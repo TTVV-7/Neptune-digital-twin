@@ -7,6 +7,8 @@ import { addLights, createGoogleTiles, createPlaceholderGround, GroundFlattener 
 import { DriveMode } from './drive.js';
 import { ModelManager } from './models.js';
 import { createPlacementPanel } from './placement.js';
+import { PlaceLayer } from './places.js';
+import { createPlacesPanel } from './placesPanel.js';
 import { createShipPanel } from './shipPanel.js';
 import { VesselLayer } from './vessels.js';
 import { WalkController } from './walk.js';
@@ -100,8 +102,32 @@ function start( apiKey ) {
 	controls.setPose( enuToLocal( START.east, START.north, START.up ), START.heading, START.pitch );
 	controls.setMode( START.mode );
 
-	const drive = new DriveMode( { camera, controls, domElement: renderer.domElement, ground, models, tiles } );
+	const places = new PlaceLayer( { getGround: () => [ ground, models.group ] } );
+	scene.add( places.group );
+
+	const drive = new DriveMode( { camera, controls, domElement: renderer.domElement, ground, models, places, tiles } );
 	scene.add( drive.group, drive.trail );
+
+	// The point on the ground (or a model) in the middle of the view.
+	const lookRay = new Raycaster();
+	const getLookPoint = () => {
+
+		lookRay.setFromCamera( new Vector2(), camera );
+		lookRay.far = 2000;
+		return lookRay.intersectObjects( [ ground, models.group ], true )[ 0 ]?.point ?? null;
+
+	};
+	createPlacesPanel( places, {
+		getLookPoint,
+		goTo: entry => {
+
+			drive.exit();
+			const { position, heading, pitch } = places.viewOf( entry );
+			controls.setMode( 'fly' );
+			controls.setPose( position, heading, pitch );
+
+		},
+	} );
 
 	const feetPosition = () => camera.position.clone().setY( camera.position.y - PLAYER.eyeHeight );
 	createPlacementPanel( models, {
@@ -150,6 +176,7 @@ function start( apiKey ) {
 		camera.updateMatrixWorld();
 		tiles?.update();
 		models.update();
+		places.update( dt );
 		vessels.update( dt, camera );
 		renderer.render( scene, camera );
 		labels.render( scene, camera );
@@ -166,7 +193,7 @@ function start( apiKey ) {
 	} );
 
 	// Handy for poking around from the browser console.
-	window.twin = { scene, camera, controls, models, vessels, drive, tiles, SITE };
+	window.twin = { scene, camera, controls, models, places, vessels, drive, tiles, SITE };
 
 }
 

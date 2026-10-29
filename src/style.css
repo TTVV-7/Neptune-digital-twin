@@ -220,6 +220,19 @@ button.link:hover {
 	color: var( --muted );
 }
 
+/* Named places (M). */
+.place-label {
+	padding: 2px 8px;
+	border-left: 3px solid var( --accent );
+	border-radius: 3px;
+	background: rgba( 16, 22, 28, 0.82 );
+	font-size: 12px;
+	font-weight: 600;
+	white-space: nowrap;
+	pointer-events: auto;
+	cursor: pointer;
+}
+
 .berth-label[data-state='free'] {
 	border-color: #3fbf6f;
 }

@@ -1,0 +1,13 @@
+// The private hosted site (cloudflare/worker.js). Deploy with `npx wrangler deploy` after
+// `npx wrangler login`. Secrets are set once with `npx wrangler secret put <NAME>`:
+// SITE_PASSWORD (required), GOOGLE_MAPS_API_KEY and AISSTREAM_API_KEY (optional).
+{
+	"name": "neptune-twin",
+	"main": "cloudflare/worker.js",
+	"compatibility_date": "2026-10-01",
+	"workers_dev": true,
+	"durable_objects": {
+		"bindings": [ { "name": "AIS", "class_name": "AisRelay" } ]
+	},
+	"migrations": [ { "tag": "v1", "new_sqlite_classes": [ "AisRelay" ] } ]
+}

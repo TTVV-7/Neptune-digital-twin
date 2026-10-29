@@ -15,16 +15,18 @@ const _target = new Vector3();
 // models (and, roughly, to Google's mesh), a warning colour, and the swept path it leaves.
 export class DriveMode {
 
-	constructor( { camera, controls, domElement, ground, models, tiles } ) {
+	constructor( { camera, controls, domElement, ground, models, places, tiles } ) {
 
 		this.camera = camera;
 		this.controls = controls;
 		this.ground = ground;
 		this.models = models;
+		this.places = places;
 		this.tiles = tiles;
 		this.active = false;
 		this.keys = new Set();
 		this.distance = 20;
+		this.view = 'chase'; // or 'driver', toggled with C
 		this.checkTimer = 0;
 		this.nearbyTiles = []; // Google tile meshes around the vehicle, when they count as obstacles
 		this.settings = { vehicle: VEHICLES[ 0 ].name, margin: 0.5, google: false, sweptPath: true };
@@ -32,8 +34,8 @@ export class DriveMode {
 		this.vehicle = new Vehicle( {
 			getGround: () => [ ground, models.group ],
 			getObstacles: () => ( {
-				rays: this.settings.google ? [ models.group, ...this.nearbyTiles ] : [ models.group ],
-				exact: [ models.group ],
+				rays: this.settings.google ? [ models.group, places.group, ...this.nearbyTiles ] : [ models.group, places.group ],
+				exact: [ models.group, places.group ],
 			} ),
 		} );
 		this.group = this.vehicle.group;
@@ -46,6 +48,7 @@ export class DriveMode {
 
 			if ( isTyping( e ) ) return;
 			if ( e.code === 'KeyT' && ! e.repeat ) this.active ? this.exit() : this.enter();
+			if ( e.code === 'KeyC' && ! e.repeat && this.active ) this.toggleView();
 			if ( ! this.active || ! DRIVE_KEYS.includes( e.code ) ) return;
 			this.keys.add( e.code );
 			e.preventDefault(); // no page scrolling on Space and the arrows
@@ -96,6 +99,15 @@ export class DriveMode {
 		this.controls.setMode( 'fly' );
 		this.controls.setPose( this.camera.position.clone(), yawToHeading( yaw ), this.controls.pitch * MathUtils.RAD2DEG );
 		$( 'drive-hud' ).hidden = true; // the vehicle stays parked, and its panel open, to look around it
+
+	}
+
+	toggleView() {
+
+		this.view = this.view === 'chase' ? 'driver' : 'chase';
+		this.vehicle.showBody( this.view === 'chase' );
+		this.controls.yaw = 0;
+		this.controls.pitch = this.view === 'driver' ? - 0.05 : - 0.35;
 
 	}
 
@@ -162,13 +174,26 @@ export class DriveMode {
 
 	}
 
-	// Chase camera: mouse look orbits around the vehicle, the wheel zooms.
+	// Chase camera: mouse look orbits around the vehicle, the wheel zooms. Driver's view:
+	// from the driver's seat (left-hand drive), mouse look turns your head.
 	follow() {
 
 		const truck = this.vehicle.bodies[ 0 ].object;
 		const controls = this.controls;
-		controls.pitch = MathUtils.clamp( controls.pitch, - 1.5, 0.2 );
 		const yaw = this.cameraYaw();
+
+		if ( this.view === 'driver' ) {
+
+			const { width, length, height, look } = this.spec;
+			const seatBack = look === 'car' || look === 'pickup' ? 2.1 : 1.1; // metres behind the front
+			controls.pitch = MathUtils.clamp( controls.pitch, - 1.2, 0.6 );
+			this.camera.position.set( - width * 0.22, Math.min( height * 0.72, 2.7 ), - length / 2 + seatBack ).applyMatrix4( truck.matrixWorld );
+			this.camera.rotation.set( controls.pitch, yaw, 0, 'YXZ' );
+			return;
+
+		}
+
+		controls.pitch = MathUtils.clamp( controls.pitch, - 1.5, 0.2 );
 		const pitch = controls.pitch;
 		_target.copy( truck.position ).setY( truck.position.y + this.spec.height * 0.8 );
 		this.camera.position.set( - Math.sin( yaw ) * Math.cos( pitch ), Math.sin( pitch ), - Math.cos( yaw ) * Math.cos( pitch ) )
@@ -242,7 +267,11 @@ export class DriveMode {
 
 		} ) );
 
-		const against = [ this.models.entries.length && 'your models', settings.google && 'Google mesh (rough, off by a metre or two)' ].filter( Boolean );
+		const against = [
+			this.models.entries.length && 'your models',
+			this.places.entries.some( p => p.block ) && 'place blocks',
+			settings.google && 'Google mesh (rough, off by a metre or two)',
+		].filter( Boolean );
 		$( 'drive-against' ).textContent = against.length ? `Checking against ${ against.join( ' and ' ) }.` : 'Nothing to check against: load your site model, or tick "Google mesh counts".';
 
 	}

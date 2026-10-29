@@ -80,13 +80,14 @@ export class Vehicle {
 		this.group.traverse( o => {
 
 			if ( o.geometry ) o.geometry.dispose();
-			if ( o.material && o.material !== WHEEL_MATERIAL ) o.material.dispose();
+			if ( o.material && ! o.material.userData.shared ) o.material.dispose();
 
 		} );
 		this.group.clear();
 		this.bodies = [ makeBody( 'truck', spec ) ];
 		if ( spec.trailer ) this.bodies.push( makeBody( 'trailer', spec.trailer ) );
 		for ( const body of this.bodies ) this.group.add( body.object );
+		this.showBody( this.bodyVisible ?? true );
 		if ( at ) this.placeAt( at.position.setY( at.groundY ), at.heading );
 
 	}
@@ -126,12 +127,14 @@ export class Vehicle {
 	drive( dt, input ) {
 
 		const { spec } = this;
-		const maxForward = ( input.crawl ? 3 : 20 ) / 3.6;
-		const maxReverse = ( input.crawl ? 2 : 6 ) / 3.6;
+		const top = spec.maxSpeed ?? 20; // km/h
+		const maxForward = ( input.crawl ? 3 : top ) / 3.6;
+		const maxReverse = ( input.crawl ? 2 : Math.min( 10, top / 3 ) ) / 3.6;
+		const accel = top >= 40 ? 3 : 1.5; // m/s², cars pick up speed faster than loaded trucks
 
 		// Speed: accelerate toward the pedal, brake hard on Space, roll to a stop otherwise.
 		const target = input.throttle > 0 ? maxForward : input.throttle < 0 ? - maxReverse : 0;
-		const rate = input.brake ? 6 : input.throttle !== 0 && Math.sign( target ) === Math.sign( this.speed || target ) ? 1.5 : 3;
+		const rate = input.brake ? 6 : input.throttle !== 0 && Math.sign( target ) === Math.sign( this.speed || target ) ? accel : 3;
 		this.speed = input.brake ? approach( this.speed, 0, rate * dt ) : approach( this.speed, target, rate * dt );
 
 		// Steering: turn the wheels toward full lock while held, back to centre when let go.
@@ -170,6 +173,14 @@ export class Vehicle {
 			this.trail.add( this.bodies, this.result?.status ?? 'clear' );
 
 		}
+
+	}
+
+	// The driver's view looks out from inside, so only the outline is drawn there.
+	showBody( visible ) {
+
+		this.bodyVisible = visible;
+		for ( const body of this.bodies ) body.solid.forEach( o => o.visible = visible );
 
 	}
 
@@ -311,7 +322,13 @@ export class Vehicle {
 		this.result = result;
 
 		const color = STATUS_COLORS[ result.status ];
-		for ( const body of this.bodies ) body.material.color.setHex( color );
+		for ( const body of this.bodies ) {
+
+			body.material.color.setHex( color );
+			body.fill.material.color.setHex( color );
+			body.fill.visible = result.status !== 'clear';
+
+		}
 		return result;
 
 	}
@@ -326,16 +343,19 @@ function makeBody( name, spec ) {
 	const object = new Group();
 	object.name = name;
 
-	// Translucent, so you can see what it runs into.
-	const material = new MeshStandardMaterial( { color: STATUS_COLORS.clear, transparent: true, opacity: 0.55, depthWrite: false } );
-	const geometry = new BoxGeometry( w, h, l ).translate( 0, h / 2, 0 );
-	const box = new Mesh( geometry, material );
-	box.raycast = () => {};
-	const edges = new LineSegments( new EdgesGeometry( geometry ), new LineBasicMaterial( { color: 0x1d2329 } ) );
-	edges.raycast = () => {};
-	object.add( box, edges );
+	// The fit envelope: an outline in the status colour, filled in when it's tight or touching.
+	const envelope = new BoxGeometry( w, h, l ).translate( 0, h / 2, 0 );
+	const material = new LineBasicMaterial( { color: STATUS_COLORS.clear } );
+	const edges = new LineSegments( new EdgesGeometry( envelope ), material );
+	const fill = new Mesh( envelope, new MeshStandardMaterial( { transparent: true, opacity: 0.35, depthWrite: false } ) );
+	fill.visible = false;
+	for ( const o of [ edges, fill ] ) o.raycast = () => {};
+	object.add( edges, fill );
 
-	const body = { name, spec, object, material, heading: 0, axle: new Vector3(), groundY: [], tight: false };
+	const look = spec.look ?? ( name === 'trailer' ? 'trailer' : 'truck' );
+	drawBody( object, look, w, h, l );
+
+	const body = { name, spec, object, material, fill, heading: 0, axle: new Vector3(), groundY: [], tight: false };
 
 	if ( name === 'truck' ) {
 
@@ -345,9 +365,10 @@ function makeBody( name, spec ) {
 		body.supportFront = ( vehicle, fwd ) => body.axle.clone().addScaledVector( fwd, spec.wheelbase );
 		body.supportRear = () => body.axle.clone();
 
-		const frontWheels = [ - 1, 1 ].map( side => wheel( object, side * ( w / 2 - 0.25 ), ahead - spec.wheelbase ) );
-		wheel( object, - ( w / 2 - 0.25 ), ahead, 1.4 );
-		wheel( object, w / 2 - 0.25, ahead, 1.4 );
+		const size = look === 'car' || look === 'pickup' ? 0.7 : 1;
+		const frontWheels = [ - 1, 1 ].map( side => wheel( object, side * ( w / 2 - 0.2 ), ahead - spec.wheelbase, size ) );
+		wheel( object, - ( w / 2 - 0.2 ), ahead, size, size < 1 ? 0.7 : 1.4 );
+		wheel( object, w / 2 - 0.2, ahead, size, size < 1 ? 0.7 : 1.4 );
 		body.steerWheels = steer => frontWheels.forEach( wh => wh.rotation.y = - steer * MathUtils.DEG2RAD );
 
 	} else {
@@ -357,22 +378,98 @@ function makeBody( name, spec ) {
 		body.centre = ( vehicle, fwd ) => vehicle.hitch().addScaledVector( fwd, - kingpinAhead );
 		body.supportFront = vehicle => vehicle.hitch();
 		body.supportRear = () => body.axle.clone();
-		wheel( object, - ( w / 2 - 0.25 ), spec.kingpinToAxle - kingpinAhead, 2.6 );
-		wheel( object, w / 2 - 0.25, spec.kingpinToAxle - kingpinAhead, 2.6 );
+		wheel( object, - ( w / 2 - 0.25 ), spec.kingpinToAxle - kingpinAhead, 1, 2.6 );
+		wheel( object, w / 2 - 0.25, spec.kingpinToAxle - kingpinAhead, 1, 2.6 );
 
 	}
 
+	body.solid = object.children.filter( c => c !== edges && c !== fill ); // hidden in the driver's view
 	return body;
 
 }
 
+const PAINT = {
+	car: new MeshStandardMaterial( { color: 0xf1f3f4, roughness: 0.35, metalness: 0.2 } ),
+	work: new MeshStandardMaterial( { color: 0xf2b632, roughness: 0.5 } ), // yellow site plant
+	cab: new MeshStandardMaterial( { color: 0xd9dde0, roughness: 0.4 } ),
+	glass: new MeshStandardMaterial( { color: 0x23303a, roughness: 0.1, metalness: 0.4 } ),
+	steel: new MeshStandardMaterial( { color: 0x59636b, roughness: 0.7 } ),
+	box: new MeshStandardMaterial( { color: 0xc9cdd0, roughness: 0.6 } ),
+	load: new MeshStandardMaterial( { color: 0xe0782c, roughness: 0.6 } ), // the oversize load
+};
+
+// Solid shapes for each kind of vehicle, in the body's frame: x across, y up from the ground,
+// z along it with the front at -l/2. Simple blocks, but enough to read what it is.
+function drawBody( object, look, w, h, l ) {
+
+	const part = ( material, x0, x1, y0, y1, z0, z1 ) => {
+
+		const mesh = new Mesh( new BoxGeometry( x1 - x0, y1 - y0, z1 - z0 ), material );
+		mesh.position.set( ( x0 + x1 ) / 2, ( y0 + y1 ) / 2, ( z0 + z1 ) / 2 );
+		mesh.raycast = () => {};
+		object.add( mesh );
+
+	};
+	const front = - l / 2, rear = l / 2, side = w / 2;
+
+	switch ( look ) {
+
+		case 'car':
+			part( PAINT.car, - side, side, 0.35, h * 0.55, front, rear ); // body
+			part( PAINT.glass, - side + 0.12, side - 0.12, h * 0.55, h, front + l * 0.3, rear - l * 0.12 ); // cabin
+			break;
+
+		case 'pickup': {
+
+			const cabEnd = front + l * 0.5;
+			part( PAINT.car, - side, side, 0.4, h * 0.55, front, rear );
+			part( PAINT.glass, - side + 0.1, side - 0.1, h * 0.55, h, front + l * 0.22, cabEnd );
+			part( PAINT.steel, - side, side, h * 0.55, h * 0.62, cabEnd + 0.1, rear ); // bed rails
+			break;
+
+		}
+
+		case 'tractor':
+		case 'truck':
+		case 'crane': {
+
+			const cabEnd = front + Math.min( 2.4, l * 0.3 );
+			part( PAINT.cab, - side, side, 0.6, Math.min( h, 3.6 ) * 0.7, front, cabEnd );
+			part( PAINT.glass, - side + 0.05, side - 0.05, Math.min( h, 3.6 ) * 0.7, Math.min( h, 3.6 ), front + 0.1, cabEnd );
+			part( PAINT.steel, - side + 0.2, side - 0.2, 0.6, 1.2, cabEnd, rear ); // chassis
+			if ( look === 'truck' ) part( PAINT.work, - side, side, 1.2, h, cabEnd + 0.3, rear ); // dump box
+			if ( look === 'crane' ) {
+
+				part( PAINT.work, - side, side, 1.2, h * 0.6, cabEnd + 0.2, rear ); // carrier
+				part( PAINT.work, - 0.5, 0.5, h * 0.6, h, front + 0.3, rear - 0.5 ); // boom, stowed
+				part( PAINT.work, - side + 0.3, side - 0.3, h * 0.6, h * 0.95, rear - l * 0.25, rear ); // turntable
+
+			}
+
+			break;
+
+		}
+
+		case 'lowbed':
+			part( PAINT.steel, - Math.min( side, 1.3 ), Math.min( side, 1.3 ), 0.5, 1.0, front, rear ); // deck
+			part( PAINT.load, - side, side, 1.0, h, front + l * 0.15, rear - l * 0.1 );
+			break;
+
+		default: // box trailer
+			part( PAINT.box, - side, side, 1.2, h, front, rear );
+
+	}
+
+}
+
 const WHEEL_MATERIAL = new MeshStandardMaterial( { color: 0x1d2329, roughness: 0.9 } );
+for ( const m of [ WHEEL_MATERIAL, ...Object.values( PAINT ) ] ) m.userData.shared = true;
 
-// `z` is in the box's frame, where forward is -z.
-function wheel( parent, x, z, length = 1 ) {
+// `z` is in the box's frame, where forward is -z. `size` is the wheel's diameter in metres.
+function wheel( parent, x, z, size = 1, length = size ) {
 
-	const mesh = new Mesh( new BoxGeometry( 0.45, 1, length ), WHEEL_MATERIAL );
-	mesh.position.set( x, 0.5, z );
+	const mesh = new Mesh( new BoxGeometry( 0.4, size, length ), WHEEL_MATERIAL );
+	mesh.position.set( x, size / 2, z );
 	mesh.raycast = () => {};
 	parent.add( mesh );
 	return mesh;

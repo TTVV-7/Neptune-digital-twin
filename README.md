@@ -61,7 +61,9 @@ The key ends up in the browser, so restricting it is what keeps it safe.
 | 1–9 | Jump to a viewpoint (also listed under H) |
 | Click a ship | Show its details. While looking around, aim with the dot in the middle. |
 | V | Show / hide live ships |
-| T | Drive a vehicle to check whether it fits (T again to stop) |
+| T | Drive a car or truck, and check whether it fits (T again to stop) |
+| C | While driving: driver's seat or chase camera |
+| M | Places: name and mark up spots on site |
 | H | Help |
 
 You start flying over the water, looking north at the terminal. Press **F** to drop to the ground and walk,
@@ -143,14 +145,25 @@ index, walking on a model with millions of triangles would drop to a few frames 
 Some hosts limit file size: Cloudflare Pages, for example, refuses files over 25 MiB. For a model
 bigger than that, use cloud storage or 3D Tiles.
 
+## Places
+
+Press **M** for the places panel. Each place has a name label, and optionally a simple block (length,
+width and height in metres) for things Google's mesh doesn't show, such as a site trailer. Blocks count as
+obstacles for the vehicle checks. **Add a place where I'm looking** drops one at the middle of the view,
+and **Move to where I'm looking** moves one. Click a label to open its settings.
+
+Changes are saved in your browser. **Copy all places** gives a list to paste into `PLACES` in
+[src/config.js](src/config.js), or to send to Claude, so everyone sees them.
+
 ## Checking whether a vehicle fits
 
-Press **T** and a vehicle appears where you're looking. Drive it with **W/S** and **A/D**, hold **Shift** to
-crawl at 3 km/h, **Space** brakes. Click, then move the mouse to look around it, and use the wheel to zoom.
-Press **T** again to stop: the vehicle stays parked so you can walk around it.
+Press **T** and a car appears where you're looking. Drive it with **W/S** and **A/D**, hold **Shift** to
+crawl at 3 km/h, **Space** brakes, and **C** switches between the driver's seat and the chase camera.
+Click, then move the mouse to look around, and use the wheel to zoom. Press **T** again to stop: the
+vehicle stays parked so you can walk around it.
 
-- **Vehicles:** pickup, tandem dump truck, travelling mobile crane, 53 ft semi-trailer, and a lowbed with an
-  oversize load. Their sizes are only typical. Set the real vehicle's and load's under *Size* in the panel,
+- **Vehicles:** car (SUV), pickup, tandem dump truck, travelling mobile crane, 53 ft semi-trailer, and a
+  lowbed with an oversize load. Their sizes are only typical. Set the real vehicle's and load's under *Size* in the panel,
   then **Copy vehicle config** and paste it into `VEHICLES` in [src/config.js](src/config.js).
 - **Clearances:** overhead, left, right, ahead and behind, for the truck and its trailer. A negative number
   is an overlap: a load 0.5 m too tall reads −0.5 m overhead. The vehicle turns amber within the warning
@@ -221,10 +234,14 @@ src/models.js       loads and places your glTF models
 src/placement.js    the P panel
 src/vessels.js      live ships, berth status, hiding Google's photographed ships
 src/shipPanel.js    the Ships panel and ship cards
+src/places.js       named places (M) and their blocks; src/placesPanel.js is the M panel
 src/vehicle.js      the drivable vehicle: turning, trailer, clearance checks, swept path
 src/drive.js        driving mode (T): keys, chase camera, readout, vehicle panel
 src/geo.js          lat/lon <-> local metres
 server/ais.js       AISStream connection, run by the dev server (vite.config.js)
+server/aisFeed.js   what AIS messages mean; shared by the dev server and the hosted Worker
+cloudflare/         the Worker for the private hosted site (wrangler.jsonc)
+site/               the built copy it serves (npm run build:site)
 public/models/      optimised .glb files that the app loads
 models-src/         original models (not committed); `npm run optimize-models` reads these
 scripts/            the model optimiser
@@ -248,7 +265,11 @@ name), then serves the built copy of the app in `site/`.
 - **Google key:** each viewer pastes one the first time (it's saved in their browser). To spare them,
   add the key there as a `GOOGLE_MAPS_API_KEY` secret: the page fetches it after the password check.
   Either way, restrict the key to `https://neptune-twin.thomas-verigin.workers.dev/*` in Google Cloud.
-- **Live ships** don't work there yet: they need the dev server's AIS connection.
+- **Live ships:** add your AISStream key there as an `AISSTREAM_API_KEY` secret. A small relay in the
+  Worker (a Durable Object) then holds the connection while someone has the site open, keeps the ships
+  between visits, and disconnects 10 minutes after the last viewer leaves.
+- **Deploying the Worker yourself:** `npx wrangler login`, then `npx wrangler deploy` (settings in
+  [wrangler.jsonc](wrangler.jsonc)).
 - **Only the page is private.** Its files come from `site/` in this public repository, so keep
   confidential models and photos out of `site/` and `public/models/`.
 
