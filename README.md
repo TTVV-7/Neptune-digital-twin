@@ -26,7 +26,10 @@ npm run dev
 Open the URL it prints, usually http://localhost:5173. Paste your Google API key when asked,
 or click **Continue without Google tiles** to try the controls on flat ground.
 
-To skip the prompt each time, copy `.env.example` to `.env.local` and put the key there.
+To skip the prompt each time, give the app the key through an environment variable named
+`GOOGLE_MAPS_API_KEY` (also accepted: `GOOGLE_API_KEY`, `GOOGLE_API`, `VITE_GOOGLE_MAPS_API_KEY`;
+case doesn't matter). Either put it in `.env.local` (copy `.env.example`), or set it in your shell
+or cloud environment. `npm run dev` and `npm run build` read it when they start.
 
 ## Getting a Google API key
 
