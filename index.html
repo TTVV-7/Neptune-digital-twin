@@ -18,10 +18,11 @@
 			</div>
 			<div id="drive-hud" hidden>
 				<div><b id="drive-name"></b> &middot; <span id="drive-speed"></span></div>
+				<div id="drive-legal" class="small" hidden></div>
 				<div id="drive-status"></div>
 				<table id="drive-clearances"></table>
 				<div id="drive-against"></div>
-				<div class="small">W/S drive &middot; A/D steer &middot; Shift crawl &middot; Space brake &middot; C driver's seat / chase view &middot; click, then mouse to look around &middot; wheel zooms &middot; T to stop</div>
+				<div class="small">L shows or hides the controls &middot; T to stop driving</div>
 			</div>
 			<div id="vessel-card" hidden>
 				<button type="button" class="close" aria-label="Close">&times;</button>
@@ -32,6 +33,34 @@
 		</div>
 		<div id="crosshair" hidden></div>
 		<div id="right"></div>
+		<div id="drive-legend" aria-label="Driving controls">
+			<section>
+				<h4>Drive</h4>
+				<div class="wasd">
+					<kbd data-keys="KeyW ArrowUp">W<small>forward</small></kbd>
+					<kbd data-keys="KeyA ArrowLeft">A<small>left</small></kbd>
+					<kbd data-keys="KeyS ArrowDown">S<small>reverse</small></kbd>
+					<kbd data-keys="KeyD ArrowRight">D<small>right</small></kbd>
+				</div>
+				<p>or the arrow keys</p>
+			</section>
+			<section>
+				<h4>Speed</h4>
+				<div class="row"><kbd class="wide" data-keys="ShiftLeft ShiftRight">Shift</kbd><span>hold to crawl at 3&nbsp;km/h</span></div>
+				<div class="row"><kbd class="wide" data-keys="Space">Space</kbd><span>brake</span></div>
+			</section>
+			<section>
+				<h4>Look</h4>
+				<div class="row"><kbd>C</kbd><span>switch to <span id="legend-view">the driver's seat</span></span></div>
+				<div class="row"><kbd class="wide">Click</kbd><span>then the mouse looks around</span></div>
+				<div class="row"><kbd class="wide">Wheel</kbd><span>zoom in and out</span></div>
+			</section>
+			<section>
+				<h4>Stop</h4>
+				<div class="row"><kbd>T</kbd><span>park and get out</span></div>
+				<div class="row"><kbd>L</kbd><span>hide these controls</span></div>
+			</section>
+		</div>
 		<div id="hint" hidden>Click to look around &middot; <b>WASD</b> move &middot; <b>F</b> walk / fly &middot; <b>1&ndash;9</b> viewpoints &middot; <b>T</b> drive &middot; <b>H</b> help</div>
 
 		<div id="help" hidden>
@@ -48,6 +77,7 @@
 				<tr><td>Click a ship</td><td>Show its details (while looking around, aim with the dot)</td></tr>
 				<tr><td>V</td><td>Show / hide live ships</td></tr>
 				<tr><td>T</td><td>Drive a car or truck, and check whether it fits (T again to stop)</td></tr>
+				<tr><td>L</td><td>While driving: show / hide the driving controls</td></tr>
 				<tr><td>M</td><td>Places: name and mark up spots on site</td></tr>
 				<tr><td>H</td><td>Show / hide this help</td></tr>
 			</table>

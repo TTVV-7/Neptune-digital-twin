@@ -4,6 +4,7 @@ import {
 	BufferAttribute,
 	BufferGeometry,
 	Color,
+	CylinderGeometry,
 	EdgesGeometry,
 	Group,
 	LineBasicMaterial,
@@ -26,6 +27,9 @@ const STEP = 0.05; // metres per simulation substep
 const TRAIL_STEP = 0.25; // metres of travel between swept-path points
 const TRAIL_MAX = 6000; // swept-path points kept per corner
 const RANGE = { overhead: 30, side: 10, end: 30 };
+const AXLE_SPREAD = 1.4; // metres between axles in a tandem or tridem group
+const STEER_SPREAD = 1.9; // between the two axles of a tandem steer
+const JACKKNIFE = 80; // degrees between neighbouring units
 
 const UP = new Vector3( 0, 1, 0 );
 const DOWN = new Vector3( 0, - 1, 0 );
@@ -49,8 +53,9 @@ function forward( heading, target = new Vector3() ) {
 
 }
 
-// A vehicle you drive around the site to see whether it fits: a truck, crane or similar,
-// optionally pulling a trailer. Each is checked as a box against the obstacles.
+// A vehicle you drive around the site to see whether it fits: a car, truck or crane,
+// optionally pulling a chain of trailers (a semi, a pup, a full trailer on its dolly, the two
+// trailers of a B-train). Each unit is checked as a box against the obstacles.
 export class Vehicle {
 
 	constructor( { getGround, getObstacles } ) {
@@ -84,8 +89,7 @@ export class Vehicle {
 
 		} );
 		this.group.clear();
-		this.bodies = [ makeBody( 'truck', spec ) ];
-		if ( spec.trailer ) this.bodies.push( makeBody( 'trailer', spec.trailer ) );
+		this.bodies = [ makeBody( spec, 0 ), ...( spec.trailers ?? [] ).map( ( trailer, i ) => makeBody( trailer, i + 1 ) ) ];
 		for ( const body of this.bodies ) this.group.add( body.object );
 		this.showBody( this.bodyVisible ?? true );
 		if ( at ) this.placeAt( at.position.setY( at.groundY ), at.heading );
@@ -97,14 +101,14 @@ export class Vehicle {
 	// (which would land it on a roof or conveyor).
 	placeAt( position, heading, onGround = true ) {
 
-		const [ truck, trailer ] = this.bodies;
+		const [ truck, ...towed ] = this.bodies;
 		for ( const body of this.bodies ) body.groundY = onGround ? [ position.y, position.y, position.y, position.y ] : [];
 		truck.axle.copy( position );
 		truck.heading = heading;
-		if ( trailer ) {
+		for ( const body of towed ) {
 
-			trailer.heading = heading;
-			trailer.axle.copy( this.hitch() ).addScaledVector( forward( heading, _v ), - this.spec.trailer.kingpinToAxle );
+			body.heading = heading;
+			body.axle.copy( this.hitch( body.index ) ).addScaledVector( forward( heading, _v ), - body.spec.kingpinToAxle );
 
 		}
 
@@ -116,10 +120,12 @@ export class Vehicle {
 
 	}
 
-	hitch( target = new Vector3() ) {
+	// Where towed unit `index` hooks onto the unit in front: `hitch` metres ahead of that unit's
+	// axle (group), negative for a pintle hook behind it.
+	hitch( index, target = new Vector3() ) {
 
-		const truck = this.bodies[ 0 ];
-		return target.copy( truck.axle ).addScaledVector( forward( truck.heading, _v ), this.spec.trailer?.hitch ?? 0 );
+		const lead = this.bodies[ index - 1 ];
+		return target.copy( lead.axle ).addScaledVector( forward( lead.heading, _v ), this.bodies[ index ].spec.hitch ?? 0 );
 
 	}
 
@@ -141,36 +147,37 @@ export class Vehicle {
 		const steerTarget = input.steer * spec.maxSteer;
 		this.steer = approach( this.steer, steerTarget, ( input.steer ? 40 : 60 ) * dt );
 
-		// Bicycle model for the truck; the trailer is dragged by its kingpin.
+		// Bicycle model for the truck; each towed unit is dragged by its hitch, in turn.
 		const distance = this.speed * dt;
 		const steps = Math.max( 1, Math.ceil( Math.abs( distance ) / STEP ) );
-		const [ truck, trailer ] = this.bodies;
+		const { bodies } = this;
+		const truck = bodies[ 0 ];
 		for ( let i = 0; i < steps; i ++ ) {
 
 			const d = distance / steps;
 			truck.heading += MathUtils.RAD2DEG * d / spec.wheelbase * Math.tan( this.steer * MathUtils.DEG2RAD );
 			truck.axle.addScaledVector( forward( truck.heading, _v ), d );
 
-			if ( trailer ) {
+			for ( let j = 1; j < bodies.length; j ++ ) {
 
-				const hitch = this.hitch( _o );
-				_d.subVectors( hitch, trailer.axle ).setY( 0 ).normalize();
-				trailer.axle.copy( hitch ).addScaledVector( _d, - spec.trailer.kingpinToAxle );
-				trailer.heading = Math.atan2( - _d.x, _d.z ) * MathUtils.RAD2DEG;
+				const body = bodies[ j ];
+				const hitch = this.hitch( j, _o );
+				_d.subVectors( hitch, body.axle ).setY( 0 ).normalize();
+				body.axle.copy( hitch ).addScaledVector( _d, - body.spec.kingpinToAxle );
+				body.heading = Math.atan2( - _d.x, _d.z ) * MathUtils.RAD2DEG;
 
 			}
 
 		}
 
-		truck.heading = ( truck.heading % 360 + 360 ) % 360;
-		if ( trailer ) trailer.heading = ( trailer.heading % 360 + 360 ) % 360;
+		for ( const body of bodies ) body.heading = ( body.heading % 360 + 360 ) % 360;
 		this.pose();
 
 		this.travelled += Math.abs( distance );
 		if ( this.travelled >= TRAIL_STEP ) {
 
 			this.travelled = 0;
-			this.trail.add( this.bodies, this.result?.status ?? 'clear' );
+			this.trail.add( this.bodies.filter( b => b.checked ), this.result?.status ?? 'clear' );
 
 		}
 
@@ -186,10 +193,7 @@ export class Vehicle {
 
 	get jackknifed() {
 
-		const [ truck, trailer ] = this.bodies;
-		if ( ! trailer ) return false;
-		const angle = Math.abs( ( ( truck.heading - trailer.heading ) % 360 + 540 ) % 360 - 180 );
-		return angle > 80;
+		return this.bodies.some( ( body, i ) => i > 0 && Math.abs( ( ( this.bodies[ i - 1 ].heading - body.heading ) % 360 + 540 ) % 360 - 180 ) > JACKKNIFE );
 
 	}
 
@@ -257,8 +261,9 @@ export class Vehicle {
 	check( { rays: obstacles, exact } = this.getObstacles() ) {
 
 		const result = { overhead: none(), left: none(), right: none(), ahead: none(), behind: none(), status: 'clear', touching: null };
+		const checked = this.bodies.filter( b => b.checked );
 
-		this.bodies.forEach( ( body, index ) => {
+		checked.forEach( ( body, index ) => {
 
 			const { spec, object, name } = body;
 			const w = spec.width, h = spec.height, l = spec.length;
@@ -304,7 +309,7 @@ export class Vehicle {
 
 					// From the front and back faces: something inside the box already shows overhead or at the sides.
 					if ( index === 0 ) record( 'ahead', cast( _v.set( x, y, - l / 2 ), AHEAD, 0, RANGE.end ) );
-					if ( index === this.bodies.length - 1 ) record( 'behind', cast( _v.set( x, y, l / 2 ), BEHIND, 0, RANGE.end ) );
+					if ( index === checked.length - 1 ) record( 'behind', cast( _v.set( x, y, l / 2 ), BEHIND, 0, RANGE.end ) );
 
 				}
 
@@ -322,7 +327,7 @@ export class Vehicle {
 		this.result = result;
 
 		const color = STATUS_COLORS[ result.status ];
-		for ( const body of this.bodies ) {
+		for ( const body of checked ) {
 
 			body.material.color.setHex( color );
 			body.fill.material.color.setHex( color );
@@ -337,53 +342,64 @@ export class Vehicle {
 
 // --- bodies ---
 
-function makeBody( name, spec ) {
+function makeBody( spec, index ) {
 
 	const { length: l, width: w, height: h } = spec;
 	const object = new Group();
+	const name = index === 0 ? 'truck' : spec.name ?? 'trailer';
 	object.name = name;
+	const look = spec.look ?? ( index === 0 ? 'dump' : 'trailer' );
+
+	// A full trailer's dolly sits under the trailer's own box, so it isn't checked separately.
+	const checked = look !== 'dolly';
+	const body = { name, index, spec, object, checked, heading: 0, axle: new Vector3(), groundY: [], tight: false };
 
 	// The fit envelope: an outline in the status colour, filled in when it's tight or touching.
-	const envelope = new BoxGeometry( w, h, l ).translate( 0, h / 2, 0 );
-	const material = new LineBasicMaterial( { color: STATUS_COLORS.clear } );
-	const edges = new LineSegments( new EdgesGeometry( envelope ), material );
-	const fill = new Mesh( envelope, new MeshStandardMaterial( { transparent: true, opacity: 0.35, depthWrite: false } ) );
-	fill.visible = false;
-	for ( const o of [ edges, fill ] ) o.raycast = () => {};
-	object.add( edges, fill );
+	const outline = [];
+	if ( checked ) {
 
-	const look = spec.look ?? ( name === 'trailer' ? 'trailer' : 'truck' );
+		const envelope = new BoxGeometry( w, h, l ).translate( 0, h / 2, 0 );
+		body.material = new LineBasicMaterial( { color: STATUS_COLORS.clear } );
+		const edges = new LineSegments( new EdgesGeometry( envelope ), body.material );
+		body.fill = new Mesh( envelope, new MeshStandardMaterial( { transparent: true, opacity: 0.35, depthWrite: false } ) );
+		body.fill.visible = false;
+		outline.push( edges, body.fill );
+		for ( const o of outline ) o.raycast = () => {};
+		object.add( ...outline );
+
+	}
+
 	drawBody( object, look, w, h, l );
 
-	const body = { name, spec, object, material, fill, heading: 0, axle: new Vector3(), groundY: [], tight: false };
+	if ( index === 0 ) {
 
-	if ( name === 'truck' ) {
-
-		// Box centre is this far ahead of the rear axle.
+		// Box centre is this far ahead of the rear axle (group).
 		const ahead = spec.wheelbase + spec.frontOverhang - l / 2;
 		body.centre = ( vehicle, fwd ) => body.axle.clone().addScaledVector( fwd, ahead );
 		body.supportFront = ( vehicle, fwd ) => body.axle.clone().addScaledVector( fwd, spec.wheelbase );
 		body.supportRear = () => body.axle.clone();
 
-		const size = look === 'car' || look === 'pickup' ? 0.7 : 1;
-		const frontWheels = [ - 1, 1 ].map( side => wheel( object, side * ( w / 2 - 0.2 ), ahead - spec.wheelbase, size ) );
-		wheel( object, - ( w / 2 - 0.2 ), ahead, size, size < 1 ? 0.7 : 1.4 );
-		wheel( object, w / 2 - 0.2, ahead, size, size < 1 ? 0.7 : 1.4 );
-		body.steerWheels = steer => frontWheels.forEach( wh => wh.rotation.y = - steer * MathUtils.DEG2RAD );
+		const small = look === 'car' || look === 'pickup';
+		const size = small ? 0.7 : 1;
+		const steered = axleGroup( object, w, ahead - spec.wheelbase, spec.steerAxles ?? 1, STEER_SPREAD, size, small ? 0.3 : 0.4 );
+		axleGroup( object, w, ahead, spec.driveAxles ?? ( small ? 1 : 2 ), AXLE_SPREAD, size, small ? 0.3 : 0.6 );
+		body.steerWheels = steer => steered.forEach( wh => wh.rotation.y = - steer * MathUtils.DEG2RAD );
 
 	} else {
 
-		// Trailer: kingpin `frontOverhang` behind the front, axle `kingpinToAxle` behind that.
-		const kingpinAhead = l / 2 - spec.frontOverhang;
-		body.centre = ( vehicle, fwd ) => vehicle.hitch().addScaledVector( fwd, - kingpinAhead );
-		body.supportFront = vehicle => vehicle.hitch();
+		// Towed: hitched `frontOverhang` behind its front (negative when a drawbar reaches out
+		// ahead of it), axle group `kingpinToAxle` behind the hitch. A dolly is centred on its axle.
+		const frontOverhang = look === 'dolly' ? l / 2 - spec.kingpinToAxle : spec.frontOverhang;
+		const kingpinAhead = l / 2 - frontOverhang; // of the box centre
+		body.centre = ( vehicle, fwd ) => vehicle.hitch( index ).addScaledVector( fwd, - kingpinAhead );
+		body.supportFront = vehicle => vehicle.hitch( index );
 		body.supportRear = () => body.axle.clone();
-		wheel( object, - ( w / 2 - 0.25 ), spec.kingpinToAxle - kingpinAhead, 1, 2.6 );
-		wheel( object, w / 2 - 0.25, spec.kingpinToAxle - kingpinAhead, 1, 2.6 );
+		axleGroup( object, w, spec.kingpinToAxle - kingpinAhead, spec.axles ?? 2, AXLE_SPREAD, 1, 0.6 );
+		if ( kingpinAhead > l / 2 ) drawbar( object, - kingpinAhead, - l / 2 );
 
 	}
 
-	body.solid = object.children.filter( c => c !== edges && c !== fill ); // hidden in the driver's view
+	body.solid = object.children.filter( c => ! outline.includes( c ) ); // hidden in the driver's view
 	return body;
 
 }
@@ -430,14 +446,22 @@ function drawBody( object, look, w, h, l ) {
 		}
 
 		case 'tractor':
-		case 'truck':
+		case 'dump':
+		case 'slinger':
 		case 'crane': {
 
 			const cabEnd = front + Math.min( 2.4, l * 0.3 );
 			part( PAINT.cab, - side, side, 0.6, Math.min( h, 3.6 ) * 0.7, front, cabEnd );
 			part( PAINT.glass, - side + 0.05, side - 0.05, Math.min( h, 3.6 ) * 0.7, Math.min( h, 3.6 ), front + 0.1, cabEnd );
 			part( PAINT.steel, - side + 0.2, side - 0.2, 0.6, 1.2, cabEnd, rear ); // chassis
-			if ( look === 'truck' ) part( PAINT.work, - side, side, 1.2, h, cabEnd + 0.3, rear ); // dump box
+			if ( look === 'dump' ) part( PAINT.work, - side, side, 1.2, h, cabEnd + 0.3, rear ); // dump box
+			if ( look === 'slinger' ) {
+
+				part( PAINT.work, - side, side, 1.2, h, cabEnd + 0.3, rear - 1.2 ); // box
+				part( PAINT.steel, - 0.45, 0.45, 1.0, 1.9, rear - 4, rear ); // conveyor, stowed
+
+			}
+
 			if ( look === 'crane' ) {
 
 				part( PAINT.work, - side, side, 1.2, h * 0.6, cabEnd + 0.2, rear ); // carrier
@@ -449,6 +473,24 @@ function drawBody( object, look, w, h, l ) {
 			break;
 
 		}
+
+		case 'dump-trailer': // pup or full trailer
+			part( PAINT.work, - side, side, 1.2, h, front, rear );
+			break;
+
+		case 'end-dump':
+			part( PAINT.steel, - side + 0.3, side - 0.3, 1.0, 1.3, front, rear ); // frame
+			part( PAINT.box, - side, side, 1.3, h, front + 0.2, rear ); // tub
+			break;
+
+		case 'belly-dump':
+			part( PAINT.box, - side, side, 1.6, h, front, rear ); // tub
+			part( PAINT.box, - side * 0.6, side * 0.6, 0.45, 1.6, front + l * 0.3, rear - l * 0.35 ); // hopper gates
+			break;
+
+		case 'dolly':
+			part( PAINT.steel, - side + 0.3, side - 0.3, 0.7, 1.1, front, rear ); // frame and turntable
+			break;
 
 		case 'lowbed':
 			part( PAINT.steel, - Math.min( side, 1.3 ), Math.min( side, 1.3 ), 0.5, 1.0, front, rear ); // deck
@@ -465,14 +507,36 @@ function drawBody( object, look, w, h, l ) {
 const WHEEL_MATERIAL = new MeshStandardMaterial( { color: 0x1d2329, roughness: 0.9 } );
 for ( const m of [ WHEEL_MATERIAL, ...Object.values( PAINT ) ] ) m.userData.shared = true;
 
-// `z` is in the box's frame, where forward is -z. `size` is the wheel's diameter in metres.
-function wheel( parent, x, z, size = 1, length = size ) {
+// Wheels for a group of `count` axles centred at `z` (in the box's frame, where forward is -z),
+// `spread` metres apart. `size` is the wheel's diameter, `thickness` its width (wider for duals).
+function axleGroup( parent, w, z, count, spread, size, thickness ) {
 
-	const mesh = new Mesh( new BoxGeometry( 0.4, size, length ), WHEEL_MATERIAL );
-	mesh.position.set( x, size / 2, z );
+	const wheels = [];
+	for ( let i = 0; i < count; i ++ ) {
+
+		for ( const side of [ - 1, 1 ] ) {
+
+			const mesh = new Mesh( new CylinderGeometry( size / 2, size / 2, thickness, 16 ).rotateZ( Math.PI / 2 ), WHEEL_MATERIAL );
+			mesh.position.set( side * ( w / 2 - thickness / 2 ), size / 2, z + ( i - ( count - 1 ) / 2 ) * spread );
+			mesh.raycast = () => {};
+			parent.add( mesh );
+			wheels.push( mesh );
+
+		}
+
+	}
+
+	return wheels;
+
+}
+
+// The tongue of a pup or a dolly, from the hitch eye at `z0` back to `z1`.
+function drawbar( parent, z0, z1 ) {
+
+	const mesh = new Mesh( new BoxGeometry( 0.25, 0.25, z1 - z0 ), PAINT.steel );
+	mesh.position.set( 0, 0.8, ( z0 + z1 ) / 2 );
 	mesh.raycast = () => {};
 	parent.add( mesh );
-	return mesh;
 
 }
 

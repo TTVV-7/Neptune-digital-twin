@@ -63,6 +63,7 @@ The key ends up in the browser, so restricting it is what keeps it safe.
 | V | Show / hide live ships |
 | T | Drive a car or truck, and check whether it fits (T again to stop) |
 | C | While driving: driver's seat or chase camera |
+| L | While driving: show / hide the driving controls |
 | M | Places: name and mark up spots on site |
 | H | Help |
 
@@ -160,12 +161,18 @@ Changes are saved in your browser. **Copy all places** gives a list to paste int
 Press **T** and a car appears where you're looking. Drive it with **W/S** and **A/D**, hold **Shift** to
 crawl at 3 km/h, **Space** brakes, and **C** switches between the driver's seat and the chase camera.
 Click, then move the mouse to look around, and use the wheel to zoom. Press **T** again to stop: the
-vehicle stays parked so you can walk around it.
+vehicle stays parked so you can walk around it. While driving, a legend of these keys sits along the bottom
+of the screen and lights up the keys you're holding. **L** hides it or brings it back.
 
-- **Vehicles:** car (SUV), pickup, tandem dump truck, travelling mobile crane, 53 ft semi-trailer, and a
-  lowbed with an oversize load. Their sizes are only typical. Set the real vehicle's and load's under *Size* in the panel,
-  then **Copy vehicle config** and paste it into `VEHICLES` in [src/config.js](src/config.js).
-- **Clearances:** overhead, left, right, ahead and behind, for the truck and its trailer. A negative number
+- **Vehicles:** car (SUV), pickup, travelling mobile crane, 53 ft semi-trailer, a lowbed with an oversize
+  load, and the 17 gravel-truck combinations on the BC Stone, Sand & Gravel Association's
+  [truck weights chart](https://gravelbc.ca) (2022): single, tandem and tridem dumps, tandem-steer trucks
+  and slingers, dumps with tandem or tridem pups, dumps with tri- or quad-axle full trailers, tractors with
+  end or belly dumps, and the Super B. The panel shows each one's BC legal weights: the most the
+  whole vehicle may weigh and what each axle group may carry. Those come from the chart. The sizes don't:
+  they're typical. Set the real vehicle's and load's under *Size* in the panel, then **Copy vehicle config**
+  and paste it into `VEHICLES` in [src/config.js](src/config.js).
+- **Clearances:** overhead, left, right, ahead and behind, for the truck and each trailer. A negative number
   is an overlap: a load 0.5 m too tall reads −0.5 m overhead. The vehicle turns amber within the warning
   distance (0.5 m unless you change it) and red when it touches something.
 - **Swept path:** the corners leave lines on the ground showing the room it needs, including the trailer
@@ -176,8 +183,10 @@ vehicle stays parked so you can walk around it.
 - The checks are only as good as the geometry. Your own models are checked exactly. Google's mesh can be
   switched on with *Google mesh counts*, but it is off by a metre or two and turns trees, parked rail cars and
   melted structures into solid lumps. It's fine for a first look, not for a decision.
-- Turning uses a low-speed model with no tyre slip, and the trailer follows its kingpin. The wheelbase and
-  steering lock set the turning circle. It doesn't model all-wheel steering or suspension.
+- Turning uses a low-speed model with no tyre slip, and each trailer follows its hitch: a semi its kingpin,
+  a pup its drawbar, a full trailer its dolly. The wheelbase and steering lock set the turning circle. Tandem
+  and tridem axle groups count as one axle in the middle of the group, so a real truck turns a little wider
+  than shown. It doesn't model all-wheel steering or suspension.
 
 ## Live ships
 
@@ -235,7 +244,7 @@ src/placement.js    the P panel
 src/vessels.js      live ships, berth status, hiding Google's photographed ships
 src/shipPanel.js    the Ships panel and ship cards
 src/places.js       named places (M) and their blocks; src/placesPanel.js is the M panel
-src/vehicle.js      the drivable vehicle: turning, trailer, clearance checks, swept path
+src/vehicle.js      the drivable vehicle: turning, trailers, clearance checks, swept path
 src/drive.js        driving mode (T): keys, chase camera, readout, vehicle panel
 src/geo.js          lat/lon <-> local metres
 server/ais.js       AISStream connection, run by the dev server (vite.config.js)

@@ -66,20 +66,99 @@ export const PLACES = [
 
 // Vehicles to drive around the site with T, to see whether they fit. Sizes are in metres
 // and only typical: set the real vehicle's and load's in the T panel, then "Copy vehicle
-// config" and paste it here. `look` picks the shape drawn; `maxSpeed` is in km/h. `trailer` is pulled from a hitch `hitch` metres ahead of the
-// truck's rear axle; `kingpinToAxle` is from that hitch back to the trailer's axles.
+// config" and paste it here.
+//   look            the shape drawn
+//   wheelbase       front axle (group) to rear axle (group); frontOverhang is front to front axle
+//   steerAxles, driveAxles   axles in the front and rear groups (drawn, and for the record)
+//   maxSteer        degrees of wheel cut; maxSpeed in km/h
+//   trailers        towed in order. Each hooks on `hitch` metres ahead of the axle group of the
+//                   unit in front (negative: a pintle hook behind it), and `kingpinToAxle` runs
+//                   from that hitch back to its own axle group. `frontOverhang` is how far the
+//                   hitch is behind the trailer's front (negative for a drawbar reaching ahead).
+//                   A full trailer is two units: its dolly, then the trailer on the dolly's turntable.
+//   legal           BC legal weights in kg: the most the whole vehicle and each axle group
+//                   (front to back) may carry, from the BC Stone, Sand & Gravel Association's
+//                   truck weights chart (2022).
+const STEER_NOTE = 'A 9,100 kg steer axle needs 445 mm wide tires and an axle rated for it.';
+const DUMP = {
+	single: { look: 'dump', length: 7.4, width: 2.6, height: 3.4, wheelbase: 4.6, frontOverhang: 1.2, steerAxles: 1, driveAxles: 1, maxSteer: 38, maxSpeed: 30 },
+	tandem: { look: 'dump', length: 9.2, width: 2.6, height: 3.4, wheelbase: 5.4, frontOverhang: 1.3, steerAxles: 1, driveAxles: 2, maxSteer: 36, maxSpeed: 30 },
+	tridem: { look: 'dump', length: 10.0, width: 2.6, height: 3.4, wheelbase: 5.8, frontOverhang: 1.3, steerAxles: 1, driveAxles: 3, maxSteer: 36, maxSpeed: 30 },
+};
+const TRACTOR = {
+	tandem: { look: 'tractor', length: 7.0, width: 2.6, height: 3.9, wheelbase: 4.6, frontOverhang: 1.2, steerAxles: 1, driveAxles: 2, maxSteer: 38, maxSpeed: 30 },
+	tridem: { look: 'tractor', length: 8.7, width: 2.6, height: 3.9, wheelbase: 5.6, frontOverhang: 1.2, steerAxles: 1, driveAxles: 3, maxSteer: 38, maxSpeed: 30 },
+};
+const PUP = {
+	tandem: { name: 'pup', look: 'dump-trailer', length: 6.6, width: 2.6, height: 3.2, frontOverhang: - 2.2, kingpinToAxle: 6.1, axles: 2 },
+	tridem: { name: 'pup', look: 'dump-trailer', length: 7.6, width: 2.6, height: 3.2, frontOverhang: - 2.2, kingpinToAxle: 6.6, axles: 3 },
+};
+const FULL = {
+	triAxle: [
+		{ name: 'dolly', look: 'dolly', length: 1.2, width: 2.5, height: 1.1, kingpinToAxle: 3.4, axles: 1 },
+		{ name: 'full trailer', look: 'dump-trailer', length: 8.0, width: 2.6, height: 3.2, hitch: 0, frontOverhang: 1.1, kingpinToAxle: 5.6, axles: 2 },
+	],
+	quadAxle: [
+		{ name: 'dolly', look: 'dolly', length: 2.6, width: 2.5, height: 1.1, kingpinToAxle: 3.8, axles: 2 },
+		{ name: 'full trailer', look: 'dump-trailer', length: 9.3, width: 2.6, height: 3.2, hitch: 0, frontOverhang: 1.6, kingpinToAxle: 6.4, axles: 2 },
+	],
+};
+const SEMI = {
+	tandemEndDump: { name: 'trailer', look: 'end-dump', length: 11.6, width: 2.6, height: 3.4, hitch: 0.3, frontOverhang: 0.9, kingpinToAxle: 9.4, axles: 2 },
+	tridemBellyDump: { name: 'trailer', look: 'belly-dump', length: 13.0, width: 2.6, height: 3.4, hitch: 0.3, frontOverhang: 0.9, kingpinToAxle: 10.0, axles: 3 },
+};
+
+// A dump truck towing a pup or a full trailer, hooked on 0.2 m behind the truck's frame.
+function towing( name, truck, trailers, legal ) {
+
+	const pintle = - ( truck.length - truck.frontOverhang - truck.wheelbase + 0.2 );
+	return { name, ...truck, trailers: trailers.map( ( trailer, i ) => ( { ...trailer, hitch: i === 0 ? pintle : trailer.hitch } ) ), legal };
+
+}
+
 export const VEHICLES = [
 	{ name: 'Car (SUV)', look: 'car', length: 4.8, width: 1.9, height: 1.75, wheelbase: 2.85, frontOverhang: 0.95, maxSteer: 36, maxSpeed: 40 },
 	{ name: 'Pickup truck', look: 'pickup', length: 5.9, width: 2.0, height: 1.9, wheelbase: 3.7, frontOverhang: 0.9, maxSteer: 35, maxSpeed: 40 },
-	{ name: 'Tandem dump truck', look: 'truck', length: 9.2, width: 2.6, height: 3.6, wheelbase: 5.6, frontOverhang: 1.4, maxSteer: 35, maxSpeed: 30 },
-	{ name: 'Mobile crane, travelling', look: 'crane', length: 13.5, width: 2.75, height: 4.0, wheelbase: 7.5, frontOverhang: 2.6, maxSteer: 30, maxSpeed: 25 },
+	{ name: 'Mobile crane, travelling', look: 'crane', length: 13.5, width: 2.75, height: 4.0, wheelbase: 7.5, frontOverhang: 2.6, steerAxles: 2, driveAxles: 3, maxSteer: 30, maxSpeed: 25 },
 	{
-		name: 'Semi-trailer, 53 ft', look: 'tractor', length: 6.6, width: 2.6, height: 3.8, wheelbase: 4.6, frontOverhang: 1.2, maxSteer: 35, maxSpeed: 30,
-		trailer: { look: 'trailer', length: 16.2, width: 2.6, height: 4.15, kingpinToAxle: 12.5, frontOverhang: 1.0, hitch: 0.3 },
+		name: 'Semi-trailer, 53 ft', ...TRACTOR.tandem,
+		trailers: [ { name: 'trailer', look: 'trailer', length: 16.2, width: 2.6, height: 4.15, hitch: 0.3, frontOverhang: 1.0, kingpinToAxle: 12.5, axles: 2 } ],
 	},
 	{
-		name: 'Lowbed with oversize load', look: 'tractor', length: 6.6, width: 2.6, height: 3.8, wheelbase: 4.6, frontOverhang: 1.2, maxSteer: 35, maxSpeed: 25,
-		trailer: { look: 'lowbed', length: 16.0, width: 4.0, height: 5.0, kingpinToAxle: 12.0, frontOverhang: 1.5, hitch: 0.3 },
+		name: 'Lowbed with oversize load', ...TRACTOR.tandem, maxSpeed: 25,
+		trailers: [ { name: 'lowbed and load', look: 'lowbed', length: 16.0, width: 4.0, height: 5.0, hitch: 0.3, frontOverhang: 1.5, kingpinToAxle: 12.0, axles: 3 } ],
+	},
+
+	// Gravel trucks, as on the BCSSGA truck weights chart.
+	{ name: 'Single axle dump (18,200 kg)', ...DUMP.single, legal: { gvw: 18200, groups: [ 9100, 9100 ], note: STEER_NOTE } },
+	{ name: 'Tandem dump (26,100 kg)', ...DUMP.tandem, legal: { gvw: 26100, groups: [ 9100, 17000 ], note: STEER_NOTE } },
+	{ name: 'Tridem dump (33,100 kg)', ...DUMP.tridem, legal: { gvw: 33100, groups: [ 9100, 24000 ], note: STEER_NOTE } },
+	{
+		name: 'Tandem steer dump (34,000 kg)', ...DUMP.tandem, length: 10.8, wheelbase: 5.9, frontOverhang: 2.2, steerAxles: 2, maxSteer: 30,
+		legal: { gvw: 34000, groups: [ 17000, 17000 ] },
+	},
+	{
+		name: 'Tandem steer slinger (40,700 kg)', ...DUMP.tridem, look: 'slinger', length: 12.0, wheelbase: 6.4, frontOverhang: 2.2, steerAxles: 2, maxSteer: 30,
+		legal: { gvw: 40700, groups: [ 17000, 24000 ], note: 'The most any single vehicle may weigh.' },
+	},
+	towing( 'Tandem dump + tandem pup (43,100 kg)', DUMP.tandem, [ PUP.tandem ], { gvw: 43100, groups: [ 9100, 17000, 17000 ] } ),
+	towing( 'Tandem dump + tridem pup (47,100 kg)', DUMP.tandem, [ PUP.tridem ], { gvw: 47100, groups: [ 9100, 17000, 21000 ] } ),
+	towing( 'Tridem dump + tandem pup (50,100 kg)', DUMP.tridem, [ PUP.tandem ], { gvw: 50100, groups: [ 9100, 24000, 17000 ] } ),
+	towing( 'Tridem dump + tridem pup (54,100 kg)', DUMP.tridem, [ PUP.tridem ], { gvw: 54100, groups: [ 9100, 24000, 21000 ] } ),
+	towing( 'Tandem dump + tri-axle full trailer (50,100 kg)', DUMP.tandem, FULL.triAxle, { gvw: 50100, groups: [ 9100, 17000, 9100, 17000 ], note: 'Full trailer 24,000 kg at most.' } ),
+	towing( 'Tandem dump + quad-axle full trailer (60,100 kg)', DUMP.tandem, FULL.quadAxle, { gvw: 60100, groups: [ 9100, 17000, 17000, 17000 ], note: 'Full trailer 34,000 kg at most.' } ),
+	towing( 'Tridem dump + tri-axle full trailer (57,100 kg)', DUMP.tridem, FULL.triAxle, { gvw: 57100, groups: [ 9100, 24000, 9100, 17000 ], note: 'Full trailer 24,000 kg at most.' } ),
+	towing( 'Tridem dump + quad-axle full trailer (63,500 kg)', DUMP.tridem, FULL.quadAxle, { gvw: 63500, groups: [ 9100, 24000, 17000, 17000 ], note: 'Full trailer 31,000 kg at most, if its axle spacing is over 8 m.' } ),
+	{ name: 'Tractor + tandem end dump (39,500 kg)', ...TRACTOR.tandem, trailers: [ SEMI.tandemEndDump ], legal: { gvw: 39500, groups: [ 5500, 17000, 17000 ] } },
+	{ name: 'Tractor + tridem belly or end dump (46,500 kg)', ...TRACTOR.tandem, trailers: [ SEMI.tridemBellyDump ], legal: { gvw: 46500, groups: [ 5500, 17000, 24000 ] } },
+	{ name: 'Tridem tractor + tridem belly or end dump (55,300 kg)', ...TRACTOR.tridem, trailers: [ SEMI.tridemBellyDump ], legal: { gvw: 55300, groups: [ 7300, 24000, 24000 ] } },
+	{
+		name: 'Super B (63,500 kg)', ...TRACTOR.tandem,
+		trailers: [
+			{ name: 'lead trailer', look: 'belly-dump', length: 10.4, width: 2.6, height: 3.4, hitch: 0.3, frontOverhang: 0.9, kingpinToAxle: 7.5, axles: 3 },
+			{ name: 'rear trailer', look: 'belly-dump', length: 9.4, width: 2.6, height: 3.4, hitch: - 0.3, frontOverhang: 0.9, kingpinToAxle: 7.0, axles: 2 },
+		],
+		legal: { gvw: 63500, groups: [ 5500, 17000, 24000, 17000 ] },
 	},
 ];
 

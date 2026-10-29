@@ -8,6 +8,7 @@ const $ = id => document.getElementById( id );
 const CHECK_SECONDS = 0.1;
 const DRIVE_KEYS = [ 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight' ];
 const DIRECTIONS = [ [ 'overhead', 'Overhead' ], [ 'left', 'Left' ], [ 'right', 'Right' ], [ 'ahead', 'Ahead' ], [ 'behind', 'Behind' ] ];
+const LEGEND_KEY = 'neptune-twin.driveLegend'; // 'off' once L has hidden the controls legend
 const _sphere = new Sphere();
 const _target = new Vector3();
 
@@ -44,11 +45,16 @@ export class DriveMode {
 		this.gui = this.createPanel();
 		this.gui.hide();
 
+		// The controls legend shows while driving; its keys light up while held.
+		this.legendKeys = [ ...document.querySelectorAll( '#drive-legend kbd[data-keys]' ) ].map( el => ( { el, codes: el.dataset.keys.split( ' ' ) } ) );
+		document.body.classList.toggle( 'legend-off', storage( () => localStorage.getItem( LEGEND_KEY ) ) === 'off' );
+
 		window.addEventListener( 'keydown', e => {
 
 			if ( isTyping( e ) ) return;
 			if ( e.code === 'KeyT' && ! e.repeat ) this.active ? this.exit() : this.enter();
 			if ( e.code === 'KeyC' && ! e.repeat && this.active ) this.toggleView();
+			if ( e.code === 'KeyL' && ! e.repeat && this.active ) this.toggleLegend();
 			if ( ! this.active || ! DRIVE_KEYS.includes( e.code ) ) return;
 			this.keys.add( e.code );
 			e.preventDefault(); // no page scrolling on Space and the arrows
@@ -85,6 +91,7 @@ export class DriveMode {
 		this.distance = Math.max( 15, this.totalLength() * 1.4 );
 		this.checkTimer = 0;
 		$( 'drive-hud' ).hidden = false;
+		document.body.classList.add( 'driving' );
 		this.gui.show();
 
 	}
@@ -99,6 +106,7 @@ export class DriveMode {
 		this.controls.setMode( 'fly' );
 		this.controls.setPose( this.camera.position.clone(), yawToHeading( yaw ), this.controls.pitch * MathUtils.RAD2DEG );
 		$( 'drive-hud' ).hidden = true; // the vehicle stays parked, and its panel open, to look around it
+		document.body.classList.remove( 'driving' );
 
 	}
 
@@ -108,6 +116,14 @@ export class DriveMode {
 		this.vehicle.showBody( this.view === 'chase' );
 		this.controls.yaw = 0;
 		this.controls.pitch = this.view === 'driver' ? - 0.05 : - 0.35;
+		$( 'legend-view' ).textContent = this.view === 'driver' ? 'back to the chase view' : 'the driver\'s seat';
+
+	}
+
+	toggleLegend() {
+
+		const off = document.body.classList.toggle( 'legend-off' );
+		storage( () => localStorage.setItem( LEGEND_KEY, off ? 'off' : 'on' ) );
 
 	}
 
@@ -119,6 +135,11 @@ export class DriveMode {
 		this.vehicle.setSpec( this.spec );
 		this.vehicle.margin = this.settings.margin;
 		this.rebuildSizeFolder?.();
+
+		const { legal } = this.spec;
+		const number = n => n.toLocaleString( 'en-CA' );
+		$( 'drive-legal' ).hidden = ! legal;
+		$( 'drive-legal' ).textContent = legal ? `BC legal max ${ number( legal.gvw ) } kg; axle groups, front to back: ${ legal.groups.map( number ).join( ' / ' ) } kg.${ legal.note ? ` ${ legal.note }` : '' }` : '';
 
 	}
 
@@ -137,7 +158,7 @@ export class DriveMode {
 
 	totalLength() {
 
-		return this.spec.length + ( this.spec.trailer ? this.spec.trailer.length : 0 );
+		return this.spec.length + ( this.spec.trailers ?? [] ).reduce( ( sum, trailer ) => sum + trailer.length, 0 );
 
 	}
 
@@ -159,6 +180,7 @@ export class DriveMode {
 			brake: k.has( 'Space' ),
 			crawl: pressed( 'ShiftLeft', 'ShiftRight' ) === 1,
 		} );
+		for ( const { el, codes } of this.legendKeys ) el.classList.toggle( 'down', codes.some( c => k.has( c ) ) );
 
 		this.checkTimer -= dt;
 		if ( this.checkTimer <= 0 ) {
@@ -237,7 +259,7 @@ export class DriveMode {
 		const { vehicle, settings } = this;
 		const r = vehicle.result;
 		const m = v => v === Infinity ? '-' : `${ v.toFixed( 1 ) } m`;
-		const where = body => body === 'trailer' ? ' (trailer)' : '';
+		const where = body => body && body !== 'truck' ? ` (${ body })` : '';
 
 		$( 'drive-name' ).textContent = this.spec.name;
 		$( 'drive-speed' ).textContent = `${ Math.abs( vehicle.speed * 3.6 ).toFixed( 0 ) } km/h${ vehicle.speed < - 0.05 ? ' reversing' : '' }`;
@@ -278,7 +300,7 @@ export class DriveMode {
 
 	createPanel() {
 
-		const gui = new GUI( { title: 'Vehicle  (T)', container: $( 'right' ) } );
+		const gui = new GUI( { title: 'Vehicle  (T)', container: $( 'right' ), width: 320 } ); // wide enough for the truck names
 		const { settings, vehicle } = this;
 
 		gui.add( settings, 'vehicle', VEHICLES.map( v => v.name ) ).onChange( name => this.useSpec( name ) );
@@ -296,12 +318,20 @@ export class DriveMode {
 			add( this.spec, 'wheelbase', 'wheelbase', 1, 20, 0.1 );
 			add( this.spec, 'frontOverhang', 'front overhang', 0, 6, 0.1 );
 			add( this.spec, 'maxSteer', 'max steering (°)', 10, 50, 1 );
-			if ( this.spec.trailer ) {
+			for ( const trailer of this.spec.trailers ?? [] ) {
 
-				add( this.spec.trailer, 'length', 'trailer / load length', 4, 40, 0.1 );
-				add( this.spec.trailer, 'width', 'trailer / load width', 1, 8, 0.05 );
-				add( this.spec.trailer, 'height', 'trailer / load height', 1, 10, 0.05 );
-				add( this.spec.trailer, 'kingpinToAxle', 'kingpin to trailer axle', 3, 30, 0.1 );
+				const name = trailer.name ?? 'trailer';
+				if ( trailer.look === 'dolly' ) {
+
+					add( trailer, 'kingpinToAxle', `${ name }: drawbar to axle`, 1, 10, 0.1 );
+					continue;
+
+				}
+
+				add( trailer, 'length', `${ name }: length`, 2, 40, 0.1 );
+				add( trailer, 'width', `${ name }: width`, 1, 8, 0.05 );
+				add( trailer, 'height', `${ name }: height`, 1, 10, 0.05 );
+				add( trailer, 'kingpinToAxle', `${ name }: hitch to axles`, 1, 30, 0.1 );
 
 			}
 
@@ -342,6 +372,21 @@ function copyText( text ) {
 
 	console.log( text );
 	navigator.clipboard?.writeText( text ).catch( () => window.prompt( 'Copy this into VEHICLES in src/config.js:', text ) );
+
+}
+
+// localStorage can be missing or throw (private windows, blocked storage).
+function storage( use ) {
+
+	try {
+
+		return use();
+
+	} catch {
+
+		return null;
+
+	}
 
 }
 
