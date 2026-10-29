@@ -118,6 +118,7 @@ export class GroundFlattener {
 
 // The stock plugin only flags changed vertices for re-upload when it re-flattens a tile,
 // assuming it saw every tile before it was first drawn. Registered late, it doesn't.
+// A collision index on the tile also has to follow the moved vertices.
 class UploadingFlatteningPlugin extends TileFlatteningPlugin {
 
 	_updateTile( tile ) {
@@ -125,7 +126,9 @@ class UploadingFlatteningPlugin extends TileFlatteningPlugin {
 		super._updateTile( tile );
 		tile.engineData.scene.traverse( c => {
 
-			if ( c.geometry ) c.geometry.attributes.position.needsUpdate = true;
+			if ( ! c.geometry ) return;
+			c.geometry.attributes.position.needsUpdate = true;
+			c.geometry.boundsTree?.refit(); // collision index built for driving (drive.js)
 
 		} );
 

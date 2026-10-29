@@ -15,6 +15,13 @@
 				<table id="berth-list"></table>
 				<div id="ships-summary"></div>
 			</div>
+			<div id="drive-hud" hidden>
+				<div><b id="drive-name"></b> &middot; <span id="drive-speed"></span></div>
+				<div id="drive-status"></div>
+				<table id="drive-clearances"></table>
+				<div id="drive-against"></div>
+				<div class="small">W/S drive &middot; A/D steer &middot; Shift crawl &middot; Space brake &middot; click, then mouse to look around &middot; wheel zooms &middot; T to stop</div>
+			</div>
 			<div id="vessel-card" hidden>
 				<button type="button" class="close" aria-label="Close">&times;</button>
 				<h3></h3>
@@ -23,7 +30,8 @@
 			</div>
 		</div>
 		<div id="crosshair" hidden></div>
-		<div id="hint" hidden>Click to look around &middot; <b>WASD</b> move &middot; <b>F</b> walk / fly &middot; <b>1&ndash;9</b> viewpoints &middot; <b>H</b> help</div>
+		<div id="right"></div>
+		<div id="hint" hidden>Click to look around &middot; <b>WASD</b> move &middot; <b>F</b> walk / fly &middot; <b>1&ndash;9</b> viewpoints &middot; <b>T</b> drive &middot; <b>H</b> help</div>
 
 		<div id="help" hidden>
 			<h2>Controls</h2>
@@ -38,6 +46,7 @@
 				<tr><td>1&ndash;9</td><td>Jump to a viewpoint</td></tr>
 				<tr><td>Click a ship</td><td>Show its details (while looking around, aim with the dot)</td></tr>
 				<tr><td>V</td><td>Show / hide live ships</td></tr>
+				<tr><td>T</td><td>Drive a vehicle to check whether it fits (T again to stop)</td></tr>
 				<tr><td>H</td><td>Show / hide this help</td></tr>
 			</table>
 			<h2>Viewpoints</h2>

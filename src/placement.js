@@ -4,7 +4,7 @@ import GUI from 'lil-gui';
 // "Copy config" gives you an entry to paste into MODELS in src/config.js.
 export function createPlacementPanel( models, { getPlayerPose } ) {
 
-	const gui = new GUI( { title: 'Model placement  (P)' } );
+	const gui = new GUI( { title: 'Model placement  (P)', container: document.getElementById( 'right' ) } );
 	gui.hide();
 
 	const empty = gui.add( { hint: 'Drop a .glb file on the page' }, 'hint' ).name( 'No models yet' ).disable();

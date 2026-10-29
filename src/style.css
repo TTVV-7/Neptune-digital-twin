@@ -26,7 +26,7 @@ html, body {
 	position: fixed;
 }
 
-#status, #ships, #vessel-card, #hint, #help, #banner, #attribution, .toast {
+#status, #ships, #drive-hud, #vessel-card, #hint, #help, #banner, #attribution, .toast {
 	background: var( --panel );
 	border-radius: 6px;
 	padding: 8px 12px;
@@ -47,6 +47,54 @@ html, body {
 
 #ships, #vessel-card {
 	pointer-events: auto;
+}
+
+/* The model placement and vehicle panels stack down the right side. */
+#right {
+	position: fixed;
+	top: 0;
+	right: 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	max-height: 100vh;
+	overflow-y: auto;
+}
+
+#drive-hud {
+	min-width: 260px;
+	font-size: 13px;
+}
+
+#drive-status {
+	margin: 4px 0;
+	font-weight: 700;
+	font-size: 15px;
+}
+
+#drive-status[data-state='clear'], #drive-clearances tr[data-state='clear'] td:nth-child( 2 ) {
+	color: #6fd894;
+}
+
+#drive-status[data-state='tight'], #drive-clearances tr[data-state='tight'] td:nth-child( 2 ) {
+	color: #f3c26b;
+}
+
+#drive-status[data-state='touching'], #drive-clearances tr[data-state='touching'] td:nth-child( 2 ) {
+	color: #ff6b5e;
+}
+
+#drive-clearances td {
+	padding: 0 12px 0 0;
+}
+
+#drive-clearances td:first-child, #drive-clearances td:last-child, #drive-against {
+	color: var( --muted );
+}
+
+#drive-against {
+	margin: 4px 0;
+	font-size: 12px;
 }
 
 #status {

@@ -4,6 +4,7 @@ import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import { MODELS, PLAYER, SITE, START, VIEWPOINTS } from './config.js';
 import { enuToLocal, localToEnu, localToLatLon, yawToHeading } from './geo.js';
 import { addLights, createGoogleTiles, createPlaceholderGround, GroundFlattener } from './world.js';
+import { DriveMode } from './drive.js';
 import { ModelManager } from './models.js';
 import { createPlacementPanel } from './placement.js';
 import { createShipPanel } from './shipPanel.js';
@@ -99,6 +100,9 @@ function start( apiKey ) {
 	controls.setPose( enuToLocal( START.east, START.north, START.up ), START.heading, START.pitch );
 	controls.setMode( START.mode );
 
+	const drive = new DriveMode( { camera, controls, domElement: renderer.domElement, ground, models, tiles } );
+	scene.add( drive.group, drive.trail );
+
 	const feetPosition = () => camera.position.clone().setY( camera.position.y - PLAYER.eyeHeight );
 	createPlacementPanel( models, {
 		getPlayerPose: () => ( { position: feetPosition(), heading: yawToHeading( controls.yaw ) } ),
@@ -120,8 +124,8 @@ function start( apiKey ) {
 	} );
 
 	setUpOverlays( controls );
-	setUpViewpoints( controls, () => [ ground, models.group ] );
-	setUpShips( vessels, controls, camera );
+	setUpViewpoints( controls, () => [ ground, models.group ], drive );
+	setUpShips( vessels, controls, camera, drive );
 
 	window.addEventListener( 'resize', () => {
 
@@ -141,7 +145,8 @@ function start( apiKey ) {
 
 		timer.update( time );
 		const dt = Math.min( timer.getDelta(), 0.1 );
-		controls.update( dt );
+		if ( drive.active ) drive.update( dt );
+		else controls.update( dt );
 		camera.updateMatrixWorld();
 		tiles?.update();
 		models.update();
@@ -153,7 +158,7 @@ function start( apiKey ) {
 		if ( hudTimer <= 0 ) {
 
 			hudTimer = 0.25;
-			updateStatus( camera, controls, tiles, models );
+			updateStatus( camera, controls, tiles, models, drive );
 			updateAttribution( tiles );
 
 		}
@@ -161,19 +166,23 @@ function start( apiKey ) {
 	} );
 
 	// Handy for poking around from the browser console.
-	window.twin = { scene, camera, controls, models, vessels, tiles, SITE };
+	window.twin = { scene, camera, controls, models, vessels, drive, tiles, SITE };
 
 }
 
-function updateStatus( camera, controls, tiles, models ) {
+function updateStatus( camera, controls, tiles, models, drive ) {
 
-	const { lat, lon } = localToLatLon( camera.position );
-	const { east, north } = localToEnu( camera.position );
+	// While driving, the position is the vehicle's, not the chase camera's.
+	const truck = drive.active && drive.vehicle.bodies[ 0 ];
+	const at = truck ? truck.object.position : camera.position;
+	const { lat, lon } = localToLatLon( at );
+	const { east, north } = localToEnu( at );
+	const mode = truck ? 'DRIVING' : controls.mode === 'walk' ? 'WALKING' : 'FLYING';
 	const lines = [
-		`${ controls.mode === 'walk' ? 'WALKING' : 'FLYING' }${ controls.mode === 'walk' && ! controls.groundFound ? ' (waiting for ground)' : '' }`,
+		`${ mode }${ ! truck && controls.mode === 'walk' && ! controls.groundFound ? ' (waiting for ground)' : '' }`,
 		`lat ${ lat.toFixed( 6 ) }  lon ${ lon.toFixed( 6 ) }`,
 		`east ${ east.toFixed( 1 ) } m  north ${ north.toFixed( 1 ) } m`,
-		`heading ${ yawToHeading( controls.yaw ).toFixed( 0 ) }°`,
+		`heading ${ ( truck ? truck.heading : yawToHeading( controls.yaw ) ).toFixed( 0 ) }°`,
 	];
 	if ( tiles && tiles.loadProgress < 1 ) lines.push( `loading tiles ${ Math.round( tiles.loadProgress * 100 ) }%` );
 	for ( const { name, loaded, total, stage } of models.loading ) {
@@ -245,7 +254,7 @@ function setUpOverlays( controls ) {
 }
 
 // Live ships: the panel, clicking on a ship, and flying over to one.
-function setUpShips( vessels, controls, camera ) {
+function setUpShips( vessels, controls, camera, drive ) {
 
 	const raycaster = new Raycaster();
 	const pointer = new Vector2();
@@ -253,6 +262,7 @@ function setUpShips( vessels, controls, camera ) {
 	createShipPanel( vessels, {
 		goTo: v => {
 
+			drive.exit();
 			const { position, heading, pitch } = vessels.viewOf( v );
 			controls.setMode( 'fly' );
 			controls.setPose( position, heading, pitch );
@@ -277,11 +287,12 @@ function setUpShips( vessels, controls, camera ) {
 }
 
 // Number keys jump to the VIEWPOINTS in config.js; the help panel lists them too.
-function setUpViewpoints( controls, getColliders ) {
+function setUpViewpoints( controls, getColliders, drive ) {
 
 	const raycaster = new Raycaster();
 	const goTo = view => {
 
+		drive.exit();
 		let up = view.up ?? 0;
 		if ( view.mode === 'walk' ) {
 

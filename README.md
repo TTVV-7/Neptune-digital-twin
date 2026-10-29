@@ -11,6 +11,7 @@ Google's photorealistic 3D map, and you can drop your own detailed models on top
 - **Controls:** first-person walking with gravity and collisions, free flying, and viewpoints on keys 1–9.
 - **Live ships:** vessels from AIS drawn at their real position, size and heading, with each Neptune berth
   shown as occupied or free.
+- **Fit checks:** drive a truck, crane or oversize load around the site and see its clearances and swept path.
 
 The step-by-step plan, with prompts you can paste to Claude, is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
@@ -60,6 +61,7 @@ The key ends up in the browser, so restricting it is what keeps it safe.
 | 1–9 | Jump to a viewpoint (also listed under H) |
 | Click a ship | Show its details. While looking around, aim with the dot in the middle. |
 | V | Show / hide live ships |
+| T | Drive a vehicle to check whether it fits (T again to stop) |
 | H | Help |
 
 You start flying over the water, looking north at the terminal. Press **F** to drop to the ground and walk,
@@ -96,6 +98,10 @@ If your model comes in back to front, try heading 180.
 | Revit `.rvt` / IFC | Export IFC or FBX, then Blender (the free Bonsai add-on reads IFC) |
 | AutoCAD `.dwg` | Usually 2D. Ask for a 3D export, or rebuild the key parts in Blender |
 | Drone or laser scan (`.las`, `.e57`, mesh) | Mesh it in RealityCapture, Metashape or CloudCompare, then export `.glb` |
+
+**This repository is public.** Anything you commit, including models and site photos, can be seen by
+anyone. Check what your client allows, or make the repository private first (GitHub: *Settings → General →
+Danger Zone → Change visibility*).
 
 ## Big models
 
@@ -136,6 +142,29 @@ index, walking on a model with millions of triangles would drop to a few frames 
 
 Some hosts limit file size: Cloudflare Pages, for example, refuses files over 25 MiB. For a model
 bigger than that, use cloud storage or 3D Tiles.
+
+## Checking whether a vehicle fits
+
+Press **T** and a vehicle appears where you're looking. Drive it with **W/S** and **A/D**, hold **Shift** to
+crawl at 3 km/h, **Space** brakes. Click, then move the mouse to look around it, and use the wheel to zoom.
+Press **T** again to stop: the vehicle stays parked so you can walk around it.
+
+- **Vehicles:** pickup, tandem dump truck, travelling mobile crane, 53 ft semi-trailer, and a lowbed with an
+  oversize load. Their sizes are only typical. Set the real vehicle's and load's under *Size* in the panel,
+  then **Copy vehicle config** and paste it into `VEHICLES` in [src/config.js](src/config.js).
+- **Clearances:** overhead, left, right, ahead and behind, for the truck and its trailer. A negative number
+  is an overlap: a load 0.5 m too tall reads −0.5 m overhead. The vehicle turns amber within the warning
+  distance (0.5 m unless you change it) and red when it touches something.
+- **Swept path:** the corners leave lines on the ground showing the room it needs, including the trailer
+  cutting inside on turns.
+
+**How far to trust it:**
+
+- The checks are only as good as the geometry. Your own models are checked exactly. Google's mesh can be
+  switched on with *Google mesh counts*, but it is off by a metre or two and turns trees, parked rail cars and
+  melted structures into solid lumps. It's fine for a first look, not for a decision.
+- Turning uses a low-speed model with no tyre slip, and the trailer follows its kingpin. The wheelbase and
+  steering lock set the turning circle. It doesn't model all-wheel steering or suspension.
 
 ## Live ships
 
@@ -192,6 +221,8 @@ src/models.js       loads and places your glTF models
 src/placement.js    the P panel
 src/vessels.js      live ships, berth status, hiding Google's photographed ships
 src/shipPanel.js    the Ships panel and ship cards
+src/vehicle.js      the drivable vehicle: turning, trailer, clearance checks, swept path
+src/drive.js        driving mode (T): keys, chase camera, readout, vehicle panel
 src/geo.js          lat/lon <-> local metres
 server/ais.js       AISStream connection, run by the dev server (vite.config.js)
 public/models/      optimised .glb files that the app loads

@@ -19,6 +19,7 @@ export class WalkController {
 		this.domElement = domElement;
 		this.getColliders = getColliders;
 
+		this.enabled = true; // false while something else (driving) has the keys
 		this.mode = 'fly';
 		this.yaw = 0;
 		this.pitch = 0;
@@ -33,7 +34,7 @@ export class WalkController {
 
 		this._onKeyDown = e => {
 
-			if ( isTyping( e ) ) return;
+			if ( isTyping( e ) || ! this.enabled ) return;
 			this.keys.add( e.code );
 			if ( e.code === 'Space' ) e.preventDefault();
 			if ( e.code === 'KeyF' && ! e.repeat ) this.toggleMode();
