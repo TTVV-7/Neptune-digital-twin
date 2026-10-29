@@ -12,7 +12,8 @@ const _forward = new Vector3();
 const _right = new Vector3();
 
 // Walk physics runs in sub-steps of at most this much horizontal movement, so slopes and
-// ledges behave the same at 10 fps as at 60 fps.
+// ledges behave much the same at 10 fps as at 60 fps. Raycasts are cheap thanks to
+// raycast.js, but the count is still capped.
 const MAX_SUBSTEP_DISTANCE = 0.25;
 const MAX_SUBSTEPS = 8;
 // Look this far above the feet for a surface the player has ended up underneath, e.g. after
@@ -54,11 +55,11 @@ export class WalkController {
 		this.raycaster = new Raycaster();
 		this.raycaster.firstHitOnly = true;
 
-		// Wall probes from just above step height up to the top of the head, at most 0.3 m apart.
+		// Wall probes just above step height, at the waist and at the top of the head. Thinner
+		// things between them are caught by a downward ray where the body is going.
 		const low = PLAYER.stepHeight + 0.05;
 		const high = PLAYER.eyeHeight + HEAD_CLEARANCE;
-		const count = Math.max( 2, Math.ceil( ( high - low ) / 0.3 ) + 1 );
-		this.probeHeights = Array.from( { length: count }, ( _, i ) => low + ( high - low ) * i / ( count - 1 ) );
+		this.probeHeights = [ low, ( low + high ) / 2, high ];
 
 		this._onKeyDown = e => {
 
@@ -85,6 +86,13 @@ export class WalkController {
 
 		};
 		this._onBlur = () => this.keys.clear();
+		// Clicking anything but the scene (the panel, a dropdown) can swallow key-ups, e.g. while a
+		// dropdown's list is open, so forget held keys rather than walking on by themselves.
+		this._onPointerDown = e => {
+
+			if ( e.target !== domElement ) this.keys.clear();
+
+		};
 		this._onMouseMove = e => {
 
 			if ( ! this.locked ) return;
@@ -111,6 +119,7 @@ export class WalkController {
 		window.addEventListener( 'keydown', this._onKeyDown, true );
 		window.addEventListener( 'keyup', this._onKeyUp, true );
 		window.addEventListener( 'blur', this._onBlur );
+		document.addEventListener( 'pointerdown', this._onPointerDown, true );
 		document.addEventListener( 'mousemove', this._onMouseMove );
 		document.addEventListener( 'pointerlockchange', this._onLockChange );
 		domElement.addEventListener( 'click', this._onClick );
@@ -288,6 +297,12 @@ export class WalkController {
 
 			}
 
+			// Anything with a top between step height and the head where the body is going: rails,
+			// pipes and beams thin enough to pass between the probes, and slopes too steep to climb.
+			const top = feetY + PLAYER.eyeHeight + HEAD_CLEARANCE;
+			_origin.set( pos.x, top, pos.z ).addScaledVector( _dir, len + PLAYER.radius );
+			if ( this.cast( _origin, DOWN, top - feetY - PLAYER.stepHeight ) ) return false;
+
 			pos.x += dx;
 			pos.z += dz;
 			return true;
@@ -309,9 +324,10 @@ export class WalkController {
 
 		const pos = this.camera.position;
 		const feetY = pos.y - PLAYER.eyeHeight;
+		const base = feetY + PLAYER.stepHeight;
 
-		_origin.set( pos.x, feetY + PLAYER.stepHeight, pos.z );
-		if ( this.isInsideModel( _origin ) || this.cast( _origin, UP, RECOVERY_HEIGHT ) ) return false;
+		_origin.set( pos.x, base, pos.z );
+		if ( this.isInsideModel( _origin ) ) return false;
 
 		_origin.set( pos.x, feetY + RECOVERY_HEIGHT, pos.z );
 		this.raycaster.firstHitOnly = false;
@@ -319,8 +335,13 @@ export class WalkController {
 		this.raycaster.firstHitOnly = true;
 		if ( hits.length === 0 ) return false;
 
-		// Hits are sorted top-down, so the last one is the surface nearest above the feet.
+		// Hits are sorted top-down, so the last one is the surface nearest above the feet. Only a
+		// ceiling between the feet and that surface means the player belongs where they are; one
+		// higher up, like a shiploader over the buried deck, doesn't.
 		const surface = hits[ hits.length - 1 ];
+		_origin.set( pos.x, base, pos.z );
+		if ( this.cast( _origin, UP, surface.point.y - base ) ) return false;
+
 		pos.y = surface.point.y + PLAYER.eyeHeight;
 		this.velocityY = 0;
 		this.grounded = true;
@@ -356,6 +377,7 @@ export class WalkController {
 		window.removeEventListener( 'keydown', this._onKeyDown, true );
 		window.removeEventListener( 'keyup', this._onKeyUp, true );
 		window.removeEventListener( 'blur', this._onBlur );
+		document.removeEventListener( 'pointerdown', this._onPointerDown, true );
 		document.removeEventListener( 'mousemove', this._onMouseMove );
 		document.removeEventListener( 'pointerlockchange', this._onLockChange );
 		this.domElement.removeEventListener( 'click', this._onClick );
@@ -364,12 +386,13 @@ export class WalkController {
 
 }
 
-// True while the user is typing in a text field, where keys must not move the player.
-// Buttons and checkboxes don't count: those keep focus after a click.
+// True while the user is typing in a text field or using a dropdown, where keys must not move
+// the player. Buttons and checkboxes don't count: those keep focus after a click.
 export function isTyping( e ) {
 
 	const t = e.target;
-	if ( t instanceof HTMLTextAreaElement || t?.isContentEditable ) return true;
+	// A focused dropdown would also act on arrow and letter keys, changing its value.
+	if ( t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement || t?.isContentEditable ) return true;
 	return t instanceof HTMLInputElement && ! [ 'button', 'checkbox', 'radio', 'range', 'submit', 'reset', 'color' ].includes( t.type );
 
 }

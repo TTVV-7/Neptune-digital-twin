@@ -55,6 +55,8 @@ html, body {
 }
 
 #help {
+	z-index: 1004;
+	background: rgb( 16, 22, 28 );
 	top: 50%;
 	transform: translateY( -50% );
 	max-width: 460px;
@@ -82,6 +84,15 @@ html, body {
 	top: 12px;
 	max-width: 640px;
 	background: rgba( 120, 30, 30, 0.9 );
+}
+
+/* On narrow screens the banner would cover the status block, so it goes underneath it. */
+@media ( max-width: 700px ) {
+
+	#banner {
+		top: 112px;
+	}
+
 }
 
 /* Google Maps logo and data credits, kept together and above the placement panel.
@@ -119,14 +130,23 @@ html, body {
 	color: var( --muted );
 }
 
-/* Keep the placement panel clear of the attribution row. Extra class so this beats the
-   stylesheet lil-gui injects at runtime. */
+/* Keep the placement panel clear of the attribution row, which wraps taller on phones. Extra
+   class so this beats the stylesheet lil-gui injects at runtime. */
 .lil-gui.lil-root.lil-auto-place {
 	max-height: calc( 100% - 56px );
 }
 
+@media ( max-width: 700px ) {
+
+	.lil-gui.lil-root.lil-auto-place {
+		max-height: calc( 100% - 100px );
+	}
+
+}
+
 .toast {
-	bottom: 112px;
+	z-index: 1003;
+	bottom: 128px;
 }
 
 #key-prompt {

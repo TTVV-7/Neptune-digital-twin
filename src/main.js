@@ -28,9 +28,10 @@ function boot() {
 
 	}
 
+	// Use a key from the link for this visit even if the browser won't let us save it.
 	if ( urlKey ) saveKey( urlKey );
 
-	const key = askForKey ? null : resolveKey();
+	const key = askForKey ? null : urlKey ? { value: urlKey, source: 'the link' } : resolveKey();
 	if ( key ) start( key.value, key.source );
 	else showKeyPrompt();
 
@@ -102,14 +103,37 @@ function start( apiKey, keySource ) {
 	let ground;
 	if ( apiKey ) {
 
+		let tileErrors = 0;
 		tiles = createGoogleTiles( {
 			apiKey,
 			camera,
 			renderer,
 			onError: ( { tile, error } ) => {
 
-				// Single tiles can fail on a network blip; only the root failing means the key or account is wrong.
-				if ( tile ) return;
+				// Single tiles can fail on a network blip. Speak up when the root fails or Google refuses
+				// the key (e.g. revoked mid-session), and briefly when tiles keep failing with none showing.
+				const refused = /error code 40[013]\b/.test( error?.message ?? '' );
+				if ( tile && ! refused ) {
+
+					tileErrors ++;
+					if ( tileErrors >= 2 && tiles.visibleTiles.size === 0 ) {
+
+						showBanner( `Google 3D tiles are failing to load (${ error?.message ?? 'unknown error' }). This is often temporary; if it keeps happening, check your connection.` );
+						// Take it back if tiles turn up after all.
+						tiles.addEventListener( 'tile-visibility-change', function onVisible( { visible } ) {
+
+							if ( ! visible ) return;
+							tiles.removeEventListener( 'tile-visibility-change', onVisible );
+							hideBanner();
+
+						} );
+
+					}
+
+					return;
+
+				}
+
 				showBanner(
 					`Google 3D tiles failed to load (${ error?.message ?? 'unknown error' }) using the key from ${ keySource }. ` +
 					'Check that the key is right, the Map Tiles API is enabled, billing is on, and the key allows this site. ' +
@@ -272,16 +296,28 @@ function setUpDragAndDrop( models, getPlacement ) {
 	window.addEventListener( 'drop', e => {
 
 		e.preventDefault();
-		for ( const file of e.dataTransfer.files ) {
+		const files = [ ...e.dataTransfer.files ];
+		const isModel = file => /\.(glb|gltf)$/i.test( file.name );
+		const modelFiles = files.filter( isModel );
+		// Anything else dropped alongside a .gltf is treated as its .bin and texture files.
+		const companions = files.filter( file => ! isModel( file ) );
 
-			if ( ! /\.(glb|gltf)$/i.test( file.name ) ) {
+		if ( modelFiles.length === 0 ) {
 
-				showBanner( `${ file.name } is not a .glb/.gltf file. Convert it first (see README).`, 6000 );
-				continue;
+			showBanner( `${ files.map( f => f.name ).join( ', ' ) }: not a .glb/.gltf file. Convert it first (see README).`, 6000 );
+			return;
 
-			}
+		}
 
-			models.loadFile( file, getPlacement() )
+		for ( const file of modelFiles ) {
+
+			models.loadFile( file, getPlacement(), companions )
+				.then( () => {
+
+					// The dev server can't serve these names from public/models, so the copied config would break.
+					if ( /[#?%]/.test( file.name ) ) showBanner( `Rename ${ file.name } without # ? or % before copying it to public/models.`, 8000 );
+
+				} )
 				.catch( err => showBanner( `Could not load ${ file.name }: ${ err.message }` ) );
 
 		}
@@ -297,7 +333,14 @@ function showBanner( message, timeout = 0 ) {
 	banner.textContent = message;
 	banner.hidden = false;
 	clearTimeout( bannerTimer );
-	if ( timeout ) bannerTimer = setTimeout( () => banner.hidden = true, timeout );
+	if ( timeout ) bannerTimer = setTimeout( hideBanner, timeout );
+
+}
+
+function hideBanner() {
+
+	clearTimeout( bannerTimer );
+	$( 'banner' ).hidden = true;
 
 }
 

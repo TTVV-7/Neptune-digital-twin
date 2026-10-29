@@ -20,6 +20,7 @@ import {
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { SITE } from './config.js';
 import { enuToLocal } from './geo.js';
+import { useFastRaycast } from './raycast.js';
 
 export const dracoLoader = new DRACOLoader().setDecoderPath( 'https://www.gstatic.com/draco/versioned/decoders/1.5.7/' );
 
@@ -54,6 +55,7 @@ export function createGoogleTiles( { apiKey, camera, renderer, onError } ) {
 	tiles.setCamera( camera );
 	tiles.setResolutionFromRenderer( camera, renderer );
 	tiles.addEventListener( 'load-error', onError );
+	tiles.addEventListener( 'load-model', ( { scene } ) => useFastRaycast( scene ) );
 
 	return tiles;
 

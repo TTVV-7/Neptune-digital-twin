@@ -27,9 +27,10 @@ Open the URL it prints, usually http://localhost:5173. Paste your Google API key
 or click **Continue without Google tiles** to try the controls on flat ground.
 
 To skip the prompt each time, give the app the key through an environment variable named
-`GOOGLE_MAPS_API_KEY` (also accepted: `GOOGLE_API_KEY`, `GOOGLE_API`, `VITE_GOOGLE_MAPS_API_KEY`;
-case doesn't matter). Either put it in `.env.local` (copy `.env.example`), or set it in your shell
-or cloud environment. `npm run dev` and `npm run build` read it when they start.
+`GOOGLE_MAPS_API_KEY` (also accepted: `GOOGLE_API`, `VITE_GOOGLE_MAPS_API_KEY`; case doesn't
+matter). Either put it in `.env.local` (copy `.env.example`), or set it in your shell or cloud
+environment. `npm run dev` and `npm run build` read it when they start. `npm run build` embeds the
+key in the built site, so only use a Maps key restricted to your site (see below).
 
 A key pasted into the app is saved in that browser and wins over the environment key it replaced.
 If the environment key changes later, the new environment key wins. **H → Change Google API key**
@@ -68,7 +69,9 @@ then press **F** to drop to the ground and walk. If you press F over the water y
 ## Adding your own model
 
 1. Export or convert the model to **.glb** (see below).
-2. Drag the file onto the page. It appears 20 m in front of you, sitting on the ground.
+2. Drag the file onto the page. It appears 20 m in front of you, sitting on the ground. For a `.gltf`
+   saved as separate files, drag it together with its `.bin` and texture files (and later copy them
+   all into `public/models/`).
 3. Press **P**. Line the model up with the Google mesh using *east*, *north*, *heading* and *scale*,
    or walk to where it belongs and click **Move to where I am**.
 4. Click **Copy config**, copy the file into `public/models/`, and paste the entry into `MODELS` in
@@ -114,6 +117,7 @@ src/world.js        Google tiles, lights, the flat stand-in ground
 src/walk.js         walk/fly controller with gravity and collisions
 src/models.js       loads and places your glTF models
 src/placement.js    the P panel
+src/raycast.js      fast raycasting (three-mesh-bvh) for walking and snapping
 src/geo.js          lat/lon <-> local metres
 public/models/      put your .glb files here
 ```

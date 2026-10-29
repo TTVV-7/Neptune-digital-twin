@@ -1,14 +1,16 @@
-import { Box3, Group, Raycaster, REVISION, Vector3 } from 'three';
+import { Box3, Group, LoadingManager, Raycaster, REVISION, Vector3 } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { dracoLoader } from './world.js';
 import { enuToLocal, headingToYaw, localToEnu } from './geo.js';
+import { useFastRaycast } from './raycast.js';
 
 const DOWN = new Vector3( 0, - 1, 0 );
 const _box = new Box3();
 const _center = new Vector3();
 const _origin = new Vector3();
+const _local = new Vector3();
 
 // Snapped models re-check the ground this often, because sharper tiles keep loading in.
 const SNAP_INTERVAL = 0.5;
@@ -31,21 +33,27 @@ export class ModelManager {
 		this.raycaster.firstHitOnly = true;
 		this.clock = 0;
 
-		const ktx2Loader = new KTX2Loader()
+		this.ktx2Loader = new KTX2Loader()
 			.setTranscoderPath( `https://cdn.jsdelivr.net/npm/three@0.${ REVISION }.0/examples/jsm/libs/basis/` )
 			.detectSupport( renderer );
+		this.loader = this.createLoader();
 
-		this.loader = new GLTFLoader()
+	}
+
+	createLoader( manager ) {
+
+		return new GLTFLoader( manager )
 			.setDRACOLoader( dracoLoader )
-			.setKTX2Loader( ktx2Loader )
+			.setKTX2Loader( this.ktx2Loader )
 			.setMeshoptDecoder( MeshoptDecoder );
 
 	}
 
-	async load( config, url = new URL( config.url, document.baseURI ).href ) {
+	async load( config, url = new URL( config.url, document.baseURI ).href, loader = this.loader ) {
 
-		const gltf = await this.loader.loadAsync( url );
+		const gltf = await loader.loadAsync( url );
 		const content = gltf.scene;
+		useFastRaycast( content );
 
 		// Recentre so east/north refer to the middle of the footprint and up to its base.
 		// CAD exports often carry huge offsets (e.g. UTM coordinates) that would put the model kilometres away.
@@ -87,17 +95,22 @@ export class ModelManager {
 
 	}
 
-	// Drag-and-dropped files load from a blob URL; the config keeps the file name.
-	loadFile( file, placement ) {
+	// Drag-and-dropped files load from blob URLs; the config keeps the file name. A .gltf saved as
+	// separate files is dropped together with its .bin and textures, which are looked up by name.
+	loadFile( file, placement, companions = [] ) {
 
-		const url = URL.createObjectURL( file );
+		const urls = new Map( [ file, ...companions ].map( f => [ f.name, URL.createObjectURL( f ) ] ) );
+		const manager = new LoadingManager();
+		manager.setURLModifier( url => urls.get( decodeURIComponent( url.split( /[?#]/ )[ 0 ].split( '/' ).pop() ) ) ?? url );
+
 		const config = {
 			name: file.name.replace( /\.(glb|gltf)$/i, '' ),
-			url: `models/${ encodeURIComponent( file.name ) }`,
+			url: `models/${ file.name }`,
 			...placement,
 			up: null,
 		};
-		return this.load( config, url ).finally( () => URL.revokeObjectURL( url ) );
+		return this.load( config, urls.get( file.name ), this.createLoader( manager ) )
+			.finally( () => urls.forEach( url => URL.revokeObjectURL( url ) ) );
 
 	}
 
@@ -175,10 +188,15 @@ export class ModelManager {
 
 	}
 
-	// Whether a world-space point is inside the bounding box of one of the models.
+	// Whether a world-space point is inside one of the models' boxes, turned with the model.
 	contains( point ) {
 
-		return this.entries.some( entry => _box.setFromObject( entry.pivot ).containsPoint( point ) );
+		return this.entries.some( entry => {
+
+			entry.pivot.updateWorldMatrix( true, false );
+			return entry.footprint.containsPoint( entry.pivot.worldToLocal( _local.copy( point ) ) );
+
+		} );
 
 	}
 

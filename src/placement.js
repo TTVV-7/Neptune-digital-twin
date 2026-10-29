@@ -31,13 +31,30 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 
 		} );
 		folder.add( state, 'heading', 0, 360, 0.1 ).name( 'heading (°)' ).onChange( apply );
-		// Not explicitly stepped, so exact factors such as 0.0254 survive.
-		const scale = folder.add( state, 'scale' ).min( 0.000001 ).step( 0.001, false ).onChange( apply );
-		folder.add( { units: state.scale }, 'units', UNITS ).name( 'model units' ).onChange( v => {
+		// Not explicitly stepped, so exact factors such as 0.0254 survive. No min() either: lil-gui
+		// would step on a grid offset from it (1 -> 1.010001), so clamp here instead.
+		const unitsState = { units: state.scale };
+		const scale = folder.add( state, 'scale' ).step( 0.001, false ).onChange( () => {
+
+			if ( ! ( state.scale > 0 ) ) {
+
+				state.scale = 1;
+				scale.updateDisplay();
+
+			}
+
+			unitsState.units = state.scale;
+			units.updateDisplay();
+			apply();
+
+		} );
+		const units = folder.add( unitsState, 'units', UNITS ).name( 'model units' ).onChange( v => {
 
 			state.scale = v;
 			scale.updateDisplay();
 			apply();
+			// Leave the keyboard to the scene; a focused dropdown also reacts to arrow keys.
+			units.$select.blur();
 
 		} );
 		up.enable( ! state.snap );
