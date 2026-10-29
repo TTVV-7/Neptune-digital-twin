@@ -5,6 +5,7 @@ import { enuToLocal, localToEnu, localToLatLon, yawToHeading } from './geo.js';
 import { addLights, createGoogleTiles, createPlaceholderGround } from './world.js';
 import { ModelManager } from './models.js';
 import { createPlacementPanel } from './placement.js';
+import { loadVehicleCatalog } from './vehicles.js';
 import { isTyping, WalkController } from './walk.js';
 
 const STORAGE_KEY = 'neptune-twin.google-api-key';
@@ -165,7 +166,16 @@ function start( apiKey, keySource ) {
 	controls.setMode( START.mode );
 
 	const feetPosition = () => camera.position.clone().setY( camera.position.y - PLAYER.eyeHeight );
-	createPlacementPanel( models, { getPlayerPosition: feetPosition } );
+	const panel = createPlacementPanel( models, {
+		getPlayerPosition: feetPosition,
+		getPlayerHeading: () => yawToHeading( controls.yaw ),
+	} );
+	loadVehicleCatalog().then( vehicles => {
+
+		panel.setVehicles( vehicles );
+		showVehicleCredits( vehicles );
+
+	} );
 
 	for ( const config of MODELS ) {
 
@@ -287,6 +297,28 @@ function setUpOverlays( controls ) {
 		window.location.href = url.href;
 
 	} );
+
+}
+
+// CC Attribution models must credit their authors wherever they're shown.
+function showVehicleCredits( vehicles ) {
+
+	if ( vehicles.length === 0 ) return;
+	const list = $( 'credits' ).querySelector( 'ul' );
+	for ( const { name, source } of vehicles ) {
+
+		const item = document.createElement( 'li' );
+		const link = document.createElement( 'a' );
+		link.href = source.url;
+		link.target = '_blank';
+		link.rel = 'noopener';
+		link.textContent = source.title;
+		item.append( `${ name }: `, link, ` by ${ source.author } (${ source.license })` );
+		list.append( item );
+
+	}
+
+	$( 'credits' ).hidden = false;
 
 }
 

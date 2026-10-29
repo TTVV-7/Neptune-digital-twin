@@ -1,15 +1,20 @@
 import GUI from 'lil-gui';
 import { isTyping } from './walk.js';
+import { vehicleConfig } from './vehicles.js';
+import { localToEnu } from './geo.js';
 
 // Common model units, as the scale that converts them to metres.
 const UNITS = { metres: 1, centimetres: 0.01, millimetres: 0.001, feet: 0.3048, inches: 0.0254 };
 
 // Panel (toggle with P) for lining your models up with the Google tiles.
 // "Copy config" gives you an entry to paste into MODELS in src/config.js.
-export function createPlacementPanel( models, { getPlayerPosition } ) {
+export function createPlacementPanel( models, { getPlayerPosition, getPlayerHeading } ) {
 
 	const gui = new GUI( { title: 'Model placement  (P)' } );
 	gui.hide();
+
+	// Filled in once the vehicle catalog has loaded.
+	const vehiclesFolder = gui.addFolder( 'Vehicles' ).hide();
 
 	const empty = gui.add( { hint: 'Drop a .glb file on the page' }, 'hint' ).name( 'No models yet' ).disable();
 	const folders = new Map();
@@ -103,7 +108,35 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 
 	}, true );
 
-	return gui;
+	// Pick a vehicle from the library and drop it a few metres ahead, facing the way you face.
+	function setVehicles( vehicles ) {
+
+		if ( vehicles.length === 0 ) return;
+		const pick = { id: vehicles[ 0 ].id };
+		const select = vehiclesFolder.add( pick, 'id', Object.fromEntries( vehicles.map( v => [ v.name, v.id ] ) ) )
+			.name( 'vehicle' )
+			.onChange( () => select.$select.blur() );
+		vehiclesFolder.add( {
+			place() {
+
+				const vehicle = vehicles.find( v => v.id === pick.id );
+				const heading = getPlayerHeading();
+				const distance = vehicle.dimensions.length / 2 + 4;
+				const { east, north } = localToEnu( getPlayerPosition() );
+				const rad = heading * Math.PI / 180;
+				models.load( vehicleConfig( vehicle, {
+					east: Math.round( ( east + Math.sin( rad ) * distance ) * 100 ) / 100,
+					north: Math.round( ( north + Math.cos( rad ) * distance ) * 100 ) / 100,
+					heading: Math.round( heading * 10 ) / 10,
+				} ) );
+
+			},
+		}, 'place' ).name( 'Place in front of me' );
+		vehiclesFolder.show();
+
+	}
+
+	return { gui, setVehicles };
 
 }
 

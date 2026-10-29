@@ -5,6 +5,7 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { dracoLoader } from './world.js';
 import { enuToLocal, headingToYaw, localToEnu } from './geo.js';
 import { useFastRaycast } from './raycast.js';
+import { frontToYaw } from './vehicles.js';
 
 const DOWN = new Vector3( 0, - 1, 0 );
 const _box = new Box3();
@@ -55,6 +56,11 @@ export class ModelManager {
 		const content = gltf.scene;
 		useFastRaycast( content );
 
+		// Turn the model so its front (if the config names one, as vehicles do) faces along the
+		// heading. This happens before recentring, so the box below is measured the right way round.
+		content.rotation.y = frontToYaw( config.front );
+		content.updateMatrixWorld();
+
 		// Recentre so east/north refer to the middle of the footprint and up to its base.
 		// CAD exports often carry huge offsets (e.g. UTM coordinates) that would put the model kilometres away.
 		if ( config.recenter !== false ) {
@@ -74,6 +80,7 @@ export class ModelManager {
 			pivot,
 			url: config.url,
 			recenter: config.recenter !== false,
+			front: config.front,
 			footprint: new Box3().setFromObject( content ),
 			state: {
 				name: config.name ?? 'Model',
@@ -237,6 +244,7 @@ export class ModelManager {
 			scale: state.scale,
 		};
 		if ( ! entry.recenter ) config.recenter = false;
+		if ( entry.front ) config.front = entry.front;
 		return config;
 
 	}
