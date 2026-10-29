@@ -16,9 +16,9 @@ const $ = id => document.getElementById( id );
 
 boot();
 
-function boot() {
+async function boot() {
 
-	const apiKey = readApiKey();
+	const apiKey = readApiKey() || await hostedApiKey();
 	if ( apiKey ) {
 
 		start( apiKey );
@@ -386,6 +386,24 @@ function readApiKey() {
 	}
 
 	return storage( () => localStorage.getItem( STORAGE_KEY ) ) || import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
+
+}
+
+// The private Cloudflare site (cloudflare/worker.js) can hand out a key stored there, after
+// its password check, so viewers don't each need one. Anywhere else this finds nothing.
+async function hostedApiKey() {
+
+	try {
+
+		const res = await fetch( 'api/config', { cache: 'no-store' } );
+		if ( ! res.headers.get( 'content-type' )?.includes( 'json' ) ) return '';
+		return ( await res.json() ).googleMapsApiKey ?? '';
+
+	} catch {
+
+		return '';
+
+	}
 
 }
 

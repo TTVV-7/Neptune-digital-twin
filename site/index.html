@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Neptune Terminals Digital Twin</title>
+		<script type="module" crossorigin src="./assets/index-D2HH8tRy.js"></script>
+		<link rel="stylesheet" crossorigin href="./assets/index-DNj0AtB-.css">
+	</head>
+	<body>
+		<div id="app"></div>
+
+		<div id="left">
+			<div id="status" hidden></div>
+			<div id="ships" hidden>
+				<div><b>Ships</b> &middot; <span id="ships-status"></span></div>
+				<table id="berth-list"></table>
+				<div id="ships-summary"></div>
+			</div>
+			<div id="drive-hud" hidden>
+				<div><b id="drive-name"></b> &middot; <span id="drive-speed"></span></div>
+				<div id="drive-status"></div>
+				<table id="drive-clearances"></table>
+				<div id="drive-against"></div>
+				<div class="small">W/S drive &middot; A/D steer &middot; Shift crawl &middot; Space brake &middot; click, then mouse to look around &middot; wheel zooms &middot; T to stop</div>
+			</div>
+			<div id="vessel-card" hidden>
+				<button type="button" class="close" aria-label="Close">&times;</button>
+				<h3></h3>
+				<table></table>
+				<button type="button" class="goto">Go to ship</button>
+			</div>
+		</div>
+		<div id="crosshair" hidden></div>
+		<div id="right"></div>
+		<div id="hint" hidden>Click to look around &middot; <b>WASD</b> move &middot; <b>F</b> walk / fly &middot; <b>1&ndash;9</b> viewpoints &middot; <b>T</b> drive &middot; <b>H</b> help</div>
+
+		<div id="help" hidden>
+			<h2>Controls</h2>
+			<table>
+				<tr><td>Click</td><td>Capture mouse to look around (Esc releases)</td></tr>
+				<tr><td>W A S D / arrows</td><td>Move</td></tr>
+				<tr><td>Shift</td><td>Run (walk) / boost (fly)</td></tr>
+				<tr><td>F</td><td>Switch between walking and flying</td></tr>
+				<tr><td>Space</td><td>Jump (walk) / up (fly)</td></tr>
+				<tr><td>E / Q</td><td>Up / down (fly)</td></tr>
+				<tr><td>P</td><td>Model placement panel</td></tr>
+				<tr><td>1&ndash;9</td><td>Jump to a viewpoint</td></tr>
+				<tr><td>Click a ship</td><td>Show its details (while looking around, aim with the dot)</td></tr>
+				<tr><td>V</td><td>Show / hide live ships</td></tr>
+				<tr><td>T</td><td>Drive a vehicle to check whether it fits (T again to stop)</td></tr>
+				<tr><td>H</td><td>Show / hide this help</td></tr>
+			</table>
+			<h2>Viewpoints</h2>
+			<table id="viewpoints"></table>
+			<p>Drop a <b>.glb</b> file anywhere on the page to load your own model.</p>
+			<p><button type="button" id="change-key">Change Google API key</button></p>
+		</div>
+
+		<div id="banner" hidden></div>
+		<div id="attribution"></div>
+
+		<div id="key-prompt" hidden>
+			<form>
+				<h1>Neptune Terminals digital twin</h1>
+				<p>
+					Paste a Google Maps Platform API key with the <b>Map Tiles API</b> enabled
+					to stream Google's photorealistic 3D model of the terminal.
+				</p>
+				<input name="key" type="password" autocomplete="off" placeholder="Google Maps API key" required />
+				<div class="buttons">
+					<button type="submit">Load the terminal</button>
+					<button type="button" id="skip">Continue without Google tiles</button>
+				</div>
+				<p class="small">
+					The key is saved only in this browser. You can also put it in <code>.env.local</code>
+					as <code>VITE_GOOGLE_MAPS_API_KEY</code>.
+				</p>
+			</form>
+		</div>
+
+	</body>
+</html>

@@ -29,7 +29,9 @@ export default defineConfig( ( { mode } ) => {
 	const env = loadEnv( mode, process.cwd(), '' );
 	const byName = new Map( Object.entries( env ).map( ( [ name, value ] ) => [ name.toLowerCase(), value ] ) );
 	const pick = names => names.map( name => byName.get( name.toLowerCase() ) ).find( Boolean ) ?? '';
-	const googleKey = pick( GOOGLE_KEY_NAMES );
+	// `npm run build:site` makes the copy in site/ that is committed and served by the Cloudflare
+	// Worker, so it must never carry a key: there the page asks the Worker for it (api/config).
+	const googleKey = mode === 'site' ? '' : pick( GOOGLE_KEY_NAMES );
 
 	return {
 		// AISSTREAM_URL points the feed at a stand-in server, for testing.

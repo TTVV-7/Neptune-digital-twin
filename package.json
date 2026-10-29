@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "optimize-models": "node scripts/optimize-models.mjs"
+    "optimize-models": "node scripts/optimize-models.mjs",
+    "build:site": "vite build --mode site --outDir site --emptyOutDir"
   },
   "dependencies": {
     "3d-tiles-renderer": "^0.5.3",
