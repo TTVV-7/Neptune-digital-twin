@@ -8,7 +8,21 @@
 	<body>
 		<div id="app"></div>
 
-		<div id="status" hidden></div>
+		<div id="left">
+			<div id="status" hidden></div>
+			<div id="ships" hidden>
+				<div><b>Ships</b> &middot; <span id="ships-status"></span></div>
+				<table id="berth-list"></table>
+				<div id="ships-summary"></div>
+			</div>
+			<div id="vessel-card" hidden>
+				<button type="button" class="close" aria-label="Close">&times;</button>
+				<h3></h3>
+				<table></table>
+				<button type="button" class="goto">Go to ship</button>
+			</div>
+		</div>
+		<div id="crosshair" hidden></div>
 		<div id="hint" hidden>Click to look around &middot; <b>WASD</b> move &middot; <b>F</b> walk / fly &middot; <b>1&ndash;9</b> viewpoints &middot; <b>H</b> help</div>
 
 		<div id="help" hidden>
@@ -22,6 +36,8 @@
 				<tr><td>E / Q</td><td>Up / down (fly)</td></tr>
 				<tr><td>P</td><td>Model placement panel</td></tr>
 				<tr><td>1&ndash;9</td><td>Jump to a viewpoint</td></tr>
+				<tr><td>Click a ship</td><td>Show its details (while looking around, aim with the dot)</td></tr>
+				<tr><td>V</td><td>Show / hide live ships</td></tr>
 				<tr><td>H</td><td>Show / hide this help</td></tr>
 			</table>
 			<h2>Viewpoints</h2>

@@ -88,12 +88,29 @@ Transport Canada drone rules.
 
 Start with public data, which proves the plumbing works. Then move to internal data.
 
-**Ships**
+**Ships (done):** live AIS through AISStream, relayed by the dev server. Ships are drawn to size, the
+three berths show occupied or free, and Google's photographed ships at the berths are hidden.
+See "Live ships" in the README. Next steps:
 
-> Add a live vessel layer. Use AISStream.io through a small backend proxy (a Cloudflare Worker or a
-> Node script; my key is [where]). Filter to Burrard Inlet, and draw each vessel as a hull at its real
-> length and heading, with a label for its name, type and speed. Ships at Neptune's berths should
-> visibly sit at the berth. Clicking a ship should show its details.
+> Deploy the AIS relay as a Cloudflare Worker so the hosted site has live ships too, and keep the key
+> as a Worker secret.
+
+> Show ships that are on their way: list vessels whose AIS destination mentions Neptune or Vancouver,
+> with their ETA, and the ships waiting at anchor in English Bay.
+
+> Keep a log of berth arrivals and departures (ship, berth, times) and show the last week in a table.
+
+**Trains**
+
+There is no free, public live feed of train or rail car positions. Railways only share them with their
+customers: CN has an API with GPS car locations for shippers, and Railinc's RailSight covers North
+American rail cars. The terminal's own systems know the most, such as unit train arrival schedules,
+car counts and car dumper or unloading logs. The Port of Vancouver's Connect+ dashboard has
+daily rail figures by terminal, but nothing live. Start with whatever the terminal can export:
+
+> Here is a sample of our rail data: [paste a few rows of train arrivals / car dumper log / CN or
+> Railinc car location messages], with columns [...]. Show the trains that are on site or due today,
+> draw the cars on the tracks of the rail loop, and colour them loaded or empty.
 
 **Conditions**
 

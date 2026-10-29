@@ -55,7 +55,13 @@ export class WalkController {
 			this.pitch = MathUtils.clamp( this.pitch, - Math.PI / 2 + 0.01, Math.PI / 2 - 0.01 );
 
 		};
-		this._onClick = () => domElement.requestPointerLock();
+		// onClick can claim a click (e.g. on a ship) so it doesn't capture the mouse.
+		this._onClick = e => {
+
+			if ( this.onClick?.( e ) ) return;
+			domElement.requestPointerLock();
+
+		};
 		this._onLockChange = () => {
 
 			this.locked = document.pointerLockElement === domElement;

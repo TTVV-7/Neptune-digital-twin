@@ -1,10 +1,13 @@
 import './style.css';
-import { PerspectiveCamera, Raycaster, Scene, Timer, Vector3, WebGLRenderer } from 'three';
+import { PerspectiveCamera, Raycaster, Scene, Timer, Vector2, Vector3, WebGLRenderer } from 'three';
+import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import { MODELS, PLAYER, SITE, START, VIEWPOINTS } from './config.js';
 import { enuToLocal, localToEnu, localToLatLon, yawToHeading } from './geo.js';
 import { addLights, createGoogleTiles, createPlaceholderGround, GroundFlattener } from './world.js';
 import { ModelManager } from './models.js';
 import { createPlacementPanel } from './placement.js';
+import { createShipPanel } from './shipPanel.js';
+import { VesselLayer } from './vessels.js';
 import { WalkController } from './walk.js';
 
 const STORAGE_KEY = 'neptune-twin.google-api-key';
@@ -50,6 +53,12 @@ function start( apiKey ) {
 	renderer.setSize( window.innerWidth, window.innerHeight );
 	$( 'app' ).appendChild( renderer.domElement );
 
+	// Ship and berth names are HTML, drawn over the canvas.
+	const labels = new CSS2DRenderer();
+	labels.setSize( window.innerWidth, window.innerHeight );
+	labels.domElement.id = 'labels';
+	$( 'app' ).appendChild( labels.domElement );
+
 	const scene = new Scene();
 	const camera = new PerspectiveCamera( 70, window.innerWidth / window.innerHeight, 0.1, 60000 );
 	addLights( scene );
@@ -83,6 +92,9 @@ function start( apiKey ) {
 	const models = new ModelManager( { getGround: () => [ ground ], flattener } );
 	scene.add( models.group );
 
+	const vessels = new VesselLayer( { getGround: () => [ ground ], flattener } );
+	scene.add( vessels.group, vessels.water );
+
 	const controls = new WalkController( camera, renderer.domElement, () => [ ground, models.group ] );
 	controls.setPose( enuToLocal( START.east, START.north, START.up ), START.heading, START.pitch );
 	controls.setMode( START.mode );
@@ -109,12 +121,14 @@ function start( apiKey ) {
 
 	setUpOverlays( controls );
 	setUpViewpoints( controls, () => [ ground, models.group ] );
+	setUpShips( vessels, controls, camera );
 
 	window.addEventListener( 'resize', () => {
 
 		camera.aspect = window.innerWidth / window.innerHeight;
 		camera.updateProjectionMatrix();
 		renderer.setSize( window.innerWidth, window.innerHeight );
+		labels.setSize( window.innerWidth, window.innerHeight );
 		tiles?.setResolutionFromRenderer( camera, renderer );
 
 	} );
@@ -131,7 +145,9 @@ function start( apiKey ) {
 		camera.updateMatrixWorld();
 		tiles?.update();
 		models.update();
+		vessels.update( dt, camera );
 		renderer.render( scene, camera );
+		labels.render( scene, camera );
 
 		hudTimer -= dt;
 		if ( hudTimer <= 0 ) {
@@ -145,7 +161,7 @@ function start( apiKey ) {
 	} );
 
 	// Handy for poking around from the browser console.
-	window.twin = { scene, camera, controls, models, tiles, SITE };
+	window.twin = { scene, camera, controls, models, vessels, tiles, SITE };
 
 }
 
@@ -201,6 +217,7 @@ function setUpOverlays( controls ) {
 	controls.onLockChange = locked => {
 
 		hint.hidden = locked;
+		$( 'crosshair' ).hidden = ! locked;
 		if ( locked ) help.hidden = true;
 
 	};
@@ -224,6 +241,38 @@ function setUpOverlays( controls ) {
 		window.location.href = url.href;
 
 	} );
+
+}
+
+// Live ships: the panel, clicking on a ship, and flying over to one.
+function setUpShips( vessels, controls, camera ) {
+
+	const raycaster = new Raycaster();
+	const pointer = new Vector2();
+
+	createShipPanel( vessels, {
+		goTo: v => {
+
+			const { position, heading, pitch } = vessels.viewOf( v );
+			controls.setMode( 'fly' );
+			controls.setPose( position, heading, pitch );
+
+		},
+	} );
+
+	// While looking around, the click goes where the dot in the middle points.
+	controls.onClick = e => {
+
+		if ( controls.locked ) pointer.set( 0, 0 );
+		else pointer.set( e.clientX / window.innerWidth * 2 - 1, - e.clientY / window.innerHeight * 2 + 1 );
+		raycaster.setFromCamera( pointer, camera );
+		const v = vessels.pick( raycaster );
+		if ( v ) vessels.select( v.data.mmsi );
+		return Boolean( v );
+
+	};
+
+	vessels.start();
 
 }
 

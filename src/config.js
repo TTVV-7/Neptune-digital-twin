@@ -32,6 +32,29 @@ export const VIEWPOINTS = [
 	{ name: 'On foot: north side of the coal pile', east: - 62, north: 191, heading: 200, pitch: 0, mode: 'walk' },
 ];
 
+// Live ships from AIS (needs a free AISStream key, see "Live ships" in the README).
+export const AIS = {
+	// Area to receive ships from: Burrard Inlet from English Bay (where ships wait at anchor)
+	// to past Second Narrows.
+	box: { south: 49.25, west: - 123.32, north: 49.34, east: - 122.95 },
+	staleMinutes: 30, // greyed out after this long without a position report
+	hideAfterHours: 6, // and hidden after this long
+};
+
+// Berths watched for ships: rectangles on the water, centred on east/north, with the long
+// side along `heading`. Estimated from Google's imagery, so rename them to the terminal's own
+// numbering and nudge them if a moored ship shows up outside its berth.
+//
+// `googleShip` is the ship that happened to be moored there when Google photographed the
+// terminal (same heading as the berth). Once live AIS is running it is pressed flat and
+// painted over with water, so a ship only shows at the berth when AIS says one is there.
+// Remove it if Google's imagery changes.
+export const BERTHS = [
+	{ name: 'West berth', east: - 480, north: - 144, heading: 116, length: 280, width: 70, googleShip: { east: - 483, north: - 149, length: 260, width: 48 } },
+	{ name: 'Middle berth', east: - 215, north: - 263, heading: 117, length: 280, width: 70, googleShip: { east: - 218, north: - 268, length: 245, width: 48 } },
+	{ name: 'East berth', east: 43, north: - 221, heading: 56, length: 260, width: 70, googleShip: { east: 46, north: - 226, length: 230, width: 48 } },
+];
+
 export const PLAYER = {
 	eyeHeight: 1.7,
 	walkSpeed: 4, // m/s

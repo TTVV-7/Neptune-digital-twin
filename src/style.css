@@ -22,18 +22,174 @@ html, body {
 	display: none !important;
 }
 
-#status, #hint, #help, #banner, #attribution, .toast {
+#hint, #help, #banner, #attribution, .toast {
 	position: fixed;
+}
+
+#status, #ships, #vessel-card, #hint, #help, #banner, #attribution, .toast {
 	background: var( --panel );
 	border-radius: 6px;
 	padding: 8px 12px;
 }
 
-#status {
+/* Status, ships and the ship card stack down the left side. */
+#left {
+	position: fixed;
 	top: 12px;
 	left: 12px;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 8px;
+	max-width: min( 380px, calc( 100vw - 24px ) );
+	pointer-events: none;
+}
+
+#ships, #vessel-card {
+	pointer-events: auto;
+}
+
+#status {
 	font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
 	white-space: pre;
+}
+
+#ships {
+	font-size: 13px;
+}
+
+#ships-status.warn {
+	color: #f3c26b;
+}
+
+#berth-list {
+	margin: 4px 0;
+	border-collapse: collapse;
+}
+
+#berth-list td {
+	padding: 1px 10px 1px 0;
+	vertical-align: top;
+}
+
+#berth-list td:first-child {
+	color: var( --muted );
+	white-space: nowrap;
+}
+
+#berth-list td[data-state='free'] {
+	color: #6fd894;
+}
+
+#berth-list td[data-state='occupied'] {
+	color: #f3c26b;
+}
+
+#ships-summary {
+	font-size: 12px;
+	color: var( --muted );
+}
+
+#ships.collapsed #berth-list {
+	display: none;
+}
+
+#vessel-card {
+	position: relative;
+	min-width: 240px;
+}
+
+#vessel-card.stale {
+	opacity: 0.75;
+}
+
+#vessel-card h3 {
+	margin: 0 24px 6px 0;
+	font-size: 15px;
+}
+
+#vessel-card td {
+	padding: 1px 12px 1px 0;
+	vertical-align: top;
+}
+
+#vessel-card td:first-child {
+	color: var( --muted );
+	white-space: nowrap;
+}
+
+#vessel-card .close {
+	position: absolute;
+	top: 4px;
+	right: 4px;
+	padding: 2px 8px;
+	background: none;
+	font-size: 18px;
+}
+
+#vessel-card .goto {
+	margin-top: 8px;
+}
+
+button.link {
+	padding: 0;
+	background: none;
+	color: var( --accent );
+	font-weight: 600;
+}
+
+button.link:hover {
+	text-decoration: underline;
+}
+
+/* Ship and berth names drawn in the scene (CSS2DRenderer). */
+#labels {
+	position: absolute;
+	top: 0;
+	left: 0;
+	pointer-events: none;
+}
+
+.vessel-label, .berth-label {
+	padding: 1px 6px;
+	border-radius: 4px;
+	background: rgba( 16, 22, 28, 0.75 );
+	font-size: 11px;
+	white-space: nowrap;
+}
+
+.vessel-label {
+	pointer-events: auto;
+	cursor: pointer;
+}
+
+.vessel-label.stale {
+	opacity: 0.5;
+}
+
+.berth-label {
+	border: 1px solid #8d959c;
+	color: var( --muted );
+}
+
+.berth-label[data-state='free'] {
+	border-color: #3fbf6f;
+}
+
+.berth-label[data-state='occupied'] {
+	border-color: #f0a030;
+}
+
+#crosshair {
+	position: fixed;
+	top: 50%;
+	left: 50%;
+	width: 6px;
+	height: 6px;
+	margin: -3px 0 0 -3px;
+	border-radius: 50%;
+	background: rgba( 255, 255, 255, 0.85 );
+	box-shadow: 0 0 2px #000;
 	pointer-events: none;
 }
 

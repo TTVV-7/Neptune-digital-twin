@@ -9,6 +9,8 @@ Google's photorealistic 3D map, and you can drop your own detailed models on top
 - **Your models:** any `.glb` / `.gltf` file, placed by east/north metres from the terminal centre.
   Big ones are compressed by `npm run optimize-models`, and Google's mesh can be flattened under them.
 - **Controls:** first-person walking with gravity and collisions, free flying, and viewpoints on keys 1–9.
+- **Live ships:** vessels from AIS drawn at their real position, size and heading, with each Neptune berth
+  shown as occupied or free.
 
 The step-by-step plan, with prompts you can paste to Claude, is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
@@ -56,6 +58,8 @@ The key ends up in the browser, so restricting it is what keeps it safe.
 | E / Q | Up / down (fly) |
 | P | Model placement panel |
 | 1–9 | Jump to a viewpoint (also listed under H) |
+| Click a ship | Show its details. While looking around, aim with the dot in the middle. |
+| V | Show / hide live ships |
 | H | Help |
 
 You start flying over the water, looking north at the terminal. Press **F** to drop to the ground and walk,
@@ -133,6 +137,42 @@ index, walking on a model with millions of triangles would drop to a few frames 
 Some hosts limit file size: Cloudflare Pages, for example, refuses files over 25 MiB. For a model
 bigger than that, use cloud storage or 3D Tiles.
 
+## Live ships
+
+The twin shows ships from AIS, the position beacons that ships broadcast by radio, through
+[AISStream](https://aisstream.io). It answers "which berths have a ship right now?":
+
+- Each ship is drawn at its real position, length, beam and heading, coloured by type: green cargo,
+  red tanker, blue passenger, orange tugs and service boats, purple pleasure craft, grey other.
+  Moving ships glide along their course between reports.
+- The three berths are outlined on the water: amber when a ship is moored there, green when free.
+  The **Ships** panel lists who is at each berth and since when. Click a ship, or its name, for its
+  type, size, destination, ETA, draught and last report.
+- Google's 3D mesh includes the ships that were moored when it was photographed. Once live AIS is
+  running, those are pressed flat and painted over with water, so a ship only shows at a berth when AIS
+  says one is there.
+
+**Setting it up:**
+
+1. Sign in at [aisstream.io](https://aisstream.io) with GitHub and create an API key under *Account*. It's free.
+2. Put it in `.env.local` as `AISSTREAM_API_KEY=...`, or set that variable in your shell or cloud environment.
+3. Run `npm run dev`. The terminal prints `AIS: connected to AISStream`.
+
+**Good to know:**
+
+- The key stays on your machine. AISStream doesn't let browsers connect directly, so the dev server
+  holds the connection and passes ship positions to the page at `/api/ais` ([server/ais.js](server/ais.js)).
+  `npm run preview` does the same. A static build (`npm run build`) has no server, so there the panel
+  says live ships are off. Hosting it means running that relay somewhere too, such as a small Node
+  server or a Cloudflare Worker.
+- Moored ships report their position only every 3 minutes, and their name and size every 6. For the
+  first 4 minutes after starting, berths say *checking...* rather than *free*. The dev server saves what
+  it has seen in `.cache/`, so later restarts don't start from nothing.
+- AISStream relies on volunteer receivers, so there can be gaps. A ship fades after 30 minutes without a
+  report and disappears after 6 hours. `AIS` in [src/config.js](src/config.js) sets both.
+- The berth outlines are estimated from Google's imagery. Rename them to the terminal's numbering, and
+  move them if a moored ship shows up outside its outline, in `BERTHS` in [src/config.js](src/config.js).
+
 ## About the Sketchfab model
 
 The [Neptune Terminal (North Vancouver)](https://skfb.ly/oyAVS) model on Sketchfab belongs to
@@ -150,7 +190,10 @@ src/world.js        Google tiles, lights, the flat stand-in ground
 src/walk.js         walk/fly controller with gravity and collisions
 src/models.js       loads and places your glTF models
 src/placement.js    the P panel
+src/vessels.js      live ships, berth status, hiding Google's photographed ships
+src/shipPanel.js    the Ships panel and ship cards
 src/geo.js          lat/lon <-> local metres
+server/ais.js       AISStream connection, run by the dev server (vite.config.js)
 public/models/      optimised .glb files that the app loads
 models-src/         original models (not committed); `npm run optimize-models` reads these
 scripts/            the model optimiser

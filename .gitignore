@@ -7,3 +7,6 @@ dist/
 # Original models; only the optimised copies in public/models/ are committed.
 models-src/*
 !models-src/README.md
+
+# Live ship data kept between dev server restarts.
+.cache/
