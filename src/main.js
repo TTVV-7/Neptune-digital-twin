@@ -132,7 +132,11 @@ function start( apiKey, keySource ) {
 	const models = new ModelManager( { getGround: () => [ ground ], renderer } );
 	scene.add( models.group );
 
-	const controls = new WalkController( camera, renderer.domElement, () => [ ground, models.group ] );
+	const controls = new WalkController( camera, renderer.domElement, {
+		getColliders: () => [ ground, models.group ],
+		getGround: () => [ ground ],
+		isInsideModel: point => models.contains( point ),
+	} );
 	controls.setPose( enuToLocal( START.east, START.north, START.up ), START.heading, START.pitch );
 	controls.setMode( START.mode );
 

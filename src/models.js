@@ -12,8 +12,9 @@ const _origin = new Vector3();
 
 // Snapped models re-check the ground this often, because sharper tiles keep loading in.
 const SNAP_INTERVAL = 0.5;
-// Ground is sampled this far outside the footprint, so a model sits on the terrain
-// around it rather than on the roof of Google's version of the same building.
+// Ground is sampled on a 3x3 grid reaching this far outside the footprint, and the median
+// height is used. A sample on the roof of Google's copy of the same building, or past the
+// berth edge in the water, is outvoted by the ones on the surrounding ground.
 const SNAP_MARGIN = 2;
 
 // Loads your own glTF/GLB models and places them in the terminal frame.
@@ -27,7 +28,8 @@ export class ModelManager {
 		this.entries = [];
 		this.getGround = getGround;
 		this.raycaster = new Raycaster();
-		this.snapTimer = 0;
+		this.raycaster.firstHitOnly = true;
+		this.clock = 0;
 
 		const ktx2Loader = new KTX2Loader()
 			.setTranscoderPath( `https://cdn.jsdelivr.net/npm/three@0.${ REVISION }.0/examples/jsm/libs/basis/` )
@@ -75,6 +77,7 @@ export class ModelManager {
 				scale: config.scale ?? 1,
 			},
 			snapped: false,
+			lastSnap: - Infinity,
 		};
 
 		this.entries.push( entry );
@@ -109,7 +112,7 @@ export class ModelManager {
 
 	}
 
-	// Put the model's base on the lowest ground found around its footprint.
+	// Put the model's base on the ground around and under its footprint.
 	snap( entry ) {
 
 		const { pivot, state, footprint } = entry;
@@ -120,7 +123,7 @@ export class ModelManager {
 		const zs = [ footprint.min.z - margin, ( footprint.min.z + footprint.max.z ) / 2, footprint.max.z + margin ];
 		const ground = this.getGround();
 
-		let lowest = Infinity;
+		const heights = [];
 		for ( const x of xs ) {
 
 			for ( const z of zs ) {
@@ -129,15 +132,19 @@ export class ModelManager {
 				_origin.y = 2000;
 				this.raycaster.set( _origin, DOWN );
 				const hit = this.raycaster.intersectObjects( ground, true ).find( h => h.object.isMesh );
-				if ( hit ) lowest = Math.min( lowest, hit.point.y );
+				if ( hit ) heights.push( hit.point.y );
 
 			}
 
 		}
 
-		if ( lowest === Infinity ) return;
+		entry.lastSnap = this.clock;
+		if ( heights.length === 0 ) return;
 
-		const up = Math.round( lowest * 100 ) / 100;
+		heights.sort( ( a, b ) => a - b );
+		const mid = heights.length >> 1;
+		const median = heights.length % 2 ? heights[ mid ] : ( heights[ mid - 1 ] + heights[ mid ] ) / 2;
+		const up = Math.round( median * 100 ) / 100;
 		entry.snapped = true;
 		if ( up !== state.up ) {
 
@@ -149,19 +156,29 @@ export class ModelManager {
 
 	}
 
-	// Tiles stream in and sharpen after a model loads: snap as soon as there is ground,
-	// then keep re-checking so the model follows the finer tiles.
+	// Tiles stream in and sharpen after a model loads: snap as soon as there is ground, then
+	// keep re-checking so the model follows the finer tiles. Only one model is checked per
+	// frame, the one waiting longest, so many models don't all raycast in the same frame.
 	update( dt ) {
 
-		this.snapTimer -= dt;
-		const recheck = this.snapTimer <= 0;
-		if ( recheck ) this.snapTimer = SNAP_INTERVAL;
-
+		this.clock += dt;
+		let next = null;
 		for ( const entry of this.entries ) {
 
-			if ( entry.state.snap && ( recheck || ! entry.snapped ) ) this.snap( entry );
+			if ( ! entry.state.snap ) continue;
+			const due = ! entry.snapped || this.clock - entry.lastSnap >= SNAP_INTERVAL;
+			if ( due && ( ! next || entry.lastSnap < next.lastSnap ) ) next = entry;
 
 		}
+
+		if ( next ) this.snap( next );
+
+	}
+
+	// Whether a world-space point is inside the bounding box of one of the models.
+	contains( point ) {
+
+		return this.entries.some( entry => _box.setFromObject( entry.pivot ).containsPoint( point ) );
 
 	}
 

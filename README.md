@@ -62,7 +62,8 @@ The key ends up in the browser, so restricting it is what keeps it safe.
 | P | Model placement panel |
 | H | Help |
 
-You start flying over the water, looking north at the terminal. Press **F** to drop to the ground and walk.
+You start flying over Burrard Inlet, looking north at the terminal. Fly in over the terminal with **W**,
+then press **F** to drop to the ground and walk. If you press F over the water you'll stand on the water.
 
 ## Adding your own model
 

@@ -15,20 +15,28 @@ const _right = new Vector3();
 // ledges behave the same at 10 fps as at 60 fps.
 const MAX_SUBSTEP_DISTANCE = 0.25;
 const MAX_SUBSTEPS = 8;
-// When the ground ray finds nothing, look for a surface this far above the feet. That
-// rescues the player after flying into the ground or when sharper tiles load in higher up.
+// Look this far above the feet for a surface the player has ended up underneath, e.g. after
+// flying into the ground or when sharper tiles load in higher up.
 const RECOVERY_HEIGHT = 50;
+// How long nothing may be under the feet before that counts as being buried rather than
+// stepping over a crack in the mesh.
+const NO_GROUND_GRACE = 0.3;
 const HEAD_CLEARANCE = 0.1;
 
 // First-person controller. Walk mode has gravity and bumps into things;
 // fly mode goes wherever you look and ignores collisions.
 export class WalkController {
 
-	constructor( camera, domElement, getColliders ) {
+	// getColliders: everything that blocks the player. getGround: the base terrain only (the
+	// tiles), used to tell when the player has ended up underneath it. isInsideModel: true when
+	// a point is within one of your own models, where being under a roof is expected.
+	constructor( camera, domElement, { getColliders, getGround, isInsideModel } ) {
 
 		this.camera = camera;
 		this.domElement = domElement;
 		this.getColliders = getColliders;
+		this.getGround = getGround;
+		this.isInsideModel = isInsideModel;
 
 		this.mode = 'fly';
 		this.yaw = 0;
@@ -37,6 +45,10 @@ export class WalkController {
 		this.grounded = false;
 		this.groundFound = false;
 		this.locked = false;
+		// The mesh the player is standing on, and whether to check for being buried next step.
+		this.standingOn = null;
+		this.checkBuried = false;
+		this.noGroundTime = 0;
 
 		this.keys = new Set();
 		this.raycaster = new Raycaster();
@@ -119,6 +131,9 @@ export class WalkController {
 		this.mode = mode;
 		this.velocityY = 0;
 		this.grounded = false;
+		this.standingOn = null;
+		// Flying has no collisions, so the player may have flown into the ground.
+		this.checkBuried = mode === 'walk';
 		this.onModeChange?.( mode );
 
 	}
@@ -183,26 +198,34 @@ export class WalkController {
 		const pos = this.camera.position;
 		if ( move ) this.moveWithCollisions( move );
 
+		if ( this.checkBuried ) {
+
+			this.checkBuried = false;
+			if ( this.liftIfBuried() ) return;
+
+		}
+
 		let feetY = pos.y - PLAYER.eyeHeight;
-		let groundY = this.groundBelow( pos.x, feetY + PLAYER.stepHeight, pos.z );
+		const ground = this.groundHit( pos.x, feetY + PLAYER.stepHeight, pos.z );
 
-		if ( groundY === null ) {
+		if ( ! ground ) {
 
-			// Nothing under the feet: either the tiles are still streaming in, or the feet are
-			// below the surface (flew into the ground, or a sharper tile loaded in higher up).
-			const above = this.groundBelow( pos.x, feetY + RECOVERY_HEIGHT, pos.z );
-			this.groundFound = above !== null;
+			// Nothing under the feet: a crack in the mesh (keep going), the tiles still streaming
+			// in (hover), or the feet are below the surface.
 			this.velocityY = 0;
-			if ( above !== null && above > feetY ) {
-
-				pos.y = above + PLAYER.eyeHeight;
-				this.grounded = true;
-
-			}
-
+			this.noGroundTime += h;
+			if ( this.noGroundTime >= NO_GROUND_GRACE ) this.groundFound = this.liftIfBuried();
 			return;
 
 		}
+
+		this.noGroundTime = 0;
+		const groundY = ground.point.y;
+
+		// The floor dropped away under a standing player and a different mesh is below: usually the
+		// tile was swapped for a sharper one whose surface is now above the feet. Google's mesh often
+		// has a second layer underneath (water under the berth deck) that would otherwise catch them.
+		if ( this.grounded && ground.object !== this.standingOn && groundY < feetY - PLAYER.stepHeight && this.liftIfBuried() ) return;
 
 		this.groundFound = true;
 		this.velocityY -= PLAYER.gravity * h;
@@ -241,6 +264,7 @@ export class WalkController {
 
 		}
 
+		this.standingOn = this.grounded ? ground.object : null;
 		feetY = newFeetY;
 		pos.y = feetY + PLAYER.eyeHeight;
 
@@ -276,21 +300,54 @@ export class WalkController {
 
 	}
 
-	groundBelow( x, y, z ) {
+	// If the feet are under a surface that can only be seen from above (the inside of the ground),
+	// move up onto the nearest such surface. Only called when being buried is likely (after
+	// flying, when the floor drops away, or when there's no ground), since a roof mesh without an
+	// underside looks the same. A ceiling that faces down at the player, such as the underside of
+	// a conveyor gallery, or being inside one of your own models, means they belong underneath.
+	liftIfBuried() {
+
+		const pos = this.camera.position;
+		const feetY = pos.y - PLAYER.eyeHeight;
+
+		_origin.set( pos.x, feetY + PLAYER.stepHeight, pos.z );
+		if ( this.isInsideModel( _origin ) || this.cast( _origin, UP, RECOVERY_HEIGHT ) ) return false;
+
+		_origin.set( pos.x, feetY + RECOVERY_HEIGHT, pos.z );
+		this.raycaster.firstHitOnly = false;
+		const hits = this.castAll( _origin, DOWN, RECOVERY_HEIGHT - PLAYER.stepHeight, this.getGround() );
+		this.raycaster.firstHitOnly = true;
+		if ( hits.length === 0 ) return false;
+
+		// Hits are sorted top-down, so the last one is the surface nearest above the feet.
+		const surface = hits[ hits.length - 1 ];
+		pos.y = surface.point.y + PLAYER.eyeHeight;
+		this.velocityY = 0;
+		this.grounded = true;
+		this.standingOn = surface.object;
+		return true;
+
+	}
+
+	groundHit( x, y, z ) {
 
 		_origin.set( x, y, z );
-		const hit = this.cast( _origin, DOWN, 5000 );
-		return hit ? hit.point.y : null;
+		return this.cast( _origin, DOWN, 5000 );
 
 	}
 
 	cast( origin, direction, far ) {
 
+		return this.castAll( origin, direction, far )[ 0 ] ?? null;
+
+	}
+
+	castAll( origin, direction, far, objects = this.getColliders() ) {
+
 		this.raycaster.set( origin, direction );
 		this.raycaster.far = far;
-		const hits = this.raycaster.intersectObjects( this.getColliders(), true );
 		// Lines and points in user models have fat pick thresholds; only solid meshes block.
-		return hits.find( hit => hit.object.isMesh ) ?? null;
+		return this.raycaster.intersectObjects( objects, true ).filter( hit => hit.object.isMesh );
 
 	}
 
