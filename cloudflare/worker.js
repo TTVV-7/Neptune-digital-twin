@@ -134,6 +134,7 @@ export class AisRelay {
 		}
 
 		ws.accept();
+		ws.binaryType = 'arraybuffer'; // AISStream sends binary frames; the default here is Blob
 		this.socket = ws;
 		ws.addEventListener( 'message', e => this.feed.received( typeof e.data === 'string' ? e.data : new TextDecoder().decode( e.data ) ) );
 		ws.addEventListener( 'close', e => this.dropped( ws, e.code ) );
