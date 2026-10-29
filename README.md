@@ -240,8 +240,9 @@ The twin is hosted at https://neptune-twin.thomas-verigin.workers.dev behind a p
 the Worker in [cloudflare/worker.js](cloudflare/worker.js). The Worker asks for the password (any user
 name), then serves the built copy of the app in `site/`.
 
-- **Updating it:** run `npm run build:site`, commit `site/` and push. The live site picks it up within a
-  couple of minutes. This build never includes a Google key.
+- **Updating it:** run `npm run build:site`, commit `site/` and push, then set `COMMIT` in the Worker
+  to that commit and redeploy it (or ask Claude to). Pinning one commit keeps the page and its files from
+  the same build. This build never includes a Google key.
 - **Password:** the `SITE_PASSWORD` secret, under *Workers & Pages → neptune-twin → Settings → Variables
   and Secrets* in the Cloudflare dashboard.
 - **Google key:** each viewer pastes one the first time (it's saved in their browser). To spare them,

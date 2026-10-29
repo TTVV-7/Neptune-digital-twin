@@ -1,13 +1,15 @@
 // Private hosting for the twin on Cloudflare Workers.
 //
 // It asks for a password (the browser's own sign-in box; any user name, the password is the
-// SITE_PASSWORD secret), then serves the built app from site/ in the GitHub repository.
-// Rebuild that copy with `npm run build:site` and push; the Worker picks it up within minutes.
+// SITE_PASSWORD secret), then serves the built app from site/ in the GitHub repository, as it
+// was at COMMIT. Pinning one commit keeps the page and its files from the same build. To
+// update: `npm run build:site`, commit and push, set COMMIT to that commit and redeploy this.
 //
 // Optional secret GOOGLE_MAPS_API_KEY: handed to the page after the password check, so viewers
 // don't need their own key. Restrict that key to this site's address in Google Cloud.
 
-const SOURCE = 'https://raw.githubusercontent.com/TTVV-7/Neptune-digital-twin/refs/heads/claude/wonderful-faraday-iq3krk/site';
+const COMMIT = '2862d9cb9c72c88c8db48c0622fe1a4eceb0686f';
+const SOURCE = `https://raw.githubusercontent.com/TTVV-7/Neptune-digital-twin/${ COMMIT }/site`;
 
 const TYPES = {
 	html: 'text/html; charset=utf-8',
@@ -46,13 +48,13 @@ export default {
 		if ( url.pathname.startsWith( '/api/' ) ) return new Response( 'Not available here', { status: 404 } );
 
 		const path = url.pathname.endsWith( '/' ) ? `${ url.pathname }index.html` : url.pathname;
-		const upstream = await fetch( SOURCE + path, { cf: { cacheEverything: true, cacheTtl: 120 } } );
+		const upstream = await fetch( SOURCE + path, { cf: { cacheEverything: true, cacheTtl: 86400 } } );
 		if ( ! upstream.ok ) return new Response( 'Not found', { status: 404 } );
 
 		return new Response( upstream.body, {
 			headers: {
 				'Content-Type': TYPES[ path.split( '.' ).pop() ] ?? 'application/octet-stream',
-				'Cache-Control': 'private, max-age=120',
+				'Cache-Control': 'private, max-age=300',
 				'X-Content-Type-Options': 'nosniff',
 			},
 		} );
