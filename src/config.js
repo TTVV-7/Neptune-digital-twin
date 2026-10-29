@@ -44,9 +44,14 @@ export const PLAYER = {
 	radius: 0.4, // how close you can get to a wall
 };
 
-// Your own detailed models. Put .glb / .gltf files in public/models/ and list them here.
+// Your own detailed models. Put .glb / .gltf files in public/models/ and list them here
+// (big files: run `npm run optimize-models` first, see the README).
 // Use the in-app placement panel (press P) to line a model up with the Google tiles,
 // then press "Copy config" and paste the result over the entry below.
+//
+// Optional extras:
+//   flatten: true      press Google's mesh flat under the model (2 m around it; a number sets the margin)
+//   recenter: false    keep the file's own origin instead of the middle of its footprint
 export const MODELS = [
 	// {
 	// 	name: 'My section of the port',
@@ -56,5 +61,6 @@ export const MODELS = [
 	// 	up: null,
 	// 	heading: 0,
 	// 	scale: 1,
+	// 	flatten: true,
 	// },
 ];

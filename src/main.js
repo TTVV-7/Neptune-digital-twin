@@ -2,7 +2,7 @@ import './style.css';
 import { PerspectiveCamera, Raycaster, Scene, Timer, Vector3, WebGLRenderer } from 'three';
 import { MODELS, PLAYER, SITE, START, VIEWPOINTS } from './config.js';
 import { enuToLocal, localToEnu, localToLatLon, yawToHeading } from './geo.js';
-import { addLights, createGoogleTiles, createPlaceholderGround } from './world.js';
+import { addLights, createGoogleTiles, createPlaceholderGround, GroundFlattener } from './world.js';
 import { ModelManager } from './models.js';
 import { createPlacementPanel } from './placement.js';
 import { WalkController } from './walk.js';
@@ -79,7 +79,8 @@ function start( apiKey ) {
 
 	scene.add( ground );
 
-	const models = new ModelManager( { getGround: () => [ ground ] } );
+	const flattener = tiles ? new GroundFlattener( tiles ) : null;
+	const models = new ModelManager( { getGround: () => [ ground ], flattener } );
 	scene.add( models.group );
 
 	const controls = new WalkController( camera, renderer.domElement, () => [ ground, models.group ] );
@@ -107,8 +108,8 @@ function start( apiKey ) {
 	} );
 
 	setUpOverlays( controls );
-
 	setUpViewpoints( controls, () => [ ground, models.group ] );
+
 	window.addEventListener( 'resize', () => {
 
 		camera.aspect = window.innerWidth / window.innerHeight;
@@ -121,6 +122,7 @@ function start( apiKey ) {
 	const timer = new Timer();
 	timer.connect( document );
 	let hudTimer = 0;
+	models.onLoading = () => hudTimer = 0;
 	renderer.setAnimationLoop( time => {
 
 		timer.update( time );
@@ -135,7 +137,7 @@ function start( apiKey ) {
 		if ( hudTimer <= 0 ) {
 
 			hudTimer = 0.25;
-			updateStatus( camera, controls, tiles );
+			updateStatus( camera, controls, tiles, models );
 			updateAttribution( tiles );
 
 		}
@@ -147,7 +149,7 @@ function start( apiKey ) {
 
 }
 
-function updateStatus( camera, controls, tiles ) {
+function updateStatus( camera, controls, tiles, models ) {
 
 	const { lat, lon } = localToLatLon( camera.position );
 	const { east, north } = localToEnu( camera.position );
@@ -158,6 +160,14 @@ function updateStatus( camera, controls, tiles ) {
 		`heading ${ yawToHeading( controls.yaw ).toFixed( 0 ) }°`,
 	];
 	if ( tiles && tiles.loadProgress < 1 ) lines.push( `loading tiles ${ Math.round( tiles.loadProgress * 100 ) }%` );
+	for ( const { name, loaded, total, stage } of models.loading ) {
+
+		const mb = bytes => ( bytes / 1e6 ).toFixed( 0 );
+		if ( stage === 'preparing' ) lines.push( `preparing ${ name }...` );
+		else if ( total ) lines.push( `loading ${ name } ${ Math.round( 100 * loaded / total ) }% (${ mb( loaded ) } / ${ mb( total ) } MB)` );
+		else lines.push( `loading ${ name } ${ mb( loaded ) } MB` );
+
+	}
 
 	const status = $( 'status' );
 	status.hidden = false;
@@ -217,16 +227,6 @@ function setUpOverlays( controls ) {
 
 }
 
-function setUpDragAndDrop( models, getPlacement ) {
-
-	window.addEventListener( 'dragover', e => e.preventDefault() );
-	window.addEventListener( 'drop', e => {
-
-		e.preventDefault();
-		for ( const file of e.dataTransfer.files ) {
-
-			if ( ! /\.(glb|gltf)$/i.test( file.name ) ) {
-
 // Number keys jump to the VIEWPOINTS in config.js; the help panel lists them too.
 function setUpViewpoints( controls, getColliders ) {
 
@@ -278,6 +278,16 @@ function setUpViewpoints( controls, getColliders ) {
 	} );
 
 }
+
+function setUpDragAndDrop( models, getPlacement ) {
+
+	window.addEventListener( 'dragover', e => e.preventDefault() );
+	window.addEventListener( 'drop', e => {
+
+		e.preventDefault();
+		for ( const file of e.dataTransfer.files ) {
+
+			if ( ! /\.(glb|gltf)$/i.test( file.name ) ) {
 
 				showBanner( `${ file.name } is not a .glb/.gltf file. Convert it first (see README).`, 6000 );
 				continue;

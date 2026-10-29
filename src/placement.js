@@ -28,6 +28,7 @@ export function createPlacementPanel( models, { getPlayerPose } ) {
 		} );
 		folder.add( state, 'heading', 0, 360, 0.1 ).name( 'heading (°)' ).onChange( apply );
 		folder.add( state, 'scale', 0.001, 10, 0.001 ).onChange( apply );
+		folder.add( state, 'flatten' ).name( 'flatten Google under it' ).onChange( apply );
 		up.enable( ! state.snap );
 
 		const actions = {

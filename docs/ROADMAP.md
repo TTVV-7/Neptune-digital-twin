@@ -47,15 +47,20 @@ in `src/config.js`.
 > position from them instead of eyeballing it. Then run the app and show me screenshots next to the
 > Google mesh so I can check the alignment.
 
-Then fix the overlap:
+**Already in place:**
 
-> My model and Google's mesh overlap, and Google's blobby buildings poke through mine. Use
-> 3d-tiles-renderer's `TileFlatteningPlugin` to flatten the Google tiles under my model's footprint.
+- `npm run optimize-models` shrinks big files (put originals in `models-src/`). See "Big models" in the README.
+- `flatten: true` (or the tick box in the P panel) presses Google's mesh flat under a model, so its
+  blobby buildings don't poke through yours. The footprint is the model's bounding rectangle.
+  If that's too coarse for an L-shaped or diagonal model, ask:
 
-If the file is big or slow:
+> Flattening under `[file].glb` takes out too much around it. Flatten under the model's real outline
+> instead of its bounding rectangle.
 
-> `[file].glb` is [N] MB and loads slowly. Write an npm script that optimises everything in
-> `public/models/` with gltf-transform (meshopt geometry, WebP or KTX2 textures), and tell me how much smaller it got.
+If the model is still too big after optimising (over 100 MB, or the browser runs out of memory):
+
+> `[file].glb` is [N] MB after optimising. Convert it to 3D Tiles so it streams in pieces, and load it
+> from `MODELS` like the other models.
 
 ## Phase 3: Add detail where Google is blurry
 

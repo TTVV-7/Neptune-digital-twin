@@ -3,3 +3,7 @@ dist/
 .env.local
 .env.*.local
 .DS_Store
+
+# Original models; only the optimised copies in public/models/ are committed.
+models-src/*
+!models-src/README.md
