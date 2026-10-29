@@ -16,7 +16,7 @@
 import { AIS } from '../src/config.js';
 import { AISSTREAM_URL, AisFeed } from '../server/aisFeed.js';
 
-const COMMIT = '0b9c1cad9e29c2dd1379bce9f2f6d5b160ef8a01';
+const COMMIT = '549eebc0bc5752edfb71b2a7410d3a692921e01c';
 const SOURCE = `https://raw.githubusercontent.com/TTVV-7/Neptune-digital-twin/${ COMMIT }/site`;
 
 const TYPES = {
