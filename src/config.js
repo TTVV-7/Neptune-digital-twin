@@ -38,7 +38,7 @@ export const AIS = {
 	// to past Second Narrows.
 	box: { south: 49.25, west: - 123.32, north: 49.34, east: - 122.95 },
 	staleMinutes: 30, // greyed out after this long without a position report
-	hideAfterHours: 6, // and hidden after this long
+	hideAfterHours: 6, // and hidden after this long; a ship moored in a berth keeps it until then
 };
 
 // Berths watched for ships: rectangles on the water, centred on east/north, with the long

@@ -27,9 +27,10 @@ const KNOTS = 0.514444; // metres per second
 const EARTH_RADIUS = 6371000;
 const SINK = 3; // metres of hull below the water line, so Google's uneven water shows no gap
 const MIN_BERTH_SHIP = 60; // metres; tugs and launches alongside don't count as occupying a berth
-// Moored ships only report every few minutes, so a berth isn't called free until the feed
-// has been listening this long, and only while reports keep coming in.
-const SETTLE_SECONDS = 240;
+// Moored ships report every 3 minutes, but AISStream only catches some of those reports at
+// these berths (one ship went unheard for over 9 minutes). So a berth isn't called free until
+// the feed has been listening this long, and only while reports keep coming in.
+export const SETTLE_SECONDS = 30 * 60;
 const QUIET_SECONDS = 300;
 const WATER_COLOR = 0x2e5878; // Google's water around the berths
 // Open water near the terminal, sampled to find the height of Google's water surface.
@@ -362,8 +363,10 @@ export class VesselLayer {
 			let occupant = null;
 			for ( const v of this.vessels.values() ) {
 
+				// A ship last heard stopped in the berth keeps it, even when its reports are sparse,
+				// until it's heard somewhere else or goes quiet for AIS.hideAfterHours.
 				const still = v.data.sog === null || v.data.sog < 1;
-				if ( ! v.stale && still && v.length >= MIN_BERTH_SHIP && inRect( berth, berth.length, berth.width, v.centre.east, v.centre.north ) ) {
+				if ( still && v.length >= MIN_BERTH_SHIP && inRect( berth, berth.length, berth.width, v.centre.east, v.centre.north ) ) {
 
 					if ( ! occupant || v.length > occupant.length ) occupant = v;
 

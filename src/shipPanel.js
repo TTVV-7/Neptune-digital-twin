@@ -1,6 +1,8 @@
 // The "Ships" panel (berth status from live AIS) and the card for a clicked ship.
 // AIS names and destinations are typed in by ships' crews, so they only ever go in as text.
 
+import { SETTLE_SECONDS } from './vessels.js';
+
 const $ = id => document.getElementById( id );
 
 const NAV_STATUS = [ 'under way', 'at anchor', 'not under command', 'restricted manoeuvrability', 'constrained by draught', 'moored', 'aground', 'fishing', 'under way, sailing' ];
@@ -27,7 +29,7 @@ export function createShipPanel( layer, { goTo } ) {
 		status.classList.toggle( 'warn', layer.status.state !== 'live' );
 
 		// Only rebuild the list when it changes, so a click on a ship name isn't lost.
-		const berths = JSON.stringify( layer.berths.map( b => [ b.state, b.occupant?.data.mmsi, b.occupant?.data.name, b.occupant?.data.type, b.occupant?.data.stoppedSince ] ) );
+		const berths = JSON.stringify( layer.berths.map( b => [ b.state, b.occupant?.data.mmsi, b.occupant?.data.name, b.occupant?.data.type, b.occupant?.data.stoppedSince, b.occupant?.stale && Math.floor( b.occupant.data.age / 300 ) ] ) );
 		if ( berths !== lastBerths ) renderBerths();
 		lastBerths = berths;
 
@@ -56,6 +58,7 @@ export function createShipPanel( layer, { goTo } ) {
 				what.append( link( v.data.name || `MMSI ${ v.data.mmsi }`, () => select( v ) ) );
 				const since = v.data.stoppedSince;
 				what.append( ` ${ typeName( v.data.type ) }${ since ? `, here since ${ since === v.data.firstSeen ? 'at least ' : '' }${ clock( since ) }` : '' }` );
+				if ( v.stale ) what.append( ` (last heard ${ ago( v.data.age ) })` );
 
 			} else {
 
@@ -143,7 +146,7 @@ function statusText( layer ) {
 	if ( state === 'live' ) {
 
 		if ( layer.quietFor > 120 ) return `live, but quiet: last message ${ ago( layer.quietFor ) }`;
-		if ( ! layer.settled ) return 'live: listening, moored ships report every few minutes';
+		if ( ! layer.settled ) return `live: listening for ${ Math.floor( layer.listenedFor / 60 ) } min; berths show free after ${ SETTLE_SECONDS / 60 }`;
 		return 'live AIS';
 
 	}

@@ -10,6 +10,8 @@
 //   GOOGLE_MAPS_API_KEY  handed to the page after the password check, so viewers don't need
 //                        their own key. Restrict it to this site's address in Google Cloud.
 //   AISSTREAM_API_KEY    live ships: the AisRelay below holds the AISStream connection.
+//
+// A cron trigger (every 10 minutes, see wrangler.jsonc) makes sure the relay is listening.
 
 import { AIS } from '../src/config.js';
 import { AISSTREAM_URL, AisFeed } from '../server/aisFeed.js';
@@ -73,14 +75,23 @@ export default {
 
 	},
 
+	// Wakes the relay in case it was restarted and its alarm lost.
+	async scheduled( controller, env ) {
+
+		if ( env.AIS ) await env.AIS.get( env.AIS.idFromName( 'burrard-inlet' ) ).fetch( 'https://relay/wake' );
+
+	},
+
 };
 
-const IDLE_MS = 10 * 60 * 1000; // stop listening this long after the last viewer
 const TICK_MS = 60 * 1000;
 
-// Holds the AISStream connection while someone has the site open (AISStream doesn't allow
-// browsers to connect, and the key stays here), keeps the table of vessels in storage
-// between visits, and answers the page's /api/ais polls. What the messages mean is in
+// Holds the AISStream connection (AISStream doesn't allow browsers to connect, and the key
+// stays here), keeps the table of vessels in storage and answers the page's /api/ais polls.
+// It listens all the time, not just while someone is looking: AISStream only catches some
+// of a moored ship's reports at Neptune's berths, so the table needs hours of listening to
+// know which ships are alongside. One object listening non-stop uses about 85% of the
+// Workers free plan's daily Durable Objects allowance. What the messages mean is in
 // server/aisFeed.js, shared with the dev server.
 export class AisRelay {
 
@@ -91,7 +102,6 @@ export class AisRelay {
 		this.feed = new AisFeed( { apiKey: env.AISSTREAM_API_KEY, box: AIS.box, log: message => console.log( message ) } );
 		this.socket = null;
 		this.retryAt = 0;
-		this.lastViewed = 0;
 		ctx.blockConcurrencyWhile( async () => {
 
 			if ( env.AISSTREAM_API_KEY ) this.feed.load( await ctx.storage.get( 'vessels' ) );
@@ -102,7 +112,6 @@ export class AisRelay {
 
 	async fetch() {
 
-		this.lastViewed = Date.now();
 		if ( this.env.AISSTREAM_API_KEY ) {
 
 			if ( ! this.socket && Date.now() >= this.retryAt ) this.connect();
@@ -151,22 +160,11 @@ export class AisRelay {
 
 	}
 
-	// Every minute while someone is watching: save the table, reconnect if the connection
-	// dropped, and stop once nobody has looked for a while (an open connection keeps this
-	// object running, and AISStream allows only a few per account).
+	// Every minute: save the table and reconnect if the connection dropped.
 	async alarm() {
 
 		await this.ctx.storage.put( 'vessels', this.feed.list() );
-
-		if ( Date.now() - this.lastViewed > IDLE_MS ) {
-
-			const ws = this.socket;
-			this.socket = null;
-			if ( ws && ws !== 'opening' ) ws.close( 1000, 'nobody watching' );
-			return;
-
-		}
-
+		if ( ! this.env.AISSTREAM_API_KEY ) return;
 		if ( ! this.socket && Date.now() >= this.retryAt ) this.connect();
 		await this.ctx.storage.setAlarm( Date.now() + TICK_MS );
 

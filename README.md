@@ -216,11 +216,18 @@ The twin shows ships from AIS, the position beacons that ships broadcast by radi
   `npm run preview` does the same. A static build (`npm run build`) has no server, so there the panel
   says live ships are off. Hosting it means running that relay somewhere too, such as a small Node
   server or a Cloudflare Worker.
-- Moored ships report their position only every 3 minutes, and their name and size every 6. For the
-  first 4 minutes after starting, berths say *checking...* rather than *free*. The dev server saves what
-  it has seen in `.cache/`, so later restarts don't start from nothing.
-- AISStream relies on volunteer receivers, so there can be gaps. A ship fades after 30 minutes without a
-  report and disappears after 6 hours. `AIS` in [src/config.js](src/config.js) sets both.
+- Moored ships report their position every 3 minutes and their name and size every 6, but AISStream
+  only catches some of those reports at Neptune's berths: one ship alongside went unheard for over
+  9 minutes. So for the first 30 minutes after starting, berths say *checking...* rather than *free*,
+  and a ship last heard stopped in a berth keeps it, even when its reports are sparse, until it's heard
+  somewhere else or goes quiet for 6 hours. When its last report is old, the panel says when it was
+  last heard. The dev server saves what it has seen in `.cache/`, so later restarts don't start from nothing.
+- The hosted site's relay listens all the time, not just while someone is looking, so it already knows
+  which ships are alongside when you open the page. That uses about 85% of the Cloudflare Workers free
+  plan's daily Durable Objects allowance. If the account ever runs over, live ships stop until midnight UTC.
+- AISStream relies on volunteer receivers, so there can be gaps, and sites like MarineTraffic may see
+  a ship before it does. A ship fades after 30 minutes without a report and disappears after 6 hours.
+  `AIS` in [src/config.js](src/config.js) sets both.
 - The berth outlines are estimated from Google's imagery. Rename them to the terminal's numbering, and
   move them if a moored ship shows up outside its outline, in `BERTHS` in [src/config.js](src/config.js).
 

@@ -6,6 +6,7 @@
 	"main": "cloudflare/worker.js",
 	"compatibility_date": "2026-10-01",
 	"workers_dev": true,
+	"triggers": { "crons": [ "*/10 * * * *" ] }, // keeps the live-ships relay listening
 	"durable_objects": {
 		"bindings": [ { "name": "AIS", "class_name": "AisRelay" } ]
 	},
