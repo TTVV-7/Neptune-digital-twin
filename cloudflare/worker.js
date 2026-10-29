@@ -42,6 +42,7 @@ export default {
 		}
 
 		// Live ships need the dev server's AIS connection, which this site doesn't have yet.
+		if ( url.pathname === '/api/ais' ) return Response.json( { now: Date.now(), status: { state: 'unavailable' }, vessels: [] } );
 		if ( url.pathname.startsWith( '/api/' ) ) return new Response( 'Not available here', { status: 404 } );
 
 		const path = url.pathname.endsWith( '/' ) ? `${ url.pathname }index.html` : url.pathname;

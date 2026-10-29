@@ -234,6 +234,23 @@ The scene uses metres with the origin at the terminal centre (`SITE` in `config.
 +Y is up, +Z is north and +X is west. Always go through `enuToLocal()` / `localToEnu()` in `geo.js`
 rather than setting x/z by hand.
 
+## Private link on Cloudflare
+
+The twin is hosted at https://neptune-twin.thomas-verigin.workers.dev behind a password, using
+the Worker in [cloudflare/worker.js](cloudflare/worker.js). The Worker asks for the password (any user
+name), then serves the built copy of the app in `site/`.
+
+- **Updating it:** run `npm run build:site`, commit `site/` and push. The live site picks it up within a
+  couple of minutes. This build never includes a Google key.
+- **Password:** the `SITE_PASSWORD` secret, under *Workers & Pages → neptune-twin → Settings → Variables
+  and Secrets* in the Cloudflare dashboard.
+- **Google key:** each viewer pastes one the first time (it's saved in their browser). To spare them,
+  add the key there as a `GOOGLE_MAPS_API_KEY` secret: the page fetches it after the password check.
+  Either way, restrict the key to `https://neptune-twin.thomas-verigin.workers.dev/*` in Google Cloud.
+- **Live ships** don't work there yet: they need the dev server's AIS connection.
+- **Only the page is private.** Its files come from `site/` in this public repository, so keep
+  confidential models and photos out of `site/` and `public/models/`.
+
 ## Building and hosting
 
 ```bash

@@ -77,8 +77,14 @@ export class VesselLayer {
 
 	start() {
 
-		this.poll();
-		setInterval( () => this.poll(), POLL_SECONDS * 1000 );
+		// Where there is no feed (a static or hosted copy), check back only once a minute.
+		const next = () => setTimeout( async () => {
+
+			await this.poll();
+			next();
+
+		}, this.status.state === 'unavailable' ? 60000 : POLL_SECONDS * 1000 );
+		this.poll().then( next );
 
 	}
 
