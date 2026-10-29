@@ -9,7 +9,7 @@
 		<div id="app"></div>
 
 		<div id="status" hidden></div>
-		<div id="hint" hidden>Click to look around &middot; <b>WASD</b> move &middot; <b>F</b> walk / fly &middot; <b>H</b> help</div>
+		<div id="hint" hidden>Click to look around &middot; <b>WASD</b> move &middot; <b>F</b> walk / fly &middot; <b>1&ndash;9</b> viewpoints &middot; <b>H</b> help</div>
 
 		<div id="help" hidden>
 			<h2>Controls</h2>
@@ -21,8 +21,11 @@
 				<tr><td>Space</td><td>Jump (walk) / up (fly)</td></tr>
 				<tr><td>E / Q</td><td>Up / down (fly)</td></tr>
 				<tr><td>P</td><td>Model placement panel</td></tr>
+				<tr><td>1&ndash;9</td><td>Jump to a viewpoint</td></tr>
 				<tr><td>H</td><td>Show / hide this help</td></tr>
 			</table>
+			<h2>Viewpoints</h2>
+			<table id="viewpoints"></table>
 			<p>Drop a <b>.glb</b> file anywhere on the page to load your own model.</p>
 			<p><button type="button" id="change-key">Change Google API key</button></p>
 		</div>

@@ -20,21 +20,18 @@ so you can roll back.
 Google Photorealistic 3D Tiles, walk/fly controls, drag-and-drop `.glb` models and a placement panel.
 See the [README](../README.md).
 
-## Phase 1: See the real terminal
+## Phase 1: See the real terminal (done)
 
-**You do:** get a Google Maps API key with the Map Tiles API enabled (steps in the README), put it in
-`.env.local`, and run `npm run dev`.
+The app streams Google's tiles with a real key, and `SITE` is centred on the terminal: (0, 0) is on
+the storage sheds, next to the coal stockpile. Keys 1–9 jump to the named viewpoints in `VIEWPOINTS`
+in `src/config.js`.
 
-**Prompts:**
-
-> I've put my Google key in `.env.local`. Run the app in a headless browser, take screenshots from
-> the start position and from the ground in the middle of the terminal, and tell me whether `SITE` in
-> `src/config.js` is centred on Neptune Terminals.
+**Prompts for later:**
 
 > Change the start position so I spawn on foot on the apron at [describe the spot, or paste lat/lon
 > from Google Maps: right-click → copy coordinates], facing [the water / the shiploader / east].
 
-> Add a "teleport" menu with named viewpoints: [Berth 1 at lat,lon], [car dumper at lat,lon], ...
+> Rename the viewpoints and add these: [Berth 1 at lat,lon], [car dumper at lat,lon], ...
 
 ## Phase 2: Bring in your model
 

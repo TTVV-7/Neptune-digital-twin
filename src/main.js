@@ -1,6 +1,6 @@
 import './style.css';
-import { PerspectiveCamera, Scene, Timer, Vector3, WebGLRenderer } from 'three';
-import { MODELS, PLAYER, SITE, START } from './config.js';
+import { PerspectiveCamera, Raycaster, Scene, Timer, Vector3, WebGLRenderer } from 'three';
+import { MODELS, PLAYER, SITE, START, VIEWPOINTS } from './config.js';
 import { enuToLocal, localToEnu, localToLatLon, yawToHeading } from './geo.js';
 import { addLights, createGoogleTiles, createPlaceholderGround } from './world.js';
 import { ModelManager } from './models.js';
@@ -108,6 +108,7 @@ function start( apiKey ) {
 
 	setUpOverlays( controls );
 
+	setUpViewpoints( controls, () => [ ground, models.group ] );
 	window.addEventListener( 'resize', () => {
 
 		camera.aspect = window.innerWidth / window.innerHeight;
@@ -225,6 +226,58 @@ function setUpDragAndDrop( models, getPlacement ) {
 		for ( const file of e.dataTransfer.files ) {
 
 			if ( ! /\.(glb|gltf)$/i.test( file.name ) ) {
+
+// Number keys jump to the VIEWPOINTS in config.js; the help panel lists them too.
+function setUpViewpoints( controls, getColliders ) {
+
+	const raycaster = new Raycaster();
+	const goTo = view => {
+
+		let up = view.up ?? 0;
+		if ( view.mode === 'walk' ) {
+
+			// Drop in from a little above the ground, which gives the detailed tiles a moment to load.
+			raycaster.set( enuToLocal( view.east, view.north, 2000 ), new Vector3( 0, - 1, 0 ) );
+			up = ( raycaster.intersectObjects( getColliders(), true )[ 0 ]?.point.y ?? 0 ) + 25;
+
+		}
+
+		controls.setMode( view.mode ?? 'fly' );
+		controls.setPose( enuToLocal( view.east, view.north, up ), view.heading ?? 0, view.pitch ?? 0 );
+
+	};
+
+	const list = $( 'viewpoints' );
+	VIEWPOINTS.slice( 0, 9 ).forEach( ( view, i ) => {
+
+		const row = document.createElement( 'tr' );
+		const key = document.createElement( 'td' );
+		const cell = document.createElement( 'td' );
+		const button = document.createElement( 'button' );
+		key.textContent = i + 1;
+		button.type = 'button';
+		button.textContent = view.name;
+		button.addEventListener( 'click', () => {
+
+			$( 'help' ).hidden = true;
+			goTo( view );
+
+		} );
+		cell.append( button );
+		row.append( key, cell );
+		list.append( row );
+
+	} );
+
+	window.addEventListener( 'keydown', e => {
+
+		const match = /^Digit([1-9])$/.exec( e.code );
+		const view = match && VIEWPOINTS[ match[ 1 ] - 1 ];
+		if ( view && ! e.repeat && ! ( e.target instanceof HTMLInputElement ) ) goTo( view );
+
+	} );
+
+}
 
 				showBanner( `${ file.name } is not a .glb/.gltf file. Convert it first (see README).`, 6000 );
 				continue;

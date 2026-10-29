@@ -55,8 +55,12 @@ The key ends up in the browser, so restricting it is what keeps it safe.
 | E / Q | Up / down (fly) |
 | P | Model placement panel |
 | H | Help |
+| 1–9 | Jump to a viewpoint (also listed under H) |
 
-You start flying over the water, looking north at the terminal. Press **F** to drop to the ground and walk.
+You start flying over the water, looking north at the terminal. Press **F** to drop to the ground and walk,
+or **4** / **5** to start on foot at the west berth or by the coal pile. The viewpoints are `VIEWPOINTS` in
+[src/config.js](src/config.js). To add one, go to the spot and copy *east*, *north* and *heading* from the
+panel in the top-left corner.
 
 ## Adding your own model
 

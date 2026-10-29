@@ -68,6 +68,21 @@ html, body {
 	white-space: nowrap;
 }
 
+#help h2 + table + h2 {
+	margin-top: 14px;
+}
+
+#viewpoints button {
+	padding: 2px 0;
+	background: none;
+	color: var( --accent );
+	text-align: left;
+}
+
+#viewpoints button:hover {
+	text-decoration: underline;
+}
+
 #banner {
 	top: 12px;
 	left: 50%;
