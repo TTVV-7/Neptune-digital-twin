@@ -37,19 +37,29 @@ html, body {
 	pointer-events: none;
 }
 
+/* Centred panels use left/right insets with auto margins rather than a 50% transform,
+   so they can use the full width on a phone. */
+#hint, #help, #banner, .toast {
+	left: 16px;
+	right: 16px;
+	margin: 0 auto;
+	width: fit-content;
+	box-sizing: border-box;
+}
+
 #hint {
-	left: 50%;
-	bottom: 24px;
-	transform: translateX( -50% );
+	bottom: 64px;
+	max-width: calc( 100vw - 32px );
+	text-align: center;
 	pointer-events: none;
-	white-space: nowrap;
 }
 
 #help {
 	top: 50%;
-	left: 50%;
-	transform: translate( -50%, -50% );
-	max-width: min( 460px, calc( 100vw - 32px ) );
+	transform: translateY( -50% );
+	max-width: 460px;
+	max-height: calc( 100vh - 32px );
+	overflow: auto;
 	padding: 16px 20px;
 }
 
@@ -70,34 +80,53 @@ html, body {
 
 #banner {
 	top: 12px;
-	left: 50%;
-	transform: translateX( -50% );
-	max-width: min( 640px, calc( 100vw - 32px ) );
+	max-width: 640px;
 	background: rgba( 120, 30, 30, 0.9 );
 }
 
+/* Google Maps logo and data credits, kept together and above the placement panel.
+   Logo spec: 16-19 px tall, 10 px clear space left, right and top, 5 px below. */
 #attribution {
-	right: 8px;
-	bottom: 8px;
-	max-width: 60vw;
-	padding: 3px 8px;
-	font-size: 11px;
-	color: var( --muted );
+	right: 0;
+	bottom: 0;
+	left: 0;
+	z-index: 1002;
+	display: flex;
+	align-items: flex-end;
+	justify-content: flex-end;
+	gap: 0;
+	padding: 0 8px 8px;
+	background: none;
+	border-radius: 0;
 	pointer-events: none;
 }
 
-#attribution:empty {
-	display: none;
+#attribution img {
+	height: 18px;
+	width: auto;
+	margin: 10px 10px 5px;
+	flex: none;
 }
 
-#attribution b {
-	color: var( --text );
+#attribution .credits {
+	display: flex;
+	flex-direction: column;
+	max-width: min( 60vw, 520px );
+	padding: 3px 8px;
+	border-radius: 6px;
+	background: var( --panel );
+	font-size: 11px;
+	color: var( --muted );
+}
+
+/* Keep the placement panel clear of the attribution row. Extra class so this beats the
+   stylesheet lil-gui injects at runtime. */
+.lil-gui.lil-root.lil-auto-place {
+	max-height: calc( 100% - 56px );
 }
 
 .toast {
-	left: 50%;
-	bottom: 72px;
-	transform: translateX( -50% );
+	bottom: 112px;
 }
 
 #key-prompt {

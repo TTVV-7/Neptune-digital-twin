@@ -1,8 +1,12 @@
 import GUI from 'lil-gui';
+import { isTyping } from './walk.js';
+
+// Common model units, as the scale that converts them to metres.
+const UNITS = { metres: 1, centimetres: 0.01, millimetres: 0.001, feet: 0.3048, inches: 0.0254 };
 
 // Panel (toggle with P) for lining your models up with the Google tiles.
 // "Copy config" gives you an entry to paste into MODELS in src/config.js.
-export function createPlacementPanel( models, { getPlayerPose } ) {
+export function createPlacementPanel( models, { getPlayerPosition } ) {
 
 	const gui = new GUI( { title: 'Model placement  (P)' } );
 	gui.hide();
@@ -27,14 +31,21 @@ export function createPlacementPanel( models, { getPlayerPose } ) {
 
 		} );
 		folder.add( state, 'heading', 0, 360, 0.1 ).name( 'heading (°)' ).onChange( apply );
-		folder.add( state, 'scale', 0.001, 10, 0.001 ).onChange( apply );
+		// Not explicitly stepped, so exact factors such as 0.0254 survive.
+		const scale = folder.add( state, 'scale' ).min( 0.000001 ).step( 0.001, false ).onChange( apply );
+		folder.add( { units: state.scale }, 'units', UNITS ).name( 'model units' ).onChange( v => {
+
+			state.scale = v;
+			scale.updateDisplay();
+			apply();
+
+		} );
 		up.enable( ! state.snap );
 
 		const actions = {
 			moveHere() {
 
-				const { position, heading } = getPlayerPose();
-				models.moveTo( entry, position, heading );
+				models.moveTo( entry, getPlayerPosition() );
 				folder.controllers.forEach( c => c.updateDisplay() );
 
 			},
@@ -68,11 +79,12 @@ export function createPlacementPanel( models, { getPlayerPose } ) {
 	};
 	models.onChange = entry => folders.get( entry )?.controllers.forEach( c => c.updateDisplay() );
 
+	// Capture phase, because lil-gui stops key events from bubbling out of its controls.
 	window.addEventListener( 'keydown', e => {
 
-		if ( e.code === 'KeyP' && ! e.repeat && ! ( e.target instanceof HTMLInputElement ) ) gui.show( gui._hidden );
+		if ( e.code === 'KeyP' && ! e.repeat && ! isTyping( e ) && ! e.ctrlKey && ! e.metaKey && ! e.altKey ) gui.show( gui._hidden );
 
-	} );
+	}, true );
 
 	return gui;
 

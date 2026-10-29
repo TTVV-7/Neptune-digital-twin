@@ -28,7 +28,13 @@
 		</div>
 
 		<div id="banner" hidden></div>
-		<div id="attribution"></div>
+		<div id="attribution" hidden>
+			<img src="google-maps-logo.svg" alt="Google Maps" />
+			<div class="credits">
+				<span id="attribution-credits"></span>
+				<span id="attribution-hybrid" hidden>3D terminal: Google Maps. Models you add are your own data, not Google's.</span>
+			</div>
+		</div>
 
 		<div id="key-prompt" hidden>
 			<form>
@@ -42,6 +48,9 @@
 					<button type="submit">Load the terminal</button>
 					<button type="button" id="skip">Continue without Google tiles</button>
 				</div>
+				<p id="env-key-note" class="small" hidden>
+					This replaces the key from the environment, in this browser only.
+				</p>
 				<p class="small">
 					The key is saved only in this browser. You can also put it in <code>.env.local</code>
 					as <code>VITE_GOOGLE_MAPS_API_KEY</code>.

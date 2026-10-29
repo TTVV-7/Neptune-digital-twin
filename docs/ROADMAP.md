@@ -75,6 +75,9 @@ shiploader booms, railings and rail cars melts at ground level. Choose the most 
 > Here are photos of [equipment] from [angles]. Model it in Blender as a clean low-poly `.glb`
 > under 50k triangles, using real dimensions [if you know them].
 
+Build these from your own photos, drawings or scans. Google's terms don't allow models traced or
+otherwise derived from its 3D tiles, so use the tiles only to check where things go.
+
 **Sketchfab model:** it is not downloadable. Contact `plowright.andrew` for the file and permission
 first. If you get it, it's just another `.glb` for Phase 2.
 

@@ -13,7 +13,7 @@ The step-by-step plan, with prompts you can paste to Claude, is in [docs/ROADMAP
 
 ## Quick start
 
-You need [Node.js](https://nodejs.org) 20 or newer.
+You need [Node.js](https://nodejs.org) 20.19+ or 22.12+ (the current LTS is fine).
 
 ```bash
 npm install
@@ -31,6 +31,10 @@ To skip the prompt each time, give the app the key through an environment variab
 case doesn't matter). Either put it in `.env.local` (copy `.env.example`), or set it in your shell
 or cloud environment. `npm run dev` and `npm run build` read it when they start.
 
+A key pasted into the app is saved in that browser and wins over the environment key it replaced.
+If the environment key changes later, the new environment key wins. **H → Change Google API key**
+always brings the prompt back.
+
 ## Getting a Google API key
 
 1. Go to the [Google Cloud console](https://console.cloud.google.com/) and create a project.
@@ -39,7 +43,9 @@ or cloud environment. `npm run dev` and `npm run build` read it when they start.
 3. Open **APIs & Services → Library**, search for **Map Tiles API** and enable it.
 4. Open **APIs & Services → Credentials → Create credentials → API key**.
 5. Restrict the key: under *API restrictions* allow only **Map Tiles API**. Under *Website restrictions*
-   add `http://localhost:5173/*` and, later, the address where you host the site.
+   add `http://localhost:5173/*` and, later, your hosting site's **origin** with `/*`, for example
+   `https://yourname.github.io/*`. Browsers only send the origin to Google, so a restriction that
+   includes a path (such as `https://yourname.github.io/neptune-twin/*`) will block the tiles.
 
 The key ends up in the browser, so restricting it is what keeps it safe.
 
@@ -78,11 +84,11 @@ If your model comes in back to front, try heading 180.
 
 | You have | Route |
 | --- | --- |
-| Blender `.blend`, `.fbx`, `.obj`, `.dae` | Import into [Blender](https://www.blender.org/), then *File → Export → glTF 2.0 (.glb)* |
-| SketchUp `.skp` | SketchUp's glTF exporter extension, or export `.dae` and go through Blender |
+| Blender `.blend`, `.fbx`, `.obj` | Import into [Blender](https://www.blender.org/), then *File → Export → glTF 2.0 (.glb)*. Blender 5 dropped `.dae` (COLLADA); use Blender 4.5 LTS for those |
+| SketchUp `.skp` | A glTF exporter extension from the SketchUp Extension Warehouse, or export `.fbx`/`.obj` (SketchUp Pro) and go through Blender |
 | Revit `.rvt` / IFC | Export IFC or FBX, then Blender (the free Bonsai add-on reads IFC) |
 | AutoCAD `.dwg` | Usually 2D. Ask for a 3D export, or rebuild the key parts in Blender |
-| Drone or laser scan (`.las`, `.e57`, mesh) | Mesh it in RealityCapture, Metashape or CloudCompare, then export `.glb` |
+| Drone or laser scan (`.las`, `.e57`, mesh) | Mesh it in RealityCapture, Metashape or CloudCompare, export `.obj` or `.ply`, then convert in Blender |
 
 Large models load faster after compression with [gltf-transform](https://gltf-transform.dev/):
 
@@ -122,11 +128,14 @@ npm run build
 ```
 
 `dist/` is a static site, so it can go on GitHub Pages, Netlify, Vercel or Cloudflare Pages.
-Add the site's address to the API key's website restrictions.
+Add the site's origin (for example `https://yourname.github.io/*`) to the API key's website restrictions.
 
 ## Google's terms, in short
 
 - Stream the tiles; don't download them or bake them into Blender or Unreal files.
-- Keep the Google attribution visible. The app shows it in the bottom-right corner.
+- Keep the attribution visible. The app shows the Google Maps logo and the data providers in the
+  bottom-right corner, plus a note that models you add are your own data, not Google's.
+- Your own models must not be traced or otherwise derived from Google's 3D mesh. Build them from your
+  own drawings, photos or scans.
 - Read the current [Map Tiles API policies](https://developers.google.com/maps/documentation/tile/policies)
   before you share the site widely.

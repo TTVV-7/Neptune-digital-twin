@@ -47,6 +47,10 @@ export function createGoogleTiles( { apiKey, camera, renderer, onError } ) {
 		lon: SITE.lon * MathUtils.DEG2RAD,
 	} ) );
 
+	// The fast bounding-volume raycast can miss Google geometry that pokes outside its tile's
+	// bounds, which would let you fall through the ground or walk through walls.
+	tiles.accelerateRaycast = false;
+
 	tiles.setCamera( camera );
 	tiles.setResolutionFromRenderer( camera, renderer );
 	tiles.addEventListener( 'load-error', onError );

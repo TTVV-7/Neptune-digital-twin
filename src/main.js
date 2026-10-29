@@ -5,33 +5,52 @@ import { enuToLocal, localToEnu, localToLatLon, yawToHeading } from './geo.js';
 import { addLights, createGoogleTiles, createPlaceholderGround } from './world.js';
 import { ModelManager } from './models.js';
 import { createPlacementPanel } from './placement.js';
-import { WalkController } from './walk.js';
+import { isTyping, WalkController } from './walk.js';
 
 const STORAGE_KEY = 'neptune-twin.google-api-key';
+const ENV_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
 const $ = id => document.getElementById( id );
 
 boot();
 
 function boot() {
 
-	const apiKey = readApiKey();
-	if ( apiKey ) {
+	const url = new URL( window.location.href );
+	const urlKey = url.searchParams.get( 'key' );
+	const askForKey = url.searchParams.has( 'prompt' );
 
-		start( apiKey );
-		return;
+	// Don't leave keys or one-off flags sitting in the address bar or history.
+	if ( urlKey !== null || askForKey ) {
+
+		url.searchParams.delete( 'key' );
+		url.searchParams.delete( 'prompt' );
+		window.history.replaceState( null, '', url.href );
 
 	}
 
+	if ( urlKey ) saveKey( urlKey );
+
+	const key = askForKey ? null : resolveKey();
+	if ( key ) start( key.value, key.source );
+	else showKeyPrompt();
+
+}
+
+function showKeyPrompt() {
+
 	const prompt = $( 'key-prompt' );
 	const form = prompt.querySelector( 'form' );
+	$( 'env-key-note' ).hidden = ! ENV_KEY;
 	prompt.hidden = false;
+	form.elements.key.focus();
+
 	form.addEventListener( 'submit', e => {
 
 		e.preventDefault();
 		const key = form.elements.key.value.trim();
-		storage( () => localStorage.setItem( STORAGE_KEY, key ) );
+		saveKey( key );
 		prompt.hidden = true;
-		start( key );
+		start( key, 'this browser' );
 
 	} );
 	$( 'skip' ).addEventListener( 'click', () => {
@@ -43,7 +62,31 @@ function boot() {
 
 }
 
-function start( apiKey ) {
+// A key typed into the prompt (or passed as ?key=) is saved together with a tag of the
+// environment key it replaced. It wins until the environment key changes, so a bad env
+// key can be overridden, and fixing the env key later isn't blocked by an old saved one.
+function resolveKey() {
+
+	const saved = storage( () => JSON.parse( localStorage.getItem( STORAGE_KEY ) ) );
+	if ( saved?.key && saved.env === envTag() ) return { value: saved.key, source: 'this browser' };
+	if ( ENV_KEY ) return { value: ENV_KEY, source: 'the environment' };
+	return null;
+
+}
+
+function saveKey( key ) {
+
+	storage( () => localStorage.setItem( STORAGE_KEY, JSON.stringify( { key, env: envTag() } ) ) );
+
+}
+
+function envTag() {
+
+	return `${ ENV_KEY.length }:${ ENV_KEY.slice( - 4 ) }`;
+
+}
+
+function start( apiKey, keySource ) {
 
 	const renderer = new WebGLRenderer( { antialias: true, logarithmicDepthBuffer: true } );
 	renderer.setPixelRatio( Math.min( window.devicePixelRatio, 2 ) );
@@ -63,10 +106,17 @@ function start( apiKey ) {
 			apiKey,
 			camera,
 			renderer,
-			onError: ( { error } ) => showBanner(
-				`Google 3D tiles failed to load (${ error?.message ?? 'unknown error' }). ` +
-				'Check that the key is right, the Map Tiles API is enabled and billing is on.',
-			),
+			onError: ( { tile, error } ) => {
+
+				// Single tiles can fail on a network blip; only the root failing means the key or account is wrong.
+				if ( tile ) return;
+				showBanner(
+					`Google 3D tiles failed to load (${ error?.message ?? 'unknown error' }) using the key from ${ keySource }. ` +
+					'Check that the key is right, the Map Tiles API is enabled, billing is on, and the key allows this site. ' +
+					'Press H to change the key.',
+				);
+
+			},
 		} );
 		ground = tiles.group;
 
@@ -79,7 +129,7 @@ function start( apiKey ) {
 
 	scene.add( ground );
 
-	const models = new ModelManager( { getGround: () => [ ground ] } );
+	const models = new ModelManager( { getGround: () => [ ground ], renderer } );
 	scene.add( models.group );
 
 	const controls = new WalkController( camera, renderer.domElement, () => [ ground, models.group ] );
@@ -87,9 +137,7 @@ function start( apiKey ) {
 	controls.setMode( START.mode );
 
 	const feetPosition = () => camera.position.clone().setY( camera.position.y - PLAYER.eyeHeight );
-	createPlacementPanel( models, {
-		getPlayerPose: () => ( { position: feetPosition(), heading: yawToHeading( controls.yaw ) } ),
-	} );
+	createPlacementPanel( models, { getPlayerPosition: feetPosition } );
 
 	for ( const config of MODELS ) {
 
@@ -127,7 +175,7 @@ function start( apiKey ) {
 		controls.update( dt );
 		camera.updateMatrixWorld();
 		tiles?.update();
-		models.update();
+		models.update( dt );
 		renderer.render( scene, camera );
 
 		hudTimer -= dt;
@@ -135,7 +183,7 @@ function start( apiKey ) {
 
 			hudTimer = 0.25;
 			updateStatus( camera, controls, tiles );
-			updateAttribution( tiles );
+			updateAttribution( tiles, models );
 
 		}
 
@@ -164,21 +212,19 @@ function updateStatus( camera, controls, tiles ) {
 
 }
 
-// Google's terms require the logo text and the data providers to stay visible.
-function updateAttribution( tiles ) {
+// Google's Map Tiles policies require the Google Maps logo next to the data providers
+// whenever tiles are on screen, and a note saying which parts of the scene aren't Google's.
+function updateAttribution( tiles, models ) {
 
-	if ( ! tiles ) return;
-	const text = tiles.getAttributions()
+	const el = $( 'attribution' );
+	el.hidden = ! tiles || tiles.visibleTiles.size === 0;
+	if ( el.hidden ) return;
+
+	$( 'attribution-credits' ).textContent = tiles.getAttributions()
 		.filter( a => a.type === 'string' && a.value )
 		.map( a => a.value )
 		.join( ' · ' );
-	const el = $( 'attribution' );
-	el.innerHTML = '';
-	if ( tiles.visibleTiles.size === 0 ) return;
-
-	const logo = document.createElement( 'b' );
-	logo.textContent = 'Google';
-	el.append( logo, text ? ` ${ text }` : '' );
+	$( 'attribution-hybrid' ).hidden = models.entries.length === 0;
 
 }
 
@@ -194,22 +240,22 @@ function setUpOverlays( controls ) {
 
 	};
 
+	// Capture phase, because lil-gui stops key events from bubbling out of its controls.
 	window.addEventListener( 'keydown', e => {
 
-		if ( e.code === 'KeyH' && ! e.repeat && ! ( e.target instanceof HTMLInputElement ) ) {
+		if ( e.code === 'KeyH' && ! e.repeat && ! isTyping( e ) && ! e.ctrlKey && ! e.metaKey && ! e.altKey ) {
 
 			help.hidden = ! help.hidden;
 			if ( ! help.hidden ) document.exitPointerLock();
 
 		}
 
-	} );
+	}, true );
 
 	$( 'change-key' ).addEventListener( 'click', () => {
 
-		storage( () => localStorage.removeItem( STORAGE_KEY ) );
 		const url = new URL( window.location.href );
-		url.searchParams.delete( 'key' );
+		url.searchParams.set( 'prompt', '' );
 		window.location.href = url.href;
 
 	} );
@@ -248,21 +294,6 @@ function showBanner( message, timeout = 0 ) {
 	banner.hidden = false;
 	clearTimeout( bannerTimer );
 	if ( timeout ) bannerTimer = setTimeout( () => banner.hidden = true, timeout );
-
-}
-
-// Key order: ?key= in the URL, then this browser's saved key, then .env.local.
-function readApiKey() {
-
-	const fromUrl = new URLSearchParams( window.location.search ).get( 'key' );
-	if ( fromUrl ) {
-
-		storage( () => localStorage.setItem( STORAGE_KEY, fromUrl ) );
-		return fromUrl;
-
-	}
-
-	return storage( () => localStorage.getItem( STORAGE_KEY ) ) || import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
 
 }
 

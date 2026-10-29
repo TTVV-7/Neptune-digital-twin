@@ -1,5 +1,6 @@
-import { Box3, Group, Raycaster, Vector3 } from 'three';
+import { Box3, Group, Raycaster, REVISION, Vector3 } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { dracoLoader } from './world.js';
 import { enuToLocal, headingToYaw, localToEnu } from './geo.js';
@@ -9,20 +10,32 @@ const _box = new Box3();
 const _center = new Vector3();
 const _origin = new Vector3();
 
+// Snapped models re-check the ground this often, because sharper tiles keep loading in.
+const SNAP_INTERVAL = 0.5;
+// Ground is sampled this far outside the footprint, so a model sits on the terrain
+// around it rather than on the roof of Google's version of the same building.
+const SNAP_MARGIN = 2;
+
 // Loads your own glTF/GLB models and places them in the terminal frame.
 // Each entry keeps an editable `state` that the placement panel changes.
 export class ModelManager {
 
-	constructor( { getGround } ) {
+	constructor( { getGround, renderer } ) {
 
 		this.group = new Group();
 		this.group.name = 'models';
 		this.entries = [];
 		this.getGround = getGround;
 		this.raycaster = new Raycaster();
+		this.snapTimer = 0;
+
+		const ktx2Loader = new KTX2Loader()
+			.setTranscoderPath( `https://cdn.jsdelivr.net/npm/three@0.${ REVISION }.0/examples/jsm/libs/basis/` )
+			.detectSupport( renderer );
 
 		this.loader = new GLTFLoader()
 			.setDRACOLoader( dracoLoader )
+			.setKTX2Loader( ktx2Loader )
 			.setMeshoptDecoder( MeshoptDecoder );
 
 	}
@@ -51,6 +64,7 @@ export class ModelManager {
 			pivot,
 			url: config.url,
 			recenter: config.recenter !== false,
+			footprint: new Box3().setFromObject( content ),
 			state: {
 				name: config.name ?? 'Model',
 				east: config.east ?? 0,
@@ -74,7 +88,12 @@ export class ModelManager {
 	loadFile( file, placement ) {
 
 		const url = URL.createObjectURL( file );
-		const config = { name: file.name.replace( /\.(glb|gltf)$/i, '' ), url: `models/${ file.name }`, ...placement, up: null };
+		const config = {
+			name: file.name.replace( /\.(glb|gltf)$/i, '' ),
+			url: `models/${ encodeURIComponent( file.name ) }`,
+			...placement,
+			up: null,
+		};
 		return this.load( config, url ).finally( () => URL.revokeObjectURL( url ) );
 
 	}
@@ -90,30 +109,57 @@ export class ModelManager {
 
 	}
 
+	// Put the model's base on the lowest ground found around its footprint.
 	snap( entry ) {
 
-		const { pivot, state } = entry;
-		_origin.copy( pivot.position );
-		_origin.y = 2000;
-		this.raycaster.set( _origin, DOWN );
-		const hits = this.raycaster.intersectObjects( this.getGround(), true );
-		if ( hits.length ) {
+		const { pivot, state, footprint } = entry;
+		pivot.updateMatrixWorld();
 
-			state.up = Math.round( hits[ 0 ].point.y * 100 ) / 100;
-			pivot.position.y = state.up;
-			entry.snapped = true;
+		const margin = SNAP_MARGIN / state.scale;
+		const xs = [ footprint.min.x - margin, ( footprint.min.x + footprint.max.x ) / 2, footprint.max.x + margin ];
+		const zs = [ footprint.min.z - margin, ( footprint.min.z + footprint.max.z ) / 2, footprint.max.z + margin ];
+		const ground = this.getGround();
+
+		let lowest = Infinity;
+		for ( const x of xs ) {
+
+			for ( const z of zs ) {
+
+				pivot.localToWorld( _origin.set( x, 0, z ) );
+				_origin.y = 2000;
+				this.raycaster.set( _origin, DOWN );
+				const hit = this.raycaster.intersectObjects( ground, true ).find( h => h.object.isMesh );
+				if ( hit ) lowest = Math.min( lowest, hit.point.y );
+
+			}
+
+		}
+
+		if ( lowest === Infinity ) return;
+
+		const up = Math.round( lowest * 100 ) / 100;
+		entry.snapped = true;
+		if ( up !== state.up ) {
+
+			state.up = up;
+			pivot.position.y = up;
 			this.onChange?.( entry );
 
 		}
 
 	}
 
-	// Tiles stream in after the model loads, so keep trying until the ground exists.
-	update() {
+	// Tiles stream in and sharpen after a model loads: snap as soon as there is ground,
+	// then keep re-checking so the model follows the finer tiles.
+	update( dt ) {
+
+		this.snapTimer -= dt;
+		const recheck = this.snapTimer <= 0;
+		if ( recheck ) this.snapTimer = SNAP_INTERVAL;
 
 		for ( const entry of this.entries ) {
 
-			if ( entry.state.snap && ! entry.snapped ) this.snap( entry );
+			if ( entry.state.snap && ( recheck || ! entry.snapped ) ) this.snap( entry );
 
 		}
 
