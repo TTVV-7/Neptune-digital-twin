@@ -20,10 +20,11 @@ material that is. Both tools are at the top of the library (**L**), under **Tool
      *Excavated soil* holding the loose volume: a ridge running along a trench (or any pit at least
      twice as long as it is wide, or one a cone wouldn't fit beside), otherwise a cone.
 
-The rim is the lowest ground around the rectangle as it was before anything was dug or flattened,
-so the pit doesn't sink after itself, and whatever stands inside it in Google's mesh (rail cars, a
-shed) is dug away with it rather than holding the floor up. Where the ground beyond the outline is
-higher, the sides keep climbing (up to 3 m out) until they meet it.
+The rim is the lowest ground around the rectangle as it was before anything was dug, so the pit
+doesn't sink after itself, and whatever stands inside it in Google's mesh (rail cars, a shed) is dug
+away with it rather than holding the floor up. Where a flatten area reaches the pit, its floor
+counts as the ground there. Where the ground beyond the outline is higher, the sides keep climbing
+(up to 3 m out) until they meet it.
 
 The P panel shows:
 

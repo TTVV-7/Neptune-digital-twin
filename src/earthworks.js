@@ -34,6 +34,9 @@ const TRUCK_LOAD = 10;
 const SLOPES = { 'vertical (shored)': 0, '0.5 : 1': 0.5, '1 : 1': 1, '1.5 : 1': 1.5, '2 : 1': 2 };
 // Side slopes keep climbing past the outline this far where the ground there is higher.
 const SLOPE_REACH = 3;
+// The rim is the lowest ground this far round the outline (models.js snaps to it), or the floor of
+// a flatten area reaching that far.
+const RIM_REACH = 2;
 // A ridge's sides run on past its rectangle this far where the ground there is lower.
 const RIDGE_TOE = 4;
 const MAX_SIZE = 200;
@@ -174,6 +177,7 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 
 	const isEarthwork = entry => entry.kind === EXCAVATION || entry.kind === STOCKPILE;
 	const order = entry => () => models.entries.indexOf( entry );
+	const floorUnder = frame => terrain.floorUnder( frame );
 	const sync = entry => {
 
 		const design = designs.get( entry );
@@ -181,6 +185,7 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 		if ( design.reshaped?.() ) terrain.dropBites( entry );
 		design.refresh();
 		terrain.setDesign( entry, design );
+		placeMarker( entry );
 		refreshLabel( entry );
 
 	};
@@ -189,7 +194,7 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 
 		if ( ! isEarthwork( entry ) || entry.placing ) return;
 		const make = entry.kind === EXCAVATION ? pitDesign : pileDesign;
-		designs.set( entry, make( entry, { order: order( entry ), progress } ) );
+		designs.set( entry, make( entry, { order: order( entry ), progress, floorUnder } ) );
 		sync( entry );
 
 	} );
@@ -212,6 +217,19 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 		terrain.setDesign( entry, null );
 
 	} );
+	// A pit's rim comes down to the floor of a flatten area around it.
+	terrain.addEventListener( 'zones', () => {
+
+		for ( const [ entry, design ] of designs ) {
+
+			if ( entry.kind !== EXCAVATION ) continue;
+			const { rim } = design;
+			design.refresh();
+			if ( design.rim !== rim ) sync( entry );
+
+		}
+
+	} );
 	terrain.addEventListener( 'change', ( { designs: changed } ) => {
 
 		for ( const entry of changed ) {
@@ -225,12 +243,15 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 
 	} );
 
-	// A pile in a pit or on another pile sits lower or higher than the ground around it.
+	// A pile in a pit or on another pile sits lower or higher than the ground around it, and a pit
+	// in a flatten area starts from the area's floor.
 	function placeMarker( entry ) {
 
-		const solved = designs.get( entry )?.solved;
+		const design = designs.get( entry );
 		const content = entry.pivot.children[ 0 ];
-		if ( entry.kind === STOCKPILE && solved && content ) content.position.y = solved.base - entry.state.up;
+		if ( ! design || ! content ) return;
+		if ( entry.kind === EXCAVATION ) content.position.y = design.rim - entry.state.up;
+		else if ( design.solved ) content.position.y = design.solved.base - entry.state.up;
 
 	}
 
@@ -240,7 +261,8 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 		const { state } = entry;
 		if ( entry.kind === EXCAVATION ) {
 
-			labels.set( entry, `Excavation · ${ format( cutOf( entry ) ) } m³ cut`, anchor.set( - state.east, state.up + 1.2, state.north ) );
+			const rim = designs.get( entry )?.rim ?? state.up;
+			labels.set( entry, `Excavation · ${ format( cutOf( entry ) ) } m³ cut`, anchor.set( - state.east, rim + 1.2, state.north ) );
 			return;
 
 		}
@@ -366,7 +388,8 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 
 // --- designs: what an excavation or a stockpile does to the ground ----------------------------
 
-function pitDesign( entry, { order, progress } ) {
+// floorUnder( frame ): the floor of the flatten areas reaching into a rectangle (Infinity if none).
+function pitDesign( entry, { order, progress, floorUnder } ) {
 
 	const g = {};
 	return {
@@ -376,11 +399,18 @@ function pitDesign( entry, { order, progress } ) {
 		refresh() {
 
 			const { state, params } = entry;
-			Object.assign( g, rectFrame( state.east, state.north, state.heading, params.width / 2, params.length / 2 ), {
-				depth: params.depth,
-				slope: params.slope,
-				rim: state.up,
-			} );
+			const { width, length, depth, slope } = params;
+			Object.assign( g, rectFrame( state.east, state.north, state.heading, width / 2, length / 2 ), { depth, slope } );
+			// Inside a flatten area the ground is the area's floor, which is what the terrain digs
+			// into there; from the original ground (the roofs of what was cleared, say) the pit
+			// would be too shallow to reach it.
+			const around = rectFrame( state.east, state.north, state.heading, width / 2 + RIM_REACH, length / 2 + RIM_REACH );
+			g.rim = Math.min( state.up, floorUnder( around ) );
+
+		},
+		get rim() {
+
+			return g.rim;
 
 		},
 		bounds: () => rectBounds( g, ( g.slope > 0 ? SLOPE_REACH : 0 ) + CELL ),

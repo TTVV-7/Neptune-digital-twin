@@ -138,6 +138,18 @@ export function insideRect( r, x, z, hw = r.hw, hl = r.hl ) {
 
 }
 
+// Whether two rectangles (see rectFrame) overlap: neither lies wholly beyond a side of the other.
+function rectsOverlap( a, b ) {
+
+	const de = b.east - a.east;
+	const dn = b.north - a.north;
+	// Each rectangle's across and along directions, east and north, as in insideRect.
+	const axes = [ a, b ].flatMap( r => [ [ r.cos, - r.sin ], [ r.sin, r.cos ] ] );
+	const reach = ( r, [ e, n ] ) => r.hw * Math.abs( r.cos * e - r.sin * n ) + r.hl * Math.abs( r.sin * e + r.cos * n );
+	return axes.every( axis => Math.abs( de * axis[ 0 ] + dn * axis[ 1 ] ) <= reach( a, axis ) + reach( b, axis ) );
+
+}
+
 const _colour = new Color();
 
 // The nodes of a grid `ni` wide reachable from `starts` through nodes where thickness( n ) > 0,
@@ -1249,7 +1261,7 @@ export class Terrain extends EventDispatcher {
 
 	}
 
-	// Flatten areas count as the ground they press Google's mesh down to.
+	// Flatten areas count as the ground they press Google's mesh down to. Dispatches 'zones'.
 	updateZone( entry, removed ) {
 
 		const old = this.zones.get( entry );
@@ -1257,15 +1269,28 @@ export class Terrain extends EventDispatcher {
 		if ( removed || ! this.models.entries.includes( entry ) ) {
 
 			this.zones.delete( entry );
-			return;
+
+		} else {
+
+			const { state, params } = entry;
+			const frame = rectFrame( state.east, state.north, state.heading, params.width / 2, params.length / 2 );
+			const zone = { frame, floor: state.up, bounds: rectBounds( frame, CELL ) };
+			this.zones.set( entry, zone );
+			this.markBounds( zone.bounds );
 
 		}
 
-		const { state, params } = entry;
-		const frame = rectFrame( state.east, state.north, state.heading, params.width / 2, params.length / 2 );
-		const zone = { frame, floor: state.up, bounds: rectBounds( frame, CELL ) };
-		this.zones.set( entry, zone );
-		this.markBounds( zone.bounds );
+		this.dispatchEvent( { type: 'zones' } );
+
+	}
+
+	// The lowest floor of the flatten areas reaching into a rectangle (see rectFrame), or Infinity
+	// if none do: that is the ground there, whatever Google's mesh had standing on it.
+	floorUnder( frame ) {
+
+		let floor = Infinity;
+		for ( const zone of this.zones.values() ) if ( rectsOverlap( zone.frame, frame ) ) floor = Math.min( floor, zone.floor );
+		return floor;
 
 	}
 
