@@ -24,6 +24,10 @@ const CRASH_MIN = 1.5;
 const GRIP = 4;
 // The cameras keep this far (m) in front of anything between them and the vehicle.
 const CAMERA_CLEARANCE = 0.4;
+// Bumper rays look for walls at these heights (m) over the ground under the vehicle, or lower on a
+// small one. The low row catches a jersey barrier or a lock block (0.8 m), which a pickup's 0.9 m
+// ray passed over, so it drove up and over them; the high one what stands on legs or wheels.
+const BUMPERS = [ 0.5, 1.0 ];
 
 // Tuning per vehicle; others use the default. Speeds in km/h, acceleration in m/s².
 const SPECS = {
@@ -129,6 +133,7 @@ export class Driver {
 		this.width = _size.x;
 		this.height = _size.y;
 		this.wheelbase = this.length * 0.6;
+		this.bumpers = [ ...new Set( BUMPERS.map( up => Math.min( up, this.height * 0.4 ) ) ) ];
 		// How far it reaches ahead of and behind where it stands (east, north), which for a crane is
 		// its carrier rather than the middle of its box.
 		this.front = pivot.position.z - _box.min.z;
@@ -355,10 +360,10 @@ export class Driver {
 	}
 
 	// The nearest wall in the way of going `distance` metres east and north by ( de, dn ), as seen by
-	// rays at bumper height from the middle and both sides of the leading end: how far the vehicle
-	// can go before touching it, and its normal (east, north) facing back at the vehicle. The ground
-	// and ramps aren't walls, and nor is the side of a rib on a corrugated wall: a wall is only one
-	// that is there looking straight at it from where the ray started.
+	// rows of rays at the bumper heights from the middle and both sides of the leading end: how far
+	// the vehicle can go before touching it, and its normal (east, north) facing back at the vehicle.
+	// The ground and ramps aren't walls, and nor is the side of a rib on a corrugated wall: a wall is
+	// only one that is there looking straight at it from where the ray started.
 	wallAhead( de, dn, distance ) {
 
 		const rad = this.heading * Math.PI / 180;
@@ -367,9 +372,9 @@ export class Driver {
 		const side = Math.max( 0, this.width / 2 - 0.1 );
 		_dir.set( - de, 0, dn );
 		let wall = null;
-		for ( const right of [ 0, - side, side ] ) {
+		for ( const up of this.bumpers ) for ( const right of [ 0, - side, side ] ) {
 
-			enuToLocal( this.east + dn * right, this.north - de * right, this.y + Math.min( 1.0, this.height * 0.4 ), _origin );
+			enuToLocal( this.east + dn * right, this.north - de * right, this.y + up, _origin );
 			const hit = this.cast( _origin, _dir, distance + reach );
 			if ( ! hit?.face ) continue;
 			_normal.copy( hit.face.normal ).transformDirection( hit.object.matrixWorld );
