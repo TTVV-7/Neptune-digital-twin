@@ -1,10 +1,4 @@
-# Laydown areas (draft for the README)
-
-Goes in the README under **Library: vehicles and site pieces**, after the flatten area bullet.
-
----
-
-## Laydown areas
+# Laydown areas
 
 Laydown areas mark out a site on the map: where the materials, trailers and equipment go. Each one is
 a coloured rectangle laid on the ground, with its name and size floating above it.
@@ -32,14 +26,6 @@ Areas follow the ground: Google's 3D mesh (or the flat stand-in), and dug or pil
 re-fit themselves as sharper tiles stream in, and when ground under them is flattened or dug. Google's
 mesh includes whatever was there when it was captured, so an area drawn over parked trucks or rail cars
 is draped over them; flatten the area first (**Flatten area**) to lay it on clear ground.
-
----
-
-For the README's **Project layout**:
-
-```
-src/laydown.js      laydown areas: coloured site areas draped on the ground, with labels
-```
 
 ## Notes for developers
 

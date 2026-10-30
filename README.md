@@ -8,6 +8,9 @@ Google's photorealistic 3D map, and you can drop your own detailed models on top
   It covers the whole terminal, the berths, Burrard Inlet and the North Shore mountains.
 - **Your models:** any `.glb` / `.gltf` file, placed by east/north metres from the terminal centre.
 - **Controls:** first-person walking with gravity and collisions, or free flying.
+- **Site planning:** a library of vehicles, construction equipment and site pieces at real scale,
+  laydown areas, excavations and stockpiles with volumes, and machines you can drive.
+- **Accounts (optional):** sign in with Google to keep layouts in your account and share them by link.
 
 The step-by-step plan, with prompts you can paste to Claude, is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
@@ -104,9 +107,12 @@ npx @gltf-transform/cli optimize input.glb public/models/output.glb --compress m
 
 ## Library: vehicles and site pieces
 
-Press **L** (or the **Library** button, bottom left) to open the library: vehicles, site office
-trailers, containers, dumpsters, barriers, fencing, traffic control, porta-potties, pallets and more,
-all at real scale and not tied to Neptune, so the same library works at any site.
+Press **L** (or the **Library** button, bottom left) to open the library: vehicles, construction
+equipment (excavators, loaders, a dozer, graders, rollers, cranes, lifts, telehandlers, forklifts,
+dump trucks...), site office trailers, containers, dumpsters, barriers, fencing, traffic control,
+porta-potties, pallets and more, all at real scale and not tied to Neptune, so the same library works
+at any site. What each downloaded machine is and where it came from is in
+[docs/equipment.md](docs/equipment.md).
 
 - **Place:** click an item, move the mouse over the ground and click. Or drag the item onto the scene.
   **R** or the mouse wheel rotates it, **Shift**+click places another, **Esc** cancels.
@@ -155,6 +161,28 @@ npm run add-asset -- https://polyhaven.com/a/<asset> --id oil-drum --category Ma
 - The script prints the model's description. Read it: if it names someone else to credit (a logo's
   designer, say), run again with `--credit "Logo by ..."` so they're listed too.
 
+## Planning a site: laydown areas, cuts and stockpiles
+
+The tools at the top of the library (**L**, under *Tools*) mark out and shape the ground. Each one is
+drawn by dragging a rectangle on the ground (lined up with the way you're looking) or clicking a spot,
+and is then selected, moved, turned, resized (**P**) and deleted like any other item.
+
+- **Laydown area:** a coloured rectangle laid on the ground with its name, size and area floating
+  above it, e.g. *Laydown A · 40 × 25 m · 1,000 m²*. The P panel sets its name, colour and a note, and
+  counts the items inside it. See [docs/laydown.md](docs/laydown.md).
+- **Excavation:** the rectangle is the top of the cut. It digs itself to its depth (2 m to start)
+  with sloped or shored sides; the P panel shows the cut volume, the loose volume (a quarter more) and
+  how many dump-truck loads that is, and **Spoil pile** pours the dug material beside it.
+- **Stockpile:** click for a cone of material (50 m³ to start), or drag for a ridge pile that fills
+  the rectangle. It pours itself: material falls and builds up at the material's natural slope
+  (gravel, sand, topsoil, excavated soil, road base, riprap, coal, potash). The P panel shows its
+  volume, weight, height and truck loads.
+- **Flatten area:** see above; clears Google's mesh where you want clear ground.
+
+Pits and piles are real ground: you can walk into a pit, drive over a pile, and things you place
+sit on them. Volumes come out within about 1% of the textbook figure for the shape, measured from
+Google's ground, so they are as good as the map. Details in [docs/earthworks.md](docs/earthworks.md).
+
 ## Race mode
 
 Press **V** to get in and drive: the selected vehicle from the library's Vehicles, else the nearest
@@ -162,9 +190,22 @@ one within 25 m, else a pickup appears in front of you. **W**/**S** gas and brak
 boosts, **Space** hops, **C** switches between chase and bonnet cameras, **V** or **Esc** gets out and
 parks it where it stopped. The speedometer shows km/h, your top speed and longest jump.
 
-The pickup tops out at 160 km/h (about 210 with boost), the semi at 120 and the haul truck at 70. The **Race**
+The construction machines drive too, at their own speeds: the dozer at 11 km/h, the wheel loader at
+40, the cranes at walking pace. The pickup tops out at 160 km/h (about 210 with boost), the semi at 120 and the haul truck at 70. The **Race**
 category has two jump ramps (1.2 m and 3 m); hit the big one at highway speed for about 1.5 s of air.
 Walls, containers and Google's buildings stop you, so flatten a strip first for a clear run.
+
+## Accounts: sign in and share layouts
+
+When the app is hosted on its Cloudflare Worker (`worker/`, `wrangler.jsonc`), the library footer has
+**Sign in with Google**. Signed in, **Layouts** saves what you've placed to your account (it then
+saves itself as you work), opens it on another computer, and makes a read-only **share link** for
+people who should see the plan but not change it. Without the Worker (e.g. plain `npm run dev`) none of
+this shows and layouts are saved in the browser as before.
+
+The Worker also hands out the Google Maps key to signed-in people and share-link viewers, so the key
+doesn't have to be built into the public site. Setting it up (a Google sign-in client, a D1 database,
+`npm run deploy`), trying it locally and the security model are in [docs/accounts.md](docs/accounts.md).
 
 ## About the Sketchfab model
 
@@ -190,6 +231,12 @@ src/sidebar.js      the library sidebar: placing, selecting, moving, drawing fla
 src/flatten.js      flatten areas: press Google's mesh flat inside a rectangle
 src/drive.js        race mode: driving, jumps, speedometer
 src/layout.js       saves placed items in the browser; export/import
+src/kinds.js        placed things that aren't models (areas, pits, piles): how features register them
+src/terrain.js      the ground that can be dug and piled: heights, volumes, drawing, saving
+src/earthworks.js   excavations and stockpiles, and their tools; src/pour.js animates pouring
+src/laydown.js      laydown areas: coloured site areas draped on the ground, with labels
+src/cloud.js        sign in with Google, layouts in your account, share links (needs the Worker)
+worker/             the Cloudflare Worker: accounts and layouts API (D1), serves the built site
 scripts/add-asset.mjs   imports a model from Sketchfab or Poly Haven into public/library
 public/library/     downloaded models, library.json catalog, thumbs/ and CREDITS.md
 src/geo.js          lat/lon <-> local metres
@@ -208,6 +255,9 @@ npm run build
 
 `dist/` is a static site, so it can go on GitHub Pages, Netlify, Vercel or Cloudflare Pages.
 Add the site's origin (for example `https://yourname.github.io/*`) to the API key's website restrictions.
+
+For accounts and share links, host it on its Cloudflare Worker instead: `npm run deploy` builds the
+site without the environment key and deploys the Worker (see [docs/accounts.md](docs/accounts.md)).
 
 ## Google's terms, in short
 

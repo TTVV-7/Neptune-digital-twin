@@ -1,10 +1,10 @@
-## Earthworks: excavations and stockpiles
+# Earthworks: excavations and stockpiles
 
 For laydown planning you can cut into the ground and pile material on it, and read off how much
 material that is. Both tools are at the top of the library (**L**), under **Tools**, next to
 **Flatten area**.
 
-### Excavations
+## Excavations
 
 1. Click **Excavation**, then drag a rectangle on the ground. The rectangle is the **top edge of the
    cut**, lined up with the way you're looking. A click without a drag makes a 10 x 10 m pit.
@@ -36,7 +36,7 @@ The P panel shows:
 With the library open, click anywhere over a pit to select it, drag it to move it, **R** to turn it,
 **Delete** to remove it: the ground comes back exactly as it was.
 
-### Stockpiles
+## Stockpiles
 
 1. Click **Stockpile**, then either
    - **click** the ground: a **cone** of 50 m³ is poured there, or
@@ -70,7 +70,7 @@ A pile sits on whatever is under it: uneven ground, the floor of a pit, or anoth
 always holds the volume you gave it, so poured into a pit it rises less above the rim. Piles are
 solid: you can walk and drive over them, and things you place snap onto them.
 
-### Labels and volumes
+## Labels and volumes
 
 While the library is open (build mode) each excavation and stockpile has a label with its volume,
 e.g. *Gravel 20 mm · 50 m³ · 80 t* or *Excavation · 291 m³ cut*. The outlines show in build mode
@@ -83,26 +83,26 @@ flatten area, from the area's floor), so they're as good as the map: Google's me
 a few tenths of a metre, which over a large area adds up. Use them for planning, not for quantities
 you'll be paid on.
 
-### With Google's 3D map
+## With Google's 3D map
 
 Pits and piles are drawn on top of Google's mesh: around them you still see Google's photo
 texture. Under a pit Google's mesh is pressed down out of sight, like a flatten area, and the
 attribution in the corner says so. Google's ground loads in stages as you get closer, so a pit can
 shift by a few centimetres while the map sharpens.
 
-### Saving
+## Saving
 
 Excavations and stockpiles are saved with the layout like any other item, and come back when you
 reload or open an exported layout. Ground dug or dumped some other way (see below) is saved with
 the layout too.
 
-### Limits
+## Limits
 
 - The ground is a grid of heights 0.5 m apart, so there are no overhangs or tunnels, and a
   *vertical (shored)* side is drawn as a very steep face about 1 m wide.
 - Excavations and ridges can be up to 200 m long; cones up to 20,000 m³.
 
-### For developers: digging from code
+## For developers: digging from code
 
 The terrain is `window.twin.terrain` (and is passed around as `terrain`). An excavator, or anything
 else, can dig and dump with it. Positions are in the scene's frame in metres (`x` is west, `z` is
