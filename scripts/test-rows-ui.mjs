@@ -1,9 +1,10 @@
 // npm run test:rows-ui: rows of library items (src/rows.js) in a real browser, against the Vite dev
 // server with no Google tiles; every request that isn't to the local server is blocked. Drawing
 // with the mouse (a drag, clicks and a double-click, Enter, Backspace, Esc) and with a finger on a
-// phone; end to end and every so many metres, round corners; across the line; on a ramp; 300 cones
-// as instances; walking into a row; saved and reloaded; points, spacing and the item changed;
-// broken apart and deleted with Undo; hidden; Pro items locked.
+// phone; end to end and every so many metres, round corners; a cone taper; a fence closed into a
+// loop; across the line; on a ramp; 300 cones as instances; walking into a row; saved and
+// reloaded; points, spacing and the item changed; broken apart and deleted with Undo; hidden; Pro
+// items locked.
 //
 // Needs Playwright with Chromium (npm i -D playwright && npx playwright install chromium).
 // TEST_VITE_PORT picks the port, or TEST_BASE=<url> uses a dev server that's already running
@@ -289,6 +290,78 @@ test( 'cones every 3 m round two corners: spaced along the line, none doubled', 
 	await page.evaluate( () => window.twin.models.setParams( window.twin.models.entries.find( e => e.kind === 'row' ), { fit: 'centred' } ) );
 	[ row ] = await rows();
 	assert.ok( steps( row.copies ).every( s => near( s, 3, 0.001 ) ) );
+
+} );
+
+test( 'a cone taper has a cone on each point, none further apart than asked', async () => {
+
+	// A 30 m taper over a 3.6 m lane, then 25 m along it; every 4 m.
+	await placeRow( 'traffic-cone', [ [ 0, - 30 ], [ 3.6, 0 ], [ 3.6, 25 ] ], { spacing: 'every', every: 4 }, { north: 30 } );
+	const [ row ] = await rows();
+	const corner = Math.hypot( 3.6, 30 );
+	// One at each end and on the corner where the taper meets the lane.
+	for ( const s of [ 0, corner, corner + 25 ] ) assert.ok( row.copies.some( c => near( ( c.sa + c.sb ) / 2, s, 0.001 ) ), `none at ${ s } m` );
+	// 30.2 m in 8 spaces and 25 m in 7: 3.78 and 3.57 m apart.
+	assert.equal( row.count, 16 );
+	assert.ok( steps( row.copies ).every( s => s <= 4 + 1e-6 ), steps( row.copies ).join() );
+
+} );
+
+test( 'a fence round an area: the first point closes the loop, panels 10 ft apart, none doubled', async () => {
+
+	await pose( 0, 20, 110, 0, - 89 );
+	await rowButton( 'fence-panel' );
+	assert.deepEqual( await page.evaluate( () => [ ...document.querySelectorAll( '.row-panel .switch button[aria-checked="true"]' ) ].map( b => b.dataset.value ) ), [ 'end', 'along', 'ends' ] );
+	// A shaky first click (6 px) is still a click, not a one-panel row.
+	const first = await screenOf( - 15, 10 );
+	await page.mouse.move( first.x, first.y );
+	await page.mouse.down();
+	await page.mouse.move( first.x + 4, first.y + 4, { steps: 2 } );
+	await page.mouse.up();
+	await frames( 2 );
+	assert.equal( ( await page.evaluate( () => window.twin.sidebar.getLine() ) ).points, 1 );
+	for ( const [ e, n ] of [ [ 15, 10 ], [ 15, 30 ], [ - 15, 30 ] ] ) {
+
+		await clickAt( e, n );
+		await page.waitForTimeout( 450 );
+
+	}
+
+	// Over the first point its dot grows, and a click there closes the loop and finishes.
+	await page.mouse.move( first.x + 2, first.y - 2, { steps: 3 } );
+	assert.ok( await page.evaluate( () => document.querySelector( '.row-dot' ).classList.contains( 'closing' ) ) );
+	await page.mouse.click( first.x + 2, first.y - 2 );
+	await page.waitForFunction( () => window.twin.models.entries.some( e => e.kind === 'row' ), null, { timeout: 20000 } );
+	let [ row ] = await rows();
+	const { points } = row.config.params;
+	assert.equal( points.length, 5 );
+	assert.deepEqual( points[ 0 ], points[ 4 ] );
+	// 100 m: panels 10 ft apart, sharing the foot at each joint, cut across the four corners.
+	assert.ok( row.copies.every( c => near( Math.hypot( c.b[ 0 ] - c.a[ 0 ], c.b[ 1 ] - c.a[ 1 ] ), 3.048, 0.001 ) ) );
+	assert.equal( row.count, 32 );
+	assert.ok( Math.max( ...gaps( row.copies ) ) < 0.01 );
+
+	// Every 2.5 m round it: 40, the last 2.5 m from the first.
+	await page.evaluate( () => window.twin.models.setParams( window.twin.models.entries.find( e => e.kind === 'row' ), { spacing: 'every', every: 2.5 } ) );
+	[ row ] = await rows();
+	assert.equal( row.count, 40 );
+	const nearest = Math.min( ...row.copies.flatMap( ( c, i ) => row.copies.slice( i + 1 ).map( d => Math.hypot( c.east - d.east, c.north - d.north ) ) ) );
+	assert.ok( nearest > 1.7, `${ nearest } m` );
+
+	// Its corner has one dot; dragged, both ends go with it and the loop stays closed.
+	// (The handles follow the selection a frame later.)
+	await page.waitForFunction( () => window.twin.sidebar.handles.positions().some( h => h.type === 'point' ), null, { timeout: 5000 } );
+	const dots = await page.evaluate( () => window.twin.sidebar.handles.positions().filter( h => h.type === 'point' ).map( h => ( { index: h.index, ...h.screen } ) ) );
+	assert.deepEqual( dots.map( d => d.index ), [ 0, 1, 2, 3 ] );
+	await page.mouse.move( dots[ 0 ].x, dots[ 0 ].y );
+	await page.mouse.down();
+	await page.mouse.move( dots[ 0 ].x - 30, dots[ 0 ].y + 20, { steps: 6 } );
+	await page.mouse.up();
+	await frames( 3 );
+	[ row ] = await rows();
+	assert.equal( row.config.params.points.length, 5 );
+	assert.deepEqual( row.config.params.points[ 0 ], row.config.params.points[ 4 ] );
+	assert.ok( ! near( lineLength( row.config.params.points ), 100, 0.5 ), `${ lineLength( row.config.params.points ) } m` );
 
 } );
 
@@ -584,6 +657,26 @@ test( 'broken apart into single items where the copies stood, and Undo; deleted,
 	await page.locator( '.undo-toast button' ).click();
 	await page.waitForFunction( () => window.twin.models.entries.some( e => e.kind === 'row' ) && ! window.twin.models.entries.some( e => e.library === 'jersey-barrier' ), null, { timeout: 20000 } );
 
+	// A downloaded model's copies are clones of it, sharing one geometry: 200 cones in moments.
+	await placeRow( 'traffic-cone', [ [ - 298.5, 0 ], [ 298.5, 0 ] ], { spacing: 'every', every: 3 }, { north: - 40 } );
+	const broken = await page.evaluate( async () => {
+
+		const { models, rows } = window.twin;
+		const t0 = performance.now();
+		await rows.breakApart( models.entries.find( e => e.kind === 'row' && e.params.item === 'traffic-cone' ) );
+		const cones = models.entries.filter( e => e.library === 'traffic-cone' );
+		const geometries = new Set();
+		for ( const cone of cones ) cone.pivot.traverse( o => o.isMesh && geometries.add( o.geometry ) );
+		models.remove( cones[ 0 ] );
+		const kept = [ ...geometries ].every( g => g.attributes.position.count > 0 );
+		for ( const cone of cones.slice( 1 ) ) models.remove( cone );
+		return { count: cones.length, ms: performance.now() - t0, geometries: geometries.size, kept };
+
+	} );
+	assert.equal( broken.count, 200 );
+	assert.ok( broken.geometries <= 3 && broken.kept, JSON.stringify( broken ) );
+	assert.ok( broken.ms < 3000, `${ broken.ms } ms` );
+
 	await page.evaluate( () => window.twin.sidebar.select( window.twin.models.entries.find( e => e.kind === 'row' ) ) );
 	await page.keyboard.press( 'Delete' );
 	assert.equal( await page.evaluate( () => window.twin.models.entries.some( e => e.kind === 'row' ) ), false );
@@ -707,7 +800,7 @@ test( 'made from a placed item; Enter, Backspace and Esc; the spacing remembered
 
 } );
 
-test( 'on a phone: Row without hovering, the sheet out of the way, taps and Done', async () => {
+test( 'on a phone: Row without hovering, the sheet out of the way, taps and Done, the row\'s dots clear of it', async () => {
 
 	const phone = await newPage( { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true } );
 	try {
@@ -737,7 +830,9 @@ test( 'on a phone: Row without hovering, the sheet out of the way, taps and Done
 		await phone.waitForFunction( () => window.twin.models.entries.some( e => e.kind === 'row' ), null, { timeout: 20000 } );
 		const [ row ] = await rows( phone );
 		assert.equal( row.config.params.points.length, 3 );
-		assert.notEqual( await phone.evaluate( () => getComputedStyle( document.getElementById( 'library' ) ).display ), 'none' );
+		// The sheet stays folded, so that the new row and the dots to change it aren't under it.
+		assert.equal( await phone.evaluate( () => document.getElementById( 'library' ).hidden ), true );
+		await phone.waitForFunction( () => window.twin.sidebar.handles.positions().filter( h => h.type === 'point' ).length === 3, null, { timeout: 5000 } );
 
 	} finally {
 
