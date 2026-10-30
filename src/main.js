@@ -5,7 +5,9 @@ import { enuToLocal, localToEnu, localToLatLon, yawToHeading } from './geo.js';
 import { addLights, createGoogleTiles, createPlaceholderGround } from './world.js';
 import { ModelManager } from './models.js';
 import { createPlacementPanel } from './placement.js';
-import { loadVehicleCatalog } from './vehicles.js';
+import { loadLibrary } from './library.js';
+import { setUpLayout } from './layout.js';
+import { createSidebar } from './sidebar.js';
 import { isTyping, WalkController } from './walk.js';
 
 const STORAGE_KEY = 'neptune-twin.google-api-key';
@@ -166,22 +168,35 @@ function start( apiKey, keySource ) {
 	controls.setMode( START.mode );
 
 	const feetPosition = () => camera.position.clone().setY( camera.position.y - PLAYER.eyeHeight );
-	const panel = createPlacementPanel( models, {
-		getPlayerPosition: feetPosition,
-		getPlayerHeading: () => yawToHeading( controls.yaw ),
-	} );
-	loadVehicleCatalog().then( vehicles => {
-
-		panel.setVehicles( vehicles );
-		showVehicleCredits( vehicles );
-
-	} );
+	const panel = createPlacementPanel( models, { getPlayerPosition: feetPosition } );
 
 	for ( const config of MODELS ) {
 
 		models.load( config ).catch( err => showBanner( `Could not load ${ config.url }: ${ err.message }` ) );
 
 	}
+
+	// The library sidebar (L) and the layout of library items saved in this browser.
+	const layout = setUpLayout( models, { onError: message => showBanner( message, 8000 ) } );
+	let sidebar = null;
+	loadLibrary().then( library => {
+
+		sidebar = createSidebar( {
+			library,
+			models,
+			layout,
+			scene,
+			camera,
+			canvas: renderer.domElement,
+			controls,
+			panel,
+			getGround: () => [ ground ],
+			getPlayer: () => ( { ...localToEnu( feetPosition() ), heading: yawToHeading( controls.yaw ) } ),
+		} );
+		showLibraryCredits( library );
+		return layout.restore();
+
+	} );
 
 	setUpDragAndDrop( models, () => {
 
@@ -214,6 +229,7 @@ function start( apiKey, keySource ) {
 		camera.updateMatrixWorld();
 		tiles?.update();
 		models.update( dt );
+		sidebar?.update();
 		renderer.render( scene, camera );
 
 		hudTimer -= dt;
@@ -228,7 +244,11 @@ function start( apiKey, keySource ) {
 	} );
 
 	// Handy for poking around from the browser console.
-	window.twin = { scene, camera, controls, models, tiles, SITE };
+	window.twin = { scene, camera, controls, models, tiles, SITE, layout, get sidebar() {
+
+		return sidebar;
+
+	} };
 
 }
 
@@ -301,11 +321,12 @@ function setUpOverlays( controls ) {
 }
 
 // CC Attribution models must credit their authors wherever they're shown.
-function showVehicleCredits( vehicles ) {
+function showLibraryCredits( library ) {
 
-	if ( vehicles.length === 0 ) return;
+	const downloaded = library.filter( item => item.source );
+	if ( downloaded.length === 0 ) return;
 	const list = $( 'credits' ).querySelector( 'ul' );
-	for ( const { name, source } of vehicles ) {
+	for ( const { name, source } of downloaded ) {
 
 		const item = document.createElement( 'li' );
 		const link = document.createElement( 'a' );
@@ -328,6 +349,8 @@ function setUpDragAndDrop( models, getPlacement ) {
 	window.addEventListener( 'drop', e => {
 
 		e.preventDefault();
+		// Library items dragged from the sidebar are handled there.
+		if ( ! e.dataTransfer.types.includes( 'Files' ) ) return;
 		const files = [ ...e.dataTransfer.files ];
 		const isModel = file => /\.(glb|gltf)$/i.test( file.name );
 		const modelFiles = files.filter( isModel );

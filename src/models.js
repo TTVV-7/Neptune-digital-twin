@@ -1,11 +1,12 @@
-import { Box3, Group, LoadingManager, Raycaster, REVISION, Vector3 } from 'three';
+import { Box3, EventDispatcher, Group, LoadingManager, Raycaster, REVISION, Vector3 } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { dracoLoader } from './world.js';
 import { enuToLocal, headingToYaw, localToEnu } from './geo.js';
 import { useFastRaycast } from './raycast.js';
-import { frontToYaw } from './vehicles.js';
+import { frontToYaw } from './library.js';
+import { buildProcedural } from './procedural.js';
 
 const DOWN = new Vector3( 0, - 1, 0 );
 const _box = new Box3();
@@ -22,9 +23,12 @@ const SNAP_MARGIN = 2;
 
 // Loads your own glTF/GLB models and places them in the terminal frame.
 // Each entry keeps an editable `state` that the placement panel changes.
-export class ModelManager {
+// Dispatches 'add', 'change' and 'remove' events with the entry.
+export class ModelManager extends EventDispatcher {
 
 	constructor( { getGround, renderer } ) {
+
+		super();
 
 		this.group = new Group();
 		this.group.name = 'models';
@@ -50,10 +54,13 @@ export class ModelManager {
 
 	}
 
-	async load( config, url = new URL( config.url, document.baseURI ).href, loader = this.loader ) {
+	// config: an entry like those in MODELS (config.js). Built-in library pieces have `procedural`
+	// instead of a url. `url` and `loader` override where and how a file is loaded (drag and drop).
+	async load( config, url, loader = this.loader ) {
 
-		const gltf = await loader.loadAsync( url );
-		const content = gltf.scene;
+		const content = config.procedural
+			? buildProcedural( config.procedural )
+			: ( await loader.loadAsync( url ?? new URL( config.url, document.baseURI ).href ) ).scene;
 		useFastRaycast( content );
 
 		// Turn the model so its front (if the config names one, as vehicles do) faces along the
@@ -81,6 +88,10 @@ export class ModelManager {
 			url: config.url,
 			recenter: config.recenter !== false,
 			front: config.front,
+			library: config.library,
+			procedural: config.procedural,
+			// Still following the mouse in the library sidebar; not saved until placed.
+			placing: !! config.placing,
 			footprint: new Box3().setFromObject( content ),
 			state: {
 				name: config.name ?? 'Model',
@@ -97,7 +108,7 @@ export class ModelManager {
 
 		this.entries.push( entry );
 		this.apply( entry );
-		this.onAdd?.( entry );
+		this.dispatchEvent( { type: 'add', entry } );
 		return entry;
 
 	}
@@ -129,6 +140,7 @@ export class ModelManager {
 		pivot.scale.setScalar( state.scale );
 		entry.snapped = false;
 		if ( state.snap ) this.snap( entry );
+		this.dispatchEvent( { type: 'change', entry } );
 
 	}
 
@@ -170,7 +182,7 @@ export class ModelManager {
 
 			state.up = up;
 			pivot.position.y = up;
-			this.onChange?.( entry );
+			this.dispatchEvent( { type: 'change', entry } );
 
 		}
 
@@ -192,6 +204,20 @@ export class ModelManager {
 		}
 
 		if ( next ) this.snap( next );
+
+	}
+
+	// The entry whose model contains this object (e.g. a raycast hit), if any.
+	entryFor( object ) {
+
+		for ( let o = object; o; o = o.parent ) {
+
+			const entry = this.entries.find( e => e.pivot === o );
+			if ( entry ) return entry;
+
+		}
+
+		return null;
 
 	}
 
@@ -218,6 +244,7 @@ export class ModelManager {
 
 		} );
 		this.entries.splice( this.entries.indexOf( entry ), 1 );
+		this.dispatchEvent( { type: 'remove', entry } );
 
 	}
 
@@ -236,7 +263,7 @@ export class ModelManager {
 		const { state } = entry;
 		const config = {
 			name: state.name,
-			url: entry.url,
+			...( entry.procedural ? { procedural: entry.procedural } : { url: entry.url } ),
 			east: round( state.east ),
 			north: round( state.north ),
 			up: state.snap ? null : round( state.up ),
@@ -245,6 +272,7 @@ export class ModelManager {
 		};
 		if ( ! entry.recenter ) config.recenter = false;
 		if ( entry.front ) config.front = entry.front;
+		if ( entry.library ) config.library = entry.library;
 		return config;
 
 	}

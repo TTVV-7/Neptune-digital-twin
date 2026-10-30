@@ -100,27 +100,46 @@ Large models load faster after compression with [gltf-transform](https://gltf-tr
 npx @gltf-transform/cli optimize input.glb public/models/output.glb --compress meshopt --texture-compress webp
 ```
 
-## Vehicle library
+## Library: vehicles and site pieces
 
-`public/vehicles/` holds real-scale vehicle models that aren't tied to Neptune, so the same library
-works at any site. `vehicles.json` lists each one with its size, which way it faces and its licence,
-and `CREDITS.md` credits the authors. The app shows the credits under **H**.
+Press **L** (or the **Library** button, bottom left) to open the library: vehicles, site office
+trailers, containers, dumpsters, barriers, fencing, traffic control, porta-potties, pallets and more,
+all at real scale and not tied to Neptune, so the same library works at any site.
 
-To place one, press **P**, open **Vehicles**, pick a vehicle and click **Place in front of me**. It
-appears a few metres ahead, facing the way you face, and can be moved like any other model.
+- **Place:** click an item, move the mouse over the ground and click. Or drag the item onto the scene.
+  **R** or the mouse wheel rotates it, **Shift**+click places another, **Esc** cancels.
+- **Edit:** click a placed item to select it, drag it to move it, **R** / **Shift+R** to turn it,
+  **Delete** to remove it. **P** shows its exact position and heading.
+- **Look around** while editing by holding the right mouse button.
+- **Save:** what you place is saved in this browser. **Export layout** downloads it as a file and
+  **Import** loads one, e.g. to share a layout or move it to another computer.
 
-To add another from Sketchfab, put a Sketchfab API token (sketchfab.com → Settings → Password & API)
-in an environment variable named `SKETCHFAB_API_TOKEN` and run:
+Two kinds of items:
+
+- **Built in** (`src/procedural.js`): simple standard pieces generated in code at exact North American
+  dimensions, e.g. a 10 ft New Jersey barrier, 20/40 ft ISO containers, a 12 x 60 ft site office trailer,
+  20/40 yd roll-offs. Add more there.
+- **Downloaded** (`public/library/`): models from Sketchfab and Poly Haven, listed in `library.json` with
+  their size, facing and licence. `CREDITS.md` credits the authors; the app shows the credits under **H**.
+
+To add a downloaded model, put a Sketchfab API token (sketchfab.com → Settings → Password & API) in an
+environment variable named `SKETCHFAB_API_TOKEN` (Poly Haven needs none) and run:
 
 ```bash
-npm run add-vehicle -- https://sketchfab.com/3d-models/<model>-<uid> --id forklift --name "Forklift" --category equipment --length 3.6
+npm run add-asset -- https://sketchfab.com/3d-models/<model>-<uid> --id forklift --name "Forklift" --category "Heavy equipment" --length 3.6
 ```
 
-- `--length` is the real vehicle's length in metres, used to scale the model.
+```bash
+npm run add-asset -- https://polyhaven.com/a/<asset> --id oil-drum --category Materials --length 0.6
+```
+
+- `--length` is the real item's length in metres along its front axis, used to scale the model.
 - `--front` is the axis its front points along in the file: `+z` (the glTF default), `-z`, `+x` or `-x`.
-  If a placed vehicle faces sideways or backwards, run the command again with another value.
+  If a placed item faces sideways or backwards, run the command again with another value.
 - Only downloadable models under **CC0** or **CC Attribution** are accepted, so they can be stored in the
   repository and used commercially. The script refuses anything else.
+- Models from SketchUp's 3D Warehouse can't go in the library: its terms forbid redistributing them.
+  You can still drop one you've downloaded onto the page for your own use.
 - Textures are shrunk to 1024 px and geometry compressed; `--max-texture 2048` keeps more detail.
 
 ## About the Sketchfab model
@@ -141,9 +160,12 @@ src/walk.js         walk/fly controller with gravity and collisions
 src/models.js       loads and places your glTF models
 src/placement.js    the P panel
 src/raycast.js      fast raycasting (three-mesh-bvh) for walking and snapping
-src/vehicles.js     loads the vehicle library
-scripts/add-vehicle.mjs   imports a vehicle from Sketchfab into public/vehicles
-public/vehicles/    vehicle models, vehicles.json catalog and CREDITS.md
+src/library.js      loads the library (downloaded models + built-in pieces)
+src/procedural.js   built-in site pieces generated in code
+src/sidebar.js      the library sidebar: placing, selecting, moving
+src/layout.js       saves placed items in the browser; export/import
+scripts/add-asset.mjs   imports a model from Sketchfab or Poly Haven into public/library
+public/library/     downloaded models, library.json catalog, thumbs/ and CREDITS.md
 src/geo.js          lat/lon <-> local metres
 public/models/      put your .glb files here
 ```

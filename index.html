@@ -20,16 +20,43 @@
 				<tr><td>F</td><td>Switch between walking and flying</td></tr>
 				<tr><td>Space</td><td>Jump (walk) / up (fly)</td></tr>
 				<tr><td>E / Q</td><td>Up / down (fly)</td></tr>
-				<tr><td>P</td><td>Model placement panel</td></tr>
+				<tr><td>Right-drag</td><td>Look around without capturing the mouse</td></tr>
+				<tr><td>L</td><td>Library: place vehicles, trailers, bins, barriers...</td></tr>
+				<tr><td>Click item</td><td>Select it; drag to move it</td></tr>
+				<tr><td>R / Shift+R</td><td>Rotate the selected or placing item</td></tr>
+				<tr><td>Delete</td><td>Remove the selected item</td></tr>
+				<tr><td>Esc</td><td>Cancel placing / deselect</td></tr>
+				<tr><td>P</td><td>Placement panel: exact positions</td></tr>
 				<tr><td>H</td><td>Show / hide this help</td></tr>
 			</table>
-			<p>Drop a <b>.glb</b> file anywhere on the page to load your own model, or add a vehicle from the library with <b>P</b> &rarr; Vehicles.</p>
+			<p>Drop a <b>.glb</b> file anywhere on the page to load your own model.</p>
 			<p><button type="button" id="change-key">Change Google API key</button></p>
 			<div id="credits" hidden>
-				<h3>Vehicle models</h3>
+				<h3>Model credits</h3>
 				<ul></ul>
 			</div>
 		</div>
+
+		<button type="button" id="library-toggle" aria-controls="library" aria-expanded="false">Library <kbd>L</kbd></button>
+		<aside id="library" hidden aria-label="Library">
+			<header>
+				<h2>Library</h2>
+				<button type="button" class="close" aria-label="Close library">&times;</button>
+			</header>
+			<input type="search" placeholder="Search vehicles, bins, barriers..." aria-label="Search the library" />
+			<p class="tip">Click an item, then click the ground to place it. Or drag it onto the scene.
+				<b>R</b> or the wheel rotates, <b>Shift</b>+click places another, <b>Esc</b> cancels.</p>
+			<div class="items"></div>
+			<footer>
+				<span class="count"></span>
+				<div class="buttons">
+					<button type="button" class="export">Export layout</button>
+					<button type="button" class="import">Import</button>
+					<button type="button" class="clear">Clear</button>
+				</div>
+				<input type="file" accept=".json,application/json" hidden />
+			</footer>
+		</aside>
 
 		<div id="banner" hidden></div>
 		<div id="attribution" hidden>

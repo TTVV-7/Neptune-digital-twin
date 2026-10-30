@@ -93,21 +93,38 @@ export class WalkController {
 			if ( e.target !== domElement ) this.keys.clear();
 
 		};
+		// Return false to stop a click on the scene from capturing the mouse (e.g. while placing items).
+		this.canLockPointer = () => true;
+		this.dragLooking = false;
 		this._onMouseMove = e => {
 
-			if ( ! this.locked ) return;
+			if ( ! this.locked && ! this.dragLooking ) return;
 			this.yaw -= e.movementX * 0.002;
 			this.pitch -= e.movementY * 0.002;
 			this.pitch = MathUtils.clamp( this.pitch, - Math.PI / 2 + 0.01, Math.PI / 2 - 0.01 );
 
 		};
-		this._onClick = () => {
+		this._onClick = e => {
 
 			// Hand the keyboard back to the scene after using the panel.
 			document.activeElement?.blur?.();
-			domElement.requestPointerLock();
+			if ( this.canLockPointer( e ) ) domElement.requestPointerLock();
 
 		};
+		// Holding the right mouse button looks around without capturing the mouse.
+		this._onPointerDownLook = e => {
+
+			if ( e.button !== 2 ) return;
+			this.dragLooking = true;
+			domElement.setPointerCapture( e.pointerId );
+
+		};
+		this._onPointerUpLook = e => {
+
+			if ( e.button === 2 ) this.dragLooking = false;
+
+		};
+		this._onContextMenu = e => e.preventDefault();
 		this._onLockChange = () => {
 
 			this.locked = document.pointerLockElement === domElement;
@@ -123,6 +140,9 @@ export class WalkController {
 		document.addEventListener( 'mousemove', this._onMouseMove );
 		document.addEventListener( 'pointerlockchange', this._onLockChange );
 		domElement.addEventListener( 'click', this._onClick );
+		domElement.addEventListener( 'pointerdown', this._onPointerDownLook );
+		domElement.addEventListener( 'pointerup', this._onPointerUpLook );
+		domElement.addEventListener( 'contextmenu', this._onContextMenu );
 
 	}
 
@@ -381,6 +401,9 @@ export class WalkController {
 		document.removeEventListener( 'mousemove', this._onMouseMove );
 		document.removeEventListener( 'pointerlockchange', this._onLockChange );
 		this.domElement.removeEventListener( 'click', this._onClick );
+		this.domElement.removeEventListener( 'pointerdown', this._onPointerDownLook );
+		this.domElement.removeEventListener( 'pointerup', this._onPointerUpLook );
+		this.domElement.removeEventListener( 'contextmenu', this._onContextMenu );
 
 	}
 

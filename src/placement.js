@@ -1,20 +1,15 @@
 import GUI from 'lil-gui';
 import { isTyping } from './walk.js';
-import { vehicleConfig } from './vehicles.js';
-import { localToEnu } from './geo.js';
 
 // Common model units, as the scale that converts them to metres.
 const UNITS = { metres: 1, centimetres: 0.01, millimetres: 0.001, feet: 0.3048, inches: 0.0254 };
 
-// Panel (toggle with P) for lining your models up with the Google tiles.
-// "Copy config" gives you an entry to paste into MODELS in src/config.js.
-export function createPlacementPanel( models, { getPlayerPosition, getPlayerHeading } ) {
+// Panel (toggle with P) for fine-tuning placed models by the numbers and lining your own models
+// up with the Google tiles. "Copy config" gives you an entry to paste into MODELS in src/config.js.
+export function createPlacementPanel( models, { getPlayerPosition } ) {
 
 	const gui = new GUI( { title: 'Model placement  (P)' } );
 	gui.hide();
-
-	// Filled in once the vehicle catalog has loaded.
-	const vehiclesFolder = gui.addFolder( 'Vehicles' ).hide();
 
 	const empty = gui.add( { hint: 'Drop a .glb file on the page' }, 'hint' ).name( 'No models yet' ).disable();
 	const folders = new Map();
@@ -23,7 +18,7 @@ export function createPlacementPanel( models, { getPlayerPosition, getPlayerHead
 
 		empty.hide();
 		const { state } = entry;
-		const folder = gui.addFolder( state.name );
+		const folder = gui.addFolder( state.name ).close();
 		const apply = () => models.apply( entry );
 
 		folder.add( state, 'east' ).step( 0.1 ).name( 'east (m)' ).onChange( apply );
@@ -68,7 +63,6 @@ export function createPlacementPanel( models, { getPlayerPosition, getPlayerHead
 			moveHere() {
 
 				models.moveTo( entry, getPlayerPosition() );
-				folder.controllers.forEach( c => c.updateDisplay() );
 
 			},
 			copyConfig() {
@@ -79,9 +73,6 @@ export function createPlacementPanel( models, { getPlayerPosition, getPlayerHead
 			remove() {
 
 				models.remove( entry );
-				folder.destroy();
-				folders.delete( entry );
-				if ( folders.size === 0 ) empty.show();
 
 			},
 		};
@@ -93,13 +84,29 @@ export function createPlacementPanel( models, { getPlayerPosition, getPlayerHead
 
 	}
 
-	models.onAdd = entry => {
+	models.addEventListener( 'add', ( { entry } ) => {
 
 		addEntry( entry );
+		// Your own dropped models usually need lining up; library items are placed with the mouse.
+		if ( ! entry.library ) focus( entry );
+
+	} );
+	models.addEventListener( 'change', ( { entry } ) => folders.get( entry )?.controllersRecursive().forEach( c => c.updateDisplay() ) );
+	models.addEventListener( 'remove', ( { entry } ) => {
+
+		folders.get( entry )?.destroy();
+		folders.delete( entry );
+		if ( folders.size === 0 ) empty.show();
+
+	} );
+
+	// Show the panel with just this entry's settings open.
+	function focus( entry ) {
+
+		for ( const [ e, folder ] of folders ) folder.open( e === entry );
 		gui.show();
 
-	};
-	models.onChange = entry => folders.get( entry )?.controllers.forEach( c => c.updateDisplay() );
+	}
 
 	// Capture phase, because lil-gui stops key events from bubbling out of its controls.
 	window.addEventListener( 'keydown', e => {
@@ -108,35 +115,7 @@ export function createPlacementPanel( models, { getPlayerPosition, getPlayerHead
 
 	}, true );
 
-	// Pick a vehicle from the library and drop it a few metres ahead, facing the way you face.
-	function setVehicles( vehicles ) {
-
-		if ( vehicles.length === 0 ) return;
-		const pick = { id: vehicles[ 0 ].id };
-		const select = vehiclesFolder.add( pick, 'id', Object.fromEntries( vehicles.map( v => [ v.name, v.id ] ) ) )
-			.name( 'vehicle' )
-			.onChange( () => select.$select.blur() );
-		vehiclesFolder.add( {
-			place() {
-
-				const vehicle = vehicles.find( v => v.id === pick.id );
-				const heading = getPlayerHeading();
-				const distance = vehicle.dimensions.length / 2 + 4;
-				const { east, north } = localToEnu( getPlayerPosition() );
-				const rad = heading * Math.PI / 180;
-				models.load( vehicleConfig( vehicle, {
-					east: Math.round( ( east + Math.sin( rad ) * distance ) * 100 ) / 100,
-					north: Math.round( ( north + Math.cos( rad ) * distance ) * 100 ) / 100,
-					heading: Math.round( heading * 10 ) / 10,
-				} ) );
-
-			},
-		}, 'place' ).name( 'Place in front of me' );
-		vehiclesFolder.show();
-
-	}
-
-	return { gui, setVehicles };
+	return { gui, focus };
 
 }
 
@@ -150,7 +129,7 @@ function copyText( text ) {
 
 }
 
-function toast( message ) {
+export function toast( message ) {
 
 	const el = document.createElement( 'div' );
 	el.className = 'toast';
