@@ -36,8 +36,8 @@ const DOUBLE_CLICK = 400;
 // A first press dragged this far (pixels; a finger: twice as far) is a straight line at once, and
 // less is a click, so that a shaky first click doesn't end the line before it's begun.
 const LINE_DRAG = 24;
-// The pointer this close to the first point (pixels; a finger: twice as close) is on it: a click
-// there closes the line into a loop.
+// The pointer this close to the first point (pixels; a finger: twice that) is on it: a click there
+// closes the line into a loop.
 const CLOSE_RADIUS = 12;
 // A phone: the library is a sheet over the bottom of the screen there (style.css).
 const PHONE = window.matchMedia( '( max-width: 700px )' );
