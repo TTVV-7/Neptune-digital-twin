@@ -181,7 +181,8 @@ export function createLegend( { controls, driver, models, getSidebar, getDriving
 	function selectedRows( entry ) {
 
 		// What its handles and toolbar (handles.js, toolbar.js) offer: areas, pits and piles (kinds
-		// with `resize`) have a size to change and a pit a depth; a round pile doesn't turn.
+		// with `resize`) have a size to change and a pit a depth; a round pile doesn't turn. Kept
+		// short, as the panel can cover the item's handles: R and Delete are on the buttons' tips.
 		const kind = getKind( entry.kind );
 		const shape = resizeShape( kind, entry.params );
 		const turns = shape !== 'circle';
@@ -193,12 +194,10 @@ export function createLegend( { controls, driver, models, getSidebar, getDriving
 			...shape ? [ [ [ '~Drag' ], shape === 'rect' ? 'The square handles: resize' : 'The square handle: resize' ] ] : [],
 			...kind?.resize?.depth ? [ [ [ '~Drag' ], 'The arrow in the middle: depth' ] ] : [],
 			[ [ `~${ click }` ], `The buttons above it: ${ buttons.join( ', ' ) }` ],
-			...turns ? [ [ [ 'R', '/', 'Shift', '+', 'R' ], 'Turn 15°' ] ] : [],
-			[ [ 'Delete' ], 'Remove it' ],
 			[ [ 'P' ], shape ? 'Exact size and position' : 'Exact position' ],
 			...drivable ? [ [ [ 'V' ], 'Drive it' ] ] : [],
 			[ [ 'Esc' ], 'Deselect' ],
-		], note: shape && mouse ? 'Sizes snap to 0.5 m: hold Shift for any size.' : '' };
+		] };
 
 	}
 
