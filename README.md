@@ -64,8 +64,9 @@ The key ends up in the browser, so restricting it is what keeps it safe.
 The **Controls** panel in the bottom right shows the keys and mouse moves for what you're doing right
 now (walking, flying, the library, placing, drawing an area, a selected item, driving, digging) and
 changes as you do. Fold it away with its arrow; it stays as a small **Controls** button, and the app
-remembers which you chose. On a phone it starts as the button. **H** (or **All controls** in the
-panel) shows the full list:
+remembers which you chose. On a phone it starts as the button. Above it, the **Show** panel hides
+things and switches between before and after (see [Showing and hiding](#showing-and-hiding-the-show-panel)).
+**H** (or **All controls** in the panel) shows the full list:
 
 | Moving | |
 | --- | --- |
@@ -94,7 +95,7 @@ panel) shows the full list:
 | Round handle | Drag to rotate the selected item; Shift snaps to 15° |
 | Square handles | On an area, excavation or stockpile: drag to resize; Shift for any size |
 | Arrow in a pit | Drag down to dig deeper, up for shallower |
-| Toolbar | The buttons over the selected item: rotate, size (type it in), drive, edit, delete |
+| Toolbar | The buttons over the selected item: rotate, size (type it in), drive, edit, hide, delete |
 | R / Shift+R | Turn the selected item 15° |
 | Delete | Remove the selected item (Undo for 5 seconds) |
 | Esc | Cancel placing or drawing / deselect |
@@ -121,6 +122,12 @@ panel) shows the full list:
 | W A S D | Drive the tracks |
 | C | Operator camera |
 | V or Esc | Get out |
+
+| Showing | |
+| --- | --- |
+| B | Before / after: the site as Google captured it (nothing flattened, dug, piled or placed), or with your changes |
+| Show panel | Above the Controls (an eye when folded): hide flatten areas, excavations, stockpiles, laydown areas, shoring in pits, labels, or a whole category such as Vehicles |
+| Hide (toolbar) | Hide just the selected item; the Show panel lists it to show again |
 
 | Other | |
 | --- | --- |
@@ -189,19 +196,20 @@ npx @gltf-transform/cli optimize input.glb public/models/output.glb --compress m
 ## Library: vehicles and site pieces
 
 Press **L** (or the **Library** button, bottom left) to open the library: vehicles, construction
-equipment (excavators, loaders, a dozer, graders, rollers, cranes, lifts, telehandlers, forklifts,
-dump trucks...), site office trailers, containers, dumpsters, barriers, fencing, traffic control,
-porta-potties, pallets, shoring and more, all at real scale and not tied to Neptune, so the same library works
-at any site. What each downloaded machine is and where it came from is in
-[docs/equipment.md](docs/equipment.md).
+equipment (excavators, loaders, a dozer, graders, rollers, mobile and tower cranes, lifts,
+telehandlers, forklifts, dump trucks...), generators, compressors and fuel tanks, site trailers in
+seven sizes, containers, fabric shelters and other temporary covers, dumpsters, barriers, fencing and
+hoarding, traffic control, porta-potties, dewatering and water treatment, people for scale, pallets,
+shoring and more, all at real scale and not tied to Neptune, so the same library works at any site.
+What each machine is, its size and where it came from is in [docs/equipment.md](docs/equipment.md).
 
 - **Place:** click an item, move the mouse over the ground and click. Or drag the item onto the scene.
   **R** or the mouse wheel rotates it, **Shift**+click places another, **Esc** cancels.
 - **Edit:** click (or tap) a placed item to select it and drag it to move it. A ring appears around it:
   drag its round knob to turn it (**Shift** snaps to 15°), or use **R** / **Shift+R**, or the wheel
   while you drag it. A toolbar over it turns it 15° (hold, or **Shift**+click, for 90°), drives it if
-  it's a vehicle or machine, opens its settings (**P**: exact position and heading) and deletes it,
-  with **Undo** for 5 seconds. **Delete** removes it too.
+  it's a vehicle or machine, opens its settings (**P**: exact position and heading), hides it and
+  deletes it, with **Undo** for 5 seconds. **Delete** removes it too.
 - **Look around** while editing by holding the right mouse button.
 - **Save:** what you place is saved in this browser. **Export layout** downloads it as a file and
   **Import** loads one, e.g. to share a layout or move it to another computer.
@@ -209,14 +217,18 @@ at any site. What each downloaded machine is and where it came from is in
   mesh inside it (rail cars, parked trucks, a shed) is pressed flat to the lowest ground around it,
   to clear space for a layout. Draw it a little bigger than what you want gone: Google's mesh is made
   of large triangles, and ones that cross the edge slope up to the uncleared side. Areas show as red
-  boxes while the library is open; select one to move, turn, resize or delete it, which brings
-  the original back. It only changes what this app draws; Google's data isn't touched.
+  boxes while the library is open (the Show panel hides them); select one to move, turn, resize or
+  delete it, which brings the original back, and **B** shows the original everywhere for a moment.
+  It only changes what this app draws; Google's data isn't touched.
 
 Two kinds of items:
 
 - **Built in** (`src/procedural.js`): simple standard pieces generated in code at exact North American
-  dimensions, e.g. a 10 ft New Jersey barrier, 20/40 ft ISO containers, a 12 x 60 ft site office trailer,
-  20/40 yd roll-offs. Add more there.
+  dimensions, e.g. a 10 ft New Jersey barrier, 20/40 ft ISO containers, site office trailers from 8 x 20
+  to 24 x 60 ft, 20/40 yd roll-offs, fabric shelters, a frac tank, workers. Add more there. Plant with
+  no clean download is built in code too, at the size of a common machine of its class: generators,
+  compressors and a fuel tank (`src/power-models.js`), mobile cranes and telehandlers
+  (`src/crane-models.js`) and the tower crane (`src/tower-crane.js`).
 - **Downloaded** (`public/library/`): models from Sketchfab and Poly Haven, listed in `library.json` with
   their size, facing and licence. `CREDITS.md` credits the authors; the app shows the credits under **H**.
 
@@ -245,6 +257,31 @@ npm run add-asset -- https://polyhaven.com/a/<asset> --id oil-drum --category Ma
 - The script prints the model's description. Read it: if it names someone else to credit (a logo's
   designer, say), run again with `--credit "Logo by ..."` so they're listed too.
 
+## Showing and hiding: the Show panel
+
+The **Show** panel sits above the Controls panel, bottom right. Fold it away with its arrow and it
+stays as a small eye button (the eye is crossed out while something is hidden); the app remembers
+which you chose, and on a phone it starts folded.
+
+- **Before / After** (or **B**): *Before* is the site as Google captured it. Flattening is off, so
+  Google's mesh is back as it was; the ground is shown as it was instead of your cuts, piles and
+  digging, and pits no longer hide any of Google's mesh; nothing you placed is drawn. *After* puts
+  it all back, exactly as it was, at once. The status readout says when you're looking at Before.
+  Placing something new switches back to After. It waits while you're driving.
+- **Layers**, each with an eye and a count: *Flatten areas* (the red boxes; the ground stays
+  flattened), *Excavations* and *Stockpiles* (their outlines and labels; the ground stays dug and
+  piled), *Laydown areas*, *Shoring in pits*, *Labels* (every floating label), then one row per
+  library category with something placed (*Vehicles*, *Heavy equipment*, *Site trailers &
+  containers*, ...), which come and go by themselves. Placing something in a hidden layer shows
+  that layer again.
+- **Hidden items**: **Hide** on the selection toolbar hides just that item (with Undo). Hidden
+  items are listed at the bottom of the panel with **Show** each and **Show all**.
+
+Hidden things aren't drawn, can't be clicked or selected, and don't block walking or driving;
+nothing is moved or deleted. Items hidden one by one are part of the plan: they're saved with the
+layout, exported with it, and hidden on its share link too. The layers and Before / After are
+yours alone, remembered in this browser.
+
 ## Planning a site: laydown areas, cuts and stockpiles
 
 The tools at the top of the library (**L**, under *Tools*) mark out and shape the ground. Each one is
@@ -270,6 +307,19 @@ panel, which has the size at the top. A pit has an arrow in the middle: drag it 
 Pits and piles are real ground: you can walk into a pit, drive over a pile, and things you place
 sit on them. Volumes come out within about 1% of the textbook figure for the shape, measured from
 Google's ground, so they are as good as the map. Details in [docs/earthworks.md](docs/earthworks.md).
+
+### Tower crane and its reach
+
+The **Tower crane** (library, *Cranes & lifts*) is set up after it's placed: in the P panel (or
+**Size** on its toolbar), **height under hook** (10 to 90 m) and **jib**, its working radius (20 to
+80 m), rebuild it, with a mast, counter-jib, counterweights and tower head to suit; **hook radius**
+and **hook height** move the trolley and hook. Turn it to point the jib. Its **reach circle**, an
+orange disc on the ground at the working radius with a fainter ring where the counter-jib's tail
+swings, shows what it can reach and what it swings over; untick *reach circle* to hide it. The
+circle drapes over the ground like a laydown area, is saved with the layout, and doesn't count in
+the crane's size (selecting, turning and snapping go by the crane itself). It's a planning aid
+without a load chart: check the real crane's chart for what it lifts at a radius. More in
+[docs/equipment.md](docs/equipment.md).
 
 ### Shoring: trench boxes, sheet piles and more
 
@@ -305,9 +355,10 @@ gets out and parks it where it stopped. The speedometer shows km/h, your top spe
 Vehicles also include a go-kart (with its driver), built in code.
 
 The construction machines drive too, at their own speeds: the dozer at 11 km/h, the wheel loader at
-40, the crawler crane at walking pace (2 km/h) and the all-terrain crane at road speed (80), even with
-its boom up. The cranes stand and turn on their carriers, and the cameras frame the carrier and look
-out of the cab rather than from up the boom. The chase camera keeps outside the machine's own box,
+40, the crawler crane at walking pace (2 km/h), the spider crane at 2.5, the carry-deck crane at 27,
+the rough-terrain crane at 40, the all-terrain crane at road speed (80) and the boom truck at 100, even
+with their booms up. The cranes stand and turn on their carriers, and the cameras frame the carrier
+and look out of the cab rather than from up the boom. The chase camera keeps outside the machine's own box,
 boom and all (backed up to a wall, it looks on from above), and the driver's-seat camera is at the
 operator's eyes: library.json gives each machine's `drive.cab` point. A cab whose windows are only
 painted on is seen from just past its windscreen, and see-through glass is left out of that view. The pickup tops out at 160 km/h (about 210 with boost), the semi at 120 and the haul truck at 70. The **Race**
@@ -342,9 +393,9 @@ host. Creating the project, the database, the environment variables (`GOOGLE_CLI
 
 ## Premium equipment (work in progress)
 
-Library items marked `"premium": true` in `library.json` (for now the cranes, lifts, forklift,
-telehandler and container handler) form a **Pro equipment** pack, bought once through a Stripe
-Payment Link. While it's locked, those cards show a **Pro** badge and picking one explains how to
+Library items marked `"premium": true` (in `library.json`, or on a built-in item in
+`src/crane-models.js`: for now the *Cranes & lifts* and *Material handling* categories) form a
+**Pro equipment** pack, bought once through a Stripe Payment Link. While it's locked, those cards show a **Pro** badge and picking one explains how to
 buy it; Stripe's webhook tells the server who has paid. Layouts and share links with premium items
 always open for everyone. It's **off** until the Payment Link, its id and the webhook's signing secret
 are set, and then only in the app: the models are still public files. Stripe setup (test mode first),
@@ -389,12 +440,21 @@ src/world.js        Google tiles, lights, the flat stand-in ground
 src/walk.js         walk/fly controller with gravity, collisions, bounces, the view turn and the zoom's glide
 src/zoom.js         the mouse wheel and trackpad pinch: zoom toward the cursor, chase camera distance
 src/legend.js       the Controls panel: the keys for what you're doing now
+src/layers.js       the Show panel: layers, hidden items and Before / After (B)
 src/drive-prompt.js V: what it drives, the "Press V to drive" prompt and twin.startDriving()
 src/models.js       loads and places your glTF models
 src/placement.js    the P panel
 src/raycast.js      fast raycasting (three-mesh-bvh) for walking and snapping
 src/library.js      loads the library (downloaded models + built-in pieces)
 src/procedural.js   built-in site pieces generated in code
+src/parts.js        builds those pieces from parts merged into one mesh per material
+src/trailers.js     site trailers: offices, double-wide, washroom, lunchroom; src/covers.js fabric
+                    shelters, canopies, scaffold enclosure, fence runs, hoarding
+src/water-treatment.js  frac and weir tanks, sand filter, dosing trailer, trash pump, dewatering bag
+src/people.js       workers and a traffic control person, for scale
+src/power-models.js generators, compressors and the fuel tank, built in code
+src/crane-models.js mobile cranes and telehandlers, built in code; src/plant-parts.js their parts
+src/tower-crane.js  the tower crane (a kind, set up in the P panel) and its reach circle
 src/sidebar.js      the library sidebar: placing, selecting, moving, drawing flatten areas
 src/handles.js      on-map handles for the selected item: turning, resizing areas, a pit's depth
 src/toolbar.js      the toolbar over the selected item, its size editor and Undo after deleting

@@ -16,7 +16,7 @@
 				<h2 id="help-title">Controls</h2>
 				<button type="button" class="close" aria-label="Close help">&times;</button>
 			</header>
-			<p class="small">The Controls panel (bottom right) shows the keys for what you are doing right now. <kbd>H</kbd> shows or hides this list.</p>
+			<p class="small">The Controls panel (bottom right) shows the keys for what you are doing right now, and the Show panel above it what is drawn. <kbd>H</kbd> shows or hides this list.</p>
 			<div class="groups">
 				<section>
 					<h3>Moving</h3>
@@ -51,7 +51,7 @@
 						<tr><td>Round handle</td><td>Drag it to rotate the selected item; <kbd>Shift</kbd> snaps to 15&deg;</td></tr>
 						<tr><td>Square handles</td><td>On an area, excavation or stockpile: drag to resize; <kbd>Shift</kbd> for any size</td></tr>
 						<tr><td>Arrow in a pit</td><td>Drag down to dig deeper, up for shallower</td></tr>
-						<tr><td>Toolbar</td><td>The buttons over the selected item: rotate, size (type it in), drive, edit, delete</td></tr>
+						<tr><td>Toolbar</td><td>The buttons over the selected item: rotate, size (type it in), drive, edit, hide, delete</td></tr>
 						<tr><td><kbd>R</kbd> / <kbd>Shift</kbd>+<kbd>R</kbd></td><td>Turn the selected item 15&deg;</td></tr>
 						<tr><td><kbd>Delete</kbd></td><td>Remove the selected item (Undo for 5 seconds)</td></tr>
 						<tr><td><kbd>Esc</kbd></td><td>Cancel placing or drawing, or deselect</td></tr>
@@ -84,6 +84,14 @@
 					</table>
 				</section>
 				<section>
+					<h3>Showing</h3>
+					<table>
+						<tr><td><kbd>B</kbd></td><td>Before / after: the site as Google captured it (nothing flattened, dug, piled or placed), or with your changes</td></tr>
+						<tr><td>Show panel</td><td>Above the Controls (the eye when folded): hide flatten areas, excavations, stockpiles, laydown areas, shoring, labels or a whole category such as Vehicles</td></tr>
+						<tr><td>Hide</td><td>On the selected item's toolbar: hide just that one. The Show panel lists it to show again</td></tr>
+					</table>
+				</section>
+				<section>
 					<h3>Other</h3>
 					<table>
 						<tr><td><kbd>H</kbd></td><td>Show or hide this help</td></tr>
@@ -98,6 +106,35 @@
 				<ul></ul>
 			</div>
 		</div>
+
+		<section id="layers" hidden aria-label="Show">
+			<button type="button" class="layers-open" aria-expanded="false" aria-controls="layers-panel" aria-label="Show panel">
+				<span class="icon"></span>
+				<span class="badge" hidden>Before</span>
+			</button>
+			<div class="layers-panel" id="layers-panel">
+				<header>
+					<span class="title">Show</span>
+					<button type="button" class="hide" aria-label="Fold the Show panel away" title="Hide">
+						<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+					</button>
+				</header>
+				<div class="before-after" role="radiogroup" aria-label="The site before or after your changes">
+					<button type="button" role="radio" data-view="before" aria-checked="false" title="The site as Google captured it: nothing flattened, dug, piled or placed (B)">Before</button>
+					<button type="button" role="radio" data-view="after" aria-checked="true" title="The site with your changes (B)">After</button>
+					<kbd>B</kbd>
+				</div>
+				<p class="note before-note" hidden>The site as Google captured it, without anything you flattened, dug, piled or placed.</p>
+				<div class="rows"></div>
+				<div class="hidden-items" hidden>
+					<header>
+						<span class="heading"></span>
+						<button type="button" class="show-all">Show all</button>
+					</header>
+					<ul></ul>
+				</div>
+			</div>
+		</section>
 
 		<section id="legend" hidden aria-label="Controls">
 			<button type="button" class="legend-open" aria-expanded="false" aria-controls="legend-panel">

@@ -1,0 +1,245 @@
+/* The Show panel (layers.js): on top of the Controls panel, bottom right, where legend.js keeps the
+   two of them clear of the other panels. The same dark see-through look. */
+#layers {
+	position: fixed;
+	right: 12px;
+	bottom: 56px;
+	z-index: 1002;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	font-size: 12px;
+}
+
+#layers .layers-open {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 10px;
+	background: var( --panel );
+	font-size: 12px;
+	line-height: 0;
+}
+
+#layers .layers-open .badge {
+	padding: 0 6px;
+	border-radius: 8px;
+	background: #d9822b;
+	color: #fff;
+	font-size: 11px;
+	font-weight: 600;
+	line-height: 16px;
+}
+
+#layers .layers-panel {
+	box-sizing: border-box;
+	width: min( 284px, calc( 100vw - 24px ) );
+	overflow-y: auto;
+	padding: 8px 12px 10px;
+	border-radius: 6px;
+	background: var( --panel );
+}
+
+#layers header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+#layers .layers-panel > header {
+	margin-bottom: 8px;
+}
+
+#layers .title {
+	flex: 1;
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var( --muted );
+}
+
+#layers .hide {
+	padding: 3px 6px;
+	background: none;
+	color: var( --muted );
+	line-height: 0;
+}
+
+#layers .hide:hover,
+#layers .hide:focus-visible {
+	background: #33414d;
+	color: var( --text );
+}
+
+/* Before / After: one switch of two halves. */
+#layers .before-after {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	padding: 2px;
+	border-radius: 6px;
+	background: rgba( 0, 0, 0, 0.35 );
+}
+
+#layers .before-after button {
+	flex: 1;
+	padding: 5px 8px;
+	border-radius: 4px;
+	background: none;
+	color: var( --muted );
+	font-size: 12px;
+}
+
+#layers .before-after button:hover {
+	color: var( --text );
+}
+
+#layers .before-after button[aria-checked='true'] {
+	background: var( --accent );
+	color: #fff;
+	font-weight: 600;
+}
+
+#layers .before-after button[data-view='before'][aria-checked='true'] {
+	background: #d9822b;
+}
+
+#layers .before-after kbd {
+	margin: 0 5px 0 3px;
+}
+
+#layers .note,
+#layers .empty {
+	margin: 8px 0 0;
+	color: var( --muted );
+	line-height: 1.35;
+}
+
+#layers h3 {
+	margin: 10px 0 2px;
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var( --muted );
+}
+
+#layers .rows {
+	margin-top: 6px;
+}
+
+/* A layer: its eye, name and how many things are in it. The whole row switches it. */
+#layers .layer {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	padding: 4px 6px;
+	border-radius: 5px;
+	background: none;
+	font-size: 12px;
+	text-align: left;
+}
+
+#layers .layer:hover,
+#layers .layer:focus-visible {
+	background: rgba( 255, 255, 255, 0.08 );
+}
+
+#layers .layer svg {
+	flex: none;
+	color: var( --accent );
+}
+
+#layers .layer .name {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+#layers .layer .count {
+	color: var( --muted );
+	font-variant-numeric: tabular-nums;
+}
+
+#layers .layer[aria-pressed='false'],
+#layers .layer[aria-pressed='false'] svg {
+	color: var( --muted );
+}
+
+/* Showing Before, nothing in the layers is drawn: they say what After will show. */
+#layers .layers-panel.before .rows,
+#layers .layers-panel.before .hidden-items {
+	opacity: 0.55;
+}
+
+#layers .hidden-items {
+	margin-top: 10px;
+	padding-top: 8px;
+	border-top: 1px solid rgba( 255, 255, 255, 0.1 );
+}
+
+#layers .hidden-items .heading {
+	flex: 1;
+	font-weight: 600;
+}
+
+#layers .hidden-items ul {
+	margin: 4px 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+#layers .hidden-items li {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 2px 0 2px 6px;
+}
+
+#layers .hidden-items .name {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+#layers .hidden-items .what {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	color: var( --muted );
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+#layers .hidden-items button {
+	flex: none;
+	padding: 3px 10px;
+	background: #26323c;
+	font-size: 12px;
+}
+
+#layers .hidden-items button:hover {
+	background: #33414d;
+}
+
+@media ( pointer: coarse ) {
+
+	#layers .layer {
+		padding: 8px 6px;
+	}
+
+	#layers .hidden-items button {
+		padding: 6px 12px;
+	}
+
+}
+
+/* The Labels layer switched off: no label floats over anything. */
+body.labels-hidden .earthworks-labels,
+body.labels-hidden .laydown-labels {
+	display: none;
+}

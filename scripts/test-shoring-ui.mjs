@@ -572,7 +572,10 @@ test( 'Shoring library pieces: listed with thumbnails, placed, turned, saved and
 	await page.waitForFunction( () => [ ...document.querySelectorAll( '#library .card[data-item^="trench-box"] img' ) ].every( img => img.src.startsWith( 'data:image/png' ) ) );
 	console.log( listed.map( c => `${ c.name }: ${ c.dims }` ).join( '\n' ) );
 
-	// One placed with the mouse and turned with R, the way a person would.
+	// One placed with the mouse and turned with R, the way a person would. The P panel is still open
+	// from the pits, so the Show panel stands beside it over the middle right, where the click goes:
+	// folded away first, as a person would move it out of the way.
+	if ( await page.isVisible( '#layers .layers-panel' ) ) await page.click( '#layers .layers-panel .hide' );
 	await page.click( '#library .card[data-item="trench-box-8x20"]' );
 	await page.mouse.move( 760, 420 );
 	await page.waitForTimeout( 300 );

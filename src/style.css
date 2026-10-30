@@ -145,6 +145,7 @@ html, body {
 /* Key and mouse chips in the help, the Controls panel, the drive prompt and the driving toast. */
 #help kbd,
 #legend kbd,
+#layers kbd,
 #drive-prompt kbd,
 .keys-toast kbd {
 	display: inline-block;
@@ -265,7 +266,9 @@ html, body {
 
 .toast {
 	z-index: 1003;
-	bottom: 128px;
+	/* Left of the Controls and Show panels when they come down this far, or over them (legend.js). */
+	bottom: var( --toast-bottom, 128px );
+	right: var( --toast-right, 16px );
 }
 
 /* Library sidebar. */
@@ -703,6 +706,7 @@ body.drive-prompt #hint {
 .keys-toast {
 	top: 18%;
 	bottom: auto;
+	right: 16px;
 	display: flex;
 	flex-wrap: wrap;
 	justify-content: center;

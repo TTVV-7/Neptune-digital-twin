@@ -60,7 +60,7 @@ const BIASED_DEPTH = /* glsl */`
 	#endif
 `;
 
-function biasDepth( shader ) {
+export function biasDepth( shader ) {
 
 	shader.fragmentShader = shader.fragmentShader.replace( '#include <logdepthbuf_fragment>', BIASED_DEPTH );
 
@@ -80,7 +80,7 @@ const measured = new WeakMap();
 export function setUpLaydown( { camera, canvas, models, sidebar, panel, getGround, onUpdate } ) {
 
 	const areas = new Map(); // entry -> { content, dirty, checkedAt, ground, inside }
-	const labels = createLabels( { camera, canvas } );
+	const labels = createLabels( { camera, canvas, isHidden: entry => models.isHidden( entry ) } );
 	const raycaster = new Raycaster();
 	raycaster.firstHitOnly = true;
 	let clock = 0;
@@ -484,8 +484,8 @@ function formatArea( v ) {
 
 // A label over each area, the same size on screen at any distance: its name, its size and its
 // note. Where labels would overlap, the selected area's wins, then the nearest; labels behind the
-// camera or far away hide.
-function createLabels( { camera, canvas } ) {
+// camera or far away hide, as do those of hidden areas (isHidden( entry )).
+function createLabels( { camera, canvas, isHidden } ) {
 
 	const root = document.createElement( 'div' );
 	root.className = 'laydown-labels';
@@ -538,7 +538,7 @@ function createLabels( { camera, canvas } ) {
 			for ( const [ entry, item ] of items ) {
 
 				projected.copy( item.anchor ).project( camera );
-				const visible = projected.z < 1 && Math.abs( projected.x ) < 1.2 && Math.abs( projected.y ) < 1.2 &&
+				const visible = ! isHidden( entry ) && projected.z < 1 && Math.abs( projected.x ) < 1.2 && Math.abs( projected.y ) < 1.2 &&
 					camera.position.distanceTo( item.anchor ) < LABEL_RANGE;
 				item.element.hidden = ! visible;
 				if ( ! visible ) continue;

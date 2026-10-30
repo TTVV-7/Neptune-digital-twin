@@ -15,6 +15,12 @@ import {
 } from 'three';
 import { buildExcavator, EXCAVATOR_20T, EXCAVATOR_MINI } from './excavator-model.js';
 import { hPileBundle, hydraulicShoreItem, sheetPileBundle, trenchBoxItem, trenchPanelItem } from './shoring-models.js';
+import { trailer } from './trailers.js';
+import { containerCanopy, fabricShelter, plywoodHoarding, popUpCanopy, scaffoldEnclosure, screenedFence } from './covers.js';
+import { dewateringBag, fracTank, flocDosingTrailer, sandFilterSkid, trashPump, weirTank } from './water-treatment.js';
+import { person } from './people.js';
+import { POWER_ITEMS } from './power-models.js';
+import { CRANE_ITEMS } from './crane-models.js';
 import { KART_ITEM } from './kart.js';
 
 // Common site pieces generated in code at real North American dimensions, in metres. Each builder
@@ -28,13 +34,39 @@ export const PROCEDURAL_ITEMS = [
 	{ id: 'jersey-barrier', name: 'Concrete jersey barrier (10 ft)', category: 'Barriers & fencing', build: jerseyBarrier },
 	{ id: 'lock-block', name: 'Concrete lock block (5 x 2.5 ft)', category: 'Barriers & fencing', build: lockBlock },
 	{ id: 'fence-panel', name: 'Temporary fence panel (10 x 6 ft)', category: 'Barriers & fencing', build: fencePanel },
-	{ id: 'site-office-trailer', name: 'Site office trailer (12 x 60 ft)', category: 'Site trailers & containers', build: siteOfficeTrailer },
+	{ id: 'fence-run-screened', name: 'Temporary fence with privacy screen, 9.1 m run (3 × 10 ft panels)', category: 'Barriers & fencing', build: () => screenedFence( 3 ) },
+	{ id: 'hoarding-plywood-10m', name: 'Plywood hoarding, 10 m run (2.4 m / 8 ft high)', category: 'Barriers & fencing', build: () => plywoodHoarding( 10 ) },
+	// Modular trailers (trailers.js); the box size is in the name, the card adds stairs and HVAC.
+	{ id: 'office-trailer-8x20', name: 'Site office trailer 2.4 × 6.1 m (8 × 20 ft)', category: 'Site trailers & containers', build: () => trailer( 'office-trailer-8x20' ) },
+	{ id: 'office-trailer-8x32', name: 'Site office trailer 2.4 × 9.8 m (8 × 32 ft)', category: 'Site trailers & containers', build: () => trailer( 'office-trailer-8x32' ) },
+	{ id: 'office-trailer-10x40', name: 'Site office trailer 3.0 × 12.2 m (10 × 40 ft)', category: 'Site trailers & containers', build: () => trailer( 'office-trailer-10x40' ) },
+	{ id: 'site-office-trailer', name: 'Site office trailer 3.7 × 18.3 m (12 × 60 ft)', category: 'Site trailers & containers', build: () => trailer( 'site-office-trailer' ) },
+	{ id: 'office-double-wide-24x60', name: 'Site office trailer, double-wide 7.3 × 18.3 m (24 × 60 ft)', category: 'Site trailers & containers', build: () => trailer( 'office-double-wide-24x60' ) },
+	{ id: 'washroom-trailer-8x28', name: 'Washroom / shower trailer 2.4 × 8.5 m (8 × 28 ft)', category: 'Site trailers & containers', build: () => trailer( 'washroom-trailer-8x28' ) },
+	{ id: 'lunchroom-trailer-12x40', name: 'Lunchroom / dry trailer 3.7 × 12.2 m (12 × 40 ft)', category: 'Site trailers & containers', build: () => trailer( 'lunchroom-trailer-12x40' ) },
 	{ id: 'container-20', name: 'Shipping container (20 ft)', category: 'Site trailers & containers', build: () => container( 6.058, 2.591, 0x8e3b2a ) },
 	{ id: 'container-40hc', name: 'Shipping container (40 ft high cube)', category: 'Site trailers & containers', build: () => container( 12.192, 2.896, 0x2a4f8e ) },
 	{ id: 'rolloff-20', name: 'Roll-off dumpster (20 yd)', category: 'Waste', build: () => rollOff( 4.5 * FT, 0x2f5f8f ) },
 	{ id: 'rolloff-40', name: 'Roll-off dumpster (40 yd)', category: 'Waste', build: () => rollOff( 8 * FT, 0x3d6b3d ) },
 	{ id: 'frontload-6yd', name: 'Front-load bin (6 yd)', category: 'Waste', build: frontLoadBin },
-	{ id: 'light-tower', name: 'Towable light tower', category: 'Site services', build: lightTower },
+	{ id: 'light-tower', name: 'Light tower, towable (9 m mast up)', category: 'Power & air', build: lightTower },
+	// Temporary covers (covers.js).
+	{ id: 'fabric-shelter-9x18', name: 'Tension fabric shelter 9 × 18 m (30 × 60 ft)', category: 'Temporary covers', build: () => fabricShelter( 9, 18, { legs: 1.5, rise: 3.5, bays: 5, depth: 0.4, door: [ 3.6, 3.6 ] } ) },
+	{ id: 'fabric-shelter-15x30', name: 'Tension fabric shelter 15 × 30 m (50 × 100 ft)', category: 'Temporary covers', build: () => fabricShelter( 15, 30, { legs: 2, rise: 5.6, bays: 6, depth: 0.6, door: [ 4.8, 4.8 ] } ) },
+	{ id: 'container-canopy-40', name: 'Container canopy, 12.2 m (40 ft) span on two 40 ft containers', category: 'Temporary covers', build: containerShelter },
+	{ id: 'popup-canopy-3x3', name: 'Pop-up canopy tent 3 × 3 m (10 × 10 ft)', category: 'Temporary covers', build: popUpCanopy },
+	{ id: 'scaffold-enclosure', name: 'Scaffold weather enclosure 7.5 × 5 m (shrink-wrapped, 3 × 2 bays)', category: 'Temporary covers', build: () => scaffoldEnclosure() },
+	// Temporary water treatment and dewatering (water-treatment.js); the IBC tote is under Materials.
+	{ id: 'frac-tank-21k', name: 'Frac tank 12.2 × 2.4 m (21,000 gal / 500 bbl)', category: 'Dewatering & water treatment', build: fracTank },
+	{ id: 'weir-tank-20', name: 'Weir / settling tank, open top 6.1 × 2.4 m (20 ft, 8,000 gal)', category: 'Dewatering & water treatment', build: weirTank },
+	{ id: 'sand-filter-skid', name: 'Sand filter skid 3.7 × 1.8 m (12 × 6 ft, 3 × 36 in vessels)', category: 'Dewatering & water treatment', build: sandFilterSkid },
+	{ id: 'floc-dosing-trailer', name: 'Flocculant dosing trailer (1,000 L tank)', category: 'Dewatering & water treatment', build: flocDosingTrailer },
+	{ id: 'trash-pump-4in', name: 'Trash pump 100 mm (4 in) with suction and discharge hoses', category: 'Dewatering & water treatment', build: trashPump },
+	{ id: 'dewatering-bag-15x30', name: 'Dewatering bag, geotextile 4.6 × 9.1 m (15 × 30 ft)', category: 'Dewatering & water treatment', build: () => dewateringBag() },
+	// People for scale (people.js).
+	{ id: 'worker-standing', name: 'Construction worker, standing (1.75 m)', category: 'People', build: () => person( 'worker-standing' ) },
+	{ id: 'worker-walking', name: 'Construction worker, walking (1.75 m)', category: 'People', build: () => person( 'worker-walking' ) },
+	{ id: 'flagger', name: 'Traffic control person with STOP/SLOW paddle', category: 'People', build: () => person( 'flagger' ) },
 	{ id: 'pallet', name: 'Wooden pallet (48 x 40 in)', category: 'Materials', build: pallet },
 	// Drivable: "drive" tunes race mode, and type 'excavator' gives them the digging controls (excavator.js).
 	{ id: 'excavator-20t', name: 'Excavator (20 t)', category: 'Heavy equipment', build: () => buildExcavator( EXCAVATOR_20T ), drive: { type: 'excavator', topSpeed: 5.5, accel: 1.2, brake: 3, reverse: 5.5 } },
@@ -51,6 +83,10 @@ export const PROCEDURAL_ITEMS = [
 	{ id: 'hydraulic-shore', name: 'Hydraulic shore (8 ft rails, ~40 kg)', category: 'Shoring', build: hydraulicShoreItem },
 	{ id: 'jump-ramp', name: 'Jump ramp (1.2 m)', category: 'Race', build: () => jumpRamp( 4, 7, 1.2 ) },
 	{ id: 'jump-ramp-big', name: 'Jump ramp (3 m)', category: 'Race', build: () => jumpRamp( 6, 16, 3 ) },
+	// Generators, compressors and fuel (power-models.js); mobile and tower cranes and telehandlers
+	// (crane-models.js, tower-crane.js).
+	...POWER_ITEMS,
+	...CRANE_ITEMS,
 	// A go-kart with a driver (kart.js), drivable like the other vehicles.
 	KART_ITEM,
 ].map( item => ( { ...item, front: '-z', procedural: true } ) );
@@ -86,7 +122,6 @@ function mat( color, { roughness = 0.8, metalness = 0, ...rest } = {} ) {
 const CONCRETE = () => mat( 0xb5b3ab, { roughness: 0.95 } );
 const STEEL = () => mat( 0x8a8f94, { roughness: 0.5, metalness: 0.6 } );
 const BLACK = () => mat( 0x1d1f21, { roughness: 0.7 } );
-const GLASS = () => mat( 0x23313b, { roughness: 0.15, metalness: 0.3 } );
 
 // A box of size [x, y, z] whose base sits at height y0, centred on (x0, z0).
 function box( parent, material, [ sx, sy, sz ], [ x0 = 0, y0 = 0, z0 = 0 ] = [] ) {
@@ -225,62 +260,6 @@ function fencePanel() {
 
 // --- site trailers & containers --------------------------------------------------------------
 
-// ATCO-style 12 x 60 ft office trailer on skirting, door side facing -Z with steel stairs.
-function siteOfficeTrailer() {
-
-	const group = new Group();
-	const length = 60 * FT;
-	const depth = 12 * FT;
-	const floor = 0.75;
-	const wall = 2.75;
-	const body = mat( 0xe8e4d8, { roughness: 0.7 } );
-	const trim = mat( 0x3c4a5a, { roughness: 0.6 } );
-
-	box( group, mat( 0x8f969a, { roughness: 0.9 } ), [ length - 0.2, floor, depth - 0.2 ] );
-	box( group, body, [ length, wall, depth ], [ 0, floor, 0 ] );
-	box( group, trim, [ length + 0.1, 0.12, depth + 0.1 ], [ 0, floor + wall, 0 ] );
-
-	// Windows: six on the door side, four at the back, one at each end.
-	const front = - depth / 2 - 0.01;
-	const back = depth / 2 + 0.01;
-	const windowAt = ( x, z, rotated = false ) => {
-
-		const frame = box( group, trim, rotated ? [ 0.04, 1.0, 1.3 ] : [ 1.3, 1.0, 0.04 ], [ x, floor + 1.1, z ] );
-		const glass = box( group, GLASS(), rotated ? [ 0.05, 0.86, 1.16 ] : [ 1.16, 0.86, 0.05 ], [ x, floor + 1.17, z ] );
-		return [ frame, glass ];
-
-	};
-
-	for ( const x of [ - 7.5, - 5, - 2.5, 2.5, 5, 7.5 ] ) windowAt( x, front );
-	for ( const x of [ - 6, - 2, 2, 6 ] ) windowAt( x, back );
-	windowAt( - length / 2 - 0.01, 0, true );
-	windowAt( length / 2 + 0.01, 0, true );
-
-	// Door, landing and stairs in the middle of the front.
-	box( group, trim, [ 0.95, 2.05, 0.05 ], [ 0, floor, front ] );
-	box( group, STEEL(), [ 0.04, 0.04, 0.04 ], [ 0.35, floor + 1.0, front - 0.03 ] );
-	const landing = 1.2;
-	box( group, STEEL(), [ 1.5, 0.08, landing ], [ 0, floor - 0.08, front - landing / 2 ] );
-	const steps = 4;
-	for ( let i = 0; i < steps; i ++ ) {
-
-		const y = floor - 0.08 - ( i + 1 ) * floor / ( steps + 1 );
-		box( group, STEEL(), [ 1.0, 0.05, 0.28 ], [ 0, y, front - landing - 0.14 - i * 0.28 ] );
-
-	}
-
-	// Guard rails along the landing's two open sides; the stairs come up between them.
-	for ( const x of [ - 0.75, 0.75 ] ) {
-
-		for ( const z of [ front - landing, front - 0.05 ] ) box( group, STEEL(), [ 0.04, 1.0, 0.04 ], [ x, floor, z ] );
-		box( group, STEEL(), [ 0.04, 0.04, landing ], [ x, floor + 1.0, front - landing / 2 ] );
-
-	}
-
-	return group;
-
-}
-
 function container( length, height, color ) {
 
 	const group = new Group();
@@ -331,6 +310,27 @@ function wrap( object ) {
 
 	const group = new Group();
 	group.add( object );
+	return group;
+
+}
+
+// A fabric canopy over the 40 ft (12.2 m) gap between two 40 ft containers, doors to the front, as
+// set up for a covered work or storage area between them (covers.js makes the canopy).
+function containerShelter() {
+
+	const group = new Group();
+	const clear = 40 * FT;
+	const width = 2.438;
+	const height = 2.591;
+	for ( const [ side, color ] of [ [ - 1, 0x8e3b2a ], [ 1, 0x2a4f8e ] ] ) {
+
+		const box = container( 12.192, height, color );
+		box.position.x = side * ( clear / 2 + width / 2 );
+		group.add( box );
+
+	}
+
+	group.add( containerCanopy( { clear, length: 12.192, height } ) );
 	return group;
 
 }

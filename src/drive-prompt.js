@@ -17,7 +17,8 @@ export function setUpDriving( { driver, models, library, camera, getSidebar, get
 
 	// The same rule as ever: the library's Vehicles, and anything else with its own "drive" tuning.
 	const vehicles = new Map( library.filter( item => item.category === 'Vehicles' || item.drive ).map( item => [ item.id, item ] ) );
-	const isDrivable = entry => !! entry && vehicles.has( entry.library ) && ! entry.placing && models.entries.includes( entry );
+	// Not one that's hidden (layers.js): it isn't there to get into.
+	const isDrivable = entry => !! entry && vehicles.has( entry.library ) && ! entry.placing && models.entries.includes( entry ) && ! models.isHidden( entry );
 
 	const prompt = document.getElementById( 'drive-prompt' );
 	const promptName = prompt.querySelector( '.name' );

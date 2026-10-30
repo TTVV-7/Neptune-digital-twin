@@ -4,10 +4,13 @@ A paid **Pro equipment** pack: some library items can only be placed once your a
 the pack, through a Stripe Payment Link. It's off until Stripe is set up below; until then every
 item is free for everyone and the app shows nothing about it.
 
-The pack is every item marked `"premium": true` in `public/library/library.json`: for now the
-*Cranes & lifts* and *Material handling* categories (all-terrain and crawler cranes, boom and
-scissor lifts, the forklift, the telehandler and the empty container handler). To change it, add
-or remove that line on an item; `npm run add-asset` keeps it when it re-imports a model.
+The pack is every item marked `"premium": true` in `public/library/library.json`, and the
+built-in ones marked `premium: true` in `src/crane-models.js`: for now the *Cranes & lifts* and
+*Material handling* categories (all-terrain, crawler, rough-terrain, carry-deck, spider and tower
+cranes, the boom truck, boom and scissor lifts, the forklift, three telehandlers and the empty
+container handler). To change it, add or remove that line on an item; `npm run add-asset` keeps
+it when it re-imports a model. Built-in items have no picture file; the dialog shows the one the
+library draws for their card.
 
 It needs accounts (sign-in and a database), so it works on Vercel ([deploy-vercel.md](deploy-vercel.md))
 or on the Cloudflare Worker ([accounts.md](accounts.md)), not on a static host.

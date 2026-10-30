@@ -55,7 +55,7 @@ const hullMaterial = new MeshBasicMaterial( { visible: false, side: DoubleSide }
 const pileLines = new Map( MATERIALS.map( m => [ m.id, new LineBasicMaterial( { color: new Color( m.colour ).offsetHSL( 0, 0, 0.15 ) } ) ] ) );
 for ( const material of [ capMaterial, pitLine, hullMaterial, ...pileLines.values() ] ) material.userData.shared = true;
 
-export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models, layout, sidebar, panel, flattening, getGround, addGround, onUpdate, addMapEdit, toast } ) {
+export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models, layout, sidebar, panel, flattening, layers, getGround, addGround, onUpdate, addMapEdit, toast } ) {
 
 	const terrain = new Terrain( { tiles, ground, models, flattening, getGround, camera } );
 	if ( tiles ) {
@@ -77,6 +77,8 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 
 	scene.add( terrain.group );
 	addGround( terrain.group );
+	// Before (the Show panel): the ground as it was, with Google's mesh showing everywhere.
+	layers.onBeforeAfter( before => terrain.setUntouched( before ) );
 	// Pits hide part of Google's mesh, which the attribution has to mention.
 	addMapEdit( () => terrain.hasCuts() );
 	terrain.onFreeformChange = () => layout.changed();
@@ -446,7 +448,7 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 
 	// Trench boxes, sheet piles... drawn in pits that have them (after the listeners above, so
 	// their rims are up to date).
-	setUpShoring( { scene, models, terrain, kind: EXCAVATION, rimOf: entry => designs.get( entry )?.rim } );
+	setUpShoring( { scene, models, terrain, layers, kind: EXCAVATION, rimOf: entry => designs.get( entry )?.rim } );
 
 	// For tests and for other features (the excavator) to build on.
 	if ( window.twin ) Object.assign( window.twin, { terrain, earthworks: { dig, pour, spoil, designs, anims, labels, stream } } );
@@ -846,7 +848,7 @@ function hipGeometry( width, length, tan, cap ) {
 
 // --- labels -----------------------------------------------------------------------------------
 
-// Small labels over excavations and stockpiles, shown in build mode.
+// Small labels over excavations and stockpiles, shown in build mode, except over hidden ones.
 function createLabels( { camera, canvas, models } ) {
 
 	const root = document.createElement( 'div' );
@@ -887,10 +889,10 @@ function createLabels( { camera, canvas, models } ) {
 			if ( root.hidden ) return;
 			const rect = canvas.getBoundingClientRect();
 			const shown = [];
-			for ( const { element, anchor } of items.values() ) {
+			for ( const [ entry, { element, anchor } ] of items ) {
 
 				projected.copy( anchor ).project( camera );
-				const show = projected.z < 1 && Math.abs( projected.x ) < 1.05 && Math.abs( projected.y ) < 1.05 && camera.position.distanceTo( anchor ) < 1000;
+				const show = ! models.isHidden( entry ) && projected.z < 1 && Math.abs( projected.x ) < 1.05 && Math.abs( projected.y ) < 1.05 && camera.position.distanceTo( anchor ) < 1000;
 				element.hidden = ! show;
 				if ( ! show ) continue;
 				shown.push( {

@@ -20,6 +20,8 @@
     "test:accounts-ui": "node --test scripts/test-accounts-ui.mjs",
     "test:premium-ui": "node --test scripts/test-premium-ui.mjs",
     "test:shoring-ui": "node --test scripts/test-shoring-ui.mjs",
+    "test:site-items-ui": "node --test scripts/test-site-items-ui.mjs",
+    "test:plant-ui": "node --test scripts/test-plant-ui.mjs",
     "test:drive-worker": "node --test scripts/test-drive-worker.mjs",
     "test:drive-ui": "node --test scripts/test-drive-ui.mjs",
     "deploy": "vite build --mode cloudflare && wrangler deploy",

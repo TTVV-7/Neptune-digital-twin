@@ -11,13 +11,17 @@ export const CATEGORY_ORDER = [
 	'Cranes & lifts',
 	'Material handling',
 	'Site trailers & containers',
+	'Temporary covers',
 	'Waste',
 	'Barriers & fencing',
 	'Traffic control',
 	'Site services',
+	'Power & air',
+	'Dewatering & water treatment',
 	'Access & scaffolding',
 	'Shoring',
 	'Materials',
+	'People',
 	'Race',
 ];
 
@@ -43,7 +47,8 @@ export async function loadLibrary() {
 	};
 
 	return [ ...downloaded, ...PROCEDURAL_ITEMS ]
-		.sort( ( a, b ) => rank( a.category ) - rank( b.category ) || a.category.localeCompare( b.category ) || a.name.localeCompare( b.name ) );
+		// Numeric, so sizes come smallest first: a 9 m shelter before a 15 m one.
+		.sort( ( a, b ) => rank( a.category ) - rank( b.category ) || a.category.localeCompare( b.category ) || a.name.localeCompare( b.name, undefined, { numeric: true } ) );
 
 }
 
@@ -55,13 +60,14 @@ export function frontToYaw( front = '-z' ) {
 
 }
 
-// Model config for placing a library item, in the same shape as MODELS in config.js.
+// Model config for placing a library item, in the same shape as MODELS in config.js. An item with
+// a `kind` (a tower crane) is placed as that kind with its default params, to be set up later.
 export function itemConfig( item, placement ) {
 
 	return {
 		name: item.name,
 		library: item.id,
-		...( item.procedural ? { procedural: item.id } : { url: `library/${ item.file }`, scale: item.scale } ),
+		...( item.kind ? { kind: item.kind, params: { ...item.params } } : item.procedural ? { procedural: item.id } : { url: `library/${ item.file }`, scale: item.scale } ),
 		front: item.front,
 		// A crane stands and turns on its carrier rather than the middle of its box (see models.js).
 		...( item.drive?.pivot ? { pivot: item.drive.pivot } : {} ),
