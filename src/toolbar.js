@@ -112,7 +112,10 @@ export function createToolbar( { camera, canvas, models, panel, select, rotate, 
 	buttons.edit.addEventListener( 'click', () => {
 
 		done( buttons.edit );
-		if ( entry ) panel.focus( entry, true );
+		if ( ! entry ) return;
+		// Unfolded too, if it was folded away by its title.
+		panel.gui.open();
+		panel.focus( entry, true );
 
 	} );
 	buttons.remove.addEventListener( 'click', () => {

@@ -185,13 +185,12 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 	} );
 
 	// Open just this entry's settings, and show the panel unless asked not to, scrolled to them
-	// when there are many.
+	// when there are many. A panel folded away by its title stays folded.
 	function focus( entry, show = true ) {
 
 		for ( const [ e, folder ] of folders ) folder.open( e === entry );
 		if ( ! show ) return;
 		gui.show();
-		gui.open();
 		const folder = folders.get( entry );
 		if ( ! folder ) return;
 		// Scrolled by hand: scrollIntoView could scroll the page itself as well.
