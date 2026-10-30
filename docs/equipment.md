@@ -88,6 +88,88 @@ Sizes are length × width × height in metres, as shown on the library cards. To
 | Large (40 t) excavator | Boom, stick and bucket merged into one mesh, 350k triangles, no description. |
 | A second, more accurate forklift | Its parts carry Evermotion's naming, so it is very likely a re-uploaded commercial model. |
 
+## Site trailers, temporary covers, water treatment and people (built in)
+
+23 more items are generated in code rather than downloaded (`src/trailers.js`, `src/covers.js`,
+`src/water-treatment.js`, `src/people.js`, all listed in `src/procedural.js`): boxy site equipment
+whose size matters more than its surface detail. They're drawn at their real size, with no files to
+download and no licence to credit, and each one's parts are merged into one mesh per material
+(`src/parts.js`), so even a fabric shelter's trusses are a handful of draw calls. Thumbnails are
+rendered in the app like the other built-in pieces. Sizes are as on the library cards, length ×
+width × height in metres, measured over everything (stairs, hoses, braces).
+
+### Site trailers & containers
+
+| Item | Card size | Notes |
+| --- | --- | --- |
+| Site office trailer 2.4 × 6.1 m (8 × 20 ft) | 6.2 × 5.2 × 3.4 | One door, two windows each side |
+| Site office trailer 2.4 × 9.8 m (8 × 32 ft) | 9.9 × 5.2 × 3.4 | |
+| Site office trailer 3.0 × 12.2 m (10 × 40 ft) | 12.3 × 5.8 × 3.5 | |
+| Site office trailer 3.7 × 18.3 m (12 × 60 ft) | 18.4 × 6.4 × 3.6 | The existing one (same id), now with HVAC units and stair rails |
+| Site office trailer, double-wide 7.3 × 18.3 m (24 × 60 ft) | 18.4 × 10.1 × 3.7 | Two 12 × 60 halves, a door to each, seam down the ends and roof |
+| Washroom / shower trailer 2.4 × 8.5 m (8 × 28 ft) | 8.6 × 5.2 × 3.8 | Two doors (WASHROOM, SHOWERS), frosted high windows, roof vents |
+| Lunchroom / dry trailer 3.7 × 12.2 m (12 × 40 ft) | 12.3 × 6.4 × 4.1 | A door at each end (LUNCHROOM, DRY), kitchen vent |
+
+The box is the size in the name; the card adds 2.3 m of landing and stairs in front of each door and
+the 0.45 m wall-mounted heating and cooling units on the back. They stand on 0.75 m of blocking and
+skirting, as set up on site. The tow hitch is left off, as it usually is once a unit is set.
+
+### Temporary covers
+
+| Item | Card size | Notes |
+| --- | --- | --- |
+| Tension fabric shelter 9 × 18 m (30 × 60 ft) | 18.1 × 9.2 × 5 | Round-arch trusses every 3.6 m on ballast blocks, open front, end wall with a door at the back |
+| Tension fabric shelter 15 × 30 m (50 × 100 ft) | 30.1 × 15.2 × 7.6 | Trusses every 5 m |
+| Container canopy, 12.2 m (40 ft) span on two 40 ft containers | 17.1 × 12.3 × 6.6 | Arch 4 m above the container tops, back closed |
+| Pop-up canopy tent 3 × 3 m (10 × 10 ft) | 3.1 × 3.1 × 3.1 | Scissor trusses, valance, leg weights |
+| Scaffold weather enclosure 7.5 × 5 m (shrink-wrapped, 3 × 2 bays) | 7.7 × 5.3 × 5.1 | Tube and coupler, 2 m lifts, 1 m ridge, door bay with its flap rolled up |
+
+The fabric is drawn from both sides, so you can walk (or drive) in through the open end and look
+round inside.
+
+### Barriers & fencing
+
+| Item | Card size | Notes |
+| --- | --- | --- |
+| Temporary fence with privacy screen, 9.1 m run (3 × 10 ft panels) | 9.3 × 1.6 × 1.9 | The same 10 × 6 ft panels as the single one, with a green wind screen, clamps and a brace stay behind each joint |
+| Plywood hoarding, 10 m run (2.4 m / 8 ft high) | 10 × 1.3 × 2.5 | Painted face to the front, 2 × 4 rails, 4 × 4 posts at 2 m, kickers behind, a DANGER notice |
+
+A screened fence run is three standard panels (9.1 m) rather than exactly 10 m: panels come in 10 ft
+widths. Place runs end to end for longer fences.
+
+### Dewatering & water treatment
+
+| Item | Card size | Notes |
+| --- | --- | --- |
+| Frac tank 12.2 × 2.4 m (21,000 gal / 500 bbl) | 12.4 × 2.4 × 3.1 | Sloped nose (front), rear axle, corrugated sides, manways, hatches, ladder and valves at the back |
+| Weir / settling tank, open top 6.1 × 2.4 m (20 ft, 8,000 gal) | 6.4 × 2.5 × 2.5 | Underflow and overflow weirs, water inside, inlet at the front |
+| Sand filter skid 3.7 × 1.8 m (12 × 6 ft, 3 × 36 in vessels) | 3.7 × 1.8 × 2.6 | Inlet and outlet headers, a valve on each branch, gauges, control panel |
+| Flocculant dosing trailer (1,000 L tank) | 4.4 × 2.3 × 1.9 | Single axle, tank in a spill tray, dosing cabinet, hose reel |
+| Trash pump 100 mm (4 in) with suction and discharge hoses | 9.2 × 1.2 × 1.1 | Pump in a 1.4 × 0.9 m frame, 3.5 m of suction hose to a strainer ahead, 5 m of lay-flat behind |
+| Dewatering bag, geotextile 4.6 × 9.1 m (15 × 30 ft) | 9.1 × 4.6 × 1.4 | Filled, with its fill spout near the front |
+
+The 1,000 L water tote was already in the library: **IBC tote (1000 L)** under *Materials*. Paint
+is plain blue and orange, without any rental company's colours or logos.
+
+### People
+
+| Item | Card size | Notes |
+| --- | --- | --- |
+| Construction worker, standing (1.75 m) | 0.6 × 0.4 × 1.8 | White hard hat, lime vest |
+| Construction worker, walking (1.75 m) | 1 × 0.6 × 1.8 | Yellow hard hat, mid-stride |
+| Traffic control person with STOP/SLOW paddle | 1.5 × 0.5 × 2.1 | Orange jacket and striped pants, arm out, STOP to the front and SLOW behind on a 450 mm paddle |
+
+Low-poly figures for scale: 1.72 m tall, 1.8 m in a hard hat, vests with CSA Z96-style stripes. They
+face the way the item's heading points.
+
+### Tests
+
+`npm run test:site-items-ui` builds each of these and checks it's within 5% of its real size,
+stands on the ground and is a handful of meshes; that it's listed in its category with its size and
+a thumbnail; and that it can be placed (one with the mouse), turned with **R**, saved and reloaded.
+Together they add no model files (0 MB) and about 12 KB of compressed code; building all 23 takes
+about 60 ms.
+
 ## For maintainers: how they were imported
 
 Each model went through `npm run add-asset` with its real length (or a scale where the posed length differs
