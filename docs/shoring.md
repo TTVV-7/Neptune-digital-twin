@@ -48,12 +48,15 @@ pipe goes in. For utility trenches, where people work between the panels.
   support, gets a 1.2 m box.
 - The panels stand against the long sides. Over about 4.5 m between the panels the spreaders don't
   reach: it's still drawn, with a warning to use slide rail or sheet piles.
-- The ends are open, as on real boxes: the readout says they need end plates or sloping, and how
-  much of each end the boxes don't reach.
+- The ends are open, as on real boxes: the notes say to slope them or fit end plates, and how much
+  of each end the boxes don't reach.
+- On most jobs one or two boxes are dragged along as the pipe goes in, rather than lining the whole
+  trench: with more than two, the notes say so. The count and weight are for lining all of it.
 
-Readout, e.g. a 3 x 20 m trench 3 m deep: *6 boxes: 2 × 2.4 × 7.3 m (8 × 24 ft) + 1 × 2.4 × 4.9 m
-(8 × 16 ft) + 2 × 1.2 × 7.3 m (4 × 24 ft) + 1 × 1.2 × 4.9 m (4 × 16 ft), 2 high, 2.8 m between
-panels; top 0.7 m above the rim*, 117 m² of shored wall, about 17 t of steel.
+Readout, e.g. a 3 x 20 m trench 3 m deep: *3 boxes: 2 × 2.4 × 7.3 m (8 × 24 ft) + 1 × 2.4 × 4.9 m
+(8 × 16 ft), with stackers 2 × 1.2 × 7.3 m (4 × 24 ft) + 1 × 1.2 × 4.9 m (4 × 16 ft); 2.8 m
+between panels, top 0.7 m above the rim*, 117 m² of shored wall, about 17 t of steel. Sizes are
+height by length, as boxes are sold.
 
 ### Slide rail
 
@@ -78,7 +81,7 @@ Light and quick to set from the top, for trenches in reasonably firm ground.
 - Cylinders reach about 4 m: wider gets a warning. Tabulated data generally stops at 6 m (20 ft)
   deep: deeper gets a warning too.
 - The ends are open, and in loose or wet ground the rails need plywood sheeting behind them: the
-  readout says so.
+  notes say so.
 
 ### Sheet piles
 
@@ -105,7 +108,7 @@ their flanges as it's dug. Cheaper than sheet piles where water isn't a problem;
   of the ground, with 75 x 300 mm lagging boards from the floor to 0.3 m out of the ground. The
   lagging in the readout includes that 0.3 m.
 - Pile length: 0.5 m out, the depth, and a toe of 0.75 of the depth (at least 1.5 m).
-- Deeper than 4 m it says they need walers with struts, rakers or tie-backs.
+- Deeper than 4 m the notes say they need walers with struts, rakers or tie-backs.
 
 ## P panel readouts
 
@@ -114,7 +117,7 @@ their flanges as it's dug. Cheaper than sheet piles where water isn't a problem;
 | shoring | What goes in and how many: boxes and their sizes, sheets and their length, piles and lagging |
 | shored wall | Area of excavation wall the support holds, m² |
 | weight (approx.) | Rough weight of the steel (aluminium for hydraulic shores), from typical weights: steel box panels 105 kg/m², slide rail panels 120 kg/m² and posts 200 kg/m, Z-sheets 65 kg/m, HP310 piles 79 kg/m |
-| shoring notes | Warnings: open ends, too wide or too deep for the system, needs bracing or an engineer |
+| shoring notes | Warnings: open ends, too wide or too deep for the system, needs bracing or an engineer, WorkSafeBC |
 
 The shoring lines are left out for an unsupported pit. The **floor** readout is the full width and
 length for a shored pit, as its sides are vertical.
@@ -122,20 +125,28 @@ length for a shored pit, as its sides are vertical.
 ## WorkSafeBC
 
 In British Columbia, excavations are covered by Part 20 of WorkSafeBC's Occupational Health and
-Safety Regulation. Among other things, nobody goes into an excavation over 1.2 m (4 ft) deep until
-its sides are sloped, benched or supported, and the support for one over 6 m (20 ft) deep is
-designed by a professional engineer. So the notes say:
+Safety Regulation (sections 20.78 to 20.95). The parts the notes and drawings follow:
 
-- An unsupported excavation deeper than 1.2 m with sides steeper than 1 : 1 (including
-  *vertical*): *Over 1.2 m deep: needs sloping, benching or shoring before anyone goes in
-  (WorkSafeBC Part 20).* A 1 : 1 slope is a common starting point, but the ground may need flatter.
-- Any excavation deeper than 6 m: the sides or their support must be designed by an engineer.
+- **20.81(1):** before anyone goes into an excavation over 1.2 m (4 ft) deep, its sides are
+  sloped, benched or supported. Sloped sides follow Figure 20-1, whose steepest face, in hard and
+  solid soil, is 3 horizontal to 4 vertical; softer ground needs flatter. So an unsupported pit
+  over 1.2 m deep with sides steeper than that (*0.5 : 1* or *vertical*) gets *Over 1.2 m deep,
+  with sides steeper than WorkSafeBC allows even in hard, solid soil (3 : 4): slope, bench or
+  shore them before anyone goes in (OHS Regulation 20.81).* *1 : 1* gets no note, but it's only
+  right where the ground holds it.
+- **20.81(2):** the open end of a trench over 1.2 m deep is sloped, or shored. Trench boxes and
+  hydraulic shores line only the long walls, so their notes say so.
+- **20.81(5):** shoring extends from at least 0.3 m (1 ft) above the ground. The shoring is drawn
+  that way, so that what's at the edge can't roll in: trench box and slide rail stacks get a
+  stacker where the panels below would only reach the rim (a 2.4 m deep trench takes an 8 ft box
+  and a 4 ft stacker), hydraulic shore rails and soldier pile lagging go 0.3 m up, and sheet piles
+  stand 1 m out.
+- **20.78:** an excavation over 6 m (20 ft) deep is dug to a qualified registered professional's
+  written instructions, and one that uses support structures to a professional engineer's. The
+  notes say which.
 
-And the shoring is drawn standing at least 0.3 m (1 ft) out of the ground, as 20.81(5) asks of
-shoring, so that what's at the edge can't roll in: trench box and slide rail stacks get a stacker
-where the panels below would only reach the rim (a 2.4 m deep trench takes an 8 ft box and a
-4 ft stacker), hydraulic shore rails and soldier pile lagging go 0.3 m up, and sheet piles stand
-1 m out.
+Sheet pile and soldier pile walls aren't picked from a supplier's table: their notes say a
+professional engineer designs the wall, and that the lengths here are rough.
 
 These are reminders for planning, not a check against the regulation: read the current
 regulation and its guidelines, and have a qualified person look at the actual ground.

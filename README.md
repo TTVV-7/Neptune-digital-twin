@@ -205,10 +205,10 @@ An excavation's **support** (P panel) shores it instead of sloping it: **trench 
 rail**, **hydraulic shores**, **sheet piles** or **soldier piles + lagging**. The sides are then cut
 vertical and the shoring is drawn in the pit to scale, from standard sizes (trench boxes 8 ft tall
 and 8 to 24 ft long, with 4 ft stackers; 0.6 m Z-sheets...), and rebuilt when the pit is resized. It
-shows with the library closed too. The P panel lists what goes in (e.g. *6 boxes: 2 × 2.4 × 7.3 m
+shows with the library closed too. The P panel lists what goes in (e.g. *3 boxes: 2 × 2.4 × 7.3 m
 (8 × 24 ft) + ...*, *80 sheets, 48 m of wall, 9.0 m long each*), the shored wall area, a rough
 weight, and warnings: open box ends, too wide for the system, needs bracing or an engineer, and
-for an unsupported pit over 1.2 m deep with sides steeper than 1 : 1, WorkSafeBC's rule about
+for an unsupported pit over 1.2 m deep with sides steeper than 3 : 4, WorkSafeBC's rule about
 sloping, benching or shoring before anyone goes in. The library's **Shoring** category has trench
 boxes, a stacker, a panel, bundles of sheet piles and H-piles and a hydraulic shore to lay down.
 It's a planning aid, not an engineered design: see [docs/shoring.md](docs/shoring.md).

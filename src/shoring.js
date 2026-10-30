@@ -38,10 +38,12 @@ const SLIDE_RAIL_BAY = 4;
 const SOLDIER_SPACING = 2.4;
 // Deeper than this, an excavation needs sloping, benching or shoring before anyone goes in.
 const SAFE_DEPTH = 1.2;
+// The steepest sloped side WorkSafeBC allows, in hard, solid soil (Figure 20-1): 3 h : 4 v.
+const STEEPEST = 0.75;
 // Shoring stands at least this far out of the ground (WorkSafeBC 20.81(5)), so what's at the edge
 // can't roll in.
 const ABOVE = 0.3;
-// Deeper than this, the support has to be engineered.
+// Deeper than this, an excavation is dug to a professional's written instructions.
 const ENGINEERED_DEPTH = 6;
 // Sheet-piled pits deeper than this get struts or corner braces under the waler.
 const BRACED_DEPTH = 4;
@@ -88,8 +90,8 @@ export function planShoring( params ) {
 function generalNotes( support, { depth, slope } ) {
 
 	const notes = [];
-	if ( support === NO_SUPPORT && depth > SAFE_DEPTH && slope < 1 ) notes.push( 'Over 1.2 m deep: needs sloping, benching or shoring before anyone goes in (WorkSafeBC Part 20).' );
-	if ( depth > ENGINEERED_DEPTH ) notes.push( 'Over 6 m deep: the sides or their support must be designed by an engineer (WorkSafeBC Part 20).' );
+	if ( support === NO_SUPPORT && depth > SAFE_DEPTH && slope < STEEPEST ) notes.push( 'Over 1.2 m deep, with sides steeper than WorkSafeBC allows even in hard, solid soil (3 : 4): slope, bench or shore them before anyone goes in (OHS Regulation 20.81).' );
+	if ( depth > ENGINEERED_DEPTH ) notes.push( support === NO_SUPPORT ? 'Over 6 m deep: dug to a qualified registered professional\'s written instructions (WorkSafeBC 20.78).' : 'Over 6 m deep: the shoring is to a professional engineer\'s written design (WorkSafeBC 20.78).' );
 	return notes;
 
 }
@@ -122,24 +124,24 @@ function planTrenchBoxes( { width, length, depth } ) {
 
 	if ( inside > MAX_SPREAD ) notes.push( `Too wide for a trench box (${ metres( inside ) } between panels; spreaders reach about ${ MAX_SPREAD } m): use slide rail or sheet piles.` );
 	const open = ( along - run ) / 2;
-	notes.push( `Ends are open: they need end plates or sloping${ open > 0.05 ? `, and ${ metres( open ) } at each end isn't covered by the boxes` : '' }.` );
+	if ( depth > SAFE_DEPTH ) notes.push( 'Ends are open: slope them, or fit end plates, before anyone works there (WorkSafeBC 20.81(2)).' );
+	if ( open > 0.05 ) notes.push( `The boxes leave ${ metres( open ) } at each end.` );
+	// Lining a long trench all at once is rare: boxes go in with the pipe.
+	if ( lengths.length > 2 ) notes.push( `${ lengths.length } boxes line all of it; usually one or two are dragged along as the pipe goes in, and the trench behind them backfilled.` );
 
-	// The boxes by size, base boxes first, then longest: "4 × 2.4 × 6.1 m (8 × 20 ft)".
-	const list = [];
-	for ( const high of new Set( stack ) ) {
+	// Boxes by size, then the stackers on them, longest first: "2 × 2.4 × 7.3 m (8 × 24 ft)", height
+	// by length, as boxes are sold.
+	const stackers = stack.length > 1 && stack[ stack.length - 1 ] === STACKER ? 1 : 0;
+	const high = stack.length - stackers;
+	const sizes = ( ft, each ) => [ ...new Set( lengths ) ].map( long => {
 
-		for ( const long of new Set( lengths ) ) {
+		const n = each * lengths.filter( l => l === long ).length;
+		return `${ n } × ${ ( ft * FT ).toFixed( 1 ) } × ${ ( long * FT ).toFixed( 1 ) } m (${ ft } × ${ long } ft)`;
 
-			const n = stack.filter( ft => ft === high ).length * lengths.filter( ft => ft === long ).length;
-			list.push( `${ n } × ${ ( high * FT ).toFixed( 1 ) } × ${ ( long * FT ).toFixed( 1 ) } m (${ high } × ${ long } ft)` );
-
-		}
-
-	}
-
-	const count = lengths.length * stack.length;
+	} ).join( ' + ' );
+	const boxes = lengths.length * high;
 	const above = height - depth;
-	const summary = `${ count } box${ count === 1 ? '' : 'es' }: ${ list.join( ' + ' ) }, ${ stack.length } high, ${ metres( inside ) } between panels; top ${ above < 0.05 ? 'level with' : `${ metres( above ) } above` } the rim`;
+	const summary = `${ boxes } box${ boxes === 1 ? '' : 'es' }${ high > 1 ? `, ${ high } high` : '' }: ${ sizes( stack[ 0 ], high ) }${ stackers ? `, with stacker${ lengths.length === 1 ? '' : 's' } ${ sizes( STACKER, 1 ) }` : '' }; ${ metres( inside ) } between panels, top ${ above < 0.05 ? 'level with' : `${ metres( above ) } above` } the rim`;
 	let kg = 0;
 	for ( const ft of stack ) for ( const long of lengths ) kg += trenchBoxWeight( { length: long * FT, height: ft * FT, width: across } );
 	return {
@@ -320,7 +322,8 @@ function planHydraulic( { width, length, depth } ) {
 	const notes = [];
 	if ( across > MAX_SHORE_SPAN ) notes.push( `Too wide for hydraulic shores (they reach about ${ MAX_SHORE_SPAN } m): use a trench box, slide rail or sheet piles.` );
 	if ( depth > MAX_SHORE_DEPTH ) notes.push( 'Deeper than hydraulic shoring tables go (about 6 m, 20 ft): use slide rail or sheet piles.' );
-	notes.push( 'Ends are open: slope them or shore them too. In loose or wet ground, add plywood sheeting behind the rails.' );
+	if ( depth > SAFE_DEPTH ) notes.push( 'Ends are open: slope them or shore them too (WorkSafeBC 20.81(2)).' );
+	notes.push( 'In loose or wet ground, add plywood sheeting behind the rails.' );
 	// About 5 kg/m of rail and 12 kg a cylinder.
 	const kg = count * ( 2 * rail * 5 + rows.length * 12 );
 	return {
@@ -377,8 +380,9 @@ function planSheetPiles( { width, length, depth } ) {
 	const [ across, along ] = width > length ? [ length, width ] : [ width, length ];
 	const braces = braced ? bracing( across, along ) : { struts: [], corner: 0 };
 	const strutLength = across - 2 * ( SHEET.depth / 2 + 0.36 );
-	const notes = [];
-	if ( braced && across > MAX_STRUT ) notes.push( `Over ${ BRACED_DEPTH } m deep and too wide to strut across: rakers or tie-backs, designed by an engineer.` );
+	// Driven walls aren't picked from a supplier's table.
+	const notes = [ 'A professional engineer designs the wall: the sheet length and bracing here are rough.' ];
+	if ( braced && across > MAX_STRUT ) notes.push( `Over ${ BRACED_DEPTH } m deep and too wide to strut across: rakers or tie-backs.` );
 	if ( depth > 8 ) notes.push( 'This deep, expect more than one waler and strut level.' );
 	// 65 kg/m of sheet, 100 kg/m of waler (W360), 97 kg/m of strut pipe (324 mm).
 	const kg = count * each * 65 + perimeter * 100 + ( braces.struts.length * strutLength + braces.corner * 4 * Math.SQRT2 ) * 97;
@@ -473,8 +477,8 @@ function planSoldierPiles( { width, length, depth } ) {
 	const toe = Math.max( 1.5, depth * 0.75 );
 	const each = Math.ceil( ( 0.5 + depth + toe ) * 2 ) / 2;
 	const lagging = perimeter * ( depth + ABOVE );
-	const notes = [];
-	if ( depth > BRACED_DEPTH ) notes.push( `Over ${ BRACED_DEPTH } m deep: soldier piles need walers with struts, rakers or tie-backs, designed by an engineer.` );
+	const notes = [ 'A professional engineer designs the wall: the pile length and spacing here are rough.' ];
+	if ( depth > BRACED_DEPTH ) notes.push( `Over ${ BRACED_DEPTH } m deep: soldier piles need walers with struts, rakers or tie-backs.` );
 	return {
 		summary: `${ piles } soldier piles (HP310, ${ maxOf( walls.map( ( w, i ) => w.length / bays[ i ] ) ) } m apart or less, ${ metres( each ) } long each), ${ Math.round( lagging ) } m² of timber lagging (${ ( lagging * 0.075 ).toFixed( 1 ) } m³)`,
 		wall: perimeter * depth,

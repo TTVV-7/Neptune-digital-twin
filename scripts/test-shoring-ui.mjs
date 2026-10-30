@@ -227,8 +227,9 @@ test( 'each support fits its trench and pit, and says what it is', async () => {
 
 	const find = ( support, width, length ) => fits.find( f => f.support === support && f.width === width && f.length === length );
 	const box = find( 'trench-box', 3, 20 );
-	assert.match( box.summary, /^6 boxes: 2 × 2\.4 × 7\.3 m \(8 × 24 ft\) \+ 1 × 2\.4 × 4\.9 m \(8 × 16 ft\) \+ 2 × 1\.2 × 7\.3 m \(4 × 24 ft\) \+ 1 × 1\.2 × 4\.9 m \(4 × 16 ft\), 2 high/ );
-	assert.ok( box.notes.some( n => n.startsWith( 'Ends are open: they need end plates or sloping' ) ) );
+	assert.match( box.summary, /^3 boxes: 2 × 2\.4 × 7\.3 m \(8 × 24 ft\) \+ 1 × 2\.4 × 4\.9 m \(8 × 16 ft\), with stackers 2 × 1\.2 × 7\.3 m \(4 × 24 ft\) \+ 1 × 1\.2 × 4\.9 m \(4 × 16 ft\); 2\.8 m between panels/ );
+	assert.ok( box.notes.some( n => n.startsWith( 'Ends are open: slope them, or fit end plates' ) ) );
+	assert.ok( box.notes.some( n => n.startsWith( '3 boxes line all of it' ) ) );
 	assert.ok( Math.abs( box.extent.z - 19.507 / 2 ) < 0.05, 'the run is centred, 64 ft long' );
 	// Drawn across: the run follows the long side, x.
 	const across = find( 'trench-box', 20, 3 );
@@ -263,22 +264,15 @@ test( 'box sizes follow the trench: 6, 13.4, 20 and 25.5 m long, 1.5, 2.4, 3 and
 	const lengths = { 6: [ 16 ], 13.4: [ 24, 20 ], 20: [ 24, 24, 16 ], 25.5: [ 24, 24, 24, 10 ] };
 	const depths = { 1.5: [ [ 8 ], 'top 0.9 m above' ], 2.4: [ [ 8, 4 ], 'top 1.3 m above' ], 3: [ [ 8, 4 ], 'top 0.7 m above' ], 5: [ [ 8, 8, 4 ], 'top 1.1 m above' ] };
 	const FT = 0.3048;
+	// "3 boxes: 2 × 2.4 × 7.3 m (8 × 24 ft) + ..., with stackers 2 × 1.2 × 7.3 m (4 × 24 ft) + ...; "
 	const expected = ( run, stack ) => {
 
-		const sizes = [];
-		for ( const high of [ ...new Set( stack ) ] ) {
-
-			for ( const long of [ ...new Set( run ) ] ) {
-
-				const count = run.filter( l => l === long ).length * stack.filter( h => h === high ).length;
-				sizes.push( `${ count } × ${ ( high * FT ).toFixed( 1 ) } × ${ ( long * FT ).toFixed( 1 ) } m (${ high } × ${ long } ft)` );
-
-			}
-
-		}
-
-		const count = run.length * stack.length;
-		return `${ count } box${ count === 1 ? '' : 'es' }: ${ sizes.join( ' + ' ) }, ${ stack.length } high, 2.8 m between panels; `;
+		const stackers = stack.length > 1 && stack.at( - 1 ) === 4 ? 1 : 0;
+		const high = stack.length - stackers;
+		const sizes = ( ft, each ) => [ ...new Set( run ) ].map( long => `${ each * run.filter( l => l === long ).length } × ${ ( ft * FT ).toFixed( 1 ) } × ${ ( long * FT ).toFixed( 1 ) } m (${ ft } × ${ long } ft)` ).join( ' + ' );
+		const count = run.length * high;
+		const on = stackers ? `, with stacker${ run.length === 1 ? '' : 's' } ${ sizes( 4, 1 ) }` : '';
+		return `${ count } box${ count === 1 ? '' : 'es' }${ high > 1 ? `, ${ high } high` : '' }: ${ sizes( stack[ 0 ], high ) }${ on }; 2.8 m between panels, `;
 
 	};
 	const plans = await page.evaluate( ( { lengths, depths } ) => {
@@ -329,10 +323,11 @@ test( 'P panel: support dropdown, slope greyed out, notes in full; WorkSafeBC no
 		};
 
 	} );
-	assert.deepEqual( notes.steep, [ 'Over 1.2 m deep: needs sloping, benching or shoring before anyone goes in (WorkSafeBC Part 20).' ] );
+	const steep = 'Over 1.2 m deep, with sides steeper than WorkSafeBC allows even in hard, solid soil (3 : 4): slope, bench or shore them before anyone goes in (OHS Regulation 20.81).';
+	assert.deepEqual( notes.steep, [ steep ] );
 	assert.deepEqual( notes.shallow, [] );
 	assert.deepEqual( notes.sloped, [] );
-	assert.ok( notes.deep[ 0 ].startsWith( 'Over 6 m deep' ) );
+	assert.deepEqual( notes.deep, [ 'Over 6 m deep: dug to a qualified registered professional\'s written instructions (WorkSafeBC 20.78).' ] );
 
 	// The panel opens on the selected pit.
 	if ( await page.evaluate( () => document.querySelector( '.lil-gui.lil-root' ).style.display === 'none' ) ) await page.keyboard.press( 'KeyP' );
@@ -354,7 +349,7 @@ test( 'P panel: support dropdown, slope greyed out, notes in full; WorkSafeBC no
 	assert.equal( p.support, 'Trench box' );
 	assert.equal( p.floor, '3.0 × 20.0 m' );
 	assert.equal( p.wall, '117 m²' );
-	assert.ok( p.notes[ 0 ].startsWith( '6 boxes:' ) && p.notes[ 1 ].startsWith( 'Ends are open' ), p.notes.join( ' / ' ) );
+	assert.ok( p.notes[ 0 ].startsWith( '3 boxes:' ) && p.notes[ 1 ].startsWith( 'Ends are open' ), p.notes.join( ' / ' ) );
 	const reveal = () => page.evaluate( () => [ ...document.querySelectorAll( '.lil-gui.lil-root .lil-gui' ) ].find( f => ! f.classList.contains( 'lil-closed' ) && f.querySelector( '.lil-title' )?.textContent === 'Excavation' ).scrollIntoView() );
 	await reveal();
 	await look( { east: 0, north: - 60, up: - 1.5, distance: 11, from: 205, elevation: 33 } );
@@ -379,7 +374,7 @@ test( 'P panel: support dropdown, slope greyed out, notes in full; WorkSafeBC no
 	p = await panel();
 	assert.equal( p.slopeDisabled, false );
 	assert.equal( p.wall, null );
-	assert.deepEqual( p.notes, [ 'Over 1.2 m deep: needs sloping, benching or shoring before anyone goes in (WorkSafeBC Part 20).' ] );
+	assert.deepEqual( p.notes, [ steep ] );
 	assert.equal( await page.evaluate( () => window.twin.shoring.shown.has( window.panelPit ) ), false );
 	await reveal();
 	await shot( 'panel-unsupported' );
@@ -429,8 +424,8 @@ test( 'back to none: the sloped pit returns; and a resize rebuilds the shoring',
 	assert.ok( Math.abs( r.sloped.cut - 286.7 ) < 4, `sloped cut ${ r.sloped.cut }` );
 	assert.ok( Math.abs( r.again.cut - 720 ) < 8 );
 	assert.equal( r.rebuilt, true );
-	assert.match( r.longerPlan, /^8 boxes: 3 × 2\.4 × 7\.3 m \(8 × 24 ft\) \+ 1 × 2\.4 × 3\.0 m \(8 × 10 ft\) \+ 3 × 1\.2 × 7\.3 m/ );
-	assert.match( r.deeper, /^12 boxes: .*, 3 high, 4\.8 m between panels; top 1\.1 m above the rim$/ );
+	assert.match( r.longerPlan, /^4 boxes: 3 × 2\.4 × 7\.3 m \(8 × 24 ft\) \+ 1 × 2\.4 × 3\.0 m \(8 × 10 ft\), with stackers 3 × 1\.2 × 7\.3 m/ );
+	assert.match( r.deeper, /^8 boxes, 2 high: .*; 4\.8 m between panels, top 1\.1 m above the rim$/ );
 	assert.ok( r.wide.some( n => n.startsWith( 'Too wide for a trench box' ) ) );
 	assert.equal( r.moved, - 210 );
 	const fit = await inspect( await page.evaluate( () => window.pits.length - 1 ) );
