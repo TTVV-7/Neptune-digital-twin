@@ -100,8 +100,8 @@ const LAUNCH = { base: 0.6, gain: 0.35, max: 13 };
 // The hit sets it spinning: about the upright by the push at the corner that hit (YAW_KICK of what
 // a rigid box would get, which is wilder than fun), nose up and over backwards by PITCH_KICK rad/s
 // per m/s of a hit square on with its nose (a backflip, if it's helped round), and over sideways
-// by ROLL_KICK per m/s of a hit on its side; each at most SPIN_MAX rad/s. In the air a hit kicks
-// half as hard. A wall it bounced off is kept clear of for WALL_GUARD s as it turns.
+// by ROLL_KICK per m/s of a hit on its side; each at most SPIN_MAX rad/s. A second hit in the same
+// jump kicks half as hard. A wall it bounced off is kept clear of for WALL_GUARD s as it turns.
 const YAW_KICK = 0.3;
 const PITCH_KICK = 0.075;
 const ROLL_KICK = 0.05;
@@ -625,8 +625,11 @@ export class Driver {
 			if ( this.grounded && ground < this.y - LEAVE_GROUND ) {
 
 				// The ground fell away (a ramp's end, a crest): keep flying with the upward speed we had.
-				// With stunts on it's free to turn from here.
+				// With stunts on it's free to turn from here, and goes up no faster than a hit throws it:
+				// a steep lump in Google's mesh (a building's skirt) taken at 90 km/h climbs at 24 m/s,
+				// which threw the kart 25 m into the sky.
 				this.grounded = false;
+				if ( this.launch ) this.vy = Math.min( this.vy, LAUNCH.max );
 				if ( this.launch && ! this.driftHop && ! this.drifting ) this.enterAir();
 
 			}
@@ -1254,14 +1257,20 @@ export class Driver {
 
 		}
 
+		// The first hit since it left the ground throws it up as from the ground: on Google's mesh it
+		// has often just come off a kerb or a bump when it meets a wall, and a building at 100 km/h
+		// only added 0.5 m. Hits after that in the same jump add less, so it can't climb a wall in
+		// bounces. Never faster up than LAUNCH.max: climbing a steep lump into a wall, it would have
+		// kept the lump's 24 m/s.
+		const first = ! inAir || ! this.air.wall;
 		if ( ! inAir ) this.enterAir();
 		const { air } = this;
 		if ( into >= BOUNCE_SCORE ) air.hits ++;
 		air.wall = { east: wall.east, north: wall.north, until: this.clock + WALL_GUARD };
 		const hop = Math.min( LAUNCH.max, LAUNCH.base + LAUNCH.gain * into );
-		this.vy = inAir ? this.vy + hop * 0.3 : Math.max( this.vy, hop );
+		this.vy = first ? Math.max( Math.min( this.vy, LAUNCH.max ), hop ) : this.vy + hop * 0.3;
 		this.setVelocity( be, bn );
-		this.kick( contact, wall, into, inAir ? 0.5 : 1 );
+		this.kick( contact, wall, into, first ? 1 : 0.5 );
 
 	}
 
