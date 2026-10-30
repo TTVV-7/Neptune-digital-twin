@@ -317,8 +317,20 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 		const long = Math.max( width, length );
 		// A windrow along a trench or wherever a cone would be wider than the pit is long, else a cone.
 		const radius = coneRadius( loose, tan );
-		const ridge = long >= 2 * Math.min( width, length ) || 2 * radius > long ? ridgeWidth( loose, long, tan ) : null;
-		const params = ridge ? { material: soil.id, shape: 'ridge', width: round( ridge, 2 ), length: long } : { material: soil.id, shape: 'cone', volume: round( loose, 1 ) };
+		let ridge = long >= 2 * Math.min( width, length ) || 2 * radius > long ? ridgeWidth( loose, long, tan ) : null;
+		let ridgeLength = long;
+		if ( ! ridge && loose > MAX_VOLUME ) {
+
+			// More than a cone may hold: a windrow after all, longer than the pit if it would
+			// otherwise have to be wider than long, up to the longest a pile may be.
+			ridgeLength = Math.min( MAX_SIZE, Math.max( long, Math.cbrt( 6 * loose / tan ) ) );
+			ridge = ridgeWidth( loose, ridgeLength, tan ) ?? ridgeLength;
+
+		}
+
+		const held = ridge ? ridgeVolume( ridge, ridgeLength, tan ) : loose;
+		if ( held < loose - 0.5 ) toast( `The spoil pile holds ${ format( held ) } m³; the other ${ format( loose - held ) } m³ needs another pile.` );
+		const params = ridge ? { material: soil.id, shape: 'ridge', width: round( ridge, 2 ), length: round( ridgeLength, 2 ) } : { material: soil.id, shape: 'cone', volume: round( loose, 1 ) };
 		const offset = Math.min( width, length ) / 2 + 2 + ( ridge ? ridge / 2 : radius );
 		const rad = heading * DEG;
 		const [ de, dn ] = beside ? [ Math.cos( rad ), - Math.sin( rad ) ] : [ Math.sin( rad ), Math.cos( rad ) ];
@@ -587,18 +599,25 @@ function solveRidge( g, { ni, count, x, z, before }, f, design ) {
 
 }
 
+// What a ridge `width` x `length` holds at the angle whose tangent is `tan`: a hip roof,
+// tan W² (3L - W) / 12.
+function ridgeVolume( width, length, tan ) {
+
+	return tan * width * width * ( 3 * length - width ) / 12;
+
+}
+
 // The width of a ridge `length` long holding `volume` at the angle whose tangent is `tan`, or
-// null if it would have to be wider than long. Volume of a hip roof: tan W² (3L - W) / 12.
+// null if it would have to be wider than long.
 function ridgeWidth( volume, length, tan ) {
 
-	const held = w => tan * w * w * ( 3 * length - w ) / 12;
-	if ( held( length ) < volume ) return null;
+	if ( ridgeVolume( length, length, tan ) < volume ) return null;
 	let lo = 0;
 	let hi = length;
 	for ( let i = 0; i < 50; i ++ ) {
 
 		const mid = ( lo + hi ) / 2;
-		if ( held( mid ) < volume ) lo = mid;
+		if ( ridgeVolume( mid, length, tan ) < volume ) lo = mid;
 		else hi = mid;
 
 	}

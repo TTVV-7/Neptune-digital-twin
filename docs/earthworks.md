@@ -18,7 +18,8 @@ material that is. Both tools are at the top of the library (**L**), under **Tool
    - **Dig** plays the digging again.
    - **Spoil pile** pours what came out of the pit beside it, clear of the rim: a pile of
      *Excavated soil* holding the loose volume: a ridge running along a trench (or any pit at least
-     twice as long as it is wide, or one a cone wouldn't fit beside), otherwise a cone.
+     twice as long as it is wide, one a cone wouldn't fit beside, or one with more spoil than a
+     cone can hold), otherwise a cone.
 
 The rim is the lowest ground around the rectangle as it was before anything was dug, so the pit
 doesn't sink after itself, and whatever stands inside it in Google's mesh (rail cars, a shed) is dug
@@ -109,7 +110,8 @@ in the ground it stood on.
 
 - The ground is a grid of heights 0.5 m apart, so there are no overhangs or tunnels, and a
   *vertical (shored)* side is drawn as a very steep face about 1 m wide.
-- Excavations and ridges can be up to 200 m long; cones up to 20,000 m³.
+- Excavations and ridges can be up to 200 m long; cones up to 20,000 m³ (**Spoil pile** makes a
+  ridge for more).
 
 ## For developers: digging from code
 
