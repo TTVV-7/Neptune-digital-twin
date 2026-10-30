@@ -479,10 +479,15 @@ for each visitor (8); over a cap the page says today's free drives are used up. 
 loaded world rather than loading a new one, so it costs nothing extra. Place search goes through the
 Worker to OpenStreetMap's Nominatim, cached and at most once a second.
 
+A **Supporter Pass** (one payment, about CA$4.99, towards the running costs) unlocks four more rides
+built in code (a sports coupe, a monster truck, a city bus and a hovercraft, each handling its own
+way) and the Garage's extras (paint, finishes, decals, rims, boost flames and trails); buying it isn't
+open yet (see [Supporter Pass (content)](docs/world-drive.md#supporter-pass-content)).
+
 How to play, the settings and limits, deploying, and the owner's Google Cloud steps (a separate
 project and key, restricted to worlddrive.app and the Map Tiles API, a daily quota and budget alerts)
-are in [docs/world-drive.md](docs/world-drive.md). Tests: `npm run test:drive-worker` and
-`npm run test:drive-ui`.
+are in [docs/world-drive.md](docs/world-drive.md). Tests: `npm run test:drive-worker`,
+`npm run test:drive-ui` and `node --test scripts/test-drive-pro-ui.mjs`.
 
 ## About the Sketchfab model
 

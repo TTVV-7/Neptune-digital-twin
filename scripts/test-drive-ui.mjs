@@ -133,7 +133,8 @@ describe( 'World Drive, desktop', () => {
 		assert.ok( await panel.isVisible() );
 		assert.match( await panel.locator( '.logo' ).textContent(), /World\s*Drive/ );
 		assert.equal( await panel.locator( '.spots button' ).count(), 12 );
-		assert.deepEqual( await panel.locator( '.vehicle b' ).allTextContents(), [ 'Go-kart', 'Pickup', 'Haul truck' ] );
+		// The Supporter Pass's rides follow, locked (see test-drive-pro-ui.mjs).
+		assert.deepEqual( await panel.locator( '.vehicle b' ).allTextContents(), [ 'Go-kart', 'Pickup', 'Haul truck', 'Sports coupe', 'Monster truck', 'City bus', 'Hovercraft' ] );
 		assert.equal( await panel.locator( '.vehicle.picked b' ).textContent(), 'Go-kart' );
 		assert.match( await panel.locator( '.osm' ).textContent(), /Search © OpenStreetMap contributors/ );
 		assert.equal( await page.locator( '#pin-card, .pin-card' ).isVisible(), false );
