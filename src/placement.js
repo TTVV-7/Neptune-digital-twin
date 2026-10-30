@@ -69,8 +69,6 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 				if ( field.type === 'text' || field.type === 'color' ) controller.onFinishChange( () => set( field.key ) );
 				else controller.onChange( () => set( field.key ) );
 				if ( field.type === 'color' ) controller.$input.addEventListener( 'change', () => set( field.key ) );
-				// A field that doesn't apply for now (a shored pit's side slope) is greyed out.
-				if ( field.enabled ) onDisplay( controller, () => controller.enable( field.enabled( entry.params ) ) );
 
 			}
 
@@ -84,7 +82,6 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 			};
 			refresh();
 			for ( const readout of kind.readouts ?? [] ) folder.add( readouts, readout.label ).disable();
-			fitReadouts( folder, readouts, kind.readouts ?? [] );
 			readoutViews.set( entry, refresh );
 			for ( const action of kind.actions ) folder.add( { run: () => action.run( entry ) }, 'run' ).name( action.label );
 			// Keep the copy in step when params change elsewhere (e.g. a pour finishing).
@@ -122,6 +119,7 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 		}
 
 		up.enable( ! state.snap );
+		if ( kind ) fitKind( folder, kind, entry, paramViews.get( entry ) );
 
 		const actions = {
 			moveHere() {
@@ -224,10 +222,21 @@ function onDisplay( controller, fn ) {
 
 }
 
-// Readouts with nothing to say (no shoring, say) are left out, and notes (readouts marked `note`,
-// e.g. a warning) are written out in full across the panel, where a field would cut them short.
-function fitReadouts( folder, readouts, specs ) {
+// A kind's fields that don't apply for now (enabled( params ) false: a shored pit's side slope)
+// are greyed out. Its readouts with nothing to say (no shoring, say) are left out, and notes
+// (readouts marked `note`, e.g. a warning) are written out in full across the panel, where a field
+// would cut them short. params: the copy the fields edit.
+function fitKind( folder, kind, entry, params ) {
 
+	for ( const controller of folder.controllers.filter( c => c.object === params ) ) {
+
+		const field = kind.fields.find( f => f.key === controller.property );
+		if ( field?.enabled ) onDisplay( controller, () => controller.enable( field.enabled( entry.params ) ) );
+
+	}
+
+	const specs = kind.readouts ?? [];
+	const readouts = folder.controllers.find( c => c.object !== params && c.property === specs[ 0 ]?.label )?.object;
 	for ( const controller of folder.controllers.filter( c => c.object === readouts ) ) {
 
 		let text = null;

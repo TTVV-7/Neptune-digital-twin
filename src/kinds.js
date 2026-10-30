@@ -16,14 +16,15 @@
 //     altersMap: true,         // changes how Google's mesh is drawn (shown in the attribution)
 //     fields: [ { key: 'width', label: 'width (m)', min: 1, step: 0.5 } ],  // P panel numbers;
 //                              // also { key, label, options: { Gravel: 'gravel', ... } } for a
-//                              // dropdown, { key, label, type: 'text' } and { key, label, type: 'color' };
-//                              // enabled( params ) greys a field out while it returns false
+//                              // dropdown, { key, label, type: 'text' } and { key, label, type: 'color' }
 //     actions: [ { label: 'Pour', run( entry ) {} } ],  // P panel buttons
 //     readouts: [ { label: 'volume', get( entry ) { return '50 m³'; } } ],  // read-only P panel
 //                              // lines, refreshed on each change (or panel.refresh( entry ))
-//                              // and left out while empty; note: true writes one out in full
-//                              // across the panel
 //   } );
+//
+// A field may also have enabled( params ), which greys it out while it returns false (a shored
+// pit's side slope), and a readout note: true, which writes it out in full across the panel (a
+// warning). A readout that gives '' is left out.
 
 const kinds = new Map();
 
