@@ -82,10 +82,10 @@ export function setUpRows( { scene, camera, canvas, models, sidebar, panel, layo
 		count: entry => layoutOf( entry )?.copies.length ?? 0,
 		contains: insideCopy,
 		fields: [
-			{ key: 'spacing', label: 'spacing', options: SPACINGS, size: true },
+			{ key: 'spacing', label: 'spacing', options: SPACINGS, size: true, editor: true },
 			{ key: 'gap', label: 'gap (m)', min: 0, max: 100, step: 0.05, size: true, when: p => p.spacing === 'end' },
 			{ key: 'every', label: 'every (m)', min: 0.1, max: 1000, step: 0.1, size: true, when: p => p.spacing === 'every' },
-			{ key: 'align', label: 'line up', options: ALIGNS, size: true },
+			{ key: 'align', label: 'line up', options: ALIGNS, size: true, editor: true },
 			{ key: 'fit', label: 'ends', options: FITS },
 			{ key: 'flip', label: 'turn round' },
 			{ key: 'item', label: 'item', options: Object.fromEntries( [ ...items.values() ].map( item => [ item.name, item.id ] ) ) },

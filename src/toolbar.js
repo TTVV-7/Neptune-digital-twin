@@ -219,12 +219,12 @@ export function createToolbar( { camera, canvas, models, panel, select, rotate, 
 	} );
 
 	// An area's fields marked as its size (kinds.js) that apply to it as it is now: numbers, and
-	// choices (a row's spacing), which apply as soon as one is picked.
+	// choices marked for the editor too (a row's spacing), which apply as soon as one is picked.
 	function sizeFields( target ) {
 
 		const kind = getKind( target?.kind );
 		if ( ! kind ) return [];
-		return kind.fields.filter( f => f.size && ! f.type && ( ! f.when || f.when( target.params ) ) );
+		return kind.fields.filter( f => f.size && ! f.type && ( ! f.options || f.editor ) && ( ! f.when || f.when( target.params ) ) );
 
 	}
 

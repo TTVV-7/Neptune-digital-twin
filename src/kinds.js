@@ -20,7 +20,8 @@
 //                              // numbers; also { key, label, options: { Gravel: 'gravel', ... } } for
 //                              // a dropdown, { key, label, type: 'text' } and { key, label, type: 'color' }.
 //                              // size: true puts it at the top of the panel, and numbers marked so are
-//                              // in the selection toolbar's Size editor too. when( params ) -> false
+//                              // in the selection toolbar's Size editor too, as are dropdowns that
+//                              // also have editor: true (a row's spacing). when( params ) -> false
 //                              // hides a field that doesn't apply (a cone's width)
 //     actions: [ { label: 'Pour', run( entry ) {} } ],  // P panel buttons
 //     readouts: [ { label: 'volume', get( entry ) { return '50 m³'; } } ],  // read-only P panel
