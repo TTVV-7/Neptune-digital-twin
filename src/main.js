@@ -196,7 +196,7 @@ function start( apiKey, keySource ) {
 	const feetPosition = () => camera.position.clone().setY( camera.position.y - PLAYER.eyeHeight );
 	const panel = createPlacementPanel( models, { getPlayerPosition: feetPosition } );
 	const flattening = setUpFlattening( { tiles, models } );
-	models.originalHeight = ( x, z ) => flattening.originalHeight( x, z, ground );
+	models.originalHeight = ( x, z, detail ) => flattening.originalHeight( x, z, ground, detail );
 	const driver = new Driver( { camera, models, controls, getColliders: () => [ ...grounds, models.group ], hud: createDriveHud() } );
 
 	// Entries from MODELS in config.js load every time. Most load straight away, but kinds that a

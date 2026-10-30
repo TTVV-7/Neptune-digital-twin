@@ -95,14 +95,26 @@ you'll be paid on.
 Pits and piles are drawn on top of Google's mesh: around them you still see Google's photo
 texture. Inside a pit (and under a pile, and a 1 m lip of dug earth round a pit) whatever of
 Google's mesh stands above the earthworks is hidden, rail cars and sheds included, and can't be
-walked or driven on; the attribution in the corner says the map has been edited. Google's ground loads in stages as you get closer, so a pit can
-shift by a few centimetres while the map sharpens.
+walked or driven on; the attribution in the corner says the map has been edited.
+
+Google's ground loads in stages, coarse first, and is coarser far from where you are. Earthworks and
+flatten areas take the ground from the sharpest tiles they've had: as the map sharpens they settle
+(a pit by a few centimetres up close), and flying away doesn't move them. After a reload, or seen
+from far off, they stand on the coarser ground shown there (the first tiles to load can be metres
+out, briefly) and come back exactly where they were, heights and volumes, once you're close enough
+for the tiles to be as sharp as when you placed them. The ground itself isn't saved: it's Google's.
 
 ## Saving
 
 Excavations and stockpiles are saved with the layout like any other item, and come back when you
-reload or open an exported layout. Ground dug or dumped some other way (see below) is saved with
-the layout too.
+reload or open an exported layout (they don't dig or pour themselves again). Ground dug or dumped
+some other way (see below) is saved with the layout too, to the centimetre.
+
+The layout is saved in this browser, which has room for about 5 MB. A site of placed items takes a
+kilobyte or two, and digging with an excavator adds about 10 to 20 kB for every 32 m square it
+works over. If the browser ever runs out of room, a message says so: the copy saved before is kept, but
+what you've changed since would be lost on reloading, so use **Export layout** (or delete something)
+and it saves again as soon as there's room.
 
 An excavator's digging is kept as dips below the ground or pit it dug into: a bite out of a pit's
 floor stays as just that dip if the pit is moved or deleted, and a pit drawn over earlier digging

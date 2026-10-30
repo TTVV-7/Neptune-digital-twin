@@ -131,6 +131,8 @@ export class ModelManager extends EventDispatcher {
 			},
 			snapped: false,
 			lastSnap: - Infinity,
+			// How coarse the ground it was snapped to is (see snap()).
+			groundError: Infinity,
 			// How race mode left it, while it hasn't been moved since (see park()).
 			parked: null,
 		};
@@ -144,8 +146,20 @@ export class ModelManager extends EventDispatcher {
 		}
 
 		this.entries.push( entry );
-		this.apply( entry );
-		this.dispatchEvent( { type: 'add', entry } );
+		try {
+
+			this.apply( entry );
+			this.dispatchEvent( { type: 'add', entry } );
+
+		} catch ( err ) {
+
+			// Something keeping track of entries couldn't take this one: take it out again, or a
+			// saved layout would keep it twice, placed and as an item that didn't load (layout.js).
+			this.remove( entry );
+			throw err;
+
+		}
+
 		return entry;
 
 	}
@@ -179,6 +193,7 @@ export class ModelManager extends EventDispatcher {
 		pivot.rotation.set( pitch * MathUtils.DEG2RAD, headingToYaw( state.heading ), roll * MathUtils.DEG2RAD, 'YXZ' );
 		pivot.scale.setScalar( state.scale );
 		entry.snapped = false;
+		entry.groundError = Infinity;
 		if ( state.snap ) this.snap( entry );
 		this.dispatchEvent( { type: 'change', entry } );
 
@@ -204,9 +219,14 @@ export class ModelManager extends EventDispatcher {
 	// Put the model's base on the ground around and under its footprint.
 	snap( entry ) {
 
-		const ground = this.groundHeight( entry );
+		const detail = { error: 0 };
+		const ground = this.groundHeight( entry, detail );
 		entry.lastSnap = this.clock;
-		if ( ground === null ) return;
+		// Ground from coarser tiles than it already stands on doesn't move it: those far from the
+		// camera, or the first to load after a reload, can be metres out. It keeps to the sharpest
+		// ground it has had since it was placed or last moved.
+		if ( ground === null || detail.error > entry.groundError ) return;
+		entry.groundError = detail.error;
 
 		const { pivot, state } = entry;
 		const up = round( ground + ( entry.parked?.rise ?? 0 ) );
@@ -222,8 +242,10 @@ export class ModelManager extends EventDispatcher {
 
 	}
 
-	// The ground height snapping puts the model on, or null where there's no ground yet.
-	groundHeight( entry ) {
+	// The ground height snapping puts the model on, or null where there's no ground yet. With
+	// `detail`, detail.error is how coarse the coarsest ground it read was, for kinds that snap to
+	// the ground as Google made it (see flatten.js), and 0 for the rest.
+	groundHeight( entry, detail = null ) {
 
 		const { pivot, state, footprint } = entry;
 		const mode = getKind( entry.kind )?.snap ?? 'median';
@@ -236,6 +258,8 @@ export class ModelManager extends EventDispatcher {
 		const ground = this.getGround();
 
 		const heights = [];
+		const sample = { error: 0 };
+		let error = 0;
 		for ( const x of xs ) {
 
 			for ( const z of zs ) {
@@ -243,8 +267,11 @@ export class ModelManager extends EventDispatcher {
 				pivot.localToWorld( _origin.set( x, 0, z ) );
 				if ( original ) {
 
-					const y = this.originalHeight( _origin.x, _origin.z );
-					if ( y !== null ) heights.push( y );
+					sample.error = 0;
+					const y = this.originalHeight( _origin.x, _origin.z, sample );
+					if ( y === null ) continue;
+					heights.push( y );
+					error = Math.max( error, sample.error );
 					continue;
 
 				}
@@ -259,6 +286,7 @@ export class ModelManager extends EventDispatcher {
 		}
 
 		if ( heights.length === 0 ) return null;
+		if ( detail ) detail.error = error;
 
 		heights.sort( ( a, b ) => a - b );
 		const mid = heights.length >> 1;
