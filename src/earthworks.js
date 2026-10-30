@@ -177,6 +177,8 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 	const sync = entry => {
 
 		const design = designs.get( entry );
+		// A stockpile moved or changed is planned afresh: bites an excavator took out of it go too.
+		if ( design.reshaped?.() ) terrain.dropBites( entry );
 		design.refresh();
 		terrain.setDesign( entry, design );
 		refreshLabel( entry );
@@ -202,6 +204,7 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 	models.addEventListener( 'remove', ( { entry } ) => {
 
 		if ( ! designs.has( entry ) ) return;
+		terrain.dropBites( entry );
 		designs.delete( entry );
 		anims.delete( entry );
 		stream.stop( entry );
@@ -411,14 +414,20 @@ function pitSurface( g, x, z, p ) {
 function pileDesign( entry, { order, progress } ) {
 
 	const g = {};
+	// Where and what the pile was at the last refresh (not its height, which follows the ground).
+	const placement = () => JSON.stringify( [ entry.state.east, entry.state.north, entry.state.heading, entry.params ] );
+	let placed = null;
 	const design = {
 		type: 'fill',
 		order,
 		solved: null,
 		top: 0,
 		material: entry.params.material,
+		// Whether it has been moved or changed since the last refresh.
+		reshaped: () => placed !== null && placement() !== placed,
 		refresh() {
 
+			placed = placement();
 			const { state, params } = entry;
 			const material = findMaterial( params.material );
 			Object.assign( g, rectFrame( state.east, state.north, state.heading, params.width / 2, params.length / 2 ), {
