@@ -1,21 +1,32 @@
 // A driving HUD any app can use with a Driver (drive.js): the speed, a boost gauge, FLYING with the
 // height, drift and jump readouts, big messages ("Crash!", "1.2 s air") and, on a touch screen,
-// buttons to drive with. It makes its own elements and styles inside `parent`, so it needs nothing
-// in the page. Give it to the Driver as `hud`; the Driver calls attach() to wire up the buttons.
+// buttons to drive with. With kart handling a DRIFT button (SPACE) sits under the speed, and its
+// chip lights up while drifting with the mini-turbo's charge. With stunts (crash: 'launch') a hit
+// pops up a word ("WHAM!"), tricks pop up as they're landed, and the score, its combo multiplier
+// and the best score show under the speed. It makes its own elements and styles inside `parent`,
+// so it needs nothing in the page. Give it to the Driver as `hud`; the Driver calls attach() to
+// wire up the buttons.
 //
 // Where it sits can be moved with CSS custom properties on the page: --drive-hud-top,
 // --drive-hud-bottom and --drive-hud-side (insets in px, e.g. to clear a map credit line).
 
 const STYLE_ID = 'drive-hud-style';
+// The DRIFT buttons' charge bar, in the colour of the boost the drift has earned so far (as its
+// sparks are: see drive-fx.js).
+const CHARGE_COLOURS = [ '#ffffff', '#ffc83d', '#3dffd8', '#ff3df0' ];
 // The speed the bar under the number fills at (km/h).
 const SPEED_SCALE = 200;
 // How long a message stays (ms), a little longer for a long one.
 const FLASH_TIME = 1500;
 const FLASH_PER_CHAR = 30;
+// How long a hit's word and landed tricks stay (ms).
+const POP_TIME = 750;
+const TRICKS_TIME = 2200;
 // Messages that name keys, as they read on a touch screen, which has the buttons instead.
 const TOUCH_WORDS = [
 	[ 'Hold Shift to fly or press R', 'Hold FLY, or tap ↺' ],
 	[ 'Press R', 'Tap ↺' ],
+	[ 'A/D spin · W/S flip · Q/E roll', '◀ ▶ spin · GAS/BRAKE flip · DRIFT + ◀ ▶ roll' ],
 ];
 
 const CSS = `
@@ -168,20 +179,203 @@ const CSS = `
 	background: var( --fly );
 }
 
+/* The DRIFT chip, lit up while drifting, filling with the mini-turbo's charge in its colour. */
 .dhud .dhud-drift {
-	background: #fff;
+	position: relative;
+	overflow: hidden;
+	background: rgba( 255, 255, 255, 0.85 );
+	box-shadow: 0 0 14px rgba( 255, 255, 255, 0.55 );
+}
+
+.dhud .dhud-drift i {
+	position: absolute;
+	inset: auto auto 0 0;
+	width: var( --charge, 0% );
+	height: 3px;
+	background: rgba( 8, 18, 26, 0.65 );
 }
 
 .dhud .dhud-drift[data-level="1"] {
 	background: #ffc83d;
+	box-shadow: 0 0 14px #ffc83d;
 }
 
 .dhud .dhud-drift[data-level="2"] {
 	background: #3dffd8;
+	box-shadow: 0 0 16px #3dffd8;
 }
 
 .dhud .dhud-drift[data-level="3"] {
 	background: #ff3df0;
+	box-shadow: 0 0 18px #ff3df0;
+}
+
+/* Stunts: the score, the combo multiplier and the best, small under the speed. */
+.dhud .dhud-score {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	font-size: 12px;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+	letter-spacing: 0.04em;
+}
+
+.dhud .dhud-points {
+	font-size: 16px;
+	font-weight: 800;
+}
+
+.dhud .dhud-mult {
+	padding: 0 6px;
+	border-radius: 999px;
+	background: rgba( 255, 255, 255, 0.15 );
+	font-weight: 800;
+}
+
+.dhud .dhud-mult.on {
+	background: var( --accent );
+	color: #08121a;
+}
+
+.dhud .dhud-best {
+	opacity: 0.6;
+}
+
+/* The DRIFT button for a mouse (touch screens have theirs among the driving buttons): hold it and
+   steer. It fills with the mini-turbo's charge, and lights up while Space is held too. */
+.dhud .dhud-drift-hold {
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	width: 100%;
+	height: 32px;
+	overflow: hidden;
+	border: 2px solid rgba( 255, 255, 255, 0.35 );
+	border-radius: 10px;
+	background: rgba( 255, 255, 255, 0.08 );
+	color: #fff;
+	font: 800 13px/1 system-ui, -apple-system, sans-serif;
+	letter-spacing: 0.08em;
+	cursor: pointer;
+	pointer-events: auto;
+	touch-action: none;
+}
+
+.dhud .dhud-drift-hold kbd {
+	font-size: 10px;
+	letter-spacing: 0.04em;
+}
+
+.dhud .dhud-drift-hold.down,
+.dhud .dhud-drift-hold.held {
+	border-color: #fff;
+	background: rgba( 255, 210, 63, 0.85 );
+	color: #08121a;
+}
+
+.dhud .dhud-drift-hold i,
+.dhud .dhud-touch .drift i {
+	position: absolute;
+	inset: auto auto 0 0;
+	width: var( --charge, 0% );
+	height: 4px;
+	background: var( --charge-colour, #fff );
+	pointer-events: none;
+}
+
+.dhud.touch .dhud-drift-hold {
+	display: none;
+}
+
+/* A hit's word: big, tilted and gone in a moment, bursting off the vehicle (in the middle of the
+   view, below the tricks). */
+.dhud .dhud-pop {
+	position: absolute;
+	top: 58%;
+	left: 50%;
+	font-size: clamp( 34px, 7vw, 80px );
+	font-weight: 900;
+	font-style: italic;
+	letter-spacing: -0.02em;
+	color: var( --accent );
+	-webkit-text-stroke: 3px #1a1206;
+	paint-order: stroke fill;
+	text-shadow: 0 6px 0 rgba( 0, 0, 0, 0.35 );
+	white-space: nowrap;
+	transform: translate( -50%, -50% ) rotate( var( --tilt, -6deg ) ) scale( var( --size, 1 ) );
+	animation: dhud-wham 0.75s ease-out forwards;
+}
+
+.dhud .dhud-pop.wipeout {
+	color: #ff5a5a;
+	font-size: clamp( 28px, 5.5vw, 60px );
+}
+
+@keyframes dhud-wham {
+	0% {
+		opacity: 0;
+		transform: translate( -50%, -50% ) rotate( var( --tilt, -6deg ) ) scale( calc( var( --size, 1 ) * 0.3 ) );
+	}
+	18% {
+		opacity: 1;
+		transform: translate( -50%, -50% ) rotate( var( --tilt, -6deg ) ) scale( calc( var( --size, 1 ) * 1.2 ) );
+	}
+	35% {
+		transform: translate( -50%, -50% ) rotate( var( --tilt, -6deg ) ) scale( var( --size, 1 ) );
+	}
+	70% {
+		opacity: 1;
+	}
+	100% {
+		opacity: 0;
+		transform: translate( -50%, -60% ) rotate( var( --tilt, -6deg ) ) scale( calc( var( --size, 1 ) * 1.05 ) );
+	}
+}
+
+/* Tricks: what it's doing in the air (dim), then what it landed and the points (bright), or what a
+   wipeout lost (struck through). */
+.dhud .dhud-tricks {
+	position: absolute;
+	top: calc( var( --drive-hud-top, 16px ) + 18vh + clamp( 44px, 8vw, 72px ) );
+	left: 0;
+	right: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+	padding: 0 16px;
+	text-align: center;
+	text-shadow: 0 2px 0 rgba( 0, 0, 0, 0.35 ), 0 4px 14px rgba( 0, 0, 0, 0.45 );
+}
+
+.dhud .dhud-tricks b {
+	font-size: clamp( 20px, 3.6vw, 32px );
+	font-weight: 800;
+	font-style: italic;
+	animation: dhud-pop 0.25s ease-out both;
+	animation-delay: calc( var( --i, 0 ) * 0.09s );
+}
+
+.dhud .dhud-tricks .points {
+	color: var( --accent );
+	font-size: clamp( 16px, 2.6vw, 22px );
+}
+
+.dhud .dhud-tricks.pending b {
+	opacity: 0.6;
+	animation: none;
+}
+
+.dhud .dhud-tricks.lost b {
+	color: #ff7a7a;
+	text-decoration: line-through;
+}
+
+.dhud .dhud-tricks.lost .points {
+	text-decoration: none;
 }
 
 .dhud .dhud-flash {
@@ -260,12 +454,23 @@ const CSS = `
 	align-items: center;
 }
 
+/* Messages and tricks start under the readouts there (18vh down, a phone on its side had them over
+   the readouts), the tricks far enough down to clear a hint on two lines. */
+.dhud.touch .dhud-flash {
+	top: max( calc( var( --drive-hud-top, 12px ) + 18vh ), calc( var( --drive-hud-top, 12px ) + 148px ) );
+}
+
+.dhud.touch .dhud-tricks {
+	top: calc( max( calc( var( --drive-hud-top, 12px ) + 18vh ), calc( var( --drive-hud-top, 12px ) + 148px ) ) + 54px );
+}
+
 .dhud.touch .dhud-number {
 	font-size: 40px;
 }
 
 .dhud.touch .dhud-stats,
-.dhud.touch .dhud-name {
+.dhud.touch .dhud-name,
+.dhud.touch .dhud-best {
 	display: none;
 }
 
@@ -433,6 +638,21 @@ const CSS = `
 		height: 48px;
 	}
 
+	/* Messages and tricks smaller, between the buttons rather than under them. */
+	.dhud.touch .dhud-flash,
+	.dhud.touch .dhud-tricks {
+		padding: 0 112px;
+	}
+
+	.dhud.touch .dhud-flash.long,
+	.dhud.touch .dhud-tricks b {
+		font-size: 18px;
+	}
+
+	.dhud.touch .dhud-tricks .points {
+		font-size: 15px;
+	}
+
 }
 `;
 
@@ -455,11 +675,15 @@ export function createDriveHud( parent = document.body ) {
 	root.hidden = true;
 	root.innerHTML = `
 		<div class="dhud-flash" hidden></div>
+		<div class="dhud-tricks" hidden></div>
+		<div class="dhud-pops"></div>
 		<div class="dhud-cluster">
-			<div class="dhud-badges"><span class="dhud-badge dhud-drift" hidden>DRIFT</span><span class="dhud-badge dhud-fly" hidden>FLYING</span></div>
+			<div class="dhud-badges"><span class="dhud-badge dhud-drift" hidden>DRIFT<i></i></span><span class="dhud-badge dhud-fly" hidden>FLYING</span></div>
 			<div class="dhud-speed"><span class="dhud-number">0</span><span class="dhud-unit">km/h</span></div>
 			<div class="dhud-bar dhud-speed-bar"><i></i></div>
 			<div class="dhud-boost" hidden><b>BOOST</b><div class="dhud-bar"><i></i></div></div>
+			<div class="dhud-score" hidden><span class="dhud-points">0</span><b class="dhud-mult">×1</b><span class="dhud-best"></span></div>
+			<button class="dhud-drift-hold" data-key="Space" hidden title="Hold and steer to drift">DRIFT <kbd>SPACE</kbd><i></i></button>
 			<div class="dhud-stats"></div>
 			<div class="dhud-name"></div>
 		</div>
@@ -469,7 +693,7 @@ export function createDriveHud( parent = document.body ) {
 			<button class="right" data-key="KeyD" aria-label="Steer right">▶</button>
 			<button class="brake" data-key="KeyS">BRAKE</button>
 			<button class="gas" data-key="KeyW">GAS</button>
-			<button class="drift" data-key="Space">HOP</button>
+			<button class="drift" data-key="Space">HOP<i></i></button>
 			<button class="booster" data-key="KeyB" hidden>BOOST</button>
 			<button class="fly" data-key="ShiftLeft" hidden>FLY</button>
 			<button class="reset" data-key="KeyR" aria-label="Back on the road">↺</button>
@@ -489,10 +713,21 @@ export function createDriveHud( parent = document.body ) {
 	const name = $( '.dhud-name' );
 	const flyBadge = $( '.dhud-fly' );
 	const driftBadge = $( '.dhud-drift' );
+	const driftHold = $( '.dhud-drift-hold' );
+	const scoreRow = $( '.dhud-score' );
+	const points = $( '.dhud-points' );
+	const mult = $( '.dhud-mult' );
+	const best = $( '.dhud-best' );
+	const tricks = $( '.dhud-tricks' );
+	const pops = $( '.dhud-pops' );
 	const keys = $( '.dhud-keys' );
-	const readouts = [ ...cluster.children ].filter( element => ! element.classList.contains( 'dhud-name' ) );
+	// The readouts a machine's panel replaces: not the name, nor the DRIFT button (see describeKeys).
+	const readouts = [ ...cluster.children ].filter( element => ! element.classList.contains( 'dhud-name' ) && element !== driftHold );
 	let driver = null;
 	let flashTimer;
+	let tricksTimer;
+	let scoring = false;
+	let tilt = 1;
 	let panel = null;
 	let flying = false;
 	// Only touch what changed: these are set many times a second.
@@ -510,8 +745,8 @@ export function createDriveHud( parent = document.body ) {
 	root.classList.toggle( 'touch', !! coarse?.matches );
 	window.addEventListener( 'touchstart', () => root.classList.add( 'touch' ), { passive: true, once: true } );
 
-	// Buttons hold their key down while pressed, each with its own finger.
-	for ( const button of root.querySelectorAll( '.dhud-touch button' ) ) {
+	// Buttons hold their key down while pressed, each with its own finger (or the mouse).
+	for ( const button of root.querySelectorAll( '.dhud-touch button, .dhud-drift-hold' ) ) {
 
 		const code = button.dataset.key;
 		const up = e => {
@@ -553,19 +788,40 @@ export function createDriveHud( parent = document.body ) {
 		keys.innerHTML = [
 			row( [ 'W', 'S' ], 'gas, brake' ),
 			row( [ 'A', 'D' ], 'steer' ),
-			row( [ 'Space' ], driver?.drift ? 'drift, hop' : 'hop' ),
+			row( [ 'Space' ], driver?.drift ? 'drift (hold and steer), hop (tap)' : 'hop' ),
 			driver?.booster && row( [ 'B' ], 'booster' ),
+			driver?.launch && row( [ 'Q', 'E' ], 'roll in the air' ),
 			row( [ 'Shift' ], driver?.fly ? 'fly' : 'boost' ),
 			row( [ 'R' ], 'reset' ),
 			row( [ 'C' ], 'camera' ),
 		].filter( Boolean ).join( ' · ' );
 		$( '.booster' ).hidden = ! driver?.booster;
 		$( '.fly' ).hidden = ! driver?.fly;
-		$( '.drift' ).textContent = driver?.drift ? 'DRIFT' : 'HOP';
+		$( '.drift' ).firstChild.textContent = driver?.drift ? 'DRIFT' : 'HOP';
+		driftHold.hidden = ! driver?.drift || !! panel;
 
 	}
 
 	describeKeys();
+
+	// Lines of tricks. Unless they're still `pending`, the last one is the points (or what a wipeout
+	// lost), styled as such.
+	function showTricks( lines, kind ) {
+
+		clearTimeout( tricksTimer );
+		tricks.className = `dhud-tricks ${ kind }`;
+		tricks.replaceChildren( ...lines.map( ( text, i ) => {
+
+			const line = document.createElement( 'b' );
+			line.textContent = text;
+			line.style.setProperty( '--i', String( i ) );
+			if ( kind !== 'pending' && i === lines.length - 1 ) line.className = 'points';
+			return line;
+
+		} ) );
+		tricks.hidden = false;
+
+	}
 
 	return {
 
@@ -585,12 +841,14 @@ export function createDriveHud( parent = document.body ) {
 			panel = machinePanel;
 			if ( panel ) cluster.append( panel );
 			for ( const element of readouts ) element.hidden = !! panel;
+			driftHold.hidden = ! driver?.drift || !! panel;
 			if ( ! panel ) {
 
 				// Badges and the boost row show only when there's something in them.
 				boostRow.hidden = ! driver?.booster;
 				flyBadge.hidden = ! flying;
 				driftBadge.hidden = true;
+				scoreRow.hidden = ! scoring;
 
 			}
 
@@ -605,6 +863,9 @@ export function createDriveHud( parent = document.body ) {
 			// A message from this drive shouldn't greet the next one.
 			clearTimeout( flashTimer );
 			flash.hidden = true;
+			clearTimeout( tricksTimer );
+			tricks.hidden = true;
+			pops.replaceChildren();
 			panel?.remove();
 			panel = null;
 			for ( const button of root.querySelectorAll( '.dhud-touch .down' ) ) button.classList.remove( 'down' );
@@ -614,8 +875,10 @@ export function createDriveHud( parent = document.body ) {
 
 		// kmh, reverse: the speed and whether it's backwards; top, bestAir, air: the best speed and
 		// jump so far and the time in the air now; boost: the booster or a drift boost is pushing;
-		// altitude: metres over the ground while flying; drift: the drift's boost level (0 to 3) or null.
-		update( { kmh, reverse, top, bestAir, air, boost, altitude = null, drift = null } ) {
+		// altitude: metres over the ground while flying; drift: the drift's boost level (0 to 3) or
+		// null; driftCharge: how far the drift is to its biggest boost (0 to 1); driftHeld: Space or
+		// a DRIFT button is held.
+		update( { kmh, reverse, top, bestAir, air, boost, altitude = null, drift = null, driftCharge = 0, driftHeld = false } ) {
 
 			set( 'kmh', Math.round( kmh ), value => number.textContent = value );
 			set( 'reverse', reverse, value => unit.textContent = value ? 'km/h R' : 'km/h' );
@@ -628,8 +891,61 @@ export function createDriveHud( parent = document.body ) {
 
 				driftBadge.hidden = value === null;
 				driftBadge.dataset.level = value ?? 0;
+				root.style.setProperty( '--charge-colour', CHARGE_COLOURS[ value ?? 0 ] );
 
 			} );
+			set( 'charge', Math.round( driftCharge * 100 ), value => root.style.setProperty( '--charge', `${ value }%` ) );
+			set( 'held', driftHeld, value => driftHold.classList.toggle( 'held', value ) );
+
+		},
+
+		// Stunts: { score, mult, best } (null hides them).
+		setScore( value ) {
+
+			scoring = !! value;
+			scoreRow.hidden = ! value || !! panel;
+			if ( ! value ) return;
+			set( 'points', value.score, score => points.textContent = score.toLocaleString( 'en-CA' ) );
+			set( 'mult', value.mult, times => {
+
+				mult.textContent = `×${ times }`;
+				mult.classList.toggle( 'on', times > 1 );
+
+			} );
+			set( 'best', value.best, score => best.textContent = `BEST ${ score.toLocaleString( 'en-CA' ) }` );
+
+		},
+
+		// A hit's word ("WHAM!"), `power` 0 to 1 by how hard; kind 'wipeout' for a wipeout.
+		pop( word, power = 0.5, kind = '' ) {
+
+			const element = document.createElement( 'div' );
+			element.className = `dhud-pop ${ kind }`.trim();
+			element.textContent = word;
+			// Tilted one way, then the other.
+			tilt = - tilt;
+			element.style.setProperty( '--tilt', `${ tilt * ( 4 + power * 5 ) }deg` );
+			element.style.setProperty( '--size', String( 0.75 + power * 0.5 ) );
+			pops.replaceChildren( element );
+			setTimeout( () => element.remove(), POP_TIME );
+
+		},
+
+		// What it's doing in the air so far (lines of text, shown dim), or null once it's down.
+		setPending( lines ) {
+
+			if ( lines ) showTricks( lines, 'pending' );
+			else if ( tricks.classList.contains( 'pending' ) ) tricks.hidden = true;
+
+		},
+
+		// Tricks landed: { lines, points, mult, combo }, the points before the multiplier; or lost in
+		// a wipeout: { lines, mult, lost }.
+		tricks( { lines, points: gained = 0, mult: times = 1, combo = false, lost = false } ) {
+
+			const last = lost ? ( times > 1 ? `Combo ×${ times } lost` : 'Wipeout' ) : `${ combo ? 'Combo! ' : '' }+${ gained.toLocaleString( 'en-CA' ) }${ times > 1 ? ` ×${ times }` : '' }`;
+			showTricks( [ ...lines, last ], lost ? 'lost' : 'landed' );
+			tricksTimer = setTimeout( () => tricks.hidden = true, TRICKS_TIME );
 
 		},
 

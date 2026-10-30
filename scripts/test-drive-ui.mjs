@@ -1,7 +1,8 @@
 // npm run test:drive-ui: World Drive (drive/index.html, src/drive-app/) in a real browser, on the
 // Vite dev server with no Maps key: the test globe and the flat test pad stand in for Google's
 // tiles. The globe and its panel; search (the Worker's /api/search answered here) only on Enter;
-// typed coordinates; start spots; a tap on the globe; dropping in and driving; the vehicle picker
+// typed coordinates; start spots; a tap on the globe; dropping in and driving; stunts (a wall
+// throwing the kart into the air, a backflip landed for points, the DRIFT button); the vehicle picker
 // and changing ride from the pause menu; M back to the globe and teleporting again with no reload;
 // recent places and the picked ride kept across a reload; a phone with touch buttons; and the
 // screens the Worker's answers lead to (used up, robot check, maps off, the visit itself). Every
@@ -230,6 +231,103 @@ describe( 'World Drive, desktop', () => {
 		assert.ok( await page.evaluate( () => Number( document.querySelector( '#hud .dhud-number' ).textContent ) ) > 0 );
 		await shot( page, 'drive-5-driving' );
 		assert.equal( await page.evaluate( () => performance.getEntriesByType( 'navigation' ).length ), navigations );
+
+	} );
+
+	test( 'stunts: a wall throws the kart into the air, a backflip lands for points, DRIFT drifts', async () => {
+
+		// Driven here at a fixed step, so it doesn't hang on the headless frame rate.
+		const result = await page.evaluate( () => {
+
+			const { driver: d, ground } = window.drive;
+			const pad = ground.getColliders()[ 0 ];
+			const step = ( seconds, each ) => {
+
+				for ( let i = 0; i < Math.round( seconds * 60 ); i ++ ) {
+
+					d.update( 1 / 60 );
+					if ( each?.() === false ) return;
+
+				}
+
+			};
+			const reset = kmh => {
+
+				for ( const code of [ ...d.keys ] ) d.release( code );
+				Object.assign( d, { east: 0, north: 0, y: 0, heading: 0, course: 0, view: 0, speed: kmh / 3.6, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, drifting: 0, driftHop: false, boost: null } );
+				d.update( 1 / 60 );
+
+			};
+			// A wall 60 m wide and 6 m high across the road, 30 m north: a vertical slice of the pad.
+			const land = pad.children.find( child => child.isMesh );
+			const wall = land.clone();
+			wall.material = land.material.clone();
+			wall.material.side = 2;
+			wall.rotation.set( 0, 0, 0 );
+			wall.scale.set( 60 / 4000, 6 / 2000, 1 );
+			wall.position.set( 0, 3, 30 );
+			pad.add( wall );
+			wall.updateMatrixWorld();
+
+			const out = {};
+			// Into it at 90 km/h: back off it and up, never through it, and down again on its wheels.
+			reset( 90 );
+			let launched = false, high = 0, through = 0;
+			const corner = d.entry.pivot.position.clone();
+			step( 6, () => {
+
+				launched ||= d.air?.hits > 0;
+				high = Math.max( high, d.y );
+				const { min, max } = d.ownBox;
+				for ( const x of [ min.x, max.x ] ) for ( const y of [ min.y, max.y ] ) for ( const z of [ min.z, max.z ] ) {
+
+					corner.set( x, y, z ).applyMatrix4( d.entry.pivot.matrixWorld );
+					if ( corner.y < 6 ) through = Math.max( through, corner.z - 30 );
+
+				}
+
+			} );
+			Object.assign( out, { launched, high, through, down: d.grounded && ! d.air } );
+			pad.remove( wall );
+
+			// Thrown up, with a backflip held on S and let go in time: it lands on its wheels and scores.
+			reset( 40 );
+			const score = d.score;
+			d.hop();
+			d.vy = 12;
+			d.press( 'KeyS' );
+			step( 5, () => {
+
+				if ( d.air && d.air.turned.x > Math.PI * 2 - 0.8 ) d.release( 'KeyS' );
+				return ! d.grounded;
+
+			} );
+			Object.assign( out, { scored: d.score - score, tricks: document.querySelector( '#hud .dhud-tricks' ).textContent } );
+
+			// The DRIFT button held with the mouse while steering right, then let go: a boost.
+			reset( 60 );
+			const button = document.querySelector( '#hud .dhud-drift-hold' );
+			const pointer = type => button.dispatchEvent( new PointerEvent( type, { pointerId: 7, pointerType: 'mouse', bubbles: true } ) );
+			pointer( 'pointerdown' );
+			d.press( 'KeyD' );
+			step( 2 );
+			const chip = document.querySelector( '#hud .dhud-drift' );
+			Object.assign( out, { button: button.offsetParent !== null, drifting: d.drifting, level: d.driftLevel, chip: ! chip.hidden && chip.dataset.level } );
+			pointer( 'pointerup' );
+			step( 0.1 );
+			out.boost = !! d.boost;
+			reset( 0 );
+			return out;
+
+		} );
+		assert.ok( result.launched, 'the wall didn\'t throw it into the air' );
+		assert.ok( result.high > 1.5, `only ${ result.high } m up` );
+		assert.ok( result.through < 0.02, `${ result.through } m into the wall` );
+		assert.ok( result.down, 'still in the air' );
+		assert.ok( result.scored > 0 && /Backflip!/.test( result.tricks ), JSON.stringify( result ) );
+		assert.ok( result.button && result.drifting === 1 && result.level >= 2 && result.chip === String( result.level ), JSON.stringify( result ) );
+		assert.ok( result.boost, 'no boost after the drift' );
+		await shot( page, 'drive-5b-stunts' );
 
 	} );
 

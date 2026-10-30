@@ -406,8 +406,10 @@ testing with test cards and the known gaps are in [docs/premium.md](docs/premium
 A second app in this repository, on its own address: pick anywhere on Earth from a globe of Google's
 3D tiles (search, a dozen start spots, recent places, or a tap on the globe), choose a go-kart, pickup
 or haul truck, press **Drive here** and drive the real world arcade-style: drift, boost, fly
-with Shift, **M** back to the globe and drop in somewhere else without reloading. Phones get a bottom
-sheet and touch buttons.
+with Shift, and hit something to bounce off it into the air, where **A**/**D** spin, **W**/**S** flip and
+**Q**/**E** roll for tricks that score (times a combo multiplier) when you land on your wheels; a
+wipeout loses the combo and rolls you back onto them. **M** goes back to the globe to drop in
+somewhere else without reloading. Phones get a bottom sheet and touch buttons.
 
 It shares `src/` with this app but has its own page (`drive/index.html`, `src/drive-app/`), build
 (`npm run dev:drive`, `npm run build:drive` into `dist-drive/`) and Cloudflare Worker
@@ -459,9 +461,11 @@ src/sidebar.js      the library sidebar: placing, selecting, moving, drawing fla
 src/handles.js      on-map handles for the selected item: turning, resizing areas, a pit's depth
 src/toolbar.js      the toolbar over the selected item, its size editor and Undo after deleting
 src/flatten.js      flatten areas: press Google's mesh flat inside a rectangle
-src/drive.js        race mode: driving, jumps, cameras, speedometer; flying, booster and drifts as options
-src/drive-hud.js    a self-contained driving HUD with touch buttons, for other apps (World Drive)
-src/drive-fx.js     booster flame, tyre smoke and drift sparks
+src/drive.js        race mode: driving, jumps, cameras, speedometer; flying, booster, drifts and stunts
+                    (crash: 'launch': bounce and launch, air tricks, score) as options
+src/drive-hud.js    a self-contained driving HUD with touch buttons, the DRIFT button, hit words,
+                    trick pop-ups and the score, for other apps (World Drive)
+src/drive-fx.js     booster flame, tyre smoke and drift sparks; a hit's sparks and bits, scrapes, dust
 src/kart.js         the go-kart model and its library item
 src/layout.js       saves placed items in the browser; export/import
 src/kinds.js        placed things that aren't models (areas, pits, piles): how features register them
