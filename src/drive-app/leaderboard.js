@@ -5,11 +5,11 @@ import { storage } from './places.js';
 // time, kept by the Worker (worker/drive/scores.js). There's no sign-up: the first time you post,
 // or pick a name in the panel, you choose a nickname and the Worker makes you a player, whose id and
 // secret stay in this browser (lose them and you pick a new name). Like a score, a new name needs
-// this visit's token, so there's none to pick on the test pad. A run's score goes up as a
-// landed jump beats your best today, anywhere or at that place (so the boards of one place have
-// everyone's best there, not only the runs that were their best of the day), at most one every
-// POST_GAP, with this visit's token; the first time, a small card asks, and never stops the game. Nothing here may get in the way of driving:
-// every call to the Worker is allowed to fail.
+// this visit's token, so there's none to pick on the test pad. A run's score goes up as a landed
+// jump beats your best today, anywhere or at that place (so the boards of one place have everyone's
+// best there, not only the runs that were their best of the day), at most one every POST_GAP, with
+// this visit's token; the first time, a small card asks, and never stops the game. Nothing here
+// may get in the way of driving: every call to the Worker is allowed to fail.
 
 const PLAYER_KEY = 'world-drive.player';
 const POSTED_KEY = 'world-drive.posted';
