@@ -243,7 +243,9 @@ export function createHandles( { scene, camera, canvas, models } ) {
 			const rad = start.heading * DEG;
 			const at = [ de * Math.cos( rad ) - dn * Math.sin( rad ), de * Math.sin( rad ) + dn * Math.cos( rad ) ];
 			const list = kind.resize.points( start.params );
-			const next = handle.type === 'point' ? list.map( ( p, i ) => i === handle.index ? at : p ) : [ ...list.slice( 0, handle.index + 1 ), at, ...list.slice( handle.index + 1 ) ];
+			// A loop's first point is its last too: they move together, so it stays closed.
+			const moves = i => i === handle.index || ( handle.index === 0 && i === list.length - 1 && isLoop( list ) );
+			const next = handle.type === 'point' ? list.map( ( p, i ) => moves( i ) ? at : p ) : [ ...list.slice( 0, handle.index + 1 ), at, ...list.slice( handle.index + 1 ) ];
 			setDraft( e, withPoints( next ) );
 			return;
 
@@ -331,9 +333,19 @@ export function createHandles( { scene, camera, canvas, models } ) {
 		} else if ( lastClick?.entry === entry && lastClick.index === handle.index && now - lastClick.time < DOUBLE_CLICK ) {
 
 			lastClick = null;
-			if ( list.length > 2 ) place( entry, withPoints( list.filter( ( _, i ) => i !== handle.index ), { entry, kind, start } ) );
+			if ( list.length > 2 ) place( entry, withPoints( withoutPoint( list, handle.index ), { entry, kind, start } ) );
 
 		} else lastClick = { entry, index: handle.index, time: now };
+
+	}
+
+	// The points without one. A loop (a fence round an area) stays closed, its first point its last,
+	// unless too few are left for one.
+	function withoutPoint( list, index ) {
+
+		if ( ! isLoop( list ) ) return list.filter( ( _, i ) => i !== index );
+		const ring = list.slice( 0, - 1 ).filter( ( _, i ) => i !== index );
+		return ring.length >= 3 ? [ ...ring, ring[ 0 ] ] : ring;
 
 	}
 
@@ -549,11 +561,13 @@ export function createHandles( { scene, camera, canvas, models } ) {
 
 		const heights = line.length > 0 ? kind.resize.heights?.( entry ) : null;
 		const adding = drag?.handle.type === 'insert' ? drag.handle.index + 1 : - 1;
+		// A loop's last point is its first: one dot for both, the first's.
+		const shut = isLoop( line ) ? line.length - 1 : - 1;
 		for ( const handle of [ ...points, ...inserts ] ) handle.active = false;
 		line.forEach( ( [ e, n ], i ) => {
 
 			const handle = pointHandle( points, i, 'point' );
-			handle.active = i !== adding;
+			handle.active = i !== adding && i !== shut;
 			handle.world.set( - at.east, entry.state.up + ( heights?.[ i ] ?? 0 ), at.north ).addScaledVector( right, e ).addScaledVector( front, n );
 			toScreen( handle.world, camera, rect, handle.screen );
 
@@ -681,6 +695,13 @@ function resizeCursor( dx, dy ) {
 
 	const sector = ( ( Math.round( Math.atan2( dy, dx ) / ( Math.PI / 4 ) ) % 4 ) + 4 ) % 4;
 	return [ 'ew-resize', 'nwse-resize', 'ns-resize', 'nesw-resize' ][ sector ];
+
+}
+
+// Whether points ([ east, north ]) end where they start: a loop, such as a fence round an area.
+function isLoop( list ) {
+
+	return list.length > 3 && Math.hypot( list[ 0 ][ 0 ] - list[ list.length - 1 ][ 0 ], list[ 0 ][ 1 ] - list[ list.length - 1 ][ 1 ] ) < 0.05;
 
 }
 
