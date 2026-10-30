@@ -48,6 +48,7 @@ export const ZOOM = {
 	minStep: 1, // metres: close to the ground a notch still moves at least this much
 	time: 0.15, // seconds a notch takes to glide there
 	maxDistance: 20000, // metres from the point: zooming out stops here
+	minClimb: 20, // degrees: zooming out rises at least this steeply, tipping the view down to match
 };
 
 // Your own detailed models. Put .glb / .gltf files in public/models/ and list them here.

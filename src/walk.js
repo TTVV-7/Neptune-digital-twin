@@ -794,6 +794,11 @@ export class WalkController {
 	// `factor` times as far from the point (under 1 toward it, over 1 away from it). A notch moves at
 	// least ZOOM.minStep metres, so close up it's still worth a notch, but never past the point.
 	// Notches in quick succession add up. Walking switches to flying: zooming is flying.
+	//
+	// Out along a level view, or from a point up in the sky, that line runs flat or downhill: it
+	// would slide along the ground into whatever is behind, or sink. So zooming out rises at least
+	// ZOOM.minClimb degrees, swinging up round the point, and the view tips down by as much, which
+	// keeps the point where it was on screen.
 	zoom( point, factor ) {
 
 		if ( ! this.enabled ) return;
@@ -805,11 +810,26 @@ export class WalkController {
 		const distance = _zoomDir.length();
 		if ( distance < 1e-3 ) return;
 		_zoomDir.divideScalar( distance );
+		// The view's tip still to come from the notches before.
+		let pitch = this.zooming ? this.zooming.pitch * ( 1 - this.zooming.done ) : 0;
+		const climb = Math.asin( MathUtils.clamp( _zoomDir.y, - 1, 1 ) );
+		const least = ZOOM.minClimb * MathUtils.DEG2RAD;
+		if ( factor > 1 && climb < least ) {
+
+			const flat = Math.hypot( _zoomDir.x, _zoomDir.z );
+			// Right under the point: back the way the view faces.
+			if ( flat > 1e-6 ) _zoomDir.set( _zoomDir.x / flat, 0, _zoomDir.z / flat );
+			else _zoomDir.set( Math.sin( this.yaw ), 0, Math.cos( this.yaw ) );
+			_zoomDir.multiplyScalar( Math.cos( least ) ).setY( Math.sin( least ) );
+			pitch += climb - least;
+
+		}
+
 		let to = distance * factor;
 		if ( Math.abs( to - distance ) < ZOOM.minStep ) to = distance + Math.sign( factor - 1 ) * ZOOM.minStep;
 		to = MathUtils.clamp( to, Math.min( distance, ZOOM_NEAREST ), Math.max( distance, ZOOM.maxDistance ) );
 		const by = ( this.zooming?.by ?? new Vector3() ).copy( point ).addScaledVector( _zoomDir, to ).sub( pos );
-		this.zooming = { by, t: 0, done: 0 };
+		this.zooming = { by, pitch, t: 0, done: 0 };
 
 	}
 
@@ -823,6 +843,13 @@ export class WalkController {
 		zoom.t = Math.min( 1, zoom.t + dt / ZOOM.time );
 		const eased = 1 - ( 1 - zoom.t ) ** 3;
 		_move.copy( zoom.by ).multiplyScalar( eased - zoom.done );
+		if ( zoom.pitch ) {
+
+			this.pitch = MathUtils.clamp( this.pitch + zoom.pitch * ( eased - zoom.done ), - Math.PI / 2 + 0.01, Math.PI / 2 - 0.01 );
+			this.applyRotation();
+
+		}
+
 		zoom.done = eased;
 		if ( zoom.t === 1 ) this.zooming = null;
 		const length = _move.length();
