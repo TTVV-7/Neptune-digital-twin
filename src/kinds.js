@@ -41,6 +41,26 @@
 // A field may also have enabled( params ), which greys it out while it returns false (a shored
 // pit's side slope), and a readout note: true, which writes it out in full across the panel (a
 // warning). A readout that gives '' is left out.
+//
+// Kinds made of library items (a row of barriers, rows.js) can also have:
+//
+//     prepare( params ) { return promise; },  // what build() needs that has to be fetched first
+//                              // (the item's model); load() waits for it
+//     item( params ) { return 'jersey-barrier'; },  // the library item it's made of: the Show
+//                              // panel lists it under that item's category, not as a kind
+//     count( entry ) { return 32; },  // how many things it is, where things are counted (1 if left out)
+//     contains( entry, point ) { return true; },  // whether a point in its own frame (inside its
+//                              // box) is inside it, for one whose box is mostly empty (a long row)
+//     resize: {
+//       shape: 'points',       // a handle on each of params' points to move it, and one in the
+//                              // middle of each stretch between them to add a point there; a
+//                              // double-click on a point takes it out
+//       points( params ),      // the points, as [ east, north ] metres from its origin as if it
+//                              // faced north (heading 0)
+//       withPoints( params, points ),  // the params with these points instead
+//       heights( entry ),      // the ground under each point, in metres above its base (optional)
+//       live, label,           // as above
+//     },
 
 const kinds = new Map();
 

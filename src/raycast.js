@@ -1,10 +1,14 @@
-import { BufferAttribute, BufferGeometry, Matrix4, Ray, Sphere, Vector3 } from 'three';
+import { BufferAttribute, BufferGeometry, Matrix3, Matrix4, Mesh, Ray, Sphere, Vector3 } from 'three';
 import { acceleratedRaycast, computeBoundsTree, MeshBVH } from 'three-mesh-bvh';
 
 const _sphere = new Sphere();
 const _ray = new Ray();
 const _point = new Vector3();
 const _inverse = new Matrix4();
+const _instanceMatrix = new Matrix4();
+const _turn = new Matrix3();
+// Stands in for one copy of an instanced mesh while a ray is tested against it.
+const _copy = new Mesh();
 
 // Walking, collisions and snapping cast several rays a frame. Without help each ray tests every
 // triangle of every tile or model it passes near (hundreds of thousands on Google tiles). This
@@ -14,10 +18,52 @@ export function useFastRaycast( root ) {
 
 	root.traverse( object => {
 
-		if ( object.isSkinnedMesh ) object.raycast = posedBvhRaycast;
+		if ( object.isInstancedMesh ) object.raycast = instancedBvhRaycast;
+		else if ( object.isSkinnedMesh ) object.raycast = posedBvhRaycast;
 		else if ( object.isMesh ) object.raycast = lazyBvhRaycast;
 
 	} );
+
+}
+
+// Copies drawn as instances (a row of barriers, rows.js) share one geometry, which gets one
+// hierarchy the first time a ray comes near any of them; each copy the ray reaches is then tested
+// with it in that copy's place. three.js's own would test every triangle of every copy it reaches.
+// Hits are the instanced mesh's, with the copy in instanceId, and the surface's normal turned the
+// way that copy faces, so code that turns normals by the hit object's matrix (walking into a wall)
+// gets the copy's.
+function instancedBvhRaycast( raycaster, intersects ) {
+
+	const { geometry, material } = this;
+	if ( material === undefined || this.count === 0 ) return;
+	if ( this.boundingSphere === null ) this.computeBoundingSphere();
+	_sphere.copy( this.boundingSphere ).applyMatrix4( this.matrixWorld );
+	if ( ! reaches( raycaster, _sphere ) ) return;
+
+	if ( geometry.boundingSphere === null ) geometry.computeBoundingSphere();
+	if ( ! geometry.boundsTree ) computeBoundsTree.call( geometry );
+	_copy.geometry = geometry;
+	_copy.material = material;
+	for ( let i = 0; i < this.count; i ++ ) {
+
+		this.getMatrixAt( i, _instanceMatrix );
+		_copy.matrixWorld.multiplyMatrices( this.matrixWorld, _instanceMatrix );
+		_sphere.copy( geometry.boundingSphere ).applyMatrix4( _copy.matrixWorld );
+		if ( ! reaches( raycaster, _sphere ) ) continue;
+		const first = intersects.length;
+		geometry.boundsTree.raycastObject3D( _copy, raycaster, intersects );
+		if ( intersects.length === first ) continue;
+		_turn.getNormalMatrix( _instanceMatrix );
+		for ( let j = first; j < intersects.length; j ++ ) {
+
+			const hit = intersects[ j ];
+			hit.object = this;
+			hit.instanceId = i;
+			hit.face?.normal.applyMatrix3( _turn ).normalize();
+
+		}
+
+	}
 
 }
 

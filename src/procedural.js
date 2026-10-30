@@ -31,8 +31,11 @@ const FT = 0.3048;
 const IN = 0.0254;
 
 export const PROCEDURAL_ITEMS = [
-	{ id: 'jersey-barrier', name: 'Concrete jersey barrier (10 ft)', category: 'Barriers & fencing', build: jerseyBarrier },
-	{ id: 'lock-block', name: 'Concrete lock block (5 x 2.5 ft)', category: 'Barriers & fencing', build: lockBlock },
+	// Weights marked "~" in a name are what a row of them adds up (rows.js): 27 ft³ of concrete in a
+	// barrier, 31 ft³ in a block, at 150 lb/ft³.
+	{ id: 'jersey-barrier', name: 'Concrete jersey barrier (10 ft, ~1.9 t)', category: 'Barriers & fencing', build: jerseyBarrier },
+	{ id: 'lock-block', name: 'Concrete lock block (5 x 2.5 ft, ~2.1 t)', category: 'Barriers & fencing', build: lockBlock },
+	{ id: 'bollard-pipe', name: 'Steel pipe bollard (6 in, 4 ft high)', category: 'Barriers & fencing', build: pipeBollard },
 	{ id: 'fence-panel', name: 'Temporary fence panel (10 x 6 ft)', category: 'Barriers & fencing', build: fencePanel },
 	{ id: 'fence-run-screened', name: 'Temporary fence with privacy screen, 9.1 m run (3 × 10 ft panels)', category: 'Barriers & fencing', build: () => screenedFence( 3 ) },
 	{ id: 'hoarding-plywood-10m', name: 'Plywood hoarding, 10 m run (2.4 m / 8 ft high)', category: 'Barriers & fencing', build: () => plywoodHoarding( 10 ) },
@@ -175,6 +178,20 @@ function lockBlock() {
 	const material = mat( 0xa8a59c, { roughness: 0.95 } );
 	box( group, material, [ 5 * FT, 2.5 * FT, 2.5 * FT ] );
 	for ( const x of [ - 1.25 * FT, 1.25 * FT ] ) cylinder( group, material, 0.15, 0.1, [ x, 2.5 * FT, 0 ], 20 );
+	return group;
+
+}
+
+// A 6 in schedule 40 pipe filled with concrete, painted safety yellow, on a plate bolted to the
+// slab (a temporary one, rather than one cast in), with a cap on top.
+function pipeBollard() {
+
+	const group = new Group();
+	const yellow = mat( 0xf2c200, { roughness: 0.55, metalness: 0.2 } );
+	box( group, STEEL(), [ 0.3, 0.02, 0.3 ] );
+	cylinder( group, yellow, 0.084, 1.2, [ 0, 0.02, 0 ], 20 );
+	const cap = cylinder( group, yellow, 0.084, 0.06, [ 0, 1.22, 0 ], 20 );
+	cap.scale.set( 0.9, 1, 0.9 );
 	return group;
 
 }

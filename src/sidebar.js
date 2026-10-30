@@ -18,6 +18,7 @@ import { buildProcedural } from './procedural.js';
 import { localToEnu } from './geo.js';
 import { isTyping, passesHitFilters } from './walk.js';
 import { ZONE_ID } from './flatten.js';
+import { getKind } from './kinds.js';
 import { createHandles } from './handles.js';
 import { createToolbar } from './toolbar.js';
 
@@ -30,10 +31,14 @@ const DRAG_TYPE = 'application/x-library-item';
 // A press that moves less than this many pixels (a finger: TOUCH_SLOP) is a click, not a drag.
 const CLICK_SLOP = 5;
 const TOUCH_SLOP = 12;
+// Drawing a line, a second click this soon (ms) where the last one was finishes it.
+const DOUBLE_CLICK = 400;
 // A phone: the library is a sheet over the bottom of the screen there (style.css).
 const PHONE = window.matchMedia( '( max-width: 700px )' );
 // The padlock on a locked premium item's Pro badge.
 const LOCK_ICON = '<svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M3.5 5.5V3.5a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="2" y="5.5" width="8" height="6" rx="1" fill="currentColor"/></svg>';
+// Three in a line, on the Row button of a card.
+const ROW_ICON = '<svg viewBox="0 0 14 10" width="13" height="9" aria-hidden="true"><path d="M1 8.5h12" stroke="currentColor" stroke-width="1.2" stroke-dasharray="1.5 1.5"/><rect x="1" y="3" width="3" height="4" rx="0.6" fill="currentColor"/><rect x="5.5" y="3" width="3" height="4" rx="0.6" fill="currentColor"/><rect x="10" y="3" width="3" height="4" rx="0.6" fill="currentColor"/></svg>';
 
 const _ndc = new Vector2();
 const _offset = new Vector3();
@@ -51,6 +56,9 @@ const _box = new Box3();
 // Premium items (library.json "premium": true) can be locked by a gate (setGate, from premium.js):
 // their cards show a Pro badge, and picking one asks the gate instead of placing it. Only picking
 // new ones is gated; placed items, and layouts that have them, load as always.
+//
+// Each card can also have a Row button (setRowMaker, from rows.js), which places a row of the item
+// along a line drawn on the ground: startLine() draws the line, clicking point after point.
 export function createSidebar( { library, models, layout, scene, camera, canvas, controls, getGround, getPlayer, panel, isDriving, onError } ) {
 
 	const root = document.getElementById( 'library' );
@@ -69,8 +77,9 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	let dragging = null; // { entry, moved }
 	let suppressClick = false;
 	let pointer = null; // last pointer position over the scene, in client pixels
-	let drawing = null; // { tool, start, heading, outline } while a tool is in use
+	let drawing = null; // { tool, start, heading, outline } while a tool is in use; a line: { tool, points, press, click, cursor }
 	let gate = null; // { isLocked( item ), onLocked( item ) }
+	let rowMaker = null; // item => starts a row of it (rows.js)
 	let wheel = 0; // trackpad scrolling not yet turned into a turn, in pixels
 
 	const handles = createHandles( { scene, camera, canvas, models } );
@@ -179,6 +188,26 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		// Longest side first, whichever way the item faces.
 		dims.textContent = d ? `${ Math.max( d.length, d.width ) } × ${ Math.min( d.length, d.width ) } × ${ d.height } m` : '';
 		card.append( thumb, name, dims );
+		// Inside the card, so it lines up with it in the grid; its click doesn't reach the card's.
+		let row = null;
+		if ( ! item.kind ) {
+
+			row = document.createElement( 'span' );
+			row.className = 'row-chip';
+			row.innerHTML = `${ ROW_ICON }Row`;
+			row.title = 'A row of these: draw a line on the ground, and they\'re placed along it, end to end or spaced as you choose';
+			row.hidden = true;
+			row.addEventListener( 'click', e => {
+
+				e.stopPropagation();
+				if ( isLocked( item ) ) pickLocked( item );
+				else rowMaker?.( item );
+
+			} );
+			card.append( row );
+
+		}
+
 		let badge = null;
 		if ( item.premium ) {
 
@@ -218,7 +247,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 		} );
 		list.append( card );
-		cards.push( { card, item, thumb, badge } );
+		cards.push( { card, item, thumb, badge, row } );
 
 	}
 
@@ -295,14 +324,20 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	} );
 
+	// A row of items counts as its copies.
 	const updateCount = () => {
 
-		const n = models.entries.filter( e => e.library && ! e.placing && ! e.inConfig ).length;
+		const n = models.entries.filter( e => e.library && ! e.placing && ! e.inConfig ).reduce( ( sum, e ) => sum + ( getKind( e.kind )?.count?.( e ) ?? 1 ), 0 );
 		count.textContent = n === 1 ? '1 item placed' : `${ n } items placed`;
 
 	};
 
 	models.addEventListener( 'add', updateCount );
+	models.addEventListener( 'change', ( { entry } ) => {
+
+		if ( getKind( entry.kind )?.count ) updateCount();
+
+	} );
 	models.addEventListener( 'remove', ( { entry } ) => {
 
 		if ( entry === selected ) select( null );
@@ -339,6 +374,14 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		cancelDrawing();
 		select( null );
 		gate.onLocked( item );
+
+	}
+
+	// The Row buttons on the cards start a row of their item with maker( item ).
+	function setRowMaker( maker ) {
+
+		rowMaker = maker;
+		for ( const { row } of cards ) if ( row ) row.hidden = ! maker;
 
 	}
 
@@ -556,14 +599,16 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 		dragging = null;
 		if ( drawing?.start ) finishDrawing( e );
+		else if ( drawing?.press ) releaseLine( e );
 
 	}
 
 	canvas.addEventListener( 'pointermove', e => {
 
 		pointer = { x: e.clientX, y: e.clientY };
-		if ( ( dragging || drawing?.start ) && ( e.buttons & 1 ) === 0 ) endPress( e );
+		if ( ( dragging || drawing?.start || drawing?.press ) && ( e.buttons & 1 ) === 0 ) endPress( e );
 		if ( drawing?.start ) updateDrawing();
+		if ( drawing?.tool.mode === 'line' ) moveLine( e );
 		if ( placing ) followPointer();
 		if ( dragging ) {
 
@@ -589,6 +634,14 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 		if ( e.button !== 0 || controls.locked || isDriving() || handles.busy ) return;
 		pointer = { x: e.clientX, y: e.clientY };
+
+		if ( drawing?.tool.mode === 'line' ) {
+
+			pressLine( e );
+			suppressClick = true;
+			return;
+
+		}
 
 		if ( drawing ) {
 
@@ -651,6 +704,8 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 		dragging = null;
 		if ( drawing?.start ) cancelDrawing();
+		// A press that turned out to be the browser's (a pinch, say) isn't a point.
+		else if ( drawing?.press ) drawing.press = null;
 
 	} );
 	canvas.addEventListener( 'lostpointercapture', () => {
@@ -722,6 +777,16 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 			else if ( drawing ) cancelDrawing();
 			else if ( placing ) cancelPlacing();
 			else select( null );
+
+		} else if ( drawing?.tool.mode === 'line' && ( e.code === 'Enter' || e.code === 'NumpadEnter' ) ) {
+
+			e.preventDefault();
+			finishLine();
+
+		} else if ( drawing?.tool.mode === 'line' && ( e.code === 'Backspace' || e.code === 'Delete' ) ) {
+
+			e.preventDefault();
+			undoPoint();
 
 		} else if ( e.code === 'KeyR' ) {
 
@@ -852,13 +917,140 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	function cancelDrawing() {
 
+		const tool = drawing?.tool;
+		stopDrawing();
+		tool?.onCancel?.();
+
+	}
+
+	function stopDrawing() {
+
 		if ( ! drawing ) return;
-		scene.remove( drawing.outline );
-		drawing.outline.geometry.dispose();
-		drawing.outline.material.dispose();
-		drawing.tool.card.classList.remove( 'active' );
+		if ( drawing.outline ) {
+
+			scene.remove( drawing.outline );
+			drawing.outline.geometry.dispose();
+			drawing.outline.material.dispose();
+
+		}
+
+		drawing.tool.card?.classList.remove( 'active' );
 		drawing = null;
 		root.classList.remove( 'placing' );
+		document.body.classList.remove( 'drawing-line' );
+
+	}
+
+	// --- drawing a line: a row of items ------------------------------------------------------
+
+	// Click points on the ground for a line, corners and all (rows.js): a double-click, Enter or
+	// finishLine() ends it, Backspace or undoPoint() takes the last point back and Esc cancels; on
+	// a finger each tap is a point. A press dragged out before any point is clicked makes a straight
+	// line at once. spec: { name, card (marked while drawing), points (any to start with), onChange(
+	// points, cursor ), onDone( points, touch ) (may return a placed entry, which is then selected),
+	// onCancel() }. Points are on the ground, as positions in the scene; cursor is the point on the
+	// ground under the pointer, or null (none, or a finger that has been lifted).
+	function startLine( spec ) {
+
+		cancelPlacing();
+		cancelDrawing();
+		select( null );
+		document.exitPointerLock?.();
+		drawing = { tool: { ...spec, mode: 'line' }, points: [ ...( spec.points ?? [] ) ], press: null, click: null, cursor: null };
+		root.classList.add( 'placing' );
+		spec.card?.classList.add( 'active' );
+		document.body.classList.add( 'drawing-line' );
+		lineChanged();
+
+	}
+
+	function pressLine( e ) {
+
+		const point = surfacePoint( e.clientX, e.clientY );
+		if ( ! point ) return;
+		drawing.press = { x: e.clientX, y: e.clientY, point, moved: false };
+		canvas.setPointerCapture( e.pointerId );
+
+	}
+
+	function moveLine( e ) {
+
+		const { press } = drawing;
+		const slop = e.pointerType === 'touch' ? TOUCH_SLOP : CLICK_SLOP;
+		if ( press && ! press.moved ) press.moved = Math.hypot( e.clientX - press.x, e.clientY - press.y ) >= slop;
+		drawing.cursor = surfacePoint( e.clientX, e.clientY );
+		lineChanged();
+
+	}
+
+	// A click adds a point, and a second one straight after it finishes. A drag adds the point it
+	// ends at, or, from the first press, is the whole line.
+	function releaseLine( e ) {
+
+		const { press, click } = drawing;
+		drawing.press = null;
+		const touch = e.pointerType !== 'mouse';
+		const slop = touch ? TOUCH_SLOP : CLICK_SLOP;
+		const now = performance.now();
+		if ( press.moved ) {
+
+			const end = surfacePoint( e.clientX, e.clientY ) ?? drawing.cursor;
+			drawing.click = null;
+			if ( end && drawing.points.length === 0 ) {
+
+				drawing.points.push( press.point, end );
+				finishLine( touch );
+				return;
+
+			}
+
+			if ( end ) drawing.points.push( end );
+
+		} else if ( click && now - click.time < DOUBLE_CLICK && Math.hypot( press.x - click.x, press.y - click.y ) < slop ) {
+
+			drawing.click = null;
+			if ( finishLine( touch ) ) return;
+
+		} else {
+
+			drawing.points.push( press.point );
+			drawing.click = { x: press.x, y: press.y, time: now };
+
+		}
+
+		// A finger isn't over the ground once it's lifted.
+		if ( touch ) drawing.cursor = null;
+		lineChanged();
+
+	}
+
+	// End the line and hand it over, if it has two points or more (true then).
+	function finishLine( touch = false ) {
+
+		if ( drawing?.tool.mode !== 'line' || drawing.points.length < 2 ) return false;
+		const { tool, points } = drawing;
+		stopDrawing();
+		Promise.resolve()
+			.then( () => tool.onDone( points, touch ) )
+			.then( entry => entry?.pivot && select( entry, touch ), err => onError( `${ tool.name }: ${ err.message }` ) );
+		return true;
+
+	}
+
+	function undoPoint() {
+
+		if ( drawing?.tool.mode !== 'line' ) return;
+		drawing.points.pop();
+		drawing.click = null;
+		lineChanged();
+
+	}
+
+	// While the first press is dragged out, the line runs from where it was pressed.
+	function lineChanged() {
+
+		const { points, press, cursor } = drawing;
+		drawing.tool.onChange?.( press?.moved && points.length === 0 ? [ press.point ] : points, cursor );
 
 	}
 
@@ -870,6 +1062,13 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		const hit = castFromScreen( x, y, [ ...getGround(), models.group ] )
 			.find( h => ! exclude || ! isInside( h.object, exclude ) );
 		return hit ? hit.point.clone() : null;
+
+	}
+
+	// The ground (Google's mesh, dug and piled earth) under the cursor, not what's placed on it.
+	function surfacePoint( x, y ) {
+
+		return castFromScreen( x, y, getGround() )[ 0 ]?.point.clone() ?? null;
 
 	}
 
@@ -917,6 +1116,16 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		select: entry => select( entry ),
 		addTool,
 		setGate,
+		setRowMaker,
+		isLocked,
+		pickLocked,
+		startLine,
+		finishLine,
+		undoPoint,
+		cancelDrawing,
+		// The line being drawn, if any: { name, points } (how many).
+		getLine: () => drawing?.tool.mode === 'line' ? { name: drawing.tool.name, points: drawing.points.length } : null,
+		cardFor: id => cards.find( c => c.item.id === id )?.card ?? null,
 		handles,
 		toolbar,
 	};

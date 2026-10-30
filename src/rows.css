@@ -1,0 +1,181 @@
+/* Drawing a row (rows.js): a panel at the top of the map with the spacing, the line's points as
+   dots and what the row comes to beside the end of the line. The same dark see-through look as
+   the Show panel and the toolbar. */
+.row-panel {
+	position: fixed;
+	top: 12px;
+	left: 0;
+	z-index: 1002;
+	box-sizing: border-box;
+	width: min( 360px, calc( 100vw - 16px ) );
+	padding: 8px 12px 10px;
+	border-radius: 8px;
+	background: var( --panel );
+	box-shadow: 0 2px 8px rgba( 0, 0, 0, 0.35 );
+	font-size: 12px;
+}
+
+.row-panel header {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	margin-bottom: 6px;
+}
+
+.row-panel .title {
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var( --muted );
+}
+
+.row-panel .item {
+	overflow: hidden;
+	font-weight: 600;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.row-panel .field {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 5px;
+}
+
+.row-panel .label {
+	flex: none;
+	width: 52px;
+	color: var( --muted );
+}
+
+/* Two or three choices as one switch, like Before / After. */
+.row-panel .switch {
+	display: flex;
+	gap: 2px;
+	padding: 2px;
+	border-radius: 6px;
+	background: rgba( 0, 0, 0, 0.35 );
+}
+
+.row-panel .switch button {
+	padding: 4px 8px;
+	border-radius: 4px;
+	background: none;
+	color: var( --muted );
+	font-size: 12px;
+	white-space: nowrap;
+}
+
+.row-panel .switch button:hover {
+	color: var( --text );
+}
+
+.row-panel .switch button[aria-checked='true'] {
+	background: var( --accent );
+	color: #fff;
+	font-weight: 600;
+}
+
+.row-panel .amount {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	color: var( --muted );
+}
+
+.row-panel .amount input {
+	box-sizing: border-box;
+	width: 58px;
+	padding: 4px 6px;
+	border: 1px solid #44525e;
+	border-radius: 5px;
+	background: #0b1117;
+	color: var( --text );
+	font: inherit;
+	font-size: 13px;
+	font-variant-numeric: tabular-nums;
+}
+
+.row-panel .summary {
+	margin: 8px 0 0;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+.row-panel .summary.warning {
+	color: #f2c14e;
+}
+
+.row-panel .tip {
+	margin: 3px 0 0;
+	color: var( --muted );
+	line-height: 1.35;
+}
+
+.row-panel .buttons {
+	display: flex;
+	justify-content: flex-end;
+	gap: 6px;
+	margin-top: 8px;
+}
+
+.row-panel .buttons button {
+	padding: 6px 12px;
+	font-size: 12px;
+}
+
+.row-panel .buttons .done {
+	background: var( --accent );
+	font-weight: 600;
+}
+
+.row-panel .buttons button:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+
+/* The points clicked so far: dots on the map, under the panels like the handles. */
+.row-dots {
+	position: fixed;
+	inset: 0;
+	z-index: 5;
+	overflow: hidden;
+	pointer-events: none;
+}
+
+.row-dot {
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 10px;
+	height: 10px;
+	box-sizing: border-box;
+	border: 2.5px solid var( --accent );
+	border-radius: 50%;
+	background: #fff;
+	box-shadow: 0 1px 3px rgba( 0, 0, 0, 0.5 );
+}
+
+/* Beside the end of the line: how many, how long, how heavy (styled as .handle-label). */
+.handle-label.row-label {
+	position: fixed;
+	z-index: 6;
+	pointer-events: none;
+}
+
+/* On a phone, the library sheet steps aside while a row is drawn, and the status readout with
+   it, so the line has the map and the panel the top of it. */
+@media ( max-width: 700px ) {
+
+	.row-panel {
+		left: 8px !important;
+		top: 8px !important;
+	}
+
+	body.drawing-line #library,
+	body.drawing-line #status {
+		display: none;
+	}
+
+}

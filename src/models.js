@@ -82,6 +82,8 @@ export class ModelManager extends EventDispatcher {
 		const params = kind ? kindParams( kind, config.params ) : null;
 
 		let content;
+		// A row of library items has to have the item's model first.
+		if ( kind?.prepare ) await kind.prepare( params );
 		if ( kind ) content = kind.build( params );
 		else if ( config.procedural ) content = buildProcedural( config.procedural );
 		else content = ( await loader.loadAsync( url ?? new URL( config.url, document.baseURI ).href ) ).scene;
@@ -349,9 +351,13 @@ export class ModelManager extends EventDispatcher {
 
 		return this.entries.some( entry => {
 
-			if ( getKind( entry.kind )?.solid === false || entry.pivot.userData.hidden ) return false;
+			const kind = getKind( entry.kind );
+			if ( kind?.solid === false || entry.pivot.userData.hidden ) return false;
 			entry.pivot.updateWorldMatrix( true, false );
-			return entry.footprint.containsPoint( entry.pivot.worldToLocal( _local.copy( point ) ) );
+			entry.pivot.worldToLocal( _local.copy( point ) );
+			if ( ! entry.footprint.containsPoint( _local ) ) return false;
+			// A row's box is mostly the space between its copies.
+			return kind?.contains ? kind.contains( entry, _local ) : true;
 
 		} );
 
@@ -504,7 +510,10 @@ function dispose( object ) {
 
 	object.traverse( o => {
 
-		o.geometry?.dispose();
+		// A row draws its copies as instances (rows.js): their matrices go too, but the item's own
+		// geometry is shared by every row of it and stays.
+		if ( o.isInstancedMesh ) o.dispose();
+		if ( ! o.geometry?.userData.shared ) o.geometry?.dispose();
 		// Built-in pieces share materials between copies; those stay.
 		const materials = Array.isArray( o.material ) ? o.material : [ o.material ];
 		materials.forEach( m => m && ! m.userData.shared && m.dispose() );

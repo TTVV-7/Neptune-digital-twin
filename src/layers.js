@@ -1,6 +1,6 @@
 import './layers.css';
 import { CATEGORY_ORDER } from './library.js';
-import { listKinds } from './kinds.js';
+import { getKind, listKinds } from './kinds.js';
 import { isTyping } from './walk.js';
 import { toast } from './placement.js';
 
@@ -73,8 +73,12 @@ export function createLayers( { models, layout, library, flattening, isDriving, 
 	let listed = [];
 	let shown = '';
 
-	const categoryOf = entry => kindCategories.get( entry.kind ) ?? categories.get( entry.library ) ?? ( entry.library ? OTHER : YOUR_MODELS );
-	const layerOf = entry => entry.kind && ! kindCategories.has( entry.kind ) ? `kind:${ entry.kind }` : `category:${ categoryOf( entry ) }`;
+	// A row of library items (rows.js) goes with that item: a row of barriers under Barriers & fencing.
+	const itemOf = entry => getKind( entry.kind )?.item?.( entry.params ) ?? null;
+	const categoryOf = entry => kindCategories.get( entry.kind ) ?? categories.get( itemOf( entry ) ?? entry.library ) ?? ( entry.library ? OTHER : YOUR_MODELS );
+	const layerOf = entry => entry.kind && ! kindCategories.has( entry.kind ) && ! itemOf( entry ) ? `kind:${ entry.kind }` : `category:${ categoryOf( entry ) }`;
+	// What a layer's count adds up: a row counts its copies.
+	const countOf = entry => getKind( entry.kind )?.count?.( entry ) ?? 1;
 	const drawn = id => ! before && ! hiddenLayers.has( id );
 	models.concealed = entry => before || hiddenLayers.has( layerOf( entry ) );
 
@@ -216,14 +220,14 @@ export function createLayers( { models, layout, library, flattening, isDriving, 
 
 		const placed = models.entries.filter( entry => ! entry.placing );
 		const counts = new Map();
-		for ( const entry of placed ) counts.set( layerOf( entry ), ( counts.get( layerOf( entry ) ) ?? 0 ) + 1 );
+		for ( const entry of placed ) counts.set( layerOf( entry ), ( counts.get( layerOf( entry ) ) ?? 0 ) + countOf( entry ) );
 		const row = ( id, name, count = counts.get( id ) ?? 0 ) => ( { id, name, count, shown: ! hiddenLayers.has( id ) } );
 		const keep = r => r.count > 0 || ! r.shown;
 
 		// The Labels layer goes last.
 		const others = [ ...custom ].sort( ( [ a ], [ b ] ) => ( a === LABELS ) - ( b === LABELS ) );
 		const site = [
-			...listKinds().filter( kind => ! kindCategories.has( kind.name ) ).map( kind => row( `kind:${ kind.name }`, kind.layer ?? `${ kind.label }s` ) ),
+			...listKinds().filter( kind => ! kindCategories.has( kind.name ) && ! kind.item ).map( kind => row( `kind:${ kind.name }`, kind.layer ?? `${ kind.label }s` ) ),
 			...others.map( ( [ id, layer ] ) => row( id, layer.name, layer.count() ) ),
 		].filter( keep );
 
