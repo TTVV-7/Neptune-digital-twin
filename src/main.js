@@ -18,6 +18,7 @@ import { accountMapsKey, setUpCloud } from './cloud.js';
 import { getKind } from './kinds.js';
 import { setUpDriving } from './drive-prompt.js';
 import { createLegend } from './legend.js';
+import { createLayers } from './layers.js';
 import { setUpZoom } from './zoom.js';
 
 // Features that plug into the app (see `features` in start()); each is a function taking the context.
@@ -214,6 +215,7 @@ function start( apiKey, keySource ) {
 	const mapEdits = [ () => models.altersMap() ];
 	let sidebar = null;
 	let driving = null;
+	let layers = null;
 	libraryLoaded.then( async library => {
 
 		sidebar = createSidebar( {
@@ -232,14 +234,18 @@ function start( apiKey, keySource ) {
 		} );
 		showLibraryCredits( library );
 		driving = setUpDriving( { driver, models, library, camera, getSidebar: () => sidebar, getPlayer, onError: message => showBanner( message, 8000 ) } );
+		// The Show panel: layers, items hidden by hand and Before / After. Before the saved layout is
+		// restored, so what's hidden in it stays hidden as it loads.
+		layers = createLayers( { models, layout, library, flattening, isDriving: () => driver.active, legend } );
 
 		// Features plug in here. Each gets this context and sets itself up: kinds (kinds.js),
 		// sidebar tools (sidebar.addTool), saved state (layout.registerExtra), per-frame work
-		// (onUpdate) and its own DOM and CSS. They're set up before the saved layout is restored,
-		// so their kinds and extras are known by then.
+		// (onUpdate), rows in the Show panel and what Before takes away (layers.addLayer,
+		// layers.onBeforeAfter) and its own DOM and CSS. They're set up before the saved layout is
+		// restored, so their kinds and extras are known by then.
 		const features = {
 			scene, camera, renderer, canvas: renderer.domElement, tiles, ground, models, layout, sidebar, panel,
-			controls, driver, flattening, library, getGround, getPlayer, feetPosition,
+			controls, driver, flattening, layers, library, getGround, getPlayer, feetPosition,
 			isDriving: () => driver.active,
 			// Make an object walkable and drivable, and somewhere models snap to.
 			addGround: object => grounds.push( object ),
@@ -278,7 +284,7 @@ function start( apiKey, keySource ) {
 
 	} );
 
-	const legend = createLegend( { controls, driver, models, getSidebar: () => sidebar, getDriving: () => driving, toggleHelp } );
+	const legend = createLegend( { controls, driver, models, getSidebar: () => sidebar, getDriving: () => driving, getLayers: () => layers, toggleHelp } );
 	setUpZoom( { canvas: renderer.domElement, camera, controls, driver, getColliders: () => [ ...grounds, models.group ] } );
 
 	window.addEventListener( 'resize', () => {
@@ -313,7 +319,7 @@ function start( apiKey, keySource ) {
 			hudTimer = 0.25;
 			driving?.update();
 			legend.update();
-			updateStatus( camera, controls, tiles, driver, driving );
+			updateStatus( camera, controls, tiles, driver, driving, layers );
 			updateAttribution( tiles, models, mapEdits.some( edited => edited() ) );
 
 		}
@@ -327,11 +333,15 @@ function start( apiKey, keySource ) {
 
 		return sidebar;
 
+	}, get layers() {
+
+		return layers;
+
 	}, startDriving: async entry => driving ? driving.startDriving( entry ) : null, isDrivable: entry => !! driving?.isDrivable( entry ) };
 
 }
 
-function updateStatus( camera, controls, tiles, driver, driving ) {
+function updateStatus( camera, controls, tiles, driver, driving, layers ) {
 
 	const { lat, lon } = localToLatLon( camera.position );
 	const { east, north } = localToEnu( camera.position );
@@ -343,6 +353,7 @@ function updateStatus( camera, controls, tiles, driver, driving ) {
 		`heading ${ yawToHeading( controls.yaw ).toFixed( 0 ) }°`,
 	];
 	if ( driving ) lines.push( driving.describe() );
+	if ( layers?.before ) lines.push( 'BEFORE: the site as Google captured it (B for after)' );
 	if ( tiles && tiles.loadProgress < 1 ) lines.push( `loading tiles ${ Math.round( tiles.loadProgress * 100 ) }%` );
 
 	const status = $( 'status' );

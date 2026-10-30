@@ -145,6 +145,7 @@ html, body {
 /* Key and mouse chips in the help, the Controls panel, the drive prompt and the driving toast. */
 #help kbd,
 #legend kbd,
+#layers kbd,
 #drive-prompt kbd,
 .keys-toast kbd {
 	display: inline-block;

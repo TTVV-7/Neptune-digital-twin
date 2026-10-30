@@ -26,6 +26,8 @@ import { registerKind } from './kinds.js';
 //
 // Other modules press Google's mesh onto their own surfaces with setShape() (earthworks uses it
 // for pits), and originalHeight() reads the ground as Google made it, ignoring all of this.
+// setEnabled( false ) puts Google's mesh back as it was, for the Before view (layers.js), and
+// setEnabled( true ) flattens it all again.
 
 export const ZONE_ID = 'flatten-zone';
 // The volume drawn for an area with no height limit.
@@ -80,6 +82,7 @@ export function buildZone( width, length, height = 0 ) {
 
 registerKind( ZONE_ID, {
 	label: 'Flattened area',
+	layer: 'Flatten areas',
 	build: ( { width, length, height } ) => buildZone( width, length, height ),
 	normalize: p => ( { width: clampSize( p.width ), length: clampSize( p.length ), height: clampHeight( p.height ) } ),
 	// Down to the lowest ground around it as Google made it, so flattening doesn't drag it lower.
@@ -141,6 +144,9 @@ export function setUpFlattening( { tiles, models } ) {
 	// Where the tileset stood when the shapes were last made (see update()).
 	const frame = new Matrix4();
 	let timer = 0;
+	// Off: no shape is in the plugin, which then gives every tile its original vertices back.
+	// Shapes keep up with their areas meanwhile, and go back in when it's turned on.
+	let enabled = true;
 
 	const toTileset = () => {
 
@@ -178,14 +184,14 @@ export function setUpFlattening( { tiles, models } ) {
 
 		const shape = shapes.get( key );
 		if ( ! shape ) return;
-		plugin.deleteShape( shape );
+		if ( plugin.hasShape( shape ) ) plugin.deleteShape( shape );
 		shapes.delete( key );
 
 	};
 
 	const sync = key => {
 
-		if ( ! plugin ) return;
+		if ( ! plugin || ! enabled ) return;
 		const source = sources.get( key );
 		if ( source !== undefined ) {
 
@@ -289,10 +295,45 @@ export function setUpFlattening( { tiles, models } ) {
 			}
 
 			timer -= dt;
-			if ( timer > 0 || dirty.size === 0 ) return;
+			if ( ! enabled || timer > 0 || dirty.size === 0 ) return;
 			timer = UPDATE_INTERVAL;
 			for ( const key of dirty ) sync( key );
 			dirty.clear();
+
+		},
+
+		// Off puts Google's mesh back as it was everywhere; on flattens it again, at once. The plugin
+		// keeps each tile's original vertices, so neither way loses anything.
+		setEnabled( on ) {
+
+			if ( on === enabled ) return;
+			enabled = on;
+			if ( ! plugin ) return;
+			if ( on ) {
+
+				// Made again from the areas and other modules' meshes as they are now.
+				for ( const key of shapes.keys() ) dirty.add( key );
+				for ( const key of sources.keys() ) dirty.add( key );
+				for ( const key of dirty ) sync( key );
+				dirty.clear();
+				return;
+
+			}
+
+			for ( const shape of shapes.values() ) if ( plugin.hasShape( shape ) ) plugin.deleteShape( shape );
+
+		},
+
+		get enabled() {
+
+			return enabled;
+
+		},
+
+		// How many shapes press Google's mesh flat now (none while it's turned off).
+		get shapeCount() {
+
+			return plugin ? plugin.shapes.size : 0;
 
 		},
 
@@ -342,7 +383,7 @@ export function setUpFlattening( { tiles, models } ) {
 
 		get active() {
 
-			return shapes.size > 0;
+			return enabled && shapes.size > 0;
 
 		},
 

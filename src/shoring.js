@@ -626,13 +626,16 @@ function groundStrip( pairs, y ) {
 // excavation's own model (which only shows in build mode), and keeps it in step: rebuilt when the
 // pit's size or support changes, moved when the pit moves or its rim changes.
 // rimOf( entry ): the height of the pit's rim, from its design in the terrain.
-export function setUpShoring( { scene, models, terrain, kind, rimOf } ) {
+export function setUpShoring( { scene, models, terrain, layers, kind, rimOf } ) {
 
 	const root = new Group();
 	root.name = 'shoring';
 	scene.add( root );
 	const shown = new Map(); // entry -> { key, group, plan }
 	const ground = shoreTheGround( terrain );
+	// Switched off in the Show panel, or showing Before (with no pits): not drawn, and the pits'
+	// walls are drawn as dug rather than straight up behind it.
+	let drawn = true;
 
 	const update = entry => {
 
@@ -669,7 +672,7 @@ export function setUpShoring( { scene, models, terrain, kind, rimOf } ) {
 
 	// The ground's walls go straight up behind the shoring (shoring-ground.js): all four, or the
 	// two long ones as far as the boxes or rails reach.
-	const shapeGround = () => ground.set( [ ...shown ].map( ( [ entry, { group, plan } ] ) => {
+	const shapeGround = () => ground.set( ! drawn ? [] : [ ...shown ].map( ( [ entry, { group, plan } ] ) => {
 
 		const { width, length } = entry.params;
 		const { east, north, heading } = entry.state;
@@ -718,6 +721,17 @@ export function setUpShoring( { scene, models, terrain, kind, rimOf } ) {
 	} );
 	for ( const entry of models.entries ) update( entry );
 	shapeGround();
+	layers.addLayer( 'shoring', {
+		name: 'Shoring in pits',
+		count: () => shown.size,
+		setShown: on => {
+
+			drawn = on;
+			root.visible = on;
+			shapeGround();
+
+		},
+	} );
 
 	const api = { root, shown, planShoring, ground };
 	if ( window.twin ) window.twin.shoring = api;
