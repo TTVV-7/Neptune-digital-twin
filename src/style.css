@@ -266,8 +266,8 @@ html, body {
 
 .toast {
 	z-index: 1003;
-	bottom: 128px;
-	/* Left of the Controls and Show panels when they come down this far (legend.js). */
+	/* Left of the Controls and Show panels when they come down this far, or over them (legend.js). */
+	bottom: var( --toast-bottom, 128px );
 	right: var( --toast-right, 16px );
 }
 

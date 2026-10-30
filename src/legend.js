@@ -18,7 +18,8 @@ const MIN_HEIGHT = 140;
 const KEYS_TOAST_TIME = 4000;
 // Toasts (Undo, Before / After...) sit this high (px) off the bottom, in the middle (.toast in
 // style.css), and are about this tall. They move left of the panels where the panels come down
-// that far, if that leaves them at least TOAST_ROOM px.
+// that far, if that leaves them at least TOAST_ROOM px, or else up over them if the panels are
+// low down (their buttons, on a phone).
 const TOAST_BOTTOM = 128;
 const TOAST_HEIGHT = 64;
 const TOAST_ROOM = 320;
@@ -309,19 +310,23 @@ export function createLegend( { controls, driver, models, getSidebar, getDriving
 
 	// Beside the P panel the column stands in from the right, where a toast in the middle of the
 	// screen (the Undo after Hide or Delete) would cover it: toasts are then centred in the space
-	// to its left (--toast-right in style.css), where there's room for them.
+	// to its left (--toast-right in style.css), where there's room for them. On a phone, where
+	// there isn't, they go up over the panels' buttons (--toast-bottom) rather than on them.
 	function clearToasts( stacked ) {
 
 		const top = window.innerHeight - TOAST_BOTTOM - TOAST_HEIGHT;
 		const bottom = window.innerHeight - TOAST_BOTTOM;
-		const lefts = [ root, stacked?.root ]
+		const rects = [ root, stacked?.root ]
 			.map( visibleRect )
-			.filter( rect => rect && rect.top < bottom && rect.bottom > top )
-			.map( rect => rect.left );
-		const right = lefts.length > 0 ? window.innerWidth - Math.min( ...lefts ) + GAP : EDGE;
+			.filter( rect => rect && rect.top < bottom && rect.bottom > top );
 		const style = document.documentElement.style;
-		if ( right > EDGE && window.innerWidth - right - EDGE >= TOAST_ROOM ) style.setProperty( '--toast-right', `${ right }px` );
-		else style.removeProperty( '--toast-right' );
+		style.removeProperty( '--toast-right' );
+		style.removeProperty( '--toast-bottom' );
+		if ( rects.length === 0 ) return;
+		const right = window.innerWidth - Math.min( ...rects.map( rect => rect.left ) ) + GAP;
+		const above = Math.min( ...rects.map( rect => rect.top ) );
+		if ( window.innerWidth - right - EDGE >= TOAST_ROOM ) style.setProperty( '--toast-right', `${ right }px` );
+		else if ( above > window.innerHeight / 2 ) style.setProperty( '--toast-bottom', `${ window.innerHeight - above + GAP }px` );
 
 	}
 
