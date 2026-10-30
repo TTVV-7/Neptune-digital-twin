@@ -106,6 +106,8 @@ export function setUpFlattening( { tiles, models } ) {
 	const dirty = new Set();
 	const scale = new Matrix4();
 	const down = new Vector3();
+	// Where the tileset stood when the shapes were last made (see update()).
+	const frame = new Matrix4();
 	let timer = 0;
 
 	const toTileset = () => {
@@ -117,19 +119,15 @@ export function setUpFlattening( { tiles, models } ) {
 
 	const commit = ( key, shape ) => {
 
-		if ( plugin.hasShape( shape ) ) {
-
-			plugin.updateShape( shape );
-
-		} else {
-
-			// The plugin presses vertices along this direction onto the shape; pointing down, it
-			// flattens everything above the floor and leaves what's below (e.g. water under a deck).
-			down.set( 0, - 1, 0 ).transformDirection( tiles.group.matrixWorld.clone().invert() );
-			plugin.addShape( shape, down, { threshold: Infinity } );
-			shapes.set( key, shape );
-
-		}
+		// The plugin presses vertices along this direction onto the shape; pointing down, it
+		// flattens everything above the floor and leaves what's below (e.g. water under a deck).
+		// It's worked out afresh every time rather than kept, as updateShape() would: a saved
+		// layout's areas are made before Google's root tileset has loaded and been turned to the
+		// site, and "down" in the tileset's frame then points somewhere else entirely.
+		down.set( 0, - 1, 0 ).transformDirection( tiles.group.matrixWorld.clone().invert() );
+		if ( plugin.hasShape( shape ) ) plugin.deleteShape( shape );
+		plugin.addShape( shape, down, { threshold: Infinity } );
+		shapes.set( key, shape );
 
 	};
 
@@ -237,6 +235,15 @@ export function setUpFlattening( { tiles, models } ) {
 	return {
 
 		update( dt ) {
+
+			// Google's tileset is turned to the site when its root loads, which is usually after a
+			// saved layout's areas were made: make them all again in its new frame.
+			if ( plugin && ! frame.equals( tiles.group.matrixWorld ) ) {
+
+				frame.copy( tiles.group.matrixWorld );
+				for ( const key of shapes.keys() ) dirty.add( key );
+
+			}
 
 			timer -= dt;
 			if ( timer > 0 || dirty.size === 0 ) return;
