@@ -1,0 +1,36 @@
+/* Excavator readouts in the race-mode HUD (excavator.js), shown instead of the speedometer. */
+.excavator-hud {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	max-width: min( 420px, calc( 100vw - 32px ) );
+}
+
+.excavator-hud dl {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 2px 12px;
+	margin: 0;
+	padding: 8px 12px;
+	border-radius: 6px;
+	background: var( --panel );
+	font-size: 13px;
+	text-shadow: none;
+}
+
+.excavator-hud dt {
+	color: var( --muted );
+}
+
+.excavator-hud dd {
+	margin: 0;
+	font-variant-numeric: tabular-nums;
+}
+
+.excavator-hud .keys {
+	padding: 4px 10px;
+	border-radius: 6px;
+	background: var( --panel );
+	font-size: 12px;
+	text-shadow: none;
+}

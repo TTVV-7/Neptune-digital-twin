@@ -13,6 +13,7 @@ import {
 	SRGBColorSpace,
 	Vector2,
 } from 'three';
+import { buildExcavator, EXCAVATOR_20T, EXCAVATOR_MINI } from './excavator-model.js';
 
 // Common site pieces generated in code at real North American dimensions, in metres. Each builder
 // returns a Group standing on y = 0 with its front (door, open side or sloped end) facing -Z, so
@@ -33,6 +34,9 @@ export const PROCEDURAL_ITEMS = [
 	{ id: 'frontload-6yd', name: 'Front-load bin (6 yd)', category: 'Waste', build: frontLoadBin },
 	{ id: 'light-tower', name: 'Towable light tower', category: 'Site services', build: lightTower },
 	{ id: 'pallet', name: 'Wooden pallet (48 x 40 in)', category: 'Materials', build: pallet },
+	// Drivable: "drive" tunes race mode, and type 'excavator' gives them the digging controls (excavator.js).
+	{ id: 'excavator-20t', name: 'Excavator (20 t)', category: 'Heavy equipment', build: () => buildExcavator( EXCAVATOR_20T ), drive: { type: 'excavator', topSpeed: 5.5, accel: 1.2, brake: 3, reverse: 5.5 } },
+	{ id: 'excavator-mini', name: 'Mini excavator (3.5 t)', category: 'Heavy equipment', build: () => buildExcavator( EXCAVATOR_MINI ), drive: { type: 'excavator', topSpeed: 4.5, accel: 1.2, brake: 3, reverse: 4.5 } },
 	{ id: 'jump-ramp', name: 'Jump ramp (1.2 m)', category: 'Race', build: () => jumpRamp( 4, 7, 1.2 ) },
 	{ id: 'jump-ramp-big', name: 'Jump ramp (3 m)', category: 'Race', build: () => jumpRamp( 6, 16, 3 ) },
 ].map( item => ( { ...item, front: '-z', procedural: true } ) );
