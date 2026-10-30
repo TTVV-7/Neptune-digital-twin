@@ -12,9 +12,10 @@ import { setUpFlattening } from './flatten.js';
 import { createDriveHud, Driver, specFor } from './drive.js';
 import { isTyping, WalkController } from './walk.js';
 import { setUpLaydown } from './laydown.js';
+import { accountMapsKey, setUpCloud } from './cloud.js';
 
 // Features that plug into the app (see `features` in start()); each is a function taking the context.
-const FEATURES = [ setUpLaydown ];
+const FEATURES = [ setUpLaydown, setUpCloud ];
 
 const STORAGE_KEY = 'neptune-twin.google-api-key';
 const ENV_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
@@ -22,7 +23,7 @@ const $ = id => document.getElementById( id );
 
 boot();
 
-function boot() {
+async function boot() {
 
 	const url = new URL( window.location.href );
 	const urlKey = url.searchParams.get( 'key' );
@@ -40,7 +41,13 @@ function boot() {
 	// Use a key from the link for this visit even if the browser won't let us save it.
 	if ( urlKey ) saveKey( urlKey );
 
-	const key = askForKey ? null : urlKey ? { value: urlKey, source: 'the link' } : resolveKey();
+	// On the Cloudflare Worker (cloud.js), signed-in users get the key from their account, so it
+	// needn't be built into the site. Elsewhere this finds no Worker and quickly returns nothing.
+	const accountKey = askForKey || urlKey ? null : await accountMapsKey();
+	const key = askForKey ? null
+		: urlKey ? { value: urlKey, source: 'the link' }
+		: accountKey ? { value: accountKey, source: 'your account' }
+		: resolveKey();
 	if ( key ) start( key.value, key.source );
 	else showKeyPrompt();
 

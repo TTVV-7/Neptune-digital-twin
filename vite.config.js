@@ -17,7 +17,9 @@ export default defineConfig( ( { command, mode } ) => {
 
 	const env = loadEnv( mode, process.cwd(), '' );
 	const byName = new Map( Object.entries( env ).map( ( [ name, value ] ) => [ name.toLowerCase(), value ] ) );
-	const keyName = GOOGLE_KEY_NAMES.find( name => byName.get( name.toLowerCase() ) );
+	// `npm run deploy` builds with --mode cloudflare: there the Worker hands the key to signed-in
+	// users (src/cloud.js), so it's left out of the public site.
+	const keyName = mode === 'cloudflare' ? null : GOOGLE_KEY_NAMES.find( name => byName.get( name.toLowerCase() ) );
 	const googleKey = keyName ? byName.get( keyName.toLowerCase() ) : '';
 	if ( keyName && command === 'build' ) {
 
@@ -25,11 +27,17 @@ export default defineConfig( ( { command, mode } ) => {
 
 	}
 
+	// TWIN_API=http://localhost:8787 (npm run dev:api) sends the app's /api requests to the local
+	// Worker, for sign-in and cloud layouts. Without it the app runs on its own, as it always has.
+	const api = env.TWIN_API;
+	const server = api ? { proxy: { '/api': { target: api } }, watch: { ignored: [ '**/.wrangler/**' ] } } : {};
+
 	return {
 		// Relative base so the built site works from any sub-path (e.g. GitHub Pages).
 		base: './',
 		// three.js alone is ~600 kB, so the default 500 kB warning is just noise here.
 		build: { chunkSizeWarningLimit: 1500 },
+		server,
 		define: {
 			'import.meta.env.VITE_GOOGLE_MAPS_API_KEY': JSON.stringify( googleKey ),
 		},
