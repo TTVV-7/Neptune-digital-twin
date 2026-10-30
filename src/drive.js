@@ -101,11 +101,11 @@ export class Driver {
 
 		// Measure the vehicle in its own frame: it faces -Z there once turned by its front axis.
 		const { pivot, state } = entry;
-		const yaw = pivot.rotation.y;
+		const rotation = pivot.rotation.clone();
 		pivot.rotation.set( 0, 0, 0 );
 		pivot.updateMatrixWorld( true );
 		_box.setFromObject( pivot ).getSize( _size );
-		pivot.rotation.set( 0, yaw, 0 );
+		pivot.rotation.copy( rotation );
 		this.length = _size.z;
 		this.width = _size.x;
 		this.height = _size.y;
@@ -118,8 +118,9 @@ export class Driver {
 		this.speed = 0;
 		this.steer = 0;
 		this.vy = 0;
-		this.pitch = 0;
-		this.roll = 0;
+		// Tilted as it was parked (see models.park), so it doesn't jolt level first.
+		this.pitch = rotation.x;
+		this.roll = rotation.z;
 		this.grounded = true;
 		this.airTime = 0;
 		this.bestAir = 0;
@@ -147,12 +148,14 @@ export class Driver {
 		const { entry } = this;
 		entry.driving = false;
 
-		// Park it where it stopped, back on the ground, and save that.
+		// Park it where it stopped, as it stands: tilted on the ground under its wheels or tracks, up
+		// a pile or down in a hole. If it's in the air it drops back onto the ground instead. Save that.
 		entry.state.east = Math.round( this.east * 100 ) / 100;
 		entry.state.north = Math.round( this.north * 100 ) / 100;
 		entry.state.heading = Math.round( ( ( this.heading % 360 ) + 360 ) % 360 * 10 ) / 10;
 		entry.state.up = this.y;
-		this.models.apply( entry );
+		const { x: pitch, z: roll } = entry.pivot.rotation;
+		this.models.park( entry, this.grounded ? { pitch: pitch * MathUtils.RAD2DEG, roll: roll * MathUtils.RAD2DEG } : null );
 
 		// Step out on the driver's side, facing the way the vehicle points.
 		const rad = this.heading * Math.PI / 180;
