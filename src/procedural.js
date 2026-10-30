@@ -15,6 +15,7 @@ import {
 } from 'three';
 import { buildExcavator, EXCAVATOR_20T, EXCAVATOR_MINI } from './excavator-model.js';
 import { hPileBundle, hydraulicShoreItem, sheetPileBundle, trenchBoxItem, trenchPanelItem } from './shoring-models.js';
+import { KART_ITEM } from './kart.js';
 
 // Common site pieces generated in code at real North American dimensions, in metres. Each builder
 // returns a Group standing on y = 0 with its front (door, open side or sloped end) facing -Z, so
@@ -50,6 +51,8 @@ export const PROCEDURAL_ITEMS = [
 	{ id: 'hydraulic-shore', name: 'Hydraulic shore (8 ft rails, ~40 kg)', category: 'Shoring', build: hydraulicShoreItem },
 	{ id: 'jump-ramp', name: 'Jump ramp (1.2 m)', category: 'Race', build: () => jumpRamp( 4, 7, 1.2 ) },
 	{ id: 'jump-ramp-big', name: 'Jump ramp (3 m)', category: 'Race', build: () => jumpRamp( 6, 16, 3 ) },
+	// A go-kart with a driver (kart.js), drivable like the other vehicles.
+	KART_ITEM,
 ].map( item => ( { ...item, front: '-z', procedural: true } ) );
 
 export function buildProcedural( id ) {
