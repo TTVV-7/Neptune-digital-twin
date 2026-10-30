@@ -898,6 +898,27 @@ describe( 'World Drive leaderboard', () => {
 
 	} );
 
+	test( 'the owner\'s SQL in docs/world-drive.md renames, removes a cheat\'s scores and removes a player', async () => {
+
+		const mine = async who => ( await board( { period: 'all', id: who.id } ) ).json.me;
+		// An abusive name, renamed: the old one is free again, the new one taken.
+		server.d1( `UPDATE players SET name = 'Driver 4821', name_key = 'driver-4821' WHERE id = '${ ace.id }'` );
+		assert.equal( ( await mine( ace ) ).name, 'Driver 4821' );
+		assert.equal( ( await send( '/api/player', { name: 'driver_4821' } ) ).status, 409 );
+		assert.equal( ( await send( '/api/player', { name: 'Ace' } ) ).status, 201 );
+		// A cheat's scores, off every board.
+		assert.equal( ( await mine( cat ) ).score, 60000 );
+		server.d1( `DELETE FROM best_scores WHERE player_id = '${ cat.id }'; DELETE FROM scores WHERE player_id = '${ cat.id }'` );
+		assert.equal( await mine( cat ), null );
+		// A player and everything of theirs.
+		server.d1( `DELETE FROM players WHERE id = '${ ace.id }'` );
+		assert.deepEqual( server.d1( `SELECT ( SELECT COUNT(*) FROM best_scores WHERE player_id = '${ ace.id }' ) AS bests, ( SELECT COUNT(*) FROM scores WHERE player_id = '${ ace.id }' ) AS logged` ), [ { bests: 0, logged: 0 } ] );
+		const gone = await score( ace, { score: 1000 }, { after: 5 * HOUR } );
+		assert.equal( gone.status, 403 );
+		assert.equal( gone.json.reason, 'player' );
+
+	} );
+
 } );
 
 // --- the Worker called here ------------------------------------------------------------

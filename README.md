@@ -418,12 +418,15 @@ Maps session, so the built site holds no key: the Worker hands it out once per v
 Cloudflare Turnstile check, and only while the day's visits are under a cap for everyone (300) and
 for each visitor (8); over a cap the page says today's free drives are used up. Teleporting moves the
 loaded world rather than loading a new one, so it costs nothing extra. Place search goes through the
-Worker to OpenStreetMap's Nominatim, cached and at most once a second.
+Worker to OpenStreetMap's Nominatim, cached and at most once a second. A leaderboard keeps each
+player's best stunt run today, this week and all time (a nickname, no sign-up) in a D1 database,
+posted with the visit's signed token and checked against what the game can score.
 
-How to play, the settings and limits, deploying, and the owner's Google Cloud steps (a separate
-project and key, restricted to worlddrive.app and the Map Tiles API, a daily quota and budget alerts)
-are in [docs/world-drive.md](docs/world-drive.md). Tests: `npm run test:drive-worker` and
-`npm run test:drive-ui`.
+How to play, the leaderboard (how cheating is limited, and looking after it in the D1 console), the
+settings and limits, deploying (`npm run deploy:drive` applies the database's migrations first), and
+the owner's Google Cloud steps (a separate project and key, restricted to worlddrive.app and the Map
+Tiles API, a daily quota and budget alerts) are in [docs/world-drive.md](docs/world-drive.md).
+Tests: `npm run test:drive-worker` and `npm run test:drive-ui`.
 
 ## About the Sketchfab model
 
@@ -487,7 +490,7 @@ public/library/     downloaded models, library.json catalog, thumbs/ and CREDITS
 src/geo.js          lat/lon <-> local metres
 public/models/      put your .glb files here
 drive/index.html    World Drive's page; its code is src/drive-app/ (docs/world-drive.md)
-worker/drive/       World Drive's Worker: the Maps key per visit, caps, Turnstile, search
+worker/drive/       World Drive's Worker: the Maps key per visit, caps, Turnstile, search, the leaderboard
 vite.drive.config.js, wrangler.drive.jsonc   World Drive's build and Worker settings
 ```
 
