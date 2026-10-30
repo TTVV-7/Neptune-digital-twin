@@ -303,7 +303,12 @@ async function start( { key, left = null } ) {
 		}
 
 		if ( gone() ) return models.remove( entry );
-		Object.assign( entry.state, { east: 0, north: 0, heading } );
+		// Something right in front (a car parked in Google's photo, a bollard): start across the
+		// road from it, where there's a clear lane.
+		const size = entry.footprint.getSize( _p );
+		const halfWidth = Math.max( 0.6, Math.min( size.x, size.z ) * entry.state.scale / 2 );
+		const step = ground.sideStep( heading, ground.heightAt( 0, 0, 30, 60 ) ?? 0, halfWidth );
+		Object.assign( entry.state, { east: step?.east ?? 0, north: step?.north ?? 0, heading } );
 		models.apply( entry );
 		entry.pivot.visible = true;
 		state.drop = null;

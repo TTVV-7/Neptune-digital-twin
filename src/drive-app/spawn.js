@@ -3,9 +3,9 @@ import { enuToLocal } from '../geo.js';
 import { blocks } from '../walk.js';
 
 // Where a vehicle drops in: the ground under the pin, and which way the street runs there, so you
-// start off along it rather than facing a wall; the deck of a bridge beside the pin; and the
-// street below a pin that's on a roof. The scene is centred on the pin (main.js), so the pin is at
-// local x = z = 0.
+// start off along it rather than facing a wall; the deck of a bridge beside the pin; the street
+// below a pin that's on a roof; and a step across the road from anything right in front. The
+// scene is centred on the pin (main.js), so the pin is at local x = z = 0.
 
 const DOWN = new Vector3( 0, - 1, 0 );
 // The ways looked along, how far (m), and in steps of how much.
@@ -42,6 +42,12 @@ const DROP = 2.5;
 // The height (m, in the scene) a vehicle is put on the ground from, as models.js does: the street
 // must be what's highest there, open to the sky, or the vehicle lands on whatever is over it.
 const SKY = 2000;
+// A start must be clear CLEAR metres ahead across the vehicle's width at the bumper heights
+// drive.js looks for walls at (m). If it isn't (a car parked in Google's photo, a bollard, a
+// barrier), the start moves across the road by these steps (m, + to the right) to where it is.
+const CLEAR = 10;
+const BUMPERS = [ 0.5, 1 ];
+const ACROSS = [ 1.5, - 1.5, 3, - 3, 4.5, - 4.5 ];
 
 const _origin = new Vector3();
 const _dir = new Vector3();
@@ -191,6 +197,56 @@ export class Ground {
 
 	}
 
+	// Where to start instead of the pin, facing `heading` at height y, when something stands right
+	// in front of a vehicle `halfWidth` metres either side of its middle: beside it, across the
+	// road, as { east, north, y }; or null where the way ahead is clear (or isn't anywhere near).
+	sideStep( heading, y, halfWidth ) {
+
+		if ( this.clearAhead( heading, y, halfWidth ) >= CLEAR ) return null;
+		const rad = heading * MathUtils.DEG2RAD;
+		for ( const offset of ACROSS ) {
+
+			const east = Math.cos( rad ) * offset;
+			const north = - Math.sin( rad ) * offset;
+			// Level ground there (not on the parked car), with no wall between it and the pin.
+			const h = this.heightBelow( east, north, y + RISE, 2 * RISE );
+			if ( h === null || Math.abs( h - y ) > LEVEL ) continue;
+			enuToLocal( east / Math.abs( offset ), north / Math.abs( offset ), 0, _dir );
+			if ( BUMPERS.some( up => this.isWall( this.cast( enuToLocal( 0, 0, y + up, _origin ), _dir, Math.abs( offset ) + halfWidth ) ) ) ) continue;
+			if ( this.clearAhead( heading, h, halfWidth, { east, north } ) >= CLEAR ) return { east, north, y: h };
+
+		}
+
+		return null;
+
+	}
+
+	// How far (m), up to CLEAR, a vehicle `halfWidth` metres either side of its middle could go from
+	// `from` (metres east and north of the pin) toward `heading`, standing at height y, before a
+	// wall anywhere across its width.
+	clearAhead( heading, y, halfWidth, from = { east: 0, north: 0 } ) {
+
+		const rad = heading * MathUtils.DEG2RAD;
+		const east = Math.sin( rad );
+		const north = Math.cos( rad );
+		enuToLocal( east, north, 0, _dir );
+		let clear = CLEAR;
+		for ( const up of BUMPERS ) {
+
+			for ( const side of [ - halfWidth, 0, halfWidth ] ) {
+
+				enuToLocal( from.east + north * side, from.north - east * side, y + up, _origin );
+				const hit = this.cast( _origin, _dir, CLEAR );
+				if ( this.isWall( hit ) ) clear = Math.min( clear, hit.distance );
+
+			}
+
+		}
+
+		return clear;
+
+	}
+
 	// The longest straight line (m) a vehicle could drive through a point (the pin, or `from`),
 	// standing at height y there, looking 8 ways.
 	longestLine( y, from ) {
@@ -220,6 +276,14 @@ export class Ground {
 
 		enuToLocal( east, north, 0, _origin );
 		return this.heightAt( _origin.x, _origin.z, y + DECK_RISE[ 1 ] + 20, DECK_RISE[ 1 ] + 40 );
+
+	}
+
+	// A hit on something standing up (a wall, a car's side), as drive.js sees walls; not the ground
+	// or a ramp.
+	isWall( hit ) {
+
+		return !! hit?.face && Math.abs( _normal.copy( hit.face.normal ).transformDirection( hit.object.matrixWorld ).y ) < 0.5;
 
 	}
 

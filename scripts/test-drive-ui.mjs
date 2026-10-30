@@ -286,6 +286,38 @@ describe( 'World Drive, desktop', () => {
 
 	} );
 
+	test( 'something right in front of the start: it steps across the road', async () => {
+
+		// A block 2.3 m wide and 2 m tall, 5 m north of the pin, from 0.3 m left of the middle to
+		// 2 m right: a car parked in Google's photo, in front of a kart heading north.
+		const found = await page.evaluate( () => {
+
+			const { ground } = window.drive;
+			const pad = ground.getColliders()[ 0 ];
+			const land = pad.children.find( child => child.isMesh );
+			const block = land.clone();
+			block.material = land.material.clone();
+			block.material.side = 2;
+			block.rotation.set( 0, 0, 0 );
+			block.scale.set( 2.3 / 4000, 2 / 2000, 1 );
+			block.position.set( - 0.85, 1, 5 );
+			pad.add( block );
+			block.updateMatrixWorld();
+			const result = { ahead: ground.clearAhead( 0, 0, 0.6 ), on: ground.sideStep( 0, 0, 0.6 ), east: ground.sideStep( 90, 0, 0.6 ) };
+			pad.remove( block );
+			result.off = ground.sideStep( 0, 0, 0.6 );
+			return result;
+
+		} );
+		assert.ok( Math.abs( found.ahead - 5 ) < 0.01, `clear ${ found.ahead } m ahead` );
+		// 1.5 m to the right still meets the block; 1.5 m to the left is clear.
+		assert.deepEqual( found.on && { east: found.on.east, north: Math.round( found.on.north * 100 ) / 100, y: Math.round( found.on.y * 100 ) / 100 }, { east: - 1.5, north: 0, y: 0 } );
+		// Heading east, or with nothing there, it stays at the pin.
+		assert.equal( found.east, null );
+		assert.equal( found.off, null );
+
+	} );
+
 	test( 'Esc pauses; the pause menu changes ride and drives on', async () => {
 
 		await page.keyboard.press( 'Escape' );

@@ -32,8 +32,10 @@ address, and the construction app is unchanged by it.
    ground..."), so the vehicle never drops through tiles that aren't there yet. It starts on the ground
    at the pin, facing along the street if there is one (a spot's road, or the longest clear line
    through the pin), else north. A spot on a bridge, or a search result that is a bridge, starts on the
-   deck rather than on the water underneath. Where there's nothing at all to drive on, it says so and
-   goes back to the globe.
+   deck rather than on the water underneath. A pin on a roof (a search result that's a building's
+   middle, or a tap on one) starts on the street beside it, and a start with something right in front
+   of it (a car parked in Google's photo, a bollard) moves across the road to a clear lane. Where
+   there's nothing at all to drive on, it says so and goes back to the globe.
 5. **M** (or the **Globe** button) goes back to the globe, from driving or from a drop-in on its way
    down. Pick somewhere else and drop in again: as often as you like, without reloading.
 
@@ -230,8 +232,12 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
 - From far away only Google's coarsest tiles have loaded; heights read off them are ignored, and the
   pin and the flight down settle onto the ground as sharper tiles arrive.
 - The search is only as good as OpenStreetMap's: a result is a point, which may be a building's middle
-  rather than its street. Dropping in faces along whatever street is there.
-- Collisions with Google's mesh are as good as the mesh: thin railings may not stop you.
+  rather than its street. Dropping in starts on the street beside it (within about 50 m) and faces
+  along it; a big flat roof (a line 30 m long across it) counts as somewhere to drive.
+- Collisions with Google's mesh are as good as the mesh: thin railings may not stop you (the kart can
+  drift through the Lions Gate's railing and drop off the deck), and parked cars and trees in the
+  photo are solid lumps.
+- Flying over a valley, the glide down (3 m/s) can take a while: R puts you back on the road.
 
 ## Credits
 
