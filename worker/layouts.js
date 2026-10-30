@@ -79,8 +79,11 @@ export async function updateLayout( { request, env, user, params } ) {
 	}
 
 	// Always later than before, even for two saves in the same millisecond, so it works as a version.
-	sets.push( 'updated_at = MAX( ?, updated_at + 1 )' );
-	values.push( Date.now(), params.id, user.id );
+	// (The larger of now and updated_at + 1, written with CASE because SQLite's MAX( a, b ) is
+	// GREATEST in Postgres.)
+	const now = Date.now();
+	sets.push( 'updated_at = CASE WHEN updated_at < ? THEN ? ELSE updated_at + 1 END' );
+	values.push( now, now, params.id, user.id );
 	let where = 'id = ? AND user_id = ?';
 	if ( expected !== null ) {
 

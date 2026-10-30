@@ -1,5 +1,6 @@
 // The app on Cloudflare Workers, with sign-in and layouts saved to your account
-// (docs/drafts/accounts.md). `npm run deploy` builds the site and deploys it with this.
+// (docs/accounts.md). `npm run deploy` builds the site and deploys it with this. The same API
+// also runs on Vercel (vercel.json, docs/deploy-vercel.md).
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "neptune-twin-app",
@@ -17,9 +18,17 @@
 		"GOOGLE_CLIENT_ID": "",
 		// Optional, comma-separated. Leave both empty to let any Google account sign in.
 		"ALLOWED_EMAILS": "",
-		"ALLOWED_DOMAINS": ""
+		"ALLOWED_DOMAINS": "",
+		// Premium equipment (docs/premium.md), off until the Payment Link's address and id are here
+		// and STRIPE_WEBHOOK_SECRET is set (a secret, below). Both are public.
+		"STRIPE_PAYMENT_LINK": "",
+		"STRIPE_PAYMENT_LINK_ID": "",
+		// Optional: the price as the app shows it, e.g. "CA$19, one time", and comma-separated
+		// emails that get premium without paying.
+		"PREMIUM_PRICE": "",
+		"PREMIUM_EMAILS": ""
 	},
-	// GOOGLE_MAPS_API_KEY is a secret: npx wrangler secret put GOOGLE_MAPS_API_KEY
+	// Secrets: npx wrangler secret put GOOGLE_MAPS_API_KEY (and STRIPE_WEBHOOK_SECRET for premium)
 	"d1_databases": [
 		{
 			"binding": "DB",

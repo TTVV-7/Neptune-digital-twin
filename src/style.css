@@ -302,6 +302,27 @@ kbd {
 	color: var( --muted );
 }
 
+/* A premium item while it's locked (premium.js): picking it explains how to unlock it. */
+#library .card.locked {
+	position: relative;
+	cursor: pointer;
+}
+
+#library .card .pro {
+	position: absolute;
+	top: 10px;
+	right: 10px;
+	display: flex;
+	align-items: center;
+	gap: 3px;
+	padding: 1px 6px;
+	border-radius: 10px;
+	background: rgba( 16, 22, 28, 0.85 );
+	color: #f2c14e;
+	font-size: 11px;
+	font-weight: 600;
+}
+
 #library footer {
 	display: flex;
 	flex-direction: column;

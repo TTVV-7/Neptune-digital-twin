@@ -9,20 +9,24 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:server": "vite build --mode server",
     "preview": "vite preview",
     "add-asset": "node scripts/add-asset.mjs",
     "dev:api": "node scripts/dev-api.mjs",
     "test:worker": "node --test scripts/test-worker.mjs",
     "test:accounts-ui": "node --test scripts/test-accounts-ui.mjs",
+    "test:premium-ui": "node --test scripts/test-premium-ui.mjs",
     "deploy": "vite build --mode cloudflare && wrangler deploy"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.2.0",
     "3d-tiles-renderer": "^0.5.3",
     "lil-gui": "^0.21.0",
     "three": "^0.186.1",
     "three-mesh-bvh": "0.9.16"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.10",
     "@gltf-transform/core": "^4.5.1",
     "@gltf-transform/extensions": "^4.5.1",
     "@gltf-transform/functions": "^4.5.1",
