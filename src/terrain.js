@@ -476,9 +476,11 @@ export class Terrain extends EventDispatcher {
 	// and `length` along `heading` (compass degrees). The bucket skims everything above one level,
 	// no deeper than `maxDepth` below the original ground; walls steeper than about 65° then slump
 	// into the hole. Loose material and stockpiles are taken first where they lie on top.
-	// Returns the bank m³ actually removed.
+	// Returns the m³ actually removed; lastDig then says how much of it was ground as it lay
+	// (bank, which swells when dumped) and how much was already loose (spoil, stockpiles).
 	dig( { x, z, heading = 0, width = 1, length = 1, volume, maxDepth = 6 } ) {
 
+		this.lastDig = { bank: 0, loose: 0 };
 		if ( ! ( volume > 0 ) ) return 0;
 		const frame = rectFrame( - x, z, heading, width / 2, length / 2 );
 		const reach = Math.hypot( width, length ) / 2 + SLUMP_REACH;
@@ -505,17 +507,22 @@ export class Terrain extends EventDispatcher {
 
 		const level = hi;
 		let removed = 0;
+		let bank = 0;
 		bite.forEach( ( n, i ) => {
 
 			const amount = w.surface[ n ] - Math.min( w.surface[ n ], Math.max( level, floors[ i ] ) );
 			if ( amount > 0 ) {
 
-				w.take( n, amount );
+				bank += w.take( n, amount ) * CELL_AREA;
 				removed += amount * CELL_AREA;
 
 			}
 
 		} );
+
+		// How much of it was ground as it lay (bank) rather than material already dug or piled
+		// (loose): only the bank part swells when it is dumped again.
+		this.lastDig = { bank, loose: removed - bank };
 
 		// Only ground that has been dug or dumped on slumps, not steep things in Google's mesh
 		// (a container, a wall) or the shored sides of a designed pit.
@@ -1657,10 +1664,13 @@ class Window {
 
 	// Take `amount` off the top: loose material first, then a stockpile under it (the bite is
 	// kept as negative loose material on top of the pile), then the ground (digging, kept as a
-	// depth below the ground or pit it was dug out of).
+	// depth below the ground or pit it was dug out of). Returns how much of it counts as bank:
+	// the ground, and loose material below the original ground, which is walls that slumped
+	// into a hole rather than spoil already dug and swollen (that lies on top, in piles).
 	take( n, amount ) {
 
 		const loose = Math.min( Math.max( this.loose[ n ], 0 ), amount );
+		const slumped = Math.max( 0, Math.min( this.surface[ n ], this.base[ n ] ) - ( this.surface[ n ] - loose ) );
 		// Without its loose layer the surface is the pile, if there is one, or else the dug ground.
 		const above = this.surface[ n ] - loose - this.exc[ n ];
 		const pile = above > 1e-4 ? Math.min( amount - loose, above ) : 0;
@@ -1669,6 +1679,7 @@ class Window {
 		this.exc[ n ] -= ground;
 		this.dug[ n ] -= ground;
 		this.surface[ n ] -= amount;
+		return ground + slumped;
 
 	}
 

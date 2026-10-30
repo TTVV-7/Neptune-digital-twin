@@ -122,7 +122,9 @@ north: use `enuToLocal()` in `src/geo.js`), headings are compass degrees, volume
 - `terrain.dig( { x, z, heading, width, length, volume, maxDepth } )` takes up to `volume` m³ (bank)
   from under a bucket `width` across and `length` along `heading`, no deeper than `maxDepth` (default
   6 m) below the original ground, and returns what it took. The bucket skims what's highest first;
-  walls steeper than about 65° slump into the hole. It bites into stockpiles and dumped material too.
+  walls steeper than about 65° slump into the hole. It bites into stockpiles and dumped material too;
+  `terrain.lastDig` then gives `{ bank, loose }`: how much was ground as it lay (it swells by `SWELL`
+  when dumped) and how much was already loose (it doesn't swell again).
 - `terrain.deposit( { x, z, volume, material, radius } )` dumps `volume` m³ (loose) of a material
   (`'soil'`, `'gravel'`... or its name) spread over `radius` metres; it settles at the material's
   angle of repose on whatever is there. Multiply bank volumes by `SWELL` (1.25) for loose.

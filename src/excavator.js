@@ -263,7 +263,7 @@ class Excavator {
 		if ( cycle?.load > 0 ) {
 
 			const over = cycle.truck && this.trucks.isBelow( cycle.truck, this.rig.mouth.getWorldPosition( _p ) );
-			this.release( cycle.load * SWELL, over ? cycle.truck : null );
+			this.release( cycle.spill, over ? cycle.truck : null );
 
 		}
 
@@ -539,7 +539,9 @@ class Excavator {
 			[ 'return', at( Math.max( reach[ 0 ], this.reach * 0.7 ), carry, DRAG ) ],
 		].map( ( [ name, to ] ) => ( { name, to, time: PHASES[ name ] * this.tuning.time } ) );
 
-		this.cycle = { phases, index: 0, t: 0, from: { ...this.arm }, volume, load: 0, bites: 0, dumped: false, truck: dump.truck, start: new Vector3() };
+		// load: m³ in the bucket as dug; spill: what it takes up once out (dug ground swells,
+		// spoil or stockpile picked up again doesn't).
+		this.cycle = { phases, index: 0, t: 0, from: { ...this.arm }, volume, load: 0, spill: 0, bites: 0, dumped: false, truck: dump.truck, start: new Vector3() };
 		if ( volume <= 0 ) this.flash( 'Too deep to reach: move closer or dig further out' );
 
 	}
@@ -601,8 +603,10 @@ class Excavator {
 			volume: cycle.volume / BITES,
 			maxDepth: this.tuning.maxDepth,
 		} );
+		const { bank } = terrain.lastDig ?? { bank: removed };
 		cycle.load += removed;
-		this.stats.dug += removed;
+		cycle.spill += bank * SWELL + ( removed - bank );
+		this.stats.dug += bank;
 		if ( removed > 0 ) this.rig.setLoad( true );
 		if ( cycle.bites === BITES && cycle.load <= 0 && cycle.volume > 0 ) this.flash( 'Nothing to dig here' );
 
@@ -613,8 +617,9 @@ class Excavator {
 		const cycle = this.cycle;
 		cycle.dumped = true;
 		this.rig.setLoad( false );
-		this.release( cycle.load * SWELL, cycle.truck );
+		this.release( cycle.spill, cycle.truck );
 		cycle.load = 0;
+		cycle.spill = 0;
 
 	}
 
