@@ -208,19 +208,22 @@ const CSS = `
 	}
 }
 
+/* Bottom left, out of the way of the vehicle in the middle of the view. */
 .dhud .dhud-keys {
 	position: absolute;
-	left: 50%;
+	left: var( --drive-hud-side, 16px );
 	bottom: var( --drive-hud-bottom, 40px );
-	transform: translateX( -50% );
-	max-width: calc( 100% - 460px );
+	max-width: min( 400px, calc( 100% - 280px ) );
 	padding: 6px 12px;
 	border-radius: 10px;
 	background: rgba( 12, 16, 24, 0.55 );
 	font-size: 12px;
 	line-height: 1.7;
-	text-align: center;
 	opacity: 0.9;
+}
+
+.dhud .dhud-keys span {
+	white-space: nowrap;
 }
 
 .dhud kbd {
@@ -365,6 +368,7 @@ const CSS = `
 
 .dhud .dhud-touch .reset {
 	top: var( --drive-hud-top, 12px );
+	font-size: 22px;
 }
 
 .dhud .dhud-touch .camera {
@@ -375,6 +379,34 @@ const CSS = `
 
 	.dhud .dhud-keys {
 		display: none;
+	}
+
+}
+
+/* A phone on its side: shorter buttons, so DRIFT stays clear of CAM at the top right. */
+@media ( max-height: 420px ) {
+
+	.dhud .dhud-touch .gas {
+		height: 96px;
+	}
+
+	.dhud .dhud-touch .drift {
+		bottom: calc( var( --drive-hud-bottom, 28px ) + 108px );
+		height: 60px;
+	}
+
+	.dhud .dhud-touch .brake {
+		height: 60px;
+	}
+
+	.dhud .dhud-touch .booster {
+		bottom: calc( var( --drive-hud-bottom, 28px ) + 72px );
+		height: 48px;
+	}
+
+	.dhud .dhud-touch .fly {
+		bottom: calc( var( --drive-hud-bottom, 28px ) + 132px );
+		height: 48px;
 	}
 
 }
@@ -482,7 +514,8 @@ export function createDriveHud( parent = document.body ) {
 
 	function describeKeys() {
 
-		const row = ( chips, text ) => `${ chips.map( chip => `<kbd>${ chip }</kbd>` ).join( ' ' ) } ${ text }`;
+		// Each key stays on a line with what it does.
+		const row = ( chips, text ) => `<span>${ chips.map( chip => `<kbd>${ chip }</kbd>` ).join( ' ' ) } ${ text }</span>`;
 		keys.innerHTML = [
 			row( [ 'W', 'S' ], 'gas, brake' ),
 			row( [ 'A', 'D' ], 'steer' ),
@@ -535,6 +568,9 @@ export function createDriveHud( parent = document.body ) {
 		hide() {
 
 			root.hidden = true;
+			// A message from this drive shouldn't greet the next one.
+			clearTimeout( flashTimer );
+			flash.hidden = true;
 			panel?.remove();
 			panel = null;
 			for ( const button of root.querySelectorAll( '.dhud-touch .down' ) ) button.classList.remove( 'down' );
