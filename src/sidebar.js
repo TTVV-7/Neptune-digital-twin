@@ -30,6 +30,8 @@ const DRAG_TYPE = 'application/x-library-item';
 // A press that moves less than this many pixels (a finger: TOUCH_SLOP) is a click, not a drag.
 const CLICK_SLOP = 5;
 const TOUCH_SLOP = 12;
+// A phone: the library is a sheet over the bottom of the screen there (style.css).
+const PHONE = window.matchMedia( '( max-width: 700px )' );
 // The padlock on a locked premium item's Pro badge.
 const LOCK_ICON = '<svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M3.5 5.5V3.5a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="2" y="5.5" width="8" height="6" rx="1" fill="currentColor"/></svg>';
 
@@ -469,7 +471,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	// Also opens the P panel at this entry. touch: picked with a finger, whose tap's click arrives
 	// after the press and would land on whatever control had opened under it by then, so the panel
-	// opens once that click has gone by.
+	// opens once that click has gone by (and on a phone not at all).
 	function select( entry, touch = false ) {
 
 		selected = entry;
@@ -477,7 +479,9 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		if ( ! entry ) return;
 		highlight.setFromObject( entry.pivot );
 		panel.focus( entry, ! touch );
-		if ( touch ) showPanelAfterTap( entry );
+		// Not on a phone, where the panel would cover the toolbar and most of the map left above the
+		// library: the toolbar's Edit opens it there.
+		if ( touch && ! PHONE.matches ) showPanelAfterTap( entry );
 
 	}
 
