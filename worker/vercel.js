@@ -68,7 +68,14 @@ export function publicUrl( request ) {
 	const url = new URL( request.url );
 	const host = request.headers.get( 'X-Forwarded-Host' )?.split( ',' )[ 0 ].trim();
 	const proto = request.headers.get( 'X-Forwarded-Proto' )?.split( ',' )[ 0 ].trim();
-	if ( host ) url.host = host;
+	if ( host ) {
+
+		// Setting host without a port keeps the old one, which belongs to the function's own address.
+		url.port = '';
+		url.host = host;
+
+	}
+
 	if ( proto === 'http' || proto === 'https' ) url.protocol = proto;
 	const path = url.searchParams.get( PATH_PARAM );
 	if ( path !== null ) {

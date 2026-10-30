@@ -715,6 +715,9 @@ function vercelTests() {
 			[ 'https://twin.example.app/api', null, null, 'https://twin.example.app/api/' ],
 			[ 'http://localhost:3000/api?__path=', 'localhost:3000', 'http', 'http://localhost:3000/api/' ],
 			[ 'http://function.internal/api?__path=/me', 'a.example, b.example', 'https,http', 'https://a.example/api/me' ],
+			// The function's own address has a port: the public host doesn't keep it.
+			[ 'http://127.0.0.1:3000/api?__path=me', 'twin.example.app', 'https', 'https://twin.example.app/api/me' ],
+			[ 'http://127.0.0.1:3000/api?__path=me', 'twin.example.app:8443', 'https', 'https://twin.example.app:8443/api/me' ],
 			// Only http and https.
 			[ 'https://twin.example.app/api/me', null, 'ftp', 'https://twin.example.app/api/me' ],
 		];
