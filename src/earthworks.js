@@ -32,8 +32,8 @@ const DIG_TIME = 3.5;
 const POUR_TIME = 5;
 // A tandem dump truck carries about this much loose material.
 const TRUCK_LOAD = 10;
-// Side slopes, horizontal : vertical.
-const SLOPES = { 'vertical (shored)': 0, '0.5 : 1': 0.5, '1 : 1': 1, '1.5 : 1': 1.5, '2 : 1': 2 };
+// Side slopes, horizontal : vertical. Shoring (the support field, shoring.js) cuts any pit vertical.
+const SLOPES = { vertical: 0, '0.5 : 1': 0.5, '1 : 1': 1, '1.5 : 1': 1.5, '2 : 1': 2 };
 // Side slopes keep climbing past the outline this far where the ground there is higher.
 const SLOPE_REACH = 3;
 // The rim is the lowest ground this far round the outline (models.js snaps to it), or the floor of
