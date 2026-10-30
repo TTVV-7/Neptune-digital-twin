@@ -19,6 +19,8 @@ import { registerKind } from './kinds.js';
 
 // Flatten areas: rectangles drawn in the library sidebar that press everything in Google's mesh
 // inside them (rail cars, trucks, sheds) down flat onto the ground, to clear space for a layout.
+// An area can stop at a height ("flatten up to"), so what passes overhead (a conveyor, a gantry,
+// a bridge deck) is left standing while what's under it is cleared.
 // It only changes what's drawn here; Google's data isn't touched. An area is a placed kind (see
 // kinds.js), so it is saved, moved, turned and deleted like the rest.
 //
@@ -26,25 +28,31 @@ import { registerKind } from './kinds.js';
 // for pits), and originalHeight() reads the ground as Google made it, ignoring all of this.
 
 export const ZONE_ID = 'flatten-zone';
+// The volume drawn for an area with no height limit.
 const VOLUME_HEIGHT = 8;
+const MAX_HEIGHT = 200;
 // Re-flattening re-processes every tile under a zone, so moves are applied a few times a second.
 const UPDATE_INTERVAL = 0.2;
 
 const fillMaterial = new MeshBasicMaterial( { color: 0xff5544, transparent: true, opacity: 0.18, side: DoubleSide, depthWrite: false } );
 const floorMaterial = new MeshBasicMaterial( { color: 0xff5544, transparent: true, opacity: 0.3, depthWrite: false } );
 const edgeMaterial = new LineBasicMaterial( { color: 0xff3322 } );
-for ( const material of [ fillMaterial, floorMaterial, edgeMaterial ] ) material.userData.shared = true;
+// The top of an area with a height limit: nothing above it is touched.
+const ceilingMaterial = new MeshBasicMaterial( { color: 0x7fd4ff, transparent: true, opacity: 0.22, side: DoubleSide, depthWrite: false } );
+for ( const material of [ fillMaterial, floorMaterial, edgeMaterial, ceilingMaterial ] ) material.userData.shared = true;
 
 // The zone as drawn in build mode: a see-through volume over the area, with a floor you can
-// click to select it. None of it blocks walking or driving.
-export function buildZone( width, length ) {
+// click to select it, up to its height limit if it has one (with a blue ceiling: what's above is
+// left alone). None of it blocks walking or driving.
+export function buildZone( width, length, height = 0 ) {
 
 	const group = new Group();
 	group.name = 'Flattened area';
 	group.userData.zone = true;
 
-	const volume = new Mesh( new BoxGeometry( width, VOLUME_HEIGHT, length ), fillMaterial );
-	volume.position.y = VOLUME_HEIGHT / 2;
+	const top = height > 0 ? height : VOLUME_HEIGHT;
+	const volume = new Mesh( new BoxGeometry( width, top, length ), fillMaterial );
+	volume.position.y = top / 2;
 	volume.raycast = () => {};
 	const edges = new LineSegments( new EdgesGeometry( volume.geometry ), edgeMaterial );
 	edges.position.copy( volume.position );
@@ -56,14 +64,24 @@ export function buildZone( width, length ) {
 
 	for ( const mesh of [ volume, edges, floor ] ) mesh.userData.noCollide = true;
 	group.add( volume, edges, floor );
+	if ( height > 0 ) {
+
+		const ceiling = new Mesh( new PlaneGeometry( width, length ).rotateX( - Math.PI / 2 ), ceilingMaterial );
+		ceiling.position.y = height;
+		ceiling.raycast = () => {};
+		ceiling.userData.noCollide = true;
+		group.add( ceiling );
+
+	}
+
 	return group;
 
 }
 
 registerKind( ZONE_ID, {
 	label: 'Flattened area',
-	build: ( { width, length } ) => buildZone( width, length ),
-	normalize: p => ( { width: clampSize( p.width ), length: clampSize( p.length ) } ),
+	build: ( { width, length, height } ) => buildZone( width, length, height ),
+	normalize: p => ( { width: clampSize( p.width ), length: clampSize( p.length ), height: clampHeight( p.height ) } ),
 	// Down to the lowest ground around it as Google made it, so flattening doesn't drag it lower.
 	snap: 'lowest-original',
 	solid: false,
@@ -72,12 +90,20 @@ registerKind( ZONE_ID, {
 	fields: [
 		{ key: 'width', label: 'width (m)', min: 1, step: 0.5 },
 		{ key: 'length', label: 'length (m)', min: 1, step: 0.5 },
+		// 0 flattens everything above the floor, as areas always did (and saved ones still do).
+		{ key: 'height', label: 'flatten up to (m, 0 = all)', min: 0, max: MAX_HEIGHT, step: 0.5 },
 	],
 } );
 
 function clampSize( v ) {
 
 	return Math.min( 2000, Math.max( 1, Number( v ) || 10 ) );
+
+}
+
+function clampHeight( v ) {
+
+	return Math.min( MAX_HEIGHT, Math.max( 0, Number( v ) || 0 ) );
 
 }
 
@@ -132,22 +158,25 @@ export function setUpFlattening( { tiles, models } ) {
 
 	}
 
-	const commit = ( key, shape ) => {
+	// `threshold`: how far above the shape the plugin presses vertices down onto it (an area's
+	// height limit); higher ones are left where they are.
+	const commit = ( key, shape, threshold = Infinity ) => {
 
 		// The plugin presses vertices along this direction onto the shape; pointing down, it
-		// flattens everything above the floor and leaves what's below (e.g. water under a deck).
+		// flattens what's above the floor and leaves what's below (e.g. water under a deck).
 		down.set( 0, - 1, 0 ).transformDirection( toTileset() );
 		const current = plugin.shapes.get( shape );
-		if ( current && current.direction.distanceToSquared( down ) < 1e-12 ) {
+		if ( current && current.direction.distanceToSquared( down ) < 1e-12 && current.threshold === threshold ) {
 
 			plugin.updateShape( shape );
 			return;
 
 		}
 
-		// New, or the frame has moved since (its direction would be stale): add it afresh.
+		// New, or the frame or the height limit has changed since (the plugin keeps both from
+		// when the shape was added): add it afresh.
 		if ( current ) plugin.deleteShape( shape );
-		plugin.addShape( shape, down, { threshold: Infinity } );
+		plugin.addShape( shape, down, { threshold } );
 		shapes.set( key, shape );
 
 	};
@@ -212,7 +241,7 @@ export function setUpFlattening( { tiles, models } ) {
 		shape.matrix.multiplyMatrices( toTileset(), pivot.matrixWorld )
 			.multiply( new Matrix4().makeScale( params.width, 1, params.length ) );
 		shape.matrixWorld.copy( shape.matrix );
-		commit( entry, shape );
+		commit( entry, shape, params.height > 0 ? params.height : Infinity );
 
 	};
 
