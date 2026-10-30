@@ -16,6 +16,9 @@ const GAP = 12;
 const MARGIN = 8;
 // Labels floating over placed things (earthworks.js, laydown.js), which the toolbar goes above.
 const LABELS = '.earthworks-labels .label, .laydown-label';
+// The Show and Controls panels on the right (layers.js, legend.js), or their buttons, which the
+// toolbar keeps beside, as it does the P panel.
+const PANELS = '#layers > :not([hidden]), #legend > :not([hidden])';
 
 const icon = paths => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ paths }</svg>`;
 const ICONS = {
@@ -364,12 +367,13 @@ export function createToolbar( { camera, canvas, models, panel, select, rotate, 
 		// Measured again only when it changes size (other buttons, the size editor).
 		size ??= { width: root.offsetWidth, height: root.offsetHeight };
 		const { width, height } = size;
-		// Beside the P panel rather than under it, where there's room (on a phone there isn't).
+		// Beside the P panel and the panels at the bottom right rather than under or over them, where
+		// there's room (on a phone there isn't).
 		let right = window.innerWidth - MARGIN;
-		const gui = panel.gui.domElement;
-		if ( gui.style.display !== 'none' ) {
+		for ( const element of [ panel.gui.domElement, ...document.querySelectorAll( PANELS ) ] ) {
 
-			const r = gui.getBoundingClientRect();
+			const r = element.getBoundingClientRect();
+			if ( r.width === 0 || r.left > right ) continue;
 			if ( r.left - MARGIN - left >= width && r.bottom > point.y - GAP - height * 2 && r.top < point.y ) right = r.left - MARGIN;
 
 		}

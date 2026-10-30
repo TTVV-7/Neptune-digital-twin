@@ -121,6 +121,8 @@ export function setUpLayout( models, { getLibrary, onError } ) {
 	models.addEventListener( 'add', save );
 	models.addEventListener( 'change', save );
 	models.addEventListener( 'remove', save );
+	// Hidden by hand: part of the plan (layers.js).
+	models.addEventListener( 'hide', save );
 	window.addEventListener( 'pagehide', flush );
 	document.addEventListener( 'visibilitychange', () => {
 

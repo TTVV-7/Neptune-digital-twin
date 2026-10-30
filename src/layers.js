@@ -34,8 +34,8 @@ const CHANGE_DELAY = 300;
 
 const icon = paths => `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ paths }</svg>`;
 const EYE_PATHS = '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>';
-export const EYE = icon( EYE_PATHS );
-export const EYE_OFF = icon( `${ EYE_PATHS }<path d="M4 20 20 4"/>` );
+const EYE = icon( EYE_PATHS );
+const EYE_OFF = icon( `${ EYE_PATHS }<path d="M4 20 20 4"/>` );
 
 // models, layout, library: what's placed, the saved layout and the library's items. flattening:
 // flatten.js, turned off for Before. isDriving: Before / After waits until you get out. legend:
@@ -90,12 +90,12 @@ export function createLayers( { models, layout, library, flattening, isDriving, 
 
 	}
 
-	// Draw what the layers and Before / After now say.
+	// Draw what the layers and Before / After now say, and the panel with them.
 	function apply() {
 
 		models.refreshHidden();
 		for ( const [ id, layer ] of custom ) layer.setShown( drawn( id ) );
-		soon();
+		render();
 
 	}
 
@@ -176,7 +176,8 @@ export function createLayers( { models, layout, library, flattening, isDriving, 
 		reveal( entry );
 
 	} );
-	for ( const type of [ 'remove', 'hide', 'visibility' ] ) models.addEventListener( type, soon );
+	// Hidden or shown by hand, or deleted: the panel says so straight away.
+	for ( const type of [ 'remove', 'hide', 'visibility' ] ) models.addEventListener( type, () => render() );
 
 	// --- the panel ---------------------------------------------------------------------------
 
