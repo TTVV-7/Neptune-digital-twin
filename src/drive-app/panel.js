@@ -1,5 +1,7 @@
 import { searchPlaces } from './api.js';
 import { formatLatLon, parseLatLon, recentPlaces, SPOTS, storage } from './places.js';
+import { openPass, proBadge } from './pass.js';
+import { isPro, onProChange } from './pro.js';
 
 // The globe's panel: search, the starting spots, recent places and the vehicle picker, and the
 // card under the pin with "Drive here". Choosing a spot or a search result flies the globe there
@@ -100,6 +102,9 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin } ) {
 	const saved = storage( () => localStorage.getItem( VEHICLE_KEY ) );
 	let picked = vehicles.find( v => v.id === saved ) ?? vehicles[ 0 ];
 	const pickers = [];
+	// A Supporter Pass ride (pro.js) is only driven with the pass; without it, the first ride is.
+	const usable = () => picked.pro && ! isPro() ? vehicles[ 0 ] : picked;
+	onProChange( () => mark() );
 
 	// A row of vehicle cards in `parent` (the panel's, and the pause menu's); onPick( vehicle ).
 	function vehiclePicker( parent, onPick = () => {} ) {
@@ -113,12 +118,15 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin } ) {
 			button.dataset.id = vehicle.id;
 			const picture = vehicle.thumb
 				? Object.assign( document.createElement( 'img' ), { src: vehicle.thumb, alt: '', loading: 'lazy' } )
-				: kartIcon();
+				: vehicle.icon ? Object.assign( document.createElement( 'span' ), { className: 'ride-icon', innerHTML: vehicle.icon } ) : kartIcon();
 			const name = Object.assign( document.createElement( 'b' ), { textContent: vehicle.name } );
 			const blurb = Object.assign( document.createElement( 'span' ), { textContent: `${ vehicle.blurb } · ${ vehicle.topSpeed } km/h` } );
 			button.append( picture, name, blurb );
+			if ( vehicle.pro ) button.append( proBadge() );
 			button.addEventListener( 'click', () => {
 
+				// Locked: what the pass is, instead.
+				if ( vehicle.pro && ! isPro() ) return openPass();
 				pick( vehicle );
 				onPick( vehicle );
 
@@ -146,8 +154,9 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin } ) {
 
 			for ( const button of parent.querySelectorAll( '.vehicle' ) ) {
 
-				const on = button.dataset.id === picked.id;
+				const on = button.dataset.id === usable().id;
 				button.classList.toggle( 'picked', on );
+				button.classList.toggle( 'locked', !! vehicles.find( v => v.id === button.dataset.id ).pro && ! isPro() );
 				button.setAttribute( 'aria-checked', String( on ) );
 
 			}
@@ -155,7 +164,7 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin } ) {
 		}
 
 		// The library's models are other people's work, under licences that ask for credit.
-		const credit = picked.credit;
+		const credit = usable().credit;
 		$( '.credit' ).textContent = credit ? `Model: "${ credit.title }" by ${ credit.author }, ${ credit.license.replace( 'CC Attribution', 'CC BY 4.0' ) }; resized and compressed.` : '';
 
 	}
@@ -183,7 +192,7 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin } ) {
 		vehiclePicker,
 		get vehicle() {
 
-			return picked;
+			return usable();
 
 		},
 		get pinned() {

@@ -13,6 +13,7 @@ import { Ground } from './spawn.js';
 import { createTestGlobe, placeEarth } from './test-globe.js';
 import { loadVehicle, loadVehicles, specOf } from './vehicles.js';
 import { setUpPanel } from './panel.js';
+import { setUpGarage } from './garage.js';
 import { formatLatLon, rememberPlace } from './places.js';
 import * as screens from './screens.js';
 
@@ -167,6 +168,8 @@ async function start( { key, left = null } ) {
 	} );
 	panel.vehiclePicker( $( 'pause' ).querySelector( '.vehicles' ), vehicle => swapVehicle( vehicle ) );
 	globe.onPick = place => pinAt( { ...place, name: 'Dropped pin', region: '' } );
+	// The Garage and the Supporter Pass, by both ride pickers (garage.js, pass.js).
+	const garage = setUpGarage( { vehicles, panel, models, current: () => state.entry && { entry: state.entry, vehicle: state.vehicle } } );
 
 	// About, with the credits the vehicle models' licences ask for.
 	const about = $( 'about' );
@@ -579,6 +582,7 @@ async function start( { key, left = null } ) {
 	// For poking around from the browser console, and for the tests.
 	window.drive = {
 		scene, camera, renderer, tiles, globe, models, driver, ground, panel,
+		garage,
 		get mode() {
 
 			return state.mode;

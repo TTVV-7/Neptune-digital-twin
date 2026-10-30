@@ -1,0 +1,80 @@
+import './pro.css';
+import { PRO_RIDES } from './rides/index.js';
+
+// The Supporter Pass sheet: what the pass is and what comes with it, opened from the globe's panel,
+// the pause menu, the Garage, and anything locked (see pro.js). Buying isn't open yet: its button
+// says "Coming soon". The payments code (Google sign-in and Stripe) will put its own button in
+// buyArea() in place of that one, and call setPro( true ) in pro.js once the pass is bought.
+
+export const PRICE = 'CA$4.99';
+const BADGE = '⭐ Supporter Pass';
+
+let sheet = null;
+
+export function openPass() {
+
+	sheet ??= build();
+	if ( ! sheet.open ) sheet.showModal();
+	sheet.querySelector( '.close' ).focus();
+
+}
+
+export function closePass() {
+
+	sheet?.close();
+
+}
+
+// Where the buy button goes.
+export function buyArea() {
+
+	sheet ??= build();
+	return sheet.querySelector( '.buy-area' );
+
+}
+
+// The small badge on anything locked.
+export function proBadge() {
+
+	return Object.assign( document.createElement( 'span' ), { className: 'pro-badge', textContent: BADGE } );
+
+}
+
+function build() {
+
+	const dialog = document.createElement( 'dialog' );
+	dialog.id = 'pass';
+	dialog.setAttribute( 'aria-labelledby', 'pass-title' );
+	dialog.innerHTML = `
+		<div class="sheet">
+			<button type="button" class="close" aria-label="Close">&times;</button>
+			<p class="pro-badge">${ BADGE }</p>
+			<h2 id="pass-title">Supporter Pass</h2>
+			<p class="lead">World Drive streams the real 3D world, and every drive costs us a little. The pass is one payment of <b>${ PRICE }</b> that helps keep it running, and comes with:</p>
+			<ul class="perks">
+				<li class="rides"><b>Four more rides</b><span>A sports coupe, a monster truck, a city bus and a hovercraft, each handling its own way.</span><div class="ride-icons"></div></li>
+				<li><b>The whole Garage</b><span>All 12 colours, matte and metallic paint, racing stripes, a number, flames or checker, rim colours, blue, green, purple, pink or rainbow boost flames, and smoke, sparkle or rainbow-ribbon trails.</span></li>
+				<li><b>A ⭐ on the leaderboard</b><span>By your name, for everyone to see.</span></li>
+				<li><b>30 drives a day</b><span>Instead of 8.</span></li>
+			</ul>
+			<div class="buy-area"><button type="button" class="primary buy" disabled>Coming soon</button></div>
+			<p class="small">One payment, no subscription. Buying opens soon.</p>
+		</div>`;
+	dialog.querySelector( '.ride-icons' ).replaceChildren( ...PRO_RIDES.map( ride => {
+
+		const icon = document.createElement( 'span' );
+		icon.className = 'ride-icon';
+		icon.title = ride.name;
+		icon.innerHTML = ride.icon;
+		return icon;
+
+	} ) );
+	dialog.querySelector( '.close' ).addEventListener( 'click', () => dialog.close() );
+	// A click on the backdrop (the dialog itself, round its sheet) closes it.
+	dialog.addEventListener( 'click', e => e.target === dialog && dialog.close() );
+	// Keys pressed here are the sheet's, not the game's: Esc closes it rather than driving on.
+	dialog.addEventListener( 'keydown', e => e.stopPropagation() );
+	document.body.append( dialog );
+	return dialog;
+
+}
