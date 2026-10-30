@@ -60,7 +60,7 @@ const BIASED_DEPTH = /* glsl */`
 	#endif
 `;
 
-function biasDepth( shader ) {
+export function biasDepth( shader ) {
 
 	shader.fragmentShader = shader.fragmentShader.replace( '#include <logdepthbuf_fragment>', BIASED_DEPTH );
 

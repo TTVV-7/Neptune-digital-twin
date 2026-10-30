@@ -451,6 +451,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	}
 
 	// See-through while it follows the mouse; materials are cloned because built-in pieces share them.
+	// What's already more see-through (glass, a tower crane's reach circle) stays as it was.
 	function setGhost( entry, on ) {
 
 		entry.pivot.traverse( object => {
@@ -459,7 +460,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 			if ( on ) {
 
 				object.userData.solidMaterial = object.material;
-				object.material = [ object.material ].flat().map( m => Object.assign( m.clone(), { transparent: true, opacity: 0.55 } ) );
+				object.material = [ object.material ].flat().map( m => Object.assign( m.clone(), { transparent: true, opacity: Math.min( m.opacity, 0.55 ) } ) );
 				if ( object.material.length === 1 ) object.material = object.material[ 0 ];
 
 			} else if ( object.userData.solidMaterial ) {

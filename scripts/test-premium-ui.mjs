@@ -28,8 +28,10 @@ const PAYMENT_LINK = 'https://buy.stripe.com/test_00g5kE1aB2cD3eF4gH';
 const PAYMENT_LINK_ID = 'plink_1TestPremiumLink00000000';
 const WEBHOOK_SECRET = 'whsec_test_not_a_real_secret_0123456789';
 const PRICE = 'CA$19, one time';
-// The Pro equipment pack: the Cranes & lifts and Material handling items in library.json.
-const PACK = [ 'crane-all-terrain', 'boom-lift-40ft', 'crane-crawler', 'scissor-lift-32ft', 'container-handler-empty', 'forklift-5000lb', 'telehandler-10k' ];
+// The Pro equipment pack: the Cranes & lifts and Material handling items, downloaded (library.json)
+// and built in code (crane-models.js).
+const BUILT_IN_PACK = [ 'tower-crane', 'crane-rough-terrain-40t', 'crane-carry-deck-8t', 'boom-truck-30t', 'crane-spider-3t', 'telehandler-compact-5500lb', 'telehandler-12k' ];
+const PACK = [ 'crane-all-terrain', 'boom-lift-40ft', 'crane-crawler', 'scissor-lift-32ft', 'container-handler-empty', 'forklift-5000lb', 'telehandler-10k', ...BUILT_IN_PACK ];
 
 let chromium;
 let browser;
@@ -106,8 +108,10 @@ test( 'signed out, the Pro equipment is locked and explains itself', async () =>
 	await dialog.waitFor();
 	assert.match( await dialog.locator( 'p.small' ).first().textContent(), /Scissor lift \(32 ft, electric\) is part of the Pro equipment pack/ );
 	assert.equal( await dialog.locator( '.pack li' ).count(), PACK.length );
-	const thumbs = await dialog.locator( '.pack img' ).evaluateAll( images => images.map( img => new URL( img.src ).pathname ) );
-	assert.ok( thumbs.every( path => /^\/library\/thumbs\/.+\.webp$/.test( path ) ), thumbs.join( ' ' ) );
+	// Downloaded items show their picture file; built-in ones the picture the library drew for them.
+	const thumbs = await dialog.locator( '.pack img' ).evaluateAll( images => images.map( img => img.src.startsWith( 'data:image/png' ) ? 'drawn' : new URL( img.src ).pathname ) );
+	assert.ok( thumbs.every( path => /^\/library\/thumbs\/.+\.webp$/.test( path ) || path === 'drawn' ), thumbs.join( ' ' ) );
+	assert.equal( thumbs.filter( path => path === 'drawn' ).length, BUILT_IN_PACK.length );
 	assert.equal( await dialog.locator( '.price' ).textContent(), PRICE );
 	// Signed out: sign in first, no way to pay yet.
 	await dialog.locator( '.sign-in .stub-google' ).waitFor();
@@ -134,7 +138,7 @@ test( 'signed out, the Pro equipment is locked and explains itself', async () =>
 
 test( 'signing in from the dialog offers the buy link, saying who is buying', async () => {
 
-	await page.locator( '#library .card', { hasText: 'Telehandler' } ).click();
+	await page.locator( '#library .card[data-item="telehandler-10k"]' ).click();
 	const dialog = page.locator( '.premium-dialog' );
 	await page.evaluate( token => window.testCredential = token, await makeToken( googleKey ) );
 	await dialog.locator( '.stub-google' ).click();

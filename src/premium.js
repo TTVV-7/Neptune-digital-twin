@@ -43,6 +43,9 @@ export function createPremium( { library, sidebar, toast, showBanner, premium, u
 	const lead = el( 'p', 'small' );
 
 	const list = el( 'ul', 'pack' );
+	// Items built in code (a tower crane, say) have no picture file: they borrow the one the
+	// library drew for their card, once it has been drawn (see open()).
+	const drawn = [];
 	for ( const item of pack ) {
 
 		const entry = el( 'li' );
@@ -50,6 +53,7 @@ export function createPremium( { library, sidebar, toast, showBanner, premium, u
 		thumb.alt = '';
 		thumb.loading = 'lazy';
 		if ( item.thumb ) thumb.src = new URL( `library/${ item.thumb }`, document.baseURI ).href;
+		else drawn.push( [ thumb, item ] );
 		entry.append( thumb, el( 'span', 'name', item.name ) );
 		list.append( entry );
 
@@ -90,6 +94,13 @@ export function createPremium( { library, sidebar, toast, showBanner, premium, u
 
 		picked = item;
 		opener = document.activeElement;
+		for ( const [ thumb, { id } ] of drawn ) {
+
+			const card = document.querySelector( `#library .card[data-item="${ id }"] img` );
+			if ( ! thumb.src && card?.src ) thumb.src = card.src;
+
+		}
+
 		document.exitPointerLock?.();
 		say( '' );
 		render();
