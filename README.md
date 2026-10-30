@@ -221,8 +221,8 @@ The construction machines drive too, at their own speeds: the dozer at 11 km/h, 
 its boom up. The cranes stand and turn on their carriers, and the cameras frame the carrier and look
 out of the cab rather than from up the boom. The pickup tops out at 160 km/h (about 210 with boost), the semi at 120 and the haul truck at 70. The **Race**
 category has two jump ramps (1.2 m and 3 m); hit the big one at highway speed for about 1.7 s of air.
-Walls, containers, barriers and Google's buildings bounce you off: head-on you stop and bounce back
-a little, at a glancing angle you scrape along them and keep most of your speed. Flatten a strip
+Hit a wall, a container, a barrier or one of Google's buildings and the vehicle just stops against
+it; back up (**S**) to drive off again. Flatten a strip
 first for a clear run. The chase camera stays in front of anything between it and the vehicle, so
 it never ends up inside a building.
 

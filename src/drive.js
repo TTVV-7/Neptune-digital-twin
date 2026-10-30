@@ -4,24 +4,15 @@ import { blocks, isTyping } from './walk.js';
 
 // Race mode: drive a placed vehicle at highway speeds. Arcade physics rather than a simulation:
 // the vehicle follows the ground under its wheels, keeps its upward speed off ramps and crests so
-// it can jump, and bounces off walls: scraping along them at a glancing angle, stopping and
-// bouncing back a little head-on.
+// it can jump, and stops dead when it hits a wall or anything else solid.
 
 const KMH = 3.6;
 const GRAVITY = 9.81;
 const JUMP_SPEED = 7;
 // Ground this much below the wheels means the vehicle has left it (off a ramp or a crest).
 const LEAVE_GROUND = 0.35;
-// Crashing: the vehicle keeps its speed along the wall less a scrape of SCRAPE times its speed
-// into it, and bounces back with RESTITUTION times that; slower than CRASH_MIN (m/s) into the wall
-// it just stops against it. It turns toward the wall's line by a share of the angle it hit at
-// (the square of the angle's cosine): most of the way for a glancing blow, so it scrapes along,
-// and hardly at all head-on. At 30° that's 22°, and the next touch turns it the rest of the way.
-const RESTITUTION = 0.3;
-const SCRAPE = 0.2;
-const CRASH_MIN = 1.5;
-// The sideways part of a bounce dies away at this rate (1/s), as the tyres grip again.
-const GRIP = 4;
+// Hitting a wall faster than this (m/s) into it says "Crash!".
+const CRASH_FLASH = 3;
 // The cameras keep this far (m) in front of anything between them and the vehicle.
 const CAMERA_CLEARANCE = 0.4;
 // Bumper rays look for walls at these heights (m) over the ground under the vehicle, or lower on a
@@ -149,8 +140,6 @@ export class Driver {
 		this.speed = 0;
 		this.steer = 0;
 		this.vy = 0;
-		// Sideways after a crash, east and north (m/s).
-		this.slide = { east: 0, north: 0 };
 		// Tilted as it was parked (see models.park), so it doesn't jolt level first.
 		this.pitch = rotation.x;
 		this.roll = rotation.z;
@@ -338,17 +327,14 @@ export class Driver {
 
 	}
 
-	// Drive on at this frame's speed and slide, up to anything solid in the way at bumper height,
-	// and bounce off it.
+	// Drive on at this frame's speed, up to anything solid in the way at bumper height, and stop
+	// there.
 	move( dt ) {
 
 		const rad = this.heading * Math.PI / 180;
-		const ve = Math.sin( rad ) * this.speed + this.slide.east;
-		const vn = Math.cos( rad ) * this.speed + this.slide.north;
+		const ve = Math.sin( rad ) * this.speed;
+		const vn = Math.cos( rad ) * this.speed;
 		const v = Math.hypot( ve, vn );
-		const grip = Math.exp( - GRIP * dt );
-		this.slide.east *= grip;
-		this.slide.north *= grip;
 		if ( v * dt < 1e-6 ) return;
 
 		const wall = this.wallAhead( ve / v, vn / v, v * dt );
@@ -396,35 +382,14 @@ export class Driver {
 
 	}
 
-	// Bounce off a wall at ( ve, vn ) m/s east and north: keep the speed along it less a scrape,
-	// bounce back with a share of the speed into it, and turn toward its line (see RESTITUTION).
-	// What's left is split into speed along the new heading and a sideways slide the tyres soon stop.
+	// Hit a wall at ( ve, vn ) m/s east and north: the vehicle stops against it, where it is,
+	// facing as it was. Backing away (or steering along it) drives off again.
 	crash( ve, vn, wall ) {
 
 		const into = - ( ve * wall.east + vn * wall.north );
 		if ( into <= 0 ) return;
-		const te = ve + wall.east * into;
-		const tn = vn + wall.north * into;
-		const along = Math.hypot( te, tn );
-		const keep = along > 0 ? Math.max( 0, along - SCRAPE * into ) / along : 0;
-		const back = into > CRASH_MIN ? RESTITUTION * into : 0;
-		const be = te * keep + wall.east * back;
-		const bn = tn * keep + wall.north * back;
-
-		if ( along > 0.1 ) {
-
-			const angle = Math.asin( MathUtils.clamp( into / Math.hypot( ve, vn ), 0, 1 ) );
-			const turn = Math.sign( vn * te - ve * tn );
-			this.heading += turn * angle * Math.cos( angle ) ** 2 * MathUtils.RAD2DEG;
-
-		}
-
-		const rad = this.heading * Math.PI / 180;
-		const fx = Math.sin( rad ), fz = Math.cos( rad );
-		this.speed = be * fx + bn * fz;
-		this.slide.east = be - fx * this.speed;
-		this.slide.north = bn - fz * this.speed;
-		if ( into > 3 ) this.hud.flash( 'Crash!' );
+		this.speed = 0;
+		if ( into > CRASH_FLASH ) this.hud.flash( 'Crash!' );
 
 	}
 
