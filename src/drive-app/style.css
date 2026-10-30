@@ -607,13 +607,28 @@ body.touch #pause kbd {
 	color: var( --muted );
 }
 
-#pause .to-globe {
+#pause .more {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 8px;
 	margin-top: 18px;
+}
+
+#pause .to-globe,
+#pause .board-open {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
 	padding: 10px 16px;
 	border: 1px solid var( --line );
 	border-radius: 12px;
 	background: var( --chip );
 	font-weight: 700;
+}
+
+#pause .board-open svg {
+	color: var( --accent );
 }
 
 #splash .status {
@@ -791,6 +806,344 @@ body.touch[data-mode='driving'] #attribution {
 	transform: translateX( -50% );
 }
 
+/* --- the leaderboard ----------------------------------------------------------------------- */
+
+/* The trophy on the globe, top right. */
+#globe-ui .board-open {
+	position: fixed;
+	top: calc( 16px + env( safe-area-inset-top, 0px ) );
+	right: 16px;
+	z-index: 11;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 46px;
+	height: 46px;
+	padding: 0;
+	border: 1px solid var( --line );
+	border-radius: 14px;
+	background: var( --panel );
+	backdrop-filter: blur( 10px );
+	-webkit-backdrop-filter: blur( 10px );
+	color: var( --accent );
+	box-shadow: 0 6px 20px rgba( 0, 0, 0, 0.35 );
+}
+
+#globe-ui .board-open:hover {
+	background: var( --panel-solid );
+}
+
+#globe-ui .board-open svg {
+	width: 22px;
+	height: 22px;
+}
+
+/* A new best, while driving: small, under the top bar on the left, never in the way. */
+#best-card {
+	position: fixed;
+	top: calc( 64px + env( safe-area-inset-top, 0px ) );
+	left: 12px;
+	z-index: 25;
+	width: min( 300px, calc( 100% - 24px ) );
+	padding: 12px 14px;
+	border: 1px solid var( --line );
+	border-left: 4px solid var( --accent );
+	border-radius: 14px;
+	background: var( --panel-solid );
+	box-shadow: 0 8px 30px rgba( 0, 0, 0, 0.4 );
+}
+
+body[data-mode='globe'] #best-card {
+	display: none;
+}
+
+/* On a touch screen the readouts are at the top: the card sits over the steering buttons, clear of
+   the ones on the right. */
+body.touch #best-card {
+	top: auto;
+	bottom: calc( 120px + var( --safe-bottom ) );
+	width: max( 170px, min( 280px, calc( 100% - 212px ) ) );
+}
+
+body.touch #best-card {
+	padding: 10px 12px;
+}
+
+body.touch #best-card .title {
+	font-size: 16px;
+}
+
+body.touch #best-card .message {
+	font-size: 13px;
+}
+
+body.touch #best-card button {
+	padding: 7px 10px;
+	font-size: 13px;
+}
+
+body.touch #best-card .name-form {
+	flex-wrap: wrap;
+}
+
+body.touch #best-card .name-form input {
+	flex-basis: 100%;
+}
+
+#best-card .title {
+	margin: 0;
+	font: 900 italic 20px/1.1 var( --font );
+	text-transform: uppercase;
+	color: var( --accent );
+}
+
+#best-card .message {
+	margin: 4px 0 0;
+	font-weight: 600;
+	color: var( --muted );
+}
+
+#best-card .buttons,
+#best-card .name-form {
+	display: flex;
+	gap: 8px;
+	margin-top: 10px;
+}
+
+#best-card .buttons[hidden],
+#best-card .name-form[hidden] {
+	display: none;
+}
+
+#best-card button {
+	padding: 8px 14px;
+	border-radius: 10px;
+	font-size: 14px;
+}
+
+#best-card .later {
+	border: 1px solid var( --line );
+	background: var( --chip );
+	font-weight: 700;
+}
+
+#best-card input,
+dialog#leaderboard input:not( [type='checkbox'] ) {
+	flex: 1;
+	min-width: 0;
+	padding: 9px 12px;
+	border: 1px solid var( --line );
+	border-radius: 10px;
+	background: rgba( 255, 255, 255, 0.08 );
+	font: inherit;
+	color: var( --ink );
+}
+
+#best-card .form-status {
+	margin: 6px 0 0;
+	font-size: 13px;
+}
+
+#best-card .form-status:empty {
+	display: none;
+}
+
+dialog#leaderboard {
+	width: min( 480px, calc( 100% - 24px ) );
+	max-height: calc( 100% - 24px );
+	padding: 20px;
+	border: 1px solid var( --line );
+	border-radius: 20px;
+	background: var( --panel-solid );
+	color: var( --ink );
+}
+
+dialog#leaderboard::backdrop {
+	background: rgba( 4, 8, 16, 0.6 );
+}
+
+dialog#leaderboard header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+dialog#leaderboard h2 {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0;
+	font: 900 italic 24px/1 var( --font );
+	text-transform: uppercase;
+}
+
+dialog#leaderboard h2 svg {
+	width: 24px;
+	height: 24px;
+	color: var( --accent );
+}
+
+dialog#leaderboard .close {
+	width: 36px;
+	height: 36px;
+	border: 1px solid var( --line );
+	border-radius: 10px;
+	background: var( --chip );
+	font-size: 22px;
+	line-height: 1;
+}
+
+dialog#leaderboard .tabs {
+	display: grid;
+	grid-template-columns: repeat( 3, 1fr );
+	gap: 4px;
+	margin: 16px 0 10px;
+	padding: 4px;
+	border-radius: 12px;
+	background: var( --chip );
+}
+
+dialog#leaderboard .tabs button {
+	padding: 8px 4px;
+	border: 0;
+	border-radius: 9px;
+	background: none;
+	font-weight: 800;
+	color: var( --muted );
+}
+
+dialog#leaderboard .tabs button[aria-selected='true'] {
+	background: var( --accent );
+	color: var( --accent-ink );
+}
+
+dialog#leaderboard .here {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 8px;
+	font-size: 14px;
+	font-weight: 600;
+}
+
+dialog#leaderboard .here span {
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+dialog#leaderboard .status {
+	margin: 18px 0;
+	text-align: center;
+	color: var( --muted );
+}
+
+dialog#leaderboard .rows {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+dialog#leaderboard .rows li {
+	display: grid;
+	grid-template-columns: 2.2em minmax( 0, 1fr ) auto;
+	align-items: center;
+	gap: 10px;
+	padding: 8px 10px;
+	border-radius: 10px;
+}
+
+dialog#leaderboard .rows li:nth-child( odd ) {
+	background: rgba( 255, 255, 255, 0.04 );
+}
+
+dialog#leaderboard .rows li.me {
+	background: rgba( 255, 210, 63, 0.16 );
+	box-shadow: inset 0 0 0 1px rgba( 255, 210, 63, 0.5 );
+}
+
+dialog#leaderboard .rank {
+	font-weight: 900;
+	font-style: italic;
+	text-align: right;
+	color: var( --muted );
+}
+
+dialog#leaderboard .rows li:nth-child( -n + 3 ) .rank {
+	color: var( --accent );
+}
+
+dialog#leaderboard .who {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+dialog#leaderboard .who b,
+dialog#leaderboard .what {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+dialog#leaderboard .what {
+	font-size: 12px;
+	color: var( --muted );
+}
+
+dialog#leaderboard .score {
+	font-weight: 900;
+	font-variant-numeric: tabular-nums;
+}
+
+dialog#leaderboard .mine {
+	margin: 10px 0 0;
+	text-align: center;
+	font-weight: 700;
+}
+
+dialog#leaderboard .you {
+	margin-top: 14px;
+	padding-top: 14px;
+	border-top: 1px solid var( --line );
+}
+
+dialog#leaderboard .named {
+	margin: 0;
+}
+
+dialog#leaderboard .name-form label {
+	display: block;
+	margin-bottom: 6px;
+	font-size: 13px;
+	font-weight: 700;
+}
+
+dialog#leaderboard .field {
+	display: flex;
+	gap: 8px;
+}
+
+dialog#leaderboard .field .primary {
+	padding: 9px 16px;
+	font-size: 14px;
+}
+
+dialog#leaderboard .form-hint,
+dialog#leaderboard .form-status {
+	margin: 6px 0 0;
+}
+
+dialog#leaderboard .form-status:empty {
+	display: none;
+}
+
+dialog#leaderboard .note {
+	margin: 14px 0 0;
+}
+
 dialog#about {
 	max-width: min( 520px, calc( 100% - 32px ) );
 	padding: 24px;
@@ -884,6 +1237,17 @@ dialog#about form {
 
 	.vehicle span {
 		display: none;
+	}
+
+	#globe-ui .board-open {
+		top: calc( 12px + env( safe-area-inset-top, 0px ) );
+		right: 12px;
+		width: 42px;
+		height: 42px;
+	}
+
+	dialog#leaderboard {
+		padding: 16px;
 	}
 
 	.pin-card {

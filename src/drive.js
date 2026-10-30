@@ -212,7 +212,9 @@ const LEVEL = new Quaternion();
 export class Driver {
 
 	// fly, booster, drift: the options above, all off by default; crash: 'stop' or 'launch'.
-	constructor( { camera, models, controls, getColliders, hud, onStop, fly = false, booster = false, drift = false, crash = 'stop' } ) {
+	// onScore( run ), with stunts on: called each time a jump's tricks are landed, with the run so
+	// far (see runSoFar), for a leaderboard.
+	constructor( { camera, models, controls, getColliders, hud, onStop, onScore = null, fly = false, booster = false, drift = false, crash = 'stop' } ) {
 
 		this.camera = camera;
 		this.models = models;
@@ -220,6 +222,7 @@ export class Driver {
 		this.getColliders = getColliders;
 		this.hud = hud;
 		this.onStop = onStop;
+		this.onScore = onScore;
 		this.fly = fly;
 		this.booster = booster;
 		this.drift = drift;
@@ -231,11 +234,16 @@ export class Driver {
 		this.pressedAt = new Map();
 		this.clock = 0;
 		this.spaceTap = null;
-		// Stunts (crash: 'launch'): the score this run, its combo multiplier and the best ever.
+		// Stunts (crash: 'launch'): the score this run, its combo multiplier and the best ever; and
+		// for onScore, when the run started (by this.clock), its longest air and its best jump.
 		this.score = 0;
 		this.mult = 1;
 		this.best = this.launch ? loadBest() : 0;
 		this.scored = null;
+		this.runStart = 0;
+		this.runAir = 0;
+		this.bestAir = 0;
+		this.bestJump = null;
 		this.hinted = false;
 		this.active = false;
 		this.cameraMode = 'chase';
@@ -397,6 +405,8 @@ export class Driver {
 		this.roll = rotation.z;
 		this.grounded = true;
 		this.airTime = 0;
+		// (The best air is this drive's; the run's is kept across pauses.)
+		this.runAir = Math.max( this.runAir, this.bestAir );
 		this.bestAir = 0;
 		this.topSpeed = 0;
 		this.lastSafe = { east: this.east, north: this.north, y: this.y };
@@ -426,6 +436,9 @@ export class Driver {
 			this.scored = entry;
 			this.score = 0;
 			this.mult = 1;
+			this.runStart = this.clock;
+			this.runAir = 0;
+			this.bestJump = null;
 
 		}
 
@@ -1710,10 +1723,13 @@ export class Driver {
 		// already multiplied, "+2,620 ×2" read as if it were still to be doubled.
 		const points = Math.round( tricks.reduce( ( sum, trick ) => sum + trick.points, 0 ) * ( combo ? COMBO_BONUS : 1 ) / 10 ) * 10;
 		this.hud.tricks?.( { lines: tricks.map( trick => trick.name ), points, mult: this.mult, combo } );
-		this.score += points * this.mult;
+		const gained = points * this.mult;
+		this.score += gained;
+		if ( gained > ( this.bestJump?.points ?? 0 ) ) this.bestJump = { lines: tricks.map( trick => trick.name ), points: gained };
 		this.mult = Math.min( MULT_MAX, this.mult + tricks.length );
 		this.lastTrick = this.clock;
-		if ( this.score > this.best ) {
+		const newBest = this.score > this.best;
+		if ( newBest ) {
 
 			this.best = this.score;
 			saveBest( this.best );
@@ -1721,6 +1737,7 @@ export class Driver {
 		}
 
 		this.showScore();
+		this.onScore?.( this.runSoFar( newBest ) );
 		this.gauge = Math.min( 1, this.gauge + TRICK_GAUGE * tricks.length );
 		// The burst only going forward: landed backwards off a wall, it would drive it straight back
 		// into the wall, and round again.
@@ -1733,6 +1750,22 @@ export class Driver {
 	showScore() {
 
 		this.hud.setScore?.( { score: this.score, mult: this.mult, best: this.best } );
+
+	}
+
+	// The run so far, for onScore: { score, best, newBest (this score is a new best), tricks (the
+	// best jump's, as "Backflip! + 360 Spin!"), runSeconds (driven, pauses left out), airTime (the
+	// longest, s) }.
+	runSoFar( newBest = false ) {
+
+		return {
+			score: this.score,
+			best: this.best,
+			newBest,
+			tricks: this.bestJump?.lines.join( ' + ' ) ?? '',
+			runSeconds: Math.max( 1, Math.ceil( this.clock - this.runStart ) ),
+			airTime: Math.round( Math.max( this.runAir, this.bestAir ) * 10 ) / 10,
+		};
 
 	}
 

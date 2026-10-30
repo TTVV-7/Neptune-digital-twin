@@ -27,7 +27,7 @@
     "test:drive-ui": "node --test scripts/test-drive-ui.mjs",
     "deploy": "vite build --mode cloudflare && wrangler deploy",
     "deploy:cloudflare": "wrangler d1 migrations apply DB --remote && npm run deploy",
-    "deploy:drive": "vite build --config vite.drive.config.js && wrangler deploy -c wrangler.drive.jsonc"
+    "deploy:drive": "wrangler d1 migrations apply DB --remote -c wrangler.drive.jsonc && vite build --config vite.drive.config.js && wrangler deploy -c wrangler.drive.jsonc"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.2.0",
