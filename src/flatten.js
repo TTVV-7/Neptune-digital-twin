@@ -121,21 +121,40 @@ export function setUpFlattening( { tiles, models } ) {
 
 	};
 
+	// The tileset's frame (set by ReorientationPlugin) only exists once its root has loaded. A shape
+	// committed before then lands in the wrong place and presses the wrong way for good, as the
+	// plugin keeps each shape's direction: that is what a layout restored as the page opens did, so
+	// its flatten areas came back unflattened. Shapes wait for the frame, then all go in.
+	let framed = ! plugin || !! tiles.root;
+	if ( ! framed ) {
+
+		tiles.addEventListener( 'load-root-tileset', () => {
+
+			framed = true;
+			for ( const entry of models.entries ) mark( { entry } );
+			for ( const key of sources.keys() ) dirty.add( key );
+
+		} );
+
+	}
+
 	const commit = ( key, shape ) => {
 
-		if ( plugin.hasShape( shape ) ) {
+		// The plugin presses vertices along this direction onto the shape; pointing down, it
+		// flattens everything above the floor and leaves what's below (e.g. water under a deck).
+		down.set( 0, - 1, 0 ).transformDirection( toTileset() );
+		const current = plugin.shapes.get( shape );
+		if ( current && current.direction.distanceToSquared( down ) < 1e-12 ) {
 
 			plugin.updateShape( shape );
-
-		} else {
-
-			// The plugin presses vertices along this direction onto the shape; pointing down, it
-			// flattens everything above the floor and leaves what's below (e.g. water under a deck).
-			down.set( 0, - 1, 0 ).transformDirection( tiles.group.matrixWorld.clone().invert() );
-			plugin.addShape( shape, down, { threshold: Infinity } );
-			shapes.set( key, shape );
+			return;
 
 		}
+
+		// New, or the frame has moved since (its direction would be stale): add it afresh.
+		if ( current ) plugin.deleteShape( shape );
+		plugin.addShape( shape, down, { threshold: Infinity } );
+		shapes.set( key, shape );
 
 	};
 
@@ -245,7 +264,7 @@ export function setUpFlattening( { tiles, models } ) {
 		update( dt ) {
 
 			timer -= dt;
-			if ( timer > 0 || dirty.size === 0 ) return;
+			if ( ! framed || timer > 0 || dirty.size === 0 ) return;
 			timer = UPDATE_INTERVAL;
 			for ( const key of dirty ) sync( key );
 			dirty.clear();
