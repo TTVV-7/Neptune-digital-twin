@@ -48,6 +48,10 @@ import { blocks } from './walk.js';
 //
 // Nodes on chunk edges are stored in both chunks (and corners in four); every write goes to all
 // copies, so neighbouring meshes always meet.
+//
+// setUntouched( true ) draws the ground as it was (h0) instead, for the Before view (layers.js):
+// nothing dug, piled or flattened, so with Google tiles nothing is drawn and none of Google's mesh
+// is hidden. Everything stays as it is underneath, and setUntouched( false ) composes it again.
 
 export const CELL = 0.5;
 const CELLS = 64;
@@ -333,6 +337,8 @@ export class Terrain extends EventDispatcher {
 		this.resampleTimer = 0;
 		// Set by the owner to save freeform digging (layout.changed).
 		this.onFreeformChange = null;
+		// The ground as it was is shown instead of the earthworks (setUntouched).
+		this.untouched = false;
 
 		this.standIn = tiles ? null : takeOverStandIn( ground );
 		this.standInChanged = false;
@@ -399,6 +405,17 @@ export class Terrain extends EventDispatcher {
 		design.chunks = new Set( this.ensure( design.bounds() ) );
 		for ( const k of design.chunks ) this.dirty.add( k );
 		this.designs.set( key, design );
+
+	}
+
+	// Show the ground as it was (true), or the earthworks again (false). Every chunk is composed
+	// again at once, so heights read straight after are already the new ones.
+	setUntouched( on ) {
+
+		if ( on === this.untouched ) return;
+		this.untouched = on;
+		for ( const key of this.chunks.keys() ) this.dirty.add( key );
+		this.flush();
 
 	}
 
@@ -784,7 +801,8 @@ export class Terrain extends EventDispatcher {
 		const list = [ ...keys ].map( key => this.chunks.get( key ) ).filter( chunk => chunk?.ready );
 		if ( list.length === 0 ) return;
 		const set = new Set( list );
-		const ordered = [ ...this.designs.values() ].sort( ( a, b ) => a.order() - b.order() );
+		// Showing the ground as it was, nothing is applied (and no volume worked out afresh).
+		const ordered = this.untouched ? [] : [ ...this.designs.values() ].sort( ( a, b ) => a.order() - b.order() );
 		const chunksOf = design => [ ...design.chunks ].map( key => this.chunks.get( key ) ).filter( chunk => set.has( chunk ) );
 
 		for ( const chunk of list ) this.startCompose( chunk );
@@ -864,7 +882,7 @@ export class Terrain extends EventDispatcher {
 
 		const { h0, base, dug, surface, cutFinal, top } = chunk;
 		base.set( h0 );
-		for ( const zone of this.zones.values() ) {
+		for ( const zone of this.untouched ? [] : this.zones.values() ) {
 
 			const range = nodeRange( chunk, zone.bounds );
 			if ( ! range ) continue;
@@ -880,7 +898,7 @@ export class Terrain extends EventDispatcher {
 
 			surface[ k ] = base[ k ];
 			cutFinal[ k ] = base[ k ];
-			top[ k ] = dug[ k ] < - DISTURBED ? CUT : GROUND;
+			top[ k ] = dug[ k ] < - DISTURBED && ! this.untouched ? CUT : GROUND;
 
 		}
 
@@ -919,7 +937,7 @@ export class Terrain extends EventDispatcher {
 	applyDug( chunk ) {
 
 		const { surface, cutFinal, dug, exc } = chunk;
-		for ( let k = 0; k < COUNT; k ++ ) {
+		for ( let k = 0; k < COUNT && ! this.untouched; k ++ ) {
 
 			surface[ k ] += dug[ k ];
 			cutFinal[ k ] += dug[ k ];
@@ -986,7 +1004,7 @@ export class Terrain extends EventDispatcher {
 			const owned = owns( k % NODES, Math.floor( k / NODES ) );
 			// A bite out of a stockpile goes no deeper than the pile there now (it may have shrunk
 			// since), and comes off that pile's volume.
-			const shown = Math.max( loose[ k ], exc[ k ] - surface[ k ] );
+			const shown = this.untouched ? 0 : Math.max( loose[ k ], exc[ k ] - surface[ k ] );
 			looseShown[ k ] = shown;
 			if ( shown !== 0 ) {
 

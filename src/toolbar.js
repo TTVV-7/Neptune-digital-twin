@@ -4,8 +4,9 @@ import { toScreen } from './handles.js';
 import { toast as showToast } from './placement.js';
 
 // The selection toolbar (sidebar.js): a row of buttons over the selected item that follows it on
-// screen, to turn it, type in an area's size, drive it, open its settings or delete it. Deleting
-// shows an Undo toast for a few seconds instead of asking first.
+// screen, to turn it, type in an area's size, drive it, open its settings, hide it or delete it.
+// Hiding and deleting show an Undo toast for a few seconds instead of asking first. Hidden items
+// stay in the plan, listed in the Show panel (layers.js) to show them again.
 
 // A press held this long (ms) on a turn button turns it by a right angle.
 const HOLD_TIME = 450;
@@ -15,6 +16,9 @@ const GAP = 12;
 const MARGIN = 8;
 // Labels floating over placed things (earthworks.js, laydown.js), which the toolbar goes above.
 const LABELS = '.earthworks-labels .label, .laydown-label';
+// The Show and Controls panels on the right (layers.js, legend.js), or their buttons, which the
+// toolbar keeps beside, as it does the P panel.
+const PANELS = '#layers > :not([hidden]), #legend > :not([hidden])';
 
 const icon = paths => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ paths }</svg>`;
 const ICONS = {
@@ -23,14 +27,15 @@ const ICONS = {
 	size: icon( '<path d="M14 4h6v6"/><path d="M10 20H4v-6"/><path d="M20 4l-6.5 6.5"/><path d="M4 20l6.5-6.5"/>' ),
 	drive: icon( '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2"/><path d="M3.5 11h6.5M14 11h6.5M12 14v6.5"/>' ),
 	edit: icon( '<path d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="17" r="2"/>' ),
+	hide: icon( '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/><path d="M4 20 20 4"/>' ),
 	remove: icon( '<path d="M4 7h16"/><path d="M9 7V4.5h6V7"/><path d="M6.5 7l1 12.5h9l1-12.5"/><path d="M10 11v5M14 11v5"/>' ),
 };
 
 const _anchor = new Vector3();
 
 // rotate( degrees ) turns the selected item, select( entry ) selects one, drive( entry ) gets in,
-// canDrive( entry ) says whether it's a vehicle or a machine.
-export function createToolbar( { camera, canvas, models, panel, select, rotate, drive, canDrive } ) {
+// canDrive( entry ) says whether it's a vehicle or a machine, hide( entry ) hides it.
+export function createToolbar( { camera, canvas, models, panel, select, rotate, drive, canDrive, hide } ) {
 
 	const root = document.createElement( 'div' );
 	root.className = 'selection-toolbar';
@@ -68,6 +73,7 @@ export function createToolbar( { camera, canvas, models, panel, select, rotate, 
 		size: button( 'size', 'Size', 'Type in the size' ),
 		drive: button( 'drive', 'Drive', 'Get in and drive it (V)' ),
 		edit: button( 'edit', 'Edit', 'All its settings (P)' ),
+		hide: button( 'hide', 'Hide', 'Hide it: it stays in the plan, and the Show panel (bottom right) shows it again' ),
 		remove: button( 'remove', 'Delete', 'Delete it (Delete key). You can undo it for a few seconds' ),
 	};
 
@@ -116,6 +122,20 @@ export function createToolbar( { camera, canvas, models, panel, select, rotate, 
 		// Unfolded too, if it was folded away by its title.
 		panel.gui.open();
 		panel.focus( entry, true );
+
+	} );
+	buttons.hide.addEventListener( 'click', () => {
+
+		done( buttons.hide );
+		if ( ! entry ) return;
+		const target = entry;
+		hide( target );
+		offerUndo( `Hid ${ target.state.name }`, () => {
+
+			models.setHidden( target, false );
+			if ( ! models.isHidden( target ) ) select( target );
+
+		} );
 
 	} );
 	buttons.remove.addEventListener( 'click', () => {
@@ -239,7 +259,7 @@ export function createToolbar( { camera, canvas, models, panel, select, rotate, 
 
 	}
 
-	// --- deleting, with undo -----------------------------------------------------------------
+	// --- deleting and hiding, with undo -----------------------------------------------------------------
 
 	let undoToast = null;
 
@@ -249,16 +269,35 @@ export function createToolbar( { camera, canvas, models, panel, select, rotate, 
 		const config = { ...models.toConfig( target ), inConfig: target.inConfig };
 		const name = target.state.name;
 		models.remove( target );
+		offerUndo( `Deleted ${ name }`, async () => {
+
+			try {
+
+				select( await models.load( config ) );
+
+			} catch ( err ) {
+
+				showToast( `Could not put ${ name } back: ${ err.message }` );
+
+			}
+
+		} );
+
+	}
+
+	// A toast saying what was done, with an Undo button for a few seconds.
+	function offerUndo( text, undo ) {
+
 		undoToast?.dismiss();
 		const element = document.createElement( 'div' );
 		element.className = 'toast undo-toast';
 		element.setAttribute( 'role', 'status' );
 		const message = document.createElement( 'span' );
-		message.textContent = `Deleted ${ name }`;
-		const undo = document.createElement( 'button' );
-		undo.type = 'button';
-		undo.textContent = 'Undo';
-		element.append( message, undo );
+		message.textContent = text;
+		const button = document.createElement( 'button' );
+		button.type = 'button';
+		button.textContent = 'Undo';
+		element.append( message, button );
 		document.body.append( element );
 		const toast = {
 			dismiss() {
@@ -271,18 +310,10 @@ export function createToolbar( { camera, canvas, models, panel, select, rotate, 
 		};
 		const timer = setTimeout( toast.dismiss, UNDO_TIME );
 		undoToast = toast;
-		undo.addEventListener( 'click', async () => {
+		button.addEventListener( 'click', () => {
 
 			toast.dismiss();
-			try {
-
-				select( await models.load( config ) );
-
-			} catch ( err ) {
-
-				showToast( `Could not put ${ name } back: ${ err.message }` );
-
-			}
+			undo();
 
 		} );
 
@@ -336,12 +367,13 @@ export function createToolbar( { camera, canvas, models, panel, select, rotate, 
 		// Measured again only when it changes size (other buttons, the size editor).
 		size ??= { width: root.offsetWidth, height: root.offsetHeight };
 		const { width, height } = size;
-		// Beside the P panel rather than under it, where there's room (on a phone there isn't).
+		// Beside the P panel and the panels at the bottom right rather than under or over them, where
+		// there's room (on a phone there isn't).
 		let right = window.innerWidth - MARGIN;
-		const gui = panel.gui.domElement;
-		if ( gui.style.display !== 'none' ) {
+		for ( const element of [ panel.gui.domElement, ...document.querySelectorAll( PANELS ) ] ) {
 
-			const r = gui.getBoundingClientRect();
+			const r = element.getBoundingClientRect();
+			if ( r.width === 0 || r.left > right ) continue;
 			if ( r.left - MARGIN - left >= width && r.bottom > point.y - GAP - height * 2 && r.top < point.y ) right = r.left - MARGIN;
 
 		}

@@ -8,7 +8,7 @@ import { useFastRaycast } from './raycast.js';
 import { frontToYaw } from './library.js';
 import { buildProcedural } from './procedural.js';
 import { getKind, kindParams } from './kinds.js';
-import { passesHitFilters } from './walk.js';
+import { addHitFilter, passesHitFilters } from './walk.js';
 
 const DOWN = new Vector3( 0, - 1, 0 );
 const _box = new Box3();
@@ -25,7 +25,13 @@ const SNAP_MARGIN = 2;
 
 // Loads your own glTF/GLB models and places them in the terminal frame.
 // Each entry keeps an editable `state` that the placement panel changes.
-// Dispatches 'add', 'change' and 'remove' events with the entry.
+// Dispatches 'add', 'change' and 'remove' events with the entry, 'hide' with the entry when it's
+// hidden or shown by hand (setHidden), and 'visibility' when what's hidden changes at all.
+//
+// An entry is hidden (isHidden) when it's hidden by hand, which is part of the plan and saved
+// with it, or when `concealed( entry )` says so: the Show panel (layers.js) sets that, for
+// layers switched off and the Before view, which are up to each viewer. Hidden entries aren't
+// drawn, can't be clicked, and don't block walking or driving; they stay where they are.
 export class ModelManager extends EventDispatcher {
 
 	constructor( { getGround, renderer } ) {
@@ -43,6 +49,11 @@ export class ModelManager extends EventDispatcher {
 		this.clock = 0;
 		// Build mode (the library sidebar is open): some kinds are only drawn then.
 		this.buildMode = false;
+		// entry -> true while it's kept out of view for this viewer (see the top of the class).
+		this.concealed = null;
+		this.hiddenCount = 0;
+		// Rays pass through hidden entries: walking, driving, zooming and clicking.
+		addHitFilter( hit => this.hiddenCount === 0 || ! inHidden( hit.object ) );
 
 		this.ktx2Loader = new KTX2Loader()
 			.setTranscoderPath( `https://cdn.jsdelivr.net/npm/three@0.${ REVISION }.0/examples/jsm/libs/basis/` )
@@ -100,7 +111,6 @@ export class ModelManager extends EventDispatcher {
 		const pivot = new Group();
 		pivot.name = config.name ?? kind?.label;
 		pivot.add( content );
-		if ( kind?.buildOnly ) pivot.visible = this.buildMode;
 		this.group.add( pivot );
 
 		const entry = {
@@ -119,6 +129,8 @@ export class ModelManager extends EventDispatcher {
 			placing: !! config.placing,
 			// From MODELS in config.js, which loads every time, rather than placed in this browser.
 			inConfig: !! config.inConfig,
+			// Hidden by hand (the selection toolbar's Hide): saved with the layout.
+			hidden: config.hidden === true,
 			footprint: new Box3().setFromObject( content ),
 			state: {
 				name: config.name ?? kind?.label ?? 'Model',
@@ -146,6 +158,7 @@ export class ModelManager extends EventDispatcher {
 		}
 
 		this.entries.push( entry );
+		this.showOrHide( entry );
 		try {
 
 			this.apply( entry );
@@ -196,6 +209,8 @@ export class ModelManager extends EventDispatcher {
 		entry.groundError = Infinity;
 		if ( state.snap ) this.snap( entry );
 		this.dispatchEvent( { type: 'change', entry } );
+		// Just placed, or got out of: no longer shown whatever its layer says.
+		if ( this.showOrHide( entry ) ) this.dispatchEvent( { type: 'visibility' } );
 
 	}
 
@@ -334,7 +349,7 @@ export class ModelManager extends EventDispatcher {
 
 		return this.entries.some( entry => {
 
-			if ( getKind( entry.kind )?.solid === false ) return false;
+			if ( getKind( entry.kind )?.solid === false || entry.pivot.userData.hidden ) return false;
 			entry.pivot.updateWorldMatrix( true, false );
 			return entry.footprint.containsPoint( entry.pivot.worldToLocal( _local.copy( point ) ) );
 
@@ -347,6 +362,7 @@ export class ModelManager extends EventDispatcher {
 		const index = this.entries.indexOf( entry );
 		if ( index === - 1 ) return;
 		this.entries.splice( index, 1 );
+		if ( entry.pivot.userData.hidden ) this.hiddenCount --;
 		this.group.remove( entry.pivot );
 		dispose( entry.pivot );
 		this.dispatchEvent( { type: 'remove', entry } );
@@ -374,8 +390,49 @@ export class ModelManager extends EventDispatcher {
 	setBuildMode( on ) {
 
 		this.buildMode = on;
-		for ( const entry of this.entries ) if ( getKind( entry.kind )?.buildOnly ) entry.pivot.visible = on;
+		for ( const entry of this.entries ) this.showOrHide( entry );
 		this.dispatchEvent( { type: 'buildmode', on } );
+
+	}
+
+	// Whether an entry is kept out of view: hidden by hand or concealed (see the top of the class).
+	// What's being placed always shows.
+	isHidden( entry ) {
+
+		if ( entry.placing || entry.driving ) return false;
+		return entry.hidden || !! this.concealed?.( entry );
+
+	}
+
+	// Hide an entry by hand, or show it again. It's saved like that.
+	setHidden( entry, hidden ) {
+
+		if ( entry.hidden === hidden ) return;
+		entry.hidden = hidden;
+		this.dispatchEvent( { type: 'hide', entry } );
+		this.refreshHidden( [ entry ] );
+
+	}
+
+	// Work out again which entries are drawn, after `concealed` changes what it says.
+	refreshHidden( entries = this.entries ) {
+
+		let changed = false;
+		for ( const entry of entries ) changed = this.showOrHide( entry ) || changed;
+		if ( changed ) this.dispatchEvent( { type: 'visibility' } );
+
+	}
+
+	// Draw the entry or not, as build mode and hiding say. True if whether it's hidden changed.
+	showOrHide( entry ) {
+
+		const { pivot } = entry;
+		const hidden = this.isHidden( entry );
+		pivot.visible = ! hidden && ( ! getKind( entry.kind )?.buildOnly || this.buildMode );
+		if ( !! pivot.userData.hidden === hidden ) return false;
+		pivot.userData.hidden = hidden;
+		this.hiddenCount += hidden ? 1 : - 1;
+		return true;
 
 	}
 
@@ -417,6 +474,7 @@ export class ModelManager extends EventDispatcher {
 
 		if ( ! entry.recenter ) config.recenter = false;
 		if ( entry.front ) config.front = entry.front;
+		if ( entry.hidden ) config.hidden = true;
 		if ( entry.pivotAhead ) config.pivot = { ahead: round( entry.pivotAhead * state.scale ) };
 		if ( entry.library && ! entry.kind ) config.library = entry.library;
 		return config;
@@ -431,6 +489,14 @@ function upgradeConfig( config ) {
 	if ( ! config.zone ) return config;
 	const { zone, library, ...rest } = config;
 	return { ...rest, kind: 'flatten-zone', params: { ...zone } };
+
+}
+
+// Whether an object is part of a hidden entry (see showOrHide).
+function inHidden( object ) {
+
+	for ( let o = object; o; o = o.parent ) if ( o.userData.hidden ) return true;
+	return false;
 
 }
 

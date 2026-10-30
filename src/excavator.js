@@ -1158,7 +1158,8 @@ function createTruckLoads( { models, layout } ) {
 	const _point = new Vector3();
 	return {
 
-		list: () => models.entries.filter( isTruck ),
+		// Hidden ones (layers.js) aren't there to load.
+		list: () => models.entries.filter( entry => isTruck( entry ) && ! models.isHidden( entry ) ),
 		load: entry => loads.get( entry )?.loose ?? 0,
 		capacity: entry => bedOf( entry ).capacity,
 		isFull: entry => ( loads.get( entry )?.loose ?? 0 ) >= bedOf( entry ).capacity,

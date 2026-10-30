@@ -2,7 +2,8 @@
 // (walking, flying, the library, placing, drawing an area, an item selected, driving, digging),
 // changing as that changes. It folds away to a small Controls button; whether it's open is
 // remembered in this browser. It opens by itself on a first visit, except on a phone, where it
-// starts as the button. H (or its All controls button) opens the full help.
+// starts as the button. H (or its All controls button) opens the full help. The Show panel
+// (layers.js) stands on top of it, in the same column (stack()), and is placed with it.
 
 import { getKind, resizeShape } from './kinds.js';
 
@@ -40,8 +41,8 @@ const EXCAVATOR = [
 
 // controls, driver, models: the walk controller, race mode and what's placed. getSidebar: the
 // library sidebar, once loaded. getDriving: what V does (drive-prompt.js), once loaded.
-// toggleHelp: shows or hides the full help.
-export function createLegend( { controls, driver, models, getSidebar, getDriving, toggleHelp } ) {
+// getLayers: the Show panel, once loaded. toggleHelp: shows or hides the full help.
+export function createLegend( { controls, driver, models, getSidebar, getDriving, getLayers, toggleHelp } ) {
 
 	const root = document.getElementById( 'legend' );
 	const openButton = root.querySelector( '.legend-open' );
@@ -60,6 +61,8 @@ export function createLegend( { controls, driver, models, getSidebar, getDriving
 	// Opened by hand while there's no room for it (a phone with the P panel open): it then stays
 	// open over the P panel, until there's room again.
 	let insist = false;
+	// The panel standing on top of this one (stack()), as { root, panel, button, open, insist }.
+	let other = null;
 
 	function setOpen( value ) {
 
@@ -108,6 +111,13 @@ export function createLegend( { controls, driver, models, getSidebar, getDriving
 
 	}
 
+	// Before / After (layers.js).
+	function beforeRow() {
+
+		return [ [ 'B' ], getLayers()?.before ? 'After: show your changes again' : 'Before: the site as Google captured it' ];
+
+	}
+
 	function walkRows() {
 
 		return { title: 'Walking', rows: [
@@ -117,6 +127,7 @@ export function createLegend( { controls, driver, models, getSidebar, getDriving
 			...look(),
 			...zoom,
 			driveRow(),
+			beforeRow(),
 			[ [ 'L' ], 'Library: place equipment' ],
 		] };
 
@@ -132,6 +143,7 @@ export function createLegend( { controls, driver, models, getSidebar, getDriving
 			...zoom,
 			[ [ 'G' ], controls.ghost ? 'Ghost is on: G to bump into walls' : 'Ghost: fly through walls' ],
 			driveRow(),
+			beforeRow(),
 			[ [ 'L' ], 'Library: place equipment' ],
 		] };
 
@@ -148,6 +160,7 @@ export function createLegend( { controls, driver, models, getSidebar, getDriving
 			...mouse ? [ [ [ '~Right-drag' ], 'Look around' ] ] : [],
 			...zoom,
 			[ [ 'W', 'A', 'S', 'D' ], 'Move' ],
+			beforeRow(),
 			[ [ 'L' ], 'Close the library' ],
 		] };
 
@@ -187,7 +200,7 @@ export function createLegend( { controls, driver, models, getSidebar, getDriving
 		const shape = resizeShape( kind, entry.params );
 		const turns = shape !== 'circle';
 		const drivable = getDriving()?.isDrivable( entry );
-		const buttons = [ turns && 'rotate', shape && 'size', drivable && 'drive', 'edit', 'delete' ].filter( Boolean );
+		const buttons = [ turns && 'rotate', shape && 'size', drivable && 'drive', 'edit', 'hide', 'delete' ].filter( Boolean );
 		return { title: `Selected: ${ entry.state.name ?? '' }`, rows: [
 			[ [ '~Drag' ], 'Move it' ],
 			...turns ? [ [ [ '~Drag' ], 'The round handle: rotate' ] ] : [],
@@ -227,55 +240,102 @@ export function createLegend( { controls, driver, models, getSidebar, getDriving
 
 	// Bottom right, above whatever else is at the bottom of the screen there (Google's attribution,
 	// the hint, the drive prompt and HUD, the library on a phone), below the status readout, and
-	// below or beside the P panel. Where there's no room for the panel (a phone with the P panel
-	// open), it folds to its button until there is. So it does on a phone while the library, a sheet
-	// over the bottom half there, is open: it would cover most of the map left to place things on.
+	// below or beside the P panel, with the other panel (the Show panel) on top of it in the same
+	// column. Where there's no room for both, the other folds to its button first, then this one.
+	// One opened by hand stays open over the P panel instead, until there's room again. On a phone
+	// both fold while the library, a sheet over the bottom half there, is open: they would cover
+	// most of the map left to place things on.
 	function place() {
 
 		const gui = visibleRect( document.querySelector( '.lil-gui.lil-root' ) );
 		const sheet = visibleRect( library );
-		let folded = ! open;
-		let spot = null;
-		if ( open ) {
+		const sheetUp = !! sheet && sheet.top > 1;
+		const stacked = other && ! other.root.hidden ? other : null;
+		const wanted = [ open, !! stacked?.open ];
+		const tries = [ wanted, [ wanted[ 0 ], false ], [ false, wanted[ 1 ] ], [ false, false ] ]
+			.filter( ( [ a, b ], i, all ) => ! ( sheetUp && ( a || b ) ) && all.findIndex( ( [ c, d ] ) => c === a && d === b ) === i );
+		let column = null;
+		for ( const [ a, b ] of tries ) {
 
-			show( panel );
-			spot = sheet && sheet.top > 1 ? null : spotFor( panel, gui );
-			if ( spot ) insist = false;
-			else if ( insist ) spot = spotFor( panel, null );
-			else folded = true;
-
-		}
-
-		if ( folded ) {
-
-			show( openButton );
-			spot = spotFor( openButton, gui ) ?? spotFor( openButton, null );
+			column = arrange( a, b, stacked, gui );
+			if ( column ) break;
 
 		}
 
-		spot ??= { right: EDGE, bottom: EDGE, height: window.innerHeight - EDGE * 2 };
+		if ( column?.open[ 0 ] ) insist = false;
+		if ( column?.open[ 1 ] ) stacked.insist = false;
+		const forced = [ open && insist, !! stacked?.open && stacked.insist ];
+		if ( forced.some( ( force, i ) => force && ! column?.open[ i ] ) ) {
+
+			column = arrange( forced[ 0 ] || !! column?.open[ 0 ], forced[ 1 ] || !! column?.open[ 1 ], stacked, null ) ?? column;
+
+		}
+
+		column ??= arrange( false, false, stacked, gui ) ?? arrange( false, false, stacked, null );
+		column ??= { ...arrange( false, false, stacked, null, true ), spot: { right: EDGE, bottom: EDGE, height: window.innerHeight - EDGE * 2 } };
+
+		// Each panel gets the height it needs where there's room, else its least and a share of the rest.
+		const { spot, sizes } = column;
+		display( ...column.open, stacked );
+		const least = sizes.reduce( ( sum, size ) => sum + size.least, 0 );
+		const need = sizes.reduce( ( sum, size ) => sum + size.natural - size.least, 0 );
+		const spare = Math.max( 0, spot.height - GAP * ( sizes.length - 1 ) - least );
+		const share = need > 0 ? Math.min( 1, spare / need ) : 1;
+		const heights = sizes.map( size => Math.floor( size.least + ( size.natural - size.least ) * share ) );
 		root.style.right = `${ spot.right }px`;
 		root.style.bottom = `${ spot.bottom }px`;
-		panel.style.maxHeight = `${ spot.height }px`;
+		panel.style.maxHeight = `${ heights[ 0 ] }px`;
+		const folded = ! column.open[ 0 ];
 		openButton.setAttribute( 'aria-expanded', String( ! folded ) );
 		document.body.classList.toggle( 'legend-open', ! folded );
+		if ( ! stacked ) return;
+
+		stacked.panel.style.maxHeight = `${ heights[ 1 ] }px`;
+		stacked.root.style.right = `${ spot.right }px`;
+		stacked.root.style.bottom = `${ spot.bottom + root.offsetHeight + GAP }px`;
+		stacked.button.setAttribute( 'aria-expanded', String( column.open[ 1 ] ) );
 
 	}
 
-	function show( box ) {
+	// The column with this panel open or folded to its button (a), and the other panel on top of it
+	// (b), if there's a spot for it clear of the P panel (`gui`, if given; any spot if `anyway`): as
+	// { spot, sizes: [ { natural, least } ] (heights in px), open: [ a, b ] }, or null.
+	function arrange( a, b, stacked, gui, anyway = false ) {
 
-		panel.hidden = box !== panel;
-		openButton.hidden = box !== openButton;
+		const boxes = display( a, b, stacked );
+
+		// A panel can be squeezed down to MIN_HEIGHT (it scrolls); a button can't.
+		const sizes = boxes.map( box => {
+
+			const natural = box.scrollHeight;
+			return { natural, least: box === panel || box === stacked?.panel ? Math.min( natural, MIN_HEIGHT ) : natural };
+
+		} );
+		const gaps = GAP * ( boxes.length - 1 );
+		const sum = key => sizes.reduce( ( total, size ) => total + size[ key ], gaps );
+		const spot = anyway ? null : spotFor( Math.max( ...boxes.map( box => box.offsetWidth ) ), sum( 'natural' ), sum( 'least' ), gui );
+		return spot || anyway ? { spot, sizes, open: [ a, b ] } : null;
 
 	}
 
-	// Where `box` fits, as { right, bottom, height } (its insets from the right and the bottom and
-	// the most height it has), clear of the P panel (`gui`) if given: at the right edge, else beside
-	// the P panel; in full if it can, else squeezed (but not under MIN_HEIGHT). Null if neither.
-	function spotFor( box, gui ) {
+	// Show each panel or its button, as a and b say; returns what's shown, bottom first.
+	function display( a, b, stacked ) {
 
-		const width = box.offsetWidth;
-		const natural = box.scrollHeight;
+		panel.hidden = ! a;
+		openButton.hidden = a;
+		if ( ! stacked ) return [ a ? panel : openButton ];
+		stacked.panel.hidden = ! b;
+		stacked.button.hidden = b;
+		return [ a ? panel : openButton, b ? stacked.panel : stacked.button ];
+
+	}
+
+	// Where a column `width` wide fits, as { right, bottom, height } (its insets from the right and
+	// the bottom and the most height it has), clear of the P panel (`gui`) if given: at the right
+	// edge, else beside the P panel; `natural` high if it can, else squeezed (but not under
+	// `least`). Null if neither.
+	function spotFor( width, natural, least, gui ) {
+
 		const sidebar = visibleRect( library );
 		const leftLimit = sidebar && sidebar.top < 1 ? sidebar.right + GAP : EDGE;
 		const rights = [ EDGE ];
@@ -288,7 +348,7 @@ export function createLegend( { controls, driver, models, getSidebar, getDriving
 				return { right, bottom, height: window.innerHeight - bottom - clearAbove( right, width, gui ) };
 
 			} );
-		return spots.find( spot => spot.height >= natural ) ?? spots.find( spot => spot.height >= Math.min( natural, MIN_HEIGHT ) ) ?? null;
+		return spots.find( spot => spot.height >= natural ) ?? spots.find( spot => spot.height >= least ) ?? null;
 
 	}
 
@@ -334,7 +394,18 @@ export function createLegend( { controls, driver, models, getSidebar, getDriving
 	window.addEventListener( 'resize', soon );
 	update();
 
-	return { update, isOpen: () => open, setOpen };
+	return {
+		update,
+		isOpen: () => open,
+		setOpen,
+		// Another panel to stand on top of this one (see `other` above).
+		stack( value ) {
+
+			other = value;
+			update();
+
+		},
+	};
 
 }
 

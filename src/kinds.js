@@ -4,6 +4,8 @@
 //
 //   registerKind( 'laydown', {
 //     label: 'Laydown area',                // default name
+//     layer: 'Laydown areas',               // its row in the Show panel (layers.js); default:
+//                                           // the label with an s
 //     build( params ) { return object; },   // what's drawn; centred on the origin, base at y = 0,
 //                                           // front facing -Z. Rebuilt whenever params change.
 //     normalize( params ) { return params; },  // fill defaults and clamp (optional)
@@ -53,6 +55,13 @@ export function resizeShape( kind, params ) {
 
 	const shape = kind?.resize?.shape ?? null;
 	return typeof shape === 'function' ? shape( params ) : shape;
+
+}
+
+// Every kind, in the order they were registered.
+export function listKinds() {
+
+	return [ ...kinds.values() ];
 
 }
 

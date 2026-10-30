@@ -84,6 +84,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		rotate: degrees => rotateSelected( degrees ),
 		drive,
 		canDrive: entry => vehicles.has( entry.library ),
+		hide: entry => models.setHidden( entry, true ),
 	} );
 
 	// --- the list ------------------------------------------------------------------------
@@ -317,6 +318,12 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	} );
 	updateCount();
+	// Hidden things can't stay selected (the Show panel, the toolbar's Hide, Before).
+	models.addEventListener( 'visibility', () => {
+
+		if ( selected && models.isHidden( selected ) ) select( null );
+
+	} );
 
 	// --- premium items -------------------------------------------------------------------
 
