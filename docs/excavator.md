@@ -1,4 +1,4 @@
-## Excavators that dig
+# Excavators that dig
 
 Two excavators are built into the library (**L**, under **Heavy equipment**): **Excavator (20 t)**
 and **Mini excavator (3.5 t)**. Place one like any other item, then press **V** to get in and dig:
@@ -18,7 +18,7 @@ as **Excavation** and **Stockpile** (see Earthworks), so they're saved with the 
 
 Both are generic machines with the proportions of their class, not any one make.
 
-### Driving and digging
+## Driving and digging
 
 Select the excavator (or stand within 25 m of it) and press **V**. The speedometer is replaced by
 the excavator's readouts and keys.
@@ -62,7 +62,7 @@ The readouts:
 If the bucket can't reach deep enough where you're digging, a pass takes less, or nothing at all
 ("Too deep to reach"): reach further out, or drive closer.
 
-### Loading trucks
+## Loading trucks
 
 Park a truck with its bed beside the excavator, on the dump side and within reach (for the 20 t,
 3 to 8.5 m from the swing axis and within about 50° of straight out to the side). The dump
@@ -75,7 +75,7 @@ in it, such as **Haul truck (off-highway, 55 t)** (34 m³ heaped) and the **Roll
 (20 and 40 yd). Front-load bins don't count: they have lids. A truck's load is saved with the
 layout. Drive the truck away (V) and the load goes with it.
 
-### Notes
+## Notes
 
 - Getting out leaves the ground as it is. The library's **Clear** puts it back, along with
   everything else.
@@ -86,7 +86,7 @@ layout. Drive the truck away (V) and the load goes with it.
 - The counters (cycles, dug, spoil) are per machine while the page is open; they're not saved.
   The hole, the pile and truck loads are.
 
-### For developers
+## For developers
 
 - `src/excavator-model.js` builds the machine: `buildExcavator( EXCAVATOR_20T )` returns a group
   whose `userData.rig` poses it: `rig.setPose( { swing, boom, stick, bucket } )` (radians),

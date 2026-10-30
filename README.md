@@ -64,7 +64,8 @@ The key ends up in the browser, so restricting it is what keeps it safe.
 | Space | Jump (walk) / up (fly) |
 | E / Q | Up / down (fly) |
 | L | Library: place vehicles and site pieces, flatten areas |
-| V | Drive the selected or nearest vehicle (race mode); V again to get out |
+| V | Drive the selected or nearest vehicle or machine (race mode); V again to get out |
+| Space (excavator) | Hold to dig; Q / E swing, R / F reach, X dump side |
 | P | Model placement panel |
 | H | Help |
 
@@ -183,6 +184,16 @@ Pits and piles are real ground: you can walk into a pit, drive over a pile, and 
 sit on them. Volumes come out within about 1% of the textbook figure for the shape, measured from
 Google's ground, so they are as good as the map. Details in [docs/earthworks.md](docs/earthworks.md).
 
+## Digging with an excavator
+
+The library's **Excavator (20 t)** and **Mini excavator (3.5 t)** (under *Heavy equipment*) really
+dig. Place one, press **V** to get in, and hold **Space** (or the left mouse button): it bites into the
+ground in front, swings round and dumps the spoil beside the hole, where it piles up at its natural
+slope, or into a dump truck, haul truck or roll-off parked on that side (the HUD counts the load).
+**Q**/**E** swing the dig direction, **R**/**F** or the wheel set the reach, **X** switches the dump side,
+**W**/**S** and **A**/**D** drive the tracks. The hole and the spoil are saved with the layout. See
+[docs/excavator.md](docs/excavator.md).
+
 ## Race mode
 
 Press **V** to get in and drive: the selected vehicle from the library's Vehicles, else the nearest
@@ -235,6 +246,7 @@ src/kinds.js        placed things that aren't models (areas, pits, piles): how f
 src/terrain.js      the ground that can be dug and piled: heights, volumes, drawing, saving
 src/earthworks.js   excavations and stockpiles, and their tools; src/pour.js animates pouring
 src/laydown.js      laydown areas: coloured site areas draped on the ground, with labels
+src/excavator.js    digging with an excavator; src/excavator-model.js builds the machines
 src/cloud.js        sign in with Google, layouts in your account, share links (needs the Worker)
 worker/             the Cloudflare Worker: accounts and layouts API (D1), serves the built site
 scripts/add-asset.mjs   imports a model from Sketchfab or Poly Haven into public/library
