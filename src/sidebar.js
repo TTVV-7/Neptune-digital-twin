@@ -19,7 +19,7 @@ import { localToEnu } from './geo.js';
 import { isTyping, passesHitFilters } from './walk.js';
 import { ZONE_ID } from './flatten.js';
 import { getKind } from './kinds.js';
-import { createHandles } from './handles.js';
+import { createHandles, toScreen } from './handles.js';
 import { createToolbar } from './toolbar.js';
 
 const ROTATE_STEP = 15;
@@ -33,6 +33,12 @@ const CLICK_SLOP = 5;
 const TOUCH_SLOP = 12;
 // Drawing a line, a second click this soon (ms) where the last one was finishes it.
 const DOUBLE_CLICK = 400;
+// A first press dragged this far (pixels; a finger: twice as far) is a straight line at once, and
+// less is a click, so that a shaky first click doesn't end the line before it's begun.
+const LINE_DRAG = 24;
+// The pointer this close to the first point (pixels; a finger: twice as close) is on it: a click
+// there closes the line into a loop.
+const CLOSE_RADIUS = 12;
 // A phone: the library is a sheet over the bottom of the screen there (style.css).
 const PHONE = window.matchMedia( '( max-width: 700px )' );
 // The padlock on a locked premium item's Pro badge.
@@ -526,7 +532,9 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	function select( entry, touch = false ) {
 
 		selected = entry;
-		highlight.visible = !! entry;
+		// A row of items (rows.js) shows as its line with dots on it instead: a box round all of a
+		// long or bent row would be mostly empty ground.
+		highlight.visible = !! entry && getKind( entry.kind )?.resize?.shape !== 'points';
 		if ( ! entry ) return;
 		highlight.setFromObject( entry.pivot );
 		panel.focus( entry, ! touch );
@@ -944,12 +952,14 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	// --- drawing a line: a row of items ------------------------------------------------------
 
 	// Click points on the ground for a line, corners and all (rows.js): a double-click, Enter or
-	// finishLine() ends it, Backspace or undoPoint() takes the last point back and Esc cancels; on
-	// a finger each tap is a point. A press dragged out before any point is clicked makes a straight
-	// line at once. spec: { name, card (marked while drawing), points (any to start with), onChange(
-	// points, cursor ), onDone( points, touch ) (may return a placed entry, which is then selected),
-	// onCancel() }. Points are on the ground, as positions in the scene; cursor is the point on the
-	// ground under the pointer, or null (none, or a finger that has been lifted).
+	// finishLine() ends it, a click on the first point closes it into a loop and ends it, Backspace
+	// or undoPoint() takes the last point back and Esc cancels; on a finger each tap is a point. A
+	// press dragged out before any point is clicked makes a straight line at once. spec: { name,
+	// card (marked while drawing), points (any to start with), onChange( points, cursor ), onDone(
+	// points, touch ) (may return a placed entry, which is then selected), onCancel() }. Points are
+	// on the ground, as positions in the scene; cursor is the point on the ground under the pointer,
+	// or null (none, or a finger that has been lifted); it is the first point itself while the
+	// pointer is on that, about to close the loop.
 	function startLine( spec ) {
 
 		cancelPlacing();
@@ -978,13 +988,23 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		const { press } = drawing;
 		const slop = e.pointerType === 'touch' ? TOUCH_SLOP : CLICK_SLOP;
 		if ( press && ! press.moved ) press.moved = Math.hypot( e.clientX - press.x, e.clientY - press.y ) >= slop;
-		drawing.cursor = surfacePoint( e.clientX, e.clientY );
+		drawing.cursor = firstPointAt( e.clientX, e.clientY, e.pointerType !== 'mouse' ) ?? surfacePoint( e.clientX, e.clientY );
 		lineChanged();
 
 	}
 
-	// A click adds a point, and a second one straight after it finishes. A drag adds the point it
-	// ends at, or, from the first press, is the whole line.
+	// The first point, if it's under the pointer and two or more have been added after it.
+	function firstPointAt( x, y, touch ) {
+
+		const [ first ] = drawing.points;
+		if ( drawing.points.length < 3 ) return null;
+		const spot = toScreen( first, camera, canvas.getBoundingClientRect() );
+		return spot.visible && Math.hypot( spot.x - x, spot.y - y ) <= CLOSE_RADIUS * ( touch ? 2 : 1 ) ? first : null;
+
+	}
+
+	// A click adds a point, and a second one straight after it finishes; one on the first point
+	// closes the loop. A drag adds the point it ends at, or, from the first press, is the whole line.
 	function releaseLine( e ) {
 
 		const { press, click } = drawing;
@@ -992,7 +1012,17 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		const touch = e.pointerType !== 'mouse';
 		const slop = touch ? TOUCH_SLOP : CLICK_SLOP;
 		const now = performance.now();
-		if ( press.moved ) {
+		const first = firstPointAt( press.moved ? e.clientX : press.x, press.moved ? e.clientY : press.y, touch );
+		// The first press dragged only a little was a click.
+		if ( press.moved && drawing.points.length === 0 && Math.hypot( e.clientX - press.x, e.clientY - press.y ) < LINE_DRAG * ( touch ? 2 : 1 ) ) press.moved = false;
+		if ( first ) {
+
+			drawing.points.push( first.clone() );
+			drawing.click = null;
+			finishLine( touch );
+			return;
+
+		} else if ( press.moved ) {
 
 			const end = surfacePoint( e.clientX, e.clientY ) ?? drawing.cursor;
 			drawing.click = null;
@@ -1030,6 +1060,9 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		if ( drawing?.tool.mode !== 'line' || drawing.points.length < 2 ) return false;
 		const { tool, points } = drawing;
 		stopDrawing();
+		// On a phone the library sheet stepped aside for the line (rows.css); it stays folded so that
+		// the line just drawn, and the dots to change it, aren't under it. Library opens it again.
+		if ( PHONE.matches ) setOpen( false );
 		Promise.resolve()
 			.then( () => tool.onDone( points, touch ) )
 			.then( entry => entry?.pivot && select( entry, touch ), err => onError( `${ tool.name }: ${ err.message }` ) );

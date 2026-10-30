@@ -207,6 +207,7 @@ export function createLegend( { controls, driver, models, getSidebar, getDriving
 
 		return { title: `Row: ${ name }`, rows: [
 			[ [ `~${ click }` ], 'The ground: add a point, corners and all' ],
+			[ [ `~${ click }` ], 'The first point again: close the loop' ],
 			[ [ '~Drag' ], 'From the first point: a straight row' ],
 			[ mouse ? [ '~Double-click', '/', 'Enter' ] : [ '~Done' ], 'Finish' ],
 			[ mouse ? [ 'Backspace' ] : [ '~Undo point' ], 'Take the last point back' ],

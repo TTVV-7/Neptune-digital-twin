@@ -91,7 +91,7 @@ things and switches between before and after (see [Showing and hiding](#showing-
 | Drag a card onto the map | Place it there |
 | R or the wheel | Turn the item you're placing |
 | Tools (top of the library) | Laydown area, Excavation, Stockpile, Flatten area: drag a rectangle, or click for the usual size |
-| Row (on a card) | Row: draw a line to place many. Click points on the ground, double-click or Enter to finish; drag for a straight row. Backspace takes a point back (see [Rows](#rows-many-of-an-item-along-a-line)) |
+| Row (on a card) | Row: draw a line to place many. Click points on the ground, double-click or Enter to finish, or click the first point to close a loop; drag for a straight row. Backspace takes a point back (see [Rows](#rows-many-of-an-item-along-a-line)) |
 | Dots on a selected row | Drag one to move that point; drag or click a plus to add one; double-click a dot to take it out |
 | Click a placed item | Select it; drag it to move it |
 | Round handle | Drag to rotate the selected item; Shift snaps to 15° |
@@ -269,9 +269,11 @@ many of one item along a line drawn on the ground. **Row** on a placed item's to
 from that item, which becomes the first of the row. Any library item works.
 
 - **Drawing:** click points on the ground, corners and all, then double-click (or press **Enter**)
-  to finish. A quick drag from where you start makes a straight row at once. **Backspace** takes the
-  last point back and **Esc** cancels. On a phone, tap the points and then **Done**; the library
-  sheet steps aside while you draw.
+  to finish, or click the first point again to close a loop (its dot grows as you come over it). A
+  drag from where you start makes a straight row at once. **Backspace** takes the last point back
+  and **Esc** cancels. On a phone, tap the points and then **Done**; the library sheet steps aside
+  while you draw, and stays folded afterwards so the new row's points can be dragged (**Library**
+  brings it back).
 - **Spacing,** in the panel at the top while drawing:
   - *End to end*: each copy runs its real length along the line, and the next starts the gap after
     it (none for barriers, fencing and hoarding, which touch; a metre for plant and vehicles). Fence

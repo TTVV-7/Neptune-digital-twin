@@ -689,7 +689,7 @@ export function setUpRows( { scene, camera, canvas, models, sidebar, panel, layo
 		for ( const mesh of state.preview.children ) mesh.count = plan.copies.length;
 		placeCopies( state.preview, t, plan.copies, heights, pitches );
 		state.preview.visible = true;
-		ui.say( state, summary( state.item, plan ) );
+		ui.say( state, `${ summary( state.item, plan ) }${ closing( state ) ? ' · closes the loop' : '' }` );
 
 	}
 
@@ -716,6 +716,15 @@ export function setUpRows( { scene, camera, canvas, models, sidebar, panel, layo
 
 		while ( state.dots.length < state.points.length ) state.dots.push( ui.dot() );
 		while ( state.dots.length > state.points.length ) state.dots.pop().remove();
+		state.dots[ 0 ]?.classList.toggle( 'closing', closing( state ) );
+
+	}
+
+	// Whether the pointer is on the first point, where a click closes the line into a loop (the
+	// sidebar hands that point itself over as the cursor then).
+	function closing( state ) {
+
+		return state.points.length > 2 && state.cursor === state.points[ 0 ];
 
 	}
 
@@ -907,8 +916,8 @@ export function setUpRows( { scene, camera, canvas, models, sidebar, panel, layo
 			label.textContent = text ?? '';
 			label.dataset.empty = String( ! text );
 			root.querySelector( '.tip' ).textContent = mouse
-				? 'Click points on the ground, corners and all; double-click or Enter to finish. Drag for a straight row. Backspace undoes a point, Esc cancels.'
-				: 'Tap points on the ground, corners and all, then Done. Drag for a straight row.';
+				? 'Click points on the ground, corners and all; double-click or Enter to finish, or click the first point to close a loop. Drag for a straight row. Backspace undoes a point, Esc cancels.'
+				: 'Tap points on the ground, corners and all, then Done, or tap the first point to close a loop. Drag for a straight row.';
 			root.querySelector( '.undo' ).disabled = state.points.length === 0;
 			root.querySelector( '.done' ).disabled = state.points.length < 2;
 

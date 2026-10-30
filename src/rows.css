@@ -157,6 +157,14 @@
 	box-shadow: 0 1px 3px rgba( 0, 0, 0, 0.5 );
 }
 
+/* The first point while a click on it would close the loop. */
+.row-dot.closing {
+	width: 18px;
+	height: 18px;
+	border-color: #fff;
+	background: var( --accent );
+}
+
 /* Beside the end of the line: how many, how long, how heavy (styled as .handle-label). */
 .handle-label.row-label {
 	position: fixed;
