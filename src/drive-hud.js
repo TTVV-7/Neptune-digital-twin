@@ -454,6 +454,16 @@ const CSS = `
 	align-items: center;
 }
 
+/* Messages and tricks start under the readouts there (18vh down, a phone on its side had them over
+   the readouts), the tricks far enough down to clear a hint on two lines. */
+.dhud.touch .dhud-flash {
+	top: max( calc( var( --drive-hud-top, 12px ) + 18vh ), calc( var( --drive-hud-top, 12px ) + 148px ) );
+}
+
+.dhud.touch .dhud-tricks {
+	top: calc( max( calc( var( --drive-hud-top, 12px ) + 18vh ), calc( var( --drive-hud-top, 12px ) + 148px ) ) + 54px );
+}
+
 .dhud.touch .dhud-number {
 	font-size: 40px;
 }
@@ -626,6 +636,21 @@ const CSS = `
 	.dhud .dhud-touch .fly {
 		bottom: calc( var( --drive-hud-bottom, 28px ) + 132px );
 		height: 48px;
+	}
+
+	/* Messages and tricks smaller, between the buttons rather than under them. */
+	.dhud.touch .dhud-flash,
+	.dhud.touch .dhud-tricks {
+		padding: 0 112px;
+	}
+
+	.dhud.touch .dhud-flash.long,
+	.dhud.touch .dhud-tricks b {
+		font-size: 18px;
+	}
+
+	.dhud.touch .dhud-tricks .points {
+		font-size: 15px;
 	}
 
 }
@@ -914,7 +939,8 @@ export function createDriveHud( parent = document.body ) {
 
 		},
 
-		// Tricks landed: { lines, points, mult, combo }; or lost in a wipeout: { lines, mult, lost }.
+		// Tricks landed: { lines, points, mult, combo }, the points before the multiplier; or lost in
+		// a wipeout: { lines, mult, lost }.
 		tricks( { lines, points: gained = 0, mult: times = 1, combo = false, lost = false } ) {
 
 			const last = lost ? ( times > 1 ? `Combo ×${ times } lost` : 'Wipeout' ) : `${ combo ? 'Combo! ' : '' }+${ gained.toLocaleString( 'en-CA' ) }${ times > 1 ? ` ×${ times }` : '' }`;
