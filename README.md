@@ -186,8 +186,9 @@ npx @gltf-transform/cli optimize input.glb public/models/output.glb --compress m
 
 Press **L** (or the **Library** button, bottom left) to open the library: vehicles, construction
 equipment (excavators, loaders, a dozer, graders, rollers, cranes, lifts, telehandlers, forklifts,
-dump trucks...), site office trailers, containers, dumpsters, barriers, fencing, traffic control,
-porta-potties, pallets, shoring and more, all at real scale and not tied to Neptune, so the same library works
+dump trucks...), site trailers in seven sizes, containers, fabric shelters and other temporary covers,
+dumpsters, barriers, fencing and hoarding, traffic control, porta-potties, dewatering and water
+treatment, people for scale, pallets, shoring and more, all at real scale and not tied to Neptune, so the same library works
 at any site. What each downloaded machine is and where it came from is in
 [docs/equipment.md](docs/equipment.md).
 
@@ -211,8 +212,8 @@ at any site. What each downloaded machine is and where it came from is in
 Two kinds of items:
 
 - **Built in** (`src/procedural.js`): simple standard pieces generated in code at exact North American
-  dimensions, e.g. a 10 ft New Jersey barrier, 20/40 ft ISO containers, a 12 x 60 ft site office trailer,
-  20/40 yd roll-offs. Add more there.
+  dimensions, e.g. a 10 ft New Jersey barrier, 20/40 ft ISO containers, site office trailers from 8 x 20
+  to 24 x 60 ft, 20/40 yd roll-offs, fabric shelters, a frac tank, workers. Add more there.
 - **Downloaded** (`public/library/`): models from Sketchfab and Poly Haven, listed in `library.json` with
   their size, facing and licence. `CREDITS.md` credits the authors; the app shows the credits under **H**.
 
@@ -364,6 +365,11 @@ src/placement.js    the P panel
 src/raycast.js      fast raycasting (three-mesh-bvh) for walking and snapping
 src/library.js      loads the library (downloaded models + built-in pieces)
 src/procedural.js   built-in site pieces generated in code
+src/parts.js        builds those pieces from parts merged into one mesh per material
+src/trailers.js     site trailers: offices, double-wide, washroom, lunchroom; src/covers.js fabric
+                    shelters, canopies, scaffold enclosure, fence runs, hoarding
+src/water-treatment.js  frac and weir tanks, sand filter, dosing trailer, trash pump, dewatering bag
+src/people.js       workers and a traffic control person, for scale
 src/sidebar.js      the library sidebar: placing, selecting, moving, drawing flatten areas
 src/handles.js      on-map handles for the selected item: turning, resizing areas, a pit's depth
 src/toolbar.js      the toolbar over the selected item, its size editor and Undo after deleting
