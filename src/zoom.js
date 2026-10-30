@@ -23,7 +23,7 @@ const _point = new Vector3();
 // While driving a car they move the chase camera nearer or farther instead.
 //
 // Others use the wheel first and say so with preventDefault, which this leaves alone: turning an
-// item being placed (sidebar.js) and an excavator's reach (excavator.js). That's why this listens on
+// item being placed or moved (sidebar.js) and an excavator's reach (excavator.js). That's why this listens on
 // the window, after them, rather than on the canvas. Over the sidebar, the panels and dialogs the
 // wheel scrolls them as usual.
 export function setUpZoom( { canvas, camera, controls, driver, getColliders } ) {

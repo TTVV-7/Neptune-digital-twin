@@ -88,9 +88,12 @@ panel) shows the full list:
 | R or the wheel | Turn the item you're placing |
 | Tools (top of the library) | Laydown area, Excavation, Stockpile, Flatten area: drag a rectangle, or click for the usual size |
 | Click a placed item | Select it; drag it to move it |
-| Round handle / corner handles | Drag to rotate / resize the selected item |
+| Round handle | Drag to rotate the selected item; Shift snaps to 15° |
+| Square handles | On an area, excavation or stockpile: drag to resize; Shift for any size |
+| Arrow in a pit | Drag down to dig deeper, up for shallower |
+| Toolbar | The buttons over the selected item: rotate, size (type it in), drive, edit, delete |
 | R / Shift+R | Turn the selected item 15° |
-| Delete | Remove the selected item |
+| Delete | Remove the selected item (Undo for 5 seconds) |
 | Esc | Cancel placing or drawing / deselect |
 | P | Placement panel: exact position, heading and size |
 
@@ -121,7 +124,9 @@ panel) shows the full list:
 
 The wheel zooms like Google Earth: each notch flies a quarter of the way to the point under the
 cursor (half with Shift), or back by a third, gliding there in a moment; close to the ground a notch
-still moves at least a metre. Zooming while walking switches to flying. It stops 1 m short of the
+still moves at least a metre. Zooming while walking switches to flying. Zooming out always climbs, at
+least 20° (`minClimb`), tipping the view down to keep the point under the cursor, so from the ground
+it rises instead of backing into what's behind you. It stops 1 m short of the
 ground, buildings and your models, like flying does (unless ghost is on). Flying gets faster with
 height above the ground: as before below 20 m, 16 times faster at 500 m and 30 times at 1 km, so from
 up high you cross the terminal in seconds. `ZOOM` and `flyHeight` in [src/config.js](src/config.js)
