@@ -26,6 +26,7 @@ const _box = new Box3();
 const _size = new Vector3();
 const _target = new Vector3();
 const _look = new Vector3();
+const _side = new Vector3();
 const DOWN = new Vector3( 0, - 1, 0 );
 
 export class Driver {
@@ -111,6 +112,13 @@ export class Driver {
 		this.width = _size.x;
 		this.height = _size.y;
 		this.wheelbase = this.length * 0.6;
+		// How far it reaches ahead of and behind where it stands (east, north), which for a crane is
+		// its carrier rather than the middle of its box.
+		this.front = pivot.position.z - _box.min.z;
+		this.rear = _box.max.z - pivot.position.z;
+		// Where the driver sits, if the library says (see specFor), from where it stands.
+		const { cab } = spec;
+		this.cab = cab ? { ahead: cab.ahead + ( this.front - this.rear ) / 2, right: cab.right + ( _box.min.x + _box.max.x ) / 2 - pivot.position.x, up: cab.up } : null;
 
 		this.east = state.east;
 		this.north = state.north;
@@ -234,7 +242,7 @@ export class Driver {
 			const sign = Math.sign( step );
 			_dir.set( - Math.sin( rad ) * sign, 0, Math.cos( rad ) * sign );
 			enuToLocal( this.east, this.north, this.y + Math.min( 1.0, this.height * 0.4 ), _origin );
-			const hit = this.cast( _origin, _dir, Math.abs( step ) + this.length / 2 );
+			const hit = this.cast( _origin, _dir, Math.abs( step ) + ( sign > 0 ? this.front : this.rear ) );
 			const wall = hit && hit.face && Math.abs( hit.face.normal.clone().transformDirection( hit.object.matrixWorld ).y ) < 0.5;
 			if ( wall ) {
 
@@ -332,20 +340,30 @@ export class Driver {
 		const rad = this.heading * Math.PI / 180;
 		const forward = _dir.set( - Math.sin( rad ), 0, Math.cos( rad ) );
 		const base = enuToLocal( this.east, this.north, this.y, _origin );
-		if ( this.cameraMode === 'hood' ) {
+		const { cab } = this;
+		// The height the cameras frame: the vehicle's, or where its box is mostly boom or mast (a
+		// crane), its cab's, so they show the carrier and the way ahead rather than the boom.
+		const height = cab ? cab.up / 0.8 : this.height;
+		const inCab = this.cameraMode === 'hood' && cab;
+		if ( inCab ) {
 
-			_target.copy( base ).addScaledVector( forward, this.length * 0.15 ).setY( base.y + this.height * 0.8 );
+			const right = _side.set( - Math.cos( rad ), 0, - Math.sin( rad ) );
+			this.camera.position.copy( base ).addScaledVector( forward, cab.ahead ).addScaledVector( right, cab.right ).setY( base.y + cab.up );
+
+		} else if ( this.cameraMode === 'hood' ) {
+
+			_target.copy( base ).addScaledVector( forward, this.length * 0.15 ).setY( base.y + height * 0.8 );
 			this.camera.position.copy( _target );
 
 		} else {
 
-			const back = this.length * 0.8 + 5;
-			_target.copy( base ).addScaledVector( forward, - back ).setY( base.y + this.height + 2.5 );
+			const back = this.rear + this.length * 0.3 + 5;
+			_target.copy( base ).addScaledVector( forward, - back ).setY( base.y + height + 2.5 );
 			this.camera.position.lerp( _target, 1 - Math.exp( - dt * 6 ) );
 
 		}
 
-		_look.copy( base ).addScaledVector( forward, 8 ).setY( base.y + this.height * 0.6 );
+		_look.copy( inCab ? this.camera.position : base ).addScaledVector( forward, 8 ).setY( base.y + height * 0.6 );
 		this.camera.lookAt( _look );
 		// Keep the walk controller's view direction in step for when we get out.
 		this.controls.yaw = headingToYaw( this.heading );
@@ -375,7 +393,10 @@ export class Driver {
 }
 
 // A library item can also give its own tuning as "drive": { topSpeed, accel, brake, reverse }
-// in library.json, which makes it drivable whatever its category.
+// in library.json, which makes it drivable whatever its category. A machine whose box is mostly
+// boom or mast (a crane) also gives "cab": { ahead, right, up }, where the driver's eyes are in
+// metres from the middle of its box at ground level, for the cameras; and "pivot": { ahead }, the
+// point it stands and turns on in metres ahead of that middle (see itemConfig and models.js).
 export function specFor( item ) {
 
 	return { ...SPECS.default, ...SPECS[ item?.id ], ...item?.drive };

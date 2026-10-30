@@ -62,6 +62,8 @@ export function itemConfig( item, placement ) {
 		library: item.id,
 		...( item.procedural ? { procedural: item.id } : { url: `library/${ item.file }`, scale: item.scale } ),
 		front: item.front,
+		// A crane stands and turns on its carrier rather than the middle of its box (see models.js).
+		...( item.drive?.pivot ? { pivot: item.drive.pivot } : {} ),
 		up: null,
 		...placement,
 	};

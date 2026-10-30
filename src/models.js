@@ -82,12 +82,17 @@ export class ModelManager extends EventDispatcher {
 
 		// Recentre so east/north refer to the middle of the footprint and up to its base.
 		// CAD exports often carry huge offsets (e.g. UTM coordinates) that would put the model kilometres away.
-		// Kinds are built centred already.
-		if ( config.recenter !== false && ! kind ) {
+		// Kinds are built centred already. A machine whose box is mostly boom (a crane) gives the
+		// point it stands and turns on instead, as metres ahead of the middle (pivot.ahead, negative
+		// for behind), so turning or steering it doesn't swing its carrier round a point on the boom.
+		const scale = config.scale ?? 1;
+		const recenter = config.recenter !== false && ! kind;
+		const pivotAhead = recenter ? ( Number( config.pivot?.ahead ) || 0 ) / scale : 0;
+		if ( recenter ) {
 
 			_box.setFromObject( content );
 			_box.getCenter( _center );
-			content.position.set( - _center.x, - _box.min.y, - _center.z );
+			content.position.set( - _center.x, - _box.min.y, - _center.z + pivotAhead );
 
 		}
 
@@ -102,6 +107,8 @@ export class ModelManager extends EventDispatcher {
 			url: config.url,
 			recenter: config.recenter !== false,
 			front: config.front,
+			// In the model's own units (see recentring above).
+			pivotAhead,
 			// Kinds count as library items: saved with the layout, listed as placed.
 			library: kind ? config.kind : config.library,
 			kind: kind ? config.kind : null,
@@ -119,7 +126,7 @@ export class ModelManager extends EventDispatcher {
 				up: config.up ?? 0,
 				snap: config.up == null,
 				heading: config.heading ?? 0,
-				scale: config.scale ?? 1,
+				scale,
 			},
 			snapped: false,
 			lastSnap: - Infinity,
@@ -381,6 +388,7 @@ export class ModelManager extends EventDispatcher {
 
 		if ( ! entry.recenter ) config.recenter = false;
 		if ( entry.front ) config.front = entry.front;
+		if ( entry.pivotAhead ) config.pivot = { ahead: round( entry.pivotAhead * state.scale ) };
 		if ( entry.library && ! entry.kind ) config.library = entry.library;
 		return config;
 
