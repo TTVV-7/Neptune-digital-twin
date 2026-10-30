@@ -151,11 +151,17 @@ like any other piece:
 ## How it's drawn
 
 - The ground is a grid of heights 0.5 m apart, so a vertical side is a steep face about 1 m wide
-  centred on the outline (see [earthworks.md](earthworks.md)). The shoring stands in that face at
-  the outline, so a little soil shows at the foot of the walls inside, and behind walls that hold
-  soil (all but trench boxes) a strip of earth at rim level covers the gap. A trench box stands
-  in a trench dug a little wider than itself, as on site.
-- The volumes are the pit's: W x L x depth for a shored pit, whatever the shoring.
+  centred on the outline (see [earthworks.md](earthworks.md)), which keeps the volume right. Left
+  like that, soil would stand in front of the shoring at the foot of the walls, up to half the
+  depth. So where a wall is shored, the ground is drawn differently (`src/shoring-ground.js`): the
+  face is moved onto the back of the shoring, the floor running flat up to it and the ground
+  outside at rim level. A metre-wide strip of earth at rim level runs round the shoring, as the
+  worked edge, and evens out the colour of ground that was dug and drawn back up. A trench box's
+  run and a hydraulic shore's rails line only the long walls: the trench's ends, and its walls
+  beyond the last box, stay as dug. Up to 16 shored pits are drawn this way at once; more keep the
+  steep face.
+- Only the drawing changes: the volumes are the pit's (W x L x depth for a shored pit, whatever
+  the shoring), and walking and clicking still use the steep face.
 - Shoring isn't solid: you walk and drive through it, and clicking it selects the pit.
 - Repeated parts are merged into one mesh per material, so a 60 x 40 m sheet-piled pit is four
   draw calls.

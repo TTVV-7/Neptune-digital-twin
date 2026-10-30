@@ -1,6 +1,7 @@
 import { BufferGeometry, Float32BufferAttribute, Group, Vector3 } from 'three';
 import { headingToYaw } from './geo.js';
 import { FT, H_PILE, PAINT, PANEL, Parts, SHEET, hPile, hydraulicCylinder, sheetWall, trenchBox, trenchBoxWeight } from './shoring-models.js';
+import { shoreTheGround } from './shoring-ground.js';
 
 // Shoring for excavations: trench boxes, slide rail, hydraulic shores, sheet piles, and soldier
 // piles with timber lagging. An excavation's "support" param picks one; its walls are then cut
@@ -43,11 +44,8 @@ const ENGINEERED_DEPTH = 6;
 const BRACED_DEPTH = 4;
 // Struts across wider than this aren't practical: rakers or tie-backs instead.
 const MAX_STRUT = 12;
-// A shored side is a steep face about 1 m wide in the terrain (a grid of heights 0.5 m apart),
-// centred on the outline. A strip of earth at rim level covers the outer half behind the
-// shoring, so it doesn't show as a gap.
-const BACKFILL = 0.6;
 const WALER_Y = - 0.7;
+const RIM_STRIP = 1;
 
 export function normalizeSupport( value ) {
 
@@ -146,10 +144,10 @@ function planTrenchBoxes( { width, length, depth } ) {
 		wall: 2 * run * depth,
 		weight: tonnes( kg, 'steel' ),
 		notes,
-		// Panels against the long walls (the outline), the run centred along the trench. No earth
-		// over the gap behind them: a box stands in a trench dug a little wider than itself.
+		// Panels against the long walls (the outline), the run centred along the trench; the trench
+		// walls beyond it and its ends are bare.
 		sides: 'long',
-		backfill: null,
+		ground: { back: 0, reach: run / 2 },
 		build( parts ) {
 
 			let z = - run / 2;
@@ -256,7 +254,8 @@ function planSlideRail( { width, length, depth } ) {
 		weight: tonnes( kg, 'steel' ),
 		notes,
 		sides: 'all',
-		backfill: 0.02,
+		// The panels' backs, 20 mm in from the outline.
+		ground: { back: - 0.02 },
 		build( parts ) {
 
 			walls.forEach( ( wall, w ) => {
@@ -325,9 +324,9 @@ function planHydraulic( { width, length, depth } ) {
 		wall: 2 * along * depth,
 		weight: tonnes( kg, 'aluminium' ),
 		notes,
-		// The trench wall the rails bear on is drawn as a face at the outline (see build).
+		// The trench walls the rails bear on are bare soil, drawn as faces at the outline (see build).
 		sides: 'long',
-		backfill: 0,
+		ground: { back: 0, reach: along / 2 },
 		build( parts ) {
 
 			for ( let i = 0; i < count; i ++ ) {
@@ -338,8 +337,9 @@ function planHydraulic( { width, length, depth } ) {
 
 			}
 
-			// The soil face between the rails: the terrain can only draw it as a steep slope.
-			for ( const side of [ - 1, 1 ] ) parts.box( PAINT.earth, [ 0.02, depth, along ], [ side * ( across / 2 + 0.01 ), - depth, 0 ] );
+			// The soil face between the rails, just in front of where the terrain's wall goes up
+			// (shoring-ground.js), which is lit as the flat ground it joins.
+			for ( const side of [ - 1, 1 ] ) parts.box( PAINT.earth, [ 0.02, depth, along ], [ side * ( across / 2 - 0.012 ), - depth, 0 ] );
 
 		},
 	};
@@ -385,13 +385,14 @@ function planSheetPiles( { width, length, depth } ) {
 		weight: tonnes( kg, 'steel' ),
 		notes,
 		sides: 'all',
-		// Its own backfill, which follows the corrugations (see build).
-		backfill: null,
+		// The outer flanges.
+		ground: { back: SHEET.depth / 2 },
 		build( parts ) {
 
 			// The corrugated line round the outline: each sheet goes from one side of the wall line
-			// to the other, flange, web, flange, starting on the outside at each corner. Earth comes
-			// up to it from outside, into the pockets that open that way.
+			// to the other, flange, web, flange, starting on the outside at each corner. The ground
+			// comes up to the outer flanges (shoring-ground.js), and earth at rim level fills the
+			// pockets between them, behind the inner flanges.
 			const h = SHEET.depth / 2;
 			const points = [];
 			walls.forEach( ( wall, w ) => {
@@ -408,9 +409,7 @@ function planSheetPiles( { width, length, depth } ) {
 
 				line.push( [ wall.length, n % 2 ? h : - h ] );
 				points.push( ...line.map( ( [ s, d ] ) => wall.at( s, d ) ) );
-				parts.add( PAINT.earth, groundStrip( line.map( ( [ s, d ] ) => [ wall.at( s, d ), wall.at( s, - BACKFILL ) ] ), 0.012 ) );
-				const corner = wall.at( 0, - BACKFILL / 2 ).addScaledVector( wall.dir, - BACKFILL / 2 );
-				parts.box( PAINT.earth, [ BACKFILL, 0.03, BACKFILL ], [ corner.x, - 0.018, corner.z ] );
+				parts.add( PAINT.earth, groundStrip( line.map( ( [ s, d ] ) => [ wall.at( s, d ), wall.at( s, - h ) ] ), 0.012 ) );
 
 			} );
 			parts.add( PAINT.sheet, sheetWall( points.map( p => [ p.x, p.z ] ), - depth - 0.2, 1 ) );
@@ -478,7 +477,8 @@ function planSoldierPiles( { width, length, depth } ) {
 		weight: tonnes( piles * each * H_PILE.kgPerM, 'steel' ),
 		notes,
 		sides: 'all',
-		backfill: 0.055,
+		// The lagging's back, behind the piles' inner flanges; their outer halves are in the soil.
+		ground: { back: - 0.055 },
 		build( parts ) {
 
 			const pitch = 0.3 + 0.012;
@@ -555,17 +555,26 @@ function toFrame( across, along, turned ) {
 
 }
 
-// Earth at rim level over the outer half of the steep face the terrain draws for a shored side,
-// from just outside it up to the shoring's outer face.
-function backfill( parts, plan, width, length ) {
+// Earth at rim level round the shoring, a metre wide. Behind the shoring the terrain's face is
+// drawn back up to the rim (shoring-ground.js), but its colour still says it was dug, in patches
+// that follow the grid: the strip evens it out, as a worked edge. Along every wall, from its
+// outside corner to the next wall's back, or along the two long walls (along z: the frame the
+// trench box and hydraulic plans build in) as far as the shoring reaches.
+function rimStrip( parts, plan, width, length ) {
 
+	const { back, reach } = plan.ground;
 	for ( const wall of wallsOf( width, length ) ) {
 
-		// Boxes and hydraulic shores line the walls along the pit's length (or its width, if
-		// that's longer); the ends are open.
-		if ( plan.sides === 'long' && ( Math.abs( wall.dir.x ) > 0.5 ) !== width > length ) continue;
-		const thick = BACKFILL + plan.backfill;
-		wallBox( parts, PAINT.earth, wall, wall.length / 2, plan.backfill - thick / 2, wall.length + 2 * BACKFILL, thick, 0.03, - 0.018 );
+		if ( plan.sides === 'long' ) {
+
+			if ( Math.abs( wall.dir.z ) < 0.5 ) continue;
+			const along = 2 * Math.min( reach, wall.length / 2 );
+			wallBox( parts, PAINT.earth, wall, wall.length / 2, - back - RIM_STRIP / 2, along, RIM_STRIP, 0.03, - 0.018 );
+			continue;
+
+		}
+
+		wallBox( parts, PAINT.earth, wall, ( wall.length - RIM_STRIP ) / 2, - back - RIM_STRIP / 2, wall.length + 2 * back + RIM_STRIP, RIM_STRIP, 0.03, - 0.018 );
 
 	}
 
@@ -612,7 +621,8 @@ export function setUpShoring( { scene, models, terrain, kind, rimOf } ) {
 	const root = new Group();
 	root.name = 'shoring';
 	scene.add( root );
-	const shown = new Map(); // entry -> { key, group }
+	const shown = new Map(); // entry -> { key, group, plan }
+	const ground = shoreTheGround( terrain );
 
 	const update = entry => {
 
@@ -625,7 +635,7 @@ export function setUpShoring( { scene, models, terrain, kind, rimOf } ) {
 
 			remove( entry );
 			if ( ! plan.build ) return;
-			item = { key, group: buildPit( plan, params ) };
+			item = { key, group: buildPit( plan, params ), plan };
 			shown.set( entry, item );
 			root.add( item.group );
 
@@ -647,12 +657,57 @@ export function setUpShoring( { scene, models, terrain, kind, rimOf } ) {
 
 	};
 
-	models.addEventListener( 'add', ( { entry } ) => update( entry ) );
-	models.addEventListener( 'change', ( { entry } ) => update( entry ) );
-	models.addEventListener( 'remove', ( { entry } ) => remove( entry ) );
+	// The ground's walls go straight up behind the shoring (shoring-ground.js): all four, or the
+	// two long ones as far as the boxes or rails reach.
+	const shapeGround = () => ground.set( [ ...shown ].map( ( [ entry, { group, plan } ] ) => {
+
+		const { width, length } = entry.params;
+		const { east, north, heading } = entry.state;
+		const long = plan.sides === 'long';
+		// Two walls: no further than the trench's ends, which stay as dug.
+		const { back, reach: along } = plan.ground;
+		const reach = long ? Math.min( along, Math.max( width, length ) / 2 ) : Infinity;
+		return {
+			east,
+			north,
+			heading,
+			width,
+			length,
+			rim: group.position.y,
+			back,
+			alongLength: ! long || width <= length ? reach : null,
+			alongWidth: ! long || width > length ? reach : null,
+		};
+
+	} ) );
+
+	models.addEventListener( 'add', ( { entry } ) => {
+
+		update( entry );
+		shapeGround();
+
+	} );
+	models.addEventListener( 'change', ( { entry } ) => {
+
+		update( entry );
+		shapeGround();
+
+	} );
+	models.addEventListener( 'remove', ( { entry } ) => {
+
+		remove( entry );
+		shapeGround();
+
+	} );
 	// A flatten area reaching a pit brings its rim down.
-	terrain.addEventListener( 'zones', () => models.entries.forEach( update ) );
+	terrain.addEventListener( 'zones', () => {
+
+		models.entries.forEach( update );
+		shapeGround();
+
+	} );
 	for ( const entry of models.entries ) update( entry );
+	shapeGround();
 
 	const api = { root, shown, planShoring };
 	if ( window.twin ) window.twin.shoring = api;
@@ -670,12 +725,11 @@ function buildPit( plan, { width, length, depth } ) {
 	const inner = new Group();
 	if ( canonical && turned ) inner.rotation.y = Math.PI / 2;
 	plan.build( parts, { width, length, depth } );
+	if ( canonical ) rimStrip( parts, plan, Math.min( width, length ), Math.max( width, length ) );
+	else rimStrip( parts, plan, width, length );
 	parts.build( inner );
 	const group = new Group();
 	group.name = 'Shoring';
-	const fill = new Parts();
-	if ( plan.backfill !== null ) backfill( fill, plan, width, length );
-	fill.build( group );
 	group.add( inner );
 	// Rays pass through it: the pit's outline is what's clicked, and the player walks the ground.
 	group.traverse( o => {
