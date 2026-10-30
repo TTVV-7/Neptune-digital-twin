@@ -2,10 +2,12 @@ import { MathUtils, Vector3 } from 'three';
 import { SITE } from './config.js';
 
 // The scene uses the frame the Google tiles are reoriented into
-// (see ReorientationPlugin): origin at SITE, +Y up, +Z north, +X west.
+// (see ReorientationPlugin): origin at SITE, +Y up, +Z north, +X west. World Drive recentres the
+// tiles on whatever place you drive, so the helpers that turn local positions into latitude and
+// longitude take that place ({ lat, lon }) as `site`; left out, it's the terminal.
 
 const METRES_PER_DEG_LAT = 111132;
-const metresPerDegLon = () => 111320 * Math.cos( SITE.lat * MathUtils.DEG2RAD );
+const metresPerDegLon = ( site = SITE ) => 111320 * Math.cos( site.lat * MathUtils.DEG2RAD );
 
 export function enuToLocal( east, north, up, target = new Vector3() ) {
 
@@ -20,21 +22,21 @@ export function localToEnu( v ) {
 }
 
 // Flat-earth approximation; plenty for a site a couple of kilometres across.
-export function localToLatLon( v ) {
+export function localToLatLon( v, site = SITE ) {
 
 	const { east, north } = localToEnu( v );
 	return {
-		lat: SITE.lat + north / METRES_PER_DEG_LAT,
-		lon: SITE.lon + east / metresPerDegLon(),
+		lat: site.lat + north / METRES_PER_DEG_LAT,
+		lon: site.lon + east / metresPerDegLon( site ),
 	};
 
 }
 
-export function latLonToEnu( lat, lon ) {
+export function latLonToEnu( lat, lon, site = SITE ) {
 
 	return {
-		east: ( lon - SITE.lon ) * metresPerDegLon(),
-		north: ( lat - SITE.lat ) * METRES_PER_DEG_LAT,
+		east: ( lon - site.lon ) * metresPerDegLon( site ),
+		north: ( lat - site.lat ) * METRES_PER_DEG_LAT,
 	};
 
 }

@@ -219,14 +219,15 @@ export const GOOGLE_STUB = `window.google = { accounts: { id: {
 } } };`;
 
 // The Vite dev server on 127.0.0.1:port, with env added to this process's environment (TWIN_API
-// sends /api to a local server). Resolves once it answers.
-export async function startVite( port, env = {} ) {
+// sends /api to a local server). config: another Vite config, e.g. World Drive's
+// vite.drive.config.js. Resolves once it answers.
+export async function startVite( port, env = {}, config = null ) {
 
 	const bin = join( dirname( createRequire( import.meta.url ).resolve( 'vite/package.json' ) ), 'bin', 'vite.js' );
 	const base = `http://127.0.0.1:${ port }`;
 	// Never a Maps key in tests: blank every name the Vite config would read one from.
 	const noKey = Object.fromEntries( [ 'GOOGLE_API', 'google_api', 'GOOGLE_MAPS_API_KEY', 'VITE_GOOGLE_MAPS_API_KEY', 'GOOGLE_MAPS_KEY', 'GOOGLE_MAPS_API' ].map( name => [ name, '' ] ) );
-	const child = spawn( process.execPath, [ bin, '--port', String( port ), '--strictPort', '--host', '127.0.0.1' ], {
+	const child = spawn( process.execPath, [ bin, ...( config ? [ '--config', config ] : [] ), '--port', String( port ), '--strictPort', '--host', '127.0.0.1' ], {
 		cwd: ROOT,
 		env: { ...process.env, TWIN_API: '', ...noKey, ...env },
 		detached: process.platform !== 'win32',

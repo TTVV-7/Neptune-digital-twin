@@ -1,0 +1,16 @@
+# Settings and secrets for World Drive's local Worker (npm run dev:drive-api). Copy this file to
+# .dev.vars.drive, which git ignores. Values here override wrangler.drive.jsonc locally.
+
+# Turnstile's test keys work on localhost: this secret always passes, with the test site key below
+# (1x00000000000000000000AA, always passes). Swap in 2x0000000000000000000000000000000AA (always
+# fails) to see the "couldn't check you're a person" screen.
+TURNSTILE_SECRET=1x0000000000000000000000000000000AA
+TURNSTILE_SITE_KEY=1x00000000000000000000AA
+
+# Optional: a Maps key (Map Tiles API) for driving on Google's tiles through the Worker. Empty, the
+# page shows its "getting ready" screen, with the flat test pad to drive on.
+GOOGLE_MAPS_API_KEY=
+
+# Small caps make the "used up" screen easy to reach.
+DAILY_VISITS=300
+PER_VISITOR_DAILY=8
