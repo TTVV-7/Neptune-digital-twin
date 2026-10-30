@@ -348,24 +348,32 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 
 	}
 
+	// Where the material drops from, worked out afresh for every rock, so the stream follows the
+	// pile when it's moved, turned or changed while it pours.
 	function pourSource( entry ) {
 
-		const { state, params } = entry;
-		const material = pileMaterial( entry );
-		const tan = Math.tan( material.repose * DEG );
-		const base = designs.get( entry )?.solved?.base ?? state.up;
-		const cap = params.maxHeight > 0 ? params.maxHeight : Infinity;
-		const height = params.shape === 'cone' ? coneRadius( params.volume, tan ) * tan : Math.min( Math.min( params.width, params.length ) / 2 * tan, cap );
-		const centre = new Vector3( - state.east, base + height + 3, state.north );
-		// Along a ridge the drop point sweeps back and forth, like a moving conveyor.
-		const rad = state.heading * DEG;
-		const along = params.length >= params.width;
-		const axis = along ? new Vector3( - Math.sin( rad ), 0, Math.cos( rad ) ) : new Vector3( - Math.cos( rad ), 0, - Math.sin( rad ) );
-		const sweep = params.shape === 'ridge' ? Math.abs( params.length - params.width ) / 2 : 0;
+		const colour = new Color( pileMaterial( entry ).colour );
+		const axis = new Vector3();
 		const point = new Vector3();
 		return {
-			colour: new Color( material.colour ),
-			emitter: time => point.copy( centre ).addScaledVector( axis, sweep * Math.sin( time * 1.3 ) ),
+			colour,
+			emitter: time => {
+
+				const { state, params } = entry;
+				const material = pileMaterial( entry );
+				const tan = Math.tan( material.repose * DEG );
+				const base = designs.get( entry )?.solved?.base ?? state.up;
+				const cap = params.maxHeight > 0 ? params.maxHeight : Infinity;
+				const height = params.shape === 'cone' ? coneRadius( params.volume, tan ) * tan : Math.min( Math.min( params.width, params.length ) / 2 * tan, cap );
+				// Along a ridge the drop point sweeps back and forth, like a moving conveyor.
+				const rad = state.heading * DEG;
+				if ( params.length >= params.width ) axis.set( - Math.sin( rad ), 0, Math.cos( rad ) );
+				else axis.set( - Math.cos( rad ), 0, - Math.sin( rad ) );
+				const sweep = params.shape === 'ridge' ? Math.abs( params.length - params.width ) / 2 : 0;
+				colour.set( material.colour );
+				return point.set( - state.east, base + height + 3, state.north ).addScaledVector( axis, sweep * Math.sin( time * 1.3 ) );
+
+			},
 		};
 
 	}
