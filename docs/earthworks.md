@@ -18,12 +18,14 @@ material that is. Both tools are at the top of the library (**L**), under **Tool
    - **Dig** plays the digging again.
    - **Spoil pile** pours what came out of the pit beside it, clear of the rim: a pile of
      *Excavated soil* holding the loose volume: a ridge running along a trench (or any pit at least
-     twice as long as it is wide, or one a cone wouldn't fit beside), otherwise a cone.
+     twice as long as it is wide, one a cone wouldn't fit beside, or one with more spoil than a
+     cone can hold), otherwise a cone.
 
-The rim is the lowest ground around the rectangle as it was before anything was dug or flattened,
-so the pit doesn't sink after itself, and whatever stands inside it in Google's mesh (rail cars, a
-shed) is dug away with it rather than holding the floor up. Where the ground beyond the outline is
-higher, the sides keep climbing (up to 3 m out) until they meet it.
+The rim is the lowest ground around the rectangle as it was before anything was dug, so the pit
+doesn't sink after itself, and whatever stands inside it in Google's mesh (rail cars, a shed) is dug
+away with it rather than holding the floor up. Where a flatten area reaches the pit, its floor
+counts as the ground there. Where the ground beyond the outline is higher, the sides keep climbing
+(up to 3 m out) until they meet it.
 
 The P panel shows:
 
@@ -35,7 +37,8 @@ The P panel shows:
 | floor | Size of the flat floor, or how deep the sides meet if there isn't one |
 
 With the library open, click anywhere over a pit to select it, drag it to move it, **R** to turn it,
-**Delete** to remove it: the ground comes back exactly as it was.
+**Delete** to remove it: the ground comes back exactly as it was (apart from any digging an
+excavator has done there, see Saving).
 
 ## Stockpiles
 
@@ -97,11 +100,18 @@ Excavations and stockpiles are saved with the layout like any other item, and co
 reload or open an exported layout. Ground dug or dumped some other way (see below) is saved with
 the layout too.
 
+An excavator's digging is kept as dips below the ground or pit it dug into: a bite out of a pit's
+floor stays as just that dip if the pit is moved or deleted, and a pit drawn over earlier digging
+is that much deeper there. A bite out of a stockpile comes off the pile's volume; when the pile is
+moved, changed or deleted it is planned afresh, and the bites go with it rather than leaving holes
+in the ground it stood on.
+
 ## Limits
 
 - The ground is a grid of heights 0.5 m apart, so there are no overhangs or tunnels, and a
   *vertical (shored)* side is drawn as a very steep face about 1 m wide.
-- Excavations and ridges can be up to 200 m long; cones up to 20,000 m³.
+- Excavations and ridges can be up to 200 m long; cones up to 20,000 m³ (**Spoil pile** makes a
+  ridge for more).
 
 ## For developers: digging from code
 

@@ -34,6 +34,9 @@ const TRUCK_LOAD = 10;
 const SLOPES = { 'vertical (shored)': 0, '0.5 : 1': 0.5, '1 : 1': 1, '1.5 : 1': 1.5, '2 : 1': 2 };
 // Side slopes keep climbing past the outline this far where the ground there is higher.
 const SLOPE_REACH = 3;
+// The rim is the lowest ground this far round the outline (models.js snaps to it), or the floor of
+// a flatten area reaching that far.
+const RIM_REACH = 2;
 // A ridge's sides run on past its rectangle this far where the ground there is lower.
 const RIDGE_TOE = 4;
 const MAX_SIZE = 200;
@@ -174,11 +177,15 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 
 	const isEarthwork = entry => entry.kind === EXCAVATION || entry.kind === STOCKPILE;
 	const order = entry => () => models.entries.indexOf( entry );
+	const floorUnder = frame => terrain.floorUnder( frame );
 	const sync = entry => {
 
 		const design = designs.get( entry );
+		// A stockpile moved or changed is planned afresh: bites an excavator took out of it go too.
+		if ( design.reshaped?.() ) terrain.dropBites( entry );
 		design.refresh();
 		terrain.setDesign( entry, design );
+		placeMarker( entry );
 		refreshLabel( entry );
 
 	};
@@ -187,7 +194,7 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 
 		if ( ! isEarthwork( entry ) || entry.placing ) return;
 		const make = entry.kind === EXCAVATION ? pitDesign : pileDesign;
-		designs.set( entry, make( entry, { order: order( entry ), progress } ) );
+		designs.set( entry, make( entry, { order: order( entry ), progress, floorUnder } ) );
 		sync( entry );
 
 	} );
@@ -202,11 +209,25 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 	models.addEventListener( 'remove', ( { entry } ) => {
 
 		if ( ! designs.has( entry ) ) return;
+		terrain.dropBites( entry );
 		designs.delete( entry );
 		anims.delete( entry );
 		stream.stop( entry );
 		labels.remove( entry );
 		terrain.setDesign( entry, null );
+
+	} );
+	// A pit's rim comes down to the floor of a flatten area around it.
+	terrain.addEventListener( 'zones', () => {
+
+		for ( const [ entry, design ] of designs ) {
+
+			if ( entry.kind !== EXCAVATION ) continue;
+			const { rim } = design;
+			design.refresh();
+			if ( design.rim !== rim ) sync( entry );
+
+		}
 
 	} );
 	terrain.addEventListener( 'change', ( { designs: changed } ) => {
@@ -222,12 +243,15 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 
 	} );
 
-	// A pile in a pit or on another pile sits lower or higher than the ground around it.
+	// A pile in a pit or on another pile sits lower or higher than the ground around it, and a pit
+	// in a flatten area starts from the area's floor.
 	function placeMarker( entry ) {
 
-		const solved = designs.get( entry )?.solved;
+		const design = designs.get( entry );
 		const content = entry.pivot.children[ 0 ];
-		if ( entry.kind === STOCKPILE && solved && content ) content.position.y = solved.base - entry.state.up;
+		if ( ! design || ! content ) return;
+		if ( entry.kind === EXCAVATION ) content.position.y = design.rim - entry.state.up;
+		else if ( design.solved ) content.position.y = design.solved.base - entry.state.up;
 
 	}
 
@@ -237,7 +261,8 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 		const { state } = entry;
 		if ( entry.kind === EXCAVATION ) {
 
-			labels.set( entry, `Excavation · ${ format( cutOf( entry ) ) } m³ cut`, anchor.set( - state.east, state.up + 1.2, state.north ) );
+			const rim = designs.get( entry )?.rim ?? state.up;
+			labels.set( entry, `Excavation · ${ format( cutOf( entry ) ) } m³ cut`, anchor.set( - state.east, rim + 1.2, state.north ) );
 			return;
 
 		}
@@ -292,8 +317,20 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 		const long = Math.max( width, length );
 		// A windrow along a trench or wherever a cone would be wider than the pit is long, else a cone.
 		const radius = coneRadius( loose, tan );
-		const ridge = long >= 2 * Math.min( width, length ) || 2 * radius > long ? ridgeWidth( loose, long, tan ) : null;
-		const params = ridge ? { material: soil.id, shape: 'ridge', width: round( ridge, 2 ), length: long } : { material: soil.id, shape: 'cone', volume: round( loose, 1 ) };
+		let ridge = long >= 2 * Math.min( width, length ) || 2 * radius > long ? ridgeWidth( loose, long, tan ) : null;
+		let ridgeLength = long;
+		if ( ! ridge && loose > MAX_VOLUME ) {
+
+			// More than a cone may hold: a windrow after all, longer than the pit if it would
+			// otherwise have to be wider than long, up to the longest a pile may be.
+			ridgeLength = Math.min( MAX_SIZE, Math.max( long, Math.cbrt( 6 * loose / tan ) ) );
+			ridge = ridgeWidth( loose, ridgeLength, tan ) ?? ridgeLength;
+
+		}
+
+		const held = ridge ? ridgeVolume( ridge, ridgeLength, tan ) : loose;
+		if ( held < loose - 0.5 ) toast( `The spoil pile holds ${ format( held ) } m³; the other ${ format( loose - held ) } m³ needs another pile.` );
+		const params = ridge ? { material: soil.id, shape: 'ridge', width: round( ridge, 2 ), length: round( ridgeLength, 2 ) } : { material: soil.id, shape: 'cone', volume: round( loose, 1 ) };
 		const offset = Math.min( width, length ) / 2 + 2 + ( ridge ? ridge / 2 : radius );
 		const rad = heading * DEG;
 		const [ de, dn ] = beside ? [ Math.cos( rad ), - Math.sin( rad ) ] : [ Math.sin( rad ), Math.cos( rad ) ];
@@ -311,24 +348,32 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 
 	}
 
+	// Where the material drops from, worked out afresh for every rock, so the stream follows the
+	// pile when it's moved, turned or changed while it pours.
 	function pourSource( entry ) {
 
-		const { state, params } = entry;
-		const material = pileMaterial( entry );
-		const tan = Math.tan( material.repose * DEG );
-		const base = designs.get( entry )?.solved?.base ?? state.up;
-		const cap = params.maxHeight > 0 ? params.maxHeight : Infinity;
-		const height = params.shape === 'cone' ? coneRadius( params.volume, tan ) * tan : Math.min( Math.min( params.width, params.length ) / 2 * tan, cap );
-		const centre = new Vector3( - state.east, base + height + 3, state.north );
-		// Along a ridge the drop point sweeps back and forth, like a moving conveyor.
-		const rad = state.heading * DEG;
-		const along = params.length >= params.width;
-		const axis = along ? new Vector3( - Math.sin( rad ), 0, Math.cos( rad ) ) : new Vector3( - Math.cos( rad ), 0, - Math.sin( rad ) );
-		const sweep = params.shape === 'ridge' ? Math.abs( params.length - params.width ) / 2 : 0;
+		const colour = new Color( pileMaterial( entry ).colour );
+		const axis = new Vector3();
 		const point = new Vector3();
 		return {
-			colour: new Color( material.colour ),
-			emitter: time => point.copy( centre ).addScaledVector( axis, sweep * Math.sin( time * 1.3 ) ),
+			colour,
+			emitter: time => {
+
+				const { state, params } = entry;
+				const material = pileMaterial( entry );
+				const tan = Math.tan( material.repose * DEG );
+				const base = designs.get( entry )?.solved?.base ?? state.up;
+				const cap = params.maxHeight > 0 ? params.maxHeight : Infinity;
+				const height = params.shape === 'cone' ? coneRadius( params.volume, tan ) * tan : Math.min( Math.min( params.width, params.length ) / 2 * tan, cap );
+				// Along a ridge the drop point sweeps back and forth, like a moving conveyor.
+				const rad = state.heading * DEG;
+				if ( params.length >= params.width ) axis.set( - Math.sin( rad ), 0, Math.cos( rad ) );
+				else axis.set( - Math.cos( rad ), 0, - Math.sin( rad ) );
+				const sweep = params.shape === 'ridge' ? Math.abs( params.length - params.width ) / 2 : 0;
+				colour.set( material.colour );
+				return point.set( - state.east, base + height + 3, state.north ).addScaledVector( axis, sweep * Math.sin( time * 1.3 ) );
+
+			},
 		};
 
 	}
@@ -363,7 +408,8 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 
 // --- designs: what an excavation or a stockpile does to the ground ----------------------------
 
-function pitDesign( entry, { order, progress } ) {
+// floorUnder( frame ): the floor of the flatten areas reaching into a rectangle (Infinity if none).
+function pitDesign( entry, { order, progress, floorUnder } ) {
 
 	const g = {};
 	return {
@@ -373,11 +419,18 @@ function pitDesign( entry, { order, progress } ) {
 		refresh() {
 
 			const { state, params } = entry;
-			Object.assign( g, rectFrame( state.east, state.north, state.heading, params.width / 2, params.length / 2 ), {
-				depth: params.depth,
-				slope: params.slope,
-				rim: state.up,
-			} );
+			const { width, length, depth, slope } = params;
+			Object.assign( g, rectFrame( state.east, state.north, state.heading, width / 2, length / 2 ), { depth, slope } );
+			// Inside a flatten area the ground is the area's floor, which is what the terrain digs
+			// into there; from the original ground (the roofs of what was cleared, say) the pit
+			// would be too shallow to reach it.
+			const around = rectFrame( state.east, state.north, state.heading, width / 2 + RIM_REACH, length / 2 + RIM_REACH );
+			g.rim = Math.min( state.up, floorUnder( around ) );
+
+		},
+		get rim() {
+
+			return g.rim;
 
 		},
 		bounds: () => rectBounds( g, ( g.slope > 0 ? SLOPE_REACH : 0 ) + CELL ),
@@ -411,14 +464,20 @@ function pitSurface( g, x, z, p ) {
 function pileDesign( entry, { order, progress } ) {
 
 	const g = {};
+	// Where and what the pile was at the last refresh (not its height, which follows the ground).
+	const placement = () => JSON.stringify( [ entry.state.east, entry.state.north, entry.state.heading, entry.params ] );
+	let placed = null;
 	const design = {
 		type: 'fill',
 		order,
 		solved: null,
 		top: 0,
 		material: entry.params.material,
+		// Whether it has been moved or changed since the last refresh.
+		reshaped: () => placed !== null && placement() !== placed,
 		refresh() {
 
+			placed = placement();
 			const { state, params } = entry;
 			const material = findMaterial( params.material );
 			Object.assign( g, rectFrame( state.east, state.north, state.heading, params.width / 2, params.length / 2 ), {
@@ -548,18 +607,25 @@ function solveRidge( g, { ni, count, x, z, before }, f, design ) {
 
 }
 
+// What a ridge `width` x `length` holds at the angle whose tangent is `tan`: a hip roof,
+// tan W² (3L - W) / 12.
+function ridgeVolume( width, length, tan ) {
+
+	return tan * width * width * ( 3 * length - width ) / 12;
+
+}
+
 // The width of a ridge `length` long holding `volume` at the angle whose tangent is `tan`, or
-// null if it would have to be wider than long. Volume of a hip roof: tan W² (3L - W) / 12.
+// null if it would have to be wider than long.
 function ridgeWidth( volume, length, tan ) {
 
-	const held = w => tan * w * w * ( 3 * length - w ) / 12;
-	if ( held( length ) < volume ) return null;
+	if ( ridgeVolume( length, length, tan ) < volume ) return null;
 	let lo = 0;
 	let hi = length;
 	for ( let i = 0; i < 50; i ++ ) {
 
 		const mid = ( lo + hi ) / 2;
-		if ( held( mid ) < volume ) lo = mid;
+		if ( ridgeVolume( mid, length, tan ) < volume ) lo = mid;
 		else hi = mid;
 
 	}

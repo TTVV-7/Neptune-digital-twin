@@ -25,10 +25,14 @@ import { blocks } from './walk.js';
 //   h0       the ground as Google (or the stand-in) made it, from flattening.originalHeight(), so
 //            pits don't feed back into their own reference. Under a flatten area it is that
 //            area's floor, as that's the ground Google's mesh shows there.
-//   dug      freeform digging (the excavator), relative to h0
 //   designs  excavations (the lowest of them and the ground wins) and then stockpiles (the
 //            highest wins), in the order they were placed
-//   loose    freeform dumped material on top of everything, so it lands on pit floors and piles
+//   dug      freeform digging (the excavator), as depths below the ground and the excavations,
+//            under the stockpiles: a bite out of a pit's floor stays just that bite when the pit
+//            is moved or deleted
+//   loose    freeform dumped material on top of everything, so it lands on pit floors and piles.
+//            Negative where a bite was taken out of a stockpile: it never reaches below the pile,
+//            and it goes when the pile is moved or deleted (dropBites)
 //
 // Each chunk is drawn as one mesh. With Google tiles only what differs from h0 is drawn, so the
 // photo texture shows elsewhere, and Google's mesh is pressed under the pits. Without tiles the
@@ -134,6 +138,18 @@ export function insideRect( r, x, z, hw = r.hw, hl = r.hl ) {
 
 }
 
+// Whether two rectangles (see rectFrame) overlap: neither lies wholly beyond a side of the other.
+function rectsOverlap( a, b ) {
+
+	const de = b.east - a.east;
+	const dn = b.north - a.north;
+	// Each rectangle's across and along directions, east and north, as in insideRect.
+	const axes = [ a, b ].flatMap( r => [ [ r.cos, - r.sin ], [ r.sin, r.cos ] ] );
+	const reach = ( r, [ e, n ] ) => r.hw * Math.abs( r.cos * e - r.sin * n ) + r.hl * Math.abs( r.sin * e + r.cos * n );
+	return axes.every( axis => Math.abs( de * axis[ 0 ] + dn * axis[ 1 ] ) <= reach( a, axis ) + reach( b, axis ) );
+
+}
+
 const _colour = new Color();
 
 // The nodes of a grid `ni` wide reachable from `starts` through nodes where thickness( n ) > 0,
@@ -193,9 +209,14 @@ class Chunk {
 		this.dug = new Float32Array( COUNT );
 		this.loose = new Float32Array( COUNT );
 		this.looseMat = new Uint8Array( COUNT );
-		// After excavations: what digging cuts into. cutFinal: the same with every dig finished.
+		// After excavations and digging: what the stockpiles stand on. cutFinal: the same with
+		// every dig finished.
 		this.exc = new Float32Array( COUNT );
 		this.cutFinal = new Float32Array( COUNT );
+		// The stockpile on top at each node (its design key), and the loose layer as drawn: a bite
+		// out of a pile no deeper than the pile is there.
+		this.pile = new Array( COUNT ).fill( null );
+		this.looseShown = new Float32Array( COUNT );
 		this.surface = new Float32Array( COUNT );
 		this.top = new Uint8Array( COUNT );
 		// Which way each cell is split into triangles (see updateMesh).
@@ -428,7 +449,7 @@ export class Terrain extends EventDispatcher {
 					if ( d > 0 ) out.fill += d;
 					else out.cut -= d;
 					out.dug -= chunk.dug[ k ];
-					out.loose += chunk.loose[ k ];
+					out.loose += chunk.looseShown[ k ];
 
 				}
 
@@ -553,6 +574,33 @@ export class Terrain extends EventDispatcher {
 
 	}
 
+	// Forget the bites taken out of a stockpile (call before it's moved, changed or deleted): they
+	// were taken out of that pile, not out of the ground or whatever is put there next.
+	dropBites( key ) {
+
+		const design = this.designs.get( key );
+		if ( ! design ) return;
+		let any = false;
+		for ( const chunkKey of design.chunks ) {
+
+			const chunk = this.chunks.get( chunkKey );
+			if ( ! chunk ) continue;
+			// Edge copies are in these chunks too, and they were marked when the pile was applied.
+			for ( let k = 0; k < COUNT; k ++ ) {
+
+				if ( chunk.pile[ k ] !== key || ! ( chunk.loose[ k ] < 0 ) ) continue;
+				chunk.loose[ k ] = 0;
+				this.dirty.add( chunk.key );
+				any = true;
+
+			}
+
+		}
+
+		if ( any ) this.onFreeformChange?.();
+
+	}
+
 	// Freeform digging and dumping, compactly: per chunk, centimetres as Int16 runs in base64.
 	saveFreeform() {
 
@@ -583,6 +631,14 @@ export class Terrain extends EventDispatcher {
 					any ||= dug[ n ] !== 0 || loose[ n ] !== 0;
 
 				}
+
+			}
+
+			// The nodes on its +x and +z edges are saved by the chunks that own them, but this one
+			// draws the ground sloping to them, so it's saved too (maybe empty) to be there again.
+			for ( let m = 0; m <= CELLS && ! any; m ++ ) {
+
+				for ( const k of [ m * NODES + CELLS, CELLS * NODES + m ] ) any ||= toCentimetres( chunk.dug[ k ] ) !== 0 || toCentimetres( chunk.loose[ k ] ) !== 0;
 
 			}
 
@@ -638,6 +694,8 @@ export class Terrain extends EventDispatcher {
 						other.dug[ k ] = dugValue;
 						other.loose[ k ] = looseValue;
 						if ( looseValue !== 0 ) other.looseMat[ k ] = materialIndex( material );
+						// Chunks that were already there (merging) are drawn again too.
+						this.dirty.add( other.key );
 
 					} );
 
@@ -695,7 +753,7 @@ export class Terrain extends EventDispatcher {
 
 		for ( const chunk of list ) this.startCompose( chunk );
 		for ( const design of ordered ) if ( design.type === 'cut' ) for ( const chunk of chunksOf( design ) ) this.applyCut( design, chunk );
-		for ( const chunk of list ) chunk.exc.set( chunk.surface );
+		for ( const chunk of list ) this.applyDug( chunk );
 		for ( const design of ordered ) {
 
 			if ( design.type !== 'fill' ) continue;
@@ -784,12 +842,13 @@ export class Terrain extends EventDispatcher {
 
 		for ( let k = 0; k < COUNT; k ++ ) {
 
-			surface[ k ] = base[ k ] + dug[ k ];
-			cutFinal[ k ] = surface[ k ];
+			surface[ k ] = base[ k ];
+			cutFinal[ k ] = base[ k ];
 			top[ k ] = dug[ k ] < - DISTURBED ? CUT : GROUND;
 
 		}
 
+		chunk.pile.fill( null );
 		chunk.contrib.clear();
 
 	}
@@ -816,6 +875,22 @@ export class Terrain extends EventDispatcher {
 
 		} );
 		chunk.contrib.set( design.key, { cut: cut * CELL_AREA, fill: 0 } );
+
+	}
+
+	// Freeform digging goes down from whatever the excavations left, so a pit's volume is the
+	// same whether or not an excavator has dug in it since.
+	applyDug( chunk ) {
+
+		const { surface, cutFinal, dug, exc } = chunk;
+		for ( let k = 0; k < COUNT; k ++ ) {
+
+			surface[ k ] += dug[ k ];
+			cutFinal[ k ] += dug[ k ];
+
+		}
+
+		exc.set( surface );
 
 	}
 
@@ -856,6 +931,7 @@ export class Terrain extends EventDispatcher {
 				if ( ! set.has( chunk ) ) return;
 				chunk.surface[ k ] = height;
 				chunk.top[ k ] = design.top;
+				chunk.pile[ k ] = design.key;
 
 			} );
 
@@ -867,18 +943,24 @@ export class Terrain extends EventDispatcher {
 
 	endCompose( chunk ) {
 
-		const { surface, loose, looseMat, top, base } = chunk;
+		const { surface, loose, looseShown, looseMat, top, base, exc, pile, contrib } = chunk;
 		let cuts = 0;
 		for ( let k = 0; k < COUNT; k ++ ) {
 
-			if ( loose[ k ] !== 0 ) {
+			const owned = owns( k % NODES, Math.floor( k / NODES ) );
+			// A bite out of a stockpile goes no deeper than the pile there now (it may have shrunk
+			// since), and comes off that pile's volume.
+			const shown = Math.max( loose[ k ], exc[ k ] - surface[ k ] );
+			looseShown[ k ] = shown;
+			if ( shown !== 0 ) {
 
-				surface[ k ] += loose[ k ];
-				if ( loose[ k ] > DISTURBED / 2 ) top[ k ] = looseMat[ k ];
+				surface[ k ] += shown;
+				if ( shown > DISTURBED / 2 ) top[ k ] = looseMat[ k ];
+				if ( shown < 0 && owned && pile[ k ] ) contrib.get( pile[ k ] ).fill += shown * CELL_AREA;
 
 			}
 
-			if ( surface[ k ] < base[ k ] - DISTURBED && owns( k % NODES, Math.floor( k / NODES ) ) ) cuts ++;
+			if ( surface[ k ] < base[ k ] - DISTURBED && owned ) cuts ++;
 
 		}
 
@@ -1179,7 +1261,7 @@ export class Terrain extends EventDispatcher {
 
 	}
 
-	// Flatten areas count as the ground they press Google's mesh down to.
+	// Flatten areas count as the ground they press Google's mesh down to. Dispatches 'zones'.
 	updateZone( entry, removed ) {
 
 		const old = this.zones.get( entry );
@@ -1187,15 +1269,28 @@ export class Terrain extends EventDispatcher {
 		if ( removed || ! this.models.entries.includes( entry ) ) {
 
 			this.zones.delete( entry );
-			return;
+
+		} else {
+
+			const { state, params } = entry;
+			const frame = rectFrame( state.east, state.north, state.heading, params.width / 2, params.length / 2 );
+			const zone = { frame, floor: state.up, bounds: rectBounds( frame, CELL ) };
+			this.zones.set( entry, zone );
+			this.markBounds( zone.bounds );
 
 		}
 
-		const { state, params } = entry;
-		const frame = rectFrame( state.east, state.north, state.heading, params.width / 2, params.length / 2 );
-		const zone = { frame, floor: state.up, bounds: rectBounds( frame, CELL ) };
-		this.zones.set( entry, zone );
-		this.markBounds( zone.bounds );
+		this.dispatchEvent( { type: 'zones' } );
+
+	}
+
+	// The lowest floor of the flatten areas reaching into a rectangle (see rectFrame), or Infinity
+	// if none do: that is the ground there, whatever Google's mesh had standing on it.
+	floorUnder( frame ) {
+
+		let floor = Infinity;
+		for ( const zone of this.zones.values() ) if ( rectsOverlap( zone.frame, frame ) ) floor = Math.min( floor, zone.floor );
+		return floor;
 
 	}
 
@@ -1463,7 +1558,8 @@ export class Terrain extends EventDispatcher {
 			w.exc[ n ] = chunk.exc[ k ];
 			w.base[ n ] = chunk.base[ k ];
 			w.dug[ n ] = chunk.dug[ k ];
-			w.loose[ n ] = chunk.loose[ k ];
+			// As drawn: an old bite deeper than its pile is now counts only as deep as the pile.
+			w.loose[ n ] = chunk.looseShown[ k ];
 			w.mat[ n ] = chunk.looseMat[ k ];
 
 		}
@@ -1560,29 +1656,18 @@ class Window {
 	}
 
 	// Take `amount` off the top: loose material first, then a stockpile under it (the bite is
-	// kept as negative loose material on top of the pile), else the ground (digging).
+	// kept as negative loose material on top of the pile), then the ground (digging, kept as a
+	// depth below the ground or pit it was dug out of).
 	take( n, amount ) {
 
 		const loose = Math.min( Math.max( this.loose[ n ], 0 ), amount );
-		this.loose[ n ] -= loose;
-		const rest = amount - loose;
-		if ( rest > 0 ) {
-
-			// Without its loose layer the surface is the pile, if there is one, or else the dug ground.
-			const pile = this.surface[ n ] - ( this.loose[ n ] + loose ) > this.exc[ n ] + 1e-4;
-			if ( pile ) {
-
-				this.loose[ n ] -= rest;
-
-			} else {
-
-				this.exc[ n ] -= rest;
-				this.dug[ n ] = this.exc[ n ] - this.base[ n ];
-
-			}
-
-		}
-
+		// Without its loose layer the surface is the pile, if there is one, or else the dug ground.
+		const above = this.surface[ n ] - loose - this.exc[ n ];
+		const pile = above > 1e-4 ? Math.min( amount - loose, above ) : 0;
+		const ground = amount - loose - pile;
+		this.loose[ n ] -= loose + pile;
+		this.exc[ n ] -= ground;
+		this.dug[ n ] -= ground;
 		this.surface[ n ] -= amount;
 
 	}
