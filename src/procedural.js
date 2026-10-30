@@ -14,6 +14,7 @@ import {
 	Vector2,
 } from 'three';
 import { buildExcavator, EXCAVATOR_20T, EXCAVATOR_MINI } from './excavator-model.js';
+import { hPileBundle, hydraulicShoreItem, sheetPileBundle, trenchBoxItem, trenchPanelItem } from './shoring-models.js';
 
 // Common site pieces generated in code at real North American dimensions, in metres. Each builder
 // returns a Group standing on y = 0 with its front (door, open side or sloped end) facing -Z, so
@@ -37,6 +38,16 @@ export const PROCEDURAL_ITEMS = [
 	// Drivable: "drive" tunes race mode, and type 'excavator' gives them the digging controls (excavator.js).
 	{ id: 'excavator-20t', name: 'Excavator (20 t)', category: 'Heavy equipment', build: () => buildExcavator( EXCAVATOR_20T ), drive: { type: 'excavator', topSpeed: 5.5, accel: 1.2, brake: 3, reverse: 5.5 } },
 	{ id: 'excavator-mini', name: 'Mini excavator (3.5 t)', category: 'Heavy equipment', build: () => buildExcavator( EXCAVATOR_MINI ), drive: { type: 'excavator', topSpeed: 4.5, accel: 1.2, brake: 3, reverse: 4.5 } },
+	// Shoring to stage and lay down; shoring.js lines excavations with the same pieces. Weights are
+	// typical for steel boxes with 4 in walls, Z-sheets of 65 kg/m and HP310 x 79 piles.
+	{ id: 'trench-box-8x16', name: 'Trench box (8 x 16 ft, ~2.9 t)', category: 'Shoring', build: () => trenchBoxItem( 16 ) },
+	{ id: 'trench-box-8x20', name: 'Trench box (8 x 20 ft, ~3.5 t)', category: 'Shoring', build: () => trenchBoxItem( 20 ) },
+	{ id: 'trench-box-8x24', name: 'Trench box (8 x 24 ft, ~4.1 t)', category: 'Shoring', build: () => trenchBoxItem( 24 ) },
+	{ id: 'trench-box-stacker-4x20', name: 'Trench box stacker (4 x 20 ft, ~1.8 t)', category: 'Shoring', build: () => trenchBoxItem( 20, 4 ) },
+	{ id: 'trench-box-panel', name: 'Trench box panel, lying flat (8 x 20 ft, ~1.6 t)', category: 'Shoring', build: trenchPanelItem },
+	{ id: 'sheet-pile-bundle', name: 'Sheet piles, bundle of 10 (12 m, ~7.8 t)', category: 'Shoring', build: sheetPileBundle },
+	{ id: 'h-pile-bundle', name: 'H-piles, bundle of 7 (HP310, 12 m, ~6.6 t)', category: 'Shoring', build: hPileBundle },
+	{ id: 'hydraulic-shore', name: 'Hydraulic shore (8 ft rails, ~40 kg)', category: 'Shoring', build: hydraulicShoreItem },
 	{ id: 'jump-ramp', name: 'Jump ramp (1.2 m)', category: 'Race', build: () => jumpRamp( 4, 7, 1.2 ) },
 	{ id: 'jump-ramp-big', name: 'Jump ramp (3 m)', category: 'Race', build: () => jumpRamp( 6, 16, 3 ) },
 ].map( item => ( { ...item, front: '-z', procedural: true } ) );

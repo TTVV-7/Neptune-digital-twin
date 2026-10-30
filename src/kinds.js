@@ -21,6 +21,10 @@
 //     readouts: [ { label: 'volume', get( entry ) { return '50 m³'; } } ],  // read-only P panel
 //                              // lines, refreshed on each change (or panel.refresh( entry ))
 //   } );
+//
+// A field may also have enabled( params ), which greys it out while it returns false (a shored
+// pit's side slope), and a readout note: true, which writes it out in full across the panel (a
+// warning). A readout that gives '' is left out.
 
 const kinds = new Map();
 

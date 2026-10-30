@@ -119,6 +119,7 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 		}
 
 		up.enable( ! state.snap );
+		if ( kind ) fitKind( folder, kind, entry, paramViews.get( entry ) );
 
 		const actions = {
 			moveHere() {
@@ -203,6 +204,60 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 	}
 
 	return { gui, focus, refresh };
+
+}
+
+// Run fn whenever a controller shows its value afresh, as it does on every change to the entry.
+function onDisplay( controller, fn ) {
+
+	const display = controller.updateDisplay.bind( controller );
+	controller.updateDisplay = () => {
+
+		display();
+		fn();
+		return controller;
+
+	};
+	controller.updateDisplay();
+
+}
+
+// A kind's fields that don't apply for now (enabled( params ) false: a shored pit's side slope)
+// are greyed out. Its readouts with nothing to say (no shoring, say) are left out, and notes
+// (readouts marked `note`, e.g. a warning) are written out in full across the panel, where a field
+// would cut them short. params: the copy the fields edit.
+function fitKind( folder, kind, entry, params ) {
+
+	for ( const controller of folder.controllers.filter( c => c.object === params ) ) {
+
+		const field = kind.fields.find( f => f.key === controller.property );
+		if ( field?.enabled ) onDisplay( controller, () => controller.enable( field.enabled( entry.params ) ) );
+
+	}
+
+	const specs = kind.readouts ?? [];
+	const readouts = folder.controllers.find( c => c.object !== params && c.property === specs[ 0 ]?.label )?.object;
+	for ( const controller of folder.controllers.filter( c => c.object === readouts ) ) {
+
+		let text = null;
+		if ( specs.find( r => r.label === controller.property )?.note ) {
+
+			text = document.createElement( 'div' );
+			text.className = 'readout-note';
+			controller.domElement.classList.add( 'note' );
+			controller.$widget.replaceChildren( text );
+
+		}
+
+		onDisplay( controller, () => {
+
+			const value = controller.getValue();
+			if ( text ) text.textContent = value;
+			controller.show( value !== '' );
+
+		} );
+
+	}
 
 }
 

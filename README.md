@@ -126,7 +126,7 @@ npx @gltf-transform/cli optimize input.glb public/models/output.glb --compress m
 Press **L** (or the **Library** button, bottom left) to open the library: vehicles, construction
 equipment (excavators, loaders, a dozer, graders, rollers, cranes, lifts, telehandlers, forklifts,
 dump trucks...), site office trailers, containers, dumpsters, barriers, fencing, traffic control,
-porta-potties, pallets and more, all at real scale and not tied to Neptune, so the same library works
+porta-potties, pallets, shoring and more, all at real scale and not tied to Neptune, so the same library works
 at any site. What each downloaded machine is and where it came from is in
 [docs/equipment.md](docs/equipment.md).
 
@@ -198,6 +198,20 @@ and is then selected, moved, turned, resized (**P**) and deleted like any other 
 Pits and piles are real ground: you can walk into a pit, drive over a pile, and things you place
 sit on them. Volumes come out within about 1% of the textbook figure for the shape, measured from
 Google's ground, so they are as good as the map. Details in [docs/earthworks.md](docs/earthworks.md).
+
+### Shoring: trench boxes, sheet piles and more
+
+An excavation's **support** (P panel) shores it instead of sloping it: **trench box**, **slide
+rail**, **hydraulic shores**, **sheet piles** or **soldier piles + lagging**. The sides are then cut
+vertical and the shoring is drawn in the pit to scale, from standard sizes (trench boxes 8 ft tall
+and 8 to 24 ft long, with 4 ft stackers; 0.6 m Z-sheets...), and rebuilt when the pit is resized. It
+shows with the library closed too. The P panel lists what goes in (e.g. *3 boxes: 2 × 2.4 × 7.3 m
+(8 × 24 ft) + ...*, *80 sheets, 48 m of wall, 9.0 m long each*), the shored wall area, a rough
+weight, and warnings: open box ends, too wide for the system, needs bracing or an engineer, and
+for an unsupported pit over 1.2 m deep with sides steeper than 3 : 4, WorkSafeBC's rule about
+sloping, benching or shoring before anyone goes in. The library's **Shoring** category has trench
+boxes, a stacker, a panel, bundles of sheet piles and H-piles and a hydraulic shore to lay down.
+It's a planning aid, not an engineered design: see [docs/shoring.md](docs/shoring.md).
 
 ## Digging with an excavator
 
@@ -286,6 +300,9 @@ src/layout.js       saves placed items in the browser; export/import
 src/kinds.js        placed things that aren't models (areas, pits, piles): how features register them
 src/terrain.js      the ground that can be dug and piled: heights, volumes, drawing, saving
 src/earthworks.js   excavations and stockpiles, and their tools; src/pour.js animates pouring
+src/shoring.js      shoring in excavations: trench boxes, slide rail, sheet piles...; readouts
+src/shoring-models.js  the shoring pieces, for pits and the library's Shoring category
+src/shoring-ground.js  draws a shored pit's walls straight up behind the shoring
 src/laydown.js      laydown areas: coloured site areas draped on the ground, with labels
 src/excavator.js    digging with an excavator; src/excavator-model.js builds the machines
 src/cloud.js        sign in with Google, layouts in your account, share links (needs the Worker)

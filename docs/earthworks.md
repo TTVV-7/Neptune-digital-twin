@@ -12,9 +12,12 @@ material that is. Both tools are at the top of the library (**L**), under **Tool
 3. Press **P** to change it:
    - **width**, **length**: the top of the cut, in metres.
    - **depth**: from the rim down to the floor (2 m to start with).
-   - **side slope**, horizontal : vertical: *vertical (shored)*, *0.5 : 1*, *1 : 1* (the default),
+   - **side slope**, horizontal : vertical: *vertical*, *0.5 : 1*, *1 : 1* (the default),
      *1.5 : 1* or *2 : 1*. A 1 : 1 slope goes out 1 m for every 1 m down. If the rectangle is too
      small for its slopes at that depth, the floor shrinks to a line and the pit is shallower.
+   - **support**: *none / sloped*, or shoring (trench box, slide rail, hydraulic shores, sheet
+     piles, soldier piles + lagging), which cuts the sides vertical and is drawn in the pit. See
+     [shoring.md](shoring.md).
    - **Dig** plays the digging again.
    - **Spoil pile** pours what came out of the pit beside it, clear of the rim: a pile of
      *Excavated soil* holding the loose volume: a ridge running along a trench (or any pit at least
@@ -110,7 +113,8 @@ in the ground it stood on.
 ## Limits
 
 - The ground is a grid of heights 0.5 m apart, so there are no overhangs or tunnels, and a
-  *vertical (shored)* side is drawn as a very steep face about 1 m wide.
+  *vertical* side is drawn as a very steep face about 1 m wide (behind shoring, it's drawn
+  straight: [shoring.md](shoring.md)).
 - Excavations and ridges can be up to 200 m long; cones up to 20,000 m³ (**Spoil pile** makes a
   ridge for more).
 
