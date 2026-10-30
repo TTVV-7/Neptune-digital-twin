@@ -14,6 +14,7 @@ import {
 	Vector2,
 } from 'three';
 import { buildExcavator, EXCAVATOR_20T, EXCAVATOR_MINI } from './excavator-model.js';
+import { KART_ITEM } from './kart.js';
 
 // Common site pieces generated in code at real North American dimensions, in metres. Each builder
 // returns a Group standing on y = 0 with its front (door, open side or sloped end) facing -Z, so
@@ -39,6 +40,8 @@ export const PROCEDURAL_ITEMS = [
 	{ id: 'excavator-mini', name: 'Mini excavator (3.5 t)', category: 'Heavy equipment', build: () => buildExcavator( EXCAVATOR_MINI ), drive: { type: 'excavator', topSpeed: 4.5, accel: 1.2, brake: 3, reverse: 4.5 } },
 	{ id: 'jump-ramp', name: 'Jump ramp (1.2 m)', category: 'Race', build: () => jumpRamp( 4, 7, 1.2 ) },
 	{ id: 'jump-ramp-big', name: 'Jump ramp (3 m)', category: 'Race', build: () => jumpRamp( 6, 16, 3 ) },
+	// A go-kart with a driver (kart.js), drivable like the other vehicles.
+	KART_ITEM,
 ].map( item => ( { ...item, front: '-z', procedural: true } ) );
 
 export function buildProcedural( id ) {
