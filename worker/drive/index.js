@@ -1,6 +1,10 @@
 import { HttpError, checkSameOrigin, errorResponse, isObject, json, readJson } from '../http.js';
 import { MAX_TOKEN, verifyTurnstile } from './turnstile.js';
 import { search } from './search.js';
+import { createPlayer, renamePlayer } from './players.js';
+import { leaderboard, postScore } from './scores.js';
+import { addressOf, clock, setting } from './settings.js';
+import { makeVisit } from './visits.js';
 
 export { DriveLimits } from './limits.js';
 
@@ -8,7 +12,9 @@ export { DriveLimits } from './limits.js';
 // for /api/*; the site itself (npm run build:drive, dist-drive/) is served straight from
 // Cloudflare's assets. Its job is to keep Google's bill in check: every page that loads Google's
 // 3D tiles starts a billed Maps session, so the Maps key is handed out once per visit, only to a
-// browser that passed Turnstile, and only while today's visits are under the caps.
+// browser that passed Turnstile, and only while today's visits are under the caps. It also keeps
+// the leaderboard (players.js, scores.js) in a D1 database: nicknames and each player's best stunt
+// scores, posted with the visit's token so they come from visits that passed Turnstile.
 //
 // Settings (wrangler.drive.jsonc vars, or secrets):
 //   GOOGLE_MAPS_API_KEY   secret: the Maps key for World Drive's own Google Cloud project (a
@@ -17,6 +23,9 @@ export { DriveLimits } from './limits.js';
 //   TURNSTILE_SITE_KEY    the widget's site key (public)
 //   DAILY_VISITS          visits a day for everyone together (300 if unset); 0 closes for the day
 //   PER_VISITOR_DAILY     visits a day per visitor (8 if unset)
+//   NAMES_PER_VISITOR_DAILY, SCORES_PER_VISITOR_DAILY   the leaderboard's new names and renames
+//                         (20 if unset) and scores (1500) a day per visitor
+//   DB                    the D1 database binding: the leaderboard's tables (worker/drive/migrations)
 //   TURNSTILE_VERIFY_URL, SEARCH_UPSTREAM, TEST_CLOCK   tests only (see scripts/test-drive-worker.mjs)
 
 // Other names the Maps key may be set under (see mapsKey).
@@ -26,6 +35,10 @@ const ROUTES = [
 	{ method: 'GET', path: '/api/config', handler: getConfig },
 	{ method: 'POST', path: '/api/visit', handler: visit },
 	{ method: 'GET', path: '/api/search', handler: search },
+	{ method: 'POST', path: '/api/player', handler: createPlayer },
+	{ method: 'POST', path: '/api/player/rename', handler: renamePlayer },
+	{ method: 'POST', path: '/api/score', handler: postScore },
+	{ method: 'GET', path: '/api/leaderboard', handler: leaderboard },
 ];
 
 export default {
@@ -54,7 +67,7 @@ export default {
 			const site = request.headers.get( 'Sec-Fetch-Site' );
 			if ( site && site !== 'same-origin' && site !== 'none' ) throw new HttpError( 403, 'Forbidden' );
 			const limits = env.LIMITS.get( env.LIMITS.idFromName( 'global' ) );
-			return await route.handler( { request, env, url, ctx, limits } );
+			return await route.handler( { request, env, url, ctx, limits, now: clock( request, env ) } );
 
 		} catch ( err ) {
 
@@ -78,9 +91,10 @@ function getConfig( { env } ) {
 }
 
 // POST /api/visit { token }: the page asks for the Maps key once as it starts. Turnstile first,
-// then the caps (both counted at once), and only then the key. Over a cap: 429 with retryAfter,
-// the seconds until midnight UTC, when the counts start again.
-async function visit( { request, env, url, limits } ) {
+// then the caps (both counted at once), and only then the key, with the visit's token for posting
+// scores (visits.js). Over a cap: 429 with retryAfter, the seconds until midnight UTC, when the
+// counts start again.
+async function visit( { request, env, url, limits, now } ) {
 
 	checkSameOrigin( request, url );
 	const body = await readJson( request, 8192 );
@@ -96,8 +110,8 @@ async function visit( { request, env, url, limits } ) {
 	const key = mapsKey( env );
 	if ( ! key ) throw new HttpError( 503, 'Maps are off today' );
 
-	const outcome = await limits.visit( ip || 'unknown', {
-		now: clock( request, env ),
+	const outcome = await limits.visit( addressOf( request ), {
+		now,
 		daily: setting( env.DAILY_VISITS, 300 ),
 		perVisitor: setting( env.PER_VISITOR_DAILY, 8 ),
 	} );
@@ -109,7 +123,7 @@ async function visit( { request, env, url, limits } ) {
 
 	}
 
-	return json( { mapsKey: key, left: outcome.left } );
+	return json( { mapsKey: key, left: outcome.left, visit: await makeVisit( env, now ) } );
 
 }
 
@@ -129,19 +143,3 @@ function mapsKey( env ) {
 
 }
 
-// A whole number setting of 0 or more, or `fallback` when it's unset or isn't one.
-function setting( value, fallback ) {
-
-	const n = Number( value );
-	return value !== undefined && value !== '' && Number.isInteger( n ) && n >= 0 ? n : fallback;
-
-}
-
-// The time visits are counted at. The tests (TEST_CLOCK=header, never set live) send it in
-// X-Test-Time to check that the counts start again at midnight UTC.
-function clock( request, env ) {
-
-	const sent = Number( request.headers.get( 'X-Test-Time' ) );
-	return env.TEST_CLOCK === 'header' && Number.isFinite( sent ) && sent > 0 ? sent : Date.now();
-
-}

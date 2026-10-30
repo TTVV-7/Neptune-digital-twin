@@ -99,7 +99,8 @@ Hit something (a wall, a building, a parked car, a barrier) and you don't stop: 
   multiplied by the combo multiplier ("+1,310 ×2" adds 2,620), which goes up by one for each trick
   you land (to ×10) and back to ×1 on a wipeout, on R, or after 6 s without a trick. The
   score, the multiplier and your best score (kept in this browser) show under the speed; tricks pop
-  up as you do them, dim while you're in the air and bright with their points when you land.
+  up as you do them, dim while you're in the air and bright with their points when you land. Your
+  best runs go on the [leaderboard](#the-leaderboard).
 - **Drifting.** Hold **Space** (or the **DRIFT** button under the speed, with the mouse, or the
   **Drift** button on a touch screen) and steer: the kart slides wide round the bend in smoke, and
   the **DRIFT** chip and button fill with the mini-turbo's charge in its colour (yellow, then teal,
@@ -198,8 +199,10 @@ starts one. World Drive is built so that one page load is one session, however m
   with **Try again**. With no key set, it shows **World Drive is getting ready** (with a flat test pad
   to drive, which costs nothing).
 
-A visitor is a hash of their IP address with a random salt made each day; addresses are never
-stored, and each day's salt and counts are deleted when the next day starts. Both caps are counted in
+A visitor is a hash of their IP address with a random salt made each day (for IPv6, the address's
+first half, its /64: the block a home or a phone is given, so the billions of addresses in it are one
+visitor); addresses are never stored, and each day's salt and counts are deleted when the next day
+starts. Both caps are counted in
 one Durable Object (`worker/drive/limits.js`, on SQLite storage, which every plan has), so two
 visits at once can't both take the last drive.
 
@@ -216,6 +219,110 @@ Cloudflare's cache for a day (by the tidied query, so `Furka  Pass` and `furka p
 answers only with `{ name, lat, lon, type }`, and refuses queries over 120 characters or with
 anything but letters, numbers and an address's punctuation. The globe's panel shows
 "Search © OpenStreetMap contributors".
+
+## The leaderboard
+
+Each player's best stunt score today, this week and all time, for everyone on worlddrive.app to
+see. There's no sign-up: a nickname is all it takes.
+
+- **The trophy** at the top right of the globe (and **Leaderboard** in the pause menu) opens it:
+  **Today**, **This week** and **All time**, the top 20 drivers' best runs with the tricks of
+  their best jump, where, in what and (this week and all time) on which day. **Only Furka Pass**
+  (whichever place you're driving, or have pinned on the globe) shows that place's board. Your own
+  row is picked out; below the top 20 it says where you are: "You're #42 of 130, with 1,230".
+- **A score is a run's**: everything from dropping in until you change ride or place (pauses don't
+  end it). When a landed jump takes the run past your best today, anywhere or at that place, the
+  run is posted, at most one every 15 s, while you drive on (so a place's board has your best there
+  even on a day you did better somewhere else). The first time, a small card says **New best!** and asks **Post
+  it to the leaderboard?**: **Post** asks for a name right there, without stopping the drive; **Not
+  now** leaves it for later, from the pause menu's leaderboard, where picking a name posts the run
+  that's waiting. After that, runs go up by themselves, and the card only shows for a new best ever
+  or a better place on today's board.
+- **Names** are 3 to 16 letters (any alphabet), numbers, spaces, _ or -, with nothing invisible in
+  them, unique whatever their case and accents, with spaces, _ and - alike, and letters that look
+  the same counted as one ("Speed Demon", "speed_demon" and "Ѕрееd Dеmоn" in Cyrillic letters are one
+  name; so are "Alice" and "AIice"). A small built-in filter turns away slurs and obvious abuse,
+  through the usual disguises (0 for o, 1 for i, Cyrillic or Greek letters for Latin ones, letters
+  doubled, spaces between them), and names passing for World Drive (admin, worlddrive, moderator,
+  staff...). **Rename** is in the panel. A name is picked on a drive on Google's map (it takes the
+  visit's token, as a score does; the test pad has none). The name is kept in this browser (an id and
+  a secret): in another browser, or after clearing the site's data, you pick a new one.
+- **Days** start at midnight UTC and **weeks** on Monday, as the free drives' counts do.
+- Only drives on Google's map post scores: the test pad (maps off, or the dev server) doesn't.
+- A bad connection never gets in the way: a post that doesn't get through is tried again a couple
+  of times, and the drive carries on regardless.
+
+### How cheating is limited
+
+The game runs in your browser, so the Worker never sees a score being made. What it can do is make
+cheating cost something and keep the boards believable (`worker/drive/scores.js`):
+
+- **A visit token.** A score is only taken with the token `/api/visit` hands out with the Maps key:
+  "v1.<visit id>.<expiry>.<signature>", an HMAC-SHA256 whose key is derived (HKDF) from
+  `TURNSTILE_SECRET`, so there's no new secret to set, and good for 6 hours. So every score comes
+  from a visit that passed Turnstile and was counted against the day's caps: a script can't post
+  without spending a drive. A new name takes the token too, and one visit makes one player and posts
+  for that player only (the first to use it), so one robot check can't fill the board, or the
+  database, with names: there are never more new names in a day than visits (`DAILY_VISITS`). A
+  token that's forged, changed, expired or someone else's is a 403.
+- **What the game can score.** Scores are whole tens; the tricks read exactly as the game names them
+  (at most five in a jump); the vehicle is one World Drive offers. A run can't have lasted longer
+  than its visit (give or take 30 s), nor scored more than **131,565 points a second** of it: three
+  times the most the game can give, about 43,855 a second (spinning, flipping and rolling flat out
+  all at once, every second in big air, with two wall bounces, all as a combo at ×10; worked out from
+  the scoring in `src/drive.js`, and the tests fail if the two drift apart). Nothing over
+  1,000,000,000 (six hours flat out is 947 million). Anything else is a 400.
+- **How often.** One score every 10 s from a player (429 with Retry-After); 1,500 scores and 20 new
+  names or renames a day from each visitor, counted, like the visits, as a hash of their address
+  (an IPv6 address by its /64) with the day's salt (`SCORES_PER_VISITOR_DAILY`,
+  `NAMES_PER_VISITOR_DAILY`).
+- **Only bests are kept**, one per player on each board, so posting over and over adds nothing.
+- The secret is kept only as its SHA-256, so a copy of the database can't post as anyone; addresses
+  aren't kept at all.
+
+What this can't stop is someone who reads the page's code and posts a made-up score that looks like
+one the game could make, from a real visit. That's what the log and the console are for.
+
+### Looking after it
+
+The database is **world-drive** in D1 (binding `DB`): `players`, `best_scores` (each player's best
+on each board: `period` is `all`, `day:2026-10-30` or `week:2026-10-26`, the Monday it starts;
+`place_key` is `''` for anywhere or the place's name in lower case), `scores` (a log of every score
+that changed a board, for 35 days) and `visits` (which player each visit made or posted for). The day and
+week boards and the log go after 35 days, tidied as scores come in; the all-time board stays.
+
+To look after it, open the Cloudflare dashboard → Storage & Databases → D1 → **world-drive** →
+**Console**. Times are milliseconds since 1970. Boards, and each player's own row and rank on them,
+are cached for half a minute, so a change shows within that.
+
+```sql
+-- Find a player by name (any case).
+SELECT id, name, datetime( created_at / 1000, 'unixepoch' ) AS joined FROM players WHERE name LIKE '%demon%';
+
+-- The fastest scoring in the last 35 days: where a cheat shows up first.
+SELECT p.id, p.name, s.score, s.run_seconds, s.score / s.run_seconds AS per_second, s.place, datetime( s.created_at / 1000, 'unixepoch' ) AS at
+FROM scores s JOIN players p ON p.id = s.player_id ORDER BY per_second DESC LIMIT 20;
+
+-- One player's scores.
+SELECT score, tricks, place, vehicle, run_seconds, air_time, visit, datetime( created_at / 1000, 'unixepoch' ) AS at
+FROM scores WHERE player_id = 'PLAYER_ID' ORDER BY created_at DESC;
+
+-- Rename an abusive name. name_key is how the Worker compares names (nameKey in
+-- worker/drive/names.js): for a new name of plain letters and numbers with no l in it, like this
+-- one, it's the name in lower case with - for the spaces.
+UPDATE players SET name = 'Driver 4821', name_key = 'driver-4821' WHERE id = 'PLAYER_ID';
+
+-- Take a cheat's scores off every board (they can carry on, from nothing).
+DELETE FROM best_scores WHERE player_id = 'PLAYER_ID';
+DELETE FROM scores WHERE player_id = 'PLAYER_ID';
+
+-- Or remove the player and everything of theirs: their bests, log and visits go with them.
+DELETE FROM players WHERE id = 'PLAYER_ID';
+```
+
+A removed player's browser is asked for a new name the next time it posts. There are no accounts to
+ban; a determined nuisance is limited by the visit caps, and an address can be blocked with a
+Cloudflare WAF rule if it comes to that.
 
 ## Settings
 
@@ -235,20 +342,33 @@ Settings → Variables and Secrets, or `npx wrangler secret put NAME -c wrangler
 | `GOOGLE_MAPS_API_KEY` | The Maps key from World Drive's own Google Cloud project (below). A secret named `Google_maps_api`, in any case, is taken too. |
 | `TURNSTILE_SECRET` | The Turnstile widget's secret key |
 
-`keep_vars` is on, so anything set in the dashboard that isn't in `vars` survives a deploy.
+`keep_vars` is on, so anything set in the dashboard that isn't in `vars` survives a deploy. Two
+more, for the leaderboard, aren't in `vars` and needn't be set; add them in the dashboard (plain
+text) to change them:
+
+| Setting | Default | What it is |
+| --- | --- | --- |
+| `SCORES_PER_VISITOR_DAILY` | 1500 | Scores a visitor may post a day (one every 10 s for four hours) |
+| `NAMES_PER_VISITOR_DAILY` | 20 | New names and renames a visitor may make a day |
+
+The leaderboard's database is the `DB` binding in `wrangler.drive.jsonc` (D1 **world-drive**,
+already made); its tables are `worker/drive/migrations`.
 
 ## Deploying
 
-`npm run deploy:drive` builds the site into `dist-drive/` and deploys the `world-drive` Worker with
-it (`vite build --config vite.drive.config.js && wrangler deploy -c wrangler.drive.jsonc`). The
-Worker only runs for `/api/*`; every other file is served straight from Cloudflare's assets.
+`npm run deploy:drive` applies the leaderboard's migrations to the world-drive database (`wrangler d1
+migrations apply DB --remote -c wrangler.drive.jsonc`; ones already applied are skipped), builds the
+site into `dist-drive/` and deploys the `world-drive` Worker with it (`vite build --config
+vite.drive.config.js && wrangler deploy -c wrangler.drive.jsonc`). The Worker only runs for
+`/api/*`; every other file is served straight from Cloudflare's assets.
 
 To deploy from GitHub on every push with Workers Builds (as the construction app is): in the
 Cloudflare dashboard open the **world-drive** Worker → Settings → Build, connect this repository and
 set
 
-- Build command: `npm run build:drive`
-- Deploy command: `npx wrangler deploy -c wrangler.drive.jsonc`
+- Deploy command: `npm run deploy:drive` (so the migrations are applied before the Worker that needs
+  them goes out)
+- Build command: none needed (`npm run build:drive` does no harm: the deploy builds again)
 - Branch: the branch World Drive ships from
 
 The first deploy replaces the holding page. `worlddrive.app` and `www.worlddrive.app` are the Worker's
@@ -301,20 +421,26 @@ secret `1x0000000000000000000000000000000AA` always passes; secret
   into the dev server, never into `npm run build:drive`, whose build fails if it finds it in the
   output.
 - With the Worker: copy `.dev.vars.drive.example` to `.dev.vars.drive`, run `npm run dev:drive-api`
-  (the Worker on http://localhost:8790), and `DRIVE_API=http://localhost:8790 npm run dev:drive`. The
-  page then goes through the robot check (Turnstile's test keys), the caps and the real search.
-  Small caps there make the used-up screen easy to see.
+  (the Worker on http://localhost:8790, with a local leaderboard database in `.wrangler/state`, its
+  migrations applied first), and `DRIVE_API=http://localhost:8790 npm run dev:drive`. The page then
+  goes through the robot check (Turnstile's test keys), the caps, the real search and the
+  leaderboard. Small caps there make the used-up screen easy to see.
 - In the browser console, `window.drive` has the scene, the globe, the driver and `dropIn( { name,
   lat, lon } )`.
 
 Tests: `npm run test:drive-worker` (the Worker under `wrangler dev`, with stand-ins for Turnstile and
 Nominatim: the caps, their reset at midnight UTC, Turnstile passing and failing, same-origin and JSON
 checks, the search's validation, cache and one-a-second limit, www, and that the key is only ever in
-the answer to a visit that passed) and `npm run test:drive-ui` (the page in Chromium without a key:
+the answer to a visit that passed; and the leaderboard on a throwaway D1 database: name rules, the
+filter and uniqueness, renaming, scores with a visit token, every cheat above turned away, SQL-ish
+names and places kept as text, the top 20 and your own rank, one place's board, the cache, days and
+weeks turning over, the tidying after 35 days, what's stored, and the console's SQL above), and `npm run test:drive-ui` (the page in Chromium without a key:
 the globe and panel, search on Enter, spots, pins, dropping in and driving, stunts (a wall throwing
 the kart into the air and never through it, a backflip landed for points, the DRIFT button), changing
-ride, M and teleporting again without a reload, recent places, a phone with touch buttons, and the
-used-up, robot-check and getting-ready screens).
+ride, M and teleporting again without a reload, recent places, a phone with touch buttons, the
+used-up, robot-check and getting-ready screens, and the leaderboard with its answers made in the
+test: tabs, your own row, picking a name and renaming, a landed jump posting the run with the card
+asking first, each place's best posted, a dead connection changing nothing, and a phone).
 
 ## How it fits together
 
@@ -331,13 +457,16 @@ src/drive-app/rides/         the Supporter Pass's rides, built in code, and part
 src/drive-app/pro.js         whether this visitor has the Supporter Pass (off until payments say so)
 src/drive-app/pass.js        the Supporter Pass sheet and its badge
 src/drive-app/garage.js      the Garage: choices and the turntable; paint.js the looks and decals
-src/drive-app/api.js         /api/config, the visit with Turnstile, /api/search
+src/drive-app/api.js         /api/config, the visit with Turnstile, /api/search, the leaderboard's calls
+src/drive-app/leaderboard.js the leaderboard: the panel, names, posting runs, the new-best card
 src/drive-app/screens.js     start screen, notices, loading card, pause, keys, messages
 src/drive-app/test-globe.js  the Earth without Google's tiles, for working without a key
 vite.drive.config.js         the build: no key, only the offered vehicles copied from public/
-worker/drive/                the Worker: index.js (routes), limits.js (caps and the search queue),
-                             turnstile.js, search.js
-wrangler.drive.jsonc         the Worker's settings, domains and Durable Object
+worker/drive/                the Worker: index.js (routes), limits.js (caps, the search queue and
+                             the leaderboard's turns), turnstile.js, search.js; the leaderboard:
+                             players.js, scores.js, boards.js, names.js (rules and the filter),
+                             visits.js (visit tokens), migrations/ (its D1 tables)
+wrangler.drive.jsonc         the Worker's settings, domains, Durable Object and D1 database
 ```
 
 Shared modules take World Drive's place as a parameter, with the terminal as the default:

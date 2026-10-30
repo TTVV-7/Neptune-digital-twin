@@ -81,8 +81,8 @@ export async function serveKeys( keys ) {
 
 // `wrangler dev` on this machine with a fresh database (migrations applied) and the given vars,
 // which replace any in wrangler.jsonc or .dev.vars. Resolves once it answers. With `config`
-// (World Drive's wrangler.drive.jsonc) it runs that Worker instead, which has no database, and
-// with only the vars given here: no .dev.vars file is read.
+// (World Drive's wrangler.drive.jsonc) it runs that Worker instead, with its own database and
+// only the vars given here: no .dev.vars file is read.
 export async function startWorker( { port, vars, config = null } ) {
 
 	const dir = mkdtempSync( join( tmpdir(), 'twin-worker-' ) );
@@ -92,12 +92,8 @@ export async function startWorker( { port, vars, config = null } ) {
 	writeFileSync( join( assets, 'index.html' ), '<!doctype html><title>test site</title>' );
 	const env = { ...process.env, WRANGLER_SEND_METRICS: 'false', CI: 'true' };
 
-	if ( ! config ) {
-
-		const migrate = spawnSync( process.execPath, [ wrangler, 'd1', 'migrations', 'apply', 'DB', '--local', '--persist-to', state ], { cwd: ROOT, env, encoding: 'utf8' } );
-		if ( migrate.status !== 0 ) throw new Error( `migrations failed:\n${ migrate.stdout }\n${ migrate.stderr }` );
-
-	}
+	const migrate = spawnSync( process.execPath, [ wrangler, 'd1', 'migrations', 'apply', 'DB', '--local', '--persist-to', state, ...( config ? [ '-c', config ] : [] ) ], { cwd: ROOT, env, encoding: 'utf8' } );
+	if ( migrate.status !== 0 ) throw new Error( `migrations failed:\n${ migrate.stdout }\n${ migrate.stderr }` );
 
 	// An empty settings file stands in for .dev.vars, so a developer's own settings stay out of it.
 	const envFile = join( dir, 'empty.env' );
@@ -134,8 +130,9 @@ export async function startWorker( { port, vars, config = null } ) {
 		try {
 
 			const res = await fetch( `${ base }/api/config` );
-			// state: where it keeps its storage, to look at what it stored.
-			if ( res.ok ) return { base, stop, log: () => log, state };
+			// state: where it keeps its storage, to look at what it stored; d1( sql ): the rows a
+			// statement gives on its database, as the owner would see them in the D1 console.
+			if ( res.ok ) return { base, stop, log: () => log, state, d1: sql => queryD1( state, config, sql ) };
 
 		} catch {
 
@@ -149,6 +146,16 @@ export async function startWorker( { port, vars, config = null } ) {
 
 	stop();
 	throw new Error( `wrangler dev didn't start:\n${ log }` );
+
+}
+
+// The rows `sql` gives on the local D1 database in `state` (wrangler d1 execute).
+function queryD1( state, config, sql ) {
+
+	const args = [ wrangler, 'd1', 'execute', 'DB', '--local', '--persist-to', state, ...( config ? [ '-c', config ] : [] ), '--command', sql, '--json' ];
+	const run = spawnSync( process.execPath, args, { cwd: ROOT, env: { ...process.env, WRANGLER_SEND_METRICS: 'false', CI: 'true' }, encoding: 'utf8' } );
+	if ( run.status !== 0 ) throw new Error( `d1 execute failed:\n${ run.stdout }\n${ run.stderr }` );
+	return JSON.parse( run.stdout ).flatMap( result => result.results );
 
 }
 

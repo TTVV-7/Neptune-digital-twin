@@ -14,6 +14,7 @@ import { createTestGlobe, placeEarth } from './test-globe.js';
 import { loadVehicle, loadVehicles, specOf } from './vehicles.js';
 import { setUpPanel } from './panel.js';
 import { setUpGarage } from './garage.js';
+import { setUpLeaderboard } from './leaderboard.js';
 import { formatLatLon, rememberPlace } from './places.js';
 import * as screens from './screens.js';
 
@@ -44,6 +45,9 @@ const SETTLE = 0.6;
 const GROUND_RANGE = [ - 1500, 9500 ];
 // Room (px) the pin's card takes over the panel when the panel is a sheet along the bottom.
 const PIN_CARD = 84;
+// What a place's name may hold on the leaderboard (as worker/drive/names.js takes it), and how long.
+const PLACE_TEXT = /[^\p{L}\p{M}\p{N} .,'’\-#&/()°]+/gu;
+const PLACE_LENGTH = 60;
 
 const $ = id => document.getElementById( id );
 const frame = () => new Promise( resolve => requestAnimationFrame( resolve ) );
@@ -57,7 +61,7 @@ async function boot() {
 	screens.splash( 'Warming up the engine...' );
 	const config = await getConfig();
 	// The Vite dev server on its own: a key from the environment, or the test globe.
-	if ( ! config ) return start( { key: DEV_KEY || null } );
+	if ( ! config ) return start( { key: DEV_KEY || null, worker: false } );
 	if ( ! config.mapsOn ) return screens.notice( 'resting', { onTestPad: () => start( { key: null } ) } );
 	visit( config );
 
@@ -68,14 +72,16 @@ async function visit( config ) {
 
 	screens.splash( 'Checking the road is clear...' );
 	const outcome = await startVisit( config.turnstileSiteKey, $( 'robot-check' ) );
-	if ( outcome.key ) return start( { key: outcome.key, left: outcome.left } );
+	if ( outcome.key ) return start( { key: outcome.key, left: outcome.left, visit: outcome.visit } );
 	if ( outcome.usedUp ) return screens.notice( 'used-up', { retryAfter: outcome.retryAfter } );
 	if ( outcome.robot ) return screens.notice( 'robot', { onRetry: () => visit( config ) } );
 	screens.notice( 'error', { message: outcome.error, onRetry: () => visit( config ) } );
 
 }
 
-async function start( { key, left = null } ) {
+// key: the Maps key (none: the test globe and pad); left: free drives left today; visit: the
+// visit's token, for posting scores; worker: whether there's a Worker (not on the dev server alone).
+async function start( { key, left = null, visit = null, worker = true } ) {
 
 	const vehicles = await loadVehicles();
 	screens.hideSplash();
@@ -138,6 +144,8 @@ async function start( { key, left = null } ) {
 	const walker = { keys: new Set(), enabled: false, yaw: 0, pitch: 0, setPose() {}, setMode() {} };
 	const driver = new Driver( {
 		camera, models, controls: walker, getColliders: grounds, hud, onStop: stopped,
+		// Each landed jump, for the leaderboard: where, and in what.
+		onScore: run => board.onScore( { ...run, place: placeLabel( state.place ), vehicle: state.vehicle?.id } ),
 		// What World Drive drives with: Shift flies, B boosts, the kart drifts, and hitting something
 		// throws you into the air for stunts.
 		fly: true, booster: true, drift: true, crash: 'launch',
@@ -171,6 +179,23 @@ async function start( { key, left = null } ) {
 	// The Garage and the Supporter Pass, by both ride pickers (garage.js, pass.js).
 	const garage = setUpGarage( { vehicles, panel, models, current: () => state.entry && { entry: state.entry, vehicle: state.vehicle } } );
 
+	// The leaderboard, from the trophy on the globe and in the pause menu. "Only here" is the place
+	// being driven, or on the globe the one pinned.
+	const board = setUpLeaderboard( {
+		dialog: $( 'leaderboard' ),
+		card: $( 'best-card' ),
+		vehicles,
+		worker,
+		getPlace: () => placeLabel( state.mode === 'globe' ? panel.pinned : state.place ),
+	} );
+	board.setVisit( visit );
+	for ( const button of document.querySelectorAll( '.board-open' ) ) {
+
+		button.hidden = ! worker;
+		button.addEventListener( 'click', () => board.open() );
+
+	}
+
 	// About, with the credits the vehicle models' licences ask for.
 	const about = $( 'about' );
 	const link = ( href, text ) => Object.assign( document.createElement( 'a' ), { href, textContent: text, target: '_blank', rel: 'noopener' } );
@@ -202,6 +227,17 @@ async function start( { key, left = null } ) {
 
 		globe.setPin( place );
 		panel.setPin( place );
+
+	}
+
+	// A place's name as the leaderboard has it: a dropped pin by where it is (to about a kilometre,
+	// so pins near each other are one place), and only the characters the Worker takes.
+	function placeLabel( place ) {
+
+		if ( ! place ) return null;
+		const name = place.name === 'Dropped pin' ? formatLatLon( place.lat, place.lon ).replace( /(\.\d\d)\d+/g, '$1' ) : place.name;
+		const label = [ ...String( name ).replace( /[–—]/g, '-' ).replace( PLACE_TEXT, ' ' ).replace( /\s+/g, ' ' ).trim() ].slice( 0, PLACE_LENGTH ).join( '' ).trim();
+		return label || formatLatLon( place.lat, place.lon );
 
 	}
 
@@ -450,7 +486,8 @@ async function start( { key, left = null } ) {
 
 	window.addEventListener( 'keydown', e => {
 
-		if ( isTyping( e ) || e.ctrlKey || e.metaKey || e.altKey || e.repeat ) return;
+		// The leaderboard over everything: its own keys (Esc closes it).
+		if ( board.isOpen || isTyping( e ) || e.ctrlKey || e.metaKey || e.altKey || e.repeat ) return;
 		if ( e.code === 'KeyM' && state.mode !== 'globe' ) toGlobe();
 		else if ( state.mode === 'paused' && ( e.code === 'Escape' || e.code === 'Enter' ) ) {
 
@@ -581,7 +618,7 @@ async function start( { key, left = null } ) {
 
 	// For poking around from the browser console, and for the tests.
 	window.drive = {
-		scene, camera, renderer, tiles, globe, models, driver, ground, panel,
+		scene, camera, renderer, tiles, globe, models, driver, ground, panel, leaderboard: board,
 		garage,
 		get mode() {
 
