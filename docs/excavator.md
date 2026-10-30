@@ -74,14 +74,20 @@ shows as a heap in the bed, and the HUD shows how full it is. When it's full ("T
 excavator goes back to the spoil pile.
 
 Trucks are recognised by name: any vehicle whose name has *dump*, *haul*, *tipper* or *roll-off*
-in it, such as **Haul truck (off-highway, 55 t)** (34 m³ heaped) and the **Roll-off dumpsters**
-(20 and 40 yd). Front-load bins don't count: they have lids. A truck's load is saved with the
-layout. Drive the truck away (V) and the load goes with it.
+in it, such as **Haul truck (off-highway, 55 t)** (34 m³ heaped), **Articulated dump truck (40 t)**
+(24 m³), **Dump truck (tandem axle)** (10 m³, about 15 t: a tandem is full at its legal weight
+before its box is, and that's the truck load the earthworks count too) and the **Roll-off
+dumpsters** (20 and 40 yd). Front-load bins don't count: they have lids. A truck's load is saved
+with the layout; importing a layout that has the same truck keeps the larger of the two loads.
+Drive the truck away (V) and the load goes with it.
 
 ## Notes
 
 - Getting out leaves the ground as it is. The library's **Clear** puts it back, along with
   everything else.
+- Getting out in the middle of a pass drops what's in the bucket where the bucket is: into the
+  truck it was being swung to if it's over that truck by now, else onto the ground. If that truck
+  is removed while the bucket is on its way, that pass is dumped on the ground instead.
 - With Google tiles, nothing can be dug until the tiles under the machine have loaded; digging
   presses Google's mesh down under the hole like an excavation does.
 - The ground is a grid of 0.5 m cells, so a single bite is a coarse rectangle, and narrow

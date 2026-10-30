@@ -62,7 +62,18 @@ export function setUpExcavator( { scene, canvas, models, layout, driver, onUpdat
 	const stats = new Map(); // entry -> { cycles, dug, spoil, loaded } while the page is open
 	const parking = new Map(); // rig -> { from, t }: arms settling back to rest after getting out
 	let active = null;
-	models.addEventListener( 'remove', ( { entry } ) => stats.delete( entry ) );
+	models.addEventListener( 'remove', ( { entry } ) => {
+
+		stats.delete( entry );
+		// The truck the bucket is on its way to was taken away: this pass goes on the ground.
+		if ( active?.cycle?.truck === entry ) {
+
+			active.cycle.truck = null;
+			active.dropLevel = null;
+
+		}
+
+	} );
 
 	// Falling soil while the bucket dumps. It lands on the earthworks, the truck's heap or the
 	// ground the machine stands on.
@@ -246,12 +257,13 @@ class Excavator {
 
 	stop() {
 
-		// Anything still in the bucket goes on the ground under it.
-		if ( this.cycle?.load > 0 ) {
+		// Anything still in the bucket drops out of it: into the truck it was being swung to if it's
+		// over that truck by now, else onto the ground under it.
+		const cycle = this.cycle;
+		if ( cycle?.load > 0 ) {
 
-			const mouth = this.rig.mouth.getWorldPosition( _p );
-			this.getTerrain()?.deposit( { x: mouth.x, z: mouth.z, volume: this.cycle.load * SWELL, material: SOIL.id, radius: 0.4 * this.size } );
-			this.stats.spoil += this.cycle.load * SWELL;
+			const over = cycle.truck && this.trucks.isBelow( cycle.truck, this.rig.mouth.getWorldPosition( _p ) );
+			this.release( cycle.load * SWELL, over ? cycle.truck : null );
 
 		}
 
@@ -601,14 +613,20 @@ class Excavator {
 		const cycle = this.cycle;
 		cycle.dumped = true;
 		this.rig.setLoad( false );
-		const loose = cycle.load * SWELL;
+		this.release( cycle.load * SWELL, cycle.truck );
 		cycle.load = 0;
-		if ( loose <= 0 ) return;
-		if ( cycle.truck ) {
 
-			this.trucks.add( cycle.truck, loose );
+	}
+
+	// `loose` m³ out of the bucket: into `truck`, or with none onto the ground under the bucket.
+	release( loose, truck ) {
+
+		if ( loose <= 0 ) return;
+		if ( truck ) {
+
+			this.trucks.add( truck, loose );
 			this.stats.loaded += loose;
-			if ( this.trucks.isFull( cycle.truck ) ) this.flash( 'Truck full' );
+			if ( this.trucks.isFull( truck ) ) this.flash( 'Truck full' );
 			return;
 
 		}
@@ -949,6 +967,12 @@ const BEDS = {
 	'haul-truck-hd465': { from: 0.3, to: 0.97, width: 0.8, rim: 0.86, capacity: 34 },
 	'rolloff-20': { from: 0.1, to: 0.99, width: 0.94, rim: 0.97, capacity: 15.3 },
 	'rolloff-40': { from: 0.08, to: 0.99, width: 0.94, rim: 0.98, capacity: 30.6 },
+	// The articulated truck's body starts behind its headboard, halfway along; its sides are low,
+	// so a full 40 t load (24 m³ heaped) stands well above them.
+	'articulated-dump-truck': { from: 0.51, to: 0.98, width: 0.92, rim: 0.655, capacity: 24 },
+	// A tandem is full at its legal weight, about 15 t (10 m³), before its box is: the truck load
+	// earthworks.js counts.
+	'dump-truck-tandem': { from: 0.26, to: 0.93, width: 0.82, rim: 0.98, capacity: 10 },
 };
 const BED = { from: 0.38, to: 0.97, width: 0.88, rim: 0.85 };
 // The bed's floor is sampled on this grid, which is also the heap's mesh.
@@ -1092,8 +1116,11 @@ function createTruckLoads( { models, layout } ) {
 			if ( ! merge ) clear();
 			for ( const [ east, north, loose ] of list ?? [] ) {
 
+				// Topped up to the saved load: merging an imported layout keeps the larger of the two
+				// loads, as merged digging does, so importing the same file again doesn't load it twice.
 				const entry = models.entries.find( e => isTruck( e ) && Math.hypot( e.state.east - east, e.state.north - north ) < 0.5 );
-				if ( entry ) add( entry, loose, false );
+				const current = loads.get( entry )?.loose ?? 0;
+				if ( entry && loose > current ) add( entry, loose - current, false );
 
 			}
 
@@ -1145,6 +1172,16 @@ function createTruckLoads( { models, layout } ) {
 			const load = loads.get( entry );
 			const top = load?.loose > 0 ? load.top : bed.floor[ Math.floor( COLS * ROWS / 2 ) ];
 			return entry.pivot.localToWorld( _point.set( bed.x, top, bed.z ) ).y;
+
+		},
+
+		// Whether the truck is under a world point, inside its outline seen from above.
+		isBelow( entry, point ) {
+
+			const { min, max } = entry.footprint;
+			entry.pivot.updateMatrixWorld( true );
+			const p = entry.pivot.worldToLocal( _point.copy( point ) );
+			return p.x >= min.x && p.x <= max.x && p.z >= min.z && p.z <= max.z;
 
 		},
 
