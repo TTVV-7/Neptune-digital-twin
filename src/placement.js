@@ -16,6 +16,7 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 	const folders = new Map();
 	const paramViews = new Map();
 	const readoutViews = new Map();
+	const fieldViews = new Map();
 
 	function addEntry( entry ) {
 
@@ -23,6 +24,11 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 		const { state } = entry;
 		const folder = gui.addFolder( state.name ).close();
 		const apply = () => models.apply( entry );
+
+		const kind = getKind( entry.kind );
+		// Kinds (areas, pits, piles) are sized by their own params rather than scaled, and their
+		// size comes first, being what's changed most. Where they are and which way they face follow.
+		if ( kind ) addKindControllers( entry, kind, folder );
 
 		folder.add( state, 'east' ).step( 0.1 ).name( 'east (m)' ).onChange( apply );
 		folder.add( state, 'north' ).step( 0.1 ).name( 'north (m)' ).onChange( apply );
@@ -34,60 +40,7 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 
 		} );
 		folder.add( state, 'heading', 0, 360, 0.1 ).name( 'heading (°)' ).onChange( apply );
-		const kind = getKind( entry.kind );
-		if ( kind ) {
-
-			// Kinds (flatten areas, stockpiles...) are sized by their own params rather than scaled.
-			// The controllers edit a copy, so a value the kind clamps shows clamped.
-			const params = { ...entry.params };
-			const set = key => {
-
-				// Leaving a field without changing it isn't an edit (and would rebuild the kind).
-				if ( params[ key ] === entry.params[ key ] ) return;
-				models.setParams( entry, { [ key ]: params[ key ] } );
-				Object.assign( params, entry.params );
-				folder.controllersRecursive().forEach( c => c.updateDisplay() );
-
-			};
-			for ( const field of kind.fields ) {
-
-				let controller;
-				if ( field.options ) controller = folder.add( params, field.key, field.options );
-				else if ( field.type === 'color' ) controller = folder.addColor( params, field.key );
-				else {
-
-					controller = folder.add( params, field.key );
-					if ( field.min !== undefined ) controller.min( field.min );
-					if ( field.max !== undefined ) controller.max( field.max );
-					if ( field.step !== undefined ) controller.step( field.step );
-
-				}
-
-				controller.name( field.label ?? field.key );
-				// Text and colours apply when finished, numbers and choices as they change. A colour is
-				// finished when its picker closes, as well as when it loses focus.
-				if ( field.type === 'text' || field.type === 'color' ) controller.onFinishChange( () => set( field.key ) );
-				else controller.onChange( () => set( field.key ) );
-				if ( field.type === 'color' ) controller.$input.addEventListener( 'change', () => set( field.key ) );
-
-			}
-
-			// Read-only figures, e.g. a stockpile's volume and weight, refreshed on every change.
-			// Worked out before the controllers are made, which show them from the start.
-			const readouts = {};
-			const refresh = () => {
-
-				for ( const readout of kind.readouts ?? [] ) readouts[ readout.label ] = String( readout.get( entry ) ?? '' );
-
-			};
-			refresh();
-			for ( const readout of kind.readouts ?? [] ) folder.add( readouts, readout.label ).disable();
-			readoutViews.set( entry, refresh );
-			for ( const action of kind.actions ) folder.add( { run: () => action.run( entry ) }, 'run' ).name( action.label );
-			// Keep the copy in step when params change elsewhere (e.g. a pour finishing).
-			paramViews.set( entry, params );
-
-		} else {
+		if ( ! kind ) {
 
 			// Not explicitly stepped, so exact factors such as 0.0254 survive. No min() either: lil-gui
 			// would step on a grid offset from it (1 -> 1.010001), so clamp here instead.
@@ -145,6 +98,73 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 
 	}
 
+	// A kind's fields, size first, then its read-only figures and its buttons.
+	function addKindControllers( entry, kind, folder ) {
+
+		// The controllers edit a copy, so a value the kind clamps shows clamped.
+		const params = { ...entry.params };
+		const set = key => {
+
+			// Leaving a field without changing it isn't an edit (and would rebuild the kind).
+			if ( params[ key ] === entry.params[ key ] ) return;
+			models.setParams( entry, { [ key ]: params[ key ] } );
+			Object.assign( params, entry.params );
+			folder.controllersRecursive().forEach( c => c.updateDisplay() );
+			showFields();
+
+		};
+		const fields = [ ...kind.fields.filter( f => f.size ), ...kind.fields.filter( f => ! f.size ) ];
+		const conditional = [];
+		for ( const field of fields ) {
+
+			let controller;
+			if ( field.options ) controller = folder.add( params, field.key, field.options );
+			else if ( field.type === 'color' ) controller = folder.addColor( params, field.key );
+			else {
+
+				controller = folder.add( params, field.key );
+				if ( field.min !== undefined ) controller.min( field.min );
+				if ( field.max !== undefined ) controller.max( field.max );
+				if ( field.step !== undefined ) controller.step( field.step );
+
+			}
+
+			controller.name( field.label ?? field.key );
+			// Text and colours apply when finished, numbers and choices as they change. A colour is
+			// finished when its picker closes, as well as when it loses focus.
+			if ( field.type === 'text' || field.type === 'color' ) controller.onFinishChange( () => set( field.key ) );
+			else controller.onChange( () => set( field.key ) );
+			if ( field.type === 'color' ) controller.$input.addEventListener( 'change', () => set( field.key ) );
+			if ( field.when ) conditional.push( [ field, controller ] );
+
+		}
+
+		// Fields that don't apply to these params (a cone's width) are hidden.
+		const showFields = () => {
+
+			for ( const [ field, controller ] of conditional ) controller.show( !! field.when( entry.params ) );
+
+		};
+		showFields();
+		fieldViews.set( entry, showFields );
+
+		// Read-only figures, e.g. a stockpile's volume and weight, refreshed on every change.
+		// Worked out before the controllers are made, which show them from the start.
+		const readouts = {};
+		const refresh = () => {
+
+			for ( const readout of kind.readouts ?? [] ) readouts[ readout.label ] = String( readout.get( entry ) ?? '' );
+
+		};
+		refresh();
+		for ( const readout of kind.readouts ?? [] ) folder.add( readouts, readout.label ).disable();
+		readoutViews.set( entry, refresh );
+		for ( const action of kind.actions ) folder.add( { run: () => action.run( entry ) }, 'run' ).name( action.label );
+		// Keep the copy in step when params change elsewhere (e.g. a pour finishing).
+		paramViews.set( entry, params );
+
+	}
+
 	models.addEventListener( 'add', ( { entry } ) => {
 
 		addEntry( entry );
@@ -159,15 +179,25 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 		folders.delete( entry );
 		paramViews.delete( entry );
 		readoutViews.delete( entry );
+		fieldViews.delete( entry );
 		if ( folders.size === 0 ) empty.show();
 
 	} );
 
-	// Open just this entry's settings, and show the panel unless asked not to.
+	// Open just this entry's settings, and show the panel unless asked not to, scrolled to them
+	// when there are many.
 	function focus( entry, show = true ) {
 
 		for ( const [ e, folder ] of folders ) folder.open( e === entry );
-		if ( show ) gui.show();
+		if ( ! show ) return;
+		gui.show();
+		gui.open();
+		const folder = folders.get( entry );
+		if ( ! folder ) return;
+		// Scrolled by hand: scrollIntoView could scroll the page itself as well.
+		const list = gui.$children.getBoundingClientRect();
+		const top = folder.domElement.getBoundingClientRect().top;
+		if ( top < list.top || top > list.bottom - 40 ) gui.$children.scrollTop += top - list.top;
 
 	}
 
@@ -198,6 +228,7 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 		}
 
 		readoutViews.get( entry )?.();
+		fieldViews.get( entry )?.();
 		for ( const controller of controllers ) if ( controller !== editing ) controller.updateDisplay();
 
 	}
