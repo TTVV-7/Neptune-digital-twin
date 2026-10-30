@@ -1027,7 +1027,8 @@ dialog#leaderboard .here {
 	font-weight: 600;
 }
 
-dialog#leaderboard .here-name {
+dialog#leaderboard .here span {
+	min-width: 0;
 	overflow: hidden;
 	white-space: nowrap;
 	text-overflow: ellipsis;

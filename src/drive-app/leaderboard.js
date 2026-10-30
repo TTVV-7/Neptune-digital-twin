@@ -109,11 +109,11 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace } )
 		if ( answer.ok ) {
 
 			failures = 0;
-			const { today, rank } = answer.body;
-			remember( today?.best ?? score );
+			const { today: day, rank, isNewBest } = answer.body;
+			remember( day?.best ?? score );
 			// Only when it's news: a best ever, or higher up today's board than before.
-			if ( answer.body.isNewBest || today?.rank < ranks.today ) showCard( 'posted', answer.body.isNewBest ? `New best! ${ points( score ) }` : `Today's best: ${ points( score ) }`, standing( answer.body ) );
-			ranks = { today: today?.rank ?? Infinity, all: rank ?? Infinity };
+			if ( isNewBest || day?.rank < ranks.today ) showCard( 'posted', isNewBest ? `New best! ${ points( score ) }` : `Today's best: ${ points( score ) }`, standing( answer.body ) );
+			ranks = { today: day?.rank ?? Infinity, all: rank ?? Infinity };
 
 		} else if ( answer.status === 429 ) {
 
@@ -148,7 +148,7 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace } )
 
 	function todayBest() {
 
-		return posted.day === today() ? posted.best : 0;
+		return posted?.day === today() ? Number( posted.best ) || 0 : 0;
 
 	}
 
@@ -159,10 +159,10 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace } )
 
 	}
 
-	function standing( { rank, today } ) {
+	function standing( { rank, today: day } ) {
 
 		const parts = [];
-		if ( today?.rank ) parts.push( `#${ today.rank } today` );
+		if ( day?.rank ) parts.push( `#${ day.rank } today` );
 		if ( rank ) parts.push( `#${ rank } all time` );
 		return parts.length ? parts.join( ' · ' ) : 'On the leaderboard';
 
@@ -230,7 +230,8 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace } )
 		}
 
 	} );
-	// Esc or a tap elsewhere leaves it be: back to driving, the name for later (the pause menu).
+	// Esc puts the card away, and so does driving on for a few seconds: the name can wait for the
+	// pause menu.
 	cardForm.elements.name.addEventListener( 'keydown', e => {
 
 		if ( e.key === 'Escape' ) hideCard();
