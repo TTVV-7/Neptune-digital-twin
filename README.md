@@ -104,7 +104,8 @@ panel) shows the full list:
 | A / D | Steer |
 | Shift | Boost |
 | Space | Hop |
-| C | Chase or bonnet camera |
+| R | Stuck? Back on the ground a few metres ahead, upright |
+| C | Chase or driver's-seat camera |
 | Wheel | Chase camera nearer or farther |
 | V or Esc | Get out |
 
@@ -281,13 +282,18 @@ slope, or into a dump truck, haul truck or roll-off parked on that side (the HUD
 
 Press **V** to get in and drive: the selected vehicle from the library's Vehicles, else the nearest
 one within 25 m, else a pickup appears in front of you. **W**/**S** gas and brake (hold S to reverse), **A**/**D** steer, **Shift**
-boosts, **Space** hops, **C** switches between chase and bonnet cameras, **V** or **Esc** gets out and
-parks it where it stopped. The speedometer shows km/h, your top speed and longest jump.
+boosts, **Space** hops, **C** switches between the chase camera and the driver's seat, **R** puts it
+back on the ground a few metres ahead (or where it last drove freely) if it's stuck, **V** or **Esc**
+gets out and parks it where it stopped. The speedometer shows km/h, your top speed and longest jump.
+Vehicles also include a go-kart (with its driver), built in code.
 
 The construction machines drive too, at their own speeds: the dozer at 11 km/h, the wheel loader at
 40, the crawler crane at walking pace (2 km/h) and the all-terrain crane at road speed (80), even with
 its boom up. The cranes stand and turn on their carriers, and the cameras frame the carrier and look
-out of the cab rather than from up the boom. The pickup tops out at 160 km/h (about 210 with boost), the semi at 120 and the haul truck at 70. The **Race**
+out of the cab rather than from up the boom. The chase camera keeps outside the machine's own box,
+boom and all (backed up to a wall, it looks on from above), and the driver's-seat camera is at the
+operator's eyes: library.json gives each machine's `drive.cab` point. A cab whose windows are only
+painted on is seen from just past its windscreen, and see-through glass is left out of that view. The pickup tops out at 160 km/h (about 210 with boost), the semi at 120 and the haul truck at 70. The **Race**
 category has two jump ramps (1.2 m and 3 m); hit the big one at highway speed for about 1.7 s of air.
 Hit a wall, a container, a barrier or one of Google's buildings and the vehicle just stops against
 it; back up (**S**) to drive off again. Flatten a strip
@@ -354,7 +360,10 @@ src/sidebar.js      the library sidebar: placing, selecting, moving, drawing fla
 src/handles.js      on-map handles for the selected item: turning, resizing areas, a pit's depth
 src/toolbar.js      the toolbar over the selected item, its size editor and Undo after deleting
 src/flatten.js      flatten areas: press Google's mesh flat inside a rectangle
-src/drive.js        race mode: driving, jumps, speedometer
+src/drive.js        race mode: driving, jumps, cameras, speedometer; flying, booster and drifts as options
+src/drive-hud.js    a self-contained driving HUD with touch buttons, for other apps (World Drive)
+src/drive-fx.js     booster flame, tyre smoke and drift sparks
+src/kart.js         the go-kart model and its library item
 src/layout.js       saves placed items in the browser; export/import
 src/kinds.js        placed things that aren't models (areas, pits, piles): how features register them
 src/terrain.js      the ground that can be dug and piled: heights, volumes, drawing, saving
