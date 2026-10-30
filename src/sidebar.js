@@ -260,6 +260,9 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	async function startPlacing( item, { fromDrag = false, heading } = {} ) {
 
+		// Placing takes over from a tool in use, as a tool takes over from placing; otherwise the
+		// tool would take the click meant to place the item.
+		cancelDrawing();
 		cancelPlacing();
 		select( null );
 		document.exitPointerLock?.();
