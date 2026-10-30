@@ -11,13 +11,16 @@ export const CATEGORY_ORDER = [
 	'Cranes & lifts',
 	'Material handling',
 	'Site trailers & containers',
+	'Temporary covers',
 	'Waste',
 	'Barriers & fencing',
 	'Traffic control',
 	'Site services',
+	'Dewatering & water treatment',
 	'Access & scaffolding',
 	'Shoring',
 	'Materials',
+	'People',
 	'Race',
 ];
 
@@ -43,7 +46,8 @@ export async function loadLibrary() {
 	};
 
 	return [ ...downloaded, ...PROCEDURAL_ITEMS ]
-		.sort( ( a, b ) => rank( a.category ) - rank( b.category ) || a.category.localeCompare( b.category ) || a.name.localeCompare( b.name ) );
+		// Numeric, so sizes come smallest first: a 9 m shelter before a 15 m one.
+		.sort( ( a, b ) => rank( a.category ) - rank( b.category ) || a.category.localeCompare( b.category ) || a.name.localeCompare( b.name, undefined, { numeric: true } ) );
 
 }
 
