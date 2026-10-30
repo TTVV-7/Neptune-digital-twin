@@ -80,8 +80,10 @@ export async function serveKeys( keys ) {
 // --- the Worker ------------------------------------------------------------------------
 
 // `wrangler dev` on this machine with a fresh database (migrations applied) and the given vars,
-// which replace any in wrangler.jsonc or .dev.vars. Resolves once it answers.
-export async function startWorker( { port, vars } ) {
+// which replace any in wrangler.jsonc or .dev.vars. Resolves once it answers. With `config`
+// (World Drive's wrangler.drive.jsonc) it runs that Worker instead, which has no database, and
+// with only the vars given here: no .dev.vars file is read.
+export async function startWorker( { port, vars, config = null } ) {
 
 	const dir = mkdtempSync( join( tmpdir(), 'twin-worker-' ) );
 	const state = join( dir, 'state' );
@@ -90,11 +92,19 @@ export async function startWorker( { port, vars } ) {
 	writeFileSync( join( assets, 'index.html' ), '<!doctype html><title>test site</title>' );
 	const env = { ...process.env, WRANGLER_SEND_METRICS: 'false', CI: 'true' };
 
-	const migrate = spawnSync( process.execPath, [ wrangler, 'd1', 'migrations', 'apply', 'DB', '--local', '--persist-to', state ], { cwd: ROOT, env, encoding: 'utf8' } );
-	if ( migrate.status !== 0 ) throw new Error( `migrations failed:\n${ migrate.stdout }\n${ migrate.stderr }` );
+	if ( ! config ) {
 
+		const migrate = spawnSync( process.execPath, [ wrangler, 'd1', 'migrations', 'apply', 'DB', '--local', '--persist-to', state ], { cwd: ROOT, env, encoding: 'utf8' } );
+		if ( migrate.status !== 0 ) throw new Error( `migrations failed:\n${ migrate.stdout }\n${ migrate.stderr }` );
+
+	}
+
+	// An empty settings file stands in for .dev.vars, so a developer's own settings stay out of it.
+	const envFile = join( dir, 'empty.env' );
+	writeFileSync( envFile, '' );
 	const args = [
-		wrangler, 'dev', '--local', '--ip', '127.0.0.1', '--port', String( port ), '--inspector-port', String( await freePort() ),
+		wrangler, 'dev', ...( config ? [ '-c', config, '--env-file', envFile ] : [] ),
+		'--local', '--ip', '127.0.0.1', '--port', String( port ), '--inspector-port', String( await freePort() ),
 		'--persist-to', state, '--assets', assets, '--show-interactive-dev-session=false',
 		...Object.entries( vars ).flatMap( ( [ name, value ] ) => [ '--var', `${ name }:${ value }` ] ),
 	];
@@ -124,7 +134,8 @@ export async function startWorker( { port, vars } ) {
 		try {
 
 			const res = await fetch( `${ base }/api/config` );
-			if ( res.ok ) return { base, stop, log: () => log };
+			// state: where it keeps its storage, to look at what it stored.
+			if ( res.ok ) return { base, stop, log: () => log, state };
 
 		} catch {
 
