@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<title>World Drive</title>
+		<meta name="description" content="Pick anywhere on Earth, drop in and drive the real 3D world, right in your browser." />
+		<meta name="theme-color" content="#070c16" />
+		<meta property="og:title" content="World Drive" />
+		<meta property="og:description" content="Pick anywhere on Earth. Drop in. Drive." />
+		<meta property="og:url" content="https://worlddrive.app/" />
+		<meta property="og:type" content="website" />
+		<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23155a9c'/%3E%3Cpath d='M10 40c8-4 14-4 22 0s14 4 22 0' stroke='%23ffd23f' stroke-width='7' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
+		<script>
+			// www.worlddrive.app is the same site. The Worker sends /api there; pages come straight from
+			// Cloudflare's assets, so they move themselves along.
+			if ( location.hostname === 'www.worlddrive.app' ) location.replace( 'https://worlddrive.app' + location.pathname + location.search + location.hash );
+		</script>
+	</head>
+	<body data-mode="start">
+		<div id="app"></div>
+
+		<div id="pin" hidden aria-hidden="true"><span></span></div>
+
+		<section id="globe-ui" hidden>
+			<div class="panel">
+				<header class="intro">
+					<h1 class="logo">World <b>Drive</b></h1>
+					<p class="tagline">Pick anywhere on Earth. Drop in. Drive.</p>
+				</header>
+				<form class="search" role="search">
+					<input type="search" name="q" placeholder="A place, an address, or lat, lon" autocomplete="off" enterkeyhint="search" maxlength="120" aria-label="Search for a place" />
+					<button type="submit">Go</button>
+				</form>
+				<p class="search-status" hidden role="status"></p>
+				<ul class="results list" hidden></ul>
+				<p class="osm">Search &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</p>
+				<h2>Your ride</h2>
+				<div class="vehicles" role="radiogroup" aria-label="Your ride"></div>
+				<p class="credit small"></p>
+				<div class="recent-block" hidden>
+					<h2>Recent</h2>
+					<ul class="recent list"></ul>
+				</div>
+				<h2>Start spots</h2>
+				<ul class="spots list"></ul>
+				<p class="small hint">Or tap the globe anywhere to drop a pin. Drag to spin it, pinch or scroll to zoom.</p>
+				<p class="small"><button type="button" class="link about-open">About World Drive</button></p>
+			</div>
+			<div class="pin-card" hidden>
+				<div class="where"><b class="name"></b><span class="coords"></span></div>
+				<button type="button" class="go">Drive here</button>
+				<button type="button" class="clear" aria-label="Clear the pin">&times;</button>
+			</div>
+		</section>
+
+		<section id="drive-ui" hidden>
+			<div class="topbar">
+				<button type="button" class="to-globe" title="Back to the globe (M)"><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M2 10h16M10 2c3 3 3 13 0 16M10 2c-3 3-3 13 0 16" fill="none" stroke="currentColor" stroke-width="1.5"/></svg> Globe <kbd>M</kbd></button>
+				<div class="place"></div>
+				<button type="button" class="keys-toggle" aria-label="Show the keys" title="Keys">?</button>
+				<button type="button" class="pause-open" aria-label="Pause" title="Pause (Esc)"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><rect x="4" y="3" width="4" height="14" rx="1" fill="currentColor"/><rect x="12" y="3" width="4" height="14" rx="1" fill="currentColor"/></svg></button>
+			</div>
+			<dl class="keys" hidden>
+				<div><dt><kbd>W</kbd> <kbd>S</kbd></dt><dd>Gas, brake &amp; reverse</dd></div>
+				<div><dt><kbd>A</kbd> <kbd>D</kbd></dt><dd>Steer</dd></div>
+				<div><dt><kbd>Space</kbd></dt><dd>Hop; hold it round a bend to drift</dd></div>
+				<div><dt><kbd>B</kbd></dt><dd>Boost</dd></div>
+				<div><dt><kbd>Shift</kbd></dt><dd>Fly</dd></div>
+				<div><dt><kbd>R</kbd></dt><dd>Back on the road</dd></div>
+				<div><dt><kbd>C</kbd></dt><dd>Camera</dd></div>
+				<div><dt>Wheel</dt><dd>Camera nearer or farther</dd></div>
+				<div><dt><kbd>M</kbd></dt><dd>Back to the globe</dd></div>
+				<div><dt><kbd>Esc</kbd></dt><dd>Pause</dd></div>
+			</dl>
+			<div class="touch" aria-label="Driving buttons">
+				<div class="steer">
+					<button type="button" data-code="KeyA" aria-label="Steer left"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4 7 12l8 8" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+					<button type="button" data-code="KeyD" aria-label="Steer right"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 4 8 8-8 8" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+				</div>
+				<div class="extras">
+					<button type="button" data-code="KeyB">Boost</button>
+					<button type="button" data-code="Space">Hop</button>
+					<button type="button" data-code="ShiftLeft">Fly</button>
+					<button type="button" data-code="KeyC">Cam</button>
+					<button type="button" data-code="KeyR">Reset</button>
+				</div>
+				<div class="pedals">
+					<button type="button" data-code="KeyS" class="brake">Brake</button>
+					<button type="button" data-code="KeyW" class="gas">Gas</button>
+				</div>
+			</div>
+		</section>
+
+		<div id="hud"></div>
+
+		<section id="loading" hidden aria-live="polite">
+			<div class="card">
+				<p class="title"></p>
+				<div class="bar" hidden><i></i></div>
+				<button type="button" class="link cancel">Back to the globe</button>
+			</div>
+		</section>
+
+		<section id="pause" hidden role="dialog" aria-labelledby="pause-title">
+			<div class="card">
+				<h2 id="pause-title">Paused</h2>
+				<button type="button" class="primary resume">Keep driving</button>
+				<h3>Change ride</h3>
+				<div class="vehicles" role="radiogroup" aria-label="Change ride"></div>
+				<button type="button" class="to-globe">Back to the globe <kbd>M</kbd></button>
+			</div>
+		</section>
+
+		<section id="splash">
+			<div class="card">
+				<h1 class="logo">World <b>Drive</b></h1>
+				<p class="status">Warming up the engine...</p>
+				<div class="road" aria-hidden="true"><i></i></div>
+				<div id="robot-check"></div>
+			</div>
+		</section>
+
+		<section id="notice" hidden role="alert">
+			<div class="card">
+				<h1 class="logo">World <b>Drive</b></h1>
+				<div class="sunset" aria-hidden="true"><i></i></div>
+				<h2 class="title"></h2>
+				<p class="message"></p>
+				<p class="countdown" hidden></p>
+				<div class="buttons"></div>
+			</div>
+		</section>
+
+		<div id="toast" hidden role="status"></div>
+
+		<div id="attribution" hidden>
+			<img src="/google-maps-logo.svg" alt="Google Maps" />
+			<span class="credits"></span>
+		</div>
+
+		<dialog id="about" aria-labelledby="about-title">
+			<h2 id="about-title">World Drive</h2>
+			<p>Pick a spot anywhere on Earth, drop in and drive the real world in 3D: city streets, mountain passes, bridges, wherever you like.</p>
+			<p>The 3D world is Google's photorealistic map, streamed as you go. Every visit costs a little, so there's a limit on free drives each day, for everyone and for each visitor. A visit lasts as long as you keep the page open: fly off and drop in somewhere else as often as you like.</p>
+			<p>Map data &copy; Google and its data providers. Place search &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>.</p>
+			<h3>Vehicle models</h3>
+			<ul class="credits small"></ul>
+			<p class="small">World Drive is checked by Cloudflare Turnstile so the free drives go to people rather than robots.</p>
+			<form method="dialog"><button type="submit" class="primary">Close</button></form>
+		</dialog>
+
+		<script type="module" src="/src/drive-app/main.js"></script>
+	</body>
+</html>

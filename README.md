@@ -15,6 +15,9 @@ Google's photorealistic 3D map, and you can drop your own detailed models on top
   hosted on Cloudflare or Vercel.
 - **Premium (work in progress, off until set up):** a Pro equipment pack bought once with Stripe.
 
+The same repository also holds a second app, **[World Drive](#world-drive-worlddriveapp)**: pick
+anywhere on Earth from a globe and drive it.
+
 The step-by-step plan, with prompts you can paste to Claude, is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Quick start
@@ -347,6 +350,28 @@ always open for everyone. It's **off** until the Payment Link, its id and the we
 are set, and then only in the app: the models are still public files. Stripe setup (test mode first),
 testing with test cards and the known gaps are in [docs/premium.md](docs/premium.md).
 
+## World Drive (worlddrive.app)
+
+A second app in this repository, on its own address: pick anywhere on Earth from a globe of Google's
+3D tiles (search, a dozen start spots, recent places, or a tap on the globe), choose a go-kart, pickup,
+semi or haul truck, press **Drive here** and drive the real world arcade-style: drift, boost, fly
+with Shift, **M** back to the globe and drop in somewhere else without reloading. Phones get a bottom
+sheet and touch buttons.
+
+It shares `src/` with this app but has its own page (`drive/index.html`, `src/drive-app/`), build
+(`npm run dev:drive`, `npm run build:drive` into `dist-drive/`) and Cloudflare Worker
+(`worker/drive/`, `wrangler.drive.jsonc`, `npm run deploy:drive`). Each page load is one billed Google
+Maps session, so the built site holds no key: the Worker hands it out once per visit, after a
+Cloudflare Turnstile check, and only while the day's visits are under a cap for everyone (300) and
+for each visitor (8); over a cap the page says today's free drives are used up. Teleporting moves the
+loaded world rather than loading a new one, so it costs nothing extra. Place search goes through the
+Worker to OpenStreetMap's Nominatim, cached and at most once a second.
+
+How to play, the settings and limits, deploying, and the owner's Google Cloud steps (a separate
+project and key, restricted to worlddrive.app and the Map Tiles API, a daily quota and budget alerts)
+are in [docs/world-drive.md](docs/world-drive.md). Tests: `npm run test:drive-worker` and
+`npm run test:drive-ui`.
+
 ## About the Sketchfab model
 
 The [Neptune Terminal (North Vancouver)](https://skfb.ly/oyAVS) model on Sketchfab belongs to
@@ -397,6 +422,9 @@ scripts/add-asset.mjs   imports a model from Sketchfab or Poly Haven into public
 public/library/     downloaded models, library.json catalog, thumbs/ and CREDITS.md
 src/geo.js          lat/lon <-> local metres
 public/models/      put your .glb files here
+drive/index.html    World Drive's page; its code is src/drive-app/ (docs/world-drive.md)
+worker/drive/       World Drive's Worker: the Maps key per visit, caps, Turnstile, search
+vite.drive.config.js, wrangler.drive.jsonc   World Drive's build and Worker settings
 ```
 
 The scene uses metres with the origin at the terminal centre (`SITE` in `config.js`):

@@ -1,0 +1,998 @@
+/* World Drive: bold and game-like, but tidy. Dark glass panels over the globe, one sunny accent. */
+
+:root {
+	--ink: #f4f7fb;
+	--muted: rgba( 244, 247, 251, 0.68 );
+	--panel: rgba( 9, 15, 27, 0.84 );
+	--panel-solid: #0b1322;
+	--line: rgba( 255, 255, 255, 0.12 );
+	--chip: rgba( 255, 255, 255, 0.07 );
+	--chip-hover: rgba( 255, 255, 255, 0.14 );
+	--accent: #ffd23f;
+	--accent-ink: #1d1500;
+	--sky: #3ec1ff;
+	--radius: 16px;
+	--font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+	--safe-bottom: env( safe-area-inset-bottom, 0px );
+	color-scheme: dark;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	height: 100%;
+	overflow: hidden;
+	font: 15px/1.4 var( --font );
+	color: var( --ink );
+	/* Space, with a few stars, behind the globe (the canvas is see-through there). */
+	background:
+		radial-gradient( 1px 1px at 12% 18%, rgba( 255, 255, 255, 0.8 ), transparent 60% ),
+		radial-gradient( 1px 1px at 72% 12%, rgba( 255, 255, 255, 0.7 ), transparent 60% ),
+		radial-gradient( 1.5px 1.5px at 38% 72%, rgba( 255, 255, 255, 0.6 ), transparent 60% ),
+		radial-gradient( 1px 1px at 88% 64%, rgba( 255, 255, 255, 0.7 ), transparent 60% ),
+		radial-gradient( 1px 1px at 22% 88%, rgba( 255, 255, 255, 0.5 ), transparent 60% ),
+		radial-gradient( 1.5px 1.5px at 60% 40%, rgba( 255, 255, 255, 0.4 ), transparent 60% ),
+		radial-gradient( ellipse at 50% 120%, #10264a 0%, #070c16 60% );
+	-webkit-tap-highlight-color: transparent;
+}
+
+[hidden] {
+	display: none !important;
+}
+
+#app canvas {
+	display: block;
+	touch-action: none;
+}
+
+button {
+	font: inherit;
+	color: inherit;
+	cursor: pointer;
+}
+
+button:focus-visible,
+input:focus-visible {
+	outline: 2px solid var( --sky );
+	outline-offset: 2px;
+}
+
+a {
+	color: var( --sky );
+}
+
+kbd {
+	display: inline-block;
+	min-width: 1.6em;
+	padding: 1px 6px;
+	border: 1px solid var( --line );
+	border-bottom-width: 2px;
+	border-radius: 6px;
+	background: rgba( 255, 255, 255, 0.08 );
+	font: 700 11px/1.5 var( --font );
+	text-align: center;
+	color: var( --ink );
+}
+
+.small {
+	font-size: 12px;
+	color: var( --muted );
+}
+
+button.link {
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var( --sky );
+	text-decoration: underline;
+}
+
+button.primary,
+.pin-card .go {
+	padding: 12px 22px;
+	border: 0;
+	border-radius: 12px;
+	background: var( --accent );
+	color: var( --accent-ink );
+	font-weight: 900;
+	font-style: italic;
+	letter-spacing: 0.3px;
+	text-transform: uppercase;
+	box-shadow: 0 4px 0 #c99a00, 0 8px 24px rgba( 255, 210, 63, 0.25 );
+	transition: transform 0.08s, box-shadow 0.08s;
+}
+
+button.primary:active,
+.pin-card .go:active {
+	transform: translateY( 3px );
+	box-shadow: 0 1px 0 #c99a00, 0 4px 12px rgba( 255, 210, 63, 0.2 );
+}
+
+/* The name: heavy, italic, leaning forward. */
+.logo {
+	margin: 0;
+	font: 900 italic 34px/1 var( --font );
+	letter-spacing: -0.5px;
+	text-transform: uppercase;
+	white-space: nowrap;
+}
+
+.logo b {
+	color: var( --accent );
+	font-weight: 900;
+}
+
+/* --- the globe's panel ------------------------------------------------------------------- */
+
+#globe-ui .panel {
+	position: fixed;
+	top: 16px;
+	left: 16px;
+	z-index: 10;
+	width: 340px;
+	max-height: calc( 100% - 32px );
+	overflow-y: auto;
+	padding: 20px;
+	border: 1px solid var( --line );
+	border-radius: var( --radius );
+	background: var( --panel );
+	backdrop-filter: blur( 14px );
+	-webkit-backdrop-filter: blur( 14px );
+	box-shadow: 0 12px 40px rgba( 0, 0, 0, 0.4 );
+	scrollbar-width: thin;
+}
+
+#globe-ui .tagline {
+	margin: 8px 0 16px;
+	color: var( --muted );
+	font-weight: 600;
+}
+
+#globe-ui h2 {
+	margin: 18px 0 8px;
+	font-size: 12px;
+	font-weight: 800;
+	letter-spacing: 1.2px;
+	text-transform: uppercase;
+	color: var( --muted );
+}
+
+.search {
+	display: flex;
+	gap: 8px;
+}
+
+.search input {
+	flex: 1;
+	min-width: 0;
+	padding: 12px 14px;
+	border: 1px solid var( --line );
+	border-radius: 12px;
+	background: rgba( 255, 255, 255, 0.08 );
+	color: var( --ink );
+	font: inherit;
+	font-size: 16px; /* 16px stops phones zooming in on it. */
+}
+
+.search input::placeholder {
+	color: rgba( 244, 247, 251, 0.45 );
+}
+
+.search button {
+	padding: 0 16px;
+	border: 0;
+	border-radius: 12px;
+	background: var( --sky );
+	color: #04121f;
+	font-weight: 800;
+}
+
+.search-status {
+	margin: 10px 2px 0;
+	font-size: 13px;
+	color: var( --muted );
+}
+
+.osm {
+	margin: 6px 2px 0;
+	font-size: 11px;
+	color: rgba( 244, 247, 251, 0.5 );
+}
+
+.list {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 6px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.results {
+	grid-template-columns: 1fr;
+	margin-top: 10px;
+}
+
+.list button {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	height: 100%;
+	padding: 9px 11px;
+	border: 1px solid transparent;
+	border-radius: 10px;
+	background: var( --chip );
+	text-align: left;
+}
+
+.list button:hover,
+.list button:focus-visible {
+	background: var( --chip-hover );
+}
+
+.list button b {
+	font-size: 14px;
+	font-weight: 750;
+}
+
+.list button span {
+	font-size: 12px;
+	color: var( --muted );
+}
+
+.vehicles {
+	display: grid;
+	/* minmax: four always fit, however long a name or wide a picture. */
+	grid-template-columns: repeat( 4, minmax( 0, 1fr ) );
+	gap: 6px;
+}
+
+.vehicle {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+	padding: 8px 4px;
+	border: 2px solid transparent;
+	border-radius: 12px;
+	background: var( --chip );
+	text-align: center;
+}
+
+.vehicle img,
+.vehicle .kart-icon {
+	display: block;
+	width: 100%;
+	max-width: 64px;
+	height: 44px;
+	object-fit: contain;
+}
+
+.vehicle .kart-icon svg {
+	width: 100%;
+	height: 100%;
+}
+
+.vehicle b {
+	font-size: 12px;
+	font-weight: 800;
+}
+
+.vehicle span {
+	font-size: 10px;
+	line-height: 1.2;
+	color: var( --muted );
+}
+
+.vehicle.picked {
+	border-color: var( --accent );
+	background: rgba( 255, 210, 63, 0.12 );
+}
+
+.credit {
+	min-height: 1em;
+	margin: 8px 2px 0;
+}
+
+/* The pin on the globe, and its card. */
+#pin {
+	position: fixed;
+	top: 0;
+	left: 0;
+	z-index: 5;
+	pointer-events: none;
+}
+
+#pin span {
+	position: absolute;
+	left: -14px;
+	top: -38px;
+	width: 28px;
+	height: 28px;
+	border: 3px solid #fff;
+	border-radius: 50% 50% 50% 0;
+	background: var( --accent );
+	transform: rotate( -45deg );
+	box-shadow: 0 4px 14px rgba( 0, 0, 0, 0.5 );
+	animation: drop 0.35s ease-out;
+}
+
+#pin span::after {
+	content: '';
+	position: absolute;
+	left: 7px;
+	top: 7px;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var( --accent-ink );
+}
+
+@keyframes drop {
+	from { transform: translateY( -24px ) rotate( -45deg ); opacity: 0; }
+}
+
+.pin-card {
+	position: fixed;
+	left: 50%;
+	bottom: calc( 28px + var( --safe-bottom ) );
+	z-index: 11;
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	max-width: calc( 100% - 32px );
+	padding: 12px 12px 12px 18px;
+	border: 1px solid var( --line );
+	border-radius: var( --radius );
+	background: var( --panel );
+	backdrop-filter: blur( 14px );
+	-webkit-backdrop-filter: blur( 14px );
+	transform: translateX( -50% );
+	box-shadow: 0 12px 40px rgba( 0, 0, 0, 0.45 );
+	animation: rise 0.25s ease-out;
+}
+
+@keyframes rise {
+	from { transform: translate( -50%, 16px ); opacity: 0; }
+}
+
+.pin-card .where {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.pin-card .name {
+	overflow: hidden;
+	font-size: 16px;
+	font-weight: 800;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.pin-card .coords {
+	overflow: hidden;
+	font-size: 12px;
+	color: var( --muted );
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.pin-card .go {
+	flex: none;
+	font-size: 17px;
+}
+
+.pin-card .clear {
+	flex: none;
+	width: 32px;
+	height: 32px;
+	border: 0;
+	border-radius: 50%;
+	background: var( --chip );
+	font-size: 20px;
+	line-height: 1;
+}
+
+/* --- driving ----------------------------------------------------------------------------- */
+
+#drive-ui .topbar {
+	position: fixed;
+	top: calc( 12px + env( safe-area-inset-top, 0px ) );
+	left: 12px;
+	right: 12px;
+	z-index: 15;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	pointer-events: none;
+}
+
+#drive-ui .topbar > * {
+	pointer-events: auto;
+}
+
+#drive-ui .topbar button {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 40px;
+	padding: 0 14px;
+	border: 1px solid var( --line );
+	border-radius: 12px;
+	background: var( --panel );
+	backdrop-filter: blur( 10px );
+	-webkit-backdrop-filter: blur( 10px );
+	font-weight: 800;
+}
+
+#drive-ui .topbar .keys-toggle,
+#drive-ui .topbar .pause-open {
+	justify-content: center;
+	width: 40px;
+	padding: 0;
+}
+
+#drive-ui .place {
+	flex: 1;
+	overflow: hidden;
+	font-weight: 800;
+	font-style: italic;
+	text-align: center;
+	text-transform: uppercase;
+	letter-spacing: 0.6px;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	text-shadow: 0 1px 4px rgba( 0, 0, 0, 0.7 );
+	pointer-events: none;
+}
+
+#drive-ui .keys {
+	position: fixed;
+	top: 64px;
+	right: 12px;
+	z-index: 15;
+	margin: 0;
+	padding: 12px 14px;
+	border: 1px solid var( --line );
+	border-radius: var( --radius );
+	background: var( --panel );
+	backdrop-filter: blur( 10px );
+	-webkit-backdrop-filter: blur( 10px );
+	font-size: 13px;
+}
+
+#drive-ui .keys div {
+	display: flex;
+	gap: 10px;
+	padding: 3px 0;
+}
+
+#drive-ui .keys dt {
+	width: 84px;
+	flex: none;
+	color: var( --muted );
+}
+
+#drive-ui .keys dd {
+	margin: 0;
+}
+
+/* Touch screens: steering bottom left, pedals bottom right, the extras above the gas. (Under
+   #drive-ui: body.touch marks a touch screen, and its other buttons stay where they are.) */
+#drive-ui .touch {
+	display: none;
+}
+
+body.touch #drive-ui .touch {
+	display: block;
+}
+
+body.touch #drive-ui .keys-toggle {
+	display: none;
+}
+
+#drive-ui .touch button {
+	position: fixed;
+	z-index: 14;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: 2px solid rgba( 255, 255, 255, 0.28 );
+	background: rgba( 9, 15, 27, 0.5 );
+	font-weight: 900;
+	text-transform: uppercase;
+	user-select: none;
+	-webkit-user-select: none;
+	touch-action: none;
+}
+
+#drive-ui .touch button.down {
+	background: rgba( 255, 210, 63, 0.4 );
+	border-color: var( --accent );
+}
+
+#drive-ui .touch .steer button {
+	bottom: calc( 22px + var( --safe-bottom ) );
+	width: 78px;
+	height: 78px;
+	border-radius: 50%;
+}
+
+#drive-ui .touch .steer button svg {
+	width: 34px;
+	height: 34px;
+}
+
+#drive-ui .touch .steer button:first-child {
+	left: 18px;
+}
+
+#drive-ui .touch .steer button:last-child {
+	left: 108px;
+}
+
+#drive-ui .touch .pedals button {
+	bottom: calc( 22px + var( --safe-bottom ) );
+	border-radius: 18px;
+	font-size: 13px;
+}
+
+#drive-ui .touch .pedals .gas {
+	right: 18px;
+	width: 84px;
+	height: 120px;
+	background: rgba( 46, 204, 113, 0.32 );
+}
+
+#drive-ui .touch .pedals .brake {
+	right: 114px;
+	width: 70px;
+	height: 78px;
+	background: rgba( 255, 90, 95, 0.3 );
+}
+
+/* One column up the right-hand edge, clear of the vehicle in the middle. */
+#drive-ui .touch .extras {
+	position: fixed;
+	right: 31px;
+	bottom: calc( 154px + var( --safe-bottom ) );
+	z-index: 14;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+#drive-ui .touch .extras button {
+	position: static;
+	width: 58px;
+	height: 44px;
+	border-radius: 12px;
+	font-size: 11px;
+}
+
+/* On touch screens the HUD moves up, out of the thumbs' way. */
+body.touch .drive-hud {
+	top: calc( 62px + env( safe-area-inset-top, 0px ) );
+	bottom: auto;
+	left: 14px;
+}
+
+/* --- loading, pause, splash and notices ----------------------------------------------- */
+
+#loading {
+	position: fixed;
+	left: 50%;
+	bottom: 18%;
+	z-index: 20;
+	transform: translateX( -50% );
+	pointer-events: none;
+}
+
+#loading .card {
+	min-width: 280px;
+	padding: 16px 22px;
+	border: 1px solid var( --line );
+	border-radius: var( --radius );
+	background: var( --panel );
+	backdrop-filter: blur( 14px );
+	-webkit-backdrop-filter: blur( 14px );
+	text-align: center;
+	pointer-events: auto;
+}
+
+#loading .title {
+	margin: 0 0 10px;
+	font-size: 18px;
+	font-weight: 900;
+	font-style: italic;
+	text-transform: uppercase;
+}
+
+#loading .bar {
+	height: 8px;
+	margin-bottom: 10px;
+	border-radius: 4px;
+	background: rgba( 255, 255, 255, 0.12 );
+	overflow: hidden;
+}
+
+#loading .bar i {
+	display: block;
+	height: 100%;
+	background: linear-gradient( 90deg, var( --sky ), var( --accent ) );
+	transform-origin: left;
+	transform: scaleX( 0.04 );
+	transition: transform 0.25s;
+}
+
+#loading .cancel {
+	font-size: 12px;
+}
+
+#pause,
+#splash,
+#notice {
+	position: fixed;
+	inset: 0;
+	z-index: 30;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 16px;
+}
+
+#pause {
+	background: rgba( 4, 8, 16, 0.45 );
+}
+
+#pause .card,
+#splash .card,
+#notice .card {
+	width: 100%;
+	max-width: 420px;
+	padding: 26px;
+	border: 1px solid var( --line );
+	border-radius: 20px;
+	background: var( --panel );
+	backdrop-filter: blur( 16px );
+	-webkit-backdrop-filter: blur( 16px );
+	text-align: center;
+	box-shadow: 0 20px 60px rgba( 0, 0, 0, 0.5 );
+}
+
+#pause h2 {
+	margin: 0 0 16px;
+	font: 900 italic 30px/1 var( --font );
+	text-transform: uppercase;
+}
+
+#pause .resume {
+	width: 100%;
+	font-size: 18px;
+}
+
+#pause h3 {
+	margin: 22px 0 8px;
+	font-size: 12px;
+	letter-spacing: 1.2px;
+	text-transform: uppercase;
+	color: var( --muted );
+}
+
+#pause .to-globe {
+	margin-top: 18px;
+	padding: 10px 16px;
+	border: 1px solid var( --line );
+	border-radius: 12px;
+	background: var( --chip );
+	font-weight: 700;
+}
+
+#splash .status {
+	margin: 18px 0 14px;
+	color: var( --muted );
+	font-weight: 600;
+}
+
+/* A dashed road line rolling by while World Drive starts. */
+.road {
+	height: 6px;
+	border-radius: 3px;
+	background: #1c2738;
+	overflow: hidden;
+}
+
+.road i {
+	display: block;
+	height: 100%;
+	background: repeating-linear-gradient( 90deg, var( --accent ) 0 24px, transparent 24px 44px );
+	animation: roll 0.6s linear infinite;
+}
+
+@keyframes roll {
+	from { transform: translateX( -44px ); }
+	to { transform: translateX( 0 ); }
+}
+
+#robot-check {
+	display: flex;
+	justify-content: center;
+	margin-top: 14px;
+}
+
+#robot-check:empty {
+	margin: 0;
+}
+
+/* Notices: a sunset over a road, as a drawing rather than the map. */
+#notice {
+	background: radial-gradient( ellipse at 50% 110%, #3b1d4f 0%, #10172b 55%, #070c16 100% );
+}
+
+#notice .sunset {
+	position: relative;
+	height: 120px;
+	margin: 20px 0 6px;
+	border-radius: 14px;
+	background: linear-gradient( #ff8a3d 0%, #ff5f6d 45%, #6c3ca8 100% );
+	overflow: hidden;
+}
+
+#notice .sunset::before {
+	content: '';
+	position: absolute;
+	left: 50%;
+	top: 34px;
+	width: 70px;
+	height: 70px;
+	border-radius: 50%;
+	background: #ffd23f;
+	transform: translateX( -50% );
+	box-shadow: 0 0 40px rgba( 255, 210, 63, 0.6 );
+}
+
+#notice .sunset::after {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 46px;
+	background: #1a1530;
+	clip-path: polygon( 0 100%, 0 40%, 30% 10%, 50% 30%, 72% 0, 100% 35%, 100% 100% );
+}
+
+#notice .sunset i {
+	position: absolute;
+	left: 50%;
+	bottom: 0;
+	z-index: 1;
+	width: 120px;
+	height: 40px;
+	background: #2a2f3d;
+	clip-path: polygon( 45% 0, 55% 0, 100% 100%, 0 100% );
+	transform: translateX( -50% );
+}
+
+#notice .title {
+	margin: 14px 0 8px;
+	font-size: 22px;
+	font-weight: 900;
+}
+
+#notice .message {
+	margin: 0 0 12px;
+	color: var( --muted );
+}
+
+#notice .countdown {
+	margin: 0 0 14px;
+	font-weight: 800;
+	color: var( --accent );
+}
+
+#notice .buttons {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 10px;
+}
+
+#notice .buttons button:not( .primary ) {
+	padding: 12px 18px;
+	border: 1px solid var( --line );
+	border-radius: 12px;
+	background: var( --chip );
+	font-weight: 700;
+}
+
+#toast {
+	position: fixed;
+	top: 16px;
+	left: 50%;
+	z-index: 40;
+	max-width: min( 520px, calc( 100% - 32px ) );
+	padding: 10px 16px;
+	border: 1px solid var( --line );
+	border-radius: 12px;
+	background: var( --panel-solid );
+	font-weight: 600;
+	text-align: center;
+	transform: translateX( -50% );
+	box-shadow: 0 8px 30px rgba( 0, 0, 0, 0.4 );
+}
+
+body[data-mode='driving'] #toast,
+body[data-mode='paused'] #toast {
+	top: 64px;
+}
+
+/* Google's logo and the data providers, whenever their tiles show. */
+#attribution {
+	position: fixed;
+	right: 10px;
+	bottom: calc( 8px + var( --safe-bottom ) );
+	z-index: 12;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	max-width: 60%;
+	font-size: 10px;
+	color: #fff;
+	text-shadow: 0 1px 2px rgba( 0, 0, 0, 0.8 );
+	pointer-events: none;
+}
+
+#attribution img {
+	height: 16px;
+	flex: none;
+}
+
+#attribution .credits {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+body.touch[data-mode='driving'] #attribution {
+	right: auto;
+	left: 50%;
+	max-width: 46%;
+	transform: translateX( -50% );
+	flex-direction: column;
+	gap: 2px;
+}
+
+dialog#about {
+	max-width: min( 520px, calc( 100% - 32px ) );
+	padding: 24px;
+	border: 1px solid var( --line );
+	border-radius: 20px;
+	background: var( --panel-solid );
+	color: var( --ink );
+}
+
+dialog#about::backdrop {
+	background: rgba( 4, 8, 16, 0.6 );
+}
+
+dialog#about h2 {
+	margin: 0 0 10px;
+	font: 900 italic 26px/1 var( --font );
+	text-transform: uppercase;
+}
+
+dialog#about h3 {
+	margin: 18px 0 6px;
+	font-size: 13px;
+}
+
+dialog#about ul {
+	padding-left: 18px;
+}
+
+dialog#about form {
+	margin-top: 16px;
+	text-align: right;
+}
+
+/* --- phones: the panel becomes a sheet along the bottom ------------------------------------ */
+
+@media ( max-width: 760px ) {
+
+	#globe-ui .panel {
+		top: auto;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		width: auto;
+		max-height: 46%;
+		padding: 14px 14px calc( 14px + var( --safe-bottom ) );
+		border-width: 1px 0 0;
+		border-radius: 20px 20px 0 0;
+		/* A backdrop filter would hold the title (fixed, below) inside the sheet. */
+		background: var( --panel-solid );
+		backdrop-filter: none;
+		-webkit-backdrop-filter: none;
+	}
+
+	#globe-ui .intro {
+		position: fixed;
+		top: calc( 14px + env( safe-area-inset-top, 0px ) );
+		left: 16px;
+		right: 16px;
+		text-shadow: 0 2px 10px rgba( 0, 0, 0, 0.6 );
+		pointer-events: none;
+	}
+
+	#globe-ui .logo {
+		font-size: 28px;
+	}
+
+	#globe-ui .tagline {
+		margin: 4px 0 0;
+		font-size: 13px;
+	}
+
+	#globe-ui h2 {
+		margin: 14px 0 6px;
+	}
+
+	/* Spots scroll sideways, in two rows. */
+	.spots {
+		grid-auto-flow: column;
+		grid-template-rows: auto auto;
+		grid-template-columns: none;
+		grid-auto-columns: 46%;
+		overflow-x: auto;
+		scrollbar-width: none;
+	}
+
+	.vehicle img,
+	.vehicle .kart-icon {
+		width: 54px;
+		height: 36px;
+	}
+
+	.vehicle span {
+		display: none;
+	}
+
+	.pin-card {
+		bottom: calc( 46% + 12px );
+		gap: 10px;
+		padding: 10px 10px 10px 14px;
+	}
+
+	.pin-card .go {
+		padding: 11px 16px;
+		font-size: 15px;
+	}
+
+	body[data-mode='globe'] #attribution {
+		top: calc( 84px + env( safe-area-inset-top, 0px ) );
+		bottom: auto;
+		left: 16px;
+		right: auto;
+		max-width: 70%;
+	}
+
+	#drive-ui .topbar .to-globe kbd {
+		display: none;
+	}
+
+	#loading {
+		bottom: 30%;
+		width: calc( 100% - 32px );
+	}
+
+	#loading .card {
+		min-width: 0;
+	}
+
+}
