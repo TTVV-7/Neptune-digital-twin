@@ -54,6 +54,9 @@ export function createLayers( { models, layout, library, flattening, isDriving, 
 	const badge = button.querySelector( '.badge' );
 	const buttonIcon = button.querySelector( '.icon' );
 	const categories = new Map( library.map( item => [ item.id, item.category ] ) );
+	// Library items placed as a kind (the tower crane, set up in the P panel) go in their category's
+	// row with the other cranes, not with the site's areas; their layouts don't save the item's id.
+	const kindCategories = new Map( library.filter( item => item.kind ).map( item => [ item.kind, item.category ] ) );
 
 	const saved = storage( () => JSON.parse( localStorage.getItem( STORAGE_KEY ) ) ) ?? {};
 	const hiddenLayers = new Set( Array.isArray( saved.hidden ) ? saved.hidden.filter( id => typeof id === 'string' ) : [] );
@@ -70,8 +73,8 @@ export function createLayers( { models, layout, library, flattening, isDriving, 
 	let listed = [];
 	let shown = '';
 
-	const categoryOf = entry => categories.get( entry.library ) ?? ( entry.library ? OTHER : YOUR_MODELS );
-	const layerOf = entry => entry.kind ? `kind:${ entry.kind }` : `category:${ categoryOf( entry ) }`;
+	const categoryOf = entry => kindCategories.get( entry.kind ) ?? categories.get( entry.library ) ?? ( entry.library ? OTHER : YOUR_MODELS );
+	const layerOf = entry => entry.kind && ! kindCategories.has( entry.kind ) ? `kind:${ entry.kind }` : `category:${ categoryOf( entry ) }`;
 	const drawn = id => ! before && ! hiddenLayers.has( id );
 	models.concealed = entry => before || hiddenLayers.has( layerOf( entry ) );
 
@@ -220,11 +223,11 @@ export function createLayers( { models, layout, library, flattening, isDriving, 
 		// The Labels layer goes last.
 		const others = [ ...custom ].sort( ( [ a ], [ b ] ) => ( a === LABELS ) - ( b === LABELS ) );
 		const site = [
-			...listKinds().map( kind => row( `kind:${ kind.name }`, kind.layer ?? `${ kind.label }s` ) ),
+			...listKinds().filter( kind => ! kindCategories.has( kind.name ) ).map( kind => row( `kind:${ kind.name }`, kind.layer ?? `${ kind.label }s` ) ),
 			...others.map( ( [ id, layer ] ) => row( id, layer.name, layer.count() ) ),
 		].filter( keep );
 
-		const names = new Set( placed.filter( entry => ! entry.kind ).map( categoryOf ) );
+		const names = new Set( placed.map( layerOf ).filter( id => id.startsWith( 'category:' ) ).map( id => id.slice( 'category:'.length ) ) );
 		for ( const id of hiddenLayers ) if ( id.startsWith( 'category:' ) ) names.add( id.slice( 'category:'.length ) );
 		const rank = name => {
 
@@ -246,7 +249,7 @@ export function createLayers( { models, layout, library, flattening, isDriving, 
 		const { site, items } = rows();
 		listed = models.entries.filter( entry => entry.hidden && ! entry.placing )
 			.sort( ( a, b ) => a.state.name.localeCompare( b.state.name ) );
-		const hidden = listed.map( entry => [ entry.state.name, entry.kind ? layerName( layerOf( entry ) ) : categoryOf( entry ) ] );
+		const hidden = listed.map( entry => [ entry.state.name, layerName( layerOf( entry ) ) ] );
 		const key = JSON.stringify( [ dock.open, before, site, items, hidden ] );
 		if ( key !== shown ) {
 
