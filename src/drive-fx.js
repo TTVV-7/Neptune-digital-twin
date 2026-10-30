@@ -1,9 +1,13 @@
 import {
 	AdditiveBlending,
 	BoxGeometry,
+	BufferAttribute,
+	BufferGeometry,
 	CanvasTexture,
 	Color,
 	ConeGeometry,
+	DoubleSide,
+	DynamicDrawUsage,
 	Group,
 	Mesh,
 	MeshBasicMaterial,
@@ -17,8 +21,10 @@ import {
 // What driving shows besides the vehicle: the booster's flame and glow, tyre smoke while drifting
 // and the sparks that say how big the drift boost will be; and with stunts, sparks, bits and a
 // flash where it hits something, sparks while it scrapes along a wall and dust where it comes down
-// hard. Kept cheap: a few cones, sprites and little boxes, reused from small pools, nothing that
-// casts or catches rays.
+// hard. An app can colour the flame and add a trail behind the vehicle while it boosts or flies
+// (World Drive's Garage): coloured smoke, sparkles or a rainbow ribbon. Kept cheap: a few cones,
+// sprites and little boxes, reused from small pools, and one ribbon whose buffers are written in
+// place, nothing made each frame and nothing that casts or catches rays.
 
 const SMOKE_POOL = 64;
 const SPARK_POOL = 120;
@@ -31,16 +37,71 @@ const DEBRIS_LIFE = 1.1;
 const GRAVITY = 9.81;
 // Spark colours for drift levels 1, 2 and 3.
 export const SPARK_COLOURS = [ 0xffc83d, 0x3dffd8, 0xff3df0 ];
+// The booster's flame by name: its outer cone, white-hot core and glow. 'rainbow' runs through the
+// hues instead, a turn every RAINBOW_TURN s.
+export const FLAMES = {
+	orange: [ 0xff6a1a, 0xfff2b0, 0xffa040 ],
+	blue: [ 0x2b6dff, 0xd6efff, 0x4fa0ff ],
+	green: [ 0x22d04a, 0xe6ffd6, 0x5cff78 ],
+	purple: [ 0x8f3dff, 0xf0e0ff, 0xae6cff ],
+	pink: [ 0xff3d98, 0xffe2f1, 0xff72b6 ],
+};
+const RAINBOW_TURN = 1.6;
+// Trails. Smoke: a puff every SMOKE_TRAIL_STEP s that lasts SMOKE_TRAIL_LIFE s. Sparkles: one every
+// SPARKLE_STEP s, twinkling, in these colours. The ribbon: RIBBON_POINTS points across the back, one
+// every RIBBON_STEP s, each fading over RIBBON_LIFE s, in a hue going round RIBBON_HUE times a
+// second (by time rather than by point, so a slow frame rate doesn't narrow the rainbow).
+const SMOKE_TRAIL_POOL = 56;
+const SMOKE_TRAIL_STEP = 0.03;
+const SMOKE_TRAIL_LIFE = 1.5;
+const SPARKLE_POOL = 90;
+const SPARKLE_STEP = 0.012;
+const SPARKLE_LIFE = 0.9;
+const SPARKLE_COLOURS = [ 0xffffff, 0xfff0a0, 0xffb6ef, 0xa6f3ff ];
+const RIBBON_POINTS = 48;
+const RIBBON_STEP = 1 / 40;
+const RIBBON_LIFE = 0.9;
+const RIBBON_HUE = 1.2;
 
 const _v = new Vector3();
 const _p = new Vector3();
+const _hue = new Color();
 
 let textures = null;
 function getTextures() {
 
 	textures ??= { soft: radial( [ [ 0, 'rgba(255,255,255,1)' ], [ 0.4, 'rgba(255,255,255,0.55)' ], [ 1, 'rgba(255,255,255,0)' ] ] ),
-		glow: radial( [ [ 0, 'rgba(255,255,255,1)' ], [ 0.25, 'rgba(255,220,160,0.8)' ], [ 0.6, 'rgba(255,120,40,0.25)' ], [ 1, 'rgba(255,80,0,0)' ] ] ) };
+		glow: radial( [ [ 0, 'rgba(255,255,255,1)' ], [ 0.25, 'rgba(255,220,160,0.8)' ], [ 0.6, 'rgba(255,120,40,0.25)' ], [ 1, 'rgba(255,80,0,0)' ] ] ),
+		star: star() };
 	return textures;
+
+}
+
+// A four-pointed twinkle with a soft middle, for sparkles.
+function star() {
+
+	const canvas = document.createElement( 'canvas' );
+	canvas.width = canvas.height = 64;
+	const ctx = canvas.getContext( '2d' );
+	const gradient = ctx.createRadialGradient( 32, 32, 0, 32, 32, 14 );
+	gradient.addColorStop( 0, 'rgba(255,255,255,1)' );
+	gradient.addColorStop( 1, 'rgba(255,255,255,0)' );
+	ctx.fillStyle = gradient;
+	ctx.fillRect( 0, 0, 64, 64 );
+	ctx.fillStyle = '#fff';
+	ctx.beginPath();
+	for ( let i = 0; i < 8; i ++ ) {
+
+		const angle = i / 8 * Math.PI * 2;
+		const reach = i % 2 ? 5 : 31;
+		ctx.lineTo( 32 + Math.cos( angle ) * reach, 32 + Math.sin( angle ) * reach );
+
+	}
+
+	ctx.fill();
+	const texture = new CanvasTexture( canvas );
+	texture.colorSpace = SRGBColorSpace;
+	return texture;
 
 }
 
@@ -61,9 +122,11 @@ function radial( stops ) {
 
 // world: the group effects that stay behind (smoke, sparks) are added to. The flame follows the
 // vehicle's pivot each frame but isn't part of it, so it never counts as the vehicle's own shape.
-export function createDriveFx( world ) {
+// look: { flame: a name in FLAMES, or 'rainbow' (orange if not given), trail: null or { kind:
+// 'smoke', 'sparkle' or 'ribbon', colour (smoke's) } }.
+export function createDriveFx( world, { flame: flameName = 'orange', trail = null } = {} ) {
 
-	const { soft, glow } = getTextures();
+	const { soft, glow, star: twinkle } = getTextures();
 	const root = new Group();
 	root.name = 'drive-fx';
 	world.add( root );
@@ -78,6 +141,13 @@ export function createDriveFx( world ) {
 	for ( const part of flame.children ) part.raycast = () => {};
 	flame.visible = false;
 	root.add( flame );
+	const rainbow = flameName === 'rainbow';
+	const [ outerColour, innerColour, haloColour ] = FLAMES[ flameName ] ?? FLAMES.orange;
+	outer.material.color.set( outerColour );
+	inner.material.color.set( rainbow ? 0xffffff : innerColour );
+	halo.material.color.set( haloColour );
+	// The glow's own picture is orange at its edge: any other colour glows from a white one.
+	if ( flameName !== 'orange' ) halo.material.map = soft;
 
 	const smoke = pool( SMOKE_POOL, () => new SpriteMaterial( { map: soft, color: 0xdedede, transparent: true, depthWrite: false } ) );
 	const sparks = pool( SPARK_POOL, () => new SpriteMaterial( { map: glow, color: 0xffffff, transparent: true, blending: AdditiveBlending, depthWrite: false } ) );
@@ -98,6 +168,13 @@ export function createDriveFx( world ) {
 
 	let nextDebris = 0;
 
+	// The trail, made only if there is one: its own pool, or the ribbon.
+	const trailKind = trail?.kind;
+	const trailSmoke = trailKind === 'smoke' ? pool( SMOKE_TRAIL_POOL, () => new SpriteMaterial( { map: soft, color: 0xffffff, transparent: true, depthWrite: false } ) ) : null;
+	const sparkles = trailKind === 'sparkle' ? pool( SPARKLE_POOL, () => new SpriteMaterial( { map: twinkle, color: 0xffffff, transparent: true, blending: AdditiveBlending, depthWrite: false } ) ) : null;
+	const ribbon = trailKind === 'ribbon' ? makeRibbon( root ) : null;
+	const smokeColour = new Color( trail?.colour ?? 0xffffff );
+
 	function pool( size, material ) {
 
 		const items = [];
@@ -107,7 +184,7 @@ export function createDriveFx( world ) {
 			sprite.visible = false;
 			sprite.raycast = () => {};
 			root.add( sprite );
-			items.push( { sprite, age: Infinity, life: 1, velocity: new Vector3(), size: 1, grow: 0, fall: 0 } );
+			items.push( { sprite, age: Infinity, life: 1, velocity: new Vector3(), size: 1, grow: 0, fall: 0, twinkle: 0 } );
 
 		}
 
@@ -116,7 +193,8 @@ export function createDriveFx( world ) {
 	}
 
 	// `fall`: the share of gravity it falls with (a hit's sparks), 0 for what floats or rises.
-	function emit( from, at, velocity, life, size, grow, colour, fall = 0 ) {
+	// `twinkle`: a sparkle's twinkle, by a phase of its own (0 for none).
+	function emit( from, at, velocity, life, size, grow, colour, fall = 0, twinkle = 0 ) {
 
 		const item = from.items[ from.next ];
 		from.next = ( from.next + 1 ) % from.items.length;
@@ -127,6 +205,7 @@ export function createDriveFx( world ) {
 		item.size = size;
 		item.grow = grow;
 		item.fall = fall;
+		item.twinkle = twinkle;
 		item.sprite.material.color.set( colour );
 		item.sprite.visible = true;
 
@@ -148,7 +227,8 @@ export function createDriveFx( world ) {
 			const t = item.age / item.life;
 			item.velocity.y -= GRAVITY * item.fall * dt;
 			item.sprite.position.addScaledVector( item.velocity, dt );
-			item.sprite.scale.setScalar( item.size + item.grow * t );
+			const twinkle = item.twinkle ? 0.55 + 0.45 * Math.sin( item.age * 38 + item.twinkle ) : 1;
+			item.sprite.scale.setScalar( ( item.size + item.grow * t ) * twinkle );
 			item.sprite.material.opacity = fade * ( 1 - t );
 
 		}
@@ -202,8 +282,54 @@ export function createDriveFx( world ) {
 	let smokeDue = 0;
 	let sparkDue = 0;
 	let scrapeDue = 0;
+	let trailDue = 0;
+	let sparkleCount = 0;
 	let flicker = 0;
 	const colour = new Color();
+
+	// The trail, while it boosts or flies (`power` over 0): puffs or sparkles left behind the back of
+	// it, drifting a little after it, or the ribbon drawn out from across its back.
+	function updateTrail( pivot, size, velocity, power, dt ) {
+
+		if ( ribbon ) {
+
+			ribbon.update( pivot, size, power, dt );
+			return;
+
+		}
+
+		const from = trailSmoke ?? sparkles;
+		if ( ! from ) return;
+		if ( power > 0 ) {
+
+			trailDue -= dt;
+			const step = trailSmoke ? SMOKE_TRAIL_STEP : SPARKLE_STEP;
+			while ( trailDue <= 0 ) {
+
+				trailDue += step;
+				// Somewhere across the back of it, a little behind.
+				const across = ( Math.random() - 0.5 ) * size.width * 0.7;
+				const up = size.height * ( trailSmoke ? 0.35 : 0.2 + Math.random() * 0.5 );
+				pivot.localToWorld( _p.set( across / size.scale, up / size.scale, ( size.rear + 0.15 ) / size.scale ) );
+				if ( trailSmoke ) {
+
+					_v.set( ( Math.random() - 0.5 ) * 0.6, 0.3 + Math.random() * 0.4, ( Math.random() - 0.5 ) * 0.6 ).addScaledVector( velocity, 0.2 );
+					emit( trailSmoke, _p, _v, SMOKE_TRAIL_LIFE, 0.55 + size.width * 0.2, 1.6 + size.width * 0.5, smokeColour );
+
+				} else {
+
+					_v.set( ( Math.random() - 0.5 ) * 1.2, ( Math.random() - 0.3 ) * 1.2, ( Math.random() - 0.5 ) * 1.2 ).addScaledVector( velocity, 0.15 );
+					emit( sparkles, _p, _v, SPARKLE_LIFE * ( 0.6 + Math.random() * 0.6 ), 0.16 + Math.random() * 0.18, 0, SPARKLE_COLOURS[ sparkleCount ++ % SPARKLE_COLOURS.length ], 0.12, 1 + Math.random() * 6 );
+
+				}
+
+			}
+
+		} else trailDue = 0;
+
+		age( from, dt, trailSmoke ? 0.8 : 1 );
+
+	}
 
 	return {
 
@@ -212,10 +338,18 @@ export function createDriveFx( world ) {
 		// on the ground ], velocity: its own (m/s, world), flame: 0..1 (booster 1, a drift boost
 		// less), drifting, level: 0..3, scrape: { at, normal } where it's scraping along a wall
 		// (world) or null, dt }.
-		update( { pivot, size, wheels, velocity, flame: power, drifting, level, scrape = null, dt } ) {
+		update( { pivot, size, wheels, velocity, flame: power, trail: trailPower = 0, drifting, level, scrape = null, dt } ) {
 
 			flicker += dt;
 			flame.visible = power > 0.01;
+			if ( flame.visible && rainbow ) {
+
+				const hue = flicker / RAINBOW_TURN % 1;
+				outer.material.color.setHSL( hue, 1, 0.55 );
+				halo.material.color.setHSL( ( hue + 0.08 ) % 1, 1, 0.65 );
+
+			}
+
 			if ( flame.visible ) {
 
 				// Behind the rear, a third of the way up, sized to the vehicle and pointing back.
@@ -290,6 +424,7 @@ export function createDriveFx( world ) {
 			age( sparks, dt, 1 );
 			age( flash, dt, 1 );
 			ageDebris( dt );
+			updateTrail( pivot, size, velocity, trailPower, dt );
 
 		},
 
@@ -352,6 +487,111 @@ export function createDriveFx( world ) {
 				o.material?.dispose();
 
 			} );
+
+		},
+
+	};
+
+}
+
+// The rainbow ribbon: a strip across the back of the vehicle, drawn out behind it as it boosts or
+// flies, each point fading as it ages and in the next hue along. Its points go round a ring, and
+// each frame they're written newest first into buffers made once.
+function makeRibbon( root ) {
+
+	const positions = new Float32Array( RIBBON_POINTS * 2 * 3 );
+	const colours = new Float32Array( RIBBON_POINTS * 2 * 4 );
+	const index = [];
+	for ( let i = 0; i < RIBBON_POINTS - 1; i ++ ) {
+
+		const a = i * 2;
+		index.push( a, a + 1, a + 2, a + 1, a + 3, a + 2 );
+
+	}
+
+	const geometry = new BufferGeometry();
+	geometry.setIndex( index );
+	geometry.setAttribute( 'position', new BufferAttribute( positions, 3 ).setUsage( DynamicDrawUsage ) );
+	geometry.setAttribute( 'color', new BufferAttribute( colours, 4 ).setUsage( DynamicDrawUsage ) );
+	geometry.setDrawRange( 0, 0 );
+	const mesh = new Mesh( geometry, new MeshBasicMaterial( { vertexColors: true, transparent: true, side: DoubleSide, depthWrite: false } ) );
+	// Its bounds change every frame; it's never far from the vehicle, which is on screen.
+	mesh.frustumCulled = false;
+	mesh.raycast = () => {};
+	mesh.visible = false;
+	root.add( mesh );
+
+	const points = Array.from( { length: RIBBON_POINTS }, () => ( { left: new Vector3(), right: new Vector3(), born: - Infinity, hue: 0 } ) );
+	let head = 0;
+	let clock = 0;
+	let due = 0;
+
+	function write( vertex, at, fade ) {
+
+		at.toArray( positions, vertex * 3 );
+		colours[ vertex * 4 ] = _hue.r;
+		colours[ vertex * 4 + 1 ] = _hue.g;
+		colours[ vertex * 4 + 2 ] = _hue.b;
+		colours[ vertex * 4 + 3 ] = fade;
+
+	}
+
+	// The newest point, across the back of the vehicle as it is now.
+	function across( point, pivot, size ) {
+
+		const half = size.width * 0.28 / size.scale;
+		const up = size.height * 0.3 / size.scale;
+		const back = ( size.rear + 0.05 ) / size.scale;
+		pivot.localToWorld( point.left.set( - half, up, back ) );
+		pivot.localToWorld( point.right.set( half, up, back ) );
+
+	}
+
+	return {
+
+		mesh,
+
+		update( pivot, size, power, dt ) {
+
+			clock += dt;
+			if ( power > 0 ) {
+
+				due -= dt;
+				if ( due <= 0 ) {
+
+					due = RIBBON_STEP;
+					head = ( head + 1 ) % RIBBON_POINTS;
+					points[ head ].born = clock;
+					points[ head ].hue = clock * RIBBON_HUE % 1;
+
+				}
+
+				// Kept on the vehicle until the next point is laid, so the ribbon stays joined to it.
+				across( points[ head ], pivot, size );
+
+			} else due = 0;
+
+			let count = 0;
+			for ( ; count < RIBBON_POINTS; count ++ ) {
+
+				const point = points[ ( head - count + RIBBON_POINTS ) % RIBBON_POINTS ];
+				const age = clock - point.born;
+				if ( age > RIBBON_LIFE ) break;
+				const fade = ( 1 - age / RIBBON_LIFE ) * 0.85;
+				_hue.setHSL( point.hue, 1, 0.56 );
+				write( count * 2, point.left, fade );
+				write( count * 2 + 1, point.right, fade );
+
+			}
+
+			mesh.visible = count > 1;
+			geometry.setDrawRange( 0, Math.max( 0, count - 1 ) * 6 );
+			if ( mesh.visible ) {
+
+				geometry.attributes.position.needsUpdate = true;
+				geometry.attributes.color.needsUpdate = true;
+
+			}
 
 		},
 
