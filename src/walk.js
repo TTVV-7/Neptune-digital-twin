@@ -414,7 +414,22 @@ export class WalkController {
 // Whether a raycast hit is something solid. Flatten-zone outlines and the like opt out.
 export function blocks( hit ) {
 
-	return hit.object.isMesh && ! hit.object.userData.noCollide;
+	return hit.object.isMesh && ! hit.object.userData.noCollide && passesHitFilters( hit );
+
+}
+
+// Other modules can rule hits out, e.g. Google's mesh where dug ground hides it.
+const hitFilters = [];
+
+export function addHitFilter( filter ) {
+
+	hitFilters.push( filter );
+
+}
+
+export function passesHitFilters( hit ) {
+
+	return hitFilters.every( filter => filter( hit ) );
 
 }
 

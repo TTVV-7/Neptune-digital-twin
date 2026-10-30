@@ -5,6 +5,7 @@ import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { registerKind } from './kinds.js';
 import { ZONE_ID } from './flatten.js';
+import { passesHitFilters } from './walk.js';
 
 // Laydown areas: rectangles marked out on the map for where materials, trailers and equipment go.
 // Each is a placed kind (kinds.js), so it is saved, moved, turned and deleted like any library
@@ -282,7 +283,7 @@ export function setUpLaydown( { camera, canvas, models, sidebar, panel, getGroun
 			fill.localToWorld( _point.fromBufferAttribute( position, i ).setY( 0 ) );
 			_point.y = top + 1;
 			raycaster.set( _point, DOWN );
-			const hit = meshes.length > 0 ? raycaster.intersectObjects( meshes, false )[ 0 ] : null;
+			const hit = meshes.length > 0 ? raycaster.intersectObjects( meshes, false ).find( passesHitFilters ) : null;
 			// No ground (off the edge of the tiles): level with the area's base.
 			heights[ i ] = hit ? _point.copy( hit.point ).applyMatrix4( _toLocal ).y : 0;
 

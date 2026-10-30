@@ -16,7 +16,7 @@ import {
 import { itemConfig } from './library.js';
 import { buildProcedural } from './procedural.js';
 import { localToEnu } from './geo.js';
-import { isTyping } from './walk.js';
+import { isTyping, passesHitFilters } from './walk.js';
 import { ZONE_ID } from './flatten.js';
 
 const ROTATE_STEP = 15;
@@ -732,7 +732,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		_ndc.set( ( x - rect.left ) / rect.width * 2 - 1, - ( y - rect.top ) / rect.height * 2 + 1 );
 		raycaster.setFromCamera( _ndc, camera );
 		// Hidden things (flatten zones outside build mode) can't be clicked.
-		return raycaster.intersectObjects( objects, true ).filter( h => h.object.isMesh && isVisible( h.object ) );
+		return raycaster.intersectObjects( objects, true ).filter( h => h.object.isMesh && isVisible( h.object ) && passesHitFilters( h ) );
 
 	}
 

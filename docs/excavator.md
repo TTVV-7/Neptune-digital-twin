@@ -88,8 +88,8 @@ Drive the truck away (V) and the load goes with it.
 - Getting out in the middle of a pass drops what's in the bucket where the bucket is: into the
   truck it was being swung to if it's over that truck by now, else onto the ground. If that truck
   is removed while the bucket is on its way, that pass is dumped on the ground instead.
-- With Google tiles, nothing can be dug until the tiles under the machine have loaded; digging
-  presses Google's mesh down under the hole like an excavation does.
+- With Google tiles, nothing can be dug until the tiles under the machine have loaded; Google's
+  mesh is hidden inside the hole like inside an excavation.
 - The ground is a grid of 0.5 m cells, so a single bite is a coarse rectangle, and narrow
   trenches are wider than the bucket.
 - The counters (cycles, dug, spoil) are per machine while the page is open; they're not saved.

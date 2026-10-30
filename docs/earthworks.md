@@ -90,8 +90,9 @@ you'll be paid on.
 ## With Google's 3D map
 
 Pits and piles are drawn on top of Google's mesh: around them you still see Google's photo
-texture. Under a pit Google's mesh is pressed down out of sight, like a flatten area, and the
-attribution in the corner says so. Google's ground loads in stages as you get closer, so a pit can
+texture. Inside a pit (and under a pile, and a 1 m lip of dug earth round a pit) whatever of
+Google's mesh stands above the earthworks is hidden, rail cars and sheds included, and can't be
+walked or driven on; the attribution in the corner says the map has been edited. Google's ground loads in stages as you get closer, so a pit can
 shift by a few centimetres while the map sharpens.
 
 ## Saving

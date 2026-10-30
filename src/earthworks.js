@@ -15,7 +15,8 @@ import {
 	Vector3,
 } from 'three';
 import { registerKind } from './kinds.js';
-import { CELL, CUT, MATERIALS, SWELL, Terrain, coneRadius, findMaterial, insideRect, materialIndex, rectBounds, rectFrame, spread } from './terrain.js';
+import { CELL, CUT, MATERIALS, SWELL, Terrain, coneRadius, findMaterial, hideUnderEarthworks, insideRect, materialIndex, rectBounds, rectFrame, spread } from './terrain.js';
+import { addHitFilter } from './walk.js';
 import { createPourStream } from './pour.js';
 
 // Earthworks for laydown planning: excavations cut into the ground and stockpiles poured onto it.
@@ -56,9 +57,26 @@ for ( const material of [ capMaterial, pitLine, hullMaterial, ...pileLines.value
 export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models, layout, sidebar, panel, flattening, getGround, addGround, onUpdate, addMapEdit, toast } ) {
 
 	const terrain = new Terrain( { tiles, ground, models, flattening, getGround, camera } );
+	if ( tiles ) {
+
+		// Google's mesh inside the drawn earthworks and above their surface is hidden, and can't
+		// be stood on or clicked.
+		const hide = scene => scene.traverse( object => {
+
+			if ( ! object.isMesh ) return;
+			object.userData.googleTile = true;
+			[ object.material ].flat().forEach( material => hideUnderEarthworks( material, terrain.mask ) );
+
+		} );
+		tiles.forEachLoadedModel( hide );
+		tiles.addEventListener( 'load-model', ( { scene } ) => hide( scene ) );
+		addHitFilter( hit => ! ( hit.object.userData.googleTile && terrain.covers( hit.point ) ) );
+
+	}
+
 	scene.add( terrain.group );
 	addGround( terrain.group );
-	// Pits press Google's mesh down, which the attribution has to mention.
+	// Pits hide part of Google's mesh, which the attribution has to mention.
 	addMapEdit( () => terrain.hasCuts() );
 	terrain.onFreeformChange = () => layout.changed();
 	layout.registerExtra( 'terrain', {

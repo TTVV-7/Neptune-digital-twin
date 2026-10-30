@@ -312,7 +312,7 @@ function start( apiKey, keySource ) {
 	} );
 
 	// Handy for poking around from the browser console.
-	window.twin = { scene, camera, controls, models, tiles, SITE, layout, driver, flattening, get sidebar() {
+	window.twin = { scene, camera, renderer, controls, models, tiles, SITE, layout, driver, flattening, get sidebar() {
 
 		return sidebar;
 

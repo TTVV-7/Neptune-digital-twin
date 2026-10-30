@@ -5,18 +5,22 @@ import {
 	Color,
 	DataTexture,
 	EventDispatcher,
+	FloatType,
 	Group,
 	LinearMipmapLinearFilter,
 	LineSegments,
 	MathUtils,
 	Mesh,
 	MeshStandardMaterial,
+	NearestFilter,
 	Raycaster,
+	RGFormat,
 	RepeatWrapping,
+	Vector2,
 	Vector3,
 } from 'three';
 import { MeshBVH } from 'three-mesh-bvh';
-import { ShapeMesh, ZONE_ID } from './flatten.js';
+import { ZONE_ID } from './flatten.js';
 import { blocks } from './walk.js';
 
 // The ground you can dig into and pile onto: a heightfield in the scene frame, made only where
@@ -35,7 +39,8 @@ import { blocks } from './walk.js';
 //            and it goes when the pile is moved or deleted (dropBites)
 //
 // Each chunk is drawn as one mesh. With Google tiles only what differs from h0 is drawn, so the
-// photo texture shows elsewhere, and Google's mesh is pressed under the pits. Without tiles the
+// photo texture shows elsewhere, and Google's mesh is hidden where it stands above what is drawn
+// (hideUnderEarthworks). Without tiles the
 // chunks draw their whole surface and the stand-in land leaves gaps for them.
 //
 // Nodes on chunk edges are stored in both chunks (and corners in four); every write goes to all
@@ -53,12 +58,16 @@ const COUNT = NODES * NODES;
 const CELL_AREA = CELL * CELL;
 // A surface this close to the ground counts as untouched.
 const DISTURBED = 0.02;
-// Google's mesh is pressed this far under a pit, and under the lowest point within PRESS_REACH
-// nodes, because its big triangles span the bend between a pit's floor and its walls.
-const PRESS_DEPTH = 0.15;
-const PRESS_REACH = 2;
-// Flatten shapes rework every Google tile under them, so a chunk resubmits at most this often.
-const PRESS_INTERVAL = 1;
+// With Google tiles, ground this many nodes (1 m) round a pit is drawn too, as a lip of disturbed
+// earth, so the pit's edge meets Google's ground cleanly.
+const APRON = 2;
+// Inside the drawn earthworks, Google's mesh is hidden from this far below their surface upwards
+// (hideUnderEarthworks): what's lower is behind the surface anyway, and Google's ground at about
+// the same height would show through in patches. Raycasts ignore what is above it (covers).
+const HIDE_BELOW = 0.3;
+const COVER_TOLERANCE = 0.03;
+// The mask that says where the earthworks are covers at most this many nodes a side.
+const MAX_MASK = 2048;
 // Sharper tiles move the ground a little; the change is eased in over this long.
 const BLEND_TIME = 0.6;
 const RESAMPLE_AFTER = 10;
@@ -228,7 +237,6 @@ class Chunk {
 		this.sampledAt = 0;
 		this.fine = null; // a full sampling pass in progress
 		this.blend = null; // easing h0 toward newer samples
-		this.press = { signature: 0, time: - Infinity, pending: false, set: false };
 
 	}
 
@@ -331,6 +339,15 @@ export class Terrain extends EventDispatcher {
 		}
 
 		this.material = createSurfaceMaterial( this.standIn?.grid );
+		// Where the earthworks are drawn over Google's tiles, and their surface height there, for
+		// the tiles' shader (hideUnderEarthworks). Shared by every tile material.
+		this.mask = {
+			twinCutTex: { value: null },
+			twinCutOrigin: { value: new Vector2() },
+			twinCutSize: { value: new Vector2() },
+			twinCutOn: { value: 0 },
+		};
+		this.maskDirty = false;
 		this.palette = [ GROUND_COLOUR, CUT_COLOUR, ...MATERIALS.map( m => m.colour ) ].map( c => new Color( c ) );
 		this.raycaster = new Raycaster();
 		this.raycaster.firstHitOnly = true;
@@ -731,8 +748,8 @@ export class Terrain extends EventDispatcher {
 
 		this.blendSome( dt );
 		this.flush();
-		if ( this.tiles ) for ( const chunk of this.chunks.values() ) if ( chunk.press.pending ) this.updatePress( chunk );
 		this.collect( dt );
+		if ( this.tiles ) this.updateMask();
 		this.updateStandIn();
 
 	}
@@ -972,7 +989,6 @@ export class Terrain extends EventDispatcher {
 		}
 
 		chunk.cutCount = cuts;
-		chunk.press.pending = true;
 
 	}
 
@@ -1025,7 +1041,6 @@ export class Terrain extends EventDispatcher {
 		this.group.remove( chunk.mesh );
 		chunk.mesh.geometry.dispose();
 		chunk.mesh.collider.dispose();
-		if ( chunk.press.set ) this.flattening.setShape( `terrain-${ chunk.key }`, null );
 		this.chunks.delete( chunk.key );
 		this.dirty.delete( chunk.key );
 		this.standInChanged = true;
@@ -1407,7 +1422,9 @@ export class Terrain extends EventDispatcher {
 
 		}
 
-		const shown = this.standIn ? null : dilate( changed );
+		const shown = this.standIn ? null : this.shownNodes( chunk, changed );
+		chunk.shown = shown;
+		this.maskDirty = true;
 		const index = geometry.index.array;
 		let n = 0;
 		for ( let lj = 0; lj < CELLS; lj ++ ) {
@@ -1443,6 +1460,42 @@ export class Terrain extends EventDispatcher {
 
 	}
 
+	// Nodes drawn with Google tiles: those changed, one more round them, and the apron round
+	// pits, which reaches into neighbouring chunks.
+	shownNodes( chunk, changed ) {
+
+		const shown = dilate( changed );
+		const cuts = this.padded( chunk, APRON, ( c, k ) => c.surface[ k ] < c.base[ k ] - DISTURBED ? 1 : 0, 0 );
+		const apron = crop( filterGrid( cuts, NODES + 2 * APRON, APRON, Math.max ), APRON );
+		for ( let k = 0; k < COUNT; k ++ ) if ( apron[ k ] ) shown[ k ] = 1;
+		return shown;
+
+	}
+
+	// A layer of this chunk and `pad` nodes into its neighbours (read( chunk, k ) for each node;
+	// `empty` where there's no chunk), as a square grid NODES + 2 * pad wide.
+	padded( chunk, pad, read, empty ) {
+
+		const side = NODES + 2 * pad;
+		const out = new Float32Array( side * side ).fill( empty );
+		for ( let b = 0; b < side; b ++ ) {
+
+			const j = chunk.j0 + b - pad;
+			for ( let a = 0; a < side; a ++ ) {
+
+				const i = chunk.i0 + a - pad;
+				const inside = a >= pad && a <= pad + CELLS && b >= pad && b <= pad + CELLS;
+				const other = inside ? chunk : this.owner( i, j );
+				if ( other ) out[ b * side + a ] = read( other, ( j - other.j0 ) * NODES + ( i - other.i0 ) );
+
+			}
+
+		}
+
+		return out;
+
+	}
+
 	neighbourTop( chunk, changed, k ) {
 
 		const li = k % NODES;
@@ -1460,85 +1513,78 @@ export class Terrain extends EventDispatcher {
 
 		}
 
-		return GROUND;
+		// The apron round a pit: disturbed earth.
+		return CUT;
 
 	}
 
-	// --- pressing Google's mesh under the pits ---------------------------------------------
+	// --- hiding Google's mesh under the earthworks -------------------------------------------
 
-	updatePress( chunk ) {
+	// Google's triangles can be far bigger than a pit (10 m and more on open ground), so pressing
+	// their corners down can't get them under a pit's floor, and drags them into long dents round
+	// it. Instead, inside the drawn earthworks the tiles' shader drops Google's mesh above the
+	// surface, from this mask of where they are drawn and how high, and raycasts ignore it there
+	// (covers).
+	updateMask() {
 
-		const { press } = chunk;
-		const key = `terrain-${ chunk.key }`;
-		if ( ! chunk.ready || ! this.chunks.has( chunk.key ) ) return;
-		const depth = new Float32Array( COUNT );
-		const cut = new Uint8Array( COUNT );
-		let any = false;
-		for ( let k = 0; k < COUNT; k ++ ) {
+		if ( ! this.maskDirty ) return;
+		this.maskDirty = false;
+		const chunks = [ ...this.chunks.values() ].filter( chunk => chunk.shown?.some( v => v ) );
+		if ( chunks.length === 0 ) {
 
-			// Under the surface as it is and as it will be once any digging has finished.
-			depth[ k ] = Math.min( chunk.surface[ k ], chunk.cutFinal[ k ] );
-			cut[ k ] = depth[ k ] < chunk.base[ k ] - DISTURBED ? 1 : 0;
-			any ||= cut[ k ] === 1;
-
-		}
-
-		if ( ! any ) {
-
-			press.pending = false;
-			if ( press.set ) this.flattening.setShape( key, null );
-			press.set = false;
-			press.signature = 0;
+			this.mask.twinCutOn.value = 0;
 			return;
 
 		}
 
-		const floor = minFilter( depth, PRESS_REACH );
-		const cells = [];
-		let signature = 2166136261;
-		for ( let lj = 0; lj < CELLS; lj ++ ) {
+		const i0 = Math.min( ...chunks.map( c => c.i0 ) );
+		const j0 = Math.min( ...chunks.map( c => c.j0 ) );
+		const w = Math.min( MAX_MASK, Math.max( ...chunks.map( c => c.i0 ) ) - i0 + NODES );
+		const h = Math.min( MAX_MASK, Math.max( ...chunks.map( c => c.j0 ) ) - j0 + NODES );
+		let texture = this.mask.twinCutTex.value;
+		if ( ! texture || texture.image.width !== w || texture.image.height !== h ) {
 
-			for ( let li = 0; li < CELLS; li ++ ) {
+			texture?.dispose();
+			texture = new DataTexture( new Float32Array( w * h * 2 ), w, h, RGFormat, FloatType );
+			texture.magFilter = texture.minFilter = NearestFilter;
+			this.mask.twinCutTex.value = texture;
 
-				const k = lj * NODES + li;
-				if ( ! ( cut[ k ] || cut[ k + 1 ] || cut[ k + NODES ] || cut[ k + NODES + 1 ] ) ) continue;
-				cells.push( k );
-				signature = Math.imul( signature ^ k, 16777619 );
-				signature = Math.imul( signature ^ Math.round( floor[ k ] * 20 ), 16777619 );
+		}
+
+		const data = texture.image.data;
+		data.fill( 0 );
+		for ( const chunk of chunks ) {
+
+			for ( let k = 0; k < COUNT; k ++ ) {
+
+				const a = chunk.i0 + k % NODES - i0;
+				const b = chunk.j0 + Math.floor( k / NODES ) - j0;
+				if ( a >= w || b >= h ) continue;
+				const t = ( b * w + a ) * 2;
+				data[ t ] = chunk.surface[ k ];
+				if ( chunk.shown[ k ] ) data[ t + 1 ] = 1;
 
 			}
 
 		}
 
-		if ( signature === press.signature ) {
+		texture.needsUpdate = true;
+		this.mask.twinCutOrigin.value.set( i0, j0 );
+		this.mask.twinCutSize.value.set( w, h );
+		this.mask.twinCutOn.value = 1;
 
-			press.pending = false;
-			return;
+	}
 
-		}
+	// Whether a point (e.g. a raycast hit on Google's mesh) is inside the drawn earthworks and
+	// above their surface, where the tiles' shader hides it.
+	covers( point ) {
 
-		// Throttled: try again next frame until it's been long enough.
-		if ( this.clock - press.time < PRESS_INTERVAL ) return;
-		const position = new Float32Array( COUNT * 3 );
-		for ( let k = 0; k < COUNT; k ++ ) {
-
-			position[ k * 3 ] = chunk.x( k );
-			position[ k * 3 + 1 ] = floor[ k ] - PRESS_DEPTH;
-			position[ k * 3 + 2 ] = chunk.z( k );
-
-		}
-
-		const index = new Uint16Array( cells.length * 6 );
-		cells.forEach( ( k, n ) => writeCell( index, n * 6, k ) );
-		const geometry = new BufferGeometry();
-		geometry.setAttribute( 'position', new BufferAttribute( position, 3 ) );
-		geometry.setIndex( new BufferAttribute( index, 1 ) );
-		geometry.boundsTree = new MeshBVH( geometry );
-		this.flattening.setShape( key, new ShapeMesh( geometry ) );
-		press.set = true;
-		press.signature = signature;
-		press.time = this.clock;
-		press.pending = false;
+		const i = Math.round( point.x / CELL );
+		const j = Math.round( point.z / CELL );
+		const chunk = this.owner( i, j );
+		if ( ! chunk?.shown?.[ ( j - chunk.j0 ) * NODES + i - chunk.i0 ] ) return false;
+		const y = this.surfaceAt( point.x, point.z );
+		return y !== null && point.y > y + COVER_TOLERANCE;
 
 	}
 
@@ -1803,34 +1849,45 @@ function settle( w, tan, materialOf, canMove ) {
 }
 
 // Smallest value within `reach` nodes, per node.
-function minFilter( values, reach ) {
+// A min or max filter (pick = Math.min or Math.max) `reach` nodes wide over a square grid.
+function filterGrid( values, side, reach, pick ) {
 
-	const rows = new Float32Array( COUNT );
+	const rows = new Float32Array( values.length );
+	const out = new Float32Array( values.length );
+	for ( let b = 0; b < side; b ++ ) {
+
+		for ( let a = 0; a < side; a ++ ) {
+
+			let m = values[ b * side + a ];
+			for ( let x = Math.max( 0, a - reach ); x <= Math.min( side - 1, a + reach ); x ++ ) m = pick( m, values[ b * side + x ] );
+			rows[ b * side + a ] = m;
+
+		}
+
+	}
+
+	for ( let b = 0; b < side; b ++ ) {
+
+		for ( let a = 0; a < side; a ++ ) {
+
+			let m = rows[ b * side + a ];
+			for ( let y = Math.max( 0, b - reach ); y <= Math.min( side - 1, b + reach ); y ++ ) m = pick( m, rows[ y * side + a ] );
+			out[ b * side + a ] = m;
+
+		}
+
+	}
+
+	return out;
+
+}
+
+// The chunk's own nodes out of a grid padded by `pad` (see Terrain.padded).
+function crop( values, pad ) {
+
+	const side = NODES + 2 * pad;
 	const out = new Float32Array( COUNT );
-	for ( let lj = 0; lj < NODES; lj ++ ) {
-
-		for ( let li = 0; li < NODES; li ++ ) {
-
-			let m = Infinity;
-			for ( let a = Math.max( 0, li - reach ); a <= Math.min( CELLS, li + reach ); a ++ ) m = Math.min( m, values[ lj * NODES + a ] );
-			rows[ lj * NODES + li ] = m;
-
-		}
-
-	}
-
-	for ( let lj = 0; lj < NODES; lj ++ ) {
-
-		for ( let li = 0; li < NODES; li ++ ) {
-
-			let m = Infinity;
-			for ( let b = Math.max( 0, lj - reach ); b <= Math.min( CELLS, lj + reach ); b ++ ) m = Math.min( m, rows[ b * NODES + li ] );
-			out[ lj * NODES + li ] = m;
-
-		}
-
-	}
-
+	for ( let lj = 0; lj < NODES; lj ++ ) for ( let li = 0; li < NODES; li ++ ) out[ lj * NODES + li ] = values[ ( lj + pad ) * side + li + pad ];
 	return out;
 
 }
@@ -2087,6 +2144,57 @@ function gridLines( { half, divisions, spacing, colour, centre }, chunks ) {
 
 // Lit like the stand-in land, coloured per vertex by what the top is made of, with a fine grain
 // on disturbed ground; on the stand-in it also draws the stand-in's grid lines on untouched ground.
+// Makes a Google tile material drop what is inside the drawn earthworks and above their surface
+// (the mask is Terrain.mask). Chains onto any other shader changes (the tiles' fade-in).
+export function hideUnderEarthworks( material, mask ) {
+
+	if ( material.userData.twinCut ) return;
+	material.userData.twinCut = true;
+	const previous = material.onBeforeCompile;
+	material.onBeforeCompile = ( shader, renderer ) => {
+
+		previous?.call( material, shader, renderer );
+		Object.assign( shader.uniforms, mask );
+		shader.vertexShader = shader.vertexShader
+			.replace( '#include <common>', '#include <common>\nvarying vec3 vTwinWorld;' )
+			.replace( '#include <begin_vertex>', '#include <begin_vertex>\nvTwinWorld = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;' );
+		shader.fragmentShader = shader.fragmentShader
+			.replace( '#include <common>', `#include <common>\n${ COVER_GLSL }` )
+			// The tiles' fade-in rewrites main's signature (`void main( ) {`), so match loosely.
+			.replace( /void\s+main\s*\(\s*\)\s*{/, value => `${ value }\n\tif ( twinCovered( vTwinWorld ) ) discard;` );
+
+	};
+	material.needsUpdate = true;
+
+}
+
+const COVER_GLSL = /* glsl */`
+uniform sampler2D twinCutTex;
+uniform vec2 twinCutOrigin;
+uniform vec2 twinCutSize;
+uniform float twinCutOn;
+varying vec3 vTwinWorld;
+
+// Inside the drawn earthworks (mask green) and not well below their surface (mask red),
+// bilinear between the four nodes around the point.
+bool twinCovered( vec3 p ) {
+
+	if ( twinCutOn < 0.5 ) return false;
+	vec2 g = p.xz / ${ CELL.toFixed( 3 ) } - twinCutOrigin;
+	vec2 i = floor( g );
+	if ( i.x < 0.0 || i.y < 0.0 || i.x >= twinCutSize.x - 1.0 || i.y >= twinCutSize.y - 1.0 ) return false;
+	vec2 f = g - i;
+	ivec2 c = ivec2( i );
+	vec2 a = texelFetch( twinCutTex, c, 0 ).rg;
+	vec2 b = texelFetch( twinCutTex, c + ivec2( 1, 0 ), 0 ).rg;
+	vec2 d = texelFetch( twinCutTex, c + ivec2( 0, 1 ), 0 ).rg;
+	vec2 e = texelFetch( twinCutTex, c + ivec2( 1, 1 ), 0 ).rg;
+	vec2 v = mix( mix( a, b, f.x ), mix( d, e, f.x ), f.y );
+	return v.g > 0.5 && p.y > v.r - ${ HIDE_BELOW.toFixed( 3 ) };
+
+}
+`;
+
 function createSurfaceMaterial( grid ) {
 
 	const material = new MeshStandardMaterial( { vertexColors: true, roughness: 1, metalness: 0 } );

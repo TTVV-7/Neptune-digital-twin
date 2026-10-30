@@ -8,6 +8,7 @@ import { useFastRaycast } from './raycast.js';
 import { frontToYaw } from './library.js';
 import { buildProcedural } from './procedural.js';
 import { getKind, kindParams } from './kinds.js';
+import { passesHitFilters } from './walk.js';
 
 const DOWN = new Vector3( 0, - 1, 0 );
 const _box = new Box3();
@@ -250,7 +251,7 @@ export class ModelManager extends EventDispatcher {
 
 				_origin.y = 2000;
 				this.raycaster.set( _origin, DOWN );
-				const hit = this.raycaster.intersectObjects( ground, true ).find( h => h.object.isMesh );
+				const hit = this.raycaster.intersectObjects( ground, true ).find( h => h.object.isMesh && passesHitFilters( h ) );
 				if ( hit ) heights.push( hit.point.y );
 
 			}
