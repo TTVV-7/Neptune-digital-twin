@@ -8,6 +8,8 @@ import { PROCEDURAL_ITEMS } from './procedural.js';
 export const CATEGORY_ORDER = [
 	'Vehicles',
 	'Heavy equipment',
+	'Cranes & lifts',
+	'Material handling',
 	'Site trailers & containers',
 	'Waste',
 	'Barriers & fencing',
