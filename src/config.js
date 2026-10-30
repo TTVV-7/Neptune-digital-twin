@@ -28,6 +28,9 @@ export const PLAYER = {
 	runSpeed: 12,
 	flySpeed: 40,
 	flyBoost: 4, // multiplier while holding Shift in fly mode
+	// Flying speeds up with height above the ground, so crossing the terminal from high up takes
+	// seconds: x1 below `from` metres, x`factor` at `to` metres, never more than x`max`.
+	flyHeight: { from: 20, to: 1000, factor: 30, max: 40 },
 	jumpSpeed: 5,
 	gravity: 9.81,
 	stepHeight: 0.6, // tallest ledge you can walk up
@@ -35,6 +38,17 @@ export const PLAYER = {
 	flyRadius: 1, // how close flying gets to walls, the ground and models
 	bounce: 0.3, // share of your speed into a wall you bounce back with; 0 just stops you
 	autoTurn: true, // turn the view along a wall you run or fly into head-on (T switches it at run time)
+};
+
+// The mouse wheel (or a trackpad's scroll and pinch) zooms like Google Earth: each notch flies a
+// share of the way to the point under the cursor, or back away from it.
+export const ZOOM = {
+	step: 0.25, // share of the distance to that point per notch
+	shiftStep: 0.5, // the same with Shift held
+	minStep: 1, // metres: close to the ground a notch still moves at least this much
+	time: 0.15, // seconds a notch takes to glide there
+	maxDistance: 20000, // metres from the point: zooming out stops here
+	minClimb: 20, // degrees: zooming out rises at least this steeply, tipping the view down to match
 };
 
 // Your own detailed models. Put .glb / .gltf files in public/models/ and list them here.

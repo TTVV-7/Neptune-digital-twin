@@ -5,17 +5,20 @@ import { enuToLocal, localToEnu, localToLatLon, yawToHeading } from './geo.js';
 import { addLights, createGoogleTiles, createPlaceholderGround } from './world.js';
 import { ModelManager } from './models.js';
 import { createPlacementPanel, toast } from './placement.js';
-import { itemConfig, loadLibrary } from './library.js';
+import { loadLibrary } from './library.js';
 import { setUpLayout } from './layout.js';
 import { createSidebar } from './sidebar.js';
 import { setUpFlattening } from './flatten.js';
-import { createDriveHud, Driver, specFor } from './drive.js';
+import { createDriveHud, Driver } from './drive.js';
 import { isTyping, WalkController } from './walk.js';
 import { setUpEarthworks } from './earthworks.js';
 import { setUpExcavator } from './excavator.js';
 import { setUpLaydown } from './laydown.js';
 import { accountMapsKey, setUpCloud } from './cloud.js';
 import { getKind } from './kinds.js';
+import { setUpDriving } from './drive-prompt.js';
+import { createLegend } from './legend.js';
+import { setUpZoom } from './zoom.js';
 
 // Features that plug into the app (see `features` in start()); each is a function taking the context.
 const FEATURES = [ setUpEarthworks, setUpExcavator, setUpLaydown, setUpCloud ];
@@ -187,6 +190,8 @@ function start( apiKey, keySource ) {
 	} );
 	controls.setPose( enuToLocal( START.east, START.north, START.up ), START.heading, START.pitch );
 	controls.setMode( START.mode );
+	// Before race mode and the sidebar, so that Esc closing the help reaches it first.
+	const { toggleHelp } = setUpOverlays( controls );
 
 	const feetPosition = () => camera.position.clone().setY( camera.position.y - PLAYER.eyeHeight );
 	const panel = createPlacementPanel( models, { getPlayerPosition: feetPosition } );
@@ -208,6 +213,7 @@ function start( apiKey, keySource ) {
 	const updates = [];
 	const mapEdits = [ () => models.altersMap() ];
 	let sidebar = null;
+	let driving = null;
 	libraryLoaded.then( async library => {
 
 		sidebar = createSidebar( {
@@ -225,7 +231,7 @@ function start( apiKey, keySource ) {
 			onError: message => showBanner( message, 8000 ),
 		} );
 		showLibraryCredits( library );
-		setUpDriving( { driver, models, library, getSidebar: () => sidebar, getPlayer, onError: message => showBanner( message, 8000 ) } );
+		driving = setUpDriving( { driver, models, library, camera, getSidebar: () => sidebar, getPlayer, onError: message => showBanner( message, 8000 ) } );
 
 		// Features plug in here. Each gets this context and sets itself up: kinds (kinds.js),
 		// sidebar tools (sidebar.addTool), saved state (layout.registerExtra), per-frame work
@@ -272,7 +278,8 @@ function start( apiKey, keySource ) {
 
 	} );
 
-	setUpOverlays( controls );
+	const legend = createLegend( { controls, driver, models, getSidebar: () => sidebar, getDriving: () => driving, toggleHelp } );
+	setUpZoom( { canvas: renderer.domElement, camera, controls, driver, getColliders: () => [ ...grounds, models.group ] } );
 
 	window.addEventListener( 'resize', () => {
 
@@ -304,7 +311,9 @@ function start( apiKey, keySource ) {
 		if ( hudTimer <= 0 ) {
 
 			hudTimer = 0.25;
-			updateStatus( camera, controls, tiles, driver );
+			driving?.update();
+			legend.update();
+			updateStatus( camera, controls, tiles, driver, driving );
 			updateAttribution( tiles, models, mapEdits.some( edited => edited() ) );
 
 		}
@@ -312,15 +321,17 @@ function start( apiKey, keySource ) {
 	} );
 
 	// Handy for poking around from the browser console.
-	window.twin = { scene, camera, renderer, controls, models, tiles, SITE, layout, driver, flattening, get sidebar() {
+	// startDriving( entry ) drives a placed vehicle or machine (what the selection's Drive button
+	// calls); with no entry it does what V does. isDrivable( entry ) says whether it can be driven.
+	window.twin = { scene, camera, renderer, controls, models, tiles, SITE, layout, driver, flattening, legend, get sidebar() {
 
 		return sidebar;
 
-	} };
+	}, startDriving: async entry => driving ? driving.startDriving( entry ) : null, isDrivable: entry => !! driving?.isDrivable( entry ) };
 
 }
 
-function updateStatus( camera, controls, tiles, driver ) {
+function updateStatus( camera, controls, tiles, driver, driving ) {
 
 	const { lat, lon } = localToLatLon( camera.position );
 	const { east, north } = localToEnu( camera.position );
@@ -331,6 +342,7 @@ function updateStatus( camera, controls, tiles, driver ) {
 		`east ${ east.toFixed( 1 ) } m  north ${ north.toFixed( 1 ) } m`,
 		`heading ${ yawToHeading( controls.yaw ).toFixed( 0 ) }°`,
 	];
+	if ( driving ) lines.push( driving.describe() );
 	if ( tiles && tiles.loadProgress < 1 ) lines.push( `loading tiles ${ Math.round( tiles.loadProgress * 100 ) }%` );
 
 	const status = $( 'status' );
@@ -359,52 +371,6 @@ function updateAttribution( tiles, models, mapEdited ) {
 
 }
 
-// V drives the selected vehicle, or the nearest one within 25 m, or a new pickup in front of you.
-function setUpDriving( { driver, models, library, getSidebar, getPlayer, onError } ) {
-
-	const vehicles = new Map( library.filter( item => item.category === 'Vehicles' || item.drive ).map( item => [ item.id, item ] ) );
-	const isVehicle = entry => entry && vehicles.has( entry.library ) && ! entry.placing;
-
-	window.addEventListener( 'keydown', async e => {
-
-		if ( e.code !== 'KeyV' || e.repeat || driver.active || isTyping( e ) || e.ctrlKey || e.metaKey || e.altKey ) return;
-		const player = getPlayer();
-		let entry = getSidebar()?.getSelected();
-		if ( ! isVehicle( entry ) ) {
-
-			entry = models.entries
-				.filter( isVehicle )
-				.map( e => [ e, Math.hypot( e.state.east - player.east, e.state.north - player.north ) ] )
-				.filter( ( [ , d ] ) => d < 25 )
-				.sort( ( a, b ) => a[ 1 ] - b[ 1 ] )[ 0 ]?.[ 0 ];
-
-		}
-
-		if ( ! entry ) {
-
-			const pickup = library.find( item => item.id === 'pickup-truck' );
-			if ( ! pickup ) return;
-			const rad = player.heading * Math.PI / 180;
-			try {
-
-				entry = await models.load( itemConfig( pickup, { east: player.east + Math.sin( rad ) * 6, north: player.north + Math.cos( rad ) * 6, heading: player.heading } ) );
-
-			} catch ( err ) {
-
-				onError( `Could not load the pickup: ${ err.message }` );
-				return;
-
-			}
-
-		}
-
-		getSidebar()?.deselect();
-		driver.start( entry, specFor( vehicles.get( entry.library ) ) );
-
-	}, true );
-
-}
-
 function setUpOverlays( controls ) {
 
 	const hint = $( 'hint' );
@@ -421,17 +387,28 @@ function setUpOverlays( controls ) {
 		autoTurn: on ? 'The view turns along walls you run into' : 'The view no longer turns along walls you run into. T turns it back on',
 	}[ setting ] );
 
+	const toggleHelp = ( show = help.hidden ) => {
+
+		help.hidden = ! show;
+		if ( show ) document.exitPointerLock();
+
+	};
+
 	// Capture phase, because lil-gui stops key events from bubbling out of its controls.
 	window.addEventListener( 'keydown', e => {
 
-		if ( e.code === 'KeyH' && ! e.repeat && ! isTyping( e ) && ! e.ctrlKey && ! e.metaKey && ! e.altKey ) {
+		if ( isTyping( e ) || e.ctrlKey || e.metaKey || e.altKey || e.repeat ) return;
+		if ( e.code === 'KeyH' ) toggleHelp();
+		else if ( e.code === 'Escape' && ! help.hidden ) {
 
-			help.hidden = ! help.hidden;
-			if ( ! help.hidden ) document.exitPointerLock();
+			// Only that: not also deselecting, cancelling a placement or getting out of a vehicle.
+			e.stopImmediatePropagation();
+			toggleHelp( false );
 
 		}
 
 	}, true );
+	help.querySelector( '.close' ).addEventListener( 'click', () => toggleHelp( false ) );
 
 	$( 'change-key' ).addEventListener( 'click', () => {
 
@@ -440,6 +417,8 @@ function setUpOverlays( controls ) {
 		window.location.href = url.href;
 
 	} );
+
+	return { toggleHelp };
 
 }
 

@@ -88,11 +88,17 @@ registerKind( ZONE_ID, {
 	buildOnly: true,
 	altersMap: true,
 	fields: [
-		{ key: 'width', label: 'width (m)', min: 1, step: 0.5 },
-		{ key: 'length', label: 'length (m)', min: 1, step: 0.5 },
+		{ key: 'width', label: 'width (m)', min: 1, step: 0.5, size: true },
+		{ key: 'length', label: 'length (m)', min: 1, step: 0.5, size: true },
 		// 0 flattens everything above the floor, as areas always did (and saved ones still do).
-		{ key: 'height', label: 'flatten up to (m, 0 = all)', min: 0, max: MAX_HEIGHT, step: 0.5 },
+		{ key: 'height', label: 'flatten up to (m, 0 = all)', min: 0, max: MAX_HEIGHT, step: 0.5, size: true },
 	],
+	// A box is cheap to rebuild, and the flattening itself catches up a few times a second.
+	resize: {
+		shape: 'rect',
+		live: true,
+		label: ( { width, length, height } ) => `${ width.toFixed( 1 ) } × ${ length.toFixed( 1 ) } m · ${ Math.round( width * length ).toLocaleString( 'en-CA' ) } m²${ height > 0 ? ` · up to ${ height.toFixed( 1 ) } m` : '' }`,
+	},
 } );
 
 function clampSize( v ) {

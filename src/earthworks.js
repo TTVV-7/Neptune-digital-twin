@@ -115,12 +115,19 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 		solid: false,
 		buildOnly: true,
 		fields: [
-			{ key: 'width', label: 'width (m)', min: 1, step: 0.5 },
-			{ key: 'length', label: 'length (m)', min: 1, step: 0.5 },
-			{ key: 'depth', label: 'depth (m)', min: 0.1, step: 0.1 },
-			{ key: 'slope', label: 'side slope (h : v)', options: SLOPES, enabled: params => params.support === NO_SUPPORT },
-			{ key: 'support', label: 'support', options: SUPPORTS },
+			{ key: 'width', label: 'width (m)', min: 1, step: 0.5, size: true },
+			{ key: 'length', label: 'length (m)', min: 1, step: 0.5, size: true },
+			{ key: 'depth', label: 'depth (m)', min: 0.1, step: 0.1, size: true },
+			{ key: 'slope', label: 'side slope (h : v)', options: SLOPES, size: true, enabled: params => params.support === NO_SUPPORT },
+			{ key: 'support', label: 'support', options: SUPPORTS, size: true },
 		],
+		// Resizing keeps the depth and the side slopes. Digging again reworks the ground under the
+		// whole pit, so that waits until the handle is let go.
+		resize: {
+			shape: 'rect',
+			depth: true,
+			label: params => `${ footprintText( params ) } · ${ params.depth.toFixed( 1 ) } m deep · ≈ ${ format( pitVolume( { ...params, slope: wallSlope( params ) } ) ) } m³ cut`,
+		},
 		actions: [
 			{ label: 'Dig', run: entry => dig( entry ) },
 			{ label: 'Spoil pile', run: entry => spoil( entry ) },
@@ -142,13 +149,29 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 		solid: false,
 		buildOnly: true,
 		fields: [
+			{ key: 'shape', label: 'shape', options: { cone: 'cone', 'ridge (fills width × length)': 'ridge' }, size: true },
+			{ key: 'volume', label: 'volume (m³)', min: 0.5, step: 1, size: true, when: isCone },
+			{ key: 'width', label: 'width (m)', min: 1, step: 0.5, size: true, when: isRidge },
+			{ key: 'length', label: 'length (m)', min: 1, step: 0.5, size: true, when: isRidge },
+			{ key: 'maxHeight', label: 'max height (m, 0 = none)', min: 0, step: 0.1, size: true, when: isRidge },
 			{ key: 'material', label: 'material', options: Object.fromEntries( MATERIALS.map( m => [ m.name, m.id ] ) ) },
-			{ key: 'shape', label: 'shape', options: { cone: 'cone', 'ridge (fills width × length)': 'ridge' } },
-			{ key: 'volume', label: 'volume (m³, cone)', min: 0.5, step: 1 },
-			{ key: 'width', label: 'width (m, ridge)', min: 1, step: 0.5 },
-			{ key: 'length', label: 'length (m, ridge)', min: 1, step: 0.5 },
-			{ key: 'maxHeight', label: 'max height (m, 0 = none)', min: 0, step: 0.1 },
 		],
+		// A cone is sized by its radius, which sets its volume. A ridge fills its footprint up to its
+		// height limit, so a bigger footprint holds more: the label says how much. Pouring again
+		// reworks the ground under the pile, so that waits until the handle is let go.
+		resize: {
+			shape: params => isCone( params ) ? 'circle' : 'rect',
+			radius: params => coneRadius( params.volume, reposeTan( params ) ),
+			withRadius: ( params, radius ) => ( { volume: round( Math.PI * radius ** 3 * reposeTan( params ) / 3, 1 ) } ),
+			label: params => {
+
+				const tan = reposeTan( params );
+				if ( isCone( params ) ) return `⌀ ${ ( 2 * coneRadius( params.volume, tan ) ).toFixed( 1 ) } m · ${ ( coneRadius( params.volume, tan ) * tan ).toFixed( 1 ) } m high · ${ format( params.volume ) } m³`;
+				const height = Math.min( Math.min( params.width, params.length ) / 2 * tan, params.maxHeight > 0 ? params.maxHeight : Infinity );
+				return `${ footprintText( params ) } · holds ≈ ${ format( ridgeHolds( params.width, params.length, tan, params.maxHeight ) ) } m³ · ${ height.toFixed( 1 ) } m high`;
+
+			},
+		},
 		actions: [ { label: 'Pour', run: entry => pour( entry ) } ],
 		readouts: [
 			{ label: 'volume', get: entry => `${ fillOf( entry ).toFixed( 1 ) } m³` },
@@ -693,6 +716,32 @@ function normalizePile( p ) {
 function pileMaterial( entry ) {
 
 	return findMaterial( entry.params.material ) ?? MATERIALS[ 0 ];
+
+}
+
+const isCone = params => params.shape === 'cone';
+const isRidge = params => params.shape === 'ridge';
+const reposeTan = params => Math.tan( ( findMaterial( params.material ) ?? MATERIALS[ 0 ] ).repose * DEG );
+const footprintText = ( { width, length } ) => `${ width.toFixed( 1 ) } × ${ length.toFixed( 1 ) } m`;
+
+// What a pit cuts from flat ground: its floor shrinks by the slope on every side on the way down,
+// to a line where the sides meet. The real figure is measured from the ground in the P panel.
+function pitVolume( { width, length, depth, slope } ) {
+
+	const z = slope > 0 ? Math.min( depth, Math.min( width, length ) / ( 2 * slope ) ) : depth;
+	return width * length * z - slope * ( width + length ) * z * z + 4 / 3 * slope * slope * z ** 3;
+
+}
+
+// What a ridge filling width x length holds on flat ground, flat on top at `cap` (0 = none): the
+// whole hip roof less the smaller one above the cap.
+function ridgeHolds( width, length, tan, cap ) {
+
+	const [ w, l ] = width <= length ? [ width, length ] : [ length, width ];
+	const full = ridgeVolume( w, l, tan );
+	if ( ! ( cap > 0 ) || cap >= w / 2 * tan ) return full;
+	const inset = 2 * cap / tan;
+	return full - ridgeVolume( w - inset, l - inset, tan );
 
 }
 

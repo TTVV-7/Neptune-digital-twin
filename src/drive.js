@@ -15,6 +15,10 @@ const LEAVE_GROUND = 0.35;
 const CRASH_FLASH = 3;
 // The cameras keep this far (m) in front of anything between them and the vehicle.
 const CAMERA_CLEARANCE = 0.4;
+// The wheel moves the chase camera nearer or farther, by this much a notch, between these shares
+// of its usual distance (see zoomChase).
+const CHASE_STEP = 1.15;
+const CHASE_ZOOM = [ 0.5, 4 ];
 // Bumper rays look for walls at these heights (m) over the ground under the vehicle, or lower on a
 // small one. The low row catches a jersey barrier or a lock block (0.8 m), which a pickup's 0.9 m
 // ray passed over, so it drove up and over them; the high one what stands on legs or wheels.
@@ -55,6 +59,8 @@ export class Driver {
 		this.keys = new Set();
 		this.active = false;
 		this.cameraMode = 'chase';
+		// How far the chase camera is, as a share of its usual distance: kept between drives.
+		this.chaseZoom = 1;
 		// Machines that aren't driven like a car bring their own controls (see addMachine).
 		this.machines = new Map();
 		this.machine = null;
@@ -103,6 +109,21 @@ export class Driver {
 	addMachine( type, create ) {
 
 		this.machines.set( type, create );
+
+	}
+
+	// The wheel while driving: the chase camera comes nearer (notches under 0) or goes farther.
+	// Zooming out from the bonnet camera goes back to the chase camera.
+	zoomChase( notches ) {
+
+		if ( this.cameraMode === 'hood' ) {
+
+			if ( notches > 0 ) this.cameraMode = 'chase';
+			return;
+
+		}
+
+		this.chaseZoom = MathUtils.clamp( this.chaseZoom * CHASE_STEP ** notches, ...CHASE_ZOOM );
 
 	}
 
@@ -419,8 +440,8 @@ export class Driver {
 
 			// Never inside a building or a container: the camera heads for a spot clear of whatever is
 			// behind the vehicle, and jumps in front of anything that comes between them on the way.
-			const back = this.rear + this.length * 0.3 + 5;
-			_target.copy( base ).addScaledVector( forward, - back ).setY( base.y + height + 2.5 );
+			const back = ( this.rear + this.length * 0.3 + 5 ) * this.chaseZoom;
+			_target.copy( base ).addScaledVector( forward, - back ).setY( base.y + height + 2.5 * this.chaseZoom );
 			_eye.copy( base ).setY( base.y + height * 0.8 );
 			this.pullInFront( _eye, _target );
 			this.camera.position.lerp( _target, 1 - Math.exp( - dt * 6 ) );

@@ -9,37 +9,118 @@
 		<div id="app"></div>
 
 		<div id="status" hidden></div>
-		<div id="hint" hidden>Click to look around &middot; <b>WASD</b> move &middot; <b>F</b> walk / fly &middot; <b>H</b> help</div>
+		<div id="hint" hidden>Click to look around &middot; <b>WASD</b> move &middot; wheel zooms &middot; <b>F</b> walk / fly &middot; <b>V</b> drive &middot; <b>H</b> help</div>
 
-		<div id="help" hidden>
-			<h2>Controls</h2>
-			<table>
-				<tr><td>Click</td><td>Capture mouse to look around (Esc releases)</td></tr>
-				<tr><td>W A S D / arrows</td><td>Move</td></tr>
-				<tr><td>Shift</td><td>Run (walk) / boost (fly)</td></tr>
-				<tr><td>F</td><td>Switch between walking and flying</td></tr>
-				<tr><td>Space</td><td>Jump (walk) / up (fly)</td></tr>
-				<tr><td>E / Q</td><td>Up / down (fly)</td></tr>
-				<tr><td>G</td><td>Ghost: walk and fly through walls, to look inside; G again to bump into them</td></tr>
-				<tr><td>T</td><td>Turn the view along walls you run into: on / off</td></tr>
-				<tr><td>Right-drag</td><td>Look around without capturing the mouse</td></tr>
-				<tr><td>L</td><td>Library: place vehicles, trailers, bins, barriers...</td></tr>
-				<tr><td>Click item</td><td>Select it; drag to move it</td></tr>
-				<tr><td>R / Shift+R</td><td>Rotate the selected or placing item</td></tr>
-				<tr><td>Delete</td><td>Remove the selected item</td></tr>
-				<tr><td>Esc</td><td>Cancel placing / deselect</td></tr>
-				<tr><td>V</td><td>Drive the selected or nearest vehicle or machine (race mode); V again to get out</td></tr>
-				<tr><td>Space (excavator)</td><td>Hold to dig; Q / E swing, R / F reach, X dump side</td></tr>
-				<tr><td>P</td><td>Placement panel: exact positions</td></tr>
-				<tr><td>H</td><td>Show / hide this help</td></tr>
-			</table>
-			<p>Drop a <b>.glb</b> file anywhere on the page to load your own model.</p>
-			<p><button type="button" id="change-key">Change Google API key</button></p>
+		<div id="help" hidden role="dialog" aria-labelledby="help-title">
+			<header>
+				<h2 id="help-title">Controls</h2>
+				<button type="button" class="close" aria-label="Close help">&times;</button>
+			</header>
+			<p class="small">The Controls panel (bottom right) shows the keys for what you are doing right now. <kbd>H</kbd> shows or hides this list.</p>
+			<div class="groups">
+				<section>
+					<h3>Moving</h3>
+					<table>
+						<tr><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrows</td><td>Move</td></tr>
+						<tr><td><kbd>Shift</kbd></td><td>Run (walking) / faster (flying)</td></tr>
+						<tr><td><kbd>F</kbd></td><td>Switch between walking and flying</td></tr>
+						<tr><td><kbd>Space</kbd></td><td>Jump (walking) / up (flying)</td></tr>
+						<tr><td><kbd>E</kbd> / <kbd>Q</kbd></td><td>Up / down (flying); <kbd>C</kbd> also goes down</td></tr>
+						<tr><td><span class="gesture">Wheel</span></td><td>Zoom toward the point under the cursor, or away from it; <kbd>Shift</kbd> for bigger steps. Or pinch a trackpad</td></tr>
+						<tr><td><kbd>G</kbd></td><td>Ghost: go through walls, to look inside; again to bump into them</td></tr>
+						<tr><td><kbd>T</kbd></td><td>Turn the view along walls you hit: on / off</td></tr>
+					</table>
+					<p class="small">The higher you fly, the faster: from 1 km up you cross the terminal in seconds.</p>
+				</section>
+				<section>
+					<h3>Looking</h3>
+					<table>
+						<tr><td><span class="gesture">Click</span> the map</td><td>Capture the mouse to look around; <kbd>Esc</kbd> frees it</td></tr>
+						<tr><td><span class="gesture">Right-drag</span></td><td>Look around without capturing the mouse</td></tr>
+					</table>
+				</section>
+				<section>
+					<h3>Building</h3>
+					<table>
+						<tr><td><kbd>L</kbd></td><td>Open or close the library</td></tr>
+						<tr><td><span class="gesture">Click</span> a card</td><td>Then click the ground to place it; <kbd>Shift</kbd>+click places another</td></tr>
+						<tr><td><span class="gesture">Drag</span> a card</td><td>Drop it on the map to place it there</td></tr>
+						<tr><td><kbd>R</kbd> or <span class="gesture">Wheel</span></td><td>Turn the item you are placing</td></tr>
+						<tr><td>Tools</td><td>Laydown area, Excavation, Stockpile, Flatten area: drag a rectangle on the ground, or click for the usual size</td></tr>
+						<tr><td><span class="gesture">Click</span> an item</td><td>Select it; <span class="gesture">drag</span> it to move it</td></tr>
+						<tr><td>Round handle</td><td>Drag it to rotate the selected item; <kbd>Shift</kbd> snaps to 15&deg;</td></tr>
+						<tr><td>Square handles</td><td>On an area, excavation or stockpile: drag to resize; <kbd>Shift</kbd> for any size</td></tr>
+						<tr><td>Arrow in a pit</td><td>Drag down to dig deeper, up for shallower</td></tr>
+						<tr><td>Toolbar</td><td>The buttons over the selected item: rotate, size (type it in), drive, edit, delete</td></tr>
+						<tr><td><kbd>R</kbd> / <kbd>Shift</kbd>+<kbd>R</kbd></td><td>Turn the selected item 15&deg;</td></tr>
+						<tr><td><kbd>Delete</kbd></td><td>Remove the selected item (Undo for 5 seconds)</td></tr>
+						<tr><td><kbd>Esc</kbd></td><td>Cancel placing or drawing, or deselect</td></tr>
+						<tr><td><kbd>P</kbd></td><td>Placement panel: exact position, heading and size</td></tr>
+					</table>
+				</section>
+				<section>
+					<h3>Driving</h3>
+					<table>
+						<tr><td><kbd>V</kbd></td><td>Drive the selected or nearest (25 m) vehicle or machine, or a new pickup</td></tr>
+						<tr><td><kbd>W</kbd> / <kbd>S</kbd></td><td>Gas / brake; hold <kbd>S</kbd> to reverse</td></tr>
+						<tr><td><kbd>A</kbd> / <kbd>D</kbd></td><td>Steer</td></tr>
+						<tr><td><kbd>Shift</kbd></td><td>Boost</td></tr>
+						<tr><td><kbd>Space</kbd></td><td>Hop</td></tr>
+						<tr><td><kbd>C</kbd></td><td>Chase or bonnet camera</td></tr>
+						<tr><td><span class="gesture">Wheel</span></td><td>Chase camera nearer or farther</td></tr>
+						<tr><td><kbd>V</kbd> or <kbd>Esc</kbd></td><td>Get out; it parks where it stopped</td></tr>
+					</table>
+				</section>
+				<section>
+					<h3>Excavator</h3>
+					<table>
+						<tr><td><kbd>Space</kbd> or hold the mouse button</td><td>Dig</td></tr>
+						<tr><td><kbd>Q</kbd> / <kbd>E</kbd></td><td>Swing</td></tr>
+						<tr><td><kbd>R</kbd> / <kbd>F</kbd> or <span class="gesture">Wheel</span></td><td>Reach</td></tr>
+						<tr><td><kbd>X</kbd></td><td>Dump side</td></tr>
+						<tr><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></td><td>Drive the tracks</td></tr>
+						<tr><td><kbd>C</kbd></td><td>Operator camera</td></tr>
+						<tr><td><kbd>V</kbd> or <kbd>Esc</kbd></td><td>Get out</td></tr>
+					</table>
+				</section>
+				<section>
+					<h3>Other</h3>
+					<table>
+						<tr><td><kbd>H</kbd></td><td>Show or hide this help</td></tr>
+						<tr><td>Drop a file</td><td>Drop a <b>.glb</b> file anywhere on the page to load your own model</td></tr>
+					</table>
+					<p><button type="button" id="change-key">Change Google API key</button></p>
+				</section>
+			</div>
 			<div id="credits" hidden>
 				<h3>Model credits</h3>
 				<p class="small">Full list with licences: <a href="library/CREDITS.md" target="_blank" rel="noopener">library/CREDITS.md</a></p>
 				<ul></ul>
 			</div>
+		</div>
+
+		<section id="legend" hidden aria-label="Controls">
+			<button type="button" class="legend-open" aria-expanded="false" aria-controls="legend-panel">
+				<svg viewBox="0 0 20 14" width="18" height="13" aria-hidden="true"><rect x="0.75" y="0.75" width="18.5" height="12.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M4 4.5h1.5M7.25 4.5h1.5M10.5 4.5h1.5M13.75 4.5h2M4 7.25h2M7.75 7.25h1.5M11 7.25h1.5M14.25 7.25h1.5M6 10h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+				Controls
+			</button>
+			<div class="legend-panel" id="legend-panel">
+				<header>
+					<span class="title">Controls</span>
+					<span class="mode"></span>
+					<button type="button" class="hide" aria-label="Hide controls" title="Hide">
+						<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+					</button>
+				</header>
+				<dl class="rows"></dl>
+				<p class="note" hidden></p>
+				<button type="button" class="all">All controls <kbd>H</kbd></button>
+			</div>
+		</section>
+
+		<div id="drive-prompt" hidden>
+			<span>Press <kbd>V</kbd> to drive the <b class="name"></b></span>
+			<button type="button">Drive</button>
 		</div>
 
 		<button type="button" id="library-toggle" aria-controls="library" aria-expanded="false">Library <kbd>L</kbd></button>
@@ -75,7 +156,7 @@
 			</div>
 			<div class="vehicle"></div>
 			<div class="stats"></div>
-			<div class="keys"><b>W</b>/<b>S</b> gas &amp; brake · <b>A</b>/<b>D</b> steer · <b>Space</b> jump · <b>Shift</b> boost · <b>C</b> camera · <b>V</b> get out</div>
+			<div class="keys"><b>W</b>/<b>S</b> gas &amp; brake · <b>A</b>/<b>D</b> steer · <b>Space</b> hop · <b>Shift</b> boost · <b>C</b> camera · wheel: camera distance · <b>V</b> get out</div>
 			<div class="flash" hidden></div>
 		</div>
 

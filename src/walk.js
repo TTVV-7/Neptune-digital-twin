@@ -1,5 +1,5 @@
 import { MathUtils, Raycaster, Vector3 } from 'three';
-import { PLAYER } from './config.js';
+import { PLAYER, ZOOM } from './config.js';
 import { headingToYaw } from './geo.js';
 
 const UP = new Vector3( 0, 1, 0 );
@@ -17,6 +17,8 @@ const _tangent = new Vector3();
 const _push = new Vector3();
 const _a = new Vector3();
 const _b = new Vector3();
+const _zoomFrom = new Vector3();
+const _zoomDir = new Vector3();
 const X_AXIS = new Vector3( 1, 0, 0 );
 
 // Walk physics runs in sub-steps of at most this much horizontal movement, so slopes and
@@ -104,6 +106,11 @@ const LEVEL_PITCH = 10 * MathUtils.DEG2RAD;
 const TURN_CANCEL = 4;
 const LOOK_BUSY = 40;
 const LOOK_FADE = 0.2;
+// A zoom never takes the camera closer than this (m) to the point it zooms to, so it can't pass
+// through it in ghost mode, where nothing else stops it.
+const ZOOM_NEAREST = 0.3;
+// Flying, the height above the ground (for the speed, see flySpeedFactor) is looked for this often (s).
+const HEIGHT_CHECK = 0.1;
 
 // First-person controller. Walk mode has gravity and bumps into things; fly mode goes wherever
 // you look and glides along whatever it meets. Running or flying into a wall bounces you back off
@@ -160,6 +167,11 @@ export class WalkController {
 		this.sweepHit = { travel: 0, normal: new Vector3() };
 		// Recent mouse movement, in pixels.
 		this.lookActivity = 0;
+		// A wheel zoom under way: { by, t, done }, the move it makes and how far along it is (see zoom).
+		this.zooming = null;
+		// Flying, the height above whatever is below (m), looked for every HEIGHT_CHECK seconds.
+		this.heightAbove = 0;
+		this.heightCheck = 0;
 
 		this.keys = new Set();
 		this.raycaster = new Raycaster();
@@ -320,6 +332,7 @@ export class WalkController {
 		this.touching = null;
 		this.velocity.set( 0, 0, 0 );
 		this.lastDt = 0;
+		this.zooming = null;
 
 	}
 
@@ -348,7 +361,8 @@ export class WalkController {
 		if ( this.mode === 'fly' ) {
 
 			const rise = ( keys.has( 'Space' ) || keys.has( 'KeyE' ) ? 1 : 0 ) - ( keys.has( 'KeyC' ) || keys.has( 'KeyQ' ) ? 1 : 0 );
-			const speed = PLAYER.flySpeed * ( fast ? PLAYER.flyBoost : 1 );
+			const moving = fwd !== 0 || strafe !== 0 || rise !== 0;
+			const speed = PLAYER.flySpeed * ( fast ? PLAYER.flyBoost : 1 ) * ( moving ? this.flySpeedFactor( dt ) : 1 );
 			const cosPitch = Math.cos( this.pitch );
 			_forward.set( - Math.sin( this.yaw ) * cosPitch, Math.sin( this.pitch ), - Math.cos( this.yaw ) * cosPitch );
 			_right.set( Math.cos( this.yaw ), 0, - Math.sin( this.yaw ) );
@@ -360,6 +374,7 @@ export class WalkController {
 			_velocity.copy( _move ).multiplyScalar( speed );
 			if ( this.ghost ) this.camera.position.addScaledVector( _velocity, dt );
 			else this.fly( dt, _velocity );
+			this.advanceZoom( dt );
 			return;
 
 		}
@@ -744,6 +759,124 @@ export class WalkController {
 			this.turnEnded = this.clock;
 
 		}
+
+	}
+
+	// How many times PLAYER.flySpeed to fly at, higher up faster (see flyHeight in config.js), so
+	// crossing the terminal from a kilometre up takes seconds and close to the ground it's as before.
+	flySpeedFactor( dt ) {
+
+		this.heightCheck -= dt;
+		if ( this.heightCheck <= 0 ) {
+
+			this.heightCheck = HEIGHT_CHECK;
+			this.heightAbove = this.measureHeight();
+
+		}
+
+		const { from, to, factor, max } = PLAYER.flyHeight;
+		if ( this.heightAbove <= from ) return 1;
+		return Math.min( max, ( this.heightAbove / from ) ** ( Math.log( factor ) / Math.log( to / from ) ) );
+
+	}
+
+	// Height (m) above the ground, a model or a roof below the camera; over nothing (tiles still
+	// streaming in), above the site's origin.
+	measureHeight() {
+
+		const pos = this.camera.position;
+		const below = this.cast( pos, DOWN, 20000 );
+		return below ? pos.y - below.point.y : Math.max( 0, pos.y );
+
+	}
+
+	// Zoom like Google Earth: glide along the line from `point` through the camera until it is
+	// `factor` times as far from the point (under 1 toward it, over 1 away from it). A notch moves at
+	// least ZOOM.minStep metres, so close up it's still worth a notch, but never past the point.
+	// Notches in quick succession add up. Walking switches to flying: zooming is flying.
+	//
+	// Out along a level view, or from a point up in the sky, that line runs flat or downhill: it
+	// would slide along the ground into whatever is behind, or sink. So zooming out rises at least
+	// ZOOM.minClimb degrees, swinging up round the point, and the view tips down by as much, which
+	// keeps the point where it was on screen.
+	zoom( point, factor ) {
+
+		if ( ! this.enabled ) return;
+		if ( this.mode === 'walk' ) this.setMode( 'fly' );
+		const pos = this.camera.position;
+		_zoomFrom.copy( pos );
+		if ( this.zooming ) _zoomFrom.addScaledVector( this.zooming.by, 1 - this.zooming.done );
+		_zoomDir.subVectors( _zoomFrom, point );
+		const distance = _zoomDir.length();
+		if ( distance < 1e-3 ) return;
+		_zoomDir.divideScalar( distance );
+		// The view's tip still to come from the notches before.
+		let pitch = this.zooming ? this.zooming.pitch * ( 1 - this.zooming.done ) : 0;
+		const climb = Math.asin( MathUtils.clamp( _zoomDir.y, - 1, 1 ) );
+		const least = ZOOM.minClimb * MathUtils.DEG2RAD;
+		if ( factor > 1 && climb < least ) {
+
+			const flat = Math.hypot( _zoomDir.x, _zoomDir.z );
+			// Right under the point: back the way the view faces.
+			if ( flat > 1e-6 ) _zoomDir.set( _zoomDir.x / flat, 0, _zoomDir.z / flat );
+			else _zoomDir.set( Math.sin( this.yaw ), 0, Math.cos( this.yaw ) );
+			_zoomDir.multiplyScalar( Math.cos( least ) ).setY( Math.sin( least ) );
+			pitch += climb - least;
+
+		}
+
+		let to = distance * factor;
+		if ( Math.abs( to - distance ) < ZOOM.minStep ) to = distance + Math.sign( factor - 1 ) * ZOOM.minStep;
+		to = MathUtils.clamp( to, Math.min( distance, ZOOM_NEAREST ), Math.max( distance, ZOOM.maxDistance ) );
+		const by = ( this.zooming?.by ?? new Vector3() ).copy( point ).addScaledVector( _zoomDir, to ).sub( pos );
+		this.zooming = { by, pitch, t: 0, done: 0 };
+
+	}
+
+	// Carry on gliding to where the wheel zoomed to, easing out over ZOOM.time. Like flying, it stops
+	// at the clearance radius from whatever is in the way (the ground, a building, a model), except
+	// in ghost mode; it doesn't slide along it, so the view doesn't drift off what was under the cursor.
+	advanceZoom( dt ) {
+
+		const zoom = this.zooming;
+		if ( ! zoom ) return;
+		zoom.t = Math.min( 1, zoom.t + dt / ZOOM.time );
+		const eased = 1 - ( 1 - zoom.t ) ** 3;
+		_move.copy( zoom.by ).multiplyScalar( eased - zoom.done );
+		if ( zoom.pitch ) {
+
+			this.pitch = MathUtils.clamp( this.pitch + zoom.pitch * ( eased - zoom.done ), - Math.PI / 2 + 0.01, Math.PI / 2 - 0.01 );
+			this.applyRotation();
+
+		}
+
+		zoom.done = eased;
+		if ( zoom.t === 1 ) this.zooming = null;
+		const length = _move.length();
+		if ( length < 1e-6 ) return;
+		const pos = this.camera.position;
+		if ( this.ghost ) {
+
+			pos.add( _move );
+			return;
+
+		}
+
+		const radius = PLAYER.flyRadius;
+		_dir.copy( _move ).divideScalar( length );
+		const hit = this.sweepAhead( _dir, length, radius );
+		if ( hit ) {
+
+			pos.addScaledVector( _dir, hit.travel );
+			this.zooming = null;
+
+		} else {
+
+			pos.add( _move );
+
+		}
+
+		this.keepClear( radius, FLY_AROUND, false );
 
 	}
 
