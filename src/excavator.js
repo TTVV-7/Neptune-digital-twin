@@ -36,8 +36,8 @@ const CURLED = - 200 * DEG;
 const CARRY = - 190 * DEG;
 // The bucket fills over this many bites while it drags.
 const BITES = 3;
-// A loaded bucket clears the ground, the pile or the truck by this much (20 t; scaled).
-const CLEARANCE = 1.6;
+// A loaded bucket's underside clears the ground, the pile or the truck by this much (20 t; scaled).
+const CLEARANCE = 0.4;
 // Dumping into a truck: its bed must be this close to the dump direction.
 const TRUCK_ANGLE = 50;
 // Rates the arm follows the controls at while not digging.
@@ -59,6 +59,7 @@ export function setUpExcavator( { scene, canvas, models, layout, driver, onUpdat
 	const stats = new Map(); // entry -> { cycles, dug, spoil, loaded } while the page is open
 	const parking = new Map(); // rig -> { from, t }: arms settling back to rest after getting out
 	let active = null;
+	models.addEventListener( 'remove', ( { entry } ) => stats.delete( entry ) );
 
 	// Falling soil while the bucket dumps. It lands on the earthworks, the truck's heap or the
 	// ground the machine stands on.
@@ -375,12 +376,12 @@ class Excavator {
 
 	}
 
-	// The lowest (or highest) the tooth tips can go at `u` with the teeth at phi.
-	limit( u, phi, lowest ) {
+	// The lowest the tooth tips can go at `u` with the teeth at phi.
+	lowest( u, phi ) {
 
 		let ok = this.reachable( u, 0, phi ) ? 0 : 3 * this.size;
 		if ( ! this.reachable( u, ok, phi ) ) return ok;
-		let out = lowest ? - 12 * this.size : 9 * this.size;
+		let out = - 12 * this.size;
 		for ( let i = 0; i < 18; i ++ ) {
 
 			const mid = ( ok + out ) / 2;
@@ -393,11 +394,29 @@ class Excavator {
 
 	}
 
+	// How high the tooth tips must be at `u` for the bucket's underside to clear `top`, with the
+	// teeth at phi or as near as the bucket's joint allows (curled right in, they point lower
+	// when the stick is reaching out). ok is false if the arm can't lift it that high.
+	lift( u, top, phi ) {
+
+		let v = top;
+		let pose = null;
+		for ( let i = 0; i < 5; i ++ ) {
+
+			pose = this.rig.solve( { u, v, phi }, {} );
+			v += top - this.rig.bucketBottom( pose );
+
+		}
+
+		return { v, ok: this.rig.bucketBottom( pose ) > top - 0.05 * this.size };
+
+	}
+
 	// Not digging: hold the bucket curled, low in front, turned towards where it will dig.
 	idle( dt ) {
 
 		const u = Math.max( this.tuning.reach[ 0 ], this.reach * 0.7 );
-		const target = { swing: this.swingFor( this.aim, u ), u, v: 0.9 * this.size, phi: CARRY };
+		const target = { swing: this.swingFor( this.aim, u ), u, v: this.lift( u, 0.3 * this.size, CARRY ).v, phi: CARRY };
 		const ease = this.first ? 1 : 1 - Math.exp( - dt * 5 );
 		for ( const key of [ 'swing', 'u', 'v', 'phi' ] ) {
 
@@ -434,25 +453,27 @@ class Excavator {
 		// than the arm reaches.
 		let volume = this.bucket.volume;
 		const depth = volume / ( this.bucket.width * drag );
-		const top = Math.min( a.v, b.v );
-		const floor = Math.max( this.limit( a.u, BITE, true ), this.limit( b.u, DRAG, true ) );
-		if ( top - depth < floor ) volume *= MathUtils.clamp( ( top - floor ) / depth, 0, 1 );
-		const bottom = Math.max( top - depth, floor );
+		const surface = Math.min( a.v, b.v );
+		const floor = Math.max( this.lowest( a.u, BITE ), this.lowest( b.u, DRAG ) );
+		if ( surface - depth < floor ) volume *= MathUtils.clamp( ( surface - floor ) / depth, 0, 1 );
+		const bottom = Math.max( surface - depth, floor );
 
 		const dump = this.dumpTarget();
 		const d = this.toArm( dump.point );
-		const highest = this.limit( d.u, CURLED, false );
-		const carry = Math.min( Math.max( a.v, b.v, d.v ) + CLEARANCE * s, highest - 0.1 * s );
+		// Carried high enough to clear the dig and what's at the dump, and raised a little as it opens.
+		const top = Math.max( a.v, b.v, d.v ) + CLEARANCE * s;
+		const carry = Math.max( this.lift( b.u + 0.3 * s, top, CURLED ).v, this.lift( d.u, top, CURLED ).v );
+		const open = Math.max( carry + 0.2 * s, this.lift( d.u + 0.3 * s, d.v + CLEARANCE * s, OPEN ).v );
 		const swing = a.swing;
 		const at = ( u, v, phi, dumpSwing = false ) => ( { swing: dumpSwing ? d.swing : swing, u, v, phi } );
 		const phases = [
 			[ 'reach', at( a.u + 0.25 * s, a.v + 0.6 * s, OPEN ) ],
-			[ 'bite', at( a.u, bottom + a.v - top, BITE ) ],
-			[ 'drag', at( b.u, bottom + b.v - top, DRAG ) ],
+			[ 'bite', at( a.u, bottom + a.v - surface, BITE ) ],
+			[ 'drag', at( b.u, bottom + b.v - surface, DRAG ) ],
 			[ 'curl', at( b.u - 0.15 * s, b.v + 0.3 * s, CURLED ) ],
 			[ 'lift', at( b.u + 0.3 * s, carry, CURLED ) ],
 			[ 'swing', at( d.u, carry, CURLED, true ) ],
-			[ 'dump', at( d.u + 0.3 * s, carry + 0.2 * s, OPEN, true ) ],
+			[ 'dump', at( d.u + 0.3 * s, open, OPEN, true ) ],
 			[ 'return', at( Math.max( reach[ 0 ], this.reach * 0.7 ), carry, DRAG ) ],
 		].map( ( [ name, to ] ) => ( { name, to, time: PHASES[ name ] * this.tuning.time } ) );
 
@@ -584,6 +605,8 @@ class Excavator {
 			const arm = this.toArm( centre );
 			const off = Math.abs( angleTo( this.swingFor( aim, arm.u ), arm.swing ) ) / DEG;
 			if ( off > TRUCK_ANGLE || arm.u < reach[ 0 ] * 0.8 || arm.u > reach[ 1 ] ) continue;
+			// A small machine can't lift its bucket over a big truck's side.
+			if ( ! this.lift( arm.u, arm.v + CLEARANCE * this.size, CURLED ).ok ) continue;
 			if ( ! best || off < best.off ) best = { truck, off, centre };
 
 		}

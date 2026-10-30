@@ -542,8 +542,7 @@ function buildArm( house, spec ) {
 	box( boom, DARK(), [ boomWidth * 0.7, 0.3 * q1, 0.36 * q1 ], [ 0, stickBase[ 1 ] - 0.24 * q1, - stickBase[ 0 ] ] );
 	for ( const x of [ - boomWidth * 0.2, boomWidth * 0.2 ] ) {
 
-		const hose = side( boom, BLACK(), scaled( [ [ 0.3, 0.42 ], [ 0.9, 0.67 ], [ 2.5, 0.87 ], [ 3.1, 0.83 ], [ 4.5, 0.49 ], [ 5.4, 0.3 ], [ 5.4, 0.25 ], [ 4.5, 0.44 ], [ 3.1, 0.78 ], [ 2.5, 0.82 ], [ 0.9, 0.62 ], [ 0.3, 0.37 ] ], q1 ), 0.05 * k, x );
-		hose.userData.noCollide = true;
+		side( boom, BLACK(), scaled( [ [ 0.3, 0.42 ], [ 0.9, 0.67 ], [ 2.5, 0.87 ], [ 3.1, 0.83 ], [ 4.5, 0.49 ], [ 5.4, 0.3 ], [ 5.4, 0.25 ], [ 4.5, 0.44 ], [ 3.1, 0.78 ], [ 2.5, 0.82 ], [ 0.9, 0.62 ], [ 0.3, 0.37 ] ], q1 ), 0.05 * k, x );
 
 	}
 
@@ -657,7 +656,6 @@ function buildBucket( bucket, spec, stickWidth ) {
 
 	const load = side( bucket, SOIL(), scaled( BUCKET_LOAD, q ), width - thickness * 3 );
 	load.visible = false;
-	load.userData.noCollide = true;
 	return load;
 
 }
