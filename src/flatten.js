@@ -265,14 +265,19 @@ export function setUpFlattening( { tiles, models } ) {
 		},
 
 		// Ground height at local (x, z) as Google (or the stand-in ground) made it, ignoring
-		// flatten areas and pits. Null where there's no ground.
-		originalHeight( x, z, ground = tiles?.group ) {
+		// flatten areas and pits. Null where there's no ground. With `detail`, detail.error says
+		// how coarse that ground is: the geometric error in metres of the Google tile it's from
+		// (0 for other ground, Infinity for none). Tiles far from the camera, and those that load
+		// first, are coarse, and the ground can be metres out on them.
+		originalHeight( x, z, ground = tiles?.group, detail = null ) {
 
+			if ( detail ) detail.error = Infinity;
 			if ( ! ground ) return null;
 			raycaster.set( new Vector3( x, 5000, z ), DOWN );
 			raycaster.far = 10000;
 			const hit = raycaster.intersectObject( ground, true ).find( h => h.object.isMesh );
 			if ( ! hit ) return null;
+			if ( detail ) detail.error = hit.object.userData.tile?.geometricError ?? 0;
 			const original = hit.face && findOriginal( hit.object.geometry );
 			if ( ! original ) return hit.point.y;
 

@@ -28,7 +28,10 @@ import { blocks } from './walk.js';
 //
 //   h0       the ground as Google (or the stand-in) made it, from flattening.originalHeight(), so
 //            pits don't feed back into their own reference. Under a flatten area it is that
-//            area's floor, as that's the ground Google's mesh shows there.
+//            area's floor, as that's the ground Google's mesh shows there. It only takes ground
+//            from tiles at least as fine as those it already has it from (err): the coarse tiles
+//            that load first give way to finer ones, and tiles far from the camera, which are
+//            coarser, don't move the earthworks.
 //   designs  excavations (the lowest of them and the ground wins) and then stockpiles (the
 //            highest wins), in the order they were placed
 //   dug      freeform digging (the excavator), as depths below the ground and the excavations,
@@ -70,9 +73,14 @@ const COVER_TOLERANCE = 0.03;
 const MAX_MASK = 2048;
 // Sharper tiles move the ground a little; the change is eased in over this long.
 const BLEND_TIME = 0.6;
-const RESAMPLE_AFTER = 10;
-// Google's tiles are coarser far from the camera, so only nearby chunks are sampled again.
-const RESAMPLE_RANGE = 300;
+// Nodes (along each side) where a chunk checks whether finer tiles have loaded over it.
+const PROBES = [ 8, 32, 56 ];
+// The ground under a chunk is read every STRIDE nodes first (the first LOOK nodes in ORDER), for
+// a quick look at all of it, then at the rest.
+const STRIDE = 4;
+const SIDE = CELLS / STRIDE + 1;
+const LOOK = SIDE * SIDE;
+const ORDER = sampleOrder();
 // Freshly dug walls stand up to this steep and slump beyond it, within this reach of the bucket.
 const SLUMP_ANGLE = 65;
 const SLUMP_REACH = 3;
@@ -214,6 +222,9 @@ class Chunk {
 		this.i0 = cx * CELLS;
 		this.j0 = cz * CELLS;
 		this.h0 = new Float32Array( COUNT );
+		// How coarse h0 is: the geometric error of the tile each node was read from (see
+		// flatten.js), Infinity where it's only a guess.
+		this.err = new Float32Array( COUNT ).fill( Infinity );
 		this.base = new Float32Array( COUNT );
 		this.dug = new Float32Array( COUNT );
 		this.loose = new Float32Array( COUNT );
@@ -303,11 +314,10 @@ const owns = ( li, lj ) => li < CELLS && lj < CELLS;
 // { ni, nj, count, x, z, before, cellArea }, row by row (before is NaN where there's no ground).
 export class Terrain extends EventDispatcher {
 
-	constructor( { tiles, ground, models, flattening, getGround, camera = null } ) {
+	constructor( { tiles, ground, models, flattening, getGround } ) {
 
 		super();
 		this.tiles = tiles;
-		this.camera = camera;
 		this.models = models;
 		this.flattening = flattening;
 		this.getGround = getGround;
@@ -326,6 +336,8 @@ export class Terrain extends EventDispatcher {
 
 		this.standIn = tiles ? null : takeOverStandIn( ground );
 		this.standInChanged = false;
+		// After each sample(), how coarse that ground was (see flatten.js originalHeight).
+		this.sampled = { error: 0 };
 		if ( this.standIn ) {
 
 			// The stand-in land now has gaps under the chunks, so ask it directly.
@@ -334,7 +346,7 @@ export class Terrain extends EventDispatcher {
 
 		} else {
 
-			this.sample = ( x, z ) => flattening.originalHeight( x, z, tiles ? undefined : ground );
+			this.sample = ( x, z ) => flattening.originalHeight( x, z, tiles ? undefined : ground, this.sampled );
 
 		}
 
@@ -1027,7 +1039,7 @@ export class Terrain extends EventDispatcher {
 		this.chunks.set( chunk.key, chunk );
 		this.sampleChunk( chunk );
 		// Edge nodes may already be known to a neighbour, including digging done there.
-		for ( const other of this.neighbours( chunk ) ) copyOverlap( other, chunk, other.ready ? [ 'h0', 'dug', 'loose', 'looseMat' ] : [ 'dug', 'loose', 'looseMat' ] );
+		for ( const other of this.neighbours( chunk ) ) copyOverlap( other, chunk, other.ready ? [ 'h0', 'err', 'dug', 'loose', 'looseMat' ] : [ 'dug', 'loose', 'looseMat' ] );
 		chunk.mesh = this.createMesh( chunk );
 		this.group.add( chunk.mesh );
 		this.dirty.add( chunk.key );
@@ -1124,23 +1136,20 @@ export class Terrain extends EventDispatcher {
 
 		// Google's tiles are raycast, which is slow: every fourth node now, the rest over the next
 		// frames (sampleSome), eased in.
-		const STRIDE = 4;
-		const side = CELLS / STRIDE + 1;
-		const coarse = new Float32Array( side * side );
+		const coarse = new Float32Array( LOOK );
+		const errors = new Float32Array( LOOK );
 		let sum = 0;
 		let valid = 0;
-		for ( let b = 0; b < side; b ++ ) {
+		for ( let n = 0; n < LOOK; n ++ ) {
 
-			for ( let a = 0; a < side; a ++ ) {
+			const k = ORDER[ n ];
+			const y = this.sample( chunk.x( k ), chunk.z( k ) );
+			coarse[ n ] = y ?? NaN;
+			errors[ n ] = this.sampled.error;
+			if ( y !== null ) {
 
-				const y = this.sample( ( chunk.i0 + a * STRIDE ) * CELL, ( chunk.j0 + b * STRIDE ) * CELL );
-				coarse[ b * side + a ] = y ?? NaN;
-				if ( y !== null ) {
-
-					sum += y;
-					valid ++;
-
-				}
+				sum += y;
+				valid ++;
 
 			}
 
@@ -1148,23 +1157,10 @@ export class Terrain extends EventDispatcher {
 
 		if ( valid === 0 ) return;
 		const mean = sum / valid;
-		for ( let n = 0; n < coarse.length; n ++ ) if ( Number.isNaN( coarse[ n ] ) ) coarse[ n ] = mean;
-		for ( let lj = 0; lj < NODES; lj ++ ) {
-
-			for ( let li = 0; li < NODES; li ++ ) {
-
-				const a = Math.min( side - 2, Math.floor( li / STRIDE ) );
-				const b = Math.min( side - 2, Math.floor( lj / STRIDE ) );
-				const fx = li / STRIDE - a;
-				const fz = lj / STRIDE - b;
-				const c = coarse;
-				h0[ lj * NODES + li ] = ( c[ b * side + a ] * ( 1 - fx ) + c[ b * side + a + 1 ] * fx ) * ( 1 - fz ) +
-					( c[ ( b + 1 ) * side + a ] * ( 1 - fx ) + c[ ( b + 1 ) * side + a + 1 ] * fx ) * fz;
-
-			}
-
-		}
-
+		for ( let n = 0; n < LOOK; n ++ ) if ( Number.isNaN( coarse[ n ] ) ) coarse[ n ] = mean;
+		const filled = fillIn( coarse, errors );
+		h0.set( filled.values );
+		chunk.err.set( filled.errors );
 		chunk.ready = true;
 		chunk.sampledLoads = this.tileLoads;
 		chunk.sampledAt = this.clock;
@@ -1181,50 +1177,85 @@ export class Terrain extends EventDispatcher {
 			chunk.sampledAt = this.clock;
 			this.sampleChunk( chunk );
 			if ( ! chunk.ready ) continue;
-			for ( const other of this.neighbours( chunk ) ) if ( other.ready ) copyOverlap( other, chunk, [ 'h0' ] );
+			for ( const other of this.neighbours( chunk ) ) if ( other.ready ) copyOverlap( other, chunk, [ 'h0', 'err' ] );
 			this.dirty.add( chunk.key );
 
 		}
 
 	}
 
-	// Sample the full grid of waiting chunks for up to `budget` ms.
+	// Sample the full grid of waiting chunks for up to `budget` ms. Every fourth node is read
+	// first, and as soon as they all are, the chunk takes them (filled in between) where they're
+	// from finer tiles than before: ground first read from the coarse tiles that load first can
+	// be metres, even hundreds of metres, out. Every waiting chunk gets that quick look before
+	// any is read in full.
 	sampleSome( budget ) {
 
 		const end = performance.now() + budget;
 		while ( this.sampling.length && performance.now() < end ) {
 
-			const chunk = this.sampling[ 0 ];
+			const chunk = this.sampling.find( c => ! c.fine || c.fine.next < LOOK ) ?? this.sampling[ 0 ];
 			if ( this.chunks.get( chunk.key ) !== chunk ) {
 
-				this.sampling.shift();
+				this.sampling.splice( this.sampling.indexOf( chunk ), 1 );
 				continue;
 
 			}
 
-			if ( ! chunk.fine ) chunk.fine = { values: new Float32Array( COUNT ), next: 0 };
+			if ( ! chunk.fine ) chunk.fine = { values: new Float32Array( COUNT ), errors: new Float32Array( COUNT ), next: 0, loads: this.tileLoads };
 			const fine = chunk.fine;
-			for ( let n = 0; n < 8 && fine.next < COUNT; n ++, fine.next ++ ) {
+			const stop = fine.next < LOOK ? LOOK : COUNT;
+			for ( let n = 0; n < 8 && fine.next < stop; n ++, fine.next ++ ) {
 
-				const k = fine.next;
+				const k = ORDER[ fine.next ];
 				fine.values[ k ] = this.sample( chunk.x( k ), chunk.z( k ) ) ?? chunk.h0[ k ];
+				fine.errors[ k ] = this.sampled.error;
+
+			}
+
+			if ( fine.next === LOOK ) {
+
+				const first = ORDER.subarray( 0, LOOK );
+				const look = fillIn( Float32Array.from( first, k => fine.values[ k ] ), Float32Array.from( first, k => fine.errors[ k ] ) );
+				this.refine( chunk, look.values, look.errors, true );
 
 			}
 
 			if ( fine.next < COUNT ) continue;
-			this.sampling.shift();
+			this.sampling.splice( this.sampling.indexOf( chunk ), 1 );
 			chunk.fine = null;
-			chunk.sampledLoads = this.tileLoads;
+			// Tiles that loaded while it was being read may not be in it yet.
+			chunk.sampledLoads = fine.loads;
 			chunk.sampledAt = this.clock;
-			let change = 0;
-			for ( let k = 0; k < COUNT; k ++ ) change = Math.max( change, Math.abs( fine.values[ k ] - chunk.h0[ k ] ) );
-			if ( change > 0.005 ) chunk.blend = { from: chunk.h0.slice(), to: fine.values, t: 0 };
+			this.refine( chunk, fine.values, fine.errors, false );
 
 		}
 
 	}
 
-	// Sharper tiles have loaded since a chunk was sampled: sample it again.
+	// Ease a chunk's ground toward newly sampled heights, at the nodes where they're from tiles at
+	// least as fine as before (strictly finer for a quick look, which is partly filled in).
+	refine( chunk, values, errors, strict ) {
+
+		const to = ( chunk.blend?.to ?? chunk.h0 ).slice();
+		let change = 0;
+		for ( let k = 0; k < COUNT; k ++ ) {
+
+			if ( strict ? errors[ k ] >= chunk.err[ k ] : errors[ k ] > chunk.err[ k ] ) continue;
+			to[ k ] = values[ k ];
+			chunk.err[ k ] = errors[ k ];
+
+		}
+
+		for ( let k = 0; k < COUNT; k ++ ) change = Math.max( change, Math.abs( to[ k ] - chunk.h0[ k ] ) );
+		if ( change > 0.005 ) chunk.blend = { from: chunk.h0.slice(), to, t: 0 };
+
+	}
+
+	// Tiles have loaded since a chunk was sampled: sample it again if they're finer over it than
+	// those its ground came from, ahead of the others and from the start. Coarser ones (far from
+	// the camera) are left alone, and a chunk first read from the coarse tiles that load first is
+	// put right wherever the camera is.
 	queueResampling( dt ) {
 
 		this.resampleTimer -= dt;
@@ -1232,19 +1263,33 @@ export class Terrain extends EventDispatcher {
 		this.resampleTimer = 2;
 		for ( const chunk of this.chunks.values() ) {
 
-			if ( ! chunk.ready || chunk.blend || this.sampling.includes( chunk ) || ! this.isNear( chunk ) ) continue;
-			if ( chunk.sampledLoads !== this.tileLoads && this.clock - chunk.sampledAt > RESAMPLE_AFTER ) this.sampling.push( chunk );
+			if ( ! chunk.ready || chunk.sampledLoads === this.tileLoads ) continue;
+			chunk.sampledLoads = this.tileLoads;
+			if ( ! this.sharper( chunk ) ) continue;
+			chunk.fine = null;
+			this.sampling = [ chunk, ...this.sampling.filter( other => other !== chunk ) ];
 
 		}
 
 	}
 
-	isNear( chunk ) {
+	// Whether finer tiles than its ground came from have loaded over a chunk, checked at a few
+	// nodes across it.
+	sharper( chunk ) {
 
-		if ( ! this.camera ) return true;
-		const { x, z } = this.camera.position;
-		const half = CHUNK_SIZE / 2;
-		return Math.hypot( x - ( chunk.i0 * CELL + half ), z - ( chunk.j0 * CELL + half ) ) < RESAMPLE_RANGE;
+		for ( const lj of PROBES ) {
+
+			for ( const li of PROBES ) {
+
+				const k = lj * NODES + li;
+				this.sample( chunk.x( k ), chunk.z( k ) );
+				if ( this.sampled.error < chunk.err[ k ] ) return true;
+
+			}
+
+		}
+
+		return false;
 
 	}
 
@@ -1270,8 +1315,8 @@ export class Terrain extends EventDispatcher {
 
 			for ( const other of this.neighbours( chunk ) ) {
 
-				copyOverlap( chunk, other, [ 'h0' ], true );
-				copyOverlap( other, chunk, [ 'h0' ], true );
+				copyOverlap( chunk, other, [ 'h0', 'err' ], true );
+				copyOverlap( other, chunk, [ 'h0', 'err' ], true );
 				this.dirty.add( other.key );
 
 			}
@@ -1889,6 +1934,45 @@ function crop( values, pad ) {
 	const out = new Float32Array( COUNT );
 	for ( let lj = 0; lj < NODES; lj ++ ) for ( let li = 0; li < NODES; li ++ ) out[ lj * NODES + li ] = values[ ( lj + pad ) * side + li + pad ];
 	return out;
+
+}
+
+// A chunk's nodes, every STRIDE-th one first, row by row.
+function sampleOrder() {
+
+	const first = [];
+	const rest = [];
+	for ( let k = 0; k < COUNT; k ++ ) ( k % NODES % STRIDE === 0 && Math.floor( k / NODES ) % STRIDE === 0 ? first : rest ).push( k );
+	return Int32Array.from( [ ...first, ...rest ] );
+
+}
+
+// Heights for every node of a chunk from those at every STRIDE-th one (SIDE x SIDE, row by row),
+// in between by bilinear interpolation, and how coarse they are: as coarse as the coarsest
+// of the nodes they're from.
+function fillIn( coarse, coarseErrors ) {
+
+	const values = new Float32Array( COUNT );
+	const errors = new Float32Array( COUNT );
+	for ( let lj = 0; lj < NODES; lj ++ ) {
+
+		for ( let li = 0; li < NODES; li ++ ) {
+
+			const a = Math.min( SIDE - 2, Math.floor( li / STRIDE ) );
+			const b = Math.min( SIDE - 2, Math.floor( lj / STRIDE ) );
+			const fx = li / STRIDE - a;
+			const fz = lj / STRIDE - b;
+			const n = b * SIDE + a;
+			const c = coarse;
+			const e = coarseErrors;
+			values[ lj * NODES + li ] = ( c[ n ] * ( 1 - fx ) + c[ n + 1 ] * fx ) * ( 1 - fz ) + ( c[ n + SIDE ] * ( 1 - fx ) + c[ n + SIDE + 1 ] * fx ) * fz;
+			errors[ lj * NODES + li ] = Math.max( fx < 1 && fz < 1 ? e[ n ] : 0, fx > 0 && fz < 1 ? e[ n + 1 ] : 0, fx < 1 && fz > 0 ? e[ n + SIDE ] : 0, fx > 0 && fz > 0 ? e[ n + SIDE + 1 ] : 0 );
+
+		}
+
+	}
+
+	return { values, errors };
 
 }
 
