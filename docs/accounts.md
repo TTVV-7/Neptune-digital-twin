@@ -37,53 +37,47 @@ see [premium.md](premium.md).
 
 ## Setting it up
 
-You need the Google Cloud project you already use (the one with the Maps key is fine) and your
-Cloudflare account. The Worker is called `neptune-twin-app`, so it doesn't touch the
-password-protected `neptune-twin` Worker.
+The app is live at **https://neptune-twin-app.thomas-verigin.workers.dev**, on the
+`neptune-twin-app` Worker (it doesn't touch the password-protected `neptune-twin` Worker) with
+its own D1 database, `neptune-twin-app`. Workers Builds deploys it from GitHub on every push to
+`claude/kind-ride-ovicsk`: `npm run deploy:cloudflare` applies any new database migrations
+(`worker/migrations/`), builds the site without a Google key (`vite build --mode cloudflare`) and
+runs `wrangler deploy`. Builds and their logs are under the Worker's *Deployments* in the
+Cloudflare dashboard.
 
-1. **Google sign-in client.** In the [Google Cloud console](https://console.cloud.google.com/):
+Its settings are in the dashboard, *Workers & Pages → neptune-twin-app → Settings → Variables
+and Secrets*, not in `wrangler.jsonc` (`keep_vars` keeps them across deploys). Each change there
+takes effect at once. Until the two below are set, the site works without accounts: it asks each
+visitor for a Maps key (kept in their browser) and has no sign-in.
+
+1. **Maps key.** Add a **Secret** named `GOOGLE_MAPS_API_KEY` with the Maps key. Signed-in people
+   and share-link viewers then get it from the Worker; it's never in the site's files. In the
+   [Google Cloud console](https://console.cloud.google.com/), *APIs & Services → Credentials*, add
+   `https://neptune-twin-app.thomas-verigin.workers.dev/*` to the key's website restrictions.
+2. **Google sign-in client.** In the Google Cloud console:
    1. *Google Auth Platform → Branding* (the OAuth consent screen): set the app name and support
       email if the project doesn't have them yet. Under *Audience*, choose **Internal** if only people
       in your Google Workspace should sign in, or **External** and press **Publish app**. Sign-in
       only asks for name, email and picture, so publishing needs no review; left in *Testing*,
       only the test users you list can sign in.
-   2. *Clients → Create client → Web application*, named e.g. "Neptune twin". Under **Authorized
-      JavaScript origins** add the site's address and the local ones:
-      `https://neptune-twin-app.<your-subdomain>.workers.dev` (the address `npm run deploy`
-      prints), your own domain if you add one, `http://localhost` and `http://localhost:5173`.
-      No redirect URIs are needed.
-   3. Copy the **Client ID** (`....apps.googleusercontent.com`) into `GOOGLE_CLIENT_ID` under
-      `vars` in `wrangler.jsonc`. It isn't a secret.
-2. **Database.** `npx wrangler login` (once), then:
-   ```bash
-   npx wrangler d1 create neptune-twin-app
-   ```
-   Paste the `database_id` it prints into `wrangler.jsonc` in place of the zeros, and create the
-   tables:
-   ```bash
-   npx wrangler d1 migrations apply DB --remote
-   ```
-3. **Who may sign in** (optional). With `ALLOWED_EMAILS` and `ALLOWED_DOMAINS` empty, anyone with a
-   Google account can sign in and save layouts (each person only ever sees their own). To limit it,
-   set either in `wrangler.jsonc`, comma-separated: `"ALLOWED_EMAILS": "you@gmail.com, pm@firm.ca"`,
-   `"ALLOWED_DOMAINS": "firm.ca"`. A domain only lets in Google Workspace accounts of that domain
+   2. *Clients*: use an existing "Web application" client (the Print Yours one is fine) or create
+      one. Under **Authorized JavaScript origins** add
+      `https://neptune-twin-app.thomas-verigin.workers.dev`, your own domain if you add one,
+      `http://localhost` and `http://localhost:5173`. No redirect URIs are needed.
+   3. Copy the **Client ID** (`....apps.googleusercontent.com`) into a **Text** variable named
+      `GOOGLE_CLIENT_ID`. It isn't a secret.
+3. **Who may sign in.** `ALLOWED_EMAILS` is set (as a secret) to the owner's email, so only they
+   can sign in. To let others in, change it, comma-separated (`you@gmail.com, pm@firm.ca`), or add
+   `ALLOWED_DOMAINS` (`firm.ca`). A domain only lets in Google Workspace accounts of that domain
    (or `gmail.com` addresses): anyone can create a Google account using a company address, so the
    address alone proves nothing. Taking someone off signs them out everywhere on their next request
-   and turns off the share links they made. Setting one of these is recommended: with both empty,
-   anyone can use up the database (each account is capped at 25 MB, but accounts are free to make).
-4. **Maps key** (optional, recommended).
-   ```bash
-   npx wrangler secret put GOOGLE_MAPS_API_KEY
-   ```
-   In the Google Cloud console, add the Worker's address (`https://neptune-twin-app.<your-subdomain>.workers.dev/*`)
-   to the key's website restrictions.
-5. **Deploy.**
-   ```bash
-   npm run deploy
-   ```
-   This builds the site without the Google key from your environment (`vite build --mode cloudflare`)
-   and runs `wrangler deploy`. Run it again after every change. Database changes are new files in
-   `worker/migrations/`, applied with the `migrations apply` command above before deploying.
+   and turns off the share links they made. With both empty anyone with a Google account could
+   sign in, get the Maps key and use up the database (each account is capped at 25 MB, but
+   accounts are free to make), so keep one set.
+
+To set it up again elsewhere (another account or name): `npx wrangler d1 create <name>`, put its
+`database_id` in `wrangler.jsonc`, then `npm run deploy:cloudflare`, and the settings above with
+`npx wrangler secret put` or the dashboard.
 
 ## Trying it on your computer
 

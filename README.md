@@ -315,6 +315,8 @@ Add the site's origin (for example `https://yourname.github.io/*`) to the API ke
 
 For accounts and share links, host it on its Cloudflare Worker instead: `npm run deploy` builds the
 site without the environment key and deploys the Worker (see [docs/accounts.md](docs/accounts.md)).
+It's live at https://neptune-twin-app.thomas-verigin.workers.dev, deployed by Workers Builds on
+every push to `claude/kind-ride-ovicsk`.
 Or on Vercel, whose build (`npm run build:server`) also leaves the key out: see
 [docs/deploy-vercel.md](docs/deploy-vercel.md).
 

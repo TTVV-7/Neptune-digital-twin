@@ -66,9 +66,9 @@ Payment Link, and refunds of anything else.
      | `PREMIUM_EMAILS` | Optional, comma-separated: who gets the pack without paying. |
 
      The new table is made by itself on the next request.
-   - **Cloudflare:** the first two and the optional ones under `vars` in `wrangler.jsonc`, the
-     secret with `npx wrangler secret put STRIPE_WEBHOOK_SECRET`, the new table with
-     `npx wrangler d1 migrations apply DB --remote`, then `npm run deploy`.
+   - **Cloudflare:** in the dashboard, *neptune-twin-app → Settings → Variables and Secrets*:
+     the first two and the optional ones as **Text**, `STRIPE_WEBHOOK_SECRET` as a **Secret**.
+     They take effect at once; the table is already there (the deploy applies the migrations).
 
    Premium switches on only when the link (an `https://` address), its `plink_` id and a
    `whsec_` secret are all set. Anything else leaves it off, so pasting the account's API key
