@@ -137,8 +137,9 @@ async function start( { key, left = null } ) {
 	const walker = { keys: new Set(), enabled: false, yaw: 0, pitch: 0, setPose() {}, setMode() {} };
 	const driver = new Driver( {
 		camera, models, controls: walker, getColliders: grounds, hud, onStop: stopped,
-		// What World Drive drives with: Shift flies, B boosts, the kart drifts.
-		fly: true, booster: true, drift: true,
+		// What World Drive drives with: Shift flies, B boosts, the kart drifts, and hitting something
+		// throws you into the air for stunts.
+		fly: true, booster: true, drift: true, crash: 'launch',
 	} );
 
 	const state = { mode: 'globe', place: null, entry: null, vehicle: null, drop: null, leaving: false };
