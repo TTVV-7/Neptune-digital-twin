@@ -78,11 +78,12 @@ then press **F** to drop to the ground and walk. If you press F over the water y
 Flying keeps 1 m clear of Google's buildings, the ground and your models, and glides along them
 when you meet them at a shallow angle. Fly or run into a wall square on and you bounce back off it,
 harder the faster you were going, and the view turns to look along the wall (to whichever side is
-nearer where you were looking) instead of into it. Moving the mouse during the turn takes the view
-back. **T** stops the turning (`autoTurn` in `PLAYER` in [src/config.js](src/config.js) sets it for
-good, with `flyRadius` for the clearance and `bounce` for how hard you bounce), and **G** (ghost)
-lets you through walls on purpose, e.g. to look inside a building; the status top left says when
-it's on.
+nearer where you were looking) instead of into it. In a corner it turns toward the open side, and
+it stays put where both ways are shut in or drop away, such as at a site trailer's door. Moving the
+mouse during the turn takes the view back. **T** stops the turning (`autoTurn` in `PLAYER` in
+[src/config.js](src/config.js) sets it for good, with `flyRadius` for the clearance and `bounce` for
+how hard you bounce), and **G** (ghost) lets you through walls on purpose, e.g. to look inside a
+building; the status top left says when it's on.
 
 ## Adding your own model
 
@@ -218,10 +219,10 @@ The construction machines drive too, at their own speeds: the dozer at 11 km/h, 
 its boom up. The cranes stand and turn on their carriers, and the cameras frame the carrier and look
 out of the cab rather than from up the boom. The pickup tops out at 160 km/h (about 210 with boost), the semi at 120 and the haul truck at 70. The **Race**
 category has two jump ramps (1.2 m and 3 m); hit the big one at highway speed for about 1.7 s of air.
-Walls, containers and Google's buildings bounce you off: head-on you stop and bounce back a little,
-at a glancing angle you scrape along them and keep most of your speed. Flatten a strip first for a
-clear run. The chase camera stays in front of anything between it and the vehicle, so it never
-ends up inside a building.
+Walls, containers, barriers and Google's buildings bounce you off: head-on you stop and bounce back
+a little, at a glancing angle you scrape along them and keep most of your speed. Flatten a strip
+first for a clear run. The chase camera stays in front of anything between it and the vehicle, so
+it never ends up inside a building.
 
 ## Accounts: sign in and share layouts
 
