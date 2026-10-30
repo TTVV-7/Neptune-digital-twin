@@ -108,6 +108,12 @@
 	margin-top: 12px;
 }
 
+/* Seven rides make the pause menu taller: on a short screen it scrolls. */
+#pause .card {
+	max-height: 100%;
+	overflow-y: auto;
+}
+
 /* --- dialogs: the pass's sheet and the Garage ---------------------------------------------- */
 
 dialog#pass,

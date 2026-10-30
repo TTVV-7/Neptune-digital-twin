@@ -452,19 +452,27 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 			Object.assign( d, { east: 0, north: 0, y: 0, heading: 0, course: 0, view: 0, speed: 30 / 3.6, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, drifting: 0, boost: null } );
 			let high = 0;
 			let hit = false;
+			// The body on its springs: how far it sank and rose.
+			const springs = d.entry.pivot.getObjectByName( 'springs' );
+			let sank = 0;
+			let rose = 0;
 			for ( let i = 0; i < 240; i ++ ) {
 
 				d.update( 1 / 60 );
 				high = Math.max( high, d.y );
 				hit ||= !! d.air?.hits;
+				sank = Math.min( sank, springs.position.y );
+				rose = Math.max( rose, springs.position.y );
 
 			}
 
 			pad.remove( car );
-			return { high, north: d.north, hit, pops: document.querySelector( '#hud .dhud-pops' ).textContent };
+			return { high, north: d.north, hit, sank, rose };
 
 		} );
 		assert.ok( over.high > 1.3 && over.north > 26 && ! over.hit, JSON.stringify( over ) );
+		// Down off the car it sinks onto its springs; in the air the wheels hang (the body rises).
+		assert.ok( over.sank < - 0.05 && over.rose > 0.05, JSON.stringify( over ) );
 
 	} );
 
@@ -582,56 +590,69 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 			// Reading a pixel back waits for the frame to be drawn (finish() doesn't, in Chrome).
 			const pixel = new Uint8Array( 4 );
 			const drawn = () => gl.readPixels( 0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel );
-			const run = ( frames, fx, boosting ) => {
+			const configs = {
+				plain: [ { flame: 'orange', trail: null }, false ],
+				boosting: [ { flame: 'orange', trail: null }, true ],
+				ribbon: [ { flame: 'rainbow', trail: { kind: 'ribbon', colour: 0xffffff } }, true ],
+				sparkle: [ { flame: 'blue', trail: { kind: 'sparkle', colour: 0xffffff } }, true ],
+				smoke: [ { flame: 'pink', trail: { kind: 'smoke', colour: 0xff3fa4 } }, true ],
+			};
+			// One set of effects for each, made up front; only the one being timed is shown.
+			d.fx.dispose();
+			const sets = {};
+			for ( const [ name, [ look ] ] of Object.entries( configs ) ) {
 
-				d.fx.dispose();
-				d.fx = createDriveFx( world, fx );
-				for ( const code of [ ...d.keys ] ) d.release( code );
-				Object.assign( d, { east: 0, north: 0, y: 0, heading: 0, course: 0, speed: 25, vy: 0, grounded: true, air: null, firing: boosting, gauge: 1, boost: null } );
-				// Warm up: shaders, pools.
-				for ( let i = 0; i < 20; i ++ ) {
+				const fx = createDriveFx( world, look );
+				sets[ name ] = { fx, root: world.children.at( - 1 ) };
 
-					d.gauge = 1;
-					d.update( 1 / 60 );
-					renderer.render( scene, camera );
-					drawn();
+			}
 
-				}
+			for ( const code of [ ...d.keys ] ) d.release( code );
+			Object.assign( d, { east: 0, north: 0, y: 0, heading: 0, course: 0, speed: 25, vy: 0, grounded: true, air: null, boost: null } );
+			const frames = { plain: [], boosting: [], ribbon: [], sparkle: [], smoke: [] };
+			const updates = { plain: [], boosting: [], ribbon: [], sparkle: [], smoke: [] };
+			const frame = boosting => {
 
-				let update = 0;
+				d.gauge = 1;
+				d.firing = boosting;
+				if ( d.north > 800 ) d.north -= 1000;
 				const begun = performance.now();
-				for ( let i = 0; i < frames; i ++ ) {
+				d.update( 1 / 60 );
+				const updated = performance.now();
+				renderer.render( scene, camera );
+				drawn();
+				return [ performance.now() - begun, updated - begun ];
 
-					d.gauge = 1;
-					if ( d.north > 800 ) d.north -= 1000;
-					const t = performance.now();
-					d.update( 1 / 60 );
-					update += performance.now() - t;
-					renderer.render( scene, camera );
-					drawn();
+			};
+			// Round and round the five, a few frames each, so the machine slowing down or speeding up
+			// (others share it) touches them all alike; the middle time of each.
+			for ( let round = 0; round < 6; round ++ ) for ( const [ name, [ , boosting ] ] of Object.entries( configs ) ) {
+
+				for ( const [ other, set ] of Object.entries( sets ) ) set.root.visible = other === name;
+				d.fx = sets[ name ].fx;
+				for ( let i = 0; i < 10; i ++ ) frame( boosting );
+				for ( let i = 0; i < 15; i ++ ) {
+
+					const [ total, update ] = frame( boosting );
+					frames[ name ].push( total );
+					updates[ name ].push( update );
 
 				}
 
-				return { frame: Math.round( ( performance.now() - begun ) / frames * 100 ) / 100, update: Math.round( update / frames * 1000 ) / 1000 };
+			}
 
-			};
-			const result = {
-				plain: run( 90, { flame: 'orange', trail: null }, false ),
-				boosting: run( 90, { flame: 'orange', trail: null }, true ),
-				ribbon: run( 90, { flame: 'rainbow', trail: { kind: 'ribbon', colour: 0xffffff } }, true ),
-				sparkle: run( 90, { flame: 'blue', trail: { kind: 'sparkle', colour: 0xffffff } }, true ),
-				smoke: run( 90, { flame: 'pink', trail: { kind: 'smoke', colour: 0xff3fa4 } }, true ),
-				plainAgain: run( 90, { flame: 'orange', trail: null }, false ),
-			};
 			d.firing = false;
-			return result;
+			for ( const [ name, set ] of Object.entries( sets ) ) if ( name !== 'plain' ) set.fx.dispose();
+			sets.plain.root.visible = true;
+			d.fx = sets.plain.fx;
+			const median = list => Math.round( [ ...list ].sort( ( a, b ) => a - b )[ list.length >> 1 ] * 1000 ) / 1000;
+			return Object.fromEntries( Object.keys( frames ).map( name => [ name, { frame: median( frames[ name ] ), update: median( updates[ name ] ) } ] ) );
 
 		} );
-		console.log( 'frame time (ms, headless software rendering; update = the driving and effects alone):', JSON.stringify( cost ) );
-		const plain = ( cost.plain.frame + cost.plainAgain.frame ) / 2;
-		for ( const kind of [ 'ribbon', 'sparkle', 'smoke' ] ) {
+		console.log( 'frame time, middle of 90 frames each (ms, headless software rendering; update = the driving and effects alone):', JSON.stringify( cost ) );
+		for ( const kind of [ 'boosting', 'ribbon', 'sparkle', 'smoke' ] ) {
 
-			assert.ok( cost[ kind ].frame < plain * 1.35 + 2, `${ kind }: ${ cost[ kind ].frame } ms a frame against ${ plain }` );
+			assert.ok( cost[ kind ].frame < cost.plain.frame * 1.25 + 2, `${ kind }: ${ cost[ kind ].frame } ms a frame against ${ cost.plain.frame }` );
 			assert.ok( cost[ kind ].update < 1.5, `${ kind }: ${ cost[ kind ].update } ms of updating a frame` );
 
 		}

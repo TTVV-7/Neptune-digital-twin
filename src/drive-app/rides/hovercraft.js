@@ -21,7 +21,7 @@ const RUDDER_LOCK = 0.55;
 // its cushion of air.
 export const HOVERCRAFT_DRIVE = {
 	topSpeed: 135, accel: 6.5, brake: 3.5, reverse: 18,
-	cab: { ahead: - 0.2, right: 0, up: 1.38 },
+	cab: { ahead: - 0.2, right: 0, up: 1.72 },
 	handling: { grip: 1.4, slip: 1.1, driftYaw: [ 55, 120 ], turn: [ 105, 78 ], lock: 60, drag: 0.35, gravity: 0.9, launch: 0.9, air: 1.1, landTilt: 45, squash: 0.6, rebound: 0.3 },
 };
 

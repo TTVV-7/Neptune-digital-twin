@@ -19,7 +19,7 @@ const BODY_COLOUR = 0x2d6bff;
 // sharply and drifting long and wide.
 export const COUPE_DRIVE = {
 	topSpeed: 195, accel: 12, brake: 20, reverse: 30,
-	cab: { ahead: - SEAT.z + 0.1, right: SEAT.x, up: 1.06 },
+	cab: { ahead: - SEAT.z + 0.08, right: SEAT.x, up: 1.17 },
 	handling: { grip: 18, slip: 2.6, driftYaw: [ 48, 128 ], turn: [ 170, 72 ], lock: 38, drag: 0.8 },
 };
 

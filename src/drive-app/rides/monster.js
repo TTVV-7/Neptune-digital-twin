@@ -22,7 +22,7 @@ const SPRING = { stiffness: 55, damping: 6, droop: 0.28, land: 0.06, most: 0.38 
 // are over a car's roof, so it drives up over cars and barriers.
 export const MONSTER_DRIVE = {
 	topSpeed: 125, accel: 7.5, brake: 12, reverse: 25,
-	cab: { ahead: - SEAT.z + 0.12, right: SEAT.x, up: 2.95 },
+	cab: { ahead: - SEAT.z + 0.1, right: SEAT.x, up: 3.07 },
 	handling: { grip: 9, slip: 1.8, driftYaw: [ 34, 95 ], turn: [ 125, 50 ], lock: 34, gravity: 0.75, launch: 1.3, air: 1.35, landTilt: 55, squash: 1.4, rebound: 0.22, bumpers: [ 1.5, 2.2 ], drag: 1.1 },
 };
 
@@ -33,6 +33,7 @@ export function makeMonster() {
 
 	// What rides on the springs: the shell, the chassis and the driver.
 	const sprung = new Group();
+	sprung.name = 'springs';
 	truck.add( sprung );
 	const shell = new Group();
 	sprung.add( shell );
@@ -71,6 +72,8 @@ export function makeMonster() {
 	let travel = 0;
 	let rate = 0;
 	let wasAirborne = false;
+	// How fast it was coming down: by the frame it lands the driver has already stopped it.
+	let falling = 0;
 	let lastSpeed = 0;
 	let lean = 0;
 	let nod = 0;
@@ -82,7 +85,8 @@ export function makeMonster() {
 		if ( dt <= 0 ) return;
 
 		// Coming down onto the springs sinks the body by how fast it lands; in the air the wheels hang.
-		if ( wasAirborne && ! airborne ) rate += Math.max( 0, - vy ) * SPRING.land * 10;
+		if ( wasAirborne && ! airborne ) rate += falling * SPRING.land * 10;
+		falling = airborne ? Math.max( 0, - vy ) : 0;
 		wasAirborne = airborne;
 		const target = airborne ? - SPRING.droop : 0;
 		for ( let left = dt; left > 1e-6; left -= 1 / 120 ) {

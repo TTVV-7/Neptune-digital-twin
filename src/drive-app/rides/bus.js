@@ -25,7 +25,7 @@ const BODY_COLOUR = 0x2440c9;
 // squashing and wobbling (and shaking the view) more than anything else.
 export const BUS_DRIVE = {
 	topSpeed: 90, accel: 2.1, brake: 6, reverse: 15,
-	cab: { ahead: - SEAT.z + 0.15, right: SEAT.x, up: 2.4 },
+	cab: { ahead: - SEAT.z + 0.15, right: SEAT.x, up: 2.2 },
 	handling: { grip: 7, slip: 1.4, driftYaw: [ 22, 55 ], turn: [ 62, 24 ], lock: 32, drag: 0.4, gravity: 1.1, launch: 0.55, air: 0.8, kick: 0.6, landTilt: 35, squash: 1.8, shake: 1.6, rebound: 0.12 },
 };
 
@@ -39,8 +39,10 @@ export function makeBus() {
 	windows( shell );
 	front( shell );
 	inside( shell );
-	driver( shell, { at: [ SEAT.x, 1.58, SEAT.z ], hands: [ SEAT.x + 0.2, 1.92, - 5.45 ], feet: - 5.7, suit: 0x23324a, cap: true, lean: 0.05 } );
-	steeringWheel( shell, [ SEAT.x, 1.9, - 5.5 ], 0.24, 0.5 );
+	// The driver sits low behind the windscreen, on a seat of their own.
+	driver( shell, { at: [ SEAT.x, 1.45, SEAT.z ], hands: [ SEAT.x + 0.2, 1.8, - 5.42 ], feet: - 5.7, suit: 0x23324a, cap: true, lean: 0.05 } );
+	block( shell, BLACK(), [ 0.5, 0.12, 0.5 ], [ SEAT.x, 1.36, SEAT.z ] );
+	steeringWheel( shell, [ SEAT.x, 1.78, - 5.48 ], 0.24, 0.5 );
 	merge( shell );
 
 	const spinners = [];

@@ -166,8 +166,9 @@ onto the bodywork through boxes each ride gives (its `userData.decals`). The tru
 keep their own paint: only their flame and trail change. A ride in the colour and finish it came in
 keeps its own materials, so the kart nobody has painted is just as it was. The trails are cheap: a
 pool of sprites, or one ribbon whose buffers are rewritten in place, nothing made each frame. On the
-test pad, boosting with a trail took a frame 3 to 8 % longer than without (software rendering in the
-test's browser) and about 0.1 ms more of updating.
+test pad (software rendering in the test's browser), the booster's flame made a frame about 7 %
+slower and a trail behind it a few per cent more again; the driving and its effects took 0.2 to
+0.3 ms a frame with or without them.
 
 `node --test scripts/test-drive-pro-ui.mjs` tries all of this on the test pad with no key: the locked
 rides and choices opening the sheet, `?pro=1` counting only on this computer, the free kart
