@@ -1,4 +1,5 @@
 import { HttpError, checkSameOrigin, isObject, json, randomToken, readJson, sha256Hex } from '../http.js';
+import { PERIODS, forgetBoards } from './boards.js';
 import { cleanName, nameAllowed, nameKey } from './names.js';
 import { addressOf, setting } from './settings.js';
 
@@ -47,6 +48,9 @@ export async function renamePlayer( { request, env, url, limits, now } ) {
 	// OR IGNORE: a name someone else has changes nothing (and their own, in another case, is fine).
 	const { meta } = await db.prepare( 'UPDATE OR IGNORE players SET name = ?, name_key = ?, last_seen_at = ? WHERE id = ?' ).bind( name, nameKey( name ), now, id ).run();
 	if ( ! meta.changes ) throw new HttpError( 409, 'That name is taken' );
+	// The new name on today's, this week's and the all-time boards straight away (the boards of one
+	// place catch up within half a minute).
+	await forgetBoards( url, Object.values( PERIODS ).map( period => [ period( now ), '' ] ) );
 	return json( { id, name } );
 
 }

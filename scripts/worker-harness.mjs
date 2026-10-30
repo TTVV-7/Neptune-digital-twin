@@ -130,8 +130,9 @@ export async function startWorker( { port, vars, config = null } ) {
 		try {
 
 			const res = await fetch( `${ base }/api/config` );
-			// state: where it keeps its storage, to look at what it stored.
-			if ( res.ok ) return { base, stop, log: () => log, state };
+			// state: where it keeps its storage, to look at what it stored; query( sql ): the rows a
+			// statement gives on its database, as the owner would see them in the D1 console.
+			if ( res.ok ) return { base, stop, log: () => log, state, query: sql => queryD1( state, config, sql ) };
 
 		} catch {
 
@@ -145,6 +146,16 @@ export async function startWorker( { port, vars, config = null } ) {
 
 	stop();
 	throw new Error( `wrangler dev didn't start:\n${ log }` );
+
+}
+
+// The rows `sql` gives on the local D1 database in `state` (wrangler d1 execute).
+function queryD1( state, config, sql ) {
+
+	const args = [ wrangler, 'd1', 'execute', 'DB', '--local', '--persist-to', state, ...( config ? [ '-c', config ] : [] ), '--command', sql, '--json' ];
+	const run = spawnSync( process.execPath, args, { cwd: ROOT, env: { ...process.env, WRANGLER_SEND_METRICS: 'false', CI: 'true' }, encoding: 'utf8' } );
+	if ( run.status !== 0 ) throw new Error( `d1 execute failed:\n${ run.stdout }\n${ run.stderr }` );
+	return JSON.parse( run.stdout ).flatMap( result => result.results );
 
 }
 

@@ -1,5 +1,6 @@
 import { HttpError, checkSameOrigin, isObject, json, readJson } from '../http.js';
 import { LIBRARY_VEHICLES } from '../../src/drive-app/catalog.js';
+import { BOARD_CACHE, PERIODS, boardKey, dateOf, forgetBoards } from './boards.js';
 import { cleanPlace, placeKey } from './names.js';
 import { PLAYER_ID, authenticate, credentials, database, takeTurn } from './players.js';
 import { setting } from './settings.js';
@@ -8,7 +9,7 @@ import { VISIT_HOURS, readVisit } from './visits.js';
 // The leaderboard (docs/world-drive.md): each player's best stunt score today, this week and all
 // time, everywhere and at each place. A score is a run's (src/drive.js: from dropping in to
 // changing ride or place), posted by the page as it beats the player's best. Only each player's
-// best on each board is kept. Days and weeks are UTC's (weeks from Monday), as the visit caps are.
+// best on each board (boards.js) is kept.
 //
 // The page reports its own score, so the Worker can't know it's honest; what it can do is make
 // cheating costly and keep the board believable:
@@ -19,7 +20,7 @@ import { VISIT_HOURS, readVisit } from './visits.js';
 //   points a second of it, three times the most the game can give (see maxRate below), nor more
 //   than MAX_SCORE; the game's scores are always whole tens, its tricks always read as it writes
 //   them, and the vehicle is one it offers;
-// - one score every SCORE_GAP s per player, and SCORES_PER_VISITOR_DAILY a day per visitor.
+// - one score every 10 s per player (SCORE_GAP), and SCORES_PER_VISITOR_DAILY a day per visitor.
 // What gets through anyway, the owner deletes (docs/world-drive.md).
 
 // The stunt scoring in src/drive.js, which the limits are worked out from (the tests check these
@@ -63,14 +64,6 @@ const MAX_TRICKS = 120;
 // Kept: the log, and the day and week boards, for this long (ms).
 const KEEP = 35 * 24 * 60 * 60 * 1000;
 const TOP = 20;
-// Boards are the same for everyone, so they're kept in Cloudflare's cache for this long (s).
-const BOARD_CACHE = 30;
-const DAY = 24 * 60 * 60 * 1000;
-const PERIODS = {
-	today: now => `day:${ dateOf( now ) }`,
-	week: now => `week:${ dateOf( now - ( ( new Date( now ).getUTCDay() + 6 ) % 7 ) * DAY ) }`,
-	all: () => 'all',
-};
 
 // POST /api/score { id, secret, score, tricks, place, vehicle, airTime, runSeconds, visit }:
 // { best, rank, isNewBest } for the all-time board, and the same as `today` and `week`.
@@ -125,8 +118,8 @@ export async function postScore( { request, env, url, limits, now } ) {
 		// The log only has what changed a board: what the owner looks through for a cheat.
 		await db.prepare( 'INSERT INTO scores ( player_id, score, tricks, place, vehicle, air_time, run_seconds, visit, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )' )
 			.bind( id, run.score, run.tricks, run.place, run.vehicle, run.airTime, run.runSeconds, visit.id, now ).run();
-		// So the player sees it straight away, here at least (each of Cloudflare's places has its own cache).
-		await Promise.all( changed.map( ( [ period, place ] ) => caches.default.delete( boardKey( url, period, place ) ) ) );
+		// So the player sees it straight away.
+		await forgetBoards( url, changed );
 
 	}
 
@@ -162,6 +155,7 @@ export async function leaderboard( { env, url, now } ) {
 
 	const period = PERIODS[ name ]( now );
 	const where = place ? placeKey( place ) : '';
+	// (Cached without the player's id: their own row is looked up each time.)
 	const key = boardKey( url, period, where );
 	const cached = await caches.default.match( key );
 	let board;
@@ -207,13 +201,6 @@ function ahead( o, b ) {
 
 }
 
-// Where a board is kept in the cache (never with a player's id: that part is looked up each time).
-function boardKey( url, period, place ) {
-
-	return new Request( `${ url.origin }/api/leaderboard/board?period=${ encodeURIComponent( period ) }&place=${ encodeURIComponent( place ) }` );
-
-}
-
 // The run as it's kept, or a 400 for anything the game wouldn't send.
 function checkRun( body ) {
 
@@ -247,12 +234,5 @@ function checkTricks( value ) {
 function bad() {
 
 	return new HttpError( 400, 'Bad request' );
-
-}
-
-// The UTC date, e.g. 2026-10-30.
-function dateOf( time ) {
-
-	return new Date( time ).toISOString().slice( 0, 10 );
 
 }
