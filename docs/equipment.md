@@ -60,9 +60,10 @@ Sizes are length × width × height in metres, as shown on the library cards. To
 - **The boom lift is a 40 ft machine.** No clean 60 ft model was found.
 - **The container handler is a made-up design** ("a fictional container loader"): a fixed 8.3 m spreader and a
   9 m mast, where a real one telescopes from 6 to 12 m and stands 11 to 13 m. Fine as a stand-in at a glance.
-- **Brand marks** show on some models: CAT (excavator, grader), JCB (backhoe), Genie (both lifts), a Volvo grille
-  badge (dump truck), and model lettering on the two rollers (BW 145 D-3, ARP 35). The licences
-  cover the models, not the trademarks; avoid these models in material that could look like an endorsement.
+- **Brand marks** show on some models: CAT (excavator, grader), JCB (backhoe), Genie (both lifts), SkyTrak in
+  large letters along the telehandler's boom, Toyota on the forklift's mast, a Volvo grille badge (dump truck),
+  and model lettering on the two rollers (BW 145 D-3, ARP 35). The licences cover the models, not the
+  trademarks; avoid these models in material that could look like an endorsement.
 - **Looks:** the dozer is battered and rusty; the two rollers are photo scans with the lighting baked in; the
   doty_aecom models (wheel loader and the three trucks) are clean flat-colour models in the same style as the
   jobsite trailer and tool crib, and the dump truck and mixer have European and 1950s-style cabs.
