@@ -1,0 +1,19 @@
+/* Labels over excavations and stockpiles in build mode (earthworks.js). */
+.earthworks-labels {
+	position: fixed;
+	inset: 0;
+	overflow: hidden;
+	pointer-events: none;
+}
+
+.earthworks-labels .label {
+	position: absolute;
+	left: 0;
+	top: 0;
+	padding: 2px 8px;
+	border-radius: 10px;
+	background: var( --panel );
+	color: var( --text );
+	font-size: 12px;
+	white-space: nowrap;
+}
