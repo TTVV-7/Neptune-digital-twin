@@ -149,23 +149,6 @@ export function setUpFlattening( { tiles, models } ) {
 
 	};
 
-	// The tileset's frame (set by ReorientationPlugin) only exists once its root has loaded. A shape
-	// committed before then lands in the wrong place and presses the wrong way for good, as the
-	// plugin keeps each shape's direction: that is what a layout restored as the page opens did, so
-	// its flatten areas came back unflattened. Shapes wait for the frame, then all go in.
-	let framed = ! plugin || !! tiles.root;
-	if ( ! framed ) {
-
-		tiles.addEventListener( 'load-root-tileset', () => {
-
-			framed = true;
-			for ( const entry of models.entries ) mark( { entry } );
-			for ( const key of sources.keys() ) dirty.add( key );
-
-		} );
-
-	}
-
 	// `threshold`: how far above the shape the plugin presses vertices down onto it (an area's
 	// height limit); higher ones are left where they are.
 	const commit = ( key, shape, threshold = Infinity ) => {
@@ -182,7 +165,9 @@ export function setUpFlattening( { tiles, models } ) {
 		}
 
 		// New, or the frame or the height limit has changed since (the plugin keeps both from
-		// when the shape was added): add it afresh.
+		// when the shape was added): add it afresh. A saved layout's areas are made before
+		// Google's root tileset has loaded and been turned to the site, when "down" in the
+		// tileset's frame points somewhere else entirely; update() makes them again once it is.
 		if ( current ) plugin.deleteShape( shape );
 		plugin.addShape( shape, down, { threshold } );
 		shapes.set( key, shape );
@@ -304,7 +289,7 @@ export function setUpFlattening( { tiles, models } ) {
 			}
 
 			timer -= dt;
-			if ( ! framed || timer > 0 || dirty.size === 0 ) return;
+			if ( timer > 0 || dirty.size === 0 ) return;
 			timer = UPDATE_INTERVAL;
 			for ( const key of dirty ) sync( key );
 			dirty.clear();
