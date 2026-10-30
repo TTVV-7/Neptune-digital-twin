@@ -162,6 +162,23 @@ html, body {
 
 }
 
+/* Readout notes in the placement panel (a pit's shoring, a warning): wrapped text across the
+   panel rather than a field that would cut them short. */
+.lil-gui .lil-controller.note > .lil-name {
+	display: none;
+}
+
+.lil-gui .lil-controller.note.lil-disabled {
+	opacity: 0.85;
+}
+
+.lil-gui .lil-controller.note .readout-note {
+	padding: 3px 0;
+	white-space: normal;
+	line-height: 1.35;
+	color: var( --text-color );
+}
+
 .toast {
 	z-index: 1003;
 	bottom: 128px;

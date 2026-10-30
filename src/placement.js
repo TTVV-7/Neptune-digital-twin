@@ -69,6 +69,8 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 				if ( field.type === 'text' || field.type === 'color' ) controller.onFinishChange( () => set( field.key ) );
 				else controller.onChange( () => set( field.key ) );
 				if ( field.type === 'color' ) controller.$input.addEventListener( 'change', () => set( field.key ) );
+				// A field that doesn't apply for now (a shored pit's side slope) is greyed out.
+				if ( field.enabled ) onDisplay( controller, () => controller.enable( field.enabled( entry.params ) ) );
 
 			}
 
@@ -82,6 +84,7 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 			};
 			refresh();
 			for ( const readout of kind.readouts ?? [] ) folder.add( readouts, readout.label ).disable();
+			fitReadouts( folder, readouts, kind.readouts ?? [] );
 			readoutViews.set( entry, refresh );
 			for ( const action of kind.actions ) folder.add( { run: () => action.run( entry ) }, 'run' ).name( action.label );
 			// Keep the copy in step when params change elsewhere (e.g. a pour finishing).
@@ -203,6 +206,49 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 	}
 
 	return { gui, focus, refresh };
+
+}
+
+// Run fn whenever a controller shows its value afresh, as it does on every change to the entry.
+function onDisplay( controller, fn ) {
+
+	const display = controller.updateDisplay.bind( controller );
+	controller.updateDisplay = () => {
+
+		display();
+		fn();
+		return controller;
+
+	};
+	controller.updateDisplay();
+
+}
+
+// Readouts with nothing to say (no shoring, say) are left out, and notes (readouts marked `note`,
+// e.g. a warning) are written out in full across the panel, where a field would cut them short.
+function fitReadouts( folder, readouts, specs ) {
+
+	for ( const controller of folder.controllers.filter( c => c.object === readouts ) ) {
+
+		let text = null;
+		if ( specs.find( r => r.label === controller.property )?.note ) {
+
+			text = document.createElement( 'div' );
+			text.className = 'readout-note';
+			controller.domElement.classList.add( 'note' );
+			controller.$widget.replaceChildren( text );
+
+		}
+
+		onDisplay( controller, () => {
+
+			const value = controller.getValue();
+			if ( text ) text.textContent = value;
+			controller.show( value !== '' );
+
+		} );
+
+	}
 
 }
 
