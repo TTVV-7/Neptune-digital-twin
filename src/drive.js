@@ -656,11 +656,13 @@ export class Driver {
 
 	// Height while flying: climbing toward a hover with Shift held, gliding down without it, never
 	// below the ground and never up through a roof or a bridge. Touching down is gentle, whatever
-	// the speed.
+	// the speed. With no ground found under it (Google's tiles there still loading) it holds its
+	// height instead of gliding down, so it can't sink through ground that arrives late.
 	flyHeight( dt, shift, ground ) {
 
 		this.altitude = ground === null ? null : Math.max( 0, this.y - ground );
-		const climb = shift ? FLY_CLIMB * MathUtils.clamp( 1 - ( this.altitude ?? 0 ) / FLY_CEILING, - 0.5, 1 ) : - FLY_GLIDE;
+		const glide = ground === null ? 0 : - FLY_GLIDE;
+		const climb = shift ? FLY_CLIMB * MathUtils.clamp( 1 - ( this.altitude ?? 0 ) / FLY_CEILING, - 0.5, 1 ) : glide;
 		this.vy += ( climb - this.vy ) * Math.min( 1, dt * 2.5 );
 		if ( this.vy > 0 ) {
 
