@@ -35,17 +35,21 @@ export function addLights( scene ) {
 
 }
 
-// Google Photorealistic 3D Tiles, streamed and recentred on the terminal.
-export function createGoogleTiles( { apiKey, camera, renderer, onError } ) {
+// Google Photorealistic 3D Tiles, streamed and recentred on the terminal, or on `site` ({ lat, lon }
+// in degrees, and height in metres above the ellipsoid) for World Drive, which moves it about with
+// recentreTiles. autoRefreshToken: on a refused tile, ask Google for a fresh session (a new root
+// tileset, which is billed as a new session). World Drive pays per session, so it turns that off.
+export function createGoogleTiles( { apiKey, camera, renderer, onError, site = SITE, autoRefreshToken = true } ) {
 
 	const tiles = new TilesRenderer();
-	tiles.registerPlugin( new GoogleCloudAuthPlugin( { apiToken: apiKey, autoRefreshToken: true } ) );
+	tiles.registerPlugin( new GoogleCloudAuthPlugin( { apiToken: apiKey, autoRefreshToken } ) );
 	tiles.registerPlugin( new GLTFExtensionsPlugin( { dracoLoader } ) );
 	tiles.registerPlugin( new TileCompressionPlugin() );
 	tiles.registerPlugin( new TilesFadePlugin() );
 	tiles.registerPlugin( new ReorientationPlugin( {
-		lat: SITE.lat * MathUtils.DEG2RAD,
-		lon: SITE.lon * MathUtils.DEG2RAD,
+		lat: site.lat * MathUtils.DEG2RAD,
+		lon: site.lon * MathUtils.DEG2RAD,
+		height: site.height ?? 0,
 	} ) );
 
 	// The fast bounding-volume raycast can miss Google geometry that pokes outside its tile's
@@ -58,6 +62,22 @@ export function createGoogleTiles( { apiKey, camera, renderer, onError } ) {
 	tiles.addEventListener( 'load-model', ( { scene } ) => useFastRaycast( scene ) );
 
 	return tiles;
+
+}
+
+// Recentre the tiles on another place (degrees, and metres above the ellipsoid) without loading
+// anything again: the same transform ReorientationPlugin made when the root tileset arrived, for
+// the new spot. The tileset, its session and every tile already loaded are kept. Returns false
+// before the root tileset is in (the plugin then uses the new place when it arrives).
+export function recentreTiles( tiles, { lat, lon, height = 0 } ) {
+
+	const plugin = tiles.plugins.find( p => p instanceof ReorientationPlugin );
+	plugin.lat = lat * MathUtils.DEG2RAD;
+	plugin.lon = lon * MathUtils.DEG2RAD;
+	plugin.height = height;
+	if ( ! tiles.root ) return false;
+	plugin.transformLatLonHeightToOrigin( plugin.lat, plugin.lon, height );
+	return true;
 
 }
 

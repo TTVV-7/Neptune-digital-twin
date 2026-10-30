@@ -31,7 +31,8 @@ const DRIVE = [
 	[ [ 'A', '/', 'D' ], 'Steer' ],
 	[ [ 'Shift' ], 'Boost' ],
 	[ [ 'Space' ], 'Hop' ],
-	[ [ 'C' ], 'Camera: chase or bonnet' ],
+	[ [ 'R' ], 'Stuck? Back on the ground' ],
+	[ [ 'C' ], 'Camera: chase or driver\'s seat' ],
 	[ [ '~Wheel' ], 'Camera nearer or farther' ],
 	[ [ 'V', '/', 'Esc' ], 'Get out' ],
 ];

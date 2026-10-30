@@ -21,6 +21,7 @@ import { dewateringBag, fracTank, flocDosingTrailer, sandFilterSkid, trashPump, 
 import { person } from './people.js';
 import { POWER_ITEMS } from './power-models.js';
 import { CRANE_ITEMS } from './crane-models.js';
+import { KART_ITEM } from './kart.js';
 
 // Common site pieces generated in code at real North American dimensions, in metres. Each builder
 // returns a Group standing on y = 0 with its front (door, open side or sloped end) facing -Z, so
@@ -86,6 +87,8 @@ export const PROCEDURAL_ITEMS = [
 	// (crane-models.js, tower-crane.js).
 	...POWER_ITEMS,
 	...CRANE_ITEMS,
+	// A go-kart with a driver (kart.js), drivable like the other vehicles.
+	KART_ITEM,
 ].map( item => ( { ...item, front: '-z', procedural: true } ) );
 
 export function buildProcedural( id ) {
