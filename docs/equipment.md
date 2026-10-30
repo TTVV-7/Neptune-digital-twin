@@ -107,5 +107,9 @@ from the real one, and always for the rigged telehandler). A few needed fixing f
 - The telehandler is rigged, so its card size was corrected by hand to the pose it is drawn in.
 - The thumbnails of the cranes (Sketchfab's showed both) and the dump truck (a distant top view) were rendered
   in the app instead.
+- Each machine's `drive` entry (top speed, acceleration, braking, reverse speed in `library.json`) was added by
+  hand. Running `add-asset` again for an id (to try another `--front`, say) keeps it, and for the same model
+  also keeps the thumbnail (`--new-thumb` fetches Sketchfab's again), an earlier `--credit` and a rigged model's
+  hand-corrected size, rescaled to the new scale and front.
 
 In total the 19 models add 25.6 MB of GLB files (the largest is the dozer at 2.9 MB) and 78 KB of thumbnails.
