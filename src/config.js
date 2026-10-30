@@ -32,6 +32,9 @@ export const PLAYER = {
 	gravity: 9.81,
 	stepHeight: 0.6, // tallest ledge you can walk up
 	radius: 0.4, // how close you can get to a wall
+	flyRadius: 1, // how close flying gets to walls, the ground and models
+	bounce: 0.3, // share of your speed into a wall you bounce back with; 0 just stops you
+	autoTurn: true, // turn the view along a wall you run or fly into head-on (T switches it at run time)
 };
 
 // Your own detailed models. Put .glb / .gltf files in public/models/ and list them here.
