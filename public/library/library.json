@@ -104,6 +104,518 @@
 		}
 	},
 	{
+		"id": "crane-all-terrain",
+		"name": "All-terrain crane (6-axle)",
+		"category": "Cranes & lifts",
+		"file": "crane-all-terrain.glb",
+		"thumb": "thumbs/crane-all-terrain.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 19.25,
+			"width": 3.96,
+			"height": 16.05
+		},
+		"triangles": 59434,
+		"sizeKB": 1061,
+		"source": {
+			"site": "Sketchfab",
+			"id": "c73b2828b3eb4b4da1929c4dd4dfee79",
+			"url": "https://sketchfab.com/3d-models/ka-2000-scx2800-2-cranes-c73b2828b3eb4b4da1929c4dd4dfee79",
+			"title": "KA-2000 & SCX2800-2 CRANES",
+			"author": "drcrazzie",
+			"authorUrl": "https://sketchfab.com/drcrazzie",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		},
+		"drive": {
+			"topSpeed": 80,
+			"accel": 1.2,
+			"brake": 4,
+			"reverse": 10
+		}
+	},
+	{
+		"id": "boom-lift-40ft",
+		"name": "Articulating boom lift (40 ft)",
+		"category": "Cranes & lifts",
+		"file": "boom-lift-40ft.glb",
+		"thumb": "thumbs/boom-lift-40ft.webp",
+		"front": "+x",
+		"scale": 0.01,
+		"dimensions": {
+			"length": 7.46,
+			"width": 1.48,
+			"height": 3.13
+		},
+		"triangles": 36647,
+		"sizeKB": 260,
+		"source": {
+			"site": "Sketchfab",
+			"id": "8a6aa351233a4879892a4a1a03ddc444",
+			"url": "https://sketchfab.com/3d-models/z-4023-n-rj-articulated-boom-lift-genie-8a6aa351233a4879892a4a1a03ddc444",
+			"title": "Z-40/23 N RJ Articulated Boom Lift (Genie)",
+			"author": "bimstore",
+			"authorUrl": "https://sketchfab.com/Revitspace",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		},
+		"drive": {
+			"topSpeed": 6,
+			"accel": 1,
+			"brake": 3,
+			"reverse": 6
+		}
+	},
+	{
+		"id": "crane-crawler",
+		"name": "Crawler crane (250 t, lattice boom)",
+		"category": "Cranes & lifts",
+		"file": "crane-crawler.glb",
+		"thumb": "thumbs/crane-crawler.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 28.62,
+			"width": 7.2,
+			"height": 45.02
+		},
+		"triangles": 61311,
+		"sizeKB": 1246,
+		"source": {
+			"site": "Sketchfab",
+			"id": "c73b2828b3eb4b4da1929c4dd4dfee79",
+			"url": "https://sketchfab.com/3d-models/ka-2000-scx2800-2-cranes-c73b2828b3eb4b4da1929c4dd4dfee79",
+			"title": "KA-2000 & SCX2800-2 CRANES",
+			"author": "drcrazzie",
+			"authorUrl": "https://sketchfab.com/drcrazzie",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		},
+		"drive": {
+			"topSpeed": 2,
+			"accel": 0.3,
+			"brake": 1,
+			"reverse": 2
+		}
+	},
+	{
+		"id": "scissor-lift-32ft",
+		"name": "Scissor lift (32 ft, electric)",
+		"category": "Cranes & lifts",
+		"file": "scissor-lift-32ft.glb",
+		"thumb": "thumbs/scissor-lift-32ft.webp",
+		"front": "-z",
+		"scale": 0.4,
+		"dimensions": {
+			"length": 2.62,
+			"width": 1.18,
+			"height": 2.21
+		},
+		"triangles": 90284,
+		"sizeKB": 696,
+		"source": {
+			"site": "Sketchfab",
+			"id": "2c4f6c0b59e7468e8774172f8ac37bed",
+			"url": "https://sketchfab.com/3d-models/scissor-lift-genie-gs-3246-2c4f6c0b59e7468e8774172f8ac37bed",
+			"title": "Scissor Lift - Genie GS-3246",
+			"author": "chwashere123",
+			"authorUrl": "https://sketchfab.com/chwashere123",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		},
+		"drive": {
+			"topSpeed": 3.5,
+			"accel": 0.8,
+			"brake": 2,
+			"reverse": 3.5
+		}
+	},
+	{
+		"id": "backhoe-loader",
+		"name": "Backhoe loader (14 ft)",
+		"category": "Heavy equipment",
+		"file": "backhoe-loader.glb",
+		"thumb": "thumbs/backhoe-loader.webp",
+		"front": "+z",
+		"scale": 0.006,
+		"dimensions": {
+			"length": 7.15,
+			"width": 2.37,
+			"height": 3.54
+		},
+		"triangles": 61038,
+		"sizeKB": 1751,
+		"source": {
+			"site": "Sketchfab",
+			"id": "5b2d02e1c1c14deba0f9c8d75fff54b6",
+			"url": "https://sketchfab.com/3d-models/jcb-backhoe-loader-3cx-tractor-5b2d02e1c1c14deba0f9c8d75fff54b6",
+			"title": "JCB Backhoe Loader 3CX Tractor",
+			"author": "Kyle Burton",
+			"authorUrl": "https://sketchfab.com/chimeracreations",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		},
+		"drive": {
+			"topSpeed": 40,
+			"accel": 2,
+			"brake": 5,
+			"reverse": 20
+		}
+	},
+	{
+		"id": "crawler-dozer-d6",
+		"name": "Crawler dozer (D6 class, 22 t)",
+		"category": "Heavy equipment",
+		"file": "crawler-dozer-d6.glb",
+		"thumb": "thumbs/crawler-dozer-d6.webp",
+		"front": "+x",
+		"scale": 0.927972,
+		"dimensions": {
+			"length": 5.66,
+			"width": 3.66,
+			"height": 2.95
+		},
+		"triangles": 39846,
+		"sizeKB": 2891,
+		"source": {
+			"site": "Sketchfab",
+			"id": "b06a715d23a7450babac383b8bb7fb0a",
+			"url": "https://sketchfab.com/3d-models/bulldozer-b06a715d23a7450babac383b8bb7fb0a",
+			"title": "Bulldozer",
+			"author": "semyon.kan",
+			"authorUrl": "https://sketchfab.com/semyon.kan",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		},
+		"drive": {
+			"topSpeed": 11,
+			"accel": 1.5,
+			"brake": 4,
+			"reverse": 14
+		}
+	},
+	{
+		"id": "excavator-20t-detailed",
+		"name": "Excavator, detailed (20 t)",
+		"category": "Heavy equipment",
+		"file": "excavator-20t-detailed.glb",
+		"thumb": "thumbs/excavator-20t-detailed.webp",
+		"front": "+z",
+		"scale": 73.6,
+		"dimensions": {
+			"length": 8.58,
+			"width": 3.17,
+			"height": 3.9
+		},
+		"triangles": 84355,
+		"sizeKB": 2411,
+		"source": {
+			"site": "Sketchfab",
+			"id": "5f195244108c46e495a1e78040f02f7e",
+			"url": "https://sketchfab.com/3d-models/excavator-cat-5f195244108c46e495a1e78040f02f7e",
+			"title": "Excavator (CAT)",
+			"author": "sarvesh777",
+			"authorUrl": "https://sketchfab.com/sarvesh903",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		},
+		"drive": {
+			"topSpeed": 5.5,
+			"accel": 1.2,
+			"brake": 3,
+			"reverse": 5.5
+		}
+	},
+	{
+		"id": "mini-excavator-detailed",
+		"name": "Mini excavator, detailed (3.5 t)",
+		"category": "Heavy equipment",
+		"file": "mini-excavator-detailed.glb",
+		"thumb": "thumbs/mini-excavator-detailed.webp",
+		"front": "-x",
+		"scale": 1.08,
+		"dimensions": {
+			"length": 4.78,
+			"width": 1.73,
+			"height": 3.59
+		},
+		"triangles": 48186,
+		"sizeKB": 603,
+		"source": {
+			"site": "Sketchfab",
+			"id": "158dbce4b84749b7bf3a1ebca6947f53",
+			"url": "https://sketchfab.com/3d-models/excabadora-waker-newson-158dbce4b84749b7bf3a1ebca6947f53",
+			"title": "Excabadora Waker Newson",
+			"author": "Carlos Ramirez Montoya",
+			"authorUrl": "https://sketchfab.com/CarlosRamirezMontoya",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		},
+		"drive": {
+			"topSpeed": 4.5,
+			"accel": 1.2,
+			"brake": 3,
+			"reverse": 4.5
+		}
+	},
+	{
+		"id": "motor-grader",
+		"name": "Motor grader (12 ft blade)",
+		"category": "Heavy equipment",
+		"file": "motor-grader.glb",
+		"thumb": "thumbs/motor-grader.webp",
+		"front": "-z",
+		"scale": 0.3065,
+		"dimensions": {
+			"length": 9.82,
+			"width": 3.16,
+			"height": 3.06
+		},
+		"triangles": 119275,
+		"sizeKB": 2756,
+		"source": {
+			"site": "Sketchfab",
+			"id": "9ae93444540648c981dc4bc500c691e5",
+			"url": "https://sketchfab.com/3d-models/caterpillar-140h-motor-grader-9ae93444540648c981dc4bc500c691e5",
+			"title": "Caterpillar 140H Motor Grader",
+			"author": "Stanz",
+			"authorUrl": "https://sketchfab.com/arxwizard",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		},
+		"drive": {
+			"topSpeed": 40,
+			"accel": 1.8,
+			"brake": 5,
+			"reverse": 25
+		}
+	},
+	{
+		"id": "skid-steer-loader",
+		"name": "Skid steer loader",
+		"category": "Heavy equipment",
+		"file": "skid-steer-loader.glb",
+		"thumb": "thumbs/skid-steer-loader.webp",
+		"front": "+z",
+		"scale": 0.802377,
+		"dimensions": {
+			"length": 3.4,
+			"width": 1.63,
+			"height": 2.16
+		},
+		"triangles": 68788,
+		"sizeKB": 1227,
+		"source": {
+			"site": "Sketchfab",
+			"id": "91948c1f514141fc82fee40ea56cc8df",
+			"url": "https://sketchfab.com/3d-models/skid-steer-loader-91948c1f514141fc82fee40ea56cc8df",
+			"title": "Skid Steer Loader",
+			"author": "SpatialNeglect",
+			"authorUrl": "https://sketchfab.com/jeandiz",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		},
+		"drive": {
+			"topSpeed": 18,
+			"accel": 3,
+			"brake": 6,
+			"reverse": 18
+		}
+	},
+	{
+		"id": "roller-smooth-drum",
+		"name": "Smooth drum roller (4.5 t)",
+		"category": "Heavy equipment",
+		"file": "roller-smooth-drum.glb",
+		"thumb": "thumbs/roller-smooth-drum.webp",
+		"front": "+z",
+		"scale": 0.367774,
+		"dimensions": {
+			"length": 4.19,
+			"width": 1.62,
+			"height": 2.97
+		},
+		"triangles": 67528,
+		"sizeKB": 1176,
+		"source": {
+			"site": "Sketchfab",
+			"id": "02c2ffa7c88f40fca1718e568adebda6",
+			"url": "https://sketchfab.com/3d-models/road-roller-02c2ffa7c88f40fca1718e568adebda6",
+			"title": "Road Roller",
+			"author": "Lassi Kaukonen",
+			"authorUrl": "https://sketchfab.com/thesidekick",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		},
+		"drive": {
+			"topSpeed": 12,
+			"accel": 1.2,
+			"brake": 3,
+			"reverse": 12
+		}
+	},
+	{
+		"id": "roller-tandem",
+		"name": "Tandem roller (3 t)",
+		"category": "Heavy equipment",
+		"file": "roller-tandem.glb",
+		"thumb": "thumbs/roller-tandem.webp",
+		"front": "+z",
+		"scale": 0.47,
+		"dimensions": {
+			"length": 3.12,
+			"width": 1.19,
+			"height": 2.52
+		},
+		"triangles": 111278,
+		"sizeKB": 2212,
+		"source": {
+			"site": "Sketchfab",
+			"id": "6a9b1acd83dd4463a2e839ba28ae1ded",
+			"url": "https://sketchfab.com/3d-models/road-roller-arp-35-6a9b1acd83dd4463a2e839ba28ae1ded",
+			"title": "Road Roller ARP 35",
+			"author": "Lassi Kaukonen",
+			"authorUrl": "https://sketchfab.com/thesidekick",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		},
+		"drive": {
+			"topSpeed": 10,
+			"accel": 1.2,
+			"brake": 3,
+			"reverse": 10
+		}
+	},
+	{
+		"id": "wheel-loader",
+		"name": "Wheel loader (3.5 m³)",
+		"category": "Heavy equipment",
+		"file": "wheel-loader.glb",
+		"thumb": "thumbs/wheel-loader.webp",
+		"front": "-x",
+		"scale": 0.925273,
+		"dimensions": {
+			"length": 8.29,
+			"width": 2.84,
+			"height": 3.46
+		},
+		"triangles": 31506,
+		"sizeKB": 371,
+		"source": {
+			"site": "Sketchfab",
+			"id": "a294549f416149ad823dddf804f69610",
+			"url": "https://sketchfab.com/3d-models/wheel-loader-a294549f416149ad823dddf804f69610",
+			"title": "Wheel Loader",
+			"author": "doty_aecom",
+			"authorUrl": "https://sketchfab.com/doty_aecom",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		},
+		"drive": {
+			"topSpeed": 40,
+			"accel": 2,
+			"brake": 5,
+			"reverse": 20
+		}
+	},
+	{
+		"id": "container-handler-empty",
+		"name": "Empty container handler (9 t)",
+		"category": "Material handling",
+		"file": "container-handler-empty.glb",
+		"thumb": "thumbs/container-handler-empty.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 8.51,
+			"width": 8.34,
+			"height": 8.97
+		},
+		"triangles": 26446,
+		"sizeKB": 823,
+		"source": {
+			"site": "Sketchfab",
+			"id": "17cac1aa2d46404ab39766a20c5f2e47",
+			"url": "https://sketchfab.com/3d-models/container-loader-17cac1aa2d46404ab39766a20c5f2e47",
+			"title": "CONTAINER LOADER",
+			"author": "jinjinjin",
+			"authorUrl": "https://sketchfab.com/thejinjinjin",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		},
+		"drive": {
+			"topSpeed": 25,
+			"accel": 1.5,
+			"brake": 5,
+			"reverse": 15
+		}
+	},
+	{
+		"id": "forklift-5000lb",
+		"name": "Forklift (5,000 lb)",
+		"category": "Material handling",
+		"file": "forklift-5000lb.glb",
+		"thumb": "thumbs/forklift-5000lb.webp",
+		"front": "-x",
+		"scale": 0.0163886,
+		"dimensions": {
+			"length": 3.6,
+			"width": 1.18,
+			"height": 2.16
+		},
+		"triangles": 34374,
+		"sizeKB": 1312,
+		"source": {
+			"site": "Sketchfab",
+			"id": "77a9000b8b584a16b739810fde725037",
+			"url": "https://sketchfab.com/3d-models/forklift-77a9000b8b584a16b739810fde725037",
+			"title": "Forklift",
+			"author": "tasraven",
+			"authorUrl": "https://sketchfab.com/tasraven",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		},
+		"drive": {
+			"topSpeed": 20,
+			"accel": 2.5,
+			"brake": 6,
+			"reverse": 15
+		}
+	},
+	{
+		"id": "telehandler-10k",
+		"name": "Telehandler (10,000 lb, 55 ft)",
+		"category": "Material handling",
+		"file": "telehandler-10k.glb",
+		"thumb": "thumbs/telehandler-10k.webp",
+		"front": "+z",
+		"scale": 1.05,
+		"dimensions": {
+			"length": 7.64,
+			"width": 3.62,
+			"height": 2.58
+		},
+		"triangles": 69544,
+		"sizeKB": 2073,
+		"source": {
+			"site": "Sketchfab",
+			"id": "66130e3034dd49eba8680f24cdee6b70",
+			"url": "https://sketchfab.com/3d-models/skytrak-66130e3034dd49eba8680f24cdee6b70",
+			"title": "SkyTrak",
+			"author": "One80 Solar",
+			"authorUrl": "https://sketchfab.com/one80solar",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		},
+		"drive": {
+			"topSpeed": 30,
+			"accel": 2,
+			"brake": 5,
+			"reverse": 15
+		}
+	},
+	{
 		"id": "ibc-tote",
 		"name": "IBC tote (1000 L)",
 		"category": "Materials",
@@ -283,6 +795,102 @@
 			"authorUrl": "https://sketchfab.com/chimeracreations",
 			"license": "CC Attribution",
 			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "articulated-dump-truck",
+		"name": "Articulated dump truck (40 t)",
+		"category": "Vehicles",
+		"file": "articulated-dump-truck.glb",
+		"thumb": "thumbs/articulated-dump-truck.webp",
+		"front": "-x",
+		"scale": 1,
+		"dimensions": {
+			"length": 10.82,
+			"width": 3.48,
+			"height": 4.14
+		},
+		"triangles": 41799,
+		"sizeKB": 422,
+		"source": {
+			"site": "Sketchfab",
+			"id": "9775ab1c4fd242beae12a98149823b33",
+			"url": "https://sketchfab.com/3d-models/articulated-dumptruck-9775ab1c4fd242beae12a98149823b33",
+			"title": "Articulated Dumptruck",
+			"author": "doty_aecom",
+			"authorUrl": "https://sketchfab.com/doty_aecom",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		},
+		"drive": {
+			"topSpeed": 55,
+			"accel": 1.8,
+			"brake": 5,
+			"reverse": 15
+		}
+	},
+	{
+		"id": "concrete-mixer-truck",
+		"name": "Concrete mixer truck (10 yd³)",
+		"category": "Vehicles",
+		"file": "concrete-mixer-truck.glb",
+		"thumb": "thumbs/concrete-mixer-truck.webp",
+		"front": "+x",
+		"scale": 1.15,
+		"dimensions": {
+			"length": 8.52,
+			"width": 2.6,
+			"height": 3.81
+		},
+		"triangles": 44310,
+		"sizeKB": 422,
+		"source": {
+			"site": "Sketchfab",
+			"id": "8d1d88a5955f4e7da13562bb7bec146f",
+			"url": "https://sketchfab.com/3d-models/concrete-mixer-truck-8d1d88a5955f4e7da13562bb7bec146f",
+			"title": "Concrete Mixer Truck",
+			"author": "doty_aecom",
+			"authorUrl": "https://sketchfab.com/doty_aecom",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		},
+		"drive": {
+			"topSpeed": 100,
+			"accel": 2.2,
+			"brake": 7,
+			"reverse": 15
+		}
+	},
+	{
+		"id": "dump-truck-tandem",
+		"name": "Dump truck (tandem axle)",
+		"category": "Vehicles",
+		"file": "dump-truck-tandem.glb",
+		"thumb": "thumbs/dump-truck-tandem.webp",
+		"front": "+z",
+		"scale": 1,
+		"dimensions": {
+			"length": 9.42,
+			"width": 2.94,
+			"height": 3.39
+		},
+		"triangles": 88253,
+		"sizeKB": 1300,
+		"source": {
+			"site": "Sketchfab",
+			"id": "ff2dc9c8283d48a4a7f2127cc21bcbc4",
+			"url": "https://sketchfab.com/3d-models/highway-dumptruck-tandem-ff2dc9c8283d48a4a7f2127cc21bcbc4",
+			"title": "Highway Dumptruck (Tandem)",
+			"author": "doty_aecom",
+			"authorUrl": "https://sketchfab.com/doty_aecom",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		},
+		"drive": {
+			"topSpeed": 100,
+			"accel": 2.5,
+			"brake": 7,
+			"reverse": 15
 		}
 	},
 	{
