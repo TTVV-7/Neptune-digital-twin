@@ -39,6 +39,8 @@ const SKY_BELOW = [ 15000, 120000 ];
 const GROUND_WAIT = [ 25, 15 ];
 // The tiles must have stopped loading this long (s) for the ground to count as there.
 const SETTLE = 0.6;
+// Room (px) the pin's card takes over the panel when the panel is a sheet along the bottom.
+const PIN_CARD = 84;
 
 const $ = id => document.getElementById( id );
 const frame = () => new Promise( resolve => requestAnimationFrame( resolve ) );
@@ -62,7 +64,7 @@ async function boot() {
 async function visit( config ) {
 
 	screens.splash( 'Checking the road is clear...' );
-	const outcome = await startVisit( config.turnstileSiteKey, $( 'turnstile' ) );
+	const outcome = await startVisit( config.turnstileSiteKey, $( 'robot-check' ) );
 	if ( outcome.key ) return start( { key: outcome.key, left: outcome.left } );
 	if ( outcome.usedUp ) return screens.notice( 'used-up', { retryAfter: outcome.retryAfter } );
 	if ( outcome.robot ) return screens.notice( 'robot', { onRetry: () => visit( config ) } );
@@ -148,7 +150,8 @@ async function start( { key, left = null } ) {
 			const pin = { ...place, height };
 			globe.setPin( pin );
 			panel.setPin( pin );
-			globe.flyTo( { lat: place.lat, lon: place.lon, height: height ?? 0, distance: 2200, heading: place.heading ?? 0, pitch: - 50 } ).then( arrived => {
+			const view = { lat: place.lat, lon: place.lon, height: height ?? 0, distance: 2200, heading: place.heading ?? 0, pitch: - 50 };
+			globe.flyTo( globe.lifted( view, pinLift(), GLOBE_FOV ) ).then( arrived => {
 
 				// Sharper tiles have loaded on the way down: sit the pin on them.
 				if ( arrived && globe.pin === pin ) pin.height = globe.surfaceHeight( pin.lat, pin.lon ) ?? pin.height;
@@ -175,6 +178,20 @@ async function start( { key, left = null } ) {
 	$( 'globe-ui' ).querySelector( '.about-open' ).addEventListener( 'click', () => about.showModal() );
 	const touch = setUpTouchControls( $( 'drive-ui' ).querySelector( '.touch' ) );
 	if ( left !== null && left <= 2 ) screens.toast( left === 0 ? 'This is your last free drive today.' : `${ left } more free drive${ left === 1 ? '' : 's' } today after this one.` );
+
+	// How far above the middle of the view a pin flown to should show (see GlobeView.lifted): on a
+	// phone the panel is a sheet along the bottom with the pin's card over it, so the pin goes in the
+	// middle of what's left between them and the title. Beside a panel down the side, the middle.
+	function pinLift() {
+
+		const sheet = $( 'globe-ui' ).querySelector( '.panel' ).getBoundingClientRect();
+		const height = window.innerHeight;
+		if ( sheet.top < height * 0.3 ) return 0;
+		const top = $( 'globe-ui' ).querySelector( '.intro' ).getBoundingClientRect().bottom;
+		const middle = ( top + sheet.top - PIN_CARD ) / 2;
+		return MathUtils.clamp( 1 - 2 * middle / height, 0, 0.8 );
+
+	}
 
 	function pinAt( place ) {
 
@@ -282,7 +299,8 @@ async function start( { key, left = null } ) {
 		state.vehicle = vehicle;
 		screens.hideLoading();
 		drive();
-		screens.showKeys();
+		// The keys, on a keyboard; a touch screen has its labelled buttons instead.
+		if ( ! document.body.classList.contains( 'touch' ) ) screens.showKeys();
 
 	}
 

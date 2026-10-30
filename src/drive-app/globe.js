@@ -235,6 +235,24 @@ export class GlobeView {
 
 	}
 
+	// A pose like `to` (see pose()) but looking a little short of its point, so that the point shows
+	// `lift` above the middle of the view (in the view's half-heights, 0 to 1) with a field of view of
+	// `fov` degrees: on a phone the panel covers the bottom of the screen. Ground taken as flat.
+	lifted( to, lift, fov ) {
+
+		const down = - to.pitch * DEG;
+		const above = Math.atan( lift * Math.tan( fov * DEG / 2 ) );
+		if ( ! lift || down - above < 5 * DEG ) return to;
+		const shift = to.distance * ( Math.sin( down ) / Math.tan( down - above ) - Math.cos( down ) );
+		const heading = to.heading * DEG;
+		return {
+			...to,
+			lat: to.lat - shift * Math.cos( heading ) / 111132,
+			lon: to.lon - shift * Math.sin( heading ) / ( 111320 * Math.max( 0.01, Math.cos( to.lat * DEG ) ) ),
+		};
+
+	}
+
 	// Fly to a pose (see pose()): along the great circle, rising for a long way and coming down in
 	// one smooth move. Resolves when it's there, or false if another flight took over.
 	flyTo( to, { duration } = {} ) {

@@ -58,13 +58,29 @@ export async function startVisit( siteKey, container ) {
 
 }
 
+let widget = null;
 function turnstileToken( siteKey, container ) {
 
 	return loadTurnstile().then( turnstile => new Promise( ( resolve, reject ) => {
 
 		const timer = setTimeout( () => reject( new Error( 'The robot check took too long' ) ), TURNSTILE_TIMEOUT );
+		// Trying again: the last widget goes first.
+		if ( widget !== null ) {
+
+			try {
+
+				turnstile.remove( widget );
+
+			} catch {
+
+				// Already gone.
+
+			}
+
+		}
+
 		container.replaceChildren();
-		turnstile.render( container, {
+		widget = turnstile.render( container, {
 			sitekey: siteKey,
 			action: 'visit',
 			// Out of sight unless Turnstile needs a click.
@@ -87,16 +103,20 @@ function turnstileToken( siteKey, container ) {
 
 }
 
+// Turnstile's script makes window.turnstile. (Checked for render: an element with the id
+// "turnstile" would show up as window.turnstile too.)
+const loaded = () => typeof window.turnstile?.render === 'function';
+
 let turnstileLoading = null;
 function loadTurnstile() {
 
 	turnstileLoading ??= new Promise( ( resolve, reject ) => {
 
-		if ( window.turnstile ) return resolve( window.turnstile );
+		if ( loaded() ) return resolve( window.turnstile );
 		const script = document.createElement( 'script' );
 		script.src = TURNSTILE_SCRIPT;
 		script.async = true;
-		script.onload = () => window.turnstile ? resolve( window.turnstile ) : reject( new Error( 'Turnstile didn\'t load' ) );
+		script.onload = () => loaded() ? resolve( window.turnstile ) : reject( new Error( 'Turnstile didn\'t load' ) );
 		script.onerror = () => {
 
 			turnstileLoading = null;

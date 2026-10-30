@@ -165,7 +165,7 @@ describe( 'World Drive, desktop', () => {
 		await flown( page );
 		const pose = await page.evaluate( () => window.drive.globe.pose() );
 		assert.ok( Math.abs( pose.lat - FURKA.lat ) < 0.01 && Math.abs( pose.lon - FURKA.lon ) < 0.01, JSON.stringify( pose ) );
-		assert.ok( await page.locator( '#pin' ).isVisible(), 'no pin on the globe' );
+		assert.ok( await page.locator( '#pin span' ).isVisible(), 'no pin on the globe' );
 		await shot( page, 'drive-3-flown' );
 
 	} );
@@ -288,7 +288,7 @@ describe( 'World Drive, desktop', () => {
 		await shot( page, 'drive-10-pin' );
 		await page.keyboard.press( 'Escape' );
 		await page.locator( '.pin-card' ).waitFor( { state: 'hidden' } );
-		assert.equal( await page.locator( '#pin' ).isVisible(), false );
+		assert.equal( await page.locator( '#pin span' ).isVisible(), false );
 
 	} );
 
@@ -329,6 +329,11 @@ describe( 'World Drive on a phone', () => {
 		await flown( page );
 		const card = await page.locator( '.pin-card' ).boundingBox();
 		assert.ok( card.y + card.height <= sheet.y, 'the pin card is under the sheet' );
+		// The globe flew so that the pin shows above its card, under the title.
+		const marker = await page.locator( '#pin span' ).boundingBox();
+		const title = await page.locator( '#globe-ui .intro' ).boundingBox();
+		assert.ok( marker && marker.y + marker.height <= card.y && marker.y >= title.y + title.height, `pin at ${ JSON.stringify( marker ) }` );
+		assert.equal( await page.locator( '#drive-ui .keys' ).isVisible(), false );
 		await shot( page, 'drive-phone-2-pin' );
 		await page.locator( '.pin-card .go' ).tap();
 		await page.waitForFunction( () => window.drive.mode === 'driving', null, { timeout: 60000 } );

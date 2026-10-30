@@ -246,7 +246,8 @@ button.primary:active,
 
 .vehicles {
 	display: grid;
-	grid-template-columns: repeat( 4, 1fr );
+	/* minmax: four always fit, however long a name or wide a picture. */
+	grid-template-columns: repeat( 4, minmax( 0, 1fr ) );
 	gap: 6px;
 }
 
@@ -265,7 +266,8 @@ button.primary:active,
 .vehicle img,
 .vehicle .kart-icon {
 	display: block;
-	width: 64px;
+	width: 100%;
+	max-width: 64px;
 	height: 44px;
 	object-fit: contain;
 }
@@ -480,7 +482,8 @@ button.primary:active,
 	margin: 0;
 }
 
-/* Touch screens: steering bottom left, pedals bottom right, the extras above the pedals. */
+/* Touch screens: steering bottom left, pedals bottom right, the extras above the gas. (Under
+   #drive-ui: body.touch marks a touch screen, and its other buttons stay where they are.) */
 #drive-ui .touch {
 	display: none;
 }
@@ -493,7 +496,7 @@ body.touch #drive-ui .keys-toggle {
 	display: none;
 }
 
-.touch button {
+#drive-ui .touch button {
 	position: fixed;
 	z-index: 14;
 	display: flex;
@@ -508,64 +511,63 @@ body.touch #drive-ui .keys-toggle {
 	touch-action: none;
 }
 
-.touch button.down {
+#drive-ui .touch button.down {
 	background: rgba( 255, 210, 63, 0.4 );
 	border-color: var( --accent );
 }
 
-.touch .steer button {
+#drive-ui .touch .steer button {
 	bottom: calc( 22px + var( --safe-bottom ) );
 	width: 78px;
 	height: 78px;
 	border-radius: 50%;
 }
 
-.touch .steer button svg {
+#drive-ui .touch .steer button svg {
 	width: 34px;
 	height: 34px;
 }
 
-.touch .steer button:first-child {
+#drive-ui .touch .steer button:first-child {
 	left: 18px;
 }
 
-.touch .steer button:last-child {
+#drive-ui .touch .steer button:last-child {
 	left: 108px;
 }
 
-.touch .pedals button {
+#drive-ui .touch .pedals button {
 	bottom: calc( 22px + var( --safe-bottom ) );
 	border-radius: 18px;
 	font-size: 13px;
 }
 
-.touch .pedals .gas {
+#drive-ui .touch .pedals .gas {
 	right: 18px;
 	width: 84px;
 	height: 120px;
 	background: rgba( 46, 204, 113, 0.32 );
 }
 
-.touch .pedals .brake {
+#drive-ui .touch .pedals .brake {
 	right: 114px;
 	width: 70px;
 	height: 78px;
 	background: rgba( 255, 90, 95, 0.3 );
 }
 
-.touch .extras {
+/* One column up the right-hand edge, clear of the vehicle in the middle. */
+#drive-ui .touch .extras {
 	position: fixed;
-	right: 18px;
+	right: 31px;
 	bottom: calc( 154px + var( --safe-bottom ) );
 	z-index: 14;
 	display: flex;
-	flex-wrap: wrap;
-	justify-content: flex-end;
+	flex-direction: column;
 	gap: 8px;
-	width: 200px;
 }
 
-.touch .extras button {
+#drive-ui .touch .extras button {
 	position: static;
 	width: 58px;
 	height: 44px;
@@ -717,13 +719,13 @@ body.touch .drive-hud {
 	to { transform: translateX( 0 ); }
 }
 
-#turnstile {
+#robot-check {
 	display: flex;
 	justify-content: center;
 	margin-top: 14px;
 }
 
-#turnstile:empty {
+#robot-check:empty {
 	margin: 0;
 }
 
@@ -913,6 +915,10 @@ dialog#about form {
 		padding: 14px 14px calc( 14px + var( --safe-bottom ) );
 		border-width: 1px 0 0;
 		border-radius: 20px 20px 0 0;
+		/* A backdrop filter would hold the title (fixed, below) inside the sheet. */
+		background: var( --panel-solid );
+		backdrop-filter: none;
+		-webkit-backdrop-filter: none;
 	}
 
 	#globe-ui .intro {
