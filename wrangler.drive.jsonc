@@ -1,6 +1,6 @@
 // World Drive on worlddrive.app (docs/world-drive.md): its own Worker, apart from the construction
-// app's (wrangler.jsonc). `npm run deploy:drive` builds the site into dist-drive/ and deploys it with
-// this; Workers Builds can run the same from GitHub.
+// app's (wrangler.jsonc). `npm run deploy:drive` applies the leaderboard's migrations, builds the
+// site into dist-drive/ and deploys it with this; Workers Builds runs the same from GitHub.
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "world-drive",
@@ -46,5 +46,16 @@
 	},
 	"migrations": [
 		{ "tag": "v1", "new_sqlite_classes": [ "DriveLimits" ] }
+	],
+	// The leaderboard: nicknames and each player's best stunt scores (worker/drive/scores.js). The
+	// world-drive database already exists; its tables are worker/drive/migrations, applied by the
+	// deploy (`npm run deploy:drive`, which Workers Builds runs) before the Worker goes out.
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "world-drive",
+			"database_id": "097e0573-c9ac-4359-8551-2ef89762bd55",
+			"migrations_dir": "worker/drive/migrations"
+		}
 	]
 }
