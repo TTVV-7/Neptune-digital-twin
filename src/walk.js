@@ -73,9 +73,11 @@ const TURN_MIN = 1.5;
 // many times the clearance radius.
 const CONFIRM_REACH = 1.3;
 // The view turn takes this long (s), the longer for a bigger turn. It only turns toward a way
-// along the wall with at least this much room (m) beyond the clearance radius.
+// along the wall with at least this much room (m) beyond the clearance radius, walking with the
+// ground checked every ROOM_STEP metres.
 const TURN_TIME = [ 0.3, 0.5 ];
 const TURN_ROOM = 2;
+const ROOM_STEP = 0.5;
 // Flying into the ground or a ceiling levels the view to this pitch off it.
 const LEVEL_PITCH = 10 * MathUtils.DEG2RAD;
 // Mouse movement (pixels) during a turn that hands the view back to the user. A turn doesn't start
@@ -604,6 +606,9 @@ export class WalkController {
 
 	// How far the player could go along the level `dir` before keeping their clearance from
 	// something, up to TURN_ROOM: from the camera flying, from the body's wall probes walking.
+	// Walking, also only as far as the ground carries on without a drop, e.g. off the landing at a
+	// site trailer's door: its guard rail is too thin for the probes, so the turn would walk you
+	// through it and off the edge.
 	roomAlong( dir ) {
 
 		const walking = this.mode === 'walk';
@@ -615,6 +620,18 @@ export class WalkController {
 			_origin.y += offset;
 			const hit = this.cast( _origin, dir, reach );
 			if ( hit ) reach = hit.distance;
+
+		}
+
+		if ( ! walking ) return reach - radius;
+		let floor = this.camera.position.y - PLAYER.eyeHeight;
+		for ( let along = ROOM_STEP; along < reach; along += ROOM_STEP ) {
+
+			_origin.copy( this.camera.position ).addScaledVector( dir, along );
+			_origin.y = floor + PLAYER.stepHeight;
+			const ground = this.cast( _origin, DOWN, PLAYER.stepHeight * 2 );
+			if ( ! ground ) return along - ROOM_STEP - radius;
+			floor = ground.point.y;
 
 		}
 
