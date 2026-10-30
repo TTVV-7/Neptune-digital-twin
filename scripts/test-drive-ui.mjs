@@ -226,6 +226,31 @@ describe( 'World Drive, desktop', () => {
 
 	} );
 
+	test( 'a bridge spot looks round its pin for the deck', async () => {
+
+		// A deck 24 m wide and 40 m up, running north 6 to 30 m east of the pin, over the test pad.
+		const found = await page.evaluate( () => {
+
+			const { ground } = window.drive;
+			const pad = ground.getColliders()[ 0 ];
+			const deck = pad.children.find( child => child.isMesh ).clone();
+			deck.scale.set( 24 / 4000, 600 / 2000, 1 );
+			deck.position.set( - 18, 40, 0 );
+			pad.add( deck );
+			deck.updateMatrixWorld();
+			const on = ground.deck( 0 );
+			pad.remove( deck );
+			return { on, off: ground.deck( 0 ) };
+
+		} );
+		assert.equal( found.off, null );
+		// The nearest point with deck all round it.
+		assert.deepEqual( { ...found.on, y: Math.round( found.on.y * 100 ) / 100 }, { east: 9, north: 0, y: 40 } );
+		const spots = await page.evaluate( async () => ( await import( '/src/drive-app/places.js' ) ).SPOTS.filter( spot => spot.deck ).map( spot => spot.id ) );
+		assert.deepEqual( spots, [ 'lions-gate', 'golden-gate', 'sydney' ] );
+
+	} );
+
 	test( 'Esc pauses; the pause menu changes ride and drives on', async () => {
 
 		await page.keyboard.press( 'Escape' );

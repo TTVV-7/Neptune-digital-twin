@@ -34,6 +34,14 @@ const TAP_TIME = 450;
 const AIR = 1.025;
 const AIR_FROM = 300000;
 const EARTH_RADIUS = 6371000;
+// Heights (m above the ellipsoid) the ground can really be at. From far off only Google's coarsest
+// tiles have loaded, whose big flat triangles cut kilometres under the curve of the Earth: a
+// height found on one of those is no use for flying down to, or for a pin.
+const LOWEST = - 500;
+const HIGHEST = 9000;
+// How often (s) the ground's height under a pin, or where a flight is headed, is looked at again
+// as sharper tiles load.
+const RECHECK = 0.25;
 
 const _m = new Matrix4();
 const _inverse = new Matrix4();
@@ -74,6 +82,7 @@ export class GlobeView {
 		this.raycaster.firstHitOnly = true;
 		this.ecef = new Matrix4();
 		this.lastTouch = - Infinity;
+		this.pinCheck = 0;
 
 		this.controls = new GlobeControls( surface, camera, canvas );
 		this.controls.setEllipsoid( ellipsoid, earth );
@@ -145,6 +154,15 @@ export class GlobeView {
 
 		}
 
+		// Sharper tiles keep loading under the pin: keep it on the ground.
+		this.pinCheck += dt;
+		if ( this.pin && this.pinCheck > RECHECK ) {
+
+			this.pinCheck = 0;
+			this.pin.height = this.surfaceHeight( this.pin.lat, this.pin.lon ) ?? this.pin.height;
+
+		}
+
 		this.updateAir();
 		this.updatePin();
 
@@ -182,7 +200,8 @@ export class GlobeView {
 		_up.set( 0, 1, 0 ).transformDirection( _m );
 		this.raycaster.set( camera.position, _a.set( 0, 0, - 1 ).transformDirection( camera.matrixWorld ) );
 		this.raycaster.far = Infinity;
-		const hit = this.raycaster.intersectObject( this.surface, true ).find( h => h.object.isMesh && h.object.visible );
+		let hit = this.raycaster.intersectObject( this.surface, true ).find( h => h.object.isMesh && h.object.visible );
+		if ( hit && ! this.plausible( _focus.copy( hit.point ).applyMatrix4( _inverse ) ) ) hit = null;
 		_ray.set( _pos, _forward );
 		if ( hit ) _focus.copy( hit.point ).applyMatrix4( _inverse );
 		else if ( ellipsoid.getPositionElevation( _pos ) < 0 ) ellipsoid.getPositionToSurfacePoint( _pos, _focus );
@@ -274,7 +293,7 @@ export class GlobeView {
 		this.flight?.resolve( false );
 		return new Promise( resolve => {
 
-			this.flight = { from, to, a: _a.clone(), b: _b.clone(), angle, logs, lift, time: 0, duration, resolve };
+			this.flight = { from, to, a: _a.clone(), b: _b.clone(), angle, logs, lift, time: 0, duration, resolve, check: 0, ground: null };
 			this.controls.enabled = false;
 
 		} );
@@ -293,6 +312,18 @@ export class GlobeView {
 
 		const f = this.flight;
 		f.time += dt;
+		// Flying down to the ground, the height it's at is only known roughly until sharper tiles
+		// load on the way: keep looking, and ease toward it. (Coming down to a guess that's too low
+		// would end up under a mountain, where nothing shows.)
+		f.check += dt;
+		if ( f.to.distance < 1e5 && f.check > RECHECK ) {
+
+			f.check = 0;
+			f.ground = this.surfaceHeight( f.to.lat, f.to.lon ) ?? f.ground;
+
+		}
+
+		if ( f.ground !== null ) f.to.height += ( f.ground - f.to.height ) * Math.min( 1, dt * 3 );
 		const t = Math.min( 1, f.time / f.duration );
 		const e = t < 0.5 ? 4 * t * t * t : 1 - ( - 2 * t + 2 ) ** 3 / 2;
 		// The point looked at moves along the ground a little ahead of the climb and descent.
@@ -342,11 +373,20 @@ export class GlobeView {
 		if ( hit ) _pos.copy( hit.point ).applyMatrix4( _inverse );
 		else if ( ! this.ellipsoid.intersectRay( _ray.copy( this.raycaster.ray ).applyMatrix4( _inverse ), _pos ) ) return null;
 		this.ellipsoid.getPositionToCartographic( _pos, _carto );
-		return { lat: _carto.lat / DEG, lon: _carto.lon / DEG, height: hit ? _carto.height : null };
+		return { lat: _carto.lat / DEG, lon: _carto.lon / DEG, height: hit && this.plausible( _pos ) ? _carto.height : null };
 
 	}
 
-	// The height (m above the ellipsoid) of whatever has loaded at ( lat, lon ), or null.
+	// Whether a point (in the Earth's frame) is at a height the ground can really be: see LOWEST.
+	plausible( point ) {
+
+		const height = this.ellipsoid.getPositionElevation( point );
+		return height >= LOWEST && height <= HIGHEST;
+
+	}
+
+	// The height (m above the ellipsoid) of whatever has loaded at ( lat, lon ), or null (nothing
+	// there, or only tiles too coarse to tell).
 	surfaceHeight( lat, lon ) {
 
 		const { ellipsoid } = this;
@@ -357,7 +397,7 @@ export class GlobeView {
 		const hit = this.raycaster.intersectObject( this.surface, true ).find( h => h.object.isMesh && h.object.visible );
 		if ( ! hit ) return null;
 		ellipsoid.getPositionToCartographic( _pos.copy( hit.point ).applyMatrix4( _inverse.copy( this.earth.matrixWorld ).invert() ), _carto );
-		return _carto.height;
+		return _carto.height >= LOWEST && _carto.height <= HIGHEST ? _carto.height : null;
 
 	}
 

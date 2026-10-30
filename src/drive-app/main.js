@@ -5,6 +5,7 @@ import { ModelManager } from '../models.js';
 import { Driver } from '../drive.js';
 import { isTyping } from '../walk.js';
 import { useFastRaycast } from '../raycast.js';
+import { enuToLocal, localToLatLon } from '../geo.js';
 import { createDriveHud } from '../drive-hud.js';
 import { getConfig, startVisit } from './api.js';
 import { GlobeView } from './globe.js';
@@ -39,6 +40,8 @@ const SKY_BELOW = [ 15000, 120000 ];
 const GROUND_WAIT = [ 25, 15 ];
 // The tiles must have stopped loading this long (s) for the ground to count as there.
 const SETTLE = 0.6;
+// Where the ground is looked for (m above the ellipsoid): below the Dead Sea to above Everest.
+const GROUND_RANGE = [ - 1500, 9500 ];
 // Room (px) the pin's card takes over the panel when the panel is a sheet along the bottom.
 const PIN_CARD = 84;
 
@@ -232,7 +235,7 @@ async function start( { key, left = null } ) {
 		if ( state.mode !== 'globe' ) return;
 		const drop = state.drop = { cancelled: false };
 		const gone = () => drop.cancelled || state.drop !== drop;
-		const { lat, lon } = place;
+		let { lat, lon } = place;
 		state.place = place;
 		rememberPlace( place );
 		panel.refreshRecent();
@@ -258,7 +261,9 @@ async function start( { key, left = null } ) {
 		await globe.flyTo( { lat, lon, height: estimate, distance: 320, heading: place.heading ?? globe.pose().heading, pitch: - 40 } );
 		if ( gone() ) return;
 		screens.loading( 'Loading the ground...', 0 );
-		const y = await settle( drop, 9000, 20000, GROUND_WAIT[ 0 ] );
+		// Looking for it anywhere from above the highest mountain to below the Dead Sea, whatever
+		// the estimate was.
+		const y = await settle( drop, GROUND_RANGE[ 1 ] - estimate, GROUND_RANGE[ 1 ] - GROUND_RANGE[ 0 ], GROUND_WAIT[ 0 ] );
 		if ( gone() ) return;
 		if ( y === null ) {
 
@@ -267,10 +272,19 @@ async function start( { key, left = null } ) {
 
 		}
 
+		// A spot on a bridge starts on its deck, if its pin is a little off it, over the water.
+		let height = estimate + y;
+		const deck = place.deck ? ground.deck( y ) : null;
+		if ( deck ) {
+
+			( { lat, lon } = localToLatLon( enuToLocal( deck.east, deck.north, 0 ), { lat, lon } ) );
+			height = estimate + deck.y;
+
+		}
+
 		// Now the ground is at y = 0, and the street can be seen: down behind where you'll start.
-		const height = estimate + y;
 		recentre( { lat, lon, height } );
-		state.place = { ...place, height };
+		state.place = { ...place, lat, lon, height };
 		const heading = ground.heading( 0, place.heading );
 		await globe.flyTo( { lat, lon, height, distance: 16, heading, pitch: - 15 }, { duration: 1.8 } );
 		if ( gone() ) return;

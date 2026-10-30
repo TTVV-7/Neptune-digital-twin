@@ -21,6 +21,13 @@ const OPEN = 0.9;
 // A spot's own heading (along its road) is used if the street that way is at least this long,
 // as a share of the longest.
 const HINT = 0.6;
+// A bridge's deck is looked for this far (m) round the pin, every so many metres, this much higher
+// than the ground at the pin (m: over the water, under the towers' tops), and must be level to
+// within LEVEL (m) a few metres round.
+const DECK_REACH = 45;
+const DECK_STEP = 3;
+const DECK_RISE = [ 8, 110 ];
+const LEVEL = 0.6;
 
 const _origin = new Vector3();
 const _dir = new Vector3();
@@ -95,6 +102,44 @@ export class Ground {
 		}
 
 		return distance;
+
+	}
+
+	// The deck of a bridge near the pin, standing at height y: the nearest point within DECK_REACH
+	// where the ground is a broad level surface well above the pin's (not a railing, a cable or a
+	// tower), as { east, north, y }, or null.
+	deck( y ) {
+
+		let best = null;
+		for ( let north = - DECK_REACH; north <= DECK_REACH; north += DECK_STEP ) {
+
+			for ( let east = - DECK_REACH; east <= DECK_REACH; east += DECK_STEP ) {
+
+				const distance = Math.hypot( east, north );
+				if ( distance > DECK_REACH || ( best && distance >= best.distance ) ) continue;
+				const top = this.heightAround( east, north, y );
+				if ( top === null || top - y < DECK_RISE[ 0 ] || top - y > DECK_RISE[ 1 ] ) continue;
+				const level = [ [ 2.5, 0 ], [ - 2.5, 0 ], [ 0, 2.5 ], [ 0, - 2.5 ] ].every( ( [ e, n ] ) => {
+
+					const h = this.heightAround( east + e, north + n, y );
+					return h !== null && Math.abs( h - top ) < LEVEL;
+
+				} );
+				if ( level ) best = { east, north, y: top, distance };
+
+			}
+
+		}
+
+		return best && { east: best.east, north: best.north, y: best.y };
+
+	}
+
+	// The ground's height `east`, `north` metres from the pin, looking down from well above y.
+	heightAround( east, north, y ) {
+
+		enuToLocal( east, north, 0, _origin );
+		return this.heightAt( _origin.x, _origin.z, y + DECK_RISE[ 1 ] + 20, DECK_RISE[ 1 ] + 40 );
 
 	}
 

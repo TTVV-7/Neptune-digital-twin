@@ -2,18 +2,19 @@
 // you drove lately (kept in this browser).
 
 // Spots worth a drive. `heading` (degrees from north) is the way along the road or bridge there:
-// a hint the drop-in follows if the street really goes that way (see spawn.js).
+// a hint the drop-in follows if the street really goes that way (see spawn.js). `deck`: the spot is
+// on a bridge, so the drop-in looks round the pin for the deck rather than the water under it.
 export const SPOTS = [
 	{ id: 'neptune', name: 'Neptune Terminals', region: 'North Vancouver, Canada', lat: 49.3054, lon: - 123.0491 },
 	{ id: 'sea-to-sky', name: 'Sea-to-Sky Highway', region: 'Howe Sound, Canada', lat: 49.5566, lon: - 123.2338 },
-	{ id: 'lions-gate', name: 'Lions Gate Bridge', region: 'Vancouver, Canada', lat: 49.3151, lon: - 123.1389, heading: 25 },
-	{ id: 'golden-gate', name: 'Golden Gate Bridge', region: 'San Francisco, USA', lat: 37.8199, lon: - 122.4783, heading: 352 },
+	{ id: 'lions-gate', name: 'Lions Gate Bridge', region: 'Vancouver, Canada', lat: 49.3151, lon: - 123.1389, heading: 25, deck: true },
+	{ id: 'golden-gate', name: 'Golden Gate Bridge', region: 'San Francisco, USA', lat: 37.8199, lon: - 122.4783, heading: 352, deck: true },
 	{ id: 'manhattan', name: 'Times Square', region: 'Manhattan, New York', lat: 40.7570, lon: - 73.9858, heading: 29 },
 	{ id: 'monaco', name: 'Monaco harbour', region: 'Monte Carlo, Monaco', lat: 43.7365, lon: 7.4216 },
 	{ id: 'shibuya', name: 'Shibuya Crossing', region: 'Tokyo, Japan', lat: 35.6595, lon: 139.7005 },
 	{ id: 'furka', name: 'Furka Pass', region: 'Swiss Alps, 2,429 m up', lat: 46.5725, lon: 8.4153 },
 	{ id: 'grand-canyon', name: 'Grand Canyon rim road', region: 'Arizona, USA', lat: 36.0757, lon: - 112.1541 },
-	{ id: 'sydney', name: 'Sydney Harbour Bridge', region: 'Sydney, Australia', lat: - 33.8523, lon: 151.2108, heading: 15 },
+	{ id: 'sydney', name: 'Sydney Harbour Bridge', region: 'Sydney, Australia', lat: - 33.8523, lon: 151.2108, heading: 15, deck: true },
 	{ id: 'arc', name: 'Arc de Triomphe', region: 'Paris, France', lat: 48.8738, lon: 2.2962, heading: 0 },
 	{ id: 'vegas', name: 'Las Vegas Strip', region: 'Nevada, USA', lat: 36.1129, lon: - 115.1724, heading: 0 },
 ];
@@ -39,7 +40,7 @@ export function formatLatLon( lat, lon ) {
 
 }
 
-// Latest first: [ { name, region, lat, lon, heading } ].
+// Latest first: [ { name, region, lat, lon, heading, deck } ].
 export function recentPlaces() {
 
 	const list = storage( () => JSON.parse( localStorage.getItem( RECENT_KEY ) ) );
@@ -48,10 +49,11 @@ export function recentPlaces() {
 
 }
 
-export function rememberPlace( { name, region = '', lat, lon, heading } ) {
+export function rememberPlace( { name, region = '', lat, lon, heading, deck } ) {
 
 	const same = place => Math.abs( place.lat - lat ) < 1e-4 && Math.abs( place.lon - lon ) < 1e-4;
-	const list = [ { name, region, lat, lon, ...( Number.isFinite( heading ) ? { heading } : {} ) }, ...recentPlaces().filter( place => ! same( place ) ) ].slice( 0, RECENT_MAX );
+	const place = { name, region, lat, lon, ...( Number.isFinite( heading ) ? { heading } : {} ), ...( deck ? { deck: true } : {} ) };
+	const list = [ place, ...recentPlaces().filter( place => ! same( place ) ) ].slice( 0, RECENT_MAX );
 	storage( () => localStorage.setItem( RECENT_KEY, JSON.stringify( list ) ) );
 	return list;
 

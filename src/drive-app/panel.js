@@ -71,7 +71,8 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin } ) {
 			return item( name, rest.slice( 0, 3 ).join( ', ' ) || result.type, () => {
 
 				showResults( [] );
-				flyTo( { name, region: rest.slice( 0, 2 ).join( ', ' ), lat: result.lat, lon: result.lon } );
+				// A bridge: start on its deck (see spawn.js).
+				flyTo( { name, region: rest.slice( 0, 2 ).join( ', ' ), lat: result.lat, lon: result.lon, deck: result.type === 'bridge' } );
 
 			} );
 
