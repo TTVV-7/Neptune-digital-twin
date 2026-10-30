@@ -1,4 +1,4 @@
-import { Box3, EventDispatcher, Group, LoadingManager, Raycaster, REVISION, Vector3 } from 'three';
+import { Box3, EventDispatcher, Group, LoadingManager, MathUtils, Raycaster, REVISION, Vector3 } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
@@ -82,12 +82,17 @@ export class ModelManager extends EventDispatcher {
 
 		// Recentre so east/north refer to the middle of the footprint and up to its base.
 		// CAD exports often carry huge offsets (e.g. UTM coordinates) that would put the model kilometres away.
-		// Kinds are built centred already.
-		if ( config.recenter !== false && ! kind ) {
+		// Kinds are built centred already. A machine whose box is mostly boom (a crane) gives the
+		// point it stands and turns on instead, as metres ahead of the middle (pivot.ahead, negative
+		// for behind), so turning or steering it doesn't swing its carrier round a point on the boom.
+		const scale = config.scale ?? 1;
+		const recenter = config.recenter !== false && ! kind;
+		const pivotAhead = recenter ? ( Number( config.pivot?.ahead ) || 0 ) / scale : 0;
+		if ( recenter ) {
 
 			_box.setFromObject( content );
 			_box.getCenter( _center );
-			content.position.set( - _center.x, - _box.min.y, - _center.z );
+			content.position.set( - _center.x, - _box.min.y, - _center.z + pivotAhead );
 
 		}
 
@@ -102,6 +107,8 @@ export class ModelManager extends EventDispatcher {
 			url: config.url,
 			recenter: config.recenter !== false,
 			front: config.front,
+			// In the model's own units (see recentring above).
+			pivotAhead,
 			// Kinds count as library items: saved with the layout, listed as placed.
 			library: kind ? config.kind : config.library,
 			kind: kind ? config.kind : null,
@@ -119,11 +126,21 @@ export class ModelManager extends EventDispatcher {
 				up: config.up ?? 0,
 				snap: config.up == null,
 				heading: config.heading ?? 0,
-				scale: config.scale ?? 1,
+				scale,
 			},
 			snapped: false,
 			lastSnap: - Infinity,
+			// How race mode left it, while it hasn't been moved since (see park()).
+			parked: null,
 		};
+
+		const parked = config.parked;
+		if ( [ parked?.rise, parked?.pitch, parked?.roll ].every( Number.isFinite ) ) {
+
+			const { east, north, heading, up } = entry.state;
+			entry.parked = { east, north, heading, up, rise: parked.rise, pitch: parked.pitch, roll: parked.roll };
+
+		}
 
 		this.entries.push( entry );
 		this.apply( entry );
@@ -153,9 +170,12 @@ export class ModelManager extends EventDispatcher {
 
 	apply( entry ) {
 
-		const { pivot, state } = entry;
+		const { pivot, state, parked } = entry;
+		// Moved, turned or raised by hand since it was parked (see park()): it's placed as usual again.
+		if ( parked && ( parked.east !== state.east || parked.north !== state.north || parked.heading !== state.heading || ( ! state.snap && parked.up !== state.up ) ) ) entry.parked = null;
+		const { pitch = 0, roll = 0 } = entry.parked ?? {};
 		enuToLocal( state.east, state.north, state.up, pivot.position );
-		pivot.rotation.set( 0, headingToYaw( state.heading ), 0 );
+		pivot.rotation.set( pitch * MathUtils.DEG2RAD, headingToYaw( state.heading ), roll * MathUtils.DEG2RAD, 'YXZ' );
 		pivot.scale.setScalar( state.scale );
 		entry.snapped = false;
 		if ( state.snap ) this.snap( entry );
@@ -163,8 +183,46 @@ export class ModelManager extends EventDispatcher {
 
 	}
 
+	// Leave a vehicle as it was driven (race mode, drive.js): where it stands now, tilted (pitch
+	// and roll in degrees) to the ground under its wheels or tracks. Up a pile, down in a hole or on
+	// a ramp, that ground isn't where snapping to the ground round the whole footprint would put it,
+	// so it keeps its height above the snapped ground too, and follows that as sharper tiles load. It
+	// stays like that, and is saved like that, until it's moved or turned. With no tilt (it was in
+	// the air) it's snapped as usual.
+	park( entry, tilt = null ) {
+
+		const { east, north, heading, up, snap } = entry.state;
+		const ground = tilt && snap ? this.groundHeight( entry ) : null;
+		const parked = tilt && { east, north, heading, up, rise: ground === null ? 0 : round( up - ground ), pitch: round( tilt.pitch ), roll: round( tilt.roll ) };
+		// Standing level where snapping would put it anyway: nothing to keep.
+		entry.parked = parked && ( parked.rise || parked.pitch || parked.roll ) ? parked : null;
+		this.apply( entry );
+
+	}
+
 	// Put the model's base on the ground around and under its footprint.
 	snap( entry ) {
+
+		const ground = this.groundHeight( entry );
+		entry.lastSnap = this.clock;
+		if ( ground === null ) return;
+
+		const { pivot, state } = entry;
+		const up = round( ground + ( entry.parked?.rise ?? 0 ) );
+		entry.snapped = true;
+		if ( up !== state.up ) {
+
+			state.up = up;
+			if ( entry.parked ) entry.parked.up = up;
+			pivot.position.y = up;
+			this.dispatchEvent( { type: 'change', entry } );
+
+		}
+
+	}
+
+	// The ground height snapping puts the model on, or null where there's no ground yet.
+	groundHeight( entry ) {
 
 		const { pivot, state, footprint } = entry;
 		const mode = getKind( entry.kind )?.snap ?? 'median';
@@ -199,22 +257,13 @@ export class ModelManager extends EventDispatcher {
 
 		}
 
-		entry.lastSnap = this.clock;
-		if ( heights.length === 0 ) return;
+		if ( heights.length === 0 ) return null;
 
 		heights.sort( ( a, b ) => a - b );
 		const mid = heights.length >> 1;
 		const median = heights.length % 2 ? heights[ mid ] : ( heights[ mid - 1 ] + heights[ mid ] ) / 2;
 		// A flatten area goes down to the lowest ground around it, so whatever stands in it is cleared.
-		const up = Math.round( ( mode.startsWith( 'lowest' ) ? heights[ 0 ] : median ) * 100 ) / 100;
-		entry.snapped = true;
-		if ( up !== state.up ) {
-
-			state.up = up;
-			pivot.position.y = up;
-			this.dispatchEvent( { type: 'change', entry } );
-
-		}
+		return round( mode.startsWith( 'lowest' ) ? heights[ 0 ] : median );
 
 	}
 
@@ -330,8 +379,16 @@ export class ModelManager extends EventDispatcher {
 			heading: round( state.heading ),
 			scale: state.scale,
 		};
+		if ( entry.parked ) {
+
+			const { rise, pitch, roll } = entry.parked;
+			config.parked = { rise, pitch, roll };
+
+		}
+
 		if ( ! entry.recenter ) config.recenter = false;
 		if ( entry.front ) config.front = entry.front;
+		if ( entry.pivotAhead ) config.pivot = { ahead: round( entry.pivotAhead * state.scale ) };
 		if ( entry.library && ! entry.kind ) config.library = entry.library;
 		return config;
 

@@ -132,7 +132,15 @@
 			"topSpeed": 80,
 			"accel": 1.2,
 			"brake": 4,
-			"reverse": 10
+			"reverse": 10,
+			"pivot": {
+				"ahead": -2.7
+			},
+			"cab": {
+				"ahead": 3.3,
+				"right": -0.6,
+				"up": 2.3
+			}
 		}
 	},
 	{
@@ -164,7 +172,10 @@
 			"topSpeed": 6,
 			"accel": 1,
 			"brake": 3,
-			"reverse": 6
+			"reverse": 6,
+			"pivot": {
+				"ahead": -2.37
+			}
 		}
 	},
 	{
@@ -196,7 +207,15 @@
 			"topSpeed": 2,
 			"accel": 0.3,
 			"brake": 1,
-			"reverse": 2
+			"reverse": 2,
+			"pivot": {
+				"ahead": -8.25
+			},
+			"cab": {
+				"ahead": -5.95,
+				"right": 1.45,
+				"up": 3.1
+			}
 		}
 	},
 	{
@@ -548,7 +567,15 @@
 			"topSpeed": 25,
 			"accel": 1.5,
 			"brake": 5,
-			"reverse": 15
+			"reverse": 15,
+			"pivot": {
+				"ahead": -1.27
+			},
+			"cab": {
+				"ahead": -0.7,
+				"right": -1.15,
+				"up": 2.7
+			}
 		}
 	},
 	{

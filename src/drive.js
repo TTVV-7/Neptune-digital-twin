@@ -26,6 +26,7 @@ const _box = new Box3();
 const _size = new Vector3();
 const _target = new Vector3();
 const _look = new Vector3();
+const _side = new Vector3();
 const DOWN = new Vector3( 0, - 1, 0 );
 
 export class Driver {
@@ -49,7 +50,8 @@ export class Driver {
 		const driveKeys = [ 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight' ];
 		window.addEventListener( 'keydown', e => {
 
-			if ( ! this.active || isTyping( e ) ) return;
+			// Browser shortcuts (Ctrl+R, Cmd+F...) are left to the browser, and don't drive or dig.
+			if ( ! this.active || isTyping( e ) || e.ctrlKey || e.metaKey || e.altKey ) return;
 			if ( driveKeys.includes( e.code ) || this.machine?.keys.includes( e.code ) ) {
 
 				e.preventDefault();
@@ -101,15 +103,22 @@ export class Driver {
 
 		// Measure the vehicle in its own frame: it faces -Z there once turned by its front axis.
 		const { pivot, state } = entry;
-		const yaw = pivot.rotation.y;
+		const rotation = pivot.rotation.clone();
 		pivot.rotation.set( 0, 0, 0 );
 		pivot.updateMatrixWorld( true );
 		_box.setFromObject( pivot ).getSize( _size );
-		pivot.rotation.set( 0, yaw, 0 );
+		pivot.rotation.copy( rotation );
 		this.length = _size.z;
 		this.width = _size.x;
 		this.height = _size.y;
 		this.wheelbase = this.length * 0.6;
+		// How far it reaches ahead of and behind where it stands (east, north), which for a crane is
+		// its carrier rather than the middle of its box.
+		this.front = pivot.position.z - _box.min.z;
+		this.rear = _box.max.z - pivot.position.z;
+		// Where the driver sits, if the library says (see specFor), from where it stands.
+		const { cab } = spec;
+		this.cab = cab ? { ahead: cab.ahead + ( this.front - this.rear ) / 2, right: cab.right + ( _box.min.x + _box.max.x ) / 2 - pivot.position.x, up: cab.up } : null;
 
 		this.east = state.east;
 		this.north = state.north;
@@ -118,8 +127,9 @@ export class Driver {
 		this.speed = 0;
 		this.steer = 0;
 		this.vy = 0;
-		this.pitch = 0;
-		this.roll = 0;
+		// Tilted as it was parked (see models.park), so it doesn't jolt level first.
+		this.pitch = rotation.x;
+		this.roll = rotation.z;
 		this.grounded = true;
 		this.airTime = 0;
 		this.bestAir = 0;
@@ -147,12 +157,14 @@ export class Driver {
 		const { entry } = this;
 		entry.driving = false;
 
-		// Park it where it stopped, back on the ground, and save that.
+		// Park it where it stopped, as it stands: tilted on the ground under its wheels or tracks, up
+		// a pile or down in a hole. If it's in the air it drops back onto the ground instead. Save that.
 		entry.state.east = Math.round( this.east * 100 ) / 100;
 		entry.state.north = Math.round( this.north * 100 ) / 100;
 		entry.state.heading = Math.round( ( ( this.heading % 360 ) + 360 ) % 360 * 10 ) / 10;
 		entry.state.up = this.y;
-		this.models.apply( entry );
+		const { x: pitch, z: roll } = entry.pivot.rotation;
+		this.models.park( entry, this.grounded ? { pitch: pitch * MathUtils.RAD2DEG, roll: roll * MathUtils.RAD2DEG } : null );
 
 		// Step out on the driver's side, facing the way the vehicle points.
 		const rad = this.heading * Math.PI / 180;
@@ -230,7 +242,7 @@ export class Driver {
 			const sign = Math.sign( step );
 			_dir.set( - Math.sin( rad ) * sign, 0, Math.cos( rad ) * sign );
 			enuToLocal( this.east, this.north, this.y + Math.min( 1.0, this.height * 0.4 ), _origin );
-			const hit = this.cast( _origin, _dir, Math.abs( step ) + this.length / 2 );
+			const hit = this.cast( _origin, _dir, Math.abs( step ) + ( sign > 0 ? this.front : this.rear ) );
 			const wall = hit && hit.face && Math.abs( hit.face.normal.clone().transformDirection( hit.object.matrixWorld ).y ) < 0.5;
 			if ( wall ) {
 
@@ -328,20 +340,30 @@ export class Driver {
 		const rad = this.heading * Math.PI / 180;
 		const forward = _dir.set( - Math.sin( rad ), 0, Math.cos( rad ) );
 		const base = enuToLocal( this.east, this.north, this.y, _origin );
-		if ( this.cameraMode === 'hood' ) {
+		const { cab } = this;
+		// The height the cameras frame: the vehicle's, or where its box is mostly boom or mast (a
+		// crane), its cab's, so they show the carrier and the way ahead rather than the boom.
+		const height = cab ? cab.up / 0.8 : this.height;
+		const inCab = this.cameraMode === 'hood' && cab;
+		if ( inCab ) {
 
-			_target.copy( base ).addScaledVector( forward, this.length * 0.15 ).setY( base.y + this.height * 0.8 );
+			const right = _side.set( - Math.cos( rad ), 0, - Math.sin( rad ) );
+			this.camera.position.copy( base ).addScaledVector( forward, cab.ahead ).addScaledVector( right, cab.right ).setY( base.y + cab.up );
+
+		} else if ( this.cameraMode === 'hood' ) {
+
+			_target.copy( base ).addScaledVector( forward, this.length * 0.15 ).setY( base.y + height * 0.8 );
 			this.camera.position.copy( _target );
 
 		} else {
 
-			const back = this.length * 0.8 + 5;
-			_target.copy( base ).addScaledVector( forward, - back ).setY( base.y + this.height + 2.5 );
+			const back = this.rear + this.length * 0.3 + 5;
+			_target.copy( base ).addScaledVector( forward, - back ).setY( base.y + height + 2.5 );
 			this.camera.position.lerp( _target, 1 - Math.exp( - dt * 6 ) );
 
 		}
 
-		_look.copy( base ).addScaledVector( forward, 8 ).setY( base.y + this.height * 0.6 );
+		_look.copy( inCab ? this.camera.position : base ).addScaledVector( forward, 8 ).setY( base.y + height * 0.6 );
 		this.camera.lookAt( _look );
 		// Keep the walk controller's view direction in step for when we get out.
 		this.controls.yaw = headingToYaw( this.heading );
@@ -371,7 +393,10 @@ export class Driver {
 }
 
 // A library item can also give its own tuning as "drive": { topSpeed, accel, brake, reverse }
-// in library.json, which makes it drivable whatever its category.
+// in library.json, which makes it drivable whatever its category. A machine whose box is mostly
+// boom or mast (a crane) also gives "cab": { ahead, right, up }, where the driver's eyes are in
+// metres from the middle of its box at ground level, for the cameras; and "pivot": { ahead }, the
+// point it stands and turns on in metres ahead of that middle (see itemConfig and models.js).
 export function specFor( item ) {
 
 	return { ...SPECS.default, ...SPECS[ item?.id ], ...item?.drive };

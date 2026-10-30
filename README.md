@@ -202,7 +202,9 @@ boosts, **Space** hops, **C** switches between chase and bonnet cameras, **V** o
 parks it where it stopped. The speedometer shows km/h, your top speed and longest jump.
 
 The construction machines drive too, at their own speeds: the dozer at 11 km/h, the wheel loader at
-40, the cranes at walking pace. The pickup tops out at 160 km/h (about 210 with boost), the semi at 120 and the haul truck at 70. The **Race**
+40, the crawler crane at walking pace (2 km/h) and the all-terrain crane at road speed (80), even with
+its boom up. The cranes stand and turn on their carriers, and the cameras frame the carrier and look
+out of the cab rather than from up the boom. The pickup tops out at 160 km/h (about 210 with boost), the semi at 120 and the haul truck at 70. The **Race**
 category has two jump ramps (1.2 m and 3 m); hit the big one at highway speed for about 1.5 s of air.
 Walls, containers and Google's buildings stop you, so flatten a strip first for a clear run.
 
