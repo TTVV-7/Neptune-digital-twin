@@ -326,7 +326,7 @@ function updateStatus( camera, controls, tiles, driver ) {
 	const { east, north } = localToEnu( camera.position );
 	const mode = driver.active ? 'DRIVING' : controls.mode === 'walk' ? 'WALKING' : 'FLYING';
 	const lines = [
-		`${ mode }${ ! driver.active && controls.mode === 'walk' && ! controls.groundFound ? ' (waiting for ground)' : '' }`,
+		`${ mode }${ ! driver.active && controls.ghost ? ' · ghost: through walls (G)' : '' }${ ! driver.active && controls.mode === 'walk' && ! controls.groundFound ? ' (waiting for ground)' : '' }`,
 		`lat ${ lat.toFixed( 6 ) }  lon ${ lon.toFixed( 6 ) }`,
 		`east ${ east.toFixed( 1 ) } m  north ${ north.toFixed( 1 ) } m`,
 		`heading ${ yawToHeading( controls.yaw ).toFixed( 0 ) }°`,
@@ -416,6 +416,10 @@ function setUpOverlays( controls ) {
 		if ( locked ) help.hidden = true;
 
 	};
+	controls.onToggle = ( setting, on ) => toast( {
+		ghost: on ? 'Ghost: you go through walls and buildings. G to bump into them again' : 'Walls and buildings stop you again',
+		autoTurn: on ? 'The view turns along walls you run into' : 'The view no longer turns along walls you run into. T turns it back on',
+	}[ setting ] );
 
 	// Capture phase, because lil-gui stops key events from bubbling out of its controls.
 	window.addEventListener( 'keydown', e => {

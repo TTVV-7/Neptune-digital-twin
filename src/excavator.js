@@ -782,6 +782,8 @@ class Excavator {
 			// A truck on the dump side would be in the way: look from the other side then.
 			const side = this.target?.truck ? - this.side : this.side;
 			camera.position.lerp( at( - 6 * s, side * 6.5 * s, 7 * s ), ease );
+			// Never inside a building, a truck or a tall pile: in front of whatever is in the way.
+			this.driver.pullInFront( at( 0, 0, 2.5 * s ), camera.position );
 			this.look.lerp( at( this.reach * 0.7, this.side * this.tuning.dump * 0.3, 0.3 * s ), ease );
 			view = Math.atan2( - ( this.look.x - camera.position.x ), this.look.z - camera.position.z ) / DEG;
 

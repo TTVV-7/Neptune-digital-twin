@@ -4,13 +4,26 @@ import { blocks, isTyping } from './walk.js';
 
 // Race mode: drive a placed vehicle at highway speeds. Arcade physics rather than a simulation:
 // the vehicle follows the ground under its wheels, keeps its upward speed off ramps and crests so
-// it can jump, and stops (with a bounce) when it hits a wall.
+// it can jump, and bounces off walls: scraping along them at a glancing angle, stopping and
+// bouncing back a little head-on.
 
 const KMH = 3.6;
 const GRAVITY = 9.81;
 const JUMP_SPEED = 7;
 // Ground this much below the wheels means the vehicle has left it (off a ramp or a crest).
 const LEAVE_GROUND = 0.35;
+// Crashing: the vehicle keeps its speed along the wall less a scrape of SCRAPE times its speed
+// into it, and bounces back with RESTITUTION times that; slower than CRASH_MIN (m/s) into the wall
+// it just stops against it. It turns toward the wall's line by a share of the angle it hit at
+// (the square of the angle's cosine): most of the way for a glancing blow, so it scrapes along,
+// and hardly at all head-on. At 30° that's 22°, and the next touch turns it the rest of the way.
+const RESTITUTION = 0.3;
+const SCRAPE = 0.2;
+const CRASH_MIN = 1.5;
+// The sideways part of a bounce dies away at this rate (1/s), as the tyres grip again.
+const GRIP = 4;
+// The cameras keep this far (m) in front of anything between them and the vehicle.
+const CAMERA_CLEARANCE = 0.4;
 
 // Tuning per vehicle; others use the default. Speeds in km/h, acceleration in m/s².
 const SPECS = {
@@ -27,6 +40,10 @@ const _size = new Vector3();
 const _target = new Vector3();
 const _look = new Vector3();
 const _side = new Vector3();
+const _normal = new Vector3();
+const _eye = new Vector3();
+const _toCamera = new Vector3();
+const _back = new Vector3();
 const DOWN = new Vector3( 0, - 1, 0 );
 
 export class Driver {
@@ -127,6 +144,8 @@ export class Driver {
 		this.speed = 0;
 		this.steer = 0;
 		this.vy = 0;
+		// Sideways after a crash, east and north (m/s).
+		this.slide = { east: 0, north: 0 };
 		// Tilted as it was parked (see models.park), so it doesn't jolt level first.
 		this.pitch = rotation.x;
 		this.roll = rotation.z;
@@ -234,31 +253,10 @@ export class Driver {
 		const yawRate = this.speed / this.wheelbase * Math.tan( this.steer * maxAngle ) * ( this.grounded ? 1 : 0.2 );
 		this.heading += yawRate * MathUtils.RAD2DEG * dt;
 
-		// Move, unless something solid is in the way at bumper height.
-		const rad = this.heading * Math.PI / 180;
-		const step = this.speed * dt;
-		if ( step !== 0 ) {
-
-			const sign = Math.sign( step );
-			_dir.set( - Math.sin( rad ) * sign, 0, Math.cos( rad ) * sign );
-			enuToLocal( this.east, this.north, this.y + Math.min( 1.0, this.height * 0.4 ), _origin );
-			const hit = this.cast( _origin, _dir, Math.abs( step ) + ( sign > 0 ? this.front : this.rear ) );
-			const wall = hit && hit.face && Math.abs( hit.face.normal.clone().transformDirection( hit.object.matrixWorld ).y ) < 0.5;
-			if ( wall ) {
-
-				this.hud.flash( 'Crash!' );
-				this.speed *= - 0.25;
-
-			} else {
-
-				this.east += Math.sin( rad ) * step;
-				this.north += Math.cos( rad ) * step;
-
-			}
-
-		}
+		this.move( dt );
 
 		// Ground under the front and rear axles and the left and right sides.
+		const rad = this.heading * Math.PI / 180;
 		const fx = Math.sin( rad ), fz = Math.cos( rad );
 		const half = this.wheelbase / 2;
 		const track = this.width * 0.4;
@@ -335,6 +333,96 @@ export class Driver {
 
 	}
 
+	// Drive on at this frame's speed and slide, up to anything solid in the way at bumper height,
+	// and bounce off it.
+	move( dt ) {
+
+		const rad = this.heading * Math.PI / 180;
+		const ve = Math.sin( rad ) * this.speed + this.slide.east;
+		const vn = Math.cos( rad ) * this.speed + this.slide.north;
+		const v = Math.hypot( ve, vn );
+		const grip = Math.exp( - GRIP * dt );
+		this.slide.east *= grip;
+		this.slide.north *= grip;
+		if ( v * dt < 1e-6 ) return;
+
+		const wall = this.wallAhead( ve / v, vn / v, v * dt );
+		const travel = wall ? wall.travel : v * dt;
+		this.east += ve / v * travel;
+		this.north += vn / v * travel;
+		if ( wall ) this.crash( ve, vn, wall );
+
+	}
+
+	// The nearest wall in the way of going `distance` metres east and north by ( de, dn ), as seen by
+	// rays at bumper height from the middle and both sides of the leading end: how far the vehicle
+	// can go before touching it, and its normal (east, north) facing back at the vehicle. The ground
+	// and ramps aren't walls, and nor is the side of a rib on a corrugated wall: a wall is only one
+	// that is there looking straight at it from where the ray started.
+	wallAhead( de, dn, distance ) {
+
+		const rad = this.heading * Math.PI / 180;
+		const along = de * Math.sin( rad ) + dn * Math.cos( rad );
+		const reach = ( along >= 0 ? this.front : this.rear ) * Math.abs( along ) + this.width / 2 * Math.sqrt( Math.max( 0, 1 - along * along ) );
+		const side = Math.max( 0, this.width / 2 - 0.1 );
+		_dir.set( - de, 0, dn );
+		let wall = null;
+		for ( const right of [ 0, - side, side ] ) {
+
+			enuToLocal( this.east + dn * right, this.north - de * right, this.y + Math.min( 1.0, this.height * 0.4 ), _origin );
+			const hit = this.cast( _origin, _dir, distance + reach );
+			if ( ! hit?.face ) continue;
+			_normal.copy( hit.face.normal ).transformDirection( hit.object.matrixWorld );
+			if ( Math.abs( _normal.y ) >= 0.5 ) continue;
+			const travel = Math.max( 0, hit.distance - reach );
+			if ( wall && travel >= wall.travel ) continue;
+			const length = Math.hypot( _normal.x, _normal.z );
+			const facing = - _normal.x * de + _normal.z * dn > 0 ? - 1 : 1;
+			const east = - _normal.x / length * facing;
+			const north = _normal.z / length * facing;
+			_back.set( east, 0, - north );
+			const ahead = this.cast( _origin, _back, hit.distance + 1 );
+			if ( ! ahead?.face || Math.abs( _normal.copy( ahead.face.normal ).transformDirection( ahead.object.matrixWorld ).dot( _back ) ) < 0.7 ) continue;
+			wall = { travel, east, north };
+
+		}
+
+		return wall;
+
+	}
+
+	// Bounce off a wall at ( ve, vn ) m/s east and north: keep the speed along it less a scrape,
+	// bounce back with a share of the speed into it, and turn toward its line (see RESTITUTION).
+	// What's left is split into speed along the new heading and a sideways slide the tyres soon stop.
+	crash( ve, vn, wall ) {
+
+		const into = - ( ve * wall.east + vn * wall.north );
+		if ( into <= 0 ) return;
+		const te = ve + wall.east * into;
+		const tn = vn + wall.north * into;
+		const along = Math.hypot( te, tn );
+		const keep = along > 0 ? Math.max( 0, along - SCRAPE * into ) / along : 0;
+		const back = into > CRASH_MIN ? RESTITUTION * into : 0;
+		const be = te * keep + wall.east * back;
+		const bn = tn * keep + wall.north * back;
+
+		if ( along > 0.1 ) {
+
+			const angle = Math.asin( MathUtils.clamp( into / Math.hypot( ve, vn ), 0, 1 ) );
+			const turn = Math.sign( vn * te - ve * tn );
+			this.heading += turn * angle * Math.cos( angle ) ** 2 * MathUtils.RAD2DEG;
+
+		}
+
+		const rad = this.heading * Math.PI / 180;
+		const fx = Math.sin( rad ), fz = Math.cos( rad );
+		this.speed = be * fx + bn * fz;
+		this.slide.east = be - fx * this.speed;
+		this.slide.north = bn - fz * this.speed;
+		if ( into > 3 ) this.hud.flash( 'Crash!' );
+
+	}
+
 	placeCamera( dt ) {
 
 		const rad = this.heading * Math.PI / 180;
@@ -349,17 +437,24 @@ export class Driver {
 
 			const right = _side.set( - Math.cos( rad ), 0, - Math.sin( rad ) );
 			this.camera.position.copy( base ).addScaledVector( forward, cab.ahead ).addScaledVector( right, cab.right ).setY( base.y + cab.up );
+			this.pullInFront( _eye.copy( base ).setY( base.y + cab.up ), this.camera.position );
 
 		} else if ( this.cameraMode === 'hood' ) {
 
 			_target.copy( base ).addScaledVector( forward, this.length * 0.15 ).setY( base.y + height * 0.8 );
 			this.camera.position.copy( _target );
+			this.pullInFront( _eye.copy( base ).setY( base.y + height * 0.8 ), this.camera.position );
 
 		} else {
 
+			// Never inside a building or a container: the camera heads for a spot clear of whatever is
+			// behind the vehicle, and jumps in front of anything that comes between them on the way.
 			const back = this.rear + this.length * 0.3 + 5;
 			_target.copy( base ).addScaledVector( forward, - back ).setY( base.y + height + 2.5 );
+			_eye.copy( base ).setY( base.y + height * 0.8 );
+			this.pullInFront( _eye, _target );
 			this.camera.position.lerp( _target, 1 - Math.exp( - dt * 6 ) );
+			this.pullInFront( _eye, this.camera.position );
 
 		}
 
@@ -368,6 +463,18 @@ export class Driver {
 		// Keep the walk controller's view direction in step for when we get out.
 		this.controls.yaw = headingToYaw( this.heading );
 		this.controls.pitch = 0;
+
+	}
+
+	// Move `point` toward `from` (on the vehicle) to just in front of anything solid between them.
+	pullInFront( from, point ) {
+
+		_toCamera.subVectors( point, from );
+		const distance = _toCamera.length();
+		if ( distance < 1e-3 ) return;
+		_toCamera.divideScalar( distance );
+		const hit = this.cast( from, _toCamera, distance + CAMERA_CLEARANCE );
+		if ( hit ) point.copy( from ).addScaledVector( _toCamera, Math.max( 0, hit.distance - CAMERA_CLEARANCE ) );
 
 	}
 
