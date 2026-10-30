@@ -1,8 +1,12 @@
 # Construction equipment in the library
 
-The library (**L**) now has 19 construction machines, all at real scale, in four groups: **Heavy equipment**,
+The library (**L**) has 19 downloaded construction machines, all at real scale, in four groups: **Heavy equipment**,
 two new categories, **Cranes & lifts** and **Material handling**, and more trucks under **Vehicles**.
 Every one of them can be driven: select it (or stand within 25 m of it) and press **V**.
+
+Since then, a tower crane, four more mobile cranes, two more telehandlers and site power and air
+(generators, compressors, a fuel tank) have been added, built in code: see
+[Plant built in code](#plant-built-in-code) below.
 
 ## What was added
 
@@ -49,13 +53,83 @@ Sizes are length × width × height in metres, as shown on the library cards. To
 | Articulated dump truck (40 t) | 10.82 × 3.48 × 4.14 | 55 | [Articulated Dumptruck](https://sketchfab.com/3d-models/articulated-dumptruck-9775ab1c4fd242beae12a98149823b33) | doty_aecom |
 | Concrete mixer truck (10 yd³) | 8.52 × 2.6 × 3.81 | 100 | [Concrete Mixer Truck](https://sketchfab.com/3d-models/concrete-mixer-truck-8d1d88a5955f4e7da13562bb7bec146f) | doty_aecom |
 
+## Plant built in code
+
+No clean CC0 or CC BY model was found for these (see [Looked for but left out](#looked-for-but-left-out)),
+so they're built in code like the site trailers and containers: plain painted shapes at the size of
+a common machine of each class, no brand, nothing to download (together they add about 27 kB to the
+app's code, 10 kB compressed, and no model files). Sizes are length × width × height in metres as
+the library cards show them: overall, drawbar or forks included, and for the cranes as set up for
+work. The code is in `src/crane-models.js`, `src/power-models.js` and `src/tower-crane.js`, with
+shared parts (wheels, cabs, telescopic booms, hook blocks, outriggers) in `src/plant-parts.js`.
+
+### Cranes & lifts (Pro pack)
+
+| Item | Size | Set up as | Top speed |
+| --- | --- | --- | --- |
+| Tower crane (hammerhead, adjustable) | 67.3 × 6.5 × 52.9 as placed | 40 m under hook, 50 m jib; both set in the P panel (below) | doesn't drive |
+| Rough-terrain crane (40 t) | 14.5 × 7.0 × 22.0 | 22 m of four-section boom at 58° over the front, outriggers set 6.45 m apart; carrier 9.2 × 2.55 m | 40 |
+| Carry-deck crane (8.5 t) | 10.7 × 2.3 × 6.3 | 8 m of three-section boom at 32° over the front, flat deck behind; carrier 5.33 × 2.24 m | 27 |
+| Boom truck (30 t) | 18.0 × 6.9 × 24.2 | 25 m of four-section boom at 58° over the deck, outriggers set 6.4 m apart; tandem-axle truck 11.6 × 2.59 m | 100 |
+| Spider crane (3 t, mini crawler) | 5.9 × 4.6 × 8.7 | legs out and set, 8.2 m of four-section boom at 62°; 2.5 × 0.74 m body on rubber tracks | 2.5 |
+
+### Material handling (Pro pack)
+
+| Item | Size | Based on | Top speed |
+| --- | --- | --- | --- |
+| Telehandler, compact (5,500 lb, 19 ft) | 4.9 × 1.9 × 2.0 | 3.86 × 1.84 × 1.94 m without its 1.07 m forks, 2.22 m wheelbase | 25 |
+| Telehandler (12,000 lb, 56 ft) | 8.4 × 2.55 × 2.75 | 7.26 × 2.49 × 2.67 m without its 1.22 m forks, 3.58 m wheelbase, four-section boom, stabilisers up | 29 |
+
+Both travel with the boom down and the forks just off the ground, alongside the downloaded
+*Telehandler (10,000 lb, 55 ft)*.
+
+### Power & air (a new category)
+
+| Item | Size | Notes |
+| --- | --- | --- |
+| Generator, towable (20 kVA) | 3.05 × 1.5 × 1.9 | single axle, exhaust stack and camlock outlet panel |
+| Generator, towable (60 kVA) | 3.9 × 1.8 × 2.2 | single axle |
+| Generator, towable (150 kVA) | 5.05 × 2.1 × 2.55 | tandem axle |
+| Generator, containerised (500 kVA, 20 ft) | 6.1 × 2.55 × 3.7 | a 20 ft high cube with a louvred radiator end, side doors and the silencer on the roof |
+| Fuel tank, double-walled (4,000 L) | 2.5 × 1.7 × 2.1 | self-bunded tank in a lifting frame, pump cabinet, fork pockets |
+| Air compressor, towable (185 CFM) | 3.6 × 1.6 × 1.7 | single axle, rounded canopy, service valves at the back |
+| Air compressor, towable (375 CFM) | 4.3 × 1.9 × 2.0 | single axle |
+| Air compressor, towable (900 CFM) | 5.7 × 2.2 × 2.5 | tandem axle |
+| Light tower, towable (9 m mast up) | 3.45 × 2.65 × 9.0 | the light tower that was under *Site services*, moved here |
+
+The towed ones face their drawbar forward, so heading is the way they'd be towed off.
+
+### The tower crane
+
+- Place it from *Cranes & lifts*; its heading is where the jib points, so turn it (round handle,
+  **R** or the toolbar) to aim the jib.
+- **P panel** (and **Size** on its toolbar): *height under hook* (10 to 90 m) and *jib: working
+  radius* (20 to 80 m) rebuild it. A longer jib gets a heavier mast (1.6, 2.0 or 2.45 m square),
+  a counter-jib about a third as long (at least 12 m) with 3 to 7 counterweight slabs, and a
+  taller tower head (about a sixth of the jib). *Hook radius* and *hook height* move the trolley
+  and the hook block. Readouts: the reach area, the tail swing (the counter-jib's radius) and the
+  overall height.
+- **Reach circle** (ticked to start with): an orange disc on the ground at the working radius,
+  with a fainter ring at the tail swing, for planning lifts: what the hook can reach, and what the
+  counter-jib swings over. It drapes over Google's ground, dug earth and stockpiles like a laydown
+  area, follows the crane while it's placed and moved, and is saved with the layout. It doesn't
+  count in the crane's size: the selection box, the turning handle and snapping to the ground go
+  by the crane itself.
+- It's a planning aid, not a lift plan: there's no load chart, so check the real crane's chart for
+  what it can lift at a radius. The mast stands on a drawn foundation pad, not a tied-in or
+  climbing arrangement, and it snaps to the median of the ground under its whole footprint, jib
+  included, so on a slope set its height by hand (P panel, *snap to ground* off).
+
 ## Things to know
 
 - **Two 20 t excavators.** The built-in *Excavator (20 t)* is the one that digs. *Excavator, detailed (20 t)*
   is a realistic model that only drives; use it where looks matter more than digging.
 - **The cranes are set up for work**, not folded for travel: the all-terrain crane's boom is raised to 16 m and
   the crawler crane's lattice boom reaches 45 m. Their card sizes include the boom, so place them by their
-  carriers and tracks, not by the box. The crawler crane creeps at 2 km/h, as real ones do.
+  carriers and tracks, not by the box. The crawler crane creeps at 2 km/h, as real ones do. The cranes built in
+  code are set up the same way, outriggers out, and stand and turn on their carriers; their bonnet camera (**C**)
+  looks out of the cab (the spider crane's from the seat at its back). Where that is comes from the model itself
+  (`measuredDrive` in `crane-models.js`), so it follows any change to it.
 - **The telehandler's stabilisers are drawn lowered**, so it is 3.6 m wide here; it travels at about 2.6 m.
 - **The boom lift is a 40 ft machine.** No clean 60 ft model was found.
 - **The container handler is a made-up design** ("a fictional container loader"): a fixed 8.3 m spreader and a
@@ -77,8 +151,12 @@ Sizes are length × width × height in metres, as shown on the library cards. To
 | --- | --- |
 | Padfoot roller | No usable CC0 or CC BY model; the only near miss was a 4M-triangle landfill compactor on a dirt diorama. |
 | Compact track loader | Only a phone scan of a Cat 279D3 carrying forks (300k triangles); the skid steer covers it. |
-| Rough-terrain crane | The one candidate is about 1.2 times too big, posed with a 31 m boom and outriggers out, and 184k triangles. |
-| Boom truck | Only Soviet and Japanese truck cranes; no North American boom truck under a clean licence. |
+| Rough-terrain crane | Looked for again: the one titled so is a Soviet KrAZ truck crane with Cyrillic lettering (181k triangles). Built in code instead. |
+| Boom truck | Only Soviet and Japanese truck cranes, an all-terrain crane titled as a truck crane, and a cartoon truck. Built in code instead. |
+| Carry-deck crane, spider crane | None at all. Built in code. |
+| Tower crane | Several, but each a fixed height and jib; built in code so both can be set. |
+| A second and third telehandler | The one clean candidate is posed diagonally in its file with the boom fully up; the rest carry JCB or Merlo branding (one is a 385 MB download). Built in code. |
+| Generators, compressors, fuel tank | Branded or lettered ("GENSET 100 Kva"), scans on dirt, or (the best towable compressor) parts named after desirefx.me, a site that redistributes paid models. Built in code. |
 | Reach stacker | Only a toy-like model with a container baked in; another was a bulk game-asset upload of doubtful origin. |
 | Terminal tractor (yard spotter) | None under CC0 or CC BY. |
 | Water truck, fuel or service truck | None clean: the candidates were fire apparatus of unknown origin (1.5M triangles) or a fictional pickup. |

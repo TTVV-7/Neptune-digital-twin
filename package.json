@@ -17,6 +17,7 @@
     "test:accounts-ui": "node --test scripts/test-accounts-ui.mjs",
     "test:premium-ui": "node --test scripts/test-premium-ui.mjs",
     "test:shoring-ui": "node --test scripts/test-shoring-ui.mjs",
+    "test:plant-ui": "node --test scripts/test-plant-ui.mjs",
     "deploy": "vite build --mode cloudflare && wrangler deploy",
     "deploy:cloudflare": "wrangler d1 migrations apply DB --remote && npm run deploy"
   },

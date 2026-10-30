@@ -62,7 +62,12 @@ registerKind( TOWER_CRANE, {
 
 function normalizeTowerCrane( p ) {
 
-	const number = ( v, fallback, min, max ) => Math.min( max, Math.max( min, Number.isFinite( Number( v ) ) && v !== null && v !== '' ? Number( v ) : fallback ) );
+	const number = ( v, fallback, min, max ) => {
+
+		const n = typeof v === 'number' ? v : Number.parseFloat( v );
+		return Math.min( max, Math.max( min, Number.isFinite( n ) ? n : fallback ) );
+
+	};
 	const height = number( p.height, TOWER_CRANE_DEFAULTS.height, 10, 90 );
 	const jib = number( p.jib, TOWER_CRANE_DEFAULTS.jib, 20, 80 );
 	return {
@@ -313,7 +318,7 @@ function emptyBox( geometry ) {
 // rebuilt and from time to time as the ground under it changes.
 export function setUpTowerCranes( { models, getGround, onUpdate } ) {
 
-	const cranes = new Map(); // entry -> { dirty, checkedAt, content }
+	const cranes = new Map(); // entry -> { dirty, checkedAt, content, ground }
 	const raycaster = new Raycaster();
 	raycaster.firstHitOnly = true;
 	let clock = 0;
@@ -322,7 +327,7 @@ export function setUpTowerCranes( { models, getGround, onUpdate } ) {
 
 		if ( entry.kind !== TOWER_CRANE ) return;
 		let crane = cranes.get( entry );
-		if ( ! crane ) cranes.set( entry, crane = { dirty: true, checkedAt: - Infinity, content: null } );
+		if ( ! crane ) cranes.set( entry, crane = { dirty: true, checkedAt: - Infinity, content: null, ground: null } );
 		const content = entry.pivot.children[ 0 ];
 		if ( content !== crane.content ) {
 
@@ -331,7 +336,7 @@ export function setUpTowerCranes( { models, getGround, onUpdate } ) {
 			// or walked on, and isn't ground.
 			const reach = findReach( content );
 			if ( reach ) for ( const object of [ reach.fill, ...reach.rings ] ) object.raycast = () => {};
-			drape( entry );
+			drape( entry, true );
 			return;
 
 		}
@@ -344,10 +349,11 @@ export function setUpTowerCranes( { models, getGround, onUpdate } ) {
 	models.addEventListener( 'change', ( { entry } ) => track( entry ) );
 	models.addEventListener( 'remove', ( { entry } ) => cranes.delete( entry ) );
 
-	function drape( entry ) {
+	// Sample the ground under the circle and lay it on it. Unless forced (the crane moved or was
+	// rebuilt), only if the ground under it changed: which meshes are there, and their vertices.
+	function drape( entry, force ) {
 
 		const crane = cranes.get( entry );
-		crane.dirty = false;
 		crane.checkedAt = clock;
 		const reach = findReach( entry.pivot.children[ 0 ] );
 		if ( ! reach ) return;
@@ -355,6 +361,10 @@ export function setUpTowerCranes( { models, getGround, onUpdate } ) {
 		entry.pivot.updateWorldMatrix( true, true );
 		_toLocal.copy( fill.matrixWorld ).invert();
 		const ground = groundUnder( fill, reach.radius );
+		const seen = ground.meshes.map( ( { id, geometry } ) => `${ id }:${ geometry.id }:${ geometry.attributes.position.version }` ).join();
+		if ( ! force && seen === crane.ground ) return;
+		crane.ground = seen;
+		crane.dirty = false;
 		const heightAt = ( x, z ) => {
 
 			fill.localToWorld( _point.set( x, 0, z ) );
@@ -448,7 +458,7 @@ export function setUpTowerCranes( { models, getGround, onUpdate } ) {
 
 		}
 
-		if ( next ) drape( next );
+		if ( next ) drape( next, cranes.get( next ).dirty );
 
 	} );
 

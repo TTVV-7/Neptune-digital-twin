@@ -331,6 +331,25 @@ test( 'tower crane: its P panel numbers rebuild it; the reach circle drapes, tog
 	assert.ok( crane.size[ 1 ] < 8, `${ crane.size[ 1 ].toFixed( 1 ) } m across` );
 	// Draped on the flat stand-in ground, just over it.
 	assert.ok( crane.lowest > 0 && crane.highest < 0.2, `fill between ${ crane.lowest } and ${ crane.highest }` );
+	// A stockpile poured under it: the circle is laid over it once the ground has changed.
+	await page.evaluate( async () => {
+
+		const { models, earthworks } = window.twin;
+		const pile = await models.load( { kind: 'stockpile', params: { shape: 'cone', volume: 300, material: 'gravel' }, east: - 105, north: - 60, heading: 0, up: null } );
+		earthworks.pour( pile );
+
+	} );
+	await page.waitForFunction( () => {
+
+		const entry = window.twin.models.entries.find( e => e.kind === 'tower-crane' );
+		let reach = null;
+		entry.pivot.children[ 0 ].traverse( o => reach ??= o.userData.reach ?? null );
+		const fill = reach.fill.geometry.attributes.position;
+		let highest = 0;
+		for ( let i = 0; i < fill.count; i ++ ) highest = Math.max( highest, fill.getY( i ) );
+		return highest > 2;
+
+	}, null, { timeout: 30000 } );
 	await look( { east: - 140, north: - 60, distance: 130, from: 200, elevation: 32 } );
 	await shot( 'tower-crane-reach' );
 	await look( { east: - 140, north: - 60, up: 40, distance: 30, from: 230, elevation: 10 } );
@@ -428,7 +447,7 @@ test( 'drivable: each driven with V; the cameras stay out of the machine, the ca
 		await page.keyboard.press( 'KeyV' );
 		await page.waitForFunction( id => window.twin.driver.active && window.twin.driver.entry.library === id, id );
 		await page.keyboard.down( 'KeyW' );
-		await page.waitForTimeout( id === 'crane-spider-3t' ? 3000 : 1500 );
+		await page.waitForTimeout( id === 'crane-spider-3t' ? 3500 : 2500 );
 		await page.keyboard.up( 'KeyW' );
 		await page.waitForTimeout( 300 );
 

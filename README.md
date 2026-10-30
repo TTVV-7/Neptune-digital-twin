@@ -185,11 +185,11 @@ npx @gltf-transform/cli optimize input.glb public/models/output.glb --compress m
 ## Library: vehicles and site pieces
 
 Press **L** (or the **Library** button, bottom left) to open the library: vehicles, construction
-equipment (excavators, loaders, a dozer, graders, rollers, cranes, lifts, telehandlers, forklifts,
-dump trucks...), site office trailers, containers, dumpsters, barriers, fencing, traffic control,
-porta-potties, pallets, shoring and more, all at real scale and not tied to Neptune, so the same library works
-at any site. What each downloaded machine is and where it came from is in
-[docs/equipment.md](docs/equipment.md).
+equipment (excavators, loaders, a dozer, graders, rollers, mobile and tower cranes, lifts,
+telehandlers, forklifts, dump trucks...), generators, compressors and fuel tanks, site office
+trailers, containers, dumpsters, barriers, fencing, traffic control, porta-potties, pallets, shoring
+and more, all at real scale and not tied to Neptune, so the same library works at any site. What
+each machine is, its size and where it came from is in [docs/equipment.md](docs/equipment.md).
 
 - **Place:** click an item, move the mouse over the ground and click. Or drag the item onto the scene.
   **R** or the mouse wheel rotates it, **Shift**+click places another, **Esc** cancels.
@@ -212,7 +212,9 @@ Two kinds of items:
 
 - **Built in** (`src/procedural.js`): simple standard pieces generated in code at exact North American
   dimensions, e.g. a 10 ft New Jersey barrier, 20/40 ft ISO containers, a 12 x 60 ft site office trailer,
-  20/40 yd roll-offs. Add more there.
+  20/40 yd roll-offs. Add more there. Plant with no clean download is built in code too, at the size of
+  a common machine of its class: generators, compressors and a fuel tank (`src/power-models.js`), mobile
+  cranes and telehandlers (`src/crane-models.js`) and the tower crane (`src/tower-crane.js`).
 - **Downloaded** (`public/library/`): models from Sketchfab and Poly Haven, listed in `library.json` with
   their size, facing and licence. `CREDITS.md` credits the authors; the app shows the credits under **H**.
 
@@ -267,6 +269,19 @@ Pits and piles are real ground: you can walk into a pit, drive over a pile, and 
 sit on them. Volumes come out within about 1% of the textbook figure for the shape, measured from
 Google's ground, so they are as good as the map. Details in [docs/earthworks.md](docs/earthworks.md).
 
+### Tower crane and its reach
+
+The **Tower crane** (library, *Cranes & lifts*) is set up after it's placed: in the P panel (or
+**Size** on its toolbar), **height under hook** (10 to 90 m) and **jib**, its working radius (20 to
+80 m), rebuild it, with a mast, counter-jib, counterweights and tower head to suit; **hook radius**
+and **hook height** move the trolley and hook. Turn it to point the jib. Its **reach circle**, an
+orange disc on the ground at the working radius with a fainter ring where the counter-jib's tail
+swings, shows what it can reach and what it swings over; untick *reach circle* to hide it. The
+circle drapes over the ground like a laydown area, is saved with the layout, and doesn't count in
+the crane's size (selecting, turning and snapping go by the crane itself). It's a planning aid
+without a load chart: check the real crane's chart for what it lifts at a radius. More in
+[docs/equipment.md](docs/equipment.md).
+
 ### Shoring: trench boxes, sheet piles and more
 
 An excavation's **support** (P panel) shores it instead of sloping it: **trench box**, **slide
@@ -299,9 +314,10 @@ boosts, **Space** hops, **C** switches between chase and bonnet cameras, **V** o
 parks it where it stopped. The speedometer shows km/h, your top speed and longest jump.
 
 The construction machines drive too, at their own speeds: the dozer at 11 km/h, the wheel loader at
-40, the crawler crane at walking pace (2 km/h) and the all-terrain crane at road speed (80), even with
-its boom up. The cranes stand and turn on their carriers, and the cameras frame the carrier and look
-out of the cab rather than from up the boom. The pickup tops out at 160 km/h (about 210 with boost), the semi at 120 and the haul truck at 70. The **Race**
+40, the crawler crane at walking pace (2 km/h), the spider crane at 2.5, the carry-deck crane at 27,
+the rough-terrain crane at 40, the all-terrain crane at road speed (80) and the boom truck at 100, even
+with their booms up. The cranes stand and turn on their carriers, and the cameras frame the carrier
+and look out of the cab rather than from up the boom. The pickup tops out at 160 km/h (about 210 with boost), the semi at 120 and the haul truck at 70. The **Race**
 category has two jump ramps (1.2 m and 3 m); hit the big one at highway speed for about 1.7 s of air.
 Hit a wall, a container, a barrier or one of Google's buildings and the vehicle just stops against
 it; back up (**S**) to drive off again. Flatten a strip
@@ -333,9 +349,9 @@ host. Creating the project, the database, the environment variables (`GOOGLE_CLI
 
 ## Premium equipment (work in progress)
 
-Library items marked `"premium": true` in `library.json` (for now the cranes, lifts, forklift,
-telehandler and container handler) form a **Pro equipment** pack, bought once through a Stripe
-Payment Link. While it's locked, those cards show a **Pro** badge and picking one explains how to
+Library items marked `"premium": true` (in `library.json`, or on a built-in item in
+`src/crane-models.js`: for now the *Cranes & lifts* and *Material handling* categories) form a
+**Pro equipment** pack, bought once through a Stripe Payment Link. While it's locked, those cards show a **Pro** badge and picking one explains how to
 buy it; Stripe's webhook tells the server who has paid. Layouts and share links with premium items
 always open for everyone. It's **off** until the Payment Link, its id and the webhook's signing secret
 are set, and then only in the app: the models are still public files. Stripe setup (test mode first),
@@ -364,6 +380,9 @@ src/placement.js    the P panel
 src/raycast.js      fast raycasting (three-mesh-bvh) for walking and snapping
 src/library.js      loads the library (downloaded models + built-in pieces)
 src/procedural.js   built-in site pieces generated in code
+src/power-models.js generators, compressors and the fuel tank, built in code
+src/crane-models.js mobile cranes and telehandlers, built in code; src/plant-parts.js their parts
+src/tower-crane.js  the tower crane (a kind, set up in the P panel) and its reach circle
 src/sidebar.js      the library sidebar: placing, selecting, moving, drawing flatten areas
 src/handles.js      on-map handles for the selected item: turning, resizing areas, a pit's depth
 src/toolbar.js      the toolbar over the selected item, its size editor and Undo after deleting
