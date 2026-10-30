@@ -11,9 +11,10 @@ import { createSidebar } from './sidebar.js';
 import { setUpFlattening } from './flatten.js';
 import { createDriveHud, Driver, specFor } from './drive.js';
 import { isTyping, WalkController } from './walk.js';
+import { setUpEarthworks } from './earthworks.js';
 
 // Features that plug into the app (see `features` in start()); each is a function taking the context.
-const FEATURES = [];
+const FEATURES = [ setUpEarthworks ];
 
 const STORAGE_KEY = 'neptune-twin.google-api-key';
 const ENV_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
