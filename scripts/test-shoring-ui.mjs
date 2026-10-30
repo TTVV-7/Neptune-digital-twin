@@ -433,6 +433,85 @@ test( 'back to none: the sloped pit returns; and a resize rebuilds the shoring',
 
 } );
 
+test( 'walls straight up behind the shoring, turned with the pit; switching frees what it replaced', async () => {
+
+	const r = await page.evaluate( async () => {
+
+		const { models, terrain, renderer, scene, camera, shoring } = window.twin;
+		// The colour at the middle of the view from a camera at `from` looking at `to` (in the pit's
+		// frame: x east, y up from the rim, z north), with the shoring painted blue.
+		const look = ( entry, from, to ) => {
+
+			terrain.flush();
+			const { group } = shoring.shown.get( entry );
+			const world = ( [ e, y, n ] ) => camera.position.clone().set( - ( entry.state.east + e ), group.position.y + y, entry.state.north + n );
+			camera.position.copy( world( from ) );
+			camera.lookAt( world( to ) );
+			camera.updateMatrixWorld();
+			const painted = [];
+			group.traverse( o => o.isMesh && o.material.name !== 'shoring earth' && painted.push( [ o.material, o.material.color.getHex() ] ) );
+			painted.forEach( ( [ m ] ) => m.color.setHex( 0x0000ff ) );
+			renderer.render( scene, camera );
+			const gl = renderer.getContext();
+			const pixel = new Uint8Array( 4 );
+			gl.readPixels( gl.drawingBufferWidth >> 1, gl.drawingBufferHeight >> 1, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel );
+			painted.forEach( ( [ m, hex ] ) => m.color.setHex( hex ) );
+			return pixel[ 2 ] > 2 * pixel[ 0 ] ? 'shoring' : `ground ${ [ ...pixel.slice( 0, 3 ) ] }`;
+
+		};
+		const sheets = await models.load( { kind: 'excavation', params: { width: 12, length: 12, depth: 5, slope: 1, support: 'sheet-piles' }, east: 400, north: 0, heading: 0, up: null } );
+		const trench = await models.load( { kind: 'excavation', params: { width: 3, length: 20, depth: 3, slope: 1, support: 'trench-box' }, east: 450, north: 0, heading: 0, up: null } );
+		// From the middle of the floor, 1 m up, at the foot of the west wall: 0.3 m up the sheets, and
+		// 0.2 m up a box panel, where the terrain's face would have stood 2.5 and 1.4 m high.
+		const shot = () => ( {
+			sheets: look( sheets, [ 0, - 4, 0 ], [ - 6, - 4.7, 0 ] ),
+			box: look( trench, [ 0, - 2, 0 ], [ - 1.5, - 2.8, 0 ] ),
+		} );
+		const straight = shot();
+		const { uniforms } = shoring.ground;
+		const count = uniforms.twinShoreCount.value;
+		uniforms.twinShoreCount.value = 0;
+		const sloped = shot();
+		uniforms.twinShoreCount.value = count;
+
+		// Turned: the shoring and its walls follow.
+		models.setParams( trench, {} );
+		trench.state.heading = 30;
+		models.apply( trench );
+		const yaw = shoring.shown.get( trench ).group.rotation.y;
+		const turned = look( trench, [ 0, - 2, 0 ], [ - 1.5 * Math.cos( Math.PI / 6 ), - 2.8, 1.5 * Math.sin( Math.PI / 6 ) ] );
+
+		// Twenty switches between the supports, then back to none: nothing left over.
+		const supports = [ 'trench-box', 'slide-rail', 'hydraulic', 'sheet-piles', 'soldier-piles' ];
+		const pit = await models.load( { kind: 'excavation', params: { width: 4, length: 18, depth: 3.5, slope: 1 }, east: 500, north: 0, heading: 25, up: null } );
+		renderer.render( scene, camera );
+		const memory = () => ( { geometries: renderer.info.memory.geometries, programs: renderer.info.programs.length } );
+		const before = memory();
+		for ( let i = 0; i < 20; i ++ ) {
+
+			models.setParams( pit, { support: supports[ i % 5 ] } );
+			renderer.render( scene, camera );
+
+		}
+
+		const during = memory();
+		models.setParams( pit, { support: 'none' } );
+		renderer.render( scene, camera );
+		return { straight, sloped, yaw, turned, before, during, after: memory() };
+
+	} );
+	assert.deepEqual( r.straight, { sheets: 'shoring', box: 'shoring' } );
+	// Without it, the steep face hides the foot of the walls: the test sees the difference.
+	assert.match( r.sloped.sheets, /^ground/ );
+	assert.match( r.sloped.box, /^ground/ );
+	assert.ok( Math.abs( r.yaw - ( Math.PI - Math.PI / 6 ) ) < 1e-6, `yaw ${ r.yaw }` );
+	assert.equal( r.turned, 'shoring' );
+	assert.equal( r.after.geometries, r.before.geometries, JSON.stringify( r ) );
+	assert.equal( r.after.programs, r.before.programs );
+	assert.ok( r.during.geometries - r.before.geometries < 20, JSON.stringify( r ) );
+
+} );
+
 test( 'shown with the library closed and open; a 60 × 40 × 6 m sheet-piled pit is a few draw calls', async () => {
 
 	await library( false );

@@ -11,8 +11,9 @@ import { CELL } from './terrain.js';
 // flat to it. Only the drawing changes. Volumes, walking, clicking and the mask over Google's
 // tiles still use the face.
 
-// Pits drawn this way at once; any more keep the steep face.
-const MAX_PITS = 16;
+// Pits drawn this way at once; any more keep the steep face. Three vectors each, well inside the
+// 256 a vertex shader can always have.
+const MAX_PITS = 32;
 // Nodes this far either side of a shored wall are moved onto it: further than a cell's diagonal
 // (0.71 m), so no triangle reaches from beyond the band on one side to the other.
 const BAND = 0.75;
@@ -108,6 +109,7 @@ export function shoreTheGround( terrain ) {
 	material.needsUpdate = true;
 
 	return {
+		uniforms,
 		set( pits ) {
 
 			const values = uniforms.twinShore.value;

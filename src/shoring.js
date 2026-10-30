@@ -51,6 +51,7 @@ const BRACED_DEPTH = 4;
 const MAX_STRUT = 12;
 const WALER_Y = - 0.7;
 const RIM_STRIP = 1;
+const SHEET_GAP = 0.02;
 
 export function normalizeSupport( value ) {
 
@@ -393,8 +394,9 @@ function planSheetPiles( { width, length, depth } ) {
 		weight: tonnes( kg, 'steel' ),
 		notes,
 		sides: 'all',
-		// The outer flanges.
-		ground: { back: SHEET.depth / 2 },
+		// Just behind the outer flanges, which are seen from the pit, in the pockets between the inner
+		// ones: the terrain's wall in the same plane would flicker through them.
+		ground: { back: SHEET.depth / 2 + SHEET_GAP },
 		build( parts ) {
 
 			// The corrugated line round the outline: each sheet goes from one side of the wall line
@@ -417,7 +419,7 @@ function planSheetPiles( { width, length, depth } ) {
 
 				line.push( [ wall.length, n % 2 ? h : - h ] );
 				points.push( ...line.map( ( [ s, d ] ) => wall.at( s, d ) ) );
-				parts.add( PAINT.earth, groundStrip( line.map( ( [ s, d ] ) => [ wall.at( s, d ), wall.at( s, - h ) ] ), 0.012 ) );
+				parts.add( PAINT.earth, groundStrip( line.map( ( [ s, d ] ) => [ wall.at( s, d ), wall.at( s, - h - SHEET_GAP ) ] ), 0.012 ) );
 
 			} );
 			parts.add( PAINT.sheet, sheetWall( points.map( p => [ p.x, p.z ] ), - depth - 0.2, 1 ) );
@@ -717,7 +719,7 @@ export function setUpShoring( { scene, models, terrain, kind, rimOf } ) {
 	for ( const entry of models.entries ) update( entry );
 	shapeGround();
 
-	const api = { root, shown, planShoring };
+	const api = { root, shown, planShoring, ground };
 	if ( window.twin ) window.twin.shoring = api;
 	return api;
 

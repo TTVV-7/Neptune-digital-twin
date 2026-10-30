@@ -302,6 +302,7 @@ src/terrain.js      the ground that can be dug and piled: heights, volumes, draw
 src/earthworks.js   excavations and stockpiles, and their tools; src/pour.js animates pouring
 src/shoring.js      shoring in excavations: trench boxes, slide rail, sheet piles...; readouts
 src/shoring-models.js  the shoring pieces, for pits and the library's Shoring category
+src/shoring-ground.js  draws a shored pit's walls straight up behind the shoring
 src/laydown.js      laydown areas: coloured site areas draped on the ground, with labels
 src/excavator.js    digging with an excavator; src/excavator-model.js builds the machines
 src/cloud.js        sign in with Google, layouts in your account, share links (needs the Worker)

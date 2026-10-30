@@ -178,7 +178,7 @@ like any other piece:
   outside at rim level. A metre-wide strip of earth at rim level runs round the shoring, as the
   worked edge, and evens out the colour of ground that was dug and drawn back up. A trench box's
   run and a hydraulic shore's rails line only the long walls: the trench's ends, and its walls
-  beyond the last box, stay as dug. Up to 16 shored pits are drawn this way at once; more keep the
+  beyond the last box, stay as dug. Up to 32 shored pits are drawn this way at once; more keep the
   steep face.
 - Only the drawing changes: the volumes are the pit's (W x L x depth for a shored pit, whatever
   the shoring), and walking and clicking still use the steep face.
@@ -189,7 +189,10 @@ like any other piece:
 ## For developers
 
 `src/shoring.js` plans and draws the support from the excavation's params; `src/shoring-models.js`
-builds the pieces, for both the pits and the library. `window.twin.shoring.planShoring( params )`
+builds the pieces, for both the pits and the library; `src/shoring-ground.js` chains onto the
+terrain's material, as `hideUnderEarthworks` does onto Google's, to move the nodes of a shored
+wall's face onto the back of the shoring (each plan's `ground.back`: how far outside the outline
+that is). `window.twin.shoring.planShoring( params )`
 gives the plan (summary, wall area, weight, notes) for any `{ width, length, depth, slope, support }`,
 and `boxRun( length )` / `boxStack( depth )` in `shoring.js` the trench box choice (in feet).
 `npm run test:shoring-ui` checks it all in a browser without Google's tiles.
