@@ -98,10 +98,16 @@ export function setUpLaydown( { camera, canvas, models, sidebar, panel, getGroun
 		fields: [
 			{ key: 'label', label: 'label', type: 'text' },
 			{ key: 'colour', label: 'colour', type: 'color' },
-			{ key: 'width', label: 'width (m)', min: 1, step: 0.5 },
-			{ key: 'length', label: 'length (m)', min: 1, step: 0.5 },
+			{ key: 'width', label: 'width (m)', min: 1, step: 0.5, size: true },
+			{ key: 'length', label: 'length (m)', min: 1, step: 0.5, size: true },
 			{ key: 'note', label: 'note', type: 'text' },
 		],
+		// Rebuilding drapes it again at once, which is quick enough to follow a handle.
+		resize: {
+			shape: 'rect',
+			live: true,
+			label: ( { width, length } ) => `${ width.toFixed( 1 ) } × ${ length.toFixed( 1 ) } m · ${ formatArea( width * length ) } m²`,
+		},
 		readouts: [
 			{ label: 'area', get: ( { params } ) => `${ formatArea( params.width * params.length ) } m²` },
 			{ label: 'perimeter', get: ( { params } ) => `${ format( 2 * ( params.width + params.length ) ) } m` },

@@ -70,9 +70,15 @@ registerKind( ZONE_ID, {
 	buildOnly: true,
 	altersMap: true,
 	fields: [
-		{ key: 'width', label: 'width (m)', min: 1, step: 0.5 },
-		{ key: 'length', label: 'length (m)', min: 1, step: 0.5 },
+		{ key: 'width', label: 'width (m)', min: 1, step: 0.5, size: true },
+		{ key: 'length', label: 'length (m)', min: 1, step: 0.5, size: true },
 	],
+	// A box is cheap to rebuild, and the flattening itself catches up a few times a second.
+	resize: {
+		shape: 'rect',
+		live: true,
+		label: ( { width, length } ) => `${ width.toFixed( 1 ) } × ${ length.toFixed( 1 ) } m · ${ Math.round( width * length ).toLocaleString( 'en-CA' ) } m²`,
+	},
 } );
 
 function clampSize( v ) {

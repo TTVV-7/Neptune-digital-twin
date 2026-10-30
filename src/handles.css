@@ -1,0 +1,243 @@
+/* On-map handles for the selected item (handles.js). They keep their size on screen, sit over the
+   map and the models, and are big enough to grab with a finger. */
+.handles {
+	position: fixed;
+	inset: 0;
+	z-index: 5;
+	overflow: hidden;
+	pointer-events: none;
+}
+
+.handles .handle {
+	position: absolute;
+	left: 0;
+	top: 0;
+	display: grid;
+	place-items: center;
+	box-sizing: border-box;
+	pointer-events: auto;
+	/* A finger drags the handle rather than scrolling or zooming the page. */
+	touch-action: none;
+	user-select: none;
+	-webkit-user-select: none;
+	-webkit-touch-callout: none;
+}
+
+/* While one is dragged, the others step back. */
+.handles.dragging .handle:not( .active ) {
+	opacity: 0.4;
+}
+
+/* The turning knob: round, in the accent colour, with curved arrows. */
+.handles .knob {
+	width: 30px;
+	height: 30px;
+	border: 2px solid #fff;
+	border-radius: 50%;
+	background: var( --accent );
+	color: #fff;
+	box-shadow: 0 1px 4px rgba( 0, 0, 0, 0.5 );
+	cursor: grab;
+}
+
+.handles .knob:hover {
+	background: #5aaef0;
+}
+
+.handles .knob.active {
+	cursor: grabbing;
+}
+
+/* Resize grips: a small square in a touch target twice its size. */
+.handles .grip {
+	width: 28px;
+	height: 28px;
+}
+
+.handles .grip::after {
+	content: '';
+	width: 12px;
+	height: 12px;
+	box-sizing: border-box;
+	border: 2px solid var( --accent );
+	border-radius: 2px;
+	background: #fff;
+	box-shadow: 0 1px 3px rgba( 0, 0, 0, 0.5 );
+}
+
+.handles .grip.edge::after {
+	width: 10px;
+	height: 10px;
+}
+
+.handles .grip:hover::after,
+.handles .grip.active::after {
+	background: var( --accent );
+	border-color: #fff;
+}
+
+/* The depth arrow in the middle of a pit. */
+.handles .depth {
+	width: 22px;
+	height: 36px;
+	border: 2px solid var( --accent );
+	border-radius: 11px;
+	background: #fff;
+	color: #10161c;
+	box-shadow: 0 1px 4px rgba( 0, 0, 0, 0.5 );
+	cursor: ns-resize;
+}
+
+.handles .depth:hover,
+.handles .depth.active {
+	background: var( --accent );
+	border-color: #fff;
+	color: #fff;
+}
+
+/* What the size or heading becomes, beside the handle while it's dragged. */
+.handle-label {
+	position: absolute;
+	left: 0;
+	top: 0;
+	padding: 3px 8px;
+	border-radius: 6px;
+	background: var( --panel );
+	box-shadow: 0 1px 4px rgba( 0, 0, 0, 0.4 );
+	color: var( --text );
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+@media ( pointer: coarse ) {
+
+	.handles .knob {
+		width: 36px;
+		height: 36px;
+	}
+
+	.handles .grip {
+		width: 36px;
+		height: 36px;
+	}
+
+	.handles .grip::after {
+		width: 14px;
+		height: 14px;
+	}
+
+	.handles .depth {
+		width: 26px;
+		height: 42px;
+	}
+
+}
+
+/* The selection toolbar (toolbar.js), over the selected item: over the P panel where it can't
+   get out of its way (on a phone), under the library, the toasts and help. */
+.selection-toolbar {
+	position: fixed;
+	left: 0;
+	top: 0;
+	z-index: 1002;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 3px;
+	border-radius: 8px;
+	background: var( --panel );
+	box-shadow: 0 2px 8px rgba( 0, 0, 0, 0.35 );
+	user-select: none;
+	-webkit-user-select: none;
+	-webkit-touch-callout: none;
+}
+
+.selection-toolbar .row {
+	display: flex;
+	gap: 1px;
+}
+
+.selection-toolbar .row button {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+	min-width: 50px;
+	padding: 5px 6px 4px;
+	border-radius: 6px;
+	background: transparent;
+	font-size: 11px;
+	line-height: 1.2;
+	white-space: nowrap;
+}
+
+.selection-toolbar .row button:hover,
+.selection-toolbar .row button:focus-visible {
+	background: rgba( 255, 255, 255, 0.1 );
+}
+
+.selection-toolbar .row button[aria-pressed='true'] {
+	background: rgba( 61, 155, 233, 0.35 );
+}
+
+.selection-toolbar .row .remove:hover {
+	color: #ff9a8f;
+}
+
+.selection-toolbar svg {
+	width: 18px;
+	height: 18px;
+}
+
+/* Typing in an area's size. */
+.size-editor {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: 6px;
+	padding: 2px 5px 5px;
+	border-top: 1px solid rgba( 255, 255, 255, 0.1 );
+}
+
+.size-editor label {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding-top: 4px;
+	font-size: 11px;
+	color: var( --muted );
+}
+
+.size-editor input {
+	box-sizing: border-box;
+	width: 72px;
+	padding: 5px 6px;
+	border: 1px solid #44525e;
+	border-radius: 5px;
+	background: #0b1117;
+	color: var( --text );
+	font: inherit;
+	font-size: 13px;
+	font-variant-numeric: tabular-nums;
+}
+
+.size-editor button {
+	padding: 6px 12px;
+	font-size: 12px;
+	background: var( --accent );
+}
+
+/* The toast after deleting something, with its Undo button. */
+.undo-toast {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding-right: 8px;
+}
+
+.undo-toast button {
+	padding: 4px 12px;
+	font-size: 12px;
+	background: var( --accent );
+}

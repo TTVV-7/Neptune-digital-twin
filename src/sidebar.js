@@ -18,8 +18,14 @@ import { buildProcedural } from './procedural.js';
 import { localToEnu } from './geo.js';
 import { isTyping, passesHitFilters } from './walk.js';
 import { ZONE_ID } from './flatten.js';
+import { createHandles } from './handles.js';
+import { createToolbar } from './toolbar.js';
 
 const ROTATE_STEP = 15;
+// The wheel turns what's being placed or moved by ROTATE_STEP per notch of a mouse wheel; a
+// trackpad's small steps add up to one every WHEEL_STEP pixels.
+const WHEEL_NOTCH = 40;
+const WHEEL_STEP = 80;
 const DRAG_TYPE = 'application/x-library-item';
 // A press that moves less than this many pixels (a finger: TOUCH_SLOP) is a click, not a drag.
 const CLICK_SLOP = 5;
@@ -31,12 +37,14 @@ const _ndc = new Vector2();
 const _offset = new Vector3();
 const _size = new Vector3();
 const _center = new Vector3();
+const _box = new Box3();
 
 // The library sidebar (L): pick an item and click the ground to place it, or drag it onto the
 // scene. A see-through preview follows the mouse; R or the wheel rotates it, Esc cancels and
 // Shift+click keeps placing more of the same. Placed items can be clicked to select, dragged to
 // move, turned with R and removed with Delete. Tools at the top (addTool) draw areas or pick
-// points on the ground instead: flatten areas, and whatever other modules add.
+// points on the ground instead: flatten areas, and whatever other modules add. The selected item
+// has handles on the map to turn and resize it (handles.js) and a toolbar over it (toolbar.js).
 //
 // Premium items (library.json "premium": true) can be locked by a gate (setGate, from premium.js):
 // their cards show a Pro badge, and picking one asks the gate instead of placing it. Only picking
@@ -61,6 +69,20 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	let pointer = null; // last pointer position over the scene, in client pixels
 	let drawing = null; // { tool, start, heading, outline } while a tool is in use
 	let gate = null; // { isLocked( item ), onLocked( item ) }
+	let wheel = 0; // trackpad scrolling not yet turned into a turn, in pixels
+
+	const handles = createHandles( { scene, camera, canvas, models } );
+	const vehicles = new Set( library.filter( item => item.category === 'Vehicles' || item.drive ).map( item => item.id ) );
+	const toolbar = createToolbar( {
+		camera,
+		canvas,
+		models,
+		panel,
+		select: entry => select( entry ),
+		rotate: degrees => rotateSelected( degrees ),
+		drive,
+		canDrive: entry => vehicles.has( entry.library ),
+	} );
 
 	// --- the list ------------------------------------------------------------------------
 
@@ -220,7 +242,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	const hint = document.getElementById( 'hint' );
 	const walkHint = hint.innerHTML;
-	const editHint = 'Click an item to select it, drag to move &middot; <b>R</b> rotates &middot; <b>Delete</b> removes &middot; right-drag to look &middot; <b>L</b> closes';
+	const editHint = 'Click an item to select it, drag to move &middot; drag its handles to turn or resize &middot; right-drag to look &middot; <b>L</b> closes';
 
 	let thumbnailsRendered = false;
 	function setOpen( value ) {
@@ -390,7 +412,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	}
 
-	function commitPlacing( keepPlacing, showPanel = true ) {
+	function commitPlacing( keepPlacing, touch = false ) {
 
 		const { entry, item, heading } = placing ?? {};
 		if ( ! entry ) return;
@@ -402,7 +424,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		updateCount();
 		// Shift+click places another, unless it has been locked meanwhile (signed out, say).
 		if ( keepPlacing && ! isLocked( item ) ) startPlacing( item, { heading } );
-		else select( entry, showPanel );
+		else select( entry, touch );
 
 	}
 
@@ -442,26 +464,72 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	// --- selecting and moving ------------------------------------------------------------
 
-	// showPanel: also open the P panel at this entry. Not for touch: the tap's click arrives after
-	// the panel has opened and would land on whatever control is now under the finger.
-	function select( entry, showPanel = true ) {
+	// Also opens the P panel at this entry. touch: picked with a finger, whose tap's click arrives
+	// after the press and would land on whatever control had opened under it by then, so the panel
+	// opens once that click has gone by.
+	function select( entry, touch = false ) {
 
 		selected = entry;
 		highlight.visible = !! entry;
-		if ( entry ) {
-
-			highlight.setFromObject( entry.pivot );
-			panel.focus( entry, showPanel );
-
-		}
+		if ( ! entry ) return;
+		highlight.setFromObject( entry.pivot );
+		panel.focus( entry, ! touch );
+		if ( touch ) showPanelAfterTap( entry );
 
 	}
 
-	function rotateSelected( degrees ) {
+	function showPanelAfterTap( entry ) {
 
-		if ( ! selected ) return;
-		selected.state.heading = ( selected.state.heading + degrees + 360 ) % 360;
-		models.apply( selected );
+		const show = () => {
+
+			clearTimeout( timer );
+			window.removeEventListener( 'click', show, true );
+			if ( selected === entry ) panel.focus( entry, true );
+
+		};
+		window.addEventListener( 'click', show, true );
+		// A drag has no click.
+		const timer = setTimeout( show, 600 );
+
+	}
+
+	function rotateSelected( degrees, entry = selected ) {
+
+		if ( ! entry ) return;
+		entry.state.heading = ( entry.state.heading + degrees + 360 ) % 360;
+		models.apply( entry );
+
+	}
+
+	// Get in a vehicle or machine: main.js's startDriving if it has one, else as V does.
+	function drive( entry ) {
+
+		if ( window.twin?.startDriving ) {
+
+			window.twin.startDriving( entry );
+			return;
+
+		}
+
+		if ( selected !== entry ) select( entry );
+		for ( const type of [ 'keydown', 'keyup' ] ) window.dispatchEvent( new KeyboardEvent( type, { code: 'KeyV', key: 'v' } ) );
+
+	}
+
+	// One turn per notch of a mouse wheel, or per WHEEL_STEP pixels of a trackpad's scrolling.
+	function wheelTurn( e ) {
+
+		const delta = e.deltaY * ( e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1 );
+		if ( Math.abs( delta ) >= WHEEL_NOTCH ) wheel = 0;
+		else {
+
+			wheel += delta;
+			if ( Math.abs( wheel ) < WHEEL_STEP ) return 0;
+			wheel = 0;
+
+		}
+
+		return Math.sign( delta ) * ROTATE_STEP;
 
 	}
 
@@ -504,13 +572,13 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	canvas.addEventListener( 'pointerdown', e => {
 
-		if ( e.button !== 0 || controls.locked || isDriving() ) return;
+		if ( e.button !== 0 || controls.locked || isDriving() || handles.busy ) return;
 		pointer = { x: e.clientX, y: e.clientY };
 
 		if ( drawing ) {
 
 			const start = groundPoint( e.clientX, e.clientY );
-			if ( start && drawing.tool.mode === 'point' ) finishPoint( start, e.pointerType === 'mouse' );
+			if ( start && drawing.tool.mode === 'point' ) finishPoint( start, e.pointerType !== 'mouse' );
 			else if ( start ) {
 
 				drawing.start = start;
@@ -528,7 +596,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		if ( placing ) {
 
 			followPointer();
-			commitPlacing( e.shiftKey, mouse );
+			commitPlacing( e.shiftKey, ! mouse );
 			suppressClick = true;
 			return;
 
@@ -538,7 +606,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		const hit = pick( e.clientX, e.clientY );
 		if ( hit ) {
 
-			select( hit.entry, mouse );
+			if ( hit.entry !== selected ) select( hit.entry, ! mouse );
 			const ground = groundPoint( e.clientX, e.clientY, hit.entry.pivot ) ?? hit.point;
 			dragging = { entry: hit.entry, offset: _offset.copy( hit.entry.pivot.position ).sub( ground ).setY( 0 ).clone(), moved: false };
 			canvas.setPointerCapture( e.pointerId );
@@ -585,13 +653,20 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	};
 
-	canvas.addEventListener( 'wheel', e => {
+	// The wheel turns what's being placed or moved, rather than whatever else it does over the scene
+	// (zooming): taken here first, at the window, and marked as used.
+	window.addEventListener( 'wheel', e => {
 
-		if ( ! placing ) return;
+		if ( e.target !== canvas ) return;
+		const turning = dragging?.entry;
+		if ( ! placing && ! turning && ! handles.busy ) return;
 		e.preventDefault();
-		rotatePlacing( Math.sign( e.deltaY ) * ROTATE_STEP );
+		const degrees = handles.busy ? 0 : wheelTurn( e );
+		if ( ! degrees ) return;
+		if ( placing ) rotatePlacing( degrees );
+		else rotateSelected( degrees, turning );
 
-	}, { passive: false } );
+	}, { capture: true, passive: false } );
 
 	// Dragging a card onto the scene. Only the scene takes the drop; let go anywhere else (over the
 	// sidebar, say) and the card's dragend cancels it.
@@ -628,7 +703,8 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		if ( e.code === 'KeyL' && ! e.repeat ) setOpen( ! open );
 		else if ( e.code === 'Escape' ) {
 
-			if ( drawing ) cancelDrawing();
+			if ( handles.busy ) handles.cancel();
+			else if ( drawing ) cancelDrawing();
 			else if ( placing ) cancelPlacing();
 			else select( null );
 
@@ -638,10 +714,10 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 			if ( placing ) rotatePlacing( step );
 			else rotateSelected( step );
 
-		} else if ( ( e.code === 'Delete' || e.code === 'Backspace' ) && selected && ! placing ) {
+		} else if ( ( e.code === 'Delete' || e.code === 'Backspace' ) && selected && ! placing && ! handles.busy ) {
 
 			e.preventDefault();
-			models.remove( selected );
+			toolbar.remove( selected );
 
 		}
 
@@ -731,25 +807,25 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 			width,
 			length,
 			dragged,
-		}, e.pointerType === 'mouse' );
+		}, e.pointerType !== 'mouse' );
 
 	}
 
-	async function finishPoint( point, showPanel ) {
+	async function finishPoint( point, touch ) {
 
 		const { heading, tool } = drawing;
 		cancelDrawing();
 		const { east, north } = localToEnu( point );
-		await runTool( tool, { east: Math.round( east * 100 ) / 100, north: Math.round( north * 100 ) / 100, height: point.y, heading: Math.round( heading * 10 ) / 10 }, showPanel );
+		await runTool( tool, { east: Math.round( east * 100 ) / 100, north: Math.round( north * 100 ) / 100, height: point.y, heading: Math.round( heading * 10 ) / 10 }, touch );
 
 	}
 
-	async function runTool( tool, shape, showPanel ) {
+	async function runTool( tool, shape, touch ) {
 
 		try {
 
 			const entry = await tool.onDone( shape );
-			if ( entry?.pivot ) select( entry, showPanel );
+			if ( entry?.pivot ) select( entry, touch );
 
 		} catch ( err ) {
 
@@ -804,7 +880,19 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	return {
 		update() {
 
-			if ( selected ) highlight.setFromObject( selected.pivot );
+			if ( selected ) {
+
+				_box.setFromObject( selected.pivot );
+				highlight.setFromObject( selected.pivot );
+
+			}
+
+			// Handles and the toolbar are for the pointer: not while it's captured to look around,
+			// or for something hidden (an excavation once the library closes).
+			const shown = selected && ! controls.locked && ! isDriving() && isVisible( selected.pivot ) ? selected : null;
+			handles.update( shown, _box );
+			// Out of the way while the item is moved or a handle dragged.
+			toolbar.update( dragging?.moved || handles.busy ? null : shown, _box, handles.onScreen() );
 			if ( placing?.entry && placing.commitWhenLoaded ) commitPlacing( false );
 
 		},
@@ -814,6 +902,8 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		select: entry => select( entry ),
 		addTool,
 		setGate,
+		handles,
+		toolbar,
 	};
 
 }
