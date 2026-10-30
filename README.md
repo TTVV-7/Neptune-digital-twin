@@ -61,8 +61,9 @@ The key ends up in the browser, so restricting it is what keeps it safe.
 The **Controls** panel in the bottom right shows the keys and mouse moves for what you're doing right
 now (walking, flying, the library, placing, drawing an area, a selected item, driving, digging) and
 changes as you do. Fold it away with its arrow; it stays as a small **Controls** button, and the app
-remembers which you chose. On a phone it starts as the button. **H** (or **All controls** in the
-panel) shows the full list:
+remembers which you chose. On a phone it starts as the button. Above it, the **Show** panel hides
+things and switches between before and after (see [Showing and hiding](#showing-and-hiding-the-show-panel)).
+**H** (or **All controls** in the panel) shows the full list:
 
 | Moving | |
 | --- | --- |
@@ -91,7 +92,7 @@ panel) shows the full list:
 | Round handle | Drag to rotate the selected item; Shift snaps to 15° |
 | Square handles | On an area, excavation or stockpile: drag to resize; Shift for any size |
 | Arrow in a pit | Drag down to dig deeper, up for shallower |
-| Toolbar | The buttons over the selected item: rotate, size (type it in), drive, edit, delete |
+| Toolbar | The buttons over the selected item: rotate, size (type it in), drive, edit, hide, delete |
 | R / Shift+R | Turn the selected item 15° |
 | Delete | Remove the selected item (Undo for 5 seconds) |
 | Esc | Cancel placing or drawing / deselect |
@@ -117,6 +118,12 @@ panel) shows the full list:
 | W A S D | Drive the tracks |
 | C | Operator camera |
 | V or Esc | Get out |
+
+| Showing | |
+| --- | --- |
+| B | Before / after: the site as Google captured it (nothing flattened, dug, piled or placed), or with your changes |
+| Show panel | Above the Controls (an eye when folded): hide flatten areas, excavations, stockpiles, laydown areas, shoring in pits, labels, or a whole category such as Vehicles |
+| Hide (toolbar) | Hide just the selected item; the Show panel lists it to show again |
 
 | Other | |
 | --- | --- |
@@ -196,8 +203,8 @@ at any site. What each downloaded machine is and where it came from is in
 - **Edit:** click (or tap) a placed item to select it and drag it to move it. A ring appears around it:
   drag its round knob to turn it (**Shift** snaps to 15°), or use **R** / **Shift+R**, or the wheel
   while you drag it. A toolbar over it turns it 15° (hold, or **Shift**+click, for 90°), drives it if
-  it's a vehicle or machine, opens its settings (**P**: exact position and heading) and deletes it,
-  with **Undo** for 5 seconds. **Delete** removes it too.
+  it's a vehicle or machine, opens its settings (**P**: exact position and heading), hides it and
+  deletes it, with **Undo** for 5 seconds. **Delete** removes it too.
 - **Look around** while editing by holding the right mouse button.
 - **Save:** what you place is saved in this browser. **Export layout** downloads it as a file and
   **Import** loads one, e.g. to share a layout or move it to another computer.
@@ -205,8 +212,9 @@ at any site. What each downloaded machine is and where it came from is in
   mesh inside it (rail cars, parked trucks, a shed) is pressed flat to the lowest ground around it,
   to clear space for a layout. Draw it a little bigger than what you want gone: Google's mesh is made
   of large triangles, and ones that cross the edge slope up to the uncleared side. Areas show as red
-  boxes while the library is open; select one to move, turn, resize or delete it, which brings
-  the original back. It only changes what this app draws; Google's data isn't touched.
+  boxes while the library is open (the Show panel hides them); select one to move, turn, resize or
+  delete it, which brings the original back, and **B** shows the original everywhere for a moment.
+  It only changes what this app draws; Google's data isn't touched.
 
 Two kinds of items:
 
@@ -240,6 +248,31 @@ npm run add-asset -- https://polyhaven.com/a/<asset> --id oil-drum --category Ma
 - Textures are shrunk to 1024 px and geometry compressed; `--max-texture 2048` keeps more detail.
 - The script prints the model's description. Read it: if it names someone else to credit (a logo's
   designer, say), run again with `--credit "Logo by ..."` so they're listed too.
+
+## Showing and hiding: the Show panel
+
+The **Show** panel sits above the Controls panel, bottom right. Fold it away with its arrow and it
+stays as a small eye button (the eye is crossed out while something is hidden); the app remembers
+which you chose, and on a phone it starts folded.
+
+- **Before / After** (or **B**): *Before* is the site as Google captured it. Flattening is off, so
+  Google's mesh is back as it was; the ground is shown as it was instead of your cuts, piles and
+  digging, and pits no longer hide any of Google's mesh; nothing you placed is drawn. *After* puts
+  it all back, exactly as it was, at once. The status readout says when you're looking at Before.
+  Placing something new switches back to After. It waits while you're driving.
+- **Layers**, each with an eye and a count: *Flatten areas* (the red boxes; the ground stays
+  flattened), *Excavations* and *Stockpiles* (their outlines and labels; the ground stays dug and
+  piled), *Laydown areas*, *Shoring in pits*, *Labels* (every floating label), then one row per
+  library category with something placed (*Vehicles*, *Heavy equipment*, *Site trailers &
+  containers*, ...), which come and go by themselves. Placing something in a hidden layer shows
+  that layer again.
+- **Hidden items**: **Hide** on the selection toolbar hides just that item (with Undo). Hidden
+  items are listed at the bottom of the panel with **Show** each and **Show all**.
+
+Hidden things aren't drawn, can't be clicked or selected, and don't block walking or driving;
+nothing is moved or deleted. Items hidden one by one are part of the plan: they're saved with the
+layout, exported with it, and hidden on its share link too. The layers and Before / After are
+yours alone, remembered in this browser.
 
 ## Planning a site: laydown areas, cuts and stockpiles
 
@@ -358,6 +391,7 @@ src/world.js        Google tiles, lights, the flat stand-in ground
 src/walk.js         walk/fly controller with gravity, collisions, bounces, the view turn and the zoom's glide
 src/zoom.js         the mouse wheel and trackpad pinch: zoom toward the cursor, chase camera distance
 src/legend.js       the Controls panel: the keys for what you're doing now
+src/layers.js       the Show panel: layers, hidden items and Before / After (B)
 src/drive-prompt.js V: what it drives, the "Press V to drive" prompt and twin.startDriving()
 src/models.js       loads and places your glTF models
 src/placement.js    the P panel
