@@ -498,7 +498,9 @@ body.touch #hud {
 	display: none;
 }
 
-body.touch #drive-ui .keys-toggle {
+body.touch #drive-ui .keys-toggle,
+body.touch #drive-ui kbd,
+body.touch #pause kbd {
 	display: none;
 }
 
