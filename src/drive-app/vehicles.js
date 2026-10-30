@@ -18,7 +18,6 @@ const KART = {
 // Friendlier names than the library's, and a word on each.
 const NAMES = {
 	'pickup-truck': { name: 'Pickup', blurb: 'All-rounder' },
-	'semi-tractor-w900': { name: 'Semi truck', blurb: 'Long nose, big rig' },
 	'haul-truck-hd465': { name: 'Haul truck', blurb: 'Huge, slow, unstoppable' },
 };
 

@@ -1,4 +1,6 @@
 // The library vehicles World Drive offers, by their id in public/library/library.json, besides
 // the go-kart (src/kart.js). Kept apart, with no imports, because vite.drive.config.js reads it
-// too: only these models and their pictures are published with the World Drive site.
-export const LIBRARY_VEHICLES = [ 'pickup-truck', 'semi-tractor-w900', 'haul-truck-hd465' ];
+// too: only these models and their pictures are published with the World Drive site. Not the semi
+// (semi-tractor-w900): the model has a pin-up decal and maker's logos, fine on a work site but not
+// in a public game.
+export const LIBRARY_VEHICLES = [ 'pickup-truck', 'haul-truck-hd465' ];

@@ -132,7 +132,7 @@ describe( 'World Drive, desktop', () => {
 		assert.ok( await panel.isVisible() );
 		assert.match( await panel.locator( '.logo' ).textContent(), /World\s*Drive/ );
 		assert.equal( await panel.locator( '.spots button' ).count(), 12 );
-		assert.deepEqual( await panel.locator( '.vehicle b' ).allTextContents(), [ 'Go-kart', 'Pickup', 'Semi truck', 'Haul truck' ] );
+		assert.deepEqual( await panel.locator( '.vehicle b' ).allTextContents(), [ 'Go-kart', 'Pickup', 'Haul truck' ] );
 		assert.equal( await panel.locator( '.vehicle.picked b' ).textContent(), 'Go-kart' );
 		assert.match( await panel.locator( '.osm' ).textContent(), /Search © OpenStreetMap contributors/ );
 		assert.equal( await page.locator( '#pin-card, .pin-card' ).isVisible(), false );
@@ -353,15 +353,15 @@ describe( 'World Drive, desktop', () => {
 		assert.deepEqual( recent, [ 'Golden Gate Bridge' ] );
 		await shot( page, 'drive-8-back' );
 
-		// The semi this time, at the place in Recent.
-		await page.locator( '#globe-ui .vehicle', { hasText: 'Semi truck' } ).click();
+		// The haul truck this time, at the place in Recent.
+		await page.locator( '#globe-ui .vehicle', { hasText: 'Haul truck' } ).click();
 		await page.locator( '.spots button', { hasText: 'Furka Pass' } ).click();
 		await flown( page );
 		await driveHere( page );
 		const now = await page.evaluate( () => ( { name: window.drive.driver.entry.state.name, place: window.drive.place.name, navigations: performance.getEntriesByType( 'navigation' ).length } ) );
-		assert.deepEqual( now, { name: 'Semi truck', place: 'Furka Pass', navigations: 1 } );
+		assert.deepEqual( now, { name: 'Haul truck', place: 'Furka Pass', navigations: 1 } );
 		await page.waitForTimeout( 600 );
-		await shot( page, 'drive-9-semi' );
+		await shot( page, 'drive-9-haul' );
 
 		// The Globe button does what M does.
 		await page.locator( '#drive-ui .to-globe' ).click();
@@ -388,7 +388,7 @@ describe( 'World Drive, desktop', () => {
 
 		await openGlobe( page );
 		assert.deepEqual( await page.locator( '.recent button b' ).allTextContents(), [ 'Furka Pass', 'Golden Gate Bridge' ] );
-		assert.equal( await page.locator( '#globe-ui .vehicle.picked b' ).textContent(), 'Semi truck' );
+		assert.equal( await page.locator( '#globe-ui .vehicle.picked b' ).textContent(), 'Haul truck' );
 		assert.deepEqual( page.outside, [] );
 		assert.deepEqual( page.errors, [] );
 

@@ -27,7 +27,7 @@ address, and the construction app is unchanged by it.
 
    Choosing a search result or a spot flies the globe down to it and pins it. The card under the pin
    says where it is, with **Drive here**.
-3. **Your ride**: the go-kart, a pickup, a semi or a haul truck. The choice is remembered.
+3. **Your ride**: the go-kart, a pickup or a haul truck. The choice is remembered.
 4. **Drive here.** The view flies down to the pin and waits for the ground to load ("Loading the
    ground..."), so the vehicle never drops through tiles that aren't there yet. It starts on the ground
    at the pin, facing along the street if there is one (a spot's road, or the longest clear line

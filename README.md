@@ -353,8 +353,8 @@ testing with test cards and the known gaps are in [docs/premium.md](docs/premium
 ## World Drive (worlddrive.app)
 
 A second app in this repository, on its own address: pick anywhere on Earth from a globe of Google's
-3D tiles (search, a dozen start spots, recent places, or a tap on the globe), choose a go-kart, pickup,
-semi or haul truck, press **Drive here** and drive the real world arcade-style: drift, boost, fly
+3D tiles (search, a dozen start spots, recent places, or a tap on the globe), choose a go-kart, pickup
+or haul truck, press **Drive here** and drive the real world arcade-style: drift, boost, fly
 with Shift, **M** back to the globe and drop in somewhere else without reloading. Phones get a bottom
 sheet and touch buttons.
 
