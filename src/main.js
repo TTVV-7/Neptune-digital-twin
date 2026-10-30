@@ -12,11 +12,12 @@ import { setUpFlattening } from './flatten.js';
 import { createDriveHud, Driver, specFor } from './drive.js';
 import { isTyping, WalkController } from './walk.js';
 import { setUpEarthworks } from './earthworks.js';
+import { setUpExcavator } from './excavator.js';
 import { setUpLaydown } from './laydown.js';
 import { accountMapsKey, setUpCloud } from './cloud.js';
 
 // Features that plug into the app (see `features` in start()); each is a function taking the context.
-const FEATURES = [ setUpEarthworks, setUpLaydown, setUpCloud ];
+const FEATURES = [ setUpEarthworks, setUpExcavator, setUpLaydown, setUpCloud ];
 
 const STORAGE_KEY = 'neptune-twin.google-api-key';
 const ENV_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';

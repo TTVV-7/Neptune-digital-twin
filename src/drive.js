@@ -42,21 +42,26 @@ export class Driver {
 		this.keys = new Set();
 		this.active = false;
 		this.cameraMode = 'chase';
+		// Machines that aren't driven like a car bring their own controls (see addMachine).
+		this.machines = new Map();
+		this.machine = null;
 
 		const driveKeys = [ 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight' ];
 		window.addEventListener( 'keydown', e => {
 
 			if ( ! this.active || isTyping( e ) ) return;
-			if ( driveKeys.includes( e.code ) ) {
+			if ( driveKeys.includes( e.code ) || this.machine?.keys.includes( e.code ) ) {
 
 				e.preventDefault();
 				this.keys.add( e.code );
-				if ( e.code === 'Space' && ! e.repeat && this.grounded ) {
+				if ( e.code === 'Space' && ! e.repeat && this.grounded && ! this.machine ) {
 
 					this.vy = JUMP_SPEED;
 					this.grounded = false;
 
 				}
+
+				if ( ! e.repeat ) this.machine?.press( e.code );
 
 			}
 
@@ -72,6 +77,18 @@ export class Driver {
 		}, true );
 		window.addEventListener( 'keyup', e => this.keys.delete( e.code ), true );
 		window.addEventListener( 'blur', () => this.keys.clear() );
+
+	}
+
+	// A kind of machine, named by `type` in a vehicle's drive spec, that is driven with its own
+	// controls rather than like a car: create( { driver, entry, spec } ) returns a controller
+	// { keys: [ key codes it uses ], press( code ), update( dt ), stop(), panel } or null to drive it
+	// like a car after all. Each frame its update() moves and poses the vehicle, keeps east, north,
+	// y and heading here up to date (that's where it parks), shows its readouts in `panel` (an
+	// element shown instead of the speedometer) and places the camera.
+	addMachine( type, create ) {
+
+		this.machines.set( type, create );
 
 	}
 
@@ -114,8 +131,10 @@ export class Driver {
 		this.controls.enabled = false;
 		document.exitPointerLock?.();
 		this.active = true;
-		this.hud.show( entry.state.name );
-		this.placeCamera( 1 );
+		this.machine = this.machines.get( spec.type )?.( { driver: this, entry, spec } ) ?? null;
+		this.hud.show( entry.state.name, this.machine?.panel );
+		if ( this.machine ) this.machine.update( 0 );
+		else this.placeCamera( 1 );
 
 	}
 
@@ -123,6 +142,8 @@ export class Driver {
 
 		if ( ! this.active ) return;
 		this.active = false;
+		this.machine?.stop();
+		this.machine = null;
 		const { entry } = this;
 		entry.driving = false;
 
@@ -151,6 +172,13 @@ export class Driver {
 		if ( ! this.models.entries.includes( this.entry ) ) {
 
 			this.stop();
+			return;
+
+		}
+
+		if ( this.machine ) {
+
+			this.machine.update( dt );
 			return;
 
 		}
@@ -361,6 +389,8 @@ function isInside( object, ancestor ) {
 export function createDriveHud() {
 
 	const root = document.getElementById( 'drive-hud' );
+	const gauge = root.querySelector( '.gauge' );
+	const keys = root.querySelector( '.keys' );
 	const speed = root.querySelector( '.speed' );
 	const unit = root.querySelector( '.unit' );
 	const needle = root.querySelector( '.needle' );
@@ -371,12 +401,18 @@ export function createDriveHud() {
 	const MAX = 220;
 	const ARC = 270;
 	let flashTimer;
+	let panel = null;
 
 	return {
 
-		show( vehicleName ) {
+		// A machine with its own readouts (an excavator) shows its panel instead of the speedometer.
+		show( vehicleName, machinePanel = null ) {
 
 			name.textContent = vehicleName;
+			panel?.remove();
+			panel = machinePanel;
+			if ( panel ) name.after( panel );
+			for ( const element of [ gauge, stats, keys ] ) element.hidden = !! panel;
 			root.hidden = false;
 			document.body.classList.add( 'driving' );
 
@@ -385,6 +421,8 @@ export function createDriveHud() {
 		hide() {
 
 			root.hidden = true;
+			panel?.remove();
+			panel = null;
 			document.body.classList.remove( 'driving' );
 
 		},
