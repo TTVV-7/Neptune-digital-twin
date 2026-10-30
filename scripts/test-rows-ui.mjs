@@ -540,7 +540,8 @@ test( 'edited: dots and pluses move, add and take out points; spacing in the Siz
 	[ row ] = await rows();
 	const length = lineLength( row.config.params.points );
 	assert.equal( row.config.params.spacing, 'every' );
-	assert.equal( row.count, Math.round( length / 4 ) + 1 );
+	// No further apart than 4 m: a copy on each end, and the rest evenly between.
+	assert.equal( row.count, Math.ceil( length / 4 - 0.02 ) + 1 );
 
 	// Lock blocks end to end, from the P panel's dropdowns.
 	await page.evaluate( () => {

@@ -36,8 +36,10 @@ export const PROCEDURAL_ITEMS = [
 	{ id: 'jersey-barrier', name: 'Concrete jersey barrier (10 ft, ~1.9 t)', category: 'Barriers & fencing', build: jerseyBarrier },
 	{ id: 'lock-block', name: 'Concrete lock block (5 x 2.5 ft, ~2.1 t)', category: 'Barriers & fencing', build: lockBlock },
 	{ id: 'bollard-pipe', name: 'Steel pipe bollard (6 in, 4 ft high)', category: 'Barriers & fencing', build: pipeBollard },
-	{ id: 'fence-panel', name: 'Temporary fence panel (10 x 6 ft)', category: 'Barriers & fencing', build: fencePanel },
-	{ id: 'fence-run-screened', name: 'Temporary fence with privacy screen, 9.1 m run (3 × 10 ft panels)', category: 'Barriers & fencing', build: () => screenedFence( 3 ) },
+	// A row of fence panels (rows.js) has them 10 ft apart, sharing the foot at each joint as on site,
+	// rather than their boxes (feet and all) touching.
+	{ id: 'fence-panel', name: 'Temporary fence panel (10 x 6 ft)', category: 'Barriers & fencing', build: fencePanel, rowLength: 10 * FT },
+	{ id: 'fence-run-screened', name: 'Temporary fence with privacy screen, 9.1 m run (3 × 10 ft panels)', category: 'Barriers & fencing', build: () => screenedFence( 3 ), rowLength: 30 * FT },
 	{ id: 'hoarding-plywood-10m', name: 'Plywood hoarding, 10 m run (2.4 m / 8 ft high)', category: 'Barriers & fencing', build: () => plywoodHoarding( 10 ) },
 	// Modular trailers (trailers.js); the box size is in the name, the card adds stairs and HVAC.
 	{ id: 'office-trailer-8x20', name: 'Site office trailer 2.4 × 6.1 m (8 × 20 ft)', category: 'Site trailers & containers', build: () => trailer( 'office-trailer-8x20' ) },

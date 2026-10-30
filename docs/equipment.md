@@ -216,7 +216,8 @@ round inside.
 A screened fence run is three standard panels (9.1 m) rather than exactly 10 m: panels come in 10 ft
 widths. For a longer fence, a run of barriers or a line of bollards, use **Row** on the card: draw
 the line on the ground and they're placed along it, end to end or every so many metres (see
-[Rows](../README.md#rows-many-of-an-item-along-a-line) in the README). The jersey barrier and the
+[Rows](../README.md#rows-many-of-an-item-along-a-line) in the README). End to end, fence panels and
+screened runs go 10 ft (and 30 ft) apart, sharing the foot at each joint as they do on site. The jersey barrier and the
 lock block carry their weight in their names (about 1.9 t and 2.1 t: 27 and 31 ft³ of concrete at
 150 lb/ft³), so a row of them says what it weighs in all. Any library item can be put in a row:
 cones, drums, water-filled barriers, light towers, trailers, trucks side by side, people.

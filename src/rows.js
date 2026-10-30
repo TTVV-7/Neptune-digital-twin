@@ -178,7 +178,9 @@ export function setUpRows( { scene, camera, canvas, models, sidebar, panel, layo
 
 		} );
 		const size = box.getSize( new Vector3() );
-		return { item, parts, size, ghost: null };
+		// End to end, pieces that share a joint (fence panels on a foot between them) are their
+		// length apart, not their box's: item.rowLength (procedural.js) says how long that is.
+		return { item, parts, size, length: Number( item.rowLength ) || null, ghost: null };
 
 	}
 
@@ -1000,7 +1002,8 @@ export function setUpRows( { scene, camera, canvas, models, sidebar, panel, layo
 // --- laying out the copies ---------------------------------------------------------------
 
 // Where each copy goes along a row's line, in its frame (three.js's local axes: x east and z south
-// as if it faced north): { copies, length (of the line), step (centre to centre on a straight) }.
+// as if it faced north): { copies, length (of the line), step and least (the most and the least
+// centre to centre on a straight), capped (more would fit than a row can have) }.
 // Each copy is { x, z, yaw, offset, a, b, sa, sb, length }: its middle and the way the line runs
 // there (yaw, about y), how it's turned from that (offset), its ends along the line (a, b, as
 // [ x, z ], and how far along the line they are, sa and sb) and the distance between them.
@@ -1008,14 +1011,17 @@ export function setUpRows( { scene, camera, canvas, models, sidebar, panel, layo
 // End to end, each copy runs straight from a point on the line to the point its length further on,
 // and the next starts the gap after that: round a corner a copy cuts across it, so they meet end to
 // end there too. The run starts at the start, or is centred with the spare split between the ends.
-// Every so many metres, copies go that far apart along the line, round corners as well: from the
-// ends, one at each end and as near that spacing as fits between; centred, exactly that spacing.
+// Every so many metres, copies go along the line, round corners as well: from the ends, one on
+// each point clicked and the rest evenly between, no further apart than that; centred, exactly that
+// spacing. A loop's first point is its last, so it has no copy twice there.
 function layOut( params, t ) {
 
 	const line = params.points.map( ( [ e, n ] ) => [ e, - n ] );
 	const starts = [ 0 ];
 	for ( let k = 1; k < line.length; k ++ ) starts.push( starts[ k - 1 ] + Math.hypot( line[ k ][ 0 ] - line[ k - 1 ][ 0 ], line[ k ][ 1 ] - line[ k - 1 ][ 1 ] ) );
 	const total = starts[ starts.length - 1 ];
+	// A loop (a fence round an area): it ends where it starts.
+	const closed = line.length > 3 && Math.hypot( line[ 0 ][ 0 ] - line[ line.length - 1 ][ 0 ], line[ 0 ][ 1 ] - line[ line.length - 1 ][ 1 ] ) < 0.05;
 	const extent = extentOf( t, params );
 	const longZ = t.size.z >= t.size.x;
 	const offset = ( ( params.align === 'along' ) === longZ ? 0 : - Math.PI / 2 ) + ( params.flip ? Math.PI : 0 );
@@ -1096,26 +1102,43 @@ function layOut( params, t ) {
 	if ( params.spacing === 'every' ) {
 
 		const every = params.every;
-		let count;
-		let step;
-		let from;
+		// Shorter than half the spacing (and not a loop): one, in the middle.
+		if ( ! closed && total < every / 2 ) return { copies: [ centredAt( total / 2 ) ], length: total, step: 0, least: 0 };
+		const places = [];
+		let step = every;
+		let least = every;
 		if ( params.fit === 'ends' ) {
 
-			const spaces = Math.round( total / every );
-			count = spaces === 0 ? 1 : spaces + 1;
-			step = spaces === 0 ? 0 : total / spaces;
-			from = spaces === 0 ? total / 2 : 0;
+			// One on each point clicked, the ends and every corner (the start and end of a cone
+			// taper, a fence's corners), and the rest evenly between them no further apart than the
+			// spacing: a site's "cones every 3 m" is at most 3 m. A loop's last point is its first.
+			step = 0;
+			least = Infinity;
+			for ( let k = 0; k < line.length - 1; k ++ ) {
+
+				const length = starts[ k + 1 ] - starts[ k ];
+				// A stretch a hair over a whole number of spaces doesn't get another copy for it.
+				const spaces = Math.max( 1, Math.ceil( length / every - 0.02 ) );
+				for ( let i = 0; i < spaces; i ++ ) places.push( starts[ k ] + length * i / spaces );
+				step = Math.max( step, length / spaces );
+				least = Math.min( least, length / spaces );
+
+			}
+
+			if ( ! closed ) places.push( total );
 
 		} else {
 
-			count = Math.floor( total / every + 1e-6 ) + 1;
-			step = every;
-			from = ( total - ( count - 1 ) * every ) / 2;
+			// Exactly the spacing along the line, what's over split between its two ends; round a
+			// loop, what's over is between its last and its first.
+			const count = Math.max( 1, Math.floor( total / every + 1e-6 ) + ( closed ? 0 : 1 ) );
+			const from = ( total - ( count - 1 ) * every ) / 2;
+			for ( let i = 0; i < count; i ++ ) places.push( from + i * every );
 
 		}
 
-		count = Math.min( count, MAX_COPIES );
-		return { copies: Array.from( { length: count }, ( _, i ) => centredAt( from + i * step ) ), length: total, step };
+		const capped = places.length > MAX_COPIES;
+		return { copies: places.slice( 0, MAX_COPIES ).map( centredAt ), length: total, step, least, capped };
 
 	}
 
@@ -1154,16 +1177,19 @@ function layOut( params, t ) {
 	}
 
 	// Shorter than one copy: one in the middle.
-	if ( links.length === 0 ) return { copies: [ centredAt( total / 2 ) ], length: total, step: 0 };
-	return { copies: links.map( ( [ sa, sb ] ) => copy( sa, sb ) ), length: total, step: extent + params.gap };
+	if ( links.length === 0 ) return { copies: [ centredAt( total / 2 ) ], length: total, step: 0, least: 0 };
+	const step = extent + params.gap;
+	const capped = links.length === MAX_COPIES && reach( links[ links.length - 1 ][ 1 ] + params.gap, extent ) !== null;
+	return { copies: links.map( ( [ sa, sb ] ) => copy( sa, sb ) ), length: total, step, least: step, capped };
 
 }
 
-// How long a copy is along the line: the item's long side lined up along it, its short side across.
+// How long a copy is along the line: the item's long side lined up along it (or how far apart its
+// joints are, where it shares them), its short side across.
 function extentOf( t, { align } ) {
 
 	const { x, z } = t.size;
-	return Math.max( 0.05, align === 'along' ? Math.max( x, z ) : Math.min( x, z ) );
+	return Math.max( 0.05, align === 'along' ? t.length ?? Math.max( x, z ) : Math.min( x, z ) );
 
 }
 
@@ -1234,14 +1260,18 @@ function summary( item, plan ) {
 	if ( ! plan ) return '';
 	const count = plan.copies.length;
 	const weight = weightText( item, count );
-	return [ `${ count } ${ count === 1 ? 'copy' : 'copies' }`, `${ format( plan.length ) } m`, weight ].filter( Boolean ).join( ' · ' );
+	// A row stops at its most rather than leave the rest of a long line bare without saying.
+	const copies = `${ format( count, 0 ) } ${ count === 1 ? 'copy' : 'copies' }${ plan.capped ? ' (the most a row has)' : '' }`;
+	return [ copies, `${ format( plan.length ) } m`, weight ].filter( Boolean ).join( ' · ' );
 
 }
 
 function spacingText( params, plan ) {
 
-	if ( ! plan ) return '';
-	return plan.step > 0 ? `${ format( plan.step, 2 ) } m centre to centre${ params.spacing === 'end' ? ' on a straight' : '' }` : '';
+	if ( ! plan || ! ( plan.step > 0 ) ) return '';
+	// Each stretch between corners spaced on its own: from the closest to the furthest apart.
+	const range = plan.least > 0 && plan.step - plan.least >= 0.005 ? `${ format( plan.least, 2 ) } to ${ format( plan.step, 2 ) }` : format( plan.step, 2 );
+	return `${ range } m centre to centre${ params.spacing === 'end' ? ' on a straight' : '' }`;
 
 }
 

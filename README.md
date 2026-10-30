@@ -274,15 +274,20 @@ from that item, which becomes the first of the row. Any library item works.
   sheet steps aside while you draw.
 - **Spacing,** in the panel at the top while drawing:
   - *End to end*: each copy runs its real length along the line, and the next starts the gap after
-    it (none for barriers, fencing and hoarding, which touch; a metre for plant and vehicles). Round a
-    corner a copy cuts across it, so they meet end to end there too.
-  - *Every X m*: that far apart centre to centre, measured along the line and on round its corners.
-    Cones and drums start at 3 m, bollards at 1.5 m, light towers at 30 m and people at 1.5 m.
+    it (none for barriers, fencing and hoarding, which touch; a metre for plant and vehicles). Fence
+    panels go 10 ft apart, sharing the foot at each joint as they do on site. Round a corner a copy
+    cuts across it, so they meet end to end there too.
+  - *Every X m*: no further apart than that centre to centre, measured along the line and on round
+    its corners. Cones and drums start at 3 m, bollards at 1.5 m, light towers at 30 m and people at
+    1.5 m.
   - *Line up*: *along* puts each copy's long side along the line (a wall of barriers, trucks nose to
     tail), *across* turns them square to it (trucks parked side by side).
-  - *Ends*: *from the ends* starts the run at the start of the line, and every X m puts one at each
-    end and spaces the rest as near X as fits; *centred* keeps the spacing exact and splits what's
-    over between the two ends.
+  - *Ends*: *from the ends* starts the run at the start of the line; every X m it puts one on each
+    point you clicked, the ends and every corner (the start and end of a cone taper), and spaces the
+    rest evenly between them, a little closer than X where X doesn't go exactly. *Centred* keeps the
+    spacing exact and splits what's over between the two ends.
+  - A line that ends where it started is a loop (a fence round a laydown area): it has no copy
+    twice where it closes.
 
   It remembers what you chose for each item. As you draw, the copies show along the line with how
   many there are, the line's length and, where the item's name gives its weight (a jersey barrier
