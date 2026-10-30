@@ -46,4 +46,5 @@ is draped over them; flatten the area first (**Flatten area**) to lay it on clea
   on top of Google's mesh between samples while things standing on it lose only a pixel or two.
 - The P panel (`src/placement.js`) now renames a kind's folder when `entry.state.name` changes (a
   laydown area takes its label as its name), shows readouts from the start, applies a colour when its
-  picker closes, and ignores leaving a field unchanged.
+  picker closes, ignores leaving a field unchanged, and leaves the field being typed in alone when the
+  entry changes meanwhile (e.g. it re-snaps as sharper tiles stream in).

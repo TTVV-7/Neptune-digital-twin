@@ -316,7 +316,7 @@ export function setUpLaydown( { camera, canvas, models, sidebar, panel, getGroun
 		if ( next ) drape( next, nextArea.dirty );
 
 		// Recount the items inside each area after things move, and only refresh a panel whose
-		// count changed: refreshing redraws its fields, which would undo half-typed text.
+		// count changed rather than redrawing every panel's fields each time.
 		countTimer -= dt;
 		if ( countDue && countTimer <= 0 ) {
 
