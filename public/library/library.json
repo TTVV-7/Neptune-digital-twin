@@ -1,1 +1,106 @@
-[]
+[
+	{
+		"id": "flatbed-trailer",
+		"name": "Flatbed trailer (48 ft)",
+		"category": "Vehicles",
+		"file": "flatbed-trailer.glb",
+		"thumb": "thumbs/flatbed-trailer.webp",
+		"front": "+z",
+		"scale": 1.33846,
+		"dimensions": {
+			"length": 14.63,
+			"width": 2.7,
+			"height": 1.48
+		},
+		"triangles": 13994,
+		"sizeKB": 508,
+		"source": {
+			"site": "Sketchfab",
+			"id": "76998b4d82604bb7996768835dcaa276",
+			"url": "https://sketchfab.com/3d-models/flatbed-trailer-76998b4d82604bb7996768835dcaa276",
+			"title": "Flatbed Trailer",
+			"author": "Arsen Ismailov",
+			"authorUrl": "https://sketchfab.com/fdgasd7",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "haul-truck-hd465",
+		"name": "Haul truck (off-highway, 55 t)",
+		"category": "Vehicles",
+		"file": "haul-truck-hd465.glb",
+		"thumb": "thumbs/haul-truck-hd465.webp",
+		"front": "+z",
+		"scale": 1.00033,
+		"dimensions": {
+			"length": 9.4,
+			"width": 5.37,
+			"height": 4.52
+		},
+		"triangles": 27368,
+		"sizeKB": 1934,
+		"source": {
+			"site": "Sketchfab",
+			"id": "2bf4dcd62e484f01bcb446af263bd65c",
+			"url": "https://sketchfab.com/3d-models/komatsu-hd-465-7eo-2bf4dcd62e484f01bcb446af263bd65c",
+			"title": "KOMATSU HD-465-7EO",
+			"author": "drcrazzie",
+			"authorUrl": "https://sketchfab.com/drcrazzie",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "pickup-truck",
+		"name": "Pickup truck (work)",
+		"category": "Vehicles",
+		"file": "pickup-truck.glb",
+		"thumb": "thumbs/pickup-truck.webp",
+		"front": "+z",
+		"scale": 1.00051,
+		"dimensions": {
+			"length": 5.36,
+			"width": 2.46,
+			"height": 2.32
+		},
+		"triangles": 219049,
+		"sizeKB": 2779,
+		"source": {
+			"site": "Sketchfab",
+			"id": "2a3afc6780614a819fb575fee959b3ab",
+			"url": "https://sketchfab.com/3d-models/american-pickup-truck-2a3afc6780614a819fb575fee959b3ab",
+			"title": "American pickup truck",
+			"author": "local.yany",
+			"authorUrl": "https://sketchfab.com/local.yany",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "semi-tractor-w900",
+		"name": "Semi tractor (long-nose sleeper)",
+		"category": "Vehicles",
+		"file": "semi-tractor-w900.glb",
+		"thumb": "thumbs/semi-tractor-w900.webp",
+		"front": "+z",
+		"scale": 1.45088,
+		"dimensions": {
+			"length": 8,
+			"width": 2.42,
+			"height": 3.47
+		},
+		"triangles": 20418,
+		"sizeKB": 583,
+		"source": {
+			"site": "Sketchfab",
+			"id": "37b10f9c92584dfdb3d1337697dc8843",
+			"url": "https://sketchfab.com/3d-models/truck-w-900-37b10f9c92584dfdb3d1337697dc8843",
+			"title": "Truck W 900",
+			"author": "perceval-66",
+			"authorUrl": "https://sketchfab.com/perceval-66",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	}
+]

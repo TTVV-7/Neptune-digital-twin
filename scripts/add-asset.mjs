@@ -1,13 +1,14 @@
 // Adds a model from Sketchfab or Poly Haven to the asset library in public/library.
 //
 //   npm run add-asset -- <source> --id pickup --name "Pickup truck" --category Vehicles \
-//     --length 5.9 [--front +z] [--max-texture 1024] [--file local.glb]
+//     --length 5.9 [--front +z] [--max-texture 1024] [--simplify 0.3] [--file local.glb]
 //
 // <source> is a Sketchfab model URL or uid, or a Poly Haven URL (https://polyhaven.com/a/<id>)
 // or polyhaven:<id>. Only downloadable Sketchfab models under CC0 or CC Attribution are accepted,
 // so they can live in the repository; Poly Haven is all CC0. The model is compressed (meshopt
 // geometry, WebP textures), scaled from --length (the real length along its front axis), and
-// recorded with a thumbnail and credit in library.json and CREDITS.md.
+// recorded with a thumbnail and credit in library.json and CREDITS.md. --simplify keeps that
+// fraction of the triangles, for detailed models that are too heavy for a browser.
 //
 // Sketchfab needs an API token (sketchfab.com > Settings > Password & API) in an environment
 // variable named SKETCHFAB_API_TOKEN, SKETCHFAB_TOKEN or SKETCHFAB_API (any case).
@@ -18,8 +19,8 @@ import { dirname, join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
-import { dedup, getBounds, meshopt, prune, textureCompress, weld } from '@gltf-transform/functions';
-import { MeshoptDecoder, MeshoptEncoder } from 'meshoptimizer';
+import { dedup, getBounds, meshopt, metalRough, prune, simplify, textureCompress, weld } from '@gltf-transform/functions';
+import { MeshoptDecoder, MeshoptEncoder, MeshoptSimplifier } from 'meshoptimizer';
 import sharp from 'sharp';
 
 const SKETCHFAB_API = 'https://api.sketchfab.com/v3';
@@ -40,6 +41,7 @@ const { values: opts, positionals } = parseArgs( {
 		length: { type: 'string' },
 		front: { type: 'string', default: '+z' },
 		'max-texture': { type: 'string', default: '1024' },
+		simplify: { type: 'string' },
 		file: { type: 'string' },
 	},
 } );
@@ -57,9 +59,12 @@ if ( ! /^[a-z0-9-]+$/.test( opts.id ) ) fail( '--id may only contain lowercase l
 if ( ! FRONTS.includes( opts.front ) ) fail( `--front must be one of ${ FRONTS.join( ', ' ) } (the axis the item's front points along in the file).` );
 const realLength = Number( opts.length );
 if ( ! ( realLength > 0 ) ) fail( '--length must be the real length in metres along the front axis.' );
+const simplifyRatio = opts.simplify === undefined ? null : Number( opts.simplify );
+if ( simplifyRatio !== null && ! ( simplifyRatio > 0 && simplifyRatio < 1 ) ) fail( '--simplify must be between 0 and 1 (the fraction of triangles to keep).' );
 
 await MeshoptEncoder.ready;
 await MeshoptDecoder.ready;
+await MeshoptSimplifier.ready;
 const io = new NodeIO()
 	.registerExtensions( ALL_EXTENSIONS )
 	.registerDependencies( { 'meshopt.decoder': MeshoptDecoder, 'meshopt.encoder': MeshoptEncoder } );
@@ -67,12 +72,20 @@ const io = new NodeIO()
 // 1. Check the licence and fetch the model.
 const { doc, source, thumbnailUrl } = polyhavenId ? await fromPolyHaven( polyhavenId ) : await fromSketchfab( sketchfabUid );
 
-// 2. Compress.
+// 1b. Measure before compressing: quantised skinned meshes keep their positions in a scaled form
+// that bounds can't see through.
+const { min, max } = getBounds( doc.getRoot().getDefaultScene() ?? doc.getRoot().listScenes()[ 0 ] );
+const size = [ max[ 0 ] - min[ 0 ], max[ 1 ] - min[ 1 ], max[ 2 ] - min[ 2 ] ];
+
+// 2. Compress. Older spec/gloss materials are converted, since three.js no longer reads them.
 const maxTexture = Number( opts[ 'max-texture' ] );
+const usesSpecGloss = doc.getRoot().listExtensionsUsed().some( e => e.extensionName === 'KHR_materials_pbrSpecularGlossiness' );
 await doc.transform(
+	...( usesSpecGloss ? [ metalRough() ] : [] ),
 	dedup(),
 	prune(),
 	weld(),
+	...( simplifyRatio ? [ simplify( { simplifier: MeshoptSimplifier, ratio: simplifyRatio, error: 0.002 } ) ] : [] ),
 	textureCompress( { encoder: sharp, targetFormat: 'webp', resize: [ maxTexture, maxTexture ] } ),
 	meshopt( { encoder: MeshoptEncoder, level: 'medium' } ),
 );
@@ -94,9 +107,7 @@ if ( thumbnailUrl ) {
 
 }
 
-// 4. Work out real-world size. Length runs along the front axis.
-const { min, max } = getBounds( doc.getRoot().getDefaultScene() ?? doc.getRoot().listScenes()[ 0 ] );
-const size = [ max[ 0 ] - min[ 0 ], max[ 1 ] - min[ 1 ], max[ 2 ] - min[ 2 ] ];
+// 4. Work out real-world size (measured in step 1b). Length runs along the front axis.
 const alongX = opts.front.endsWith( 'x' );
 const scale = realLength / ( alongX ? size[ 0 ] : size[ 2 ] );
 const round = v => Math.round( v * 100 ) / 100;

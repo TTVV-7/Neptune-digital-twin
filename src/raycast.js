@@ -11,7 +11,8 @@ export function useFastRaycast( root ) {
 
 	root.traverse( object => {
 
-		if ( object.isMesh ) object.raycast = lazyBvhRaycast;
+		// Skinned (rigged) meshes are left to three.js, which raycasts them in their posed shape.
+		if ( object.isMesh && ! object.isSkinnedMesh ) object.raycast = lazyBvhRaycast;
 
 	} );
 
