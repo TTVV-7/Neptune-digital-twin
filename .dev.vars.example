@@ -12,3 +12,11 @@ GOOGLE_MAPS_API_KEY=
 # Optional, comma-separated: who may sign in. Empty means any Google account.
 ALLOWED_EMAILS=
 ALLOWED_DOMAINS=
+
+# Optional: premium equipment (docs/premium.md), with Stripe in test mode. Off unless all three
+# Stripe settings are filled in.
+STRIPE_PAYMENT_LINK=
+STRIPE_PAYMENT_LINK_ID=
+STRIPE_WEBHOOK_SECRET=
+PREMIUM_PRICE=
+PREMIUM_EMAILS=

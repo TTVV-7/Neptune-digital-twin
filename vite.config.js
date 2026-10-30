@@ -17,9 +17,12 @@ export default defineConfig( ( { command, mode } ) => {
 
 	const env = loadEnv( mode, process.cwd(), '' );
 	const byName = new Map( Object.entries( env ).map( ( [ name, value ] ) => [ name.toLowerCase(), value ] ) );
-	// `npm run deploy` builds with --mode cloudflare: there the Worker hands the key to signed-in
-	// users (src/cloud.js), so it's left out of the public site.
-	const keyName = mode === 'cloudflare' ? null : GOOGLE_KEY_NAMES.find( name => byName.get( name.toLowerCase() ) );
+	// `npm run deploy` builds with --mode cloudflare, and Vercel (vercel.json) with --mode server:
+	// there the API hands the key to signed-in users (src/cloud.js), so it's left out of the public
+	// site. Any build on Vercel (which sets VERCEL) counts as one, so a changed build command can't
+	// put the key from the project's settings into the site.
+	const serverHasKey = mode === 'cloudflare' || mode === 'server' || !! process.env.VERCEL;
+	const keyName = serverHasKey ? null : GOOGLE_KEY_NAMES.find( name => byName.get( name.toLowerCase() ) );
 	const googleKey = keyName ? byName.get( keyName.toLowerCase() ) : '';
 	if ( keyName && command === 'build' ) {
 

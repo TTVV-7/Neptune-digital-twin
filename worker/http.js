@@ -70,6 +70,23 @@ export function checkSameOrigin( request, url ) {
 // The body as JSON, refusing anything over the limit before reading all of it.
 export async function readJson( request, limit = MAX_BODY ) {
 
+	const bytes = await readBytes( request, limit );
+	try {
+
+		return JSON.parse( new TextDecoder().decode( bytes ) );
+
+	} catch {
+
+		throw new HttpError( 400, 'Bad request' );
+
+	}
+
+}
+
+// The body exactly as it was sent (a signature covers these bytes), refusing anything over the
+// limit before reading all of it.
+export async function readBytes( request, limit = MAX_BODY ) {
+
 	if ( Number( request.headers.get( 'Content-Length' ) ) > limit ) throw new HttpError( 413, 'Too large' );
 	if ( ! request.body ) throw new HttpError( 400, 'Bad request' );
 
@@ -101,15 +118,7 @@ export async function readJson( request, limit = MAX_BODY ) {
 
 	}
 
-	try {
-
-		return JSON.parse( new TextDecoder().decode( bytes ) );
-
-	} catch {
-
-		throw new HttpError( 400, 'Bad request' );
-
-	}
+	return bytes;
 
 }
 
@@ -126,6 +135,13 @@ export function cleanText( value, max ) {
 	if ( typeof value !== 'string' ) return null;
 	const text = value.replace( /[\u0000-\u001f\u007f]/g, '' ).trim();
 	return text.length > 0 && text.length <= max ? text : null;
+
+}
+
+// A comma-separated setting (ALLOWED_EMAILS, PREMIUM_EMAILS...) as trimmed, lower-case entries.
+export function list( value ) {
+
+	return ( value ?? '' ).split( ',' ).map( s => s.trim().toLowerCase() ).filter( Boolean );
 
 }
 

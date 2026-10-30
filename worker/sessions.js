@@ -1,5 +1,6 @@
 import { verifyIdToken } from './google.js';
-import { HttpError, isObject, json, noContent, readJson, randomToken, sha256Hex } from './http.js';
+import { HttpError, isObject, json, list, noContent, readJson, randomToken, sha256Hex } from './http.js';
+import { premiumFor } from './premium.js';
 
 // Signing in: the page gets an ID token from Google and posts it here. If it checks out we
 // remember the person and give their browser a session cookie for 30 days. Only a hash of the
@@ -37,7 +38,8 @@ export async function signIn( { request, env, url } ) {
 			.bind( await sha256Hex( token ), user.id, now, now + SESSION_SECONDS * 1000 ),
 	] );
 
-	return json( { user: publicUser( user ), hasMapsKey: !! env.GOOGLE_MAPS_API_KEY }, 200, { 'Set-Cookie': sessionCookie( url, token, SESSION_SECONDS ) } );
+	const answer = { user: publicUser( user ), hasMapsKey: !! env.GOOGLE_MAPS_API_KEY, premium: await premiumFor( env, user ) };
+	return json( answer, 200, { 'Set-Cookie': sessionCookie( url, token, SESSION_SECONDS ) } );
 
 }
 
@@ -90,12 +92,6 @@ export function isAllowed( { email, hd }, env ) {
 	const domain = email.split( '@' ).pop();
 	if ( hd ) return domains.includes( hd ) || domains.includes( domain );
 	return domain === 'gmail.com' && domains.includes( domain );
-
-}
-
-function list( value ) {
-
-	return ( value ?? '' ).split( ',' ).map( s => s.trim().toLowerCase() ).filter( Boolean );
 
 }
 
