@@ -60,9 +60,10 @@ Sizes are length × width × height in metres, as shown on the library cards. To
 - **The boom lift is a 40 ft machine.** No clean 60 ft model was found.
 - **The container handler is a made-up design** ("a fictional container loader"): a fixed 8.3 m spreader and a
   9 m mast, where a real one telescopes from 6 to 12 m and stands 11 to 13 m. Fine as a stand-in at a glance.
-- **Brand marks** show on some models: CAT (excavator, grader), JCB (backhoe), Genie (both lifts), a Volvo grille
-  badge (dump truck), and model lettering on the two rollers (BW 145 D-3, ARP 35). The licences
-  cover the models, not the trademarks; avoid these models in material that could look like an endorsement.
+- **Brand marks** show on some models: CAT (excavator, grader), JCB (backhoe), Genie (both lifts), SkyTrak in
+  large letters along the telehandler's boom, Toyota on the forklift's mast, a Volvo grille badge (dump truck),
+  and model lettering on the two rollers (BW 145 D-3, ARP 35). The licences cover the models, not the
+  trademarks; avoid these models in material that could look like an endorsement.
 - **Looks:** the dozer is battered and rusty; the two rollers are photo scans with the lighting baked in; the
   doty_aecom models (wheel loader and the three trucks) are clean flat-colour models in the same style as the
   jobsite trailer and tool crib, and the dump truck and mixer have European and 1950s-style cabs.
@@ -106,5 +107,9 @@ from the real one, and always for the rigged telehandler). A few needed fixing f
 - The telehandler is rigged, so its card size was corrected by hand to the pose it is drawn in.
 - The thumbnails of the cranes (Sketchfab's showed both) and the dump truck (a distant top view) were rendered
   in the app instead.
+- Each machine's `drive` entry (top speed, acceleration, braking, reverse speed in `library.json`) was added by
+  hand. Running `add-asset` again for an id (to try another `--front`, say) keeps it, and for the same model
+  also keeps the thumbnail (`--new-thumb` fetches Sketchfab's again), an earlier `--credit` and a rigged model's
+  hand-corrected size, rescaled to the new scale and front.
 
 In total the 19 models add 25.6 MB of GLB files (the largest is the dozer at 2.9 MB) and 78 KB of thumbnails.

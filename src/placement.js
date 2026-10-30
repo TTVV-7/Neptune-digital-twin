@@ -178,15 +178,27 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 
 	}, true );
 
-	// Refresh an entry's readouts and controllers, e.g. while a stockpile is being poured, and its
-	// title if it was renamed (a laydown area takes its label as its name).
+	// Refresh an entry's readouts and controllers, e.g. while a stockpile is being poured or an area
+	// re-snaps to the ground, and its title if it was renamed (a laydown area takes its label as its
+	// name). The field being typed in is left alone: until it's finished, what's typed so far is only
+	// in that field and the copy, and lil-gui would overwrite a text field even while it has focus.
 	function refresh( entry ) {
 
 		const folder = folders.get( entry );
-		if ( folder && folder._title !== entry.state.name ) folder.title( entry.state.name );
-		if ( paramViews.has( entry ) ) Object.assign( paramViews.get( entry ), entry.params );
+		if ( ! folder ) return;
+		if ( folder._title !== entry.state.name ) folder.title( entry.state.name );
+		const controllers = folder.controllersRecursive();
+		const editing = controllers.find( c => c.domElement.contains( document.activeElement ) );
+		const params = paramViews.get( entry );
+		if ( params ) {
+
+			const typed = editing?.object === params ? { [ editing.property ]: params[ editing.property ] } : {};
+			Object.assign( params, entry.params, typed );
+
+		}
+
 		readoutViews.get( entry )?.();
-		folder?.controllersRecursive().forEach( c => c.updateDisplay() );
+		for ( const controller of controllers ) if ( controller !== editing ) controller.updateDisplay();
 
 	}
 

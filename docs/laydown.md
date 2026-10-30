@@ -36,12 +36,15 @@ is draped over them; flatten the area first (**Flatten area**) to lay it on clea
 - The area is built as a flat grid (about 1.5 m spacing, coarser for big areas so no area takes more
   than about 2,500 samples) with a `Line2` outline round its edge. Draping raycasts straight down
   through each grid point against `features.getGround()`, testing only the ground meshes whose boxes
-  overlap the area. An area is draped again when it moves, turns or is rebuilt (at most ten times a
-  second while dragged); otherwise each area checks twice a second whether the ground meshes under
-  it, or their vertices, changed (cheap: no raycasts) and drapes again only if so.
+  overlap the area. Each ray starts just above the highest of those boxes, so a box is measured again
+  whenever its mesh's vertices change (earth piled up after it was measured would stand above it).
+  An area is draped again when it moves, turns or is rebuilt (at most ten times a second while
+  dragged); otherwise each area checks twice a second whether the ground meshes under it, or their
+  vertices, changed (cheap: no raycasts) and drapes again only if so.
 - It's drawn a little nearer the camera than it is (10 cm plus 0.3 % of the distance, in the
   logarithmic depth shader; `polygonOffset` is ignored when a shader writes its depth), so it stays
   on top of Google's mesh between samples while things standing on it lose only a pixel or two.
 - The P panel (`src/placement.js`) now renames a kind's folder when `entry.state.name` changes (a
   laydown area takes its label as its name), shows readouts from the start, applies a colour when its
-  picker closes, and ignores leaving a field unchanged.
+  picker closes, ignores leaving a field unchanged, and leaves the field being typed in alone when the
+  entry changes meanwhile (e.g. it re-snaps as sharper tiles stream in).

@@ -15,6 +15,7 @@ import { setUpEarthworks } from './earthworks.js';
 import { setUpExcavator } from './excavator.js';
 import { setUpLaydown } from './laydown.js';
 import { accountMapsKey, setUpCloud } from './cloud.js';
+import { getKind } from './kinds.js';
 
 // Features that plug into the app (see `features` in start()); each is a function taking the context.
 const FEATURES = [ setUpEarthworks, setUpExcavator, setUpLaydown, setUpCloud ];
@@ -193,11 +194,12 @@ function start( apiKey, keySource ) {
 	models.originalHeight = ( x, z ) => flattening.originalHeight( x, z, ground );
 	const driver = new Driver( { camera, models, controls, getColliders: () => [ ...grounds, models.group ], hud: createDriveHud() } );
 
-	for ( const config of MODELS ) {
-
-		models.load( { ...config, inConfig: true } ).catch( err => showBanner( `Could not load ${ config.url }: ${ err.message }` ) );
-
-	}
+	// Entries from MODELS in config.js load every time. Most load straight away, but kinds that a
+	// feature registers (laydown areas, excavations, stockpiles) wait until the features are set up.
+	const loadFromConfig = config => models.load( { ...config, inConfig: true } )
+		.catch( err => showBanner( `Could not load ${ config.name ?? config.url ?? config.kind }: ${ err.message }` ) );
+	const afterFeatures = MODELS.filter( config => config.kind && ! getKind( config.kind ) );
+	for ( const config of MODELS ) if ( ! afterFeatures.includes( config ) ) loadFromConfig( config );
 
 	// The library sidebar (L) and the layout of library items saved in this browser.
 	const libraryLoaded = loadLibrary();
@@ -256,6 +258,7 @@ function start( apiKey, keySource ) {
 			}
 
 		} ) );
+		for ( const config of afterFeatures ) loadFromConfig( config );
 		return layout.restore();
 
 	} );

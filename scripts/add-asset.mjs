@@ -2,7 +2,7 @@
 //
 //   npm run add-asset -- <source> --id pickup --name "Pickup truck" --category Vehicles \
 //     --length 5.9 [--front=+z] [--max-texture 1024] [--simplify 0.3] [--file local.glb] \
-//     [--credit "Logo by ..."]
+//     [--credit "Logo by ..."] [--new-thumb]
 //   (--scale 0.01 instead of --length when the factor from file units to metres is known;
 //   rigged models need --scale, as they are measured in their bind pose)
 //
@@ -15,10 +15,16 @@
 // description is printed: read it for anyone else to credit (e.g. a logo's designer), which
 // goes in --credit, and for any extra conditions.
 //
+// Running it again for an id already in the library (to try another --front, say) replaces the
+// entry but keeps what was added to it by hand, such as a machine's `drive` tuning. For the same
+// model it also keeps the thumbnail (some were rendered in the app instead; --new-thumb fetches
+// the source's again), an earlier --credit, and a rigged model's size, which is measured in its
+// bind pose and so may have been corrected by hand.
+//
 // Sketchfab needs an API token (sketchfab.com > Settings > Password & API) in an environment
 // variable named SKETCHFAB_API_TOKEN, SKETCHFAB_TOKEN or SKETCHFAB_API (any case).
 
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -50,6 +56,7 @@ const { values: opts, positionals } = parseArgs( {
 		simplify: { type: 'string' },
 		file: { type: 'string' },
 		credit: { type: 'string' },
+		'new-thumb': { type: 'boolean' },
 	},
 } );
 
@@ -78,14 +85,29 @@ const io = new NodeIO()
 	.registerExtensions( ALL_EXTENSIONS )
 	.registerDependencies( { 'meshopt.decoder': MeshoptDecoder, 'meshopt.encoder': MeshoptEncoder } );
 
+// The entry from an earlier run for this id, if any, and whether it was for the same model.
+const catalog = JSON.parse( await readFile( CATALOG, 'utf8' ).catch( () => '[]' ) );
+const previous = catalog.find( item => item.id === opts.id );
+// What is carried over from it, to report at the end.
+const kept = [];
+
 // 1. Check the licence and fetch the model.
 const { doc, source, thumbnailUrl, description } = polyhavenId ? await fromPolyHaven( polyhavenId ) : await fromSketchfab( sketchfabUid );
+const same = previous?.source?.site === source.site && previous.source.id === source.id ? previous : null;
 if ( opts.credit ) source.extraCredit = opts.credit;
+else if ( same?.source.extraCredit ) {
+
+	source.extraCredit = same.source.extraCredit;
+	kept.push( 'extra credit' );
+
+}
+
 if ( description?.trim() ) console.log( `Description of "${ source.title }" (check it for anyone else to credit, with --credit, and for extra conditions):\n${ description.trim() }\n` );
 
 // Bounds are taken from the raw vertex positions, which for a rigged model are its bind pose. If
 // the file is posed differently (a raised boom, an open door), it is drawn at another size.
-if ( realLength !== null && doc.getRoot().listSkins().length > 0 ) {
+const rigged = doc.getRoot().listSkins().length > 0;
+if ( realLength !== null && rigged ) {
 
 	fail( `"${ source.title }" is rigged, and rigged models are measured in their bind pose, which may not be how they are drawn. ` +
 		'Give --scale (the factor from file units to metres) instead of --length, then check its size in the app.' );
@@ -112,9 +134,12 @@ await doc.transform(
 const output = await io.writeBinary( doc );
 await writeFile( new URL( `${ opts.id }.glb`, LIBRARY ), output );
 
-// 3. Thumbnail for the sidebar.
-let thumb;
-if ( thumbnailUrl ) {
+// 3. Thumbnail for the sidebar. The same model's thumbnail from an earlier run is kept, unless
+// --new-thumb asks for the source's again.
+const earlierThumb = same?.thumb && await access( new URL( same.thumb, LIBRARY ) ).then( () => true, () => false ) ? same.thumb : undefined;
+let thumb = opts[ 'new-thumb' ] ? undefined : earlierThumb;
+if ( thumb ) kept.push( 'thumbnail (--new-thumb fetches the source\'s again)' );
+else if ( thumbnailUrl ) {
 
 	const res = await fetch( thumbnailUrl, { headers: { 'User-Agent': USER_AGENT } } );
 	if ( res.ok ) {
@@ -124,6 +149,14 @@ if ( thumbnailUrl ) {
 		await sharp( Buffer.from( await res.arrayBuffer() ) ).resize( 256, 256, { fit: 'cover' } ).webp( { quality: 80 } ).toFile( new URL( thumb, LIBRARY ).pathname );
 
 	}
+
+}
+
+// Asked for a new one, but it couldn't be fetched.
+if ( ! thumb && earlierThumb ) {
+
+	thumb = earlierThumb;
+	kept.push( 'thumbnail (the source\'s could not be fetched)' );
 
 }
 
@@ -138,6 +171,24 @@ const triangles = doc.getRoot().listMeshes().reduce( ( sum, mesh ) => sum + mesh
 
 }, 0 ), 0 );
 
+let dimensions = {
+	length: round( ( alongX ? size[ 0 ] : size[ 2 ] ) * scale ),
+	width: round( ( alongX ? size[ 2 ] : size[ 0 ] ) * scale ),
+	height: round( size[ 1 ] * scale ),
+};
+
+// A rigged model's bind pose isn't how it is drawn, so its size may have been corrected by hand
+// (the telehandler's was). That size is kept, rescaled to the new scale and turned to the new --front.
+if ( rigged && same?.dimensions ) {
+
+	const k = scale / same.scale;
+	const turned = same.front.endsWith( 'x' ) !== alongX;
+	const { length, width, height } = same.dimensions;
+	dimensions = { length: round( ( turned ? width : length ) * k ), width: round( ( turned ? length : width ) * k ), height: round( height * k ) };
+	kept.push( 'size (a rigged model is measured in its bind pose)' );
+
+}
+
 const entry = {
 	id: opts.id,
 	name: opts.name ?? source.title,
@@ -146,26 +197,24 @@ const entry = {
 	thumb,
 	front: opts.front,
 	scale: Number( scale.toPrecision( 6 ) ),
-	dimensions: {
-		length: round( ( alongX ? size[ 0 ] : size[ 2 ] ) * scale ),
-		width: round( ( alongX ? size[ 2 ] : size[ 0 ] ) * scale ),
-		height: round( size[ 1 ] * scale ),
-	},
+	dimensions,
 	triangles,
 	sizeKB: Math.round( output.byteLength / 1024 ),
 	source,
 };
 
-// 5. Record it in the catalog and the credits.
-const catalog = JSON.parse( await readFile( CATALOG, 'utf8' ).catch( () => '[]' ) ).filter( item => item.id !== entry.id );
-catalog.push( entry );
-catalog.sort( ( a, b ) => a.category.localeCompare( b.category ) || a.name.localeCompare( b.name ) );
-await writeFile( CATALOG, JSON.stringify( catalog, null, '\t' ) + '\n' );
-await writeFile( CREDITS, credits( catalog ) );
+// 5. Record it in the catalog and the credits. Fields that were added to an earlier entry by hand
+// (a machine's drive tuning, say) stay in it.
+kept.push( ...Object.keys( previous ?? {} ).filter( key => ! ( key in entry ) ) );
+const updated = [ ...catalog.filter( item => item.id !== entry.id ), { ...previous, ...entry } ];
+updated.sort( ( a, b ) => a.category.localeCompare( b.category ) || a.name.localeCompare( b.name ) );
+await writeFile( CATALOG, JSON.stringify( updated, null, '\t' ) + '\n' );
+await writeFile( CREDITS, credits( updated ) );
 
 console.log( `Added ${ entry.name } as public/library/${ entry.file } (${ entry.sizeKB } KB, ${ triangles } triangles, ` +
 	`${ entry.dimensions.length } x ${ entry.dimensions.width } x ${ entry.dimensions.height } m). ` +
 	'Check it in the app (L opens the library); if it faces the wrong way, run again with a different --front.' );
+if ( kept.length ) console.log( `Kept from its earlier entry: ${ kept.join( ', ' ) }.` );
 
 async function fromSketchfab( uid ) {
 

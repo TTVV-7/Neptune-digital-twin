@@ -21,6 +21,9 @@ import { ZONE_ID } from './flatten.js';
 
 const ROTATE_STEP = 15;
 const DRAG_TYPE = 'application/x-library-item';
+// A press that moves less than this many pixels (a finger: TOUCH_SLOP) is a click, not a drag.
+const CLICK_SLOP = 5;
+const TOUCH_SLOP = 12;
 
 const _ndc = new Vector2();
 const _offset = new Vector3();
@@ -260,6 +263,9 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	async function startPlacing( item, { fromDrag = false, heading } = {} ) {
 
+		// Placing takes over from a tool in use, as a tool takes over from placing; otherwise the
+		// tool would take the click meant to place the item.
+		cancelDrawing();
 		cancelPlacing();
 		select( null );
 		document.exitPointerLock?.();
@@ -401,7 +407,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	function endPress( e ) {
 
 		dragging = null;
-		if ( drawing?.start ) finishDrawing( e.pointerType === 'mouse' );
+		if ( drawing?.start ) finishDrawing( e );
 
 	}
 
@@ -443,6 +449,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 			else if ( start ) {
 
 				drawing.start = start;
+				drawing.press = { x: e.clientX, y: e.clientY };
 				canvas.setPointerCapture( e.pointerId );
 
 			}
@@ -632,13 +639,21 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	}
 
-	async function finishDrawing( showPanel = true ) {
+	// e is the pointer event that ended the press.
+	async function finishDrawing( e ) {
 
-		const rect = drawnRectangle();
-		const { heading, tool } = drawing;
+		const { heading, tool, start, press } = drawing;
+		// A click makes an area of the tool's default size where it was pressed. Whether the
+		// pointer moved is judged on screen: from a distance one pixel covers metres of ground, so
+		// a click that slipped a pixel would otherwise make a sliver.
+		const slop = e.pointerType === 'touch' ? TOUCH_SLOP : CLICK_SLOP;
+		const clicked = Math.hypot( e.clientX - press.x, e.clientY - press.y ) < slop;
+		const { east, north } = localToEnu( start );
+		const rect = clicked ? { across: 0, along: 0, east, north, height: start.y } : drawnRectangle();
 		cancelDrawing();
 		if ( ! rect ) return;
-		// A click without much of a drag makes an area of the tool's default size there.
+		// Close up, a drag can be under a metre: one that short both ways counts as a click too, and
+		// one that short one way takes the tool's default size that way.
 		const [ defaultWidth, defaultLength ] = tool.defaultSize ?? [ 10, 10 ];
 		const dragged = Math.abs( rect.across ) >= 1 || Math.abs( rect.along ) >= 1;
 		const width = Math.abs( rect.across ) < 1 ? defaultWidth : Math.round( Math.abs( rect.across ) * 10 ) / 10;
@@ -651,7 +666,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 			width,
 			length,
 			dragged,
-		}, showPanel );
+		}, e.pointerType === 'mouse' );
 
 	}
 
