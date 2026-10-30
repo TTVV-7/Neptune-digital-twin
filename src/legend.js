@@ -1,5 +1,5 @@
 // The Controls panel, bottom right: the keys and mouse moves for what you're doing right now
-// (walking, flying, the library, placing, drawing an area, an item selected, driving, digging),
+// (walking, flying, the library, placing, drawing an area or a row, an item selected, driving, digging),
 // changing as that changes. It folds away to a small Controls button; whether it's open is
 // remembered in this browser. It opens by itself on a first visit, except on a phone, where it
 // starts as the button. H (or its All controls button) opens the full help. The Show panel
@@ -96,6 +96,8 @@ export function createLegend( { controls, driver, models, getSidebar, getDriving
 		}
 
 		const sidebar = getSidebar();
+		const line = sidebar?.getLine();
+		if ( line ) return lineRows( line );
 		const tool = library.querySelector( '.card.tool.active' );
 		if ( tool ) return drawingRows( tool.querySelector( '.name' )?.textContent ?? '' );
 		if ( library.classList.contains( 'placing' ) ) return placingRows( models.entries.find( entry => entry.placing )?.state.name ?? '' );
@@ -163,6 +165,7 @@ export function createLegend( { controls, driver, models, getSidebar, getDriving
 			[ [ `~${ click }` ], 'An item, then the ground: place it' ],
 			...mouse ? [ [ [ '~Drag' ], 'An item onto the map: place it' ] ] : [],
 			[ [ `~${ click }` ], 'A tool, then drag on the ground: draw an area' ],
+			[ [ '~Row' ], 'On a card: draw a line to place many' ],
 			[ [ `~${ click }` ], 'Something placed: select it' ],
 			[ [ '~Drag' ], 'Something placed: move it' ],
 			...mouse ? [ [ [ '~Right-drag' ], 'Look around' ] ] : [],
@@ -199,6 +202,22 @@ export function createLegend( { controls, driver, models, getSidebar, getDriving
 
 	}
 
+	// Drawing a row of items (rows.js): the line is clicked point by point.
+	function lineRows( { name } ) {
+
+		return { title: `Row: ${ name }`, rows: [
+			[ [ `~${ click }` ], 'The ground: add a point, corners and all' ],
+			[ [ `~${ click }` ], 'The first point again: close the loop' ],
+			[ [ '~Drag' ], 'From the first point: a straight row' ],
+			[ mouse ? [ '~Double-click', '/', 'Enter' ] : [ '~Done' ], 'Finish' ],
+			[ mouse ? [ 'Backspace' ] : [ '~Undo point' ], 'Take the last point back' ],
+			[ [ 'Esc' ], 'Cancel' ],
+			...mouse ? [ [ [ '~Right-drag' ], 'Look around' ] ] : [],
+			...zoom,
+		], note: 'Spacing, line-up and ends are in the panel at the top.' };
+
+	}
+
 	function selectedRows( entry ) {
 
 		// What its handles and toolbar (handles.js, toolbar.js) offer: areas, pits and piles (kinds
@@ -208,14 +227,21 @@ export function createLegend( { controls, driver, models, getSidebar, getDriving
 		const shape = resizeShape( kind, entry.params );
 		const turns = shape !== 'circle';
 		const drivable = getDriving()?.isDrivable( entry );
-		const buttons = [ turns && 'rotate', shape && 'size', drivable && 'drive', 'edit', 'hide', 'delete' ].filter( Boolean );
+		// Buttons other modules add (a row's Break apart, rows.js), as the toolbar shows them.
+		const extras = getSidebar()?.toolbar.labels( entry ) ?? [];
+		const buttons = [ turns && 'rotate', shape && 'size', drivable && 'drive', ...extras.map( text => text.toLowerCase() ), 'edit', 'hide', 'delete' ].filter( Boolean );
+		const points = shape === 'points';
 		return { title: `Selected: ${ entry.state.name ?? '' }`, rows: [
 			[ [ '~Drag' ], 'Move it' ],
 			...turns ? [ [ [ '~Drag' ], 'The round handle: rotate' ] ] : [],
-			...shape ? [ [ [ '~Drag' ], shape === 'rect' ? 'The square handles: resize' : 'The square handle: resize' ] ] : [],
+			...points ? [
+				[ [ '~Drag' ], 'A dot: move that point of the line' ],
+				[ [ '~Drag' ], 'A plus: add a point there (or click it)' ],
+				[ [ mouse ? '~Double-click' : '~Double-tap' ], 'A dot: take that point out' ],
+			] : shape ? [ [ [ '~Drag' ], shape === 'rect' ? 'The square handles: resize' : 'The square handle: resize' ] ] : [],
 			...kind?.resize?.depth ? [ [ [ '~Drag' ], 'The arrow in the middle: depth' ] ] : [],
 			[ [ `~${ click }` ], `The buttons above it: ${ buttons.join( ', ' ) }` ],
-			[ [ 'P' ], shape ? 'Exact size and position' : 'Exact position' ],
+			[ [ 'P' ], points ? 'Spacing, item and position' : shape ? 'Exact size and position' : 'Exact position' ],
 			...drivable ? [ [ [ 'V' ], 'Drive it' ] ] : [],
 			[ [ 'Esc' ], 'Deselect' ],
 		] };

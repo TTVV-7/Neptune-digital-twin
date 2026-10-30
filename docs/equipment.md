@@ -211,9 +211,16 @@ round inside.
 | --- | --- | --- |
 | Temporary fence with privacy screen, 9.1 m run (3 × 10 ft panels) | 9.3 × 1.6 × 1.9 | The same 10 × 6 ft panels as the single one, with a green wind screen, clamps and a brace stay behind each joint |
 | Plywood hoarding, 10 m run (2.4 m / 8 ft high) | 10 × 1.3 × 2.5 | Painted face to the front, 2 × 4 rails, 4 × 4 posts at 2 m, kickers behind, a DANGER notice |
+| Steel pipe bollard (6 in, 4 ft high) | 0.3 × 0.3 × 1.3 | 168 mm pipe painted safety yellow, on a plate bolted to the slab (a temporary one), with a cap |
 
 A screened fence run is three standard panels (9.1 m) rather than exactly 10 m: panels come in 10 ft
-widths. Place runs end to end for longer fences.
+widths. For a longer fence, a run of barriers or a line of bollards, use **Row** on the card: draw
+the line on the ground and they're placed along it, end to end or every so many metres (see
+[Rows](../README.md#rows-many-of-an-item-along-a-line) in the README). End to end, fence panels and
+screened runs go 10 ft (and 30 ft) apart, sharing the foot at each joint as they do on site. The jersey barrier and the
+lock block carry their weight in their names (about 1.9 t and 2.1 t: 27 and 31 ft³ of concrete at
+150 lb/ft³), so a row of them says what it weighs in all. Any library item can be put in a row:
+cones, drums, water-filled barriers, light towers, trailers, trucks side by side, people.
 
 ### Dewatering & water treatment
 

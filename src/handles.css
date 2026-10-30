@@ -76,6 +76,51 @@
 	border-color: #fff;
 }
 
+/* A point on a row's line (rows.js): a white dot ringed in the accent colour. */
+.handles .point {
+	width: 28px;
+	height: 28px;
+	cursor: move;
+}
+
+.handles .point::after {
+	content: '';
+	width: 12px;
+	height: 12px;
+	box-sizing: border-box;
+	border: 2.5px solid var( --accent );
+	border-radius: 50%;
+	background: #fff;
+	box-shadow: 0 1px 3px rgba( 0, 0, 0, 0.5 );
+}
+
+.handles .point:hover::after,
+.handles .point.active::after {
+	background: var( --accent );
+	border-color: #fff;
+}
+
+/* Halfway along a stretch of the line: a plus to add a point there, quieter than the points. */
+.handles .insert {
+	width: 24px;
+	height: 24px;
+	cursor: copy;
+}
+
+.handles .insert svg {
+	padding: 2px;
+	border: 1.5px solid #fff;
+	border-radius: 50%;
+	background: rgba( 61, 155, 233, 0.75 );
+	color: #fff;
+	box-shadow: 0 1px 3px rgba( 0, 0, 0, 0.45 );
+}
+
+.handles .insert:hover svg,
+.handles .insert.active svg {
+	background: var( --accent );
+}
+
 /* The depth arrow in the middle of a pit. */
 .handles .depth {
 	width: 22px;
@@ -125,6 +170,21 @@
 	.handles .grip::after {
 		width: 14px;
 		height: 14px;
+	}
+
+	.handles .point {
+		width: 36px;
+		height: 36px;
+	}
+
+	.handles .point::after {
+		width: 15px;
+		height: 15px;
+	}
+
+	.handles .insert {
+		width: 32px;
+		height: 32px;
 	}
 
 	.handles .depth {
@@ -190,6 +250,17 @@
 	height: 18px;
 }
 
+/* On a phone seven buttons (a row's Break apart, a vehicle's Drive and Row) fit across. */
+@media ( max-width: 480px ) {
+
+	.selection-toolbar .row button {
+		min-width: 0;
+		padding: 5px 4px 4px;
+		font-size: 10px;
+	}
+
+}
+
 /* Typing in an area's size. */
 .size-editor {
 	display: flex;
@@ -220,6 +291,17 @@
 	font: inherit;
 	font-size: 13px;
 	font-variant-numeric: tabular-nums;
+}
+
+.size-editor select {
+	box-sizing: border-box;
+	padding: 5px 4px;
+	border: 1px solid #44525e;
+	border-radius: 5px;
+	background: #0b1117;
+	color: var( --text );
+	font: inherit;
+	font-size: 13px;
 }
 
 .size-editor button {

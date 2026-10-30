@@ -6,7 +6,8 @@ import { toast as showToast } from './placement.js';
 // The selection toolbar (sidebar.js): a row of buttons over the selected item that follows it on
 // screen, to turn it, type in an area's size, drive it, open its settings, hide it or delete it.
 // Hiding and deleting show an Undo toast for a few seconds instead of asking first. Hidden items
-// stay in the plan, listed in the Show panel (layers.js) to show them again.
+// stay in the plan, listed in the Show panel (layers.js) to show them again. Other modules add
+// buttons of their own with addButton() (a row of an item, rows.js).
 
 // A press held this long (ms) on a turn button turns it by a right angle.
 const HOLD_TIME = 450;
@@ -78,6 +79,8 @@ export function createToolbar( { camera, canvas, models, panel, select, rotate, 
 	};
 
 	let entry = null;
+	// Buttons other modules added: [ { element, shown( entry ) } ].
+	const extras = [];
 
 	// A click turns by 15°, Shift+click or a held press by 90°.
 	for ( const [ element, sign ] of [ [ buttons.left, - 1 ], [ buttons.right, 1 ] ] ) {
@@ -158,6 +161,28 @@ export function createToolbar( { camera, canvas, models, panel, select, rotate, 
 
 	}
 
+	// A button of another module's, before Edit: { name, text, title, icon (SVG paths in a 24 x 24
+	// box), shown( entry ), run( entry ) }.
+	function addButton( { name, text, title, icon: paths, shown, run } ) {
+
+		const element = document.createElement( 'button' );
+		element.type = 'button';
+		element.className = name;
+		element.title = title;
+		element.innerHTML = `${ icon( paths ) }<span>${ text }</span>`;
+		element.hidden = true;
+		row.insertBefore( element, buttons.edit );
+		element.addEventListener( 'click', () => {
+
+			done( element );
+			if ( entry ) run( entry );
+
+		} );
+		extras.push( { element, shown } );
+		return element;
+
+	}
+
 	// --- the size editor ---------------------------------------------------------------------
 
 	const editor = document.createElement( 'form' );
@@ -177,6 +202,9 @@ export function createToolbar( { camera, canvas, models, panel, select, rotate, 
 
 		}
 
+		// Choices (a row's spacing) are their options' values, in the order they're listed.
+		for ( const select of editor.querySelectorAll( 'select' ) ) values[ select.name ] = choices( select.name )[ select.selectedIndex ];
+
 		models.setParams( entry, values );
 		// Show what it became (sizes are kept within each kind's limits).
 		fillEditor( true );
@@ -190,12 +218,13 @@ export function createToolbar( { camera, canvas, models, panel, select, rotate, 
 
 	} );
 
-	// An area's number fields marked as its size (kinds.js) that apply to it as it is now.
+	// An area's fields marked as its size (kinds.js) that apply to it as it is now: numbers, and
+	// choices marked for the editor too (a row's spacing), which apply as soon as one is picked.
 	function sizeFields( target ) {
 
 		const kind = getKind( target?.kind );
 		if ( ! kind ) return [];
-		return kind.fields.filter( f => f.size && ! f.options && ! f.type && ( ! f.when || f.when( target.params ) ) );
+		return kind.fields.filter( f => f.size && ! f.type && ( ! f.options || f.editor ) && ( ! f.when || f.when( target.params ) ) );
 
 	}
 
@@ -207,6 +236,7 @@ export function createToolbar( { camera, canvas, models, panel, select, rotate, 
 		const input = editor.querySelector( 'input' );
 		input?.focus();
 		input?.select();
+		if ( ! input ) editor.querySelector( 'select' )?.focus();
 
 	}
 
@@ -232,11 +262,7 @@ export function createToolbar( { camera, canvas, models, panel, select, rotate, 
 				const label = document.createElement( 'label' );
 				const name = document.createElement( 'span' );
 				name.textContent = field.label ?? field.key;
-				const input = document.createElement( 'input' );
-				Object.assign( input, { type: 'number', name: field.key, step: 'any', inputMode: 'decimal' } );
-				if ( field.min !== undefined ) input.min = field.min;
-				if ( field.max !== undefined ) input.max = field.max;
-				label.append( name, input );
+				label.append( name, field.options ? choice( field ) : number( field ) );
 				editor.append( label );
 
 			}
@@ -255,7 +281,36 @@ export function createToolbar( { camera, canvas, models, panel, select, rotate, 
 
 		}
 
+		for ( const select of editor.querySelectorAll( 'select' ) ) select.selectedIndex = Math.max( 0, choices( select.name ).indexOf( entry.params[ select.name ] ) );
 		editing = { params: entry.params, keys };
+
+	}
+
+	function number( field ) {
+
+		const input = document.createElement( 'input' );
+		Object.assign( input, { type: 'number', name: field.key, step: 'any', inputMode: 'decimal' } );
+		if ( field.min !== undefined ) input.min = field.min;
+		if ( field.max !== undefined ) input.max = field.max;
+		return input;
+
+	}
+
+	// A dropdown of a field's options ({ label: value }), applied as soon as one is picked.
+	function choice( field ) {
+
+		const select = document.createElement( 'select' );
+		select.name = field.key;
+		for ( const text of Object.keys( field.options ) ) select.append( Object.assign( document.createElement( 'option' ), { textContent: text } ) );
+		select.addEventListener( 'change', () => editor.requestSubmit() );
+		return select;
+
+	}
+
+	// The values of a choice's options, in the order its dropdown lists them.
+	function choices( key ) {
+
+		return Object.values( sizeFields( entry ).find( f => f.key === key )?.options ?? {} );
 
 	}
 
@@ -362,6 +417,7 @@ export function createToolbar( { camera, canvas, models, panel, select, rotate, 
 		setHidden( buttons.right, resizeShape( kind, entry.params ) === 'circle' );
 		setHidden( buttons.size, sizeFields( entry ).length === 0 );
 		setHidden( buttons.drive, ! canDrive( entry ) );
+		for ( const { element, shown } of extras ) setHidden( element, ! shown( entry ) );
 		if ( ! editor.hidden && entry.params !== editing?.params ) fillEditor( false );
 
 		// Measured again only when it changes size (other buttons, the size editor).
@@ -402,6 +458,11 @@ export function createToolbar( { camera, canvas, models, panel, select, rotate, 
 	return {
 		update,
 		remove,
+		addButton,
+		// The text of the buttons added with addButton() that show for an entry.
+		labels: target => extras.filter( ( { shown } ) => shown( target ) ).map( ( { element } ) => element.textContent ),
+		// A toast saying what was done, with Undo: offerUndo( text, undo ).
+		offerUndo,
 		// Esc in the size editor, and for tests.
 		closeEditor,
 		get editorOpen() {

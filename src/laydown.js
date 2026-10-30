@@ -247,38 +247,9 @@ export function setUpLaydown( { camera, canvas, models, sidebar, panel, getGroun
 		const position = fill.geometry.attributes.position;
 		entry.pivot.updateWorldMatrix( true, true );
 
-		// Only the ground meshes under the area are tested, rather than every tile in view. Which
-		// meshes they are and the versions of their vertices tell whether anything changed.
+		// Only the ground meshes under the area are tested, and their key tells whether anything changed.
 		_bounds.copy( fill.geometry.boundingBox ).applyMatrix4( fill.matrixWorld );
-		const meshes = [];
-		let top = - Infinity;
-		for ( const root of getGround() ) {
-
-			root.traverseVisible( object => {
-
-				if ( ! object.isMesh || object.userData.noCollide ) return;
-				// The box is worked out again whenever the vertices change. Earth piled up after it
-				// was measured (a pile pouring, a spoil heap) would otherwise stand above it, and
-				// rays started under the pile's new top would miss it.
-				const { geometry } = object;
-				const { position } = geometry.attributes;
-				if ( ! geometry.boundingBox || measured.get( position ) !== position.version ) {
-
-					geometry.computeBoundingBox();
-					measured.set( position, position.version );
-
-				}
-
-				_box.copy( geometry.boundingBox ).applyMatrix4( object.matrixWorld );
-				if ( _box.max.x < _bounds.min.x || _box.min.x > _bounds.max.x || _box.max.z < _bounds.min.z || _box.min.z > _bounds.max.z ) return;
-				meshes.push( object );
-				top = Math.max( top, _box.max.y );
-
-			} );
-
-		}
-
-		const ground = meshes.map( ( { id, geometry } ) => `${ id }:${ geometry.id }:${ geometry.attributes.position.version }` ).join();
+		const { meshes, top, key: ground } = groundUnder( getGround(), _bounds );
 		if ( ! force && ground === area.ground ) return;
 		area.ground = ground;
 		area.dirty = false;
@@ -351,6 +322,44 @@ export function setUpLaydown( { camera, canvas, models, sidebar, panel, getGroun
 		labels.update( sidebar.getSelected() );
 
 	} );
+
+}
+
+// The ground meshes (in `roots`) under a box in the scene, the top of the highest, and a key that
+// changes when they do (sharper tiles, flattening, digging): only these are tested, rather than
+// every tile in view. Rows of items (rows.js) sit on the ground found this way too.
+export function groundUnder( roots, bounds ) {
+
+	const meshes = [];
+	let top = - Infinity;
+	for ( const root of roots ) {
+
+		root.traverseVisible( object => {
+
+			if ( ! object.isMesh || object.userData.noCollide ) return;
+			// The box is worked out again whenever the vertices change. Earth piled up after it was
+			// measured (a pile pouring, a spoil heap) would otherwise stand above it, and rays
+			// started under the pile's new top would miss it.
+			const { geometry } = object;
+			const { position } = geometry.attributes;
+			if ( ! geometry.boundingBox || measured.get( position ) !== position.version ) {
+
+				geometry.computeBoundingBox();
+				measured.set( position, position.version );
+
+			}
+
+			_box.copy( geometry.boundingBox ).applyMatrix4( object.matrixWorld );
+			if ( _box.max.x < bounds.min.x || _box.min.x > bounds.max.x || _box.max.z < bounds.min.z || _box.min.z > bounds.max.z ) return;
+			meshes.push( object );
+			top = Math.max( top, _box.max.y );
+
+		} );
+
+	}
+
+	const key = meshes.map( ( { id, geometry } ) => `${ id }:${ geometry.id }:${ geometry.attributes.position.version }` ).join();
+	return { meshes, top, key };
 
 }
 

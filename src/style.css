@@ -367,6 +367,7 @@ kbd {
 }
 
 #library .card {
+	position: relative;
 	display: flex;
 	flex-direction: column;
 	gap: 4px;
@@ -386,6 +387,11 @@ kbd {
 
 #library .card.active {
 	outline: 2px solid #ff3322;
+}
+
+/* An item a row of which is being drawn (rows.js). */
+#library .card.active:not( .tool ) {
+	outline-color: var( --accent );
 }
 
 #library .card img {
@@ -408,7 +414,6 @@ kbd {
 
 /* A premium item while it's locked (premium.js): picking it explains how to unlock it. */
 #library .card.locked {
-	position: relative;
 	cursor: pointer;
 }
 
@@ -425,6 +430,44 @@ kbd {
 	color: #f2c14e;
 	font-size: 11px;
 	font-weight: 600;
+}
+
+/* Row, on a card: a row of the item along a line drawn on the ground (rows.js). Over the picture
+   where the pointer is, and always with a finger. */
+#library .card .row-chip {
+	position: absolute;
+	top: 10px;
+	left: 10px;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 2px 7px 2px 6px;
+	border-radius: 10px;
+	background: rgba( 16, 22, 28, 0.85 );
+	color: var( --text );
+	font-size: 11px;
+	font-weight: 600;
+	cursor: pointer;
+	opacity: 0;
+	transition: opacity 0.12s;
+}
+
+#library .card:hover .row-chip,
+#library .card:focus-visible .row-chip,
+#library .card.active .row-chip {
+	opacity: 1;
+}
+
+#library .card .row-chip:hover {
+	background: var( --accent );
+}
+
+@media ( hover: none ) {
+
+	#library .card .row-chip {
+		opacity: 1;
+	}
+
 }
 
 #library footer {

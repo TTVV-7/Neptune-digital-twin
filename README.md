@@ -91,11 +91,13 @@ things and switches between before and after (see [Showing and hiding](#showing-
 | Drag a card onto the map | Place it there |
 | R or the wheel | Turn the item you're placing |
 | Tools (top of the library) | Laydown area, Excavation, Stockpile, Flatten area: drag a rectangle, or click for the usual size |
+| Row (on a card) | Row: draw a line to place many. Click points on the ground, double-click or Enter to finish, or click the first point to close a loop; drag for a straight row. Backspace takes a point back (see [Rows](#rows-many-of-an-item-along-a-line)) |
+| Dots on a selected row | Drag one to move that point; drag or click a plus to add one; double-click a dot to take it out |
 | Click a placed item | Select it; drag it to move it |
 | Round handle | Drag to rotate the selected item; Shift snaps to 15° |
 | Square handles | On an area, excavation or stockpile: drag to resize; Shift for any size |
 | Arrow in a pit | Drag down to dig deeper, up for shallower |
-| Toolbar | The buttons over the selected item: rotate, size (type it in), drive, edit, hide, delete |
+| Toolbar | The buttons over the selected item: rotate, size (type it in), drive, row (more of it along a line), break apart (a row), edit, hide, delete |
 | R / Shift+R | Turn the selected item 15° |
 | Delete | Remove the selected item (Undo for 5 seconds) |
 | Esc | Cancel placing or drawing / deselect |
@@ -205,6 +207,8 @@ What each machine is, its size and where it came from is in [docs/equipment.md](
 
 - **Place:** click an item, move the mouse over the ground and click. Or drag the item onto the scene.
   **R** or the mouse wheel rotates it, **Shift**+click places another, **Esc** cancels.
+- **Row:** the **Row** button on a card places many along a line drawn on the ground: a run of
+  barriers, cones every 3 m, light towers down a road. See [Rows](#rows-many-of-an-item-along-a-line).
 - **Edit:** click (or tap) a placed item to select it and drag it to move it. A ring appears around it:
   drag its round knob to turn it (**Shift** snaps to 15°), or use **R** / **Shift+R**, or the wheel
   while you drag it. A toolbar over it turns it 15° (hold, or **Shift**+click, for 90°), drives it if
@@ -256,6 +260,61 @@ npm run add-asset -- https://polyhaven.com/a/<asset> --id oil-drum --category Ma
 - Textures are shrunk to 1024 px and geometry compressed; `--max-texture 2048` keeps more detail.
 - The script prints the model's description. Read it: if it names someone else to credit (a logo's
   designer, say), run again with `--credit "Logo by ..."` so they're listed too.
+
+## Rows: many of an item along a line
+
+A run of jersey barriers, cones every 3 m along a lane, light towers down a haul road, trucks parked
+side by side: **Row** on a library card (it shows where the pointer is, and always on a phone) places
+many of one item along a line drawn on the ground. **Row** on a placed item's toolbar does the same
+from that item, which becomes the first of the row. Any library item works.
+
+- **Drawing:** click points on the ground, corners and all, then double-click (or press **Enter**)
+  to finish, or click the first point again to close a loop (its dot grows as you come over it). A
+  drag from where you start makes a straight row at once. **Backspace** takes the last point back
+  and **Esc** cancels. On a phone, tap the points and then **Done**; the library sheet steps aside
+  while you draw, and stays folded afterwards so the new row's points can be dragged (**Library**
+  brings it back).
+- **Spacing,** in the panel at the top while drawing:
+  - *End to end*: each copy runs its real length along the line, and the next starts the gap after
+    it (none for barriers, fencing and hoarding, which touch; a metre for plant and vehicles). Fence
+    panels go 10 ft apart, sharing the foot at each joint as they do on site. Round a corner a copy
+    cuts across it, so they meet end to end there too.
+  - *Every X m*: no further apart than that centre to centre, measured along the line and on round
+    its corners. Cones and drums start at 3 m, bollards at 1.5 m, light towers at 30 m and people at
+    1.5 m.
+  - *Line up*: *along* puts each copy's long side along the line (a wall of barriers, trucks nose to
+    tail), *across* turns them square to it (trucks parked side by side).
+  - *Ends*: *from the ends* starts the run at the start of the line; every X m it puts one on each
+    point you clicked, the ends and every corner (the start and end of a cone taper), and spaces the
+    rest evenly between them, a little closer than X where X doesn't go exactly. *Centred* keeps the
+    spacing exact and splits what's over between the two ends.
+  - A line that ends where it started is a loop (a fence round a laydown area): it has no copy
+    twice where it closes.
+
+  It remembers what you chose for each item. As you draw, the copies show along the line with how
+  many there are, the line's length and, where the item's name gives its weight (a jersey barrier
+  ~1.9 t, a lock block ~2.1 t, trench boxes), what they weigh in all.
+- **One thing:** the row is selected (click any copy), moved, turned, hidden, deleted (with Undo)
+  and saved as one item. The Show panel lists it under its item's category, counting its copies, as
+  does the library's footer.
+- **Editing:** a selected row has a dot on each point of its line: drag one to move that point, drag
+  or click a plus between two to add a point there, double-click a dot to take it out. The P panel,
+  or **Size** on its toolbar, changes the spacing, line-up and ends, turns every copy round, and
+  swaps the item (a row of barriers becomes lock blocks). **Break apart** (toolbar or P panel) turns
+  it into single items where its copies stood, with Undo.
+- **On the ground:** each copy sits on the ground under it (Google's mesh, dug or piled earth) and
+  follows it as sharper tiles load. Long, low copies (barriers, fence panels, trucks along the line)
+  tilt along the line on a slope, up to 12°; anything else stands level on the highest ground under
+  it, so nothing floats or digs in. With *snap to ground* off in the P panel they stand level at its
+  *up*.
+- **Light:** the copies are drawn as instances, so a row costs a draw call for each part of its item
+  however many copies it has (300 cones are one), and walking and driving bump into each copy rather
+  than the space between them.
+- **Pro items** need the Pro pack for a new row, as for placing one; rows already placed open for
+  everyone.
+
+A saved or exported layout keeps a row as `kind: "row"` with its item, its points (metres from its
+middle, as if it faced north), the spacing, and each copy's height and tilt as last found.
 
 ## Showing and hiding: the Show panel
 
@@ -475,6 +534,7 @@ src/shoring.js      shoring in excavations: trench boxes, slide rail, sheet pile
 src/shoring-models.js  the shoring pieces, for pits and the library's Shoring category
 src/shoring-ground.js  draws a shored pit's walls straight up behind the shoring
 src/laydown.js      laydown areas: coloured site areas draped on the ground, with labels
+src/rows.js         rows: many of one library item along a line drawn on the ground (Row on a card)
 src/excavator.js    digging with an excavator; src/excavator-model.js builds the machines
 src/cloud.js        sign in with Google, layouts in your account, share links (needs the Worker)
 src/premium.js      the Pro equipment pack: locked cards and the buy dialog (needs the Worker)

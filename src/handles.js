@@ -9,9 +9,11 @@ import { headingToYaw } from './geo.js';
 // On-map handles for the selected item (sidebar.js): a ring round its footprint with a knob in
 // front of it to turn it, and for areas (kinds with `resize`, see kinds.js) squares on the corners
 // and edges to resize them, one on the edge of a round pile, and an arrow in the middle of a pit to
-// set its depth. The handles are elements over the canvas, so they are the same size on screen at
-// any distance, stay on top of the map and the models, and a press on one never reaches the scene
-// (where it would move the item instead). The ring and the outlines are lines drawn over everything.
+// set its depth. A row of items (rows.js) has a dot on each point of its line to move it, a plus
+// halfway along each stretch to add a point there, and its line drawn through them. The handles
+// are elements over the canvas, so they are the same size on screen at any distance, stay on top
+// of the map and the models, and a press on one never reaches the scene (where it would move the
+// item instead). The ring and the outlines are lines drawn over everything.
 
 // Pixels from the footprint's furthest corner out to the ring, which the knob sits on.
 const RING_GAP = 34;
@@ -33,12 +35,20 @@ const CORNER_ROOM = 24;
 const DEPTH_ROOM = 56;
 // The arc of the ring either side of the knob drawn in the accent colour, in degrees.
 const ARC = 22;
+// A point handle moves once the pointer has gone this many pixels (a finger: TOUCH_SLOP), so a
+// click on it doesn't nudge it; two clicks this close together (ms) take the point out.
+const CLICK_SLOP = 5;
+const TOUCH_SLOP = 12;
+const DOUBLE_CLICK = 400;
+// A plus to add a point shows on stretches at least this long on screen (pixels).
+const INSERT_ROOM = 56;
 const LIFT = 0.08;
 const ACCENT = 0x3d9be9;
 const DEG = MathUtils.DEG2RAD;
 
 const TURN_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0 1 14-5.3L20 9"/><path d="M20 4v5h-5"/><path d="M20 12a8 8 0 0 1-14 5.3L4 15"/><path d="M4 20v-5h5"/></svg>';
 const DEPTH_ICON = '<svg viewBox="0 0 24 24" width="16" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4"/></svg>';
+const INSERT_ICON = '<svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 2v8M2 6h8"/></svg>';
 
 const UP = new Vector3( 0, 1, 0 );
 const _ndc = new Vector2();
@@ -75,7 +85,9 @@ export function createHandles( { scene, camera, canvas, models } ) {
 		{ type: 'radius', sx: 1, sy: 0, className: 'grip', title: 'Drag to make it bigger or smaller. Shift for any size' },
 		{ type: 'depth', className: 'depth', html: DEPTH_ICON, title: 'Drag down to dig deeper, up for shallower. Shift for any depth' },
 	];
-	for ( const handle of handles ) {
+	for ( const handle of handles ) makeHandle( handle );
+
+	function makeHandle( handle ) {
 
 		const element = document.createElement( 'div' );
 		element.className = `handle ${ handle.className }`;
@@ -97,10 +109,20 @@ export function createHandles( { scene, camera, canvas, models } ) {
 		}, { passive: false } );
 		root.append( element );
 		Object.assign( handle, { element, world: new Vector3(), screen: { x: 0, y: 0, visible: false }, active: false } );
+		return handle;
 
 	}
 
 	const knob = handles[ 0 ];
+	// A row's points and the pluses between them, made as many as are needed: { type: 'point' or
+	// 'insert', index, ... } like the handles above. A plus at index i adds a point after point i.
+	const points = [];
+	const inserts = [];
+	const pointHandle = ( list, i, type ) => list[ i ] ??= makeHandle( type === 'point'
+		? { type, index: i, className: 'point', title: 'Drag to move this point. Double-click to take it out' }
+		: { type, index: i, className: 'insert', html: INSERT_ICON, title: 'Drag, or click, to add a point here' } );
+	// The last click on a point, to tell a double-click: { entry, index, time }.
+	let lastClick = null;
 
 	// The ring (a dark halo under a light line, to show on bright concrete and dark water alike),
 	// the accent arc either side of the knob, the outline a resize will give, the floor of a pit
@@ -120,7 +142,10 @@ export function createHandles( { scene, camera, canvas, models } ) {
 	const roundOutline = overlayLine( scene, circle, 2.5, ACCENT, 1, 1002 );
 	const floor = overlayLine( scene, square, 2, ACCENT, 0.8, 1002 );
 	const plumb = overlayLine( scene, [ new Vector3(), new Vector3( 0, - 1, 0 ) ], 2, ACCENT, 0.8, 1002 );
-	const lines = [ ringHalo, ring, ringArc, outline, roundOutline, floor, plumb ];
+	// A row's line, through its points.
+	const path = overlayLine( scene, [ new Vector3(), new Vector3( 0, 0, 1 ) ], 2.5, ACCENT, 0.9, 1002 );
+	let pathKey = '';
+	const lines = [ ringHalo, ring, ringArc, outline, roundOutline, floor, plumb, path ];
 
 	const raycaster = new Raycaster();
 	const plane = new Plane();
@@ -158,6 +183,8 @@ export function createHandles( { scene, camera, canvas, models } ) {
 			press: { x: e.clientX, y: e.clientY },
 		};
 		if ( handle.type === 'depth' ) measureDepthDrag( drag );
+		// A point is moved on a level plane through where it is, rather than the item's base.
+		if ( handle.type === 'point' || handle.type === 'insert' ) drag.base = handle.world.y;
 		root.classList.add( 'dragging' );
 		handle.element.classList.add( 'active' );
 		showLabel( e, handle.type === 'turn' ? `${ Math.round( state.heading ) }°` : drag.kind.resize.label( params ) );
@@ -176,6 +203,14 @@ export function createHandles( { scene, camera, canvas, models } ) {
 			const depth = snap( start.params.depth + along / perMetre, e.shiftKey ? DEPTH_FREE : DEPTH_STEP );
 			setDraft( e, { east: start.east, north: start.north, heading: start.heading, params: kindParams( kind, { ...start.params, depth: Math.max( DEPTH_FREE, depth ) } ) } );
 			return;
+
+		}
+
+		if ( handle.type === 'point' || handle.type === 'insert' ) {
+
+			const slop = e.pointerType === 'touch' ? TOUCH_SLOP : CLICK_SLOP;
+			if ( ! drag.moved && Math.hypot( e.clientX - drag.press.x, e.clientY - drag.press.y ) < slop ) return;
+			drag.moved = true;
 
 		}
 
@@ -198,6 +233,20 @@ export function createHandles( { scene, camera, canvas, models } ) {
 			}
 
 			showLabel( e, `${ heading }°` );
+			return;
+
+		}
+
+		if ( handle.type === 'point' || handle.type === 'insert' ) {
+
+			// Into its own frame, as if it faced north: across (east) and along (north).
+			const rad = start.heading * DEG;
+			const at = [ de * Math.cos( rad ) - dn * Math.sin( rad ), de * Math.sin( rad ) + dn * Math.cos( rad ) ];
+			const list = kind.resize.points( start.params );
+			// A loop's first point is its last too: they move together, so it stays closed.
+			const moves = i => i === handle.index || ( handle.index === 0 && i === list.length - 1 && isLoop( list ) );
+			const next = handle.type === 'point' ? list.map( ( p, i ) => moves( i ) ? at : p ) : [ ...list.slice( 0, handle.index + 1 ), at, ...list.slice( handle.index + 1 ) ];
+			setDraft( e, withPoints( next ) );
 			return;
 
 		}
@@ -253,9 +302,67 @@ export function createHandles( { scene, camera, canvas, models } ) {
 	function release( e ) {
 
 		if ( ! drag || e.pointerId !== drag.pointerId ) return;
-		const { entry, draft } = drag;
+		const { entry, draft, handle, moved } = drag;
+		if ( ( handle.type === 'point' || handle.type === 'insert' ) && ! moved ) {
+
+			clickPoint( handle );
+			return;
+
+		}
+
 		end();
 		if ( draft ) place( entry, draft );
+
+	}
+
+	// A click on a plus adds a point there; a second click on a point straight after the first
+	// takes it out, leaving at least two.
+	function clickPoint( handle ) {
+
+		const { entry, kind, start } = drag;
+		end();
+		const list = kind.resize.points( start.params );
+		const now = performance.now();
+		if ( handle.type === 'insert' ) {
+
+			const [ a, b ] = [ list[ handle.index ], list[ handle.index + 1 ] ];
+			const middle = [ ( a[ 0 ] + b[ 0 ] ) / 2, ( a[ 1 ] + b[ 1 ] ) / 2 ];
+			place( entry, withPoints( [ ...list.slice( 0, handle.index + 1 ), middle, ...list.slice( handle.index + 1 ) ], { entry, kind, start } ) );
+			lastClick = null;
+
+		} else if ( lastClick?.entry === entry && lastClick.index === handle.index && now - lastClick.time < DOUBLE_CLICK ) {
+
+			lastClick = null;
+			if ( list.length > 2 ) place( entry, withPoints( withoutPoint( list, handle.index ), { entry, kind, start } ) );
+
+		} else lastClick = { entry, index: handle.index, time: now };
+
+	}
+
+	// The points without one. A loop (a fence round an area) stays closed, its first point its last,
+	// unless too few are left for one.
+	function withoutPoint( list, index ) {
+
+		if ( ! isLoop( list ) ) return list.filter( ( _, i ) => i !== index );
+		const ring = list.slice( 0, - 1 ).filter( ( _, i ) => i !== index );
+		return ring.length >= 3 ? [ ...ring, ring[ 0 ] ] : ring;
+
+	}
+
+	// A placement with these points (in its frame as when the drag began), its origin moved to the
+	// middle of them so that it keeps turning about its middle. The drag's kind and start, or another's.
+	function withPoints( list, { kind, start } = drag ) {
+
+		const middle = [ 0, 1 ].map( k => ( Math.min( ...list.map( p => p[ k ] ) ) + Math.max( ...list.map( p => p[ k ] ) ) ) / 2 );
+		const rad = start.heading * DEG;
+		const cos = Math.cos( rad );
+		const sin = Math.sin( rad );
+		return {
+			east: round( start.east + middle[ 0 ] * cos + middle[ 1 ] * sin ),
+			north: round( start.north - middle[ 0 ] * sin + middle[ 1 ] * cos ),
+			heading: start.heading,
+			params: kindParams( kind, kind.resize.withPoints( start.params, list.map( ( [ e, n ] ) => [ round( e - middle[ 0 ] ), round( n - middle[ 1 ] ) ] ) ) ),
+		};
 
 	}
 
@@ -389,10 +496,11 @@ export function createHandles( { scene, camera, canvas, models } ) {
 
 		}
 
+		placePoints( entry, kind, shape === 'points' ? kind.resize.points( params ) : [], { east, north }, rect );
 		for ( const handle of handles ) if ( handle.active ) toScreen( handle.world, camera, rect, handle.screen );
 		if ( shape === 'rect' ) makeRoom( depthHandle );
 
-		for ( const handle of handles ) {
+		for ( const handle of [ ...handles, ...points, ...inserts ] ) {
 
 			const { element, screen } = handle;
 			// The one being dragged stays, even off screen: hiding it would lose the pointer.
@@ -446,6 +554,49 @@ export function createHandles( { scene, camera, canvas, models } ) {
 
 	}
 
+	// A row's points (`line`, in its frame as if it faced north) sit on the ground under them, the
+	// pluses halfway between them where there's room on screen, and the line is drawn through them.
+	// While a plus is dragged it is the new point. `at`: where its origin is.
+	function placePoints( entry, kind, line, at, rect ) {
+
+		const heights = line.length > 0 ? kind.resize.heights?.( entry ) : null;
+		const adding = drag?.handle.type === 'insert' ? drag.handle.index + 1 : - 1;
+		// A loop's last point is its first: one dot for both, the first's.
+		const shut = isLoop( line ) ? line.length - 1 : - 1;
+		for ( const handle of [ ...points, ...inserts ] ) handle.active = false;
+		line.forEach( ( [ e, n ], i ) => {
+
+			const handle = pointHandle( points, i, 'point' );
+			handle.active = i !== adding && i !== shut;
+			handle.world.set( - at.east, entry.state.up + ( heights?.[ i ] ?? 0 ), at.north ).addScaledVector( right, e ).addScaledVector( front, n );
+			toScreen( handle.world, camera, rect, handle.screen );
+
+		} );
+		for ( let i = 0; i < line.length - 1; i ++ ) {
+
+			const handle = pointHandle( inserts, i, 'insert' );
+			const [ a, b ] = [ points[ i ], points[ i + 1 ] ];
+			if ( drag?.handle === handle ) handle.world.copy( points[ adding ].world );
+			else handle.world.addVectors( a.world, b.world ).multiplyScalar( 0.5 );
+			toScreen( handle.world, camera, rect, handle.screen );
+			handle.active = ! drag && Math.hypot( a.screen.x - b.screen.x, a.screen.y - b.screen.y ) >= INSERT_ROOM;
+
+		}
+
+		if ( line.length < 2 ) return;
+		const positions = line.flatMap( ( _, i ) => [ points[ i ].world.x, points[ i ].world.y + LIFT, points[ i ].world.z ] );
+		const key = positions.map( v => v.toFixed( 2 ) ).join();
+		if ( key !== pathKey ) {
+
+			pathKey = key;
+			path.geometry.setPositions( positions );
+
+		}
+
+		path.visible = true;
+
+	}
+
 	// Hide handles that would crowd each other on screen: a far-off or narrow area keeps its
 	// corners, and a small one just the knob. The one being dragged always shows.
 	function makeRoom( depthHandle ) {
@@ -476,6 +627,13 @@ export function createHandles( { scene, camera, canvas, models } ) {
 
 	}
 
+	// The handles on screen: none while nothing is selected, whatever each was last.
+	function shown() {
+
+		return root.hidden ? [] : [ ...handles, ...points, ...inserts ].filter( h => ! h.element.hidden );
+
+	}
+
 	// Metres across one pixel of the screen at `point`.
 	function worldPerPixel( point ) {
 
@@ -495,7 +653,7 @@ export function createHandles( { scene, camera, canvas, models } ) {
 
 		},
 		// The handles on screen now, as { x, y, r } in client pixels, for the toolbar to keep clear of.
-		onScreen: () => handles.filter( h => ! h.element.hidden ).map( h => {
+		onScreen: () => shown().map( h => {
 
 			// Measured once: reading it every frame would make the page lay itself out again.
 			h.radius ||= h.element.offsetHeight / 2;
@@ -503,7 +661,7 @@ export function createHandles( { scene, camera, canvas, models } ) {
 
 		} ),
 		// Each handle shown now, with where it is in the scene and on screen (for tests).
-		positions: () => handles.filter( h => ! h.element.hidden ).map( ( { type, sx, sy, world, screen } ) => ( { type, sx, sy, world: world.clone(), screen: { ...screen } } ) ),
+		positions: () => shown().map( ( { type, sx, sy, index, world, screen } ) => ( { type, sx, sy, index, world: world.clone(), screen: { ...screen } } ) ),
 		label: () => label.hidden ? null : label.textContent,
 
 	};
@@ -537,6 +695,13 @@ function resizeCursor( dx, dy ) {
 
 	const sector = ( ( Math.round( Math.atan2( dy, dx ) / ( Math.PI / 4 ) ) % 4 ) + 4 ) % 4;
 	return [ 'ew-resize', 'nwse-resize', 'ns-resize', 'nesw-resize' ][ sector ];
+
+}
+
+// Whether points ([ east, north ]) end where they start: a loop, such as a fence round an area.
+function isLoop( list ) {
+
+	return list.length > 3 && Math.hypot( list[ 0 ][ 0 ] - list[ list.length - 1 ][ 0 ], list[ 0 ][ 1 ] - list[ list.length - 1 ][ 1 ] ) < 0.05;
 
 }
 
