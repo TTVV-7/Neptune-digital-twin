@@ -70,14 +70,17 @@ right, under the bar with **Globe** and pause. Several can be held at once. In t
 Hit something (a wall, a building, a parked car, a barrier) and you don't stop: you bounce off it.
 
 - **The bounce.** You keep most of your speed along what you hit (85 %), come back off it with 40 %
-  of your speed into it (at most 58 km/h), and are thrown up by more the harder you hit: a 0.3 m hop
-  at 20 km/h, about 3.5 m at 80, 7.7 m at 120, and never more than 8.6 m however fast. Where you hit
-  sets you spinning: clip a corner and you spin round; hit square on and the nose goes up and over
-  backwards. Hits shake the view, squash the vehicle for a moment and throw sparks and bits, with a
-  word for how hard: **BONK!**, **BOING!** or **WHAM!**
+  of your speed into it (at most 58 km/h), and are thrown up by more the harder you hit: a 0.4 m hop
+  at 22 km/h, about 3.5 m at 80, 7.7 m at 120, and never more than 8.6 m however fast. Where you hit
+  sets you spinning: clip a corner and you spin round; hit square on and the nose goes up and back.
+  Left alone you come down on your wheels, tipped back 25° to 45° by a hit at up to 160 km/h; a
+  harder one (with the booster) takes you over backwards, so finish the backflip with **S** or wipe
+  out. Hits shake the view, squash the vehicle for a moment and throw sparks and bits, with a word
+  for how hard: **BONK!**, **BOING!** or **WHAM!** The chase camera follows you up and down a little
+  behind, so you see yourself thrown.
 - **Not every hit launches.** Meet a wall at under 15° and you scrape along it in sparks. A nudge
-  under about 11 km/h stops you against it, so pressing on into a wall doesn't jitter. Kerbs and
-  other low steps are still driven over.
+  under about 11 km/h stops you against it, so pressing on into a wall doesn't jitter, and up to
+  22 km/h it knocks you back along the ground. Kerbs and other low steps are still driven over.
 - **In the air** (after a hit, off a ramp, a crest or a hop): **A**/**D** spin, **W**/**S** flip, **Q**/**E**
   (or **Space** with **A**/**D**) roll. Let go and the turn stops within about 45°. Keys you were
   already holding when you left the ground (the gas, say) don't count until you press them again,
@@ -89,9 +92,10 @@ Hit something (a wall, a building, a parked car, a barrier) and you don't stop: 
   lost, and the vehicle rolls back onto its wheels by itself (or press **R**).
 - **Tricks and score.** A spin counts by half turns (180, 360, 720...), flips and barrel rolls by
   whole turns, give or take a little. Each scores: 300 a half turn, 1,000 a flip, 800 a roll, 150 a
-  wall bounce and 300 a second for big air (1.5 s or more). Two or more in one jump are a combo
-  (half as much again). Everything is multiplied by the combo multiplier, which goes up by one for
-  each trick you land (to ×10) and back to ×1 on a wipeout, on R, or after 6 s without a trick. The
+  wall bounce (a **BOING!** or a **WHAM!**, 32 km/h or more into it) and 300 a second for big air
+  (1.5 s or more). Two or more in one jump are a combo (half as much again). Everything is
+  multiplied by the combo multiplier ("+1,310 ×2" adds 2,620), which goes up by one for each trick
+  you land (to ×10) and back to ×1 on a wipeout, on R, or after 6 s without a trick. The
   score, the multiplier and your best score (kept in this browser) show under the speed; tricks pop
   up as you do them, dim while you're in the air and bright with their points when you land.
 - **Drifting.** Hold **Space** (or the **DRIFT** button under the speed, with the mouse, or the
