@@ -56,9 +56,10 @@ The keys card shows as each drive starts; **?** brings it back. Flying, the boos
 from `src/drive.js`, which World Drive starts with `fly`, `booster` and `drift` on (the construction
 app leaves them off).
 
-On a touch screen the globe's panel is a sheet along the bottom, and driving has on-screen buttons:
-steering bottom left, **Brake** and **Gas** bottom right, and Boost, Hop, Fly, Cam and Reset above the
-gas. Several can be held at once.
+On a touch screen the globe's panel is a sheet along the bottom, and driving has on-screen buttons
+(the driving HUD's, `src/drive-hud.js`): steering bottom left; **Gas** with **Drift** over it at the
+right-hand edge, and **Brake**, **Boost** and **Fly** beside them; reset (↺) and **Cam** at the top
+right, under the bar with **Globe** and pause. Several can be held at once.
 
 ## What a visit costs, and how it's capped
 
@@ -201,7 +202,7 @@ robot-check and getting-ready screens).
 ## How it fits together
 
 ```
-drive/index.html             the page: panel, pin card, driving bar, touch buttons, screens
+drive/index.html             the page: panel, pin card, driving bar, keys card, screens
 src/drive-app/main.js        starts it: the visit, the tiles, modes (globe, dropping, driving,
                              paused), dropping in, recentring, the render loop
 src/drive-app/globe.js       GlobeView: GlobeControls, the slow spin, flights, the pin, picking
@@ -211,7 +212,6 @@ src/drive-app/places.js      the start spots, typed coordinates, recent places
 src/drive-app/vehicles.js    the go-kart and the library trucks; catalog.js lists which
 src/drive-app/api.js         /api/config, the visit with Turnstile, /api/search
 src/drive-app/screens.js     start screen, notices, loading card, pause, keys, messages
-src/drive-app/touch.js       on-screen driving buttons, as key presses
 src/drive-app/test-globe.js  the Earth without Google's tiles, for working without a key
 vite.drive.config.js         the build: no key, only the offered vehicles copied from public/
 worker/drive/                the Worker: index.js (routes), limits.js (caps and the search queue),

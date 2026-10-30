@@ -482,104 +482,24 @@ button.primary:active,
 	margin: 0;
 }
 
-/* Touch screens: steering bottom left, pedals bottom right, the extras above the gas. (Under
-   #drive-ui: body.touch marks a touch screen, and its other buttons stay where they are.) */
-#drive-ui .touch {
-	display: none;
+/* The driving HUD (drive-hud.js) and, on a touch screen, its buttons. Its readouts and its reset
+   and camera buttons start under the top bar, and the buttons keep clear of the phone's own bar at
+   the bottom. Its list of keys stays hidden: the keys card above has them all, M and Esc too. */
+#hud {
+	--drive-hud-top: calc( 62px + env( safe-area-inset-top, 0px ) );
+	--drive-hud-bottom: calc( 40px + var( --safe-bottom ) );
 }
 
-body.touch #drive-ui .touch {
-	display: block;
+body.touch #hud {
+	--drive-hud-bottom: calc( 28px + var( --safe-bottom ) );
+}
+
+#hud .dhud-keys {
+	display: none;
 }
 
 body.touch #drive-ui .keys-toggle {
 	display: none;
-}
-
-#drive-ui .touch button {
-	position: fixed;
-	z-index: 14;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	border: 2px solid rgba( 255, 255, 255, 0.28 );
-	background: rgba( 9, 15, 27, 0.5 );
-	font-weight: 900;
-	text-transform: uppercase;
-	user-select: none;
-	-webkit-user-select: none;
-	touch-action: none;
-}
-
-#drive-ui .touch button.down {
-	background: rgba( 255, 210, 63, 0.4 );
-	border-color: var( --accent );
-}
-
-#drive-ui .touch .steer button {
-	bottom: calc( 22px + var( --safe-bottom ) );
-	width: 78px;
-	height: 78px;
-	border-radius: 50%;
-}
-
-#drive-ui .touch .steer button svg {
-	width: 34px;
-	height: 34px;
-}
-
-#drive-ui .touch .steer button:first-child {
-	left: 18px;
-}
-
-#drive-ui .touch .steer button:last-child {
-	left: 108px;
-}
-
-#drive-ui .touch .pedals button {
-	bottom: calc( 22px + var( --safe-bottom ) );
-	border-radius: 18px;
-	font-size: 13px;
-}
-
-#drive-ui .touch .pedals .gas {
-	right: 18px;
-	width: 84px;
-	height: 120px;
-	background: rgba( 46, 204, 113, 0.32 );
-}
-
-#drive-ui .touch .pedals .brake {
-	right: 114px;
-	width: 70px;
-	height: 78px;
-	background: rgba( 255, 90, 95, 0.3 );
-}
-
-/* One column up the right-hand edge, clear of the vehicle in the middle. */
-#drive-ui .touch .extras {
-	position: fixed;
-	right: 31px;
-	bottom: calc( 154px + var( --safe-bottom ) );
-	z-index: 14;
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-}
-
-#drive-ui .touch .extras button {
-	position: static;
-	width: 58px;
-	height: 44px;
-	border-radius: 12px;
-	font-size: 11px;
-}
-
-/* On touch screens the HUD moves up, out of the thumbs' way. */
-body.touch .drive-hud {
-	top: calc( 62px + env( safe-area-inset-top, 0px ) );
-	bottom: auto;
-	left: 14px;
 }
 
 /* --- loading, pause, splash and notices ----------------------------------------------- */
@@ -859,13 +779,13 @@ body[data-mode='paused'] #toast {
 	text-overflow: ellipsis;
 }
 
+/* Driving on a touch screen: one line along the bottom edge, under the driving buttons. */
 body.touch[data-mode='driving'] #attribution {
 	right: auto;
 	left: 50%;
-	max-width: 46%;
+	bottom: calc( 6px + var( --safe-bottom ) );
+	max-width: calc( 100% - 20px );
 	transform: translateX( -50% );
-	flex-direction: column;
-	gap: 2px;
 }
 
 dialog#about {

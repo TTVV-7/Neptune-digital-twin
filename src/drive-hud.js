@@ -12,6 +12,11 @@ const SPEED_SCALE = 200;
 // How long a message stays (ms), a little longer for a long one.
 const FLASH_TIME = 1500;
 const FLASH_PER_CHAR = 30;
+// Messages that name keys, as they read on a touch screen, which has the buttons instead.
+const TOUCH_WORDS = [
+	[ 'Hold Shift to fly or press R', 'Hold FLY, or tap ↺' ],
+	[ 'Press R', 'Tap ↺' ],
+];
 
 const CSS = `
 .dhud {
@@ -383,6 +388,25 @@ const CSS = `
 
 }
 
+/* A phone held upright: the vehicle fills the middle of the bottom half, so BOOST and FLY go up the
+   edge above DRIFT, leaving only BRAKE (below the vehicle) in the inner column. */
+@media ( orientation: portrait ) and ( max-width: 520px ) {
+
+	.dhud .dhud-touch .booster,
+	.dhud .dhud-touch .fly {
+		right: var( --drive-hud-side, 16px );
+	}
+
+	.dhud .dhud-touch .booster {
+		bottom: calc( var( --drive-hud-bottom, 28px ) + 220px );
+	}
+
+	.dhud .dhud-touch .fly {
+		bottom: calc( var( --drive-hud-bottom, 28px ) + 288px );
+	}
+
+}
+
 /* A phone on its side: shorter buttons, so DRIFT stays clear of CAM at the top right. */
 @media ( max-height: 420px ) {
 
@@ -501,7 +525,17 @@ export function createDriveHud( parent = document.body ) {
 		button.addEventListener( 'pointerdown', e => {
 
 			e.preventDefault();
-			button.setPointerCapture?.( e.pointerId );
+			// Kept by the button while held, even if the finger slides off it.
+			try {
+
+				button.setPointerCapture?.( e.pointerId );
+
+			} catch {
+
+				// Not a live pointer (a synthetic press): nothing to keep, but it still drives.
+
+			}
+
 			button.classList.add( 'down' );
 			if ( code ) driver?.press( code );
 			else if ( button.dataset.tap === 'camera' ) driver?.toggleCamera();
@@ -622,6 +656,7 @@ export function createDriveHud( parent = document.body ) {
 
 		flash( message ) {
 
+			if ( root.classList.contains( 'touch' ) ) for ( const [ keys, buttons ] of TOUCH_WORDS ) message = message.replace( keys, buttons );
 			flash.textContent = message;
 			flash.classList.toggle( 'long', message.length > 18 );
 			// Restart the pop for a new message on top of the last.

@@ -14,7 +14,6 @@ import { createTestGlobe, placeEarth } from './test-globe.js';
 import { loadVehicle, loadVehicles, specOf } from './vehicles.js';
 import { setUpPanel } from './panel.js';
 import { formatLatLon, rememberPlace } from './places.js';
-import { setUpTouchControls } from './touch.js';
 import * as screens from './screens.js';
 
 // World Drive (worlddrive.app, docs/world-drive.md): pick anywhere on Earth from a globe of
@@ -179,7 +178,6 @@ async function start( { key, left = null } ) {
 
 	} ) );
 	$( 'globe-ui' ).querySelector( '.about-open' ).addEventListener( 'click', () => about.showModal() );
-	const touch = setUpTouchControls( $( 'drive-ui' ).querySelector( '.touch' ) );
 	if ( left !== null && left <= 2 ) screens.toast( left === 0 ? 'This is your last free drive today.' : `${ left } more free drive${ left === 1 ? '' : 's' } today after this one.` );
 
 	// How far above the middle of the view a pin flown to should show (see GlobeView.lifted): on a
@@ -211,7 +209,6 @@ async function start( { key, left = null } ) {
 		$( 'globe-ui' ).hidden = mode !== 'globe';
 		$( 'drive-ui' ).hidden = mode !== 'driving' && mode !== 'paused';
 		if ( pad ) pad.visible = mode !== 'globe';
-		if ( mode !== 'driving' ) touch.releaseAll();
 
 	}
 
@@ -470,7 +467,7 @@ async function start( { key, left = null } ) {
 
 	}, { passive: false } );
 
-	// Touch screens get the on-screen driving buttons.
+	// Touch screens get the HUD's driving buttons (drive-hud.js), and no keys card.
 	const coarse = window.matchMedia( '(pointer: coarse)' );
 	const showTouch = on => document.body.classList.toggle( 'touch', on );
 	showTouch( coarse.matches );

@@ -227,7 +227,7 @@ describe( 'World Drive, desktop', () => {
 		await page.keyboard.down( 'KeyW' );
 		await page.waitForFunction( () => window.drive.driver.speed > 5, null, { timeout: 20000 } );
 		await page.keyboard.up( 'KeyW' );
-		assert.ok( await page.evaluate( () => Number( document.querySelector( '.drive-hud .speed b' ).textContent ) ) > 0 );
+		assert.ok( await page.evaluate( () => Number( document.querySelector( '#hud .dhud-number' ).textContent ) ) > 0 );
 		await shot( page, 'drive-5-driving' );
 		assert.equal( await page.evaluate( () => performance.getEntriesByType( 'navigation' ).length ), navigations );
 
@@ -369,18 +369,18 @@ describe( 'World Drive on a phone', () => {
 		await shot( page, 'drive-phone-2-pin' );
 		await page.locator( '.pin-card .go' ).tap();
 		await page.waitForFunction( () => window.drive.mode === 'driving', null, { timeout: 60000 } );
-		assert.ok( await page.locator( '#drive-ui .touch .gas' ).isVisible() );
+		assert.ok( await page.locator( '#hud .dhud-touch .gas' ).isVisible() );
 		assert.equal( await page.locator( '#drive-ui .keys-toggle' ).isVisible(), false );
 
 		// Hold the gas and steer right with two fingers.
 		const press = ( selector, type, pointerId ) => page.locator( selector ).dispatchEvent( type, { pointerId, isPrimary: pointerId === 1, pointerType: 'touch', bubbles: true } );
-		await press( '.touch .gas', 'pointerdown', 1 );
-		await press( '.touch [data-code="KeyD"]', 'pointerdown', 2 );
+		await press( '.dhud-touch .gas', 'pointerdown', 1 );
+		await press( '.dhud-touch .right', 'pointerdown', 2 );
 		await page.waitForFunction( () => window.drive.driver.speed > 3, null, { timeout: 20000 } );
 		assert.ok( await page.evaluate( () => window.drive.driver.keys.has( 'KeyW' ) && window.drive.driver.keys.has( 'KeyD' ) ) );
 		await shot( page, 'drive-phone-3-driving' );
-		await press( '.touch .gas', 'pointerup', 1 );
-		await press( '.touch [data-code="KeyD"]', 'pointerup', 2 );
+		await press( '.dhud-touch .gas', 'pointerup', 1 );
+		await press( '.dhud-touch .right', 'pointerup', 2 );
 		assert.ok( await page.evaluate( () => ! window.drive.driver.keys.has( 'KeyW' ) && ! window.drive.driver.keys.has( 'KeyD' ) ) );
 		const heading = await page.evaluate( () => window.drive.driver.heading );
 		assert.notEqual( heading, 29, 'steering did nothing' );
