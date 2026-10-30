@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
 import { CLIENT_ID, makeKey, makeToken, rewritten, serveKeys, startVercelApi, startWorker, stripeSignature } from './worker-harness.mjs';
-import { publicUrl } from '../worker/vercel.js';
+import { publicUrl, vercelApi } from '../worker/vercel.js';
 import { toPostgres } from '../worker/postgres.js';
 import { premiumSettings } from '../worker/premium.js';
 
@@ -730,6 +730,25 @@ function vercelTests() {
 		const request = rewritten( 'https://twin.example.app', '/api/layouts?site=Neptune%20Terminals' );
 		assert.equal( new URL( request.url ).searchParams.get( '__path' ), 'layouts' );
 		assert.equal( publicUrl( request ).href, 'https://twin.example.app/api/layouts?site=Neptune+Terminals' );
+
+	} );
+
+	test( 'a database error is logged without the connection string or its password', async t => {
+
+		// Neon's driver quotes the whole address in its error when it isn't a valid URL (pasted with
+		// its quotes, say). That fails before anything is sent, so nothing leaves this machine.
+		const password = 'made-up-password-0123';
+		const env = { DATABASE_URL: `"postgres://twin:${ password }@db.invalid/neondb"`, GOOGLE_CLIENT_ID: CLIENT_ID };
+		const api = vercelApi( { getEnv: () => env } );
+		const logged = [];
+		t.mock.method( console, 'error', ( ...args ) => logged.push( args.join( ' ' ) ) );
+		const res = await api.fetch( rewritten( PUBLIC_ORIGIN, '/api/shared/AAAAAAAAAAAAAAAAAAAAAA' ) );
+		assert.equal( res.status, 500 );
+		assert.deepEqual( await res.json(), { error: 'Something went wrong' } );
+		assert.equal( logged.length, 1 );
+		assert.ok( ! logged[ 0 ].includes( password ), 'the password was logged' );
+		assert.ok( ! logged[ 0 ].includes( 'db.invalid' ), 'the address was logged' );
+		assert.match( logged[ 0 ], /DatabaseError/ );
 
 	} );
 

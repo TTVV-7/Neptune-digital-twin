@@ -13,7 +13,8 @@ import { MIGRATIONS } from './postgres-schema.js';
 //
 // Underneath is a driver: query( text, values ) -> { rows, fields: [ { name, dataTypeID } ],
 // rowCount }, and transaction( [ { text, values } ] ) -> their results, all or nothing.
-// neonDriver is the real one; the tests use the same interface on PGlite.
+// neonDriver is the real one; the tests use the same interface on PGlite. Whatever the driver
+// throws becomes a DatabaseError, which says no more than Postgres's error code.
 
 // Postgres sends int8 and numeric as text, since they can hold more than a JavaScript number can
 // exactly. Ours never come near 2^53.
@@ -34,8 +35,9 @@ export function neonDriver( url ) {
 
 }
 
-export function postgresDatabase( driver, migrations = MIGRATIONS ) {
+export function postgresDatabase( connection, migrations = MIGRATIONS ) {
 
+	const driver = withSafeErrors( connection );
 	let schema = null;
 	// A failure isn't kept, so the next request tries again.
 	const ready = () => schema ??= applySchema( driver, migrations ).catch( err => {
@@ -122,6 +124,47 @@ export function toPostgres( sql ) {
 	}
 
 	return out;
+
+}
+
+// A failed query, saying only Postgres's five-character error code (SQLSTATE) when there is one:
+// enough to tell what went wrong, and all applySchema needs.
+export class DatabaseError extends Error {
+
+	constructor( code ) {
+
+		const state = typeof code === 'string' && /^[0-9A-Z]{5}$/.test( code ) ? code : '';
+		super( state ? `Postgres error ${ state }` : 'Database request failed' );
+		this.name = 'DatabaseError';
+		this.code = state;
+
+	}
+
+}
+
+// The driver, throwing DatabaseErrors. Its own errors can quote the connection string, password
+// and all (Neon's does when DATABASE_URL isn't a valid address), or values from the query, and
+// index.js logs an error's message.
+function withSafeErrors( driver ) {
+
+	async function safely( run ) {
+
+		try {
+
+			return await run();
+
+		} catch ( err ) {
+
+			throw new DatabaseError( err?.code );
+
+		}
+
+	}
+
+	return {
+		query: ( text, values ) => safely( () => driver.query( text, values ) ),
+		transaction: queries => safely( () => driver.transaction( queries ) ),
+	};
 
 }
 
