@@ -54,6 +54,8 @@ const PRESS_INTERVAL = 1;
 // Sharper tiles move the ground a little; the change is eased in over this long.
 const BLEND_TIME = 0.6;
 const RESAMPLE_AFTER = 10;
+// Google's tiles are coarser far from the camera, so only nearby chunks are sampled again.
+const RESAMPLE_RANGE = 300;
 // Freshly dug walls stand up to this steep and slump beyond it, within this reach of the bucket.
 const SLUMP_ANGLE = 65;
 const SLUMP_REACH = 3;
@@ -268,10 +270,11 @@ const owns = ( li, lj ) => li < CELLS && lj < CELLS;
 // { ni, nj, count, x, z, before, cellArea }, row by row (before is NaN where there's no ground).
 export class Terrain extends EventDispatcher {
 
-	constructor( { tiles, ground, models, flattening, getGround } ) {
+	constructor( { tiles, ground, models, flattening, getGround, camera = null } ) {
 
 		super();
 		this.tiles = tiles;
+		this.camera = camera;
 		this.models = models;
 		this.flattening = flattening;
 		this.getGround = getGround;
@@ -1072,7 +1075,7 @@ export class Terrain extends EventDispatcher {
 		while ( this.sampling.length && performance.now() < end ) {
 
 			const chunk = this.sampling[ 0 ];
-			if ( ! this.chunks.has( chunk.key ) ) {
+			if ( this.chunks.get( chunk.key ) !== chunk ) {
 
 				this.sampling.shift();
 				continue;
@@ -1109,10 +1112,19 @@ export class Terrain extends EventDispatcher {
 		this.resampleTimer = 2;
 		for ( const chunk of this.chunks.values() ) {
 
-			if ( ! chunk.ready || chunk.blend || this.sampling.includes( chunk ) ) continue;
+			if ( ! chunk.ready || chunk.blend || this.sampling.includes( chunk ) || ! this.isNear( chunk ) ) continue;
 			if ( chunk.sampledLoads !== this.tileLoads && this.clock - chunk.sampledAt > RESAMPLE_AFTER ) this.sampling.push( chunk );
 
 		}
+
+	}
+
+	isNear( chunk ) {
+
+		if ( ! this.camera ) return true;
+		const { x, z } = this.camera.position;
+		const half = CHUNK_SIZE / 2;
+		return Math.hypot( x - ( chunk.i0 * CELL + half ), z - ( chunk.j0 * CELL + half ) ) < RESAMPLE_RANGE;
 
 	}
 

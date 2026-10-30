@@ -52,7 +52,7 @@ for ( const material of [ capMaterial, pitLine, hullMaterial, ...pileLines.value
 
 export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models, layout, sidebar, panel, flattening, getGround, addGround, onUpdate, addMapEdit, toast } ) {
 
-	const terrain = new Terrain( { tiles, ground, models, flattening, getGround } );
+	const terrain = new Terrain( { tiles, ground, models, flattening, getGround, camera } );
 	scene.add( terrain.group );
 	addGround( terrain.group );
 	// Pits press Google's mesh down, which the attribution has to mention.
