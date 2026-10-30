@@ -72,8 +72,10 @@ const TURN_MIN = 1.5;
 // Flying, an impact is checked by looking straight at the surface from the camera, out to this
 // many times the clearance radius.
 const CONFIRM_REACH = 1.3;
-// The view turn takes this long (s), the longer for a bigger turn.
+// The view turn takes this long (s), the longer for a bigger turn. It only turns toward a way
+// along the wall with at least this much room (m) beyond the clearance radius.
 const TURN_TIME = [ 0.3, 0.5 ];
+const TURN_ROOM = 2;
 // Flying into the ground or a ceiling levels the view to this pitch off it.
 const LEVEL_PITCH = 10 * MathUtils.DEG2RAD;
 // Mouse movement (pixels) during a turn that hands the view back to the user. A turn doesn't start
@@ -564,7 +566,9 @@ export class WalkController {
 	}
 
 	// Turn the view along a wall it was looking into, to whichever side is nearer where it was
-	// looking (or going). Flying into the ground or a ceiling levels it off instead.
+	// looking (or going), unless another wall closes that way off close by (an inside corner) and
+	// the other way is open: turning to face the other wall would only look into that instead. Shut
+	// in both ways, the view stays. Flying into the ground or a ceiling levels it off instead.
 	turnAlong( normal, velocity ) {
 
 		if ( ! this.autoTurn || this.lookActivity > LOOK_BUSY ) return;
@@ -581,7 +585,9 @@ export class WalkController {
 				let side = _forward.dot( _tangent );
 				if ( Math.abs( side ) < 0.05 ) side = velocity.dot( _tangent ) || 1;
 				if ( side < 0 ) _tangent.negate();
-				yaw = wrapAngle( Math.atan2( - _tangent.x, - _tangent.z ) - this.yaw );
+				let open = this.roomAlong( _tangent ) >= TURN_ROOM;
+				if ( ! open ) open = this.roomAlong( _tangent.negate() ) >= TURN_ROOM;
+				if ( open ) yaw = wrapAngle( Math.atan2( - _tangent.x, - _tangent.z ) - this.yaw );
 
 			}
 
@@ -593,6 +599,26 @@ export class WalkController {
 		if ( size < 0.05 ) return;
 		const time = MathUtils.lerp( TURN_TIME[ 0 ], TURN_TIME[ 1 ], Math.min( 1, size / ( Math.PI / 2 ) ) );
 		this.turn = { yaw, pitch, time, t: 0, done: 0, mouse: 0 };
+
+	}
+
+	// How far the player could go along the level `dir` before keeping their clearance from
+	// something, up to TURN_ROOM: from the camera flying, from the body's wall probes walking.
+	roomAlong( dir ) {
+
+		const walking = this.mode === 'walk';
+		const radius = walking ? PLAYER.radius : PLAYER.flyRadius;
+		let reach = radius + TURN_ROOM;
+		for ( const offset of walking ? this.walkProbes : this.flyProbes ) {
+
+			_origin.copy( this.camera.position );
+			_origin.y += offset;
+			const hit = this.cast( _origin, dir, reach );
+			if ( hit ) reach = hit.distance;
+
+		}
+
+		return reach - radius;
 
 	}
 
