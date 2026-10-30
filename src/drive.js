@@ -81,13 +81,18 @@ const STUCK_SPEED = 0.3;
 // crash: 'launch'. Met at under SCRAPE_ANGLE° a wall is scraped along, losing SCRAPE_LOSS times
 // the speed into it. Slower than BUMP_MIN m/s into it the vehicle stops against it as with 'stop',
 // so pressing on into a wall never jitters. Harder, it keeps TANGENT_KEEP of its speed along the
-// wall, bounces back with RESTITUTION of its speed into it (at most BOUNCE_MAX m/s across the
-// ground, so it isn't flung far) and is thrown up at LAUNCH.base + LAUNCH.gain m/s for each m/s
-// into the wall, at most LAUNCH.max: a 0.3 m hop at 20 km/h, 3.5 m at 80, 7.7 m at 120 and never
-// more than 8.6 m.
+// wall and bounces back with RESTITUTION of its speed into it (at most BOUNCE_MAX m/s across the
+// ground, so it isn't flung far); slower than LAUNCH_MIN m/s that's a knock back along the ground,
+// and from LAUNCH_MIN it's also thrown up at LAUNCH.base + LAUNCH.gain m/s for each m/s into the
+// wall, at most LAUNCH.max: a 0.4 m hop at 22 km/h, 3.5 m at 80, 7.7 m at 120 and never more than
+// 8.6 m. (Launched from LAUNCH_MIN of 3 m/s, holding the gas a couple of metres from a wall hopped
+// against it over and over, a "Wall bounce" each time.) Only a hit of BOUNCE_SCORE m/s or more
+// (BOING! and WHAM!) scores as a wall bounce.
 const SCRAPE_ANGLE = 15;
 const SCRAPE_LOSS = 0.25;
 const BUMP_MIN = 3;
+const LAUNCH_MIN = 6;
+const BOUNCE_SCORE = 9;
 const TANGENT_KEEP = 0.85;
 const RESTITUTION = 0.4;
 const BOUNCE_MAX = 16;
@@ -107,14 +112,21 @@ const WALL_GUARD = 0.6;
 // rad/s², a big vehicle more slowly (see start). Let go of the key and that turn stops at AIR_STOP
 // (1/s), going on about 45° from full speed, so a flip can be landed. Keys already held KEY_GRACE
 // s before it left the ground count only once pressed again, so holding the gas off a ramp
-// doesn't flip it. Nearly level, not spinning much and with nothing pressed, it eases toward the
-// way it's flying at ASSIST (1/s), as a plain jump does.
+// doesn't flip it. With nothing pressed and under ASSIST_TILT° from upright, it eases toward the
+// way it's flying at ASSIST (1/s), as a plain jump does, and on the way down what's left of a hit's
+// tumble (or of a flip let go of) dies away at STEADY (1/s), so it lands: a hit at up to 160 km/h
+// tips it back 25° to 45° and it comes down on its wheels (left to spin on, one at 60 to 100 km/h
+// came down at 43° to 50° and wiped out). A harder one (the booster) still turns it past
+// ASSIST_TILT and over: finish the backflip, or wipe out. Spins about the upright carry on: they
+// don't stop it landing.
 const AIR_RATE = { yaw: 6.5, pitch: 5.5, roll: 6.5 };
 const AIR_ACCEL = 22;
 const AIR_DAMP = 0.6;
 const AIR_STOP = 6;
 const KEY_GRACE = 0.25;
 const ASSIST = 1.5;
+const ASSIST_TILT = 60;
+const STEADY = 3;
 // Flying (Shift), Space with W/S flips and with A/D (or Q/E) rolls; let go and it slows at
 // FLIGHT_DAMP and rights itself at FLIGHT_RIGHTING (1/s).
 const FLIGHT_DAMP = 4;
@@ -152,8 +164,11 @@ const SHAKE = 0.025;
 const SHAKE_MAX = 0.8;
 const SHAKE_DECAY = 6;
 // The chase camera turns round after the vehicle at most this fast (°/s), so a wipeout that ends
-// facing back the way it came swings it round in a second rather than whipping it.
+// facing back the way it came swings it round in a second rather than whipping it. Thrown into the
+// air, it eases up and down after the vehicle at AIR_CAMERA (1/s): about 3 m behind it at the
+// start of a big throw, so the vehicle is seen to fly up, and as much above it as it comes down.
 const VIEW_TURN = 180;
+const AIR_CAMERA = 3;
 // What a hit says, by how hard it was (m/s into it).
 const WORDS = [ [ 18, 'WHAM!' ], [ 9, 'BOING!' ], [ 0, 'BONK!' ] ];
 // Told once, the first time it's thrown into the air.
@@ -1091,6 +1106,17 @@ export class Driver {
 			const up = this.extent( UP, q ) * 0.6;
 			rows = [ ...new Set( [ Math.max( this.bumpers[ 0 ], middle - up ), middle, middle + up ] ) ];
 
+		} else if ( this.air?.flight ) {
+
+			// Flying with stunts on, it's tipped by its climb or dive, or by a trick, about where it
+			// stands: they reach as far as its box does that way, turned as it is. (Gliding nose down
+			// into a wall, the top of the kart went 0.3 m into it.)
+			const q = this.attitude( _attitude );
+			_a.set( - de, 0, dn );
+			reach = this.extent( _a, q ) + _c.copy( this.centre ).applyQuaternion( q ).dot( _a );
+			side = this.extent( _a.set( - dn, 0, - de ), q );
+			rows = this.bumpers;
+
 		} else {
 
 			const rad = this.heading * Math.PI / 180;
@@ -1217,9 +1243,20 @@ export class Driver {
 
 		}
 
+		if ( ! inAir && into < LAUNCH_MIN ) {
+
+			// A knock: back off it along the ground, still facing it (so it reverses away from it,
+			// rather than a drift's slide turning it back into the wall).
+			const rad = this.heading * Math.PI / 180;
+			this.speed = be * Math.sin( rad ) + bn * Math.cos( rad );
+			this.course = this.heading;
+			return;
+
+		}
+
 		if ( ! inAir ) this.enterAir();
 		const { air } = this;
-		air.hits ++;
+		if ( into >= BOUNCE_SCORE ) air.hits ++;
 		air.wall = { east: wall.east, north: wall.north, until: this.clock + WALL_GUARD };
 		const hop = Math.min( LAUNCH.max, LAUNCH.base + LAUNCH.gain * into );
 		this.vy = inAir ? this.vy + hop * 0.3 : Math.max( this.vy, hop );
@@ -1382,8 +1419,8 @@ export class Driver {
 	}
 
 	// In the air, not flying: spinning as it was set off and as the keys turn it (none in a wipeout).
-	// Left alone, nearly level and hardly spinning, it eases toward the way it's flying, as a plain
-	// jump does. Its heading is the way its nose points.
+	// Left alone and not far from upright, it steadies and eases toward the way it's flying, as a
+	// plain jump does. Its heading is the way its nose points.
 	airSpin( dt ) {
 
 		const { air } = this;
@@ -1392,7 +1429,16 @@ export class Driver {
 		this.turn( dt, input, AIR_DAMP );
 		const { q, spin } = air;
 		const idle = input && ! input.yaw && ! input.pitch && ! input.roll;
-		if ( idle && air.time > 0.15 && spin.length() < 1.5 && this.tilt( q ) < 60 ) {
+		if ( idle && air.time > 0.15 && this.tilt( q ) < ASSIST_TILT ) {
+
+			// Coming down, it steadies for the landing.
+			if ( this.vy < 0 ) {
+
+				const steady = Math.exp( - STEADY * dt );
+				spin.x *= steady;
+				spin.z *= steady;
+
+			}
 
 			_euler.setFromQuaternion( q, 'YXZ' );
 			const along = this.speed * Math.cos( ( this.course - yawToHeading( _euler.y ) ) * MathUtils.DEG2RAD );
@@ -1649,9 +1695,11 @@ export class Driver {
 
 		if ( tricks.length === 0 ) return;
 		const combo = tricks.length > 1;
-		const points = Math.round( tricks.reduce( ( sum, trick ) => sum + trick.points, 0 ) * ( combo ? COMBO_BONUS : 1 ) * this.mult / 10 ) * 10;
+		// Shown as these points times the multiplier ("+1,310 ×2"), which is what's added: shown
+		// already multiplied, "+2,620 ×2" read as if it were still to be doubled.
+		const points = Math.round( tricks.reduce( ( sum, trick ) => sum + trick.points, 0 ) * ( combo ? COMBO_BONUS : 1 ) / 10 ) * 10;
 		this.hud.tricks?.( { lines: tricks.map( trick => trick.name ), points, mult: this.mult, combo } );
-		this.score += points;
+		this.score += points * this.mult;
 		this.mult = Math.min( MULT_MAX, this.mult + tricks.length );
 		this.lastTrick = this.clock;
 		if ( this.score > this.best ) {
@@ -1807,10 +1855,22 @@ export class Driver {
 			_eye.copy( base ).setY( base.y + height * 0.8 );
 			this.clearView( _eye, _target, base, lift );
 			// It moves with the vehicle and eases round after it as it turns, so it doesn't fall
-			// behind at speed.
-			if ( this.lastBase ) this.camera.position.add( _a.subVectors( base, this.lastBase ) );
+			// behind at speed. Thrown into the air with stunts on, it only eases up and down after it,
+			// more slowly (AIR_CAMERA), so the throw is seen: moved up with it, the camera kept the
+			// vehicle still on screen and only the scenery behind it dropped away.
+			const thrown = !! this.air && ! this.air.flight;
+			if ( this.lastBase ) {
+
+				_a.subVectors( base, this.lastBase );
+				if ( thrown ) _a.y = 0;
+				this.camera.position.add( _a );
+
+			}
+
 			this.lastBase = ( this.lastBase ?? new Vector3() ).copy( base );
+			const was = this.camera.position.y;
 			this.camera.position.lerp( _target, 1 - Math.exp( - dt * 6 ) );
+			if ( thrown ) this.camera.position.y = was + ( _target.y - was ) * ( 1 - Math.exp( - dt * AIR_CAMERA ) );
 			this.keepOut( _eye, this.camera.position );
 			_look.copy( base ).addScaledVector( forward, 8 ).setY( base.y + height * 0.6 );
 
