@@ -42,9 +42,10 @@ pipe goes in. For utility trenches, where people work between the panels.
   with the fewest boxes, then the longest run, longest boxes first, centred. A box may be up to 5 cm
   longer than the trench. For example 6 m takes one 16 ft box, 13.4 m a 24 and a 20, 20 m two 24s
   and a 16, 25.5 m three 24s and a 10.
-- Up: 2.4 m boxes, with a 1.2 m stacker on top where that's enough, until the top is level with
-  the rim or above it. 1.5 and 2.4 m deep take one box, 3 m a box and a stacker, 5 m two boxes
-  and a stacker. A pit no deeper than 1.2 m gets a 1.2 m box.
+- Up: 2.4 m boxes, with a 1.2 m stacker on top where that's enough, until the top stands at least
+  0.3 m out of the ground (WorkSafeBC 20.81(5), see below). 1.5 m deep takes one box, 2.4 and 3 m
+  a box and a stacker, 5 m two boxes and a stacker. A pit no deeper than 1.2 m, which needs no
+  support, gets a 1.2 m box.
 - The panels stand against the long sides. Over about 4.5 m between the panels the spreaders don't
   reach: it's still drawn, with a warning to use slide rail or sheet piles.
 - The ends are open, as on real boxes: the readout says they need end plates or sloping, and how
@@ -60,8 +61,8 @@ Steel posts set at the corners and along the sides, with panels sliding down bet
 pit is dug. For manholes, pump stations and pits where a box won't do, with all four sides held.
 
 - Drawn: yellow posts at the corners and every 4 m or less, grey panels between them on all four
-  sides, stacked like trench boxes (2.4 m, with 1.2 m on top) to the rim or above. The posts stand
-  at least 0.6 m out of the ground.
+  sides, stacked like trench boxes (2.4 m, with 1.2 m on top) to at least 0.3 m out of the ground.
+  The posts stand at least 0.6 m out of the ground.
 - In a trench up to 6 m wide, a strut across between each pair of facing posts.
 - Most systems go to about 7.5 m deep; deeper gets a warning.
 
@@ -70,10 +71,10 @@ pit is dug. For manholes, pump stations and pits where a box won't do, with all 
 Pairs of aluminium rails pressed against the trench walls by hydraulic cylinders across the trench.
 Light and quick to set from the top, for trenches in reasonably firm ground.
 
-- Drawn: a shore every 2.4 m (8 ft) or less along the trench, starting 0.6 m in from the ends; the
-  top cylinder 0.45 m below the rim and the rest spread down to 0.75 m above the floor, no more
-  than 1.2 m apart (one row up to 1.65 m deep, 2 rows at 2.4 m, 3 at 3 m). The trench walls
-  between the rails are drawn as earth faces.
+- Drawn: a shore every 2.4 m (8 ft) or less along the trench, starting 0.6 m in from the ends, its
+  rails from 0.3 m off the floor to 0.3 m out of the ground; the top cylinder 0.45 m below the rim
+  and the rest spread down to 0.75 m above the floor, no more than 1.2 m apart (one row up to
+  1.65 m deep, 2 rows at 2.4 m, 3 at 3 m). The trench walls between the rails are bare earth.
 - Cylinders reach about 4 m: wider gets a warning. Tabulated data generally stops at 6 m (20 ft)
   deep: deeper gets a warning too.
 - The ends are open, and in loose or wet ground the rails need plywood sheeting behind them: the
@@ -101,7 +102,8 @@ Steel H-piles driven or drilled in round the pit, with timber boards (lagging) s
 their flanges as it's dug. Cheaper than sheet piles where water isn't a problem; not watertight.
 
 - Drawn: HP310 piles about 2.4 m apart round the outline (one at each corner), standing 0.5 m out
-  of the ground, with 75 x 300 mm lagging boards down to the floor.
+  of the ground, with 75 x 300 mm lagging boards from the floor to 0.3 m out of the ground. The
+  lagging in the readout includes that 0.3 m.
 - Pile length: 0.5 m out, the depth, and a toe of 0.75 of the depth (at least 1.5 m).
 - Deeper than 4 m it says they need walers with struts, rakers or tie-backs.
 
@@ -128,6 +130,12 @@ designed by a professional engineer. So the notes say:
   *vertical*): *Over 1.2 m deep: needs sloping, benching or shoring before anyone goes in
   (WorkSafeBC Part 20).* A 1 : 1 slope is a common starting point, but the ground may need flatter.
 - Any excavation deeper than 6 m: the sides or their support must be designed by an engineer.
+
+And the shoring is drawn standing at least 0.3 m (1 ft) out of the ground, as 20.81(5) asks of
+shoring, so that what's at the edge can't roll in: trench box and slide rail stacks get a stacker
+where the panels below would only reach the rim (a 2.4 m deep trench takes an 8 ft box and a
+4 ft stacker), hydraulic shore rails and soldier pile lagging go 0.3 m up, and sheet piles stand
+1 m out.
 
 These are reminders for planning, not a check against the regulation: read the current
 regulation and its guidelines, and have a qualified person look at the actual ground.

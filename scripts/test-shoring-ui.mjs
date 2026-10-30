@@ -181,7 +181,7 @@ async function shot( name ) {
 
 }
 
-test( 'trench box runs: fewest boxes that leave no room for another, stacked to the rim', async () => {
+test( 'trench box runs: fewest boxes that leave no room for another, stacked 0.3 m out of the ground', async () => {
 
 	const { runs, stacks } = await page.evaluate( async () => {
 
@@ -193,7 +193,8 @@ test( 'trench box runs: fewest boxes that leave no room for another, stacked to 
 
 	} );
 	assert.deepEqual( runs, [ [ 16 ], [ 24, 20 ], [ 24, 24, 16 ], [ 24, 24, 24, 10 ], [], [ 24, 8 ] ] );
-	assert.deepEqual( stacks, [ [ 4 ], [ 8 ], [ 8 ], [ 8, 4 ], [ 8, 8, 4 ] ] );
+	// 2.4 m deep takes a stacker too: a lone 8 ft box would be level with the rim.
+	assert.deepEqual( stacks, [ [ 4 ], [ 8 ], [ 8, 4 ], [ 8, 4 ], [ 8, 8, 4 ] ] );
 
 } );
 
@@ -213,7 +214,8 @@ test( 'each support fits its trench and pit, and says what it is', async () => {
 			assert.ok( r.extent.x <= width / 2 + tol + 1e-3, `${ support } ${ width }x${ length }x${ depth }: ${ r.extent.x.toFixed( 3 ) } across` );
 			assert.ok( r.extent.z <= length / 2 + tol + 1e-3, `${ support } ${ width }x${ length }x${ depth }: ${ r.extent.z.toFixed( 3 ) } along` );
 			assert.ok( r.extent.low >= - depth - 0.25, `${ support }: down to ${ r.extent.low }` );
-			assert.ok( r.extent.high <= 1.6, `${ support }: up to ${ r.extent.high }` );
+			// At least 0.3 m out of the ground (WorkSafeBC 20.81(5)), and not towering over it.
+			assert.ok( r.extent.high >= 0.29 && r.extent.high <= 1.6, `${ support }: up to ${ r.extent.high }` );
 			if ( support === 'sheet-piles' ) assert.ok( r.extent.sheetOff <= 0.2 + 1e-3, `sheets ${ r.extent.sheetOff } from the outline` );
 			// Lines the walls rather than standing in the middle.
 			assert.ok( ( width <= length ? r.extent.x : r.extent.z ) >= Math.min( width, length ) / 2 - 0.5, `${ support }: reaches the sides` );
@@ -237,7 +239,8 @@ test( 'each support fits its trench and pit, and says what it is', async () => {
 	assert.match( find( 'hydraulic', 3, 20 ).summary, /^9 shores 2\.4 m apart, 3 cylinders each/ );
 	assert.match( find( 'sheet-piles', 12, 12 ).summary, /^80 sheets, 48 m of wall, 9\.0 m long each .*2 struts across, 4 corner braces$/ );
 	assert.match( find( 'sheet-piles', 3, 20 ).summary, /^76 sheets, 46 m of wall, 7\.0 m long each .*waler round the inside$/ );
-	assert.match( find( 'soldier-piles', 12, 12 ).summary, /^20 soldier piles .* 240 m² of timber lagging/ );
+	// Lagging to 0.3 m out of the ground: 48 m round, 5.3 m high.
+	assert.match( find( 'soldier-piles', 12, 12 ).summary, /^20 soldier piles .* 254 m² of timber lagging/ );
 	assert.ok( find( 'soldier-piles', 12, 12 ).notes.some( n => n.startsWith( 'Over 4 m deep' ) ) );
 	assert.match( find( 'slide-rail', 12, 12 ).summary, /^36 panels in 12 posts/ );
 	assert.equal( find( 'sheet-piles', 12, 12 ).wall, 240 );
@@ -258,7 +261,7 @@ test( 'box sizes follow the trench: 6, 13.4, 20 and 25.5 m long, 1.5, 2.4, 3 and
 
 	// Box lengths along the trench and panel heights up from the floor, in feet, and the top.
 	const lengths = { 6: [ 16 ], 13.4: [ 24, 20 ], 20: [ 24, 24, 16 ], 25.5: [ 24, 24, 24, 10 ] };
-	const depths = { 1.5: [ [ 8 ], 'top 0.9 m above' ], 2.4: [ [ 8 ], 'top level with' ], 3: [ [ 8, 4 ], 'top 0.7 m above' ], 5: [ [ 8, 8, 4 ], 'top 1.1 m above' ] };
+	const depths = { 1.5: [ [ 8 ], 'top 0.9 m above' ], 2.4: [ [ 8, 4 ], 'top 1.3 m above' ], 3: [ [ 8, 4 ], 'top 0.7 m above' ], 5: [ [ 8, 8, 4 ], 'top 1.1 m above' ] };
 	const FT = 0.3048;
 	const expected = ( run, stack ) => {
 
@@ -298,11 +301,11 @@ test( 'box sizes follow the trench: 6, 13.4, 20 and 25.5 m long, 1.5, 2.4, 3 and
 	}
 
 	console.log( Object.entries( plans ).map( ( [ k, v ] ) => `${ k.replace( ' ', ' m long, ' ) } m deep: ${ v }` ).join( '\n' ) );
-	// Drawn: the stack reaches the rim and the run stays inside the trench.
+	// Drawn: the stack stands 0.3 m out of the ground and the run stays inside the trench.
 	for ( const [ k, [ length, depth ] ] of [ [ 6, 1.5 ], [ 13.4, 2.4 ], [ 25.5, 5 ] ].entries() ) {
 
 		const r = await inspect( await pit( { width: 3, length, depth, slope: 1, support: 'trench-box' }, 300 + k * 10, 300 ) );
-		assert.ok( r.extent.high >= - 0.01 && r.extent.z <= length / 2 + 0.12 && r.extent.low >= - depth - 0.01, `${ length } × ${ depth }: ${ JSON.stringify( r.extent ) }` );
+		assert.ok( r.extent.high >= 0.3 && r.extent.z <= length / 2 + 0.12 && r.extent.low >= - depth - 0.01, `${ length } × ${ depth }: ${ JSON.stringify( r.extent ) }` );
 
 	}
 

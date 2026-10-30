@@ -38,6 +38,9 @@ const SLIDE_RAIL_BAY = 4;
 const SOLDIER_SPACING = 2.4;
 // Deeper than this, an excavation needs sloping, benching or shoring before anyone goes in.
 const SAFE_DEPTH = 1.2;
+// Shoring stands at least this far out of the ground (WorkSafeBC 20.81(5)), so what's at the edge
+// can't roll in.
+const ABOVE = 0.3;
 // Deeper than this, the support has to be engineered.
 const ENGINEERED_DEPTH = 6;
 // Sheet-piled pits deeper than this get struts or corner braces under the waler.
@@ -209,17 +212,18 @@ export function boxRun( along ) {
 
 }
 
-// Panel heights (ft) from the bottom up, at least as tall as the pit is deep: 2.4 m (8 ft)
-// boxes and a 1.2 m (4 ft) stacker on top where that's enough. A pit no deeper than 1.2 m gets
-// a 1.2 m box.
+// Panel heights (ft) from the bottom up, standing at least 0.3 m out of the ground: 2.4 m (8 ft)
+// boxes and a 1.2 m (4 ft) stacker on top where that's enough. A pit no deeper than 1.2 m, which
+// needs no support, gets a 1.2 m box.
 export function boxStack( depth ) {
 
-	if ( depth <= STACKER * FT + 0.01 ) return [ STACKER ];
+	if ( depth <= SAFE_DEPTH ) return [ STACKER ];
+	const top = depth + ABOVE;
 	const stack = [];
 	let height = 0;
-	while ( height < depth - 0.01 ) {
+	while ( height < top - 0.01 ) {
 
-		const ft = depth - height <= STACKER * FT + 0.01 && stack.length > 0 ? STACKER : BASE_BOX;
+		const ft = top - height <= STACKER * FT + 0.01 && stack.length > 0 ? STACKER : BASE_BOX;
 		stack.push( ft );
 		height += ft * FT;
 
@@ -304,7 +308,7 @@ function planSlideRail( { width, length, depth } ) {
 
 // Hydraulic shores: a pair of aluminium rails on the long walls with cylinders across, 2.4 m
 // apart along the trench, the top cylinder 0.45 m under the rim and none more than 1.2 m apart
-// or from the floor.
+// or from the floor. The rails reach from 0.3 m off the floor to 0.3 m out of the ground.
 function planHydraulic( { width, length, depth } ) {
 
 	const [ across, along ] = width > length ? [ length, width ] : [ width, length ];
@@ -312,7 +316,7 @@ function planHydraulic( { width, length, depth } ) {
 	const count = span > 0 ? Math.ceil( span / SHORE_SPACING - 0.01 ) + 1 : 1;
 	const spacing = count > 1 ? span / ( count - 1 ) : 0;
 	const rows = cylinderRows( depth );
-	const rail = depth - 0.3 + 0.05;
+	const rail = depth - 0.3 + ABOVE;
 	const notes = [];
 	if ( across > MAX_SHORE_SPAN ) notes.push( `Too wide for hydraulic shores (they reach about ${ MAX_SHORE_SPAN } m): use a trench box, slide rail or sheet piles.` );
 	if ( depth > MAX_SHORE_DEPTH ) notes.push( 'Deeper than hydraulic shoring tables go (about 6 m, 20 ft): use slide rail or sheet piles.' );
@@ -458,8 +462,8 @@ function bracing( across, along ) {
 }
 
 // Soldier piles: H-piles about 2.4 m apart round the outline (one at each corner), standing
-// 0.5 m out of the ground, with 75 mm timber lagging boards behind their inner flanges down to
-// the floor.
+// 0.5 m out of the ground, with 75 mm timber lagging boards behind their inner flanges from the
+// floor to 0.3 m out of the ground.
 function planSoldierPiles( { width, length, depth } ) {
 
 	const walls = wallsOf( width, length );
@@ -468,12 +472,12 @@ function planSoldierPiles( { width, length, depth } ) {
 	const perimeter = 2 * ( width + length );
 	const toe = Math.max( 1.5, depth * 0.75 );
 	const each = Math.ceil( ( 0.5 + depth + toe ) * 2 ) / 2;
-	const lagging = perimeter * depth;
+	const lagging = perimeter * ( depth + ABOVE );
 	const notes = [];
 	if ( depth > BRACED_DEPTH ) notes.push( `Over ${ BRACED_DEPTH } m deep: soldier piles need walers with struts, rakers or tie-backs, designed by an engineer.` );
 	return {
 		summary: `${ piles } soldier piles (HP310, ${ maxOf( walls.map( ( w, i ) => w.length / bays[ i ] ) ) } m apart or less, ${ metres( each ) } long each), ${ Math.round( lagging ) } m² of timber lagging (${ ( lagging * 0.075 ).toFixed( 1 ) } m³)`,
-		wall: lagging,
+		wall: perimeter * depth,
 		weight: tonnes( piles * each * H_PILE.kgPerM, 'steel' ),
 		notes,
 		sides: 'all',
@@ -483,7 +487,7 @@ function planSoldierPiles( { width, length, depth } ) {
 
 			const pitch = 0.3 + 0.012;
 			// No sliver of a board at the top.
-			const boards = Math.max( 1, Math.ceil( ( depth - 0.05 ) / pitch ) );
+			const boards = Math.max( 1, Math.ceil( ( depth + ABOVE - 0.05 ) / pitch ) );
 			walls.forEach( ( wall, w ) => {
 
 				const n = bays[ w ];
@@ -497,7 +501,7 @@ function planSoldierPiles( { width, length, depth } ) {
 					for ( let i = 0; i < boards; i ++ ) {
 
 						const y = - depth + i * pitch;
-						wallBox( parts, PAINT.timber, wall, ( k + 0.5 ) * spacing, 0.0925, spacing - 0.02, 0.075, Math.min( 0.3, - y ), y );
+						wallBox( parts, PAINT.timber, wall, ( k + 0.5 ) * spacing, 0.0925, spacing - 0.02, 0.075, Math.min( 0.3, ABOVE - y ), y );
 
 					}
 
