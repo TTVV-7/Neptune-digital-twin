@@ -14,6 +14,7 @@ import { isTyping, WalkController } from './walk.js';
 import { setUpEarthworks } from './earthworks.js';
 import { setUpExcavator } from './excavator.js';
 import { setUpLaydown } from './laydown.js';
+import { setUpTowerCranes } from './tower-crane.js';
 import { accountMapsKey, setUpCloud } from './cloud.js';
 import { getKind } from './kinds.js';
 import { setUpDriving } from './drive-prompt.js';
@@ -21,7 +22,7 @@ import { createLegend } from './legend.js';
 import { setUpZoom } from './zoom.js';
 
 // Features that plug into the app (see `features` in start()); each is a function taking the context.
-const FEATURES = [ setUpEarthworks, setUpExcavator, setUpLaydown, setUpCloud ];
+const FEATURES = [ setUpEarthworks, setUpExcavator, setUpLaydown, setUpTowerCranes, setUpCloud ];
 
 const STORAGE_KEY = 'neptune-twin.google-api-key';
 const ENV_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';

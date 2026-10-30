@@ -15,6 +15,8 @@ import {
 } from 'three';
 import { buildExcavator, EXCAVATOR_20T, EXCAVATOR_MINI } from './excavator-model.js';
 import { hPileBundle, hydraulicShoreItem, sheetPileBundle, trenchBoxItem, trenchPanelItem } from './shoring-models.js';
+import { POWER_ITEMS } from './power-models.js';
+import { CRANE_ITEMS } from './crane-models.js';
 
 // Common site pieces generated in code at real North American dimensions, in metres. Each builder
 // returns a Group standing on y = 0 with its front (door, open side or sloped end) facing -Z, so
@@ -33,7 +35,7 @@ export const PROCEDURAL_ITEMS = [
 	{ id: 'rolloff-20', name: 'Roll-off dumpster (20 yd)', category: 'Waste', build: () => rollOff( 4.5 * FT, 0x2f5f8f ) },
 	{ id: 'rolloff-40', name: 'Roll-off dumpster (40 yd)', category: 'Waste', build: () => rollOff( 8 * FT, 0x3d6b3d ) },
 	{ id: 'frontload-6yd', name: 'Front-load bin (6 yd)', category: 'Waste', build: frontLoadBin },
-	{ id: 'light-tower', name: 'Towable light tower', category: 'Site services', build: lightTower },
+	{ id: 'light-tower', name: 'Light tower, towable (9 m mast up)', category: 'Power & air', build: lightTower },
 	{ id: 'pallet', name: 'Wooden pallet (48 x 40 in)', category: 'Materials', build: pallet },
 	// Drivable: "drive" tunes race mode, and type 'excavator' gives them the digging controls (excavator.js).
 	{ id: 'excavator-20t', name: 'Excavator (20 t)', category: 'Heavy equipment', build: () => buildExcavator( EXCAVATOR_20T ), drive: { type: 'excavator', topSpeed: 5.5, accel: 1.2, brake: 3, reverse: 5.5 } },
@@ -50,6 +52,10 @@ export const PROCEDURAL_ITEMS = [
 	{ id: 'hydraulic-shore', name: 'Hydraulic shore (8 ft rails, ~40 kg)', category: 'Shoring', build: hydraulicShoreItem },
 	{ id: 'jump-ramp', name: 'Jump ramp (1.2 m)', category: 'Race', build: () => jumpRamp( 4, 7, 1.2 ) },
 	{ id: 'jump-ramp-big', name: 'Jump ramp (3 m)', category: 'Race', build: () => jumpRamp( 6, 16, 3 ) },
+	// Generators, compressors and fuel (power-models.js); mobile and tower cranes and telehandlers
+	// (crane-models.js, tower-crane.js).
+	...POWER_ITEMS,
+	...CRANE_ITEMS,
 ].map( item => ( { ...item, front: '-z', procedural: true } ) );
 
 export function buildProcedural( id ) {
