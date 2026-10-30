@@ -3,6 +3,7 @@ import { Box3, BufferAttribute, Euler, Group, InstancedMesh, MathUtils, Matrix4,
 import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import { clone as cloneModel } from 'three/addons/utils/SkeletonUtils.js';
 import { registerKind } from './kinds.js';
 import { frontToYaw, itemConfig } from './library.js';
 import { buildProcedural } from './procedural.js';
@@ -136,7 +137,8 @@ export function setUpRows( { scene, camera, canvas, models, sidebar, panel, layo
 
 	// The item's model, made once: each of its meshes as geometry, material and where it sits in the
 	// item, which faces -Z with the middle of its footprint at the origin and its base at y = 0, as a
-	// placed item does (models.js); and the size of its box. A failed load is tried again next time.
+	// placed item does (models.js); and the size of its box. A downloaded model's scene is kept too,
+	// for breaking a row apart into copies of it. A failed load is tried again next time.
 	function template( id ) {
 
 		let t = templates.get( id );
@@ -165,8 +167,10 @@ export function setUpRows( { scene, camera, canvas, models, sidebar, panel, layo
 
 			if ( ! object.isMesh ) return;
 			const geometry = object.isSkinnedMesh ? posed( object ) : object.geometry;
-			// Every row of the item draws these; removing one leaves them be (models.js).
+			// Every row of the item draws these, and items broken out of one; removing one leaves
+			// them be (models.js).
 			geometry.userData.shared = true;
+			object.geometry.userData.shared = true;
 			for ( const material of [ object.material ].flat() ) material.userData.shared = true;
 			parts.push( {
 				geometry,
@@ -180,7 +184,7 @@ export function setUpRows( { scene, camera, canvas, models, sidebar, panel, layo
 		const size = box.getSize( new Vector3() );
 		// End to end, pieces that share a joint (fence panels on a foot between them) are their
 		// length apart, not their box's: item.rowLength (procedural.js) says how long that is.
-		return { item, parts, size, length: Number( item.rowLength ) || null, ghost: null };
+		return { item, parts, size, length: Number( item.rowLength ) || null, scene: item.procedural ? null : content, ghost: null };
 
 	}
 
@@ -464,19 +468,23 @@ export function setUpRows( { scene, camera, canvas, models, sidebar, panel, layo
 
 	// --- breaking a row apart ------------------------------------------------------------
 
-	// Each copy becomes a single item where it stands, tilted as it was; Undo puts the row back.
+	// Each copy becomes a single item where it stands, tilted as it was; Undo puts the row back. A
+	// downloaded model's copies are its scene cloned, sharing its geometry, materials and textures:
+	// loading the file for each took 10 s for 200 cones, and kept 200 of each texture.
 	async function breakApart( entry ) {
 
 		const item = items.get( entry.params.item );
 		const plan = layoutOf( entry );
 		if ( ! item || ! plan || ! models.entries.includes( entry ) ) return;
+		const { scene } = entry.pivot.children[ 0 ].userData.row.t;
+		const loader = scene ? { loadAsync: async () => ( { scene: cloneModel( scene ) } ) } : undefined;
 		const config = { ...models.toConfig( entry ), inConfig: entry.inConfig };
 		const name = entry.state.name;
 		const placements = plan.copies.map( ( copy, i ) => placementOf( entry, copy, entry.params.heights[ i ] ?? 0, entry.params.tilts[ i ] ?? 0, item ) );
 		models.remove( entry );
 		const results = await Promise.allSettled( placements.map( async ( { east, north, heading, up, pitch, roll } ) => {
 
-			const single = await models.load( itemConfig( item, { east, north, heading, up } ) );
+			const single = await models.load( itemConfig( item, { east, north, heading, up } ), undefined, loader );
 			// Snapped like any item from now on, keeping its tilt and height above the ground.
 			single.state.snap = true;
 			if ( Math.abs( pitch ) >= 0.1 || Math.abs( roll ) >= 0.1 ) models.park( single, { pitch, roll } );
