@@ -554,7 +554,9 @@ describe( 'World Drive leaderboard', () => {
 
 	test( 'names are 3 to 16 letters, numbers, spaces, _ or -', async () => {
 
-		const bad = [ '', 'ab', '  a  ', 'x'.repeat( 17 ), 'a😀b', 'dot.name', '<b>hi</b>', 'Robert\'); DROP TABLE players;--', '1 OR 1=1', '_-_', 'a\u0000bc', 'zero​width', 42, null, [ 'abc' ], { name: 'abc' } ];
+		const bad = [ '', 'ab', '  a  ', 'x'.repeat( 17 ), 'a😀b', 'dot.name', '<b>hi</b>', '<img src=x onerror=alert(1)>', 'Robert\'); DROP TABLE players;--', '1 OR 1=1', '_-_', 'a\u0000bc', 'zero​width', 42, null, [ 'abc' ], { name: 'abc' } ];
+		// Letters that show as nothing, after a name or as all of one; marks on nothing, or stacked up.
+		bad.push( 'Speed Demon\uFE0F', 'Speed\u034FDemon', '\u3164\u3164\u3164', 'Ace\u115F', 'Ace\uDB40\uDD00', '\u0301Ace', 'Ace \u0301x', `Zalgo${ '\u0301\u0302\u0303\u0304' }` );
 		for ( const name of bad ) {
 
 			const res = await send( '/api/player', { name } );
@@ -616,7 +618,8 @@ describe( 'World Drive leaderboard', () => {
 
 	test( 'slurs, obvious abuse and names passing for World Drive are refused', async () => {
 
-		for ( const name of [ 'N1GGA', 'fuuuck you', 'Sh1t_Head', 'K Y S', 'Admin', 'the_admin', '4dm1n', 'W0rld Drive', 'worlddrive', 'WorldDriveTeam', 'Moderator', 'Staff' ] ) {
+		// The last few with Cyrillic or Greek letters, or a dotless ı, standing in for Latin ones.
+		for ( const name of [ 'N1GGA', 'fuuuck you', 'Sh1t_Head', 'K Y S', 'Admin', 'the_admin', '4dm1n', 'W0rld Drive', 'worlddrive', 'WorldDriveTeam', 'Moderator', 'Staff', 'Fuсk you', 'Аdmin', 'ΑDΜΙΝ', 'shıt head' ] ) {
 
 			const res = await send( '/api/player', { name } );
 			assert.equal( res.status, 400, name );
@@ -631,7 +634,9 @@ describe( 'World Drive leaderboard', () => {
 
 	test( 'names are unique whatever their case, with spaces, _ and - alike', async () => {
 
-		for ( const name of [ 'speed demon', 'SPEED_DEMON', 'Speed-Demon', ' speed  demon ', 'Speed__Demon', 'ZOË' ] ) {
+		// And whatever its accents, or with letters that look the same: Cyrillic ones for S, p, e
+		// and o; Greek ones for Z and o; I for l, rn for m.
+		for ( const name of [ 'speed demon', 'SPEED_DEMON', 'Speed-Demon', ' speed  demon ', 'Speed__Demon', 'ZOË', 'Zoe', 'Ѕрееd Dеmоn', 'Speed Dernon', 'Ζοë', 'Jose 99', 'drop tabIe' ] ) {
 
 			const res = await named( name );
 			assert.equal( res.status, 409, name );

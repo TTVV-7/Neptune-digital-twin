@@ -6,7 +6,8 @@
 CREATE TABLE players (
 	id TEXT PRIMARY KEY,
 	name TEXT NOT NULL,
-	-- The name as names are compared: lower case, spaces, _ and - alike (worker/drive/names.js).
+	-- The name as names are compared: lower case, no accents, look-alike letters as one, spaces, _
+	-- and - alike (nameKey in worker/drive/names.js).
 	name_key TEXT NOT NULL UNIQUE,
 	secret_hash TEXT NOT NULL,
 	created_at INTEGER NOT NULL,

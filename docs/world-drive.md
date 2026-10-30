@@ -164,9 +164,11 @@ see. There's no sign-up: a nickname is all it takes.
   now** leaves it for later, from the pause menu's leaderboard, where picking a name posts the run
   that's waiting. After that, runs go up by themselves, and the card only shows for a new best ever
   or a better place on today's board.
-- **Names** are 3 to 16 letters (any alphabet), numbers, spaces, _ or -, unique whatever their case,
-  with spaces, _ and - alike ("Speed Demon" and "speed_demon" are one name). A small built-in filter
-  turns away slurs and obvious abuse, through the usual disguises (0 for o, 1 for i, letters
+- **Names** are 3 to 16 letters (any alphabet), numbers, spaces, _ or -, with nothing invisible in
+  them, unique whatever their case and accents, with spaces, _ and - alike, and letters that look
+  the same counted as one ("Speed Demon", "speed_demon" and "Ѕрееd Dеmоn" in Cyrillic letters are one
+  name; so are "Alice" and "AIice"). A small built-in filter turns away slurs and obvious abuse,
+  through the usual disguises (0 for o, 1 for i, Cyrillic or Greek letters for Latin ones, letters
   doubled, spaces between them), and names passing for World Drive (admin, worlddrive, moderator,
   staff...). **Rename** is in the panel. A name is picked on a drive on Google's map (it takes the
   visit's token, as a score does; the test pad has none). The name is kept in this browser (an id and
@@ -220,8 +222,8 @@ To look after it, open the Cloudflare dashboard → Storage & Databases → D1 �
 shows within that.
 
 ```sql
--- Find a player by name.
-SELECT id, name, datetime( created_at / 1000, 'unixepoch' ) AS joined FROM players WHERE name_key LIKE '%demon%';
+-- Find a player by name (any case).
+SELECT id, name, datetime( created_at / 1000, 'unixepoch' ) AS joined FROM players WHERE name LIKE '%demon%';
 
 -- The fastest scoring in the last 35 days: where a cheat shows up first.
 SELECT p.id, p.name, s.score, s.run_seconds, s.score / s.run_seconds AS per_second, s.place, datetime( s.created_at / 1000, 'unixepoch' ) AS at
@@ -231,7 +233,9 @@ FROM scores s JOIN players p ON p.id = s.player_id ORDER BY per_second DESC LIMI
 SELECT score, tricks, place, vehicle, run_seconds, air_time, visit, datetime( created_at / 1000, 'unixepoch' ) AS at
 FROM scores WHERE player_id = 'PLAYER_ID' ORDER BY created_at DESC;
 
--- Rename an abusive name. name_key is the name in lower case, with spaces, _ and - as one -.
+-- Rename an abusive name. name_key is how the Worker compares names (nameKey in
+-- worker/drive/names.js): for a new name of plain letters and numbers with no l in it, like this
+-- one, it's the name in lower case with - for the spaces.
 UPDATE players SET name = 'Driver 4821', name_key = 'driver-4821' WHERE id = 'PLAYER_ID';
 
 -- Take a cheat's scores off every board (they can carry on, from nothing).
