@@ -15,6 +15,9 @@ material that is. Both tools are at the top of the library (**L**), under **Tool
    - **side slope**, horizontal : vertical: *vertical (shored)*, *0.5 : 1*, *1 : 1* (the default),
      *1.5 : 1* or *2 : 1*. A 1 : 1 slope goes out 1 m for every 1 m down. If the rectangle is too
      small for its slopes at that depth, the floor shrinks to a line and the pit is shallower.
+   - **support**: *none / sloped*, or shoring (trench box, slide rail, hydraulic shores, sheet
+     piles, soldier piles + lagging), which cuts the sides vertical and is drawn in the pit. See
+     [shoring.md](shoring.md).
    - **Dig** plays the digging again.
    - **Spoil pile** pours what came out of the pit beside it, clear of the rim: a pile of
      *Excavated soil* holding the loose volume: a ridge running along a trench (or any pit at least

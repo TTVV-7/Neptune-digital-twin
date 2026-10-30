@@ -18,6 +18,7 @@ import { registerKind } from './kinds.js';
 import { CELL, CUT, MATERIALS, SWELL, Terrain, coneRadius, findMaterial, hideUnderEarthworks, insideRect, materialIndex, rectBounds, rectFrame, spread } from './terrain.js';
 import { addHitFilter } from './walk.js';
 import { createPourStream } from './pour.js';
+import { NO_SUPPORT, SHORING_READOUTS, SUPPORTS, normalizeSupport, setUpShoring, wallSlope } from './shoring.js';
 
 // Earthworks for laydown planning: excavations cut into the ground and stockpiles poured onto it.
 // Both are placed kinds (kinds.js), saved and moved like any library item; the ground itself is
@@ -117,7 +118,8 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 			{ key: 'width', label: 'width (m)', min: 1, step: 0.5 },
 			{ key: 'length', label: 'length (m)', min: 1, step: 0.5 },
 			{ key: 'depth', label: 'depth (m)', min: 0.1, step: 0.1 },
-			{ key: 'slope', label: 'side slope (h : v)', options: SLOPES },
+			{ key: 'slope', label: 'side slope (h : v)', options: SLOPES, enabled: params => params.support === NO_SUPPORT },
+			{ key: 'support', label: 'support', options: SUPPORTS },
 		],
 		actions: [
 			{ label: 'Dig', run: entry => dig( entry ) },
@@ -127,7 +129,8 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 			{ label: 'cut (bank)', get: entry => `${ cutOf( entry ).toFixed( 1 ) } m³` },
 			{ label: `loose (×${ SWELL })`, get: entry => `${ ( cutOf( entry ) * SWELL ).toFixed( 1 ) } m³` },
 			{ label: 'truck loads', get: entry => loads( cutOf( entry ) * SWELL ) },
-			{ label: 'floor', get: entry => floorSize( entry.params ) },
+			{ label: 'floor', get: entry => floorSize( { ...entry.params, slope: wallSlope( entry.params ) } ) },
+			...SHORING_READOUTS,
 		],
 	} );
 
@@ -418,6 +421,10 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 
 	} );
 
+	// Trench boxes, sheet piles... drawn in pits that have them (after the listeners above, so
+	// their rims are up to date).
+	setUpShoring( { scene, models, terrain, kind: EXCAVATION, rimOf: entry => designs.get( entry )?.rim } );
+
 	// For tests and for other features (the excavator) to build on.
 	if ( window.twin ) Object.assign( window.twin, { terrain, earthworks: { dig, pour, spoil, designs, anims, labels, stream } } );
 	return { terrain, dig, pour, spoil };
@@ -439,6 +446,8 @@ function pitDesign( entry, { order, progress, floorUnder } ) {
 			const { state, params } = entry;
 			const { width, length, depth, slope } = params;
 			Object.assign( g, rectFrame( state.east, state.north, state.heading, width / 2, length / 2 ), { depth, slope } );
+			// Shoring holds the sides up: they're cut vertical.
+			g.slope = wallSlope( params );
 			// Inside a flatten area the ground is the area's floor, which is what the terrain digs
 			// into there; from the original ground (the roofs of what was cleared, say) the pit
 			// would be too shallow to reach it.
@@ -663,6 +672,7 @@ function normalizePit( p ) {
 		length: clamp( p.length, 1, MAX_SIZE, 10 ),
 		depth: clamp( p.depth, 0.1, 30, 2 ),
 		slope,
+		support: normalizeSupport( p.support ),
 	};
 
 }
