@@ -190,6 +190,8 @@ function start( apiKey, keySource ) {
 	} );
 	controls.setPose( enuToLocal( START.east, START.north, START.up ), START.heading, START.pitch );
 	controls.setMode( START.mode );
+	// Before race mode and the sidebar, so that Esc closing the help reaches it first.
+	const { toggleHelp } = setUpOverlays( controls );
 
 	const feetPosition = () => camera.position.clone().setY( camera.position.y - PLAYER.eyeHeight );
 	const panel = createPlacementPanel( models, { getPlayerPosition: feetPosition } );
@@ -276,7 +278,6 @@ function start( apiKey, keySource ) {
 
 	} );
 
-	const { toggleHelp } = setUpOverlays( controls );
 	const legend = createLegend( { controls, driver, models, getSidebar: () => sidebar, getDriving: () => driving, toggleHelp } );
 	setUpZoom( { canvas: renderer.domElement, camera, controls, driver, getColliders: () => [ ...grounds, models.group ] } );
 
@@ -398,7 +399,13 @@ function setUpOverlays( controls ) {
 
 		if ( isTyping( e ) || e.ctrlKey || e.metaKey || e.altKey || e.repeat ) return;
 		if ( e.code === 'KeyH' ) toggleHelp();
-		else if ( e.code === 'Escape' && ! help.hidden ) toggleHelp( false );
+		else if ( e.code === 'Escape' && ! help.hidden ) {
+
+			// Only that: not also deselecting, cancelling a placement or getting out of a vehicle.
+			e.stopImmediatePropagation();
+			toggleHelp( false );
+
+		}
 
 	}, true );
 	help.querySelector( '.close' ).addEventListener( 'click', () => toggleHelp( false ) );
