@@ -304,62 +304,71 @@ const CSS = `
 }
 
 .dhud .dhud-touch .gas,
-.dhud .dhud-touch .brake {
-	bottom: var( --drive-hud-bottom, 28px );
+.dhud .dhud-touch .brake,
+.dhud .dhud-touch .drift,
+.dhud .dhud-touch .booster,
+.dhud .dhud-touch .fly {
 	width: 76px;
 }
 
-.dhud .dhud-touch .gas {
+/* Two columns at the bottom right: GAS with DRIFT over it at the edge, BRAKE, BOOST and FLY inside. */
+.dhud .dhud-touch .gas,
+.dhud .dhud-touch .drift {
 	right: var( --drive-hud-side, 16px );
+}
+
+.dhud .dhud-touch .brake,
+.dhud .dhud-touch .booster,
+.dhud .dhud-touch .fly {
+	right: calc( var( --drive-hud-side, 16px ) + 88px );
+}
+
+.dhud .dhud-touch .gas {
+	bottom: var( --drive-hud-bottom, 28px );
 	height: 120px;
 	background: rgba( 40, 180, 90, 0.55 );
 }
 
+.dhud .dhud-touch .drift {
+	bottom: calc( var( --drive-hud-bottom, 28px ) + 132px );
+	height: 76px;
+}
+
 .dhud .dhud-touch .brake {
-	right: calc( var( --drive-hud-side, 16px ) + 88px );
+	bottom: var( --drive-hud-bottom, 28px );
 	height: 76px;
 	background: rgba( 220, 50, 60, 0.5 );
 }
 
-.dhud .dhud-touch .drift,
-.dhud .dhud-touch .booster,
-.dhud .dhud-touch .fly {
-	width: 64px;
-	height: 52px;
-	font-size: 12px;
-}
-
-.dhud .dhud-touch .drift {
-	right: var( --drive-hud-side, 16px );
-	bottom: calc( var( --drive-hud-bottom, 28px ) + 132px );
-}
-
 .dhud .dhud-touch .booster {
-	right: calc( var( --drive-hud-side, 16px ) + 76px );
 	bottom: calc( var( --drive-hud-bottom, 28px ) + 88px );
+	height: 56px;
+	font-size: 12px;
 	background: rgba( 255, 90, 31, 0.55 );
 }
 
 .dhud .dhud-touch .fly {
-	right: calc( var( --drive-hud-side, 16px ) + 152px );
-	bottom: calc( var( --drive-hud-bottom, 28px ) + 44px );
+	bottom: calc( var( --drive-hud-bottom, 28px ) + 156px );
+	height: 56px;
+	font-size: 12px;
 	background: rgba( 61, 224, 255, 0.4 );
 }
 
+/* Reset and camera down the right edge at the top, clear of the readouts in the middle. */
 .dhud .dhud-touch .reset,
 .dhud .dhud-touch .camera {
-	top: calc( var( --drive-hud-top, 12px ) + 2px );
+	right: var( --drive-hud-side, 16px );
 	width: 52px;
 	height: 44px;
 	font-size: 12px;
 }
 
 .dhud .dhud-touch .reset {
-	right: var( --drive-hud-side, 16px );
+	top: var( --drive-hud-top, 12px );
 }
 
 .dhud .dhud-touch .camera {
-	right: calc( var( --drive-hud-side, 16px ) + 60px );
+	top: calc( var( --drive-hud-top, 12px ) + 52px );
 }
 
 @media ( max-width: 760px ) {
