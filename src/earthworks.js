@@ -15,7 +15,7 @@ import {
 	Vector3,
 } from 'three';
 import { registerKind } from './kinds.js';
-import { CELL, CUT, MATERIALS, SWELL, Terrain, coneRadius, findMaterial, insideRect, materialIndex, rectBounds, rectFrame } from './terrain.js';
+import { CELL, CUT, MATERIALS, SWELL, Terrain, coneRadius, findMaterial, insideRect, materialIndex, rectBounds, rectFrame, spread } from './terrain.js';
 import { createPourStream } from './pour.js';
 
 // Earthworks for laydown planning: excavations cut into the ground and stockpiles poured onto it.
@@ -267,6 +267,7 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 	}
 
 	// A pile of what came out of the pit, swollen, beside its longer side and clear of the rim.
+	// Returns the new stockpile entry.
 	async function spoil( entry ) {
 
 		const anim = anims.get( entry );
@@ -287,10 +288,10 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 		const { east, north, heading } = entry.state;
 		const beside = length >= width;
 		const long = Math.max( width, length );
-		// A cone if it's no longer than the pit, else a ridge along it.
+		// A windrow along a trench or wherever a cone would be wider than the pit is long, else a cone.
 		const radius = coneRadius( loose, tan );
-		const ridge = 2 * radius > long ? ridgeWidth( loose, long, tan ) : null;
-		const params = ridge ? { material: soil.id, shape: 'ridge', width: round( ridge, 1 ), length: long } : { material: soil.id, shape: 'cone', volume: round( loose, 1 ) };
+		const ridge = long >= 2 * Math.min( width, length ) || 2 * radius > long ? ridgeWidth( loose, long, tan ) : null;
+		const params = ridge ? { material: soil.id, shape: 'ridge', width: round( ridge, 2 ), length: long } : { material: soil.id, shape: 'cone', volume: round( loose, 1 ) };
 		const offset = Math.min( width, length ) / 2 + 2 + ( ridge ? ridge / 2 : radius );
 		const rad = heading * DEG;
 		const [ de, dn ] = beside ? [ Math.cos( rad ), - Math.sin( rad ) ] : [ Math.sin( rad ), Math.cos( rad ) ];
@@ -456,33 +457,29 @@ function coneReach( g ) {
 }
 
 // The cone, at the material's angle of repose, whose apex is just high enough that it adds the
-// poured volume above whatever is under it (found by bisection).
-function solveCone( g, { count, x, z, before, owned, cellArea }, f, design ) {
+// poured volume above whatever is under it (found by bisection). Only what is connected to its
+// middle counts, so its sides don't come up again in a pit beyond its foot.
+function solveCone( g, { ni, count, x, z, before, cellArea }, f, design ) {
 
 	const target = g.volume * f;
 	const reach = coneReach( g );
 	const cx = - g.east;
 	const cz = g.north;
 	const drop = new Float32Array( count );
-	const near = [];
 	let lo = Infinity;
+	let middle = 0;
 	for ( let n = 0; n < count; n ++ ) {
 
 		const d = Math.hypot( x[ n ] - cx, z[ n ] - cz );
 		drop[ n ] = d <= reach ? d * g.tan : Infinity;
-		lo = Math.min( lo, before[ n ] + drop[ n ] );
-		if ( d <= reach && owned[ n ] ) near.push( n );
+		if ( d < Math.hypot( x[ middle ] - cx, z[ middle ] - cz ) ) middle = n;
+		if ( before[ n ] + drop[ n ] < lo ) lo = before[ n ] + drop[ n ];
 
 	}
 
 	if ( ! Number.isFinite( lo ) ) return null;
-	const added = apex => {
-
-		let sum = 0;
-		for ( const n of near ) sum += Math.max( 0, apex - drop[ n ] - before[ n ] );
-		return sum * cellArea;
-
-	};
+	const thickness = apex => n => apex - drop[ n ] - before[ n ];
+	const added = apex => spread( ni, count, [ middle ], thickness( apex ) ).total * cellArea;
 	let hi = lo + 1;
 	for ( let i = 0; i < 40 && added( hi ) < target; i ++ ) hi = lo + ( hi - lo ) * 2;
 	for ( let i = 0; i < 50; i ++ ) {
@@ -494,14 +491,16 @@ function solveCone( g, { count, x, z, before, owned, cellArea }, f, design ) {
 	}
 
 	const apex = ( lo + hi ) / 2;
-	const tops = new Float32Array( count );
+	const { mask } = spread( ni, count, [ middle ], thickness( apex ) );
+	const tops = new Float32Array( count ).fill( - Infinity );
 	let height = 0;
 	const under = [];
 	for ( let n = 0; n < count; n ++ ) {
 
+		if ( ! mask[ n ] ) continue;
 		tops[ n ] = apex - drop[ n ];
 		height = Math.max( height, tops[ n ] - before[ n ] );
-		if ( owned[ n ] && tops[ n ] > before[ n ] ) under.push( before[ n ] );
+		under.push( before[ n ] );
 
 	}
 
@@ -512,25 +511,32 @@ function solveCone( g, { count, x, z, before, owned, cellArea }, f, design ) {
 
 // A hip-roofed pile filling the rectangle at the angle of repose, flat on top at its max height,
 // standing on the middle height of the ground under it. While pouring it grows from the middle.
-function solveRidge( g, { count, x, z, before, owned }, f, design ) {
+// Its sides run on down where the ground falls away, as long as they stay connected to it.
+function solveRidge( g, { ni, count, x, z, before }, f, design ) {
 
 	const s = Math.cbrt( f );
 	const cap = g.cap > 0 ? g.cap * s : Infinity;
 	const under = [];
 	const inside = new Float32Array( count );
+	const seeds = [];
 	for ( let n = 0; n < count; n ++ ) {
 
 		inside[ n ] = insideRect( g, x[ n ], z[ n ], g.hw * s, g.hl * s );
-		if ( owned[ n ] && insideRect( g, x[ n ], z[ n ] ) >= 0 ) under.push( before[ n ] );
+		if ( Number.isNaN( before[ n ] ) ) continue;
+		if ( insideRect( g, x[ n ], z[ n ] ) >= 0 ) under.push( before[ n ] );
+		if ( inside[ n ] >= 0 ) seeds.push( n );
 
 	}
 
-	const base = median( under ) ?? Math.min( ...before );
-	const tops = new Float32Array( count );
+	const base = median( under ) ?? 0;
+	const top = n => inside[ n ] >= - RIDGE_TOE ? base + Math.min( cap, g.tan * inside[ n ] ) : - Infinity;
+	const { mask } = spread( ni, count, seeds, n => top( n ) - before[ n ] );
+	const tops = new Float32Array( count ).fill( - Infinity );
 	let height = 0;
 	for ( let n = 0; n < count; n ++ ) {
 
-		tops[ n ] = inside[ n ] >= - RIDGE_TOE ? base + Math.min( cap, g.tan * inside[ n ] ) : - Infinity;
+		if ( ! mask[ n ] ) continue;
+		tops[ n ] = top( n );
 		height = Math.max( height, tops[ n ] - before[ n ] );
 
 	}

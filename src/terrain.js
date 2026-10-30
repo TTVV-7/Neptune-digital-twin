@@ -130,6 +130,40 @@ export function insideRect( r, x, z, hw = r.hw, hl = r.hl ) {
 
 const _colour = new Color();
 
+// The nodes of a grid `ni` wide reachable from `starts` through nodes where thickness( n ) > 0,
+// and their total thickness. Material piled up can't jump over ground in its way, so a pile's
+// sides that would come up again in a pit beyond its foot don't count.
+export function spread( ni, count, starts, thickness ) {
+
+	const mask = new Uint8Array( count );
+	const stack = [];
+	let total = 0;
+	const visit = n => {
+
+		if ( n < 0 || n >= count || mask[ n ] ) return;
+		const t = thickness( n );
+		if ( ! ( t > 0 ) ) return;
+		mask[ n ] = 1;
+		total += t;
+		stack.push( n );
+
+	};
+	for ( const n of starts ) visit( n );
+	while ( stack.length ) {
+
+		const n = stack.pop();
+		const i = n % ni;
+		if ( i > 0 ) visit( n - 1 );
+		if ( i < ni - 1 ) visit( n + 1 );
+		visit( n - ni );
+		visit( n + ni );
+
+	}
+
+	return { mask, total };
+
+}
+
 const chunkKey = ( cx, cz ) => ( cx + 32768 ) * 65536 + ( cz + 32768 );
 
 // Chunks that hold any node between min and max (edge nodes belong to two chunks).
@@ -230,8 +264,8 @@ const owns = ( li, lj ) => li < CELLS && lj < CELLS;
 // Designs (see setDesign) are { type: 'cut' | 'fill', order() -> number, bounds() -> { minX, maxX,
 // minZ, maxZ }, top (what its surface is made of) } and, for cuts, height( x, z ) (Infinity where
 // it doesn't cut) and optionally heightFinal( x, z ) once any animation has finished; for fills,
-// solve( nodes ) -> Float32Array of top heights, given every node in its bounds as
-// { count, x, z, before, owned, cellArea } (owned: counts toward volumes; edge nodes come twice).
+// solve( nodes ) -> Float32Array of top heights, given the grid of nodes in its bounds as
+// { ni, nj, count, x, z, before, cellArea }, row by row (before is NaN where there's no ground).
 export class Terrain extends EventDispatcher {
 
 	constructor( { tiles, ground, models, flattening, getGround } ) {
@@ -768,48 +802,47 @@ export class Terrain extends EventDispatcher {
 
 	applyFill( design, chunks ) {
 
-		const bounds = design.bounds();
-		const parts = chunks.map( chunk => [ chunk, nodeRange( chunk, bounds ) ] ).filter( ( [ , range ] ) => range );
-		let count = 0;
-		for ( const [ , r ] of parts ) count += ( r.l1 - r.l0 + 1 ) * ( r.m1 - r.m0 + 1 );
-		const nodes = { count, x: new Float32Array( count ), z: new Float32Array( count ), before: new Float32Array( count ), owned: new Uint8Array( count ), cellArea: CELL_AREA };
-		let n = 0;
-		for ( const [ chunk, range ] of parts ) {
+		const { minX, maxX, minZ, maxZ } = design.bounds();
+		const i0 = Math.ceil( minX / CELL );
+		const j0 = Math.ceil( minZ / CELL );
+		const ni = Math.floor( maxX / CELL ) - i0 + 1;
+		const nj = Math.floor( maxZ / CELL ) - j0 + 1;
+		const count = Math.max( 0, ni * nj );
+		const nodes = { ni, nj, count, x: new Float32Array( count ), z: new Float32Array( count ), before: new Float32Array( count ), cellArea: CELL_AREA };
+		const set = new Set( chunks );
+		for ( let n = 0; n < count; n ++ ) {
 
-			this.forRange( chunk, range, ( k, x, z, owned ) => {
-
-				nodes.x[ n ] = x;
-				nodes.z[ n ] = z;
-				nodes.before[ n ] = chunk.surface[ k ];
-				nodes.owned[ n ] = owned ? 1 : 0;
-				n ++;
-
-			} );
+			const i = i0 + n % ni;
+			const j = j0 + Math.floor( n / ni );
+			const chunk = this.owner( i, j );
+			nodes.x[ n ] = i * CELL;
+			nodes.z[ n ] = j * CELL;
+			nodes.before[ n ] = set.has( chunk ) ? chunk.surface[ ( j - chunk.j0 ) * NODES + i - chunk.i0 ] : NaN;
 
 		}
 
 		const tops = count ? design.solve( nodes ) : null;
-		n = 0;
-		for ( const [ chunk, range ] of parts ) {
+		const fills = new Map( chunks.map( chunk => [ chunk, 0 ] ) );
+		for ( let n = 0; tops && n < count; n ++ ) {
 
-			let fill = 0;
-			this.forRange( chunk, range, ( k, x, z, owned ) => {
+			const height = tops[ n ];
+			const before = nodes.before[ n ];
+			if ( ! ( height > before + 1e-5 ) ) continue;
+			const i = i0 + n % ni;
+			const j = j0 + Math.floor( n / ni );
+			const owner = this.owner( i, j );
+			fills.set( owner, fills.get( owner ) + height - before );
+			this.forCopies( i, j, ( chunk, k ) => {
 
-				const height = tops ? tops[ n ] : - Infinity;
-				if ( height > chunk.surface[ k ] + 1e-5 ) {
-
-					if ( owned ) fill += height - chunk.surface[ k ];
-					chunk.surface[ k ] = height;
-					chunk.top[ k ] = design.top;
-
-				}
-
-				n ++;
+				if ( ! set.has( chunk ) ) return;
+				chunk.surface[ k ] = height;
+				chunk.top[ k ] = design.top;
 
 			} );
-			chunk.contrib.set( design.key, { cut: 0, fill: fill * CELL_AREA } );
 
 		}
+
+		for ( const [ chunk, fill ] of fills ) chunk.contrib.set( design.key, { cut: 0, fill: fill * CELL_AREA } );
 
 	}
 
@@ -1549,13 +1582,9 @@ function placeCone( w, x, z, volume, tan, radius, mat ) {
 
 	}
 
-	const added = apex => {
-
-		let sum = 0;
-		for ( let n = 0; n < w.n; n ++ ) sum += Math.max( 0, apex - drop[ n ] - w.surface[ n ] );
-		return sum * CELL_AREA;
-
-	};
+	const start = [ w.nearest( x, z ) ];
+	const thickness = apex => n => apex - drop[ n ] - w.surface[ n ];
+	const added = apex => spread( w.ni, w.n, start, thickness( apex ) ).total * CELL_AREA;
 	let hi = lo + 1;
 	for ( let i = 0; i < 40 && added( hi ) < volume; i ++ ) hi = lo + ( hi - lo ) * 2;
 	for ( let i = 0; i < 60; i ++ ) {
@@ -1568,11 +1597,12 @@ function placeCone( w, x, z, volume, tan, radius, mat ) {
 
 	// Scale the last bit so exactly `volume` goes down.
 	const apex = hi;
-	const scale = volume / added( apex );
+	const { mask, total } = spread( w.ni, w.n, start, thickness( apex ) );
+	const scale = volume / ( total * CELL_AREA );
 	let fits = true;
 	for ( let n = 0; n < w.n; n ++ ) {
 
-		const amount = Math.max( 0, apex - drop[ n ] - w.surface[ n ] ) * scale;
+		const amount = mask[ n ] ? ( apex - drop[ n ] - w.surface[ n ] ) * scale : 0;
 		if ( amount <= 0 ) continue;
 		if ( w.isEdge( n ) ) fits = false;
 		w.give( n, amount, mat );
