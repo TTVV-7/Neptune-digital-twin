@@ -66,14 +66,15 @@ export function cleanQuery( value ) {
 
 }
 
-// Only what the globe needs from a Nominatim place.
+// Only what the globe needs from a Nominatim place. Its type is OpenStreetMap's ('bridge',
+// 'motorway', 'city'...): a bridge starts on its deck (src/drive-app/spawn.js).
 function toResult( place ) {
 
 	const lat = Number( place?.lat );
 	const lon = Number( place?.lon );
 	const name = typeof place?.display_name === 'string' ? place.display_name.replace( /[\u0000-\u001f\u007f]/g, '' ).trim().slice( 0, 200 ) : '';
 	if ( ! name || ! Number.isFinite( lat ) || ! Number.isFinite( lon ) || Math.abs( lat ) > 90 || Math.abs( lon ) > 180 ) return null;
-	const type = typeof place.addresstype === 'string' ? place.addresstype : typeof place.type === 'string' ? place.type : '';
+	const type = typeof place.type === 'string' ? place.type : typeof place.addresstype === 'string' ? place.addresstype : '';
 	return { name, lat, lon, type: type.slice( 0, 40 ) };
 
 }

@@ -185,6 +185,13 @@ describe( 'World Drive, desktop', () => {
 		assert.equal( await page.locator( '.search-status' ).isVisible(), false );
 		await flown( page );
 
+		// A bridge found by the search starts on its deck, like the bridges among the spots.
+		await input.fill( 'Golden Gate' );
+		await input.press( 'Enter' );
+		await page.locator( '.results button' ).first().click();
+		assert.deepEqual( await page.evaluate( () => [ window.drive.panel.pinned.name, window.drive.panel.pinned.deck ] ), [ 'Golden Gate Bridge', true ] );
+		await flown( page );
+
 	} );
 
 	test( 'a start spot drops in on the test pad and drives', async () => {
