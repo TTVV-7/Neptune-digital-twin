@@ -132,8 +132,11 @@ at any site. What each downloaded machine is and where it came from is in
 
 - **Place:** click an item, move the mouse over the ground and click. Or drag the item onto the scene.
   **R** or the mouse wheel rotates it, **Shift**+click places another, **Esc** cancels.
-- **Edit:** click a placed item to select it, drag it to move it, **R** / **Shift+R** to turn it,
-  **Delete** to remove it. **P** shows its exact position and heading.
+- **Edit:** click (or tap) a placed item to select it and drag it to move it. A ring appears around it:
+  drag its round knob to turn it (**Shift** snaps to 15°), or use **R** / **Shift+R**, or the wheel
+  while you drag it. A toolbar over it turns it 15° (hold, or **Shift**+click, for 90°), drives it if
+  it's a vehicle or machine, opens its settings (**P**: exact position and heading) and deletes it,
+  with **Undo** for 5 seconds. **Delete** removes it too.
 - **Look around** while editing by holding the right mouse button.
 - **Save:** what you place is saved in this browser. **Export layout** downloads it as a file and
   **Import** loads one, e.g. to share a layout or move it to another computer.
@@ -141,7 +144,7 @@ at any site. What each downloaded machine is and where it came from is in
   mesh inside it (rail cars, parked trucks, a shed) is pressed flat to the lowest ground around it,
   to clear space for a layout. Draw it a little bigger than what you want gone: Google's mesh is made
   of large triangles, and ones that cross the edge slope up to the uncleared side. Areas show as red
-  boxes while the library is open; select one to move, turn, resize (**P**) or delete it, which brings
+  boxes while the library is open; select one to move, turn, resize or delete it, which brings
   the original back. It only changes what this app draws; Google's data isn't touched.
 
 Two kinds of items:
@@ -181,7 +184,10 @@ npm run add-asset -- https://polyhaven.com/a/<asset> --id oil-drum --category Ma
 
 The tools at the top of the library (**L**, under *Tools*) mark out and shape the ground. Each one is
 drawn by dragging a rectangle on the ground (lined up with the way you're looking) or clicking a spot,
-and is then selected, moved, turned, resized (**P**) and deleted like any other item.
+and is then selected, moved, turned and deleted like any other item. To resize a selected area, drag
+the squares on its corners and edges (the opposite side stays put; sizes snap to 0.5 m, **Shift** for
+any size, and a label shows the size as you go), type it in with **Size** on its toolbar, or use the P
+panel, which has the size at the top. A pit has an arrow in the middle: drag it down to dig deeper.
 
 - **Laydown area:** a coloured rectangle laid on the ground with its name, size and area floating
   above it, e.g. *Laydown A · 40 × 25 m · 1,000 m²*. The P panel sets its name, colour and a note, and
@@ -192,7 +198,8 @@ and is then selected, moved, turned, resized (**P**) and deleted like any other 
 - **Stockpile:** click for a cone of material (50 m³ to start), or drag for a ridge pile that fills
   the rectangle. It pours itself: material falls and builds up at the material's natural slope
   (gravel, sand, topsoil, excavated soil, road base, riprap, coal, potash). The P panel shows its
-  volume, weight, height and truck loads.
+  volume, weight, height and truck loads. Resizing a ridge keeps its height limit, and the label says
+  how much the new footprint holds; a cone has one handle on its edge, which sets its volume.
 - **Flatten area:** see above; clears Google's mesh where you want clear ground.
 
 Pits and piles are real ground: you can walk into a pit, drive over a pile, and things you place
@@ -280,6 +287,8 @@ src/raycast.js      fast raycasting (three-mesh-bvh) for walking and snapping
 src/library.js      loads the library (downloaded models + built-in pieces)
 src/procedural.js   built-in site pieces generated in code
 src/sidebar.js      the library sidebar: placing, selecting, moving, drawing flatten areas
+src/handles.js      on-map handles for the selected item: turning, resizing areas, a pit's depth
+src/toolbar.js      the toolbar over the selected item, its size editor and Undo after deleting
 src/flatten.js      flatten areas: press Google's mesh flat inside a rectangle
 src/drive.js        race mode: driving, jumps, speedometer
 src/layout.js       saves placed items in the browser; export/import
