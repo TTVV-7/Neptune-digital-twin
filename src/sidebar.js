@@ -267,6 +267,9 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 			cancelPlacing();
 			cancelDrawing();
+			// What only shows with the library open (an excavation, say) doesn't stay selected out of
+			// sight, with its keys in the Controls panel and Delete removing it unseen.
+			if ( selected && ! isVisible( selected.pivot ) ) select( null );
 
 		}
 
