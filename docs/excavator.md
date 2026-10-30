@@ -45,9 +45,10 @@ when the bucket opens. Dug material swells by a quarter, so each 1.0 m³ taken o
 *Excavated soil* (34°). Freshly dug walls stand up to about 65° and slump beyond that.
 
 The machine rests on the ground under its tracks, tilting with it, and you can drive it into its
-own hole or up a pile. It won't climb a wall steeper than about 60°. Getting out parks it as it
-stands, tilted on the pile or down in the hole, and it's saved like that until you move or turn
-it. Other vehicles park the same way.
+own hole or up a pile. It won't climb a wall steeper than about 60°, and containers, walls and
+other things placed in the way stop its tracks ("Blocked"), and its tail when the house is turned
+so that it leads. Getting out parks it as it stands, tilted on the pile or down in the hole, and
+it's saved like that until you move or turn it. Other vehicles park the same way.
 
 The readouts:
 

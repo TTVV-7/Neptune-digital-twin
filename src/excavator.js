@@ -40,6 +40,9 @@ const BITES = 3;
 const CLEARANCE = 0.4;
 // Dumping into a truck: its bed must be this close to the dump direction.
 const TRUCK_ANGLE = 50;
+// The ground under a corner of the tracks may rise this much (a share of their height) in a frame
+// while climbing a slope; more is something to climb over, such as a container or a wall's top.
+const STEP = 0.5;
 // Rates the arm follows the controls at while not digging.
 const RATES = { swing: 70 * DEG, u: 3, v: 3, phi: 150 * DEG };
 const SOIL = findMaterial( 'soil' );
@@ -171,6 +174,11 @@ class Excavator {
 		this.pitch = 0;
 		this.roll = 0;
 		this.first = true;
+		// The machine rests on the ground felt near the ends of the tracks, under the middle of each.
+		this.along = this.track.length / 2 - this.track.height * 0.35;
+		this.across = ( this.track.width - this.track.shoe ) / 2;
+		// The ground under the tracks' outside corners as of the last frame, to tell what's in the way.
+		this.edges = [ null, null, null, null ];
 
 		// Where to dig: aim (degrees right of straight ahead over the tracks) and reach (metres from
 		// the swing axis); which side the spoil goes.
@@ -265,26 +273,73 @@ class Excavator {
 		const target = throttle > 0 ? top : throttle < 0 ? - this.drive.reverse / KMH : 0;
 		const rate = target === 0 || Math.sign( target ) !== Math.sign( this.speed ) ? this.drive.brake : this.drive.accel;
 		this.speed += MathUtils.clamp( target - this.speed, - rate * dt, rate * dt );
+		const from = { east: this.east, north: this.north, heading: this.heading };
 		this.heading = wrapDegrees( this.heading + turn * this.tuning.turn * dt );
 
 		const step = this.speed * dt;
-		if ( step === 0 ) return;
-		const rad = this.heading * DEG;
-		const sign = Math.sign( step );
-		_dir.set( - Math.sin( rad ) * sign, 0, Math.cos( rad ) * sign );
-		enuToLocal( this.east, this.north, this.ground + this.track.height * 0.9, _p );
-		const hit = this.driver.cast( _p, _dir, Math.abs( step ) + this.track.length / 2 + 0.1 );
-		const wall = hit?.face && Math.abs( hit.face.normal.clone().transformDirection( hit.object.matrixWorld ).y ) < 0.5;
-		if ( wall ) {
+		if ( step !== 0 && this.blocked( step ) ) {
 
 			this.speed = 0;
 			this.flash( 'Blocked' );
-			return;
+
+		} else if ( step !== 0 ) {
+
+			const rad = this.heading * DEG;
+			this.east += Math.sin( rad ) * step;
+			this.north += Math.cos( rad ) * step;
 
 		}
 
-		this.east += Math.sin( rad ) * step;
-		this.north += Math.cos( rad ) * step;
+		// A corner of the tracks that would come down on top of something rather than climb the ground
+		// (the end of a container beside them, say) means that's in the way: don't move or turn into it.
+		if ( this.east === from.east && this.north === from.north && this.heading === from.heading ) return;
+		const edges = this.trackGround( this.track.length / 2, this.track.width / 2 );
+		if ( edges.some( ( h, i ) => h !== null && this.edges[ i ] !== null && h > this.edges[ i ] + STEP * this.track.height ) ) {
+
+			Object.assign( this, from );
+			this.speed = 0;
+			this.flash( 'Blocked' );
+
+		}
+
+	}
+
+	// Whether something solid is in the way of moving `step` metres along the heading (back if
+	// negative): rays at track height across the width of the tracks, reaching just past their ends,
+	// and one at the counterweight's height where the house is turned so its tail leads.
+	blocked( step ) {
+
+		const rad = this.heading * DEG;
+		const sign = Math.sign( step );
+		const fx = Math.sin( rad );
+		const fz = Math.cos( rad );
+		_dir.set( - fx * sign, 0, fz * sign );
+		const { track } = this;
+		const { house, swing } = this.rig.spec;
+		const rays = [ - 1, - 0.5, 0, 0.5, 1 ].map( s => ( { right: s * ( track.width / 2 - 0.05 ), up: track.height * 0.9, reach: track.length / 2 + 0.1 } ) );
+		// The tail swings round with the house: how far it reaches ahead of the swing axis, and right.
+		const ahead = - Math.cos( this.arm.swing ) * house.tail;
+		if ( ahead * sign > track.length / 2 ) rays.push( { right: Math.sin( this.arm.swing ) * house.tail, up: ( swing + house.counterweight ) / 2, reach: ahead * sign + 0.1 } );
+		return rays.some( ( { right, up, reach } ) => {
+
+			enuToLocal( this.east + fz * right, this.north - fx * right, this.ground + up, _p );
+			const hit = this.driver.cast( _p, _dir, Math.abs( step ) + reach );
+			return hit?.face && Math.abs( hit.face.normal.clone().transformDirection( hit.object.matrixWorld ).y ) < 0.5;
+
+		} );
+
+	}
+
+	// The ground at four points `along` ahead and behind the swing axis and `across` to each side:
+	// front left, front right, rear left, rear right.
+	trackGround( along, across ) {
+
+		const rad = this.heading * DEG;
+		const fx = Math.sin( rad );
+		const fz = Math.cos( rad );
+		this.driver.y = this.ground;
+		return [ [ 1, - 1 ], [ 1, 1 ], [ - 1, - 1 ], [ - 1, 1 ] ].map( ( [ a, s ] ) =>
+			this.driver.groundAt( this.east + fx * along * a + fz * across * s, this.north + fz * along * a - fx * across * s ) );
 
 	}
 
@@ -292,14 +347,9 @@ class Excavator {
 	// corners where the ground isn't flat.
 	settle( dt ) {
 
-		const rad = this.heading * DEG;
-		const fx = Math.sin( rad );
-		const fz = Math.cos( rad );
-		const along = this.track.length / 2 - this.track.height * 0.35;
-		const across = ( this.track.width - this.track.shoe ) / 2;
-		this.driver.y = this.ground;
-		const corners = [ [ 1, - 1 ], [ 1, 1 ], [ - 1, - 1 ], [ - 1, 1 ] ].map( ( [ a, s ] ) =>
-			this.driver.groundAt( this.east + fx * along * a + fz * across * s, this.north + fz * along * a - fx * across * s ) );
+		const { along, across } = this;
+		const corners = this.trackGround( along, across );
+		this.edges = this.trackGround( this.track.length / 2, this.track.width / 2 );
 		const known = corners.filter( h => h !== null );
 		if ( known.length === 0 ) return;
 		const fill = known.reduce( ( a, b ) => a + b, 0 ) / known.length;
