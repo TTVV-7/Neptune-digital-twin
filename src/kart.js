@@ -35,6 +35,14 @@ const STEER_LOCK = 0.45;
 // camera, and the head that camera would otherwise be inside.
 const EYE = { ahead: - 0.08, right: 0, up: 0.94 };
 
+// Boxes in which decals are projected onto it (see src/drive-app/paint.js): over the nose, onto the
+// side pods, and a number on the nose.
+const KART_DECALS = {
+	top: { at: [ 0, 0.2, - 0.61 ], size: [ 0.3, 0.42, 0.3 ] },
+	side: { at: [ 0.6, 0.155, 0.01 ], size: [ 0.6, 0.17, 0.25 ] },
+	bonnet: { at: [ 0, 0.2, - 0.62 ], size: 0.24, deep: 0.3 },
+};
+
 // Tuning for race mode (see drive.js specFor): light and quick.
 export const KART_DRIVE = { topSpeed: 100, accel: 9, brake: 16, reverse: 25, cab: EYE };
 
@@ -101,6 +109,16 @@ export function makeKart() {
 
 	// The in-seat camera sits inside the helmet: hide the head then (see drive.js).
 	head.userData.hideInCab = true;
+
+	// What World Drive's Garage repaints (src/drive-app/paint.js): the bodywork and the rims; and
+	// where its decals go, on the nose and the side pods.
+	kart.traverse( o => {
+
+		if ( o.material === PAINT() && o.parent === kart ) o.userData.paint = 'body';
+		else if ( o.material === RIM() ) o.userData.paint = 'rim';
+
+	} );
+	kart.userData.decals = KART_DECALS;
 
 	let roll = 0;
 	kart.userData.onDrive = ( { steer, speed, dt } ) => {
