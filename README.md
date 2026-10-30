@@ -10,7 +10,9 @@ Google's photorealistic 3D map, and you can drop your own detailed models on top
 - **Controls:** first-person walking with gravity and collisions, or free flying.
 - **Site planning:** a library of vehicles, construction equipment and site pieces at real scale,
   laydown areas, excavations and stockpiles with volumes, and machines you can drive.
-- **Accounts (optional):** sign in with Google to keep layouts in your account and share them by link.
+- **Accounts (optional):** sign in with Google to keep layouts in your account and share them by link,
+  hosted on Cloudflare or Vercel.
+- **Premium (work in progress, off until set up):** a Pro equipment pack bought once with Stripe.
 
 The step-by-step plan, with prompts you can paste to Claude, is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
@@ -210,7 +212,8 @@ Walls, containers and Google's buildings stop you, so flatten a strip first for 
 
 ## Accounts: sign in and share layouts
 
-When the app is hosted on its Cloudflare Worker (`worker/`, `wrangler.jsonc`), the library footer has
+When the app is hosted on its Cloudflare Worker (`worker/`, `wrangler.jsonc`) or on Vercel with a
+database (below), the library footer has
 **Sign in with Google**. Signed in, **Layouts** saves what you've placed to your account (it then
 saves itself as you work), opens it on another computer, and makes a read-only **share link** for
 people who should see the plan but not change it. Without the Worker (e.g. plain `npm run dev`) none of
@@ -219,6 +222,26 @@ this shows and layouts are saved in the browser as before.
 The Worker also hands out the Google Maps key to signed-in people and share-link viewers, so the key
 doesn't have to be built into the public site. Setting it up (a Google sign-in client, a D1 database,
 `npm run deploy`), trying it locally and the security model are in [docs/accounts.md](docs/accounts.md).
+
+## Hosting on Vercel
+
+The same app and API run on Vercel: `vercel.json` builds the site without the Maps key and sends
+`/api/*` to one Vercel Function (`api/index.js`), which runs the Worker's code with a Postgres
+database (Neon, from the project's *Storage* tab) in place of D1. The tables are made by themselves;
+there's no migration to run. Without a database or a sign-in client the site works like any static
+host. Creating the project, the database, the environment variables (`GOOGLE_CLIENT_ID`,
+`GOOGLE_MAPS_API_KEY`, `ALLOWED_EMAILS`) and the Google settings are in
+[docs/deploy-vercel.md](docs/deploy-vercel.md).
+
+## Premium equipment (work in progress)
+
+Library items marked `"premium": true` in `library.json` (for now the cranes, lifts, forklift,
+telehandler and container handler) form a **Pro equipment** pack, bought once through a Stripe
+Payment Link. While it's locked, those cards show a **Pro** badge and picking one explains how to
+buy it; Stripe's webhook tells the server who has paid. Layouts and share links with premium items
+always open for everyone. It's **off** until the Payment Link, its id and the webhook's signing secret
+are set, and then only in the app: the models are still public files. Stripe setup (test mode first),
+testing with test cards and the known gaps are in [docs/premium.md](docs/premium.md).
 
 ## About the Sketchfab model
 
@@ -250,7 +273,11 @@ src/earthworks.js   excavations and stockpiles, and their tools; src/pour.js ani
 src/laydown.js      laydown areas: coloured site areas draped on the ground, with labels
 src/excavator.js    digging with an excavator; src/excavator-model.js builds the machines
 src/cloud.js        sign in with Google, layouts in your account, share links (needs the Worker)
-worker/             the Cloudflare Worker: accounts and layouts API (D1), serves the built site
+src/premium.js      the Pro equipment pack: locked cards and the buy dialog (needs the Worker)
+worker/             the Cloudflare Worker: accounts, layouts and premium API (D1), serves the built site
+worker/premium.js   premium settings and the Stripe webhook
+worker/vercel.js    the Worker as a Vercel Function; worker/postgres.js gives it D1's API on Postgres
+api/index.js        the Vercel Function (vercel.json sends /api/* to it)
 scripts/add-asset.mjs   imports a model from Sketchfab or Poly Haven into public/library
 public/library/     downloaded models, library.json catalog, thumbs/ and CREDITS.md
 src/geo.js          lat/lon <-> local metres
@@ -272,6 +299,8 @@ Add the site's origin (for example `https://yourname.github.io/*`) to the API ke
 
 For accounts and share links, host it on its Cloudflare Worker instead: `npm run deploy` builds the
 site without the environment key and deploys the Worker (see [docs/accounts.md](docs/accounts.md)).
+Or on Vercel, whose build (`npm run build:server`) also leaves the key out: see
+[docs/deploy-vercel.md](docs/deploy-vercel.md).
 
 ## Google's terms, in short
 

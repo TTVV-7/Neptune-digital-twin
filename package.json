@@ -15,6 +15,7 @@
     "dev:api": "node scripts/dev-api.mjs",
     "test:worker": "node --test scripts/test-worker.mjs",
     "test:accounts-ui": "node --test scripts/test-accounts-ui.mjs",
+    "test:premium-ui": "node --test scripts/test-premium-ui.mjs",
     "deploy": "vite build --mode cloudflare && wrangler deploy"
   },
   "dependencies": {

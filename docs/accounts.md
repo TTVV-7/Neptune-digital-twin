@@ -5,6 +5,10 @@ account, so a layout follows you to another computer, and share a read-only link
 still saves what you place in your browser as before, signed in or not. On a plain static host or
 with `npm run dev` on its own there's no Worker, and none of this shows.
 
+The same Worker code also runs on Vercel with a Postgres database: see
+[deploy-vercel.md](deploy-vercel.md). Premium equipment bought with Stripe builds on accounts:
+see [premium.md](premium.md).
+
 ## Using it
 
 - **Sign in:** open the library (**L**). Under Export / Import / Clear there's a **Sign in with
@@ -96,13 +100,17 @@ Without `TWIN_API`, `npm run dev` works exactly as before.
 
 Tests (both run everything on your computer, with test keys standing in for Google's):
 
-- `npm run test:worker`: the API against `wrangler dev` with a throwaway database: sign-in and every
-  kind of bad token, allowed accounts, layouts, other people's layouts, sharing, CSRF, size limits,
-  sign-out.
+- `npm run test:worker`: the API against `wrangler dev` with a throwaway database, and again as the
+  Vercel Function on an in-memory Postgres: sign-in and every kind of bad token, allowed accounts,
+  layouts, other people's layouts, sharing, CSRF, size limits, premium and the Stripe webhook,
+  sign-out. `TEST_WORKER_TARGETS=d1` (or `postgres`) runs one of the two.
 - `npm run test:accounts-ui`: the same in a browser (needs `npm i -D playwright` and
   `npx playwright install chromium`): sign in, save, reload, open, autosave, a conflicting save,
-  sharing, the read-only view and Save a copy, sign out, and the app without the Worker.
-  `TEST_SCREENSHOTS=shots` saves pictures.
+  sharing, the read-only view and Save a copy, sign out, the app without the Worker, and that the
+  premium items place as usual while premium isn't set up. `TEST_SCREENSHOTS=shots` saves pictures.
+- `npm run test:premium-ui`: premium in a browser, with made-up Stripe settings and signed test
+  webhooks: locked items and their dialog, the buy link, unlocking, and shared layouts with premium
+  items.
 
 ## How it works
 
@@ -117,15 +125,19 @@ Tests (both run everything on your computer, with test keys standing in for Goog
 
 | Request | What it does |
 | --- | --- |
-| `GET /api/config` | `{ googleClientId, signedIn, user?, mapsKey? }`; `?view=<token>` adds the key for a valid share link |
-| `POST /api/session` `{ credential }` | Sign in with a Google ID token; sets the session cookie |
+| `GET /api/config` | `{ googleClientId, signedIn, user?, mapsKey?, premium }`; `?view=<token>` adds the key for a valid share link |
+| `POST /api/session` `{ credential }` | Sign in with a Google ID token; sets the session cookie. Answers `{ user, hasMapsKey, premium }` |
 | `DELETE /api/session` | Sign out |
-| `GET /api/me` | The signed-in user |
+| `GET /api/me` | The signed-in user, and `premium` |
 | `GET /api/layouts?site=` | Your layouts: `id, name, updatedAt, shared, shareToken` |
 | `POST /api/layouts` `{ site, name, data }` | Save a new one (201) |
 | `GET / PUT / DELETE /api/layouts/:id` | Read, change (`name` and/or `data`), delete. `PUT` with `If-Match: "<updatedAt>"` (or `updatedAt` in the body) is refused with 409 and the newer `updatedAt` if someone saved in between |
 | `POST / DELETE /api/layouts/:id/share` | Share by link (returns `shareToken`; sharing again keeps the same link) / stop |
 | `GET /api/shared/:token` | Anyone with the link: `name, site, data, updatedAt, owner` (first name) |
+| `POST /api/stripe/webhook` | Stripe's webhook for premium, checked by its signature ([premium.md](premium.md)) |
+
+`premium` is `{ enabled: false }` until Stripe is set up, then `{ enabled: true, link, price,
+unlocked, clientReferenceId? }`.
 
 ## Security
 
@@ -141,7 +153,8 @@ Tests (both run everything on your computer, with test keys standing in for Goog
   used to sign in. Sessions last 30 days; signing out deletes it on the server.
 - **Cross-site requests.** Everything that changes something must be `application/json` and carry
   an `Origin` equal to the site's own; anything else gets 403 or 415. Other sites can't send JSON
-  without a CORS preflight, which the Worker never answers.
+  without a CORS preflight, which the Worker never answers. The one exception is Stripe's webhook,
+  which comes from Stripe's servers rather than a page and is checked by its signature instead.
 - **Your layouts are yours.** Every query includes the owner, and someone else's layout is
   answered with 404, the same as one that doesn't exist. All SQL uses bound parameters. Request
   bodies are limited to 1 MB, a layout to 1 MB as stored, names to 100 characters, and each

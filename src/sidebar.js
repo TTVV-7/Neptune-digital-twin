@@ -24,6 +24,8 @@ const DRAG_TYPE = 'application/x-library-item';
 // A press that moves less than this many pixels (a finger: TOUCH_SLOP) is a click, not a drag.
 const CLICK_SLOP = 5;
 const TOUCH_SLOP = 12;
+// The padlock on a locked premium item's Pro badge.
+const LOCK_ICON = '<svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M3.5 5.5V3.5a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="2" y="5.5" width="8" height="6" rx="1" fill="currentColor"/></svg>';
 
 const _ndc = new Vector2();
 const _offset = new Vector3();
@@ -35,6 +37,10 @@ const _center = new Vector3();
 // Shift+click keeps placing more of the same. Placed items can be clicked to select, dragged to
 // move, turned with R and removed with Delete. Tools at the top (addTool) draw areas or pick
 // points on the ground instead: flatten areas, and whatever other modules add.
+//
+// Premium items (library.json "premium": true) can be locked by a gate (setGate, from premium.js):
+// their cards show a Pro badge, and picking one asks the gate instead of placing it. Only picking
+// new ones is gated; placed items, and layouts that have them, load as always.
 export function createSidebar( { library, models, layout, scene, camera, canvas, controls, getGround, getPlayer, panel, isDriving, onError } ) {
 
 	const root = document.getElementById( 'library' );
@@ -54,6 +60,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	let suppressClick = false;
 	let pointer = null; // last pointer position over the scene, in client pixels
 	let drawing = null; // { tool, start, heading, outline } while a tool is in use
+	let gate = null; // { isLocked( item ), onLocked( item ) }
 
 	// --- the list ------------------------------------------------------------------------
 
@@ -131,6 +138,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		const card = document.createElement( 'button' );
 		card.type = 'button';
 		card.className = 'card';
+		card.dataset.item = item.id;
 		card.draggable = true;
 		card.title = item.source ? `${ item.source.title } by ${ item.source.author } (${ item.source.license })` : 'Built in';
 		const thumb = document.createElement( 'img' );
@@ -146,8 +154,32 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		// Longest side first, whichever way the item faces.
 		dims.textContent = d ? `${ Math.max( d.length, d.width ) } × ${ Math.min( d.length, d.width ) } × ${ d.height } m` : '';
 		card.append( thumb, name, dims );
-		card.addEventListener( 'click', () => startPlacing( item ) );
+		let badge = null;
+		if ( item.premium ) {
+
+			badge = document.createElement( 'span' );
+			badge.className = 'pro';
+			badge.innerHTML = `${ LOCK_ICON }Pro`;
+			badge.hidden = true;
+			card.append( badge );
+
+		}
+
+		card.addEventListener( 'click', () => {
+
+			if ( isLocked( item ) ) pickLocked( item );
+			else startPlacing( item );
+
+		} );
 		card.addEventListener( 'dragstart', e => {
+
+			if ( isLocked( item ) ) {
+
+				e.preventDefault();
+				pickLocked( item );
+				return;
+
+			}
 
 			e.dataTransfer.setData( DRAG_TYPE, item.id );
 			e.dataTransfer.effectAllowed = 'copy';
@@ -161,7 +193,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 		} );
 		list.append( card );
-		cards.push( { card, item, thumb } );
+		cards.push( { card, item, thumb, badge } );
 
 	}
 
@@ -259,6 +291,38 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	} );
 	updateCount();
 
+	// --- premium items -------------------------------------------------------------------
+
+	function isLocked( item ) {
+
+		return !! item.premium && !! gate?.isLocked( item );
+
+	}
+
+	function pickLocked( item ) {
+
+		cancelPlacing();
+		cancelDrawing();
+		select( null );
+		gate.onLocked( item );
+
+	}
+
+	// null unlocks everything, as it is without premium.
+	function setGate( value ) {
+
+		gate = value;
+		for ( const { card, item, badge } of cards ) {
+
+			if ( ! badge ) continue;
+			const locked = isLocked( item );
+			badge.hidden = ! locked;
+			card.classList.toggle( 'locked', locked );
+
+		}
+
+	}
+
 	// --- placing -------------------------------------------------------------------------
 
 	async function startPlacing( item, { fromDrag = false, heading } = {} ) {
@@ -336,7 +400,8 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		setGhost( entry, false );
 		models.apply( entry );
 		updateCount();
-		if ( keepPlacing ) startPlacing( item, { heading } );
+		// Shift+click places another, unless it has been locked meanwhile (signed out, say).
+		if ( keepPlacing && ! isLocked( item ) ) startPlacing( item, { heading } );
 		else select( entry, showPanel );
 
 	}
@@ -748,6 +813,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		deselect: () => select( null ),
 		select: entry => select( entry ),
 		addTool,
+		setGate,
 	};
 
 }

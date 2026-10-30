@@ -2,6 +2,7 @@ import './cloud.css';
 import { SITE } from './config.js';
 import { isTyping } from './walk.js';
 import { button, createLayoutsDialog, el } from './cloud-dialog.js';
+import { createPremium } from './premium.js';
 
 // Your account, when the site runs on its Cloudflare Worker (worker/index.js): sign in with
 // Google, save layouts to your account, open them on another computer, and share a read-only
@@ -11,6 +12,9 @@ import { button, createLayoutsDialog, el } from './cloud-dialog.js';
 //
 // A share link is the app's address with ?view=<token>: it opens that layout without touching
 // the viewer's own (layout.setLocalSaving( false )) until they choose Save a copy.
+//
+// When the server sells premium equipment (/api/config's premium.enabled), premium.js locks the
+// Pro equipment pack in the library until your account has bought it.
 
 const API = 'api/';
 const CONFIG_TIMEOUT = 4000;
@@ -26,18 +30,19 @@ const KEEPALIVE_LIMIT = 60000;
 
 let configPromise = null;
 let dialog = null;
+let premium = null;
 
 // Keys pressed in the dialog mustn't also walk, turn or delete things in the scene. The app's
 // key handlers listen on window in the capture phase; this one is added as the module loads,
 // before any of them, so it can stop them. Text fields are left alone: the app ignores typing.
 window.addEventListener( 'keydown', e => {
 
-	if ( dialog?.isOpen() && ! isTyping( e ) ) e.stopImmediatePropagation();
+	if ( ( dialog?.isOpen() || premium?.isOpen() ) && ! isTyping( e ) ) e.stopImmediatePropagation();
 
 }, true );
 
-// GET /api/config, once: { googleClientId, signedIn, user?, mapsKey? }, or null when there is
-// no Worker behind this site. Started by main.js as the page boots.
+// GET /api/config, once: { googleClientId, signedIn, user?, mapsKey?, premium }, or null when
+// there is no Worker behind this site. Started by main.js as the page boots.
 export function loadConfig() {
 
 	configPromise ??= fetchConfig();
@@ -74,7 +79,7 @@ async function fetchConfig() {
 }
 
 // The feature (see FEATURES in main.js).
-export async function setUpCloud( { layout, models, sidebar, tiles, toast, showBanner } ) {
+export async function setUpCloud( { layout, models, sidebar, library, tiles, toast, showBanner } ) {
 
 	const config = await loadConfig();
 	if ( ! config ) {
@@ -95,6 +100,7 @@ export async function setUpCloud( { layout, models, sidebar, tiles, toast, showB
 	let saving = null;
 	let timer = null;
 	let googleButton = null;
+	let google = null;
 
 	// --- the account area at the bottom of the library ------------------------------------
 
@@ -164,6 +170,21 @@ export async function setUpCloud( { layout, models, sidebar, tiles, toast, showB
 		email: () => user?.email ?? '',
 	} );
 
+	if ( config.premium?.enabled ) {
+
+		premium = createPremium( {
+			library,
+			sidebar,
+			toast,
+			showBanner,
+			premium: config.premium,
+			user,
+			fetchMe: () => call( 'GET', 'me' ),
+			renderSignIn: renderGoogleButton,
+		} );
+
+	}
+
 	function render() {
 
 		area.hidden = ! config.googleClientId && ! user;
@@ -185,6 +206,7 @@ export async function setUpCloud( { layout, models, sidebar, tiles, toast, showB
 
 		}
 
+		if ( ! user ) premium?.signedOut();
 		renderStatus();
 
 	}
@@ -219,17 +241,25 @@ export async function setUpCloud( { layout, models, sidebar, tiles, toast, showB
 	function showGoogleButton() {
 
 		if ( ! config.googleClientId || googleButton ) return;
-		googleButton = loadScript( GOOGLE_SCRIPT ).then( () => {
-
-			const google = window.google.accounts.id;
-			google.initialize( { client_id: config.googleClientId, callback: ( { credential } ) => signIn( credential ), ux_mode: 'popup', auto_select: false } );
-			google.renderButton( googleSlot, { theme: 'filled_black', size: 'medium', text: 'signin_with', shape: 'pill', width: 240 } );
-
-		} ).catch( () => {
+		googleButton = renderGoogleButton( googleSlot ).catch( () => {
 
 			note.textContent = 'Google sign-in didn\'t load. Check your connection or ad blocker, then reload the page.';
 
 		} );
+
+	}
+
+	// Google's button in an element: the library's footer, or the premium dialog.
+	function renderGoogleButton( slot ) {
+
+		google ??= loadScript( GOOGLE_SCRIPT ).then( () => {
+
+			const id = window.google.accounts.id;
+			id.initialize( { client_id: config.googleClientId, callback: ( { credential } ) => signIn( credential ), ux_mode: 'popup', auto_select: false } );
+			return id;
+
+		} );
+		return google.then( id => id.renderButton( slot, { theme: 'filled_black', size: 'medium', text: 'signin_with', shape: 'pill', width: 240 } ) );
 
 	}
 
@@ -243,6 +273,7 @@ export async function setUpCloud( { layout, models, sidebar, tiles, toast, showB
 			link = readLink();
 			render();
 			toast( `Signed in as ${ user.email }` );
+			premium?.update( res.premium, user, { announce: true } );
 			// Changes made while signed out go to the current layout now, but ask: by now the
 			// browser's layout may be something else altogether, such as a copy of a shared one.
 			if ( link && fingerprint( layout.getData() ) !== link.fingerprint ) {

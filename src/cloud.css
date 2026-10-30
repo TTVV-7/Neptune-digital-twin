@@ -1,5 +1,6 @@
-/* Your account (cloud.js): the area at the bottom of the library, the Layouts dialog and the
-   banner over a shared layout. Same dark panels as the library. */
+/* Your account (cloud.js): the area at the bottom of the library, the Layouts dialog, the
+   premium dialog (premium.js) and the banner over a shared layout. Same dark panels as the
+   library. */
 
 .cloud-account {
 	display: flex;
@@ -246,6 +247,61 @@ button.link {
 
 .cloud-dialog.busy {
 	cursor: progress;
+}
+
+/* The premium dialog: what's in the Pro equipment pack, the price, and buying it. */
+.premium-dialog .pack {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	display: grid;
+	grid-template-columns: repeat( auto-fill, minmax( 104px, 1fr ) );
+	gap: 8px;
+}
+
+.premium-dialog .pack li {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 6px;
+	border-radius: 6px;
+	background: #1c2731;
+	font-size: 11px;
+	line-height: 1.3;
+}
+
+.premium-dialog .pack img {
+	width: 100%;
+	aspect-ratio: 1;
+	object-fit: contain;
+	border-radius: 4px;
+	background: #2a3844;
+}
+
+.premium-dialog .price {
+	margin: 14px 0 8px;
+	font-size: 15px;
+	font-weight: 600;
+}
+
+.premium-dialog .buying p,
+.premium-dialog .sign-in p {
+	margin: 8px 0 0;
+}
+
+.premium-dialog .buy {
+	display: inline-block;
+	padding: 8px 16px;
+	border-radius: 6px;
+	background: var( --accent );
+	color: #fff;
+	font-weight: 600;
+	text-decoration: none;
+}
+
+.premium-dialog .sign-in .google-button {
+	min-height: 32px;
+	margin-top: 8px;
 }
 
 /* Over a shared layout: what you're looking at, and the way to keep it. Centred in the space

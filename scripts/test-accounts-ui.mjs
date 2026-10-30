@@ -1,18 +1,18 @@
 // npm run test:accounts-ui: signs in, saves, opens, autosaves and shares a layout in a real
-// browser, against `wrangler dev` and the Vite dev server on this machine. Google's sign-in
-// script is replaced by a stand-in that signs in with a test token, and every request that
-// isn't to the local server is blocked, so nothing reaches Google or Cloudflare.
+// browser, against `wrangler dev` and the Vite dev server on this machine, and checks that the
+// premium items place as usual while premium isn't set up. Google's sign-in script is replaced by
+// a stand-in that signs in with a test token, and every request that isn't to the local server is
+// blocked, so nothing reaches Google or Cloudflare.
 //
 // Needs Playwright with Chromium (npm i -D playwright && npx playwright install chromium).
 // TEST_VITE_PORT and TEST_WORKER_PORT pick the ports; TEST_SCREENSHOTS=<folder> saves pictures.
 
 import assert from 'node:assert/strict';
-import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { after, before, test } from 'node:test';
-import { CLIENT_ID, ROOT, makeKey, makeToken, serveKeys, startWorker } from './worker-harness.mjs';
+import { CLIENT_ID, GOOGLE_STUB, makeKey, makeToken, serveKeys, startVite, startWorker } from './worker-harness.mjs';
 
 const require = createRequire( import.meta.url );
 const VITE_PORT = Number( process.env.TEST_VITE_PORT ) || 5199;
@@ -22,21 +22,6 @@ const BASE = `http://127.0.0.1:${ VITE_PORT }`;
 const GOOGLE_SCRIPT = 'https://accounts.google.com/gsi/client';
 const MAPS_KEY = 'test-maps-key-not-real';
 const LAYOUT_KEY = 'neptune-twin.layout.Neptune Terminals';
-
-// Stands in for Google's script: its button signs in with whatever token the test left in
-// window.testCredential.
-const GOOGLE_STUB = `window.google = { accounts: { id: {
-	initialize( options ) { this.options = options; },
-	renderButton( parent ) {
-		const button = document.createElement( 'button' );
-		button.type = 'button';
-		button.className = 'stub-google';
-		button.textContent = 'Sign in with Google';
-		button.onclick = () => this.options.callback( { credential: window.testCredential, select_by: 'btn' } );
-		parent.append( button );
-	},
-	prompt() {}, disableAutoSelect() {}, cancel() {},
-} } };`;
 
 let chromium;
 let browser;
@@ -64,7 +49,7 @@ before( async () => {
 	googleKey = await makeKey( 'ui-key' );
 	keys = await serveKeys( [ googleKey.jwk ] );
 	worker = await startWorker( { port: WORKER_PORT, vars: { GOOGLE_CLIENT_ID: CLIENT_ID, GOOGLE_JWKS_URL: keys.url, GOOGLE_MAPS_API_KEY: MAPS_KEY, ALLOWED_EMAILS: '', ALLOWED_DOMAINS: '' } } );
-	vite = await startVite( { TWIN_API: worker.base } );
+	vite = await startVite( VITE_PORT, { TWIN_API: worker.base } );
 	browser = await chromium.launch( { args: [ '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader' ] } );
 
 } );
@@ -98,6 +83,20 @@ test( 'signed out, the library offers Google sign-in', async () => {
 	await page.locator( '.cloud-account .stub-google' ).waitFor();
 	assert.match( await page.locator( '.cloud-account .signed-out .note' ).textContent(), /Sign in to keep layouts/ );
 	await shot( page.locator( '#library' ), 'signed-out' );
+
+} );
+
+test( 'with premium not set up, the Pro equipment places like everything else', async () => {
+
+	// This Worker has no Stripe settings (scripts/test-premium-ui.mjs has them).
+	assert.deepEqual( ( await api( page, 'GET', '/api/config' ) ).premium, { enabled: false } );
+	assert.equal( await page.locator( '#library .card.locked' ).count(), 0 );
+	assert.equal( await page.locator( '#library .card .pro:visible' ).count(), 0 );
+	await page.locator( '#library .card', { hasText: 'Scissor lift' } ).click();
+	await page.waitForFunction( () => window.twin.models.entries.some( e => e.placing && e.library === 'scissor-lift-32ft' ) );
+	assert.equal( await page.locator( '.premium-dialog' ).count(), 0 );
+	await page.keyboard.press( 'Escape' );
+	await page.waitForFunction( () => window.twin.models.entries.length === 3 );
 
 } );
 
@@ -285,7 +284,7 @@ test( 'sign out keeps the layout in this browser', async () => {
 test( 'without the Worker the app is as before: no account, one failed request', async () => {
 
 	vite.stop();
-	vite = await startVite( {} );
+	vite = await startVite( VITE_PORT );
 	const plain = await newPage();
 	const problems = [];
 	plain.on( 'console', message => message.type() === 'error' && problems.push( message.text() ) );
@@ -367,45 +366,5 @@ async function api( target, method, path, body ) {
 async function shot( target, name ) {
 
 	if ( SHOTS ) await target.screenshot( { path: join( SHOTS, `${ name }.png` ), timeout: 150000 } );
-
-}
-
-async function startVite( env ) {
-
-	const bin = join( dirname( require.resolve( 'vite/package.json' ) ), 'bin', 'vite.js' );
-	// Never a Maps key in tests: blank every name the Vite config would read one from.
-	const noKey = Object.fromEntries( [ 'GOOGLE_API', 'google_api', 'GOOGLE_MAPS_API_KEY', 'VITE_GOOGLE_MAPS_API_KEY', 'GOOGLE_MAPS_KEY', 'GOOGLE_MAPS_API' ].map( name => [ name, '' ] ) );
-	const child = spawn( process.execPath, [ bin, '--port', String( VITE_PORT ), '--strictPort', '--host', '127.0.0.1' ], {
-		cwd: ROOT,
-		env: { ...process.env, TWIN_API: '', ...noKey, ...env },
-		detached: process.platform !== 'win32',
-		stdio: 'ignore',
-	} );
-	const stop = () => {
-
-		if ( child.exitCode !== null ) return;
-		if ( process.platform === 'win32' ) spawnSync( 'taskkill', [ '/pid', String( child.pid ), '/t', '/f' ] );
-		else process.kill( - child.pid, 'SIGTERM' );
-
-	};
-
-	for ( let i = 0; i < 100; i ++ ) {
-
-		try {
-
-			if ( ( await fetch( BASE ) ).ok ) return { stop };
-
-		} catch {
-
-			// Not listening yet.
-
-		}
-
-		await new Promise( resolve => setTimeout( resolve, 300 ) );
-
-	}
-
-	stop();
-	throw new Error( 'Vite didn\'t start' );
 
 }

@@ -513,7 +513,7 @@ function apiTests( target ) {
 
 	} );
 
-	// --- premium -------------------------------------------------------------------------------
+	// --- premium -------------------------------------------------------------------------
 
 	test( 'premium: PREMIUM_EMAILS have it without paying; others don\'t', async () => {
 
