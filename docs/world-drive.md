@@ -158,8 +158,9 @@ see. There's no sign-up: a nickname is all it takes.
   (whichever place you're driving, or have pinned on the globe) shows that place's board. Your own
   row is picked out; below the top 20 it says where you are: "You're #42 of 130, with 1,230".
 - **A score is a run's**: everything from dropping in until you change ride or place (pauses don't
-  end it). When a landed jump takes the run past your best today, the run is posted, at most one
-  every 15 s, while you drive on. The first time, a small card says **New best!** and asks **Post
+  end it). When a landed jump takes the run past your best today, anywhere or at that place, the
+  run is posted, at most one every 15 s, while you drive on (so a place's board has your best there
+  even on a day you did better somewhere else). The first time, a small card says **New best!** and asks **Post
   it to the leaderboard?**: **Post** asks for a name right there, without stopping the drive; **Not
   now** leaves it for later, from the pause menu's leaderboard, where picking a name posts the run
   that's waiting. After that, runs go up by themselves, and the card only shows for a new best ever
@@ -366,7 +367,7 @@ the kart into the air and never through it, a backflip landed for points, the DR
 ride, M and teleporting again without a reload, recent places, a phone with touch buttons, the
 used-up, robot-check and getting-ready screens, and the leaderboard with its answers made in the
 test: tabs, your own row, picking a name and renaming, a landed jump posting the run with the card
-asking first, a dead connection changing nothing, and a phone).
+asking first, each place's best posted, a dead connection changing nothing, and a phone).
 
 ## How it fits together
 

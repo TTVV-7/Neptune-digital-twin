@@ -6,8 +6,9 @@ import { storage } from './places.js';
 // or pick a name in the panel, you choose a nickname and the Worker makes you a player, whose id and
 // secret stay in this browser (lose them and you pick a new name). Like a score, a new name needs
 // this visit's token, so there's none to pick on the test pad. A run's score goes up as a
-// landed jump beats your best today, at most one every POST_GAP, with this visit's token; the first
-// time, a small card asks, and never stops the game. Nothing here may get in the way of driving:
+// landed jump beats your best today, anywhere or at that place (so the boards of one place have
+// everyone's best there, not only the runs that were their best of the day), at most one every
+// POST_GAP, with this visit's token; the first time, a small card asks, and never stops the game. Nothing here may get in the way of driving:
 // every call to the Worker is allowed to fail.
 
 const PLAYER_KEY = 'world-drive.player';
@@ -43,10 +44,11 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace } )
 
 	let player = loadPlayer();
 	let visit = null;
-	// The best posted today: { day, best }.
+	// The best posted today: { day, best, places: { [ place's key ]: best there } }.
 	let posted = storage( () => JSON.parse( localStorage.getItem( POSTED_KEY ) ) ) ?? {};
-	// The run waiting to go up, and the post that's on its way.
-	let pending = null;
+	// The runs waiting to go up, the best at each place (by its key), the place that's waited
+	// longest first; and the post that's on its way.
+	const waiting = new Map();
 	let timer = 0;
 	let sending = false;
 	let lastPost = - Infinity;
@@ -69,10 +71,10 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace } )
 
 		try {
 
-			if ( ! worker || ! visit || run.score <= todayBest() ) return;
-			pending = run;
+			if ( ! worker || ! visit || ! beats( run ) ) return;
+			wait( run );
 			if ( player ) schedule();
-			else if ( ! asked ) ask();
+			else if ( ! asked ) ask( run );
 			else if ( ! card.hidden && card.dataset.kind === 'ask' ) card.querySelector( '.title' ).textContent = title( run );
 
 		} catch ( err ) {
@@ -95,12 +97,41 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace } )
 
 	}
 
+	// The best run at a place, to go up when its turn comes (a better one already waiting stays).
+	function wait( run ) {
+
+		const key = placeKey( run.place );
+		if ( ! ( waiting.get( key )?.score >= run.score ) ) waiting.set( key, run );
+
+	}
+
+	// The best run waiting, or null.
+	function pending() {
+
+		let best = null;
+		for ( const run of waiting.values() ) if ( ! best || run.score > best.score ) best = run;
+		return best;
+
+	}
+
 	async function send() {
 
-		const run = pending;
-		if ( ! run || ! player || ! visit || sending ) return;
-		pending = null;
-		if ( run.score <= todayBest() ) return;
+		if ( ! player || ! visit || sending ) return;
+		// The place that's waited longest, unless a post since has beaten it.
+		let run = null;
+		for ( const [ key, waited ] of waiting ) {
+
+			waiting.delete( key );
+			if ( beats( waited ) ) {
+
+				run = waited;
+				break;
+
+			}
+
+		}
+
+		if ( ! run ) return;
 		sending = true;
 		lastPost = Date.now();
 		const { id, secret } = player;
@@ -112,7 +143,7 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace } )
 
 			failures = 0;
 			const { today: day, rank, isNewBest } = answer.body;
-			remember( day?.best ?? score );
+			remember( day?.best ?? score, place, score );
 			// Only when it's news: a best ever, or higher up today's board than before.
 			if ( isNewBest || day?.rank < ranks.today ) showCard( 'posted', isNewBest ? `New best! ${ points( score ) }` : `Today's best: ${ points( score ) }`, standing( answer.body ) );
 			ranks = { today: day?.rank ?? Infinity, all: rank ?? Infinity };
@@ -120,14 +151,14 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace } )
 		} else if ( answer.status === 429 ) {
 
 			// Too soon (or today's scores are used up): wait as long as the Worker says.
-			pending ??= run;
+			wait( run );
 			lastPost = Date.now() + answer.retryAfter * 1000 - POST_GAP;
 
 		} else if ( answer.status === 403 && answer.body.reason === 'player' ) {
 
 			// This player is gone (the owner removed it): pick a new name to post again.
 			forgetPlayer();
-			pending ??= run;
+			wait( run );
 			asked = false;
 
 		} else if ( answer.status === 403 ) {
@@ -139,12 +170,19 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace } )
 
 			// No connection, or the Worker had trouble: try again in a while. (A 400 is a score the
 			// leaderboard won't take; there's nothing to try again.)
-			pending ??= run;
+			wait( run );
 			lastPost = Date.now() + RETRY - POST_GAP;
 
 		}
 
-		if ( pending && player ) schedule();
+		if ( waiting.size && player ) schedule();
+
+	}
+
+	// Whether a run would change a board: better than the best posted today, anywhere or at its place.
+	function beats( run ) {
+
+		return run.score > todayBest() || run.score > placeBest( run.place );
 
 	}
 
@@ -154,9 +192,18 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace } )
 
 	}
 
-	function remember( best ) {
+	function placeBest( place ) {
 
-		posted = { day: today(), best: Math.max( best, todayBest() ) };
+		return posted?.day === today() && place ? Number( posted.places?.[ placeKey( place ) ] ) || 0 : 0;
+
+	}
+
+	// After a post of `score` at `place`: today's best is `best` (the Worker's word for it).
+	function remember( best, place, score ) {
+
+		const places = posted?.day === today() && typeof posted.places === 'object' && posted.places ? { ...posted.places } : {};
+		if ( place ) places[ placeKey( place ) ] = Math.max( score, placeBest( place ) );
+		posted = { day: today(), best: Math.max( best, todayBest() ), places };
 		storage( () => localStorage.setItem( POSTED_KEY, JSON.stringify( posted ) ) );
 
 	}
@@ -172,10 +219,10 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace } )
 
 	// --- the card: "New best! Post it?", and what came of a post ---
 
-	function ask() {
+	function ask( run ) {
 
 		asked = true;
-		showCard( 'ask', title( pending ), 'Post it to the leaderboard?' );
+		showCard( 'ask', title( run ), 'Post it to the leaderboard?' );
 		cardButtons.hidden = false;
 
 	}
@@ -227,7 +274,7 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace } )
 		if ( await pickName( input.value, text => cardStatus.textContent = text ) ) {
 
 			input.blur();
-			showCard( 'posted', title( pending ?? { score: todayBest() } ), `Driving as ${ player.name }. Posting your score...` );
+			showCard( 'posted', title( pending() ?? { score: todayBest() } ), `Driving as ${ player.name }. Posting your score...` );
 
 		}
 
@@ -282,7 +329,7 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace } )
 		player = { id: answer.body.id, secret: answer.body.secret ?? player.secret, name: answer.body.name };
 		storage( () => localStorage.setItem( PLAYER_KEY, JSON.stringify( player ) ) );
 		say( '' );
-		if ( pending ) schedule();
+		if ( waiting.size ) schedule();
 		return true;
 
 	}
@@ -381,8 +428,8 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace } )
 		form.elements.name.value = renaming ? player.name : '';
 		form.querySelector( 'button[type=submit]' ).textContent = renaming ? 'Rename' : 'Save';
 		formStatus.textContent = '';
-		const waiting = ! player && pending && visit;
-		$( '.form-hint' ).textContent = waiting ? `Pick a name and your ${ points( pending.score ) } goes up.` : NAME_RULE;
+		const next = ! player && visit ? pending() : null;
+		$( '.form-hint' ).textContent = next ? `Pick a name and your ${ points( next.score ) } goes up.` : NAME_RULE;
 		$( '.offline' ).hidden = ! worker || !! visit;
 
 	}
@@ -452,9 +499,10 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace } )
 			return player;
 
 		},
+		// The best run waiting to go up, or null.
 		get pending() {
 
-			return pending;
+			return pending();
 
 		},
 	};
@@ -466,6 +514,13 @@ function loadPlayer() {
 
 	const saved = storage( () => JSON.parse( localStorage.getItem( PLAYER_KEY ) ) );
 	return typeof saved?.id === 'string' && typeof saved.secret === 'string' && typeof saved.name === 'string' ? saved : null;
+
+}
+
+// A place as the Worker matches places for its boards: whatever their case.
+function placeKey( place ) {
+
+	return String( place ?? '' ).normalize( 'NFKC' ).toLowerCase();
 
 }
 

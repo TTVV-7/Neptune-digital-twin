@@ -8,7 +8,8 @@
 // screens the Worker's answers lead to (used up, robot check, maps off, the visit itself); and the
 // leaderboard (its answers made here): the trophy and the panel, tabs, your own row, picking a name
 // and renaming, a landed jump posting the run (the card asking the first time, never stopping the
-// drive), a dead connection changing nothing, and all of it on a phone. Every request that isn't
+// drive), each place's best posted as well as the day's, a dead connection changing nothing, and all
+// of it on a phone. Every request that isn't
 // to the local server is blocked, so nothing reaches Google, Cloudflare or OpenStreetMap.
 //
 // Needs Playwright with Chromium, as test-accounts-ui.mjs does. TEST_VITE_PORT picks the port;
@@ -877,6 +878,46 @@ describe( 'World Drive leaderboard', () => {
 		await page.waitForFunction( () => window.drive.driver.speed > 3, null, { timeout: 20000 } );
 		await page.keyboard.up( 'KeyW' );
 		assert.equal( await mode( page ), 'driving' );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'each place\'s best goes up, not only the day\'s: the boards of one place are whole', async () => {
+
+		// The Worker's answer for the score sent: today's best is the best of those posted.
+		let best = 0;
+		const page = await leaderboardPage( { score: route => {
+
+			best = Math.max( best, route.request().postDataJSON().score );
+			const day = { best, rank: 1, isNewBest: false };
+			route.fulfill( { contentType: 'application/json', body: JSON.stringify( { ...day, today: day, week: day } ) } );
+
+		} } );
+		const { asked } = page;
+		await page.addInitScript( () => localStorage.setItem( 'world-drive.player', JSON.stringify( { id: 'P1ayer-id_000000', secret: 'S'.repeat( 32 ), name: 'Speed Demon' } ) ) );
+		await testPad( page );
+		await page.evaluate( () => window.drive.leaderboard.setVisit( 'v1.test-visit-token' ) );
+		const land = ( score, place ) => page.evaluate( run => window.drive.leaderboard.onScore( run ), { score, best: score, newBest: false, tricks: 'Backflip!', runSeconds: 60, airTime: 1.2, place, vehicle: 'go-kart' } );
+		const waitingAt = () => page.evaluate( () => window.drive.leaderboard.pending?.place ?? null );
+
+		await land( 5000, 'Times Square' );
+		await page.waitForFunction( () => JSON.parse( localStorage.getItem( 'world-drive.posted' ) )?.best === 5000 );
+		// Less at the same place: nothing to post.
+		await land( 3000, 'Times Square' );
+		assert.equal( await waitingAt(), null );
+		// Less than today's best, but the first at two other places: each goes up in its turn, the
+		// place that waited longest first.
+		await land( 1000, 'Golden Gate Bridge' );
+		await land( 2000, 'Furka Pass' );
+		await land( 1500, 'golden gate bridge' );
+		assert.equal( await waitingAt(), 'Furka Pass' );
+		const deadline = Date.now() + 25000;
+		while ( asked.scores.length < 2 && Date.now() < deadline ) await page.waitForTimeout( 250 );
+		assert.deepEqual( asked.scores.map( sent => `${ sent.place } ${ sent.score }` ), [ 'Times Square 5000', 'golden gate bridge 1500' ] );
+		assert.equal( await waitingAt(), 'Furka Pass' );
+		await page.waitForFunction( () => JSON.parse( localStorage.getItem( 'world-drive.posted' ) ).places[ 'golden gate bridge' ] === 1500 );
+		assert.deepEqual( await page.evaluate( () => JSON.parse( localStorage.getItem( 'world-drive.posted' ) ) ), { day: new Date().toISOString().slice( 0, 10 ), best: 5000, places: { 'times square': 5000, 'golden gate bridge': 1500 } } );
 		assert.deepEqual( page.errors, [] );
 		await page.context().close();
 
