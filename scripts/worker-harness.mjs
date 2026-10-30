@@ -130,9 +130,9 @@ export async function startWorker( { port, vars, config = null } ) {
 		try {
 
 			const res = await fetch( `${ base }/api/config` );
-			// state: where it keeps its storage, to look at what it stored; query( sql ): the rows a
+			// state: where it keeps its storage, to look at what it stored; d1( sql ): the rows a
 			// statement gives on its database, as the owner would see them in the D1 console.
-			if ( res.ok ) return { base, stop, log: () => log, state, query: sql => queryD1( state, config, sql ) };
+			if ( res.ok ) return { base, stop, log: () => log, state, d1: sql => queryD1( state, config, sql ) };
 
 		} catch {
 

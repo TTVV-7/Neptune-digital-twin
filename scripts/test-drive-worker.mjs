@@ -875,16 +875,16 @@ describe( 'World Drive leaderboard', () => {
 		assert.equal( ( await board( { period: 'all', place: 'Golden Gate Bridge' } ) ).json.total, 1 );
 		// The log keeps what's under 35 days old (Gus's Sunday and Monday scores and Hal's), and
 		// only the visits that haven't run out.
-		const log = server.query( 'SELECT p.name, s.score FROM scores s JOIN players p ON p.id = s.player_id ORDER BY s.created_at' );
+		const log = server.d1( 'SELECT p.name, s.score FROM scores s JOIN players p ON p.id = s.player_id ORDER BY s.created_at' );
 		assert.deepEqual( log.map( row => `${ row.name } ${ row.score }` ), [ 'Gus 8000', 'Gus 5000', 'Hal 1000' ] );
-		assert.deepEqual( server.query( 'SELECT player_id FROM visits' ).map( row => row.player_id ), [ hal.id ] );
-		assert.deepEqual( server.query( 'SELECT DISTINCT period FROM best_scores ORDER BY period' ).map( row => row.period ), [ 'all', 'day:2026-11-01', 'day:2026-11-02', `day:${ new Date( NOON + 36 * DAY ).toISOString().slice( 0, 10 ) }`, 'week:2026-10-26', 'week:2026-11-02', 'week:2026-11-30' ] );
+		assert.deepEqual( server.d1( 'SELECT player_id FROM visits' ).map( row => row.player_id ), [ hal.id ] );
+		assert.deepEqual( server.d1( 'SELECT DISTINCT period FROM best_scores ORDER BY period' ).map( row => row.period ), [ 'all', 'day:2026-11-01', 'day:2026-11-02', `day:${ new Date( NOON + 36 * DAY ).toISOString().slice( 0, 10 ) }`, 'week:2026-10-26', 'week:2026-11-02', 'week:2026-11-30' ] );
 
 	} );
 
 	test( 'secrets are kept only as hashes, and addresses not at all', async () => {
 
-		const [ row ] = server.query( `SELECT secret_hash FROM players WHERE id = '${ ace.id }'` );
+		const [ row ] = server.d1( `SELECT secret_hash FROM players WHERE id = '${ ace.id }'` );
 		assert.equal( row.secret_hash, createHash( 'sha256' ).update( ace.secret ).digest( 'hex' ) );
 		const files = listFiles( server.state );
 		assert.ok( files.some( file => /\.sqlite$/.test( file ) ) );
