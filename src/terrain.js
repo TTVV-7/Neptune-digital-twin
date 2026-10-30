@@ -586,6 +586,14 @@ export class Terrain extends EventDispatcher {
 
 			}
 
+			// The nodes on its +x and +z edges are saved by the chunks that own them, but this one
+			// draws the ground sloping to them, so it's saved too (maybe empty) to be there again.
+			for ( let m = 0; m <= CELLS && ! any; m ++ ) {
+
+				for ( const k of [ m * NODES + CELLS, CELLS * NODES + m ] ) any ||= toCentimetres( chunk.dug[ k ] ) !== 0 || toCentimetres( chunk.loose[ k ] ) !== 0;
+
+			}
+
 			if ( any ) chunks.push( { c: [ chunk.cx, chunk.cz ], d: encodeRuns( dug ), l: encodeRuns( loose ), m: encodeRuns( mats ) } );
 
 		}
@@ -638,6 +646,8 @@ export class Terrain extends EventDispatcher {
 						other.dug[ k ] = dugValue;
 						other.loose[ k ] = looseValue;
 						if ( looseValue !== 0 ) other.looseMat[ k ] = materialIndex( material );
+						// Chunks that were already there (merging) are drawn again too.
+						this.dirty.add( other.key );
 
 					} );
 
