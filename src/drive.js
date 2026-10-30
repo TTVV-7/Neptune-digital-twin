@@ -49,7 +49,8 @@ export class Driver {
 		const driveKeys = [ 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight' ];
 		window.addEventListener( 'keydown', e => {
 
-			if ( ! this.active || isTyping( e ) ) return;
+			// Browser shortcuts (Ctrl+R, Cmd+F...) are left to the browser, and don't drive or dig.
+			if ( ! this.active || isTyping( e ) || e.ctrlKey || e.metaKey || e.altKey ) return;
 			if ( driveKeys.includes( e.code ) || this.machine?.keys.includes( e.code ) ) {
 
 				e.preventDefault();
