@@ -1,0 +1,14 @@
+# Settings and secrets for the local Worker (npm run dev:api). Copy this file to .dev.vars,
+# which git ignores, and fill in what you need. Values here override wrangler.jsonc locally.
+
+# The "Web application" OAuth client id from the Google Cloud console, with
+# http://localhost and http://localhost:5173 among its Authorized JavaScript origins.
+GOOGLE_CLIENT_ID=
+
+# Optional: a Maps key the Worker hands to signed-in users (and share links), so it doesn't
+# have to be built into the site.
+GOOGLE_MAPS_API_KEY=
+
+# Optional, comma-separated: who may sign in. Empty means any Google account.
+ALLOWED_EMAILS=
+ALLOWED_DOMAINS=

@@ -86,7 +86,8 @@ export function setUpLayout( models, { getLibrary, onError } ) {
 	} );
 	window.addEventListener( 'storage', e => {
 
-		if ( e.key !== key || stale ) return;
+		// While viewing a shared layout this tab doesn't save, so it can't overwrite the other.
+		if ( e.key !== key || stale || ! localSaving ) return;
 		stale = true;
 		onError( 'This layout was changed in another tab. Reload to see those changes; changes made here are no longer saved.' );
 
@@ -140,6 +141,8 @@ export function setUpLayout( models, { getLibrary, onError } ) {
 
 		async restore() {
 
+			// Viewing someone's shared layout instead (cloud.js turned local saving off first).
+			if ( ! localSaving ) return;
 			const saved = parse( storage( () => JSON.parse( localStorage.getItem( key ) ) ) );
 			if ( ! saved ) return;
 			restoring = true;

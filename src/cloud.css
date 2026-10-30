@@ -1,0 +1,305 @@
+/* Your account (cloud.js): the area at the bottom of the library, the Layouts dialog and the
+   banner over a shared layout. Same dark panels as the library. */
+
+.cloud-account {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding-top: 8px;
+	border-top: 1px solid #2a3844;
+}
+
+.cloud-account .note,
+.cloud-account .cloud-status {
+	margin: 0;
+	font-size: 12px;
+	color: var( --muted );
+}
+
+.cloud-account .cloud-status:empty {
+	display: none;
+}
+
+/* Google draws its own button (an iframe) here. */
+.cloud-account .google-button {
+	min-height: 32px;
+}
+
+.cloud-account .signed-in {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.cloud-account .chip {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	color: var( --text );
+	font-size: 13px;
+}
+
+.cloud-account .avatar,
+.cloud-account .initials {
+	flex: none;
+	width: 24px;
+	height: 24px;
+	border-radius: 50%;
+}
+
+.cloud-account .initials {
+	display: grid;
+	place-items: center;
+	background: var( --accent );
+	color: #fff;
+	font-size: 11px;
+	font-weight: 600;
+}
+
+.cloud-account .who {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* Small text buttons inside a sentence: Retry, Keep mine... */
+button.link {
+	margin-left: 6px;
+	padding: 0;
+	background: none;
+	color: var( --accent );
+	font-size: inherit;
+	text-decoration: underline;
+}
+
+#library footer button.link {
+	padding: 0;
+	font-size: inherit;
+}
+
+/* The Layouts dialog. */
+.cloud-dialog {
+	width: min( 520px, calc( 100vw - 32px ) );
+	max-height: calc( 100vh - 32px );
+	box-sizing: border-box;
+	padding: 16px 20px;
+	border: 0;
+	border-radius: 10px;
+	background: rgb( 16, 22, 28 );
+	color: var( --text );
+	font: inherit;
+}
+
+.cloud-dialog::backdrop {
+	background: rgba( 0, 0, 0, 0.5 );
+}
+
+.cloud-dialog header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.cloud-dialog h2 {
+	margin: 0;
+	font-size: 16px;
+}
+
+.cloud-dialog h3 {
+	margin: 16px 0 6px;
+	font-size: 12px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var( --muted );
+}
+
+.cloud-dialog .close {
+	padding: 2px 10px;
+	font-size: 18px;
+}
+
+.cloud-dialog > .small {
+	margin: 2px 0 12px;
+}
+
+.cloud-dialog label {
+	display: block;
+	margin-bottom: 4px;
+	font-size: 12px;
+	color: var( --muted );
+}
+
+.cloud-dialog .fields,
+.cloud-dialog .rename,
+.cloud-dialog .share {
+	display: flex;
+	gap: 6px;
+}
+
+.cloud-dialog input {
+	flex: 1;
+	min-width: 0;
+	padding: 6px 8px;
+	border-radius: 6px;
+	border: 1px solid #44525e;
+	background: #0b1117;
+	color: var( --text );
+	font: inherit;
+}
+
+.cloud-dialog button {
+	padding: 6px 10px;
+	font-size: 12px;
+}
+
+.cloud-dialog button[type='submit'] {
+	background: var( --accent );
+}
+
+.cloud-dialog :focus-visible {
+	outline: 2px solid var( --accent );
+	outline-offset: 1px;
+}
+
+.cloud-dialog .list {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.cloud-dialog .list li {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 8px 10px;
+	border-radius: 6px;
+	background: #1c2731;
+}
+
+.cloud-dialog .list li.current {
+	outline: 1px solid var( --accent );
+}
+
+.cloud-dialog .list li.empty {
+	color: var( --muted );
+	font-size: 12px;
+}
+
+.cloud-dialog .head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+}
+
+.cloud-dialog .head .name {
+	font-weight: 600;
+	overflow-wrap: anywhere;
+}
+
+.cloud-dialog .head .rename {
+	flex: 1;
+}
+
+.cloud-dialog .badge {
+	padding: 1px 6px;
+	border-radius: 10px;
+	background: #2a4f6e;
+	font-size: 11px;
+}
+
+.cloud-dialog .badge.shared {
+	background: #2f5a3a;
+}
+
+.cloud-dialog .meta {
+	font-size: 12px;
+	color: var( --muted );
+}
+
+.cloud-dialog .actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.cloud-dialog button.delete {
+	margin-left: auto;
+	background: #5a2a2a;
+}
+
+.cloud-dialog .share input {
+	font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.cloud-dialog .message {
+	min-height: 1.4em;
+	margin: 12px 0 0;
+	font-size: 12px;
+	color: var( --muted );
+}
+
+.cloud-dialog.busy {
+	cursor: progress;
+}
+
+/* Over a shared layout: what you're looking at, and the way to keep it. Centred in the space
+   right of the status readout (top left), which moves right while the library is open. */
+.cloud-banner {
+	position: fixed;
+	top: 12px;
+	left: 272px;
+	right: 16px;
+	z-index: 1003;
+	width: fit-content;
+	max-width: 640px;
+	margin: 0 auto;
+	box-sizing: border-box;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 12px;
+	padding: 8px 12px;
+	border-radius: 6px;
+	background: rgba( 22, 52, 78, 0.92 );
+}
+
+.cloud-banner button {
+	padding: 4px 10px;
+	background: var( --accent );
+}
+
+body.library-open .cloud-banner {
+	left: 572px;
+}
+
+/* Error banners go below it rather than on top. */
+body.viewing-shared #banner {
+	top: 64px;
+	left: 272px;
+}
+
+body.viewing-shared.library-open #banner {
+	left: 572px;
+}
+
+@media ( max-width: 700px ) {
+
+	.cloud-banner,
+	body.library-open .cloud-banner {
+		top: 112px;
+		left: 16px;
+	}
+
+	body.viewing-shared #banner,
+	body.viewing-shared.library-open #banner {
+		top: 172px;
+		left: 16px;
+	}
+
+}

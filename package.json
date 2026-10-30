@@ -10,7 +10,11 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "add-asset": "node scripts/add-asset.mjs"
+    "add-asset": "node scripts/add-asset.mjs",
+    "dev:api": "node scripts/dev-api.mjs",
+    "test:worker": "node --test scripts/test-worker.mjs",
+    "test:accounts-ui": "node --test scripts/test-accounts-ui.mjs",
+    "deploy": "vite build --mode cloudflare && wrangler deploy"
   },
   "dependencies": {
     "3d-tiles-renderer": "^0.5.3",
@@ -24,6 +28,7 @@
     "@gltf-transform/functions": "^4.5.1",
     "meshoptimizer": "^1.3.0",
     "sharp": "^0.35.5",
-    "vite": "^8.3.5"
+    "vite": "^8.3.5",
+    "wrangler": "^4.156.0"
   }
 }

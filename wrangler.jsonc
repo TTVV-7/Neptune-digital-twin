@@ -1,0 +1,33 @@
+// The app on Cloudflare Workers, with sign-in and layouts saved to your account
+// (docs/drafts/accounts.md). `npm run deploy` builds the site and deploys it with this.
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "neptune-twin-app",
+	"main": "worker/index.js",
+	"compatibility_date": "2026-10-01",
+	// The built site (npm run build). The Worker only runs for /api/*; everything else is
+	// served straight from these files.
+	"assets": {
+		"directory": "./dist",
+		"binding": "ASSETS",
+		"run_worker_first": [ "/api/*" ]
+	},
+	"vars": {
+		// The "Web application" OAuth client id from the Google Cloud console. It isn't secret.
+		"GOOGLE_CLIENT_ID": "",
+		// Optional, comma-separated. Leave both empty to let any Google account sign in.
+		"ALLOWED_EMAILS": "",
+		"ALLOWED_DOMAINS": ""
+	},
+	// GOOGLE_MAPS_API_KEY is a secret: npx wrangler secret put GOOGLE_MAPS_API_KEY
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "neptune-twin-app",
+			// Placeholder. Create the database with `npx wrangler d1 create neptune-twin-app`
+			// and paste the database_id it prints here.
+			"database_id": "00000000-0000-0000-0000-000000000000",
+			"migrations_dir": "worker/migrations"
+		}
+	]
+}
