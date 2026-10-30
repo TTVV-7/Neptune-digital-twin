@@ -67,6 +67,11 @@ const REARM_TIME = 0.75;
 // After a bounce the keys' push into the wall is held off while the wall is still within this
 // many metres beyond the clearance radius, so you aren't straight back against it.
 const REPEL_REACH = 4;
+// Once the clearance check has pushed the camera off something, the keys' push back into it is
+// held off while it's within this much (m) beyond the clearance radius: gliding along a corrugated
+// container wall then keeps a steady distance instead of bobbing into the gap between each pair
+// of ribs and being pushed out again, 2-6 cm a frame.
+const TOUCH_REACH = 0.1;
 // Slower than this into a wall (m/s), the view doesn't turn.
 const TURN_MIN = 1.5;
 // Flying, an impact is checked by looking straight at the surface from the camera, out to this
@@ -123,6 +128,9 @@ export class WalkController {
 		this.bounce = new Vector3();
 		this.repel = null;
 		this.turn = null;
+		// What the clearance check last pushed the camera off, while it's still there (see keepOff).
+		this.touching = null;
+		this.touchNormal = new Vector3();
 		this.clock = 0;
 		this.lastContact = { time: - Infinity, normal: new Vector3() };
 		// How fast the player really went last frame (m/s), for how hard they hit things.
@@ -293,6 +301,7 @@ export class WalkController {
 		this.bounce.set( 0, 0, 0 );
 		this.repel = null;
 		this.turn = null;
+		this.touching = null;
 		this.velocity.set( 0, 0, 0 );
 		this.lastDt = 0;
 
@@ -348,7 +357,13 @@ export class WalkController {
 			.addScaledVector( _right, strafe );
 		if ( _move.lengthSq() > 0 ) _move.normalize();
 		_velocity.copy( _move ).multiplyScalar( speed );
-		if ( ! this.ghost ) this.holdOff( _velocity, PLAYER.radius );
+		if ( ! this.ghost ) {
+
+			this.holdOff( _velocity, PLAYER.radius );
+			this.keepOff( _velocity, PLAYER.radius );
+
+		}
+
 		_rest.copy( _velocity ).add( this.bounce );
 
 		const moving = _rest.lengthSq() > 1e-6;
@@ -361,6 +376,7 @@ export class WalkController {
 		if ( moving && ! this.ghost ) {
 
 			const pushed = this.keepClear( PLAYER.radius, WALK_AROUND, true );
+			if ( pushed ) this.touching = this.touchNormal.copy( pushed );
 			const wall = this.wall ?? pushed;
 			if ( wall ) this.impact( wall, _velocity, BOUNCE_MIN.walk );
 
@@ -376,11 +392,13 @@ export class WalkController {
 
 		const radius = PLAYER.flyRadius;
 		this.holdOff( velocity, radius );
+		this.keepOff( velocity, radius );
 		_rest.copy( velocity ).add( this.bounce ).multiplyScalar( dt );
 		if ( _rest.lengthSq() > 0 ) {
 
 			const hit = this.sweep( _rest, radius );
 			const pushed = this.keepClear( radius, FLY_AROUND, false );
+			if ( pushed ) this.touching = this.touchNormal.copy( pushed );
 			if ( hit ?? pushed ) this.impact( hit ?? pushed, velocity, BOUNCE_MIN.fly );
 
 		}
@@ -557,6 +575,20 @@ export class WalkController {
 		}
 
 		velocity.addScaledVector( repel, into );
+
+	}
+
+	// The keys' push into what the clearance check last pushed the camera off is held off while it's
+	// still there, so the camera glides along at a steady distance (see TOUCH_REACH).
+	keepOff( velocity, radius ) {
+
+		const { touching } = this;
+		if ( ! touching ) return;
+		const into = - velocity.dot( touching );
+		if ( into <= 0 ) return;
+		_dir.copy( touching ).negate();
+		if ( this.cast( this.camera.position, _dir, radius + TOUCH_REACH ) ) velocity.addScaledVector( touching, into );
+		else this.touching = null;
 
 	}
 
