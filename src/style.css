@@ -267,6 +267,8 @@ html, body {
 .toast {
 	z-index: 1003;
 	bottom: 128px;
+	/* Left of the Controls and Show panels when they come down this far (legend.js). */
+	right: var( --toast-right, 16px );
 }
 
 /* Library sidebar. */
@@ -704,6 +706,7 @@ body.drive-prompt #hint {
 .keys-toast {
 	top: 18%;
 	bottom: auto;
+	right: 16px;
 	display: flex;
 	flex-wrap: wrap;
 	justify-content: center;
