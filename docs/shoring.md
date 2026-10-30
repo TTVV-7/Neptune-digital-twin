@@ -34,8 +34,9 @@ Two steel side panels held apart by spreader pipes, dropped into a trench and dr
 pipe goes in. For utility trenches, where people work between the panels.
 
 - Drawn: safety-yellow panels 120 mm thick with ribs down the outside, a channel along the top and
-  collar posts where the 150 mm (6 in) spreaders pin on: two per end (near the top and the bottom)
-  in a box, one per end in a stacker. Lifting eyes on top.
+  collar posts where the 150 mm (6 in) spreaders pin on: two per end in a box, near the top and
+  1.2 m up, which leaves about 1.1 m (44 in) under them for the pipe (boxes are sold with anything
+  from about 0.5 to 2 m); one per end in a stacker. Lifting eyes on top.
 - Sizes as they're sold: panels 2.4 m (8 ft) tall, and 1.2 m (4 ft) stackers; lengths 2.4, 3.0,
   3.7, 4.9, 6.1 and 7.3 m (8, 10, 12, 16, 20 and 24 ft).
 - Along the trench: of the runs that leave less than the shortest box (2.4 m) uncovered, the one

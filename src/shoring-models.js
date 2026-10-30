@@ -175,14 +175,14 @@ function trenchPanel( parts, { x0, y0, z0, length, height, side, inset } ) {
 
 // A steel trench box, or a stacker (anything under 2 m tall) on top of one: two side panels
 // `length` along z and `height` tall, `width` apart outside, centred on x = 0 and z = z0 with its
-// base at y0. Spreaders join them near both ends: near the top and the bottom of a box, at
-// mid-height in a stacker.
+// base at y0. Spreaders join them near both ends: in a box, one near the top and one 1.2 m up,
+// leaving about 1.1 m (44 in) under it for the pipe to go through; at mid-height in a stacker.
 export function trenchBox( parts, { length, height, width, y0 = 0, z0 = 0 } ) {
 
 	const inside = width - 2 * PANEL;
 	const inset = Math.min( 0.6, length / 4 );
 	for ( const side of [ - 1, 1 ] ) trenchPanel( parts, { x0: side * ( width - PANEL ) / 2, y0, z0, length, height, side, inset } );
-	const rows = height < 2 ? [ height / 2 ] : [ 0.55, height - 0.45 ];
+	const rows = height < 2 ? [ height / 2 ] : [ 1.2, height - 0.45 ];
 	for ( const end of [ - 1, 1 ] ) {
 
 		const z = z0 + end * ( length / 2 - inset );
