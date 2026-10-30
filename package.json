@@ -8,17 +8,23 @@
   },
   "scripts": {
     "dev": "vite",
+    "dev:drive": "vite --config vite.drive.config.js",
     "build": "vite build",
+    "build:drive": "vite build --config vite.drive.config.js",
     "build:server": "vite build --mode server",
     "preview": "vite preview",
     "add-asset": "node scripts/add-asset.mjs",
     "dev:api": "node scripts/dev-api.mjs",
+    "dev:drive-api": "node scripts/dev-drive-api.mjs",
     "test:worker": "node --test scripts/test-worker.mjs",
     "test:accounts-ui": "node --test scripts/test-accounts-ui.mjs",
     "test:premium-ui": "node --test scripts/test-premium-ui.mjs",
     "test:shoring-ui": "node --test scripts/test-shoring-ui.mjs",
+    "test:drive-worker": "node --test scripts/test-drive-worker.mjs",
+    "test:drive-ui": "node --test scripts/test-drive-ui.mjs",
     "deploy": "vite build --mode cloudflare && wrangler deploy",
-    "deploy:cloudflare": "wrangler d1 migrations apply DB --remote && npm run deploy"
+    "deploy:cloudflare": "wrangler d1 migrations apply DB --remote && npm run deploy",
+    "deploy:drive": "vite build --config vite.drive.config.js && wrangler deploy -c wrangler.drive.jsonc"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.2.0",

@@ -15,6 +15,9 @@ Google's photorealistic 3D map, and you can drop your own detailed models on top
   hosted on Cloudflare or Vercel.
 - **Premium (work in progress, off until set up):** a Pro equipment pack bought once with Stripe.
 
+The same repository also holds a second app, **[World Drive](#world-drive-worlddriveapp)**: pick
+anywhere on Earth from a globe and drive it.
+
 The step-by-step plan, with prompts you can paste to Claude, is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Quick start
@@ -104,7 +107,8 @@ panel) shows the full list:
 | A / D | Steer |
 | Shift | Boost |
 | Space | Hop |
-| C | Chase or bonnet camera |
+| R | Stuck? Back on the ground a few metres ahead, upright |
+| C | Chase or driver's-seat camera |
 | Wheel | Chase camera nearer or farther |
 | V or Esc | Get out |
 
@@ -295,13 +299,18 @@ slope, or into a dump truck, haul truck or roll-off parked on that side (the HUD
 
 Press **V** to get in and drive: the selected vehicle from the library's Vehicles, else the nearest
 one within 25 m, else a pickup appears in front of you. **W**/**S** gas and brake (hold S to reverse), **A**/**D** steer, **Shift**
-boosts, **Space** hops, **C** switches between chase and bonnet cameras, **V** or **Esc** gets out and
-parks it where it stopped. The speedometer shows km/h, your top speed and longest jump.
+boosts, **Space** hops, **C** switches between the chase camera and the driver's seat, **R** puts it
+back on the ground a few metres ahead (or where it last drove freely) if it's stuck, **V** or **Esc**
+gets out and parks it where it stopped. The speedometer shows km/h, your top speed and longest jump.
+Vehicles also include a go-kart (with its driver), built in code.
 
 The construction machines drive too, at their own speeds: the dozer at 11 km/h, the wheel loader at
 40, the crawler crane at walking pace (2 km/h) and the all-terrain crane at road speed (80), even with
 its boom up. The cranes stand and turn on their carriers, and the cameras frame the carrier and look
-out of the cab rather than from up the boom. The pickup tops out at 160 km/h (about 210 with boost), the semi at 120 and the haul truck at 70. The **Race**
+out of the cab rather than from up the boom. The chase camera keeps outside the machine's own box,
+boom and all (backed up to a wall, it looks on from above), and the driver's-seat camera is at the
+operator's eyes: library.json gives each machine's `drive.cab` point. A cab whose windows are only
+painted on is seen from just past its windscreen, and see-through glass is left out of that view. The pickup tops out at 160 km/h (about 210 with boost), the semi at 120 and the haul truck at 70. The **Race**
 category has two jump ramps (1.2 m and 3 m); hit the big one at highway speed for about 1.7 s of air.
 Hit a wall, a container, a barrier or one of Google's buildings and the vehicle just stops against
 it; back up (**S**) to drive off again. Flatten a strip
@@ -341,6 +350,28 @@ always open for everyone. It's **off** until the Payment Link, its id and the we
 are set, and then only in the app: the models are still public files. Stripe setup (test mode first),
 testing with test cards and the known gaps are in [docs/premium.md](docs/premium.md).
 
+## World Drive (worlddrive.app)
+
+A second app in this repository, on its own address: pick anywhere on Earth from a globe of Google's
+3D tiles (search, a dozen start spots, recent places, or a tap on the globe), choose a go-kart, pickup,
+semi or haul truck, press **Drive here** and drive the real world arcade-style: drift, boost, fly
+with Shift, **M** back to the globe and drop in somewhere else without reloading. Phones get a bottom
+sheet and touch buttons.
+
+It shares `src/` with this app but has its own page (`drive/index.html`, `src/drive-app/`), build
+(`npm run dev:drive`, `npm run build:drive` into `dist-drive/`) and Cloudflare Worker
+(`worker/drive/`, `wrangler.drive.jsonc`, `npm run deploy:drive`). Each page load is one billed Google
+Maps session, so the built site holds no key: the Worker hands it out once per visit, after a
+Cloudflare Turnstile check, and only while the day's visits are under a cap for everyone (300) and
+for each visitor (8); over a cap the page says today's free drives are used up. Teleporting moves the
+loaded world rather than loading a new one, so it costs nothing extra. Place search goes through the
+Worker to OpenStreetMap's Nominatim, cached and at most once a second.
+
+How to play, the settings and limits, deploying, and the owner's Google Cloud steps (a separate
+project and key, restricted to worlddrive.app and the Map Tiles API, a daily quota and budget alerts)
+are in [docs/world-drive.md](docs/world-drive.md). Tests: `npm run test:drive-worker` and
+`npm run test:drive-ui`.
+
 ## About the Sketchfab model
 
 The [Neptune Terminal (North Vancouver)](https://skfb.ly/oyAVS) model on Sketchfab belongs to
@@ -368,7 +399,10 @@ src/sidebar.js      the library sidebar: placing, selecting, moving, drawing fla
 src/handles.js      on-map handles for the selected item: turning, resizing areas, a pit's depth
 src/toolbar.js      the toolbar over the selected item, its size editor and Undo after deleting
 src/flatten.js      flatten areas: press Google's mesh flat inside a rectangle
-src/drive.js        race mode: driving, jumps, speedometer
+src/drive.js        race mode: driving, jumps, cameras, speedometer; flying, booster and drifts as options
+src/drive-hud.js    a self-contained driving HUD with touch buttons, for other apps (World Drive)
+src/drive-fx.js     booster flame, tyre smoke and drift sparks
+src/kart.js         the go-kart model and its library item
 src/layout.js       saves placed items in the browser; export/import
 src/kinds.js        placed things that aren't models (areas, pits, piles): how features register them
 src/terrain.js      the ground that can be dug and piled: heights, volumes, drawing, saving
@@ -388,6 +422,9 @@ scripts/add-asset.mjs   imports a model from Sketchfab or Poly Haven into public
 public/library/     downloaded models, library.json catalog, thumbs/ and CREDITS.md
 src/geo.js          lat/lon <-> local metres
 public/models/      put your .glb files here
+drive/index.html    World Drive's page; its code is src/drive-app/ (docs/world-drive.md)
+worker/drive/       World Drive's Worker: the Maps key per visit, caps, Turnstile, search
+vite.drive.config.js, wrangler.drive.jsonc   World Drive's build and Worker settings
 ```
 
 The scene uses metres with the origin at the terminal centre (`SITE` in `config.js`):

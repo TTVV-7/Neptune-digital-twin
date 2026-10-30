@@ -1,10 +1,16 @@
 import { Box3, MathUtils, Raycaster, Vector3 } from 'three';
-import { enuToLocal, headingToYaw, localToEnu } from './geo.js';
+import { enuToLocal, headingToYaw } from './geo.js';
 import { blocks, isTyping } from './walk.js';
+import { createDriveFx } from './drive-fx.js';
 
 // Race mode: drive a placed vehicle at highway speeds. Arcade physics rather than a simulation:
 // the vehicle follows the ground under its wheels, keeps its upward speed off ramps and crests so
 // it can jump, and stops dead when it hits a wall or anything else solid.
+//
+// Three options, off unless an app asks (World Drive turns them on): `fly`, where holding Shift
+// lifts the vehicle off and flies it, and letting go glides it back down; `booster`, a rocket on B
+// that pushes well past the top speed while its gauge lasts; and `drift`, kart handling: sharp
+// steering at low speed, and drifts on Space that pay out a boost.
 
 const KMH = 3.6;
 const GRAVITY = 9.81;
@@ -15,6 +21,10 @@ const LEAVE_GROUND = 0.35;
 const CRASH_FLASH = 3;
 // The cameras keep this far (m) in front of anything between them and the vehicle.
 const CAMERA_CLEARANCE = 0.4;
+// ...and the chase camera this far outside the vehicle's own box, boom and all. With less room
+// than ROOM behind the vehicle (backed up to a wall) it looks on from above instead.
+const OWN_CLEARANCE = 0.3;
+const ROOM = 1;
 // The wheel moves the chase camera nearer or farther, by this much a notch, between these shares
 // of its usual distance (see zoomChase).
 const CHASE_STEP = 1.15;
@@ -23,6 +33,43 @@ const CHASE_ZOOM = [ 0.5, 4 ];
 // small one. The low row catches a jersey barrier or a lock block (0.8 m), which a pickup's 0.9 m
 // ray passed over, so it drove up and over them; the high one what stands on legs or wheels.
 const BUMPERS = [ 0.5, 1.0 ];
+// In the cab, the view starts just past (by CAB_MARGIN) a cab whose windscreen isn't see-through
+// (painted on), if it's this near (m).
+const CAB_SHELL = 1.6;
+const CAB_MARGIN = 0.35;
+
+// Flying: climb (m/s) while Shift is held, slowing to a hover this high (m) over the ground; glide
+// down (m/s) once it's let go; turn rate (°/s) at full steer.
+const FLY_CLIMB = 7;
+const FLY_CEILING = 150;
+const FLY_GLIDE = 3;
+const FLY_YAW = 75;
+// Booster: a full gauge fires for BOOST_TIME s and refills in BOOST_RECHARGE s; firing pushes at
+// BOOST_ACCEL m/s² up to BOOST_SPEED times the top speed. It needs BOOST_MIN of the gauge to fire.
+const BOOST_TIME = 2.5;
+const BOOST_RECHARGE = 8;
+const BOOST_ACCEL = 28;
+const BOOST_SPEED = 2;
+const BOOST_MIN = 0.15;
+// Kart handling: the most it turns (°/s) at full lock, from walking pace to top speed.
+const KART_YAW = [ 150, 55 ];
+// Drifts start above DRIFT_MIN m/s, with a hop of DRIFT_HOP m/s. They turn at DRIFT_YAW °/s
+// steering out of the turn to into it, and the way the kart travels follows its nose at
+// DRIFT_SLIP (1/s) while sliding, GRIP when not. Drifting this long (s) earns each boost level,
+// which pays out for `time` s up to `speed` times the top speed.
+const DRIFT_MIN = 5;
+const DRIFT_HOP = 2.4;
+const DRIFT_YAW = [ 40, 110 ];
+const DRIFT_SLIP = 2.4;
+const GRIP = 12;
+const DRIFT_LEVELS = [ 0.7, 1.5, 2.5 ];
+const DRIFT_BOOSTS = [ { time: 0.6, speed: 1.2, name: 'Drift boost' }, { time: 1, speed: 1.3, name: 'Big drift boost' }, { time: 1.5, speed: 1.4, name: 'Mega drift boost' } ];
+const DRIFT_BOOST_ACCEL = 18;
+// R puts the vehicle back on the ground this far ahead (m). Pressing on for STUCK_TIME s at under
+// STUCK_SPEED m/s says how to get unstuck.
+const RESPAWN_AHEAD = 4;
+const STUCK_TIME = 2;
+const STUCK_SPEED = 0.3;
 
 // Tuning per vehicle; others use the default. Speeds in km/h, acceleration in m/s².
 const SPECS = {
@@ -38,16 +85,19 @@ const _box = new Box3();
 const _size = new Vector3();
 const _target = new Vector3();
 const _look = new Vector3();
-const _side = new Vector3();
 const _normal = new Vector3();
 const _eye = new Vector3();
 const _toCamera = new Vector3();
 const _back = new Vector3();
+const _a = new Vector3();
+const _b = new Vector3();
 const DOWN = new Vector3( 0, - 1, 0 );
+const UP = new Vector3( 0, 1, 0 );
 
 export class Driver {
 
-	constructor( { camera, models, controls, getColliders, hud, onStop } ) {
+	// fly, booster, drift: the options above, all off by default.
+	constructor( { camera, models, controls, getColliders, hud, onStop, fly = false, booster = false, drift = false } ) {
 
 		this.camera = camera;
 		this.models = models;
@@ -55,6 +105,9 @@ export class Driver {
 		this.getColliders = getColliders;
 		this.hud = hud;
 		this.onStop = onStop;
+		this.fly = fly;
+		this.booster = booster;
+		this.drift = drift;
 		this.raycaster = new Raycaster();
 		this.keys = new Set();
 		this.active = false;
@@ -65,27 +118,20 @@ export class Driver {
 		this.machines = new Map();
 		this.machine = null;
 
-		const driveKeys = [ 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight' ];
+		this.driveKeys = [ 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight', 'KeyR', ...booster ? [ 'KeyB' ] : [] ];
 		window.addEventListener( 'keydown', e => {
 
 			// Browser shortcuts (Ctrl+R, Cmd+F...) are left to the browser, and don't drive or dig.
 			if ( ! this.active || isTyping( e ) || e.ctrlKey || e.metaKey || e.altKey ) return;
-			if ( driveKeys.includes( e.code ) || this.machine?.keys.includes( e.code ) ) {
+			if ( this.driveKeys.includes( e.code ) || this.machine?.keys.includes( e.code ) ) {
 
 				e.preventDefault();
-				this.keys.add( e.code );
-				if ( e.code === 'Space' && ! e.repeat && this.grounded && ! this.machine ) {
-
-					this.vy = JUMP_SPEED;
-					this.grounded = false;
-
-				}
-
-				if ( ! e.repeat ) this.machine?.press( e.code );
+				if ( e.repeat ) this.keys.add( e.code );
+				else this.press( e.code );
 
 			}
 
-			if ( e.code === 'KeyC' && ! e.repeat ) this.cameraMode = this.cameraMode === 'chase' ? 'hood' : 'chase';
+			if ( e.code === 'KeyC' && ! e.repeat ) this.toggleCamera();
 			if ( ( e.code === 'KeyV' || e.code === 'Escape' ) && ! e.repeat ) {
 
 				// Stop here, so the same key press doesn't start driving again.
@@ -95,8 +141,42 @@ export class Driver {
 			}
 
 		}, true );
-		window.addEventListener( 'keyup', e => this.keys.delete( e.code ), true );
+		window.addEventListener( 'keyup', e => this.release( e.code ), true );
 		window.addEventListener( 'blur', () => this.keys.clear() );
+		// A HUD with buttons for touch screens (drive-hud.js) presses keys through press() and release().
+		hud.attach?.( this );
+
+	}
+
+	// A key (or a HUD button standing in for one) goes down: held keys drive in update(), and some
+	// act once as they go down.
+	press( code ) {
+
+		if ( ! this.active ) return;
+		this.keys.add( code );
+		if ( this.machine ) {
+
+			this.machine.press( code );
+			return;
+
+		}
+
+		if ( code === 'Space' && this.grounded ) this.hop();
+		else if ( code === 'KeyB' && this.booster ) this.fireBooster();
+		else if ( code === 'KeyR' ) this.respawn();
+
+	}
+
+	release( code ) {
+
+		this.keys.delete( code );
+
+	}
+
+	// C: the chase camera, or the driver's seat (the bonnet on a vehicle that doesn't say where its cab is).
+	toggleCamera() {
+
+		this.cameraMode = this.cameraMode === 'chase' ? 'hood' : 'chase';
 
 	}
 
@@ -140,7 +220,12 @@ export class Driver {
 		pivot.rotation.set( 0, 0, 0 );
 		pivot.updateMatrixWorld( true );
 		_box.setFromObject( pivot ).getSize( _size );
+		// The same box in the pivot's own frame, for keeping the chase camera out of it.
+		this.ownBox = _box.clone().translate( _origin.copy( pivot.position ).negate() );
+		this.ownBox.min.divideScalar( pivot.scale.x );
+		this.ownBox.max.divideScalar( pivot.scale.x );
 		pivot.rotation.copy( rotation );
+		pivot.updateMatrixWorld( true );
 		this.length = _size.z;
 		this.width = _size.x;
 		this.height = _size.y;
@@ -150,14 +235,18 @@ export class Driver {
 		// its carrier rather than the middle of its box.
 		this.front = pivot.position.z - _box.min.z;
 		this.rear = _box.max.z - pivot.position.z;
-		// Where the driver sits, if the library says (see specFor), from where it stands.
+		// Where the driver sits, if the library says (see specFor), from where it stands, and the
+		// same point in the pivot's frame.
 		const { cab } = spec;
 		this.cab = cab ? { ahead: cab.ahead + ( this.front - this.rear ) / 2, right: cab.right + ( _box.min.x + _box.max.x ) / 2 - pivot.position.x, up: cab.up } : null;
+		this.cabEye = this.cab ? new Vector3( this.cab.right, this.cab.up, - this.cab.ahead ).divideScalar( pivot.scale.x ) : null;
 
 		this.east = state.east;
 		this.north = state.north;
 		this.y = state.up;
 		this.heading = state.heading;
+		// The way it's travelling, which only differs from the way it points while drifting.
+		this.course = this.heading;
 		this.speed = 0;
 		this.steer = 0;
 		this.vy = 0;
@@ -169,14 +258,46 @@ export class Driver {
 		this.bestAir = 0;
 		this.topSpeed = 0;
 		this.lastSafe = { east: this.east, north: this.north, y: this.y };
+		this.flying = false;
+		this.gauge = 1;
+		this.firing = false;
+		this.drifting = 0;
+		this.driftTime = 0;
+		this.driftLevel = 0;
+		this.driftHop = false;
+		this.boost = null;
+		this.stuckTime = 0;
+		// Where R puts it back when it can't go a little ahead: a spot it drove through freely.
+		this.lastGood = { east: this.east, north: this.north, y: this.y };
+		this.recentGood = this.lastGood;
+		this.goodTimer = 0;
+
+		// Parts that move as it drives (a kart's wheels: see kart.js), and what the cab view hides:
+		// the driver's own head, and glass, which would only tint the view.
+		this.animators = [];
+		this.cabHidden = [];
+		pivot.traverse( object => {
+
+			if ( object.userData.onDrive ) this.animators.push( object.userData.onDrive );
+			const glass = object.isMesh && [ object.material ].flat().every( m => m.transparent );
+			if ( object.userData.hideInCab || glass ) this.cabHidden.push( object );
+
+		} );
+		this.near = this.camera.near;
+		this.cabNear = this.cab ? this.measureCab() : null;
+		this.cabShown = false;
+		this.lastBase = null;
+		this.fx = this.booster || this.drift ? createDriveFx( this.models.group.parent ?? this.models.group ) : null;
 
 		this.keys.clear();
-		this.controls.keys.clear();
+		this.controls.keys?.clear();
 		this.controls.enabled = false;
 		document.exitPointerLock?.();
 		this.active = true;
 		this.machine = this.machines.get( spec.type )?.( { driver: this, entry, spec } ) ?? null;
 		this.hud.show( entry.state.name, this.machine?.panel );
+		this.hud.setFlying?.( false );
+		this.hud.setBoost?.( this.booster ? this.gauge : null );
 		if ( this.machine ) this.machine.update( 0 );
 		else this.placeCamera( 1 );
 
@@ -190,6 +311,9 @@ export class Driver {
 		this.machine = null;
 		const { entry } = this;
 		entry.driving = false;
+		this.showCab( false );
+		this.fx?.dispose();
+		this.fx = null;
 
 		// Park it where it stopped, as it stands: tilted on the ground under its wheels or tracks, up
 		// a pile or down in a hole. If it's in the air it drops back onto the ground instead. Save that.
@@ -204,8 +328,8 @@ export class Driver {
 		const rad = this.heading * Math.PI / 180;
 		const side = this.width / 2 + 1.2;
 		const { east, north } = { east: this.east - Math.cos( rad ) * side, north: this.north + Math.sin( rad ) * side };
-		this.controls.setPose( enuToLocal( east, north, this.y + 1.7 + 0.5 ), this.heading, 0 );
-		this.controls.setMode( 'walk' );
+		this.controls.setPose?.( enuToLocal( east, north, this.y + 1.7 + 0.5 ), this.heading, 0 );
+		this.controls.setMode?.( 'walk' );
 		this.controls.enabled = true;
 		this.hud.hide();
 		this.onStop?.( entry );
@@ -232,12 +356,17 @@ export class Driver {
 		const { keys, spec } = this;
 		const throttle = keys.has( 'KeyW' ) || keys.has( 'ArrowUp' );
 		const brake = keys.has( 'KeyS' ) || keys.has( 'ArrowDown' );
-		const steerInput = ( keys.has( 'KeyD' ) || keys.has( 'ArrowRight' ) ? 1 : 0 ) - ( keys.has( 'KeyA' ) || keys.has( 'ArrowLeft' ) ? 1 : 0 );
-		const boost = keys.has( 'ShiftLeft' ) || keys.has( 'ShiftRight' );
+		const steerInput = this.steerInput();
+		const shift = keys.has( 'ShiftLeft' ) || keys.has( 'ShiftRight' );
+		// With flying on, Shift lifts off; otherwise it boosts.
+		const boost = shift && ! this.fly;
+		if ( shift && this.fly && ! this.flying ) this.takeOff();
+		const east = this.east;
+		const north = this.north;
 
 		// Speed. Boost raises the top speed by a third.
 		const top = spec.topSpeed * ( boost ? 4 / 3 : 1 ) / KMH;
-		if ( this.grounded ) {
+		if ( this.grounded || this.flying ) {
 
 			if ( throttle && this.speed >= - 0.5 ) {
 
@@ -262,11 +391,29 @@ export class Driver {
 
 		}
 
-		// Steering: smoothed, with less lock at speed (bicycle model).
-		this.steer += ( steerInput - this.steer ) * Math.min( 1, dt * 4 );
-		const maxAngle = MathUtils.lerp( 35, 3.5, MathUtils.clamp( Math.abs( this.speed ) / 40, 0, 1 ) ) * MathUtils.DEG2RAD;
-		const yawRate = this.speed / this.wheelbase * Math.tan( this.steer * maxAngle ) * ( this.grounded ? 1 : 0.2 );
-		this.heading += yawRate * MathUtils.RAD2DEG * dt;
+		if ( this.booster || this.drift ) this.thrust( dt, top );
+
+		if ( this.flying ) {
+
+			// In the air it turns like a hovercraft, at the same rate whatever its speed.
+			this.steer += ( steerInput - this.steer ) * Math.min( 1, dt * 4 );
+			this.heading += this.steer * FLY_YAW * dt;
+			this.course = this.heading;
+
+		} else if ( this.drift ) {
+
+			this.kartSteer( dt, steerInput );
+
+		} else {
+
+			// Steering: smoothed, with less lock at speed (bicycle model).
+			this.steer += ( steerInput - this.steer ) * Math.min( 1, dt * 4 );
+			const maxAngle = MathUtils.lerp( 35, 3.5, MathUtils.clamp( Math.abs( this.speed ) / 40, 0, 1 ) ) * MathUtils.DEG2RAD;
+			const yawRate = this.speed / this.wheelbase * Math.tan( this.steer * maxAngle ) * ( this.grounded ? 1 : 0.2 );
+			this.heading += yawRate * MathUtils.RAD2DEG * dt;
+			this.course = this.heading;
+
+		}
 
 		this.move( dt );
 
@@ -281,7 +428,11 @@ export class Driver {
 		const right = this.groundAt( this.east + fz * track, this.north - fx * track );
 		const heights = [ front, rear ].filter( h => h !== null );
 
-		if ( heights.length === 0 ) {
+		if ( this.flying ) {
+
+			this.flyHeight( dt, shift, heights.length ? Math.max( ...heights ) : null );
+
+		} else if ( heights.length === 0 ) {
 
 			// Off the edge of the world: put it back where it last stood.
 			if ( this.y < this.lastSafe.y - 200 ) Object.assign( this, this.lastSafe, { speed: 0, vy: 0 } );
@@ -320,12 +471,14 @@ export class Driver {
 				if ( this.y <= ground ) {
 
 					this.y = ground;
-					if ( this.airTime > 0.4 ) this.hud.flash( `${ this.airTime.toFixed( 1 ) } s air` );
-					this.bestAir = Math.max( this.bestAir, this.airTime );
+					// A drift's little hop isn't a jump.
+					if ( this.airTime > 0.4 && ! this.driftHop ) this.hud.flash( `${ this.airTime.toFixed( 1 ) } s air` );
+					if ( ! this.driftHop ) this.bestAir = Math.max( this.bestAir, this.airTime );
 					if ( this.vy < - 12 ) this.speed *= 0.8;
 					this.vy = 0;
 					this.airTime = 0;
 					this.grounded = true;
+					this.driftHop = false;
 
 				}
 
@@ -333,18 +486,279 @@ export class Driver {
 
 		}
 
+		// Level with the ground across the wheels; banked into the turn when flying, and leaning out
+		// of a drift a little.
 		const sideSlope = left !== null && right !== null ? ( right - left ) / ( track * 2 ) : 0;
-		this.roll += ( ( this.grounded ? Math.atan( sideSlope ) : this.roll ) - this.roll ) * Math.min( 1, dt * 8 );
+		const lean = this.flying ? - this.steer * 0.3 : this.grounded ? Math.atan( sideSlope ) + this.drifting * 0.05 : this.roll;
+		this.roll += ( lean - this.roll ) * Math.min( 1, dt * 8 );
 
 		// Pose the model. It faces -Z in its pivot, so pitch is about X and roll about Z.
 		const { pivot } = this.entry;
 		enuToLocal( this.east, this.north, this.y, pivot.position );
 		pivot.rotation.set( this.pitch, headingToYaw( this.heading ), this.roll, 'YXZ' );
 		pivot.updateMatrixWorld( true );
+		// Front wheels turned against a drift, as a kart's are.
+		const wheels = this.drifting ? this.steer * 0.3 - this.drifting * 0.6 : this.steer;
+		for ( const animate of this.animators ) animate( { steer: wheels, speed: this.speed, dt } );
+		this.updateFx( dt );
 
+		this.checkStuck( dt, throttle || brake, Math.hypot( this.east - east, this.north - north ) );
 		this.topSpeed = Math.max( this.topSpeed, Math.abs( this.speed ) );
-		this.hud.update( { kmh: Math.abs( this.speed ) * KMH, reverse: this.speed < - 0.3, top: this.topSpeed * KMH, bestAir: this.bestAir, air: this.grounded ? 0 : this.airTime, boost } );
+		this.hud.update( {
+			kmh: Math.abs( this.speed ) * KMH, reverse: this.speed < - 0.3, top: this.topSpeed * KMH, bestAir: this.bestAir, air: this.grounded || this.flying ? 0 : this.airTime,
+			boost: this.booster || this.drift ? this.firing || !! this.boost : boost,
+			altitude: this.flying ? this.altitude : null, drift: this.drifting ? this.driftLevel : null,
+		} );
+		if ( this.booster ) this.hud.setBoost?.( this.gauge );
 		this.placeCamera( dt );
+
+	}
+
+	steerInput() {
+
+		const { keys } = this;
+		return ( keys.has( 'KeyD' ) || keys.has( 'ArrowRight' ) ? 1 : 0 ) - ( keys.has( 'KeyA' ) || keys.has( 'ArrowLeft' ) ? 1 : 0 );
+
+	}
+
+	// Space on the ground: a hop. With kart handling, steering at speed, it's a little hop into a drift.
+	hop() {
+
+		const steer = this.steerInput();
+		if ( this.drift && steer !== 0 && this.speed > DRIFT_MIN ) {
+
+			this.vy = DRIFT_HOP;
+			this.driftHop = true;
+			this.startDrift( steer );
+
+		} else {
+
+			this.vy = JUMP_SPEED;
+			this.driftHop = false;
+
+		}
+
+		this.grounded = false;
+
+	}
+
+	// Kart handling: sharp steering at low speed that eases off with speed, and drifts. Hold Space
+	// while steering at speed and the kart slides round the turn nose-in for as long as it's held,
+	// tighter steering into it and wider steering out; let go and it gets a boost that grows with
+	// the drift's length.
+	kartSteer( dt, steerInput ) {
+
+		this.steer += ( steerInput - this.steer ) * Math.min( 1, dt * 10 );
+		const space = this.keys.has( 'Space' );
+		if ( ! this.drifting && space && steerInput !== 0 && this.grounded && this.speed > DRIFT_MIN ) this.startDrift( steerInput );
+		if ( this.drifting && ! space ) this.endDrift( true );
+		else if ( this.drifting && this.speed < DRIFT_MIN * 0.6 ) this.endDrift( false );
+
+		let yawRate;
+		if ( this.drifting ) {
+
+			yawRate = this.drifting * MathUtils.lerp( ...DRIFT_YAW, ( this.steer * this.drifting + 1 ) / 2 );
+			this.speed -= this.speed * 0.1 * dt;
+			this.driftTime += dt;
+			const level = DRIFT_LEVELS.filter( time => this.driftTime >= time ).length;
+			if ( this.grounded ) this.driftLevel = Math.max( this.driftLevel, level );
+
+		} else {
+
+			// Full lock as a bicycle near standstill, capped at a rate that eases off with speed.
+			const speed = Math.abs( this.speed );
+			const lock = speed / this.wheelbase * Math.tan( 35 * MathUtils.DEG2RAD ) * MathUtils.RAD2DEG;
+			const cap = MathUtils.lerp( ...KART_YAW, MathUtils.clamp( speed / ( this.spec.topSpeed / KMH ), 0, 1 ) );
+			yawRate = Math.sign( this.speed ) * this.steer * Math.min( lock, cap );
+
+		}
+
+		this.heading += yawRate * ( this.grounded ? 1 : 0.5 ) * dt;
+		// The way it travels follows the way it points: slowly while sliding, almost at once with grip.
+		const slip = ( ( this.heading - this.course ) % 360 + 540 ) % 360 - 180;
+		this.course += slip * Math.min( 1, dt * ( this.drifting ? DRIFT_SLIP : GRIP ) );
+
+	}
+
+	startDrift( direction ) {
+
+		this.drifting = Math.sign( direction );
+		this.driftTime = 0;
+		this.driftLevel = 0;
+
+	}
+
+	// Out of the drift; let go of Space after a long enough one (`paid`) and it pays out its boost.
+	endDrift( paid ) {
+
+		if ( paid && this.driftLevel > 0 ) {
+
+			const boost = DRIFT_BOOSTS[ this.driftLevel - 1 ];
+			this.boost = { ...boost, left: boost.time };
+			this.hud.flash( boost.name );
+
+		}
+
+		this.drifting = 0;
+		this.driftLevel = 0;
+
+	}
+
+	fireBooster() {
+
+		if ( this.firing || this.gauge < BOOST_MIN ) return;
+		this.firing = true;
+
+	}
+
+	// The booster and drift boosts push past the top speed while they last; after them it comes
+	// back down to the top speed.
+	thrust( dt, top ) {
+
+		const base = this.spec.topSpeed / KMH;
+		if ( this.firing ) {
+
+			this.gauge = Math.max( 0, this.gauge - dt / BOOST_TIME );
+			if ( this.gauge === 0 ) this.firing = false;
+			if ( this.speed < base * BOOST_SPEED ) this.speed = Math.min( this.speed + BOOST_ACCEL * dt, base * BOOST_SPEED );
+
+		} else {
+
+			this.gauge = Math.min( 1, this.gauge + dt / BOOST_RECHARGE );
+
+		}
+
+		if ( this.boost ) {
+
+			if ( this.speed < base * this.boost.speed ) this.speed = Math.min( this.speed + DRIFT_BOOST_ACCEL * dt, base * this.boost.speed );
+			this.boost.left -= dt;
+			if ( this.boost.left <= 0 ) this.boost = null;
+
+		} else if ( ! this.firing && this.speed > top && ( this.grounded || this.flying ) ) {
+
+			this.speed = Math.max( top, this.speed - ( this.speed - top ) * Math.min( 1, dt * 1.2 ) - dt );
+
+		}
+
+	}
+
+	// Shift held: off the ground and up. Steering, gas and brake keep working in the air.
+	takeOff() {
+
+		this.flying = true;
+		this.grounded = false;
+		this.airTime = 0;
+		this.driftHop = false;
+		if ( this.drifting ) this.endDrift( false );
+		this.hud.setFlying?.( true );
+
+	}
+
+	// Height while flying: climbing toward a hover with Shift held, gliding down without it, never
+	// below the ground and never up through a roof or a bridge. Touching down is gentle, whatever
+	// the speed. With no ground found under it (Google's tiles there still loading) it holds its
+	// height instead of gliding down, so it can't sink through ground that arrives late.
+	flyHeight( dt, shift, ground ) {
+
+		this.altitude = ground === null ? null : Math.max( 0, this.y - ground );
+		const glide = ground === null ? 0 : - FLY_GLIDE;
+		const climb = shift ? FLY_CLIMB * MathUtils.clamp( 1 - ( this.altitude ?? 0 ) / FLY_CEILING, - 0.5, 1 ) : glide;
+		this.vy += ( climb - this.vy ) * Math.min( 1, dt * 2.5 );
+		if ( this.vy > 0 ) {
+
+			enuToLocal( this.east, this.north, this.y + this.height / 2, _origin );
+			if ( this.cast( _origin, UP, this.height / 2 + this.vy * dt + 0.2 ) ) this.vy = 0;
+
+		}
+
+		this.y += this.vy * dt;
+		if ( ground !== null && this.y <= ground ) {
+
+			this.y = ground;
+			this.vy = Math.max( this.vy, 0 );
+			if ( ! shift ) this.land();
+
+		}
+
+		this.pitch += ( MathUtils.clamp( this.vy / Math.max( 6, Math.abs( this.speed ) ), - 0.35, 0.35 ) - this.pitch ) * Math.min( 1, dt * 3 );
+
+	}
+
+	land() {
+
+		this.flying = false;
+		this.grounded = true;
+		this.vy = 0;
+		this.airTime = 0;
+		this.hud.setFlying?.( false );
+
+	}
+
+	// R: back on the ground a few metres ahead, upright and stopped, or if that's blocked or there's
+	// no ground there, at a spot it drove through freely a moment ago.
+	respawn() {
+
+		const rad = this.heading * Math.PI / 180;
+		const de = Math.sin( rad ), dn = Math.cos( rad );
+		let spot = null;
+		if ( ! this.wallAhead( de, dn, RESPAWN_AHEAD ) ) {
+
+			const east = this.east + de * RESPAWN_AHEAD;
+			const north = this.north + dn * RESPAWN_AHEAD;
+			const ground = this.groundAt( east, north );
+			if ( ground !== null && Math.abs( ground - this.y ) < 3 ) spot = { east, north, y: ground };
+
+		}
+
+		Object.assign( this, spot ?? this.lastGood, { speed: 0, vy: 0, steer: 0, pitch: 0, roll: 0, course: this.heading, grounded: true, airTime: 0, stuckTime: 0, driftHop: false, boost: null } );
+		if ( this.flying ) this.land();
+		if ( this.drifting ) this.endDrift( false );
+		this.recentGood = this.lastGood = { east: this.east, north: this.north, y: this.y };
+		this.hud.flash( 'Back on the road' );
+
+	}
+
+	// Pressing on without getting anywhere says how to get unstuck. Meanwhile, remember where it
+	// moves freely, for R.
+	checkStuck( dt, pressing, moved ) {
+
+		if ( pressing && moved < STUCK_SPEED * dt && ! this.flying ) this.stuckTime += dt;
+		else this.stuckTime = Math.min( 0, this.stuckTime + dt );
+		if ( this.stuckTime >= STUCK_TIME ) {
+
+			this.hud.flash( this.fly ? 'Stuck? Hold Shift to fly or press R' : 'Stuck? Press R' );
+			// Again in a few seconds if it's still stuck.
+			this.stuckTime = - 2;
+
+		}
+
+		this.goodTimer += dt;
+		if ( this.grounded && Math.abs( this.speed ) > 1 && moved > 0.5 * dt && this.goodTimer >= 0.5 ) {
+
+			this.goodTimer = 0;
+			this.lastGood = this.recentGood;
+			this.recentGood = { east: this.east, north: this.north, y: this.y };
+
+		}
+
+	}
+
+	updateFx( dt ) {
+
+		if ( ! this.fx ) return;
+		const { scale } = this.entry.pivot;
+		const wheel = ( this.rear - this.length * 0.2 ) / scale.x;
+		const track = this.width * 0.4 / scale.x;
+		this.fx.update( {
+			pivot: this.entry.pivot,
+			size: { width: this.width, height: this.height, rear: this.rear, scale: scale.x },
+			wheels: [ _a.set( - track, 0.05, wheel ), _b.set( track, 0.05, wheel ) ],
+			velocity: _target.set( - Math.sin( this.course * Math.PI / 180 ) * this.speed, this.vy, Math.cos( this.course * Math.PI / 180 ) * this.speed ),
+			flame: this.firing ? 1 : this.boost ? 0.55 : 0,
+			drifting: !! this.drifting && this.grounded,
+			level: this.driftLevel,
+			dt,
+		} );
 
 	}
 
@@ -352,7 +766,7 @@ export class Driver {
 	// there.
 	move( dt ) {
 
-		const rad = this.heading * Math.PI / 180;
+		const rad = this.course * Math.PI / 180;
 		const ve = Math.sin( rad ) * this.speed;
 		const vn = Math.cos( rad ) * this.speed;
 		const v = Math.hypot( ve, vn );
@@ -404,12 +818,16 @@ export class Driver {
 	}
 
 	// Hit a wall at ( ve, vn ) m/s east and north: the vehicle stops against it, where it is,
-	// facing as it was. Backing away (or steering along it) drives off again.
+	// facing as it was. Backing away (or steering along it) drives off again. A drift or a drift
+	// boost ends there too.
 	crash( ve, vn, wall ) {
 
 		const into = - ( ve * wall.east + vn * wall.north );
 		if ( into <= 0 ) return;
 		this.speed = 0;
+		this.course = this.heading;
+		this.boost = null;
+		if ( this.drifting ) this.endDrift( false );
 		if ( into > CRASH_FLASH ) this.hud.flash( 'Crash!' );
 
 	}
@@ -423,37 +841,143 @@ export class Driver {
 		// The height the cameras frame: the vehicle's, or where its box is mostly boom or mast (a
 		// crane), its cab's, so they show the carrier and the way ahead rather than the boom.
 		const height = cab ? cab.up / 0.8 : this.height;
-		const inCab = this.cameraMode === 'hood' && cab;
+		const inCab = this.cameraMode === 'hood' && !! cab;
+		this.showCab( inCab );
+		// Where the chase camera last followed it from (see below); not while it's in another view.
+		if ( this.cameraMode !== 'chase' ) this.lastBase = null;
 		if ( inCab ) {
 
-			const right = _side.set( - Math.cos( rad ), 0, - Math.sin( rad ) );
-			this.camera.position.copy( base ).addScaledVector( forward, cab.ahead ).addScaledVector( right, cab.right ).setY( base.y + cab.up );
-			this.pullInFront( _eye.copy( base ).setY( base.y + cab.up ), this.camera.position );
+			// At the driver's eyes, turned and tilted with the vehicle, looking down the road ahead.
+			const { pivot } = this.entry;
+			pivot.localToWorld( this.camera.position.copy( this.cabEye ) );
+			pivot.localToWorld( _look.set( 0, - 1.4, - 10 ).divideScalar( pivot.scale.x ).add( this.cabEye ) );
 
 		} else if ( this.cameraMode === 'hood' ) {
 
 			_target.copy( base ).addScaledVector( forward, this.length * 0.15 ).setY( base.y + height * 0.8 );
 			this.camera.position.copy( _target );
 			this.pullInFront( _eye.copy( base ).setY( base.y + height * 0.8 ), this.camera.position );
+			_look.copy( base ).addScaledVector( forward, 8 ).setY( base.y + height * 0.6 );
 
 		} else {
 
-			// Never inside a building or a container: the camera heads for a spot clear of whatever is
-			// behind the vehicle, and jumps in front of anything that comes between them on the way.
-			const back = ( this.rear + this.length * 0.3 + 5 ) * this.chaseZoom;
-			_target.copy( base ).addScaledVector( forward, - back ).setY( base.y + height + 2.5 * this.chaseZoom );
+			// Never inside a building, a container or the vehicle itself: the camera heads for a spot
+			// behind and above the vehicle's box (a crane's boom and all), in front of whatever is
+			// behind it, and on the way there it keeps out of both. A small vehicle has it nearer.
+			const reach = Math.min( 5, 1.5 + this.length );
+			const lift = Math.min( 2.5, 0.6 + this.length * 0.4 ) * this.chaseZoom;
+			const back = this.rear + ( this.length * 0.3 + reach ) * this.chaseZoom;
+			_target.copy( base ).addScaledVector( forward, - back ).setY( base.y + height + lift );
 			_eye.copy( base ).setY( base.y + height * 0.8 );
-			this.pullInFront( _eye, _target );
+			this.clearView( _eye, _target, base, lift );
+			// It moves with the vehicle and eases round after it as it turns, so it doesn't fall
+			// behind at speed.
+			if ( this.lastBase ) this.camera.position.add( _a.subVectors( base, this.lastBase ) );
+			this.lastBase = ( this.lastBase ?? new Vector3() ).copy( base );
 			this.camera.position.lerp( _target, 1 - Math.exp( - dt * 6 ) );
-			this.pullInFront( _eye, this.camera.position );
+			this.keepOut( _eye, this.camera.position );
+			_look.copy( base ).addScaledVector( forward, 8 ).setY( base.y + height * 0.6 );
 
 		}
 
-		_look.copy( inCab ? this.camera.position : base ).addScaledVector( forward, 8 ).setY( base.y + height * 0.6 );
 		this.camera.lookAt( _look );
 		// Keep the walk controller's view direction in step for when we get out.
 		this.controls.yaw = headingToYaw( this.heading );
 		this.controls.pitch = 0;
+
+	}
+
+	// Bring the chase camera's `target` in front of anything solid between it and `eye` (a point
+	// in the vehicle), but no nearer than just outside the vehicle's own box. With no room for it
+	// behind the vehicle (backed up to a wall), it goes up over the vehicle instead.
+	clearView( eye, target, base, lift ) {
+
+		_toCamera.subVectors( target, eye );
+		const distance = _toCamera.length();
+		_toCamera.divideScalar( distance );
+		const out = this.leaveOwnBox( eye, _toCamera, distance );
+		const hit = this.cast( eye, _toCamera, Math.max( distance, out ) + CAMERA_CLEARANCE );
+		const free = hit ? hit.distance - CAMERA_CLEARANCE : Infinity;
+		if ( free >= out + ROOM ) {
+
+			target.copy( eye ).addScaledVector( _toCamera, Math.min( Math.max( distance, out ), free ) );
+			return;
+
+		}
+
+		target.copy( base ).setY( base.y + this.height + Math.max( lift, 1.5 ) );
+		this.keepOut( eye, target );
+
+	}
+
+	// Keep `point` (the camera) outside the vehicle's own box, moving it out along the line from
+	// `eye` (a point in the vehicle), and in front of anything solid along that line, but not back
+	// inside the box for it.
+	keepOut( eye, point ) {
+
+		_toCamera.subVectors( point, eye );
+		const distance = _toCamera.length();
+		if ( distance < 1e-3 ) return;
+		_toCamera.divideScalar( distance );
+		const out = this.leaveOwnBox( eye, _toCamera, distance );
+		const far = Math.max( distance, out );
+		const hit = this.cast( eye, _toCamera, far + CAMERA_CLEARANCE );
+		point.copy( eye ).addScaledVector( _toCamera, hit ? Math.max( out, Math.min( far, hit.distance - CAMERA_CLEARANCE ) ) : far );
+
+	}
+
+	// How far along `dir` from `origin` the line leaves the vehicle's box grown by OWN_CLEARANCE;
+	// 0 if `origin` is outside it already.
+	leaveOwnBox( origin, dir, distance ) {
+
+		const { pivot } = this.entry;
+		const scale = pivot.scale.x;
+		pivot.worldToLocal( _a.copy( origin ) );
+		pivot.worldToLocal( _b.copy( origin ).addScaledVector( dir, distance ) ).sub( _a );
+		const grow = OWN_CLEARANCE / scale;
+		const { min, max } = this.ownBox;
+		let leave = Infinity;
+		for ( const axis of [ 'x', 'y', 'z' ] ) {
+
+			const lo = min[ axis ] - grow;
+			const hi = max[ axis ] + grow;
+			if ( _a[ axis ] < lo || _a[ axis ] > hi ) return 0;
+			const d = _b[ axis ];
+			if ( d > 1e-9 ) leave = Math.min( leave, ( hi - _a[ axis ] ) / d );
+			else if ( d < - 1e-9 ) leave = Math.min( leave, ( lo - _a[ axis ] ) / d );
+
+		}
+
+		return leave === Infinity ? 0 : leave * distance;
+
+	}
+
+	// The driver's-seat view hides the driver's own head and the glass, and starts just past a cab
+	// shell whose windows aren't see-through (cabNear, see measureCab).
+	showCab( on ) {
+
+		if ( on === this.cabShown ) return;
+		this.cabShown = on;
+		for ( const object of this.cabHidden ) object.visible = ! on;
+		this.camera.near = on && this.cabNear ? this.cabNear : this.near;
+		this.camera.updateProjectionMatrix();
+
+	}
+
+	// Where the driver's-seat view should start: just past the windscreen if the driver would see
+	// the inside of it (a cab with painted-on windows), found by looking out a little above
+	// straight ahead, where a see-through windscreen (hidden in this view) lets the eye out. Null
+	// for a cab that has one, so its dashboard stays in view.
+	measureCab() {
+
+		const { pivot } = this.entry;
+		pivot.localToWorld( _eye.copy( this.cabEye ) );
+		pivot.localToWorld( _look.set( 0, 0.9, - 10 ).divideScalar( pivot.scale.x ).add( this.cabEye ) ).sub( _eye ).normalize();
+		this.raycaster.set( _eye, _look );
+		this.raycaster.far = CAB_SHELL;
+		const hit = this.raycaster.intersectObject( pivot, true )
+			.find( h => h.object.isMesh && ! this.cabHidden.some( hidden => isInside( h.object, hidden ) ) );
+		return hit ? hit.distance + CAB_MARGIN : null;
 
 	}
 
@@ -491,10 +1015,11 @@ export class Driver {
 }
 
 // A library item can also give its own tuning as "drive": { topSpeed, accel, brake, reverse }
-// in library.json, which makes it drivable whatever its category. A machine whose box is mostly
-// boom or mast (a crane) also gives "cab": { ahead, right, up }, where the driver's eyes are in
-// metres from the middle of its box at ground level, for the cameras; and "pivot": { ahead }, the
-// point it stands and turns on in metres ahead of that middle (see itemConfig and models.js).
+// in library.json, which makes it drivable whatever its category. It can also give "cab":
+// { ahead, right, up }, where the driver's eyes are in metres from the middle of its box at ground
+// level, for the driver's-seat camera (and a crane, whose box is mostly boom or mast, for framing
+// the chase camera on its carrier); and "pivot": { ahead }, the point it stands and turns on in
+// metres ahead of that middle (see itemConfig and models.js).
 export function specFor( item ) {
 
 	return { ...SPECS.default, ...SPECS[ item?.id ], ...item?.drive };

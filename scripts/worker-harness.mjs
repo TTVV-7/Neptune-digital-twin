@@ -80,8 +80,10 @@ export async function serveKeys( keys ) {
 // --- the Worker ------------------------------------------------------------------------
 
 // `wrangler dev` on this machine with a fresh database (migrations applied) and the given vars,
-// which replace any in wrangler.jsonc or .dev.vars. Resolves once it answers.
-export async function startWorker( { port, vars } ) {
+// which replace any in wrangler.jsonc or .dev.vars. Resolves once it answers. With `config`
+// (World Drive's wrangler.drive.jsonc) it runs that Worker instead, which has no database, and
+// with only the vars given here: no .dev.vars file is read.
+export async function startWorker( { port, vars, config = null } ) {
 
 	const dir = mkdtempSync( join( tmpdir(), 'twin-worker-' ) );
 	const state = join( dir, 'state' );
@@ -90,11 +92,19 @@ export async function startWorker( { port, vars } ) {
 	writeFileSync( join( assets, 'index.html' ), '<!doctype html><title>test site</title>' );
 	const env = { ...process.env, WRANGLER_SEND_METRICS: 'false', CI: 'true' };
 
-	const migrate = spawnSync( process.execPath, [ wrangler, 'd1', 'migrations', 'apply', 'DB', '--local', '--persist-to', state ], { cwd: ROOT, env, encoding: 'utf8' } );
-	if ( migrate.status !== 0 ) throw new Error( `migrations failed:\n${ migrate.stdout }\n${ migrate.stderr }` );
+	if ( ! config ) {
 
+		const migrate = spawnSync( process.execPath, [ wrangler, 'd1', 'migrations', 'apply', 'DB', '--local', '--persist-to', state ], { cwd: ROOT, env, encoding: 'utf8' } );
+		if ( migrate.status !== 0 ) throw new Error( `migrations failed:\n${ migrate.stdout }\n${ migrate.stderr }` );
+
+	}
+
+	// An empty settings file stands in for .dev.vars, so a developer's own settings stay out of it.
+	const envFile = join( dir, 'empty.env' );
+	writeFileSync( envFile, '' );
 	const args = [
-		wrangler, 'dev', '--local', '--ip', '127.0.0.1', '--port', String( port ), '--inspector-port', String( await freePort() ),
+		wrangler, 'dev', ...( config ? [ '-c', config, '--env-file', envFile ] : [] ),
+		'--local', '--ip', '127.0.0.1', '--port', String( port ), '--inspector-port', String( await freePort() ),
 		'--persist-to', state, '--assets', assets, '--show-interactive-dev-session=false',
 		...Object.entries( vars ).flatMap( ( [ name, value ] ) => [ '--var', `${ name }:${ value }` ] ),
 	];
@@ -124,7 +134,8 @@ export async function startWorker( { port, vars } ) {
 		try {
 
 			const res = await fetch( `${ base }/api/config` );
-			if ( res.ok ) return { base, stop, log: () => log };
+			// state: where it keeps its storage, to look at what it stored.
+			if ( res.ok ) return { base, stop, log: () => log, state };
 
 		} catch {
 
@@ -208,14 +219,15 @@ export const GOOGLE_STUB = `window.google = { accounts: { id: {
 } } };`;
 
 // The Vite dev server on 127.0.0.1:port, with env added to this process's environment (TWIN_API
-// sends /api to a local server). Resolves once it answers.
-export async function startVite( port, env = {} ) {
+// sends /api to a local server). config: another Vite config, e.g. World Drive's
+// vite.drive.config.js. Resolves once it answers.
+export async function startVite( port, env = {}, config = null ) {
 
 	const bin = join( dirname( createRequire( import.meta.url ).resolve( 'vite/package.json' ) ), 'bin', 'vite.js' );
 	const base = `http://127.0.0.1:${ port }`;
 	// Never a Maps key in tests: blank every name the Vite config would read one from.
 	const noKey = Object.fromEntries( [ 'GOOGLE_API', 'google_api', 'GOOGLE_MAPS_API_KEY', 'VITE_GOOGLE_MAPS_API_KEY', 'GOOGLE_MAPS_KEY', 'GOOGLE_MAPS_API' ].map( name => [ name, '' ] ) );
-	const child = spawn( process.execPath, [ bin, '--port', String( port ), '--strictPort', '--host', '127.0.0.1' ], {
+	const child = spawn( process.execPath, [ bin, ...( config ? [ '--config', config ] : [] ), '--port', String( port ), '--strictPort', '--host', '127.0.0.1' ], {
 		cwd: ROOT,
 		env: { ...process.env, TWIN_API: '', ...noKey, ...env },
 		detached: process.platform !== 'win32',

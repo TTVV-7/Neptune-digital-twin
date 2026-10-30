@@ -1,0 +1,50 @@
+// World Drive on worlddrive.app (docs/world-drive.md): its own Worker, apart from the construction
+// app's (wrangler.jsonc). `npm run deploy:drive` builds the site into dist-drive/ and deploys it with
+// this; Workers Builds can run the same from GitHub.
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "world-drive",
+	"main": "worker/drive/index.js",
+	"compatibility_date": "2026-10-01",
+	// The built site (npm run build:drive). The Worker only runs for /api/*; everything else is
+	// served straight from these files, which costs nothing however many people visit.
+	"assets": {
+		"directory": "./dist-drive",
+		"binding": "ASSETS",
+		"run_worker_first": [ "/api/*" ]
+	},
+	// Both addresses are the Worker's custom domains (Cloudflare makes their DNS records and
+	// certificates). www sends you on to worlddrive.app (worker/drive/index.js and the page itself).
+	"routes": [
+		{ "pattern": "worlddrive.app", "custom_domain": true },
+		{ "pattern": "www.worlddrive.app", "custom_domain": true }
+	],
+	// No second address on workers.dev: the Turnstile widget only works on worlddrive.app, and one
+	// address keeps the visit counts simple.
+	"workers_dev": false,
+	"preview_urls": false,
+	// Settings in the dashboard (Settings → Variables and Secrets) that aren't listed here survive a
+	// deploy. The three below are set from here on every deploy: change them here, not there.
+	"keep_vars": true,
+	"vars": {
+		// Visits a day for everyone together, and for each visitor; both start again at midnight UTC.
+		// Each visit is one billed Google Maps session.
+		"DAILY_VISITS": "300",
+		"PER_VISITOR_DAILY": "8",
+		// The Turnstile widget for worlddrive.app (public; its secret is the TURNSTILE_SECRET secret).
+		"TURNSTILE_SITE_KEY": "0x4AAAAAAFs3k5sgUIQHSuGC"
+	},
+	// Secrets, set by the owner and never in a file: GOOGLE_MAPS_API_KEY (a secret named
+	// Google_maps_api, in any case, is taken too) and TURNSTILE_SECRET
+	// (npx wrangler secret put GOOGLE_MAPS_API_KEY -c wrangler.drive.jsonc). Locally they come from
+	// .dev.vars.drive (.dev.vars.drive.example).
+	//
+	// The day's visit counts and the search queue: one Durable Object for everyone, on SQLite storage
+	// (on every plan, the free one too).
+	"durable_objects": {
+		"bindings": [ { "name": "LIMITS", "class_name": "DriveLimits" } ]
+	},
+	"migrations": [
+		{ "tag": "v1", "new_sqlite_classes": [ "DriveLimits" ] }
+	]
+}

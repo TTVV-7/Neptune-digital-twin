@@ -4,8 +4,8 @@ import { defineConfig, loadEnv } from 'vite';
 // stored in a cloud environment or shell (e.g. GOOGLE_MAPS_API_KEY or google_api) works
 // as well as VITE_GOOGLE_MAPS_API_KEY in .env.local. GOOGLE_API_KEY is deliberately left out:
 // it often holds a different Google key (e.g. Gemini), and whatever is used here ends up
-// readable in the built site.
-const GOOGLE_KEY_NAMES = [
+// readable in the built site. vite.drive.config.js (World Drive) reads the same names.
+export const GOOGLE_KEY_NAMES = [
 	'VITE_GOOGLE_MAPS_API_KEY',
 	'GOOGLE_MAPS_API_KEY',
 	'GOOGLE_MAPS_KEY',
