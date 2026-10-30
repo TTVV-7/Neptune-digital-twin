@@ -86,8 +86,10 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 		label: 'Excavation',
 		build: buildPitMarker,
 		normalize: normalizePit,
-		// The rim is the ground as it was, so digging doesn't drag the pit down after itself.
-		snap: 'median-original',
+		// The rim is the ground as it was, so digging doesn't drag the pit down after itself, and
+		// the lowest of it, so whatever stands in Google's mesh there (rail cars, a shed) is dug
+		// away with the pit instead of lifting the floor to its roof.
+		snap: 'lowest-original',
 		solid: false,
 		buildOnly: true,
 		fields: [
