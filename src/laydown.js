@@ -73,6 +73,8 @@ const _box = new Box3();
 const _bounds = new Box3();
 const _inverse = new Matrix4();
 const _toLocal = new Matrix4();
+// Ground meshes' vertices -> their version when the mesh's box was last worked out.
+const measured = new WeakMap();
 
 export function setUpLaydown( { camera, canvas, models, sidebar, panel, getGround, onUpdate } ) {
 
@@ -248,8 +250,19 @@ export function setUpLaydown( { camera, canvas, models, sidebar, panel, getGroun
 			root.traverseVisible( object => {
 
 				if ( ! object.isMesh || object.userData.noCollide ) return;
-				if ( ! object.geometry.boundingBox ) object.geometry.computeBoundingBox();
-				_box.copy( object.geometry.boundingBox ).applyMatrix4( object.matrixWorld );
+				// The box is worked out again whenever the vertices change. Earth piled up after it
+				// was measured (a pile pouring, a spoil heap) would otherwise stand above it, and
+				// rays started under the pile's new top would miss it.
+				const { geometry } = object;
+				const { position } = geometry.attributes;
+				if ( ! geometry.boundingBox || measured.get( position ) !== position.version ) {
+
+					geometry.computeBoundingBox();
+					measured.set( position, position.version );
+
+				}
+
+				_box.copy( geometry.boundingBox ).applyMatrix4( object.matrixWorld );
 				if ( _box.max.x < _bounds.min.x || _box.min.x > _bounds.max.x || _box.max.z < _bounds.min.z || _box.min.z > _bounds.max.z ) return;
 				meshes.push( object );
 				top = Math.max( top, _box.max.y );
