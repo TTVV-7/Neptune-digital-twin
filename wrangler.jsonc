@@ -13,29 +13,21 @@
 		"binding": "ASSETS",
 		"run_worker_first": [ "/api/*" ]
 	},
-	"vars": {
-		// The "Web application" OAuth client id from the Google Cloud console. It isn't secret.
-		"GOOGLE_CLIENT_ID": "",
-		// Optional, comma-separated. Leave both empty to let any Google account sign in.
-		"ALLOWED_EMAILS": "",
-		"ALLOWED_DOMAINS": "",
-		// Premium equipment (docs/premium.md), off until the Payment Link's address and id are here
-		// and STRIPE_WEBHOOK_SECRET is set (a secret, below). Both are public.
-		"STRIPE_PAYMENT_LINK": "",
-		"STRIPE_PAYMENT_LINK_ID": "",
-		// Optional: the price as the app shows it, e.g. "CA$19, one time", and comma-separated
-		// emails that get premium without paying.
-		"PREMIUM_PRICE": "",
-		"PREMIUM_EMAILS": ""
-	},
+	// Settings are kept in the Worker's dashboard (Settings → Variables and Secrets), not here, so
+	// a deploy from GitHub (Workers Builds) never blanks them; keep_vars keeps them across deploys.
+	// Plain text: GOOGLE_CLIENT_ID (the "Web application" OAuth client id, not secret),
+	// ALLOWED_EMAILS and ALLOWED_DOMAINS (comma-separated; both empty lets any Google account in),
+	// and for premium (docs/premium.md) STRIPE_PAYMENT_LINK, STRIPE_PAYMENT_LINK_ID, PREMIUM_PRICE,
+	// PREMIUM_EMAILS. Locally they come from .dev.vars (.dev.vars.example).
+	"keep_vars": true,
 	// Secrets: npx wrangler secret put GOOGLE_MAPS_API_KEY (and STRIPE_WEBHOOK_SECRET for premium)
 	"d1_databases": [
 		{
 			"binding": "DB",
 			"database_name": "neptune-twin-app",
-			// Placeholder. Create the database with `npx wrangler d1 create neptune-twin-app`
-			// and paste the database_id it prints here.
-			"database_id": "00000000-0000-0000-0000-000000000000",
+			// Made with `npx wrangler d1 create neptune-twin-app`. Its tables are worker/migrations,
+			// applied by the deploy (Workers Builds runs `npm run deploy:cloudflare`).
+			"database_id": "752bc4f8-6114-4d38-929e-ac734e8176e0",
 			"migrations_dir": "worker/migrations"
 		}
 	]
