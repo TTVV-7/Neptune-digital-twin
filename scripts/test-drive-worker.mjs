@@ -865,15 +865,32 @@ describe( 'World Drive leaderboard', () => {
 		assert.equal( again.headers.get( 'X-Board-Cache' ), 'hit' );
 		assert.equal( again.headers.get( 'Cache-Control' ), 'no-store' );
 		assert.equal( again.json.rows[ 0 ].name, 'Racer 1' );
+		// A player's own row is kept a moment too: its rank is a count of the rows ahead.
+		const before = await board( { period: 'week', id: cat.id } );
+		assert.equal( before.headers.get( 'X-Player-Cache' ), 'miss' );
+		const kept = await board( { period: 'week', id: cat.id } );
+		assert.equal( kept.headers.get( 'X-Player-Cache' ), 'hit' );
+		assert.deepEqual( kept.json.me, before.json.me );
+		assert.equal( kept.json.me.rank, 25 );
 		const best = await score( cat, { score: 60000 }, { after: 10 * 60 * SECOND } );
 		assert.equal( best.json.week.rank, 1 );
-		const fresh = await board( { period: 'week' } );
+		const fresh = await board( { period: 'week', id: cat.id } );
 		assert.equal( fresh.headers.get( 'X-Board-Cache' ), 'miss' );
+		assert.equal( fresh.headers.get( 'X-Player-Cache' ), 'miss' );
 		assert.equal( fresh.json.rows[ 0 ].name, 'Cat' );
-		// With an id the board can come from the cache; the player's own row never does.
+		assert.deepEqual( [ fresh.json.me.rank, fresh.json.me.score ], [ 1, 60000 ] );
+		// With an id the board can come from the cache; anyone's own row is their own.
 		const mine = await board( { period: 'week', id: ace.id } );
 		assert.equal( mine.headers.get( 'X-Board-Cache' ), 'hit' );
+		assert.equal( mine.headers.get( 'X-Player-Cache' ), 'miss' );
 		assert.equal( mine.json.me.name, 'Ace' );
+		// A rename shows straight away, in the rows and in their own.
+		const rename = name => send( '/api/player/rename', { id: cat.id, secret: cat.secret, name } );
+		assert.equal( ( await rename( 'Cat Renamed' ) ).status, 200 );
+		const renamed = await board( { period: 'week', id: cat.id } );
+		assert.equal( renamed.headers.get( 'X-Player-Cache' ), 'miss' );
+		assert.deepEqual( [ renamed.json.rows[ 0 ].name, renamed.json.me.name ], [ 'Cat Renamed', 'Cat Renamed' ] );
+		assert.equal( ( await rename( 'Cat' ) ).status, 200 );
 
 	} );
 
@@ -965,7 +982,9 @@ describe( 'World Drive leaderboard', () => {
 
 	test( 'the owner\'s SQL in docs/world-drive.md renames, removes a cheat\'s scores and removes a player', async () => {
 
-		const mine = async who => ( await board( { period: 'all', id: who.id } ) ).json.me;
+		// (Boards, and each player's own row on them, are kept half a minute, as the docs say: so the
+		// changes are looked for where nobody has looked yet.)
+		const mine = async ( who, place = '' ) => ( await board( { period: 'all', place, id: who.id } ) ).json.me;
 		// An abusive name, renamed: the old one is free again, the new one taken.
 		server.d1( `UPDATE players SET name = 'Driver 4821', name_key = 'driver-4821' WHERE id = '${ ace.id }'` );
 		assert.equal( ( await mine( ace ) ).name, 'Driver 4821' );
@@ -974,7 +993,7 @@ describe( 'World Drive leaderboard', () => {
 		// A cheat's scores, off every board.
 		assert.equal( ( await mine( cat ) ).score, 60000 );
 		server.d1( `DELETE FROM best_scores WHERE player_id = '${ cat.id }'; DELETE FROM scores WHERE player_id = '${ cat.id }'` );
-		assert.equal( await mine( cat ), null );
+		assert.equal( await mine( cat, 'Furka Pass' ), null );
 		// A player and everything of theirs.
 		server.d1( `DELETE FROM players WHERE id = '${ ace.id }'` );
 		assert.deepEqual( server.d1( `SELECT ( SELECT COUNT(*) FROM best_scores WHERE player_id = '${ ace.id }' ) AS bests, ( SELECT COUNT(*) FROM scores WHERE player_id = '${ ace.id }' ) AS logged` ), [ { bests: 0, logged: 0 } ] );

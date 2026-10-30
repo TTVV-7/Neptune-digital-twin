@@ -119,7 +119,7 @@ export async function postScore( { request, env, url, limits, now } ) {
 		await db.prepare( 'INSERT INTO scores ( player_id, score, tricks, place, vehicle, air_time, run_seconds, visit, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )' )
 			.bind( id, run.score, run.tricks, run.place, run.vehicle, run.airTime, run.runSeconds, visit.id, now ).run();
 		// So the player sees it straight away.
-		await forgetBoards( url, changed );
+		await forgetBoards( url, changed, id );
 
 	}
 
@@ -155,7 +155,7 @@ export async function leaderboard( { env, url, now } ) {
 
 	const period = PERIODS[ name ]( now );
 	const where = place ? placeKey( place ) : '';
-	// (Cached without the player's id: their own row is looked up each time.)
+	// (Cached without the player's id: their own row is kept apart, below.)
 	const key = boardKey( url, period, where );
 	const cached = await caches.default.match( key );
 	let board;
@@ -173,16 +173,30 @@ export async function leaderboard( { env, url, now } ) {
 	}
 
 	const answer = { period: name, place, ...board };
+	const headers = { 'X-Board-Cache': cached ? 'hit' : 'miss' };
 	if ( id ) {
 
-		const row = await db.prepare( `SELECT p.name, b.score, b.tricks, b.place, b.vehicle, b.air_time, b.created_at,
-			( SELECT COUNT(*) FROM best_scores o WHERE ${ ahead( 'o', 'b' ) } ) + 1 AS rank
-			FROM best_scores b JOIN players p ON p.id = b.player_id WHERE b.player_id = ? AND b.period = ? AND b.place_key = ?` ).bind( id, period, where ).first();
-		answer.me = row ? { rank: row.rank, ...entry( row ) } : null;
+		// The player's own row, kept as the board is (a new best or a rename clears it).
+		const mine = boardKey( url, period, where, id );
+		const kept = await caches.default.match( mine );
+		if ( kept ) answer.me = ( await kept.json() ).me;
+		else {
+
+			const row = await db.prepare( `SELECT p.name, b.score, b.tricks, b.place, b.vehicle, b.air_time, b.created_at,
+				( SELECT COUNT(*) FROM best_scores o WHERE ${ ahead( 'o', 'b' ) } ) + 1 AS rank
+				FROM best_scores b JOIN players p ON p.id = b.player_id WHERE b.player_id = ? AND b.period = ? AND b.place_key = ?` ).bind( id, period, where ).first();
+			answer.me = row ? { rank: row.rank, ...entry( row ) } : null;
+			await caches.default.put( mine, json( { me: answer.me }, 200, { 'Cache-Control': `public, max-age=${ BOARD_CACHE }` } ) );
+
+		}
+
+		// The two kept a moment apart: never "#131 of 130".
+		if ( answer.me ) answer.total = Math.max( answer.total, answer.me.rank );
+		headers[ 'X-Player-Cache' ] = kept ? 'hit' : 'miss';
 
 	}
 
-	return json( answer, 200, { 'X-Board-Cache': cached ? 'hit' : 'miss' } );
+	return json( answer, 200, headers );
 
 }
 

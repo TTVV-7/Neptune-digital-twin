@@ -64,7 +64,7 @@ export async function renamePlayer( { request, env, url, limits, now } ) {
 	if ( ! meta.changes ) throw new HttpError( 409, 'That name is taken' );
 	// The new name on today's, this week's and the all-time boards straight away (the boards of one
 	// place catch up within half a minute).
-	await forgetBoards( url, Object.values( PERIODS ).map( period => [ period( now ), '' ] ) );
+	await forgetBoards( url, Object.values( PERIODS ).map( period => [ period( now ), '' ] ), id );
 	return json( { id, name } );
 
 }

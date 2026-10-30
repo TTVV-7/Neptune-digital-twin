@@ -218,8 +218,8 @@ that changed a board, for 35 days) and `visits` (which player each visit made or
 week boards and the log go after 35 days, tidied as scores come in; the all-time board stays.
 
 To look after it, open the Cloudflare dashboard → Storage & Databases → D1 → **world-drive** →
-**Console**. Times are milliseconds since 1970. Boards are cached for half a minute, so a change
-shows within that.
+**Console**. Times are milliseconds since 1970. Boards, and each player's own row and rank on them,
+are cached for half a minute, so a change shows within that.
 
 ```sql
 -- Find a player by name (any case).
