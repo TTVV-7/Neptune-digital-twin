@@ -58,21 +58,77 @@ The key ends up in the browser, so restricting it is what keeps it safe.
 
 ## Controls
 
-| Key | Action |
+The **Controls** panel in the bottom right shows the keys and mouse moves for what you're doing right
+now (walking, flying, the library, placing, drawing an area, a selected item, driving, digging) and
+changes as you do. Fold it away with its arrow; it stays as a small **Controls** button, and the app
+remembers which you chose. On a phone it starts as the button. **H** (or **All controls** in the
+panel) shows the full list:
+
+| Moving | |
 | --- | --- |
-| Click | Capture the mouse to look around (Esc releases it) |
 | W A S D / arrows | Move |
-| Shift | Run (walk) / boost (fly) |
+| Shift | Run (walk) / faster (fly) |
 | F | Switch between walking and flying |
 | Space | Jump (walk) / up (fly) |
-| E / Q | Up / down (fly) |
+| E / Q | Up / down (fly); C also goes down |
+| Wheel | Zoom toward the point under the cursor, or away from it; Shift for bigger steps. A trackpad's pinch zooms too |
 | G | Ghost: walk and fly through walls and buildings, to look inside; G again to bump into them |
 | T | Turn the view along walls you run into: on / off |
-| L | Library: place vehicles and site pieces, flatten areas |
-| V | Drive the selected or nearest vehicle or machine (race mode); V again to get out |
-| Space (excavator) | Hold to dig; Q / E swing, R / F reach, X dump side |
-| P | Model placement panel |
-| H | Help |
+
+| Looking | |
+| --- | --- |
+| Click the map | Capture the mouse to look around (Esc frees it) |
+| Right-drag | Look around without capturing the mouse |
+
+| Building | |
+| --- | --- |
+| L | Library: place vehicles, equipment and site pieces |
+| Click a card, then the ground | Place it; Shift+click places another |
+| Drag a card onto the map | Place it there |
+| R or the wheel | Turn the item you're placing |
+| Tools (top of the library) | Laydown area, Excavation, Stockpile, Flatten area: drag a rectangle, or click for the usual size |
+| Click a placed item | Select it; drag it to move it |
+| Round handle / corner handles | Drag to rotate / resize the selected item |
+| R / Shift+R | Turn the selected item 15° |
+| Delete | Remove the selected item |
+| Esc | Cancel placing or drawing / deselect |
+| P | Placement panel: exact position, heading and size |
+
+| Driving | |
+| --- | --- |
+| V | Drive the selected or nearest (within 25 m) vehicle or machine, or a new pickup |
+| W / S | Gas / brake (hold S to reverse) |
+| A / D | Steer |
+| Shift | Boost |
+| Space | Hop |
+| C | Chase or bonnet camera |
+| Wheel | Chase camera nearer or farther |
+| V or Esc | Get out |
+
+| Excavator | |
+| --- | --- |
+| Space or hold the mouse button | Dig |
+| Q / E | Swing |
+| R / F or the wheel | Reach |
+| X | Dump side |
+| W A S D | Drive the tracks |
+| C | Operator camera |
+| V or Esc | Get out |
+
+| Other | |
+| --- | --- |
+| H | Help: all the controls |
+
+The wheel zooms like Google Earth: each notch flies a quarter of the way to the point under the
+cursor (half with Shift), or back by a third, gliding there in a moment; close to the ground a notch
+still moves at least a metre. Zooming while walking switches to flying. It stops 1 m short of the
+ground, buildings and your models, like flying does (unless ghost is on). Flying gets faster with
+height above the ground: as before below 20 m, 16 times faster at 500 m and 30 times at 1 km, so from
+up high you cross the terminal in seconds. `ZOOM` and `flyHeight` in [src/config.js](src/config.js)
+tune both.
+
+Walk or fly up to a vehicle or machine and a prompt near the bottom says **Press V to drive** it, with
+a **Drive** button; the status readout top left always says what V will do.
 
 You start flying over Burrard Inlet, looking north at the terminal. Fly in over the terminal with **W**,
 then press **F** to drop to the ground and walk. If you press F over the water you'll stand on the water.
@@ -273,7 +329,10 @@ index.html          page shell and overlays
 src/config.js       site location, start position, player tuning, your models  <- edit this
 src/main.js         sets everything up and runs the render loop
 src/world.js        Google tiles, lights, the flat stand-in ground
-src/walk.js         walk/fly controller with gravity, collisions, bounces and the view turn
+src/walk.js         walk/fly controller with gravity, collisions, bounces, the view turn and the zoom's glide
+src/zoom.js         the mouse wheel and trackpad pinch: zoom toward the cursor, chase camera distance
+src/legend.js       the Controls panel: the keys for what you're doing now
+src/drive-prompt.js V: what it drives, the "Press V to drive" prompt and twin.startDriving()
 src/models.js       loads and places your glTF models
 src/placement.js    the P panel
 src/raycast.js      fast raycasting (three-mesh-bvh) for walking and snapping
