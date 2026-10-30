@@ -342,9 +342,11 @@ export class Driver {
 
 }
 
-export function specFor( libraryId ) {
+// A library item can also give its own tuning as "drive": { topSpeed, accel, brake, reverse }
+// in library.json, which makes it drivable whatever its category.
+export function specFor( item ) {
 
-	return SPECS[ libraryId ] ?? SPECS.default;
+	return { ...SPECS.default, ...SPECS[ item?.id ], ...item?.drive };
 
 }
 

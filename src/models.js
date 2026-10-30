@@ -7,7 +7,7 @@ import { enuToLocal, headingToYaw, localToEnu } from './geo.js';
 import { useFastRaycast } from './raycast.js';
 import { frontToYaw } from './library.js';
 import { buildProcedural } from './procedural.js';
-import { buildZone, ZONE_ID } from './flatten.js';
+import { getKind, kindParams } from './kinds.js';
 
 const DOWN = new Vector3( 0, - 1, 0 );
 const _box = new Box3();
@@ -35,9 +35,13 @@ export class ModelManager extends EventDispatcher {
 		this.group.name = 'models';
 		this.entries = [];
 		this.getGround = getGround;
+		// Ground height at local (x, z) ignoring flatten areas and digging; set by flatten.js.
+		this.originalHeight = null;
 		this.raycaster = new Raycaster();
 		this.raycaster.firstHitOnly = true;
 		this.clock = 0;
+		// Build mode (the library sidebar is open): some kinds are only drawn then.
+		this.buildMode = false;
 
 		this.ktx2Loader = new KTX2Loader()
 			.setTranscoderPath( `https://cdn.jsdelivr.net/npm/three@0.${ REVISION }.0/examples/jsm/libs/basis/` )
@@ -56,12 +60,17 @@ export class ModelManager extends EventDispatcher {
 	}
 
 	// config: an entry like those in MODELS (config.js). Built-in library pieces have `procedural`
-	// instead of a url, and flatten zones have `zone`. `url` and `loader` override where and how a
-	// file is loaded (drag and drop).
+	// instead of a url, and other kinds of things (flatten areas, stockpiles...) have `kind` and
+	// `params` (see kinds.js). `url` and `loader` override where and how a file is loaded (drag and drop).
 	async load( config, url, loader = this.loader ) {
 
+		config = upgradeConfig( config );
+		const kind = getKind( config.kind );
+		if ( config.kind && ! kind ) throw new Error( `unknown kind "${ config.kind }"` );
+		const params = kind ? kindParams( kind, config.params ) : null;
+
 		let content;
-		if ( config.zone ) content = buildZone( config.zone.width, config.zone.length );
+		if ( kind ) content = kind.build( params );
 		else if ( config.procedural ) content = buildProcedural( config.procedural );
 		else content = ( await loader.loadAsync( url ?? new URL( config.url, document.baseURI ).href ) ).scene;
 		useFastRaycast( content );
@@ -73,7 +82,8 @@ export class ModelManager extends EventDispatcher {
 
 		// Recentre so east/north refer to the middle of the footprint and up to its base.
 		// CAD exports often carry huge offsets (e.g. UTM coordinates) that would put the model kilometres away.
-		if ( config.recenter !== false ) {
+		// Kinds are built centred already.
+		if ( config.recenter !== false && ! kind ) {
 
 			_box.setFromObject( content );
 			_box.getCenter( _center );
@@ -82,8 +92,9 @@ export class ModelManager extends EventDispatcher {
 		}
 
 		const pivot = new Group();
-		pivot.name = config.name;
+		pivot.name = config.name ?? kind?.label;
 		pivot.add( content );
+		if ( kind?.buildOnly ) pivot.visible = this.buildMode;
 		this.group.add( pivot );
 
 		const entry = {
@@ -91,8 +102,10 @@ export class ModelManager extends EventDispatcher {
 			url: config.url,
 			recenter: config.recenter !== false,
 			front: config.front,
-			library: config.zone ? ZONE_ID : config.library,
-			zone: config.zone ? { width: config.zone.width, length: config.zone.length } : null,
+			// Kinds count as library items: saved with the layout, listed as placed.
+			library: kind ? config.kind : config.library,
+			kind: kind ? config.kind : null,
+			params,
 			procedural: config.procedural,
 			// Still following the mouse in the library sidebar; not saved until placed.
 			placing: !! config.placing,
@@ -100,7 +113,7 @@ export class ModelManager extends EventDispatcher {
 			inConfig: !! config.inConfig,
 			footprint: new Box3().setFromObject( content ),
 			state: {
-				name: config.name ?? 'Model',
+				name: config.name ?? kind?.label ?? 'Model',
 				east: config.east ?? 0,
 				north: config.north ?? 0,
 				up: config.up ?? 0,
@@ -154,6 +167,8 @@ export class ModelManager extends EventDispatcher {
 	snap( entry ) {
 
 		const { pivot, state, footprint } = entry;
+		const mode = getKind( entry.kind )?.snap ?? 'median';
+		const original = mode.endsWith( '-original' ) && this.originalHeight;
 		pivot.updateMatrixWorld();
 
 		const margin = SNAP_MARGIN / state.scale;
@@ -167,6 +182,14 @@ export class ModelManager extends EventDispatcher {
 			for ( const z of zs ) {
 
 				pivot.localToWorld( _origin.set( x, 0, z ) );
+				if ( original ) {
+
+					const y = this.originalHeight( _origin.x, _origin.z );
+					if ( y !== null ) heights.push( y );
+					continue;
+
+				}
+
 				_origin.y = 2000;
 				this.raycaster.set( _origin, DOWN );
 				const hit = this.raycaster.intersectObjects( ground, true ).find( h => h.object.isMesh );
@@ -182,8 +205,8 @@ export class ModelManager extends EventDispatcher {
 		heights.sort( ( a, b ) => a - b );
 		const mid = heights.length >> 1;
 		const median = heights.length % 2 ? heights[ mid ] : ( heights[ mid - 1 ] + heights[ mid ] ) / 2;
-		// A flatten zone goes down to the lowest ground around it, so whatever stands in it is cleared.
-		const up = Math.round( ( entry.zone ? heights[ 0 ] : median ) * 100 ) / 100;
+		// A flatten area goes down to the lowest ground around it, so whatever stands in it is cleared.
+		const up = Math.round( ( mode.startsWith( 'lowest' ) ? heights[ 0 ] : median ) * 100 ) / 100;
 		entry.snapped = true;
 		if ( up !== state.up ) {
 
@@ -204,7 +227,7 @@ export class ModelManager extends EventDispatcher {
 		let next = null;
 		for ( const entry of this.entries ) {
 
-			if ( ! entry.state.snap || entry.driving ) continue;
+			if ( ! entry.state.snap || entry.driving || getKind( entry.kind )?.snap === false ) continue;
 			const due = ! entry.snapped || this.clock - entry.lastSnap >= SNAP_INTERVAL;
 			if ( due && ( ! next || entry.lastSnap < next.lastSnap ) ) next = entry;
 
@@ -233,7 +256,7 @@ export class ModelManager extends EventDispatcher {
 
 		return this.entries.some( entry => {
 
-			if ( entry.zone ) return false;
+			if ( getKind( entry.kind )?.solid === false ) return false;
 			entry.pivot.updateWorldMatrix( true, false );
 			return entry.footprint.containsPoint( entry.pivot.worldToLocal( _local.copy( point ) ) );
 
@@ -247,29 +270,41 @@ export class ModelManager extends EventDispatcher {
 		if ( index === - 1 ) return;
 		this.entries.splice( index, 1 );
 		this.group.remove( entry.pivot );
-		entry.pivot.traverse( o => {
-
-			o.geometry?.dispose();
-			// Built-in pieces share materials between copies; those stay.
-			const materials = Array.isArray( o.material ) ? o.material : [ o.material ];
-			materials.forEach( m => m && ! m.userData.shared && m.dispose() );
-
-		} );
+		dispose( entry.pivot );
 		this.dispatchEvent( { type: 'remove', entry } );
 
 	}
 
-	// Resize a flatten zone.
-	setZoneSize( entry, width, length ) {
+	// Change a kind's params (an area's size, a stockpile's material...) and rebuild it.
+	setParams( entry, params ) {
 
+		const kind = getKind( entry.kind );
+		if ( ! kind ) return;
+		entry.params = kindParams( kind, { ...entry.params, ...params } );
 		const old = entry.pivot.children[ 0 ];
 		entry.pivot.remove( old );
-		old.traverse( o => o.geometry?.dispose() );
-		const content = buildZone( width, length );
+		dispose( old );
+		const content = kind.build( entry.params );
+		useFastRaycast( content );
 		entry.footprint = new Box3().setFromObject( content );
 		entry.pivot.add( content );
-		entry.zone = { width, length };
 		this.apply( entry );
+
+	}
+
+	// Build mode is on while the library sidebar is open; kinds marked buildOnly show only then.
+	setBuildMode( on ) {
+
+		this.buildMode = on;
+		for ( const entry of this.entries ) if ( getKind( entry.kind )?.buildOnly ) entry.pivot.visible = on;
+		this.dispatchEvent( { type: 'buildmode', on } );
+
+	}
+
+	// Whether anything placed changes how Google's mesh is drawn.
+	altersMap() {
+
+		return this.entries.some( entry => getKind( entry.kind )?.altersMap );
 
 	}
 
@@ -288,7 +323,7 @@ export class ModelManager extends EventDispatcher {
 		const { state } = entry;
 		const config = {
 			name: state.name,
-			...( entry.zone ? { zone: { ...entry.zone } } : entry.procedural ? { procedural: entry.procedural } : { url: entry.url } ),
+			...( entry.kind ? { kind: entry.kind, params: { ...entry.params } } : entry.procedural ? { procedural: entry.procedural } : { url: entry.url } ),
 			east: round( state.east ),
 			north: round( state.north ),
 			up: state.snap ? null : round( state.up ),
@@ -297,10 +332,32 @@ export class ModelManager extends EventDispatcher {
 		};
 		if ( ! entry.recenter ) config.recenter = false;
 		if ( entry.front ) config.front = entry.front;
-		if ( entry.library ) config.library = entry.library;
+		if ( entry.library && ! entry.kind ) config.library = entry.library;
 		return config;
 
 	}
+
+}
+
+// Layouts saved before kinds existed stored flatten areas as { zone: { width, length } }.
+function upgradeConfig( config ) {
+
+	if ( ! config.zone ) return config;
+	const { zone, library, ...rest } = config;
+	return { ...rest, kind: 'flatten-zone', params: { ...zone } };
+
+}
+
+function dispose( object ) {
+
+	object.traverse( o => {
+
+		o.geometry?.dispose();
+		// Built-in pieces share materials between copies; those stay.
+		const materials = Array.isArray( o.material ) ? o.material : [ o.material ];
+		materials.forEach( m => m && ! m.userData.shared && m.dispose() );
+
+	} );
 
 }
 

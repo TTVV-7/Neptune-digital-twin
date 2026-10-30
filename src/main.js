@@ -4,13 +4,16 @@ import { MODELS, PLAYER, SITE, START } from './config.js';
 import { enuToLocal, localToEnu, localToLatLon, yawToHeading } from './geo.js';
 import { addLights, createGoogleTiles, createPlaceholderGround } from './world.js';
 import { ModelManager } from './models.js';
-import { createPlacementPanel } from './placement.js';
+import { createPlacementPanel, toast } from './placement.js';
 import { itemConfig, loadLibrary } from './library.js';
 import { setUpLayout } from './layout.js';
 import { createSidebar } from './sidebar.js';
 import { setUpFlattening } from './flatten.js';
 import { createDriveHud, Driver, specFor } from './drive.js';
 import { isTyping, WalkController } from './walk.js';
+
+// Features that plug into the app (see `features` in start()); each is a function taking the context.
+const FEATURES = [];
 
 const STORAGE_KEY = 'neptune-twin.google-api-key';
 const ENV_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
@@ -158,12 +161,17 @@ function start( apiKey, keySource ) {
 
 	scene.add( ground );
 
-	const models = new ModelManager( { getGround: () => [ ground ], renderer } );
+	// What counts as ground for walking, driving and snapping: the tiles (or stand-in) plus
+	// anything features add with addGround(), such as dug and piled earth.
+	const grounds = [ ground ];
+	const getGround = () => grounds;
+
+	const models = new ModelManager( { getGround, renderer } );
 	scene.add( models.group );
 
 	const controls = new WalkController( camera, renderer.domElement, {
-		getColliders: () => [ ground, models.group ],
-		getGround: () => [ ground ],
+		getColliders: () => [ ...grounds, models.group ],
+		getGround,
 		isInsideModel: point => models.contains( point ),
 	} );
 	controls.setPose( enuToLocal( START.east, START.north, START.up ), START.heading, START.pitch );
@@ -172,7 +180,8 @@ function start( apiKey, keySource ) {
 	const feetPosition = () => camera.position.clone().setY( camera.position.y - PLAYER.eyeHeight );
 	const panel = createPlacementPanel( models, { getPlayerPosition: feetPosition } );
 	const flattening = setUpFlattening( { tiles, models } );
-	const driver = new Driver( { camera, models, controls, getColliders: () => [ ground, models.group ], hud: createDriveHud() } );
+	models.originalHeight = ( x, z ) => flattening.originalHeight( x, z, ground );
+	const driver = new Driver( { camera, models, controls, getColliders: () => [ ...grounds, models.group ], hud: createDriveHud() } );
 
 	for ( const config of MODELS ) {
 
@@ -183,8 +192,11 @@ function start( apiKey, keySource ) {
 	// The library sidebar (L) and the layout of library items saved in this browser.
 	const libraryLoaded = loadLibrary();
 	const layout = setUpLayout( models, { getLibrary: () => libraryLoaded, onError: message => showBanner( message, 10000 ) } );
+	const getPlayer = () => ( { ...localToEnu( feetPosition() ), heading: yawToHeading( controls.yaw ) } );
+	const updates = [];
+	const mapEdits = [ () => models.altersMap() ];
 	let sidebar = null;
-	libraryLoaded.then( library => {
+	libraryLoaded.then( async library => {
 
 		sidebar = createSidebar( {
 			library,
@@ -195,14 +207,45 @@ function start( apiKey, keySource ) {
 			canvas: renderer.domElement,
 			controls,
 			panel,
-			flattening,
 			isDriving: () => driver.active,
-			getGround: () => [ ground ],
-			getPlayer: () => ( { ...localToEnu( feetPosition() ), heading: yawToHeading( controls.yaw ) } ),
+			getGround,
+			getPlayer,
 			onError: message => showBanner( message, 8000 ),
 		} );
 		showLibraryCredits( library );
-		setUpDriving( { driver, models, library, getSidebar: () => sidebar, getPlayer: () => ( { ...localToEnu( feetPosition() ), heading: yawToHeading( controls.yaw ) } ), onError: message => showBanner( message, 8000 ) } );
+		setUpDriving( { driver, models, library, getSidebar: () => sidebar, getPlayer, onError: message => showBanner( message, 8000 ) } );
+
+		// Features plug in here. Each gets this context and sets itself up: kinds (kinds.js),
+		// sidebar tools (sidebar.addTool), saved state (layout.registerExtra), per-frame work
+		// (onUpdate) and its own DOM and CSS. They're set up before the saved layout is restored,
+		// so their kinds and extras are known by then.
+		const features = {
+			scene, camera, renderer, canvas: renderer.domElement, tiles, ground, models, layout, sidebar, panel,
+			controls, driver, flattening, library, getGround, getPlayer, feetPosition,
+			isDriving: () => driver.active,
+			// Make an object walkable and drivable, and somewhere models snap to.
+			addGround: object => grounds.push( object ),
+			// Called every frame with the time step in seconds.
+			onUpdate: fn => updates.push( fn ),
+			// Say whether the feature changes how Google's mesh is drawn (for the attribution).
+			addMapEdit: fn => mapEdits.push( fn ),
+			showBanner: ( message, ms = 8000 ) => showBanner( message, ms ),
+			toast,
+		};
+		await Promise.all( FEATURES.map( async setUp => {
+
+			try {
+
+				await setUp( features );
+
+			} catch ( err ) {
+
+				console.error( err );
+				showBanner( `A feature failed to start: ${ err.message }`, 10000 );
+
+			}
+
+		} ) );
 		return layout.restore();
 
 	} );
@@ -239,6 +282,7 @@ function start( apiKey, keySource ) {
 		camera.updateMatrixWorld();
 		tiles?.update();
 		models.update( dt );
+		for ( const update of updates ) update( dt );
 		flattening.update( dt );
 		sidebar?.update();
 		renderer.render( scene, camera );
@@ -248,7 +292,7 @@ function start( apiKey, keySource ) {
 
 			hudTimer = 0.25;
 			updateStatus( camera, controls, tiles, driver );
-			updateAttribution( tiles, models );
+			updateAttribution( tiles, models, mapEdits.some( edited => edited() ) );
 
 		}
 
@@ -284,7 +328,7 @@ function updateStatus( camera, controls, tiles, driver ) {
 
 // Google's Map Tiles policies require the Google Maps logo next to the data providers
 // whenever tiles are on screen, and a note saying which parts of the scene aren't Google's.
-function updateAttribution( tiles, models ) {
+function updateAttribution( tiles, models, mapEdited ) {
 
 	const el = $( 'attribution' );
 	el.hidden = ! tiles || tiles.visibleTiles.size === 0;
@@ -296,8 +340,8 @@ function updateAttribution( tiles, models ) {
 		.join( ' · ' );
 	const hybrid = $( 'attribution-hybrid' );
 	hybrid.hidden = models.entries.length === 0;
-	hybrid.textContent = models.entries.some( e => e.zone )
-		? '3D terminal: Google Maps, with areas you flattened edited in this app. Models you add are your own data, not Google\'s.'
+	hybrid.textContent = mapEdited
+		? '3D terminal: Google Maps, with areas you flattened or dug edited in this app. Models you add are your own data, not Google\'s.'
 		: '3D terminal: Google Maps. Models you add are your own data, not Google\'s.';
 
 }
@@ -305,7 +349,7 @@ function updateAttribution( tiles, models ) {
 // V drives the selected vehicle, or the nearest one within 25 m, or a new pickup in front of you.
 function setUpDriving( { driver, models, library, getSidebar, getPlayer, onError } ) {
 
-	const vehicles = new Set( library.filter( item => item.category === 'Vehicles' ).map( item => item.id ) );
+	const vehicles = new Map( library.filter( item => item.category === 'Vehicles' || item.drive ).map( item => [ item.id, item ] ) );
 	const isVehicle = entry => entry && vehicles.has( entry.library ) && ! entry.placing;
 
 	window.addEventListener( 'keydown', async e => {
@@ -342,7 +386,7 @@ function setUpDriving( { driver, models, library, getSidebar, getPlayer, onError
 		}
 
 		getSidebar()?.deselect();
-		driver.start( entry, specFor( entry.library ) );
+		driver.start( entry, specFor( vehicles.get( entry.library ) ) );
 
 	}, true );
 

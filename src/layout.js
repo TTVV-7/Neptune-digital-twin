@@ -4,6 +4,11 @@ import { toast } from './placement.js';
 
 // Library items you place are saved in this browser and come back next time. Export and Import
 // move a layout between browsers, or into the repository as a file.
+//
+// A layout is { version: 2, site, lat, lon, items: [ model configs ], extras: { name: data } }.
+// Extras are other modules' saved state that isn't a placed item, e.g. ground dug by an
+// excavator: registerExtra( name, { save, load, clear } ) and call changed() when it changes.
+// Layouts saved before version 2 are just the items array.
 export function setUpLayout( models, { getLibrary, onError } ) {
 
 	const key = `neptune-twin.layout.${ SITE.name }`;
@@ -18,10 +23,36 @@ export function setUpLayout( models, { getLibrary, onError } ) {
 	let stale = false;
 
 	const current = () => [ ...placed().map( e => models.toConfig( e ) ), ...unloaded ];
+
+	// name -> { save() -> data or null, load( data, { merge } ), clear() }
+	const extras = new Map();
+	// Saved extras whose module hasn't registered (yet); kept in every save like unloaded items.
+	let pendingExtras = {};
+	const extrasData = () => {
+
+		const out = { ...pendingExtras };
+		for ( const [ name, extra ] of extras ) {
+
+			const value = extra.save();
+			if ( value != null ) out[ name ] = value;
+			else delete out[ name ];
+
+		}
+
+		return out;
+
+	};
+
+	const data = () => ( { version: 2, site: SITE.name, lat: SITE.lat, lon: SITE.lon, items: current(), extras: extrasData() } );
+
+	// Off while viewing someone else's shared layout, so it doesn't replace yours.
+	let localSaving = true;
+	const listeners = new Set();
 	const write = () => {
 
 		if ( restoring || stale ) return;
-		storage( () => localStorage.setItem( key, JSON.stringify( current() ) ) );
+		if ( localSaving ) storage( () => localStorage.setItem( key, JSON.stringify( data() ) ) );
+		for ( const listener of listeners ) listener();
 
 	};
 
@@ -70,26 +101,118 @@ export function setUpLayout( models, { getLibrary, onError } ) {
 
 	}
 
+	async function loadExtras( values = {}, options = {} ) {
+
+		for ( const [ name, value ] of Object.entries( values ) ) {
+
+			const extra = extras.get( name );
+			if ( ! extra ) {
+
+				pendingExtras[ name ] = value;
+				continue;
+
+			}
+
+			try {
+
+				await extra.load( value, options );
+
+			} catch ( err ) {
+
+				onError( `Could not load the saved ${ name }: ${ err.message }` );
+
+			}
+
+		}
+
+	}
+
+	function clearAll() {
+
+		unloaded = [];
+		pendingExtras = {};
+		for ( const entry of placed() ) models.remove( entry );
+		for ( const extra of extras.values() ) extra.clear();
+
+	}
+
 	return {
 
 		async restore() {
 
-			const items = storage( () => JSON.parse( localStorage.getItem( key ) ) );
-			if ( ! Array.isArray( items ) || items.length === 0 ) return;
+			const saved = parse( storage( () => JSON.parse( localStorage.getItem( key ) ) ) );
+			if ( ! saved ) return;
 			restoring = true;
-			const failed = await load( items );
+			const failed = await load( saved.items );
 			unloaded = failed;
+			await loadExtras( saved.extras );
 			restoring = false;
-			if ( failed.length ) onError( `${ failed.length } of ${ items.length } saved items could not be loaded. They stay saved and will be tried again next time.` );
+			if ( failed.length ) onError( `${ failed.length } of ${ saved.items.length } saved items could not be loaded. They stay saved and will be tried again next time.` );
 			save();
+
+		},
+
+		// Saved state of another module (see the top of this file). If a saved layout already
+		// has data under this name, it's loaded now.
+		registerExtra( name, extra ) {
+
+			extras.set( name, extra );
+			if ( name in pendingExtras ) {
+
+				const value = pendingExtras[ name ];
+				delete pendingExtras[ name ];
+				loadExtras( { [ name ]: value } );
+
+			}
+
+		},
+
+		// An extra's state changed: save soon.
+		changed() {
+
+			save();
+
+		},
+
+		// The whole layout, as saved and exported.
+		getData: data,
+
+		// Replace everything placed with another layout (e.g. one opened from your account).
+		// Returns how many items could not be loaded.
+		async replace( value ) {
+
+			const next = parse( value );
+			if ( ! next ) throw new Error( 'not a layout' );
+			restoring = true;
+			clearAll();
+			const failed = await load( next.items );
+			unloaded = failed;
+			await loadExtras( next.extras );
+			restoring = false;
+			save();
+			return failed.length;
+
+		},
+
+		// Called (debounced) after every save, e.g. to save to your account as well.
+		onChange( listener ) {
+
+			listeners.add( listener );
+			return () => listeners.delete( listener );
+
+		},
+
+		setLocalSaving( on ) {
+
+			localSaving = on;
+			if ( on ) save();
 
 		},
 
 		export() {
 
-			const data = { site: SITE.name, lat: SITE.lat, lon: SITE.lon, items: current() };
 			const link = document.createElement( 'a' );
-			link.href = URL.createObjectURL( new Blob( [ JSON.stringify( data, null, '\t' ) ], { type: 'application/json' } ) );
+			link.href = URL.createObjectURL( new Blob( [ JSON.stringify( data(), null, '\t' ) ], { type: 'application/json' } ) );
 			link.download = `${ SITE.name.toLowerCase().replace( /\W+/g, '-' ) }-layout.json`;
 			link.click();
 			setTimeout( () => URL.revokeObjectURL( link.href ), 1000 );
@@ -100,15 +223,16 @@ export function setUpLayout( models, { getLibrary, onError } ) {
 
 			try {
 
-				const data = JSON.parse( await file.text() );
-				const items = Array.isArray( data ) ? data : data.items;
-				if ( ! Array.isArray( items ) ) throw new Error( 'no items' );
+				const imported = parse( JSON.parse( await file.text() ) );
+				if ( ! imported ) throw new Error( 'no items' );
+				const { items } = imported;
 
 				// Skip items already placed at the same spot, so importing a file twice doesn't stack copies.
 				const existing = new Set( current().map( fingerprint ) );
 				const fresh = items.filter( config => ! existing.has( fingerprint( config ) ) );
 				const failed = await load( fresh );
 				unloaded.push( ...failed );
+				await loadExtras( imported.extras, { merge: true } );
 				save();
 
 				const count = n => n === 1 ? '1 item' : `${ n } items`;
@@ -127,13 +251,21 @@ export function setUpLayout( models, { getLibrary, onError } ) {
 
 		clear() {
 
-			unloaded = [];
-			for ( const entry of placed() ) models.remove( entry );
+			clearAll();
 			save();
 
 		},
 
 	};
+
+}
+
+// A saved or exported layout in either format, as { items, extras }, or null.
+function parse( value ) {
+
+	if ( Array.isArray( value ) ) return { items: value, extras: {} };
+	if ( value && Array.isArray( value.items ) ) return { items: value.items, extras: value.extras ?? {} };
+	return null;
 
 }
 
@@ -153,7 +285,7 @@ function resolve( config, library ) {
 function fingerprint( config ) {
 
 	const round = v => Math.round( ( v ?? 0 ) * 10 ) / 10;
-	return [ config.library ?? config.url ?? config.procedural, round( config.east ), round( config.north ), round( config.heading ) ].join( '|' );
+	return [ config.kind ?? config.library ?? config.url ?? config.procedural, round( config.east ), round( config.north ), round( config.heading ) ].join( '|' );
 
 }
 

@@ -17,6 +17,7 @@ import { itemConfig } from './library.js';
 import { buildProcedural } from './procedural.js';
 import { localToEnu } from './geo.js';
 import { isTyping } from './walk.js';
+import { ZONE_ID } from './flatten.js';
 
 const ROTATE_STEP = 15;
 const DRAG_TYPE = 'application/x-library-item';
@@ -29,8 +30,9 @@ const _center = new Vector3();
 // The library sidebar (L): pick an item and click the ground to place it, or drag it onto the
 // scene. A see-through preview follows the mouse; R or the wheel rotates it, Esc cancels and
 // Shift+click keeps placing more of the same. Placed items can be clicked to select, dragged to
-// move, turned with R and removed with Delete.
-export function createSidebar( { library, models, layout, scene, camera, canvas, controls, getGround, getPlayer, panel, flattening, isDriving, onError } ) {
+// move, turned with R and removed with Delete. Tools at the top (addTool) draw areas or pick
+// points on the ground instead: flatten areas, and whatever other modules add.
+export function createSidebar( { library, models, layout, scene, camera, canvas, controls, getGround, getPlayer, panel, isDriving, onError } ) {
 
 	const root = document.getElementById( 'library' );
 	const toggle = document.getElementById( 'library-toggle' );
@@ -48,29 +50,65 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	let dragging = null; // { entry, moved }
 	let suppressClick = false;
 	let pointer = null; // last pointer position over the scene, in client pixels
-	let drawing = null; // { start, heading, outline } while drawing a flatten zone
+	let drawing = null; // { tool, start, heading, outline } while a tool is in use
 
 	// --- the list ------------------------------------------------------------------------
 
-	// Tools come first: the flatten tool clears Google's mesh (rail cars, trucks, sheds) from an area.
+	// Tools come first, in their own group, then the library by category.
 	const toolsHeading = document.createElement( 'h3' );
 	toolsHeading.textContent = 'Tools';
-	const flattenCard = document.createElement( 'button' );
-	flattenCard.type = 'button';
-	flattenCard.className = 'card tool';
-	flattenCard.title = 'Drag a rectangle on the ground; everything in Google\'s 3D map inside it is pressed flat';
-	const flattenIcon = document.createElement( 'img' );
-	flattenIcon.alt = '';
-	flattenIcon.src = 'data:image/svg+xml,' + encodeURIComponent( '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#2a3844"/><path d="M6 46h52" stroke="#8a8f86" stroke-width="3"/><rect x="14" y="30" width="18" height="16" fill="#8e3b2a" opacity=".45"/><rect x="34" y="34" width="16" height="12" fill="#2a4f8e" opacity=".45"/><rect x="10" y="20" width="44" height="28" fill="#ff5544" fill-opacity=".2" stroke="#ff3322" stroke-width="2.5" stroke-dasharray="5 3"/><path d="M32 8v10m-5-5 5 5 5-5" stroke="#eef2f5" stroke-width="2.5" fill="none"/></svg>' );
-	const flattenName = document.createElement( 'span' );
-	flattenName.className = 'name';
-	flattenName.textContent = 'Flatten area';
-	const flattenDims = document.createElement( 'span' );
-	flattenDims.className = 'dims';
-	flattenDims.textContent = 'Drag a rectangle to clear it';
-	flattenCard.append( flattenIcon, flattenName, flattenDims );
-	flattenCard.addEventListener( 'click', () => startDrawing() );
-	list.append( toolsHeading, flattenCard );
+	const toolCards = document.createElement( 'div' );
+	toolCards.className = 'tools';
+	list.append( toolsHeading, toolCards );
+
+	// A tool card. spec:
+	//   name, hint (shown under the name), title (tooltip), icon (SVG markup, 64 x 64 viewBox)
+	//   mode: 'rect' to drag out a rectangle lined up with the way you're looking (a click without
+	//         a drag makes one defaultSize = [ width, length ] in metres), or 'point' to click a spot
+	//   color: outline colour while dragging
+	//   onDone( shape ): called with { east, north, height, heading, width, length, dragged } (just
+	//         east/north/height/heading for 'point'); may return a placed entry (or a promise of
+	//         one), which is then selected.
+	function addTool( spec ) {
+
+		const card = document.createElement( 'button' );
+		card.type = 'button';
+		card.className = 'card tool';
+		card.title = spec.title ?? spec.hint ?? '';
+		const icon = document.createElement( 'img' );
+		icon.alt = '';
+		icon.src = 'data:image/svg+xml,' + encodeURIComponent( spec.icon );
+		const name = document.createElement( 'span' );
+		name.className = 'name';
+		name.textContent = spec.name;
+		const hint = document.createElement( 'span' );
+		hint.className = 'dims';
+		hint.textContent = spec.hint ?? '';
+		card.append( icon, name, hint );
+		const tool = { ...spec, mode: spec.mode ?? 'rect', card };
+		card.addEventListener( 'click', () => startDrawing( tool ) );
+		toolCards.append( card );
+		return tool;
+
+	}
+
+	// The flatten tool clears Google's mesh (rail cars, trucks, sheds) from an area.
+	addTool( {
+		name: 'Flatten area',
+		hint: 'Drag a rectangle to clear it',
+		title: 'Drag a rectangle on the ground; everything in Google\'s 3D map inside it is pressed flat',
+		icon: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#2a3844"/><path d="M6 46h52" stroke="#8a8f86" stroke-width="3"/><rect x="14" y="30" width="18" height="16" fill="#8e3b2a" opacity=".45"/><rect x="34" y="34" width="16" height="12" fill="#2a4f8e" opacity=".45"/><rect x="10" y="20" width="44" height="28" fill="#ff5544" fill-opacity=".2" stroke="#ff3322" stroke-width="2.5" stroke-dasharray="5 3"/><path d="M32 8v10m-5-5 5 5 5-5" stroke="#eef2f5" stroke-width="2.5" fill="none"/></svg>',
+		mode: 'rect',
+		color: 0xff3322,
+		onDone: ( { east, north, heading, width, length } ) => models.load( {
+			kind: ZONE_ID,
+			params: { width, length },
+			east,
+			north,
+			heading,
+			up: null,
+		} ),
+	} );
 
 	for ( const item of library.filter( i => i.procedural ) ) item.dimensions = measure( buildProcedural( item.id ) );
 
@@ -155,7 +193,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		open = value;
 		root.hidden = ! open;
 		hint.innerHTML = open ? editHint : walkHint;
-		flattening.setVisible( open );
+		models.setBuildMode( open );
 		toggle.setAttribute( 'aria-expanded', String( open ) );
 		document.body.classList.toggle( 'library-open', open );
 		if ( open ) {
@@ -401,7 +439,8 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		if ( drawing ) {
 
 			const start = groundPoint( e.clientX, e.clientY );
-			if ( start ) {
+			if ( start && drawing.tool.mode === 'point' ) finishPoint( start, e.pointerType === 'mouse' );
+			else if ( start ) {
 
 				drawing.start = start;
 				canvas.setPointerCapture( e.pointerId );
@@ -536,20 +575,21 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	}, true );
 
-	// --- drawing flatten zones -----------------------------------------------------------
+	// --- tools: drawing areas and picking points -------------------------------------------
 
-	// Drag out a rectangle on the ground, lined up with the way you're looking.
-	function startDrawing() {
+	// Drag out a rectangle on the ground, lined up with the way you're looking, or pick a point.
+	function startDrawing( tool ) {
 
 		cancelPlacing();
+		cancelDrawing();
 		select( null );
 		document.exitPointerLock?.();
-		const outline = new LineLoop( new BufferGeometry(), new LineBasicMaterial( { color: 0xff3322 } ) );
+		const outline = new LineLoop( new BufferGeometry(), new LineBasicMaterial( { color: tool.color ?? 0xff3322 } ) );
 		outline.visible = false;
 		scene.add( outline );
-		drawing = { start: null, heading: getPlayer().heading, outline };
+		drawing = { tool, start: null, heading: getPlayer().heading, outline };
 		root.classList.add( 'placing' );
-		flattenCard.classList.add( 'active' );
+		tool.card.classList.add( 'active' );
 
 	}
 
@@ -595,27 +635,45 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	async function finishDrawing( showPanel = true ) {
 
 		const rect = drawnRectangle();
-		const { heading } = drawing;
+		const { heading, tool } = drawing;
 		cancelDrawing();
 		if ( ! rect ) return;
-		// A click without much of a drag makes a 10 x 10 m area there.
-		const width = Math.abs( rect.across ) < 1 ? 10 : Math.round( Math.abs( rect.across ) * 10 ) / 10;
-		const length = Math.abs( rect.along ) < 1 ? 10 : Math.round( Math.abs( rect.along ) * 10 ) / 10;
+		// A click without much of a drag makes an area of the tool's default size there.
+		const [ defaultWidth, defaultLength ] = tool.defaultSize ?? [ 10, 10 ];
+		const dragged = Math.abs( rect.across ) >= 1 || Math.abs( rect.along ) >= 1;
+		const width = Math.abs( rect.across ) < 1 ? defaultWidth : Math.round( Math.abs( rect.across ) * 10 ) / 10;
+		const length = Math.abs( rect.along ) < 1 ? defaultLength : Math.round( Math.abs( rect.along ) * 10 ) / 10;
+		await runTool( tool, {
+			east: Math.round( rect.east * 100 ) / 100,
+			north: Math.round( rect.north * 100 ) / 100,
+			height: rect.height,
+			heading: Math.round( heading * 10 ) / 10,
+			width,
+			length,
+			dragged,
+		}, showPanel );
+
+	}
+
+	async function finishPoint( point, showPanel ) {
+
+		const { heading, tool } = drawing;
+		cancelDrawing();
+		const { east, north } = localToEnu( point );
+		await runTool( tool, { east: Math.round( east * 100 ) / 100, north: Math.round( north * 100 ) / 100, height: point.y, heading: Math.round( heading * 10 ) / 10 }, showPanel );
+
+	}
+
+	async function runTool( tool, shape, showPanel ) {
+
 		try {
 
-			const entry = await models.load( {
-				name: 'Flattened area',
-				zone: { width, length },
-				east: Math.round( rect.east * 100 ) / 100,
-				north: Math.round( rect.north * 100 ) / 100,
-				heading: Math.round( heading * 10 ) / 10,
-				up: null,
-			} );
-			select( entry, showPanel );
+			const entry = await tool.onDone( shape );
+			if ( entry?.pivot ) select( entry, showPanel );
 
 		} catch ( err ) {
 
-			onError( `Could not add the area: ${ err.message }` );
+			onError( `${ tool.name }: ${ err.message }` );
 
 		}
 
@@ -627,9 +685,9 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		scene.remove( drawing.outline );
 		drawing.outline.geometry.dispose();
 		drawing.outline.material.dispose();
+		drawing.tool.card.classList.remove( 'active' );
 		drawing = null;
 		root.classList.remove( 'placing' );
-		flattenCard.classList.remove( 'active' );
 
 	}
 
@@ -673,6 +731,8 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		isOpen: () => open,
 		getSelected: () => selected,
 		deselect: () => select( null ),
+		select: entry => select( entry ),
+		addTool,
 	};
 
 }

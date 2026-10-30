@@ -1,5 +1,6 @@
 import GUI from 'lil-gui';
 import { isTyping } from './walk.js';
+import { getKind } from './kinds.js';
 
 // Common model units, as the scale that converts them to metres.
 const UNITS = { metres: 1, centimetres: 0.01, millimetres: 0.001, feet: 0.3048, inches: 0.0254 };
@@ -13,6 +14,8 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 
 	const empty = gui.add( { hint: 'Drop a .glb file on the page' }, 'hint' ).name( 'No models yet' ).disable();
 	const folders = new Map();
+	const paramViews = new Map();
+	const readoutViews = new Map();
 
 	function addEntry( entry ) {
 
@@ -31,13 +34,59 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 
 		} );
 		folder.add( state, 'heading', 0, 360, 0.1 ).name( 'heading (°)' ).onChange( apply );
-		if ( entry.zone ) {
+		const kind = getKind( entry.kind );
+		if ( kind ) {
 
-			// A flatten zone is sized directly in metres rather than scaled.
-			const size = { width: entry.zone.width, length: entry.zone.length };
-			const resize = () => models.setZoneSize( entry, Math.max( 1, size.width ), Math.max( 1, size.length ) );
-			folder.add( size, 'width' ).min( 1 ).step( 0.5 ).name( 'width (m)' ).onChange( resize );
-			folder.add( size, 'length' ).min( 1 ).step( 0.5 ).name( 'length (m)' ).onChange( resize );
+			// Kinds (flatten areas, stockpiles...) are sized by their own params rather than scaled.
+			// The controllers edit a copy, so a value the kind clamps shows clamped.
+			const params = { ...entry.params };
+			const set = key => {
+
+				models.setParams( entry, { [ key ]: params[ key ] } );
+				Object.assign( params, entry.params );
+				folder.controllersRecursive().forEach( c => c.updateDisplay() );
+
+			};
+			for ( const field of kind.fields ) {
+
+				let controller;
+				if ( field.options ) controller = folder.add( params, field.key, field.options );
+				else if ( field.type === 'color' ) controller = folder.addColor( params, field.key );
+				else {
+
+					controller = folder.add( params, field.key );
+					if ( field.min !== undefined ) controller.min( field.min );
+					if ( field.max !== undefined ) controller.max( field.max );
+					if ( field.step !== undefined ) controller.step( field.step );
+
+				}
+
+				controller.name( field.label ?? field.key );
+				// Text and colours apply when finished, numbers and choices as they change.
+				if ( field.type === 'text' || field.type === 'color' ) controller.onFinishChange( () => set( field.key ) );
+				else controller.onChange( () => set( field.key ) );
+
+			}
+
+			// Read-only figures, e.g. a stockpile's volume and weight, refreshed on every change.
+			const readouts = {};
+			for ( const readout of kind.readouts ?? [] ) {
+
+				readouts[ readout.label ] = '';
+				folder.add( readouts, readout.label ).disable();
+
+			}
+
+			const refresh = () => {
+
+				for ( const readout of kind.readouts ?? [] ) readouts[ readout.label ] = String( readout.get( entry ) ?? '' );
+
+			};
+			refresh();
+			readoutViews.set( entry, refresh );
+			for ( const action of kind.actions ) folder.add( { run: () => action.run( entry ) }, 'run' ).name( action.label );
+			// Keep the copy in step when params change elsewhere (e.g. a pour finishing).
+			paramViews.set( entry, params );
 
 		} else {
 
@@ -104,11 +153,19 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 		if ( ! entry.library ) focus( entry );
 
 	} );
-	models.addEventListener( 'change', ( { entry } ) => folders.get( entry )?.controllersRecursive().forEach( c => c.updateDisplay() ) );
+	models.addEventListener( 'change', ( { entry } ) => {
+
+		if ( paramViews.has( entry ) ) Object.assign( paramViews.get( entry ), entry.params );
+		readoutViews.get( entry )?.();
+		folders.get( entry )?.controllersRecursive().forEach( c => c.updateDisplay() );
+
+	} );
 	models.addEventListener( 'remove', ( { entry } ) => {
 
 		folders.get( entry )?.destroy();
 		folders.delete( entry );
+		paramViews.delete( entry );
+		readoutViews.delete( entry );
 		if ( folders.size === 0 ) empty.show();
 
 	} );
@@ -128,7 +185,16 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 
 	}, true );
 
-	return { gui, focus };
+	// Refresh an entry's readouts and controllers, e.g. while a stockpile is being poured.
+	function refresh( entry ) {
+
+		if ( paramViews.has( entry ) ) Object.assign( paramViews.get( entry ), entry.params );
+		readoutViews.get( entry )?.();
+		folders.get( entry )?.controllersRecursive().forEach( c => c.updateDisplay() );
+
+	}
+
+	return { gui, focus, refresh };
 
 }
 
