@@ -42,6 +42,8 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 			const params = { ...entry.params };
 			const set = key => {
 
+				// Leaving a field without changing it isn't an edit (and would rebuild the kind).
+				if ( params[ key ] === entry.params[ key ] ) return;
 				models.setParams( entry, { [ key ]: params[ key ] } );
 				Object.assign( params, entry.params );
 				folder.controllersRecursive().forEach( c => c.updateDisplay() );
@@ -62,27 +64,24 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 				}
 
 				controller.name( field.label ?? field.key );
-				// Text and colours apply when finished, numbers and choices as they change.
+				// Text and colours apply when finished, numbers and choices as they change. A colour is
+				// finished when its picker closes, as well as when it loses focus.
 				if ( field.type === 'text' || field.type === 'color' ) controller.onFinishChange( () => set( field.key ) );
 				else controller.onChange( () => set( field.key ) );
+				if ( field.type === 'color' ) controller.$input.addEventListener( 'change', () => set( field.key ) );
 
 			}
 
 			// Read-only figures, e.g. a stockpile's volume and weight, refreshed on every change.
+			// Worked out before the controllers are made, which show them from the start.
 			const readouts = {};
-			for ( const readout of kind.readouts ?? [] ) {
-
-				readouts[ readout.label ] = '';
-				folder.add( readouts, readout.label ).disable();
-
-			}
-
 			const refresh = () => {
 
 				for ( const readout of kind.readouts ?? [] ) readouts[ readout.label ] = String( readout.get( entry ) ?? '' );
 
 			};
 			refresh();
+			for ( const readout of kind.readouts ?? [] ) folder.add( readouts, readout.label ).disable();
 			readoutViews.set( entry, refresh );
 			for ( const action of kind.actions ) folder.add( { run: () => action.run( entry ) }, 'run' ).name( action.label );
 			// Keep the copy in step when params change elsewhere (e.g. a pour finishing).
@@ -153,13 +152,7 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 		if ( ! entry.library ) focus( entry );
 
 	} );
-	models.addEventListener( 'change', ( { entry } ) => {
-
-		if ( paramViews.has( entry ) ) Object.assign( paramViews.get( entry ), entry.params );
-		readoutViews.get( entry )?.();
-		folders.get( entry )?.controllersRecursive().forEach( c => c.updateDisplay() );
-
-	} );
+	models.addEventListener( 'change', ( { entry } ) => refresh( entry ) );
 	models.addEventListener( 'remove', ( { entry } ) => {
 
 		folders.get( entry )?.destroy();
@@ -185,12 +178,15 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 
 	}, true );
 
-	// Refresh an entry's readouts and controllers, e.g. while a stockpile is being poured.
+	// Refresh an entry's readouts and controllers, e.g. while a stockpile is being poured, and its
+	// title if it was renamed (a laydown area takes its label as its name).
 	function refresh( entry ) {
 
+		const folder = folders.get( entry );
+		if ( folder && folder._title !== entry.state.name ) folder.title( entry.state.name );
 		if ( paramViews.has( entry ) ) Object.assign( paramViews.get( entry ), entry.params );
 		readoutViews.get( entry )?.();
-		folders.get( entry )?.controllersRecursive().forEach( c => c.updateDisplay() );
+		folder?.controllersRecursive().forEach( c => c.updateDisplay() );
 
 	}
 
