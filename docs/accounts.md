@@ -37,7 +37,8 @@ see [premium.md](premium.md).
 
 ## Setting it up
 
-The app is live at **https://neptune-twin-app.thomas-verigin.workers.dev**, on the
+The app is live at `https://neptune-twin-app.<your-subdomain>.workers.dev` (the address is in the
+Worker's Cloudflare dashboard; it's kept out of this public repository), on the
 `neptune-twin-app` Worker (it doesn't touch the password-protected `neptune-twin` Worker) with
 its own D1 database, `neptune-twin-app`. Workers Builds deploys it from GitHub on every push to
 `claude/kind-ride-ovicsk`: `npm run deploy:cloudflare` applies any new database migrations
@@ -50,10 +51,14 @@ and Secrets*, not in `wrangler.jsonc` (`keep_vars` keeps them across deploys). E
 takes effect at once. Until the two below are set, the site works without accounts: it asks each
 visitor for a Maps key (kept in their browser) and has no sign-in.
 
-1. **Maps key.** Add a **Secret** named `GOOGLE_MAPS_API_KEY` with the Maps key. Signed-in people
-   and share-link viewers then get it from the Worker; it's never in the site's files. In the
-   [Google Cloud console](https://console.cloud.google.com/), *APIs & Services → Credentials*, add
-   `https://neptune-twin-app.thomas-verigin.workers.dev/*` to the key's website restrictions.
+1. **Maps key.** A **Secret** named `GOOGLE_MAPS_API_KEY` holds the Maps key; it's never in the
+   site's files. By default only signed-in people and share-link viewers get it from the Worker.
+   The **Text** variable `MAPS_KEY_FOR` set to `everyone` hands it to every visitor instead, so
+   the site opens on Google's tiles with no key prompt and no sign-in; anyone with the address can
+   then load tiles on the key (each visit is a billed session). Either way, in the
+   [Google Cloud console](https://console.cloud.google.com/), *APIs & Services → Credentials*,
+   restrict the key to `https://neptune-twin-app.<your-subdomain>.workers.dev/*` (website
+   restrictions), so it's no use anywhere else.
 2. **Google sign-in client.** In the Google Cloud console:
    1. *Google Auth Platform → Branding* (the OAuth consent screen): set the app name and support
       email if the project doesn't have them yet. Under *Audience*, choose **Internal** if only people
@@ -62,7 +67,7 @@ visitor for a Maps key (kept in their browser) and has no sign-in.
       only the test users you list can sign in.
    2. *Clients*: use an existing "Web application" client (the Print Yours one is fine) or create
       one. Under **Authorized JavaScript origins** add
-      `https://neptune-twin-app.thomas-verigin.workers.dev`, your own domain if you add one,
+      `https://neptune-twin-app.<your-subdomain>.workers.dev`, your own domain if you add one,
       `http://localhost` and `http://localhost:5173`. No redirect URIs are needed.
    3. Copy the **Client ID** (`....apps.googleusercontent.com`) into a **Text** variable named
       `GOOGLE_CLIENT_ID`. It isn't a secret.

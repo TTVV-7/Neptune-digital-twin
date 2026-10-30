@@ -797,6 +797,32 @@ function vercelTests() {
 
 	} );
 
+	test( 'MAPS_KEY_FOR=everyone hands the Maps key to every visitor, with or without accounts', async () => {
+
+		const env = { GOOGLE_MAPS_API_KEY: MAPS_KEY, MAPS_KEY_FOR: ' Everyone ' };
+		const without = vercelApi( { getEnv: () => env } );
+		const config = await ( await without.fetch( rewritten( PUBLIC_ORIGIN, '/api/config' ) ) ).json();
+		assert.deepEqual( config, { ...local, mapsKey: MAPS_KEY } );
+		// Any other value keeps it back.
+		env.MAPS_KEY_FOR = 'signed-in';
+		assert.deepEqual( await ( await without.fetch( rewritten( PUBLIC_ORIGIN, '/api/config' ) ) ).json(), local );
+		// With accounts, a visitor who isn't signed in gets it too.
+		const api = await startVercelApi( { origin: PUBLIC_ORIGIN, vars: { GOOGLE_CLIENT_ID: CLIENT_ID, GOOGLE_MAPS_API_KEY: MAPS_KEY, MAPS_KEY_FOR: 'everyone' } } );
+		try {
+
+			const res = await api.fetch( '/api/config' );
+			const body = await res.json();
+			assert.equal( body.signedIn, false );
+			assert.equal( body.mapsKey, MAPS_KEY );
+
+		} finally {
+
+			await api.stop?.();
+
+		}
+
+	} );
+
 	test( 'premium stays off until the link, its id and the webhook secret are all set', async () => {
 
 		const full = { STRIPE_PAYMENT_LINK: PAYMENT_LINK, STRIPE_PAYMENT_LINK_ID: PAYMENT_LINK_ID, STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET };

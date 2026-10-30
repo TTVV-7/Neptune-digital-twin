@@ -17,6 +17,7 @@ import { neonDriver, postgresDatabase } from './postgres.js';
 const SETTINGS = [
 	'GOOGLE_CLIENT_ID',
 	'GOOGLE_MAPS_API_KEY',
+	'MAPS_KEY_FOR',
 	'ALLOWED_EMAILS',
 	'ALLOWED_DOMAINS',
 	'GOOGLE_JWKS_URL',

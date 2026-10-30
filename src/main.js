@@ -44,12 +44,12 @@ async function boot() {
 	// Use a key from the link for this visit even if the browser won't let us save it.
 	if ( urlKey ) saveKey( urlKey );
 
-	// On the Cloudflare Worker (cloud.js), signed-in users get the key from their account, so it
-	// needn't be built into the site. Elsewhere this finds no Worker and quickly returns nothing.
+	// On the Cloudflare Worker (cloud.js), signed-in users (or, with MAPS_KEY_FOR=everyone, every
+	// visitor) get the key from the site, so it needn't be built into it. Elsewhere this finds no Worker and quickly returns nothing.
 	const accountKey = askForKey || urlKey ? null : await accountMapsKey();
 	const key = askForKey ? null
 		: urlKey ? { value: urlKey, source: 'the link' }
-		: accountKey ? { value: accountKey, source: 'your account' }
+		: accountKey ? { value: accountKey, source: 'this site' }
 		: resolveKey();
 	if ( key ) start( key.value, key.source );
 	else showKeyPrompt();

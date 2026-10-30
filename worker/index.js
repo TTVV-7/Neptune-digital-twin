@@ -13,6 +13,7 @@ import { premiumFor, stripeWebhook } from './premium.js';
 //   GOOGLE_CLIENT_ID      the OAuth client id of the "Sign in with Google" button (public)
 //   GOOGLE_MAPS_API_KEY   secret, optional: the Maps key, handed only to signed-in users and to
 //                         people opening a share link, so it isn't built into the public site
+//   MAPS_KEY_FOR          optional: "everyone" hands the Maps key to every visitor instead
 //   ALLOWED_EMAILS        optional, comma-separated: only these people can sign in...
 //   ALLOWED_DOMAINS       optional, comma-separated: ...or anyone in these Google Workspace domains
 //   GOOGLE_JWKS_URL       tests only: where to get the keys ID tokens are signed with
@@ -73,7 +74,7 @@ async function handle( request, env, url ) {
 
 	}
 
-	if ( ! env.DB || ! env.GOOGLE_CLIENT_ID ) return withoutAccounts( request, url );
+	if ( ! env.DB || ! env.GOOGLE_CLIENT_ID ) return withoutAccounts( request, url, env );
 	if ( route.sameOrigin !== false ) checkSameOrigin( request, url );
 	const auth = route.auth ?? 'required';
 	const user = auth === 'none' ? null : await currentUser( request, env, url );
@@ -116,7 +117,7 @@ async function getConfig( { env, url, user } ) {
 
 	const config = { googleClientId: env.GOOGLE_CLIENT_ID ?? '', signedIn: !! user };
 	if ( user ) config.user = publicUser( user );
-	if ( env.GOOGLE_MAPS_API_KEY && ( user || await isShared( env, url.searchParams.get( 'view' ) ) ) ) config.mapsKey = env.GOOGLE_MAPS_API_KEY;
+	if ( env.GOOGLE_MAPS_API_KEY && ( keyForEveryone( env ) || user || await isShared( env, url.searchParams.get( 'view' ) ) ) ) config.mapsKey = env.GOOGLE_MAPS_API_KEY;
 	config.premium = await premiumFor( env, user );
 	return json( config );
 
@@ -131,9 +132,26 @@ async function getMe( { env, user } ) {
 // No database or no sign-in client (a Vercel project before its database is connected, say): the
 // app gets the answer that makes it run on its own, with no sign-in and the usual key prompt.
 // Nothing else can work.
-function withoutAccounts( request, url ) {
+function withoutAccounts( request, url, env ) {
 
-	if ( request.method === 'GET' && url.pathname === '/api/config' ) return json( { googleClientId: '', signedIn: false, premium: { enabled: false } } );
+	if ( request.method === 'GET' && url.pathname === '/api/config' ) {
+
+		const config = { googleClientId: '', signedIn: false, premium: { enabled: false } };
+		if ( env.GOOGLE_MAPS_API_KEY && keyForEveryone( env ) ) config.mapsKey = env.GOOGLE_MAPS_API_KEY;
+		return json( config );
+
+	}
+
 	throw new HttpError( 503, 'Accounts aren\'t set up' );
+
+}
+
+// MAPS_KEY_FOR=everyone hands the Maps key to every visitor, signed in or not, so the site opens
+// on Google's tiles with no key prompt and no sign-in. Anyone with the address can then load tiles
+// on the key (each visit is a billed session) and read the key itself, so it must be restricted to
+// the site's address in the Google Cloud console.
+function keyForEveryone( env ) {
+
+	return String( env.MAPS_KEY_FOR ?? '' ).trim().toLowerCase() === 'everyone';
 
 }
