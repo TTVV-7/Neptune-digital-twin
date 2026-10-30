@@ -4,6 +4,8 @@
 // remembered in this browser. It opens by itself on a first visit, except on a phone, where it
 // starts as the button. H (or its All controls button) opens the full help.
 
+import { getKind, resizeShape } from './kinds.js';
+
 const STORAGE_KEY = 'neptune-twin.legend';
 // Narrower than this (px) counts as a phone: the panel starts folded away.
 const PHONE_WIDTH = 700;
@@ -172,24 +174,31 @@ export function createLegend( { controls, driver, models, getSidebar, getDriving
 			[ [ 'Esc' ], 'Cancel' ],
 			...mouse ? [ [ [ '~Right-drag' ], 'Look around' ] ] : [],
 			[ [ 'W', 'A', 'S', 'D' ], 'Move' ],
-		], note: 'Afterwards, drag its corner handles to resize it.' };
+		], note: 'Afterwards, drag its handles to resize it.' };
 
 	}
 
 	function selectedRows( entry ) {
 
-		// Areas, pits and piles (kinds) have a size to change; models only turn.
-		const sized = !! entry.kind;
+		// What its handles and toolbar (handles.js, toolbar.js) offer: areas, pits and piles (kinds
+		// with `resize`) have a size to change and a pit a depth; a round pile doesn't turn.
+		const kind = getKind( entry.kind );
+		const shape = resizeShape( kind, entry.params );
+		const turns = shape !== 'circle';
+		const drivable = getDriving()?.isDrivable( entry );
+		const buttons = [ turns && 'rotate', shape && 'size', drivable && 'drive', 'edit', 'delete' ].filter( Boolean );
 		return { title: `Selected: ${ entry.state.name ?? '' }`, rows: [
 			[ [ '~Drag' ], 'Move it' ],
-			[ [ '~Drag' ], 'The round handle: rotate' ],
-			...sized ? [ [ [ '~Drag' ], 'The corner handles: resize' ] ] : [],
-			[ [ 'R', '/', 'Shift', '+', 'R' ], 'Turn 15°' ],
+			...turns ? [ [ [ '~Drag' ], 'The round handle: rotate' ] ] : [],
+			...shape ? [ [ [ '~Drag' ], shape === 'rect' ? 'The square handles: resize' : 'The square handle: resize' ] ] : [],
+			...kind?.resize?.depth ? [ [ [ '~Drag' ], 'The arrow in the middle: depth' ] ] : [],
+			[ [ `~${ click }` ], `The buttons above it: ${ buttons.join( ', ' ) }` ],
+			...turns ? [ [ [ 'R', '/', 'Shift', '+', 'R' ], 'Turn 15°' ] ] : [],
 			[ [ 'Delete' ], 'Remove it' ],
-			[ [ 'P' ], sized ? 'Exact size and position' : 'Exact position' ],
-			...getDriving()?.isDrivable( entry ) ? [ [ [ 'V' ], 'Drive it' ] ] : [],
+			[ [ 'P' ], shape ? 'Exact size and position' : 'Exact position' ],
+			...drivable ? [ [ [ 'V' ], 'Drive it' ] ] : [],
 			[ [ 'Esc' ], 'Deselect' ],
-		] };
+		], note: shape && mouse ? 'Sizes snap to 0.5 m: hold Shift for any size.' : '' };
 
 	}
 
