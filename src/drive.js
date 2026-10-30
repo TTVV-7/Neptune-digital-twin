@@ -165,10 +165,12 @@ const SHAKE_MAX = 0.8;
 const SHAKE_DECAY = 6;
 // The chase camera turns round after the vehicle at most this fast (°/s), so a wipeout that ends
 // facing back the way it came swings it round in a second rather than whipping it. Thrown into the
-// air, it eases up and down after the vehicle at AIR_CAMERA (1/s): about 3 m behind it at the
-// start of a big throw, so the vehicle is seen to fly up, and as much above it as it comes down.
+// air, it eases up and down after the vehicle at AIR_CAMERA (1/s), at most AIR_LAG m behind it,
+// so the vehicle is seen to fly up and come down. (With no limit, falling 40 m off a bridge left
+// it 10 m above, looking down at a speck.)
 const VIEW_TURN = 180;
 const AIR_CAMERA = 3;
+const AIR_LAG = 3;
 // What a hit says, by how hard it was (m/s into it).
 const WORDS = [ [ 18, 'WHAM!' ], [ 9, 'BOING!' ], [ 0, 'BONK!' ] ];
 // Told once, the first time it's thrown into the air.
@@ -1865,8 +1867,8 @@ export class Driver {
 			this.clearView( _eye, _target, base, lift );
 			// It moves with the vehicle and eases round after it as it turns, so it doesn't fall
 			// behind at speed. Thrown into the air with stunts on, it only eases up and down after it,
-			// more slowly (AIR_CAMERA), so the throw is seen: moved up with it, the camera kept the
-			// vehicle still on screen and only the scenery behind it dropped away.
+			// more slowly (AIR_CAMERA, AIR_LAG), so the throw is seen: moved up with it, the camera
+			// kept the vehicle still on screen and only the scenery behind it dropped away.
 			const thrown = !! this.air && ! this.air.flight;
 			if ( this.lastBase ) {
 
@@ -1879,7 +1881,7 @@ export class Driver {
 			this.lastBase = ( this.lastBase ?? new Vector3() ).copy( base );
 			const was = this.camera.position.y;
 			this.camera.position.lerp( _target, 1 - Math.exp( - dt * 6 ) );
-			if ( thrown ) this.camera.position.y = was + ( _target.y - was ) * ( 1 - Math.exp( - dt * AIR_CAMERA ) );
+			if ( thrown ) this.camera.position.y = MathUtils.clamp( was + ( _target.y - was ) * ( 1 - Math.exp( - dt * AIR_CAMERA ) ), _target.y - AIR_LAG, _target.y + AIR_LAG );
 			this.keepOut( _eye, this.camera.position );
 			_look.copy( base ).addScaledVector( forward, 8 ).setY( base.y + height * 0.6 );
 
