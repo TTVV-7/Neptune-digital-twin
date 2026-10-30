@@ -1,6 +1,9 @@
 import {
 	Box3,
 	BoxHelper,
+	BufferGeometry,
+	LineBasicMaterial,
+	LineLoop,
 	DirectionalLight,
 	HemisphereLight,
 	PerspectiveCamera,
@@ -27,7 +30,7 @@ const _center = new Vector3();
 // scene. A see-through preview follows the mouse; R or the wheel rotates it, Esc cancels and
 // Shift+click keeps placing more of the same. Placed items can be clicked to select, dragged to
 // move, turned with R and removed with Delete.
-export function createSidebar( { library, models, layout, scene, camera, canvas, controls, getGround, getPlayer, panel, onError } ) {
+export function createSidebar( { library, models, layout, scene, camera, canvas, controls, getGround, getPlayer, panel, flattening, isDriving, onError } ) {
 
 	const root = document.getElementById( 'library' );
 	const toggle = document.getElementById( 'library-toggle' );
@@ -45,8 +48,29 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	let dragging = null; // { entry, moved }
 	let suppressClick = false;
 	let pointer = null; // last pointer position over the scene, in client pixels
+	let drawing = null; // { start, heading, outline } while drawing a flatten zone
 
 	// --- the list ------------------------------------------------------------------------
+
+	// Tools come first: the flatten tool clears Google's mesh (rail cars, trucks, sheds) from an area.
+	const toolsHeading = document.createElement( 'h3' );
+	toolsHeading.textContent = 'Tools';
+	const flattenCard = document.createElement( 'button' );
+	flattenCard.type = 'button';
+	flattenCard.className = 'card tool';
+	flattenCard.title = 'Drag a rectangle on the ground; everything in Google\'s 3D map inside it is pressed flat';
+	const flattenIcon = document.createElement( 'img' );
+	flattenIcon.alt = '';
+	flattenIcon.src = 'data:image/svg+xml,' + encodeURIComponent( '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#2a3844"/><path d="M6 46h52" stroke="#8a8f86" stroke-width="3"/><rect x="14" y="30" width="18" height="16" fill="#8e3b2a" opacity=".45"/><rect x="34" y="34" width="16" height="12" fill="#2a4f8e" opacity=".45"/><rect x="10" y="20" width="44" height="28" fill="#ff5544" fill-opacity=".2" stroke="#ff3322" stroke-width="2.5" stroke-dasharray="5 3"/><path d="M32 8v10m-5-5 5 5 5-5" stroke="#eef2f5" stroke-width="2.5" fill="none"/></svg>' );
+	const flattenName = document.createElement( 'span' );
+	flattenName.className = 'name';
+	flattenName.textContent = 'Flatten area';
+	const flattenDims = document.createElement( 'span' );
+	flattenDims.className = 'dims';
+	flattenDims.textContent = 'Drag a rectangle to clear it';
+	flattenCard.append( flattenIcon, flattenName, flattenDims );
+	flattenCard.addEventListener( 'click', () => startDrawing() );
+	list.append( toolsHeading, flattenCard );
 
 	for ( const item of library.filter( i => i.procedural ) ) item.dimensions = measure( buildProcedural( item.id ) );
 
@@ -131,6 +155,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		open = value;
 		root.hidden = ! open;
 		hint.innerHTML = open ? editHint : walkHint;
+		flattening.setVisible( open );
 		toggle.setAttribute( 'aria-expanded', String( open ) );
 		document.body.classList.toggle( 'library-open', open );
 		if ( open ) {
@@ -146,6 +171,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		} else {
 
 			cancelPlacing();
+			cancelDrawing();
 
 		}
 
@@ -256,7 +282,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	}
 
-	function commitPlacing( keepPlacing ) {
+	function commitPlacing( keepPlacing, showPanel = true ) {
 
 		const { entry, item, heading } = placing ?? {};
 		if ( ! entry ) return;
@@ -267,7 +293,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		models.apply( entry );
 		updateCount();
 		if ( keepPlacing ) startPlacing( item, { heading } );
-		else select( entry );
+		else select( entry, showPanel );
 
 	}
 
@@ -307,14 +333,16 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	// --- selecting and moving ------------------------------------------------------------
 
-	function select( entry ) {
+	// showPanel: also open the P panel at this entry. Not for touch: the tap's click arrives after
+	// the panel has opened and would land on whatever control is now under the finger.
+	function select( entry, showPanel = true ) {
 
 		selected = entry;
 		highlight.visible = !! entry;
 		if ( entry ) {
 
 			highlight.setFromObject( entry.pivot );
-			panel.focus( entry );
+			panel.focus( entry, showPanel );
 
 		}
 
@@ -330,9 +358,20 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	// --- pointer and keyboard ------------------------------------------------------------
 
+	// The left button can be let go while another is still held (e.g. right-drag to look); that
+	// arrives as a pointermove, not a pointerup, so presses end whenever it is no longer down.
+	function endPress( e ) {
+
+		dragging = null;
+		if ( drawing?.start ) finishDrawing( e.pointerType === 'mouse' );
+
+	}
+
 	canvas.addEventListener( 'pointermove', e => {
 
 		pointer = { x: e.clientX, y: e.clientY };
+		if ( ( dragging || drawing?.start ) && ( e.buttons & 1 ) === 0 ) endPress( e );
+		if ( drawing?.start ) updateDrawing();
 		if ( placing ) followPointer();
 		if ( dragging ) {
 
@@ -356,22 +395,39 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	canvas.addEventListener( 'pointerdown', e => {
 
-		if ( e.button !== 0 || controls.locked ) return;
+		if ( e.button !== 0 || controls.locked || isDriving() ) return;
 		pointer = { x: e.clientX, y: e.clientY };
 
-		if ( placing ) {
+		if ( drawing ) {
 
-			followPointer();
-			commitPlacing( e.shiftKey );
+			const start = groundPoint( e.clientX, e.clientY );
+			if ( start ) {
+
+				drawing.start = start;
+				canvas.setPointerCapture( e.pointerId );
+
+			}
+
 			suppressClick = true;
 			return;
 
 		}
 
+		const mouse = e.pointerType === 'mouse';
+		if ( placing ) {
+
+			followPointer();
+			commitPlacing( e.shiftKey, mouse );
+			suppressClick = true;
+			return;
+
+		}
+
+		dragging = null;
 		const hit = pick( e.clientX, e.clientY );
 		if ( hit ) {
 
-			select( hit.entry );
+			select( hit.entry, mouse );
 			const ground = groundPoint( e.clientX, e.clientY, hit.entry.pivot ) ?? hit.point;
 			dragging = { entry: hit.entry, offset: _offset.copy( hit.entry.pivot.position ).sub( ground ).setY( 0 ).clone(), moved: false };
 			canvas.setPointerCapture( e.pointerId );
@@ -391,14 +447,28 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	canvas.addEventListener( 'pointerup', e => {
 
-		if ( e.button === 0 ) dragging = null;
+		if ( ( e.buttons & 1 ) === 0 ) endPress( e );
+
+	} );
+
+	// The browser took the touch over (scrolling, a system gesture) or capture was lost: stop
+	// dragging, so the item doesn't later jump to wherever the next touch lands.
+	canvas.addEventListener( 'pointercancel', () => {
+
+		dragging = null;
+		if ( drawing?.start ) cancelDrawing();
+
+	} );
+	canvas.addEventListener( 'lostpointercapture', () => {
+
+		dragging = null;
 
 	} );
 
 	// While editing, a click selects or places instead of capturing the mouse.
 	controls.canLockPointer = () => {
 
-		const allowed = ! suppressClick && ! placing;
+		const allowed = ! suppressClick && ! placing && ! drawing;
 		suppressClick = false;
 		return allowed;
 
@@ -412,10 +482,11 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	}, { passive: false } );
 
-	// Dragging a card onto the scene.
+	// Dragging a card onto the scene. Only the scene takes the drop; let go anywhere else (over the
+	// sidebar, say) and the card's dragend cancels it.
 	window.addEventListener( 'dragover', e => {
 
-		if ( ! e.dataTransfer?.types.includes( DRAG_TYPE ) ) return;
+		if ( ! e.dataTransfer?.types.includes( DRAG_TYPE ) || e.target !== canvas ) return;
 		e.preventDefault();
 		e.dataTransfer.dropEffect = 'copy';
 		pointer = { x: e.clientX, y: e.clientY };
@@ -425,22 +496,29 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	window.addEventListener( 'drop', e => {
 
-		if ( ! e.dataTransfer?.types.includes( DRAG_TYPE ) ) return;
+		if ( ! e.dataTransfer?.types.includes( DRAG_TYPE ) || e.target !== canvas ) return;
 		e.preventDefault();
 		pointer = { x: e.clientX, y: e.clientY };
 		followPointer();
 		if ( placing?.entry ) commitPlacing( false );
-		else if ( placing ) placing.commitWhenLoaded = true;
+		else if ( placing ) {
+
+			// Still loading: place it when it arrives. No longer a drag, so dragend leaves it be.
+			placing.fromDrag = false;
+			placing.commitWhenLoaded = true;
+
+		}
 
 	} );
 
 	window.addEventListener( 'keydown', e => {
 
-		if ( isTyping( e ) || e.ctrlKey || e.metaKey || e.altKey ) return;
+		if ( isTyping( e ) || e.ctrlKey || e.metaKey || e.altKey || isDriving() ) return;
 		if ( e.code === 'KeyL' && ! e.repeat ) setOpen( ! open );
 		else if ( e.code === 'Escape' ) {
 
-			if ( placing ) cancelPlacing();
+			if ( drawing ) cancelDrawing();
+			else if ( placing ) cancelPlacing();
 			else select( null );
 
 		} else if ( e.code === 'KeyR' ) {
@@ -457,6 +535,103 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		}
 
 	}, true );
+
+	// --- drawing flatten zones -----------------------------------------------------------
+
+	// Drag out a rectangle on the ground, lined up with the way you're looking.
+	function startDrawing() {
+
+		cancelPlacing();
+		select( null );
+		document.exitPointerLock?.();
+		const outline = new LineLoop( new BufferGeometry(), new LineBasicMaterial( { color: 0xff3322 } ) );
+		outline.visible = false;
+		scene.add( outline );
+		drawing = { start: null, heading: getPlayer().heading, outline };
+		root.classList.add( 'placing' );
+		flattenCard.classList.add( 'active' );
+
+	}
+
+	// The rectangle from the drag start to the pointer, in the drawing's own axes.
+	function drawnRectangle() {
+
+		const end = pointer && groundPoint( pointer.x, pointer.y );
+		if ( ! end ) return null;
+		const a = localToEnu( drawing.start );
+		const b = localToEnu( end );
+		const rad = drawing.heading * Math.PI / 180;
+		const de = b.east - a.east;
+		const dn = b.north - a.north;
+		return {
+			across: de * Math.cos( rad ) - dn * Math.sin( rad ),
+			along: de * Math.sin( rad ) + dn * Math.cos( rad ),
+			east: ( a.east + b.east ) / 2,
+			north: ( a.north + b.north ) / 2,
+			height: drawing.start.y,
+		};
+
+	}
+
+	function updateDrawing() {
+
+		const rect = drawnRectangle();
+		if ( ! rect ) return;
+		const rad = drawing.heading * Math.PI / 180;
+		const corners = [ [ - 1, - 1 ], [ 1, - 1 ], [ 1, 1 ], [ - 1, 1 ] ].map( ( [ i, j ] ) => {
+
+			const x = i * rect.across / 2;
+			const y = j * rect.along / 2;
+			const east = rect.east + x * Math.cos( rad ) + y * Math.sin( rad );
+			const north = rect.north - x * Math.sin( rad ) + y * Math.cos( rad );
+			return new Vector3( - east, rect.height + 0.2, north );
+
+		} );
+		drawing.outline.geometry.setFromPoints( corners );
+		drawing.outline.visible = true;
+
+	}
+
+	async function finishDrawing( showPanel = true ) {
+
+		const rect = drawnRectangle();
+		const { heading } = drawing;
+		cancelDrawing();
+		if ( ! rect ) return;
+		// A click without much of a drag makes a 10 x 10 m area there.
+		const width = Math.abs( rect.across ) < 1 ? 10 : Math.round( Math.abs( rect.across ) * 10 ) / 10;
+		const length = Math.abs( rect.along ) < 1 ? 10 : Math.round( Math.abs( rect.along ) * 10 ) / 10;
+		try {
+
+			const entry = await models.load( {
+				name: 'Flattened area',
+				zone: { width, length },
+				east: Math.round( rect.east * 100 ) / 100,
+				north: Math.round( rect.north * 100 ) / 100,
+				heading: Math.round( heading * 10 ) / 10,
+				up: null,
+			} );
+			select( entry, showPanel );
+
+		} catch ( err ) {
+
+			onError( `Could not add the area: ${ err.message }` );
+
+		}
+
+	}
+
+	function cancelDrawing() {
+
+		if ( ! drawing ) return;
+		scene.remove( drawing.outline );
+		drawing.outline.geometry.dispose();
+		drawing.outline.material.dispose();
+		drawing = null;
+		root.classList.remove( 'placing' );
+		flattenCard.classList.remove( 'active' );
+
+	}
 
 	// --- helpers -------------------------------------------------------------------------
 
@@ -483,7 +658,8 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		const rect = canvas.getBoundingClientRect();
 		_ndc.set( ( x - rect.left ) / rect.width * 2 - 1, - ( y - rect.top ) / rect.height * 2 + 1 );
 		raycaster.setFromCamera( _ndc, camera );
-		return raycaster.intersectObjects( objects, true ).filter( h => h.object.isMesh );
+		// Hidden things (flatten zones outside build mode) can't be clicked.
+		return raycaster.intersectObjects( objects, true ).filter( h => h.object.isMesh && isVisible( h.object ) );
 
 	}
 
@@ -495,7 +671,16 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 		},
 		isOpen: () => open,
+		getSelected: () => selected,
+		deselect: () => select( null ),
 	};
+
+}
+
+function isVisible( object ) {
+
+	for ( let o = object; o; o = o.parent ) if ( ! o.visible ) return false;
+	return true;
 
 }
 

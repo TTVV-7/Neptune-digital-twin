@@ -7,6 +7,7 @@ import { enuToLocal, headingToYaw, localToEnu } from './geo.js';
 import { useFastRaycast } from './raycast.js';
 import { frontToYaw } from './library.js';
 import { buildProcedural } from './procedural.js';
+import { buildZone, ZONE_ID } from './flatten.js';
 
 const DOWN = new Vector3( 0, - 1, 0 );
 const _box = new Box3();
@@ -55,12 +56,14 @@ export class ModelManager extends EventDispatcher {
 	}
 
 	// config: an entry like those in MODELS (config.js). Built-in library pieces have `procedural`
-	// instead of a url. `url` and `loader` override where and how a file is loaded (drag and drop).
+	// instead of a url, and flatten zones have `zone`. `url` and `loader` override where and how a
+	// file is loaded (drag and drop).
 	async load( config, url, loader = this.loader ) {
 
-		const content = config.procedural
-			? buildProcedural( config.procedural )
-			: ( await loader.loadAsync( url ?? new URL( config.url, document.baseURI ).href ) ).scene;
+		let content;
+		if ( config.zone ) content = buildZone( config.zone.width, config.zone.length );
+		else if ( config.procedural ) content = buildProcedural( config.procedural );
+		else content = ( await loader.loadAsync( url ?? new URL( config.url, document.baseURI ).href ) ).scene;
 		useFastRaycast( content );
 
 		// Turn the model so its front (if the config names one, as vehicles do) faces along the
@@ -88,7 +91,8 @@ export class ModelManager extends EventDispatcher {
 			url: config.url,
 			recenter: config.recenter !== false,
 			front: config.front,
-			library: config.library,
+			library: config.zone ? ZONE_ID : config.library,
+			zone: config.zone ? { width: config.zone.width, length: config.zone.length } : null,
 			procedural: config.procedural,
 			// Still following the mouse in the library sidebar; not saved until placed.
 			placing: !! config.placing,
@@ -178,7 +182,8 @@ export class ModelManager extends EventDispatcher {
 		heights.sort( ( a, b ) => a - b );
 		const mid = heights.length >> 1;
 		const median = heights.length % 2 ? heights[ mid ] : ( heights[ mid - 1 ] + heights[ mid ] ) / 2;
-		const up = Math.round( median * 100 ) / 100;
+		// A flatten zone goes down to the lowest ground around it, so whatever stands in it is cleared.
+		const up = Math.round( ( entry.zone ? heights[ 0 ] : median ) * 100 ) / 100;
 		entry.snapped = true;
 		if ( up !== state.up ) {
 
@@ -199,7 +204,7 @@ export class ModelManager extends EventDispatcher {
 		let next = null;
 		for ( const entry of this.entries ) {
 
-			if ( ! entry.state.snap ) continue;
+			if ( ! entry.state.snap || entry.driving ) continue;
 			const due = ! entry.snapped || this.clock - entry.lastSnap >= SNAP_INTERVAL;
 			if ( due && ( ! next || entry.lastSnap < next.lastSnap ) ) next = entry;
 
@@ -228,6 +233,7 @@ export class ModelManager extends EventDispatcher {
 
 		return this.entries.some( entry => {
 
+			if ( entry.zone ) return false;
 			entry.pivot.updateWorldMatrix( true, false );
 			return entry.footprint.containsPoint( entry.pivot.worldToLocal( _local.copy( point ) ) );
 
@@ -253,6 +259,20 @@ export class ModelManager extends EventDispatcher {
 
 	}
 
+	// Resize a flatten zone.
+	setZoneSize( entry, width, length ) {
+
+		const old = entry.pivot.children[ 0 ];
+		entry.pivot.remove( old );
+		old.traverse( o => o.geometry?.dispose() );
+		const content = buildZone( width, length );
+		entry.footprint = new Box3().setFromObject( content );
+		entry.pivot.add( content );
+		entry.zone = { width, length };
+		this.apply( entry );
+
+	}
+
 	moveTo( entry, position, heading ) {
 
 		const { east, north } = localToEnu( position );
@@ -268,7 +288,7 @@ export class ModelManager extends EventDispatcher {
 		const { state } = entry;
 		const config = {
 			name: state.name,
-			...( entry.procedural ? { procedural: entry.procedural } : { url: entry.url } ),
+			...( entry.zone ? { zone: { ...entry.zone } } : entry.procedural ? { procedural: entry.procedural } : { url: entry.url } ),
 			east: round( state.east ),
 			north: round( state.north ),
 			up: state.snap ? null : round( state.up ),

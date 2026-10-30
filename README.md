@@ -60,6 +60,8 @@ The key ends up in the browser, so restricting it is what keeps it safe.
 | F | Switch between walking and flying |
 | Space | Jump (walk) / up (fly) |
 | E / Q | Up / down (fly) |
+| L | Library: place vehicles and site pieces, flatten areas |
+| V | Drive the selected or nearest vehicle (race mode); V again to get out |
 | P | Model placement panel |
 | H | Help |
 
@@ -113,6 +115,12 @@ all at real scale and not tied to Neptune, so the same library works at any site
 - **Look around** while editing by holding the right mouse button.
 - **Save:** what you place is saved in this browser. **Export layout** downloads it as a file and
   **Import** loads one, e.g. to share a layout or move it to another computer.
+- **Flatten area** (top of the list): drag a rectangle on the ground and everything in Google's 3D
+  mesh inside it (rail cars, parked trucks, a shed) is pressed flat to the lowest ground around it,
+  to clear space for a layout. Draw it a little bigger than what you want gone: Google's mesh is made
+  of large triangles, and ones that cross the edge slope up to the uncleared side. Areas show as red
+  boxes while the library is open; select one to move, turn, resize (**P**) or delete it, which brings
+  the original back. It only changes what this app draws; Google's data isn't touched.
 
 Two kinds of items:
 
@@ -134,6 +142,8 @@ npm run add-asset -- https://polyhaven.com/a/<asset> --id oil-drum --category Ma
 ```
 
 - `--length` is the real item's length in metres along its front axis, used to scale the model.
+  Rigged models (with a skeleton) need `--scale` instead, the factor from file units to metres:
+  they're measured in their rest pose, which may not be how they're drawn.
 - `--front` is the axis its front points along in the file: `+z` (the glTF default), `-z`, `+x` or `-x`.
   Write negative axes with an equals sign, e.g. `--front=-z`.
   If a placed item faces sideways or backwards, run the command again with another value.
@@ -142,6 +152,19 @@ npm run add-asset -- https://polyhaven.com/a/<asset> --id oil-drum --category Ma
 - Models from SketchUp's 3D Warehouse can't go in the library: its terms forbid redistributing them.
   You can still drop one you've downloaded onto the page for your own use.
 - Textures are shrunk to 1024 px and geometry compressed; `--max-texture 2048` keeps more detail.
+- The script prints the model's description. Read it: if it names someone else to credit (a logo's
+  designer, say), run again with `--credit "Logo by ..."` so they're listed too.
+
+## Race mode
+
+Press **V** to get in and drive: the selected vehicle from the library's Vehicles, else the nearest
+one within 25 m, else a pickup appears in front of you. **W**/**S** gas and brake (hold S to reverse), **A**/**D** steer, **Shift**
+boosts, **Space** hops, **C** switches between chase and bonnet cameras, **V** or **Esc** gets out and
+parks it where it stopped. The speedometer shows km/h, your top speed and longest jump.
+
+The pickup tops out at 160 km/h (about 210 with boost), the semi at 120 and the haul truck at 70. The **Race**
+category has two jump ramps (1.2 m and 3 m); hit the big one at highway speed for about 1.5 s of air.
+Walls, containers and Google's buildings stop you, so flatten a strip first for a clear run.
 
 ## About the Sketchfab model
 
@@ -163,7 +186,9 @@ src/placement.js    the P panel
 src/raycast.js      fast raycasting (three-mesh-bvh) for walking and snapping
 src/library.js      loads the library (downloaded models + built-in pieces)
 src/procedural.js   built-in site pieces generated in code
-src/sidebar.js      the library sidebar: placing, selecting, moving
+src/sidebar.js      the library sidebar: placing, selecting, moving, drawing flatten areas
+src/flatten.js      flatten areas: press Google's mesh flat inside a rectangle
+src/drive.js        race mode: driving, jumps, speedometer
 src/layout.js       saves placed items in the browser; export/import
 scripts/add-asset.mjs   imports a model from Sketchfab or Poly Haven into public/library
 public/library/     downloaded models, library.json catalog, thumbs/ and CREDITS.md
@@ -191,5 +216,8 @@ Add the site's origin (for example `https://yourname.github.io/*`) to the API ke
   bottom-right corner, plus a note that models you add are your own data, not Google's.
 - Your own models must not be traced or otherwise derived from Google's 3D mesh. Build them from your
   own drawings, photos or scans.
+- Flattened areas change how the mesh is drawn in the browser only, and the attribution says so when
+  any are in use. Hiding parts of the mesh to show proposed work is common practice (CesiumJS clips
+  Google's tiles the same way), but check the terms if you publish screenshots of edited areas.
 - Read the current [Map Tiles API policies](https://developers.google.com/maps/documentation/tile/policies)
   before you share the site widely.

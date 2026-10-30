@@ -26,6 +26,7 @@
 				<tr><td>R / Shift+R</td><td>Rotate the selected or placing item</td></tr>
 				<tr><td>Delete</td><td>Remove the selected item</td></tr>
 				<tr><td>Esc</td><td>Cancel placing / deselect</td></tr>
+				<tr><td>V</td><td>Drive the selected or nearest vehicle (race mode); V again to get out</td></tr>
 				<tr><td>P</td><td>Placement panel: exact positions</td></tr>
 				<tr><td>H</td><td>Show / hide this help</td></tr>
 			</table>
@@ -33,6 +34,7 @@
 			<p><button type="button" id="change-key">Change Google API key</button></p>
 			<div id="credits" hidden>
 				<h3>Model credits</h3>
+				<p class="small">Full list with licences: <a href="library/CREDITS.md" target="_blank" rel="noopener">library/CREDITS.md</a></p>
 				<ul></ul>
 			</div>
 		</div>
@@ -57,6 +59,22 @@
 				<input type="file" accept=".json,application/json" hidden />
 			</footer>
 		</aside>
+
+		<div id="drive-hud" hidden>
+			<div class="gauge">
+				<svg viewBox="0 0 120 120" aria-hidden="true">
+					<path class="arc" d="M 26.06 93.94 A 48 48 0 1 1 93.94 93.94" pathLength="100" />
+					<path class="arc-fill" d="M 26.06 93.94 A 48 48 0 1 1 93.94 93.94" pathLength="100" />
+					<line class="needle" x1="60" y1="60" x2="60" y2="20" />
+					<circle cx="60" cy="60" r="4" />
+				</svg>
+				<div class="readout"><span class="speed">0</span><span class="unit">km/h</span></div>
+			</div>
+			<div class="vehicle"></div>
+			<div class="stats"></div>
+			<div class="keys"><b>W</b>/<b>S</b> gas &amp; brake · <b>A</b>/<b>D</b> steer · <b>Space</b> jump · <b>Shift</b> boost · <b>C</b> camera · <b>V</b> get out</div>
+			<div class="flash" hidden></div>
+		</div>
 
 		<div id="banner" hidden></div>
 		<div id="attribution" hidden>

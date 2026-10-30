@@ -5,9 +5,11 @@ import { enuToLocal, localToEnu, localToLatLon, yawToHeading } from './geo.js';
 import { addLights, createGoogleTiles, createPlaceholderGround } from './world.js';
 import { ModelManager } from './models.js';
 import { createPlacementPanel } from './placement.js';
-import { loadLibrary } from './library.js';
+import { itemConfig, loadLibrary } from './library.js';
 import { setUpLayout } from './layout.js';
 import { createSidebar } from './sidebar.js';
+import { setUpFlattening } from './flatten.js';
+import { createDriveHud, Driver, specFor } from './drive.js';
 import { isTyping, WalkController } from './walk.js';
 
 const STORAGE_KEY = 'neptune-twin.google-api-key';
@@ -169,6 +171,8 @@ function start( apiKey, keySource ) {
 
 	const feetPosition = () => camera.position.clone().setY( camera.position.y - PLAYER.eyeHeight );
 	const panel = createPlacementPanel( models, { getPlayerPosition: feetPosition } );
+	const flattening = setUpFlattening( { tiles, models } );
+	const driver = new Driver( { camera, models, controls, getColliders: () => [ ground, models.group ], hud: createDriveHud() } );
 
 	for ( const config of MODELS ) {
 
@@ -191,11 +195,14 @@ function start( apiKey, keySource ) {
 			canvas: renderer.domElement,
 			controls,
 			panel,
+			flattening,
+			isDriving: () => driver.active,
 			getGround: () => [ ground ],
 			getPlayer: () => ( { ...localToEnu( feetPosition() ), heading: yawToHeading( controls.yaw ) } ),
 			onError: message => showBanner( message, 8000 ),
 		} );
 		showLibraryCredits( library );
+		setUpDriving( { driver, models, library, getSidebar: () => sidebar, getPlayer: () => ( { ...localToEnu( feetPosition() ), heading: yawToHeading( controls.yaw ) } ), onError: message => showBanner( message, 8000 ) } );
 		return layout.restore();
 
 	} );
@@ -227,10 +234,12 @@ function start( apiKey, keySource ) {
 
 		timer.update( time );
 		const dt = Math.min( timer.getDelta(), 0.1 );
-		controls.update( dt );
+		if ( driver.active ) driver.update( dt );
+		else controls.update( dt );
 		camera.updateMatrixWorld();
 		tiles?.update();
 		models.update( dt );
+		flattening.update( dt );
 		sidebar?.update();
 		renderer.render( scene, camera );
 
@@ -238,7 +247,7 @@ function start( apiKey, keySource ) {
 		if ( hudTimer <= 0 ) {
 
 			hudTimer = 0.25;
-			updateStatus( camera, controls, tiles );
+			updateStatus( camera, controls, tiles, driver );
 			updateAttribution( tiles, models );
 
 		}
@@ -246,7 +255,7 @@ function start( apiKey, keySource ) {
 	} );
 
 	// Handy for poking around from the browser console.
-	window.twin = { scene, camera, controls, models, tiles, SITE, layout, get sidebar() {
+	window.twin = { scene, camera, controls, models, tiles, SITE, layout, driver, flattening, get sidebar() {
 
 		return sidebar;
 
@@ -254,12 +263,13 @@ function start( apiKey, keySource ) {
 
 }
 
-function updateStatus( camera, controls, tiles ) {
+function updateStatus( camera, controls, tiles, driver ) {
 
 	const { lat, lon } = localToLatLon( camera.position );
 	const { east, north } = localToEnu( camera.position );
+	const mode = driver.active ? 'DRIVING' : controls.mode === 'walk' ? 'WALKING' : 'FLYING';
 	const lines = [
-		`${ controls.mode === 'walk' ? 'WALKING' : 'FLYING' }${ controls.mode === 'walk' && ! controls.groundFound ? ' (waiting for ground)' : '' }`,
+		`${ mode }${ ! driver.active && controls.mode === 'walk' && ! controls.groundFound ? ' (waiting for ground)' : '' }`,
 		`lat ${ lat.toFixed( 6 ) }  lon ${ lon.toFixed( 6 ) }`,
 		`east ${ east.toFixed( 1 ) } m  north ${ north.toFixed( 1 ) } m`,
 		`heading ${ yawToHeading( controls.yaw ).toFixed( 0 ) }°`,
@@ -284,7 +294,57 @@ function updateAttribution( tiles, models ) {
 		.filter( a => a.type === 'string' && a.value )
 		.map( a => a.value )
 		.join( ' · ' );
-	$( 'attribution-hybrid' ).hidden = models.entries.length === 0;
+	const hybrid = $( 'attribution-hybrid' );
+	hybrid.hidden = models.entries.length === 0;
+	hybrid.textContent = models.entries.some( e => e.zone )
+		? '3D terminal: Google Maps, with areas you flattened edited in this app. Models you add are your own data, not Google\'s.'
+		: '3D terminal: Google Maps. Models you add are your own data, not Google\'s.';
+
+}
+
+// V drives the selected vehicle, or the nearest one within 25 m, or a new pickup in front of you.
+function setUpDriving( { driver, models, library, getSidebar, getPlayer, onError } ) {
+
+	const vehicles = new Set( library.filter( item => item.category === 'Vehicles' ).map( item => item.id ) );
+	const isVehicle = entry => entry && vehicles.has( entry.library ) && ! entry.placing;
+
+	window.addEventListener( 'keydown', async e => {
+
+		if ( e.code !== 'KeyV' || e.repeat || driver.active || isTyping( e ) || e.ctrlKey || e.metaKey || e.altKey ) return;
+		const player = getPlayer();
+		let entry = getSidebar()?.getSelected();
+		if ( ! isVehicle( entry ) ) {
+
+			entry = models.entries
+				.filter( isVehicle )
+				.map( e => [ e, Math.hypot( e.state.east - player.east, e.state.north - player.north ) ] )
+				.filter( ( [ , d ] ) => d < 25 )
+				.sort( ( a, b ) => a[ 1 ] - b[ 1 ] )[ 0 ]?.[ 0 ];
+
+		}
+
+		if ( ! entry ) {
+
+			const pickup = library.find( item => item.id === 'pickup-truck' );
+			if ( ! pickup ) return;
+			const rad = player.heading * Math.PI / 180;
+			try {
+
+				entry = await models.load( itemConfig( pickup, { east: player.east + Math.sin( rad ) * 6, north: player.north + Math.cos( rad ) * 6, heading: player.heading } ) );
+
+			} catch ( err ) {
+
+				onError( `Could not load the pickup: ${ err.message }` );
+				return;
+
+			}
+
+		}
+
+		getSidebar()?.deselect();
+		driver.start( entry, specFor( entry.library ) );
+
+	}, true );
 
 }
 
@@ -328,15 +388,13 @@ function showLibraryCredits( library ) {
 	const downloaded = library.filter( item => item.source );
 	if ( downloaded.length === 0 ) return;
 	const list = $( 'credits' ).querySelector( 'ul' );
+	const link = ( href, text ) => Object.assign( document.createElement( 'a' ), { href, textContent: text, target: '_blank', rel: 'noopener' } );
 	for ( const { name, source } of downloaded ) {
 
+		// The licences ask for the licence itself and a note that the models were changed.
 		const item = document.createElement( 'li' );
-		const link = document.createElement( 'a' );
-		link.href = source.url;
-		link.target = '_blank';
-		link.rel = 'noopener';
-		link.textContent = source.title;
-		item.append( `${ name }: `, link, ` by ${ source.author } (${ source.license })` );
+		item.append( `${ name }: `, link( source.url, source.title ), ` by ${ source.author }, `, link( source.licenseUrl, source.license ),
+			source.extraCredit ? `. ${ source.extraCredit }` : '', '. Modified: compressed and rescaled.' );
 		list.append( item );
 
 	}
@@ -347,7 +405,12 @@ function showLibraryCredits( library ) {
 
 function setUpDragAndDrop( models, getPlacement ) {
 
-	window.addEventListener( 'dragover', e => e.preventDefault() );
+	// Files can be dropped anywhere; library cards only on the scene (see sidebar.js).
+	window.addEventListener( 'dragover', e => {
+
+		if ( e.dataTransfer?.types.includes( 'Files' ) ) e.preventDefault();
+
+	} );
 	window.addEventListener( 'drop', e => {
 
 		e.preventDefault();

@@ -16,6 +16,8 @@ html, body {
 
 #app canvas {
 	display: block;
+	/* Touches drag items and draw areas instead of panning or zooming the page. */
+	touch-action: none;
 }
 
 [hidden] {
@@ -269,6 +271,14 @@ kbd {
 	background: #263441;
 }
 
+#library .card.tool {
+	cursor: crosshair;
+}
+
+#library .card.active {
+	outline: 2px solid #ff3322;
+}
+
 #library .card img {
 	width: 100%;
 	aspect-ratio: 1;
@@ -322,6 +332,109 @@ body.library-open #status {
 		left: 12px;
 	}
 
+}
+
+/* Race mode speedometer. */
+/* Bottom left: the bottom right is kept clear for Google's attribution. */
+#drive-hud {
+	position: fixed;
+	left: 16px;
+	bottom: 16px;
+	z-index: 1003;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 4px;
+	pointer-events: none;
+	text-shadow: 0 1px 3px rgba( 0, 0, 0, 0.8 );
+}
+
+#drive-hud .gauge {
+	position: relative;
+	width: 170px;
+	height: 150px;
+}
+
+#drive-hud svg {
+	width: 170px;
+	height: 170px;
+}
+
+#drive-hud .arc,
+#drive-hud .arc-fill {
+	fill: none;
+	stroke-width: 8;
+	stroke-linecap: round;
+}
+
+#drive-hud .arc {
+	stroke: rgba( 16, 22, 28, 0.75 );
+}
+
+#drive-hud .arc-fill {
+	stroke: var( --accent );
+	stroke-dasharray: 100;
+	stroke-dashoffset: 100;
+}
+
+#drive-hud.boost .arc-fill {
+	stroke: #ff7a1a;
+}
+
+#drive-hud .needle {
+	stroke: #ff3b30;
+	stroke-width: 3;
+	stroke-linecap: round;
+}
+
+#drive-hud circle {
+	fill: #eef2f5;
+}
+
+#drive-hud .readout {
+	position: absolute;
+	left: 0;
+	width: 170px;
+	bottom: 6px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	line-height: 1;
+}
+
+#drive-hud .speed {
+	font: 700 38px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+#drive-hud .unit,
+#drive-hud .stats,
+#drive-hud .vehicle {
+	font-size: 12px;
+	color: var( --muted );
+}
+
+#drive-hud .keys {
+	padding: 4px 10px;
+	border-radius: 6px;
+	background: var( --panel );
+	font-size: 12px;
+	text-shadow: none;
+}
+
+#drive-hud .flash {
+	position: fixed;
+	top: 30%;
+	left: 0;
+	right: 0;
+	text-align: center;
+	font: 700 32px/1 system-ui, sans-serif;
+	color: #fff;
+}
+
+/* While driving, the walking hint and the library button are out of the way. */
+body.driving #hint,
+body.driving #library-toggle {
+	display: none;
 }
 
 #key-prompt {

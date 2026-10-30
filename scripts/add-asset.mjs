@@ -1,15 +1,19 @@
 // Adds a model from Sketchfab or Poly Haven to the asset library in public/library.
 //
 //   npm run add-asset -- <source> --id pickup --name "Pickup truck" --category Vehicles \
-//     --length 5.9 [--front=+z] [--max-texture 1024] [--simplify 0.3] [--file local.glb]
-//   (--scale 0.01 instead of --length when the factor from file units to metres is known)
+//     --length 5.9 [--front=+z] [--max-texture 1024] [--simplify 0.3] [--file local.glb] \
+//     [--credit "Logo by ..."]
+//   (--scale 0.01 instead of --length when the factor from file units to metres is known;
+//   rigged models need --scale, as they are measured in their bind pose)
 //
 // <source> is a Sketchfab model URL or uid, or a Poly Haven URL (https://polyhaven.com/a/<id>)
 // or polyhaven:<id>. Only downloadable Sketchfab models under CC0 or CC Attribution are accepted,
 // so they can live in the repository; Poly Haven is all CC0. The model is compressed (meshopt
 // geometry, WebP textures), scaled from --length (the real length along its front axis), and
 // recorded with a thumbnail and credit in library.json and CREDITS.md. --simplify keeps that
-// fraction of the triangles, for detailed models that are too heavy for a browser.
+// fraction of the triangles, for detailed models that are too heavy for a browser. The model's
+// description is printed: read it for anyone else to credit (e.g. a logo's designer), which
+// goes in --credit, and for any extra conditions.
 //
 // Sketchfab needs an API token (sketchfab.com > Settings > Password & API) in an environment
 // variable named SKETCHFAB_API_TOKEN, SKETCHFAB_TOKEN or SKETCHFAB_API (any case).
@@ -45,6 +49,7 @@ const { values: opts, positionals } = parseArgs( {
 		'max-texture': { type: 'string', default: '1024' },
 		simplify: { type: 'string' },
 		file: { type: 'string' },
+		credit: { type: 'string' },
 	},
 } );
 
@@ -74,7 +79,18 @@ const io = new NodeIO()
 	.registerDependencies( { 'meshopt.decoder': MeshoptDecoder, 'meshopt.encoder': MeshoptEncoder } );
 
 // 1. Check the licence and fetch the model.
-const { doc, source, thumbnailUrl } = polyhavenId ? await fromPolyHaven( polyhavenId ) : await fromSketchfab( sketchfabUid );
+const { doc, source, thumbnailUrl, description } = polyhavenId ? await fromPolyHaven( polyhavenId ) : await fromSketchfab( sketchfabUid );
+if ( opts.credit ) source.extraCredit = opts.credit;
+if ( description?.trim() ) console.log( `Description of "${ source.title }" (check it for anyone else to credit, with --credit, and for extra conditions):\n${ description.trim() }\n` );
+
+// Bounds are taken from the raw vertex positions, which for a rigged model are its bind pose. If
+// the file is posed differently (a raised boom, an open door), it is drawn at another size.
+if ( realLength !== null && doc.getRoot().listSkins().length > 0 ) {
+
+	fail( `"${ source.title }" is rigged, and rigged models are measured in their bind pose, which may not be how they are drawn. ` +
+		'Give --scale (the factor from file units to metres) instead of --length, then check its size in the app.' );
+
+}
 
 // 1b. Measure before compressing: quantised skinned meshes keep their positions in a scaled form
 // that bounds can't see through.
@@ -179,6 +195,7 @@ async function fromSketchfab( uid ) {
 	return {
 		doc: await io.readBinary( bytes ),
 		thumbnailUrl: ( images.find( image => image.width >= 256 ) ?? images.at( - 1 ) )?.url,
+		description: model.description,
 		source: {
 			site: 'Sketchfab',
 			id: uid,
@@ -242,7 +259,7 @@ function credits( list ) {
 
 	const lines = list.map( item => `- **${ item.name }** (\`${ item.file }\`): "[${ item.source.title }](${ item.source.url })" by ` +
 		`${ item.source.authorUrl ? `[${ item.source.author }](${ item.source.authorUrl })` : item.source.author } on ${ item.source.site }, ` +
-		`licensed [${ item.source.license }](${ item.source.licenseUrl }). Compressed and rescaled for this project.` );
+		`licensed [${ item.source.license }](${ item.source.licenseUrl }).${ item.source.extraCredit ? ` ${ item.source.extraCredit }.` : '' } Compressed and rescaled for this project.` );
 	return '# Asset library credits\n\nThese models come from Sketchfab and Poly Haven under the licences listed. ' +
 		`Keep this file with them. Items generated in code (src/procedural.js) are part of this project.\n\n${ lines.join( '\n' ) }\n`;
 

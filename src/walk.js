@@ -46,6 +46,8 @@ export class WalkController {
 		this.grounded = false;
 		this.groundFound = false;
 		this.locked = false;
+		// Off while driving: the controller then ignores keys and leaves the camera alone.
+		this.enabled = true;
 		// The mesh the player is standing on, and whether to check for being buried next step.
 		this.standingOn = null;
 		this.checkBuried = false;
@@ -64,7 +66,7 @@ export class WalkController {
 		this._onKeyDown = e => {
 
 			if ( e.key === 'Meta' ) this.keys.clear();
-			if ( isTyping( e ) || e.ctrlKey || e.metaKey || e.altKey ) return;
+			if ( ! this.enabled || isTyping( e ) || e.ctrlKey || e.metaKey || e.altKey ) return;
 
 			// Space would otherwise press whichever panel button or checkbox has focus.
 			if ( e.code === 'Space' ) e.preventDefault();
@@ -108,7 +110,7 @@ export class WalkController {
 
 			// Hand the keyboard back to the scene after using the panel.
 			document.activeElement?.blur?.();
-			if ( this.canLockPointer( e ) ) domElement.requestPointerLock();
+			if ( this.enabled && this.canLockPointer( e ) ) domElement.requestPointerLock();
 
 		};
 		// Holding the right mouse button looks around without capturing the mouse.
@@ -388,7 +390,7 @@ export class WalkController {
 		this.raycaster.set( origin, direction );
 		this.raycaster.far = far;
 		// Lines and points in user models have fat pick thresholds; only solid meshes block.
-		return this.raycaster.intersectObjects( objects, true ).filter( hit => hit.object.isMesh );
+		return this.raycaster.intersectObjects( objects, true ).filter( blocks );
 
 	}
 
@@ -406,6 +408,13 @@ export class WalkController {
 		this.domElement.removeEventListener( 'contextmenu', this._onContextMenu );
 
 	}
+
+}
+
+// Whether a raycast hit is something solid. Flatten-zone outlines and the like opt out.
+export function blocks( hit ) {
+
+	return hit.object.isMesh && ! hit.object.userData.noCollide;
 
 }
 

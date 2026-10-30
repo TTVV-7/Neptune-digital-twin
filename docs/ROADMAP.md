@@ -50,10 +50,11 @@ See the [README](../README.md).
 > position from them instead of eyeballing it. Then run the app and show me screenshots next to the
 > Google mesh so I can check the alignment.
 
-Then fix the overlap:
+Then fix the overlap. Where Google's blobby buildings poke through yours, draw a **Flatten area**
+over them (L, top of the list). To have that happen automatically for every model of yours:
 
-> My model and Google's mesh overlap, and Google's blobby buildings poke through mine. Use
-> 3d-tiles-renderer's `TileFlatteningPlugin` to flatten the Google tiles under my model's footprint.
+> My model and Google's mesh overlap. Give the entries in `MODELS` a `flatten: true` option that
+> keeps a flatten area (see `src/flatten.js`) under the model's footprint as it moves.
 
 If the file is big or slow:
 

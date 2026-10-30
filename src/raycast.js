@@ -21,12 +21,22 @@ export function useFastRaycast( root ) {
 function lazyBvhRaycast( raycaster, intersects ) {
 
 	const { geometry } = this;
+	const { position } = geometry.attributes;
 	if ( ! geometry.boundsTree ) {
 
 		if ( geometry.boundingSphere === null ) geometry.computeBoundingSphere();
 		_sphere.copy( geometry.boundingSphere ).applyMatrix4( this.matrixWorld );
 		if ( ! raycaster.ray.intersectsSphere( _sphere ) ) return;
 		computeBoundsTree.call( geometry );
+		geometry.userData.bvhVersion = position.version;
+
+	} else if ( geometry.userData.bvhVersion !== position.version ) {
+
+		// The vertices moved (a flatten zone pressed this tile down): update the hierarchy.
+		geometry.computeBoundingSphere();
+		geometry.computeBoundingBox();
+		geometry.boundsTree.refit();
+		geometry.userData.bvhVersion = position.version;
 
 	}
 

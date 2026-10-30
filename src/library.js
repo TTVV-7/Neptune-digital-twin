@@ -15,6 +15,7 @@ export const CATEGORY_ORDER = [
 	'Site services',
 	'Access & scaffolding',
 	'Materials',
+	'Race',
 ];
 
 export async function loadLibrary() {

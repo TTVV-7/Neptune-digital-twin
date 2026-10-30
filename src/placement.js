@@ -31,32 +31,45 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 
 		} );
 		folder.add( state, 'heading', 0, 360, 0.1 ).name( 'heading (°)' ).onChange( apply );
-		// Not explicitly stepped, so exact factors such as 0.0254 survive. No min() either: lil-gui
-		// would step on a grid offset from it (1 -> 1.010001), so clamp here instead.
-		const unitsState = { units: state.scale };
-		const scale = folder.add( state, 'scale' ).step( 0.001, false ).onChange( () => {
+		if ( entry.zone ) {
 
-			if ( ! ( state.scale > 0 ) ) {
+			// A flatten zone is sized directly in metres rather than scaled.
+			const size = { width: entry.zone.width, length: entry.zone.length };
+			const resize = () => models.setZoneSize( entry, Math.max( 1, size.width ), Math.max( 1, size.length ) );
+			folder.add( size, 'width' ).min( 1 ).step( 0.5 ).name( 'width (m)' ).onChange( resize );
+			folder.add( size, 'length' ).min( 1 ).step( 0.5 ).name( 'length (m)' ).onChange( resize );
 
-				state.scale = 1;
+		} else {
+
+			// Not explicitly stepped, so exact factors such as 0.0254 survive. No min() either: lil-gui
+			// would step on a grid offset from it (1 -> 1.010001), so clamp here instead.
+			const unitsState = { units: state.scale };
+			const scale = folder.add( state, 'scale' ).step( 0.001, false ).onChange( () => {
+
+				if ( ! ( state.scale > 0 ) ) {
+
+					state.scale = 1;
+					scale.updateDisplay();
+
+				}
+
+				unitsState.units = state.scale;
+				units.updateDisplay();
+				apply();
+
+			} );
+			const units = folder.add( unitsState, 'units', UNITS ).name( 'model units' ).onChange( v => {
+
+				state.scale = v;
 				scale.updateDisplay();
+				apply();
+				// Leave the keyboard to the scene; a focused dropdown also reacts to arrow keys.
+				units.$select.blur();
 
-			}
+			} );
 
-			unitsState.units = state.scale;
-			units.updateDisplay();
-			apply();
+		}
 
-		} );
-		const units = folder.add( unitsState, 'units', UNITS ).name( 'model units' ).onChange( v => {
-
-			state.scale = v;
-			scale.updateDisplay();
-			apply();
-			// Leave the keyboard to the scene; a focused dropdown also reacts to arrow keys.
-			units.$select.blur();
-
-		} );
 		up.enable( ! state.snap );
 
 		const actions = {
@@ -100,11 +113,11 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 
 	} );
 
-	// Show the panel with just this entry's settings open.
-	function focus( entry ) {
+	// Open just this entry's settings, and show the panel unless asked not to.
+	function focus( entry, show = true ) {
 
 		for ( const [ e, folder ] of folders ) folder.open( e === entry );
-		gui.show();
+		if ( show ) gui.show();
 
 	}
 

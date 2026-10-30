@@ -33,6 +33,8 @@ export const PROCEDURAL_ITEMS = [
 	{ id: 'frontload-6yd', name: 'Front-load bin (6 yd)', category: 'Waste', build: frontLoadBin },
 	{ id: 'light-tower', name: 'Towable light tower', category: 'Site services', build: lightTower },
 	{ id: 'pallet', name: 'Wooden pallet (48 x 40 in)', category: 'Materials', build: pallet },
+	{ id: 'jump-ramp', name: 'Jump ramp (1.2 m)', category: 'Race', build: () => jumpRamp( 4, 7, 1.2 ) },
+	{ id: 'jump-ramp-big', name: 'Jump ramp (3 m)', category: 'Race', build: () => jumpRamp( 6, 16, 3 ) },
 ].map( item => ( { ...item, front: '-z', procedural: true } ) );
 
 export function buildProcedural( id ) {
@@ -129,22 +131,45 @@ function chainLink() {
 
 	if ( ! chainLinkMaterial ) {
 
-		const canvas = document.createElement( 'canvas' );
-		canvas.width = canvas.height = 64;
-		const ctx = canvas.getContext( '2d' );
-		ctx.strokeStyle = '#c9ced2';
-		ctx.lineWidth = 5;
-		ctx.beginPath();
-		ctx.moveTo( 0, 0 );
-		ctx.lineTo( 64, 64 );
-		ctx.moveTo( 64, 0 );
-		ctx.lineTo( 0, 64 );
-		ctx.stroke();
-		const texture = new CanvasTexture( canvas );
+		// The wire covers about a fifth of the panel, so with ordinary mipmaps its alpha fades away a
+		// few metres off and only the frame is left. Each smaller level is drawn by hand instead,
+		// with wire at least a pixel wide, so further away the mesh becomes a see-through haze.
+		const levels = [];
+		for ( let size = 64; size >= 1; size /= 2 ) {
+
+			const canvas = document.createElement( 'canvas' );
+			canvas.width = canvas.height = size;
+			const ctx = canvas.getContext( '2d' );
+			if ( size >= 4 ) {
+
+				ctx.strokeStyle = '#c9ced2';
+				ctx.lineWidth = Math.max( 5 * size / 64, 1 );
+				ctx.beginPath();
+				ctx.moveTo( 0, 0 );
+				ctx.lineTo( size, size );
+				ctx.moveTo( size, 0 );
+				ctx.lineTo( 0, size );
+				ctx.stroke();
+
+			} else {
+
+				ctx.fillStyle = 'rgba( 201, 206, 210, 0.45 )';
+				ctx.fillRect( 0, 0, size, size );
+
+			}
+
+			levels.push( canvas );
+
+		}
+
+		const texture = new CanvasTexture( levels[ 0 ] );
+		texture.mipmaps = levels;
+		texture.generateMipmaps = false;
 		texture.colorSpace = SRGBColorSpace;
 		texture.wrapS = texture.wrapT = RepeatWrapping;
 		texture.repeat.set( 10 * FT / 0.06, 6 * FT / 0.06 );
-		chainLinkMaterial = new MeshStandardMaterial( { map: texture, alphaTest: 0.5, side: DoubleSide, metalness: 0.6, roughness: 0.5 } );
+		// Blended, so the haze is see-through; the alpha test keeps the gaps out of the depth buffer.
+		chainLinkMaterial = new MeshStandardMaterial( { map: texture, transparent: true, alphaTest: 0.01, side: DoubleSide, metalness: 0.6, roughness: 0.5 } );
 		chainLinkMaterial.userData.shared = true;
 
 	}
@@ -226,8 +251,14 @@ function siteOfficeTrailer() {
 
 	}
 
-	for ( const x of [ - 0.75, 0.75 ] ) box( group, STEEL(), [ 0.04, 1.0, 0.04 ], [ x, floor, front - landing ] );
-	box( group, STEEL(), [ 1.5, 0.04, 0.04 ], [ 0, floor + 1.0, front - landing ] );
+	// Guard rails along the landing's two open sides; the stairs come up between them.
+	for ( const x of [ - 0.75, 0.75 ] ) {
+
+		for ( const z of [ front - landing, front - 0.05 ] ) box( group, STEEL(), [ 0.04, 1.0, 0.04 ], [ x, floor, z ] );
+		box( group, STEEL(), [ 0.04, 0.04, landing ], [ x, floor + 1.0, front - landing / 2 ] );
+
+	}
+
 	return group;
 
 }
@@ -420,3 +451,35 @@ function pallet() {
 	return group;
 
 }
+
+// --- race ------------------------------------------------------------------------------------
+
+// A wedge to drive up and launch off. You drive up from +Z and take off at the tall end, which
+// faces -Z, so the ramp's heading is the direction you jump.
+function jumpRamp( width, length, height ) {
+
+	const group = new Group();
+	const deck = mat( 0x6d7378, { roughness: 0.6, metalness: 0.5 } );
+	profile( group, deck, [ [ length / 2, 0 ], [ - length / 2, height ], [ - length / 2, 0 ] ], width );
+
+	// Yellow and black edges along the deck so it reads from a distance.
+	const stripes = 8;
+	const slope = Math.atan2( height, length );
+	const run = Math.hypot( length, height );
+	for ( let i = 0; i < stripes; i ++ ) {
+
+		const t = ( i + 0.5 ) / stripes;
+		for ( const x of [ - width / 2 + 0.08, width / 2 - 0.08 ] ) {
+
+			const stripe = box( group, mat( i % 2 ? 0x1d1f21 : 0xf2b705, { roughness: 0.5 } ), [ 0.16, 0.02, run / stripes ], [ 0, 0, 0 ] );
+			stripe.rotation.x = slope;
+			stripe.position.set( x, t * height + 0.01, length / 2 - t * length );
+
+		}
+
+	}
+
+	return group;
+
+}
+
