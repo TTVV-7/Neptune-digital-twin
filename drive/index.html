@@ -15,6 +15,17 @@
 			// www.worlddrive.app is the same site. The Worker sends /api there; pages come straight from
 			// Cloudflare's assets, so they move themselves along.
 			if ( location.hostname === 'www.worlddrive.app' ) location.replace( 'https://worlddrive.app' + location.pathname + location.search + location.hash );
+			// Cloudflare Web Analytics (no cookies): visitors, countries, referrers, page speed. Only on
+			// worlddrive.app itself, so local development and tests aren't counted.
+			if ( location.hostname === 'worlddrive.app' ) {
+
+				const beacon = document.createElement( 'script' );
+				beacon.defer = true;
+				beacon.src = 'https://static.cloudflareinsights.com/beacon.min.js';
+				beacon.dataset.cfBeacon = '{"token": "f788bd8a2fb34dc2a64001b4ebab52c2"}';
+				document.head.append( beacon );
+
+			}
 		</script>
 	</head>
 	<body data-mode="start">

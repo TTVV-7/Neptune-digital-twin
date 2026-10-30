@@ -4,6 +4,19 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<title>Neptune Terminals Digital Twin</title>
+		<script>
+			// Cloudflare Web Analytics (no cookies): visitors, pages, countries, page speed. Only on the
+			// hosted site, so local development and tests aren't counted.
+			if ( location.protocol === 'https:' && ! /^(localhost|127\.0\.0\.1)$/.test( location.hostname ) ) {
+
+				const beacon = document.createElement( 'script' );
+				beacon.defer = true;
+				beacon.src = 'https://static.cloudflareinsights.com/beacon.min.js';
+				beacon.dataset.cfBeacon = '{"token": "403e095ca07c43aead721a217563f008"}';
+				document.head.append( beacon );
+
+			}
+		</script>
 	</head>
 	<body>
 		<div id="app"></div>
