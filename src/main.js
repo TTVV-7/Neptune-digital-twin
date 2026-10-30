@@ -172,14 +172,15 @@ function start( apiKey, keySource ) {
 
 	for ( const config of MODELS ) {
 
-		models.load( config ).catch( err => showBanner( `Could not load ${ config.url }: ${ err.message }` ) );
+		models.load( { ...config, inConfig: true } ).catch( err => showBanner( `Could not load ${ config.url }: ${ err.message }` ) );
 
 	}
 
 	// The library sidebar (L) and the layout of library items saved in this browser.
-	const layout = setUpLayout( models, { onError: message => showBanner( message, 8000 ) } );
+	const libraryLoaded = loadLibrary();
+	const layout = setUpLayout( models, { getLibrary: () => libraryLoaded, onError: message => showBanner( message, 10000 ) } );
 	let sidebar = null;
-	loadLibrary().then( library => {
+	libraryLoaded.then( library => {
 
 		sidebar = createSidebar( {
 			library,
@@ -192,6 +193,7 @@ function start( apiKey, keySource ) {
 			panel,
 			getGround: () => [ ground ],
 			getPlayer: () => ( { ...localToEnu( feetPosition() ), heading: yawToHeading( controls.yaw ) } ),
+			onError: message => showBanner( message, 8000 ),
 		} );
 		showLibraryCredits( library );
 		return layout.restore();

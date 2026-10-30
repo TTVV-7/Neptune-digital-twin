@@ -27,7 +27,7 @@ const _center = new Vector3();
 // scene. A see-through preview follows the mouse; R or the wheel rotates it, Esc cancels and
 // Shift+click keeps placing more of the same. Placed items can be clicked to select, dragged to
 // move, turned with R and removed with Delete.
-export function createSidebar( { library, models, layout, scene, camera, canvas, controls, getGround, getPlayer, panel } ) {
+export function createSidebar( { library, models, layout, scene, camera, canvas, controls, getGround, getPlayer, panel, onError } ) {
 
 	const root = document.getElementById( 'library' );
 	const toggle = document.getElementById( 'library-toggle' );
@@ -170,7 +170,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 	const updateCount = () => {
 
-		const n = models.entries.filter( e => e.library && ! e.placing ).length;
+		const n = models.entries.filter( e => e.library && ! e.placing && ! e.inConfig ).length;
 		count.textContent = n === 1 ? '1 item placed' : `${ n } items placed`;
 
 	};
@@ -179,6 +179,14 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	models.addEventListener( 'remove', ( { entry } ) => {
 
 		if ( entry === selected ) select( null );
+		// The preview was removed some other way, e.g. from the P panel.
+		if ( entry === placing?.entry ) {
+
+			placing = null;
+			root.classList.remove( 'placing' );
+
+		}
+
 		updateCount();
 
 	} );
@@ -220,7 +228,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 			if ( placing === state ) placing = null;
 			root.classList.remove( 'placing' );
-			console.error( err );
+			onError( `Could not load ${ item.name }: ${ err.message }` );
 
 		}
 
@@ -257,6 +265,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		entry.placing = false;
 		setGhost( entry, false );
 		models.apply( entry );
+		updateCount();
 		if ( keepPlacing ) startPlacing( item, { heading } );
 		else select( entry );
 

@@ -67,7 +67,7 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 			},
 			copyConfig() {
 
-				copyText( JSON.stringify( models.toConfig( entry ), null, '\t' ) + ',' );
+				copyText( JSON.stringify( models.toConfig( entry ), null, '\t' ) + ',', entry.library && ! entry.inConfig );
 
 			},
 			remove() {
@@ -119,11 +119,14 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 
 }
 
-function copyText( text ) {
+// alsoSaved: the item is also in this browser's saved layout, so pasting it would make two.
+function copyText( text, alsoSaved ) {
 
 	console.log( text );
 	navigator.clipboard?.writeText( text ).then(
-		() => toast( 'Config copied — paste it into MODELS in src/config.js' ),
+		() => toast( alsoSaved
+			? 'Config copied. After pasting it into MODELS in src/config.js, remove this copy (it is also saved in this browser).'
+			: 'Config copied — paste it into MODELS in src/config.js' ),
 		() => window.prompt( 'Copy this into MODELS in src/config.js:', text ),
 	) ?? window.prompt( 'Copy this into MODELS in src/config.js:', text );
 

@@ -51,7 +51,14 @@ const materials = new Map();
 function mat( color, { roughness = 0.8, metalness = 0, ...rest } = {} ) {
 
 	const key = JSON.stringify( [ color, roughness, metalness, rest ] );
-	if ( ! materials.has( key ) ) materials.set( key, new MeshStandardMaterial( { color, roughness, metalness, ...rest } ) );
+	if ( ! materials.has( key ) ) {
+
+		const material = new MeshStandardMaterial( { color, roughness, metalness, ...rest } );
+		material.userData.shared = true;
+		materials.set( key, material );
+
+	}
+
 	return materials.get( key );
 
 }
@@ -138,6 +145,7 @@ function chainLink() {
 		texture.wrapS = texture.wrapT = RepeatWrapping;
 		texture.repeat.set( 10 * FT / 0.06, 6 * FT / 0.06 );
 		chainLinkMaterial = new MeshStandardMaterial( { map: texture, alphaTest: 0.5, side: DoubleSide, metalness: 0.6, roughness: 0.5 } );
+		chainLinkMaterial.userData.shared = true;
 
 	}
 

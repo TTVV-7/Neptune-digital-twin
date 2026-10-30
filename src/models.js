@@ -92,6 +92,8 @@ export class ModelManager extends EventDispatcher {
 			procedural: config.procedural,
 			// Still following the mouse in the library sidebar; not saved until placed.
 			placing: !! config.placing,
+			// From MODELS in config.js, which loads every time, rather than placed in this browser.
+			inConfig: !! config.inConfig,
 			footprint: new Box3().setFromObject( content ),
 			state: {
 				name: config.name ?? 'Model',
@@ -235,15 +237,18 @@ export class ModelManager extends EventDispatcher {
 
 	remove( entry ) {
 
+		const index = this.entries.indexOf( entry );
+		if ( index === - 1 ) return;
+		this.entries.splice( index, 1 );
 		this.group.remove( entry.pivot );
 		entry.pivot.traverse( o => {
 
 			o.geometry?.dispose();
+			// Built-in pieces share materials between copies; those stay.
 			const materials = Array.isArray( o.material ) ? o.material : [ o.material ];
-			materials.forEach( m => m?.dispose() );
+			materials.forEach( m => m && ! m.userData.shared && m.dispose() );
 
 		} );
-		this.entries.splice( this.entries.indexOf( entry ), 1 );
 		this.dispatchEvent( { type: 'remove', entry } );
 
 	}
