@@ -83,6 +83,20 @@ const CONFIRM_REACH = 1.3;
 const TURN_TIME = [ 0.3, 0.5 ];
 const TURN_ROOM = 2;
 const ROOM_STEP = 0.5;
+// A turn doesn't start while one is under way, nor for this long (s) after it. Google's walls are
+// lumpy, so one crash meets several faces in quick succession, and turning again for each of them
+// spun the view 140-160° round, back the way you came, instead of along the wall. Running on into
+// the far wall of a corner after the turn is a new impact, and turns you along that one.
+const TURN_REST = 0.25;
+// The turn follows the wall's line through points this far (m) either side of where it was hit,
+// found within WALL_REACH beyond the clearance radius, if that line is within about 45° of the face
+// that was hit (see wallLine).
+const WALL_SPAN = 1;
+const WALL_REACH = 3;
+const WALL_AGREE = 0.7;
+// Turning to the nearer way along a wall is at most 90° on a flat one. A face that is still off the
+// wall's line can ask for more, so the turn stops at this; escaping a corner the other way doesn't.
+const TURN_MAX = 100 * MathUtils.DEG2RAD;
 // Flying into the ground or a ceiling levels the view to this pitch off it.
 const LEVEL_PITCH = 10 * MathUtils.DEG2RAD;
 // Mouse movement (pixels) during a turn that hands the view back to the user. A turn doesn't start
@@ -128,6 +142,7 @@ export class WalkController {
 		this.bounce = new Vector3();
 		this.repel = null;
 		this.turn = null;
+		this.turnEnded = - Infinity;
 		// What the clearance check last pushed the camera off, while it's still there (see keepOff).
 		this.touching = null;
 		this.touchNormal = new Vector3();
@@ -301,6 +316,7 @@ export class WalkController {
 		this.bounce.set( 0, 0, 0 );
 		this.repel = null;
 		this.turn = null;
+		this.turnEnded = - Infinity;
 		this.touching = null;
 		this.velocity.set( 0, 0, 0 );
 		this.lastDt = 0;
@@ -605,13 +621,14 @@ export class WalkController {
 	// in both ways, the view stays. Flying into the ground or a ceiling levels it off instead.
 	turnAlong( normal, velocity ) {
 
-		if ( ! this.autoTurn || this.lookActivity > LOOK_BUSY ) return;
+		if ( ! this.autoTurn || this.lookActivity > LOOK_BUSY || this.turn || this.clock - this.turnEnded < TURN_REST ) return;
 		let yaw = 0;
 		let pitch = 0;
 		_normal.set( normal.x, 0, normal.z );
 		if ( _normal.lengthSq() > 0.25 ) {
 
 			_normal.normalize();
+			this.wallLine( _normal );
 			_forward.set( - Math.sin( this.yaw ), 0, - Math.cos( this.yaw ) );
 			if ( - _forward.dot( _normal ) > HEAD_ON ) {
 
@@ -620,8 +637,15 @@ export class WalkController {
 				if ( Math.abs( side ) < 0.05 ) side = velocity.dot( _tangent ) || 1;
 				if ( side < 0 ) _tangent.negate();
 				let open = this.roomAlong( _tangent ) >= TURN_ROOM;
-				if ( ! open ) open = this.roomAlong( _tangent.negate() ) >= TURN_ROOM;
-				if ( open ) yaw = wrapAngle( Math.atan2( - _tangent.x, - _tangent.z ) - this.yaw );
+				let limit = TURN_MAX;
+				if ( ! open ) {
+
+					open = this.roomAlong( _tangent.negate() ) >= TURN_ROOM;
+					limit = Math.PI;
+
+				}
+
+				if ( open ) yaw = MathUtils.clamp( wrapAngle( Math.atan2( - _tangent.x, - _tangent.z ) - this.yaw ), - limit, limit );
 
 			}
 
@@ -633,6 +657,38 @@ export class WalkController {
 		if ( size < 0.05 ) return;
 		const time = MathUtils.lerp( TURN_TIME[ 0 ], TURN_TIME[ 1 ], Math.min( 1, size / ( Math.PI / 2 ) ) );
 		this.turn = { yaw, pitch, time, t: 0, done: 0, mouse: 0 };
+
+	}
+
+	// The level `normal` of a wall that was hit, turned to square on to the line through the wall
+	// WALL_SPAN either side: the face that was hit can be well off the wall's own line (Google's
+	// walls are lumpy), and turning along that face turned the view 110-130° instead of along the
+	// wall. Left as it is if the wall isn't there both ways, or the line is far off the face (a
+	// corner or an edge).
+	wallLine( normal ) {
+
+		const walking = this.mode === 'walk';
+		const reach = ( walking ? PLAYER.radius : PLAYER.flyRadius ) + WALL_REACH;
+		_tangent.set( normal.z, 0, - normal.x );
+		_dir.copy( normal ).negate();
+		for ( const offset of walking ? this.walkProbes : this.flyProbes ) {
+
+			_origin.copy( this.camera.position ).addScaledVector( _tangent, - WALL_SPAN );
+			_origin.y += offset;
+			const left = this.cast( _origin, _dir, reach );
+			if ( ! left ) continue;
+			_origin.addScaledVector( _tangent, WALL_SPAN * 2 );
+			const right = this.cast( _origin, _dir, reach );
+			if ( ! right ) continue;
+			_tangent.subVectors( right.point, left.point ).setY( 0 );
+			if ( _tangent.lengthSq() < 1e-4 ) return;
+			_tangent.normalize();
+			_a.set( - _tangent.z, 0, _tangent.x );
+			if ( _a.dot( normal ) < 0 ) _a.negate();
+			if ( _a.dot( normal ) > WALL_AGREE ) normal.copy( _a );
+			return;
+
+		}
 
 	}
 
@@ -682,7 +738,12 @@ export class WalkController {
 		this.yaw += turn.yaw * ( eased - turn.done );
 		this.pitch = MathUtils.clamp( this.pitch + turn.pitch * ( eased - turn.done ), - Math.PI / 2 + 0.01, Math.PI / 2 - 0.01 );
 		turn.done = eased;
-		if ( turn.t === 1 ) this.turn = null;
+		if ( turn.t === 1 ) {
+
+			this.turn = null;
+			this.turnEnded = this.clock;
+
+		}
 
 	}
 
