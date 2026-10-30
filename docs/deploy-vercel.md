@@ -97,6 +97,10 @@ npm run test:worker` runs just the Vercel side (no wrangler, about ten seconds).
   aren't on the other. Nothing here moves data between them.
 - **Preview deployments** use the same database as production unless the Neon integration is
   set to make a database branch per preview.
+- **Database errors in the logs** say only `DatabaseError` and Postgres's error code (SQLSTATE),
+  never the connection string or what was asked: `Database request failed`, with no code, means
+  the database couldn't be reached at all, so check that `DATABASE_URL` is a plain
+  `postgres://...` address (no quotes around it) and that the Neon database is still connected.
 - **Rate limiting** isn't done here. If the site is public, add a Vercel Firewall rate-limit
   rule for `/api/session`.
 - **Deleting an account**: in Neon's SQL editor, `DELETE FROM users WHERE email = '...';` takes
