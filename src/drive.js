@@ -983,11 +983,17 @@ export class Driver {
 		Object.assign( this, spot ?? this.lastGood, { speed: 0, vy: 0, steer: 0, pitch: 0, roll: 0, course: this.heading, grounded: true, airTime: 0, stuckTime: 0, driftHop: false, boost: null } );
 		if ( this.air ) {
 
-			// Out of whatever it was doing in the air, and out of the combo.
+			// Out of whatever it was doing in the air.
 			this.air = null;
 			this.view = this.heading;
-			this.mult = 1;
 			this.hud.setPending?.( null );
+
+		}
+
+		// A bail: out of the combo too.
+		if ( this.launch ) {
+
+			this.mult = 1;
 			this.showScore();
 
 		}
@@ -1461,7 +1467,9 @@ export class Driver {
 
 		}
 
-		if ( this.y + this.centre.y - reach > ground ) return;
+		// Down only coming down: thrown up off something low, the top of that thing can be under its
+		// middle and over its wheels for a moment, and it isn't landing on it.
+		if ( this.vy > 0 || this.y + this.centre.y - reach > ground ) return;
 		this.y = ground + reach - this.centre.y;
 		if ( air.wipeout ) this.startRighting();
 		else if ( this.tilt( air.q ) <= LAND_TILT ) this.touchDown( ground );

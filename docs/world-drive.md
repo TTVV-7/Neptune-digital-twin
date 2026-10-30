@@ -45,23 +45,60 @@ address, and the construction app is unchanged by it.
 | --- | --- |
 | W / S | Gas; brake, and reverse once stopped |
 | A / D | Steer |
-| Space | Hop; hold it round a bend to drift, and let go for a mini-turbo |
+| Space | Drift: hold it and steer round a bend, let go for a mini-turbo; tap it to hop |
 | B | Booster |
 | Shift | Fly: hold to lift off, let go to glide down |
+| In the air | A / D spin, W / S flip (W forward, S back), Q / E roll (or Space with A / D) |
 | R | Stuck? Back on the road a few metres on |
 | C | Chase or driver's-seat camera |
 | Wheel | Chase camera nearer or farther |
 | M | Back to the globe |
 | Esc | Pause: keep driving, change ride, or back to the globe |
 
-The keys card shows as each drive starts; **?** brings it back. Flying, the booster, drifts and R come
-from `src/drive.js`, which World Drive starts with `fly`, `booster` and `drift` on (the construction
-app leaves them off).
+The keys card shows as each drive starts; **?** brings it back. Flying, the booster, drifts, stunts
+and R come from `src/drive.js`, which World Drive starts with `fly`, `booster` and `drift` on and
+`crash: 'launch'` (the construction app leaves them off, and its crashes stop the vehicle dead).
 
 On a touch screen the globe's panel is a sheet along the bottom, and driving has on-screen buttons
 (the driving HUD's, `src/drive-hud.js`): steering bottom left; **Gas** with **Drift** over it at the
 right-hand edge, and **Brake**, **Boost** and **Fly** beside them; reset (↺) and **Cam** at the top
-right, under the bar with **Globe** and pause. Several can be held at once.
+right, under the bar with **Globe** and pause. Several can be held at once. In the air ◀ ▶ spin,
+**Gas** and **Brake** flip, and **Drift** held with ◀ ▶ rolls.
+
+### Stunts
+
+Hit something (a wall, a building, a parked car, a barrier) and you don't stop: you bounce off it.
+
+- **The bounce.** You keep most of your speed along what you hit (85 %), come back off it with 40 %
+  of your speed into it (at most 58 km/h), and are thrown up by more the harder you hit: a 0.3 m hop
+  at 20 km/h, about 3.5 m at 80, 7.7 m at 120, and never more than 8.6 m however fast. Where you hit
+  sets you spinning: clip a corner and you spin round; hit square on and the nose goes up and over
+  backwards. Hits shake the view, squash the vehicle for a moment and throw sparks and bits, with a
+  word for how hard: **BONK!**, **BOING!** or **WHAM!**
+- **Not every hit launches.** Meet a wall at under 15° and you scrape along it in sparks. A nudge
+  under about 11 km/h stops you against it, so pressing on into a wall doesn't jitter. Kerbs and
+  other low steps are still driven over.
+- **In the air** (after a hit, off a ramp, a crest or a hop): **A**/**D** spin, **W**/**S** flip, **Q**/**E**
+  (or **Space** with **A**/**D**) roll. Let go and the turn stops within about 45°. Keys you were
+  already holding when you left the ground (the gas, say) don't count until you press them again,
+  so holding the gas off a ramp doesn't flip you. Flying (**Shift**), **Space** with **W**/**S** flips
+  and with **A**/**D** (or **Q**/**E**) rolls, and you right yourself when you let go.
+- **Landing.** Within about 40° of upright you land: the suspension takes it, the tricks you did
+  pay out, the booster is topped up (a fifth for each trick) and, going forward, you get a burst
+  of speed. On your roof or side it's a **wipeout**: a short tumble, the tricks and the combo are
+  lost, and the vehicle rolls back onto its wheels by itself (or press **R**).
+- **Tricks and score.** A spin counts by half turns (180, 360, 720...), flips and barrel rolls by
+  whole turns, give or take a little. Each scores: 300 a half turn, 1,000 a flip, 800 a roll, 150 a
+  wall bounce and 300 a second for big air (1.5 s or more). Two or more in one jump are a combo
+  (half as much again). Everything is multiplied by the combo multiplier, which goes up by one for
+  each trick you land (to ×10) and back to ×1 on a wipeout, on R, or after 6 s without a trick. The
+  score, the multiplier and your best score (kept in this browser) show under the speed; tricks pop
+  up as you do them, dim while you're in the air and bright with their points when you land.
+- **Drifting.** Hold **Space** (or the **DRIFT** button under the speed, with the mouse, or the
+  **Drift** button on a touch screen) and steer: the kart slides wide round the bend in smoke, and
+  the **DRIFT** chip and button fill with the mini-turbo's charge in its colour (yellow, then teal,
+  then pink after 0.7, 1.5 and 2.5 s). Let go for a short, strong boost. Space held before you
+  steer waits for the steering rather than hopping; a quick tap hops.
 
 ## What a visit costs, and how it's capped
 
@@ -197,9 +234,10 @@ Tests: `npm run test:drive-worker` (the Worker under `wrangler dev`, with stand-
 Nominatim: the caps, their reset at midnight UTC, Turnstile passing and failing, same-origin and JSON
 checks, the search's validation, cache and one-a-second limit, www, and that the key is only ever in
 the answer to a visit that passed) and `npm run test:drive-ui` (the page in Chromium without a key:
-the globe and panel, search on Enter, spots, pins, dropping in and driving, changing ride, M and
-teleporting again without a reload, recent places, a phone with touch buttons, and the used-up,
-robot-check and getting-ready screens).
+the globe and panel, search on Enter, spots, pins, dropping in and driving, stunts (a wall throwing
+the kart into the air and never through it, a backflip landed for points, the DRIFT button), changing
+ride, M and teleporting again without a reload, recent places, a phone with touch buttons, and the
+used-up, robot-check and getting-ready screens).
 
 ## How it fits together
 
@@ -236,7 +274,9 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   along it; a big flat roof (a line 30 m long across it) counts as somewhere to drive.
 - Collisions with Google's mesh are as good as the mesh: thin railings may not stop you (the kart can
   drift through the Lions Gate's railing and drop off the deck), and parked cars and trees in the
-  photo are solid lumps.
+  photo are solid lumps, which you bounce off like anything else. In the air the vehicle is checked
+  against walls as the box it is, turned as it is, which is close but not exact for a tumbling truck
+  meeting a roof's edge.
 - Flying over a valley, the glide down (3 m/s) can take a while: R puts you back on the road.
 
 ## Credits
