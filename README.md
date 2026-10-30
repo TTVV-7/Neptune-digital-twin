@@ -135,6 +135,7 @@ npm run add-asset -- https://polyhaven.com/a/<asset> --id oil-drum --category Ma
 
 - `--length` is the real item's length in metres along its front axis, used to scale the model.
 - `--front` is the axis its front points along in the file: `+z` (the glTF default), `-z`, `+x` or `-x`.
+  Write negative axes with an equals sign, e.g. `--front=-z`.
   If a placed item faces sideways or backwards, run the command again with another value.
 - Only downloadable models under **CC0** or **CC Attribution** are accepted, so they can be stored in the
   repository and used commercially. The script refuses anything else.

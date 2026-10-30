@@ -78,7 +78,8 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		const dims = document.createElement( 'span' );
 		dims.className = 'dims';
 		const d = item.dimensions;
-		dims.textContent = d ? `${ d.length } × ${ d.width } × ${ d.height } m` : '';
+		// Longest side first, whichever way the item faces.
+		dims.textContent = d ? `${ Math.max( d.length, d.width ) } × ${ Math.min( d.length, d.width ) } × ${ d.height } m` : '';
 		card.append( thumb, name, dims );
 		card.addEventListener( 'click', () => startPlacing( item ) );
 		card.addEventListener( 'dragstart', e => {
@@ -196,7 +197,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		placing = state;
 		root.classList.add( 'placing' );
 
-		const ahead = ( item.dimensions?.length ?? 4 ) / 2 + 6;
+		const ahead = Math.max( item.dimensions?.length ?? 4, item.dimensions?.width ?? 0 ) / 2 + 6;
 		const rad = player.heading * Math.PI / 180;
 		const start = pointer && groundPoint( pointer.x, pointer.y );
 		const { east, north } = start ? localToEnu( start ) : { east: player.east + Math.sin( rad ) * ahead, north: player.north + Math.cos( rad ) * ahead };

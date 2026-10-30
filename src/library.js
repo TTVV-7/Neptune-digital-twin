@@ -13,6 +13,7 @@ export const CATEGORY_ORDER = [
 	'Barriers & fencing',
 	'Traffic control',
 	'Site services',
+	'Access & scaffolding',
 	'Materials',
 ];
 

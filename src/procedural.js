@@ -6,7 +6,6 @@ import {
 	DoubleSide,
 	ExtrudeGeometry,
 	Group,
-	LatheGeometry,
 	Mesh,
 	MeshStandardMaterial,
 	RepeatWrapping,
@@ -26,18 +25,14 @@ export const PROCEDURAL_ITEMS = [
 	{ id: 'jersey-barrier', name: 'Concrete jersey barrier (10 ft)', category: 'Barriers & fencing', build: jerseyBarrier },
 	{ id: 'lock-block', name: 'Concrete lock block (5 x 2.5 ft)', category: 'Barriers & fencing', build: lockBlock },
 	{ id: 'fence-panel', name: 'Temporary fence panel (10 x 6 ft)', category: 'Barriers & fencing', build: fencePanel },
-	{ id: 'traffic-cone', name: 'Traffic cone (28 in)', category: 'Traffic control', build: trafficCone },
-	{ id: 'traffic-drum', name: 'Traffic drum', category: 'Traffic control', build: trafficDrum },
 	{ id: 'site-office-trailer', name: 'Site office trailer (12 x 60 ft)', category: 'Site trailers & containers', build: siteOfficeTrailer },
 	{ id: 'container-20', name: 'Shipping container (20 ft)', category: 'Site trailers & containers', build: () => container( 6.058, 2.591, 0x8e3b2a ) },
 	{ id: 'container-40hc', name: 'Shipping container (40 ft high cube)', category: 'Site trailers & containers', build: () => container( 12.192, 2.896, 0x2a4f8e ) },
 	{ id: 'rolloff-20', name: 'Roll-off dumpster (20 yd)', category: 'Waste', build: () => rollOff( 4.5 * FT, 0x2f5f8f ) },
 	{ id: 'rolloff-40', name: 'Roll-off dumpster (40 yd)', category: 'Waste', build: () => rollOff( 8 * FT, 0x3d6b3d ) },
 	{ id: 'frontload-6yd', name: 'Front-load bin (6 yd)', category: 'Waste', build: frontLoadBin },
-	{ id: 'porta-potty', name: 'Portable toilet', category: 'Site services', build: portaPotty },
 	{ id: 'light-tower', name: 'Towable light tower', category: 'Site services', build: lightTower },
 	{ id: 'pallet', name: 'Wooden pallet (48 x 40 in)', category: 'Materials', build: pallet },
-	{ id: 'ibc-tote', name: 'IBC tote (1000 L)', category: 'Materials', build: ibcTote },
 ].map( item => ( { ...item, front: '-z', procedural: true } ) );
 
 export function buildProcedural( id ) {
@@ -173,48 +168,6 @@ function fencePanel() {
 
 	// Rubber feet at both ends.
 	for ( const x of [ - width / 2, width / 2 ] ) box( group, BLACK(), [ 0.2, 0.12, 0.6 ], [ x, 0, 0 ] );
-	return group;
-
-}
-
-// --- traffic control -------------------------------------------------------------------------
-
-function trafficCone() {
-
-	const group = new Group();
-	box( group, BLACK(), [ 14 * IN, 0.03, 14 * IN ] );
-	const orange = mat( 0xff5a1f, { roughness: 0.6 } );
-	const white = mat( 0xf5f5f0, { roughness: 0.3 } );
-	const top = 28 * IN;
-	const radiusAt = y => 0.13 - ( 0.13 - 0.025 ) * ( y - 0.03 ) / ( top - 0.03 );
-	// Orange cone with two reflective collars.
-	const bands = [ [ 0.03, 0.40, orange ], [ 0.40, 0.48, white ], [ 0.48, 0.53, orange ], [ 0.53, 0.59, white ], [ 0.59, top, orange ] ];
-	for ( const [ y0, y1, material ] of bands ) {
-
-		const lathe = new LatheGeometry( [ new Vector2( radiusAt( y0 ), y0 ), new Vector2( radiusAt( y1 ), y1 ) ], 24 );
-		group.add( new Mesh( lathe, material ) );
-
-	}
-
-	return group;
-
-}
-
-function trafficDrum() {
-
-	const group = new Group();
-	cylinder( group, BLACK(), 0.37, 0.1, [ 0, 0, 0 ], 24 );
-	const orange = mat( 0xff5a1f, { roughness: 0.5 } );
-	const white = mat( 0xf5f5f0, { roughness: 0.3 } );
-	const height = 36 * IN;
-	const bands = 5;
-	for ( let i = 0; i < bands; i ++ ) {
-
-		const y0 = 0.1 + ( height - 0.1 ) * i / bands;
-		cylinder( group, i % 2 ? white : orange, 0.29 - i * 0.01, ( height - 0.1 ) / bands, [ 0, y0, 0 ], 24 );
-
-	}
-
 	return group;
 
 }
@@ -403,25 +356,6 @@ function frontLoadBin() {
 
 // --- site services ---------------------------------------------------------------------------
 
-function portaPotty() {
-
-	const group = new Group();
-	const shell = mat( 0x1f5fa8, { roughness: 0.6 } );
-	const width = 1.12;
-	const depth = 1.17;
-	box( group, shell, [ width, 0.1, depth ] );
-	box( group, shell, [ width - 0.04, 2.1, depth - 0.04 ], [ 0, 0.1, 0 ] );
-	box( group, mat( 0xf2f2ee, { roughness: 0.5, transparent: true, opacity: 0.9 } ), [ width + 0.04, 0.09, depth + 0.04 ], [ 0, 2.2, 0 ] );
-	cylinder( group, shell, 0.05, 0.25, [ 0.35, 2.29, 0.3 ], 10 );
-
-	// Door with a vacancy latch and a vent strip.
-	box( group, mat( 0x1a5292, { roughness: 0.6 } ), [ 0.8, 1.95, 0.03 ], [ 0, 0.15, - depth / 2 + 0.005 ] );
-	box( group, mat( 0xc8102e, { roughness: 0.4 } ), [ 0.08, 0.04, 0.02 ], [ 0.28, 1.1, - depth / 2 - 0.02 ] );
-	box( group, BLACK(), [ 0.6, 0.06, 0.02 ], [ 0, 1.95, - depth / 2 - 0.02 ] );
-	return group;
-
-}
-
 // Towable light tower with its mast raised and four lamps facing -Z.
 function lightTower() {
 
@@ -475,46 +409,6 @@ function pallet() {
 	for ( const z of [ - width / 2 + 0.019, 0, width / 2 - 0.019 ] ) box( group, wood, [ length, stringer, 0.038 ], [ 0, thickness, z ] );
 	for ( let i = 0; i < 7; i ++ ) box( group, wood, [ board, thickness, width ], [ - length / 2 + board / 2 + i * ( length - board ) / 6, thickness + stringer, 0 ] );
 	for ( let i = 0; i < 5; i ++ ) box( group, wood, [ board, thickness, width ], [ - length / 2 + board / 2 + i * ( length - board ) / 4, 0, 0 ] );
-	return group;
-
-}
-
-// 1000 L intermediate bulk container: white tank in a galvanised cage on a pallet base.
-function ibcTote() {
-
-	const group = new Group();
-	const length = 1.2;
-	const width = 1.0;
-	const base = 0.15;
-	const height = 1.16;
-	box( group, mat( 0x6b6f73, { roughness: 0.6, metalness: 0.4 } ), [ length, base, width ] );
-	box( group, mat( 0xf0f0ea, { roughness: 0.4, transparent: true, opacity: 0.92 } ), [ length - 0.08, height - base - 0.06, width - 0.08 ], [ 0, base, 0 ] );
-	cylinder( group, mat( 0xd6d6d0, { roughness: 0.4 } ), 0.08, 0.05, [ 0, height - 0.06, 0 ], 16 );
-	box( group, BLACK(), [ 0.12, 0.1, 0.1 ], [ 0, base + 0.03, - width / 2 - 0.02 ] );
-
-	// Cage: vertical and horizontal tubes on every side.
-	const tube = STEEL();
-	for ( let i = 0; i <= 5; i ++ ) {
-
-		const x = - length / 2 + i * length / 5;
-		for ( const z of [ - width / 2, width / 2 ] ) box( group, tube, [ 0.02, height - base, 0.02 ], [ x, base, z ] );
-
-	}
-
-	for ( let i = 0; i <= 4; i ++ ) {
-
-		const z = - width / 2 + i * width / 4;
-		for ( const x of [ - length / 2, length / 2 ] ) box( group, tube, [ 0.02, height - base, 0.02 ], [ x, base, z ] );
-
-	}
-
-	for ( const y of [ base + 0.3, base + 0.65, height - 0.02 ] ) {
-
-		for ( const z of [ - width / 2, width / 2 ] ) box( group, tube, [ length, 0.02, 0.02 ], [ 0, y, z ] );
-		for ( const x of [ - length / 2, length / 2 ] ) box( group, tube, [ 0.02, 0.02, width ], [ x, y, 0 ] );
-
-	}
-
 	return group;
 
 }

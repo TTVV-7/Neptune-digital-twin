@@ -1,7 +1,8 @@
 // Adds a model from Sketchfab or Poly Haven to the asset library in public/library.
 //
 //   npm run add-asset -- <source> --id pickup --name "Pickup truck" --category Vehicles \
-//     --length 5.9 [--front +z] [--max-texture 1024] [--simplify 0.3] [--file local.glb]
+//     --length 5.9 [--front=+z] [--max-texture 1024] [--simplify 0.3] [--file local.glb]
+//   (--scale 0.01 instead of --length when the factor from file units to metres is known)
 //
 // <source> is a Sketchfab model URL or uid, or a Poly Haven URL (https://polyhaven.com/a/<id>)
 // or polyhaven:<id>. Only downloadable Sketchfab models under CC0 or CC Attribution are accepted,
@@ -39,6 +40,7 @@ const { values: opts, positionals } = parseArgs( {
 		name: { type: 'string' },
 		category: { type: 'string', default: 'Other' },
 		length: { type: 'string' },
+		scale: { type: 'string' },
 		front: { type: 'string', default: '+z' },
 		'max-texture': { type: 'string', default: '1024' },
 		simplify: { type: 'string' },
@@ -49,16 +51,18 @@ const { values: opts, positionals } = parseArgs( {
 const sourceArg = positionals[ 0 ] ?? '';
 const polyhavenId = sourceArg.match( /^polyhaven:([\w-]+)$/ )?.[ 1 ] ?? sourceArg.match( /polyhaven\.com\/a\/([\w-]+)/ )?.[ 1 ];
 const sketchfabUid = polyhavenId ? null : sourceArg.match( /[0-9a-f]{32}/ )?.[ 0 ];
-if ( ( ! polyhavenId && ! sketchfabUid ) || ! opts.id || ! opts.length ) {
+if ( ( ! polyhavenId && ! sketchfabUid ) || ! opts.id || ( ! opts.length === ! opts.scale ) ) {
 
-	fail( 'Usage: npm run add-asset -- <sketchfab url | polyhaven url> --id <id> --length <metres> [--name ...] [--category ...] [--front +z|-z|+x|-x]' );
+	fail( 'Usage: npm run add-asset -- <sketchfab url | polyhaven url> --id <id> (--length <metres> | --scale <factor>) [--name ...] [--category ...] [--front=+z|-z|+x|-x]' );
 
 }
 
 if ( ! /^[a-z0-9-]+$/.test( opts.id ) ) fail( '--id may only contain lowercase letters, digits and dashes.' );
 if ( ! FRONTS.includes( opts.front ) ) fail( `--front must be one of ${ FRONTS.join( ', ' ) } (the axis the item's front points along in the file).` );
-const realLength = Number( opts.length );
-if ( ! ( realLength > 0 ) ) fail( '--length must be the real length in metres along the front axis.' );
+const realLength = opts.length === undefined ? null : Number( opts.length );
+if ( realLength !== null && ! ( realLength > 0 ) ) fail( '--length must be the real length in metres along the front axis.' );
+const fixedScale = opts.scale === undefined ? null : Number( opts.scale );
+if ( fixedScale !== null && ! ( fixedScale > 0 ) ) fail( '--scale must be a positive factor from file units to metres.' );
 const simplifyRatio = opts.simplify === undefined ? null : Number( opts.simplify );
 if ( simplifyRatio !== null && ! ( simplifyRatio > 0 && simplifyRatio < 1 ) ) fail( '--simplify must be between 0 and 1 (the fraction of triangles to keep).' );
 
@@ -109,7 +113,7 @@ if ( thumbnailUrl ) {
 
 // 4. Work out real-world size (measured in step 1b). Length runs along the front axis.
 const alongX = opts.front.endsWith( 'x' );
-const scale = realLength / ( alongX ? size[ 0 ] : size[ 2 ] );
+const scale = fixedScale ?? realLength / ( alongX ? size[ 0 ] : size[ 2 ] );
 const round = v => Math.round( v * 100 ) / 100;
 const triangles = doc.getRoot().listMeshes().reduce( ( sum, mesh ) => sum + mesh.listPrimitives().reduce( ( s, p ) => {
 

@@ -1,5 +1,291 @@
 [
 	{
+		"id": "rolling-stairs",
+		"name": "Rolling stairs (10 step)",
+		"category": "Access & scaffolding",
+		"file": "rolling-stairs.glb",
+		"thumb": "thumbs/rolling-stairs.webp",
+		"front": "+z",
+		"scale": 0.875,
+		"dimensions": {
+			"length": 3.4,
+			"width": 1.12,
+			"height": 3.81
+		},
+		"triangles": 49410,
+		"sizeKB": 282,
+		"source": {
+			"site": "Sketchfab",
+			"id": "901590d676494d3faec9d2a9504e6e93",
+			"url": "https://sketchfab.com/3d-models/rolling-ladder-901590d676494d3faec9d2a9504e6e93",
+			"title": "Rolling Ladder",
+			"author": "garg1",
+			"authorUrl": "https://sketchfab.com/garg1",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "scaffold-run",
+		"name": "Scaffold run (6 bays, 3 lifts)",
+		"category": "Access & scaffolding",
+		"file": "scaffold-run.glb",
+		"thumb": "thumbs/scaffold-run.webp",
+		"front": "+z",
+		"scale": 1,
+		"dimensions": {
+			"length": 0.85,
+			"width": 7.89,
+			"height": 6.49
+		},
+		"triangles": 28028,
+		"sizeKB": 775,
+		"source": {
+			"site": "Sketchfab",
+			"id": "c1f03864ec72449c8968f0630c287c8d",
+			"url": "https://sketchfab.com/3d-models/realistic-metal-scaffolding-c1f03864ec72449c8968f0630c287c8d",
+			"title": "Realistic Metal Scaffolding",
+			"author": "Jungle Jim",
+			"authorUrl": "https://sketchfab.com/jungle_jim",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "step-ladder-6ft",
+		"name": "Step ladder (6 ft)",
+		"category": "Access & scaffolding",
+		"file": "step-ladder-6ft.glb",
+		"thumb": "thumbs/step-ladder-6ft.webp",
+		"front": "+x",
+		"scale": 0.01,
+		"dimensions": {
+			"length": 1.05,
+			"width": 0.62,
+			"height": 1.83
+		},
+		"triangles": 4094,
+		"sizeKB": 288,
+		"source": {
+			"site": "Sketchfab",
+			"id": "4f0a875a047d451cb65316f590bbcdc2",
+			"url": "https://sketchfab.com/3d-models/fiberglass-step-ladder-6-new-4f0a875a047d451cb65316f590bbcdc2",
+			"title": "Fiberglass Step Ladder 6' (New)",
+			"author": "Oliver Triplett",
+			"authorUrl": "https://sketchfab.com/OliverTriplett",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "water-barrier",
+		"name": "Water-filled barrier (plastic)",
+		"category": "Barriers & fencing",
+		"file": "water-barrier.glb",
+		"thumb": "thumbs/water-barrier.webp",
+		"front": "+x",
+		"scale": 0.56,
+		"dimensions": {
+			"length": 0.64,
+			"width": 2.24,
+			"height": 0.81
+		},
+		"triangles": 410,
+		"sizeKB": 169,
+		"source": {
+			"site": "Sketchfab",
+			"id": "97133475fbb4419ca45c24c9c3b648b7",
+			"url": "https://sketchfab.com/3d-models/plastic-construction-barrier-type-3-high-poly-97133475fbb4419ca45c24c9c3b648b7",
+			"title": "Plastic construction barrier type #3 high-poly",
+			"author": "Proper Props",
+			"authorUrl": "https://sketchfab.com/p.props3d",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "ibc-tote",
+		"name": "IBC tote (1000 L)",
+		"category": "Materials",
+		"file": "ibc-tote.glb",
+		"thumb": "thumbs/ibc-tote.webp",
+		"front": "-x",
+		"scale": 0.93,
+		"dimensions": {
+			"length": 1.22,
+			"width": 1.04,
+			"height": 1.16
+		},
+		"triangles": 5965,
+		"sizeKB": 209,
+		"source": {
+			"site": "Sketchfab",
+			"id": "8b80338880564f6e9c97aa517c60ec37",
+			"url": "https://sketchfab.com/3d-models/ibc-container-8b80338880564f6e9c97aa517c60ec37",
+			"title": "IBC Container",
+			"author": "tboiston",
+			"authorUrl": "https://sketchfab.com/tboiston",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "oil-drum",
+		"name": "Steel drum (55 gal)",
+		"category": "Materials",
+		"file": "oil-drum.glb",
+		"thumb": "thumbs/oil-drum.webp",
+		"front": "+z",
+		"scale": 0.945,
+		"dimensions": {
+			"length": 0.6,
+			"width": 0.6,
+			"height": 0.88
+		},
+		"triangles": 1473,
+		"sizeKB": 269,
+		"source": {
+			"site": "Poly Haven",
+			"id": "barrel_03",
+			"url": "https://polyhaven.com/a/barrel_03",
+			"title": "Barrel 03",
+			"author": "Serhii Khromov",
+			"authorUrl": "https://polyhaven.com",
+			"license": "CC0",
+			"licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/"
+		}
+	},
+	{
+		"id": "porta-potty",
+		"name": "Portable toilet",
+		"category": "Site services",
+		"file": "porta-potty.glb",
+		"thumb": "thumbs/porta-potty.webp",
+		"front": "+x",
+		"scale": 1.15,
+		"dimensions": {
+			"length": 1.11,
+			"width": 1.12,
+			"height": 2.3
+		},
+		"triangles": 2137,
+		"sizeKB": 260,
+		"source": {
+			"site": "Sketchfab",
+			"id": "b970702ea74a456e89673e73cfb6d873",
+			"url": "https://sketchfab.com/3d-models/porta-potty-porta-loo-b970702ea74a456e89673e73cfb6d873",
+			"title": "Porta Potty | Porta Loo",
+			"author": "Sean Thomas",
+			"authorUrl": "https://sketchfab.com/foon.",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "jobsite-trailer-10x50",
+		"name": "Jobsite trailer (10 x 50 ft)",
+		"category": "Site trailers & containers",
+		"file": "jobsite-trailer-10x50.glb",
+		"thumb": "thumbs/jobsite-trailer-10x50.webp",
+		"front": "+z",
+		"scale": 1,
+		"dimensions": {
+			"length": 4.47,
+			"width": 15.08,
+			"height": 4.2
+		},
+		"triangles": 87902,
+		"sizeKB": 1000,
+		"source": {
+			"site": "Sketchfab",
+			"id": "3764049dcb8c4fceb7822c525ba004c2",
+			"url": "https://sketchfab.com/3d-models/jobsite-trailer-3764049dcb8c4fceb7822c525ba004c2",
+			"title": "Jobsite Trailer",
+			"author": "doty_aecom",
+			"authorUrl": "https://sketchfab.com/doty_aecom",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "tool-crib-10",
+		"name": "Tool crib container (10 ft)",
+		"category": "Site trailers & containers",
+		"file": "tool-crib-10.glb",
+		"thumb": "thumbs/tool-crib-10.webp",
+		"front": "+z",
+		"scale": 1,
+		"dimensions": {
+			"length": 3.05,
+			"width": 2.44,
+			"height": 2.89
+		},
+		"triangles": 5097,
+		"sizeKB": 52,
+		"source": {
+			"site": "Sketchfab",
+			"id": "736927b85aa0461e88e637384a9f140e",
+			"url": "https://sketchfab.com/3d-models/tool-crib-container-736927b85aa0461e88e637384a9f140e",
+			"title": "Tool crib container",
+			"author": "doty_aecom",
+			"authorUrl": "https://sketchfab.com/doty_aecom",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "traffic-cone",
+		"name": "Traffic cone (28 in)",
+		"category": "Traffic control",
+		"file": "traffic-cone.glb",
+		"thumb": "thumbs/traffic-cone.webp",
+		"front": "+z",
+		"scale": 1,
+		"dimensions": {
+			"length": 0.5,
+			"width": 0.5,
+			"height": 0.71
+		},
+		"triangles": 700,
+		"sizeKB": 76,
+		"source": {
+			"site": "Sketchfab",
+			"id": "05d3184730f942a3a94465b72dfc766d",
+			"url": "https://sketchfab.com/3d-models/traffic-cone-low-poly-pbr-05d3184730f942a3a94465b72dfc766d",
+			"title": "Traffic Cone Low-poly PBR",
+			"author": "MaX3Dd",
+			"authorUrl": "https://sketchfab.com/MaX3Dd",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "traffic-drum",
+		"name": "Traffic drum",
+		"category": "Traffic control",
+		"file": "traffic-drum.glb",
+		"thumb": "thumbs/traffic-drum.webp",
+		"front": "+z",
+		"scale": 0.52,
+		"dimensions": {
+			"length": 0.89,
+			"width": 0.89,
+			"height": 1.04
+		},
+		"triangles": 1380,
+		"sizeKB": 237,
+		"source": {
+			"site": "Sketchfab",
+			"id": "486f76bf01bd4905910d076686741747",
+			"url": "https://sketchfab.com/3d-models/construction-barrel-486f76bf01bd4905910d076686741747",
+			"title": "Construction Barrel",
+			"author": "Kyle Burton",
+			"authorUrl": "https://sketchfab.com/chimeracreations",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "flatbed-trailer",
 		"name": "Flatbed trailer (48 ft)",
 		"category": "Vehicles",
@@ -99,6 +385,32 @@
 			"title": "Truck W 900",
 			"author": "perceval-66",
 			"authorUrl": "https://sketchfab.com/perceval-66",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "frontload-4yd",
+		"name": "Front-load dumpster (4 yd)",
+		"category": "Waste",
+		"file": "frontload-4yd.glb",
+		"thumb": "thumbs/frontload-4yd.webp",
+		"front": "-z",
+		"scale": 0.0173,
+		"dimensions": {
+			"length": 1.42,
+			"width": 2.1,
+			"height": 1.59
+		},
+		"triangles": 12622,
+		"sizeKB": 452,
+		"source": {
+			"site": "Sketchfab",
+			"id": "e8b38df736994cf8b4f7a3a9d2980f6b",
+			"url": "https://sketchfab.com/3d-models/dumpster-e8b38df736994cf8b4f7a3a9d2980f6b",
+			"title": "Dumpster",
+			"author": "George Hager",
+			"authorUrl": "https://sketchfab.com/adjective.george",
 			"license": "CC Attribution",
 			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
 		}
