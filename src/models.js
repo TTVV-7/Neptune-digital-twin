@@ -146,8 +146,20 @@ export class ModelManager extends EventDispatcher {
 		}
 
 		this.entries.push( entry );
-		this.apply( entry );
-		this.dispatchEvent( { type: 'add', entry } );
+		try {
+
+			this.apply( entry );
+			this.dispatchEvent( { type: 'add', entry } );
+
+		} catch ( err ) {
+
+			// Something keeping track of entries couldn't take this one: take it out again, or a
+			// saved layout would keep it twice, placed and as an item that didn't load (layout.js).
+			this.remove( entry );
+			throw err;
+
+		}
+
 		return entry;
 
 	}

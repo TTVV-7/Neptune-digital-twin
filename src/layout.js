@@ -29,6 +29,8 @@ export function setUpLayout( models, { getLibrary, onError } ) {
 	// What this tab last wrote or read, ignoring item order, to tell real changes from the
 	// same layout written again (e.g. by a second tab restoring it).
 	let lastSeen = null;
+	// The last write to this browser failed (e.g. no room left); it's tried again on every change.
+	let unsaved = false;
 
 	const current = () => [ ...placed().map( e => models.toConfig( e ) ), ...unloaded ];
 
@@ -63,8 +65,30 @@ export function setUpLayout( models, { getLibrary, onError } ) {
 		const seen = canonical( value );
 		if ( localSaving && ! stale && seen !== lastSeen ) {
 
-			storage( () => localStorage.setItem( key, JSON.stringify( value ) ) );
-			lastSeen = seen;
+			const text = JSON.stringify( value );
+			try {
+
+				localStorage.setItem( key, text );
+				lastSeen = seen;
+				if ( unsaved ) toast( 'The layout is saved in this browser again' );
+				unsaved = false;
+
+			} catch ( err ) {
+
+				// A write that fails changes nothing, so the copy saved before is still there, but
+				// what's placed now would be gone after a reload: say so, once until it works again.
+				if ( ! unsaved ) {
+
+					const why = err.name === 'QuotaExceededError'
+						? `has no room left to save the layout (${ Math.ceil( text.length / 1000 ).toLocaleString( 'en-CA' ) } kB)`
+						: `isn't saving the layout (${ err.message })`;
+					onError( `This browser ${ why }, so changes since the last save would be lost on reloading. Use Export layout to keep them, or delete something.` );
+
+				}
+
+				unsaved = true;
+
+			}
 
 		}
 
@@ -356,7 +380,8 @@ function fingerprint( config ) {
 
 }
 
-// localStorage can throw in private windows; the layout just isn't saved then.
+// Reading localStorage can throw in private windows (and parsing on a damaged copy); there's
+// no saved layout then. Writing is handled in write(), which says when it fails.
 function storage( fn ) {
 
 	try {
