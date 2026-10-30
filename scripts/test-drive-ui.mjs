@@ -643,8 +643,8 @@ const POSTED = { best: 4210, rank: 12, isNewBest: true, today: { best: 4210, ran
 const RESTING = { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: false };
 
 // The leaderboard's side of the Worker, answered here; `asked` has what the page sent. options.score
-// answers a score (route => ...), so a test can make it fail.
-async function leaderboardPage( { score, ...options } = {} ) {
+// answers a score (route => ...), so a test can make it fail; options.rows are the boards' rows.
+async function leaderboardPage( { score, rows = ROWS, ...options } = {} ) {
 
 	const page = await newPage( { ...options, api: { config: RESTING, turnstile: true, visit: route => route.abort() } } );
 	const asked = page.asked = { boards: [], players: [], renames: [], scores: [] };
@@ -653,8 +653,8 @@ async function leaderboardPage( { score, ...options } = {} ) {
 
 		const query = Object.fromEntries( new URL( route.request().url() ).searchParams );
 		asked.boards.push( query );
-		const me = query.id && ( query.period === 'week' ? { ...ROWS[ 1 ] } : { ...ROWS[ 1 ], rank: 42, score: 1230 } );
-		json( route, { period: query.period, place: query.place ?? null, total: 130, rows: query.place ? [] : ROWS, ...( query.id ? { me } : {} ) } );
+		const me = query.id && ( query.period === 'week' ? { ...rows[ 1 ] } : { ...rows[ 1 ], rank: 42, score: 1230 } );
+		json( route, { period: query.period, place: query.place ?? null, total: 130, rows: query.place ? [] : rows, ...( query.id ? { me } : {} ) } );
 
 	} );
 	await page.route( `${ BASE }/api/player`, route => {
@@ -792,6 +792,31 @@ describe( 'World Drive leaderboard', () => {
 		await page.keyboard.press( 'Escape' );
 		await dialog.waitFor( { state: 'hidden' } );
 		assert.equal( await mode( page ), 'globe' );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'names, places and tricks are shown as text, never as markup', async () => {
+
+		// The Worker never takes these, but the page mustn't trust that it didn't.
+		const markup = '<img src=x onerror="window.pwned = true">';
+		const rows = [
+			{ ...ROWS[ 0 ], name: markup, place: '<b onmouseover="window.pwned = true">Furka</b>' },
+			{ ...ROWS[ 1 ], name: '<script>window.pwned = true</script>', tricks: `${ markup } + Backflip!`, vehicle: markup },
+		];
+		const page = await leaderboardPage( { rows } );
+		await page.addInitScript( name => localStorage.setItem( 'world-drive.player', JSON.stringify( { id: 'P1ayer-id_000000', secret: 'S'.repeat( 32 ), name } ) ), markup );
+		await testPad( page );
+		await page.locator( '#globe-ui .board-open' ).click();
+		const dialog = page.locator( '#leaderboard' );
+		await dialog.locator( '.rows li' ).first().waitFor();
+		assert.deepEqual( await dialog.locator( '.rows li .who b' ).allTextContents(), [ markup, '<script>window.pwned = true</script>' ] );
+		assert.equal( await dialog.locator( '.rows li .what' ).first().textContent(), `${ ROWS[ 0 ].tricks } · <b onmouseover="window.pwned = true">Furka</b> · Go-kart` );
+		assert.equal( await dialog.locator( '.named .name' ).textContent(), markup );
+		assert.equal( await dialog.locator( '.mine' ).textContent(), 'You\'re #42 of 130, with 1,230' );
+		assert.equal( await page.locator( '#leaderboard img, #leaderboard script, #leaderboard .rows b b' ).count(), 0 );
+		assert.equal( await page.evaluate( () => window.pwned ?? false ), false );
 		assert.deepEqual( page.errors, [] );
 		await page.context().close();
 
