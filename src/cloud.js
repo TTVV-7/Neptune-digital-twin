@@ -59,7 +59,8 @@ async function fetchConfig() {
 	if ( view ) url.searchParams.set( 'view', view );
 	try {
 
-		const res = await fetch( url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout( CONFIG_TIMEOUT ) } );
+		// Give a share link longer: without the server it can't be opened at all.
+		const res = await fetch( url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout( view ? CONFIG_TIMEOUT * 3 : CONFIG_TIMEOUT ) } );
 		if ( ! res.ok || ! res.headers.get( 'Content-Type' )?.includes( 'application/json' ) ) return null;
 		const config = await res.json();
 		return typeof config?.signedIn === 'boolean' ? config : null;
@@ -76,7 +77,14 @@ async function fetchConfig() {
 export async function setUpCloud( { layout, models, sidebar, tiles, toast, showBanner } ) {
 
 	const config = await loadConfig();
-	if ( ! config ) return;
+	if ( ! config ) {
+
+		// Plain static hosting has no server and no share links; say so rather than quietly
+		// showing the viewer's own layout instead.
+		if ( new URL( window.location.href ).searchParams.has( 'view' ) ) showBanner( 'Couldn\'t reach the server to open the shared layout. Reload to try again.', 10000 );
+		return;
+
+	}
 
 	let user = config.user ?? null;
 	let link = readLink();
@@ -235,8 +243,20 @@ export async function setUpCloud( { layout, models, sidebar, tiles, toast, showB
 			link = readLink();
 			render();
 			toast( `Signed in as ${ user.email }` );
-			// Changes made while signed out go to the current layout now.
-			if ( link ) scheduleSave();
+			// Changes made while signed out go to the current layout now, but ask: by now the
+			// browser's layout may be something else altogether, such as a copy of a shared one.
+			if ( link && fingerprint( layout.getData() ) !== link.fingerprint ) {
+
+				if ( window.confirm( `Save the changes made in this browser while you were signed out to "${ link.name }" in your account?` ) ) scheduleSave();
+				else {
+
+					forgetLink();
+					render();
+
+				}
+
+			}
+
 			tilesNote.hidden = ! res.hasMapsKey || !! tiles;
 
 		} catch ( err ) {
@@ -249,6 +269,8 @@ export async function setUpCloud( { layout, models, sidebar, tiles, toast, showB
 
 	async function signOut() {
 
+		// Don't lose the last change: finish the save waiting for its delay first.
+		await flushSave();
 		try {
 
 			await api( 'DELETE', 'session' );
@@ -311,6 +333,14 @@ export async function setUpCloud( { layout, models, sidebar, tiles, toast, showB
 		} ).catch( () => {} );
 
 	} );
+
+	// Finish a save that is waiting for its delay or under way.
+	async function flushSave() {
+
+		if ( saving ) await saving.catch( () => {} );
+		if ( timer ) await saveNow();
+
+	}
 
 	function scheduleSave( delay = AUTOSAVE_DELAY ) {
 
@@ -379,6 +409,8 @@ export async function setUpCloud( { layout, models, sidebar, tiles, toast, showB
 	// Make a layout from your account the current one: replace what's placed with it.
 	async function use( saved ) {
 
+		// The last changes to the layout you're leaving go to it first.
+		await flushSave();
 		clearTimeout( timer );
 		timer = null;
 		problem = null;
@@ -474,7 +506,8 @@ export async function setUpCloud( { layout, models, sidebar, tiles, toast, showB
 	// Ask before replacing what's placed, unless it's all saved in your account already.
 	function confirmReplacing( question ) {
 
-		const data = layout.getData();
+		// While the browser's own layout is still loading, what's placed isn't all of it yet.
+		const data = layout.loading ? localLayout() : layout.getData();
 		return safe( data ) || window.confirm( `${ question } It replaces what's placed now${ count( data ) }, which isn't saved to your account.` );
 
 	}
@@ -571,6 +604,9 @@ export async function setUpCloud( { layout, models, sidebar, tiles, toast, showB
 		if ( ! confirmLeaving( `Make "${ viewing.name }" your layout in this browser?` ) ) return;
 		const { name } = viewing;
 		stopViewing();
+		// The layout in this browser is no longer the account layout it was linked to, so signing
+		// in later mustn't save it over that one.
+		forgetLink();
 		toast( `"${ name }" is now your layout in this browser` );
 
 	}

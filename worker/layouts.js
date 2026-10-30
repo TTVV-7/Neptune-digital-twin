@@ -1,12 +1,16 @@
 import { HttpError, cleanText, isObject, json, jsonText, noContent, randomToken, readJson } from './http.js';
-import { firstName } from './sessions.js';
+import { isAllowed } from './sessions.js';
 
 // Layouts saved to your account. Only the owner can list, read, change, share or delete one;
 // anyone with a share link can read it. updatedAt (milliseconds) doubles as a version: a save
 // that says which version it started from is refused with 409 if the layout has moved on, so
 // two tabs or computers don't silently overwrite each other.
 
-const LAYOUT_LIMIT = 500;
+const LAYOUT_LIMIT = 200;
+// Stored size of one layout and of everyone's layouts together per account, so one account
+// (any Google account can sign in unless the allow-lists are set) can't fill the database.
+const LAYOUT_BYTES = 1024 * 1024;
+const ACCOUNT_BYTES = 25 * 1024 * 1024;
 const ID_PATTERN = /^[A-Za-z0-9_-]{16}$/;
 const SHARE_PATTERN = /^[A-Za-z0-9_-]{22}$/;
 const SUMMARY = 'id, site, name, share_token, updated_at';
@@ -28,8 +32,9 @@ export async function listLayouts( { env, url, user } ) {
 export async function createLayout( { request, env, user } ) {
 
 	const fields = readFields( await readJson( request ), { create: true } );
-	const { count } = await env.DB.prepare( 'SELECT COUNT(*) AS count FROM layouts WHERE user_id = ?' ).bind( user.id ).first();
+	const { count, bytes } = await env.DB.prepare( 'SELECT COUNT(*) AS count, COALESCE( SUM( LENGTH( data ) ), 0 ) AS bytes FROM layouts WHERE user_id = ?' ).bind( user.id ).first();
 	if ( count >= LAYOUT_LIMIT ) throw new HttpError( 403, 'Too many layouts. Delete some first.' );
+	if ( bytes + fields.data.length > ACCOUNT_BYTES ) throw accountFull();
 
 	const now = Date.now();
 	const row = await env.DB.prepare( `
@@ -56,6 +61,12 @@ export async function updateLayout( { request, env, user, params } ) {
 	const fields = readFields( body, { create: false } );
 	if ( fields.name === undefined && fields.data === undefined ) throw badRequest();
 	const expected = expectedVersion( request, body );
+	if ( fields.data !== undefined ) {
+
+		const { bytes } = await env.DB.prepare( 'SELECT COALESCE( SUM( LENGTH( data ) ), 0 ) AS bytes FROM layouts WHERE user_id = ? AND id != ?' ).bind( user.id, params.id ).first();
+		if ( bytes + fields.data.length > ACCOUNT_BYTES ) throw accountFull();
+
+	}
 
 	const sets = [];
 	const values = [];
@@ -117,12 +128,13 @@ export async function unshareLayout( { env, user, params } ) {
 
 }
 
-// A shared layout, for anyone with the link: read only, and only the owner's first name.
+// A shared layout, for anyone with the link: read only, and only the owner's first name (never
+// anything taken from their email address).
 export async function getShared( { env, params } ) {
 
-	const row = await sharedLayout( env, params.token, 'layouts.name, layouts.site, layouts.data, layouts.updated_at, users.name AS owner_name, users.given_name, users.email' );
+	const row = await sharedLayout( env, params.token, 'layouts.name, layouts.site, layouts.data, layouts.updated_at, users.name AS owner_name, users.given_name' );
 	if ( ! row ) throw notFound();
-	const owner = firstName( { name: row.owner_name, given_name: row.given_name, email: row.email } );
+	const owner = row.given_name || row.owner_name?.split( ' ' )[ 0 ] || 'someone';
 	return jsonWithData( { name: row.name, site: row.site, updatedAt: row.updated_at, owner }, row.data, { 'X-Robots-Tag': 'noindex' } );
 
 }
@@ -133,10 +145,19 @@ export async function isShared( env, token ) {
 
 }
 
-function sharedLayout( env, token, columns ) {
+// Links only work while their owner is still allowed to sign in, so taking someone off the
+// allow-lists also turns off the links they made (and the Maps key that comes with them).
+async function sharedLayout( env, token, columns ) {
 
 	if ( typeof token !== 'string' || ! SHARE_PATTERN.test( token ) ) return null;
-	return env.DB.prepare( `SELECT ${ columns } FROM layouts JOIN users ON users.id = layouts.user_id WHERE layouts.share_token = ?` ).bind( token ).first();
+	const row = await env.DB.prepare( `SELECT ${ columns }, users.email AS owner_email, users.hosted_domain AS owner_hd FROM layouts JOIN users ON users.id = layouts.user_id WHERE layouts.share_token = ?` ).bind( token ).first();
+	return row && isAllowed( { email: row.owner_email, hd: row.owner_hd }, env ) ? row : null;
+
+}
+
+function accountFull() {
+
+	return new HttpError( 403, 'Your account is full. Delete some layouts first.' );
 
 }
 
@@ -162,6 +183,8 @@ function readFields( body, { create } ) {
 		// The app's layout format: { version, items: [...], extras: {...}, ... }.
 		if ( ! isObject( body.data ) || ! Array.isArray( body.data.items ) ) throw badRequest();
 		fields.data = JSON.stringify( body.data );
+		// Measured as stored: re-encoding can make it bigger than the request was.
+		if ( fields.data.length > LAYOUT_BYTES ) throw new HttpError( 413, 'This layout is too big to save' );
 
 	}
 

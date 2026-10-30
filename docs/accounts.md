@@ -64,7 +64,9 @@ password-protected `neptune-twin` Worker.
    set either in `wrangler.jsonc`, comma-separated: `"ALLOWED_EMAILS": "you@gmail.com, pm@firm.ca"`,
    `"ALLOWED_DOMAINS": "firm.ca"`. A domain only lets in Google Workspace accounts of that domain
    (or `gmail.com` addresses): anyone can create a Google account using a company address, so the
-   address alone proves nothing. Taking someone off signs them out everywhere on their next request.
+   address alone proves nothing. Taking someone off signs them out everywhere on their next request
+   and turns off the share links they made. Setting one of these is recommended: with both empty,
+   anyone can use up the database (each account is capped at 25 MB, but accounts are free to make).
 4. **Maps key** (optional, recommended).
    ```bash
    npx wrangler secret put GOOGLE_MAPS_API_KEY
@@ -142,7 +144,8 @@ Tests (both run everything on your computer, with test keys standing in for Goog
   without a CORS preflight, which the Worker never answers.
 - **Your layouts are yours.** Every query includes the owner, and someone else's layout is
   answered with 404, the same as one that doesn't exist. All SQL uses bound parameters. Request
-  bodies are limited to 1 MB, names to 100 characters, 500 layouts per person.
+  bodies are limited to 1 MB, a layout to 1 MB as stored, names to 100 characters, and each
+  person to 200 layouts and 25 MB in all.
 - **Share links** are 128-bit random tokens, read-only, and only expose the layout, its name and
   your first name. They're stored as they are (not hashed) so you can copy the same link again;
   they only guard layout data that sits in the same database. Stop sharing turns a link off for

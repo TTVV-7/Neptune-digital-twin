@@ -40,6 +40,10 @@ import { blocks } from './walk.js';
 export const CELL = 0.5;
 const CELLS = 64;
 export const CHUNK_SIZE = CELL * CELLS;
+// Limits on dug ground read from a saved layout: chunks (about 0.5 MB each in memory), and how
+// far from the site they may be (in chunks: 200 x 32 m = 6.4 km).
+const MAX_SAVED_CHUNKS = 200;
+const MAX_CHUNK_INDEX = 200;
 const NODES = CELLS + 1;
 const COUNT = NODES * NODES;
 const CELL_AREA = CELL * CELL;
@@ -595,12 +599,24 @@ export class Terrain extends EventDispatcher {
 
 		if ( ! data?.chunks ) return;
 		if ( data.cell !== CELL || data.size !== CELLS ) throw new Error( 'saved with a different grid' );
-		if ( ! merge ) this.resetFreeform();
-		for ( const { c: [ cx, cz ], d, l, m } of data.chunks ) {
+		// Saved layouts can come from anyone (a shared link, an imported file), so check them before
+		// allocating anything: each chunk takes about half a megabyte.
+		if ( ! Array.isArray( data.chunks ) || data.chunks.length > MAX_SAVED_CHUNKS ) throw new Error( 'too much dug ground' );
+		const seen = new Set();
+		for ( const chunk of data.chunks ) {
 
-			const dug = decodeRuns( d );
-			const loose = decodeRuns( l );
-			const mats = decodeRuns( m );
+			const [ cx, cz ] = Array.isArray( chunk?.c ) ? chunk.c : [];
+			if ( ! Number.isInteger( cx ) || ! Number.isInteger( cz ) || Math.abs( cx ) > MAX_CHUNK_INDEX || Math.abs( cz ) > MAX_CHUNK_INDEX ) throw new Error( 'bad dug ground' );
+			if ( seen.has( chunkKey( cx, cz ) ) ) throw new Error( 'bad dug ground' );
+			seen.add( chunkKey( cx, cz ) );
+
+		}
+
+		const decoded = data.chunks.map( ( { d, l, m } ) => [ decodeRuns( d ), decodeRuns( l ), decodeRuns( m ) ] );
+		if ( ! merge ) this.resetFreeform();
+		data.chunks.forEach( ( { c: [ cx, cz ] }, index ) => {
+
+			const [ dug, loose, mats ] = decoded[ index ];
 			const chunk = this.chunks.get( chunkKey( cx, cz ) ) ?? this.createChunk( cx, cz );
 			for ( let lj = 0; lj < CELLS; lj ++ ) {
 
@@ -629,7 +645,7 @@ export class Terrain extends EventDispatcher {
 
 			}
 
-		}
+		} );
 
 		this.onFreeformChange?.();
 
@@ -1800,17 +1816,22 @@ function encodeRuns( values ) {
 
 }
 
+// Throws on anything encodeRuns couldn't have written (saved layouts can come from anyone).
 function decodeRuns( text ) {
 
 	const values = new Int16Array( CELLS * CELLS );
 	if ( ! text ) return values;
+	if ( typeof text !== 'string' ) throw new Error( 'bad dug ground' );
 	const binary = atob( text );
+	if ( binary.length % 2 ) throw new Error( 'bad dug ground' );
 	const view = new DataView( new ArrayBuffer( binary.length ) );
 	for ( let i = 0; i < binary.length; i ++ ) view.setUint8( i, binary.charCodeAt( i ) );
-	for ( let i = 0; i + 1 < binary.length / 2; ) {
+	const words = binary.length / 2;
+	for ( let i = 0; i + 1 < words; ) {
 
 		const start = view.getInt16( i * 2, true );
 		const length = view.getInt16( i * 2 + 2, true );
+		if ( start < 0 || length <= 0 || start + length > values.length || i + 2 + length > words ) throw new Error( 'bad dug ground' );
 		for ( let n = 0; n < length; n ++ ) values[ start + n ] = view.getInt16( ( i + 2 + n ) * 2, true );
 		i += 2 + length;
 

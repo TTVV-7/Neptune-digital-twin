@@ -18,9 +18,17 @@ export function setUpLayout( models, { getLibrary, onError } ) {
 	// Saved items that haven't loaded (still downloading, or failing, e.g. a model file that
 	// moved) are kept in every save rather than dropped.
 	let unloaded = [];
-	let restoring = false;
-	// Another tab saved a different layout; writing ours would throw that away.
+	// Saving is held until the saved layout has been restored (or replaced): models from MODELS
+	// in config.js load straight away, and saving then would overwrite the layout with nothing.
+	let restoring = true;
+	// Each restore or replace starts a new generation; models still arriving from an older one
+	// (a slow download when you open another layout) are dropped rather than mixed in.
+	let generation = 0;
+	// Another tab saved a different layout; writing ours to this browser would throw that away.
 	let stale = false;
+	// What this tab last wrote or read, ignoring item order, to tell real changes from the
+	// same layout written again (e.g. by a second tab restoring it).
+	let lastSeen = null;
 
 	const current = () => [ ...placed().map( e => models.toConfig( e ) ), ...unloaded ];
 
@@ -50,8 +58,18 @@ export function setUpLayout( models, { getLibrary, onError } ) {
 	const listeners = new Set();
 	const write = () => {
 
-		if ( restoring || stale ) return;
-		if ( localSaving ) storage( () => localStorage.setItem( key, JSON.stringify( data() ) ) );
+		if ( restoring ) return;
+		const value = data();
+		const seen = canonical( value );
+		if ( localSaving && ! stale && seen !== lastSeen ) {
+
+			storage( () => localStorage.setItem( key, JSON.stringify( value ) ) );
+			lastSeen = seen;
+
+		}
+
+		// Saving to an account goes on even when another tab has written this browser's copy:
+		// the server spots real conflicts itself.
 		for ( const listener of listeners ) listener();
 
 	};
@@ -68,8 +86,9 @@ export function setUpLayout( models, { getLibrary, onError } ) {
 
 	const save = ( { entry } = {} ) => {
 
-		// The preview following the mouse changes every frame and isn't saved.
-		if ( entry?.placing ) return;
+		// The preview following the mouse changes every frame and isn't saved, and models from
+		// MODELS aren't part of the layout.
+		if ( entry?.placing || entry?.inConfig ) return;
 		clearTimeout( timer );
 		timer = setTimeout( flush, 300 );
 
@@ -88,23 +107,34 @@ export function setUpLayout( models, { getLibrary, onError } ) {
 
 		// While viewing a shared layout this tab doesn't save, so it can't overwrite the other.
 		if ( e.key !== key || stale || ! localSaving ) return;
+		// Another tab writing back the same layout (opening the app restores and saves it) isn't a change.
+		const other = parse( storage( () => JSON.parse( e.newValue ) ) );
+		if ( other && canonical( other ) === lastSeen ) return;
 		stale = true;
-		onError( 'This layout was changed in another tab. Reload to see those changes; changes made here are no longer saved.' );
+		onError( 'This layout was changed in another tab. Reload to see those changes; changes made here are no longer saved in this browser.' );
 
 	} );
 
-	// Load configs; returns the ones that failed.
-	async function load( items ) {
+	// Load configs; returns the ones that failed. Models that arrive after a newer restore or
+	// replace has started are removed again.
+	async function load( items, gen = generation ) {
 
 		const library = await getLibrary();
-		const results = await Promise.allSettled( items.map( config => models.load( resolve( config, library ) ) ) );
+		const results = await Promise.allSettled( items.map( config => models.load( resolve( config, library ) ).then( entry => {
+
+			if ( gen !== generation ) models.remove( entry );
+			return entry;
+
+		} ) ) );
 		return items.filter( ( _, i ) => results[ i ].status === 'rejected' );
 
 	}
 
-	async function loadExtras( values = {}, options = {} ) {
+	async function loadExtras( values = {}, options = {}, gen = generation ) {
 
 		for ( const [ name, value ] of Object.entries( values ) ) {
+
+			if ( gen !== generation ) return;
 
 			const extra = extras.get( name );
 			if ( ! extra ) {
@@ -141,17 +171,34 @@ export function setUpLayout( models, { getLibrary, onError } ) {
 
 		async restore() {
 
-			// Viewing someone's shared layout instead (cloud.js turned local saving off first).
+			// Viewing someone's shared layout instead (cloud.js turned local saving off first and
+			// replaces what's placed itself).
 			if ( ! localSaving ) return;
+			const gen = ++ generation;
 			const saved = parse( storage( () => JSON.parse( localStorage.getItem( key ) ) ) );
-			if ( ! saved ) return;
-			restoring = true;
-			const failed = await load( saved.items );
+			if ( ! saved ) {
+
+				restoring = false;
+				return;
+
+			}
+
+			lastSeen = canonical( saved );
+			const failed = await load( saved.items, gen );
+			if ( gen !== generation ) return;
 			unloaded = failed;
-			await loadExtras( saved.extras );
+			await loadExtras( saved.extras, {}, gen );
+			if ( gen !== generation ) return;
 			restoring = false;
 			if ( failed.length ) onError( `${ failed.length } of ${ saved.items.length } saved items could not be loaded. They stay saved and will be tried again next time.` );
 			save();
+
+		},
+
+		// Whether a saved, opened or shared layout is still loading.
+		get loading() {
+
+			return restoring;
 
 		},
 
@@ -186,12 +233,17 @@ export function setUpLayout( models, { getLibrary, onError } ) {
 
 			const next = parse( value );
 			if ( ! next ) throw new Error( 'not a layout' );
+			const gen = ++ generation;
 			restoring = true;
 			clearAll();
-			const failed = await load( next.items );
+			const failed = await load( next.items, gen );
+			if ( gen !== generation ) return failed.length;
 			unloaded = failed;
-			await loadExtras( next.extras );
+			await loadExtras( next.extras, {}, gen );
+			if ( gen !== generation ) return failed.length;
 			restoring = false;
+			// This tab now shows the layout it chose, so it saves it in this browser again.
+			stale = false;
 			save();
 			return failed.length;
 
@@ -254,12 +306,24 @@ export function setUpLayout( models, { getLibrary, onError } ) {
 
 		clear() {
 
+			// Anything still loading from the saved layout is dropped too.
+			++ generation;
+			restoring = false;
 			clearAll();
 			save();
 
 		},
 
 	};
+
+}
+
+// A layout's content, ignoring the order items happen to finish loading in.
+function canonical( { items, extras } ) {
+
+	const sorted = items.map( item => JSON.stringify( item ) ).sort();
+	const keys = Object.keys( extras ?? {} ).sort();
+	return JSON.stringify( [ sorted, keys.map( k => [ k, extras[ k ] ] ) ] );
 
 }
 

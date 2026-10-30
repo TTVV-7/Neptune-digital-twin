@@ -351,6 +351,45 @@ test( 'bodies over 1 MB are refused', async () => {
 
 } );
 
+test( 'a share link never shows anything from the owner\'s email address', async () => {
+
+	// Google gives no name for some accounts; the link must not fall back to the email.
+	const gina = await signedIn( { sub: '1007', email: 'gina.long@neptune.example', hd: 'neptune.example', name: undefined, given_name: undefined } );
+	const made = await gina.send( 'POST', '/api/layouts', { body: { site: SITE, name: 'Gina\'s plan', data: layoutData() } } );
+	const shared = await gina.send( 'POST', `/api/layouts/${ made.body.id }/share`, { body: {} } );
+	const view = await client().send( 'GET', `/api/shared/${ shared.body.shareToken }` );
+	assert.equal( view.status, 200 );
+	assert.equal( view.body.owner, 'someone' );
+	assert.ok( ! JSON.stringify( view.body ).includes( 'gina' ) );
+
+} );
+
+test( 'stored size is limited per layout and per account', async () => {
+
+	// Small to send, but over 1 MB once stored: each number is written out in full.
+	const swollen = { ...layoutData(), extras: { numbers: Array.from( { length: 190000 }, () => 1e20 ) } };
+	assert.equal( ( await bob.send( 'POST', '/api/layouts', { body: { site: SITE, name: 'Swollen', data: swollen } } ) ).status, 413 );
+
+	// Layouts of 0.9 MB until the account's 25 MB are used up.
+	const fits = { ...layoutData(), extras: { notes: 'x'.repeat( 900 * 1024 ) } };
+	const made = [];
+	let refused = null;
+	for ( let i = 0; i < 30 && ! refused; i ++ ) {
+
+		const res = await bob.send( 'POST', '/api/layouts', { body: { site: SITE, name: `Big ${ i }`, data: fits } } );
+		if ( res.status === 201 ) made.push( res.body.id );
+		else refused = res;
+
+	}
+
+	assert.equal( refused?.status, 403 );
+	assert.ok( made.length >= 25 && made.length <= 28, `${ made.length } fitted` );
+	// A full account can still save its layouts smaller.
+	assert.equal( ( await bob.send( 'PUT', `/api/layouts/${ made[ 0 ] }`, { body: { data: layoutData() } } ) ).status, 200 );
+	for ( const id of made ) await bob.send( 'DELETE', `/api/layouts/${ id }`, { body: {} } );
+
+} );
+
 test( 'delete a layout', async () => {
 
 	const path = `/api/layouts/${ aliceLayout.id }`;
