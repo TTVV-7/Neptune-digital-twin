@@ -3,8 +3,9 @@ import { enuToLocal } from '../geo.js';
 import { blocks } from '../walk.js';
 
 // Where a vehicle drops in: the ground under the pin, and which way the street runs there, so you
-// start off along it rather than facing a wall. The scene is centred on the pin (main.js), so the
-// pin is at local x = z = 0.
+// start off along it rather than facing a wall; the deck of a bridge beside the pin; and the
+// street below a pin that's on a roof. The scene is centred on the pin (main.js), so the pin is at
+// local x = z = 0.
 
 const DOWN = new Vector3( 0, - 1, 0 );
 // The ways looked along, how far (m), and in steps of how much.
@@ -30,6 +31,17 @@ const DECK_RISE = [ 8, 110 ];
 const LEVEL = 0.7;
 const LANE = 4;
 const AROUND = Array.from( { length: 8 }, ( _, i ) => [ Math.sin( i * Math.PI / 4 ) * LANE, Math.cos( i * Math.PI / 4 ) * LANE ] );
+// A pin on a roof (or a tree, a bus shelter, a sign: anything raised) starts on the street instead.
+// It's raised if no line through it is LINE metres long; the street is the nearest point within
+// STREET_REACH, looked at every STREET_STEP metres, at least DROP lower, level a lane's width all
+// round and with a line that long through it.
+const LINE = 30;
+const STREET_REACH = 48;
+const STREET_STEP = 4;
+const DROP = 2.5;
+// The height (m, in the scene) a vehicle is put on the ground from, as models.js does: the street
+// must be what's highest there, open to the sky, or the vehicle lands on whatever is over it.
+const SKY = 2000;
 
 const _origin = new Vector3();
 const _dir = new Vector3();
@@ -80,9 +92,9 @@ export class Ground {
 
 	}
 
-	// How far (m) a vehicle could go from the pin toward `heading` before a wall, a step too high or
-	// the end of what's loaded.
-	room( heading, y ) {
+	// How far (m) a vehicle could go from the pin (or `from`, metres east and north of it) toward
+	// `heading` before a wall, a step too high or the end of what's loaded.
+	room( heading, y, from = { east: 0, north: 0 } ) {
 
 		const rad = heading * MathUtils.DEG2RAD;
 		const east = Math.sin( rad );
@@ -92,10 +104,10 @@ export class Ground {
 		let distance = 0;
 		for ( let d = STEP; d <= REACH; d += STEP ) {
 
-			enuToLocal( east * ( d - STEP ), north * ( d - STEP ), ground + BUMPER, _origin );
+			enuToLocal( from.east + east * ( d - STEP ), from.north + north * ( d - STEP ), ground + BUMPER, _origin );
 			const hit = this.cast( _origin, _dir, STEP );
 			if ( hit?.face && Math.abs( _normal.copy( hit.face.normal ).transformDirection( hit.object.matrixWorld ).y ) < 0.6 ) break;
-			enuToLocal( east * d, north * d, 0, _origin );
+			enuToLocal( from.east + east * d, from.north + north * d, 0, _origin );
 			const next = this.heightAt( _origin.x, _origin.z, ground + 30, 60 );
 			if ( next === null || Math.abs( next - ground ) > RISE ) break;
 			ground = next;
@@ -134,6 +146,72 @@ export class Ground {
 		}
 
 		return best && { east: best.east, north: best.north, y: best.y };
+
+	}
+
+	// The street, when the pin is on something raised (a roof: a pin dropped on a building, or a
+	// search result that's a building's middle), standing at height y there: as { east, north, y },
+	// or null where the pin is on a street, a road or open ground already, or no street was found.
+	street( y ) {
+
+		if ( this.longestLine( y ) >= LINE ) return null;
+		const points = [];
+		const steps = Math.floor( STREET_REACH / STREET_STEP );
+		for ( let i = - steps; i <= steps; i ++ ) {
+
+			for ( let j = - steps; j <= steps; j ++ ) {
+
+				const east = j * STREET_STEP;
+				const north = i * STREET_STEP;
+				const distance = Math.hypot( east, north );
+				if ( distance > 0 && distance <= STREET_REACH ) points.push( { east, north, distance } );
+
+			}
+
+		}
+
+		points.sort( ( a, b ) => a.distance - b.distance );
+		for ( const { east, north } of points ) {
+
+			// Open to the sky, well below the pin's roof, and clear of anything as high as that roof
+			// a lane's width all round (looking down from just over it).
+			const top = this.heightBelow( east, north, SKY, 2 * SKY );
+			if ( top === null || y - top < DROP ) continue;
+			const level = AROUND.every( ( [ e, n ] ) => {
+
+				const h = this.heightBelow( east + e, north + n, y + 1 );
+				return h !== null && Math.abs( h - top ) < LEVEL;
+
+			} );
+			if ( level && this.longestLine( top, { east, north } ) >= LINE ) return { east, north, y: top };
+
+		}
+
+		return null;
+
+	}
+
+	// The longest straight line (m) a vehicle could drive through a point (the pin, or `from`),
+	// standing at height y there, looking 8 ways.
+	longestLine( y, from ) {
+
+		let longest = 0;
+		for ( let i = 0; i < 4; i ++ ) {
+
+			longest = Math.max( longest, this.room( i * 45, y, from ) + this.room( i * 45 + 180, y, from ) );
+			if ( longest >= LINE ) break;
+
+		}
+
+		return longest;
+
+	}
+
+	// The ground's height `east`, `north` metres from the pin, looking down from `top`.
+	heightBelow( east, north, top, depth = 400 ) {
+
+		enuToLocal( east, north, 0, _origin );
+		return this.heightAt( _origin.x, _origin.z, top, depth );
 
 	}
 

@@ -269,13 +269,14 @@ async function start( { key, left = null } ) {
 
 		}
 
-		// A spot on a bridge starts on its deck, if its pin is a little off it, over the water.
+		// A spot on a bridge starts on its deck, if its pin is a little off it, over the water; a pin
+		// on a roof (or anything else raised) starts on the street below it.
 		let height = estimate + y;
-		const deck = place.deck ? ground.deck( y ) : null;
-		if ( deck ) {
+		const start = place.deck ? ground.deck( y ) : ground.street( y );
+		if ( start ) {
 
-			( { lat, lon } = localToLatLon( enuToLocal( deck.east, deck.north, 0 ), { lat, lon } ) );
-			height = estimate + deck.y;
+			( { lat, lon } = localToLatLon( enuToLocal( start.east, start.north, 0 ), { lat, lon } ) );
+			height = estimate + start.y;
 
 		}
 

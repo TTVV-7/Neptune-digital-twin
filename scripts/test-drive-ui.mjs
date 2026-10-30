@@ -258,6 +258,34 @@ describe( 'World Drive, desktop', () => {
 
 	} );
 
+	test( 'a pin on a roof starts on the street below it', async () => {
+
+		// A flat roof 20 m square and 12 m up, right over the pin, on the open test pad.
+		const found = await page.evaluate( () => {
+
+			const { ground } = window.drive;
+			const pad = ground.getColliders()[ 0 ];
+			const roof = pad.children.find( child => child.isMesh ).clone();
+			roof.scale.set( 20 / 4000, 20 / 2000, 1 );
+			roof.position.set( 0, 12, 0 );
+			pad.add( roof );
+			roof.updateMatrixWorld();
+			const y = ground.heightAt( 0, 0 );
+			const on = ground.street( y );
+			pad.remove( roof );
+			return { y, on, off: ground.street( 0 ) };
+
+		} );
+		assert.equal( Math.round( found.y ), 12 );
+		// Open ground already: it stays where it is.
+		assert.equal( found.off, null );
+		// The nearest point of the pad clear of the roof by a lane's width (4 m) all round.
+		assert.ok( found.on, 'no street found' );
+		assert.equal( Math.hypot( found.on.east, found.on.north ), 16, JSON.stringify( found.on ) );
+		assert.ok( Math.abs( found.on.y ) < 0.05, JSON.stringify( found.on ) );
+
+	} );
+
 	test( 'Esc pauses; the pause menu changes ride and drives on', async () => {
 
 		await page.keyboard.press( 'Escape' );
