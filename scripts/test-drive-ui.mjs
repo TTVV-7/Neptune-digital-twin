@@ -244,8 +244,8 @@ describe( 'World Drive, desktop', () => {
 
 		} );
 		assert.equal( found.off, null );
-		// The nearest point with deck all round it.
-		assert.deepEqual( { ...found.on, y: Math.round( found.on.y * 100 ) / 100 }, { east: 9, north: 0, y: 40 } );
+		// The nearest point with 4 m of deck all round it.
+		assert.deepEqual( { ...found.on, y: Math.round( found.on.y * 100 ) / 100 }, { east: 12, north: 0, y: 40 } );
 		const spots = await page.evaluate( async () => ( await import( '/src/drive-app/places.js' ) ).SPOTS.filter( spot => spot.deck ).map( spot => spot.id ) );
 		assert.deepEqual( spots, [ 'lions-gate', 'golden-gate', 'sydney' ] );
 

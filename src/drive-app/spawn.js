@@ -23,11 +23,13 @@ const OPEN = 0.9;
 const HINT = 0.6;
 // A bridge's deck is looked for this far (m) round the pin, every so many metres, this much higher
 // than the ground at the pin (m: over the water, under the towers' tops), and must be level to
-// within LEVEL (m) a few metres round.
+// within LEVEL (m) for LANE metres all round: a roadway, not a footpath, a kerb or a railing.
 const DECK_REACH = 45;
 const DECK_STEP = 3;
 const DECK_RISE = [ 8, 110 ];
-const LEVEL = 0.6;
+const LEVEL = 0.7;
+const LANE = 4;
+const AROUND = Array.from( { length: 8 }, ( _, i ) => [ Math.sin( i * Math.PI / 4 ) * LANE, Math.cos( i * Math.PI / 4 ) * LANE ] );
 
 const _origin = new Vector3();
 const _dir = new Vector3();
@@ -119,7 +121,7 @@ export class Ground {
 				if ( distance > DECK_REACH || ( best && distance >= best.distance ) ) continue;
 				const top = this.heightAround( east, north, y );
 				if ( top === null || top - y < DECK_RISE[ 0 ] || top - y > DECK_RISE[ 1 ] ) continue;
-				const level = [ [ 2.5, 0 ], [ - 2.5, 0 ], [ 0, 2.5 ], [ 0, - 2.5 ] ].every( ( [ e, n ] ) => {
+				const level = AROUND.every( ( [ e, n ] ) => {
 
 					const h = this.heightAround( east + e, north + n, y );
 					return h !== null && Math.abs( h - top ) < LEVEL;
