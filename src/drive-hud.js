@@ -290,12 +290,13 @@ const CSS = `
 	display: none;
 }
 
-/* A hit's word: big, tilted and gone in a moment. */
+/* A hit's word: big, tilted and gone in a moment, bursting off the vehicle (in the middle of the
+   view, below the tricks). */
 .dhud .dhud-pop {
 	position: absolute;
-	top: 36%;
+	top: 58%;
 	left: 50%;
-	font-size: clamp( 40px, 9vw, 92px );
+	font-size: clamp( 34px, 7vw, 80px );
 	font-weight: 900;
 	font-style: italic;
 	letter-spacing: -0.02em;
@@ -310,7 +311,7 @@ const CSS = `
 
 .dhud .dhud-pop.wipeout {
 	color: #ff5a5a;
-	font-size: clamp( 30px, 6.5vw, 64px );
+	font-size: clamp( 28px, 5.5vw, 60px );
 }
 
 @keyframes dhud-wham {

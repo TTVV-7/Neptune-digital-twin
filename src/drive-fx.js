@@ -241,7 +241,8 @@ export function createDriveFx( world ) {
 					smokeDue += 0.035;
 					for ( const wheel of wheels ) {
 
-						pivot.localToWorld( _p.copy( wheel ) );
+						// A little over the tyre, so the ground doesn't cut the puff off flat.
+						pivot.localToWorld( _p.copy( wheel ) ).y += 0.25;
 						_v.set( ( Math.random() - 0.5 ) * 0.8, 0.5 + Math.random() * 0.5, ( Math.random() - 0.5 ) * 0.8 ).addScaledVector( velocity, 0.6 );
 						emit( smoke, _p, _v, SMOKE_LIFE, 0.5, 1.8, 0xf2f2f2 );
 
@@ -330,10 +331,11 @@ export function createDriveFx( world ) {
 			const count = Math.round( 4 + 8 * power );
 			for ( let i = 0; i < count; i ++ ) {
 
+				// Starting high enough that the ground doesn't cut the puffs off flat.
 				const angle = i / count * Math.PI * 2;
-				_p.set( Math.cos( angle ) * width * 0.6, 0.1, Math.sin( angle ) * width * 0.6 ).add( at );
-				_v.set( Math.cos( angle ) * ( 1.5 + 2 * power ), 0.6 + Math.random() * 0.8, Math.sin( angle ) * ( 1.5 + 2 * power ) );
-				emit( smoke, _p, _v, SMOKE_LIFE, 0.6 + power * 0.6, 1.6 + power * 1.5, 0xcfc8bc );
+				_p.set( Math.cos( angle ) * width * 0.6, 0.35 + power * 0.25, Math.sin( angle ) * width * 0.6 ).add( at );
+				_v.set( Math.cos( angle ) * ( 1.5 + 2 * power ), 0.8 + Math.random() * 0.8, Math.sin( angle ) * ( 1.5 + 2 * power ) );
+				emit( smoke, _p, _v, SMOKE_LIFE, 0.5 + power * 0.4, 1.1 + power * 1.1, 0xcfc8bc );
 
 			}
 

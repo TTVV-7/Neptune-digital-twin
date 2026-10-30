@@ -151,6 +151,9 @@ const SQUASH = { stiffness: 320, damping: 11, hit: 0.1, land: 0.2, max: 0.22 };
 const SHAKE = 0.025;
 const SHAKE_MAX = 0.8;
 const SHAKE_DECAY = 6;
+// The chase camera turns round after the vehicle at most this fast (°/s), so a wipeout that ends
+// facing back the way it came swings it round in a second rather than whipping it.
+const VIEW_TURN = 180;
 // What a hit says, by how hard it was (m/s into it).
 const WORDS = [ [ 18, 'WHAM!' ], [ 9, 'BOING!' ], [ 0, 'BONK!' ] ];
 // Told once, the first time it's thrown into the air.
@@ -1750,7 +1753,8 @@ export class Driver {
 
 		}
 
-		this.view += ( ( ( target - this.view ) % 360 + 540 ) % 360 - 180 ) * Math.min( 1, dt * rate );
+		const turn = ( ( target - this.view ) % 360 + 540 ) % 360 - 180;
+		this.view += MathUtils.clamp( turn * Math.min( 1, dt * rate ), - VIEW_TURN * dt, VIEW_TURN * dt );
 		this.shake *= Math.exp( - SHAKE_DECAY * dt );
 
 	}
