@@ -55,8 +55,8 @@ CREATE TABLE scores (
 CREATE INDEX scores_by_player ON scores ( player_id, created_at );
 CREATE INDEX scores_by_age ON scores ( created_at );
 
--- Which player each visit has posted for: one visit, one player. Gone once the visit's token has
--- run out.
+-- Which player each visit has made or posted for: one visit, one player. Gone once the visit's
+-- token has run out.
 CREATE TABLE visits (
 	id TEXT PRIMARY KEY,
 	player_id TEXT NOT NULL REFERENCES players ( id ) ON DELETE CASCADE,

@@ -738,12 +738,15 @@ describe( 'World Drive leaderboard', () => {
 		// Today's rows don't say the day.
 		assert.equal( await dialog.locator( '.rows li .what' ).first().textContent(), '1080 Spin! + Backflip! · Furka Pass · Go-kart' );
 		assert.equal( await dialog.locator( '.mine' ).textContent(), '130 drivers on this board' );
-		// No visit on the test pad: nothing's posted from it, and it says so.
+		// No visit on the test pad: no name to pick and nothing posted from it, and it says so.
+		const form = dialog.locator( '.name-form' );
 		assert.ok( await dialog.locator( '.offline' ).isVisible() );
+		assert.equal( await form.isVisible(), false );
 		await shot( page, 'board-1-today' );
 
-		// Picking a name, checked here first.
-		const form = dialog.locator( '.name-form' );
+		// With one (as on Google's map), a name, checked here first.
+		await page.evaluate( () => window.drive.leaderboard.setVisit( 'v1.test-visit-token' ) );
+		assert.equal( await dialog.locator( '.offline' ).isVisible(), false );
 		await form.locator( 'input' ).fill( 'ab' );
 		await form.locator( 'button[type=submit]' ).click();
 		assert.equal( await form.locator( '.form-status' ).textContent(), 'Use 3 to 16 letters, numbers, spaces, _ or -.' );
@@ -751,7 +754,7 @@ describe( 'World Drive leaderboard', () => {
 		await form.locator( 'input' ).fill( '  Speed   Demon ' );
 		await form.locator( 'input' ).press( 'Enter' );
 		await dialog.locator( '.named' ).waitFor();
-		assert.deepEqual( asked.players, [ { name: 'Speed Demon' } ] );
+		assert.deepEqual( asked.players, [ { name: 'Speed Demon', visit: 'v1.test-visit-token' } ] );
 		assert.equal( await dialog.locator( '.named .name' ).textContent(), 'Speed Demon' );
 		assert.deepEqual( await page.evaluate( () => JSON.parse( localStorage.getItem( 'world-drive.player' ) ) ), { id: 'P1ayer-id_000000', secret: 'S'.repeat( 32 ), name: 'Speed Demon' } );
 		// The board again, with your own place below the top.
@@ -822,7 +825,7 @@ describe( 'World Drive leaderboard', () => {
 		assert.equal( await page.evaluate( () => window.drive.driver.keys.size ), 0 );
 		await input.press( 'Enter' );
 		await card.locator( '.message', { hasText: '#3 today · #12 all time' } ).waitFor();
-		assert.deepEqual( asked.players, [ { name: 'Flip Master' } ] );
+		assert.deepEqual( asked.players, [ { name: 'Flip Master', visit: 'v1.test-visit-token' } ] );
 		assert.equal( asked.scores.length, 1 );
 		const [ sent ] = asked.scores;
 		assert.deepEqual( Object.keys( sent ).sort(), [ 'airTime', 'id', 'place', 'runSeconds', 'score', 'secret', 'tricks', 'vehicle', 'visit' ] );

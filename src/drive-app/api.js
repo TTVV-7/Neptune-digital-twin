@@ -157,10 +157,10 @@ export async function searchPlaces( query ) {
 // None of these throw: each answers { ok, status, body, retryAfter }, status 0 when the Worker
 // couldn't be reached, so a bad connection never gets in the way of driving.
 
-// A new player: body { id, secret, name }.
-export function createPlayer( name ) {
+// A new player, made with this visit's token (one visit, one player): body { id, secret, name }.
+export function createPlayer( name, visit ) {
 
-	return send( 'POST', '/api/player', { name } );
+	return send( 'POST', '/api/player', { name, visit } );
 
 }
 

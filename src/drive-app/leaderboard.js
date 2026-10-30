@@ -4,7 +4,8 @@ import { storage } from './places.js';
 // The leaderboard (docs/world-drive.md): each player's best stunt score today, this week and all
 // time, kept by the Worker (worker/drive/scores.js). There's no sign-up: the first time you post,
 // or pick a name in the panel, you choose a nickname and the Worker makes you a player, whose id and
-// secret stay in this browser (lose them and you pick a new name). A run's score goes up as a
+// secret stay in this browser (lose them and you pick a new name). Like a score, a new name needs
+// this visit's token, so there's none to pick on the test pad. A run's score goes up as a
 // landed jump beats your best today, at most one every POST_GAP, with this visit's token; the first
 // time, a small card asks, and never stops the game. Nothing here may get in the way of driving:
 // every call to the Worker is allowed to fail.
@@ -20,6 +21,7 @@ const TRIES = 3;
 const CARD_TIME = 6000;
 const NAME = /^[\p{L}\p{M}\p{N} _-]{3,16}$/u;
 const NAME_RULE = 'Use 3 to 16 letters, numbers, spaces, _ or -.';
+const NO_VISIT = 'Names are picked on drives on the real 3D map.';
 
 // dialog: #leaderboard; card: #best-card, the new-best card shown while driving; vehicles: from
 // loadVehicles(), for their names; worker: whether there's a Worker to ask (not on the Vite dev
@@ -258,11 +260,20 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace } )
 
 		}
 
+		if ( ! player && ! visit ) {
+
+			say( NO_VISIT );
+			return false;
+
+		}
+
 		say( 'Saving...' );
-		const answer = player ? await renamePlayer( player, name ) : await createPlayer( name );
+		const answer = player ? await renamePlayer( player, name ) : await createPlayer( name, visit );
 		if ( ! answer.ok ) {
 
-			if ( answer.status === 403 ) forgetPlayer();
+			// A visit that's run out, or has made its player already, makes no more.
+			if ( answer.status === 403 && answer.body.reason === 'visit' ) visit = null;
+			else if ( answer.status === 403 ) forgetPlayer();
 			say( nameError( answer ) );
 			return false;
 
@@ -281,6 +292,7 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace } )
 		if ( status === 409 ) return 'That name\'s taken. Try another.';
 		if ( status === 400 && /allowed/.test( body.error ) ) return 'That name isn\'t allowed. Try another.';
 		if ( status === 400 ) return NAME_RULE;
+		if ( status === 403 && body.reason === 'visit' ) return 'This visit has run out. Reload the page to pick a name.';
 		if ( status === 403 ) return 'This browser\'s name was removed. Pick a new one.';
 		if ( status === 429 ) return 'That\'s all the new names for today. Try again tomorrow.';
 		return 'Couldn\'t reach World Drive. Try again.';
@@ -364,7 +376,8 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace } )
 
 		named.hidden = ! player || renaming;
 		if ( player ) named.querySelector( '.name' ).textContent = player.name;
-		form.hidden = !! player && ! renaming;
+		// A new name needs a visit; a rename doesn't.
+		form.hidden = player ? ! renaming : ! visit;
 		form.elements.name.value = renaming ? player.name : '';
 		form.querySelector( 'button[type=submit]' ).textContent = renaming ? 'Rename' : 'Save';
 		formStatus.textContent = '';
@@ -426,6 +439,7 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace } )
 		setVisit( token ) {
 
 			visit = token || null;
+			if ( dialog.open ) showYou();
 
 		},
 		get isOpen() {

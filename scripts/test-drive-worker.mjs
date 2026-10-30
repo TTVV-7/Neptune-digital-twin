@@ -6,8 +6,9 @@
 // and was under the caps; the caps for everyone and per visitor, counted at once and starting again
 // at midnight UTC; visitors stored only as hashes; same-origin and JSON checks; the search's
 // validation, cache and one-request-a-second limit; and www going to worlddrive.app. And the
-// leaderboard, on a throwaway D1 database: nicknames and their rules, renaming, scores posted with
-// a visit's token, each way of cheating it turns away (tokens forged, changed, expired or someone
+// leaderboard, on a throwaway D1 database: nicknames and their rules (each made with a visit's
+// token, one player a visit), renaming, scores posted with a visit's token, IPv6 visitors counted
+// by their /64, each way of cheating it turns away (tokens forged, changed, expired or someone
 // else's, the wrong secret, scores the game can't make, too many too fast), the boards (top 20,
 // your own rank, one place, the cache), days and weeks starting at midnight UTC, and the tidying
 // up after 35 days.
@@ -22,6 +23,7 @@ import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { startWorker } from './worker-harness.mjs';
 import { MAX_SCORE, RATE, SCORING, maxRate } from '../worker/drive/scores.js';
+import { addressOf } from '../worker/drive/settings.js';
 import { VISIT_HOURS, makeVisit } from '../worker/drive/visits.js';
 
 const PORT = Number( process.env.TEST_DRIVE_WORKER_PORT ) || 8796;
@@ -475,15 +477,29 @@ describe( 'World Drive leaderboard', () => {
 		time,
 	} );
 
+	// A name asked for as the page asks, with a visit of its own (from `ip`, at `time`), or with
+	// `visit`, a token from before.
+	async function named( name, { ip = nextIp(), time = NOON, visit: token = null } = {} ) {
+
+		if ( ! token ) {
+
+			const visited = await visit( server, { ip, time } );
+			assert.equal( visited.status, 200, visited.text );
+			token = visited.json.visit;
+
+		}
+
+		return { ...await send( '/api/player', { name, visit: token }, { ip, time } ), visit: token };
+
+	}
+
 	// A new player with an address and a visit of their own: { id, secret, name, ip, visit, visitedAt }.
 	async function player( name, { time = NOON } = {} ) {
 
 		const ip = nextIp();
-		const made = await send( '/api/player', { name }, { ip, time } );
+		const made = await named( name, { ip, time } );
 		assert.equal( made.status, 201, `${ name }: ${ made.text }` );
-		const visited = await visit( server, { ip, time } );
-		assert.equal( visited.status, 200 );
-		return { ...made.json, ip, visit: visited.json.visit, visitedAt: time };
+		return { ...made.json, ip, visit: made.visit, visitedAt: time };
 
 	}
 
@@ -518,7 +534,7 @@ describe( 'World Drive leaderboard', () => {
 
 	test( 'a nickname makes a player: an id, a secret given only this once, the name tidied', async () => {
 
-		const res = await send( '/api/player', { name: '  Speed   Demon ' } );
+		const res = await named( '  Speed   Demon ' );
 		assert.equal( res.status, 201 );
 		assert.equal( res.headers.get( 'Cache-Control' ), 'no-store' );
 		assert.deepEqual( Object.keys( res.json ).sort(), [ 'id', 'name', 'secret' ] );
@@ -528,7 +544,7 @@ describe( 'World Drive leaderboard', () => {
 		speed = res.json;
 		for ( const name of [ 'Zoë', 'José_99', '東京ドライバー', 'drop table', 'x-_-y' ] ) {
 
-			const made = await send( '/api/player', { name } );
+			const made = await named( name );
 			assert.equal( made.status, 201, name );
 			assert.equal( made.json.name, name );
 
@@ -559,6 +575,45 @@ describe( 'World Drive leaderboard', () => {
 
 	} );
 
+	test( 'a name needs a visit that passed Turnstile, and one visit makes one player', async () => {
+
+		// No visit, or a forged or expired one: nothing made, and nothing counted against the address.
+		const ip = nextIp();
+		const { visit: token } = await named( 'Visitor One', { ip } );
+		const [ , id, expires, signature ] = token.split( '.' );
+		const forged = signature.slice( 0, 10 ) + ( signature[ 10 ] === 'A' ? 'B' : 'A' ) + signature.slice( 11 );
+		const bad = {
+			'no visit': undefined,
+			'not a visit': 'hello',
+			'a forged signature': `v1.${ id }.${ expires }.${ forged }`,
+			'signed with another secret': await makeVisit( { TURNSTILE_SECRET: FAIL_SECRET }, NOON ),
+			'one from seven hours ago': await makeVisit( { TURNSTILE_SECRET: PASS_SECRET }, NOON - 7 * HOUR ),
+		};
+		for ( let round = 0; round < 3; round ++ ) {
+
+			for ( const [ what, visit ] of Object.entries( bad ) ) {
+
+				const res = await send( '/api/player', { name: `Robot ${ round }`, visit }, { ip } );
+				assert.equal( res.status, 403, what );
+				assert.deepEqual( res.json, { error: 'Forbidden', reason: 'visit' }, what );
+
+			}
+
+		}
+
+		assert.equal( server.d1( 'SELECT COUNT(*) AS n FROM players WHERE name LIKE \'Robot%\'' )[ 0 ].n, 0 );
+		// The visit that made Visitor One makes no one else...
+		const again = await named( 'Visitor Two', { ip, visit: token } );
+		assert.equal( again.status, 403 );
+		assert.equal( again.json.reason, 'visit' );
+		// ...but a name that's taken doesn't use a visit up, and the address still has its turns.
+		const fresh = await visit( server, { ip } );
+		assert.equal( ( await named( 'Visitor One', { ip, visit: fresh.json.visit } ) ).status, 409 );
+		assert.equal( ( await named( 'Visitor Two', { ip, visit: fresh.json.visit } ) ).status, 201 );
+		assert.deepEqual( server.d1( `SELECT p.name FROM visits v JOIN players p ON p.id = v.player_id WHERE v.id IN ( '${ id }', '${ fresh.json.visit.split( '.' )[ 1 ] }' ) ORDER BY p.name` ).map( row => row.name ), [ 'Visitor One', 'Visitor Two' ] );
+
+	} );
+
 	test( 'slurs, obvious abuse and names passing for World Drive are refused', async () => {
 
 		for ( const name of [ 'N1GGA', 'fuuuck you', 'Sh1t_Head', 'K Y S', 'Admin', 'the_admin', '4dm1n', 'W0rld Drive', 'worlddrive', 'WorldDriveTeam', 'Moderator', 'Staff' ] ) {
@@ -570,7 +625,7 @@ describe( 'World Drive leaderboard', () => {
 		}
 
 		// Rude words inside words that aren't.
-		for ( const name of [ 'Scunthorpe', 'Badminton Ace', 'Cassandra', 'Niger Delta', 'Grape Ape' ] ) assert.equal( ( await send( '/api/player', { name } ) ).status, 201, name );
+		for ( const name of [ 'Scunthorpe', 'Badminton Ace', 'Cassandra', 'Niger Delta', 'Grape Ape' ] ) assert.equal( ( await named( name ) ).status, 201, name );
 
 	} );
 
@@ -578,7 +633,7 @@ describe( 'World Drive leaderboard', () => {
 
 		for ( const name of [ 'speed demon', 'SPEED_DEMON', 'Speed-Demon', ' speed  demon ', 'Speed__Demon', 'ZOË' ] ) {
 
-			const res = await send( '/api/player', { name } );
+			const res = await named( name );
 			assert.equal( res.status, 409, name );
 			assert.equal( res.json.error, 'That name is taken' );
 
@@ -589,14 +644,19 @@ describe( 'World Drive leaderboard', () => {
 	test( 'a visitor makes at most NAMES_PER_VISITOR_DAILY names a day', async () => {
 
 		const ip = nextIp();
-		for ( let i = 0; i < NAMES_DAILY; i ++ ) assert.equal( ( await send( '/api/player', { name: `Busy Bee ${ i }` }, { ip } ) ).status, 201 );
-		const over = await send( '/api/player', { name: 'Busy Bee 9' }, { ip } );
+		for ( let i = 0; i < NAMES_DAILY; i ++ ) assert.equal( ( await named( `Busy Bee ${ i }`, { ip } ) ).status, 201 );
+		const over = await named( 'Busy Bee 9', { ip } );
 		assert.equal( over.status, 429 );
 		assert.equal( over.json.retryAfter, 12 * 60 * 60 );
 		assert.equal( over.headers.get( 'Retry-After' ), String( 12 * 60 * 60 ) );
 		// Someone else can, and so can they tomorrow.
-		assert.equal( ( await send( '/api/player', { name: 'Busy Bee 9' } ) ).status, 201 );
-		assert.equal( ( await send( '/api/player', { name: 'Busy Bee 10' }, { ip, time: NOON + DAY } ) ).status, 201 );
+		assert.equal( ( await named( 'Busy Bee 9' ) ).status, 201 );
+		assert.equal( ( await named( 'Busy Bee 10', { ip, time: NOON + DAY } ) ).status, 201 );
+		// An IPv6 visitor is their /64: the other addresses in it are the same visitor.
+		const home = '2001:db8:4:2';
+		for ( let i = 1; i <= NAMES_DAILY; i ++ ) assert.equal( ( await named( `Busy Bee ${ 10 + i }`, { ip: `${ home }::${ i }` } ) ).status, 201 );
+		assert.equal( ( await named( 'Busy Bee 20', { ip: `${ home }:0:ffff:1:2` } ) ).status, 429 );
+		assert.equal( ( await named( 'Busy Bee 20', { ip: '2001:db8:4:3::1' } ) ).status, 201 );
 
 	} );
 
@@ -617,7 +677,7 @@ describe( 'World Drive leaderboard', () => {
 		assert.deepEqual( own.json, { id: speed.id, name: 'SPEED demon' } );
 		assert.equal( ( await rename( { id: speed.id, secret: speed.secret, name: 'Speedy Gonzo' } ) ).json.name, 'Speedy Gonzo' );
 		// And the old one is free again.
-		assert.equal( ( await send( '/api/player', { name: 'Speed Demon' } ) ).status, 201 );
+		assert.equal( ( await named( 'Speed Demon' ) ).status, 201 );
 
 	} );
 
@@ -904,8 +964,8 @@ describe( 'World Drive leaderboard', () => {
 		// An abusive name, renamed: the old one is free again, the new one taken.
 		server.d1( `UPDATE players SET name = 'Driver 4821', name_key = 'driver-4821' WHERE id = '${ ace.id }'` );
 		assert.equal( ( await mine( ace ) ).name, 'Driver 4821' );
-		assert.equal( ( await send( '/api/player', { name: 'driver_4821' } ) ).status, 409 );
-		assert.equal( ( await send( '/api/player', { name: 'Ace' } ) ).status, 201 );
+		assert.equal( ( await named( 'driver_4821' ) ).status, 409 );
+		assert.equal( ( await named( 'Ace' ) ).status, 201 );
 		// A cheat's scores, off every board.
 		assert.equal( ( await mine( cat ) ).score, 60000 );
 		server.d1( `DELETE FROM best_scores WHERE player_id = '${ cat.id }'; DELETE FROM scores WHERE player_id = '${ cat.id }'` );
@@ -1043,6 +1103,21 @@ describe( 'World Drive Worker without its database', () => {
 		} ), env, {} );
 		assert.equal( made.status, 503 );
 		assert.deepEqual( await made.json(), { error: 'Not set up yet' } );
+
+	} );
+
+} );
+
+describe( 'Visitors', () => {
+
+	test( 'are their address, or for IPv6 its /64, however it\'s written', () => {
+
+		const of = ip => addressOf( new Request( 'https://worlddrive.app/api/visit', { headers: ip ? { 'CF-Connecting-IP': ip } : {} } ) );
+		assert.equal( of( '203.0.113.7' ), '203.0.113.7' );
+		for ( const ip of [ '2001:db8:1234:5678:9abc:def0:1:2', '2001:DB8:1234:5678::1', '2001:0db8:1234:5678:0000:0000:0000:0001' ] ) assert.equal( of( ip ), '2001:db8:1234:5678::/64', ip );
+		assert.equal( of( '2001:db8::' ), '2001:db8:0:0::/64' );
+		assert.equal( of( '::ffff:192.0.2.1' ), '::ffff:192.0.2.1' );
+		assert.equal( of( '' ), 'unknown' );
 
 	} );
 

@@ -17,9 +17,18 @@ export function clock( request, env ) {
 
 }
 
-// The visitor's address, as Cloudflare gives it: only ever hashed (see limits.js).
+// The visitor's address, as Cloudflare gives it: only ever hashed (see limits.js). An IPv6 address
+// counts by its first half, its /64: that's the block a home or a phone is given, and every one of
+// the billions of addresses in it would otherwise be a visitor of its own, with caps of its own.
 export function addressOf( request ) {
 
-	return request.headers.get( 'CF-Connecting-IP' ) || 'unknown';
+	const ip = request.headers.get( 'CF-Connecting-IP' ) || 'unknown';
+	if ( ! ip.includes( ':' ) || ip.includes( '.' ) ) return ip;
+	const [ head, tail ] = ip.toLowerCase().split( '::' );
+	const left = head ? head.split( ':' ) : [];
+	const right = tail ? tail.split( ':' ) : [];
+	const groups = tail === undefined ? left : [ ...left, ...Array( Math.max( 0, 8 - left.length - right.length ) ).fill( '0' ), ...right ];
+	if ( groups.length !== 8 ) return ip;
+	return `${ groups.slice( 0, 4 ).map( group => group.replace( /^0+(?=.)/, '' ) ).join( ':' ) }::/64`;
 
 }

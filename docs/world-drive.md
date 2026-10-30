@@ -126,8 +126,10 @@ starts one. World Drive is built so that one page load is one session, however m
   with **Try again**. With no key set, it shows **World Drive is getting ready** (with a flat test pad
   to drive, which costs nothing).
 
-A visitor is a hash of their IP address with a random salt made each day; addresses are never
-stored, and each day's salt and counts are deleted when the next day starts. Both caps are counted in
+A visitor is a hash of their IP address with a random salt made each day (for IPv6, the address's
+first half, its /64: the block a home or a phone is given, so the billions of addresses in it are one
+visitor); addresses are never stored, and each day's salt and counts are deleted when the next day
+starts. Both caps are counted in
 one Durable Object (`worker/drive/limits.js`, on SQLite storage, which every plan has), so two
 visits at once can't both take the last drive.
 
@@ -166,8 +168,9 @@ see. There's no sign-up: a nickname is all it takes.
   with spaces, _ and - alike ("Speed Demon" and "speed_demon" are one name). A small built-in filter
   turns away slurs and obvious abuse, through the usual disguises (0 for o, 1 for i, letters
   doubled, spaces between them), and names passing for World Drive (admin, worlddrive, moderator,
-  staff...). **Rename** is in the panel. The name is kept in this browser (an id and a secret): in
-  another browser, or after clearing the site's data, you pick a new one.
+  staff...). **Rename** is in the panel. A name is picked on a drive on Google's map (it takes the
+  visit's token, as a score does; the test pad has none). The name is kept in this browser (an id and
+  a secret): in another browser, or after clearing the site's data, you pick a new one.
 - **Days** start at midnight UTC and **weeks** on Monday, as the free drives' counts do.
 - Only drives on Google's map post scores: the test pad (maps off, or the dev server) doesn't.
 - A bad connection never gets in the way: a post that doesn't get through is tried again a couple
@@ -182,8 +185,10 @@ cheating cost something and keep the boards believable (`worker/drive/scores.js`
   "v1.<visit id>.<expiry>.<signature>", an HMAC-SHA256 whose key is derived (HKDF) from
   `TURNSTILE_SECRET`, so there's no new secret to set, and good for 6 hours. So every score comes
   from a visit that passed Turnstile and was counted against the day's caps: a script can't post
-  without spending a drive. One visit posts for one player, the first to use it, so one robot check
-  can't fill the board with names. A token that's forged, changed, expired or someone else's is a 403.
+  without spending a drive. A new name takes the token too, and one visit makes one player and posts
+  for that player only (the first to use it), so one robot check can't fill the board, or the
+  database, with names: there are never more new names in a day than visits (`DAILY_VISITS`). A
+  token that's forged, changed, expired or someone else's is a 403.
 - **What the game can score.** Scores are whole tens; the tricks read exactly as the game names them
   (at most five in a jump); the vehicle is one World Drive offers. A run can't have lasted longer
   than its visit (give or take 30 s), nor scored more than **131,565 points a second** of it: three
@@ -193,7 +198,8 @@ cheating cost something and keep the boards believable (`worker/drive/scores.js`
   1,000,000,000 (six hours flat out is 947 million). Anything else is a 400.
 - **How often.** One score every 10 s from a player (429 with Retry-After); 1,500 scores and 20 new
   names or renames a day from each visitor, counted, like the visits, as a hash of their address
-  with the day's salt (`SCORES_PER_VISITOR_DAILY`, `NAMES_PER_VISITOR_DAILY`).
+  (an IPv6 address by its /64) with the day's salt (`SCORES_PER_VISITOR_DAILY`,
+  `NAMES_PER_VISITOR_DAILY`).
 - **Only bests are kept**, one per player on each board, so posting over and over adds nothing.
 - The secret is kept only as its SHA-256, so a copy of the database can't post as anyone; addresses
   aren't kept at all.
@@ -206,7 +212,7 @@ one the game could make, from a real visit. That's what the log and the console 
 The database is **world-drive** in D1 (binding `DB`): `players`, `best_scores` (each player's best
 on each board: `period` is `all`, `day:2026-10-30` or `week:2026-10-26`, the Monday it starts;
 `place_key` is `''` for anywhere or the place's name in lower case), `scores` (a log of every score
-that changed a board, for 35 days) and `visits` (which player each visit posted for). The day and
+that changed a board, for 35 days) and `visits` (which player each visit made or posted for). The day and
 week boards and the log go after 35 days, tidied as scores come in; the all-time board stays.
 
 To look after it, open the Cloudflare dashboard → Storage & Databases → D1 → **world-drive** →
