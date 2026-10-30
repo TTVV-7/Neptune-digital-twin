@@ -11,12 +11,16 @@ export { DriveLimits } from './limits.js';
 // browser that passed Turnstile, and only while today's visits are under the caps.
 //
 // Settings (wrangler.drive.jsonc vars, or secrets):
-//   GOOGLE_MAPS_API_KEY   secret: the Maps key for World Drive's own Google Cloud project
+//   GOOGLE_MAPS_API_KEY   secret: the Maps key for World Drive's own Google Cloud project (a
+//                         secret named Google_maps_api, in any case, works as well: see mapsKey)
 //   TURNSTILE_SECRET      secret: the Turnstile widget's secret key
 //   TURNSTILE_SITE_KEY    the widget's site key (public)
 //   DAILY_VISITS          visits a day for everyone together (300 if unset); 0 closes for the day
 //   PER_VISITOR_DAILY     visits a day per visitor (8 if unset)
 //   TURNSTILE_VERIFY_URL, SEARCH_UPSTREAM, TEST_CLOCK   tests only (see scripts/test-drive-worker.mjs)
+
+// Other names the Maps key may be set under (see mapsKey).
+const KEY_NAMES = /^google_maps_api(_key)?$/i;
 
 const ROUTES = [
 	{ method: 'GET', path: '/api/config', handler: getConfig },
@@ -69,7 +73,7 @@ export default {
 // (without a key it shows a "back soon" screen instead of the globe).
 function getConfig( { env } ) {
 
-	return json( { turnstileSiteKey: env.TURNSTILE_SITE_KEY ?? '', mapsOn: !! env.GOOGLE_MAPS_API_KEY } );
+	return json( { turnstileSiteKey: env.TURNSTILE_SITE_KEY ?? '', mapsOn: !! mapsKey( env ) } );
 
 }
 
@@ -89,7 +93,8 @@ async function visit( { request, env, url, limits } ) {
 	if ( check.unavailable ) throw new HttpError( 503, 'Couldn\'t check right now. Try again' );
 	if ( ! check.ok ) throw new HttpError( 403, 'The robot check didn\'t pass' );
 	// Before counting: with no key there's nothing to count.
-	if ( ! env.GOOGLE_MAPS_API_KEY ) throw new HttpError( 503, 'Maps are off today' );
+	const key = mapsKey( env );
+	if ( ! key ) throw new HttpError( 503, 'Maps are off today' );
 
 	const outcome = await limits.visit( ip || 'unknown', {
 		now: clock( request, env ),
@@ -104,7 +109,23 @@ async function visit( { request, env, url, limits } ) {
 
 	}
 
-	return json( { mapsKey: env.GOOGLE_MAPS_API_KEY, left: outcome.left } );
+	return json( { mapsKey: key, left: outcome.left } );
+
+}
+
+// The Maps key: the GOOGLE_MAPS_API_KEY secret, or one the owner set as Google_maps_api (or
+// GOOGLE_MAPS_API, google_maps_api_key...) in the dashboard. Settings' names are case-sensitive
+// there, so any case is taken. '' when there's none.
+function mapsKey( env ) {
+
+	if ( typeof env.GOOGLE_MAPS_API_KEY === 'string' && env.GOOGLE_MAPS_API_KEY.trim() ) return env.GOOGLE_MAPS_API_KEY.trim();
+	for ( const [ name, value ] of Object.entries( env ) ) {
+
+		if ( KEY_NAMES.test( name ) && typeof value === 'string' && value.trim() ) return value.trim();
+
+	}
+
+	return '';
 
 }
 

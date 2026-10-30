@@ -406,15 +406,15 @@ describe( 'World Drive Worker, Turnstile failing and maps off', () => {
 
 } );
 
-// --- www, as Cloudflare delivers it ------------------------------------------------------
+// --- the Worker called here ------------------------------------------------------------
 
 // wrangler dev always addresses requests to itself, so www.worlddrive.app is checked by calling the
-// Worker here, with 'cloudflare:workers' (only there inside Cloudflare's runtime) stood in for.
-describe( 'World Drive Worker addresses', () => {
+// Worker here, with 'cloudflare:workers' (only there inside Cloudflare's runtime) stood in for. So
+// are other names for the key, which would each need a wrangler dev of their own.
+let imported = null;
+function loadWorker() {
 
-	let worker;
-
-	before( async () => {
+	imported ??= ( async () => {
 
 		const stub = 'export class DurableObject { constructor( ctx, env ) { this.ctx = ctx; this.env = env; } }';
 		const hooks = `export async function resolve( specifier, context, next ) {
@@ -422,7 +422,20 @@ describe( 'World Drive Worker addresses', () => {
 			return next( specifier, context );
 		}`;
 		register( `data:text/javascript,${ encodeURIComponent( hooks ) }` );
-		worker = ( await import( '../worker/drive/index.js' ) ).default;
+		return ( await import( '../worker/drive/index.js' ) ).default;
+
+	} )();
+	return imported;
+
+}
+
+describe( 'World Drive Worker addresses', () => {
+
+	let worker;
+
+	before( async () => {
+
+		worker = await loadWorker();
 
 	} );
 
@@ -445,6 +458,54 @@ describe( 'World Drive Worker addresses', () => {
 		const res = await worker.fetch( new Request( 'https://worlddrive.app/' ), env, {} );
 		assert.equal( await res.text(), 'site' );
 		assert.deepEqual( asked, [ 'https://worlddrive.app/' ] );
+
+	} );
+
+} );
+
+describe( 'World Drive Worker with the key set as Google_maps_api', () => {
+
+	test( 'takes the key under that name in any case, still only after Turnstile and the caps', async () => {
+
+		const worker = await loadWorker();
+		const counted = [];
+		const limits = { visit: async ip => ( counted.push( ip ), { ok: true, left: 3 } ) };
+		const ask = ( env, ip ) => worker.fetch( new Request( 'https://worlddrive.app/api/visit', {
+			method: 'POST',
+			headers: { Origin: 'https://worlddrive.app', 'Content-Type': 'application/json', 'CF-Connecting-IP': ip },
+			body: JSON.stringify( { token: TOKEN } ),
+		} ), env, {} );
+
+		for ( const name of [ 'Google_maps_api', 'GOOGLE_MAPS_API', 'google_maps_api_key' ] ) {
+
+			const env = {
+				[ name ]: MAPS_KEY,
+				TURNSTILE_SITE_KEY: '1x00000000000000000000AA',
+				TURNSTILE_SECRET: PASS_SECRET,
+				TURNSTILE_VERIFY_URL: `${ upstreamBase }/siteverify`,
+				LIMITS: { idFromName: id => id, get: () => limits },
+			};
+			const config = await worker.fetch( new Request( 'https://worlddrive.app/api/config' ), env, {} );
+			assert.deepEqual( await config.json(), { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true }, name );
+
+			const failed = await ask( { ...env, TURNSTILE_SECRET: FAIL_SECRET }, '198.51.100.30' );
+			assert.equal( failed.status, 403, name );
+			assert.ok( ! ( await failed.text() ).includes( MAPS_KEY ), name );
+
+			const passed = await ask( env, '198.51.100.31' );
+			assert.equal( passed.status, 200, name );
+			assert.deepEqual( await passed.json(), { mapsKey: MAPS_KEY, left: 3 }, name );
+
+		}
+
+		// Only the visits that passed were counted.
+		assert.deepEqual( counted, [ '198.51.100.31', '198.51.100.31', '198.51.100.31' ] );
+
+		// GOOGLE_MAPS_API_KEY comes first; a blank one doesn't count.
+		const both = { GOOGLE_MAPS_API_KEY: ' ', Google_maps_api: MAPS_KEY, LIMITS: { idFromName: id => id, get: () => limits } };
+		assert.equal( ( await ( await worker.fetch( new Request( 'https://worlddrive.app/api/config' ), both, {} ) ).json() ).mapsOn, true );
+		const none = { GOOGLE_MAPS_API_KEY: '', Google_maps_api: '', LIMITS: { idFromName: id => id, get: () => limits } };
+		assert.equal( ( await ( await worker.fetch( new Request( 'https://worlddrive.app/api/config' ), none, {} ) ).json() ).mapsOn, false );
 
 	} );
 
