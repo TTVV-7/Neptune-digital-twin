@@ -59,14 +59,14 @@ const _euler = new Euler();
 const _matrix = new Matrix4();
 const _part = new Matrix4();
 const _bounds = new Box3();
-const _box = new Box3();
 
 export function setUpRows( { scene, camera, canvas, models, sidebar, panel, layout, library, getGround, onUpdate, toast } ) {
 
 	const items = new Map( library.filter( item => ! item.kind ).map( item => [ item.id, item ] ) );
 	// item id -> { promise, ready }: what its rows are drawn from, once loaded.
 	const templates = new Map();
-	// entry -> { content, item, layout, pointHeights, dirty, checkedAt, ground }
+	// entry -> { content, item, pointHeights, dirty, checkedAt, ground }: what it was last built and
+	// draped as, and when
 	const rows = new Map();
 	const raycaster = new Raycaster();
 	raycaster.firstHitOnly = true;
@@ -178,7 +178,7 @@ export function setUpRows( { scene, camera, canvas, models, sidebar, panel, layo
 
 		} );
 		const size = box.getSize( new Vector3() );
-		return { item, parts, size, weight: weightOf( item ), ghost: null };
+		return { item, parts, size, ghost: null };
 
 	}
 
@@ -640,7 +640,6 @@ export function setUpRows( { scene, camera, canvas, models, sidebar, panel, layo
 
 		const { origin, levels, params } = row;
 		const plan = layOut( params, t );
-		state.plan = plan;
 		if ( ! state.preview || state.preview.userData.capacity < plan.copies.length ) {
 
 			if ( state.preview ) {

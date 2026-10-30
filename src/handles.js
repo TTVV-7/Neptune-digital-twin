@@ -613,6 +613,13 @@ export function createHandles( { scene, camera, canvas, models } ) {
 
 	}
 
+	// The handles on screen: none while nothing is selected, whatever each was last.
+	function shown() {
+
+		return root.hidden ? [] : [ ...handles, ...points, ...inserts ].filter( h => ! h.element.hidden );
+
+	}
+
 	// Metres across one pixel of the screen at `point`.
 	function worldPerPixel( point ) {
 
@@ -632,7 +639,7 @@ export function createHandles( { scene, camera, canvas, models } ) {
 
 		},
 		// The handles on screen now, as { x, y, r } in client pixels, for the toolbar to keep clear of.
-		onScreen: () => [ ...handles, ...points, ...inserts ].filter( h => ! h.element.hidden ).map( h => {
+		onScreen: () => shown().map( h => {
 
 			// Measured once: reading it every frame would make the page lay itself out again.
 			h.radius ||= h.element.offsetHeight / 2;
@@ -640,7 +647,7 @@ export function createHandles( { scene, camera, canvas, models } ) {
 
 		} ),
 		// Each handle shown now, with where it is in the scene and on screen (for tests).
-		positions: () => [ ...handles, ...points, ...inserts ].filter( h => ! h.element.hidden ).map( ( { type, sx, sy, index, world, screen } ) => ( { type, sx, sy, index, world: world.clone(), screen: { ...screen } } ) ),
+		positions: () => shown().map( ( { type, sx, sy, index, world, screen } ) => ( { type, sx, sy, index, world: world.clone(), screen: { ...screen } } ) ),
 		label: () => label.hidden ? null : label.textContent,
 
 	};
