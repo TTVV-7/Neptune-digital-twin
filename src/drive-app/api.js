@@ -1,5 +1,5 @@
 // Talking to World Drive's Worker (worker/drive/): the settings, the visit that hands out the Maps
-// key after a Turnstile check, and the place search.
+// key after a Turnstile check, the place search and the leaderboard.
 
 const TURNSTILE_SCRIPT = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
 const TURNSTILE_TIMEOUT = 45000;
@@ -22,9 +22,9 @@ export async function getConfig() {
 }
 
 // Once per page load: get a Turnstile token (invisible unless Turnstile wants a click, then its
-// widget shows in `container`) and trade it for the Maps key. Answers { key, left }, or
-// { usedUp: true, retryAfter } over a daily cap, { robot: true } when the check failed, or
-// { error } for anything else.
+// widget shows in `container`) and trade it for the Maps key. Answers { key, left, visit } (visit:
+// the token scores are posted with, see postScore), or { usedUp: true, retryAfter } over a daily
+// cap, { robot: true } when the check failed, or { error } for anything else.
 export async function startVisit( siteKey, container ) {
 
 	let token;
@@ -51,7 +51,7 @@ export async function startVisit( siteKey, container ) {
 
 	}
 
-	if ( res.ok && typeof body.mapsKey === 'string' && body.mapsKey ) return { key: body.mapsKey, left: body.left };
+	if ( res.ok && typeof body.mapsKey === 'string' && body.mapsKey ) return { key: body.mapsKey, left: body.left, visit: typeof body.visit === 'string' ? body.visit : null };
 	if ( res.status === 429 ) return { usedUp: true, retryAfter: Number( body.retryAfter ) || 0, reason: body.reason };
 	if ( res.status === 403 ) return { robot: true };
 	return { error: body.error ?? `World Drive answered ${ res.status }.` };
@@ -150,5 +150,64 @@ export async function searchPlaces( query ) {
 	if ( res.status === 400 ) throw new Error( 'Type a place or an address: letters, numbers and simple punctuation.' );
 	if ( ! res.ok || ! Array.isArray( body.results ) ) throw new Error( 'Search isn\'t answering. Try again soon.' );
 	return body.results;
+
+}
+
+// --- the leaderboard (worker/drive/players.js, scores.js) ---
+// None of these throw: each answers { ok, status, body, retryAfter }, status 0 when the Worker
+// couldn't be reached, so a bad connection never gets in the way of driving.
+
+// A new player: body { id, secret, name }.
+export function createPlayer( name ) {
+
+	return send( 'POST', '/api/player', { name } );
+
+}
+
+// body { id, name }.
+export function renamePlayer( { id, secret }, name ) {
+
+	return send( 'POST', '/api/player/rename', { id, secret, name } );
+
+}
+
+// A run's score: { id, secret, visit, score, tricks, place, vehicle, airTime, runSeconds }. body
+// { best, rank, isNewBest } for all time, and the same as `today` and `week`.
+export function postScore( run ) {
+
+	return send( 'POST', '/api/score', run );
+
+}
+
+// A board: period 'today', 'week' or 'all', place (or null for anywhere), id (or null) for the
+// player's own row. body { total, rows: [ { rank, name, score, tricks, place, vehicle, date } ], me }.
+export function getBoard( { period, place = null, id = null } ) {
+
+	const query = new URLSearchParams( { period } );
+	if ( place ) query.set( 'place', place );
+	if ( id ) query.set( 'id', id );
+	return send( 'GET', `/api/leaderboard?${ query }` );
+
+}
+
+async function send( method, path, body ) {
+
+	try {
+
+		const res = await fetch( path, {
+			method,
+			headers: body ? { 'Content-Type': 'application/json', Accept: 'application/json' } : { Accept: 'application/json' },
+			body: body ? JSON.stringify( body ) : undefined,
+		} );
+		const json = /json/.test( res.headers.get( 'Content-Type' ) ?? '' ) ? await res.json().catch( () => null ) : null;
+		// Not the Worker answering (the Vite dev server on its own): as good as no connection.
+		if ( ! json ) return { ok: false, status: 0, body: {}, retryAfter: 0 };
+		return { ok: res.ok, status: res.status, body: json, retryAfter: Number( res.headers.get( 'Retry-After' ) ) || 0 };
+
+	} catch {
+
+		return { ok: false, status: 0, body: {}, retryAfter: 0 };
+
+	}
 
 }

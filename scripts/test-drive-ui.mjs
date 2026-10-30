@@ -4,10 +4,12 @@
 // typed coordinates; start spots; a tap on the globe; dropping in and driving; stunts (a wall
 // throwing the kart into the air, a backflip landed for points, the DRIFT button); the vehicle picker
 // and changing ride from the pause menu; M back to the globe and teleporting again with no reload;
-// recent places and the picked ride kept across a reload; a phone with touch buttons; and the
-// screens the Worker's answers lead to (used up, robot check, maps off, the visit itself). Every
-// request that isn't to the local server is blocked, so nothing reaches Google, Cloudflare or
-// OpenStreetMap.
+// recent places and the picked ride kept across a reload; a phone with touch buttons; the
+// screens the Worker's answers lead to (used up, robot check, maps off, the visit itself); and the
+// leaderboard (its answers made here): the trophy and the panel, tabs, your own row, picking a name
+// and renaming, a landed jump posting the run (the card asking the first time, never stopping the
+// drive), a dead connection changing nothing, and all of it on a phone. Every request that isn't
+// to the local server is blocked, so nothing reaches Google, Cloudflare or OpenStreetMap.
 //
 // Needs Playwright with Chromium, as test-accounts-ui.mjs does. TEST_VITE_PORT picks the port;
 // TEST_SCREENSHOTS=<folder> saves pictures.
@@ -138,8 +140,9 @@ describe( 'World Drive, desktop', () => {
 		assert.match( await panel.locator( '.osm' ).textContent(), /Search © OpenStreetMap contributors/ );
 		assert.equal( await page.locator( '#pin-card, .pin-card' ).isVisible(), false );
 		assert.equal( await page.evaluate( () => !! window.drive.tiles ), false );
-		// No Worker here: no robot check either.
+		// No Worker here: no robot check either, and no leaderboard.
 		assert.deepEqual( page.outside, [] );
+		assert.equal( await page.locator( '#globe-ui .board-open' ).isVisible(), false );
 		await page.waitForTimeout( 500 );
 		await shot( page, 'drive-1-globe' );
 
@@ -622,6 +625,326 @@ describe( 'World Drive with its Worker', () => {
 		await page.locator( '#notice button', { hasText: 'Drive the test pad' } ).click();
 		await page.waitForFunction( () => window.drive?.mode === 'globe', null, { timeout: 30000 } );
 		assert.ok( ! page.outside.some( url => url.includes( 'turnstile' ) ), 'asked Turnstile with maps off' );
+		await page.context().close();
+
+	} );
+
+} );
+
+// --- the leaderboard ---------------------------------------------------------------------
+
+const ROWS = [
+	{ rank: 1, name: 'Ace', score: 52340, tricks: '1080 Spin! + Backflip!', place: 'Furka Pass', vehicle: 'go-kart', airTime: 2.4, date: '2026-10-29' },
+	{ rank: 2, name: 'Speed Demon', score: 31200, tricks: 'Barrel roll ×2', place: 'Times Square', vehicle: 'pickup-truck', airTime: 1.6, date: '2026-10-30' },
+	{ rank: 3, name: 'Zoë', score: 18750, tricks: 'Wall bounce + Big air 1.8 s', place: 'Golden Gate Bridge', vehicle: 'haul-truck-hd465', airTime: 1.8, date: '2026-10-30' },
+];
+const POSTED = { best: 4210, rank: 12, isNewBest: true, today: { best: 4210, rank: 3, isNewBest: true }, week: { best: 4210, rank: 5, isNewBest: true } };
+const RESTING = { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: false };
+
+// The leaderboard's side of the Worker, answered here; `asked` has what the page sent. options.score
+// answers a score (route => ...), so a test can make it fail.
+async function leaderboardPage( { score, ...options } = {} ) {
+
+	const page = await newPage( { ...options, api: { config: RESTING, turnstile: true, visit: route => route.abort() } } );
+	const asked = page.asked = { boards: [], players: [], renames: [], scores: [] };
+	const json = ( route, body, status = 200 ) => route.fulfill( { status, contentType: 'application/json', body: JSON.stringify( body ) } );
+	await page.route( `${ BASE }/api/leaderboard?*`, route => {
+
+		const query = Object.fromEntries( new URL( route.request().url() ).searchParams );
+		asked.boards.push( query );
+		const me = query.id && ( query.period === 'week' ? { ...ROWS[ 1 ] } : { ...ROWS[ 1 ], rank: 42, score: 1230 } );
+		json( route, { period: query.period, place: query.place ?? null, total: 130, rows: query.place ? [] : ROWS, ...( query.id ? { me } : {} ) } );
+
+	} );
+	await page.route( `${ BASE }/api/player`, route => {
+
+		const body = route.request().postDataJSON();
+		asked.players.push( body );
+		if ( body.name === 'Taken Name' ) return json( route, { error: 'That name is taken' }, 409 );
+		json( route, { id: 'P1ayer-id_000000', secret: 'S'.repeat( 32 ), name: body.name }, 201 );
+
+	} );
+	await page.route( `${ BASE }/api/player/rename`, route => {
+
+		const body = route.request().postDataJSON();
+		asked.renames.push( body );
+		if ( body.name === 'Taken Name' ) return json( route, { error: 'That name is taken' }, 409 );
+		json( route, { id: body.id, name: body.name } );
+
+	} );
+	await page.route( `${ BASE }/api/score`, route => {
+
+		asked.scores.push( route.request().postDataJSON() );
+		if ( score ) return score( route );
+		json( route, POSTED );
+
+	} );
+	return page;
+
+}
+
+// Maps are off, so the page offers the test pad: the globe, with its Worker but no visit.
+async function testPad( page ) {
+
+	await page.goto( BASE );
+	await page.locator( '#notice button', { hasText: 'Drive the test pad' } ).click();
+	await page.waitForFunction( () => window.drive?.mode === 'globe', null, { timeout: 30000 } );
+
+}
+
+// A backflip, landed on the test pad (driven at a fixed step, as in the stunts test): the score.
+function landBackflip( page ) {
+
+	return page.evaluate( () => {
+
+		const { driver: d } = window.drive;
+		for ( const code of [ ...d.keys ] ) d.release( code );
+		Object.assign( d, { east: 0, north: 0, y: 0, heading: 0, course: 0, view: 0, speed: 40 / 3.6, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, boost: null } );
+		d.update( 1 / 60 );
+		const before = d.score;
+		d.hop();
+		d.vy = 12;
+		d.press( 'KeyS' );
+		for ( let i = 0; i < 300; i ++ ) {
+
+			d.update( 1 / 60 );
+			if ( d.air && d.air.turned.x > Math.PI * 2 - 0.8 ) d.release( 'KeyS' );
+			if ( d.grounded && ! d.air && i > 10 ) break;
+
+		}
+
+		return { scored: d.score - before, score: d.score };
+
+	} );
+
+}
+
+describe( 'World Drive leaderboard', () => {
+
+	test( 'the trophy opens the boards: tabs, your own row, a name to pick and to change', async () => {
+
+		const page = await leaderboardPage();
+		const { asked } = page;
+		await testPad( page );
+		const trophy = page.locator( '#globe-ui .board-open' );
+		assert.ok( await trophy.isVisible() );
+		await trophy.click();
+		const dialog = page.locator( '#leaderboard' );
+		await dialog.locator( '.rows li' ).first().waitFor();
+		assert.deepEqual( asked.boards, [ { period: 'today' } ] );
+		assert.equal( await dialog.locator( '.tabs [aria-selected="true"]' ).textContent(), 'Today' );
+		assert.deepEqual( await dialog.locator( '.rows li .who b' ).allTextContents(), [ 'Ace', 'Speed Demon', 'Zoë' ] );
+		assert.deepEqual( await dialog.locator( '.rows li .score' ).allTextContents(), [ '52,340', '31,200', '18,750' ] );
+		// Today's rows don't say the day.
+		assert.equal( await dialog.locator( '.rows li .what' ).first().textContent(), '1080 Spin! + Backflip! · Furka Pass · Go-kart' );
+		assert.equal( await dialog.locator( '.mine' ).textContent(), '130 drivers on this board' );
+		// No visit on the test pad: nothing's posted from it, and it says so.
+		assert.ok( await dialog.locator( '.offline' ).isVisible() );
+		await shot( page, 'board-1-today' );
+
+		// Picking a name, checked here first.
+		const form = dialog.locator( '.name-form' );
+		await form.locator( 'input' ).fill( 'ab' );
+		await form.locator( 'button[type=submit]' ).click();
+		assert.equal( await form.locator( '.form-status' ).textContent(), 'Use 3 to 16 letters, numbers, spaces, _ or -.' );
+		assert.deepEqual( asked.players, [] );
+		await form.locator( 'input' ).fill( '  Speed   Demon ' );
+		await form.locator( 'input' ).press( 'Enter' );
+		await dialog.locator( '.named' ).waitFor();
+		assert.deepEqual( asked.players, [ { name: 'Speed Demon' } ] );
+		assert.equal( await dialog.locator( '.named .name' ).textContent(), 'Speed Demon' );
+		assert.deepEqual( await page.evaluate( () => JSON.parse( localStorage.getItem( 'world-drive.player' ) ) ), { id: 'P1ayer-id_000000', secret: 'S'.repeat( 32 ), name: 'Speed Demon' } );
+		// The board again, with your own place below the top.
+		await dialog.locator( '.mine', { hasText: '#42' } ).waitFor();
+		assert.deepEqual( asked.boards.at( - 1 ), { period: 'today', id: 'P1ayer-id_000000' } );
+		assert.equal( await dialog.locator( '.mine' ).textContent(), 'You\'re #42 of 130, with 1,230' );
+		assert.equal( await dialog.locator( '.rows li.me' ).count(), 0 );
+
+		// This week: you're in the top, and your row shows it; the dates show.
+		await dialog.locator( '.tabs button', { hasText: 'This week' } ).click();
+		await dialog.locator( '.rows li.me' ).waitFor();
+		assert.deepEqual( asked.boards.at( - 1 ), { period: 'week', id: 'P1ayer-id_000000' } );
+		assert.match( await dialog.locator( '.rows li.me' ).textContent(), /Speed Demon/ );
+		assert.equal( await dialog.locator( '.mine' ).textContent(), 'You\'re #2 of 130' );
+		assert.match( await dialog.locator( '.rows li .what' ).first().textContent(), / · Oct 29$/ );
+		await shot( page, 'board-2-week' );
+		await dialog.locator( '.tabs button', { hasText: 'All time' } ).click();
+		await page.waitForFunction( () => document.querySelector( '#leaderboard .tabs [aria-selected="true"]' ).textContent === 'All time' );
+		assert.equal( asked.boards.at( - 1 ).period, 'all' );
+
+		// Renaming: a taken name says so, a free one changes it and keeps the secret.
+		await dialog.locator( '.rename' ).click();
+		assert.equal( await form.locator( 'input' ).inputValue(), 'Speed Demon' );
+		await form.locator( 'input' ).fill( 'Taken Name' );
+		await form.locator( 'input' ).press( 'Enter' );
+		await form.locator( '.form-status', { hasText: 'That name\'s taken. Try another.' } ).waitFor();
+		await form.locator( 'input' ).fill( 'Speedier' );
+		await form.locator( 'input' ).press( 'Enter' );
+		await dialog.locator( '.named .name', { hasText: 'Speedier' } ).waitFor();
+		assert.deepEqual( asked.renames.at( - 1 ), { id: 'P1ayer-id_000000', secret: 'S'.repeat( 32 ), name: 'Speedier' } );
+		assert.equal( await page.evaluate( () => JSON.parse( localStorage.getItem( 'world-drive.player' ) ).name ), 'Speedier' );
+
+		// Esc closes it, and leaves the globe as it was.
+		await page.keyboard.press( 'Escape' );
+		await dialog.waitFor( { state: 'hidden' } );
+		assert.equal( await mode( page ), 'globe' );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'a landed jump posts the run: the card asks the first time, and the drive goes on', async () => {
+
+		const page = await leaderboardPage();
+		const { asked } = page;
+		await testPad( page );
+		await page.locator( '.spots button', { hasText: 'Furka Pass' } ).click();
+		await flown( page );
+		await driveHere( page );
+		await page.evaluate( () => window.drive.leaderboard.setVisit( 'v1.test-visit-token' ) );
+
+		const { scored, score } = await landBackflip( page );
+		assert.ok( scored > 0, 'no points for the backflip' );
+		const card = page.locator( '#best-card' );
+		await card.waitFor();
+		assert.equal( await card.locator( '.title' ).textContent(), `New best! ${ score.toLocaleString( 'en-CA' ) }` );
+		assert.equal( await card.locator( '.message' ).textContent(), 'Post it to the leaderboard?' );
+		// Nothing's sent before a name is picked, and nothing stopped.
+		assert.deepEqual( asked.scores, [] );
+		assert.equal( await mode( page ), 'driving' );
+		await shot( page, 'board-3-ask' );
+
+		await card.locator( '.post' ).click();
+		const input = card.locator( 'input' );
+		assert.ok( await input.evaluate( element => element === document.activeElement ) );
+		// Typing doesn't drive.
+		await input.pressSequentially( 'Flip Master', { delay: 10 } );
+		assert.equal( await page.evaluate( () => window.drive.driver.keys.size ), 0 );
+		await input.press( 'Enter' );
+		await card.locator( '.message', { hasText: '#3 today · #12 all time' } ).waitFor();
+		assert.deepEqual( asked.players, [ { name: 'Flip Master' } ] );
+		assert.equal( asked.scores.length, 1 );
+		const [ sent ] = asked.scores;
+		assert.deepEqual( Object.keys( sent ).sort(), [ 'airTime', 'id', 'place', 'runSeconds', 'score', 'secret', 'tricks', 'vehicle', 'visit' ] );
+		const { airTime, runSeconds, tricks, ...rest } = sent;
+		assert.deepEqual( rest, { id: 'P1ayer-id_000000', secret: 'S'.repeat( 32 ), visit: 'v1.test-visit-token', score, place: 'Furka Pass', vehicle: 'go-kart' } );
+		// The jump's tricks as the HUD named them, and its air: a backflip thrown up at 12 m/s is big air.
+		assert.match( tricks, /^Backflip! \+ Big air \d\.\d s$/ );
+		assert.equal( airTime, Number( tricks.match( /Big air (\d\.\d)/ )[ 1 ] ) );
+		assert.ok( Number.isInteger( runSeconds ) && runSeconds >= airTime, `runSeconds ${ runSeconds }` );
+		assert.equal( await page.evaluate( () => document.activeElement === document.body ), true, 'the name field kept the keys' );
+		await shot( page, 'board-4-posted' );
+
+		// Still driving, keys and all.
+		assert.equal( await mode( page ), 'driving' );
+		await page.keyboard.down( 'KeyW' );
+		await page.waitForFunction( () => window.drive.driver.speed > 3, null, { timeout: 20000 } );
+		await page.keyboard.up( 'KeyW' );
+		// The best posted today is remembered: no lower score goes up.
+		assert.equal( await page.evaluate( () => JSON.parse( localStorage.getItem( 'world-drive.posted' ) ).best ), POSTED.today.best );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'with a name, scores go up by themselves, one at a time; a dead connection never stops the drive', async () => {
+
+		const page = await leaderboardPage( { score: route => route.abort() } );
+		const { asked } = page;
+		await page.addInitScript( () => localStorage.setItem( 'world-drive.player', JSON.stringify( { id: 'P1ayer-id_000000', secret: 'S'.repeat( 32 ), name: 'Speed Demon' } ) ) );
+		await testPad( page );
+		await page.locator( '.spots button', { hasText: 'Times Square' } ).click();
+		await flown( page );
+		await driveHere( page );
+		await page.evaluate( () => window.drive.leaderboard.setVisit( 'v1.test-visit-token' ) );
+
+		await landBackflip( page );
+		await page.waitForTimeout( 300 );
+		// Straight up, with no card to ask; it didn't get through.
+		assert.equal( asked.scores.length, 1 );
+		assert.equal( asked.scores[ 0 ].place, 'Times Square' );
+		assert.equal( await page.locator( '#best-card' ).isVisible(), false );
+		// Another jump at once: it waits its turn.
+		await landBackflip( page );
+		await page.waitForTimeout( 300 );
+		assert.equal( asked.scores.length, 1 );
+		assert.ok( await page.evaluate( () => window.drive.leaderboard.pending?.score > 0 ) );
+		// And the drive goes on.
+		await page.keyboard.down( 'KeyW' );
+		await page.waitForFunction( () => window.drive.driver.speed > 3, null, { timeout: 20000 } );
+		await page.keyboard.up( 'KeyW' );
+		assert.equal( await mode( page ), 'driving' );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'on a phone: the trophy, the card and the boards fit, and the pause menu has them, here too', async () => {
+
+		const page = await leaderboardPage( { viewport: { width: 390, height: 844 }, touch: true } );
+		const { asked } = page;
+		await testPad( page );
+		const trophy = await page.locator( '#globe-ui .board-open' ).boundingBox();
+		assert.ok( trophy.x + trophy.width <= 390 && trophy.y >= 0, JSON.stringify( trophy ) );
+		// Clear of the title and the tagline under it (where their words end, not their boxes).
+		const words = await page.evaluate( () => [ '.logo', '.tagline' ].map( selector => {
+
+			const range = document.createRange();
+			range.selectNodeContents( document.querySelector( `#globe-ui ${ selector }` ) );
+			return range.getBoundingClientRect().right;
+
+		} ) );
+		assert.ok( words.every( right => right <= trophy.x ), `the trophy is over the title: ${ words } ${ trophy.x }` );
+		await page.locator( '#globe-ui .board-open' ).tap();
+		const dialog = page.locator( '#leaderboard' );
+		await dialog.locator( '.rows li' ).first().waitFor();
+		const box = await dialog.boundingBox();
+		assert.ok( box.x >= 0 && box.x + box.width <= 390 && box.y >= 0 && box.y + box.height <= 844, JSON.stringify( box ) );
+		assert.ok( await page.evaluate( () => document.documentElement.scrollWidth <= 390 && [ ...document.querySelectorAll( '#leaderboard, #leaderboard *' ) ].every( element => element.scrollWidth <= element.clientWidth + 1 || getComputedStyle( element ).textOverflow === 'ellipsis' ) ), 'something is wider than the screen' );
+		await shot( page, 'board-phone-1' );
+		await dialog.locator( '.close' ).tap();
+
+		await page.locator( '.spots button', { hasText: 'Times Square' } ).tap();
+		await flown( page );
+		await page.locator( '.pin-card .go' ).tap();
+		await page.waitForFunction( () => window.drive.mode === 'driving', null, { timeout: 60000 } );
+
+		// The card over the steering, clear of the readouts and the other buttons.
+		await page.evaluate( () => {
+
+			window.drive.leaderboard.setVisit( 'v1.test-visit-token' );
+			window.drive.leaderboard.onScore( { score: 4210, best: 4210, newBest: true, tricks: 'Backflip!', runSeconds: 30, airTime: 1.2, place: 'Times Square', vehicle: 'go-kart' } );
+
+		} );
+		await page.locator( '#best-card' ).waitFor();
+		const card = await page.locator( '#best-card' ).boundingBox();
+		assert.ok( card.x >= 0 && card.x + card.width <= 390, JSON.stringify( card ) );
+		for ( const selector of [ '#hud .dhud-cluster', '#hud .dhud-touch .left', '#hud .dhud-touch .right', '#hud .dhud-touch .brake', '#hud .dhud-touch .drift', '#hud .dhud-touch .reset', '#drive-ui .topbar' ] ) {
+
+			const other = await page.locator( selector ).boundingBox();
+			const apart = card.x + card.width <= other.x || other.x + other.width <= card.x || card.y + card.height <= other.y || other.y + other.height <= card.y;
+			assert.ok( apart, `the card is over ${ selector }: ${ JSON.stringify( { card, other } ) }` );
+
+		}
+
+		await shot( page, 'board-phone-2-card' );
+		await page.locator( '#best-card .later' ).tap();
+		await page.locator( '#best-card' ).waitFor( { state: 'hidden' } );
+
+		// The pause menu's leaderboard has "only here".
+		await page.locator( '#drive-ui .pause-open' ).tap();
+		await page.locator( '#pause .board-open' ).tap();
+		await dialog.locator( '.rows li' ).first().waitFor();
+		assert.equal( await dialog.locator( '.here' ).textContent(), ' Only Times Square' );
+		await dialog.locator( '.here input' ).tap();
+		await dialog.locator( '.status', { hasText: 'No scores here yet. Be the first!' } ).waitFor();
+		assert.deepEqual( asked.boards.at( - 1 ), { period: 'today', place: 'Times Square' } );
+		await shot( page, 'board-phone-3-here' );
+		await dialog.locator( '.close' ).tap();
+		// Back to the pause menu, as it was.
+		assert.equal( await mode( page ), 'paused' );
+		assert.ok( await page.locator( '#pause' ).isVisible() );
+		assert.deepEqual( page.errors, [] );
 		await page.context().close();
 
 	} );
