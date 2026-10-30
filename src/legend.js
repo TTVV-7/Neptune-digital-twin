@@ -229,16 +229,18 @@ export function createLegend( { controls, driver, models, getSidebar, getDriving
 	// Bottom right, above whatever else is at the bottom of the screen there (Google's attribution,
 	// the hint, the drive prompt and HUD, the library on a phone), below the status readout, and
 	// below or beside the P panel. Where there's no room for the panel (a phone with the P panel
-	// open), it folds to its button until there is.
+	// open), it folds to its button until there is. So it does on a phone while the library, a sheet
+	// over the bottom half there, is open: it would cover most of the map left to place things on.
 	function place() {
 
 		const gui = visibleRect( document.querySelector( '.lil-gui.lil-root' ) );
+		const sheet = visibleRect( library );
 		let folded = ! open;
 		let spot = null;
 		if ( open ) {
 
 			show( panel );
-			spot = spotFor( panel, gui );
+			spot = sheet && sheet.top > 1 ? null : spotFor( panel, gui );
 			if ( spot ) insist = false;
 			else if ( insist ) spot = spotFor( panel, null );
 			else folded = true;
