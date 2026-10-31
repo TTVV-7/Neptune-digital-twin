@@ -183,9 +183,9 @@ const AIR_HINT = 'In the air: A/D spin · W/S flip · Q/E roll';
 // ground), here not lowered for a small vehicle, and set over a car's roof a vehicle drives up
 // onto cars rather than into them. The rest are shares: drag of the rolling resistance and air
 // drag, gravity of gravity in the air, launch of how hard (and how hard at most) a hit throws it
-// up, air of how fast the keys turn it in the air, kick of how hard a hit sets it spinning,
-// squash and shake of a hit's squash and the camera's shake, and rebound of a hard landing's
-// speed that it bounces back up with.
+// up, air of how fast the keys turn it in the air (at most a kart's rate), kick of how hard a hit
+// sets it spinning, squash and shake of a hit's squash and the camera's shake, and rebound of a
+// hard landing's speed that it bounces back up with.
 const HANDLING = { grip: GRIP, slip: DRIFT_SLIP, driftYaw: DRIFT_YAW, turn: KART_YAW, lock: 35, landTilt: LAND_TILT, bumpers: null, drag: 1, gravity: 1, launch: 1, air: 1, kick: 1, squash: 1, shake: 1, rebound: 0 };
 
 // Tuning per vehicle; others use the default. Speeds in km/h, acceleration in m/s².
@@ -402,7 +402,9 @@ export class Driver {
 		this.centre = this.ownBox.getCenter( new Vector3() ).multiplyScalar( this.scale );
 		this.half = this.ownBox.getSize( new Vector3() ).multiplyScalar( this.scale / 2 );
 		// A big vehicle turns more slowly in the air: a kart at the full rate, a pickup at 0.86 of it.
-		this.trickRate = MathUtils.clamp( Math.sqrt( 4 / this.length ), 0.55, 1 ) * handling.air;
+		// Handling can quicken that, but never past a kart's: the leaderboard takes that as the most
+		// any vehicle can score a second (SCORING in worker/drive/scores.js).
+		this.trickRate = Math.min( 1, MathUtils.clamp( Math.sqrt( 4 / this.length ), 0.55, 1 ) * handling.air );
 
 		this.east = state.east;
 		this.north = state.north;
