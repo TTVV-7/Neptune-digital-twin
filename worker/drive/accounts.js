@@ -17,8 +17,9 @@ import { googleClientId } from './settings.js';
 const cookies = sessionCookies( 'wd_session' );
 // Sign-ins, and players linked, a visitor may make in a day (counted as the leaderboard's names are,
 // limits.js). A Google token can be sent again for the hour it's good for, and each sign-in is a new
-// session kept for 30 days, so this keeps a script from filling the database with them; a session
-// lasts a month, so nobody else comes near it (a whole school on one address included).
+// session kept for 30 days, so this keeps a script from filling the database with them. Sessions
+// last a month, so nobody signing in for themselves comes near it (a whole school on one address
+// included).
 const SIGN_INS_DAILY = 50;
 const LINKS_DAILY = 20;
 

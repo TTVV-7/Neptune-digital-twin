@@ -278,7 +278,11 @@ async function signIn( credential ) {
 	const answer = await startSession( credential );
 	if ( ! answer.ok ) {
 
-		const why = answer.status === 0 ? UNREACHABLE : answer.status === 503 ? 'Signing in isn\'t open right now. Try again later.' : 'Signing in didn\'t work. Try again.';
+		const why = {
+			0: UNREACHABLE,
+			429: 'That\'s all the signing in from here for today. Try again tomorrow.',
+			503: 'Signing in isn\'t open right now. Try again later.',
+		}[ answer.status ] ?? 'Signing in didn\'t work. Try again.';
 		return say( why );
 
 	}
