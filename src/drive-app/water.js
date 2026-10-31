@@ -32,11 +32,17 @@ const FAR = { radius: 35, count: 8, from: 10, depth: 110 };
 const FLAT = 0.35;
 const EVEN = 6;
 const LOWER = 1;
+// How far (m) past something uneven close by to look for water at the spot's level (see look):
+// enough for the rings there to be clear of a shore the spot is right by.
+const PROBE = 13;
 // Water's colour (0 to 255): no brighter than BRIGHT (luma), its blue at least its red less WARM
 // and its green less GREEN.
 const BRIGHT = 150;
 const WARM = 2;
 const GREEN = 6;
+// What look() says of ground that is surely dry, and of what it can't tell.
+const DRY = Object.freeze( { level: null, dry: true } );
+const UNSURE = Object.freeze( { level: null, dry: false } );
 
 const _origin = new Vector3();
 const _a = new Vector3();
@@ -107,7 +113,7 @@ export function createWater( ground ) {
 
 	// The heights (m over `h`) round ( east, north ) on `ring`, null where a ray found nothing; with
 	// `colours`, the colour where each hit too.
-	function look( ring, east, north, h, colours = null ) {
+	function round( ring, east, north, h, colours = null ) {
 
 		const heights = [];
 		for ( let i = 0; i < ring.count; i ++ ) {
@@ -126,28 +132,67 @@ export function createWater( ground ) {
 	// Whether the ring's heights are all there and within FLAT of the spot's.
 	const level = heights => heights.every( dh => dh !== null && Math.abs( dh ) <= FLAT );
 
+	// What's under ( east, north ), looked for down from just over y: { level } the water's surface
+	// height (m, in the scene) where it's water, else null; and whether it's surely dry ground: not
+	// water-coloured, over something lower, or (a road, a field) uneven close by with no water at
+	// its level just past that. What's left, water-coloured and level close by but not all round,
+	// is water by a shore, a pier or a ship as often as anything: not water, nor surely dry.
+	// `probing`: whether to look past what's uneven close by (not when this is the look past it).
+	function look( east, north, y, probing = true ) {
+
+		const hit = down( east, north, y + 2, 40 );
+		if ( ! hit ) return UNSURE;
+		const colours = [ colourOf( hit ) ];
+		if ( ! waterLike( colours[ 0 ] ) ) return DRY;
+		const h = hit.point.y;
+		const near = round( NEAR, east, north, h, colours );
+		// Anything lower close by (or nothing at all, far below): it's over something, not water.
+		if ( near.some( dh => dh === null || dh < - FLAT ) ) return DRY;
+		if ( ! level( near ) || ! even( colours ) ) {
+
+			// A road's kerbs, cars and markings, or a shore by water. Water being the lowest thing
+			// round it, look PROBE m out the other way from what's highest or least like it here: the
+			// spot is surely dry unless that's water at its level (it's by the water's edge, then,
+			// where the rings reach the shore).
+			if ( ! probing ) return DRY;
+			const angle = ( away( near, colours ) + 0.5 ) / NEAR.count * Math.PI * 2 + Math.PI;
+			const past = look( east + Math.sin( angle ) * PROBE, north + Math.cos( angle ) * PROBE, h, false ).level;
+			return past !== null && Math.abs( past - h ) <= FLAT ? UNSURE : DRY;
+
+		}
+
+		const open = level( round( MID, east, north, h, colours ) ) && even( colours );
+		// A ray that finds nothing (far below, or nothing loaded) counts as lower.
+		if ( ! round( FAR, east, north, h ).every( dh => dh !== null && dh >= - LOWER ) ) return DRY;
+		return open ? { level: h, dry: false } : UNSURE;
+
+	}
+
 	return {
 
+		look,
+
 		// The height (m, in the scene) of the water's surface under ( east, north ), looked for down
-		// from just over y; null where that's dry ground, or can't be told.
+		// from just over y; null where there's no telling it's water.
 		at( east, north, y ) {
 
-			const hit = down( east, north, y + 2, 40 );
-			if ( ! hit ) return null;
-			const colours = [ colourOf( hit ) ];
-			if ( ! waterLike( colours[ 0 ] ) ) return null;
-			const h = hit.point.y;
-			if ( ! level( look( NEAR, east, north, h, colours ) ) ) return null;
-			if ( ! level( look( MID, east, north, h, colours ) ) ) return null;
-			if ( ! even( colours ) ) return null;
-			// A ray that finds nothing (far below, or nothing loaded) counts as lower.
-			if ( ! look( FAR, east, north, h ).every( dh => dh !== null && dh >= - LOWER ) ) return null;
-			return h;
+			return look( east, north, y ).level;
 
 		},
 
-		// Everything `at` looks at, for measuring and the tests: the heights round the spot and the
-		// colours, with how long it took (ms) and what `at` makes of it.
+		// Whether ( east, north ) and the ground `reach` m round it (north, east, south and west) are
+		// all surely dry, looked for down from just over y: somewhere for a boost pad, which isn't
+		// left by the water's edge either.
+		clear( east, north, y, reach ) {
+
+			if ( ! look( east, north, y ).dry ) return false;
+			for ( let i = 0; i < 4; i ++ ) if ( ! look( east + Math.sin( i * Math.PI / 2 ) * reach, north + Math.cos( i * Math.PI / 2 ) * reach, y ).dry ) return false;
+			return true;
+
+		},
+
+		// Everything look() looks at, for measuring and the tests: the heights round the spot and the
+		// colours, with how long it took (ms), and what look() makes of it (level and dry).
 		measure( east, north, y ) {
 
 			const begun = performance.now();
@@ -155,9 +200,9 @@ export function createWater( ground ) {
 			if ( ! hit ) return null;
 			const h = hit.point.y;
 			const colours = [ colourOf( hit ) ];
-			const near = look( NEAR, east, north, h, colours );
-			const mid = look( MID, east, north, h, colours );
-			const far = look( FAR, east, north, h );
+			const near = round( NEAR, east, north, h, colours );
+			const mid = round( MID, east, north, h, colours );
+			const far = round( FAR, east, north, h );
 			const known = colours.filter( Boolean );
 			const flat = [ ...near, ...mid ].reduce( ( most, dh ) => Math.max( most, dh === null ? Infinity : Math.abs( dh ) ), 0 );
 			const lower = far.reduce( ( least, dh ) => Math.min( least, dh ?? - Infinity ), 0 );
@@ -167,12 +212,31 @@ export function createWater( ground ) {
 				h, normal, edge: edge( hit ), near, mid, far, colours, flat, lower,
 				mean: known.length ? [ 'r', 'g', 'b' ].map( k => Math.round( known.reduce( ( sum, c ) => sum + c[ k ], 0 ) / known.length ) ) : null,
 				spread: spread( known ), waterLike: waterLike( colours[ 0 ] ), even: even( colours ), ms,
-				water: this.at( east, north, y ) !== null,
+				...look( east, north, y ),
 			};
 
 		},
 
 	};
+
+}
+
+// Which of a ring's points (by its index) stands out most from the spot at its middle, the first
+// of `colours`: the highest over it past FLAT, else the least like it in colour.
+function away( heights, colours ) {
+
+	let most = 0;
+	let index = 0;
+	heights.forEach( ( dh, i ) => {
+
+		const colour = colours[ i + 1 ];
+		const off = dh > FLAT ? 1000 + dh : colour && colours[ 0 ] ? Math.abs( luma( colour ) - luma( colours[ 0 ] ) ) : 999;
+		if ( off <= most ) return;
+		most = off;
+		index = i;
+
+	} );
+	return index;
 
 }
 

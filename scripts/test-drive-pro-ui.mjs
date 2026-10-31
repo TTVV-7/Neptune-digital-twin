@@ -1,21 +1,23 @@
-// node --test scripts/test-drive-pro-ui.mjs: World Drive's Supporter Pass content (docs/world-drive.md)
-// in a real browser, on the Vite dev server with no Maps key (the test globe and the flat test pad,
-// as test-drive-ui.mjs uses). Without the pass: the four pass rides are listed with their badge and
-// can't be driven, picking one (or a locked Garage choice) opens the pass's sheet, the free
-// choices work (and keep working with a damaged saved value, or none kept at all), the world isn't
-// drawn behind the Garage, and the free game drives as it did. ?pro=1 only counts on this computer. With
-// ?pro=1 here: each new ride drives, drifts, is thrown up by a wall and lands, and their handling
-// is measured against the kart's (top speed, 0 to 100 km/h, turning, how high the same wall
-// throws them, and that it goes supersonic); the hovercraft hovers with no wheels; the Garage's
-// paint, decals, boost style, flame and trail go on the ride being driven and are still there after
-// a reload, and a look saved before the boost styles keeps its flame's colour; what a trail and the
-// booster cost a frame; every boost style drawn at 150 km/h (a picture of each), keeping to its
-// budget and making nothing new in a minute of boosting, and what each costs a frame; and the
-// Garage and the badges on a phone. And World Drive's cars (src/drive-app/cars.js): listed,
-// credited, small and their real size, with wheels that steer; the muscle car free and the rest
-// locked; each driving, drifting, thrown up and landing, going supersonic, its wheels spinning and
-// steering; and the Garage repainting the one whose paint is plain colour and saying the others keep
-// theirs. Everything off this machine is blocked.
+// node --test scripts/test-drive-pro-ui.mjs: World Drive's Supporter Pass content
+// (docs/world-drive.md) in a real browser, on the Vite dev server with no Maps key (the test globe
+// and the flat test pad, as test-drive-ui.mjs uses). Without the pass: the four pass rides are
+// listed with their badge and can't be driven, picking one (or a locked Garage choice) opens the
+// pass's sheet, the free choices work (and keep working with a damaged saved value, or none kept at
+// all), the world isn't drawn behind the Garage, and the free game drives as it did. ?pro=1 only
+// counts on this computer. With ?pro=1 here: each new ride drives, drifts, is thrown up by a wall
+// and lands, and their handling is measured against the kart's (top speed, 0 to 100 km/h, turning,
+// how high the same wall throws them, and that it goes supersonic); the hovercraft hovers with no
+// wheels, and rides over water (the test pad's sea, as Google draws water) throwing up spray where
+// the coupe splashes, with no boost pads put down on it; the Garage's paint, decals, boost style,
+// flame and trail go on the ride being driven and are still there after a reload, and a look saved
+// before the boost styles keeps its flame's colour; what a trail and the booster cost a frame;
+// every boost style drawn at 150 km/h (a picture of each), keeping to its budget and making nothing
+// new in a minute of boosting, and what each costs a frame; and the Garage and the badges on a
+// phone. And World Drive's cars (src/drive-app/cars.js): listed, credited, small and their real
+// size, with wheels that steer; the muscle car free and the rest locked; each driving, drifting,
+// thrown up and landing, going supersonic, its wheels spinning and steering; and the Garage
+// repainting the one whose paint is plain colour and saying the others keep theirs. Everything off
+// this machine is blocked.
 //
 // Needs Playwright with Chromium. TEST_VITE_PORT picks the port; TEST_SCREENSHOTS=<folder> saves
 // pictures; the handling it measures is printed.
@@ -617,6 +619,91 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 		assert.ok( over.high > 1.3 && over.north > 26 && ! over.hit, JSON.stringify( over ) );
 		// Down off the car it sinks onto its springs; in the air the wheels hang (the body rises).
 		assert.ok( over.sank < - 0.05 && over.rose > 0.05, JSON.stringify( over ) );
+
+	} );
+
+	test( 'the hovercraft rides over water, throwing up spray, where the others splash; no boost pads on the water', async () => {
+
+		// The pad's sea, 2 m below its land south of north = -280, as Google draws water: one even
+		// colour (see water.js and test-drive-ui.mjs).
+		const across = async name => {
+
+			await swapTo( page, name );
+			return page.evaluate( () => {
+
+				const { driver: d, ground, pads, scene } = window.drive;
+				const pad = ground.getColliders()[ 0 ];
+				const sea = pad.children.find( child => child.isMesh && child.position.y < - 1 );
+				if ( ! sea.material.map ) {
+
+					const canvas = Object.assign( document.createElement( 'canvas' ), { width: 64, height: 64 } );
+					const ctx = canvas.getContext( '2d' );
+					ctx.fillStyle = 'rgb(45,76,95)';
+					ctx.fillRect( 0, 0, 64, 64 );
+					const disc = pads.group.children[ 0 ].material;
+					const map = new disc.map.constructor( canvas );
+					map.colorSpace = disc.map.colorSpace;
+					sea.material = new disc.constructor( { map } );
+
+				}
+
+				for ( const code of [ ...d.keys ] ) d.release( code );
+				Object.assign( d, { east: 0, north: - 230, y: 0, heading: 180, course: 180, view: 180, speed: 60 / 3.6, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, flying: false, drifting: 0, boost: null, firing: false, splash: null, dry: [], wetIn: 0, onWater: false } );
+				pads.clear();
+				const spray = () => scene.getObjectByName( 'drive-fx' ).children.filter( o => o.isSprite && o.visible ).length;
+				const out = { name: d.entry.state.name, splashed: false, onWater: 0, low: Infinity, high: - Infinity, sprayOnLand: 0, sprayOnWater: 0, padsOnSea: 0, pads: 0 };
+				const seen = new Set();
+				d.press( 'KeyW' );
+				for ( let i = 0; i < 10 * 60 && ! out.splashed; i ++ ) {
+
+					d.update( 1 / 60 );
+					pads.update( 1 / 60 );
+					out.splashed = !! d.splash;
+					if ( d.onWater ) {
+
+						out.onWater += 1 / 60;
+						out.low = Math.min( out.low, d.y );
+						out.high = Math.max( out.high, d.y );
+						out.sprayOnWater = Math.max( out.sprayOnWater, spray() );
+
+					} else if ( d.north > - 270 ) out.sprayOnLand = Math.max( out.sprayOnLand, spray() );
+					for ( const p of pads.pads ) {
+
+						const key = `${ p.index }:${ p.at.z.toFixed( 1 ) }`;
+						if ( p.state === 'free' || seen.has( key ) ) continue;
+						seen.add( key );
+						out.pads ++;
+						if ( p.at.y < - 1.99 ) out.padsOnSea ++;
+
+					}
+
+				}
+
+				d.release( 'KeyW' );
+				out.north = d.north;
+				// Back on the land, for what comes next.
+				for ( let i = 0; i < 150; i ++ ) d.update( 1 / 60 );
+				Object.assign( d, { east: 0, north: 0, y: 0, heading: 0, course: 0, view: 0, speed: 0, splash: null } );
+				d.hud.fade( false );
+				return out;
+
+			} );
+
+		};
+		const hover = await across( 'Hovercraft' );
+		console.log( 'hovercraft over the water:', JSON.stringify( hover ) );
+		assert.equal( hover.name, 'Hovercraft' );
+		// Out over the sea for seconds, on its surface, never splashing, spray behind it there only.
+		assert.ok( ! hover.splashed && hover.onWater > 5 && hover.north < - 500, JSON.stringify( hover ) );
+		assert.ok( Math.abs( hover.low + 2 ) < 0.05 && Math.abs( hover.high + 2 ) < 0.05, JSON.stringify( hover ) );
+		assert.ok( hover.sprayOnLand === 0 && hover.sprayOnWater >= 10, JSON.stringify( hover ) );
+		assert.equal( hover.padsOnSea, 0 );
+		await shot( page, 'pro-hovercraft-water' );
+
+		const coupe = await across( 'Sports coupe' );
+		console.log( 'sports coupe into the water:', JSON.stringify( coupe ) );
+		assert.ok( coupe.splashed && coupe.north < - 280, JSON.stringify( coupe ) );
+		assert.deepEqual( page.errors, [] );
 
 	} );
 

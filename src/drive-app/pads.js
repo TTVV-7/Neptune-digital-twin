@@ -24,18 +24,17 @@ import { storage } from './places.js';
 // more rays round the pad keep it to ground as smooth as a road (not parked cars, kerbs, slopes or
 // the lumpy tops of bushes), and more on the way there from the vehicle keep it off roofs, shelters
 // and banks beside the road: the ground must climb or fall gently all the way, as a street does,
-// never in a step that stays up, as at a roof's edge or up an embankment. Nor on water (water.js),
-// which is as flat and open as anywhere on Google's mesh, and where the others would only splash
-// down beside a pad (a hovercraft rides there, but a pad on the sea looks lost). A modest number, recycled
-// as you leave them behind; one that's driven over goes dark and lights again a few seconds later
-// (with the gauge full, it's left lit). The booster still recharges by itself (drive.js): pads only
-// add to it. The pause menu's switch turns them off (kept in this browser); they're on unless it's
-// been used.
+// never in a step that stays up, as at a roof's edge or up an embankment. Never on water either
+// (water.js), which is as flat and open as anything on Google's mesh: going for a pad there is a
+// splash for all but the hovercraft. A modest number, recycled as you leave them behind; one
+// that's driven over goes dark and lights again a few seconds later (with the gauge full, it's
+// left lit). The booster still recharges by itself (drive.js): pads only add to it. The pause
+// menu's switch turns them off (kept in this browser); they're on unless it's been used.
 //
 // They cost little: three instanced meshes (the pads, their glow and their light) and a try at a
 // new spot every TRY s, of two dozen rays at most (most tries end after one or two) and, for a spot
-// that passes all that, a look for water (a couple of dozen more), plus one ray a frame checking a
-// pad in turn.
+// that passes all that, a look for water there and round it (on most ground a ray or seven each),
+// plus one ray a frame checking a pad in turn.
 
 const KEY = 'world-drive.pads';
 // The small and big pads: how many, how wide (m, radius), how much of the gauge each gives, how
@@ -86,6 +85,9 @@ const ROUND = Array.from( { length: 8 }, ( _, i ) => [ Math.sin( i * Math.PI / 4
 // Pads are only put down with the vehicle at most this high (m) over where it last stood on the
 // ground: flying high, the street below is too far off to know.
 const ABOVE = 20;
+// Where water.js says there's water, or can't tell, as by a shore, there's no pad, nor this far
+// (m) from it.
+const DRY_REACH = 8;
 
 const DOWN = new Vector3( 0, - 1, 0 );
 const UP = new Vector3( 0, 1, 0 );
@@ -100,7 +102,7 @@ const _c = new Color();
 
 // scene: what the pads are drawn in. driver: the Driver (drive.js). ground: the Ground (spawn.js),
 // whose rays see only the ground (the tiles or the test pad). water: water.js's, which says where
-// water is (none: anywhere goes). toggle: the pause menu's checkbox.
+// it's surely dry (none: anywhere goes). toggle: the pause menu's checkbox.
 export function createBoostPads( { scene, driver, ground, water = null, toggle = null } ) {
 
 	const group = new Group();
@@ -242,8 +244,9 @@ export function createBoostPads( { scene, driver, ground, water = null, toggle =
 
 		}
 
-		// Last, as it's the dearest look and few spots get this far.
-		if ( water?.at( east, north, y ) != null ) return;
+		// Surely dry ground, and round it too, not by water: last, as it's the dearest look (up to
+		// five of water.js's) and few spots get this far.
+		if ( water && ! water.clear( east, north, y, DRY_REACH ) ) return;
 		enuToLocal( east, north, y, pad.at );
 		pad.normal.copy( normal );
 		pad.state = 'lit';

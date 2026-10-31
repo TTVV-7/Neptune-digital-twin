@@ -262,8 +262,9 @@ export class Driver {
 	// fly, booster, drift: the options above, all off by default; crash: 'stop' or 'launch'.
 	// onScore( run ), with stunts on: called each time a jump's tricks are landed, with the run so
 	// far (see runSoFar), for a leaderboard. water: null (the default: no water anywhere), or
-	// { at( east, north, y ) }, the height of the water's surface under ( east, north ) looked for
-	// down from just over y, or null where that's dry ground.
+	// { look( east, north, y ) }, saying what's under ( east, north ), looked for down from just
+	// over y: { level, dry }, level being the water's surface height there (null where it isn't
+	// water) and dry whether it's surely dry ground (neither: it can't tell).
 	constructor( { camera, models, controls, getColliders, hud, onStop, onScore = null, fly = false, booster = false, drift = false, crash = 'stop', water = null } ) {
 
 		this.camera = camera;
@@ -1148,8 +1149,8 @@ export class Driver {
 			const north = this.north + dn * RESPAWN_AHEAD;
 			const ground = this.groundAt( east, north );
 			if ( ground !== null && Math.abs( ground - this.y ) < 3 ) spot = { east, north, y: ground };
-			// Not into water a few metres on (a hovercraft doesn't mind).
-			if ( spot && this.water && ! this.floats && this.water.at( east, north, ground ) !== null ) spot = null;
+			// Only onto ground that's surely dry, not into water (a hovercraft doesn't mind).
+			if ( spot && this.water && ! this.floats && ! this.water.look( east, north, ground ).dry ) spot = null;
 
 		}
 
@@ -1206,18 +1207,19 @@ export class Driver {
 	// --- water (the `water` option) ---
 
 	// On the ground, every WATER_EVERY s: in water, a splash, unless it rides on water (a hovercraft,
-	// which throws up spray there instead); on dry ground, a spot on the trail back to it. Not until
-	// it has been on dry ground, so a drive dropped onto water rides on it rather than splashing over
-	// and over with nowhere to go back to.
+	// which throws up spray there instead); on ground that's surely dry, a spot on the trail back to
+	// it (not where there's no telling, as by a shore). Not until it has been on dry ground, so a
+	// drive dropped onto water rides on it rather than splashing over and over with nowhere to go
+	// back to.
 	lookForWater( dt ) {
 
 		this.wetIn -= dt;
 		if ( this.wetIn > 0 || ! this.grounded || this.flying || this.air ) return;
 		this.wetIn = WATER_EVERY;
-		const level = this.water.at( this.east, this.north, this.y );
+		const { level, dry } = this.water.look( this.east, this.north, this.y );
 		this.onWater = level !== null;
-		if ( ! this.onWater ) this.markDry();
-		else if ( ! this.floats && this.dry.length ) this.startSplash( level, Math.max( 0, - this.vy ) );
+		if ( dry ) this.markDry();
+		else if ( this.onWater && ! this.floats && this.dry.length ) this.startSplash( level, Math.max( 0, - this.vy ) );
 
 	}
 
@@ -1226,7 +1228,7 @@ export class Driver {
 	splashed( ground, fall ) {
 
 		if ( ! this.water || this.floats || ! this.dry.length ) return false;
-		const level = this.water.at( this.east, this.north, ground );
+		const { level } = this.water.look( this.east, this.north, ground );
 		if ( level === null ) return false;
 		this.startSplash( level, fall );
 		return true;
