@@ -242,10 +242,12 @@ dialog#pass {
 	color: var( --muted );
 }
 
+/* All in one row, however many, so the sheet stays short. */
 #pass .ride-icons {
 	display: grid;
-	grid-template-columns: repeat( 5, 1fr );
-	gap: 6px;
+	grid-auto-flow: column;
+	grid-auto-columns: 1fr;
+	gap: 4px;
 	margin-top: 6px;
 }
 

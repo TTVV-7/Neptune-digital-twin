@@ -703,6 +703,9 @@ describe( 'World Drive boosts: supersonic and boost pads', () => {
 			const { driver: d, camera } = window.drive;
 			for ( const code of [ ...d.keys ] ) d.release( code );
 			const top = d.spec.topSpeed / 3.6 * 2;
+			// Driving's view first: headless frames come slowly, and it may still be widening from the
+			// globe's when a run of rides has taken few of them.
+			await window.untilFrame( () => Math.abs( camera.fov - 70 ) < 0.2 );
 			Object.assign( d, { east: 0, north: 0, heading: 0, course: 0, view: 0, speed: top, gauge: 1, firing: true, supersonic: false, nearTop: 0 } );
 			const fov = camera.fov;
 			const hold = () => {

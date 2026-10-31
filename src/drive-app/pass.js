@@ -56,8 +56,8 @@ function build() {
 			<h2 id="pass-title">Supporter Pass</h2>
 			<p class="lead">World Drive streams the real 3D world, and every drive costs us a little. The pass is one payment of <b>${ PRICE }</b> that helps keep it running, and comes with:</p>
 			<ul class="perks">
-				<li class="rides"><b>${ COUNTS[ PASS_CARS.length + PRO_RIDES.length ] ?? PASS_CARS.length + PRO_RIDES.length } more rides</b><span>${ COUNTS[ PASS_CARS.length ] } cars (${ listOf( PASS_CARS ) }) and ${ COUNTS[ PRO_RIDES.length ].toLowerCase() } built for World Drive (${ listOf( PRO_RIDES ) }), each handling its own way.</span><div class="ride-icons"></div></li>
-				<li><b>The whole Garage</b><span>All 12 colours, matte and metallic paint, racing stripes, a number, flames or checker, rim colours, nine more boost styles (plasma, lightning, glitter, a comet, neon rings, fireworks, hearts, pixels and ink) and the flame in blue, green, purple, pink or rainbow, and smoke, sparkle or rainbow-ribbon trails.</span></li>
+				<li class="rides"><b>${ COUNTS[ PASS_CARS.length + PRO_RIDES.length ] ?? PASS_CARS.length + PRO_RIDES.length } more rides</b><span>${ COUNTS[ PASS_CARS.length ] } cars and ${ COUNTS[ PRO_RIDES.length ].toLowerCase() } rides built for World Drive, each handling its own way.</span><div class="ride-icons"></div></li>
+				<li><b>The whole Garage</b><span>All 12 colours, matte and metallic paint, racing stripes, a number, flames or checker, rim colours, nine more boost styles (lightning, fireworks, a comet and more), flame colours, and smoke, sparkle or rainbow-ribbon trails.</span></li>
 				<li><b>A ⭐ on the leaderboard</b><span>By your name, for everyone to see.</span></li>
 				<li><b>30 drives a day</b><span>Instead of 8.</span></li>
 			</ul>
@@ -68,9 +68,13 @@ function build() {
 		</div>`;
 	dialog.querySelector( '.ride-icons' ).replaceChildren( ...[ ...PASS_CARS, ...PRO_RIDES ].map( ride => {
 
+		// Each named by its picture alone, which keeps the sheet short enough for Buy and signing in
+		// to be on a laptop's screen.
 		const icon = document.createElement( 'span' );
 		icon.className = 'ride-icon';
 		icon.title = ride.name;
+		icon.setAttribute( 'role', 'img' );
+		icon.setAttribute( 'aria-label', ride.name );
 		// A car's picture is its thumbnail (drive/public/cars/thumbs/); a built ride's, its drawing.
 		if ( ride.icon ) icon.innerHTML = ride.icon;
 		else icon.append( Object.assign( document.createElement( 'img' ), { src: new URL( `cars/thumbs/${ ride.id }.webp`, document.baseURI ).href, alt: '', loading: 'lazy' } ) );
@@ -84,13 +88,5 @@ function build() {
 	dialog.addEventListener( 'keydown', e => e.stopPropagation() );
 	document.body.append( dialog );
 	return dialog;
-
-}
-
-// "a neon racer, a dune buggy and a farm truck"
-function listOf( rides ) {
-
-	const names = rides.map( ride => `a ${ ride.name.toLowerCase() }` );
-	return names.length > 1 ? `${ names.slice( 0, - 1 ).join( ', ' ) } and ${ names.at( - 1 ) }` : names.join( '' );
 
 }
