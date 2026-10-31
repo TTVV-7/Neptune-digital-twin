@@ -215,8 +215,14 @@ for the pass, and driving and the leaderboard never need it.
   Google** (in the sheet, or in the pause menu: "Have the Supporter Pass? Sign in to use it here.")
   brings it back: that's "restore purchases". The pause menu also says who's signed in, with
   **Sign out**, which locks the pass again in that browser.
+- **The used-up screen** ("Today's free drives are used up", this address's 8 gone, not everyone's
+  300) has the same sign-in, for a supporter on a new browser or one who cleared the site's data, and
+  for a buyer brought back from Stripe before its webhook arrived (that tab starts a visit of its own,
+  counted by the address until the pass is known). Once the account there has the pass, the visit
+  is asked for again, once: a supporter who has had their 30 sees the screen, saying who's signed in.
 - Signed in, the browser's leaderboard player is linked to the account (once), so a supporter's ⭐
-  shows by their name on every board.
+  shows by their name on every board. Signing out forgets that it was linked (the note holds the
+  email), so signing in again links it again.
 - With no sign-in set up (`GOOGLE_CLIENT_ID` empty), no Worker (the dev server alone) or the Worker
   not answering, the sheet keeps **Coming soon** and nothing else changes. With sign-in but buying
   off, it's **Coming soon** with a sign-in for those who already have the pass (`SUPPORTER_EMAILS`).
@@ -243,7 +249,10 @@ for the pass, and driving and the leaderboard never need it.
   It proves itself with its `Stripe-Signature`, checked by the code the construction app's webhook
   uses (`worker/stripe.js`): HMAC-SHA256 of `<t>.<raw body>` with the signing secret, compared in
   constant time with each `v1` (any may match, for when a secret is being rolled), refused with 400 if
-  none does or `t` is more than five minutes off; bodies over 256 kB are a 413. Then:
+  none does or `t` is more than five minutes off; bodies over 256 kB are a 413. While the link is a
+  live one (not `https://buy.stripe.com/test_...`), or there's none, an event that isn't
+  `livemode: true` is answered 200 and ignored: a test-mode endpoint's secret set here by mistake
+  would otherwise let anyone with a test link pay with Stripe's test card, for nothing. Then:
   - `checkout.session.completed` with `payment_status: 'paid'`, or
     `checkout.session.async_payment_succeeded` (bank debits and the like complete unpaid first),
     records a purchase once per Checkout Session (the same event again changes nothing): the account
@@ -252,6 +261,12 @@ for the pass, and driving and the leaderboard never need it.
     link's checkouts count; without it any paid checkout on the account does (it's World Drive's own).
   - `charge.refunded` with `refunded: true` (refunded in full) marks that payment's purchase refunded,
     which takes the pass away. A partial refund keeps it.
+  - `charge.dispute.funds_withdrawn` (a chargeback: the bank has taken the money back) marks it
+    `disputed`, which takes the pass away too; `charge.dispute.funds_reinstated` (the dispute won)
+    gives it back, unless it was refunded meanwhile.
+  - Stripe doesn't promise to deliver events in order, and a delivery that failed is retried for up
+    to three days, so a refund or chargeback can arrive before its checkout. Each is also kept by its
+    PaymentIntent (`reversals`), and a checkout arriving after it comes in already taken back.
   - Anything else properly signed is answered 200 and left alone, so Stripe doesn't send it again.
 - **Who has the pass** (`hasPass`): an account with a purchase that isn't refunded, its own or one paid
   with its email by someone not signed in, or whose email is in `SUPPORTER_EMAILS`. It's looked up
@@ -275,9 +290,9 @@ for the pass, and driving and the leaderboard never need it.
 | `SUPPORTER_PAYMENT_LINK` | `vars` | The Payment Link, `https://buy.stripe.com/9B6bJ0fSYaMf3nc0cCfrW00` (live, public) |
 | `SUPPORTER_PRICE` | `vars` | The price as the page shows it: `CA$4.99` |
 | `PER_VISITOR_DAILY_SUPPORTER` | `vars` | A supporter's drives a day (30) |
-| `STRIPE_WEBHOOK_SECRET` | secret | The webhook endpoint's signing secret, `whsec_...` |
+| `STRIPE_WEBHOOK_SECRET` | secret | The webhook endpoint's signing secret, `whsec_...`: the live endpoint's while the link is live |
 | `SUPPORTER_EMAILS` | secret, optional | Comma-separated: people who have the pass without paying (you, testers) |
-| `SUPPORTER_PAYMENT_LINK_ID` | dashboard text, optional | The link's `plink_...` id: only its checkouts count |
+| `SUPPORTER_PAYMENT_LINK_ID` | dashboard text, optional (recommended) | The link's `plink_...` id: only its checkouts count |
 
 Buying is on only when `GOOGLE_CLIENT_ID`, the link (an `https://` address) and a `whsec_` secret
 are all set, and `SUPPORTER_PAYMENT_LINK_ID`, if set, is a `plink_` id. Anything else leaves it off,
@@ -291,20 +306,30 @@ offers buying just then.
    Yours one is fine) with `https://worlddrive.app` under **Authorized JavaScript origins**. Put its
    **Client ID** (it isn't a secret) in `wrangler.drive.jsonc` as `GOOGLE_CLIENT_ID`, commit and push:
    Workers Builds deploys it, and the deploy applies the new tables (`0002_supporter_pass.sql`) first.
-2. **The Payment Link's redirect.** Stripe Dashboard (World Drive's account, live) → **Payment
-   Links** → the link → **Edit** → **After payment**: **Don't show confirmation page**, and redirect
-   customers to `https://worlddrive.app/?supporter=thanks`. While there, turn off letting customers
-   adjust the quantity. (Optional: copy the link's `plink_...` id, on its page and in the page's
-   address, into `SUPPORTER_PAYMENT_LINK_ID` as a dashboard text variable.)
-3. **The webhook.** Stripe Dashboard → **Developers → Webhooks → Add endpoint** (in Workbench:
-   **Webhooks → Add destination**, your account's events, then **Webhook endpoint**):
+2. **The Payment Link's redirect.** Stripe Dashboard (World Drive's account, **live**: the link in
+   `wrangler.drive.jsonc` has no `test_` in it, so it takes real money) → **Payment Links** → the link
+   → **Edit** → **After payment**: **Don't show confirmation page**, and redirect customers to
+   `https://worlddrive.app/?supporter=thanks`. While there, turn off letting customers adjust the
+   quantity. Recommended: copy the link's `plink_...` id (on its page, and in the page's address) into
+   `SUPPORTER_PAYMENT_LINK_ID` as a dashboard text variable, so a checkout on anything else the
+   account ever sells can't count as a pass.
+3. **The webhook**, with **Test mode off** (a test-mode endpoint never hears of live payments, and its
+   events are ignored here anyway while the link is live). Stripe Dashboard → **Developers →
+   Webhooks → Add endpoint** (in Workbench: **Webhooks → Add destination**, your account's events,
+   then **Webhook endpoint**):
    - Endpoint URL: `https://worlddrive.app/api/stripe/webhook` (not `www.`: Stripe doesn't follow the
      redirect)
-   - Events: `checkout.session.completed`, `checkout.session.async_payment_succeeded` and
-     `charge.refunded`
+   - Events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+     `charge.refunded`, `charge.dispute.funds_withdrawn` and `charge.dispute.funds_reinstated`
    - Any API version: only fields every version has are read.
 
    Create it and reveal its **Signing secret** (`whsec_...`).
+
+   To try it all without real money first: a test-mode Payment Link (`https://buy.stripe.com/test_...`)
+   in `SUPPORTER_PAYMENT_LINK` and a test-mode endpoint's secret in `STRIPE_WEBHOOK_SECRET`, then pay
+   with Stripe's test card `4242 4242 4242 4242`. Put the live link and the live endpoint's secret
+   back before anyone else can buy: while the link is a test one, anyone can get the pass with that
+   card.
 4. **The secret.** Cloudflare dashboard → Workers & Pages → **world-drive** → Settings → Variables and
    Secrets → **Add** → type **Secret**, name `STRIPE_WEBHOOK_SECRET`, the signing secret as its value
    (or `npx wrangler secret put STRIPE_WEBHOOK_SECRET -c wrangler.drive.jsonc`). It takes effect at
@@ -329,7 +354,7 @@ LEFT JOIN purchases p ON p.account_id = a.id OR ( p.account_id IS NULL AND p.ema
 -- Give someone the pass, by the email they sign in with (signed in or not yet).
 INSERT INTO purchases ( checkout_session, email, status, created_at ) VALUES ( 'granted-eve', 'eve@example.com', 'granted', strftime( '%s', 'now' ) * 1000 );
 
--- Take it away (a chargeback, or a pass given by hand): it stays on record, refunded.
+-- Take it away (a pass given by hand, or anything Stripe didn't tell us): it stays on record, refunded.
 UPDATE purchases SET status = 'refunded', refunded_at = strftime( '%s', 'now' ) * 1000 WHERE checkout_session = 'granted-eve';
 
 -- A payment through the bare link with an email that isn't their Google one: give it to their account.
@@ -343,12 +368,15 @@ UPDATE purchases SET account_id = 12 WHERE checkout_session = 'cs_live_...';
 - **The lock is in the page.** The pass's rides and the Garage's extras are code in the public site,
   so someone who digs through it can switch them on in their own browser. What the Worker keeps for
   supporters (the 30 drives and the ⭐) can't be had that way.
-- Disputes and chargebacks aren't handled by themselves, nor a refund that arrives before its
-  purchase (Stripe can deliver out of order when retrying): take the pass away by hand (above).
+- A chargeback's "won" (`funds_reinstated`) delivered before its "withdrawn" leaves the pass taken
+  away: Stripe would have to retry the first for longer than the whole dispute took. Give it back by
+  hand (above). An early fraud warning or an inquiry takes no money, so it changes nothing.
 - Only `paid` counts: a 100 % discount code (`no_payment_required`) doesn't give the pass. Use
   `SUPPORTER_EMAILS` or the console to give one away.
-- A supporter on a new browser has the address's 8 drives until they sign in; once those are used,
-  the used-up screen has no sign-in, so it's tomorrow (or another browser on another network).
+- A supporter on a new browser has the address's 8 drives until they sign in (in the pass's sheet,
+  the pause menu or the used-up screen). Buying isn't offered on the used-up screen.
+- Runs in the pass's rides are accepted on the leaderboard from anyone (`PASS_RIDES` in
+  `scores.js`): the lock is in the page, so a row may show one of those rides by a name without a ⭐.
 - No receipts or purchase history in the page: Stripe emails its own receipt if that's on in its
   settings.
 
@@ -624,19 +652,21 @@ names and places kept as text, the top 20 and your own rank, one place's board, 
 weeks turning over, the tidying after 35 days, what's stored, and the console's SQL above; and the
 Supporter Pass, with test keys standing in for Google's and a made-up webhook secret for Stripe's:
 signing in and every bad token turned away, the session cookie, `/api/me`, the webhook's signatures
-and five minutes, a payment once, bank debits, buying before signing in, refunds, another link's
-checkouts, the same-origin checks only the webhook goes without, `SUPPORTER_EMAILS`, 30 drives a day
-for a supporter, the ⭐, the owner's SQL, and buying off without its settings), and `npm run test:drive-ui` (the page in Chromium without a key:
-the globe and panel, search on Enter, spots, pins, dropping in and driving, stunts (a wall throwing
-the kart into the air and never through it, a backflip landed for points, the DRIFT button), changing
-ride, M and teleporting again without a reload, recent places, a phone with touch buttons, the
-used-up, robot-check and getting-ready screens, and the leaderboard with its answers made in the
-test: tabs, your own row, picking a name and renaming, a landed jump posting the run with the card
-asking first, each place's best posted, a dead connection changing nothing, and a phone; and buying
-the pass with Google's script stood in for: signing in from the sheet and the pause menu, Buy's link,
-unlocking on focus and on `?supporter=thanks`, on every load, signing out, the player linked, the ⭐,
-and "Coming soon" with no sign-in or no Worker answering). `npm run test:drive-pro-ui` tries the
-pass's rides and the Garage.
+and five minutes, a payment once, bank debits, buying before signing in, refunds and chargebacks
+(either delivered before its checkout), another link's checkouts, test-mode payments with a live
+link, the same-origin checks only the webhook goes without, `SUPPORTER_EMAILS`, 30 drives a day for a
+supporter, the ⭐, the owner's SQL, and buying off without its settings), and `npm run test:drive-ui`
+(the page in Chromium without a key: the globe and panel, search on Enter, spots, pins, dropping in
+and driving, stunts (a wall throwing the kart into the air and never through it, a backflip landed
+for points, the DRIFT button), changing ride, M and teleporting again without a reload, recent
+places, a phone with touch buttons, the used-up, robot-check and getting-ready screens, and the
+leaderboard with its answers made in the test: tabs, your own row, picking a name and renaming, a
+landed jump posting the run with the card asking first, each place's best posted, a dead connection
+changing nothing, and a phone; and buying the pass with Google's script stood in for: signing in
+from the sheet, the pause menu and the used-up screen, Buy's link, "Check again" before Stripe's
+word, unlocking on focus and on `?supporter=thanks`, on every load, signing out, the player linked,
+the ⭐, and "Coming soon" with no sign-in or no Worker answering). `npm run test:drive-pro-ui` tries
+the pass's rides and the Garage.
 
 ## How it fits together
 

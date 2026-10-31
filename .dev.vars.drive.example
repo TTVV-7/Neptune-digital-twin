@@ -21,7 +21,9 @@ PER_VISITOR_DAILY=8
 # --forward-to localhost:8790/api/stripe/webhook` prints (Stripe CLI, a test-mode account): never
 # the live endpoint's here. The Payment Link in wrangler.drive.jsonc is the live one, which takes
 # real money: here it's blank (buying off), or a test-mode link, https://buy.stripe.com/test_...
-# SUPPORTER_EMAILS (comma-separated) have the pass without paying.
+# Only with a test-mode link are test-mode events (stripe listen's, stripe trigger's) taken; blank,
+# or live, they're answered and ignored. SUPPORTER_EMAILS (comma-separated) have the pass without
+# paying.
 GOOGLE_CLIENT_ID=
 SUPPORTER_PAYMENT_LINK=
 STRIPE_WEBHOOK_SECRET=

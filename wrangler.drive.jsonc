@@ -45,9 +45,9 @@
 	// Secrets, set by the owner and never in a file (the dashboard, or
 	// npx wrangler secret put GOOGLE_MAPS_API_KEY -c wrangler.drive.jsonc): GOOGLE_MAPS_API_KEY (a
 	// secret named Google_maps_api, in any case, is taken too), TURNSTILE_SECRET, and for the
-	// Supporter Pass STRIPE_WEBHOOK_SECRET (the webhook endpoint's whsec_... signing secret; buying
-	// stays off without it) and, if wanted, SUPPORTER_EMAILS (comma-separated: the pass without
-	// paying). Locally they come from .dev.vars.drive (.dev.vars.drive.example).
+	// Supporter Pass STRIPE_WEBHOOK_SECRET (the live webhook endpoint's whsec_... signing secret;
+	// buying stays off without it) and, if wanted, SUPPORTER_EMAILS (comma-separated: the pass
+	// without paying). Locally they come from .dev.vars.drive (.dev.vars.drive.example).
 	//
 	// The day's visit counts and the search queue: one Durable Object for everyone, on SQLite storage
 	// (on every plan, the free one too).
