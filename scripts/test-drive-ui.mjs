@@ -1323,11 +1323,11 @@ describe( 'World Drive water', () => {
 			const kit = window.waterKit;
 			kit.reset( - 250, 180, 60 );
 			const out = {};
-			// Up on Shift, out over the sea.
-			d.press( 'ShiftLeft' );
+			// Up on F, out over the sea.
+			d.press( 'KeyF' );
 			kit.step( 4 );
 			Object.assign( out, { flying: d.flying, overSea: d.north < - 300, high: d.y, splashFlying: !! d.splash } );
-			d.release( 'ShiftLeft' );
+			d.release( 'KeyF' );
 			kit.step( 30, () => ! d.splash );
 			Object.assign( out, { downIn: !! d.splash, at: d.north, flyingAfter: d.flying } );
 			// R a moment into the splash.

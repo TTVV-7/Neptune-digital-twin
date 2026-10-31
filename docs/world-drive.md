@@ -181,7 +181,7 @@ so everything used to drive on the sea. Now driving into water, or coming down i
   dozen metres of the shore it can't tell water from the shore (below), but coming down into it,
   half a metre or more from the last dry ground or landing there, is coming down into the water.
   **Slowly** off a beach into the sea is the same once you're about a dozen metres out (until then
-  the beach is in reach of the rings it's told by). **Flying** (Shift) over water is fine until you
+  the beach is in reach of the rings it's told by). **Flying** (F) over water is fine until you
   come down in it.
 - **The hovercraft** rides on water as on land, throwing up spray behind it as it goes. **Boost pads**
   never go down on water, nor by it.
