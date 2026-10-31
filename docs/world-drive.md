@@ -159,16 +159,19 @@ each (in their paint) and the badge until the pass is on.
 
 Six cars from Sketchfab, each made ready to drive by `scripts/add-drive-car.mjs` (below) and tuned in
 `src/drive-app/cars.js`. The muscle car is free; the rest come with the pass, locked like the rides
-above, between the free rides and the built ones in the picker, each with its own picture.
+above, between the free rides and the built ones in the picker, each with its own picture. With
+thirteen rides, the pause menu has them in two rows that scroll sideways (the one being driven in
+view), so it's no taller than it was and the pass's sign-in under them stays on screen; the Garage's
+row of rides scrolls to the one shown.
 
 | Car | Model (CC BY 4.0) | Size | Top speed | Handling |
 | --- | --- | --- | --- | --- |
-| Muscle car (free) | "Classic Muscle car" by Lexyc16 | 4.7 × 2.1 m, 1.4 m tall | 175 km/h | Loose: grip a little over the kart's, drifts that swing the tail far out; its paint is plain colour, so the Garage repaints it |
-| Neon racer | "Green Bug Stylized Scifi Car Free" by ferofluid | 4.3 × 2.3 m | 185 km/h | Quickest away of the cars, grips hardest and turns in sharpest |
-| Night cruiser | "Blade Air Stylized Scifi Car Free" by ferofluid | 4.6 × 2.1 m | 205 km/h | The fastest of everything, heavy: slow to turn, rolls on and on off the gas, thrown less by a hit |
-| Dune buggy | "Dune Buggy \"jump\"" by XP_Frost | 3.5 × 3.1 m (its wheels out on long arms) | 145 km/h | Light and bouncy: loose on the road, thrown highest of the cars, slow to fall, landing up to 50° off upright and bouncing |
-| Farm truck | "Farm pickup truck" by Nekitron | 5.0 × 2.25 m, 2.8 m tall | 115 km/h | Slow away, turns wide, barely thrown up, squashes and shakes the view more |
-| Police cruiser | the police car of "LowPoly Cars Pickup, Sedan, Police, StationWagon" by JG3D | 4.0 × 2.3 m | 180 km/h | Steady all-rounder; plain black-and-white livery, no words or crest |
+| Muscle car (free) | "Classic Muscle car" by Lexyc16 | 4.7 × 2.1 m, 1.4 m tall | 175 km/h | 0 to 100 in 3.3 s. Loose: grip a little over the kart's, drifts that swing the tail far out; its paint is plain colour, so the Garage repaints it |
+| Neon racer | "Green Bug Stylized Scifi Car Free" by ferofluid | 4.3 × 2.3 m | 185 km/h | 0 to 100 in 2.5 s, the quickest of the cars; grips hardest and turns in sharpest (131°/s at 50 km/h) |
+| Night cruiser | "Blade Air Stylized Scifi Car Free" by ferofluid | 4.6 × 2.1 m | 205 km/h | 0 to 100 in 3.8 s. The fastest of everything, heavy: slow to turn, rolls on and on off the gas, thrown less by a hit |
+| Dune buggy | "Dune Buggy \"jump\"" by XP_Frost | 3.5 × 3.1 m (its wheels out on long arms) | 145 km/h | 0 to 100 in 3.1 s. Light and bouncy: loose on the road, thrown highest of the cars, slow to fall, landing up to 50° off upright and bouncing |
+| Farm truck | "Farm pickup truck" by Nekitron | 5.0 × 2.25 m, 2.8 m tall | 115 km/h | 0 to 100 in 9.4 s, turning wide (79°/s at 50 km/h), barely thrown up, squashes and shakes the view more |
+| Police cruiser | the police car of "LowPoly Cars Pickup, Sedan, Police, StationWagon" by JG3D | 4.0 × 2.3 m | 180 km/h | 0 to 100 in 3.5 s. A steady all-rounder; plain black-and-white livery, no words or crest |
 
 Their wheels spin with the speed (each by its own size) and the front ones steer, turned against a
 drift as the rides' are. Nothing turns in the air faster than the kart, as for the rides.
@@ -177,8 +180,8 @@ drift as the rides' are. Nothing turns in the air faster than the kart, as for t
 (file, size, wheels, triangles and the source: title, author, link, licence) and `CREDITS.md`.
 `vite.drive.config.js` makes `drive/public/` World Drive's public folder, so only its build publishes
 them (at `/cars/...`); the construction app's library (`public/library/`) and its build never see
-them. The 2.7 MB of models and 30 kB of pictures are fetched only for the car being driven or looked
-at in the Garage. CC BY asks for credit: each car's model, author, licence and link (and what was
+them. They add 2.8 MB to the built site (2.74 MB of models, 52 kB of pictures), and a model is only
+fetched for the car being driven or looked at in the Garage. CC BY asks for credit: each car's model, author, licence and link (and what was
 changed) are in the About box, under the ride picker while it's picked, and in `CREDITS.md`.
 
 **Adding a car.** `npm run add-drive-car -- <sketchfab url> --id night-cruiser --length 4.6 --front=+z`

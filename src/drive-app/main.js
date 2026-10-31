@@ -446,6 +446,8 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 		if ( state.leaving ) return;
 		setMode( 'paused' );
 		screens.pause( true );
+		// The rides scroll sideways there: the one being driven in view.
+		$( 'pause' ).querySelector( '.vehicle.picked' )?.scrollIntoView( { block: 'nearest', inline: 'nearest' } );
 
 	}
 
