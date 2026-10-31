@@ -428,9 +428,23 @@ dialog#garage {
 	color: var( --muted );
 }
 
-#garage .locked-note .pro-badge {
-	letter-spacing: 0;
-	text-transform: none;
+/* Over the choices without the pass: the badge, what the stars mean, and a way to the pass. */
+#garage .pass-note {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px 6px;
+	margin: 4px 0 2px;
+	font-size: 12px;
+	color: var( --muted );
+}
+
+#garage .pass-note[hidden] {
+	display: none;
+}
+
+#garage .pass-note .link {
+	font-size: 12px;
 }
 
 #garage .note {

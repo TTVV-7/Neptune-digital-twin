@@ -25,9 +25,9 @@ import { isPro, onProChange } from './pro.js';
 // The Garage: each ride's paint, decals, rims, boost flame and trail (paint.js), chosen with the
 // ride turning on a turntable, and kept in this browser for each ride. Opened from a Garage button
 // by the ride picker on the globe's panel and in the pause menu, beside one for the Supporter Pass.
-// What needs the pass (pro.js) wears its badge, and choosing it opens the pass's sheet instead; a
-// ride that needs the pass can still be looked at here. Changes made while paused are on the ride
-// as soon as it drives on.
+// What needs the pass (pro.js) wears a star, with one word on the pass above them all, and choosing
+// it opens the pass's sheet instead; a ride that needs the pass can still be looked at here. Changes
+// made while paused are on the ride as soon as it drives on.
 
 // How fast the turntable turns (rad/s), and how long a flame or trail shows when it's picked (s).
 const TURN = 0.45;
@@ -97,7 +97,7 @@ export function setUpGarage( { vehicles, panel, models, current } ) {
 
 		const section = document.createElement( 'section' );
 		section.dataset.part = part;
-		section.innerHTML = `<h3>${ title }<span class="locked-note"></span></h3>${ note ? `<p class="note">${ note }</p>` : '' }<div class="choices ${ kind }s"></div>`;
+		section.innerHTML = `<h3>${ title }</h3>${ note ? `<p class="note">${ note }</p>` : '' }<div class="choices ${ kind }s"></div>`;
 		section.querySelector( '.choices' ).replaceChildren( ...list.map( choice => {
 
 			const button = document.createElement( 'button' );
@@ -144,6 +144,9 @@ export function setUpGarage( { vehicles, panel, models, current } ) {
 
 	} );
 	dialog.querySelector( '.locked-banner button' ).addEventListener( 'click', () => openPass() );
+	const passNote = dialog.querySelector( '.pass-note' );
+	passNote.prepend( proBadge(), ' ' );
+	passNote.querySelector( 'button' ).addEventListener( 'click', () => openPass() );
 	dialog.querySelector( '.demo' ).addEventListener( 'click', () => preview?.boost() );
 
 	function locked( part, id ) {
@@ -194,26 +197,30 @@ export function setUpGarage( { vehicles, panel, models, current } ) {
 		const wearing = shown();
 		for ( const tab of tabs.children ) tab.setAttribute( 'aria-pressed', String( tab.dataset.id === vehicle.id ) );
 		const paintable = vehicle.paintable !== false;
+		let anyLocked = false;
 		for ( const section of options.querySelectorAll( 'section' ) ) {
 
 			const { part } = section.dataset;
-			const { paint } = PARTS.find( p => p.part === part );
+			const { paint, title } = PARTS.find( p => p.part === part );
 			section.hidden = paint && ! paintable || part === 'smoke' && wearing.trail !== 'smoke';
-			let anyLocked = false;
+			// A hovercraft's "rims" are its duct and rudders.
+			section.querySelector( 'h3' ).textContent = part === 'rim' ? vehicle.rims ?? title : title;
 			for ( const button of section.querySelectorAll( '.choice' ) ) {
 
 				const on = button.dataset.id === wearing[ part ];
 				const shut = locked( part, button.dataset.id );
-				anyLocked ||= shut;
+				anyLocked ||= shut && ! section.hidden;
 				button.classList.toggle( 'on', on );
 				button.classList.toggle( 'locked', shut );
 				button.setAttribute( 'aria-pressed', String( on ) );
 
 			}
 
-			section.querySelector( '.locked-note' ).replaceChildren( ...anyLocked ? [ proBadge() ] : [] );
-
 		}
+
+		// Once, over the choices, rather than on each part: the stars say which. A pass ride has its
+		// own word on the pass, over the turntable.
+		passNote.hidden = ! anyLocked || !! vehicle.pro;
 
 		const number = options.querySelector( '.number' );
 		number.hidden = wearing.decal !== 'number';
@@ -320,6 +327,7 @@ function build() {
 					<div class="locked-banner" hidden><span>⭐ A Supporter Pass ride</span><button type="button" class="link">What's in the pass</button></div>
 				</div>
 				<div class="options">
+					<p class="pass-note" hidden>Starred choices come with the pass. <button type="button" class="link">What's in it</button></p>
 					<p class="paint-note small" hidden>This truck keeps its own paint: pick its boost flame and trail.</p>
 				</div>
 			</div>
