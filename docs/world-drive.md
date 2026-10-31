@@ -196,8 +196,9 @@ Six cars from Sketchfab, each made ready to drive by `scripts/add-drive-car.mjs`
 `src/drive-app/cars.js`. The muscle car is free; the rest come with the pass, locked like the rides
 above, between the free rides and the built ones in the picker, each with its own picture. With
 thirteen rides, the pause menu has them in two rows that scroll sideways (the one being driven in
-view), so it's no taller than it was and the pass's sign-in under them stays on screen; the Garage's
-row of rides scrolls to the one shown.
+view; on a phone about three across, the next peeking in, so each pass ride's badge fits), so it's
+no taller than it was and the pass's sign-in under them stays on screen; the Garage's row of rides
+scrolls to the one shown.
 
 | Car | Model (CC BY 4.0) | Size | Top speed | Handling |
 | --- | --- | --- | --- | --- |
