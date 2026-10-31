@@ -49,8 +49,7 @@ export const FLAMES = {
 const RAINBOW_TURN = 1.6;
 // Trails. Smoke: a puff every SMOKE_TRAIL_STEP s that lasts SMOKE_TRAIL_LIFE s. Sparkles: one every
 // SPARKLE_STEP s, twinkling, in these colours. The ribbon: RIBBON_POINTS points across the back, one
-// every RIBBON_STEP s, each fading over RIBBON_LIFE s, in a hue going round RIBBON_HUE times a
-// second (by time rather than by point, so a slow frame rate doesn't narrow the rainbow).
+// every RIBBON_STEP s, each fading over RIBBON_LIFE s, in bands of these hues side by side.
 const SMOKE_TRAIL_POOL = 56;
 const SMOKE_TRAIL_STEP = 0.03;
 const SMOKE_TRAIL_LIFE = 1.5;
@@ -61,11 +60,11 @@ const SPARKLE_COLOURS = [ 0xffffff, 0xfff0a0, 0xffb6ef, 0xa6f3ff ];
 const RIBBON_POINTS = 48;
 const RIBBON_STEP = 1 / 40;
 const RIBBON_LIFE = 0.9;
-const RIBBON_HUE = 1.2;
+const RIBBON_HUES = [ 0, 0.08, 0.15, 0.33, 0.58, 0.77 ];
 
 const _v = new Vector3();
 const _p = new Vector3();
-const _hue = new Color();
+const _across = new Vector3();
 
 let textures = null;
 function getTextures() {
@@ -495,17 +494,27 @@ export function createDriveFx( world, { flame: flameName = 'orange', trail = nul
 }
 
 // The rainbow ribbon: a strip across the back of the vehicle, drawn out behind it as it boosts or
-// flies, each point fading as it ages and in the next hue along. Its points go round a ring, and
-// each frame they're written newest first into buffers made once.
+// flies, each point along it fading as it ages. Its colours are bands side by side, red on the left
+// to violet on the right, so it reads as a rainbow at any speed and from any side; bands of colour
+// along it instead would be one colour across the few metres the chase camera sees at speed. Its
+// points go round a ring, and each frame they're written newest first into buffers made once; the
+// colours are written once, and only how faded each point is changes.
 function makeRibbon( root ) {
 
-	const positions = new Float32Array( RIBBON_POINTS * 2 * 3 );
-	const colours = new Float32Array( RIBBON_POINTS * 2 * 4 );
+	// Each band has two edges of its own, so its colour stops sharply at the next one's.
+	const bands = RIBBON_HUES.length;
+	const row = bands * 2;
+	const positions = new Float32Array( RIBBON_POINTS * row * 3 );
+	const colours = new Float32Array( RIBBON_POINTS * row * 4 );
 	const index = [];
-	for ( let i = 0; i < RIBBON_POINTS - 1; i ++ ) {
+	const hue = new Color();
+	for ( let i = 0; i < RIBBON_POINTS; i ++ ) for ( let band = 0; band < bands; band ++ ) {
 
-		const a = i * 2;
-		index.push( a, a + 1, a + 2, a + 1, a + 3, a + 2 );
+		const a = i * row + band * 2;
+		hue.setHSL( RIBBON_HUES[ band ], 1, 0.55 );
+		hue.toArray( colours, a * 4 );
+		hue.toArray( colours, ( a + 1 ) * 4 );
+		if ( i < RIBBON_POINTS - 1 ) index.push( a, a + 1, a + row, a + 1, a + row + 1, a + row );
 
 	}
 
@@ -521,20 +530,10 @@ function makeRibbon( root ) {
 	mesh.visible = false;
 	root.add( mesh );
 
-	const points = Array.from( { length: RIBBON_POINTS }, () => ( { left: new Vector3(), right: new Vector3(), born: - Infinity, hue: 0 } ) );
+	const points = Array.from( { length: RIBBON_POINTS }, () => ( { left: new Vector3(), right: new Vector3(), born: - Infinity } ) );
 	let head = 0;
 	let clock = 0;
 	let due = 0;
-
-	function write( vertex, at, fade ) {
-
-		at.toArray( positions, vertex * 3 );
-		colours[ vertex * 4 ] = _hue.r;
-		colours[ vertex * 4 + 1 ] = _hue.g;
-		colours[ vertex * 4 + 2 ] = _hue.b;
-		colours[ vertex * 4 + 3 ] = fade;
-
-	}
 
 	// The newest point, across the back of the vehicle as it is now.
 	function across( point, pivot, size ) {
@@ -562,7 +561,6 @@ function makeRibbon( root ) {
 					due = RIBBON_STEP;
 					head = ( head + 1 ) % RIBBON_POINTS;
 					points[ head ].born = clock;
-					points[ head ].hue = clock * RIBBON_HUE % 1;
 
 				}
 
@@ -578,14 +576,19 @@ function makeRibbon( root ) {
 				const age = clock - point.born;
 				if ( age > RIBBON_LIFE ) break;
 				const fade = ( 1 - age / RIBBON_LIFE ) * 0.85;
-				_hue.setHSL( point.hue, 1, 0.56 );
-				write( count * 2, point.left, fade );
-				write( count * 2 + 1, point.right, fade );
+				for ( let edge = 0; edge < row; edge ++ ) {
+
+					// Edge 2b and 2b + 1 are band b's left and right.
+					const vertex = count * row + edge;
+					_across.lerpVectors( point.left, point.right, ( ( edge >> 1 ) + ( edge & 1 ) ) / bands ).toArray( positions, vertex * 3 );
+					colours[ vertex * 4 + 3 ] = fade;
+
+				}
 
 			}
 
 			mesh.visible = count > 1;
-			geometry.setDrawRange( 0, Math.max( 0, count - 1 ) * 6 );
+			geometry.setDrawRange( 0, Math.max( 0, count - 1 ) * bands * 6 );
 			if ( mesh.visible ) {
 
 				geometry.attributes.position.needsUpdate = true;
