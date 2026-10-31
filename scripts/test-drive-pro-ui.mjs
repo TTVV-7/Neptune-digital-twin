@@ -494,17 +494,33 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 
 			const { driver: d } = window.drive;
 			const { pivot } = d.entry;
-			for ( let i = 0; i < 30; i ++ ) d.update( 1 / 60 );
+			// Settled first (the picture before was taken turning), then the gap under its skirt as
+			// it bobs for two seconds: it rocks with the steering and the gas, so its lowest moment
+			// depends on when it's looked at.
+			for ( const code of [ ...d.keys ] ) d.release( code );
+			Object.assign( d, { speed: 0, steer: 0 } );
+			for ( let i = 0; i < 90; i ++ ) d.update( 1 / 60 );
+			const hull = new d.ownBox.constructor();
+			const gaps = [];
+			for ( let i = 0; i < 120; i ++ ) {
+
+				d.update( 1 / 60 );
+				gaps.push( hull.setFromObject( pivot.getObjectByName( 'hover' ), true ).min.y - d.y );
+
+			}
+
 			// Tyres are the rides' rubber; the skirt is a rubber of its own.
 			let tyres = 0;
 			pivot.traverse( o => o.isMesh && o.material.color?.getHex() === 0x17181a && tyres ++ );
-			const hull = new d.ownBox.constructor().setFromObject( pivot.getObjectByName( 'hover' ) );
-			return { name: d.entry.state.name, tyres, gap: hull.min.y - d.y, grounded: d.grounded };
+			const round = x => Math.round( x * 1000 ) / 1000;
+			return { name: d.entry.state.name, tyres, low: round( Math.min( ...gaps ) ), high: round( Math.max( ...gaps ) ), grounded: d.grounded };
 
 		} );
 		assert.equal( hover.name, 'Hovercraft' );
 		assert.equal( hover.tyres, 0 );
-		assert.ok( hover.gap > 0.1 && hover.gap < 0.3 && hover.grounded, JSON.stringify( hover ) );
+		// Its skirt's lowest edge 16 cm up, give or take its bobbing and rocking.
+		assert.ok( hover.low > 0.08 && hover.high < 0.3 && hover.grounded, JSON.stringify( hover ) );
+		console.log( 'hovercraft skirt over the ground (m):', JSON.stringify( hover ) );
 		await page.waitForTimeout( 300 );
 		await shot( page, 'pro-hovercraft-hovering' );
 
