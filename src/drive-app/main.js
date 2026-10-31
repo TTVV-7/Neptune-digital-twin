@@ -237,10 +237,10 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 	// About, with the credits the vehicle models' licences ask for.
 	const about = $( 'about' );
 	const link = ( href, text ) => Object.assign( document.createElement( 'a' ), { href, textContent: text, target: '_blank', rel: 'noopener' } );
-	about.querySelector( '.credits' ).replaceChildren( ...vehicles.filter( v => v.credit ).map( ( { name, credit } ) => {
+	about.querySelector( '.credits' ).replaceChildren( ...vehicles.filter( v => v.credit ).map( ( { name, credit, changes = 'compressed and rescaled' } ) => {
 
 		const li = document.createElement( 'li' );
-		li.append( `${ name }: `, link( credit.url, credit.title ), ` by ${ credit.author }, `, link( credit.licenseUrl, credit.license ), '. Modified: compressed and rescaled.' );
+		li.append( `${ name }: `, link( credit.url, credit.title ), ` by ${ credit.author }, `, link( credit.licenseUrl, credit.license ), `. Modified: ${ changes }.` );
 		return li;
 
 	} ) );

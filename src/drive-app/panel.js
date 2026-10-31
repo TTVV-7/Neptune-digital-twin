@@ -165,7 +165,7 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin } ) {
 
 		// The library's models are other people's work, under licences that ask for credit.
 		const credit = usable().credit;
-		$( '.credit' ).textContent = credit ? `Model: "${ credit.title }" by ${ credit.author }, ${ credit.license.replace( 'CC Attribution', 'CC BY 4.0' ) }; resized and compressed.` : '';
+		$( '.credit' ).textContent = credit ? `Model: "${ credit.title }" by ${ credit.author }, ${ credit.license.replace( 'CC Attribution', 'CC BY 4.0' ) }; ${ usable().changes ?? 'resized and compressed' }.` : '';
 
 	}
 
