@@ -110,10 +110,23 @@
 	margin-top: 12px;
 }
 
-/* Seven rides make the pause menu taller: on a short screen it scrolls. */
+/* On a short screen the pause menu scrolls. */
 #pause .card {
 	max-height: 100%;
 	overflow-y: auto;
+}
+
+/* With the cars there are thirteen rides: in the pause menu they go in two rows that scroll
+   sideways, four across, so the menu stays as short as it was and what's under them (the
+   Supporter Pass's sign-in) stays on screen. Room over them for the pass rides' badges. */
+#pause .vehicles {
+	grid-template-columns: none;
+	grid-template-rows: repeat( 2, auto );
+	grid-auto-flow: column;
+	grid-auto-columns: calc( ( 100% - 18px ) / 4 );
+	padding: 9px 0 6px;
+	overflow-x: auto;
+	scrollbar-width: thin;
 }
 
 /* --- dialogs: the pass's sheet and the Garage ---------------------------------------------- */
@@ -231,7 +244,7 @@ dialog#pass {
 
 #pass .ride-icons {
 	display: grid;
-	grid-template-columns: repeat( 4, 1fr );
+	grid-template-columns: repeat( 5, 1fr );
 	gap: 6px;
 	margin-top: 6px;
 }
@@ -241,6 +254,13 @@ dialog#pass {
 	padding: 2px;
 	border-radius: 8px;
 	background: rgba( 255, 255, 255, 0.06 );
+}
+
+#pass .ride-icons .ride-icon img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
 }
 
 #pass .buy-area button {

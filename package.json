@@ -14,6 +14,8 @@
     "build:server": "vite build --mode server",
     "preview": "vite preview",
     "add-asset": "node scripts/add-asset.mjs",
+    "add-drive-car": "node scripts/add-drive-car.mjs",
+    "drive-car-thumbs": "node scripts/drive-car-thumbs.mjs",
     "dev:api": "node scripts/dev-api.mjs",
     "dev:drive-api": "node scripts/dev-drive-api.mjs",
     "test:worker": "node --test scripts/test-worker.mjs",

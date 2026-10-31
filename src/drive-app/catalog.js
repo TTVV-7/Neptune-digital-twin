@@ -8,3 +8,7 @@ export const LIBRARY_VEHICLES = [ 'pickup-truck', 'haul-truck-hd465' ];
 // The Supporter Pass rides (src/drive-app/rides/), by id. Here too so the Worker can accept their
 // runs on the leaderboard without importing the models.
 export const PASS_RIDES = [ 'sports-coupe', 'monster-truck', 'city-bus', 'hovercraft' ];
+
+// World Drive's own cars (cars.js, models in drive/public/cars/), by id: the muscle car is free, the
+// rest come with the Supporter Pass. Here too so the Worker can accept their runs.
+export const DRIVE_CARS = [ 'muscle-car', 'neon-racer', 'night-cruiser', 'dune-buggy', 'farm-truck', 'police-cruiser' ];

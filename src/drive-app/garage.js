@@ -196,6 +196,8 @@ export function setUpGarage( { vehicles, panel, models, current } ) {
 
 		const wearing = shown();
 		for ( const tab of tabs.children ) tab.setAttribute( 'aria-pressed', String( tab.dataset.id === vehicle.id ) );
+		// With the cars there are more rides than fit across: the one shown is scrolled into view.
+		tabs.querySelector( '[aria-pressed="true"]' )?.scrollIntoView( { block: 'nearest', inline: 'nearest' } );
 		const paintable = vehicle.paintable !== false;
 		let anyLocked = false;
 		for ( const section of options.querySelectorAll( 'section' ) ) {
@@ -328,7 +330,7 @@ function build() {
 				</div>
 				<div class="options">
 					<p class="pass-note" hidden>Starred choices come with the pass. <button type="button" class="link">What's in it</button></p>
-					<p class="paint-note small" hidden>This truck keeps its own paint: pick its boost flame and trail.</p>
+					<p class="paint-note small" hidden>Its paint is part of the model, so it keeps it: pick its boost flame and trail.</p>
 				</div>
 			</div>
 			<footer>
@@ -446,11 +448,12 @@ function createPreview( canvas, models, getVehicle, onPaintable ) {
 
 	}
 
-	// A ride's model, as driving shows it: built, or a truck loaded from the library, standing on
-	// y = 0 in the middle and facing -Z.
+	// A ride's model, as driving shows it: built, a car made ready to drive (cars.js) or a truck
+	// loaded from the library, standing on y = 0 in the middle and facing -Z.
 	async function modelOf( vehicle ) {
 
 		if ( vehicle.build ) return vehicle.build();
+		if ( vehicle.load ) return vehicle.load( models.loader );
 		const { item } = vehicle;
 		const content = ( await models.loader.loadAsync( new URL( `library/${ item.file }`, document.baseURI ).href ) ).scene;
 		content.rotation.y = frontToYaw( item.front );

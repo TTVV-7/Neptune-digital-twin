@@ -140,8 +140,12 @@ describe( 'World Drive, desktop', () => {
 		assert.ok( await panel.isVisible() );
 		assert.match( await panel.locator( '.logo' ).textContent(), /World\s*Drive/ );
 		assert.equal( await panel.locator( '.spots button' ).count(), 12 );
-		// The Supporter Pass's rides follow, locked (see test-drive-pro-ui.mjs).
-		assert.deepEqual( await panel.locator( '.vehicle b' ).allTextContents(), [ 'Go-kart', 'Pickup', 'Haul truck', 'Sports coupe', 'Monster truck', 'City bus', 'Hovercraft' ] );
+		// Then the cars (the muscle car free) and the Supporter Pass's rides, locked (see
+		// test-drive-pro-ui.mjs).
+		assert.deepEqual( await panel.locator( '.vehicle b' ).allTextContents(), [
+			'Go-kart', 'Pickup', 'Haul truck', 'Muscle car', 'Neon racer', 'Night cruiser', 'Dune buggy', 'Farm truck', 'Police cruiser',
+			'Sports coupe', 'Monster truck', 'City bus', 'Hovercraft',
+		] );
 		assert.equal( await panel.locator( '.vehicle.picked b' ).textContent(), 'Go-kart' );
 		assert.match( await panel.locator( '.osm' ).textContent(), /Search © OpenStreetMap contributors/ );
 		assert.equal( await page.locator( '#pin-card, .pin-card' ).isVisible(), false );
@@ -1098,6 +1102,8 @@ async function supporterPage( { me = SIGNED_OUT, signedInAs = ALICE, clientId = 
 }
 
 const locked = page => page.locator( '#globe-ui .vehicle.locked' ).count();
+// What the pass unlocks in the picker: five cars and four rides.
+const LOCKED = 9;
 const sheet = page => page.locator( '#pass .buy-area' );
 
 async function openPass( page ) {
@@ -1115,7 +1121,7 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		const { asked } = page;
 		await testPad( page );
 		await page.waitForFunction( () => window.drive.supporter.me );
-		assert.equal( await locked( page ), 4 );
+		assert.equal( await locked( page ), LOCKED );
 		// Google's script only once a sign-in button is on screen.
 		assert.equal( page.google, 0, 'Google\'s script loaded before anyone could sign in' );
 		await openPass( page );
@@ -1147,7 +1153,7 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		assert.deepEqual( Object.fromEntries( url.searchParams ), { client_reference_id: '42', prefilled_email: 'alice@example.com' } );
 		assert.deepEqual( [ target, features ], [ '_blank', 'noopener' ] );
 		await area.locator( '.supporter-line', { hasText: 'Finish paying in the new tab' } ).waitFor();
-		assert.equal( await locked( page ), 4 );
+		assert.equal( await locked( page ), LOCKED );
 		// Asked before Stripe's word has come: it says so, rather than that there's no pass.
 		await area.locator( 'button', { hasText: 'Check again' } ).click();
 		await area.locator( '.supporter-status', { hasText: 'Not confirmed yet: it can take a minute after paying' } ).waitFor();
@@ -1174,7 +1180,7 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		assert.equal( new URL( page.url() ).search, '', 'the address still says thanks' );
 		// The webhook hasn't arrived yet: it's asked again a few seconds on.
 		await page.waitForFunction( () => window.drive.supporter.me );
-		assert.equal( await locked( page ), 4 );
+		assert.equal( await locked( page ), LOCKED );
 		page.state.me = { ...ALICE, supporter: true };
 		await page.locator( '#toast', { hasText: 'Thanks! Supporter Pass unlocked' } ).waitFor( { timeout: 15000 } );
 		assert.equal( await locked( page ), 0 );
@@ -1200,7 +1206,7 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		await area.locator( 'button', { hasText: 'Sign out' } ).click();
 		await area.locator( '.stub-google' ).waitFor();
 		assert.equal( page.asked.signOuts, 1 );
-		assert.equal( await locked( page ), 4 );
+		assert.equal( await locked( page ), LOCKED );
 		await page.locator( '#toast', { hasText: 'Signed out' } ).waitFor();
 		assert.deepEqual( page.errors, [] );
 		await page.context().close();
@@ -1230,7 +1236,7 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		assert.equal( await mode( page ), 'paused' );
 		await account.locator( 'button', { hasText: 'Sign out' } ).click();
 		await account.locator( '.stub-google' ).waitFor();
-		assert.equal( await page.locator( '#pause .vehicle.locked' ).count(), 4 );
+		assert.equal( await page.locator( '#pause .vehicle.locked' ).count(), LOCKED );
 		await page.locator( '#pause .resume' ).click();
 		await page.waitForFunction( () => window.drive.mode === 'driving' );
 		assert.deepEqual( page.errors, [] );
@@ -1374,7 +1380,7 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 			await page.locator( '.spots button', { hasText: 'Times Square' } ).click();
 			await flown( page );
 			await driveHere( page );
-			assert.equal( await locked( page ), 4, why );
+			assert.equal( await locked( page ), LOCKED, why );
 			assert.deepEqual( page.errors, [], why );
 			await page.context().close();
 
