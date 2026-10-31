@@ -7,6 +7,7 @@ import { makeMonster, MONSTER_DRIVE } from './monster.js';
 // the pass (pro.js). Each has its tuning ( drive, see drive.js specFor), the colour it comes in (an
 // id in paint.js's SWATCHES), and a little drawing for the picker in place of a photo, its paint in
 // the parts marked data-paint (which the Garage recolours).
+// Their ids are also in catalog.js's PASS_RIDES, which the Worker's leaderboard accepts.
 
 export const PRO_RIDES = [
 	{
