@@ -119,12 +119,19 @@ default. Everything locked asks `isPro()` and follows `onProChange`; the payment
 `setPro( true )` for a visitor who has the pass. For testing, `?pro=1` in the address turns it on, but
 only when the page is on `localhost` or `127.0.0.1` (`testPass` decides), never on worlddrive.app.
 
-**Locked things** show a small **⭐ Supporter Pass** badge, and picking one opens the pass's sheet
+**Locked things** show a small **⭐ Supporter Pass** badge (in the Garage, a ⭐ on each locked choice
+under one line saying what the stars mean), and picking one opens the pass's sheet
 instead (`src/drive-app/pass.js`): what the pass is and what comes with it (the four rides, the
 Garage's extras, a ⭐ by your name on the leaderboard, 30 drives a day instead of 8) and a **Coming
 soon** button, which the payments code replaces (`buyArea()`). The sheet also opens from **⭐ Supporter
 Pass** under the rides on the globe and in the pause menu. A ride or a look saved while the pass was
-on falls back to the go-kart, or to the free choices, without it.
+on falls back to the go-kart, or to the free choices, without it. Nothing comes up by itself: the
+sheet only opens when something locked, or one of those buttons, is picked.
+
+**For the payments work:** the leaderboard's Worker only takes runs in the free rides (`VEHICLES` in
+`worker/drive/scores.js` is the go-kart and the library trucks), so the pass rides' ids
+(`sports-coupe`, `monster-truck`, `city-bus`, `hovercraft`, in `src/drive-app/rides/index.js`) need
+adding there. Until then a run in one is answered 400 and the page quietly doesn't post it.
 
 ### The four rides
 
@@ -135,13 +142,15 @@ place of its constants: see `HANDLING` there; vehicles without it handle as befo
 | Ride | Size | Top speed | Handling |
 | --- | --- | --- | --- |
 | Sports coupe | 4.4 × 1.9 m | 195 km/h | Quick (0 to 100 in 2.6 s, the kart's 5.2), grips hard, turns in sharply, long wide drifts |
-| Monster truck | 5.4 × 3.5 m, 3.4 m tall | 125 km/h | Thrown about twice as high by the same hit (gravity at 0.75 in the air, launches × 1.3), quicker to flip and landing up to 55° off upright, bouncing on soft springs; its bumpers are 1.5 m up, so it drives up over cars, barriers and kerbs |
+| Monster truck | 5.4 × 3.5 m, 3.4 m tall | 125 km/h | Thrown about twice as high by the same hit (gravity at 0.75 in the air, launches × 1.3), quicker to flip than its size would make it (as quick as the kart) and landing up to 55° off upright, bouncing on soft springs; its bumpers are 1.5 m up, so it drives up over cars, barriers and kerbs |
 | City bus | 12 × 2.55 m, 3.2 m tall | 90 km/h | Slow away (22 km/h after 3 s), rolls on and on off the gas, turns wide; barely thrown up by a crash, slow to turn in the air, and squashes and shakes the view the most |
 | Hovercraft | 4.2 × 2.1 m | 135 km/h | No wheels: it floats 16 cm up on its skirt (water is just more ground to it), slides wide through every turn (about 50° at 50 km/h, under 10° for the others), glides on and stops slowly, and bounces on its cushion |
 
 Wheels spin and front wheels steer (the monster truck steers all four, the back ones the other way);
 the monster truck's body rides on springs that sink and rebound as it lands and lean it out of
-turns; the hovercraft bobs, its fan spins up with the gas and its rudders follow the steering. Each
+turns; the hovercraft bobs, its fan spins up with the gas and its rudders follow the steering.
+Nothing turns in the air faster than the kart, whatever its handling: the leaderboard's limits
+(`SCORING` in `worker/drive/scores.js`) take the kart's rate as the most there is. Each
 has a driver: behind tinted glass in the coupe and the truck, at the front of the bus (with its
 passengers), in the open on the hovercraft. They follow the free rides in the picker with a drawing
 each (in their paint) and the badge until the pass is on.
@@ -159,24 +168,29 @@ turntable (drag to turn it; **▶ Boost** shows its flame and trail), and for ea
 | Decal | None | Racing stripes, a number (0 to 99), flames, checker |
 | Rims (a hovercraft's trim) | Silver, graphite | Gold, white, red, blue, lime, pink |
 | Boost flame | Orange | Blue, green, purple, pink, rainbow |
-| Trail (boosting or flying) | None | Smoke (in 8 colours), sparkle, rainbow ribbon |
+| Trail (boosting or flying) | None | Smoke (in 8 colours), sparkle, rainbow ribbon (six bands side by side) |
 
 Choices are kept for each ride in this browser (`world-drive.garage` in localStorage) and put on
-whenever it's driven; picked while paused they're on it as soon as it drives on. Decals are projected
+whenever it's driven; picked while paused they're on it as soon as it drives on. A browser that keeps
+nothing (site data blocked) still wears them for the visit, and a damaged value there is simply
+replaced by the next choice. Decals are projected
 onto the bodywork through boxes each ride gives (its `userData.decals`). The trucks from the library
 keep their own paint: only their flame and trail change. A ride in the colour and finish it came in
 keeps its own materials, so the kart nobody has painted is just as it was. The trails are cheap: a
 pool of sprites, or one ribbon whose buffers are rewritten in place, nothing made each frame. On the
 test pad (software rendering in the test's browser), the booster's flame made a frame about 7 %
 slower and a trail behind it a few per cent more again; the driving and its effects took 0.2 to
-0.3 ms a frame with or without them.
+0.3 ms a frame with or without them. While the Garage is open the world behind it isn't drawn (its
+turntable is, with a renderer of its own): on a phone, where it fills the screen, drawing both took
+two to four times as long a frame.
 
 `node --test scripts/test-drive-pro-ui.mjs` tries all of this on the test pad with no key: the locked
 rides and choices opening the sheet, `?pro=1` counting only on this computer, the free kart
 unchanged, each ride driving, drifting, thrown up by a wall and landing, their handling measured
 against each other, the hovercraft hovering with no wheels, the monster truck over a car, the
-Garage's choices on the ride and kept across a reload, the frame time with trails, and the Garage on
-a phone.
+Garage's choices on the ride and kept across a reload (and still made with a damaged saved value,
+or none kept at all), the world not drawn behind the Garage, the frame time with trails, nothing
+turning in the air faster than the kart, and the Garage and the locked rides' badges on a phone.
 
 ## What a visit costs, and how it's capped
 
