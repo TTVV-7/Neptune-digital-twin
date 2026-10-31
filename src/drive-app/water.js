@@ -20,12 +20,12 @@ import { enuToLocal } from '../geo.js';
 //   deck has the water below it, and a roof the street.
 //
 // Measured on Google's tiles in Vancouver, San Francisco, Sydney, Paris, Los Angeles, Las Vegas,
-// New York, Amsterdam, Venice, Hong Kong, Monaco, Geneva, London, Chicago, Rio, Turin and the
-// Bonneville Salt Flats (docs/world-drive.md), it never took a road, a car park, an apron, a
-// field, a court, a beach, a plaza, a roof or a bridge's deck for water, and found most open
-// water. It prefers missing a little water to a false splash: what it can't be sure of (a ray that
-// finds nothing, a picture it can't read) isn't water. Nor is water within a ring's reach of a
-// shore, a pier or a ship, which it can't tell from an even grey square; there it says it can't
+// New York, Amsterdam, Venice, Hong Kong, Monaco, Geneva, London, Chicago, Rio, Turin, Tokyo and
+// the Bonneville Salt Flats (docs/world-drive.md), it never took a road, a car park, an apron, a
+// field, a lawn, a court, a beach, a plaza, a roof or a bridge's deck for water, and found most
+// open water. It prefers missing a little water to a false splash: what it can't be sure of (a ray
+// that finds nothing, a picture it can't read) isn't water. Nor is water within a ring's reach of
+// a shore, a pier or a ship, which it can't tell from an even grey square; there it says it can't
 // tell, rather than that it's dry, so nothing is put back or put down there as if it were dry
 // ground (drive.js's trail back from a splash, boost pads), and says where the water it found
 // past the edge is (drive.js takes that for water when the vehicle came down into it, off a quay
@@ -33,9 +33,9 @@ import { enuToLocal } from '../geo.js';
 // lowest round about; a colour in between (a river's brown, or grass's) on level ground that's
 // the lowest round about can't be told, and a colour only water has (the turquoise of a lagoon, a
 // clear lake or the sea by the surf, which Google draws from photographs, beds and all, neither
-// level nor even) is never dry. The colours are read from a small copy of each tile's picture, drawn once onto a canvas and
-// kept as long as the picture is. It looks at the cheapest things first, so on most ground it's
-// done after one ray or seven.
+// level nor even) is never dry. The colours are read from a small copy of each tile's picture,
+// drawn once onto a canvas and kept as long as the picture is. It looks at the cheapest things
+// first, so on most ground it's done after one ray or seven.
 
 const DOWN = new Vector3( 0, - 1, 0 );
 // The copy of a tile's picture (px a side): a texel is a metre or two on the ground nearby.
@@ -198,9 +198,9 @@ export function createWater( ground ) {
 		}
 
 		const open = level( round( MID, east, north, h, colours ) ) && even( colours );
-		// A ray that finds nothing (far below, or nothing loaded) counts as lower.
 		const farColours = [];
 		const far = round( FAR, east, north, h, farColours );
+		// A ray that finds nothing (far below, or nothing loaded) counts as lower.
 		if ( ! far.every( dh => dh !== null && dh >= - LOWER ) ) return dry;
 		if ( open && waterLike( colour ) ) return { level: h, dry: false };
 		// Teal or olive grey: water if the far ring is too wherever it's level with it (over that,
