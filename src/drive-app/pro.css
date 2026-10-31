@@ -44,8 +44,10 @@
 	height: 100%;
 }
 
-/* A pass ride: the badge across its top edge, smaller for the narrow cards. */
+/* A pass ride: the badge across its top edge, smaller for the narrow cards. (Shown even where
+   style.css hides a card's other words, on a phone.) */
 .vehicle .pro-badge {
+	display: inline-flex;
 	position: absolute;
 	top: -7px;
 	left: 50%;
@@ -590,6 +592,12 @@ dialog#garage {
 	#garage .done {
 		min-width: 0;
 		flex: 1;
+	}
+
+	/* A pass ride's drawing as small as the other cards' pictures. */
+	.vehicle .ride-icon {
+		width: 54px;
+		height: 36px;
 	}
 
 	/* The globe's sheet has little height to spare: its rides go in one row that scrolls sideways. */
