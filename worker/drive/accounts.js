@@ -2,7 +2,7 @@ import { verifyIdToken } from '../google.js';
 import { HttpError, isObject, json, noContent, randomToken, readJson, sha256Hex } from '../http.js';
 import { SESSION_SECONDS, profileFrom, sessionCookies, testCertsUrl } from '../sessions.js';
 import { PERIODS, forgetBoards } from './boards.js';
-import { authenticate, credentials, database } from './players.js';
+import { authenticate, credentials, database, takeTurn } from './players.js';
 import { isSupporter, purchaseFor } from './supporter.js';
 import { googleClientId } from './settings.js';
 
@@ -15,9 +15,15 @@ import { googleClientId } from './settings.js';
 // Only the SHA-256 of the cookie's token is kept. Anyone with a Google account can sign in.
 
 const cookies = sessionCookies( 'wd_session' );
+// Sign-ins, and players linked, a visitor may make in a day (counted as the leaderboard's names are,
+// limits.js). A Google token can be sent again for the hour it's good for, and each sign-in is a new
+// session kept for 30 days, so this keeps a script from filling the database with them; a session
+// lasts a month, so nobody else comes near it (a whole school on one address included).
+const SIGN_INS_DAILY = 50;
+const LINKS_DAILY = 20;
 
 // POST /api/session { credential }: what /api/me says (now signed in), with the session cookie.
-export async function signIn( { request, env, url, now } ) {
+export async function signIn( { request, env, url, limits, now } ) {
 
 	const clientId = googleClientId( env );
 	if ( ! clientId ) throw new HttpError( 503, 'Sign-in isn\'t set up' );
@@ -26,6 +32,8 @@ export async function signIn( { request, env, url, now } ) {
 	if ( ! isObject( body ) ) throw new HttpError( 400, 'Bad request' );
 
 	const claims = await verifyIdToken( body.credential, { clientId, certsUrl: testCertsUrl( env ) } );
+	// Only a good token is counted.
+	await takeTurn( limits, request, 'sign-in', now, SIGN_INS_DAILY );
 	const { sub, email, name } = profileFrom( claims );
 	const account = await db.prepare( `INSERT INTO accounts ( google_sub, email, name, created_at, last_login_at ) VALUES ( ?1, ?2, ?3, ?4, ?4 )
 		ON CONFLICT ( google_sub ) DO UPDATE SET email = excluded.email, name = excluded.name, last_login_at = excluded.last_login_at
@@ -85,7 +93,7 @@ async function meFor( env, account ) {
 // only the browser that has the player can link it; linked again, it's the last account's.
 export async function linkPlayer( context ) {
 
-	const { request, env, url, now } = context;
+	const { request, env, url, limits, now } = context;
 	const account = await currentAccount( context );
 	if ( ! account ) throw new HttpError( 401, 'Sign in first' );
 	const db = database( env );
@@ -93,6 +101,7 @@ export async function linkPlayer( context ) {
 	if ( ! isObject( body ) ) throw new HttpError( 400, 'Bad request' );
 	const { id, secret } = credentials( body );
 	const player = await authenticate( db, id, secret );
+	await takeTurn( limits, request, 'link', now, LINKS_DAILY );
 	await db.prepare( 'UPDATE players SET account_id = ? WHERE id = ?' ).bind( account.id, id ).run();
 	// The ⭐ on today's, this week's and the all-time boards straight away (the boards of one place
 	// catch up within half a minute).

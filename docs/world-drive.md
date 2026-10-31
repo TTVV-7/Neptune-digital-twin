@@ -231,11 +231,13 @@ for the pass, and driving and the leaderboard never need it.
   email and name) is made or updated. The answer sets a session cookie for 30 days, made by the
   construction app's code (`worker/sessions.js`) under its own name: `__Host-wd_session`, `Secure`,
   `HttpOnly`, `SameSite=Lax`, `Path=/`. Only the SHA-256 of its token is kept (`sessions`).
-  `DELETE /api/session` signs that browser out. Anyone with a Google account can sign in.
+  `DELETE /api/session` signs that browser out. Anyone with a Google account can sign in, up to 50
+  times a day from one visitor (counted like the leaderboard's names), so a token sent again and
+  again for the hour it's good for can't fill the database with sessions.
 - `GET /api/me`: `{ signedIn, name?, email?, supporter, purchase: { enabled, link?, price?,
   clientReferenceId? } }`.
 - `POST /api/player/link { id, secret }`, signed in: the leaderboard player (proved by its secret, as
-  a rename is) becomes the account's (`players.account_id`).
+  a rename is) becomes the account's (`players.account_id`); 20 a day from one visitor.
 - **Stripe's webhook**, `POST /api/stripe/webhook` (`worker/drive/supporter.js`): the one route without
   the same-origin and JSON checks (it comes from Stripe's servers, not a page) and without a session.
   It proves itself with its `Stripe-Signature`, checked by the code the construction app's webhook

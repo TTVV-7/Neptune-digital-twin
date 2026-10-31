@@ -1210,6 +1210,23 @@ describe( 'World Drive Supporter Pass', () => {
 
 	} );
 
+	test( 'a visitor signs in at most 50 times a day; a bad token isn\'t counted', async () => {
+
+		const ip = nextIp();
+		const credential = await makeToken( googleKey, { sub: '1009', email: 'busy@example.com', name: 'Busy' } );
+		const forged = await makeToken( otherKey, { sub: '1009', email: 'busy@example.com' } );
+		assert.equal( ( await send( 'POST', '/api/session', { credential: forged }, { ip } ) ).status, 401 );
+		for ( let i = 1; i <= 50; i ++ ) assert.equal( ( await send( 'POST', '/api/session', { credential }, { ip } ) ).status, 200, `sign-in ${ i }` );
+		const over = await send( 'POST', '/api/session', { credential }, { ip } );
+		assert.equal( over.status, 429 );
+		assert.equal( over.headers.get( 'Set-Cookie' ), null );
+		assert.ok( over.json.retryAfter > 0 );
+		// From somewhere else, and the next day, it's fine.
+		assert.equal( ( await send( 'POST', '/api/session', { credential } ) ).status, 200 );
+		assert.equal( ( await send( 'POST', '/api/session', { credential }, { ip, time: PASS_DAY + DAY } ) ).status, 200 );
+
+	} );
+
 	test( 'a session lasts 30 days, and signing out ends it', async () => {
 
 		assert.equal( ( await me( alice.cookie, PASS_DAY + 29 * DAY ) ).json.signedIn, true );
