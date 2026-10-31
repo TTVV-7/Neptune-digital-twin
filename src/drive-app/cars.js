@@ -103,7 +103,7 @@ export async function loadCars() {
 		thumb: entry.thumb ? new URL( `${ BASE }${ entry.thumb }`, document.baseURI ).href : null,
 		credit: entry.source,
 		// What was done to it, for the credits: CC BY asks for that to be said.
-		changes: 'compressed, rescaled and its wheels made to turn',
+		changes: `compressed, rescaled${ entry.plainLamps ? ', its lamps made plain' : '' } and its wheels made to turn`,
 		topSpeed: car.drive.topSpeed,
 		load: loader => loadCar( loader, car, entry ),
 		item: { ...car, file: entry.file },

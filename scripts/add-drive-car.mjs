@@ -3,7 +3,7 @@
 //
 //   npm run add-drive-car -- <sketchfab url | uid> --id dune-buggy --length 4.2 [--front=+z] \
 //     [--max-texture 1024] [--simplify 0.5] [--lit] [--paint Body,Trim] [--rims Rim] [--part Car02] \
-//     [--file local.glb] [--credit "Decal by ..."]
+//     [--lamps TailLamp] [--file local.glb] [--credit "Decal by ..."]
 //
 // Like add-asset.mjs, which fills the construction app's library: only downloadable Sketchfab
 // models under CC0 or CC Attribution, compressed (meshopt geometry, WebP textures no bigger than
@@ -21,6 +21,8 @@
 // - --lit draws a model made unlit (KHR_materials_unlit) as lit paint, like the rest of the world.
 // - --paint names the materials that are bodywork the Garage may repaint, and --rims those that
 //   are rims (only inside the wheels): see paint.js. A textured model has none.
+// - --lamps names the materials of lamps drawn as a real maker draws theirs (three bars a side, say,
+//   which is that maker's mark): each side's become one plain lamp, the box round them.
 //
 // The model's description is printed: read it for anyone else to credit (--credit) and for extra
 // conditions. Names, blurbs and handling are World Drive's own, in src/drive-app/cars.js.
@@ -63,6 +65,7 @@ const { values: opts, positionals } = parseArgs( {
 		paint: { type: 'string' },
 		rims: { type: 'string' },
 		part: { type: 'string' },
+		lamps: { type: 'string' },
 		file: { type: 'string' },
 		credit: { type: 'string' },
 	},
@@ -79,6 +82,7 @@ if ( simplifyRatio !== null && ! ( simplifyRatio > 0 && simplifyRatio < 1 ) ) fa
 const maxTexture = Number( opts[ 'max-texture' ] );
 const painted = new Set( opts.paint?.split( ',' ).map( name => name.trim() ) ?? [] );
 const rims = new Set( opts.rims?.split( ',' ).map( name => name.trim() ) ?? [] );
+const lamps = new Set( opts.lamps?.split( ',' ).map( name => name.trim() ) ?? [] );
 
 await MeshoptEncoder.ready;
 await MeshoptDecoder.ready;
@@ -152,6 +156,13 @@ function rotateVector( [ x, y, z ] ) {
 
 }
 
+// Lamps that are a real maker's mark made plain (--lamps), before the wheels are looked for, as
+// what's made of the model from here on is made of its pieces.
+const buffer = root.listBuffers()[ 0 ] ?? doc.createBuffer();
+const plain = parts.filter( ( { prim } ) => lamps.has( prim.getMaterial()?.getName() ) );
+if ( lamps.size && ! plain.length ) fail( `No part is made of ${ [ ...lamps ].join( ' or ' ) }: it has ${ root.listMaterials().map( material => material.getName() ).join( ', ' ) }.` );
+for ( const { prim } of plain ) plainLamps( prim );
+
 // 4. Find the wheels.
 const pieces = parts.flatMap( ( { prim } ) => piecesOf( prim ) );
 const all = boxOf( pieces.map( piece => piece.box ) );
@@ -220,7 +231,6 @@ axles.forEach( ( axle, i ) => {
 } );
 
 // 5. Rebuild the scene as body and wheels, the wheels' geometry about their axles.
-const buffer = root.listBuffers()[ 0 ] ?? doc.createBuffer();
 const carNode = doc.createNode( opts.id );
 const bodyMesh = doc.createMesh( 'body' );
 carNode.addChild( doc.createNode( 'body' ).setMesh( bodyMesh ) );
@@ -283,6 +293,8 @@ const entry = {
 	paintable: painted.size > 0,
 	// One car out of a set of them (--part).
 	...( opts.part ? { part: opts.part } : {} ),
+	// Its lamps made plain (--lamps), which the credits say.
+	...( plain.length ? { plainLamps: true } : {} ),
 	triangles,
 	sizeKB: Math.round( output.byteLength / 1024 ),
 	source,
@@ -361,6 +373,65 @@ function piecesOf( prim ) {
 	}
 
 	return [ ...byRoot.values() ];
+
+}
+
+// `prim` (lamps, see --lamps) as one box on each side of the car's middle, round what was there:
+// positions and normals only, all a plain lamp needs.
+function plainLamps( prim ) {
+
+	const position = prim.getAttribute( 'POSITION' );
+	const sides = new Map();
+	const v = [];
+	for ( let i = 0; i < position.getCount(); i ++ ) {
+
+		position.getElement( i, v );
+		const side = v[ 0 ] < 0 ? 'left' : 'right';
+		const box = sides.get( side ) ?? { min: [ ...v ], max: [ ...v ] };
+		for ( let axis = 0; axis < 3; axis ++ ) {
+
+			box.min[ axis ] = Math.min( box.min[ axis ], v[ axis ] );
+			box.max[ axis ] = Math.max( box.max[ axis ], v[ axis ] );
+
+		}
+
+		sides.set( side, box );
+
+	}
+
+	const positions = [];
+	const normals = [];
+	const indices = [];
+	for ( const { min, max } of sides.values() ) {
+
+		// Each face: the four corners across the two other axes, which turn about this one the right
+		// way round (y then z about x, z then x about y, x then y about z), so it faces out.
+		for ( const [ axis, sign ] of [ [ 0, - 1 ], [ 0, 1 ], [ 1, - 1 ], [ 1, 1 ], [ 2, - 1 ], [ 2, 1 ] ] ) {
+
+			const u = ( axis + 1 ) % 3;
+			const w = ( axis + 2 ) % 3;
+			const first = positions.length / 3;
+			for ( const [ a, b ] of [ [ 0, 0 ], [ 1, 0 ], [ 1, 1 ], [ 0, 1 ] ] ) {
+
+				const corner = [];
+				corner[ axis ] = sign < 0 ? min[ axis ] : max[ axis ];
+				corner[ u ] = a ? max[ u ] : min[ u ];
+				corner[ w ] = b ? max[ w ] : min[ w ];
+				positions.push( ...corner );
+				normals.push( ...[ 0, 1, 2 ].map( k => k === axis ? sign : 0 ) );
+
+			}
+
+			indices.push( ...( sign > 0 ? [ 0, 1, 2, 0, 2, 3 ] : [ 0, 2, 1, 0, 3, 2 ] ).map( i => first + i ) );
+
+		}
+
+	}
+
+	for ( const semantic of prim.listSemantics() ) prim.setAttribute( semantic, null );
+	prim.setAttribute( 'POSITION', doc.createAccessor().setType( 'VEC3' ).setBuffer( buffer ).setArray( new Float32Array( positions ) ) );
+	prim.setAttribute( 'NORMAL', doc.createAccessor().setType( 'VEC3' ).setBuffer( buffer ).setArray( new Float32Array( normals ) ) );
+	prim.setIndices( doc.createAccessor().setType( 'SCALAR' ).setBuffer( buffer ).setArray( new Uint16Array( indices ) ) );
 
 }
 
@@ -487,7 +558,7 @@ function credits( list ) {
 	const lines = list.map( car => `- \`${ car.file }\`: ${ car.part ? 'one car from ' : '' }"[${ car.source.title }](${ car.source.url })" by ` +
 		`${ car.source.authorUrl ? `[${ car.source.author }](${ car.source.authorUrl })` : car.source.author } on ${ car.source.site }, ` +
 		`licensed [${ car.source.license }](${ car.source.licenseUrl }).${ car.source.extraCredit ? ` ${ car.source.extraCredit }.` : '' } ` +
-		'Compressed, rescaled and its wheels made separate parts for World Drive.' );
+		`Compressed, rescaled${ car.plainLamps ? ', its lamps made plain' : '' } and its wheels made separate parts for World Drive.` );
 	return '# World Drive cars: credits\n\nThese models come from Sketchfab under the licences listed, and are published with World Drive ' +
 		'only (not the construction app\'s library). Keep this file with them; World Drive also credits each in its About box and ' +
 		`its ride picker. The rides built in code (src/kart.js, src/drive-app/rides/) are part of this project.\n\n${ lines.join( '\n' ) }\n`;

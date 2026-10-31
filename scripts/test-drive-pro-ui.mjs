@@ -1083,7 +1083,7 @@ describe( 'World Drive\'s cars', () => {
 		assert.equal( await panel.locator( '.vehicle.picked b' ).textContent(), 'Muscle car' );
 		// Its picture, drawn for the picker, and the credit its licence asks for, under the rides.
 		assert.match( await panel.locator( '.vehicle[data-id="muscle-car"] img' ).getAttribute( 'src' ), /\/cars\/thumbs\/muscle-car\.webp$/ );
-		assert.equal( await panel.locator( '.credit' ).textContent(), 'Model: "Classic Muscle car" by Lexyc16, CC BY 4.0; compressed, rescaled and its wheels made to turn.' );
+		assert.equal( await panel.locator( '.credit' ).textContent(), 'Model: "Classic Muscle car" by Lexyc16, CC BY 4.0; compressed, rescaled, its lamps made plain and its wheels made to turn.' );
 		await shot( page, 'cars-globe-picker' );
 		// About credits all six, each with its link and its licence's.
 		await page.locator( '#globe-ui .about-open' ).click();

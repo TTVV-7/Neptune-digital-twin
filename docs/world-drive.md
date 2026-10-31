@@ -235,7 +235,12 @@ its name, blurb, tuning and whether it needs the pass in `cars.js` and its id in
   rigged, is turned away with the reason;
 - `--paint` and `--rims` name the materials the Garage may repaint (the muscle car's body and rims);
   `--lit` shades a model drawn unlit, as the rest of the world is;
+- `--lamps` names the material of lamps drawn as a real maker draws theirs (three bars a side is one
+  maker's mark): each side's become one plain lamp, the box round them, and the credits say so;
 - compresses it (meshopt, WebP textures up to `--max-texture`, 1024; `--simplify` if it's heavy).
+
+The muscle car, say, was `--id muscle-car --length 4.7 --front=+z --paint Material --rims Material.001
+--lamps Material.004`.
 
 `drive-car-thumbs.mjs` draws every picture the same way (World Drive's dev server in Chromium, the
 car from ahead and to its left, on nothing), whatever Sketchfab's own pictures were.
@@ -247,7 +252,7 @@ couldn't be made to turn, and other people's concepts:
 
 | Model | Author | Verdict |
 | --- | --- | --- |
-| [Classic Muscle car](https://sketchfab.com/3d-models/classic-muscle-car-641efc889e5f4543bae51d0922e6f4b3) | Lexyc16 | ✔ Muscle car: a generic 1970s coupe, no maker's details or badges; separate wheels; plain colours, so paintable; 5,600 triangles |
+| [Classic Muscle car](https://sketchfab.com/3d-models/classic-muscle-car-641efc889e5f4543bae51d0922e6f4b3) | Lexyc16 | ✔ Muscle car: a generic 1970s coupe with no badges, but its tail lamps were three bars a side, a well-known maker's mark, so the importer makes each side one plain lamp (`--lamps`); separate wheels; plain colours, so paintable; 5,500 triangles |
 | [Green Bug Stylized Scifi Car Free](https://sketchfab.com/3d-models/green-bug-stylized-scifi-car-free-34f1a7734d474b34a8291f613a581ccb) | ferofluid | ✔ Neon racer: an original sci-fi design, separate wheels, clean textures (no writing); 27,000 |
 | [Blade Air Stylized Scifi Car Free](https://sketchfab.com/3d-models/blade-air-stylized-scifi-car-free-8444b0a772624900a68049e270a01c29) | ferofluid | ✔ Night cruiser: original; wheels separated by shape; 15,000 |
 | [Dune Buggy "jump"](https://sketchfab.com/3d-models/dune-buggy-jump-c9838cac69904010923d5024168b0893) | XP_Frost | ✔ Dune buggy: a tube-frame buggy of no make (a race number only); wheels separated by shape; 29,000 |

@@ -181,8 +181,9 @@
 			}
 		],
 		"paintable": true,
-		"triangles": 5594,
-		"sizeKB": 73,
+		"plainLamps": true,
+		"triangles": 5498,
+		"sizeKB": 72,
 		"source": {
 			"site": "Sketchfab",
 			"id": "641efc889e5f4543bae51d0922e6f4b3",
