@@ -88,10 +88,15 @@ export function defaultLook( vehicle ) {
 
 }
 
+// What's been chosen on this visit, by ride id. Kept here as well as in localStorage so the Garage
+// still works for the visit in a browser that keeps nothing (site data blocked, some private
+// windows), where reading back what was just saved finds nothing.
+const chosen = new Map();
+
 // What this browser has chosen for `vehicle`, over its defaults.
 export function savedLook( vehicle ) {
 
-	const saved = storage( () => JSON.parse( localStorage.getItem( KEY ) ) )?.[ vehicle.id ];
+	const saved = chosen.get( vehicle.id ) ?? stored()[ vehicle.id ];
 	const look = defaultLook( vehicle );
 	if ( ! saved || typeof saved !== 'object' ) return look;
 	for ( const [ part, list ] of Object.entries( LISTS ) ) if ( list.some( choice => choice.id === saved[ part ] ) ) look[ part ] = saved[ part ];
@@ -102,13 +107,18 @@ export function savedLook( vehicle ) {
 
 export function saveLook( vehicle, look ) {
 
-	storage( () => {
+	chosen.set( vehicle.id, { ...look } );
+	storage( () => localStorage.setItem( KEY, JSON.stringify( { ...stored(), [ vehicle.id ]: look } ) ) );
 
-		const all = JSON.parse( localStorage.getItem( KEY ) ) ?? {};
-		all[ vehicle.id ] = look;
-		localStorage.setItem( KEY, JSON.stringify( all ) );
+}
 
-	} );
+// Every ride's saved look, { id: look }. Anything else there (a damaged value, or one from some
+// other version) counts as nothing saved, so the next choice replaces it rather than failing on it
+// for good.
+function stored() {
+
+	const all = storage( () => JSON.parse( localStorage.getItem( KEY ) ) );
+	return all && typeof all === 'object' && ! Array.isArray( all ) ? all : {};
 
 }
 
