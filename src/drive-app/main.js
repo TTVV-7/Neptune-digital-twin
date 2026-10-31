@@ -13,6 +13,7 @@ import { Ground } from './spawn.js';
 import { createTestGlobe, placeEarth } from './test-globe.js';
 import { loadVehicle, loadVehicles, specOf } from './vehicles.js';
 import { setUpPanel } from './panel.js';
+import { setUpGarage } from './garage.js';
 import { setUpLeaderboard } from './leaderboard.js';
 import { formatLatLon, rememberPlace } from './places.js';
 import * as screens from './screens.js';
@@ -175,6 +176,8 @@ async function start( { key, left = null, visit = null, worker = true } ) {
 	} );
 	panel.vehiclePicker( $( 'pause' ).querySelector( '.vehicles' ), vehicle => swapVehicle( vehicle ) );
 	globe.onPick = place => pinAt( { ...place, name: 'Dropped pin', region: '' } );
+	// The Garage and the Supporter Pass, by both ride pickers (garage.js, pass.js).
+	const garage = setUpGarage( { vehicles, panel, models, current: () => state.entry && { entry: state.entry, vehicle: state.vehicle } } );
 
 	// The leaderboard, from the trophy on the globe and in the pause menu. "Only here" is the place
 	// being driven, or on the globe the one pinned.
@@ -587,7 +590,9 @@ async function start( { key, left = null, visit = null, worker = true } ) {
 		camera.updateMatrixWorld();
 		tiles?.update();
 		models.update( dt );
-		renderer.render( scene, camera );
+		// Not while the Garage is open: its turntable draws instead, and on a phone it covers the
+		// screen, so drawing the world behind it as well would only halve the frame rate.
+		if ( ! garage.isOpen ) renderer.render( scene, camera );
 		globe.capture();
 
 		slow -= dt;
@@ -616,6 +621,7 @@ async function start( { key, left = null, visit = null, worker = true } ) {
 	// For poking around from the browser console, and for the tests.
 	window.drive = {
 		scene, camera, renderer, tiles, globe, models, driver, ground, panel, leaderboard: board,
+		garage,
 		get mode() {
 
 			return state.mode;
