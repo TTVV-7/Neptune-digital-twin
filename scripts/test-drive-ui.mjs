@@ -9,8 +9,12 @@
 // leaderboard (its answers made here): the trophy and the panel, tabs, your own row, picking a name
 // and renaming, a landed jump posting the run (the card asking the first time, never stopping the
 // drive), each place's best posted as well as the day's, a dead connection changing nothing, and all
-// of it on a phone. Every request that isn't
-// to the local server is blocked, so nothing reaches Google, Cloudflare or OpenStreetMap.
+// of it on a phone. And the Supporter Pass's buying (its answers made here, Google's sign-in script
+// stood in for): signing in from the pass's sheet, the pause menu and the used-up screen, Buy's link
+// saying whose it is, unlocking when the window has focus again and on ?supporter=thanks, on every
+// load for a supporter, signing out, the leaderboard player linked, the ⭐ on the board, and "Coming
+// soon" with no sign-in or no Worker answering, the free game unchanged. Every request that isn't to
+// the local server is blocked, so nothing reaches Google, Cloudflare, Stripe or OpenStreetMap.
 //
 // Needs Playwright with Chromium, as test-accounts-ui.mjs does. TEST_VITE_PORT picks the port;
 // TEST_SCREENSHOTS=<folder> saves pictures.
@@ -20,7 +24,7 @@ import { mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
-import { startVite } from './worker-harness.mjs';
+import { GOOGLE_STUB, startVite } from './worker-harness.mjs';
 
 const require = createRequire( import.meta.url );
 const PORT = Number( process.env.TEST_VITE_PORT ) || 5521;
@@ -1016,6 +1020,365 @@ describe( 'World Drive leaderboard', () => {
 		assert.ok( await page.locator( '#pause' ).isVisible() );
 		assert.deepEqual( page.errors, [] );
 		await page.context().close();
+
+	} );
+
+} );
+
+// --- the Supporter Pass's buying and signing in -----------------------------------------------
+
+const CLIENT = 'test-client.apps.googleusercontent.com';
+// Made up, in Stripe's format: never opened (window.open is stood in for, and nothing off this
+// machine is reached).
+const PASS_LINK = 'https://buy.stripe.com/test_madeUpLink000';
+const SIGNED_OUT = { signedIn: false, supporter: false, purchase: { enabled: true, link: PASS_LINK, price: 'CA$4.99' } };
+const ALICE = { signedIn: true, name: 'Alice Example', email: 'alice@example.com', supporter: false, purchase: { ...SIGNED_OUT.purchase, clientReferenceId: '42' } };
+const PLAYER = { id: 'P1ayer-id_000000', secret: 'S'.repeat( 32 ), name: 'Speed Demon' };
+
+// The test pad with sign-in set up, and the Worker's side of it answered here. me: what /api/me
+// says (page.state.me, which a test changes as the Worker would, a purchase arriving say); a good
+// sign-in (window.testCredential 'good-token') makes it signedIn. page.asked has what was sent, and
+// page.google how often Google's script (stood in for, harness's GOOGLE_STUB) was loaded. config and
+// visit: /api/config (maps off, the test pad) and /api/visit (never answered) as newPage takes them.
+async function supporterPage( { me = SIGNED_OUT, signedInAs = ALICE, clientId = CLIENT, player = null, config = RESTING, visit = route => route.abort(), ...options } = {} ) {
+
+	const page = await newPage( { ...options, api: { config: { ...config, googleClientId: clientId }, turnstile: true, visit } } );
+	// Never a page of Stripe's: Buy's new tab is only noted.
+	await page.context().route( /^https?:\/\/(?!127\.0\.0\.1)/, route => route.abort() );
+	await page.addInitScript( ( { player } ) => {
+
+		window.opened = [];
+		window.open = ( ...args ) => ( window.opened.push( args ), null );
+		if ( player ) localStorage.setItem( 'world-drive.player', JSON.stringify( player ) );
+
+	}, { player } );
+	const state = page.state = { me, signedInAs };
+	const asked = page.asked = { me: 0, sessions: [], signOuts: 0, links: [] };
+	page.google = 0;
+	const json = ( route, body, status = 200 ) => route.fulfill( { status, contentType: 'application/json', body: JSON.stringify( body ) } );
+	await page.route( 'https://accounts.google.com/gsi/client', route => {
+
+		page.google ++;
+		route.fulfill( { contentType: 'text/javascript', body: GOOGLE_STUB } );
+
+	} );
+	await page.route( `${ BASE }/api/me`, route => {
+
+		asked.me ++;
+		if ( state.me === 'down' ) return route.abort();
+		json( route, state.me );
+
+	} );
+	await page.route( `${ BASE }/api/session`, route => {
+
+		const request = route.request();
+		if ( request.method() === 'DELETE' ) {
+
+			asked.signOuts ++;
+			state.me = SIGNED_OUT;
+			return route.fulfill( { status: 204 } );
+
+		}
+
+		const { credential } = request.postDataJSON();
+		asked.sessions.push( { credential, type: request.headers()[ 'content-type' ] } );
+		if ( credential !== 'good-token' ) return json( route, { error: 'Sign-in failed' }, 401 );
+		state.me = state.signedInAs;
+		json( route, state.me );
+
+	} );
+	await page.route( `${ BASE }/api/player/link`, route => {
+
+		asked.links.push( route.request().postDataJSON() );
+		json( route, { id: PLAYER.id, name: PLAYER.name } );
+
+	} );
+	return page;
+
+}
+
+const locked = page => page.locator( '#globe-ui .vehicle.locked' ).count();
+const sheet = page => page.locator( '#pass .buy-area' );
+
+async function openPass( page ) {
+
+	await page.locator( '#globe-ui .pass-open' ).click();
+	await page.locator( '#pass' ).waitFor();
+
+}
+
+describe( 'World Drive Supporter Pass: buying and signing in', () => {
+
+	test( 'the sheet signs in with Google, then Buy opens the link saying whose it is', async () => {
+
+		const page = await supporterPage();
+		const { asked } = page;
+		await testPad( page );
+		await page.waitForFunction( () => window.drive.supporter.me );
+		assert.equal( await locked( page ), 4 );
+		// Google's script only once a sign-in button is on screen.
+		assert.equal( page.google, 0, 'Google\'s script loaded before anyone could sign in' );
+		await openPass( page );
+		const area = sheet( page );
+		await area.locator( '.stub-google' ).waitFor();
+		assert.equal( page.google, 1 );
+		assert.match( await area.textContent(), /Sign in to buy, so the pass is yours in any browser\. Bought it already\? Signing in brings it back\./ );
+		assert.equal( await area.locator( '.buy' ).count(), 0, 'Buy shows to someone signed out' );
+		await shot( page, 'pass-1-signed-out' );
+
+		// A token Google didn't sign, then a good one.
+		await page.evaluate( () => window.testCredential = 'forged' );
+		await area.locator( '.stub-google' ).click();
+		await area.locator( '.supporter-status', { hasText: 'Signing in didn\'t work. Try again.' } ).waitFor();
+		await page.evaluate( () => window.testCredential = 'good-token' );
+		await area.locator( '.stub-google' ).click();
+		await area.locator( '.buy' ).waitFor();
+		assert.deepEqual( asked.sessions, [ { credential: 'forged', type: 'application/json' }, { credential: 'good-token', type: 'application/json' } ] );
+		assert.equal( await area.locator( '.buy' ).textContent(), 'Buy for CA$4.99' );
+		assert.match( await area.textContent(), /Signed in as alice@example\.com · Restore purchases · Sign out/ );
+		await shot( page, 'pass-2-signed-in' );
+
+		await area.locator( '.buy' ).click();
+		const opened = await page.evaluate( () => window.opened );
+		assert.equal( opened.length, 1 );
+		const [ href, target, features ] = opened[ 0 ];
+		const url = new URL( href );
+		assert.equal( `${ url.origin }${ url.pathname }`, PASS_LINK );
+		assert.deepEqual( Object.fromEntries( url.searchParams ), { client_reference_id: '42', prefilled_email: 'alice@example.com' } );
+		assert.deepEqual( [ target, features ], [ '_blank', 'noopener' ] );
+		await area.locator( '.supporter-line', { hasText: 'Finish paying in the new tab' } ).waitFor();
+		assert.equal( await locked( page ), 4 );
+		// Asked before Stripe's word has come: it says so, rather than that there's no pass.
+		await area.locator( 'button', { hasText: 'Check again' } ).click();
+		await area.locator( '.supporter-status', { hasText: 'Not confirmed yet: it can take a minute after paying' } ).waitFor();
+
+		// Paid in the other tab: Stripe has told the Worker by the time this window has focus again.
+		page.state.me = { ...ALICE, supporter: true };
+		await page.evaluate( () => window.dispatchEvent( new Event( 'focus' ) ) );
+		await page.locator( '#toast', { hasText: 'Thanks! Supporter Pass unlocked' } ).waitFor();
+		await area.locator( '.supporter-thanks' ).waitFor();
+		assert.equal( await locked( page ), 0 );
+		assert.equal( await area.locator( '.buy' ).count(), 0 );
+		await shot( page, 'pass-3-unlocked' );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'back from Stripe on ?supporter=thanks: asked until it arrives, then unlocked, the address tidied', async () => {
+
+		const page = await supporterPage( { me: ALICE } );
+		await page.goto( `${ BASE }/?supporter=thanks` );
+		await page.locator( '#notice button', { hasText: 'Drive the test pad' } ).click();
+		await page.waitForFunction( () => window.drive?.mode === 'globe', null, { timeout: 30000 } );
+		assert.equal( new URL( page.url() ).search, '', 'the address still says thanks' );
+		// The webhook hasn't arrived yet: it's asked again a few seconds on.
+		await page.waitForFunction( () => window.drive.supporter.me );
+		assert.equal( await locked( page ), 4 );
+		page.state.me = { ...ALICE, supporter: true };
+		await page.locator( '#toast', { hasText: 'Thanks! Supporter Pass unlocked' } ).waitFor( { timeout: 15000 } );
+		assert.equal( await locked( page ), 0 );
+		assert.ok( page.asked.me >= 2 );
+		await page.context().close();
+
+	} );
+
+	test( 'a supporter\'s pass is back on every load, quietly; signing out locks it again', async () => {
+
+		const page = await supporterPage( { me: { ...ALICE, supporter: true } } );
+		for ( let load = 0; load < 2; load ++ ) {
+
+			await testPad( page );
+			await page.waitForFunction( () => document.querySelectorAll( '#globe-ui .vehicle.locked' ).length === 0, null, { timeout: 10000 } );
+			assert.doesNotMatch( await page.locator( '#toast' ).textContent(), /Supporter|Thanks/ );
+
+		}
+
+		await openPass( page );
+		const area = sheet( page );
+		assert.match( await area.textContent(), /You have the Supporter Pass\. Thanks for helping keep World Drive on the road!/ );
+		await area.locator( 'button', { hasText: 'Sign out' } ).click();
+		await area.locator( '.stub-google' ).waitFor();
+		assert.equal( page.asked.signOuts, 1 );
+		assert.equal( await locked( page ), 4 );
+		await page.locator( '#toast', { hasText: 'Signed out' } ).waitFor();
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'the pause menu signs in (restoring the pass) and out, and the drive goes on', async () => {
+
+		const page = await supporterPage( { signedInAs: { ...ALICE, supporter: true } } );
+		await testPad( page );
+		await page.locator( '.spots button', { hasText: 'Times Square' } ).click();
+		await flown( page );
+		await driveHere( page );
+		await page.keyboard.press( 'Escape' );
+		await page.locator( '#pause' ).waitFor();
+		const account = page.locator( '#pause .account' );
+		await account.locator( '.stub-google' ).waitFor();
+		assert.match( await account.textContent(), /Have the Supporter Pass\? Sign in to use it here\./ );
+		await shot( page, 'pass-4-pause-signed-out' );
+		await page.evaluate( () => window.testCredential = 'good-token' );
+		await account.locator( '.stub-google' ).click();
+		await account.locator( '.supporter-line', { hasText: 'Signed in as Alice Example · ⭐ Supporter Pass · Sign out' } ).waitFor();
+		assert.equal( await page.locator( '#pause .vehicle.locked' ).count(), 0 );
+		await page.locator( '#toast', { hasText: 'Signed in: Supporter Pass unlocked' } ).waitFor();
+		await shot( page, 'pass-5-pause-signed-in' );
+		// Still paused, and the drive goes on as ever.
+		assert.equal( await mode( page ), 'paused' );
+		await account.locator( 'button', { hasText: 'Sign out' } ).click();
+		await account.locator( '.stub-google' ).waitFor();
+		assert.equal( await page.locator( '#pause .vehicle.locked' ).count(), 4 );
+		await page.locator( '#pause .resume' ).click();
+		await page.waitForFunction( () => window.drive.mode === 'driving' );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'signed in, this browser\'s leaderboard player is linked to the account, once', async () => {
+
+		const page = await supporterPage( { me: ALICE, player: PLAYER } );
+		await testPad( page );
+		await page.waitForFunction( () => window.drive.supporter.me );
+		await page.waitForFunction( () => localStorage.getItem( 'world-drive.linked' ) );
+		assert.deepEqual( page.asked.links, [ { id: PLAYER.id, secret: PLAYER.secret } ] );
+		await testPad( page );
+		await page.waitForFunction( () => window.drive.supporter.me );
+		await page.waitForTimeout( 300 );
+		assert.equal( page.asked.links.length, 1, 'linked again on the next visit' );
+		// Signed out, the email in it goes from this browser.
+		await page.evaluate( () => window.drive.supporter.signOut() );
+		assert.equal( await page.evaluate( () => localStorage.getItem( 'world-drive.linked' ) ), null );
+		await page.context().close();
+
+	} );
+
+	test( 'a ⭐ by a supporter\'s name on the leaderboard', async () => {
+
+		const page = await leaderboardPage( { rows: [ { ...ROWS[ 0 ], supporter: true }, ROWS[ 1 ], { ...ROWS[ 2 ], supporter: 'yes' } ] } );
+		await testPad( page );
+		await page.locator( '#globe-ui .board-open' ).click();
+		const rows = page.locator( '#leaderboard .rows li' );
+		await rows.first().waitFor();
+		assert.deepEqual( await rows.locator( '.who b' ).allTextContents(), [ 'Ace⭐', 'Speed Demon', 'Zoë' ] );
+		const star = rows.first().locator( '.supporter-star' );
+		assert.equal( await star.getAttribute( 'aria-label' ), 'Supporter Pass' );
+		assert.equal( await star.getAttribute( 'title' ), 'Supporter Pass' );
+		assert.equal( await rows.locator( '.supporter-star' ).count(), 1 );
+		await shot( page, 'pass-6-board-star' );
+		await page.context().close();
+
+	} );
+
+	test( 'used up on this address: the screen signs in, and once the pass is here the visit is asked for again, once', async () => {
+
+		const usedUp = reason => ( { status: 429, contentType: 'application/json', body: JSON.stringify( { error: 'You\'ve had today\'s free drives', reason, retryAfter: 3600 } ) } );
+		// The second answer is the Worker's own refusal for another reason, so no Maps key is ever handed out here.
+		const mapsOff = { status: 503, contentType: 'application/json', body: '{"error":"Maps are off today"}' };
+		const usedUpPage = async ( answers, options ) => {
+
+			const page = await supporterPage( { ...options, config: { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true }, visit: route => {
+
+				page.visits ++;
+				route.fulfill( answers[ Math.min( page.visits, answers.length ) - 1 ] );
+
+			} } );
+			page.visits = 0;
+			return page;
+
+		};
+		const notice = page => page.locator( '#notice' );
+
+		// A supporter on a new browser: signs in on the screen, and the visit is asked for again.
+		let page = await usedUpPage( [ usedUp( 'visitor' ), mapsOff ], { signedInAs: { ...ALICE, supporter: true } } );
+		await page.goto( BASE );
+		await notice( page ).locator( '.account .stub-google' ).waitFor();
+		assert.equal( await notice( page ).locator( '.title' ).textContent(), 'Today\'s free drives are used up' );
+		assert.match( await notice( page ).locator( '.account' ).textContent(), /Have the Supporter Pass\? Sign in to use it here\./ );
+		await shot( page, 'pass-7-used-up-sign-in' );
+		await page.evaluate( () => window.testCredential = 'good-token' );
+		await notice( page ).locator( '.stub-google' ).click();
+		await page.locator( '#notice[data-kind="error"]' ).waitFor();
+		assert.equal( page.visits, 2 );
+		assert.equal( await notice( page ).locator( '.message' ).textContent(), 'Maps are off today' );
+		assert.ok( await notice( page ).locator( '.account' ).isHidden(), 'the sign-in stayed on another notice' );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+		// Back from paying before Stripe's word: asked again once it's here.
+		page = await usedUpPage( [ usedUp( 'visitor' ), mapsOff ], { me: ALICE } );
+		await page.goto( `${ BASE }/?supporter=thanks` );
+		await notice( page ).locator( '.account', { hasText: 'Signed in as Alice Example · Sign out' } ).waitFor();
+		assert.equal( page.visits, 1 );
+		page.state.me = { ...ALICE, supporter: true };
+		await page.locator( '#notice[data-kind="error"]' ).waitFor( { timeout: 15000 } );
+		await page.locator( '#toast', { hasText: 'Thanks! Supporter Pass unlocked' } ).waitFor();
+		assert.equal( page.visits, 2 );
+		assert.equal( new URL( page.url() ).search, '' );
+		await page.context().close();
+
+		// A supporter who has had their 30: asked again once, then the screen stays, saying who's signed in.
+		page = await usedUpPage( [ usedUp( 'visitor' ) ], { me: { ...ALICE, supporter: true } } );
+		await page.goto( BASE );
+		await notice( page ).locator( '.account', { hasText: 'Signed in as Alice Example · ⭐ Supporter Pass · Sign out' } ).waitFor();
+		await page.waitForTimeout( 1500 );
+		assert.equal( page.visits, 2 );
+		assert.equal( await page.locator( '#notice' ).getAttribute( 'data-kind' ), 'used-up' );
+		await page.context().close();
+
+		// Everyone's drives used up, not this address's: no sign-in, and not Google's script.
+		page = await usedUpPage( [ usedUp( 'daily' ) ] );
+		await page.goto( BASE );
+		await page.locator( '#notice[data-kind="used-up"]' ).waitFor();
+		await page.waitForTimeout( 500 );
+		assert.ok( await notice( page ).locator( '.account' ).isHidden() );
+		assert.equal( page.asked.me, 0 );
+		assert.equal( page.google, 0 );
+		await page.context().close();
+
+	} );
+
+	test( 'buying not open yet: "Coming soon", with signing in for those who have the pass', async () => {
+
+		const page = await supporterPage( { me: { ...SIGNED_OUT, purchase: { enabled: false } } } );
+		await testPad( page );
+		await page.waitForFunction( () => window.drive.supporter.me );
+		await openPass( page );
+		const area = sheet( page );
+		await area.locator( '.stub-google' ).waitFor();
+		assert.equal( await area.locator( '.buy' ).textContent(), 'Coming soon' );
+		assert.ok( await area.locator( '.buy' ).isDisabled() );
+		assert.match( await area.textContent(), /Have the pass already\? Sign in to use it here\..*Buying opens soon\./ );
+		await page.context().close();
+
+	} );
+
+	test( 'no sign-in set up, or the Worker not answering: the free game as ever, the sheet "Coming soon"', async () => {
+
+		for ( const [ why, options ] of [ [ 'no client id', { clientId: '' } ], [ '/api/me down', { me: 'down' } ] ] ) {
+
+			const page = await supporterPage( options );
+			await testPad( page );
+			await openPass( page );
+			const area = sheet( page );
+			assert.equal( await area.locator( '.buy' ).textContent(), 'Coming soon', why );
+			assert.ok( await area.locator( '.buy' ).isDisabled(), why );
+			assert.equal( await page.locator( '#pause .account' ).isHidden(), true, why );
+			assert.equal( page.google, 0, `${ why }: Google's script loaded` );
+			if ( why === 'no client id' ) assert.equal( page.asked.me, 0, 'asked /api/me with no sign-in set up' );
+			await page.locator( '#pass .close' ).click();
+			// And it drives.
+			await page.locator( '.spots button', { hasText: 'Times Square' } ).click();
+			await flown( page );
+			await driveHere( page );
+			assert.equal( await locked( page ), 4, why );
+			assert.deepEqual( page.errors, [], why );
+			await page.context().close();
+
+		}
 
 	} );
 

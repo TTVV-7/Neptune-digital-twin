@@ -1,4 +1,4 @@
-import { HttpError, checkSameOrigin, isObject, json, randomToken, readJson, sha256Hex } from '../http.js';
+import { HttpError, isObject, json, randomToken, readJson, sha256Hex } from '../http.js';
 import { PERIODS, forgetBoards } from './boards.js';
 import { cleanName, nameAllowed, nameKey } from './names.js';
 import { addressOf, setting } from './settings.js';
@@ -19,9 +19,8 @@ const NAMES_DAILY = 20;
 const BAD_NAME = 'Names are 3 to 16 letters, numbers, spaces, _ or -';
 
 // POST /api/player { name, visit }: { id, secret, name }.
-export async function createPlayer( { request, env, url, limits, now } ) {
+export async function createPlayer( { request, env, limits, now } ) {
 
-	checkSameOrigin( request, url );
 	const db = database( env );
 	const body = await readJson( request, 1024 );
 	const name = checkName( isObject( body ) ? body.name : null );
@@ -50,7 +49,6 @@ export async function createPlayer( { request, env, url, limits, now } ) {
 // POST /api/player/rename { id, secret, name }: { id, name }.
 export async function renamePlayer( { request, env, url, limits, now } ) {
 
-	checkSameOrigin( request, url );
 	const db = database( env );
 	const body = await readJson( request, 1024 );
 	if ( ! isObject( body ) ) throw new HttpError( 400, 'Bad request' );

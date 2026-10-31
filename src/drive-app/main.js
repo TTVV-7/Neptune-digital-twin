@@ -15,6 +15,8 @@ import { loadVehicle, loadVehicles, specOf } from './vehicles.js';
 import { setUpPanel } from './panel.js';
 import { setUpGarage } from './garage.js';
 import { setUpLeaderboard } from './leaderboard.js';
+import { buyArea } from './pass.js';
+import { fillAccountArea, fillBuyArea, linkPlayer, setUpSupporter } from './supporter.js';
 import { formatLatLon, rememberPlace } from './places.js';
 import * as screens from './screens.js';
 
@@ -62,7 +64,7 @@ async function boot() {
 	const config = await getConfig();
 	// The Vite dev server on its own: a key from the environment, or the test globe.
 	if ( ! config ) return start( { key: DEV_KEY || null, worker: false } );
-	if ( ! config.mapsOn ) return screens.notice( 'resting', { onTestPad: () => start( { key: null } ) } );
+	if ( ! config.mapsOn ) return screens.notice( 'resting', { onTestPad: () => start( { key: null, googleClientId: config.googleClientId } ) } );
 	visit( config );
 
 }
@@ -72,16 +74,41 @@ async function visit( config ) {
 
 	screens.splash( 'Checking the road is clear...' );
 	const outcome = await startVisit( config.turnstileSiteKey, $( 'robot-check' ) );
-	if ( outcome.key ) return start( { key: outcome.key, left: outcome.left, visit: outcome.visit } );
-	if ( outcome.usedUp ) return screens.notice( 'used-up', { retryAfter: outcome.retryAfter } );
+	if ( outcome.key ) return start( { key: outcome.key, left: outcome.left, visit: outcome.visit, googleClientId: config.googleClientId } );
+	if ( outcome.usedUp ) return usedUp( config, outcome );
 	if ( outcome.robot ) return screens.notice( 'robot', { onRetry: () => visit( config ) } );
 	screens.notice( 'error', { message: outcome.error, onRetry: () => visit( config ) } );
 
 }
 
+// Whether the visit has been asked for again as a supporter's (see usedUp).
+let askedAsSupporter = false;
+
+// Today's drives are used up. A supporter's are counted by their account, not this address (30 a
+// day), so with signing in set up the screen has a sign-in too: a supporter on a new browser, or
+// back from paying before Stripe's word arrived (?supporter=thanks, supporter.js), would otherwise be
+// stuck here until tomorrow. Once the account here has the pass, the visit is asked for again: once,
+// so a supporter who has had their 30 sees this screen rather than asking round and round.
+function usedUp( config, { retryAfter, reason } ) {
+
+	screens.notice( 'used-up', { retryAfter } );
+	if ( reason !== 'visitor' || ! config.googleClientId ) return;
+	const again = () => {
+
+		askedAsSupporter = true;
+		$( 'notice' ).hidden = true;
+		visit( config );
+
+	};
+	setUpSupporter( { worker: true, googleClientId: config.googleClientId, onPass: askedAsSupporter ? null : again } );
+	fillAccountArea( $( 'notice' ).querySelector( '.account' ) );
+
+}
+
 // key: the Maps key (none: the test globe and pad); left: free drives left today; visit: the
-// visit's token, for posting scores; worker: whether there's a Worker (not on the dev server alone).
-async function start( { key, left = null, visit = null, worker = true } ) {
+// visit's token, for posting scores; worker: whether there's a Worker (not on the dev server alone);
+// googleClientId: the sign-in button's, for the Supporter Pass ('' when there's no signing in).
+async function start( { key, left = null, visit = null, worker = true, googleClientId = '' } ) {
 
 	const vehicles = await loadVehicles();
 	screens.hideSplash();
@@ -187,12 +214,23 @@ async function start( { key, left = null, visit = null, worker = true } ) {
 		vehicles,
 		worker,
 		getPlace: () => placeLabel( state.mode === 'globe' ? panel.pinned : state.place ),
+		onPlayer: () => linkPlayer(),
 	} );
 	board.setVisit( visit );
 	for ( const button of document.querySelectorAll( '.board-open' ) ) {
 
 		button.hidden = ! worker;
 		button.addEventListener( 'click', () => board.open() );
+
+	}
+
+	// Buying the Supporter Pass in its sheet, and signing in for it there and in the pause menu
+	// (supporter.js). Without sign-in set up the sheet just says "Coming soon".
+	const supporter = setUpSupporter( { worker, googleClientId, player: () => board.player } );
+	if ( supporter.on ) {
+
+		fillBuyArea( buyArea() );
+		fillAccountArea( $( 'pause' ).querySelector( '.account' ) );
 
 	}
 
@@ -621,7 +659,7 @@ async function start( { key, left = null, visit = null, worker = true } ) {
 	// For poking around from the browser console, and for the tests.
 	window.drive = {
 		scene, camera, renderer, tiles, globe, models, driver, ground, panel, leaderboard: board,
-		garage,
+		garage, supporter,
 		get mode() {
 
 			return state.mode;

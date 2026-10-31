@@ -4,11 +4,13 @@ import { premiumFor } from './premium.js';
 
 // Signing in: the page gets an ID token from Google and posts it here. If it checks out we
 // remember the person and give their browser a session cookie for 30 days. Only a hash of the
-// session token is stored.
+// session token is stored. World Drive's accounts (drive/accounts.js) sign in the same way, with
+// the cookie, the test keys' guard and the profile from here.
 
-const SESSION_SECONDS = 30 * 24 * 3600;
+export const SESSION_SECONDS = 30 * 24 * 3600;
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const LOCAL_HOSTS = [ 'localhost', '127.0.0.1', '[::1]' ];
+const cookies = sessionCookies( 'twin_session' );
 
 export async function signIn( { request, env, url } ) {
 
@@ -31,7 +33,7 @@ export async function signIn( { request, env, url } ) {
 
 	// A fresh session every time, replacing any this browser had, and expired ones are tidied away.
 	const token = randomToken( 32 );
-	const old = sessionToken( request, url );
+	const old = cookies.read( request, url );
 	await env.DB.batch( [
 		env.DB.prepare( 'DELETE FROM sessions WHERE expires_at <= ? OR token_hash = ?' ).bind( now, old ? await sha256Hex( old ) : '' ),
 		env.DB.prepare( 'INSERT INTO sessions ( token_hash, user_id, created_at, expires_at ) VALUES ( ?, ?, ?, ? )' )
@@ -39,22 +41,22 @@ export async function signIn( { request, env, url } ) {
 	] );
 
 	const answer = { user: publicUser( user ), hasMapsKey: !! env.GOOGLE_MAPS_API_KEY, premium: await premiumFor( env, user ) };
-	return json( answer, 200, { 'Set-Cookie': sessionCookie( url, token, SESSION_SECONDS ) } );
+	return json( answer, 200, { 'Set-Cookie': cookies.write( url, token, SESSION_SECONDS ) } );
 
 }
 
 export async function signOut( { request, env, url } ) {
 
-	const token = sessionToken( request, url );
+	const token = cookies.read( request, url );
 	if ( token ) await env.DB.prepare( 'DELETE FROM sessions WHERE token_hash = ?' ).bind( await sha256Hex( token ) ).run();
-	return noContent( { 'Set-Cookie': sessionCookie( url, '', 0 ) } );
+	return noContent( { 'Set-Cookie': cookies.write( url, '', 0 ) } );
 
 }
 
 // The signed-in user's row, or null.
 export async function currentUser( request, env, url ) {
 
-	const token = sessionToken( request, url );
+	const token = cookies.read( request, url );
 	if ( ! token ) return null;
 	const user = await env.DB.prepare( `
 		SELECT users.* FROM sessions JOIN users ON users.id = sessions.user_id
@@ -95,7 +97,9 @@ export function isAllowed( { email, hd }, env ) {
 
 }
 
-function profileFrom( claims ) {
+// What's kept of a Google account: its id (sub), email in lower case, and name, given name,
+// picture and Workspace domain, trimmed and shortened.
+export function profileFrom( claims ) {
 
 	const text = ( value, max ) => typeof value === 'string' ? value.trim().slice( 0, max ) : '';
 	const picture = text( claims.picture, 2000 );
@@ -112,7 +116,7 @@ function profileFrom( claims ) {
 
 // Tests sign their own tokens and serve their own keys. Only an address on this machine is
 // accepted, so a stray setting on the real site can't make it trust anyone else's keys.
-function testCertsUrl( env ) {
+export function testCertsUrl( env ) {
 
 	if ( ! env.GOOGLE_JWKS_URL ) return undefined;
 	const url = new URL( env.GOOGLE_JWKS_URL );
@@ -132,29 +136,32 @@ function isLocalDev( url ) {
 
 }
 
-function cookieName( url ) {
+// A session cookie named `name` (twin_session here): write( url, token, maxAge ) is its Set-Cookie
+// value, and read( request, url ) the token a request has in it, or null. HttpOnly, so the page's
+// scripts never see it, and SameSite=Lax, so other sites' requests mostly come without it.
+export function sessionCookies( name ) {
 
-	return isLocalDev( url ) ? 'twin_session' : '__Host-twin_session';
+	const cookieName = url => isLocalDev( url ) ? name : `__Host-${ name }`;
+	return {
+		write( url, token, maxAge ) {
 
-}
+			const secure = isLocalDev( url ) ? '' : '; Secure';
+			return `${ cookieName( url ) }=${ token }; Max-Age=${ maxAge }; Path=/; HttpOnly; SameSite=Lax${ secure }`;
 
-function sessionCookie( url, token, maxAge ) {
+		},
+		read( request, url ) {
 
-	const secure = isLocalDev( url ) ? '' : '; Secure';
-	return `${ cookieName( url ) }=${ token }; Max-Age=${ maxAge }; Path=/; HttpOnly; SameSite=Lax${ secure }`;
+			const wanted = cookieName( url );
+			for ( const part of ( request.headers.get( 'Cookie' ) ?? '' ).split( ';' ) ) {
 
-}
+				const [ key, value ] = part.trim().split( '=' );
+				if ( key === wanted && TOKEN_PATTERN.test( value ?? '' ) ) return value;
 
-function sessionToken( request, url ) {
+			}
 
-	const name = cookieName( url );
-	for ( const part of ( request.headers.get( 'Cookie' ) ?? '' ).split( ';' ) ) {
+			return null;
 
-		const [ key, value ] = part.trim().split( '=' );
-		if ( key === name && TOKEN_PATTERN.test( value ?? '' ) ) return value;
-
-	}
-
-	return null;
+		},
+	};
 
 }
