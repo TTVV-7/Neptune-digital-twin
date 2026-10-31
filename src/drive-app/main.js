@@ -175,7 +175,7 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 		camera, models, controls: walker, getColliders: grounds, hud, onStop: stopped,
 		// Each landed jump, for the leaderboard: where, and in what.
 		onScore: run => board.onScore( { ...run, place: placeLabel( state.place ), vehicle: state.vehicle?.id } ),
-		// What World Drive drives with: Shift flies, B boosts, the kart drifts, and hitting something
+		// What World Drive drives with: F flies, Shift (or B) boosts, the kart drifts, and hitting something
 		// throws you into the air for stunts.
 		fly: true, booster: true, drift: true, crash: 'launch',
 	} );

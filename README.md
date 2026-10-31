@@ -464,8 +464,8 @@ testing with test cards and the known gaps are in [docs/premium.md](docs/premium
 
 A second app in this repository, on its own address: pick anywhere on Earth from a globe of Google's
 3D tiles (search, a dozen start spots, recent places, or a tap on the globe), choose a go-kart, pickup
-or muscle car, press **Drive here** and drive the real world arcade-style: drift, boost, fly
-with Shift, and hit something to bounce off it into the air, where **A**/**D** spin, **W**/**S** flip and
+or muscle car, press **Drive here** and drive the real world arcade-style: drift (Space), boost
+(Shift), fly (F), and hit something to bounce off it into the air, where **A**/**D** spin, **W**/**S** flip and
 **Q**/**E** roll for tricks that score (times a combo multiplier) when you land on your wheels; a
 wipeout loses the combo and rolls you back onto them. Boosting flat out hits **overdrive** (a sonic
 boom, streaks of air, a wider view), and glowing **boost pads** turn up on open ground as you drive

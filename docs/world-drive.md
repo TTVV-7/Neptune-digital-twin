@@ -50,8 +50,8 @@ address, and the construction app is unchanged by it.
 | W / S | Gas; brake, and reverse once stopped |
 | A / D | Steer |
 | Space | Drift: hold it and steer round a bend, let go for a mini-turbo; tap it to hop |
-| B | Booster: flat out for a moment, overdrive |
-| Shift | Fly: hold to lift off, let go to glide down |
+| Shift (or B) | Booster: flat out for a moment, overdrive |
+| F | Fly: hold to lift off, let go to glide down |
 | In the air | A / D spin, W / S flip (W forward, S back), Q / E roll (or Space with A / D) |
 | R | Stuck? Back on the road a few metres on |
 | C | Chase or driver's-seat camera |
@@ -88,7 +88,7 @@ Hit something (a wall, a building, a parked car, a barrier) and you don't stop: 
 - **In the air** (after a hit, off a ramp, a crest or a hop): **A**/**D** spin, **W**/**S** flip, **Q**/**E**
   (or **Space** with **A**/**D**) roll. Let go and the turn stops within about 45°. Keys you were
   already holding when you left the ground (the gas, say) don't count until you press them again,
-  so holding the gas off a ramp doesn't flip you. Flying (**Shift**), **Space** with **W**/**S** flips
+  so holding the gas off a ramp doesn't flip you. Flying (**F**), **Space** with **W**/**S** flips
   and with **A**/**D** (or **Q**/**E**) rolls, and you right yourself when you let go.
 - **Landing.** Within about 40° of upright you land: the suspension takes it, the tricks you did
   pay out, the booster is topped up (a fifth for each trick) and, going forward, you get a burst
@@ -111,7 +111,7 @@ Hit something (a wall, a building, a parked car, a barrier) and you don't stop: 
 
 ### Boosting
 
-- **The booster** (**B**) fires the whole gauge, 2.5 s of it (it needs 15 % to light), pushing you up
+- **The booster** (**Shift**, or **B**) fires the whole gauge, 2.5 s of it (it needs 15 % to light), pushing you up
   to twice the ride's top speed. The gauge refills by itself in 8 s; landed tricks top it up (a fifth
   each), and so do boost pads. What it leaves behind is the ride's **boost style** from the
   [Garage](#the-garage): the classic flame, bubbles or confetti, or with the pass one of nine more.

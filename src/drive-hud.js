@@ -25,7 +25,7 @@ const REFUEL_TIME = 700;
 const TRICKS_TIME = 2200;
 // Messages that name keys, as they read on a touch screen, which has the buttons instead.
 const TOUCH_WORDS = [
-	[ 'Hold Shift to fly or press R', 'Hold FLY, or tap ↺' ],
+	[ 'Hold F to fly or press R', 'Hold FLY, or tap ↺' ],
 	[ 'Press R', 'Tap ↺' ],
 	[ 'A/D spin · W/S flip · Q/E roll', '◀ ▶ spin · GAS/BRAKE flip · DRIFT + ◀ ▶ roll' ],
 ];
@@ -729,7 +729,7 @@ export function createDriveHud( parent = document.body ) {
 			<button class="gas" data-key="KeyW">GAS</button>
 			<button class="drift" data-key="Space">HOP<i></i></button>
 			<button class="booster" data-key="KeyB" hidden>BOOST</button>
-			<button class="fly" data-key="ShiftLeft" hidden>FLY</button>
+			<button class="fly" data-key="KeyF" hidden>FLY</button>
 			<button class="reset" data-key="KeyR" aria-label="Back on the road">↺</button>
 			<button class="camera" data-tap="camera" aria-label="Camera">CAM</button>
 		</div>`;
@@ -826,9 +826,9 @@ export function createDriveHud( parent = document.body ) {
 			row( [ 'W', 'S' ], 'gas, brake' ),
 			row( [ 'A', 'D' ], 'steer' ),
 			row( [ 'Space' ], driver?.drift ? 'drift (hold and steer), hop (tap)' : 'hop' ),
-			driver?.booster && row( [ 'B' ], 'booster (flat out for a moment: overdrive)' ),
+			driver?.booster ? row( [ 'Shift' ], 'boost (flat out for a moment: overdrive)' ) : row( [ 'Shift' ], 'boost' ),
+			driver?.fly && row( [ 'F' ], 'fly' ),
 			driver?.launch && row( [ 'Q', 'E' ], 'roll in the air' ),
-			row( [ 'Shift' ], driver?.fly ? 'fly' : 'boost' ),
 			row( [ 'R' ], 'reset' ),
 			row( [ 'C' ], 'camera' ),
 		].filter( Boolean ).join( ' · ' );

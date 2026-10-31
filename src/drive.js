@@ -7,7 +7,7 @@ import { createDriveFx } from './drive-fx.js';
 // the vehicle follows the ground under its wheels, keeps its upward speed off ramps and crests so
 // it can jump, and stops dead when it hits a wall or anything else solid.
 //
-// Four options, off unless an app asks (World Drive turns them on): `fly`, where holding Shift
+// Four options, off unless an app asks (World Drive turns them on): `fly`, where holding F
 // lifts the vehicle off and flies it, and letting go glides it back down; `booster`, a rocket on B
 // that pushes well past the top speed while its gauge lasts, and held at full speed goes
 // supersonic, with a sonic boom; `drift`, kart handling: sharp
@@ -42,7 +42,7 @@ const BUMPERS = [ 0.5, 1.0 ];
 const CAB_SHELL = 1.6;
 const CAB_MARGIN = 0.35;
 
-// Flying: climb (m/s) while Shift is held, slowing to a hover this high (m) over the ground; glide
+// Flying: climb (m/s) while F is held, slowing to a hover this high (m) over the ground; glide
 // down (m/s) once it's let go; turn rate (°/s) at full steer.
 const FLY_CLIMB = 7;
 const FLY_CEILING = 150;
@@ -134,7 +134,7 @@ const KEY_GRACE = 0.25;
 const ASSIST = 1.5;
 const ASSIST_TILT = 60;
 const STEADY = 3;
-// Flying (Shift), Space with W/S flips and with A/D (or Q/E) rolls; let go and it slows at
+// Flying (F), Space with W/S flips and with A/D (or Q/E) rolls; let go and it slows at
 // FLIGHT_DAMP and rights itself at FLIGHT_RIGHTING (1/s).
 const FLIGHT_DAMP = 4;
 const FLIGHT_RIGHTING = 3;
@@ -272,7 +272,7 @@ export class Driver {
 		this.machines = new Map();
 		this.machine = null;
 
-		this.driveKeys = [ 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight', 'KeyR', ...booster ? [ 'KeyB' ] : [], ...this.launch ? [ 'KeyQ', 'KeyE' ] : [] ];
+		this.driveKeys = [ 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight', 'KeyR', ...booster ? [ 'KeyB' ] : [], ...this.fly ? [ 'KeyF' ] : [], ...this.launch ? [ 'KeyQ', 'KeyE' ] : [] ];
 		window.addEventListener( 'keydown', e => {
 
 			// Browser shortcuts (Ctrl+R, Cmd+F...) are left to the browser, and don't drive or dig.
@@ -320,7 +320,8 @@ export class Driver {
 		// if it's let go at once (see release).
 		if ( code === 'Space' && this.grounded && this.drift && this.steerInput() === 0 ) this.spaceTap = this.clock;
 		else if ( code === 'Space' && this.grounded ) this.hop();
-		else if ( code === 'KeyB' && this.booster ) this.fireBooster();
+		// The booster goes on Shift, by the gas and steering keys, as well as B.
+		else if ( this.booster && ( code === 'KeyB' || code === 'ShiftLeft' || code === 'ShiftRight' ) ) this.fireBooster();
 		else if ( code === 'KeyR' ) this.respawn();
 
 	}
@@ -568,9 +569,11 @@ export class Driver {
 		const brake = ! tricking && ( keys.has( 'KeyS' ) || keys.has( 'ArrowDown' ) );
 		const steerInput = tricking ? 0 : this.steerInput();
 		const shift = keys.has( 'ShiftLeft' ) || keys.has( 'ShiftRight' );
-		// With flying on, Shift lifts off; otherwise it boosts. A wipeout rights itself first.
-		const boost = shift && ! this.fly;
-		if ( shift && this.fly && ! this.flying && ! this.air?.wipeout ) this.takeOff();
+		// With the booster on, Shift fires it (see press); otherwise it boosts a little. F flies,
+		// with flying on. A wipeout rights itself first.
+		const boost = shift && ! this.booster;
+		const lift = this.fly && keys.has( 'KeyF' );
+		if ( lift && ! this.flying && ! this.air?.wipeout ) this.takeOff();
 		// A drift carried off the ground, let go of in the air: free to turn from here.
 		if ( this.launch && ! this.grounded && ! this.flying && ! this.air && ! this.driftHop && ! this.drifting ) this.enterAir();
 		const east = this.east;
@@ -649,7 +652,7 @@ export class Driver {
 
 		if ( this.flying ) {
 
-			this.flyHeight( dt, shift, heights.length ? Math.max( ...heights ) : null );
+			this.flyHeight( dt, lift, heights.length ? Math.max( ...heights ) : null );
 
 		} else if ( this.air ) {
 
@@ -965,7 +968,7 @@ export class Driver {
 
 	}
 
-	// Shift held: off the ground and up. Steering, gas and brake keep working in the air.
+	// F held: off the ground and up. Steering, gas and brake keep working in the air.
 	takeOff() {
 
 		this.flying = true;
@@ -1005,7 +1008,7 @@ export class Driver {
 
 	}
 
-	// Height while flying: climbing toward a hover with Shift held, gliding down without it, never
+	// Height while flying: climbing toward a hover with F held, gliding down without it, never
 	// below the ground and never up through a roof or a bridge. Touching down is gentle, whatever
 	// the speed. With no ground found under it (Google's tiles there still loading) it holds its
 	// height instead of gliding down, so it can't sink through ground that arrives late.
@@ -1123,7 +1126,7 @@ export class Driver {
 		else this.stuckTime = Math.min( 0, this.stuckTime + dt );
 		if ( this.stuckTime >= STUCK_TIME ) {
 
-			this.hud.flash( this.fly ? 'Stuck? Hold Shift to fly or press R' : 'Stuck? Press R' );
+			this.hud.flash( this.fly ? 'Stuck? Hold F to fly or press R' : 'Stuck? Press R' );
 			// Again in a few seconds if it's still stuck.
 			this.stuckTime = - 2;
 
@@ -1449,7 +1452,7 @@ export class Driver {
 
 	// Off the ground with stunts on (thrown by a hit, off a ramp or a crest, or a hop): free to turn
 	// any way about the middle of its box, which carries on from where it was. In the air east,
-	// north and y are under that middle. `flight`: taking off with Shift, where it flies as it does
+	// north and y are under that middle. `flight`: taking off with F, where it flies as it does
 	// without stunts and a trick turns it only for a moment (see flightSpin).
 	enterAir( flight = false ) {
 
