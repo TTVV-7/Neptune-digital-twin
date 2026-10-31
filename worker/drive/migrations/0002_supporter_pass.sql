@@ -38,18 +38,28 @@ CREATE TABLE purchases (
 	-- What was paid, in the currency's smallest unit (cents), and the currency ('cad').
 	amount INTEGER,
 	currency TEXT,
-	-- How a refund (charge.refunded) finds the purchase.
+	-- How a refund or a chargeback finds the purchase.
 	payment_intent TEXT,
-	-- 'paid', 'refunded', or what the owner wrote by hand ('granted').
+	-- 'paid', 'refunded', 'disputed' (charged back), or what the owner wrote by hand ('granted').
 	status TEXT NOT NULL,
 	created_at INTEGER NOT NULL,
-	-- Set by a full refund, which takes the pass away again.
+	-- Set when the money is taken back (refunded in full, or charged back), which takes the pass
+	-- away again; cleared if a chargeback is won.
 	refunded_at INTEGER
 );
 
 CREATE INDEX purchases_by_account ON purchases ( account_id );
 CREATE INDEX purchases_by_email ON purchases ( email );
 CREATE INDEX purchases_by_payment ON purchases ( payment_intent );
+
+-- Every payment taken back, by its PaymentIntent, whether or not its purchase is here yet: Stripe
+-- doesn't promise to deliver events in order, and a checkout retried after its refund arrived must
+-- come in already taken back. status: 'refunded', or 'disputed' while a chargeback has the money.
+CREATE TABLE reversals (
+	payment_intent TEXT PRIMARY KEY,
+	status TEXT NOT NULL,
+	created_at INTEGER NOT NULL
+);
 
 -- The account a leaderboard player belongs to, once someone signed in links this browser's player
 -- (POST /api/player/link): a supporter's players have a ⭐ by their name.

@@ -14,7 +14,8 @@
 // up after 35 days. And the Supporter Pass, with ID tokens signed by test keys standing in for
 // Google's and webhooks signed with a made-up secret standing in for Stripe's: signing in (and
 // every bad token turned away), the session cookie, /api/me, the webhook (signatures, five minutes,
-// a payment once, bank debits, bought before signing in, refunds, another link's checkouts), the
+// a payment once, bank debits, bought before signing in, refunds, chargebacks, either delivered
+// before their checkout, another link's checkouts, test-mode payments with a live link), the
 // same-origin checks it alone goes without, SUPPORTER_EMAILS, 30 drives a day for a supporter, the
 // ⭐ on the leaderboard, the owner's SQL, and buying off without its settings.
 // TEST_DRIVE_WORKER_PORT=8796 moves the five wrangler servers (that port and the next four).
@@ -1022,13 +1023,15 @@ const WEBHOOK_SECRET = 'whsec_made_up_for_world_drive_tests_0123';
 // sessions included, unless a test says otherwise.
 const PASS_DAY = Date.UTC( 2026, 10, 3, 12, 0, 0 );
 
-// A Checkout Session event as Stripe sends it (only the fields read are filled in).
-function checkout( id, { type = 'checkout.session.completed', reference = null, email = 'alice@example.com', paid = true, link = PASS_LINK_ID } = {} ) {
+// A Checkout Session event as Stripe sends it (only the fields read are filled in). live: a live-mode
+// event, a real payment; without it a test-mode one, as PASS_LINK (a test link) makes.
+function checkout( id, { type = 'checkout.session.completed', reference = null, email = 'alice@example.com', paid = true, link = PASS_LINK_ID, live = false } = {} ) {
 
 	return {
 		id: `evt_${ id }`,
 		object: 'event',
 		type,
+		livemode: live,
 		data: { object: {
 			id: `cs_test_${ id }`,
 			object: 'checkout.session',
@@ -1046,9 +1049,17 @@ function checkout( id, { type = 'checkout.session.completed', reference = null, 
 
 }
 
-function refund( id, { full = true } = {} ) {
+function refund( id, { full = true, live = false } = {} ) {
 
-	return { id: `evt_refund_${ id }`, object: 'event', type: 'charge.refunded', data: { object: { id: `ch_${ id }`, object: 'charge', payment_intent: `pi_${ id }`, refunded: full, amount_refunded: full ? 499 : 100 } } };
+	return { id: `evt_refund_${ id }`, object: 'event', type: 'charge.refunded', livemode: live, data: { object: { id: `ch_${ id }`, object: 'charge', payment_intent: `pi_${ id }`, refunded: full, amount_refunded: full ? 499 : 100 } } };
+
+}
+
+// A chargeback's money: taken back as it opens ('withdrawn'), or given back once it's won ('reinstated').
+function dispute( id, funds ) {
+
+	const status = funds === 'withdrawn' ? 'needs_response' : 'won';
+	return { id: `evt_dispute_${ funds }_${ id }`, object: 'event', type: `charge.dispute.funds_${ funds }`, livemode: false, data: { object: { id: `dp_${ id }`, object: 'dispute', charge: `ch_${ id }`, payment_intent: `pi_${ id }`, amount: 499, status } } };
 
 }
 
@@ -1468,6 +1479,63 @@ describe( 'World Drive Supporter Pass', () => {
 
 	} );
 
+	test( 'a refund delivered before its checkout (Stripe still retrying that one): the pass never comes', async () => {
+
+		const frank = await signIn( { sub: '1010', email: 'frank@example.com', name: 'Frank' } );
+		const reference = frank.json.purchase.clientReferenceId;
+		assert.equal( ( await webhook( server, refund( 'frank' ) ) ).status, 200 );
+		assert.equal( ( await webhook( server, checkout( 'frank', { reference, email: 'frank@example.com' } ) ) ).status, 200 );
+		assert.equal( ( await me( frank.cookie ) ).json.supporter, false );
+		assert.deepEqual( server.d1( 'SELECT status, refunded_at FROM purchases WHERE checkout_session = \'cs_test_frank\'' ), [ { status: 'refunded', refunded_at: PASS_DAY } ] );
+
+	} );
+
+	test( 'a chargeback takes the pass away while the bank has the money; won, it\'s back; refunded, it stays gone', async () => {
+
+		const has = async ( name, sub ) => {
+
+			const person = await signIn( { sub, email: `${ name }@example.com`, name } );
+			return async () => ( await me( person.cookie ) ).json.supporter;
+
+		};
+		const status = name => server.d1( `SELECT status FROM purchases WHERE checkout_session = 'cs_test_${ name }'` )[ 0 ]?.status;
+		const pay = async ( name, sub ) => {
+
+			const supporter = await has( name, sub );
+			assert.equal( ( await webhook( server, checkout( name, { email: `${ name }@example.com` } ) ) ).status, 200 );
+			return supporter;
+
+		};
+
+		// Opened and won.
+		const grace = await pay( 'grace', '1011' );
+		assert.equal( await grace(), true );
+		assert.equal( ( await webhook( server, dispute( 'grace', 'withdrawn' ) ) ).status, 200 );
+		assert.equal( await grace(), false );
+		assert.equal( status( 'grace' ), 'disputed' );
+		assert.equal( ( await webhook( server, dispute( 'grace', 'reinstated' ) ) ).status, 200 );
+		assert.equal( await grace(), true );
+		assert.deepEqual( server.d1( 'SELECT status, refunded_at FROM purchases WHERE checkout_session = \'cs_test_grace\'' ), [ { status: 'paid', refunded_at: null } ] );
+
+		// Won, but refunded too, and the refund delivered first: it stays refunded.
+		const heidi = await pay( 'heidi', '1012' );
+		assert.equal( ( await webhook( server, dispute( 'heidi', 'withdrawn' ) ) ).status, 200 );
+		assert.equal( ( await webhook( server, refund( 'heidi' ) ) ).status, 200 );
+		assert.equal( ( await webhook( server, dispute( 'heidi', 'reinstated' ) ) ).status, 200 );
+		assert.equal( await heidi(), false );
+		assert.equal( status( 'heidi' ), 'refunded' );
+
+		// The chargeback delivered before the checkout: in taken back, until it's won.
+		const ivan = await has( 'ivan', '1013' );
+		assert.equal( ( await webhook( server, dispute( 'ivan', 'withdrawn' ) ) ).status, 200 );
+		assert.equal( ( await webhook( server, checkout( 'ivan', { email: 'ivan@example.com' } ) ) ).status, 200 );
+		assert.equal( await ivan(), false );
+		assert.equal( status( 'ivan' ), 'disputed' );
+		assert.equal( ( await webhook( server, dispute( 'ivan', 'reinstated' ) ) ).status, 200 );
+		assert.equal( await ivan(), true );
+
+	} );
+
 } );
 
 // The webhook keeps payments whether or not buying is on, and with SUPPORTER_PAYMENT_LINK_ID set
@@ -1504,12 +1572,30 @@ describe( 'World Drive Supporter Pass, with a link id and no sign-in', () => {
 
 	} );
 
+	// SUPPORTER_PAYMENT_LINK is wrangler.drive.jsonc's, a live link: real payments, live events.
 	test( 'only checkouts through SUPPORTER_PAYMENT_LINK_ID count', async () => {
 
-		assert.equal( ( await webhook( server, checkout( 'elsewhere', { link: 'plink_1SomeOtherLink' } ) ) ).status, 200 );
-		assert.equal( ( await webhook( server, checkout( 'nolink', { link: null } ) ) ).status, 200 );
-		assert.equal( ( await webhook( server, checkout( 'ours' ) ) ).status, 200 );
+		assert.equal( ( await webhook( server, checkout( 'elsewhere', { link: 'plink_1SomeOtherLink', live: true } ) ) ).status, 200 );
+		assert.equal( ( await webhook( server, checkout( 'nolink', { link: null, live: true } ) ) ).status, 200 );
+		assert.equal( ( await webhook( server, checkout( 'ours', { live: true } ) ) ).status, 200 );
 		assert.deepEqual( server.d1( 'SELECT checkout_session FROM purchases' ).map( row => row.checkout_session ), [ 'cs_test_ours' ] );
+
+	} );
+
+	test( 'with a live link, a test-mode payment (a test card, free) never gives the pass, nor a test refund takes it', async () => {
+
+		// What a test-mode endpoint's secret, set here by mistake, would bring.
+		assert.equal( ( await webhook( server, checkout( 'testcard' ) ) ).status, 200 );
+		const unmarked = checkout( 'unmarked' );
+		delete unmarked.livemode;
+		assert.equal( ( await webhook( server, unmarked ) ).status, 200 );
+		assert.equal( ( await webhook( server, refund( 'ours' ) ) ).status, 200 );
+		assert.equal( ( await webhook( server, dispute( 'ours', 'withdrawn' ) ) ).status, 200 );
+		assert.deepEqual( server.d1( 'SELECT checkout_session, status, refunded_at FROM purchases' ), [ { checkout_session: 'cs_test_ours', status: 'paid', refunded_at: null } ] );
+		assert.deepEqual( server.d1( 'SELECT COUNT(*) AS n FROM reversals' ), [ { n: 0 } ] );
+		// A live refund does.
+		assert.equal( ( await webhook( server, refund( 'ours', { live: true } ) ) ).status, 200 );
+		assert.deepEqual( server.d1( 'SELECT status FROM purchases' ), [ { status: 'refunded' } ] );
 
 	} );
 
