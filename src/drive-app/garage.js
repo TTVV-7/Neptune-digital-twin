@@ -196,6 +196,8 @@ export function setUpGarage( { vehicles, panel, models, current } ) {
 
 		const wearing = shown();
 		for ( const tab of tabs.children ) tab.setAttribute( 'aria-pressed', String( tab.dataset.id === vehicle.id ) );
+		// With the cars there are more rides than fit across: the one shown is scrolled into view.
+		tabs.querySelector( '[aria-pressed="true"]' )?.scrollIntoView( { block: 'nearest', inline: 'nearest' } );
 		const paintable = vehicle.paintable !== false;
 		let anyLocked = false;
 		for ( const section of options.querySelectorAll( 'section' ) ) {

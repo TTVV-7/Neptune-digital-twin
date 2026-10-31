@@ -27,8 +27,10 @@ address, and the construction app is unchanged by it.
 
    Choosing a search result or a spot flies the globe down to it and pins it. The card under the pin
    says where it is, with **Drive here**.
-3. **Your ride**: the go-kart, a pickup or a haul truck, or with the [Supporter Pass](#supporter-pass-content)
-   a sports coupe, a monster truck, a city bus or a hovercraft. The choice is remembered. **Garage**,
+3. **Your ride**: the go-kart, a pickup, a haul truck or the muscle car, or with the
+   [Supporter Pass](#supporter-pass-content) five more [cars](#world-drives-cars) (a neon racer, a
+   night cruiser, a dune buggy, a farm truck and a police cruiser) and four rides built for it (a
+   sports coupe, a monster truck, a city bus and a hovercraft). The choice is remembered. **Garage**,
    under the rides, paints them.
 4. **Drive here.** The view flies down to the pin and waits for the ground to load ("Loading the
    ground..."), so the vehicle never drops through tiles that aren't there yet. It starts on the ground
@@ -120,15 +122,16 @@ only when the page is on `localhost` or `127.0.0.1` (`testPass` decides), never 
 
 **Locked things** show a small **⭐ Supporter Pass** badge (in the Garage, a ⭐ on each locked choice
 under one line saying what the stars mean), and picking one opens the pass's sheet
-instead (`src/drive-app/pass.js`): what the pass is and what comes with it (the four rides, the
-Garage's extras, a ⭐ by your name on the leaderboard, 30 drives a day instead of 8) and its buy
+instead (`src/drive-app/pass.js`): what the pass is and what comes with it (nine more rides, five cars
+and four built in code, each with its picture; the Garage's extras, a ⭐ by your name on the
+leaderboard, 30 drives a day instead of 8) and its buy
 area (`buyArea()`), which says **Coming soon** until the payments code fills it. The sheet also opens from **⭐ Supporter
 Pass** under the rides on the globe and in the pause menu. A ride or a look saved while the pass was
 on falls back to the go-kart, or to the free choices, without it. Nothing comes up by itself: the
 sheet only opens when something locked, or one of those buttons, is picked.
 
-The leaderboard takes runs in the pass's rides as in the free ones (`PASS_RIDES` in
-`src/drive-app/catalog.js`, which `VEHICLES` in `worker/drive/scores.js` reads).
+The leaderboard takes runs in the pass's rides and cars as in the free ones (`PASS_RIDES` and
+`DRIVE_CARS` in `src/drive-app/catalog.js`, which `VEHICLES` in `worker/drive/scores.js` reads).
 
 ### The four rides
 
@@ -152,6 +155,88 @@ has a driver: behind tinted glass in the coupe and the truck, at the front of th
 passengers), in the open on the hovercraft. They follow the free rides in the picker with a drawing
 each (in their paint) and the badge until the pass is on.
 
+### World Drive's cars
+
+Six cars from Sketchfab, each made ready to drive by `scripts/add-drive-car.mjs` (below) and tuned in
+`src/drive-app/cars.js`. The muscle car is free; the rest come with the pass, locked like the rides
+above, between the free rides and the built ones in the picker, each with its own picture.
+
+| Car | Model (CC BY 4.0) | Size | Top speed | Handling |
+| --- | --- | --- | --- | --- |
+| Muscle car (free) | "Classic Muscle car" by Lexyc16 | 4.7 × 2.1 m, 1.4 m tall | 175 km/h | Loose: grip a little over the kart's, drifts that swing the tail far out; its paint is plain colour, so the Garage repaints it |
+| Neon racer | "Green Bug Stylized Scifi Car Free" by ferofluid | 4.3 × 2.3 m | 185 km/h | Quickest away of the cars, grips hardest and turns in sharpest |
+| Night cruiser | "Blade Air Stylized Scifi Car Free" by ferofluid | 4.6 × 2.1 m | 205 km/h | The fastest of everything, heavy: slow to turn, rolls on and on off the gas, thrown less by a hit |
+| Dune buggy | "Dune Buggy \"jump\"" by XP_Frost | 3.5 × 3.1 m (its wheels out on long arms) | 145 km/h | Light and bouncy: loose on the road, thrown highest of the cars, slow to fall, landing up to 50° off upright and bouncing |
+| Farm truck | "Farm pickup truck" by Nekitron | 5.0 × 2.25 m, 2.8 m tall | 115 km/h | Slow away, turns wide, barely thrown up, squashes and shakes the view more |
+| Police cruiser | the police car of "LowPoly Cars Pickup, Sedan, Police, StationWagon" by JG3D | 4.0 × 2.3 m | 180 km/h | Steady all-rounder; plain black-and-white livery, no words or crest |
+
+Their wheels spin with the speed (each by its own size) and the front ones steer, turned against a
+drift as the rides' are. Nothing turns in the air faster than the kart, as for the rides.
+
+**Where they live.** `drive/public/cars/`: each car's `.glb`, its picture in `thumbs/`, `cars.json`
+(file, size, wheels, triangles and the source: title, author, link, licence) and `CREDITS.md`.
+`vite.drive.config.js` makes `drive/public/` World Drive's public folder, so only its build publishes
+them (at `/cars/...`); the construction app's library (`public/library/`) and its build never see
+them. The 2.7 MB of models and 30 kB of pictures are fetched only for the car being driven or looked
+at in the Garage. CC BY asks for credit: each car's model, author, licence and link (and what was
+changed) are in the About box, under the ride picker while it's picked, and in `CREDITS.md`.
+
+**Adding a car.** `npm run add-drive-car -- <sketchfab url> --id night-cruiser --length 4.6 --front=+z`
+(with the same Sketchfab token as `add-asset`), then `npm run drive-car-thumbs -- night-cruiser`, then
+its name, blurb, tuning and whether it needs the pass in `cars.js` and its id in `DRIVE_CARS`
+(`catalog.js`). The importer:
+
+- checks the licence (downloadable, CC0 or CC BY only) and prints the description, to read for anyone
+  else to credit (`--credit`) and any conditions;
+- bakes the model to its real size (`--length` along the front axis `--front` names), facing -Z on
+  y = 0, with nothing left in its transforms; `--part <node>` takes one car out of a set;
+- finds the wheels by shape, whatever they're called: a tyre is a piece of its own standing on the
+  ground at a corner, about as long as it's tall, and whatever sits wholly inside its circle (rim,
+  hub, disc) turns with it. Each wheel becomes a node at its axle (`wheel-front-left`...) with its
+  radius and whether it steers; the rest is `body`. A model whose tyres are joined to the body, or
+  rigged, is turned away with the reason;
+- `--paint` and `--rims` name the materials the Garage may repaint (the muscle car's body and rims);
+  `--lit` shades a model drawn unlit, as the rest of the world is;
+- compresses it (meshopt, WebP textures up to `--max-texture`, 1024; `--simplify` if it's heavy).
+
+`drive-car-thumbs.mjs` draws every picture the same way (World Drive's dev server in Chromium, the
+car from ahead and to its left, on nothing), whatever Sketchfab's own pictures were.
+
+**Choosing them** (Sketchfab, 31 October 2026: downloadable, CC0 or CC BY, under 60,000 triangles).
+CC0 cars hardly exist there, so all six are CC BY. Turned away was anything named after or drawn from
+a real car, maker, film or game (names, tags, descriptions and textures read), anything whose wheels
+couldn't be made to turn, and other people's concepts:
+
+| Model | Author | Verdict |
+| --- | --- | --- |
+| [Classic Muscle car](https://sketchfab.com/3d-models/classic-muscle-car-641efc889e5f4543bae51d0922e6f4b3) | Lexyc16 | ✔ Muscle car: a generic 1970s coupe, no maker's details or badges; separate wheels; plain colours, so paintable; 5,600 triangles |
+| [Green Bug Stylized Scifi Car Free](https://sketchfab.com/3d-models/green-bug-stylized-scifi-car-free-34f1a7734d474b34a8291f613a581ccb) | ferofluid | ✔ Neon racer: an original sci-fi design, separate wheels, clean textures (no writing); 27,000 |
+| [Blade Air Stylized Scifi Car Free](https://sketchfab.com/3d-models/blade-air-stylized-scifi-car-free-8444b0a772624900a68049e270a01c29) | ferofluid | ✔ Night cruiser: original; wheels separated by shape; 15,000 |
+| [Dune Buggy "jump"](https://sketchfab.com/3d-models/dune-buggy-jump-c9838cac69904010923d5024168b0893) | XP_Frost | ✔ Dune buggy: a tube-frame buggy of no make (a race number only); wheels separated by shape; 29,000 |
+| [Farm pickup truck](https://sketchfab.com/3d-models/farm-pickup-truck-5615b16ba2e24f7ab6cd26eda7946ae8) | Nekitron | ✔ Farm truck: a hand-painted old truck of no make, separate wheels; 5,400 |
+| [LowPoly Cars Pickup, Sedan, Police, StationWagon](https://sketchfab.com/3d-models/lowpoly-cars-pickup-sedan-police-stationwagon-8fb25f8fc1064f4d88a98294c757eef5) | JG3D | ✔ Police cruiser (its police car only): generic livery with no words or crest, blank plates; 6,000 |
+| [Ice Cream Truck](https://sketchfab.com/3d-models/ice-cream-truck-b8b1294228044e64af8bfbae82c80ac0) | Bogdan Strielecki | ✘ Original and fun, but its tyres are one piece with the body: they couldn't turn |
+| [Toony Yellow Formula Racer](https://sketchfab.com/3d-models/toony-yellow-formula-racer-cartoon-race-2c5e07abb88a441d85584cab8733c0d2) | ARTEL_3D | ✘ The whole car is one welded piece: no wheels to turn |
+| [Colorful Cartoon Police Car](https://sketchfab.com/3d-models/colorful-cartoon-police-car-3d-model-c3b82fd5b86c4fd0931c0217b4670ee3) | Skill Artist | ✘ Stands at an angle in its file, so its wheels weren't found square; the JG3D car does the job |
+| [Offroad Rally Trophy Truck 4x4 Lowpoly](https://sketchfab.com/3d-models/offroad-rally-trophy-truck-4x4-lowpoly-812abec58e8943a49c7f3a46d522d1a7) | nabeelashrafphotography | ✘ Rigged: its wheels hang off bones |
+| [Low Poly Car Set](https://sketchfab.com/3d-models/low-poly-car-set-9b8a51478e404a3594e11584b90a0e91) | BetelgeuseMan | ✘ Original toy-like taxis and police cars, but so tall and boxy that at a car's length they stand 3.6 m high |
+| [Cartoon Sports Car](https://sketchfab.com/3d-models/cartoon-sports-car-bd149c9a899d46bfa97326934dfa769c) | Nirvana Studio | ✘ A caricature of a well-known 1980s Japanese hatchback |
+| [Cicada - Retro Cartoon Car](https://sketchfab.com/3d-models/cicada-retro-cartoon-car-135b16b4f77249d8ad13185270f94251) and [Cartoon Sports Car](https://sketchfab.com/3d-models/cartoon-sports-car-0fd87559642a41b7a7924876ad3e9399) | RCC Design | ✘ Cartoons of real cars (tagged with their makers' names) |
+| [Modern Cartoon Sports Car](https://sketchfab.com/3d-models/modern-cartoon-sports-car-2186dbdfe51a42f9ae230431d1e9d754) | RCC Design | ✘ A cartoon of a current Italian supercar, its badge on the nose |
+| [Cartoon_sports_car](https://sketchfab.com/3d-models/cartoon-sports-car-a0db886ee94f478aa629b5cdd38d2160) | Arham Abdullah | ✘ The same model as RCC Design's cartoon of a real car, uploaded again |
+| [(FREE) Racing Car in 3 styles](https://sketchfab.com/3d-models/free-racing-car-in-3-styles-12cbb1078c37497caa3a9e205f665cdc) | Mena | ✘ A real supercar, its model name on the picture |
+| [Free Generic Muscle Car - STYLIZED (1970s)](https://sketchfab.com/3d-models/free-generic-muscle-car-stylized-1970s-0cccd454adb44ea981862ac1d83ce250), [Stylized Low Poly Muscle Car](https://sketchfab.com/3d-models/stylized-low-poly-muscle-car-free-eedfeed9cebc497582cf962f25cbbe5e), [Derby car](https://sketchfab.com/3d-models/derby-car-free-30331d8e1355492f8be6ec7bb5b556bc) | bloxy_crazy, nano nova, FelikinRuslan | ✘ Each "based on" a named real muscle car (description or tags) |
+| [Low-poly sports car](https://sketchfab.com/3d-models/low-poly-sports-car-23dfdeb55dc24970b36065afaab7a8a5), [NFX Car](https://sketchfab.com/3d-models/nfx-car-979875e117814e46ace66d1fc8697b5d), [Generic Toyama XR Sedan](https://sketchfab.com/3d-models/generic-toyama-xr-sedan-a161542c38ac44fca3b1c283f6d986bb), [Casual Daily Art / 03 - Car](https://sketchfab.com/3d-models/casual-daily-art-03-car-99109de883894ed494107aaed094acf5) | Juff22, Reivilodius, mk2design, Hellbrush | ✘ Based on named real cars (descriptions and tags) |
+| [Coupe '33 Hot Rod #2](https://sketchfab.com/3d-models/coupe-33-hot-rod-2-low-poly-model-c880d700b7ec445ea9718e1b73f97e3e), [Fairheaven LT '80 Cop Cruiser](https://sketchfab.com/3d-models/fairheaven-lt-80-cop-cruiser-low-poly-model-61766c1e6e1e4b2b803c174f33433a74), [Canyon '75 Taxi](https://sketchfab.com/3d-models/canyon-75-taxi-low-poly-model-9e8f92a215784f3d8aaaaeab1bef54c4), [Saba V12 '95](https://sketchfab.com/3d-models/saba-v12-95-low-poly-model-3ab977050c334c13b6abb5de078b4957), [Sanremo '70](https://sketchfab.com/3d-models/sanremo-70-low-poly-model-b2261c471645417a8b7e5882d541c248) | Daniel Zhabotinsky | ✘ Well made, but real cars' bodies (a '33 hot rod coupe, a classic New York cab, 1980s police sedans, Italian supercars) under made-up names |
+| [Hot Rod](https://sketchfab.com/3d-models/hot-rod-16d4373a090444688d87768e2b59f7e2) | Mario | ✘ "Based on Mad Max: Fury Road", a film's car |
+| [Cyberpunk car](https://sketchfab.com/3d-models/cyberpunk-car-b4301ff99d214d16a7a43708a5866bf0) | 4d_Bob | ✘ Inspired by another game's cars |
+| [Retro Police Car](https://sketchfab.com/3d-models/retro-police-car-987ac49f178d4fdb82ded6988a9e96e6) | MadeByYeshe | ✘ "Inspired by" a real car and styled after another game |
+| [Car](https://sketchfab.com/3d-models/car-acccd15d4e454399a39dbe40f4f6df71) and [Retro car stylized](https://sketchfab.com/3d-models/retro-car-stylized-880582f91feb41aabd2c8ec6d4b8038a) | cuadot, makcutka250 | ✘ Modelled from other artists' concept art, which their licence can't speak for |
+| [Flying Retro Car](https://sketchfab.com/3d-models/flying-retro-car-92b34852dc4144faa0e1d7a68d70411e), [Off Road 4X4 racer](https://sketchfab.com/3d-models/off-road-4x4-racer-with-4-different-skins-b065496a2a8a4bf6ba6ab4e4fe5ce133) | OzerGokmen, Duane's Mind | ✘ A famous small German car's body |
+| [Futuristic racing car "Molnia"](https://sketchfab.com/3d-models/futuristic-racing-car-molnia-738a78a4c9154614b90029bf8bb80d61), [Hover-Car](https://sketchfab.com/3d-models/hover-car-low-poly-sci-fi-game-ready-95fc47d2715247f89c8e359dc1838b14) | TuppsM, Mert Tetik | ✘ Hover pods with no wheels (the hovercraft already floats); one with its doors open and a plate |
+| [futuristic sports car](https://sketchfab.com/3d-models/futuristic-sports-car-c992e5e3924a4278b69e1c6b76113014) | k13473117 | ✘ Made by an AI generator (tagged Rodin): no telling what it was drawn from, and one lump |
+| [Sylized Hand Painted Cartoon Car](https://sketchfab.com/3d-models/sylized-hand-painted-cartoon-car-01f98e92152d4d8386131ffe322f3210) and Van | ferofluid | ✘ The car is modelled with its doors and bonnet open; the van is tagged with a maker's name |
+
 ### The Garage
 
 **Garage** under the rides on the globe, and in the pause menu, opens the paint shop
@@ -171,8 +256,11 @@ Choices are kept for each ride in this browser (`world-drive.garage` in localSto
 whenever it's driven; picked while paused they're on it as soon as it drives on. A browser that keeps
 nothing (site data blocked) still wears them for the visit, and a damaged value there is simply
 replaced by the next choice. Decals are projected
-onto the bodywork through boxes each ride gives (its `userData.decals`). The trucks from the library
-keep their own paint: only their flame and trail change. A ride in the colour and finish it came in
+onto the bodywork through boxes each ride gives (its `userData.decals`). The trucks from the library,
+and the cars whose paint is a picture on the model (all but the muscle car), keep their own paint:
+only their flame and trail change, and the Garage says so ("Its paint is part of the model, so it
+keeps it"). The muscle car's paint is plain colour, so it takes colours, finishes, rims and decals
+as the rides do (the free ones without the pass). A ride in the colour and finish it came in
 keeps its own materials, so the kart nobody has painted is just as it was. The trails are cheap: a
 pool of sprites, or one ribbon whose buffers are rewritten in place, nothing made each frame. On the
 test pad (software rendering in the test's browser), the booster's flame made a frame about 7 %
@@ -188,12 +276,21 @@ against each other, the hovercraft hovering with no wheels, the monster truck ov
 Garage's choices on the ride and kept across a reload (and still made with a damaged saved value,
 or none kept at all), the world not drawn behind the Garage, the frame time with trails, nothing
 turning in the air faster than the kart, and the Garage and the locked rides' badges on a phone.
+And the cars: each listed in `cars.json`, `cars.js` and `DRIVE_CARS` alike, under 2 MB, CC BY or
+CC0 and in `CREDITS.md`, its real size, with four wheels and the front two steering; without the
+pass the muscle car free, pictured, credited under the picker and in About (all six, with links),
+driving, drifting, thrown up by a wall and landing, and the others opening the sheet; with it each
+car driving, drifting, thrown up and landing, its wheels spinning and the front ones steering the
+right way, its size as imported, and their handling against each other (the night cruiser fastest,
+the neon racer quickest to 100, the dune buggy thrown highest, the farm truck slowest); the Garage
+repainting the muscle car (colour, rims, decals) and saying the others keep their paint, with only
+flame and trail to pick.
 
 ## Supporter Pass (buying it)
 
 The pass is one payment of **CA$4.99**, no subscription, through a Stripe Payment Link in World
-Drive's own Stripe account. It comes with what's [above](#supporter-pass-content) (the four rides
-and the whole Garage), a **⭐ by your name on the leaderboard**, and **30 drives a day** instead of 8.
+Drive's own Stripe account. It comes with what's [above](#supporter-pass-content) (five cars, the four
+rides and the whole Garage), a **⭐ by your name on the leaderboard**, and **30 drives a day** instead of 8.
 A pass is a Google account's, so it's yours in any browser you sign in on: signing in is only ever
 for the pass, and driving and the leaderboard never need it.
 
@@ -375,8 +472,9 @@ UPDATE purchases SET account_id = 12 WHERE checkout_session = 'cs_live_...';
   `SUPPORTER_EMAILS` or the console to give one away.
 - A supporter on a new browser has the address's 8 drives until they sign in (in the pass's sheet,
   the pause menu or the used-up screen). Buying isn't offered on the used-up screen.
-- Runs in the pass's rides are accepted on the leaderboard from anyone (`PASS_RIDES` in
-  `scores.js`): the lock is in the page, so a row may show one of those rides by a name without a ⭐.
+- Runs in the pass's rides and cars are accepted on the leaderboard from anyone (`PASS_RIDES` and
+  `DRIVE_CARS` in `scores.js`): the lock is in the page, so a row may show one of those by a name
+  without a ⭐. Likewise the cars' models are public files, as the library's are.
 - No receipts or purchase history in the page: Stripe emails its own receipt if that's on in its
   settings.
 
@@ -678,7 +776,10 @@ src/drive-app/globe.js       GlobeView: GlobeControls, the slow spin, flights, t
 src/drive-app/spawn.js       Ground: the ground's height, which way the street runs, a bridge's deck
 src/drive-app/panel.js       search, spots, recent places, the ride picker, the pin's card
 src/drive-app/places.js      the start spots, typed coordinates, recent places
-src/drive-app/vehicles.js    the go-kart, the library trucks (catalog.js lists which) and the pass's rides
+src/drive-app/vehicles.js    the go-kart, the library trucks (catalog.js lists which), the cars and the
+                             pass's rides
+src/drive-app/cars.js        the cars (drive/public/cars/): names, tuning, which are free; loading one
+                             with its wheels turning, its paint and decals
 src/drive-app/rides/         the Supporter Pass's rides, built in code, and parts.js they're built from
 src/drive-app/pro.js         whether this visitor has the Supporter Pass (off until payments say so)
 src/drive-app/pass.js        the Supporter Pass sheet and its badge
@@ -690,7 +791,10 @@ src/drive-app/api.js         /api/config, the visit with Turnstile, /api/search,
 src/drive-app/leaderboard.js the leaderboard: the panel, names, posting runs, the new-best card
 src/drive-app/screens.js     start screen, notices, loading card, pause, keys, messages
 src/drive-app/test-globe.js  the Earth without Google's tiles, for working without a key
-vite.drive.config.js         the build: no key, only the offered vehicles copied from public/
+vite.drive.config.js         the build: no key, only the offered vehicles copied from public/, and
+                             drive/public/ (the cars) as its own public folder
+drive/public/cars/           the cars' models, pictures, cars.json and CREDITS.md
+scripts/add-drive-car.mjs    imports a car from Sketchfab into it; drive-car-thumbs.mjs draws the pictures
 worker/drive/                the Worker: index.js (routes), limits.js (caps, the search queue and
                              the leaderboard's turns), turnstile.js, search.js; the leaderboard:
                              players.js, scores.js, boards.js, names.js (rules and the filter),
@@ -725,5 +829,6 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
 ## Credits
 
 The 3D world is Google's: the Google Maps logo and the data providers show whenever the tiles are on
-screen. Place search © OpenStreetMap contributors. The trucks are models from Sketchfab under CC BY
-4.0, credited under **About World Drive** and on the ride picker; the go-kart is built in code.
+screen. Place search © OpenStreetMap contributors. The trucks and the cars are models from Sketchfab
+under CC BY 4.0, credited under **About World Drive** and on the ride picker (and the cars in
+`drive/public/cars/CREDITS.md`); the go-kart and the pass's rides are built in code.

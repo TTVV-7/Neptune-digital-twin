@@ -8,23 +8,33 @@
 // is measured against the kart's (top speed, 0 to 100 km/h, turning, how high the same wall
 // throws them); the hovercraft hovers with no wheels; the Garage's paint, decals, flame and trail
 // go on the ride being driven and are still there after a reload; what a trail and the booster
-// cost a frame; and the Garage and the badges on a phone. Everything off this machine is blocked.
+// cost a frame; and the Garage and the badges on a phone. And World Drive's cars
+// (src/drive-app/cars.js): listed, credited, small and their real size, with wheels that steer; the
+// muscle car free and the rest locked; each driving, drifting, thrown up and landing, its wheels
+// spinning and steering; and the Garage repainting the one whose paint is plain colour and saying
+// the others keep theirs. Everything off this machine is blocked.
 //
 // Needs Playwright with Chromium. TEST_VITE_PORT picks the port; TEST_SCREENSHOTS=<folder> saves
 // pictures; the handling it measures is printed.
 
 import assert from 'node:assert/strict';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { startVite } from './worker-harness.mjs';
+import { CARS as CAR_SPECS } from '../src/drive-app/cars.js';
+import { DRIVE_CARS } from '../src/drive-app/catalog.js';
 
 const require = createRequire( import.meta.url );
 const PORT = Number( process.env.TEST_VITE_PORT ) || 5531;
 const SHOTS = process.env.TEST_SCREENSHOTS;
 const BASE = `http://127.0.0.1:${ PORT }`;
 const RIDES = [ 'Sports coupe', 'Monster truck', 'City bus', 'Hovercraft' ];
+// World Drive's cars (src/drive-app/cars.js): the first is free, the rest come with the pass.
+const CARS = [ 'Muscle car', 'Neon racer', 'Night cruiser', 'Dune buggy', 'Farm truck', 'Police cruiser' ];
+const PASS_CARS = CARS.slice( 1 );
+const LOCKED = [ ...PASS_CARS, ...RIDES ];
 
 let chromium;
 let browser;
@@ -217,17 +227,19 @@ describe( 'Supporter Pass, without it', () => {
 
 		await openGlobe( page );
 		const panel = page.locator( '#globe-ui .panel' );
-		assert.deepEqual( await panel.locator( '.vehicle b' ).allTextContents(), [ 'Go-kart', 'Pickup', 'Haul truck', ...RIDES ] );
-		assert.deepEqual( await panel.locator( '.vehicle.locked b' ).allTextContents(), RIDES );
-		assert.deepEqual( await panel.locator( '.vehicle .pro-badge' ).allTextContents(), RIDES.map( () => '⭐ Supporter Pass' ) );
+		assert.deepEqual( await panel.locator( '.vehicle b' ).allTextContents(), [ 'Go-kart', 'Pickup', 'Haul truck', ...CARS, ...RIDES ] );
+		assert.deepEqual( await panel.locator( '.vehicle.locked b' ).allTextContents(), LOCKED );
+		assert.deepEqual( await panel.locator( '.vehicle .pro-badge' ).allTextContents(), LOCKED.map( () => '⭐ Supporter Pass' ) );
 		assert.equal( await page.evaluate( async () => ( await import( '/src/drive-app/pro.js' ) ).isPro() ), false );
 
 		await panel.locator( '.vehicle', { hasText: 'Monster truck' } ).click();
 		await page.locator( '#pass' ).waitFor();
 		assert.equal( await panel.locator( '.vehicle.picked b' ).textContent(), 'Go-kart' );
 		const sheet = page.locator( '#pass' );
-		assert.match( await sheet.textContent(), /Four more rides[\s\S]*whole Garage[\s\S]*on the leaderboard[\s\S]*30 drives a day[\s\S]*Instead of 8/ );
-		assert.equal( await sheet.locator( '.ride-icon' ).count(), 4 );
+		assert.match( await sheet.textContent(), /Nine more rides[\s\S]*whole Garage[\s\S]*on the leaderboard[\s\S]*30 drives a day[\s\S]*Instead of 8/ );
+		assert.match( await sheet.locator( '.rides' ).textContent(), /Five cars \(a neon racer, a night cruiser, a dune buggy, a farm truck and a police cruiser\) and four built for World Drive \(a sports coupe, a monster truck, a city bus and a hovercraft\)/ );
+		assert.equal( await sheet.locator( '.ride-icon' ).count(), 9 );
+		assert.deepEqual( await sheet.locator( '.ride-icon' ).evaluateAll( icons => icons.map( icon => icon.title ) ), LOCKED );
 		assert.equal( await sheet.locator( '.buy' ).textContent(), 'Coming soon' );
 		assert.ok( await sheet.locator( '.buy' ).isDisabled() );
 		await shot( page, 'pro-pass-sheet' );
@@ -763,11 +775,11 @@ describe( 'The Garage on a phone', () => {
 			return box.width > 20 && box.height > 8 && getComputedStyle( badge ).display !== 'none';
 
 		} ) );
-		assert.deepEqual( await badges( '#globe-ui' ), [ true, true, true, true ] );
+		assert.deepEqual( await badges( '#globe-ui' ), LOCKED.map( () => true ) );
 		await dropIn( page );
 		await page.evaluate( () => window.drive.driver.stop() );
 		await page.locator( '#pause' ).waitFor();
-		assert.deepEqual( await badges( '#pause' ), [ true, true, true, true ] );
+		assert.deepEqual( await badges( '#pause' ), LOCKED.map( () => true ) );
 		await shot( page, 'pro-phone-pause-locked' );
 		assert.deepEqual( page.errors, [] );
 		await page.context().close();
@@ -807,6 +819,228 @@ describe( 'The Garage on a phone', () => {
 		await garage.waitFor( { state: 'hidden' } );
 		assert.deepEqual( page.errors, [] );
 		await page.context().close();
+
+	} );
+
+} );
+
+describe( 'World Drive\'s cars', () => {
+
+	const folder = new URL( '../drive/public/cars/', import.meta.url );
+	const listed = JSON.parse( readFileSync( new URL( 'cars.json', folder ), 'utf8' ) );
+	const idOf = name => CAR_SPECS.find( car => car.name === name ).id;
+	let page;
+
+	after( () => page?.context().close() );
+
+	test( 'each is listed and credited, small enough, its real size, with four wheels and the front two steering', () => {
+
+		assert.deepEqual( CAR_SPECS.map( car => car.id ), DRIVE_CARS );
+		assert.deepEqual( CAR_SPECS.map( car => car.name ), CARS );
+		assert.deepEqual( listed.map( car => car.id ).sort(), [ ...DRIVE_CARS ].sort() );
+		// One free, the rest with the pass.
+		assert.deepEqual( CAR_SPECS.filter( car => ! car.pro ).map( car => car.name ), [ 'Muscle car' ] );
+		const credits = readFileSync( new URL( 'CREDITS.md', folder ), 'utf8' );
+		for ( const car of listed ) {
+
+			const bytes = statSync( new URL( car.file, folder ) ).size;
+			assert.ok( bytes < 2 * 1024 * 1024, `${ car.id } is ${ bytes } bytes` );
+			assert.ok( statSync( new URL( car.thumb, folder ) ).size > 1000, car.id );
+			assert.ok( [ 'CC Attribution', 'CC0 Public Domain' ].includes( car.source.license ), car.id );
+			assert.match( car.source.url, /^https:\/\/sketchfab\.com\/3d-models\//, car.id );
+			assert.ok( credits.includes( car.source.url ) && credits.includes( car.source.author ) && credits.includes( car.source.licenseUrl ), car.id );
+			assert.ok( car.dimensions.length >= 3.4 && car.dimensions.length <= 5.2 && car.dimensions.width < 3.2 && car.dimensions.height < 3, `${ car.id } ${ JSON.stringify( car.dimensions ) }` );
+			assert.equal( car.wheels.length, 4, car.id );
+			// The front pair (front is -z) steers, one each side.
+			const front = car.wheels.filter( wheel => wheel.steers );
+			assert.deepEqual( front.map( wheel => Math.sign( wheel.at[ 2 ] ) ), [ - 1, - 1 ], car.id );
+			assert.deepEqual( front.map( wheel => Math.sign( wheel.at[ 0 ] ) ).sort(), [ - 1, 1 ], car.id );
+
+		}
+
+	} );
+
+	test( 'without the pass: the muscle car is free, drives and is credited; the others open the pass', async () => {
+
+		page = await newPage();
+		await openGlobe( page );
+		const panel = page.locator( '#globe-ui .panel' );
+		await panel.locator( '.vehicle', { hasText: 'Neon racer' } ).click();
+		await page.locator( '#pass' ).waitFor();
+		await page.locator( '#pass .close' ).click();
+		assert.equal( await panel.locator( '.vehicle.picked b' ).textContent(), 'Go-kart' );
+		await panel.locator( '.vehicle', { hasText: 'Muscle car' } ).click();
+		assert.equal( await panel.locator( '.vehicle.picked b' ).textContent(), 'Muscle car' );
+		// Its picture, drawn for the picker, and the credit its licence asks for, under the rides.
+		assert.match( await panel.locator( '.vehicle[data-id="muscle-car"] img' ).getAttribute( 'src' ), /\/cars\/thumbs\/muscle-car\.webp$/ );
+		assert.equal( await panel.locator( '.credit' ).textContent(), 'Model: "Classic Muscle car" by Lexyc16, CC BY 4.0; compressed, rescaled and its wheels made to turn.' );
+		await shot( page, 'cars-globe-picker' );
+		// About credits all six, each with its link and its licence's.
+		await page.locator( '#globe-ui .about-open' ).click();
+		const lines = await page.locator( '#about .credits li' ).allTextContents();
+		for ( const car of listed ) {
+
+			const name = CAR_SPECS.find( spec => spec.id === car.id ).name;
+			const line = lines.find( text => text.startsWith( `${ name }:` ) );
+			assert.ok( line?.includes( car.source.title ) && line.includes( `by ${ car.source.author }` ) && line.includes( 'its wheels made to turn' ), `${ name }: ${ line }` );
+			assert.equal( await page.locator( `#about .credits a[href="${ car.source.url }"]` ).count(), 1, name );
+
+		}
+
+		assert.ok( await page.locator( '#about .credits a[href="https://creativecommons.org/licenses/by/4.0/"]' ).count() >= 6 );
+		await shot( page, 'cars-about' );
+		await page.locator( '#about button[type="submit"]' ).click();
+		await dropIn( page );
+		const car = await page.evaluate( measure );
+		console.log( 'handling, muscle car without the pass:', JSON.stringify( car ) );
+		assert.equal( car.name, 'Muscle car' );
+		assert.ok( car.after3s > 10 && car.drifting === 1 && car.driftLevel >= 2 && car.driftBoost && car.hit && car.launch > 0.3 && car.landed, JSON.stringify( car ) );
+		assert.deepEqual( page.errors, [] );
+		assert.deepEqual( page.outside, [] );
+		await page.context().close();
+		page = null;
+
+	} );
+
+	test( 'with the pass: each drives, drifts, is thrown up by a wall and lands, its wheels spinning and the front ones steering', async () => {
+
+		page = await newPage();
+		await openGlobe( page, '?pro=1' );
+		await page.locator( '#globe-ui .vehicle', { hasText: 'Muscle car' } ).click();
+		await dropIn( page );
+		const handling = {};
+		for ( const name of CARS ) {
+
+			if ( name !== 'Muscle car' ) await swapTo( page, name );
+			const id = idOf( name );
+			const ride = handling[ name ] = await page.evaluate( measure );
+			assert.equal( ride.name, name );
+			assert.ok( ride.after3s > 10, `${ name } didn't get going: ${ JSON.stringify( ride ) }` );
+			assert.ok( ride.drifting === 1 && ride.driftLevel >= 2 && ride.driftBoost, `${ name } didn't drift: ${ JSON.stringify( ride ) }` );
+			assert.ok( ride.hit && ride.launch > 0.3 && ride.landed, `${ name } wasn't thrown up and back down: ${ JSON.stringify( ride ) }` );
+			assert.ok( ride.trickRate <= 1, `${ name } turns in the air at ${ ride.trickRate } of a kart's rate` );
+
+			// Its wheels: a third of a second at 36 km/h, steering right.
+			const wheels = await page.evaluate( () => {
+
+				const { driver: d } = window.drive;
+				for ( const code of [ ...d.keys ] ) d.release( code );
+				Object.assign( d, { east: 0, north: 0, y: 0, heading: 0, course: 0, speed: 10, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, flying: false, drifting: 0, boost: null } );
+				const hubs = [];
+				d.entry.pivot.traverse( o => o.userData.wheel && hubs.push( o ) );
+				const before = hubs.map( hub => hub.rotation.x );
+				d.press( 'KeyD' );
+				for ( let i = 0; i < 20; i ++ ) d.update( 1 / 60 );
+				const turned = hubs.map( ( hub, i ) => ( { steers: hub.userData.wheel.steers, spun: Math.abs( hub.rotation.x - before[ i ] ), steer: hub.rotation.y } ) );
+				d.release( 'KeyD' );
+				Object.assign( d, { speed: 0, steer: 0 } );
+				return { size: [ d.length, d.width, d.height ], turned };
+
+			} );
+			assert.equal( wheels.turned.length, 4, name );
+			for ( const wheel of wheels.turned ) {
+
+				assert.ok( wheel.spun > 0.3, `${ name }: a wheel didn't spin ${ JSON.stringify( wheels ) }` );
+				// Steering right turns the front wheels right (clockwise from above), and only them.
+				assert.ok( wheel.steers ? wheel.steer < - 0.05 : wheel.steer === 0, `${ name }: ${ JSON.stringify( wheels ) }` );
+
+			}
+
+			// As big as the importer made it.
+			const { length, width, height } = listed.find( car => car.id === id ).dimensions;
+			wheels.size.forEach( ( measured, i ) => assert.ok( Math.abs( measured - [ length, width, height ][ i ] ) < 0.05 * [ length, width, height ][ i ], `${ name } is ${ wheels.size } against ${ [ length, width, height ] }` ) );
+
+			// A close look, and a picture of it under way and turning.
+			await page.evaluate( () => {
+
+				document.querySelector( '#drive-ui .keys' ).hidden = true;
+				window.drive.driver.chaseZoom = 0.5;
+
+			} );
+			await page.waitForTimeout( 700 );
+			await shot( page, `cars-close-${ id }` );
+			await page.evaluate( () => window.drive.driver.chaseZoom = 1 );
+			await page.keyboard.down( 'KeyW' );
+			await page.waitForFunction( () => window.drive.driver.speed > 8, null, { timeout: 20000 } );
+			await page.keyboard.down( 'KeyA' );
+			await page.waitForTimeout( 500 );
+			await shot( page, `cars-drive-${ id }` );
+			await page.keyboard.up( 'KeyA' );
+			await page.keyboard.up( 'KeyW' );
+
+		}
+
+		console.log( 'handling of the cars:' );
+		for ( const [ name, ride ] of Object.entries( handling ) ) console.log( `  ${ name.padEnd( 14 ) } top ${ ride.topSpeed } km/h, 0-100 ${ ride.zeroTo100 ?? 'never' } s, 3 s: ${ ride.after3s } km/h, turn ${ ride.turnRate }°/s at 50 km/h (slide ${ ride.slide }°), wall at 70 km/h: up ${ ride.launch } m, ${ ride.airTime } s in the air` );
+		const cars = Object.values( handling );
+		const { 'Neon racer': neon, 'Night cruiser': cruiser, 'Dune buggy': buggy, 'Farm truck': truck } = handling;
+		// Each its own: the night cruiser fastest, the neon racer quickest away, the dune buggy thrown
+		// highest, the farm truck slowest.
+		for ( const other of cars ) {
+
+			if ( other !== cruiser ) assert.ok( cruiser.topSpeed > other.topSpeed, `night cruiser ${ cruiser.topSpeed } vs ${ other.name } ${ other.topSpeed }` );
+			if ( other !== neon ) assert.ok( neon.zeroTo100 < other.zeroTo100, `neon racer 0-100 ${ neon.zeroTo100 } vs ${ other.name } ${ other.zeroTo100 }` );
+			if ( other !== buggy ) assert.ok( buggy.launch > other.launch, `dune buggy ${ buggy.launch } m vs ${ other.name } ${ other.launch } m` );
+			if ( other !== truck ) assert.ok( truck.topSpeed < other.topSpeed && truck.after3s < other.after3s, `farm truck vs ${ other.name }` );
+
+		}
+
+		assert.deepEqual( page.errors, [] );
+		assert.deepEqual( page.outside, [] );
+
+	} );
+
+	test( 'the Garage paints the muscle car (colour, rims, decals); the others keep their own paint, and say so', async () => {
+
+		await swapTo( page, 'Muscle car' );
+		await page.keyboard.press( 'Escape' );
+		await page.locator( '#pause' ).waitFor();
+		await page.locator( '#pause .garage-open' ).click();
+		const garage = page.locator( '#garage' );
+		await garage.waitFor();
+		await page.waitForFunction( () => window.drive.garage.preview?.model?.name === 'Muscle car', null, { timeout: 20000 } );
+		const pick = ( part, id ) => garage.locator( `[data-part="${ part }"] .choice[data-id="${ id }"]` ).click();
+		await pick( 'colour', 'red' );
+		await pick( 'rim', 'gold' );
+		await pick( 'decal', 'stripes' );
+		await page.waitForTimeout( 900 );
+		await shot( page, 'cars-garage-muscle-car' );
+		const worn = await page.evaluate( () => {
+
+			const { pivot } = window.drive.driver.entry;
+			const body = new Set();
+			const rims = new Set();
+			pivot.traverse( o => {
+
+				if ( o.userData.paint === 'body' ) body.add( o.material.color.getHexString() );
+				if ( o.userData.paint === 'rim' ) rims.add( o.material.color.getHexString() );
+
+			} );
+			const decals = pivot.getObjectByName( 'decals' );
+			return { body: [ ...body ], rims: [ ...rims ], decals: decals ? decals.children.reduce( ( sum, m ) => sum + m.geometry.attributes.position.count, 0 ) : 0 };
+
+		} );
+		assert.deepEqual( worn.body, [ 'd81e2c' ] );
+		assert.deepEqual( worn.rims, [ 'd9a63a' ] );
+		assert.ok( worn.decals > 30, JSON.stringify( worn ) );
+		for ( const name of PASS_CARS ) {
+
+			await garage.locator( '.ride-tab', { hasText: name } ).click();
+			await page.waitForFunction( ride => window.drive.garage.preview.model?.name === ride && window.drive.garage.vehicle.paintable === false, name, { timeout: 20000 } );
+			// Only the flame and trail: its paint is part of the model, and the Garage says so.
+			assert.ok( await garage.locator( '.paint-note' ).isVisible(), name );
+			assert.match( await garage.locator( '.paint-note' ).textContent(), /keeps it: pick its boost flame and trail/ );
+			for ( const part of [ 'colour', 'finish', 'decal', 'rim' ] ) assert.equal( await garage.locator( `[data-part="${ part }"]` ).isVisible(), false, `${ name } ${ part }` );
+			assert.ok( await garage.locator( '[data-part="flame"]' ).isVisible() && await garage.locator( '[data-part="trail"]' ).isVisible(), name );
+			await page.waitForTimeout( 500 );
+			await shot( page, `cars-garage-${ idOf( name ) }` );
+
+		}
+
+		await garage.locator( '.done' ).click();
+		await page.locator( '#pause .resume' ).click();
+		await page.waitForFunction( () => window.drive.mode === 'driving' );
+		assert.deepEqual( page.errors, [] );
 
 	} );
 

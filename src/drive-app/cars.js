@@ -134,23 +134,48 @@ export async function loadCar( loader, car, entry ) {
 
 	if ( car.decals && body ) {
 
-		// Decals go onto the meshes in decalParent (paint.js): the body's, which a body of more than
-		// one material holds as a group.
+		// Decals go onto the meshes in decalParent (paint.js), in the car's metres. The compression
+		// keeps a part's positions small and puts a transform on its node to undo that (meshopt's
+		// quantization), so a body of more than one material, a group of meshes, hands its transform
+		// down to them first.
+		if ( ! body.isMesh ) {
+
+			body.updateMatrix();
+			for ( const mesh of body.children ) mesh.applyMatrix4( body.matrix );
+			body.matrix.identity().decompose( body.position, body.quaternion, body.scale );
+
+		}
+
 		model.userData.decals = car.decals;
 		model.userData.decalParent = body.isMesh ? body.parent : body;
 
 	}
 
-	// Spun by how far it's gone, each wheel by its own size; turned about y before it spins.
-	const turns = wheels.map( () => 0 );
-	for ( const wheel of wheels ) wheel.rotation.order = 'YXZ';
+	// Each wheel turns about its axle (cars.json has where it is), whatever that same transform has
+	// made of its node's origin: held in a hub of its own there, which spins by how far the car has
+	// gone (for each wheel's own size) and, at the front, steers before it spins.
+	const hubs = wheels.map( wheel => {
+
+		const hub = new Group();
+		hub.name = `${ wheel.name } hub`;
+		hub.userData.wheel = wheel.userData.wheel;
+		delete wheel.userData.wheel;
+		hub.position.fromArray( entry.wheels?.find( w => w.name === wheel.name )?.at ?? wheel.position.toArray() );
+		hub.rotation.order = 'YXZ';
+		wheel.parent.add( hub );
+		wheel.position.sub( hub.position );
+		hub.add( wheel );
+		return hub;
+
+	} );
+	const turns = hubs.map( () => 0 );
 	model.userData.onDrive = ( { steer, speed, dt } ) => {
 
-		wheels.forEach( ( wheel, i ) => {
+		hubs.forEach( ( hub, i ) => {
 
-			turns[ i ] = ( turns[ i ] + speed * dt / wheel.userData.wheel.radius ) % ( Math.PI * 2 );
-			wheel.rotation.x = - turns[ i ];
-			if ( wheel.userData.wheel.steers ) wheel.rotation.y = - steer * STEER_LOCK;
+			turns[ i ] = ( turns[ i ] + speed * dt / hub.userData.wheel.radius ) % ( Math.PI * 2 );
+			hub.rotation.x = - turns[ i ];
+			if ( hub.userData.wheel.steers ) hub.rotation.y = - steer * STEER_LOCK;
 
 		} );
 

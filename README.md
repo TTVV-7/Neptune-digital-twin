@@ -463,8 +463,8 @@ testing with test cards and the known gaps are in [docs/premium.md](docs/premium
 ## World Drive (worlddrive.app)
 
 A second app in this repository, on its own address: pick anywhere on Earth from a globe of Google's
-3D tiles (search, a dozen start spots, recent places, or a tap on the globe), choose a go-kart, pickup
-or haul truck, press **Drive here** and drive the real world arcade-style: drift, boost, fly
+3D tiles (search, a dozen start spots, recent places, or a tap on the globe), choose a go-kart, pickup,
+haul truck or muscle car, press **Drive here** and drive the real world arcade-style: drift, boost, fly
 with Shift, and hit something to bounce off it into the air, where **A**/**D** spin, **W**/**S** flip and
 **Q**/**E** roll for tricks that score (times a combo multiplier) when you land on your wheels; a
 wipeout loses the combo and rolls you back onto them. **M** goes back to the globe to drop in
@@ -481,9 +481,16 @@ Worker to OpenStreetMap's Nominatim, cached and at most once a second. A leaderb
 player's best stunt run today, this week and all time (a nickname, no sign-up) in a D1 database,
 posted with the visit's signed token and checked against what the game can score.
 
-A **Supporter Pass** (one payment of CA$4.99 towards the running costs) unlocks four more rides
-built in code (a sports coupe, a monster truck, a city bus and a hovercraft, each handling its own
-way), the Garage's extras (paint, finishes, decals, rims, boost flames and trails), a ⭐ on the
+World Drive's cars are models from Sketchfab (CC BY, credited in its About box and ride picker),
+kept out of the construction app's library: `npm run add-drive-car` imports one into
+`drive/public/cars/`, which only World Drive's build publishes, finding its wheels so they spin and
+steer, and `npm run drive-car-thumbs` draws its picture for the picker (see
+[World Drive's cars](docs/world-drive.md#world-drives-cars)).
+
+A **Supporter Pass** (one payment of CA$4.99 towards the running costs) unlocks nine more rides:
+five more cars (a neon racer, a night cruiser, a dune buggy, a farm truck and a police cruiser) and
+four built in code (a sports coupe, a monster truck, a city bus and a hovercraft), each handling its
+own way; the Garage's extras (paint, finishes, decals, rims, boost flames and trails), a ⭐ on the
 leaderboard and 30 drives a day. It's bought with a Stripe Payment Link after signing in with Google,
 so it's yours in any browser; Stripe's signed webhook records it. Buying stays off ("Coming soon")
 until `GOOGLE_CLIENT_ID` and the webhook's secret are set (see
@@ -555,6 +562,8 @@ worker/vercel.js    the Worker as a Vercel Function; worker/postgres.js gives it
 api/index.js        the Vercel Function (vercel.json sends /api/* to it)
 scripts/add-asset.mjs   imports a model from Sketchfab or Poly Haven into public/library
 public/library/     downloaded models, library.json catalog, thumbs/ and CREDITS.md
+scripts/add-drive-car.mjs, drive-car-thumbs.mjs   import a car for World Drive into drive/public/cars
+                    (its own cars.json, thumbs/ and CREDITS.md; World Drive's build only)
 src/geo.js          lat/lon <-> local metres
 public/models/      put your .glb files here
 drive/index.html    World Drive's page; its code is src/drive-app/ (docs/world-drive.md)
