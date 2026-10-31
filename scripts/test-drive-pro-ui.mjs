@@ -2,12 +2,13 @@
 // in a real browser, on the Vite dev server with no Maps key (the test globe and the flat test pad,
 // as test-drive-ui.mjs uses). Without the pass: the four pass rides are listed with their badge and
 // can't be driven, picking one (or a locked Garage choice) opens the pass's sheet, the free
-// choices work, and the free game drives as it did. ?pro=1 only counts on this computer. With
+// choices work (and keep working with a damaged saved value, or none kept at all), the world isn't
+// drawn behind the Garage, and the free game drives as it did. ?pro=1 only counts on this computer. With
 // ?pro=1 here: each new ride drives, drifts, is thrown up by a wall and lands, and their handling
 // is measured against the kart's (top speed, 0 to 100 km/h, turning, how high the same wall
 // throws them); the hovercraft hovers with no wheels; the Garage's paint, decals, flame and trail
 // go on the ride being driven and are still there after a reload; what a trail and the booster
-// cost a frame; and the Garage on a phone. Everything off this machine is blocked.
+// cost a frame; and the Garage and the badges on a phone. Everything off this machine is blocked.
 //
 // Needs Playwright with Chromium. TEST_VITE_PORT picks the port; TEST_SCREENSHOTS=<folder> saves
 // pictures; the handling it measures is printed.
@@ -132,7 +133,7 @@ function measure() {
 		d.update( 1 / 60 );
 
 	};
-	const out = { name: d.entry.state.name };
+	const out = { name: d.entry.state.name, trickRate: d.trickRate };
 
 	// The gas held from a standstill.
 	reset( 0 );
@@ -257,7 +258,20 @@ describe( 'Supporter Pass, without it', () => {
 		assert.deepEqual( await garage.locator( '[data-part="decal"] .choice:not(.locked)' ).allTextContents(), [ 'None⭐' ] );
 		assert.equal( await garage.locator( '[data-part="flame"] .choice:not(.locked)' ).count(), 1 );
 		assert.deepEqual( await garage.locator( '[data-part="trail"] .choice:not(.locked)' ).allTextContents(), [ 'None⭐' ] );
-		assert.equal( await garage.locator( '[data-part="colour"] h3 .pro-badge' ).textContent(), '⭐ Supporter Pass' );
+		// One word on the pass over the choices, not a badge on every part.
+		assert.equal( await garage.locator( '.pass-note .pro-badge' ).textContent(), '⭐ Supporter Pass' );
+		assert.ok( await garage.locator( '.pass-note' ).isVisible() );
+		assert.equal( await garage.locator( 'h3 .pro-badge' ).count(), 0 );
+		// The world isn't drawn behind it: the turntable is.
+		const drawn = await page.evaluate( async () => {
+
+			const { info } = window.drive.renderer;
+			const before = info.render.frame;
+			for ( let i = 0; i < 10; i ++ ) await new Promise( requestAnimationFrame );
+			return info.render.frame - before;
+
+		} );
+		assert.equal( drawn, 0 );
 
 		// Locked: the pass, and nothing changes.
 		await garage.locator( '[data-part="colour"] .choice[data-id="violet"]' ).click();
@@ -280,6 +294,7 @@ describe( 'Supporter Pass, without it', () => {
 		await garage.locator( '.ride-tab', { hasText: 'Monster truck' } ).click();
 		await page.waitForFunction( () => window.drive.garage.preview.model?.name === 'Monster truck', null, { timeout: 20000 } );
 		assert.ok( await garage.locator( '.locked-banner' ).isVisible() );
+		assert.equal( await garage.locator( '.pass-note' ).isVisible(), false );
 		await garage.locator( '[data-part="decal"] .choice[data-id="none"]' ).click();
 		await page.locator( '#pass' ).waitFor();
 		await page.locator( '#pass .close' ).click();
@@ -293,6 +308,65 @@ describe( 'Supporter Pass, without it', () => {
 		assert.ok( await garage.locator( '[data-part="flame"]' ).isVisible() );
 		await garage.locator( '.done' ).click();
 		await garage.waitFor( { state: 'hidden' } );
+		// And the world is drawn again.
+		assert.ok( await page.evaluate( async () => {
+
+			const { info } = window.drive.renderer;
+			const before = info.render.frame;
+			for ( let i = 0; i < 5; i ++ ) await new Promise( requestAnimationFrame );
+			return info.render.frame > before;
+
+		} ) );
+
+	} );
+
+	test( 'a damaged saved look, or a browser that keeps nothing, doesn\'t stop the Garage', async () => {
+
+		const pickWhite = async target => {
+
+			await target.locator( '#globe-ui .garage-open' ).click();
+			await target.waitForFunction( () => window.drive.garage.preview?.model, null, { timeout: 20000 } );
+			await target.locator( '#garage [data-part="colour"] .choice[data-id="white"]' ).click();
+			const on = await target.locator( '#garage [data-part="colour"] .choice.on' ).getAttribute( 'data-id' );
+			await target.locator( '#garage .done' ).click();
+			return on;
+
+		};
+		// Whatever was there before (another version's, or half written), the next choice is kept.
+		for ( const damaged of [ '{"go-kart": {"colour": "w', '"go-kart"', '[ 1, 2 ]', '7' ] ) {
+
+			await page.evaluate( value => localStorage.setItem( 'world-drive.garage', value ), damaged );
+			await openGlobe( page );
+			assert.equal( await pickWhite( page ), 'white', damaged );
+			assert.equal( await page.evaluate( () => JSON.parse( localStorage.getItem( 'world-drive.garage' ) )[ 'go-kart' ].colour ), 'white', damaged );
+
+		}
+
+		// Site data blocked: nothing is kept, but what's picked is on the kart for this visit.
+		const blocked = await newPage();
+		await blocked.addInitScript( () => {
+
+			for ( const name of [ 'getItem', 'setItem', 'removeItem' ] ) Storage.prototype[ name ] = () => {
+
+				throw new DOMException( 'The site\'s data is blocked', 'SecurityError' );
+
+			};
+
+		} );
+		await openGlobe( blocked );
+		assert.equal( await pickWhite( blocked ), 'white' );
+		await dropIn( blocked );
+		const colours = await blocked.evaluate( () => {
+
+			const found = new Set();
+			window.drive.driver.entry.pivot.traverse( o => o.userData.paint === 'body' && found.add( o.material.color.getHexString() ) );
+			return [ ...found ];
+
+		} );
+		assert.deepEqual( colours, [ 'eef1f4' ] );
+		assert.deepEqual( blocked.errors, [] );
+		await blocked.context().close();
+		await page.evaluate( () => localStorage.removeItem( 'world-drive.garage' ) );
 
 	} );
 
@@ -316,9 +390,7 @@ describe( 'Supporter Pass, without it', () => {
 		// A look saved with the pass (say on a test page) doesn't come with it.
 		await page.evaluate( () => {
 
-			const all = JSON.parse( localStorage.getItem( 'world-drive.garage' ) );
-			Object.assign( all[ 'go-kart' ], { colour: 'violet', finish: 'metallic', decal: 'flames', flame: 'rainbow', trail: 'ribbon' } );
-			localStorage.setItem( 'world-drive.garage', JSON.stringify( all ) );
+			localStorage.setItem( 'world-drive.garage', JSON.stringify( { 'go-kart': { colour: 'violet', finish: 'metallic', decal: 'flames', flame: 'rainbow', trail: 'ribbon' } } ) );
 			localStorage.setItem( 'world-drive.vehicle', 'monster-truck' );
 
 		} );
@@ -387,6 +459,8 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 			assert.ok( ride.after3s > 10, `${ name } didn't get going: ${ JSON.stringify( ride ) }` );
 			assert.ok( ride.drifting === 1 && ride.driftLevel >= 2 && ride.driftBoost, `${ name } didn't drift: ${ JSON.stringify( ride ) }` );
 			assert.ok( ride.hit && ride.launch > 0.3 && ride.landed, `${ name } wasn't thrown up and back down: ${ JSON.stringify( ride ) }` );
+			// Never turning in the air faster than a kart, the most the leaderboard allows for.
+			assert.ok( ride.trickRate <= 1, `${ name } turns in the air at ${ ride.trickRate } of a kart's rate` );
 
 		}
 
@@ -662,6 +736,27 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 } );
 
 describe( 'The Garage on a phone', () => {
+
+	test( 'without the pass, the locked rides wear their badge there too', async () => {
+
+		const page = await newPage( { viewport: { width: 390, height: 844 }, touch: true } );
+		await openGlobe( page );
+		const badges = async root => page.locator( `${ root } .vehicle.locked .pro-badge` ).evaluateAll( list => list.map( badge => {
+
+			const box = badge.getBoundingClientRect();
+			return box.width > 20 && box.height > 8 && getComputedStyle( badge ).display !== 'none';
+
+		} ) );
+		assert.deepEqual( await badges( '#globe-ui' ), [ true, true, true, true ] );
+		await dropIn( page );
+		await page.evaluate( () => window.drive.driver.stop() );
+		await page.locator( '#pause' ).waitFor();
+		assert.deepEqual( await badges( '#pause' ), [ true, true, true, true ] );
+		await shot( page, 'pro-phone-pause-locked' );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
 
 	test( 'it fills the screen, the ride and its choices fit across, and it closes', async () => {
 
