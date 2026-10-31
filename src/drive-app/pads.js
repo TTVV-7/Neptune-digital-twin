@@ -20,28 +20,31 @@ import { storage } from './places.js';
 // little, a big one all the way. They're put down as you drive, ahead of you and round you, where
 // the ground is open and flattish and can be driven to from the street you're on. Each spot is
 // looked at down from high above, so the first thing a ray meets is whatever is on top there: a
-// roof, a tree or a bridge over the street rules it out, and nothing goes inside a building. Four
-// more rays round the pad keep it off parked cars, kerbs and slopes, and a few on the way there
-// from the vehicle keep it off roofs and shelters: the ground must climb or fall gently all the
-// way, as a street does, never in a step, as at a roof's edge. A modest number, recycled as you leave them behind; one that's
-// driven over goes dark and lights again a few seconds later (with the gauge full, it's left lit). The booster still recharges by itself
-// (drive.js): pads only add to it. The pause menu's switch turns them off (kept in this browser);
-// they're on unless it's been used.
+// roof, a tree or a bridge over the street rules it out, and nothing goes inside a building. Eight
+// more rays round the pad keep it to ground as smooth as a road (not parked cars, kerbs, slopes or
+// the lumpy tops of bushes), and more on the way there from the vehicle keep it off roofs, shelters
+// and banks beside the road: the ground must climb or fall gently all the way, as a street does,
+// never in a step that stays up, as at a roof's edge or up an embankment. A modest number, recycled
+// as you leave them behind; one that's driven over goes dark and lights again a few seconds later
+// (with the gauge full, it's left lit). The booster still recharges by itself (drive.js): pads only
+// add to it. The pause menu's switch turns them off (kept in this browser); they're on unless it's
+// been used.
 //
-// They cost little: three instanced meshes (the pads, their glow and the big ones' light) and a try
-// at a new spot every TRY s, of a dozen rays at most (most tries end after one or two), plus one
-// ray a frame checking a pad in turn.
+// They cost little: three instanced meshes (the pads, their glow and their light) and a try at a
+// new spot every TRY s, of two dozen rays at most (most tries end after one or two), plus one ray a
+// frame checking a pad in turn.
 
 const KEY = 'world-drive.pads';
 // The small and big pads: how many, how wide (m, radius), how much of the gauge each gives, how
-// long (s) each takes to light again after it's driven over, and their colour.
+// long (s) each takes to light again after it's driven over, their colour, and how tall and bright
+// the column of light over each is (so they're seen from the chase camera, low over the road).
 const KINDS = {
-	small: { count: 9, radius: 1.1, refill: 0.12, respawn: 4, colour: 0xffc83d },
-	big: { count: 3, radius: 1.9, refill: 1, respawn: 10, colour: 0xff6a2a },
+	small: { count: 9, radius: 1.1, refill: 0.12, respawn: 4, colour: 0xffc83d, column: 1.4, shine: 0.5 },
+	big: { count: 3, radius: 1.9, refill: 1, respawn: 10, colour: 0xff6a2a, column: 3.2, shine: 0.8 },
 };
 // Where they're looked for: AHEAD m in front along the way it's going, within SPREAD° either side;
 // or, for a share AROUND of the tries, anywhere round it AROUND_REACH m away. One try every TRY s.
-const AHEAD = [ 30, 110 ];
+const AHEAD = [ 30, 100 ];
 const SPREAD = 50;
 const AROUND = 0.3;
 const AROUND_REACH = [ 25, 70 ];
@@ -52,17 +55,17 @@ const BEHIND = 50;
 // Pads keep SPACING m apart.
 const SPACING = 15;
 // The ground is looked for down from SKY m over where the vehicle last stood on the ground, and
-// must be within LEVEL m of that height; level to within FLAT m at four points FLAT_REACH m out
+// must be within LEVEL m of that height; level to within FLAT m at eight points FLAT_REACH m out
 // past the pad's edge; its normal at least TILT upright; and on the way there from the vehicle,
 // looked at every WALK m at most, it may rise or fall no more than RISE m from one look to the
 // next (a street at 14 %).
 const SKY = 300;
 const LEVEL = 12;
-const FLAT = 0.3;
+const FLAT = 0.15;
 const FLAT_REACH = 0.6;
 const TILT = 0.96;
-const WALK = 14;
-const RISE = 2;
+const WALK = 7;
+const RISE = 1;
 // Pads sit LIFT m over the ground. One a frame is looked at again, in case sharper tiles have
 // arrived under it: moved up or down to them by up to SETTLE m; more, or no ground, and it goes.
 const LIFT = 0.05;
@@ -75,8 +78,8 @@ const HIGH = 1.5;
 const GROW = 0.35;
 const FLASH = 0.45;
 
-// The four points round a pad its ground must be level at, east and north (times the reach).
-const ROUND = [ [ 1, 0 ], [ - 1, 0 ], [ 0, 1 ], [ 0, - 1 ] ];
+// The eight points round a pad its ground must be level at, east and north (times the reach).
+const ROUND = Array.from( { length: 8 }, ( _, i ) => [ Math.sin( i * Math.PI / 4 ), Math.cos( i * Math.PI / 4 ) ] );
 // Pads are only put down with the vehicle at most this high (m) over where it last stood on the
 // ground: flying high, the street below is too far off to know.
 const ABOVE = 20;
@@ -102,20 +105,20 @@ export function createBoostPads( { scene, driver, ground, toggle = null } ) {
 	const pads = [];
 	for ( const [ kind, { count } ] of Object.entries( KINDS ) ) for ( let i = 0; i < count; i ++ ) {
 
-		// Its copy in the pads' and glows' meshes, and a big one's in the lights'. State: 'free'
-		// (nowhere), 'lit' or 'used' (dark for `timer` s more).
+		// Its copy in each mesh is `index`. State: 'free' (nowhere), 'lit' or 'used' (dark for
+		// `timer` s more).
 		pads.push( {
-			kind, ...KINDS[ kind ], index: pads.length, light: kind === 'big' ? i : - 1,
+			kind, ...KINDS[ kind ], index: pads.length,
 			state: 'free', at: new Vector3(), normal: new Vector3(), timer: 0, born: 0, flash: 0, phase: Math.random() * Math.PI * 2,
 		} );
 
 	}
 
-	// The pads, their glow round them, and over each big one a column of light, seen from afar.
+	// The pads, their glow round them, and over each a column of light, seen from afar.
 	const flat = new CircleGeometry( 1, 40 ).rotateX( - Math.PI / 2 );
 	const discs = instanced( flat, new MeshBasicMaterial( { map: padPicture(), transparent: true, depthWrite: false } ), pads.length );
 	const glows = instanced( flat, new MeshBasicMaterial( { map: glowPicture(), transparent: true, depthWrite: false, blending: AdditiveBlending } ), pads.length );
-	const lights = instanced( new CylinderGeometry( 1, 1, 1, 24, 1, true ).translate( 0, 0.5, 0 ), new MeshBasicMaterial( { map: lightPicture(), transparent: true, depthWrite: false, blending: AdditiveBlending, side: DoubleSide } ), KINDS.big.count );
+	const lights = instanced( new CylinderGeometry( 1, 1, 1, 24, 1, true ).translate( 0, 0.5, 0 ), new MeshBasicMaterial( { map: lightPicture(), transparent: true, depthWrite: false, blending: AdditiveBlending, side: DoubleSide } ), pads.length );
 
 	function instanced( geometry, material, count ) {
 
@@ -215,14 +218,23 @@ export function createBoostPads( { scene, driver, ground, toggle = null } ) {
 
 		}
 
-		// The way there: no step up onto a roof or a shelter, nor down off one.
+		// The way there: no step up onto a roof, a shelter or a bank, nor down off one. Something
+		// standing in the way (a parked car, a bollard) is one look higher than those either side of
+		// it, and is passed by; a step that stays up isn't.
 		const steps = Math.ceil( Math.hypot( east - from.east, north - from.north ) / WALK );
 		let height = street;
+		let passing = false;
 		for ( let i = 1; i <= steps; i ++ ) {
 
 			const next = i === steps ? y : topAt( from.east + ( east - from.east ) * i / steps, from.north + ( north - from.north ) * i / steps, street );
-			if ( next === null || Math.abs( next - height ) > RISE ) return;
-			height = next;
+			if ( next === null ) return;
+			if ( Math.abs( next - height ) <= RISE ) {
+
+				height = next;
+				passing = false;
+
+			} else if ( next > height && ! passing && i < steps ) passing = true;
+			else return;
 
 		}
 
@@ -309,7 +321,7 @@ export function createBoostPads( { scene, driver, ground, toggle = null } ) {
 
 				discs.setMatrixAt( pad.index, HIDDEN );
 				glows.setMatrixAt( pad.index, HIDDEN );
-				if ( pad.light >= 0 ) lights.setMatrixAt( pad.light, HIDDEN );
+				lights.setMatrixAt( pad.index, HIDDEN );
 				continue;
 
 			}
@@ -329,13 +341,9 @@ export function createBoostPads( { scene, driver, ground, toggle = null } ) {
 			_at.addScaledVector( pad.normal, 0.01 );
 			glows.setMatrixAt( pad.index, _m.compose( _at, _q, _scale.setScalar( pad.radius * glow * grown ) ) );
 			glows.setColorAt( pad.index, _c.set( pad.colour ).multiplyScalar( flash > 0 ? flash * 1.5 : lit ? 0.9 : 0.6 * back ) );
-			if ( pad.light >= 0 ) {
-
-				const on = lit ? 1 : back;
-				lights.setMatrixAt( pad.light, on > 0 ? _m.compose( _at, _q, _scale.set( pad.radius * 0.6 * pulse * grown, 3.2 * grown, pad.radius * 0.6 * pulse * grown ) ) : HIDDEN );
-				lights.setColorAt( pad.light, _c.set( pad.colour ).multiplyScalar( on * 0.8 ) );
-
-			}
+			const on = lit ? 1 : back;
+			lights.setMatrixAt( pad.index, on > 0 ? _m.compose( _at, _q, _scale.set( pad.radius * 0.6 * pulse * grown, pad.column * grown, pad.radius * 0.6 * pulse * grown ) ) : HIDDEN );
+			lights.setColorAt( pad.index, _c.set( pad.colour ).multiplyScalar( on * pad.shine ) );
 
 		}
 

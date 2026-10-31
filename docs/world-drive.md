@@ -120,25 +120,27 @@ Hit something (a wall, a building, a parked car, a barrier) and you don't stop: 
   once if you hit something. Every ride can, each against its own top speed (the kart at about
   190 km/h, the haul truck at 120). It's all in `src/drive.js` (`SUPERSONIC`) and `drive-boosts.js`;
   World Drive widens the view by `driver.warp`.
-- **Boost pads.** Glowing pads turn up on the ground ahead of and round you as you drive: small gold
-  ones (+12 % of the gauge) and big orange ones under a column of light (a full gauge). Drive over
+- **Boost pads.** Glowing pads turn up on the ground ahead of and round you as you drive, each under
+  a column of light: small gold ones (+12 % of the gauge) and big orange ones (a full gauge). Drive over
   one and it goes dark, lighting again 4 s later (a big one 10 s); with the gauge already full you
   leave it for later. There are at most 12 (9 small, 3 big), 15 m apart or more, and those you leave
   far behind are put down ahead again. **Boost pads on the road** in the pause menu turns them off
   (kept in this browser).
 
-  Where they go (`src/drive-app/pads.js`): every 0.08 s one spot is tried, 30 to 110 m ahead along
+  Where they go (`src/drive-app/pads.js`): every 0.08 s one spot is tried, 30 to 100 m ahead along
   the way you're going (within 50° either side) or, one try in three, anywhere 25 to 70 m round you.
   Each spot is looked at straight down from 300 m up, so the first thing the ray meets is whatever is
   on top there: a roof, a tree or a bridge over the street rules it out, and nothing goes inside a
-  building. The ground there must be nearly level (tilted less than 16°, and within 30 cm of it at
-  four points just past the pad's edge: not on a parked car, a kerb or a slope) and reachable from
-  the street you were last on: looked at every 14 m at most on the way there, it may climb or fall
-  up to 2 m from one look to the next (a street at 14 %), never in a step up onto a roof or a bus
-  shelter. Nothing is put down while you're more than 20 m over where you last drove. One pad a
-  frame is looked at again, so when sharper tiles arrive under it, it moves onto them (or goes, if
-  the ground there moved more than a metre). It's three instanced meshes, and a try is a dozen rays
-  at most, most of them ending after one or two.
+  building. The ground there must be as smooth as a road (tilted less than 16°, and within 15 cm of
+  it at eight points just past the pad's edge: not on a parked car, a kerb, a slope or the lumpy top
+  of a bush) and reachable from the street you were last on: looked at every 7 m at most on the
+  way there, it may climb or fall up to 1 m from one look to the next (a street at 14 %), passing
+  by something standing in the way (one look higher than those either side: a parked car), but
+  never a step that stays up, onto a roof or a bus shelter or up the bank beside a highway. Nothing
+  is put down while you're more than 20 m over where you last drove. One pad a frame is looked at
+  again, so when sharper tiles arrive under it, it moves onto them (or goes, if the ground there
+  moved more than a metre). It's three instanced meshes, and a try is two dozen rays at most, most
+  of them ending after one or two.
 
 ## Supporter Pass (content)
 
