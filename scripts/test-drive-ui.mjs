@@ -148,7 +148,7 @@ describe( 'World Drive, desktop', () => {
 		// Then the cars (the muscle car free) and the Supporter Pass's rides, locked (see
 		// test-drive-pro-ui.mjs).
 		assert.deepEqual( await panel.locator( '.vehicle b' ).allTextContents(), [
-			'Go-kart', 'Pickup', 'Haul truck', 'Muscle car', 'Neon racer', 'Night cruiser', 'Dune buggy', 'Farm truck', 'Police cruiser',
+			'Go-kart', 'Pickup', 'Muscle car', 'Neon racer', 'Night cruiser', 'Dune buggy', 'Farm truck', 'Police cruiser',
 			'Sports coupe', 'Monster truck', 'City bus', 'Hovercraft',
 		] );
 		assert.equal( await panel.locator( '.vehicle.picked b' ).textContent(), 'Go-kart' );
@@ -469,15 +469,15 @@ describe( 'World Drive, desktop', () => {
 		assert.deepEqual( recent, [ 'Golden Gate Bridge' ] );
 		await shot( page, 'drive-8-back' );
 
-		// The haul truck this time, at the place in Recent.
-		await page.locator( '#globe-ui .vehicle', { hasText: 'Haul truck' } ).click();
+		// The muscle car this time, at the place in Recent.
+		await page.locator( '#globe-ui .vehicle', { hasText: 'Muscle car' } ).click();
 		await page.locator( '.spots button', { hasText: 'Furka Pass' } ).click();
 		await flown( page );
 		await driveHere( page );
 		const now = await page.evaluate( () => ( { name: window.drive.driver.entry.state.name, place: window.drive.place.name, navigations: performance.getEntriesByType( 'navigation' ).length } ) );
-		assert.deepEqual( now, { name: 'Haul truck', place: 'Furka Pass', navigations: 1 } );
+		assert.deepEqual( now, { name: 'Muscle car', place: 'Furka Pass', navigations: 1 } );
 		await page.waitForTimeout( 600 );
-		await shot( page, 'drive-9-haul' );
+		await shot( page, 'drive-9-muscle' );
 
 		// The Globe button does what M does.
 		await page.locator( '#drive-ui .to-globe' ).click();
@@ -504,7 +504,7 @@ describe( 'World Drive, desktop', () => {
 
 		await openGlobe( page );
 		assert.deepEqual( await page.locator( '.recent button b' ).allTextContents(), [ 'Furka Pass', 'Golden Gate Bridge' ] );
-		assert.equal( await page.locator( '#globe-ui .vehicle.picked b' ).textContent(), 'Haul truck' );
+		assert.equal( await page.locator( '#globe-ui .vehicle.picked b' ).textContent(), 'Muscle car' );
 		assert.deepEqual( page.outside, [] );
 		assert.deepEqual( page.errors, [] );
 
@@ -666,7 +666,7 @@ describe( 'World Drive boosts: supersonic and boost pads', () => {
 		await driveHere( page );
 		await page.evaluate( () => document.querySelector( '#drive-ui .keys' ).hidden = true );
 		const rides = [];
-		for ( const name of [ 'Go-kart', 'Pickup', 'Haul truck' ] ) {
+		for ( const name of [ 'Go-kart', 'Pickup', 'Muscle car' ] ) {
 
 			if ( name !== 'Go-kart' ) await swapTo( page, name );
 			const ride = await page.evaluate( supersonic );
@@ -676,7 +676,7 @@ describe( 'World Drive boosts: supersonic and boost pads', () => {
 			assert.equal( ride.tagBefore, false );
 			// At (or nearly at) the booster's top speed, a moment after reaching it.
 			assert.ok( ride.at !== null && ride.kmh >= ride.boostedTop * 0.85 - 1, JSON.stringify( ride ) );
-			assert.equal( ride.tag, 'SUPERSONIC' );
+			assert.equal( ride.tag, 'OVERDRIVE' );
 			// The boom (two rings and a flash) and then streaks of air going past.
 			assert.ok( ride.boom >= 3 && ride.streaks >= 8, JSON.stringify( ride ) );
 			assert.ok( ride.still && ride.warp > 0.9, JSON.stringify( ride ) );
@@ -686,8 +686,8 @@ describe( 'World Drive boosts: supersonic and boost pads', () => {
 
 		}
 
-		// Going faster takes longer: the haul truck's top is a third of the kart's boosted one.
-		assert.ok( rides[ 0 ].boostedTop > rides[ 2 ].boostedTop );
+		// Each ride's own top speed: the muscle car's boosted top is well above the kart's.
+		assert.ok( rides[ 2 ].boostedTop > rides[ 0 ].boostedTop );
 
 		// Driven by the page itself, kept supersonic for a moment: the view widens, then narrows again.
 		// (Waited for frame by frame, up to 600 of them: headless, they come slowly.)
@@ -1116,7 +1116,7 @@ describe( 'World Drive with its Worker', () => {
 const ROWS = [
 	{ rank: 1, name: 'Ace', score: 52340, tricks: '1080 Spin! + Backflip!', place: 'Furka Pass', vehicle: 'go-kart', airTime: 2.4, date: '2026-10-29' },
 	{ rank: 2, name: 'Speed Demon', score: 31200, tricks: 'Barrel roll ×2', place: 'Times Square', vehicle: 'pickup-truck', airTime: 1.6, date: '2026-10-30' },
-	{ rank: 3, name: 'Zoë', score: 18750, tricks: 'Wall bounce + Big air 1.8 s', place: 'Golden Gate Bridge', vehicle: 'haul-truck-hd465', airTime: 1.8, date: '2026-10-30' },
+	{ rank: 3, name: 'Zoë', score: 18750, tricks: 'Wall bounce + Big air 1.8 s', place: 'Golden Gate Bridge', vehicle: 'pickup-truck', airTime: 1.8, date: '2026-10-30' },
 ];
 const POSTED = { best: 4210, rank: 12, isNewBest: true, today: { best: 4210, rank: 3, isNewBest: true }, week: { best: 4210, rank: 5, isNewBest: true } };
 const RESTING = { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: false };

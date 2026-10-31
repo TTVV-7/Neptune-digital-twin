@@ -712,7 +712,7 @@ export function createDriveHud( parent = document.body ) {
 		<div class="dhud-tricks" hidden></div>
 		<div class="dhud-pops"></div>
 		<div class="dhud-cluster">
-			<div class="dhud-badges"><span class="dhud-badge dhud-drift" hidden>DRIFT<i></i></span><span class="dhud-badge dhud-fly" hidden>FLYING</span><span class="dhud-badge dhud-sonic" hidden>SUPERSONIC</span></div>
+			<div class="dhud-badges"><span class="dhud-badge dhud-drift" hidden>DRIFT<i></i></span><span class="dhud-badge dhud-fly" hidden>FLYING</span><span class="dhud-badge dhud-sonic" hidden>OVERDRIVE</span></div>
 			<div class="dhud-speed"><span class="dhud-number">0</span><span class="dhud-unit">km/h</span></div>
 			<div class="dhud-bar dhud-speed-bar"><i></i></div>
 			<div class="dhud-boost" hidden><b>BOOST</b><div class="dhud-bar"><i></i></div></div>
@@ -826,7 +826,7 @@ export function createDriveHud( parent = document.body ) {
 			row( [ 'W', 'S' ], 'gas, brake' ),
 			row( [ 'A', 'D' ], 'steer' ),
 			row( [ 'Space' ], driver?.drift ? 'drift (hold and steer), hop (tap)' : 'hop' ),
-			driver?.booster && row( [ 'B' ], 'booster (flat out for a moment: supersonic)' ),
+			driver?.booster && row( [ 'B' ], 'booster (flat out for a moment: overdrive)' ),
 			driver?.launch && row( [ 'Q', 'E' ], 'roll in the air' ),
 			row( [ 'Shift' ], driver?.fly ? 'fly' : 'boost' ),
 			row( [ 'R' ], 'reset' ),

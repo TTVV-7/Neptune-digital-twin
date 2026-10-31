@@ -27,7 +27,7 @@ address, and the construction app is unchanged by it.
 
    Choosing a search result or a spot flies the globe down to it and pins it. The card under the pin
    says where it is, with **Drive here**.
-3. **Your ride**: the go-kart, a pickup, a haul truck or the muscle car, or with the
+3. **Your ride**: the go-kart, a pickup or the muscle car, or with the
    [Supporter Pass](#supporter-pass-content) five more [cars](#world-drives-cars) (a neon racer, a
    night cruiser, a dune buggy, a farm truck and a police cruiser) and four rides built for it (a
    sports coupe, a monster truck, a city bus and a hovercraft). The choice is remembered. **Garage**,
@@ -50,7 +50,7 @@ address, and the construction app is unchanged by it.
 | W / S | Gas; brake, and reverse once stopped |
 | A / D | Steer |
 | Space | Drift: hold it and steer round a bend, let go for a mini-turbo; tap it to hop |
-| B | Booster: flat out for a moment, supersonic |
+| B | Booster: flat out for a moment, overdrive |
 | Shift | Fly: hold to lift off, let go to glide down |
 | In the air | A / D spin, W / S flip (W forward, S back), Q / E roll (or Space with A / D) |
 | R | Stuck? Back on the road a few metres on |
@@ -115,12 +115,12 @@ Hit something (a wall, a building, a parked car, a barrier) and you don't stop: 
   to twice the ride's top speed. The gauge refills by itself in 8 s; landed tricks top it up (a fifth
   each), and so do boost pads. What it leaves behind is the ride's **boost style** from the
   [Garage](#the-garage): the classic flame, bubbles or confetti, or with the pass one of nine more.
-- **Supersonic.** Boost at 85 % or more of that doubled top speed for three quarters of a second and
-  you go supersonic: a sonic boom (a shock ring blown out round you, a flash and a jolt), streaks of
-  air streaming back past you, the view 9° wider and **SUPERSONIC** by the speed. It lasts, boosting
+- **Overdrive.** Boost at 85 % or more of that doubled top speed for three quarters of a second and
+  you hit overdrive (the code calls it supersonic): a sonic boom (a shock ring blown out round you, a flash and a jolt), streaks of
+  air streaming back past you, the view 9° wider and **OVERDRIVE** by the speed. It lasts, boosting
   or not, until you drop under three quarters of that speed: a moment after the gauge runs out, or at
   once if you hit something. Every ride can, each against its own top speed (the kart at about
-  190 km/h, the haul truck at 120). It's all in `src/drive.js` (`SUPERSONIC`) and `drive-boosts.js`;
+  190 km/h, the pickup at about 290). It's all in `src/drive.js` (`SUPERSONIC`) and `drive-boosts.js`;
   World Drive widens the view by `driver.warp`.
 - **Boost pads.** Glowing pads turn up on the ground ahead of and round you as you drive, each under
   a column of light: small gold ones (+12 % of the gauge) and big orange ones (a full gauge). Drive over

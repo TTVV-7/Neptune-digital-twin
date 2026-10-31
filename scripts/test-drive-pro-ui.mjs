@@ -243,7 +243,7 @@ describe( 'Supporter Pass, without it', () => {
 
 		await openGlobe( page );
 		const panel = page.locator( '#globe-ui .panel' );
-		assert.deepEqual( await panel.locator( '.vehicle b' ).allTextContents(), [ 'Go-kart', 'Pickup', 'Haul truck', ...CARS, ...RIDES ] );
+		assert.deepEqual( await panel.locator( '.vehicle b' ).allTextContents(), [ 'Go-kart', 'Pickup', ...CARS, ...RIDES ] );
 		assert.deepEqual( await panel.locator( '.vehicle.locked b' ).allTextContents(), LOCKED );
 		assert.deepEqual( await panel.locator( '.vehicle .pro-badge' ).allTextContents(), LOCKED.map( () => '⭐ Supporter Pass' ) );
 		assert.equal( await page.evaluate( async () => ( await import( '/src/drive-app/pro.js' ) ).isPro() ), false );

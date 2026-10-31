@@ -463,11 +463,11 @@ testing with test cards and the known gaps are in [docs/premium.md](docs/premium
 ## World Drive (worlddrive.app)
 
 A second app in this repository, on its own address: pick anywhere on Earth from a globe of Google's
-3D tiles (search, a dozen start spots, recent places, or a tap on the globe), choose a go-kart, pickup,
-haul truck or muscle car, press **Drive here** and drive the real world arcade-style: drift, boost, fly
+3D tiles (search, a dozen start spots, recent places, or a tap on the globe), choose a go-kart, pickup
+or muscle car, press **Drive here** and drive the real world arcade-style: drift, boost, fly
 with Shift, and hit something to bounce off it into the air, where **A**/**D** spin, **W**/**S** flip and
 **Q**/**E** roll for tricks that score (times a combo multiplier) when you land on your wheels; a
-wipeout loses the combo and rolls you back onto them. Boosting flat out goes **supersonic** (a sonic
+wipeout loses the combo and rolls you back onto them. Boosting flat out hits **overdrive** (a sonic
 boom, streaks of air, a wider view), and glowing **boost pads** turn up on open ground as you drive
 to top the booster up (a switch in the pause menu turns them off). **M** goes back to the globe to
 drop in somewhere else without reloading. Phones get a bottom sheet and touch buttons.

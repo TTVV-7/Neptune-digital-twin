@@ -27,7 +27,6 @@ const KART = {
 // Friendlier names than the library's, and a word on each.
 const NAMES = {
 	'pickup-truck': { name: 'Pickup', blurb: 'All-rounder' },
-	'haul-truck-hd465': { name: 'Haul truck', blurb: 'Huge, slow, unstoppable' },
 };
 
 // [ { id, name, blurb, thumb, credit, item } ]: the kart, then whichever of the library's
