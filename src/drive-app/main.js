@@ -590,7 +590,9 @@ async function start( { key, left = null, visit = null, worker = true } ) {
 		camera.updateMatrixWorld();
 		tiles?.update();
 		models.update( dt );
-		renderer.render( scene, camera );
+		// Not while the Garage is open: its turntable draws instead, and on a phone it covers the
+		// screen, so drawing the world behind it as well would only halve the frame rate.
+		if ( ! garage.isOpen ) renderer.render( scene, camera );
 		globe.capture();
 
 		slow -= dt;
