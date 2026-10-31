@@ -11,15 +11,17 @@ const REAR_AXLE = 1.3;
 const FRONT_TYRE = { radius: 0.335, width: 0.25, rim: 0.7, spokes: 5, x: 0.8 };
 const REAR_TYRE = { radius: 0.34, width: 0.29, rim: 0.7, spokes: 5, x: 0.81 };
 const STEER_LOCK = 0.5;
-// The driver sits on the left (-x), well back.
-const SEAT = { x: - 0.36, z: 0.28 };
+// The driver sits on the left (-x), well back and low, hips SEAT.y up, and a little smaller than the
+// kart's (DRIVER), so the helmet clears the roof.
+const SEAT = { x: - 0.36, y: 0.34, z: 0.28 };
+const DRIVER = 0.92;
 const BODY_COLOUR = 0x2d6bff;
 
 // Tuning (see drive.js specFor and HANDLING): far quicker than the kart, gripping hard, turning in
 // sharply and drifting long and wide.
 export const COUPE_DRIVE = {
 	topSpeed: 195, accel: 12, brake: 20, reverse: 30,
-	cab: { ahead: - SEAT.z + 0.08, right: SEAT.x, up: 1.17 },
+	cab: { ahead: - SEAT.z + 0.08, right: SEAT.x, up: 1.03 },
 	handling: { grip: 18, slip: 2.6, driftYaw: [ 48, 128 ], turn: [ 170, 72 ], lock: 38, drag: 0.8 },
 };
 
@@ -32,8 +34,8 @@ export function makeCoupe() {
 	bodywork( shell );
 	cabin( shell );
 	details( shell );
-	const head = driver( shell, { at: [ SEAT.x, 0.42, SEAT.z ], hands: [ SEAT.x + 0.17, 0.86, - 0.22 ], feet: - 1.05, suit: 0x1b1d22, helmet: 0xf4f6f8, lean: 0.4 } );
-	steeringWheel( shell, [ SEAT.x, 0.86, - 0.25 ], 0.17, 1.15 );
+	driver( shell, { at: [ SEAT.x, SEAT.y, SEAT.z ], hands: [ SEAT.x + 0.17, 0.8, - 0.22 ], feet: - 1.05, suit: 0x1b1d22, helmet: 0xf4f6f8, lean: 0.4, size: DRIVER } );
+	steeringWheel( shell, [ SEAT.x, 0.8, - 0.25 ], 0.17, 1.15 );
 	merge( shell );
 
 	const spinners = [];
@@ -124,8 +126,9 @@ function cabin( parent ) {
 
 	};
 	profile( parent, GLASS(), [ [ - 0.8, 0.82 ], [ - 0.06, 1.24 ], [ 0.55, 1.26 ], [ 1.32, 0.95 ], [ 1.2, 0.86 ], [ - 0.8, 0.8 ] ], - 0.74, 0.74, { bevel: 0.03, warp } );
-	// The roof, a little over the glass.
-	paint( profile( parent, bodyPaint(), [ [ - 0.14, 1.215 ], [ - 0.06, 1.272 ], [ 0.56, 1.29 ], [ 0.9, 1.15 ], [ 0.8, 1.13 ], [ 0.52, 1.245 ], [ - 0.04, 1.228 ] ], - 0.66, 0.66, { bevel: 0.025, warp } ) );
+	// The roof, a little over the glass and wider than its top, so it reads as a roof rather than a
+	// plank laid on a bubble.
+	paint( profile( parent, bodyPaint(), [ [ - 0.14, 1.215 ], [ - 0.06, 1.272 ], [ 0.56, 1.29 ], [ 0.9, 1.15 ], [ 0.8, 1.13 ], [ 0.52, 1.245 ], [ - 0.04, 1.228 ] ], - 0.77, 0.77, { bevel: 0.025, warp } ) );
 	// Pillars up the windscreen's sides and behind the doors, leaning in with the glass.
 	for ( const side of [ - 1, 1 ] ) {
 
@@ -172,8 +175,8 @@ function details( parent ) {
 	// Two seats, low, and a dashboard.
 	for ( const x of [ SEAT.x, - SEAT.x ] ) {
 
-		block( parent, BLACK(), [ 0.48, 0.12, 0.52 ], [ x, 0.36, SEAT.z - 0.05 ] );
-		block( parent, BLACK(), [ 0.48, 0.62, 0.12 ], [ x, 0.68, SEAT.z + 0.22 ], [ - 0.25, 0, 0 ] );
+		block( parent, BLACK(), [ 0.48, 0.12, 0.52 ], [ x, SEAT.y - 0.06, SEAT.z - 0.05 ] );
+		block( parent, BLACK(), [ 0.48, 0.62, 0.12 ], [ x, SEAT.y + 0.26, SEAT.z + 0.22 ], [ - 0.25, 0, 0 ] );
 
 	}
 
