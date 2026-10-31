@@ -164,17 +164,25 @@ so everything used to drive on the sea. Now driving into water, or coming down i
   quarter of a second later, "Back on dry land", with you stopped on the last dry ground you were
   on: the newest spot on a trail kept as you drive (one every 3 m on ground that's surely dry, the
   last 24) at least 8 m back from the last of them (about where you left the shore, the quay, the
-  pier or the bridge's deck) and 20 m from where you went in. You face the way you were going
-  there, or the other way if that was toward the water: straight off a beach into the sea, you come
-  back facing up the beach; off a bridge, along its deck. Each splash trims the trail to that spot,
-  so another goes back further.
+  pier or the bridge's deck) and 20 m from where you went in, and not one within a metre of the
+  water's level if there's one that isn't (water the tiles drew unlike water would be about level
+  with it, give or take how far Google's water slopes across a harbour). You face the way you were
+  going there, or the other way if that was toward the water: straight off a beach into the sea, you
+  come back facing up the beach; off a bridge, along its deck. Each splash trims the trail to that
+  spot, so another goes back further. Put back on a spot that then turns out to be water (sharper
+  tiles telling what coarser ones couldn't), that spot is dropped from the trail and, with nothing
+  older on it, there's no splash rather than the same one over and over. A pause (Esc) keeps the
+  trail.
 - **R** in the water does it at once, and **R** by the water never puts you in it (only onto ground
   that's surely dry, else where you last drove freely). Esc while sinking parks you back on dry land.
 - **Like a wipeout**: tricks you were doing in the air and the combo are lost ("Combo ×3 lost", or
   "Sunk"); the score so far is kept.
-- **Slowly** off a beach into the sea is the same, once you're about a dozen metres out (until then
-  the beach is in reach of the rings it's told by, below). **Flying** (Shift) over water is fine
-  until you come down in it.
+- **Off a quay or a bank**, down into the water by its edge is a splash there and then: within a
+  dozen metres of the shore it can't tell water from the shore (below), but coming down into it,
+  half a metre or more from the last dry ground or landing there, is coming down into the water.
+  **Slowly** off a beach into the sea is the same once you're about a dozen metres out (until then
+  the beach is in reach of the rings it's told by). **Flying** (Shift) over water is fine until you
+  come down in it.
 - **The hovercraft** rides on water as on land, throwing up spray behind it as it goes. **Boost pads**
   never go down on water, nor by it.
 - **Dropped in on water** (a pin on the sea), you ride on it until you've been on dry ground: with
@@ -196,27 +204,44 @@ level round about. `water.js` looks for exactly that, with rays looking down rou
 
 1. **Colour**: the tile's own picture where the ray hit it. Google's pictures arrive as
    ImageBitmaps (GLTFLoader decodes each tile's from its glTF); each is drawn once onto a 64-pixel
-   canvas, kept as long as the picture is, and the hit's UV picks a pixel. Water-like is bluish or
-   grey, not green (a field), warm (sand, soil, brick) or bright (concrete, a pale beach): luma at
-   most 150, blue at least red less 2 and at least green less 6.
-2. **Level**, to within 35 cm, at 6 points 5 m round it and 8 points 12 m round it.
+   canvas, kept as long as the picture is, and the hit's UV picks a pixel. Water-like is bluish,
+   grey or a river's brownish grey, not green (a field), warm (sand, soil, brick) or bright
+   (concrete, a pale beach): luma at most 150, blue at least red less 12 (the Thames) and at least
+   green less 6. A harbour's teal and a canal's olive grey are greener (blue at least green less
+   14: Hong Kong's harbour, the IJ behind Amsterdam Centraal), but so is a lawn in New York's
+   bluish pictures: Central Park's Great Lawn is (81, 121, 112), Hong Kong's harbour (78, 117,
+   107), as level and as even. Those are water only where the far ring (4, below), wherever it's
+   level with the spot, is that colour too and as bright to within 8: open water, not a lawn among
+   ball fields, paths and patches (the Great Lawn's far ring was 20 to 25 off).
+2. **Level**, to within 50 cm, at 6 points 5 m round it and 8 points 12 m round it (most of
+   Google's water is level to millimetres; Hong Kong's harbour only to half a metre).
 3. **Even**: the brightness of the 15 colours there varies by at most 6 (its standard deviation,
    out of 255). Roads have markings, cars and patches; fields their lines and mowing.
-4. **The lowest**: nothing at 8 points 35 m round it more than a metre lower (a ray that finds
+4. **The lowest**: nothing at 8 points 35 m round it more than 1.5 m lower (a ray that finds
    nothing counts as lower). A quay, a pier, a beach, a bridge's deck or a roof has the water or the
    street below it.
 
 It says one of three things: **water** (at that height), **surely dry**, or **can't tell**. Surely
-dry is anything not water-coloured, over something lower, or uneven close by (within 5 m) with no
-water at its level 13 m on past what's uneven (water by its edge has the shore close by too, and
-13 m out the rings are clear of it). What's left, water-coloured and level close by but not all
-round, is as often water by a shore, a pier or a ship as an even grey square, so nothing happens
-there: no splash, and it isn't taken for dry ground. The trail back from a splash, R's few metres
-on and boost pads take only surely dry ground. What it can't be sure of (no picture, a ray that
-finds nothing) is never water: it misses a little water rather than splash on a road. It looks at
-the cheapest things first: on most ground one ray, on a road seven or so; all of it is 23 rays.
+dry is anything coloured clearly unlike water (brighter than 170, red over blue by more than 25:
+sand, soil, brick, a tiled roof; or grass green, green over blue by more than 30 and over red by
+more than 10), over something lower, or uneven close by (within 5 m) with no water at its level 13 m
+on past what's uneven (water by its edge has the shore close by too, and 13 m out the rings are
+clear of it), nor water-coloured ground at its level there that it can't tell either (water in a
+canal, by a sea wall or among boats). What's left, water-coloured and level close by but not all
+round, is as often water by a shore, a pier or a ship as an even grey square, so it can't tell: no
+splash, and it isn't taken for dry ground, but it says where the water past the edge is, which the
+Driver takes for water when it came down into it. So is a colour in between (a brown, a green) on
+level, even ground that's the lowest round about. And turquoise (green and blue both 40 or more over
+red) is never dry, whatever its shape: Geneva's clear lake, the Bellagio's and the sea by
+Copacabana's surf are drawn from photographs, beds and all, neither level nor even. The trail back
+from a splash, R's few metres on and boost pads take only surely dry ground. What it can't be sure
+of (no picture, a ray that finds nothing) is never water: it misses a little water rather than
+splash on a road. It looks at the cheapest things first: on most ground one ray, on a road seven or
+so; all of it is 23 rays.
 
-**Measured** on Google's tiles, 31 October 2026: 47 spots, each with 4 more 8 m round it, looked at
+**First measured** on Google's tiles, 31 October 2026, with the first rule (water's colour no
+warmer than blue at least red less 2 and no greener than green less 6, level to 35 cm, nothing 1 m
+lower, anything not water-coloured surely dry): 47 spots, each with 4 more 8 m round it, looked at
 with the vehicle parked there (so with the tiles a drive has) and labelled from a picture of it.
 Water (19): Burrard Inlet by Neptune Terminals (two) and by the Lions Gate (two, one in the
 bridge's shadow), San Francisco Bay under the Golden Gate (three), Sydney Harbour (three), the
@@ -251,6 +276,59 @@ Golden Gate's deck (three) with no splash, all 116 looks saying surely dry; and 
 across Sydney Harbour for 14 s, on the water all the way (48 looks, all water), throwing spray,
 never splashing, with no boost pad put down. A look took 0.2 to 0.3 ms on average on the car park
 and the deck and 1.1 ms on open water (at most 3.6 ms), in the test's software rendering.
+
+**Measured again**, played where the first rule wasn't measured (the review, 31 October 2026, three
+page loads, every place reached by the globe's drop-in). At each place the camera looked straight
+down from 80 to 150 m, the detector gave its verdict on an 11 × 7 grid (15 to 29 m apart) drawn
+over the picture, each point was labelled from the picture (water, land, or can't say: a shore
+line, a boat, a moored barge), and the heights and colours every 2 m round it were kept, so other
+rules could be tried on the same ground offline (that agreed with the page's own verdicts at 94 to
+98 % of the points). Places: the IJ behind Amsterdam Centraal and the Prinsengracht, Venice's
+Rialto, Molo and Piazza San Marco, Tsim Sha Tsui in Hong Kong, Port Hercule and the Monaco harbour
+start, Copacabana's beach and sea, Geneva's lake by the Jet d'Eau, the Thames by the London Eye,
+the Chicago River, the Seine by the Louvre, Sydney Harbour, LAX's apron, Highway 401 and Yorkdale's
+car park, the Lingotto's roof, the US Open's courts, the Bonneville Salt Flats, the Sea-to-Sky
+Highway, Neptune Terminals, the Arc de Triomphe, the Las Vegas Strip and the Bellagio's lake, a
+Dodger Stadium car park, Shibuya Crossing, and Central Park's Great Lawn and Sheep Meadow (some of
+them twice). The same 2,700 points, by the first rule and by this one:
+
+| | First rule: water | can't tell | dry | This rule: water | can't tell | dry |
+| --- | --- | --- | --- | --- | --- | --- |
+| Water (796) | 232 | 82 | 482 | 412 | 285 | 99 |
+| Land (1,904) | 0 | 10 | 1,894 | 0 | 79 | 1,825 |
+
+The first rule called most of this water dry: Hong Kong's teal harbour (78, 117, 107), the IJ's
+olive grey (76, 89, 82) and the Thames's brownish grey (91, 90, 85) failed its colour, so they
+were dry ground: no splash, boost pads put down on the Thames, Geneva's lake and the IJ, and the
+way back from a splash in the IJ was a spot on the water. A wider colour alone (green up to 14 over
+blue) took the Great Lawn for water at two points in the second page load, hence the far ring's
+colours. The water this rule still calls dry is mostly Geneva's lake bed and Copacabana's surf
+(photographed, uneven, foam bright), Hong Kong's harbour where its water slopes 1.6 to 2.3 m within
+35 m on a coarse tile, and Venice's busy Grand Canal. None of the builder's 103 land samples above
+is water by it either.
+
+**Tried again on Google's tiles** (scratch scripts; the kart sent at the water from a surely dry
+spot 25 to 60 m off, at 20 to 60 km/h). With the first rule it splashed within 10 s at 3 of 9 places
+(in the IJ only after 21 m on the water, and came back onto the water); Monaco's harbour, Geneva's
+lake (140 m out), the Thames, the Prinsengracht and Venice's canals it rode on. With this rule's
+earlier steps, 10 of 10 (Monaco's start twice, the IJ twice, Hong Kong twice, the Thames, Copacabana
+twice and the Seine): **SPLASH!** or **KER-SPLOOSH!** off Hong Kong's promenade, 7 m down; in the IJ
+off the quay, right by it (down into the water by its edge); slowly down Copacabana's beach into the
+sea. Each time it came back on ground the detector called dry, facing away (within 30° of straight
+away from where it went in), drove on 3 s with no second splash, and R there facing the water never
+put it in. Three times the way back was by the water: on Copacabana's teal sea by the surf
+(turquoise is never dry since), on Hong Kong's water by the sea wall (fixed since: the probe past
+the edge, and a metre over the water) and in Copacabana's surf (below). The hovercraft crossed the
+IJ and Hong Kong's harbour (three runs) with no splash. Driving about the look-alikes (the Great
+Lawn, Sheep Meadow, Neptune's yard, the Arc de Triomphe, the Strip, a Dodger car park, Shibuya, the
+Sea-to-Sky Highway, LAX, the 401, Bonneville, Piazza San Marco), no splash at all. One root tileset
+request per page load.
+
+**What it costs** (the page's own timings, in software rendering on a shared machine): a look took
+0.1 to 1.5 ms at the median by place and at most 7.4 ms; a ray 0.03 to 0.07 ms; a tile picture's
+64-pixel copy 0.7 ms at most, once per picture. At five looks a second that's well under 1 % of the
+time. Boost pads' check of a spot and 8 m round it (five looks, only for the few spots that pass
+everything else) took up to 21 ms, once 44 ms when a single ray took 40 ms (a tile's first ray).
 
 ## Supporter Pass (content)
 
@@ -960,7 +1038,10 @@ recycled, and the pause menu's switch kept across a reload), water (the test pad
 even sea colour, as Google draws water: off its edge at speed, off a ramp with a spin and a ×3
 combo lost, slowly down a beach into it, each a splash, sinking nose first with the camera holding
 on it and the view fading, then back on the dry ground it came from facing away; flying over it
-until coming down, R in it and by it, and boost pads never on it or by it), the used-up,
+until coming down, R in it and by it, and boost pads never on it or by it; Google's other water
+colours, a bluish lawn among ball fields and a lagoon's turquoise; a canal's water by its wall
+never taken for dry; slowly off a quay, a splash right by it; never the same splash twice; the way
+back past a spot level with the water and kept across a pause), the used-up,
 robot-check and getting-ready screens, and the leaderboard with its answers made in the test: tabs, your own row, picking a name and renaming, a
 landed jump posting the run with the card asking first, each place's best posted, a dead connection
 changing nothing, and a phone; and buying the pass with Google's script stood in for: signing in
@@ -1033,10 +1114,16 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   meeting a roof's edge.
 - Flying over a valley, the glide down (3 m/s) can take a while: R puts you back on the road.
 - [Water](#water) is told by how Google draws it, which isn't always the same: it misses water
-  that's photographed rather than filled (a fountain lake), in a bridge's shadow, at a seam between
-  sharper and coarser tiles, or in surf on a sloping coarse tile, and within about 12 m of a shore,
-  a pier or a ship it can't tell water from an even grey square, so there you ride on it (a kart
-  dropped between a jetty and the ship moored at it floated). Out from there, it splashes.
+  that's photographed rather than filled (a fountain lake, Geneva's clear lake, a lagoon), busy
+  with boats and wakes (Venice's Grand Canal), in a narrow canal (Amsterdam's, Venice's: the rings
+  reach the banks), in a bridge's shadow, at a seam between sharper and coarser tiles, where it
+  slopes on a coarse tile (surf, parts of Hong Kong's harbour), and teal or olive grey water within
+  35 m of a bank or a moored boat; and within about 12 m of a shore, a pier or a ship it can't tell
+  water from an even grey square, so there you ride on it (a kart dropped between a jetty and the
+  ship moored at it floated), unless you came down into it. Out from there, it splashes. Where it
+  can't tell it never puts boost pads down nor takes you back there, but surf's foam is bright, so
+  it's taken for dry ground: pads can go down on a wide band of surf, and the way back from the sea
+  off a beach can be in the surf.
 
 ## Credits
 

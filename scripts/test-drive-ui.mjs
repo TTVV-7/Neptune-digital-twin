@@ -13,6 +13,9 @@
 // water): off its edge at speed, off a ramp and slowly down a beach, each a splash, sinking nose
 // first with the camera holding on it, the combo lost, then back on the dry ground it came from
 // facing away; flying over it until coming down, R in it and R by it, and boost pads never on it;
+// Google's other water colours, a bluish lawn among ball fields and a lagoon's turquoise; a
+// canal's water by its wall never taken for dry; slowly off a quay, a splash right by it; never
+// the same splash twice; the way back past a spot level with the water, and kept across a pause;
 // the screens the Worker's answers lead to (used up, robot check, maps off, the visit itself); and
 // the leaderboard (its answers made here): the trophy and the panel, tabs, your own row, picking a
 // name and renaming, a landed jump posting the run (the card asking the first time, never stopping
