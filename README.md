@@ -467,8 +467,10 @@ A second app in this repository, on its own address: pick anywhere on Earth from
 or haul truck, press **Drive here** and drive the real world arcade-style: drift, boost, fly
 with Shift, and hit something to bounce off it into the air, where **A**/**D** spin, **W**/**S** flip and
 **Q**/**E** roll for tricks that score (times a combo multiplier) when you land on your wheels; a
-wipeout loses the combo and rolls you back onto them. **M** goes back to the globe to drop in
-somewhere else without reloading. Phones get a bottom sheet and touch buttons.
+wipeout loses the combo and rolls you back onto them. Boosting flat out goes **supersonic** (a sonic
+boom, streaks of air, a wider view), and glowing **boost pads** turn up on open ground as you drive
+to top the booster up (a switch in the pause menu turns them off). **M** goes back to the globe to
+drop in somewhere else without reloading. Phones get a bottom sheet and touch buttons.
 
 It shares `src/` with this app but has its own page (`drive/index.html`, `src/drive-app/`), build
 (`npm run dev:drive`, `npm run build:drive` into `dist-drive/`) and Cloudflare Worker
@@ -483,10 +485,10 @@ posted with the visit's signed token and checked against what the game can score
 
 A **Supporter Pass** (one payment of CA$4.99 towards the running costs) unlocks four more rides
 built in code (a sports coupe, a monster truck, a city bus and a hovercraft, each handling its own
-way), the Garage's extras (paint, finishes, decals, rims, boost flames and trails), a ⭐ on the
-leaderboard and 30 drives a day. It's bought with a Stripe Payment Link after signing in with Google,
-so it's yours in any browser; Stripe's signed webhook records it. Buying stays off ("Coming soon")
-until `GOOGLE_CLIENT_ID` and the webhook's secret are set (see
+way), the Garage's extras (paint, finishes, decals, rims, nine more boost styles, flame colours and
+trails), a ⭐ on the leaderboard and 30 drives a day. It's bought with a Stripe Payment Link after
+signing in with Google, so it's yours in any browser; Stripe's signed webhook records it. Buying
+stays off ("Coming soon") until `GOOGLE_CLIENT_ID` and the webhook's secret are set (see
 [Supporter Pass (buying it)](docs/world-drive.md#supporter-pass-buying-it) for the owner's steps).
 
 How to play, the leaderboard (how cheating is limited, and looking after it in the D1 console), the
@@ -536,6 +538,8 @@ src/drive.js        race mode: driving, jumps, cameras, speedometer; flying, boo
 src/drive-hud.js    a self-contained driving HUD with touch buttons, the DRIFT button, hit words,
                     trick pop-ups and the score, for other apps (World Drive)
 src/drive-fx.js     booster flame, tyre smoke and drift sparks; a hit's sparks and bits, scrapes, dust
+src/drive-boosts.js boost styles (plasma, lightning, bubbles, a comet...) and the supersonic boom and
+                    streaks, each a fixed batch of quads drawn in one go, for drive-fx.js
 src/kart.js         the go-kart model and its library item
 src/layout.js       saves placed items in the browser; export/import
 src/kinds.js        placed things that aren't models (areas, pits, piles): how features register them

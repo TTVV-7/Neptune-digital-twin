@@ -102,7 +102,12 @@ export function createBoostPads( { scene, driver, ground, toggle = null } ) {
 	const pads = [];
 	for ( const [ kind, { count } ] of Object.entries( KINDS ) ) for ( let i = 0; i < count; i ++ ) {
 
-		pads.push( { kind, ...KINDS[ kind ], index: pads.length, light: kind === 'big' ? pads.filter( p => p.kind === 'big' ).length : - 1, state: 'free', at: new Vector3(), normal: new Vector3(), timer: 0, born: 0, flash: 0, phase: Math.random() * Math.PI * 2 } );
+		// Its copy in the pads' and glows' meshes, and a big one's in the lights'. State: 'free'
+		// (nowhere), 'lit' or 'used' (dark for `timer` s more).
+		pads.push( {
+			kind, ...KINDS[ kind ], index: pads.length, light: kind === 'big' ? i : - 1,
+			state: 'free', at: new Vector3(), normal: new Vector3(), timer: 0, born: 0, flash: 0, phase: Math.random() * Math.PI * 2,
+		} );
 
 	}
 
