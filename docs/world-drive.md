@@ -109,29 +109,26 @@ Hit something (a wall, a building, a parked car, a barrier) and you don't stop: 
 
 ## Supporter Pass (content)
 
-The Supporter Pass is a one-time payment (about CA$4.99) towards World Drive's running costs. This
-part is what it unlocks and the switch that unlocks it; paying for it (Google sign-in, Stripe, its
-webhook and the pass kept in D1) comes later, and until then nobody has it and the free game is
-exactly as it was.
+The Supporter Pass is a one-time payment (CA$4.99) towards World Drive's running costs. This part is
+what it unlocks and the switch that unlocks it; buying it (Google sign-in, Stripe, its webhook and the
+pass kept in D1) is [below](#supporter-pass-buying-it). Without it the free game is exactly as it was.
 
 **The switch** is `src/drive-app/pro.js`: `isPro()`, `onProChange( fn )` and `setPro( on )`, off by
-default. Everything locked asks `isPro()` and follows `onProChange`; the payments code will call
-`setPro( true )` for a visitor who has the pass. For testing, `?pro=1` in the address turns it on, but
+default. Everything locked asks `isPro()` and follows `onProChange`; the payments code
+(`supporter.js`) calls `setPro( true )` for a visitor who has the pass. For testing, `?pro=1` in the address turns it on, but
 only when the page is on `localhost` or `127.0.0.1` (`testPass` decides), never on worlddrive.app.
 
 **Locked things** show a small **⭐ Supporter Pass** badge (in the Garage, a ⭐ on each locked choice
 under one line saying what the stars mean), and picking one opens the pass's sheet
 instead (`src/drive-app/pass.js`): what the pass is and what comes with it (the four rides, the
-Garage's extras, a ⭐ by your name on the leaderboard, 30 drives a day instead of 8) and a **Coming
-soon** button, which the payments code replaces (`buyArea()`). The sheet also opens from **⭐ Supporter
+Garage's extras, a ⭐ by your name on the leaderboard, 30 drives a day instead of 8) and its buy
+area (`buyArea()`), which says **Coming soon** until the payments code fills it. The sheet also opens from **⭐ Supporter
 Pass** under the rides on the globe and in the pause menu. A ride or a look saved while the pass was
 on falls back to the go-kart, or to the free choices, without it. Nothing comes up by itself: the
 sheet only opens when something locked, or one of those buttons, is picked.
 
-**For the payments work:** the leaderboard's Worker only takes runs in the free rides (`VEHICLES` in
-`worker/drive/scores.js` is the go-kart and the library trucks), so the pass rides' ids
-(`sports-coupe`, `monster-truck`, `city-bus`, `hovercraft`, in `src/drive-app/rides/index.js`) need
-adding there. Until then a run in one is answered 400 and the page quietly doesn't post it.
+The leaderboard takes runs in the pass's rides as in the free ones (`PASS_RIDES` in
+`src/drive-app/catalog.js`, which `VEHICLES` in `worker/drive/scores.js` reads).
 
 ### The four rides
 
@@ -192,6 +189,167 @@ Garage's choices on the ride and kept across a reload (and still made with a dam
 or none kept at all), the world not drawn behind the Garage, the frame time with trails, nothing
 turning in the air faster than the kart, and the Garage and the locked rides' badges on a phone.
 
+## Supporter Pass (buying it)
+
+The pass is one payment of **CA$4.99**, no subscription, through a Stripe Payment Link in World
+Drive's own Stripe account. It comes with what's [above](#supporter-pass-content) (the four rides
+and the whole Garage), a **⭐ by your name on the leaderboard**, and **30 drives a day** instead of 8.
+A pass is a Google account's, so it's yours in any browser you sign in on: signing in is only ever
+for the pass, and driving and the leaderboard never need it.
+
+### What people see
+
+- **The pass's sheet** (any locked ride or Garage choice, or **⭐ Supporter Pass** under the rides):
+  signed out, Google's **Sign in with Google** button ("Sign in to buy, so the pass is yours in any
+  browser. Bought it already? Signing in brings it back."). Signed in, **Buy for CA$4.99**, with
+  "Signed in as ... · Restore purchases · Sign out" under it.
+- **Buy** opens the Payment Link in a new tab, with `client_reference_id` (the account's id, which
+  Stripe hands back with the payment, so the Worker knows whose it is) and `prefilled_email` (the
+  Google address). The sheet says to finish paying there, with **Check again**.
+- **Back from Stripe.** Stripe sends the buyer to `https://worlddrive.app/?supporter=thanks`: the page
+  tidies the address, asks the Worker (again every 3 s for half a minute, in case Stripe's webhook is
+  a moment behind) and says **Thanks! Supporter Pass unlocked**. Going back to the first tab instead,
+  it asks as soon as the window has focus again. The rides and the Garage's extras unlock at once
+  (`setPro( true )` in `pro.js`), mid-drive or not.
+- **Every visit after**, signed in, the pass is simply on. On another browser, **Sign in with
+  Google** (in the sheet, or in the pause menu: "Have the Supporter Pass? Sign in to use it here.")
+  brings it back: that's "restore purchases". The pause menu also says who's signed in, with
+  **Sign out**, which locks the pass again in that browser.
+- Signed in, the browser's leaderboard player is linked to the account (once), so a supporter's ⭐
+  shows by their name on every board.
+- With no sign-in set up (`GOOGLE_CLIENT_ID` empty), no Worker (the dev server alone) or the Worker
+  not answering, the sheet keeps **Coming soon** and nothing else changes. With sign-in but buying
+  off, it's **Coming soon** with a sign-in for those who already have the pass (`SUPPORTER_EMAILS`).
+  No call failing ever stops the drive.
+
+### How it works
+
+- **Signing in** (`worker/drive/accounts.js`): the page posts the ID token from Google's button to
+  `POST /api/session { credential }`. It's checked as the construction app checks its own (shared
+  code, `worker/google.js`: RS256 by one of Google's current keys, issued by Google, for
+  `GOOGLE_CLIENT_ID`, not expired, a verified email), and the account (`accounts`: Google's id,
+  email and name) is made or updated. The answer sets a session cookie for 30 days, made by the
+  construction app's code (`worker/sessions.js`) under its own name: `__Host-wd_session`, `Secure`,
+  `HttpOnly`, `SameSite=Lax`, `Path=/`. Only the SHA-256 of its token is kept (`sessions`).
+  `DELETE /api/session` signs that browser out. Anyone with a Google account can sign in.
+- `GET /api/me`: `{ signedIn, name?, email?, supporter, purchase: { enabled, link?, price?,
+  clientReferenceId? } }`.
+- `POST /api/player/link { id, secret }`, signed in: the leaderboard player (proved by its secret, as
+  a rename is) becomes the account's (`players.account_id`).
+- **Stripe's webhook**, `POST /api/stripe/webhook` (`worker/drive/supporter.js`): the one route without
+  the same-origin and JSON checks (it comes from Stripe's servers, not a page) and without a session.
+  It proves itself with its `Stripe-Signature`, checked by the code the construction app's webhook
+  uses (`worker/stripe.js`): HMAC-SHA256 of `<t>.<raw body>` with the signing secret, compared in
+  constant time with each `v1` (any may match, for when a secret is being rolled), refused with 400 if
+  none does or `t` is more than five minutes off; bodies over 256 kB are a 413. Then:
+  - `checkout.session.completed` with `payment_status: 'paid'`, or
+    `checkout.session.async_payment_succeeded` (bank debits and the like complete unpaid first),
+    records a purchase once per Checkout Session (the same event again changes nothing): the account
+    named by `client_reference_id`, else nobody's yet, and whoever signs in with the email paid with
+    (which Google has checked is theirs) has it. With `SUPPORTER_PAYMENT_LINK_ID` set, only that
+    link's checkouts count; without it any paid checkout on the account does (it's World Drive's own).
+  - `charge.refunded` with `refunded: true` (refunded in full) marks that payment's purchase refunded,
+    which takes the pass away. A partial refund keeps it.
+  - Anything else properly signed is answered 200 and left alone, so Stripe doesn't send it again.
+- **Who has the pass** (`hasPass`): an account with a purchase that isn't refunded, its own or one paid
+  with its email by someone not signed in, or whose email is in `SUPPORTER_EMAILS`. It's looked up
+  each time, never copied, so a refund or a change to `SUPPORTER_EMAILS` counts straight away.
+- **30 drives a day**: `/api/visit` with a supporter's session counts the visit against the account
+  (hashed with the day's salt, like an address) with `PER_VISITOR_DAILY_SUPPORTER` (30), not against
+  the address. It still counts towards `DAILY_VISITS` for everyone. If the database can't be asked
+  just then, the visit goes ahead as anyone's.
+- **The ⭐**: leaderboard rows (and your own row) have `supporter: true` for a player linked to a
+  supporter's account, looked up as the board is made (one look in each index per row); boards are
+  cached for half a minute, so a new ⭐ or a refund shows within that.
+- In the page, `src/drive-app/supporter.js` fills the sheet's buy area (`buyArea()` in `pass.js`) and
+  the pause menu's account line. Google's script (`accounts.google.com/gsi/client`) is only loaded
+  once one of its buttons is on screen.
+
+### Settings
+
+| Setting | Where | What it is |
+| --- | --- | --- |
+| `GOOGLE_CLIENT_ID` | `vars` | The OAuth web client's id (public). Empty: no signing in, no buying, and the sheet says "Coming soon" |
+| `SUPPORTER_PAYMENT_LINK` | `vars` | The Payment Link, `https://buy.stripe.com/9B6bJ0fSYaMf3nc0cCfrW00` (live, public) |
+| `SUPPORTER_PRICE` | `vars` | The price as the page shows it: `CA$4.99` |
+| `PER_VISITOR_DAILY_SUPPORTER` | `vars` | A supporter's drives a day (30) |
+| `STRIPE_WEBHOOK_SECRET` | secret | The webhook endpoint's signing secret, `whsec_...` |
+| `SUPPORTER_EMAILS` | secret, optional | Comma-separated: people who have the pass without paying (you, testers) |
+| `SUPPORTER_PAYMENT_LINK_ID` | dashboard text, optional | The link's `plink_...` id: only its checkouts count |
+
+Buying is on only when `GOOGLE_CLIENT_ID`, the link (an `https://` address) and a `whsec_` secret
+are all set, and `SUPPORTER_PAYMENT_LINK_ID`, if set, is a `plink_` id. Anything else leaves it off,
+so pasting the account's API key (`sk_...`) into the secret by mistake can't turn it on half-working.
+The webhook itself only needs the secret: a payment that arrives is kept whether or not the page
+offers buying just then.
+
+### The owner's steps
+
+1. **Google sign-in.** In Google Cloud, Google Auth Platform → **Clients**: the web client (the Print
+   Yours one is fine) with `https://worlddrive.app` under **Authorized JavaScript origins**. Put its
+   **Client ID** (it isn't a secret) in `wrangler.drive.jsonc` as `GOOGLE_CLIENT_ID`, commit and push:
+   Workers Builds deploys it, and the deploy applies the new tables (`0002_supporter_pass.sql`) first.
+2. **The Payment Link's redirect.** Stripe Dashboard (World Drive's account, live) → **Payment
+   Links** → the link → **Edit** → **After payment**: **Don't show confirmation page**, and redirect
+   customers to `https://worlddrive.app/?supporter=thanks`. While there, turn off letting customers
+   adjust the quantity. (Optional: copy the link's `plink_...` id, on its page and in the page's
+   address, into `SUPPORTER_PAYMENT_LINK_ID` as a dashboard text variable.)
+3. **The webhook.** Stripe Dashboard → **Developers → Webhooks → Add endpoint** (in Workbench:
+   **Webhooks → Add destination**, your account's events, then **Webhook endpoint**):
+   - Endpoint URL: `https://worlddrive.app/api/stripe/webhook` (not `www.`: Stripe doesn't follow the
+     redirect)
+   - Events: `checkout.session.completed`, `checkout.session.async_payment_succeeded` and
+     `charge.refunded`
+   - Any API version: only fields every version has are read.
+
+   Create it and reveal its **Signing secret** (`whsec_...`).
+4. **The secret.** Cloudflare dashboard → Workers & Pages → **world-drive** → Settings → Variables and
+   Secrets → **Add** → type **Secret**, name `STRIPE_WEBHOOK_SECRET`, the signing secret as its value
+   (or `npx wrangler secret put STRIPE_WEBHOOK_SECRET -c wrangler.drive.jsonc`). It takes effect at
+   once, and buying opens. Optionally add `SUPPORTER_EMAILS` the same way.
+5. **Try it for real.** The link is live, so a test is a real purchase: open worlddrive.app, open the
+   pass, sign in, **Buy for CA$4.99** and pay with your own card. Stripe brings you back and the page
+   says *Thanks! Supporter Pass unlocked*; the webhook's page in Stripe lists the delivery with our
+   answer (200). Then refund it in full (Stripe Dashboard → **Payments** → the payment → **Refund**):
+   the pass locks again at your next visit. Stripe keeps its fee on a refunded payment, so the test
+   costs that much.
+
+### Giving and taking away a pass by hand
+
+In the D1 console (Storage & Databases → D1 → **world-drive** → **Console**; times are milliseconds
+since 1970):
+
+```sql
+-- Look someone up by their Google email: their account and passes.
+SELECT a.id, a.email, a.name, p.checkout_session, p.status, p.refunded_at FROM accounts a
+LEFT JOIN purchases p ON p.account_id = a.id OR ( p.account_id IS NULL AND p.email = a.email ) WHERE a.email LIKE '%eve@%';
+
+-- Give someone the pass, by the email they sign in with (signed in or not yet).
+INSERT INTO purchases ( checkout_session, email, status, created_at ) VALUES ( 'granted-eve', 'eve@example.com', 'granted', strftime( '%s', 'now' ) * 1000 );
+
+-- Take it away (a chargeback, or a pass given by hand): it stays on record, refunded.
+UPDATE purchases SET status = 'refunded', refunded_at = strftime( '%s', 'now' ) * 1000 WHERE checkout_session = 'granted-eve';
+
+-- A payment through the bare link with an email that isn't their Google one: give it to their account.
+UPDATE purchases SET account_id = 12 WHERE checkout_session = 'cs_live_...';
+```
+
+`SUPPORTER_EMAILS` does the same as the first for anyone you name, without the console.
+
+### Known gaps
+
+- **The lock is in the page.** The pass's rides and the Garage's extras are code in the public site,
+  so someone who digs through it can switch them on in their own browser. What the Worker keeps for
+  supporters (the 30 drives and the ⭐) can't be had that way.
+- Disputes and chargebacks aren't handled by themselves, nor a refund that arrives before its
+  purchase (Stripe can deliver out of order when retrying): take the pass away by hand (above).
+- Only `paid` counts: a 100 % discount code (`no_payment_required`) doesn't give the pass. Use
+  `SUPPORTER_EMAILS` or the console to give one away.
+- A supporter on a new browser has the address's 8 drives until they sign in; once those are used,
+  the used-up screen has no sign-in, so it's tomorrow (or another browser on another network).
+- No receipts or purchase history in the page: Stripe emails its own receipt if that's on in its
+  settings.
+
 ## What a visit costs, and how it's capped
 
 Google bills the Map Tiles API by the **3D tiles session**: each page that loads the root tileset
@@ -207,7 +365,8 @@ starts one. World Drive is built so that one page load is one session, however m
 - The built site never contains the Maps key. The page asks the Worker for it once as it starts
   (`POST /api/visit`), after an invisible Cloudflare Turnstile check, and only while the day's visits
   are under two caps: **DAILY_VISITS** for everyone together (300) and **PER_VISITOR_DAILY** for each
-  visitor (8). Both start again at midnight UTC.
+  visitor (8; a supporter signed in has **PER_VISITOR_DAILY_SUPPORTER**, 30, counted by their account).
+  Both start again at midnight UTC.
 - Over a cap the page shows **Today's free drives are used up**, with how long until fresh drives,
   and loads nothing from Google. A failed robot check shows **We couldn't check you're a person**
   with **Try again**. With no key set, it shows **World Drive is getting ready** (with a flat test pad
@@ -347,6 +506,10 @@ In `wrangler.drive.jsonc` (`vars`, set on every deploy; change them there, not i
 | `DAILY_VISITS` | 300 | Visits a day for everyone together; 0 closes for the day |
 | `PER_VISITOR_DAILY` | 8 | Visits a day per visitor |
 | `TURNSTILE_SITE_KEY` | `0x4AAAAAAFs3k5sgUIQHSuGC` | The worlddrive.app Turnstile widget (public) |
+| `PER_VISITOR_DAILY_SUPPORTER` | 30 | Visits a day for a supporter, signed in |
+| `GOOGLE_CLIENT_ID` | empty | The Supporter Pass's Google sign-in (public); empty, no signing in or buying |
+| `SUPPORTER_PAYMENT_LINK` | the live link | The Supporter Pass's Stripe Payment Link (public) |
+| `SUPPORTER_PRICE` | `CA$4.99` | Its price, as the page shows it |
 
 Secrets, set by the owner and never in a file (Cloudflare dashboard: Workers & Pages → world-drive →
 Settings → Variables and Secrets, or `npx wrangler secret put NAME -c wrangler.drive.jsonc`):
@@ -355,18 +518,20 @@ Settings → Variables and Secrets, or `npx wrangler secret put NAME -c wrangler
 | --- | --- |
 | `GOOGLE_MAPS_API_KEY` | The Maps key from World Drive's own Google Cloud project (below). A secret named `Google_maps_api`, in any case, is taken too. |
 | `TURNSTILE_SECRET` | The Turnstile widget's secret key |
+| `STRIPE_WEBHOOK_SECRET` | The Supporter Pass webhook's signing secret, `whsec_...`; buying stays off without it |
+| `SUPPORTER_EMAILS` | Optional, comma-separated: people with the pass without paying |
 
-`keep_vars` is on, so anything set in the dashboard that isn't in `vars` survives a deploy. Two
-more, for the leaderboard, aren't in `vars` and needn't be set; add them in the dashboard (plain
-text) to change them:
+`keep_vars` is on, so anything set in the dashboard that isn't in `vars` survives a deploy. A few
+more aren't in `vars` and needn't be set; add them in the dashboard (plain text) to change them:
 
 | Setting | Default | What it is |
 | --- | --- | --- |
 | `SCORES_PER_VISITOR_DAILY` | 1500 | Scores a visitor may post a day (one every 10 s for four hours) |
 | `NAMES_PER_VISITOR_DAILY` | 20 | New names and renames a visitor may make a day |
+| `SUPPORTER_PAYMENT_LINK_ID` | none | The Payment Link's `plink_...` id: only its checkouts are a Supporter Pass |
 
-The leaderboard's database is the `DB` binding in `wrangler.drive.jsonc` (D1 **world-drive**,
-already made); its tables are `worker/drive/migrations`.
+The leaderboard's and the Supporter Pass's database is the `DB` binding in `wrangler.drive.jsonc`
+(D1 **world-drive**, already made); its tables are `worker/drive/migrations`.
 
 ## Deploying
 
@@ -438,7 +603,13 @@ secret `1x0000000000000000000000000000000AA` always passes; secret
   (the Worker on http://localhost:8790, with a local leaderboard database in `.wrangler/state`, its
   migrations applied first), and `DRIVE_API=http://localhost:8790 npm run dev:drive`. The page then
   goes through the robot check (Turnstile's test keys), the caps, the real search and the
-  leaderboard. Small caps there make the used-up screen easy to see.
+  leaderboard. Small caps there make the used-up screen easy to see. For the Supporter Pass, put a
+  Google web client whose origins include `http://localhost:5173` in `GOOGLE_CLIENT_ID` there, a
+  test-mode Payment Link in `SUPPORTER_PAYMENT_LINK` (the one in `wrangler.drive.jsonc` is live, and
+  `.dev.vars.drive.example` blanks it), and as `STRIPE_WEBHOOK_SECRET` the `whsec_...` that the
+  [Stripe CLI](https://docs.stripe.com/stripe-cli) prints for
+  `stripe listen --forward-to localhost:8790/api/stripe/webhook` (test mode). Or skip Stripe: put
+  your address in `SUPPORTER_EMAILS` and sign in.
 - In the browser console, `window.drive` has the scene, the globe, the driver and `dropIn( { name,
   lat, lon } )`.
 
@@ -448,13 +619,22 @@ checks, the search's validation, cache and one-a-second limit, www, and that the
 the answer to a visit that passed; and the leaderboard on a throwaway D1 database: name rules, the
 filter and uniqueness, renaming, scores with a visit token, every cheat above turned away, SQL-ish
 names and places kept as text, the top 20 and your own rank, one place's board, the cache, days and
-weeks turning over, the tidying after 35 days, what's stored, and the console's SQL above), and `npm run test:drive-ui` (the page in Chromium without a key:
+weeks turning over, the tidying after 35 days, what's stored, and the console's SQL above; and the
+Supporter Pass, with test keys standing in for Google's and a made-up webhook secret for Stripe's:
+signing in and every bad token turned away, the session cookie, `/api/me`, the webhook's signatures
+and five minutes, a payment once, bank debits, buying before signing in, refunds, another link's
+checkouts, the same-origin checks only the webhook goes without, `SUPPORTER_EMAILS`, 30 drives a day
+for a supporter, the ⭐, the owner's SQL, and buying off without its settings), and `npm run test:drive-ui` (the page in Chromium without a key:
 the globe and panel, search on Enter, spots, pins, dropping in and driving, stunts (a wall throwing
 the kart into the air and never through it, a backflip landed for points, the DRIFT button), changing
 ride, M and teleporting again without a reload, recent places, a phone with touch buttons, the
 used-up, robot-check and getting-ready screens, and the leaderboard with its answers made in the
 test: tabs, your own row, picking a name and renaming, a landed jump posting the run with the card
-asking first, each place's best posted, a dead connection changing nothing, and a phone).
+asking first, each place's best posted, a dead connection changing nothing, and a phone; and buying
+the pass with Google's script stood in for: signing in from the sheet and the pause menu, Buy's link,
+unlocking on focus and on `?supporter=thanks`, on every load, signing out, the player linked, the ⭐,
+and "Coming soon" with no sign-in or no Worker answering). `npm run test:drive-pro-ui` tries the
+pass's rides and the Garage.
 
 ## How it fits together
 
@@ -470,8 +650,11 @@ src/drive-app/vehicles.js    the go-kart, the library trucks (catalog.js lists w
 src/drive-app/rides/         the Supporter Pass's rides, built in code, and parts.js they're built from
 src/drive-app/pro.js         whether this visitor has the Supporter Pass (off until payments say so)
 src/drive-app/pass.js        the Supporter Pass sheet and its badge
+src/drive-app/supporter.js   buying it: Google sign-in, the Payment Link, unlocking, the pause menu's
+                             account line
 src/drive-app/garage.js      the Garage: choices and the turntable; paint.js the looks and decals
-src/drive-app/api.js         /api/config, the visit with Turnstile, /api/search, the leaderboard's calls
+src/drive-app/api.js         /api/config, the visit with Turnstile, /api/search, the leaderboard's and
+                             the Supporter Pass's calls
 src/drive-app/leaderboard.js the leaderboard: the panel, names, posting runs, the new-best card
 src/drive-app/screens.js     start screen, notices, loading card, pause, keys, messages
 src/drive-app/test-globe.js  the Earth without Google's tiles, for working without a key
@@ -479,7 +662,11 @@ vite.drive.config.js         the build: no key, only the offered vehicles copied
 worker/drive/                the Worker: index.js (routes), limits.js (caps, the search queue and
                              the leaderboard's turns), turnstile.js, search.js; the leaderboard:
                              players.js, scores.js, boards.js, names.js (rules and the filter),
-                             visits.js (visit tokens), migrations/ (its D1 tables)
+                             visits.js (visit tokens); the Supporter Pass: accounts.js (sign-in,
+                             sessions, /api/me), supporter.js (the webhook, who has it);
+                             migrations/ (its D1 tables)
+worker/google.js, sessions.js, stripe.js   shared with the construction app: Google's ID tokens,
+                             the session cookie, Stripe's webhook signatures
 wrangler.drive.jsonc         the Worker's settings, domains, Durable Object and D1 database
 ```
 

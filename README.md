@@ -481,16 +481,19 @@ Worker to OpenStreetMap's Nominatim, cached and at most once a second. A leaderb
 player's best stunt run today, this week and all time (a nickname, no sign-up) in a D1 database,
 posted with the visit's signed token and checked against what the game can score.
 
-A **Supporter Pass** (one payment, about CA$4.99, towards the running costs) unlocks four more rides
+A **Supporter Pass** (one payment of CA$4.99 towards the running costs) unlocks four more rides
 built in code (a sports coupe, a monster truck, a city bus and a hovercraft, each handling its own
-way) and the Garage's extras (paint, finishes, decals, rims, boost flames and trails); buying it isn't
-open yet (see [Supporter Pass (content)](docs/world-drive.md#supporter-pass-content)).
+way), the Garage's extras (paint, finishes, decals, rims, boost flames and trails), a ⭐ on the
+leaderboard and 30 drives a day. It's bought with a Stripe Payment Link after signing in with Google,
+so it's yours in any browser; Stripe's signed webhook records it. Buying stays off ("Coming soon")
+until `GOOGLE_CLIENT_ID` and the webhook's secret are set (see
+[Supporter Pass (buying it)](docs/world-drive.md#supporter-pass-buying-it) for the owner's steps).
 
 How to play, the leaderboard (how cheating is limited, and looking after it in the D1 console), the
 settings and limits, deploying (`npm run deploy:drive` applies the database's migrations first), and
 the owner's Google Cloud steps (a separate project and key, restricted to worlddrive.app and the Map
 Tiles API, a daily quota and budget alerts) are in [docs/world-drive.md](docs/world-drive.md).
-Tests: `npm run test:drive-worker`, `npm run test:drive-ui` and `node --test scripts/test-drive-pro-ui.mjs`.
+Tests: `npm run test:drive-worker`, `npm run test:drive-ui` and `npm run test:drive-pro-ui`.
 
 ## About the Sketchfab model
 
@@ -555,7 +558,8 @@ public/library/     downloaded models, library.json catalog, thumbs/ and CREDITS
 src/geo.js          lat/lon <-> local metres
 public/models/      put your .glb files here
 drive/index.html    World Drive's page; its code is src/drive-app/ (docs/world-drive.md)
-worker/drive/       World Drive's Worker: the Maps key per visit, caps, Turnstile, search, the leaderboard
+worker/drive/       World Drive's Worker: the Maps key per visit, caps, Turnstile, search, the leaderboard,
+                    the Supporter Pass (Google sign-in, Stripe's webhook)
 vite.drive.config.js, wrangler.drive.jsonc   World Drive's build and Worker settings
 ```
 
