@@ -8,9 +8,11 @@ import { enuToLocal } from '../geo.js';
 // glints), and at the lowest level round about. So a spot is water when, from rays looking down
 // round it (see look):
 //
-// - the ground there is coloured like water (bluish, grey, a harbour's teal, a canal's olive grey or
-//   a river's brownish grey; not green like a field, warm like sand or soil, nor bright like
-//   concrete), read from the tile's own picture where the ray hit it;
+// - the ground there is coloured like water (bluish, grey or a river's brownish grey; not green
+//   like a field, warm like sand or soil, nor bright like concrete), read from the tile's own
+//   picture where the ray hit it; or a harbour's teal or olive grey, which a bluish lawn can be
+//   too, where everything level with it out to FAR's reach is that colour as well (open water, not
+//   a lawn among ball fields, paths and patches);
 // - it's level, everywhere within MID's reach of it, to within FLAT;
 // - its picture is even over all of that (the colours' brightness varies by no more than EVEN):
 //   a road has markings, cars and patches, a field its lines;
@@ -29,9 +31,9 @@ import { enuToLocal } from '../geo.js';
 // past the edge is (drive.js takes that for water when the vehicle came down into it, off a quay
 // or a bank). Ground is only surely dry when it's coloured unlike water, or isn't level or the
 // lowest round about; a colour in between (a river's brown, or grass's) on level ground that's
-// the lowest round about can't be told, and a colour only water has (the turquoise of a lagoon or
-// a clear lake, which Google draws from photographs, beds and all, neither level nor even) is never
-// dry. The colours are read from a small copy of each tile's picture, drawn once onto a canvas and
+// the lowest round about can't be told, and a colour only water has (the turquoise of a lagoon, a
+// clear lake or the sea by the surf, which Google draws from photographs, beds and all, neither
+// level nor even) is never dry. The colours are read from a small copy of each tile's picture, drawn once onto a canvas and
 // kept as long as the picture is. It looks at the cheapest things first, so on most ground it's
 // done after one ray or seven.
 
@@ -52,18 +54,22 @@ const LOWER = 1.5;
 // enough for the rings there to be clear of a shore the spot is right by.
 const PROBE = 13;
 // Water's colour (0 to 255): no brighter than BRIGHT (luma), its blue at least its red less WARM
-// (the Thames's brownish grey) and its green less GREEN (Hong Kong's teal, the IJ's olive grey).
+// (the Thames's brownish grey) and its green less GREEN. Hong Kong's teal and the IJ's olive grey
+// are greener, up to TEAL, but so is a lawn in New York's bluish pictures: that's only water where
+// all FAR's ring that's level with it is too, and as bright to within MATCH.
 const BRIGHT = 150;
 const WARM = 12;
-const GREEN = 14;
+const GREEN = 6;
+const TEAL = 14;
+const MATCH = 8;
 // Clearly not water's colour, whatever the ground's shape: brighter than LIGHT (concrete, a pale
 // beach), its red over its blue by more than SANDY (sand, soil, brick, a tiled roof), or green like
 // grass (its green over its blue by more than GRASS, and well over its red).
 const LIGHT = 170;
 const SANDY = 25;
 const GRASS = 30;
-// Only ever water's colour: its blue over its red by DEEP or more, and at least its green.
-const DEEP = 45;
+// Only ever water's colour: turquoise, its green and its blue both over its red by DEEP or more.
+const DEEP = 40;
 // What look() says of ground that is surely dry, and of what it can't tell.
 const DRY = Object.freeze( { level: null, dry: true } );
 const UNSURE = Object.freeze( { level: null, dry: false } );
@@ -187,16 +193,23 @@ export function createWater( ground ) {
 			const angle = ( away( near, colours ) + 0.5 ) / NEAR.count * Math.PI * 2 + Math.PI;
 			const past = look( east + Math.sin( angle ) * PROBE, north + Math.cos( angle ) * PROBE, h, false ).level;
 			if ( past === null || Math.abs( past - h ) > FLAT ) return dry;
-			return waterLike( colour ) ? { level: null, dry: false, shore: past } : UNSURE;
+			return waterLike( colour, TEAL ) ? { level: null, dry: false, shore: past } : UNSURE;
 
 		}
 
 		const open = level( round( MID, east, north, h, colours ) ) && even( colours );
 		// A ray that finds nothing (far below, or nothing loaded) counts as lower.
-		if ( ! round( FAR, east, north, h ).every( dh => dh !== null && dh >= - LOWER ) ) return dry;
+		const farColours = [];
+		const far = round( FAR, east, north, h, farColours );
+		if ( ! far.every( dh => dh !== null && dh >= - LOWER ) ) return dry;
+		if ( open && waterLike( colour ) ) return { level: h, dry: false };
+		// Teal or olive grey: water if the far ring is too wherever it's level with it (over that,
+		// it's a bank, a ship or a tree).
+		const like = c => waterLike( c, TEAL ) && Math.abs( luma( c ) - luma( colour ) ) <= MATCH;
+		if ( open && waterLike( colour, TEAL ) && far.every( ( dh, i ) => dh > FLAT || like( farColours[ i ] ) ) ) return { level: h, dry: false };
 		// Level, even and the lowest thing round about, in a colour that might not be water's (a
 		// brown, a green): it can't tell.
-		return open && waterLike( colour ) ? { level: h, dry: false } : UNSURE;
+		return UNSURE;
 
 	}
 
@@ -272,12 +285,13 @@ function away( heights, colours ) {
 
 }
 
-// Bluish, grey, teal or a little brown or olive; not green, warm or bright.
-function waterLike( colour ) {
+// Bluish, grey or a little brown, not green, warm or bright; with `green` TEAL, teal or olive
+// grey too.
+function waterLike( colour, green = GREEN ) {
 
 	if ( ! colour ) return false;
 	const { r, g, b } = colour;
-	return luma( colour ) <= BRIGHT && b >= r - WARM && b >= g - GREEN;
+	return luma( colour ) <= BRIGHT && b >= r - WARM && b >= g - green;
 
 }
 
@@ -290,12 +304,12 @@ function notWater( colour ) {
 
 }
 
-// Only ever water: deep blue or turquoise.
+// Only ever water: turquoise.
 function deep( colour ) {
 
 	if ( ! colour ) return false;
 	const { r, g, b } = colour;
-	return b - r >= DEEP && b >= g;
+	return g - r >= DEEP && b - r >= DEEP;
 
 }
 

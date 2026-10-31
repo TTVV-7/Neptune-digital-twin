@@ -1386,7 +1386,7 @@ describe( 'World Drive water', () => {
 
 	} );
 
-	test( 'water in Google\'s other colours is water; grass, sand and concrete are dry, mown grass can\'t be told, and a lagoon\'s turquoise is never dry', async () => {
+	test( 'water in Google\'s other colours is water; grass, sand and concrete are dry, mown grass can\'t be told, a bluish lawn among ball fields isn\'t water, and a lagoon\'s turquoise is never dry', async () => {
 
 		const result = await page.evaluate( () => {
 
@@ -1419,6 +1419,13 @@ describe( 'World Drive water', () => {
 
 			}
 
+			// A lawn as bluish as Hong Kong's harbour (Central Park's, measured), level and even, with a
+			// ball field on a level with it 35 m off: not water, as the harbour would be all round.
+			sea.material = paint( sea.material, [ 81, 121, 112 ] );
+			const field = kit.slab( 12, 12, 35 * Math.sin( Math.PI / 8 ), - 340 + 35 * Math.cos( Math.PI / 8 ), - 1.99, 0 );
+			field.material = paint( field.material, [ 240, 180, 144 ] );
+			out.lawnAmongFields = say( water.look( 0, - 340, - 1 ) );
+			kit.remove( field );
 			// A sandbar 1 m over the sea, 8 m across: uneven round its middle (the sea lower), so dry
 			// in a grey, but not in a lagoon's turquoise, which only water is.
 			const bar = kit.slab( 8, 8, 0, - 340, - 1, 0 );
@@ -1435,7 +1442,7 @@ describe( 'World Drive water', () => {
 
 		} );
 		console.log( 'water, colours:', JSON.stringify( result ) );
-		assert.deepEqual( result, { harbourTeal: 'water', canalOlive: 'water', riverBrown: 'water', mownGrass: 'unsure', sand: 'dry', concrete: 'dry', lawn: 'dry', barGrey: 'dry', barTurquoise: 'unsure' } );
+		assert.deepEqual( result, { harbourTeal: 'water', canalOlive: 'water', riverBrown: 'water', mownGrass: 'unsure', sand: 'dry', concrete: 'dry', lawn: 'dry', lawnAmongFields: 'unsure', barGrey: 'dry', barTurquoise: 'unsure' } );
 
 	} );
 
