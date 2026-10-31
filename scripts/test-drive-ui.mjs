@@ -1446,6 +1446,26 @@ describe( 'World Drive water', () => {
 
 	} );
 
+	test( 'a canal 25 m across: the water by its wall is never taken for dry ground, and its quays are', async () => {
+
+		const result = await page.evaluate( () => {
+
+			const { water } = window.drive;
+			const kit = window.waterKit;
+			// Two quays level with the land, 2 m over the sea, 25 m apart.
+			const quays = [ kit.slab( 40, 40, - 32.5, - 340, 0, 0 ), kit.slab( 40, 40, 32.5, - 340, 0, 0 ) ];
+			const say = r => r.level !== null ? 'water' : r.dry ? 'dry' : 'unsure';
+			// 4 m off one wall: past it (13 m on), water by the other wall, which can't be told either.
+			const out = { byWall: say( water.look( - 8.5, - 340, - 1 ) ), quay: say( water.look( - 30, - 340, 1 ) ) };
+			for ( const quay of quays ) kit.remove( quay );
+			return out;
+
+		} );
+		console.log( 'water, a canal:', JSON.stringify( result ) );
+		assert.deepEqual( result, { byWall: 'unsure', quay: 'dry' } );
+
+	} );
+
 	test( 'slowly off a quay: down into the water by its edge is a splash there, not a dozen metres out', async () => {
 
 		const result = await page.evaluate( () => {

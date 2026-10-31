@@ -193,9 +193,10 @@ const WORDS = [ [ 18, 'WHAM!' ], [ 9, 'BOING!' ], [ 0, 'BONK!' ] ];
 // ground: the newest at least DRY_EDGE m back from the last of them (about where it left the
 // shore) and DRY_OUT m from where it went in (water within a few metres of the shore can pass for
 // dry ground: see drive-app/water.js), and not within ABOVE_WATER m of the water's level if any
-// will do (water the tiles there drew unlike water would be about level with it). Water by its
-// edge that water.js can't tell from the shore is water all the same when it came DOWN_INTO m or
-// more down into it from the last dry ground it was on, off a quay, a bank or a ramp.
+// will do (water the tiles there drew unlike water would be about level with it, give or take how
+// far Google's water slopes across a harbour). Water by its edge that water.js can't tell from
+// the shore is water all the same when it came DOWN_INTO m or more down into it from the last dry
+// ground it was on, off a quay, a bank or a ramp.
 const WATER_EVERY = 0.2;
 const WATER_DRAG = 5;
 const DIP = 0.04;
@@ -209,7 +210,7 @@ const DRY_STEP = 3;
 const DRY_KEEP = 24;
 const DRY_EDGE = 8;
 const DRY_OUT = 20;
-const ABOVE_WATER = 0.5;
+const ABOVE_WATER = 1;
 const DOWN_INTO = 0.5;
 // What a splash says, by how hard it went in (m/s: how fast it came down, and a share of how fast
 // it was going).

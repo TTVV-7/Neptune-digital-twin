@@ -188,12 +188,14 @@ export function createWater( ground ) {
 			// A road's kerbs, cars and markings, or a shore by water. Water being the lowest thing
 			// round it, look PROBE m out the other way from what's highest or least like it here: the
 			// spot is dry unless that's water at its level (it's by the water's edge, then, where the
-			// rings reach the shore).
+			// rings reach the shore), or water-coloured ground at its level that can't be told either
+			// (water by a sea wall or among boats, as often as not).
 			if ( ! probing ) return dry;
 			const angle = ( away( near, colours ) + 0.5 ) / NEAR.count * Math.PI * 2 + Math.PI;
-			const past = look( east + Math.sin( angle ) * PROBE, north + Math.cos( angle ) * PROBE, h, false ).level;
-			if ( past === null || Math.abs( past - h ) > FLAT ) return dry;
-			return waterLike( colour, TEAL ) ? { level: null, dry: false, shore: past } : UNSURE;
+			const past = look( east + Math.sin( angle ) * PROBE, north + Math.cos( angle ) * PROBE, h, false );
+			const atLevel = Math.abs( past.height - h ) <= FLAT;
+			if ( past.level !== null && atLevel ) return waterLike( colour, TEAL ) ? { level: null, dry: false, shore: past.level } : UNSURE;
+			return ! past.dry && atLevel && waterLike( colour, TEAL ) ? UNSURE : dry;
 
 		}
 
@@ -202,14 +204,15 @@ export function createWater( ground ) {
 		const far = round( FAR, east, north, h, farColours );
 		// A ray that finds nothing (far below, or nothing loaded) counts as lower.
 		if ( ! far.every( dh => dh !== null && dh >= - LOWER ) ) return dry;
-		if ( open && waterLike( colour ) ) return { level: h, dry: false };
+		if ( open && waterLike( colour ) ) return { level: h, dry: false, height: h };
 		// Teal or olive grey: water if the far ring is too wherever it's level with it (over that,
 		// it's a bank, a ship or a tree).
 		const like = c => waterLike( c, TEAL ) && Math.abs( luma( c ) - luma( colour ) ) <= MATCH;
-		if ( open && waterLike( colour, TEAL ) && far.every( ( dh, i ) => dh > FLAT || like( farColours[ i ] ) ) ) return { level: h, dry: false };
+		if ( open && waterLike( colour, TEAL ) && far.every( ( dh, i ) => dh > FLAT || like( farColours[ i ] ) ) ) return { level: h, dry: false, height: h };
 		// Level, even and the lowest thing round about, in a colour that might not be water's (a
-		// brown, a green): it can't tell.
-		return UNSURE;
+		// brown, a green), or level close by but not all round: it can't tell. Looked at from a spot
+		// by it, how high it is (see above).
+		return probing ? UNSURE : { level: null, dry: false, height: h };
 
 	}
 
