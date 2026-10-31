@@ -1,5 +1,5 @@
-// A driving HUD any app can use with a Driver (drive.js): the speed, a boost gauge, FLYING with the
-// height, drift and jump readouts, big messages ("Crash!", "1.2 s air") and, on a touch screen,
+// A driving HUD any app can use with a Driver (drive.js): the speed, a boost gauge (which flashes
+// when something tops it up), FLYING with the height, SUPERSONIC, drift and jump readouts, big messages ("Crash!", "1.2 s air") and, on a touch screen,
 // buttons to drive with. With kart handling a DRIFT button (SPACE) sits under the speed, and its
 // chip lights up while drifting with the mini-turbo's charge. With stunts (crash: 'launch') a hit
 // pops up a word ("WHAM!"), tricks pop up as they're landed, and the score, its combo multiplier
@@ -19,8 +19,9 @@ const SPEED_SCALE = 200;
 // How long a message stays (ms), a little longer for a long one.
 const FLASH_TIME = 1500;
 const FLASH_PER_CHAR = 30;
-// How long a hit's word and landed tricks stay (ms).
+// How long a hit's word and landed tricks stay (ms), and a top-up's on the boost gauge.
 const POP_TIME = 750;
+const REFUEL_TIME = 700;
 const TRICKS_TIME = 2200;
 // Messages that name keys, as they read on a touch screen, which has the buttons instead.
 const TOUCH_WORDS = [
@@ -177,6 +178,39 @@ const CSS = `
 
 .dhud .dhud-fly {
 	background: var( --fly );
+}
+
+/* Supersonic: white-hot, arriving with a jolt. */
+.dhud .dhud-sonic {
+	background: linear-gradient( 100deg, #ffffff, #bfe4ff 45%, #ffd23f );
+	box-shadow: 0 0 16px rgba( 191, 228, 255, 0.9 );
+	font-style: italic;
+	animation: dhud-sonic 0.45s ease-out;
+}
+
+@keyframes dhud-sonic {
+	from {
+		opacity: 0;
+		transform: scale( 1.8 );
+	}
+}
+
+/* The gauge topped up (a boost pad): a ring of light round it, and what it took by BOOST. */
+.dhud .dhud-boost.refuel .dhud-bar {
+	animation: dhud-refuel 0.5s ease-out;
+}
+
+.dhud .dhud-boost.refuel b {
+	color: var( --accent );
+}
+
+@keyframes dhud-refuel {
+	from {
+		box-shadow: 0 0 0 0 rgba( 255, 210, 63, 0.95 );
+	}
+	to {
+		box-shadow: 0 0 0 9px rgba( 255, 210, 63, 0 );
+	}
 }
 
 /* The DRIFT chip, lit up while drifting, filling with the mini-turbo's charge in its colour. */
@@ -678,7 +712,7 @@ export function createDriveHud( parent = document.body ) {
 		<div class="dhud-tricks" hidden></div>
 		<div class="dhud-pops"></div>
 		<div class="dhud-cluster">
-			<div class="dhud-badges"><span class="dhud-badge dhud-drift" hidden>DRIFT<i></i></span><span class="dhud-badge dhud-fly" hidden>FLYING</span></div>
+			<div class="dhud-badges"><span class="dhud-badge dhud-drift" hidden>DRIFT<i></i></span><span class="dhud-badge dhud-fly" hidden>FLYING</span><span class="dhud-badge dhud-sonic" hidden>SUPERSONIC</span></div>
 			<div class="dhud-speed"><span class="dhud-number">0</span><span class="dhud-unit">km/h</span></div>
 			<div class="dhud-bar dhud-speed-bar"><i></i></div>
 			<div class="dhud-boost" hidden><b>BOOST</b><div class="dhud-bar"><i></i></div></div>
@@ -712,6 +746,8 @@ export function createDriveHud( parent = document.body ) {
 	const stats = $( '.dhud-stats' );
 	const name = $( '.dhud-name' );
 	const flyBadge = $( '.dhud-fly' );
+	const sonicBadge = $( '.dhud-sonic' );
+	const boostLabel = $( '.dhud-boost b' );
 	const driftBadge = $( '.dhud-drift' );
 	const driftHold = $( '.dhud-drift-hold' );
 	const scoreRow = $( '.dhud-score' );
@@ -726,6 +762,7 @@ export function createDriveHud( parent = document.body ) {
 	let driver = null;
 	let flashTimer;
 	let tricksTimer;
+	let refuelTimer;
 	let scoring = false;
 	let tilt = 1;
 	let panel = null;
@@ -789,7 +826,7 @@ export function createDriveHud( parent = document.body ) {
 			row( [ 'W', 'S' ], 'gas, brake' ),
 			row( [ 'A', 'D' ], 'steer' ),
 			row( [ 'Space' ], driver?.drift ? 'drift (hold and steer), hop (tap)' : 'hop' ),
-			driver?.booster && row( [ 'B' ], 'booster' ),
+			driver?.booster && row( [ 'B' ], 'booster (hold it flat out: supersonic)' ),
 			driver?.launch && row( [ 'Q', 'E' ], 'roll in the air' ),
 			row( [ 'Shift' ], driver?.fly ? 'fly' : 'boost' ),
 			row( [ 'R' ], 'reset' ),
@@ -847,6 +884,8 @@ export function createDriveHud( parent = document.body ) {
 				// Badges and the boost row show only when there's something in them.
 				boostRow.hidden = ! driver?.booster;
 				flyBadge.hidden = ! flying;
+				sonicBadge.hidden = true;
+				shown.delete( 'sonic' );
 				driftBadge.hidden = true;
 				scoreRow.hidden = ! scoring;
 
@@ -865,6 +904,9 @@ export function createDriveHud( parent = document.body ) {
 			flash.hidden = true;
 			clearTimeout( tricksTimer );
 			tricks.hidden = true;
+			clearTimeout( refuelTimer );
+			boostRow.classList.remove( 'refuel' );
+			boostLabel.textContent = 'BOOST';
 			pops.replaceChildren();
 			panel?.remove();
 			panel = null;
@@ -967,6 +1009,31 @@ export function createDriveHud( parent = document.body ) {
 
 			flying = on;
 			flyBadge.hidden = ! on || !! panel;
+
+		},
+
+		// Supersonic (boosting flat out, see drive.js), or not.
+		setSupersonic( on ) {
+
+			set( 'sonic', !! on && ! panel, value => sonicBadge.hidden = ! value );
+
+		},
+
+		// Something topped up the boost gauge by `share` (0 to 1): it flashes, with what it took.
+		refuel( share ) {
+
+			if ( share <= 0 ) return;
+			boostLabel.textContent = `+${ Math.round( share * 100 ) }%`;
+			boostRow.classList.remove( 'refuel' );
+			void boostRow.offsetWidth;
+			boostRow.classList.add( 'refuel' );
+			clearTimeout( refuelTimer );
+			refuelTimer = setTimeout( () => {
+
+				boostRow.classList.remove( 'refuel' );
+				boostLabel.textContent = 'BOOST';
+
+			}, REFUEL_TIME );
 
 		},
 

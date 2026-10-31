@@ -631,6 +631,25 @@ body.touch #pause kbd {
 	color: var( --accent );
 }
 
+/* A setting: the boost pads, on or off. */
+#pause .setting {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 16px;
+	font-size: 14px;
+	font-weight: 700;
+	color: var( --muted );
+	cursor: pointer;
+}
+
+#pause .setting input {
+	width: 18px;
+	height: 18px;
+	margin: 0;
+	accent-color: var( --accent );
+}
+
 #splash .status {
 	margin: 18px 0 14px;
 	color: var( --muted );
