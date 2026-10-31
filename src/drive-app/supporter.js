@@ -47,15 +47,29 @@ let unlockedHere = false;
 let google = null;
 // The question to /api/me on its way, if there is one.
 let asking = null;
+// Called once the account signed in here has the pass (see setUpSupporter), or null.
+let onPass = null;
+let handle = null;
 const areas = new Map();
 const observers = new Set();
 
-// Once, as World Drive starts. worker: whether there's a Worker (not on the Vite dev server alone);
+// As World Drive starts. worker: whether there's a Worker (not on the Vite dev server alone);
 // googleClientId: /api/config's; player(): this browser's leaderboard player, { id, secret } or null.
-export function setUpSupporter( { worker, googleClientId, player } ) {
+// The used-up screen sets it up first (main.js), with onPass(): called once, as soon as the account
+// here has the pass, to ask for the visit again. Set up again as the drive starts, it only takes the
+// new player() and onPass (none): the questions already asked, and their answers, carry on.
+export function setUpSupporter( { worker, googleClientId, player, onPass: whenPass = null } ) {
+
+	getPlayer = player ?? getPlayer;
+	onPass = whenPass;
+	if ( handle ) {
+
+		if ( me?.signedIn ) linkPlayer();
+		return handle;
+
+	}
 
 	clientId = worker && typeof googleClientId === 'string' ? googleClientId : '';
-	getPlayer = player ?? getPlayer;
 	const thanks = takeThanks();
 	if ( clientId ) {
 
@@ -65,7 +79,7 @@ export function setUpSupporter( { worker, googleClientId, player } ) {
 
 	} else if ( thanks ) toast( 'Thanks for supporting World Drive!' );
 
-	return {
+	handle = {
 		// Whether there's signing in (and so perhaps buying) here at all.
 		on: !! clientId,
 		get me() {
@@ -78,6 +92,7 @@ export function setUpSupporter( { worker, googleClientId, player } ) {
 		restorePurchases,
 		signOut,
 	};
+	return handle;
 
 }
 
@@ -89,7 +104,7 @@ export function fillBuyArea( root ) {
 
 }
 
-// The pause menu's account line: who's signed in, signing in and out.
+// The pause menu's account line, and the used-up screen's: who's signed in, signing in and out.
 export function fillAccountArea( root ) {
 
 	addArea( root, 'account' );
@@ -136,7 +151,9 @@ export async function restorePurchases() {
 
 		say( 'Checking...' );
 		const known = await refresh();
-		say( ! known ? UNREACHABLE : me.supporter ? '' : 'No Supporter Pass on this account yet. Bought it with another? Sign out and sign in with that one.' );
+		// Just paid, it's most likely Stripe's word still on its way (days, for a bank debit).
+		const notYet = waitingSince ? 'Not confirmed yet: it can take a minute after paying (a few days for a bank debit). It unlocks here by itself.' : 'No Supporter Pass on this account yet. Bought it with another? Sign out and sign in with that one.';
+		say( ! known ? UNREACHABLE : me.supporter ? '' : notYet );
 		if ( me.supporter ) unlocked();
 		return !! me.supporter;
 
@@ -162,6 +179,8 @@ export async function signOut() {
 	const answer = await endSession();
 	if ( ! answer.ok ) return say( UNREACHABLE );
 	say( '' );
+	// The email in it stays off a shared computer; signing in again links the player again, once.
+	storage( () => localStorage.removeItem( LINKED_KEY ) );
 	window.google?.accounts?.id?.disableAutoSelect?.();
 	if ( ! await refresh() ) update( { signedIn: false, supporter: false, purchase: { enabled: false } } );
 	toast( 'Signed out' );
@@ -218,6 +237,13 @@ function update( next ) {
 	if ( me.supporter ) waitingSince = 0;
 	render();
 	if ( me.signedIn ) linkPlayer();
+	if ( me.supporter && onPass ) {
+
+		const fn = onPass;
+		onPass = null;
+		fn();
+
+	}
 
 }
 
@@ -413,7 +439,8 @@ function renderBuy( root ) {
 
 }
 
-// The pause menu: who's signed in, or a way to sign in for someone with the pass.
+// The pause menu's and the used-up screen's: who's signed in, or a way to sign in for someone with
+// the pass.
 function renderAccount( root ) {
 
 	root.hidden = ! clientId || ! me;

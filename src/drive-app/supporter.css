@@ -1,5 +1,6 @@
 /* Buying the Supporter Pass and signing in for it (supporter.js): the pass sheet's buy area, the
-   pause menu's account line, and the ⭐ by a supporter's name on the leaderboard. */
+   pause menu's and the used-up screen's account lines, and the ⭐ by a supporter's name on the
+   leaderboard. */
 
 .supporter-line {
 	margin: 10px 0 0;
@@ -14,7 +15,8 @@
 
 /* The sheet makes every button in its buy area a big one; these are links in a line of text. */
 #pass .buy-area button.link,
-#pause .account button.link {
+#pause .account button.link,
+#notice .account button.link {
 	width: auto;
 	font-size: inherit;
 }
@@ -46,14 +48,21 @@
 	color-scheme: dark;
 }
 
-#pause .account {
+#pause .account,
+#notice .account {
 	margin-top: 18px;
 	padding-top: 12px;
 	border-top: 1px solid var( --line );
 }
 
-#pause .account .supporter-line:first-child {
+#pause .account .supporter-line:first-child,
+#notice .account .supporter-line:first-child {
 	margin-top: 0;
+}
+
+/* Only on the used-up screen: the robot check or an error after it isn't about drives. */
+#notice:not( [data-kind="used-up"] ) .account {
+	display: none;
 }
 
 .supporter-star {

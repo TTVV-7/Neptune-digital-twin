@@ -10,11 +10,11 @@
 // and renaming, a landed jump posting the run (the card asking the first time, never stopping the
 // drive), each place's best posted as well as the day's, a dead connection changing nothing, and all
 // of it on a phone. And the Supporter Pass's buying (its answers made here, Google's sign-in script
-// stood in for): signing in from the pass's sheet and the pause menu, Buy's link saying whose it is,
-// unlocking when the window has focus again and on ?supporter=thanks, on every load for a supporter,
-// signing out, the leaderboard player linked, the ⭐ on the board, and "Coming soon" with no sign-in
-// or no Worker answering, the free game unchanged. Every request that isn't to the local server is
-// blocked, so nothing reaches Google, Cloudflare, Stripe or OpenStreetMap.
+// stood in for): signing in from the pass's sheet, the pause menu and the used-up screen, Buy's link
+// saying whose it is, unlocking when the window has focus again and on ?supporter=thanks, on every
+// load for a supporter, signing out, the leaderboard player linked, the ⭐ on the board, and "Coming
+// soon" with no sign-in or no Worker answering, the free game unchanged. Every request that isn't to
+// the local server is blocked, so nothing reaches Google, Cloudflare, Stripe or OpenStreetMap.
 //
 // Needs Playwright with Chromium, as test-accounts-ui.mjs does. TEST_VITE_PORT picks the port;
 // TEST_SCREENSHOTS=<folder> saves pictures.
@@ -1038,10 +1038,11 @@ const PLAYER = { id: 'P1ayer-id_000000', secret: 'S'.repeat( 32 ), name: 'Speed 
 // The test pad with sign-in set up, and the Worker's side of it answered here. me: what /api/me
 // says (page.state.me, which a test changes as the Worker would, a purchase arriving say); a good
 // sign-in (window.testCredential 'good-token') makes it signedIn. page.asked has what was sent, and
-// page.google how often Google's script (stood in for, harness's GOOGLE_STUB) was loaded.
-async function supporterPage( { me = SIGNED_OUT, signedInAs = ALICE, clientId = CLIENT, player = null, ...options } = {} ) {
+// page.google how often Google's script (stood in for, harness's GOOGLE_STUB) was loaded. config and
+// visit: /api/config (maps off, the test pad) and /api/visit (never answered) as newPage takes them.
+async function supporterPage( { me = SIGNED_OUT, signedInAs = ALICE, clientId = CLIENT, player = null, config = RESTING, visit = route => route.abort(), ...options } = {} ) {
 
-	const page = await newPage( { ...options, api: { config: { ...RESTING, googleClientId: clientId }, turnstile: true, visit: route => route.abort() } } );
+	const page = await newPage( { ...options, api: { config: { ...config, googleClientId: clientId }, turnstile: true, visit } } );
 	// Never a page of Stripe's: Buy's new tab is only noted.
 	await page.context().route( /^https?:\/\/(?!127\.0\.0\.1)/, route => route.abort() );
 	await page.addInitScript( ( { player } ) => {
@@ -1147,6 +1148,9 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		assert.deepEqual( [ target, features ], [ '_blank', 'noopener' ] );
 		await area.locator( '.supporter-line', { hasText: 'Finish paying in the new tab' } ).waitFor();
 		assert.equal( await locked( page ), 4 );
+		// Asked before Stripe's word has come: it says so, rather than that there's no pass.
+		await area.locator( 'button', { hasText: 'Check again' } ).click();
+		await area.locator( '.supporter-status', { hasText: 'Not confirmed yet: it can take a minute after paying' } ).waitFor();
 
 		// Paid in the other tab: Stripe has told the Worker by the time this window has focus again.
 		page.state.me = { ...ALICE, supporter: true };
@@ -1245,6 +1249,9 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		await page.waitForFunction( () => window.drive.supporter.me );
 		await page.waitForTimeout( 300 );
 		assert.equal( page.asked.links.length, 1, 'linked again on the next visit' );
+		// Signed out, the email in it goes from this browser.
+		await page.evaluate( () => window.drive.supporter.signOut() );
+		assert.equal( await page.evaluate( () => localStorage.getItem( 'world-drive.linked' ) ), null );
 		await page.context().close();
 
 	} );
@@ -1262,6 +1269,74 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		assert.equal( await star.getAttribute( 'title' ), 'Supporter Pass' );
 		assert.equal( await rows.locator( '.supporter-star' ).count(), 1 );
 		await shot( page, 'pass-6-board-star' );
+		await page.context().close();
+
+	} );
+
+	test( 'used up on this address: the screen signs in, and once the pass is here the visit is asked for again, once', async () => {
+
+		const usedUp = reason => ( { status: 429, contentType: 'application/json', body: JSON.stringify( { error: 'You\'ve had today\'s free drives', reason, retryAfter: 3600 } ) } );
+		// The second answer is the Worker's own refusal for another reason, so no Maps key is ever handed out here.
+		const mapsOff = { status: 503, contentType: 'application/json', body: '{"error":"Maps are off today"}' };
+		const usedUpPage = async ( answers, options ) => {
+
+			const page = await supporterPage( { ...options, config: { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true }, visit: route => {
+
+				page.visits ++;
+				route.fulfill( answers[ Math.min( page.visits, answers.length ) - 1 ] );
+
+			} } );
+			page.visits = 0;
+			return page;
+
+		};
+		const notice = page => page.locator( '#notice' );
+
+		// A supporter on a new browser: signs in on the screen, and the visit is asked for again.
+		let page = await usedUpPage( [ usedUp( 'visitor' ), mapsOff ], { signedInAs: { ...ALICE, supporter: true } } );
+		await page.goto( BASE );
+		await notice( page ).locator( '.account .stub-google' ).waitFor();
+		assert.equal( await notice( page ).locator( '.title' ).textContent(), 'Today\'s free drives are used up' );
+		assert.match( await notice( page ).locator( '.account' ).textContent(), /Have the Supporter Pass\? Sign in to use it here\./ );
+		await shot( page, 'pass-7-used-up-sign-in' );
+		await page.evaluate( () => window.testCredential = 'good-token' );
+		await notice( page ).locator( '.stub-google' ).click();
+		await page.locator( '#notice[data-kind="error"]' ).waitFor();
+		assert.equal( page.visits, 2 );
+		assert.equal( await notice( page ).locator( '.message' ).textContent(), 'Maps are off today' );
+		assert.ok( await notice( page ).locator( '.account' ).isHidden(), 'the sign-in stayed on another notice' );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+		// Back from paying before Stripe's word: asked again once it's here.
+		page = await usedUpPage( [ usedUp( 'visitor' ), mapsOff ], { me: ALICE } );
+		await page.goto( `${ BASE }/?supporter=thanks` );
+		await notice( page ).locator( '.account', { hasText: 'Signed in as Alice Example · Sign out' } ).waitFor();
+		assert.equal( page.visits, 1 );
+		page.state.me = { ...ALICE, supporter: true };
+		await page.locator( '#notice[data-kind="error"]' ).waitFor( { timeout: 15000 } );
+		await page.locator( '#toast', { hasText: 'Thanks! Supporter Pass unlocked' } ).waitFor();
+		assert.equal( page.visits, 2 );
+		assert.equal( new URL( page.url() ).search, '' );
+		await page.context().close();
+
+		// A supporter who has had their 30: asked again once, then the screen stays, saying who's signed in.
+		page = await usedUpPage( [ usedUp( 'visitor' ) ], { me: { ...ALICE, supporter: true } } );
+		await page.goto( BASE );
+		await notice( page ).locator( '.account', { hasText: 'Signed in as Alice Example · ⭐ Supporter Pass · Sign out' } ).waitFor();
+		await page.waitForTimeout( 1500 );
+		assert.equal( page.visits, 2 );
+		assert.equal( await page.locator( '#notice' ).getAttribute( 'data-kind' ), 'used-up' );
+		await page.context().close();
+
+		// Everyone's drives used up, not this address's: no sign-in, and not Google's script.
+		page = await usedUpPage( [ usedUp( 'daily' ) ] );
+		await page.goto( BASE );
+		await page.locator( '#notice[data-kind="used-up"]' ).waitFor();
+		await page.waitForTimeout( 500 );
+		assert.ok( await notice( page ).locator( '.account' ).isHidden() );
+		assert.equal( page.asked.me, 0 );
+		assert.equal( page.google, 0 );
 		await page.context().close();
 
 	} );

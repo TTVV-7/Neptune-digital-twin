@@ -75,9 +75,33 @@ async function visit( config ) {
 	screens.splash( 'Checking the road is clear...' );
 	const outcome = await startVisit( config.turnstileSiteKey, $( 'robot-check' ) );
 	if ( outcome.key ) return start( { key: outcome.key, left: outcome.left, visit: outcome.visit, googleClientId: config.googleClientId } );
-	if ( outcome.usedUp ) return screens.notice( 'used-up', { retryAfter: outcome.retryAfter } );
+	if ( outcome.usedUp ) return usedUp( config, outcome );
 	if ( outcome.robot ) return screens.notice( 'robot', { onRetry: () => visit( config ) } );
 	screens.notice( 'error', { message: outcome.error, onRetry: () => visit( config ) } );
+
+}
+
+// Whether the visit has been asked for again as a supporter's (see usedUp).
+let askedAsSupporter = false;
+
+// Today's drives are used up. A supporter's are counted by their account, not this address (30 a
+// day), so with signing in set up the screen has a sign-in too: a supporter on a new browser, or
+// back from paying before Stripe's word arrived (?supporter=thanks, supporter.js), would otherwise be
+// stuck here until tomorrow. Once the account here has the pass, the visit is asked for again: once,
+// so a supporter who has had their 30 sees this screen rather than asking round and round.
+function usedUp( config, { retryAfter, reason } ) {
+
+	screens.notice( 'used-up', { retryAfter } );
+	if ( reason !== 'visitor' || ! config.googleClientId ) return;
+	const again = () => {
+
+		askedAsSupporter = true;
+		$( 'notice' ).hidden = true;
+		visit( config );
+
+	};
+	setUpSupporter( { worker: true, googleClientId: config.googleClientId, onPass: askedAsSupporter ? null : again } );
+	fillAccountArea( $( 'notice' ).querySelector( '.account' ) );
 
 }
 
