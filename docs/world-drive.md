@@ -53,15 +53,16 @@ address, and the construction app is unchanged by it.
 | B | Booster: flat out for a moment, overdrive |
 | Shift | Fly: hold to lift off, let go to glide down |
 | In the air | A / D spin, W / S flip (W forward, S back), Q / E roll (or Space with A / D) |
-| R | Stuck? Back on the road a few metres on |
+| R | Stuck? Back on the road a few metres on (in water: back on dry land at once) |
 | C | Chase or driver's-seat camera |
 | Wheel | Chase camera nearer or farther |
 | M | Back to the globe |
 | Esc | Pause: keep driving, change ride, or back to the globe |
 
-The keys card shows as each drive starts; **?** brings it back. Flying, the booster, drifts, stunts
-and R come from `src/drive.js`, which World Drive starts with `fly`, `booster` and `drift` on and
-`crash: 'launch'` (the construction app leaves them off, and its crashes stop the vehicle dead).
+The keys card shows as each drive starts; **?** brings it back. Flying, the booster, drifts, stunts,
+water and R come from `src/drive.js`, which World Drive starts with `fly`, `booster` and `drift` on,
+`crash: 'launch'` and its `water` (the construction app leaves them off: its crashes stop the
+vehicle dead, and nothing there is water).
 
 On a touch screen the globe's panel is a sheet along the bottom, and driving has on-screen buttons
 (the driving HUD's, `src/drive-hud.js`): steering bottom left; **Gas** with **Drift** over it at the
@@ -126,8 +127,8 @@ Hit something (a wall, a building, a parked car, a barrier) and you don't stop: 
   a column of light: small gold ones (+12 % of the gauge) and big orange ones (a full gauge). Drive over
   one and it goes dark, lighting again 4 s later (a big one 10 s); with the gauge already full you
   leave it for later. There are at most 12 (9 small, 3 big), 15 m apart or more, and those you leave
-  far behind are put down ahead again. **Boost pads on the road** in the pause menu turns them off
-  (kept in this browser).
+  far behind are put down ahead again. They never go down on [water](#water), nor by it. **Boost
+  pads on the road** in the pause menu turns them off (kept in this browser).
 
   Where they go (`src/drive-app/pads.js`): every 0.08 s one spot is tried, 30 to 100 m ahead along
   the way you're going (within 50° either side) or, one try in three, anywhere 25 to 70 m round you.
@@ -141,8 +142,115 @@ Hit something (a wall, a building, a parked car, a barrier) and you don't stop: 
   never a step that stays up, onto a roof or a bus shelter or up the bank beside a highway. Nothing
   is put down while you're more than 20 m over where you last drove. One pad a frame is looked at
   again, so when sharper tiles arrive under it, it moves onto them (or goes, if the ground there
-  moved more than a metre). It's three instanced meshes, and a try is two dozen rays at most, most
-  of them ending after one or two.
+  moved more than a metre). Last, it must be surely dry ground there and 8 m round it, north, east,
+  south and west (water.js, [below](#how-water-is-told-from-the-ground)): not water, and not where
+  it can't tell, as by a shore. It's three instanced meshes, and a try is two dozen rays at most,
+  most of them ending after one or two, and for the few spots that get that far, five looks for
+  water (on most ground a ray or seven each).
+
+### Water
+
+Google's 3D tiles don't say what's water: a bay, a harbour or a river is just more ground in them,
+so everything used to drive on the sea. Now driving into water, or coming down in it, is a splash:
+
+- **The splash.** Droplets and spray thrown up round you, a ring of foam spreading over the water
+  over a patch of foam where you went in, and a word for how hard: **SPLISH!** driving in slowly,
+  **SPLASH!**, or **KER-SPLOOSH!** off something high (how fast you came down, and 0.4 of how fast
+  you were going, 4 and 14 m/s being the steps). The vehicle slows hard in the water, dips under
+  by how hard it hit and bobs back up, tips nose down and sinks, rocking, sending ripples of foam
+  out every half second, while the camera holds on it: it stops turning after you and rising and
+  falling with you, only carried along as you drift on.
+- **Back on dry land.** A second and a half in, the view fades out to deep water and back in a
+  quarter of a second later, "Back on dry land", with you stopped on the last dry ground you were
+  on: the newest spot on a trail kept as you drive (one every 3 m on ground that's surely dry, the
+  last 24) at least 8 m back from the last of them (about where you left the shore, the quay, the
+  pier or the bridge's deck) and 20 m from where you went in. You face the way you were going
+  there, or the other way if that was toward the water: straight off a beach into the sea, you come
+  back facing up the beach; off a bridge, along its deck. Each splash trims the trail to that spot,
+  so another goes back further.
+- **R** in the water does it at once, and **R** by the water never puts you in it (only onto ground
+  that's surely dry, else where you last drove freely). Esc while sinking parks you back on dry land.
+- **Like a wipeout**: tricks you were doing in the air and the combo are lost ("Combo ×3 lost", or
+  "Sunk"); the score so far is kept.
+- **Slowly** off a beach into the sea is the same, once you're about a dozen metres out (until then
+  the beach is in reach of the rings it's told by, below). **Flying** (Shift) over water is fine
+  until you come down in it.
+- **The hovercraft** rides on water as on land, throwing up spray behind it as it goes. **Boost pads**
+  never go down on water, nor by it.
+- **Dropped in on water** (a pin on the sea), you ride on it until you've been on dry ground: with
+  nowhere to go back to, a splash would only be followed by another.
+
+It's the Driver's `water` option (`src/drive.js`; off unless an app gives one, so the construction
+app's driving never splashes), which World Drive gives `src/drive-app/water.js`. The Driver looks
+every 0.2 s on the ground and wherever it comes down (off a jump, a wipeout's first touch, a drift's
+hop, gliding down from flying). The hovercraft says `floats: true` in its tuning. The splash's
+droplets, spray, foam and ripples are `drive-fx.js` (fixed pools made with the vehicle's other
+effects, only when there's water: 150 droplets, 48 puffs, 6 rings and 2 patches of foam), and its
+word and the fade `drive-hud.js`.
+
+#### How water is told from the ground
+
+Google draws water unlike anything else on its mesh: as a flat sheet (most of it level to the
+millimetre) of one even colour (a fill, not a photograph: no waves, wakes or glints), at the lowest
+level round about. `water.js` looks for exactly that, with rays looking down round the spot:
+
+1. **Colour**: the tile's own picture where the ray hit it. Google's pictures arrive as
+   ImageBitmaps (GLTFLoader decodes each tile's from its glTF); each is drawn once onto a 64-pixel
+   canvas, kept as long as the picture is, and the hit's UV picks a pixel. Water-like is bluish or
+   grey, not green (a field), warm (sand, soil, brick) or bright (concrete, a pale beach): luma at
+   most 150, blue at least red less 2 and at least green less 6.
+2. **Level**, to within 35 cm, at 6 points 5 m round it and 8 points 12 m round it.
+3. **Even**: the brightness of the 15 colours there varies by at most 6 (its standard deviation,
+   out of 255). Roads have markings, cars and patches; fields their lines and mowing.
+4. **The lowest**: nothing at 8 points 35 m round it more than a metre lower (a ray that finds
+   nothing counts as lower). A quay, a pier, a beach, a bridge's deck or a roof has the water or the
+   street below it.
+
+It says one of three things: **water** (at that height), **surely dry**, or **can't tell**. Surely
+dry is anything not water-coloured, over something lower, or uneven close by (within 5 m) with no
+water at its level 13 m on past what's uneven (water by its edge has the shore close by too, and
+13 m out the rings are clear of it). What's left, water-coloured and level close by but not all
+round, is as often water by a shore, a pier or a ship as an even grey square, so nothing happens
+there: no splash, and it isn't taken for dry ground. The trail back from a splash, R's few metres
+on and boost pads take only surely dry ground. What it can't be sure of (no picture, a ray that
+finds nothing) is never water: it misses a little water rather than splash on a road. It looks at
+the cheapest things first: on most ground one ray, on a road seven or so; all of it is 23 rays.
+
+**Measured** on Google's tiles, 31 October 2026: 47 spots, each with 4 more 8 m round it, looked at
+with the vehicle parked there (so with the tiles a drive has) and labelled from a picture of it.
+Water (19): Burrard Inlet by Neptune Terminals (two) and by the Lions Gate (two, one in the
+bridge's shadow), San Francisco Bay under the Golden Gate (three), Sydney Harbour (three), the
+Seine by the Louvre (three, one of them twice), the Pacific off Santa Monica Pier (three) and in
+Ocean Beach's surf, and the Bellagio's lake in Las Vegas. Look-alikes (28): Neptune's grey yard and
+its road (Google's pictures there are bluish), its jetty, the Lions Gate's deck and the tidal flats
+under it, the Golden Gate's deck, the Sydney Harbour Bridge's arch, three of the Louvre's quays and
+streets, Dodger Stadium's field and four of its car parks and banks, the Las Vegas Strip (two, its
+asphalt dark) and the trees beside it, Times Square and two of its roofs, the Sydney Cricket
+Ground's field and stand, Ocean Beach's sand (two) and road, and Santa Monica's beach (two).
+
+| | Said water | Said not water |
+| --- | --- | --- |
+| Water (95) | 72 | 23 |
+| Land look-alikes (133) | 0 | 133 |
+
+The water it missed: the inlet in the Lions Gate's shadow (its colour varying by 7 to 10 there), a
+seam under the Golden Gate between sharper and coarser tiles (the water 2.8 m lower on one side), a
+spot beside a ship, the Bellagio's lake (photographed water, with fountains), Ocean Beach's surf (a
+coarse tile, sloping) and three spots by seams on the Seine and off Santa Monica. Google's open
+water was level to a few millimetres in San Francisco and Sydney and to 4 to 26 cm in Burrard
+Inlet, the Seine and off Santa Monica, its colour varying by 0.6 to 4.4. Land as level as that
+varied more (Neptune's yard 14 to 28, Santa Monica's beach 11) or wasn't water-coloured anyway
+(the fields, green, varied by 8.4 and 13).
+
+**Tried on Google's tiles** (scratch scripts, one page load, every place reached by the globe's
+drop-in): off the Lions Gate's deck into the inlet, 70 m down at 38 m/s, **KER-SPLOOSH!**, sinking,
+and back on the deck 1.75 s later, facing along it (twice; and once more when the kart, driving the
+deck, went over the railing by itself); thrown off the side of Santa Monica Pier, 7 m down,
+**SPLASH!** and back on the pier; across a Dodger Stadium car park (four 5 s runs) and along the
+Golden Gate's deck (three) with no splash, all 116 looks saying surely dry; and the hovercraft
+across Sydney Harbour for 14 s, on the water all the way (48 looks, all water), throwing spray,
+never splashing, with no boost pad put down. A look took 0.2 to 0.3 ms on average on the car park
+and the deck and 1.1 ms on open water (at most 3.6 ms), in the test's software rendering.
 
 ## Supporter Pass (content)
 
@@ -179,7 +287,7 @@ place of its constants: see `HANDLING` there; vehicles without it handle as befo
 | Sports coupe | 4.4 × 1.9 m | 195 km/h | Quick (0 to 100 in 2.6 s, the kart's 5.2), grips hard, turns in sharply, long wide drifts |
 | Monster truck | 5.4 × 3.5 m, 3.4 m tall | 125 km/h | Thrown about twice as high by the same hit (gravity at 0.75 in the air, launches × 1.3), quicker to flip than its size would make it (as quick as the kart) and landing up to 55° off upright, bouncing on soft springs; its bumpers are 1.5 m up, so it drives up over cars, barriers and kerbs |
 | City bus | 12 × 2.55 m, 3.2 m tall | 90 km/h | Slow away (22 km/h after 3 s), rolls on and on off the gas, turns wide; barely thrown up by a crash, slow to turn in the air, and squashes and shakes the view the most |
-| Hovercraft | 4.2 × 2.1 m | 135 km/h | No wheels: it floats 16 cm up on its skirt (water is just more ground to it), slides wide through every turn (about 50° at 50 km/h, under 10° for the others), glides on and stops slowly, and bounces on its cushion |
+| Hovercraft | 4.2 × 2.1 m | 135 km/h | No wheels: it floats 16 cm up on its skirt, over [water](#water) too (where the others splash), throwing up spray there; slides wide through every turn (about 50° at 50 km/h, under 10° for the others), glides on and stops slowly, and bounces on its cushion |
 
 Wheels spin and front wheels steer (the monster truck steers all four, the back ones the other way);
 the monster truck's body rides on springs that sink and rebound as it lands and lean it out of
@@ -354,7 +462,9 @@ two to four times as long a frame.
 `node --test scripts/test-drive-pro-ui.mjs` tries all of this on the test pad with no key: the locked
 rides and choices opening the sheet, `?pro=1` counting only on this computer, the free kart
 unchanged, each ride driving, drifting, thrown up by a wall and landing, their handling measured
-against each other, the hovercraft hovering with no wheels, the monster truck over a car, the
+against each other, the hovercraft hovering with no wheels and riding over the test pad's sea
+(spray behind it there only, no boost pads on it) where the coupe splashes, the monster truck over
+a car, the
 Garage's choices on the ride and kept across a reload (and still made with a damaged saved value,
 or none kept at all), the world not drawn behind the Garage, the frame time with trails, nothing
 turning in the air faster than the kart, each ride going supersonic, the boost styles in the Garage
@@ -846,8 +956,12 @@ places, a phone with touch buttons, boosting flat out going supersonic in each f
 the streaks, the tag and the wider view, and its end as it slows), boost pads on the test pad (put
 down as it drives, never on a roof, a car, a shelter or a slope nor from high up, moved onto sharper
 ground, a small one's 12 % and a big one's fill, dark then lit again, left lit with a full gauge,
-recycled, and the pause menu's switch kept across a reload), the used-up, robot-check and
-getting-ready screens, and the leaderboard with its answers made in the test: tabs, your own row, picking a name and renaming, a
+recycled, and the pause menu's switch kept across a reload), water (the test pad's sea given one
+even sea colour, as Google draws water: off its edge at speed, off a ramp with a spin and a ×3
+combo lost, slowly down a beach into it, each a splash, sinking nose first with the camera holding
+on it and the view fading, then back on the dry ground it came from facing away; flying over it
+until coming down, R in it and by it, and boost pads never on it or by it), the used-up,
+robot-check and getting-ready screens, and the leaderboard with its answers made in the test: tabs, your own row, picking a name and renaming, a
 landed jump posting the run with the card asking first, each place's best posted, a dead connection
 changing nothing, and a phone; and buying the pass with Google's script stood in for: signing in
 from the sheet, the pause menu and the used-up screen, Buy's link, "Check again" before Stripe's
@@ -877,6 +991,8 @@ src/drive-app/supporter.js   buying it: Google sign-in, the Payment Link, unlock
 src/drive-app/garage.js      the Garage: choices and the turntable; paint.js the looks and decals;
                              boosts.js the boost styles it offers
 src/drive-app/pads.js        boost pads: where they go, driving over them, the pause menu's switch
+src/drive-app/water.js       water on Google's mesh, told by how it's drawn: for splashes, the way
+                             back from one, R and boost pads
 src/drive-app/api.js         /api/config, the visit with Turnstile, /api/search, the leaderboard's and
                              the Supporter Pass's calls
 src/drive-app/leaderboard.js the leaderboard: the panel, names, posting runs, the new-best card
@@ -916,6 +1032,11 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   against walls as the box it is, turned as it is, which is close but not exact for a tumbling truck
   meeting a roof's edge.
 - Flying over a valley, the glide down (3 m/s) can take a while: R puts you back on the road.
+- [Water](#water) is told by how Google draws it, which isn't always the same: it misses water
+  that's photographed rather than filled (a fountain lake), in a bridge's shadow, at a seam between
+  sharper and coarser tiles, or in surf on a sloping coarse tile, and within about 12 m of a shore,
+  a pier or a ship it can't tell water from an even grey square, so there you ride on it (a kart
+  dropped between a jetty and the ship moored at it floated). Out from there, it splashes.
 
 ## Credits
 

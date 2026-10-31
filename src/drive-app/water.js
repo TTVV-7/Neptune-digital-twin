@@ -5,8 +5,8 @@ import { enuToLocal } from '../geo.js';
 // just more ground, so without this the vehicles drive on the sea. It's told from the ground by
 // how Google draws it, which is unlike anything else there: flat as a table (most of it to the
 // millimetre), its picture one even colour (a fill, not a photo: no waves, boats' wakes or
-// glints), and at the lowest level round about. So a spot is water when, from a few rays looking
-// down round it:
+// glints), and at the lowest level round about. So a spot is water when, from rays looking down
+// round it (see look):
 //
 // - the ground there is coloured like water (bluish or grey, not green like a field, warm like sand
 //   or soil, nor bright like concrete), read from the tile's own picture where the ray hit it;
@@ -16,10 +16,16 @@ import { enuToLocal } from '../geo.js';
 // - nothing within FAR's reach is more than LOWER below it: a quay, a pier, a beach or a bridge's
 //   deck has the water below it, and a roof the street.
 //
-// It prefers missing a little water to a false splash on a road: what it can't be sure of (a ray
-// that finds nothing, a picture it can't read) counts as dry. The colours are read from a small copy
-// of each tile's picture, drawn once onto a canvas and kept as long as the picture is. It looks at
-// the cheapest things first, so on a road it's usually done after one ray or seven.
+// Measured on Google's tiles in Vancouver, San Francisco, Sydney, Paris, Los Angeles, Las Vegas
+// and New York (docs/world-drive.md), it never took a road, a car park, a field, a beach, a roof
+// or a bridge's deck for water, and found most open water. It prefers missing a little water to a
+// false splash: what it can't be sure of (a ray that finds nothing, a picture it can't read) isn't
+// water. Nor is water within a ring's reach of a shore, a pier or a ship, which it can't tell from
+// an even grey square; there it says it can't tell, rather than that it's dry, so nothing is put
+// back or put down there as if it were dry ground (drive.js's trail back from a splash, boost
+// pads). The colours are read from a small copy of each tile's picture, drawn once onto a canvas
+// and kept as long as the picture is. It looks at the cheapest things first, so on most ground
+// it's done after one ray or seven.
 
 const DOWN = new Vector3( 0, - 1, 0 );
 // The copy of a tile's picture (px a side): a texel is a metre or two on the ground nearby.

@@ -492,7 +492,13 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 
 			}
 
-		} else bubbleDue = rippleDue = RIPPLE_STEP;
+		} else {
+
+			// The splash's own ring comes first; then a ripple each time it bobs.
+			bubbleDue = 0;
+			rippleDue = RIPPLE_STEP;
+
+		}
 
 		const spray = state?.spray ?? 0;
 		if ( spray > 0 ) {
@@ -687,8 +693,8 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 
 		// Coming down in water: a splash at `at` (world, on the surface), `power` 0 to 1 by how hard,
 		// round a vehicle `width` (m) wide. Droplets thrown up and out round it and falling back,
-		// billows of spray, and on the surface rings of foam spreading one after another over a patch
-		// of foam where it went in.
+		// billows of spray, and on the surface a ring of foam spreading over a patch of foam where it
+		// went in (the ripples after it are update's, as it sinks).
 		splash( at, power, width ) {
 
 			if ( ! surface ) return;
