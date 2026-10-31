@@ -658,4 +658,10 @@ dialog#garage {
 		scrollbar-width: none;
 	}
 
+	/* The pause menu's two rows about three across, not four, which cut a pass ride's badge short,
+	   with the next one peeking in to say they scroll (a phone shows no scrollbar), as the globe's. */
+	#pause .vehicles {
+		grid-auto-columns: 29%;
+	}
+
 }
