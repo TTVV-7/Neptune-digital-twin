@@ -176,6 +176,18 @@ const WORDS = [ [ 18, 'WHAM!' ], [ 9, 'BOING!' ], [ 0, 'BONK!' ] ];
 // Told once, the first time it's thrown into the air.
 const AIR_HINT = 'In the air: A/D spin · W/S flip · Q/E roll';
 
+// How a vehicle handles, which its tuning can change as "handling" (see specFor): whatever it
+// leaves out is as the constants above have it, so a vehicle without any handles as it always
+// has. grip, slip, driftYaw and turn are GRIP, DRIFT_SLIP, DRIFT_YAW and KART_YAW; lock is the
+// steering's full lock (°) near standstill; landTilt is LAND_TILT; bumpers are BUMPERS (m over the
+// ground), here not lowered for a small vehicle, and set over a car's roof a vehicle drives up
+// onto cars rather than into them. The rest are shares: drag of the rolling resistance and air
+// drag, gravity of gravity in the air, launch of how hard (and how hard at most) a hit throws it
+// up, air of how fast the keys turn it in the air (at most a kart's rate), kick of how hard a hit
+// sets it spinning, squash and shake of a hit's squash and the camera's shake, and rebound of a
+// hard landing's speed that it bounces back up with.
+const HANDLING = { grip: GRIP, slip: DRIFT_SLIP, driftYaw: DRIFT_YAW, turn: KART_YAW, lock: 35, landTilt: LAND_TILT, bumpers: null, drag: 1, gravity: 1, launch: 1, air: 1, kick: 1, squash: 1, shake: 1, rebound: 0 };
+
 // Tuning per vehicle; others use the default. Speeds in km/h, acceleration in m/s².
 const SPECS = {
 	default: { topSpeed: 160, accel: 6, brake: 11, reverse: 30 },
@@ -373,7 +385,8 @@ export class Driver {
 		this.width = _size.x;
 		this.height = _size.y;
 		this.wheelbase = this.length * 0.6;
-		this.bumpers = [ ...new Set( BUMPERS.map( up => Math.min( up, this.height * 0.4 ) ) ) ];
+		const handling = this.handling = { ...HANDLING, ...spec.handling };
+		this.bumpers = handling.bumpers ? [ ...handling.bumpers ] : [ ...new Set( BUMPERS.map( up => Math.min( up, this.height * 0.4 ) ) ) ];
 		// How far it reaches ahead of and behind where it stands (east, north), which for a crane is
 		// its carrier rather than the middle of its box.
 		this.front = pivot.position.z - _box.min.z;
@@ -389,7 +402,9 @@ export class Driver {
 		this.centre = this.ownBox.getCenter( new Vector3() ).multiplyScalar( this.scale );
 		this.half = this.ownBox.getSize( new Vector3() ).multiplyScalar( this.scale / 2 );
 		// A big vehicle turns more slowly in the air: a kart at the full rate, a pickup at 0.86 of it.
-		this.trickRate = MathUtils.clamp( Math.sqrt( 4 / this.length ), 0.55, 1 );
+		// Handling can quicken that, but never past a kart's: the leaderboard takes that as the most
+		// any vehicle can score a second (SCORING in worker/drive/scores.js).
+		this.trickRate = Math.min( 1, MathUtils.clamp( Math.sqrt( 4 / this.length ), 0.55, 1 ) * handling.air );
 
 		this.east = state.east;
 		this.north = state.north;
@@ -462,7 +477,7 @@ export class Driver {
 		this.cabNear = this.cab ? this.measureCab() : null;
 		this.cabShown = false;
 		this.lastBase = null;
-		this.fx = this.booster || this.drift || this.launch ? createDriveFx( this.models.group.parent ?? this.models.group ) : null;
+		this.fx = this.booster || this.drift || this.launch ? createDriveFx( this.models.group.parent ?? this.models.group, spec.fx ) : null;
 
 		this.keys.clear();
 		this.controls.keys?.clear();
@@ -566,7 +581,7 @@ export class Driver {
 			} else {
 
 				// Rolling resistance and air drag.
-				const drag = ( 0.4 + 0.0009 * this.speed * this.speed ) * dt;
+				const drag = ( 0.4 + 0.0009 * this.speed * this.speed ) * this.handling.drag * dt;
 				this.speed = Math.abs( this.speed ) <= drag ? 0 : this.speed - Math.sign( this.speed ) * drag;
 
 			}
@@ -628,7 +643,7 @@ export class Driver {
 
 			// Off the edge of the world: put it back where it last stood.
 			if ( this.y < this.lastSafe.y - 200 ) Object.assign( this, this.lastSafe, { speed: 0, vy: 0 } );
-			this.vy -= GRAVITY * dt;
+			this.vy -= GRAVITY * this.handling.gravity * dt;
 			this.y += this.vy * dt;
 
 		} else {
@@ -644,7 +659,7 @@ export class Driver {
 				// a steep lump in Google's mesh (a building's skirt) taken at 90 km/h climbs at 24 m/s,
 				// which threw the kart 25 m into the sky.
 				this.grounded = false;
-				if ( this.launch ) this.vy = Math.min( this.vy, LAUNCH.max );
+				if ( this.launch ) this.vy = Math.min( this.vy, LAUNCH.max * this.handling.launch );
 				if ( this.launch && ! this.driftHop && ! this.drifting ) this.enterAir();
 
 			}
@@ -665,7 +680,7 @@ export class Driver {
 
 			} else {
 
-				this.vy -= GRAVITY * dt;
+				this.vy -= GRAVITY * this.handling.gravity * dt;
 				this.y += this.vy * dt;
 				this.airTime += dt;
 				this.pitch += ( MathUtils.clamp( this.vy / Math.max( 1, Math.abs( this.speed ) ), - 0.5, 0.5 ) - this.pitch ) * Math.min( 1, dt * 2 );
@@ -702,9 +717,11 @@ export class Driver {
 		this.pose();
 		if ( this.launch ) this.springSquash( dt );
 		pivot.updateMatrixWorld( true );
-		// Front wheels turned against a drift, as a kart's are.
+		// Front wheels turned against a drift, as a kart's are. A model can also follow the vehicle
+		// leaving the ground and coming down (its suspension), and the gas.
 		const wheels = this.drifting ? this.steer * 0.3 - this.drifting * 0.6 : this.steer;
-		for ( const animate of this.animators ) animate( { steer: wheels, speed: this.speed, dt } );
+		const airborne = ! this.grounded && ! this.flying;
+		for ( const animate of this.animators ) animate( { steer: wheels, speed: this.speed, dt, airborne, vy: this.vy, throttle } );
 		this.updateFx( dt );
 
 		this.checkStuck( dt, throttle || brake, Math.hypot( this.east - east, this.north - north ) );
@@ -799,9 +816,10 @@ export class Driver {
 		else if ( this.drifting && this.speed < DRIFT_MIN * 0.6 ) this.endDrift( false );
 
 		let yawRate;
+		const { handling } = this;
 		if ( this.drifting ) {
 
-			yawRate = this.drifting * MathUtils.lerp( ...DRIFT_YAW, ( this.steer * this.drifting + 1 ) / 2 );
+			yawRate = this.drifting * MathUtils.lerp( ...handling.driftYaw, ( this.steer * this.drifting + 1 ) / 2 );
 			this.speed -= this.speed * 0.1 * dt;
 			this.driftTime += dt;
 			const level = DRIFT_LEVELS.filter( time => this.driftTime >= time ).length;
@@ -811,8 +829,8 @@ export class Driver {
 
 			// Full lock as a bicycle near standstill, capped at a rate that eases off with speed.
 			const speed = Math.abs( this.speed );
-			const lock = speed / this.wheelbase * Math.tan( 35 * MathUtils.DEG2RAD ) * MathUtils.RAD2DEG;
-			const cap = MathUtils.lerp( ...KART_YAW, MathUtils.clamp( speed / ( this.spec.topSpeed / KMH ), 0, 1 ) );
+			const lock = speed / this.wheelbase * Math.tan( handling.lock * MathUtils.DEG2RAD ) * MathUtils.RAD2DEG;
+			const cap = MathUtils.lerp( ...handling.turn, MathUtils.clamp( speed / ( this.spec.topSpeed / KMH ), 0, 1 ) );
 			yawRate = Math.sign( this.speed ) * this.steer * Math.min( lock, cap );
 
 		}
@@ -820,7 +838,7 @@ export class Driver {
 		this.heading += yawRate * ( this.grounded ? 1 : 0.5 ) * dt;
 		// The way it travels follows the way it points: slowly while sliding, almost at once with grip.
 		const slip = ( ( this.heading - this.course ) % 360 + 540 ) % 360 - 180;
-		this.course += slip * Math.min( 1, dt * ( this.drifting ? DRIFT_SLIP : GRIP ) );
+		this.course += slip * Math.min( 1, dt * ( this.drifting ? handling.slip : handling.grip ) );
 
 	}
 
@@ -975,7 +993,7 @@ export class Driver {
 
 		const { air } = this;
 		const q = this.attitude( new Quaternion() );
-		if ( this.tilt( q ) <= LAND_TILT ) {
+		if ( this.tilt( q ) <= this.handling.landTilt ) {
 
 			const tricks = this.tricksOf( air );
 			this.air = null;
@@ -1077,6 +1095,8 @@ export class Driver {
 			wheels: [ _a.set( - track, 0.05, wheel ), _b.set( track, 0.05, wheel ) ],
 			velocity: _target.set( - Math.sin( this.course * Math.PI / 180 ) * this.speed, this.vy, Math.cos( this.course * Math.PI / 180 ) * this.speed ),
 			flame: this.firing ? 1 : this.boost ? 0.55 : 0,
+			// A trail (World Drive's Garage) shows behind it boosting or flying.
+			trail: this.firing || this.boost || this.flying ? 1 : 0,
 			drifting: !! this.drifting && this.grounded,
 			level: this.driftLevel,
 			scrape: this.scraping > 0 ? this.scrapeAt : null,
@@ -1282,8 +1302,9 @@ export class Driver {
 		const { air } = this;
 		if ( into >= BOUNCE_SCORE ) air.hits ++;
 		air.wall = { east: wall.east, north: wall.north, until: this.clock + WALL_GUARD };
-		const hop = Math.min( LAUNCH.max, LAUNCH.base + LAUNCH.gain * into );
-		this.vy = first ? Math.max( Math.min( this.vy, LAUNCH.max ), hop ) : this.vy + hop * 0.3;
+		const { launch } = this.handling;
+		const hop = Math.min( LAUNCH.max, LAUNCH.base + LAUNCH.gain * into ) * launch;
+		this.vy = first ? Math.max( Math.min( this.vy, LAUNCH.max * launch ), hop ) : this.vy + hop * 0.3;
 		this.setVelocity( be, bn );
 		this.kick( contact, wall, into, first ? 1 : 0.5 );
 
@@ -1338,13 +1359,14 @@ export class Driver {
 		const { lever } = contact;
 		const length = this.half.z * 2;
 		const width = this.half.x * 2;
-		const yaw = YAW_KICK * into * ( 1 + RESTITUTION ) * ( lever.z * normal.x - lever.x * normal.z ) / ( ( length * length + width * width ) / 12 );
+		const { kick } = this.handling;
+		const yaw = YAW_KICK * kick * into * ( 1 + RESTITUTION ) * ( lever.z * normal.x - lever.x * normal.z ) / ( ( length * length + width * width ) / 12 );
 		_axis.set( 0, MathUtils.clamp( yaw, - SPIN_MAX, SPIN_MAX ), 0 ).applyQuaternion( _q.copy( q ).invert() );
 		spin.addScaledVector( _axis, share );
 		const nose = _z.set( 0, 0, 1 ).applyQuaternion( q ).dot( normal );
 		const flank = - _x.set( 1, 0, 0 ).applyQuaternion( q ).dot( normal );
-		spin.x += MathUtils.clamp( PITCH_KICK * into * nose, - SPIN_MAX, SPIN_MAX ) * share;
-		spin.z += MathUtils.clamp( ROLL_KICK * into * flank, - SPIN_MAX, SPIN_MAX ) * share;
+		spin.x += MathUtils.clamp( PITCH_KICK * kick * into * nose, - SPIN_MAX, SPIN_MAX ) * share;
+		spin.z += MathUtils.clamp( ROLL_KICK * kick * into * flank, - SPIN_MAX, SPIN_MAX ) * share;
 		spin.clampScalar( - SPIN_MAX, SPIN_MAX );
 
 	}
@@ -1355,7 +1377,7 @@ export class Driver {
 
 		const power = MathUtils.clamp( into / 30, 0, 1 );
 		this.squashBy( into * SQUASH.hit, 'hit' );
-		this.shake = Math.max( this.shake, Math.min( SHAKE_MAX, into * SHAKE ) );
+		this.shake = Math.max( this.shake, Math.min( SHAKE_MAX * this.handling.shake, into * SHAKE * this.handling.shake ) );
 		// From the top of where it hit, so the chase camera sees the burst over the vehicle.
 		point.y = Math.max( point.y, this.middle( _c ).y + this.half.y * 0.6 );
 		this.fx?.burst( point, _n.set( - wall.east, 0, wall.north ), power );
@@ -1512,7 +1534,7 @@ export class Driver {
 
 		}
 
-		this.vy -= GRAVITY * dt;
+		this.vy -= GRAVITY * this.handling.gravity * dt;
 		const reach = this.extent( UP, air.q );
 		if ( this.vy > 0 ) {
 
@@ -1542,7 +1564,7 @@ export class Driver {
 		if ( this.vy > 0 || this.y + this.centre.y - reach > ground ) return;
 		this.y = ground + reach - this.centre.y;
 		if ( air.wipeout ) this.startRighting();
-		else if ( this.tilt( air.q ) <= LAND_TILT ) this.touchDown( ground );
+		else if ( this.tilt( air.q ) <= this.handling.landTilt ) this.touchDown( ground );
 		else this.wipeOut( ground );
 
 	}
@@ -1568,6 +1590,7 @@ export class Driver {
 		if ( this.vy < - 5 ) this.fx?.dust( enuToLocal( this.east, this.north, ground, _c ), MathUtils.clamp( - this.vy / 15, 0, 1 ), this.width );
 		if ( ! air.flew ) this.bestAir = Math.max( this.bestAir, air.time );
 		const tricks = this.tricksOf( air );
+		const fall = - this.vy;
 		this.vy = 0;
 		this.airTime = 0;
 		this.grounded = true;
@@ -1575,6 +1598,16 @@ export class Driver {
 		this.landedAt = this.clock;
 		this.hud.setPending?.( null );
 		this.payTricks( tricks );
+		// Soft suspension bounces it back up off a hard landing: a little hop, not a jump of its own
+		// (as a drift's hop isn't), so it lands again without tricks or a wipeout.
+		const { rebound } = this.handling;
+		if ( rebound > 0 && fall > 5 ) {
+
+			this.vy = Math.min( fall * rebound, 4 );
+			this.grounded = false;
+			this.driftHop = true;
+
+		}
 
 	}
 
@@ -1592,7 +1625,7 @@ export class Driver {
 		this.speed *= WIPE_KEEP;
 		air.spin.multiplyScalar( 0.5 );
 		this.squashBy( Math.max( 2, hard * SQUASH.land ), 'land' );
-		this.shake = Math.max( this.shake, Math.min( SHAKE_MAX, hard * SHAKE ) );
+		this.shake = Math.max( this.shake, Math.min( SHAKE_MAX * this.handling.shake, hard * SHAKE * this.handling.shake ) );
 		const power = MathUtils.clamp( hard / 15, 0.3, 1 );
 		enuToLocal( this.east, this.north, ground, _c );
 		this.fx?.burst( _c, UP, power );
@@ -1810,7 +1843,7 @@ export class Driver {
 	// ('land'), which springs back (see springSquash).
 	squashBy( speed, along ) {
 
-		this.squash.speed -= speed;
+		this.squash.speed -= speed * this.handling.squash;
 		this.squash.along = along;
 
 	}
@@ -1819,12 +1852,13 @@ export class Driver {
 
 		const { squash } = this;
 		if ( squash.value === 0 && squash.speed === 0 ) return;
+		const most = Math.min( 0.4, SQUASH.max * this.handling.squash );
 		// In small steps, so the stiff spring stays steady at a low frame rate.
 		for ( let left = dt; left > 1e-6; left -= 1 / 120 ) {
 
 			const step = Math.min( left, 1 / 120 );
 			squash.speed -= ( SQUASH.stiffness * squash.value + SQUASH.damping * squash.speed ) * step;
-			squash.value = MathUtils.clamp( squash.value + squash.speed * step, - SQUASH.max, SQUASH.max );
+			squash.value = MathUtils.clamp( squash.value + squash.speed * step, - most, most );
 
 		}
 
@@ -2069,7 +2103,9 @@ export class Driver {
 // { ahead, right, up }, where the driver's eyes are in metres from the middle of its box at ground
 // level, for the driver's-seat camera (and a crane, whose box is mostly boom or mast, for framing
 // the chase camera on its carrier); and "pivot": { ahead }, the point it stands and turns on in
-// metres ahead of that middle (see itemConfig and models.js).
+// metres ahead of that middle (see itemConfig and models.js). A vehicle built in code can bring
+// "handling" too (see HANDLING), and an app can add "fx" to the spec it drives with, the look of
+// the booster's flame and of a trail (see createDriveFx).
 export function specFor( item ) {
 
 	return { ...SPECS.default, ...SPECS[ item?.id ], ...item?.drive };
