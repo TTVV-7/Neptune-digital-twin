@@ -18,17 +18,19 @@ import { storage } from './places.js';
 
 // Boost pads: glowing pads on the ground that top up the booster when driven over, a small one by a
 // little, a big one all the way. They're put down as you drive, ahead of you and round you, where
-// the ground is open and flattish at about the height of the street you're on. Each spot is looked
-// at down from high above, so the first thing a ray meets is whatever is on top there: a roof, a
-// tree or a bridge over the street rules it out, and nothing goes inside a building, nor on a roof
-// high over the street (it isn't at the street's height). Four more rays round the pad keep it off
-// parked cars, kerbs and slopes. A modest number, recycled as you leave them behind; one that's
-// driven over goes dark and lights again a few seconds later. The booster still recharges by itself
+// the ground is open and flattish and can be driven to from the street you're on. Each spot is
+// looked at down from high above, so the first thing a ray meets is whatever is on top there: a
+// roof, a tree or a bridge over the street rules it out, and nothing goes inside a building. Four
+// more rays round the pad keep it off parked cars, kerbs and slopes, and a few on the way there
+// from the vehicle keep it off roofs and shelters: the ground must climb or fall gently all the
+// way, as a street does, never in a step, as at a roof's edge. A modest number, recycled as you leave them behind; one that's
+// driven over goes dark and lights again a few seconds later (with the gauge full, it's left lit). The booster still recharges by itself
 // (drive.js): pads only add to it. The pause menu's switch turns them off (kept in this browser);
 // they're on unless it's been used.
 //
 // They cost little: three instanced meshes (the pads, their glow and the big ones' light) and a try
-// at a new spot every TRY s, of five rays at most, plus one ray a frame checking a pad in turn.
+// at a new spot every TRY s, of a dozen rays at most (most tries end after one or two), plus one
+// ray a frame checking a pad in turn.
 
 const KEY = 'world-drive.pads';
 // The small and big pads: how many, how wide (m, radius), how much of the gauge each gives, how
@@ -47,19 +49,20 @@ const TRY = 0.08;
 // A pad goes (to be put down somewhere else) once it's RECYCLE m away, or BEHIND m behind.
 const RECYCLE = 160;
 const BEHIND = 50;
-// Pads keep SPACING m apart, and none is put down nearer the vehicle than NEAR.
+// Pads keep SPACING m apart.
 const SPACING = 15;
-const NEAR = 12;
 // The ground is looked for down from SKY m over where the vehicle last stood on the ground, and
-// must be within LEVEL m of that height, plus SLOPE m for each metre away (streets climb); level to
-// within FLAT m at four points FLAT_REACH m out past the pad's edge; and its normal at least TILT
-// upright.
+// must be within LEVEL m of that height; level to within FLAT m at four points FLAT_REACH m out
+// past the pad's edge; its normal at least TILT upright; and on the way there from the vehicle,
+// looked at every WALK m at most, it may rise or fall no more than RISE m from one look to the
+// next (a street at 14 %).
 const SKY = 300;
-const LEVEL = 3;
-const SLOPE = 0.06;
+const LEVEL = 12;
 const FLAT = 0.3;
 const FLAT_REACH = 0.6;
 const TILT = 0.96;
+const WALK = 14;
+const RISE = 2;
 // Pads sit LIFT m over the ground. One a frame is looked at again, in case sharper tiles have
 // arrived under it: moved up or down to them by up to SETTLE m; more, or no ground, and it goes.
 const LIFT = 0.05;
@@ -193,16 +196,28 @@ export function createBoostPads( { scene, driver, ground, toggle = null } ) {
 
 		}
 
-		// The street's height where it last stood on it (not the air it's flying through).
-		const street = driver.lastSafe?.y ?? driver.y;
+		// From the street where it last stood on it (not the air it's flying through).
+		const from = driver.lastSafe ?? driver;
+		const street = from.y;
 		const y = topAt( east, north, street );
-		if ( y === null || _normal.y < TILT || Math.abs( y - street ) > LEVEL + SLOPE * distance ) return;
+		if ( y === null || _normal.y < TILT || Math.abs( y - street ) > LEVEL ) return;
 		const normal = _at.copy( _normal );
 		const reach = pad.radius + FLAT_REACH;
 		for ( const [ de, dn ] of ROUND ) {
 
 			const around = topAt( east + de * reach, north + dn * reach, street );
 			if ( around === null || Math.abs( around - y ) > FLAT ) return;
+
+		}
+
+		// The way there: no step up onto a roof or a shelter, nor down off one.
+		const steps = Math.ceil( Math.hypot( east - from.east, north - from.north ) / WALK );
+		let height = street;
+		for ( let i = 1; i <= steps; i ++ ) {
+
+			const next = i === steps ? y : topAt( from.east + ( east - from.east ) * i / steps, from.north + ( north - from.north ) * i / steps, street );
+			if ( next === null || Math.abs( next - height ) > RISE ) return;
+			height = next;
 
 		}
 
@@ -232,7 +247,8 @@ export function createBoostPads( { scene, driver, ground, toggle = null } ) {
 
 	}
 
-	// What the vehicle drove over this frame, from where it was to where it is.
+	// What the vehicle drove over this frame, from where it was to where it is. With the gauge
+	// already full, a pad is left lit for later.
 	function pickUp() {
 
 		const { east, north } = driver;
@@ -242,7 +258,7 @@ export function createBoostPads( { scene, driver, ground, toggle = null } ) {
 		const length2 = de * de + dn * dn;
 		for ( const pad of pads ) {
 
-			if ( pad.state !== 'lit' ) continue;
+			if ( pad.state !== 'lit' || driver.gauge >= 1 ) continue;
 			// The nearest point of the path to the pad's middle.
 			const pe = - pad.at.x - from.east;
 			const pn = pad.at.z - from.north;

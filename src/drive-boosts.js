@@ -578,7 +578,7 @@ function bolt( batch, frame, from, toward, length, steps, wander, width, life, c
 			piece.frame = SHAPES.bolt;
 			piece.position.addVectors( _b, _p ).multiplyScalar( 0.5 );
 			piece.axis.subVectors( _p, _b ).multiplyScalar( 0.5 );
-			piece.size = layer ? width * 3.5 : width;
+			piece.size = layer ? width * 2.5 : width;
 			piece.colour.set( layer ? glow : core );
 			piece.alpha = layer ? 0.45 : 1;
 			piece.carry.copy( frame.velocity );
@@ -688,21 +688,22 @@ const STYLES = {
 						due += 0.055;
 						for ( let n = 0; n < 2; n ++ ) {
 
-							// Back and a little out to one side or the other, up or down.
-							const length = ( 2.2 + Math.random() * 2 ) * frame.scale * ( 0.6 + 0.4 * frame.power );
-							way.copy( frame.back ).addScaledVector( frame.right, ( Math.random() - 0.5 ) * 0.7 ).addScaledVector( frame.up, ( Math.random() - 0.35 ) * 0.5 ).normalize();
+							// Back and fanned out to one side or the other and up: crackling round the back
+							// of it rather than reaching all the way back to the camera.
+							const length = ( 1.3 + Math.random() ) * frame.scale * ( 0.6 + 0.4 * frame.power );
+							way.copy( frame.back ).addScaledVector( frame.right, ( Math.random() - 0.5 ) * 1.4 ).addScaledVector( frame.up, ( Math.random() - 0.15 ) * 0.9 ).normalize();
 							const life = 0.07 + Math.random() * 0.06;
-							tip.copy( bolt( batch, frame, frame.nozzle, way, length, 7, 0.22 * frame.scale, 0.05 * frame.scale, life, 0xf3eaff, 0x8a5cff ) );
+							tip.copy( bolt( batch, frame, frame.nozzle, way, length, 6, 0.16 * frame.scale, 0.045 * frame.scale, life, 0xf3eaff, 0x8a5cff ) );
 							// A branch off it, from somewhere along its first half.
 							fork.copy( frame.nozzle ).lerp( tip, 0.25 + Math.random() * 0.3 );
 							way.addScaledVector( frame.right, ( Math.random() < 0.5 ? - 1 : 1 ) * 0.9 ).addScaledVector( frame.up, ( Math.random() - 0.5 ) * 0.8 ).normalize();
-							bolt( batch, frame, fork, way, length * 0.45, 3, 0.12 * frame.scale, 0.03 * frame.scale, life * 0.8, 0xe4d6ff, 0x7a4dff );
+							bolt( batch, frame, fork, way, length * 0.5, 3, 0.1 * frame.scale, 0.03 * frame.scale, life * 0.8, 0xe4d6ff, 0x7a4dff );
 							// A flash where it ends.
 							const flash = batch.spawn( life );
 							flash.position.copy( tip );
 							flash.carry.copy( frame.velocity );
 							flash.frame = SHAPES.glow;
-							flash.size = 0.35 * frame.scale;
+							flash.size = 0.28 * frame.scale;
 							flash.colour.set( 0xc8b0ff );
 							flash.alpha = 0.8;
 							flash.kind = 1;
@@ -734,7 +735,7 @@ const STYLES = {
 
 				const p = batch.spawn( 0.5 + Math.random() * 0.45 );
 				nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.6, ( Math.random() - 0.3 ) * f.size.height * 0.5, p.position );
-				thrown( f, p, 0.85, 2.5 + Math.random() * 2, 0.4, 1.8 );
+				thrown( f, p, 0.9, 2 + Math.random() * 2, 0.4, 1.8 );
 				p.frame = SHAPES.star;
 				p.size = ( 0.07 + Math.random() * 0.08 ) * f.scale;
 				p.colour.set( colours[ n ++ % colours.length ] );
@@ -769,9 +770,9 @@ const STYLES = {
 			let f = null;
 			const bubble = k => {
 
-				const p = batch.spawn( 1.2 + Math.random() * 0.8 );
+				const p = batch.spawn( 0.9 + Math.random() * 0.6 );
 				nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.5, ( Math.random() - 0.4 ) * 0.3 * f.scale, p.position );
-				thrown( f, p, 0.8, 2 + Math.random() * 1.5, 0.6, 0.6 );
+				thrown( f, p, 0.9, 1.5 + Math.random() * 1.5, 0.6, 0.6 );
 				p.frame = SHAPES.bubble;
 				p.size = ( 0.1 + Math.random() * 0.2 ) * f.scale;
 				p.grow = p.size * 0.25;
@@ -800,7 +801,7 @@ const STYLES = {
 
 					f = frame;
 					batch.begin();
-					bubbles( frame.power, frame.dt, 46, bubble );
+					bubbles( frame.power, frame.dt, 55, bubble );
 					batch.update( frame.dt, hooks );
 
 				},
@@ -822,7 +823,7 @@ const STYLES = {
 
 				const p = batch.spawn( 1 + Math.random() * 0.5 );
 				nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.6, ( Math.random() - 0.3 ) * 0.3 * f.scale, p.position );
-				thrown( f, p, 0.72, 2.5 + Math.random() * 2, 2.2, 2 );
+				thrown( f, p, 0.85, 2 + Math.random() * 2, 2.2, 2 );
 				p.frame = SHAPES.square;
 				p.size = ( 0.06 + Math.random() * 0.03 ) * f.scale;
 				p.aspect = 0.55;
@@ -870,7 +871,7 @@ const STYLES = {
 
 				const p = batch.spawn( 1 + Math.random() * 0.5 );
 				nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.5, ( Math.random() - 0.2 ) * 0.3 * f.scale, p.position );
-				thrown( f, p, 0.78, 2.2 + Math.random() * 1.2, 1.1, 0.6 );
+				thrown( f, p, 0.88, 1.8 + Math.random() * 1.2, 1.1, 0.6 );
 				p.frame = SHAPES.heart;
 				p.size = ( 0.13 + Math.random() * 0.1 ) * f.scale;
 				p.grow = p.size * 0.4;
@@ -922,7 +923,7 @@ const STYLES = {
 
 				const p = batch.spawn( 0.7 + Math.random() * 0.35 );
 				nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.5, ( Math.random() - 0.4 ) * 0.4 * f.scale, p.position );
-				thrown( f, p, 0.82, 3.5 + Math.random() * 2, 0.3, 1.2 );
+				thrown( f, p, 0.88, 3 + Math.random() * 2, 0.3, 1.2 );
 				p.frame = SHAPES.pixel;
 				p.size = grid;
 				// Hottest nearest the exhaust: the first colours most often.
@@ -984,16 +985,16 @@ const STYLES = {
 			const burst = from => {
 
 				const colour = pick( colours );
-				for ( let i = 0; i < 18; i ++ ) {
+				for ( let i = 0; i < 14; i ++ ) {
 
-					const spark = batch.spawn( 0.6 + Math.random() * 0.35 );
+					const spark = batch.spawn( 0.55 + Math.random() * 0.3 );
 					spark.position.copy( from.position );
 					// All round, carried on with the rocket.
 					_v.set( Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5 ).normalize();
 					spark.carry.copy( from.carry );
-					spark.velocity.copy( from.velocity ).multiplyScalar( 0.3 ).addScaledVector( _v, ( 2.6 + Math.random() * 0.8 ) * scale );
+					spark.velocity.copy( from.velocity ).multiplyScalar( 0.3 ).addScaledVector( _v, ( 2.2 + Math.random() * 0.6 ) * scale );
 					spark.frame = SHAPES.star;
-					spark.size = 0.08 * scale;
+					spark.size = 0.065 * scale;
 					spark.colour.set( colour );
 					spark.fall = 0.45;
 					spark.drag = 1.6;
@@ -1005,8 +1006,8 @@ const STYLES = {
 				flash.position.copy( from.position );
 				flash.carry.copy( from.carry );
 				flash.frame = SHAPES.burst;
-				flash.size = 0.45 * scale;
-				flash.grow = 0.35 * scale;
+				flash.size = 0.25 * scale;
+				flash.grow = 0.2 * scale;
 				flash.colour.set( colour );
 
 			};
@@ -1027,7 +1028,7 @@ const STYLES = {
 					f = frame;
 					scale = frame.scale;
 					batch.begin();
-					rockets( frame.power, frame.dt, 9, rocket );
+					rockets( frame.power, frame.dt, 8, rocket );
 					batch.update( frame.dt, hooks );
 
 				},
@@ -1055,7 +1056,7 @@ const STYLES = {
 				nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.5, 0, p.position );
 				thrown( f, p, 0.65, 3.5 + Math.random() * 2, 1.4, 1 );
 				p.frame = SHAPES.drop;
-				p.size = ( 0.06 + Math.random() * 0.05 ) * f.scale;
+				p.size = ( 0.07 + Math.random() * 0.06 ) * f.scale;
 				p.colour.set( colours[ colour ] );
 				p.fall = 1;
 
@@ -1064,13 +1065,20 @@ const STYLES = {
 			const splat = () => {
 
 				const { size } = f;
-				const p = batch.spawn( 4 );
+				const p = batch.spawn( 5 );
 				f.pivot.localToWorld( p.position.set( ( Math.random() - 0.5 ) * size.width * 0.7 / size.scale, INK_LIFT / size.scale, ( size.rear + 0.3 + Math.random() * 1.2 ) / size.scale ) );
 				p.axis.copy( f.up );
 				p.mode = FLAT;
 				p.frame = SHAPES.splat + Math.floor( Math.random() * 3 );
-				p.size = ( 0.3 + Math.random() * 0.35 ) * f.scale;
-				p.turn = Math.random() * Math.PI * 2;
+				p.size = ( 0.35 + Math.random() * 0.35 ) * f.scale;
+				// Flung along the road the faster it goes, so at speed they join into a trail of
+				// paint rather than dots too far apart. Flat on level ground the quad's own across
+				// is -Z and its up -X (see the shader), so that's the turn to the way it's going.
+				const speed = Math.hypot( f.velocity.x, f.velocity.z );
+				const stretch = Math.min( 3, 1 + speed / 15 );
+				p.size *= stretch;
+				p.aspect = 1 / stretch;
+				p.turn = speed > 1 ? Math.atan2( - f.velocity.x, - f.velocity.z ) + ( Math.random() - 0.5 ) * 0.4 : Math.random() * Math.PI * 2;
 				p.colour.set( colours[ colour ] );
 				p.kind = 1;
 
@@ -1123,7 +1131,7 @@ const STYLES = {
 
 				const p = batch.spawn( 0.6 );
 				nozzleAt( f, k, 0, 0, p.position );
-				thrown( f, p, 0.8, 4, 0, 0 );
+				thrown( f, p, 0.9, 3, 0, 0 );
 				p.axis.copy( f.back );
 				p.mode = FLAT;
 				p.frame = SHAPES.ring;
@@ -1287,13 +1295,13 @@ export function createSupersonic( root ) {
 		const angle = Math.random() * Math.PI;
 		p.position.copy( f.middle ).addScaledVector( f.right, Math.cos( angle ) * ( width * 0.55 + Math.random() * 0.5 ) )
 			.addScaledVector( f.up, Math.sin( angle ) * ( height * 0.55 + Math.random() * 0.4 ) - height * 0.1 )
-			.addScaledVector( travel, ( Math.random() - 0.4 ) * length );
-		// Slipping back past it, a little slower than it goes.
-		p.carry.copy( f.velocity ).multiplyScalar( 0.82 );
+			.addScaledVector( travel, ( Math.random() - 0.3 ) * length );
+		// Slipping back past it, a little slower than it goes (not so slow they reach the camera).
+		p.carry.copy( f.velocity ).multiplyScalar( 0.88 );
 		p.mode = ALONG;
 		p.frame = SHAPES.streak;
-		p.axis.copy( travel ).multiplyScalar( Math.min( 2.2, 0.4 + speed * 0.025 ) );
-		p.size = 0.035 + Math.random() * 0.02;
+		p.axis.copy( travel ).multiplyScalar( Math.min( 2.2, 0.4 + speed * 0.025 ) * Math.sqrt( f.scale ) );
+		p.size = ( 0.035 + Math.random() * 0.02 ) * f.scale;
 		p.colour.set( Math.random() < 0.6 ? 0xffffff : 0xbfe4ff );
 		p.alpha = 0.6;
 
@@ -1317,7 +1325,8 @@ export function createSupersonic( root ) {
 			if ( speed > 1 ) travel.copy( frame.velocity ).divideScalar( speed );
 			else travel.copy( frame.back ).negate();
 			batch.begin();
-			streaks( on ? 1 : 0, frame.dt, 80, streak );
+			// More round something bigger: about as thick on it as on a kart.
+			streaks( on ? 1 : 0, frame.dt, 80 * Math.sqrt( frame.scale ), streak );
 			batch.update( frame.dt, hooks );
 
 		},

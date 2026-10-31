@@ -6,9 +6,12 @@
 // drawn behind the Garage, and the free game drives as it did. ?pro=1 only counts on this computer. With
 // ?pro=1 here: each new ride drives, drifts, is thrown up by a wall and lands, and their handling
 // is measured against the kart's (top speed, 0 to 100 km/h, turning, how high the same wall
-// throws them); the hovercraft hovers with no wheels; the Garage's paint, decals, flame and trail
-// go on the ride being driven and are still there after a reload; what a trail and the booster
-// cost a frame; and the Garage and the badges on a phone. Everything off this machine is blocked.
+// throws them, and that it goes supersonic); the hovercraft hovers with no wheels; the Garage's
+// paint, decals, boost style, flame and trail go on the ride being driven and are still there after
+// a reload, and a look saved before the boost styles keeps its flame's colour; what a trail and the
+// booster cost a frame; every boost style drawn at 150 km/h (a picture of each), keeping to its
+// budget and making nothing new in a minute of boosting, and what each costs a frame; and the
+// Garage and the badges on a phone. Everything off this machine is blocked.
 //
 // Needs Playwright with Chromium. TEST_VITE_PORT picks the port; TEST_SCREENSHOTS=<folder> saves
 // pictures; the handling it measures is printed.
@@ -196,6 +199,19 @@ function measure() {
 	} );
 	pad.remove( wall );
 	Object.assign( out, { hit, launch: Math.round( high * 100 ) / 100, airTime: Math.round( air * 100 ) / 100, landed: d.grounded && ! d.air } );
+
+	// The gas and the booster from a standstill, the gauge kept full: how long until supersonic.
+	reset( 0 );
+	d.press( 'KeyW' );
+	d.press( 'KeyB' );
+	out.supersonic = null;
+	step( 20, t => {
+
+		d.gauge = 1;
+		if ( d.supersonic ) out.supersonic = Math.round( t * 10 ) / 10;
+		return ! d.supersonic;
+
+	} );
 	reset( 0 );
 	return out;
 
@@ -289,6 +305,26 @@ describe( 'Supporter Pass, without it', () => {
 		assert.ok( await garage.locator( '[data-part="colour"] .choice[data-id="red"]' ).evaluate( b => b.classList.contains( 'on' ) ) );
 		await page.waitForTimeout( 400 );
 		await shot( page, 'pro-garage-free' );
+
+		// Boost styles: three free and nine with the pass. A free one goes on and shows itself off;
+		// the flame's colour only shows under the classic flame.
+		const boosts = garage.locator( '[data-part="boost"]' );
+		assert.deepEqual( await boosts.locator( '.choice:not(.locked)' ).allTextContents(), [ 'Classic flame⭐', 'Bubbles⭐', 'Confetti⭐' ] );
+		assert.equal( await boosts.locator( '.choice.locked' ).count(), 9 );
+		assert.ok( await boosts.locator( '.choice[data-id="classic"]' ).evaluate( b => b.classList.contains( 'on' ) ) );
+		assert.ok( await garage.locator( '[data-part="flame"]' ).isVisible() );
+		await boosts.locator( '.choice[data-id="lightning"]' ).click();
+		await page.locator( '#pass' ).waitFor();
+		await page.locator( '#pass .close' ).click();
+		await boosts.locator( '.choice[data-id="bubbles"]' ).click();
+		const bubbles = await page.evaluate( () => ( { saved: JSON.parse( localStorage.getItem( 'world-drive.garage' ) )[ 'go-kart' ].boost, demo: window.drive.garage.preview.demo > 0, budget: window.drive.garage.preview.fx.particles.budget } ) );
+		assert.ok( bubbles.saved === 'bubbles' && bubbles.demo && bubbles.budget > 120, JSON.stringify( bubbles ) );
+		assert.equal( await garage.locator( '[data-part="flame"]' ).isVisible(), false );
+		await boosts.scrollIntoViewIfNeeded();
+		await page.waitForTimeout( 900 );
+		await shot( page, 'pro-garage-bubbles' );
+		await boosts.locator( '.choice[data-id="classic"]' ).click();
+		assert.ok( await garage.locator( '[data-part="flame"]' ).isVisible() );
 
 		// A pass ride turns on the turntable, with a word on the pass; anything picked opens it.
 		await garage.locator( '.ride-tab', { hasText: 'Monster truck' } ).click();
@@ -390,7 +426,7 @@ describe( 'Supporter Pass, without it', () => {
 		// A look saved with the pass (say on a test page) doesn't come with it.
 		await page.evaluate( () => {
 
-			localStorage.setItem( 'world-drive.garage', JSON.stringify( { 'go-kart': { colour: 'violet', finish: 'metallic', decal: 'flames', flame: 'rainbow', trail: 'ribbon' } } ) );
+			localStorage.setItem( 'world-drive.garage', JSON.stringify( { 'go-kart': { colour: 'violet', finish: 'metallic', decal: 'flames', boost: 'lightning', flame: 'rainbow', trail: 'ribbon' } } ) );
 			localStorage.setItem( 'world-drive.vehicle', 'monster-truck' );
 
 		} );
@@ -406,12 +442,12 @@ describe( 'Supporter Pass, without it', () => {
 			return {
 				name: d.entry.state.name, handling: d.spec.handling ?? null, fx: d.spec.fx,
 				grip: d.handling.grip, turn: d.handling.turn, gravity: d.handling.gravity, launch: d.handling.launch,
-				// Not violet, metallic, flames or a rainbow ribbon without the pass: as it came.
+				// Not violet, metallic, flames, lightning or a rainbow ribbon without the pass: as it came.
 				colours: [ ...new Set( body.map( m => m.color.getHexString() ) ) ], physical: body.some( m => m.isMeshPhysicalMaterial ), decals: !! d.entry.pivot.getObjectByName( 'decals' ),
 			};
 
 		} );
-		assert.deepEqual( kart, { name: 'Go-kart', handling: null, fx: { flame: 'orange', trail: null }, grip: 12, turn: [ 150, 55 ], gravity: 1, launch: 1, colours: [ 'ff4a1c' ], physical: false, decals: false } );
+		assert.deepEqual( kart, { name: 'Go-kart', handling: null, fx: { boost: 'classic', flame: 'orange', trail: null }, grip: 12, turn: [ 150, 55 ], gravity: 1, launch: 1, colours: [ 'ff4a1c' ], physical: false, decals: false } );
 		const handling = await page.evaluate( measure );
 		console.log( 'handling, kart without the pass:', JSON.stringify( handling ) );
 		assert.ok( handling.launch > 1.5 && handling.landed && handling.drifting === 1 && handling.driftBoost, JSON.stringify( handling ) );
@@ -461,11 +497,13 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 			assert.ok( ride.hit && ride.launch > 0.3 && ride.landed, `${ name } wasn't thrown up and back down: ${ JSON.stringify( ride ) }` );
 			// Never turning in the air faster than a kart, the most the leaderboard allows for.
 			assert.ok( ride.trickRate <= 1, `${ name } turns in the air at ${ ride.trickRate } of a kart's rate` );
+			// Boosting flat out, supersonic.
+			assert.ok( ride.supersonic !== null, `${ name } never went supersonic: ${ JSON.stringify( ride ) }` );
 
 		}
 
 		console.log( 'handling with the pass:' );
-		for ( const [ name, ride ] of Object.entries( handling ) ) console.log( `  ${ name.padEnd( 14 ) } top ${ ride.topSpeed } km/h, 0-100 ${ ride.zeroTo100 ?? 'never' } s, 3 s: ${ ride.after3s } km/h, turn ${ ride.turnRate }°/s at 50 km/h (slide ${ ride.slide }°), wall at 70 km/h: up ${ ride.launch } m, ${ ride.airTime } s in the air` );
+		for ( const [ name, ride ] of Object.entries( handling ) ) console.log( `  ${ name.padEnd( 14 ) } top ${ ride.topSpeed } km/h, 0-100 ${ ride.zeroTo100 ?? 'never' } s, 3 s: ${ ride.after3s } km/h, turn ${ ride.turnRate }°/s at 50 km/h (slide ${ ride.slide }°), wall at 70 km/h: up ${ ride.launch } m, ${ ride.airTime } s in the air, supersonic after ${ ride.supersonic } s` );
 		const { kart, 'Sports coupe': coupe, 'Monster truck': monster, 'City bus': bus, Hovercraft: hover } = handling;
 		// The coupe: well over the kart's top speed, quicker to 100, and turning in sharply.
 		assert.ok( coupe.topSpeed >= kart.topSpeed + 60, `coupe ${ coupe.topSpeed } vs kart ${ kart.topSpeed }` );
@@ -615,13 +653,14 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 		assert.deepEqual( before.rims, [ 'd9a63a' ] );
 		assert.ok( before.decals > 30, JSON.stringify( before ) );
 		// A close look at each of the others, in a look of its own.
-		for ( const [ name, colour, decal, trail ] of [ [ 'Monster truck', 'black', 'flames', 'smoke' ], [ 'City bus', 'teal', 'checker', 'none' ], [ 'Hovercraft', 'pink', 'number', 'sparkle' ] ] ) {
+		for ( const [ name, colour, decal, trail, boost ] of [ [ 'Monster truck', 'black', 'flames', 'smoke', 'fireworks' ], [ 'City bus', 'teal', 'checker', 'none', 'bubbles' ], [ 'Hovercraft', 'pink', 'number', 'sparkle', 'comet' ] ] ) {
 
 			await garage.locator( '.ride-tab', { hasText: name } ).click();
 			await page.waitForFunction( ride => window.drive.garage.preview.model?.name === ride, name, { timeout: 20000 } );
 			await pick( 'colour', colour );
 			await pick( 'decal', decal );
 			await pick( 'trail', trail );
+			await pick( 'boost', boost );
 			await page.waitForTimeout( 900 );
 			await shot( page, `pro-garage-${ name.toLowerCase().replace( ' ', '-' ) }` );
 
@@ -648,7 +687,7 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 			return { spec: d.spec.fx, ribbon: ribbon?.visible && ribbon.geometry.drawRange.count, flame: flame?.material.color.getHexString() };
 
 		} );
-		assert.deepEqual( fx.spec, { flame: 'blue', trail: { kind: 'ribbon', colour: 0xeef1f4 } } );
+		assert.deepEqual( fx.spec, { boost: 'classic', flame: 'blue', trail: { kind: 'ribbon', colour: 0xeef1f4 } } );
 		assert.ok( fx.ribbon > 6, JSON.stringify( fx ) );
 		assert.equal( fx.flame, '2b6dff' );
 		await page.waitForTimeout( 200 );
@@ -665,6 +704,9 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 		assert.deepEqual( after.rims, before.rims );
 		assert.ok( after.decals > 30 );
 		assert.deepEqual( await page.evaluate( () => window.drive.driver.spec.fx ), fx.spec );
+		// The hovercraft's comet, too, kept and driven with.
+		await swapTo( page, 'Hovercraft' );
+		assert.deepEqual( await page.evaluate( () => window.drive.driver.spec.fx ), { boost: 'comet', flame: 'orange', trail: { kind: 'sparkle', colour: 0xeef1f4 } } );
 		assert.deepEqual( page.errors, [] );
 
 	} );
@@ -746,6 +788,174 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 			assert.ok( cost[ kind ].update < 1.5, `${ kind }: ${ cost[ kind ].update } ms of updating a frame` );
 
 		}
+
+	} );
+
+	test( 'a look saved before the boost styles keeps its flame: the classic flame, in its colour', async () => {
+
+		// As the Garage kept it before: a flame's colour and no boost style.
+		await page.evaluate( () => localStorage.setItem( 'world-drive.garage', JSON.stringify( { 'go-kart': { colour: 'red', flame: 'purple', trail: 'none' } } ) ) );
+		await openGlobe( page, '?pro=1' );
+		await page.locator( '#globe-ui .vehicle', { hasText: 'Go-kart' } ).click();
+		await page.locator( '#globe-ui .garage-open' ).click();
+		const garage = page.locator( '#garage' );
+		await page.waitForFunction( () => window.drive.garage.preview?.model, null, { timeout: 20000 } );
+		assert.equal( await garage.locator( '[data-part="boost"] .choice.on' ).getAttribute( 'data-id' ), 'classic' );
+		assert.equal( await garage.locator( '[data-part="flame"] .choice.on' ).getAttribute( 'data-id' ), 'purple' );
+		await garage.locator( '.done' ).click();
+		await dropIn( page );
+		const worn = await page.evaluate( () => {
+
+			const { driver: d } = window.drive;
+			let flame = null;
+			d.models.group.parent.getObjectByName( 'drive-fx' ).traverse( o => flame ??= o.geometry?.type === 'ConeGeometry' ? o : null );
+			return { fx: d.spec.fx, cone: flame.material.color.getHexString() };
+
+		} );
+		assert.deepEqual( worn, { fx: { boost: 'classic', flame: 'purple', trail: null }, cone: '8f3dff' } );
+		assert.deepEqual( page.errors, [] );
+
+	} );
+
+	test( 'every boost style is drawn at 150 km/h, keeps to its budget, makes nothing new in a minute of boosting, and costs little', async () => {
+
+		// Driving already, after the tests before; or on its own, dropped in here.
+		if ( await page.evaluate( () => window.drive?.mode ) !== 'driving' ) {
+
+			await openGlobe( page, '?pro=1' );
+			await dropIn( page );
+
+		}
+
+		await page.evaluate( () => document.querySelector( '#drive-ui .keys' ).hidden = true );
+		const styles = [ 'classic', ...await page.evaluate( async () => ( await import( '/src/drive-boosts.js' ) ).BOOST_STYLES ) ];
+		const garageStyles = await page.evaluate( async () => ( await import( '/src/drive-app/boosts.js' ) ).BOOSTS.map( style => style.id ) );
+		// The Garage offers each of drive-boosts.js's styles, and nothing else.
+		assert.deepEqual( [ ...garageStyles ].sort(), [ ...styles ].sort() );
+		assert.ok( styles.length >= 9 );
+		const results = {};
+		for ( const style of styles ) {
+
+			const result = results[ style ] = await page.evaluate( async style => {
+
+				const { createDriveFx } = await import( '/src/drive-fx.js' );
+				const { driver: d, renderer, scene, camera } = window.drive;
+				const gl = renderer.getContext();
+				const world = d.models.group.parent;
+				const { width, height } = gl.canvas;
+				const pixels = [ new Uint8Array( width * height * 4 ), new Uint8Array( width * height * 4 ) ];
+				const one = new Uint8Array( 4 );
+				const memory = () => ( { geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures, programs: renderer.info.programs.length } );
+				d.fx.dispose();
+				d.fx = createDriveFx( world, { boost: style, flame: 'orange', trail: null } );
+				const root = world.children.at( - 1 );
+				for ( const code of [ ...d.keys ] ) d.release( code );
+				Object.assign( d, { east: 0, north: 0, y: 0, heading: 0, course: 0, view: 0, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, flying: false, boost: null } );
+				// At 150 km/h with the booster lit (the gauge kept full, the speed held there).
+				const frame = ( boosting, draw ) => {
+
+					d.gauge = 1;
+					d.firing = boosting;
+					d.speed = 150 / 3.6;
+					if ( d.north > 800 ) d.north -= 1000;
+					const begun = performance.now();
+					d.update( 1 / 60 );
+					const updated = performance.now();
+					if ( draw ) {
+
+						renderer.render( scene, camera );
+						// Reading a pixel back waits for the frame to be drawn.
+						gl.readPixels( 0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, one );
+
+					}
+
+					return [ performance.now() - begun, updated - begun ];
+
+				};
+				const median = list => Math.round( [ ...list ].sort( ( a, b ) => a - b )[ list.length >> 1 ] * 1000 ) / 1000;
+				// Boosting all along, drawn with its effects and without them by turns, a few frames
+				// each, so the machine slowing down or speeding up (others share it) touches both
+				// alike: the middle time of each. The update is the driving and the effects alone.
+				for ( let i = 0; i < 90; i ++ ) frame( true, false );
+				const times = { plain: [ [], [] ], boosting: [ [], [] ] };
+				for ( let round = 0; round < 8; round ++ ) for ( const kind of [ 'plain', 'boosting' ] ) {
+
+					root.visible = kind === 'boosting';
+					for ( let i = 0; i < 4; i ++ ) {
+
+						const [ total, update ] = frame( true, true );
+						times[ kind ][ 0 ].push( total );
+						times[ kind ][ 1 ].push( update );
+
+					}
+
+				}
+
+				root.visible = true;
+				const out = Object.fromEntries( Object.entries( times ).map( ( [ kind, [ frames, updates ] ] ) => [ kind, { frame: median( frames ), update: median( updates ) } ] ) );
+
+				// Drawn: the picture with it and without it differ, behind the vehicle.
+				renderer.render( scene, camera );
+				gl.readPixels( 0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels[ 0 ] );
+				root.visible = false;
+				renderer.render( scene, camera );
+				gl.readPixels( 0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels[ 1 ] );
+				root.visible = true;
+				let changed = 0;
+				for ( let i = 0; i < pixels[ 0 ].length; i += 4 ) if ( Math.abs( pixels[ 0 ][ i ] - pixels[ 1 ][ i ] ) + Math.abs( pixels[ 0 ][ i + 1 ] - pixels[ 1 ][ i + 1 ] ) + Math.abs( pixels[ 0 ][ i + 2 ] - pixels[ 1 ][ i + 2 ] ) > 30 ) changed ++;
+				out.changed = changed;
+
+				// A minute of boosting: drawn every second, its objects counted, the most alive kept.
+				const before = { ...memory(), objects: 0, materials: 0 };
+				const count = () => {
+
+					const materials = new Set();
+					let objects = 0;
+					root.traverse( o => {
+
+						objects ++;
+						if ( o.material ) materials.add( o.material );
+
+					} );
+					return { objects, materials: materials.size };
+
+				};
+				Object.assign( before, count() );
+				out.budget = d.fx.particles.budget;
+				out.most = 0;
+				for ( let second = 0; second < 60; second ++ ) {
+
+					for ( let i = 0; i < 59; i ++ ) {
+
+						frame( true, false );
+						out.most = Math.max( out.most, d.fx.particles.alive );
+
+					}
+
+					frame( true, true );
+
+				}
+
+				out.grew = Object.fromEntries( Object.entries( { ...memory(), ...count() } ).filter( ( [ key, value ] ) => value !== before[ key ] ).map( ( [ key, value ] ) => [ key, `${ before[ key ] } → ${ value }` ] ) );
+				// Left boosting, for its picture.
+				d.firing = true;
+				return out;
+
+			}, style );
+			await shot( page, `pro-boost-${ style }` );
+			console.log( `boost style ${ style.padEnd( 10 ) } ${ JSON.stringify( result ) }` );
+			assert.ok( result.changed > 400, `${ style } didn't show: ${ result.changed } pixels changed` );
+			assert.deepEqual( result.grew, {}, `${ style } made new things in a minute of boosting` );
+			assert.ok( result.most <= result.budget, `${ style }: ${ result.most } alive, over its budget of ${ result.budget }` );
+			assert.ok( result.boosting.update < 1.5, `${ style }: ${ result.boosting.update } ms of updating a frame` );
+			// Software rendering here, where what costs is how much of the screen is drawn over: a few
+			// tenths more at most (fireworks, sparks all over the view) and usually a few per cent.
+			assert.ok( result.boosting.frame < result.plain.frame * 1.3 + 2, `${ style }: ${ result.boosting.frame } ms a frame against ${ result.plain.frame }` );
+
+		}
+
+		await page.evaluate( () => window.drive.driver.firing = false );
+		assert.deepEqual( page.errors, [] );
 
 	} );
 
