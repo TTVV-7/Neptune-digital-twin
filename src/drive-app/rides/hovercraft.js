@@ -6,7 +6,8 @@ import { BLACK, block, CHROME, DARK, driver, GLASS, HEADLIGHT, mat, merge, paint
 // the back with rudders behind it. No wheels: it floats HOVER m over the ground, bobbing a little,
 // over a soft shadow, so roads, grass and water are all the same to it. 4.2 m long and 2.1 m wide,
 // 1.9 m tall to the top of the duct, on y = 0, facing -Z. The fan spins faster with the gas and
-// the speed, and the rudders swing with the steering (onDrive).
+// the speed, and the rudders swing with the steering (onDrive). Where World Drive finds water, the
+// others splash and sink: it `floats` on (drive.js), throwing up spray behind it.
 
 const HOVER = 0.16;
 const BODY_COLOUR = 0xffc21a;
@@ -18,9 +19,9 @@ const RUDDER_LOCK = 0.55;
 // Tuning (see drive.js specFor and HANDLING): nothing holds it to the ground, so it slides wide
 // through every turn and slides on after it, turns at much the same rate whatever its speed,
 // glides on with the gas off and takes a long way to stop; it floats down gently and bounces on
-// its cushion of air.
+// its cushion of air, on water as on land.
 export const HOVERCRAFT_DRIVE = {
-	topSpeed: 135, accel: 6.5, brake: 3.5, reverse: 18,
+	topSpeed: 135, accel: 6.5, brake: 3.5, reverse: 18, floats: true,
 	cab: { ahead: - 0.2, right: 0, up: 1.72 },
 	handling: { grip: 1.4, slip: 1.1, driftYaw: [ 55, 120 ], turn: [ 105, 78 ], lock: 60, drag: 0.35, gravity: 0.9, launch: 0.9, air: 1.1, landTilt: 45, squash: 0.6, rebound: 0.3 },
 };

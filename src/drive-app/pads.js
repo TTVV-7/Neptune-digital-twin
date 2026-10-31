@@ -24,15 +24,18 @@ import { storage } from './places.js';
 // more rays round the pad keep it to ground as smooth as a road (not parked cars, kerbs, slopes or
 // the lumpy tops of bushes), and more on the way there from the vehicle keep it off roofs, shelters
 // and banks beside the road: the ground must climb or fall gently all the way, as a street does,
-// never in a step that stays up, as at a roof's edge or up an embankment. A modest number, recycled
+// never in a step that stays up, as at a roof's edge or up an embankment. Nor on water (water.js),
+// which is as flat and open as anywhere on Google's mesh, and where the others would only splash
+// down beside a pad (a hovercraft rides there, but a pad on the sea looks lost). A modest number, recycled
 // as you leave them behind; one that's driven over goes dark and lights again a few seconds later
 // (with the gauge full, it's left lit). The booster still recharges by itself (drive.js): pads only
 // add to it. The pause menu's switch turns them off (kept in this browser); they're on unless it's
 // been used.
 //
 // They cost little: three instanced meshes (the pads, their glow and their light) and a try at a
-// new spot every TRY s, of two dozen rays at most (most tries end after one or two), plus one ray a
-// frame checking a pad in turn.
+// new spot every TRY s, of two dozen rays at most (most tries end after one or two) and, for a spot
+// that passes all that, a look for water (a couple of dozen more), plus one ray a frame checking a
+// pad in turn.
 
 const KEY = 'world-drive.pads';
 // The small and big pads: how many, how wide (m, radius), how much of the gauge each gives, how
@@ -96,8 +99,9 @@ const _m = new Matrix4();
 const _c = new Color();
 
 // scene: what the pads are drawn in. driver: the Driver (drive.js). ground: the Ground (spawn.js),
-// whose rays see only the ground (the tiles or the test pad). toggle: the pause menu's checkbox.
-export function createBoostPads( { scene, driver, ground, toggle = null } ) {
+// whose rays see only the ground (the tiles or the test pad). water: water.js's, which says where
+// water is (none: anywhere goes). toggle: the pause menu's checkbox.
+export function createBoostPads( { scene, driver, ground, water = null, toggle = null } ) {
 
 	const group = new Group();
 	group.name = 'boost-pads';
@@ -238,6 +242,8 @@ export function createBoostPads( { scene, driver, ground, toggle = null } ) {
 
 		}
 
+		// Last, as it's the dearest look and few spots get this far.
+		if ( water?.at( east, north, y ) != null ) return;
 		enuToLocal( east, north, y, pad.at );
 		pad.normal.copy( normal );
 		pad.state = 'lit';
