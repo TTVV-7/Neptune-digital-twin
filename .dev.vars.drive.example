@@ -14,3 +14,15 @@ GOOGLE_MAPS_API_KEY=
 # The daily caps, as on worlddrive.app. Lower them (say to 2) to reach the "used up" screen quickly.
 DAILY_VISITS=300
 PER_VISITOR_DAILY=8
+
+# The Supporter Pass (docs/world-drive.md). Signing in on this computer needs a Google OAuth web
+# client with http://localhost:5173 among its Authorized JavaScript origins; empty, there's no
+# signing in and no buying. The webhook's secret is the whsec_... that `stripe listen
+# --forward-to localhost:8790/api/stripe/webhook` prints (Stripe CLI, a test-mode account): never
+# the live endpoint's here. The Payment Link in wrangler.drive.jsonc is the live one, which takes
+# real money: here it's blank (buying off), or a test-mode link, https://buy.stripe.com/test_...
+# SUPPORTER_EMAILS (comma-separated) have the pass without paying.
+GOOGLE_CLIENT_ID=
+SUPPORTER_PAYMENT_LINK=
+STRIPE_WEBHOOK_SECRET=
+SUPPORTER_EMAILS=

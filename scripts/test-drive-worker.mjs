@@ -11,8 +11,13 @@
 // by their /64, each way of cheating it turns away (tokens forged, changed, expired or someone
 // else's, the wrong secret, scores the game can't make, too many too fast), the boards (top 20,
 // your own rank, one place, the cache), days and weeks starting at midnight UTC, and the tidying
-// up after 35 days.
-// TEST_DRIVE_WORKER_PORT=8796 moves the three wrangler servers (that port and the next two).
+// up after 35 days. And the Supporter Pass, with ID tokens signed by test keys standing in for
+// Google's and webhooks signed with a made-up secret standing in for Stripe's: signing in (and
+// every bad token turned away), the session cookie, /api/me, the webhook (signatures, five minutes,
+// a payment once, bank debits, bought before signing in, refunds, another link's checkouts), the
+// same-origin checks it alone goes without, SUPPORTER_EMAILS, 30 drives a day for a supporter, the
+// ⭐ on the leaderboard, the owner's SQL, and buying off without its settings.
+// TEST_DRIVE_WORKER_PORT=8796 moves the five wrangler servers (that port and the next four).
 
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -21,9 +26,11 @@ import { createServer } from 'node:http';
 import { register } from 'node:module';
 import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
-import { startWorker } from './worker-harness.mjs';
+import { CLIENT_ID, makeKey, makeToken, serveKeys, startWorker, stripeSignature } from './worker-harness.mjs';
+import { sessionCookies } from '../worker/sessions.js';
 import { MAX_SCORE, RATE, SCORING, maxRate } from '../worker/drive/scores.js';
 import { addressOf } from '../worker/drive/settings.js';
+import { purchaseFor, purchaseSettings } from '../worker/drive/supporter.js';
 import { VISIT_HOURS, makeVisit } from '../worker/drive/visits.js';
 
 const PORT = Number( process.env.TEST_DRIVE_WORKER_PORT ) || 8796;
@@ -170,7 +177,7 @@ describe( 'World Drive Worker', () => {
 
 		const { status, json, text } = await call( server, '/api/config' );
 		assert.equal( status, 200 );
-		assert.deepEqual( json, { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true } );
+		assert.deepEqual( json, { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true, googleClientId: '' } );
 		assert.ok( ! text.includes( MAPS_KEY ) );
 
 	} );
@@ -404,7 +411,7 @@ describe( 'World Drive Worker, Turnstile failing and maps off', () => {
 	test( 'config says maps are off, with the site key from wrangler.drive.jsonc', async () => {
 
 		const { json } = await call( server, '/api/config' );
-		assert.deepEqual( json, { turnstileSiteKey: '0x4AAAAAAFs3k5sgUIQHSuGC', mapsOn: false } );
+		assert.deepEqual( json, { turnstileSiteKey: '0x4AAAAAAFs3k5sgUIQHSuGC', mapsOn: false, googleClientId: '' } );
 
 	} );
 
@@ -1005,6 +1012,535 @@ describe( 'World Drive leaderboard', () => {
 
 } );
 
+// --- the Supporter Pass ------------------------------------------------------------------
+
+// Made up, in Stripe's and Google's formats: nothing here is a real link, secret or account.
+const PASS_LINK = 'https://buy.stripe.com/test_7sYmadeUp00000000000';
+const PASS_LINK_ID = 'plink_1MadeUpSupporterLink0000';
+const WEBHOOK_SECRET = 'whsec_made_up_for_world_drive_tests_0123';
+// Tuesday 3 November 2026 at noon UTC: everything on the Supporter Pass's Worker happens then,
+// sessions included, unless a test says otherwise.
+const PASS_DAY = Date.UTC( 2026, 10, 3, 12, 0, 0 );
+
+// A Checkout Session event as Stripe sends it (only the fields read are filled in).
+function checkout( id, { type = 'checkout.session.completed', reference = null, email = 'alice@example.com', paid = true, link = PASS_LINK_ID } = {} ) {
+
+	return {
+		id: `evt_${ id }`,
+		object: 'event',
+		type,
+		data: { object: {
+			id: `cs_test_${ id }`,
+			object: 'checkout.session',
+			mode: 'payment',
+			payment_status: paid ? 'paid' : 'unpaid',
+			amount_total: 499,
+			currency: 'cad',
+			client_reference_id: reference,
+			customer_details: { email },
+			customer_email: null,
+			payment_intent: `pi_${ id }`,
+			payment_link: link,
+		} },
+	};
+
+}
+
+function refund( id, { full = true } = {} ) {
+
+	return { id: `evt_refund_${ id }`, object: 'event', type: 'charge.refunded', data: { object: { id: `ch_${ id }`, object: 'charge', payment_intent: `pi_${ id }`, refunded: full, amount_refunded: full ? 499 : 100 } } };
+
+}
+
+// Stripe's servers POSTing to the webhook: no Origin, no cookie, signed (or `signature` as given).
+function webhook( server, event, { secret = WEBHOOK_SECRET, signature, headers = {}, time = PASS_DAY } = {} ) {
+
+	const body = typeof event === 'string' ? event : JSON.stringify( event );
+	return call( server, '/api/stripe/webhook', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json; charset=utf-8', 'Stripe-Signature': signature ?? stripeSignature( body, secret ), ...headers },
+		body,
+		time,
+	} );
+
+}
+
+describe( 'World Drive Supporter Pass', () => {
+
+	let server;
+	let keys;
+	let googleKey;
+	let otherKey;
+	let alice;
+	const addresses = [];
+	const nextIp = () => {
+
+		const ip = `198.19.${ Math.floor( addresses.length / 200 ) }.${ addresses.length % 200 + 1 }`;
+		addresses.push( ip );
+		return ip;
+
+	};
+
+	before( async () => {
+
+		googleKey = await makeKey( 'drive-test-key-1' );
+		// Not in the key set, with the same id: tokens signed with it are forgeries.
+		otherKey = await makeKey( 'drive-test-key-1' );
+		keys = await serveKeys( [ googleKey.jwk ] );
+		server = await startWorker( {
+			port: PORT + 3,
+			config: 'wrangler.drive.jsonc',
+			vars: {
+				GOOGLE_MAPS_API_KEY: MAPS_KEY,
+				TURNSTILE_SECRET: PASS_SECRET,
+				TURNSTILE_SITE_KEY: '1x00000000000000000000AA',
+				TURNSTILE_VERIFY_URL: `${ upstreamBase }/siteverify`,
+				SEARCH_UPSTREAM: `${ upstreamBase }/search`,
+				TEST_CLOCK: 'header',
+				DAILY_VISITS: '1000',
+				GOOGLE_CLIENT_ID: CLIENT_ID,
+				GOOGLE_JWKS_URL: keys.url,
+				SUPPORTER_PAYMENT_LINK: PASS_LINK,
+				STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET,
+				SUPPORTER_EMAILS: ' Friend@Example.com, ',
+				// PER_VISITOR_DAILY (8), PER_VISITOR_DAILY_SUPPORTER (30) and SUPPORTER_PRICE ("CA$4.99")
+				// are wrangler.drive.jsonc's, and SUPPORTER_PAYMENT_LINK_ID isn't set: the account is
+				// World Drive's own, so any paid checkout on it counts.
+			},
+		} );
+
+	} );
+
+	after( () => {
+
+		server?.stop();
+		keys?.close();
+
+	} );
+
+	// A request as the page makes it: JSON, from the site itself, with this browser's cookie.
+	const send = ( method, path, body, { cookie, ip = nextIp(), time = PASS_DAY, headers = {} } = {} ) => call( server, path, {
+		method,
+		headers: { Origin: server.base, 'Content-Type': 'application/json', ...( cookie ? { Cookie: cookie } : {} ), ...headers },
+		body: body === undefined ? undefined : JSON.stringify( body ),
+		ip,
+		time,
+	} );
+	const me = ( cookie, time = PASS_DAY ) => call( server, '/api/me', { headers: cookie ? { Cookie: cookie } : {}, time } );
+
+	// Signs in with an ID token for `claims` (or `credential` as given): the answer, and the cookie
+	// to send back.
+	async function signIn( claims = {}, { credential, key = googleKey, cookie } = {} ) {
+
+		const res = await send( 'POST', '/api/session', { credential: credential ?? await makeToken( key, claims ) }, { cookie } );
+		const token = /^__Host-wd_session=([\w-]{43});/.exec( res.headers.get( 'Set-Cookie' ) ?? '' )?.[ 1 ];
+		return { ...res, token, cookie: token ? `__Host-wd_session=${ token }` : null };
+
+	}
+
+	// A leaderboard player with a visit of its own, and a run of `score` on the board at Furka Pass.
+	async function player( name, score ) {
+
+		const ip = nextIp();
+		const visited = await call( server, '/api/visit', { method: 'POST', headers: { Origin: server.base, 'Content-Type': 'application/json' }, body: JSON.stringify( { token: TOKEN } ), ip, time: PASS_DAY } );
+		assert.equal( visited.status, 200, visited.text );
+		const made = await send( 'POST', '/api/player', { name, visit: visited.json.visit }, { ip } );
+		assert.equal( made.status, 201, made.text );
+		const run = { id: made.json.id, secret: made.json.secret, score, tricks: 'Backflip!', place: 'Furka Pass', vehicle: 'go-kart', airTime: 1.2, runSeconds: 60, visit: visited.json.visit };
+		const posted = await send( 'POST', '/api/score', run, { ip, time: PASS_DAY + 60 * SECOND } );
+		assert.equal( posted.status, 200, posted.text );
+		return made.json;
+
+	}
+
+	const board = ( query, time = PASS_DAY + HOUR ) => call( server, `/api/leaderboard?${ new URLSearchParams( query ) }`, { time } );
+
+	test( 'signed out, /api/me says so, and how to buy', async () => {
+
+		const res = await me();
+		assert.equal( res.status, 200 );
+		assert.equal( res.headers.get( 'Cache-Control' ), 'no-store' );
+		assert.deepEqual( res.json, { signedIn: false, supporter: false, purchase: { enabled: true, link: PASS_LINK, price: 'CA$4.99' } } );
+		assert.equal( ( await call( server, '/api/config' ) ).json.googleClientId, CLIENT_ID );
+
+	} );
+
+	test( 'signing in: a session cookie, HttpOnly and SameSite=Lax, and /api/me signed in', async () => {
+
+		alice = await signIn();
+		assert.equal( alice.status, 200, alice.text );
+		// wrangler dev hands the Worker every request as one to https://worlddrive.app (the route in
+		// wrangler.drive.jsonc), so the cookie is as it is there: Secure, and __Host- (this exact host,
+		// the whole site, never from http or another site).
+		assert.equal( alice.headers.get( 'Set-Cookie' ), `__Host-wd_session=${ alice.token }; Max-Age=2592000; Path=/; HttpOnly; SameSite=Lax; Secure` );
+		const [ account ] = server.d1( 'SELECT id, google_sub, email, name FROM accounts WHERE google_sub = \'1001\'' );
+		assert.deepEqual( alice.json, { signedIn: true, name: 'Alice Example', email: 'alice@example.com', supporter: false, purchase: { enabled: true, link: PASS_LINK, price: 'CA$4.99', clientReferenceId: String( account.id ) } } );
+		alice.id = account.id;
+		assert.deepEqual( ( await me( alice.cookie ) ).json, alice.json );
+		// Only the token's SHA-256 is kept.
+		const [ session ] = server.d1( `SELECT token_hash, account_id, expires_at - created_at AS lasts FROM sessions WHERE account_id = ${ account.id }` );
+		assert.deepEqual( session, { token_hash: createHash( 'sha256' ).update( alice.token ).digest( 'hex' ), account_id: account.id, lasts: 30 * DAY } );
+
+	} );
+
+	test( 'sign-in turns away a token for another site, expired, forged or not one at all', async () => {
+
+		const now = Math.floor( Date.now() / 1000 );
+		const bad = {
+			'wrong audience': await makeToken( googleKey, { aud: 'someone-else.apps.googleusercontent.com' } ),
+			'expired': await makeToken( googleKey, { iat: now - 7200, exp: now - 3600 } ),
+			'forged signature': await makeToken( otherKey ),
+			'not from Google': await makeToken( googleKey, { iss: 'https://accounts.example.com' } ),
+			'unverified email': await makeToken( googleKey, { email_verified: false } ),
+			'changed after signing': ( await makeToken( googleKey ) ).replace( /\.([^.]+)\./, ( m, claims ) => `.${ Buffer.from( JSON.stringify( { ...JSON.parse( Buffer.from( claims, 'base64url' ) ), sub: '1002' } ) ).toString( 'base64url' ) }.` ),
+			'not a token': 'nope',
+		};
+		for ( const [ why, credential ] of Object.entries( bad ) ) {
+
+			const res = await signIn( {}, { credential } );
+			assert.equal( res.status, 401, why );
+			assert.deepEqual( res.json, { error: 'Sign-in failed' }, why );
+			assert.equal( res.headers.get( 'Set-Cookie' ), null, why );
+
+		}
+
+		assert.equal( ( await send( 'POST', '/api/session', [] ) ).status, 400 );
+		assert.equal( ( await send( 'POST', '/api/session', {} ) ).status, 401 );
+		assert.equal( server.d1( 'SELECT COUNT(*) AS n FROM accounts' )[ 0 ].n, 1, 'an account was made from a bad token' );
+
+	} );
+
+	test( 'a session lasts 30 days, and signing out ends it', async () => {
+
+		assert.equal( ( await me( alice.cookie, PASS_DAY + 29 * DAY ) ).json.signedIn, true );
+		assert.equal( ( await me( alice.cookie, PASS_DAY + 31 * DAY ) ).json.signedIn, false );
+		// A cookie that isn't one of ours, or isn't the shape they're made in, is nobody.
+		assert.equal( ( await me( `__Host-wd_session=${ 'x'.repeat( 43 ) }` ) ).json.signedIn, false );
+		assert.equal( ( await me( `__Host-wd_session=${ alice.token }x` ) ).json.signedIn, false );
+		assert.equal( ( await me( `wd_session=${ alice.token }` ) ).json.signedIn, false );
+		assert.equal( ( await me( `__Host-twin_session=${ alice.token }` ) ).json.signedIn, false );
+		assert.equal( ( await me( `theme=dark; __Host-wd_session=${ alice.token }` ) ).json.signedIn, true );
+
+		const other = await signIn();
+		const out = await send( 'DELETE', '/api/session', undefined, { cookie: other.cookie } );
+		assert.equal( out.status, 204 );
+		assert.equal( out.headers.get( 'Set-Cookie' ), '__Host-wd_session=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax; Secure' );
+		assert.equal( ( await me( other.cookie ) ).json.signedIn, false );
+		// Only that browser's: Alice's first session goes on.
+		assert.equal( ( await me( alice.cookie ) ).json.signedIn, true );
+		const get = await call( server, '/api/session' );
+		assert.equal( get.status, 405 );
+		assert.equal( get.headers.get( 'Allow' ), 'POST, DELETE' );
+
+	} );
+
+	test( 'only Stripe\'s webhook goes without the same-origin and JSON checks', async () => {
+
+		const changes = [ [ 'POST', '/api/visit' ], [ 'POST', '/api/player' ], [ 'POST', '/api/player/rename' ], [ 'POST', '/api/player/link' ], [ 'POST', '/api/score' ], [ 'POST', '/api/session' ], [ 'DELETE', '/api/session' ] ];
+		for ( const [ method, path ] of changes ) {
+
+			const body = JSON.stringify( { credential: 'x', token: TOKEN } );
+			const headers = { Cookie: alice.cookie };
+			assert.equal( ( await call( server, path, { method, body, headers: { ...headers, 'Content-Type': 'application/json' } } ) ).status, 403, `${ method } ${ path } with no Origin` );
+			assert.equal( ( await call( server, path, { method, body, headers: { ...headers, 'Content-Type': 'application/json', Origin: 'https://evil.example' } } ) ).status, 403, `${ method } ${ path } from another site` );
+			assert.equal( ( await call( server, path, { method, body, headers: { ...headers, 'Content-Type': 'text/plain', Origin: server.base } } ) ).status, 415, `${ method } ${ path } as a form` );
+			assert.equal( ( await call( server, path, { method, body, headers: { ...headers, 'Content-Type': 'application/json', Origin: server.base, 'Sec-Fetch-Site': 'cross-site' } } ) ).status, 403, `${ method } ${ path } cross-site` );
+
+		}
+
+		assert.equal( ( await me( alice.cookie ) ).json.signedIn, true, 'a cross-site request signed Alice out' );
+		// The webhook, signed, with no Origin (and even marked cross-site): taken.
+		assert.equal( ( await webhook( server, { id: 'evt_hello', type: 'customer.created', data: { object: {} } } ) ).status, 200 );
+		assert.equal( ( await webhook( server, { id: 'evt_hello', type: 'customer.created', data: { object: {} } }, { headers: { 'Sec-Fetch-Site': 'cross-site', 'Content-Type': 'text/plain' } } ) ).status, 200 );
+
+	} );
+
+	test( 'the webhook takes only what Stripe signed, in the last five minutes', async () => {
+
+		const event = JSON.stringify( checkout( 'forged', { reference: String( alice.id ) } ) );
+		const now = Math.floor( Date.now() / 1000 );
+		const bad = {
+			'no signature': '',
+			'wrong secret': stripeSignature( event, 'whsec_someone_elses_secret' ),
+			'stale': stripeSignature( event, WEBHOOK_SECRET, now - 360 ),
+			'from the future': stripeSignature( event, WEBHOOK_SECRET, now + 360 ),
+			'not hex': `t=${ now },v1=${ 'z'.repeat( 64 ) }`,
+			'no time': stripeSignature( event, WEBHOOK_SECRET ).split( ',' )[ 1 ],
+		};
+		for ( const [ why, signature ] of Object.entries( bad ) ) {
+
+			const res = await webhook( server, event, { signature } );
+			assert.equal( res.status, 400, why );
+			assert.deepEqual( res.json, { error: 'Bad request' }, why );
+
+		}
+
+		// Signed, then changed.
+		assert.equal( ( await webhook( server, event.replace( 'alice@', 'mallory@' ), { signature: stripeSignature( event, WEBHOOK_SECRET ) } ) ).status, 400 );
+		// While a secret is being rolled there are two v1s: either may match.
+		const hello = '{"id":"evt_rolled","type":"customer.created"}';
+		const ours = stripeSignature( hello, WEBHOOK_SECRET, now ).split( 'v1=' )[ 1 ];
+		const theirs = stripeSignature( hello, 'whsec_the_old_one', now ).split( 'v1=' )[ 1 ];
+		assert.equal( ( await webhook( server, hello, { signature: `t=${ now },v1=${ theirs },v1=${ ours }` } ) ).status, 200 );
+		assert.equal( ( await webhook( server, hello, { signature: `t=${ now },v1=${ ours },v1=${ theirs }` } ) ).status, 200 );
+		// Signed but not an event.
+		assert.equal( ( await webhook( server, '{nope' ) ).status, 400 );
+		assert.equal( ( await webhook( server, '[1,2]' ) ).status, 400 );
+		// Too big to be one of Stripe's.
+		const huge = JSON.stringify( { id: 'evt_big', type: 'customer.created', padding: 'x'.repeat( 300 * 1024 ) } );
+		assert.equal( ( await webhook( server, huge ) ).status, 413 );
+		assert.equal( ( await me( alice.cookie ) ).json.supporter, false );
+		assert.equal( server.d1( 'SELECT COUNT(*) AS n FROM purchases' )[ 0 ].n, 0 );
+
+	} );
+
+	test( 'a paid checkout gives the account named on the link the pass, once', async () => {
+
+		const event = checkout( 'alice', { reference: String( alice.id ) } );
+		const res = await webhook( server, event );
+		assert.equal( res.status, 200 );
+		assert.deepEqual( res.json, { received: true } );
+		assert.equal( ( await me( alice.cookie ) ).json.supporter, true );
+		// The same event again (Stripe retries until it hears 200), and the same session once more.
+		assert.equal( ( await webhook( server, event ) ).status, 200 );
+		assert.equal( ( await webhook( server, { ...event, id: 'evt_alice_again', type: 'checkout.session.async_payment_succeeded' } ) ).status, 200 );
+		assert.deepEqual( server.d1( 'SELECT checkout_session, account_id, email, amount, currency, payment_intent, status, created_at, refunded_at FROM purchases' ), [
+			{ checkout_session: 'cs_test_alice', account_id: alice.id, email: 'alice@example.com', amount: 499, currency: 'cad', payment_intent: 'pi_alice', status: 'paid', created_at: PASS_DAY, refunded_at: null },
+		] );
+
+	} );
+
+	test( 'paying by bank debit: nothing until the money arrives, then the pass', async () => {
+
+		const carol = await signIn( { sub: '1003', email: 'carol@example.com', name: 'Carol' } );
+		const reference = carol.json.purchase.clientReferenceId;
+		assert.equal( ( await webhook( server, checkout( 'carol', { reference, email: 'carol@example.com', paid: false } ) ) ).status, 200 );
+		assert.equal( ( await me( carol.cookie ) ).json.supporter, false );
+		assert.equal( ( await webhook( server, checkout( 'carol', { reference, email: 'carol@example.com', type: 'checkout.session.async_payment_succeeded' } ) ) ).status, 200 );
+		assert.equal( ( await me( carol.cookie ) ).json.supporter, true );
+
+	} );
+
+	test( 'bought before signing in: whoever then signs in with the email paid with has it', async () => {
+
+		// No account named (the bare link), and one that doesn't exist: both are the email's.
+		assert.equal( ( await webhook( server, checkout( 'bob', { email: 'Bob@Example.com ' } ) ) ).status, 200 );
+		assert.equal( ( await webhook( server, checkout( 'dan', { reference: '987654', email: 'dan@example.com' } ) ) ).status, 200 );
+		assert.deepEqual( server.d1( 'SELECT checkout_session, account_id, email FROM purchases WHERE checkout_session IN ( \'cs_test_bob\', \'cs_test_dan\' ) ORDER BY 1' ), [
+			{ checkout_session: 'cs_test_bob', account_id: null, email: 'bob@example.com' },
+			{ checkout_session: 'cs_test_dan', account_id: null, email: 'dan@example.com' },
+		] );
+		const bob = await signIn( { sub: '1004', email: 'BOB@example.com', name: 'Bob' } );
+		assert.equal( bob.json.supporter, true );
+		assert.equal( ( await signIn( { sub: '1005', email: 'eve@example.com', name: 'Eve' } ) ).json.supporter, false );
+
+	} );
+
+	test( 'a full refund takes the pass away again; a partial one doesn\'t', async () => {
+
+		const carol = await signIn( { sub: '1003', email: 'carol@example.com', name: 'Carol' } );
+		assert.equal( ( await webhook( server, refund( 'carol', { full: false } ) ) ).status, 200 );
+		assert.equal( ( await me( carol.cookie ) ).json.supporter, true );
+		assert.equal( ( await webhook( server, refund( 'carol' ) ) ).status, 200 );
+		assert.equal( ( await me( carol.cookie ) ).json.supporter, false );
+		const [ row ] = server.d1( 'SELECT status, refunded_at FROM purchases WHERE checkout_session = \'cs_test_carol\'' );
+		assert.deepEqual( row, { status: 'refunded', refunded_at: PASS_DAY } );
+		// A refund of something else changes nothing.
+		assert.equal( ( await webhook( server, refund( 'unknown' ) ) ).status, 200 );
+		assert.equal( ( await me( alice.cookie ) ).json.supporter, true );
+
+	} );
+
+	test( 'SUPPORTER_EMAILS have the pass without paying, whatever the case', async () => {
+
+		const friend = await signIn( { sub: '1006', email: 'friend@example.com', name: 'A Friend' } );
+		assert.equal( friend.json.supporter, true );
+		assert.equal( server.d1( 'SELECT COUNT(*) AS n FROM purchases WHERE email = \'friend@example.com\'' )[ 0 ].n, 0 );
+
+	} );
+
+	test( 'a supporter gets 30 drives a day, counted by their account; anyone else 8, by their address', async () => {
+
+		const ip = nextIp();
+		const drive = ( cookie, time = PASS_DAY ) => call( server, '/api/visit', { method: 'POST', headers: { Origin: server.base, 'Content-Type': 'application/json', ...( cookie ? { Cookie: cookie } : {} ) }, body: JSON.stringify( { token: TOKEN } ), ip, time } );
+		// Alice has the pass: 30, all from one address.
+		for ( let i = 1; i <= 30; i ++ ) {
+
+			const res = await drive( alice.cookie );
+			assert.equal( res.status, 200, `drive ${ i }: ${ res.text }` );
+			assert.equal( res.json.left, 30 - i );
+
+		}
+
+		const over = await drive( alice.cookie );
+		assert.equal( over.status, 429 );
+		assert.equal( over.json.reason, 'visitor' );
+		// The address's own 8 are all still there, for anyone not signed in; and for someone signed
+		// in without the pass (Carol, refunded), it's the address that counts.
+		const carol = await signIn( { sub: '1003', email: 'carol@example.com', name: 'Carol' } );
+		assert.equal( ( await drive() ).json.left, 7 );
+		for ( let i = 6; i >= 0; i -- ) assert.equal( ( await drive( carol.cookie ) ).json.left, i );
+		assert.equal( ( await drive( carol.cookie ) ).status, 429 );
+		assert.equal( ( await drive() ).status, 429 );
+		// The next day, Alice's 30 again.
+		assert.equal( ( await drive( alice.cookie, PASS_DAY + DAY ) ).json.left, 29 );
+		// Counted as a hash, like an address: the account's id isn't stored either.
+		assert.ok( ! listFiles( server.state ).some( file => readFileSync( file ).toString( 'latin1' ).includes( `account:${ alice.id }` ) ) );
+
+	} );
+
+	test( 'linking a leaderboard player puts a ⭐ by its name for a supporter, and only then', async () => {
+
+		const starred = await player( 'Star Driver', 9000 );
+		const plain = await player( 'Plain Driver', 8000 );
+		const eve = await player( 'Eve Drives', 7000 );
+		// Signed out, the wrong secret, a player that doesn't exist: refused.
+		assert.equal( ( await send( 'POST', '/api/player/link', { id: starred.id, secret: starred.secret } ) ).status, 401 );
+		assert.equal( ( await send( 'POST', '/api/player/link', { id: starred.id, secret: 'W'.repeat( 32 ) }, { cookie: alice.cookie } ) ).status, 403 );
+		assert.equal( ( await send( 'POST', '/api/player/link', { id: 'Q'.repeat( 16 ), secret: starred.secret }, { cookie: alice.cookie } ) ).status, 403 );
+		assert.equal( ( await send( 'POST', '/api/player/link', { id: starred.id }, { cookie: alice.cookie } ) ).status, 400 );
+
+		// The board, before: kept for half a minute, and linking clears it.
+		assert.ok( ( await board( { period: 'all' } ) ).json.rows.every( row => ! ( 'supporter' in row ) ) );
+		const linked = await send( 'POST', '/api/player/link', { id: starred.id, secret: starred.secret }, { cookie: alice.cookie } );
+		assert.equal( linked.status, 200 );
+		assert.deepEqual( linked.json, { id: starred.id, name: 'Star Driver' } );
+		const eveAccount = await signIn( { sub: '1005', email: 'eve@example.com', name: 'Eve' } );
+		assert.equal( ( await send( 'POST', '/api/player/link', { id: eve.id, secret: eve.secret }, { cookie: eveAccount.cookie } ) ).status, 200 );
+
+		const { json } = await board( { period: 'all', id: starred.id } );
+		const shown = Object.fromEntries( json.rows.map( row => [ row.name, row.supporter ?? false ] ) );
+		assert.deepEqual( shown, { 'Star Driver': true, 'Plain Driver': false, 'Eve Drives': false } );
+		assert.deepEqual( json.rows[ 0 ], { rank: 1, name: 'Star Driver', score: 9000, tricks: 'Backflip!', place: 'Furka Pass', vehicle: 'go-kart', airTime: 1.2, date: '2026-11-03', supporter: true } );
+		assert.equal( json.me.supporter, true );
+		// The board of one place, too.
+		assert.equal( ( await board( { period: 'all', place: 'Furka Pass' } ) ).json.rows.find( row => row.name === 'Star Driver' ).supporter, true );
+		// A friend in SUPPORTER_EMAILS stars as well.
+		const friend = await signIn( { sub: '1006', email: 'friend@example.com', name: 'A Friend' } );
+		assert.equal( ( await send( 'POST', '/api/player/link', { id: plain.id, secret: plain.secret }, { cookie: friend.cookie } ) ).status, 200 );
+		assert.equal( ( await board( { period: 'today' } ) ).json.rows.find( row => row.name === 'Plain Driver' ).supporter, true );
+
+		// A refund takes it away: on a board made after it.
+		assert.equal( ( await webhook( server, refund( 'alice' ) ) ).status, 200 );
+		assert.equal( ( await board( { period: 'week' } ) ).json.rows.find( row => row.name === 'Star Driver' ).supporter, undefined );
+
+	} );
+
+	test( 'the purchases kept are only what Stripe sent', async () => {
+
+		const sessions = server.d1( 'SELECT checkout_session FROM purchases ORDER BY 1' ).map( row => row.checkout_session );
+		assert.deepEqual( sessions, [ 'cs_test_alice', 'cs_test_bob', 'cs_test_carol', 'cs_test_dan' ] );
+
+	} );
+
+	test( 'the owner\'s SQL in docs/world-drive.md grants and takes away a pass by hand', async () => {
+
+		const eve = await signIn( { sub: '1005', email: 'eve@example.com', name: 'Eve' } );
+		assert.equal( eve.json.supporter, false );
+		// As written there: someone looked up, given the pass, and then not.
+		const lookUp = () => server.d1( `SELECT a.id, a.email, a.name, p.checkout_session, p.status, p.refunded_at FROM accounts a
+			LEFT JOIN purchases p ON p.account_id = a.id OR ( p.account_id IS NULL AND p.email = a.email ) WHERE a.email LIKE '%eve@%'` );
+		assert.deepEqual( lookUp().map( row => [ row.email, row.checkout_session ] ), [ [ 'eve@example.com', null ] ] );
+		server.d1( 'INSERT INTO purchases ( checkout_session, email, status, created_at ) VALUES ( \'granted-eve\', \'eve@example.com\', \'granted\', strftime( \'%s\', \'now\' ) * 1000 )' );
+		assert.equal( ( await me( eve.cookie ) ).json.supporter, true );
+		assert.deepEqual( lookUp().map( row => [ row.checkout_session, row.status, row.refunded_at ] ), [ [ 'granted-eve', 'granted', null ] ] );
+		server.d1( 'UPDATE purchases SET status = \'refunded\', refunded_at = strftime( \'%s\', \'now\' ) * 1000 WHERE checkout_session = \'granted-eve\'' );
+		assert.equal( ( await me( eve.cookie ) ).json.supporter, false );
+		assert.equal( lookUp()[ 0 ].status, 'refunded' );
+		assert.ok( lookUp()[ 0 ].refunded_at > Date.UTC( 2026, 0, 1 ) );
+
+	} );
+
+} );
+
+// The webhook keeps payments whether or not buying is on, and with SUPPORTER_PAYMENT_LINK_ID set
+// takes only that link's.
+describe( 'World Drive Supporter Pass, with a link id and no sign-in', () => {
+
+	let server;
+
+	before( async () => {
+
+		server = await startWorker( {
+			port: PORT + 4,
+			config: 'wrangler.drive.jsonc',
+			vars: {
+				GOOGLE_MAPS_API_KEY: MAPS_KEY,
+				TURNSTILE_SECRET: PASS_SECRET,
+				TURNSTILE_VERIFY_URL: `${ upstreamBase }/siteverify`,
+				STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET,
+				SUPPORTER_PAYMENT_LINK_ID: PASS_LINK_ID,
+			},
+		} );
+
+	} );
+
+	after( () => server?.stop() );
+
+	test( 'without GOOGLE_CLIENT_ID there\'s no signing in, and no buying', async () => {
+
+		assert.deepEqual( ( await call( server, '/api/me' ) ).json, { signedIn: false, supporter: false, purchase: { enabled: false } } );
+		assert.equal( ( await call( server, '/api/config' ) ).json.googleClientId, '' );
+		const res = await call( server, '/api/session', { method: 'POST', headers: { Origin: server.base, 'Content-Type': 'application/json' }, body: '{"credential":"x"}' } );
+		assert.equal( res.status, 503 );
+		assert.equal( res.headers.get( 'Set-Cookie' ), null );
+
+	} );
+
+	test( 'only checkouts through SUPPORTER_PAYMENT_LINK_ID count', async () => {
+
+		assert.equal( ( await webhook( server, checkout( 'elsewhere', { link: 'plink_1SomeOtherLink' } ) ) ).status, 200 );
+		assert.equal( ( await webhook( server, checkout( 'nolink', { link: null } ) ) ).status, 200 );
+		assert.equal( ( await webhook( server, checkout( 'ours' ) ) ).status, 200 );
+		assert.deepEqual( server.d1( 'SELECT checkout_session FROM purchases' ).map( row => row.checkout_session ), [ 'cs_test_ours' ] );
+
+	} );
+
+} );
+
+describe( 'The Supporter Pass\'s settings', () => {
+
+	const full = { GOOGLE_CLIENT_ID: CLIENT_ID, SUPPORTER_PAYMENT_LINK: PASS_LINK, STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET, SUPPORTER_PRICE: ' CA$4.99 ' };
+
+	test( 'buying is on only with the client id, an https link and a whsec_ secret (and a plink_ id, if any)', () => {
+
+		assert.deepEqual( purchaseSettings( full ), { link: PASS_LINK, price: 'CA$4.99' } );
+		assert.deepEqual( purchaseSettings( { ...full, SUPPORTER_PAYMENT_LINK_ID: PASS_LINK_ID } ), { link: PASS_LINK, price: 'CA$4.99' } );
+		const off = {
+			'no client id': { GOOGLE_CLIENT_ID: ' ' },
+			'no link': { SUPPORTER_PAYMENT_LINK: '' },
+			'a link that isn\'t https': { SUPPORTER_PAYMENT_LINK: 'http://buy.stripe.com/test_x' },
+			'not a link': { SUPPORTER_PAYMENT_LINK: 'buy.stripe.com' },
+			'no secret': { STRIPE_WEBHOOK_SECRET: undefined },
+			'an API key for the secret': { STRIPE_WEBHOOK_SECRET: 'sk_live_made_up' },
+			'a link id that isn\'t one': { SUPPORTER_PAYMENT_LINK_ID: 'https://buy.stripe.com/x' },
+		};
+		for ( const [ why, change ] of Object.entries( off ) ) assert.equal( purchaseSettings( { ...full, ...change } ), null, why );
+		assert.deepEqual( purchaseFor( { ...full, STRIPE_WEBHOOK_SECRET: '' }, { id: 7 } ), { enabled: false } );
+		assert.deepEqual( purchaseFor( full, { id: 7 } ), { enabled: true, link: PASS_LINK, price: 'CA$4.99', clientReferenceId: '7' } );
+
+	} );
+
+	test( 'the session cookie is Secure, __Host- and the whole site\'s on https', () => {
+
+		const cookies = sessionCookies( 'wd_session' );
+		const token = 'T'.repeat( 43 );
+		const site = new URL( 'https://worlddrive.app/api/session' );
+		assert.equal( cookies.write( site, token, 60 ), `__Host-wd_session=${ token }; Max-Age=60; Path=/; HttpOnly; SameSite=Lax; Secure` );
+		const ask = cookie => cookies.read( new Request( site, { headers: { Cookie: cookie } } ), site );
+		assert.equal( ask( `__Host-wd_session=${ token }` ), token );
+		// Without the prefix it could have been set by another site on a sub-domain, or over http.
+		assert.equal( ask( `wd_session=${ token }` ), null );
+		assert.equal( ask( `__Host-twin_session=${ token }` ), null );
+		assert.equal( ask( `__Host-wd_session=${ token }x` ), null );
+		// Plain http only on this machine, for local development.
+		assert.equal( cookies.write( new URL( 'http://127.0.0.1:8790/' ), token, 60 ), `wd_session=${ token }; Max-Age=60; Path=/; HttpOnly; SameSite=Lax` );
+		assert.equal( cookies.write( new URL( 'http://worlddrive.app/' ), token, 60 ), `__Host-wd_session=${ token }; Max-Age=60; Path=/; HttpOnly; SameSite=Lax; Secure` );
+
+	} );
+
+} );
+
 // --- the Worker called here ------------------------------------------------------------
 
 // wrangler dev always addresses requests to itself, so www.worlddrive.app is checked by calling the
@@ -1085,7 +1621,7 @@ describe( 'World Drive Worker with the key set as Google_maps_api', () => {
 				LIMITS: { idFromName: id => id, get: () => limits },
 			};
 			const config = await worker.fetch( new Request( 'https://worlddrive.app/api/config' ), env, {} );
-			assert.deepEqual( await config.json(), { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true }, name );
+			assert.deepEqual( await config.json(), { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true, googleClientId: '' }, name );
 
 			const failed = await ask( { ...env, TURNSTILE_SECRET: FAIL_SECRET }, '198.51.100.30' );
 			assert.equal( failed.status, 403, name );

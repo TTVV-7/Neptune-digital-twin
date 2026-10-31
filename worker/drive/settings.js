@@ -1,10 +1,18 @@
-// Small helpers the World Drive Worker's routes share: its number settings and its clock.
+// Small helpers the World Drive Worker's routes share: its settings and its clock.
 
 // A whole number setting of 0 or more, or `fallback` when it's unset or isn't one.
 export function setting( value, fallback ) {
 
 	const n = Number( value );
 	return value !== undefined && value !== '' && Number.isInteger( n ) && n >= 0 ? n : fallback;
+
+}
+
+// The OAuth client id of the "Sign in with Google" button (GOOGLE_CLIENT_ID, public), or '' when
+// it isn't set: then there's no signing in, and no buying the Supporter Pass (accounts.js).
+export function googleClientId( env ) {
+
+	return typeof env.GOOGLE_CLIENT_ID === 'string' ? env.GOOGLE_CLIENT_ID.trim() : '';
 
 }
 
