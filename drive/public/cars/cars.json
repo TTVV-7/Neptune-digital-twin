@@ -1,0 +1,394 @@
+[
+	{
+		"id": "dune-buggy",
+		"file": "dune-buggy.glb",
+		"thumb": "thumbs/dune-buggy.webp",
+		"dimensions": {
+			"length": 3.5,
+			"width": 3.1,
+			"height": 1.69
+		},
+		"wheels": [
+			{
+				"name": "wheel-rear-left",
+				"at": [
+					-1.1,
+					0.44,
+					1.17
+				],
+				"radius": 0.44,
+				"steers": false
+			},
+			{
+				"name": "wheel-front-left",
+				"at": [
+					-1.42,
+					0.44,
+					-1.08
+				],
+				"radius": 0.44,
+				"steers": true
+			},
+			{
+				"name": "wheel-rear-right",
+				"at": [
+					1.1,
+					0.44,
+					1.17
+				],
+				"radius": 0.44,
+				"steers": false
+			},
+			{
+				"name": "wheel-front-right",
+				"at": [
+					1.42,
+					0.44,
+					-1.08
+				],
+				"radius": 0.44,
+				"steers": true
+			}
+		],
+		"paintable": false,
+		"triangles": 29282,
+		"sizeKB": 1054,
+		"source": {
+			"site": "Sketchfab",
+			"id": "c9838cac69904010923d5024168b0893",
+			"url": "https://sketchfab.com/3d-models/dune-buggy-jump-c9838cac69904010923d5024168b0893",
+			"title": "Dune Buggy \"jump\"",
+			"author": "XP_Frost",
+			"authorUrl": "https://sketchfab.com/XP_Frost",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "farm-truck",
+		"file": "farm-truck.glb",
+		"thumb": "thumbs/farm-truck.webp",
+		"dimensions": {
+			"length": 5,
+			"width": 2.25,
+			"height": 2.81
+		},
+		"wheels": [
+			{
+				"name": "wheel-rear-left",
+				"at": [
+					-0.87,
+					0.44,
+					1.4
+				],
+				"radius": 0.44,
+				"steers": false
+			},
+			{
+				"name": "wheel-rear-right",
+				"at": [
+					0.88,
+					0.44,
+					1.4
+				],
+				"radius": 0.44,
+				"steers": false
+			},
+			{
+				"name": "wheel-front-left",
+				"at": [
+					-0.92,
+					0.43,
+					-1.55
+				],
+				"radius": 0.42,
+				"steers": true
+			},
+			{
+				"name": "wheel-front-right",
+				"at": [
+					0.92,
+					0.43,
+					-1.55
+				],
+				"radius": 0.42,
+				"steers": true
+			}
+		],
+		"paintable": false,
+		"triangles": 5433,
+		"sizeKB": 139,
+		"source": {
+			"site": "Sketchfab",
+			"id": "5615b16ba2e24f7ab6cd26eda7946ae8",
+			"url": "https://sketchfab.com/3d-models/farm-pickup-truck-5615b16ba2e24f7ab6cd26eda7946ae8",
+			"title": "Farm pickup truck",
+			"author": "Nekitron",
+			"authorUrl": "https://sketchfab.com/nikita.nt.1998",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "muscle-car",
+		"file": "muscle-car.glb",
+		"thumb": "thumbs/muscle-car.webp",
+		"dimensions": {
+			"length": 4.7,
+			"width": 2.11,
+			"height": 1.39
+		},
+		"wheels": [
+			{
+				"name": "wheel-rear-left",
+				"at": [
+					-0.75,
+					0.36,
+					1.31
+				],
+				"radius": 0.32,
+				"steers": false
+			},
+			{
+				"name": "wheel-rear-right",
+				"at": [
+					0.75,
+					0.36,
+					1.31
+				],
+				"radius": 0.32,
+				"steers": false
+			},
+			{
+				"name": "wheel-front-right",
+				"at": [
+					0.78,
+					0.32,
+					-1.35
+				],
+				"radius": 0.32,
+				"steers": true
+			},
+			{
+				"name": "wheel-front-left",
+				"at": [
+					-0.78,
+					0.32,
+					-1.35
+				],
+				"radius": 0.32,
+				"steers": true
+			}
+		],
+		"paintable": true,
+		"plainLamps": true,
+		"triangles": 5498,
+		"sizeKB": 72,
+		"source": {
+			"site": "Sketchfab",
+			"id": "641efc889e5f4543bae51d0922e6f4b3",
+			"url": "https://sketchfab.com/3d-models/classic-muscle-car-641efc889e5f4543bae51d0922e6f4b3",
+			"title": "Classic Muscle car",
+			"author": "Lexyc16",
+			"authorUrl": "https://sketchfab.com/Lexyc16",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "neon-racer",
+		"file": "neon-racer.glb",
+		"thumb": "thumbs/neon-racer.webp",
+		"dimensions": {
+			"length": 4.3,
+			"width": 2.34,
+			"height": 1.77
+		},
+		"wheels": [
+			{
+				"name": "wheel-front-left",
+				"at": [
+					-0.84,
+					0.43,
+					-1.23
+				],
+				"radius": 0.43,
+				"steers": true
+			},
+			{
+				"name": "wheel-rear-left",
+				"at": [
+					-0.84,
+					0.43,
+					1.02
+				],
+				"radius": 0.43,
+				"steers": false
+			},
+			{
+				"name": "wheel-front-right",
+				"at": [
+					0.87,
+					0.43,
+					-1.23
+				],
+				"radius": 0.43,
+				"steers": true
+			},
+			{
+				"name": "wheel-rear-right",
+				"at": [
+					0.87,
+					0.43,
+					1.02
+				],
+				"radius": 0.43,
+				"steers": false
+			}
+		],
+		"paintable": false,
+		"triangles": 27010,
+		"sizeKB": 805,
+		"source": {
+			"site": "Sketchfab",
+			"id": "34f1a7734d474b34a8291f613a581ccb",
+			"url": "https://sketchfab.com/3d-models/green-bug-stylized-scifi-car-free-34f1a7734d474b34a8291f613a581ccb",
+			"title": "Green Bug Stylized Scifi Car Free",
+			"author": "ferofluid",
+			"authorUrl": "https://sketchfab.com/ferofluid",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "night-cruiser",
+		"file": "night-cruiser.glb",
+		"thumb": "thumbs/night-cruiser.webp",
+		"dimensions": {
+			"length": 4.6,
+			"width": 2.07,
+			"height": 1.7
+		},
+		"wheels": [
+			{
+				"name": "wheel-front-left",
+				"at": [
+					-0.86,
+					0.32,
+					-1.19
+				],
+				"radius": 0.32,
+				"steers": true
+			},
+			{
+				"name": "wheel-front-right",
+				"at": [
+					0.86,
+					0.32,
+					-1.19
+				],
+				"radius": 0.32,
+				"steers": true
+			},
+			{
+				"name": "wheel-rear-left",
+				"at": [
+					-0.86,
+					0.32,
+					1.07
+				],
+				"radius": 0.32,
+				"steers": false
+			},
+			{
+				"name": "wheel-rear-right",
+				"at": [
+					0.86,
+					0.32,
+					1.07
+				],
+				"radius": 0.32,
+				"steers": false
+			}
+		],
+		"paintable": false,
+		"triangles": 15161,
+		"sizeKB": 505,
+		"source": {
+			"site": "Sketchfab",
+			"id": "8444b0a772624900a68049e270a01c29",
+			"url": "https://sketchfab.com/3d-models/blade-air-stylized-scifi-car-free-8444b0a772624900a68049e270a01c29",
+			"title": "Blade Air Stylized Scifi Car Free",
+			"author": "ferofluid",
+			"authorUrl": "https://sketchfab.com/ferofluid",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "police-cruiser",
+		"file": "police-cruiser.glb",
+		"thumb": "thumbs/police-cruiser.webp",
+		"dimensions": {
+			"length": 4,
+			"width": 2.3,
+			"height": 2.34
+		},
+		"wheels": [
+			{
+				"name": "wheel-rear-left",
+				"at": [
+					-0.99,
+					0.4,
+					1.13
+				],
+				"radius": 0.4,
+				"steers": false
+			},
+			{
+				"name": "wheel-front-left",
+				"at": [
+					-0.99,
+					0.4,
+					-1.1
+				],
+				"radius": 0.4,
+				"steers": true
+			},
+			{
+				"name": "wheel-rear-right",
+				"at": [
+					0.99,
+					0.4,
+					1.13
+				],
+				"radius": 0.4,
+				"steers": false
+			},
+			{
+				"name": "wheel-front-right",
+				"at": [
+					0.99,
+					0.4,
+					-1.1
+				],
+				"radius": 0.4,
+				"steers": true
+			}
+		],
+		"paintable": false,
+		"part": "CarSedanPoliceLow.001",
+		"triangles": 6012,
+		"sizeKB": 102,
+		"source": {
+			"site": "Sketchfab",
+			"id": "8fb25f8fc1064f4d88a98294c757eef5",
+			"url": "https://sketchfab.com/3d-models/lowpoly-cars-pickup-sedan-police-stationwagon-8fb25f8fc1064f4d88a98294c757eef5",
+			"title": "LowPoly Cars Pickup, Sedan, Police, StationWagon",
+			"author": "JG3D",
+			"authorUrl": "https://sketchfab.com/jg-3d",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	}
+]

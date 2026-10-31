@@ -1,4 +1,5 @@
 import './pro.css';
+import { CARS } from './cars.js';
 import { PRO_RIDES } from './rides/index.js';
 
 // The Supporter Pass sheet: what the pass is and what comes with it, opened from the globe's panel,
@@ -8,6 +9,9 @@ import { PRO_RIDES } from './rides/index.js';
 
 export const PRICE = 'CA$4.99';
 const BADGE = '⭐ Supporter Pass';
+const COUNTS = [ 'No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve' ];
+// What the pass adds to the rides: the cars that need it (cars.js), and the rides built for it.
+const PASS_CARS = CARS.filter( car => car.pro );
 
 let sheet = null;
 
@@ -52,8 +56,8 @@ function build() {
 			<h2 id="pass-title">Supporter Pass</h2>
 			<p class="lead">World Drive streams the real 3D world, and every drive costs us a little. The pass is one payment of <b>${ PRICE }</b> that helps keep it running, and comes with:</p>
 			<ul class="perks">
-				<li class="rides"><b>Four more rides</b><span>A sports coupe, a monster truck, a city bus and a hovercraft, each handling its own way.</span><div class="ride-icons"></div></li>
-				<li><b>The whole Garage</b><span>All 12 colours, matte and metallic paint, racing stripes, a number, flames or checker, rim colours, blue, green, purple, pink or rainbow boost flames, and smoke, sparkle or rainbow-ribbon trails.</span></li>
+				<li class="rides"><b>${ COUNTS[ PASS_CARS.length + PRO_RIDES.length ] ?? PASS_CARS.length + PRO_RIDES.length } more rides</b><span>${ COUNTS[ PASS_CARS.length ] } cars and ${ COUNTS[ PRO_RIDES.length ].toLowerCase() } rides built for World Drive, each handling its own way.</span><div class="ride-icons"></div></li>
+				<li><b>The whole Garage</b><span>All 12 colours, matte and metallic paint, racing stripes, a number, flames or checker, rim colours, nine more boost styles (lightning, fireworks, a comet and more), flame colours, and smoke, sparkle or rainbow-ribbon trails.</span></li>
 				<li><b>A ⭐ on the leaderboard</b><span>By your name, for everyone to see.</span></li>
 				<li><b>30 drives a day</b><span>Instead of 8.</span></li>
 			</ul>
@@ -62,12 +66,18 @@ function build() {
 				<p class="small">One payment, no subscription. Buying opens soon.</p>
 			</div>
 		</div>`;
-	dialog.querySelector( '.ride-icons' ).replaceChildren( ...PRO_RIDES.map( ride => {
+	dialog.querySelector( '.ride-icons' ).replaceChildren( ...[ ...PASS_CARS, ...PRO_RIDES ].map( ride => {
 
+		// Each named by its picture alone, which keeps the sheet short enough for Buy and signing in
+		// to be on a laptop's screen.
 		const icon = document.createElement( 'span' );
 		icon.className = 'ride-icon';
 		icon.title = ride.name;
-		icon.innerHTML = ride.icon;
+		icon.setAttribute( 'role', 'img' );
+		icon.setAttribute( 'aria-label', ride.name );
+		// A car's picture is its thumbnail (drive/public/cars/thumbs/); a built ride's, its drawing.
+		if ( ride.icon ) icon.innerHTML = ride.icon;
+		else icon.append( Object.assign( document.createElement( 'img' ), { src: new URL( `cars/thumbs/${ ride.id }.webp`, document.baseURI ).href, alt: '', loading: 'lazy' } ) );
 		return icon;
 
 	} ) );

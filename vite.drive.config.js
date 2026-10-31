@@ -32,8 +32,10 @@ export default defineConfig( ( { command, mode } ) => {
 		// Nothing from the environment reaches the page by its name: not even VITE_GOOGLE_MAPS_API_KEY,
 		// which Vite would otherwise hand to any code reading import.meta.env.
 		envPrefix: 'WORLD_DRIVE_PUBLIC_',
-		// public/ holds the whole construction library (35 MB); World Drive publishes its few files itself.
-		publicDir: false,
+		// public/ holds the whole construction library (35 MB): World Drive publishes its few files from
+		// there itself (publishFromLibrary). Its own, the cars (scripts/add-drive-car.mjs), are in
+		// drive/public/, which only this build publishes.
+		publicDir: join( ROOT, 'drive', 'public' ),
 		base: '/',
 		// The page is drive/index.html, but its code is in src/ beside the construction app's, as
 		// /src/... like that app's page has it.

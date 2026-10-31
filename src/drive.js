@@ -9,7 +9,8 @@ import { createDriveFx } from './drive-fx.js';
 //
 // Four options, off unless an app asks (World Drive turns them on): `fly`, where holding Shift
 // lifts the vehicle off and flies it, and letting go glides it back down; `booster`, a rocket on B
-// that pushes well past the top speed while its gauge lasts; `drift`, kart handling: sharp
+// that pushes well past the top speed while its gauge lasts, and held at full speed goes
+// supersonic, with a sonic boom; `drift`, kart handling: sharp
 // steering at low speed, and drifts on Space that pay out a boost; and `crash: 'launch'`, where
 // hitting something bounces the vehicle off it and throws it into the air, and in the air it can
 // spin, flip and roll for tricks that score when it lands on its wheels (crash: 'stop', the
@@ -54,6 +55,12 @@ const BOOST_RECHARGE = 8;
 const BOOST_ACCEL = 28;
 const BOOST_SPEED = 2;
 const BOOST_MIN = 0.15;
+// Supersonic: boosting at `near` or more of the booster's top speed for `after` s goes supersonic,
+// with a sonic boom and streaks of air past it (drive-fx.js), a shake, and the view a little wider
+// (`warp`, eased in and out at `ease` 1/s, which an app adds to its field of view). It lasts,
+// boosting or not, until the speed drops under `below` of that top speed: after the gauge runs
+// out, a moment more as it slows.
+const SUPERSONIC = { near: 0.85, after: 0.75, below: 0.75, ease: 4, shake: 0.25 };
 // Kart handling: the most it turns (°/s) at full lock, from walking pace to top speed.
 const KART_YAW = [ 150, 55 ];
 // Drifts start above DRIFT_MIN m/s, with a hop of DRIFT_HOP m/s. They turn at DRIFT_YAW °/s
@@ -428,6 +435,11 @@ export class Driver {
 		this.flying = false;
 		this.gauge = 1;
 		this.firing = false;
+		// How long it has boosted near its top speed, whether it's supersonic, and how far into the
+		// supersonic view it is (0 to 1).
+		this.nearTop = 0;
+		this.supersonic = false;
+		this.warp = 0;
 		this.drifting = 0;
 		this.driftTime = 0;
 		this.driftLevel = 0;
@@ -488,6 +500,7 @@ export class Driver {
 		this.hud.show( entry.state.name, this.machine?.panel );
 		this.hud.setFlying?.( false );
 		this.hud.setBoost?.( this.booster ? this.gauge : null );
+		this.hud.setSupersonic?.( false );
 		if ( this.launch ) this.showScore();
 		if ( this.machine ) this.machine.update( 0 );
 		else this.placeCamera( 1 );
@@ -505,6 +518,8 @@ export class Driver {
 		this.showCab( false );
 		this.fx?.dispose();
 		this.fx = null;
+		this.supersonic = false;
+		this.warp = 0;
 
 		// Park it where it stopped, as it stands: tilted on the ground under its wheels or tracks, up
 		// a pile or down in a hole. If it's in the air it drops back onto the ground instead. Save that.
@@ -589,6 +604,7 @@ export class Driver {
 		}
 
 		if ( this.booster || this.drift || this.launch ) this.thrust( dt, top );
+		if ( this.booster ) this.checkSupersonic( dt );
 
 		if ( this.flying ) {
 
@@ -875,6 +891,49 @@ export class Driver {
 
 	}
 
+	// Boost from somewhere else (World Drive's boost pads): `share` of a full gauge, filling it at
+	// most. Returns how much it took.
+	addBoost( share ) {
+
+		if ( ! this.booster || ! this.active ) return 0;
+		const before = this.gauge;
+		this.gauge = Math.min( 1, this.gauge + share );
+		this.hud.setBoost?.( this.gauge );
+		this.hud.refuel?.( this.gauge - before );
+		return this.gauge - before;
+
+	}
+
+	// Boosting at nearly the booster's top speed for a moment: supersonic, with a boom, until the
+	// speed drops (see SUPERSONIC).
+	checkSupersonic( dt ) {
+
+		const top = this.spec.topSpeed / KMH * BOOST_SPEED;
+		if ( ! this.supersonic ) {
+
+			this.nearTop = this.firing && this.speed >= top * SUPERSONIC.near ? this.nearTop + dt : 0;
+			if ( this.nearTop >= SUPERSONIC.after ) {
+
+				this.supersonic = true;
+				this.fx?.boom();
+				// (The shake dies away with stunts on, which is where it's used: see turnView.)
+				if ( this.launch ) this.shake = Math.max( this.shake, SUPERSONIC.shake );
+				this.hud.setSupersonic?.( true );
+
+			}
+
+		} else if ( this.speed < top * SUPERSONIC.below ) {
+
+			this.supersonic = false;
+			this.nearTop = 0;
+			this.hud.setSupersonic?.( false );
+
+		}
+
+		this.warp += ( ( this.supersonic ? 1 : 0 ) - this.warp ) * Math.min( 1, dt * SUPERSONIC.ease );
+
+	}
+
 	// The booster and drift boosts push past the top speed while they last; after them it comes
 	// back down to the top speed.
 	thrust( dt, top ) {
@@ -1091,7 +1150,7 @@ export class Driver {
 		this.scraping = Math.max( 0, this.scraping - dt );
 		this.fx.update( {
 			pivot: this.entry.pivot,
-			size: { width: this.width, height: this.height, rear: this.rear, scale },
+			size: { width: this.width, height: this.height, length: this.length, rear: this.rear, scale },
 			wheels: [ _a.set( - track, 0.05, wheel ), _b.set( track, 0.05, wheel ) ],
 			velocity: _target.set( - Math.sin( this.course * Math.PI / 180 ) * this.speed, this.vy, Math.cos( this.course * Math.PI / 180 ) * this.speed ),
 			flame: this.firing ? 1 : this.boost ? 0.55 : 0,
@@ -1100,6 +1159,9 @@ export class Driver {
 			drifting: !! this.drifting && this.grounded,
 			level: this.driftLevel,
 			scrape: this.scraping > 0 ? this.scrapeAt : null,
+			// Ink is left on the road only on its wheels; supersonic, streaks of air go past it.
+			grounded: this.grounded && ! this.flying && ! this.air,
+			supersonic: this.supersonic,
 			dt,
 		} );
 

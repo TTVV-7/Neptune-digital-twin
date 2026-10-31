@@ -10,12 +10,16 @@ import {
 	Vector3,
 } from 'three';
 import { DecalGeometry } from 'three/addons/geometries/DecalGeometry.js';
+import { BOOSTS } from './boosts.js';
 import { storage } from './places.js';
 
 // The Garage's paint shop: what each ride can wear, what this browser has chosen for each, and
-// putting it on a model. A look is { colour, finish, decal, number, rim, flame, trail, smoke }, each
-// the id of a choice below (number is 0 to 99). The first few choices of each are free; the rest
-// come with the Supporter Pass (pro.js), and without it a saved look falls back to the free ones.
+// putting it on a model. A look is { colour, finish, decal, number, rim, boost, flame, trail, smoke },
+// each the id of a choice below or in boosts.js (number is 0 to 99). The first few choices of each
+// are free; the rest come with the Supporter Pass (pro.js), and without it a saved look falls back
+// to the free ones. `boost` is the boost style; `flame` the classic flame's colour, which was the
+// only boost there was, so a look saved before the styles (a flame and no boost) is the classic
+// flame in the colour it had.
 //
 // Paint goes on what a model tags userData.paint = 'body' or 'rim' (the rides in rides/ and the
 // kart); decals are projected onto its bodywork in the boxes its userData.decals gives (see
@@ -59,7 +63,7 @@ export const RIMS = [
 	{ id: 'lime', name: 'Lime', hex: 0x8be02b },
 	{ id: 'pink', name: 'Pink', hex: 0xff4fae },
 ];
-// Booster flames, by drive-fx.js's names for them.
+// The classic boost flame's colours, by drive-fx.js's names for them.
 export const FLAMES = [
 	{ id: 'orange', name: 'Orange', css: '#ff6a1a', free: true },
 	{ id: 'blue', name: 'Blue', css: '#2b6dff' },
@@ -77,8 +81,8 @@ export const TRAILS = [
 ];
 export const SMOKES = SWATCHES.filter( swatch => [ 'white', 'black', 'red', 'sunburst', 'lime', 'electric', 'violet', 'pink' ].includes( swatch.id ) );
 
-const BASE = { finish: 'gloss', decal: 'none', number: 7, rim: 'silver', flame: 'orange', trail: 'none', smoke: 'white' };
-const LISTS = { colour: SWATCHES, finish: FINISHES, decal: DECALS, rim: RIMS, flame: FLAMES, trail: TRAILS, smoke: SMOKES };
+const BASE = { finish: 'gloss', decal: 'none', number: 7, rim: 'silver', boost: 'classic', flame: 'orange', trail: 'none', smoke: 'white' };
+const LISTS = { colour: SWATCHES, finish: FINISHES, decal: DECALS, rim: RIMS, boost: BOOSTS, flame: FLAMES, trail: TRAILS, smoke: SMOKES };
 
 // The look a vehicle comes with: its own colour (vehicle.colour, an id in SWATCHES) and the free
 // choices for the rest.
@@ -143,11 +147,11 @@ export function lookFor( vehicle, pro ) {
 
 }
 
-// The flame and trail drive-fx.js draws for a look.
+// The boost style, flame and trail drive-fx.js draws for a look.
 export function fxOf( look ) {
 
 	const smoke = SMOKES.find( choice => choice.id === look.smoke ) ?? SMOKES[ 0 ];
-	return { flame: look.flame, trail: look.trail === 'none' ? null : { kind: look.trail, colour: smoke.hex } };
+	return { boost: look.boost, flame: look.flame, trail: look.trail === 'none' ? null : { kind: look.trail, colour: smoke.hex } };
 
 }
 

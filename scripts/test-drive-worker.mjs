@@ -30,6 +30,7 @@ import { after, before, describe, test } from 'node:test';
 import { CLIENT_ID, makeKey, makeToken, serveKeys, startWorker, stripeSignature } from './worker-harness.mjs';
 import { sessionCookies } from '../worker/sessions.js';
 import { MAX_SCORE, RATE, SCORING, maxRate } from '../worker/drive/scores.js';
+import { DRIVE_CARS, PASS_RIDES } from '../src/drive-app/catalog.js';
 import { addressOf } from '../worker/drive/settings.js';
 import { purchaseFor, purchaseSettings } from '../worker/drive/supporter.js';
 import { VISIT_HOURS, makeVisit } from '../worker/drive/visits.js';
@@ -828,6 +829,18 @@ describe( 'World Drive leaderboard', () => {
 		assert.equal( ( await call( server, '/api/score', { method: 'POST', headers: { Origin: server.base, 'Content-Type': 'text/plain' }, body, time: NOON + 60 * SECOND } ) ).status, 415, 'a form' );
 		// None of that counted as a score: a good one goes straight in.
 		assert.equal( ( await score( cat, { score: 3000 } ) ).status, 200 );
+		// Every ride World Drive offers gets past the run's checks to the visit's (here a made-up token,
+		// so nothing is kept and no turn is taken): its cars, the free one and the pass's, and the pass's
+		// rides. Something else stops at the run.
+		const madeUp = { visit: 'v1.made-up.0.0' };
+		for ( const vehicle of [ ...DRIVE_CARS, ...PASS_RIDES ] ) {
+
+			const res = await score( cat, { vehicle }, madeUp );
+			assert.deepEqual( [ res.status, res.json.reason ], [ 403, 'visit' ], vehicle );
+
+		}
+
+		assert.equal( ( await score( cat, { vehicle: 'tank' }, madeUp ) ).status, 400 );
 
 	} );
 

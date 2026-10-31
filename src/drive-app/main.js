@@ -14,6 +14,7 @@ import { createTestGlobe, placeEarth } from './test-globe.js';
 import { loadVehicle, loadVehicles, specOf } from './vehicles.js';
 import { setUpPanel } from './panel.js';
 import { setUpGarage } from './garage.js';
+import { createBoostPads } from './pads.js';
 import { setUpLeaderboard } from './leaderboard.js';
 import { buyArea } from './pass.js';
 import { fillAccountArea, fillBuyArea, linkPlayer, setUpSupporter } from './supporter.js';
@@ -33,9 +34,10 @@ import * as screens from './screens.js';
 const DEV_KEY = __DEV_MAPS_KEY__;
 const SKY = new Color( 0x9fcbee );
 const SPACE = new Color( 0x070c16 );
-// Field of view on the globe, and driving.
+// Field of view on the globe, and driving; supersonic (drive.js), the view widens by this much more.
 const GLOBE_FOV = 50;
 const DRIVE_FOV = 70;
+const SUPERSONIC_FOV = 9;
 // The sky fades from blue to space between these heights (m); above, the page's stars show.
 const SKY_BELOW = [ 15000, 120000 ];
 // How long (s) the drop-in waits for the ground at most: while flying down to look round, then
@@ -179,6 +181,8 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 	} );
 
 	const state = { mode: 'globe', place: null, entry: null, vehicle: null, drop: null, leaving: false };
+	// Boost pads on the ground as you drive (pads.js), with their switch in the pause menu.
+	const pads = createBoostPads( { scene, driver, ground, toggle: $( 'pause' ).querySelector( '.pads-toggle' ) } );
 
 	const panel = setUpPanel( {
 		root: $( 'globe-ui' ),
@@ -237,10 +241,10 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 	// About, with the credits the vehicle models' licences ask for.
 	const about = $( 'about' );
 	const link = ( href, text ) => Object.assign( document.createElement( 'a' ), { href, textContent: text, target: '_blank', rel: 'noopener' } );
-	about.querySelector( '.credits' ).replaceChildren( ...vehicles.filter( v => v.credit ).map( ( { name, credit } ) => {
+	about.querySelector( '.credits' ).replaceChildren( ...vehicles.filter( v => v.credit ).map( ( { name, credit, changes = 'compressed and rescaled' } ) => {
 
 		const li = document.createElement( 'li' );
-		li.append( `${ name }: `, link( credit.url, credit.title ), ` by ${ credit.author }, `, link( credit.licenseUrl, credit.license ), '. Modified: compressed and rescaled.' );
+		li.append( `${ name }: `, link( credit.url, credit.title ), ` by ${ credit.author }, `, link( credit.licenseUrl, credit.license ), `. Modified: ${ changes }.` );
 		return li;
 
 	} ) );
@@ -315,6 +319,7 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 		rememberPlace( place );
 		panel.refreshRecent();
 		pinAt( null );
+		pads.clear();
 		setMode( 'dropping' );
 		$( 'drive-ui' ).querySelector( '.place' ).textContent = place.name;
 		screens.loading( `Dropping in: ${ place.name }` );
@@ -446,6 +451,8 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 		if ( state.leaving ) return;
 		setMode( 'paused' );
 		screens.pause( true );
+		// The rides scroll sideways there: the one being driven in view.
+		$( 'pause' ).querySelector( '.vehicle.picked' )?.scrollIntoView( { block: 'nearest', inline: 'nearest' } );
 
 	}
 
@@ -503,6 +510,7 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 		if ( driver.active ) driver.stop();
 		state.leaving = false;
 		removeVehicle();
+		pads.clear();
 		screens.pause( false );
 		screens.hideLoading();
 		screens.hideKeys();
@@ -605,6 +613,7 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 		timer.update( time );
 		const dt = Math.min( timer.getDelta(), 0.1 );
 		if ( driver.active ) driver.update( dt );
+		pads.update( dt );
 		globe.update( dt );
 
 		// How high the camera is decides the sky, the field of view and, while driving, clipping.
@@ -615,7 +624,7 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 		const space = MathUtils.smoothstep( altitude, ...SKY_BELOW );
 		scene.background = space < 1 ? sky.lerpColors( SKY, SPACE, space ) : null;
 		if ( testEarth ) testEarth.visible = state.mode === 'globe' || altitude > 20000;
-		const fov = state.mode === 'driving' || state.mode === 'paused' ? DRIVE_FOV : GLOBE_FOV;
+		const fov = state.mode === 'driving' || state.mode === 'paused' ? DRIVE_FOV + SUPERSONIC_FOV * driver.warp : GLOBE_FOV;
 		if ( Math.abs( camera.fov - fov ) > 0.01 ) {
 
 			camera.fov += ( fov - camera.fov ) * Math.min( 1, dt * 3 );
@@ -659,7 +668,7 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 	// For poking around from the browser console, and for the tests.
 	window.drive = {
 		scene, camera, renderer, tiles, globe, models, driver, ground, panel, leaderboard: board,
-		garage, supporter,
+		garage, supporter, pads,
 		get mode() {
 
 			return state.mode;

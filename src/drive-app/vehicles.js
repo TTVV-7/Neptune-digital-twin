@@ -1,6 +1,7 @@
 import { itemConfig } from '../library.js';
 import { specFor } from '../drive.js';
 import { makeKart } from '../kart.js';
+import { loadCars } from './cars.js';
 import { LIBRARY_VEHICLES } from './catalog.js';
 import { applyLook, fxOf, lookFor } from './paint.js';
 import { isPro } from './pro.js';
@@ -8,8 +9,10 @@ import { PRO_RIDES } from './rides/index.js';
 
 // What you can drive: the go-kart, built in code (kart.js), a few trucks from the library, loaded
 // as models.js loads anything placed, so drive.js drives them as it does in the construction app,
-// and after them the Supporter Pass's rides (rides/), built in code and locked without the pass
-// (`pro`, see pro.js). Each wears its look from the Garage (paint.js).
+// then World Drive's own cars (cars.js: models from Sketchfab whose wheels turn, one free and the
+// rest with the pass), and after them the Supporter Pass's rides (rides/), built in code. What
+// needs the pass is locked without it (`pro`, see pro.js). Each wears its look from the Garage
+// (paint.js).
 
 const KART = {
 	id: 'go-kart',
@@ -28,11 +31,12 @@ const NAMES = {
 };
 
 // [ { id, name, blurb, thumb, credit, item } ]: the kart, then whichever of the library's
-// vehicles the site has (the build publishes just those, see vite.drive.config.js), then the
-// pass's rides ( pro, with an icon for a thumb).
+// vehicles the site has (the build publishes just those, see vite.drive.config.js), then the cars
+// (free first; the rest pro, as the pass's rides, which come last with an icon for a thumb).
 export async function loadVehicles() {
 
 	let library = [];
+	const cars = loadCars();
 	try {
 
 		const res = await fetch( new URL( 'library/library.json', document.baseURI ) );
@@ -53,7 +57,7 @@ export async function loadVehicles() {
 		item,
 	} ) );
 	const built = ride => ( { ...ride, thumb: null, credit: null, topSpeed: ride.drive.topSpeed, item: ride } );
-	return [ built( KART ), ...trucks, ...PRO_RIDES.map( built ) ];
+	return [ built( KART ), ...trucks, ...await cars, ...PRO_RIDES.map( built ) ];
 
 }
 
@@ -63,10 +67,11 @@ export async function loadVehicle( models, vehicle, { east = 0, north = 0, headi
 
 	const placement = { name: vehicle.name, east, north, heading, up: null };
 	let entry;
-	if ( vehicle.build ) {
+	if ( vehicle.build || vehicle.load ) {
 
-		// Built rather than loaded: a loader that hands over a new one.
-		const loader = { loadAsync: async () => ( { scene: vehicle.build() } ) };
+		// Built (a ride) or made ready to drive (a car) rather than loaded as it is: a loader that
+		// hands over a new one.
+		const loader = { loadAsync: async () => ( { scene: vehicle.build ? vehicle.build() : await vehicle.load( models.loader ) } ) };
 		entry = await models.load( { ...placement, url: vehicle.id, library: vehicle.id }, vehicle.id, loader );
 
 	} else entry = await models.load( itemConfig( vehicle.item, placement ) );
