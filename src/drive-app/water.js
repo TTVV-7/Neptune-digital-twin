@@ -8,24 +8,32 @@ import { enuToLocal } from '../geo.js';
 // glints), and at the lowest level round about. So a spot is water when, from rays looking down
 // round it (see look):
 //
-// - the ground there is coloured like water (bluish or grey, not green like a field, warm like sand
-//   or soil, nor bright like concrete), read from the tile's own picture where the ray hit it;
+// - the ground there is coloured like water (bluish, grey, a harbour's teal, a canal's olive grey or
+//   a river's brownish grey; not green like a field, warm like sand or soil, nor bright like
+//   concrete), read from the tile's own picture where the ray hit it;
 // - it's level, everywhere within MID's reach of it, to within FLAT;
 // - its picture is even over all of that (the colours' brightness varies by no more than EVEN):
 //   a road has markings, cars and patches, a field its lines;
 // - nothing within FAR's reach is more than LOWER below it: a quay, a pier, a beach or a bridge's
 //   deck has the water below it, and a roof the street.
 //
-// Measured on Google's tiles in Vancouver, San Francisco, Sydney, Paris, Los Angeles, Las Vegas
-// and New York (docs/world-drive.md), it never took a road, a car park, a field, a beach, a roof
-// or a bridge's deck for water, and found most open water. It prefers missing a little water to a
-// false splash: what it can't be sure of (a ray that finds nothing, a picture it can't read) isn't
-// water. Nor is water within a ring's reach of a shore, a pier or a ship, which it can't tell from
-// an even grey square; there it says it can't tell, rather than that it's dry, so nothing is put
-// back or put down there as if it were dry ground (drive.js's trail back from a splash, boost
-// pads). The colours are read from a small copy of each tile's picture, drawn once onto a canvas
-// and kept as long as the picture is. It looks at the cheapest things first, so on most ground
-// it's done after one ray or seven.
+// Measured on Google's tiles in Vancouver, San Francisco, Sydney, Paris, Los Angeles, Las Vegas,
+// New York, Amsterdam, Venice, Hong Kong, Monaco, Geneva, London, Chicago, Rio, Turin and the
+// Bonneville Salt Flats (docs/world-drive.md), it never took a road, a car park, an apron, a
+// field, a court, a beach, a plaza, a roof or a bridge's deck for water, and found most open
+// water. It prefers missing a little water to a false splash: what it can't be sure of (a ray that
+// finds nothing, a picture it can't read) isn't water. Nor is water within a ring's reach of a
+// shore, a pier or a ship, which it can't tell from an even grey square; there it says it can't
+// tell, rather than that it's dry, so nothing is put back or put down there as if it were dry
+// ground (drive.js's trail back from a splash, boost pads), and says where the water it found
+// past the edge is (drive.js takes that for water when the vehicle came down into it, off a quay
+// or a bank). Ground is only surely dry when it's coloured unlike water, or isn't level or the
+// lowest round about; a colour in between (a river's brown, or grass's) on level ground that's
+// the lowest round about can't be told, and a colour only water has (the turquoise of a lagoon or
+// a clear lake, which Google draws from photographs, beds and all, neither level nor even) is never
+// dry. The colours are read from a small copy of each tile's picture, drawn once onto a canvas and
+// kept as long as the picture is. It looks at the cheapest things first, so on most ground it's
+// done after one ray or seven.
 
 const DOWN = new Vector3( 0, - 1, 0 );
 // The copy of a tile's picture (px a side): a texel is a metre or two on the ground nearby.
@@ -35,17 +43,27 @@ const COPY = 64;
 const NEAR = { radius: 5, count: 6, from: 4, depth: 24 };
 const MID = { radius: 12, count: 8, from: 4, depth: 24 };
 const FAR = { radius: 35, count: 8, from: 10, depth: 110 };
-const FLAT = 0.35;
+// Google's water is level to millimetres in some places, and to half a metre across a harbour in
+// others (Hong Kong's), drawn from tiles of different sharpness.
+const FLAT = 0.5;
 const EVEN = 6;
-const LOWER = 1;
+const LOWER = 1.5;
 // How far (m) past something uneven close by to look for water at the spot's level (see look):
 // enough for the rings there to be clear of a shore the spot is right by.
 const PROBE = 13;
 // Water's colour (0 to 255): no brighter than BRIGHT (luma), its blue at least its red less WARM
-// and its green less GREEN.
+// (the Thames's brownish grey) and its green less GREEN (Hong Kong's teal, the IJ's olive grey).
 const BRIGHT = 150;
-const WARM = 2;
-const GREEN = 6;
+const WARM = 12;
+const GREEN = 14;
+// Clearly not water's colour, whatever the ground's shape: brighter than LIGHT (concrete, a pale
+// beach), its red over its blue by more than SANDY (sand, soil, brick, a tiled roof), or green like
+// grass (its green over its blue by more than GRASS, and well over its red).
+const LIGHT = 170;
+const SANDY = 25;
+const GRASS = 30;
+// Only ever water's colour: its blue over its red by DEEP or more, and at least its green.
+const DEEP = 45;
 // What look() says of ground that is surely dry, and of what it can't tell.
 const DRY = Object.freeze( { level: null, dry: true } );
 const UNSURE = Object.freeze( { level: null, dry: false } );
@@ -139,38 +157,46 @@ export function createWater( ground ) {
 	const level = heights => heights.every( dh => dh !== null && Math.abs( dh ) <= FLAT );
 
 	// What's under ( east, north ), looked for down from just over y: { level } the water's surface
-	// height (m, in the scene) where it's water, else null; and whether it's surely dry ground: not
-	// water-coloured, over something lower, or (a road, a field) uneven close by with no water at
-	// its level just past that. What's left, water-coloured and level close by but not all round,
-	// is water by a shore, a pier or a ship as often as anything: not water, nor surely dry.
-	// `probing`: whether to look past what's uneven close by (not when this is the look past it).
+	// height (m, in the scene) where it's water, else null; and whether it's surely dry ground:
+	// coloured unlike water, over something lower, or (a road, a field) uneven close by with no
+	// water at its level just past that. What's left, water-coloured and level close by but not all
+	// round, is water by a shore, a pier or a ship as often as anything: not water, nor surely dry,
+	// and { shore } the height of the water found past the edge. `probing`: whether to look past
+	// what's uneven close by (not when this is the look past it).
 	function look( east, north, y, probing = true ) {
 
 		const hit = down( east, north, y + 2, 40 );
 		if ( ! hit ) return UNSURE;
 		const colours = [ colourOf( hit ) ];
-		if ( ! waterLike( colours[ 0 ] ) ) return DRY;
+		const colour = colours[ 0 ];
+		// What it is if it isn't water: dry, unless only water is that colour (a lagoon's turquoise
+		// can be bright, its bed uneven).
+		const dry = deep( colour ) ? UNSURE : DRY;
+		if ( notWater( colour ) ) return dry;
 		const h = hit.point.y;
 		const near = round( NEAR, east, north, h, colours );
 		// Anything lower close by (or nothing at all, far below): it's over something, not water.
-		if ( near.some( dh => dh === null || dh < - FLAT ) ) return DRY;
+		if ( near.some( dh => dh === null || dh < - FLAT ) ) return dry;
 		if ( ! level( near ) || ! even( colours ) ) {
 
 			// A road's kerbs, cars and markings, or a shore by water. Water being the lowest thing
 			// round it, look PROBE m out the other way from what's highest or least like it here: the
-			// spot is surely dry unless that's water at its level (it's by the water's edge, then,
-			// where the rings reach the shore).
-			if ( ! probing ) return DRY;
+			// spot is dry unless that's water at its level (it's by the water's edge, then, where the
+			// rings reach the shore).
+			if ( ! probing ) return dry;
 			const angle = ( away( near, colours ) + 0.5 ) / NEAR.count * Math.PI * 2 + Math.PI;
 			const past = look( east + Math.sin( angle ) * PROBE, north + Math.cos( angle ) * PROBE, h, false ).level;
-			return past !== null && Math.abs( past - h ) <= FLAT ? UNSURE : DRY;
+			if ( past === null || Math.abs( past - h ) > FLAT ) return dry;
+			return waterLike( colour ) ? { level: null, dry: false, shore: past } : UNSURE;
 
 		}
 
 		const open = level( round( MID, east, north, h, colours ) ) && even( colours );
 		// A ray that finds nothing (far below, or nothing loaded) counts as lower.
-		if ( ! round( FAR, east, north, h ).every( dh => dh !== null && dh >= - LOWER ) ) return DRY;
-		return open ? { level: h, dry: false } : UNSURE;
+		if ( ! round( FAR, east, north, h ).every( dh => dh !== null && dh >= - LOWER ) ) return dry;
+		// Level, even and the lowest thing round about, in a colour that might not be water's (a
+		// brown, a green): it can't tell.
+		return open && waterLike( colour ) ? { level: h, dry: false } : UNSURE;
 
 	}
 
@@ -217,7 +243,7 @@ export function createWater( ground ) {
 			return {
 				h, normal, edge: edge( hit ), near, mid, far, colours, flat, lower,
 				mean: known.length ? [ 'r', 'g', 'b' ].map( k => Math.round( known.reduce( ( sum, c ) => sum + c[ k ], 0 ) / known.length ) ) : null,
-				spread: spread( known ), waterLike: waterLike( colours[ 0 ] ), even: even( colours ), ms,
+				spread: spread( known ), waterLike: waterLike( colours[ 0 ] ), notWater: notWater( colours[ 0 ] ), deep: deep( colours[ 0 ] ), even: even( colours ), ms,
 				...look( east, north, y ),
 			};
 
@@ -246,12 +272,30 @@ function away( heights, colours ) {
 
 }
 
-// Bluish or grey, not green, warm or bright.
+// Bluish, grey, teal or a little brown or olive; not green, warm or bright.
 function waterLike( colour ) {
 
 	if ( ! colour ) return false;
 	const { r, g, b } = colour;
 	return luma( colour ) <= BRIGHT && b >= r - WARM && b >= g - GREEN;
+
+}
+
+// Clearly not water: bright, warm or grass green, or no colour to go by.
+function notWater( colour ) {
+
+	if ( ! colour ) return true;
+	const { r, g, b } = colour;
+	return luma( colour ) > LIGHT || r - b > SANDY || ( g - b > GRASS && g > r + 10 );
+
+}
+
+// Only ever water: deep blue or turquoise.
+function deep( colour ) {
+
+	if ( ! colour ) return false;
+	const { r, g, b } = colour;
+	return b - r >= DEEP && b >= g;
 
 }
 
