@@ -235,10 +235,10 @@ vehicle's speed (ink and a comet's tail less), with the air slowing only its own
 150 km/h it trails a few metres behind, between the vehicle and the chase camera, rather than being left on the road, which at that
 speed is behind the camera in a tenth of a second. The supersonic effects are one more batch (120).
 On the test pad (software rendering in the test's browser), a minute of boosting each made nothing
-new (no geometries, textures, programs, objects or materials) and kept within its budget; the
-driving and its effects took 0.2 to 0.3 ms a frame with any style, and drawing them added a few per
-cent to a frame for most and up to a quarter for those that fill the most of the view (fireworks,
-lightning, ink near the camera).
+new (no geometries, textures, programs, objects or materials) and kept within its budget (at most
+205 alive, glitter's); the driving and its effects took 0.1 to 0.2 ms a frame with any style, and
+drawing them added 2 to 10 % to a frame for most, and up to a fifth for those that cover the most
+of the view (lightning 15 %, fireworks 22 %).
 
 Choices are kept for each ride in this browser (`world-drive.garage` in localStorage) and put on
 whenever it's driven; picked while paused they're on it as soon as it drives on. A browser that keeps
