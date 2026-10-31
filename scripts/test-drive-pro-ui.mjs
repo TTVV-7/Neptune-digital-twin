@@ -13,9 +13,9 @@
 // budget and making nothing new in a minute of boosting, and what each costs a frame; and the
 // Garage and the badges on a phone. And World Drive's cars (src/drive-app/cars.js): listed,
 // credited, small and their real size, with wheels that steer; the muscle car free and the rest
-// locked; each driving, drifting, thrown up and landing, its wheels spinning and steering; and the
-// Garage repainting the one whose paint is plain colour and saying the others keep theirs.
-// Everything off this machine is blocked.
+// locked; each driving, drifting, thrown up and landing, going supersonic, its wheels spinning and
+// steering; and the Garage repainting the one whose paint is plain colour and saying the others keep
+// theirs. Everything off this machine is blocked.
 //
 // Needs Playwright with Chromium. TEST_VITE_PORT picks the port; TEST_SCREENSHOTS=<folder> saves
 // pictures; the handling it measures is printed.
@@ -253,9 +253,13 @@ describe( 'Supporter Pass, without it', () => {
 		assert.equal( await panel.locator( '.vehicle.picked b' ).textContent(), 'Go-kart' );
 		const sheet = page.locator( '#pass' );
 		assert.match( await sheet.textContent(), /Nine more rides[\s\S]*whole Garage[\s\S]*on the leaderboard[\s\S]*30 drives a day[\s\S]*Instead of 8/ );
-		assert.match( await sheet.locator( '.rides' ).textContent(), /Five cars \(a neon racer, a night cruiser, a dune buggy, a farm truck and a police cruiser\) and four built for World Drive \(a sports coupe, a monster truck, a city bus and a hovercraft\)/ );
+		assert.match( await sheet.locator( '.rides' ).textContent(), /Five cars and four rides built for World Drive/ );
+		// Each ride named by its picture, for a screen reader too.
 		assert.equal( await sheet.locator( '.ride-icon' ).count(), 9 );
 		assert.deepEqual( await sheet.locator( '.ride-icon' ).evaluateAll( icons => icons.map( icon => icon.title ) ), LOCKED );
+		assert.deepEqual( await sheet.locator( '.ride-icon[role="img"]' ).evaluateAll( icons => icons.map( icon => icon.getAttribute( 'aria-label' ) ) ), LOCKED );
+		// Short enough for Buy and signing in under it to be on a laptop's screen (1280 × 800).
+		assert.ok( await sheet.locator( '.buy-area' ).evaluate( area => area.getBoundingClientRect().bottom <= innerHeight ) );
 		assert.equal( await sheet.locator( '.buy' ).textContent(), 'Coming soon' );
 		assert.ok( await sheet.locator( '.buy' ).isDisabled() );
 		await shot( page, 'pro-pass-sheet' );
@@ -1129,6 +1133,8 @@ describe( 'World Drive\'s cars', () => {
 			assert.ok( ride.drifting === 1 && ride.driftLevel >= 2 && ride.driftBoost, `${ name } didn't drift: ${ JSON.stringify( ride ) }` );
 			assert.ok( ride.hit && ride.launch > 0.3 && ride.landed, `${ name } wasn't thrown up and back down: ${ JSON.stringify( ride ) }` );
 			assert.ok( ride.trickRate <= 1, `${ name } turns in the air at ${ ride.trickRate } of a kart's rate` );
+			// Boosting flat out, supersonic, as every ride does.
+			assert.ok( ride.supersonic !== null, `${ name } never went supersonic: ${ JSON.stringify( ride ) }` );
 
 			// Its wheels: a third of a second at 36 km/h, steering right.
 			const wheels = await page.evaluate( () => {
@@ -1181,7 +1187,7 @@ describe( 'World Drive\'s cars', () => {
 		}
 
 		console.log( 'handling of the cars:' );
-		for ( const [ name, ride ] of Object.entries( handling ) ) console.log( `  ${ name.padEnd( 14 ) } top ${ ride.topSpeed } km/h, 0-100 ${ ride.zeroTo100 ?? 'never' } s, 3 s: ${ ride.after3s } km/h, turn ${ ride.turnRate }°/s at 50 km/h (slide ${ ride.slide }°), wall at 70 km/h: up ${ ride.launch } m, ${ ride.airTime } s in the air` );
+		for ( const [ name, ride ] of Object.entries( handling ) ) console.log( `  ${ name.padEnd( 14 ) } top ${ ride.topSpeed } km/h, 0-100 ${ ride.zeroTo100 ?? 'never' } s, 3 s: ${ ride.after3s } km/h, turn ${ ride.turnRate }°/s at 50 km/h (slide ${ ride.slide }°), wall at 70 km/h: up ${ ride.launch } m, ${ ride.airTime } s in the air, supersonic after ${ ride.supersonic } s` );
 		const cars = Object.values( handling );
 		const { 'Neon racer': neon, 'Night cruiser': cruiser, 'Dune buggy': buggy, 'Farm truck': truck } = handling;
 		// Each its own: the night cruiser fastest, the neon racer quickest away, the dune buggy thrown

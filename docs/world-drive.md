@@ -365,10 +365,11 @@ and timed, and the Garage and the locked rides' badges on a phone. And the cars:
 size, with four wheels and the front two steering; without the pass the muscle car free, pictured,
 credited under the picker and in About (all six, with links), driving, drifting, thrown up by a wall
 and landing, and the others opening the sheet; with it each car driving, drifting, thrown up and
-landing, its wheels spinning and the front ones steering the right way, its size as imported, and
-their handling against each other (the night cruiser fastest, the neon racer quickest to 100, the
-dune buggy thrown highest, the farm truck slowest); the Garage repainting the muscle car (colour,
-rims, decals) and saying the others keep their paint, with only a boost and trail to pick.
+landing, going supersonic, its wheels spinning and the front ones steering the right way, its size
+as imported, and their handling against each other (the night cruiser fastest, the neon racer
+quickest to 100, the dune buggy thrown highest, the farm truck slowest); the Garage repainting the
+muscle car (colour, rims, decals) and saying the others keep their paint, with only a boost and
+trail to pick.
 
 ## Supporter Pass (buying it)
 
