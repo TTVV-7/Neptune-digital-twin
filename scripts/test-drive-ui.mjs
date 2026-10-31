@@ -1386,6 +1386,136 @@ describe( 'World Drive water', () => {
 
 	} );
 
+	test( 'water in Google\'s other colours is water; grass, sand and concrete are dry, mown grass can\'t be told, and a lagoon\'s turquoise is never dry', async () => {
+
+		const result = await page.evaluate( () => {
+
+			const { water, pads, ground } = window.drive;
+			const pad = ground.getColliders()[ 0 ];
+			const sea = pad.children.find( child => child.isMesh && child.position.y < - 1 );
+			const kit = window.waterKit;
+			const before = sea.material;
+			// The sea painted one colour (a new picture each time, as water.js keeps a copy of each).
+			const paint = ( material, [ r, g, b ] ) => {
+
+				const canvas = Object.assign( document.createElement( 'canvas' ), { width: 64, height: 64 } );
+				const ctx = canvas.getContext( '2d' );
+				ctx.fillStyle = `rgb(${ r },${ g },${ b })`;
+				ctx.fillRect( 0, 0, 64, 64 );
+				const disc = pads.group.children[ 0 ].material;
+				const map = new disc.map.constructor( canvas );
+				map.colorSpace = disc.map.colorSpace;
+				return new disc.constructor( { map } );
+
+			};
+			const say = r => r.level !== null ? 'water' : r.dry ? 'dry' : 'unsure';
+			const out = {};
+			// Measured on Google's tiles: Hong Kong's harbour, the IJ in Amsterdam, the Thames; a
+			// cricket field, Copacabana's sand, a pale pavement, a lawn.
+			for ( const [ name, colour ] of Object.entries( { harbourTeal: [ 78, 117, 107 ], canalOlive: [ 76, 89, 82 ], riverBrown: [ 91, 90, 85 ], mownGrass: [ 82, 107, 91 ], sand: [ 205, 185, 165 ], concrete: [ 190, 188, 182 ], lawn: [ 90, 130, 60 ] } ) ) {
+
+				sea.material = paint( sea.material, colour );
+				out[ name ] = say( water.look( 0, - 340, - 1 ) );
+
+			}
+
+			// A sandbar 1 m over the sea, 8 m across: uneven round its middle (the sea lower), so dry
+			// in a grey, but not in a lagoon's turquoise, which only water is.
+			const bar = kit.slab( 8, 8, 0, - 340, - 1, 0 );
+			for ( const [ name, colour ] of Object.entries( { barGrey: [ 120, 120, 120 ], barTurquoise: [ 40, 170, 180 ] } ) ) {
+
+				bar.material = paint( bar.material, colour );
+				out[ name ] = say( water.look( 0, - 340, 0 ) );
+
+			}
+
+			kit.remove( bar );
+			sea.material = before;
+			return out;
+
+		} );
+		console.log( 'water, colours:', JSON.stringify( result ) );
+		assert.deepEqual( result, { harbourTeal: 'water', canalOlive: 'water', riverBrown: 'water', mownGrass: 'unsure', sand: 'dry', concrete: 'dry', lawn: 'dry', barGrey: 'dry', barTurquoise: 'unsure' } );
+
+	} );
+
+	test( 'slowly off a quay: down into the water by its edge is a splash there, not a dozen metres out', async () => {
+
+		const result = await page.evaluate( () => {
+
+			const { driver: d } = window.drive;
+			const kit = window.waterKit;
+			kit.reset( - 268, 180, 14 );
+			d.press( 'KeyW' );
+			kit.step( 10, () => {
+
+				d.speed = Math.min( d.speed, 14 / 3.6 );
+				return ! d.splash;
+
+			} );
+			d.release( 'KeyW' );
+			const out = { splashed: !! d.splash, at: d.north, level: d.splash?.level, word: kit.hud().word };
+			kit.step( 2.5, () => !! d.splash );
+			Object.assign( out, { after: { north: d.north, y: d.y, heading: d.heading } } );
+			return out;
+
+		} );
+		console.log( 'water, off a quay:', JSON.stringify( result ) );
+		assert.ok( result.splashed && result.at < - 280 && result.at > - 288 && Math.abs( result.level + 2 ) < 0.01, JSON.stringify( result ) );
+		assert.ok( result.after.north > - 280 && Math.abs( result.after.y ) < 0.01 && Math.abs( ( result.after.heading + 540 ) % 360 - 180 ) < 15, JSON.stringify( result.after ) );
+
+	} );
+
+	test( 'never the same splash over and over: put back on a spot that turns out to be water, it\'s let be; the way back is never level with the water if it can help it; a pause keeps the way back', async () => {
+
+		const result = await page.evaluate( async () => {
+
+			const { driver: d } = window.drive;
+			const kit = window.waterKit;
+			const out = {};
+			let splashes = 0;
+			const start = d.startSplash;
+			d.startSplash = function ( ...args ) {
+
+				splashes ++;
+				return start.apply( this, args );
+
+			};
+			// The only way back is on the sea (as if coarse tiles there had looked dry).
+			kit.reset( - 340, 180 );
+			d.dry = [ { east: 0, north: - 330, y: - 2, heading: 0 } ];
+			d.startSplash( - 2, 3 );
+			kit.step( 2.5, () => !! d.splash );
+			Object.assign( out, { back: { north: d.north, y: d.y } } );
+			kit.step( 5 );
+			Object.assign( out, { splashes, left: d.dry.length, after: { north: d.north, y: d.y, splash: !! d.splash } } );
+			// A way back with a spot about level with the water nearest it (a pontoon, say): the one
+			// on the land before it is taken.
+			d.dry = [ { east: 0, north: - 236, y: 0, heading: 180 }, { east: 0, north: - 250, y: - 1.8, heading: 180 }, { east: 0, north: - 276, y: 0, heading: 180 } ];
+			out.dryBack = d.dryBack( 0, - 300, - 2 ).north;
+			d.startSplash = start;
+			// Driven along the land, paused and driven on: the trail is still there.
+			kit.reset( - 150, 0 );
+			d.press( 'KeyW' );
+			kit.step( 3 );
+			d.release( 'KeyW' );
+			const trail = d.dry.length;
+			d.stop();
+			await new Promise( resolve => setTimeout( resolve, 100 ) );
+			const paused = window.drive.mode;
+			window.drive.resume();
+			Object.assign( out, { trail, paused, resumed: window.drive.mode, trailAfter: d.dry.length } );
+			return out;
+
+		} );
+		console.log( 'water, no splash loop:', JSON.stringify( result ) );
+		assert.ok( Math.abs( result.back.north + 330 ) < 1, JSON.stringify( result ) );
+		assert.ok( result.splashes === 1 && result.left === 0 && ! result.after.splash && Math.abs( result.after.y + 2 ) < 0.01, JSON.stringify( result ) );
+		assert.equal( result.dryBack, - 236 );
+		assert.ok( result.trail > 3 && result.paused === 'paused' && result.resumed === 'driving' && result.trailAfter === result.trail, JSON.stringify( result ) );
+
+	} );
+
 } );
 
 describe( 'World Drive with its Worker', () => {

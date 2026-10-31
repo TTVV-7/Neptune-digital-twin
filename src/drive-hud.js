@@ -4,9 +4,9 @@
 // chip lights up while drifting with the mini-turbo's charge. With stunts (crash: 'launch') a hit
 // pops up a word ("WHAM!"), tricks pop up as they're landed, and the score, its combo multiplier
 // and the best score show under the speed. Coming down in water (World Drive's) pops up a splash's
-// word, and the view fades out and back in as the vehicle is put back on dry land. It makes its own elements and styles inside `parent`,
-// so it needs nothing in the page. Give it to the Driver as `hud`; the Driver calls attach() to
-// wire up the buttons.
+// word, and the view fades out and back in as the vehicle is put back on dry land. It makes its
+// own elements and styles inside `parent`, so it needs nothing in the page. Give it to the Driver
+// as `hud`; the Driver calls attach() to wire up the buttons.
 //
 // Where it sits can be moved with CSS custom properties on the page: --drive-hud-top,
 // --drive-hud-bottom and --drive-hud-side (insets in px, e.g. to clear a map credit line).
