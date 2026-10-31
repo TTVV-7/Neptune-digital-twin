@@ -18,11 +18,12 @@ import {
 } from 'three';
 import { createDriveFx } from '../drive-fx.js';
 import { frontToYaw } from '../library.js';
+import { BOOSTS } from './boosts.js';
 import { applyLook, DECALS, defaultLook, FINISHES, FLAMES, fxOf, isLocked, isPaintable, lookFor, RIMS, saveLook, savedLook, SMOKES, SWATCHES, TRAILS } from './paint.js';
 import { openPass, proBadge } from './pass.js';
 import { isPro, onProChange } from './pro.js';
 
-// The Garage: each ride's paint, decals, rims, boost flame and trail (paint.js), chosen with the
+// The Garage: each ride's paint, decals, rims, boost style and trail (paint.js), chosen with the
 // ride turning on a turntable, and kept in this browser for each ride. Opened from a Garage button
 // by the ride picker on the globe's panel and in the pause menu, beside one for the Supporter Pass.
 // What needs the pass (pro.js) wears a star, with one word on the pass above them all, and choosing
@@ -41,7 +42,7 @@ const PARTS = [
 	{ part: 'finish', title: 'Finish', list: FINISHES, kind: 'word', paint: true },
 	{ part: 'decal', title: 'Decal', list: DECALS, kind: 'word', paint: true },
 	{ part: 'rim', title: 'Rims', list: RIMS, kind: 'swatch', paint: true },
-	{ part: 'flame', title: 'Boost flame', list: FLAMES, kind: 'swatch' },
+	...boostParts(),
 	{ part: 'trail', title: 'Trail', list: TRAILS, kind: 'word', note: 'Behind you while boosting or flying' },
 	{ part: 'smoke', title: 'Smoke colour', list: SMOKES, kind: 'swatch' },
 ];
@@ -110,7 +111,8 @@ export function setUpGarage( { vehicles, panel, models, current } ) {
 				button.style.setProperty( '--swatch', choice.css ?? `#${ choice.hex.toString( 16 ).padStart( 6, '0' ) }` );
 				button.setAttribute( 'aria-label', choice.name );
 
-			} else button.textContent = choice.name;
+			} else if ( kind === 'style' ) styleButton( button, choice );
+			else button.textContent = choice.name;
 			button.append( Object.assign( document.createElement( 'i' ), { className: 'star', textContent: '⭐' } ) );
 			button.addEventListener( 'click', () => choose( part, choice.id ) );
 			return button;
@@ -165,8 +167,9 @@ export function setUpGarage( { vehicles, panel, models, current } ) {
 		}
 
 		look[ part ] = id;
-		// Smoke's colour only shows with the smoke trail.
+		// Smoke's colour only shows with the smoke trail, and the flame's with the classic flame.
 		if ( part === 'smoke' ) look.trail = 'smoke';
+		if ( part === 'flame' ) look.boost = 'classic';
 		changed( part );
 
 	}
@@ -177,7 +180,7 @@ export function setUpGarage( { vehicles, panel, models, current } ) {
 		saveLook( vehicle, look );
 		mark();
 		preview?.wear( vehicle, shown() );
-		if ( part === 'flame' || part === 'trail' || part === 'smoke' ) preview?.boost();
+		if ( SHOWN_OFF.includes( part ) ) preview?.boost();
 		const ride = current();
 		if ( ride?.vehicle.id === vehicle.id ) applyLook( ride.entry.pivot, lookFor( vehicle, isPro() ), vehicle );
 		recolourIcons();
@@ -204,7 +207,7 @@ export function setUpGarage( { vehicles, panel, models, current } ) {
 
 			const { part } = section.dataset;
 			const { paint, title } = PARTS.find( p => p.part === part );
-			section.hidden = paint && ! paintable || part === 'smoke' && wearing.trail !== 'smoke';
+			section.hidden = paint && ! paintable || part === 'smoke' && wearing.trail !== 'smoke' || boostHidden( part, wearing );
 			// A hovercraft's "rims" are its duct and rudders.
 			section.querySelector( 'h3' ).textContent = part === 'rim' ? vehicle.rims ?? title : title;
 			for ( const button of section.querySelectorAll( '.choice' ) ) {
@@ -330,7 +333,7 @@ function build() {
 				</div>
 				<div class="options">
 					<p class="pass-note" hidden>Starred choices come with the pass. <button type="button" class="link">What's in it</button></p>
-					<p class="paint-note small" hidden>Its paint is part of the model, so it keeps it: pick its boost flame and trail.</p>
+					<p class="paint-note small" hidden>Its paint is part of the model, so it keeps it: pick its boost and trail.</p>
 				</div>
 			</div>
 			<footer>
@@ -340,6 +343,37 @@ function build() {
 		</div>`;
 	document.body.append( dialog );
 	return dialog;
+
+}
+
+// --- the boost ------------------------------------------------------------------------------
+
+// What's picked here is shown off at once with a moment of boosting on the turntable.
+const SHOWN_OFF = [ 'boost', 'flame', 'trail', 'smoke' ];
+
+// The boost's parts: its style (boosts.js), each a button with a little picture, and the classic
+// flame's colour, which was the only boost there was and now shows only under the classic flame.
+function boostParts() {
+
+	return [
+		{ part: 'boost', title: 'Boost', list: BOOSTS, kind: 'style', note: 'What your booster leaves behind' },
+		{ part: 'flame', title: 'Flame colour', list: FLAMES, kind: 'swatch' },
+	];
+
+}
+
+function styleButton( button, choice ) {
+
+	button.classList.add( 'word' );
+	button.innerHTML = choice.icon;
+	button.append( Object.assign( document.createElement( 'span' ), { textContent: choice.name } ) );
+
+}
+
+// The flame's colour only matters with the classic flame.
+function boostHidden( part, wearing ) {
+
+	return part === 'flame' && wearing.boost !== 'classic';
 
 }
 
@@ -370,7 +404,7 @@ function createPreview( canvas, models, getVehicle, onPaintable ) {
 	const sphere = new Sphere();
 	const box = new Box3();
 	const still = new Vector3();
-	const size = { width: 1, height: 1, rear: 1, scale: 1 };
+	const size = { width: 1, height: 1, length: 1, rear: 1, scale: 1 };
 	const wheels = [ new Vector3(), new Vector3() ];
 	let model = null;
 	let fx = null;
@@ -408,7 +442,7 @@ function createPreview( canvas, models, getVehicle, onPaintable ) {
 		if ( model && fx ) {
 
 			model.updateMatrixWorld( true );
-			fx.update( { pivot: model, size, wheels, velocity: still, flame: demo > 0 ? 1 : 0, trail: demo > 0 ? 1 : 0, drifting: false, level: 0, dt } );
+			fx.update( { pivot: model, size, wheels, velocity: still, flame: demo > 0 ? 1 : 0, trail: demo > 0 ? 1 : 0, drifting: false, level: 0, grounded: true, dt } );
 
 		}
 
@@ -495,7 +529,7 @@ function createPreview( canvas, models, getVehicle, onPaintable ) {
 		box.setFromObject( model );
 		box.getBoundingSphere( sphere );
 		box.getSize( still );
-		Object.assign( size, { width: still.x, height: still.y, rear: box.max.z, scale: 1 } );
+		Object.assign( size, { width: still.x, height: still.y, length: still.z, rear: box.max.z, scale: 1 } );
 		wheels[ 0 ].set( - still.x * 0.4, 0.05, box.max.z * 0.6 );
 		wheels[ 1 ].set( still.x * 0.4, 0.05, box.max.z * 0.6 );
 		still.set( 0, 0, 0 );

@@ -50,7 +50,7 @@ address, and the construction app is unchanged by it.
 | W / S | Gas; brake, and reverse once stopped |
 | A / D | Steer |
 | Space | Drift: hold it and steer round a bend, let go for a mini-turbo; tap it to hop |
-| B | Booster |
+| B | Booster: flat out for a moment, supersonic |
 | Shift | Fly: hold to lift off, let go to glide down |
 | In the air | A / D spin, W / S flip (W forward, S back), Q / E roll (or Space with A / D) |
 | R | Stuck? Back on the road a few metres on |
@@ -108,6 +108,41 @@ Hit something (a wall, a building, a parked car, a barrier) and you don't stop: 
   the **DRIFT** chip and button fill with the mini-turbo's charge in its colour (yellow, then teal,
   then pink after 0.7, 1.5 and 2.5 s). Let go for a short, strong boost. Space held before you
   steer waits for the steering rather than hopping; a quick tap hops.
+
+### Boosting
+
+- **The booster** (**B**) fires the whole gauge, 2.5 s of it (it needs 15 % to light), pushing you up
+  to twice the ride's top speed. The gauge refills by itself in 8 s; landed tricks top it up (a fifth
+  each), and so do boost pads. What it leaves behind is the ride's **boost style** from the
+  [Garage](#the-garage): the classic flame, bubbles or confetti, or with the pass one of nine more.
+- **Supersonic.** Boost at 85 % or more of that doubled top speed for three quarters of a second and
+  you go supersonic: a sonic boom (a shock ring blown out round you, a flash and a jolt), streaks of
+  air streaming back past you, the view 9° wider and **SUPERSONIC** by the speed. It lasts, boosting
+  or not, until you drop under three quarters of that speed: a moment after the gauge runs out, or at
+  once if you hit something. Every ride can, each against its own top speed (the kart at about
+  190 km/h, the haul truck at 120). It's all in `src/drive.js` (`SUPERSONIC`) and `drive-boosts.js`;
+  World Drive widens the view by `driver.warp`.
+- **Boost pads.** Glowing pads turn up on the ground ahead of and round you as you drive, each under
+  a column of light: small gold ones (+12 % of the gauge) and big orange ones (a full gauge). Drive over
+  one and it goes dark, lighting again 4 s later (a big one 10 s); with the gauge already full you
+  leave it for later. There are at most 12 (9 small, 3 big), 15 m apart or more, and those you leave
+  far behind are put down ahead again. **Boost pads on the road** in the pause menu turns them off
+  (kept in this browser).
+
+  Where they go (`src/drive-app/pads.js`): every 0.08 s one spot is tried, 30 to 100 m ahead along
+  the way you're going (within 50° either side) or, one try in three, anywhere 25 to 70 m round you.
+  Each spot is looked at straight down from 300 m up, so the first thing the ray meets is whatever is
+  on top there: a roof, a tree or a bridge over the street rules it out, and nothing goes inside a
+  building. The ground there must be as smooth as a road (tilted less than 16°, and within 15 cm of
+  it at eight points just past the pad's edge: not on a parked car, a kerb, a slope or the lumpy top
+  of a bush) and reachable from the street you were last on: looked at every 7 m at most on the
+  way there, it may climb or fall up to 1 m from one look to the next (a street at 14 %), passing
+  by something standing in the way (one look higher than those either side: a parked car), but
+  never a step that stays up, onto a roof or a bus shelter or up the bank beside a highway. Nothing
+  is put down while you're more than 20 m over where you last drove. One pad a frame is looked at
+  again, so when sharper tiles arrive under it, it moves onto them (or goes, if the ground there
+  moved more than a metre). It's three instanced meshes, and a try is two dozen rays at most, most
+  of them ending after one or two.
 
 ## Supporter Pass (content)
 
@@ -244,7 +279,7 @@ couldn't be made to turn, and other people's concepts:
 
 **Garage** under the rides on the globe, and in the pause menu, opens the paint shop
 (`src/drive-app/garage.js`, the looks in `src/drive-app/paint.js`): every ride turning on a
-turntable (drag to turn it; **▶ Boost** shows its flame and trail), and for each:
+turntable (drag to turn it; **▶ Boost** shows its boost and trail), and for each:
 
 | | Free | With the pass |
 | --- | --- | --- |
@@ -252,8 +287,46 @@ turntable (drag to turn it; **▶ Boost** shows its flame and trail), and for ea
 | Finish | Gloss | Matte, metallic |
 | Decal | None | Racing stripes, a number (0 to 99), flames, checker |
 | Rims (a hovercraft's trim) | Silver, graphite | Gold, white, red, blue, lime, pink |
-| Boost flame | Orange | Blue, green, purple, pink, rainbow |
+| Boost style | Classic flame, bubbles, confetti | Plasma, lightning, glitter, comet, neon rings, fireworks, hearts, pixel, ink |
+| Flame colour (the classic flame's) | Orange | Blue, green, purple, pink, rainbow |
 | Trail (boosting or flying) | None | Smoke (in 8 colours), sparkle, rainbow ribbon (six bands side by side) |
+
+**Boost styles** (`src/drive-boosts.js`; the Garage's list, with a little picture for each, is
+`src/drive-app/boosts.js`) are what the booster leaves behind:
+
+| Style | |
+| --- | --- |
+| Classic flame | The flame as it always was, in its colour |
+| Bubbles | Soap bubbles floating up and wobbling away, each popping at the end |
+| Confetti | Paper rectangles in party colours, tumbling over and over as they flutter down behind |
+| Plasma | A blue-white electric flame crackling with little arcs, throwing blue sparks |
+| Lightning | Forked bolts crackling back and out from the exhaust, struck again every few hundredths of a second |
+| Glitter | A stream of tiny twinkling stars in white, gold, pink, sky and lilac |
+| Comet | A throbbing white-blue head and a long glowing tail that narrows and turns blue behind it |
+| Neon rings | Glowing hoops thrown out flat across the way it's going, so the camera looks through them |
+| Fireworks | Little rockets bursting over it into balls of sparks in one colour, which fall and twinkle out |
+| Hearts | Hearts rising and swaying away, beating as they go |
+| Pixel | Chunky squares in a bright palette on a grid in the world, shrinking in steps and blinking out |
+| Ink | Blobs of bright paint flung out behind, leaving splats on the road for five seconds, drawn out longer the faster it goes |
+
+The flame colour was the Garage's only boost choice before the styles. It's now the classic flame's
+colour, shown under it, so a look saved before (a flame and no style) is the classic flame in the
+colour it had; without the pass a saved style is the classic flame again, as anything else locked
+goes back to its free choice.
+
+Each style is one batch of quads drawn from one picture sheet, in one draw call: billboards, strips
+along a line (a bolt, a comet's tail) or quads flat across a normal (a ring, a splat on the road).
+It has a fixed number of particles, made once with its buffers (its budget, 40 to 280; the oldest
+is reused when they're all in use), and each frame only the numbers in its buffers change, so
+nothing is made while boosting. Most of what's thrown out is carried along at 85 to 97 % of the
+vehicle's speed (ink and a comet's tail less), with the air slowing only its own motion, so at
+150 km/h it trails a few metres behind, between the vehicle and the chase camera, rather than being left on the road, which at that
+speed is behind the camera in a tenth of a second. The supersonic effects are one more batch (120).
+On the test pad (software rendering in the test's browser), a minute of boosting each made nothing
+new (no geometries, textures, programs, objects or materials) and kept within its budget (at most
+205 alive, glitter's); the driving and its effects took 0.1 to 0.2 ms a frame with any style, and
+drawing them added 2 to 10 % to a frame for most, and up to a fifth for those that cover the most
+of the view (lightning 15 %, fireworks 22 %).
 
 Choices are kept for each ride in this browser (`world-drive.garage` in localStorage) and put on
 whenever it's driven; picked while paused they're on it as soon as it drives on. A browser that keeps
@@ -278,16 +351,18 @@ unchanged, each ride driving, drifting, thrown up by a wall and landing, their h
 against each other, the hovercraft hovering with no wheels, the monster truck over a car, the
 Garage's choices on the ride and kept across a reload (and still made with a damaged saved value,
 or none kept at all), the world not drawn behind the Garage, the frame time with trails, nothing
-turning in the air faster than the kart, and the Garage and the locked rides' badges on a phone.
-And the cars: each listed in `cars.json`, `cars.js` and `DRIVE_CARS` alike, under 2 MB, CC BY or
-CC0 and in `CREDITS.md`, its real size, with four wheels and the front two steering; without the
-pass the muscle car free, pictured, credited under the picker and in About (all six, with links),
-driving, drifting, thrown up by a wall and landing, and the others opening the sheet; with it each
-car driving, drifting, thrown up and landing, its wheels spinning and the front ones steering the
-right way, its size as imported, and their handling against each other (the night cruiser fastest,
-the neon racer quickest to 100, the dune buggy thrown highest, the farm truck slowest); the Garage
-repainting the muscle car (colour, rims, decals) and saying the others keep their paint, with only
-flame and trail to pick.
+turning in the air faster than the kart, each ride going supersonic, the boost styles in the Garage
+(three free, the rest opening the sheet), a look saved before the styles keeping its flame's colour,
+every style drawn at 150 km/h (with a picture of each), making nothing new in a minute of boosting
+and timed, and the Garage and the locked rides' badges on a phone. And the cars: each listed in
+`cars.json`, `cars.js` and `DRIVE_CARS` alike, under 2 MB, CC BY or CC0 and in `CREDITS.md`, its real
+size, with four wheels and the front two steering; without the pass the muscle car free, pictured,
+credited under the picker and in About (all six, with links), driving, drifting, thrown up by a wall
+and landing, and the others opening the sheet; with it each car driving, drifting, thrown up and
+landing, its wheels spinning and the front ones steering the right way, its size as imported, and
+their handling against each other (the night cruiser fastest, the neon racer quickest to 100, the
+dune buggy thrown highest, the farm truck slowest); the Garage repainting the muscle car (colour,
+rims, decals) and saying the others keep their paint, with only a boost and trail to pick.
 
 ## Supporter Pass (buying it)
 
@@ -760,14 +835,18 @@ supporter, the ⭐, the owner's SQL, and buying off without its settings), and `
 (the page in Chromium without a key: the globe and panel, search on Enter, spots, pins, dropping in
 and driving, stunts (a wall throwing the kart into the air and never through it, a backflip landed
 for points, the DRIFT button), changing ride, M and teleporting again without a reload, recent
-places, a phone with touch buttons, the used-up, robot-check and getting-ready screens, and the
-leaderboard with its answers made in the test: tabs, your own row, picking a name and renaming, a
+places, a phone with touch buttons, boosting flat out going supersonic in each free ride (the boom,
+the streaks, the tag and the wider view, and its end as it slows), boost pads on the test pad (put
+down as it drives, never on a roof, a car, a shelter or a slope nor from high up, moved onto sharper
+ground, a small one's 12 % and a big one's fill, dark then lit again, left lit with a full gauge,
+recycled, and the pause menu's switch kept across a reload), the used-up, robot-check and
+getting-ready screens, and the leaderboard with its answers made in the test: tabs, your own row, picking a name and renaming, a
 landed jump posting the run with the card asking first, each place's best posted, a dead connection
 changing nothing, and a phone; and buying the pass with Google's script stood in for: signing in
 from the sheet, the pause menu and the used-up screen, Buy's link, "Check again" before Stripe's
 word, unlocking on focus and on `?supporter=thanks`, on every load, signing out, the player linked,
 the ⭐, and "Coming soon" with no sign-in or no Worker answering). `npm run test:drive-pro-ui` tries
-the pass's rides and the Garage.
+the pass's rides, the Garage and the boost styles.
 
 ## How it fits together
 
@@ -788,7 +867,9 @@ src/drive-app/pro.js         whether this visitor has the Supporter Pass (off un
 src/drive-app/pass.js        the Supporter Pass sheet and its badge
 src/drive-app/supporter.js   buying it: Google sign-in, the Payment Link, unlocking, the pause menu's
                              account line
-src/drive-app/garage.js      the Garage: choices and the turntable; paint.js the looks and decals
+src/drive-app/garage.js      the Garage: choices and the turntable; paint.js the looks and decals;
+                             boosts.js the boost styles it offers
+src/drive-app/pads.js        boost pads: where they go, driving over them, the pause menu's switch
 src/drive-app/api.js         /api/config, the visit with Turnstile, /api/search, the leaderboard's and
                              the Supporter Pass's calls
 src/drive-app/leaderboard.js the leaderboard: the panel, names, posting runs, the new-best card

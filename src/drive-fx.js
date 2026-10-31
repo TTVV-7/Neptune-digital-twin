@@ -12,19 +12,23 @@ import {
 	Mesh,
 	MeshBasicMaterial,
 	MeshStandardMaterial,
+	Quaternion,
 	SRGBColorSpace,
 	Sprite,
 	SpriteMaterial,
 	Vector3,
 } from 'three';
+import { createBoostStyle, createSupersonic, styleFlame } from './drive-boosts.js';
 
 // What driving shows besides the vehicle: the booster's flame and glow, tyre smoke while drifting
 // and the sparks that say how big the drift boost will be; and with stunts, sparks, bits and a
 // flash where it hits something, sparks while it scrapes along a wall and dust where it comes down
-// hard. An app can colour the flame and add a trail behind the vehicle while it boosts or flies
-// (World Drive's Garage): coloured smoke, sparkles or a rainbow ribbon. Kept cheap: a few cones,
-// sprites and little boxes, reused from small pools, and one ribbon whose buffers are written in
-// place, nothing made each frame and nothing that casts or catches rays.
+// hard. An app can colour the flame or swap it for a boost style of drive-boosts.js (plasma,
+// lightning, bubbles, a comet's tail...), and add a trail behind the vehicle while it boosts or
+// flies (World Drive's Garage): coloured smoke, sparkles or a rainbow ribbon. Going supersonic
+// (drive.js) adds a sonic boom and streaks of air past it. Kept cheap: a few cones, sprites and
+// little boxes, reused from small pools, and ribbons and batches of quads whose buffers are written
+// in place, nothing made each frame and nothing that casts or catches rays.
 
 const SMOKE_POOL = 64;
 const SPARK_POOL = 120;
@@ -65,6 +69,7 @@ const RIBBON_HUES = [ 0, 0.08, 0.15, 0.33, 0.58, 0.77 ];
 const _v = new Vector3();
 const _p = new Vector3();
 const _across = new Vector3();
+const _q = new Quaternion();
 
 let textures = null;
 function getTextures() {
@@ -121,9 +126,10 @@ function radial( stops ) {
 
 // world: the group effects that stay behind (smoke, sparks) are added to. The flame follows the
 // vehicle's pivot each frame but isn't part of it, so it never counts as the vehicle's own shape.
-// look: { flame: a name in FLAMES, or 'rainbow' (orange if not given), trail: null or { kind:
-// 'smoke', 'sparkle' or 'ribbon', colour (smoke's) } }.
-export function createDriveFx( world, { flame: flameName = 'orange', trail = null } = {} ) {
+// look: { boost: 'classic' (the flame, if not given) or a style in drive-boosts.js, flame: the
+// classic flame's colour, a name in FLAMES or 'rainbow' (orange if not given), trail: null or {
+// kind: 'smoke', 'sparkle' or 'ribbon', colour (smoke's) } }.
+export function createDriveFx( world, { boost = 'classic', flame: flameName = 'orange', trail = null } = {} ) {
 
 	const { soft, glow, star: twinkle } = getTextures();
 	const root = new Group();
@@ -147,6 +153,29 @@ export function createDriveFx( world, { flame: flameName = 'orange', trail = nul
 	halo.material.color.set( haloColour );
 	// The glow's own picture is orange at its edge: any other colour glows from a white one.
 	if ( flameName !== 'orange' ) halo.material.map = soft;
+
+	// A boost style instead (drive-boosts.js): its particles, and the flame in its colours, its glow
+	// alone, or nothing at all. Then the supersonic effects, which every style has.
+	const style = createBoostStyle( root, boost );
+	const styled = style ? styleFlame( boost ) : null;
+	if ( style ) {
+
+		outer.visible = inner.visible = !! styled?.outer;
+		if ( styled?.outer ) outer.material.color.set( styled.outer );
+		if ( styled?.inner ) inner.material.color.set( styled.inner );
+		if ( styled ) halo.material.color.set( styled.halo );
+		halo.material.map = soft;
+
+	}
+
+	const sonic = createSupersonic( root );
+	// What the style and the supersonic effects are told each frame (see drive-boosts.js): one
+	// object, filled in again each time.
+	const frame = {
+		pivot: null, size: null, velocity: new Vector3(), power: 0, grounded: true, dt: 0, clock: 0, scale: 1,
+		nozzle: new Vector3(), lastNozzle: new Vector3(), back: new Vector3(), up: new Vector3(), right: new Vector3(), middle: new Vector3(),
+	};
+	let framed = false;
 
 	const smoke = pool( SMOKE_POOL, () => new SpriteMaterial( { map: soft, color: 0xdedede, transparent: true, depthWrite: false } ) );
 	const sparks = pool( SPARK_POOL, () => new SpriteMaterial( { map: glow, color: 0xffffff, transparent: true, blending: AdditiveBlending, depthWrite: false } ) );
@@ -286,6 +315,31 @@ export function createDriveFx( world, { flame: flameName = 'orange', trail = nul
 	let flicker = 0;
 	const colour = new Color();
 
+	// Where the exhaust is, which ways are back, up and right, and the rest of `frame`.
+	function setFrame( pivot, size, velocity, power, grounded, dt ) {
+
+		frame.pivot = pivot;
+		frame.size = size;
+		frame.velocity.copy( velocity );
+		frame.power = power;
+		frame.grounded = grounded;
+		frame.dt = dt;
+		frame.clock = flicker;
+		frame.scale = Math.max( 0.35, Math.min( size.width, size.height ) * 0.45 ) / 0.45;
+		frame.lastNozzle.copy( frame.nozzle );
+		pivot.localToWorld( frame.nozzle.set( 0, size.height * 0.33 / size.scale, ( size.rear + 0.02 ) / size.scale ) );
+		pivot.localToWorld( frame.middle.set( 0, size.height * 0.5 / size.scale, ( size.rear - ( size.length ?? size.rear * 2 ) / 2 ) / size.scale ) );
+		// Its own axes, turned as it is: it faces -Z.
+		pivot.getWorldQuaternion( _q );
+		frame.back.set( 0, 0, 1 ).applyQuaternion( _q );
+		frame.up.set( 0, 1, 0 ).applyQuaternion( _q );
+		frame.right.set( 1, 0, 0 ).applyQuaternion( _q );
+		// The first frame has no frame before it.
+		if ( ! framed ) frame.lastNozzle.copy( frame.nozzle );
+		framed = true;
+
+	}
+
 	// The trail, while it boosts or flies (`power` over 0): puffs or sparkles left behind the back of
 	// it, drifting a little after it, or the ribbon drawn out from across its back.
 	function updateTrail( pivot, size, velocity, power, dt ) {
@@ -333,15 +387,18 @@ export function createDriveFx( world, { flame: flameName = 'orange', trail = nul
 	return {
 
 		// Each frame, with the vehicle's pivot and size and what it's doing:
-		// { pivot, size: { width, height, rear, scale }, wheels: [ local points of the rear tyres
-		// on the ground ], velocity: its own (m/s, world), flame: 0..1 (booster 1, a drift boost
-		// less), drifting, level: 0..3, scrape: { at, normal } where it's scraping along a wall
-		// (world) or null, dt }.
-		update( { pivot, size, wheels, velocity, flame: power, trail: trailPower = 0, drifting, level, scrape = null, dt } ) {
+		// { pivot, size: { width, height, length, rear, scale }, wheels: [ local points of the rear
+		// tyres on the ground ], velocity: its own (m/s, world), flame: 0..1 (booster 1, a drift
+		// boost less), drifting, level: 0..3, scrape: { at, normal } where it's scraping along a wall
+		// (world) or null, grounded (on its wheels: ink is left on the road), supersonic, dt }.
+		update( { pivot, size, wheels, velocity, flame: power, trail: trailPower = 0, drifting, level, scrape = null, grounded = true, supersonic = false, dt } ) {
 
 			flicker += dt;
-			flame.visible = power > 0.01;
-			if ( flame.visible && rainbow ) {
+			setFrame( pivot, size, velocity, power, grounded, dt );
+			style?.update( frame );
+			sonic.update( frame, supersonic );
+			flame.visible = power > 0.01 && ( ! style || !! styled );
+			if ( flame.visible && rainbow && ! style ) {
 
 				const hue = flicker / RAINBOW_TURN % 1;
 				outer.material.color.setHSL( hue, 1, 0.55 );
@@ -355,8 +412,10 @@ export function createDriveFx( world, { flame: flameName = 'orange', trail = nul
 				const scale = Math.max( 0.35, Math.min( size.width, size.height ) * 0.45 );
 				pivot.localToWorld( flame.position.set( 0, size.height * 0.33 / size.scale, ( size.rear + 0.02 ) / size.scale ) );
 				pivot.getWorldQuaternion( flame.quaternion );
-				const jitter = 0.85 + 0.3 * Math.abs( Math.sin( flicker * 47 ) * Math.sin( flicker * 31 ) );
-				flame.scale.set( scale * power, scale * power, scale * ( 0.6 + power * 2.6 ) * jitter );
+				// A style's flame may burn longer or shorter, and flicker more wildly.
+				const wild = styled?.flicker ?? 1;
+				const jitter = 0.85 + 0.3 * wild * Math.abs( Math.sin( flicker * 47 * wild ) * Math.sin( flicker * 31 * wild ) );
+				flame.scale.set( scale * power, scale * power, scale * ( 0.6 + power * 2.6 ) * jitter * ( styled?.length ?? 1 ) );
 				outer.material.opacity = 0.25 + 0.35 * jitter;
 				inner.material.opacity = 0.9;
 				halo.scale.setScalar( 1.6 * jitter );
@@ -424,6 +483,21 @@ export function createDriveFx( world, { flame: flameName = 'orange', trail = nul
 			age( flash, dt, 1 );
 			ageDebris( dt );
 			updateTrail( pivot, size, velocity, trailPower, dt );
+
+		},
+
+		// The sonic boom, going supersonic: a shock ring round it and a flash.
+		boom() {
+
+			if ( framed ) sonic.boom( frame, Math.max( frame.size.width, frame.size.height ) );
+
+		},
+
+		// How many of the boost style's and the supersonic effects' particles are alive, and the
+		// most there can be.
+		get particles() {
+
+			return { alive: ( style?.alive ?? 0 ) + sonic.alive, budget: ( style?.budget ?? 0 ) + sonic.budget };
 
 		},
 

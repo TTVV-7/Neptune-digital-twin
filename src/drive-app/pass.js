@@ -57,7 +57,7 @@ function build() {
 			<p class="lead">World Drive streams the real 3D world, and every drive costs us a little. The pass is one payment of <b>${ PRICE }</b> that helps keep it running, and comes with:</p>
 			<ul class="perks">
 				<li class="rides"><b>${ COUNTS[ PASS_CARS.length + PRO_RIDES.length ] ?? PASS_CARS.length + PRO_RIDES.length } more rides</b><span>${ COUNTS[ PASS_CARS.length ] } cars (${ listOf( PASS_CARS ) }) and ${ COUNTS[ PRO_RIDES.length ].toLowerCase() } built for World Drive (${ listOf( PRO_RIDES ) }), each handling its own way.</span><div class="ride-icons"></div></li>
-				<li><b>The whole Garage</b><span>All 12 colours, matte and metallic paint, racing stripes, a number, flames or checker, rim colours, blue, green, purple, pink or rainbow boost flames, and smoke, sparkle or rainbow-ribbon trails.</span></li>
+				<li><b>The whole Garage</b><span>All 12 colours, matte and metallic paint, racing stripes, a number, flames or checker, rim colours, nine more boost styles (plasma, lightning, glitter, a comet, neon rings, fireworks, hearts, pixels and ink) and the flame in blue, green, purple, pink or rainbow, and smoke, sparkle or rainbow-ribbon trails.</span></li>
 				<li><b>A ⭐ on the leaderboard</b><span>By your name, for everyone to see.</span></li>
 				<li><b>30 drives a day</b><span>Instead of 8.</span></li>
 			</ul>
