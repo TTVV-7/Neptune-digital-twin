@@ -469,8 +469,12 @@ or muscle car, press **Drive here** and drive the real world arcade-style: drift
 **Q**/**E** roll for tricks that score (times a combo multiplier) when you land on your wheels; a
 wipeout loses the combo and rolls you back onto them. Boosting flat out hits **overdrive** (a sonic
 boom, streaks of air, a wider view), and glowing **boost pads** turn up on open ground as you drive
-to top the booster up (a switch in the pause menu turns them off). **M** goes back to the globe to
-drop in somewhere else without reloading. Phones get a bottom sheet and touch buttons.
+to top the booster up (a switch in the pause menu turns them off). Drive or come down into **water**
+and it's a splash: spray and rings of foam, the vehicle sinking nose first, then back on the last
+dry ground you were on, facing away from it (the hovercraft rides on it). Google's mesh doesn't say
+what's water, so `src/drive-app/water.js` tells it by how Google draws it: level, one even colour,
+the lowest thing round about. **M** goes back to the globe to drop in somewhere else without
+reloading. Phones get a bottom sheet and touch buttons.
 
 It shares `src/` with this app but has its own page (`drive/index.html`, `src/drive-app/`), build
 (`npm run dev:drive`, `npm run build:drive` into `dist-drive/`) and Cloudflare Worker
@@ -540,11 +544,14 @@ src/sidebar.js      the library sidebar: placing, selecting, moving, drawing fla
 src/handles.js      on-map handles for the selected item: turning, resizing areas, a pit's depth
 src/toolbar.js      the toolbar over the selected item, its size editor and Undo after deleting
 src/flatten.js      flatten areas: press Google's mesh flat inside a rectangle
-src/drive.js        race mode: driving, jumps, cameras, speedometer; flying, booster, drifts and stunts
-                    (crash: 'launch': bounce and launch, air tricks, score) as options
+src/drive.js        race mode: driving, jumps, cameras, speedometer; flying, booster, drifts, stunts
+                    (crash: 'launch': bounce and launch, air tricks, score) and water (a splash, then
+                    back on dry land) as options
 src/drive-hud.js    a self-contained driving HUD with touch buttons, the DRIFT button, hit words,
-                    trick pop-ups and the score, for other apps (World Drive)
-src/drive-fx.js     booster flame, tyre smoke and drift sparks; a hit's sparks and bits, scrapes, dust
+                    trick pop-ups and the score, a splash's word and the fade after it, for other
+                    apps (World Drive)
+src/drive-fx.js     booster flame, tyre smoke and drift sparks; a hit's sparks and bits, scrapes, dust;
+                    a splash's spray and foam, a hovercraft's spray
 src/drive-boosts.js boost styles (plasma, lightning, bubbles, a comet...) and the supersonic boom and
                     streaks, each a fixed batch of quads drawn in one go, for drive-fx.js
 src/kart.js         the go-kart model and its library item

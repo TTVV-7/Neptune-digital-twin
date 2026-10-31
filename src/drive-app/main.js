@@ -15,6 +15,7 @@ import { loadVehicle, loadVehicles, specOf } from './vehicles.js';
 import { setUpPanel } from './panel.js';
 import { setUpGarage } from './garage.js';
 import { createBoostPads } from './pads.js';
+import { createWater } from './water.js';
 import { setUpLeaderboard } from './leaderboard.js';
 import { buyArea } from './pass.js';
 import { fillAccountArea, fillBuyArea, linkPlayer, setUpSupporter } from './supporter.js';
@@ -168,6 +169,8 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 	scene.add( models.group );
 	const ground = new Ground( grounds );
 	const hud = createDriveHud( $( 'hud' ) );
+	// Google's mesh doesn't say what's water: water.js tells it from the ground by how it looks.
+	const water = createWater( ground );
 	// drive.js hands the view back to the construction app's walk controller when you get out.
 	// World Drive has no walking: this stands in for it.
 	const walker = { keys: new Set(), enabled: false, yaw: 0, pitch: 0, setPose() {}, setMode() {} };
@@ -175,14 +178,15 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 		camera, models, controls: walker, getColliders: grounds, hud, onStop: stopped,
 		// Each landed jump, for the leaderboard: where, and in what.
 		onScore: run => board.onScore( { ...run, place: placeLabel( state.place ), vehicle: state.vehicle?.id } ),
-		// What World Drive drives with: F flies, Shift (or B) boosts, the kart drifts, and hitting something
-		// throws you into the air for stunts.
-		fly: true, booster: true, drift: true, crash: 'launch',
+		// What World Drive drives with: F flies, Shift (or B) boosts, the kart drifts, hitting something
+		// throws you into the air for stunts, and driving into water is a splash.
+		fly: true, booster: true, drift: true, crash: 'launch', water,
 	} );
 
 	const state = { mode: 'globe', place: null, entry: null, vehicle: null, drop: null, leaving: false };
-	// Boost pads on the ground as you drive (pads.js), with their switch in the pause menu.
-	const pads = createBoostPads( { scene, driver, ground, toggle: $( 'pause' ).querySelector( '.pads-toggle' ) } );
+	// Boost pads on the ground as you drive (pads.js), never on water, with their switch in the
+	// pause menu.
+	const pads = createBoostPads( { scene, driver, ground, water, toggle: $( 'pause' ).querySelector( '.pads-toggle' ) } );
 
 	const panel = setUpPanel( {
 		root: $( 'globe-ui' ),
@@ -668,7 +672,7 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 	// For poking around from the browser console, and for the tests.
 	window.drive = {
 		scene, camera, renderer, tiles, globe, models, driver, ground, panel, leaderboard: board,
-		garage, supporter, pads,
+		garage, supporter, pads, water,
 		get mode() {
 
 			return state.mode;

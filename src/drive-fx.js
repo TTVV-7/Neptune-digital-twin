@@ -9,9 +9,11 @@ import {
 	DoubleSide,
 	DynamicDrawUsage,
 	Group,
+	MathUtils,
 	Mesh,
 	MeshBasicMaterial,
 	MeshStandardMaterial,
+	PlaneGeometry,
 	Quaternion,
 	SRGBColorSpace,
 	Sprite,
@@ -26,9 +28,12 @@ import { createBoostStyle, createSupersonic, styleFlame } from './drive-boosts.j
 // hard. An app can colour the flame or swap it for a boost style of drive-boosts.js (plasma,
 // lightning, bubbles, a comet's tail...), and add a trail behind the vehicle while it boosts or
 // flies (World Drive's Garage): coloured smoke, sparkles or a rainbow ribbon. Going supersonic
-// (drive.js) adds a sonic boom and streaks of air past it. Kept cheap: a few cones, sprites and
-// little boxes, reused from small pools, and ribbons and batches of quads whose buffers are written
-// in place, nothing made each frame and nothing that casts or catches rays.
+// (drive.js) adds a sonic boom and streaks of air past it. With water (World Drive's), coming down
+// in it throws up a splash: spray and droplets, rings of foam spreading over the surface and a patch
+// of foam where it went in, then foam bubbling round it as it sinks; a hovercraft on water throws a
+// little spray behind it. Kept cheap: a few cones, sprites and little boxes, reused from small
+// pools, and ribbons and batches of quads whose buffers are written in place, nothing made each
+// frame and nothing that casts or catches rays.
 
 const SMOKE_POOL = 64;
 const SPARK_POOL = 120;
@@ -65,6 +70,25 @@ const RIBBON_POINTS = 48;
 const RIBBON_STEP = 1 / 40;
 const RIBBON_LIFE = 0.9;
 const RIBBON_HUES = [ 0, 0.08, 0.15, 0.33, 0.58, 0.77 ];
+// Water. A splash's droplets (falling back, gone in DROP_LIFE s) and spray (billows of mist,
+// MIST_LIFE s); a ring of foam spreading out from it for RING_LIFE s, to RING_REACH m (and more for
+// a harder splash) past the vehicle's side, over a patch of foam where it went in, for FOAM_LIFE s.
+// Sinking, it bobs, sending out a ripple of foam every RIPPLE_STEP s (RIPPLE_REACH m), and foam
+// bubbles round it, a puff every BUBBLE_STEP s; a hovercraft's spray, a puff every SPRAY_STEP s at
+// full speed.
+const DROP_POOL = 150;
+const MIST_POOL = 48;
+const DROP_LIFE = 1.3;
+const MIST_LIFE = 1.5;
+const RINGS = 6;
+const RING_LIFE = 2;
+const RING_REACH = 5;
+const RIPPLE_STEP = 0.45;
+const RIPPLE_REACH = 3;
+const FOAM_LIFE = 2.6;
+const BUBBLE_STEP = 0.07;
+const SPRAY_STEP = 0.02;
+const WATER_COLOURS = [ 0xffffff, 0xe6f6ff, 0xc9ecff ];
 
 const _v = new Vector3();
 const _p = new Vector3();
@@ -124,12 +148,61 @@ function radial( stops ) {
 
 }
 
+// Water's pictures, drawn once: a ring of foam (a soft band, broken up by flecks so it reads as
+// foam rather than a drawn circle), and a patch of foam (a soft blob, flecked the same way).
+let waterTextures = null;
+function getWaterTextures() {
+
+	waterTextures ??= { ring: foam( 0.82, 0.09, 220 ), patch: foam( 0, 0.9, 60 ) };
+	return waterTextures;
+
+}
+
+// Foam round a circle `at` (a share of the radius) `wide` either side of it, with `flecks`.
+function foam( at, wide, flecks ) {
+
+	const size = 128;
+	const m = size / 2;
+	const canvas = document.createElement( 'canvas' );
+	canvas.width = canvas.height = size;
+	const ctx = canvas.getContext( '2d' );
+	const gradient = ctx.createRadialGradient( m, m, 0, m, m, m );
+	for ( const stop of [ 0, 0.25, 0.5, 0.75, 1 ] ) {
+
+		const off = Math.abs( stop - 0.5 ) * 2;
+		const radius = MathUtils.clamp( at + ( stop - 0.5 ) * 2 * wide, 0, 1 );
+		gradient.addColorStop( radius, `rgba(255,255,255,${ ( ( 1 - off * off ) * 0.85 ).toFixed( 3 ) })` );
+
+	}
+
+	ctx.fillStyle = gradient;
+	ctx.fillRect( 0, 0, size, size );
+	// Flecks over the band: bright where there's foam, cut out a little between.
+	for ( let i = 0; i < flecks; i ++ ) {
+
+		const angle = Math.random() * Math.PI * 2;
+		const r = ( at + ( Math.random() - 0.5 ) * 2 * wide ) * m;
+		ctx.globalCompositeOperation = i % 3 ? 'source-atop' : 'destination-out';
+		ctx.fillStyle = i % 3 ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.5)';
+		ctx.beginPath();
+		ctx.arc( m + Math.cos( angle ) * r, m + Math.sin( angle ) * r, 1 + Math.random() * 1.8, 0, Math.PI * 2 );
+		ctx.fill();
+
+	}
+
+	const texture = new CanvasTexture( canvas );
+	texture.colorSpace = SRGBColorSpace;
+	return texture;
+
+}
+
 // world: the group effects that stay behind (smoke, sparks) are added to. The flame follows the
 // vehicle's pivot each frame but isn't part of it, so it never counts as the vehicle's own shape.
 // look: { boost: 'classic' (the flame, if not given) or a style in drive-boosts.js, flame: the
 // classic flame's colour, a name in FLAMES or 'rainbow' (orange if not given), trail: null or {
-// kind: 'smoke', 'sparkle' or 'ribbon', colour (smoke's) } }.
-export function createDriveFx( world, { boost = 'classic', flame: flameName = 'orange', trail = null } = {} ) {
+// kind: 'smoke', 'sparkle' or 'ribbon', colour (smoke's) } }. water: whether there's water to
+// splash in (its pools are only made then).
+export function createDriveFx( world, { boost = 'classic', flame: flameName = 'orange', trail = null } = {}, { water = false } = {} ) {
 
 	const { soft, glow, star: twinkle } = getTextures();
 	const root = new Group();
@@ -202,6 +275,15 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 	const sparkles = trailKind === 'sparkle' ? pool( SPARKLE_POOL, () => new SpriteMaterial( { map: twinkle, color: 0xffffff, transparent: true, blending: AdditiveBlending, depthWrite: false } ) ) : null;
 	const ribbon = trailKind === 'ribbon' ? makeRibbon( root ) : null;
 	const smokeColour = new Color( trail?.colour ?? 0xffffff );
+
+	// Water, made only if there is any: droplets and spray (sprites, drawn as they are rather than
+	// added, so they're white in daylight rather than glowing), and the foam on the surface.
+	const drops = water ? pool( DROP_POOL, () => new SpriteMaterial( { map: soft, color: 0xffffff, transparent: true, depthWrite: false } ) ) : null;
+	const mist = water ? pool( MIST_POOL, () => new SpriteMaterial( { map: soft, color: 0xffffff, transparent: true, depthWrite: false } ) ) : null;
+	const surface = water ? makeFoam( root ) : null;
+	let bubbleDue = 0;
+	let rippleDue = 0;
+	let sprayDue = 0;
 
 	function pool( size, material ) {
 
@@ -384,14 +466,73 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 
 	}
 
+	// In the water: foam bubbling up round it as it sinks (`state.sinking`), or a hovercraft's spray
+	// thrown up behind it (`state.spray`, 0 to 1 by its speed), on the surface at `state.level`.
+	function updateWater( pivot, size, velocity, state, dt ) {
+
+		if ( state?.sinking ) {
+
+			rippleDue -= dt;
+			if ( rippleDue <= 0 ) {
+
+				rippleDue += RIPPLE_STEP;
+				surface.ripple( _p.copy( frame.middle ).setY( state.level ), size.width );
+
+			}
+
+			bubbleDue -= dt;
+			while ( bubbleDue <= 0 ) {
+
+				bubbleDue += BUBBLE_STEP;
+				const angle = Math.random() * Math.PI * 2;
+				const reach = ( 0.35 + Math.random() * 0.45 ) * Math.max( size.width, size.length ) * 0.6;
+				_p.set( Math.cos( angle ) * reach, 0, Math.sin( angle ) * reach ).add( frame.middle ).setY( state.level + 0.15 );
+				_v.set( ( Math.random() - 0.5 ) * 0.5, 0.3 + Math.random() * 0.6, ( Math.random() - 0.5 ) * 0.5 );
+				emit( mist, _p, _v, 0.9, 0.25 + Math.random() * 0.3, 0.8, 0xffffff );
+
+			}
+
+		} else {
+
+			// The splash's own ring comes first; then a ripple each time it bobs.
+			bubbleDue = 0;
+			rippleDue = RIPPLE_STEP;
+
+		}
+
+		const spray = state?.spray ?? 0;
+		if ( spray > 0 ) {
+
+			sprayDue -= dt * spray;
+			while ( sprayDue <= 0 ) {
+
+				sprayDue += SPRAY_STEP;
+				// Off the skirt across its back, thrown up and back a little after it.
+				const across = ( Math.random() - 0.5 ) * size.width * 0.9;
+				pivot.localToWorld( _p.set( across / size.scale, 0, ( size.rear + 0.1 ) / size.scale ) ).setY( state.level + 0.15 );
+				_v.set( ( Math.random() - 0.5 ) * 2, 1 + Math.random() * 2.5 * spray, ( Math.random() - 0.5 ) * 2 ).addScaledVector( velocity, 0.55 );
+				if ( Math.random() < 0.45 ) emit( mist, _p, _v, 0.9, 0.5, 1.8, 0xffffff, 0.15 );
+				else emit( drops, _p, _v, 0.8, 0.1 + Math.random() * 0.12, 0, WATER_COLOURS[ Math.floor( Math.random() * WATER_COLOURS.length ) ], 1 );
+
+			}
+
+		} else sprayDue = 0;
+
+		age( drops, dt, 0.95 );
+		age( mist, dt, 0.45 );
+		surface.update( dt );
+
+	}
+
 	return {
 
 		// Each frame, with the vehicle's pivot and size and what it's doing:
 		// { pivot, size: { width, height, length, rear, scale }, wheels: [ local points of the rear
 		// tyres on the ground ], velocity: its own (m/s, world), flame: 0..1 (booster 1, a drift
 		// boost less), drifting, level: 0..3, scrape: { at, normal } where it's scraping along a wall
-		// (world) or null, grounded (on its wheels: ink is left on the road), supersonic, dt }.
-		update( { pivot, size, wheels, velocity, flame: power, trail: trailPower = 0, drifting, level, scrape = null, grounded = true, supersonic = false, dt } ) {
+		// (world) or null, grounded (on its wheels: ink is left on the road), supersonic, water: null
+		// or in it, { level: the surface's height (world), sinking, spray: 0..1 }, dt }.
+		update( { pivot, size, wheels, velocity, flame: power, trail: trailPower = 0, drifting, level, scrape = null, grounded = true, supersonic = false, water: wet = null, dt } ) {
 
 			flicker += dt;
 			setFrame( pivot, size, velocity, power, grounded, dt );
@@ -483,6 +624,7 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 			age( flash, dt, 1 );
 			ageDebris( dt );
 			updateTrail( pivot, size, velocity, trailPower, dt );
+			if ( surface ) updateWater( pivot, size, velocity, wet, dt );
 
 		},
 
@@ -546,6 +688,41 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 				emit( smoke, _p, _v, SMOKE_LIFE, 0.5 + power * 0.4, 1.1 + power * 1.1, 0xcfc8bc );
 
 			}
+
+		},
+
+		// Coming down in water: a splash at `at` (world, on the surface), `power` 0 to 1 by how hard,
+		// round a vehicle `width` (m) wide. Droplets thrown up and out round it and falling back,
+		// billows of spray, and on the surface a ring of foam spreading over a patch of foam where it
+		// went in (the ripples after it are update's, as it sinks).
+		splash( at, power, width ) {
+
+			if ( ! surface ) return;
+			const count = Math.round( 50 + 90 * power );
+			for ( let i = 0; i < count; i ++ ) {
+
+				const angle = Math.random() * Math.PI * 2;
+				const reach = width * ( 0.25 + Math.random() * 0.45 );
+				_p.set( Math.cos( angle ) * reach, 0.15, Math.sin( angle ) * reach ).add( at );
+				const out = ( 1 + Math.random() * 3 ) * ( 0.6 + power );
+				_v.set( Math.cos( angle ) * out, ( 3 + Math.random() * 5 ) * ( 0.5 + power ), Math.sin( angle ) * out );
+				emit( drops, _p, _v, DROP_LIFE * ( 0.6 + Math.random() * 0.5 ), 0.12 + Math.random() * 0.22, 0.05, WATER_COLOURS[ i % WATER_COLOURS.length ], 1 );
+
+			}
+
+			const billows = Math.round( 6 + 8 * power );
+			for ( let i = 0; i < billows; i ++ ) {
+
+				const angle = i / billows * Math.PI * 2 + Math.random() * 0.4;
+				const reach = width * ( 0.2 + Math.random() * 0.4 );
+				_p.set( Math.cos( angle ) * reach, 0.3 + Math.random() * 0.4, Math.sin( angle ) * reach ).add( at );
+				const out = 0.6 + Math.random() * 1.6;
+				_v.set( Math.cos( angle ) * out, ( 1.5 + Math.random() * 3 ) * ( 0.5 + power ), Math.sin( angle ) * out );
+				emit( mist, _p, _v, MIST_LIFE * ( 0.7 + Math.random() * 0.5 ), 0.3 + width * 0.15, 0.8 + 1.2 * power, 0xffffff, 0.35 );
+
+			}
+
+			surface.splash( at, power, width );
 
 		},
 
@@ -669,6 +846,83 @@ function makeRibbon( root ) {
 				geometry.attributes.color.needsUpdate = true;
 
 			}
+
+		},
+
+	};
+
+}
+
+// Foam on the water's surface: rings spreading out from a splash and from a vehicle bobbing in the
+// water, and a patch of foam where it went in, each a flat quad (sharing one shape) grown and
+// faded in place. A few of each, reused oldest first.
+function makeFoam( root ) {
+
+	const { ring, patch } = getWaterTextures();
+	const flat = new PlaneGeometry( 2, 2 ).rotateX( - Math.PI / 2 );
+	const make = map => {
+
+		// Just over the surface (the world draws with a logarithmic depth buffer, which a polygon
+		// offset doesn't move).
+		const mesh = new Mesh( flat, new MeshBasicMaterial( { map, transparent: true, depthWrite: false } ) );
+		mesh.visible = false;
+		mesh.raycast = () => {};
+		root.add( mesh );
+		return { mesh, age: Infinity, wait: 0, life: 1, from: 1, to: 1, peak: 1 };
+
+	};
+
+	const rings = Array.from( { length: RINGS }, () => make( ring ) );
+	const patches = [ make( patch ), make( patch ) ];
+	let nextRing = 0;
+	let nextPatch = 0;
+
+	// After `wait` s, grow from `from` to `to` m across over `life` s, fading from `peak`.
+	function start( item, at, wait, life, from, to, peak ) {
+
+		item.mesh.position.copy( at ).setY( at.y + 0.06 );
+		item.mesh.visible = false;
+		Object.assign( item, { age: 0, wait, life, from, to, peak } );
+
+	}
+
+	function grow( item, dt ) {
+
+		if ( item.age > item.wait + item.life ) return;
+		item.age += dt;
+		const t = ( item.age - item.wait ) / item.life;
+		item.mesh.visible = t >= 0 && t < 1;
+		if ( ! item.mesh.visible ) return;
+		item.mesh.scale.setScalar( item.from + ( item.to - item.from ) * ( 1 - ( 1 - t ) ** 2 ) );
+		item.mesh.material.opacity = item.peak * ( 1 - t ) * Math.min( 1, t * 8 );
+
+	}
+
+	return {
+
+		splash( at, power, width ) {
+
+			const from = width * 0.55;
+			start( rings[ nextRing ], at, 0, RING_LIFE, from, from + RING_REACH + 3 * power, 0.8 );
+			nextRing = ( nextRing + 1 ) % rings.length;
+			start( patches[ nextPatch ], at, 0, FOAM_LIFE, width * 0.6, width * ( 1.2 + power * 0.4 ), 0.7 );
+			nextPatch = ( nextPatch + 1 ) % patches.length;
+
+		},
+
+		// A smaller ring from a vehicle `width` m wide bobbing at `at`.
+		ripple( at, width ) {
+
+			const from = width * 0.5;
+			start( rings[ nextRing ], at, 0, RING_LIFE * 0.8, from, from + RIPPLE_REACH, 0.55 );
+			nextRing = ( nextRing + 1 ) % rings.length;
+
+		},
+
+		update( dt ) {
+
+			for ( const item of rings ) grow( item, dt );
+			for ( const item of patches ) grow( item, dt );
 
 		},
 

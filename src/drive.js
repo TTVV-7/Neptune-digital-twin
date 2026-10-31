@@ -14,7 +14,11 @@ import { createDriveFx } from './drive-fx.js';
 // steering at low speed, and drifts on Space that pay out a boost; and `crash: 'launch'`, where
 // hitting something bounces the vehicle off it and throws it into the air, and in the air it can
 // spin, flip and roll for tricks that score when it lands on its wheels (crash: 'stop', the
-// default, stops it dead).
+// default, stops it dead). And `water`, also off unless an app gives one (World Drive's
+// drive-app/water.js, which tells water from ground on Google's mesh): driving or coming down into
+// water is a splash, the vehicle sinking nose first, and a moment later it's back on the last dry
+// ground it was on, facing away from the water. A vehicle whose tuning says it `floats` (a
+// hovercraft) rides on water as on the ground.
 
 const KMH = 3.6;
 const GRAVITY = 9.81;
@@ -180,6 +184,37 @@ const AIR_CAMERA = 3;
 const AIR_LAG = 3;
 // What a hit says, by how hard it was (m/s into it).
 const WORDS = [ [ 18, 'WHAM!' ], [ 9, 'BOING!' ], [ 0, 'BONK!' ] ];
+// Water (the `water` option). On the ground it's looked for under the vehicle every WATER_EVERY s,
+// and wherever it comes down. In it, the vehicle slows at WATER_DRAG (1/s), dips under by how hard
+// it came down (DIP of its height for each m/s, at most DIP_MOST), bobs, tips nose down (NOSE_DOWN
+// rad) and sinks SINK of its height over SINK_TIME s while the camera holds still on it; after
+// SPLASH_HOLD s the view fades out and back in (FADE s) with it on the last dry ground it was on.
+// That's from a trail of spots DRY_STEP m apart (the last DRY_KEEP of them) where it was on dry
+// ground: the newest at least DRY_EDGE m back from the last of them (about where it left the
+// shore) and DRY_OUT m from where it went in (water within a few metres of the shore can pass for
+// dry ground: see drive-app/water.js), and not within ABOVE_WATER m of the water's level if any
+// will do (water the tiles there drew unlike water would be about level with it, give or take how
+// far Google's water slopes across a harbour). Water by its edge that water.js can't tell from
+// the shore is water all the same when it came DOWN_INTO m or more down into it from the last dry
+// ground it was on, off a quay, a bank or a ramp.
+const WATER_EVERY = 0.2;
+const WATER_DRAG = 5;
+const DIP = 0.04;
+const DIP_MOST = 0.6;
+const NOSE_DOWN = - 0.45;
+const SINK = 0.7;
+const SINK_TIME = 1.8;
+const SPLASH_HOLD = 1.5;
+const FADE = 0.25;
+const DRY_STEP = 3;
+const DRY_KEEP = 24;
+const DRY_EDGE = 8;
+const DRY_OUT = 20;
+const ABOVE_WATER = 1;
+const DOWN_INTO = 0.5;
+// What a splash says, by how hard it went in (m/s: how fast it came down, and a share of how fast
+// it was going).
+const SPLASHES = [ [ 14, 'KER-SPLOOSH!' ], [ 4, 'SPLASH!' ], [ 0, 'SPLISH!' ] ];
 // Told once, the first time it's thrown into the air.
 const AIR_HINT = 'In the air: A/D spin · W/S flip · Q/E roll';
 
@@ -232,8 +267,12 @@ export class Driver {
 
 	// fly, booster, drift: the options above, all off by default; crash: 'stop' or 'launch'.
 	// onScore( run ), with stunts on: called each time a jump's tricks are landed, with the run so
-	// far (see runSoFar), for a leaderboard.
-	constructor( { camera, models, controls, getColliders, hud, onStop, onScore = null, fly = false, booster = false, drift = false, crash = 'stop' } ) {
+	// far (see runSoFar), for a leaderboard. water: null (the default: no water anywhere), or
+	// { look( east, north, y ) }, saying what's under ( east, north ), looked for down from just
+	// over y: { level, dry, shore }, level being the water's surface height there (null where it
+	// isn't water), dry whether it's surely dry ground (neither: it can't tell) and shore, where it
+	// can't tell, the height of water just past there (by its edge), if there is any.
+	constructor( { camera, models, controls, getColliders, hud, onStop, onScore = null, fly = false, booster = false, drift = false, crash = 'stop', water = null } ) {
 
 		this.camera = camera;
 		this.models = models;
@@ -246,6 +285,7 @@ export class Driver {
 		this.booster = booster;
 		this.drift = drift;
 		this.launch = crash === 'launch';
+		this.water = water;
 		this.raycaster = new Raycaster();
 		this.keys = new Set();
 		// When each key last went down (by this.clock, the time driven), for the keys that count in
@@ -312,6 +352,14 @@ export class Driver {
 		if ( this.machine ) {
 
 			this.machine.press( code );
+			return;
+
+		}
+
+		// Sinking in water nothing drives it, but R puts it back on dry land at once.
+		if ( this.splash ) {
+
+			if ( code === 'KeyR' ) this.comeBack();
 			return;
 
 		}
@@ -458,6 +506,20 @@ export class Driver {
 		this.scraping = 0;
 		this.scrapeAt = { at: new Vector3(), normal: new Vector3() };
 		this.spaceTap = null;
+		// Water (see lookForWater): whether it rides on it, the splash it's in, whether it's on water
+		// (a hovercraft), when to look next, and the trail of dry ground it's been on: the place's,
+		// kept across a pause (the same ride where it was), not taken into another ride or place.
+		this.floats = !! spec.floats;
+		this.splash = null;
+		this.onWater = false;
+		this.wetIn = 0;
+		this.backAt = null;
+		if ( this.trailOf !== entry ) {
+
+			this.trailOf = entry;
+			this.dry = [];
+
+		}
 		// A new ride, or a new place, is a new run.
 		if ( this.launch && this.scored !== entry ) {
 
@@ -490,7 +552,7 @@ export class Driver {
 		this.cabNear = this.cab ? this.measureCab() : null;
 		this.cabShown = false;
 		this.lastBase = null;
-		this.fx = this.booster || this.drift || this.launch ? createDriveFx( this.models.group.parent ?? this.models.group, spec.fx ) : null;
+		this.fx = this.booster || this.drift || this.launch ? createDriveFx( this.models.group.parent ?? this.models.group, spec.fx, { water: !! this.water } ) : null;
 
 		this.keys.clear();
 		this.controls.keys?.clear();
@@ -502,6 +564,7 @@ export class Driver {
 		this.hud.setFlying?.( false );
 		this.hud.setBoost?.( this.booster ? this.gauge : null );
 		this.hud.setSupersonic?.( false );
+		this.hud.fade?.( false );
 		if ( this.launch ) this.showScore();
 		if ( this.machine ) this.machine.update( 0 );
 		else this.placeCamera( 1 );
@@ -511,6 +574,8 @@ export class Driver {
 	stop() {
 
 		if ( ! this.active ) return;
+		// Stopped while sinking: it's parked back on dry land, as it would have been a moment later.
+		if ( this.splash ) this.comeBack();
 		this.active = false;
 		this.machine?.stop();
 		this.machine = null;
@@ -562,6 +627,13 @@ export class Driver {
 		}
 
 		this.clock += dt;
+		if ( this.splash ) {
+
+			this.sink( dt );
+			return;
+
+		}
+
 		const { keys, spec } = this;
 		// Flying with stunts on, holding Space turns W/S and A/D into flips and rolls (see airInput).
 		const tricking = this.flying && !! this.air && this.airKey( 'Space' );
@@ -703,7 +775,7 @@ export class Driver {
 				this.y += this.vy * dt;
 				this.airTime += dt;
 				this.pitch += ( MathUtils.clamp( this.vy / Math.max( 1, Math.abs( this.speed ) ), - 0.5, 0.5 ) - this.pitch ) * Math.min( 1, dt * 2 );
-				if ( this.y <= ground ) {
+				if ( this.y <= ground && ! this.splashed( ground, - this.vy ) ) {
 
 					this.y = ground;
 					// A drift's little hop isn't a jump.
@@ -722,9 +794,12 @@ export class Driver {
 
 		}
 
+		// Water under it, or dry ground to come back to.
+		if ( this.water && ! this.splash ) this.lookForWater( dt );
+
 		// Level with the ground across the wheels; banked into the turn when flying, and leaning out
 		// of a drift a little. Turned any way in the air with stunts on, it keeps to that.
-		if ( ! this.air || this.air.flight ) {
+		if ( ! this.splash && ( ! this.air || this.air.flight ) ) {
 
 			const sideSlope = left !== null && right !== null ? ( right - left ) / ( track * 2 ) : 0;
 			const lean = this.flying ? - this.steer * 0.3 : this.grounded ? Math.atan( sideSlope ) + this.drifting * 0.05 : this.roll;
@@ -1028,9 +1103,10 @@ export class Driver {
 		this.y += this.vy * dt;
 		if ( ground !== null && this.y <= ground ) {
 
+			const fall = Math.max( 0, - this.vy );
 			this.y = ground;
 			this.vy = Math.max( this.vy, 0 );
-			if ( ! shift ) this.land();
+			if ( ! shift && ! this.splashed( ground, fall ) ) this.land();
 
 		}
 
@@ -1090,6 +1166,8 @@ export class Driver {
 			const north = this.north + dn * RESPAWN_AHEAD;
 			const ground = this.groundAt( east, north );
 			if ( ground !== null && Math.abs( ground - this.y ) < 3 ) spot = { east, north, y: ground };
+			// Only onto ground that's surely dry, not into water (a hovercraft doesn't mind).
+			if ( spot && this.water && ! this.floats && ! this.water.look( east, north, ground ).dry ) spot = null;
 
 		}
 
@@ -1143,6 +1221,278 @@ export class Driver {
 
 	}
 
+	// --- water (the `water` option) ---
+
+	// On the ground, every WATER_EVERY s: in water, a splash, unless it rides on water (a hovercraft,
+	// which throws up spray there instead); on ground that's surely dry, a spot on the trail back to
+	// it (not where there's no telling, as by a shore). Not until it has been on dry ground, so a
+	// drive dropped onto water rides on it rather than splashing over and over with nowhere to go
+	// back to.
+	lookForWater( dt ) {
+
+		this.wetIn -= dt;
+		if ( this.wetIn > 0 || ! this.grounded || this.flying || this.air ) return;
+		this.wetIn = WATER_EVERY;
+		const { level, dry, shore = null } = this.water.look( this.east, this.north, this.y );
+		// By the water's edge, it's in the water if it came down into it from the last dry ground.
+		const last = this.dry[ this.dry.length - 1 ];
+		const wet = level ?? ( shore !== null && last && last.y - this.y >= DOWN_INTO ? shore : null );
+		this.onWater = wet !== null;
+		if ( this.backAt && Math.hypot( this.east - this.backAt.east, this.north - this.backAt.north ) > DRY_STEP ) this.backAt = null;
+		if ( dry ) this.markDry();
+		else if ( this.onWater && ! this.floats && this.dry.length ) {
+
+			// Put back on a spot that turns out to be water (sharper tiles can tell what coarser ones
+			// couldn't): it's no way back, and with nothing older on the trail there's no splash,
+			// rather than the same one over and over.
+			if ( this.backAt ) this.dry.pop();
+			this.backAt = null;
+			if ( this.dry.length ) this.startSplash( wet, Math.max( 0, - this.vy ) );
+
+		}
+
+	}
+
+	// Coming down onto ground at `ground` (m up) under it, at `fall` m/s: into water (or by its
+	// edge: coming down there is coming down into it), a splash, and true; false on dry ground, or
+	// for a vehicle that rides on water.
+	splashed( ground, fall ) {
+
+		if ( ! this.water || this.floats || ! this.dry.length ) return false;
+		const { level, shore = null } = this.water.look( this.east, this.north, ground );
+		const wet = level ?? shore;
+		if ( wet === null ) return false;
+		this.startSplash( wet, fall );
+		return true;
+
+	}
+
+	// A spot of dry ground it's on, for the trail back from water: one every DRY_STEP m.
+	markDry() {
+
+		const last = this.dry[ this.dry.length - 1 ];
+		if ( last && Math.hypot( this.east - last.east, this.north - last.north ) < DRY_STEP ) return;
+		this.dry.push( { east: this.east, north: this.north, y: this.y, heading: ( this.heading % 360 + 360 ) % 360 } );
+		if ( this.dry.length > DRY_KEEP ) this.dry.shift();
+
+	}
+
+	// Where to come back to from water it went into at ( east, north ), its surface at `level`: the
+	// newest spot on the trail at least DRY_OUT m from there and DRY_EDGE m from the last dry spot
+	// it was on (about where it left the shore, the quay or the deck), not about level with the
+	// water if there's one that isn't, else the oldest, so it isn't left on the water's edge. It
+	// faces the way it was going there, or if that's back toward where it went in (driving straight
+	// into the sea), the other way.
+	dryBack( east, north, level ) {
+
+		const last = this.dry[ this.dry.length - 1 ];
+		const newest = above => {
+
+			for ( let i = this.dry.length - 1; i >= 0; i -- ) {
+
+				const spot = this.dry[ i ];
+				if ( above && Math.abs( spot.y - level ) < ABOVE_WATER ) continue;
+				if ( Math.hypot( spot.east - east, spot.north - north, spot.y - level ) < DRY_OUT ) continue;
+				if ( Math.hypot( spot.east - last.east, spot.north - last.north, spot.y - last.y ) < DRY_EDGE ) continue;
+				return i;
+
+			}
+
+			return null;
+
+		};
+		const index = newest( true ) ?? newest( false ) ?? 0;
+		const spot = this.dry[ index ];
+		const away = Math.atan2( spot.east - east, spot.north - north ) * MathUtils.RAD2DEG;
+		const toward = Math.hypot( spot.east - east, spot.north - north ) > 1 && Math.cos( ( spot.heading - away ) * MathUtils.DEG2RAD ) < 0;
+		return { ...spot, heading: ( spot.heading + ( toward ? 180 : 0 ) ) % 360, index };
+
+	}
+
+	// Into water at `level` (m up), `fall` m/s down: a splash. Whatever it was doing in the air is
+	// lost, as in a wipeout, with the combo; it slows, bobs and sinks nose first while the camera
+	// holds still on it (see sink), and is back on dry land a moment later (see comeBack).
+	startSplash( level, fall ) {
+
+		let lost = [];
+		if ( this.air ) {
+
+			// Turned as it was in the air, standing where its box puts it.
+			const q = this.attitude( _attitude );
+			const at = localToEnu( this.middle( _b ).sub( _a.copy( this.centre ).applyQuaternion( q ) ) );
+			_euler.setFromQuaternion( q, 'YXZ' );
+			this.east = at.east;
+			this.north = at.north;
+			this.heading = yawToHeading( _euler.y );
+			this.pitch = _euler.x;
+			this.roll = _euler.z;
+			lost = this.tricksOf( this.air );
+			if ( ! this.air.flew ) this.bestAir = Math.max( this.bestAir, this.air.time );
+			this.air = null;
+			this.hud.setPending?.( null );
+
+		}
+
+		if ( this.flying ) {
+
+			this.flying = false;
+			this.hud.setFlying?.( false );
+
+		}
+
+		if ( this.drifting ) this.endDrift( false );
+		if ( this.supersonic ) {
+
+			this.supersonic = false;
+			this.nearTop = 0;
+			this.hud.setSupersonic?.( false );
+
+		}
+
+		if ( this.launch ) {
+
+			if ( lost.length || this.mult > 1 ) this.hud.tricks?.( { lines: lost.map( trick => trick.name ), mult: this.mult, lost: true, bail: 'Sunk' } );
+			this.mult = 1;
+			this.lastTrick = - Infinity;
+			this.showScore();
+			this.squashBy( Math.max( 1.5, fall * SQUASH.land ), 'land' );
+
+		}
+
+		// How hard it went in: coming down, and a share of going along.
+		const hard = Math.hypot( fall, this.speed * 0.4 );
+		const power = MathUtils.clamp( hard / 15, 0.15, 1 );
+		Object.assign( this, { y: level, vy: 0, grounded: true, airTime: 0, firing: false, boost: null, driftHop: false, onWater: true } );
+		// The camera turns from where it was looking to the vehicle (see holdCamera).
+		const look = this.camera.getWorldDirection( new Vector3() ).multiplyScalar( this.camera.position.distanceTo( this.middle( _c ) ) ).add( this.camera.position );
+		this.splash = {
+			t: 0, level, look, from: null, faded: false, back: this.dryBack( this.east, this.north, level ),
+			dip: Math.min( DIP_MOST, fall * DIP ) * this.height,
+			// It settles upright, or on its roof if that's how it went in.
+			roll: Math.abs( this.roll ) > Math.PI / 2 ? Math.sign( this.roll ) * Math.PI : 0,
+		};
+		this.fx?.splash( enuToLocal( this.east, this.north, level, _c ), power, Math.max( this.width, this.length * 0.6 ) );
+		this.shake = Math.max( this.shake, Math.min( SHAKE_MAX * this.handling.shake, 0.1 + hard * SHAKE * 0.5 ) );
+		this.hud.pop?.( SPLASHES.find( ( [ least ] ) => hard >= least )[ 1 ], power, 'splash' );
+
+	}
+
+	// In the water: slowing as it drifts on, dipping under by how hard it came down and bobbing
+	// back up, tipping nose down and sinking, the camera holding still on it; then the view fades
+	// out and it's back on dry land (comeBack).
+	sink( dt ) {
+
+		const { splash } = this;
+		splash.t += dt;
+		const t = splash.t;
+		this.speed *= Math.exp( - WATER_DRAG * dt );
+		this.wade( dt );
+		const dip = t < 0.5 ? splash.dip * Math.sin( Math.PI * t / 0.5 ) : 0;
+		const bob = Math.sin( t * 7 ) * 0.05 * this.height * Math.exp( - t );
+		this.y = splash.level - this.height * SINK * MathUtils.smoothstep( t, 0.2, SINK_TIME ) - dip + bob;
+		const ease = 1 - Math.exp( - 2.5 * dt );
+		this.pitch += ( NOSE_DOWN + Math.sin( t * 4.2 ) * 0.06 - this.pitch ) * ease;
+		this.roll += ( splash.roll + Math.sin( t * 3.1 ) * 0.07 - this.roll ) * ease;
+		this.pose();
+		if ( this.launch ) this.springSquash( dt );
+		this.entry.pivot.updateMatrixWorld( true );
+		for ( const animate of this.animators ) animate( { steer: 0, speed: this.speed, dt, airborne: false, vy: 0, throttle: false } );
+		this.warp += ( 0 - this.warp ) * Math.min( 1, dt * SUPERSONIC.ease );
+		if ( this.booster ) this.gauge = Math.min( 1, this.gauge + dt / BOOST_RECHARGE );
+		this.updateFx( dt );
+		this.hud.update( { kmh: Math.abs( this.speed ) * KMH, reverse: false, top: this.topSpeed * KMH, bestAir: this.bestAir, air: 0, boost: false } );
+		if ( this.booster ) this.hud.setBoost?.( this.gauge );
+		this.shake *= Math.exp( - SHAKE_DECAY * dt );
+		this.holdCamera( dt );
+		if ( t >= SPLASH_HOLD && ! splash.faded ) {
+
+			splash.faded = true;
+			this.hud.fade?.( true );
+
+		}
+
+		if ( t >= SPLASH_HOLD + FADE ) this.comeBack();
+
+	}
+
+	// Drifting on through the water the way it was going, up to a wall but never bounced off it.
+	wade( dt ) {
+
+		const step = Math.abs( this.speed ) * dt;
+		if ( step < 1e-6 ) return;
+		const rad = this.course * Math.PI / 180;
+		const sign = Math.sign( this.speed );
+		const de = Math.sin( rad ) * sign;
+		const dn = Math.cos( rad ) * sign;
+		const wall = this.wallAhead( de, dn, step );
+		const travel = wall ? wall.travel : step;
+		this.east += de * travel;
+		this.north += dn * travel;
+		if ( wall ) this.speed = 0;
+
+	}
+
+	// The camera holds on it: no longer turning after it or rising and falling with it, only carried
+	// along as it drifts on (as the chase camera is), so it stays as near as it was, above the water,
+	// and turning to watch it sink, shaken by the splash.
+	holdCamera( dt ) {
+
+		const { splash } = this;
+		const { position } = this.camera;
+		this.middle( _c );
+		if ( splash.from ) {
+
+			position.x += _c.x - splash.from.x;
+			position.z += _c.z - splash.from.z;
+
+		}
+
+		splash.from = ( splash.from ?? new Vector3() ).copy( _c );
+		position.y = Math.max( position.y, splash.level + 1.5 );
+		_c.y = Math.max( _c.y, splash.level + 0.3 );
+		splash.look.lerp( _c, 1 - Math.exp( - 5 * dt ) );
+		_look.copy( splash.look );
+		if ( this.shake > 0.01 ) {
+
+			_look.x += Math.sin( this.clock * 47 ) * this.shake;
+			_look.y += Math.sin( this.clock * 61 + 1 ) * this.shake * 0.7;
+			_look.z += Math.sin( this.clock * 53 + 2 ) * this.shake;
+
+		}
+
+		this.camera.lookAt( _look );
+		this.controls.yaw = headingToYaw( this.heading );
+		this.controls.pitch = 0;
+
+	}
+
+	// Out of the water (after the splash, or R in it) onto the dry ground it came from, stopped,
+	// the chase camera behind it and the view fading back in. The trail past that spot goes: it was
+	// nearer the water, and a second splash goes back further.
+	comeBack() {
+
+		const { back } = this.splash;
+		this.splash = null;
+		this.dry.length = back.index + 1;
+		this.backAt = { east: back.east, north: back.north };
+		const y = this.groundAt( back.east, back.north, back.y + 2 ) ?? back.y;
+		Object.assign( this, {
+			east: back.east, north: back.north, y, heading: back.heading, course: back.heading, view: back.heading,
+			speed: 0, vy: 0, steer: 0, pitch: 0, roll: 0, grounded: true, airTime: 0, stuckTime: 0, onWater: false, wetIn: WATER_EVERY, shake: 0,
+		} );
+		this.lastSafe = { east: this.east, north: this.north, y };
+		this.recentGood = this.lastGood = { east: this.east, north: this.north, y };
+		this.squash.value = this.squash.speed = 0;
+		this.entry.pivot.scale.setScalar( this.scale );
+		this.pose();
+		this.entry.pivot.updateMatrixWorld( true );
+		this.lastBase = null;
+		this.placeCamera( 1 );
+		this.hud.fade?.( false );
+		this.hud.flash( 'Back on dry land' );
+
+	}
+
 	updateFx( dt ) {
 
 		if ( ! this.fx ) return;
@@ -1163,8 +1513,10 @@ export class Driver {
 			level: this.driftLevel,
 			scrape: this.scraping > 0 ? this.scrapeAt : null,
 			// Ink is left on the road only on its wheels; supersonic, streaks of air go past it.
-			grounded: this.grounded && ! this.flying && ! this.air,
+			grounded: this.grounded && ! this.flying && ! this.air && ! this.splash,
 			supersonic: this.supersonic,
+			// Sinking in water, foam round it; a hovercraft on water throws up spray as it goes.
+			water: this.splash ? { level: this.splash.level, sinking: true } : this.floats && this.onWater && this.grounded && ! this.flying ? { level: this.y, spray: MathUtils.clamp( Math.abs( this.speed ) / 25, 0, 1 ) } : null,
 			dt,
 		} );
 
@@ -1627,6 +1979,7 @@ export class Driver {
 		// Down only coming down: thrown up off something low, the top of that thing can be under its
 		// middle and over its wheels for a moment, and it isn't landing on it.
 		if ( this.vy > 0 || this.y + this.centre.y - reach > ground ) return;
+		if ( ! air.wipeout && this.splashed( ground, - this.vy ) ) return;
 		this.y = ground + reach - this.centre.y;
 		if ( air.wipeout ) this.startRighting();
 		else if ( this.tilt( air.q ) <= this.handling.landTilt ) this.touchDown( ground );
