@@ -2,9 +2,9 @@ import './pro.css';
 import { PRO_RIDES } from './rides/index.js';
 
 // The Supporter Pass sheet: what the pass is and what comes with it, opened from the globe's panel,
-// the pause menu, the Garage, and anything locked (see pro.js). Buying isn't open yet: its button
-// says "Coming soon". The payments code (Google sign-in and Stripe) will put its own button in
-// buyArea() in place of that one, and call setPro( true ) in pro.js once the pass is bought.
+// the pause menu, the Garage, and anything locked (see pro.js). Its buy area says "Coming soon"
+// until the payments code (supporter.js: Google sign-in and Stripe) fills it with its own, and that
+// calls setPro( true ) in pro.js once the pass is bought.
 
 export const PRICE = 'CA$4.99';
 const BADGE = '⭐ Supporter Pass';
@@ -57,8 +57,10 @@ function build() {
 				<li><b>A ⭐ on the leaderboard</b><span>By your name, for everyone to see.</span></li>
 				<li><b>30 drives a day</b><span>Instead of 8.</span></li>
 			</ul>
-			<div class="buy-area"><button type="button" class="primary buy" disabled>Coming soon</button></div>
-			<p class="small">One payment, no subscription. Buying opens soon.</p>
+			<div class="buy-area">
+				<button type="button" class="primary buy" disabled>Coming soon</button>
+				<p class="small">One payment, no subscription. Buying opens soon.</p>
+			</div>
 		</div>`;
 	dialog.querySelector( '.ride-icons' ).replaceChildren( ...PRO_RIDES.map( ride => {
 

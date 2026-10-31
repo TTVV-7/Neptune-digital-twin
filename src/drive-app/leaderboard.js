@@ -26,8 +26,9 @@ const NO_VISIT = 'Names are picked on drives on the real 3D map.';
 
 // dialog: #leaderboard; card: #best-card, the new-best card shown while driving; vehicles: from
 // loadVehicles(), for their names; worker: whether there's a Worker to ask (not on the Vite dev
-// server on its own); getPlace(): the place being driven or pinned, for "only here", or null.
-export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace } ) {
+// server on its own); getPlace(): the place being driven or pinned, for "only here", or null;
+// onPlayer(): a new player was made here (to link it to the account signed in, supporter.js).
+export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace, onPlayer = () => {} } ) {
 
 	const $ = selector => dialog.querySelector( selector );
 	const tabs = [ ...dialog.querySelectorAll( '.tabs button' ) ];
@@ -326,8 +327,10 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace } )
 
 		}
 
+		const made = ! player;
 		player = { id: answer.body.id, secret: answer.body.secret ?? player.secret, name: answer.body.name };
 		storage( () => localStorage.setItem( PLAYER_KEY, JSON.stringify( player ) ) );
+		if ( made ) onPlayer();
 		say( '' );
 		if ( waiting.size ) schedule();
 		return true;
@@ -412,7 +415,18 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace } )
 		const when = period === 'today' ? '' : new Date( `${ row.date }T12:00:00Z` ).toLocaleDateString( 'en-CA', { month: 'short', day: 'numeric', timeZone: 'UTC' } );
 		const what = [ row.tricks, row.place, vehicle, when ].filter( Boolean ).join( ' · ' );
 		const who = Object.assign( document.createElement( 'span' ), { className: 'who' } );
-		who.append( Object.assign( document.createElement( 'b' ), { textContent: row.name } ), Object.assign( document.createElement( 'span' ), { className: 'what', textContent: what } ) );
+		const name = Object.assign( document.createElement( 'b' ), { textContent: row.name } );
+		// A Supporter Pass holder's (supporter.js).
+		if ( row.supporter === true ) {
+
+			const star = Object.assign( document.createElement( 'span' ), { className: 'supporter-star', textContent: '⭐', title: 'Supporter Pass' } );
+			star.setAttribute( 'role', 'img' );
+			star.setAttribute( 'aria-label', 'Supporter Pass' );
+			name.append( star );
+
+		}
+
+		who.append( name, Object.assign( document.createElement( 'span' ), { className: 'what', textContent: what } ) );
 		li.append( Object.assign( document.createElement( 'span' ), { className: 'rank', textContent: String( row.rank ) } ), who, Object.assign( document.createElement( 'span' ), { className: 'score', textContent: points( row.score ) } ) );
 		return li;
 

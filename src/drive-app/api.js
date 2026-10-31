@@ -1,10 +1,12 @@
 // Talking to World Drive's Worker (worker/drive/): the settings, the visit that hands out the Maps
-// key after a Turnstile check, the place search and the leaderboard.
+// key after a Turnstile check, the place search, the leaderboard, and signing in for the Supporter
+// Pass.
 
 const TURNSTILE_SCRIPT = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
 const TURNSTILE_TIMEOUT = 45000;
 
-// { turnstileSiteKey, mapsOn }, or null where there's no Worker (the Vite dev server on its own).
+// { turnstileSiteKey, mapsOn, googleClientId }, or null where there's no Worker (the Vite dev server
+// on its own). googleClientId is '' when there's no signing in.
 export async function getConfig() {
 
 	try {
@@ -190,6 +192,37 @@ export function getBoard( { period, place = null, id = null } ) {
 
 }
 
+// --- the Supporter Pass (worker/drive/accounts.js, supporter.js) ---
+// As the leaderboard's: none of these throw.
+
+// body { signedIn, name, email, supporter, purchase: { enabled, link, price, clientReferenceId } }.
+export function getMe() {
+
+	return send( 'GET', '/api/me' );
+
+}
+
+// Signed in with the ID token from Google's button: body as getMe's, and this browser's session
+// cookie set (HttpOnly: the page never sees it).
+export function startSession( credential ) {
+
+	return send( 'POST', '/api/session', { credential } );
+
+}
+
+export function endSession() {
+
+	return send( 'DELETE', '/api/session', {} );
+
+}
+
+// This browser's leaderboard player, made the signed-in account's (a supporter's have a ⭐).
+export function linkPlayer( { id, secret } ) {
+
+	return send( 'POST', '/api/player/link', { id, secret } );
+
+}
+
 async function send( method, path, body ) {
 
 	try {
@@ -199,6 +232,8 @@ async function send( method, path, body ) {
 			headers: body ? { 'Content-Type': 'application/json', Accept: 'application/json' } : { Accept: 'application/json' },
 			body: body ? JSON.stringify( body ) : undefined,
 		} );
+		// Done, with nothing to say (signing out).
+		if ( res.status === 204 ) return { ok: true, status: 204, body: {}, retryAfter: 0 };
 		const json = /json/.test( res.headers.get( 'Content-Type' ) ?? '' ) ? await res.json().catch( () => null ) : null;
 		// Not the Worker answering (the Vite dev server on its own): as good as no connection.
 		if ( ! json ) return { ok: false, status: 0, body: {}, retryAfter: 0 };
