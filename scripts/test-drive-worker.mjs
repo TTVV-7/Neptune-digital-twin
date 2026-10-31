@@ -159,6 +159,8 @@ describe( 'World Drive Worker', () => {
 			port: PORT,
 			config: 'wrangler.drive.jsonc',
 			vars: {
+				// Sign-in off whatever wrangler.drive.jsonc says: these suites test the site without it.
+				GOOGLE_CLIENT_ID: '',
 				GOOGLE_MAPS_API_KEY: MAPS_KEY,
 				TURNSTILE_SECRET: PASS_SECRET,
 				TURNSTILE_SITE_KEY: '1x00000000000000000000AA',
@@ -398,6 +400,7 @@ describe( 'World Drive Worker, Turnstile failing and maps off', () => {
 			port: PORT + 1,
 			config: 'wrangler.drive.jsonc',
 			vars: {
+				GOOGLE_CLIENT_ID: '',
 				GOOGLE_MAPS_API_KEY: '',
 				TURNSTILE_SECRET: FAIL_SECRET,
 				TURNSTILE_VERIFY_URL: `${ upstreamBase }/siteverify`,
@@ -1550,6 +1553,7 @@ describe( 'World Drive Supporter Pass, with a link id and no sign-in', () => {
 			port: PORT + 4,
 			config: 'wrangler.drive.jsonc',
 			vars: {
+				GOOGLE_CLIENT_ID: '',
 				GOOGLE_MAPS_API_KEY: MAPS_KEY,
 				TURNSTILE_SECRET: PASS_SECRET,
 				TURNSTILE_VERIFY_URL: `${ upstreamBase }/siteverify`,

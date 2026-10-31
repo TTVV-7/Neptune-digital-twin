@@ -38,7 +38,7 @@
 		// buying, and the pass says "Coming soon"); the Payment Link, in World Drive's own Stripe
 		// account, and its price as the page shows it.
 		"PER_VISITOR_DAILY_SUPPORTER": "30",
-		"GOOGLE_CLIENT_ID": "",
+		"GOOGLE_CLIENT_ID": "979605278581-il852i6ql3e6j2t1kobqo2bg46pkaii5.apps.googleusercontent.com",
 		"SUPPORTER_PAYMENT_LINK": "https://buy.stripe.com/9B6bJ0fSYaMf3nc0cCfrW00",
 		"SUPPORTER_PRICE": "CA$4.99"
 	},
