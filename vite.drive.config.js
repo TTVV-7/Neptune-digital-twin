@@ -42,7 +42,8 @@ export default defineConfig( ( { command, mode } ) => {
 		resolve: { alias: [ { find: /^\/src\//, replacement: `${ join( ROOT, 'src' ) }/` } ] },
 		// three.js alone is ~600 kB, so the default 500 kB warning is just noise here.
 		build: { outDir: join( ROOT, 'dist-drive' ), emptyOutDir: true, chunkSizeWarningLimit: 1500 },
-		server: api ? { proxy: { '/api': { target: api } }, watch: { ignored: [ '**/.wrangler/**' ] } } : {},
+		// ws: driving with others' rooms (/api/live) are WebSockets, which the proxy passes on too.
+		server: api ? { proxy: { '/api': { target: api, ws: true } }, watch: { ignored: [ '**/.wrangler/**' ] } } : {},
 		define: {
 			__DEV_MAPS_KEY__: JSON.stringify( command === 'serve' ? envKey : '' ),
 		},
