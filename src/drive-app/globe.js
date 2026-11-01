@@ -77,6 +77,9 @@ export class GlobeView {
 		this.pin = null;
 		this.flight = null;
 		this.enabled = true;
+		// A tap: onTap( x, y ) first (true if it took it: a dot of who's driving now), else onPick
+		// with the place tapped.
+		this.onTap = null;
 		this.onPick = null;
 		this.raycaster = new Raycaster();
 		this.raycaster.firstHitOnly = true;
@@ -105,6 +108,7 @@ export class GlobeView {
 			const tap = press && press.id === e.pointerId && Math.hypot( e.clientX - press.x, e.clientY - press.y ) < TAP_MOVE && performance.now() - press.time < TAP_TIME;
 			press = null;
 			if ( ! tap || ! this.controls.enabled || e.button > 0 ) return;
+			if ( this.onTap?.( e.clientX, e.clientY ) ) return;
 			const place = this.pick( e.clientX, e.clientY );
 			if ( place ) this.onPick?.( place );
 

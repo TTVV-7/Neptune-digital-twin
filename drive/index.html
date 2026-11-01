@@ -49,6 +49,11 @@
 				<p class="search-status" hidden role="status"></p>
 				<ul class="results list" hidden></ul>
 				<p class="osm">Search &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</p>
+				<section class="online" hidden aria-labelledby="online-title">
+					<h2 id="online-title">Driving now</h2>
+					<p class="summary small" role="status"></p>
+					<ul class="areas list"></ul>
+				</section>
 				<h2>Your ride</h2>
 				<div class="vehicles" role="radiogroup" aria-label="Your ride"></div>
 				<p class="credit small"></p>
@@ -69,6 +74,8 @@
 				<button type="button" class="go">Drive here</button>
 				<button type="button" class="clear" aria-label="Clear the pin">&times;</button>
 			</div>
+			<!-- Where people are driving now, over the globe (online.js). -->
+			<div class="online-dots" role="group" aria-label="Where people are driving now"></div>
 		</section>
 
 		<section id="drive-ui" hidden>
@@ -172,6 +179,7 @@
 			<p>The 3D world is Google's photorealistic map, streamed as you go. Every visit costs a little, so there's a limit on free drives each day, for everyone and for each visitor. A visit lasts as long as you keep the page open: fly off and drop in somewhere else as often as you like.</p>
 			<p>The leaderboard keeps the nickname you pick and your best scores, with where you set them and in what; nothing else about you.</p>
 			<p>While <b>Show me to drivers nearby</b> is on (it is unless you switch it off in the pause menu), or while you're in a party, the others driving there see your leaderboard nickname (or a guest name), your ride and where your car is in the game, including the spot you dropped in and its name. Nothing else about you, and never where you really are.</p>
+			<p>With it on, you're also counted on the globe's map of who's driving now, which everyone sees: a dot, to about a kilometre, where your car is in the game (or, while nobody else is driving in your area, where you dropped in, which can be a place you searched for), with how many are driving there. No name, no place name and nothing else about you. In a party, on the globe, or with it off, you're not counted.</p>
 			<p>Signing in with Google is only for the Supporter Pass. It keeps your Google account's name and email address, whether you have the pass, and which nickname is yours, so the pass and its ⭐ follow you to any browser. Payments are made with Stripe: World Drive never sees your card.</p>
 			<p>Map data &copy; Google and its data providers. Place search &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>.</p>
 			<h3>Vehicle models</h3>

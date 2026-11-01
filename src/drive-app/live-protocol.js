@@ -1,5 +1,6 @@
 // Driving with others (docs/world-drive.md): what the page (live.js, ghosts.js) and the Worker's
-// rooms (worker/drive/live.js) say to each other over a WebSocket, and the limits both keep to.
+// rooms (worker/drive/live.js) say to each other over a WebSocket, and the limits both keep to; and
+// at the end, the dots of who's driving now that the rooms report and the globe shows (online.js).
 // Plain data and small functions, with nothing from three.js or the browser, so the Worker
 // imports it too.
 //
@@ -81,6 +82,17 @@ export function cellOf( lat, lon ) {
 export function shardOf( room, shard ) {
 
 	return `${ room.split( '#' )[ 0 ]}#${ shard }`;
+
+}
+
+// The edges (degrees) of an area, shard 0's name: { south, north, west, east }. The last column of a
+// band stops at 180°.
+export function boundsOf( cell ) {
+
+	const [ band, col ] = cell.slice( 5 ).split( '.' ).map( Number );
+	const width = columnDeg( band );
+	const west = col * width - 180;
+	return { south: band * CELL_DEG - 90, north: ( band + 1 ) * CELL_DEG - 90, west, east: Math.min( 180, west + width ) };
 
 }
 
@@ -308,5 +320,151 @@ export function checkPlace( place ) {
 export function checkTrick( score ) {
 
 	return Number.isInteger( score ) && score >= 1 && score <= MAX_TRICK ? score : null;
+
+}
+
+// --- who's driving now, on the globe -------------------------------------------------------------
+//
+// The globe shows where people are driving just now (docs/world-drive.md, "On the globe: who's
+// driving now"). Each area's room adds its drivers to the reports of what it has spent that it
+// already makes to DriveLimits (worker/drive/live.js), as dots: positions and counts, never who. A
+// party is private and never says; those on the globe aren't counted (paused drivers are: they're
+// parked in the game), nor anyone with "Show me to drivers nearby" off, who isn't in an area's room.
+// GET /api/online hands out everyone's:
+//   { on, total, areas: [ DOT... ] }
+// on: false while driving with others is off (LIVE, or the day's budget spent); total: how many are
+// driving in all; areas: at most ONLINE_AREAS dots, busiest first.
+// DOT: { lat, lon, height, count }: where (degrees, to DOT_PLACES decimals: about a kilometre; and
+//   metres above the ellipsoid, to DOT_HEIGHT), and how many are driving there.
+
+// The drivers in a room this near each other (m) are one dot (greedily: each joins the nearest dot
+// begun within this of it, or begins one), with at most ROOM_DOTS a room (past that, each joins the
+// nearest). A dot is at its drivers' mean position, rounded.
+export const DOT_SPREAD = 2000;
+export const ROOM_DOTS = 3;
+export const DOT_PLACES = 2;
+export const DOT_HEIGHT = 10;
+export const ONLINE_AREAS = 200;
+// A dot is kept this far (degrees) inside its room's area, so dropping in on it (which starts on a
+// street near it) puts you in that room.
+const DOT_INSIDE = 0.002;
+// More drivers than this in one dot is no count anyone made.
+const DOT_MOST = 100000;
+
+// WGS84, as Google's tiles and the test globe have the Earth: the equator's radius (m), the
+// flattening, and the square of the eccentricity.
+const WGS84_A = 6378137;
+const WGS84_F = 1 / 298.257223563;
+const WGS84_E2 = WGS84_F * ( 2 - WGS84_F );
+const DEG = Math.PI / 180;
+
+// Earth-centred metres ({ x, y, z }) for a spot: degrees, and metres above the ellipsoid.
+export function toEcef( lat, lon, height = 0 ) {
+
+	const sin = Math.sin( lat * DEG );
+	const cos = Math.cos( lat * DEG );
+	const n = WGS84_A / Math.sqrt( 1 - WGS84_E2 * sin * sin );
+	return { x: ( n + height ) * cos * Math.cos( lon * DEG ), y: ( n + height ) * cos * Math.sin( lon * DEG ), z: ( n * ( 1 - WGS84_E2 ) + height ) * sin };
+
+}
+
+// The spot at Earth-centred metres ( x, y, z ): { lat, lon } in degrees and its height in metres
+// above the ellipsoid, exact to far under a millimetre from below the ground to well out in space.
+// The latitude starts from the one a point on the ellipsoid there would have, and each round of
+// tan φ = ( z + e² N sin φ ) / p (N the radius of curvature at φ) cuts what's left of its error by a
+// factor of e² (1/150) or more; the height comes from φ as p cos φ + z sin φ − a² / N, which holds at
+// the poles as well.
+export function toGeodetic( x, y, z ) {
+
+	const p = Math.hypot( x, y );
+	let lat = Math.atan2( z, p * ( 1 - WGS84_E2 ) );
+	for ( let i = 0; i < 5; i ++ ) {
+
+		const sin = Math.sin( lat );
+		lat = Math.atan2( z + WGS84_E2 * WGS84_A / Math.sqrt( 1 - WGS84_E2 * sin * sin ) * sin, p );
+
+	}
+
+	const sin = Math.sin( lat );
+	const n = WGS84_A / Math.sqrt( 1 - WGS84_E2 * sin * sin );
+	return { lat: lat / DEG, lon: Math.atan2( y, x ) / DEG, height: p * Math.cos( lat ) + z * sin - WGS84_A * WGS84_A / n };
+
+}
+
+// A nearby room's drivers as dots: `points`, their Earth-centred positions ({ x, y, z }) in an order
+// that doesn't change from one call to the next, in the area `cell` (shard 0's name), which the dots
+// are kept inside. [ DOT... ], busiest first.
+export function dotsOf( points, cell ) {
+
+	const groups = [];
+	for ( const point of points ) {
+
+		let nearest = null;
+		let gap = Infinity;
+		for ( const group of groups ) {
+
+			const d = Math.hypot( group.first.x - point.x, group.first.y - point.y, group.first.z - point.z );
+			if ( d < gap ) {
+
+				nearest = group;
+				gap = d;
+
+			}
+
+		}
+
+		if ( nearest && ( gap <= DOT_SPREAD || groups.length >= ROOM_DOTS ) ) nearest.points.push( point );
+		else groups.push( { first: point, points: [ point ] } );
+
+	}
+
+	return groups.map( ( { points: members } ) => {
+
+		const n = members.length;
+		const mean = members.reduce( ( sum, p ) => ( { x: sum.x + p.x / n, y: sum.y + p.y / n, z: sum.z + p.z / n } ), { x: 0, y: 0, z: 0 } );
+		const { lat, lon, height } = toGeodetic( mean.x, mean.y, mean.z );
+		const { south, north, west, east } = boundsOf( cell );
+		// Its longitude taken round to the area's side of 180° first: a car just over it, in the area
+		// west of it still, is at -179.99°, by the area's east edge rather than its west.
+		const unwrapped = lon - 360 * Math.round( ( lon - ( west + east ) / 2 ) / 360 );
+		return { lat: within( lat, south, north ), lon: within( unwrapped, west, east ), height: toTens( height ), count: n };
+
+	} ).sort( busiest );
+
+}
+
+// Busiest first, then from the south-west, so the same dots are always in the same order.
+export function busiest( a, b ) {
+
+	return b.count - a.count || a.lat - b.lat || a.lon - b.lon;
+
+}
+
+// `value` (degrees) to DOT_PLACES decimals, and at least DOT_INSIDE inside low to high (never -0).
+function within( value, low, high ) {
+
+	const steps = 10 ** DOT_PLACES;
+	const least = Math.ceil( ( low + DOT_INSIDE ) * steps - 1e-6 );
+	const most = Math.floor( ( high - DOT_INSIDE ) * steps + 1e-6 );
+	return Math.min( Math.max( Math.round( value * steps ), least ), most ) / steps || 0;
+
+}
+
+// A height to DOT_HEIGHT m (and never -0, which isn't 0 to a deep comparison).
+function toTens( height ) {
+
+	return Math.round( height / DOT_HEIGHT ) * DOT_HEIGHT || 0;
+
+}
+
+// A DOT as sent, if it's one, rounded as dots are, else null.
+export function checkDot( dot ) {
+
+	if ( ! dot || typeof dot !== 'object' ) return null;
+	const { lat, lon, height, count } = dot;
+	if ( ! Number.isFinite( lat ) || Math.abs( lat ) > 90 || ! Number.isFinite( lon ) || Math.abs( lon ) > 180 ) return null;
+	if ( ! Number.isFinite( height ) || Math.abs( height ) > 100000 ) return null;
+	if ( ! Number.isInteger( count ) || count < 1 || count > DOT_MOST ) return null;
+	return { lat: round( lat, DOT_PLACES ) || 0, lon: round( lon, DOT_PLACES ) || 0, height: toTens( height ), count };
 
 }

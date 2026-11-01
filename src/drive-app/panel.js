@@ -2,10 +2,12 @@ import { searchPlaces } from './api.js';
 import { formatLatLon, parseLatLon, recentPlaces, SPOTS, storage } from './places.js';
 import { openPass, proBadge } from './pass.js';
 import { isPro, onProChange } from './pro.js';
+import { drivers } from './online.js';
 
-// The globe's panel: search, the starting spots, recent places and the vehicle picker, and the
-// card under the pin with "Drive here". Choosing a spot or a search result flies the globe there
-// and pins it; a tap on the globe pins the spot tapped.
+// The globe's panel: search, the starting spots, recent places, the vehicle picker and who's
+// driving now (online.js), and the card under the pin with "Drive here". Choosing a spot, a search
+// result or an area where people are driving flies the globe there and pins it; a tap on the globe
+// pins the spot tapped.
 
 const VEHICLE_KEY = 'world-drive.vehicle';
 
@@ -171,15 +173,47 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin } ) {
 
 	vehiclePicker( $( '.vehicles' ) );
 
+	// --- who's driving now (online.js): how many, and the busiest areas, each like a spot ---
+
+	// { summary, areas: [ { title, subtitle, place } ] }, or null for none of it. The list is made
+	// again only when it changes, so a row being pressed isn't swapped for another under the finger.
+	let onlineKey = null;
+	function setOnline( online ) {
+
+		const section = $( '.online' );
+		section.hidden = ! online;
+		if ( ! online ) return;
+		section.querySelector( '.summary' ).textContent = online.summary;
+		const key = JSON.stringify( online.areas.map( ( { title, subtitle, place } ) => [ title, subtitle, place.lat, place.lon ] ) );
+		if ( key === onlineKey ) return;
+		onlineKey = key;
+		const list = section.querySelector( '.areas' );
+		list.replaceChildren( ...online.areas.map( area => item( area.title, area.subtitle, () => flyTo( area.place ) ) ) );
+		list.hidden = online.areas.length === 0;
+
+	}
+
 	// --- the pin and its card ---
 
+	// A pin on an area where people are driving (online.js) says how many, place.drivers, and which
+	// start spot it's near, place.near.
 	function setPin( place ) {
 
 		pinned = place;
 		card.hidden = ! place;
 		if ( ! place ) return;
-		card.querySelector( '.name' ).textContent = place.name ?? 'Dropped pin';
-		card.querySelector( '.coords' ).textContent = place.region ? `${ place.region } · ${ formatLatLon( place.lat, place.lon ) }` : formatLatLon( place.lat, place.lon );
+		const where = formatLatLon( place.lat, place.lon );
+		const count = place.drivers;
+		if ( count ) {
+
+			card.querySelector( '.name' ).textContent = `${ drivers( count ) } here`;
+			card.querySelector( '.coords' ).textContent = place.near ? `${ place.near } · ${ where }` : where;
+			return;
+
+		}
+
+		card.querySelector( '.name' ).textContent = place.near || place.name || 'Dropped pin';
+		card.querySelector( '.coords' ).textContent = place.region ? `${ place.region } · ${ where }` : where;
 
 	}
 
@@ -188,6 +222,7 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin } ) {
 
 	return {
 		setPin,
+		setOnline,
 		refreshRecent,
 		vehiclePicker,
 		get vehicle() {

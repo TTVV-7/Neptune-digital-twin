@@ -1541,6 +1541,121 @@ body:not( .touch ) #drive-ui .horn {
 	margin-top: 10px;
 }
 
+/* Under the nearby switch: it counts you on the globe too. */
+.friends .note {
+	margin: 4px 0 0 26px;
+	font-size: 12px;
+	color: rgba( 244, 247, 251, 0.5 );
+}
+
+/* --- who's driving now, on the globe (online.js) ------------------------------------------- */
+
+/* The panel's "Driving now", with a live light like the driving bar's chip. */
+#globe-ui .online h2 {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+#globe-ui .online h2::before {
+	content: '';
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: #3ce05a;
+	box-shadow: 0 0 8px #3ce05a;
+}
+
+#globe-ui .online .summary {
+	margin: 0 2px 8px;
+	font-size: 13px;
+	color: var( --muted );
+}
+
+/* The dots over the globe, placed each frame: under the panel, the pin and its card, which hide
+   the dots they'd cover. A pointer goes through them to the globe, which hands taps on one back to
+   online.js, so a drag that starts on a dot spins the globe; they're buttons for the keyboard. */
+#globe-ui .online-dots {
+	position: fixed;
+	inset: 0;
+	z-index: 4;
+	overflow: hidden;
+	pointer-events: none;
+}
+
+.online-dot {
+	--size: 32px;
+	position: absolute;
+	top: 0;
+	left: 0;
+	display: grid;
+	place-items: center;
+	width: var( --size );
+	height: var( --size );
+	padding: 0;
+	translate: -50% -50%;
+	border: 2px solid rgba( 255, 255, 255, 0.92 );
+	border-radius: 50%;
+	background: radial-gradient( circle at 40% 35%, #b9ffc8 0%, #3ce05a 45%, #17a63a 100% );
+	box-shadow: 0 0 14px 4px rgba( 60, 224, 90, 0.55 ), 0 3px 10px rgba( 0, 0, 0, 0.5 );
+	color: #04210c;
+	font-size: 14px;
+	font-weight: 900;
+	line-height: 1;
+	pointer-events: none;
+}
+
+.online-dot.many {
+	font-size: 12px;
+}
+
+/* A ring going out from each, now and then: someone's there now. */
+.online-dot::before {
+	content: '';
+	position: absolute;
+	inset: -3px;
+	border: 2px solid rgba( 60, 224, 90, 0.7 );
+	border-radius: 50%;
+	animation: online-ring 2.4s ease-out infinite;
+	pointer-events: none;
+}
+
+/* And its glow pulsing gently: a wider glow of its own fading in and out, as only its opacity
+   changes, which needs no painting again each frame (a box-shadow changing would). */
+.online-dot::after {
+	content: '';
+	position: absolute;
+	inset: -2px;
+	border-radius: 50%;
+	box-shadow: 0 0 20px 7px rgba( 60, 224, 90, 0.4 );
+	opacity: 0;
+	animation: online-glow 2.4s ease-in-out infinite;
+	pointer-events: none;
+}
+
+.online-dot.hover,
+.online-dot:focus-visible {
+	box-shadow: 0 0 20px 7px rgba( 60, 224, 90, 0.7 ), 0 3px 10px rgba( 0, 0, 0, 0.5 );
+}
+
+@keyframes online-glow {
+	50% { opacity: 1; }
+}
+
+@keyframes online-ring {
+	from { transform: scale( 1 ); opacity: 0.9; }
+	to { transform: scale( 1.8 ); opacity: 0; }
+}
+
+@media ( prefers-reduced-motion: reduce ) {
+
+	.online-dot::before,
+	.online-dot::after {
+		animation: none;
+	}
+
+}
+
 /* A toast's button (a friend's "Join"). */
 #toast .toast-action {
 	margin-left: 8px;
@@ -1592,6 +1707,15 @@ body:not( .touch ) #drive-ui .horn {
 
 	#globe-ui h2 {
 		margin: 14px 0 6px;
+	}
+
+	/* Where people are driving now: one row, sideways, so the ride picker below stays in sight. */
+	#globe-ui .online .areas {
+		grid-auto-flow: column;
+		grid-template-columns: none;
+		grid-auto-columns: 46%;
+		overflow-x: auto;
+		scrollbar-width: none;
 	}
 
 	/* Spots scroll sideways, in two rows. */

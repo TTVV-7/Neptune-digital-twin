@@ -1,10 +1,11 @@
 import { DurableObject } from 'cloudflare:workers';
 import { sha256Hex } from '../http.js';
+import { busiest, checkDot, parseRoom, ROOM_DOTS } from '../../src/drive-app/live-protocol.js';
 
 // One of these for everyone (named "global", see index.js): it counts the day's visits, in all and
 // per visitor, the leaderboard's new names and scores per visitor, and what driving with others has
-// spent of its budget and which room each visit is in (liveOpen, liveSpent), and spaces out the
-// searches sent on to OpenStreetMap.
+// spent of its budget and which room each visit is in (liveOpen, liveSpent), where people are driving
+// now for the globe (liveSpent, liveOnline), and spaces out the searches sent on to OpenStreetMap.
 // A Durable Object handles one call at a time, and each check-and-count below runs in one go with
 // nothing in between, so two visits arriving together can't both take the last drive of the day.
 // Counts are kept in its SQLite storage (on every plan, the free one too), so a restart doesn't
@@ -36,6 +37,11 @@ export class DriveLimits extends DurableObject {
 		// And each visit's connections to its rooms today (see liveOpen): the room it's in now, and how
 		// many it has made. A visit's id is a random one of its own (visits.js), never its address.
 		this.sql.exec( 'CREATE TABLE IF NOT EXISTS live_visits ( day TEXT NOT NULL, visit TEXT NOT NULL, room TEXT NOT NULL, connects INTEGER NOT NULL, PRIMARY KEY ( day, visit ) )' );
+		// Who's driving now, for the globe (/api/online): each area's room's dots (live-protocol.js) as
+		// its latest report had them, and when (ms). One row a room, deleted as it reports none; a row
+		// older than the asker's TTL is from a room that went without a word (a restart, say), left out
+		// and deleted. Positions and counts only, never who.
+		this.sql.exec( 'CREATE TABLE IF NOT EXISTS live_online ( room TEXT PRIMARY KEY, dots TEXT NOT NULL, at INTEGER NOT NULL )' );
 		// When the next search may go out (ms). Only in memory: if this object is put to sleep,
 		// more than a second has gone by anyway.
 		this.nextSearch = 0;
@@ -115,13 +121,63 @@ export class DriveLimits extends DurableObject {
 	}
 
 	// A room adding the `amount` (billed requests) it has spent since it last said, at `now`:
-	// { open, spent } with today's spend after it. Not open, the room closes everyone in it.
-	liveSpent( amount, { now, budget } ) {
+	// { open, spent } with today's spend after it. Not open, the room closes everyone in it. An area's
+	// room says where its drivers are too, `online`: { room, dots }, kept for the globe (liveOnline)
+	// with the time, or let go of with no dots (and with the day's budget spent, as the room is about
+	// to close everyone).
+	liveSpent( amount, { now, budget, online = null } ) {
 
 		const day = dayOf( now );
 		this.saltFor( day );
 		const add = Number.isFinite( amount ) && amount > 0 ? amount : 0;
-		return this.ctx.storage.transactionSync( () => addLive( this.sql, day, add, budget ) );
+		return this.ctx.storage.transactionSync( () => {
+
+			const today = addLive( this.sql, day, add, budget );
+			const room = typeof online?.room === 'string' ? parseRoom( online.room ) : null;
+			if ( room?.kind !== 'near' ) return today;
+			const dots = ( Array.isArray( online.dots ) ? online.dots.slice( 0, ROOM_DOTS ) : [] ).map( checkDot ).filter( Boolean );
+			if ( today.open && dots.length ) this.sql.exec( 'INSERT INTO live_online ( room, dots, at ) VALUES ( ?, ?, ? ) ON CONFLICT ( room ) DO UPDATE SET dots = excluded.dots, at = excluded.at', online.room, JSON.stringify( dots ), now );
+			else this.sql.exec( 'DELETE FROM live_online WHERE room = ?', online.room );
+			return today;
+
+		} );
+
+	}
+
+	// Where people are driving now, for /api/online at `now`: the rooms' dots no older than `ttl` (ms),
+	// those at the same spot as one, busiest first, at most `most` of them: { open: true, total, areas },
+	// total counting them all. This ask is a Durable Object request, so it's counted against the day's
+	// budget as liveOpen's are, in the same go; once that's spent it's { open: false } and nothing more.
+	liveOnline( { now, budget, ttl, most } ) {
+
+		const day = dayOf( now );
+		this.saltFor( day );
+		return this.ctx.storage.transactionSync( () => {
+
+			if ( ! addLive( this.sql, day, 1, budget ).open ) return { open: false };
+			const rows = this.sql.exec( 'SELECT dots, at FROM live_online' ).toArray();
+			const stale = now - ttl;
+			if ( rows.some( row => row.at < stale ) ) this.sql.exec( 'DELETE FROM live_online WHERE at < ?', stale );
+			const areas = new Map();
+			let total = 0;
+			for ( const row of rows ) {
+
+				if ( row.at < stale ) continue;
+				for ( const dot of JSON.parse( row.dots ) ) {
+
+					total += dot.count;
+					const key = `${ dot.lat },${ dot.lon }`;
+					const area = areas.get( key );
+					if ( area ) area.count += dot.count;
+					else areas.set( key, { ...dot } );
+
+				}
+
+			}
+
+			return { open: true, total, areas: [ ...areas.values() ].sort( busiest ).slice( 0, most ) };
+
+		} );
 
 	}
 

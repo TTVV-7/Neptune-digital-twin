@@ -1840,6 +1840,43 @@ describe( 'World Drive Worker asking whether driving with others is open today',
 
 	} );
 
+	test( '/api/config: page loads arriving together as the answer runs out ask DriveLimits once in this Worker instance, the others open as it last heard; an ask that never comes back is given up on after 5 s', async () => {
+
+		const worker = await loadWorker();
+		let asked = 0;
+		let hold = null;
+		const limits = {
+			liveOpen: async () => {
+
+				asked ++;
+				await hold;
+				return { open: true, spent: 1 };
+
+			},
+		};
+		const env = { TEST_CLOCK: 'header', LIMITS: { idFromName: id => id, get: () => limits } };
+		const config = async time => ( await ( await worker.fetch( new Request( 'https://worlddrive.app/api/config', { headers: { 'X-Test-Time': String( time ) } } ), env, {} ) ).json() ).live;
+		const day = Date.UTC( 2030, 6, 1, 12 );
+		assert.equal( await config( day ), true );
+		assert.equal( asked, 1 );
+		// 30 s on: 20 at once, DriveLimits taking a while to say.
+		let release;
+		hold = new Promise( resolve => release = resolve );
+		const burst = Array.from( { length: 20 }, () => config( day + 30000 ) );
+		await new Promise( resolve => setTimeout( resolve, 20 ) );
+		release();
+		assert.deepEqual( new Set( await Promise.all( burst ) ), new Set( [ true ] ) );
+		assert.equal( asked, 2 );
+		// An ask that never comes back: open meanwhile, as last heard, and 5 s on it asks again.
+		hold = new Promise( () => {} );
+		config( day + 60000 );
+		await new Promise( resolve => setTimeout( resolve, 10 ) );
+		assert.deepEqual( [ await config( day + 64999 ), asked ], [ true, 3 ] );
+		hold = null;
+		assert.deepEqual( [ await config( day + 65000 ), asked ], [ true, 4 ] );
+
+	} );
+
 } );
 
 describe( 'World Drive Worker without its database', () => {
