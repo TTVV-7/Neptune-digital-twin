@@ -12,16 +12,18 @@ import { storage } from './places.js';
 // (near:BAND.COL, from a drop-in until a minute back on the globe), or the next of its shards when
 // one is full. It says where the car is, Earth-centred so that pages centred on other places agree,
 // up to SEND_HZ times a second while it moves and only while someone else is there to see it (each
-// message is billed: alone it's quiet, and sends the car as soon as someone comes); hands what the
-// room says to whoever listens (ghosts.js draws the others, friends.js the list and the party); and
-// comes back after a dropped connection.
+// message is billed: alone it's quiet, with only those on the globe it's slow, and it sends the car
+// as soon as someone comes); hands what the room says to whoever listens (ghosts.js draws the
+// others, friends.js the list and the party); and comes back after a dropped connection, one that
+// went quiet included.
 //
 // Events (on( type, fn )): 'status' (connecting, live...), 'party' (joined or left one), 'nearby'
 // (the switch), 'welcome' { room, you, max, players }, 'join' PLAYER, 'leave' { pid, player },
 // 'look' { pid, vehicle, look }, 'place' { pid, place }, 'away' { pid }, 'states' { at, states:
 // [ { pid, s, age } ] }, 'trick' { pid, score }, 'honk' { pid }, 'clear' (everyone's gone: a new
 // room, or the connection dropped), 'full' { max } (a party with its most already) and 'ended'
-// (why: driving with others is over for this visit; 'budget' when it's off till midnight UTC).
+// (why: driving with others is over for this visit; 'budget' when it's off till midnight UTC,
+// 'refused' when the Worker kept turning it away).
 
 const NEARBY_KEY = 'world-drive.nearby';
 // Seconds to wait before connecting again after a dropped connection: the first time, the
@@ -45,6 +47,14 @@ const BUDGET = { rate: 14, burst: 24 };
 const MAX_SPEED = 450;
 // How often (ms) the car's area is worked out again.
 const FOLLOW_MS = 500;
+// Nothing heard this long (ms) after a keepalive: the connection has gone without a word (a network
+// that drops everything), and is taken as dropped.
+const SILENT_MS = 10000;
+// Turned away at the door: /api/config is asked the first time in a row (and each time while it
+// can't be reached), then at most this often (ms); and REFUSALS in a row while the Worker is there
+// and on is over for the visit.
+const CONFIG_MS = 5 * 60000;
+const REFUSALS = 8;
 
 const _inverse = new Matrix4();
 const _earth = new Quaternion();
@@ -89,6 +99,11 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 	let tries = 0;
 	let retryTimer = null;
 	let status = 'off';
+	// Attempts in a row turned away at the door, what /api/config last said (null: it couldn't be
+	// reached) and when (turnedAway).
+	let refusals = 0;
+	let config = null;
+	let configAt = - Infinity;
 	// What the room has been told of this page (see tell), when anything last went, the last state
 	// sent (when, its flags, where, whether the car was moving), the car's latest state (null without
 	// a car), the budget left and the last honk.
@@ -101,6 +116,9 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 	let tokens = BUDGET.burst;
 	let tokensAt = performance.now();
 	let honkAt = - Infinity;
+	// When the room was last heard from, and the last keepalive sent.
+	let heardAt = 0;
+	let pingAt = - Infinity;
 	// When the visit's token runs out (its third part, in seconds): the rooms turn it away after.
 	const visitEnds = Number( String( visit ).split( '.' )[ 2 ] ) * 1000 || Infinity;
 
@@ -186,11 +204,20 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 
 			opened = true;
 			if ( socket !== ws ) return;
+			refusals = 0;
+			heardAt = performance.now();
+			pingAt = - Infinity;
 			told = { ride: JSON.stringify( ride ), place: JSON.stringify( place ), away };
 			transmit( { t: 'hello', player: helloPlayer(), vehicle: ride.vehicle, look: ride.look, place, away } );
 
 		} );
-		ws.addEventListener( 'message', e => socket === ws && receive( e.data ) );
+		ws.addEventListener( 'message', e => {
+
+			if ( socket !== ws ) return;
+			heardAt = performance.now();
+			receive( e.data );
+
+		} );
 		// Only the socket in use counts: one closed here on the way to another room, or the one a
 		// reconnect replaced, says nothing.
 		ws.addEventListener( 'close', e => socket === ws && closed( e.code, { opened, reason: e.reason } ) );
@@ -270,20 +297,41 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 	}
 
 	// Never let in: the Worker said no before the room (as it does to everyone while LIVE is off, or
-	// once the day's budget is spent), or wasn't there to ask. A browser doesn't say which, so its
-	// config does: switched off is over for this visit (without a word, or with one for the budget);
-	// anything else is tried again as a dropped connection is.
+	// once the day's budget is spent, and to a visit that keeps connecting), or wasn't there to ask.
+	// A browser doesn't say which, so its config does: switched off is over for this visit (without
+	// a word, or with one for the budget); anything else (DriveLimits not answering just then, with
+	// liveReason 'unknown', included) is tried again as a dropped connection is. Each ask the Worker
+	// answers is a request, so it's asked the first time in a row and then only every CONFIG_MS: a
+	// network that blocks WebSockets would otherwise have it asked every 30 s for hours. While it
+	// can't be reached (offline, or the Worker restarting), each time, to hear as soon as it's back
+	// whether it's on. And turned away REFUSALS times in a row while the Worker last said it was on
+	// (never when it couldn't be reached), it's over for this visit too.
 	async function turnedAway( name ) {
 
-		const config = await getConfig();
-		if ( room !== name || socket || ended ) return;
-		if ( config?.live === false ) end( config.liveReason === BUDGET_SPENT ? 'budget' : 'off' );
-		else {
+		refusals ++;
+		if ( refusals === 1 || ! config || performance.now() - configAt >= CONFIG_MS ) {
 
-			retry( name );
-			setStatus();
+			configAt = performance.now();
+			config = await getConfig();
+			if ( room !== name || socket || ended ) return;
+			if ( config?.live === false && config.liveReason !== 'unknown' ) {
+
+				end( config.liveReason === BUDGET_SPENT ? 'budget' : 'off' );
+				return;
+
+			}
 
 		}
+
+		if ( config?.live === true && refusals >= REFUSALS ) {
+
+			end( 'refused' );
+			return;
+
+		}
+
+		retry( name );
+		setStatus();
 
 	}
 
@@ -310,7 +358,7 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 	}
 
 	// Over for this visit: replaced by another tab, the visit run out, switched off (or for the rest of
-	// the day, its budget spent), or a message the room wouldn't take.
+	// the day, its budget spent), a message the room wouldn't take, or turned away again and again.
 	function end( reason ) {
 
 		if ( ended ) return;
@@ -389,7 +437,28 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 
 		// Back on the globe for a minute: the area's room goes.
 		if ( room && wanted() !== room ) sync();
-		if ( isLive() && performance.now() - sentAt >= KEEPALIVE_MS ) transmit( PING );
+		if ( ! isLive() ) return;
+		const now = performance.now();
+		// Nothing heard since a keepalive SILENT_MS ago: the way to the room has gone quiet (no word of
+		// it closing gets through either), so it's a dropped connection, tried again as one.
+		if ( pingAt > heardAt && now - pingAt > SILENT_MS ) {
+
+			const ws = socket;
+			closed( 1006 );
+			ws.close();
+			return;
+
+		}
+
+		// The keepalive, when nothing has been sent for KEEPALIVE_MS (the room's idle check counts
+		// only what it hears) or nothing heard for that long (to know the way's still there), at most
+		// one every KEEPALIVE_MS.
+		if ( ( now - sentAt >= KEEPALIVE_MS || now - heardAt >= KEEPALIVE_MS ) && now - pingAt >= KEEPALIVE_MS ) {
+
+			transmit( PING );
+			pingAt = now;
+
+		}
 
 	}
 
@@ -417,6 +486,7 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 			self = { name: cleanName( message.name ), star: message.star === true };
 			max = Number( message.max ) || 0;
 			tries = 0;
+			refusals = 0;
 			stateAt = - Infinity;
 			flagsSent = - 1;
 			players.clear();
@@ -475,10 +545,13 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 
 			const where = checkPlace( message.place );
 			if ( ! where ) return;
+			// The first to drop in where only those on the globe were: the car, at once, as for a join.
+			const was = watched();
 			p.place = where;
 			p.away = false;
 			p.s = null;
 			emit( 'place', { pid: p.pid, place: where } );
+			if ( ! was ) sendState();
 
 		} else if ( t === 'away' && p ) {
 
@@ -509,6 +582,13 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 			if ( score ) emit( 'trick', { pid: p.pid, score } );
 
 		} else if ( t === 'honk' && p ) emit( 'honk', { pid: p.pid } );
+
+	}
+
+	// Whether anyone else in the room can see this page's car: someone driving, not on the globe.
+	function watched() {
+
+		return [ ...players.values() ].some( p => ! p.away );
 
 	}
 
@@ -612,7 +692,10 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 			const moving = Math.hypot( s[ 7 ], s[ 8 ], s[ 9 ] ) > STILL_SPEED || _p.distanceTo( _last ) > STILL || _q.angleTo( _lastQ ) > STILL;
 			const gap = now - stateAt;
 			// Still, at STILL_HZ; but once more at SEND_HZ as it stops, so where it stopped goes soon.
-			const due = flags !== flagsSent ? gap >= FLAG_GAP : gap >= 1000 / ( moving || wasMoving ? SEND_HZ : STILL_HZ );
+			// With only those on the globe there, who can't see it (only their Join needs to know where
+			// it is), at STILL_HZ whatever it does.
+			const seen = watched();
+			const due = flags !== flagsSent && seen ? gap >= FLAG_GAP : gap >= 1000 / ( seen && ( moving || wasMoving ) ? SEND_HZ : STILL_HZ );
 			if ( ! due || ! spend() ) return;
 			transmit( { t: 's', s } );
 			stateAt = now;
@@ -638,8 +721,11 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 			place = checkPlace( where );
 			if ( ! place ) return;
 			away = false;
+			// A new area, or one where this page isn't with others in a room of it (back on the globe past
+			// the minute, alone in one of its shards, or it was busy): from the area's first room again.
+			// With others in a shard, within the minute, it stays with them.
 			const here = cellOf( place.lat, place.lon );
-			if ( here !== cell ) {
+			if ( here !== cell || party || ! room || ! players.size ) {
 
 				cell = here;
 				shard = 0;

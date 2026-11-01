@@ -646,20 +646,30 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 
 	}
 
-	// Your car to `spot` (besideOf's) in this scene, on the ground there, driving on. False where
-	// there's no ground loaded there to put it on.
+	// Your car to `spot` (besideOf's) in this scene, on the ground there, driving on. Only ground
+	// within 3 m of their car's height, as R takes (not a roof, a tree or a deck over them), and not
+	// where it's surely water for a ride that doesn't float; false otherwise, or where there's no
+	// ground loaded there to put it on, and it's a drop-in instead (which finds the street).
 	function moveCar( { local, heading } ) {
 
-		const y = ground.heightAt( local.x, local.z, local.y + 60, 200 );
+		const y = ground.heightAt( local.x, local.z, local.y + 3, 6 );
 		if ( y === null ) return false;
+		if ( ! specOf( state.vehicle ).floats && water.at( - local.x, local.z, y ) !== null ) return false;
 		const { entry } = state;
 		state.leaving = true;
 		if ( driver.active ) driver.stop();
 		state.leaving = false;
 		Object.assign( entry.state, { east: - local.x, north: local.z, heading, up: y } );
 		entry.parked = null;
+		// At that height: not snapped as a placed model is, from high above onto the first thing in
+		// the way, which under a roof is the roof. (While it's driven, nothing snaps it.)
+		const { snap } = entry.state;
+		entry.state.snap = false;
 		models.apply( entry );
+		entry.state.snap = snap;
 		screens.pause( false );
+		// A fresh trail of dry ground from here: a splash isn't to take it back where it came from.
+		driver.trailOf = null;
 		drive();
 		return true;
 

@@ -1,4 +1,5 @@
 import { Box3, Group, MathUtils, Quaternion, Vector3 } from 'three';
+import { clone as cloneModel } from 'three/addons/utils/SkeletonUtils.js';
 import { createDriveFx } from '../drive-fx.js';
 import { specFor } from '../drive.js';
 import { frontToYaw } from '../library.js';
@@ -15,8 +16,11 @@ import { applyLook, cleanLook, fxOf } from './paint.js';
 //
 // Their models are loaded as the Garage loads the turntable's (its builders, and models.js's loader
 // with its decoders): a ride built in code is built for each, and a model from a file is read once
-// and copied for each ghost in it, sharing its geometry and pictures until the last goes. Each ghost
-// has materials of its own, so it can turn see-through on its own.
+// and copied for each ghost in it (with skeletons of its own, for a skinned one), sharing its
+// geometry and pictures until TEMPLATE_KEEP after the last goes. Each ghost has materials of its
+// own, so it can turn see-through on its own. A new ride or paint is built once it has held for
+// LOOK_HOLD, and no oftener than LOOK_GAP, and swapped in when it's ready: a driver going through
+// colours in the Garage (or doing it on purpose, many times a second) costs the others one build.
 
 // The most drawn at once (the nearest), and of them the nearest with their effects, within FX_RANGE.
 const MAX_DRAWN = 12;
@@ -38,6 +42,11 @@ const HONK_SHOW = 1600;
 const POP_SHOW = 2200;
 // How fast (ms a second) the estimate of the room's clock may fall back, as the way here slows.
 const CLOCK_DRIFT = 20;
+// A new look is built once it has held this long (ms), at most once every LOOK_GAP for each car;
+// a model read from a file is kept TEMPLATE_KEEP after the last car in it goes, for the next.
+const LOOK_HOLD = 1000;
+const LOOK_GAP = 5000;
+const TEMPLATE_KEEP = 15000;
 
 const _box = new Box3();
 const _size = new Vector3();
@@ -94,12 +103,12 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 
 		const ghost = ghosts.get( pid );
 		if ( ! ghost ) return;
+		// A new ride, or a new paint job: a new model (its look is part of it), once it has held (see
+		// update), in place of the one drawn now.
 		ghost.vehicle = vehicle;
 		ghost.look = look;
 		ghost.failed = false;
-		// A new ride, or a new paint job: a new model (its look is part of it).
-		ghost.loading = null;
-		unload( ghost );
+		ghost.lookAt = performance.now();
 
 	} );
 	live.on( 'place', ( { pid, place } ) => {
@@ -150,7 +159,7 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 			snaps: [], heard: performance.now(),
 			// Where it's drawn: Earth-centred, and in the scene; its flags and velocity (Earth-centred).
 			p: new Vector3(), q: new Quaternion(), v: new Vector3(), flags: 0, scene: new Vector3(), distance: Infinity,
-			model: null, loading: null, failed: false, fx: null, fxFlags: 0, faded: false, drawn: false,
+			model: null, loading: null, failed: false, lookAt: 0, builtAt: - Infinity, builds: 0, fx: null, fxFlags: 0, faded: false, drawn: false,
 			yaw: null, steer: 0, splashLevel: 0,
 			tag: makeTag( p ),
 		};
@@ -184,6 +193,10 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 			v: new Vector3( s[ 7 ], s[ 8 ], s[ 9 ] ),
 			flags: s[ 10 ],
 		} );
+		// Those the next sample would drop, dropped now: while it isn't drawn (hidden, this page on the
+		// globe, a tab in the background) nothing samples it, and they'd pile up for hours.
+		const from = performance.now() - INTERP_MS;
+		while ( snaps.length > 2 && snaps[ 1 ].at <= from ) snaps.shift();
 		ghost.away = false;
 
 	}
@@ -277,15 +290,36 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 
 	// --- models ---
 
+	// The ride a ghost wants, and what its model is built from: the ride and its look, as one key.
+	function vehicleOf( ghost ) {
+
+		return byId.get( ghost.vehicle ) ?? byId.get( 'go-kart' ) ?? vehicles[ 0 ];
+
+	}
+
+	function keyOf( ghost ) {
+
+		const vehicle = vehicleOf( ghost );
+		return `${ vehicle.id } ${ JSON.stringify( cleanLook( vehicle, ghost.look ) ) }`;
+
+	}
+
+	// A model for the ride and look the ghost wants; the one it has (if any) is drawn until this is
+	// ready, and only then let go of, so a file both are from is never read again for it.
 	function load( ghost ) {
 
-		const vehicle = byId.get( ghost.vehicle ) ?? byId.get( 'go-kart' ) ?? vehicles[ 0 ];
+		const vehicle = vehicleOf( ghost );
+		const key = keyOf( ghost );
 		const job = build( vehicle, cleanLook( vehicle, ghost.look ) );
 		ghost.loading = job;
+		ghost.builds ++;
+		if ( ghost.model ) ghost.builtAt = performance.now();
 		job.then( model => {
 
 			if ( ghost.loading !== job || ghosts.get( ghost.pid ) !== ghost ) return dispose( model );
 			ghost.loading = null;
+			unload( ghost );
+			model.key = key;
 			ghost.model = model;
 			ghost.faded = false;
 			model.pivot.visible = false;
@@ -308,10 +342,12 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 	async function build( vehicle, look ) {
 
 		const used = [];
+		// (SkeletonUtils' clone: a skinned mesh copied as Object3D.clone copies it keeps the file's
+		// skeleton, whose bones aren't in the copy, and so is drawn where those are, not with it.)
 		const copyOf = async url => {
 
 			used.push( url );
-			return ( await template( url ) ).scene.clone();
+			return cloneModel( ( await template( url ) ).scene );
 
 		};
 		let content;
@@ -380,10 +416,12 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 
 	}
 
-	// A model from a file, read once for every ghost in it, until the last of them goes.
+	// A model from a file, read once for every ghost in it, until TEMPLATE_KEEP after the last of them
+	// goes (a ride changed back to, or a reconnect, reads nothing again).
 	function template( url ) {
 
 		let entry = templates.get( url );
+		clearTimeout( entry?.timer );
 		if ( ! entry ) {
 
 			entry = {
@@ -414,7 +452,18 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 
 		const entry = templates.get( url );
 		if ( ! entry || -- entry.users > 0 ) return;
-		templates.delete( url );
+		entry.timer = setTimeout( () => {
+
+			if ( entry.users > 0 || templates.get( url ) !== entry ) return;
+			templates.delete( url );
+			free( entry );
+
+		}, TEMPLATE_KEEP );
+
+	}
+
+	function free( entry ) {
+
 		entry.gltf.then( gltf => gltf.scene.traverse( o => {
 
 			o.geometry?.dispose();
@@ -429,8 +478,8 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 
 	}
 
-	// What a ghost owns goes: its effects, its model's own geometry (a ride's built parts, decals) and
-	// materials, and its hold on the file the model was read from.
+	// What a ghost owns goes: its effects, its model's own geometry (a ride's built parts, decals),
+	// materials and skeletons, and its hold on the file the model was read from.
 	function unload( ghost ) {
 
 		dropFx( ghost );
@@ -446,6 +495,8 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 		model.pivot.traverse( o => {
 
 			if ( o.geometry && ! o.geometry.userData.shared && ! o.geometry.userData.template ) o.geometry.dispose();
+			// Its own (see build), with the bones' texture each has on the GPU.
+			o.skeleton?.dispose();
 
 		} );
 		for ( const material of model.materials ) material.dispose();
@@ -571,6 +622,7 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 			}
 
 			if ( ! ghost.model && ! ghost.loading && ! ghost.failed ) load( ghost );
+			else if ( ghost.model && ! ghost.loading && ! ghost.failed && ghost.model.key !== keyOf( ghost ) && now - ghost.lookAt >= LOOK_HOLD && now - ghost.builtAt >= LOOK_GAP ) load( ghost );
 			if ( ! ghost.model ) return;
 			place( ghost, dt );
 			const near = ghost.faded ? FADE_NEAR + 2 : FADE_NEAR;
@@ -680,6 +732,12 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 
 		},
 		isHidden: name => hidden.has( name ),
+		// How many models read from a file are kept, for the tests.
+		get templates() {
+
+			return templates.size;
+
+		},
 		// How far (m) a driver's ghost is from your car (or the camera, without one), or null if it
 		// isn't drawn.
 		distanceTo( pid ) {
@@ -696,7 +754,7 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 			return [ ...ghosts.values() ].map( ghost => ( {
 				pid: ghost.pid, name: ghost.name, star: ghost.star, vehicle: ghost.model?.vehicle.id ?? null, wanted: ghost.vehicle,
 				drawn: ghost.drawn, visible: !! ghost.model?.pivot.visible, away: ghost.away, paused: !! ( ghost.flags & FLAGS.paused ),
-				flags: ghost.flags, faded: ghost.faded, fx: !! ghost.fx,
+				flags: ghost.flags, faded: ghost.faded, fx: !! ghost.fx, builds: ghost.builds, snaps: ghost.snaps.length,
 				position: ghost.model ? ghost.model.pivot.position.toArray() : null,
 				quaternion: ghost.model ? ghost.model.pivot.quaternion.toArray() : null,
 				tag: ghost.tag.root,

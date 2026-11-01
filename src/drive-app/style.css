@@ -451,11 +451,13 @@ button.primary:active,
 	pointer-events: none;
 }
 
+/* Over the driving HUD (drive-hud.js) while it shows, as the players list is: on a short window
+   its last rows reach down to where the HUD sits. */
 #drive-ui .keys {
 	position: fixed;
 	top: 64px;
 	right: 12px;
-	z-index: 15;
+	z-index: 1004;
 	max-width: min( 380px, calc( 100vw - 24px ) );
 	margin: 0;
 	padding: 12px 14px;
@@ -1272,6 +1274,28 @@ dialog#about form {
 	height: 8px;
 	border-radius: 50%;
 	background: var( --muted );
+}
+
+/* On a phone, only the count (or only the light, connecting or busy): the place's name beside it
+   keeps its room. Its words are its aria-label either way. */
+#drive-ui .live-chip .short {
+	display: none;
+}
+
+@media ( max-width: 480px ) {
+
+	#drive-ui .live-chip .long {
+		display: none;
+	}
+
+	#drive-ui .live-chip .short {
+		display: inline;
+	}
+
+	#drive-ui .live-chip .short:empty {
+		display: none;
+	}
+
 }
 
 #drive-ui .live-chip.on::before {

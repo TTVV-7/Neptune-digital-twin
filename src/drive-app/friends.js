@@ -1,4 +1,4 @@
-import { FLAGS } from './live-protocol.js';
+import { FLAGS, cellOf } from './live-protocol.js';
 import { storage } from './places.js';
 import { hideKeys, toast } from './screens.js';
 
@@ -38,6 +38,9 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo } ) {
 	let beeps = 0;
 	let lastMode = null;
 	let nearbyToast = - Infinity;
+	// Who the party's banner names (their pid, or null), and what it says.
+	let bannerPid = null;
+	let bannerKey = null;
 
 	chip.addEventListener( 'click', () => openList( list.hidden ) );
 	horn.addEventListener( 'click', () => honk() );
@@ -105,7 +108,12 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo } ) {
 
 		refresh();
 		const p = live.players.get( pid );
-		if ( inParty() && p ) toast( `${ p.name } went to ${ place.name || 'a new place' }.`, 8000, { label: 'Join', onClick: () => goTo( pid ) } );
+		if ( ! inParty() || ! p ) return;
+		// A friend dropping in where you're driving (as Join does, beside you) needs no Join; on the
+		// globe, the banner says it already if it's them.
+		const here = ! live.away && live.place && cellOf( place.lat, place.lon ) === cellOf( live.place.lat, live.place.lon );
+		if ( here ) toast( `${ p.name } dropped in near you.`, 4000 );
+		else if ( mode() !== 'globe' || bannerPid !== pid ) toast( `${ p.name } went to ${ place.name || 'a new place' }.`, 8000, { label: 'Join', onClick: () => goTo( pid ) } );
 
 	} );
 	live.on( 'full', ( { max } ) => toast( `That party is full: ${ max } drivers at most.`, 6000 ) );
@@ -113,8 +121,10 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo } ) {
 
 		refresh();
 		if ( reason === 'replaced' ) toast( 'Driving with others moved to another tab.', 8000 );
-		else if ( reason === 'expired' ) toast( 'Driving with others has ended for this visit. Reload for a fresh drive.', 10000 );
+		// (Not "reload": that's a new visit, one of the day's free drives.)
+		else if ( reason === 'expired' ) toast( 'Driving with others has ended for this visit (after 6 hours). It\'s on again on your next visit.', 10000 );
 		else if ( reason === 'budget' ) toast( BUDGET_TOAST, 10000 );
+		else if ( reason === 'refused' ) toast( 'Driving with others couldn\'t connect from here, so you\'re driving on your own.', 8000 );
 
 	} );
 	live.on( 'honk', ( { pid } ) => {
@@ -136,11 +146,11 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo } ) {
 	function refresh() {
 
 		lastMode = mode();
-		// Switched off on the Worker (for good, or the rest of the day), or for this visit: none of it
-		// shows.
-		const off = live.ended === 'off' || live.ended === 'budget' || live.ended === 'protocol';
+		// Over for this visit, whatever ended it (the toast said why): none of it shows. Nor the horn
+		// with nearby off and no party, as there's nobody to hear it.
+		const off = !! live.ended;
 		for ( const area of areas ) area.refresh( off );
-		hornKey.hidden = horn.hidden = !! live.ended;
+		hornKey.hidden = horn.hidden = off || live.status === 'off';
 		showChip();
 		showBanner();
 		// The list is for driving: paused or gone, it closes.
@@ -162,9 +172,20 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo } ) {
 
 		const count = live.players.size + 1;
 		const where = inParty() ? 'Party' : 'Nearby';
-		chip.textContent = status === 'busy' ? 'Nearby is busy'
+		const label = status === 'busy' ? 'Nearby is busy'
 			: status !== 'live' ? `${ where } · connecting`
 				: ! inParty() && count === 1 ? 'Nearby · just you' : `${ where } · ${ count }`;
+		// The words, and on a phone only the count (style.css), so the place's name keeps its room.
+		if ( label !== chip.getAttribute( 'aria-label' ) ) {
+
+			chip.replaceChildren(
+				Object.assign( document.createElement( 'span' ), { className: 'long', textContent: label } ),
+				Object.assign( document.createElement( 'span' ), { className: 'short', textContent: status === 'live' ? String( count ) : '' } ),
+			);
+			chip.setAttribute( 'aria-label', label );
+
+		}
+
 		chip.classList.toggle( 'on', status === 'live' );
 
 	}
@@ -200,7 +221,9 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo } ) {
 		heading.textContent = inParty() ? `Party ${ live.party }` : 'Drivers nearby';
 		const shown = others();
 		empty.hidden = shown.length > 0;
-		empty.textContent = inParty() ? 'Nobody else here yet. Invite friends from the pause menu.' : 'Nobody else driving near here yet.';
+		empty.textContent = inParty() ? 'Nobody else here yet. Invite friends from the pause menu.'
+			: live.status === 'busy' ? 'This area is full just now, so you\'re driving on your own here.'
+				: 'Nobody else driving near here yet.';
 		for ( const [ pid, row ] of rowOf ) {
 
 			if ( live.players.has( pid ) ) continue;
@@ -253,18 +276,25 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo } ) {
 				const hiddenHere = ghosts.isHidden( name );
 				hide.textContent = hiddenHere ? 'Show' : 'Hide';
 				hide.title = hiddenHere ? 'Show them again' : 'Hide them for this visit';
+				// Whose, for a screen reader: otherwise a column of the same two words.
+				go.setAttribute( 'aria-label', `Go to ${ name }` );
+				hide.setAttribute( 'aria-label', `${ hide.textContent } ${ name }` );
 
 			},
 		};
 
 	}
 
+	// Made again only when what it says changes: it's a live region, read out each time it is.
 	function showBanner() {
 
 		const show = inParty() && mode() === 'globe' && ! live.ended;
 		banner.hidden = ! show;
-		if ( ! show ) return;
-		const driving = [ ...live.players.values() ].find( p => ! p.away && ( p.s || p.place ) );
+		const driving = show ? [ ...live.players.values() ].find( p => ! p.away && ( p.s || p.place ) ) : null;
+		bannerPid = driving?.pid ?? null;
+		const key = show && JSON.stringify( driving ? [ driving.pid, driving.name, driving.star, driving.place?.name ] : null );
+		if ( ! show || key === bannerKey ) return;
+		bannerKey = key;
 		if ( ! driving ) {
 
 			banner.replaceChildren( Object.assign( document.createElement( 'span' ), { textContent: 'Waiting for your friends: pick a place and they can join you.' } ) );
@@ -312,11 +342,9 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo } ) {
 
 				root.hidden = off;
 				if ( off ) return;
-				const over = !! live.ended;
-				invite.hidden = inParty() || over;
-				party.hidden = ! inParty() || over;
+				invite.hidden = inParty();
+				party.hidden = ! inParty();
 				nearby.input.checked = live.nearby;
-				nearby.label.hidden = over;
 				if ( hornSetting ) hornSetting.input.checked = hornOn;
 				if ( party.hidden ) return;
 				code.textContent = `Your party: ${ live.party }. Anyone with the link can join you.`;
@@ -360,9 +388,10 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo } ) {
 
 	// --- the horn ---
 
+	// (Not with nearby off and no party: nobody's there to hear it.)
 	function honk() {
 
-		if ( mode() !== 'driving' || ! live.honk() ) return;
+		if ( mode() !== 'driving' || live.status === 'off' || ! live.honk() ) return;
 		ghosts.honkSelf();
 		beep( 1 );
 

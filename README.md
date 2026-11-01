@@ -490,7 +490,8 @@ posted with the visit's signed token and checked against what the game can score
 **Driving with others**: everyone else driving the same area (about 11 km across) shows up live as
 a ghost car you pass straight through, with their nickname, ride and Garage paint; **Invite
 friends** makes a party link (`/?party=CODE`) that brings friends to you anywhere on Earth, and
-**H** honks. No chat, and nobody sees more of you than your car in the game. Each room is a Durable
+**H** honks. No chat; the others see your nickname (or a guest name), your ride and where your car
+is in the game, including the spot you dropped in, and nothing else of you. Each room is a Durable
 Object on the WebSocket Hibernation API (`worker/drive/live.js`, speaking
 `src/drive-app/live-protocol.js`). It switches itself off for the rest of the UTC day once it has
 used its daily budget of Durable Object requests (`LIVE_DAILY_BUDGET`), so it can't use up what the

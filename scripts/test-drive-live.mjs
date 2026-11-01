@@ -23,7 +23,9 @@
 // alone, held states; a visit gone to another room; a closed connection talking on; and what it
 // spends: every billed request counted once, reported once a minute while there's enough to and
 // every ten minutes otherwise (a lone driver), and as it empties, a replaced driver's spend kept,
-// closing everyone when the day's is spent, and carrying on when DriveLimits fails.
+// closing everyone when the day's is spent, and carrying on when DriveLimits fails. And the page's
+// side (src/drive-app/live.js) on stand-ins for the browser: turned away at the door, a connection
+// gone quiet, a busy area tried again, and quiet with only those on the globe to see it.
 // TEST_DRIVE_LIVE_PORT=8950 moves the three wrangler servers (that port and the next two).
 
 import assert from 'node:assert/strict';
@@ -32,11 +34,11 @@ import { register } from 'node:module';
 import { createRequire } from 'node:module';
 import { createConnection } from 'node:net';
 import { serialize } from 'node:v8';
-import { after, before, describe, test } from 'node:test';
+import { after, before, describe, mock, test } from 'node:test';
 import { CLIENT_ID, makeKey, makeToken, serveKeys, startWorker } from './worker-harness.mjs';
 import {
-	BUDGET_SPENT, BURST, CLOSE, FLUSH_MS, HELLO_MS, HONK_GAP, IDLE_MS, KEEPALIVE_MS, MAX_HELLO, MAX_MESSAGE, PARTY_MAX, PING, PONG, PROTOCOL,
-	SEND_HZ, VIEW_RANGE,
+	BUDGET_SPENT, BURST, CLOSE, FLUSH_MS, HELLO_MS, HONK_GAP, IDLE_MS, KEEPALIVE_MS, MAX_HELLO, MAX_MESSAGE, NEARBY_SHARDS, PARTY_MAX, PING, PONG,
+	PROTOCOL, SEND_HZ, STILL_HZ, VIEW_RANGE,
 	cellOf, makePartyCode, packState, shardOf,
 } from '../src/drive-app/live-protocol.js';
 import { makeVisit } from '../worker/drive/visits.js';
@@ -2091,6 +2093,356 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 			console.error = realError;
 
 		}
+
+	} );
+
+} );
+
+// --- the page's side, here -------------------------------------------------------------------
+
+// src/drive-app/live.js on stand-ins for what it uses of the browser: WebSockets the test opens,
+// answers and closes as the room or the network would, /api/config answering as the test says, and
+// its clock and timers moved by the test (node:test's mock timers, and performance.now).
+
+describe( 'The page\'s side (src/drive-app/live.js), here on stand-ins for the browser', () => {
+
+	let createLive;
+	let Matrix4;
+	let Object3D;
+	let Vector3;
+	let now = 0;
+	// What /api/config answers, in turn (the last of them from then on; null: it can't be reached),
+	// and how many times it's been asked.
+	let configs = [ { live: true } ];
+	let asked = 0;
+	const sockets = [];
+	const real = {};
+	const PAD = { name: 'Test Pad', lat: 46.5725, lon: 8.4153, height: 2429 };
+	const TOKEN = `v1.${ 'A'.repeat( 22 ) }.${ Math.floor( Date.now() / 1000 ) + 6 * 3600 }.${ 'B'.repeat( 43 ) }`;
+
+	class PageSocket {
+
+		static CONNECTING = 0;
+		static OPEN = 1;
+		static CLOSING = 2;
+		static CLOSED = 3;
+
+		constructor( url ) {
+
+			Object.assign( this, { room: new URL( url ).searchParams.get( 'room' ), readyState: 0, sent: [], listeners: new Map() } );
+			sockets.push( this );
+
+		}
+
+		addEventListener( type, fn ) {
+
+			if ( ! this.listeners.has( type ) ) this.listeners.set( type, [] );
+			this.listeners.get( type ).push( fn );
+
+		}
+
+		send( text ) {
+
+			if ( this.readyState !== 1 ) throw new Error( 'not open' );
+			this.sent.push( text );
+
+		}
+
+		close() {
+
+			this.readyState = 3;
+
+		}
+
+		// The room's (or the network's) side.
+		emit( type, event = {} ) {
+
+			for ( const fn of this.listeners.get( type ) ?? [] ) fn( event );
+
+		}
+
+		open() {
+
+			this.readyState = 1;
+			this.emit( 'open' );
+
+		}
+
+		hear( message ) {
+
+			this.emit( 'message', { data: typeof message === 'string' ? message : JSON.stringify( message ) } );
+
+		}
+
+		end( code ) {
+
+			this.readyState = 3;
+			this.emit( 'close', { code, reason: '' } );
+
+		}
+
+		// What the page has sent it: each message's t (a keepalive as its text).
+		said() {
+
+			return this.sent.map( text => text === PING ? PING : JSON.parse( text ).t );
+
+		}
+
+	}
+
+	const welcome = ( ws, players = [] ) => ws.hear( { t: 'welcome', you: 'me000001', name: 'Guest 0001', star: false, room: ws.room, max: 20, players } );
+	const friend = ( pid, more = {} ) => ( { pid, name: `Friend ${ pid }`, star: false, vehicle: 'go-kart', look: {}, place: null, away: true, s: null, ...more } );
+	const settle = async () => {
+
+		for ( let i = 0; i < 6; i ++ ) await new Promise( resolve => setImmediate( resolve ) );
+
+	};
+	// The clock `ms` on, in frames of 50 ms (each calling `frame`), the page's timers with it.
+	async function advance( ms, frame = null ) {
+
+		const until = now + ms;
+		while ( now < until ) {
+
+			const step = Math.min( 50, until - now );
+			now += step;
+			mock.timers.tick( step );
+			frame?.();
+			await settle();
+
+		}
+
+	}
+
+	before( async () => {
+
+		( { Matrix4, Object3D, Vector3 } = await import( 'three' ) );
+		for ( const name of [ 'performance', 'location', 'localStorage', 'WebSocket', 'fetch' ] ) real[ name ] = Object.getOwnPropertyDescriptor( globalThis, name );
+		mock.timers.enable( { apis: [ 'setTimeout', 'setInterval' ] } );
+		Object.defineProperty( globalThis, 'performance', { value: { now: () => now }, configurable: true, writable: true } );
+		globalThis.location = { protocol: 'https:', host: 'worlddrive.app' };
+		globalThis.localStorage = { getItem: () => null, setItem: () => {} };
+		globalThis.WebSocket = PageSocket;
+		globalThis.fetch = async () => {
+
+			asked ++;
+			const answer = configs.length > 1 ? configs.shift() : configs[ 0 ];
+			if ( answer === null ) throw new TypeError( 'Failed to fetch' );
+			return new Response( JSON.stringify( answer ), { headers: { 'Content-Type': 'application/json' } } );
+
+		};
+		( { createLive } = await import( '../src/drive-app/live.js' ) );
+
+	} );
+
+	after( () => {
+
+		mock.timers.reset();
+		for ( const [ name, descriptor ] of Object.entries( real ) ) {
+
+			if ( descriptor ) Object.defineProperty( globalThis, name, descriptor );
+			else delete globalThis[ name ];
+
+		}
+
+	} );
+
+	// A page on the globe, with nothing else of the browser's: its earth's frame is Earth's own, and
+	// its car (car()) is at the pad, moving north at `speed` m/s each frame if it's told to.
+	function page() {
+
+		configs = [ { live: true } ];
+		asked = 0;
+		sockets.length = 0;
+		const earth = { matrixWorld: new Matrix4(), updateWorldMatrix() {} };
+		const ellipsoid = { getPositionToCartographic: ( p, out ) => Object.assign( out, { lat: PAD.lat * Math.PI / 180, lon: PAD.lon * Math.PI / 180, height: PAD.height } ) };
+		const live = createLive( { earth, ellipsoid, visit: TOKEN, player: () => null, ride: { vehicle: 'go-kart', look: {} } } );
+		const at = ecef( PAD.lat, PAD.lon, PAD.height );
+		const pivot = new Object3D();
+		pivot.position.set( at.x, at.y, at.z );
+		const velocity = new Vector3();
+		live.car = { pivot, velocity, flags: 128 };
+		// A frame of driving at `speed` (m/s).
+		live.drive = ( speed = 10 ) => {
+
+			velocity.set( 0, 0, - speed );
+			pivot.position.z += speed / 20;
+			live.update( live.car );
+
+		};
+		return live;
+
+	}
+
+	const states = ws => ws.said().filter( t => t === 's' ).length;
+
+	test( 'turned away at the door while the Worker says it\'s on: /api/config asked the first time only, and after 8 in a row it stops', async () => {
+
+		const live = page();
+		const ended = [];
+		live.on( 'ended', reason => ended.push( reason ) );
+		live.setPlace( PAD );
+		for ( let i = 0; i < 20 && ! live.ended; i ++ ) {
+
+			// Never let in (the browser can't say why: a token refused, say).
+			sockets.at( - 1 ).end( 1006 );
+			await advance( 31 * SECOND );
+
+		}
+
+		assert.deepEqual( ended, [ 'refused' ] );
+		assert.equal( sockets.length, 8 );
+		assert.equal( asked, 1 );
+		await advance( 5 * MINUTE );
+		assert.equal( sockets.length, 8 );
+
+	} );
+
+	test( 'turned away while DriveLimits can\'t say (liveReason \'unknown\'), or the Worker can\'t be reached: it keeps trying (asking every 5 minutes, or each time while it can\'t be reached), and gets back in', async () => {
+
+		for ( const [ answer, asks ] of [ [ { live: false, liveReason: 'unknown' }, 3 ], [ null, 30 ] ] ) {
+
+			const live = page();
+			configs = [ answer ];
+			live.setPlace( PAD );
+			for ( let i = 0; i < 30; i ++ ) {
+
+				sockets.at( - 1 ).end( 1006 );
+				await advance( 31 * SECOND );
+
+			}
+
+			assert.equal( live.ended, null, JSON.stringify( answer ) );
+			assert.equal( sockets.length, 31 );
+			// Nearly fifteen minutes of them: asked at the first, then at the first five minutes on, and
+			// ten (120 times otherwise); or, with no answer at all, each time.
+			assert.equal( asked, asks, JSON.stringify( answer ) );
+			// In again: and from then on, turned away is a new run of them.
+			configs = [ { live: true } ];
+			sockets.at( - 1 ).open();
+			welcome( sockets.at( - 1 ) );
+			assert.equal( live.status, 'live' );
+			live.setNearby( false );
+
+		}
+
+		// Switched off, or the day's budget spent: over at once; or, the Worker restarting with LIVE
+		// off, as soon as it answers again.
+		for ( const [ answers, reason ] of [ [ [ { live: false } ], 'off' ], [ [ { live: false, liveReason: BUDGET_SPENT } ], 'budget' ], [ [ null, null, { live: false } ], 'off' ] ] ) {
+
+			const live = page();
+			configs = [ ...answers ];
+			live.setPlace( PAD );
+			for ( let i = 0; i < answers.length; i ++ ) {
+
+				sockets.at( - 1 ).end( 1006 );
+				await advance( 31 * SECOND );
+
+			}
+
+			assert.equal( live.ended, reason, JSON.stringify( answers ) );
+
+		}
+
+	} );
+
+	test( 'a connection gone quiet (nothing heard after a keepalive for 10 s) is taken as dropped, and comes back', async () => {
+
+		const live = page();
+		live.setPlace( PAD );
+		const ws = sockets.at( - 1 );
+		ws.open();
+		welcome( ws );
+		// Alone, it sends nothing but its keepalive, KEEPALIVE_MS on; the room answers.
+		await advance( KEEPALIVE_MS + 500 );
+		assert.deepEqual( ws.said(), [ 'hello', PING ] );
+		ws.hear( PONG );
+		await advance( KEEPALIVE_MS );
+		assert.deepEqual( ws.said(), [ 'hello', PING, PING ] );
+		assert.equal( ws.readyState, 1 );
+		// This one isn't answered, nor anything else heard: 10 s on, it's dropped, and tried again.
+		await advance( 11 * SECOND );
+		assert.equal( ws.readyState, 3 );
+		assert.equal( live.status, 'retrying' );
+		await advance( 1500 );
+		assert.equal( sockets.length, 2 );
+		assert.equal( sockets[ 1 ].room, ws.room );
+		sockets[ 1 ].open();
+		welcome( sockets[ 1 ] );
+		assert.equal( live.status, 'live' );
+		live.setNearby( false );
+
+	} );
+
+	test( 'an area all of whose rooms were full: tried again at the next drop-in there; alone in a shard, back to the first room; with others in it, staying', async () => {
+
+		const cell = cellOf( PAD.lat, PAD.lon );
+		const live = page();
+		live.setPlace( PAD );
+		for ( let shard = 0; shard < NEARBY_SHARDS; shard ++ ) {
+
+			const ws = sockets.at( - 1 );
+			assert.equal( ws.room, shard ? shardOf( cell, shard ) : cell );
+			ws.open();
+			ws.hear( { t: 'full', room: ws.room, max: 20 } );
+
+		}
+
+		assert.equal( live.status, 'busy' );
+		const tried = sockets.length;
+		await advance( MINUTE );
+		assert.equal( sockets.length, tried );
+		// Back to the globe and in again, in the same area: its first room again.
+		live.setAway();
+		live.setPlace( { ...PAD, lat: PAD.lat + 0.01 } );
+		assert.equal( sockets.length, tried + 1 );
+		assert.equal( sockets.at( - 1 ).room, cell );
+
+		// The first full, in the next alone: in again, it's the first it tries.
+		sockets.at( - 1 ).open();
+		sockets.at( - 1 ).hear( { t: 'full', room: cell, max: 20 } );
+		const alone = sockets.at( - 1 );
+		assert.equal( alone.room, shardOf( cell, 1 ) );
+		alone.open();
+		welcome( alone );
+		live.setAway();
+		live.setPlace( PAD );
+		assert.equal( sockets.at( - 1 ).room, cell );
+		// The first full again; in the next with someone there: in again, it stays with them.
+		sockets.at( - 1 ).open();
+		sockets.at( - 1 ).hear( { t: 'full', room: cell, max: 20 } );
+		const shared = sockets.at( - 1 );
+		shared.open();
+		welcome( shared, [ friend( 'friend01', { away: false, place: PAD } ) ] );
+		const made = sockets.length;
+		live.setAway();
+		live.setPlace( PAD );
+		assert.deepEqual( [ sockets.length, live.room ], [ made, shardOf( cell, 1 ) ] );
+		live.setNearby( false );
+
+	} );
+
+	test( 'with only those on the globe in the room, the car goes at STILL_HZ; one dropping in has it at once, then SEND_HZ', async () => {
+
+		const live = page();
+		live.setPlace( PAD );
+		const ws = sockets.at( - 1 );
+		ws.open();
+		welcome( ws, [ friend( 'friend01' ) ] );
+		await advance( 10 * SECOND, () => live.drive() );
+		const quiet = states( ws );
+		assert.ok( quiet >= 4 && quiet <= 10 * STILL_HZ + 1, `${ quiet } states in 10 s` );
+		// The friend drops in.
+		ws.hear( { t: 'place', pid: 'friend01', place: PAD } );
+		assert.equal( states( ws ), quiet + 1 );
+		await advance( 2 * SECOND, () => live.drive() );
+		const seen = states( ws ) - quiet - 1;
+		assert.ok( seen >= 2 * SEND_HZ - 1 && seen <= 2 * SEND_HZ + 1, `${ seen } states in 2 s` );
+		// Back to the globe, and it's slow again.
+		ws.hear( { t: 'away', pid: 'friend01' } );
+		const before = states( ws );
+		await advance( 4 * SECOND, () => live.drive() );
+		assert.ok( states( ws ) - before <= 4 * STILL_HZ + 1 );
+		live.setNearby( false );
 
 	} );
 

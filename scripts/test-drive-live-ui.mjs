@@ -7,16 +7,20 @@
 // back to the globe and back when it drops in again; another ride and paint when it changes; its
 // name from the leaderboard and ⭐ over it, a name with HTML in it shown as text; driven straight
 // through without a bump, see-through up close; its honk and its trick's points over it; and
-// gone, with what it was drawn with freed, when it leaves. A party: inviting makes a link, which
+// gone, with what it was drawn with freed, when it leaves. The pickup (a skinned model) drawn where
+// its ghost is; a flood of new rides and paint built for none of it; hidden, what's heard of it not
+// piling up; Go to on the ground under a roof, not on it. A party: inviting makes a link, which
 // opens on the globe with a banner to join the friend driving, who's dropped in beside; a driver
 // at the same spot outside the party sees neither of them but does see another driver there; a
 // ninth member is told it's full; a reload rejoins; leaving drops the link from the address. A
-// full area's next shard, a busy one, a dropped connection coming back, another tab taking over, a
-// visit run out, a touch screen's list and horn, the room following the car into another area,
+// full area's next shard, a busy one (tried again at the next drop-in there), a dropped connection
+// coming back (and one gone quiet, passing nothing), another tab taking over, a visit run out, a
+// touch screen's list, compact chip and horn, the room following the car into another area,
 // only the page's own origin through the proxy, and the Worker restarted with LIVE off: open pages
 // stop without a word and new ones show nothing of it, driving as ever. Alone in its room a page
 // sends no states, and a driver joining sees it at once; the ghost following is measured at
-// SEND_HZ. The day's budget spent (the Worker with a small LIVE_DAILY_BUDGET): a page turned away
+// SEND_HZ, and only at STILL_HZ while the only other one in the room is on the globe. The day's
+// budget spent (the Worker with a small LIVE_DAILY_BUDGET, spent by connecting): a page turned away
 // says so once and shows nothing more of it, a party's link says why, and both drive as ever.
 //
 // Visit tokens are made here with Turnstile's documented test secret, as /api/visit makes them
@@ -36,7 +40,7 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { WebSocket } from 'ws';
-import { FLAGS, INTERP_MS, NEARBY_SHARDS, PARTY_MAX, PROTOCOL, SEND_HZ, cellOf, parseRoom, shardOf } from '../src/drive-app/live-protocol.js';
+import { FLAGS, INTERP_MS, NEARBY_SHARDS, PARTY_MAX, PROTOCOL, SEND_HZ, cellOf, makePartyCode, parseRoom, shardOf } from '../src/drive-app/live-protocol.js';
 import { makeVisit } from '../worker/drive/visits.js';
 import { startVite, startWorker } from './worker-harness.mjs';
 
@@ -166,6 +170,21 @@ async function startLine( port, target ) {
 		cut() {
 
 			for ( const pair of sockets ) if ( pair.socket ) pair.client.destroy();
+
+		},
+		// Every WebSocket through it stops passing anything, either way, and nothing's closed: a
+		// network that drops everything without a word. (New ones go through as ever.)
+		stall() {
+
+			for ( const pair of sockets ) {
+
+				if ( ! pair.socket ) continue;
+				pair.client.unpipe( pair.upstream );
+				pair.upstream.unpipe( pair.client );
+				pair.client.pause();
+				pair.upstream.pause();
+
+			}
 
 		},
 		stop() {
@@ -395,6 +414,8 @@ describe( 'World Drive, driving with others', () => {
 		await row.first().waitFor();
 		assert.equal( await row.count(), 1 );
 		assert.match( await row.locator( '.what' ).textContent(), /^Go-kart · \d+ m$/ );
+		// Its buttons say whose they are.
+		assert.deepEqual( [ await row.locator( 'button.go' ).getAttribute( 'aria-label' ), await row.locator( 'button.hide' ).getAttribute( 'aria-label' ) ], [ 'Go to Ana', 'Hide Ana' ] );
 		await shot( b, 'live-1-list' );
 		// Hidden for this visit, and shown again.
 		await row.locator( 'button.hide' ).click();
@@ -556,6 +577,20 @@ describe( 'World Drive, driving with others', () => {
 
 	} );
 
+	test( 'A hidden on B while it drives: B keeps only the last of what it hears of A, not all of it', async () => {
+
+		await b.evaluate( () => window.drive.ghosts.hide( 'Ana' ) );
+		await placeCar( a, 0, 0, 0 );
+		await a.evaluate( () => window.drive.driver.press( 'KeyW' ) );
+		await b.waitForTimeout( 3000 );
+		const kept = ( await ghosts( b ) )[ 0 ].snaps;
+		await a.evaluate( () => window.drive.driver.release( 'KeyW' ) );
+		await b.evaluate( () => window.drive.ghosts.hide( 'Ana', false ) );
+		assert.ok( kept <= 4, `${ kept } of A's states kept` );
+		await b.waitForFunction( () => window.drive.ghosts.list()[ 0 ]?.visible );
+
+	} );
+
 	test( 'A pauses: parked on B, and the list says so', async () => {
 
 		await placeCar( a, 0, 0, 0 );
@@ -585,6 +620,19 @@ describe( 'World Drive, driving with others', () => {
 		await a.locator( '#pause .vehicles .vehicle[data-id="pickup-truck"]' ).click();
 		await b.waitForFunction( () => window.drive.ghosts.list()[ 0 ]?.vehicle === 'pickup-truck' && window.drive.ghosts.list()[ 0 ].visible, null, { timeout: 30000 } );
 		await shot( b, 'live-3b-pickup' );
+		// Its skinned body drawn where its ghost is, not where the file's own bones are.
+		const apart = await b.evaluate( () => {
+
+			const pivot = window.drive.ghosts.group.children.find( o => o.name.startsWith( 'ghost' ) );
+			let skinned = null;
+			pivot.traverse( o => skinned ??= o.isSkinnedMesh ? o : null );
+			if ( ! skinned ) return 'no skinned mesh';
+			pivot.updateMatrixWorld( true );
+			const vertex = skinned.getVertexPosition( 0, pivot.position.clone() ).applyMatrix4( skinned.matrixWorld );
+			return vertex.distanceTo( pivot.getWorldPosition( pivot.position.clone() ) );
+
+		} );
+		assert.ok( typeof apart === 'number' && apart < 10, `the pickup's body is drawn ${ apart } m from its ghost` );
 
 		// And back in the kart, for what follows.
 		await a.keyboard.press( 'Escape' );
@@ -608,6 +656,32 @@ describe( 'World Drive, driving with others', () => {
 		await b.waitForFunction( painted, red, { timeout: 30000 } );
 		await a.keyboard.press( 'Escape' );
 		await a.waitForFunction( () => window.drive.mode === 'driving' );
+
+		// A new ride or look twenty times a second for two seconds (from the console), then back to the
+		// red kart: none of them held long enough for B to build, so B builds nothing.
+		const look = await b.evaluate( () => [ ...window.drive.live.players.values() ][ 0 ].look );
+		const builds = ( await ghosts( b ) )[ 0 ].builds;
+		await a.evaluate( look => new Promise( resolve => {
+
+			let i = 0;
+			const timer = setInterval( () => {
+
+				if ( ++ i <= 40 ) window.drive.live.setRide( i % 2 ? 'pickup-truck' : 'city-bus', { colour: i % 3 ? 'red' : 'blue' } );
+				else {
+
+					clearInterval( timer );
+					window.drive.live.setRide( 'go-kart', look );
+					resolve();
+
+				}
+
+			}, 50 );
+
+		} ), look );
+		await b.waitForTimeout( 2500 );
+		const after = ( await ghosts( b ) )[ 0 ];
+		assert.deepEqual( [ after.builds, after.vehicle, after.visible ], [ builds, 'go-kart', true ] );
+		assert.ok( await b.evaluate( painted, red ) );
 
 	} );
 
@@ -662,14 +736,33 @@ describe( 'World Drive, driving with others', () => {
 
 	test( 'Go to, from the list: beside A in this scene, facing A\'s way', async () => {
 
-		// A is parked at the middle of the pad facing north; B is up the road past it.
+		// A is parked at the middle of the pad facing north, under a roof 7 m up (a deck, a shelter, a
+		// tree's crown) on B's page; B is up the road past it.
+		await b.evaluate( () => {
+
+			const [ pad ] = window.drive.ground.getColliders();
+			const roof = pad.children[ 0 ].clone();
+			roof.name = 'test roof';
+			roof.position.set( 0, 7, 0 );
+			roof.scale.set( 20 / 4000, 20 / 2000, 1 );
+			pad.add( roof );
+			pad.updateMatrixWorld( true );
+
+		} );
 		await b.locator( '#drive-ui .live-chip' ).click();
 		await b.locator( '#drive-ui .players button.go' ).click();
 		await b.waitForFunction( () => window.drive.mode === 'driving' && Math.abs( window.drive.driver.north ) < 1 );
 		assert.equal( await b.locator( '#drive-ui .players' ).isVisible(), false );
-		const { east, north, heading } = await b.evaluate( () => window.drive.driver );
-		// A's right, facing north, is east.
+		const { east, north, heading, y } = await b.evaluate( () => window.drive.driver );
+		await b.evaluate( () => {
+
+			const [ pad ] = window.drive.ground.getColliders();
+			pad.remove( pad.getObjectByName( 'test roof' ) );
+
+		} );
+		// A's right, facing north, is east; on the ground there, as A is, not on the roof.
 		assert.ok( Math.abs( east - 5 ) < 0.3 && Math.abs( north ) < 0.3 && Math.abs( heading ) < 1, JSON.stringify( { east, north, heading } ) );
+		assert.ok( Math.abs( y ) < 0.5, `B went to ${ y } m up` );
 
 	} );
 
@@ -756,9 +849,15 @@ describe( 'World Drive, driving with others', () => {
 		assert.equal( ( await live( a ) ).status, 'off' );
 		assert.equal( await a.evaluate( () => localStorage.getItem( 'world-drive.nearby' ) ), 'off' );
 		assert.equal( await a.locator( '#drive-ui .live-chip' ).isHidden(), true );
+		// Nobody to hear a horn: no H in the keys card.
+		assert.equal( await a.evaluate( () => document.querySelector( '#drive-ui .live-key' ).hidden ), true );
+		// (The models read from files for the rides before are let go of a while after the last ghost
+		// in them went.)
+		await b.waitForFunction( () => window.drive.ghosts.templates === 0, null, { timeout: 30000 } );
 		const without = await memory();
 		assert.equal( without.children, 0 );
 		await toggle.check();
+		assert.equal( await a.evaluate( () => document.querySelector( '#drive-ui .live-key' ).hidden ), false );
 		await a.keyboard.press( 'Escape' );
 		await waitLive( a, cell );
 		await b.waitForFunction( () => window.drive.ghosts.list()[ 0 ]?.visible && window.drive.ghosts.list()[ 0 ].fx, null, { timeout: 30000 } );
@@ -838,6 +937,17 @@ describe( 'World Drive, a party', () => {
 		const guest = ( await live( a ) ).others[ 0 ];
 		assert.match( guest, /^Guest \d{4}$/ );
 		assert.match( await b.locator( '#globe-ui .friends .members li' ).first().textContent(), new RegExp( `^You \\(${ guest }\\)$` ) );
+		// With only B there, on the globe, A driving sends its car once every 2 s, not 5 a second.
+		await a.waitForFunction( () => window.drive.mode === 'driving' );
+		const since = Date.now();
+		await a.evaluate( () => window.drive.driver.press( 'KeyW' ) );
+		await a.waitForTimeout( 3000 );
+		await a.evaluate( () => window.drive.driver.release( 'KeyW' ) );
+		const slow = statesSent( a, since ).length;
+		assert.ok( slow >= 1 && slow <= 3, `A sent ${ slow } states in 3 s` );
+		// Parked again, which B hears of within 2 s.
+		await placeCar( a, 10, 20, 90 );
+		await a.waitForTimeout( 2500 );
 		await banner.locator( '.join' ).click();
 		await b.waitForFunction( () => window.drive.mode === 'driving', null, { timeout: 60000 } );
 		assert.equal( await banner.isVisible(), false );
@@ -850,6 +960,9 @@ describe( 'World Drive, a party', () => {
 		await a.locator( '#drive-ui .live-chip', { hasText: 'Party · 2' } ).waitFor();
 		await a.waitForFunction( () => window.drive.ghosts.list()[ 0 ]?.visible, null, { timeout: 30000 } );
 		assert.equal( new URL( b.url() ).searchParams.get( 'party' ), code );
+		// A was told B came, not to go where A already is.
+		await a.locator( '#toast', { hasText: `${ guest } dropped in near you.` } ).waitFor();
+		assert.equal( await a.locator( '#toast .toast-action' ).count(), 0 );
 		await shot( b, 'live-7-joined' );
 
 	} );
@@ -936,6 +1049,15 @@ describe( 'World Drive, a party', () => {
 		await banner.locator( 'span', { hasText: 'Ana ⭐ is driving at Over There' } ).waitFor( { timeout: 15000 } );
 		// A saw B go and come back.
 		await a.waitForFunction( () => window.drive.live.players.size === 1 );
+		// A back to the globe and in again: the banner says so, and no toast says it again.
+		await b.evaluate( () => document.getElementById( 'toast' ).textContent = '' );
+		await a.keyboard.press( 'KeyM' );
+		await banner.locator( 'span', { hasText: 'Waiting for your friends' } ).waitFor( { timeout: 15000 } );
+		await dropIn( a, THERE );
+		await placeCar( a, 0, 0, 0 );
+		await banner.locator( 'span', { hasText: 'Ana ⭐ is driving at Over There' } ).waitFor( { timeout: 15000 } );
+		await b.waitForTimeout( 500 );
+		assert.doesNotMatch( await b.locator( '#toast' ).textContent(), /went to/ );
 		await banner.locator( '.join' ).click();
 		await b.waitForFunction( () => window.drive.mode === 'driving', null, { timeout: 60000 } );
 		await b.waitForFunction( () => window.drive.ghosts.list()[ 0 ]?.visible, null, { timeout: 30000 } );
@@ -982,7 +1104,15 @@ describe( 'World Drive, a party', () => {
 		assert.deepEqual( await live( b ), { status: 'busy', room: null, party: null, you: null, others: [] } );
 		// Every shard was tried, once each, in turn.
 		assert.deepEqual( b.rooms.filter( room => room.startsWith( busy ) ), shards );
+		// Its list says why nobody's there.
+		await b.locator( '#drive-ui .live-chip' ).click();
+		assert.equal( await b.locator( '#drive-ui .players .empty' ).textContent(), 'This area is full just now, so you\'re driving on your own here.' );
+		await b.locator( '#drive-ui .live-chip' ).click();
+		// The crowd gone, a drop-in there again tries its first room again.
 		for ( const ws of fillers ) ws.close();
+		await b.keyboard.press( 'KeyM' );
+		await dropIn( b, BUSY );
+		await waitLive( b, busy );
 
 	} );
 
@@ -996,6 +1126,14 @@ describe( 'World Drive, a party', () => {
 		await b.waitForFunction( first => window.drive.live.status === 'live' && window.drive.live.you !== first, first, { timeout: 15000 } );
 		// The same area again.
 		assert.equal( ( await live( b ) ).room, cellOf( PAD.lat, PAD.lon ) );
+		// And one that goes quiet without a word (nothing passes, nothing closes): its keepalive
+		// unanswered for 10 s, it's taken as dropped, within 40 s.
+		const second = ( await live( b ) ).you;
+		const stalled = Date.now();
+		line.stall();
+		await b.waitForFunction( second => window.drive.live.status === 'live' && window.drive.live.you !== second, second, { timeout: 60000 } );
+		console.log( `    back ${ Date.now() - stalled } ms after the line went quiet` );
+		assert.equal( ( await live( b ) ).room, cellOf( PAD.lat, PAD.lon ) );
 
 	} );
 
@@ -1006,6 +1144,9 @@ describe( 'World Drive, a party', () => {
 		await b.locator( '#toast', { hasText: 'Driving with others moved to another tab.' } ).waitFor( { timeout: 15000 } );
 		assert.equal( ( await live( b ) ).status, 'ended' );
 		assert.equal( await b.locator( '#drive-ui .live-chip' ).isHidden(), true );
+		// None of it shows any more: no empty "Drive with friends", nor a horn setting for no horn.
+		assert.equal( await b.locator( '#pause .friends' ).isHidden(), true );
+		assert.equal( await b.locator( '#globe-ui .friends' ).isHidden(), true );
 		other.close();
 		// It stays stopped: nothing more is tried.
 		await b.waitForTimeout( 2500 );
@@ -1028,14 +1169,14 @@ describe( 'World Drive, a party', () => {
 
 describe( 'World Drive, driving with others ending, on a phone, and moving on', () => {
 
-	test( 'a visit run out stops it, with a word to reload', async () => {
+	test( 'a visit run out stops it, with a word that it\'s on again next visit', async () => {
 
 		// A visit made six hours ago, less 12 s: the room closes it as it runs out.
 		const token = await visitToken( Date.now() - 6 * HOUR + 12000 );
 		const page = await livePage( { token, path: '/?party=ABCDEFG' } );
 		await waitLive( page, 'party:ABCDEFG' );
 		await page.locator( '#globe-ui .party-banner', { hasText: 'Waiting for your friends' } ).waitFor();
-		await page.locator( '#toast', { hasText: 'Reload for a fresh drive' } ).waitFor( { timeout: 20000 } );
+		await page.locator( '#toast', { hasText: 'It\'s on again on your next visit.' } ).waitFor( { timeout: 20000 } );
 		assert.equal( ( await live( page ) ).status, 'ended' );
 		assert.equal( await page.evaluate( () => window.drive.live.ended ), 'expired' );
 		assert.equal( await page.locator( '#globe-ui .party-banner' ).isHidden(), true );
@@ -1062,7 +1203,15 @@ describe( 'World Drive, driving with others ending, on a phone, and moving on', 
 		const horn = phone.locator( '#drive-ui .horn' );
 		assert.ok( await horn.isVisible(), 'no horn button on a touch screen' );
 		assert.equal( await a.locator( '#drive-ui .horn' ).isVisible(), false );
-		await phone.locator( '#drive-ui .live-chip', { hasText: 'Nearby · 2' } ).tap();
+		// The chip as only its light and count, so the place's name keeps its room; its words are its
+		// label.
+		const chip = phone.locator( '#drive-ui .live-chip' );
+		await chip.locator( '.short', { hasText: /^2$/ } ).waitFor();
+		assert.equal( await chip.locator( '.long' ).isVisible(), false );
+		assert.equal( await chip.getAttribute( 'aria-label' ), 'Nearby · 2' );
+		const place = await phone.locator( '#drive-ui .place' ).evaluate( el => ( { width: el.getBoundingClientRect().width, cut: el.scrollWidth > el.clientWidth } ) );
+		assert.ok( place.width > 100, JSON.stringify( place ) );
+		await chip.tap();
 		await phone.locator( '#drive-ui .players li' ).first().waitFor();
 		await shot( phone, 'live-8-phone-list' );
 		await phone.locator( '#drive-ui .live-chip' ).tap();
@@ -1170,15 +1319,24 @@ describe( 'World Drive, the day\'s budget for driving with others spent', () => 
 
 	test( 'turned away for the budget: a toast once that it\'s back after midnight UTC, none of it shows, and driving goes on; a party\'s link on a new page says why', async () => {
 
-		// The Worker again (LIVE on) with a budget of 40 Durable Object requests a day, most of which
-		// this test then spends by asking, as page loads do.
+		// The Worker again (LIVE on) with a budget of 40 Durable Object requests a day, which this test
+		// then spends by connecting to rooms, as drivers do (page loads ask DriveLimits only every 30
+		// s, so they spend little).
 		const toast = 'Lots of drivers today: driving with others is back after midnight UTC.';
 		await restartWorker( { LIVE_DAILY_BUDGET: '40' } );
 		const page = await livePage( { token: await visitToken() } );
 		assert.ok( await page.locator( '#globe-ui .friends' ).isVisible() );
-		let asks = 0;
-		while ( asks < 50 && ( await ( await fetch( `${ BASE }/api/config` ) ).json() ).live ) asks ++;
-		assert.ok( asks < 40, `${ asks } asks were open` );
+		let opened = 0;
+		for ( ; opened < 40; opened ++ ) {
+
+			const ws = await connectAs( await visitToken(), `party:${ makePartyCode( bytes => crypto.getRandomValues( bytes ) ) }` ).catch( () => null );
+			if ( ! ws ) break;
+			ws.close();
+			await page.waitForTimeout( 100 );
+
+		}
+
+		assert.ok( opened > 0 && opened < 40, `${ opened } connections got in` );
 		// Dropping in, the page connects to the area's room and is turned away: it asks why, and stops.
 		await dropIn( page );
 		await page.waitForFunction( () => window.drive.live.ended === 'budget', null, { timeout: 30000 } );
