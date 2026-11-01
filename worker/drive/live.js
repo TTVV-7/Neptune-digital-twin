@@ -39,15 +39,18 @@ import { readVisit } from './visits.js';
 //   REPORT_MS while there's REPORT_LEAST or more to add, at least every REPORT_MOST while anyone's in
 //   it, and as it empties; when that says the day's is spent it closes everyone (CLOSE.off,
 //   BUDGET_SPENT). /api/live asks DriveLimits first (liveToday), and so does /api/config at most
-//   once every OPEN_MS in each Worker instance; those asks count too. The count runs behind, a
-//   minute for rooms with drivers moving, up to REPORT_MOST (and under REPORT_LEAST) for the
-//   others: the budget leaves room for that.
+//   once every OPEN_MS in each Worker instance (and one at a time); those asks count too. The count
+//   runs behind, a minute for rooms with drivers moving, up to REPORT_MOST (and under REPORT_LEAST)
+//   for the others: the budget leaves room for that.
 // - Who's driving now (the globe's dots): an area's room puts its dots in the reports it makes
 //   anyway, so it costs no request of its own; only when they've changed does a report go with less
 //   than REPORT_LEAST to add, REPORT_MS after the last as ever (each is a request and a row written,
 //   one more in DriveLimits for the dots). /api/online is kept ONLINE_MS in each of Cloudflare's
-//   locations (the Cache API) and by browsers, so only an ask that finds none kept asks
-//   DriveLimits: a request, counted against the day's budget like the others.
+//   locations (the Cache API), by each Worker instance and by browsers, so only an ask that finds
+//   none kept asks DriveLimits, and only one at a time in each instance: a request, counted against
+//   the day's budget like the others. So about two a minute in each Worker instance (those in one
+//   location mostly share its cache), and a page on the globe alone in its location is one a
+//   minute, about 60 an hour (it stops asking after a while without a touch).
 // - Duration: 128 MB for as long as a room is running, or idle in memory but unable to hibernate.
 //   A room that's only waiting for its WebSockets' next message can hibernate, and isn't charged
 //   for that time at all, even before it does. A pending setTimeout keeps it from hibernating, so
@@ -110,6 +113,18 @@ const DAILY_BUDGET = 40000;
 let spentDay = null;
 let openDay = null;
 const OPEN_MS = 30000;
+// Requests arriving together as what's kept runs out would each ask DriveLimits (Cloudflare's cache
+// doesn't make them wait for one another's), so a burst of them could spend the day's budget by
+// itself. So while this Worker instance has one ask out for /api/config (openAsking) or for
+// /api/online (onlineAsking: { key, at }), the others are answered with what it last heard, a
+// little old, rather than asking too. An ask is given up on after ASKING_MS, in case its request
+// was cancelled before it came back. What it last heard for /api/online, onlineHeard, is kept as
+// plain values ({ key, answer, keep, at, date }), as a Response or a call's promise belongs to the
+// request it was made in.
+let openAsking = null;
+let onlineAsking = null;
+let onlineHeard = null;
+const ASKING_MS = 5000;
 // The most connections a visit makes in a day, unless LIVE_VISIT_CONNECTS says otherwise (a page
 // makes one each time it changes room, or comes back after a dropped connection: a few dozen in six
 // hours of driving from area to area). Past that DriveLimits turns it away, and this Worker
@@ -201,6 +216,9 @@ export async function liveToday( { env, limits, now, connection = null } ) {
 	const day = `${ dayOf( now ) } ${ budget }`;
 	if ( spentDay === day ) return { open: false, reason: BUDGET_SPENT };
 	if ( ! connection && openDay?.day === day && now >= openDay.at && now < openDay.at + OPEN_MS ) return { open: true };
+	// Another page load here is asking just now: open, as it last heard today.
+	if ( ! connection && openDay?.day === day && asking( openAsking, now ) ) return { open: true };
+	const mine = connection ? null : ( openAsking = { at: now } );
 	try {
 
 		const answer = await limits.liveOpen( { now, budget, ...connection } );
@@ -219,18 +237,32 @@ export async function liveToday( { env, limits, now, connection = null } ) {
 		console.error( 'Live budget check', err?.name, err?.message );
 		return { open: false, reason: 'unknown' };
 
+	} finally {
+
+		if ( mine && openAsking === mine ) openAsking = null;
+
 	}
+
+}
+
+// Whether `ask` ({ at }, or null), one out to DriveLimits, is still waited for at `now` (see
+// ASKING_MS).
+function asking( ask, now ) {
+
+	return ask !== null && now >= ask.at && now < ask.at + ASKING_MS;
 
 }
 
 // GET /api/online: where people are driving now, for the globe's dots: { on, total, areas } (see
 // live-protocol.js). Kept ONLINE_MS in Cloudflare's cache (each of its locations has its own), under
 // the address without its query, so a query can't get round it, and by browsers for what's left of
-// that (its Date says when it was made). Only a request that finds none kept asks DriveLimits, which
-// counts that against the day's budget. Off (LIVE, a budget of 0, or the day's spent, as this Worker
-// instance remembers once it's heard), it's on: false, asking nothing. If DriveLimits can't say just
-// now, it's nobody (on: true), kept ONLINE_FAILED_MS: never an error page. The tests (TEST_CLOCK)
-// keep one for each time they say it is (X-Test-Time), so each of their times is asked afresh.
+// that (its Date says when it was made), and by this Worker instance as well (onlineHeard). Only a
+// request that finds none kept asks DriveLimits, which counts that against the day's budget; while
+// one is asking, the others here are answered with what was last heard, a little old (see
+// onlineAsking). Off (LIVE, a budget of 0, or the day's spent, as this Worker instance remembers
+// once it's heard), it's on: false, asking nothing. If DriveLimits can't say just now, it's nobody
+// (on: true), kept ONLINE_FAILED_MS: never an error page. The tests (TEST_CLOCK) keep one for each
+// time they say it is (X-Test-Time), so each of their times is asked afresh.
 export async function online( { request, env, url, limits, now } ) {
 
 	const budget = dailyBudget( env );
@@ -242,9 +274,15 @@ export async function online( { request, env, url, limits, now } ) {
 	if ( spentDay === day ) return onlineAnswer( { on: false, total: 0, areas: [] }, offToday );
 	const tested = env.TEST_CLOCK === 'header' && request.headers.has( 'X-Test-Time' );
 	const key = new Request( `${ url.origin }${ url.pathname }${ tested ? `?at=${ now }` : '' }` );
+	// Heard here lately: as Cloudflare's cache would answer, the same Date and all.
+	const heard = onlineHeard?.key === key.url ? onlineHeard : null;
+	if ( heard && now >= heard.at && now < heard.at + heard.keep ) return onlineAnswer( heard.answer, heard.keep, heard.date );
 	const cache = globalThis.caches?.default;
 	const kept = await cache?.match( key ).catch( () => null );
 	if ( kept ) return kept;
+	// Another request here is asking just now: what was last heard, kept nowhere.
+	if ( heard && onlineAsking?.key === key.url && asking( onlineAsking, now ) ) return onlineAnswer( heard.answer, 0 );
+	const mine = onlineAsking = { key: key.url, at: now };
 
 	let answer;
 	let keep = ONLINE_MS;
@@ -269,15 +307,18 @@ export async function online( { request, env, url, limits, now } ) {
 	}
 
 	const response = onlineAnswer( answer, keep );
+	onlineHeard = { key: key.url, answer, keep, at: now, date: response.headers.get( 'Date' ) };
+	if ( onlineAsking === mine ) onlineAsking = null;
 	if ( keep >= 1000 ) await cache?.put( key, response.clone() ).catch( err => console.error( 'Live online cache', err?.name, err?.message ) );
 	return response;
 
 }
 
-// An answer for /api/online, kept `keep` ms (to the second).
-function onlineAnswer( answer, keep ) {
+// An answer for /api/online, kept `keep` ms (to the second) from `date` (an HTTP date: now, unless
+// it's one heard before).
+function onlineAnswer( answer, keep, date = new Date().toUTCString() ) {
 
-	return json( answer, 200, { 'Cache-Control': `public, max-age=${ Math.floor( keep / 1000 ) }`, Date: new Date().toUTCString() } );
+	return json( answer, 200, { 'Cache-Control': `public, max-age=${ Math.floor( keep / 1000 ) }`, Date: date } );
 
 }
 

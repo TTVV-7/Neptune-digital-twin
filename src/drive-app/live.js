@@ -826,6 +826,13 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 			return ended;
 
 		},
+		// When the visit runs out (ms, Date.now()'s clock): driving with others is over then, though
+		// this page only finds out as it next connects.
+		get visitEnds() {
+
+			return visitEnds;
+
+		},
 		get party() {
 
 			return party;

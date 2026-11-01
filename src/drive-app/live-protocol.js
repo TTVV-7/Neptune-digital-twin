@@ -424,7 +424,10 @@ export function dotsOf( points, cell ) {
 		const mean = members.reduce( ( sum, p ) => ( { x: sum.x + p.x / n, y: sum.y + p.y / n, z: sum.z + p.z / n } ), { x: 0, y: 0, z: 0 } );
 		const { lat, lon, height } = toGeodetic( mean.x, mean.y, mean.z );
 		const { south, north, west, east } = boundsOf( cell );
-		return { lat: within( lat, south, north ), lon: within( lon, west, east ), height: toTens( height ), count: n };
+		// Its longitude taken round to the area's side of 180° first: a car just over it, in the area
+		// west of it still, is at -179.99°, by the area's east edge rather than its west.
+		const unwrapped = lon - 360 * Math.round( ( lon - ( west + east ) / 2 ) / 360 );
+		return { lat: within( lat, south, north ), lon: within( unwrapped, west, east ), height: toTens( height ), count: n };
 
 	} ).sort( busiest );
 

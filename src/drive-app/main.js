@@ -63,9 +63,10 @@ const PLACE_LENGTH = 60;
 const GO_NEAR = 10000;
 const GO_BESIDE = 5;
 // Only the dev server: a test (scripts/test-drive-live-ui.mjs) can hand the page a visit's token,
-// { visit }, for driving with others on the test pad, which has no visit of its own. Whether it's
-// on is still the Worker's to say. import.meta.env.DEV is false in the build, so the built site has
-// no such way in.
+// { visit }, for driving with others on the test pad, which has no visit of its own, and make who's
+// driving now ask more often and go idle sooner, online: { poll, idle } (ms). Whether it's on is
+// still the Worker's to say. import.meta.env.DEV is false in the build, so the built site has no
+// such way in.
 const LIVE_TEST = import.meta.env.DEV ? window.worldDriveLiveTest ?? null : null;
 
 const $ = id => document.getElementById( id );
@@ -285,10 +286,15 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 	// of it without.
 	const globeUi = $( 'globe-ui' );
 	const online = live && createOnline( {
-		camera, earth, ellipsoid, canvas, live, panel, mode: () => state.mode, onPick: flyToPlace,
+		camera, earth, ellipsoid, canvas, live, panel, mode: () => state.mode, onPick: flyToPlace, onZoom: zoomTo,
+		// The Garage covers the globe (the whole screen on a phone): nothing's asked while it's open.
+		paused: () => garage.isOpen,
 		layer: globeUi.querySelector( '.online-dots' ),
 		covers: [ globeUi.querySelector( '.panel' ), globeUi.querySelector( '.pin-card' ), globeUi.querySelector( '.party-banner' ) ],
+		poll: LIVE_TEST?.online?.poll, idle: LIVE_TEST?.online?.idle,
 	} );
+	// A tap on one of its dots goes there rather than dropping a pin.
+	globe.onTap = ( x, y ) => !! online?.tap( x, y );
 	// A party's link (?party=CODE): its room, from the globe on. With driving with others off for
 	// the rest of the day (its budget spent), a word on why nothing comes of the link.
 	const partyCode = cleanPartyCode( new URLSearchParams( location.search ).get( 'party' ) );
@@ -334,6 +340,14 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 			if ( arrived && globe.pin === pin ) pin.height = globe.surfaceHeight( pin.lat, pin.lon ) ?? pin.height;
 
 		} );
+
+	}
+
+	// Straight down over a spot from `distance` (m) up, unpinned: where several areas of people
+	// driving are, so they come apart.
+	function zoomTo( { lat, lon, distance } ) {
+
+		globe.flyTo( globe.lifted( { lat, lon, height: 0, distance, heading: globe.pose().heading, pitch: - 90 }, pinLift(), GLOBE_FOV ) );
 
 	}
 
@@ -386,8 +400,10 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 		pinAt( null );
 		pads.clear();
 		setMode( 'dropping' );
-		$( 'drive-ui' ).querySelector( '.place' ).textContent = place.name;
-		screens.loading( `Dropping in: ${ place.name }` );
+		// (Where people are driving is a pin, or a start spot's own place, with the spot it's near.)
+		const shown = place.near || place.name;
+		$( 'drive-ui' ).querySelector( '.place' ).textContent = shown;
+		screens.loading( `Dropping in: ${ shown }` );
 
 		// Centre the scene on the pin, at about the height of the ground there.
 		const estimate = place.height ?? globe.surfaceHeight( lat, lon ) ?? 0;

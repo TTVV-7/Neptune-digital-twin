@@ -28,13 +28,13 @@
 // gone quiet, a busy area tried again, and quiet with only those on the globe to see it. Then who's
 // driving now, on the globe: Earth-centred metres to latitude, longitude and height and back (known
 // points, and three.js's ellipsoid); a room's drivers as dots (together within DOT_SPREAD, at most
-// ROOM_DOTS, rounded, inside the area); an area's room's dots with its reports (a party's never,
-// those on the globe not counted, paused ones counted, a change within REPORT_MS though there's little
-// to report, the dots taken off as it empties, after hibernating and after a failed report); DriveLimits
-// keeping them, on Node's own SQLite (one row a room, the TTL, the 200 busiest, each ask charged to
-// the budget); /api/online on stand-ins (its cache, DriveLimits failing, the budget spent, LIVE off);
-// and the whole way round on a Worker of its own (the real Cache API, the TTL), on: false with LIVE
-// off and the budget spent.
+// ROOM_DOTS, rounded, inside the area, on its side of 180°); an area's room's dots with its reports
+// (a party's never, those on the globe not counted, paused ones counted, a change within REPORT_MS
+// though there's little to report, the dots taken off as it empties, after hibernating and after a
+// failed report); DriveLimits keeping them, on Node's own SQLite (one row a room, the TTL, the 200
+// busiest, each ask charged to the budget); /api/online on stand-ins (its cache, a burst asking
+// once, DriveLimits failing, the budget spent, LIVE off); and the whole way round on a Worker of its
+// own (the real Cache API, the TTL), on: false with LIVE off and the budget spent.
 // TEST_DRIVE_LIVE_PORT=8950 moves the four wrangler servers (that port and the next three).
 
 import assert from 'node:assert/strict';
@@ -2843,6 +2843,13 @@ describe( 'Who\'s driving now: where, as dots', () => {
 
 		}
 
+		// By 180°: a car just over it, in the area west of it still (its room hasn't followed yet), is
+		// by the area's east edge, not its west; and two either side of it are one dot there.
+		const last = cellOf( 0.05, 179.95 );
+		assert.equal( boundsOf( last ).east, 180 );
+		assert.equal( dotsOf( [ toEcef( 0.05, - 179.995 ) ], last )[ 0 ].lon, 179.99 );
+		assert.deepEqual( dotsOf( [ toEcef( 0.05, 179.997 ), toEcef( 0.05, - 179.997 ) ], last ).map( dot => [ dot.lon, dot.count ] ), [ [ 179.99, 2 ] ] );
+
 	} );
 
 	test( 'a dot as sent: checked and rounded, or nothing', () => {
@@ -3058,16 +3065,18 @@ describe( '/api/online, here with stand-ins for DriveLimits and Cloudflare\'s ca
 
 	} );
 
-	// DriveLimits answering `answer` (or failing with it), and each ask it was asked.
+	// DriveLimits answering `answer` (or failing with it), once `hold` (a promise, if any) has
+	// settled, and each ask it was asked.
 	function limitsAnswering( answer ) {
 
-		const limits = { answer, asked: [] };
+		const limits = { answer, asked: [], hold: null };
 		limits.binding = {
 			idFromName: name => name,
 			get: () => ( {
 				liveOnline: async options => {
 
 					limits.asked.push( options );
+					await limits.hold;
 					if ( limits.answer instanceof Error ) throw limits.answer;
 					return limits.answer;
 
@@ -3078,6 +3087,14 @@ describe( '/api/online, here with stand-ins for DriveLimits and Cloudflare\'s ca
 
 	}
 
+	// The Worker's clock (Date.now, which this Worker instance keeps what it heard by) going with the
+	// cache's, from `start`, for test `t`.
+	function clockFrom( t, start ) {
+
+		t.mock.method( Date, 'now', () => start + cacheClock );
+
+	}
+
 	async function get( env, { path = '/api/online', headers = {}, method = 'GET' } = {} ) {
 
 		const res = await worker.fetch( new Request( `https://worlddrive.app${ path }`, { method, headers } ), env, {} );
@@ -3085,10 +3102,11 @@ describe( '/api/online, here with stand-ins for DriveLimits and Cloudflare\'s ca
 
 	}
 
-	test( 'the rooms\' dots, kept ONLINE_MS (30 s) in Cloudflare\'s cache under its address without the query, so a second ask within that never reaches DriveLimits; by browsers for as long, from its Date', async () => {
+	test( 'the rooms\' dots, kept ONLINE_MS (30 s) in Cloudflare\'s cache under its address without the query, so a second ask within that never reaches DriveLimits; by browsers for as long, from its Date', async t => {
 
 		kept.clear();
 		cacheClock = 0;
+		clockFrom( t, Date.now() );
 		const areas = [ { ...FURKA_DOT, count: 3 }, TIMES_DOT ];
 		const limits = limitsAnswering( { open: true, total: 4, areas } );
 		const env = { LIVE_DAILY_BUDGET: '4321', LIMITS: limits.binding };
@@ -3117,6 +3135,52 @@ describe( '/api/online, here with stand-ins for DriveLimits and Cloudflare\'s ca
 		assert.equal( ( await get( env, { headers: { 'Sec-Fetch-Site': 'cross-site' } } ) ).status, 403 );
 		assert.equal( ( await get( env, { method: 'POST', headers: { Origin: 'https://worlddrive.app', 'Content-Type': 'application/json' } } ) ).status, 405 );
 		assert.equal( limits.asked.length, 2 );
+
+	} );
+
+	test( 'asks arriving together as the kept answer runs out ask DriveLimits once in this Worker instance: the others get what it last heard, a little old and kept nowhere; an ask that never comes back is given up on after 5 s', async t => {
+
+		kept.clear();
+		cacheClock = 0;
+		// (An hour on, so nothing heard in the test before is still kept.)
+		clockFrom( t, Date.now() + HOUR );
+		const before = { on: true, total: 1, areas: [ FURKA_DOT ] };
+		const now = { on: true, total: 2, areas: [ { ...FURKA_DOT, count: 2 } ] };
+		const limits = limitsAnswering( { open: true, total: 1, areas: [ FURKA_DOT ] } );
+		const env = { LIMITS: limits.binding };
+		assert.deepEqual( ( await get( env ) ).body, before );
+		// 30 s on, kept nowhere now: 20 at once, DriveLimits taking a while to say.
+		cacheClock = 30 * SECOND;
+		limits.answer = { open: true, total: 2, areas: now.areas };
+		let release;
+		limits.hold = new Promise( resolve => release = resolve );
+		const burst = Array.from( { length: 20 }, () => get( env ) );
+		await sleep( 20 );
+		release();
+		const answers = await Promise.all( burst );
+		assert.equal( limits.asked.length, 2 );
+		const fresh = answers.filter( answer => answer.body.total === 2 );
+		assert.deepEqual( fresh.map( answer => [ answer.keep, answer.body ] ), [ [ 'public, max-age=30', now ] ] );
+		assert.deepEqual( new Set( answers.filter( answer => answer.body.total !== 2 ).map( answer => JSON.stringify( [ answer.status, answer.keep, answer.body ] ) ) ), new Set( [ JSON.stringify( [ 200, 'public, max-age=0', before ] ) ] ) );
+		// The new one is what's kept, here and in Cloudflare's cache.
+		cacheClock = 31 * SECOND;
+		assert.deepEqual( ( await get( env ) ).body, now );
+		assert.deepEqual( await ( await cache.match( new Request( 'https://worlddrive.app/api/online' ) ) ).json(), now );
+		assert.equal( limits.asked.length, 2 );
+
+		// An ask that never comes back (its request cancelled, say): the others meanwhile get what
+		// was last heard, and 5 s on one asks again.
+		cacheClock = 62 * SECOND;
+		limits.hold = new Promise( () => {} );
+		get( env );
+		await sleep( 10 );
+		assert.equal( limits.asked.length, 3 );
+		assert.deepEqual( [ ( await get( env ) ).keep, limits.asked.length ], [ 'public, max-age=0', 3 ] );
+		cacheClock = 67 * SECOND;
+		limits.hold = null;
+		limits.answer = { open: true, total: 0, areas: [] };
+		assert.deepEqual( ( await get( env ) ).body, { on: true, total: 0, areas: [] } );
+		assert.equal( limits.asked.length, 4 );
 
 	} );
 

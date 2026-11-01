@@ -1573,7 +1573,8 @@ body:not( .touch ) #drive-ui .horn {
 }
 
 /* The dots over the globe, placed each frame: under the panel, the pin and its card, which hide
-   the dots they'd cover. */
+   the dots they'd cover. A pointer goes through them to the globe, which hands taps on one back to
+   online.js, so a drag that starts on a dot spins the globe; they're buttons for the keyboard. */
 #globe-ui .online-dots {
 	position: fixed;
 	inset: 0;
@@ -1601,9 +1602,7 @@ body:not( .touch ) #drive-ui .horn {
 	font-size: 14px;
 	font-weight: 900;
 	line-height: 1;
-	pointer-events: auto;
-	touch-action: manipulation;
-	animation: online-glow 2.4s ease-in-out infinite;
+	pointer-events: none;
 }
 
 .online-dot.many {
@@ -1621,13 +1620,26 @@ body:not( .touch ) #drive-ui .horn {
 	pointer-events: none;
 }
 
-.online-dot:hover,
+/* And its glow pulsing gently: a wider glow of its own fading in and out, as only its opacity
+   changes, which needs no painting again each frame (a box-shadow changing would). */
+.online-dot::after {
+	content: '';
+	position: absolute;
+	inset: -2px;
+	border-radius: 50%;
+	box-shadow: 0 0 20px 7px rgba( 60, 224, 90, 0.4 );
+	opacity: 0;
+	animation: online-glow 2.4s ease-in-out infinite;
+	pointer-events: none;
+}
+
+.online-dot.hover,
 .online-dot:focus-visible {
 	box-shadow: 0 0 20px 7px rgba( 60, 224, 90, 0.7 ), 0 3px 10px rgba( 0, 0, 0, 0.5 );
 }
 
 @keyframes online-glow {
-	50% { box-shadow: 0 0 20px 7px rgba( 60, 224, 90, 0.4 ), 0 3px 10px rgba( 0, 0, 0, 0.5 ); }
+	50% { opacity: 1; }
 }
 
 @keyframes online-ring {
@@ -1637,8 +1649,8 @@ body:not( .touch ) #drive-ui .horn {
 
 @media ( prefers-reduced-motion: reduce ) {
 
-	.online-dot,
-	.online-dot::before {
+	.online-dot::before,
+	.online-dot::after {
 		animation: none;
 	}
 

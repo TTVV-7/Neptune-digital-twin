@@ -493,11 +493,14 @@ makes a party link (`/?party=CODE`) that brings friends to you anywhere on Earth
 No chat; the others see your nickname (or a guest name), your ride and where your car is in the
 game, including the spot you dropped in, and nothing else of you. On the globe, a glowing dot
 wherever people are driving in an area right now shows how many (and the panel's **Driving now** the
-busiest areas): tap one to fly there and **Drive here** into their room. Only those visible nearby
-count (never a party, or anyone with **Show me to drivers nearby** off), as positions to about a
-kilometre and counts, no names; the rooms add their dots to the reports they already make, and
-`/api/online` is kept 30 s by Cloudflare's cache and browsers, so it costs next to nothing. Each
-room is a Durable Object on the WebSocket Hibernation API (`worker/drive/live.js`, speaking
+busiest areas): tap one to fly there and **Drive here** into their room (or, for several drawn as
+one, down over them till they part). Only those visible nearby count (never a party, or anyone with
+**Show me to drivers nearby** off), as positions to about a kilometre and counts, no names; the
+rooms add their dots to the reports they already make, and `/api/online` is kept 30 s by
+Cloudflare's cache, each Worker instance and browsers. A page alone on the globe in its Cloudflare
+location still costs about 60 of the day's budget an hour (about 120 an hour in a location however
+many watch), so it stops asking once nobody has touched it for 10 minutes. Each room is a Durable
+Object on the WebSocket Hibernation API (`worker/drive/live.js`, speaking
 `src/drive-app/live-protocol.js`). It switches itself off for the rest of the UTC day once it has
 used its daily budget of Durable Object requests (`LIVE_DAILY_BUDGET`), so it can't use up what the
 visits need, and `LIVE` in `wrangler.drive.jsonc` switches it all off (see

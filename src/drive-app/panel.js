@@ -195,7 +195,8 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin } ) {
 
 	// --- the pin and its card ---
 
-	// A pin on an area where people are driving (online.js) says how many: place.drivers.
+	// A pin on an area where people are driving (online.js) says how many, place.drivers, and which
+	// start spot it's near, place.near.
 	function setPin( place ) {
 
 		pinned = place;
@@ -205,13 +206,13 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin } ) {
 		const count = place.drivers;
 		if ( count ) {
 
-			card.querySelector( '.name' ).textContent = `${ drivers( count ) } here now`;
-			card.querySelector( '.coords' ).textContent = place.name && place.name !== 'Dropped pin' ? `${ place.name } · ${ where }` : where;
+			card.querySelector( '.name' ).textContent = `${ drivers( count ) } here`;
+			card.querySelector( '.coords' ).textContent = place.near ? `${ place.near } · ${ where }` : where;
 			return;
 
 		}
 
-		card.querySelector( '.name' ).textContent = place.name ?? 'Dropped pin';
+		card.querySelector( '.name' ).textContent = place.near || place.name || 'Dropped pin';
 		card.querySelector( '.coords' ).textContent = place.region ? `${ place.region } · ${ where }` : where;
 
 	}
