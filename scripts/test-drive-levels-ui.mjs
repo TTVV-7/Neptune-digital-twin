@@ -147,6 +147,21 @@ async function dropIn( page, place = PAD ) {
 
 }
 
+// What `fn` gives once it gives something (a report Playwright saw answered, say), within 10 s.
+async function until( fn ) {
+
+	for ( let i = 0; i < 200; i ++ ) {
+
+		const value = fn();
+		if ( value ) return value;
+		await new Promise( resolve => setTimeout( resolve, 50 ) );
+
+	}
+
+	throw new Error( `Nothing came of ${ fn }` );
+
+}
+
 const shown = page => page.evaluate( () => ( { level: window.drive.progress.level, ...window.drive.progress.progress, local: window.drive.progress.local } ) );
 const stored = page => page.evaluate( () => JSON.parse( localStorage.getItem( 'world-drive.progress' ) ) );
 const row = id => worker.d1( `SELECT xp, title, progress_at FROM players WHERE id = '${ id }'` )[ 0 ];
@@ -281,7 +296,7 @@ describe( 'World Drive levels in the page', () => {
 		named = await page.evaluate( () => window.drive.leaderboard.player );
 		// The claim: everything driven before, in its first report.
 		await page.waitForFunction( () => ! window.drive.progress.local && JSON.parse( localStorage.getItem( 'world-drive.progress' ) ).local.xp === 0, null, { timeout: 15000 } );
-		const claim = page.reports.find( r => r.sent?.km > 0 );
+		const claim = await until( () => page.reports.find( r => r.sent?.km > 0 ) );
 		assert.equal( claim.status, 200 );
 		assert.deepEqual( claim.sent.spots, [ 'furka' ] );
 		assert.equal( claim.sent.daily, true );
