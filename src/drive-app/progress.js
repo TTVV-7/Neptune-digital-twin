@@ -82,8 +82,10 @@ function setLevel( next ) {
 // pad, or once it has run out); player(): the leaderboard player, { id, secret, name } or null;
 // onChange(): what's shown has changed (XP, level, title); onPop( { text, kind } ): something to
 // say over the drive; onLevelUp( { level, from, rewards, nickname } ): a level reached (nickname:
-// there's no player to keep it with yet, and one could be picked now).
-export function createProgress( { worker, visit = () => null, player = () => null, onChange = () => {}, onPop = () => {}, onLevelUp = () => {} } ) {
+// there's no player to keep it with yet, and one could be picked now); onStanding(): the Worker
+// says the player's level is another now (what the others see by their name: live.js says hello
+// again with it).
+export function createProgress( { worker, visit = () => null, player = () => null, onChange = () => {}, onPop = () => {}, onLevelUp = () => {}, onStanding = () => {} } ) {
 
 	const saved = load();
 	// What the Worker last said, for the player it's for: { id, xp, title, supporter, streakDay }.
@@ -100,6 +102,8 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 	let asked = saved.asked;
 
 	let sending = false;
+	// Where the player stands was asked while a report was on its way: asked again after it.
+	let askAgain = false;
 	let gone = null;
 	let reportedAt = Date.now();
 	let retryAt = 0;
@@ -413,6 +417,12 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 			if ( answer.body.daily ) server.streakDay = today();
 			if ( answer.body.daily ) server.streak = answer.body.daily.streak;
 			retryAt = 0;
+			if ( askAgain ) {
+
+				askAgain = false;
+				refresh();
+
+			}
 
 		} else {
 
@@ -449,8 +459,11 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 	function took( body ) {
 
 		const me = player();
-		const was = server?.id === me.id ? server : { streakDay: '', streak: 0 };
+		const known = server?.id === me.id;
+		const was = known ? server : { streakDay: '', streak: 0 };
 		server = { ...was, id: me.id, xp: body.xp, title: typeof body.title === 'string' ? body.title : was.title ?? '', supporter: body.supporter === true };
+		// (The first word of a player is what the room heard as it said hello.)
+		if ( known && levelOf( was.xp ) !== levelOf( server.xp ) ) onStanding();
 
 	}
 
@@ -475,6 +488,13 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 		const me = player();
 		const token = visit();
 		if ( ! me || ! worker || ! token || ended ) return;
+		if ( sending ) {
+
+			askAgain = true;
+			return;
+
+		}
+
 		if ( hasLocal() ) return report();
 		const answer = await postProgress( me, token, emptyReport() );
 		if ( answer.ok && Number.isFinite( answer.body.xp ) && player()?.id === me.id ) {

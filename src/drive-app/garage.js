@@ -204,7 +204,7 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 		const ride = current();
 		if ( ride?.vehicle.id === vehicle.id ) {
 
-			applyLook( ride.entry.pivot, lookFor( vehicle, isPro() ), vehicle );
+			applyLook( ride.entry.pivot, lookFor( vehicle, access() ), vehicle );
 			onLook();
 
 		}

@@ -274,7 +274,8 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 	// Levels (progress.js, profile.js): XP for what's driven, kept with the leaderboard player (or
 	// in this browser until there's one), the bar and pop-ups while driving, a level-up's burst, and
 	// the profile card on the globe's panel. A level reached unlocks Garage looks (paint.js asks
-	// getLevel), and the others in the room hear of it as it says hello again.
+	// getLevel), and the others in the room hear of it as it says hello again (once the Worker has
+	// it: the room looks it up).
 	let profile = null;
 	const progress = createProgress( {
 		worker,
@@ -282,12 +283,9 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 		player: () => board.player,
 		onChange: () => profile?.render(),
 		onPop: event => profile?.pop( event ),
-		onLevelUp: event => {
-
-			profile?.levelUp( event );
-			live?.rehello();
-
-		},
+		onLevelUp: event => profile?.levelUp( event ),
+		// The others in the room see a player's level by their name: hello again with the new one.
+		onStanding: () => live?.rehello(),
 	} );
 	profile = setUpProfile( {
 		progress,

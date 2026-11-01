@@ -77,7 +77,7 @@ export function setUpProfile( { progress, player, canName = () => false, onGarag
 	let levelTimer = 0;
 	let levelTime = LEVEL_UP_TIME;
 	let shownEvent = null;
-	// It stays up while the pointer's on it (or a finger: to read it, or reach its buttons).
+	// It stays up while the pointer's on its buttons (the rest lets the pointer through to the game).
 	const levelCard = card.querySelector( '.level-card' );
 	levelCard.addEventListener( 'pointerenter', () => clearTimeout( levelTimer ) );
 	levelCard.addEventListener( 'pointerleave', () => {

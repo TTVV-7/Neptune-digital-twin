@@ -153,9 +153,10 @@ export function unlockOf( vehicle, part, id ) {
 }
 
 // Whether a choice is locked for someone with the pass or not and at a level: `access` is { pro,
-// level } (level 1 when it isn't given).
-export function isLocked( vehicle, part, id, { pro = false, level = 1 } = {} ) {
+// level } (level 1 when it isn't given; true or false alone, as before levels, is the pass).
+export function isLocked( vehicle, part, id, access = {} ) {
 
+	const { pro = false, level = 1 } = access && typeof access === 'object' ? access : { pro: access === true };
 	const unlock = unlockOf( vehicle, part, id );
 	if ( ! unlock ) return false;
 	return ! ( ( unlock.pass && pro ) || ( unlock.level !== null && level >= unlock.level ) );

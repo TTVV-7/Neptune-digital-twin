@@ -25,7 +25,7 @@ import {
 	areaOf, badgeOf, capReport, checkReport, dailyXp, drivingXp, levelOf, progressOf, rewardsAt, rewardsBetween, titleOf, trickXp, unlockLevel,
 } from '../src/drive-app/levels.js';
 import { BOOSTS } from '../src/drive-app/boosts.js';
-import { DECALS, FINISHES, FLAMES, RIMS, SMOKES, SWATCHES, TRAILS, isLocked, unlockOf } from '../src/drive-app/paint.js';
+import { DECALS, FINISHES, FLAMES, RIMS, SMOKES, SWATCHES, TRAILS, isLocked, lookFor, saveLook, unlockOf } from '../src/drive-app/paint.js';
 import { SPOTS } from '../src/drive-app/places.js';
 import { makeVisit } from '../worker/drive/visits.js';
 
@@ -39,6 +39,7 @@ const DAY = 24 * HOUR;
 // 1 November 2026, noon UTC: the tests' clock (TEST_CLOCK), moved on as they need.
 const NOON = Date.UTC( 2026, 10, 1, 12 );
 const KART = { id: 'go-kart', colour: 'blaze' };
+const pick = ( { colour, boost, rim, trail } ) => ( { colour, boost, rim, trail } );
 // The Garage's lists, by part (paint.js, boosts.js).
 const LISTS = { colour: SWATCHES, finish: FINISHES, decal: DECALS, rim: RIMS, boost: BOOSTS, flame: FLAMES, trail: TRAILS };
 const PLACES = [ [ 46.5725, 8.4153 ], [ 49.30653, - 123.04957 ], [ 37.8199, - 122.4783 ], [ 40.75765, - 73.98577 ], [ 43.73658, 7.42144 ], [ 35.6595, 139.7005 ], [ - 33.8523, 151.2108 ] ];
@@ -154,6 +155,15 @@ describe( 'Levels: the curve and the unlock track', () => {
 
 		}
 
+		// The look driven with: what's locked put back to the ride's own.
+		const saved = { colour: 'copper', boost: 'plasma', rim: 'white', trail: 'smoke' };
+		saveLook( KART, saved );
+		assert.deepEqual( pick( lookFor( KART, { level: 1 } ) ), { colour: 'blaze', boost: 'classic', rim: 'silver', trail: 'none' } );
+		assert.deepEqual( pick( lookFor( KART, { level: 7 } ) ), { colour: 'blaze', boost: 'plasma', rim: 'white', trail: 'none' } );
+		assert.deepEqual( pick( lookFor( KART, { pro: true, level: 1 } ) ), { colour: 'blaze', boost: 'plasma', rim: 'white', trail: 'smoke' } );
+		assert.deepEqual( pick( lookFor( KART, { level: 25 } ) ), saved );
+		// (true alone, as callers said it before levels, is the pass.)
+		assert.deepEqual( pick( lookFor( KART, true ) ), pick( lookFor( KART, { pro: true } ) ) );
 		// Free looks, and the colour a ride comes in, are never locked.
 		assert.equal( isLocked( KART, 'colour', 'blaze' ), false );
 		assert.equal( isLocked( { id: 'x', colour: 'violet' }, 'colour', 'violet' ), false );

@@ -178,6 +178,10 @@ describe( 'World Drive levels in the page', () => {
 		assert.equal( await page.locator( '#globe-ui .profile .title-pick' ).isVisible(), false );
 		await dropIn( page );
 		assert.equal( await page.locator( '#drive-ui .xp-level' ).textContent(), 'Lv 1' );
+		// Level 3 within the first 250 m (the spot, the area and the day's bonus): its burst is held up
+		// for the next test by the pointer on it, as it is for anyone reading it.
+		await page.waitForFunction( () => window.drive.progress.level === 3, null, { timeout: 30000 } );
+		await page.locator( '#level-up button.reward', { hasText: 'Hearts boost' } ).hover();
 		// Driving on: the spot after 100 m, the area and the day's bonus after 250 m, and what's
 		// driven every 10 s.
 		await page.waitForFunction( () => window.popTexts.some( text => /^\+\d+ XP · \d+\.\d km/.test( text ) ), null, { timeout: 30000 } );
@@ -185,7 +189,6 @@ describe( 'World Drive levels in the page', () => {
 		for ( const said of [ `Furka Pass +${ XP.spot } XP`, `New area +${ XP.area } XP`, `Daily bonus +${ XP.daily } XP` ] ) assert.ok( pops.includes( said ), `${ said }: ${ pops }` );
 		await shot( page, 'levels-0-bar' );
 		// The bar: level 3 (500 XP) and on into it.
-		await page.waitForFunction( () => window.drive.progress.level === 3, null, { timeout: 20000 } );
 		assert.equal( await page.locator( '#drive-ui .xp-level' ).textContent(), 'Lv 3' );
 		const width = await page.locator( '#drive-ui .xp-hud .xp-bar i' ).evaluate( i => parseFloat( i.style.width ) );
 		assert.ok( width >= 0 && width < 100, `${ width }` );
@@ -197,10 +200,8 @@ describe( 'World Drive levels in the page', () => {
 	test( 'a level-up says what it unlocked, once that there\'s no nickname; its look opens the Garage, and it\'s there', async () => {
 
 		const card = page.locator( '#level-up' );
-		await page.waitForFunction( () => document.querySelector( '#level-up .heading' ).textContent === 'Level 3!' );
 		await card.waitFor();
-		// It stays up while the pointer's on it.
-		await card.locator( '.level-card' ).hover();
+		assert.equal( await card.locator( '.heading' ).textContent(), 'Level 3!' );
 		// Both levels' rewards: the Sunburst paint and the Hearts boost, each a way to the Garage.
 		assert.deepEqual( await card.locator( 'button.reward' ).allTextContents(), [ ...rewardsAt( 2 ), ...rewardsAt( 3 ) ].map( r => r.name ) );
 		assert.ok( await card.locator( '.nickname' ).isVisible(), 'no "Pick a nickname"' );
