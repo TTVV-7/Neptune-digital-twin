@@ -305,6 +305,8 @@ describe( 'World Drive levels in the page', () => {
 		assert.ok( Math.abs( server.xp - before.xp ) <= 3, `${ server.xp } on the Worker, ${ before.xp } here` );
 		assert.equal( ( await shown( page ) ).xp, server.xp );
 		assert.equal( ( await shown( page ) ).level, 3 );
+		// Today's bonus is had, so the next drive doesn't say it again.
+		assert.equal( ( await stored( page ) ).server.streakDay, new Date().toISOString().slice( 0, 10 ) );
 		await page.locator( '#leaderboard .close' ).click();
 		assert.deepEqual( page.errors, [] );
 

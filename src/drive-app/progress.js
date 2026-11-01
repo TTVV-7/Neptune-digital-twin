@@ -414,7 +414,8 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 			remember( [ ...( accepted.areas ?? [] ), ...( accepted.spots ?? [] ).map( id => `spot:${ id }` ) ] );
 			unsent.areas.push( ...sent.areas.filter( place => ! accepted.areas?.includes( place ) && ! unsent.areas.includes( place ) ) );
 			unsent.spots.push( ...sent.spots.filter( id => ! accepted.spots?.includes( id ) && ! unsent.spots.includes( id ) ) );
-			if ( answer.body.daily ) server.streakDay = today();
+			// Today's bonus is had: this report's, or (none in the answer) another device's earlier today.
+			if ( sent.daily ) server.streakDay = today();
 			if ( answer.body.daily ) server.streak = answer.body.daily.streak;
 			retryAt = 0;
 			if ( askAgain ) {
@@ -432,6 +433,8 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 			if ( answer.status === 403 && answer.body.reason === 'visit' ) ended = true;
 			else if ( answer.status === 403 ) gone = me.id;
 			if ( answer.status !== 400 ) unsent = merge( before, unsent );
+			// A claim it won't take isn't asked again and again.
+			else if ( claim ) local = freshLocal();
 			retryAt = Date.now() + Math.max( RETRY, answer.retryAfter * 1000 );
 
 		}
