@@ -6,14 +6,21 @@
 // a room that isn't one, no token, a forged, changed or expired one, the protocol not ours, LIVE
 // off, a client's own internal headers); welcome, join and leave; names from the leaderboard's
 // players (never the page's), guests, and a supporter's ⭐; states batched every FLUSH_MS, never
-// echoed, rounded and checked, and in an area only within VIEW_RANGE; look, place, away, trick and
-// honk relayed at once, honks spaced; the rate, the sizes and what's out of order; full rooms and
-// the area's shards; a visit connecting again; keepalives answered; the hello deadline, a visit
-// running out, and a room carrying on after it has hibernated. Then the room here in this process,
-// on a stand-in for Cloudflare's runtime and clock: batches with nothing after them, being idle,
-// waking up from its attachments, the alarm, LIVE switched off, the room emptying, a hello's name
-// still being looked up, the attachment's size, and no timers.
-// TEST_DRIVE_LIVE_PORT=8950 moves the two wrangler servers (that port and the next).
+// echoed, rounded and checked, and in an area only within VIEW_RANGE; a car alone in its room
+// going to nobody and not kept, and its first state after a join going at once; a state held back
+// going with its car's next; look, place, away, trick and honk relayed at once, honks spaced; the
+// rate, the sizes and what's out of order; full rooms and the area's shards; a visit connecting
+// again; keepalives answered; the hello deadline, a visit running out, and a room carrying on after
+// it has hibernated. The day's budget (LIVE_DAILY_BUDGET, small here): each ask counting, a room
+// adding what it spent, a room closing everyone as it's spent (CLOSE.off, BUDGET_SPENT), /api/live's
+// 503 and /api/config saying so, and a fresh day at midnight UTC (the tests' clock, X-Test-Time).
+// Then the room here in this process, on a stand-in for Cloudflare's runtime and clock: batches with
+// nothing after them, being idle, waking up from its attachments, the alarm, LIVE switched off, the
+// room emptying, a hello's name still being looked up, the attachment's size, no timers; quiet when
+// alone, held states; and what it spends: every billed request counted once, reported once a
+// minute and as it empties, closing everyone when the day's is spent, and carrying on when
+// DriveLimits fails.
+// TEST_DRIVE_LIVE_PORT=8950 moves the three wrangler servers (that port and the next two).
 
 import assert from 'node:assert/strict';
 import { register } from 'node:module';
@@ -22,7 +29,8 @@ import { serialize } from 'node:v8';
 import { after, before, describe, test } from 'node:test';
 import { CLIENT_ID, makeKey, makeToken, serveKeys, startWorker } from './worker-harness.mjs';
 import {
-	BURST, CLOSE, FLUSH_MS, HELLO_MS, HONK_GAP, IDLE_MS, MAX_HELLO, MAX_MESSAGE, PARTY_MAX, PING, PONG, PROTOCOL, VIEW_RANGE,
+	BUDGET_SPENT, BURST, CLOSE, FLUSH_MS, HELLO_MS, HONK_GAP, IDLE_MS, KEEPALIVE_MS, MAX_HELLO, MAX_MESSAGE, PARTY_MAX, PING, PONG, PROTOCOL,
+	VIEW_RANGE,
 	cellOf, makePartyCode, packState, shardOf,
 } from '../src/drive-app/live-protocol.js';
 import { makeVisit } from '../worker/drive/visits.js';
@@ -34,6 +42,11 @@ const PASS_SECRET = '1x0000000000000000000000000000000AA';
 const FAIL_SECRET = '2x0000000000000000000000000000000AA';
 const SECOND = 1000;
 const HOUR = 60 * 60 * SECOND;
+const DAY = 24 * HOUR;
+// How often a room with anyone in it reports what it has spent (worker/drive/live.js's REPORT_MS),
+// and what it counts: connecting, each message in (billed 20 to a request), each alarm, each report.
+const REPORT_MS = 60 * SECOND;
+const COST = { connect: 1, message: 1 / 20, alarm: 1, report: 1 };
 // Small areas here, to fill one quickly.
 const NEARBY_MAX = 4;
 const FURKA = { name: 'Furka Pass', lat: 46.5725, lon: 8.4153, height: 2429 };
@@ -517,6 +530,75 @@ describe( 'Driving with others', () => {
 
 	} );
 
+	test( 'alone in a room, a car\'s states go to nobody and aren\'t kept; its first after someone joins goes to them at once', async () => {
+
+		const room = partyRoom();
+		const alice = await join( server, room );
+		// Connected, but no hello: not anyone yet.
+		const lurker = await connect( server, room );
+		for ( const north of [ 0, 10, 20 ] ) {
+
+			alice.send( { t: 's', s: carAt( 46.5725, 8.4153, { north } ) } );
+			await sleep( FLUSH_MS + 20 );
+
+		}
+
+		alice.send( { t: 'honk' } );
+		await sleep( 200 );
+		assert.deepEqual( [ ...await alice.drain(), ...await lurker.drain() ], [] );
+		// Bob, joining, isn't shown where Alice was: no car until her page sends it.
+		const bob = await join( server, room );
+		assert.equal( bob.welcome.players[ 0 ].s, null );
+		assert.ok( await alice.take( 'join' ) );
+		// Bob's first, and Alice's first right after it (her page sends it as it hears the join):
+		// each goes at once, with nothing after it to bring it.
+		bob.send( { t: 's', s: carAt( 46.5725, 8.4153, { north: 500 } ) } );
+		assert.deepEqual( cars( [ await alice.take( 'S' ) ] ), { [ bob.pid ]: carAt( 46.5725, 8.4153, { north: 500 } ) } );
+		alice.send( { t: 's', s: carAt( 46.5725, 8.4153, { north: 30 } ) } );
+		const first = await bob.take( 'S', 1000 );
+		assert.ok( first, 'Alice\'s first waited' );
+		assert.deepEqual( cars( [ first ] ), { [ alice.pid ]: carAt( 46.5725, 8.4153, { north: 30 } ) } );
+		// Bob goes: Alice is alone again, her last state forgotten, and what she sends goes nowhere.
+		await bob.close();
+		assert.ok( await alice.take( 'leave' ) );
+		alice.send( { t: 's', s: carAt( 46.5725, 8.4153, { north: 40 } ) } );
+		await sleep( 200 );
+		assert.deepEqual( ( await alice.drain() ).filter( m => m.t === 'S' ), [] );
+		const carol = await join( server, room );
+		assert.equal( carol.welcome.players.find( p => p.pid === alice.pid ).s, null );
+		assert.deepEqual( lurker.inbox, [] );
+		await Promise.all( [ alice, lurker, carol ].map( page => page.close() ) );
+
+	} );
+
+	test( 'a state the batching held back goes with its car\'s next, if that came FLUSH_MS or more after it', async () => {
+
+		const room = partyRoom();
+		const alice = await join( server, room );
+		const bob = await join( server, room );
+		await alice.take( 'join' );
+		alice.send( { t: 's', s: carAt( 46.5725, 8.4153 ) } );
+		assert.ok( await bob.take( 'S' ) );
+		await sleep( FLUSH_MS + 50 );
+		// Bob's first goes at once; Alice's next, just after that batch, is held back...
+		bob.send( { t: 's', s: carAt( 46.5725, 8.4153, { north: 500 } ) } );
+		assert.ok( await alice.take( 'S' ) );
+		alice.send( { t: 's', s: carAt( 46.5725, 8.4153, { north: 2, speed: 10 } ) } );
+		assert.equal( await bob.take( 'S', FLUSH_MS ), null );
+		// ... and goes with the one after it, a fifth of a second on as a page sends them: both, in
+		// order.
+		await sleep( 200 - FLUSH_MS );
+		alice.send( { t: 's', s: carAt( 46.5725, 8.4153, { north: 3, speed: 10 } ) } );
+		const both = await bob.take( 'S' );
+		assert.deepEqual( both.s.map( entry => entry.slice( 0, 12 ) ), [
+			[ alice.pid, ...carAt( 46.5725, 8.4153, { north: 2, speed: 10 } ) ],
+			[ alice.pid, ...carAt( 46.5725, 8.4153, { north: 3, speed: 10 } ) ],
+		] );
+		assert.ok( both.s[ 0 ][ 12 ] >= FLUSH_MS && both.s[ 1 ][ 12 ] < FLUSH_MS, JSON.stringify( both.s.map( entry => entry[ 12 ] ) ) );
+		await Promise.all( [ alice.close(), bob.close() ] );
+
+	} );
+
 	test( 'a state is rounded as packState rounds it, and one no car could be in is dropped, not passed on', async () => {
 
 		const room = partyRoom();
@@ -885,6 +967,97 @@ describe( 'Driving with others', () => {
 
 } );
 
+// --- the day's budget, in wrangler dev ---------------------------------------------------
+
+describe( 'Driving with others\' daily budget', () => {
+
+	// A Worker with a budget of BUDGET billed requests a day, and the tests' clock (TEST_CLOCK): a
+	// request may say what time it is in X-Test-Time.
+	const BUDGET = 30;
+	let tight;
+	// Two drivers in a room from the start, there when the day's budget runs out at the real time.
+	let waiting;
+	const at = time => ( { 'X-Test-Time': String( time ) } );
+	const config = async ( time = null ) => ( await fetch( `${ tight.base }/api/config`, { headers: time ? at( time ) : {} } ) ).json();
+
+	before( async () => {
+
+		tight = await startWorker( {
+			port: PORT + 2,
+			config: 'wrangler.drive.jsonc',
+			vars: { GOOGLE_CLIENT_ID: '', GOOGLE_MAPS_API_KEY: 'test-maps-key-not-real', TURNSTILE_SECRET: PASS_SECRET, TEST_CLOCK: 'header', LIVE_DAILY_BUDGET: String( BUDGET ) },
+		} );
+		const room = partyRoom();
+		waiting = { at: Date.now(), alice: await join( tight, room ), bob: await join( tight, room ) };
+
+	} );
+
+	after( () => {
+
+		for ( const page of [ waiting?.alice, waiting?.bob ] ) page?.ws.terminate();
+		tight?.stop();
+
+	} );
+
+	test( 'a room adds what it spent to the day\'s as it empties', async () => {
+
+		// Today, by the real clock: asked once as the Worker started, once for each of the two
+		// waiting, and once each for these two.
+		const room = partyRoom();
+		const alice = await join( tight, room );
+		const bob = await join( tight, room );
+		for ( let i = 0; i < 18; i ++ ) alice.send( { t: 's', s: carAt( 46.5725, 8.4153, { north: i } ) } );
+		await sleep( 300 );
+		await Promise.all( [ alice.close(), bob.close() ] );
+		await sleep( 500 );
+		// Reported: two connections, 20 messages, the report itself and a moment of keepalives: 4 and a
+		// little. So 5 asks and 4 make 9, and the 21st ask from here spends the budget (without the
+		// report it would be the 25th).
+		let opens = 0;
+		while ( opens <= BUDGET && ( await config() ).live ) opens ++;
+		assert.equal( opens, BUDGET - 10, `${ opens } asks were open` );
+
+	} );
+
+	test( 'a room hearing the day\'s budget is spent closes everyone in it with CLOSE.off and BUDGET_SPENT', async () => {
+
+		// At its first report, REPORT_MS after the first of them connected.
+		const { alice, bob } = waiting;
+		const wait = Math.max( 0, waiting.at + REPORT_MS - Date.now() ) + 5 * SECOND;
+		const closed = await Promise.all( [ alice.ended( wait ), bob.ended( wait ) ] );
+		assert.deepEqual( closed, [ { code: CLOSE.off, reason: BUDGET_SPENT }, { code: CLOSE.off, reason: BUDGET_SPENT } ] );
+		assert.ok( alice.closedAt - waiting.at >= REPORT_MS - SECOND, `${ alice.closedAt - waiting.at } ms in` );
+		// And the door's shut until midnight.
+		assert.equal( ( await connect( tight, partyRoom() ) ).status, 503 );
+		assert.deepEqual( ( ( { live, liveReason } ) => ( { live, liveReason } ) )( await config() ), { live: false, liveReason: BUDGET_SPENT } );
+
+	} );
+
+	test( 'each ask counts against the day\'s budget; spent, /api/config says so and /api/live turns away with 503; at midnight UTC, a fresh day', async () => {
+
+		// A day of its own, years on (the tests' clock). Last of these, as a new day forgets those before
+		// it, today's included. BUDGET - 1 asks are open, and the next spends it.
+		const day = Date.UTC( 2031, 0, 15 );
+		let opens = 0;
+		while ( opens <= BUDGET && ( await config( day + 12 * HOUR ) ).live ) opens ++;
+		assert.equal( opens, BUDGET - 1 );
+		const spent = await config( day + 23 * HOUR );
+		assert.deepEqual( [ spent.live, spent.liveReason ], [ false, BUDGET_SPENT ] );
+		const turned = await connect( tight, partyRoom(), { token: await visitToken( day + 23 * HOUR ), headers: at( day + 23 * HOUR ) } );
+		assert.equal( turned.status, 503 );
+		assert.deepEqual( JSON.parse( turned.body ), { error: 'Lots of drivers today: driving with others is back after midnight UTC', reason: BUDGET_SPENT } );
+		// To the last millisecond of that day; then midnight, and it's open, a connection getting in.
+		assert.equal( ( await config( day + DAY - 1 ) ).live, false );
+		const next = await config( day + DAY );
+		assert.deepEqual( [ next.live, next.liveReason ], [ true, undefined ] );
+		const page = await join( tight, partyRoom(), {}, { token: await visitToken( day + DAY ), headers: at( day + DAY ) } );
+		assert.deepEqual( page.welcome.players, [] );
+		await page.close();
+
+	} );
+
+} );
+
 // --- the room, here --------------------------------------------------------------------
 
 // What wrangler dev can't show quickly: IDLE_MS is over a minute, and hibernation is the runtime's
@@ -1004,13 +1177,14 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 	} );
 
 	// The runtime's side of one room: its WebSockets, when each last had a keepalive answered, its
-	// alarm, and whether its storage was emptied.
+	// alarm (and how many times it has gone off), and whether its storage was emptied.
 	function runtime() {
 
 		const ctx = {
 			sockets: [],
 			pinged: new Map(),
 			alarm: null,
+			fired: 0,
 			emptied: 0,
 			autoResponse: null,
 			acceptWebSocket( ws ) {
@@ -1107,6 +1281,7 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 
 			clock = Math.max( clock, ctx.alarm );
 			ctx.alarm = null;
+			ctx.fired ++;
 			await room.alarm();
 
 		}
@@ -1117,10 +1292,41 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 
 	const say = ( room, ws, message ) => room.webSocketMessage( ws, typeof message === 'string' ? message : JSON.stringify( message ) );
 
+	// DriveLimits as a room reaches it (env.LIMITS): each report it's sent, kept; open, or not, or
+	// failing, as the test says.
+	function limitsStub() {
+
+		const stub = { reports: [], open: true, fail: false };
+		stub.binding = {
+			idFromName: name => name,
+			get: () => ( {
+				liveSpent: async ( amount, { now, budget } ) => {
+
+					if ( stub.fail ) throw new Error( 'DriveLimits is down' );
+					stub.reports.push( { amount, now, budget } );
+					return { open: stub.open, spent: 0 };
+
+				},
+			} ),
+		};
+		return stub;
+
+	}
+
+	// The page closing `ws`, as the runtime hands that to the room.
+	async function leave( room, ws ) {
+
+		ws.readyState = WebSocket.CLOSED;
+		await room.webSocketClose( ws, 1000, '', true );
+
+	}
+
+	const total = reports => reports.reduce( ( sum, report ) => sum + report.amount, 0 );
+
 	test( 'keepalives are the auto-response, PING answered with PONG', () => {
 
 		const ctx = runtime();
-		new DriveRoom( ctx, {} );
+		new DriveRoom( ctx, { LIMITS: limitsStub().binding } );
 		assert.deepEqual( { ...ctx.autoResponse }, { request: PING, response: PONG } );
 
 	} );
@@ -1129,7 +1335,7 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 
 		const set = timers.set;
 		const ctx = runtime();
-		const room = new DriveRoom( ctx, {} );
+		const room = new DriveRoom( ctx, { LIMITS: limitsStub().binding } );
 		const alice = await hello( room, ctx );
 		const bob = await hello( room, ctx );
 		alice.said();
@@ -1159,7 +1365,7 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 	test( 'idle: no word for IDLE_MS closes a connection, and a keepalive answered for it is a word', async () => {
 
 		const ctx = runtime();
-		const room = new DriveRoom( ctx, {} );
+		const room = new DriveRoom( ctx, { LIMITS: limitsStub().binding } );
 		const start = clock;
 		const alice = await hello( room, ctx );
 		const bob = await hello( room, ctx );
@@ -1188,7 +1394,7 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 	test( 'the alarm: hello within HELLO_MS, and a visit run out; only set while there are connections', async () => {
 
 		const ctx = runtime();
-		const room = new DriveRoom( ctx, {} );
+		const room = new DriveRoom( ctx, { LIMITS: limitsStub().binding } );
 		const quiet = await arrive( room, ctx );
 		assert.equal( ctx.alarm, clock + HELLO_MS );
 		await wait( room, ctx, HELLO_MS - 1 );
@@ -1223,7 +1429,7 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 	test( 'LIVE switched off: each connection is closed with CLOSE.off as it next says anything, or at the alarm', async () => {
 
 		const ctx = runtime();
-		const env = { LIVE: 'on' };
+		const env = { LIVE: 'on', LIMITS: limitsStub().binding };
 		const room = new DriveRoom( ctx, env );
 		const alice = await hello( room, ctx );
 		const bob = await hello( room, ctx );
@@ -1239,7 +1445,7 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 	test( 'woken from hibernation, a room carries on from its connections\' attachments', async () => {
 
 		const ctx = runtime();
-		const env = {};
+		const env = { LIMITS: limitsStub().binding };
 		const asleep = new DriveRoom( ctx, env );
 		const area = { name: 'near:1365.1297' };
 		const alice = await hello( asleep, ctx, area );
@@ -1286,15 +1492,19 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 	test( 'an attachment stays well under 2 KB, the longest hello included', async () => {
 
 		const ctx = runtime();
-		const room = new DriveRoom( ctx, {} );
+		const room = new DriveRoom( ctx, { LIMITS: limitsStub().binding } );
+		// (Someone else there, so the state is kept: alone, it would be dropped.)
+		await hello( room, ctx );
 		const look = Object.fromEntries( [ 'colour', 'finish', 'decal', 'rim', 'boost', 'flame', 'trail', 'smoke' ].map( part => [ part, 'x'.repeat( 24 ) ] ) );
 		const ws = await hello( room, ctx, { visit: 'v'.repeat( 22 ), name: 'near:1365.79#3' }, { vehicle: 'police-cruiser', look: { ...look, number: 99 }, place: { name: '東'.repeat( 80 ), lat: - 89.123456, lon: 179.123456, height: 9999.9 } } );
 		await say( room, ws, { t: 's', s: carAt( 46.5725, 8.4153, { speed: 343.21, flags: 4095 } ) } );
 		const bytes = serialize( ws.attachment ).length;
 		assert.ok( bytes < 1024, `${ bytes } bytes` );
 		assert.equal( ws.attachment.place.name.length, 60 );
-		// Nothing only for memory in it.
-		assert.deepEqual( Object.keys( ws.attachment ).filter( key => [ 'moved', 'sent', 'pending', 'queue' ].includes( key ) ), [] );
+		assert.equal( ws.attachment.s[ 10 ], 4095 );
+		// What it has spent is in it; nothing only for memory is.
+		assert.deepEqual( [ typeof ws.attachment.spent, typeof ws.attachment.counted, typeof ws.attachment.reported ], [ 'number', 'number', 'number' ] );
+		assert.deepEqual( Object.keys( ws.attachment ).filter( key => [ 'moved', 'sent', 'sAt', 'held', 'pending', 'queue' ].includes( key ) ), [] );
 
 	} );
 
@@ -1312,7 +1522,7 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 
 		};
 		const db = { prepare: () => ( { bind: () => ( { first } ) } ) };
-		const room = new DriveRoom( ctx, { DB: db } );
+		const room = new DriveRoom( ctx, { DB: db, LIMITS: limitsStub().binding } );
 		const watcher = await hello( room, ctx );
 		const ws = await arrive( room, ctx );
 		const helloed = say( room, ws, { ...HELLO, player: { id: 'A'.repeat( 16 ), secret: 'B'.repeat( 32 ) } } );
@@ -1326,6 +1536,230 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 		const [ welcome ] = ws.said();
 		assert.deepEqual( [ welcome.t, welcome.name, welcome.star ], [ 'welcome', 'Looked Up', true ] );
 		assert.deepEqual( watcher.said().map( m => [ m.t, m.player?.name ?? m.pid, m.player?.star ] ), [ [ 'join', 'Looked Up', true ], [ 'look', welcome.you, undefined ], [ 'honk', welcome.you, undefined ] ] );
+
+	} );
+
+	test( 'alone, a car\'s states are dropped; as someone joins, its first goes at once; as it\'s alone again, its last is forgotten', async () => {
+
+		const ctx = runtime();
+		const room = new DriveRoom( ctx, { LIMITS: limitsStub().binding } );
+		const alice = await hello( room, ctx );
+		for ( const north of [ 0, 10, 20 ] ) {
+
+			await say( room, alice, { t: 's', s: carAt( 46.5725, 8.4153, { north } ) } );
+			clock += 200;
+
+		}
+
+		// Nobody to send them to, and none kept: Bob, joining, sees Alice with no car yet.
+		const bob = await hello( room, ctx );
+		assert.equal( bob.welcome.players[ 0 ].s, null );
+		assert.deepEqual( alice.said().map( m => m.t ), [ 'join' ] );
+		// Bob's first goes at once, and so does Alice's, sent as she heard him join, though it comes
+		// within FLUSH_MS of that batch.
+		await say( room, bob, { t: 's', s: carAt( 46.5725, 8.4153, { north: 500 } ) } );
+		assert.deepEqual( cars( alice.said() ), { [ bob.pid ]: carAt( 46.5725, 8.4153, { north: 500 } ) } );
+		clock += 10;
+		await say( room, alice, { t: 's', s: carAt( 46.5725, 8.4153, { north: 30 } ) } );
+		assert.deepEqual( bob.said(), [ { t: 'S', at: clock, s: [ [ alice.pid, ...carAt( 46.5725, 8.4153, { north: 30 } ), 0 ] ] } ] );
+		// After that, as ever: the next within FLUSH_MS waits.
+		clock += 20;
+		await say( room, alice, { t: 's', s: carAt( 46.5725, 8.4153, { north: 31 } ) } );
+		assert.deepEqual( bob.said(), [] );
+
+		// Bob goes, and Alice's last state goes with him: Carol, joining later, isn't shown it.
+		await leave( room, bob );
+		clock += 30 * SECOND;
+		const carol = await hello( room, ctx );
+		assert.equal( carol.welcome.players[ 0 ].s, null );
+		await say( room, alice, { t: 's', s: carAt( 46.5725, 8.4153, { north: 40 } ) } );
+		assert.deepEqual( cars( carol.said() ), { [ alice.pid ]: carAt( 46.5725, 8.4153, { north: 40 } ) } );
+		// Carol closed by the room (a second hello) leaves Alice alone too.
+		await say( room, carol, HELLO );
+		assert.equal( carol.closedWith.code, CLOSE.protocol );
+		const dan = await hello( room, ctx );
+		assert.equal( dan.welcome.players.find( p => p.pid === alice.pid ).s, null );
+
+	} );
+
+	test( 'a state held back FLUSH_MS or more goes with its car\'s next, oldest first; closer together, only the later', async () => {
+
+		const ctx = runtime();
+		const room = new DriveRoom( ctx, { LIMITS: limitsStub().binding } );
+		const alice = await hello( room, ctx );
+		const bob = await hello( room, ctx );
+		await say( room, alice, { t: 's', s: carAt( 46.5725, 8.4153 ) } );
+		clock += 200;
+		await say( room, bob, { t: 's', s: carAt( 46.5725, 8.4153, { north: 500 } ) } );
+		alice.said();
+		bob.said();
+		// Alice's next comes 30 ms after Bob's batch, and waits; her one after it, FLUSH_MS on, brings
+		// both.
+		clock += 30;
+		await say( room, alice, { t: 's', s: carAt( 46.5725, 8.4153, { north: 2, speed: 10 } ) } );
+		assert.deepEqual( bob.said(), [] );
+		clock += FLUSH_MS;
+		await say( room, alice, { t: 's', s: carAt( 46.5725, 8.4153, { north: 3, speed: 10 } ) } );
+		assert.deepEqual( bob.said(), [ { t: 'S', at: clock, s: [
+			[ alice.pid, ...carAt( 46.5725, 8.4153, { north: 2, speed: 10 } ), FLUSH_MS ],
+			[ alice.pid, ...carAt( 46.5725, 8.4153, { north: 3, speed: 10 } ), 0 ],
+		] } ] );
+		// Two within FLUSH_MS of each other: the later only.
+		clock += 30;
+		await say( room, alice, { t: 's', s: carAt( 46.5725, 8.4153, { north: 4, speed: 10 } ) } );
+		clock += 30;
+		await say( room, alice, { t: 's', s: carAt( 46.5725, 8.4153, { north: 5, speed: 10 } ) } );
+		clock += 50;
+		await say( room, bob, { t: 'honk' } );
+		assert.deepEqual( bob.said(), [ { t: 'S', at: clock, s: [ [ alice.pid, ...carAt( 46.5725, 8.4153, { north: 5, speed: 10 } ), 50 ] ] } ] );
+
+	} );
+
+	test( 'what a room spends, in billed requests: reported once a minute while anyone\'s in it, and as it empties, none of it lost', async () => {
+
+		const ctx = runtime();
+		const limits = limitsStub();
+		const room = new DriveRoom( ctx, { LIMITS: limits.binding, LIVE_DAILY_BUDGET: '5000' } );
+		const start = clock;
+		const alice = await hello( room, ctx );
+		const bob = await hello( room, ctx );
+		// Two hellos, and 18 states from Alice in under a second.
+		let messages = 2;
+		for ( let i = 0; i < 18; i ++ ) {
+
+			await say( room, alice, { t: 's', s: carAt( 46.5725, 8.4153, { north: i, speed: 10 } ) } );
+			messages ++;
+			clock += 50;
+
+		}
+
+		// Then ten minutes of keepalives every KEEPALIVE_MS from both (answered by the runtime, never
+		// seen by the room), and the alarm whenever it's due.
+		for ( let t = KEEPALIVE_MS; t <= 10 * 60 * SECOND; t += KEEPALIVE_MS ) {
+
+			await wait( room, ctx, start + t - clock );
+			ctx.pinged.set( alice, clock );
+			ctx.pinged.set( bob, clock );
+
+		}
+
+		// A report REPORT_MS after the first connection, then never more than that apart (an idle check
+		// coming up to 10 s before one makes it then), and no alarm but those and the hello deadline's:
+		// an alarm is a request too.
+		const times = limits.reports.map( report => report.now - start );
+		assert.equal( times[ 0 ], REPORT_MS );
+		for ( let i = 1; i < times.length; i ++ ) assert.ok( times[ i ] - times[ i - 1 ] <= REPORT_MS && times[ i ] - times[ i - 1 ] >= REPORT_MS - 10 * SECOND, JSON.stringify( times ) );
+		assert.ok( times.at( - 1 ) > 9 * 60 * SECOND, JSON.stringify( times ) );
+		assert.equal( ctx.fired, limits.reports.length + 1 );
+		assert.ok( limits.reports.every( report => report.budget === 5000 ) );
+		// The first: both connecting, the messages, the hello deadline's alarm and its own, the call,
+		// and a minute of keepalives for each, as if one came every KEEPALIVE_MS.
+		const keepalive = ms => ms / KEEPALIVE_MS * COST.message;
+		assert.ok( Math.abs( limits.reports[ 0 ].amount - ( 2 * COST.connect + messages * COST.message + 2 * COST.alarm + COST.report + 2 * keepalive( REPORT_MS ) ) ) < 1e-9, JSON.stringify( limits.reports[ 0 ] ) );
+		// Then a minute of keepalives, the alarm and the call.
+		assert.ok( Math.abs( limits.reports[ 1 ].amount - ( COST.alarm + COST.report + 2 * keepalive( REPORT_MS ) ) ) < 1e-9 );
+		assert.ok( ctx.alarm > clock && ctx.alarm <= limits.reports.at( - 1 ).now + REPORT_MS );
+
+		// Both go: the room reports what's left as it empties, and every billed request is counted once.
+		const reports = limits.reports.length;
+		clock += 7 * SECOND;
+		await say( room, bob, { t: 'honk' } );
+		messages ++;
+		await leave( room, alice );
+		await leave( room, bob );
+		assert.equal( ctx.alarm, null );
+		assert.equal( limits.reports.length, reports + 1 );
+		const spent = 2 * COST.connect + messages * COST.message + ctx.fired * COST.alarm + limits.reports.length * COST.report + 2 * keepalive( clock - start );
+		assert.ok( Math.abs( total( limits.reports ) - spent ) < 1e-9, `${ total( limits.reports ) } reported, ${ spent } spent` );
+
+	} );
+
+	test( 'a connection turned away as the room is full, or closed by it, is counted too', async () => {
+
+		const ctx = runtime();
+		const limits = limitsStub();
+		const room = new DriveRoom( ctx, { LIMITS: limits.binding, LIVE_PARTY_MAX: '2' } );
+		const start = clock;
+		const alice = await hello( room, ctx );
+		// One that never says hello, and one told the room's full: connecting was a request all the same.
+		const quiet = await arrive( room, ctx );
+		const full = await arrive( room, ctx );
+		assert.deepEqual( full.closedWith, { code: CLOSE.full, reason: 'full' } );
+		// The quiet one closed at the hello deadline: its connecting and keepalives go on Alice's.
+		await wait( room, ctx, HELLO_MS );
+		assert.deepEqual( quiet.closedWith, { code: CLOSE.hello, reason: 'no hello' } );
+		const quietFor = clock - start;
+		ctx.pinged.set( alice, clock );
+		await wait( room, ctx, REPORT_MS );
+		await leave( room, alice );
+		assert.equal( limits.reports.length, 2 );
+		const spent = 3 * COST.connect + COST.message + ctx.fired * COST.alarm + 2 * COST.report + ( clock - start + quietFor ) / KEEPALIVE_MS * COST.message;
+		assert.ok( Math.abs( total( limits.reports ) - spent ) < 1e-9, `${ total( limits.reports ) } reported, ${ spent } spent` );
+
+	} );
+
+	test( 'the day\'s budget spent: the next report closes everyone with CLOSE.off and BUDGET_SPENT, and the room asks no more', async () => {
+
+		const ctx = runtime();
+		const limits = limitsStub();
+		const room = new DriveRoom( ctx, { LIMITS: limits.binding } );
+		const alice = await hello( room, ctx );
+		const bob = await hello( room, ctx );
+		await say( room, alice, { t: 's', s: carAt( 46.5725, 8.4153 ) } );
+		ctx.pinged.set( alice, clock );
+		ctx.pinged.set( bob, clock );
+		await wait( room, ctx, REPORT_MS );
+		assert.deepEqual( [ alice.closedWith, bob.closedWith ], [ null, null ] );
+		limits.open = false;
+		ctx.pinged.set( alice, clock );
+		ctx.pinged.set( bob, clock );
+		await wait( room, ctx, REPORT_MS );
+		assert.deepEqual( alice.closedWith, { code: CLOSE.off, reason: BUDGET_SPENT } );
+		assert.deepEqual( bob.closedWith, { code: CLOSE.off, reason: BUDGET_SPENT } );
+		assert.equal( ctx.alarm, null );
+		assert.ok( ctx.emptied >= 1 );
+		// Their pages' closes as they come back: nothing more to report.
+		for ( const ws of [ alice, bob ] ) await room.webSocketClose( ws, CLOSE.off, BUDGET_SPENT, true );
+		assert.equal( limits.reports.length, 2 );
+
+	} );
+
+	test( 'DriveLimits failing: the room carries on as if open, tries again a minute on, and nothing it spent is lost', async () => {
+
+		const ctx = runtime();
+		const limits = limitsStub();
+		const room = new DriveRoom( ctx, { LIMITS: limits.binding } );
+		const start = clock;
+		const alice = await hello( room, ctx );
+		const bob = await hello( room, ctx );
+		const logged = [];
+		const realError = console.error;
+		console.error = ( ...args ) => logged.push( args.join( ' ' ) );
+		try {
+
+			limits.fail = true;
+			await wait( room, ctx, REPORT_MS );
+			assert.deepEqual( [ alice.closedWith, bob.closedWith ], [ null, null ] );
+			assert.equal( logged.length, 1 );
+			assert.match( logged[ 0 ], /^Live budget report Error DriveLimits is down$/ );
+			// Not again at once: the next alarm is for Bob's and Alice's idle deadline, then the report.
+			ctx.pinged.set( alice, clock );
+			ctx.pinged.set( bob, clock );
+			assert.ok( ctx.alarm > clock );
+			limits.fail = false;
+			await wait( room, ctx, REPORT_MS );
+			assert.equal( logged.length, 1 );
+			assert.deepEqual( limits.reports.map( report => report.now - start ), [ 2 * REPORT_MS ] );
+			assert.deepEqual( [ alice.closedWith, bob.closedWith ], [ null, null ] );
+			// The failed report's all in this one, its call included.
+			const spent = 2 * COST.connect + 2 * COST.message + ctx.fired * COST.alarm + 2 * COST.report + 2 * ( clock - start ) / KEEPALIVE_MS * COST.message;
+			assert.ok( Math.abs( total( limits.reports ) - spent ) < 1e-9, `${ total( limits.reports ) } reported, ${ spent } spent` );
+
+		} finally {
+
+			console.error = realError;
+
+		}
 
 	} );
 

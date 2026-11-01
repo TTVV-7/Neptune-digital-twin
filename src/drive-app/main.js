@@ -22,8 +22,8 @@ import { fillAccountArea, fillBuyArea, linkPlayer, setUpSupporter } from './supp
 import { formatLatLon, rememberPlace } from './places.js';
 import { createLive, flagsOf, velocityOf } from './live.js';
 import { createGhosts } from './ghosts.js';
-import { setUpFriends } from './friends.js';
-import { cleanPartyCode } from './live-protocol.js';
+import { BUDGET_TOAST, setUpFriends } from './friends.js';
+import { BUDGET_SPENT, cleanPartyCode } from './live-protocol.js';
 import * as screens from './screens.js';
 
 // World Drive (worlddrive.app, docs/world-drive.md): pick anywhere on Earth from a globe of
@@ -84,7 +84,7 @@ async function boot() {
 	const config = await getConfig();
 	// The Vite dev server on its own: a key from the environment, or the test globe.
 	if ( ! config ) return start( { key: DEV_KEY || null, worker: false } );
-	if ( ! config.mapsOn ) return screens.notice( 'resting', { onTestPad: () => start( { key: null, googleClientId: config.googleClientId, live: !! config.live } ) } );
+	if ( ! config.mapsOn ) return screens.notice( 'resting', { onTestPad: () => start( { key: null, googleClientId: config.googleClientId, live: !! config.live, liveReason: config.liveReason } ) } );
 	visit( config );
 
 }
@@ -94,7 +94,7 @@ async function visit( config ) {
 
 	screens.splash( 'Checking the road is clear...' );
 	const outcome = await startVisit( config.turnstileSiteKey, $( 'robot-check' ) );
-	if ( outcome.key ) return start( { key: outcome.key, left: outcome.left, visit: outcome.visit, googleClientId: config.googleClientId, live: !! config.live } );
+	if ( outcome.key ) return start( { key: outcome.key, left: outcome.left, visit: outcome.visit, googleClientId: config.googleClientId, live: !! config.live, liveReason: config.liveReason } );
 	if ( outcome.usedUp ) return usedUp( config, outcome );
 	if ( outcome.robot ) return screens.notice( 'robot', { onRetry: () => visit( config ) } );
 	screens.notice( 'error', { message: outcome.error, onRetry: () => visit( config ) } );
@@ -128,8 +128,9 @@ function usedUp( config, { retryAfter, reason } ) {
 // key: the Maps key (none: the test globe and pad); left: free drives left today; visit: the
 // visit's token, for posting scores; worker: whether there's a Worker (not on the dev server alone);
 // googleClientId: the sign-in button's, for the Supporter Pass ('' when there's no signing in);
-// live: whether the Worker has driving with others on (its /api/config says).
-async function start( { key, left = null, visit = null, worker = true, googleClientId = '', live: liveOn = false } ) {
+// live: whether the Worker has driving with others on (its /api/config says), and liveReason why
+// not when it's off for the rest of the day.
+async function start( { key, left = null, visit = null, worker = true, googleClientId = '', live: liveOn = false, liveReason = '' } ) {
 
 	const vehicles = await loadVehicles();
 	screens.hideSplash();
@@ -290,9 +291,11 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 		: null;
 	const ghosts = live && createGhosts( { scene, earth, camera, vehicles, loader: models.loader, live, tags: $( 'live-tags' ), own: () => state.entry?.pivot ?? null } );
 	const friends = live && setUpFriends( { live, ghosts, vehicles, mode: () => state.mode, goTo } );
-	// A party's link (?party=CODE): its room, from the globe on.
+	// A party's link (?party=CODE): its room, from the globe on. With driving with others off for
+	// the rest of the day (its budget spent), a word on why nothing comes of the link.
 	const partyCode = cleanPartyCode( new URLSearchParams( location.search ).get( 'party' ) );
 	if ( friends && partyCode ) friends.joinParty( partyCode );
+	else if ( partyCode && liveReason === BUDGET_SPENT ) screens.toast( BUDGET_TOAST, 10000 );
 	// The points of each landed jump: the run's score less what it was at the last, in this ride at
 	// this place (a run of its own, see drive.js).
 	let runScore = 0;

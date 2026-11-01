@@ -10,6 +10,8 @@ import { hideKeys, toast } from './screens.js';
 // (H, or its button on a touch screen), with a soft beep for yours and those near.
 
 const HORN_KEY = 'world-drive.horn';
+// Driving with others off for the rest of the day, its budget spent (worker/drive/live.js).
+export const BUDGET_TOAST = 'Lots of drivers today: driving with others is back after midnight UTC.';
 // Other cars' horns are heard this near (m).
 const HEAR_RANGE = 150;
 // In an area, a toast for someone new at most this often (ms).
@@ -112,6 +114,7 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo } ) {
 		refresh();
 		if ( reason === 'replaced' ) toast( 'Driving with others moved to another tab.', 8000 );
 		else if ( reason === 'expired' ) toast( 'Driving with others has ended for this visit. Reload for a fresh drive.', 10000 );
+		else if ( reason === 'budget' ) toast( BUDGET_TOAST, 10000 );
 
 	} );
 	live.on( 'honk', ( { pid } ) => {
@@ -133,8 +136,9 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo } ) {
 	function refresh() {
 
 		lastMode = mode();
-		// Switched off on the Worker (or for this visit): none of it shows.
-		const off = live.ended === 'off' || live.ended === 'protocol';
+		// Switched off on the Worker (for good, or the rest of the day), or for this visit: none of it
+		// shows.
+		const off = live.ended === 'off' || live.ended === 'budget' || live.ended === 'protocol';
 		for ( const area of areas ) area.refresh( off );
 		hornKey.hidden = horn.hidden = !! live.ended;
 		showChip();

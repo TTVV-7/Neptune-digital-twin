@@ -343,10 +343,10 @@ others:
 - **A party.** **Invite friends** makes a link (`https://worlddrive.app/?party=CODE`); whoever
   opens it is in your party wherever on Earth each of you is, and can join you where you are.
 
-It's only on when the Worker says so (`live: true` in `/api/config`, the `LIVE` setting below) and
-the visit has a token, which only visits on Google's map get. When it's off, nothing of it appears:
-no chip, no **Drive with friends**, no H in the keys card, no horn button, and driving alone is as it
-always was.
+It's only on when the Worker says so (`live: true` in `/api/config`: the `LIVE` setting below, and
+[the day's budget](#the-days-budget) not spent) and the visit has a token, which only visits on
+Google's map get. When it's off, nothing of it appears: no chip, no **Drive with friends**, no H in
+the keys card, no horn button, and driving alone is as it always was.
 
 ### What you see and do
 
@@ -356,9 +356,13 @@ always was.
   distance, or "paused", "on the globe" or "at <place>". **Go to** puts you 5 m to their right,
   facing their way: within 10 km, straight there in the same scene; farther, a drop-in at their spot
   in your own ride. **Hide** hides that driver for this visit (**Show** brings them back).
-- **Other cars** are drawn a quarter of a second behind where their drivers are, moving smoothly
-  and turning with them (in the tests, a kart driving off and turning was drawn within 10 cm of
-  where it really was at the median, and 40 cm at most). Their flame or boost style, trail, drift smoke and sparks,
+- **Other cars** are drawn 0.3 s behind where their drivers are, moving smoothly and turning with
+  them: each page hears of the others' cars 5 times a second, and draws them along a curve through
+  each of those words that leaves and arrives at the speed and heading it had there, so a car
+  rounds a bend rather than cutting its corners (in the tests, a kart driving off and turning was
+  drawn within 5 to 9 cm of where it really was at the median, and 45 cm at most, as close as it
+  was at 8 words a second with straight lines between). A word that's late, it carries on along the
+  bend it was taking. Their flame or boost style, trail, drift smoke and sparks,
   overdrive's boom and streaks, splashes and the hovercraft's spray show for the nearest 6 within
   300 m, and their wheels turn. A name tag hangs over each (hidden beyond 400 m), with a 📣 when they
   honk and "+1,234" when they land a trick. A car within 8 m of yours or of the camera turns
@@ -389,7 +393,9 @@ always was.
 - **When it stops.** A dropped connection comes back by itself, waiting 1, 2, 5, 10 and then 30 s
   between tries. It stops for the rest of the visit when another tab with the same visit takes over
   ("Driving with others moved to another tab."), when the visit runs out after 6 hours ("... Reload
-  for a fresh drive."), or, without a word, when it's switched off. Driving alone carries on.
+  for a fresh drive."), when the day's budget is spent ("Lots of drivers today: driving with others
+  is back after midnight UTC.", once), or, without a word, when it's switched off. Driving alone
+  carries on. A party's link opened while the day's budget is spent says the same.
 
 ### What others can see about you
 
@@ -420,23 +426,32 @@ about as wide) and `near:BAND.COL#1` to `#3` for its other shards. What's said i
   token> ]` (a browser can't set headers on a WebSocket, and a token in the address would end up in
   logs). Before the room is touched the Worker turns away anything that isn't a WebSocket (426), from
   another site (403: the Origin must be worlddrive.app's own, as WebSockets have no CORS), while
-  `LIVE` is off (503), to a room that isn't one (400), without the protocol (400) or without a good
-  visit token (401: forged, changed or run out). The room gets only what was checked.
+  `LIVE` is off (503), to a room that isn't one (400), without the protocol (400), without a good
+  visit token (401: forged, changed or run out) or once the day's budget is spent (503 with
+  `reason: 'budget'`, asked of `DriveLimits` only after everything else checks out). The room gets
+  only what was checked.
 - Positions are Earth-centred (ECEF metres) and turns a quaternion in that frame, so two pages
-  centred on different places agree on where a car is. A page sends its car 8 times a second while
-  it moves, once a second while it's still and at once when what it's doing changes (at most 14
-  messages a second on average and 24 at once, under the room's limit). The room sends everyone
-  what's moved at most once every 100 ms, with the next message to arrive once that's passed (there's no
-  timer: it would keep the room from hibernating), each car's state with how long the room held it,
-  so a page knows when it was where it says. In an area, only cars within 5 km.
+  centred on different places agree on where a car is. A page sends its car 5 times a second while
+  it moves, once every 2 s while it's still (and once more at 5 a second as it stops, so where it
+  stopped isn't what waits), and at once when what it's doing changes (at most 14 messages a second
+  on average and 24 at once, under the room's limit). **Alone in its room it sends none**: they'd
+  be for nobody, and every message in is billed. As someone joins (or it joins a room with someone
+  in it) it sends its car at once, from the message itself rather than the next frame, so the
+  newcomer sees it straight away even if its tab is in the background; the room, for its part,
+  forgets the last state of a driver left on its own, so nobody's shown where that car was a while
+  ago. The room sends everyone what's moved at most once every 100 ms, with the next message to
+  arrive once that's passed (there's no timer: it would keep the room from hibernating), each car's
+  state with how long the room held it, so a page knows when it was where it says. A car's first
+  state goes at once, and one held back goes with its car's next (both, oldest first, if they came
+  100 ms or more apart), so none is lost at 5 a second. In an area, only cars within 5 km.
 - Limits, each closing the connection with its own code: hello within 10 s (4003); nothing heard
   for 75 s (4007: the page's keepalive every 25 s counts, answered by the runtime without waking
   the room); over 20 messages a second, or 40 at once (4004); a message it can't take (4000); the
   visit run out (4005); another connection with the same visit (4002, the older goes); a full room
-  (a `full` message, then 4001); switched off (4006). A state no car could be in is dropped, not
-  closed on.
-- A room stores nothing but its alarm (once about every 75 s while anyone's in it, for the limits
-  above), and deletes that when it empties.
+  (a `full` message, then 4001); switched off (4006), or the day's budget spent (4006 with the
+  reason `budget`). A state no car could be in is dropped, not closed on.
+- A room stores nothing but its alarm (once a minute while anyone's in it: the limits above, and
+  adding what it has spent to the day's), and deletes that when it empties.
 
 ### Switching it off
 
@@ -446,13 +461,48 @@ anything or at its room's next alarm; one whose connection dropped first (as whe
 restart) finds the door shut when it tries again, asks `/api/config` and sees `live: false`. Either
 way it stops for the visit without a word, everything of it disappears from the page and driving
 alone carries on; pages loaded afterwards show none of it. `"on"` and deploy turns it back on for
-the next page load. Nothing switches it off by itself: watch the Durable Objects' usage (below).
+the next page load. It also switches itself off for the rest of each day once it has spent that
+day's budget (below).
 
 | Setting | Default | What it is |
 | --- | --- | --- |
 | `LIVE` | `on` (in `vars`) | `off` switches driving with others off |
+| `LIVE_DAILY_BUDGET` | 40000 (in `vars`) | The Durable Object requests a day it may use; 0 is off |
 | `LIVE_PARTY_MAX` | 8 (unset) | The most in a party |
 | `LIVE_NEARBY_MAX` | 20 (unset) | The most in each of an area's rooms |
+
+### The day's budget
+
+On the Free plan, once all of an account's Durable Objects together have made 100,000 requests in
+a day, every one of them fails until 00:00 UTC, `DriveLimits` included: `/api/visit` would fail
+and nobody could start a drive. It isn't known which plan the account is on, so driving with others
+keeps to a budget of its own, `LIVE_DAILY_BUDGET` billed requests a day (**40,000** in
+`wrangler.drive.jsonc`), and leaves the rest for visits, names, scores and searches:
+
+- **What's counted**, in billed requests as Cloudflare counts them (below): each connection (1),
+  each message a room is sent (1/20 each), the keepalives (counted as one every 25 s for each
+  connection, 1/20 each: the runtime answers them without the room seeing them, and the pricing
+  doesn't say whether they're billed), each of a room's alarms (1) and each of its reports (1), and
+  each time the Worker asks `DriveLimits` whether it's open (1: on every connection to a room and
+  every `/api/config`).
+- **Where.** Each connection keeps its own count in what it keeps through hibernation; about once a
+  minute while anyone's in a room, and as the last one leaves, the room adds its count to the day's
+  in `DriveLimits` (a `live` table, one row a UTC day, deleted with the days before it as visits'
+  are). That's the room's alarm anyway, which is set no oftener than that.
+- **Spent**, the next room to report closes everyone in it (4006, `budget`); the others do at their
+  next report, within the minute. `/api/live` turns new connections away (503 with
+  `reason: 'budget'`) and `/api/config` says `live: false` with `liveReason: 'budget'`, so new page
+  loads show none of it. A page turned off this way toasts once, "Lots of drivers today: driving
+  with others is back after midnight UTC.", hides it all and drives on alone. At 00:00 UTC it's a
+  fresh day: pages loaded after that have it again. Once a Worker instance has heard the day is
+  spent it stops asking until the next day.
+- **If `DriveLimits` can't say**, a room carries on as if it's open (and adds what it couldn't
+  report to its next report, a minute on); `/api/config` and `/api/live` take it as off, so nothing
+  new starts, and a page that's turned away asks `/api/config` again before it gives up.
+- The count runs up to a minute behind, which is why the budget isn't all of what's left: 60,000 of
+  the Free plan's requests are left for the rest of the site, and for the last minute's driving.
+  On Workers Paid, going over costs money rather than switching everything off, so it can be
+  raised there (see what that costs below).
 
 ### What it costs
 
@@ -471,26 +521,38 @@ From Cloudflare's [Durable Objects pricing](https://developers.cloudflare.com/du
 - **Storage** (SQLite): "Each setAlarm() is billed as a single row written" (Free: 100,000 rows a day;
   Paid: 50 million a month, then $1.00 a million), and a room's storage is deleted when it empties.
 - **Over a Free plan limit**, "further operations of that type will fail with an error" until
-  00:00 UTC, for every Durable Object: `DriveLimits` too, so nobody could start a drive.
+  00:00 UTC, for every Durable Object: `DriveLimits` too, so nobody could start a drive. That's what
+  [the day's budget](#the-days-budget) is for.
 
 Worked through:
 
 | | Messages | Billed requests |
 | --- | --- | --- |
-| A driver, an hour on the move (8 a second) | 28,800 | 1,440 |
-| Parked, an hour (once a second) | 3,600 | 180 |
-| On the globe in a party, an hour (keepalives, if they count: the page doesn't say) | 144 | about 7 |
-| A room's alarm, an hour | | about 48, and as many rows written |
+| A driver with others, an hour on the move (5 a second) | 18,000 | 900 |
+| With others, parked, an hour (once every 2 s) | 1,800 | 90 |
+| Alone in a room, or on the globe in a party alone, an hour (keepalives only, if they count: the pricing doesn't say) | 144 | about 7 |
+| A room with anyone in it, an hour (an alarm and a report to `DriveLimits` each minute) | | 120, and 120 rows written |
+| Connecting to a room (the Worker's ask, and the connection) | | 2 |
+| A page load (`/api/config`'s ask) | | 1 |
 
-So the Free plan's 100,000 requests a day are about **69 driver-hours a day**, shared with
-everything else in Durable Objects; on Paid, the million a month included is about 690 driver-hours,
-and after that a driver-hour costs about $0.0002. A room kept awake for a whole hour would be
-460.8 GB-s (Free: about 28 room-hours a day; Paid: about $0.006 a room-hour), but a room only runs
-while it handles a message. Connections and reconnects are Worker requests too, as every `/api/`
-call is. Limits that matter here ([WebSockets](https://developers.cloudflare.com/durable-objects/best-practices/websockets/),
+So the default budget of 40,000 a day is about **40 driver-hours with others** (two driving
+together for an hour is 2 × 900 + 120 = 1,920), or about 300 hours of drivers each alone in their
+area's room (about 127 an hour, nearly all of it the room's alarm and report), and leaves 60,000 of
+the Free plan's 100,000 for everything else. (Before, at 8 a second whether anyone was there or
+not, a driver was 1,440 an hour, and nothing stopped the rooms using all 100,000.) On **Workers
+Paid** (1 million requests a month included, for all Durable Objects together, then $0.15 a
+million) the default is at most 1.2 million a month. Raising `LIVE_DAILY_BUDGET` there costs at
+most $0.45 a month for each 100,000 a day more (3 million a month): 200,000 a day, about 200
+driver-hours with others, is at most 6 million a month, $0.75 past the included million (more if
+visits and scores use some of it); a driver-hour with others is about $0.00014.
+
+A room kept awake for a whole hour would be 460.8 GB-s (Free: about 28 room-hours a day; Paid:
+about $0.006 a room-hour), but a room only runs while it handles a message. Connections and
+reconnects are Worker requests too, as every `/api/` call is. Limits that matter here ([WebSockets](https://developers.cloudflare.com/durable-objects/best-practices/websockets/),
 [state](https://developers.cloudflare.com/durable-objects/api/state/)): what a room keeps for each
-connection through hibernation is under 1 kB of the 16,384 bytes allowed, and a Durable Object
-holds up to 32,768 hibernating WebSockets, far more than a room lets in.
+connection through hibernation (its count of what it has spent included) is under 1 kB of the
+16,384 bytes allowed, and a Durable Object holds up to 32,768 hibernating WebSockets, far more than
+a room lets in.
 
 ### How it's tested
 
@@ -498,12 +560,21 @@ holds up to 32,768 hibernating WebSockets, far more than a room lets in.
 WebSockets opened as the page opens them, every connection turned away before the room, welcome,
 join and leave, names from the leaderboard (never the page's), guests and the ⭐, batches every
 100 ms with each state's age, never back to its own, rounded and checked, only within 5 km in an
-area, everything else passed on at once, honks spaced, the rate, sizes and order, full parties and
-areas and their shards, a visit connecting again, keepalives, the hello deadline, a visit running
-out and a room carrying on after hibernating; and the room in-process on a stand-in for
-Cloudflare's runtime and clock: batches with nothing after them, idle connections, waking from its
-attachments, the alarm, `LIVE` switched off, emptying, a name still being looked up, the
-attachment's size, and no timers.
+area, a car alone in its room going to nobody and not kept, its first state after a join going at
+once, a held-back state going with its car's next, everything else passed on at once, honks
+spaced, the rate, sizes and order, full parties and areas and their shards, a visit connecting
+again, keepalives, the hello deadline, a visit running out and a room carrying on after
+hibernating. The day's budget, on a Worker of its own with a budget of 30: every ask counting, a
+room adding what it spent as it empties, a room closing everyone with 4006 `budget` at its report,
+`/api/live`'s 503 and `/api/config`'s `liveReason`, and a fresh day at midnight UTC (the tests'
+clock). And the room in-process on a stand-in for Cloudflare's runtime and clock: batches with
+nothing after them, idle connections, waking from its attachments, the alarm, `LIVE` switched off,
+emptying, a name still being looked up, the attachment's size, no timers, quiet when alone, held
+states, and what it spends: every billed request counted exactly once over ten minutes, reported
+once a minute and as it empties, everyone closed when the day's is spent, and a room carrying on
+when `DriveLimits` fails, counting it all in the next report. `npm run test:drive-worker` checks
+`/api/config` asking (and not asking again once the day's spent, or when it's off) on a stand-in
+`DriveLimits`.
 
 `npm run test:drive-live-ui` (`scripts/test-drive-live-ui.mjs`): two to four pages in Chromium on
 the test pad, against the real Worker under `wrangler dev` behind Vite's proxy (the test pad has no
@@ -518,7 +589,11 @@ friend going elsewhere; leaving. A full area's next shard and a busy one; a drop
 (the test cuts the line between Vite and the Worker) coming back; another tab; a visit running out;
 a phone; the room following the car into another area; only the page's own origin through the
 proxy; and the Worker restarted with `LIVE` off, an open page stopping without a word and a new one
-showing none of it, both driving as ever.
+showing none of it, both driving as ever. A page alone in its room sends no states (as Playwright
+sees its frames go) and a second driver joining sees it within 1.5 s; the following is measured at
+5 a second, and that A sent at that rate. And the Worker with a budget of 40, spent by asking: a
+page turned away toasting once and showing none of it, a party's link on a new page saying why,
+both driving as ever.
 
 ## Supporter Pass (content)
 
@@ -1105,6 +1180,7 @@ In `wrangler.drive.jsonc` (`vars`, set on every deploy; change them there, not i
 | `SUPPORTER_PAYMENT_LINK` | the live link | The Supporter Pass's Stripe Payment Link (public) |
 | `SUPPORTER_PRICE` | `CA$4.99` | Its price, as the page shows it |
 | `LIVE` | `on` | [Driving with others](#switching-it-off); `off` switches it off |
+| `LIVE_DAILY_BUDGET` | 40000 | [The Durable Object requests a day](#the-days-budget) driving with others may use; 0 is off |
 
 Secrets, set by the owner and never in a file (Cloudflare dashboard: Workers & Pages → world-drive →
 Settings → Variables and Secrets, or `npx wrangler secret put NAME -c wrangler.drive.jsonc`):
@@ -1342,9 +1418,10 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   only checks it's somewhere a car could be (on Earth, at a speed a ride can go), so someone who
   digs into the page can put their ghost anywhere; it can't touch anyone, as nothing collides. A car
   on a poor connection lags or jumps. **Hide** goes by name, so two guests who happen to have the
-  same one are hidden together. On the Free plan the rooms share Durable Objects' 100,000 requests a
-  day with the visit counts (about 69 hours of driving with others), and nothing switches `LIVE`
-  off by itself before that runs out.
+  same one are hidden together. It switches itself off for the rest of the UTC day once it has spent
+  [its budget](#the-days-budget) (by default about 40 driver-hours with others), so on a busy day
+  it ends early for everyone; its count of what it has spent runs up to a minute behind, and the
+  keepalives in it are an estimate (as if one came every 25 s).
 
 ## Credits
 

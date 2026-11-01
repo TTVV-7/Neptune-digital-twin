@@ -103,15 +103,21 @@ export function parseRoom( text ) {
 
 // --- timing and limits ---------------------------------------------------------------------------
 
-// The page sends its car SEND_HZ times a second while it moves, STILL_HZ while it sits still, and
-// straight away when its flags change. The room sends everyone what's new at most every FLUSH_MS.
-export const SEND_HZ = 8;
-export const STILL_HZ = 1;
+// The page sends its car SEND_HZ times a second while it moves, STILL_HZ while it sits still (once
+// more at SEND_HZ as it stops, so where it stopped isn't held back), and straight away when its
+// flags change. But none at all while nobody else who has said hello is in its room: a state is
+// only for the others, and each one the room is sent is billed (see worker/drive/live.js). It
+// sends its car at once when someone comes (a join, or a welcome with others in it). The room
+// sends everyone what's new at most every FLUSH_MS.
+export const SEND_HZ = 5;
+export const STILL_HZ = 0.5;
 export const FLUSH_MS = 100;
 // Other cars are drawn this far (ms) behind the latest word of them, so there's a position on each
-// side of now to move between; a jump of more than TELEPORT m from one to the next is a jump (R,
-// a splash's way back, a new drop-in), not a drive. A car with no word for STALE_MS is taken away.
-export const INTERP_MS = 250;
+// side of now to move between: words come 1000 / SEND_HZ ms apart (a frame more as they fall), and
+// one the room held back comes with the next. A jump of more than TELEPORT m from one to the next
+// is a jump (R, a splash's way back, a new drop-in), not a drive. A car with no word for STALE_MS
+// (seven still states running) is taken away.
+export const INTERP_MS = 300;
 export const TELEPORT = 60;
 export const STALE_MS = 15000;
 // In an area, a car only goes to those within VIEW_RANGE m of it.
@@ -141,9 +147,13 @@ export const CLOSE = {
 	hello: 4003, // no hello in time
 	rate: 4004, // too many messages
 	expired: 4005, // the visit's token ran out (VISIT_HOURS after it was handed out)
-	off: 4006, // driving with others is switched off (LIVE)
+	off: 4006, // driving with others is switched off (LIVE), or till midnight UTC (BUDGET_SPENT)
 	idle: 4007, // nothing heard for IDLE_MS
 };
+// The day's budget for driving with others is spent (worker/drive/live.js): the reason CLOSE.off
+// comes with, /api/live's 503 says in `reason` and /api/config in `liveReason` (with live: false).
+// It's back after midnight UTC.
+export const BUDGET_SPENT = 'budget';
 
 // --- what's said ---------------------------------------------------------------------------------
 //
@@ -151,7 +161,7 @@ export const CLOSE = {
 //   { t: 'hello', player: { id, secret } | null, vehicle, look, place: PLACE | null, away: bool }
 //        first, once. player is the leaderboard's (its name is looked up; without one the room
 //        names you "Guest 1234"). away: on the globe, not driving yet.
-//   { t: 's', s: STATE }        where the car is (see packState)
+//   { t: 's', s: STATE }        where the car is (see packState), while anyone else is there
 //   { t: 'look', vehicle, look }   a new ride or look
 //   { t: 'place', place: PLACE }   dropped in somewhere (and so not away)
 //   { t: 'away' }               back on the globe
@@ -168,12 +178,16 @@ export const CLOSE = {
 //   { t: 'look', pid, vehicle, look }   { t: 'place', pid, place }   { t: 'away', pid }
 //   { t: 'S', at: ms, s: [ [ PID, ...STATE, AGE ]... ] }   what's moved since the last of these, at
 //        the room's clock, each with how long (AGE, ms) the room had held it: a batch goes with the
-//        next message to arrive once FLUSH_MS has passed, so a car's state may be new or a while old
+//        next message to arrive once FLUSH_MS has passed, so a car's state may be new or a while old.
+//        A car can be in one twice, oldest first: a state that was held back, and its next if
+//        that came FLUSH_MS or more after it (closer together, only the later goes)
 //   { t: 'trick', pid, score }   { t: 'honk', pid }
 //   then a close with one of CLOSE's codes when it's over.
 //
 // PID: the room's own id for a connection (8 characters), never the leaderboard's player id.
-// PLAYER: { pid, name, star (a Supporter Pass), vehicle, look, place, away, s: STATE | null }.
+// PLAYER: { pid, name, star (a Supporter Pass), vehicle, look, place, away, s: STATE | null }. s is
+//   null on the globe, and for a driver who was alone in the room: its page sends its car as it
+//   hears the join.
 // PLACE: { name, lat, lon, height } (degrees, and the ground's height there in metres above the
 //   ellipsoid): where its driver dropped in.
 // STATE: [ x, y, z, qx, qy, qz, qw, vx, vy, vz, flags ]: the car's pivot (ECEF metres, 2

@@ -1,6 +1,6 @@
 import { MathUtils, Matrix4, Quaternion, Vector3 } from 'three';
 import {
-	CLOSE, FLAGS, HONK_GAP, KEEPALIVE_MS, NEARBY_SHARDS, PARTY_MAX, PING, PONG, PROTOCOL, SEND_HZ, STALE_MS, STILL_HZ,
+	BUDGET_SPENT, CLOSE, FLAGS, HONK_GAP, KEEPALIVE_MS, NEARBY_SHARDS, PARTY_MAX, PING, PONG, PROTOCOL, SEND_HZ, STALE_MS, STILL_HZ,
 	cellOf, checkLook, checkPlace, checkState, checkTrick, checkVehicle, cleanPartyCode, makePartyCode, packState, shardOf,
 } from './live-protocol.js';
 import { getConfig } from './api.js';
@@ -11,15 +11,17 @@ import { storage } from './places.js';
 // one, on the globe too; otherwise, with "Show me to drivers nearby" on, the area the car is in
 // (near:BAND.COL, from a drop-in until a minute back on the globe), or the next of its shards when
 // one is full. It says where the car is, Earth-centred so that pages centred on other places agree,
-// up to SEND_HZ times a second while it moves; hands what the room says to whoever listens (ghosts.js
-// draws the others, friends.js the list and the party); and comes back after a dropped connection.
+// up to SEND_HZ times a second while it moves and only while someone else is there to see it (each
+// message is billed: alone it's quiet, and sends the car as soon as someone comes); hands what the
+// room says to whoever listens (ghosts.js draws the others, friends.js the list and the party); and
+// comes back after a dropped connection.
 //
 // Events (on( type, fn )): 'status' (connecting, live...), 'party' (joined or left one), 'nearby'
 // (the switch), 'welcome' { room, you, max, players }, 'join' PLAYER, 'leave' { pid, player },
 // 'look' { pid, vehicle, look }, 'place' { pid, place }, 'away' { pid }, 'states' { at, states:
 // [ { pid, s, age } ] }, 'trick' { pid, score }, 'honk' { pid }, 'clear' (everyone's gone: a new
 // room, or the connection dropped), 'full' { max } (a party with its most already) and 'ended'
-// (why: driving with others is over for this visit).
+// (why: driving with others is over for this visit; 'budget' when it's off till midnight UTC).
 
 const NEARBY_KEY = 'world-drive.nearby';
 // Seconds to wait before connecting again after a dropped connection: the first time, the
@@ -88,11 +90,14 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 	let retryTimer = null;
 	let status = 'off';
 	// What the room has been told of this page (see tell), when anything last went, the last state
-	// sent (when, its flags, where), the budget left and the last honk.
+	// sent (when, its flags, where, whether the car was moving), the car's latest state (null without
+	// a car), the budget left and the last honk.
 	let told = null;
 	let sentAt = 0;
 	let stateAt = - Infinity;
 	let flagsSent = - 1;
+	let wasMoving = false;
+	let latest = null;
 	let tokens = BUDGET.burst;
 	let tokensAt = performance.now();
 	let honkAt = - Infinity;
@@ -188,7 +193,7 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 		ws.addEventListener( 'message', e => socket === ws && receive( e.data ) );
 		// Only the socket in use counts: one closed here on the way to another room, or the one a
 		// reconnect replaced, says nothing.
-		ws.addEventListener( 'close', e => socket === ws && closed( e.code, { opened } ) );
+		ws.addEventListener( 'close', e => socket === ws && closed( e.code, { opened, reason: e.reason } ) );
 
 	}
 
@@ -222,9 +227,10 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 
 	}
 
-	// The room's socket closed with `code`; opened: whether it ever got in (else the Worker turned
-	// it away before the room, or couldn't be reached); max: the room's most, when it was full.
-	function closed( code, { opened = true, max: most = PARTY_MAX } = {} ) {
+	// The room's socket closed with `code` and `reason`; opened: whether it ever got in (else the
+	// Worker turned it away before the room, or couldn't be reached); max: the room's most, when it
+	// was full.
+	function closed( code, { opened = true, max: most = PARTY_MAX, reason = '' } = {} ) {
 
 		socket = null;
 		const name = room;
@@ -251,7 +257,7 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 
 		} else if ( code === CLOSE.replaced ) end( 'replaced' );
 		else if ( code === CLOSE.expired ) end( 'expired' );
-		else if ( code === CLOSE.off ) end( 'off' );
+		else if ( code === CLOSE.off ) end( reason === BUDGET_SPENT ? 'budget' : 'off' );
 		else if ( code === CLOSE.protocol ) {
 
 			console.error( `World Drive: the room ${ name } turned away what this page said (close ${ code }); driving with others is off for this visit.` );
@@ -263,14 +269,15 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 
 	}
 
-	// Never let in: the Worker said no before the room (as it does to everyone while LIVE is off),
-	// or wasn't there to ask. A browser doesn't say which, so its config does: switched off is over
-	// for this visit, without a word; anything else is tried again as a dropped connection is.
+	// Never let in: the Worker said no before the room (as it does to everyone while LIVE is off, or
+	// once the day's budget is spent), or wasn't there to ask. A browser doesn't say which, so its
+	// config does: switched off is over for this visit (without a word, or with one for the budget);
+	// anything else is tried again as a dropped connection is.
 	async function turnedAway( name ) {
 
 		const config = await getConfig();
 		if ( room !== name || socket || ended ) return;
-		if ( config?.live === false ) end( 'off' );
+		if ( config?.live === false ) end( config.liveReason === BUDGET_SPENT ? 'budget' : 'off' );
 		else {
 
 			retry( name );
@@ -302,8 +309,8 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 
 	}
 
-	// Over for this visit: replaced by another tab, the visit run out, switched off, or a message the
-	// room wouldn't take.
+	// Over for this visit: replaced by another tab, the visit run out, switched off (or for the rest of
+	// the day, its budget spent), or a message the room wouldn't take.
 	function end( reason ) {
 
 		if ( ended ) return;
@@ -364,6 +371,20 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 
 	}
 
+	// The car as it is now, to a room that has just had someone come after this page had it to itself
+	// (and so had sent none): they see it at once, wherever it's got to, even with no frames coming
+	// (a tab in the background). Not on the globe: that's no car.
+	function sendState() {
+
+		if ( ! latest || away || ! isLive() ) return;
+		transmit( { t: 's', s: latest } );
+		stateAt = performance.now();
+		flagsSent = latest[ 10 ];
+		_last.set( latest[ 0 ], latest[ 1 ], latest[ 2 ] );
+		_lastQ.set( latest[ 3 ], latest[ 4 ], latest[ 5 ], latest[ 6 ] );
+
+	}
+
 	function tick() {
 
 		// Back on the globe for a minute: the area's room goes.
@@ -408,8 +429,9 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 
 			setStatus();
 			emit( 'welcome', { room, you, max, players: [ ...players.values() ] } );
-			// Anything that changed while it connected.
+			// Anything that changed while it connected, and the car if there's anyone to see it.
 			tell();
+			if ( players.size ) sendState();
 			return;
 
 		}
@@ -431,7 +453,10 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 
 			const joined = playerOf( message.player );
 			if ( ! joined ) return;
+			// The first to come since this page had the room to itself: the car, at once.
+			const first = ! players.size;
 			players.set( joined.pid, joined );
+			if ( first ) sendState();
 			emit( 'join', joined );
 
 		} else if ( t === 'leave' ) {
@@ -567,8 +592,9 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 		// one, or null (the globe, dropping in).
 		update( car ) {
 
-			if ( ended || ! car ) return;
-			const s = stateOf( car );
+			if ( ended ) return;
+			const s = car ? stateOf( car ) : null;
+			latest = s;
 			if ( ! s ) return;
 			const now = performance.now();
 			if ( now - followed >= FOLLOW_MS ) {
@@ -578,17 +604,20 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 
 			}
 
-			if ( ! isLive() ) return;
+			// Nobody else here: nothing to send (see sendState for when someone comes).
+			if ( ! isLive() || ! players.size ) return;
 			const flags = s[ 10 ];
 			_p.set( s[ 0 ], s[ 1 ], s[ 2 ] );
 			_q.set( s[ 3 ], s[ 4 ], s[ 5 ], s[ 6 ] );
 			const moving = Math.hypot( s[ 7 ], s[ 8 ], s[ 9 ] ) > STILL_SPEED || _p.distanceTo( _last ) > STILL || _q.angleTo( _lastQ ) > STILL;
 			const gap = now - stateAt;
-			const due = flags !== flagsSent ? gap >= FLAG_GAP : gap >= 1000 / ( moving ? SEND_HZ : STILL_HZ );
+			// Still, at STILL_HZ; but once more at SEND_HZ as it stops, so where it stopped goes soon.
+			const due = flags !== flagsSent ? gap >= FLAG_GAP : gap >= 1000 / ( moving || wasMoving ? SEND_HZ : STILL_HZ );
 			if ( ! due || ! spend() ) return;
 			transmit( { t: 's', s } );
 			stateAt = now;
 			flagsSent = flags;
+			wasMoving = moving;
 			_last.copy( _p );
 			_lastQ.copy( _q );
 

@@ -27,8 +27,12 @@ const TAG_RANGE = 400;
 // Within this of your car or the camera (m), a ghost is see-through, so it never blocks the view.
 const FADE_NEAR = 8;
 const FADE_OPACITY = 0.35;
-// Past the latest word of a car, it goes on at its speed for at most this long (s), then waits.
+// Past the latest word of a car, it goes on at its speed for at most this long (s), turning as it
+// was, then waits. The turn is only taken from two words at least TURN_GAP (s) apart, and goes on
+// for no more than TURN_MOST (radians).
 const EXTRAPOLATE = 0.5;
+const TURN_GAP = 0.05;
+const TURN_MOST = Math.PI / 2;
 // How long (ms) a honk's 📣 and a trick's points show.
 const HONK_SHOW = 1600;
 const POP_SHOW = 2200;
@@ -44,6 +48,10 @@ const _own = new Vector3();
 const _v = new Vector3();
 const _forward = new Vector3();
 const _tag = new Vector3();
+const _turn = new Quaternion();
+const _half = new Quaternion();
+const _axis = new Vector3();
+const _chord = new Vector3();
 const noRay = () => {};
 
 // scene: where the ghosts go; earth: the tiles' (or test globe's) group, whose matrixWorld takes
@@ -181,8 +189,8 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 	}
 
 	// Where the car was at `at`: between the two words either side of then, or past the newest, on a
-	// little at its speed. A jump of more than TELEPORT m isn't driven: it's there all at once. False
-	// with no word of it at all.
+	// little at its speed and turning as it was (see onFrom). A jump of more than TELEPORT m isn't
+	// driven: it's there all at once. False with no word of it at all.
 	function sample( ghost, at ) {
 
 		const { snaps } = ghost;
@@ -198,14 +206,15 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 
 		} else if ( ! b || b.at <= at ) {
 
-			const last = b ?? a;
-			setFrom( ghost, last, MathUtils.clamp( ( at - last.at ) / 1000, 0, EXTRAPOLATE ) );
+			const ahead = MathUtils.clamp( ( at - ( b ?? a ).at ) / 1000, 0, EXTRAPOLATE );
+			if ( b && a.p.distanceTo( b.p ) <= TELEPORT ) onFrom( ghost, a, b, ahead );
+			else setFrom( ghost, b ?? a, ahead );
 
 		} else if ( a.p.distanceTo( b.p ) > TELEPORT ) setFrom( ghost, a, 0 );
 		else {
 
 			const u = ( at - a.at ) / ( b.at - a.at );
-			ghost.p.lerpVectors( a.p, b.p, u );
+			hermite( ghost.p, a, b, u );
 			ghost.q.slerpQuaternions( a.q, b.q, u );
 			ghost.v.lerpVectors( a.v, b.v, u );
 			ghost.flags = a.flags;
@@ -216,12 +225,53 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 
 	}
 
+	// Where a car was `u` of the way from word `a` to word `b`: a cubic Hermite curve through both
+	// positions, leaving the first and arriving at the second at their velocities (Earth-centred
+	// m/s, over the time between them). Words come a fifth of a second apart, and a car turning in
+	// that time doesn't go in a straight line from one to the next; this rounds the corner as it
+	// did. In the form p0 + h01 (p1 - p0) + ..., so the Earth-centred millions of metres cancel
+	// before anything is scaled.
+	function hermite( target, a, b, u ) {
+
+		const dt = ( b.at - a.at ) / 1000;
+		const u2 = u * u;
+		const u3 = u2 * u;
+		target.subVectors( b.p, a.p ).multiplyScalar( 3 * u2 - 2 * u3 ).add( a.p )
+			.addScaledVector( a.v, ( u3 - 2 * u2 + u ) * dt )
+			.addScaledVector( b.v, ( u3 - u2 ) * dt );
+
+	}
+
 	function setFrom( ghost, snap, ahead ) {
 
 		ghost.p.copy( snap.p ).addScaledVector( snap.v, ahead );
 		ghost.q.copy( snap.q );
 		ghost.v.copy( snap.v );
 		ghost.flags = snap.flags;
+
+	}
+
+	// `ahead` s on from word `b`, turning as the car did from `a` to `b`: a word that's late (the
+	// room holds a state back for up to one more from its car, see its flush) would otherwise leave
+	// it going straight on, still facing the way it last did, while the car it stands for rounds a
+	// bend. Along the arc: its velocity turned half as far, as the chord of a steady turn goes.
+	function onFrom( ghost, a, b, ahead ) {
+
+		setFrom( ghost, b, ahead );
+		const dt = ( b.at - a.at ) / 1000;
+		if ( ahead <= 0 || dt < TURN_GAP ) return;
+		// The turn from a to b, in the Earth-centred frame, the short way round.
+		_turn.copy( a.q ).invert().premultiply( b.q );
+		if ( _turn.w < 0 ) _turn.set( - _turn.x, - _turn.y, - _turn.z, - _turn.w );
+		const angle = 2 * Math.acos( Math.min( 1, _turn.w ) );
+		if ( angle < 1e-4 ) return;
+		_axis.set( _turn.x, _turn.y, _turn.z ).normalize();
+		const on = Math.min( angle * ahead / dt, TURN_MOST );
+		_turn.setFromAxisAngle( _axis, on );
+		_half.setFromAxisAngle( _axis, on / 2 );
+		ghost.q.premultiply( _turn );
+		ghost.p.copy( b.p ).addScaledVector( _chord.copy( b.v ).applyQuaternion( _half ), ahead );
+		ghost.v.applyQuaternion( _turn );
 
 	}
 

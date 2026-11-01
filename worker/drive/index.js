@@ -7,7 +7,8 @@ import { addressOf, clock, googleClientId, setting } from './settings.js';
 import { makeVisit } from './visits.js';
 import { currentAccount, getMe, linkPlayer, signIn, signOut } from './accounts.js';
 import { isSupporter, stripeWebhook } from './supporter.js';
-import { live } from './live.js';
+import { live, liveToday } from './live.js';
+import { BUDGET_SPENT } from '../../src/drive-app/live-protocol.js';
 
 export { DriveLimits } from './limits.js';
 export { DriveRoom } from './live.js';
@@ -37,6 +38,8 @@ export { DriveRoom } from './live.js';
 //   DB                    the D1 database binding: the leaderboard's and the accounts' tables
 //                         (worker/drive/migrations)
 //   LIVE                  'off' switches driving with others off (anything else, or unset, is on)
+//   LIVE_DAILY_BUDGET     the Durable Object requests a day driving with others may use (40000 if
+//                         unset), then it's off till midnight UTC (see live.js); 0 is off
 //   LIVE_PARTY_MAX, LIVE_NEARBY_MAX   the most in a party (8 if unset) and in an area's room (20)
 //   ROOMS                 the Durable Object binding for the rooms (DriveRoom, live.js)
 //   TURNSTILE_VERIFY_URL, SEARCH_UPSTREAM, TEST_CLOCK, GOOGLE_JWKS_URL   tests only (see
@@ -114,10 +117,16 @@ export default {
 
 // What the page needs before it starts: the Turnstile site key, whether there are maps today
 // (without a key it shows a "back soon" screen instead of the globe), the sign-in button's client
-// id ('' when there's no signing in, see accounts.js), and whether driving with others is on.
-function getConfig( { env } ) {
+// id ('' when there's no signing in, see accounts.js), and whether driving with others is on, with
+// liveReason: BUDGET_SPENT when it's off for the rest of the day (its budget, see live.js). If
+// DriveLimits can't say, it's off.
+async function getConfig( { env, limits, now } ) {
 
-	return json( { turnstileSiteKey: env.TURNSTILE_SITE_KEY ?? '', mapsOn: !! mapsKey( env ), googleClientId: googleClientId( env ), live: env.LIVE !== 'off' } );
+	const today = await liveToday( { env, limits, now } );
+	return json( {
+		turnstileSiteKey: env.TURNSTILE_SITE_KEY ?? '', mapsOn: !! mapsKey( env ), googleClientId: googleClientId( env ), live: today.open,
+		...( today.reason === BUDGET_SPENT ? { liveReason: BUDGET_SPENT } : {} ),
+	} );
 
 }
 

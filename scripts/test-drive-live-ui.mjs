@@ -2,8 +2,8 @@
 // in real browser pages on the test pad (the Vite dev server, no Maps key), talking to the real
 // Worker's rooms (worker/drive/live.js under `wrangler dev`, LIVE on) through the dev server's
 // proxy, two to four pages at once. Two drivers dropping in at the same spot share the area's room
-// and see each other's ghost: following the other car a quarter of a second behind, within half a
-// metre or so, facing its way; its flame as it boosts; parked when it pauses; gone when it goes
+// and see each other's ghost: following the other car INTERP_MS behind, within a few tens of
+// centimetres, facing its way; its flame as it boosts; parked when it pauses; gone when it goes
 // back to the globe and back when it drops in again; another ride and paint when it changes; its
 // name from the leaderboard and ⭐ over it, a name with HTML in it shown as text; driven straight
 // through without a bump, see-through up close; its honk and its trick's points over it; and
@@ -14,7 +14,10 @@
 // full area's next shard, a busy one, a dropped connection coming back, another tab taking over, a
 // visit run out, a touch screen's list and horn, the room following the car into another area,
 // only the page's own origin through the proxy, and the Worker restarted with LIVE off: open pages
-// stop without a word and new ones show nothing of it, driving as ever.
+// stop without a word and new ones show nothing of it, driving as ever. Alone in its room a page
+// sends no states, and a driver joining sees it at once; the ghost following is measured at
+// SEND_HZ. The day's budget spent (the Worker with a small LIVE_DAILY_BUDGET): a page turned away
+// says so once and shows nothing more of it, a party's link says why, and both drive as ever.
 //
 // Visit tokens are made here with Turnstile's documented test secret, as /api/visit makes them
 // (the test pad has no visit of its own: main.js's dev-only seam hands each page one). The
@@ -33,7 +36,7 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { WebSocket } from 'ws';
-import { FLAGS, INTERP_MS, NEARBY_SHARDS, PARTY_MAX, PROTOCOL, cellOf, parseRoom, shardOf } from '../src/drive-app/live-protocol.js';
+import { FLAGS, INTERP_MS, NEARBY_SHARDS, PARTY_MAX, PROTOCOL, SEND_HZ, cellOf, parseRoom, shardOf } from '../src/drive-app/live-protocol.js';
 import { makeVisit } from '../worker/drive/visits.js';
 import { startVite, startWorker } from './worker-harness.mjs';
 
@@ -195,7 +198,8 @@ async function restartWorker( vars ) {
 
 // A page on the test pad's globe, handed `token` for driving with others (main.js's test seam,
 // the dev server's only), with the leaderboard's `player` if any, boost pads off. rooms: the room
-// of each connection it opens to one, in order.
+// of each connection it opens to one, in order; sent: what it has sent the rooms, { at, t } (t a
+// message's type, or a keepalive's text), as Playwright saw each frame go.
 async function livePage( { token, player = null, path = '/', touch = false } ) {
 
 	const viewport = touch ? { width: 390, height: 760 } : { width: 900, height: 560 };
@@ -211,6 +215,7 @@ async function livePage( { token, player = null, path = '/', touch = false } ) {
 	page.token = token;
 	page.errors = [];
 	page.rooms = [];
+	page.sent = [];
 	page.on( 'pageerror', err => page.errors.push( err.message ) );
 	// Console errors too, but for requests blocked here, a socket hung up on while still connecting
 	// (switching rooms) and one the Worker turns away at the door (switched off), which the browser
@@ -220,7 +225,24 @@ async function livePage( { token, player = null, path = '/', touch = false } ) {
 
 		// (Not the dev server's own, for reloading the page as code changes.)
 		const url = new URL( ws.url() );
-		if ( url.pathname === '/api/live' ) page.rooms.push( url.searchParams.get( 'room' ) );
+		if ( url.pathname !== '/api/live' ) return;
+		page.rooms.push( url.searchParams.get( 'room' ) );
+		ws.on( 'framesent', ( { payload } ) => {
+
+			let t = String( payload );
+			try {
+
+				t = JSON.parse( t ).t;
+
+			} catch {
+
+				// The keepalive's plain text.
+
+			}
+
+			page.sent.push( { at: Date.now(), t } );
+
+		} );
 
 	} );
 	await page.route( /^https?:\/\/(?!127\.0\.0\.1)/, route => route.abort() );
@@ -284,6 +306,8 @@ function whereAll( page ) {
 }
 
 const distance = ( a, b ) => Math.hypot( a[ 0 ] - b[ 0 ], a[ 1 ] - b[ 1 ], a[ 2 ] - b[ 2 ] );
+// When a page sent its car ('s'), from `since` (ms) on.
+const statesSent = ( page, since = 0 ) => page.sent.filter( frame => frame.t === 's' && frame.at >= since ).map( frame => frame.at );
 
 async function shot( page, name ) {
 
@@ -315,24 +339,41 @@ describe( 'World Drive, driving with others', () => {
 
 	} );
 
-	test( 'two drivers dropping in at the same spot share its area and see each other', async () => {
+	test( 'alone, a driver sends no states; a second dropping in at the same spot shares its area and sees the first at once', async () => {
 
 		// On the globe, out of a party, nothing's connected yet.
 		assert.deepEqual( await live( a ), { status: 'off', room: null, party: null, you: null, others: [] } );
 		assert.ok( await a.locator( '#globe-ui .friends' ).isVisible(), 'no "Drive with friends" on the globe' );
 		assert.ok( await a.locator( '#globe-ui .friends .invite' ).isVisible() );
 		assert.ok( await a.locator( '#globe-ui .friends input[type=checkbox]' ).isChecked(), 'nearby isn\'t on to begin with' );
-		await Promise.all( [ dropIn( a ), dropIn( b ) ] );
-		await Promise.all( [ waitLive( a, cell ), waitLive( b, cell ) ] );
+		// A drops in first, alone in the area's room: its car is for nobody, so none of it is sent.
+		await dropIn( a );
+		await waitLive( a, cell );
 		await placeCar( a, 0, 0, 0 );
+		await a.evaluate( () => window.drive.driver.press( 'KeyW' ) );
+		await a.waitForTimeout( 1200 );
+		await a.evaluate( () => window.drive.driver.release( 'KeyW' ) );
+		await a.waitForTimeout( 1300 );
+		assert.deepEqual( statesSent( a ), [], 'A sent its car to an empty room' );
+		assert.ok( a.sent.some( frame => frame.t === 'hello' ) );
+		await placeCar( a, 0, 0, 0 );
+		// B drops in: A sends its car as it hears B join, and B draws it straight away.
+		const quiet = Date.now();
+		await dropIn( b );
+		await waitLive( b, cell );
+		const welcomed = Date.now();
 		await placeCar( b, 4, - 14, 0 );
 		await b.waitForFunction( () => window.drive.ghosts.list().some( g => g.visible ), null, { timeout: 30000 } );
-		const seen = await ghosts( b );
-		assert.equal( seen.length, 1 );
-		assert.equal( seen[ 0 ].vehicle, 'go-kart' );
+		const seen = Date.now() - welcomed;
+		console.log( `    A's ghost on B: ${ seen } ms after B was in` );
+		assert.ok( seen < 1500, `B first drew A ${ seen } ms after it was in` );
+		assert.ok( statesSent( a, quiet ).length >= 1 );
+		const drawn = await ghosts( b );
+		assert.equal( drawn.length, 1 );
+		assert.equal( drawn[ 0 ].vehicle, 'go-kart' );
 		// The names are the leaderboard's, looked up by the room: Ana has the pass; Bo's name has
 		// HTML in it, which is only ever text.
-		assert.equal( seen[ 0 ].label, 'Ana⭐' );
+		assert.equal( drawn[ 0 ].label, 'Ana⭐' );
 		const label = await a.waitForFunction( () => window.drive.ghosts.list()[ 0 ]?.tag.querySelector( '.label' ).textContent );
 		assert.equal( await label.jsonValue(), BO_SAYS );
 		assert.equal( await a.evaluate( () => document.querySelectorAll( '#live-tags img, #live-tags .label b b' ).length ), 0 );
@@ -367,7 +408,7 @@ describe( 'World Drive, driving with others', () => {
 
 	} );
 
-	test( 'A drives: B\'s ghost follows a quarter of a second behind, within half a metre or so, facing its way', async () => {
+	test( 'A drives: B\'s ghost follows INTERP_MS behind, within a few tens of centimetres, facing its way; A sends SEND_HZ a second', async () => {
 
 		// Where A really is, each frame as it's sent, and where B draws it, each frame as it's drawn
 		// (both Earth-centred, on the shared clock).
@@ -472,9 +513,16 @@ describe( 'World Drive, driving with others', () => {
 		console.log( `    ghost following: ${ summary }` );
 		assert.ok( errors.length >= 8, `too few frames to tell: ${ summary }` );
 		// (Each state comes with how long the room held it, so the error is the drawing's, not the
-		// batching's: a few tens of centimetres at 15 to 25 m/s.)
-		assert.ok( at( errors, 0.5 ) < 0.5 && at( errors, 0.9 ) < 1, summary );
+		// batching's: words a fifth of a second apart, curved between with their velocities, a few
+		// tens of centimetres at 15 to 25 m/s.)
+		assert.ok( at( errors, 0.5 ) < 0.3 && errors.at( - 1 ) < 1, summary );
 		assert.ok( at( turns, 0.5 ) < 3 && turns.at( - 1 ) < 8, summary );
+		// A sent its car SEND_HZ times a second as it drove (a little less, a frame late each time;
+		// more only as what it's doing changes).
+		const sent = statesSent( a, started + 500 ).filter( time => time < started + 3000 );
+		const gaps = sent.slice( 1 ).map( ( time, i ) => time - sent[ i ] ).sort( ( x, y ) => x - y );
+		console.log( `    A sent ${ sent.length } states in 2.5 s, ${ at( gaps, 0.5 ) } ms apart (median)` );
+		assert.ok( at( gaps, 0.5 ) >= 1000 / SEND_HZ - 30 && sent.length <= 2.5 * SEND_HZ + 4, `${ sent.length } states, ${ at( gaps, 0.5 ) } ms apart` );
 
 		// Stopped: there, to a few centimetres.
 		await a.evaluate( () => Object.assign( window.drive.driver, { speed: 0 } ) );
@@ -1113,6 +1161,60 @@ describe( 'World Drive, driving with others switched off on the Worker', () => {
 		await fresh.evaluate( () => window.drive.driver.release( 'KeyW' ) );
 		assert.deepEqual( fresh.errors, [] );
 		await fresh.context().close();
+
+	} );
+
+} );
+
+describe( 'World Drive, the day\'s budget for driving with others spent', () => {
+
+	test( 'turned away for the budget: a toast once that it\'s back after midnight UTC, none of it shows, and driving goes on; a party\'s link on a new page says why', async () => {
+
+		// The Worker again (LIVE on) with a budget of 40 Durable Object requests a day, most of which
+		// this test then spends by asking, as page loads do.
+		const toast = 'Lots of drivers today: driving with others is back after midnight UTC.';
+		await restartWorker( { LIVE_DAILY_BUDGET: '40' } );
+		const page = await livePage( { token: await visitToken() } );
+		assert.ok( await page.locator( '#globe-ui .friends' ).isVisible() );
+		let asks = 0;
+		while ( asks < 50 && ( await ( await fetch( `${ BASE }/api/config` ) ).json() ).live ) asks ++;
+		assert.ok( asks < 40, `${ asks } asks were open` );
+		// Dropping in, the page connects to the area's room and is turned away: it asks why, and stops.
+		await dropIn( page );
+		await page.waitForFunction( () => window.drive.live.ended === 'budget', null, { timeout: 30000 } );
+		await page.locator( '#toast', { hasText: toast } ).waitFor();
+		assert.equal( await page.locator( '#drive-ui .live-chip' ).isHidden(), true );
+		assert.equal( await page.locator( '#drive-ui .live-key' ).isHidden(), true );
+		assert.equal( await page.locator( '#pause .friends' ).isHidden(), true );
+		await page.evaluate( () => window.drive.driver.press( 'KeyW' ) );
+		await page.waitForFunction( () => window.drive.driver.speed > 2 );
+		await page.evaluate( () => window.drive.driver.release( 'KeyW' ) );
+		// Back on the globe and in again: nothing more of it, nor another toast.
+		await page.locator( '#drive-ui .to-globe' ).click();
+		await page.waitForFunction( () => window.drive.mode === 'globe' );
+		assert.equal( await page.locator( '#globe-ui .friends' ).isHidden(), true );
+		await page.evaluate( () => document.getElementById( 'toast' ).textContent = '' );
+		await dropIn( page );
+		await page.waitForTimeout( 1500 );
+		assert.doesNotMatch( await page.locator( '#toast' ).textContent(), /others/ );
+		assert.ok( page.rooms.length <= 1, JSON.stringify( page.rooms ) );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+		// A friend opening a party's link now: told why nothing comes of it, and drives alone.
+		const friend = await livePage( { token: await visitToken(), path: '/?party=ABCDEFG' } );
+		assert.equal( await friend.evaluate( () => window.drive.live ), null );
+		await friend.locator( '#toast', { hasText: toast } ).waitFor();
+		assert.equal( await friend.locator( '#globe-ui .friends' ).isHidden(), true );
+		assert.equal( await friend.locator( '#globe-ui .party-banner' ).isHidden(), true );
+		await dropIn( friend );
+		assert.equal( await friend.locator( '#drive-ui .live-chip' ).isHidden(), true );
+		await friend.evaluate( () => window.drive.driver.press( 'KeyW' ) );
+		await friend.waitForFunction( () => window.drive.driver.speed > 2 );
+		await friend.evaluate( () => window.drive.driver.release( 'KeyW' ) );
+		assert.deepEqual( friend.rooms, [] );
+		assert.deepEqual( friend.errors, [] );
+		await friend.context().close();
 
 	} );
 

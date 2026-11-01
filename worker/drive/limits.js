@@ -2,12 +2,13 @@ import { DurableObject } from 'cloudflare:workers';
 import { sha256Hex } from '../http.js';
 
 // One of these for everyone (named "global", see index.js): it counts the day's visits, in all and
-// per visitor, and the leaderboard's new names and scores per visitor, and spaces out the searches
-// sent on to OpenStreetMap. A Durable Object handles one call at a time, and each check-and-count
-// below runs in one go with nothing in between, so two visits arriving together can't both take
-// the last drive of the day. Counts are kept in its SQLite storage (on every plan, the free one
-// too), so a restart doesn't hand out a fresh day. A day runs from midnight UTC; when a new one
-// starts, the days before it are deleted.
+// per visitor, the leaderboard's new names and scores per visitor, and what driving with others has
+// spent of its budget (liveOpen, liveSpent), and spaces out the searches sent on to OpenStreetMap.
+// A Durable Object handles one call at a time, and each check-and-count below runs in one go with
+// nothing in between, so two visits arriving together can't both take the last drive of the day.
+// Counts are kept in its SQLite storage (on every plan, the free one too), so a restart doesn't
+// hand out a fresh day. A day runs from midnight UTC; when a new one starts, the days before it are
+// deleted.
 
 const DAY = 24 * 60 * 60 * 1000;
 // OpenStreetMap's Nominatim allows an application one request a second, from everyone together.
@@ -28,6 +29,9 @@ export class DriveLimits extends DurableObject {
 		this.sql.exec( 'CREATE TABLE IF NOT EXISTS visitors ( day TEXT NOT NULL, visitor TEXT NOT NULL, visits INTEGER NOT NULL, PRIMARY KEY ( day, visitor ) )' );
 		// The leaderboard's turns (see take): how many of each kind each visitor has had today.
 		this.sql.exec( 'CREATE TABLE IF NOT EXISTS turns ( day TEXT NOT NULL, kind TEXT NOT NULL, visitor TEXT NOT NULL, count INTEGER NOT NULL, PRIMARY KEY ( day, kind, visitor ) )' );
+		// Driving with others' spend each day, in billed Durable Object requests (worker/drive/live.js
+		// counts them): a fraction, as incoming WebSocket messages are billed 20 to a request.
+		this.sql.exec( 'CREATE TABLE IF NOT EXISTS live ( day TEXT PRIMARY KEY, spent REAL NOT NULL )' );
 		// When the next search may go out (ms). Only in memory: if this object is put to sleep,
 		// more than a second has gone by anyway.
 		this.nextSearch = 0;
@@ -79,6 +83,32 @@ export class DriveLimits extends DurableObject {
 
 	}
 
+	// Driving with others, asked at `now` whether it's open today: { open, spent }, open while what
+	// it has spent today (billed requests) is under `budget`. The Worker asks on each connection to
+	// a room and for /api/config; each ask is a Durable Object request itself, so it counts as one.
+	liveOpen( { now, budget } ) {
+
+		return this.liveSpent( 1, { now, budget } );
+
+	}
+
+	// A room adding the `amount` (billed requests) it has spent since it last said, at `now`:
+	// { open, spent } with today's spend after it. Not open, the room closes everyone in it.
+	liveSpent( amount, { now, budget } ) {
+
+		const day = dayOf( now );
+		this.saltFor( day );
+		const add = Number.isFinite( amount ) && amount > 0 ? amount : 0;
+		return this.ctx.storage.transactionSync( () => {
+
+			this.sql.exec( 'INSERT INTO live ( day, spent ) VALUES ( ?, ? ) ON CONFLICT ( day ) DO UPDATE SET spent = spent + excluded.spent', day, add );
+			const spent = this.sql.exec( 'SELECT spent FROM live WHERE day = ?', day ).one().spent;
+			return { open: spent < budget, spent };
+
+		} );
+
+	}
+
 	// When a search may go on to OpenStreetMap: { wait } in ms (0 for straight away), with that
 	// turn now taken, or { busy: true, retryAfter } in seconds when the queue is already full.
 	searchSlot() {
@@ -101,6 +131,7 @@ export class DriveLimits extends DurableObject {
 
 			this.sql.exec( 'DELETE FROM visitors WHERE day < ?', day );
 			this.sql.exec( 'DELETE FROM turns WHERE day < ?', day );
+			this.sql.exec( 'DELETE FROM live WHERE day < ?', day );
 			this.sql.exec( 'DELETE FROM days WHERE day < ?', day );
 			this.sql.exec( 'INSERT OR IGNORE INTO days ( day, salt ) VALUES ( ?, ? )', day, salt );
 
@@ -119,7 +150,7 @@ function untilMidnight( now ) {
 }
 
 // The UTC date, e.g. 2026-10-30.
-function dayOf( time ) {
+export function dayOf( time ) {
 
 	return new Date( time ).toISOString().slice( 0, 10 );
 

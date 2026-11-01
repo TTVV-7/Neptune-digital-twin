@@ -492,7 +492,9 @@ a ghost car you pass straight through, with their nickname, ride and Garage pain
 friends** makes a party link (`/?party=CODE`) that brings friends to you anywhere on Earth, and
 **H** honks. No chat, and nobody sees more of you than your car in the game. Each room is a Durable
 Object on the WebSocket Hibernation API (`worker/drive/live.js`, speaking
-`src/drive-app/live-protocol.js`), and `LIVE` in `wrangler.drive.jsonc` switches it all off (see
+`src/drive-app/live-protocol.js`). It switches itself off for the rest of the UTC day once it has
+used its daily budget of Durable Object requests (`LIVE_DAILY_BUDGET`), so it can't use up what the
+visits need, and `LIVE` in `wrangler.drive.jsonc` switches it all off (see
 [Driving with others](docs/world-drive.md#driving-with-others), with what it costs).
 
 World Drive's cars are models from Sketchfab (CC BY, credited in its About box and ride picker),
