@@ -799,8 +799,9 @@ account the player is linked to, never anything the page says.
   goes after 5 s (10 with the word on nicknames below), or stays while the pointer's on its buttons,
   and only its buttons catch clicks: it shows in the middle of a drive. One that comes on the globe
   shows as the next drive starts, and one showing goes as the drive pauses. The others in the room
-  see the new level by your name once the Worker has it (the page says hello to the room again). Without a nickname, the first says "Pick a nickname to save your progress", once
-  (only where a nickname can be picked: a drive on Google's map).
+  see the new level by your name once the Worker has it (the page says hello to the room again).
+  Without a nickname, the first says "Pick a nickname to save your progress", once (only where a
+  nickname can be picked: a drive on Google's map).
 - **The globe's panel**: a profile card under the search: your nickname (or "You"), the level badge
   (its ring steel, then bronze at 10, silver at 20, gold at 30, platinum at 40 and rainbow at 50),
   "Lv 9 · Drifter", the bar to the next level, "Next: Racing stripes at Lv 9", a **Title** picker
