@@ -49,8 +49,8 @@ const PARTS = [
 
 // vehicles: from loadVehicles(). panel: the globe's panel (for the ride picked there). models: the
 // world's ModelManager, whose loader loads the trucks for the turntable. current(): the ride being
-// driven, { entry, vehicle }, or null.
-export function setUpGarage( { vehicles, panel, models, current } ) {
+// driven, { entry, vehicle }, or null. onLook(): the ride being driven has a new look on.
+export function setUpGarage( { vehicles, panel, models, current, onLook = () => {} } ) {
 
 	const dialog = build();
 	const canvas = dialog.querySelector( 'canvas' );
@@ -182,7 +182,13 @@ export function setUpGarage( { vehicles, panel, models, current } ) {
 		preview?.wear( vehicle, shown() );
 		if ( SHOWN_OFF.includes( part ) ) preview?.boost();
 		const ride = current();
-		if ( ride?.vehicle.id === vehicle.id ) applyLook( ride.entry.pivot, lookFor( vehicle, isPro() ), vehicle );
+		if ( ride?.vehicle.id === vehicle.id ) {
+
+			applyLook( ride.entry.pivot, lookFor( vehicle, isPro() ), vehicle );
+			onLook();
+
+		}
+
 		recolourIcons();
 
 	}

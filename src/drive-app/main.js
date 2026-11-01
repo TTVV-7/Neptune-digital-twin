@@ -1,5 +1,5 @@
 import './style.css';
-import { Color, MathUtils, Matrix4, PerspectiveCamera, Scene, Timer, Vector3, WebGLRenderer } from 'three';
+import { Color, MathUtils, Matrix4, PerspectiveCamera, Quaternion, Scene, Timer, Vector3, WebGLRenderer } from 'three';
 import { addLights, createGoogleTiles, createPlaceholderGround, recentreTiles } from '../world.js';
 import { ModelManager } from '../models.js';
 import { Driver } from '../drive.js';
@@ -11,7 +11,7 @@ import { getConfig, startVisit } from './api.js';
 import { GlobeView } from './globe.js';
 import { Ground } from './spawn.js';
 import { createTestGlobe, placeEarth } from './test-globe.js';
-import { loadVehicle, loadVehicles, specOf } from './vehicles.js';
+import { loadVehicle, loadVehicles, lookOf, specOf } from './vehicles.js';
 import { setUpPanel } from './panel.js';
 import { setUpGarage } from './garage.js';
 import { createBoostPads } from './pads.js';
@@ -20,6 +20,10 @@ import { setUpLeaderboard } from './leaderboard.js';
 import { buyArea } from './pass.js';
 import { fillAccountArea, fillBuyArea, linkPlayer, setUpSupporter } from './supporter.js';
 import { formatLatLon, rememberPlace } from './places.js';
+import { createLive, flagsOf, velocityOf } from './live.js';
+import { createGhosts } from './ghosts.js';
+import { BUDGET_TOAST, setUpFriends } from './friends.js';
+import { BUDGET_SPENT, cleanPartyCode } from './live-protocol.js';
 import * as screens from './screens.js';
 
 // World Drive (worlddrive.app, docs/world-drive.md): pick anywhere on Earth from a globe of
@@ -53,11 +57,24 @@ const PIN_CARD = 84;
 // What a place's name may hold on the leaderboard (as worker/drive/names.js takes it), and how long.
 const PLACE_TEXT = /[^\p{L}\p{M}\p{N} .,'’\-#&/()°]+/gu;
 const PLACE_LENGTH = 60;
+// Driving with others: "Go to" someone this near (m) drives you to them in this scene; farther
+// off, it's a drop-in where they are. Either way you start this far (m) to their side.
+const GO_NEAR = 10000;
+const GO_BESIDE = 5;
+// Only the dev server: a test (scripts/test-drive-live-ui.mjs) can hand the page a visit's token,
+// { visit }, for driving with others on the test pad, which has no visit of its own. Whether it's
+// on is still the Worker's to say. import.meta.env.DEV is false in the build, so the built site has
+// no such way in.
+const LIVE_TEST = import.meta.env.DEV ? window.worldDriveLiveTest ?? null : null;
 
 const $ = id => document.getElementById( id );
 const frame = () => new Promise( resolve => requestAnimationFrame( resolve ) );
 const _p = new Vector3();
 const _inverse = new Matrix4();
+const _q = new Quaternion();
+const _side = new Vector3();
+const _ahead = new Vector3();
+const _velocity = new Vector3();
 
 boot();
 
@@ -67,7 +84,7 @@ async function boot() {
 	const config = await getConfig();
 	// The Vite dev server on its own: a key from the environment, or the test globe.
 	if ( ! config ) return start( { key: DEV_KEY || null, worker: false } );
-	if ( ! config.mapsOn ) return screens.notice( 'resting', { onTestPad: () => start( { key: null, googleClientId: config.googleClientId } ) } );
+	if ( ! config.mapsOn ) return screens.notice( 'resting', { onTestPad: () => start( { key: null, googleClientId: config.googleClientId, live: !! config.live, liveReason: config.liveReason } ) } );
 	visit( config );
 
 }
@@ -77,7 +94,7 @@ async function visit( config ) {
 
 	screens.splash( 'Checking the road is clear...' );
 	const outcome = await startVisit( config.turnstileSiteKey, $( 'robot-check' ) );
-	if ( outcome.key ) return start( { key: outcome.key, left: outcome.left, visit: outcome.visit, googleClientId: config.googleClientId } );
+	if ( outcome.key ) return start( { key: outcome.key, left: outcome.left, visit: outcome.visit, googleClientId: config.googleClientId, live: !! config.live, liveReason: config.liveReason } );
 	if ( outcome.usedUp ) return usedUp( config, outcome );
 	if ( outcome.robot ) return screens.notice( 'robot', { onRetry: () => visit( config ) } );
 	screens.notice( 'error', { message: outcome.error, onRetry: () => visit( config ) } );
@@ -110,8 +127,10 @@ function usedUp( config, { retryAfter, reason } ) {
 
 // key: the Maps key (none: the test globe and pad); left: free drives left today; visit: the
 // visit's token, for posting scores; worker: whether there's a Worker (not on the dev server alone);
-// googleClientId: the sign-in button's, for the Supporter Pass ('' when there's no signing in).
-async function start( { key, left = null, visit = null, worker = true, googleClientId = '' } ) {
+// googleClientId: the sign-in button's, for the Supporter Pass ('' when there's no signing in);
+// live: whether the Worker has driving with others on (its /api/config says), and liveReason why
+// not when it's off for the rest of the day.
+async function start( { key, left = null, visit = null, worker = true, googleClientId = '', live: liveOn = false, liveReason = '' } ) {
 
 	const vehicles = await loadVehicles();
 	screens.hideSplash();
@@ -177,7 +196,12 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 	const driver = new Driver( {
 		camera, models, controls: walker, getColliders: grounds, hud, onStop: stopped,
 		// Each landed jump, for the leaderboard: where, and in what.
-		onScore: run => board.onScore( { ...run, place: placeLabel( state.place ), vehicle: state.vehicle?.id } ),
+		onScore: run => {
+
+			board.onScore( { ...run, place: placeLabel( state.place ), vehicle: state.vehicle?.id } );
+			landed( run );
+
+		},
 		// What World Drive drives with: F flies, Shift (or B) boosts, the kart drifts, hitting something
 		// throws you into the air for stunts, and driving into water is a splash.
 		fly: true, booster: true, drift: true, crash: 'launch', water,
@@ -212,7 +236,10 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 	panel.vehiclePicker( $( 'pause' ).querySelector( '.vehicles' ), vehicle => swapVehicle( vehicle ) );
 	globe.onPick = place => pinAt( { ...place, name: 'Dropped pin', region: '' } );
 	// The Garage and the Supporter Pass, by both ride pickers (garage.js, pass.js).
-	const garage = setUpGarage( { vehicles, panel, models, current: () => state.entry && { entry: state.entry, vehicle: state.vehicle } } );
+	const garage = setUpGarage( {
+		vehicles, panel, models, current: () => state.entry && { entry: state.entry, vehicle: state.vehicle },
+		onLook: () => live?.setRide( state.vehicle.id, lookOf( state.vehicle ) ),
+	} );
 
 	// The leaderboard, from the trophy on the globe and in the pause menu. "Only here" is the place
 	// being driven, or on the globe the one pinned.
@@ -223,6 +250,7 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 		worker,
 		getPlace: () => placeLabel( state.mode === 'globe' ? panel.pinned : state.place ),
 		onPlayer: () => linkPlayer(),
+		onName: () => live?.rehello(),
 	} );
 	board.setVisit( visit );
 	for ( const button of document.querySelectorAll( '.board-open' ) ) {
@@ -254,6 +282,27 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 	} ) );
 	$( 'globe-ui' ).querySelector( '.about-open' ).addEventListener( 'click', () => about.showModal() );
 	if ( left !== null && left <= 2 ) screens.toast( left === 0 ? 'This is your last free drive today.' : `${ left } more free drive${ left === 1 ? '' : 's' } today after this one.` );
+
+	// Driving with others (live.js, ghosts.js, friends.js): only when the Worker has it on and this
+	// visit has a token to show the room. Without it, nothing of it is made. When the Worker couldn't
+	// say ('unknown': DriveLimits didn't answer, as for a few minutes after a deploy while it still
+	// runs its old code) it's made anyway: turned away at the door, it tries again as a dropped
+	// connection does, so the visit isn't left without it for hours over a moment's hiccup.
+	const liveVisit = LIVE_TEST?.visit ?? visit;
+	const live = ( liveOn || liveReason === 'unknown' ) && typeof liveVisit === 'string' && liveVisit
+		? createLive( { earth, ellipsoid, visit: liveVisit, player: () => board.player, ride: { vehicle: panel.vehicle.id, look: lookOf( panel.vehicle ) } } )
+		: null;
+	const ghosts = live && createGhosts( { scene, earth, camera, vehicles, loader: models.loader, live, tags: $( 'live-tags' ), own: () => state.entry?.pivot ?? null } );
+	const friends = live && setUpFriends( { live, ghosts, vehicles, mode: () => state.mode, goTo } );
+	// A party's link (?party=CODE): its room, from the globe on. With driving with others off for
+	// the rest of the day (its budget spent), a word on why nothing comes of the link.
+	const partyCode = cleanPartyCode( new URLSearchParams( location.search ).get( 'party' ) );
+	if ( friends && partyCode ) friends.joinParty( partyCode );
+	else if ( partyCode && liveReason === BUDGET_SPENT ) screens.toast( BUDGET_TOAST, 10000 );
+	// The points of each landed jump: the run's score less what it was at the last, in this ride at
+	// this place (a run of its own, see drive.js).
+	let runScore = 0;
+	let runEntry = null;
 
 	// How far above the middle of the view a pin flown to should show (see GlobeView.lifted): on a
 	// phone the panel is a sheet along the bottom with the pin's card over it, so the pin goes in the
@@ -403,6 +452,8 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 		state.vehicle = vehicle;
 		screens.hideLoading();
 		drive();
+		live?.setRide( vehicle.id, lookOf( vehicle ) );
+		live?.setPlace( { name: placeLabel( state.place ), lat, lon, height } );
 		// The keys, on a keyboard; a touch screen has its labelled buttons instead.
 		if ( ! document.body.classList.contains( 'touch' ) ) screens.showKeys();
 
@@ -486,6 +537,7 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 			models.remove( old );
 			state.entry = entry;
 			state.vehicle = vehicle;
+			live?.setRide( vehicle.id, lookOf( vehicle ) );
 			resume();
 
 		} catch ( err ) {
@@ -520,8 +572,109 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 		screens.hideKeys();
 		globe.cancelFlight();
 		setMode( 'globe' );
+		live?.setAway();
 		const { lat, lon } = state.place ?? globe.pose();
 		globe.flyTo( globe.orbit( lat, lon ) );
+
+	}
+
+	// --- driving with others ---
+
+	// A landed jump's points, for the others to see over your car.
+	function landed( run ) {
+
+		if ( state.entry !== runEntry ) {
+
+			runEntry = state.entry;
+			runScore = 0;
+
+		}
+
+		const gained = run.score - runScore;
+		runScore = run.score;
+		if ( gained >= 1 ) live?.trick( gained );
+
+	}
+
+	// The car, for live.js to send: where it is, how fast it's going and what it's doing.
+	function car() {
+
+		if ( ( state.mode !== 'driving' && state.mode !== 'paused' ) || ! state.entry ) return null;
+		return { pivot: state.entry.pivot, velocity: velocityOf( driver, _velocity ), flags: flagsOf( driver, state.mode === 'paused' ) };
+
+	}
+
+	// To another driver (the list's "Go to", the party's "Join"): next to them, facing their way. In
+	// this scene if they're near, straight there; anywhere else, a drop-in, in your own ride.
+	function goTo( pid ) {
+
+		const other = live.players.get( pid );
+		if ( ! other || other.away ) return;
+		const spot = besideOf( other );
+		if ( ! spot ) return;
+		const here = state.mode === 'driving' || state.mode === 'paused';
+		if ( here && state.entry && spot.local.length() < GO_NEAR && moveCar( spot ) ) return;
+		if ( state.mode !== 'globe' ) toGlobe();
+		dropIn( { name: other.place?.name || 'Dropped pin', lat: spot.lat, lon: spot.lon, height: spot.height, heading: spot.heading } );
+
+	}
+
+	// GO_BESIDE m to the right of another driver's car, from the last word of it (or where they
+	// dropped in): { lat, lon, height, heading, local: in this scene }.
+	function besideOf( other ) {
+
+		earth.updateWorldMatrix( true, false );
+		if ( ! other.s ) {
+
+			const { lat, lon, height } = other.place ?? {};
+			if ( ! Number.isFinite( lat ) ) return null;
+			ellipsoid.getCartographicToPosition( lat * MathUtils.DEG2RAD, lon * MathUtils.DEG2RAD, height, _p );
+			return { lat, lon, height, heading: 0, local: _p.clone().applyMatrix4( earth.matrixWorld ) };
+
+		}
+
+		const [ x, y, z, qx, qy, qz, qw ] = other.s;
+		_q.set( qx, qy, qz, qw );
+		_p.set( x, y, z ).add( _side.set( 1, 0, 0 ).applyQuaternion( _q ).multiplyScalar( GO_BESIDE ) );
+		const carto = {};
+		ellipsoid.getPositionToCartographic( _p, carto );
+		const lat = carto.lat * MathUtils.RAD2DEG;
+		const lon = carto.lon * MathUtils.RAD2DEG;
+		// Their heading, from the way they face along the ground there (east and north).
+		_ahead.set( 0, 0, - 1 ).applyQuaternion( _q );
+		const east = - Math.sin( carto.lon ) * _ahead.x + Math.cos( carto.lon ) * _ahead.y;
+		const north = - Math.sin( carto.lat ) * Math.cos( carto.lon ) * _ahead.x - Math.sin( carto.lat ) * Math.sin( carto.lon ) * _ahead.y + Math.cos( carto.lat ) * _ahead.z;
+		const heading = MathUtils.euclideanModulo( Math.atan2( east, north ) * MathUtils.RAD2DEG, 360 );
+		return { lat, lon, height: carto.height, heading, local: _p.clone().applyMatrix4( earth.matrixWorld ) };
+
+	}
+
+	// Your car to `spot` (besideOf's) in this scene, on the ground there, driving on. Only ground
+	// within 3 m of their car's height, as R takes (not a roof, a tree or a deck over them), and not
+	// where it's surely water for a ride that doesn't float; false otherwise, or where there's no
+	// ground loaded there to put it on, and it's a drop-in instead (which finds the street).
+	function moveCar( { local, heading } ) {
+
+		const y = ground.heightAt( local.x, local.z, local.y + 3, 6 );
+		if ( y === null ) return false;
+		if ( ! specOf( state.vehicle ).floats && water.at( - local.x, local.z, y ) !== null ) return false;
+		const { entry } = state;
+		state.leaving = true;
+		if ( driver.active ) driver.stop();
+		state.leaving = false;
+		Object.assign( entry.state, { east: - local.x, north: local.z, heading, up: y } );
+		entry.parked = null;
+		// At that height: not snapped as a placed model is, from high above onto the first thing in
+		// the way, which under a roof is the roof. (While it's driven, nothing snaps it.)
+		const { snap } = entry.state;
+		entry.state.snap = false;
+		models.apply( entry );
+		entry.state.snap = snap;
+		screens.pause( false );
+		// A fresh trail of dry ground from here: a splash isn't to take it back where it came from.
+		driver.trailOf = null;
+		drive();
+		return true;
 
 	}
 
@@ -539,6 +692,7 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 		// The leaderboard over everything: its own keys (Esc closes it).
 		if ( board.isOpen || isTyping( e ) || e.ctrlKey || e.metaKey || e.altKey || e.repeat ) return;
 		if ( e.code === 'KeyM' && state.mode !== 'globe' ) toGlobe();
+		else if ( e.code === 'KeyH' && state.mode === 'driving' && friends ) friends.honk();
 		else if ( state.mode === 'paused' && ( e.code === 'Escape' || e.code === 'Enter' ) ) {
 
 			e.preventDefault();
@@ -617,6 +771,7 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 		timer.update( time );
 		const dt = Math.min( timer.getDelta(), 0.1 );
 		if ( driver.active ) driver.update( dt );
+		live?.update( car() );
 		pads.update( dt );
 		globe.update( dt );
 
@@ -641,6 +796,7 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 		camera.updateMatrixWorld();
 		tiles?.update();
 		models.update( dt );
+		ghosts?.update( dt, state.mode === 'driving' || state.mode === 'paused' );
 		// Not while the Garage is open: its turntable draws instead, and on a phone it covers the
 		// screen, so drawing the world behind it as well would only halve the frame rate.
 		if ( ! garage.isOpen ) renderer.render( scene, camera );
@@ -672,7 +828,7 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 	// For poking around from the browser console, and for the tests.
 	window.drive = {
 		scene, camera, renderer, tiles, globe, models, driver, ground, panel, leaderboard: board,
-		garage, supporter, pads, water,
+		garage, supporter, pads, water, live, ghosts, friends,
 		get mode() {
 
 			return state.mode;

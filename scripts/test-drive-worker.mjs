@@ -181,7 +181,7 @@ describe( 'World Drive Worker', () => {
 
 		const { status, json, text } = await call( server, '/api/config' );
 		assert.equal( status, 200 );
-		assert.deepEqual( json, { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true, googleClientId: '' } );
+		assert.deepEqual( json, { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true, googleClientId: '', live: true } );
 		assert.ok( ! text.includes( MAPS_KEY ) );
 
 	} );
@@ -416,7 +416,7 @@ describe( 'World Drive Worker, Turnstile failing and maps off', () => {
 	test( 'config says maps are off, with the site key from wrangler.drive.jsonc', async () => {
 
 		const { json } = await call( server, '/api/config' );
-		assert.deepEqual( json, { turnstileSiteKey: '0x4AAAAAAFs3k5sgUIQHSuGC', mapsOn: false, googleClientId: '' } );
+		assert.deepEqual( json, { turnstileSiteKey: '0x4AAAAAAFs3k5sgUIQHSuGC', mapsOn: false, googleClientId: '', live: true } );
 
 	} );
 
@@ -438,7 +438,8 @@ const NOON = Date.UTC( 2026, 9, 30, 12, 0, 0 );
 const SUNDAY_NIGHT = Date.UTC( 2026, 10, 1, 23, 59, 30 );
 const MONDAY_MORNING = Date.UTC( 2026, 10, 2, 0, 0, 30 );
 const SECOND = 1000;
-const HOUR = 60 * 60 * SECOND;
+const MINUTE = 60 * SECOND;
+const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 const NAMES_DAILY = 4;
 const SCORES_DAILY = 6;
@@ -1724,7 +1725,7 @@ describe( 'World Drive Worker with the key set as Google_maps_api', () => {
 
 		const worker = await loadWorker();
 		const counted = [];
-		const limits = { visit: async ip => ( counted.push( ip ), { ok: true, left: 3 } ) };
+		const limits = { visit: async ip => ( counted.push( ip ), { ok: true, left: 3 } ), liveOpen: async () => ( { open: true, spent: 1 } ) };
 		const ask = ( env, ip ) => worker.fetch( new Request( 'https://worlddrive.app/api/visit', {
 			method: 'POST',
 			headers: { Origin: 'https://worlddrive.app', 'Content-Type': 'application/json', 'CF-Connecting-IP': ip },
@@ -1741,7 +1742,7 @@ describe( 'World Drive Worker with the key set as Google_maps_api', () => {
 				LIMITS: { idFromName: id => id, get: () => limits },
 			};
 			const config = await worker.fetch( new Request( 'https://worlddrive.app/api/config' ), env, {} );
-			assert.deepEqual( await config.json(), { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true, googleClientId: '' }, name );
+			assert.deepEqual( await config.json(), { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true, googleClientId: '', live: true }, name );
 
 			const failed = await ask( { ...env, TURNSTILE_SECRET: FAIL_SECRET }, '198.51.100.30' );
 			assert.equal( failed.status, 403, name );
@@ -1763,6 +1764,79 @@ describe( 'World Drive Worker with the key set as Google_maps_api', () => {
 		assert.equal( ( await ( await worker.fetch( new Request( 'https://worlddrive.app/api/config' ), both, {} ) ).json() ).mapsOn, true );
 		const none = { GOOGLE_MAPS_API_KEY: '', Google_maps_api: '', LIMITS: { idFromName: id => id, get: () => limits } };
 		assert.equal( ( await ( await worker.fetch( new Request( 'https://worlddrive.app/api/config' ), none, {} ) ).json() ).mapsOn, false );
+
+	} );
+
+} );
+
+describe( 'World Drive Worker asking whether driving with others is open today', () => {
+
+	test( '/api/config: live while the budget lasts, asked at most every 30 s; spent, liveReason says so and it isn\'t asked again that day; DriveLimits failing, off with liveReason \'unknown\'; a budget of 0 or LIVE off: off', async () => {
+
+		const worker = await loadWorker();
+		const asked = [];
+		let answer = { open: true, spent: 1 };
+		const limits = {
+			liveOpen: async options => {
+
+				asked.push( options );
+				if ( answer instanceof Error ) throw answer;
+				return answer;
+
+			},
+		};
+		const env = { TEST_CLOCK: 'header', LIVE_DAILY_BUDGET: '1234', LIMITS: { idFromName: id => id, get: () => limits } };
+		const config = async ( time, more = {} ) => {
+
+			const res = await worker.fetch( new Request( 'https://worlddrive.app/api/config', { headers: { 'X-Test-Time': String( time ) } } ), { ...env, ...more }, {} );
+			const { live, liveReason } = await res.json();
+			return { live, liveReason };
+
+		};
+		const day = Date.UTC( 2030, 5, 1, 12 );
+		assert.deepEqual( await config( day ), { live: true, liveReason: undefined } );
+		assert.deepEqual( asked, [ { now: day, budget: 1234 } ] );
+		// An open answer holds for 30 s from when it was given (anyone can ask, and every page load
+		// does): not asked again till then.
+		for ( const later of [ 1, 10000, 29999 ] ) assert.deepEqual( await config( day + later ), { live: true, liveReason: undefined } );
+		assert.equal( asked.length, 1 );
+		await config( day + 30000 );
+		assert.equal( asked.length, 2 );
+		// Unset, it's 40,000 (a budget of its own, asked about afresh).
+		await config( day + 30000, { LIVE_DAILY_BUDGET: undefined } );
+		assert.deepEqual( [ asked.length, asked.at( - 1 ).budget ], [ 3, 40000 ] );
+
+		// DriveLimits failing: off, to be safe, with liveReason 'unknown' (a page turned away tries
+		// again rather than stopping).
+		const realError = console.error;
+		const logged = [];
+		console.error = ( ...args ) => logged.push( args.join( ' ' ) );
+		try {
+
+			answer = new Error( 'DriveLimits is down' );
+			assert.deepEqual( await config( day + MINUTE ), { live: false, liveReason: 'unknown' } );
+			assert.deepEqual( logged, [ 'Live budget check Error DriveLimits is down' ] );
+
+		} finally {
+
+			console.error = realError;
+
+		}
+
+		// Spent: off, saying why, and this Worker doesn't ask again that day (an ask is a request too).
+		answer = { open: false, spent: 1234 };
+		assert.deepEqual( await config( day + 2 * MINUTE ), { live: false, liveReason: 'budget' } );
+		const asks = asked.length;
+		assert.deepEqual( await config( day + 11 * HOUR ), { live: false, liveReason: 'budget' } );
+		assert.equal( asked.length, asks );
+		// The next day it asks again.
+		answer = { open: true, spent: 1 };
+		assert.deepEqual( await config( day + DAY ), { live: true, liveReason: undefined } );
+		assert.equal( asked.length, asks + 1 );
+		// A budget of 0, or LIVE off: off, without asking.
+		assert.deepEqual( await config( day + DAY, { LIVE_DAILY_BUDGET: '0' } ), { live: false, liveReason: undefined } );
+		assert.deepEqual( await config( day + DAY, { LIVE: 'off' } ), { live: false, liveReason: undefined } );
+		assert.equal( asked.length, asks + 1 );
 
 	} );
 

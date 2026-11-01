@@ -40,7 +40,22 @@
 		"PER_VISITOR_DAILY_SUPPORTER": "30",
 		"GOOGLE_CLIENT_ID": "979605278581-il852i6ql3e6j2t1kobqo2bg46pkaii5.apps.googleusercontent.com",
 		"SUPPORTER_PAYMENT_LINK": "https://buy.stripe.com/9B6bJ0fSYaMf3nc0cCfrW00",
-		"SUPPORTER_PRICE": "CA$4.99"
+		"SUPPORTER_PRICE": "CA$4.99",
+		// Driving with others (worker/drive/live.js): "off" is the kill switch. New connections are
+		// turned away, those already in a room are closed as they next say anything (or at the room's
+		// next alarm) once the room runs the new version (a busy one can take up to 5 minutes to; see
+		// docs/world-drive.md, "Switching it off"), and the page drives alone.
+		"LIVE": "on",
+		// Its budget: the Durable Object requests a day it may use (UTC days), then it switches itself
+		// off until midnight UTC, the same way, with a toast that it's back then. Rooms are billed by
+		// the message: an hour driving with others is about 900 requests (5 a second, billed 20 to a
+		// request), and a driver alone in a room sends only a keepalive. On the Free plan every
+		// Durable Object fails for the rest of the day once all of them together pass 100,000,
+		// DriveLimits' visit counts included, and then nobody could start a drive: 40,000 leaves the
+		// rest for those, with room for the minute the rooms' counts can run behind. On Workers Paid,
+		// past the million a month included, requests are $0.15 a million: each 100,000 a day more is
+		// 3 million a month, $0.45 (docs/world-drive.md, "What it costs"). 0 is off.
+		"LIVE_DAILY_BUDGET": "40000"
 	},
 	// Secrets, set by the owner and never in a file (the dashboard, or
 	// npx wrangler secret put GOOGLE_MAPS_API_KEY -c wrangler.drive.jsonc): GOOGLE_MAPS_API_KEY (a
@@ -50,12 +65,27 @@
 	// without paying). Locally they come from .dev.vars.drive (.dev.vars.drive.example).
 	//
 	// The day's visit counts and the search queue: one Durable Object for everyone, on SQLite storage
-	// (on every plan, the free one too).
+	// (on every plan, the free one too), with what driving with others has spent of today's budget.
+	// And the rooms for driving with others: one Durable Object a room, a party (the friends who
+	// opened its link) or the drivers in one area about 11 km across, holding everyone's WebSocket and
+	// telling them where the others are. A room stores nothing but its alarm (about once a minute
+	// while anyone's in it, when it may add what it has spent to the day's), and hibernates between
+	// messages; SQLite-backed for the free plan as well.
 	"durable_objects": {
-		"bindings": [ { "name": "LIMITS", "class_name": "DriveLimits" } ]
+		"bindings": [
+			{ "name": "LIMITS", "class_name": "DriveLimits" },
+			{ "name": "ROOMS", "class_name": "DriveRoom" }
+		]
 	},
+	// Each visit's connections to the rooms, at most 20 a minute (worker/drive/live.js): a loop of
+	// them is turned away before it costs a Durable Object request. Cloudflare's rate limiter counts
+	// in each of its locations, roughly; the namespace is this account's own number for it.
+	"ratelimits": [
+		{ "name": "LIVE_CONNECTS", "namespace_id": "4801", "simple": { "limit": 20, "period": 60 } }
+	],
 	"migrations": [
-		{ "tag": "v1", "new_sqlite_classes": [ "DriveLimits" ] }
+		{ "tag": "v1", "new_sqlite_classes": [ "DriveLimits" ] },
+		{ "tag": "v2", "new_sqlite_classes": [ "DriveRoom" ] }
 	],
 	// The leaderboard: nicknames and each player's best stunt scores (worker/drive/scores.js). The
 	// world-drive database already exists; its tables are worker/drive/migrations, applied by the

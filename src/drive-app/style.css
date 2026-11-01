@@ -451,11 +451,13 @@ button.primary:active,
 	pointer-events: none;
 }
 
+/* Over the driving HUD (drive-hud.js) while it shows, as the players list is: on a short window
+   its last rows reach down to where the HUD sits. */
 #drive-ui .keys {
 	position: fixed;
 	top: 64px;
 	right: 12px;
-	z-index: 15;
+	z-index: 1004;
 	max-width: min( 380px, calc( 100vw - 24px ) );
 	margin: 0;
 	padding: 12px 14px;
@@ -1196,6 +1198,360 @@ dialog#about form {
 	text-align: right;
 }
 
+/* --- driving with others ------------------------------------------------------------------- */
+
+/* Names over the others' cars (ghosts.js), placed each frame: centred over the roof. */
+#live-tags {
+	position: fixed;
+	inset: 0;
+	z-index: 3;
+	overflow: hidden;
+	pointer-events: none;
+}
+
+.live-tag {
+	position: absolute;
+	top: 0;
+	left: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+	translate: -50% -100%;
+	white-space: nowrap;
+}
+
+.live-tag .label {
+	padding: 2px 8px;
+	border-radius: 8px;
+	background: rgba( 9, 15, 27, 0.72 );
+	font-size: 12px;
+	font-weight: 800;
+	text-shadow: 0 1px 2px rgba( 0, 0, 0, 0.6 );
+}
+
+.live-tag .star {
+	margin-left: 3px;
+	font-size: 11px;
+}
+
+/* Your own car's has no name: only its honk. */
+.live-tag.self .label {
+	display: none;
+}
+
+.live-tag .honk {
+	font-size: 26px;
+	line-height: 1;
+	filter: drop-shadow( 0 2px 4px rgba( 0, 0, 0, 0.5 ) );
+}
+
+.live-tag .pop {
+	font: 900 italic 18px/1 var( --font );
+	color: var( --accent );
+	text-shadow: 0 2px 6px rgba( 0, 0, 0, 0.7 );
+}
+
+.live-tag .go {
+	animation: live-rise 0.5s ease-out;
+}
+
+@keyframes live-rise {
+	from { transform: translateY( 10px ) scale( 0.6 ); opacity: 0; }
+}
+
+/* The chip in the driving bar: who's driving with you, with a light while connected. */
+#drive-ui .topbar .live-chip {
+	flex: none;
+	gap: 8px;
+	font-size: 13px;
+	white-space: nowrap;
+}
+
+#drive-ui .live-chip::before {
+	content: '';
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var( --muted );
+}
+
+/* On a phone, only the count (or only the light, connecting or busy): the place's name beside it
+   keeps its room. Its words are its aria-label either way. */
+#drive-ui .live-chip .short {
+	display: none;
+}
+
+@media ( max-width: 480px ) {
+
+	#drive-ui .live-chip .long {
+		display: none;
+	}
+
+	#drive-ui .live-chip .short {
+		display: inline;
+	}
+
+	#drive-ui .live-chip .short:empty {
+		display: none;
+	}
+
+}
+
+#drive-ui .live-chip.on::before {
+	background: #3ce05a;
+	box-shadow: 0 0 8px #3ce05a;
+}
+
+/* The list it opens, under the bar on the right, as the keys card; over the driving HUD
+   (drive-hud.js) while it's open, which on a touch screen has its readouts up here. */
+#drive-ui .players {
+	position: fixed;
+	top: calc( 64px + env( safe-area-inset-top, 0px ) );
+	right: 12px;
+	z-index: 1004;
+	width: min( 340px, calc( 100vw - 24px ) );
+	max-height: calc( 100% - 150px );
+	overflow-y: auto;
+	padding: 12px 14px;
+	border: 1px solid var( --line );
+	border-radius: var( --radius );
+	background: var( --panel );
+	backdrop-filter: blur( 10px );
+	-webkit-backdrop-filter: blur( 10px );
+}
+
+#drive-ui .players h3 {
+	margin: 0 0 8px;
+	font-size: 12px;
+	letter-spacing: 1.2px;
+	text-transform: uppercase;
+	color: var( --muted );
+}
+
+#drive-ui .players ul {
+	display: grid;
+	gap: 6px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+#drive-ui .players li {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 10px;
+	border-radius: 10px;
+	background: var( --chip );
+}
+
+#drive-ui .players .who {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-width: 0;
+}
+
+#drive-ui .players .who > b,
+#drive-ui .players .who > span:first-child {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+#drive-ui .players .what {
+	overflow: hidden;
+	font-size: 12px;
+	color: var( --muted );
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+#drive-ui .players button {
+	flex: none;
+	padding: 6px 10px;
+	border: 1px solid var( --line );
+	border-radius: 8px;
+	background: var( --chip );
+	font-size: 12px;
+	font-weight: 800;
+}
+
+#drive-ui .players button.go {
+	border-color: transparent;
+	background: var( --accent );
+	color: var( --accent-ink );
+}
+
+#drive-ui .players button:disabled {
+	opacity: 0.4;
+	cursor: default;
+}
+
+#drive-ui .players .empty {
+	margin: 0 0 4px;
+	font-size: 13px;
+	color: var( --muted );
+}
+
+/* The horn, on a touch screen: top left, across from reset and the camera. */
+#drive-ui .horn {
+	position: fixed;
+	top: calc( 62px + env( safe-area-inset-top, 0px ) );
+	left: 16px;
+	z-index: 15;
+	width: 52px;
+	height: 44px;
+	padding: 0;
+	border: 2px solid rgba( 255, 255, 255, 0.35 );
+	border-radius: 18px;
+	background: rgba( 12, 16, 24, 0.5 );
+	font-size: 22px;
+	line-height: 1;
+	touch-action: manipulation;
+}
+
+body:not( .touch ) #drive-ui .horn {
+	display: none;
+}
+
+/* On the globe in a party: who's driving where, to join them. Beside the panel, clear of the
+   trophy and below where messages show. */
+#globe-ui .party-banner {
+	position: fixed;
+	top: calc( 84px + env( safe-area-inset-top, 0px ) );
+	left: 372px;
+	z-index: 11;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	max-width: min( 560px, calc( 100% - 450px ) );
+	padding: 10px 10px 10px 16px;
+	border: 1px solid var( --line );
+	border-left: 4px solid var( --accent );
+	border-radius: 14px;
+	background: var( --panel-solid );
+	box-shadow: 0 8px 30px rgba( 0, 0, 0, 0.4 );
+	font-weight: 700;
+	animation: rise-in 0.25s ease-out;
+}
+
+@keyframes rise-in {
+	from { transform: translateY( -8px ); opacity: 0; }
+}
+
+#globe-ui .party-banner .join {
+	flex: none;
+	padding: 8px 16px;
+	font-size: 14px;
+}
+
+/* "Drive with friends", on the globe's panel and in the pause menu. */
+.friends .invite {
+	width: 100%;
+	padding: 10px;
+	border: 1px solid rgba( 62, 193, 255, 0.45 );
+	border-radius: 10px;
+	background: var( --chip );
+	color: var( --sky );
+	font-weight: 800;
+}
+
+.friends .invite:hover {
+	background: var( --chip-hover );
+}
+
+.friends .party {
+	display: grid;
+	gap: 8px;
+}
+
+.friends .code {
+	margin: 0;
+	font-size: 13px;
+	color: var( --muted );
+}
+
+.friends .link-row {
+	display: flex;
+	gap: 6px;
+}
+
+.friends .link-text {
+	flex: 1;
+	min-width: 0;
+	padding: 8px 10px;
+	border: 1px solid var( --line );
+	border-radius: 10px;
+	background: rgba( 255, 255, 255, 0.08 );
+	color: var( --ink );
+	font: inherit;
+	font-size: 13px;
+}
+
+.friends .link-row button {
+	flex: none;
+	padding: 0 12px;
+	border: 0;
+	border-radius: 10px;
+	background: var( --sky );
+	color: #04121f;
+	font-weight: 800;
+}
+
+.friends .members {
+	display: grid;
+	gap: 2px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	font-size: 13px;
+}
+
+.friends .leave {
+	justify-self: start;
+	font-size: 13px;
+}
+
+.friends .setting {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 10px;
+	font-size: 13px;
+	font-weight: 700;
+	color: var( --muted );
+	cursor: pointer;
+}
+
+.friends .setting input {
+	width: 18px;
+	height: 18px;
+	margin: 0;
+	accent-color: var( --accent );
+}
+
+#pause .friends {
+	text-align: left;
+}
+
+#pause .friends .setting {
+	display: flex;
+	margin-top: 10px;
+}
+
+/* A toast's button (a friend's "Join"). */
+#toast .toast-action {
+	margin-left: 8px;
+	padding: 4px 12px;
+	border: 0;
+	border-radius: 8px;
+	background: var( --accent );
+	color: var( --accent-ink );
+	font-weight: 900;
+}
+
 /* --- phones: the panel becomes a sheet along the bottom ------------------------------------ */
 
 @media ( max-width: 760px ) {
@@ -1299,6 +1655,15 @@ dialog#about form {
 
 	#loading .card {
 		min-width: 0;
+	}
+
+	/* Above the pin's card, over the sheet. */
+	#globe-ui .party-banner {
+		top: auto;
+		left: 12px;
+		right: 12px;
+		bottom: calc( 46% + 84px );
+		max-width: none;
 	}
 
 }
