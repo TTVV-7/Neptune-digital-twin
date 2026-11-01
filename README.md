@@ -487,6 +487,14 @@ Worker to OpenStreetMap's Nominatim, cached and at most once a second. A leaderb
 player's best stunt run today, this week and all time (a nickname, no sign-up) in a D1 database,
 posted with the visit's signed token and checked against what the game can score.
 
+**Driving with others**: everyone else driving the same area (about 11 km across) shows up live as
+a ghost car you pass straight through, with their nickname, ride and Garage paint; **Invite
+friends** makes a party link (`/?party=CODE`) that brings friends to you anywhere on Earth, and
+**H** honks. No chat, and nobody sees more of you than your car in the game. Each room is a Durable
+Object on the WebSocket Hibernation API (`worker/drive/live.js`, speaking
+`src/drive-app/live-protocol.js`), and `LIVE` in `wrangler.drive.jsonc` switches it all off (see
+[Driving with others](docs/world-drive.md#driving-with-others), with what it costs).
+
 World Drive's cars are models from Sketchfab (CC BY, credited in its About box and ride picker),
 kept out of the construction app's library: `npm run add-drive-car` imports one into
 `drive/public/cars/`, which only World Drive's build publishes, finding its wheels so they spin and
@@ -506,7 +514,8 @@ How to play, the leaderboard (how cheating is limited, and looking after it in t
 settings and limits, deploying (`npm run deploy:drive` applies the database's migrations first), and
 the owner's Google Cloud steps (a separate project and key, restricted to worlddrive.app and the Map
 Tiles API, a daily quota and budget alerts) are in [docs/world-drive.md](docs/world-drive.md).
-Tests: `npm run test:drive-worker`, `npm run test:drive-ui` and `npm run test:drive-pro-ui`.
+Tests: `npm run test:drive-worker`, `npm run test:drive-ui`, `npm run test:drive-pro-ui`,
+`npm run test:drive-live` and `npm run test:drive-live-ui`.
 
 ## About the Sketchfab model
 
@@ -579,7 +588,7 @@ src/geo.js          lat/lon <-> local metres
 public/models/      put your .glb files here
 drive/index.html    World Drive's page; its code is src/drive-app/ (docs/world-drive.md)
 worker/drive/       World Drive's Worker: the Maps key per visit, caps, Turnstile, search, the leaderboard,
-                    the Supporter Pass (Google sign-in, Stripe's webhook)
+                    the Supporter Pass (Google sign-in, Stripe's webhook), driving with others' rooms
 vite.drive.config.js, wrangler.drive.jsonc   World Drive's build and Worker settings
 ```
 

@@ -57,6 +57,7 @@ address, and the construction app is unchanged by it.
 | C | Chase or driver's-seat camera |
 | Wheel | Chase camera nearer or farther |
 | M | Back to the globe |
+| H | Horn, for those [driving with you](#driving-with-others) (only while that's on) |
 | Esc | Pause: keep driving, change ride, or back to the globe |
 
 The keys card shows as each drive starts; **?** brings it back. Flying, the booster, drifts, stunts,
@@ -329,6 +330,195 @@ request per page load.
 64-pixel copy 0.7 ms at most, once per picture. At five looks a second that's well under 1 % of the
 time. Boost pads' check of a spot and 8 m round it (five looks, only for the few spots that pass
 everything else) took up to 21 ms, once 44 ms when a single ray took 40 ms (a tile's first ray).
+
+## Driving with others
+
+Other people driving World Drive show up as they drive: their car, in their own ride and Garage
+look, with their name over it. Everyone is a **ghost**: cars pass straight through each other, and
+other cars are never in the way of yours or of the camera. There's no chat. Two ways to be with
+others:
+
+- **Nearby** (the default). After you drop in, you're in the room for the area you're in (about
+  11 km across) and see everyone else driving there, so a popular spot is busy.
+- **A party.** **Invite friends** makes a link (`https://worlddrive.app/?party=CODE`); whoever
+  opens it is in your party wherever on Earth each of you is, and can join you where you are.
+
+It's only on when the Worker says so (`live: true` in `/api/config`, the `LIVE` setting below) and
+the visit has a token, which only visits on Google's map get. When it's off, nothing of it appears:
+no chip, no **Drive with friends**, no H in the keys card, no horn button, and driving alone is as it
+always was.
+
+### What you see and do
+
+- **The chip** in the driving bar, by the place's name: "Nearby · 5", "Nearby · just you",
+  "Party · 3", "Nearby is busy" or "... · connecting", with a green light while connected. Tap or
+  click it for **the list**, nearest first: each driver's name (⭐ for the Supporter Pass), ride and
+  distance, or "paused", "on the globe" or "at <place>". **Go to** puts you 5 m to their right,
+  facing their way: within 10 km, straight there in the same scene; farther, a drop-in at their spot
+  in your own ride. **Hide** hides that driver for this visit (**Show** brings them back).
+- **Other cars** are drawn a quarter of a second behind where their drivers are, moving smoothly
+  and turning with them (in the tests, a kart driving off and turning was drawn within 10 cm of
+  where it really was at the median, and 40 cm at most). Their flame or boost style, trail, drift smoke and sparks,
+  overdrive's boom and streaks, splashes and the hovercraft's spray show for the nearest 6 within
+  300 m, and their wheels turn. A name tag hangs over each (hidden beyond 400 m), with a 📣 when they
+  honk and "+1,234" when they land a trick. A car within 8 m of yours or of the camera turns
+  see-through, so it never blocks the view. A paused driver's car stays parked where it stopped; a
+  driver back on the globe disappears, and so does a car with no word of it for 15 s. At most the
+  12 nearest are drawn.
+- **Nearby rooms.** An area takes 20 drivers; when it's full you go to the next of its up to four
+  rooms (shards), and with all four full the chip says **Nearby is busy** and you drive alone. Drive
+  into another area and stay there 5 s and your room follows you. Back on the globe you stay in the
+  area's room for a minute (the others see you as "on the globe"), then leave it. **Show me to
+  drivers nearby** (on by default, kept in this browser) turns nearby off.
+- **Drive with friends**, on the globe's panel and in the pause menu: **Invite friends**, then the
+  link with **Copy** and **Share** (where the browser can share), the party's members ("You
+  (Guest 1234)" first, by the name the others see), **Leave party**, and the nearby switch. A party
+  takes 8; its code is 7 letters and figures with nothing that reads two ways (no I, O, 0 or 1).
+  The party stays in the address while you're in it, so a reload keeps you in it; **Leave party**
+  takes it out and puts you back with those nearby.
+- **Opening a party's link**: you're in the party from the globe on. A banner there says "<name> is
+  driving at <place>" with **Join** (5 m to their right, facing their way, in the ride you picked),
+  or "Waiting for your friends: pick a place and they can join you". Toasts say who joined and left
+  the party and where a friend went ("Ana went to Monaco." with **Join**); a full party says "That
+  party is full: 8 drivers at most." and you drive on with those nearby.
+- **The horn**: **H** while driving, or 📣 at the top left on a touch screen. A 📣 shows over your
+  car on your screen and everyone else's, and a soft beep plays for your own honk and for those
+  within 150 m (once you've clicked, tapped or pressed a key: browsers want that before sound).
+  **Horn sounds** in the pause menu turns the beep off (kept in this browser). One honk every 0.8 s
+  at most.
+- **When it stops.** A dropped connection comes back by itself, waiting 1, 2, 5, 10 and then 30 s
+  between tries. It stops for the rest of the visit when another tab with the same visit takes over
+  ("Driving with others moved to another tab."), when the visit runs out after 6 hours ("... Reload
+  for a fresh drive."), or, without a word, when it's switched off. Driving alone carries on.
+
+### What others can see about you
+
+- **Your name**: the leaderboard nickname this browser has, with a ⭐ if it's linked to an account
+  with the Supporter Pass, looked up by the room from the player's id and secret (never a name the
+  page says). Without one you're "Guest" and four figures, new each time you connect. Never your
+  Google name or email.
+- **Your ride and its look** from the Garage.
+- **Where you drive in the game**: your car's position, turn and speed in the game's world, what
+  it's doing (boosting, drifting, flying, paused), and where you dropped in (the place's name as the
+  game shows it, and its coordinates). Never where you really are: World Drive never asks the
+  browser for its location. But a place you drop in at is shown to your party or that area's room,
+  so a search for your own street shows it to them.
+- Whether you're on the globe, your tricks' points and your honks.
+- Not your address (IP), not your leaderboard id or secret, and nothing you type. In a nearby room,
+  where your car is only goes to those driving within 5 km of it (and to anyone there not driving
+  just then); the place you dropped in goes to the whole room. The room keeps nothing once
+  everyone's gone.
+
+### The rooms
+
+Each room is one Durable Object (`DriveRoom`, `worker/drive/live.js`) on the WebSocket Hibernation
+API: `party:CODE`, or `near:BAND.COL` for an area (bands 0.1° of latitude tall, cut into columns
+about as wide) and `near:BAND.COL#1` to `#3` for its other shards. What's said is
+`src/drive-app/live-protocol.js`, which the page and the Worker both import:
+
+- The page opens `GET /api/live?room=<room>` with the subprotocols `[ 'worlddrive-live.v1', <visit
+  token> ]` (a browser can't set headers on a WebSocket, and a token in the address would end up in
+  logs). Before the room is touched the Worker turns away anything that isn't a WebSocket (426), from
+  another site (403: the Origin must be worlddrive.app's own, as WebSockets have no CORS), while
+  `LIVE` is off (503), to a room that isn't one (400), without the protocol (400) or without a good
+  visit token (401: forged, changed or run out). The room gets only what was checked.
+- Positions are Earth-centred (ECEF metres) and turns a quaternion in that frame, so two pages
+  centred on different places agree on where a car is. A page sends its car 8 times a second while
+  it moves, once a second while it's still and at once when what it's doing changes (at most 14
+  messages a second on average and 24 at once, under the room's limit). The room sends everyone
+  what's moved at most once every 100 ms, with the next message to arrive once that's passed (there's no
+  timer: it would keep the room from hibernating), each car's state with how long the room held it,
+  so a page knows when it was where it says. In an area, only cars within 5 km.
+- Limits, each closing the connection with its own code: hello within 10 s (4003); nothing heard
+  for 75 s (4007: the page's keepalive every 25 s counts, answered by the runtime without waking
+  the room); over 20 messages a second, or 40 at once (4004); a message it can't take (4000); the
+  visit run out (4005); another connection with the same visit (4002, the older goes); a full room
+  (a `full` message, then 4001); switched off (4006). A state no car could be in is dropped, not
+  closed on.
+- A room stores nothing but its alarm (once about every 75 s while anyone's in it, for the limits
+  above), and deletes that when it empties.
+
+### Switching it off
+
+`LIVE` in `wrangler.drive.jsonc` (`vars`) is the kill switch: `"off"` and deploy. New connections
+are turned away at the door (503). A page that was connected is closed (4006) as it next says
+anything or at its room's next alarm; one whose connection dropped first (as when the rooms
+restart) finds the door shut when it tries again, asks `/api/config` and sees `live: false`. Either
+way it stops for the visit without a word, everything of it disappears from the page and driving
+alone carries on; pages loaded afterwards show none of it. `"on"` and deploy turns it back on for
+the next page load. Nothing switches it off by itself: watch the Durable Objects' usage (below).
+
+| Setting | Default | What it is |
+| --- | --- | --- |
+| `LIVE` | `on` (in `vars`) | `off` switches driving with others off |
+| `LIVE_PARTY_MAX` | 8 (unset) | The most in a party |
+| `LIVE_NEARBY_MAX` | 20 (unset) | The most in each of an area's rooms |
+
+### What it costs
+
+From Cloudflare's [Durable Objects pricing](https://developers.cloudflare.com/durable-objects/platform/pricing/)
+(read 1 November 2026):
+
+- **Requests.** "A request is needed to create a WebSocket connection. There is no charge for
+  outgoing WebSocket messages, nor for incoming WebSocket protocol pings." Incoming WebSocket
+  messages count 20 to 1 (100 messages are 5 requests), and each alarm is one. Free plan: 100,000 a
+  day; Paid: 1 million a month included, then $0.15 a million.
+- **Duration**, billed at 128 MB while a room is running or idle but unable to hibernate: "Durable
+  Objects that are idle and eligible for hibernation are not billed for duration, even before the
+  runtime has hibernated them", and the keepalive's auto-response adds none. Free: 13,000 GB-s a
+  day; Paid: 400,000 GB-s a month, then $12.50 a million. Nothing keeps a room awake between
+  messages, so this is only the time spent handling them.
+- **Storage** (SQLite): "Each setAlarm() is billed as a single row written" (Free: 100,000 rows a day;
+  Paid: 50 million a month, then $1.00 a million), and a room's storage is deleted when it empties.
+- **Over a Free plan limit**, "further operations of that type will fail with an error" until
+  00:00 UTC, for every Durable Object: `DriveLimits` too, so nobody could start a drive.
+
+Worked through:
+
+| | Messages | Billed requests |
+| --- | --- | --- |
+| A driver, an hour on the move (8 a second) | 28,800 | 1,440 |
+| Parked, an hour (once a second) | 3,600 | 180 |
+| On the globe in a party, an hour (keepalives, if they count: the page doesn't say) | 144 | about 7 |
+| A room's alarm, an hour | | about 48, and as many rows written |
+
+So the Free plan's 100,000 requests a day are about **69 driver-hours a day**, shared with
+everything else in Durable Objects; on Paid, the million a month included is about 690 driver-hours,
+and after that a driver-hour costs about $0.0002. A room kept awake for a whole hour would be
+460.8 GB-s (Free: about 28 room-hours a day; Paid: about $0.006 a room-hour), but a room only runs
+while it handles a message. Connections and reconnects are Worker requests too, as every `/api/`
+call is. Limits that matter here ([WebSockets](https://developers.cloudflare.com/durable-objects/best-practices/websockets/),
+[state](https://developers.cloudflare.com/durable-objects/api/state/)): what a room keeps for each
+connection through hibernation is under 1 kB of the 16,384 bytes allowed, and a Durable Object
+holds up to 32,768 hibernating WebSockets, far more than a room lets in.
+
+### How it's tested
+
+`npm run test:drive-live` (the rooms, `scripts/test-drive-live.mjs`): under `wrangler dev`, with
+WebSockets opened as the page opens them, every connection turned away before the room, welcome,
+join and leave, names from the leaderboard (never the page's), guests and the ⭐, batches every
+100 ms with each state's age, never back to its own, rounded and checked, only within 5 km in an
+area, everything else passed on at once, honks spaced, the rate, sizes and order, full parties and
+areas and their shards, a visit connecting again, keepalives, the hello deadline, a visit running
+out and a room carrying on after hibernating; and the room in-process on a stand-in for
+Cloudflare's runtime and clock: batches with nothing after them, idle connections, waking from its
+attachments, the alarm, `LIVE` switched off, emptying, a name still being looked up, the
+attachment's size, and no timers.
+
+`npm run test:drive-live-ui` (`scripts/test-drive-live-ui.mjs`): two to four pages in Chromium on
+the test pad, against the real Worker under `wrangler dev` behind Vite's proxy (the test pad has no
+visit, so a dev-only seam in `main.js`, `window.worldDriveLiveTest = { visit }`, hands each page a
+token made with Turnstile's test secret; the built site has no such seam). Two drivers at one spot
+seeing each other; a ghost following (measured), boosting, parked, gone to the globe and back, in
+another ride and paint; real leaderboard names with a supporter's ⭐ and an HTML name shown as text;
+driving through a ghost; Go to; the horn and a trick's points; the nearby switch freeing what a
+ghost was drawn with. A party: the link, the banner and Join; a third driver at the same spot
+seeing neither of the party but a fourth; a ninth member told it's full; a reload rejoining; a
+friend going elsewhere; leaving. A full area's next shard and a busy one; a dropped connection
+(the test cuts the line between Vite and the Worker) coming back; another tab; a visit running out;
+a phone; the room following the car into another area; only the page's own origin through the
+proxy; and the Worker restarted with `LIVE` off, an open page stopping without a word and a new one
+showing none of it, both driving as ever.
 
 ## Supporter Pass (content)
 
@@ -780,6 +970,9 @@ starts. Both caps are counted in
 one Durable Object (`worker/drive/limits.js`, on SQLite storage, which every plan has), so two
 visits at once can't both take the last drive.
 
+Driving with others costs nothing at Google; its rooms are Cloudflare's Durable Objects, with
+[costs of their own](#what-it-costs).
+
 The key still reaches the browser (that's how the tiles are fetched), so someone determined could copy
 it from a visit. That's what the Google-side limits below are for: the key only works from
 worlddrive.app, only for the Map Tiles API, and only up to a daily quota.
@@ -911,6 +1104,7 @@ In `wrangler.drive.jsonc` (`vars`, set on every deploy; change them there, not i
 | `GOOGLE_CLIENT_ID` | empty | The Supporter Pass's Google sign-in (public); empty, no signing in or buying |
 | `SUPPORTER_PAYMENT_LINK` | the live link | The Supporter Pass's Stripe Payment Link (public) |
 | `SUPPORTER_PRICE` | `CA$4.99` | Its price, as the page shows it |
+| `LIVE` | `on` | [Driving with others](#switching-it-off); `off` switches it off |
 
 Secrets, set by the owner and never in a file (Cloudflare dashboard: Workers & Pages → world-drive →
 Settings → Variables and Secrets, or `npx wrangler secret put NAME -c wrangler.drive.jsonc`):
@@ -930,6 +1124,7 @@ more aren't in `vars` and needn't be set; add them in the dashboard (plain text)
 | `SCORES_PER_VISITOR_DAILY` | 1500 | Scores a visitor may post a day (one every 10 s for four hours) |
 | `NAMES_PER_VISITOR_DAILY` | 20 | New names and renames a visitor may make a day |
 | `SUPPORTER_PAYMENT_LINK_ID` | none | The Payment Link's `plink_...` id: only its checkouts are a Supporter Pass |
+| `LIVE_PARTY_MAX`, `LIVE_NEARBY_MAX` | 8, 20 | The most in a party, and in each of an area's rooms |
 
 The leaderboard's and the Supporter Pass's database is the `DB` binding in `wrangler.drive.jsonc`
 (D1 **world-drive**, already made); its tables are `worker/drive/migrations`.
@@ -940,7 +1135,10 @@ The leaderboard's and the Supporter Pass's database is the `DB` binding in `wran
 migrations apply DB --remote -c wrangler.drive.jsonc`; ones already applied are skipped), builds the
 site into `dist-drive/` and deploys the `world-drive` Worker with it (`vite build --config
 vite.drive.config.js && wrangler deploy -c wrangler.drive.jsonc`). The Worker only runs for
-`/api/*`; every other file is served straight from Cloudflare's assets.
+`/api/*`; every other file is served straight from Cloudflare's assets. The Durable Objects'
+classes are `migrations` in `wrangler.drive.jsonc`, which `wrangler deploy` applies itself: `v1`
+the visit counts' `DriveLimits`, `v2` the rooms' `DriveRoom` (both on SQLite storage, which the
+Free plan needs).
 
 To deploy from GitHub on every push with Workers Builds (as the construction app is): in the
 Cloudflare dashboard open the **world-drive** Worker → Settings → Build, connect this repository and
@@ -1011,8 +1209,13 @@ secret `1x0000000000000000000000000000000AA` always passes; secret
   [Stripe CLI](https://docs.stripe.com/stripe-cli) prints for
   `stripe listen --forward-to localhost:8790/api/stripe/webhook` (test mode). Or skip Stripe: put
   your address in `SUPPORTER_EMAILS` and sign in.
+- [Driving with others](#driving-with-others) needs the Worker (`DRIVE_API`: Vite's proxy passes its
+  WebSockets on, and the browser's Origin with them, which `wrangler dev` takes as its own) and a
+  visit's token, so a drive on Google's map. The test pad has no visit: the tests hand the page one
+  through a seam only the dev server has (`window.worldDriveLiveTest = { visit }` before the page
+  loads, see `scripts/test-drive-live-ui.mjs`).
 - In the browser console, `window.drive` has the scene, the globe, the driver and `dropIn( { name,
-  lat, lon } )`.
+  lat, lon } )`, and with driving with others on, `live`, `ghosts` and `friends`.
 
 Tests: `npm run test:drive-worker` (the Worker under `wrangler dev`, with stand-ins for Turnstile and
 Nominatim: the caps, their reset at midnight UTC, Turnstile passing and failing, same-origin and JSON
@@ -1048,7 +1251,8 @@ changing nothing, and a phone; and buying the pass with Google's script stood in
 from the sheet, the pause menu and the used-up screen, Buy's link, "Check again" before Stripe's
 word, unlocking on focus and on `?supporter=thanks`, on every load, signing out, the player linked,
 the ⭐, and "Coming soon" with no sign-in or no Worker answering). `npm run test:drive-pro-ui` tries
-the pass's rides, the Garage and the boost styles.
+the pass's rides, the Garage and the boost styles, and `npm run test:drive-live` and
+`npm run test:drive-live-ui` [driving with others](#how-its-tested).
 
 ## How it fits together
 
@@ -1077,21 +1281,31 @@ src/drive-app/water.js       water on Google's mesh, told by how it's drawn: for
 src/drive-app/api.js         /api/config, the visit with Turnstile, /api/search, the leaderboard's and
                              the Supporter Pass's calls
 src/drive-app/leaderboard.js the leaderboard: the panel, names, posting runs, the new-best card
+src/drive-app/live-protocol.js  driving with others: the rooms, messages, limits and checks the page
+                             and the Worker share
+src/drive-app/live.js        the page's connection to its room: which room, sending the car, what
+                             the room says
+src/drive-app/ghosts.js      the others' cars, their name tags and effects
+src/drive-app/friends.js     the chip and list, Drive with friends, the party's banner and toasts,
+                             the horn
 src/drive-app/screens.js     start screen, notices, loading card, pause, keys, messages
 src/drive-app/test-globe.js  the Earth without Google's tiles, for working without a key
 vite.drive.config.js         the build: no key, only the offered vehicles copied from public/, and
-                             drive/public/ (the cars) as its own public folder
+                             drive/public/ (the cars) as its own public folder; in dev, /api passed
+                             on to DRIVE_API, WebSockets too
 drive/public/cars/           the cars' models, pictures, cars.json and CREDITS.md
 scripts/add-drive-car.mjs    imports a car from Sketchfab into it; drive-car-thumbs.mjs draws the pictures
 worker/drive/                the Worker: index.js (routes), limits.js (caps, the search queue and
                              the leaderboard's turns), turnstile.js, search.js; the leaderboard:
                              players.js, scores.js, boards.js, names.js (rules and the filter),
                              visits.js (visit tokens); the Supporter Pass: accounts.js (sign-in,
-                             sessions, /api/me), supporter.js (the webhook, who has it);
+                             sessions, /api/me), supporter.js (the webhook, who has it); driving
+                             with others: live.js (/api/live and the rooms, DriveRoom);
                              migrations/ (its D1 tables)
 worker/google.js, sessions.js, stripe.js   shared with the construction app: Google's ID tokens,
                              the session cookie, Stripe's webhook signatures
-wrangler.drive.jsonc         the Worker's settings, domains, Durable Object and D1 database
+wrangler.drive.jsonc         the Worker's settings, domains, Durable Objects (the visit counts and
+                             the rooms) and D1 database
 ```
 
 Shared modules take World Drive's place as a parameter, with the terminal as the default:
@@ -1124,6 +1338,13 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   can't tell it never puts boost pads down nor takes you back there, but surf's foam is bright, so
   it's taken for dry ground: pads can go down on a wide band of surf, and the way back from the sea
   off a beach can be in the surf.
+- [Driving with others](#driving-with-others): each page says where its own car is, and the room
+  only checks it's somewhere a car could be (on Earth, at a speed a ride can go), so someone who
+  digs into the page can put their ghost anywhere; it can't touch anyone, as nothing collides. A car
+  on a poor connection lags or jumps. **Hide** goes by name, so two guests who happen to have the
+  same one are hidden together. On the Free plan the rooms share Durable Objects' 100,000 requests a
+  day with the visit counts (about 69 hours of driving with others), and nothing switches `LIVE`
+  off by itself before that runs out.
 
 ## Credits
 
