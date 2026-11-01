@@ -81,15 +81,19 @@
 	// them is turned away before it costs a Durable Object request. Cloudflare's rate limiter counts
 	// in each of its locations, roughly; the namespace is this account's own number for it.
 	"ratelimits": [
-		{ "name": "LIVE_CONNECTS", "namespace_id": "4801", "simple": { "limit": 20, "period": 60 } }
+		{ "name": "LIVE_CONNECTS", "namespace_id": "4801", "simple": { "limit": 20, "period": 60 } },
+		// Each player's reports of what they drove, for their XP (worker/drive/progress.js), and title
+		// changes: at most 10 a minute (a page reports every couple of minutes). On the rate limiter
+		// rather than DriveLimits, so levels cost no Durable Object request at all.
+		{ "name": "PROGRESS_POSTS", "namespace_id": "4802", "simple": { "limit": 10, "period": 60 } }
 	],
 	"migrations": [
 		{ "tag": "v1", "new_sqlite_classes": [ "DriveLimits" ] },
 		{ "tag": "v2", "new_sqlite_classes": [ "DriveRoom" ] }
 	],
-	// The leaderboard: nicknames and each player's best stunt scores (worker/drive/scores.js). The
-	// world-drive database already exists; its tables are worker/drive/migrations, applied by the
-	// deploy (`npm run deploy:drive`, which Workers Builds runs) before the Worker goes out.
+	// The leaderboard: nicknames and each player's best stunt scores (worker/drive/scores.js), and
+	// each player's XP for levels (worker/drive/progress.js). The world-drive database already
+	// exists; its tables are worker/drive/migrations, applied by the deploy (`npm run deploy:drive`, which Workers Builds runs) before the Worker goes out.
 	"d1_databases": [
 		{
 			"binding": "DB",

@@ -506,6 +506,18 @@ used its daily budget of Durable Object requests (`LIVE_DAILY_BUDGET`), so it ca
 visits need, and `LIVE` in `wrangler.drive.jsonc` switches it all off (see
 [Driving with others](docs/world-drive.md#driving-with-others), with what it costs).
 
+**Levels**: driving earns XP (each km, air off jumps, drift boosts, boost pads, landed tricks, the
+first drive in each area and at each start spot, minutes with others, and the day's first drive,
+more for days in a row), climbing 50 levels: level 2 in the first few minutes, 50 a long goal. Levels
+unlock about half the Supporter Pass's Garage looks on the way to 40, and titles for your nametag, a
+level badge whose frame changes every ten levels and four colours that only levels give. While
+driving a slim XP bar shows under the place's name, with "+46 XP · 1.4 km" pop-ups and a burst at
+each level-up; the globe's panel has a profile card with the whole track. XP is kept with the
+leaderboard nickname in D1 (an account showing its best nickname's level), or in the browser until
+you pick one, which claims it. The Worker caps each report by the time since the last
+(`worker/drive/progress.js`, sharing its rules with the page in `src/drive-app/levels.js`), on a
+rate limiter rather than a Durable Object (see [Levels](docs/world-drive.md#levels)).
+
 World Drive's cars are models from Sketchfab (CC BY, credited in its About box and ride picker),
 kept out of the construction app's library: `npm run add-drive-car` imports one into
 `drive/public/cars/`, which only World Drive's build publishes, finding its wheels so they spin and
@@ -515,8 +527,9 @@ steer, and `npm run drive-car-thumbs` draws its picture for the picker (see
 A **Supporter Pass** (one payment of CA$4.99 towards the running costs) unlocks nine more rides:
 five more cars (a neon racer, a night cruiser, a dune buggy, a farm truck and a police cruiser) and
 four built in code (a sports coupe, a monster truck, a city bus and a hovercraft), each handling its
-own way; the Garage's extras (paint, finishes, decals, rims, nine more boost styles, flame colours
-and trails), a ⭐ on the leaderboard and 30 drives a day. It's bought with a Stripe Payment Link after
+own way; every look in the Garage at once (paint, finishes, decals, rims, nine more boost styles,
+flame colours and trails, some of which levels unlock over time), +50% XP, a ⭐ on the leaderboard and
+30 drives a day. It's bought with a Stripe Payment Link after
 signing in with Google, so it's yours in any browser; Stripe's signed webhook records it. Buying
 stays off ("Coming soon") until `GOOGLE_CLIENT_ID` and the webhook's secret are set (see
 [Supporter Pass (buying it)](docs/world-drive.md#supporter-pass-buying-it) for the owner's steps).
@@ -526,7 +539,8 @@ settings and limits, deploying (`npm run deploy:drive` applies the database's mi
 the owner's Google Cloud steps (a separate project and key, restricted to worlddrive.app and the Map
 Tiles API, a daily quota and budget alerts) are in [docs/world-drive.md](docs/world-drive.md).
 Tests: `npm run test:drive-worker`, `npm run test:drive-ui`, `npm run test:drive-pro-ui`,
-`npm run test:drive-live` and `npm run test:drive-live-ui`.
+`npm run test:drive-live`, `npm run test:drive-live-ui`, `npm run test:drive-levels` and
+`npm run test:drive-levels-ui`.
 
 ## About the Sketchfab model
 
@@ -599,7 +613,8 @@ src/geo.js          lat/lon <-> local metres
 public/models/      put your .glb files here
 drive/index.html    World Drive's page; its code is src/drive-app/ (docs/world-drive.md)
 worker/drive/       World Drive's Worker: the Maps key per visit, caps, Turnstile, search, the leaderboard,
-                    the Supporter Pass (Google sign-in, Stripe's webhook), driving with others' rooms
+                    levels' XP, the Supporter Pass (Google sign-in, Stripe's webhook), driving with
+                    others' rooms
 vite.drive.config.js, wrangler.drive.jsonc   World Drive's build and Worker settings
 ```
 

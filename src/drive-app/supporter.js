@@ -52,6 +52,9 @@ let onPass = null;
 let handle = null;
 const areas = new Map();
 const observers = new Set();
+// Called with the player each time one is linked to the account here (levels: a linked player's
+// level is the account's, progress.js).
+const linked = new Set();
 
 // As World Drive starts. worker: whether there's a Worker (not on the Vite dev server alone);
 // googleClientId: /api/config's; player(): this browser's leaderboard player, { id, secret } or null.
@@ -196,7 +199,17 @@ export async function linkPlayer() {
 	const key = `${ player.id } ${ me.email }`;
 	if ( storage( () => localStorage.getItem( LINKED_KEY ) ) === key ) return;
 	const answer = await postLink( player );
-	if ( answer.ok ) storage( () => localStorage.setItem( LINKED_KEY, key ) );
+	if ( ! answer.ok ) return;
+	storage( () => localStorage.setItem( LINKED_KEY, key ) );
+	for ( const fn of linked ) fn( player );
+
+}
+
+// fn( player ) whenever this browser's player is linked to the account signed in here.
+export function onLinked( fn ) {
+
+	linked.add( fn );
+	return () => linked.delete( fn );
 
 }
 

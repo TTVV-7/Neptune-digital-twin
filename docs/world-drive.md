@@ -60,7 +60,8 @@ address, and the construction app is unchanged by it.
 | H | Horn, for those [driving with you](#driving-with-others) (only while that's on) |
 | Esc | Pause: keep driving, change ride, or back to the globe |
 
-The keys card shows as each drive starts; **?** brings it back. Flying, the booster, drifts, stunts,
+The keys card shows as each drive starts; **?** brings it back. Under the place's name at the top,
+a slim bar shows your [level](#levels) and the XP to the next, with small "+46 XP" pop-ups under it. Flying, the booster, drifts, stunts,
 water and R come from `src/drive.js`, which World Drive starts with `fly`, `booster` and `drift` on,
 `crash: 'launch'` and its `water` (the construction app leaves them off: its crashes stop the
 vehicle dead, and nothing there is water).
@@ -423,7 +424,8 @@ always was.
 ### What others can see about you
 
 - **Your name**: the leaderboard nickname this browser has, with a ⭐ if it's linked to an account
-  with the Supporter Pass, looked up by the room from the player's id and secret (never a name the
+  with the Supporter Pass and your [level and title](#levels) under it ("Lv 12 · Drifter"), looked
+  up by the room from the player's id and secret as the page says hello (never a name or level the
   page says). Without one you're "Guest" and four figures, the same for the whole visit (made from
   it), so **Hide** holds and a friend coming back is the same guest. Never your Google name or
   email.
@@ -819,6 +821,341 @@ while touched (the seam), nothing once idle and at once at the next touch, nothi
 is open, and nothing more once its visit has run out; and with `LIVE` off or the budget spent, no
 dots, no **Driving now**, and with `LIVE` off on a page loaded then, not even an ask.
 
+## Levels
+
+Driving earns **XP**, and XP climbs **50 levels**, each with something to unlock. About half of the
+[Supporter Pass](#supporter-pass-content)'s Garage looks come with levels on the way to 40 (the pass
+still gives them all at once), and some rewards only levels give, supporters included: titles for
+your nametag, the level badge's frame and four colours. The pass's nine rides are never on the
+track. The rules are `src/drive-app/levels.js`, which the page and the Worker both import, so the
+page shows what the Worker counts.
+
+### How XP is earned
+
+| What | XP |
+| --- | --- |
+| Each km driven, on the ground or flying | 20 |
+| Each second in the air off a jump (not flying) | 3 |
+| Each drift boost paid out | 8 |
+| Each boost pad driven over | 4 |
+| Each minute driving with others in your room (someone else there and not on the globe) | 6 |
+| The first drive in an area (live-protocol.js's `cellOf`, about 11 km across), once you've driven a km in it | 100 |
+| Each start spot, the first time (driving within 300 m of it, 100 m into the drive) | 250 |
+| The day's first drive (UTC days), once you've driven 250 m | 100, and 25 more for each day in a row before it, up to 200 from the fifth |
+| A landed trick run | half the square root of the run's points (10,000 points is 50 XP, 40,000 is 100), 300 at most a run |
+| With the Supporter Pass | everything ×1.5 |
+
+A run is the leaderboard's (from dropping in until you change ride or place), so its later points
+count for less and one huge combo can't be worth more than 300. The page counts each landed jump's
+share (what the run's new points add) and reports it with the rest, every run alike, with a nickname
+or without, whether the leaderboard takes the run or not. Driving is the steady part: a kart flat
+out makes about 37 XP a minute, a car about 50, and driving about at some 72 km/h on average, with
+some air, a drift boost and a pad now and then, about 46; a few landed runs add 10 or so. A new
+area is worth a couple of minutes of driving, and takes a km of it, so hopping between drop-ins for
+them doesn't beat driving by much.
+
+### The curve
+
+XP to the next level grows with each level (`100 + 100n + 0.9n^2.5` from level n, rounded to 50s
+below 10 and 100s from there). Level 2 comes with the first drive's bonuses (the day's first drive
+and a new area, or a start spot, a minute or two in), 5 in a first session, 10 in a few sessions,
+30 for regulars and 50 a long goal. "About" is the play a regular takes, as the levels test
+simulates one: 30 minutes a day of the driving above (46 XP a minute, and 10 of tricks), the day's
+bonus each day, a start spot on each of the first 12 days, and two new areas a day for the first
+10, then one. Someone who only cruises (about 39 XP a minute) takes about a third longer; a stunter
+in the air a lot, about 40 % less.
+
+| Level | XP | About |
+| --- | --- | --- |
+| 2 | 200 | the first couple of minutes |
+| 3 | 500 | |
+| 5 | 1,450 | a first session (about 17 minutes) |
+| 10 | 6,050 | about 80 minutes |
+| 20 | 29,250 | about 6½ hours |
+| 30 | 82,050 | about 20 hours |
+| 40 | 181,150 | about 45 hours |
+| 50 | 346,450 | about 87 hours |
+
+### The unlock track
+
+⭐: a Supporter Pass look, which the pass unlocks at once; "levels only": the pass doesn't give it.
+
+| Level | XP | Unlocks |
+| --- | --- | --- |
+| 1 | 0 | Title: Rookie; Steel badge |
+| 2 | 200 | Sunburst paint ⭐ |
+| 3 | 500 | Hearts boost ⭐ |
+| 4 | 900 | Title: Joyrider |
+| 5 | 1,450 | Lime paint ⭐ |
+| 6 | 2,100 | White rims ⭐ |
+| 7 | 2,900 | Plasma boost ⭐ |
+| 8 | 3,800 | Title: Drifter |
+| 9 | 4,850 | Racing stripes ⭐ |
+| 10 | 6,050 | Bronze badge |
+| 11 | 7,450 | Teal paint ⭐ |
+| 12 | 9,050 | Title: Street Racer |
+| 13 | 10,750 | Pixel boost ⭐ |
+| 14 | 12,650 | Blue flame ⭐ |
+| 15 | 14,850 | Title: Stunt Ace |
+| 16 | 17,250 | Smoke trail ⭐ |
+| 17 | 19,850 | Title: Speedster |
+| 18 | 22,750 | Electric blue paint ⭐ |
+| 19 | 25,850 | Title: Trickster |
+| 20 | 29,250 | Silver badge |
+| 21 | 32,950 | Red rims ⭐ |
+| 22 | 36,950 | Title: Explorer |
+| 23 | 41,250 | Glitter boost ⭐ |
+| 24 | 45,950 | Title: Globetrotter |
+| 25 | 50,950 | Copper paint (levels only) |
+| 26 | 56,350 | Number decal ⭐ |
+| 27 | 62,150 | Title: Road Warrior |
+| 28 | 68,350 | Green flame ⭐ |
+| 29 | 74,950 | Title: Sky Pilot |
+| 30 | 82,050 | Gold badge |
+| 31 | 89,550 | Matte finish ⭐ |
+| 32 | 97,550 | Title: Daredevil |
+| 33 | 106,050 | Title: Trailblazer |
+| 34 | 115,050 | Violet paint ⭐ |
+| 35 | 124,650 | Mint paint (levels only) |
+| 36 | 134,750 | Title: Pathfinder |
+| 37 | 145,450 | Blue rims ⭐ |
+| 38 | 156,750 | Title: Storm Chaser |
+| 39 | 168,650 | Title: High Flyer |
+| 40 | 181,150 | Platinum badge; Purple flame ⭐ |
+| 41 | 194,350 | Title: Thrill Seeker |
+| 42 | 208,250 | Title: Wheel Wizard |
+| 43 | 222,850 | Title: Night Owl |
+| 44 | 238,150 | Title: Road Captain |
+| 45 | 254,250 | Plum paint (levels only) |
+| 46 | 271,050 | Title: Cartographer |
+| 47 | 288,650 | Title: Supersonic |
+| 48 | 307,050 | Title: World Tourer |
+| 49 | 326,350 | Title: Icon |
+| 50 | 346,450 | Title: Legend; Legend badge; Champion gold paint (levels only) |
+
+That's 19 of the pass's 38 Garage looks (5 of its 9 colours, matte, stripes and a number, 3 of its
+6 rim colours, 4 of its 9 boost styles, 3 of its 5 flame colours and the smoke trail; a colour
+unlocked is a smoke colour too). The showiest stay the pass's alone: jet black, forest green, royal
+blue and hot pink paint, metallic, flames and checker, gold, lime and pink rims, the lightning,
+comet, neon rings, fireworks and ink boosts, pink and rainbow flames, and the sparkle and rainbow
+ribbon trails. The four level-only colours are in `paint.js`'s `SWATCHES` with `levelOnly`.
+
+### What the Supporter Pass gives
+
+Every Garage look at once (the 19 on the track and the 19 that are the pass's alone), **+50% XP**,
+and the nine rides, as before; and still a ⭐ and 30 drives a day
+([below](#supporter-pass-buying-it)). Levels' own rewards (titles, badges, the level-only colours)
+come with levels for everyone, supporters too. The ×1.5 is the Worker's: it looks up the pass of the
+account the player is linked to, never anything the page says.
+
+A supporter has the track's 19 pass looks already, so for them those levels bring nothing new:
+18 of their level-ups from 2 to 39 (2, 3, 5, 6, 7, 9, 11, 13, 14, 16, 18, 21, 23, 26, 28, 31, 34
+and 37). The page says so rather than "Unlocked": a level-up says "Already yours with the pass:
+Sunburst paint", the profile card's "Next" is the next reward that's new to them, and the track
+tags those looks "✓ Pass". What levels add for a supporter is the titles, the badges and the
+level-only colours.
+
+### What you see
+
+- **Driving**: a slim XP bar under the place's name, with your level ("Lv 7") and, on a wider
+  screen, "1,240 / 1,600 XP". Small pop-ups under it, batched every 10 s of driving: "+46 XP · 1.4
+  km · 6 s air · 2 drift boosts", and at once for "New area +100 XP", "Furka Pass +250 XP", "Daily
+  bonus +125 XP · 2 days in a row" and "+50 XP · tricks". On a phone the count goes and the pop-ups
+  sit at the left, under the horn. Toasts while driving move down under them.
+- **A level-up**: a burst of rays and "Level 7!", with "Unlocked: Plasma boost" (three at most, and
+  "+6 more", when several levels came at once: the track has them all; a title says "Title:
+  Drifter"). A look there opens the Garage (pausing the drive) to try it on. It goes after 5 s (10
+  with the word on nicknames below), or stays while the pointer's on its buttons, and only its
+  buttons catch clicks: it shows in the middle of a drive, under the bar and ending above where
+  landed tricks' callouts start; on a touch screen at the left, clear of the buttons on the right
+  (over the callouts a moment there: there's no room above them). One that comes on the globe shows
+  as the next drive starts, and one showing goes as the drive pauses. The others see your new level
+  by your name the next time the page says hello to a room (moving to another area's room, or
+  connecting again): saying hello again for each level would have them see you leave and join.
+  Without a nickname, the first says "Pick a nickname to save your progress", once (only where a
+  nickname can be picked: a drive on Google's map).
+- **The globe's panel**: a profile card under the search: your nickname (or "You"), the level badge
+  (its ring steel, then bronze at 10, silver at 20, gold at 30, platinum at 40 and rainbow at 50),
+  "Lv 9 · Drifter", the bar to the next level, "Next: Racing stripes at Lv 9", a **Title** picker
+  ("Newest", the newest you have, or any one unlocked) and **All rewards**, the whole track: every
+  level with its XP and rewards (each with its swatch, boost picture or tag), done, next or still to
+  come.
+  Without a nickname, "Your progress is kept in this browser. Pick a nickname to save it."
+- **The Garage**: each locked choice says what unlocks it: "Lv 12 · or Pass" (a swatch, being
+  small, only "Lv 12"), "Pass", or "Lv 25" for a level-only colour, with the whole sentence as its
+  tooltip. Picking one the pass unlocks opens the pass's sheet; a level-only one says "Copper comes
+  at level 25: you're level 3. Drive on!". Locks follow the level as it changes, and the ride being
+  driven wears what's unlocked (`lookFor` puts back anything locked, a level not there yet or a look
+  chosen on a test page, as it does without the pass).
+- **The others**: the leaderboard's rows say each driver's level and title ("Lv 12 · Drifter", as
+  they are now), and so do the nametags over the cars of those driving with you, small under the
+  name.
+
+### Saving it, and claiming it
+
+- **With a nickname**, XP is kept with the leaderboard player in D1 (`players.xp`), so it's yours
+  wherever that nickname is. A player linked to a Google account (signing in for the pass links the
+  browser's player, `accounts.js`) shows the level of the account's best player: sign in on another
+  device and pick a nickname there, and it shows the account's level until its own XP passes it.
+  (Each player's XP is its own, and the caps below are each player's: an account's players added up
+  would let several players' caps add up too.) The page reports what it drove every 2 minutes while
+  driving, as it pauses, as it goes back to the globe, and as the page goes (`pagehide`, with
+  `fetch( ..., { keepalive: true } )`: `navigator.sendBeacon` can't send JSON with the right
+  Content-Type). What hasn't been reported is kept in the browser (`world-drive.progress`), and so
+  is the report on its way until its answer comes: each has an id, so one whose answer never came
+  (the page went, or the connection dropped) goes again as it was, and the Worker counts it once. A
+  reload or a report that didn't get through loses nothing. While a report is on its way, what it
+  carries still shows, and its places and the day's bonus aren't said again.
+- **Before a nickname**, it's kept in this browser and shown all the same (level-ups, unlocks and
+  all), with everything driven totted up. Picking a nickname claims it: the new player's first
+  report carries all of it, with the days' bonuses counted in this browser and the streak they
+  made, and the Worker counts it as any report, with an hour's worth allowed however long the visit
+  has lasted (an hour of the caps is several hours of real driving), the days' bonuses up to 14
+  days' worth, and their streak carried on if its last day was today or yesterday. It goes once the
+  new player is linked to the account signed in here, if there is one, so a supporter's claim counts
+  ×1.5. The Worker's XP then replaces the browser's.
+- **Without a Worker** (the dev server alone) it's only ever this browser's, and nothing asks for a
+  nickname. A drive with a nickname but no visit (the test pad) keeps what it drove for the next
+  report a visit can make.
+
+### Reports, and how cheating is limited
+
+`POST /api/progress { id, secret, visit, report }` (`worker/drive/progress.js`), with the visit's
+token as scores are posted (`visits.js`'s `readVisit`) and the player's secret. The report is what
+was driven since the last: `{ id, km, air, drifts, pads, together, tricks, areas: [ cellOf names ],
+spots: [ SPOTS ids ], daily, days? }`: id the page's own for the report (8 to 40 letters, digits,
+`_` or `-`), tricks the landed runs' XP, and only in a claim, days `{ xp, streak, day }`, the days'
+bonuses counted in the browser before the nickname. Anything the page couldn't send (a negative or
+non-number amount, a count that isn't whole, an area that isn't one, a spot that isn't one, over 200
+of either, an id or days that aren't) is a 400; a forged, changed, expired or another player's
+visit a 403 (`reason: 'visit'`), the wrong secret a 403 (`reason: 'player'`). The answer: `{ xp,
+own, level, gained, unlocked: [ rewards ], supporter, title, chosen, streakDay, streak, accepted: {
+areas, spots }, daily?: { streak, xp }, repeated? }`: xp and level the account's best (or the
+player's), own the player's own XP, title the one shown and chosen the one picked (`''` for the
+newest), streakDay and streak the last daily bonus's day and its days in a row. A report with
+nothing in it changes nothing, and is how the page asks where it stands as it starts.
+
+The page says what it drove, so the Worker can't know it's true. What it does is keep each report to
+what could have been driven in the real time since the player's last (`progress_at`, kept in D1;
+for a player's first report, the claim, an hour):
+
+| Cap | |
+| --- | --- |
+| Time counted | 5 minutes at most per report (an hour for the first, the claim) |
+| km | 450 km/h of it: faster than any ride goes flat out with the booster (the night cruiser's 205, doubled), flying or not |
+| Air | a second a second |
+| Drift boosts, pads | one every 1.5 s, one every 2 s |
+| Minutes with others | a minute a minute |
+| All the driving together | 300 XP a minute (km, air, drift boosts, pads and minutes together), which no driving comes near |
+| New areas and spots | one a minute of it (whole ones: a report sooner carries none); those over the cap aren't taken (`accepted` says which were) and the page sends them again with the next |
+| Areas and spots | each once a player (the `discoveries` table), 2,000 at most a player |
+| The day's bonus | once a UTC day; the streak counts days in a row, back to 1 after a day off |
+| Trick XP | 150 a minute (what doesn't fit isn't counted) |
+| The claim's days' bonuses | 14 days' worth of the biggest at most (2,800 XP), only in the claim |
+| Reports | none with anything in it sooner than 30 s after the last (each is a row written: a 429 with Retry-After, and the page keeps it for later); 10 a minute a player in all (`PROGRESS_POSTS`, Cloudflare's rate limiter, as `LIVE_CONNECTS`: 429 with Retry-After) |
+| One visit, one player | as for scores: a visit reports for the player that first used it |
+
+Two reports at once can't both count the same minutes: each is claimed with one statement against
+the last report's time, and the second is a 409 (the page sends it again); its places are written
+only with that statement (`changes()`), so they aren't kept without their XP. A report with the id
+of the last one taken is that one sent again: it's answered with where the player stands
+(`repeated: true`) and counts nothing. Titles are checked the same way: `POST /api/player/title {
+id, secret, title }` takes only a title the player's level has (403 `reason: 'title'` otherwise),
+and `''` is the newest they have (`{ level, title, chosen }`).
+
+What this can't stop is someone who reads the page's code and reports the most the caps allow from
+a real visit, every minute it lasts: about ten times as fast as driving does (300 XP a minute of
+driving, 150 of tricks and a new area's 100), so level 30 in under three hours of a script running
+rather than a regular's 20 hours of driving. A new player's claim counts an hour of that at once
+(about 37,000 XP, level 22), and no more however old the visit; an account shows its best player,
+so several players can't add up their caps. The Garage's unlocks are in the page anyway (as the
+pass's are, see [Known gaps](#known-gaps)); what the Worker keeps (the level and title others see)
+is what the caps are for, and the console below sets it right.
+
+### What levels cost
+
+Reports ask no Durable Object: they don't touch `DriveLimits` (the free plan's 100,000 a day are for
+the visit caps and driving with others), and the rate limiter is Cloudflare's, as `LIVE_CONNECTS`
+is. A level reached says nothing to a room. A title picked while driving with others does say hello
+to the room again, as renaming does: about 3 Durable Object requests (the Worker's ask of
+`DriveLimits`, the connection, and the old one's leave), counted in the day's
+[budget](#the-days-budget) and held by `LIVE_CONNECTS` and `LIVE_VISIT_CONNECTS`. Scores cost what
+they did: trick XP comes with the reports.
+
+Each report is one Worker request and, in D1 ([pricing](https://developers.cloudflare.com/d1/platform/pricing/),
+read 1 November 2026: Free 5 million rows read and 100,000 rows written a day; Paid 25 billion read
+and 50 million written a month included; "Indexes will add an additional written row when writes
+include the indexed column"):
+
+| | Rows read | Rows written |
+| --- | --- | --- |
+| A report | about 8 (the player, their account's players, whether it has the pass, the visit, the places the time since the last lets it take: 5 at most after the claim) | 1 (the player's row: no indexed column changes), and 1 for each new area or spot (`discoveries` has no rowid, so its key is the table) |
+| A visit's first report | the same | 2 more (the visit's row and its index) |
+| An empty report (the page starting) | about 6 | none |
+
+At a report every 2 minutes, an hour's drive is 30 reports: about 240 rows read and 30 to 40
+written. The day's 300 visits at 20 minutes each (100 driver-hours) are about 3,000 reports: some
+24,000 rows read (half a per cent of the Free plan's) and 3,000 to 5,000 written (3 to 5 %), and
+3,000 Worker requests of the Free plan's 100,000. A script can't make a report read much more:
+listing 200 places, only those the time allows are looked up; and with a report no sooner than 30 s
+after the last, a player writes at most 2 rows a minute (2,880 a day), and a row for each new place
+(2,000 at most a player, ever). The leaderboard's rows now look up each player's account's best XP as a board is made (a
+look in `players_by_account` a row), and boards are cached for half a minute as before. Storage: a
+few numbers a player, and a 30-byte row a discovery (2,000 at most a player).
+
+### Looking after levels
+
+In the D1 console (as for [the leaderboard](#looking-after-it)):
+
+```sql
+-- The players climbing fastest: XP, level's worth, since when.
+SELECT id, name, xp, discoveries, datetime( created_at / 1000, 'unixepoch' ) AS joined FROM players ORDER BY xp DESC LIMIT 20;
+
+-- Set a cheat's XP back (or to 0), and forget their discoveries so they're earned again.
+UPDATE players SET xp = 0, title = '', discoveries = 0 WHERE id = 'PLAYER_ID';
+DELETE FROM discoveries WHERE player_id = 'PLAYER_ID';
+```
+
+Removing a player removes their discoveries with them.
+
+### How levels are tested
+
+`npm run test:drive-levels` (`scripts/test-drive-levels.mjs`): the curve as a simulated regular
+climbs it (printing the play to levels 2, 5, 10, 30 and 50) and the track as written (every level
+from 2 to 50 gives something, level 2 within the first drive's bonuses, the pass's rides never on
+it, 19 of its 38 looks on it by level 40 and the showiest not, every look a choice the Garage has,
+the level-only colours never with the pass, the Garage's locks, a supporter's "Next"), reports'
+shapes and caps, and that progress.js asks no Durable Object; then the Worker under `wrangler dev`:
+a report's XP and its answer, every cap by the time since the last (a minute's worth, half a
+minute's, an hour later only five minutes', one sooner than 30 s after the last a 429), the claim
+(an hour's worth, and no more from a visit nearly six hours old), the days' bonuses a claim brings
+and their streak, a report sent again with its id counted once, forged, changed, expired and
+someone else's visits, the wrong secret and reports it can't take, areas and spots only once
+(those over the cap taken by the next report, 2,000 at most, and none kept by a report that lost
+to another at the same moment), the day's bonus once a UTC day and its streak across midnight and
+after a day off, trick XP in reports (the 150 a minute, and none with a score), a supporter's ×1.5
+(signed in with test keys standing in for Google's, an email in `SUPPORTER_EMAILS`, both players
+linked), an account's players not adding up (three claims linked to one account show the best),
+titles (locked ones refused, the one picked in each answer, on the leaderboard's rows), the rate
+limiter (the 11th report in a minute a 429), and discoveries going with a removed player.
+`npm run test:drive-levels-ui` (`scripts/test-drive-levels-ui.mjs`): the page on the test pad, with
+the real Worker behind Vite's proxy (a dev-only seam in `main.js`, `window.worldDriveVisitTest = {
+visit }`, hands it a visit's token, as the live tests' does): driving fills the bar with its pop-ups
+(the start spot, a new area, the day's bonus, the km); the level-up's burst with its reward and
+"Pick a nickname", its look opening the Garage where it's unlocked, worn and pressed; a milestone's
+level-up with its badge reward drawn small, and a long one listing three and "+6 more", clear of the
+trick callouts; the Garage's chips and what picking a locked one does; the progress kept in the
+browser, across a reload, then claimed by a nickname (the Worker's XP within a rounding of the
+page's, the day's bonus as days); the profile card and the track; a title picked ("Newest" when
+none is), on the leaderboard and over the car on another page driving with it; a report on its way
+for a second and a half (the day's bonus and the new area said once, what's shown never going
+down), one whose answer was lost sent again with its id after a reload and counted once, and 250
+areas sent 200 at a time; with the pass, everything unlocked but the level-only colours, the track
+and a level-up saying the pass looks are theirs already, and a supporter's report earning ×1.5; a
+phone (the bar clear of the speed, the level-up clear of the buttons); and no Worker at all. Pictures
+of the bar, level-ups, the profile card, the track and the Garage's locks at 1280 × 720 and on a 375
+× 740 touch screen with `TEST_SCREENSHOTS`.
+
 ## Supporter Pass (content)
 
 The Supporter Pass is a one-time payment (CA$4.99) towards World Drive's running costs. This part is
@@ -833,8 +1170,9 @@ only when the page is on `localhost` or `127.0.0.1` (`testPass` decides), never 
 **Locked things** show a small **⭐ Supporter Pass** badge (in the Garage, a ⭐ on each locked choice
 under one line saying what the stars mean), and picking one opens the pass's sheet
 instead (`src/drive-app/pass.js`): what the pass is and what comes with it (nine more rides, five cars
-and four built in code, each with its picture; the Garage's extras, a ⭐ by your name on the
-leaderboard, 30 drives a day instead of 8) and its buy
+and four built in code, each with its picture; every Garage look at once, which levels otherwise
+unlock some of over time; +50% XP; a ⭐ by your name on the leaderboard, 30 drives a day instead of
+8) and its buy
 area (`buyArea()`), which says **Coming soon** until the payments code fills it. The sheet also opens from **⭐ Supporter
 Pass** under the rides on the globe and in the pause menu. A ride or a look saved while the pass was
 on falls back to the go-kart, or to the free choices, without it. Nothing comes up by itself: the
@@ -962,15 +1300,15 @@ couldn't be made to turn, and other people's concepts:
 (`src/drive-app/garage.js`, the looks in `src/drive-app/paint.js`): every ride turning on a
 turntable (drag to turn it; **▶ Boost** shows its boost and trail), and for each:
 
-| | Free | With the pass |
-| --- | --- | --- |
-| Body colour | Blaze orange, racing red, ice white | 9 more |
-| Finish | Gloss | Matte, metallic |
-| Decal | None | Racing stripes, a number (0 to 99), flames, checker |
-| Rims (a hovercraft's trim) | Silver, graphite | Gold, white, red, blue, lime, pink |
-| Boost style | Classic flame, bubbles, confetti | Plasma, lightning, glitter, comet, neon rings, fireworks, hearts, pixel, ink |
-| Flame colour (the classic flame's) | Orange | Blue, green, purple, pink, rainbow |
-| Trail (boosting or flying) | None | Smoke (in 8 colours), sparkle, rainbow ribbon (six bands side by side) |
+| | Free | With the pass, or a [level](#the-unlock-track) | With the pass | With a level only |
+| --- | --- | --- | --- | --- |
+| Body colour | Blaze orange, racing red, ice white | Sunburst (2), lime (5), teal (11), electric blue (18), violet (34) | Jet black, forest green, royal blue, hot pink | Copper (25), mint (35), plum (45), champion gold (50) |
+| Finish | Gloss | Matte (31) | Metallic | |
+| Decal | None | Racing stripes (9), a number, 0 to 99 (26) | Flames, checker | |
+| Rims (a hovercraft's trim) | Silver, graphite | White (6), red (21), blue (37) | Gold, lime, pink | |
+| Boost style | Classic flame, bubbles, confetti | Hearts (3), plasma (7), pixel (13), glitter (23) | Lightning, comet, neon rings, fireworks, ink | |
+| Flame colour (the classic flame's) | Orange | Blue (14), green (28), purple (40) | Pink, rainbow | |
+| Trail (boosting or flying) | None | Smoke (16; its colours as the body colours unlock) | Sparkle, rainbow ribbon (six bands side by side) | |
 
 **Boost styles** (`src/drive-boosts.js`; the Garage's list, with a little picture for each, is
 `src/drive-app/boosts.js`) are what the booster leaves behind:
@@ -992,8 +1330,8 @@ turntable (drag to turn it; **▶ Boost** shows its boost and trail), and for ea
 
 The flame colour was the Garage's only boost choice before the styles. It's now the classic flame's
 colour, shown under it, so a look saved before (a flame and no style) is the classic flame in the
-colour it had; without the pass a saved style is the classic flame again, as anything else locked
-goes back to its free choice.
+colour it had; without the pass (or the level) a saved style is the classic flame again, as anything
+else locked goes back to its free choice.
 
 Each style is one batch of quads drawn from one picture sheet, in one draw call: billboards, strips
 along a line (a bolt, a comet's tail) or quads flat across a normal (a ring, a splat on the road).
@@ -1052,7 +1390,8 @@ trail to pick.
 
 The pass is one payment of **CA$4.99**, no subscription, through a Stripe Payment Link in World
 Drive's own Stripe account. It comes with what's [above](#supporter-pass-content) (five cars, the four
-rides and the whole Garage), a **⭐ by your name on the leaderboard**, and **30 drives a day** instead of 8.
+rides and every Garage look at once), **+50% XP** for [levels](#levels), a **⭐ by your name on the
+leaderboard**, and **30 drives a day** instead of 8.
 A pass is a Google account's, so it's yours in any browser you sign in on: signing in is only ever
 for the pass, and driving and the leaderboard never need it.
 
@@ -1296,6 +1635,7 @@ see. There's no sign-up: a nickname is all it takes.
   their best jump, where, in what and (this week and all time) on which day. **Only Furka Pass**
   (whichever place you're driving, or have pinned on the globe) shows that place's board. Your own
   row is picked out; below the top 20 it says where you are: "You're #42 of 130, with 1,230".
+  Each row says the driver's [level and title](#levels) as they are now ("Lv 12 · Drifter").
 - **A score is a run's**: everything from dropping in until you change ride or place (pauses don't
   end it). When a landed jump takes the run past your best today, anywhere or at that place, the
   run is posted, at most one every 15 s, while you drive on (so a place's board has your best there
@@ -1426,13 +1766,19 @@ more aren't in `vars` and needn't be set; add them in the dashboard (plain text)
 | `SUPPORTER_PAYMENT_LINK_ID` | none | The Payment Link's `plink_...` id: only its checkouts are a Supporter Pass |
 | `LIVE_PARTY_MAX`, `LIVE_NEARBY_MAX` | 8, 20 | The most in a party, and in each of an area's rooms |
 
-The leaderboard's and the Supporter Pass's database is the `DB` binding in `wrangler.drive.jsonc`
-(D1 **world-drive**, already made); its tables are `worker/drive/migrations`.
+Two rate limiters are `ratelimits` in `wrangler.drive.jsonc` (Cloudflare's, which cost no Durable
+Object request): `LIVE_CONNECTS` (each visit's connections to rooms, 20 a minute) and
+`PROGRESS_POSTS` (each player's [level](#levels) reports and title changes, 10 a minute).
+
+The leaderboard's, levels' and the Supporter Pass's database is the `DB` binding in
+`wrangler.drive.jsonc` (D1 **world-drive**, already made); its tables are `worker/drive/migrations`
+(`0003_levels.sql` levels': XP and the rest on `players`, and `discoveries`).
 
 ## Deploying
 
-`npm run deploy:drive` applies the leaderboard's migrations to the world-drive database (`wrangler d1
-migrations apply DB --remote -c wrangler.drive.jsonc`; ones already applied are skipped), builds the
+`npm run deploy:drive` applies the database's migrations to the world-drive database (`wrangler d1
+migrations apply DB --remote -c wrangler.drive.jsonc`; ones already applied are skipped, and
+`0003_levels.sql` adds levels' columns and table before the Worker that needs them goes out), builds the
 site into `dist-drive/` and deploys the `world-drive` Worker with it (`vite build --config
 vite.drive.config.js && wrangler deploy -c wrangler.drive.jsonc`). The Worker only runs for
 `/api/*`; every other file is served straight from Cloudflare's assets. The Durable Objects'
@@ -1524,9 +1870,13 @@ secret `1x0000000000000000000000000000000AA` always passes; secret
   WebSockets on, and the browser's Origin with them, which `wrangler dev` takes as its own) and a
   visit's token, so a drive on Google's map. The test pad has no visit: the tests hand the page one
   through a seam only the dev server has (`window.worldDriveLiveTest = { visit }` before the page
-  loads, see `scripts/test-drive-live-ui.mjs`).
+  loads, see `scripts/test-drive-live-ui.mjs`). `window.worldDriveVisitTest = { visit }` hands the
+  test pad a visit for everything a visit does (names, scores, [levels](#levels)' reports and
+  driving with others), as `scripts/test-drive-levels-ui.mjs` does.
 - In the browser console, `window.drive` has the scene, the globe, the driver and `dropIn( { name,
-  lat, lon } )`, and with driving with others on, `live`, `ghosts` and `friends`.
+  lat, lon } )`, levels' `progress` (`progress.level`, `progress.progress`, what's `unsent` and the
+  report on its way, `flying`) and
+  `profile`, and with driving with others on, `live`, `ghosts` and `friends`.
 
 Tests: `npm run test:drive-worker` (the Worker under `wrangler dev`, with stand-ins for Turnstile and
 Nominatim: the caps, their reset at midnight UTC, Turnstile passing and failing, same-origin and JSON
@@ -1562,8 +1912,9 @@ changing nothing, and a phone; and buying the pass with Google's script stood in
 from the sheet, the pause menu and the used-up screen, Buy's link, "Check again" before Stripe's
 word, unlocking on focus and on `?supporter=thanks`, on every load, signing out, the player linked,
 the ⭐, and "Coming soon" with no sign-in or no Worker answering). `npm run test:drive-pro-ui` tries
-the pass's rides, the Garage and the boost styles, and `npm run test:drive-live` and
-`npm run test:drive-live-ui` [driving with others](#how-its-tested).
+the pass's rides, the Garage and the boost styles, `npm run test:drive-live` and
+`npm run test:drive-live-ui` [driving with others](#how-its-tested), and `npm run test:drive-levels`
+and `npm run test:drive-levels-ui` [levels](#how-levels-are-tested).
 
 ## How it fits together
 
@@ -1592,6 +1943,12 @@ src/drive-app/water.js       water on Google's mesh, told by how it's drawn: for
 src/drive-app/api.js         /api/config, the visit with Turnstile, /api/search, the leaderboard's and
                              the Supporter Pass's calls
 src/drive-app/leaderboard.js the leaderboard: the panel, names, posting runs, the new-best card
+src/drive-app/levels.js      levels' rules, which the page and the Worker share: XP, the curve, the
+                             caps and the unlock track
+src/drive-app/progress.js    levels in the page: counting what's driven, reporting it (or keeping it
+                             here before a nickname), the level the Garage's locks follow
+src/drive-app/profile.js     what levels show: the XP bar and pop-ups, a level-up, the profile card,
+                             the whole track (levels.css)
 src/drive-app/live-protocol.js  driving with others: the rooms, messages, limits and checks the page
                              and the Worker share, and who's driving now's dots (where, how many)
 src/drive-app/live.js        the page's connection to its room: which room, sending the car, what
@@ -1613,12 +1970,12 @@ worker/drive/                the Worker: index.js (routes), limits.js (caps, the
                              visits.js (visit tokens); the Supporter Pass: accounts.js (sign-in,
                              sessions, /api/me), supporter.js (the webhook, who has it); driving
                              with others: live.js (/api/live and the rooms, DriveRoom, and
-                             /api/online, who's driving now);
-                             migrations/ (its D1 tables)
+                             /api/online, who's driving now); levels: progress.js
+                             (/api/progress, titles); migrations/ (its D1 tables)
 worker/google.js, sessions.js, stripe.js   shared with the construction app: Google's ID tokens,
                              the session cookie, Stripe's webhook signatures
 wrangler.drive.jsonc         the Worker's settings, domains, Durable Objects (the visit counts and
-                             the rooms) and D1 database
+                             the rooms), rate limiters and D1 database
 ```
 
 Shared modules take World Drive's place as a parameter, with the terminal as the default:
@@ -1673,6 +2030,15 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   left over, and in about 150 bands that's under 0.014° wide: no spot to 0.01° fits 0.002° inside
   it, so a dot there is drawn in the column before, and Drive here on it joins that column's room
   (open ocean, Antarctica, Chukotka and a few Fiji and Aleutian bands).
+- [Levels](#levels): the page says what it drove, so a script reporting the most the caps allow
+  from a real visit levels about ten times as fast as driving, and a new player's claim counts an
+  hour of that at once; the Garage's unlocks are in the page, as the pass's are. Each device's
+  nickname is a player of its own: signed in, an account shows its best player's level, but a new
+  device still picks a nickname of its own and its XP is its own. Others in a room see a new level
+  at the page's next hello there, not as it comes. A report whose answer was lost is counted once
+  only while it's the player's last (another device reporting in between would let it count again),
+  and if it listed more new places than its time allowed, the extra ones aren't sent again. A
+  nickname removed by the owner takes its XP with it.
 
 ## Credits
 

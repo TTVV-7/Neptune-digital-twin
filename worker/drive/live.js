@@ -10,6 +10,7 @@ import { credentials, database } from './players.js';
 import { setting } from './settings.js';
 import { hasPass, supporterEmails } from './supporter.js';
 import { readVisit } from './visits.js';
+import { standingOf, xpOf } from './progress.js';
 
 // Driving with others (docs/world-drive.md): the rooms. src/drive-app/live-protocol.js says what a
 // room is (a party, or the drivers in one area) and what's said in one; this is the Worker's half.
@@ -356,7 +357,7 @@ function roomName( room ) {
 // bucket and when it was counted), honk (the last), left (closed by the room), spent (billed
 // requests the room hasn't reported yet), reported (when the room last reported), shown (the dots
 // of who's driving now it reported then, see dots), and once it has said hello pid, name, star,
-// vehicle, look, place, away, s }.
+// level, title, vehicle, look, place, away, s }.
 export class DriveRoom extends DurableObject {
 
 	constructor( ctx, env ) {
@@ -494,8 +495,8 @@ export class DriveRoom extends DurableObject {
 	}
 
 	// hello: who's driving what, where. The name is the leaderboard's for a player whose id and
-	// secret check out (never one the page sends), with a ⭐ for a supporter's; anyone else, or
-	// everyone while the database can't say, is a guest.
+	// secret check out (never one the page sends), with a ⭐ for a supporter's and their level and
+	// title (levels.js); anyone else, or everyone while the database can't say, is a guest.
 	async hello( ws, driver, m ) {
 
 		const vehicle = checkVehicle( m.vehicle );
@@ -508,14 +509,14 @@ export class DriveRoom extends DurableObject {
 		driver.pending = true;
 		driver.queue = [];
 		this.save( ws, driver );
-		const { name, star } = await this.nameOf( m.player, driver.visit );
+		const { name, star, level, title } = await this.nameOf( m.player, driver.visit );
 		// Gone while it was looked up.
 		if ( this.drivers.get( ws ) !== driver || driver.left || ws.readyState !== WebSocket.OPEN ) return;
 
 		const taken = new Set( this.sockets().map( other => this.driver( other ).pid ) );
 		let pid = randomToken( 6 );
 		while ( taken.has( pid ) ) pid = randomToken( 6 );
-		Object.assign( driver, { pid, name, star, vehicle, look, place, away: m.away === true, s: null, pending: false } );
+		Object.assign( driver, { pid, name, star, level, title, vehicle, look, place, away: m.away === true, s: null, pending: false } );
 		const others = this.helloed().filter( other => other !== ws ).map( other => playerOf( this.driver( other ) ) );
 		send( ws, { t: 'welcome', you: pid, name, star, room: driver.room, max: this.max( parseRoom( driver.room ) ), players: others } );
 		driver.sent = this.moves;
@@ -534,9 +535,10 @@ export class DriveRoom extends DurableObject {
 
 	}
 
-	// { name, star } for hello's player: { id, secret } as the leaderboard has them, or anything else
-	// from `visit`. A guest's four figures are its visit's, so they stay the same each time it
-	// connects (Hide, by name, holds; a friend coming back is the same guest).
+	// { name, star, level, title } for hello's player: { id, secret } as the leaderboard has them, or
+	// anything else from `visit`, a guest with no level (null). A guest's four figures are its
+	// visit's, so they stay the same each time it connects (Hide, by name, holds; a friend coming
+	// back is the same guest).
 	async nameOf( player, visit ) {
 
 		try {
@@ -544,9 +546,9 @@ export class DriveRoom extends DurableObject {
 			if ( isObject( player ) ) {
 
 				const { id, secret } = credentials( player );
-				const row = await database( this.env ).prepare( `SELECT p.name, ${ hasPass( 'p.account_id', '?3' ) } AS star FROM players p WHERE p.id = ?1 AND p.secret_hash = ?2` )
-					.bind( id, await sha256Hex( secret ), supporterEmails( this.env ) ).first();
-				if ( row ) return { name: row.name, star: !! row.star };
+				const row = await database( this.env ).prepare( `SELECT p.name, ${ hasPass( 'p.account_id', '?3' ) } AS star, ${ xpOf( 'p' ) } AS xp, p.title
+					FROM players p WHERE p.id = ?1 AND p.secret_hash = ?2` ).bind( id, await sha256Hex( secret ), supporterEmails( this.env ) ).first();
+				if ( row ) return { name: row.name, star: !! row.star, ...standingOf( row.xp, row.title ) };
 
 			}
 
@@ -558,7 +560,7 @@ export class DriveRoom extends DurableObject {
 		}
 
 		const number = parseInt( ( await sha256Hex( `guest ${ visit }` ) ).slice( 0, 8 ), 16 ) % 10000;
-		return { name: `Guest ${ String( number ).padStart( 4, '0' ) }`, star: false };
+		return { name: `Guest ${ String( number ).padStart( 4, '0' ) }`, star: false, level: null, title: null };
 
 	}
 
@@ -1132,9 +1134,9 @@ function spotIn( place, cell ) {
 }
 
 // A PLAYER, as the others are told of one.
-function playerOf( { pid, name, star, vehicle, look, place, away, s } ) {
+function playerOf( { pid, name, star, level = null, title = null, vehicle, look, place, away, s } ) {
 
-	return { pid, name, star, vehicle, look, place, away, s };
+	return { pid, name, star, level, title, vehicle, look, place, away, s };
 
 }
 
