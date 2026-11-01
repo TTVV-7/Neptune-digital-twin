@@ -213,7 +213,9 @@ body.touch .xp-pop {
 
 /* --- a level-up --------------------------------------------------------------------------- */
 
-/* Over the driving HUD (drive-hud.js), as the keys card is. */
+/* Over the driving HUD (drive-hud.js), as the keys card is: under the bar, and ending above where
+   drive-hud.js's trick callouts start (18vh + about 134px down), since a level-up often comes with a
+   landed trick. */
 #level-up {
 	position: fixed;
 	inset: 0;
@@ -221,13 +223,13 @@ body.touch .xp-pop {
 	display: grid;
 	justify-items: center;
 	align-content: start;
-	padding-top: 17vh;
+	padding-top: calc( 18vh - 30px );
 	pointer-events: none;
 }
 
 #level-up .burst {
 	position: absolute;
-	top: calc( 17vh - 110px );
+	top: calc( 18vh - 140px );
 	left: 50%;
 	width: 420px;
 	height: 420px;
@@ -259,18 +261,33 @@ body.touch .xp-pop {
 	}
 }
 
-/* On a phone the speed sits under the top bar: under it, and smaller. */
+/* On a touch screen the speed sits under the top bar: under it, smaller, and at the left, clear of
+   the buttons on the right (FLY, BOOST, DRIFT, GAS: two columns of them, or one on a phone held
+   upright). There's no room above the callouts there: it's over them a moment. */
 body.touch #level-up {
+	justify-items: start;
 	padding-top: 29vh;
 }
 
 body.touch #level-up .burst {
 	top: calc( 29vh - 110px );
+	left: 12px;
+	margin-left: -80px;
 }
 
 body.touch #level-up .level-card {
 	gap: 4px;
+	max-width: calc( 100vw - 204px );
+	margin-left: 12px;
 	padding: 10px 14px 12px;
+}
+
+@media ( orientation: portrait ) and ( max-width: 520px ) {
+
+	body.touch #level-up .level-card {
+		max-width: calc( 100vw - 116px );
+	}
+
 }
 
 body.touch #level-up .heading {
@@ -281,6 +298,7 @@ body.touch #level-up .reward {
 	font-size: 12px;
 }
 
+body.touch #level-up .had,
 body.touch #level-up .nickname {
 	font-size: 12px;
 }
@@ -289,9 +307,9 @@ body.touch #level-up .nickname {
 	position: relative;
 	display: grid;
 	justify-items: center;
-	gap: 6px;
-	max-width: min( 380px, calc( 100vw - 32px ) );
-	padding: 14px 20px 16px;
+	gap: 5px;
+	max-width: min( 640px, calc( 100vw - 32px ) );
+	padding: 12px 20px 14px;
 	border: 1px solid rgba( 255, 210, 63, 0.5 );
 	border-radius: 18px;
 	background: var( --panel-solid );
@@ -320,20 +338,22 @@ body.touch #level-up .nickname {
 	}
 }
 
-#level-up .level-badge {
+/* The card's own badge, not a badge reward's little one in its list. */
+#level-up .level-card > .level-badge {
 	width: 54px;
 	height: 54px;
 	margin-top: -38px;
 }
 
-#level-up .level-badge b {
+#level-up .level-card > .level-badge b {
 	font-size: 21px;
 }
 
 #level-up .heading {
 	margin: 0;
 	color: var( --accent );
-	font-size: 26px;
+	font-size: 24px;
+	line-height: 1.15;
 	font-style: italic;
 	font-weight: 900;
 	letter-spacing: 0.5px;
@@ -348,8 +368,18 @@ body.touch #level-up .nickname {
 	gap: 6px;
 }
 
+#level-up .unlocked[hidden] {
+	display: none;
+}
+
+#level-up .more {
+	color: var( --muted );
+	font-weight: 700;
+}
+
+#level-up .had,
 #level-up .nickname {
-	margin: 4px 0 0;
+	margin: 2px 0 0;
 	font-size: 13px;
 	color: var( --muted );
 }
@@ -375,6 +405,14 @@ button.reward {
 
 button.reward:hover {
 	background: rgba( 255, 210, 63, 0.22 );
+}
+
+/* "Title:" before a title's name. */
+.reward .kind {
+	margin-right: -2px;
+	color: var( --muted );
+	font-size: 11px;
+	font-weight: 700;
 }
 
 .reward .icon {
@@ -411,6 +449,12 @@ button.reward:hover {
 .reward:not( .pass ) .tag {
 	background: rgba( 62, 193, 255, 0.16 );
 	color: var( --sky );
+}
+
+/* A supporter's already. */
+.reward.owned .tag {
+	background: rgba( 120, 220, 140, 0.16 );
+	color: #8fe3a1;
 }
 
 /* --- the profile card on the globe's panel -------------------------------------------------- */
@@ -566,7 +610,7 @@ dialog#track .levels {
 
 dialog#track li {
 	display: grid;
-	grid-template-columns: 76px 1fr auto;
+	grid-template-columns: 96px 1fr auto;
 	align-items: center;
 	gap: 10px;
 	padding: 7px 10px;
@@ -576,7 +620,7 @@ dialog#track li {
 }
 
 dialog#track li.done {
-	opacity: 0.62;
+	opacity: 0.8;
 }
 
 dialog#track li.next {
@@ -595,6 +639,7 @@ dialog#track .level-head .xp {
 	font-size: 10px;
 	font-weight: 700;
 	line-height: 1.1;
+	white-space: nowrap;
 }
 
 dialog#track .rewards {

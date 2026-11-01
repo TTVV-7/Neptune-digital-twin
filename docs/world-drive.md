@@ -421,7 +421,8 @@ the keys card, no horn button, and driving alone is as it always was.
 
 - **Your name**: the leaderboard nickname this browser has, with a ⭐ if it's linked to an account
   with the Supporter Pass and your [level and title](#levels) under it ("Lv 12 · Drifter"), looked
-  up by the room from the player's id and secret (never a name or level the page says). Without one you're "Guest" and four figures, the same for the whole visit (made from
+  up by the room from the player's id and secret as the page says hello (never a name or level the
+  page says). Without one you're "Guest" and four figures, the same for the whole visit (made from
   it), so **Hide** holds and a friend coming back is the same guest. Never your Google name or
   email.
 - **Your ride and its look** from the Garage.
@@ -679,41 +680,47 @@ page shows what the Worker counts.
 
 | What | XP |
 | --- | --- |
-| Each km driven, on the ground or flying | 10 |
+| Each km driven, on the ground or flying | 20 |
 | Each second in the air off a jump (not flying) | 3 |
 | Each drift boost paid out | 8 |
 | Each boost pad driven over | 4 |
 | Each minute driving with others in your room (someone else there and not on the globe) | 6 |
-| The first drive in an area (live-protocol.js's `cellOf`, about 11 km across), once you've driven 250 m in it | 150 |
+| The first drive in an area (live-protocol.js's `cellOf`, about 11 km across), once you've driven a km in it | 100 |
 | Each start spot, the first time (driving within 300 m of it, 100 m into the drive) | 250 |
 | The day's first drive (UTC days), once you've driven 250 m | 100, and 25 more for each day in a row before it, up to 200 from the fifth |
-| A landed trick run, as the leaderboard takes its score | half the square root of the run's points (10,000 points is 50 XP, 40,000 is 100), 300 at most a run |
+| A landed trick run | half the square root of the run's points (10,000 points is 50 XP, 40,000 is 100), 300 at most a run |
 | With the Supporter Pass | everything ×1.5 |
 
 A run is the leaderboard's (from dropping in until you change ride or place), so its later points
-count for less and one huge combo can't be worth more than 300. Trick XP comes with the scores the
-leaderboard takes: a run posted again as it gets better earns only what its new points add, and a
-run that doesn't beat your best today (anywhere, or at that place) isn't posted, so it earns none.
-Driving about at roughly a km a minute, with some air, a couple of drift boosts and pads, is about
-60 XP a minute.
+count for less and one huge combo can't be worth more than 300. The page counts each landed jump's
+share (what the run's new points add) and reports it with the rest, every run alike, with a nickname
+or without, whether the leaderboard takes the run or not. Driving is the steady part: a kart flat
+out makes about 37 XP a minute, a car about 50, and driving about at some 72 km/h on average, with
+some air, a drift boost and a pad now and then, about 46; a few landed runs add 10 or so. A new
+area is worth a couple of minutes of driving, and takes a km of it, so hopping between drop-ins for
+them doesn't beat driving by much.
 
 ### The curve
 
 XP to the next level grows with each level (`100 + 100n + 0.9n^2.5` from level n, rounded to 50s
-below 10 and 100s from there). At about 60 XP a minute: level 2 comes with the first drive's
-bonuses (a new area and the day's first drive, a few minutes in), 5 in a first session, 10 in a few
-sessions, 30 for regulars and 50 a long goal.
+below 10 and 100s from there). Level 2 comes with the first drive's bonuses (the day's first drive
+and a new area, or a start spot, a minute or two in), 5 in a first session, 10 in a few sessions,
+30 for regulars and 50 a long goal. "About" is the play a regular takes, as the levels test
+simulates one: 30 minutes a day of the driving above (46 XP a minute, and 10 of tricks), the day's
+bonus each day, a start spot on each of the first 12 days, and two new areas a day for the first
+10, then one. Someone who only cruises (about 39 XP a minute) takes about a third longer; a stunter
+in the air a lot, about 40 % less.
 
 | Level | XP | About |
 | --- | --- | --- |
-| 2 | 200 | the first few minutes |
+| 2 | 200 | the first couple of minutes |
 | 3 | 500 | |
-| 5 | 1,450 | a first session (20 to 25 minutes, with its bonuses) |
-| 10 | 6,050 | under 2 hours |
-| 20 | 29,250 | 8 hours |
-| 30 | 82,050 | 23 hours |
-| 40 | 181,150 | 50 hours |
-| 50 | 346,450 | about 95 hours |
+| 5 | 1,450 | a first session (about 17 minutes) |
+| 10 | 6,050 | about 80 minutes |
+| 20 | 29,250 | about 6½ hours |
+| 30 | 82,050 | about 20 hours |
+| 40 | 181,150 | about 45 hours |
+| 50 | 346,450 | about 87 hours |
 
 ### The unlock track
 
@@ -787,26 +794,38 @@ and the nine rides, as before; and still a ⭐ and 30 drives a day
 come with levels for everyone, supporters too. The ×1.5 is the Worker's: it looks up the pass of the
 account the player is linked to, never anything the page says.
 
+A supporter has the track's 19 pass looks already, so for them those levels bring nothing new:
+18 of their level-ups from 2 to 39 (2, 3, 5, 6, 7, 9, 11, 13, 14, 16, 18, 21, 23, 26, 28, 31, 34
+and 37). The page says so rather than "Unlocked": a level-up says "Already yours with the pass:
+Sunburst paint", the profile card's "Next" is the next reward that's new to them, and the track
+tags those looks "✓ Pass". What levels add for a supporter is the titles, the badges and the
+level-only colours.
+
 ### What you see
 
 - **Driving**: a slim XP bar under the place's name, with your level ("Lv 7") and, on a wider
   screen, "1,240 / 1,600 XP". Small pop-ups under it, batched every 10 s of driving: "+46 XP · 1.4
-  km · 6 s air · 2 drift boosts", and at once for "New area +150 XP", "Furka Pass +250 XP", "Daily
+  km · 6 s air · 2 drift boosts", and at once for "New area +100 XP", "Furka Pass +250 XP", "Daily
   bonus +125 XP · 2 days in a row" and "+50 XP · tricks". On a phone the count goes and the pop-ups
   sit at the left, under the horn. Toasts while driving move down under them.
-- **A level-up**: a burst of rays and "Level 7!", with "Unlocked: Plasma boost" (several, if more
-  than one level came at once). A look there opens the Garage (pausing the drive) to try it on. It
-  goes after 5 s (10 with the word on nicknames below), or stays while the pointer's on its buttons,
-  and only its buttons catch clicks: it shows in the middle of a drive. One that comes on the globe
-  shows as the next drive starts, and one showing goes as the drive pauses. The others in the room
-  see the new level by your name once the Worker has it (the page says hello to the room again).
+- **A level-up**: a burst of rays and "Level 7!", with "Unlocked: Plasma boost" (three at most, and
+  "+6 more", when several levels came at once: the track has them all; a title says "Title:
+  Drifter"). A look there opens the Garage (pausing the drive) to try it on. It goes after 5 s (10
+  with the word on nicknames below), or stays while the pointer's on its buttons, and only its
+  buttons catch clicks: it shows in the middle of a drive, under the bar and ending above where
+  landed tricks' callouts start; on a touch screen at the left, clear of the buttons on the right
+  (over the callouts a moment there: there's no room above them). One that comes on the globe shows
+  as the next drive starts, and one showing goes as the drive pauses. The others see your new level
+  by your name the next time the page says hello to a room (moving to another area's room, or
+  connecting again): saying hello again for each level would have them see you leave and join.
   Without a nickname, the first says "Pick a nickname to save your progress", once (only where a
   nickname can be picked: a drive on Google's map).
 - **The globe's panel**: a profile card under the search: your nickname (or "You"), the level badge
   (its ring steel, then bronze at 10, silver at 20, gold at 30, platinum at 40 and rainbow at 50),
   "Lv 9 · Drifter", the bar to the next level, "Next: Racing stripes at Lv 9", a **Title** picker
-  (the newest you have, or any one unlocked) and **All rewards**, the whole track: every level with
-  its XP and rewards (each with its swatch, boost picture or tag), done, next or still to come.
+  ("Newest", the newest you have, or any one unlocked) and **All rewards**, the whole track: every
+  level with its XP and rewards (each with its swatch, boost picture or tag), done, next or still to
+  come.
   Without a nickname, "Your progress is kept in this browser. Pick a nickname to save it."
 - **The Garage**: each locked choice says what unlocks it: "Lv 12 · or Pass" (a swatch, being
   small, only "Lv 12"), "Pass", or "Lv 25" for a level-only colour, with the whole sentence as its
@@ -822,17 +841,25 @@ account the player is linked to, never anything the page says.
 
 - **With a nickname**, XP is kept with the leaderboard player in D1 (`players.xp`), so it's yours
   wherever that nickname is. A player linked to a Google account (signing in for the pass links the
-  browser's player, `accounts.js`) counts with all of the account's players together: sign in on
-  another device and pick a nickname there, and its level is the account's. The page reports what
-  it drove every 2 minutes while driving, as it pauses, as it goes back to the globe, and as the
-  page goes (`pagehide`, with `fetch( ..., { keepalive: true } )`: `navigator.sendBeacon` can't send
-  JSON with the right Content-Type). What hasn't been reported is kept in the browser
-  (`world-drive.progress`), so a reload or a report that didn't get through loses nothing; the next
-  report carries it.
+  browser's player, `accounts.js`) shows the level of the account's best player: sign in on another
+  device and pick a nickname there, and it shows the account's level until its own XP passes it.
+  (Each player's XP is its own, and the caps below are each player's: an account's players added up
+  would let several players' caps add up too.) The page reports what it drove every 2 minutes while
+  driving, as it pauses, as it goes back to the globe, and as the page goes (`pagehide`, with
+  `fetch( ..., { keepalive: true } )`: `navigator.sendBeacon` can't send JSON with the right
+  Content-Type). What hasn't been reported is kept in the browser (`world-drive.progress`), and so
+  is the report on its way until its answer comes: each has an id, so one whose answer never came
+  (the page went, or the connection dropped) goes again as it was, and the Worker counts it once. A
+  reload or a report that didn't get through loses nothing. While a report is on its way, what it
+  carries still shows, and its places and the day's bonus aren't said again.
 - **Before a nickname**, it's kept in this browser and shown all the same (level-ups, unlocks and
   all), with everything driven totted up. Picking a nickname claims it: the new player's first
-  report carries all of it, and the Worker counts it as any report, with an hour's worth allowed (or
-  as long as the visit has lasted, if longer). The Worker's XP then replaces the browser's.
+  report carries all of it, with the days' bonuses counted in this browser and the streak they
+  made, and the Worker counts it as any report, with an hour's worth allowed however long the visit
+  has lasted (an hour of the caps is several hours of real driving), the days' bonuses up to 14
+  days' worth, and their streak carried on if its last day was today or yesterday. It goes once the
+  new player is linked to the account signed in here, if there is one, so a supporter's claim counts
+  ×1.5. The Worker's XP then replaces the browser's.
 - **Without a Worker** (the dev server alone) it's only ever this browser's, and nothing asks for a
   nickname. A drive with a nickname but no visit (the test pad) keeps what it drove for the next
   report a visit can make.
@@ -841,17 +868,22 @@ account the player is linked to, never anything the page says.
 
 `POST /api/progress { id, secret, visit, report }` (`worker/drive/progress.js`), with the visit's
 token as scores are posted (`visits.js`'s `readVisit`) and the player's secret. The report is what
-was driven since the last: `{ km, air, drifts, pads, together, areas: [ cellOf names ], spots: [
-SPOTS ids ], daily, tricks }` (tricks only in a claim). Anything the page couldn't send (a negative
-or non-number amount, a count that isn't whole, an area that isn't one, a spot that isn't one, over
-200 places) is a 400; a forged, changed, expired or another player's visit a 403 (`reason:
-'visit'`), the wrong secret a 403 (`reason: 'player'`). The answer: `{ xp, level, gained, unlocked:
-[ rewards ], supporter, title, accepted: { areas, spots }, daily?: { streak, xp } }`; a report with
+was driven since the last: `{ id, km, air, drifts, pads, together, tricks, areas: [ cellOf names ],
+spots: [ SPOTS ids ], daily, days? }`: id the page's own for the report (8 to 40 letters, digits,
+`_` or `-`), tricks the landed runs' XP, and only in a claim, days `{ xp, streak, day }`, the days'
+bonuses counted in the browser before the nickname. Anything the page couldn't send (a negative or
+non-number amount, a count that isn't whole, an area that isn't one, a spot that isn't one, over 200
+of either, an id or days that aren't) is a 400; a forged, changed, expired or another player's
+visit a 403 (`reason: 'visit'`), the wrong secret a 403 (`reason: 'player'`). The answer: `{ xp,
+own, level, gained, unlocked: [ rewards ], supporter, title, chosen, streakDay, streak, accepted: {
+areas, spots }, daily?: { streak, xp }, repeated? }`: xp and level the account's best (or the
+player's), own the player's own XP, title the one shown and chosen the one picked (`''` for the
+newest), streakDay and streak the last daily bonus's day and its days in a row. A report with
 nothing in it changes nothing, and is how the page asks where it stands as it starts.
 
 The page says what it drove, so the Worker can't know it's true. What it does is keep each report to
 what could have been driven in the real time since the player's last (`progress_at`, kept in D1;
-for a player's first report, the claim, an hour or the visit's length):
+for a player's first report, the claim, an hour):
 
 | Cap | |
 | --- | --- |
@@ -864,29 +896,37 @@ for a player's first report, the claim, an hour or the visit's length):
 | New areas and spots | one a minute of it (whole ones: a report sooner carries none); those over the cap aren't taken (`accepted` says which were) and the page sends them again with the next |
 | Areas and spots | each once a player (the `discoveries` table), 2,000 at most a player |
 | The day's bonus | once a UTC day; the streak counts days in a row, back to 1 after a day off |
-| Trick XP | 150 a minute since the last trick XP, however it comes (what doesn't fit comes with the run's next score) |
-| Reports | 10 a minute a player (`PROGRESS_POSTS`, Cloudflare's rate limiter, as `LIVE_CONNECTS`: 429 with Retry-After) |
+| Trick XP | 150 a minute (what doesn't fit isn't counted) |
+| The claim's days' bonuses | 14 days' worth of the biggest at most (2,800 XP), only in the claim |
+| Reports | none with anything in it sooner than 30 s after the last (each is a row written: a 429 with Retry-After, and the page keeps it for later); 10 a minute a player in all (`PROGRESS_POSTS`, Cloudflare's rate limiter, as `LIVE_CONNECTS`: 429 with Retry-After) |
 | One visit, one player | as for scores: a visit reports for the player that first used it |
 
 Two reports at once can't both count the same minutes: each is claimed with one statement against
-the last report's time, and the second is a 409 (the page sends it again). A report sent again at
-once earns nothing (no time has passed). Titles are checked the same way: `POST /api/player/title {
+the last report's time, and the second is a 409 (the page sends it again); its places are written
+only with that statement (`changes()`), so they aren't kept without their XP. A report with the id
+of the last one taken is that one sent again: it's answered with where the player stands
+(`repeated: true`) and counts nothing. Titles are checked the same way: `POST /api/player/title {
 id, secret, title }` takes only a title the player's level has (403 `reason: 'title'` otherwise),
-and `''` is the newest they have.
+and `''` is the newest they have (`{ level, title, chosen }`).
 
 What this can't stop is someone who reads the page's code and reports the most the caps allow from
 a real visit, every minute it lasts: about ten times as fast as driving does (300 XP a minute of
-driving, 150 of tricks and 150 of new areas), so level 30 in under three hours of a script running
-rather than a regular's 20-odd hours of driving. The Garage's unlocks are in the page anyway (as the pass's are, see
-[Known gaps](#known-gaps)); what the Worker keeps (the level and title others see) is what the caps
-are for, and the console below sets it right.
+driving, 150 of tricks and a new area's 100), so level 30 in under three hours of a script running
+rather than a regular's 20 hours of driving. A new player's claim counts an hour of that at once
+(about 37,000 XP, level 22), and no more however old the visit; an account shows its best player,
+so several players can't add up their caps. The Garage's unlocks are in the page anyway (as the
+pass's are, see [Known gaps](#known-gaps)); what the Worker keeps (the level and title others see)
+is what the caps are for, and the console below sets it right.
 
 ### What levels cost
 
-No Durable Object requests at all: reports don't touch `DriveLimits` (the free plan's 100,000 a day
-are for the visit caps and driving with others), and the rate limiter is Cloudflare's, as
-`LIVE_CONNECTS` is. Trick XP adds one D1 read and one write to each score the leaderboard takes, which
-already asks `DriveLimits` for its turn as before.
+Reports ask no Durable Object: they don't touch `DriveLimits` (the free plan's 100,000 a day are for
+the visit caps and driving with others), and the rate limiter is Cloudflare's, as `LIVE_CONNECTS`
+is. A level reached says nothing to a room. A title picked while driving with others does say hello
+to the room again, as renaming does: about 3 Durable Object requests (the Worker's ask of
+`DriveLimits`, the connection, and the old one's leave), counted in the day's
+[budget](#the-days-budget) and held by `LIVE_CONNECTS` and `LIVE_VISIT_CONNECTS`. Scores cost what
+they did: trick XP comes with the reports.
 
 Each report is one Worker request and, in D1 ([pricing](https://developers.cloudflare.com/d1/platform/pricing/),
 read 1 November 2026: Free 5 million rows read and 100,000 rows written a day; Paid 25 billion read
@@ -895,18 +935,19 @@ include the indexed column"):
 
 | | Rows read | Rows written |
 | --- | --- | --- |
-| A report | about 8 (the player, their account's players, whether it has the pass, the visit, the places it lists) | 1 (the player's row: no indexed column changes), and 1 for each new area or spot (`discoveries` has no rowid, so its key is the table) |
+| A report | about 8 (the player, their account's players, whether it has the pass, the visit, the places the time since the last lets it take: 5 at most after the claim) | 1 (the player's row: no indexed column changes), and 1 for each new area or spot (`discoveries` has no rowid, so its key is the table) |
 | A visit's first report | the same | 2 more (the visit's row and its index) |
 | An empty report (the page starting) | about 6 | none |
-| A trick score | about 4 more | 1 more |
 
 At a report every 2 minutes, an hour's drive is 30 reports: about 240 rows read and 30 to 40
 written. The day's 300 visits at 20 minutes each (100 driver-hours) are about 3,000 reports: some
 24,000 rows read (half a per cent of the Free plan's) and 3,000 to 5,000 written (3 to 5 %), and
-3,000 Worker requests of the Free plan's 100,000. The leaderboard's rows now add up each player's
-account's XP as a board is made (a look in `players_by_account` a row), and boards are cached for
-half a minute as before. Storage: a few numbers a player, and a 30-byte row a discovery (2,000 at
-most a player).
+3,000 Worker requests of the Free plan's 100,000. A script can't make a report read much more:
+listing 200 places, only those the time allows are looked up; and with a report no sooner than 30 s
+after the last, a player writes at most 2 rows a minute (2,880 a day), and a row for each new place
+(2,000 at most a player, ever). The leaderboard's rows now look up each player's account's best XP as a board is made (a
+look in `players_by_account` a row), and boards are cached for half a minute as before. Storage: a
+few numbers a player, and a 30-byte row a discovery (2,000 at most a player).
 
 ### Looking after levels
 
@@ -925,32 +966,41 @@ Removing a player removes their discoveries with them.
 
 ### How levels are tested
 
-`npm run test:drive-levels` (`scripts/test-drive-levels.mjs`): the curve and the track as written
-(every level from 2 to 50 gives something, level 2 within the first drive's bonuses, the pass's
-rides never on it, 19 of its 38 looks on it by level 40 and the showiest not, every look a choice
-the Garage has, the level-only colours never with the pass, the Garage's locks), reports' shapes
-and caps, and that progress.js asks no Durable Object; then the Worker under `wrangler dev`: a
-report's XP and its answer, every cap by the time since the last (a minute's worth, a second's, an
-hour later only five minutes', a report sent again earning nothing), the claim (an hour's worth),
-forged, changed, expired and someone else's visits, the wrong secret and reports it can't take,
-areas and spots only once (those over the cap taken by the next report, 2,000 at most), the day's
-bonus once a UTC day and its streak across midnight and after a day off, trick XP through
-`/api/score` (a run's square root, what its new points add, its 300, the 150 a minute), a
-supporter's ×1.5 (signed in with test keys standing in for Google's, an email in
-`SUPPORTER_EMAILS`, both players linked: and their XP counting together), titles (locked ones
-refused, on the leaderboard's rows), the rate limiter (the 11th report in a minute a 429), and
-discoveries going with a removed player. `npm run test:drive-levels-ui`
-(`scripts/test-drive-levels-ui.mjs`): the page on the test pad, with the real Worker behind Vite's
-proxy (a dev-only seam in `main.js`, `window.worldDriveVisitTest = { visit }`, hands it a visit's
-token, as the live tests' does): driving fills the bar with its pop-ups (the start spot, a new area,
-the day's bonus, the km); the level-up's burst with both levels' rewards and "Pick a nickname", its
-look opening the Garage where it's unlocked and on the ride; the Garage's chips and what picking a
-locked one does; the progress kept in the browser, across a reload, then claimed by a nickname (the
-Worker's XP within a rounding of the page's); the profile card and the track; a title picked, on the
-leaderboard and over the car on another page driving with it; with the pass, everything unlocked but
-the level-only colours, and a supporter's report earning ×1.5; a phone (the bar clear of the speed);
-and no Worker at all. Pictures of the bar, a level-up, the profile card, the track and the Garage's
-locks at 1280 × 720 and on a 375 × 740 touch screen with `TEST_SCREENSHOTS`.
+`npm run test:drive-levels` (`scripts/test-drive-levels.mjs`): the curve as a simulated regular
+climbs it (printing the play to levels 2, 5, 10, 30 and 50) and the track as written (every level
+from 2 to 50 gives something, level 2 within the first drive's bonuses, the pass's rides never on
+it, 19 of its 38 looks on it by level 40 and the showiest not, every look a choice the Garage has,
+the level-only colours never with the pass, the Garage's locks, a supporter's "Next"), reports'
+shapes and caps, and that progress.js asks no Durable Object; then the Worker under `wrangler dev`:
+a report's XP and its answer, every cap by the time since the last (a minute's worth, half a
+minute's, an hour later only five minutes', one sooner than 30 s after the last a 429), the claim
+(an hour's worth, and no more from a visit nearly six hours old), the days' bonuses a claim brings
+and their streak, a report sent again with its id counted once, forged, changed, expired and
+someone else's visits, the wrong secret and reports it can't take, areas and spots only once
+(those over the cap taken by the next report, 2,000 at most, and none kept by a report that lost
+to another at the same moment), the day's bonus once a UTC day and its streak across midnight and
+after a day off, trick XP in reports (the 150 a minute, and none with a score), a supporter's ×1.5
+(signed in with test keys standing in for Google's, an email in `SUPPORTER_EMAILS`, both players
+linked), an account's players not adding up (three claims linked to one account show the best),
+titles (locked ones refused, the one picked in each answer, on the leaderboard's rows), the rate
+limiter (the 11th report in a minute a 429), and discoveries going with a removed player.
+`npm run test:drive-levels-ui` (`scripts/test-drive-levels-ui.mjs`): the page on the test pad, with
+the real Worker behind Vite's proxy (a dev-only seam in `main.js`, `window.worldDriveVisitTest = {
+visit }`, hands it a visit's token, as the live tests' does): driving fills the bar with its pop-ups
+(the start spot, a new area, the day's bonus, the km); the level-up's burst with its reward and
+"Pick a nickname", its look opening the Garage where it's unlocked, worn and pressed; a milestone's
+level-up with its badge reward drawn small, and a long one listing three and "+6 more", clear of the
+trick callouts; the Garage's chips and what picking a locked one does; the progress kept in the
+browser, across a reload, then claimed by a nickname (the Worker's XP within a rounding of the
+page's, the day's bonus as days); the profile card and the track; a title picked ("Newest" when
+none is), on the leaderboard and over the car on another page driving with it; a report on its way
+for a second and a half (the day's bonus and the new area said once, what's shown never going
+down), one whose answer was lost sent again with its id after a reload and counted once, and 250
+areas sent 200 at a time; with the pass, everything unlocked but the level-only colours, the track
+and a level-up saying the pass looks are theirs already, and a supporter's report earning ×1.5; a
+phone (the bar clear of the speed, the level-up clear of the buttons); and no Worker at all. Pictures
+of the bar, level-ups, the profile card, the track and the Garage's locks at 1280 × 720 and on a 375
+× 740 touch screen with `TEST_SCREENSHOTS`.
 
 ## Supporter Pass (content)
 
@@ -1670,7 +1720,8 @@ secret `1x0000000000000000000000000000000AA` always passes; secret
   test pad a visit for everything a visit does (names, scores, [levels](#levels)' reports and
   driving with others), as `scripts/test-drive-levels-ui.mjs` does.
 - In the browser console, `window.drive` has the scene, the globe, the driver and `dropIn( { name,
-  lat, lon } )`, levels' `progress` (`progress.level`, `progress.progress`, what's `unsent`) and
+  lat, lon } )`, levels' `progress` (`progress.level`, `progress.progress`, what's `unsent` and the
+  report on its way, `flying`) and
   `profile`, and with driving with others on, `live`, `ghosts` and `friends`.
 
 Tests: `npm run test:drive-worker` (the Worker under `wrangler dev`, with stand-ins for Turnstile and
@@ -1764,7 +1815,7 @@ worker/drive/                the Worker: index.js (routes), limits.js (caps, the
                              visits.js (visit tokens); the Supporter Pass: accounts.js (sign-in,
                              sessions, /api/me), supporter.js (the webhook, who has it); driving
                              with others: live.js (/api/live and the rooms, DriveRoom); levels:
-                             progress.js (/api/progress, titles, trick XP); migrations/ (its D1
+                             progress.js (/api/progress, titles); migrations/ (its D1
                              tables)
 worker/google.js, sessions.js, stripe.js   shared with the construction app: Google's ID tokens,
                              the session cookie, Stripe's webhook signatures
@@ -1814,11 +1865,14 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   messages a second (four times what a page sends), for its visit's six hours: about 3,600 billed
   requests an hour, which nothing but the day's budget stops.
 - [Levels](#levels): the page says what it drove, so a script reporting the most the caps allow
-  from a real visit levels about ten times as fast as driving; the Garage's unlocks are in the page,
-  as the pass's are. Trick XP only comes with the runs the leaderboard takes (a run that doesn't beat
-  your best today, anywhere or at that place, isn't posted). Each device's nickname is a player of
-  its own: signed in, an account's players count their XP together, but a new device still picks a
-  nickname of its own. A nickname removed by the owner takes its XP with it.
+  from a real visit levels about ten times as fast as driving, and a new player's claim counts an
+  hour of that at once; the Garage's unlocks are in the page, as the pass's are. Each device's
+  nickname is a player of its own: signed in, an account shows its best player's level, but a new
+  device still picks a nickname of its own and its XP is its own. Others in a room see a new level
+  at the page's next hello there, not as it comes. A report whose answer was lost is counted once
+  only while it's the player's last (another device reporting in between would let it count again),
+  and if it listed more new places than its time allowed, the extra ones aren't sent again. A
+  nickname removed by the owner takes its XP with it.
 
 ## Credits
 

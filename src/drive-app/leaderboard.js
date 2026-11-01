@@ -30,9 +30,8 @@ const NO_VISIT = 'Names are picked on drives on the real 3D map.';
 // server on its own); getPlace(): the place being driven or pinned, for "only here", or null;
 // onPlayer(): a new player was made here (to link it to the account signed in, supporter.js, and
 // to claim the XP driven before, progress.js); onName(): a player made or renamed here (driving
-// with others says hello again with it, live.js); onXp( xp ): the XP a posted run's tricks earned
-// (the Worker's answer's xp, progress.js's scoreXp).
-export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace, onPlayer = () => {}, onName = () => {}, onXp = () => {} } ) {
+// with others says hello again with it, live.js).
+export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace, onPlayer = () => {}, onName = () => {} } ) {
 
 	const $ = selector => dialog.querySelector( selector );
 	const tabs = [ ...dialog.querySelectorAll( '.tabs button' ) ];
@@ -148,7 +147,6 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace, on
 
 			failures = 0;
 			const { today: day, rank, isNewBest } = answer.body;
-			onXp( answer.body.xp );
 			remember( day?.best ?? score, place, score );
 			// Only when it's news: a best ever, or higher up today's board than before.
 			if ( isNewBest || day?.rank < ranks.today ) showCard( 'posted', isNewBest ? `New best! ${ points( score ) }` : `Today's best: ${ points( score ) }`, standing( answer.body ) );

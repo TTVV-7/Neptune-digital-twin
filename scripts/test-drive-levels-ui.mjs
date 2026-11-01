@@ -1,14 +1,17 @@
 // npm run test:drive-levels-ui: levels in the page (src/drive-app/progress.js, profile.js, the
 // Garage's locks) in Chromium on the test pad, against the real Worker (worker/drive/progress.js
 // under `wrangler dev`) behind Vite's proxy. Driving fills the XP bar with pop-ups ("+46 XP · 1.4
-// km", a new area, the day's bonus, a start spot); a level-up's burst says what it unlocked, and a
-// look there opens the Garage, where it's on; before a nickname it's kept in the browser, said once
-// at the first level-up, and claimed by the nickname; the profile card, the whole track and the
-// title picker; a title on the leaderboard's rows and over the car on another page driving
-// with it; the Garage's chips ("Lv 7 · or Pass", "Pass", "Lv 25"); with the pass, its looks
-// unlocked and the level-only ones still not; a supporter's report earning ×1.5; and no Worker at
-// all (the dev server alone), still levels, kept in the browser. Pictures of each at 1280 × 720
-// and on a 375 × 740 touch screen.
+// km", a new area, the day's bonus, a start spot); a level-up's burst says what it unlocked (three
+// at most, a milestone's badge drawn small), and a look there opens the Garage, where it's on;
+// before a nickname it's kept in the browser, said once at the first level-up, and claimed by the
+// nickname; the profile card, the whole track and the title picker; a title on the leaderboard's
+// rows and over the car on another page driving with it; the Garage's chips ("Lv 7 · or Pass",
+// "Pass", "Lv 25"); a report on its way (the day's bonus and a new area said once, the level
+// steady), one whose answer was lost sent again and counted once, and a backlog of areas sent a
+// report's worth at a time; with the pass, its looks unlocked and the level-only ones still not, a
+// level-up that says they're the supporter's already, and a supporter's report earning ×1.5; a
+// phone (the level-up clear of the buttons); and no Worker at all (the dev server alone), still
+// levels, kept in the browser. Pictures of each at 1280 × 720 and on a 375 × 740 touch screen.
 //
 // The test pad has no visit: main.js's dev-only seam (window.worldDriveVisitTest) hands each page a
 // token made here with Turnstile's documented test secret, as /api/visit makes them, and
@@ -23,7 +26,7 @@ import { mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
-import { LEVEL_XP, XP, rewardsAt } from '../src/drive-app/levels.js';
+import { LEVEL_XP, XP, areaOf, levelOf, nextReward, rewardsAt, rewardsBetween } from '../src/drive-app/levels.js';
 import { makeVisit } from '../worker/drive/visits.js';
 import { startVite, startWorker } from './worker-harness.mjs';
 
@@ -163,6 +166,9 @@ async function until( fn ) {
 }
 
 const shown = page => page.evaluate( () => ( { level: window.drive.progress.level, ...window.drive.progress.progress, local: window.drive.progress.local } ) );
+const today = () => new Date().toISOString().slice( 0, 10 );
+// What the page counts as said: pop-ups with these words.
+const said = ( page, words ) => page.evaluate( words => window.popTexts.filter( text => text.startsWith( words ) ).length, words );
 const stored = page => page.evaluate( () => JSON.parse( localStorage.getItem( 'world-drive.progress' ) ) );
 const row = id => worker.d1( `SELECT xp, title, progress_at FROM players WHERE id = '${ id }'` )[ 0 ];
 
@@ -193,21 +199,23 @@ describe( 'World Drive levels in the page', () => {
 		assert.equal( await page.locator( '#globe-ui .profile .title-pick' ).isVisible(), false );
 		await dropIn( page );
 		assert.equal( await page.locator( '#drive-ui .xp-level' ).textContent(), 'Lv 1' );
-		// Level 3 within the first 250 m (the spot, the area and the day's bonus): its burst is held up
-		// for the next test by the pointer on it, as it is for anyone reading it.
-		await page.waitForFunction( () => window.drive.progress.level === 3, null, { timeout: 30000 } );
-		await page.locator( '#level-up button.reward', { hasText: 'Hearts boost' } ).hover();
-		// Driving on: the spot after 100 m, the area and the day's bonus after 250 m, and what's
-		// driven every 10 s.
-		await page.waitForFunction( () => window.popTexts.some( text => /^\+\d+ XP · \d+\.\d km/.test( text ) ), null, { timeout: 30000 } );
+		// Level 2 with the start spot, 100 m in: its burst is held up for the next test by the pointer
+		// on it, as it is for anyone reading it.
+		await page.waitForFunction( () => window.drive.progress.level === 2, null, { timeout: 30000 } );
+		await page.locator( '#level-up button.reward', { hasText: 'Sunburst paint' } ).hover();
+		// Driving on: the spot after 100 m, the day's bonus after 250 m, the area after a km, and
+		// what's driven every 10 s.
+		await page.waitForFunction( () => window.popTexts.some( text => text.startsWith( 'New area' ) ) && window.popTexts.some( text => /^\+\d+ XP · \d+\.\d km/.test( text ) ), null, { timeout: 90000 } );
 		const pops = await page.evaluate( () => window.popTexts );
-		for ( const said of [ `Furka Pass +${ XP.spot } XP`, `New area +${ XP.area } XP`, `Daily bonus +${ XP.daily } XP` ] ) assert.ok( pops.includes( said ), `${ said }: ${ pops }` );
+		for ( const words of [ `Furka Pass +${ XP.spot } XP`, `New area +${ XP.area } XP`, `Daily bonus +${ XP.daily } XP` ] ) assert.ok( pops.includes( words ), `${ words }: ${ pops }` );
 		await shot( page, 'levels-0-bar' );
-		// The bar: level 3 (500 XP) and on into it.
-		assert.equal( await page.locator( '#drive-ui .xp-level' ).textContent(), 'Lv 3' );
+		// The bar: the level and on into it.
+		const { level } = await shown( page );
+		assert.ok( level >= 2, `level ${ level }` );
+		assert.equal( await page.locator( '#drive-ui .xp-level' ).textContent(), `Lv ${ level }` );
 		const width = await page.locator( '#drive-ui .xp-hud .xp-bar i' ).evaluate( i => parseFloat( i.style.width ) );
 		assert.ok( width >= 0 && width < 100, `${ width }` );
-		assert.match( await page.locator( '#drive-ui .xp-count' ).textContent(), /^\d+ \/ 400 XP$/ );
+		assert.match( await page.locator( '#drive-ui .xp-count' ).textContent(), new RegExp( `^\\d+ / ${ LEVEL_XP[ level + 1 ] - LEVEL_XP[ level ] } XP$` ) );
 		assert.deepEqual( page.errors, [] );
 
 	} );
@@ -216,24 +224,26 @@ describe( 'World Drive levels in the page', () => {
 
 		const card = page.locator( '#level-up' );
 		await card.waitFor();
-		assert.equal( await card.locator( '.heading' ).textContent(), 'Level 3!' );
-		// Both levels' rewards: the Sunburst paint and the Hearts boost, each a way to the Garage.
-		assert.deepEqual( await card.locator( 'button.reward' ).allTextContents(), [ ...rewardsAt( 2 ), ...rewardsAt( 3 ) ].map( r => r.name ) );
+		assert.equal( await card.locator( '.heading' ).textContent(), 'Level 2!' );
+		// Its reward, the Sunburst paint, a way to the Garage that says so.
+		assert.deepEqual( await card.locator( 'button.reward' ).allTextContents(), rewardsAt( 2 ).map( r => r.name ) );
+		assert.equal( await card.locator( 'button.reward' ).getAttribute( 'aria-label' ), 'Try Sunburst paint on in the Garage' );
 		assert.ok( await card.locator( '.nickname' ).isVisible(), 'no "Pick a nickname"' );
 		await shot( page, 'levels-1-level-up' );
-		await card.locator( 'button.reward', { hasText: 'Hearts boost' } ).click();
+		await card.locator( 'button.reward', { hasText: 'Sunburst paint' } ).click();
 		const garage = page.locator( '#garage' );
 		await garage.waitFor();
 		assert.equal( await page.evaluate( () => window.drive.mode ), 'paused' );
-		// The hearts boost and the sunburst paint are unlocked; what's next on the track says so.
-		const hearts = garage.locator( '[data-part="boost"] .choice[data-id="hearts"]' );
-		assert.equal( await hearts.evaluate( b => b.classList.contains( 'locked' ) ), false );
-		await hearts.click();
-		assert.equal( await hearts.evaluate( b => b.classList.contains( 'on' ) ), true );
-		assert.equal( await garage.locator( '[data-part="colour"] .choice[data-id="sunburst"]' ).evaluate( b => b.classList.contains( 'locked' ) ), false );
+		// The sunburst paint is unlocked, and worn once picked (and said to be, aria-pressed).
+		const sunburst = garage.locator( '[data-part="colour"] .choice[data-id="sunburst"]' );
+		assert.equal( await sunburst.evaluate( b => b.classList.contains( 'locked' ) ), false );
+		await sunburst.click();
+		assert.equal( await sunburst.evaluate( b => b.classList.contains( 'on' ) ), true );
+		assert.equal( await sunburst.getAttribute( 'aria-pressed' ), 'true' );
+		assert.equal( await garage.locator( '[data-part="colour"] .choice[data-id="blaze"]' ).getAttribute( 'aria-pressed' ), 'false' );
 		await page.locator( '#garage .done' ).click();
 		await page.locator( '#pause .resume' ).click();
-		assert.equal( await page.evaluate( () => window.drive.driver.spec.fx.boost ), 'hearts' );
+		assert.equal( await page.evaluate( () => JSON.parse( localStorage.getItem( 'world-drive.garage' ) )[ 'go-kart' ].colour ), 'sunburst' );
 		// "Pick a nickname" only that once.
 		assert.equal( ( await stored( page ) ).asked, true );
 
@@ -252,12 +262,12 @@ describe( 'World Drive levels in the page', () => {
 		assert.equal( await chip( 'colour', 'teal' ), 'Lv 11' );
 		assert.equal( await chip( 'colour', 'black' ), 'Pass' );
 		assert.equal( await chip( 'colour', 'copper' ), 'Lv 25' );
-		assert.equal( await chip( 'boost', 'hearts' ), '' );
+		assert.equal( await chip( 'colour', 'sunburst' ), '' );
 		assert.equal( await garage.locator( '[data-part="colour"] .choice[data-id="teal"]' ).getAttribute( 'title' ), 'Teal: unlocks at level 11, or with the Supporter Pass' );
 		await shot( page, 'levels-2-garage' );
 		// A level-only colour says which level; the pass's sheet doesn't open for it.
 		await garage.locator( '[data-part="colour"] .choice[data-id="copper"]' ).click();
-		assert.equal( await garage.locator( '.level-note' ).textContent(), 'Copper comes at level 25: you\'re level 3. Drive on!' );
+		assert.equal( await garage.locator( '.level-note' ).textContent(), `Copper comes at level 25: you're level ${ ( await shown( page ) ).level }. Drive on!` );
 		assert.equal( await page.locator( '#pass' ).isVisible(), false );
 		// One the pass unlocks opens it.
 		await garage.locator( '[data-part="boost"] .choice[data-id="plasma"]' ).click();
@@ -267,14 +277,56 @@ describe( 'World Drive levels in the page', () => {
 
 	} );
 
+	test( 'a milestone\'s level-up draws its badge reward small; a long one lists three and says how many more', async () => {
+
+		await page.locator( '#pause .resume' ).click();
+		await page.waitForFunction( () => window.drive.mode === 'driving' );
+		const card = page.locator( '#level-up' );
+		const levelUp = ( from, to ) => page.evaluate( event => {
+
+			window.drive.profile.hideLevelUp();
+			window.drive.profile.levelUp( event );
+
+		}, { level: to, from, rewards: rewardsBetween( from, to ), nickname: false } );
+		await levelUp( 9, 10 );
+		await card.waitFor();
+		assert.equal( await card.locator( '.heading' ).textContent(), 'Level 10!' );
+		assert.deepEqual( await card.locator( '.reward' ).allTextContents(), [ '10Bronze badge' ] );
+		// (Once it's come in: it springs a little past its size on the way.)
+		await card.locator( '.level-card' ).evaluate( el => Promise.all( el.getAnimations().map( a => a.finished ) ) );
+		const reward = await card.locator( '.unlocked .level-badge' ).boundingBox();
+		const own = await card.locator( '.level-card > .level-badge' ).boundingBox();
+		assert.ok( reward.width <= 22 && reward.height <= 22, JSON.stringify( reward ) );
+		assert.ok( Math.abs( own.width - 54 ) <= 1, `${ own.width }` );
+		await shot( page, 'levels-1b-level-10' );
+		// Levels 4 to 12 at once: three, and the rest counted.
+		await levelUp( 3, 12 );
+		assert.equal( await card.locator( '.reward' ).count(), 3 );
+		assert.equal( await card.locator( '.more' ).textContent(), `+${ rewardsBetween( 3, 12 ).length - 3 } more` );
+		assert.deepEqual( await card.locator( '.reward.title' ).first().allTextContents(), [ 'Title:Joyrider' ] );
+		await page.waitForTimeout( 600 );
+		await shot( page, 'levels-1c-level-12' );
+		// Clear of the trick callouts under it (a level-up often comes with a landed trick).
+		await page.evaluate( () => window.drive.driver.hud.tricks( { lines: [ 'Backflip!', '360 Spin!' ], points: 1950, mult: 3, combo: true } ) );
+		const box = await card.locator( '.level-card' ).boundingBox();
+		const tricks = await page.locator( '#hud .dhud-tricks b' ).first().boundingBox();
+		assert.ok( box.y + box.height <= tricks.y, `the card (${ box.y + box.height }) runs into the tricks (${ tricks.y })` );
+		await page.evaluate( () => window.drive.profile.hideLevelUp() );
+		await page.keyboard.press( 'Escape' );
+		await page.waitForFunction( () => window.drive.mode === 'paused' );
+
+	} );
+
 	test( 'before a nickname it\'s kept in this browser; the nickname claims it', async () => {
 
 		// Back on the globe: what was driven is added in here.
 		await page.locator( '#pause .to-globe' ).click();
 		await page.waitForFunction( () => window.drive.mode === 'globe' );
 		const local = ( await stored( page ) ).local;
-		assert.ok( local.xp >= LEVEL_XP[ 3 ], JSON.stringify( local ) );
-		assert.ok( local.totals.km > 0.25 );
+		assert.ok( local.xp >= LEVEL_XP[ 2 ], JSON.stringify( local ) );
+		assert.ok( local.totals.km > 1 );
+		// The day's bonus, kept apart for the claim.
+		assert.deepEqual( [ local.bonus, local.streakDay, local.streak ], [ XP.daily, today(), 1 ] );
 		assert.deepEqual( local.totals.spots, [ 'furka' ] );
 		assert.equal( local.totals.areas.length, 1 );
 		const before = await shown( page );
@@ -299,14 +351,15 @@ describe( 'World Drive levels in the page', () => {
 		const claim = await until( () => page.reports.find( r => r.sent?.km > 0 ) );
 		assert.equal( claim.status, 200 );
 		assert.deepEqual( claim.sent.spots, [ 'furka' ] );
-		assert.equal( claim.sent.daily, true );
+		assert.deepEqual( claim.sent.days, { xp: XP.daily, streak: 1, day: today() } );
+		assert.equal( claim.sent.daily, false );
 		const server = row( named.id );
 		// The Worker works it out again, from what was driven: the same, give or take rounding.
 		assert.ok( Math.abs( server.xp - before.xp ) <= 3, `${ server.xp } on the Worker, ${ before.xp } here` );
 		assert.equal( ( await shown( page ) ).xp, server.xp );
-		assert.equal( ( await shown( page ) ).level, 3 );
+		assert.equal( ( await shown( page ) ).level, levelOf( server.xp ) );
 		// Today's bonus is had, so the next drive doesn't say it again.
-		assert.equal( ( await stored( page ) ).server.streakDay, new Date().toISOString().slice( 0, 10 ) );
+		assert.equal( ( await stored( page ) ).server.streakDay, today() );
 		await page.locator( '#leaderboard .close' ).click();
 		assert.deepEqual( page.errors, [] );
 
@@ -315,21 +368,28 @@ describe( 'World Drive levels in the page', () => {
 	test( 'the profile card and the whole track', async () => {
 
 		const profile = page.locator( '#globe-ui .profile' );
+		const { level } = await shown( page );
 		assert.equal( await profile.locator( '.name' ).textContent(), 'Level Racer' );
-		assert.equal( await profile.locator( '.title' ).textContent(), 'Lv 3 · Rookie' );
-		assert.equal( await profile.locator( '.level-badge b' ).textContent(), '3' );
-		assert.equal( await profile.locator( '.next' ).textContent(), 'Next: Joyrider at Lv 4' );
+		assert.equal( await profile.locator( '.title' ).textContent(), `Lv ${ level } · Rookie` );
+		assert.equal( await profile.locator( '.level-badge b' ).textContent(), String( level ) );
+		assert.equal( await profile.locator( '.next' ).textContent(), `Next: ${ nextReward( level ).name } at Lv ${ nextReward( level ).level }` );
 		assert.equal( await profile.locator( '.save-note' ).isVisible(), false );
 		assert.ok( await profile.locator( '.title-pick' ).isVisible() );
 		assert.deepEqual( await profile.locator( 'select option' ).allTextContents(), [ 'Newest (Rookie)', 'Rookie' ] );
+		// None picked: "Newest" is.
+		assert.equal( await profile.locator( 'select' ).inputValue(), '' );
 		await shot( page, 'levels-4-profile' );
 		await profile.locator( '.track-open' ).click();
 		const track = page.locator( '#track' );
 		await track.waitFor();
 		assert.equal( await track.locator( 'li' ).count(), 50 );
-		assert.equal( await track.locator( 'li.done' ).count(), 3 );
-		assert.equal( await track.locator( 'li.next' ).getAttribute( 'data-level' ), '4' );
+		assert.equal( await track.locator( 'li.done' ).count(), level );
+		assert.equal( await track.locator( 'li.next' ).getAttribute( 'data-level' ), String( level + 1 ) );
 		assert.deepEqual( await track.locator( 'li[data-level="7"] .reward' ).allTextContents(), [ 'Plasma boostor ⭐ Pass' ] );
+		assert.deepEqual( await track.locator( 'li[data-level="4"] .reward' ).allTextContents(), [ 'Title:Joyrider' ] );
+		// Each level's XP on one line.
+		const xp = await track.locator( 'li[data-level="30"] .level-head .xp' ).boundingBox();
+		assert.ok( xp.height < 16, `${ xp.height }` );
 		assert.deepEqual( await track.locator( 'li[data-level="25"] .reward' ).allTextContents(), [ 'Copper paintLevels only' ] );
 		assert.equal( await track.locator( 'li[data-level="50"] .level-head .level-badge' ).getAttribute( 'data-frame' ), 'legend' );
 		await shot( page, 'levels-5-track' );
@@ -345,6 +405,9 @@ describe( 'World Drive levels in the page', () => {
 		await page.waitForFunction( () => window.drive.progress.level === 9 );
 		const select = page.locator( '#globe-ui .profile select' );
 		assert.deepEqual( await select.locator( 'option' ).allTextContents(), [ 'Newest (Drifter)', 'Rookie', 'Joyrider', 'Drifter' ] );
+		// None picked (the Worker resolves '' to Drifter for others, but the page keeps '' as picked).
+		assert.equal( await select.inputValue(), '' );
+		assert.equal( await page.evaluate( () => window.drive.progress.chosenTitle ), '' );
 		await select.selectOption( 'joyrider' );
 		await page.waitForFunction( () => window.drive.progress.chosenTitle === 'joyrider' );
 		assert.equal( row( named.id ).title, 'joyrider' );
@@ -391,6 +454,158 @@ describe( 'World Drive levels in the page', () => {
 
 } );
 
+describe( 'World Drive levels: reports on their way', () => {
+
+	test( 'while a report is on its way, the day\'s bonus and a new area are said once, and the level holds', async () => {
+
+		const racer = await makePlayer( 'Flight Racer' );
+		const page = await levelsPage( { visit: racer.visit, player: racer } );
+		try {
+
+			await dropIn( page );
+			// The spot, the day's bonus and a new area, a km in.
+			await page.waitForFunction( () => window.popTexts.some( text => text.startsWith( 'New area' ) ), null, { timeout: 90000 } );
+			assert.equal( await said( page, 'Daily bonus' ), 1 );
+			// A landed trick's boost isn't a drift boost.
+			const drifts = await page.evaluate( () => window.drive.progress.unsent.drifts );
+			await page.evaluate( () => {
+
+				window.drive.driver.boost = { time: 0.5, speed: 1.2, name: 'Trick boost', left: 0.5 };
+
+			} );
+			await page.waitForTimeout( 300 );
+			assert.equal( await page.evaluate( () => window.drive.progress.unsent.drifts ), drifts );
+			// The report takes a second and a half to be answered, and the drive goes on meanwhile.
+			await page.route( '**/api/progress', async route => {
+
+				await new Promise( resolve => setTimeout( resolve, 1500 ) );
+				await route.continue();
+
+			} );
+			const flight = await page.evaluate( async () => {
+
+				const seen = [];
+				let going = true;
+				const look = () => {
+
+					seen.push( { xp: window.drive.progress.progress.xp, level: window.drive.progress.level } );
+					if ( going ) requestAnimationFrame( look );
+
+				};
+				look();
+				await window.drive.progress.report();
+				// And a few seconds after it (discoveries are looked for each second).
+				await new Promise( resolve => setTimeout( resolve, 2500 ) );
+				going = false;
+				return { seen, flying: window.drive.progress.flying };
+
+			} );
+			await page.unroute( '**/api/progress' );
+			assert.equal( await said( page, 'Daily bonus' ), 1, 'the day\'s bonus said again' );
+			assert.equal( await said( page, 'New area' ), 1, 'the area said again' );
+			assert.equal( flight.flying, null );
+			// What's shown never went down (it goes on up as it's driven; the Worker's rounding may be a
+			// point off the page's), nor did the level.
+			for ( let i = 1; i < flight.seen.length; i ++ ) {
+
+				assert.ok( flight.seen[ i ].xp >= flight.seen[ i - 1 ].xp - 1, `${ flight.seen[ i - 1 ].xp } then ${ flight.seen[ i ].xp }` );
+				assert.ok( flight.seen[ i ].level >= flight.seen[ i - 1 ].level );
+
+			}
+			const answered = await until( () => page.reports.find( r => r.sent?.km > 0 ) );
+			assert.equal( answered.status, 200 );
+			assert.deepEqual( [ answered.sent.daily, answered.sent.spots, answered.sent.areas.length ], [ true, [ 'furka' ], 1 ] );
+			assert.equal( ( await stored( page ) ).server.streakDay, today() );
+			assert.deepEqual( page.errors, [] );
+
+		} finally {
+
+			await page.context().close();
+
+		}
+
+	} );
+
+	test( 'a report whose answer was lost goes again with its id, after a reload too, and counts once', async () => {
+
+		const racer = await makePlayer( 'Lost Answer' );
+		const page = await levelsPage( { visit: racer.visit, player: racer } );
+		try {
+
+			// Two km driven, reported; the Worker takes it, but the answer never comes back.
+			await page.route( '**/api/progress', async route => {
+
+				await route.fetch();
+				await route.abort();
+
+			} );
+			await page.evaluate( () => {
+
+				Object.assign( window.drive.progress.unsent, { km: 2 } );
+				return window.drive.progress.report();
+
+			} );
+			await page.unroute( '**/api/progress' );
+			assert.equal( row( racer.id ).xp, 2 * XP.km );
+			const flying = await page.evaluate( () => window.drive.progress.flying );
+			assert.equal( flying.sent.km, 2 );
+			// Still shown, and kept in the browser.
+			assert.equal( ( await shown( page ) ).xp, 2 * XP.km );
+			assert.equal( ( await stored( page ) ).flying.id, flying.id );
+			// The page goes and comes back: as it starts, the report goes again, with its id.
+			await page.reload();
+			await page.locator( '#notice button', { hasText: 'Drive the test pad' } ).click();
+			await page.waitForFunction( () => window.drive?.mode === 'globe' );
+			await page.waitForFunction( () => window.drive.progress.flying === null, null, { timeout: 15000 } );
+			const again = await until( () => page.reports.find( r => r.sent?.id === flying.id ) );
+			assert.equal( again.status, 200 );
+			assert.equal( again.body.repeated, true );
+			assert.equal( row( racer.id ).xp, 2 * XP.km );
+			assert.equal( ( await shown( page ) ).xp, 2 * XP.km );
+			assert.deepEqual( page.errors, [] );
+
+		} finally {
+
+			await page.context().close();
+
+		}
+
+	} );
+
+	test( 'a backlog of areas goes a report\'s worth at a time, the rest kept for the next', async () => {
+
+		const racer = await makePlayer( 'Backlog Racer' );
+		const page = await levelsPage( { visit: racer.visit, player: racer } );
+		try {
+
+			// 250 areas waiting (more than a report may list).
+			const areas = [ ...new Set( Array.from( { length: 400 }, ( _, i ) => areaOf( - 60 + ( i % 20 ) * 0.5, - 170 + Math.floor( i / 20 ) * 0.5 ) ) ) ].slice( 0, 250 );
+			assert.equal( areas.length, 250 );
+			await page.evaluate( areas => {
+
+				Object.assign( window.drive.progress.unsent, { km: 1, areas } );
+				return window.drive.progress.report();
+
+			}, areas );
+			const sent = await until( () => page.reports.find( r => r.sent?.km > 0 ) );
+			assert.equal( sent.status, 200 );
+			assert.equal( sent.sent.areas.length, 200 );
+			// The first report (an hour's worth) takes 60 places; the other 190 wait.
+			assert.equal( sent.body.accepted.areas.length, 60 );
+			assert.equal( await page.evaluate( () => window.drive.progress.unsent.areas.length ), 190 );
+			assert.equal( row( racer.id ).xp, XP.km + 60 * XP.area );
+			assert.deepEqual( page.errors, [] );
+
+		} finally {
+
+			await page.context().close();
+
+		}
+
+	} );
+
+} );
+
 describe( 'World Drive levels with the Supporter Pass', () => {
 
 	test( 'with the pass its looks are unlocked, the level-only ones not; a supporter\'s reports earn ×1.5', async () => {
@@ -408,11 +623,39 @@ describe( 'World Drive levels with the Supporter Pass', () => {
 			const locked = await garage.locator( '.choice.locked' ).evaluateAll( buttons => buttons.map( b => `${ b.closest( 'section' ).dataset.part } ${ b.dataset.id } ${ b.querySelector( '.unlock' ).textContent }` ) );
 			assert.deepEqual( locked, [ 'colour copper Lv 25', 'colour mint Lv 35', 'colour plum Lv 45', 'colour champion Lv 50' ] );
 			await page.locator( '#garage .done' ).click();
+			// What's next is new to a supporter: not the Sunburst paint their pass has.
+			assert.equal( await page.locator( '#globe-ui .profile .next' ).textContent(), 'Next: Joyrider at Lv 4' );
+			await page.locator( '#globe-ui .profile .track-open' ).click();
+			const track = page.locator( '#track' );
+			await track.waitFor();
+			assert.deepEqual( await track.locator( 'li[data-level="2"] .reward' ).allTextContents(), [ 'Sunburst paint✓ Pass' ] );
+			assert.deepEqual( await track.locator( 'li[data-level="25"] .reward' ).allTextContents(), [ 'Copper paintLevels only' ] );
+			await shot( page, 'levels-pass-track' );
+			await track.locator( '.close' ).click();
 			// The first answer says the Worker counts it ×1.5.
 			await page.waitForFunction( () => window.drive.progress.supporter );
 			await dropIn( page );
 			await page.evaluate( () => window.drive.driver.release( 'KeyW' ) );
-			// Two km driven, as the page counts it, reported: 20 XP, ×1.5.
+			// A level-up that brings only a look the pass has: no news, but it says so.
+			const card = page.locator( '#level-up' );
+			await page.evaluate( event => window.drive.profile.levelUp( event ), { level: 2, from: 1, rewards: rewardsAt( 2 ), nickname: false } );
+			await card.waitFor();
+			assert.equal( await card.locator( '.heading' ).textContent(), 'Level 2!' );
+			assert.equal( await card.locator( '.unlocked' ).isVisible(), false );
+			assert.equal( await card.locator( '.had' ).textContent(), 'Already yours with the pass: Sunburst paint' );
+			// One that brings a title too: the title is news.
+			await page.evaluate( event => {
+
+				window.drive.profile.hideLevelUp();
+				window.drive.profile.levelUp( event );
+
+			}, { level: 4, from: 2, rewards: rewardsBetween( 2, 4 ), nickname: false } );
+			assert.deepEqual( await card.locator( '.reward' ).allTextContents(), [ 'Title:Joyrider' ] );
+			assert.equal( await card.locator( '.had' ).textContent(), 'Already yours with the pass: Hearts boost' );
+			await page.waitForTimeout( 600 );
+			await shot( page, 'levels-pass-level-up' );
+			await page.evaluate( () => window.drive.profile.hideLevelUp() );
+			// Two km driven, as the page counts it, reported: ×1.5.
 			const before = row( fan.id ).xp;
 			const [ res ] = await Promise.all( [
 				page.waitForResponse( r => new URL( r.url() ).pathname === '/api/progress' && r.request().postDataJSON()?.report?.km === 2 ),
@@ -425,8 +668,8 @@ describe( 'World Drive levels with the Supporter Pass', () => {
 			] );
 			const last = await res.json();
 			assert.equal( last.supporter, true );
-			assert.equal( last.gained, 30 );
-			assert.equal( row( fan.id ).xp, before + 30 );
+			assert.equal( last.gained, 2 * XP.km * 1.5 );
+			assert.equal( row( fan.id ).xp, before + 2 * XP.km * 1.5 );
 			assert.deepEqual( page.errors, [] );
 
 		} finally {
@@ -456,6 +699,30 @@ describe( 'World Drive levels on a phone, and with no Worker', () => {
 			const speed = ( await page.locator( '#hud .dhud-cluster' ).boundingBox() ).y;
 			assert.ok( bar.y + bar.height <= speed, `the bar (${ bar.y + bar.height }) runs into the speed (${ speed })` );
 			assert.ok( bar.x >= 0 && bar.x + bar.width <= PHONE.width );
+			// The card clear of the buttons on the right (FLY, BOOST, DRIFT, GAS), however long it is.
+			const clear = async () => {
+
+				const box = await page.locator( '#level-up .level-card' ).boundingBox();
+				for ( const button of await page.locator( '#hud .dhud-touch button:visible' ).all() ) {
+
+					const b = await button.boundingBox();
+					const overlap = box.x < b.x + b.width && b.x < box.x + box.width && box.y < b.y + b.height && b.y < box.y + box.height;
+					assert.ok( ! overlap, `the card ${ JSON.stringify( box ) } is over ${ await button.getAttribute( 'class' ) } ${ JSON.stringify( b ) }` );
+
+				}
+
+			};
+			await clear();
+			await page.evaluate( event => {
+
+				window.drive.profile.hideLevelUp();
+				window.drive.profile.levelUp( event );
+
+			}, { level: 12, from: 1, rewards: rewardsBetween( 1, 12 ), nickname: true } );
+			await page.waitForTimeout( 600 );
+			await clear();
+			await shot( page, 'levels-phone-1b-level-12' );
+			await page.evaluate( () => window.drive.profile.hideLevelUp() );
 			await page.waitForTimeout( 6000 );
 			await shot( page, 'levels-phone-2-bar' );
 			await page.evaluate( () => window.drive.toGlobe() );

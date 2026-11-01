@@ -6,10 +6,10 @@
 // XP comes from driving (each km, on the ground or flying), air time off jumps, drift boosts paid
 // out, boost pads, minutes driving with others, the first drive in each area (live-protocol.js's
 // cellOf) and at each start spot (places.js's SPOTS), the day's first drive (more for days in a
-// row), and landed trick runs (the leaderboard's scores, worker/drive/scores.js). The page reports
-// what it drove (POST /api/progress, a REPORT); the Worker caps each amount by the time since the
-// player's last report (CAPS), works out the XP and keeps it with the leaderboard player. A
-// supporter's XP counts SUPPORTER_XP times.
+// row), and landed trick runs (each run as drive.js scores it). The page reports what it drove
+// (POST /api/progress, a REPORT); the Worker caps each amount by the time since the player's last
+// report (CAPS), works out the XP and keeps it with the leaderboard player. A supporter's XP counts
+// SUPPORTER_XP times.
 //
 // The unlock track: about half of the Supporter Pass's Garage looks come with levels on the way to
 // 40 (the pass still gives them all at once), and some rewards come only with levels, supporters
@@ -23,22 +23,25 @@ export const LEVEL_MAX = 50;
 
 // --- what XP is earned for ------------------------------------------------------------------
 
+// Driving is the game, so its km earn the most of the steady sources: a kart flat out (110 km/h)
+// makes about 37 XP a minute, a car about 50; a new area is worth a few minutes of driving, not
+// more, so hopping between drop-ins doesn't beat driving by much.
 export const XP = {
-	km: 10, // each km driven, on the ground or flying
+	km: 20, // each km driven, on the ground or flying
 	air: 3, // each second in the air off a jump (not flying)
 	drift: 8, // each drift boost paid out
 	pad: 4, // each boost pad driven over
 	together: 6, // each minute driving with others in your room
-	area: 150, // the first drive in an area (about 11 km across)
+	area: 100, // the first drive in an area (about 11 km across)
 	spot: 250, // each start spot, the first time
 	daily: 100, // the day's first drive (UTC days)
 	streak: 25, // and this much more for each day in a row before it...
 	streakMax: 4, // ...counting at most this many: 200 at most, from the fifth day in a row
 };
-// The time and distance that make the first drive somewhere count: an area is discovered once
-// you've driven DISCOVER_KM in it (a drop-in alone isn't a drive), and the day's bonus comes with
-// the first report that has DAILY_KM of driving in it.
-export const DISCOVER_KM = 0.25;
+// The distances that make the first drive somewhere count: an area is discovered once you've driven
+// DISCOVER_KM in it (a drop-in and a short hop aren't a drive), and the day's bonus comes once
+// DAILY_KM has been driven that day.
+export const DISCOVER_KM = 1;
 export const DAILY_KM = 0.25;
 // How near (m) a start spot you have to drive for it to count.
 export const SPOT_RANGE = 300;
@@ -52,15 +55,17 @@ export const SUPPORTER_XP = 1.5;
 
 // --- the caps -------------------------------------------------------------------------------
 
-// What one report (or a trick run's score) can carry, by the real time since the player's last:
-// window, the most time (s) one report counts (a report every couple of minutes is the page's way);
-// claim, the time (s) a player's first report counts at least (what was driven before picking a
-// nickname, kept in the browser and claimed with it); kmh, faster than any ride goes flat out with
-// the booster, flying or not (the night cruiser's 205 km/h doubled); air, seconds of air a second;
-// drifts and pads, the most a second; rate, the most XP a minute from the continuous sources (km,
-// air, drift boosts, pads, minutes together) all at once, which no driving comes near; places,
-// new areas and spots a minute (whole ones: a report that comes sooner carries none, and they wait
-// for the next); tricks, XP a minute from tricks.
+// What one report can carry, by the real time since the player's last: window, the most time (s)
+// one report counts (a report every couple of minutes is the page's way); claim, the time (s) a
+// player's first report counts (what was driven before picking a nickname, kept in the browser and
+// claimed with it: an hour of these caps is several hours of real driving); kmh, faster than any
+// ride goes flat out with the booster, flying or not (the night cruiser's 205 km/h doubled); air,
+// seconds of air a second; drifts and pads, the most a second; rate, the most XP a minute from the
+// continuous sources (km, air, drift boosts, pads, minutes together) all at once, which no driving
+// comes near; places, new areas and spots a minute (whole ones: a report that comes sooner carries
+// none, and they wait for the next); tricks, XP a minute from landed trick runs; gap, the least
+// time (s) between two reports with anything in them (each is a row written: one sooner is turned
+// away, and the page sends it later).
 export const CAPS = {
 	window: 5 * 60,
 	claim: 60 * 60,
@@ -71,10 +76,14 @@ export const CAPS = {
 	rate: 300,
 	places: 1,
 	tricks: 150,
+	gap: 30,
 };
 // The most discoveries (areas and spots) kept for a player; the most places one report may list.
 export const DISCOVERIES_MAX = 2000;
 export const REPORT_PLACES = 200;
+// A claim carries the days' bonuses this browser counted before the nickname (a REPORT's days), at
+// most CLAIM_DAYS days' worth of the biggest bonus.
+export const CLAIM_DAYS = 14;
 
 // --- the curve ------------------------------------------------------------------------------
 
@@ -218,10 +227,11 @@ export function levelOnly( part, id ) {
 
 }
 
-// The next reward after `level`, or null at the top.
-export function nextReward( level ) {
+// The next reward after `level`, or null at the top. pro: for a supporter, whose pass has its looks
+// already, the next that's new to them.
+export function nextReward( level, { pro = false } = {} ) {
 
-	return REWARDS.find( reward => reward.level > level ) ?? null;
+	return REWARDS.find( reward => reward.level > level && ! ( pro && reward.kind === 'look' && reward.pass ) ) ?? null;
 
 }
 
@@ -259,10 +269,15 @@ export function badgeOf( level ) {
 // --- reports --------------------------------------------------------------------------------
 
 // What the page reports with POST /api/progress, all since its last report: km driven, seconds in
-// the air, drift boosts paid out, boost pads, minutes driving with others, areas (cellOf's names)
-// and spots (SPOTS' ids) first driven, whether it's the day's first drive, and, only when claiming
-// what was driven before picking a nickname, the trick XP earned meanwhile.
+// the air, drift boosts paid out, boost pads, minutes driving with others, the trick XP of the runs
+// landed (trickXp, what each run's new points add), areas (cellOf's names) and spots (SPOTS' ids)
+// first driven, and whether it's the day's first drive. Two more, that emptyReport leaves out: id,
+// the page's own for the report (REPORT_ID), so one sent again whose answer never came is counted
+// once; and only in a claim, days: { xp, streak, day }, the days' bonuses counted in this browser
+// before the nickname (their XP together, and the streak they made, as of `day`).
 export const REPORT_FIELDS = [ 'km', 'air', 'drifts', 'pads', 'together', 'tricks' ];
+export const REPORT_ID = /^[\w-]{8,40}$/;
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 export function emptyReport() {
 
@@ -281,7 +296,7 @@ export function checkArea( text ) {
 }
 
 // A report as sent, if it's one the page could send, else null: every amount a number of 0 or
-// more (counts whole), places listed once, at most REPORT_PLACES of them.
+// more (counts whole), places listed once, at most REPORT_PLACES of them, and id and days as said.
 export function checkReport( raw ) {
 
 	if ( ! raw || typeof raw !== 'object' || Array.isArray( raw ) ) return null;
@@ -306,7 +321,31 @@ export function checkReport( raw ) {
 
 	if ( raw.daily !== undefined && typeof raw.daily !== 'boolean' ) return null;
 	report.daily = raw.daily === true;
+	if ( raw.id !== undefined ) {
+
+		if ( typeof raw.id !== 'string' || ! REPORT_ID.test( raw.id ) ) return null;
+		report.id = raw.id;
+
+	}
+
+	if ( raw.days !== undefined ) {
+
+		const { xp, streak, day } = raw.days ?? {};
+		if ( typeof xp !== 'number' || ! Number.isFinite( xp ) || xp < 0 || xp > 1e7 ) return null;
+		if ( ! Number.isInteger( streak ) || streak < 0 || streak > 1e4 ) return null;
+		if ( typeof day !== 'string' || ( day && ! DAY.test( day ) ) ) return null;
+		report.days = { xp, streak, day };
+
+	}
+
 	return report;
+
+}
+
+// Whether a report has nothing in it (how the page asks where it stands).
+export function isEmptyReport( report ) {
+
+	return ! report.daily && ! report.areas.length && ! report.spots.length && ! ( report.days?.xp > 0 ) && REPORT_FIELDS.every( field => ! ( report[ field ] > 0 ) );
 
 }
 

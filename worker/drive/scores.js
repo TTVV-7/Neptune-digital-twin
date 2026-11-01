@@ -6,7 +6,7 @@ import { PLAYER_ID, authenticate, credentials, database, takeTurn } from './play
 import { setting } from './settings.js';
 import { hasPass, supporterEmails } from './supporter.js';
 import { VISIT_HOURS, readVisit } from './visits.js';
-import { standingOf, trickProgress, xpOf } from './progress.js';
+import { standingOf, xpOf } from './progress.js';
 
 // The leaderboard (docs/world-drive.md): each player's best stunt score today, this week and all
 // time, everywhere and at each place. A score is a run's (src/drive.js: from dropping in to
@@ -68,9 +68,8 @@ const KEEP = 35 * 24 * 60 * 60 * 1000;
 const TOP = 20;
 
 // POST /api/score { id, secret, score, tricks, place, vehicle, airTime, runSeconds, visit }:
-// { best, rank, isNewBest } for the all-time board, and the same as `today` and `week`; and `xp`,
-// the XP the run's tricks earned (progress.js's trickProgress: { gained, xp, level, unlocked,
-// supporter, title }).
+// { best, rank, isNewBest } for the all-time board, and the same as `today` and `week`. (A run's XP
+// comes with the page's reports, progress.js, whether the leaderboard takes it or not.)
 export async function postScore( { request, env, url, limits, now } ) {
 
 	const db = database( env );
@@ -102,8 +101,6 @@ export async function postScore( { request, env, url, limits, now } ) {
 	}
 
 	await takeTurn( limits, request, 'score', now, setting( env.SCORES_PER_VISITOR_DAILY, SCORES_DAILY ) );
-	// Taken: its tricks' XP, for the player's level.
-	const xp = await trickProgress( db, env, { id, run, visit, now } );
 
 	// The player's best on each board it's on: this period and place, and anywhere.
 	const boards = Object.values( PERIODS ).flatMap( period => [ [ period( now ), '' ], [ period( now ), run.placeKey ] ] );
@@ -139,7 +136,7 @@ export async function postScore( { request, env, url, limits, now } ) {
 	}
 
 	const { all, ...rest } = answer;
-	return json( { ...all, ...rest, xp } );
+	return json( { ...all, ...rest } );
 
 }
 

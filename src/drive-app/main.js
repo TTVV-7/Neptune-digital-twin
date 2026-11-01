@@ -259,23 +259,24 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 		vehicles,
 		worker,
 		getPlace: () => placeLabel( state.mode === 'globe' ? panel.pinned : state.place ),
-		// A new player: linked to the account signed in here, and the XP driven before it claimed.
-		onPlayer: () => {
+		// A new player: linked to the account signed in here, then the XP driven before it claimed
+		// (after the link, so a supporter's claim counts with the pass; linkPlayer never throws, and
+		// once linked, onLinked below has sent the claim already).
+		onPlayer: async () => {
 
-			linkPlayer();
+			await linkPlayer();
 			progress.report();
 
 		},
 		onName: () => live?.rehello(),
-		onXp: xp => progress.scoreXp( xp ),
 	} );
 	board.setVisit( visit );
 
 	// Levels (progress.js, profile.js): XP for what's driven, kept with the leaderboard player (or
 	// in this browser until there's one), the bar and pop-ups while driving, a level-up's burst, and
 	// the profile card on the globe's panel. A level reached unlocks Garage looks (paint.js asks
-	// getLevel), and the others in the room hear of it as it says hello again (once the Worker has
-	// it: the room looks it up).
+	// getLevel). The others in a room see it at the page's next hello there (the room looks it up):
+	// saying hello again for each level would have the room see the driver leave and join.
 	let profile = null;
 	const progress = createProgress( {
 		worker,
@@ -284,8 +285,6 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 		onChange: () => profile?.render(),
 		onPop: event => profile?.pop( event ),
 		onLevelUp: event => profile?.levelUp( event ),
-		// The others in the room see a player's level by their name: hello again with the new one.
-		onStanding: () => live?.rehello(),
 	} );
 	profile = setUpProfile( {
 		progress,

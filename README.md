@@ -505,8 +505,8 @@ unlock about half the Supporter Pass's Garage looks on the way to 40, and titles
 level badge whose frame changes every ten levels and four colours that only levels give. While
 driving a slim XP bar shows under the place's name, with "+46 XP · 1.4 km" pop-ups and a burst at
 each level-up; the globe's panel has a profile card with the whole track. XP is kept with the
-leaderboard nickname in D1 (an account's nicknames counting together), or in the browser until you
-pick one, which claims it. The Worker caps each report by the time since the last
+leaderboard nickname in D1 (an account showing its best nickname's level), or in the browser until
+you pick one, which claims it. The Worker caps each report by the time since the last
 (`worker/drive/progress.js`, sharing its rules with the page in `src/drive-app/levels.js`), on a
 rate limiter rather than a Durable Object (see [Levels](docs/world-drive.md#levels)).
 

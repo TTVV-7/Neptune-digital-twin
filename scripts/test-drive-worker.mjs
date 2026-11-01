@@ -708,10 +708,7 @@ describe( 'World Drive leaderboard', () => {
 		assert.equal( res.status, 200, res.text );
 		assert.equal( res.headers.get( 'Cache-Control' ), 'no-store' );
 		const first = { best: 12430, rank: 1, isNewBest: true };
-		const { xp, ...standing } = res.json;
-		assert.deepEqual( standing, { ...first, today: first, week: first } );
-		// And the XP its tricks earned (levels, scripts/test-drive-levels.mjs): half the square root.
-		assert.deepEqual( xp, { xp: 56, level: 1, gained: 56, unlocked: [], supporter: false, title: 'rookie' } );
+		assert.deepEqual( res.json, { ...first, today: first, week: first } );
 		for ( const period of [ 'today', 'week', 'all' ] ) {
 
 			const { status, json } = await board( { period } );
@@ -731,9 +728,7 @@ describe( 'World Drive leaderboard', () => {
 		const lower = await score( ace, { score: 900 }, { after: 71 * SECOND } );
 		assert.equal( lower.status, 200 );
 		const kept = { best: 12430, rank: 1, isNewBest: false };
-		const { xp, ...standing } = lower.json;
-		assert.deepEqual( standing, { ...kept, today: kept, week: kept } );
-		assert.equal( xp.gained, 0 );
+		assert.deepEqual( lower.json, { ...kept, today: kept, week: kept } );
 		const higher = await score( ace, { score: 20000 }, { after: 82 * SECOND } );
 		assert.equal( higher.json.best, 20000 );
 		assert.equal( higher.json.isNewBest, true );

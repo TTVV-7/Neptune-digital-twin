@@ -1,17 +1,19 @@
 // npm run test:drive-levels: World Drive's levels (src/drive-app/levels.js, worker/drive/progress.js,
-// docs/world-drive.md). The curve and the unlock track as they're written (every level from 2 to 50
-// gives something, the pass's rides are never on it, about half the pass's looks are, the
-// level-only rewards never come with the pass, every look on it is one the Garage has); then the
-// Worker under `wrangler dev` on this machine, with a throwaway D1 database: reports of what was
-// driven and the XP they earn, every cap (too much for the time since the last report, a report
-// sent again, at most five minutes' worth), a forged, changed, expired or someone else's visit, the
-// wrong secret, reports the page couldn't send, areas and spots only once (and those over the cap
-// taken by the next report), the day's bonus once a UTC day and its streak, a supporter's XP ×1.5
-// (SUPPORTER_EMAILS and an account signed in with test keys standing in for Google's, and the
-// player linked to it, whose players then count together), trick XP through /api/score, what was
-// driven before a nickname claimed with the first report, the title check, the leaderboard's rows,
-// the cap on discoveries and Cloudflare's rate limiter (no Durable Object asked). Visit tokens are
-// made here with Turnstile's documented test secret, as /api/visit makes them.
+// docs/world-drive.md). The curve as a simulated regular climbs it, and the unlock track as it's
+// written (every level from 2 to 50 gives something, the pass's rides are never on it, about half
+// the pass's looks are, the level-only rewards never come with the pass, every look on it is one
+// the Garage has); then the Worker under `wrangler dev` on this machine, with a throwaway D1
+// database: reports of what was driven and the XP they earn, every cap (too much for the time since
+// the last report, a report sent again, at most five minutes' worth), a forged, changed, expired or
+// someone else's visit, the wrong secret, reports the page couldn't send, areas and spots only once
+// (and those over the cap taken by the next report, and two reports at once), the day's bonus once a
+// UTC day and its streak, a supporter's XP ×1.5 (SUPPORTER_EMAILS and an account signed in with test
+// keys standing in for Google's, and the player linked to it), an account showing its best player
+// (never its players added up), trick XP in reports, what was driven before a nickname claimed with
+// the first report (an hour of it however old the visit, with the days' bonuses), a report sent
+// again counted once, the title check, the leaderboard's rows, the cap on discoveries and
+// Cloudflare's rate limiter (no Durable Object asked). Visit tokens are made here with Turnstile's
+// documented test secret, as /api/visit makes them.
 //
 // TEST_DRIVE_LEVELS_PORT picks the Worker's port (9200).
 
@@ -21,8 +23,8 @@ import { after, before, describe, test } from 'node:test';
 import { CLIENT_ID, makeKey, makeToken, serveKeys, startWorker } from './worker-harness.mjs';
 import { DRIVE_CARS, PASS_RIDES } from '../src/drive-app/catalog.js';
 import {
-	CAPS, DISCOVERIES_MAX, LEVEL_MAX, LEVEL_XP, REWARDS, SUPPORTER_XP, TITLES, TRICK, XP,
-	areaOf, badgeOf, capReport, checkReport, dailyXp, drivingXp, levelOf, progressOf, rewardsAt, rewardsBetween, titleOf, trickXp, unlockLevel,
+	CAPS, CLAIM_DAYS, DISCOVERIES_MAX, LEVEL_MAX, LEVEL_XP, REWARDS, SUPPORTER_XP, TITLES, TRICK, XP,
+	areaOf, badgeOf, capReport, checkReport, dailyXp, drivingXp, levelOf, nextReward, progressOf, rewardsAt, rewardsBetween, titleOf, trickXp, unlockLevel,
 } from '../src/drive-app/levels.js';
 import { BOOSTS } from '../src/drive-app/boosts.js';
 import { DECALS, FINISHES, FLAMES, RIMS, SMOKES, SWATCHES, TRAILS, isLocked, lookFor, saveLook, unlockOf } from '../src/drive-app/paint.js';
@@ -45,6 +47,36 @@ const LISTS = { colour: SWATCHES, finish: FINISHES, decal: DECALS, rim: RIMS, bo
 const PLACES = [ [ 46.5725, 8.4153 ], [ 49.30653, - 123.04957 ], [ 37.8199, - 122.4783 ], [ 40.75765, - 73.98577 ], [ 43.73658, 7.42144 ], [ 35.6595, 139.7005 ], [ - 33.8523, 151.2108 ] ];
 const AREAS = PLACES.map( ( [ lat, lon ] ) => areaOf( lat, lon ) );
 
+// A regular's play, as the Worker counts it: 30 minutes a day at about 72 km/h on average (1.2 km a
+// minute, with its stops and crashes), 4 s of air, a drift boost and half a pad a minute, a
+// 10,000-point trick run every 5 minutes; the day's bonus each day (days in a row), a start spot each
+// of the first 12 days, and two new areas a day for the first 10, then one. The minutes of play to
+// reach each of `levels`.
+function simulate( levels, { minutes = 30, perMinute = { km: 1.2, air: 4, drifts: 1, pads: 0.5, together: 0 }, runEvery = 5, runScore = 10000 } = {} ) {
+
+	const reached = {};
+	let xp = 0;
+	let played = 0;
+	for ( let day = 1; Object.keys( reached ).length < levels.length; day ++ ) {
+
+		for ( let m = 0; m < minutes; m ++ ) {
+
+			played ++;
+			xp += drivingXp( perMinute );
+			if ( m === 0 ) xp += dailyXp( day );
+			if ( m === 1 && day <= 12 ) xp += XP.spot;
+			if ( m === 2 || ( m === 12 && day <= 10 ) ) xp += XP.area;
+			if ( ( m + 1 ) % runEvery === 0 ) xp += trickXp( runScore );
+			for ( const level of levels ) if ( ! reached[ level ] && xp >= LEVEL_XP[ level ] ) reached[ level ] = played;
+
+		}
+
+	}
+
+	return reached;
+
+}
+
 // --- the curve and the track, as written ---------------------------------------------------------
 
 describe( 'Levels: the curve and the unlock track', () => {
@@ -61,15 +93,20 @@ describe( 'Levels: the curve and the unlock track', () => {
 
 		}
 
-		// At about 60 XP a minute of driving (a km a minute, some air, drifts and pads), with a first
-		// drive's bonuses (the day's, a new area, a spot): level 2 in the first few minutes, 5 in a
-		// first session, 10 in a few, 30 for regulars, 50 a long goal.
-		const minutes = level => LEVEL_XP[ level ] / 60;
+		// A regular (simulate): level 2 in the first few minutes, 5 in a first session, 10 in a few,
+		// 30 for regulars and 50 a long goal. Driving earns about 46 XP a minute of it, tricks 10.
 		assert.ok( LEVEL_XP[ 2 ] <= XP.daily + XP.area, 'level 2 takes more than the first drive\'s bonuses' );
-		assert.ok( minutes( 5 ) < 30, `level 5 takes ${ minutes( 5 ) } minutes` );
-		assert.ok( minutes( 10 ) > 60 && minutes( 10 ) < 180, `level 10 takes ${ minutes( 10 ) } minutes` );
-		assert.ok( minutes( 30 ) / 60 > 15 && minutes( 30 ) / 60 < 40, `level 30 takes ${ minutes( 30 ) / 60 } hours` );
-		assert.ok( minutes( 50 ) / 60 > 80, `level 50 takes ${ minutes( 50 ) / 60 } hours` );
+		const minutes = simulate( [ 2, 5, 10, 30, 50 ] );
+		console.log( `    a regular: ${ Object.entries( minutes ).map( ( [ level, m ] ) => `level ${ level } in ${ m < 120 ? `${ m } min` : `${ ( m / 60 ).toFixed( 1 ) } h` }` ).join( ', ' ) }` );
+		assert.ok( minutes[ 2 ] <= 5, `level 2 takes ${ minutes[ 2 ] } minutes` );
+		assert.ok( minutes[ 5 ] >= 10 && minutes[ 5 ] <= 30, `level 5 takes ${ minutes[ 5 ] } minutes` );
+		assert.ok( minutes[ 10 ] > 60 && minutes[ 10 ] < 120, `level 10 takes ${ minutes[ 10 ] } minutes` );
+		assert.ok( minutes[ 30 ] / 60 > 15 && minutes[ 30 ] / 60 < 30, `level 30 takes ${ minutes[ 30 ] / 60 } hours` );
+		assert.ok( minutes[ 50 ] / 60 > 70 && minutes[ 50 ] / 60 < 110, `level 50 takes ${ minutes[ 50 ] / 60 } hours` );
+		// Driving is worth driving: a kart flat out (110 km/h) earns over 35 XP a minute, and a new
+		// area (a km's drive, and the globe between) no more than a few minutes of that.
+		assert.ok( 110 / 60 * XP.km > 35, 'a kart flat out earns too little' );
+		assert.ok( XP.area <= 3 * 110 / 60 * XP.km, 'a new area is worth too much driving' );
 		assert.equal( levelOf( 0 ), 1 );
 		assert.equal( levelOf( LEVEL_XP[ 7 ] - 1 ), 6 );
 		assert.equal( levelOf( LEVEL_XP[ 7 ] ), 7 );
@@ -107,6 +144,11 @@ describe( 'Levels: the curve and the unlock track', () => {
 		assert.equal( titleOf( 9, '' ).id, 'drifter' );
 		assert.equal( titleOf( 9, 'joyrider' ).id, 'joyrider' );
 		assert.deepEqual( rewardsBetween( 1, 3 ).map( r => r.id ), [ 'sunburst', 'hearts' ] );
+		// What's next: for a supporter, whose pass has the track's pass looks, the next that's new.
+		assert.equal( nextReward( 1 ).id, 'sunburst' );
+		assert.equal( nextReward( 1, { pro: true } ).id, 'joyrider' );
+		assert.equal( nextReward( 8, { pro: true } ).id, 'bronze' );
+		assert.equal( nextReward( 50, { pro: true } ), null );
 
 	} );
 
@@ -181,6 +223,16 @@ describe( 'Levels: the curve and the unlock track', () => {
 		for ( const bad of [ { km: - 1 }, { km: '3' }, { air: Infinity }, { drifts: 1.5 }, { pads: 2.2 }, { km: 1e8 }, { areas: [ 'near:1.1#1' ] }, { areas: [ 'party:ABCDEFG' ] }, { areas: 'near:1.1' },
 			{ spots: [ 'nowhere' ] }, { daily: 'yes' }, { areas: Array.from( { length: 201 }, () => AREAS[ 0 ] ) } ] ) assert.equal( checkReport( bad ), null, JSON.stringify( bad ).slice( 0, 60 ) );
 		assert.deepEqual( checkReport( { areas: [ AREAS[ 0 ], AREAS[ 0 ] ], spots: [ 'furka' ] } ).areas, [ AREAS[ 0 ] ] );
+		// A report's id, and a claim's days.
+		assert.equal( checkReport( { id: 'a1b2c3d4e5' } ).id, 'a1b2c3d4e5' );
+		assert.deepEqual( checkReport( { days: { xp: 375, streak: 3, day: '2026-11-01' } } ).days, { xp: 375, streak: 3, day: '2026-11-01' } );
+		assert.deepEqual( checkReport( { days: { xp: 0, streak: 0, day: '' } } ).days, { xp: 0, streak: 0, day: '' } );
+		for ( const bad of [ { id: 'short' }, { id: 'no spaces here' }, { id: 7 }, { days: 3 }, { days: { xp: - 1, streak: 1, day: '' } }, { days: { xp: 1, streak: 1.5, day: '' } }, { days: { xp: 1, streak: 1, day: 'today' } } ] ) {
+
+			assert.equal( checkReport( bad ), null, JSON.stringify( bad ) );
+
+		}
+
 		// Two minutes: 15 km at most (450 km/h), 120 s of air, 80 drift boosts, 60 pads, 2 minutes
 		// together, two places (spots first), 300 trick XP.
 		const capped = capReport( { km: 100, air: 500, drifts: 500, pads: 500, together: 9, tricks: 1e4, areas: AREAS, spots: [ 'furka' ], daily: true }, 120 );
@@ -281,7 +333,9 @@ describe( 'Levels: the Worker', () => {
 	// A report from `who`, `after` ms after their visit began (or at `time`).
 	const report = ( who, body, { time, after = 2 * MINUTE, visit = who.visit, secret = who.secret } = {} ) =>
 		call( '/api/progress', { method: 'POST', body: { id: who.id, secret, visit, report: body }, time: time ?? who.at + after } );
-	const row = who => server.d1( `SELECT xp, title, progress_at, streak_day, streak, discoveries, trick_xp, trick_seconds FROM players WHERE id = '${ who.id }'` )[ 0 ];
+	const row = who => server.d1( `SELECT xp, title, progress_at, streak_day, streak, discoveries FROM players WHERE id = '${ who.id }'` )[ 0 ];
+	// A progress answer: nothing yet, with `fields`.
+	const answer = ( fields = {} ) => ( { xp: 0, own: 0, level: 1, gained: 0, unlocked: [], supporter: false, title: 'rookie', chosen: '', streakDay: '', streak: 0, accepted: { areas: [], spots: [] }, ...fields } );
 
 	test( 'a report earns its XP, and says where the player stands', async () => {
 
@@ -290,7 +344,7 @@ describe( 'Levels: the Worker', () => {
 		const asked = await report( ana, {}, { after: 30 * SECOND } );
 		assert.equal( asked.status, 200, asked.text );
 		assert.equal( asked.headers.get( 'Cache-Control' ), 'no-store' );
-		assert.deepEqual( asked.json, { xp: 0, level: 1, gained: 0, unlocked: [], supporter: false, title: 'rookie', accepted: { areas: [], spots: [] } } );
+		assert.deepEqual( asked.json, answer() );
 		assert.equal( row( ana ).progress_at, 0 );
 		// 2.5 km, 10 s of air, 3 drift boosts, 4 pads, a minute with others, a new area, a spot and
 		// the day's first drive.
@@ -299,43 +353,53 @@ describe( 'Levels: the Worker', () => {
 		const xp = 2.5 * XP.km + 10 * XP.air + 3 * XP.drift + 4 * XP.pad + XP.together + XP.area + XP.spot + XP.daily;
 		assert.equal( first.json.gained, xp );
 		assert.equal( first.json.xp, xp );
+		assert.equal( first.json.own, xp );
+		assert.deepEqual( [ first.json.streakDay, first.json.streak ], [ '2026-11-01', 1 ] );
 		assert.equal( first.json.level, levelOf( xp ) );
 		assert.deepEqual( first.json.unlocked.map( r => r.id ), rewardsBetween( 1, levelOf( xp ) ).map( r => r.id ) );
 		assert.deepEqual( first.json.accepted, { areas: [ AREAS[ 0 ] ], spots: [ 'furka' ] } );
 		assert.deepEqual( first.json.daily, { streak: 1, xp: XP.daily } );
 		assert.equal( first.json.supporter, false );
-		assert.deepEqual( row( ana ), { xp, title: '', progress_at: ana.at + 2 * MINUTE, streak_day: '2026-11-01', streak: 1, discoveries: 2, trick_xp: 0, trick_seconds: 0 } );
+		assert.deepEqual( row( ana ), { xp, title: '', progress_at: ana.at + 2 * MINUTE, streak_day: '2026-11-01', streak: 1, discoveries: 2 } );
 		assert.deepEqual( server.d1( `SELECT place FROM discoveries WHERE player_id = '${ ana.id }' ORDER BY place` ).map( r => r.place ), [ AREAS[ 0 ], 'spot:furka' ].sort() );
 		// Two minutes more of driving.
 		const next = await report( ana, { km: 3 }, { after: 4 * MINUTE } );
-		assert.equal( next.json.gained, 30 );
-		assert.equal( next.json.xp, xp + 30 );
+		assert.equal( next.json.gained, 3 * XP.km );
+		assert.equal( next.json.xp, xp + 3 * XP.km );
 
 	} );
 
-	test( 'every amount capped by the time since the last report, five minutes at most; a report sent again earns nothing', async () => {
+	test( 'every amount capped by the time since the last report, five minutes at most; none sooner than half a minute after the last', async () => {
 
 		const bo = await player();
-		await report( bo, {}, { after: 10 * SECOND } );
 		// The first report claims what was driven before (below): from then on, the time since.
 		assert.equal( ( await report( bo, { km: 1 }, { after: MINUTE } ) ).status, 200 );
 		const at = bo.at + MINUTE;
 		// A minute: no more than 7.5 km, 60 s of air, 40 drift boosts, 30 pads, a minute together.
-		const minute = await report( bo, { km: 50, air: 200 }, { time: at + MINUTE } );
-		assert.equal( minute.json.gained, 7.5 * XP.km + 60 * XP.air );
-		const drifts = await report( bo, { drifts: 500, pads: 500, together: 10 }, { time: at + 2 * MINUTE } );
+		const minute = await report( bo, { km: 50 }, { time: at + MINUTE } );
+		assert.equal( minute.json.gained, 7.5 * XP.km );
+		const air = await report( bo, { km: 1, air: 200 }, { time: at + 2 * MINUTE } );
+		assert.equal( air.json.gained, XP.km + 60 * XP.air );
+		const drifts = await report( bo, { drifts: 500, pads: 500, together: 10 }, { time: at + 3 * MINUTE } );
 		// 40 drift boosts, 30 pads and a minute together: 320 + 120 + 6, held to CAPS.rate a minute.
 		assert.equal( drifts.json.gained, CAPS.rate );
-		// The same report again, at once: no time has passed, so nothing.
-		const again = await report( bo, { km: 50, air: 200 }, { time: at + 2 * MINUTE } );
-		assert.equal( again.status, 200 );
-		assert.equal( again.json.gained, 0 );
-		// And a second later, a second's worth.
-		const soon = await report( bo, { km: 50 }, { time: at + 2 * MINUTE + SECOND } );
-		assert.equal( soon.json.gained, Math.round( 450 / 3600 * XP.km ) );
+		// The same report again, at once, or a second later: each would be a row written, so it's
+		// turned away until CAPS.gap has passed (the page keeps it for later); asking where the
+		// player stands (an empty report) isn't.
+		const again = await report( bo, { km: 50, air: 200 }, { time: at + 3 * MINUTE } );
+		assert.equal( again.status, 429 );
+		assert.equal( again.headers.get( 'Retry-After' ), String( CAPS.gap ) );
+		const soon = await report( bo, { km: 50 }, { time: at + 3 * MINUTE + SECOND } );
+		assert.equal( soon.status, 429 );
+		assert.equal( soon.json.retryAfter, CAPS.gap - 1 );
+		assert.equal( ( await report( bo, {}, { time: at + 3 * MINUTE + SECOND } ) ).status, 200 );
+		// Half a minute later, half a minute's worth.
+		const half = await report( bo, { km: 50 }, { time: at + 3 * MINUTE + CAPS.gap * SECOND } );
+		assert.equal( half.status, 200 );
+		assert.equal( half.json.gained, CAPS.gap * 450 / 3600 * XP.km );
 		// An hour after: five minutes' worth at most (37.5 km).
 		const late = await report( bo, { km: 100 }, { time: at + HOUR } );
-		assert.equal( late.json.gained, 375 );
+		assert.equal( late.json.gained, 37.5 * XP.km );
 		assert.equal( row( bo ).xp, late.json.xp );
 
 	} );
@@ -351,11 +415,87 @@ describe( 'Levels: the Worker', () => {
 		assert.deepEqual( claim.json.accepted, { areas: AREAS.slice( 0, 3 ), spots: [ 'furka', 'monaco' ] } );
 		// The next report counts only the time since.
 		const after = await report( cy, { km: 40 }, { after: 11 * MINUTE } );
-		assert.equal( after.json.gained, 75 );
+		assert.equal( after.json.gained, 7.5 * XP.km );
 		// More than an hour's worth isn't taken.
 		const dee = await player();
 		const big = await report( dee, { km: 1000, air: 10000, drifts: 10000 }, { after: 5 * MINUTE } );
 		assert.equal( big.json.gained, 60 * CAPS.rate );
+		// However old the visit: an hour, not the six hours a visit lasts. (A visit made at noon,
+		// its nickname made with it nearly six hours later.)
+		const late = NOON + 5 * HOUR + 50 * MINUTE;
+		const visit = await visitAt( NOON );
+		const made = await call( '/api/player', { method: 'POST', body: { name: `Driver ${ ++ names }`, visit }, time: late } );
+		assert.equal( made.status, 201, made.text );
+		const old = { ...made.json, visit, at: late };
+		const most = await report( old, { km: 1e6, air: 1e6, drifts: 1e6, pads: 1e6, together: 1e6, tricks: 1e7 }, { after: 5 * MINUTE } );
+		assert.equal( most.json.gained, 60 * CAPS.rate + 60 * CAPS.tricks );
+		// And no more tricks than the time since the last report allows, after the claim.
+		const tricks = await report( old, { tricks: 1e7 }, { after: 7 * MINUTE } );
+		assert.equal( tricks.json.gained, 2 * CAPS.tricks );
+
+	} );
+
+	test( 'the claim brings the days\' bonuses counted before the nickname, and the streak they made', async () => {
+
+		// Three days in a row in this browser (100, 125 and 150), the last of them today.
+		const eli = await player();
+		const claim = await report( eli, { km: 1, days: { xp: 375, streak: 3, day: '2026-11-01' } }, { after: 10 * MINUTE } );
+		assert.equal( claim.json.gained, XP.km + 375 );
+		assert.deepEqual( [ claim.json.streakDay, claim.json.streak, claim.json.daily ], [ '2026-11-01', 3, undefined ] );
+		// Tomorrow's is the fourth in a row.
+		const tomorrow = Date.UTC( 2026, 10, 2, 12 );
+		const next = await report( eli, { km: 0.5, daily: true }, { time: tomorrow, visit: await visitAt( tomorrow - MINUTE ) } );
+		assert.deepEqual( next.json.daily, { streak: 4, xp: dailyXp( 4 ) } );
+		// The last of them yesterday, and today's in the claim too: the fourth.
+		const fia = await player();
+		const both = await report( fia, { km: 1, daily: true, days: { xp: 375, streak: 3, day: '2026-10-31' } }, { after: 10 * MINUTE } );
+		assert.equal( both.json.gained, XP.km + 375 + dailyXp( 4 ) );
+		assert.deepEqual( both.json.daily, { streak: 4, xp: dailyXp( 4 ) } );
+		// A streak that's over (its last day before yesterday) starts again; the bonuses still count,
+		// CLAIM_DAYS of the biggest at most; and only in a claim.
+		const gil = await player();
+		const over = await report( gil, { km: 1, daily: true, days: { xp: 1e6, streak: 30, day: '2026-10-20' } }, { after: 10 * MINUTE } );
+		assert.equal( over.json.gained, XP.km + CLAIM_DAYS * dailyXp( 5 ) + XP.daily );
+		assert.deepEqual( over.json.daily, { streak: 1, xp: XP.daily } );
+		const again = await report( gil, { km: 1, days: { xp: 1e6, streak: 30, day: '2026-11-01' } }, { after: 12 * MINUTE } );
+		assert.equal( again.json.gained, XP.km );
+
+	} );
+
+	test( 'a report sent again (its answer lost) is counted once', async () => {
+
+		const ike = await player();
+		const sent = { id: 'report-one-0001', km: 2, areas: [ AREAS[ 1 ] ] };
+		const first = await report( ike, sent, { after: 2 * MINUTE } );
+		assert.equal( first.json.gained, 2 * XP.km + XP.area );
+		// The same id again, a little later or much later: nothing more, and where the player stands.
+		for ( const after of [ 2 * MINUTE + 5 * SECOND, 9 * MINUTE ] ) {
+
+			const again = await report( ike, sent, { after } );
+			assert.equal( again.status, 200, again.text );
+			assert.deepEqual( again.json, answer( { xp: first.json.xp, own: first.json.xp, level: first.json.level, accepted: { areas: [], spots: [] }, repeated: true } ) );
+
+		}
+
+		// A new id is a new report.
+		const next = await report( ike, { ...sent, id: 'report-two-0002' }, { after: 10 * MINUTE } );
+		assert.equal( next.json.gained, 2 * XP.km );
+		assert.equal( row( ike ).xp, first.json.xp + 2 * XP.km );
+
+	} );
+
+	test( 'two reports at once: one counts, and the other\'s places aren\'t kept without it', async () => {
+
+		const jan = await player();
+		await report( jan, { km: 1 }, { after: MINUTE } );
+		// Five at the same moment, each with its own place: one is taken, the rest are a 409 (or a 429,
+		// those that looked after it was).
+		const at = jan.at + 20 * MINUTE;
+		const results = await Promise.all( AREAS.slice( 0, 5 ).map( area => report( jan, { km: 1, areas: [ area ] }, { time: at } ) ) );
+		assert.equal( results.filter( r => r.status === 200 ).length, 1, results.map( r => r.status ).join() );
+		assert.ok( results.every( r => [ 200, 409, 429 ].includes( r.status ) ), results.map( r => r.status ).join() );
+		assert.equal( row( jan ).discoveries, 1 );
+		assert.equal( server.d1( `SELECT COUNT(*) AS n FROM discoveries WHERE player_id = '${ jan.id }'` )[ 0 ].n, 1 );
 
 	} );
 
@@ -455,44 +595,29 @@ describe( 'Levels: the Worker', () => {
 
 	} );
 
-	test( 'trick XP comes with the leaderboard\'s scores: a run\'s square root, its own cap, and the time\'s', async () => {
+	test( 'trick XP comes with reports, every landed run whether the leaderboard takes it or not, held to the time\'s cap', async () => {
 
 		const hal = await player();
-		const score = ( run, after ) => call( '/api/score', {
+		await report( hal, { km: 1 }, { after: MINUTE } );
+		// What the runs' new points added (the page works it out: levels.js's trickXp).
+		const runs = await report( hal, { tricks: trickXp( 10000 ) + trickXp( 40000 ) }, { after: 3 * MINUTE } );
+		assert.equal( runs.json.gained, 150 );
+		// No more than CAPS.tricks a minute since the last report.
+		const most = await report( hal, { tricks: 5000 }, { after: 4 * MINUTE } );
+		assert.equal( most.json.gained, CAPS.tricks );
+		// A score the leaderboard takes earns no XP of its own (it came with the report).
+		const scored = await call( '/api/score', {
 			method: 'POST',
-			body: { id: hal.id, secret: hal.secret, visit: hal.visit, tricks: 'Backflip!', place: 'Furka Pass', vehicle: 'go-kart', airTime: 1.2, ...run },
-			time: hal.at + after,
+			body: { id: hal.id, secret: hal.secret, visit: hal.visit, score: 40000, tricks: 'Backflip!', place: 'Furka Pass', vehicle: 'go-kart', airTime: 1.2, runSeconds: 160 },
+			time: hal.at + 5 * MINUTE,
 		} );
-		// A run's first score: half its square root.
-		const first = await score( { score: 10000, runSeconds: 100 }, 2 * MINUTE );
-		assert.equal( first.status, 200, first.text );
-		assert.deepEqual( first.json.xp, { xp: 50, level: 1, gained: 50, unlocked: [], supporter: false, title: 'rookie' } );
-		// The same run, later and bigger: only what its new points add.
-		const more = await score( { score: 40000, runSeconds: 160 }, 3 * MINUTE );
-		assert.equal( more.json.xp.gained, 50 );
-		assert.equal( more.json.xp.xp, 100 );
-		// However big, a run earns TRICK.max at most.
-		const huge = await score( { score: 9000000, runSeconds: 400 }, 8 * MINUTE );
-		assert.equal( huge.json.xp.gained, TRICK.max - 100 );
-		const bigger = await score( { score: 20000000, runSeconds: 500 }, 10 * MINUTE );
-		assert.equal( bigger.json.xp.gained, 0 );
-		// Another place is another run.
-		const there = await score( { score: 2500, runSeconds: 30, place: 'Monaco harbour' }, 11 * MINUTE );
-		assert.equal( there.json.xp.gained, 25 );
-		// A new run at the same place (its time started again) too, but no more than CAPS.tricks a
-		// minute since the last: 20 s is 50 XP, the rest with the run's next score.
-		const again = await score( { score: 1e6, runSeconds: 20 }, 11 * MINUTE + 20 * SECOND );
-		assert.equal( again.json.xp.gained, 50 );
-		const rest = await score( { score: 1e6 + 10, runSeconds: 40 }, 13 * MINUTE );
-		assert.equal( rest.json.xp.gained, TRICK.max - 50 );
-		assert.equal( row( hal ).xp, 100 + TRICK.max - 100 + 25 + TRICK.max );
-		// A score the leaderboard won't take earns nothing.
-		assert.equal( ( await score( { score: 1e9, runSeconds: 1 }, 14 * MINUTE ) ).status, 400 );
-		assert.equal( row( hal ).xp, 100 + TRICK.max - 100 + 25 + TRICK.max );
+		assert.equal( scored.status, 200, scored.text );
+		assert.equal( 'xp' in scored.json, false );
+		assert.equal( row( hal ).xp, XP.km + 150 + CAPS.tricks );
 
 	} );
 
-	test( 'a supporter\'s XP counts ×1.5, by the account the player is linked to; an account\'s players count together', async () => {
+	test( 'a supporter\'s XP counts ×1.5, by the account the player is linked to; an account shows its best player', async () => {
 
 		const ida = await player();
 		const jo = await player();
@@ -502,19 +627,43 @@ describe( 'Levels: the Worker', () => {
 		assert.equal( session.json.supporter, true );
 		const cookie = `__Host-wd_session=${ /__Host-wd_session=([\w-]{43})/.exec( session.headers.get( 'Set-Cookie' ) )[ 1 ] }`;
 		// Before: as anyone, whatever the page says (there's nothing in a report for it).
-		assert.equal( ( await report( ida, { km: 2, supporter: true }, { after: MINUTE } ) ).json.gained, 20 );
+		assert.equal( ( await report( ida, { km: 2, supporter: true }, { after: MINUTE } ) ).json.gained, 2 * XP.km );
 		for ( const who of [ ida, jo ] ) assert.equal( ( await call( '/api/player/link', { method: 'POST', body: { id: who.id, secret: who.secret }, cookie } ) ).status, 200 );
 		const boosted = await report( ida, { km: 2, air: 10 }, { after: 2 * MINUTE } );
 		assert.equal( boosted.json.supporter, true );
-		assert.equal( boosted.json.gained, Math.round( ( 20 + 30 ) * SUPPORTER_XP ) );
-		assert.equal( ( await report( jo, { km: 2 }, { after: MINUTE } ) ).json.gained, 30 );
-		// Jo's level is the account's: both players' XP together.
+		assert.equal( boosted.json.gained, Math.round( ( 2 * XP.km + 10 * XP.air ) * SUPPORTER_XP ) );
+		assert.equal( ( await report( jo, { km: 2 }, { after: MINUTE } ) ).json.gained, 2 * XP.km * SUPPORTER_XP );
+		// Jo's level is the account's: the best of its players (Ida's), Jo's own XP beside it.
 		const both = await report( jo, {}, { after: 90 * SECOND } );
-		assert.equal( both.json.xp, row( ida ).xp + row( jo ).xp );
+		assert.deepEqual( [ both.json.xp, both.json.own ], [ row( ida ).xp, row( jo ).xp ] );
 		// Trick XP too.
-		const trick = await call( '/api/score', { method: 'POST', body: { id: jo.id, secret: jo.secret, visit: jo.visit, score: 10000, tricks: 'Backflip!', place: 'Furka Pass', vehicle: 'go-kart', airTime: 1, runSeconds: 100 }, time: jo.at + 2 * MINUTE } );
-		assert.equal( trick.json.xp.gained, 75 );
-		assert.equal( trick.json.xp.supporter, true );
+		const trick = await report( jo, { tricks: 50 }, { after: 3 * MINUTE } );
+		assert.equal( trick.json.gained, 75 );
+		assert.equal( trick.json.supporter, true );
+
+	} );
+
+	test( 'an account\'s players don\'t add up: each claims its own hour, and the account shows the best', async () => {
+
+		// Three new players, each claiming an hour of every cap, then linked to one account.
+		const most = { km: 1e6, air: 1e6, drifts: 1e6, pads: 1e6, together: 1e6, tricks: 1e7 };
+		const crew = [ await player(), await player(), await player() ];
+		for ( const who of crew ) assert.equal( ( await report( who, most, { after: 5 * MINUTE } ) ).json.gained, 60 * CAPS.rate + 60 * CAPS.tricks );
+		const session = await call( '/api/session', { method: 'POST', body: { credential: await makeToken( googleKey, { sub: 'crew-1', email: 'crew@example.com' } ) } } );
+		const cookie = `__Host-wd_session=${ /__Host-wd_session=([\w-]{43})/.exec( session.headers.get( 'Set-Cookie' ) )[ 1 ] }`;
+		for ( const who of crew ) assert.equal( ( await call( '/api/player/link', { method: 'POST', body: { id: who.id, secret: who.secret }, cookie } ) ).status, 200 );
+		const one = 60 * CAPS.rate + 60 * CAPS.tricks;
+		const asked = await report( crew[ 0 ], {}, { after: 6 * MINUTE } );
+		assert.deepEqual( [ asked.json.xp, asked.json.level ], [ one, levelOf( one ) ] );
+		// A little more for one of them: the account's is theirs, and the others' answers say so
+		// without a level-up of their own.
+		const more = await report( crew[ 1 ], { km: 1 }, { after: 7 * MINUTE } );
+		assert.deepEqual( [ more.json.xp, more.json.own, more.json.unlocked ], [ one + XP.km, one + XP.km, [] ] );
+		const other = await report( crew[ 2 ], { km: 1 }, { after: 7 * MINUTE } );
+		assert.deepEqual( [ other.json.xp, other.json.own, other.json.gained ], [ one + XP.km, one + XP.km, XP.km ] );
+		// The level that unlocks a title is the account's best, and a higher one is still refused.
+		const title = await call( '/api/player/title', { method: 'POST', body: { id: crew[ 0 ].id, secret: crew[ 0 ].secret, title: 'legend' }, time: crew[ 0 ].at + 8 * MINUTE } );
+		assert.equal( title.status, 403 );
 
 	} );
 
@@ -533,7 +682,10 @@ describe( 'Levels: the Worker', () => {
 		server.d1( `UPDATE players SET xp = ${ LEVEL_XP[ 9 ] } WHERE id = '${ kim.id }'` );
 		const picked = await title( 'joyrider' );
 		assert.equal( picked.status, 200, picked.text );
-		assert.deepEqual( picked.json, { level: 9, title: 'joyrider' } );
+		assert.deepEqual( picked.json, { level: 9, title: 'joyrider', chosen: 'joyrider' } );
+		// A report's answer says which was picked, as well as the one shown.
+		const standing = await report( kim, {}, { after: 3 * MINUTE + 10 * SECOND } );
+		assert.deepEqual( [ standing.json.title, standing.json.chosen ], [ 'joyrider', 'joyrider' ] );
 		assert.equal( row( kim ).title, 'joyrider' );
 		// On the leaderboard with a score: the level, and the title.
 		const scored = await call( '/api/score', { method: 'POST', body: { id: kim.id, secret: kim.secret, visit: kim.visit, score: 777770, tricks: 'Backflip!', place: 'Furka Pass', vehicle: 'go-kart', airTime: 1, runSeconds: 200 }, time: kim.at + 4 * MINUTE } );
@@ -543,8 +695,10 @@ describe( 'Levels: the Worker', () => {
 		assert.equal( mine.level, 9 );
 		assert.equal( mine.title, 'joyrider' );
 		assert.equal( board.json.me.level, 9 );
-		// '' is the newest they have.
-		assert.deepEqual( ( await title( '' ) ).json, { level: 9, title: 'drifter' } );
+		// '' is the newest they have, and a report's answer says '' was picked.
+		assert.deepEqual( ( await title( '' ) ).json, { level: 9, title: 'drifter', chosen: '' } );
+		const newest = await report( kim, {}, { after: 5 * MINUTE } );
+		assert.deepEqual( [ newest.json.title, newest.json.chosen ], [ 'drifter', '' ] );
 
 	} );
 

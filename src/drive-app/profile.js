@@ -2,19 +2,23 @@ import './levels.css';
 import { BOOSTS } from './boosts.js';
 import { LEVEL_MAX, LEVEL_XP, REWARDS, TITLES, badgeOf, nextReward, rewardsAt } from './levels.js';
 import { DECALS, FINISHES, FLAMES, RIMS, SWATCHES, TRAILS } from './paint.js';
+import { isPro, onProChange } from './pro.js';
 
 // What players see of levels (levels.js, progress.js): while driving, a slim XP bar with the
 // level under the place's name and small "+46 XP · 1.4 km" pop-ups by it; a level-up's burst,
 // "Level 7! Unlocked: Plasma boost", whose look opens the Garage; on the globe's panel a card with
 // the nickname, the level badge, the bar to the next level, the next reward, the title picker and
-// "All rewards", which opens the whole track. All World Drive's own: drive-hud.js (which the
-// construction app shares) is left as it is.
+// "All rewards", which opens the whole track. A supporter's pass has the track's pass looks already,
+// so for them those aren't news: a level-up says they're theirs already, and "Next" is the next
+// reward that's new to them. All World Drive's own: drive-hud.js (which the construction app
+// shares) is left as it is.
 
 // How long (ms) a level-up shows, and a pop-up.
 const LEVEL_UP_TIME = 5200;
 const POP_TIME = 2600;
-// The most pop-ups at once.
+// The most pop-ups at once; the most rewards a level-up lists (the track has them all).
 const POPS = 3;
+const MOST = 3;
 
 const svg = body => `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">${ body }</svg>`;
 // Little pictures for the rewards that have none of their own.
@@ -65,6 +69,7 @@ export function setUpProfile( { progress, player, canName = () => false, onGarag
 			<span class="level-badge"><b></b></span>
 			<p class="heading"></p>
 			<div class="unlocked"></div>
+			<p class="had small" hidden></p>
 			<p class="nickname" hidden>Pick a nickname to save your progress. <button type="button" class="link">Pick one</button></p>
 		</div>`;
 	document.body.append( card );
@@ -105,12 +110,18 @@ export function setUpProfile( { progress, player, canName = () => false, onGarag
 		const { level, rewards, nickname } = event;
 		badge( card.querySelector( '.level-badge' ), level );
 		card.querySelector( '.heading' ).textContent = `Level ${ level }!`;
+		// What's new: for a supporter, not the pass's looks, which they have already.
+		const pro = isPro();
+		const owned = reward => pro && reward.kind === 'look' && reward.pass;
+		const news = rewards.filter( r => ( r.kind !== 'badge' || r.level > 1 ) && ! owned( r ) );
+		const had = rewards.filter( owned );
 		const unlocked = card.querySelector( '.unlocked' );
 		unlocked.replaceChildren();
-		if ( rewards.length ) {
+		unlocked.hidden = ! news.length;
+		if ( news.length ) {
 
 			unlocked.append( element( 'span', 'small', 'Unlocked:' ) );
-			for ( const reward of rewards.filter( r => r.kind !== 'badge' || r.level > 1 ) ) {
+			for ( const reward of news.slice( 0, MOST ) ) {
 
 				// A look opens the Garage, to try it on.
 				const item = element( reward.kind === 'look' ? 'button' : 'span', `reward ${ reward.kind }` );
@@ -118,6 +129,7 @@ export function setUpProfile( { progress, player, canName = () => false, onGarag
 
 					item.type = 'button';
 					item.title = 'Try it on in the Garage';
+					item.setAttribute( 'aria-label', `Try ${ reward.name } on in the Garage` );
 					item.addEventListener( 'click', () => {
 
 						hideLevelUp();
@@ -127,12 +139,19 @@ export function setUpProfile( { progress, player, canName = () => false, onGarag
 
 				}
 
-				item.append( icon( reward ), element( 'span', '', reward.name ) );
+				item.append( icon( reward ), ...label( reward ) );
 				unlocked.append( item );
 
 			}
 
+			if ( news.length > MOST ) unlocked.append( element( 'span', 'more small', `+${ news.length - MOST } more` ) );
+
 		}
+
+		const hadLine = card.querySelector( '.had' );
+		const names = had.slice( 0, 2 ).map( r => r.name ).join( ', ' ) + ( had.length > 2 ? ` and ${ had.length - 2 } more` : '' );
+		hadLine.textContent = had.length ? `Already yours with the pass: ${ names }` : '';
+		hadLine.hidden = ! had.length;
 
 		card.querySelector( '.nickname' ).hidden = ! nickname;
 		card.hidden = false;
@@ -205,7 +224,7 @@ export function setUpProfile( { progress, player, canName = () => false, onGarag
 			<button type="button" class="close" aria-label="Close">&times;</button>
 		</header>
 		<div class="scroll">
-			<p class="small lead">XP comes from driving: each km, air off jumps, drift boosts, boost pads, landed tricks, new areas and start spots, driving with others, and the day's first drive. ⭐ rewards come with the Supporter Pass too, all at once (with +50% XP).</p>
+			<p class="small lead"></p>
 			<ol class="levels"></ol>
 		</div>`;
 	document.body.append( track );
@@ -217,6 +236,8 @@ export function setUpProfile( { progress, player, canName = () => false, onGarag
 	function openTrack() {
 
 		const level = progress.level;
+		const pro = isPro();
+		track.querySelector( '.lead' ).textContent = `XP comes from driving: each km, air off jumps, drift boosts, boost pads, landed tricks, new areas and start spots, driving with others, and the day's first drive. ${ pro ? 'Your Supporter Pass has every ⭐ look already, and +50% XP.' : '⭐ rewards come with the Supporter Pass too, all at once (with +50% XP).' }`;
 		const list = track.querySelector( '.levels' );
 		list.replaceChildren( ...Array.from( { length: LEVEL_MAX }, ( _, i ) => {
 
@@ -231,9 +252,9 @@ export function setUpProfile( { progress, player, canName = () => false, onGarag
 			const rewards = element( 'div', 'rewards' );
 			for ( const reward of rewardsAt( n ) ) {
 
-				const item = element( 'span', `reward ${ reward.kind }${ reward.pass ? ' pass' : '' }` );
-				item.append( icon( reward ), element( 'span', '', reward.name ) );
-				if ( reward.kind === 'look' ) item.append( element( 'i', 'tag', reward.pass ? 'or ⭐ Pass' : 'Levels only' ) );
+				const item = element( 'span', `reward ${ reward.kind }${ reward.pass ? ' pass' : '' }${ pro && reward.pass ? ' owned' : '' }` );
+				item.append( icon( reward ), ...label( reward ) );
+				if ( reward.kind === 'look' ) item.append( element( 'i', 'tag', reward.pass ? pro ? '✓ Pass' : 'or ⭐ Pass' : 'Levels only' ) );
 				rewards.append( item );
 
 			}
@@ -256,7 +277,8 @@ export function setUpProfile( { progress, player, canName = () => false, onGarag
 		const { level, xp, next, into, span, fraction } = progress.progress;
 		const title = progress.title;
 		const me = player();
-		const key = [ level, xp, title?.id, me?.name, progress.chosenTitle, progress.local, canName() ].join( '|' );
+		const pro = isPro();
+		const key = [ level, xp, title?.id, me?.name, progress.chosenTitle, progress.local, canName(), pro ].join( '|' );
 		if ( key === last ) return;
 		last = key;
 		const count = next === null ? `${ xp.toLocaleString( 'en-CA' ) } XP` : `${ into.toLocaleString( 'en-CA' ) } / ${ span.toLocaleString( 'en-CA' ) } XP`;
@@ -271,7 +293,7 @@ export function setUpProfile( { progress, player, canName = () => false, onGarag
 		profile.querySelector( '.title' ).textContent = `Lv ${ level } · ${ title.name }`;
 		profile.querySelector( '.xp-bar i' ).style.width = `${ ( fraction * 100 ).toFixed( 1 ) }%`;
 		profile.querySelector( '.count' ).textContent = count;
-		const coming = nextReward( level );
+		const coming = nextReward( level, { pro } );
 		profile.querySelector( '.next' ).textContent = coming ? `Next: ${ coming.name } at Lv ${ coming.level }` : 'Every reward is yours';
 		profile.querySelector( '.save-note' ).hidden = ! progress.local || ! canName();
 
@@ -290,6 +312,8 @@ export function setUpProfile( { progress, player, canName = () => false, onGarag
 	}
 
 	render();
+	// The pass coming or going changes what's next.
+	onProChange( () => render() );
 
 	return {
 		render,
@@ -348,6 +372,13 @@ export function icon( reward ) {
 	else if ( reward.part === 'trail' ) holder.innerHTML = ICONS.smoke;
 	else if ( reward.part === 'finish' ) holder.innerHTML = ICONS.finish;
 	return holder;
+
+}
+
+// A reward's name, a title's said to be one ("Title: Joyrider").
+function label( reward ) {
+
+	return reward.kind === 'title' ? [ element( 'span', 'kind', 'Title:' ), element( 'span', '', reward.name ) ] : [ element( 'span', '', reward.name ) ];
 
 }
 

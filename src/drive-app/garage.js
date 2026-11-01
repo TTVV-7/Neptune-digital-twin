@@ -245,6 +245,7 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 				const pass = !! unlock?.pass || ( shut && !! vehicle.pro && ! isPro() );
 				anyLocked ||= pass && ! section.hidden;
 				button.classList.toggle( 'on', on );
+				button.setAttribute( 'aria-pressed', String( on ) );
 				button.classList.toggle( 'locked', shut );
 				button.classList.toggle( 'pass', pass );
 				button.classList.toggle( 'level-only', shut && ! pass );
