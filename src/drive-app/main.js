@@ -284,9 +284,12 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 	if ( left !== null && left <= 2 ) screens.toast( left === 0 ? 'This is your last free drive today.' : `${ left } more free drive${ left === 1 ? '' : 's' } today after this one.` );
 
 	// Driving with others (live.js, ghosts.js, friends.js): only when the Worker has it on and this
-	// visit has a token to show the room. Without it, nothing of it is made.
+	// visit has a token to show the room. Without it, nothing of it is made. When the Worker couldn't
+	// say ('unknown': DriveLimits didn't answer, as for a few minutes after a deploy while it still
+	// runs its old code) it's made anyway: turned away at the door, it tries again as a dropped
+	// connection does, so the visit isn't left without it for hours over a moment's hiccup.
 	const liveVisit = LIVE_TEST?.visit ?? visit;
-	const live = liveOn && typeof liveVisit === 'string' && liveVisit
+	const live = ( liveOn || liveReason === 'unknown' ) && typeof liveVisit === 'string' && liveVisit
 		? createLive( { earth, ellipsoid, visit: liveVisit, player: () => board.player, ride: { vehicle: panel.vehicle.id, look: lookOf( panel.vehicle ) } } )
 		: null;
 	const ghosts = live && createGhosts( { scene, earth, camera, vehicles, loader: models.loader, live, tags: $( 'live-tags' ), own: () => state.entry?.pivot ?? null } );

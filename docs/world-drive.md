@@ -1286,15 +1286,16 @@ classes are `migrations` in `wrangler.drive.jsonc`, which `wrangler deploy` appl
 the visit counts' `DriveLimits`, `v2` the rooms' `DriveRoom` (both on SQLite storage, which the
 Free plan needs).
 
-The first deploy with driving with others (and any that changes what the Worker asks `DriveLimits`)
-goes out once by hand with `npx wrangler deploy -c wrangler.drive.jsonc
---durable-objects-code-update-mode immediate` (after `npm run build:drive` and the migrations), or
-with that as the Workers Builds deploy command for that one deploy. Durable Objects keep an active
-object's code for up to 5 minutes after a deploy by default, and `DriveLimits`, which every visit,
-score and page load reaches, is rarely idle long enough to take the new code sooner: meanwhile the
-new Worker would ask it for `liveOpen`, which the old code hasn't got, and every page loaded then
-would have no driving with others for its whole visit. Immediate resets it (and any rooms, which
-then have nobody in them to drop) at once.
+A deploy that changes what the Worker asks `DriveLimits` (as the first with driving with others
+did: `liveOpen` and `liveSpent`) needs nothing special. Durable Objects keep an active object's code
+for up to 5 minutes after a deploy by default (until it hibernates), so for those minutes the new
+Worker can ask the old `DriveLimits` for something it hasn't got. Visits and scores carry on (their
+calls are the same in both), `/api/config` answers `live: false` with `liveReason: 'unknown'`, and a
+page loaded then makes driving with others anyway and is turned away at the door (503) until
+`DriveLimits` runs the new code; it tries again as after a dropped connection, so it's in a room a
+few minutes later at most. `npx wrangler deploy -c wrangler.drive.jsonc
+--durable-objects-code-update-mode immediate` (after `npm run build:drive` and the migrations)
+skips the wait, at the cost of dropping everyone's connection to their room for a moment.
 
 To deploy from GitHub on every push with Workers Builds (as the construction app is): in the
 Cloudflare dashboard open the **world-drive** Worker → Settings → Build, connect this repository and
