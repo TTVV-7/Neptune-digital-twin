@@ -19,9 +19,15 @@
 // only the page's own origin through the proxy, and the Worker restarted with LIVE off: open pages
 // stop without a word and new ones show nothing of it, driving as ever. Alone in its room a page
 // sends no states, and a driver joining sees it at once; the ghost following is measured at
-// SEND_HZ, and only at STILL_HZ while the only other one in the room is on the globe. The day's
-// budget spent (the Worker with a small LIVE_DAILY_BUDGET, spent by connecting): a page turned away
-// says so once and shows nothing more of it, a party's link says why, and both drive as ever.
+// SEND_HZ, and only at STILL_HZ while the only other one in the room is on the globe. Who's driving
+// now, on the globe (online.js): a driver dropping in shows as a dot within about a minute, on a page
+// on the globe and in its panel's "Driving now" (named after the start spot near it, the busiest
+// first); tapping it flies there and pins it, the card saying how many, and Drive here puts you in
+// their room, their ghost in sight; one in a party, or with nearby off, never shows, and a page just
+// back on the globe doesn't count itself. The day's budget spent (the Worker with a small
+// LIVE_DAILY_BUDGET, spent by connecting): a page turned away says so once and shows nothing more of
+// it, a party's link says why, and both drive as ever; with LIVE off, nothing of who's driving now
+// either, not even an ask.
 //
 // Visit tokens are made here with Turnstile's documented test secret, as /api/visit makes them
 // (the test pad has no visit of its own: main.js's dev-only seam hands each page one). The
@@ -56,9 +62,11 @@ const HOUR = 60 * 60 * 1000;
 const NEARBY_MAX = 4;
 // The Worker as World Drive's own (wrangler.drive.jsonc) with no Maps key, so the page offers the
 // test pad. LIVE is the file's ("on") until the last tests switch it off.
+// TEST_CLOCK: the tests ask /api/online afresh, each at a time of its own (X-Test-Time), where pages
+// get the answer kept for 30 s.
 const VARS = {
 	GOOGLE_MAPS_API_KEY: '', GOOGLE_CLIENT_ID: '', TURNSTILE_SECRET: PASS_SECRET, TURNSTILE_SITE_KEY: '1x00000000000000000000AA',
-	SUPPORTER_EMAILS: 'ana@example.com', LIVE_NEARBY_MAX: String( NEARBY_MAX ),
+	SUPPORTER_EMAILS: 'ana@example.com', LIVE_NEARBY_MAX: String( NEARBY_MAX ), TEST_CLOCK: 'header',
 };
 // Where the drivers drop in, a place 33 km north, and two more areas: one full but for its next
 // shard, one busy.
@@ -219,9 +227,8 @@ async function restartWorker( vars ) {
 // the dev server's only), with the leaderboard's `player` if any, boost pads off. rooms: the room
 // of each connection it opens to one, in order; sent: what it has sent the rooms, { at, t } (t a
 // message's type, or a keepalive's text), as Playwright saw each frame go.
-async function livePage( { token, player = null, path = '/', touch = false } ) {
+async function livePage( { token, player = null, path = '/', touch = false, viewport = touch ? { width: 390, height: 760 } : { width: 900, height: 560 } } ) {
 
-	const viewport = touch ? { width: 390, height: 760 } : { width: 900, height: 560 };
 	const context = await browser.newContext( { viewport, hasTouch: touch, isMobile: touch } );
 	await context.addInitScript( ( { visit, player } ) => {
 
@@ -235,6 +242,9 @@ async function livePage( { token, player = null, path = '/', touch = false } ) {
 	page.errors = [];
 	page.rooms = [];
 	page.sent = [];
+	// When it asked /api/online (who's driving now, on the globe).
+	page.onlineAsks = [];
+	page.on( 'request', request => new URL( request.url() ).pathname === '/api/online' && page.onlineAsks.push( Date.now() ) );
 	page.on( 'pageerror', err => page.errors.push( err.message ) );
 	// Console errors too, but for requests blocked here, a socket hung up on while still connecting
 	// (switching rooms) and one the Worker turns away at the door (switched off), which the browser
@@ -1269,6 +1279,219 @@ describe( 'World Drive, driving with others ending, on a phone, and moving on', 
 
 } );
 
+
+// --- who's driving now, on the globe ---------------------------------------------------------------
+
+// Where people are driving, as the Worker has it now: /api/online asked afresh (a time of its own, so
+// not the answer kept for pages).
+let freshAsks = 0;
+async function onlineNow() {
+
+	const res = await fetch( `${ worker.base }/api/online`, { headers: { 'X-Test-Time': String( Date.now() + ++ freshAsks ) } } );
+	return res.json();
+
+}
+
+// A driver of the test's own, parked where it dropped in at `place` (as a page alone in its room
+// sends no states, its room has only that), keeping its connection alive: its socket.
+async function parkedAt( place ) {
+
+	const ws = new WebSocket( `${ worker.base.replace( /^http/, 'ws' ) }/api/live?room=${ encodeURIComponent( cellOf( place.lat, place.lon ) ) }`, [ PROTOCOL, await visitToken() ], { headers: { Origin: worker.base } } );
+	await new Promise( ( resolve, reject ) => {
+
+		ws.on( 'open', () => ws.send( JSON.stringify( { t: 'hello', player: null, vehicle: 'go-kart', look: {}, place, away: false } ) ) );
+		ws.on( 'message', data => data.toString().includes( '"welcome"' ) && resolve() );
+		ws.on( 'close', code => reject( new Error( `closed with ${ code }` ) ) );
+		ws.on( 'error', reject );
+
+	} );
+	ws.alive = setInterval( () => ws.readyState === WebSocket.OPEN && ws.send( 'ping' ), 20000 );
+	return ws;
+
+}
+
+const near = ( a, b, km ) => Math.hypot( a.lat - b.lat, ( a.lon - b.lon ) * Math.cos( a.lat * Math.PI / 180 ) ) * 111.2 < km;
+
+describe( 'World Drive, who\'s driving now on the globe', () => {
+
+	// A drops in at Golden Gate Park (6.7 km from the Golden Gate Bridge's start spot, and well inside
+	// its area: a dot is kept inside its room's, so one by an edge moves a little); C in a party at
+	// Monaco, and D with nearby off at Sydney, neither of whom shows; and the test's own drivers
+	// parked at Times Square (4), Shibuya (3), the Arc de Triomphe (2) and the Las Vegas Strip (1).
+	const P = { name: 'Golden Gate Park', lat: 37.76, lon: - 122.47 };
+	const MONACO = { name: 'Monaco', lat: 43.7366, lon: 7.4214 };
+	const SYDNEY = { name: 'Sydney', lat: - 33.8523, lon: 151.2108 };
+	const PARKED = [
+		[ { name: 'Times Square', lat: 40.75765, lon: - 73.98577, height: 12 }, 4 ],
+		[ { name: 'Shibuya', lat: 35.6595, lon: 139.7005, height: 38 }, 3 ],
+		[ { name: 'Arc de Triomphe', lat: 48.8738, lon: 2.2962, height: 60 }, 2 ],
+		[ { name: 'The Strip', lat: 36.1129, lon: - 115.1728, height: 620 }, 1 ],
+	];
+	let a;
+	let c;
+	let d;
+	let b;
+	let parked = [];
+	let droppedAt;
+
+	before( async () => {
+
+		[ a, c, d ] = await Promise.all( [
+			livePage( { token: await visitToken() } ),
+			livePage( { token: await visitToken(), path: `/?party=${ makePartyCode( bytes => crypto.getRandomValues( bytes ) ) }` } ),
+			livePage( { token: await visitToken() } ),
+		] );
+		await d.locator( '#globe-ui .friends input[type=checkbox]' ).uncheck();
+		await Promise.all( [ dropIn( a, P ), dropIn( c, MONACO ), dropIn( d, SYDNEY ) ] );
+		await waitLive( a, cellOf( P.lat, P.lon ) );
+		droppedAt = Date.now();
+		parked = await Promise.all( PARKED.flatMap( ( [ place, count ] ) => Array.from( { length: count }, () => parkedAt( place ) ) ) );
+
+	} );
+
+	after( async () => {
+
+		for ( const ws of parked ) {
+
+			clearInterval( ws.alive );
+			ws.close();
+
+		}
+
+		for ( const page of [ a, b, c, d ] ) await page?.context().close();
+
+	} );
+
+	test( 'a driver dropping in is on the globe within about a minute: a dot on a page on the globe, and its panel\'s "Driving now", busiest first and named after the start spot near each; a party\'s and one with nearby off never', async () => {
+
+		assert.equal( ( await live( d ) ).status, 'off' );
+		assert.equal( ( await live( c ) ).room.startsWith( 'party:' ), true );
+		// Her room says so at its first report, a minute after she connected.
+		let now = await onlineNow();
+		while ( ! now.areas.some( area => near( area, P, 1 ) ) && Date.now() - droppedAt < 80000 ) {
+
+			await new Promise( resolve => setTimeout( resolve, 1000 ) );
+			now = await onlineNow();
+
+		}
+
+		const there = Date.now() - droppedAt;
+		console.log( `    A on the globe ${ there } ms after she was in her room` );
+		assert.ok( there < 70000, `${ there } ms` );
+		const dot = now.areas.find( area => near( area, P, 1 ) );
+		assert.deepEqual( [ dot.lat, dot.lon, dot.count ], [ 37.76, - 122.47, 1 ] );
+
+		// B opens the globe: the dots, and the panel's list.
+		b = await livePage( { token: await visitToken(), viewport: { width: 1280, height: 720 } } );
+		await b.waitForFunction( () => window.drive.online.areas.length >= 5, null, { timeout: 30000 } );
+		console.log( `    on B's globe ${ Date.now() - droppedAt } ms after A was in` );
+		const areas = await b.evaluate( () => window.drive.online.areas );
+		assert.deepEqual( areas.find( area => near( area, P, 1 ) )?.count, 1 );
+		assert.equal( areas.filter( area => near( area, MONACO, 20 ) || near( area, SYDNEY, 20 ) ).length, 0, JSON.stringify( areas ) );
+		const section = b.locator( '#globe-ui .online' );
+		await section.waitFor();
+		assert.equal( await section.locator( '.summary' ).textContent(), '11 driving now. Tap a glowing dot to join them.' );
+		const rows = await section.locator( '.areas li' ).evaluateAll( items => items.map( li => [ li.querySelector( 'b' ).textContent, li.querySelector( 'span' ).textContent ] ) );
+		assert.deepEqual( rows, [
+			[ 'Near Times Square', '4 drivers' ], [ 'Near Shibuya Crossing', '3 drivers' ], [ 'Near Arc de Triomphe', '2 drivers' ],
+			[ 'Near Las Vegas Strip', '1 driver' ], [ 'Near Golden Gate Bridge', '1 driver' ],
+		] );
+		// No names, nothing anyone typed, no pids: the Worker says only where and how many.
+		assert.deepEqual( Object.keys( now ).sort(), [ 'areas', 'on', 'total' ] );
+		assert.ok( now.areas.every( area => Object.keys( area ).sort().join() === 'count,height,lat,lon' ), JSON.stringify( now ) );
+		await shot( b, 'online-0-panel' );
+		assert.deepEqual( [ a.errors, b.errors, c.errors, d.errors ], [ [], [], [], [] ] );
+
+	} );
+
+	test( 'back on the globe, a page doesn\'t count itself where it was driving, though its room hasn\'t said yet', async () => {
+
+		await a.keyboard.press( 'KeyM' );
+		await a.waitForFunction( () => window.drive.mode === 'globe' );
+		await a.waitForFunction( () => window.drive.online.areas.length >= 4, null, { timeout: 20000 } );
+		assert.ok( ( await onlineNow() ).areas.some( area => near( area, P, 1 ) ), 'her room has already said she went' );
+		const mine = await a.evaluate( () => ( { areas: window.drive.online.areas, total: window.drive.online.total } ) );
+		assert.equal( mine.areas.filter( area => near( area, P, 1 ) ).length, 0, JSON.stringify( mine ) );
+		assert.equal( mine.total, 10 );
+		// And she drops in there again.
+		await dropIn( a, P );
+		await waitLive( a, cellOf( P.lat, P.lon ) );
+
+	} );
+
+	test( 'the dots over the globe: one over each area facing the camera, sized by how many, none round the back; overlapping, one with both counts', async () => {
+
+		// North America from far out (and held there: left alone, the globe turns): Times Square's 4, and
+		// the Strip and the park, 670 km apart, as one of 2 to the west of it; Shibuya's round the back of
+		// the Earth.
+		const view = ( lat, lon, distance ) => b.evaluate( ( [ lat, lon, distance ] ) => window.drive.globe.flyTo( { lat, lon, height: 0, distance, heading: 0, pitch: - 90 }, { duration: 0.3 } ), [ lat, lon, distance ] );
+		await view( 39, - 98, 2.5e7 );
+		await b.evaluate( () => window.drive.globe.touched() );
+		await b.waitForTimeout( 500 );
+		const america = await b.evaluate( () => window.drive.online.dots );
+		const times = america.find( dot => dot.count === 4 );
+		assert.ok( times && america.some( dot => dot.count === 2 && dot.x < times.x - 50 && dot.label === '2 drivers driving here' ), JSON.stringify( america ) );
+		assert.ok( america.every( dot => dot.count !== 3 ), JSON.stringify( america ) );
+		// Nearer, as the globe opens: each its own, bigger for more.
+		await b.evaluate( () => window.drive.globe.flyTo( { ...window.drive.globe.orbit( 39, - 98 ), heading: 0 }, { duration: 0.3 } ) );
+		await b.evaluate( () => window.drive.globe.touched() );
+		await b.waitForTimeout( 500 );
+		const sizes = await b.locator( '.online-dot:not([hidden])' ).evaluateAll( dots => dots.map( dot => [ dot.textContent, dot.getBoundingClientRect().width ] ) );
+		const width = text => sizes.find( ( [ t ] ) => t === text )[ 1 ];
+		assert.ok( sizes.every( ( [ , w ] ) => w >= 32 ) && width( '4' ) > Math.min( ...sizes.map( ( [ , w ] ) => w ) ), JSON.stringify( sizes ) );
+		assert.equal( await b.locator( '.online-dot:not([hidden])', { hasText: '4' } ).getAttribute( 'aria-label' ), '4 drivers driving here' );
+		await shot( b, 'online-1-globe' );
+		// On a phone.
+		const phone = await livePage( { token: await visitToken(), touch: true, viewport: { width: 375, height: 740 } } );
+		await phone.waitForFunction( () => window.drive.online.areas.length >= 5, null, { timeout: 30000 } );
+		await phone.evaluate( () => window.drive.globe.flyTo( { ...window.drive.globe.orbit( 30, - 98 ), heading: 0 }, { duration: 0.3 } ) );
+		await phone.evaluate( () => window.drive.globe.touched() );
+		await phone.waitForTimeout( 800 );
+		const dots = await phone.evaluate( () => window.drive.online.dots );
+		assert.ok( dots.length >= 2, JSON.stringify( dots ) );
+		const sheet = await phone.locator( '#globe-ui .panel' ).evaluate( el => el.getBoundingClientRect().top );
+		assert.ok( dots.every( dot => dot.y < sheet ), JSON.stringify( { dots, sheet } ) );
+		for ( const box of await phone.locator( '.online-dot:not([hidden])' ).evaluateAll( els => els.map( el => el.getBoundingClientRect() ).map( r => [ r.width, r.height ] ) ) ) assert.ok( box[ 0 ] >= 32 && box[ 1 ] >= 32, JSON.stringify( box ) );
+		await shot( phone, 'online-2-phone' );
+		assert.deepEqual( phone.errors, [] );
+		await phone.context().close();
+
+	} );
+
+	test( 'tapping a dot flies there and pins it, its card saying how many drive there now; Drive here drops in, into their room, their ghost in sight', async () => {
+
+		// Nearer, so the park's dot is one of its own.
+		await b.evaluate( p => window.drive.globe.flyTo( { lat: p.lat, lon: p.lon, height: 0, distance: 1.5e6, heading: 0, pitch: - 90 }, { duration: 0.3 } ), P );
+		await b.waitForTimeout( 800 );
+		const dots = await b.evaluate( () => window.drive.online.dots );
+		const middle = { x: 640, y: 360 };
+		const dot = dots.sort( ( x, y ) => Math.hypot( x.x - middle.x, x.y - middle.y ) - Math.hypot( y.x - middle.x, y.y - middle.y ) )[ 0 ];
+		assert.deepEqual( [ dot.count, dot.label ], [ 1, '1 driver driving here' ] );
+		await b.mouse.click( dot.x, dot.y );
+		const card = b.locator( '#globe-ui .pin-card' );
+		await card.waitFor();
+		assert.equal( await card.locator( '.name' ).textContent(), '1 driver here now' );
+		assert.equal( await card.locator( '.coords' ).textContent(), 'Near Golden Gate Bridge · 37.7600° N, 122.4700° W' );
+		// The flight down to it, the pin over the dot.
+		await b.waitForFunction( () => ! window.drive.globe.flight, null, { timeout: 10000 } );
+		await shot( b, 'online-3-pinned' );
+		await card.locator( '.go' ).click();
+		await b.waitForFunction( () => window.drive.mode === 'driving', null, { timeout: 60000 } );
+		assert.equal( await b.locator( '#drive-ui .place' ).textContent(), 'Near Golden Gate Bridge' );
+		await waitLive( b, cellOf( P.lat, P.lon ) );
+		await b.waitForFunction( () => window.drive.ghosts.list().some( g => g.visible ), null, { timeout: 30000 } );
+		const told = await b.evaluate( () => [ ...window.drive.live.players.values() ].map( p => p.place?.name ) );
+		assert.deepEqual( told, [ 'Golden Gate Park' ] );
+		// Driving, the globe's dots ask nothing.
+		const asks = b.onlineAsks.length;
+		await b.waitForTimeout( 1500 );
+		assert.equal( b.onlineAsks.length, asks );
+		assert.deepEqual( [ a.errors, b.errors ], [ [], [] ] );
+
+	} );
+
+} );
+
 describe( 'World Drive, driving with others switched off on the Worker', () => {
 
 	test( 'LIVE off: an open page stops without a word, a new one shows none of it, and both drive as ever', async () => {
@@ -1281,6 +1504,10 @@ describe( 'World Drive, driving with others switched off on the Worker', () => {
 		assert.equal( ( await ( await fetch( `${ BASE }/api/config` ) ).json() ).live, false );
 		await page.waitForFunction( () => window.drive.live.ended === 'off', null, { timeout: 60000 } );
 		assert.equal( await page.locator( '#globe-ui .friends' ).isHidden(), true );
+		// Nor who's driving now: no dots, no "Driving now".
+		await page.waitForFunction( () => ! window.drive.online.on );
+		assert.equal( await page.locator( '#globe-ui .online' ).isHidden(), true );
+		assert.equal( await page.locator( '.online-dot:not([hidden])' ).count(), 0 );
 		assert.equal( await page.locator( '#globe-ui .party-banner' ).isHidden(), true );
 		assert.doesNotMatch( await page.locator( '#toast' ).textContent(), /others/ );
 		await dropIn( page );
@@ -1295,6 +1522,10 @@ describe( 'World Drive, driving with others switched off on the Worker', () => {
 		// A page loaded now: nothing of it at all, with a visit's token or not.
 		const fresh = await livePage( { token: await visitToken(), path: '/?party=ABCDEFH' } );
 		assert.equal( await fresh.evaluate( () => window.drive.live ), null );
+		assert.equal( await fresh.evaluate( () => window.drive.online ), null );
+		assert.equal( await fresh.locator( '#globe-ui .online' ).isHidden(), true );
+		// (And the Worker says so too, asking nothing.)
+		assert.deepEqual( await onlineNow(), { on: false, total: 0, areas: [] } );
 		assert.equal( await fresh.locator( '#globe-ui .friends' ).isHidden(), true );
 		assert.equal( await fresh.locator( '#globe-ui .party-banner' ).isHidden(), true );
 		await dropIn( fresh );
@@ -1305,6 +1536,7 @@ describe( 'World Drive, driving with others switched off on the Worker', () => {
 		await fresh.keyboard.press( 'KeyH' );
 		assert.equal( await fresh.evaluate( () => document.querySelectorAll( '#live-tags *' ).length ), 0 );
 		assert.deepEqual( fresh.rooms, [] );
+		assert.deepEqual( fresh.onlineAsks, [] );
 		await fresh.evaluate( () => window.drive.driver.press( 'KeyW' ) );
 		await fresh.waitForFunction( () => window.drive.driver.speed > 2 );
 		await fresh.evaluate( () => window.drive.driver.release( 'KeyW' ) );
@@ -1351,6 +1583,8 @@ describe( 'World Drive, the day\'s budget for driving with others spent', () => 
 		await page.locator( '#drive-ui .to-globe' ).click();
 		await page.waitForFunction( () => window.drive.mode === 'globe' );
 		assert.equal( await page.locator( '#globe-ui .friends' ).isHidden(), true );
+		assert.equal( await page.locator( '#globe-ui .online' ).isHidden(), true );
+		assert.equal( await page.evaluate( () => window.drive.online.on ), false );
 		await page.evaluate( () => document.getElementById( 'toast' ).textContent = '' );
 		await dropIn( page );
 		await page.waitForTimeout( 1500 );

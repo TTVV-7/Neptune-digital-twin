@@ -43,6 +43,36 @@ export function formatLatLon( lat, lon ) {
 
 }
 
+// The start spot nearest ( lat, lon ) if there's one within `within` metres, else null.
+export function spotNear( lat, lon, within ) {
+
+	let nearest = null;
+	let gap = within;
+	for ( const spot of SPOTS ) {
+
+		const d = metresBetween( lat, lon, spot.lat, spot.lon );
+		if ( d <= gap ) {
+
+			nearest = spot;
+			gap = d;
+
+		}
+
+	}
+
+	return nearest;
+
+}
+
+// How far apart (m) two spots are along the ground: on a sphere, which is near enough.
+export function metresBetween( latA, lonA, latB, lonB ) {
+
+	const rad = Math.PI / 180;
+	const a = Math.sin( ( latB - latA ) * rad / 2 ) ** 2 + Math.cos( latA * rad ) * Math.cos( latB * rad ) * Math.sin( ( lonB - lonA ) * rad / 2 ) ** 2;
+	return 2 * 6371000 * Math.asin( Math.min( 1, Math.sqrt( a ) ) );
+
+}
+
 // Latest first: [ { name, region, lat, lon, heading, deck } ].
 export function recentPlaces() {
 

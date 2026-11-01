@@ -7,7 +7,7 @@ import { addressOf, clock, googleClientId, setting } from './settings.js';
 import { makeVisit } from './visits.js';
 import { currentAccount, getMe, linkPlayer, signIn, signOut } from './accounts.js';
 import { isSupporter, stripeWebhook } from './supporter.js';
-import { live, liveToday } from './live.js';
+import { live, liveToday, online } from './live.js';
 import { BUDGET_SPENT } from '../../src/drive-app/live-protocol.js';
 
 export { DriveLimits } from './limits.js';
@@ -22,7 +22,8 @@ export { DriveRoom } from './live.js';
 // scores, posted with the visit's token so they come from visits that passed Turnstile. And the
 // Supporter Pass (accounts.js, supporter.js): Google sign-in, the pass bought through Stripe, and
 // for supporters more drives a day and a ⭐ on the leaderboard. Driving with others (live.js) is a
-// WebSocket to a room, one Durable Object a party or area, that tells everyone where the others are.
+// WebSocket to a room, one Durable Object a party or area, that tells everyone where the others are;
+// /api/online says where people are driving now, for the globe's dots.
 //
 // Settings (wrangler.drive.jsonc vars, or secrets):
 //   GOOGLE_MAPS_API_KEY   secret: the Maps key for World Drive's own Google Cloud project (a
@@ -65,6 +66,7 @@ const ROUTES = [
 	{ method: 'DELETE', path: '/api/session', handler: signOut },
 	{ method: 'GET', path: '/api/me', handler: getMe },
 	{ method: 'GET', path: '/api/live', handler: live },
+	{ method: 'GET', path: '/api/online', handler: online },
 	{ method: 'POST', path: '/api/stripe/webhook', handler: stripeWebhook, sameOrigin: false },
 ];
 

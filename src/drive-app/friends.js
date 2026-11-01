@@ -327,7 +327,9 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo } ) {
 		const leave = button( 'Leave party', 'link leave', () => live.leaveParty() );
 		party.append( code, row, members, leave );
 		const nearby = setting( 'Show me to drivers nearby', live.nearby, on => live.setNearby( on ) );
-		const parts = [ title, invite, party, nearby.label ];
+		// Being shown nearby is being counted on the globe too (online.js): the switch says so.
+		const counted = Object.assign( document.createElement( 'p' ), { className: 'note', textContent: 'Also counts you, with no name, on the globe\'s map of who\'s driving.' } );
+		const parts = [ title, invite, party, nearby.label, counted ];
 		const hornSetting = inPause ? setting( 'Horn sounds', hornOn, on => {
 
 			hornOn = on;

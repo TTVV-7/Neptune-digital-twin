@@ -25,8 +25,17 @@
 // every ten minutes otherwise (a lone driver), and as it empties, a replaced driver's spend kept,
 // closing everyone when the day's is spent, and carrying on when DriveLimits fails. And the page's
 // side (src/drive-app/live.js) on stand-ins for the browser: turned away at the door, a connection
-// gone quiet, a busy area tried again, and quiet with only those on the globe to see it.
-// TEST_DRIVE_LIVE_PORT=8950 moves the three wrangler servers (that port and the next two).
+// gone quiet, a busy area tried again, and quiet with only those on the globe to see it. Then who's
+// driving now, on the globe: Earth-centred metres to latitude, longitude and height and back (known
+// points, and three.js's ellipsoid); a room's drivers as dots (together within DOT_SPREAD, at most
+// ROOM_DOTS, rounded, inside the area); an area's room's dots with its reports (a party's never,
+// those on the globe not counted, paused ones counted, a change within REPORT_MS though there's little
+// to report, the dots taken off as it empties, after hibernating and after a failed report); DriveLimits
+// keeping them, on Node's own SQLite (one row a room, the TTL, the 200 busiest, each ask charged to
+// the budget); /api/online on stand-ins (its cache, DriveLimits failing, the budget spent, LIVE off);
+// and the whole way round on a Worker of its own (the real Cache API, the TTL), on: false with LIVE
+// off and the budget spent.
+// TEST_DRIVE_LIVE_PORT=8950 moves the four wrangler servers (that port and the next three).
 
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
@@ -37,9 +46,9 @@ import { serialize } from 'node:v8';
 import { after, before, describe, mock, test } from 'node:test';
 import { CLIENT_ID, makeKey, makeToken, serveKeys, startWorker } from './worker-harness.mjs';
 import {
-	BUDGET_SPENT, BURST, CLOSE, FLUSH_MS, HELLO_MS, HONK_GAP, IDLE_MS, KEEPALIVE_MS, MAX_HELLO, MAX_MESSAGE, NEARBY_SHARDS, PARTY_MAX, PING, PONG,
-	PROTOCOL, SEND_HZ, STILL_HZ, VIEW_RANGE,
-	cellOf, makePartyCode, packState, shardOf,
+	BUDGET_SPENT, BURST, CLOSE, DOT_SPREAD, FLAGS, FLUSH_MS, HELLO_MS, HONK_GAP, IDLE_MS, KEEPALIVE_MS, MAX_HELLO, MAX_MESSAGE, NEARBY_SHARDS, ONLINE_AREAS,
+	PARTY_MAX, PING, PONG, PROTOCOL, ROOM_DOTS, SEND_HZ, STILL_HZ, VIEW_RANGE,
+	boundsOf, cellOf, checkDot, dotsOf, makePartyCode, packState, shardOf, toEcef, toGeodetic,
 } from '../src/drive-app/live-protocol.js';
 import { makeVisit } from '../worker/drive/visits.js';
 
@@ -60,6 +69,14 @@ const COST = { connect: 1, message: 1 / 20, alarm: 1, report: 1 };
 const NEARBY_MAX = 4;
 const FURKA = { name: 'Furka Pass', lat: 46.5725, lon: 8.4153, height: 2429 };
 const HELLO = { t: 'hello', player: null, vehicle: 'go-kart', look: { colour: 'red', number: 7 }, place: FURKA, away: false };
+// Who's driving now, on the globe: the Furka Pass's area (its room), and its dot with one driver
+// there (to 0.01° and 10 m); and two more places, with theirs.
+const FURKA_AREA = cellOf( FURKA.lat, FURKA.lon );
+const FURKA_DOT = { lat: 46.57, lon: 8.42, height: 2430, count: 1 };
+const MONACO = { name: 'Monaco harbour', lat: 43.73658, lon: 7.42144, height: 3 };
+const MONACO_DOT = { lat: 43.74, lon: 7.42, height: 0, count: 1 };
+const TIMES = { name: 'Times Square', lat: 40.75765, lon: - 73.98577, height: 12 };
+const TIMES_DOT = { lat: 40.76, lon: - 73.99, height: 10, count: 1 };
 
 const sleep = ms => new Promise( resolve => setTimeout( resolve, ms ) );
 // A visit's token as /api/visit hands one out (made at `time`), and the visit's id in it.
@@ -297,7 +314,70 @@ function cars( messages ) {
 
 }
 
+// 'cloudflare:workers' (only there inside Cloudflare's runtime) stood in for, as test-drive-worker.mjs
+// does, so the Worker's own modules can be imported here.
+let stoodIn = false;
+function standInForCloudflare() {
+
+	if ( stoodIn ) return;
+	stoodIn = true;
+	const stub = 'export class DurableObject { constructor( ctx, env ) { this.ctx = ctx; this.env = env; } }';
+	const hooks = `export async function resolve( specifier, context, next ) {
+		if ( specifier === 'cloudflare:workers' ) return { url: 'data:text/javascript,' + encodeURIComponent( ${ JSON.stringify( stub ) } ), shortCircuit: true };
+		return next( specifier, context );
+	}`;
+	register( `data:text/javascript,${ encodeURIComponent( hooks ) }` );
+
+}
+
+// /api/online's answer at `time` (the tests' clock, on a Worker with TEST_CLOCK: each time a fresh
+// ask, as none is kept for it yet), or with time null as a page asks: { on, total, areas }.
+async function online( server, time = null ) {
+
+	const res = await fetch( `${ server.base }/api/online`, { headers: time === null ? {} : { 'X-Test-Time': String( time ) } } );
+	assert.equal( res.status, 200 );
+	return res.json();
+
+}
+
 // --- the Worker, in wrangler dev ---------------------------------------------------------
+
+// Who's driving now, the whole way round (see its tests, after the others under wrangler dev): a
+// Worker of its own, with its drivers connected from the start, as a room says where they are a
+// minute after its first connected, so by the time their tests come that's been and gone.
+const presence = {};
+
+before( async () => {
+
+	presence.server = await startWorker( {
+		port: PORT + 3,
+		config: 'wrangler.drive.jsonc',
+		vars: { GOOGLE_CLIENT_ID: '', GOOGLE_MAPS_API_KEY: 'test-maps-key-not-real', TURNSTILE_SECRET: PASS_SECRET, TEST_CLOCK: 'header' },
+	} );
+	const { server } = presence;
+	presence.at = Date.now();
+	// Alice at the Furka Pass and Erin at Monaco, each alone in her area's room; Pat in a party at Times
+	// Square, and Gil on the globe in the Times Square area's room: neither of those counted.
+	presence.alice = await join( server, FURKA_AREA );
+	presence.erin = await join( server, cellOf( MONACO.lat, MONACO.lon ), { place: MONACO } );
+	presence.pat = await join( server, partyRoom(), { place: TIMES } );
+	presence.gil = await join( server, cellOf( TIMES.lat, TIMES.lon ), { place: null, away: true } );
+	// Their keepalives, as their pages send them.
+	presence.alive = setInterval( () => {
+
+		for ( const page of [ presence.alice, presence.erin, presence.pat, presence.gil ] ) if ( page.ws.readyState === WebSocket.OPEN ) page.send( PING );
+
+	}, 20 * SECOND );
+
+} );
+
+after( () => {
+
+	clearInterval( presence.alive );
+	for ( const page of [ presence.alice, presence.erin, presence.pat, presence.gil ] ) page?.ws.terminate();
+	presence.server?.stop();
+
+} );
 
 describe( 'Driving with others', () => {
 
@@ -380,6 +460,18 @@ describe( 'Driving with others', () => {
 		return made.json;
 
 	}
+
+	test( '/api/online: on, and with LIVE=off on: false and nobody, kept 30 s by browsers too', async () => {
+
+		const on = await fetch( `${ server.base }/api/online` );
+		assert.equal( on.headers.get( 'Cache-Control' ), 'public, max-age=30' );
+		assert.equal( ( await on.json() ).on, true );
+		const res = await fetch( `${ off.base }/api/online` );
+		assert.deepEqual( [ res.status, res.headers.get( 'Cache-Control' ), await res.json() ], [ 200, 'public, max-age=30', { on: false, total: 0, areas: [] } ] );
+		// From another site's page: turned away, as everything is.
+		assert.equal( ( await fetch( `${ server.base }/api/online`, { headers: { 'Sec-Fetch-Site': 'cross-site' } } ) ).status, 403 );
+
+	} );
 
 	test( 'config says driving with others is on, and off with LIVE=off', async () => {
 
@@ -1205,9 +1297,10 @@ describe( 'Driving with others\' daily budget', () => {
 		const closed = await Promise.all( [ alice.ended( wait ), bob.ended( wait ) ] );
 		assert.deepEqual( closed, [ { code: CLOSE.off, reason: BUDGET_SPENT }, { code: CLOSE.off, reason: BUDGET_SPENT } ] );
 		assert.ok( alice.closedAt - waiting.at >= REPORT_MS - SECOND, `${ alice.closedAt - waiting.at } ms in` );
-		// And the door's shut until midnight.
+		// And the door's shut until midnight, and the globe shows nobody driving.
 		assert.equal( ( await connect( tight, partyRoom() ) ).status, 503 );
 		assert.deepEqual( ( ( { live, liveReason } ) => ( { live, liveReason } ) )( await config() ), { live: false, liveReason: BUDGET_SPENT } );
+		assert.deepEqual( await online( tight, Date.now() ), { on: false, total: 0, areas: [] } );
 
 	} );
 
@@ -1331,12 +1424,7 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 
 	before( async () => {
 
-		const stub = 'export class DurableObject { constructor( ctx, env ) { this.ctx = ctx; this.env = env; } }';
-		const hooks = `export async function resolve( specifier, context, next ) {
-			if ( specifier === 'cloudflare:workers' ) return { url: 'data:text/javascript,' + encodeURIComponent( ${ JSON.stringify( stub ) } ), shortCircuit: true };
-			return next( specifier, context );
-		}`;
-		register( `data:text/javascript,${ encodeURIComponent( hooks ) }` );
+		standInForCloudflare();
 		( { DriveRoom } = await import( '../worker/drive/live.js' ) );
 		globalThis.WebSocketPair = class {
 
@@ -1519,18 +1607,18 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 	// The Worker asking a room to let go of a visit gone to another room, its connection there `seq`.
 	const leaveFor = ( room, visit, seq ) => room.fetch( { headers: new Headers( { 'X-Live-Leave': visit, 'X-Live-Seq': String( seq ) } ) } );
 
-	// DriveLimits as a room reaches it (env.LIMITS): each report it's sent, kept; open, or not, or
-	// failing, as the test says.
+	// DriveLimits as a room reaches it (env.LIMITS): each report it's sent (with an area's room's
+	// dots, online), kept; open, or not, or failing, as the test says.
 	function limitsStub() {
 
 		const stub = { reports: [], open: true, fail: false };
 		stub.binding = {
 			idFromName: name => name,
 			get: () => ( {
-				liveSpent: async ( amount, { now, budget } ) => {
+				liveSpent: async ( amount, { now, budget, online } ) => {
 
 					if ( stub.fail ) throw new Error( 'DriveLimits is down' );
-					stub.reports.push( { amount, now, budget } );
+					stub.reports.push( { amount, now, budget, ...( online ? { online: structuredClone( online ) } : {} ) } );
 					return { open: stub.open, spent: 0 };
 
 				},
@@ -2096,6 +2184,234 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 
 	} );
 
+	// --- who's driving now: an area's room's dots, in its reports ---
+
+	// The dots in each report that had them (an area's room's), and when.
+	const dotsIn = reports => reports.filter( report => report.online ).map( report => ( { at: report.now, room: report.online.room, dots: report.online.dots } ) );
+	// The clock `ms` on, `pages` each sending its keepalive every KEEPALIVE_MS meanwhile, as pages with
+	// nothing else to say do, the alarm going as it's due.
+	async function idle( room, ctx, pages, ms ) {
+
+		const until = clock + ms;
+		while ( clock + KEEPALIVE_MS <= until ) {
+
+			await wait( room, ctx, KEEPALIVE_MS );
+			for ( const page of pages ) if ( ! page.closedWith ) await ping( room, page );
+
+		}
+
+		await wait( room, ctx, until - clock );
+
+	}
+
+	test( 'an area\'s room says where its drivers are with its reports: a lone driver at REPORT_MS, though it has little to report, then only as the room reports anyway; going, it takes its dot off. A party\'s room never says', async () => {
+
+		const ctx = runtime();
+		const limits = limitsStub();
+		const room = new DriveRoom( ctx, { LIMITS: limits.binding } );
+		const start = clock;
+		const alone = await hello( room, ctx, { name: FURKA_AREA } );
+		await idle( room, ctx, [ alone ], 30 * MINUTE );
+		const reported = dotsIn( limits.reports );
+		// Every report of an area's room has its dots: the first REPORT_MS after it connected, where it
+		// dropped in (its page sends no states alone), to about a kilometre and 10 m.
+		assert.equal( reported.length, limits.reports.length );
+		assert.deepEqual( reported[ 0 ], { at: start + REPORT_MS, room: FURKA_AREA, dots: [ FURKA_DOT ] } );
+		// Nothing changing, then only the reports the room makes anyway: every few minutes for a lone
+		// driver, never more than REPORT_MOST and its next alarm apart (well within ONLINE_TTL, 12).
+		for ( let i = 1; i < reported.length; i ++ ) {
+
+			const gap = reported[ i ].at - reported[ i - 1 ].at;
+			assert.ok( gap >= 4 * REPORT_MS && gap <= 11 * MINUTE, JSON.stringify( reported.map( r => r.at - start ) ) );
+			assert.deepEqual( reported[ i ].dots, [ FURKA_DOT ] );
+
+		}
+
+		assert.ok( reported.length >= 4, JSON.stringify( reported.map( r => r.at - start ) ) );
+		// Going: the room's last report, as it empties, has none.
+		await leave( room, alone );
+		assert.deepEqual( dotsIn( limits.reports ).slice( reported.length ), [ { at: clock, room: FURKA_AREA, dots: [] } ] );
+
+		// A party's room, the same: no dots, ever.
+		const partyCtx = runtime();
+		const partyLimits = limitsStub();
+		const party = new DriveRoom( partyCtx, { LIMITS: partyLimits.binding } );
+		const friend = await hello( party, partyCtx );
+		const other = await hello( party, partyCtx );
+		await drive( party, partyCtx, friend, 5 * MINUTE, [ other ] );
+		await leave( party, friend );
+		await leave( party, other );
+		assert.ok( partyLimits.reports.length >= 5 );
+		assert.ok( partyLimits.reports.every( report => ! ( 'online' in report ) ), JSON.stringify( partyLimits.reports.find( report => report.online ) ) );
+
+	} );
+
+	test( 'who\'s counted: those on the globe aren\'t, a paused driver is; a change goes with the next report REPORT_MS after the last, though there\'s little to report', async () => {
+
+		const ctx = runtime();
+		const limits = limitsStub();
+		const room = new DriveRoom( ctx, { LIMITS: limits.binding } );
+		const start = clock;
+		const alice = await hello( room, ctx, { name: FURKA_AREA } );
+		// Bob's on the globe, still in the area's room (for a minute, as a page is).
+		const bob = await hello( room, ctx, { name: FURKA_AREA }, { place: null, away: true } );
+		await idle( room, ctx, [ alice, bob ], REPORT_MS );
+		assert.deepEqual( dotsIn( limits.reports ), [ { at: start + REPORT_MS, room: FURKA_AREA, dots: [ FURKA_DOT ] } ] );
+
+		// He drops in beside her and parks (paused): two, at their mean, from the next report on: as soon
+		// as one may be, REPORT_MS after the last (or REPORT_EARLY before), with less than REPORT_LEAST
+		// (5) to report.
+		await say( room, bob, { t: 'place', place: FURKA } );
+		await say( room, bob, { t: 's', s: carAt( 46.5725, 8.4153, { north: 30, flags: FLAGS.paused | FLAGS.grounded } ) } );
+		await idle( room, ctx, [ alice, bob ], REPORT_MS );
+		let reported = dotsIn( limits.reports );
+		assert.equal( reported.length, 2 );
+		assert.ok( reported[ 1 ].at - reported[ 0 ].at <= REPORT_MS && reported[ 1 ].at - reported[ 0 ].at >= REPORT_MS - 10 * SECOND, `${ reported[ 1 ].at - reported[ 0 ].at } ms` );
+		assert.ok( limits.reports[ 1 ].amount < 5, `${ limits.reports[ 1 ].amount } reported` );
+		assert.deepEqual( reported[ 1 ].dots, [ { ...FURKA_DOT, count: 2 } ] );
+
+		// Back on the globe: one again, within the minute.
+		await say( room, bob, { t: 'away' } );
+		await idle( room, ctx, [ alice, bob ], REPORT_MS );
+		reported = dotsIn( limits.reports );
+		assert.equal( reported.length, 3 );
+		assert.ok( reported[ 2 ].at - reported[ 1 ].at <= REPORT_MS );
+		assert.deepEqual( reported[ 2 ].dots, [ FURKA_DOT ] );
+		// And with nothing changing, no report for the minutes after that but what the room's alarms
+		// add up to.
+		await idle( room, ctx, [ alice, bob ], 3 * MINUTE );
+		assert.equal( dotsIn( limits.reports ).length, 3 );
+
+	} );
+
+	test( 'drivers in a room more than DOT_SPREAD apart are dots of their own, each at its drivers\' mean, rounded; a car the room has word of is where it is, a lone one from another area in the middle of this one', async () => {
+
+		const ctx = runtime();
+		const limits = limitsStub();
+		const room = new DriveRoom( ctx, { LIMITS: limits.binding } );
+		const start = clock;
+		const [ a, b, c ] = [ await hello( room, ctx, { name: FURKA_AREA } ), await hello( room, ctx, { name: FURKA_AREA } ), await hello( room, ctx, { name: FURKA_AREA } ) ];
+		// A and B 1 km apart, C 3 km south of them.
+		await say( room, a, { t: 's', s: carAt( 46.5725, 8.4153, { north: 500 } ) } );
+		await say( room, b, { t: 's', s: carAt( 46.5725, 8.4153, { north: - 500 } ) } );
+		await say( room, c, { t: 's', s: carAt( 46.5725, 8.4153, { north: - 3500 } ) } );
+		await idle( room, ctx, [ a, b, c ], REPORT_MS );
+		const [ first ] = dotsIn( limits.reports );
+		assert.equal( first.at, start + REPORT_MS );
+		const south = toGeodetic( ...Object.values( ecef( 46.5725 - 3500 / 111200, 8.4153, 2430 ) ) );
+		assert.deepEqual( first.dots, [ { lat: 46.57, lon: 8.42, height: 2430, count: 2 }, { lat: Math.round( south.lat * 100 ) / 100, lon: 8.42, height: 2430, count: 1 } ] );
+
+		// Someone alone in a room drove into it from another area, so the room has no word of their car
+		// and where they dropped in isn't in it: they're in the middle of the area.
+		const loneCtx = runtime();
+		const loneLimits = limitsStub();
+		const lone = new DriveRoom( loneCtx, { LIMITS: loneLimits.binding } );
+		const next = cellOf( FURKA.lat + 0.1, FURKA.lon );
+		const driver = await hello( lone, loneCtx, { name: next } );
+		await idle( lone, loneCtx, [ driver ], REPORT_MS );
+		const { south: s, north, west, east } = boundsOf( next );
+		const [ dot ] = dotsIn( loneLimits.reports )[ 0 ].dots;
+		assert.deepEqual( dot, { lat: Math.round( ( s + north ) / 2 * 100 ) / 100, lon: Math.round( ( west + east ) / 2 * 100 ) / 100, height: 2430, count: 1 } );
+		assert.equal( cellOf( dot.lat, dot.lon ), next );
+
+	} );
+
+	test( 'a room that empties, or closes everyone, takes its dots off as it goes; one closed for the day\'s budget, DriveLimits has let go of already', async () => {
+
+		// LIVE switched off: closed at the alarm, which reports none.
+		const ctx = runtime();
+		const limits = limitsStub();
+		const env = { LIVE: 'on', LIMITS: limits.binding };
+		const room = new DriveRoom( ctx, env );
+		const alice = await hello( room, ctx, { name: FURKA_AREA } );
+		await idle( room, ctx, [ alice ], REPORT_MS );
+		env.LIVE = 'off';
+		await wait( room, ctx, REPORT_MS );
+		assert.deepEqual( alice.closedWith, { code: CLOSE.off, reason: 'off' } );
+		assert.deepEqual( dotsIn( limits.reports ).map( r => r.dots ), [ [ FURKA_DOT ], [] ] );
+		await room.webSocketClose( alice, CLOSE.off, 'off', true );
+		assert.equal( limits.reports.length, 2 );
+
+		// The day's budget spent: everyone closed at the report, and as their closes come in, nothing
+		// more to say (DriveLimits let go of the dots as it said so).
+		const spentCtx = runtime();
+		const spentLimits = limitsStub();
+		const spent = new DriveRoom( spentCtx, { LIMITS: spentLimits.binding } );
+		const bob = await hello( spent, spentCtx, { name: FURKA_AREA } );
+		spentLimits.open = false;
+		await idle( spent, spentCtx, [ bob ], REPORT_MS );
+		assert.deepEqual( bob.closedWith, { code: CLOSE.off, reason: BUDGET_SPENT } );
+		await spent.webSocketClose( bob, CLOSE.off, BUDGET_SPENT, true );
+		assert.equal( spentLimits.reports.length, 1 );
+
+		// The last to go woke the room from hibernation to say so: it knows from what the connection kept
+		// that it had dots up, and takes them off.
+		const sleepCtx = runtime();
+		const sleepLimits = limitsStub();
+		const asleep = new DriveRoom( sleepCtx, { LIMITS: sleepLimits.binding } );
+		const carol = await hello( asleep, sleepCtx, { name: FURKA_AREA } );
+		await idle( asleep, sleepCtx, [ carol ], REPORT_MS );
+		assert.equal( dotsIn( sleepLimits.reports ).length, 1 );
+		await leave( new DriveRoom( sleepCtx, { LIMITS: sleepLimits.binding } ), carol );
+		assert.deepEqual( dotsIn( sleepLimits.reports ).map( r => r.dots ), [ [ FURKA_DOT ], [] ] );
+
+	} );
+
+	test( 'woken from hibernation, a room knows which dots it last reported, so it doesn\'t report the same again; DriveLimits failing, they go with the next report', async () => {
+
+		const ctx = runtime();
+		const limits = limitsStub();
+		const env = { LIMITS: limits.binding };
+		const alice = await hello( new DriveRoom( ctx, env ), ctx, { name: FURKA_AREA } );
+		await idle( new DriveRoom( ctx, env ), ctx, [ alice ], REPORT_MS );
+		assert.equal( dotsIn( limits.reports ).length, 1 );
+		// Each alarm and keepalive from now on in a room just woken: nothing new to say in the next two
+		// minutes (its alarms and keepalives are under REPORT_LEAST).
+		for ( let i = 0; i < 2 * MINUTE / KEEPALIVE_MS; i ++ ) await idle( new DriveRoom( ctx, env ), ctx, [ alice ], KEEPALIVE_MS );
+		assert.equal( dotsIn( limits.reports ).length, 1 );
+
+		// A second driver while DriveLimits is down: the report fails, and the next goes as soon as one
+		// may, at the next alarm a minute on, with little to report.
+		const realError = console.error;
+		console.error = () => {};
+		try {
+
+			const room = new DriveRoom( ctx, env );
+			const bob = await hello( room, ctx, { name: FURKA_AREA } );
+			limits.fail = true;
+			await idle( room, ctx, [ alice, bob ], REPORT_MS );
+			assert.equal( dotsIn( limits.reports ).length, 1 );
+			limits.fail = false;
+			const failed = clock;
+			await idle( room, ctx, [ alice, bob ], REPORT_MS );
+			const reported = dotsIn( limits.reports );
+			assert.equal( reported.length, 2 );
+			assert.ok( reported[ 1 ].at - failed <= REPORT_MS );
+			assert.deepEqual( reported[ 1 ].dots, [ { ...FURKA_DOT, count: 2 } ] );
+
+		} finally {
+
+			console.error = realError;
+
+		}
+
+	} );
+
+	test( 'an attachment with the most dots a room reports is still well under 2 KB', async () => {
+
+		const ctx = runtime();
+		const room = new DriveRoom( ctx, { LIMITS: limitsStub().binding } );
+		const pages = [];
+		for ( let i = 0; i < 4; i ++ ) pages.push( await hello( room, ctx, { name: FURKA_AREA, visit: 'v'.repeat( 22 ) + i }, { place: { name: '東'.repeat( 80 ), lat: 46.5725, lon: 8.4153, height: 9999.9 } } ) );
+		for ( const [ i, page ] of pages.entries() ) await say( room, page, { t: 's', s: carAt( 46.5725, 8.4153, { north: - 4000 * i } ) } );
+		await idle( room, ctx, pages, REPORT_MS );
+		const shown = JSON.parse( pages[ 0 ].attachment.shown );
+		assert.equal( shown.length, ROOM_DOTS );
+		const bytes = serialize( pages[ 0 ].attachment ).length;
+		assert.ok( bytes < 1024, `${ bytes } bytes` );
+
+	} );
+
 } );
 
 // --- the page's side, here -------------------------------------------------------------------
@@ -2443,6 +2759,467 @@ describe( 'The page\'s side (src/drive-app/live.js), here on stand-ins for the b
 		await advance( 4 * SECOND, () => live.drive() );
 		assert.ok( states( ws ) - before <= 4 * STILL_HZ + 1 );
 		live.setNearby( false );
+
+	} );
+
+} );
+
+// --- who's driving now -----------------------------------------------------------------------
+
+describe( 'Who\'s driving now: where, as dots', () => {
+
+	test( 'Earth-centred metres to latitude, longitude and height and back, exact to a millimetre: known points, and as three.js\'s ellipsoid has them', async () => {
+
+		const a = 6378137;
+		const b = 6356752.314245179;
+		// Within `degrees` (1e-9° is 0.1 mm) and a millimetre of height.
+		const near = ( got, want, what, degrees = 1e-9 ) => {
+
+			assert.ok( Math.abs( got.lat - want.lat ) < degrees && Math.abs( got.lon - want.lon ) < degrees && Math.abs( got.height - want.height ) < 1e-3, `${ what }: ${ JSON.stringify( got ) }` );
+
+		};
+		near( toGeodetic( a, 0, 0 ), { lat: 0, lon: 0, height: 0 }, 'the equator at Greenwich' );
+		near( toGeodetic( 0, a + 100, 0 ), { lat: 0, lon: 90, height: 100 }, '90° E, 100 m up' );
+		near( toGeodetic( - a, 0, 0 ), { lat: 0, lon: 180, height: 0 }, 'the date line' );
+		near( toGeodetic( 0, 0, b ), { lat: 90, lon: 0, height: 0 }, 'the North Pole' );
+		near( toGeodetic( 0, 0, - b - 2000 ), { lat: - 90, lon: 0, height: 2000 }, '2 km over the South Pole' );
+		// The Furka Pass, as the test's own sum (ecef above) has it.
+		near( toGeodetic( ...Object.values( ecef( 46.5725, 8.4153, 2429 ) ) ), { lat: 46.5725, lon: 8.4153, height: 2429 }, 'the Furka Pass' );
+		assert.deepEqual( Object.values( toEcef( 46.5725, 8.4153, 2429 ) ).map( v => v.toFixed( 3 ) ), Object.values( ecef( 46.5725, 8.4153, 2429 ) ).map( v => v.toFixed( 3 ) ) );
+
+		// And three.js's (3d-tiles-renderer's WGS84 ellipsoid, the tiles' and the test globe's), from
+		// below the Dead Sea to flying high, everywhere: to a millimetre (by the poles, its latitude is
+		// the one that's a fraction of one out).
+		const { WGS84_ELLIPSOID } = await import( '3d-tiles-renderer' );
+		const { Vector3 } = await import( 'three' );
+		let seed = 7;
+		const random = () => ( seed = ( seed * 16807 ) % 2147483647 ) / 2147483647;
+		for ( let i = 0; i < 2000; i ++ ) {
+
+			const [ lat, lon, height ] = [ random() * 180 - 90, random() * 360 - 180, random() * 25000 - 1000 ];
+			const at = WGS84_ELLIPSOID.getCartographicToPosition( lat * Math.PI / 180, lon * Math.PI / 180, height, new Vector3() );
+			const ours = toEcef( lat, lon, height );
+			assert.ok( Math.hypot( ours.x - at.x, ours.y - at.y, ours.z - at.z ) < 1e-3 );
+			const theirs = WGS84_ELLIPSOID.getPositionToCartographic( at, {} );
+			const back = toGeodetic( at.x, at.y, at.z );
+			near( back, { lat, lon, height }, `${ lat }, ${ lon }, ${ height }` );
+			near( back, { lat: theirs.lat * 180 / Math.PI, lon: theirs.lon * 180 / Math.PI, height: theirs.height }, `three's ${ lat }, ${ lon }, ${ height }`, 1e-8 );
+
+		}
+
+	} );
+
+	test( 'a room\'s drivers as dots: those within DOT_SPREAD of one another together, at most ROOM_DOTS, each at its drivers\' mean rounded to 0.01° and 10 m, inside its room\'s area, busiest first', () => {
+
+		const at = ( north, east = 0, height = 2430 ) => toEcef( FURKA.lat + north / 111200, FURKA.lon + east / ( 111320 * Math.cos( FURKA.lat * Math.PI / 180 ) ), height );
+		// Alone.
+		assert.deepEqual( dotsOf( [ at( 0, 0, 2429 ) ], FURKA_AREA ), [ FURKA_DOT ] );
+		assert.deepEqual( dotsOf( [], FURKA_AREA ), [] );
+		// Two 1.5 km apart: one dot, at their mean (750 m north of the first).
+		const mean = toGeodetic( ...Object.values( at( 750 ) ) );
+		assert.deepEqual( dotsOf( [ at( 0 ), at( 1500 ) ], FURKA_AREA ), [ { lat: Math.round( mean.lat * 100 ) / 100, lon: 8.42, height: 2430, count: 2 } ] );
+		// 2.5 km apart: two.
+		assert.equal( dotsOf( [ at( 0 ), at( - 2500 ) ], FURKA_AREA ).length, 2 );
+		assert.ok( DOT_SPREAD === 2000 && ROOM_DOTS === 3 );
+		// Greedily: each joins the nearest dot begun within DOT_SPREAD of it (here the first, 1.8 km
+		// off, though the second's first is 2.2 km off), or begins one.
+		const greedy = dotsOf( [ at( 0 ), at( 0, 4000 ), at( 0, 1800 ), at( - 3000 ) ], FURKA_AREA );
+		assert.deepEqual( greedy.map( dot => dot.count ), [ 2, 1, 1 ] );
+		// Past ROOM_DOTS, each joins the nearest.
+		const spread = dotsOf( [ at( 0 ), at( - 3000 ), at( - 6000 ), at( 0, 3000 ), at( - 6000, 300 ) ], FURKA_AREA );
+		assert.equal( spread.length, ROOM_DOTS );
+		assert.equal( spread.reduce( ( sum, dot ) => sum + dot.count, 0 ), 5 );
+		assert.deepEqual( spread.map( dot => dot.count ), [ 2, 2, 1 ] );
+		// Sorted busiest first, then from the south-west; and each inside the area (its edges at least
+		// 0.002° away): a driver on the edge of it, or past it (drove out, and the room hasn't followed
+		// yet), is still in its room's area, so dropping in on the dot puts you there.
+		const { south, north, west, east } = boundsOf( FURKA_AREA );
+		for ( const [ lat, lon ] of [ [ south, west ], [ north - 1e-9, east - 1e-9 ], [ north + 0.01, FURKA.lon ], [ FURKA.lat, west - 0.003 ] ] ) {
+
+			const [ dot ] = dotsOf( [ toEcef( lat, lon, 100 ) ], FURKA_AREA );
+			assert.equal( cellOf( dot.lat, dot.lon ), FURKA_AREA, JSON.stringify( dot ) );
+			assert.ok( dot.lat - south >= 0.002 && north - dot.lat >= 0.002 && dot.lon - west >= 0.002 && east - dot.lon >= 0.002, JSON.stringify( dot ) );
+			assert.deepEqual( [ dot.lat, dot.lon ].map( v => Math.round( v * 100 ) / 100 ), [ dot.lat, dot.lon ] );
+
+		}
+
+	} );
+
+	test( 'a dot as sent: checked and rounded, or nothing', () => {
+
+		assert.deepEqual( checkDot( { lat: 46.571234, lon: 8.4199, height: 2434.9, count: 3, name: 'not kept' } ), { lat: 46.57, lon: 8.42, height: 2430, count: 3 } );
+		for ( const bad of [ null, 'dot', { ...FURKA_DOT, lat: 91 }, { ...FURKA_DOT, lon: - 181 }, { ...FURKA_DOT, count: 0 }, { ...FURKA_DOT, count: 1.5 }, { ...FURKA_DOT, count: '2' }, { ...FURKA_DOT, height: Infinity }, { lat: 1, lon: 2, count: 1 } ] ) {
+
+			assert.equal( checkDot( bad ), null, JSON.stringify( bad ) );
+
+		}
+
+	} );
+
+} );
+
+// DriveLimits here, on Node's own SQLite standing in for its Durable Object storage (exec, with its
+// cursor's toArray and one, and transactionSync): its SQL, run for real.
+describe( 'DriveLimits keeping who\'s driving now, here on SQLite', () => {
+
+	let DriveLimits;
+	let DatabaseSync;
+	const now = Date.UTC( 2030, 2, 3, 12 );
+	const TTL = 12 * MINUTE;
+
+	before( async () => {
+
+		standInForCloudflare();
+		( { DriveLimits } = await import( '../worker/drive/limits.js' ) );
+		( { DatabaseSync } = await import( 'node:sqlite' ) );
+
+	} );
+
+	function fresh() {
+
+		const db = new DatabaseSync( ':memory:' );
+		const sql = {
+			exec( query, ...bindings ) {
+
+				const statement = db.prepare( query );
+				const rows = /^\s*SELECT/i.test( query ) ? statement.all( ...bindings ).map( row => ( { ...row } ) ) : ( statement.run( ...bindings ), [] );
+				return {
+					toArray: () => rows,
+					one() {
+
+						assert.equal( rows.length, 1 );
+						return rows[ 0 ];
+
+					},
+				};
+
+			},
+		};
+		const storage = {
+			sql,
+			transactionSync( fn ) {
+
+				db.exec( 'BEGIN' );
+				try {
+
+					const result = fn();
+					db.exec( 'COMMIT' );
+					return result;
+
+				} catch ( err ) {
+
+					db.exec( 'ROLLBACK' );
+					throw err;
+
+				}
+
+			},
+		};
+		const limits = new DriveLimits( { storage }, {} );
+		limits.rows = () => sql.exec( 'SELECT room, dots, at FROM live_online ORDER BY room' ).toArray();
+		return limits;
+
+	}
+
+	const ask = ( limits, at = now, budget = 1000 ) => limits.liveOnline( { now: at, budget, ttl: TTL, most: ONLINE_AREAS } );
+	const report = ( limits, room, dots, { at = now, budget = 1000, amount = 1 } = {} ) => limits.liveSpent( amount, { now: at, budget, online: { room, dots } } );
+	const TIMES_AREA = cellOf( TIMES.lat, TIMES.lon );
+
+	test( 'each area\'s room\'s dots as it last reported them, one row a room, those at one spot one area; none lets go of them; a party\'s, or what isn\'t a dot, kept nowhere', () => {
+
+		const limits = fresh();
+		assert.deepEqual( ask( limits ), { open: true, total: 0, areas: [] } );
+		// The area's first room and its second shard, at the same spot: one area of three.
+		report( limits, FURKA_AREA, [ FURKA_DOT ] );
+		report( limits, shardOf( FURKA_AREA, 1 ), [ { ...FURKA_DOT, count: 2 } ] );
+		report( limits, TIMES_AREA, [ TIMES_DOT ] );
+		assert.deepEqual( ask( limits ), { open: true, total: 4, areas: [ { ...FURKA_DOT, count: 3 }, TIMES_DOT ] } );
+		// A room's next report is all of what it says: Times Square's room now has two dots.
+		const uptown = { lat: 40.78, lon: - 73.97, height: 30, count: 2 };
+		report( limits, TIMES_AREA, [ uptown, TIMES_DOT ] );
+		assert.deepEqual( ask( limits ), { open: true, total: 6, areas: [ { ...FURKA_DOT, count: 3 }, uptown, TIMES_DOT ] } );
+		// None: its row goes.
+		report( limits, shardOf( FURKA_AREA, 1 ), [] );
+		assert.deepEqual( ask( limits ).total, 4 );
+		assert.deepEqual( limits.rows().map( row => row.room ), [ FURKA_AREA, TIMES_AREA ].sort() );
+		// A party's, a name that's no room, and dots that aren't (or more than ROOM_DOTS): nothing, or
+		// only what checks out.
+		report( limits, 'party:ABCDEFG', [ FURKA_DOT ] );
+		report( limits, 'near:999999.1', [ FURKA_DOT ] );
+		report( limits, cellOf( MONACO.lat, MONACO.lon ), [ { ...MONACO_DOT, count: 0 }, { lat: 'here' }, null ] );
+		assert.deepEqual( limits.rows().map( row => row.room ), [ FURKA_AREA, TIMES_AREA ].sort() );
+		report( limits, cellOf( MONACO.lat, MONACO.lon ), [ { ...MONACO_DOT, name: 'Ana\'s house' }, MONACO_DOT, MONACO_DOT, MONACO_DOT ] );
+		assert.deepEqual( JSON.parse( limits.rows().find( row => row.room === cellOf( MONACO.lat, MONACO.lon ) ).dots ), [ MONACO_DOT, MONACO_DOT, MONACO_DOT ] );
+		// A report without online (a party's room, or before) changes nothing of it.
+		limits.liveSpent( 3, { now, budget: 1000 } );
+		assert.equal( ask( limits ).total, 7 );
+
+	} );
+
+	test( 'a room\'s dots older than the TTL are left out, and deleted; a room still there says them again within it', () => {
+
+		const limits = fresh();
+		report( limits, FURKA_AREA, [ FURKA_DOT ], { at: now } );
+		report( limits, TIMES_AREA, [ TIMES_DOT ], { at: now + 5 * MINUTE } );
+		assert.equal( ask( limits, now + TTL ).total, 2 );
+		// Furka's room hasn't said for longer than the TTL (it went without a word): left out, and gone.
+		assert.deepEqual( ask( limits, now + TTL + 1 ), { open: true, total: 1, areas: [ TIMES_DOT ] } );
+		assert.deepEqual( limits.rows().map( row => row.room ), [ TIMES_AREA ] );
+		// Saying them again, it's back.
+		report( limits, FURKA_AREA, [ FURKA_DOT ], { at: now + TTL + 2 } );
+		assert.equal( ask( limits, now + TTL + 3 ).total, 2 );
+
+	} );
+
+	test( 'at most ONLINE_AREAS (200) areas, the busiest, busiest first, with the total of them all', () => {
+
+		const limits = fresh();
+		const all = [];
+		for ( let i = 0; i < 260; i ++ ) {
+
+			const lat = - 60 + i * 0.45;
+			const lon = ( i * 37 ) % 340 - 170;
+			const room = cellOf( lat, lon );
+			const [ dot ] = dotsOf( [ toEcef( lat, lon, i ) ], room );
+			dot.count = 1 + ( i * 7 ) % 5;
+			report( limits, room, [ dot ] );
+			all.push( dot );
+
+		}
+
+		const found = ask( limits );
+		assert.equal( found.total, all.reduce( ( sum, dot ) => sum + dot.count, 0 ) );
+		assert.equal( found.areas.length, ONLINE_AREAS );
+		assert.deepEqual( found.areas, all.sort( ( a, b ) => b.count - a.count || a.lat - b.lat || a.lon - b.lon ).slice( 0, ONLINE_AREAS ) );
+		for ( let i = 1; i < found.areas.length; i ++ ) assert.ok( found.areas[ i - 1 ].count >= found.areas[ i ].count );
+
+	} );
+
+	test( 'each ask is counted against the day\'s budget for driving with others, in the same go: once it\'s spent, { open: false } and nothing more; a report that spends it lets go of its room\'s dots', () => {
+
+		const limits = fresh();
+		report( limits, FURKA_AREA, [ FURKA_DOT ], { budget: 10, amount: 5 } );
+		const spentNow = () => limits.liveSpent( 0, { now, budget: 10 } ).spent;
+		assert.equal( spentNow(), 5 );
+		for ( let i = 1; i <= 4; i ++ ) {
+
+			assert.equal( ask( limits, now, 10 ).open, true );
+			assert.equal( spentNow(), 5 + i );
+
+		}
+
+		// The tenth request: spent, and it says nothing.
+		assert.deepEqual( ask( limits, now, 10 ), { open: false } );
+		assert.equal( spentNow(), 10 );
+		// A room reporting then (it closes everyone): its dots go with it.
+		report( limits, TIMES_AREA, [ TIMES_DOT ], { budget: 10, amount: 0 } );
+		report( limits, FURKA_AREA, [ FURKA_DOT ], { budget: 10, amount: 2 } );
+		assert.deepEqual( limits.rows(), [] );
+		// The next day, a fresh budget: asked, open.
+		assert.deepEqual( ask( limits, now + DAY, 10 ), { open: true, total: 0, areas: [] } );
+
+	} );
+
+} );
+
+describe( '/api/online, here with stand-ins for DriveLimits and Cloudflare\'s cache', () => {
+
+	let worker;
+	// Cloudflare's cache (caches.default) as /api/online uses it: match and put, each kept as long as
+	// its Cache-Control says, on a clock of its own.
+	const kept = new Map();
+	let cacheClock = 0;
+	const cache = {
+		async match( request ) {
+
+			const entry = kept.get( request.url );
+			return entry && cacheClock < entry.until ? entry.response.clone() : undefined;
+
+		},
+		async put( request, response ) {
+
+			const age = Number( /max-age=(\d+)/.exec( response.headers.get( 'Cache-Control' ) ?? '' )?.[ 1 ] ?? 0 );
+			kept.set( request.url, { response: response.clone(), until: cacheClock + age * SECOND } );
+
+		},
+	};
+
+	before( async () => {
+
+		standInForCloudflare();
+		worker = ( await import( '../worker/drive/index.js' ) ).default;
+		globalThis.caches = { default: cache };
+
+	} );
+
+	after( () => {
+
+		delete globalThis.caches;
+
+	} );
+
+	// DriveLimits answering `answer` (or failing with it), and each ask it was asked.
+	function limitsAnswering( answer ) {
+
+		const limits = { answer, asked: [] };
+		limits.binding = {
+			idFromName: name => name,
+			get: () => ( {
+				liveOnline: async options => {
+
+					limits.asked.push( options );
+					if ( limits.answer instanceof Error ) throw limits.answer;
+					return limits.answer;
+
+				},
+			} ),
+		};
+		return limits;
+
+	}
+
+	async function get( env, { path = '/api/online', headers = {}, method = 'GET' } = {} ) {
+
+		const res = await worker.fetch( new Request( `https://worlddrive.app${ path }`, { method, headers } ), env, {} );
+		return { status: res.status, keep: res.headers.get( 'Cache-Control' ), date: res.headers.get( 'Date' ), body: await res.json() };
+
+	}
+
+	test( 'the rooms\' dots, kept ONLINE_MS (30 s) in Cloudflare\'s cache under its address without the query, so a second ask within that never reaches DriveLimits; by browsers for as long, from its Date', async () => {
+
+		kept.clear();
+		cacheClock = 0;
+		const areas = [ { ...FURKA_DOT, count: 3 }, TIMES_DOT ];
+		const limits = limitsAnswering( { open: true, total: 4, areas } );
+		const env = { LIVE_DAILY_BUDGET: '4321', LIMITS: limits.binding };
+		const first = await get( env );
+		assert.deepEqual( [ first.status, first.keep, first.body ], [ 200, 'public, max-age=30', { on: true, total: 4, areas } ] );
+		assert.ok( Math.abs( Date.parse( first.date ) - Date.now() ) < 5 * SECOND, first.date );
+		assert.equal( limits.asked.length, 1 );
+		assert.deepEqual( ( ( { budget, ttl, most } ) => ( { budget, ttl, most } ) )( limits.asked[ 0 ] ), { budget: 4321, ttl: 12 * MINUTE, most: ONLINE_AREAS } );
+		assert.ok( Math.abs( limits.asked[ 0 ].now - Date.now() ) < 5 * SECOND );
+		// Within 30 s: the one kept, whatever the query, DriveLimits not asked.
+		limits.answer = { open: true, total: 0, areas: [] };
+		for ( const [ path, later ] of [ [ '/api/online', SECOND ], [ '/api/online?fresh=1', 15 * SECOND ], [ `/api/online?${ Date.now() }`, 30 * SECOND - 1 ] ] ) {
+
+			cacheClock = later;
+			const again = await get( env, { path } );
+			assert.deepEqual( [ again.body, again.date ], [ first.body, first.date ] );
+
+		}
+
+		assert.equal( limits.asked.length, 1 );
+		// Then asked again.
+		cacheClock = 30 * SECOND;
+		assert.deepEqual( ( await get( env ) ).body, { on: true, total: 0, areas: [] } );
+		assert.equal( limits.asked.length, 2 );
+		// Another site's page: turned away, as from any route; and only GET.
+		assert.equal( ( await get( env, { headers: { 'Sec-Fetch-Site': 'cross-site' } } ) ).status, 403 );
+		assert.equal( ( await get( env, { method: 'POST', headers: { Origin: 'https://worlddrive.app', 'Content-Type': 'application/json' } } ) ).status, 405 );
+		assert.equal( limits.asked.length, 2 );
+
+	} );
+
+	test( 'DriveLimits failing: nobody, on, kept only 10 s, never an error; the day\'s budget spent: on: false, and not asked again that day; LIVE off or a budget of 0: on: false, asking nothing', async () => {
+
+		kept.clear();
+		cacheClock = 0;
+		const limits = limitsAnswering( new Error( 'DriveLimits is down' ) );
+		const env = { TEST_CLOCK: 'header', LIVE_DAILY_BUDGET: '4322', LIMITS: limits.binding };
+		const day = Date.UTC( 2031, 5, 1, 12 );
+		const at = time => ( { 'X-Test-Time': String( time ) } );
+		const realError = console.error;
+		const logged = [];
+		console.error = ( ...args ) => logged.push( args.join( ' ' ) );
+		try {
+
+			const failed = await get( env, { headers: at( day ) } );
+			assert.deepEqual( [ failed.status, failed.keep, failed.body ], [ 200, 'public, max-age=10', { on: true, total: 0, areas: [] } ] );
+			assert.deepEqual( logged, [ 'Live online Error DriveLimits is down' ] );
+
+		} finally {
+
+			console.error = realError;
+
+		}
+
+		// (The tests' clock keeps one for each time: asked again at once at another.)
+		limits.answer = { open: false };
+		const spent = await get( env, { headers: at( day + 1 ) } );
+		assert.deepEqual( [ spent.keep, spent.body ], [ 'public, max-age=30', { on: false, total: 0, areas: [] } ] );
+		const asks = limits.asked.length;
+		// This Worker instance remembers: not asked again that day, kept or not; and as midnight UTC
+		// comes, it's kept no later than that, when it's on again.
+		for ( const [ later, keep ] of [ [ 2, 30 ], [ HOUR, 30 ], [ 12 * HOUR - 12 * SECOND, 12 ], [ 12 * HOUR - 300, 0 ] ] ) {
+
+			const off = await get( env, { headers: at( day + later ) } );
+			assert.deepEqual( [ off.keep, off.body ], [ `public, max-age=${ keep }`, { on: false, total: 0, areas: [] } ] );
+
+		}
+
+		assert.equal( limits.asked.length, asks );
+		limits.answer = { open: true, total: 1, areas: [ FURKA_DOT ] };
+		// The next day it asks again.
+		assert.deepEqual( ( await get( env, { headers: at( day + DAY ) } ) ).body, { on: true, total: 1, areas: [ FURKA_DOT ] } );
+		assert.equal( limits.asked.length, asks + 1 );
+		// LIVE off, or a budget of 0: off, without asking.
+		for ( const more of [ { LIVE: 'off' }, { LIVE_DAILY_BUDGET: '0' } ] ) {
+
+			const off = await get( { ...env, ...more }, { headers: at( day + DAY + 1 ) } );
+			assert.deepEqual( [ off.status, off.body ], [ 200, { on: false, total: 0, areas: [] } ] );
+
+		}
+
+		assert.equal( limits.asked.length, asks + 1 );
+
+	} );
+
+} );
+
+describe( 'Who\'s driving now, the Worker\'s whole way round', () => {
+
+	// Each ask at a time of its own (the tests' clock), so it isn't one kept.
+	let asked = 0;
+	const fresh = ( later = 0 ) => online( presence.server, Date.now() + later + ++ asked );
+
+	test( 'an area\'s room\'s driver is in /api/online within about a minute of connecting, where she dropped in; one in a party, or on the globe, never', async () => {
+
+		let answer = await fresh();
+		while ( answer.total < 2 && Date.now() < presence.at + 90 * SECOND ) {
+
+			await sleep( SECOND );
+			answer = await fresh();
+
+		}
+
+		console.log( `    in /api/online ${ Math.round( ( Date.now() - presence.at ) / SECOND ) } s after connecting (a minute and the suite's other tests)` );
+		assert.deepEqual( answer, { on: true, total: 2, areas: [ MONACO_DOT, FURKA_DOT ] } );
+
+	} );
+
+	test( 'kept 30 s in Cloudflare\'s cache: asked as a page asks, the same answer as before, though a driver has gone since; asked afresh, she has', async () => {
+
+		const res = await fetch( `${ presence.server.base }/api/online` );
+		const first = { keep: res.headers.get( 'Cache-Control' ), date: res.headers.get( 'Date' ), body: await res.json() };
+		assert.deepEqual( [ first.keep, first.body ], [ 'public, max-age=30', { on: true, total: 2, areas: [ MONACO_DOT, FURKA_DOT ] } ] );
+		// Alice goes: her room says so as it empties.
+		await presence.alice.close();
+		await sleep( 1500 );
+		assert.deepEqual( await fresh(), { on: true, total: 1, areas: [ MONACO_DOT ] } );
+		// The same address, and with a query: the answer kept, made when the first was (its Date).
+		for ( const path of [ '/api/online', '/api/online?again' ] ) {
+
+			const again = await fetch( `${ presence.server.base }${ path }` );
+			assert.deepEqual( [ again.headers.get( 'Date' ), await again.json() ], [ first.date, first.body ] );
+
+		}
+
+	} );
+
+	test( 'a room\'s dots older than 12 minutes are left out and deleted: asked 13 minutes on, Erin\'s room (which won\'t say again for minutes) has none, and then nor has it now', async () => {
+
+		assert.deepEqual( await fresh( 13 * MINUTE ), { on: true, total: 0, areas: [] } );
+		assert.deepEqual( await fresh(), { on: true, total: 0, areas: [] } );
 
 	} );
 

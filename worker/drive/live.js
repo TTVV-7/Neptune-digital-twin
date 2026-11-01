@@ -1,9 +1,9 @@
 import { DurableObject } from 'cloudflare:workers';
-import { HttpError, isObject, randomToken, sha256Hex } from '../http.js';
+import { HttpError, isObject, json, randomToken, sha256Hex } from '../http.js';
 import {
-	BUDGET_SPENT, BURST, CLOSE, FLUSH_MS, HELLO_MS, HONK_GAP, IDLE_MS, MAX_HELLO, MAX_MESSAGE, NEARBY_MAX, PARTY_MAX, PING, PONG, PROTOCOL, RATE,
-	VIEW_RANGE,
-	checkLook, checkPlace, checkState, checkTrick, checkVehicle, parseRoom, shardOf,
+	BUDGET_SPENT, BURST, CLOSE, FLUSH_MS, HELLO_MS, HONK_GAP, IDLE_MS, MAX_HELLO, MAX_MESSAGE, NEARBY_MAX, ONLINE_AREAS, PARTY_MAX, PING, PONG, PROTOCOL,
+	RATE, VIEW_RANGE,
+	boundsOf, cellOf, checkLook, checkPlace, checkState, checkTrick, checkVehicle, dotsOf, parseRoom, shardOf, toEcef,
 } from '../../src/drive-app/live-protocol.js';
 import { dayOf } from './limits.js';
 import { credentials, database } from './players.js';
@@ -14,7 +14,9 @@ import { readVisit } from './visits.js';
 // Driving with others (docs/world-drive.md): the rooms. src/drive-app/live-protocol.js says what a
 // room is (a party, or the drivers in one area) and what's said in one; this is the Worker's half.
 // /api/live checks a connection (live) and hands it to its room, one Durable Object a room
-// (DriveRoom), which tells everyone in it where the others are.
+// (DriveRoom), which tells everyone in it where the others are. An area's room also says where its
+// drivers are in its reports to DriveLimits (see report), for the globe's dots of who's driving now,
+// which /api/online hands out (online).
 //
 // What it costs, as Cloudflare's pages had it in November 2026
 // (developers.cloudflare.com/durable-objects/platform/pricing/ and .../platform/limits/):
@@ -40,6 +42,12 @@ import { readVisit } from './visits.js';
 //   once every OPEN_MS in each Worker instance; those asks count too. The count runs behind, a
 //   minute for rooms with drivers moving, up to REPORT_MOST (and under REPORT_LEAST) for the
 //   others: the budget leaves room for that.
+// - Who's driving now (the globe's dots): an area's room puts its dots in the reports it makes
+//   anyway, so it costs no request of its own; only when they've changed does a report go with less
+//   than REPORT_LEAST to add, REPORT_MS after the last as ever (each is a request and a row written,
+//   one more in DriveLimits for the dots). /api/online is kept ONLINE_MS in each of Cloudflare's
+//   locations (the Cache API) and by browsers, so only an ask that finds none kept asks
+//   DriveLimits: a request, counted against the day's budget like the others.
 // - Duration: 128 MB for as long as a room is running, or idle in memory but unable to hibernate.
 //   A room that's only waiting for its WebSockets' next message can hibernate, and isn't charged
 //   for that time at all, even before it does. A pending setTimeout keeps it from hibernating, so
@@ -85,6 +93,14 @@ const REPORT_LEAST = 5;
 const REPORT_MOST = 10 * 60000;
 // How long (ms) a room remembers a visit gone to another room (DriveRoom's moveOn).
 const ELSEWHERE_MS = 60000;
+// /api/online's answer is kept this long (ms), by Cloudflare's cache and by browsers; when
+// DriveLimits couldn't be asked, only ONLINE_FAILED_MS. A room's dots in DriveLimits are left out
+// once they're ONLINE_TTL old: a room that's still there reports at least every REPORT_MOST (and
+// within a minute of that, at its next alarm), so only one that went without a word is.
+const ONLINE_MS = 30000;
+const ONLINE_FAILED_MS = 10000;
+const ONLINE_TTL = 12 * 60000;
+const DAY_MS = 24 * 60 * 60000;
 // The day's budget (billed requests) when LIVE_DAILY_BUDGET is unset.
 const DAILY_BUDGET = 40000;
 // The day (and budget) DriveLimits said was spent, so this Worker instance doesn't ask again that
@@ -207,6 +223,64 @@ export async function liveToday( { env, limits, now, connection = null } ) {
 
 }
 
+// GET /api/online: where people are driving now, for the globe's dots: { on, total, areas } (see
+// live-protocol.js). Kept ONLINE_MS in Cloudflare's cache (each of its locations has its own), under
+// the address without its query, so a query can't get round it, and by browsers for what's left of
+// that (its Date says when it was made). Only a request that finds none kept asks DriveLimits, which
+// counts that against the day's budget. Off (LIVE, a budget of 0, or the day's spent, as this Worker
+// instance remembers once it's heard), it's on: false, asking nothing. If DriveLimits can't say just
+// now, it's nobody (on: true), kept ONLINE_FAILED_MS: never an error page. The tests (TEST_CLOCK)
+// keep one for each time they say it is (X-Test-Time), so each of their times is asked afresh.
+export async function online( { request, env, url, limits, now } ) {
+
+	const budget = dailyBudget( env );
+	const day = `${ dayOf( now ) } ${ budget }`;
+	// Off for the rest of the day: kept no later than midnight UTC, when it's on again (a page that's
+	// told it's off shows none of it for the rest of its visit).
+	const offToday = Math.min( ONLINE_MS, ( Math.floor( now / DAY_MS ) + 1 ) * DAY_MS - now );
+	if ( liveOff( env ) ) return onlineAnswer( { on: false, total: 0, areas: [] }, ONLINE_MS );
+	if ( spentDay === day ) return onlineAnswer( { on: false, total: 0, areas: [] }, offToday );
+	const tested = env.TEST_CLOCK === 'header' && request.headers.has( 'X-Test-Time' );
+	const key = new Request( `${ url.origin }${ url.pathname }${ tested ? `?at=${ now }` : '' }` );
+	const cache = globalThis.caches?.default;
+	const kept = await cache?.match( key ).catch( () => null );
+	if ( kept ) return kept;
+
+	let answer;
+	let keep = ONLINE_MS;
+	try {
+
+		const found = await limits.liveOnline( { now, budget, ttl: ONLINE_TTL, most: ONLINE_AREAS } );
+		if ( found.open ) answer = { on: true, total: found.total, areas: found.areas };
+		else {
+
+			spentDay = day;
+			answer = { on: false, total: 0, areas: [] };
+			keep = offToday;
+
+		}
+
+	} catch ( err ) {
+
+		console.error( 'Live online', err?.name, err?.message );
+		answer = { on: true, total: 0, areas: [] };
+		keep = ONLINE_FAILED_MS;
+
+	}
+
+	const response = onlineAnswer( answer, keep );
+	if ( keep >= 1000 ) await cache?.put( key, response.clone() ).catch( err => console.error( 'Live online cache', err?.name, err?.message ) );
+	return response;
+
+}
+
+// An answer for /api/online, kept `keep` ms (to the second).
+function onlineAnswer( answer, keep ) {
+
+	return json( answer, 200, { 'Cache-Control': `public, max-age=${ Math.floor( keep / 1000 ) }`, Date: new Date().toUTCString() } );
+
+}
+
 // The day's budget for driving with others, in billed Durable Object requests: LIVE_DAILY_BUDGET,
 // or DAILY_BUDGET when it's unset.
 function dailyBudget( env ) {
@@ -239,8 +313,9 @@ function roomName( room ) {
 // An attachment, a driver: { visit, seq (its number among the visit's connections today), expires,
 // room, at (connected), heard (last message, a keepalive included), tokens, filled (the rate's
 // bucket and when it was counted), honk (the last), left (closed by the room), spent (billed
-// requests the room hasn't reported yet), reported (when the room last reported), and once it has
-// said hello pid, name, star, vehicle, look, place, away, s }.
+// requests the room hasn't reported yet), reported (when the room last reported), shown (the dots
+// of who's driving now it reported then, see dots), and once it has said hello pid, name, star,
+// vehicle, look, place, away, s }.
 export class DriveRoom extends DurableObject {
 
 	constructor( ctx, env ) {
@@ -261,6 +336,9 @@ export class DriveRoom extends DurableObject {
 		this.aborting = false;
 		// Visits gone to another room lately (moveOn): { seq, at } by visit.
 		this.elsewhere = new Map();
+		// The room's name, and the dots it last reported (see shownKey), once they're known.
+		this.name = null;
+		this.shown = undefined;
 
 	}
 
@@ -282,6 +360,7 @@ export class DriveRoom extends DurableObject {
 		if ( request.headers.get( 'Upgrade' ) !== 'websocket' || ! room || ! visit || ! Number.isFinite( expires ) ) return new Response( 'Bad request', { status: 400 } );
 
 		const name = roomName( room );
+		this.name = name;
 		const here = this.sockets();
 		// The same visit again (another tab, or the page reconnecting) takes its own place.
 		const before = here.filter( ws => this.driver( ws ).visit === visit );
@@ -309,7 +388,7 @@ export class DriveRoom extends DurableObject {
 			// with, and the room's last report is still known from it.
 			const driver = {
 				visit, seq, expires, room: name, at: now, heard: now, tokens: BURST, filled: now, honk: 0, pid: null,
-				spent: COST.connect, reported: this.reportedAt( server ) ?? now, moved: 0, sent: 0,
+				spent: COST.connect, reported: this.reportedAt( server ) ?? now, shown: this.shownKey(), moved: 0, sent: 0,
 			};
 			this.drivers.set( server, driver );
 			this.save( server, driver );
@@ -567,6 +646,8 @@ export class DriveRoom extends DurableObject {
 
 		const now = Date.now();
 		let next = Infinity;
+		// (Known before any of them is let go of below, as the last of them may be the one to know.)
+		this.shownKey();
 		for ( const ws of this.sockets() ) {
 
 			const driver = this.driver( ws );
@@ -581,10 +662,10 @@ export class DriveRoom extends DurableObject {
 
 		this.flush( now );
 		// This alarm is a request too: in the report, if one's due (or nobody's left, for what the
-		// last of them spent), else counted for the next.
+		// last of them spent, and to take the room's dots off the globe), else counted for the next.
 		if ( ! this.sockets().length ) {
 
-			if ( this.leftover > 0 ) await this.report( now, COST.alarm );
+			if ( this.leftover > 0 || this.shownKey() !== '' ) await this.report( now, COST.alarm );
 
 		} else if ( this.reportDue( now ) ) await this.report( now, COST.alarm );
 		else this.charge( COST.alarm );
@@ -598,14 +679,77 @@ export class DriveRoom extends DurableObject {
 	}
 
 	// Whether the alarm at `now` reports: the first time, or from REPORT_EARLY before REPORT_MS since
-	// the last, with REPORT_LEAST or more to report, or once it's been REPORT_MOST.
+	// the last, with REPORT_LEAST or more to report, with the room's dots changed since the last (see
+	// dots: who's driving now goes on the globe within about a minute), or once it's been REPORT_MOST.
 	reportDue( now ) {
 
 		const reported = this.reportedAt();
 		if ( reported === null ) return true;
 		if ( now < reported + REPORT_MS - REPORT_EARLY ) return false;
 		const unreported = this.sockets().reduce( ( sum, ws ) => sum + ( this.driver( ws ).spent ?? 0 ), this.leftover );
-		return unreported >= REPORT_LEAST || now >= reported + REPORT_MOST;
+		return unreported >= REPORT_LEAST || now >= reported + REPORT_MOST || this.dotsChanged();
+
+	}
+
+	// The room's drivers as dots for the globe's who's driving now (live-protocol.js's dotsOf), or
+	// null for a party, which is private and never says. Those who have said hello and aren't on the
+	// globe (a paused driver is parked in the game, so counts), each where its car is; the room has no
+	// word of a car alone in it (its page sends none), so then where its driver dropped in, if that's
+	// in this area, or else the middle of the area (they drove in from another).
+	dots() {
+
+		const room = parseRoom( this.name );
+		if ( room?.kind !== 'near' ) return null;
+		const drivers = this.helloed().map( ws => this.driver( ws ) ).filter( driver => ! driver.away && ( driver.s || driver.place ) );
+		drivers.sort( ( a, b ) => a.at - b.at || ( a.pid < b.pid ? - 1 : 1 ) );
+		return dotsOf( drivers.map( ( { s, place } ) => s ? { x: s[ 0 ], y: s[ 1 ], z: s[ 2 ] } : spotIn( place, room.cell ) ), room.cell );
+
+	}
+
+	// Whether the room's dots aren't what it last reported.
+	dotsChanged() {
+
+		const dots = this.dots();
+		return dots !== null && keyOf( dots ) !== this.shownKey();
+
+	}
+
+	// The dots the room last reported (keyOf's), kept with `reported` in its connections' attachments
+	// so that it outlasts hibernation: '' for none (nothing in DriveLimits), null when the report
+	// didn't get through (so the next goes as soon as it may). `also`: a connection that's going, not
+	// among those still here.
+	shownKey( also = null ) {
+
+		if ( this.shown !== undefined ) return this.shown;
+		let at = - Infinity;
+		let shown = '';
+		for ( const ws of also ? [ ...this.ctx.getWebSockets(), also ] : this.ctx.getWebSockets() ) {
+
+			const driver = this.driver( ws );
+			if ( Number.isFinite( driver.reported ) && driver.reported >= at && driver.shown !== undefined ) {
+
+				at = driver.reported;
+				shown = driver.shown;
+
+			}
+
+		}
+
+		this.shown = shown;
+		return shown;
+
+	}
+
+	shownAs( key ) {
+
+		this.shown = key;
+		for ( const ws of this.sockets() ) {
+
+			const driver = this.driver( ws );
+			driver.shown = key;
+			this.save( ws, driver );
+
+		}
 
 	}
 
@@ -613,9 +757,11 @@ export class DriveRoom extends DurableObject {
 	// for the alarm doing this, and this call), added to the day's in DriveLimits; if that's the day's
 	// budget spent, everyone is closed with CLOSE.off and BUDGET_SPENT. It's all taken as it's sent,
 	// so what comes in meanwhile is counted for the next. If DriveLimits can't be asked, the room
-	// carries on as if it's open, and all of it goes with the next report, a minute on.
+	// carries on as if it's open, and all of it goes with the next report, a minute on. An area's room
+	// says where its drivers are too (dots), none once it's empty.
 	async report( now, extra ) {
 
+		const dots = this.dots();
 		let amount = this.leftover + extra + COST.report;
 		this.leftover = 0;
 		for ( const ws of this.sockets() ) {
@@ -631,16 +777,19 @@ export class DriveRoom extends DurableObject {
 		try {
 
 			const limits = this.env.LIMITS.get( this.env.LIMITS.idFromName( 'global' ) );
-			( { open } = await limits.liveSpent( amount, { now, budget: dailyBudget( this.env ) } ) );
+			( { open } = await limits.liveSpent( amount, { now, budget: dailyBudget( this.env ), ...( dots ? { online: { room: this.name, dots } } : {} ) } ) );
 
 		} catch ( err ) {
 
 			console.error( 'Live budget report', err?.name, err?.message );
 			this.charge( amount );
+			if ( dots ) this.shownAs( null );
 			return;
 
 		}
 
+		// (With the day's spent, DriveLimits has let go of them too.)
+		if ( dots ) this.shownAs( open ? keyOf( dots ) : '' );
 		if ( open ) return;
 		for ( const ws of this.sockets() ) this.shut( ws, CLOSE.off, BUDGET_SPENT );
 		// The day's spent: what they had spent since is let go, rather than asking again to add it.
@@ -788,6 +937,8 @@ export class DriveRoom extends DurableObject {
 
 		const now = Date.now();
 		const driver = this.driver( ws );
+		// (Known before it goes, as it may be the last to know.)
+		this.shownKey( ws );
 		if ( ! driver.left ) {
 
 			// Gone first, so it isn't one of those still here below, and an error and then a close
@@ -812,7 +963,7 @@ export class DriveRoom extends DurableObject {
 		this.drivers.delete( ws );
 		if ( ! this.sockets().some( other => other !== ws ) ) {
 
-			if ( this.leftover > 0 ) await this.report( now, 0 );
+			if ( this.leftover > 0 || this.shownKey() !== '' ) await this.report( now, 0 );
 			// (Unless someone came while that was said.)
 			if ( ! this.sockets().some( other => other !== ws ) ) await this.empty();
 
@@ -891,6 +1042,8 @@ export class DriveRoom extends DurableObject {
 			const kept = ws.deserializeAttachment();
 			driver = kept ? { ...kept, moved: 0, sent: 0 } : { left: true };
 			if ( ! driver.left ) this.drivers.set( ws, driver );
+			// Woken: the room's name is in each of its connections'.
+			if ( typeof kept?.room === 'string' ) this.name ??= kept.room;
 
 		}
 
@@ -917,6 +1070,23 @@ export class DriveRoom extends DurableObject {
 		}
 
 	}
+
+}
+
+// A room's dots as it reports them, as text to tell whether they've changed: '' for none.
+function keyOf( dots ) {
+
+	return dots.length ? JSON.stringify( dots ) : '';
+
+}
+
+// Where a driver whose car the room has no word of is, Earth-centred: where they dropped in, if
+// that's in the area `cell`, else the middle of it.
+function spotIn( place, cell ) {
+
+	if ( cellOf( place.lat, place.lon ) === cell ) return toEcef( place.lat, place.lon, place.height );
+	const { south, north, west, east } = boundsOf( cell );
+	return toEcef( ( south + north ) / 2, ( west + east ) / 2, place.height );
 
 }
 

@@ -23,6 +23,7 @@ import { formatLatLon, rememberPlace } from './places.js';
 import { createLive, flagsOf, velocityOf } from './live.js';
 import { createGhosts } from './ghosts.js';
 import { BUDGET_TOAST, setUpFriends } from './friends.js';
+import { createOnline } from './online.js';
 import { BUDGET_SPENT, cleanPartyCode } from './live-protocol.js';
 import * as screens from './screens.js';
 
@@ -215,21 +216,7 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 	const panel = setUpPanel( {
 		root: $( 'globe-ui' ),
 		vehicles,
-		flyTo: place => {
-
-			const height = globe.surfaceHeight( place.lat, place.lon );
-			const pin = { ...place, height };
-			globe.setPin( pin );
-			panel.setPin( pin );
-			const view = { lat: place.lat, lon: place.lon, height: height ?? 0, distance: 2200, heading: place.heading ?? 0, pitch: - 50 };
-			globe.flyTo( globe.lifted( view, pinLift(), GLOBE_FOV ) ).then( arrived => {
-
-				// Sharper tiles have loaded on the way down: sit the pin on them.
-				if ( arrived && globe.pin === pin ) pin.height = globe.surfaceHeight( pin.lat, pin.lon ) ?? pin.height;
-
-			} );
-
-		},
+		flyTo: place => flyToPlace( place ),
 		onDrive: place => dropIn( place ),
 		onClearPin: () => pinAt( null ),
 	} );
@@ -294,6 +281,14 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 		: null;
 	const ghosts = live && createGhosts( { scene, earth, camera, vehicles, loader: models.loader, live, tags: $( 'live-tags' ), own: () => state.entry?.pivot ?? null } );
 	const friends = live && setUpFriends( { live, ghosts, vehicles, mode: () => state.mode, goTo } );
+	// Where people are driving now, on the globe (online.js): with driving with others, and nothing
+	// of it without.
+	const globeUi = $( 'globe-ui' );
+	const online = live && createOnline( {
+		camera, earth, ellipsoid, canvas, live, panel, mode: () => state.mode, onPick: flyToPlace,
+		layer: globeUi.querySelector( '.online-dots' ),
+		covers: [ globeUi.querySelector( '.panel' ), globeUi.querySelector( '.pin-card' ), globeUi.querySelector( '.party-banner' ) ],
+	} );
 	// A party's link (?party=CODE): its room, from the globe on. With driving with others off for
 	// the rest of the day (its budget spent), a word on why nothing comes of the link.
 	const partyCode = cleanPartyCode( new URLSearchParams( location.search ).get( 'party' ) );
@@ -322,6 +317,23 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 
 		globe.setPin( place );
 		panel.setPin( place );
+
+	}
+
+	// A spot, a search result or where people are driving: the globe flies there, pinned.
+	function flyToPlace( place ) {
+
+		const height = globe.surfaceHeight( place.lat, place.lon );
+		const pin = { ...place, height };
+		globe.setPin( pin );
+		panel.setPin( pin );
+		const view = { lat: place.lat, lon: place.lon, height: height ?? 0, distance: 2200, heading: place.heading ?? 0, pitch: - 50 };
+		globe.flyTo( globe.lifted( view, pinLift(), GLOBE_FOV ) ).then( arrived => {
+
+			// Sharper tiles have loaded on the way down: sit the pin on them.
+			if ( arrived && globe.pin === pin ) pin.height = globe.surfaceHeight( pin.lat, pin.lon ) ?? pin.height;
+
+		} );
 
 	}
 
@@ -560,6 +572,7 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 	function toGlobe( { fromHere = false } = {} ) {
 
 		if ( state.mode === 'globe' && ! fromHere ) return;
+		const was = carSpot();
 		if ( state.drop ) state.drop.cancelled = true;
 		state.drop = null;
 		state.leaving = true;
@@ -573,12 +586,24 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 		globe.cancelFlight();
 		setMode( 'globe' );
 		live?.setAway();
+		online?.left( was );
 		const { lat, lon } = state.place ?? globe.pose();
 		globe.flyTo( globe.orbit( lat, lon ) );
 
 	}
 
 	// --- driving with others ---
+
+	// Where the car is ({ lat, lon }), or null without one.
+	function carSpot() {
+
+		if ( ! state.entry ) return null;
+		earth.updateWorldMatrix( true, false );
+		state.entry.pivot.getWorldPosition( _p ).applyMatrix4( _inverse.copy( earth.matrixWorld ).invert() );
+		const spot = ellipsoid.getPositionToCartographic( _p, {} );
+		return { lat: spot.lat * MathUtils.RAD2DEG, lon: spot.lon * MathUtils.RAD2DEG };
+
+	}
 
 	// A landed jump's points, for the others to see over your car.
 	function landed( run ) {
@@ -797,6 +822,7 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 		tiles?.update();
 		models.update( dt );
 		ghosts?.update( dt, state.mode === 'driving' || state.mode === 'paused' );
+		online?.update();
 		// Not while the Garage is open: its turntable draws instead, and on a phone it covers the
 		// screen, so drawing the world behind it as well would only halve the frame rate.
 		if ( ! garage.isOpen ) renderer.render( scene, camera );
@@ -828,7 +854,7 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 	// For poking around from the browser console, and for the tests.
 	window.drive = {
 		scene, camera, renderer, tiles, globe, models, driver, ground, panel, leaderboard: board,
-		garage, supporter, pads, water, live, ghosts, friends,
+		garage, supporter, pads, water, live, ghosts, friends, online,
 		get mode() {
 
 			return state.mode;

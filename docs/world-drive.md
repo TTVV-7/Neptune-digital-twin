@@ -343,10 +343,14 @@ others:
 - **A party.** **Invite friends** makes a link (`https://worlddrive.app/?party=CODE`); whoever
   opens it is in your party wherever on Earth each of you is, and can join you where you are.
 
+And on the globe, **who's driving now**: a glowing dot wherever people are driving in an area's
+room, with how many (see [On the globe: who's driving now](#on-the-globe-whos-driving-now)).
+
 It's only on when the Worker says so (`live: true` in `/api/config`: the `LIVE` setting below, and
 [the day's budget](#the-days-budget) not spent) and the visit has a token, which only visits on
 Google's map get. When it's off, nothing of it appears: no chip, no **Drive with friends**, no H in
-the keys card, no horn button, and driving alone is as it always was.
+the keys card, no horn button, no dots or **Driving now** on the globe, and driving alone is as it
+always was.
 
 ### What you see and do
 
@@ -434,6 +438,89 @@ the keys card, no horn button, and driving alone is as it always was.
   where your car is only goes to those driving within 5 km of it (and to anyone there not driving
   just then); the place you dropped in goes to the whole room. The room keeps nothing once
   everyone's gone. The About box says this too.
+- **On the globe**, while you're in a nearby room and driving (or paused), everyone sees a count
+  where you are, to about a kilometre, with no name or anything else of you (below). Not in a party,
+  on the globe, or with **Show me to drivers nearby** off; the switch says so ("Also counts you,
+  with no name, on the globe's map of who's driving."), and so does the About box.
+
+### On the globe: who's driving now
+
+**What shows.** On the globe, a glowing green dot, pulsing gently, wherever people are driving
+just now, with how many on it: 32 px across for one (a touch target), bigger for more, up to 60.
+Dots that would overlap on screen are drawn as one with all their drivers, at the busiest one's
+spot (so from far out the San Francisco and Las Vegas areas are one dot, two as you come down). A
+dot isn't drawn round the back of the Earth, off the screen, or under the panel, the pin's card or
+the party banner. Tapping (or clicking) one flies the globe there as a search result does and pins
+it, its card saying "3 drivers here now" (or "1 driver"), with "Near Golden Gate Bridge" and the
+coordinates under it, and **Drive here**: dropping in there puts you in that area's nearby room
+(each dot is kept inside its room's area), so you see them. The card's count follows each new
+answer. On the panel, **Driving now** says how many are driving in all ("12 driving now. Tap a
+glowing dot to join them.", or "Nobody driving right now: be the first.") and lists the 5
+busiest areas, each named after the nearest start spot within 25 km ("Near Times Square", "4
+drivers"), or else by its coordinates, and each going there as a dot does. The wheel over a dot
+zooms the globe as anywhere else. None of it while driving, and none of it at all while driving
+with others is off (no Worker, `LIVE` off, the day's budget spent, or over for this visit: then
+the page doesn't even ask). Each dot is a button whose label says "3 drivers driving here".
+
+**Who's counted, and what's said** (decided, and kept to by the rooms, `worker/drive/live.js`):
+
+- Only drivers in **nearby rooms**: those already visible to anyone who drops in there. A party's
+  room is private and never says. A page with **Show me to drivers nearby** off isn't in a nearby
+  room, so it never shows. Drivers on the globe (still in the area's room for a minute) don't
+  count; paused ones do, as they're parked in the game.
+- Only positions and counts: no names, no place names (one typed into the search can be a home
+  address), no pids. A position is rounded to 0.01° (about a kilometre) and its height to 10 m.
+- Drivers in one room more than 2 km apart are dots of their own: greedily, each joins the nearest
+  dot begun within 2 km of it, or begins one, at most 3 a room (past that, each joins the
+  nearest). A dot is at its drivers' mean position, rounded, and kept at least 0.002° inside its
+  room's area (so a dot by an area's edge can sit a kilometre or so from them, on their side of
+  it: dropping in on it puts you in their room). A car is where it is when the room has word of it; a page alone in its room sends no
+  states, so then it's where its driver dropped in, or, if that's in another area (they drove into
+  this one), the middle of this area.
+- A page just back on the globe from driving in a nearby room doesn't count itself: for 100 s
+  (its room's next report and an answer's 30 s) it takes 1 off the area within 3 km of where it
+  was, if that area has more than the others it knows are driving in its room.
+
+**Timing.** A new driver shows within about a minute: their room says where its drivers are at
+its next report, which goes when they've changed (someone joined, left, went to the globe, came
+back, or a dot moved to another rounded spot) as soon as a report may, 50 to 60 s after the last
+(a room's first comes a minute after its first driver connected), even with little else to
+report. Then `/api/online` is kept up to 30 s, and a page asks when the globe shows and every
+minute while it's showing and the tab can be seen. One who's gone goes the same way within about
+a minute, or at once when their room empties (its last report says none); a room that went
+without a word (a restart) is left out once its last report is 12 minutes old.
+
+**How it works.** Each area's room puts its dots (`live-protocol.js`'s `dotsOf`) in the reports of
+what it has spent that it makes to `DriveLimits` anyway (`liveSpent`), which keeps them in a table
+of its own, `live_online`: one row a room, replaced at each report, deleted when the room reports
+none (or as it reports with the day's budget spent, as it then closes everyone); a row older than 12
+minutes (the TTL: a room still there reports at least every 10 minutes and its next alarm) is left
+out and deleted. A room knows what it last reported from what its connections keep through
+hibernation, so waking up doesn't make it report again. `GET /api/online` answers
+`{ on, total, areas: [ { lat, lon, height, count } ] }`: at most 200 areas, busiest first (those of
+an area's rooms at the same spot as one), and `total` counting them all. It's kept 30 s in
+Cloudflare's cache (the Cache API, `caches.default`, under the address without its query, so a query
+can't get round it; each Cloudflare location has its own), and by browsers for what's left of that
+(`Cache-Control: public, max-age=30` and the `Date` it was made). Only a request that finds none
+kept asks `DriveLimits` (`liveOnline`), which counts that ask against the day's budget in the same
+go, as any Durable Object request; `on: false` once the budget is spent or with `LIVE` off, asking
+nothing then (a Worker instance remembers a spent day, as for `/api/config`, and an answer that it's
+off for the day is kept no later than midnight UTC: a page told it's off shows none of it for the
+rest of its visit). If `DriveLimits` can't say, it's `on: true` with nobody, kept 10 s: never an
+error. The same-origin checks every route has apply. On the page it's `src/drive-app/online.js` (the
+dots, projected each frame through the globe's ellipsoid and the Earth's matrix as it is then) and
+the panel's part in `panel.js`; `window.drive.online` has what it shows, for the tests.
+
+**What it costs.** No Durable Object requests of its own from the rooms: the dots ride on reports
+they already make. The only extra is a report when a quiet room's dots change (a lone driver's
+room reports a minute after they arrive rather than a few minutes later), at most one a minute, as
+ever: a request and a row written, and the dots' own row in `DriveLimits` (an upsert or a delete
+for each report of an area's room). An answer not kept is a `DriveLimits` request, counted against
+the day's budget: at most two a minute in each Cloudflare location where someone's on the globe,
+2,880 a day if one location had someone on the globe all day and night, and none at all while
+nobody looks. Each such ask reads a row for each area's room with drivers (rows read: Free 5
+million a day). Every ask that reaches the Worker is a Worker request (Free: 100,000 a day): a page
+on the globe asks once a minute, and the browser answers any ask within 30 s of the last itself.
 
 ### The rooms
 
@@ -584,11 +671,14 @@ Worked through:
 | A driver alone in a room, an hour, all told (its keepalives, the room's alarm about every 50 s, a report every 5 minutes or so) | 144 | about 93 (110 for a tab in the background, keepalives once a minute) |
 | Connecting to a room (the Worker's ask, the connection, and an alarm 10 s later for its hello) | | 3 (and 2 rows written), 1 more on a change of room |
 | A page load (`/api/config`'s ask, at most one every 30 s in each Worker instance) | | 0 or 1 |
+| Who's driving now on the globe (`/api/online`, kept 30 s in each Cloudflare location) | | at most 2 a minute a location while anyone's on the globe |
 
 So the default budget of 40,000 a day is about **40 driver-hours with others** (two driving
 together for an hour is 2 × 900 + 120 = 1,920), or about 430 hours of drivers each alone in their
 area's room (about 93 an hour, mostly the room's alarm; 360 hours of tabs left in the background),
-and leaves 60,000 of the Free plan's 100,000 for everything else. (Before, at 8 a second whether
+and leaves 60,000 of the Free plan's 100,000 for everything else. (The globe's dots of who's driving
+now add a report when a quiet room's drivers change, and an ask of `DriveLimits` at most twice a
+minute in each location where someone's on the globe, all within the budget.) (Before, at 8 a second whether
 anyone was there or
 not, a driver was 1,440 an hour, and nothing stopped the rooms using all 100,000.) On **Workers
 Paid** (1 million requests a month included, for all Durable Objects together, then $0.15 a
@@ -637,7 +727,24 @@ turned away 8 times while the Worker's on and stopping, asking `/api/config` onl
 turned away while `DriveLimits` can't say or the Worker can't be reached and trying on, asking
 every 5 minutes (each time while it can't be reached, so a Worker back with `LIVE` off is heard of
 at once); a connection gone quiet taken as dropped; a busy area tried again on a new
-drop-in; and sending once every 2 s with only those on the globe there. `npm run test:drive-worker`
+drop-in; and sending once every 2 s with only those on the globe there. Who's driving now:
+Earth-centred metres to latitude, longitude and height (and back) against known points and three.js's
+ellipsoid, to a millimetre; the dots (within 2 km together, greedily, at most 3, the mean rounded,
+inside the area); a room's reports with its dots (a lone driver's at REPORT_MS though there's little
+to report, then only with the room's own; a party's never; those on the globe not counted, paused
+ones counted; a change within a minute; spread drivers as dots of their own; a lone one from another
+area in the middle of this one; dots taken off as the room empties or `LIVE` goes off, and not
+again for the budget; waking without reporting the same again; a failed report's dots going with
+the next; the attachment still under 1 kB); `DriveLimits` on Node's own SQLite (one row a room,
+shards at a spot as one area, none letting go, a party's and what isn't a dot kept nowhere, the
+TTL, the 200 busiest of 260 with the total of all, each ask charged to the budget and `open:
+false` once it's spent, a report that spends it deleting its row); `/api/online` on stand-ins
+(kept 30 s whatever the query, DriveLimits not asked again within it, a failure `on: true` with
+nobody for 10 s, a spent day `on: false` and not asked again, `LIVE` off asking nothing, another
+site's page 403); and the whole way round under `wrangler dev` (an area's driver in `/api/online`
+where she dropped in, a party's and one on the globe never, the real Cache API keeping the answer
+after she's gone, the TTL), with `on: false` from the Worker with `LIVE` off and once the budget's
+spent. `npm run test:drive-worker`
 checks `/api/config` asking (at most every 30 s, and not again once the day's spent, or when it's
 off; `liveReason: 'unknown'` when `DriveLimits` fails) on a stand-in `DriveLimits`.
 
@@ -663,7 +770,17 @@ page stopping without a word and a new one showing none of it, both driving as e
 in its room sends no states (as Playwright sees its frames go) and a second driver joining sees it
 within 1.5 s; the following is measured at 5 a second, and that A sent at that rate. And the Worker
 with a budget of 40, spent by connecting: a page turned away toasting once and showing none of it,
-a party's link on a new page saying why, both driving as ever.
+a party's link on a new page saying why, both driving as ever. Who's driving now: a driver dropping
+in at Golden Gate Park in `/api/online` within 70 s (her room's first report), and on a
+second page's globe, its **Driving now** saying "11 driving now." with the 5 busiest named after
+their start spots (the test's own drivers parked at Times Square, Shibuya, the Arc de Triomphe and
+the Strip), a party's driver (Monaco) and one with nearby off (Sydney) never; the first back on the
+globe not counting herself while her room still does; the dots over North America (the Strip and
+the park as one of 2 from far out, Shibuya's round the back, bigger for more, at least 32 px)
+and on a phone above the sheet; tapping the dot flying there with "1 driver here now" on the card,
+and **Drive here** dropping in to her room with her ghost in sight, asking nothing while driving;
+and with `LIVE` off or the budget spent, no dots, no **Driving now**, and with `LIVE` off on a page
+loaded then, not even an ask.
 
 ## Supporter Pass (content)
 
@@ -1439,12 +1556,13 @@ src/drive-app/api.js         /api/config, the visit with Turnstile, /api/search,
                              the Supporter Pass's calls
 src/drive-app/leaderboard.js the leaderboard: the panel, names, posting runs, the new-best card
 src/drive-app/live-protocol.js  driving with others: the rooms, messages, limits and checks the page
-                             and the Worker share
+                             and the Worker share, and who's driving now's dots (where, how many)
 src/drive-app/live.js        the page's connection to its room: which room, sending the car, what
                              the room says
 src/drive-app/ghosts.js      the others' cars, their name tags and effects
 src/drive-app/friends.js     the chip and list, Drive with friends, the party's banner and toasts,
                              the horn
+src/drive-app/online.js      who's driving now on the globe: /api/online, the dots, Driving now
 src/drive-app/screens.js     start screen, notices, loading card, pause, keys, messages
 src/drive-app/test-globe.js  the Earth without Google's tiles, for working without a key
 vite.drive.config.js         the build: no key, only the offered vehicles copied from public/, and
@@ -1457,7 +1575,8 @@ worker/drive/                the Worker: index.js (routes), limits.js (caps, the
                              players.js, scores.js, boards.js, names.js (rules and the filter),
                              visits.js (visit tokens); the Supporter Pass: accounts.js (sign-in,
                              sessions, /api/me), supporter.js (the webhook, who has it); driving
-                             with others: live.js (/api/live and the rooms, DriveRoom);
+                             with others: live.js (/api/live and the rooms, DriveRoom, and
+                             /api/online, who's driving now);
                              migrations/ (its D1 tables)
 worker/google.js, sessions.js, stripe.js   shared with the construction app: Google's ID tokens,
                              the session cookie, Stripe's webhook signatures
@@ -1506,6 +1625,13 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   minute behind (up to 10 for quiet rooms). One connection can still send at the room's limit, 20
   messages a second (four times what a page sends), for its visit's six hours: about 3,600 billed
   requests an hour, which nothing but the day's budget stops.
+- [Who's driving now](#on-the-globe-whos-driving-now) is a minute behind (a room says what's
+  changed at its next report, and an answer is kept 30 s), and a room that went without a word (a
+  restart) shows its last dots for up to 12 minutes. A page alone in its room sends no states, so its
+  room only knows where its driver dropped in (or, if they drove in from another area, the middle of
+  it): a dot for a lone driver who has driven off can be several kilometres from them, though in
+  their area, so dropping in on it still puts you in their room. And as for ghosts, a page that's
+  been dug into can put its dot anywhere in its area: one dot a visit, as a visit is in one room.
 
 ## Credits
 
