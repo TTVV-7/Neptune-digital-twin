@@ -27,8 +27,9 @@ const NO_VISIT = 'Names are picked on drives on the real 3D map.';
 // dialog: #leaderboard; card: #best-card, the new-best card shown while driving; vehicles: from
 // loadVehicles(), for their names; worker: whether there's a Worker to ask (not on the Vite dev
 // server on its own); getPlace(): the place being driven or pinned, for "only here", or null;
-// onPlayer(): a new player was made here (to link it to the account signed in, supporter.js).
-export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace, onPlayer = () => {} } ) {
+// onPlayer(): a new player was made here (to link it to the account signed in, supporter.js);
+// onName(): a player made or renamed here (driving with others says hello again with it, live.js).
+export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace, onPlayer = () => {}, onName = () => {} } ) {
 
 	const $ = selector => dialog.querySelector( selector );
 	const tabs = [ ...dialog.querySelectorAll( '.tabs button' ) ];
@@ -331,6 +332,7 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace, on
 		player = { id: answer.body.id, secret: answer.body.secret ?? player.secret, name: answer.body.name };
 		storage( () => localStorage.setItem( PLAYER_KEY, JSON.stringify( player ) ) );
 		if ( made ) onPlayer();
+		onName();
 		say( '' );
 		if ( waiting.size ) schedule();
 		return true;

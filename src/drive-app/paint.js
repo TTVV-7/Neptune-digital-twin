@@ -100,12 +100,20 @@ const chosen = new Map();
 // What this browser has chosen for `vehicle`, over its defaults.
 export function savedLook( vehicle ) {
 
-	const saved = chosen.get( vehicle.id ) ?? stored()[ vehicle.id ];
-	const look = defaultLook( vehicle );
-	if ( ! saved || typeof saved !== 'object' ) return look;
-	for ( const [ part, list ] of Object.entries( LISTS ) ) if ( list.some( choice => choice.id === saved[ part ] ) ) look[ part ] = saved[ part ];
-	if ( Number.isInteger( saved.number ) && saved.number >= 0 && saved.number <= 99 ) look.number = saved.number;
-	return look;
+	return cleanLook( vehicle, chosen.get( vehicle.id ) ?? stored()[ vehicle.id ] );
+
+}
+
+// `look` over `vehicle`'s defaults, part by part: a choice this page doesn't know (a damaged saved
+// value, or another driver's look from a newer version, see ghosts.js) is the ride's own instead.
+// Locked or not: another driver's pass is theirs to wear.
+export function cleanLook( vehicle, look ) {
+
+	const clean = defaultLook( vehicle );
+	if ( ! look || typeof look !== 'object' ) return clean;
+	for ( const [ part, list ] of Object.entries( LISTS ) ) if ( list.some( choice => choice.id === look[ part ] ) ) clean[ part ] = look[ part ];
+	if ( Number.isInteger( look.number ) && look.number >= 0 && look.number <= 99 ) clean.number = look.number;
+	return clean;
 
 }
 

@@ -146,10 +146,25 @@ export function hideKeys() {
 
 }
 
-export function toast( text, ms = 5000 ) {
+// A short message; with `action` ({ label, onClick }), a button after it (driving with others'
+// "Join").
+export function toast( text, ms = 5000, action = null ) {
 
 	const root = $( 'toast' );
 	root.textContent = text;
+	if ( action ) {
+
+		const button = Object.assign( document.createElement( 'button' ), { type: 'button', className: 'toast-action', textContent: action.label } );
+		button.addEventListener( 'click', () => {
+
+			root.hidden = true;
+			action.onClick();
+
+		} );
+		root.append( ' ', button );
+
+	}
+
 	root.hidden = false;
 	clearTimeout( toastTimer );
 	toastTimer = setTimeout( () => root.hidden = true, ms );
