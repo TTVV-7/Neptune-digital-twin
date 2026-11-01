@@ -47,8 +47,8 @@ const EXPIRES = 'X-Live-Expires';
 const ROOM = 'X-Live-Room';
 // The parts of a driver only kept in memory, not in its attachment: when its car last moved and
 // when it was last sent the others' (counts of the room's own, which start again when it wakes),
-// and a hello being looked up with the messages that came in behind it.
-const MEMORY = [ 'moved', 'sent', 'pending', 'queue' ];
+// when its state came in, and a hello being looked up with the messages that came in behind it.
+const MEMORY = [ 'moved', 'sent', 'sAt', 'pending', 'queue' ];
 const encoder = new TextEncoder();
 
 // GET /api/live?room=<room>: a WebSocket to the room. Everything is checked here, before the room
@@ -127,7 +127,7 @@ export class DriveRoom extends DurableObject {
 		if ( here.length - before.length >= this.max( room ) ) {
 
 			// Accepted only to say so: the page then tries the area's next shard.
-			send( server, { t: 'full', room: name } );
+			send( server, { t: 'full', room: name, max: this.max( room ) } );
 			server.close( CLOSE.full, 'full' );
 
 		} else {
@@ -213,7 +213,7 @@ export class DriveRoom extends DurableObject {
 		while ( taken.has( pid ) ) pid = randomToken( 6 );
 		Object.assign( driver, { pid, name, star, vehicle, look, place, away: m.away === true, s: null, pending: false } );
 		const others = this.helloed().filter( other => other !== ws ).map( other => playerOf( this.driver( other ) ) );
-		send( ws, { t: 'welcome', you: pid, room: driver.room, max: this.max( parseRoom( driver.room ) ), players: others } );
+		send( ws, { t: 'welcome', you: pid, name, star, room: driver.room, max: this.max( parseRoom( driver.room ) ), players: others } );
 		driver.sent = this.moves;
 		this.broadcast( { t: 'join', player: playerOf( driver ) }, ws );
 
@@ -270,6 +270,7 @@ export class DriveRoom extends DurableObject {
 				if ( s ) {
 
 					driver.s = s;
+					driver.sAt = now;
 					driver.moved = ++ this.moves;
 
 				}
@@ -330,7 +331,8 @@ export class DriveRoom extends DurableObject {
 
 	// What's moved since the last batch, to each driver who has said hello: at most one batch every
 	// FLUSH_MS, each with only the cars that moved since that driver's last, never its own, and in an
-	// area only those within VIEW_RANGE of it (all of them until it has a car of its own). There's no
+	// area only those within VIEW_RANGE of it (all of them until it has a car of its own), each with
+	// how long it's been held here, so the page can tell when it was where it says. There's no
 	// timer for it: one would keep the room from hibernating, and so charged for the whole time it
 	// waits (see the costs above). It goes with the next message to arrive once it's due, which in a
 	// room with cars moving is within a fraction of a second; a car sends at least STILL_HZ (once a
@@ -347,7 +349,7 @@ export class DriveRoom extends DurableObject {
 
 				if ( other === ws || ! from.s || from.moved <= to.sent ) continue;
 				if ( near && Math.hypot( from.s[ 0 ] - to.s[ 0 ], from.s[ 1 ] - to.s[ 1 ], from.s[ 2 ] - to.s[ 2 ] ) > VIEW_RANGE ) continue;
-				s.push( [ from.pid, ...from.s ] );
+				s.push( [ from.pid, ...from.s, now - ( from.sAt ?? now ) ] );
 
 			}
 

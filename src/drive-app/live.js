@@ -1,8 +1,9 @@
 import { MathUtils, Matrix4, Quaternion, Vector3 } from 'three';
 import {
-	CLOSE, FLAGS, HONK_GAP, KEEPALIVE_MS, NEARBY_SHARDS, PING, PONG, PROTOCOL, SEND_HZ, STILL_HZ,
+	CLOSE, FLAGS, HONK_GAP, KEEPALIVE_MS, NEARBY_SHARDS, PARTY_MAX, PING, PONG, PROTOCOL, SEND_HZ, STALE_MS, STILL_HZ,
 	cellOf, checkLook, checkPlace, checkState, checkTrick, checkVehicle, cleanPartyCode, makePartyCode, packState, shardOf,
 } from './live-protocol.js';
+import { getConfig } from './api.js';
 import { storage } from './places.js';
 
 // Driving with others (docs/world-drive.md): the page's side of live-protocol.js. One WebSocket to
@@ -16,9 +17,9 @@ import { storage } from './places.js';
 // Events (on( type, fn )): 'status' (connecting, live...), 'party' (joined or left one), 'nearby'
 // (the switch), 'welcome' { room, you, max, players }, 'join' PLAYER, 'leave' { pid, player },
 // 'look' { pid, vehicle, look }, 'place' { pid, place }, 'away' { pid }, 'states' { at, states:
-// [ { pid, s } ] }, 'trick' { pid, score }, 'honk' { pid }, 'clear' (everyone's gone: a new room,
-// or the connection dropped), 'full' (a party with its most already) and 'ended' (why: driving with
-// others is over for this visit).
+// [ { pid, s, age } ] }, 'trick' { pid, score }, 'honk' { pid }, 'clear' (everyone's gone: a new
+// room, or the connection dropped), 'full' { max } (a party with its most already) and 'ended'
+// (why: driving with others is over for this visit).
 
 const NEARBY_KEY = 'world-drive.nearby';
 // Seconds to wait before connecting again after a dropped connection: the first time, the
@@ -75,10 +76,12 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 	let otherSince = 0;
 	let followed = 0;
 	// The room wanted (connected, connecting or waiting to try again), its socket, this page's pid
-	// in it once welcomed, its most and everyone else in it.
+	// in it once welcomed and what the others there call it ({ name, star }), its most and everyone
+	// else in it.
 	let room = null;
 	let socket = null;
 	let you = null;
+	let self = null;
 	let max = 0;
 	const players = new Map();
 	let tries = 0;
@@ -93,6 +96,8 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 	let tokens = BUDGET.burst;
 	let tokensAt = performance.now();
 	let honkAt = - Infinity;
+	// When the visit's token runs out (its third part, in seconds): the rooms turn it away after.
+	const visitEnds = Number( String( visit ).split( '.' )[ 2 ] ) * 1000 || Infinity;
 
 	// The keepalive, the minute back on the globe and the wait to try again run on a timer of their
 	// own, so they go on while frames don't (a tab in the background).
@@ -145,6 +150,15 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 	function connect( name ) {
 
 		room = name;
+		// A run-out visit is turned away at the door, which looks no different here from a connection
+		// that dropped: it's over, as the room would have said had it been connected.
+		if ( Date.now() >= visitEnds ) {
+
+			end( 'expired' );
+			return;
+
+		}
+
 		const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
 		let ws;
 		try {
@@ -162,8 +176,10 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 		}
 
 		socket = ws;
+		let opened = false;
 		ws.addEventListener( 'open', () => {
 
+			opened = true;
 			if ( socket !== ws ) return;
 			told = { ride: JSON.stringify( ride ), place: JSON.stringify( place ), away };
 			transmit( { t: 'hello', player: helloPlayer(), vehicle: ride.vehicle, look: ride.look, place, away } );
@@ -172,7 +188,7 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 		ws.addEventListener( 'message', e => socket === ws && receive( e.data ) );
 		// Only the socket in use counts: one closed here on the way to another room, or the one a
 		// reconnect replaced, says nothing.
-		ws.addEventListener( 'close', e => socket === ws && closed( e.code ) );
+		ws.addEventListener( 'close', e => socket === ws && closed( e.code, { opened } ) );
 
 	}
 
@@ -199,13 +215,16 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 	function forget() {
 
 		you = null;
+		self = null;
 		told = null;
 		players.clear();
 		emit( 'clear' );
 
 	}
 
-	function closed( code ) {
+	// The room's socket closed with `code`; opened: whether it ever got in (else the Worker turned
+	// it away before the room, or couldn't be reached); max: the room's most, when it was full.
+	function closed( code, { opened = true, max: most = PARTY_MAX } = {} ) {
 
 		socket = null;
 		const name = room;
@@ -217,7 +236,7 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 
 				// A party with its most already: drive on alone (or nearby).
 				party = null;
-				emit( 'full' );
+				emit( 'full', { max: most } );
 				emit( 'party', null );
 
 			} else if ( shard + 1 < NEARBY_SHARDS ) shard ++;
@@ -238,8 +257,26 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 			console.error( `World Drive: the room ${ name } turned away what this page said (close ${ code }); driving with others is off for this visit.` );
 			end( 'protocol' );
 
-		} else retry( name );
+		} else if ( ! opened ) turnedAway( name );
+		else retry( name );
 		setStatus();
+
+	}
+
+	// Never let in: the Worker said no before the room (as it does to everyone while LIVE is off),
+	// or wasn't there to ask. A browser doesn't say which, so its config does: switched off is over
+	// for this visit, without a word; anything else is tried again as a dropped connection is.
+	async function turnedAway( name ) {
+
+		const config = await getConfig();
+		if ( room !== name || socket || ended ) return;
+		if ( config?.live === false ) end( 'off' );
+		else {
+
+			retry( name );
+			setStatus();
+
+		}
 
 	}
 
@@ -356,6 +393,7 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 		if ( t === 'welcome' ) {
 
 			you = typeof message.you === 'string' ? message.you : '';
+			self = { name: cleanName( message.name ), star: message.star === true };
 			max = Number( message.max ) || 0;
 			tries = 0;
 			stateAt = - Infinity;
@@ -372,6 +410,17 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 			emit( 'welcome', { room, you, max, players: [ ...players.values() ] } );
 			// Anything that changed while it connected.
 			tell();
+			return;
+
+		}
+
+		if ( t === 'full' ) {
+
+			// Turned away, the room has its most: on to the next shard (or out of the party) now. The
+			// close that follows can be a while coming, and this socket has nothing more to say.
+			const ws = socket;
+			closed( CLOSE.full, { max: Number( message.max ) || PARTY_MAX } );
+			ws?.close();
 			return;
 
 		}
@@ -418,11 +467,12 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 			for ( const entry of message.s ) {
 
 				const who = Array.isArray( entry ) ? players.get( entry[ 0 ] ) : null;
-				const s = who ? checkState( entry.slice( 1 ) ) : null;
+				const s = who ? checkState( entry.slice( 1, 12 ) ) : null;
 				if ( ! s ) continue;
 				who.s = s;
 				who.away = false;
-				states.push( { pid: who.pid, s } );
+				// How long (ms) the room had held it before this batch went.
+				states.push( { pid: who.pid, s, age: MathUtils.clamp( Number( entry[ 12 ] ) || 0, 0, STALE_MS ) } );
 
 			}
 
@@ -442,10 +492,9 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 	function playerOf( raw ) {
 
 		if ( ! raw || typeof raw !== 'object' || typeof raw.pid !== 'string' || raw.pid === you ) return null;
-		const name = typeof raw.name === 'string' ? raw.name.replace( /\s+/g, ' ' ).trim().slice( 0, 40 ) : '';
 		return {
 			pid: raw.pid,
-			name: name || 'Guest',
+			name: cleanName( raw.name ),
 			star: raw.star === true,
 			vehicle: checkVehicle( raw.vehicle ) ?? 'go-kart',
 			look: checkLook( raw.look ) ?? {},
@@ -682,6 +731,12 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 			return you;
 
 		},
+		// { name, star }: what the room's others call this page, once it's in.
+		get self() {
+
+			return self;
+
+		},
 		get max() {
 
 			return max;
@@ -704,6 +759,13 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 		},
 
 	};
+
+}
+
+// A name as a room gives one, for showing as text: one line, 40 characters at most.
+function cleanName( name ) {
+
+	return ( typeof name === 'string' ? name.replace( /\s+/g, ' ' ).trim().slice( 0, 40 ) : '' ) || 'Guest';
 
 }
 

@@ -2,7 +2,7 @@ import { Box3, Group, MathUtils, Quaternion, Vector3 } from 'three';
 import { createDriveFx } from '../drive-fx.js';
 import { specFor } from '../drive.js';
 import { frontToYaw } from '../library.js';
-import { FLAGS, FLUSH_MS, INTERP_MS, STALE_MS, TELEPORT } from './live-protocol.js';
+import { FLAGS, INTERP_MS, STALE_MS, TELEPORT } from './live-protocol.js';
 import { applyLook, cleanLook, fxOf } from './paint.js';
 
 // The others driving with you (live.js): each a ghost of their ride, in their look from the Garage,
@@ -117,10 +117,8 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 		const sample = at - now;
 		offset = offset === null ? sample : Math.max( sample, offset - ( now - offsetAt ) * CLOCK_DRIFT / 1000 );
 		offsetAt = now;
-		// The room sends what it was told in the last FLUSH_MS, all with the time it sent them: on
-		// average from half that before.
-		const local = at - FLUSH_MS / 2 - offset;
-		for ( const { pid, s } of states ) push( ghosts.get( pid ), local, s );
+		// Each as of when the room heard it: the batch's time less how long the room had held it.
+		for ( const { pid, s, age } of states ) push( ghosts.get( pid ), at - age - offset, s );
 
 	} );
 	live.on( 'trick', ( { pid, score } ) => {

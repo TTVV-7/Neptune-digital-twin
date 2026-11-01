@@ -1,4 +1,4 @@
-import { FLAGS, PARTY_MAX } from './live-protocol.js';
+import { FLAGS } from './live-protocol.js';
 import { storage } from './places.js';
 import { hideKeys, toast } from './screens.js';
 
@@ -106,7 +106,7 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo } ) {
 		if ( inParty() && p ) toast( `${ p.name } went to ${ place.name || 'a new place' }.`, 8000, { label: 'Join', onClick: () => goTo( pid ) } );
 
 	} );
-	live.on( 'full', () => toast( `That party is full: ${ PARTY_MAX } drivers at most.`, 6000 ) );
+	live.on( 'full', ( { max } ) => toast( `That party is full: ${ max } drivers at most.`, 6000 ) );
 	live.on( 'ended', reason => {
 
 		refresh();
@@ -317,7 +317,10 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo } ) {
 				if ( party.hidden ) return;
 				code.textContent = `Your party: ${ live.party }. Anyone with the link can join you.`;
 				link.value = `${ location.origin }/?party=${ live.party }`;
-				const you = Object.assign( document.createElement( 'li' ), { textContent: 'You' } );
+				// You, by the name the others see (a guest has no other way to know it).
+				const you = document.createElement( 'li' );
+				you.append( 'You' );
+				if ( live.self ) you.append( ' (', nameOf( live.self ), ')' );
 				members.replaceChildren( you, ...[ ...live.players.values() ].map( p => {
 
 					const li = document.createElement( 'li' );

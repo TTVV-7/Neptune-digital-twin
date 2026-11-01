@@ -36,7 +36,8 @@ const BANDS = Math.round( 180 / CELL_DEG );
 const NEAR = /^near:(\d{1,4})\.(\d{1,5})(?:#(\d))?$/;
 const PARTY = /^party:([A-Z0-9]+)$/;
 
-// A new party code from `random`, a function filling a Uint8Array (crypto.getRandomValues).
+// A new party code from `random`, a function filling a Uint8Array and returning it: bytes =>
+// crypto.getRandomValues( bytes ) (passed bare, getRandomValues has lost its crypto and throws).
 export function makePartyCode( random ) {
 
 	const bytes = random( new Uint8Array( PARTY_CODE_LENGTH ) );
@@ -159,10 +160,15 @@ export const CLOSE = {
 //   'ping'                      (plain text) keepalive
 //
 // Room → page:
-//   { t: 'welcome', you: PID, room, max, players: [ PLAYER... ] }   everyone else in the room
+//   { t: 'welcome', you: PID, name, star, room, max, players: [ PLAYER... ] }   you as the others
+//        see you (your name, which a guest has no other way to learn, and ⭐), and everyone else
+//   { t: 'full', room, max }   the room has its most already: sent just before CLOSE.full, which
+//        can be slow to arrive, so the page moves on as soon as it hears this
 //   { t: 'join', player: PLAYER }   { t: 'leave', pid }
 //   { t: 'look', pid, vehicle, look }   { t: 'place', pid, place }   { t: 'away', pid }
-//   { t: 'S', at: ms, s: [ [ PID, ...STATE ]... ] }   what's moved since the last of these
+//   { t: 'S', at: ms, s: [ [ PID, ...STATE, AGE ]... ] }   what's moved since the last of these, at
+//        the room's clock, each with how long (AGE, ms) the room had held it: a batch goes with the
+//        next message to arrive once FLUSH_MS has passed, so a car's state may be new or a while old
 //   { t: 'trick', pid, score }   { t: 'honk', pid }
 //   then a close with one of CLOSE's codes when it's over.
 //

@@ -62,8 +62,9 @@ const PLACE_LENGTH = 60;
 const GO_NEAR = 10000;
 const GO_BESIDE = 5;
 // Only the dev server: a test (scripts/test-drive-live-ui.mjs) can hand the page a visit's token,
-// { visit }, for driving with others on the test pad, which has no visit of its own.
-// import.meta.env.DEV is false in the build, so the built site has no such way in.
+// { visit }, for driving with others on the test pad, which has no visit of its own. Whether it's
+// on is still the Worker's to say. import.meta.env.DEV is false in the build, so the built site has
+// no such way in.
 const LIVE_TEST = import.meta.env.DEV ? window.worldDriveLiveTest ?? null : null;
 
 const $ = id => document.getElementById( id );
@@ -284,7 +285,7 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 	// Driving with others (live.js, ghosts.js, friends.js): only when the Worker has it on and this
 	// visit has a token to show the room. Without it, nothing of it is made.
 	const liveVisit = LIVE_TEST?.visit ?? visit;
-	const live = ( liveOn || !! LIVE_TEST ) && typeof liveVisit === 'string' && liveVisit
+	const live = liveOn && typeof liveVisit === 'string' && liveVisit
 		? createLive( { earth, ellipsoid, visit: liveVisit, player: () => board.player, ride: { vehicle: panel.vehicle.id, look: lookOf( panel.vehicle ) } } )
 		: null;
 	const ghosts = live && createGhosts( { scene, earth, camera, vehicles, loader: models.loader, live, tags: $( 'live-tags' ), own: () => state.entry?.pivot ?? null } );

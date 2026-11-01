@@ -189,13 +189,13 @@ async function join( server, room, hello = {}, options = {} ) {
 
 }
 
-// Each car in the 'S' batches among `messages`, by pid: its latest state.
+// Each car in the 'S' batches among `messages`, by pid: its latest state (without its age).
 function cars( messages ) {
 
 	const seen = {};
 	for ( const m of messages ) {
 
-		if ( m?.t === 'S' ) for ( const [ pid, ...s ] of m.s ) seen[ pid ] = s;
+		if ( m?.t === 'S' ) for ( const [ pid, ...s ] of m.s ) seen[ pid ] = s.slice( 0, 11 );
 
 	}
 
@@ -361,18 +361,20 @@ describe( 'Driving with others', () => {
 
 		const room = partyRoom();
 		const alice = await join( server, room );
-		assert.deepEqual( alice.welcome, { t: 'welcome', you: alice.pid, room, max: PARTY_MAX, players: [] } );
+		assert.deepEqual( alice.welcome, { t: 'welcome', you: alice.pid, name: alice.welcome.name, star: false, room, max: PARTY_MAX, players: [] } );
 		assert.match( alice.pid, /^[A-Za-z0-9_-]{8}$/ );
+		// A guest is told what the others call them.
+		assert.match( alice.welcome.name, /^Guest \d{4}$/ );
 
 		// Someone connected who hasn't said hello isn't anyone yet.
 		const lurker = await connect( server, room );
 		const bob = await join( server, room, { vehicle: 'muscle-car', look: { colour: 'blue', decal: 'flames', boost: 'confetti', number: 42 }, place: null, away: true } );
 		assert.notEqual( bob.pid, alice.pid );
 		const [ seen ] = bob.welcome.players;
-		assert.deepEqual( bob.welcome.players, [ { pid: alice.pid, name: seen.name, star: false, vehicle: 'go-kart', look: { colour: 'red', number: 7 }, place: FURKA, away: false, s: null } ] );
+		assert.deepEqual( bob.welcome.players, [ { pid: alice.pid, name: alice.welcome.name, star: false, vehicle: 'go-kart', look: { colour: 'red', number: 7 }, place: FURKA, away: false, s: null } ] );
 		assert.match( seen.name, /^Guest \d{4}$/ );
 		const joined = await alice.take( 'join' );
-		assert.deepEqual( joined, { t: 'join', player: { pid: bob.pid, name: joined.player.name, star: false, vehicle: 'muscle-car', look: { colour: 'blue', decal: 'flames', boost: 'confetti', number: 42 }, place: null, away: true, s: null } } );
+		assert.deepEqual( joined, { t: 'join', player: { pid: bob.pid, name: bob.welcome.name, star: false, vehicle: 'muscle-car', look: { colour: 'blue', decal: 'flames', boost: 'confetti', number: 42 }, place: null, away: true, s: null } } );
 		assert.match( joined.player.name, /^Guest \d{4}$/ );
 		assert.deepEqual( lurker.inbox, [], 'nothing for a page before its hello' );
 
@@ -392,6 +394,7 @@ describe( 'Driving with others', () => {
 		const watcher = await join( server, room );
 		const named = await join( server, room, { player: { id: rider.id, secret: rider.secret }, name: 'Admin' } );
 		assert.deepEqual( ( await watcher.take( 'join' ) ).player.name, 'Ghost Rider' );
+		assert.deepEqual( [ named.welcome.name, named.welcome.star ], [ 'Ghost Rider', false ] );
 		assert.match( named.welcome.players[ 0 ].name, /^Guest \d{4}$/ );
 
 		// The wrong secret, someone who isn't a player, or not a player's shape at all: guests.
@@ -434,6 +437,7 @@ describe( 'Driving with others', () => {
 		const star = await join( server, room, { player: { id: friend.id, secret: friend.secret } } );
 		const joined = ( await watcher.take( 'join' ) ).player;
 		assert.deepEqual( [ joined.name, joined.star ], [ 'Star Friend', true ] );
+		assert.deepEqual( [ star.welcome.name, star.welcome.star ], [ 'Star Friend', true ] );
 		assert.equal( star.welcome.players[ 0 ].star, false );
 		const notStar = await join( server, room, { player: { id: plain.id, secret: plain.secret } } );
 		const shown = Object.fromEntries( notStar.welcome.players.map( p => [ p.name, p.star ] ) );
@@ -454,7 +458,8 @@ describe( 'Driving with others', () => {
 		alice.send( { t: 's', s: carAt( 46.5725, 8.4153 ) } );
 		const first = await bob.take( 'S' );
 		assert.equal( first.s.length, 1 );
-		assert.deepEqual( first.s[ 0 ], [ alice.pid, ...carAt( 46.5725, 8.4153 ) ] );
+		// The car's state, and how long the room had held it: it went with the message that brought it.
+		assert.deepEqual( first.s[ 0 ], [ alice.pid, ...carAt( 46.5725, 8.4153 ), 0 ] );
 		assert.ok( Math.abs( first.at - Date.now() ) < 5 * SECOND );
 
 		// Three in quick succession, then a word from Bob after FLUSH_MS: one batch each way, Alice's
@@ -464,9 +469,11 @@ describe( 'Driving with others', () => {
 		// Bob is far away (a party has no range): 300 km.
 		bob.send( { t: 's', s: carAt( 49.2, 8.4153 ) } );
 		const toBob = await bob.take( 'S' );
-		assert.deepEqual( toBob.s, [ [ alice.pid, ...carAt( 46.5725, 8.4153, { north: 30 } ) ] ] );
+		assert.deepEqual( toBob.s.map( entry => entry.slice( 0, 12 ) ), [ [ alice.pid, ...carAt( 46.5725, 8.4153, { north: 30 } ) ] ] );
+		// Alice's waited for Bob's word (FLUSH_MS and more); Bob's went at once.
+		assert.ok( toBob.s[ 0 ][ 12 ] >= FLUSH_MS && toBob.s[ 0 ][ 12 ] < 5 * SECOND, `held ${ toBob.s[ 0 ][ 12 ] } ms` );
 		const toAlice = await alice.take( 'S' );
-		assert.deepEqual( toAlice.s, [ [ bob.pid, ...carAt( 49.2, 8.4153 ) ] ] );
+		assert.deepEqual( toAlice.s, [ [ bob.pid, ...carAt( 49.2, 8.4153 ), 0 ] ] );
 		assert.ok( toAlice.at - first.at >= FLUSH_MS );
 		assert.deepEqual( ( await bob.drain( 200 ) ).filter( m => m.t === 'S' ), [] );
 
@@ -496,8 +503,16 @@ describe( 'Driving with others', () => {
 
 		}
 
-		assert.deepEqual( batches.bob.at( - 1 ).s[ 0 ], [ alice.pid, ...carAt( 46.5725, 8.4153, { north: 122, speed: 20 } ) ] );
-		assert.deepEqual( batches.alice.at( - 1 ).s[ 0 ], [ bob.pid, ...carAt( 49.2, 8.4153, { north: 22, speed: 20, flags: 128 | 2 } ) ] );
+		assert.deepEqual( batches.bob.at( - 1 ).s[ 0 ].slice( 0, 12 ), [ alice.pid, ...carAt( 46.5725, 8.4153, { north: 122, speed: 20 } ) ] );
+		assert.deepEqual( batches.alice.at( - 1 ).s[ 0 ].slice( 0, 12 ), [ bob.pid, ...carAt( 49.2, 8.4153, { north: 22, speed: 20, flags: 128 | 2 } ) ] );
+		// Each held, while both drive, for about as long as the gap between two of their messages
+		// (the last may have waited for the trick).
+		for ( const list of [ batches.alice, batches.bob ] ) {
+
+			const ages = list.map( batch => batch.s[ 0 ][ 12 ] );
+			assert.ok( ages.every( age => Number.isInteger( age ) && age >= 0 ) && ages.slice( 0, - 1 ).every( age => age < FLUSH_MS + 200 ), JSON.stringify( ages ) );
+
+		}
 		await Promise.all( [ alice.close(), bob.close() ] );
 
 	} );
@@ -511,7 +526,7 @@ describe( 'Driving with others', () => {
 		alice.send( { t: 's', s: [ p.x + 0.123456, p.y, p.z, 0.000049, 0, 0.7071067, 0.7071068, 12.3456, - 0.004, 0, 128 | 1 ] } );
 		const sent = ( await bob.take( 'S' ) ).s[ 0 ];
 		// (-0.004 rounds to -0, which JSON sends as 0.)
-		assert.deepEqual( sent.slice( 4 ), [ 0, 0, 0.7071, 0.7071, 12.35, 0, 0, 129 ] );
+		assert.deepEqual( sent.slice( 4, 12 ), [ 0, 0, 0.7071, 0.7071, 12.35, 0, 0, 129 ] );
 		assert.equal( sent[ 1 ], Math.round( ( p.x + 0.123456 ) * 100 ) / 100 );
 
 		await sleep( FLUSH_MS + 20 );
@@ -770,7 +785,7 @@ describe( 'Driving with others', () => {
 		for ( const page of pages ) await page.drain();
 
 		const ninth = await connect( server, room );
-		assert.deepEqual( await ninth.take( 'full' ), { t: 'full', room } );
+		assert.deepEqual( await ninth.take( 'full' ), { t: 'full', room, max: PARTY_MAX } );
 		assert.deepEqual( await ninth.ended(), { code: CLOSE.full, reason: 'full' } );
 		// A page that hasn't said hello holds its place too.
 		await pages[ 0 ].close();
@@ -799,7 +814,7 @@ describe( 'Driving with others', () => {
 		for ( let i = 1; i < NEARBY_MAX; i ++ ) pages.push( await join( server, area ) );
 		assert.equal( pages.at( - 1 ).welcome.players.length, NEARBY_MAX - 1 );
 		const turned = await connect( server, area );
-		assert.deepEqual( await turned.take( 'full' ), { t: 'full', room: area } );
+		assert.deepEqual( await turned.take( 'full' ), { t: 'full', room: area, max: NEARBY_MAX } );
 		assert.equal( ( await turned.ended() ).code, CLOSE.full );
 		assert.equal( ( await connect( server, shardOf( area, 0 ) ).then( page => page.ended() ) ).code, CLOSE.full );
 
@@ -1119,7 +1134,7 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 		const bob = await hello( room, ctx );
 		alice.said();
 		await say( room, alice, { t: 's', s: carAt( 46.5725, 8.4153 ) } );
-		assert.deepEqual( bob.said(), [ { t: 'S', at: clock, s: [ [ alice.pid, ...carAt( 46.5725, 8.4153 ) ] ] } ] );
+		assert.deepEqual( bob.said(), [ { t: 'S', at: clock, s: [ [ alice.pid, ...carAt( 46.5725, 8.4153 ), 0 ] ] } ] );
 		clock += 30;
 		await say( room, alice, { t: 's', s: carAt( 46.5725, 8.4153, { north: 1 } ) } );
 		clock += 30;
@@ -1127,7 +1142,8 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 		assert.deepEqual( bob.said(), [] );
 		clock += FLUSH_MS - 60;
 		await say( room, bob, { t: 'honk' } );
-		assert.deepEqual( bob.said(), [ { t: 'S', at: clock, s: [ [ alice.pid, ...carAt( 46.5725, 8.4153, { north: 2 } ) ] ] } ] );
+		// Alice's latest, held since it came in FLUSH_MS - 60 ms ago.
+		assert.deepEqual( bob.said(), [ { t: 'S', at: clock, s: [ [ alice.pid, ...carAt( 46.5725, 8.4153, { north: 2 } ), FLUSH_MS - 60 ] ] } ] );
 		assert.deepEqual( alice.said(), [ { t: 'honk', pid: bob.pid } ] );
 
 		// One more, and then nothing from anyone: the alarm takes it.
@@ -1308,7 +1324,7 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 		answer( { name: 'Looked Up', star: 1 } );
 		await helloed;
 		const [ welcome ] = ws.said();
-		assert.equal( welcome.t, 'welcome' );
+		assert.deepEqual( [ welcome.t, welcome.name, welcome.star ], [ 'welcome', 'Looked Up', true ] );
 		assert.deepEqual( watcher.said().map( m => [ m.t, m.player?.name ?? m.pid, m.player?.star ] ), [ [ 'join', 'Looked Up', true ], [ 'look', welcome.you, undefined ], [ 'honk', welcome.you, undefined ] ] );
 
 	} );
