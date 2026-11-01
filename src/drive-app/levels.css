@@ -1,0 +1,677 @@
+/* Levels (profile.js): the XP bar and pop-ups while driving, a level-up's burst, the profile card on
+   the globe's panel, the whole track, the level badge, and the Garage's "Lv 12" chips. */
+
+/* --- the level badge: the level in a ring whose colour is its frame ----------------------- */
+
+.level-badge {
+	--frame: #9aa7b8;
+	display: inline-grid;
+	flex: none;
+	width: 42px;
+	height: 42px;
+	padding: 3px;
+	border-radius: 50%;
+	background: var( --frame );
+	box-shadow: 0 2px 8px rgba( 0, 0, 0, 0.45 );
+}
+
+.level-badge b {
+	display: grid;
+	place-items: center;
+	border-radius: 50%;
+	background: radial-gradient( circle at 40% 30%, #22324f, #0b1322 70% );
+	color: var( --ink );
+	font-size: 16px;
+	font-style: italic;
+	font-weight: 900;
+	line-height: 1;
+}
+
+.level-badge[data-frame='bronze'] {
+	--frame: linear-gradient( 135deg, #f0a865, #9c5a22 );
+}
+
+.level-badge[data-frame='silver'] {
+	--frame: linear-gradient( 135deg, #ffffff, #9ea9b6 );
+}
+
+.level-badge[data-frame='gold'] {
+	--frame: linear-gradient( 135deg, #fff1a6, #e0a400 );
+}
+
+.level-badge[data-frame='platinum'] {
+	--frame: linear-gradient( 135deg, #e6fcff, #62c8e6 );
+	box-shadow: 0 0 10px rgba( 120, 220, 255, 0.55 ), 0 2px 8px rgba( 0, 0, 0, 0.45 );
+}
+
+.level-badge[data-frame='legend'] {
+	--frame: conic-gradient( #ff3d3d, #ffd23d, #3dff6e, #3dc8ff, #8f3dff, #ff3d98, #ff3d3d );
+	box-shadow: 0 0 12px rgba( 255, 210, 63, 0.6 ), 0 2px 8px rgba( 0, 0, 0, 0.45 );
+}
+
+.level-badge.small {
+	width: 32px;
+	height: 32px;
+	padding: 2.5px;
+}
+
+.level-badge.small b {
+	font-size: 12px;
+}
+
+.level-badge.tiny {
+	width: 20px;
+	height: 20px;
+	padding: 2px;
+	box-shadow: none;
+}
+
+.level-badge.tiny b {
+	font-size: 8px;
+}
+
+/* --- the bar ---------------------------------------------------------------------------- */
+
+.xp-bar {
+	display: block;
+	overflow: hidden;
+	height: 6px;
+	border-radius: 3px;
+	background: rgba( 255, 255, 255, 0.16 );
+}
+
+.xp-bar i {
+	display: block;
+	width: 0;
+	height: 100%;
+	border-radius: inherit;
+	background: linear-gradient( 90deg, #ffd23f, #ff8a3d );
+	transition: width 0.4s ease;
+}
+
+/* --- driving: under the place's name, and the pop-ups under it ------------------------------ */
+
+#drive-ui .xp-hud {
+	position: fixed;
+	top: calc( 41px + env( safe-area-inset-top, 0px ) );
+	left: 50%;
+	z-index: 15;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 11px;
+	font-weight: 800;
+	white-space: nowrap;
+	transform: translateX( -50% );
+	pointer-events: none;
+}
+
+/* The place's name a little higher, to make room under it. */
+#drive-ui .place {
+	transform: translateY( -6px );
+}
+
+#drive-ui .xp-level {
+	padding: 1px 6px;
+	border-radius: 6px;
+	background: var( --accent );
+	color: var( --accent-ink );
+	font-style: italic;
+	box-shadow: 0 1px 4px rgba( 0, 0, 0, 0.4 );
+}
+
+#drive-ui .xp-hud .xp-bar {
+	width: min( 180px, 34vw );
+	height: 5px;
+	box-shadow: 0 1px 4px rgba( 0, 0, 0, 0.45 );
+}
+
+#drive-ui .xp-count {
+	color: var( --ink );
+	font-variant-numeric: tabular-nums;
+	text-shadow: 0 1px 4px rgba( 0, 0, 0, 0.8 );
+}
+
+#drive-ui .xp-pops {
+	position: fixed;
+	top: calc( 62px + env( safe-area-inset-top, 0px ) );
+	left: 50%;
+	z-index: 16;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 4px;
+	transform: translateX( -50% );
+	pointer-events: none;
+}
+
+.xp-pop {
+	padding: 3px 10px;
+	border-radius: 9px;
+	background: rgba( 9, 15, 27, 0.72 );
+	color: var( --accent );
+	font-size: 13px;
+	font-weight: 800;
+	white-space: nowrap;
+	text-shadow: 0 1px 3px rgba( 0, 0, 0, 0.7 );
+	animation: xp-pop 2.6s ease forwards;
+}
+
+.xp-pop.bonus {
+	background: rgba( 255, 210, 63, 0.92 );
+	color: var( --accent-ink );
+	text-shadow: none;
+}
+
+.xp-pop.tricks {
+	color: #7ff0ff;
+}
+
+@keyframes xp-pop {
+	0% {
+		opacity: 0;
+		transform: translateY( 8px ) scale( 0.9 );
+	}
+	12% {
+		opacity: 1;
+		transform: none;
+	}
+	75% {
+		opacity: 1;
+	}
+	100% {
+		opacity: 0;
+		transform: translateY( -10px );
+	}
+}
+
+/* Toasts while driving go under the pop-ups. */
+html body[data-mode='driving'] #toast,
+html body[data-mode='paused'] #toast {
+	top: calc( 92px + env( safe-area-inset-top, 0px ) );
+}
+
+/* On a phone the speed sits under the top bar: the count goes, and the pop-ups go to the left. */
+body.touch #drive-ui .xp-count {
+	display: none;
+}
+
+body.touch #drive-ui .xp-pops {
+	top: calc( 60px + env( safe-area-inset-top, 0px ) );
+	left: 12px;
+	max-width: 96px;
+	align-items: flex-start;
+	transform: none;
+}
+
+body.touch .xp-pop {
+	padding: 3px 7px;
+	font-size: 11px;
+	white-space: normal;
+}
+
+/* --- a level-up --------------------------------------------------------------------------- */
+
+/* Over the driving HUD (drive-hud.js), as the keys card is. */
+#level-up {
+	position: fixed;
+	inset: 0;
+	z-index: 1006;
+	display: grid;
+	justify-items: center;
+	align-content: start;
+	padding-top: 17vh;
+	pointer-events: none;
+}
+
+#level-up .burst {
+	position: absolute;
+	top: calc( 17vh - 110px );
+	left: 50%;
+	width: 420px;
+	height: 420px;
+	margin-left: -210px;
+	border-radius: 50%;
+	background:
+		radial-gradient( circle, rgba( 255, 210, 63, 0.55 ) 0%, rgba( 255, 138, 61, 0.25 ) 32%, transparent 62% ),
+		repeating-conic-gradient( rgba( 255, 232, 140, 0.32 ) 0deg 7deg, transparent 7deg 22deg );
+	mask: radial-gradient( circle, #000 30%, transparent 68% );
+	-webkit-mask: radial-gradient( circle, #000 30%, transparent 68% );
+	opacity: 0;
+}
+
+#level-up.go .burst {
+	animation: level-burst 2.4s ease-out forwards;
+}
+
+@keyframes level-burst {
+	0% {
+		opacity: 0;
+		transform: scale( 0.3 ) rotate( 0deg );
+	}
+	15% {
+		opacity: 1;
+	}
+	100% {
+		opacity: 0;
+		transform: scale( 1.25 ) rotate( 50deg );
+	}
+}
+
+/* On a phone the speed sits under the top bar: under it. */
+body.touch #level-up {
+	padding-top: 30vh;
+}
+
+body.touch #level-up .burst {
+	top: calc( 30vh - 110px );
+}
+
+#level-up .level-card {
+	position: relative;
+	display: grid;
+	justify-items: center;
+	gap: 6px;
+	max-width: min( 380px, calc( 100vw - 32px ) );
+	padding: 14px 20px 16px;
+	border: 1px solid rgba( 255, 210, 63, 0.5 );
+	border-radius: 18px;
+	background: var( --panel-solid );
+	text-align: center;
+	box-shadow: 0 12px 40px rgba( 0, 0, 0, 0.5 ), 0 0 30px rgba( 255, 210, 63, 0.25 );
+	pointer-events: auto;
+}
+
+#level-up.go .level-card {
+	animation: level-card 0.5s cubic-bezier( 0.2, 1.6, 0.4, 1 );
+}
+
+@keyframes level-card {
+	0% {
+		opacity: 0;
+		transform: scale( 0.6 );
+	}
+	100% {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+#level-up .level-badge {
+	width: 54px;
+	height: 54px;
+	margin-top: -38px;
+}
+
+#level-up .level-badge b {
+	font-size: 21px;
+}
+
+#level-up .heading {
+	margin: 0;
+	color: var( --accent );
+	font-size: 26px;
+	font-style: italic;
+	font-weight: 900;
+	letter-spacing: 0.5px;
+	text-transform: uppercase;
+}
+
+#level-up .unlocked {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	align-items: center;
+	gap: 6px;
+}
+
+#level-up .nickname {
+	margin: 4px 0 0;
+	font-size: 13px;
+	color: var( --muted );
+}
+
+/* --- rewards, wherever they're listed ------------------------------------------------------ */
+
+.reward {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 9px 4px 5px;
+	border: 1px solid var( --line );
+	border-radius: 10px;
+	background: var( --chip );
+	font-size: 13px;
+	font-weight: 700;
+}
+
+button.reward {
+	border-color: rgba( 255, 210, 63, 0.6 );
+	background: rgba( 255, 210, 63, 0.12 );
+}
+
+button.reward:hover {
+	background: rgba( 255, 210, 63, 0.22 );
+}
+
+.reward .icon {
+	display: inline-grid;
+	place-items: center;
+	width: 22px;
+	height: 22px;
+}
+
+.reward .swatch {
+	width: 18px;
+	height: 18px;
+	border-radius: 50%;
+	background: var( --swatch );
+	box-shadow: inset 0 0 0 1px rgba( 255, 255, 255, 0.3 );
+}
+
+.reward .swatch.rim {
+	background: transparent;
+	border: 5px solid var( --swatch );
+}
+
+.reward .tag {
+	padding: 1px 5px;
+	border-radius: 6px;
+	background: rgba( 255, 210, 63, 0.16 );
+	color: var( --accent );
+	font-size: 10px;
+	font-style: normal;
+	font-weight: 800;
+	white-space: nowrap;
+}
+
+.reward:not( .pass ) .tag {
+	background: rgba( 62, 193, 255, 0.16 );
+	color: var( --sky );
+}
+
+/* --- the profile card on the globe's panel -------------------------------------------------- */
+
+#globe-ui .profile {
+	margin: 12px 0 2px;
+	padding: 10px 12px;
+	border: 1px solid var( --line );
+	border-radius: 14px;
+	background: var( --chip );
+}
+
+#globe-ui .profile-head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-bottom: 8px;
+}
+
+#globe-ui .profile .who {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+#globe-ui .profile .name {
+	overflow: hidden;
+	font-size: 15px;
+	font-weight: 800;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+#globe-ui .profile .title {
+	color: var( --muted );
+	font-size: 12px;
+	font-weight: 700;
+}
+
+#globe-ui .profile .track-open {
+	flex: none;
+	margin-left: auto;
+	font-size: 13px;
+}
+
+#globe-ui .profile .xp-line {
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+	margin: 6px 0 0;
+	color: var( --muted );
+}
+
+#globe-ui .profile .next {
+	text-align: right;
+}
+
+#globe-ui .profile .title-pick {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 8px;
+	color: var( --muted );
+	font-weight: 700;
+}
+
+#globe-ui .profile select {
+	flex: 1;
+	min-width: 0;
+	padding: 5px 8px;
+	border: 1px solid var( --line );
+	border-radius: 8px;
+	background: var( --panel-solid );
+	color: var( --ink );
+	font: inherit;
+	font-size: 13px;
+}
+
+#globe-ui .profile .title-status,
+#globe-ui .profile .save-note {
+	margin: 8px 0 0;
+	color: var( --muted );
+}
+
+/* --- the whole track ------------------------------------------------------------------------ */
+
+dialog#track {
+	width: min( 600px, calc( 100vw - 24px ) );
+	max-height: min( 86vh, 900px );
+	padding: 0;
+	overflow: hidden;
+	border: 1px solid var( --line );
+	border-radius: var( --radius );
+	background: var( --panel-solid );
+	color: var( --ink );
+	box-shadow: 0 20px 60px rgba( 0, 0, 0, 0.6 );
+}
+
+dialog#track::backdrop {
+	background: rgba( 3, 6, 12, 0.6 );
+}
+
+/* The header stays; the levels scroll under it. */
+dialog#track[open] {
+	display: flex;
+	flex-direction: column;
+}
+
+dialog#track .scroll {
+	overflow-y: auto;
+	min-height: 0;
+}
+
+dialog#track header {
+	flex: none;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 14px 18px 10px;
+	background: var( --panel-solid );
+}
+
+dialog#track h2 {
+	margin: 0;
+	font-size: 20px;
+	font-style: italic;
+	font-weight: 900;
+	text-transform: uppercase;
+}
+
+dialog#track .close {
+	width: 34px;
+	height: 34px;
+	border: 0;
+	border-radius: 10px;
+	background: var( --chip );
+	font-size: 22px;
+	line-height: 1;
+}
+
+dialog#track .lead {
+	margin: 0 18px 10px;
+	color: var( --muted );
+}
+
+dialog#track .levels {
+	display: grid;
+	gap: 6px;
+	margin: 0;
+	padding: 0 14px 16px;
+	list-style: none;
+}
+
+dialog#track li {
+	display: grid;
+	grid-template-columns: 76px 1fr auto;
+	align-items: center;
+	gap: 10px;
+	padding: 7px 10px;
+	border: 1px solid transparent;
+	border-radius: 12px;
+	background: var( --chip );
+}
+
+dialog#track li.done {
+	opacity: 0.62;
+}
+
+dialog#track li.next {
+	border-color: rgba( 255, 210, 63, 0.7 );
+	background: rgba( 255, 210, 63, 0.08 );
+}
+
+dialog#track .level-head {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+dialog#track .level-head .xp {
+	color: var( --muted );
+	font-size: 10px;
+	font-weight: 700;
+	line-height: 1.1;
+}
+
+dialog#track .rewards {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 5px;
+}
+
+dialog#track .state {
+	color: var( --accent );
+	font-size: 12px;
+	font-weight: 800;
+}
+
+@media ( max-width: 480px ) {
+
+	dialog#track li {
+		grid-template-columns: 1fr auto;
+	}
+
+	dialog#track .rewards {
+		grid-column: 1 / -1;
+		grid-row: 2;
+	}
+
+}
+
+/* --- the Garage's locks: what unlocks each locked choice --------------------------------------- */
+
+#garage .choice .unlock {
+	display: none;
+	font-style: normal;
+}
+
+#garage .choice.locked .unlock:not( :empty ) {
+	display: inline-block;
+}
+
+#garage .choice.word .unlock {
+	margin-left: 6px;
+	padding: 1px 5px;
+	border-radius: 6px;
+	background: rgba( 255, 210, 63, 0.16 );
+	color: var( --accent );
+	font-size: 10px;
+	font-weight: 800;
+	vertical-align: 1px;
+}
+
+#garage .choice.swatch .unlock {
+	position: absolute;
+	bottom: -9px;
+	left: 50%;
+	padding: 0 4px;
+	border: 1px solid var( --line );
+	border-radius: 6px;
+	background: var( --panel-solid );
+	color: var( --accent );
+	font-size: 9px;
+	font-weight: 800;
+	line-height: 13px;
+	white-space: nowrap;
+	transform: translateX( -50% );
+}
+
+#garage .choice.level-only .unlock {
+	color: var( --sky );
+}
+
+/* Only what the pass unlocks wears its star. */
+#garage .choice.locked:not( .pass ) .star {
+	display: none;
+}
+
+#garage .choices.swatches {
+	row-gap: 16px;
+}
+
+#garage .level-note {
+	margin: 4px 0 2px;
+	color: var( --sky );
+	font-size: 12px;
+	font-weight: 700;
+}
+
+/* --- the others' level, under their names (ghosts.js) and on the leaderboard ------------------- */
+
+.live-tag .level {
+	padding: 0 6px;
+	border-radius: 6px;
+	background: rgba( 9, 15, 27, 0.55 );
+	color: var( --accent );
+	font-size: 10px;
+	font-weight: 800;
+	text-shadow: 0 1px 2px rgba( 0, 0, 0, 0.7 );
+}
+
+dialog#leaderboard .lvl {
+	display: block;
+	color: var( --accent );
+	font-size: 11px;
+	font-weight: 800;
+}

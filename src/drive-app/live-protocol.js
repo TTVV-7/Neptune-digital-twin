@@ -187,9 +187,10 @@ export const BUDGET_SPENT = 'budget';
 //   then a close with one of CLOSE's codes when it's over.
 //
 // PID: the room's own id for a connection (8 characters), never the leaderboard's player id.
-// PLAYER: { pid, name, star (a Supporter Pass), vehicle, look, place, away, s: STATE | null }. s is
-//   null on the globe, and for a driver who was alone in the room: its page sends its car as it
-//   hears the join.
+// PLAYER: { pid, name, star (a Supporter Pass), level, title, vehicle, look, place, away, s: STATE |
+//   null }. level (1 to 50) and title (an id in levels.js's TITLES) are the leaderboard player's,
+//   null for a guest. s is null on the globe, and for a driver who was alone in the room: its page
+//   sends its car as it hears the join.
 // PLACE: { name, lat, lon, height } (degrees, and the ground's height there in metres above the
 //   ellipsoid): where its driver dropped in.
 // STATE: [ x, y, z, qx, qy, qz, qw, vx, vy, vz, flags ]: the car's pivot (ECEF metres, 2

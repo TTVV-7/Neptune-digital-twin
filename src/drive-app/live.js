@@ -4,6 +4,7 @@ import {
 	cellOf, checkLook, checkPlace, checkState, checkTrick, checkVehicle, cleanPartyCode, makePartyCode, packState, shardOf,
 } from './live-protocol.js';
 import { getConfig } from './api.js';
+import { LEVEL_MAX, TITLES } from './levels.js';
 import { storage } from './places.js';
 
 // Driving with others (docs/world-drive.md): the page's side of live-protocol.js. One WebSocket to
@@ -601,6 +602,9 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 			pid: raw.pid,
 			name: cleanName( raw.name ),
 			star: raw.star === true,
+			// The leaderboard player's level and title (levels.js); none for a guest.
+			level: Number.isInteger( raw.level ) && raw.level >= 1 && raw.level <= LEVEL_MAX ? raw.level : null,
+			title: TITLES.some( reward => reward.id === raw.title ) ? raw.title : null,
 			vehicle: checkVehicle( raw.vehicle ) ?? 'go-kart',
 			look: checkLook( raw.look ) ?? {},
 			place: checkPlace( raw.place ),

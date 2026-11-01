@@ -18,7 +18,11 @@ import { createBoostPads } from './pads.js';
 import { createWater } from './water.js';
 import { setUpLeaderboard } from './leaderboard.js';
 import { buyArea } from './pass.js';
-import { fillAccountArea, fillBuyArea, linkPlayer, setUpSupporter } from './supporter.js';
+import { fillAccountArea, fillBuyArea, linkPlayer, onLinked, setUpSupporter } from './supporter.js';
+import { onProChange } from './pro.js';
+import { applyLook } from './paint.js';
+import { createProgress, onLevelChange } from './progress.js';
+import { setUpProfile } from './profile.js';
 import { formatLatLon, rememberPlace } from './places.js';
 import { createLive, flagsOf, velocityOf } from './live.js';
 import { createGhosts } from './ghosts.js';
@@ -66,6 +70,10 @@ const GO_BESIDE = 5;
 // on is still the Worker's to say. import.meta.env.DEV is false in the build, so the built site has
 // no such way in.
 const LIVE_TEST = import.meta.env.DEV ? window.worldDriveLiveTest ?? null : null;
+// Only the dev server too: a test (scripts/test-drive-levels-ui.mjs) can hand the page a visit's
+// token, { visit }, for the leaderboard and levels on the test pad, as if it were a visit on
+// Google's map.
+const VISIT_TEST = import.meta.env.DEV ? window.worldDriveVisitTest ?? null : null;
 
 const $ = id => document.getElementById( id );
 const frame = () => new Promise( resolve => requestAnimationFrame( resolve ) );
@@ -130,8 +138,9 @@ function usedUp( config, { retryAfter, reason } ) {
 // googleClientId: the sign-in button's, for the Supporter Pass ('' when there's no signing in);
 // live: whether the Worker has driving with others on (its /api/config says), and liveReason why
 // not when it's off for the rest of the day.
-async function start( { key, left = null, visit = null, worker = true, googleClientId = '', live: liveOn = false, liveReason = '' } ) {
+async function start( { key, left = null, visit: token = null, worker = true, googleClientId = '', live: liveOn = false, liveReason = '' } ) {
 
+	const visit = token ?? VISIT_TEST?.visit ?? null;
 	const vehicles = await loadVehicles();
 	screens.hideSplash();
 
@@ -195,10 +204,11 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 	const walker = { keys: new Set(), enabled: false, yaw: 0, pitch: 0, setPose() {}, setMode() {} };
 	const driver = new Driver( {
 		camera, models, controls: walker, getColliders: grounds, hud, onStop: stopped,
-		// Each landed jump, for the leaderboard: where, and in what.
+		// Each landed jump, for the leaderboard: where, and in what; and for levels.
 		onScore: run => {
 
 			board.onScore( { ...run, place: placeLabel( state.place ), vehicle: state.vehicle?.id } );
+			progress.landed( run, state.entry );
 			landed( run );
 
 		},
@@ -210,7 +220,7 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 	const state = { mode: 'globe', place: null, entry: null, vehicle: null, drop: null, leaving: false };
 	// Boost pads on the ground as you drive (pads.js), never on water, with their switch in the
 	// pause menu.
-	const pads = createBoostPads( { scene, driver, ground, water, toggle: $( 'pause' ).querySelector( '.pads-toggle' ) } );
+	const pads = createBoostPads( { scene, driver, ground, water, toggle: $( 'pause' ).querySelector( '.pads-toggle' ), onPad: () => progress.pad() } );
 
 	const panel = setUpPanel( {
 		root: $( 'globe-ui' ),
@@ -249,10 +259,68 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 		vehicles,
 		worker,
 		getPlace: () => placeLabel( state.mode === 'globe' ? panel.pinned : state.place ),
-		onPlayer: () => linkPlayer(),
+		// A new player: linked to the account signed in here, and the XP driven before it claimed.
+		onPlayer: () => {
+
+			linkPlayer();
+			progress.report();
+
+		},
 		onName: () => live?.rehello(),
+		onXp: xp => progress.scoreXp( xp ),
 	} );
 	board.setVisit( visit );
+
+	// Levels (progress.js, profile.js): XP for what's driven, kept with the leaderboard player (or
+	// in this browser until there's one), the bar and pop-ups while driving, a level-up's burst, and
+	// the profile card on the globe's panel. A level reached unlocks Garage looks (paint.js asks
+	// getLevel), and the others in the room hear of it as it says hello again.
+	let profile = null;
+	const progress = createProgress( {
+		worker,
+		visit: () => visit,
+		player: () => board.player,
+		onChange: () => profile?.render(),
+		onPop: event => profile?.pop( event ),
+		onLevelUp: event => {
+
+			profile?.levelUp( event );
+			live?.rehello();
+
+		},
+	} );
+	profile = setUpProfile( {
+		progress,
+		player: () => board.player,
+		canName: () => worker && !! visit,
+		mode: () => state.mode,
+		onGarage: () => {
+
+			pauseDrive();
+			garage.open( state.vehicle ?? panel.vehicle );
+
+		},
+		onNickname: () => {
+
+			pauseDrive();
+			board.open();
+
+		},
+		onTitle: () => live?.rehello(),
+	} );
+	// The look on the ride being driven, with what's unlocked now (a level can lock nothing, but a
+	// look chosen on a test page waits for its level).
+	onLevelChange( () => {
+
+		if ( ! state.entry ) return;
+		applyLook( state.entry.pivot, lookOf( state.vehicle ), state.vehicle );
+		live?.setRide( state.vehicle.id, lookOf( state.vehicle ) );
+
+	} );
+	// Linked to an account (whose players' XP counts together), or the pass bought (+50% XP): where
+	// the player stands now.
+	onLinked( () => progress.refresh() );
+	onProChange( () => progress.refresh() );
 	for ( const button of document.querySelectorAll( '.board-open' ) ) {
 
 		button.hidden = ! worker;
@@ -299,6 +367,8 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 	const partyCode = cleanPartyCode( new URLSearchParams( location.search ).get( 'party' ) );
 	if ( friends && partyCode ) friends.joinParty( partyCode );
 	else if ( partyCode && liveReason === BUDGET_SPENT ) screens.toast( BUDGET_TOAST, 10000 );
+	// Levels show from here on (a level-up says hello again in the room, so after that's made).
+	progress.start();
 	// The points of each landed jump: the run's score less what it was at the last, in this ride at
 	// this place (a run of its own, see drive.js).
 	let runScore = 0;
@@ -340,6 +410,9 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 
 		state.mode = mode;
 		document.body.dataset.mode = mode;
+		// A level-up waiting shows as the drive starts, and one showing goes as it pauses or ends.
+		if ( mode === 'driving' ) profile.driving();
+		else profile.hideLevelUp();
 		globe.setEnabled( mode === 'globe' );
 		$( 'globe-ui' ).hidden = mode !== 'globe';
 		$( 'drive-ui' ).hidden = mode !== 'driving' && mode !== 'paused';
@@ -451,6 +524,7 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 		state.entry = entry;
 		state.vehicle = vehicle;
 		screens.hideLoading();
+		progress.dropped();
 		drive();
 		live?.setRide( vehicle.id, lookOf( vehicle ) );
 		live?.setPlace( { name: placeLabel( state.place ), lat, lon, height } );
@@ -503,6 +577,8 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 	// drive.js stopped driving (Esc or V, or the pause button): that's a pause here.
 	function stopped() {
 
+		// What was driven goes to the Worker as the drive pauses (or ends: toGlobe).
+		progress.report();
 		if ( state.leaving ) return;
 		setMode( 'paused' );
 		screens.pause( true );
@@ -560,6 +636,8 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 	function toGlobe( { fromHere = false } = {} ) {
 
 		if ( state.mode === 'globe' && ! fromHere ) return;
+		// What was driven goes to the Worker (or, before a nickname, is kept here).
+		progress.report();
 		if ( state.drop ) state.drop.cancelled = true;
 		state.drop = null;
 		state.leaving = true;
@@ -593,6 +671,32 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 		const gained = run.score - runScore;
 		runScore = run.score;
 		if ( gained >= 1 ) live?.trick( gained );
+
+	}
+
+	// What levels count each frame of driving (progress.js's drive).
+	function driven() {
+
+		const d = driver;
+		return {
+			speed: velocityOf( d, _velocity ).length(),
+			air: ! d.grounded && ! d.flying && ! d.splash,
+			boost: d.boost,
+			together: !! live && [ ...live.players.values() ].some( p => ! p.away ),
+			where: carWhere,
+		};
+
+	}
+
+	// Where the car is: { lat, lon } (degrees).
+	function carWhere() {
+
+		if ( ! state.entry ) return {};
+		earth.updateWorldMatrix( true, false );
+		state.entry.pivot.getWorldPosition( _p ).applyMatrix4( _inverse.copy( earth.matrixWorld ).invert() );
+		const at = {};
+		ellipsoid.getPositionToCartographic( _p, at );
+		return { lat: at.lat * MathUtils.RAD2DEG, lon: at.lon * MathUtils.RAD2DEG };
 
 	}
 
@@ -771,6 +875,7 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 		timer.update( time );
 		const dt = Math.min( timer.getDelta(), 0.1 );
 		if ( driver.active ) driver.update( dt );
+		if ( state.mode === 'driving' && driver.active ) progress.drive( dt, driven() );
 		live?.update( car() );
 		pads.update( dt );
 		globe.update( dt );
@@ -828,7 +933,7 @@ async function start( { key, left = null, visit = null, worker = true, googleCli
 	// For poking around from the browser console, and for the tests.
 	window.drive = {
 		scene, camera, renderer, tiles, globe, models, driver, ground, panel, leaderboard: board,
-		garage, supporter, pads, water, live, ghosts, friends,
+		garage, supporter, pads, water, live, ghosts, friends, progress, profile,
 		get mode() {
 
 			return state.mode;

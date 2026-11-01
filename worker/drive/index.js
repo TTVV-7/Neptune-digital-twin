@@ -3,6 +3,7 @@ import { MAX_TOKEN, verifyTurnstile } from './turnstile.js';
 import { search } from './search.js';
 import { createPlayer, renamePlayer } from './players.js';
 import { leaderboard, postScore } from './scores.js';
+import { postProgress, setTitle } from './progress.js';
 import { addressOf, clock, googleClientId, setting } from './settings.js';
 import { makeVisit } from './visits.js';
 import { currentAccount, getMe, linkPlayer, signIn, signOut } from './accounts.js';
@@ -19,8 +20,8 @@ export { DriveRoom } from './live.js';
 // 3D tiles starts a billed Maps session, so the Maps key is handed out once per visit, only to a
 // browser that passed Turnstile, and only while today's visits are under the caps. It also keeps
 // the leaderboard (players.js, scores.js) in a D1 database: nicknames and each player's best stunt
-// scores, posted with the visit's token so they come from visits that passed Turnstile. And the
-// Supporter Pass (accounts.js, supporter.js): Google sign-in, the pass bought through Stripe, and
+// scores, posted with the visit's token so they come from visits that passed Turnstile, and each
+// player's XP and level (progress.js). And the Supporter Pass (accounts.js, supporter.js): Google sign-in, the pass bought through Stripe, and
 // for supporters more drives a day and a ⭐ on the leaderboard. Driving with others (live.js) is a
 // WebSocket to a room, one Durable Object a party or area, that tells everyone where the others are.
 //
@@ -44,6 +45,8 @@ export { DriveRoom } from './live.js';
 //   LIVE_VISIT_CONNECTS   the most connections to rooms a visit makes in a day (200 if unset)
 //   ROOMS                 the Durable Object binding for the rooms (DriveRoom, live.js)
 //   LIVE_CONNECTS         the rate limiter binding for each visit's connections to rooms (live.js)
+//   PROGRESS_POSTS        the rate limiter binding for each player's reports of what they drove
+//                         (progress.js)
 //   TURNSTILE_VERIFY_URL, SEARCH_UPSTREAM, TEST_CLOCK, GOOGLE_JWKS_URL   tests only (see
 //                         scripts/test-drive-worker.mjs)
 
@@ -59,7 +62,9 @@ const ROUTES = [
 	{ method: 'POST', path: '/api/player', handler: createPlayer },
 	{ method: 'POST', path: '/api/player/rename', handler: renamePlayer },
 	{ method: 'POST', path: '/api/player/link', handler: linkPlayer },
+	{ method: 'POST', path: '/api/player/title', handler: setTitle },
 	{ method: 'POST', path: '/api/score', handler: postScore },
+	{ method: 'POST', path: '/api/progress', handler: postProgress },
 	{ method: 'GET', path: '/api/leaderboard', handler: leaderboard },
 	{ method: 'POST', path: '/api/session', handler: signIn },
 	{ method: 'DELETE', path: '/api/session', handler: signOut },

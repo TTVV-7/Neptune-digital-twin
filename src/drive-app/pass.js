@@ -2,10 +2,11 @@ import './pro.css';
 import { CARS } from './cars.js';
 import { PRO_RIDES } from './rides/index.js';
 
-// The Supporter Pass sheet: what the pass is and what comes with it, opened from the globe's panel,
-// the pause menu, the Garage, and anything locked (see pro.js). Its buy area says "Coming soon"
-// until the payments code (supporter.js: Google sign-in and Stripe) fills it with its own, and that
-// calls setPro( true ) in pro.js once the pass is bought.
+// The Supporter Pass sheet: what the pass is and what comes with it (the rides, every Garage look at
+// once, +50% XP for levels, the ⭐, more drives a day), opened from the globe's panel, the pause
+// menu, the Garage, and anything locked (see pro.js). Its buy area says "Coming soon" until the
+// payments code (supporter.js: Google sign-in and Stripe) fills it with its own, and that calls
+// setPro( true ) in pro.js once the pass is bought.
 
 export const PRICE = 'CA$4.99';
 const BADGE = '⭐ Supporter Pass';
@@ -57,7 +58,8 @@ function build() {
 			<p class="lead">World Drive streams the real 3D world, and every drive costs us a little. The pass is one payment of <b>${ PRICE }</b> that helps keep it running, and comes with:</p>
 			<ul class="perks">
 				<li class="rides"><b>${ COUNTS[ PASS_CARS.length + PRO_RIDES.length ] ?? PASS_CARS.length + PRO_RIDES.length } more rides</b><span>${ COUNTS[ PASS_CARS.length ] } cars and ${ COUNTS[ PRO_RIDES.length ].toLowerCase() } rides built for World Drive, each handling its own way.</span><div class="ride-icons"></div></li>
-				<li><b>The whole Garage</b><span>All 12 colours, matte and metallic paint, racing stripes, a number, flames or checker, rim colours, nine more boost styles (lightning, fireworks, a comet and more), flame colours, and smoke, sparkle or rainbow-ribbon trails.</span></li>
+				<li><b>The whole Garage, now</b><span>Every look at once: all 12 colours, matte and metallic paint, stripes, a number, flames or checker, rim colours, nine more boost styles (lightning, fireworks, a comet...), flame colours and three trails. Levels unlock some of them as you drive; the pass doesn't wait.</span></li>
+				<li><b>+50% XP</b><span>Every level sooner, with its titles and level-only colours.</span></li>
 				<li><b>A ⭐ on the leaderboard</b><span>By your name, for everyone to see.</span></li>
 				<li><b>30 drives a day</b><span>Instead of 8.</span></li>
 			</ul>

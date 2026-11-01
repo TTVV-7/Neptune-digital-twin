@@ -19,16 +19,20 @@ import {
 import { createDriveFx } from '../drive-fx.js';
 import { frontToYaw } from '../library.js';
 import { BOOSTS } from './boosts.js';
-import { applyLook, DECALS, defaultLook, FINISHES, FLAMES, fxOf, isLocked, isPaintable, lookFor, RIMS, saveLook, savedLook, SMOKES, SWATCHES, TRAILS } from './paint.js';
+import { applyLook, DECALS, defaultLook, FINISHES, FLAMES, fxOf, isLocked, isPaintable, lookFor, RIMS, saveLook, savedLook, SMOKES, SWATCHES, TRAILS, unlockOf } from './paint.js';
 import { openPass, proBadge } from './pass.js';
 import { isPro, onProChange } from './pro.js';
+import { getLevel, onLevelChange } from './progress.js';
+import { access } from './vehicles.js';
 
 // The Garage: each ride's paint, decals, rims, boost style and trail (paint.js), chosen with the
 // ride turning on a turntable, and kept in this browser for each ride. Opened from a Garage button
 // by the ride picker on the globe's panel and in the pause menu, beside one for the Supporter Pass.
-// What needs the pass (pro.js) wears a star, with one word on the pass above them all, and choosing
-// it opens the pass's sheet instead; a ride that needs the pass can still be looked at here. Changes
-// made while paused are on the ride as soon as it drives on.
+// Each locked choice says what unlocks it: a level ("Lv 12", levels.js's track), the pass (pro.js:
+// a star, with one word on the pass above them all), or either ("Lv 12 · or Pass"). Choosing one
+// the pass unlocks opens the pass's sheet; one only a level unlocks says which. A ride that needs
+// the pass can still be looked at here. Changes made while paused are on the ride as soon as it
+// drives on.
 
 // How fast the turntable turns (rad/s), and how long a flame or trail shows when it's picked (s).
 const TURN = 0.45;
@@ -105,6 +109,7 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 			button.type = 'button';
 			button.className = `choice ${ kind }`;
 			button.dataset.id = choice.id;
+			button.dataset.name = choice.name;
 			button.title = choice.name;
 			if ( kind === 'swatch' ) {
 
@@ -114,6 +119,8 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 			} else if ( kind === 'style' ) styleButton( button, choice );
 			else button.textContent = choice.name;
 			button.append( Object.assign( document.createElement( 'i' ), { className: 'star', textContent: '⭐' } ) );
+			// What unlocks it, while it's locked (see mark).
+			button.append( Object.assign( document.createElement( 'i' ), { className: 'unlock' } ) );
 			button.addEventListener( 'click', () => choose( part, choice.id ) );
 			return button;
 
@@ -146,6 +153,7 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 
 	} );
 	dialog.querySelector( '.locked-banner button' ).addEventListener( 'click', () => openPass() );
+	const levelNote = dialog.querySelector( '.level-note' );
 	const passNote = dialog.querySelector( '.pass-note' );
 	passNote.prepend( proBadge(), ' ' );
 	passNote.querySelector( 'button' ).addEventListener( 'click', () => openPass() );
@@ -153,13 +161,25 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 
 	function locked( part, id ) {
 
-		return ! isPro() && ( !! vehicle.pro || isLocked( vehicle, part, id ) );
+		return ( !! vehicle.pro && ! isPro() ) || isLocked( vehicle, part, id, access() );
 
 	}
 
 	function choose( part, id ) {
 
+		levelNote.hidden = true;
 		if ( locked( part, id ) ) {
+
+			// Only a level gives it: which one (the pass's sheet would only disappoint).
+			const unlock = unlockOf( vehicle, part, id );
+			if ( unlock && ! unlock.pass && ! ( vehicle.pro && ! isPro() ) ) {
+
+				const name = PARTS.find( p => p.part === part ).list.find( choice => choice.id === id )?.name ?? id;
+				levelNote.textContent = `${ name } comes at level ${ unlock.level }: you're level ${ getLevel() }. Drive on!`;
+				levelNote.hidden = false;
+				return;
+
+			}
 
 			openPass();
 			return;
@@ -197,7 +217,7 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 	// it), as saved; anything else locked, as it would be driven.
 	function shown() {
 
-		return vehicle.pro ? look : lookFor( vehicle, isPro() );
+		return vehicle.pro ? look : lookFor( vehicle, access() );
 
 	}
 
@@ -220,10 +240,18 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 
 				const on = button.dataset.id === wearing[ part ];
 				const shut = locked( part, button.dataset.id );
-				anyLocked ||= shut && ! section.hidden;
+				const unlock = shut ? unlockOf( vehicle, part, button.dataset.id ) : null;
+				// A pass ride's choices are all the pass's, whatever a level would unlock on the others.
+				const pass = !! unlock?.pass || ( shut && !! vehicle.pro && ! isPro() );
+				anyLocked ||= pass && ! section.hidden;
 				button.classList.toggle( 'on', on );
 				button.classList.toggle( 'locked', shut );
-				button.setAttribute( 'aria-pressed', String( on ) );
+				button.classList.toggle( 'pass', pass );
+				button.classList.toggle( 'level-only', shut && ! pass );
+				const chip = button.querySelector( '.unlock' );
+				const says = unlock && ! ( vehicle.pro && ! isPro() );
+				chip.textContent = says ? unlockText( unlock, button.classList.contains( 'swatch' ) ) : '';
+				button.title = says ? `${ button.dataset.name }: ${ unlockSentence( unlock ) }` : button.dataset.name;
 
 			}
 
@@ -247,7 +275,7 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 
 		for ( const v of vehicles ) {
 
-			const swatch = SWATCHES.find( s => s.id === lookFor( v, isPro() || !! v.pro ).colour );
+			const swatch = SWATCHES.find( s => s.id === lookFor( v, v.pro ? { ...access(), pro: true } : access() ).colour );
 			for ( const shape of document.querySelectorAll( `.vehicle[data-id="${ v.id }"] [data-paint]` ) ) shape.setAttribute( 'fill', `#${ swatch.hex.toString( 16 ).padStart( 6, '0' ) }` );
 
 		}
@@ -260,6 +288,7 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 
 		vehicle = which;
 		look = savedLook( vehicle );
+		levelNote.hidden = true;
 		mark();
 		preview?.load( vehicle, shown() );
 
@@ -285,13 +314,16 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 	dialog.addEventListener( 'click', e => e.target === dialog && dialog.close() );
 	// Keys pressed here are the Garage's, not the game's: Esc closes it, Enter doesn't drive on.
 	dialog.addEventListener( 'keydown', e => e.stopPropagation() );
-	onProChange( () => {
+	// The pass coming or going, or a level reached, unlocks (or locks) choices here and on the rides.
+	const unlocked = () => {
 
 		mark();
 		preview?.wear( vehicle, shown() );
 		recolourIcons();
 
-	} );
+	};
+	onProChange( unlocked );
+	onLevelChange( unlocked );
 	// Once the pickers are drawn.
 	requestAnimationFrame( recolourIcons );
 
@@ -338,7 +370,8 @@ function build() {
 					<div class="locked-banner" hidden><span>⭐ A Supporter Pass ride</span><button type="button" class="link">What's in the pass</button></div>
 				</div>
 				<div class="options">
-					<p class="pass-note" hidden>Starred choices come with the pass. <button type="button" class="link">What's in it</button></p>
+					<p class="pass-note" hidden>Starred choices come with the pass; levels unlock some of them as you drive. <button type="button" class="link">What's in it</button></p>
+					<p class="level-note" hidden role="status"></p>
 					<p class="paint-note small" hidden>Its paint is part of the model, so it keeps it: pick its boost and trail.</p>
 				</div>
 			</div>
@@ -365,6 +398,24 @@ function boostParts() {
 		{ part: 'boost', title: 'Boost', list: BOOSTS, kind: 'style', note: 'What your booster leaves behind' },
 		{ part: 'flame', title: 'Flame colour', list: FLAMES, kind: 'swatch' },
 	];
+
+}
+
+// What unlocks a choice, on its chip: "Lv 12 · or Pass", "Pass" or "Lv 25" (a swatch, being
+// small, only the level, or "Pass").
+function unlockText( { level, pass }, small ) {
+
+	if ( level === null ) return 'Pass';
+	if ( small || ! pass ) return `Lv ${ level }`;
+	return `Lv ${ level } · or Pass`;
+
+}
+
+function unlockSentence( { level, pass } ) {
+
+	if ( level === null ) return 'comes with the Supporter Pass';
+	if ( ! pass ) return `unlocks at level ${ level }`;
+	return `unlocks at level ${ level }, or with the Supporter Pass`;
 
 }
 

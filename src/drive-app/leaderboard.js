@@ -1,4 +1,5 @@
 import { createPlayer, getBoard, postScore, renamePlayer } from './api.js';
+import { LEVEL_MAX, levelLine } from './levels.js';
 import { storage } from './places.js';
 
 // The leaderboard (docs/world-drive.md): each player's best stunt score today, this week and all
@@ -27,9 +28,11 @@ const NO_VISIT = 'Names are picked on drives on the real 3D map.';
 // dialog: #leaderboard; card: #best-card, the new-best card shown while driving; vehicles: from
 // loadVehicles(), for their names; worker: whether there's a Worker to ask (not on the Vite dev
 // server on its own); getPlace(): the place being driven or pinned, for "only here", or null;
-// onPlayer(): a new player was made here (to link it to the account signed in, supporter.js);
-// onName(): a player made or renamed here (driving with others says hello again with it, live.js).
-export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace, onPlayer = () => {}, onName = () => {} } ) {
+// onPlayer(): a new player was made here (to link it to the account signed in, supporter.js, and
+// to claim the XP driven before, progress.js); onName(): a player made or renamed here (driving
+// with others says hello again with it, live.js); onXp( xp ): the XP a posted run's tricks earned
+// (the Worker's answer's xp, progress.js's scoreXp).
+export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace, onPlayer = () => {}, onName = () => {}, onXp = () => {} } ) {
 
 	const $ = selector => dialog.querySelector( selector );
 	const tabs = [ ...dialog.querySelectorAll( '.tabs button' ) ];
@@ -145,6 +148,7 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace, on
 
 			failures = 0;
 			const { today: day, rank, isNewBest } = answer.body;
+			onXp( answer.body.xp );
 			remember( day?.best ?? score, place, score );
 			// Only when it's news: a best ever, or higher up today's board than before.
 			if ( isNewBest || day?.rank < ranks.today ) showCard( 'posted', isNewBest ? `New best! ${ points( score ) }` : `Today's best: ${ points( score ) }`, standing( answer.body ) );
@@ -428,7 +432,9 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace, on
 
 		}
 
-		who.append( name, Object.assign( document.createElement( 'span' ), { className: 'what', textContent: what } ) );
+		// Their level and title, as the Worker has them now.
+		const level = Number.isInteger( row.level ) && row.level >= 1 && row.level <= LEVEL_MAX ? levelLine( row.level, row.title ) : '';
+		who.append( name, ...( level ? [ Object.assign( document.createElement( 'span' ), { className: 'lvl', textContent: level } ) ] : [] ), Object.assign( document.createElement( 'span' ), { className: 'what', textContent: what } ) );
 		li.append( Object.assign( document.createElement( 'span' ), { className: 'rank', textContent: String( row.rank ) } ), who, Object.assign( document.createElement( 'span' ), { className: 'score', textContent: points( row.score ) } ) );
 		return li;
 

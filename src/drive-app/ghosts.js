@@ -4,6 +4,7 @@ import { createDriveFx } from '../drive-fx.js';
 import { specFor } from '../drive.js';
 import { frontToYaw } from '../library.js';
 import { FLAGS, INTERP_MS, STALE_MS, TELEPORT } from './live-protocol.js';
+import { levelLine } from './levels.js';
 import { applyLook, cleanLook, fxOf } from './paint.js';
 
 // The others driving with you (live.js): each a ghost of their ride, in their look from the Garage,
@@ -155,7 +156,7 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 
 		remove( p.pid );
 		const ghost = {
-			pid: p.pid, name: p.name, star: p.star, vehicle: p.vehicle, look: p.look, place: p.place, away: p.away,
+			pid: p.pid, name: p.name, star: p.star, level: p.level ?? null, title: p.title ?? null, vehicle: p.vehicle, look: p.look, place: p.place, away: p.away,
 			snaps: [], heard: performance.now(),
 			// Where it's drawn: Earth-centred, and in the scene; its flags and velocity (Earth-centred).
 			p: new Vector3(), q: new Quaternion(), v: new Vector3(), flags: 0, scene: new Vector3(), distance: Infinity,
@@ -654,7 +655,7 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 
 	// --- names over them ---
 
-	function makeTag( { name, star } ) {
+	function makeTag( { name, star, level = null, title = null } ) {
 
 		const root = document.createElement( 'div' );
 		root.className = 'live-tag';
@@ -666,6 +667,8 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 		label.append( Object.assign( document.createElement( 'b' ), { textContent: name } ) );
 		if ( star ) label.append( Object.assign( document.createElement( 'span' ), { className: 'star', textContent: '⭐', title: 'Supporter' } ) );
 		root.append( honk, pop, label );
+		// A player's level and title, small under the name ("Lv 12 · Drifter"); a guest has none.
+		if ( level ) root.append( Object.assign( document.createElement( 'span' ), { className: 'level', textContent: levelLine( level, title ) } ) );
 		tags.append( root );
 		return { root, honk, pop, shown: false, timers: new Map() };
 
@@ -752,7 +755,7 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 		list() {
 
 			return [ ...ghosts.values() ].map( ghost => ( {
-				pid: ghost.pid, name: ghost.name, star: ghost.star, vehicle: ghost.model?.vehicle.id ?? null, wanted: ghost.vehicle,
+				pid: ghost.pid, name: ghost.name, star: ghost.star, level: ghost.level, title: ghost.title, vehicle: ghost.model?.vehicle.id ?? null, wanted: ghost.vehicle,
 				drawn: ghost.drawn, visible: !! ghost.model?.pivot.visible, away: ghost.away, paused: !! ( ghost.flags & FLAGS.paused ),
 				flags: ghost.flags, faded: ghost.faded, fx: !! ghost.fx, builds: ghost.builds, snaps: ghost.snaps.length,
 				position: ghost.model ? ghost.model.pivot.position.toArray() : null,
