@@ -1,8 +1,8 @@
 import { DurableObject } from 'cloudflare:workers';
 import { HttpError, isObject, randomToken, sha256Hex } from '../http.js';
 import {
-	BUDGET_SPENT, BURST, CLOSE, FLUSH_MS, HELLO_MS, HONK_GAP, IDLE_MS, KEEPALIVE_MS, MAX_HELLO, MAX_MESSAGE, NEARBY_MAX, PARTY_MAX, PING, PONG,
-	PROTOCOL, RATE, VIEW_RANGE,
+	BUDGET_SPENT, BURST, CLOSE, FLUSH_MS, HELLO_MS, HONK_GAP, IDLE_MS, MAX_HELLO, MAX_MESSAGE, NEARBY_MAX, PARTY_MAX, PING, PONG, PROTOCOL, RATE,
+	VIEW_RANGE,
 	checkLook, checkPlace, checkState, checkTrick, checkVehicle, parseRoom, shardOf,
 } from '../../src/drive-app/live-protocol.js';
 import { dayOf } from './limits.js';
@@ -23,20 +23,23 @@ import { readVisit } from './visits.js';
 //   is a request, and so is each call to DriveLimits. The Free plan has 100,000 a day for all
 //   Durable Objects together (DriveLimits' visits and scores included), Paid 1 million a month and
 //   then $0.15 a million. A driver with others sends SEND_HZ (5) a second: 18,000 messages, 900
-//   requests, an hour on the move; alone in its room, its page sends no states at all. The
-//   keepalives the room answers by itself (an auto-response, below) neither wake it nor add to its
-//   duration; the pricing doesn't say they aren't incoming messages, so they're counted as if they
-//   were: one every KEEPALIVE_MS is 7 requests an hour.
+//   requests, an hour on the move; alone in its room, its page sends no states at all, only its
+//   keepalive every KEEPALIVE_MS, 7 requests an hour. The room answers those itself rather than with
+//   the runtime's auto-response: that would answer them without the room seeing them, so they could
+//   be neither counted nor held to the rate, and the pricing doesn't say whether they're billed. Each
+//   wakes the room for as long as it takes to answer.
 // - The day's budget: on the Free plan, past 100,000 requests every Durable Object fails until
 //   midnight UTC, DriveLimits too, and then nobody could start a drive. So driving with others
 //   counts what it spends, in billed requests, and switches itself off for the rest of the UTC day
 //   once that reaches LIVE_DAILY_BUDGET (40,000 if unset), leaving the rest for visits and scores.
-//   Each room counts its own (each connection's in its attachment: connecting, its messages, its
-//   keepalives as if one came every KEEPALIVE_MS; and the room's alarms) and adds it to DriveLimits'
-//   count about once every REPORT_MS while anyone's in it, and as it empties; when that says the
-//   day's is spent it closes everyone (CLOSE.off, BUDGET_SPENT). /api/live and /api/config ask
-//   DriveLimits first (liveToday), and those asks count too. The count runs up to REPORT_MS behind:
-//   the budget leaves room for that.
+//   Each room counts its own (each connection's in its attachment: connecting and its messages,
+//   keepalives included; and the room's alarms) and adds it to DriveLimits' count about once every
+//   REPORT_MS while there's REPORT_LEAST or more to add, at least every REPORT_MOST while anyone's in
+//   it, and as it empties; when that says the day's is spent it closes everyone (CLOSE.off,
+//   BUDGET_SPENT). /api/live asks DriveLimits first (liveToday), and so does /api/config at most
+//   once every OPEN_MS in each Worker instance; those asks count too. The count runs behind, a
+//   minute for rooms with drivers moving, up to REPORT_MOST (and under REPORT_LEAST) for the
+//   others: the budget leaves room for that.
 // - Duration: 128 MB for as long as a room is running, or idle in memory but unable to hibernate.
 //   A room that's only waiting for its WebSockets' next message can hibernate, and isn't charged
 //   for that time at all, even before it does. A pending setTimeout keeps it from hibernating, so
@@ -58,6 +61,10 @@ import { readVisit } from './visits.js';
 const VISIT = 'X-Live-Visit';
 const EXPIRES = 'X-Live-Expires';
 const ROOM = 'X-Live-Room';
+// The connection's number among its visit's today (DriveLimits' liveOpen), and, alone, the visit a
+// room is to let go of because it has connected to another room (with that connection's number).
+const SEQ = 'X-Live-Seq';
+const LEAVE = 'X-Live-Leave';
 // The parts of a driver only kept in memory, not in its attachment: when its car last moved and
 // when it was last sent the others' (counts of the room's own, which start again when it wakes),
 // when its state came in, and a hello being looked up with the messages that came in behind it.
@@ -70,13 +77,29 @@ const COST = { connect: 1, message: 1 / 20, alarm: 1, report: 1 };
 // is set no later than that. An alarm that comes for something else within REPORT_EARLY of the next
 // report makes it then, so there aren't two alarms close together: as for a page sending only
 // keepalives, whose idle check falls IDLE_MS - KEEPALIVE_MS (50 s) or more after the last alarm.
+// But with less than REPORT_LEAST (billed requests) to report, as in a room of drivers each alone
+// or parked, it waits, up to REPORT_MOST: the alarm and report would be nearly all it spends.
 const REPORT_MS = 60000;
 const REPORT_EARLY = 10000;
+const REPORT_LEAST = 5;
+const REPORT_MOST = 10 * 60000;
+// How long (ms) a room remembers a visit gone to another room (DriveRoom's moveOn).
+const ELSEWHERE_MS = 60000;
 // The day's budget (billed requests) when LIVE_DAILY_BUDGET is unset.
 const DAILY_BUDGET = 40000;
 // The day (and budget) DriveLimits said was spent, so this Worker instance doesn't ask again that
-// day: an ask is a Durable Object request too.
+// day: an ask is a Durable Object request too. And when it last said that day was open, which
+// /api/config takes for OPEN_MS: every page load asks, and anyone can ask without a visit, so each
+// asking DriveLimits would let a loop of requests spend the day's budget by itself.
 let spentDay = null;
+let openDay = null;
+const OPEN_MS = 30000;
+// The most connections a visit makes in a day, unless LIVE_VISIT_CONNECTS says otherwise (a page
+// makes one each time it changes room, or comes back after a dropped connection: a few dozen in six
+// hours of driving from area to area). Past that DriveLimits turns it away, and this Worker
+// instance remembers the visit until it runs out, rather than asking again.
+const VISIT_CONNECTS = 200;
+const refusedVisits = new Map();
 
 // GET /api/live?room=<room>: a WebSocket to the room. Everything is checked here, before the room
 // is asked: a connection turned away costs a Worker request and nothing in a Durable Object.
@@ -96,30 +119,82 @@ export async function live( { request, env, url, limits, now } ) {
 	if ( protocol !== PROTOCOL ) throw new HttpError( 400, 'Bad request' );
 	const visit = await readVisit( env, token, now );
 	if ( ! visit ) throw new HttpError( 401, 'Unauthorized' );
+	// A visit connecting over and over (a loop): at most LIVE_CONNECTS' limit a minute (20) get as
+	// far as DriveLimits, on Cloudflare's rate limiter, which is no Durable Object request; and none
+	// once DriveLimits has turned it away for the day. A page connects far less often than that.
+	if ( refusedVisits.has( visit.id ) ) throw new HttpError( 429, 'Too many connections' );
+	if ( env.LIVE_CONNECTS && ! ( await env.LIVE_CONNECTS.limit( { key: visit.id } ) ).success ) throw new HttpError( 429, 'Too many connections' );
 	// Only then the day's budget: a request turned away above costs no Durable Object request.
-	const today = await liveToday( { env, limits, now } );
+	const name = roomName( room );
+	const connects = setting( env.LIVE_VISIT_CONNECTS, VISIT_CONNECTS );
+	const today = await liveToday( { env, limits, now, connection: { visit: visit.id, room: name, connects } } );
 	if ( today.reason === BUDGET_SPENT ) throw new HttpError( 503, 'Lots of drivers today: driving with others is back after midnight UTC', { reason: BUDGET_SPENT } );
 	if ( ! today.open ) throw new HttpError( 503, 'Driving with others is off just now' );
+	if ( today.refused ) {
 
-	const name = roomName( room );
-	const headers = { Upgrade: 'websocket', [ VISIT ]: visit.id, [ EXPIRES ]: String( visit.expiresAt ), [ ROOM ]: name };
+		refuse( visit, now );
+		throw new HttpError( 429, 'Too many connections' );
+
+	}
+
+	// A visit is in one room at a time: the one it was in lets go of it first (a page moving on has
+	// hung up there already; a page in many rooms at once, or another tab, hasn't).
+	if ( today.was ) await leaveRoom( env, today.was, visit.id, today.seq );
+	const headers = { Upgrade: 'websocket', [ VISIT ]: visit.id, [ EXPIRES ]: String( visit.expiresAt ), [ ROOM ]: name, [ SEQ ]: String( today.seq ) };
 	return env.ROOMS.get( env.ROOMS.idFromName( name ) ).fetch( new Request( 'https://room.internal/', { headers } ) );
+
+}
+
+// A visit DriveLimits has turned away for the day, remembered until it runs out (and those run out
+// let go of, so the list stays short).
+function refuse( visit, now ) {
+
+	if ( refusedVisits.size >= 1000 ) for ( const [ id, until ] of refusedVisits ) if ( until <= now ) refusedVisits.delete( id );
+	refusedVisits.set( visit.id, visit.expiresAt );
+
+}
+
+// Room `name` letting go of `visit`'s connections from before its connection number `seq` (see
+// DriveRoom's moveOn). If it can't be asked just now, they stay there until they go some other way
+// (the page hanging up, being idle, its visit running out).
+async function leaveRoom( env, name, visit, seq ) {
+
+	try {
+
+		await env.ROOMS.get( env.ROOMS.idFromName( name ) ).fetch( new Request( 'https://room.internal/leave', { headers: { [ LEAVE ]: visit, [ SEQ ]: String( seq ) } } ) );
+
+	} catch ( err ) {
+
+		console.error( 'Live leave', err?.name, err?.message );
+
+	}
 
 }
 
 // Whether driving with others is open at `now`, for /api/live and /api/config: { open: true }, or
 // { open: false, reason } with 'off' (LIVE, or a budget of 0), BUDGET_SPENT (today's is) or
 // 'unknown' (DriveLimits couldn't say just now: closed, to be safe, and a page turned away asks
-// /api/config again before it gives up). Each ask is counted with the day's spend.
-export async function liveToday( { env, limits, now } ) {
+// /api/config again, and tries again, rather than giving up). Each ask is counted with the day's
+// spend. For a connection to a room (/api/live, `connection`: { visit, room, connects }) it always
+// asks, and an open answer also has DriveLimits' refused, seq and was (see liveOpen); /api/config
+// takes an open answer heard here in the last OPEN_MS.
+export async function liveToday( { env, limits, now, connection = null } ) {
 
 	const budget = dailyBudget( env );
 	if ( liveOff( env ) ) return { open: false, reason: 'off' };
 	const day = `${ dayOf( now ) } ${ budget }`;
 	if ( spentDay === day ) return { open: false, reason: BUDGET_SPENT };
+	if ( ! connection && openDay?.day === day && now >= openDay.at && now < openDay.at + OPEN_MS ) return { open: true };
 	try {
 
-		if ( ( await limits.liveOpen( { now, budget } ) ).open ) return { open: true };
+		const answer = await limits.liveOpen( { now, budget, ...connection } );
+		if ( answer.open ) {
+
+			openDay = { day, at: now };
+			return connection ? { open: true, refused: !! answer.refused, seq: answer.seq ?? 0, was: answer.was ?? null } : { open: true };
+
+		}
+
 		spentDay = day;
 		return { open: false, reason: BUDGET_SPENT };
 
@@ -147,7 +222,7 @@ function liveOff( env ) {
 
 }
 
-// A room's one name, whichever way it was written ('near:01277.1088#0' is 'near:1277.1088').
+// A room's one name, whichever way it was written ('near:1277.01088#0' is 'near:1277.1088').
 function roomName( room ) {
 
 	if ( room.kind === 'party' ) return `party:${ room.code }`;
@@ -161,19 +236,16 @@ function roomName( room ) {
 // attachment (serializeAttachment), and what's only in memory (the counts flush keeps) is fine to
 // lose: everyone's latest state goes again with their next message.
 //
-// An attachment, a driver: { visit, expires, room, at (connected), heard (last message), tokens,
-// filled (the rate's bucket and when it was counted), honk (the last), left (closed by the room),
-// spent (billed requests the room hasn't reported yet), counted (when its keepalives were last
-// counted in), reported (when the room last reported), and once it has said hello pid, name, star,
-// vehicle, look, place, away, s }.
+// An attachment, a driver: { visit, seq (its number among the visit's connections today), expires,
+// room, at (connected), heard (last message, a keepalive included), tokens, filled (the rate's
+// bucket and when it was counted), honk (the last), left (closed by the room), spent (billed
+// requests the room hasn't reported yet), reported (when the room last reported), and once it has
+// said hello pid, name, star, vehicle, look, place, away, s }.
 export class DriveRoom extends DurableObject {
 
 	constructor( ctx, env ) {
 
 		super( ctx, env );
-		// Keepalives answered without waking the room or being counted as its time;
-		// getWebSocketAutoResponseTimestamp says when each was last answered, for idle.
-		ctx.setWebSocketAutoResponse( new WebSocketRequestResponsePair( PING, PONG ) );
 		this.drivers = new Map();
 		// States taken (moves), and how many of them and when the last batch went out; whether the next
 		// batch is to go now (a car's first state).
@@ -183,17 +255,32 @@ export class DriveRoom extends DurableObject {
 		this.urgent = false;
 		// Spent by connections that went with nobody left to carry it: reported as the room empties.
 		this.leftover = 0;
+		// Messages from each connection the room has closed that its page went on sending (unheeded),
+		// and whether the room is resetting for one.
+		this.unheard = new WeakMap();
+		this.aborting = false;
+		// Visits gone to another room lately (moveOn): { seq, at } by visit.
+		this.elsewhere = new Map();
 
 	}
 
 	async fetch( request ) {
 
+		const now = Date.now();
+		const leaving = request.headers.get( LEAVE );
+		if ( leaving ) {
+
+			this.moveOn( leaving, Number( request.headers.get( SEQ ) ) || 0, now );
+			return new Response( null, { status: 204 } );
+
+		}
+
 		const room = parseRoom( request.headers.get( ROOM ) );
 		const visit = request.headers.get( VISIT );
 		const expires = Number( request.headers.get( EXPIRES ) );
+		const seq = Number( request.headers.get( SEQ ) ) || 0;
 		if ( request.headers.get( 'Upgrade' ) !== 'websocket' || ! room || ! visit || ! Number.isFinite( expires ) ) return new Response( 'Bad request', { status: 400 } );
 
-		const now = Date.now();
 		const name = roomName( room );
 		const here = this.sockets();
 		// The same visit again (another tab, or the page reconnecting) takes its own place.
@@ -201,7 +288,13 @@ export class DriveRoom extends DurableObject {
 		const [ client, server ] = Object.values( new WebSocketPair() );
 		this.ctx.acceptWebSocket( server );
 
-		if ( here.length - before.length >= this.max( room ) ) {
+		if ( this.movedOn( visit, seq, now ) ) {
+
+			// Its visit is in another room already, from a connection made after this one.
+			server.close( CLOSE.replaced, 'replaced' );
+			this.charge( COST.connect, server );
+
+		} else if ( here.length - before.length >= this.max( room ) ) {
 
 			// Accepted only to say so: the page then tries the area's next shard. Connecting was a
 			// request all the same.
@@ -211,14 +304,16 @@ export class DriveRoom extends DurableObject {
 
 		} else {
 
-			for ( const ws of before ) this.shut( ws, CLOSE.replaced, 'replaced' );
 			// Its spend starts with connecting, and the room's reports go on as they were (or start).
+			// Kept before the connection it replaces goes, so that one's unreported spend has this to go
+			// with, and the room's last report is still known from it.
 			const driver = {
-				visit, expires, room: name, at: now, heard: now, tokens: BURST, filled: now, honk: 0, pid: null,
-				spent: COST.connect, counted: now, reported: this.reportedAt( server ) ?? now, moved: 0, sent: 0,
+				visit, seq, expires, room: name, at: now, heard: now, tokens: BURST, filled: now, honk: 0, pid: null,
+				spent: COST.connect, reported: this.reportedAt( server ) ?? now, moved: 0, sent: 0,
 			};
 			this.drivers.set( server, driver );
 			this.save( server, driver );
+			for ( const ws of before ) this.shut( ws, CLOSE.replaced, 'replaced' );
 			await this.wake( Math.min( now + HELLO_MS, expires ) );
 
 		}
@@ -230,26 +325,30 @@ export class DriveRoom extends DurableObject {
 	async webSocketMessage( ws, message ) {
 
 		const driver = this.driver( ws );
-		if ( driver.left ) return;
+		if ( driver.left ) return this.unheeded( ws );
 		const now = Date.now();
 		// Every message in is billed, whatever becomes of it (each way on from here saves it).
 		driver.spent = ( driver.spent ?? 0 ) + COST.message;
 		if ( liveOff( this.env ) ) return this.shut( ws, CLOSE.off, 'off' );
 		if ( now >= driver.expires ) return this.shut( ws, CLOSE.expired, 'expired' );
 		if ( typeof message !== 'string' ) return this.shut( ws, CLOSE.protocol, 'text only' );
-		if ( tooLong( message, driver.pid || driver.pending ? MAX_MESSAGE : MAX_HELLO ) ) return this.shut( ws, CLOSE.protocol, 'too long' );
-		const m = parse( message );
-		if ( ! m ) return this.shut( ws, CLOSE.protocol, 'bad message' );
+		// The keepalive, answered here, before hello too: held to the rate as anything else is.
+		if ( message === PING ) {
 
-		driver.heard = now;
-		// A honk too soon after the last is dropped, and not counted against the rate.
-		if ( m.t === 'honk' && driver.pid && now - driver.honk < HONK_GAP ) {
-
+			driver.heard = now;
+			if ( ! spend( driver, now ) ) return this.shut( ws, CLOSE.rate, 'too many messages' );
+			send( ws, PONG );
 			this.save( ws, driver );
 			return this.flush( now );
 
 		}
 
+		if ( tooLong( message, driver.pid || driver.pending ? MAX_MESSAGE : MAX_HELLO ) ) return this.shut( ws, CLOSE.protocol, 'too long' );
+		const m = parse( message );
+		if ( ! m ) return this.shut( ws, CLOSE.protocol, 'bad message' );
+
+		driver.heard = now;
+		// (A honk too soon after the last is dropped by handle, after it's taken from the rate.)
 		if ( ! spend( driver, now ) ) return this.shut( ws, CLOSE.rate, 'too many messages' );
 
 		if ( m.t === 'hello' ) {
@@ -289,7 +388,7 @@ export class DriveRoom extends DurableObject {
 		driver.pending = true;
 		driver.queue = [];
 		this.save( ws, driver );
-		const { name, star } = await this.nameOf( m.player );
+		const { name, star } = await this.nameOf( m.player, driver.visit );
 		// Gone while it was looked up.
 		if ( this.drivers.get( ws ) !== driver || driver.left || ws.readyState !== WebSocket.OPEN ) return;
 
@@ -315,8 +414,10 @@ export class DriveRoom extends DurableObject {
 
 	}
 
-	// { name, star } for hello's player: { id, secret } as the leaderboard has them, or anything else.
-	async nameOf( player ) {
+	// { name, star } for hello's player: { id, secret } as the leaderboard has them, or anything else
+	// from `visit`. A guest's four figures are its visit's, so they stay the same each time it
+	// connects (Hide, by name, holds; a friend coming back is the same guest).
+	async nameOf( player, visit ) {
 
 		try {
 
@@ -336,8 +437,8 @@ export class DriveRoom extends DurableObject {
 
 		}
 
-		const [ number ] = crypto.getRandomValues( new Uint16Array( 1 ) );
-		return { name: `Guest ${ String( number % 10000 ).padStart( 4, '0' ) }`, star: false };
+		const number = parseInt( ( await sha256Hex( `guest ${ visit }` ) ).slice( 0, 8 ), 16 ) % 10000;
+		return { name: `Guest ${ String( number ).padStart( 4, '0' ) }`, star: false };
 
 	}
 
@@ -458,10 +559,10 @@ export class DriveRoom extends DurableObject {
 	}
 
 	// The room's one alarm, set only while it has connections: the hello that hasn't come in
-	// HELLO_MS, the connection with no word for IDLE_MS (a keepalive answered for it counts), the
-	// visit that has run out, and the report of what the room has spent (see report). Then it's set
-	// for the next of those: once a minute while everyone's there, the reports' REPORT_MS. An alarm
-	// is a request and a row written, so no more often than that.
+	// HELLO_MS, the connection with no word for IDLE_MS (a keepalive counts), the visit that has run
+	// out, and the report of what the room has spent (see report). Then it's set for the next of
+	// those: once a minute while everyone's there, the reports' REPORT_MS. An alarm is a request and
+	// a row written, so no more often than that.
 	async alarm() {
 
 		const now = Date.now();
@@ -469,30 +570,42 @@ export class DriveRoom extends DurableObject {
 		for ( const ws of this.sockets() ) {
 
 			const driver = this.driver( ws );
-			const heard = Math.max( driver.heard, this.ctx.getWebSocketAutoResponseTimestamp( ws )?.getTime() ?? 0 );
 			const hello = driver.pid || driver.pending ? Infinity : driver.at + HELLO_MS;
 			if ( liveOff( this.env ) ) this.shut( ws, CLOSE.off, 'off' );
 			else if ( now >= driver.expires ) this.shut( ws, CLOSE.expired, 'expired' );
 			else if ( now >= hello ) this.shut( ws, CLOSE.hello, 'no hello' );
-			else if ( now >= heard + IDLE_MS ) this.shut( ws, CLOSE.idle, 'idle' );
-			else next = Math.min( next, driver.expires, hello, heard + IDLE_MS );
+			else if ( now >= driver.heard + IDLE_MS ) this.shut( ws, CLOSE.idle, 'idle' );
+			else next = Math.min( next, driver.expires, hello, driver.heard + IDLE_MS );
 
 		}
 
 		this.flush( now );
 		// This alarm is a request too: in the report, if one's due (or nobody's left, for what the
 		// last of them spent), else counted for the next.
-		const reported = this.reportedAt();
 		if ( ! this.sockets().length ) {
 
 			if ( this.leftover > 0 ) await this.report( now, COST.alarm );
 
-		} else if ( reported === null || now >= reported + REPORT_MS - REPORT_EARLY ) await this.report( now, COST.alarm );
+		} else if ( this.reportDue( now ) ) await this.report( now, COST.alarm );
 		else this.charge( COST.alarm );
 		// Nobody left (or everyone closed by the report, for the budget): the room empties. Someone who
 		// came while it was reporting set an alarm of their own, which is kept (wake).
 		if ( ! this.sockets().length ) return this.empty();
-		await this.wake( Math.min( next, ( this.reportedAt() ?? now ) + REPORT_MS ) );
+		// The next report REPORT_MS after the last; one put off (reportDue) no sooner than it would
+		// have been, so the alarm doesn't come straight back to put it off again.
+		await this.wake( Math.min( next, Math.max( ( this.reportedAt() ?? now ) + REPORT_MS, now + REPORT_MS - REPORT_EARLY ) ) );
+
+	}
+
+	// Whether the alarm at `now` reports: the first time, or from REPORT_EARLY before REPORT_MS since
+	// the last, with REPORT_LEAST or more to report, or once it's been REPORT_MOST.
+	reportDue( now ) {
+
+		const reported = this.reportedAt();
+		if ( reported === null ) return true;
+		if ( now < reported + REPORT_MS - REPORT_EARLY ) return false;
+		const unreported = this.sockets().reduce( ( sum, ws ) => sum + ( this.driver( ws ).spent ?? 0 ), this.leftover );
+		return unreported >= REPORT_LEAST || now >= reported + REPORT_MOST;
 
 	}
 
@@ -508,8 +621,8 @@ export class DriveRoom extends DurableObject {
 		for ( const ws of this.sockets() ) {
 
 			const driver = this.driver( ws );
-			amount += ( driver.spent ?? 0 ) + keepalives( driver, now );
-			Object.assign( driver, { spent: 0, counted: now, reported: now } );
+			amount += driver.spent ?? 0;
+			Object.assign( driver, { spent: 0, reported: now } );
 			this.save( ws, driver );
 
 		}
@@ -553,13 +666,56 @@ export class DriveRoom extends DurableObject {
 
 	}
 
-	// A connection going: what it spent that the room hasn't reported, its keepalives to now
-	// included, carried by another (charge).
-	settle( ws, driver, now ) {
+	// A connection going: what it spent that the room hasn't reported, carried by another (charge).
+	settle( ws, driver ) {
 
-		const amount = ( driver.spent ?? 0 ) + keepalives( driver, now );
-		Object.assign( driver, { spent: 0, counted: now } );
+		const amount = driver.spent ?? 0;
+		driver.spent = 0;
 		this.charge( amount, ws );
+
+	}
+
+	// A message on a connection the room has closed (or turned away as full) whose page hasn't
+	// answered the close and goes on sending: billed all the same, so counted. A browser stops once
+	// it has the close, so a few are only what was on the way; past BURST, the client is ignoring
+	// it, and as the runtime has no way to cut one connection off, the room resets, with what it has
+	// spent reported first. Everyone's connection to it drops then, and their pages come back by
+	// themselves; the one that wouldn't stop has to connect again (a request) to go on.
+	async unheeded( ws ) {
+
+		this.charge( COST.message, ws );
+		const count = ( this.unheard.get( ws ) ?? 0 ) + 1;
+		this.unheard.set( ws, count );
+		if ( count <= BURST || this.aborting ) return;
+		this.aborting = true;
+		await this.report( Date.now(), 0 );
+		this.ctx.abort( 'a closed connection kept talking' );
+
+	}
+
+	// `visit` gone to another room, with its connection number `seq` there (/api/live): its
+	// connections here from before that one go, as one taking over in the room itself replaces them.
+	// Kept for ELSEWHERE_MS, so one of them still on its way in (connected at the same moment) is
+	// turned away as it comes; a later one, the page coming back here, isn't.
+	moveOn( visit, seq, now ) {
+
+		for ( const ws of this.sockets() ) {
+
+			const driver = this.driver( ws );
+			if ( driver.visit === visit && ( driver.seq ?? 0 ) < seq ) this.shut( ws, CLOSE.replaced, 'replaced' );
+
+		}
+
+		for ( const [ other, { at } ] of this.elsewhere ) if ( now - at >= ELSEWHERE_MS ) this.elsewhere.delete( other );
+		this.elsewhere.set( visit, { seq, at: now } );
+
+	}
+
+	// Whether a connection of `visit` numbered `seq` comes after the visit went elsewhere (moveOn).
+	movedOn( visit, seq, now ) {
+
+		const gone = this.elsewhere.get( visit );
+		return !! gone && seq < gone.seq && now - gone.at < ELSEWHERE_MS;
 
 	}
 
@@ -648,7 +804,7 @@ export class DriveRoom extends DurableObject {
 			}
 
 			if ( driver.pid ) this.broadcast( { t: 'leave', pid: driver.pid }, ws );
-			this.settle( ws, driver, now );
+			this.settle( ws, driver );
 			this.quiet( ws );
 
 		}
@@ -671,7 +827,7 @@ export class DriveRoom extends DurableObject {
 		if ( driver.left ) return;
 		if ( driver.pid ) this.broadcast( { t: 'leave', pid: driver.pid }, ws );
 		driver.left = true;
-		this.settle( ws, driver, Date.now() );
+		this.settle( ws, driver );
 		this.quiet( ws );
 		this.save( ws, driver );
 		this.drivers.delete( ws );
@@ -761,15 +917,6 @@ export class DriveRoom extends DurableObject {
 		}
 
 	}
-
-}
-
-// What a connection's keepalives (answered without waking the room, so never seen here) have cost
-// since they were last counted, as if one came every KEEPALIVE_MS: a page sends one only when it has
-// said nothing else for that long, so this is never less.
-function keepalives( driver, now ) {
-
-	return Math.max( 0, now - ( driver.counted ?? now ) ) / KEEPALIVE_MS * COST.message;
 
 }
 

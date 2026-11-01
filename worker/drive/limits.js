@@ -3,7 +3,8 @@ import { sha256Hex } from '../http.js';
 
 // One of these for everyone (named "global", see index.js): it counts the day's visits, in all and
 // per visitor, the leaderboard's new names and scores per visitor, and what driving with others has
-// spent of its budget (liveOpen, liveSpent), and spaces out the searches sent on to OpenStreetMap.
+// spent of its budget and which room each visit is in (liveOpen, liveSpent), and spaces out the
+// searches sent on to OpenStreetMap.
 // A Durable Object handles one call at a time, and each check-and-count below runs in one go with
 // nothing in between, so two visits arriving together can't both take the last drive of the day.
 // Counts are kept in its SQLite storage (on every plan, the free one too), so a restart doesn't
@@ -32,6 +33,9 @@ export class DriveLimits extends DurableObject {
 		// Driving with others' spend each day, in billed Durable Object requests (worker/drive/live.js
 		// counts them): a fraction, as incoming WebSocket messages are billed 20 to a request.
 		this.sql.exec( 'CREATE TABLE IF NOT EXISTS live ( day TEXT PRIMARY KEY, spent REAL NOT NULL )' );
+		// And each visit's connections to its rooms today (see liveOpen): the room it's in now, and how
+		// many it has made. A visit's id is a random one of its own (visits.js), never its address.
+		this.sql.exec( 'CREATE TABLE IF NOT EXISTS live_visits ( day TEXT NOT NULL, visit TEXT NOT NULL, room TEXT NOT NULL, connects INTEGER NOT NULL, PRIMARY KEY ( day, visit ) )' );
 		// When the next search may go out (ms). Only in memory: if this object is put to sleep,
 		// more than a second has gone by anyway.
 		this.nextSearch = 0;
@@ -86,9 +90,27 @@ export class DriveLimits extends DurableObject {
 	// Driving with others, asked at `now` whether it's open today: { open, spent }, open while what
 	// it has spent today (billed requests) is under `budget`. The Worker asks on each connection to
 	// a room and for /api/config; each ask is a Durable Object request itself, so it counts as one.
-	liveOpen( { now, budget } ) {
+	// A connection's ask (/api/live) also says its `visit` and the `room` it's for, which is then the
+	// visit's room: { open, spent, seq, was } with seq its number among the visit's connections
+	// today, and was the room it was in before if that's another (the Worker has that room let go of
+	// it, so a visit is in one room at a time: a request, counted here too), else null. Past
+	// `connects` connections today it's { open, spent, refused: true }, and nothing is kept of it.
+	liveOpen( { now, budget, visit = null, room = null, connects = Infinity } ) {
 
-		return this.liveSpent( 1, { now, budget } );
+		const day = dayOf( now );
+		this.saltFor( day );
+		return this.ctx.storage.transactionSync( () => {
+
+			const today = addLive( this.sql, day, 1, budget );
+			if ( ! today.open || visit === null ) return today;
+			const row = this.sql.exec( 'SELECT room, connects FROM live_visits WHERE day = ? AND visit = ?', day, visit ).toArray()[ 0 ];
+			const seq = ( row?.connects ?? 0 ) + 1;
+			if ( seq > connects ) return { ...today, refused: true };
+			this.sql.exec( 'INSERT INTO live_visits ( day, visit, room, connects ) VALUES ( ?, ?, ?, ? ) ON CONFLICT ( day, visit ) DO UPDATE SET room = excluded.room, connects = excluded.connects', day, visit, room, seq );
+			if ( ! row || row.room === room ) return { ...today, seq, was: null };
+			return { ...addLive( this.sql, day, 1, budget ), seq, was: row.room };
+
+		} );
 
 	}
 
@@ -99,13 +121,7 @@ export class DriveLimits extends DurableObject {
 		const day = dayOf( now );
 		this.saltFor( day );
 		const add = Number.isFinite( amount ) && amount > 0 ? amount : 0;
-		return this.ctx.storage.transactionSync( () => {
-
-			this.sql.exec( 'INSERT INTO live ( day, spent ) VALUES ( ?, ? ) ON CONFLICT ( day ) DO UPDATE SET spent = spent + excluded.spent', day, add );
-			const spent = this.sql.exec( 'SELECT spent FROM live WHERE day = ?', day ).one().spent;
-			return { open: spent < budget, spent };
-
-		} );
+		return this.ctx.storage.transactionSync( () => addLive( this.sql, day, add, budget ) );
 
 	}
 
@@ -132,6 +148,7 @@ export class DriveLimits extends DurableObject {
 			this.sql.exec( 'DELETE FROM visitors WHERE day < ?', day );
 			this.sql.exec( 'DELETE FROM turns WHERE day < ?', day );
 			this.sql.exec( 'DELETE FROM live WHERE day < ?', day );
+			this.sql.exec( 'DELETE FROM live_visits WHERE day < ?', day );
 			this.sql.exec( 'DELETE FROM days WHERE day < ?', day );
 			this.sql.exec( 'INSERT OR IGNORE INTO days ( day, salt ) VALUES ( ?, ? )', day, salt );
 
@@ -139,6 +156,16 @@ export class DriveLimits extends DurableObject {
 		return this.sql.exec( 'SELECT salt FROM days WHERE day = ?', day ).one().salt;
 
 	}
+
+}
+
+// `amount` (billed requests) added to driving with others' spend on `day`: { open, spent } with
+// the day's spend after it, open while that's under `budget`.
+function addLive( sql, day, amount, budget ) {
+
+	sql.exec( 'INSERT INTO live ( day, spent ) VALUES ( ?, ? ) ON CONFLICT ( day ) DO UPDATE SET spent = spent + excluded.spent', day, amount );
+	const spent = sql.exec( 'SELECT spent FROM live WHERE day = ?', day ).one().spent;
+	return { open: spent < budget, spent };
 
 }
 

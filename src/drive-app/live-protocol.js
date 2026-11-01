@@ -122,8 +122,10 @@ export const TELEPORT = 60;
 export const STALE_MS = 15000;
 // In an area, a car only goes to those within VIEW_RANGE m of it.
 export const VIEW_RANGE = 5000;
-// The page sends PING every KEEPALIVE_MS while it has nothing else to say; the room answers PONG
-// without waking up (an auto-response). A connection with no word at all for IDLE_MS is closed.
+// The page sends PING every KEEPALIVE_MS while it has nothing else to say (or has heard nothing
+// for that long), and the room answers PONG: itself, not as the runtime's auto-response, so it's
+// counted and held to the rate as any message is. A connection with no word at all for IDLE_MS is
+// closed, and a page that hears nothing back for a while after its PING takes it as dropped.
 export const PING = 'ping';
 export const PONG = 'pong';
 export const KEEPALIVE_MS = 25000;
@@ -136,7 +138,7 @@ export const BURST = 40;
 // The longest message (bytes, as sent): hello, then everything else.
 export const MAX_HELLO = 1024;
 export const MAX_MESSAGE = 512;
-// Honks: one per HONK_GAP ms per driver (more are dropped, not counted against the rate).
+// Honks: one per HONK_GAP ms per driver (more are dropped).
 export const HONK_GAP = 800;
 
 // WebSocket close codes the room uses.
@@ -297,7 +299,8 @@ export function checkPlace( place ) {
 	const { lat, lon, height } = place;
 	if ( ! Number.isFinite( lat ) || Math.abs( lat ) > 90 || ! Number.isFinite( lon ) || Math.abs( lon ) > 180 ) return null;
 	if ( ! Number.isFinite( height ) || height < - 2000 || height > 10000 ) return null;
-	const name = [ ...String( place.name ?? '' ).replace( PLACE_TEXT, ' ' ).replace( /\s+/g, ' ' ).trim() ].slice( 0, PLACE_LENGTH ).join( '' ).trim();
+	// Only a string: anything else (an object with its own toString) is no name.
+	const name = [ ...( typeof place.name === 'string' ? place.name : '' ).replace( PLACE_TEXT, ' ' ).replace( /\s+/g, ' ' ).trim() ].slice( 0, PLACE_LENGTH ).join( '' ).trim();
 	return { name, lat: round( lat, 6 ), lon: round( lon, 6 ), height: round( height, 1 ) };
 
 }

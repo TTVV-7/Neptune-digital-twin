@@ -438,7 +438,8 @@ const NOON = Date.UTC( 2026, 9, 30, 12, 0, 0 );
 const SUNDAY_NIGHT = Date.UTC( 2026, 10, 1, 23, 59, 30 );
 const MONDAY_MORNING = Date.UTC( 2026, 10, 2, 0, 0, 30 );
 const SECOND = 1000;
-const HOUR = 60 * 60 * SECOND;
+const MINUTE = 60 * SECOND;
+const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 const NAMES_DAILY = 4;
 const SCORES_DAILY = 6;
@@ -1770,7 +1771,7 @@ describe( 'World Drive Worker with the key set as Google_maps_api', () => {
 
 describe( 'World Drive Worker asking whether driving with others is open today', () => {
 
-	test( '/api/config: live while the budget lasts; spent, liveReason says so and it isn\'t asked again that day; DriveLimits failing, a budget of 0 or LIVE off: off', async () => {
+	test( '/api/config: live while the budget lasts, asked at most every 30 s; spent, liveReason says so and it isn\'t asked again that day; DriveLimits failing, off with liveReason \'unknown\'; a budget of 0 or LIVE off: off', async () => {
 
 		const worker = await loadWorker();
 		const asked = [];
@@ -1795,18 +1796,25 @@ describe( 'World Drive Worker asking whether driving with others is open today',
 		const day = Date.UTC( 2030, 5, 1, 12 );
 		assert.deepEqual( await config( day ), { live: true, liveReason: undefined } );
 		assert.deepEqual( asked, [ { now: day, budget: 1234 } ] );
-		// Unset, it's 40,000.
-		await config( day, { LIVE_DAILY_BUDGET: undefined } );
-		assert.equal( asked.at( - 1 ).budget, 40000 );
+		// An open answer holds for 30 s from when it was given (anyone can ask, and every page load
+		// does): not asked again till then.
+		for ( const later of [ 1, 10000, 29999 ] ) assert.deepEqual( await config( day + later ), { live: true, liveReason: undefined } );
+		assert.equal( asked.length, 1 );
+		await config( day + 30000 );
+		assert.equal( asked.length, 2 );
+		// Unset, it's 40,000 (a budget of its own, asked about afresh).
+		await config( day + 30000, { LIVE_DAILY_BUDGET: undefined } );
+		assert.deepEqual( [ asked.length, asked.at( - 1 ).budget ], [ 3, 40000 ] );
 
-		// DriveLimits failing: off, to be safe, without a reason (the page drives alone, as with LIVE off).
+		// DriveLimits failing: off, to be safe, with liveReason 'unknown' (a page turned away tries
+		// again rather than stopping).
 		const realError = console.error;
 		const logged = [];
 		console.error = ( ...args ) => logged.push( args.join( ' ' ) );
 		try {
 
 			answer = new Error( 'DriveLimits is down' );
-			assert.deepEqual( await config( day ), { live: false, liveReason: undefined } );
+			assert.deepEqual( await config( day + MINUTE ), { live: false, liveReason: 'unknown' } );
 			assert.deepEqual( logged, [ 'Live budget check Error DriveLimits is down' ] );
 
 		} finally {
@@ -1817,7 +1825,7 @@ describe( 'World Drive Worker asking whether driving with others is open today',
 
 		// Spent: off, saying why, and this Worker doesn't ask again that day (an ask is a request too).
 		answer = { open: false, spent: 1234 };
-		assert.deepEqual( await config( day ), { live: false, liveReason: 'budget' } );
+		assert.deepEqual( await config( day + 2 * MINUTE ), { live: false, liveReason: 'budget' } );
 		const asks = asked.length;
 		assert.deepEqual( await config( day + 11 * HOUR ), { live: false, liveReason: 'budget' } );
 		assert.equal( asked.length, asks );

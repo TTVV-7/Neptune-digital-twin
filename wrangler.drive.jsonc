@@ -43,7 +43,8 @@
 		"SUPPORTER_PRICE": "CA$4.99",
 		// Driving with others (worker/drive/live.js): "off" is the kill switch. New connections are
 		// turned away, those already in a room are closed as they next say anything (or at the room's
-		// next alarm), and the page drives alone.
+		// next alarm) once the room runs the new version (a busy one can take up to 5 minutes to; see
+		// docs/world-drive.md, "Switching it off"), and the page drives alone.
 		"LIVE": "on",
 		// Its budget: the Durable Object requests a day it may use (UTC days), then it switches itself
 		// off until midnight UTC, the same way, with a toast that it's back then. Rooms are billed by
@@ -67,15 +68,21 @@
 	// (on every plan, the free one too), with what driving with others has spent of today's budget.
 	// And the rooms for driving with others: one Durable Object a room, a party (the friends who
 	// opened its link) or the drivers in one area about 11 km across, holding everyone's WebSocket and
-	// telling them where the others are. A room stores nothing but its alarm (once a minute while
-	// anyone's in it, when it adds what it has spent to the day's), and hibernates between messages;
-	// SQLite-backed for the free plan as well.
+	// telling them where the others are. A room stores nothing but its alarm (about once a minute
+	// while anyone's in it, when it may add what it has spent to the day's), and hibernates between
+	// messages; SQLite-backed for the free plan as well.
 	"durable_objects": {
 		"bindings": [
 			{ "name": "LIMITS", "class_name": "DriveLimits" },
 			{ "name": "ROOMS", "class_name": "DriveRoom" }
 		]
 	},
+	// Each visit's connections to the rooms, at most 20 a minute (worker/drive/live.js): a loop of
+	// them is turned away before it costs a Durable Object request. Cloudflare's rate limiter counts
+	// in each of its locations, roughly; the namespace is this account's own number for it.
+	"ratelimits": [
+		{ "name": "LIVE_CONNECTS", "namespace_id": "4801", "simple": { "limit": 20, "period": 60 } }
+	],
 	"migrations": [
 		{ "tag": "v1", "new_sqlite_classes": [ "DriveLimits" ] },
 		{ "tag": "v2", "new_sqlite_classes": [ "DriveRoom" ] }

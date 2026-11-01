@@ -8,29 +8,35 @@
 // players (never the page's), guests, and a supporter's ⭐; states batched every FLUSH_MS, never
 // echoed, rounded and checked, and in an area only within VIEW_RANGE; a car alone in its room
 // going to nobody and not kept, and its first state after a join going at once; a state held back
-// going with its car's next; look, place, away, trick and honk relayed at once, honks spaced; the
-// rate, the sizes and what's out of order; full rooms and the area's shards; a visit connecting
-// again; keepalives answered; the hello deadline, a visit running out, and a room carrying on after
-// it has hibernated. The day's budget (LIVE_DAILY_BUDGET, small here): each ask counting, a room
-// adding what it spent, a room closing everyone as it's spent (CLOSE.off, BUDGET_SPENT), /api/live's
-// 503 and /api/config saying so, and a fresh day at midnight UTC (the tests' clock, X-Test-Time).
+// going with its car's next; look, place, away, trick and honk relayed at once, honks spaced and
+// held to the rate; a place's name that isn't text; the rate, the sizes and what's out of order;
+// full rooms and the area's shards; a visit connecting again, in the same room or another, as the
+// same guest; one visit connecting over and over (the rate limiter); a connection the room closed
+// going on talking (a raw client that ignores the close: the room resets); keepalives answered and
+// held to the rate; the hello deadline, a visit running out, and a room carrying on after it has
+// hibernated. The day's budget (LIVE_DAILY_BUDGET, small here): each ask counting, a room adding
+// what it spent, a room closing everyone as it's spent (CLOSE.off, BUDGET_SPENT), /api/live's 503
+// and /api/config saying so, and a fresh day at midnight UTC (the tests' clock, X-Test-Time).
 // Then the room here in this process, on a stand-in for Cloudflare's runtime and clock: batches with
 // nothing after them, being idle, waking up from its attachments, the alarm, LIVE switched off, the
 // room emptying, a hello's name still being looked up, the attachment's size, no timers; quiet when
-// alone, held states; and what it spends: every billed request counted once, reported once a
-// minute and as it empties, closing everyone when the day's is spent, and carrying on when
-// DriveLimits fails.
+// alone, held states; a visit gone to another room; a closed connection talking on; and what it
+// spends: every billed request counted once, reported once a minute while there's enough to and
+// every ten minutes otherwise (a lone driver), and as it empties, a replaced driver's spend kept,
+// closing everyone when the day's is spent, and carrying on when DriveLimits fails.
 // TEST_DRIVE_LIVE_PORT=8950 moves the three wrangler servers (that port and the next two).
 
 import assert from 'node:assert/strict';
+import { randomBytes } from 'node:crypto';
 import { register } from 'node:module';
 import { createRequire } from 'node:module';
+import { createConnection } from 'node:net';
 import { serialize } from 'node:v8';
 import { after, before, describe, test } from 'node:test';
 import { CLIENT_ID, makeKey, makeToken, serveKeys, startWorker } from './worker-harness.mjs';
 import {
 	BUDGET_SPENT, BURST, CLOSE, FLUSH_MS, HELLO_MS, HONK_GAP, IDLE_MS, KEEPALIVE_MS, MAX_HELLO, MAX_MESSAGE, PARTY_MAX, PING, PONG, PROTOCOL,
-	VIEW_RANGE,
+	SEND_HZ, VIEW_RANGE,
 	cellOf, makePartyCode, packState, shardOf,
 } from '../src/drive-app/live-protocol.js';
 import { makeVisit } from '../worker/drive/visits.js';
@@ -41,7 +47,8 @@ const PORT = Number( process.env.TEST_DRIVE_LIVE_PORT ) || 8950;
 const PASS_SECRET = '1x0000000000000000000000000000000AA';
 const FAIL_SECRET = '2x0000000000000000000000000000000AA';
 const SECOND = 1000;
-const HOUR = 60 * 60 * SECOND;
+const MINUTE = 60 * SECOND;
+const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 // How often a room with anyone in it reports what it has spent (worker/drive/live.js's REPORT_MS),
 // and what it counts: connecting, each message in (billed 20 to a request), each alarm, each report.
@@ -199,6 +206,78 @@ async function join( server, room, hello = {}, options = {} ) {
 	assert.ok( page.welcome, `no welcome: ${ JSON.stringify( page.inbox ) }` );
 	page.pid = page.welcome.you;
 	return page;
+
+}
+
+// A connection to `room` made byte by byte, as a client that keeps to none of the rules would make
+// one: it never answers a close, and goes on sending after it. { send( text ), frames (the text it
+// was sent), closeFrame ({ code, at } once the room's close came), closed (the TCP connection gone,
+// and when, closedAt) }.
+function rawSocket( server, room, token ) {
+
+	const { hostname, port } = new URL( server.base );
+	const socket = createConnection( Number( port ), hostname );
+	const raw = { frames: [], closeFrame: null, closed: false, closedAt: null };
+	// A text frame, masked, as a client sends one.
+	raw.send = text => {
+
+		const payload = Buffer.from( text );
+		const mask = randomBytes( 4 );
+		const head = payload.length < 126 ? Buffer.from( [ 0x81, 0x80 | payload.length ] ) : Buffer.from( [ 0x81, 0x80 | 126, payload.length >> 8, payload.length & 255 ] );
+		if ( ! socket.destroyed ) socket.write( Buffer.concat( [ head, mask, payload.map( ( b, i ) => b ^ mask[ i % 4 ] ) ] ) );
+
+	};
+	return new Promise( ( resolve, reject ) => {
+
+		let buffer = Buffer.alloc( 0 );
+		let upgraded = false;
+		socket.once( 'connect', () => socket.write( [
+			`GET /api/live?room=${ encodeURIComponent( room ) } HTTP/1.1`, `Host: ${ hostname }:${ port }`, 'Upgrade: websocket', 'Connection: Upgrade',
+			`Sec-WebSocket-Key: ${ randomBytes( 16 ).toString( 'base64' ) }`, 'Sec-WebSocket-Version: 13', `Sec-WebSocket-Protocol: ${ PROTOCOL }, ${ token }`,
+			`Origin: ${ server.base }`, '', '',
+		].join( '\r\n' ) ) );
+		socket.on( 'data', chunk => {
+
+			buffer = Buffer.concat( [ buffer, chunk ] );
+			if ( ! upgraded ) {
+
+				const end = buffer.indexOf( '\r\n\r\n' );
+				if ( end < 0 ) return;
+				const status = buffer.subarray( 0, end ).toString().split( '\r\n' )[ 0 ];
+				buffer = buffer.subarray( end + 4 );
+				if ( ! / 101 /.test( status ) ) return reject( new Error( status ) );
+				upgraded = true;
+				resolve( raw );
+
+			}
+
+			// The room's frames, unmasked.
+			while ( buffer.length >= 2 ) {
+
+				const opcode = buffer[ 0 ] & 15;
+				let length = buffer[ 1 ] & 127;
+				let offset = 2;
+				if ( length === 126 ) {
+
+					if ( buffer.length < 4 ) break;
+					length = buffer.readUInt16BE( 2 );
+					offset = 4;
+
+				}
+
+				if ( buffer.length < offset + length ) break;
+				const payload = buffer.subarray( offset, offset + length );
+				buffer = buffer.subarray( offset + length );
+				if ( opcode === 8 ) raw.closeFrame ??= { code: payload.length >= 2 ? payload.readUInt16BE( 0 ) : 1005, at: Date.now() };
+				else if ( opcode === 1 ) raw.frames.push( payload.toString() );
+
+			}
+
+		} );
+		socket.on( 'close', () => Object.assign( raw, { closed: true, closedAt: Date.now() } ) );
+		socket.on( 'error', reject );
+
+	} );
 
 }
 
@@ -700,22 +779,46 @@ describe( 'Driving with others', () => {
 
 	} );
 
-	test( 'honks: one every HONK_GAP from each driver, the rest dropped without counting against the rate', async () => {
+	test( 'honks: one every HONK_GAP from each driver, the rest dropped; held to the rate as anything else is', async () => {
 
 		const room = partyRoom();
 		const alice = await join( server, room );
 		const bob = await join( server, room );
 		alice.send( { t: 'honk' } );
 		assert.deepEqual( await bob.take( 'honk' ), { t: 'honk', pid: alice.pid } );
-		// Twice BURST at once: none of them get through, and Alice isn't closed for them.
-		for ( let i = 0; i < 2 * BURST; i ++ ) alice.send( { t: 'honk' } );
+		// A few more at once: none of them get through, and Alice isn't closed for them.
+		for ( let i = 0; i < 10; i ++ ) alice.send( { t: 'honk' } );
 		await sleep( 200 );
 		assert.equal( await bob.take( 'honk', 0 ), null );
 		assert.equal( await alice.ended( 100 ), null );
 		await sleep( HONK_GAP );
 		alice.send( { t: 'honk' } );
 		assert.ok( await bob.take( 'honk' ) );
-		await Promise.all( [ alice.close(), bob.close() ] );
+		// But twice BURST at once is over the rate, honks or not.
+		for ( let i = 0; i < 2 * BURST; i ++ ) alice.send( { t: 'honk' } );
+		assert.deepEqual( await alice.ended(), { code: CLOSE.rate, reason: 'too many messages' } );
+		assert.equal( ( await bob.take( 'leave' ) ).pid, alice.pid );
+		await bob.close();
+
+	} );
+
+	test( 'a place whose name isn\'t text has no name, and nothing else changes', async () => {
+
+		const room = partyRoom();
+		const alice = await join( server, room );
+		const bob = await join( server, room );
+		for ( const name of [ { toString: 1 }, [ { toString: 0 } ], 7, null ] ) {
+
+			alice.send( { t: 'place', place: { ...FURKA, name } } );
+			assert.deepEqual( ( await bob.take( 'place' ) ).place, { ...FURKA, name: '' }, JSON.stringify( name ) );
+
+		}
+
+		// In a hello too.
+		const carol = await join( server, room, { place: { ...FURKA, name: { toString: 1 } } } );
+		assert.equal( ( await bob.take( 'join' ) ).player.place.name, '' );
+		assert.deepEqual( await Promise.all( [ alice.ended( 100 ), bob.ended( 100 ), carol.ended( 100 ) ] ), [ null, null, null ] );
+		await Promise.all( [ alice.close(), bob.close(), carol.close() ] );
 
 	} );
 
@@ -841,18 +944,19 @@ describe( 'Driving with others', () => {
 
 	} );
 
-	test( 'keepalives are answered by the room itself, before hello too, and never count as messages', async () => {
+	test( 'keepalives are answered by the room, before hello too, and held to the rate as anything else is', async () => {
 
 		const page = await connect( server, partyRoom() );
 		page.send( PING );
 		assert.equal( await page.take( PONG ), PONG );
-		// Many more than the rate allows of anything else.
-		for ( let i = 0; i < 3 * BURST; i ++ ) page.send( PING );
-		await sleep( 300 );
-		assert.equal( ( await page.drain() ).filter( m => m === PONG ).length, 3 * BURST );
 		page.send( HELLO );
 		assert.ok( await page.take( 'welcome' ) );
-		await page.close();
+		page.send( PING );
+		assert.equal( await page.take( PONG ), PONG );
+		// Many more than the rate allows, as a keepalive is a message billed as any other is.
+		for ( let i = 0; i < 3 * BURST; i ++ ) page.send( PING );
+		assert.deepEqual( await page.ended(), { code: CLOSE.rate, reason: 'too many messages' } );
+		assert.ok( ( await page.drain() ).filter( m => m === PONG ).length < BURST );
 
 	} );
 
@@ -906,7 +1010,7 @@ describe( 'Driving with others', () => {
 
 	} );
 
-	test( 'the same visit connecting again closes the last with CLOSE.replaced, and the others see it leave and come back', async () => {
+	test( 'the same visit connecting again closes the last with CLOSE.replaced, and the others see it leave and come back as the same guest', async () => {
 
 		const room = partyRoom();
 		const watcher = await join( server, room );
@@ -917,11 +1021,71 @@ describe( 'Driving with others', () => {
 		assert.deepEqual( await tab.ended(), { code: CLOSE.replaced, reason: 'replaced' } );
 		assert.deepEqual( again.welcome.players.map( p => p.pid ), [ watcher.pid ] );
 		assert.deepEqual( await watcher.take( 'leave' ), { t: 'leave', pid: tab.pid } );
-		assert.equal( ( await watcher.take( 'join' ) ).player.vehicle, 'pickup-truck' );
-		// The same visit in another room is fine there.
+		const back = ( await watcher.take( 'join' ) ).player;
+		assert.equal( back.vehicle, 'pickup-truck' );
+		// A guest's name is its visit's: the same each time it connects (another visit's is its own).
+		assert.match( tab.welcome.name, /^Guest \d{4}$/ );
+		assert.deepEqual( [ again.welcome.name, back.name ], [ tab.welcome.name, tab.welcome.name ] );
+		// The same visit in another room: it's there now, so this room lets go of it at once.
 		const elsewhere = await join( server, partyRoom(), {}, { token } );
-		assert.equal( await again.ended( 200 ), null );
-		await Promise.all( [ watcher, again, elsewhere ].map( page => page.close() ) );
+		assert.deepEqual( await again.ended(), { code: CLOSE.replaced, reason: 'replaced' } );
+		assert.deepEqual( await watcher.take( 'leave' ), { t: 'leave', pid: again.pid } );
+		assert.equal( elsewhere.welcome.name, tab.welcome.name );
+		assert.equal( await elsewhere.ended( 300 ), null );
+		await Promise.all( [ watcher, elsewhere ].map( page => page.close() ) );
+
+	} );
+
+	test( 'one visit connecting over and over: past 20 a minute, turned away (429) before the room or DriveLimits', async () => {
+
+		// (Cloudflare's rate limiter counts by the minute: the first 20 always get in, and with 21 more
+		// the next minute's are used up too.)
+		const room = partyRoom();
+		const token = await visitToken();
+		const outcomes = [];
+		while ( outcomes.length < 41 && outcomes.at( - 1 ) !== 429 ) {
+
+			const page = await connect( server, room, { token } );
+			outcomes.push( page instanceof Page ? 'in' : page.status );
+			if ( page instanceof Page ) page.ws.terminate();
+
+		}
+
+		assert.deepEqual( outcomes.slice( 0, 20 ), Array( 20 ).fill( 'in' ) );
+		assert.equal( outcomes.at( - 1 ), 429, JSON.stringify( outcomes ) );
+		// Another visit's are its own.
+		const other = await join( server, room );
+		await other.close();
+
+	} );
+
+	test( 'a connection the room has closed that goes on sending, its close unanswered: the room resets, and everyone comes back in', async () => {
+
+		const room = partyRoom();
+		const honest = await join( server, room );
+		const zombie = await rawSocket( server, room, await visitToken() );
+		zombie.send( JSON.stringify( HELLO ) );
+		assert.ok( await honest.take( 'join' ) );
+		// Over the rate: the room closes it, and it doesn't stop.
+		for ( let i = 0; i < 2 * BURST; i ++ ) zombie.send( JSON.stringify( { t: 'trick', score: 1 } ) );
+		const deadline = Date.now() + 5000;
+		while ( ! zombie.closeFrame && Date.now() < deadline ) await sleep( 20 );
+		assert.equal( zombie.closeFrame?.code, CLOSE.rate );
+		for ( let i = 0; i < 4 * BURST && ! zombie.closed; i ++ ) {
+
+			zombie.send( JSON.stringify( { t: 'honk' } ) );
+			await sleep( 5 );
+
+		}
+
+		while ( ! zombie.closed && Date.now() < deadline + 5000 ) await sleep( 20 );
+		assert.ok( zombie.closed, 'the room never let go of it' );
+		console.log( `    the zombie cut off ${ zombie.closedAt - zombie.closeFrame.at } ms after its close` );
+		// Everyone else's connection dropped with the room, and they come straight back.
+		assert.equal( ( await honest.ended() )?.code, 1006 );
+		const again = await join( server, room );
+		assert.deepEqual( again.welcome.players, [] );
+		await again.close();
 
 	} );
 
@@ -943,7 +1107,7 @@ describe( 'Driving with others', () => {
 
 	} );
 
-	test( 'a room that has hibernated carries on from where it was, its keepalives answered meanwhile', async () => {
+	test( 'a room that has hibernated carries on from where it was, its keepalives answered', async () => {
 
 		// wrangler dev hibernates a room as Cloudflare does, 10 s after its last event: here the
 		// alarm for the hello deadline, HELLO_MS after they connected. (Only the room's being as it
@@ -975,25 +1139,36 @@ describe( 'Driving with others\' daily budget', () => {
 	// request may say what time it is in X-Test-Time.
 	const BUDGET = 30;
 	let tight;
-	// Two drivers in a room from the start, there when the day's budget runs out at the real time.
+	// Two drivers in a room from the start, one of them driving (so the room has enough to report
+	// each minute), there when the day's budget runs out at the real time.
 	let waiting;
 	const at = time => ( { 'X-Test-Time': String( time ) } );
 	const config = async ( time = null ) => ( await fetch( `${ tight.base }/api/config`, { headers: time ? at( time ) : {} } ) ).json();
+	// /api/config asks DriveLimits at most once every 30 s in a Worker instance (an open answer is
+	// kept that long from when it was given), so an ask is made counted here at a time of its own:
+	// each a millisecond before the last, from a minute before the real time of the first (which is
+	// on the same UTC day but in a minute after midnight).
+	let asked = 0;
+	let base = null;
+	const ask = async () => config( ( base ??= Date.now() - MINUTE ) - ++ asked );
 
 	before( async () => {
 
 		tight = await startWorker( {
 			port: PORT + 2,
 			config: 'wrangler.drive.jsonc',
-			vars: { GOOGLE_CLIENT_ID: '', GOOGLE_MAPS_API_KEY: 'test-maps-key-not-real', TURNSTILE_SECRET: PASS_SECRET, TEST_CLOCK: 'header', LIVE_DAILY_BUDGET: String( BUDGET ) },
+			vars: { GOOGLE_CLIENT_ID: '', GOOGLE_MAPS_API_KEY: 'test-maps-key-not-real', TURNSTILE_SECRET: PASS_SECRET, TEST_CLOCK: 'header', LIVE_DAILY_BUDGET: String( BUDGET ), LIVE_VISIT_CONNECTS: '3' },
 		} );
 		const room = partyRoom();
 		waiting = { at: Date.now(), alice: await join( tight, room ), bob: await join( tight, room ) };
+		let north = 0;
+		waiting.driving = setInterval( () => waiting.alice.send( { t: 's', s: carAt( 46.5725, 8.4153, { north: north ++, speed: 5 } ) } ), 250 );
 
 	} );
 
 	after( () => {
 
+		clearInterval( waiting?.driving );
 		for ( const page of [ waiting?.alice, waiting?.bob ] ) page?.ws.terminate();
 		tight?.stop();
 
@@ -1010,18 +1185,19 @@ describe( 'Driving with others\' daily budget', () => {
 		await sleep( 300 );
 		await Promise.all( [ alice.close(), bob.close() ] );
 		await sleep( 500 );
-		// Reported: two connections, 20 messages, the report itself and a moment of keepalives: 4 and a
-		// little. So 5 asks and 4 make 9, and the 21st ask from here spends the budget (without the
-		// report it would be the 25th).
+		// Reported: two connections, 20 messages and the report itself: 4. So 5 asks and 4 make 9 (and
+		// the waiting room's few states so far, not reported yet), and the 21st ask from here spends
+		// the budget (without the report it would be the 25th).
 		let opens = 0;
-		while ( opens <= BUDGET && ( await config() ).live ) opens ++;
+		while ( opens <= BUDGET && ( await ask() ).live ) opens ++;
 		assert.equal( opens, BUDGET - 10, `${ opens } asks were open` );
 
 	} );
 
 	test( 'a room hearing the day\'s budget is spent closes everyone in it with CLOSE.off and BUDGET_SPENT', async () => {
 
-		// At its first report, REPORT_MS after the first of them connected.
+		// At its first report, REPORT_MS after the first of them connected: Alice driving, there's more
+		// than enough to report by then.
 		const { alice, bob } = waiting;
 		const wait = Math.max( 0, waiting.at + REPORT_MS - Date.now() ) + 5 * SECOND;
 		const closed = await Promise.all( [ alice.ended( wait ), bob.ended( wait ) ] );
@@ -1036,10 +1212,17 @@ describe( 'Driving with others\' daily budget', () => {
 	test( 'each ask counts against the day\'s budget; spent, /api/config says so and /api/live turns away with 503; at midnight UTC, a fresh day', async () => {
 
 		// A day of its own, years on (the tests' clock). Last of these, as a new day forgets those before
-		// it, today's included. BUDGET - 1 asks are open, and the next spends it.
+		// it, today's included. BUDGET - 1 asks are open, and the next spends it; within 30 s of an open
+		// answer, /api/config takes that and doesn't ask.
 		const day = Date.UTC( 2031, 0, 15 );
 		let opens = 0;
-		while ( opens <= BUDGET && ( await config( day + 12 * HOUR ) ).live ) opens ++;
+		while ( opens <= BUDGET && ( await config( day + 12 * HOUR + opens * MINUTE ) ).live ) {
+
+			opens ++;
+			if ( opens === 1 ) for ( let i = 0; i < 5; i ++ ) assert.equal( ( await config( day + 12 * HOUR + 1 + i * 5 * SECOND ) ).live, true );
+
+		}
+
 		assert.equal( opens, BUDGET - 1 );
 		const spent = await config( day + 23 * HOUR );
 		assert.deepEqual( [ spent.live, spent.liveReason ], [ false, BUDGET_SPENT ] );
@@ -1053,6 +1236,26 @@ describe( 'Driving with others\' daily budget', () => {
 		const page = await join( tight, partyRoom(), {}, { token: await visitToken( day + DAY ), headers: at( day + DAY ) } );
 		assert.deepEqual( page.welcome.players, [] );
 		await page.close();
+
+	} );
+
+	test( 'a visit connects at most LIVE_VISIT_CONNECTS times a day (3 here), then it\'s turned away (429)', async () => {
+
+		// That fresh day, an hour on.
+		const time = Date.UTC( 2031, 0, 16, 1 );
+		const token = await visitToken( time );
+		const room = partyRoom();
+		for ( let i = 0; i < 3; i ++ ) {
+
+			const page = await join( tight, room, {}, { token, headers: at( time ) } );
+			page.ws.terminate();
+
+		}
+
+		for ( let i = 0; i < 2; i ++ ) assert.equal( ( await connect( tight, room, { token, headers: at( time ) } ) ).status, 429 );
+		// Another visit's are its own.
+		const other = await join( tight, room, {}, { token: await visitToken( time ), headers: at( time ) } );
+		await other.close();
 
 	} );
 
@@ -1071,15 +1274,18 @@ class FakeSocket {
 
 		this.readyState = WebSocket.OPEN;
 		this.sent = [];
+		this.pongs = 0;
 		this.attachment = null;
 		this.closedWith = null;
 
 	}
 
+	// (Keepalives' answers counted, not kept with the rest.)
 	send( text ) {
 
 		if ( this.readyState !== WebSocket.OPEN ) throw new Error( 'closed' );
-		this.sent.push( text );
+		if ( text === PONG ) this.pongs ++;
+		else this.sent.push( text );
 
 	}
 
@@ -1140,15 +1346,6 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 			}
 
 		};
-		globalThis.WebSocketRequestResponsePair = class {
-
-			constructor( request, response ) {
-
-				Object.assign( this, { request, response } );
-
-			}
-
-		};
 		Date.now = () => clock;
 		// The room must never leave a timer behind: one would keep it from hibernating.
 		globalThis.setTimeout = ( ...args ) => {
@@ -1172,21 +1369,20 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 		globalThis.setTimeout = realSetTimeout;
 		globalThis.setInterval = realSetInterval;
 		delete globalThis.WebSocketPair;
-		delete globalThis.WebSocketRequestResponsePair;
 
 	} );
 
-	// The runtime's side of one room: its WebSockets, when each last had a keepalive answered, its
-	// alarm (and how many times it has gone off), and whether its storage was emptied.
+	// The runtime's side of one room: its WebSockets, its alarm (and how many times it has gone off),
+	// whether its storage was emptied, and why it was reset (abort), if it was: every connection to
+	// it drops then.
 	function runtime() {
 
 		const ctx = {
 			sockets: [],
-			pinged: new Map(),
 			alarm: null,
 			fired: 0,
 			emptied: 0,
-			autoResponse: null,
+			aborted: null,
 			acceptWebSocket( ws ) {
 
 				this.sockets.push( ws );
@@ -1197,14 +1393,10 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 				return this.sockets.filter( ws => ws.readyState !== WebSocket.CLOSED );
 
 			},
-			setWebSocketAutoResponse( pair ) {
+			abort( reason ) {
 
-				this.autoResponse = pair;
-
-			},
-			getWebSocketAutoResponseTimestamp( ws ) {
-
-				return ctx.pinged.has( ws ) ? new Date( ctx.pinged.get( ws ) ) : null;
+				this.aborted = reason;
+				for ( const ws of this.sockets ) ws.readyState = WebSocket.CLOSED;
 
 			},
 			storage: {
@@ -1231,10 +1423,11 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 	}
 
 	let visits = 0;
-	// A connection as /api/live hands it to `room` (checked there): the room's end of it.
-	async function arrive( room, ctx, { visit = `visit-${ ++ visits }`, expires = clock + 6 * HOUR, name = 'party:ABCDEFG' } = {} ) {
+	// A connection as /api/live hands it to `room` (checked there), numbered `seq` among its visit's:
+	// the room's end of it.
+	async function arrive( room, ctx, { visit = `visit-${ ++ visits }`, expires = clock + 6 * HOUR, name = 'party:ABCDEFG', seq = 1 } = {} ) {
 
-		const headers = new Headers( { Upgrade: 'websocket', 'X-Live-Visit': visit, 'X-Live-Expires': String( expires ), 'X-Live-Room': name } );
+		const headers = new Headers( { Upgrade: 'websocket', 'X-Live-Visit': visit, 'X-Live-Expires': String( expires ), 'X-Live-Room': name, 'X-Live-Seq': String( seq ) } );
 		// Node's Response doesn't take a 101.
 		globalThis.Response = class {
 
@@ -1291,6 +1484,38 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 	}
 
 	const say = ( room, ws, message ) => room.webSocketMessage( ws, typeof message === 'string' ? message : JSON.stringify( message ) );
+	// A page's keepalive, as it sends one.
+	const ping = ( room, ws ) => say( room, ws, PING );
+	// A page driving for `ms` with someone to see it (its car SEND_HZ times a second) and the pages
+	// `others` sending only their keepalive every KEEPALIVE_MS, the clock (and the alarm) going on
+	// with them, until the room closes them: how many messages they sent.
+	async function drive( room, ctx, ws, ms, others = [] ) {
+
+		const until = clock + ms;
+		let sent = 0;
+		for ( let step = 1; clock + 1000 / SEND_HZ <= until; step ++ ) {
+
+			await wait( room, ctx, 1000 / SEND_HZ );
+			if ( ws.closedWith ) break;
+			await say( room, ws, { t: 's', s: carAt( 46.5725, 8.4153, { north: step, speed: 10 } ) } );
+			sent ++;
+			if ( step % ( KEEPALIVE_MS * SEND_HZ / 1000 ) ) continue;
+			for ( const other of others ) {
+
+				await ping( room, other );
+				sent ++;
+
+			}
+
+		}
+
+		await wait( room, ctx, Math.max( 0, until - clock ) );
+		return sent;
+
+	}
+
+	// The Worker asking a room to let go of a visit gone to another room, its connection there `seq`.
+	const leaveFor = ( room, visit, seq ) => room.fetch( { headers: new Headers( { 'X-Live-Leave': visit, 'X-Live-Seq': String( seq ) } ) } );
 
 	// DriveLimits as a room reaches it (env.LIMITS): each report it's sent, kept; open, or not, or
 	// failing, as the test says.
@@ -1323,11 +1548,19 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 
 	const total = reports => reports.reduce( ( sum, report ) => sum + report.amount, 0 );
 
-	test( 'keepalives are the auto-response, PING answered with PONG', () => {
+	test( 'keepalives: PING answered with PONG by the room, before hello too, and held to the rate as anything else is', async () => {
 
 		const ctx = runtime();
-		new DriveRoom( ctx, { LIMITS: limitsStub().binding } );
-		assert.deepEqual( { ...ctx.autoResponse }, { request: PING, response: PONG } );
+		const room = new DriveRoom( ctx, { LIMITS: limitsStub().binding } );
+		const ws = await arrive( room, ctx );
+		await ping( room, ws );
+		assert.equal( ws.pongs, 1 );
+		await say( room, ws, HELLO );
+		assert.equal( ws.said()[ 0 ].t, 'welcome' );
+		// With the two so far, BURST at once is over the rate.
+		for ( let i = 0; i < BURST && ! ws.closedWith; i ++ ) await ping( room, ws );
+		assert.deepEqual( ws.closedWith, { code: CLOSE.rate, reason: 'too many messages' } );
+		assert.equal( ws.pongs, BURST - 1 );
 
 	} );
 
@@ -1371,10 +1604,12 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 		const bob = await hello( room, ctx );
 		alice.said();
 		// Alice only pings, every KEEPALIVE_MS, as an away page does; Bob says nothing at all.
+		let pinged = 0;
 		for ( let t = 25 * SECOND; t <= 2 * IDLE_MS; t += 25 * SECOND ) {
 
 			await wait( room, ctx, start + t - clock );
-			ctx.pinged.set( alice, clock );
+			await ping( room, alice );
+			pinged = clock;
 
 		}
 
@@ -1382,7 +1617,7 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 		assert.equal( alice.closedWith, null );
 		assert.deepEqual( alice.said(), [ { t: 'leave', pid: bob.pid } ] );
 		// The alarm's next is Alice's: IDLE_MS after a keepalive of hers.
-		assert.ok( ctx.alarm > clock && ctx.alarm <= ctx.pinged.get( alice ) + IDLE_MS );
+		assert.ok( ctx.alarm > clock && ctx.alarm <= pinged + IDLE_MS );
 		// Stopping, she's closed IDLE_MS after it.
 		await wait( room, ctx, IDLE_MS );
 		assert.deepEqual( alice.closedWith, { code: CLOSE.idle, reason: 'idle' } );
@@ -1502,8 +1737,8 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 		assert.ok( bytes < 1024, `${ bytes } bytes` );
 		assert.equal( ws.attachment.place.name.length, 60 );
 		assert.equal( ws.attachment.s[ 10 ], 4095 );
-		// What it has spent is in it; nothing only for memory is.
-		assert.deepEqual( [ typeof ws.attachment.spent, typeof ws.attachment.counted, typeof ws.attachment.reported ], [ 'number', 'number', 'number' ] );
+		// What it has spent is in it, and its number among its visit's; nothing only for memory is.
+		assert.deepEqual( [ typeof ws.attachment.spent, typeof ws.attachment.reported, ws.attachment.seq ], [ 'number', 'number', 1 ] );
 		assert.deepEqual( Object.keys( ws.attachment ).filter( key => [ 'moved', 'sent', 'sAt', 'held', 'pending', 'queue' ].includes( key ) ), [] );
 
 	} );
@@ -1615,7 +1850,7 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 
 	} );
 
-	test( 'what a room spends, in billed requests: reported once a minute while anyone\'s in it, and as it empties, none of it lost', async () => {
+	test( 'what a room spends, in billed requests: reported once a minute while there\'s enough to, every few minutes when there\'s little, and as it empties, none of it lost', async () => {
 
 		const ctx = runtime();
 		const limits = limitsStub();
@@ -1623,54 +1858,80 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 		const start = clock;
 		const alice = await hello( room, ctx );
 		const bob = await hello( room, ctx );
-		// Two hellos, and 18 states from Alice in under a second.
-		let messages = 2;
-		for ( let i = 0; i < 18; i ++ ) {
-
-			await say( room, alice, { t: 's', s: carAt( 46.5725, 8.4153, { north: i, speed: 10 } ) } );
-			messages ++;
-			clock += 50;
-
-		}
-
-		// Then ten minutes of keepalives every KEEPALIVE_MS from both (answered by the runtime, never
-		// seen by the room), and the alarm whenever it's due.
-		for ( let t = KEEPALIVE_MS; t <= 10 * 60 * SECOND; t += KEEPALIVE_MS ) {
-
-			await wait( room, ctx, start + t - clock );
-			ctx.pinged.set( alice, clock );
-			ctx.pinged.set( bob, clock );
-
-		}
-
-		// A report REPORT_MS after the first connection, then never more than that apart (an idle check
-		// coming up to 10 s before one makes it then), and no alarm but those and the hello deadline's:
-		// an alarm is a request too.
-		const times = limits.reports.map( report => report.now - start );
-		assert.equal( times[ 0 ], REPORT_MS );
-		for ( let i = 1; i < times.length; i ++ ) assert.ok( times[ i ] - times[ i - 1 ] <= REPORT_MS && times[ i ] - times[ i - 1 ] >= REPORT_MS - 10 * SECOND, JSON.stringify( times ) );
-		assert.ok( times.at( - 1 ) > 9 * 60 * SECOND, JSON.stringify( times ) );
-		assert.equal( ctx.fired, limits.reports.length + 1 );
+		// Two hellos, then five minutes of Alice driving with Bob there, his page sending only its
+		// keepalive, as one with nothing else to say does.
+		let messages = 2 + await drive( room, ctx, alice, 5 * 60 * SECOND, [ bob ] );
+		// A report REPORT_MS after the first connection, then never more than that apart (Bob's idle
+		// check coming up to 10 s before one makes it then), and no alarm but those and the hello
+		// deadline's: an alarm is a request too.
+		const driving = limits.reports.map( report => report.now - start );
+		assert.equal( driving[ 0 ], REPORT_MS );
+		for ( let i = 1; i < driving.length; i ++ ) assert.ok( driving[ i ] - driving[ i - 1 ] <= REPORT_MS && driving[ i ] - driving[ i - 1 ] >= REPORT_MS - 10 * SECOND, JSON.stringify( driving ) );
+		assert.ok( driving.length >= 5 && driving.at( - 1 ) > 4 * REPORT_MS, JSON.stringify( driving ) );
+		assert.equal( ctx.fired, driving.length + 1 );
 		assert.ok( limits.reports.every( report => report.budget === 5000 ) );
-		// The first: both connecting, the messages, the hello deadline's alarm and its own, the call,
-		// and a minute of keepalives for each, as if one came every KEEPALIVE_MS.
-		const keepalive = ms => ms / KEEPALIVE_MS * COST.message;
-		assert.ok( Math.abs( limits.reports[ 0 ].amount - ( 2 * COST.connect + messages * COST.message + 2 * COST.alarm + COST.report + 2 * keepalive( REPORT_MS ) ) ) < 1e-9, JSON.stringify( limits.reports[ 0 ] ) );
-		// Then a minute of keepalives, the alarm and the call.
-		assert.ok( Math.abs( limits.reports[ 1 ].amount - ( COST.alarm + COST.report + 2 * keepalive( REPORT_MS ) ) ) < 1e-9 );
-		assert.ok( ctx.alarm > clock && ctx.alarm <= limits.reports.at( - 1 ).now + REPORT_MS );
+
+		// Then fifteen minutes parked, both sending only keepalives: less than REPORT_LEAST (5) a
+		// minute, so the room's alarm comes as often as before for its checks, but reports only once
+		// its own alarms (counted for the next) and the keepalives make that.
+		const parked = clock;
+		for ( let t = KEEPALIVE_MS; t <= 15 * 60 * SECOND; t += KEEPALIVE_MS ) {
+
+			await wait( room, ctx, parked + t - clock );
+			for ( const page of [ alice, bob ] ) await ping( room, page );
+			messages += 2;
+
+		}
+
+		// (The first, the last of the driving, within the minute.)
+		const quiet = limits.reports.slice( driving.length ).map( report => report.now - start );
+		assert.ok( quiet.length >= 3 && quiet.length <= 5, JSON.stringify( quiet ) );
+		assert.ok( quiet[ 0 ] - driving.at( - 1 ) <= REPORT_MS, JSON.stringify( quiet ) );
+		for ( let i = 1; i < quiet.length; i ++ ) assert.ok( quiet[ i ] - quiet[ i - 1 ] >= 4 * REPORT_MS && quiet[ i ] - quiet[ i - 1 ] <= 10 * REPORT_MS, JSON.stringify( quiet ) );
+
+		assert.ok( ctx.alarm > clock && ctx.alarm <= clock + REPORT_MS );
 
 		// Both go: the room reports what's left as it empties, and every billed request is counted once.
-		const reports = limits.reports.length;
-		clock += 7 * SECOND;
-		await say( room, bob, { t: 'honk' } );
-		messages ++;
 		await leave( room, alice );
 		await leave( room, bob );
 		assert.equal( ctx.alarm, null );
-		assert.equal( limits.reports.length, reports + 1 );
-		const spent = 2 * COST.connect + messages * COST.message + ctx.fired * COST.alarm + limits.reports.length * COST.report + 2 * keepalive( clock - start );
+		const spent = 2 * COST.connect + messages * COST.message + ctx.fired * COST.alarm + limits.reports.length * COST.report;
 		assert.ok( Math.abs( total( limits.reports ) - spent ) < 1e-9, `${ total( limits.reports ) } reported, ${ spent } spent` );
+
+	} );
+
+	test( 'a driver alone in a room, only its keepalive: the room\'s alarm, and a report every few minutes', async () => {
+
+		// Every KEEPALIVE_MS, and once a minute as a tab in the background is held to.
+		const hour = {};
+		for ( const every of [ KEEPALIVE_MS, 60 * SECOND ] ) {
+
+			const ctx = runtime();
+			const limits = limitsStub();
+			const room = new DriveRoom( ctx, { LIMITS: limits.binding } );
+			const start = clock;
+			const alone = await hello( room, ctx );
+			let messages = 1;
+			for ( let t = every; t <= HOUR; t += every ) {
+
+				await wait( room, ctx, start + t - clock );
+				await ping( room, alone );
+				messages ++;
+
+			}
+
+			assert.equal( alone.closedWith, null );
+			const reports = limits.reports.length;
+			await leave( room, alone );
+			const spent = COST.connect + messages * COST.message + ctx.fired * COST.alarm + limits.reports.length * COST.report;
+			assert.ok( Math.abs( total( limits.reports ) - spent ) < 1e-9, `${ total( limits.reports ) } reported, ${ spent } spent` );
+			console.log( `    alone an hour, a keepalive every ${ every / SECOND } s: ${ ctx.fired } alarms, ${ reports } reports, ${ spent.toFixed( 1 ) } billed requests` );
+			hour[ every ] = spent;
+
+		}
+
+		// (It was about 150 and 190 when the room reported every minute.)
+		assert.ok( hour[ KEEPALIVE_MS ] < 100 && hour[ 60 * SECOND ] < 125, JSON.stringify( hour ) );
 
 	} );
 
@@ -1679,21 +1940,94 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 		const ctx = runtime();
 		const limits = limitsStub();
 		const room = new DriveRoom( ctx, { LIMITS: limits.binding, LIVE_PARTY_MAX: '2' } );
-		const start = clock;
 		const alice = await hello( room, ctx );
 		// One that never says hello, and one told the room's full: connecting was a request all the same.
 		const quiet = await arrive( room, ctx );
 		const full = await arrive( room, ctx );
 		assert.deepEqual( full.closedWith, { code: CLOSE.full, reason: 'full' } );
-		// The quiet one closed at the hello deadline: its connecting and keepalives go on Alice's.
+		// The quiet one closed at the hello deadline: its connecting goes on Alice's.
 		await wait( room, ctx, HELLO_MS );
 		assert.deepEqual( quiet.closedWith, { code: CLOSE.hello, reason: 'no hello' } );
-		const quietFor = clock - start;
-		ctx.pinged.set( alice, clock );
+		await ping( room, alice );
 		await wait( room, ctx, REPORT_MS );
 		await leave( room, alice );
-		assert.equal( limits.reports.length, 2 );
-		const spent = 3 * COST.connect + COST.message + ctx.fired * COST.alarm + 2 * COST.report + ( clock - start + quietFor ) / KEEPALIVE_MS * COST.message;
+		// Too little for a report in the minute: all of it as the room empties.
+		assert.equal( limits.reports.length, 1 );
+		const spent = 3 * COST.connect + 2 * COST.message + ctx.fired * COST.alarm + COST.report;
+		assert.ok( Math.abs( total( limits.reports ) - spent ) < 1e-9, `${ total( limits.reports ) } reported, ${ spent } spent` );
+
+	} );
+
+	test( 'a connection the room has closed that goes on talking: each message counted, and past BURST of them the room resets, what it spent reported first', async () => {
+
+		const ctx = runtime();
+		const limits = limitsStub();
+		const room = new DriveRoom( ctx, { LIMITS: limits.binding, LIVE_PARTY_MAX: '2' } );
+		const alice = await hello( room, ctx );
+		const bob = await hello( room, ctx );
+		let messages = 2;
+		// One turned away as the room's full, saying something anyway: counted on Alice.
+		const full = await arrive( room, ctx );
+		for ( let i = 0; i < 5; i ++ ) await say( room, full, { t: 'honk' } );
+		messages += 5;
+		// Bob over the rate is closed; his page doesn't answer, and goes on.
+		for ( let i = 0; i < BURST; i ++ ) await say( room, bob, { t: 'trick', score: 10 } );
+		messages += BURST;
+		assert.deepEqual( bob.closedWith, { code: CLOSE.rate, reason: 'too many messages' } );
+		for ( let i = 0; i < BURST; i ++ ) await say( room, bob, { t: 'honk' } );
+		messages += BURST;
+		assert.deepEqual( [ ctx.aborted, limits.reports.length ], [ null, 0 ] );
+		assert.deepEqual( alice.said().filter( m => m.t === 'honk' ), [] );
+		// One more, and the room resets: everyone's connection to it drops.
+		await say( room, bob, { t: 'honk' } );
+		messages ++;
+		assert.equal( ctx.aborted, 'a closed connection kept talking' );
+		assert.equal( alice.readyState, WebSocket.CLOSED );
+		assert.equal( limits.reports.length, 1 );
+		const spent = 3 * COST.connect + messages * COST.message + COST.report;
+		assert.ok( Math.abs( total( limits.reports ) - spent ) < 1e-9, `${ total( limits.reports ) } reported, ${ spent } spent` );
+
+	} );
+
+	test( 'a visit gone to another room: its connections here go (CLOSE.replaced); one of them still on its way in is turned away, one made after isn\'t', async () => {
+
+		const ctx = runtime();
+		const room = new DriveRoom( ctx, { LIMITS: limitsStub().binding } );
+		const watcher = await hello( room, ctx );
+		const tab = await hello( room, ctx, { visit: 'moving', seq: 3 } );
+		watcher.said();
+		// The Worker, as the visit's connection 5 goes to another room.
+		assert.equal( ( await leaveFor( room, 'moving', 5 ) ).status, 204 );
+		assert.deepEqual( tab.closedWith, { code: CLOSE.replaced, reason: 'replaced' } );
+		assert.deepEqual( watcher.said(), [ { t: 'leave', pid: tab.pid } ] );
+		// Its connection 4, made a moment before 5 and only coming in now: turned away.
+		const late = await arrive( room, ctx, { visit: 'moving', seq: 4 } );
+		assert.deepEqual( late.closedWith, { code: CLOSE.replaced, reason: 'replaced' } );
+		// The page coming back here later (6): in, as ever.
+		const back = await hello( room, ctx, { visit: 'moving', seq: 6 } );
+		assert.equal( back.closedWith, null );
+		assert.deepEqual( watcher.said().map( m => m.t ), [ 'join' ] );
+		// A visit with nothing here: nothing happens.
+		await leaveFor( room, 'nobody-here', 2 );
+		assert.deepEqual( [ watcher.closedWith, back.closedWith ], [ null, null ] );
+
+	} );
+
+	test( 'a lone driver connecting again: what its last connection hadn\'t reported goes with its new one, not into memory', async () => {
+
+		const ctx = runtime();
+		const limits = limitsStub();
+		const room = new DriveRoom( ctx, { LIMITS: limits.binding } );
+		const first = await hello( room, ctx, { visit: 'again' } );
+		await ping( room, first );
+		const second = await arrive( room, ctx, { visit: 'again', seq: 2 } );
+		assert.deepEqual( first.closedWith, { code: CLOSE.replaced, reason: 'replaced' } );
+		assert.ok( Math.abs( second.attachment.spent - ( 2 * COST.connect + 2 * COST.message ) ) < 1e-9, JSON.stringify( second.attachment ) );
+		// So a room woken from hibernation (a new one, with only what the sockets kept) still has it.
+		const woken = new DriveRoom( ctx, { LIMITS: limits.binding } );
+		await say( woken, second, HELLO );
+		await leave( woken, second );
+		const spent = 2 * COST.connect + 3 * COST.message + COST.report;
 		assert.ok( Math.abs( total( limits.reports ) - spent ) < 1e-9, `${ total( limits.reports ) } reported, ${ spent } spent` );
 
 	} );
@@ -1705,15 +2039,11 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 		const room = new DriveRoom( ctx, { LIMITS: limits.binding } );
 		const alice = await hello( room, ctx );
 		const bob = await hello( room, ctx );
-		await say( room, alice, { t: 's', s: carAt( 46.5725, 8.4153 ) } );
-		ctx.pinged.set( alice, clock );
-		ctx.pinged.set( bob, clock );
-		await wait( room, ctx, REPORT_MS );
+		await drive( room, ctx, alice, REPORT_MS, [ bob ] );
+		assert.equal( limits.reports.length, 1 );
 		assert.deepEqual( [ alice.closedWith, bob.closedWith ], [ null, null ] );
 		limits.open = false;
-		ctx.pinged.set( alice, clock );
-		ctx.pinged.set( bob, clock );
-		await wait( room, ctx, REPORT_MS );
+		await drive( room, ctx, alice, REPORT_MS, [ bob ] );
 		assert.deepEqual( alice.closedWith, { code: CLOSE.off, reason: BUDGET_SPENT } );
 		assert.deepEqual( bob.closedWith, { code: CLOSE.off, reason: BUDGET_SPENT } );
 		assert.equal( ctx.alarm, null );
@@ -1724,7 +2054,7 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 
 	} );
 
-	test( 'DriveLimits failing: the room carries on as if open, tries again a minute on, and nothing it spent is lost', async () => {
+	test( 'DriveLimits failing: the room carries on as if open, tries again at its next alarm, and nothing it spent is lost', async () => {
 
 		const ctx = runtime();
 		const limits = limitsStub();
@@ -1732,27 +2062,28 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 		const start = clock;
 		const alice = await hello( room, ctx );
 		const bob = await hello( room, ctx );
+		let messages = 2;
 		const logged = [];
 		const realError = console.error;
 		console.error = ( ...args ) => logged.push( args.join( ' ' ) );
 		try {
 
 			limits.fail = true;
-			await wait( room, ctx, REPORT_MS );
+			messages += await drive( room, ctx, alice, REPORT_MS, [ bob ] );
 			assert.deepEqual( [ alice.closedWith, bob.closedWith ], [ null, null ] );
 			assert.equal( logged.length, 1 );
 			assert.match( logged[ 0 ], /^Live budget report Error DriveLimits is down$/ );
-			// Not again at once: the next alarm is for Bob's and Alice's idle deadline, then the report.
-			ctx.pinged.set( alice, clock );
-			ctx.pinged.set( bob, clock );
+			// Not again at once.
 			assert.ok( ctx.alarm > clock );
 			limits.fail = false;
-			await wait( room, ctx, REPORT_MS );
+			messages += await drive( room, ctx, alice, REPORT_MS, [ bob ] );
 			assert.equal( logged.length, 1 );
 			assert.deepEqual( limits.reports.map( report => report.now - start ), [ 2 * REPORT_MS ] );
 			assert.deepEqual( [ alice.closedWith, bob.closedWith ], [ null, null ] );
-			// The failed report's all in this one, its call included.
-			const spent = 2 * COST.connect + 2 * COST.message + ctx.fired * COST.alarm + 2 * COST.report + 2 * ( clock - start ) / KEEPALIVE_MS * COST.message;
+			// The failed report's all in that one, its call included (and what came after, as they go).
+			await leave( room, alice );
+			await leave( room, bob );
+			const spent = 2 * COST.connect + messages * COST.message + ctx.fired * COST.alarm + ( limits.reports.length + 1 ) * COST.report;
 			assert.ok( Math.abs( total( limits.reports ) - spent ) < 1e-9, `${ total( limits.reports ) } reported, ${ spent } spent` );
 
 		} finally {
