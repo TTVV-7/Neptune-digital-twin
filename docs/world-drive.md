@@ -38,8 +38,10 @@ address, and the construction app is unchanged by it.
    through the pin), else north. A spot on a bridge, or a search result that is a bridge, starts on the
    deck rather than on the water underneath. A pin on a roof (a search result that's a building's
    middle, or a tap on one) starts on the street beside it, and a start with something right in front
-   of it (a car parked in Google's photo, a bollard) moves across the road to a clear lane. Where
-   there's nothing at all to drive on, it says so and goes back to the globe.
+   of it (a car parked in Google's photo, a bollard) moves across the road to a clear lane. A pin out
+   on the open sea, where Google's tiles are only the sea bed far below, starts on the sea's surface
+   ([the open sea](#the-open-sea)). Where there's nothing at all to drive on, it says so and goes
+   back to the globe.
 5. **M** (or the **Globe** button) goes back to the globe, from driving or from a drop-in on its way
    down. Pick somewhere else and drop in again: as often as you like, without reloading.
 
@@ -188,7 +190,10 @@ so everything used to drive on the sea. Now driving into water, or coming down i
 - **The hovercraft** rides on water as on land, throwing up spray behind it as it goes. **Boost pads**
   never go down on water, nor by it.
 - **Dropped in on water** (a pin on the sea), you ride on it until you've been on dry ground: with
-  nowhere to go back to, a splash would only be followed by another.
+  nowhere to go back to, a splash would only be followed by another. So too on the
+  [open sea](#the-open-sea), where there may be no dry ground for a thousand kilometres: any ride
+  drives on it, and flies and comes down on it, until it reaches land; from then on, back into it is
+  a splash and back on that land.
 
 It's the Driver's `water` option (`src/drive.js`; off unless an app gives one, so the construction
 app's driving never splashes), which World Drive gives `src/drive-app/water.js`. The Driver looks
@@ -331,6 +336,72 @@ request per page load.
 64-pixel copy 0.7 ms at most, once per picture. At five looks a second that's well under 1 % of the
 time. Boost pads' check of a spot and 8 m round it (five looks, only for the few spots that pass
 everything else) took up to 21 ms, once 44 ms when a single ray took 40 ms (a tile's first ray).
+
+#### The open sea
+
+Out past what Google photographs of a coast, its 3D tiles aren't the sea at all: they're the sea
+bed, with the sea's picture on it, and nothing at the surface. Measured on Google's tiles (2
+November 2026): by Santa Monica Pier, Google's photographed water is at the sea's height (36.7 m
+under the ellipsoid there), as everywhere it photographs; 8 km out in Santa Monica Bay (33.95° N,
+118.6° W) the tiles under the pin were 220 m under the ellipsoid, the bay's bed 184 m down, coarse
+(a leaf tile with 64 m of geometric error, the most there is there) and sloping up to the shore 2 m
+in 100; 7 km off Kona, Hawaii, 1.7 km down; and in the middle of the Pacific (30° N, 140° W and
+145.3° W), 4.7 and 5.2 km down (leaf tiles, 1 km of error).
+
+So a pin out at sea didn't work. The drop-in looked for ground no lower than 1.5 km under the
+ellipsoid (lower than any land), found none, and after waiting 25 s for it said "There's no 3D map
+at this spot yet. Try somewhere else." and went back to the globe. (A pin over the shelf found the
+sea bed and started on it: water-coloured, level to half a metre close by and the lowest round
+about, so water.js calls it water, and you rode on it, 184 m under the sea in Santa Monica Bay.)
+Coming down into the water, and a drop-in on the water by the shore, were never the trouble: a
+kart flown out 550 m from Santa Monica's beach and let glide down into the sea there splashed
+(**SPLISH!**) and was back on dry land, and so it did thrown in from 15 m; a pin on the water by
+the pier started on the water, riding on it.
+
+Now the drop-in looks for ground down to below the deepest sea floor (11.5 km under the ellipsoid;
+the Challenger Deep is 10.9 km down), and ground there more than 1 km under the sea's height, with
+the tiles done loading, is the sea floor: no land or lake is more than about 430 m under the sea
+(the Dead Sea's shore), and that leaves room for a coarse tile's flat face cutting under the curve
+of the Earth before sharper ones arrive (480 m for one 150 km across). The drive starts on the sea's
+surface instead: `src/drive-app/sea.js` lays a disc of water there, 130 km across, round the vehicle
+and following it as it drives (laid again each 50 m), fine by the vehicle and coarse at the horizon,
+each point of it where the sea is over that point of the Earth: it curves away under the scene's
+flat frame as the Earth does, 2 m lower 5 km on. It's one deep blue, mottled so that driving over it
+is seen to move (Google's picture of the bed out there is its shaded relief, as dark as (12, 13, 19)
+at 30° N, 140° W, so it isn't taken from that). The Driver drives on it as on any ground, and
+water.js calls anywhere on it water, so it is water like any other: you ride on it until you've been
+on dry ground (an island, a coast), the hovercraft floats on it throwing up spray, no boost pad goes
+down on it, and once you've been on dry ground, driving or coming down into it is a splash and back
+on that ground. The flight down to it doesn't look for Google's ground (it would come down onto the
+bed). M, or a drop-in anywhere else, takes it away. Land, bridges, roofs, lakes and the shelf drop
+in as before: the ground found there is higher than that, and a pin there never asks how high the
+sea is.
+
+**The sea's height.** Google's heights are over the WGS 84 ellipsoid, and the sea's surface isn't:
+it lies on the geoid, from 107 m under the ellipsoid south of India to 85 m over it by New Guinea,
+so the sea at 0 would have been tens of metres from a coast's own water. It's NGA's EGM96 geoid
+(public domain), every degree: `drive/public/sea/egm96.bin`, 65,160 bytes (181 rows from 90° N, of
+360 heights from 180° W, each a signed byte in metres), fetched the first time a drop-in needs it
+and read bilinearly. `node scripts/make-sea-level.mjs` makes it from PROJ's copy of the model's
+15-minute grid (https://cdn.proj.org/us_nga_egm96_15.tif, fetched, or a copy given). It's within
+0.5 m of the full model on average (1.9 m at the 99th percentile, 14 m at worst, by the deep
+trenches), and 2 to 6 m low by round volcanic islands, whose own bump is narrower than a degree.
+If it doesn't load, the sea is at 0.
+
+**Tried on Google's tiles** (scratch scripts, three page loads, every place reached by the globe's
+drop-in): the middle of the Pacific, by a tap on the globe from space (30° N, 145.1° and 145.3° W)
+and by typed coordinates (30° N, 140° W): driving 7 to 11 s after **Drive here**, on the sea at 20.7
+to 28 m under the ellipsoid, the bed 4.7 to 5.2 km under it; the kart driven on for 4 to 5 s, on
+the water all the way with no splash, flown 25 m up and glided down onto it, and thrown 25 m up and
+down onto it, with no splash; the hovercraft across it throwing up spray. 7 km off Kona, Hawaii,
+with the island in sight: the sea at 15.5 m over the ellipsoid (EGM96 at a degree; at its full 15
+minutes, 19.3), the bed 1.7 km down; held 400 m off the coast, 6.5 km on, Google's own water there
+was 1.0 m over the open sea's surface, a kerb's step, the coast rising straight out of the sea in
+the view. On Google's ground by that coast (its photographed water by the shore, dark and not
+even, which water.js takes for dry ground), flown 900 m out over the open sea and let glide down:
+**SPLASH!**, and back there, "Back on dry land". Santa Monica Bay, the pier's water and the beach
+dropped in as before, the same ground at the same heights, and a kart flown out from the beach
+into the sea, and thrown in, still went **SPLISH!** and was back on dry land.
 
 ## Driving with others
 
@@ -1940,6 +2011,9 @@ src/drive-app/garage.js      the Garage: choices and the turntable; paint.js the
 src/drive-app/pads.js        boost pads: where they go, driving over them, the pause menu's switch
 src/drive-app/water.js       water on Google's mesh, told by how it's drawn: for splashes, the way
                              back from one, R and boost pads
+src/drive-app/sea.js         the open sea: its surface where Google draws only the sea bed, and the
+                             sea's height (EGM96, drive/public/sea/egm96.bin, which
+                             scripts/make-sea-level.mjs makes)
 src/drive-app/api.js         /api/config, the visit with Turnstile, /api/search, the leaderboard's and
                              the Supporter Pass's calls
 src/drive-app/leaderboard.js the leaderboard: the panel, names, posting runs, the new-best card
@@ -1997,6 +2071,17 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   against walls as the box it is, turned as it is, which is close but not exact for a tumbling truck
   meeting a roof's edge.
 - Flying over a valley, the glide down (3 m/s) can take a while: R puts you back on the road.
+- Out over the continental shelf, past what Google photographs of a coast and under 1 km deep,
+  Google's tiles are the sea bed with the sea's picture on it, and a drop-in starts on that, which
+  water.js calls water: you ride on the bed (184 m under the sea 8 km out in Santa Monica Bay),
+  sloping up toward the coast, under the height of Google's photographed water by the shore (how the
+  two meet there wasn't tried). By its depth it can't be told from a lake that's under the sea's
+  height (the Dead Sea's, the Sea of Galilee's, the Salton Sea's), so it's left as it was. The
+  [open sea](#the-open-sea)'s surface is EGM96's at a degree, a few metres from a coast's own water
+  (1 m under it off Kona; by round volcanic islands up to 6 m low), so driving from it to a coast
+  can be a step of a few metres up onto Google's water, or the coast's lowest ground a few metres
+  under it; and it's one deep blue, whatever Google's pictures of the sea round it are (by Kona,
+  dark navy).
 - [Water](#water) is told by how Google draws it, which isn't always the same: it misses water
   that's photographed rather than filled (a fountain lake, Geneva's clear lake, a lagoon), busy
   with boats and wakes (Venice's Grand Canal), in a narrow canal (Amsterdam's, Venice's: the rings
@@ -2043,6 +2128,6 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
 ## Credits
 
 The 3D world is Google's: the Google Maps logo and the data providers show whenever the tiles are on
-screen. Place search © OpenStreetMap contributors. The trucks and the cars are models from Sketchfab
+screen. The open sea's height is NGA's EGM96 geoid (public domain), from PROJ's copy of it. Place search © OpenStreetMap contributors. The trucks and the cars are models from Sketchfab
 under CC BY 4.0, credited under **About World Drive** and on the ride picker (and the cars in
 `drive/public/cars/CREDITS.md`); the go-kart and the pass's rides are built in code.

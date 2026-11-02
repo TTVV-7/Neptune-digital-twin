@@ -16,6 +16,10 @@
 // Google's other water colours, a bluish lawn among ball fields and a lagoon's turquoise; a
 // canal's water by its wall never taken for dry; slowly off a quay, a splash right by it; never
 // the same splash twice; the way back past a spot level with the water, and kept across a pause;
+// the open sea (the pad lowered 3 km, as Google's tiles are only the sea bed out there): the sea's
+// height (EGM96's), a typed pin there started on the sea's own surface, driven on, curving away
+// with the Earth, flown over and come down on with no splash, a splash off an island and back on
+// it, and gone back on the globe, a drop-in on land having none;
 // the screens the Worker's answers lead to (used up, robot check, maps off, the visit itself); and
 // the leaderboard (its answers made here): the trophy and the panel, tabs, your own row, picking a
 // name and renaming, a landed jump posting the run (the card asking the first time, never stopping
@@ -1543,6 +1547,218 @@ describe( 'World Drive water', () => {
 		assert.ok( result.splashes === 1 && result.left === 0 && ! result.after.splash && Math.abs( result.after.y + 2 ) < 0.01, JSON.stringify( result ) );
 		assert.equal( result.dryBack, - 236 );
 		assert.ok( result.trail > 3 && result.paused === 'paused' && result.resumed === 'driving' && result.trailAfter === result.trail, JSON.stringify( result ) );
+
+	} );
+
+} );
+
+// The open sea. Out past what Google photographs of a coast, its tiles are the sea bed under the
+// sea's picture (5 km down in the middle of the Pacific), with no surface: the test pad lowered
+// 3 km stands in for it. A drop-in there starts on a surface of the sea's own (sea.js) at the
+// sea's height there (EGM96's, drive/public/sea/egm96.bin), which is water like any other.
+describe( 'World Drive, the open sea', () => {
+
+	let page;
+
+	before( async () => {
+
+		page = await newPage();
+		await openGlobe( page );
+
+	} );
+
+	after( () => page?.context().close() );
+
+	test( 'the sea\'s height over the ellipsoid is EGM96\'s, to a few metres', async () => {
+
+		const levels = await page.evaluate( async () => {
+
+			const { seaLevel } = await import( '/src/drive-app/sea.js' );
+			return Promise.all( [ [ 0, 0 ], [ 4.75, 78.75 ], [ - 8.25, 147.25 ], [ 34, - 118.5 ], [ 30, - 140 ], [ 90, 0 ], [ - 90, 0 ], [ 30, 180 ], [ 30, - 180 ] ].map( ( [ lat, lon ] ) => seaLevel( lat, lon ) ) );
+
+		} );
+		console.log( 'sea levels:', JSON.stringify( levels ) );
+		// The full model there: 17.16 m at 0° 0°, its lowest south of India and its highest by New
+		// Guinea, Santa Monica Bay, the middle of the Pacific, the poles; and 180° E is 180° W.
+		const model = [ 17.16, - 106.99, 85.39, - 36.01, - 28.11, 13.61, - 29.53, - 7.5, - 7.5 ];
+		levels.forEach( ( level, i ) => assert.ok( Math.abs( level - model[ i ] ) < 5, `${ level } vs ${ model[ i ] }` ) );
+		assert.equal( levels[ 7 ], levels[ 8 ] );
+
+	} );
+
+	test( 'dropped in on the open sea: started on its surface at the sea\'s height, riding on it, the Earth curving away under it, flying and coming down on it, never a splash or a boost pad', async () => {
+
+		// The sea bed 3 km down; the pin typed in, as anyone would.
+		await page.evaluate( () => {
+
+			const pad = window.drive.ground.getColliders()[ 0 ];
+			pad.position.y = - 3000;
+			pad.updateMatrixWorld( true );
+
+		} );
+		await page.locator( '.search input[name=q]' ).fill( '30, -140' );
+		await page.locator( '.search input[name=q]' ).press( 'Enter' );
+		await flown( page );
+		await driveHere( page );
+		await page.evaluate( () => document.querySelector( '#drive-ui .keys' ).hidden = true );
+		await shot( page, 'drive-open-sea' );
+		const result = await page.evaluate( () => {
+
+			const { driver: d, water, sea, pads, place, ground } = window.drive;
+			const toast = document.querySelector( '#toast' );
+			const out = {
+				toast: toast.hidden ? null : toast.textContent, sea: sea.active, colliders: ground.getColliders().length, height: place.height,
+				start: { y: d.y, heading: d.heading }, look: water.look( 0, 0, 0 ), dry: water.look( 0, 0, 0 ).dry,
+			};
+			const step = ( seconds, each ) => {
+
+				for ( let i = 0; i < Math.round( seconds * 60 ); i ++ ) {
+
+					d.update( 1 / 60 );
+					sea.follow( d.east, d.north );
+					pads.update( 1 / 60 );
+					if ( each?.() === false ) return;
+
+				}
+
+			};
+			// Driven on for 6 s: on the water all the way, with nowhere dry to go back to.
+			for ( const code of [ ...d.keys ] ) d.release( code );
+			const drive = { splashed: false, low: Infinity, high: - Infinity, onWater: 0, pads: 0 };
+			d.press( 'KeyW' );
+			step( 6, () => {
+
+				drive.splashed ||= !! d.splash;
+				drive.low = Math.min( drive.low, d.y );
+				drive.high = Math.max( drive.high, d.y );
+				if ( d.onWater ) drive.onWater += 1 / 60;
+				drive.pads = Math.max( drive.pads, pads.pads.filter( p => p.state !== 'free' ).length );
+
+			} );
+			d.release( 'KeyW' );
+			Object.assign( drive, { north: d.north, dry: d.dry.length } );
+			out.drive = drive;
+			// 5 km on, the sea is 2 m lower than where the scene is centred: the Earth curving away.
+			Object.assign( d, { east: 0, north: 5000, speed: 10, grounded: true } );
+			step( 1.5 );
+			out.far = { y: d.y, look: water.look( d.east, d.north, d.y ).level, expected: - ( d.north ** 2 ) / ( 2 * 6371000 ) };
+			// Up on F, and down again with it let go.
+			d.press( 'KeyF' );
+			step( 2 );
+			const high = d.y - out.far.y;
+			d.release( 'KeyF' );
+			let splashed = false;
+			step( 20, () => {
+
+				splashed ||= !! d.splash;
+				return ! d.grounded || d.flying;
+
+			} );
+			step( 0.5, () => {
+
+				splashed ||= !! d.splash;
+
+			} );
+			out.flew = { high, splashed, flying: d.flying, grounded: d.grounded, y: d.y, onWater: d.onWater };
+			return out;
+
+		} );
+		console.log( 'the open sea:', JSON.stringify( result ) );
+		assert.equal( result.toast, null );
+		assert.ok( result.sea && result.colliders === 2, JSON.stringify( result ) );
+		// The sea's height there (EGM96: 28 m under the ellipsoid), at the scene's y = 0.
+		assert.ok( Math.abs( result.height + 28 ) < 1, `the sea at ${ result.height } m` );
+		assert.ok( Math.abs( result.start.y ) < 0.01 && result.look.level !== null && Math.abs( result.look.level ) < 0.01 && ! result.dry, JSON.stringify( result ) );
+		assert.ok( ! result.drive.splashed && result.drive.north > 60 && result.drive.onWater > 5.5 && result.drive.dry === 0, JSON.stringify( result.drive ) );
+		assert.ok( Math.abs( result.drive.low ) < 0.01 && Math.abs( result.drive.high ) < 0.01 && result.drive.pads === 0, JSON.stringify( result.drive ) );
+		assert.ok( Math.abs( result.far.y - result.far.expected ) < 0.1 && result.far.expected < - 1.9 && Math.abs( result.far.look - result.far.y ) < 0.01, JSON.stringify( result.far ) );
+		assert.ok( result.flew.high > 5 && ! result.flew.splashed && ! result.flew.flying && result.flew.grounded && result.flew.onWater, JSON.stringify( result.flew ) );
+		assert.ok( Math.abs( result.flew.y - result.far.y ) < 0.1, JSON.stringify( result.flew ) );
+		assert.deepEqual( page.errors, [] );
+
+	} );
+
+	test( 'once it has been on dry ground (an island), driving off into the open sea is a splash and back on the island; back on the globe the sea goes, and a drop-in on land has none', async () => {
+
+		const result = await page.evaluate( () => {
+
+			const { driver: d, sea, ground } = window.drive;
+			// An island 0.3 m over the sea, 40 m across, 20 m ahead: a slab cut from the pad, 3 km up
+			// from it.
+			const pad = ground.getColliders()[ 0 ];
+			const land = pad.children.find( child => child.isMesh );
+			const island = land.clone();
+			const top = d.y + 0.3;
+			island.scale.set( 40 / 4000, 40 / 2000, 1 );
+			island.position.set( - d.east, top - pad.position.y, d.north + 40 );
+			pad.add( island );
+			island.updateMatrixWorld( true );
+			for ( const code of [ ...d.keys ] ) d.release( code );
+			Object.assign( d, { heading: 0, course: 0, view: 0, speed: 8, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, flying: false, splash: null, dry: [], onWater: false } );
+			const $ = selector => document.querySelector( `#hud ${ selector }` );
+			const step = ( seconds, each ) => {
+
+				for ( let i = 0; i < Math.round( seconds * 60 ); i ++ ) {
+
+					d.update( 1 / 60 );
+					sea.follow( d.east, d.north );
+					if ( each?.() === false ) return;
+
+				}
+
+			};
+			d.press( 'KeyW' );
+			let word = null;
+			const start = d.north;
+			step( 12, () => {
+
+				word ??= d.splash && ( $( '.dhud-pop.splash' )?.textContent ?? null );
+				return ! d.splash;
+
+			} );
+			d.release( 'KeyW' );
+			const out = { islandAt: [ start + 20, start + 60 ], splashed: !! d.splash, wentIn: d.north, trail: d.dry.length, word };
+			step( 3, () => ! d.splash || undefined );
+			step( 0.2 );
+			Object.assign( out, { back: { north: d.north, y: d.y, splash: !! d.splash, flash: $( '.dhud-flash' ).hidden ? null : $( '.dhud-flash' ).textContent, island: d.y - top } } );
+			island.removeFromParent();
+			return out;
+
+		} );
+		console.log( 'the open sea, an island:', JSON.stringify( result ) );
+		assert.ok( result.splashed && result.wentIn > result.islandAt[ 1 ] && result.trail > 3, JSON.stringify( result ) );
+		assert.ok( [ 'SPLISH!', 'SPLASH!', 'KER-SPLOOSH!' ].includes( result.word ), JSON.stringify( result ) );
+		assert.ok( ! result.back.splash && Math.abs( result.back.island ) < 0.05 && result.back.north > result.islandAt[ 0 ] && result.back.north < result.islandAt[ 1 ], JSON.stringify( result.back ) );
+		assert.equal( result.back.flash, 'Back on dry land' );
+
+		// M: the globe, and the sea gone with the place.
+		await page.keyboard.press( 'KeyM' );
+		await page.waitForFunction( () => window.drive.mode === 'globe' );
+		const gone = await page.evaluate( () => {
+
+			const { sea, ground } = window.drive;
+			const pad = ground.getColliders()[ 0 ];
+			const out = { sea: sea.active, colliders: ground.getColliders().length, inScene: !! sea.mesh.parent };
+			pad.position.y = 0;
+			pad.updateMatrixWorld( true );
+			return out;
+
+		} );
+		assert.deepEqual( gone, { sea: false, colliders: 1, inScene: false } );
+		// The pad back where land is: a drop-in there has no sea.
+		await page.locator( '.spots button', { hasText: 'Neptune Terminals' } ).click();
+		await flown( page );
+		await driveHere( page );
+		const land = await page.evaluate( () => {
+
+			const { driver: d, sea, water, ground } = window.drive;
+			return { sea: sea.active, colliders: ground.getColliders().length, y: d.y, dry: water.look( d.east, d.north, d.y ).dry };
+
+		} );
+		assert.deepEqual( land, { sea: false, colliders: 1, y: land.y, dry: true } );
+		assert.ok( Math.abs( land.y ) < 0.01, JSON.stringify( land ) );
+		assert.deepEqual( page.errors, [] );
+		assert.deepEqual( page.outside, [] );
 
 	} );
 

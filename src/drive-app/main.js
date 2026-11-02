@@ -16,6 +16,7 @@ import { setUpPanel } from './panel.js';
 import { setUpGarage } from './garage.js';
 import { createBoostPads } from './pads.js';
 import { createWater } from './water.js';
+import { createSea, seaLevel } from './sea.js';
 import { setUpLeaderboard } from './leaderboard.js';
 import { buyArea } from './pass.js';
 import { fillAccountArea, fillBuyArea, linkPlayer, onLinked, setUpSupporter } from './supporter.js';
@@ -55,8 +56,20 @@ const SKY_BELOW = [ 15000, 120000 ];
 const GROUND_WAIT = [ 25, 15 ];
 // The tiles must have stopped loading this long (s) for the ground to count as there.
 const SETTLE = 0.6;
-// Where the ground is looked for (m above the ellipsoid): below the Dead Sea to above Everest.
-const GROUND_RANGE = [ - 1500, 9500 ];
+// Where the ground is looked for (m above the ellipsoid): below the deepest sea floor (the
+// Challenger Deep, 10.9 km down) to above Everest. Ground under the pin lower than LOWEST is used
+// only as the sea floor (below).
+const GROUND_RANGE = [ - 11500, 9500 ];
+const LOWEST = - 1500;
+// Out past what Google photographs of a coast, its tiles are the sea bed with the sea's picture on
+// it: ground more than SEA_FLOOR m under the sea's height there is that, and the drive starts on
+// the sea's surface instead (sea.js). No land or lake is more than about 430 m under the sea (the
+// Dead Sea's shore), and this leaves room besides for a coarse tile's flat face cutting under the
+// curve of the Earth (one 150 km across, 480 m, as the test globe's do). The sea is never more than
+// HIGHEST_SEA m over the ellipsoid, so ground higher than that less SEA_FLOOR needn't ask how high
+// the sea is.
+const SEA_FLOOR = 1000;
+const HIGHEST_SEA = 86;
 // Room (px) the pin's card takes over the panel when the panel is a sheet along the bottom.
 const PIN_CARD = 84;
 // What a place's name may hold on the leaderboard (as worker/drive/names.js takes it), and how long.
@@ -186,7 +199,9 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 
 	}
 
-	const grounds = () => [ tiles ? tiles.group : pad ];
+	// What's driven on: Google's tiles (or the test pad), and out at sea the sea's own surface.
+	const sea = createSea( { scene } );
+	const grounds = () => sea.active ? [ tiles ? tiles.group : pad, sea.mesh ] : [ tiles ? tiles.group : pad ];
 	const globe = new GlobeView( { camera, canvas, earth, surface: earth, ellipsoid, pin: $( 'pin' ) } );
 	scene.add( globe.air );
 	globe.place( globe.orbit( home.lat, home.lon ) );
@@ -469,6 +484,7 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 		panel.refreshRecent();
 		pinAt( null );
 		pads.clear();
+		sea.clear();
 		setMode( 'dropping' );
 		// (Where people are driving is a pin, or a start spot's own place, with the spot it's near.)
 		const shown = place.near || place.name;
@@ -492,11 +508,17 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 		await globe.flyTo( { lat, lon, height: estimate, distance: 320, heading: place.heading ?? globe.pose().heading, pitch: - 40 } );
 		if ( gone() ) return;
 		screens.loading( 'Loading the ground...', 0 );
-		// Looking for it anywhere from above the highest mountain to below the Dead Sea, whatever
-		// the estimate was.
-		const y = await settle( drop, GROUND_RANGE[ 1 ] - estimate, GROUND_RANGE[ 1 ] - GROUND_RANGE[ 0 ], GROUND_WAIT[ 0 ] );
+		// Looking for it anywhere from above the highest mountain to below the deepest sea floor,
+		// whatever the estimate was.
+		const { y, settled } = await settle( drop, GROUND_RANGE[ 1 ] - estimate, GROUND_RANGE[ 1 ] - GROUND_RANGE[ 0 ], GROUND_WAIT[ 0 ] );
 		if ( gone() ) return;
-		if ( y === null ) {
+		// Far under the sea's height (with the tiles done loading, not a coarse tile cutting under the
+		// curve of the Earth), it's the sea floor: the open sea, started on its surface.
+		const floor = y === null ? null : estimate + y;
+		const level = floor !== null && settled && floor < HIGHEST_SEA - SEA_FLOOR ? await seaLevel( lat, lon ) : null;
+		const open = level !== null && floor < level - SEA_FLOOR;
+		if ( gone() ) return;
+		if ( floor === null || ( ! open && floor < LOWEST ) ) {
 
 			noGround( 'There\'s no 3D map at this spot yet. Try somewhere else.' );
 			return;
@@ -505,8 +527,8 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 
 		// A spot on a bridge starts on its deck, if its pin is a little off it, over the water; a pin
 		// on a roof (or anything else raised) starts on the street below it.
-		let height = estimate + y;
-		const start = place.deck ? ground.deck( y ) : ground.street( y );
+		let height = open ? level : floor;
+		const start = open ? null : place.deck ? ground.deck( y ) : ground.street( y );
 		if ( start ) {
 
 			( { lat, lon } = localToLatLon( enuToLocal( start.east, start.north, 0 ), { lat, lon } ) );
@@ -514,11 +536,13 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 
 		}
 
-		// Now the ground is at y = 0, and the street can be seen: down behind where you'll start.
+		// Now the ground (or the sea) is at y = 0, and the street can be seen: down behind where
+		// you'll start.
 		recentre( { lat, lon, height } );
+		if ( open ) sea.start( { lat, lon, height } );
 		state.place = { ...place, lat, lon, height };
 		const heading = ground.heading( 0, place.heading );
-		await globe.flyTo( { lat, lon, height, distance: 16, heading, pitch: - 15 }, { duration: 1.8 } );
+		await globe.flyTo( { lat, lon, height, distance: 16, heading, pitch: - 15 }, { duration: 1.8, ground: ! open } );
 		if ( gone() ) return;
 		screens.loading( 'Loading the ground...', 0 );
 		await settle( drop, 300, 600, GROUND_WAIT[ 1 ] );
@@ -558,8 +582,9 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 
 	}
 
-	// Wait for ground under the pin with the tiles done loading for a moment: its height (m, in the
-	// scene), or null if there's still none after `timeout` seconds.
+	// Wait for ground under the pin with the tiles done loading for a moment: { y } its height (m, in
+	// the scene), or null if there's still none after `timeout` seconds, and whether the tiles had
+	// settled (not still loading when the time ran out).
 	async function settle( drop, top, depth, timeout ) {
 
 		const begun = performance.now();
@@ -568,13 +593,13 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 		for ( ;; ) {
 
 			await frame();
-			if ( drop.cancelled ) return null;
+			if ( drop.cancelled ) return { y: null, settled: false };
 			const now = performance.now();
 			const y = ground.heightAt( 0, 0, top, depth );
 			quiet = y !== null && ! tiles?.isLoading ? quiet + ( now - last ) / 1000 : 0;
 			last = now;
 			screens.setProgress( tiles ? tiles.loadProgress : 1 );
-			if ( quiet >= SETTLE || now - begun > timeout * 1000 ) return y;
+			if ( quiet >= SETTLE || now - begun > timeout * 1000 ) return { y, settled: quiet >= SETTLE };
 
 		}
 
@@ -671,6 +696,7 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 		state.leaving = false;
 		removeVehicle();
 		pads.clear();
+		sea.clear();
 		screens.pause( false );
 		screens.hideLoading();
 		screens.hideKeys();
@@ -913,6 +939,8 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 		timer.update( time );
 		const dt = Math.min( timer.getDelta(), 0.1 );
 		if ( driver.active ) driver.update( dt );
+		// The open sea's surface stays round the vehicle.
+		if ( driver.active ) sea.follow( driver.east, driver.north );
 		if ( state.mode === 'driving' && driver.active ) progress.drive( dt, driven() );
 		live?.update( car() );
 		pads.update( dt );
@@ -972,7 +1000,7 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 	// For poking around from the browser console, and for the tests.
 	window.drive = {
 		scene, camera, renderer, tiles, globe, models, driver, ground, panel, leaderboard: board,
-		garage, supporter, pads, water, live, ghosts, friends, online, progress, profile,
+		garage, supporter, pads, water, sea, live, ghosts, friends, online, progress, profile,
 		get mode() {
 
 			return state.mode;

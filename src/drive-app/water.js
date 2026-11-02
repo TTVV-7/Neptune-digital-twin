@@ -35,7 +35,8 @@ import { enuToLocal } from '../geo.js';
 // clear lake or the sea by the surf, which Google draws from photographs, beds and all, neither
 // level nor even) is never dry. The colours are read from a small copy of each tile's picture,
 // drawn once onto a canvas and kept as long as the picture is. It looks at the cheapest things
-// first, so on most ground it's done after one ray or seven.
+// first, so on most ground it's done after one ray or seven. The open sea's surface that sea.js
+// lays where Google draws only the sea bed is water wherever a ray meets it.
 
 const DOWN = new Vector3( 0, - 1, 0 );
 // The copy of a tile's picture (px a side): a texel is a metre or two on the ground nearby.
@@ -173,6 +174,8 @@ export function createWater( ground ) {
 
 		const hit = down( east, north, y + 2, 40 );
 		if ( ! hit ) return UNSURE;
+		// The open sea's own surface (sea.js), out where Google draws only the sea bed: water.
+		if ( hit.object.userData.sea ) return { level: hit.point.y, dry: false, height: hit.point.y };
 		const colours = [ colourOf( hit ) ];
 		const colour = colours[ 0 ];
 		// What it is if it isn't water: dry, unless only water is that colour (a lagoon's turquoise
