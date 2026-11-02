@@ -146,7 +146,7 @@ export const ANCHOR_ANGLE = 20;
 export const BOND_LENGTH = 9;
 const MIN_FREE = 4.5;
 const BOND_COVER = 4.5;
-const FRICTION_ANGLE = 32;
+export const FRICTION_ANGLE = 32;
 export const ANCHOR_SPACING = 2.4;
 // Embedment below the floor (tool defaults from the research: Illinois DOT and Enercalc for
 // cantilevers in loose fill, GEC 4's example for braced walls), at least 1.5 m.

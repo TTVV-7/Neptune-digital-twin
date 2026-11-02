@@ -160,7 +160,7 @@ export function insideRect( r, x, z, hw = r.hw, hl = r.hl ) {
 }
 
 // Whether two rectangles (see rectFrame) overlap: neither lies wholly beyond a side of the other.
-function rectsOverlap( a, b ) {
+export function rectsOverlap( a, b ) {
 
 	const de = b.east - a.east;
 	const dn = b.north - a.north;
@@ -453,13 +453,29 @@ export class Terrain extends EventDispatcher {
 	// the chunks. Doesn't wait for pending changes (cheap enough for particles).
 	surfaceAt( x, z ) {
 
+		return this.readNodes( 'surface', x, z );
+
+	}
+
+	// The ground as it was at local (x, z), before anything was dug or piled (h0, or a flatten
+	// area's floor), or null outside the chunks: the original ground line of a pit's section.
+	// Read afresh each time, so it's as sharp as the tiles the chunks have sampled by then.
+	groundAt( x, z ) {
+
+		return this.readNodes( 'base', x, z );
+
+	}
+
+	// A chunk array of heights (surface, base) at local (x, z), on the triangles the mesh draws.
+	readNodes( name, x, z ) {
+
 		const fi = x / CELL;
 		const fj = z / CELL;
 		const i = Math.floor( fi );
 		const j = Math.floor( fj );
 		const chunk = this.owner( i, j );
 		if ( ! chunk?.ready ) return null;
-		const s = chunk.surface;
+		const s = chunk[ name ];
 		const k = ( j - chunk.j0 ) * NODES + i - chunk.i0;
 		const fx = fi - i;
 		const fz = fj - j;
