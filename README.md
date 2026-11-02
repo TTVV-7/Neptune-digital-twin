@@ -353,9 +353,12 @@ panel, which has the size at the top. A pit has an arrow in the middle: drag it 
 - **Laydown area:** a coloured rectangle laid on the ground with its name, size and area floating
   above it, e.g. *Laydown A · 40 × 25 m · 1,000 m²*. The P panel sets its name, colour and a note, and
   counts the items inside it. See [docs/laydown.md](docs/laydown.md).
-- **Excavation:** the rectangle is the top of the cut. It digs itself to its depth (2 m to start)
-  with sloped or shored sides; the P panel shows the cut volume, the loose volume (a quarter more) and
-  how many dump-truck loads that is, and **Spoil pile** pours the dug material beside it.
+- **Excavation:** the rectangle is the floor of the pit. It digs itself to its depth (2 m to start)
+  with its sides sloped out for the soil (WorkSafeBC's soil types; Neptune's fill is type C,
+  1.5 : 1). In the P panel the sides are *sloped*, *stepped* (benched) or *shored*, for the whole pit
+  or side by side (numbered in the scene with the way each faces), and a slider steps through the
+  dig stages; it shows the cut volume, the loose volume (a quarter more), how many dump-truck loads
+  that is, the floor and the top of the cut, and **Spoil pile** pours the dug material beside it.
 - **Stockpile:** click for a cone of material (50 m³ to start), or drag for a ridge pile that fills
   the rectangle. It pours itself: material falls and builds up at the material's natural slope
   (gravel, sand, topsoil, excavated soil, road base, riprap, coal, potash). The P panel shows its

@@ -7,6 +7,7 @@ import {
 	DoubleSide,
 	Group,
 	LineBasicMaterial,
+	LineDashedMaterial,
 	LineLoop,
 	MathUtils,
 	Mesh,
@@ -18,8 +19,35 @@ import { registerKind } from './kinds.js';
 import { CELL, CUT, MATERIALS, SWELL, Terrain, coneRadius, findMaterial, hideUnderEarthworks, insideRect, materialIndex, rectBounds, rectFrame, spread } from './terrain.js';
 import { addHitFilter } from './walk.js';
 import { createPourStream } from './pour.js';
-import { NO_SUPPORT, SHORING_READOUTS, SUPPORTS, normalizeSupport, setUpShoring, wallSlope } from './shoring.js';
+import { SHORING_READOUTS, setUpShoring } from './shoring.js';
 import { SECTION_ACTIONS, SECTION_READOUTS, clipTileMaterial, setUpSection } from './excavation-section.js';
+import {
+	BRACINGS,
+	ENDS,
+	METHODS,
+	OUTLINES,
+	SIDE_METHODS,
+	SLOPE_FROM,
+	SOILS,
+	SOIL_OPTIONS,
+	SYSTEMS,
+	cutBounds,
+	cutVolume,
+	depthAt,
+	geometryAtStage,
+	methodPatch,
+	newExcavationParams,
+	normaliseExcavation,
+	outlines,
+	pitFrame,
+	pitToEnu,
+	planExcavation,
+	ratio,
+	saveExcavation,
+	sideCompass,
+	sideLabel,
+	toPit,
+} from './excavation-design.js';
 
 // Earthworks for laydown planning: excavations cut into the ground and stockpiles poured onto it.
 // Both are placed kinds (kinds.js), saved and moved like any library item; the ground itself is
@@ -33,13 +61,11 @@ const DIG_TIME = 3.5;
 const POUR_TIME = 5;
 // A tandem dump truck carries about this much loose material.
 const TRUCK_LOAD = 10;
-// Side slopes, horizontal : vertical. Shoring (the support field, shoring.js) cuts any pit vertical.
-const SLOPES = { vertical: 0, '0.5 : 1': 0.5, '1 : 1': 1, '1.5 : 1': 1.5, '2 : 1': 2 };
-// Side slopes keep climbing past the outline this far where the ground there is higher.
-const SLOPE_REACH = 3;
-// The rim is the lowest ground this far round the outline (models.js snaps to it), or the floor of
-// a flatten area reaching that far.
+// The rim is the lowest ground this far round the top of the cut (models.js snaps to it), or the
+// floor of a flatten area reaching that far.
 const RIM_REACH = 2;
+// Side labels stand this far above the rim, at the middle of each side's top edge.
+const SIDE_LABEL_HEIGHT = 0.3;
 // A ridge's sides run on past its rectangle this far where the ground there is lower.
 const RIDGE_TOE = 4;
 const MAX_SIZE = 200;
@@ -51,10 +77,19 @@ const PILE_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><
 
 const capMaterial = new MeshBasicMaterial( { color: 0xd9822b, transparent: true, opacity: 0.16, side: DoubleSide, depthWrite: false } );
 const pitLine = new LineBasicMaterial( { color: 0xd9822b } );
+// A pit drawn by its floor has the floor's outline too, dashed, inside the top of the cut.
+const floorLine = new LineDashedMaterial( { color: 0xd9822b, dashSize: 0.6, gapSize: 0.4, transparent: true, opacity: 0.8 } );
 // Stockpiles are clicked through an invisible hull a little bigger than the pile.
 const hullMaterial = new MeshBasicMaterial( { visible: false, side: DoubleSide } );
 const pileLines = new Map( MATERIALS.map( m => [ m.id, new LineBasicMaterial( { color: new Color( m.colour ).offsetHSL( 0, 0, 0.15 ) } ) ] ) );
-for ( const material of [ capMaterial, pitLine, hullMaterial, ...pileLines.values() ] ) material.userData.shared = true;
+for ( const material of [ capMaterial, pitLine, floorLine, hullMaterial, ...pileLines.values() ] ) material.userData.shared = true;
+
+// The P panel's choices for an excavation (excavation-design.js has what each means).
+const SYSTEM_OPTIONS = Object.fromEntries( Object.entries( SYSTEMS ).map( ( [ id, system ] ) => [ system.label, id ] ) );
+// Support levels: 'classic' is the single waler the first shoring drew, offered only to a pit that
+// still has it (a layout saved before), since picking anything else can't go back to it.
+const LEVEL_OPTIONS = Object.fromEntries( Object.entries( BRACINGS ).filter( ( [ , value ] ) => value !== 'classic' ) );
+const CLASSIC_OPTIONS = { ...LEVEL_OPTIONS, 'as first drawn': 'classic' };
 
 export function setUpEarthworks( { scene, camera, renderer, canvas, controls, tiles, ground, models, layout, sidebar, panel, flattening, layers, getGround, addGround, onUpdate, addMapEdit, toast } ) {
 
@@ -104,7 +139,10 @@ export function setUpEarthworks( { scene, camera, renderer, canvas, controls, ti
 
 	};
 	const stream = createPourStream( { scene, surfaceAt: ( x, z ) => terrain.surfaceAt( x, z ) } );
-	const labels = createLabels( { camera, canvas, models } );
+	// A pit's sides are numbered in the scene while it's selected or its P panel settings are open,
+	// so its per-side choices there can be told apart.
+	const showsSides = entry => models.buildMode && ( sidebar.getSelected?.() === entry || !! panel.shows?.( entry ) );
+	const labels = createLabels( { camera, canvas, models, showsSides } );
 	// New stockpiles are made of whatever the last one was changed to.
 	let lastMaterial = 'gravel';
 
@@ -116,26 +154,30 @@ export function setUpEarthworks( { scene, camera, renderer, canvas, controls, ti
 	registerKind( EXCAVATION, {
 		label: 'Excavation',
 		build: buildPitMarker,
-		normalize: normalizePit,
+		normalize: normaliseExcavation,
+		// Params at what their absence means are left out, so pits saved before sides had methods
+		// save again byte for byte.
+		save: saveExcavation,
 		// The rim is the ground as it was, so digging doesn't drag the pit down after itself, and
 		// the lowest of it, so whatever stands in Google's mesh there (rail cars, a shed) is dug
 		// away with the pit instead of lifting the floor to its roof.
 		snap: 'lowest-original',
 		solid: false,
 		buildOnly: true,
-		fields: [
-			{ key: 'width', label: 'width (m)', min: 1, step: 0.5, size: true },
-			{ key: 'length', label: 'length (m)', min: 1, step: 0.5, size: true },
-			{ key: 'depth', label: 'depth (m)', min: 0.1, step: 0.1, size: true },
-			{ key: 'slope', label: 'side slope (h : v)', options: SLOPES, size: true, enabled: params => params.support === NO_SUPPORT },
-			{ key: 'support', label: 'support', options: SUPPORTS, size: true },
-		],
-		// Resizing keeps the depth and the side slopes. Digging again reworks the ground under the
-		// whole pit, so that waits until the handle is let go.
+		fields: PIT_FIELDS,
+		// Resizing keeps the depth and the sides. Digging again reworks the ground under the
+		// whole pit, so that waits until the handle is let go; meanwhile the top of the cut and the
+		// floor are outlined.
 		resize: {
 			shape: 'rect',
 			depth: true,
-			label: params => `${ footprintText( params ) } · ${ params.depth.toFixed( 1 ) } m deep · ≈ ${ format( pitVolume( { ...params, slope: wallSlope( params ) } ) ) } m³ cut`,
+			label: resizeText,
+			outlines: params => {
+
+				const { top, floor } = outlines( planExcavation( params ).geom );
+				return { top, floor };
+
+			},
 		},
 		actions: [
 			{ label: 'Dig', run: entry => dig( entry ) },
@@ -146,7 +188,9 @@ export function setUpEarthworks( { scene, camera, renderer, canvas, controls, ti
 			{ label: 'cut (bank)', get: entry => `${ cutOf( entry ).toFixed( 1 ) } m³` },
 			{ label: `loose (×${ SWELL })`, get: entry => `${ ( cutOf( entry ) * SWELL ).toFixed( 1 ) } m³` },
 			{ label: 'truck loads', get: entry => loads( cutOf( entry ) * SWELL ) },
-			{ label: 'floor', get: entry => floorSize( { ...entry.params, slope: wallSlope( entry.params ) } ) },
+			{ label: 'floor', get: entry => floorText( entry.params ) },
+			{ label: 'top of the cut', get: entry => topText( entry.params ) },
+			{ label: 'stage', note: true, get: entry => stageText( entry.params ) },
 			...SHORING_READOUTS,
 			...SECTION_READOUTS,
 		],
@@ -195,15 +239,15 @@ export function setUpEarthworks( { scene, camera, renderer, canvas, controls, ti
 
 	sidebar.addTool( {
 		name: 'Excavation',
-		hint: 'Drag the top of the cut',
-		title: 'Drag a rectangle on the ground: the top edge of a pit, dug 2 m deep with 1 : 1 sides. Press P to change it.',
+		hint: 'Drag the floor of the pit',
+		title: `Drag a rectangle on the ground: the floor of a pit, dug 2 m deep with its sides sloped out for the soil (${ ratio( SOILS.C.slope ) } in soft, sandy or filled ground). Press P to step or shore them, for the whole pit or side by side.`,
 		icon: PIT_ICON,
 		mode: 'rect',
 		color: 0xd9822b,
 		defaultSize: [ 10, 10 ],
 		onDone: async ( { east, north, heading, width, length } ) => {
 
-			const entry = await models.load( { kind: EXCAVATION, params: { width, length }, east, north, heading, up: null } );
+			const entry = await models.load( { kind: EXCAVATION, params: newExcavationParams( { width, length } ), east, north, heading, up: null } );
 			dig( entry );
 			return entry;
 
@@ -317,7 +361,20 @@ export function setUpEarthworks( { scene, camera, renderer, canvas, controls, ti
 		if ( entry.kind === EXCAVATION ) {
 
 			const rim = designs.get( entry )?.rim ?? state.up;
-			labels.set( entry, `Excavation · ${ format( cutOf( entry ) ) } m³ cut`, anchor.set( - state.east, rim + 1.2, state.north ) );
+			// Over the middle of the top of the cut, and each side's number at the middle of its top
+			// edge, with the compass point it faces.
+			const { top } = outlines( designOf( entry.params ).geom );
+			const frame = pitFrame( state );
+			const at = ( u, v, up ) => {
+
+				const { east, north } = pitToEnu( frame, u, v );
+				return new Vector3( - east, rim + up, north );
+
+			};
+			const [ u, v ] = [ ( top.u0 + top.u1 ) / 2, ( top.v0 + top.v1 ) / 2 ];
+			labels.set( entry, `Excavation · ${ format( cutOf( entry ) ) } m³ cut`, anchor.copy( at( u, v, 1.2 ) ) );
+			const middles = [ [ u, top.v1 ], [ top.u1, v ], [ u, top.v0 ], [ top.u0, v ] ];
+			labels.sides( entry, middles.map( ( [ su, sv ], i ) => ( { text: `${ i + 1 } · ${ sideCompass( state.heading, i + 1 ) }`, anchor: at( su, sv, SIDE_LABEL_HEIGHT ) } ) ) );
 			return;
 
 		}
@@ -348,8 +405,8 @@ export function setUpEarthworks( { scene, camera, renderer, canvas, controls, ti
 
 	}
 
-	// A pile of what came out of the pit, swollen, beside its longer side and clear of the rim.
-	// Returns the new stockpile entry.
+	// A pile of what came out of the pit, swollen, beside the longer side of the top of the cut and
+	// clear of the rim. Returns the new stockpile entry.
 	async function spoil( entry ) {
 
 		const anim = anims.get( entry );
@@ -366,8 +423,9 @@ export function setUpEarthworks( { scene, camera, renderer, canvas, controls, ti
 
 		const soil = findMaterial( 'soil' );
 		const tan = Math.tan( soil.repose * DEG );
-		const { width, length } = entry.params;
-		const { east, north, heading } = entry.state;
+		// The top of the cut: the rectangle itself for a pit drawn by its top.
+		const { top, topSize: { width, length } } = outlines( designOf( entry.params ).geom );
+		const { heading } = entry.state;
 		const beside = length >= width;
 		const long = Math.max( width, length );
 		// A windrow along a trench or wherever a cone would be wider than the pit is long, else a cone.
@@ -386,14 +444,15 @@ export function setUpEarthworks( { scene, camera, renderer, canvas, controls, ti
 		const held = ridge ? ridgeVolume( ridge, ridgeLength, tan ) : loose;
 		if ( held < loose - 0.5 ) toast( `The spoil pile holds ${ format( held ) } m³; the other ${ format( loose - held ) } m³ needs another pile.` );
 		const params = ridge ? { material: soil.id, shape: 'ridge', width: round( ridge, 2 ), length: round( ridgeLength, 2 ) } : { material: soil.id, shape: 'cone', volume: round( loose, 1 ) };
-		const offset = Math.min( width, length ) / 2 + 2 + ( ridge ? ridge / 2 : radius );
-		const rad = heading * DEG;
-		const [ de, dn ] = beside ? [ Math.cos( rad ), - Math.sin( rad ) ] : [ Math.sin( rad ), Math.cos( rad ) ];
+		// Out past the right side of the top, or its front, level with the middle of that side.
+		const clear = 2 + ( ridge ? ridge / 2 : radius );
+		const [ u, v ] = beside ? [ top.u1 + clear, ( top.v0 + top.v1 ) / 2 ] : [ ( top.u0 + top.u1 ) / 2, top.v1 + clear ];
+		const at = pitToEnu( pitFrame( entry.state ), u, v );
 		const pile = await models.load( {
 			kind: STOCKPILE,
 			params,
-			east: round( east + de * offset, 2 ),
-			north: round( north + dn * offset, 2 ),
+			east: round( at.east, 2 ),
+			north: round( at.north, 2 ),
 			heading: beside ? heading : ( heading + 90 ) % 360,
 			up: null,
 		} );
@@ -470,6 +529,9 @@ export function setUpEarthworks( { scene, camera, renderer, canvas, controls, ti
 // --- designs: what an excavation or a stockpile does to the ground ----------------------------
 
 // floorUnder( frame ): the floor of the flatten areas reaching into a rectangle (Infinity if none).
+// The surface is the design's (excavation-design.js depthAt): each side sloped, benched or cut
+// vertical, as deep as the dig stage shown, and p (0..1) of that while the dig animation plays.
+// For pits saved before sides had methods it is exactly the surface they had.
 function pitDesign( entry, { order, progress, floorUnder } ) {
 
 	const g = {};
@@ -480,14 +542,21 @@ function pitDesign( entry, { order, progress, floorUnder } ) {
 		refresh() {
 
 			const { state, params } = entry;
-			const { width, length, depth, slope } = params;
-			Object.assign( g, rectFrame( state.east, state.north, state.heading, width / 2, length / 2 ), { depth, slope } );
-			// Shoring holds the sides up: they're cut vertical.
-			g.slope = wallSlope( params );
+			const design = planExcavation( params );
+			g.frame = pitFrame( state );
+			g.stage = design.stage;
+			// While rakers wait to go in, a berm is left against their walls.
+			g.geom = geometryAtStage( design.geom, design.plan, design.stage );
+			g.final = design.geom;
+			// Round the top of the cut: the rectangle itself for a pit drawn by its top, and wider
+			// than the floor for one drawn by its floor, by the larger of each pair of sides.
+			const { hw, hl, margin } = cutBounds( design.geom );
+			g.rect = rectFrame( state.east, state.north, state.heading, hw, hl );
+			g.margin = margin;
 			// Inside a flatten area the ground is the area's floor, which is what the terrain digs
 			// into there; from the original ground (the roofs of what was cleared, say) the pit
 			// would be too shallow to reach it.
-			const around = rectFrame( state.east, state.north, state.heading, width / 2 + RIM_REACH, length / 2 + RIM_REACH );
+			const around = rectFrame( state.east, state.north, state.heading, hw + RIM_REACH, hl + RIM_REACH );
 			g.rim = Math.min( state.up, floorUnder( around ) );
 
 		},
@@ -496,31 +565,42 @@ function pitDesign( entry, { order, progress, floorUnder } ) {
 			return g.rim;
 
 		},
-		bounds: () => rectBounds( g, ( g.slope > 0 ? SLOPE_REACH : 0 ) + CELL ),
-		height: ( x, z ) => pitSurface( g, x, z, progress( entry ) ),
-		heightFinal: ( x, z ) => pitSurface( g, x, z, 1 ),
+		// The pit's frame, its geometry as dug at the stage shown, finished, and that stage.
+		get frame() {
+
+			return g.frame;
+
+		},
+		get geom() {
+
+			return g.geom;
+
+		},
+		get final() {
+
+			return g.final;
+
+		},
+		get stage() {
+
+			return g.stage;
+
+		},
+		bounds: () => rectBounds( g.rect, g.margin ),
+		// Infinity (the rim less -Infinity) where it isn't cut at all.
+		height: ( x, z ) => {
+
+			const [ u, v ] = toPit( g.frame, x, z );
+			return g.rim - depthAt( g.geom, u, v, g.stage.dig * progress( entry ) );
+
+		},
+		heightFinal: ( x, z ) => {
+
+			const [ u, v ] = toPit( g.frame, x, z );
+			return g.rim - depthAt( g.final, u, v, g.final.depth );
+
+		},
 	};
-
-}
-
-// The pit's design surface: the floor `depth` below the rim, with the sides sloping up at
-// `slope` (horizontal : vertical) to meet the rim at the outline. A footprint too small for its
-// slopes gets a floor that shrinks to a line. p (0..1) deepens it, for the dig animation.
-function pitSurface( g, x, z, p ) {
-
-	const inside = insideRect( g, x, z );
-	if ( g.slope === 0 ) {
-
-		// The ground is a grid of heights, so a vertical wall falls across two cells, centred on
-		// the outline and eased at both ends: turned pits get straight edges rather than teeth,
-		// with the same volume.
-		const t = MathUtils.smoothstep( inside, - CELL, CELL );
-		return t > 0 ? g.rim - g.depth * p * t : Infinity;
-
-	}
-
-	if ( inside < - SLOPE_REACH ) return Infinity;
-	return g.rim - Math.min( g.depth * p, inside / g.slope );
 
 }
 
@@ -699,17 +779,105 @@ function ridgeWidth( volume, length, tan ) {
 
 // --- params -----------------------------------------------------------------------------------
 
-function normalizePit( p ) {
+// An excavation's design, worked out once for each set of params (excavation-design.js).
+const designOf = params => planExcavation( params );
+const sidesWhere = ( params, test ) => designOf( params ).geom.sides.some( test );
+const anySloped = params => sidesWhere( params, side => side.method === 'slope' );
+const anyBenched = params => sidesWhere( params, side => side.method === 'bench' );
+const anyWall = params => designOf( params ).plan.walls.length > 0;
+const levelTypes = params => Object.values( designOf( params ).plan.sideTypes );
+// A pit that still has the first shoring's single waler (a layout saved before support levels).
+const classic = params => params.bracing === 'classic' && params.method === 'shore' && ( params.support === 'sheet-piles' || params.support === 'soldier-piles' );
+const stagesOf = params => designOf( params ).stages;
 
-	const wanted = Number( p.slope );
-	const slope = Object.values( SLOPES ).reduce( ( best, s ) => Math.abs( s - wanted ) < Math.abs( best - wanted ) ? s : best, 1 );
-	return {
-		width: clamp( p.width, 1, MAX_SIZE, 10 ),
-		length: clamp( p.length, 1, MAX_SIZE, 10 ),
-		depth: clamp( p.depth, 0.1, 30, 2 ),
-		slope,
-		support: normalizeSupport( p.support ),
-	};
+// The P panel, in this order: the size (also in the toolbar's Size editor), what the rectangle
+// is, how the sides are cut (all alike, or each side its own way in a sub-folder, named by which
+// way each faces), then what that way needs: the shoring system, the soil and slope, the benches,
+// the support levels for walls, the groundwater, and the dig stage shown.
+const PIT_FIELDS = [
+	{ key: 'width', label: 'width (m)', min: 1, step: 0.5, size: true },
+	{ key: 'length', label: 'length (m)', min: 1, step: 0.5, size: true },
+	{ key: 'depth', label: 'depth (m)', min: 0.1, step: 0.1, size: true },
+	{ key: 'outline', label: 'the rectangle is', options: OUTLINES },
+	// Sloped and shored follow the support, so picking one sets that too.
+	{ key: 'method', label: 'sides', options: METHODS, patch: methodPatch },
+	...[ 1, 2, 3, 4 ].map( n => ( {
+		key: `side${ n }`,
+		label: ( params, entry ) => sideLabel( entry.state.heading, n ),
+		options: SIDE_METHODS,
+		group: 'each side',
+		when: params => params.method === 'sides',
+	} ) ),
+	{ key: 'support', label: 'system', options: SYSTEM_OPTIONS, when: params => params.method === 'shore' },
+	{ key: 'ends', label: 'ends', options: ENDS, when: params => params.method === 'shore' && ( params.support === 'trench-box' || params.support === 'hydraulic' ) },
+	{ key: 'soil', label: 'soil (WorkSafeBC)', options: SOIL_OPTIONS },
+	{ key: 'slopeBy', label: 'slope', options: SLOPE_FROM, when: anySloped },
+	{ key: 'slope', label: 'slope (h : v)', min: 0, max: 4, step: 0.05, when: params => anySloped( params ) && params.slopeBy === 'custom' },
+	{ key: 'benchHeight', label: 'bench height (m, 0 = up to 1.2)', min: 0, step: 0.1, when: anyBenched },
+	{ key: 'benchWidth', label: 'bench width (m, 0 = 1.5 × height)', min: 0, step: 0.1, when: anyBenched },
+	{ key: 'bracing', label: 'support levels', options: CLASSIC_OPTIONS, when: params => anyWall( params ) && classic( params ) },
+	// 'classic' anywhere else is worked out as suggested, so it shows as that.
+	{ key: 'bracing', label: 'support levels', options: LEVEL_OPTIONS, get: params => params.bracing === 'classic' ? 'auto' : params.bracing, when: params => anyWall( params ) && ! classic( params ) },
+	{ key: 'levels', label: 'levels (m down, blank = suggested)', type: 'text', when: params => anyWall( params ) && ! [ 'none', 'classic' ].includes( designOf( params ).plan.type ) },
+	// A pit from before keeps the toe its first shoring worked out.
+	{ key: 'toe', label: 'embedment (m, 0 = suggested)', min: 0, step: 0.5, when: params => anyWall( params ) && ! classic( params ) },
+	{ key: 'rakerAngle', label: 'raker angle (°)', min: 30, max: 60, step: 1, when: params => levelTypes( params ).includes( 'rakers' ) },
+	{ key: 'anchorAngle', label: 'tieback angle (° down)', min: 10, max: 45, step: 1, when: params => levelTypes( params ).includes( 'tiebacks' ) },
+	{ key: 'bondLength', label: 'bond length (m)', min: 4.5, max: 12, step: 0.5, when: params => levelTypes( params ).includes( 'tiebacks' ) },
+	{ key: 'groundwater', label: 'groundwater (m down)', min: 0, step: 0.1 },
+	// The finished pit is saved as -1 and shown as the last step, so it stays finished when the
+	// stages change (another level, a deeper floor).
+	{
+		key: 'stage',
+		label: 'dig stage',
+		min: 0,
+		max: params => stagesOf( params ).length - 1,
+		step: 1,
+		get: params => designOf( params ).stage.index,
+		patch: ( value, params ) => {
+
+			const step = Math.round( value );
+			return { stage: step >= stagesOf( params ).length - 1 ? - 1 : step };
+
+		},
+		when: params => stagesOf( params ).length > 1,
+	},
+];
+
+// The floor, or how deep the sides meet when they do before the floor. Rounded to a micrometre
+// first, so the figure is the one the first excavations worked out the other way round.
+function floorText( params ) {
+
+	const shape = outlines( designOf( params ).geom );
+	const metres = value => ( Math.round( value * 1e6 ) / 1e6 ).toFixed( 1 );
+	if ( shape.floorSize ) return `${ metres( shape.floorSize.width ) } × ${ metres( shape.floorSize.length ) } m`;
+	return `none: the sides meet ${ metres( shape.meets ) } m down`;
+
+}
+
+function topText( params ) {
+
+	const { topSize } = outlines( designOf( params ).geom );
+	return `${ topSize.width.toFixed( 1 ) } × ${ topSize.length.toFixed( 1 ) } m`;
+
+}
+
+// The dig stage shown, unless the pit is finished.
+function stageText( params ) {
+
+	const { stages, stage } = designOf( params );
+	return stage.index === stages.length - 1 ? '' : `${ stage.index + 1 } of ${ stages.length }: ${ stage.label }`;
+
+}
+
+// Beside the handle while resizing: the rectangle (the floor, and then the top, for a pit drawn by
+// its floor), the depth and the cut from flat ground.
+function resizeText( params ) {
+
+	const { geom } = designOf( params );
+	const cut = `${ params.depth.toFixed( 1 ) } m deep · ≈ ${ format( cutVolume( geom ) ) } m³ cut`;
+	if ( params.outline !== 'floor' ) return `${ footprintText( params ) } · ${ cut }`;
+	return `floor ${ footprintText( params ) } · top ${ footprintText( outlines( geom ).topSize ) } · ${ cut }`;
 
 }
 
@@ -737,15 +905,6 @@ const isRidge = params => params.shape === 'ridge';
 const reposeTan = params => Math.tan( ( findMaterial( params.material ) ?? MATERIALS[ 0 ] ).repose * DEG );
 const footprintText = ( { width, length } ) => `${ width.toFixed( 1 ) } × ${ length.toFixed( 1 ) } m`;
 
-// What a pit cuts from flat ground: its floor shrinks by the slope on every side on the way down,
-// to a line where the sides meet. The real figure is measured from the ground in the P panel.
-function pitVolume( { width, length, depth, slope } ) {
-
-	const z = slope > 0 ? Math.min( depth, Math.min( width, length ) / ( 2 * slope ) ) : depth;
-	return width * length * z - slope * ( width + length ) * z * z + 4 / 3 * slope * slope * z ** 3;
-
-}
-
 // What a ridge filling width x length holds on flat ground, flat on top at `cap` (0 = none): the
 // whole hip roof less the smaller one above the cap.
 function ridgeHolds( width, length, tan, cap ) {
@@ -755,15 +914,6 @@ function ridgeHolds( width, length, tan, cap ) {
 	if ( ! ( cap > 0 ) || cap >= w / 2 * tan ) return full;
 	const inset = 2 * cap / tan;
 	return full - ridgeVolume( w - inset, l - inset, tan );
-
-}
-
-function floorSize( { width, length, depth, slope } ) {
-
-	const w = width - 2 * slope * depth;
-	const l = length - 2 * slope * depth;
-	if ( w > 0 && l > 0 ) return `${ w.toFixed( 1 ) } × ${ l.toFixed( 1 ) } m`;
-	return `none: the sides meet ${ ( Math.min( width, length ) / 2 / slope ).toFixed( 1 ) } m down`;
 
 }
 
@@ -779,19 +929,38 @@ function baseSize( entry, solved ) {
 
 // --- build mode markers -----------------------------------------------------------------------
 
-// The outline of the top of the cut and a see-through cap, to click and drag it by.
-function buildPitMarker( { width, length } ) {
+// The outline of the top of the cut and a see-through cap, to click and drag it by. A pit drawn by
+// its floor has its floor outlined too, dashed; its top is round the floor, off centre when its
+// sides differ. A pit drawn by its top (as all were before) has the marker it always had, so its
+// footprint, and with it the ground it snaps to and its handles, are the same.
+function buildPitMarker( params ) {
 
+	const { width, length } = params;
 	const group = new Group();
 	group.name = 'Excavation';
-	const cap = new Mesh( new PlaneGeometry( width, length ).rotateX( - Math.PI / 2 ), capMaterial );
-	cap.position.y = 0.04;
+	let top = { u0: - width / 2, u1: width / 2, v0: - length / 2, v1: length / 2 };
+	let floor = null;
+	if ( params.outline === 'floor' ) {
+
+		top = outlines( designOf( params ).geom ).top;
+		floor = new LineLoop( rectangle( width, length ), floorLine );
+		floor.computeLineDistances();
+		floor.position.y = 0.06;
+
+	}
+
+	// The marker's frame: x to the pit's right (u), -z to its front (v).
+	const [ w, l ] = [ top.u1 - top.u0, top.v1 - top.v0 ];
+	const [ x, z ] = [ ( top.u0 + top.u1 ) / 2, - ( top.v0 + top.v1 ) / 2 ];
+	const cap = new Mesh( new PlaneGeometry( w, l ).rotateX( - Math.PI / 2 ), capMaterial );
+	cap.position.set( x, 0.04, z );
 	cap.renderOrder = 1;
-	const outline = new LineLoop( rectangle( width, length ), pitLine );
-	outline.position.y = 0.06;
-	outline.raycast = () => {};
-	for ( const object of [ cap, outline ] ) object.userData.noCollide = true;
-	group.add( cap, outline );
+	const outline = new LineLoop( rectangle( w, l ), pitLine );
+	outline.position.set( x, 0.06, z );
+	const objects = [ cap, outline, floor ].filter( Boolean );
+	for ( const object of objects ) object.userData.noCollide = true;
+	for ( const line of [ outline, floor ] ) if ( line ) line.raycast = () => {};
+	group.add( ...objects );
 	return group;
 
 }
@@ -859,16 +1028,58 @@ function hipGeometry( width, length, tan, cap ) {
 
 // --- labels -----------------------------------------------------------------------------------
 
-// Small labels over excavations and stockpiles, shown in build mode, except over hidden ones.
-function createLabels( { camera, canvas, models } ) {
+// Small labels over excavations and stockpiles, shown in build mode, except over hidden ones. A
+// pit's side numbers are chips of their own (not .label, so the Labels layer counts one label a
+// pit), shown while showsSides( entry ), at their sides rather than moved up out of each other's
+// way, and hidden with the Labels layer like the rest.
+function createLabels( { camera, canvas, models, showsSides } ) {
 
 	const root = document.createElement( 'div' );
 	root.className = 'earthworks-labels';
 	document.body.append( root );
 	const items = new Map(); // entry -> { element, anchor }
+	const sideItems = new Map(); // entry -> [ { element, anchor } ]
 	const projected = new Vector3();
+	const onScreen = ( anchor, rect ) => {
+
+		projected.copy( anchor ).project( camera );
+		if ( ! ( projected.z < 1 && Math.abs( projected.x ) < 1.05 && Math.abs( projected.y ) < 1.05 && camera.position.distanceTo( anchor ) < 1000 ) ) return null;
+		return { x: rect.left + ( projected.x + 1 ) / 2 * rect.width, y: rect.top + ( 1 - projected.y ) / 2 * rect.height, depth: projected.z };
+
+	};
 
 	return {
+
+		// A pit's side numbers: [ { text, anchor } ] in the order of its sides.
+		sides( entry, list ) {
+
+			let chips = sideItems.get( entry );
+			if ( ! chips ) {
+
+				chips = list.map( () => {
+
+					const element = document.createElement( 'div' );
+					element.className = 'side-label';
+					element.hidden = true;
+					root.append( element );
+					return { element, anchor: new Vector3() };
+
+				} );
+				sideItems.set( entry, chips );
+
+			}
+
+			list.forEach( ( { text, anchor }, i ) => {
+
+				if ( chips[ i ].element.textContent !== text ) chips[ i ].element.textContent = text;
+				chips[ i ].anchor.copy( anchor );
+
+			} );
+
+		},
+
+		// What a pit's side chips say now, shown or not ([] if it has none).
+		sideTexts: entry => ( sideItems.get( entry ) ?? [] ).map( chip => ( { text: chip.element.textContent, shown: ! chip.element.hidden } ) ),
 
 		set( entry, text, anchor ) {
 
@@ -891,6 +1102,8 @@ function createLabels( { camera, canvas, models } ) {
 
 			items.get( entry )?.element.remove();
 			items.delete( entry );
+			for ( const chip of sideItems.get( entry ) ?? [] ) chip.element.remove();
+			sideItems.delete( entry );
 
 		},
 
@@ -899,18 +1112,28 @@ function createLabels( { camera, canvas, models } ) {
 			root.hidden = ! models.buildMode;
 			if ( root.hidden ) return;
 			const rect = canvas.getBoundingClientRect();
+			for ( const [ entry, chips ] of sideItems ) {
+
+				const wanted = ! models.isHidden( entry ) && showsSides( entry );
+				for ( const { element, anchor } of chips ) {
+
+					const at = wanted ? onScreen( anchor, rect ) : null;
+					if ( element.hidden !== ! at ) element.hidden = ! at;
+					if ( at ) element.style.transform = `translate( ${ at.x.toFixed( 1 ) }px, ${ at.y.toFixed( 1 ) }px ) translate( -50%, -100% )`;
+
+				}
+
+			}
+
 			const shown = [];
 			for ( const [ entry, { element, anchor } ] of items ) {
 
-				projected.copy( anchor ).project( camera );
-				const show = ! models.isHidden( entry ) && projected.z < 1 && Math.abs( projected.x ) < 1.05 && Math.abs( projected.y ) < 1.05 && camera.position.distanceTo( anchor ) < 1000;
-				element.hidden = ! show;
-				if ( ! show ) continue;
+				const at = models.isHidden( entry ) ? null : onScreen( anchor, rect );
+				element.hidden = ! at;
+				if ( ! at ) continue;
 				shown.push( {
 					element,
-					x: rect.left + ( projected.x + 1 ) / 2 * rect.width,
-					y: rect.top + ( 1 - projected.y ) / 2 * rect.height,
-					depth: projected.z,
+					...at,
 					width: element.offsetWidth,
 					height: element.offsetHeight,
 				} );
