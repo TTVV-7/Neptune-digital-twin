@@ -82,7 +82,10 @@ function newSurface( geom, frame, rim, x, z, p ) {
 
 }
 
-const LEGACY_SUPPORTS = Object.values( SUPPORTS );
+// The supports a pit could have before sides had methods (the secant and contiguous pile walls
+// came with them), so the comparisons below stay with what old layouts can hold.
+const LEGACY_SUPPORTS = [ 'none', 'trench-box', 'slide-rail', 'hydraulic', 'sheet-piles', 'soldier-piles' ];
+assert.deepEqual( LEGACY_SUPPORTS.filter( id => ! Object.values( SUPPORTS ).includes( id ) ), [] );
 
 // --- old pits, exactly as before -------------------------------------------------------------------
 

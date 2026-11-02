@@ -1357,7 +1357,7 @@ export function excavationFlags( params, geom = excavationGeometry( params ), pl
 
 		if ( side.method !== 'wall' ) continue;
 		const system = SYSTEMS[ side.system ];
-		if ( below && ! system.watertight ) add( `pervious-${ side.n }`, 'warn', `Side ${ side.n }: ${ system.label.toLowerCase() } let water through below the groundwater: dewater, grout, or use sheet or secant piles.`, 'NAVFAC DM 7.02 Table 4; FHWA GEC 4 Table 12' );
+		if ( below && ! system.watertight ) add( `pervious-${ side.n }`, 'warn', `Side ${ side.n }: water comes through the ${ system.label.toLowerCase() } below the groundwater: dewater, grout, or use sheet or secant piles.`, 'NAVFAC DM 7.02 Table 4; FHWA GEC 4 Table 12' );
 
 	}
 

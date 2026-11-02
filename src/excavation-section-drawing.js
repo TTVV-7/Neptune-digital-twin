@@ -711,8 +711,10 @@ function count( n, one, many = `${ one }s` ) {
 
 }
 
-// The quantities, as rows for the section card: [ [ what, how much ] ].
-export function quantityRows( design ) {
+// The quantities, as rows for the section card: [ [ what, how much ] ]. piles: the sheets or piles
+// of each system as the shoring draws them (shoring.js), which can be a few more than the shared
+// module's count round corners.
+export function quantityRows( design, piles = design.quantities.piles ) {
 
 	const { quantities: q, plan, geom } = design;
 	const rows = [
@@ -726,8 +728,9 @@ export function quantityRows( design ) {
 	if ( q.walls.length ) {
 
 		rows.push( [ 'Wall area', `${ volumeText( q.wallArea ) } m²` ] );
-		for ( const [ system, n ] of Object.entries( q.piles ) ) {
+		for ( const system of Object.keys( q.piles ) ) {
 
+			const n = piles[ system ] ?? q.piles[ system ];
 			const { label } = SYSTEMS[ system ];
 			const sides = q.walls.filter( w => w.system === system ).map( w => w.side ).join( ', ' );
 			const unit = system === 'sheet-piles' ? 'sheet' : 'pile';
@@ -754,32 +757,6 @@ export function quantityRows( design ) {
 	}
 
 	return rows;
-
-}
-
-// The walls, piles and members in a line or two, for the P panel ('' with no walls: the shoring's
-// own readouts cover trench systems).
-export function quantitiesText( design ) {
-
-	const { quantities: q, plan } = design;
-	const parts = [];
-	if ( q.walls.length ) {
-
-		const piles = Object.entries( q.piles ).map( ( [ system, n ] ) => `${ SYSTEMS[ system ].label.toLowerCase() } ${ count( n, system === 'sheet-piles' ? 'sheet' : 'pile' ) } × ${ ( plan.pileLength[ system ] ?? 0 ).toFixed( 1 ) } m` );
-		parts.push( `Walls ${ volumeText( q.wallArea ) } m²: ${ piles.join( ', ' ) }.` );
-		const members = [];
-		if ( q.walers > 0 ) members.push( `walers ${ volumeText( q.walers ) } m` );
-		if ( q.struts.count ) members.push( `${ count( q.struts.count, 'strut' ) } (${ volumeText( q.struts.metres ) } m)` );
-		if ( q.corners ) members.push( count( q.corners, 'corner brace' ) );
-		if ( q.kingPosts ) members.push( count( q.kingPosts, 'king post' ) );
-		if ( q.rakers.count ) members.push( `${ count( q.rakers.count, 'raker' ) } on ${ count( q.kickers, 'kicker block' ) }` );
-		if ( q.tiebacks.count ) members.push( `${ count( q.tiebacks.count, 'tieback' ) } (${ volumeText( q.tiebacks.metres ) } m)` );
-		if ( members.length ) parts.push( `${ capitalise( members.join( ', ' ) ) }.` );
-		if ( q.zones.anchors.length ) parts.push( `No digging or foundations ${ [ ...new Set( q.zones.anchors.map( z => z.reach.toFixed( 1 ) ) ) ].join( ' / ' ) } m behind side${ q.zones.anchors.length > 1 ? 's' : '' } ${ q.zones.anchors.map( z => z.side ).join( ', ' ) } (tiebacks).` );
-
-	}
-
-	return parts.join( ' ' );
 
 }
 
@@ -869,11 +846,5 @@ export function conflictsText( conflicts, design ) {
 	const adjacent = of( 'adjacent' );
 	if ( adjacent.length ) out.push( `Within ${ design.geom.depth.toFixed( 1 ) } m of the toe (adjacent): ${ names( adjacent ) }. A structure there means a QRP's written instructions (WorkSafeBC 20.78(1)(b)).` );
 	return out.join( ' ' );
-
-}
-
-function capitalise( text ) {
-
-	return text.charAt( 0 ).toUpperCase() + text.slice( 1 );
 
 }

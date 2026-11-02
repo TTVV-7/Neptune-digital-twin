@@ -263,6 +263,15 @@
 .xs-scale path { fill: none; stroke: #eef2f5; stroke-width: 1.2; }
 .xs-scale text { fill: var( --muted ); font-size: 10px; }
 
+/* While the scene is cut away, what's drawn on the screen for the selected pit (its toolbar, the
+   resize handles, the pit labels and side numbers) would sit on the cut face: hidden till it's
+   closed or switched to 2D. */
+body.section-cutaway .selection-toolbar,
+body.section-cutaway .handles,
+body.section-cutaway .earthworks-labels {
+	display: none;
+}
+
 /* Over the scene: the cut's dimensions, on top of everything, never in the way of the mouse. */
 .section-overlay {
 	position: fixed;

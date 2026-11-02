@@ -69,61 +69,6 @@ before( async () => {
 
 		const { models } = window.twin;
 		for ( const entry of [ ...models.entries ] ) models.remove( entry );
-		await digPerSide();
-
-		// Until earthworks.js keeps the new params and digs each side as it's cut (the ground's own
-		// part of this work), the test does: the excavation kind normalises with the design module,
-		// and each pit's design in the terrain is the design surface. Once earthworks.js does both
-		// this does nothing.
-		async function digPerSide() {
-
-			const { getKind } = await import( '/src/kinds.js' );
-			const X = await import( '/src/excavation-design.js' );
-			const { rectBounds, rectFrame } = await import( '/src/terrain.js' );
-			const kind = getKind( 'excavation' );
-			window.perSideShim = ! ( 'method' in kind.normalize( {} ) );
-			if ( ! window.perSideShim ) return;
-			kind.normalize = X.normaliseExcavation;
-			const { terrain, earthworks } = window.twin;
-			const progress = entry => {
-
-				const anim = earthworks.anims.get( entry );
-				return anim ? Math.min( 1, anim.t / anim.duration ) : 1;
-
-			};
-			const reshape = ( { entry } ) => {
-
-				const design = earthworks.designs.get( entry );
-				if ( entry.kind !== 'excavation' || ! design || design.perSide ) return;
-				design.perSide = true;
-				const at = ( x, z ) => X.toPit( X.pitFrame( entry.state ), x, z );
-				design.bounds = () => {
-
-					const { geom } = X.planExcavation( entry.params );
-					const { hw, hl, margin } = X.cutBounds( geom );
-					return rectBounds( rectFrame( entry.state.east, entry.state.north, entry.state.heading, hw, hl ), margin );
-
-				};
-				design.height = ( x, z ) => {
-
-					const d = X.planExcavation( entry.params );
-					const [ u, v ] = at( x, z );
-					return design.rim - X.depthAt( X.geometryAtStage( d.geom, d.plan, d.stage ), u, v, d.stage.dig * progress( entry ) );
-
-				};
-				design.heightFinal = ( x, z ) => {
-
-					const { geom } = X.planExcavation( entry.params );
-					const [ u, v ] = at( x, z );
-					return design.rim - X.depthAt( geom, u, v, geom.depth );
-
-				};
-				terrain.setDesign( entry, design );
-
-			};
-			models.addEventListener( 'add', reshape );
-
-		}
 
 	} );
 
@@ -263,7 +208,7 @@ test( 'each wall system lines only its own side, into the slopes\' wings and dow
 	assert.ok( secant.materials.concreteLight && secant.materials.concrete, Object.keys( secant.materials ).join() );
 	assert.match( secant.summary, /^4[56] secant piles \(0\.88 m, 150 mm overlap\) on side 2, 10\.5 m long each, under a capping beam; cantilevered/ );
 	// Contiguous piles below the groundwater: flagged.
-	assert.match( ( await inspect( 3 ) ).checks, /Side 2: contiguous pile wall let water through below the groundwater/ );
+	assert.match( ( await inspect( 3 ) ).checks, /Side 2: water comes through the contiguous pile wall below the groundwater/ );
 
 	// All four systems round one pit, each to its own side; the corners worked out between them.
 	const mixed = await pit( { width: 14, length: 10, depth: 6, outline: 'floor', bracing: 'auto', method: 'sides', side1: 'secant-piles', side2: 'sheet-piles', side3: 'contiguous-piles', side4: 'soldier-piles' }, 0, 80 );
@@ -545,21 +490,6 @@ test( 'saved and reloaded: the new params and the shoring come back', async () =
 	await page.goto( `${ base }/?prompt`, { waitUntil: 'domcontentloaded' } );
 	await page.click( '#skip' );
 	await page.waitForFunction( n => window.twin?.shoring && window.twin.models.entries.filter( e => e.kind === 'excavation' ).length === n, before.pits.length );
-	const shim = await page.evaluate( async () => {
-
-		const { getKind } = await import( '/src/kinds.js' );
-		return ! ( 'method' in getKind( 'excavation' ).normalize( {} ) );
-
-	} );
-	if ( shim ) {
-
-		// The excavation kind still saves and restores only the five first keys until earthworks.js
-		// takes the design module's (the ground's part): nothing more to check here yet.
-		console.log( 'earthworks.js still keeps the first five keys: reload of the new params skipped' );
-		return;
-
-	}
-
 	const after = await page.evaluate( () => {
 
 		const { models, shoring } = window.twin;

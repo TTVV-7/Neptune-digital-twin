@@ -7,9 +7,6 @@
 // removed); the quantities and comparison against the shared module; what's placed in the cut,
 // over the tiebacks, in the spoil set-back and in the adjacent band, and the no-dig zones drawn.
 //
-// The new params (per side, tiebacks...) need the shared normaliser: until the excavation kind uses
-// it (earthworks.js), the tests that need them put it in place first, as the kind will have it.
-//
 // Needs Playwright with Chromium (npm i -D playwright && npx playwright install chromium).
 // TEST_VITE_PORT picks the port, or TEST_BASE=<url> uses a dev server that's already running
 // (started without a Maps key); TEST_SCREENSHOTS=<folder> saves pictures.
@@ -84,19 +81,6 @@ async function clear() {
 		section.close();
 		for ( const entry of [ ...models.entries ] ) models.remove( entry );
 		window.pits = [];
-
-	} );
-
-}
-
-// The excavation kind with the shared normaliser, as earthworks.js gives it the new params.
-async function sharedParams() {
-
-	await page.evaluate( async () => {
-
-		const { getKind } = await import( '/src/kinds.js' );
-		const { normaliseExcavation } = await import( '/src/excavation-design.js' );
-		getKind( 'excavation' ).normalize = normaliseExcavation;
 
 	} );
 
@@ -227,9 +211,9 @@ test( 'an old pit: its readouts, its section from the P panel, and its params le
 	const expected = await page.evaluate( async i => {
 
 		const { planExcavation, compareMethods, comparisonText } = await import( '/src/excavation-design.js' );
-		const { designCutText, footprintText, quantitiesText } = await import( '/src/excavation-section-drawing.js' );
+		const { designCutText, footprintText } = await import( '/src/excavation-section-drawing.js' );
 		const design = planExcavation( window.pits[ i ].params );
-		return { cut: designCutText( design ), footprint: footprintText( design ), quantities: quantitiesText( design ), compared: comparisonText( compareMethods( design.params ) ), volume: design.quantities.volume };
+		return { cut: designCutText( design ), footprint: footprintText( design ), compared: comparisonText( compareMethods( design.params ) ), volume: design.quantities.volume };
 
 	}, i );
 	const rows = await panelOf();
@@ -238,8 +222,9 @@ test( 'an old pit: its readouts, its section from the P panel, and its params le
 	assert.equal( expected.volume, 960 );
 	assert.match( expected.cut, /^960 m³ · 1,200 m³ loose · about 120 loads$/ );
 	assert.equal( rows.footprint.value, expected.footprint );
-	assert.equal( rows.quantities.value, expected.quantities );
-	assert.match( rows.quantities.value, /^Walls 280 m²: sheet piles 94 sheets × 9\.0 m\./ );
+	// The walls and what's in them are the shoring's readouts, not repeated here.
+	assert.equal( rows.quantities, undefined );
+	assert.match( rows.shoring.value, /^94 sheets, 56 m of wall, 9\.0 m long each/ );
 	assert.equal( rows.compared.value, expected.compared );
 	assert.ok( rows.compared.value.startsWith( 'Sloped (1.5 : 1, soil C) instead: ' ), rows.compared.value );
 	// Nothing placed near it: the note is left out.
@@ -276,7 +261,6 @@ test( 'an old pit: its readouts, its section from the P panel, and its params le
 test( 'the section\'s dimensions are the design\'s: walls with struts, slopes, tiebacks, benches, a stage, the cut moved', async () => {
 
 	await clear();
-	await sharedParams();
 
 	// Floor 12 × 20 m, 8 m deep, sheet piles on sides 1 and 3, sides 2 and 4 sloped for soil C.
 	const mixed = { width: 12, length: 20, depth: 8, outline: 'floor', method: 'sides', side1: 'sheet-piles', side3: 'sheet-piles', side2: 'slope', side4: 'slope', slopeBy: 'soil', bracing: 'auto' };
@@ -476,6 +460,9 @@ test( 'the 3D cut-away: clipped, filled in, framed side on, and everything put b
 	assert.ok( r.behind < - 8, `camera ${ r.behind } m along` );
 	// The soil's colour (0x6b5640), drawn unlit.
 	assert.ok( Math.abs( r.pixel[ 0 ] - 0x6b ) < 14 && Math.abs( r.pixel[ 1 ] - 0x56 ) < 14 && Math.abs( r.pixel[ 2 ] - 0x40 ) < 14, `pixel ${ r.pixel }` );
+	// Nothing of the selection drawn over the cut: the toolbar, the handles, the labels and side numbers.
+	const overlays = () => page.evaluate( () => [ '.selection-toolbar', '.handles', '.earthworks-labels' ].map( q => getComputedStyle( document.querySelector( q ) ).display === 'none' && document.body.classList.contains( 'section-cutaway' ) ) );
+	assert.deepEqual( await overlays(), [ true, true, true ] );
 	await shot( 'cut-away' );
 
 	// The 3D off: the scene as it was, the card still open; on again: framed again.
@@ -483,6 +470,7 @@ test( 'the 3D cut-away: clipped, filled in, framed side on, and everything put b
 	let s = await page.evaluate( () => ( { off: window.twin.section.planes.every( p => p.constant === 1e9 ), cap: window.twin.section.cap.children.length, open: ! window.twin.section.card.hidden } ) );
 	assert.deepEqual( s, { off: true, cap: 0, open: true } );
 	assert.deepEqual( await pose(), start );
+	assert.deepEqual( await overlays(), [ false, false, false ] );
 	await page.click( '.section-card .cutaway input' );
 	assert.equal( await page.evaluate( () => window.twin.section.planes[ 0 ].constant !== 1e9 ), true );
 
@@ -497,6 +485,7 @@ test( 'the 3D cut-away: clipped, filled in, framed side on, and everything put b
 	}, i );
 	assert.deepEqual( s, { closed: true, off: true, cap: 0, overlay: true, selected: true } );
 	assert.deepEqual( await pose(), start );
+	assert.deepEqual( await overlays(), [ false, false, false ] );
 
 	// Opened while walking: flying while it's open, walking again after.
 	await page.evaluate( () => window.twin.controls.setMode( 'walk' ) );
@@ -519,7 +508,6 @@ test( 'the 3D cut-away: clipped, filled in, framed side on, and everything put b
 test( 'the quantities and the comparison are the shared module\'s', async () => {
 
 	await clear();
-	await sharedParams();
 	const i = await pit( { width: 12, length: 20, depth: 8, outline: 'floor', method: 'sides', side1: 'sheet-piles', side3: 'sheet-piles', side2: 'slope', side4: 'slope', slopeBy: 'soil', bracing: 'auto' }, 0, 0, 0 );
 	await section( i, false );
 	const r = await page.evaluate( async i => {
@@ -530,7 +518,7 @@ test( 'the quantities and the comparison are the shared module\'s', async () => 
 		const list = compareMethods( design.params );
 		const rows = Object.fromEntries( [ ...section.card.querySelectorAll( '.quantities tr' ) ].map( tr => [ tr.querySelector( 'th' ).textContent, tr.querySelector( 'td' ).textContent ] ) );
 		const compared = [ ...section.card.querySelectorAll( '.compare tr[data-method]' ) ].map( tr => ( { method: tr.dataset.method, volume: Number( tr.querySelector( '[data-volume]' ).dataset.volume ), current: tr.classList.contains( 'current' ) } ) );
-		return { q: design.quantities, rows, compared, list, text: comparisonText( list ), checks: section.card.querySelector( '.checks summary' ).textContent, flags: design.flags.length };
+		return { q: design.quantities, piles: window.twin.shoring.planShoring( window.pits[ i ].params ).piles, rows, compared, list, text: comparisonText( list ), checks: section.card.querySelector( '.checks summary' ).textContent, flags: design.flags.length };
 
 	}, i );
 	assert.equal( r.q.volume, 3840 );
@@ -540,7 +528,7 @@ test( 'the quantities and the comparison are the shared module\'s', async () => 
 	assert.equal( r.rows[ 'Top of the cut' ], '36.0 × 20.0 m, 720 m²' );
 	assert.equal( r.rows[ 'Floor' ], '12.0 × 20.0 m' );
 	assert.equal( r.rows[ 'Wall area' ], `${ Math.round( r.q.wallArea ) } m²` );
-	assert.equal( r.rows[ 'Sheet piles' ], `${ r.q.piles[ 'sheet-piles' ] } sheets, 13.0 m long (sides 1, 3)` );
+	assert.equal( r.rows[ 'Sheet piles' ], `${ r.piles[ 'sheet-piles' ] } sheets, 13.0 m long (sides 1, 3)` );
 	assert.equal( r.rows[ 'Struts' ], `${ r.q.struts.count }, ${ Math.round( r.q.struts.metres ) } m in all` );
 	assert.equal( r.rows[ 'King posts' ], String( r.q.kingPosts ) );
 	assert.equal( r.compared.length, r.list.length );
@@ -560,15 +548,42 @@ test( 'the quantities and the comparison are the shared module\'s', async () => 
 	assert.match( panel[ 'design cut (flat ground)' ].value, /^1,712 m³ · / );
 	assert.equal( panel.footprint.value, '704 m² (22.0 × 32.0 m)' );
 	assert.match( panel.compared.value, /Shored instead: 912 m³ less cut, top 10\.0 × 20\.0 m\./ );
-	// No walls, nothing to list: the note is left out.
-	assert.equal( panel.quantities.shown, false );
+	assert.equal( panel.quantities, undefined );
+
+	// Piles are counted as the shoring draws them: soldier piles meeting contiguous piles at every
+	// corner each have their own end pile there, and a ring of secant piles needs more round the
+	// outside of its corners than along the floor's edges.
+	await page.evaluate( () => window.twin.section.close() );
+	for ( const [ params, east, expected ] of [
+		[ { width: 12, length: 20, depth: 8, outline: 'floor', method: 'sides', side1: 'soldier-piles', side2: 'contiguous-piles', side3: 'soldier-piles', side4: 'contiguous-piles', bracing: 'auto' }, 200, { 'Soldier piles + lagging': '14 piles', 'Contiguous pile wall': '58 piles' } ],
+		[ { width: 24, length: 40, depth: 10, outline: 'floor', support: 'secant-piles', bracing: 'tiebacks' }, 300, { 'Secant pile wall': '182 piles' } ],
+	] ) {
+
+		const k = await pit( params, east, 0, 0 );
+		await section( k, false );
+		const got = await page.evaluate( async k => {
+
+			const { section, shoring } = window.twin;
+			const rows = Object.fromEntries( [ ...section.card.querySelectorAll( '.quantities tr' ) ].map( tr => [ tr.querySelector( 'th' ).textContent, tr.querySelector( 'td' ).textContent ] ) );
+			return { rows, summary: shoring.planShoring( window.pits[ k ].params ).summary };
+
+		}, k );
+		for ( const [ what, n ] of Object.entries( expected ) ) {
+
+			assert.ok( got.rows[ what ].startsWith( `${ n }, ` ), `${ what }: ${ got.rows[ what ] }` );
+			assert.ok( got.summary.includes( n.replace( 'piles', '' ) ), got.summary );
+
+		}
+
+		await page.evaluate( () => window.twin.section.close() );
+
+	}
 
 } );
 
 test( 'what\'s placed nearby: in the cut, over the tiebacks, in the spoil set-back and the adjacent band; no-dig zones drawn', async () => {
 
 	await clear();
-	await sharedParams();
 	// Sheet piles with tiebacks all round: a no-dig zone behind each wall.
 	const anchored = await pit( { width: 12, length: 20, depth: 8, outline: 'floor', method: 'shore', support: 'sheet-piles', bracing: 'tiebacks' }, 500, 0, 0 );
 	const reach = await page.evaluate( async i => {

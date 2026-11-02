@@ -606,6 +606,10 @@ function planWalls( { geom, plan: bp, quantities } ) {
 
 	// What goes in, system by system, in the order the systems are listed.
 	const summary = [];
+	// The sheets or piles drawn, by system, for the section's quantities: the shared module counts
+	// bays along each side's line, which misses the piles a corner adds round the outside and the
+	// end piles two different walls each have at a corner.
+	const piles = {};
 	let steel = 0;
 	let concrete = 0;
 	for ( const id of Object.keys( SYSTEMS ) ) {
@@ -618,12 +622,14 @@ function planWalls( { geom, plan: bp, quantities } ) {
 		if ( id === 'sheet-piles' ) {
 
 			const count = sum( runs, w => w.sheets );
+			piles[ id ] = count;
 			summary.push( `${ count } sheets (Z-profile, ${ SHEET.width } m wide) on ${ where }, ${ metres( length ) } long each` );
 			steel += count * length * KG.sheet;
 
 		} else if ( id === 'soldier-piles' ) {
 
 			const count = sum( runs, w => w.posts.length );
+			piles[ id ] = count;
 			const lagging = sum( runs, w => w.span * ( D + ABOVE ) );
 			summary.push( `${ count } soldier piles (HP310, ${ maxOf( runs.map( w => w.spacing ) ) } m apart or less) on ${ where }, ${ metres( length ) } long each, ${ Math.round( lagging ) } m² of timber lagging (${ ( lagging * BOARD.thick ).toFixed( 1 ) } m³)` );
 			steel += count * length * H_PILE.kgPerM;
@@ -631,6 +637,7 @@ function planWalls( { geom, plan: bp, quantities } ) {
 		} else {
 
 			const count = sum( runs, w => w.posts.length );
+			piles[ id ] = count;
 			const gap = Math.round( Math.abs( system.diameter - system.centres ) * 1000 );
 			const spec = id === 'secant-piles' ? `${ system.diameter } m, ${ gap } mm overlap` : `${ system.diameter } m, ${ gap } mm gaps`;
 			summary.push( `${ count } ${ id === 'secant-piles' ? 'secant' : 'contiguous' } piles (${ spec }) on ${ where }, ${ metres( length ) } long each, under a capping beam` );
@@ -673,6 +680,7 @@ function planWalls( { geom, plan: bp, quantities } ) {
 	return {
 		summary: summary.join( '; ' ),
 		wall: quantities.wallArea,
+		piles,
 		weight: [ steel >= 50 ? tonnes( steel, 'steel' ) : '', concrete >= 0.5 ? `${ Math.round( concrete ).toLocaleString( 'en-CA' ) } m³ concrete` : '' ].filter( Boolean ).join( ', ' ),
 		notes,
 		sides: 'all',

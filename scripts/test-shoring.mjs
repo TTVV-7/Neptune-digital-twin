@@ -501,8 +501,8 @@ test( 'P panel text: the support levels, and the checks less what the notes say,
 
 	const plan = planShoring( { width: 10, length: 8, depth: 3.5, outline: 'floor', method: 'shore', support: 'contiguous-piles', bracing: 'auto' } );
 	assert.equal( plan.levels, 'None (cantilever), suggested for 3.5 m deep: no support levels; embedment 5.3 m below the floor (1.5 times the depth); contiguous piles 9.5 m long.' );
-	assert.match( plan.checks, /All four sides: contiguous pile wall let water through below the groundwater/ );
-	assert.equal( plan.checks.match( /let water through/g ).length, 1 );
+	assert.match( plan.checks, /All four sides: water comes through the contiguous pile wall below the groundwater/ );
+	assert.equal( plan.checks.match( /water comes through/g ).length, 1 );
 	assert.equal( plan.weight, '173 m³ concrete' );
 	const deep = planShoring( { width: 24, length: 40, depth: 10, outline: 'floor', method: 'shore', support: 'secant-piles', bracing: 'tiebacks' } );
 	for ( const id of X.COVERED ) assert.ok( ! deep.design.flags.some( f => f.id === id && deep.checks.includes( f.text.slice( 0, 30 ) ) ), id );

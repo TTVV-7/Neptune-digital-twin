@@ -12,7 +12,6 @@ import {
 	designCutText,
 	findConflicts,
 	footprintText,
-	quantitiesText,
 	quantityRows,
 	sectionDrawing,
 	sectionRange,
@@ -21,6 +20,7 @@ import {
 	zoneRects,
 } from './excavation-section-drawing.js';
 import { PAINT } from './shoring-models.js';
+import { planShoring } from './shoring.js';
 import { rectsOverlap } from './terrain.js';
 import { addHitFilter, isTyping, passesHitFilters } from './walk.js';
 import { LAYDOWN, biasDepth, groundUnder } from './laydown.js';
@@ -127,7 +127,6 @@ function comparison( params ) {
 export const SECTION_READOUTS = [
 	{ label: 'design cut (flat ground)', get: entry => designCutText( planExcavation( entry.params ) ) },
 	{ label: 'footprint', get: entry => footprintText( planExcavation( entry.params ) ) },
-	{ label: 'quantities', note: true, get: entry => quantitiesText( planExcavation( entry.params ) ) },
 	{ label: 'compared', note: true, get: entry => comparisonText( comparison( entry.params ) ) },
 	{ label: 'nearby', note: true, get: entry => section?.nearbyText( entry ) ?? '' },
 ];
@@ -579,7 +578,7 @@ export function setUpSection( { scene, camera, renderer, canvas, controls, model
 		if ( ! view ) return;
 		const { entry } = view;
 		const design = planExcavation( entry.params );
-		card.querySelector( '.quantities table' ).innerHTML = quantityRows( design ).map( ( [ what, value ] ) => `<tr><th>${ escape( what ) }</th><td>${ escape( value ) }</td></tr>` ).join( '' );
+		card.querySelector( '.quantities table' ).innerHTML = quantityRows( design, planShoring( entry.params ).piles ).map( ( [ what, value ] ) => `<tr><th>${ escape( what ) }</th><td>${ escape( value ) }</td></tr>` ).join( '' );
 		const rows = comparisonRows( comparison( entry.params ) );
 		card.querySelector( '.compare' ).hidden = rows.length < 2;
 		card.querySelector( '.compare table' ).innerHTML = '<tr><th></th><th>cut</th><th>vs plan</th><th>top</th></tr>' + rows.map( r => `<tr class="${ r.current ? 'current' : '' }" data-method="${ escape( r.label ) }"><th>${ escape( r.label ) }</th><td data-volume="${ r.volume }">${ volumeText( r.volume ) } m³</td><td>${ r.change === null ? '' : Math.abs( r.change ) < 0.5 ? 'the same' : `${ r.change < 0 ? '−' : '+' }${ volumeText( Math.abs( r.change ) ) } m³` }</td><td>${ escape( r.top ) }</td></tr>` ).join( '' );
@@ -615,6 +614,9 @@ export function setUpSection( { scene, camera, renderer, canvas, controls, model
 		disposeCap();
 		const on = !! view?.cutaway && !! view.drawing;
 		overlay.hidden = ! on;
+		// The pit's toolbar, handles, label and side numbers would sit on the cut face, some for a
+		// side that's cut away: out of the way while the scene is cut (excavation-section.css).
+		document.body.classList.toggle( 'section-cutaway', on );
 		if ( ! on ) {
 
 			for ( const plane of planes ) plane.set( UP, OFF );
