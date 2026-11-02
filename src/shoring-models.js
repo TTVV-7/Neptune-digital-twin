@@ -18,9 +18,11 @@ import {
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // Shoring equipment at real size, in metres: trench boxes and their stackers, slide rail, hydraulic
-// shores, sheet piles and H-piles. shoring.js lines excavations with these, and the library has
-// them as pieces to stage and lay down (procedural.js). Repeated parts are merged into one mesh
-// per material, so a run of boxes or a 60 m sheet-piled wall is a handful of draw calls.
+// shores, sheet piles and H-piles, and the paint for concrete pile walls, kicker blocks and
+// tiebacks. shoring.js lines excavations with these, and the library has them as pieces to stage
+// and lay down (procedural.js). Repeated parts are merged into one mesh per material, so a run of
+// boxes or a 60 m sheet-piled wall is a handful of draw calls. No DOM and nothing from the app:
+// World Drive bundles this file.
 
 export const FT = 0.3048;
 // Steel trench box panels are double-walled plate about 120 mm (4 3/4 in) thick.
@@ -68,6 +70,12 @@ export const PAINT = {
 	timber: paint( 0x9a764b, { metalness: 0, roughness: 0.9 } ),
 	// Dug earth, as the terrain draws it (CUT_COLOUR in terrain.js).
 	earth: paint( 0x6d5a47, { metalness: 0, roughness: 1 } ),
+	// Cast concrete: secant piles' reinforced secondaries, contiguous piles, capping beams, kicker
+	// blocks and tiebacks' grouted bond lengths; secant primaries, a weaker mix, a shade lighter.
+	concrete: paint( 0x9d9a92, { metalness: 0, roughness: 0.9 } ),
+	concreteLight: paint( 0xb9b5ab, { metalness: 0, roughness: 0.9 } ),
+	// A tieback's unbonded length: strand in a black sheath.
+	tendon: paint( 0x2b2e31, { metalness: 0.2, roughness: 0.6 } ),
 };
 for ( const [ name, material ] of Object.entries( PAINT ) ) material.name = `shoring ${ name }`;
 
@@ -225,16 +233,18 @@ function sheetSection() {
 }
 
 // A wall of sheets as one surface standing from y0 to y1 along a closed loop of points [ x, z ]
-// (the corrugations already in it). Each face is flat-shaded, so the corrugations read.
-export function sheetWall( points, y0, y1 ) {
+// (the corrugations already in it), or along an open line from the first to the last when
+// `closed` is false (a wall on one side of a pit). Each face is flat-shaded, so the corrugations
+// read.
+export function sheetWall( points, y0, y1, closed = true ) {
 
-	const count = points.length;
+	const count = closed ? points.length : points.length - 1;
 	const positions = new Float32Array( count * 18 );
 	const normals = new Float32Array( count * 18 );
 	for ( let i = 0; i < count; i ++ ) {
 
 		const [ ax, az ] = points[ i ];
-		const [ bx, bz ] = points[ ( i + 1 ) % count ];
+		const [ bx, bz ] = points[ ( i + 1 ) % points.length ];
 		// Facing the way the triangles wind, so both sides light properly (DoubleSide flips it).
 		const length = Math.hypot( bx - ax, bz - az ) || 1;
 		const nx = - ( bz - az ) / length;

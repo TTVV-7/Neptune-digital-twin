@@ -1,25 +1,27 @@
-import { BufferGeometry, Float32BufferAttribute, Group, Vector3 } from 'three';
+import { BufferGeometry, Float32BufferAttribute, Group, Mesh, Vector3 } from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { headingToYaw } from './geo.js';
 import { FT, H_PILE, PAINT, PANEL, Parts, SHEET, hPile, hydraulicCylinder, sheetWall, trenchBox, trenchBoxWeight } from './shoring-models.js';
-import { shoreTheGround } from './shoring-ground.js';
+import { CORNER_REACH, shoreTheGround } from './shoring-ground.js';
+import { COVERED, NO_SUPPORT, SYSTEMS, WALER_DEPTH, geometryAtStage, normaliseExcavation, normalizeSupport, planExcavation } from './excavation-design.js';
 
-// Shoring for excavations: trench boxes, slide rail, hydraulic shores, sheet piles, and soldier
-// piles with timber lagging. An excavation's "support" param picks one; its walls are then cut
-// vertical, and the shoring is drawn in the pit to scale, rebuilt from the pit's width, length and
-// depth whenever they change. Unlike the pit's outline it shows all the time: it's a real thing
-// on site. The P panel lists what it's made of, the shored wall area, a rough weight and
-// warnings. A planning aid only: real shoring is chosen from the supplier's tabulated data or
-// designed by an engineer (see docs/shoring.md).
+// Shoring for excavations: trench boxes, slide rail and hydraulic shores, which shore a trench or
+// pit as a whole, and walls of sheet piles, soldier piles with timber lagging, secant piles or
+// contiguous piles, which can line any side, with their support levels: walers with struts, corner
+// braces and king posts, rakers down to kicker blocks, or tiebacks drilled back into the ground.
+// An excavation's params (excavation-design.js) say which: the whole pit shored with one system
+// ("support"), or each side sloped, stepped or walled on its own. The design module works out where
+// everything goes; this draws it in the pit to scale, rebuilt whenever the params change, and
+// shows what's in at the dig stage the params show. Unlike the pit's outline it shows all the
+// time: it's a real thing on site. The P panel lists what it's made of, the shored wall area, a
+// rough weight, the support levels and the checks. A planning aid only: real shoring is chosen
+// from the supplier's tabulated data or designed by an engineer (see docs/shoring.md).
 
-export const NO_SUPPORT = 'none';
-// Dropdown names -> param values.
+export { NO_SUPPORT, normalizeSupport };
+// Dropdown names -> param values: none, then every system by its name.
 export const SUPPORTS = {
 	'none / sloped': NO_SUPPORT,
-	'Trench box': 'trench-box',
-	'Slide rail': 'slide-rail',
-	'Hydraulic shores': 'hydraulic',
-	'Sheet piles': 'sheet-piles',
-	'Soldier piles + lagging': 'soldier-piles',
+	...Object.fromEntries( Object.entries( SYSTEMS ).map( ( [ id, system ] ) => [ system.label, id ] ) ),
 };
 
 // Standard trench box lengths and panel heights, in feet, as they're sold.
@@ -38,8 +40,6 @@ const SLIDE_RAIL_BAY = 4;
 const SOLDIER_SPACING = 2.4;
 // Deeper than this, an excavation needs sloping, benching or shoring before anyone goes in.
 const SAFE_DEPTH = 1.2;
-// The steepest sloped side WorkSafeBC allows, in hard, solid soil (Figure 20-1): 3 h : 4 v.
-const STEEPEST = 0.75;
 // Shoring stands at least this far out of the ground (WorkSafeBC 20.81(5)), so what's at the edge
 // can't roll in.
 const ABOVE = 0.3;
@@ -52,12 +52,13 @@ const MAX_STRUT = 12;
 const WALER_Y = - 0.7;
 const RIM_STRIP = 1;
 const SHEET_GAP = 0.02;
-
-export function normalizeSupport( value ) {
-
-	return Object.values( SUPPORTS ).includes( value ) ? value : NO_SUPPORT;
-
-}
+// Timber lagging boards, 75 x 300 mm, about 12 mm apart.
+const BOARD = { thick: 0.075, high: 0.3, gap: 0.012 };
+// A capping beam on a pile wall, from this far down to its stick-up.
+const CAP_DEPTH = 0.45;
+// Rough weights: kg per metre of a Z-sheet 0.6 m wide, of a W360 waler, of strut pipe (324, 508
+// and 610 mm, by span), and of a tieback's strand; concrete pile walls and blocks by volume.
+const KG = { sheet: 65, waler: 100, strut: [ [ 12, 97 ], [ 20, 150 ], [ Infinity, 200 ] ], strand: 5, head: 30 };
 
 // The side slope the pit is dug to: vertical with any support.
 export function wallSlope( params ) {
@@ -69,17 +70,28 @@ export function wallSlope( params ) {
 // --- plans: what goes in, from the pit's params alone ---------------------------------------------
 
 const plans = new Map();
-// The plan for a pit's params, worked out once for each size and support.
-export function planShoring( params ) {
+// The plan for a pit's params, worked out once for each set of them. Every param but the stage
+// shown changes what goes in; the stage only shows and hides what's in by then (showStage).
+// { key, design (planExcavation's, finished), summary, wall (m²), weight, notes, levels and checks
+// (P panel text), sides ('long' or 'all', for the trench systems), shored (which sides the
+// ground's walls go straight up behind: [ { n, back, from, to } ]), build( parts ) }.
+export function planShoring( raw ) {
 
-	const { width, length, depth, slope } = params;
-	const support = normalizeSupport( params.support );
-	const key = [ support, width, length, depth, slope ].join();
+	const params = normaliseExcavation( raw );
+	const { stage, ...rest } = params;
+	const key = JSON.stringify( rest );
 	if ( ! plans.has( key ) ) {
 
 		if ( plans.size > 200 ) plans.clear();
-		const plan = PLANNERS[ support ]?.( { width, length, depth } ) ?? { summary: '', wall: 0, weight: '', notes: [], build: null };
-		plan.notes.push( ...generalNotes( support, params ) );
+		const design = planExcavation( { ...rest, stage: - 1 } );
+		const { geom, plan: bracing } = design;
+		let plan;
+		if ( geom.trench ) plan = planTrench( design );
+		else if ( bracing.type === 'classic' ) plan = classicWalls( design );
+		else if ( bracing.walls.length ) plan = planWalls( design );
+		else plan = { summary: '', wall: 0, weight: '', notes: [], shored: [], build: null };
+		plan.notes.push( ...generalNotes( design ) );
+		Object.assign( plan, { key, design, levels: levelsText( design ), checks: checksText( design ) } );
 		plans.set( key, plan );
 
 	}
@@ -88,11 +100,14 @@ export function planShoring( params ) {
 
 }
 
-function generalNotes( support, { depth, slope } ) {
+// The notes every pit gets: too steep, and too deep to dig without a professional's written
+// instructions. With the whole pit cut one way the words are as the first shoring had them.
+function generalNotes( { params, geom, plan, flags } ) {
 
 	const notes = [];
-	if ( support === NO_SUPPORT && depth > SAFE_DEPTH && slope < STEEPEST ) notes.push( 'Over 1.2 m deep, with sides steeper than WorkSafeBC allows even in hard, solid soil (3 : 4): slope, bench or shore them before anyone goes in (OHS Regulation 20.81).' );
-	if ( depth > ENGINEERED_DEPTH ) notes.push( support === NO_SUPPORT ? 'Over 6 m deep: dug to a qualified registered professional\'s written instructions (WorkSafeBC 20.78).' : 'Over 6 m deep: the shoring is to a professional engineer\'s written design (WorkSafeBC 20.78).' );
+	const steep = flags.find( f => f.id === 'too-steep' );
+	if ( steep ) notes.push( params.method === 'sides' ? `${ steep.text.replace( /\.$/, '' ) } (OHS Regulation 20.81).` : 'Over 1.2 m deep, with sides steeper than WorkSafeBC allows even in hard, solid soil (3 : 4): slope, bench or shore them before anyone goes in (OHS Regulation 20.81).' );
+	if ( geom.depth > ENGINEERED_DEPTH ) notes.push( plan.walls.length || geom.trench ? 'Over 6 m deep: the shoring is to a professional engineer\'s written design (WorkSafeBC 20.78).' : 'Over 6 m deep: dug to a qualified registered professional\'s written instructions (WorkSafeBC 20.78).' );
 	return notes;
 
 }
@@ -105,11 +120,54 @@ const PLANNERS = {
 	'soldier-piles': planSoldierPiles,
 };
 
+// A trench system shores the whole pit. Its boxes or shores stand on the floor between the ends,
+// which is all of the trench unless the ends are sloped back; slide rail lines all four sides.
+function planTrench( { params, geom } ) {
+
+	const { width, length, depth } = params;
+	const [ front, right, back, left ] = geom.sides;
+	const turned = width > length;
+	const across = turned ? length : width;
+	const along = Math.max( 0, turned ? right.toe + left.toe : front.toe + back.toe );
+	const plan = geom.system === 'slide-rail' ? planSlideRail( { width, length, depth } ) : PLANNERS[ geom.system ]( { width, length, depth, across, along } );
+	const sloped = geom.sides.some( side => side.method === 'slope' );
+	if ( sloped ) plan.notes = plan.notes.filter( note => ! note.startsWith( 'Ends are open' ) );
+	plan.turned = turned;
+	plan.outline = { width, length };
+	// The long walls, as far along them as the boxes or shores reach; or all four round the corners.
+	plan.shored = geom.sides.filter( side => plan.sides === 'all' || side.axis === ( turned ? 0 : 1 ) ).map( side => {
+
+		const [ a, b ] = neighbours( geom.sides, side );
+		const reach = plan.sides === 'all' ? null : Math.min( plan.ground.reach, Math.max( width, length ) / 2 );
+		return { n: side.n, back: plan.ground.back, from: reach === null ? - a.top - CORNER_REACH : - reach, to: reach === null ? b.top + CORNER_REACH : reach };
+
+	} );
+	return plan;
+
+}
+
+// Sheet or soldier piles round the whole pit with the bracing the first shoring gave them, for pits
+// saved before support levels could be chosen: drawn and described exactly as they were.
+function classicWalls( { params, geom } ) {
+
+	const { width, length, depth } = params;
+	const plan = PLANNERS[ geom.system ]( { width, length, depth } );
+	plan.outline = { width, length };
+	plan.shored = geom.sides.map( side => {
+
+		const [ a, b ] = neighbours( geom.sides, side );
+		return { n: side.n, back: plan.ground.back, from: - a.top - CORNER_REACH, to: b.top + CORNER_REACH };
+
+	} );
+	return plan;
+
+}
+
 // Trench boxes line the two long sides, end to end and stacked for depth. The run is the fewest
 // boxes that leave no room for another, and of those the longest run, longest boxes first.
-function planTrenchBoxes( { width, length, depth } ) {
+function planTrenchBoxes( { width, length, depth, ...given } ) {
 
-	const [ across, along ] = width > length ? [ length, width ] : [ width, length ];
+	const [ across, along ] = given.along !== undefined ? [ given.across, given.along ] : width > length ? [ length, width ] : [ width, length ];
 	const lengths = boxRun( along );
 	const stack = boxStack( depth );
 	const run = lengths.reduce( ( sum, ft ) => sum + ft * FT, 0 );
@@ -312,9 +370,9 @@ function planSlideRail( { width, length, depth } ) {
 // Hydraulic shores: a pair of aluminium rails on the long walls with cylinders across, 2.4 m
 // apart along the trench, the top cylinder 0.45 m under the rim and none more than 1.2 m apart
 // or from the floor. The rails reach from 0.3 m off the floor to 0.3 m out of the ground.
-function planHydraulic( { width, length, depth } ) {
+function planHydraulic( { width, length, depth, ...given } ) {
 
-	const [ across, along ] = width > length ? [ length, width ] : [ width, length ];
+	const [ across, along ] = given.along !== undefined ? [ given.across, given.along ] : width > length ? [ length, width ] : [ width, length ];
 	const span = Math.max( 0, along - 1.2 );
 	const count = span > 0 ? Math.ceil( span / SHORE_SPACING - 0.01 ) + 1 : 1;
 	const spacing = count > 1 ? span / ( count - 1 ) : 0;
@@ -424,7 +482,9 @@ function planSheetPiles( { width, length, depth } ) {
 			} );
 			parts.add( PAINT.sheet, sheetWall( points.map( p => [ p.x, p.z ] ), - depth - 0.2, 1 ) );
 
-			// Waler: a W360 on its side against the inner flanges, web level.
+			// Waler: a W360 on its side against the inner flanges, web level. It and the struts are
+			// the first (only) level, in once the first lift is dug.
+			parts.when = 1;
 			for ( const wall of walls ) {
 
 				const middle = wall.length / 2;
@@ -491,7 +551,7 @@ function planSoldierPiles( { width, length, depth } ) {
 		ground: { back: - 0.055 },
 		build( parts ) {
 
-			const pitch = 0.3 + 0.012;
+			const pitch = BOARD.high + BOARD.gap;
 			// No sliver of a board at the top.
 			const boards = Math.max( 1, Math.ceil( ( depth + ABOVE - 0.05 ) / pitch ) );
 			walls.forEach( ( wall, w ) => {
@@ -504,19 +564,351 @@ function planSoldierPiles( { width, length, depth } ) {
 
 					const p = wall.at( k * spacing, 0 );
 					hPile( parts, { x: p.x, z: p.z, y0: - depth - 0.1, y1: 0.5, yaw } );
-					for ( let i = 0; i < boards; i ++ ) {
-
-						const y = - depth + i * pitch;
-						wallBox( parts, PAINT.timber, wall, ( k + 0.5 ) * spacing, 0.0925, spacing - 0.02, 0.075, Math.min( 0.3, ABOVE - y ), y );
-
-					}
 
 				}
 
 			} );
+			// The boards row by row from the top, each in once the face behind it is dug.
+			for ( let i = boards - 1; i >= 0; i -- ) {
+
+				const y = - depth + i * pitch;
+				parts.when = boardWhen( y );
+				walls.forEach( ( wall, w ) => {
+
+					const spacing = wall.length / bays[ w ];
+					for ( let k = 0; k < bays[ w ]; k ++ ) wallBox( parts, PAINT.timber, wall, ( k + 0.5 ) * spacing, 0.0925, spacing - 0.02, 0.075, Math.min( 0.3, ABOVE - y ), y );
+
+				} );
+
+			}
+
+			parts.when = 0;
 
 		},
 	};
+
+}
+
+// --- walls on any side, with support levels ------------------------------------------------------
+
+// Walls of each side's own system, with the support levels and members bracingPlan works out for
+// them (excavation-design.js): walers along each level, struts across with corner braces and king
+// posts, rakers down to kicker blocks, or tiebacks back into the ground. Walls stand down to their
+// embedment below the floor, as they're driven or drilled, which shows in a section. Built in the
+// group's frame (x = u, z = -v, y up from the rim), every level's members after the walls, so a dig
+// stage shows a prefix of each mesh (showStage).
+function planWalls( { geom, plan: bp, quantities } ) {
+
+	const D = geom.depth;
+	const walls = geom.sides.filter( side => side.method === 'wall' ).map( side => wallRun( geom, side ) );
+	const members = type => bp.members.filter( m => m.type === type );
+	const sum = ( list, f ) => list.reduce( ( total, item ) => total + f( item ), 0 );
+
+	// What goes in, system by system, in the order the systems are listed.
+	const summary = [];
+	let steel = 0;
+	let concrete = 0;
+	for ( const id of Object.keys( SYSTEMS ) ) {
+
+		const runs = walls.filter( w => w.system === id );
+		if ( runs.length === 0 ) continue;
+		const system = SYSTEMS[ id ];
+		const length = bp.pileLength[ id ];
+		const where = sidesText( runs.map( w => w.side.n ) );
+		if ( id === 'sheet-piles' ) {
+
+			const count = sum( runs, w => w.sheets );
+			summary.push( `${ count } sheets (Z-profile, ${ SHEET.width } m wide) on ${ where }, ${ metres( length ) } long each` );
+			steel += count * length * KG.sheet;
+
+		} else if ( id === 'soldier-piles' ) {
+
+			const count = sum( runs, w => w.posts.length );
+			const lagging = sum( runs, w => w.span * ( D + ABOVE ) );
+			summary.push( `${ count } soldier piles (HP310, ${ maxOf( runs.map( w => w.spacing ) ) } m apart or less) on ${ where }, ${ metres( length ) } long each, ${ Math.round( lagging ) } m² of timber lagging (${ ( lagging * BOARD.thick ).toFixed( 1 ) } m³)` );
+			steel += count * length * H_PILE.kgPerM;
+
+		} else {
+
+			const count = sum( runs, w => w.posts.length );
+			const gap = Math.round( Math.abs( system.diameter - system.centres ) * 1000 );
+			const spec = id === 'secant-piles' ? `${ system.diameter } m, ${ gap } mm overlap` : `${ system.diameter } m, ${ gap } mm gaps`;
+			summary.push( `${ count } ${ id === 'secant-piles' ? 'secant' : 'contiguous' } piles (${ spec }) on ${ where }, ${ metres( length ) } long each, under a capping beam` );
+			concrete += count * Math.PI * ( system.diameter / 2 ) ** 2 * length + sum( runs, w => w.span ) * system.diameter * ( CAP_DEPTH + system.stickUp );
+
+		}
+
+	}
+
+	const walers = members( 'waler' );
+	const struts = members( 'strut' );
+	const corners = members( 'corner' );
+	const posts = members( 'kingpost' );
+	const rakers = members( 'raker' );
+	const kickers = members( 'kicker' );
+	const tiebacks = members( 'tieback' );
+	const span = bp.struts?.span ?? 0;
+	const strutKg = KG.strut.find( ( [ upTo ] ) => span <= upTo )[ 1 ];
+	steel += sum( walers, m => m.length ) * KG.waler + sum( struts, m => m.length ) * strutKg + sum( [ ...corners, ...rakers ], m => m.length ) * KG.strut[ 0 ][ 1 ];
+	steel += sum( posts, m => m.length ) * H_PILE.kgPerM + sum( tiebacks, m => m.length * KG.strand + KG.head );
+	concrete += kickers.length * KICKER_VOLUME + sum( tiebacks, m => Math.PI * BOND_RADIUS ** 2 * m.bond );
+
+	const what = [
+		struts.length ? plural( struts.length, 'strut' ) + ' across' : '',
+		corners.length ? plural( corners.length, 'corner brace' ) : '',
+		posts.length ? plural( posts.length, 'king post' ) : '',
+		rakers.length ? `${ plural( rakers.length, 'raker' ) } to kicker blocks` : '',
+		tiebacks.length ? plural( tiebacks.length, 'tieback' ) : '',
+	].filter( Boolean );
+	const levels = bp.levels.length;
+	summary.push( levels ? `walers at ${ plural( levels, 'level' ) }${ what.length ? ` with ${ listText( what ) }` : '' }` : 'cantilevered, with no support levels' );
+
+	const notes = [ 'A professional engineer designs the walls and their support: the pile lengths, sizes and levels here are rough.' ];
+	const wings = walls.filter( w => w.wing > 0.05 );
+	if ( wings.length ) notes.push( `The wall${ wings.length > 1 ? 's' : '' } on ${ sidesText( wings.map( w => w.side.n ) ) } run${ wings.length > 1 ? '' : 's' } on past the floor's corners into the slopes or benches beside ${ wings.length > 1 ? 'them' : 'it' }, as far as their tops (${ metres( Math.max( ...wings.map( w => w.wing ) ) ) } at most).` );
+	if ( walls.some( w => w.system === 'soldier-piles' ) ) notes.push( 'The lagging goes in from the top down, 1.2 to 1.5 m at a time, as the face is dug (FHWA GEC 4).' );
+	if ( rakers.length ) notes.push( 'Rakers: the middle is dug to the floor first, leaving a berm of soil against the walls until the kicker blocks and rakers are in.' );
+	if ( tiebacks.length ) notes.push( 'Tiebacks run under the ground behind the walls: nothing is dug or piled in their no-dig zone while they\'re in, and under ground that isn\'t the port\'s they need the owner\'s consent (FHWA GEC 4 5.3.6).' );
+
+	return {
+		summary: summary.join( '; ' ),
+		wall: quantities.wallArea,
+		weight: [ steel >= 50 ? tonnes( steel, 'steel' ) : '', concrete >= 0.5 ? `${ Math.round( concrete ).toLocaleString( 'en-CA' ) } m³ concrete` : '' ].filter( Boolean ).join( ', ' ),
+		notes,
+		sides: 'all',
+		shored: walls.map( w => ( { n: w.side.n, back: SYSTEMS[ w.system ].back, from: - w.ends[ 0 ].reach, to: w.ends[ 1 ].reach } ) ),
+		build( parts ) {
+
+			for ( const w of walls ) buildWall( parts, w, D, bp );
+			buildMembers( parts, geom, bp );
+
+		},
+	};
+
+}
+
+const KICKER_VOLUME = 1.2 * 1 * 0.6;
+const BOND_RADIUS = 0.075;
+
+// A wall along one side: where it ends at each neighbour (t along its line: a at -t, b at +t),
+// and its sheets, or the posts of its piles (t of each it draws; a corner pile shared with the next
+// wall of the same system is drawn by the side before it going round, 1 to 4).
+function wallRun( geom, side ) {
+
+	const system = SYSTEMS[ side.system ];
+	const pile = system.diameter ?? 0;
+	const ends = neighbours( geom.sides, side ).map( other => {
+
+		const wall = other.method === 'wall';
+		// Shored round the corner, the ground's walls go straight up there too (shoring-ground.js).
+		const reach = other.top + ( wall ? CORNER_REACH : 0 );
+		if ( ! wall ) return { t: other.top, other, wall, shared: false, draws: true, owner: false, reach };
+		const theirs = SYSTEMS[ other.system ];
+		// Going round 1 to 4, the side before a corner takes what the two walls share there.
+		const owner = other.n === side.n % 4 + 1;
+		if ( other.system === side.system ) return { t: other.top + pile / 2, other, wall, shared: true, draws: owner, owner, reach };
+		// Two different walls: the one standing less far out runs on to the other's back, and the
+		// other stops at its face.
+		if ( system.back < theirs.back ) return { t: other.top + theirs.back - pile / 2, other, wall, shared: false, draws: true, owner, reach };
+		return { t: other.top - theirs.inner - pile / 2, other, wall, shared: false, draws: true, owner, reach };
+
+	} );
+	const [ a, b ] = ends;
+	const span = a.t + b.t;
+	const run = { side, system: side.system, ends, span, wing: Math.max( 0, ...ends.filter( e => ! e.wall ).map( e => e.other.top - e.other.toe ) ) };
+	if ( side.system === 'sheet-piles' ) run.sheets = Math.max( 2, Math.round( span / SHEET.width ) );
+	else {
+
+		const bays = Math.max( 1, Math.ceil( span / ( system.spacing ?? system.centres ) - 0.01 ) );
+		run.bays = bays;
+		run.spacing = span / bays;
+		run.all = Array.from( { length: bays + 1 }, ( _, k ) => - a.t + k * run.spacing );
+		run.posts = run.all.filter( ( _, k ) => ! ( k === 0 && a.shared && ! a.draws ) && ! ( k === bays && b.shared && ! b.draws ) );
+
+	}
+
+	return run;
+
+}
+
+// One wall, from its toe below the floor to its stick-up, with the earth at the rim behind it.
+function buildWall( parts, w, D, bp ) {
+
+	const { side, ends: [ a, b ] } = w;
+	const system = SYSTEMS[ w.system ];
+	const bottom = - D - bp.toe;
+	parts.when = 0;
+	if ( w.system === 'sheet-piles' ) {
+
+		// The corrugated line, flange, web, flange, starting outside the line at the a end, as the
+		// first shoring drew it round the pit; earth at rim level fills the pockets behind the inner
+		// flanges.
+		const h = SHEET.depth / 2;
+		const width = w.span / w.sheets;
+		const line = [];
+		for ( let k = 0; k < w.sheets; k ++ ) {
+
+			const d = k % 2 ? h : - h;
+			line.push( [ k * width, d ], [ k * width + SHEET.flange, d ], [ ( k + 1 ) * width - SHEET.flange, - d ] );
+
+		}
+
+		line.push( [ w.span, w.sheets % 2 ? h : - h ] );
+		parts.add( PAINT.sheet, sheetWall( line.map( ( [ s, d ] ) => at( side, s - a.t, d ) ).map( p => [ p.x, p.z ] ), bottom, system.stickUp, false ) );
+		parts.add( PAINT.earth, groundStrip( line.map( ( [ s, d ] ) => [ at( side, s - a.t, d ), at( side, s - a.t, - h - SHEET_GAP ) ] ), 0.012 ) );
+
+	} else if ( w.system === 'soldier-piles' ) {
+
+		// H-piles with their flanges facing into the pit, lagging boards behind the inner flanges
+		// in every bay, row by row from the top, each in once the face behind it is dug.
+		const yaw = side.axis ? ( side.sign > 0 ? Math.PI : 0 ) : - side.sign * Math.PI / 2;
+		for ( const t of w.posts ) {
+
+			const p = at( side, t, 0 );
+			hPile( parts, { x: p.x, z: p.z, y0: bottom, y1: system.stickUp, yaw } );
+
+		}
+
+		const pitch = BOARD.high + BOARD.gap;
+		const boards = Math.max( 1, Math.ceil( ( D + ABOVE - 0.05 ) / pitch ) );
+		for ( let i = boards - 1; i >= 0; i -- ) {
+
+			const y = - D + i * pitch;
+			parts.when = boardWhen( y );
+			for ( let k = 0; k < w.bays; k ++ ) sideBox( parts, PAINT.timber, side, w.all[ k ] + 0.01, w.all[ k + 1 ] - 0.01, 0.055, 0.055 + BOARD.thick, y, y + Math.min( BOARD.high, ABOVE - y ) );
+
+		}
+
+		parts.when = 0;
+
+	} else {
+
+		// Bored piles standing just outside the line, their faces on it, under a capping beam;
+		// secant primaries (unreinforced, drilled first) a shade lighter than the secondaries cut
+		// into them.
+		const r = system.diameter / 2;
+		const secant = w.system === 'secant-piles';
+		w.all.forEach( ( t, k ) => {
+
+			if ( ! w.posts.includes( t ) ) return;
+			const p = at( side, t, - r );
+			parts.rod( secant && k % 2 === 0 ? PAINT.concreteLight : PAINT.concrete, r, new Vector3( p.x, bottom, p.z ), new Vector3( p.x, - CAP_DEPTH + 0.05, p.z ), 16 );
+
+		} );
+		// The beam over the piles' tops; at a corner with another wall like it, the side that draws
+		// the corner pile covers the corner, and the other stops at its line.
+		const beamEnd = e => e.shared ? ( e.draws ? e.other.top + system.diameter : e.other.top ) : e.t + r;
+		sideBox( parts, PAINT.concrete, side, - beamEnd( a ), beamEnd( b ), - system.diameter, 0, - CAP_DEPTH, system.stickUp );
+
+	}
+
+	// A metre of worked ground behind the wall at the rim; round a corner with another wall, the side
+	// that draws the corner takes the square there.
+	const stripEnd = e => e.wall ? e.other.top + SYSTEMS[ e.other.system ].back + ( e.owner ? RIM_STRIP : 0 ) : e.other.top;
+	sideBox( parts, PAINT.earth, side, - stripEnd( a ), stripEnd( b ), - system.back - RIM_STRIP, - system.back, - 0.018, 0.012 );
+
+}
+
+// The support levels' members, each level after the walls and the one above it.
+function buildMembers( parts, geom, bp ) {
+
+	const D = geom.depth;
+	const sideOf = n => geom.sides[ n - 1 ];
+	const v = ( [ x, y, z ] ) => new Vector3( x, y, z );
+	for ( const m of bp.members ) {
+
+		parts.when = m.level === null || m.level === undefined ? 0 : m.level + 1;
+		if ( m.type === 'waler' ) {
+
+			// A W360 on its side against the wall: flanges up and down its face, web level.
+			const side = sideOf( m.side );
+			const t0 = side.axis ? - m.a[ 2 ] : m.a[ 0 ];
+			const t1 = side.axis ? - m.b[ 2 ] : m.b[ 0 ];
+			const d = SYSTEMS[ side.system ].inner + WALER_DEPTH / 2;
+			const y = m.a[ 1 ];
+			for ( const f of [ - 1, 1 ] ) sideBox( parts, PAINT.waler, side, Math.min( t0, t1 ), Math.max( t0, t1 ), d + f * 0.16, d + f * 0.18, y - 0.125, y + 0.125 );
+			sideBox( parts, PAINT.waler, side, Math.min( t0, t1 ), Math.max( t0, t1 ), d - 0.17, d + 0.17, y - 0.008, y + 0.008 );
+
+		} else if ( m.type === 'strut' ) {
+
+			// Pipe, heavier the longer it spans.
+			const span = bp.struts?.span ?? m.length;
+			parts.rod( PAINT.strut, span <= 12 ? 0.16 : span <= 20 ? 0.25 : 0.3, v( m.a ), v( m.b ), 12 );
+
+		} else if ( m.type === 'corner' ) {
+
+			parts.rod( PAINT.strut, 0.14, v( m.a ), v( m.b ), 12 );
+
+		} else if ( m.type === 'kingpost' ) {
+
+			// An H-pile with its web along the struts it holds up.
+			const alongZ = bp.struts?.across?.[ 0 ] === 1 || bp.struts?.across?.[ 0 ] === 3;
+			hPile( parts, { x: m.a[ 0 ], z: m.a[ 2 ], y0: m.a[ 1 ], y1: m.b[ 1 ], yaw: alongZ ? Math.PI / 2 : 0 } );
+
+		} else if ( m.type === 'raker' ) {
+
+			parts.rod( PAINT.strut, 0.16, v( m.a ), v( m.b ), 12 );
+
+		} else if ( m.type === 'kicker' ) {
+
+			// Cast half into the floor, so the raker bears on the middle of its face.
+			const side = sideOf( m.side );
+			parts.box( PAINT.concrete, [ m.size.across, m.size.height, m.size.along ], [ m.a[ 0 ], - D - m.size.height / 2, m.a[ 2 ] ], side.axis ? 0 : Math.PI / 2 );
+
+		} else if ( m.type === 'tieback' ) {
+
+			// The head on the waler's face (a bearing plate and the wedge block), the strand out
+			// through the wall in its sheath, then the grouted bond length.
+			const side = sideOf( m.side );
+			const a = v( m.a );
+			const start = v( m.bondStart );
+			const end = v( m.b );
+			const back = a.clone().sub( end ).normalize();
+			const t = side.axis ? - m.a[ 2 ] : m.a[ 0 ];
+			const d = SYSTEMS[ side.system ].inner + WALER_DEPTH;
+			sideBox( parts, PAINT.strut, side, t - 0.17, t + 0.17, d, d + 0.04, a.y - 0.17, a.y + 0.17 );
+			parts.rod( PAINT.strut, 0.07, a.clone().addScaledVector( back, 0.03 ), a.clone().addScaledVector( back, 0.16 ), 10 );
+			parts.rod( PAINT.tendon, 0.035, a, start, 8 );
+			parts.rod( PAINT.concrete, BOND_RADIUS, start, end, 10 );
+
+		}
+
+	}
+
+	parts.when = 0;
+
+}
+
+// A point t along a side, d in from its line (negative: behind it) and y up from the rim, in the
+// shoring group's frame: x = u, z = -v (as excavation-design.js gives its members).
+function at( side, t, d, y = 0 ) {
+
+	const c = side.sign * ( side.top - d );
+	return side.axis ? new Vector3( c, y, - t ) : new Vector3( t, y, - c );
+
+}
+
+// A box lined up with a side: from t0 to t1 along it, d0 to d1 in from its line, y0 to y1 up.
+function sideBox( parts, material, side, t0, t1, d0, d1, y0, y1 ) {
+
+	const p = at( side, ( t0 + t1 ) / 2, ( d0 + d1 ) / 2 );
+	parts.box( material, [ Math.abs( d1 - d0 ), y1 - y0, Math.abs( t1 - t0 ) ], [ p.x, y0, p.z ], side.axis ? 0 : Math.PI / 2 );
+
+}
+
+// The two sides at either end of a side (excavation-design.js): for the front and back the left
+// and the right (t = u), for the right and left the back and the front (t = v).
+function neighbours( sides, side ) {
+
+	return side.axis === 0 ? [ sides[ 3 ], sides[ 1 ] ] : [ sides[ 2 ], sides[ 0 ] ];
+
+}
+
+// A lagging board is in once the pit is dug down to its foot (never before the first lift, even
+// for the boards standing out of the ground).
+function boardWhen( y ) {
+
+	return Math.max( 0.01, - y );
 
 }
 
@@ -624,14 +1016,16 @@ function groundStrip( pairs, y ) {
 
 // Draws the shoring of every excavation that has some, in the scene rather than in the
 // excavation's own model (which only shows in build mode), and keeps it in step: rebuilt when the
-// pit's size or support changes, moved when the pit moves or its rim changes.
+// pit's params change, moved when the pit moves or its rim changes, and showing what's in at the
+// pit's dig stage (its params' stage: walls, levels down to the one installed, lagging down to the
+// dig) without being rebuilt.
 // rimOf( entry ): the height of the pit's rim, from its design in the terrain.
 export function setUpShoring( { scene, models, terrain, layers, kind, rimOf } ) {
 
 	const root = new Group();
 	root.name = 'shoring';
 	scene.add( root );
-	const shown = new Map(); // entry -> { key, group, plan }
+	const shown = new Map(); // entry -> { key, group, plan, stage }
 	const ground = shoreTheGround( terrain );
 	// Switched off in the Show panel, or showing Before (with no pits): not drawn, and the pits'
 	// walls are drawn as dug rather than straight up behind it.
@@ -642,18 +1036,19 @@ export function setUpShoring( { scene, models, terrain, layers, kind, rimOf } ) 
 		if ( entry.kind !== kind ) return;
 		const { params, state } = entry;
 		const plan = planShoring( params );
-		const key = JSON.stringify( [ params.support, params.width, params.length, params.depth ] );
 		let item = shown.get( entry );
-		if ( item?.key !== key ) {
+		if ( item?.key !== plan.key ) {
 
 			remove( entry );
 			if ( ! plan.build ) return;
-			item = { key, group: buildPit( plan, params ), plan };
+			item = { key: plan.key, group: buildPit( plan ), plan };
 			shown.set( entry, item );
 			root.add( item.group );
 
 		}
 
+		item.stage = planExcavation( params ).stage;
+		showStage( item.group, item.stage );
 		const rim = rimOf( entry ) ?? state.up;
 		item.group.position.set( - state.east, rim, state.north );
 		item.group.rotation.y = headingToYaw( state.heading );
@@ -670,27 +1065,14 @@ export function setUpShoring( { scene, models, terrain, layers, kind, rimOf } ) 
 
 	};
 
-	// The ground's walls go straight up behind the shoring (shoring-ground.js): all four, or the
-	// two long ones as far as the boxes or rails reach.
-	const shapeGround = () => ground.set( ! drawn ? [] : [ ...shown ].map( ( [ entry, { group, plan } ] ) => {
+	// The ground's walls go straight up behind the shoring (shoring-ground.js), side by side: the
+	// sides shored as far as the shoring reaches, next to vertical sides as dug.
+	const shapeGround = () => ground.set( ! drawn ? [] : [ ...shown ].filter( ( [ , item ] ) => item.group.visible ).map( ( [ entry, { group, plan, stage } ] ) => {
 
-		const { width, length } = entry.params;
+		const design = planExcavation( entry.params );
+		const geom = geometryAtStage( design.geom, design.plan, stage ?? design.stage );
 		const { east, north, heading } = entry.state;
-		const long = plan.sides === 'long';
-		// Two walls: no further than the trench's ends, which stay as dug.
-		const { back, reach: along } = plan.ground;
-		const reach = long ? Math.min( along, Math.max( width, length ) / 2 ) : Infinity;
-		return {
-			east,
-			north,
-			heading,
-			width,
-			length,
-			rim: group.position.y,
-			back,
-			alongLength: ! long || width <= length ? reach : null,
-			alongWidth: ! long || width > length ? reach : null,
-		};
+		return { east, north, heading, rim: group.position.y, sides: geom.sides.map( side => groundSide( geom, plan, side ) ) };
 
 	} ) );
 
@@ -739,18 +1121,123 @@ export function setUpShoring( { scene, models, terrain, layers, kind, rimOf } ) 
 
 }
 
-// The shoring for a pit, in its frame: x across its width, z along its length, y up from the rim.
-function buildPit( plan, { width, length, depth } ) {
+// One side as the ground's shader takes it (shoring-ground.js): where its line is if it's vertical,
+// and how far behind it and along it it's shored. While rakers wait, the berm left against a wall
+// is eased across the wall's line much as a vertical side is (to a few centimetres), so it's
+// straightened too, between the floor's corners, where no slope beside it is shallower.
+function groundSide( geom, plan, side ) {
 
-	const parts = new Parts();
-	const turned = width > length;
-	// Planners that only line the long walls build as if the pit ran along z.
-	const canonical = plan.sides === 'long';
+	const berm = side.profile === 'berm';
+	const line = side.profile === 'vertical' || berm ? side.top : null;
+	const shored = line === null ? null : plan.shored.find( s => s.n === side.n );
+	if ( ! shored ) return { line, back: 0, from: null, to: null };
+	let { from, to } = shored;
+	if ( berm ) {
+
+		const [ a, b ] = neighbours( geom.sides, side );
+		if ( a.method !== 'wall' ) from = Math.max( from, - a.toe );
+		if ( b.method !== 'wall' ) to = Math.min( to, b.toe );
+
+	}
+
+	return { line, back: shored.back, from, to };
+
+}
+
+// Collects parts as Parts does, each tagged with when it goes in (parts.when: 0 with the walls,
+// k + 1 with support level k, or for lagging the depth dug before it's in), and merges them one
+// mesh per material in that order, so a dig stage is a prefix of each: drawn with a draw range,
+// with nothing rebuilt and still one draw call per material.
+class StagedParts extends Parts {
+
+	constructor() {
+
+		super();
+		this.when = 0;
+		this.whens = new Map(); // material -> [ when ]
+
+	}
+
+	add( material, geometry ) {
+
+		super.add( material, geometry );
+		if ( ! this.whens.has( material ) ) this.whens.set( material, [] );
+		this.whens.get( material ).push( this.when );
+		return this;
+
+	}
+
+	build( group = new Group() ) {
+
+		for ( const [ material, list ] of this.lists ) {
+
+			const whens = this.whens.get( material );
+			const order = list.map( ( _, i ) => i ).sort( ( a, b ) => whens[ a ] - whens[ b ] || a - b );
+			const mesh = new Mesh( mergeGeometries( order.map( i => list[ i ] ) ), material );
+			// [ when, vertices up to and including it ], and what the when is measured against.
+			const steps = [];
+			let count = 0;
+			for ( const i of order ) {
+
+				count += list[ i ].attributes.position.count;
+				if ( steps.length && steps[ steps.length - 1 ][ 0 ] === whens[ i ] ) steps[ steps.length - 1 ][ 1 ] = count;
+				else steps.push( [ whens[ i ], count ] );
+
+			}
+
+			mesh.userData.steps = steps;
+			mesh.userData.byDepth = material === PAINT.timber;
+			group.add( mesh );
+
+		}
+
+		this.lists.clear();
+		this.whens.clear();
+		return group;
+
+	}
+
+}
+
+// Shows what's in at a dig stage (excavation-design.js excavationStages): the walls once they're
+// in, the levels installed, lagging down to the depth dug. Nothing when it's the finished pit but
+// the draw ranges back to whole.
+export function showStage( group, stage ) {
+
+	group.visible = stage.walls !== false;
+	group.traverse( mesh => {
+
+		const steps = mesh.userData?.steps;
+		if ( ! steps ) return;
+		const limit = mesh.userData.byDepth ? stage.dig + 1e-6 : stage.installed;
+		let count = 0;
+		for ( const [ when, upTo ] of steps ) if ( when <= limit ) count = upTo;
+		mesh.geometry.setDrawRange( 0, count );
+		mesh.visible = count > 0;
+
+	} );
+
+}
+
+// The shoring for a pit, in its frame: x across its width, z along its length, y up from the rim.
+function buildPit( plan ) {
+
+	const parts = new StagedParts();
 	const inner = new Group();
-	if ( canonical && turned ) inner.rotation.y = Math.PI / 2;
-	plan.build( parts, { width, length, depth } );
-	if ( canonical ) rimStrip( parts, plan, Math.min( width, length ), Math.max( width, length ) );
-	else rimStrip( parts, plan, width, length );
+	if ( plan.outline ) {
+
+		// The first planners: trench systems along the longer side, or a ring of walls.
+		const { width, length } = plan.outline;
+		// Planners that only line the long walls build as if the pit ran along z.
+		const canonical = plan.sides === 'long';
+		if ( canonical && plan.turned ) inner.rotation.y = Math.PI / 2;
+		plan.build( parts );
+		parts.when = 0;
+		if ( canonical ) rimStrip( parts, plan, Math.min( width, length ), Math.max( width, length ) );
+		else rimStrip( parts, plan, width, length );
+
+	} else plan.build( parts );
+
 	parts.build( inner );
 	const group = new Group();
 	group.name = 'Shoring';
@@ -774,6 +1261,8 @@ export const SHORING_READOUTS = [
 	{ label: 'shored wall', get: entry => wallText( planShoring( entry.params ).wall ) },
 	{ label: 'weight (approx.)', get: entry => planShoring( entry.params ).weight },
 	{ label: 'shoring notes', note: true, get: entry => planShoring( entry.params ).notes.join( ' ' ) },
+	{ label: 'support levels', note: true, get: entry => planShoring( entry.params ).levels },
+	{ label: 'checks', note: true, get: entry => planShoring( entry.params ).checks },
 ];
 
 function wallText( area ) {
@@ -782,11 +1271,139 @@ function wallText( area ) {
 
 }
 
+const BRACING_NAMES = {
+	none: 'None (cantilever)',
+	struts: 'Walers and struts',
+	rakers: 'Rakers to kicker blocks',
+	tiebacks: 'Tiebacks',
+	classic: 'One waler 0.7 m down, as the first shoring had it',
+};
+
+// The support levels, for the P panel: what holds the walls, where the levels are and what's in
+// them, the embedment and the pile lengths, and how far rakers and tiebacks reach. Empty without
+// walls (trench systems bring their own: see the summary).
+function levelsText( { params, geom, plan, quantities } ) {
+
+	if ( plan.walls.length === 0 ) return '';
+	const D = geom.depth;
+	const parts = [];
+	// The first shoring gave soldier piles no levels at all.
+	const name = plan.type === 'classic' && plan.levels.length === 0 ? 'None (cantilever), as the first shoring had it' : BRACING_NAMES[ plan.type ];
+	const head = `${ name }${ params.bracing === 'auto' ? `, suggested for ${ metres( D ) } deep` : '' }`;
+	if ( plan.levels.length ) {
+
+		const how = plan.suggested ? ' (the first within 1.5 m of the top, then no more than 3 m apart or above the floor)' : '';
+		parts.push( `${ head }: ${ plural( plan.levels.length, 'level' ) }, ${ listText( plan.levels.map( z => String( round( z, 2 ) ) ) ) } m down${ plan.type === 'classic' ? '' : how }` );
+
+	} else parts.push( `${ head }: no support levels` );
+
+	// Sides held another way than the rest (a wall with none opposite to strut against).
+	const types = Object.entries( plan.sideTypes ).filter( ( [ , type ] ) => type !== plan.type && plan.type !== 'classic' && type !== 'none' );
+	if ( types.length ) parts.push( types.map( ( [ n, type ] ) => `side ${ n } ${ type === 'rakers' ? 'on rakers, with no wall opposite' : type }` ).join( ', ' ) );
+
+	if ( quantities.struts.count ) parts.push( `${ plural( quantities.struts.count, 'strut' ) } ${ metres( plan.struts.span ) } long${ quantities.corners ? `, ${ plural( quantities.corners, 'corner brace' ) }` : '' }${ quantities.kingPosts ? `, ${ plural( quantities.kingPosts, 'king post' ) } under them` : '' }` );
+	else if ( quantities.corners ) parts.push( plural( quantities.corners, 'corner brace' ) );
+	const rakers = Object.values( plan.rakers );
+	if ( rakers.length ) parts.push( `${ plural( quantities.rakers.count, 'raker' ) } at ${ params.rakerAngle }° to ${ plural( quantities.kickers, 'kicker block' ) }, taking up to ${ metres( Math.max( ...rakers.map( r => r.reach ) ) ) } of the floor from the wall` );
+	const anchors = Object.entries( plan.anchors );
+	if ( anchors.length ) {
+
+		const rows = anchors.flatMap( ( [ , a ] ) => a.rows );
+		const free = rows.map( r => r.free );
+		const lo = Math.min( ...free );
+		const hi = Math.max( ...free );
+		parts.push( `${ plural( quantities.tiebacks.count, 'tieback' ) } at ${ params.anchorAngle }° below level, unbonded ${ lo === hi ? metres( lo ) : `${ round( lo, 1 ) } to ${ metres( hi ) }` }, bonded ${ metres( params.bondLength ) }` );
+		// The no-dig zone behind each side, the same depth for sides alike.
+		const reaches = new Map();
+		for ( const [ n, a ] of anchors ) {
+
+			const r = metres( a.reach );
+			reaches.set( r, [ ...reaches.get( r ) ?? [], Number( n ) ] );
+
+		}
+
+		parts.push( [ ...reaches ].map( ( [ r, list ] ) => `no-dig zone ${ r } behind ${ sidesText( list ) }` ).join( ', ' ) );
+
+	}
+
+	const how = params.toe > 0 ? 'as set' : plan.type === 'classic' ? 'as the first shoring had it' : plan.levels.length ? 'half the depth, 1.5 m at least' : '1.5 times the depth';
+	parts.push( `embedment ${ metres( plan.toe ) } below the floor (${ how })` );
+	parts.push( Object.entries( plan.pileLength ).map( ( [ id, length ] ) => `${ id === 'sheet-piles' ? 'sheets' : SYSTEMS[ id ].label.toLowerCase().replace( ' + lagging', '' ).replace( 'pile wall', 'piles' ) } ${ metres( length ) } long` ).join( ', ' ) );
+	return `${ parts.join( '; ' ) }.`;
+
+}
+
+const LEVEL_ORDER = { stop: 0, warn: 1, note: 2 };
+
+// The WorkSafeBC and practice checks (excavation-design.js excavationFlags), the gravest first, with
+// their sources; less what the shoring notes already say (and, for the first shoring's soldier
+// piles, the cantilever its own note warns of). A check made side by side and saying the same of
+// each is said once for them all: "Sides 1 and 3: ...".
+function checksText( { plan, flags } ) {
+
+	const kept = flags.filter( f => ! COVERED.includes( f.id ) && ! ( plan.type === 'classic' && f.id === 'cantilever' ) );
+	const merged = [];
+	for ( const f of kept ) {
+
+		const [ , n, rest ] = /^Side (\d): (.*)$/s.exec( f.text ) ?? [];
+		const same = n && merged.find( m => m.rest === rest && m.level === f.level && m.source === f.source );
+		if ( same ) same.sides.push( Number( n ) );
+		else merged.push( { ...f, rest, sides: n ? [ Number( n ) ] : null } );
+
+	}
+
+	return merged
+		.sort( ( a, b ) => LEVEL_ORDER[ a.level ] - LEVEL_ORDER[ b.level ] )
+		.map( f => {
+
+			const text = f.sides ? `${ capitalise( sidesText( f.sides ) ) }: ${ f.rest }` : f.text;
+			return `${ f.level === 'stop' ? 'Stop: ' : '' }${ /[.:]$/.test( text ) ? text.slice( 0, - 1 ) : text } (${ f.source }).`;
+
+		} )
+		.join( ' ' );
+
+}
+
 // --- helpers ------------------------------------------------------------------------------------
 
 function metres( value, digits = 1 ) {
 
 	return `${ value.toLocaleString( 'en-CA', { minimumFractionDigits: digits, maximumFractionDigits: digits } ) } m`;
+
+}
+
+function round( value, digits ) {
+
+	const f = 10 ** digits;
+	return Math.round( value * f ) / f;
+
+}
+
+function capitalise( text ) {
+
+	return text.charAt( 0 ).toUpperCase() + text.slice( 1 );
+
+}
+
+function plural( count, word ) {
+
+	return `${ count.toLocaleString( 'en-CA' ) } ${ word }${ count === 1 ? '' : 's' }`;
+
+}
+
+// 'a', 'a and b', 'a, b and c'.
+function listText( items ) {
+
+	return items.length < 2 ? items.join( '' ) : `${ items.slice( 0, - 1 ).join( ', ' ) } and ${ items[ items.length - 1 ] }`;
+
+}
+
+// 'side 2', 'sides 1 and 3', 'all four sides'.
+function sidesText( list ) {
+
+	const sorted = [ ...new Set( list ) ].sort();
+	if ( sorted.length === 4 ) return 'all four sides';
+	return `side${ sorted.length > 1 ? 's' : '' } ${ listText( sorted.map( String ) ) }`;
 
 }
 
