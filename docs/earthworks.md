@@ -6,6 +6,12 @@ material that is. Both tools are at the top of the library (**L**), under **Tool
 
 ## Excavations
 
+**A planning aid with WorkSafeBC flags, not engineering design.** The slopes, benches, walls and
+support levels here are rules of thumb for laying out a site and talking to suppliers and engineers:
+over 6 m deep, with water coming in or a structure beside it, WorkSafeBC wants a qualified
+professional's written instructions, and shoring is always a professional engineer's design
+(OHS Regulation 20.78).
+
 1. Click **Excavation**, then drag a rectangle on the ground. The rectangle is the **floor of the
    pit**, lined up with the way you're looking: the space the work needs down there. A click
    without a drag makes a 10 x 10 m floor.
@@ -86,7 +92,9 @@ floor. With rakers, the middle is dug to the floor first, leaving a berm of soil
 until the rakers and their kicker blocks are in. The stage readout says what's happening, e.g.
 *4 of 8: Dig to 4.25 m*. **Dig** digs down to the stage shown.
 
-The P panel shows:
+### What the P panel shows
+
+The excavation's own readouts come first:
 
 | Readout | Meaning |
 | --- | --- |
@@ -96,6 +104,56 @@ The P panel shows:
 | floor | Size of the flat floor, or how deep the sides meet if there isn't one |
 | top of the cut | Size of the pit at the surface: what it takes up on the site |
 | stage | The dig stage shown, unless it's the finished pit |
+
+Then the shoring's (*shoring*, *shored wall*, *weight*, *shoring notes*, *support levels*,
+*checks*: [shoring.md](shoring.md)) and the section's (*design cut (flat ground)*, *footprint*,
+*compared*, *nearby*: below).
+
+### Section, quantities and checks
+
+- **Section across** and **Section along** (P panel) cut through the pit and draw it to scale on a
+  card: the ground before digging, the slopes with their ratios, the benches with their height and
+  width, the walls down to their embedment, each support level, struts, rakers and kicker blocks,
+  tiebacks with their free and bond lengths and no-dig reach, and the groundwater. A slider moves
+  the cut through the pit, and with **3D** ticked the scene is cut away too, so a deep pit's profile
+  can be seen in place. See [excavation-section.md](excavation-section.md).
+- **design cut (flat ground)** and **footprint**: the design's volume from flat ground at the rim
+  and the area the top of the cut takes up (*cut (bank)* is measured from the map's ground, so it
+  differs on slopes). The section card has the full quantities: walls, sheets or piles, walers,
+  struts, rakers, tiebacks.
+- **compared**: the same floor dug the other ways. For a 30 × 20 m floor 8 m deep with sheet piles
+  on side 1, benches on side 2 and the other two sloped for soil C: *Sloped (1.5 : 1, soil C)
+  instead: 2,388 m³ more cut, top 54.0 × 44.0 m. Stepped instead: 1,389 m³ more cut, top 50.6 ×
+  40.6 m. Shored instead: 3,948 m³ less cut, top 30.0 × 20.0 m.*
+- **nearby**: placed items that the cut, a tieback no-dig zone, the spoil set-back (1.2 m, 0.6 m
+  for a trench: WorkSafeBC 20.90) or the band WorkSafeBC calls adjacent (the depth out from the toe:
+  20.78(1)(b)) reaches. Rail lines, roads and buildings in Google's map aren't items, so place one
+  there to have it checked.
+- **checks** (the shoring's readout, and the section card's *Checks*): the flags below, the gravest
+  first, each with its source. What the shoring notes already say isn't said twice.
+
+| Check | When | Source |
+| --- | --- | --- |
+| Sides too steep (stop) | over 1.2 m deep, sloped sides steeper than 3 : 4 | WorkSafeBC 20.81(1), Figure 20-1 |
+| Steeper than the soil | over 1.2 m, sloped steeper than the soil's ratio above | WorkSafeBC 20.81(1); OSHA, Ontario for comparison |
+| Over 6 m deep | slopes or benches: a professional engineer's design; any pit: a QRP's or (shored) PE's written instructions | WorkSafeBC 20.78(1)(a), Figures 20-1 and 20-2 |
+| Benches | risers over 1.2 m; benches narrower than the riser (warn) or 1.5 × the riser (note: workers at the bottom only); benched in type C or wet; wider than 3.7 m (the figure is for trenches) | WorkSafeBC Figure 20-2, G20.81; OSHA App. B |
+| Groundwater, wet | the floor below the groundwater depth (2 m down at Neptune until there's site data); wet soil | WorkSafeBC 20.78(1)(c) |
+| Engineered | any wall: a professional engineer designs it and its support | WorkSafeBC 20.78(2), G20.81 |
+| Pervious wall | soldier piles or a contiguous wall below the groundwater | NAVFAC DM 7.02, FHWA GEC 4 |
+| Secant overlap | under 75 mm, or gone at the toe from drilling drift | Lindquist (DFI 2011) |
+| Cantilever | walls with no support levels: over 4 m (warn), over 5.5 m (stop) | USACE EM 1110-2-2504, Caltrans |
+| Levels | typed levels: the first over 1.5 m down, gaps over 3 m, the last over 3 m above the floor; levels at or below the floor | CN shoring criteria 11-13 |
+| Struts | over 12 m long (king posts), over about 20 m (rakers or tiebacks); a wall with no wall opposite (rakers instead) | NAVFAC DM 7.02 Table 5 |
+| Tiebacks | the top row's bond under 4.5 m of soil | FHWA GEC 4 5.3.7 |
+| Rakers | rakers and kicker blocks over half the floor; the berm left for them steeper than the soil's slope | NAVFAC DM 7.02 Table 6 |
+| Hydraulic shores | in type C or wet ground, or below the water | NAXSA; OSHA App. D |
+| Access | a trench over 1.2 m deep: a ladder or ramp within 8 m of anyone in it | WorkSafeBC 20.87(2) |
+
+WorkSafeBC gives a slope only for hard soil (Figure 20-1, 3 : 4); the B, C and wet slopes are
+OSHA's and Ontario's, used for comparison, and the checks say so. These are reminders for planning,
+not a check against the regulation: read the current regulation and its guidelines, and have a
+qualified person look at the actual ground.
 
 With the library open, click anywhere over a pit to select it, drag it to move it, **R** to turn it,
 **Delete** to remove it: the ground comes back exactly as it was (apart from any digging an
@@ -211,3 +269,11 @@ north: use `enuToLocal()` in `src/geo.js`), headings are compass degrees, volume
   angle of repose on whatever is there. Multiply bank volumes by `SWELL` (1.25) for loose.
 - `terrain.heightAt( x, z )` is the ground height there, earthworks included.
 - `terrain.resetFreeform()` undoes all such digging and dumping.
+
+An excavation's design comes from its params alone: `src/excavation-design.js` (no scene or DOM)
+works out each side, the design surface the terrain digs to (`depthAt`), the support levels and
+their members, the dig stages, the quantities, the comparison of methods and the checks, once per
+set of params (`planExcavation( params )`). The terrain, the shoring and the section all read it.
+`npm run test:excavation` checks it in Node, old pits against the surface they had bit for bit;
+`npm run test:excavation-ui` checks the pits, the P panel, the side labels, the tool and saving in a
+browser without Google's tiles.

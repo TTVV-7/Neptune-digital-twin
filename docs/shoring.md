@@ -32,6 +32,10 @@ person.
    **embedment**, the raker or anchor angle and the bond length. Empty or 0 means suggested.
 4. Move the **dig stage** slider to see the works part way: walls in, dug to the first level, level
    1 in, and so on down to the floor.
+5. **Section across** or **Section along** cuts through the pit: the walls down to their toe, the
+   levels with their depths and spacing, struts, rakers and kicker blocks, tiebacks with their free
+   and bond lengths and no-dig reach, drawn to scale, with the scene cut away to match
+   ([excavation-section.md](excavation-section.md)).
 
 The shoring is rebuilt from the pit's params whenever they change (but not for the dig stage, which
 only shows and hides what's in), and follows the pit when it's moved or turned. Unlike the pit's
@@ -169,7 +173,8 @@ between opposite walls), so they're for the whole pit.
 - **Where two walls meet** they close the corner: two of the same share a corner pile; of two
   different ones, the one standing less far out (sheets, soldier piles) runs on to the other's
   back, and the other stops at its face.
-- The pile counts in the summary are what's drawn, corner piles counted once.
+- The pile counts in the summary are what's drawn, corner piles counted once; the section card's
+  quantities use the same counts.
 
 ## Support levels
 

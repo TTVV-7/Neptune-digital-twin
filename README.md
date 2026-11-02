@@ -97,6 +97,7 @@ things and switches between before and after (see [Showing and hiding](#showing-
 | Round handle | Drag to rotate the selected item; Shift snaps to 15° |
 | Square handles | On an area, excavation or stockpile: drag to resize; Shift for any size |
 | Arrow in a pit | Drag down to dig deeper, up for shallower |
+| P on a pit | Its sides sloped, stepped or shored (the whole pit or each side), support levels, dig stage; **Section across** / **Section along** cuts through it (Esc closes the section) |
 | Toolbar | The buttons over the selected item: rotate, size (type it in), drive, row (more of it along a line), break apart (a row), edit, hide, delete |
 | R / Shift+R | Turn the selected item 15° |
 | Delete | Remove the selected item (Undo for 5 seconds) |
@@ -128,7 +129,7 @@ things and switches between before and after (see [Showing and hiding](#showing-
 | Showing | |
 | --- | --- |
 | B | Before / after: the site as Google captured it (nothing flattened, dug, piled or placed), or with your changes |
-| Show panel | Above the Controls (an eye when folded): hide flatten areas, excavations, stockpiles, laydown areas, shoring in pits, labels, or a whole category such as Vehicles |
+| Show panel | Above the Controls (an eye when folded): hide flatten areas, excavations, stockpiles, laydown areas, shoring in pits, tieback no-dig zones, labels, or a whole category such as Vehicles |
 | Hide (toolbar) | Hide just the selected item; the Show panel lists it to show again |
 
 | Other | |
@@ -358,7 +359,9 @@ panel, which has the size at the top. A pit has an arrow in the middle: drag it 
   1.5 : 1). In the P panel the sides are *sloped*, *stepped* (benched) or *shored*, for the whole pit
   or side by side (numbered in the scene with the way each faces), and a slider steps through the
   dig stages; it shows the cut volume, the loose volume (a quarter more), how many dump-truck loads
-  that is, the floor and the top of the cut, and **Spoil pile** pours the dug material beside it.
+  that is, the floor and the top of the cut, how the other methods compare for the same floor and
+  what's placed where the pit reaches; **Spoil pile** pours the dug material beside it, and
+  **Section across** / **along** draws the pit's profile to scale (see below).
 - **Stockpile:** click for a cone of material (50 m³ to start), or drag for a ridge pile that fills
   the rectangle. It pours itself: material falls and builds up at the material's natural slope
   (gravel, sand, topsoil, excavated soil, road base, riprap, coal, potash). The P panel shows its
@@ -403,6 +406,18 @@ struts too long, tiebacks too shallow, pervious walls below the water. The libra
 category has trench boxes, a stacker, a panel, bundles of sheet piles and H-piles and a hydraulic
 shore to lay down.
 It's a planning aid, not an engineered design: see [docs/shoring.md](docs/shoring.md).
+
+### Excavation sections, quantities and what's nearby
+
+**Section across** and **Section along** in a pit's P panel cut through it: a card draws the profile
+to scale (the ground before digging, the slopes with their ratios, benches, the walls down to their
+embedment, the support levels, struts, rakers and kicker blocks, tiebacks with their free and bond
+lengths and no-dig reach, the groundwater), with a slider to move the cut, and the scene is cut away
+in 3D to match. The card lists the quantities (cut, top of the cut, wall area, sheets or piles,
+walers, struts, rakers, tiebacks), compares the methods for the same floor (*Shored instead: 912 m³
+less cut*), and gives every WorkSafeBC check with its source. The P panel's **nearby** warns when
+the cut, a tieback no-dig zone, the spoil set-back or the adjacent band reaches something placed on
+the map. See [docs/excavation-section.md](docs/excavation-section.md).
 
 ## Digging with an excavator
 
@@ -603,6 +618,10 @@ src/layout.js       saves placed items in the browser; export/import
 src/kinds.js        placed things that aren't models (areas, pits, piles): how features register them
 src/terrain.js      the ground that can be dug and piled: heights, volumes, drawing, saving
 src/earthworks.js   excavations and stockpiles, and their tools; src/pour.js animates pouring
+src/excavation-design.js  an excavation worked out from its params, no scene or DOM: sides, the
+                    design surface, support levels, stages, quantities, WorkSafeBC checks
+src/excavation-section.js  the section card, 3D cut-away, quantities and nearby check;
+                    src/excavation-section-drawing.js works the section out (no scene or DOM)
 src/shoring.js      shoring in excavations: trench systems, walls side by side, support levels; readouts
 src/shoring-models.js  the shoring pieces, for pits and the library's Shoring category
 src/shoring-ground.js  draws a shored pit's walls straight up behind the shoring
