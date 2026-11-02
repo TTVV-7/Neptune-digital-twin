@@ -277,8 +277,10 @@ export class GlobeView {
 	}
 
 	// Fly to a pose (see pose()): along the great circle, rising for a long way and coming down in
-	// one smooth move. Resolves when it's there, or false if another flight took over.
-	flyTo( to, { duration } = {} ) {
+	// one smooth move. Resolves when it's there, or false if another flight took over. `ground`:
+	// whether to come down onto the tiles' ground as sharper ones show where it is (see fly), which
+	// isn't where the open sea's surface is (sea.js).
+	flyTo( to, { duration, ground = true } = {} ) {
 
 		const from = this.pose();
 		to = { height: 0, heading: from.heading, pitch: - 60, ...to };
@@ -297,7 +299,7 @@ export class GlobeView {
 		this.flight?.resolve( false );
 		return new Promise( resolve => {
 
-			this.flight = { from, to, a: _a.clone(), b: _b.clone(), angle, logs, lift, time: 0, duration, resolve, check: 0, ground: null };
+			this.flight = { from, to, a: _a.clone(), b: _b.clone(), angle, logs, lift, time: 0, duration, resolve, check: 0, ground: null, onGround: ground };
 			this.controls.enabled = false;
 
 		} );
@@ -320,7 +322,7 @@ export class GlobeView {
 		// load on the way: keep looking, and ease toward it. (Coming down to a guess that's too low
 		// would end up under a mountain, where nothing shows.)
 		f.check += dt;
-		if ( f.to.distance < 1e5 && f.check > RECHECK ) {
+		if ( f.onGround && f.to.distance < 1e5 && f.check > RECHECK ) {
 
 			f.check = 0;
 			f.ground = this.surfaceHeight( f.to.lat, f.to.lon ) ?? f.ground;

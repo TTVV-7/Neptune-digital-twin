@@ -38,8 +38,10 @@ address, and the construction app is unchanged by it.
    through the pin), else north. A spot on a bridge, or a search result that is a bridge, starts on the
    deck rather than on the water underneath. A pin on a roof (a search result that's a building's
    middle, or a tap on one) starts on the street beside it, and a start with something right in front
-   of it (a car parked in Google's photo, a bollard) moves across the road to a clear lane. Where
-   there's nothing at all to drive on, it says so and goes back to the globe.
+   of it (a car parked in Google's photo, a bollard) moves across the road to a clear lane. A pin
+   out on the sea, or on a big lake, where Google's tiles are only the bed below, starts on the
+   water's surface ([the open sea](#the-open-sea)). Where there's nothing at all to drive on, it
+   says so and goes back to the globe.
 5. **M** (or the **Globe** button) goes back to the globe, from driving or from a drop-in on its way
    down. Pick somewhere else and drop in again: as often as you like, without reloading.
 
@@ -185,10 +187,13 @@ so everything used to drive on the sea. Now driving into water, or coming down i
   **Slowly** off a beach into the sea is the same once you're about a dozen metres out (until then
   the beach is in reach of the rings it's told by). **Flying** (F) over water is fine until you
   come down in it.
-- **The hovercraft** rides on water as on land, throwing up spray behind it as it goes. **Boost pads**
-  never go down on water, nor by it.
+- **The hovercraft** rides on water as on land, throwing up spray behind it as it goes.
+  **Boost pads** never go down on water, nor by it.
 - **Dropped in on water** (a pin on the sea), you ride on it until you've been on dry ground: with
-  nowhere to go back to, a splash would only be followed by another.
+  nowhere to go back to, a splash would only be followed by another. So too on the
+  [open sea](#the-open-sea) (and a big lake's open water), where there may be no dry ground for a
+  thousand kilometres: any ride drives on it, and flies and comes down on it, until it reaches land;
+  from then on, back into it is a splash and back on that land.
 
 It's the Driver's `water` option (`src/drive.js`; off unless an app gives one, so the construction
 app's driving never splashes), which World Drive gives `src/drive-app/water.js`. The Driver looks
@@ -331,6 +336,242 @@ request per page load.
 64-pixel copy 0.7 ms at most, once per picture. At five looks a second that's well under 1 % of the
 time. Boost pads' check of a spot and 8 m round it (five looks, only for the few spots that pass
 everything else) took up to 21 ms, once 44 ms when a single ray took 40 ms (a tile's first ray).
+
+#### The open sea
+
+Out past what Google photographs of a coast, its 3D tiles aren't the sea at all: they're the sea
+bed, with the sea's picture on it, and nothing at the surface. Measured on Google's tiles (2
+November 2026): by Santa Monica Pier, Google's photographed water is at the sea's height (36.7 m
+under the ellipsoid there), as everywhere it photographs; 8 km out in Santa Monica Bay (33.95° N,
+118.6° W) the tiles under the pin were 220 m under the ellipsoid, the bay's bed 184 m down, coarse
+(a leaf tile with 64 m of geometric error, the most there is there) and sloping up to the shore 2 m
+in 100; 7 km off Kona, Hawaii, 1.7 km down; and in the middle of the Pacific (30° N, 140° W and
+145.3° W), 4.7 and 5.2 km down (leaf tiles, 1 km of error).
+
+So a pin out at sea didn't work. The drop-in looked for ground no lower than 1.5 km under the
+ellipsoid (lower than any land), found none, and after waiting 25 s for it said "There's no 3D map
+at this spot yet. Try somewhere else." and went back to the globe. (A pin over the shelf found the
+sea bed and started on it: in Santa Monica Bay water-coloured, level to half a metre close by and
+the lowest round about, so water.js called it water, and you rode on it, 184 m under the sea; 20 km
+off Waikiki, 578 m under it, water.js called it dry ground.) Coming down into the water, and a
+drop-in on the water by the shore, were never the trouble: a kart flown out 550 m from Santa
+Monica's beach and let glide down into the sea there splashed (**SPLISH!**) and was back on dry
+land, and so it did thrown in from 15 m; a pin on the water by the pier started on the water, riding
+on it.
+
+Now the drop-in looks for ground down to below the deepest sea floor (11.5 km under the ellipsoid;
+the Challenger Deep is 10.9 km down), and with the tiles done loading (not a coarse tile cutting
+under the curve of the Earth before sharper ones arrive) it starts on the water's surface instead
+of the ground under the pin where that ground is:
+
+- more than 15 m under the sea's height there, and the pin is on the sea or a coast (the map,
+  below);
+- more than 15 m under the surface of a big lake the pin is on ([the lakes](#the-big-lakes), below):
+  Google draws some deep lakes' beds as it does the sea's, Lake Baikal's 1.6 km under the lake;
+- either of those with nothing within 150 m of it more than 15 m over the water's surface
+  (walled off, below);
+- or lower than 1.5 km under the ellipsoid, wherever it is: deeper than any land or lake bed.
+
+How far down the ground is doesn't say on its own what it is: the Dead Sea's shore is 430 m under
+the sea, Death Valley 86 m, and they're land on the map, which never starts on water, however far
+under the sea it is. 15 m is twice as deep as the lowest land along most coasts (the Netherlands'
+polders, about 7 m under the sea; New Orleans, 2 m), with room for the sea's height as it's had here
+(up to 9.5 m low by volcanic islands, 3.9 m high at worst: below) and for Google's own water by a
+coast with the tide out, which drop in as before, on Google's water. So the shelf seas, where most
+taps on the sea land, start on the sea: Santa Monica Bay (Google's bed there 184 m under the sea),
+13 and 20 km off Waikiki (546 and 578 m), the Strait of Georgia (328 m). At first it went by depth
+alone, ground more than 1 km under the sea's height being the sea bed: that took Baikal's bed for
+the sea, laying the sea's surface 455 m under the lake's, and left the shelf on its bed; then 30 m
+under the sea's height, with a map of the sea but not of lakes, which left Baikal on its bed; then
+without the walls (next), which put the side of the Assal depression, land, on the sea.
+
+**Walled off.** A coast's square on the map (below) takes in land up to 4.6 km from the sea, and
+land that close to it can be further under it than 15 m. Lake Assal in Djibouti, 155 m under the
+sea, is 10 km from the Ghoubbet, the head of the Gulf of Tadjoura, and the east side of its
+depression reaches into the square the Ghoubbet's shore crosses (11.583° to 11.625° N, 42.5° to
+42.542° E): along that square's west edge Google's ground is up to 28 m under the sea. A pin there
+started on the sea's surface, 28 m over the land, and the kart drove across it at 103 km/h on water.
+A dry dock, a pit or a cutting by the sea can be that far under it too. But land under the sea's
+height is only dry because something over the sea's height walls it off from the sea, and the bed of
+open water has no such wall round it. So where anything within 150 m of the ground under the pin
+(rays down at 50, 100 and 150 m on 16 bearings, to 15 m over the water's surface) stands more than
+15 m over the water's surface, the ground is land, and the drop-in starts on it as before.
+
+On Google's tiles (2 November 2026, typed pins) each of the 12 spots in that square more than 15 m
+under the sea (a probe every 30 m) has ground 16 to 40 m over the sea within 150 m of it (within
+100 m for nine of them, the depression's rim); a pin at 11.6045° N, 42.5004° E started on Google's
+ground there, 15.4 m under the sea, dry ground to water.js, with no sea's surface, the drop-in's
+19th ray finding ground 26.8 m over the sea 100 m north-east, and the kart drove on over dry ground
+with no splash. In the Strait of Georgia, on Lake Baikal and on Lake Ontario (43.55° N, 79.35° W)
+the drive started on the water's surface as before, all 48 rays finding Google's ground there, none
+of it over the water. A wide pit dug under the sea's height by a coast (an open-pit mine), its
+middle more than 150 m from its rim, still isn't told from the bed.
+
+The drive starts on the water's surface: `src/drive-app/sea.js` lays a disc of water there, 130 km
+across, round the vehicle and following it as it drives (laid again each 50 m), fine by the vehicle
+and coarse at the horizon, each point of it where the water is over that point of the Earth: at the
+sea's height there, or as far over it as the lake is (a lake's surface lies along the geoid as the
+sea's does), curving away under the scene's flat frame as the Earth does, 2 m lower 5 km on. It's
+one deep blue, mottled so that driving over it is seen to move (Google's picture of the bed out
+there is its shaded relief, as dark as (12, 13, 19) at 30° N, 140° W, so it isn't taken from that).
+The Driver drives on it as on any ground, and water.js calls anywhere on it water, so it is water
+like any other: you ride on it until you've been on dry ground (an island, a coast), the hovercraft
+floats on it throwing up spray, no boost pad goes down on it, and once you've been on dry ground,
+driving or coming down into it is a splash and back on that ground, not the bed. The flight down to
+it doesn't look for Google's ground (it would come down onto the bed). M, or a drop-in anywhere
+else, takes it away. It's only by its own water: out over land, with two of the map's squares or
+more between the vehicle's and the nearest of its water's (the sea's and its coasts', or the lake's
+own: more than 9 km north or south, 7 km east or west at 43° N), it's gone, so that the ground under
+the water's height there isn't under it (Niagara's gorge below Lake Erie, Irkutsk below Baikal's
+outlet, the Jordan valley inland from the Mediterranean); it's laid again when the vehicle comes
+back within reach on ground half a metre or more over the water's height (not in a hollow under it,
+where it would be over the vehicle). Land, bridges, roofs and Google's own water drop in as before:
+ground more than 71 m over the ellipsoid (the sea's highest, 86 m, less 15), unless it's in a big
+lake's box (a little wider than the lake), never asks how high the sea is nor where it is.
+
+**The sea's height.** Google's heights are over the WGS 84 ellipsoid, and the sea's surface isn't:
+it lies on the geoid, from 107 m under the ellipsoid south of India to 85 m over it by New Guinea,
+so the sea at 0 would have been tens of metres from a coast's own water. It's NGA's EGM96 geoid
+(public domain), every degree: `drive/public/sea/egm96.bin`, 65,160 bytes (181 rows from 90° N, of
+360 heights from 180° W, each a signed byte in metres), fetched the first time a drop-in needs it
+and read bilinearly. `node scripts/make-sea-level.mjs` makes it from PROJ's copy of the model's
+15-minute grid (https://cdn.proj.org/us_nga_egm96_15.tif, fetched, or a copy given). It's within
+0.5 m of the full model on average (1.9 m at the 99th percentile, 14 m at worst, by the deep
+trenches). On the map's 333,804 coast squares it's 0.4 m from it on average and within 2.5 m on 98
+in 100; it's furthest out by round volcanic islands, whose own bump is narrower than a degree: up to
+9.5 m low on the Big Island of Hawaii's south coast (19.27° N, 155.31° W), and more than 6 m low on
+86 squares, by the Big Island, Puerto Rico, the Canaries, Leyte, the Bonin Islands and the
+Aleutians. It's 3.9 m high at worst (by Lake Maracaibo). If it doesn't load, the sea is at 0.
+
+**Where the sea and the big lakes are.** It's Natural Earth's ocean and lakes at 1:10 million
+(public domain), every 1/24° (4.6 km north to south, 3.4 km across at 43° N):
+`drive/public/sea/mask.bin`, 251,556 bytes, fetched with the sea's height the first time a drop-in
+needs it. A square is the sea if all of it is, a coast if the sea's edge (a coast, an island's)
+crosses it, a big lake's if all of it is that lake, and otherwise land; the sea and a coast both
+count as the sea. Natural Earth's ocean is the sea and every sea joined to it (the Black Sea, the
+Baltic, Hudson Bay), one polygon all the way round the world, with no lake in it (its other polygon,
+the Caspian, is a lake here). A pin anywhere on the sea is in the sea or a coast, whatever
+1:10 million's coast is off by (a kilometre or so); a coast square takes in land up to 4.6 km from
+the sea, which is why 15 m and the walls (above) matter. Lake Assal is land (though its depression's
+side reaches into a coast's square, above), as are the Dead Sea's shore, Death Valley, the Qattara
+Depression, the Salton Sea, the Karagiye Depression by the Caspian and the Salinas Grandes on
+Argentina's Valdés Peninsula (42 m under the sea, five squares from the nearest coast's). A square a
+lake's shore crosses is land, not the lake's: right by a lake there can be ground far under it (the
+river out of it below a falls or a dam), which by the sea there isn't. Natural Earth's Lake Erie
+goes down the Niagara River to the falls, whose gorge is 75 m under the lake; Lake Victoria's
+reaches Jinja, where the Nile leaves it through a dam. So within a square of a big lake's shore, and
+of its islands, a pin drops in on Google's ground as before.
+
+Each of its 4,320 rows (from 90° N) is its runs of the same along the row's 8,640 squares (from
+180° W): each as its length times 4 plus what it is (land 0, a coast 1, the sea 2, a lake 3), and
+after a lake's, which lake, each number in bytes of 7 bits, low bits first, the top bit set on all
+but the last; before the rows, 24 and how many lakes there are, so a map made for another list of
+lakes isn't read. `node scripts/make-sea-mask.mjs` makes it from Natural Earth's GeoJSON copies
+(`ne_10m_ocean.geojson` and `ne_10m_lakes.geojson` from
+https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/, fetched, or copies
+given) and checks it on the way: the middle of the Pacific (and at 180°), Santa Monica Bay, off
+Waikiki, the Strait of Georgia, the Black Sea and the Baltic are the sea, Santa Monica Pier a coast,
+the big lakes theirs, and Olkhon (an island in Baikal), Denver and the places above land. If the
+map doesn't load, only ground lower than 1.5 km under the ellipsoid is the sea bed: the deep sea
+still starts on the sea, and the shelf and the lakes on their beds.
+
+#### The big lakes
+
+A lake is here if it's big and deep enough that Google may draw its bed far from its shores, as it
+does Baikal's and the Great Lakes' (tried, below); where it draws the lake's surface instead (Lake
+Tanganyika's, Lake Malawi's), a pin there drops in on that as before. Its height is its surface over
+the sea as its country measures it (over its own mean sea level, within a metre or so of the geoid),
+so its water is laid that far over EGM96's geoid there. They're `LAKES` in `src/drive-app/lakes.js`,
+with their sources there too and their outlines' names in Natural Earth's lakes (the Caspian's is
+its ocean's other polygon) and a box round each: a lake is added there, and the map made again.
+
+| Lake | Surface over the sea | Deepest | Its height's source |
+| --- | --- | --- | --- |
+| Baikal | 455.5 m | 1,642 m | Wikipedia, *Lake Baikal* |
+| The Caspian Sea | −28 m | 1,025 m | Wikipedia, *Caspian Sea* (falling since 1995) |
+| Superior | 183.4 m | 406 m | US Army Corps of Engineers, 2013's average (601.7 ft) |
+| Michigan and Huron (one lake) | 175.9 m | 281 m | US EPA, *Great Lakes: Physical Facts* (577 ft) |
+| Erie | 173.4 m | 64 m | US EPA (569 ft) |
+| Ontario | 74.1 m | 244 m | US EPA (243 ft) |
+| Tanganyika | 773 m | 1,470 m | ILEC, World Lake Database |
+| Malawi | 468 m | 706 m | Reader's Digest, *Natural Wonders of the World* (1980) |
+| Victoria | 1,135 m | 81 m | DAHITI, TU Munich's satellite altimetry |
+| Great Bear | 156 m | 446 m | *Encyclopedia of Earth* |
+| Great Slave | 156 m | 614 m | *Encyclopedia of Earth* |
+| Ladoga | 5 m | 230 m | Wikipedia, *Lake Ladoga* |
+| Onega | 33 m | 127 m | Wikipedia, *Lake Onega* |
+| Titicaca | 3,812 m | 281 m | ILEC, World Lake Database |
+| Issyk-Kul | 1,607 m | 668 m | Savvaitova and Petr, *Int. J. of Salt Lake Research* (1992) |
+
+(Each as its Wikipedia article gave it on 2 November 2026, with the source it cites where it cites
+one.) A lake whose level has moved since (the Caspian's, down about 2 m since 1995) has its water
+laid that far from Google's photographed water by its shore.
+
+**Tried on Google's tiles** (scratch scripts, three page loads, every place reached by the globe's
+drop-in): the middle of the Pacific, by a tap on the globe from space (30° N, 145.1° and 145.3° W)
+and by typed coordinates (30° N, 140° W): driving 7 to 11 s after **Drive here**, on the sea at 20.7
+to 28 m under the ellipsoid, the bed 4.7 to 5.2 km under it; the kart driven on for 4 to 5 s, on
+the water all the way with no splash, flown 25 m up and glided down onto it, and thrown 25 m up and
+down onto it, with no splash; the hovercraft across it throwing up spray. 7 km off Kona, Hawaii,
+with the island in sight: the sea at 15.5 m over the ellipsoid (EGM96 at a degree; at its full 15
+minutes, 19.3), the bed 1.7 km down; held 400 m off the coast, 6.5 km on, Google's own water there
+was 1.0 m over the open sea's surface, a kerb's step, the coast rising straight out of the sea in
+the view. On Google's ground by that coast (its photographed water by the shore, dark and not
+even, which water.js takes for dry ground), flown 900 m out over the open sea and let glide down:
+**SPLASH!**, and back there, "Back on dry land". Santa Monica Bay, the pier's water and the beach
+dropped in as before, the same ground at the same heights, and a kart flown out from the beach
+into the sea, and thrown in, still went **SPLISH!** and was back on dry land.
+
+**With the map and the lakes** (three more page loads, typed pins, the kart unless said). The first,
+with a map of the sea alone: on from Santa Monica Bay toward the pier, Google's ground rose from
+129 m under the open sea's surface 2 km on to 7.6 m under it 10.8 km on (500 m short of the pier),
+all of it water to water.js; the Caspian (38.2° N, 51.2° E) is a flat surface of Google's 6.2 m
+under the ellipsoid, 6.8 m over the sea's height there and 35 m over the Caspian's own, so a pin
+there starts on that; and the pier's water was 36.5 m under the ellipsoid, 1.0 m under the sea's
+height as EGM96 has it there. Then as it is now (two loads, one root tileset request each):
+
+- **Lake Baikal** (53.25° N, 108.1° E): on the lake's surface, 422.2 m over the ellipsoid (455.5 m
+  over the sea's height there, which is 33.3 m under it), with its shores in view; Google's bed
+  1,634 m under it.
+- **Lake Superior** (47.7° N, 87.5° W): Google draws its bed too. On the lake's surface, 147.9 m
+  over the ellipsoid (183.4 m over the sea's height there, which is 35.5 m under it); the bed
+  171.6 m under it.
+- **The sea**: 13 and 20 km off Waikiki (21.15° and 21.08° N, 157.85° W) at 11.5 and 12.0 m over the
+  ellipsoid, the bed 546 and 578 m under it; the Strait of Georgia (49.2° N, 123.55° W) at 18.4 m
+  under it, the bed 328 m down; Santa Monica Bay (33.95° N, 118.6° W) at 35.9 m under it, the bed
+  184 m down; the middle of the Pacific (30° N, 140° W) at 28 m under it, the bed 4.7 km down. Each
+  driven on for 4 s, on the water all the way, with no splash.
+- **Land, as before**: the Dead Sea (31.5° N, 35.48° E: Google's lake there, 396 m under the
+  ellipsoid and 416 m under the sea, land on the map, and dry ground to water.js, its salt-flecked
+  picture not even), Death Valley (36.25° N, 116.83° W: 116 m under the ellipsoid, 86 m under the
+  sea), Neptune Terminals' start spot (in a coast square, its ground 6 m over the sea) and the
+  Golden Gate's, on its deck at 48.3 m over the ellipsoid: none with water of their own.
+- **Back into the sea from the beach**: from the open sea in Santa Monica Bay the kart was put on
+  Santa Monica's beach north of the pier, 11 km off, over Google's sand 2 to 0.6 m over the open
+  sea's surface, sloping down to where water.js called it water 330 m on, and driven into the sea: a
+  splash, and "Back on dry land" on the beach, 2.7 m over the sea's surface, not the bed. Flown out
+  with F and let glide down, it came down on the sand, rolled on into the sea and sank there with a
+  splash.
+- **The hovercraft** on Lake Baikal: on the lake's surface, floating for 10 s at up to 113 km/h,
+  throwing up spray, with no splash.
+- **More lakes**: Google draws Lake Michigan's bed (44° N, 87° W) 104 m under the lake's surface and
+  Lake Ontario's (43.6° N, 77.8° W) 205 m under it, and each started on its surface, at 139.9 and
+  38.0 m over the ellipsoid. It draws the others tried at their surface, a few metres from the
+  table's height: Tanganyika (6° S, 29.5° E) 5.4 m under it, Malawi (12° S, 34.5° E) 5.1 m over,
+  Victoria (1° S, 33° E) 0.6 m under, Titicaca (15.8° S, 69.4° W) 3.1 m over, Issyk-Kul (42.45° N,
+  77.25° E) 7.5 m under, Great Slave (61.5° N, 114° W) 7.8 m over, and the Caspian 35 m over: each
+  started on Google's surface, as before (Tanganyika's and Malawi's, from cloud-flecked pictures,
+  dry ground to water.js; at Issyk-Kul water.js took the start for dry ground and 2 m on it splashed
+  and came back).
+- **Below Niagara Falls** (43.0885° N, 79.0712° W, in the gorge, 75 m under Lake Erie and in a
+  square of Natural Earth's Erie that's land on the map): on Google's ground there, with no water of
+  its own.
+
+**With the walls and the reach** (one more page load, typed pins), as well as what's under
+[walled off](#the-open-sea): from Lake Ontario's surface, the vehicle put 3 m over the lake's height
+at Rochester (four squares from the lake's) had no lake's surface round it, and at Toronto (one
+square from them) had it again; from Lake Baikal's, at Irkutsk (11 squares off) it was gone. In the
+Strait of Georgia the kart drove on the sea for 4 s, on the water all the way, with no splash.
 
 ## Driving with others
 
@@ -1915,7 +2156,13 @@ on it and the view fading, then back on the dry ground it came from facing away;
 until coming down, R in it and by it, and boost pads never on it or by it; Google's other water
 colours, a bluish lawn among ball fields and a lagoon's turquoise; a canal's water by its wall
 never taken for dry; slowly off a quay, a splash right by it; never the same splash twice; the way
-back past a spot level with the water and kept across a pause), the used-up,
+back past a spot level with the water and kept across a pause), the open sea and the big lakes (the
+pad lowered under the water's surface, as Google draws the bed: started on the sea's surface or Lake
+Baikal's, ridden on, flown over and come down on, a floating ride's spray, a splash off an island
+and back on it; 14 m under the sea, on Google's water as before; the Dead Sea's shore, land, never;
+the map's sea, coasts, lakes and land; land walled off from the sea by ground over it, the side
+of the Assal depression, never; Lake Erie's surface gone out over land to Niagara's gorge and back
+by the lake; without the map, only the deep sea), the used-up,
 robot-check and getting-ready screens, and the leaderboard with its answers made in the test: tabs, your own row, picking a name and renaming, a
 landed jump posting the run with the card asking first, each place's best posted, a dead connection
 changing nothing, and a phone; and buying the pass with Google's script stood in for: signing in
@@ -1950,6 +2197,14 @@ src/drive-app/garage.js      the Garage: choices and the turntable; paint.js the
 src/drive-app/pads.js        boost pads: where they go, driving over them, the pause menu's switch
 src/drive-app/water.js       water on Google's mesh, told by how it's drawn: for splashes, the way
                              back from one, R and boost pads
+src/drive-app/sea.js         the open sea: its surface where Google draws only the bed of the sea
+                             or a big lake, round the vehicle while it's by that water, the sea's
+                             height (EGM96, drive/public/sea/egm96.bin, which
+                             scripts/make-sea-level.mjs makes) and where the sea and the big lakes
+                             are (Natural Earth's, drive/public/sea/mask.bin, which
+                             scripts/make-sea-mask.mjs makes)
+src/drive-app/lakes.js       the big lakes whose beds Google may draw: their surfaces' heights,
+                             with sources, and their outlines' names in Natural Earth
 src/drive-app/api.js         /api/config, the visit with Turnstile, /api/search, the leaderboard's and
                              the Supporter Pass's calls
 src/drive-app/leaderboard.js the leaderboard: the panel, names, posting runs, the new-best card
@@ -2007,17 +2262,54 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   against walls as the box it is, turned as it is, which is close but not exact for a tumbling truck
   meeting a roof's edge.
 - Flying over a valley, the glide down (3 m/s) can take a while: R puts you back on the road.
+- Where Google draws the bed of the sea or a lake and the drop-in doesn't take it for
+  [open water](#the-open-sea), it starts on that bed, as it always did: the sea less than 15 m under
+  its height (a bank), a big lake's shallow water (its bed less than 15 m under the table's height:
+  off Chicago, at 41.9° N, 87.45° W, Google draws Lake Michigan's bed 10.5 m under it, 8 to 9 m
+  under its own photographed water by Navy Pier, and so in Lake Erie's shallow western basin, 7 m
+  deep on average), a bed with ground more than 15 m over the water within 150 m of it
+  ([walled off](#the-open-sea): by a cliff, or an island's steep shore), the water within a square
+  of the map (up to about 5 km) of a big lake's shore or its islands, a lake that isn't in
+  [the table](#the-big-lakes), and the shelf and the lakes if the map didn't load. water.js tells
+  that bed from dry ground by how it's drawn, as it does Google's water, and the bed under the
+  water's picture is mostly the water's colour, level close by and the lowest round about, so mostly
+  water to it (Santa Monica Bay's was, 184 m down, and Baikal's), and you ride on it until you've
+  been on dry ground; but not always (20 km off Waikiki, 578 m down, it was dry ground), and dry
+  ground is where the way back from a later splash puts you, back on the bed. Close in, by a coast,
+  it's mostly Google's own water, at the water's height. The other way, land more than 15 m under
+  the sea in a coast's square with nothing over the sea's height within 150 m of it (the middle of a
+  wide pit dug by a coast) would still start on the sea's surface.
+- The open water's surface is EGM96's at a degree, a metre or a few from a coast's own water: 1 m
+  under it off Kona (by round volcanic islands up to 9.5 m low, below Kilauea on the Big Island's
+  south coast), so driving from the open sea to that coast is a step up onto Google's water; 1 m
+  over it by Santa Monica Pier, so there it covers Google's water and the lowest of the beach. A big
+  lake's is its height in the table that far over EGM96's, and where Google draws a lake's surface
+  it was 0.6 to 7.8 m from that (the Caspian's 35 m over it), within the 15 m that keeps such a
+  surface from being taken for a bed; so by a lake's shore its water and Google's may be a step of a
+  few metres apart (how they meet wasn't tried). Within reach of its water (till there are two of
+  the map's squares between the vehicle's and the nearest of the sea's and its coasts', or of the
+  lake's own: 7 to 14 km), any ground under the water's surface is under the disc too: by the sea, a
+  polder behind its dyke (New Orleans' lowest streets, 2 m under the sea, two squares from the
+  coast's; the Haarlemmermeer, three squares from it, is out of reach); by a lake, the river out of
+  it below the outlet (the Niagara above the falls) or a lower lake (Lake Huron, 7.5 m under
+  Superior) while the vehicle is still within reach of the lake. Out of reach the disc is gone, from
+  under the vehicle too if it's riding on it there (down a river from the lake, say), which then
+  comes down onto whatever is below. Coming back within reach, it's back only once the vehicle is
+  half a metre over the water's height, so a vehicle coming back along Google's own water at about
+  the lake's height has none till it's on the shore. And it's one deep blue, whatever Google's
+  pictures of the water round it are (by Kona, dark navy).
 - [Water](#water) is told by how Google draws it, which isn't always the same: it misses water
-  that's photographed rather than filled (a fountain lake, Geneva's clear lake, a lagoon), busy
-  with boats and wakes (Venice's Grand Canal), in a narrow canal (Amsterdam's, Venice's: the rings
-  reach the banks), in a bridge's shadow, at a seam between sharper and coarser tiles, where it
-  slopes on a coarse tile (surf, parts of Hong Kong's harbour), and teal or olive grey water within
-  35 m of a bank or a moored boat; and within about 12 m of a shore, a pier or a ship it can't tell
-  water from an even grey square, so there you ride on it (a kart dropped between a jetty and the
-  ship moored at it floated), unless you came down into it. Out from there, it splashes. Where it
-  can't tell it never puts boost pads down nor takes you back there, but surf's foam is bright, so
-  it's taken for dry ground: pads can go down on a wide band of surf, and the way back from the sea
-  off a beach can be in the surf.
+  that's photographed rather than filled (a fountain lake, Geneva's clear lake, a lagoon; a big
+  lake's surface drawn from cloud-flecked pictures, Lake Tanganyika's, Lake Malawi's, the Dead
+  Sea's), busy with boats and wakes (Venice's Grand Canal), in a narrow canal (Amsterdam's,
+  Venice's: the rings reach the banks), in a bridge's shadow, at a seam between sharper and coarser
+  tiles, where it slopes on a coarse tile (surf, parts of Hong Kong's harbour), and teal or olive
+  grey water within 35 m of a bank or a moored boat; and within about 12 m of a shore, a pier or a
+  ship it can't tell water from an even grey square, so there you ride on it (a kart dropped between
+  a jetty and the ship moored at it floated), unless you came down into it. Out from there, it
+  splashes. Where it can't tell it never puts boost pads down nor takes you back there, but surf's
+  foam is bright, so it's taken for dry ground: pads can go down on a wide band of surf, and the way
+  back from the sea off a beach can be in the surf.
 - [Driving with others](#driving-with-others): each page says where its own car is, and the room
   only checks it's somewhere a car could be (on Earth, at a speed a ride can go), so someone who
   digs into the page can put their ghost anywhere; it can't touch anyone, as nothing collides. A car
@@ -2053,6 +2345,9 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
 ## Credits
 
 The 3D world is Google's: the Google Maps logo and the data providers show whenever the tiles are on
-screen. Place search © OpenStreetMap contributors. The trucks and the cars are models from Sketchfab
-under CC BY 4.0, credited under **About World Drive** and on the ride picker (and the cars in
-`drive/public/cars/CREDITS.md`); the go-kart and the pass's rides are built in code.
+screen. The open sea's height is NGA's EGM96 geoid (public domain), from PROJ's copy of it, and
+where the sea and the big lakes are is Natural Earth's ocean and lakes at 1:10 million (public
+domain, naturalearthdata.com), from its GitHub copy. Place search © OpenStreetMap contributors. The
+trucks and the cars are models from Sketchfab under CC BY 4.0, credited under **About World Drive**
+and on the ride picker (and the cars in `drive/public/cars/CREDITS.md`); the go-kart and the pass's
+rides are built in code.
