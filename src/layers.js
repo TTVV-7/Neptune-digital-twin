@@ -207,6 +207,8 @@ export function createLayers( { models, layout, library, flattening, isDriving, 
 
 	function setOpen( value ) {
 
+		// Opened by hand while a section holds the panels folded: it lets go.
+		if ( value ) legend.hold?.( false );
 		dock.open = value;
 		dock.insist = value;
 		save();

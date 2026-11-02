@@ -569,17 +569,23 @@ test( 'rakers reach the floor at their angle; tiebacks run past the active wedge
 	assert.equal( r.plan.members.filter( m => m.type === 'kicker' ).length, rakers.length );
 	assert.ok( Math.abs( r.plan.rakers[ 1 ].rows[ 0 ].reach - 6 ) < 1e-12 );
 
-	// The research's worked example: H = 10 m, top row 1.5 m down.
+	// The research's worked example: H = 10 m, top row 1.5 m down, the wedge rising at 61° from the
+	// foot of the wall: 6.25 m free at 15° and 6.17 m at 20° with the head on the wall. Here the
+	// head is on the waler's face, 0.36 m in front of it, so the tendon crosses the wedge further
+	// out: ( 8.5 + 0.36 tan 61° ) / ( tan 61° + tan θ ), then 2 m (0.2 H) more.
+	const DEG = Math.PI / 180;
+	const freeAt = angle => ( 8.5 + X.WALER_DEPTH * Math.tan( 61 * DEG ) ) / ( Math.tan( 61 * DEG ) + Math.tan( angle * DEG ) ) / Math.cos( angle * DEG ) + 2;
 	const anchors = angle => X.planExcavation( { width: 30, length: 40, depth: 10, support: 'secant-piles', bracing: 'tiebacks', levels: '1.5, 5', anchorAngle: angle, outline: 'floor' } );
 	const at15 = anchors( 15 );
 	const row15 = at15.plan.anchors[ 1 ].rows[ 0 ];
-	assert.ok( Math.abs( row15.free - 6.25 ) < 0.01, `free ${ row15.free }` );
-	assert.ok( Math.abs( ( row15.free + row15.bond ) * Math.cos( 15 * Math.PI / 180 ) - 14.73 ) < 0.02 );
+	assert.ok( Math.abs( row15.free - freeAt( 15 ) ) < 1e-9 && Math.abs( row15.free - 6.57 ) < 0.01, `free ${ row15.free }` );
+	assert.ok( Math.abs( ( row15.free + row15.bond ) * Math.cos( 15 * DEG ) - 15.04 ) < 0.01 );
 	assert.ok( row15.bondCentre < 4.5 );
 	assert.ok( at15.flags.some( f => f.id === 'anchor-cover-1' ) );
 	const at20 = anchors( 20 );
 	const row20 = at20.plan.anchors[ 1 ].rows[ 0 ];
-	assert.ok( Math.abs( row20.free - 6.17 ) < 0.01 && Math.abs( row20.bondCentre - 5.15 ) < 0.01 );
+	assert.ok( Math.abs( row20.free - freeAt( 20 ) ) < 1e-9 && Math.abs( row20.free - 6.49 ) < 0.01, `free ${ row20.free }` );
+	assert.ok( Math.abs( row20.bondCentre - ( 1.5 + ( row20.free + 4.5 ) * Math.sin( 20 * DEG ) ) ) < 1e-9 && Math.abs( row20.bondCentre - 5.26 ) < 0.01, `bond centre ${ row20.bondCentre }` );
 	assert.ok( ! at20.flags.some( f => f.id.startsWith( 'anchor-cover' ) ) );
 	// Never under 4.5 m free; the tendon goes out behind the wall and down.
 	for ( const m of at20.plan.members.filter( t => t.type === 'tieback' ) ) {
@@ -722,6 +728,153 @@ test( 'flags: WorkSafeBC, soil, water, walls and their support', () => {
 		assert.ok( [ 'stop', 'warn', 'note' ].includes( flag.level ) && flag.text && flag.source, flag.id );
 
 	}
+
+} );
+
+test( 'benches: narrow, tall or wide ones are flagged at the level the regulation calls for', () => {
+
+	const flag = ( p, id ) => X.planExcavation( { outline: 'floor', method: 'bench', groundwater: 50, ...p } ).flags.find( f => f.id === id );
+	// Equal benches 1.2 m wide on 1.2 m risers put the second riser's top 1.2 m out at 2.4 m up,
+	// inside the 3H:4V line (1.8 m out): no case of Figure 20-2 allows it.
+	const narrow = flag( { width: 3, length: 30, depth: 3.6, soil: 'A', benchWidth: 1.2 }, 'bench-width' );
+	assert.equal( narrow.level, 'warn' );
+	assert.match( narrow.text, /^Benches 1\.2 m wide on 1\.2 m risers come inside Figure 20-2's 3H:4V line: make them 1\.5 times the riser, 1\.8 m/ );
+	assert.equal( flag( { width: 3, length: 30, depth: 3.6, soil: 'A', benchWidth: 1.79 }, 'bench-width' )?.level, 'warn' );
+	assert.equal( flag( { width: 3, length: 30, depth: 3.6, soil: 'A', benchWidth: 1.8 }, 'bench-width' ), undefined );
+	// One 3 m riser, or two of 2.5 m: unsupported vertical faces over 1.2 m, as a stop.
+	const tall = flag( { width: 10, length: 20, depth: 3, soil: 'A', benchHeight: 3 }, 'bench-height' );
+	assert.equal( tall.level, 'stop' );
+	assert.match( tall.text, /^Unsupported vertical risers 3 m high, over 1\.2 m: slope, bench \(1\.2 m at most\) or shore them before anyone goes in\.$/ );
+	assert.equal( flag( { width: 10, length: 20, depth: 5, soil: 'A', benchHeight: 2.5 }, 'bench-height' ).level, 'stop' );
+	// Over 3.7 m wide, Figure 20-2 doesn't apply: a warning, not a note.
+	assert.equal( flag( { width: 10, length: 30, depth: 3.6, soil: 'A' }, 'bench-wide' ).level, 'warn' );
+	assert.equal( flag( { width: 3, length: 30, depth: 3.6, soil: 'A' }, 'bench-wide' ), undefined );
+
+} );
+
+test( 'flags say who writes the instructions, and when the groundwater is only assumed', () => {
+
+	const flags = p => X.planExcavation( p ).flags;
+	// Deeper than 6 m: sloped sides a QRP's, benches a professional engineer's.
+	const sloped = flags( { width: 20, length: 30, depth: 8, outline: 'floor', slopeBy: 'soil', soil: 'C', groundwater: 50 } ).find( f => f.id === 'deep-slope' );
+	assert.match( sloped.text, /QRP's written instructions \(20\.78\(1\)\(a\), 20\.81\(1\)\(a\)\)/ );
+	assert.doesNotMatch( sloped.text, /engineer/ );
+	const mixed = flags( { width: 20, length: 30, depth: 8, outline: 'floor', method: 'sides', side1: 'bench', soil: 'A', groundwater: 50 } ).find( f => f.id === 'deep-slope' );
+	assert.match( mixed.text, /slopes on sides 2, 3, 4 to a QRP's .*; the benches on side 1 a professional engineer's design/ );
+	// Wet ground with support: a PE's.
+	assert.match( flags( { width: 10, length: 20, depth: 3, soil: 'wet', support: 'sheet-piles' } ).find( f => f.id === 'wet' ).text, /a PE's with support/ );
+	// The 2 m default is an assumption; a level set from site data isn't.
+	assert.match( flags( { width: 12, length: 20, depth: 2.5, outline: 'floor' } ).find( f => f.id === 'groundwater' ).text, /^Floor 0\.5 m below the groundwater \(assumed 2 m down: set it from site data\)/ );
+	assert.match( flags( { width: 12, length: 20, depth: 2.5, outline: 'floor', groundwater: 1.5 } ).find( f => f.id === 'groundwater' ).text, /^Floor 1 m below the groundwater \(1\.5 m down\):/ );
+	assert.equal( flags( { width: 10, length: 20, depth: 3, support: 'sheet-piles' } ).find( f => f.id === 'engineered' ).source, 'WorkSafeBC 20.81(1)(d), G20.81' );
+
+} );
+
+test( 'the comparison says when stepping isn\'t a fair way to compare', () => {
+
+	const text = p => X.comparisonText( X.compareMethods( X.normaliseExcavation( { width: 12, length: 20, depth: 4, outline: 'floor', slopeBy: 'soil', ...p } ) ) );
+	assert.match( text( { soil: 'C' } ), /^Stepped \(not for soil C: benching shown for hard soil only; over 3\.7 m wide: a QRP's design\) instead: 258 m³ less cut/ );
+	assert.match( text( { soil: 'A', width: 3 } ), /^Stepped instead: / );
+	assert.match( text( { soil: 'wet', width: 3 } ), /^Stepped \(not for soil C, wet: benching shown for hard soil only\) instead: / );
+
+} );
+
+test( 'a cut 1.2 m deep or less isn\'t a trench: spoil 1.2 m back', () => {
+
+	const shallow = X.planExcavation( { width: 1, length: 20, depth: 1, outline: 'floor', slopeBy: 'custom', slope: 0 } ).quantities;
+	assert.equal( shallow.trench, false );
+	assert.deepEqual( shallow.zones.spoil[ 0 ], [ - 0.5 - 1.2, - 10 - 1.2 ] );
+	assert.equal( X.planExcavation( { width: 1, length: 20, depth: 1.5, outline: 'floor', slopeBy: 'custom', slope: 0 } ).quantities.trench, true );
+	// A V-cut is as deep as where its sides meet.
+	const vee = X.planExcavation( { width: 2, length: 20, depth: 3, slope: 1 } ).quantities;
+	assert.equal( vee.floor, null );
+	assert.equal( vee.trench, X.planExcavation( { width: 2, length: 20, depth: 3, slope: 1 } ).quantities.meets > 1.2 );
+
+} );
+
+test( 'lagging only where the face is dug, and spoil beside shoring is in its band', () => {
+
+	// Soldier piles on side 2 between 1.5 : 1 slopes: the wall runs 6 m into each slope's wing,
+	// where the slope's soil stands in front of it.
+	const d = X.planExcavation( { width: 10, length: 20, depth: 4, outline: 'floor', method: 'sides', side2: 'soldier-piles', slopeBy: 'soil', soil: 'C' } );
+	const [ wall ] = d.quantities.walls;
+	assert.equal( wall.length, 32 );
+	assert.ok( Math.abs( wall.area - 104 ) < 1e-9 );
+	assert.ok( Math.abs( wall.lagging - ( 104 + 0.3 * 32 ) ) < 1e-9 );
+	assert.match( planShoring( d.params ).summary, /, 114 m² of timber lagging \(8\.5 m³\)/ );
+	// The band behind side 2 its load comes from, the depth out from its line.
+	const [ band ] = d.quantities.zones.shored;
+	assert.equal( band.side, 2 );
+	assert.ok( band.polygon.every( ( [ u ] ) => u >= 5 - 1e-9 && u <= 9 + 1e-9 ) );
+
+} );
+
+test( 'typed levels come back the same when normalised again', () => {
+
+	for ( const levels of [ '2, 2.31', '0.21, 2', '4.5, 4.8', '2, 2.3', '1.5, 4.5, 7.52', ' 4.5;1.5 , 1.6, x, 7.52 , -2' ] ) {
+
+		const once = X.normaliseExcavation( { levels } );
+		assert.deepEqual( X.normaliseExcavation( X.saveExcavation( once ) ), once, levels );
+
+	}
+
+	assert.equal( X.normaliseExcavation( { levels: '2, 2.3' } ).levels, '2, 2.3' );
+	assert.equal( X.normaliseExcavation( { levels: '4.5, 4.8' } ).levels, '4.5, 4.8' );
+
+} );
+
+test( 'raker berms never dig deeper than the finished pit, beside slopes and benches too', () => {
+
+	const pits = [
+		{ width: 20, length: 30, depth: 8, outline: 'floor', method: 'sides', side1: 'sheet-piles', side2: 'sheet-piles', side3: 'slope', side4: 'slope', slopeBy: 'soil', soil: 'B', bracing: 'rakers' },
+		{ width: 14, length: 18, depth: 6, outline: 'floor', method: 'sides', side1: 'soldier-piles', side2: 'bench', side3: 'secant-piles', side4: 'slope', soil: 'A', bracing: 'rakers' },
+		{ width: 30, length: 40, depth: 8, support: 'sheet-piles', bracing: 'rakers', levels: '2, 5', outline: 'floor' },
+	];
+	for ( const p of pits ) {
+
+		const d = X.planExcavation( p );
+		const finished = d.geom;
+		const [ front, right, back, left ] = finished.sides;
+		let checked = 0;
+		for ( const stage of d.stages.filter( s => s.berm !== null ) ) {
+
+			const geom = X.geometryAtStage( finished, d.plan, stage );
+			for ( let u = - left.top - 1; u <= right.top + 1; u += 0.25 ) {
+
+				for ( let v = - back.top - 1; v <= front.top + 1; v += 0.25 ) {
+
+					const now = X.depthAt( geom, u, v, stage.dig );
+					const end = X.depthAt( finished, u, v, finished.depth );
+					assert.ok( now <= end + 1e-9, `${ JSON.stringify( p ) } stage ${ stage.label } at ${ u }, ${ v }: ${ now } > ${ end }` );
+					checked ++;
+
+				}
+
+			}
+
+		}
+
+		assert.ok( checked > 1000 );
+
+	}
+
+} );
+
+test( 'walls too close for walers: struts face to face, and a warning', () => {
+
+	const d = X.planExcavation( { width: 1, length: 12, depth: 5, outline: 'floor', support: 'sheet-piles', bracing: 'auto' } );
+	assert.equal( d.plan.type, 'struts' );
+	assert.equal( d.plan.struts.direct, true );
+	assert.ok( Math.abs( d.plan.struts.span - ( 1 - 2 * 0.19 ) ) < 1e-9 );
+	assert.ok( d.plan.members.filter( m => m.type === 'strut' ).every( m => m.length > 0.6 ) );
+	// No walers on the strutted walls, so nothing overlaps across the pit.
+	assert.ok( ! d.plan.members.some( m => m.type === 'waler' && d.plan.struts.across.includes( m.side ) ) );
+	assert.ok( d.flags.some( f => f.id === 'too-narrow' && f.level === 'warn' ) );
+	assert.match( planShoring( d.params ).levels, /struts 0\.6 m long/ );
+	// Wide enough: walers and struts as before.
+	const wide = X.planExcavation( { width: 2, length: 12, depth: 5, outline: 'floor', support: 'sheet-piles', bracing: 'auto' } );
+	assert.equal( wide.plan.struts.direct, false );
+	assert.ok( ! wide.flags.some( f => f.id === 'too-narrow' ) );
 
 } );
 

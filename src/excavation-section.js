@@ -9,9 +9,8 @@ import {
 	conflictsText,
 	cutPoint,
 	cutSides,
-	designCutText,
 	findConflicts,
-	footprintText,
+	memberCut,
 	quantityRows,
 	sectionDrawing,
 	sectionRange,
@@ -76,6 +75,21 @@ const ZONE_LIFT = 0.05;
 const ZONE_LINE_LIFT = 0.1;
 const ZONE_COLOUR = '#ff5a36';
 const ZONE_RECHECK = 0.5;
+// The ground beyond each side is read again this often, seconds, as sharper tiles come in; a side
+// is flagged where it rises or falls steeper than this (20.78(1)(d): 3 horizontal to 1 vertical),
+// read this far out (the depth, at least) at three places along it.
+const SLOPE_INTERVAL = 5;
+const STEEP_GROUND = 1 / 3;
+const SLOPE_OUT = 3;
+// The card: beside the library with at least this much of the view left for the cut-away before
+// the P panel, else a sheet along the bottom between them (px). Phones (the CSS) always get a sheet.
+const CARD_WIDTH = 600;
+const MIN_VIEW = 400;
+const EDGE = 12;
+const PHONE_CARD = 760;
+const MIN_SHEET = 480;
+// The checks, gravest first, as the P panel lists them (shoring.js).
+const LEVEL_ORDER = { stop: 0, warn: 1, note: 2 };
 
 const DEG = Math.PI / 180;
 const UP = new Vector3( 0, 1, 0 );
@@ -128,9 +142,9 @@ function comparison( params ) {
 }
 
 // Added to the excavation's readouts (kinds.js) after its own and the shoring's.
+// The design's cut from flat ground and the top's area are in the card's quantities and the pit's
+// own readouts (earthworks.js), so they aren't said twice.
 export const SECTION_READOUTS = [
-	{ label: 'design cut (flat ground)', get: entry => designCutText( planExcavation( entry.params ) ) },
-	{ label: 'footprint', get: entry => footprintText( planExcavation( entry.params ) ) },
 	{ label: 'compared', note: true, get: entry => comparisonText( comparison( entry.params ) ) },
 	{ label: 'nearby', note: true, get: entry => section?.nearbyText( entry ) ?? '' },
 ];
@@ -153,8 +167,8 @@ export const SECTION_ACTIONS = [
 ];
 
 // context: { scene, camera, renderer, canvas, controls, models, terrain, layers, panel, onUpdate,
-// toast, kind, designs, rimOf }.
-export function setUpSection( { scene, camera, renderer, canvas, controls, models, terrain, layers, panel, onUpdate, kind, rimOf } ) {
+// toast, kind, designs, rimOf, getSelected }.
+export function setUpSection( { scene, camera, renderer, canvas, controls, models, terrain, layers, panel, onUpdate, kind, rimOf, getSelected = () => null } ) {
 
 	// The first cut-away gives the planes to what it cuts: the shoring's paint, the terrain, the
 	// ground (Google's tiles, or the stand-in), and from then on every tile as it loads. Placed
@@ -184,6 +198,8 @@ export function setUpSection( { scene, camera, renderer, canvas, controls, model
 	let checkTimer = 0;
 	let checkDue = false;
 	let version = 0;
+	// Bumped every SLOPE_INTERVAL, to read the ground round the pits again.
+	let groundEpoch = 0;
 	const nearbyCache = new Map(); // pit -> { key, list, text }
 	const shownNearby = new Map(); // pit -> the text its panel shows
 
@@ -222,18 +238,66 @@ export function setUpSection( { scene, camera, renderer, canvas, controls, model
 	function nearby( pit ) {
 
 		const { state } = pit;
-		const key = `${ version }|${ JSON.stringify( pit.params ) }|${ state.east },${ state.north },${ state.heading }`;
+		const key = `${ version }|${ groundEpoch }|${ JSON.stringify( pit.params ) }|${ state.east },${ state.north },${ state.heading }`;
 		let item = nearbyCache.get( pit );
 		if ( item?.key !== key ) {
 
 			const design = planExcavation( pit.params );
-			const list = findConflicts( design, state, itemsAround( pit ), rectsOverlap );
+			const list = [ ...findConflicts( design, state, itemsAround( pit ), rectsOverlap ), ...groundSlopes( pit, design ) ];
 			item = { key, list, text: conflictsText( list, design ) };
 			nearbyCache.set( pit, item );
 
 		}
 
 		return item;
+
+	}
+
+	// Sides where the ground beyond the top edge rises or falls steeper than 1 in 3 (WorkSafeBC
+	// 20.78(1)(d)), as the map has it before anything was dug: read from just past the edge to the
+	// depth beyond it (3 m at least), at its middle and towards both ends, and the middle reading of
+	// the three taken, so a rail car or a post at one of them doesn't count. [ { zone: 'ground',
+	// side, name: 'rises' or 'falls', level } ]. Remembered until the ground is read again.
+	const slopesCache = new Map(); // pit -> { key, list }
+	function groundSlopes( pit, design ) {
+
+		const { east, north, heading } = pit.state;
+		const key = JSON.stringify( [ design.params, east, north, heading, groundEpoch ] );
+		const cached = slopesCache.get( pit );
+		if ( cached?.key === key ) return cached.list;
+		const frame = pitFrame( pit.state );
+		const heightAt = ( u, v ) => {
+
+			const p = pitToEnu( frame, u, v );
+			const y = terrain.groundAt( - p.east, p.north ) ?? models.originalHeight?.( - p.east, p.north );
+			return Number.isFinite( y ) ? y : null;
+
+		};
+		const { sides, depth } = design.geom;
+		const [ front, right, back, left ] = sides;
+		const out = Math.max( SLOPE_OUT, depth );
+		const list = [];
+		for ( const side of sides ) {
+
+			// Along its top edge (t), and out from the middle of the pit (c).
+			const [ t0, t1 ] = side.axis ? [ - back.top, front.top ] : [ - left.top, right.top ];
+			const point = ( t, c ) => side.axis ? [ side.sign * c, t ] : [ t, side.sign * c ];
+			const grades = [ 0.2, 0.5, 0.8 ].map( f => {
+
+				const t = t0 + ( t1 - t0 ) * f;
+				const near = heightAt( ...point( t, side.top + 0.5 ) );
+				const far = heightAt( ...point( t, side.top + 0.5 + out ) );
+				return near === null || far === null ? null : ( far - near ) / out;
+
+			} ).filter( g => g !== null ).sort( ( a, b ) => a - b );
+			if ( grades.length < 3 ) continue;
+			const grade = grades[ 1 ];
+			if ( Math.abs( grade ) > STEEP_GROUND ) list.push( { zone: 'ground', side: side.n, name: grade > 0 ? 'rises' : 'falls', level: 'warn' } );
+
+		}
+
+		slopesCache.set( pit, { key, list } );
+		return list;
 
 	}
 
@@ -393,6 +457,7 @@ export function setUpSection( { scene, camera, renderer, canvas, controls, model
 		checkDue = true;
 		removeZones( entry );
 		nearbyCache.delete( entry );
+		slopesCache.delete( entry );
 		shownNearby.delete( entry );
 		if ( view?.entry === entry ) close();
 
@@ -440,29 +505,46 @@ export function setUpSection( { scene, camera, renderer, canvas, controls, model
 			render();
 
 		} );
-		// Hand the keys back to the scene once the slider's let go.
-		slider.addEventListener( 'change', () => slider.blur() );
+		// Hand the keys back to the scene once the slider's let go by the mouse; with the keys it
+		// keeps them (its arrow keys don't move the camera: walk.js isTyping).
+		slider.addEventListener( 'pointerup', () => slider.blur() );
+		// The checks open by themselves while there's something to heed, until they're opened or
+		// closed by hand.
+		element.querySelector( '.checks summary' ).addEventListener( 'click', () => {
+
+			if ( view ) view.checksByHand = true;
+
+		} );
 		return element;
 
 	}
 
 	// Open the section through a pit: across its width (along false) or along its length. Opening
-	// another cut of the same pit keeps the view it was opened from, to go back to.
+	// another cut of the same pit keeps the view it was opened from, to go back to; another pit's
+	// takes over that view too. Opened at the middle, or where a row of tiebacks or rakers is in
+	// the cut if none is at the middle (they're spaced along the walls).
 	function open( entry, along ) {
 
-		if ( view && view.entry !== entry ) close();
-		if ( ! view ) {
+		if ( view && view.entry !== entry ) {
 
-			view = { entry, along, at: 0, cutaway: card.querySelector( '.cutaway input' ).checked, pose: null, framed: false, groundKey: null, ground: new Map(), groundTime: 0 };
+			const { pose, framed } = view;
+			view = { ...view, entry, along, at: memberCut( planExcavation( entry.params ), along ), checksByHand: false, groundKey: null, ground: new Map(), pose, framed };
+
+		} else if ( ! view ) {
+
+			view = { entry, along, at: memberCut( planExcavation( entry.params ), along ), cutaway: card.querySelector( '.cutaway input' ).checked, pose: null, framed: false, groundKey: null, ground: new Map(), groundTime: 0, checksByHand: false };
 
 		} else if ( view.along !== along ) {
 
 			view.along = along;
-			view.at = 0;
+			view.at = memberCut( planExcavation( entry.params ), along );
 
 		}
 
+		view.selected = getSelected();
 		card.hidden = false;
+		hold( view.cutaway );
+		layoutCard();
 		render();
 		if ( view.cutaway ) frameCamera();
 
@@ -475,6 +557,7 @@ export function setUpSection( { scene, camera, renderer, canvas, controls, model
 		const { pose, framed } = view;
 		view = null;
 		card.hidden = true;
+		hold( false );
 		update3d();
 		if ( framed ) restorePose( pose );
 
@@ -484,7 +567,9 @@ export function setUpSection( { scene, camera, renderer, canvas, controls, model
 
 		if ( ! view ) return;
 		view.cutaway = on;
-		update3d();
+		hold( on );
+		layoutCard();
+		render();
 		if ( on ) frameCamera();
 		else if ( view.framed ) {
 
@@ -492,6 +577,61 @@ export function setUpSection( { scene, camera, renderer, canvas, controls, model
 			view.framed = false;
 
 		}
+
+	}
+
+	// The Show and Controls panels fold to their buttons while the scene is cut away, for room to
+	// see it, without changing what's saved for them (main.js's legend places both).
+	function hold( on ) {
+
+		window.twin?.legend?.hold?.( on );
+
+	}
+
+	// Where the card goes (see CARD_WIDTH): its left beside the library, and, with the scene cut
+	// away, a sheet along the bottom where there isn't room for it and the cut-away side by side
+	// before the P panel; the sheet stops short of the Show and Controls panels' buttons there if it
+	// can stay wide enough for its drawing.
+	function layoutCard() {
+
+		if ( window.innerWidth <= PHONE_CARD ) {
+
+			card.classList.remove( 'sheet' );
+			card.style.left = '';
+			card.style.width = '';
+			clearAttribution( 8, window.innerWidth - 8 );
+			return;
+
+		}
+
+		const library = visibleRect( document.getElementById( 'library' ) );
+		const gui = visibleRect( document.querySelector( '.lil-gui.lil-root' ) );
+		const left = library && library.top < 1 ? library.right + EDGE : EDGE;
+		const right = gui && gui.left > left + MIN_VIEW ? window.innerWidth - gui.left + EDGE : EDGE;
+		let room = window.innerWidth - left - right;
+		const sheet = !! view?.cutaway && room < CARD_WIDTH + MIN_VIEW;
+		if ( sheet ) {
+
+			const buttons = [ document.getElementById( 'layers' ), document.getElementById( 'legend' ) ].map( visibleRect ).filter( b => b && b.top > window.innerHeight * 0.55 && b.left > left );
+			const clear = Math.min( window.innerWidth - right, ...buttons.map( b => b.left - EDGE ) ) - left;
+			if ( clear >= MIN_SHEET ) room = clear;
+
+		}
+
+		card.classList.toggle( 'sheet', sheet );
+		card.style.left = `${ left }px`;
+		card.style.width = sheet ? `${ room }px` : '';
+		if ( sheet ) clearAttribution( left, left + room );
+		else card.style.bottom = '';
+
+	}
+
+	// Along the bottom, the card stands above Google's logo and the map's credits, which must stay
+	// in sight (the attribution's own layer is under the card's).
+	function clearAttribution( from, to ) {
+
+		const under = [ ...document.querySelectorAll( '#attribution img, #attribution .credits' ) ].map( visibleRect ).filter( r => r && r.top > window.innerHeight / 2 && r.right > from && r.left < to );
+		card.style.bottom = under.length ? `${ Math.max( ...under.map( r => window.innerHeight - r.top + 10 ) ) }px` : '';
 
 	}
 
@@ -543,15 +683,17 @@ export function setUpSection( { scene, camera, renderer, canvas, controls, model
 		const width = Math.max( 240, host.clientWidth || 560 );
 		const { from, to } = sectionRange( design, view.along );
 		const options = { along: view.along, at: view.at, groundAt, heading: entry.state.heading };
-		// Fitted to the card's width, or its height if that's less: dimensions stack a line of text apart.
+		// Fitted to the card's width, or its height if that's less: dimensions stack a line of text
+		// apart. As a sheet along the bottom, the drawing leaves the cut-away above it its room.
+		const maxHeight = card.classList.contains( 'sheet' ) ? Math.max( 180, Math.min( MAX_HEIGHT, window.innerHeight * 0.45 - 110 ) ) : MAX_HEIGHT;
 		let k = ( width - 2 * PAD ) / ( to - from );
 		let drawing = sectionDrawing( design, { ...options, unit: TEXT / k } );
-		const tall = ( MAX_HEIGHT - 2 * PAD ) / ( drawing.top - drawing.bottom );
+		const tall = ( maxHeight - 2 * PAD ) / ( drawing.top - drawing.bottom );
 		if ( tall < k ) {
 
 			k = tall;
 			drawing = sectionDrawing( design, { ...options, unit: TEXT / k } );
-			k = Math.min( k, ( MAX_HEIGHT - 2 * PAD ) / ( drawing.top - drawing.bottom ) );
+			k = Math.min( k, ( maxHeight - 2 * PAD ) / ( drawing.top - drawing.bottom ) );
 
 		}
 
@@ -560,12 +702,16 @@ export function setUpSection( { scene, camera, renderer, canvas, controls, model
 		const x0 = ( width - ( to - from ) * k ) / 2;
 		const map = ( s, y ) => [ x0 + ( s - from ) * k, PAD + ( drawing.top - y ) * k ];
 		host.innerHTML = cardSvg( drawing, map, { width, height, k } ) + legend( drawing );
+		clearLabels( host.querySelector( 'svg' ) );
 
-		const name = entry.state.name;
-		card.querySelector( '.title' ).textContent = `Section ${ view.along ? 'along' : 'across' } · ${ name }`;
+		// Which pit, as every pit is called Excavation: by its top and depth.
+		const { top } = design.quantities;
+		card.querySelector( '.title' ).textContent = `Section ${ view.along ? 'along' : 'across' } · ${ entry.state.name }, top ${ top.width.toFixed( 1 ) } × ${ top.length.toFixed( 1 ) } m, ${ geom.depth.toFixed( 1 ) } m deep`;
 		const heading = entry.state.heading;
-		const axis = view.along ? 'u' : 'v';
-		card.querySelector( '.where' ).textContent = `Looking toward ${ sideLabel( heading, far.n ) }: ${ sideLabel( heading, left.n ) } (${ sideMethodText( left ) }) on the left, ${ sideLabel( heading, right.n ) } (${ sideMethodText( right ) }) on the right. Cut ${ axis } = ${ view.at.toFixed( 1 ) } m from the middle.`;
+		// The cut moves toward the far side (front or right) as `at` grows, the near side as it falls.
+		const toward = view.at > 0 ? far : cutSides( geom, view.along ).near;
+		const where = Math.abs( view.at ) < 0.05 ? 'Cut through the middle.' : `Cut ${ Math.abs( view.at ).toFixed( 1 ) } m from the middle, toward ${ sideLabel( heading, toward.n ) }.`;
+		card.querySelector( '.where' ).textContent = `Looking toward ${ sideLabel( heading, far.n ) }: ${ sideLabel( heading, left.n ) } (${ sideMethodText( left ) }) on the left, ${ sideLabel( heading, right.n ) } (${ sideMethodText( right ) }) on the right. ${ where }`;
 		for ( const button of card.querySelectorAll( '[data-cut]' ) ) button.setAttribute( 'aria-pressed', String( ( button.dataset.cut === 'along' ) === view.along ) );
 		const slider = card.querySelector( '.at input' );
 		slider.min = range[ 0 ].toFixed( 2 );
@@ -586,13 +732,19 @@ export function setUpSection( { scene, camera, renderer, canvas, controls, model
 		const rows = comparisonRows( comparison( entry.params ) );
 		card.querySelector( '.compare' ).hidden = rows.length < 2;
 		card.querySelector( '.compare table' ).innerHTML = '<tr><th></th><th>cut</th><th>vs plan</th><th>top</th></tr>' + rows.map( r => `<tr class="${ r.current ? 'current' : '' }" data-method="${ escape( r.label ) }"><th>${ escape( r.label ) }</th><td data-volume="${ r.volume }">${ volumeText( r.volume ) } m³</td><td>${ r.change === null ? '' : Math.abs( r.change ) < 0.5 ? 'the same' : `${ r.change < 0 ? '−' : '+' }${ volumeText( Math.abs( r.change ) ) } m³` }</td><td>${ escape( r.top ) }</td></tr>` ).join( '' );
+		// Gravest first, what's nearby among the warnings; opened while any is a stop or a warning.
 		const checks = [
 			...nearby( entry ).list.length ? [ { level: 'warn', text: nearby( entry ).text, source: 'what\'s placed on the map' } ] : [],
 			...design.flags,
-		];
+		].sort( ( a, b ) => LEVEL_ORDER[ a.level ] - LEVEL_ORDER[ b.level ] );
 		const list = card.querySelector( '.checks ul' );
-		list.innerHTML = checks.length ? checks.map( f => `<li class="${ f.level }">${ escape( f.text ) } <span class="source">${ escape( f.source ) }</span></li>` ).join( '' ) : '<li class="note">Nothing to flag.</li>';
-		card.querySelector( '.checks summary' ).textContent = `Checks (${ checks.length })`;
+		list.innerHTML = checks.length ? checks.map( f => `<li class="${ f.level }">${ escape( f.text ) } <span class="source">${ escape( f.source ) }</span></li>` ).join( '' ) : '<li class="note">Nothing flagged by these planning checks.</li>';
+		const worst = [ 'stop', 'warn' ].find( level => checks.some( c => c.level === level ) );
+		const many = checks.filter( c => c.level === worst ).length;
+		const summary = card.querySelector( '.checks summary' );
+		summary.textContent = `Checks (${ checks.length }${ worst ? ` · ${ many } ${ worst === 'stop' ? 'stop' : 'warning' }${ many === 1 ? '' : 's' }` : '' })`;
+		summary.className = worst ?? '';
+		if ( ! view.checksByHand ) card.querySelector( '.checks' ).open = !! worst;
 
 	}
 
@@ -795,13 +947,21 @@ export function setUpSection( { scene, camera, renderer, canvas, controls, model
 		const area = canvas.getBoundingClientRect();
 		let [ x0, x1, y0, y1 ] = [ area.left, area.right, area.top, area.bottom ];
 		const c = card.getBoundingClientRect();
-		if ( c.width < area.width * 0.6 ) x0 = Math.max( x0, c.right );
-		else y1 = Math.min( y1, c.top );
-		const gui = document.querySelector( '.lil-gui.lil-root' );
-		if ( gui && gui.style.display !== 'none' ) {
+		const library = visibleRect( document.getElementById( 'library' ) );
+		if ( card.classList.contains( 'sheet' ) || c.width >= area.width * 0.6 ) {
 
-			const g = gui.getBoundingClientRect();
-			if ( g.width > 0 && g.left > x0 + 200 ) x1 = Math.min( x1, g.left );
+			// A sheet along the bottom: above it, right of the library.
+			y1 = Math.min( y1, c.top );
+			if ( library && library.top < 1 ) x0 = Math.max( x0, library.right );
+
+		} else x0 = Math.max( x0, c.right );
+
+		// The P panel, and the Show and Controls panels if one's been opened again by hand (their
+		// buttons are small, and below the cut).
+		for ( const element of [ document.querySelector( '.lil-gui.lil-root' ), document.querySelector( '#layers .layers-panel' ), document.querySelector( '#legend .legend-panel' ) ] ) {
+
+			const g = visibleRect( element );
+			if ( g && g.left > x0 + 100 ) x1 = Math.min( x1, g.left );
 
 		}
 
@@ -907,6 +1067,13 @@ export function setUpSection( { scene, camera, renderer, canvas, controls, model
 		// No-dig zones: shown in build mode, draped again where the ground under them changed.
 		zoneRoot.visible = zonesOn && models.buildMode;
 		zoneClock += dt;
+		// The ground round the pits read again, for its slope beyond their sides.
+		if ( Math.floor( zoneClock / SLOPE_INTERVAL ) !== groundEpoch ) {
+
+			groundEpoch = Math.floor( zoneClock / SLOPE_INTERVAL );
+			checkDue = true;
+
+		}
 		for ( const [ pit, item ] of zones ) {
 
 			item.group.visible = ! models.isHidden( pit );
@@ -921,12 +1088,31 @@ export function setUpSection( { scene, camera, renderer, canvas, controls, model
 
 		if ( view ) {
 
+			// Another pit selected since: the section follows it (another kind of item can be selected
+			// and moved with the section left as it is, to watch what's nearby).
+			const selected = getSelected();
+			if ( selected !== view.selected ) {
+
+				view.selected = selected;
+				if ( selected && selected !== view.entry && selected.kind === kind && ! selected.placing && models.entries.includes( selected ) ) open( selected, view.along );
+
+			}
+
+			if ( ! view ) return;
 			view.groundTime += dt;
 			if ( view.groundTime > GROUND_INTERVAL ) view.groundDue = true;
 			if ( view.dirty || view.groundDue ) render();
 			drawOverlay();
 
 		}
+
+	} );
+
+	window.addEventListener( 'resize', () => {
+
+		if ( ! view ) return;
+		layoutCard();
+		view.dirty = true;
 
 	} );
 
@@ -1101,7 +1287,57 @@ function scaleBar( k, height ) {
 	const metres = [ 0.5, 1, 2, 5, 10, 20, 50, 100 ].find( m => m * k >= 60 ) ?? 100;
 	const w = metres * k;
 	const [ x, y ] = [ PAD, height - PAD + 2 ];
-	return `<g class="xs-scale" data-metres="${ metres }" data-k="${ k }"><path d="M${ x } ${ y - 4 }V${ y }H${ ( x + w ).toFixed( 1 ) }V${ y - 4 }M${ ( x + w / 2 ).toFixed( 1 ) } ${ y }V${ y - 2.5 }"/><text x="${ ( x + w + 5 ).toFixed( 1 ) }" y="${ y }" dominant-baseline="auto">${ metres } m · 1 : 1</text></g>`;
+	return `<g class="xs-scale" data-metres="${ metres }" data-k="${ k }"><path d="M${ x } ${ y - 4 }V${ y }H${ ( x + w ).toFixed( 1 ) }V${ y - 4 }M${ ( x + w / 2 ).toFixed( 1 ) } ${ y }V${ y - 2.5 }"/><text x="${ ( x + w + 5 ).toFixed( 1 ) }" y="${ y }" dominant-baseline="auto">${ metres } m · same scale up and across</text></g>`;
+
+}
+
+// Text that lands on text drawn before it (dimensions first, then labels) is moved a line off,
+// up its own way (a dimension's figures off their line, which stays put) or down, and a label
+// that can't be also half its width along, as a last pass once the card is drawn.
+function clearLabels( svg ) {
+
+	if ( ! svg?.getBoundingClientRect ) return;
+	const placed = [];
+	const hits = rect => placed.some( p => rect.width > 0 && p.width > 0 && rect.left < p.right - 1 && rect.right > p.left + 1 && rect.top < p.bottom - 1 && rect.bottom > p.top + 1 );
+	for ( const text of svg.querySelectorAll( '.xs-dim-text, .xs-label' ) ) {
+
+		let rect = text.getBoundingClientRect();
+		const turned = text.getAttribute( 'transform' ) ?? '';
+		// Its own up, from the turn a dimension's figures have: ( sin a, -cos a ).
+		const angle = Number( /rotate\(\s*([-\d.]+)/.exec( turned )?.[ 1 ] ?? 0 ) * Math.PI / 180;
+		const line = Math.min( rect.width, rect.height ) + 1;
+		const half = Math.max( rect.width, rect.height ) / 2 + 2;
+		// [ lines up, half widths along ].
+		const tries = [ [ 1, 0 ], [ - 1, 0 ], [ 2, 0 ], [ - 2, 0 ], ...text.classList.contains( 'xs-label' ) ? [ [ 0, 1 ], [ 0, - 1 ], [ 1, 1 ], [ 1, - 1 ] ] : [] ];
+		for ( const [ k, j ] of tries ) {
+
+			if ( ! hits( rect ) ) break;
+			const [ dx, dy ] = [ Math.sin( angle ) * k * line + Math.cos( angle ) * j * half, - Math.cos( angle ) * k * line + Math.sin( angle ) * j * half ];
+			text.setAttribute( 'transform', `translate(${ dx.toFixed( 1 ) } ${ dy.toFixed( 1 ) }) ${ turned }`.trim() );
+			const moved = text.getBoundingClientRect();
+			if ( ! hits( moved ) ) {
+
+				rect = moved;
+				break;
+
+			}
+
+			if ( turned ) text.setAttribute( 'transform', turned );
+			else text.removeAttribute( 'transform' );
+
+		}
+
+		placed.push( text.getBoundingClientRect() );
+
+	}
+
+}
+
+function visibleRect( element ) {
+
+	if ( ! element || element.getClientRects().length === 0 ) return null;
+	const rect = element.getBoundingClientRect();
+	return rect.width > 0 && rect.height > 0 ? rect : null;
 
 }
 

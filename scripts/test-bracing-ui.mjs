@@ -197,7 +197,7 @@ test( 'each wall system lines only its own side, into the slopes\' wings and dow
 		// Down to the toe below the floor (a 4 m cantilever: 1.5 x 4 = 6 m), and out of the ground.
 		assert.ok( Math.abs( extent.minY - ( - D - 6 ) ) < 0.02, `${ system }: down to ${ extent.minY }` );
 		assert.ok( extent.maxY >= 0.29 && extent.maxY <= 1.01, `${ system }: up to ${ extent.maxY }` );
-		assert.match( r.levels, /^None \(cantilever\), suggested for 4\.0 m deep: no support levels; embedment 6\.0 m below the floor \(1\.5 times the depth\)/ );
+		assert.match( r.levels, /^None \(cantilever\), suggested for 4\.0 m deep: no support levels; embedment 6\.0 m below the floor \(rule of thumb: 1\.5 times the depth\)/ );
 		assert.ok( r.notes.some( n => n.startsWith( 'The wall on side 2 runs on past the floor\'s corners into the slopes or benches beside it, as far as their tops (6.0 m at most).' ) ), r.notes.join( ' / ' ) );
 		console.log( `${ system } on side 2: ${ r.summary } | ${ Math.round( r.wall ) } m² | ${ r.weight } | ${ r.meshes } meshes` );
 
@@ -233,7 +233,7 @@ test( 'support levels: none, struts, rakers, tiebacks and the first shoring\'s w
 	let r = await inspect( i );
 	// Levels about every 3 m: 1.5, 3.65 and 5.85 m down; walers on all four walls at each, struts
 	// across the 12.9 m between the walers on the long walls with king posts, corner braces.
-	assert.match( r.levels, /^Walers and struts: 3 levels, 1\.5, 3\.65 and 5\.85 m down \(the first within 1\.5 m of the top, then no more than 3 m apart or above the floor\); \d+ struts 12\.9 m long, 12 corner braces, \d+ king posts under them; embedment 4\.0 m below the floor/ );
+	assert.match( r.levels, /^Walers and struts: 3 levels, 1\.5, 3\.65 and 5\.85 m down \(a rule of thumb from CN's shoring criteria: the first within 1\.5 m of the top, then no more than 3 m apart or above the floor\); \d+ struts 12\.9 m long, 12 corner braces, \d+ king posts under them; embedment 4\.0 m below the floor/ );
 	for ( const name of [ 'sheet', 'waler', 'strut', 'pile' ] ) assert.ok( r.materials[ name ], name );
 	// Walers at the three depths, the king posts from 3 m under the floor.
 	assert.ok( Math.abs( r.materials.waler.maxY - ( - 1.5 + 0.125 ) ) < 1e-3 && Math.abs( r.materials.waler.minY - ( - 5.85 - 0.125 ) ) < 1e-3, JSON.stringify( r.materials.waler ) );
@@ -257,7 +257,7 @@ test( 'support levels: none, struts, rakers, tiebacks and the first shoring\'s w
 	await shot( 'rakers' );
 
 	// Tiebacks: heads on the walers, strand and bond out behind the walls and down, under the
-	// no-dig zone (13.9 m behind the 10 m pit of the research's example; here 8 m deep).
+	// no-dig zone (14.2 m behind the 10 m pit of the research's example; here 8 m deep).
 	await setParams( i, { bracing: 'tiebacks', anchorAngle: 20 } );
 	r = await inspect( i );
 	assert.ok( r.materials.tendon, Object.keys( r.materials ).join() );
@@ -272,7 +272,7 @@ test( 'support levels: none, struts, rakers, tiebacks and the first shoring\'s w
 	await setParams( i, { bracing: 'none' } );
 	r = await inspect( i );
 	assert.ok( ! r.materials.waler && ! r.materials.strut, Object.keys( r.materials ).join() );
-	assert.match( r.checks, /^Stop: A 8 m cantilever wall: add struts, rakers or tiebacks/ );
+	assert.match( r.checks, /^Stop: A 8 m cantilever wall, past the practice limit of about 5\.5 m: add struts, rakers or tiebacks/ );
 
 	// The first shoring's waler, as old pits have it, and as their plans were.
 	await setParams( i, { bracing: 'classic' } );
@@ -350,7 +350,7 @@ test( 'P panel: what\'s in, the support levels and the checks, each said once', 
 
 	} );
 	assert.match( notes.shoring, /^18\d secant piles \(0\.88 m, 150 mm overlap\) on all four sides, 15\.5 m long each, under a capping beam; walers at 3 levels with 162 tiebacks$/ );
-	assert.match( notes[ 'support levels' ], /^Tiebacks: 3 levels, 1\.5, 4\.35 and 7\.15 m down .*; 162 tiebacks at 20° below level, unbonded 4\.5 to 6\.2 m, bonded 9\.0 m; no-dig zone 13\.9 m behind all four sides; embedment 5\.0 m below the floor .*; secant piles 15\.5 m long\.$/ );
+	assert.match( notes[ 'support levels' ], /^Tiebacks: 3 levels, 1\.5, 4\.35 and 7\.15 m down .*; 162 tiebacks at 20° below level, unbonded 4\.5 to 6\.5 m, bonded 9\.0 m; no-dig zone 14\.2 m behind all four sides; embedment 5\.0 m below the floor .*; secant piles 15\.5 m long\.$/ );
 	assert.match( notes[ 'shoring notes' ], /^A professional engineer designs the walls and their support/ );
 	assert.match( notes.checks, /Floor 8 m below the groundwater/ );
 	assert.match( notes.checks, /Secant piles this long may drift apart at the toe/ );

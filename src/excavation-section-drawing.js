@@ -14,6 +14,7 @@
 
 import {
 	ABOVE,
+	DEFAULT_GROUNDWATER,
 	FRICTION_ANGLE,
 	KICKER,
 	SLOPE_REACH,
@@ -47,6 +48,9 @@ const CAP_OVER = 0.1;
 const CAP_DEPTH = 0.9;
 // A trench system's panels, 120 mm (shoring-models.js PANEL), inside the outline.
 const PANEL = 0.12;
+// The side headings' tier above the ground, in lines: over the spoil (1), top and no-dig (2) and
+// adjacent (3) dimensions, with room for the adjacent's figures.
+const SIDE_TIER = 4.6;
 // A tandem dump truck's load, loose m³ (earthworks.js TRUCK_LOAD), and the swell (terrain.js SWELL).
 export const TRUCK_LOAD = 10;
 export const SWELL = 1.25;
@@ -63,6 +67,21 @@ export function cutSides( geom, along ) {
 
 }
 
+// Where to open a cut so a row of tiebacks or rakers on the sides in profile is in it, as they're
+// spaced along the walls and may all miss the middle: the row nearest the middle, to 0.1 m, or the
+// middle itself when one's there already or there are none.
+export function memberCut( design, along ) {
+
+	const { left, right, range } = cutSides( design.geom, along );
+	const ws = design.plan.members
+		.filter( m => ( m.type === 'tieback' || m.type === 'raker' ) && ( m.side === left.n || m.side === right.n ) )
+		.map( m => along ? m.a[ 0 ] : - m.a[ 2 ] );
+	if ( ws.length === 0 || ws.some( w => Math.abs( w ) <= NEAR ) ) return 0;
+	const w = ws.reduce( ( a, b ) => Math.abs( b ) < Math.abs( a ) ? b : a );
+	return Math.min( range[ 1 ], Math.max( range[ 0 ], Math.round( w * 10 ) / 10 ) );
+
+}
+
 // The point [ u, v ] of the pit at s along a cut placed at `at`.
 export function cutPoint( along, at, s ) {
 
@@ -71,12 +90,13 @@ export function cutPoint( along, at, s ) {
 }
 
 // How far along the cut the drawing reaches: past the top edges by GROUND_PAST, and past the end
-// of the tiebacks on the sides in profile.
+// of the tiebacks and of the adjacent band on the sides in profile, with room for their labels.
 export function sectionRange( design, along ) {
 
 	const { geom, plan } = design;
 	const { left, right } = cutSides( geom, along );
-	const reach = side => Math.max( GROUND_PAST, ( plan.anchors[ side.n ]?.reach ?? 0 ) + 1.5 );
+	const adjacent = side => Math.max( 0, side.toe ) + geom.depth - side.top;
+	const reach = side => Math.max( GROUND_PAST, ( plan.anchors[ side.n ]?.reach ?? 0 ) + 1.5, adjacent( side ) + 1.5 );
 	return { from: - left.top - reach( left ), to: right.top + reach( right ) };
 
 }
@@ -544,7 +564,9 @@ export function sectionDrawing( design, { along = false, at = 0, groundAt = () =
 	dim( 'depth', 'v', 0, - D, deep, deep, `${ metres( D ) } deep`, D );
 	if ( ! finished && stage.dig < D - 1e-6 ) dim( 'dug', 'v', 0, - stage.dig, deep - 1.6 * unit, deep, `dug ${ metres( stage.dig ) }`, stage.dig );
 	dim( 'top', 'h', - left.top, right.top, tier( 2 ), [ groundAtS( ground, - left.top ), groundAtS( ground, right.top ) ], `top ${ metres( left.top + right.top ) }`, left.top + right.top );
-	if ( floorFrom !== null && floorTo - floorFrom > 0.5 ) dim( 'floor', 'h', floorFrom, floorTo, - D + 0.7 * unit, [ - D, - D ], `floor ${ metres( floorTo - floorFrom ) }`, floorTo - floorFrom );
+	// Below the floor, where the level chain's figures in the pit don't reach (the toe is measured
+	// behind the wall).
+	if ( floorFrom !== null && floorTo - floorFrom > 0.5 ) dim( 'floor', 'h', floorFrom, floorTo, - D - 0.7 * unit, [ - D, - D ], `floor ${ metres( floorTo - floorFrom ) }`, floorTo - floorFrom );
 
 	const setback = quantities.trench ? SPOIL_TRENCH : SPOIL_OTHER;
 	for ( const [ side, dir ] of [ [ left, - 1 ], [ right, 1 ] ] ) {
@@ -554,8 +576,8 @@ export function sectionDrawing( design, { along = false, at = 0, groundAt = () =
 		const end = dir > 0 ? 'end' : 'start';
 		const what = sideMethodText( side );
 		const piles = side.method === 'wall' ? plan.pileLength[ side.system ] : undefined;
-		label( `side-${ n }`, dir > 0 ? to : from, tier( 4 ), `${ sideLabel( heading, n ) } · ${ what }${ piles ? `, ${ piles.toFixed( 1 ) } m ${ side.system === 'sheet-piles' ? 'sheets' : 'piles' }` : '' }`, end, 'side', piles );
-		dim( `spoil-${ n }`, 'h', edge, edge + dir * setback, tier( 1 ), [ groundAtS( ground, edge ), groundAtS( ground, edge + dir * setback ) ], `spoil ≥ ${ setback.toFixed( 1 ) }`, setback );
+		label( `side-${ n }`, dir > 0 ? to : from, tier( SIDE_TIER ), `${ sideLabel( heading, n ) } · ${ what }${ piles ? `, ${ piles.toFixed( 1 ) } m ${ side.system === 'sheet-piles' ? 'sheets' : 'piles' }` : '' }`, end, 'side', piles );
+		dim( `spoil-${ n }`, 'h', edge, edge + dir * setback, tier( 1 ), [ groundAtS( ground, edge ), groundAtS( ground, edge + dir * setback ) ], `spoil ≥ ${ setback.toFixed( 1 ) } m`, setback );
 		// WorkSafeBC's "adjacent": the depth out from a vertical line through the toe [P20] 20.1.
 		// Shown where it reaches past the top edge: inside the cut nothing can stand.
 		const toeLine = dir * Math.max( 0, side.toe );
@@ -580,10 +602,12 @@ export function sectionDrawing( design, { along = false, at = 0, groundAt = () =
 	const shown = [ wallLeft, wallRight ].filter( Boolean );
 	shown.forEach( ( wall, i ) => {
 
-		const { side, dir, inner, face, toe } = wall;
+		const { side, dir, inner, face, toe, outline, system } = wall;
 		const { n } = side;
 		const chain = face - dir * 2.2 * unit;
-		if ( i === 0 ) dim( 'toe', 'v', - D, toe, chain, inner, `toe ${ metres( plan.toe ) }`, plan.toe );
+		// The toe behind the wall, below the floor, where nothing else is drawn.
+		const back = outline + dir * Math.max( system.back, PILE_OUT );
+		if ( i === 0 ) dim( 'toe', 'v', - D, toe, back + dir * 3 * unit, back, `toe ${ metres( plan.toe ) }`, plan.toe );
 		plan.levels.forEach( ( z, k ) => label( `level-${ n }-${ k + 1 }`, face - dir * 0.15, - z, `L${ k + 1 }`, dir > 0 ? 'end' : 'start', 'level', z ) );
 		if ( i === 0 && plan.levels.length ) {
 
@@ -611,7 +635,8 @@ export function sectionDrawing( design, { along = false, at = 0, groundAt = () =
 				const [ bs, by ] = tendon( row.free + row.bond / 2 );
 				// The top row in full, the others' free lengths (the bond is the same).
 				label( `free-${ n }-${ k + 1 }`, fs, fy + 0.55 * unit, k === 0 ? `free ${ metres( row.free ) }` : row.free.toFixed( 2 ), dir > 0 ? 'start' : 'end', 'anchor', row.free );
-				label( `bond-${ n }-${ k + 1 }`, bs, by + 0.55 * unit, k === 0 ? `bond ${ metres( row.bond ) }` : '', 'middle', 'anchor', row.bond );
+				// Under the bond, clear of the cover dimension above its middle.
+				label( `bond-${ n }-${ k + 1 }`, bs, by - 0.65 * unit, k === 0 ? `bond ${ metres( row.bond ) }` : '', 'middle', 'anchor', row.bond );
 				label( `angle-${ n }-${ k + 1 }`, head[ 0 ] + dir * 0.9 * unit, head[ 1 ] - 0.75 * unit, k === 0 ? `${ row.angle }°` : '', dir > 0 ? 'start' : 'end', 'anchor', row.angle );
 				if ( k === 0 ) dim( `cover-${ n }`, 'v', groundAtS( ground, bs ), - row.bondCentre, bs, bs, `${ row.bondCentre.toFixed( 2 ) } cover`, row.bondCentre );
 
@@ -625,7 +650,8 @@ export function sectionDrawing( design, { along = false, at = 0, groundAt = () =
 		const rakers = plan.rakers[ n ];
 		if ( rakers ) {
 
-			dim( `rakers-${ n }`, 'h', wall.outline, wall.outline - dir * rakers.reach, - D + 1.9 * unit, [ - D, - D ], `rakers take ${ metres( rakers.reach ) }`, rakers.reach );
+			// Below the floor's own dimension, clear of the levels and the depth in the pit.
+			dim( `rakers-${ n }`, 'h', wall.outline, wall.outline - dir * rakers.reach, - D - 1.7 * unit, [ - D, - D ], `rakers + kickers ${ metres( rakers.reach ) }`, rakers.reach );
 			label( `raker-${ n }`, face - dir * rakers.rows[ 0 ].reach / 2, - ( D + rakers.rows[ 0 ].z ) / 2 + 0.5 * unit, `rakers ${ rakers.rows[ 0 ].angle }°`, dir > 0 ? 'end' : 'start', 'note', rakers.rows[ 0 ].angle );
 
 		}
@@ -636,12 +662,12 @@ export function sectionDrawing( design, { along = false, at = 0, groundAt = () =
 	if ( params.groundwater < - bottom ) {
 
 		lines.push( { kind: 'groundwater', points: [ [ from, - params.groundwater ], [ to, - params.groundwater ] ], dashed: true } );
-		label( 'groundwater', from + 0.3 * unit, - params.groundwater + 0.45 * unit, `▽ ${ metres( params.groundwater ) }`, 'start', 'water', params.groundwater );
+		label( 'groundwater', from + 0.3 * unit, - params.groundwater + 0.45 * unit, `▽ ${ metres( params.groundwater ) }${ params.groundwater === DEFAULT_GROUNDWATER ? ' (assumed)' : '' }`, 'start', 'water', params.groundwater );
 
 	}
 
-	if ( drawing.stage ) label( 'stage', from + 0.3 * unit, tier( 5 ), `Stage ${ stage.index + 1 } of ${ stages.length }: ${ stage.label }`, 'start', 'stage' );
-	drawing.top = tier( drawing.stage ? 5.6 : 4.6 );
+	if ( drawing.stage ) label( 'stage', from + 0.3 * unit, tier( SIDE_TIER + 1 ), `Stage ${ stage.index + 1 } of ${ stages.length }: ${ stage.label }`, 'start', 'stage' );
+	drawing.top = tier( SIDE_TIER + ( drawing.stage ? 1.6 : 0.6 ) );
 	drawing.bottom = bottom;
 	return drawing;
 
@@ -752,7 +778,7 @@ export function quantityRows( design, piles = design.quantities.piles ) {
 
 	} else if ( geom.trench ) {
 
-		rows.push( [ 'Shoring', `${ SYSTEMS[ geom.system ].label }: see the shoring readouts` ] );
+		rows.push( [ 'Shoring', `${ SYSTEMS[ geom.system ].label }: see the shoring in the P panel` ] );
 
 	}
 
@@ -798,26 +824,32 @@ export function zoneRects( design, state ) {
 		...zones.anchors.map( a => ( { zone: 'anchors', side: a.side, rect: rectOf( a.polygon ) } ) ),
 		{ zone: 'spoil', rect: rectOf( zones.spoil ) },
 		{ zone: 'adjacent', rect: rectOf( zones.adjacent ) },
+		...( zones.shored ?? [] ).map( z => ( { zone: 'surcharge', side: z.side, rect: rectOf( z.polygon ) } ) ),
 	];
 
 }
 
+// Zones an item is told of on top of the one it's in: over the tiebacks, and spoil in the band a
+// shored side holds. The others go in order, the first only: in the cut, a stockpile inside the
+// spoil set-back, within the adjacent band.
+const ALSO = [ 'anchors', 'surcharge' ];
+const ORDER = [ 'cut', 'spoil', 'adjacent' ];
+// Only piles of spoil count against the set-back and as a surcharge.
+const SPOIL_ONLY = [ 'spoil', 'surcharge' ];
+
 // What's placed where the pit reaches: items [ { name, kind, rect } ] (rect as above) against the
-// zones, each item once, at the first of: in the cut, over the tiebacks, a stockpile inside the
-// spoil set-back, within the adjacent band. overlaps( a, b ): terrain.js rectsOverlap.
-// [ { zone, side, name, level } ].
+// zones: the first of ORDER it's in, and the ALSO zones (unless it's in the cut, which says it
+// all). overlaps( a, b ): terrain.js rectsOverlap. [ { zone, side, name, level } ].
 export function findConflicts( design, state, items, overlaps ) {
 
 	const zones = zoneRects( design, state );
 	const found = [];
 	for ( const item of items ) {
 
-		const hits = zones.filter( z => ( z.zone !== 'spoil' || item.kind === 'stockpile' ) && overlaps( z.rect, item.rect ) );
-		const order = [ 'cut', 'anchors', 'spoil', 'adjacent' ];
-		hits.sort( ( a, b ) => order.indexOf( a.zone ) - order.indexOf( b.zone ) );
-		const hit = hits[ 0 ];
-		if ( ! hit ) continue;
-		found.push( { zone: hit.zone, side: hit.side ?? null, name: item.name, level: hit.zone === 'adjacent' ? 'note' : 'warn' } );
+		const hits = zones.filter( z => ( ! SPOIL_ONLY.includes( z.zone ) || item.kind === 'stockpile' ) && overlaps( z.rect, item.rect ) );
+		const first = hits.filter( h => ORDER.includes( h.zone ) ).sort( ( a, b ) => ORDER.indexOf( a.zone ) - ORDER.indexOf( b.zone ) )[ 0 ];
+		const also = first?.zone === 'cut' ? [] : hits.filter( h => ALSO.includes( h.zone ) );
+		for ( const hit of [ ...( first ? [ first ] : [] ), ...also ] ) found.push( { zone: hit.zone, side: hit.side ?? null, name: item.name, level: hit.zone === 'adjacent' ? 'note' : 'warn' } );
 
 	}
 
@@ -837,14 +869,20 @@ export function conflictsText( conflicts, design ) {
 	};
 
 	const of = zone => conflicts.filter( c => c.zone === zone );
+	const are = list => new Set( list.map( c => c.name ) ).size > 1 ? 'are' : 'is';
+	const bySide = list => [ ...new Set( list.map( c => c.side ) ) ].sort().map( side => [ side, list.filter( c => c.side === side ) ] );
+	// Shored, a structure in the adjacent band makes it a professional engineer's [P20] 20.78(2).
+	const shored = design.plan.walls.length > 0 || design.geom.trench;
 	const out = [];
 	if ( of( 'cut' ).length ) out.push( `The cut reaches ${ names( of( 'cut' ) ) }.` );
-	const anchored = of( 'anchors' );
-	for ( const side of [ ...new Set( anchored.map( c => c.side ) ) ] ) out.push( `Tiebacks on side ${ side } run under ${ names( anchored.filter( c => c.side === side ) ) }: consent, or steeper or shorter anchors (FHWA GEC 4 5.3.6).` );
+	for ( const [ side, list ] of bySide( of( 'anchors' ) ) ) out.push( `Tiebacks on side ${ side } run under ${ names( list ) }: consent, or steeper or shorter anchors (FHWA GEC 4 5.3.6).` );
 	const spoil = of( 'spoil' );
-	if ( spoil.length ) out.push( `${ names( spoil ) } ${ new Set( spoil.map( c => c.name ) ).size > 1 ? 'are' : 'is' } inside the spoil set-back (${ ( design.quantities.trench ? SPOIL_TRENCH : SPOIL_OTHER ).toFixed( 1 ) } m, WorkSafeBC 20.90).` );
+	if ( spoil.length ) out.push( `${ names( spoil ) } ${ are( spoil ) } inside the spoil set-back (${ ( design.quantities.trench ? SPOIL_TRENCH : SPOIL_OTHER ).toFixed( 1 ) } m, WorkSafeBC 20.90).` );
+	for ( const [ side, list ] of bySide( of( 'surcharge' ) ) ) out.push( `${ names( list ) } ${ are( list ) } beside the shoring on side ${ side }: over 0.6 m deep on average, the shoring must allow for it (WorkSafeBC 20.86).` );
 	const adjacent = of( 'adjacent' );
-	if ( adjacent.length ) out.push( `Within ${ design.geom.depth.toFixed( 1 ) } m of the toe (adjacent): ${ names( adjacent ) }. A structure there means a QRP's written instructions (WorkSafeBC 20.78(1)(b)).` );
+	if ( adjacent.length ) out.push( `Within ${ design.geom.depth.toFixed( 1 ) } m of the toe (adjacent): ${ names( adjacent ) }. A structure there means ${ shored ? 'a PE\'s written instructions, as it\'s shored (WorkSafeBC 20.78(1)(b), (2))' : 'a QRP\'s written instructions (WorkSafeBC 20.78(1)(b))' }.` );
+	// The ground beyond a side, as the map has it (excavation-section.js groundSlopes).
+	for ( const c of of( 'ground' ) ) out.push( `The ground beyond side ${ c.side } ${ c.name } steeper than 1 in 3 (as the map has it): a QRP's written instructions, a PE's with support (WorkSafeBC 20.78(1)(d), (2)).` );
 	return out.join( ' ' );
 
 }

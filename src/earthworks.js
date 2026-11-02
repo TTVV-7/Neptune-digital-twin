@@ -44,6 +44,7 @@ import {
 	planExcavation,
 	ratio,
 	saveExcavation,
+	slopeOf,
 	sideCompass,
 	sideLabel,
 	toPit,
@@ -66,6 +67,10 @@ const TRUCK_LOAD = 10;
 const RIM_REACH = 2;
 // Side labels stand this far above the rim, at the middle of each side's top edge.
 const SIDE_LABEL_HEIGHT = 0.3;
+// And this far out from the middle of each top edge, clear of the handles there.
+const SIDE_LABEL_OUT = 1;
+// Said in every pit's P panel: what the figures are, and aren't.
+const PLANNING_AID = 'A planning aid, not a design or a compliance check: slopes for soil B and C are OSHA\'s, for comparison; have a qualified person check the ground for stable faces (WorkSafeBC 20.81(1)(b)).';
 // A ridge's sides run on past its rectangle this far where the ground there is lower.
 const RIDGE_TOE = 4;
 const MAX_SIZE = 200;
@@ -184,6 +189,8 @@ export function setUpEarthworks( { scene, camera, renderer, canvas, controls, ti
 			{ label: 'Spoil pile', run: entry => spoil( entry ) },
 			...SECTION_ACTIONS,
 		],
+		// The buttons (the section among them) before the readouts, which can run to a few screens.
+		actionsFirst: true,
 		readouts: [
 			{ label: 'cut (bank)', get: entry => `${ cutOf( entry ).toFixed( 1 ) } m³` },
 			{ label: `loose (×${ SWELL })`, get: entry => `${ ( cutOf( entry ) * SWELL ).toFixed( 1 ) } m³` },
@@ -191,6 +198,7 @@ export function setUpEarthworks( { scene, camera, renderer, canvas, controls, ti
 			{ label: 'floor', get: entry => floorText( entry.params ) },
 			{ label: 'top of the cut', get: entry => topText( entry.params ) },
 			{ label: 'stage', note: true, get: entry => stageText( entry.params ) },
+			{ label: 'planning aid', note: true, get: () => PLANNING_AID },
 			...SHORING_READOUTS,
 			...SECTION_READOUTS,
 		],
@@ -240,11 +248,19 @@ export function setUpEarthworks( { scene, camera, renderer, canvas, controls, ti
 	sidebar.addTool( {
 		name: 'Excavation',
 		hint: 'Drag the floor of the pit',
-		title: `Drag a rectangle on the ground: the floor of a pit, dug 2 m deep with its sides sloped out for the soil (${ ratio( SOILS.C.slope ) } in soft, sandy or filled ground). Press P to step or shore them, for the whole pit or side by side.`,
+		title: `Drag a rectangle on the ground: the floor of a pit, dug 2 m deep with its sides sloped out for the soil (${ ratio( SOILS.C.slope ) } in soft, sandy or filled ground: OSHA's, for comparison; WorkSafeBC gives none). Press P to step or shore them, for the whole pit or side by side.`,
 		icon: PIT_ICON,
 		mode: 'rect',
 		color: 0xd9822b,
 		defaultSize: [ 10, 10 ],
+		// While the floor is dragged out: the top of the cut it makes, and their sizes.
+		preview: ( { width, length } ) => {
+
+			if ( width < 1 && length < 1 ) return null;
+			const { params, geom } = planExcavation( newExcavationParams( { width: Math.max( 1, width ), length: Math.max( 1, length ) } ) );
+			return { top: outlines( geom ).top, label: resizeText( params ) };
+
+		},
 		onDone: async ( { east, north, heading, width, length } ) => {
 
 			const entry = await models.load( { kind: EXCAVATION, params: newExcavationParams( { width, length } ), east, north, heading, up: null } );
@@ -373,7 +389,8 @@ export function setUpEarthworks( { scene, camera, renderer, canvas, controls, ti
 			};
 			const [ u, v ] = [ ( top.u0 + top.u1 ) / 2, ( top.v0 + top.v1 ) / 2 ];
 			labels.set( entry, `Excavation · ${ format( cutOf( entry ) ) } m³ cut`, anchor.copy( at( u, v, 1.2 ) ) );
-			const middles = [ [ u, top.v1 ], [ top.u1, v ], [ u, top.v0 ], [ top.u0, v ] ];
+			const out = SIDE_LABEL_OUT;
+			const middles = [ [ u, top.v1 + out ], [ top.u1 + out, v ], [ u, top.v0 - out ], [ top.u0 - out, v ] ];
 			labels.sides( entry, middles.map( ( [ su, sv ], i ) => ( { text: `${ i + 1 } · ${ sideCompass( state.heading, i + 1 ) }`, anchor: at( su, sv, SIDE_LABEL_HEIGHT ) } ) ) );
 			return;
 
@@ -424,9 +441,15 @@ export function setUpEarthworks( { scene, camera, renderer, canvas, controls, ti
 		const soil = findMaterial( 'soil' );
 		const tan = Math.tan( soil.repose * DEG );
 		// The top of the cut: the rectangle itself for a pit drawn by its top.
-		const { top, topSize: { width, length } } = outlines( designOf( entry.params ).geom );
+		const { geom } = designOf( entry.params );
+		const { top, topSize: { width, length } } = outlines( geom );
 		const { heading } = entry.state;
 		const beside = length >= width;
+		// Beside a long side that's sloped or stepped where there's one: a pile beside shoring loads
+		// it (WorkSafeBC 20.86). Right or front first, as before.
+		const shored = n => [ 'wall', 'trench' ].includes( geom.sides[ n - 1 ].method );
+		const [ first, other ] = beside ? [ 2, 4 ] : [ 1, 3 ];
+		const far = ! shored( first ) || shored( other );
 		const long = Math.max( width, length );
 		// A windrow along a trench or wherever a cone would be wider than the pit is long, else a cone.
 		const radius = coneRadius( loose, tan );
@@ -446,7 +469,7 @@ export function setUpEarthworks( { scene, camera, renderer, canvas, controls, ti
 		const params = ridge ? { material: soil.id, shape: 'ridge', width: round( ridge, 2 ), length: round( ridgeLength, 2 ) } : { material: soil.id, shape: 'cone', volume: round( loose, 1 ) };
 		// Out past the right side of the top, or its front, level with the middle of that side.
 		const clear = 2 + ( ridge ? ridge / 2 : radius );
-		const [ u, v ] = beside ? [ top.u1 + clear, ( top.v0 + top.v1 ) / 2 ] : [ ( top.u0 + top.u1 ) / 2, top.v1 + clear ];
+		const [ u, v ] = beside ? [ far ? top.u1 + clear : top.u0 - clear, ( top.v0 + top.v1 ) / 2 ] : [ ( top.u0 + top.u1 ) / 2, far ? top.v1 + clear : top.v0 - clear ];
 		const at = pitToEnu( pitFrame( entry.state ), u, v );
 		const pile = await models.load( {
 			kind: STOCKPILE,
@@ -518,7 +541,7 @@ export function setUpEarthworks( { scene, camera, renderer, canvas, controls, ti
 	// their rims are up to date).
 	setUpShoring( { scene, models, terrain, layers, kind: EXCAVATION, rimOf: entry => designs.get( entry )?.rim } );
 	// The section view and quantities, after the shoring, which they show cut away.
-	setUpSection( { scene, camera, renderer, canvas, controls, models, terrain, layers, panel, onUpdate, toast, kind: EXCAVATION, designs, rimOf: entry => designs.get( entry )?.rim } );
+	setUpSection( { scene, camera, renderer, canvas, controls, models, terrain, layers, panel, onUpdate, toast, kind: EXCAVATION, designs, rimOf: entry => designs.get( entry )?.rim, getSelected: () => sidebar.getSelected?.() } );
 
 	// For tests and for other features (the excavator) to build on.
 	if ( window.twin ) Object.assign( window.twin, { terrain, earthworks: { dig, pour, spoil, designs, anims, labels, stream } } );
@@ -811,36 +834,41 @@ const PIT_FIELDS = [
 	{ key: 'support', label: 'system', options: SYSTEM_OPTIONS, when: params => params.method === 'shore' },
 	{ key: 'ends', label: 'ends', options: ENDS, when: params => params.method === 'shore' && ( params.support === 'trench-box' || params.support === 'hydraulic' ) },
 	{ key: 'soil', label: 'soil (WorkSafeBC)', options: SOIL_OPTIONS },
-	{ key: 'slopeBy', label: 'slope', options: SLOPE_FROM, when: anySloped },
+	// The slope in use, whichever way it's set.
+	{ key: 'slopeBy', label: params => `slope (${ ratio( slopeOf( params ) ) })`, options: SLOPE_FROM, when: anySloped },
 	{ key: 'slope', label: 'slope (h : v)', min: 0, max: 4, step: 0.05, when: params => anySloped( params ) && params.slopeBy === 'custom' },
-	{ key: 'benchHeight', label: 'bench height (m, 0 = up to 1.2)', min: 0, step: 0.1, when: anyBenched },
-	{ key: 'benchWidth', label: 'bench width (m, 0 = 1.5 × height)', min: 0, step: 0.1, when: anyBenched },
+	// 0 works them out (risers up to 1.2 m, benches 1.5 times as wide): the label says what to.
+	{ key: 'benchHeight', label: params => autoLabel( 'bench height', params.benchHeight, benchOf( params )?.rise ), min: 0, step: 0.1, when: anyBenched },
+	{ key: 'benchWidth', label: params => autoLabel( 'bench width', params.benchWidth, benchOf( params )?.benchWidth ), min: 0, step: 0.1, when: anyBenched },
 	{ key: 'bracing', label: 'support levels', options: CLASSIC_OPTIONS, when: params => anyWall( params ) && classic( params ) },
 	// 'classic' anywhere else is worked out as suggested, so it shows as that.
 	{ key: 'bracing', label: 'support levels', options: LEVEL_OPTIONS, get: params => params.bracing === 'classic' ? 'auto' : params.bracing, when: params => anyWall( params ) && ! classic( params ) },
-	{ key: 'levels', label: 'levels (m down, blank = suggested)', type: 'text', when: params => anyWall( params ) && ! [ 'none', 'classic' ].includes( designOf( params ).plan.type ) },
+	// Blank for the suggested levels, which show greyed in the box.
+	{ key: 'levels', label: 'levels (m down)', type: 'text', placeholder: params => designOf( params ).plan.levels.map( z => String( z ) ).join( ', ' ), when: params => anyWall( params ) && ! [ 'none', 'classic' ].includes( designOf( params ).plan.type ) },
 	// A pit from before keeps the toe its first shoring worked out.
-	{ key: 'toe', label: 'embedment (m, 0 = suggested)', min: 0, step: 0.5, when: params => anyWall( params ) && ! classic( params ) },
+	{ key: 'toe', label: params => autoLabel( 'embedment', params.toe, designOf( params ).plan.toe ), min: 0, step: 0.5, when: params => anyWall( params ) && ! classic( params ) },
 	{ key: 'rakerAngle', label: 'raker angle (°)', min: 30, max: 60, step: 1, when: params => levelTypes( params ).includes( 'rakers' ) },
 	{ key: 'anchorAngle', label: 'tieback angle (° down)', min: 10, max: 45, step: 1, when: params => levelTypes( params ).includes( 'tiebacks' ) },
 	{ key: 'bondLength', label: 'bond length (m)', min: 4.5, max: 12, step: 0.5, when: params => levelTypes( params ).includes( 'tiebacks' ) },
 	{ key: 'groundwater', label: 'groundwater (m down)', min: 0, step: 0.1 },
-	// The finished pit is saved as -1 and shown as the last step, so it stays finished when the
-	// stages change (another level, a deeper floor).
+	// Counted from 1, as the stage readout and the section count them. The finished pit is saved as
+	// -1 and shown as the last step, so it stays finished when the stages change (another level, a
+	// deeper floor). A pit with just before and after has no slider: the Show panel's Before /
+	// After shows that.
 	{
 		key: 'stage',
-		label: 'dig stage',
-		min: 0,
-		max: params => stagesOf( params ).length - 1,
+		label: params => designOf( params ).stage.index === stagesOf( params ).length - 1 ? 'dig stage (finished)' : `dig stage (of ${ stagesOf( params ).length })`,
+		min: 1,
+		max: params => stagesOf( params ).length,
 		step: 1,
-		get: params => designOf( params ).stage.index,
+		get: params => designOf( params ).stage.index + 1,
 		patch: ( value, params ) => {
 
-			const step = Math.round( value );
+			const step = Math.round( value ) - 1;
 			return { stage: step >= stagesOf( params ).length - 1 ? - 1 : step };
 
 		},
-		when: params => stagesOf( params ).length > 1,
+		when: params => stagesOf( params ).length > 2,
 	},
 ];
 
@@ -855,10 +883,26 @@ function floorText( params ) {
 
 }
 
+// The top's size and area (the pit's footprint).
 function topText( params ) {
 
 	const { topSize } = outlines( designOf( params ).geom );
-	return `${ topSize.width.toFixed( 1 ) } × ${ topSize.length.toFixed( 1 ) } m`;
+	const area = topSize.width * topSize.length;
+	return `${ topSize.width.toFixed( 1 ) } × ${ topSize.length.toFixed( 1 ) } m, ${ area >= 100 ? Math.round( area ).toLocaleString( 'en-CA' ) : area.toFixed( 1 ) } m²`;
+
+}
+
+// A field where 0 works the value out: what it works out to while it's 0.
+function autoLabel( name, value, auto ) {
+
+	return value > 0 || ! Number.isFinite( auto ) ? `${ name } (m, 0 = auto)` : `${ name } (0 = ${ Math.round( auto * 100 ) / 100 } m)`;
+
+}
+
+// The risers and benches stepped sides are cut to (all stepped sides alike).
+function benchOf( params ) {
+
+	return designOf( params ).geom.sides.find( side => side.method === 'bench' );
 
 }
 

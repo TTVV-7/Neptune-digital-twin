@@ -128,6 +128,8 @@ export const WALER_DEPTH = 0.36;
 export const STRUT_SPACING = 4.5;
 export const KING_POST_SPAN = 12;
 export const MAX_STRUT = 20;
+// Room needed between two walers for struts to go in, besides the walers (tool default).
+const NARROW_ROOM = 0.3;
 // Corner braces in pits at least this wide, their legs up to this long along each wall (shoring.js).
 const CORNER_WIDTH = 6;
 const CORNER_LEG = 3.5;
@@ -166,13 +168,15 @@ const MAX_LEVELS = 12;
 
 // Dropdown names -> values, for the P panel.
 export const METHODS = { 'sloped': 'slope', 'stepped (benched)': 'bench', 'shored': 'shore', 'per side': 'sides' };
+// Capitalised like the walls' names they're listed with.
 export const SIDE_METHODS = {
-	'sloped': 'slope',
-	'stepped (benched)': 'bench',
+	'Sloped': 'slope',
+	'Stepped (benched)': 'bench',
 	...Object.fromEntries( Object.entries( SYSTEMS ).filter( ( [ , s ] ) => s.kind === 'wall' ).map( ( [ id, s ] ) => [ s.label, id ] ) ),
 };
 export const OUTLINES = { 'the floor of the pit': 'floor', 'the top of the cut': 'top' };
-export const SLOPE_FROM = { 'the steepest for the soil': 'soil', 'a ratio of my own': 'custom' };
+// 'usual': WorkSafeBC gives a slope for hard soil only; B and C are OSHA's, for comparison (SOILS).
+export const SLOPE_FROM = { 'usual for the soil': 'soil', 'a ratio of my own': 'custom' };
 export const ENDS = { 'open (vertical)': 'open', 'sloped': 'sloped' };
 export const BRACINGS = {
 	'suggested': 'auto',
@@ -214,7 +218,7 @@ export const DEFAULTS = {
 };
 
 // The params the Excavation tool gives a new pit: the rectangle is the floor, the sides slope at
-// the steepest the soil allows, and support levels are suggested from the depth.
+// the soil's usual slope (SOILS), and support levels are suggested from the depth.
 export function newExcavationParams( { width, length } ) {
 
 	return { width, length, outline: 'floor', slopeBy: 'soil', bracing: 'auto' };
@@ -317,9 +321,11 @@ export function slopeOf( params ) {
 function levelsText( text ) {
 
 	if ( typeof text !== 'string' && typeof text !== 'number' ) return '';
-	const values = String( text ).split( /[\s,;]+/ ).map( Number ).filter( z => Number.isFinite( z ) && z > 0.2 && z <= MAX_DEPTH ).map( z => round( z, 2 ) ).sort( ( a, b ) => a - b );
+	// Rounded to 5 cm before they're filtered and spaced, so the text this gives comes back the
+	// same when it's normalised again (on the next edit or reload): nothing kept now is dropped then.
+	const values = String( text ).split( /[\s,;]+/ ).map( Number ).filter( Number.isFinite ).map( z => Math.round( z * 20 ) / 20 ).filter( z => z > 0.2 && z <= MAX_DEPTH ).sort( ( a, b ) => a - b );
 	const kept = [];
-	for ( const z of values ) if ( kept.length < MAX_LEVELS && ( kept.length === 0 || z - kept[ kept.length - 1 ] >= 0.3 ) ) kept.push( Math.round( z * 20 ) / 20 );
+	for ( const z of values ) if ( kept.length < MAX_LEVELS && ( kept.length === 0 || z - kept[ kept.length - 1 ] >= 0.3 - 1e-9 ) ) kept.push( z );
 	return kept.map( z => String( z ) ).join( ', ' );
 
 }
@@ -535,10 +541,18 @@ export function depthAt( geom, u, v, cap ) {
 			if ( e < - SLOPE_REACH ) return - Infinity;
 			depth = Math.min( depth, e / side.slope );
 
-		} else {
+		} else if ( profile === 'bench' ) {
 
 			if ( e <= - CELL ) return - Infinity;
-			depth = Math.min( depth, profile === 'bench' ? benchDepth( side, e ) : bermDepth( side, e ) );
+			depth = Math.min( depth, benchDepth( side, e ) );
+
+		} else {
+
+			// A berm against a wall: sharp, then eased across the wall's line with whatever the other
+			// sides leave there, as the finished wall is, so no stage digs deeper than the pit will be
+			// where a slope or benches beside it are shallower.
+			if ( e < vertical ) vertical = e;
+			depth = Math.min( depth, side.bermTop + Math.max( 0, e ) / side.bermSlope );
 
 		}
 
@@ -567,14 +581,6 @@ function benchDepth( side, e ) {
 	}
 
 	return side.rise * steps;
-
-}
-
-// While rakers wait for their kicker blocks, a berm of soil is left against the wall: the wall is
-// dug to bermTop, then the berm slopes down into the pit at bermSlope (h : v).
-function bermDepth( side, e ) {
-
-	return side.bermTop * ease( e ) + ( e > 0 ? e / side.bermSlope : 0 );
 
 }
 
@@ -780,6 +786,10 @@ export function bracingPlan( params, geom = excavationGeometry( params ) ) {
 	const pairs = [ [ 1, 3 ], [ 2, 4 ] ].filter( ( [ a, b ] ) => geom.sides[ a - 1 ].method === 'wall' && geom.sides[ b - 1 ].method === 'wall' );
 	const strutPair = pairs.length === 2 ? ( geom.sides[ 0 ].length >= geom.sides[ 1 ].length ? pairs[ 0 ] : pairs[ 1 ] ) : pairs[ 0 ] ?? null;
 	const span = strutPair ? spanBetween( geom, strutPair ) : Infinity;
+	// Walls closer than two walers and a little room apart: the struts bear on the walls' faces,
+	// with no walers on those two walls.
+	const clear = strutPair ? clearBetween( geom, strutPair ) : Infinity;
+	const direct = clear < 2 * WALER_DEPTH + NARROW_ROOM;
 	if ( type === 'auto' ) type = D <= BRACE_DEPTH ? 'none' : strutPair && span <= MAX_STRUT ? 'struts' : 'rakers';
 	plan.type = type;
 
@@ -807,10 +817,12 @@ export function bracingPlan( params, geom = excavationGeometry( params ) ) {
 	}
 
 	const anyStruts = walls.some( s => plan.sideTypes[ s.n ] === 'struts' );
+	const strutDirect = side => direct && anyStruts && strutPair.includes( side.n ) && plan.sideTypes[ side.n ] === 'struts';
 	plan.levels.forEach( ( z, level ) => {
 
 		for ( const side of walls ) {
 
+			if ( strutDirect( side ) ) continue;
 			const extent = walerExtent( geom, side, z );
 			if ( extent ) plan.members.push( walerMember( geom, side, level, z, extent ) );
 
@@ -818,7 +830,7 @@ export function bracingPlan( params, geom = excavationGeometry( params ) ) {
 
 	} );
 
-	if ( anyStruts && strutPair ) addStruts( geom, plan, strutPair, span );
+	if ( anyStruts && strutPair ) addStruts( geom, plan, strutPair, direct ? clear : span, direct );
 	for ( const side of walls ) {
 
 		if ( plan.sideTypes[ side.n ] === 'rakers' ) addRakers( params, geom, plan, side );
@@ -879,6 +891,14 @@ function spanBetween( geom, [ a, b ] ) {
 
 }
 
+// And between their faces.
+function clearBetween( geom, [ a, b ] ) {
+
+	const [ sa, sb ] = [ geom.sides[ a - 1 ], geom.sides[ b - 1 ] ];
+	return sa.top + sb.top - SYSTEMS[ sa.system ].inner - SYSTEMS[ sb.system ].inner;
+
+}
+
 // A point on a side, t along it (u for front and back, v for right and left) and d in from its
 // top edge, at z below the rim, in the shoring frame [ x, y, z ].
 function onSide( side, t, d, z ) {
@@ -927,8 +947,9 @@ function positions( t0, t1, clear ) {
 }
 
 // Struts square across between the strutted walls at every level, corner braces where two walls
-// meet in a pit at least 6 m across, and king posts under struts longer than 12 m.
-function addStruts( geom, plan, [ a, b ], span ) {
+// meet in a pit at least 6 m across, and king posts under struts longer than 12 m. Direct: from
+// wall face to wall face, where there's no room for walers.
+function addStruts( geom, plan, [ a, b ], span, direct = false ) {
 
 	const sa = geom.sides[ a - 1 ];
 	const sb = geom.sides[ b - 1 ];
@@ -942,9 +963,9 @@ function addStruts( geom, plan, [ a, b ], span ) {
 	const corner = corners.length && across >= CORNER_WIDTH ? Math.min( CORNER_LEG, across / 4 ) : 0;
 	const at = positions( t0, t1, Math.max( corner + 1, 1.5 ) );
 	const posts = span > KING_POST_SPAN ? Math.ceil( span / KING_POST_SPAN - 1e-9 ) - 1 : 0;
-	plan.struts = { across: [ a, b ], span, positions: at, kingPosts: posts };
-	const fa = faceOf( sa );
-	const fb = faceOf( sb );
+	plan.struts = { across: [ a, b ], span, positions: at, kingPosts: posts, direct };
+	const fa = direct ? SYSTEMS[ sa.system ].inner : faceOf( sa );
+	const fb = direct ? SYSTEMS[ sb.system ].inner : faceOf( sb );
 	plan.levels.forEach( ( z, level ) => {
 
 		for ( const t of at ) plan.members.push( member( 'strut', null, level, onSide( sa, t, fa, z ), onSide( sb, t, fb, z ) ) );
@@ -1034,7 +1055,9 @@ function addTiebacks( params, geom, plan, side ) {
 
 		const extent = walerExtent( geom, side, z );
 		if ( ! extent ) return;
-		const crossing = ( D - z ) / ( wedge + Math.tan( theta ) );
+		// How far out from the head (on the waler's face) the tendon crosses the wedge, which rises
+		// from the foot of the wall's face, WALER_DEPTH behind the head.
+		const crossing = ( D - z + WALER_DEPTH * wedge ) / ( wedge + Math.tan( theta ) );
 		const free = Math.max( MIN_FREE, crossing / Math.cos( theta ) + Math.max( 1.5, 0.2 * D ) );
 		const total = free + bond;
 		const reach = total * Math.cos( theta ) - face;
@@ -1203,7 +1226,9 @@ export function excavationQuantities( params, geom = excavationGeometry( params 
 		else if ( side.system === 'soldier-piles' ) {
 
 			out.bays = Math.max( 1, Math.ceil( length / system.spacing - 0.01 ) );
-			out.lagging = length * ( D + ABOVE );
+			// Boards only where the face is dug: in a slope's or benches' wing the soil stands in
+			// front of the piles below the face. Then up to 0.3 m out of the ground all along.
+			out.lagging = out.area + ABOVE * length;
 
 		} else out.bays = Math.max( 1, Math.ceil( length / system.centres - 0.01 ) );
 		return out;
@@ -1223,7 +1248,10 @@ export function excavationQuantities( params, geom = excavationGeometry( params 
 	const metres = type => plan.members.filter( m => m.type === type ).reduce( ( sum, m ) => sum + m.length, 0 );
 	const { top } = shape;
 	const rect = ( u0, u1, v0, v1 ) => [ [ u0, v0 ], [ u1, v0 ], [ u1, v1 ], [ u0, v1 ] ];
-	const trench = ( shape.floorSize ? Math.min( shape.floorSize.width, shape.floorSize.length ) : 0 ) < TRENCH_WIDTH;
+	// A trench is under 3.7 m wide at the bottom and over 1.2 m deep [P20] 20.1; a V-cut whose sides
+	// meet is as deep as where they meet.
+	const deepest = shape.meets ?? D;
+	const trench = deepest > SAFE_DEPTH && ( shape.floorSize ? Math.min( shape.floorSize.width, shape.floorSize.length ) : 0 ) < TRENCH_WIDTH;
 	const setback = trench ? SPOIL_TRENCH : SPOIL_OTHER;
 	const [ front, right, back, left ] = geom.sides;
 	const toeOut = s => Math.max( 0, s.toe ) + D;
@@ -1232,6 +1260,9 @@ export function excavationQuantities( params, geom = excavationGeometry( params 
 		spoil: rect( top.u0 - setback, top.u1 + setback, top.v0 - setback, top.v1 + setback ),
 		adjacent: rect( - Math.max( left.top, toeOut( left ) ), Math.max( right.top, toeOut( right ) ), - Math.max( back.top, toeOut( back ) ), Math.max( front.top, toeOut( front ) ) ),
 		anchors: Object.entries( plan.anchors ).map( ( [ n, { reach } ] ) => ( { side: Number( n ), reach, polygon: anchorZone( geom, geom.sides[ n - 1 ], reach ) } ) ),
+		// Behind a wall or a trench system, the band its load comes from: a pile there loads the
+		// shoring [P20] 20.86.
+		shored: geom.sides.filter( s => s.method === 'wall' || s.method === 'trench' ).map( s => ( { side: s.n, polygon: anchorZone( geom, s, Math.max( 0.5, toeOut( s ) - s.top ) ) } ) ),
 	};
 	return {
 		volume: cutVolume( geom ),
@@ -1255,7 +1286,8 @@ export function excavationQuantities( params, geom = excavationGeometry( params 
 
 }
 
-// The strip behind a side that its tiebacks reach under: along its top edge, `reach` out from it.
+// The strip behind a side along its top edge, `reach` out from it: where its tiebacks reach under,
+// or the band its shoring holds.
 function anchorZone( geom, side, reach ) {
 
 	const [ a, b ] = neighbours( geom.sides, side );
@@ -1277,7 +1309,7 @@ export function compareMethods( params ) {
 	const floor = { ...params, outline: 'floor', width: shape.floorSize.width, length: shape.floorSize.length, stage: - 1 };
 	const options = [
 		{ method: 'slope', label: `sloped (${ ratio( SOILS[ params.soil ].slope ) }, soil ${ params.soil === 'wet' ? 'C, wet' : params.soil })`, params: { ...floor, method: 'slope', support: NO_SUPPORT, slopeBy: 'soil' } },
-		{ method: 'bench', label: 'stepped', params: { ...floor, method: 'bench' } },
+		{ method: 'bench', label: steppedLabel( params, floor ), params: { ...floor, method: 'bench' } },
 		{ method: 'shore', label: 'shored', params: { ...floor, method: 'shore', support: params.support !== NO_SUPPORT ? params.support : DEFAULT_WALL } },
 	];
 	const current = { method: params.method, label: 'as planned', volume: cutVolume( geom ), top: shape.topSize, area: shape.topSize.width * shape.topSize.length, current: true };
@@ -1291,6 +1323,17 @@ export function compareMethods( params ) {
 		return { method, label, volume: cutVolume( g ), top: s.topSize, area: s.topSize.width * s.topSize.length, current: false };
 
 	} ) ];
+
+}
+
+// Stepped, and why that may not be a fair comparison: WorkSafeBC shows benching only against the
+// hard-soil line (OSHA allows none in type C), and not for pits over 3.7 m wide [G20] G20.81.
+function steppedLabel( params, floor ) {
+
+	const caveats = [];
+	if ( ! SOILS[ params.soil ].benching ) caveats.push( `not for soil ${ params.soil === 'wet' ? 'C, wet' : params.soil }: benching shown for hard soil only` );
+	if ( Math.min( floor.width, floor.length ) >= TRENCH_WIDTH ) caveats.push( 'over 3.7 m wide: a QRP\'s design' );
+	return caveats.length ? `stepped (${ caveats.join( '; ' ) })` : 'stepped';
 
 }
 
@@ -1334,24 +1377,41 @@ export function excavationFlags( params, geom = excavationGeometry( params ), pl
 
 	if ( deep && sloped.length && slope < STEEPEST ) add( 'too-steep', 'stop', `Over 1.2 m deep with side${ sloped.length > 1 ? 's' : '' } ${ names( sloped ) } steeper than WorkSafeBC allows even in hard, solid soil (3 : 4): slope, bench or shore them before anyone goes in.`, 'WorkSafeBC 20.81(1), Figure 20-1' );
 	else if ( deep && sloped.length && slope < soil.slope ) add( 'steeper-than-soil', 'warn', `Sloped at ${ ratio( slope ) }, steeper than the ${ ratio( soil.slope ) } suggested for soil ${ params.soil === 'wet' ? 'C (wet)' : params.soil }: WorkSafeBC asks for slopes that keep the faces stable in the soil there.`, `WorkSafeBC 20.81(1)(b); ${ soil.source }` );
-	if ( D > ENGINEERED_DEPTH && unsupported.length ) add( 'deep-slope', 'warn', 'Over 6 m deep: the slopes and benches are a professional engineer\'s design (Figures 20-1 and 20-2 stop at 6 m).', 'WorkSafeBC 20.78(1)(a), Figures 20-1, 20-2' );
+	if ( D > ENGINEERED_DEPTH && unsupported.length ) {
+
+		// Figure 20-1 stops at 6 m, so deeper slopes are a QRP's (20.78(1)(a), 20.81(1)(a)); Figure
+		// 20-2's note makes deeper benches a professional engineer's.
+		const how = [
+			sloped.length ? `the slope${ sloped.length > 1 ? 's' : '' } on side${ sloped.length > 1 ? 's' : '' } ${ names( sloped ) } to a QRP's written instructions (20.78(1)(a), 20.81(1)(a))` : '',
+			benched.length ? `the benches on side${ benched.length > 1 ? 's' : '' } ${ names( benched ) } a professional engineer's design (Figure 20-2)` : '',
+		].filter( Boolean );
+		add( 'deep-slope', 'warn', `Over 6 m deep, past Figures 20-1 and 20-2: ${ how.join( '; ' ) }.`, `WorkSafeBC 20.78(1)(a), ${ benched.length ? 'Figures 20-1, 20-2' : 'Figure 20-1' }` );
+
+	}
 	if ( D > ENGINEERED_DEPTH ) add( 'over-6m', 'warn', plan.walls.length || geom.trench ? 'Over 6 m deep: the shoring is to a professional engineer\'s written design.' : 'Over 6 m deep: dug to a qualified registered professional\'s written instructions.', 'WorkSafeBC 20.78' );
 
 	if ( benched.length && deep ) {
 
 		const side = benched[ 0 ];
-		if ( side.rise > BENCH_HEIGHT + 1e-9 ) add( 'bench-height', 'warn', `Benches ${ round( side.rise, 2 ) } m high: WorkSafeBC's are at most 1.2 m.`, 'WorkSafeBC Figure 20-2' );
-		if ( side.steps > 1 && side.benchWidth < side.rise - 1e-9 ) add( 'bench-width', 'warn', `Benches ${ round( side.benchWidth, 2 ) } m wide, narrower than their ${ round( side.rise, 2 ) } m risers.`, 'WorkSafeBC Figure 20-2' );
-		else if ( side.steps > 1 && side.benchWidth < BENCH_RATIO * side.rise - 1e-9 ) add( 'bench-width', 'note', `Benches under 1.5 times their risers: workers only at the bottom (Figure 20-2 Case 3).`, 'WorkSafeBC Figure 20-2' );
+		const [ h, w ] = [ round( side.rise, 2 ), round( side.benchWidth, 2 ) ];
+		// A riser is an unsupported vertical face: over 1.2 m it fits none of 20.81(1)'s ways, as a
+		// slope steeper than 3 : 4 doesn't.
+		if ( side.rise > BENCH_HEIGHT + 1e-9 ) add( 'bench-height', 'stop', `Unsupported vertical risers ${ h } m high, over 1.2 m: slope, bench (1.2 m at most) or shore them before anyone goes in.`, 'WorkSafeBC 20.81(1), Figures 20-1, 20-2' );
+		// Equal benches narrower than 1.5 risers put the second riser's top inside the 3H:4V line
+		// from the toe, which no case of Figure 20-2 allows (Case 3 narrows only the benches above a
+		// first one 1.5 times as wide).
+		if ( side.steps > 1 && side.benchWidth < BENCH_RATIO * side.rise - 1e-9 ) add( 'bench-width', 'warn', `Benches ${ w } m wide on ${ h } m risers come inside Figure 20-2's 3H:4V line: make them 1.5 times the riser, ${ round( BENCH_RATIO * side.rise, 2 ) } m (Case 3 narrows only the benches above a first bench that wide, with workers at the bottom only).`, 'WorkSafeBC Figure 20-2' );
 		if ( ! soil.benching ) add( 'bench-soil', 'warn', 'Benched in soft, sandy or filled ground: WorkSafeBC shows benching against the hard-soil line, and OSHA allows none in type C.', 'WorkSafeBC Figure 20-2; OSHA App. B, for comparison' );
-		if ( floorWidth >= TRENCH_WIDTH ) add( 'bench-wide', 'note', 'Wider than 3.7 m: WorkSafeBC\'s benching figure is for trenches, so the benches here are a QRP\'s or engineer\'s design.', 'WorkSafeBC G20.81' );
+		if ( floorWidth >= TRENCH_WIDTH ) add( 'bench-wide', 'warn', 'WorkSafeBC\'s benching (20.81(1)(c), Figure 20-2) doesn\'t apply over 3.7 m wide: slope or shore it, or have a QRP specify the benches in writing (20.81(1)(a)).', 'WorkSafeBC G20.81' );
 
 	}
 
-	if ( D > params.groundwater && D > SAFE_DEPTH ) add( 'groundwater', 'warn', `Floor ${ round( D - params.groundwater, 2 ) } m below the groundwater (${ round( params.groundwater, 2 ) } m down): a QRP's written instructions (a PE's with support), or effective dewatering.`, 'WorkSafeBC 20.78(1)(c), G20.78(1)(c)' );
-	if ( params.soil === 'wet' && deep ) add( 'wet', 'warn', 'Water coming in: a QRP\'s written instructions unless it\'s dewatered.', 'WorkSafeBC 20.78(1)(c)' );
+	// The tool's default groundwater is an assumption until there's site data: said so.
+	const water = params.groundwater === DEFAULT_GROUNDWATER ? `assumed ${ round( params.groundwater, 2 ) } m down: set it from site data` : `${ round( params.groundwater, 2 ) } m down`;
+	if ( D > params.groundwater && D > SAFE_DEPTH ) add( 'groundwater', 'warn', `Floor ${ round( D - params.groundwater, 2 ) } m below the groundwater (${ water }): a QRP's written instructions (a PE's with support), or effective dewatering.`, 'WorkSafeBC 20.78(1)(c), G20.78(1)(c)' );
+	if ( params.soil === 'wet' && deep ) add( 'wet', 'warn', 'Water coming in: a QRP\'s written instructions (a PE\'s with support, 20.78(2)) unless it\'s dewatered.', 'WorkSafeBC 20.78(1)(c)' );
 
-	if ( plan.walls.length ) add( 'engineered', 'note', 'A professional engineer designs the walls and their support: the sizes, lengths and levels here are rough.', 'WorkSafeBC 20.78(2), G20.81' );
+	if ( plan.walls.length ) add( 'engineered', 'note', 'A professional engineer designs the walls and their support: the sizes, lengths and levels here are rough.', 'WorkSafeBC 20.81(1)(d), G20.81' );
 	const below = D > params.groundwater;
 	for ( const side of geom.sides ) {
 
@@ -1372,7 +1432,7 @@ export function excavationFlags( params, geom = excavationGeometry( params ), pl
 	}
 
 	const cantilever = plan.walls.length && plan.levels.length === 0;
-	if ( cantilever && D > CANTILEVER_MAX ) add( 'cantilever', 'stop', `A ${ round( D, 1 ) } m cantilever wall: add struts, rakers or tiebacks.`, 'USACE EM 1110-2-2504 2-4a; Caltrans T&S 7-1' );
+	if ( cantilever && D > CANTILEVER_MAX ) add( 'cantilever', 'stop', `A ${ round( D, 1 ) } m cantilever wall, past the practice limit of about 5.5 m: add struts, rakers or tiebacks.`, 'USACE EM 1110-2-2504 2-4a; Caltrans T&S 7-1' );
 	else if ( cantilever && D > BRACE_DEPTH ) add( 'cantilever', 'warn', `A ${ round( D, 1 ) } m cantilever wall: usually braced past about 4 m.`, 'USACE EM 1110-2-2504 2-4a' );
 
 	if ( plan.levels.length && plan.type !== 'classic' ) {
@@ -1385,18 +1445,20 @@ export function excavationFlags( params, geom = excavationGeometry( params ), pl
 
 	}
 
-	if ( plan.dropped.length ) add( 'levels-below', 'note', `Level${ plan.dropped.length > 1 ? 's' : '' } at ${ plan.dropped.join( ', ' ) } m left out: at or below the floor.`, 'tool' );
+	if ( plan.dropped.length ) add( 'levels-below', 'note', `Level${ plan.dropped.length > 1 ? 's' : '' } at ${ plan.dropped.join( ', ' ) } m left out: at or below the floor.`, 'planning default' );
 
 	for ( const side of geom.sides ) {
 
-		if ( side.method === 'wall' && plan.sideTypes[ side.n ] === 'rakers' && params.bracing === 'struts' ) add( `no-strut-${ side.n }`, 'note', `Side ${ side.n } has no wall opposite to strut against: rakers instead.`, 'tool' );
+		if ( side.method === 'wall' && plan.sideTypes[ side.n ] === 'rakers' && params.bracing === 'struts' ) add( `no-strut-${ side.n }`, 'note', `Side ${ side.n } has no wall opposite to strut against: rakers instead.`, 'planning default' );
 
 	}
 
 	if ( plan.struts ) {
 
 		if ( plan.struts.span > MAX_STRUT ) add( 'strut-span', 'warn', `Struts ${ round( plan.struts.span, 1 ) } m long: past about 20 m, rakers or tiebacks.`, 'NAVFAC DM 7.02 Table 5' );
-		else if ( plan.struts.span > KING_POST_SPAN && plan.type !== 'classic' ) add( 'king-posts', 'note', `Struts ${ round( plan.struts.span, 1 ) } m long, with king posts under them.`, 'tool' );
+		else if ( plan.struts.span > KING_POST_SPAN && plan.type !== 'classic' ) add( 'king-posts', 'note', `Struts ${ round( plan.struts.span, 1 ) } m long, with king posts under them.`, 'planning default' );
+		// Walls too close for walers.
+		if ( plan.struts.direct ) add( 'too-narrow', 'warn', `${ round( plan.struts.span, 2 ) } m between the walls: no room for walers, so the struts bear on the walls' faces; a trench system may suit better.`, 'planning default' );
 
 	}
 
@@ -1410,7 +1472,7 @@ export function excavationFlags( params, geom = excavationGeometry( params ), pl
 
 		const side = geom.sides[ n - 1 ];
 		const across = side.axis ? shape.floorSize?.width : shape.floorSize?.length;
-		if ( across && reach > across / 2 ) add( `raker-floor-${ n }`, 'note', `Side ${ n }: rakers and kickers take ${ round( reach, 1 ) } m of the floor, over half of it: struts or tiebacks?`, 'tool; Deep Excavation LLC' );
+		if ( across && reach > across / 2 ) add( `raker-floor-${ n }`, 'note', `Side ${ n }: rakers and kickers take ${ round( reach, 1 ) } m of the floor, over half of it: struts or tiebacks?`, 'planning default; Deep Excavation LLC' );
 
 	}
 

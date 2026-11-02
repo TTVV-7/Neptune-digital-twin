@@ -59,6 +59,9 @@ function oldLayout() {
 
 	}
 
+	// Trench boxes too short for the shortest box (2.4 m): no box, nothing drawn.
+	for ( const [ k, [ width, length, depth, slope ] ] of [ [ 1, 1, 0.1, 2 ], [ 2, 2, 2, 1 ] ].entries() ) items.push( { name: 'Excavation', kind: 'excavation', params: { width, length, depth, slope, support: 'trench-box' }, east: 1500, north: 100 + k * 40, up: null, heading: 0, scale: 1 } );
+
 	// Across the shore: half on the land, half over the water.
 	for ( const [ k, slope ] of OLD_SLOPES.entries() ) {
 
@@ -198,6 +201,9 @@ test( 'a layout saved before sides had methods loads exactly as it did', async (
 
 	const then = JSON.parse( readFileSync( FIXTURE, 'utf8' ) );
 	assert.equal( now.pits.length, then.length );
+	// Trench systems' notes have said since that they're used to the maker's data (WorkSafeBC
+	// 20.81(1)(f)): the one note the first code didn't give.
+	for ( const pit of now.pits ) pit.shoring.notes = pit.shoring.notes.filter( note => ! note.startsWith( 'Used to the maker\'s tabulated data' ) );
 	for ( const [ i, pit ] of now.pits.entries() ) assert.deepEqual( pit, then[ i ], `pit ${ i } ${ JSON.stringify( then[ i ].params ) } at ${ then[ i ].at }` );
 	console.log( `${ now.pits.length } pits from before: heights (${ now.pits.reduce( ( s, p ) => s + p.heights.count, 0 ).toLocaleString( 'en-CA' ) } points), cuts, rims, footprints, shoring and labels as they were` );
 	assert.deepEqual( errors, [] );
@@ -387,17 +393,17 @@ test( 'each method digs its design: sloped for the soil or at a ratio, stepped, 
 	}
 
 	assert.ok( near( r.soil.finished, 1712, 0.5 ) );
-	assert.equal( r.soil.top, '22.0 × 32.0 m' );
+	assert.equal( r.soil.top, '22.0 × 32.0 m, 704 m²' );
 	assert.equal( r.soil.floor, '10.0 × 20.0 m' );
-	assert.equal( r.ratio.top, '16.0 × 26.0 m' );
-	assert.equal( r.stepped.top, '16.8 × 22.8 m' );
+	assert.equal( r.ratio.top, '16.0 × 26.0 m, 416 m²' );
+	assert.equal( r.stepped.top, '16.8 × 22.8 m, 383 m²' );
 	assert.equal( r.stepped.floor, '6.0 × 12.0 m' );
-	assert.equal( r.shored.top, '12.0 × 12.0 m' );
+	assert.equal( r.shored.top, '12.0 × 12.0 m, 144 m²' );
 	assert.ok( near( r.shored.cut, 720, 8 ), `shored cut ${ r.shored.cut }` );
 	// The trench's ends slope at 1.5 : 1 for the soil; its long sides stand in the box.
-	assert.equal( r.trench.top, '3.0 × 29.0 m' );
+	assert.equal( r.trench.top, '3.0 × 29.0 m, 87.0 m²' );
 	// Risers of 1 m, three of them, with 2 m benches: 4 m out.
-	assert.equal( r.benchedRatio.top, '16.0 × 16.0 m' );
+	assert.equal( r.benchedRatio.top, '16.0 × 16.0 m, 256 m²' );
 
 	// The benches, in from the stepped pit's right side at its middle: 1.2, 2.4, 3.6 m down, then
 	// the floor.
@@ -425,7 +431,7 @@ test( 'per side: a wall, a slope, benches and secant piles in one pit, corners w
 	assert.equal( r.wrong, 0, JSON.stringify( r.first ) );
 	assert.equal( r.outside, 0 );
 	assert.deepEqual( r.outline, { u0: - 6, u1: 12, v0: - 17.2, v1: 10 } );
-	assert.equal( r.top, '18.0 × 27.2 m' );
+	assert.equal( r.top, '18.0 × 27.2 m, 490 m²' );
 	assert.equal( r.floor, '12.0 × 20.0 m' );
 	assert.ok( near( r.cut, r.finished, r.finished * 0.012 ), `cut ${ r.cut } against ${ r.finished }` );
 	// Along side 1's wall at the middle: straight down; in side 2's wing beside the wall, the
@@ -449,7 +455,7 @@ test( 'per side: a wall, a slope, benches and secant piles in one pit, corners w
 	await page.evaluate( i => window.twin.models.setParams( window.placed[ i ], { method: 'sides', side1: 'sheet-piles' } ), old );
 	const o = await inspect( old );
 	assert.equal( o.wrong, 0, JSON.stringify( o.first ) );
-	assert.equal( o.top, '20.0 × 10.0 m' );
+	assert.equal( o.top, '20.0 × 10.0 m, 200 m²' );
 	assert.equal( o.floor, '16.0 × 8.0 m' );
 	assert.equal( o.params.outline, 'top' );
 
@@ -540,7 +546,9 @@ function setRow( name, value ) {
 	return page.evaluate( ( [ name, value ] ) => {
 
 		const folder = [ ...document.querySelectorAll( '.lil-gui.lil-root > .lil-children > .lil-gui' ) ].find( f => ! f.classList.contains( 'lil-closed' ) && f.querySelector( '.lil-title' )?.textContent === 'Excavation' );
-		const row = [ ...folder.querySelectorAll( '.lil-controller' ) ].find( c => c.querySelector( '.lil-name' )?.textContent === name && c.style.display !== 'none' );
+		// A name ending in '…' matches a label that starts so (one that says the value in use).
+		const named = text => name.endsWith( '…' ) ? text?.startsWith( name.slice( 0, - 1 ) ) : text === name;
+		const row = [ ...folder.querySelectorAll( '.lil-controller' ) ].find( c => named( c.querySelector( '.lil-name' )?.textContent ) && c.style.display !== 'none' );
 		const select = row.querySelector( 'select' );
 		if ( select ) {
 
@@ -571,29 +579,39 @@ test( 'P panel: the method for all sides or each, with what each needs; per-side
 	await page.evaluate( i => window.twin.sidebar.select( window.placed[ i ] ), i );
 	await frames( 2 );
 	const params = () => page.evaluate( i => ( { ...window.placed[ i ].params } ), i );
-	const fields = [ 'width (m)', 'length (m)', 'depth (m)', 'the rectangle is', 'sides', 'side 1 (N)', 'side 2 (E)', 'side 3 (S)', 'side 4 (W)', 'system', 'ends', 'soil (WorkSafeBC)', 'slope', 'slope (h : v)', 'bench height (m, 0 = up to 1.2)', 'bench width (m, 0 = 1.5 × height)', 'support levels', 'levels (m down, blank = suggested)', 'embedment (m, 0 = suggested)', 'raker angle (°)', 'tieback angle (° down)', 'bond length (m)', 'groundwater (m down)', 'dig stage' ];
-	const showing = async () => shown( await panelRows() ).filter( name => fields.includes( name ) );
+	// Labels that say the value in use (the slope, the benches, the embedment, the dig stage) are
+	// listed by how they start, as 'slope (…'.
+	const fields = [ 'width (m)', 'length (m)', 'depth (m)', 'the rectangle is', 'sides', 'side 1 (N)', 'side 2 (E)', 'side 3 (S)', 'side 4 (W)', 'system', 'ends', 'soil (WorkSafeBC)', 'slope (…', 'slope (h : v)', 'bench height (…', 'bench width (…', 'support levels', 'levels (m down)', 'embedment (…', 'raker angle (°)', 'tieback angle (° down)', 'bond length (m)', 'groundwater (m down)', 'dig stage (…' ];
+	const field = name => fields.find( f => f === name || ( f.endsWith( '…' ) && name.startsWith( f.slice( 0, - 1 ) ) && ! fields.includes( name ) ) );
+	const showing = async () => shown( await panelRows() ).map( field ).filter( Boolean );
 
 	let rows = await panelRows();
-	assert.deepEqual( await showing(), [ 'width (m)', 'length (m)', 'depth (m)', 'the rectangle is', 'sides', 'soil (WorkSafeBC)', 'slope', 'groundwater (m down)', 'dig stage' ] );
+	// Sloped: no dig stage slider (before and after only, as the Show panel's Before / After).
+	assert.deepEqual( await showing(), [ 'width (m)', 'length (m)', 'depth (m)', 'the rectangle is', 'sides', 'soil (WorkSafeBC)', 'slope (…', 'groundwater (m down)' ] );
 	assert.equal( rows[ 'the rectangle is' ].value, 'the floor of the pit' );
 	assert.equal( rows.sides.value, 'sloped' );
 	assert.equal( rows[ 'soil (WorkSafeBC)' ].value, 'C: soft, sandy, filled or loose' );
-	assert.equal( rows.slope.value, 'the steepest for the soil' );
-	assert.equal( rows[ 'top of the cut' ].value, '20.0 × 28.0 m' );
+	// The soil's usual slope, and what it is.
+	assert.equal( rows[ 'slope (1.5 : 1)' ].value, 'usual for the soil' );
+	assert.equal( rows[ 'top of the cut' ].value, '20.0 × 28.0 m, 560 m²' );
 
 	// A ratio of its own: the slider shows, and the top follows it.
-	await setRow( 'slope', 'a ratio of my own' );
+	await setRow( 'slope (…', 'a ratio of my own' );
 	assert.ok( ( await showing() ).includes( 'slope (h : v)' ) );
 	await setRow( 'slope (h : v)', 0.75 );
 	assert.equal( ( await params() ).slope, 0.75 );
-	assert.equal( ( await panelRows() )[ 'top of the cut' ].value, '17.0 × 25.0 m' );
+	assert.equal( ( await panelRows() )[ 'top of the cut' ].value, '17.0 × 25.0 m, 425 m²' );
 
 	// Stepped: the benches, not the slopes.
 	await setRow( 'sides', 'stepped (benched)' );
-	assert.deepEqual( await showing(), [ 'width (m)', 'length (m)', 'depth (m)', 'the rectangle is', 'sides', 'soil (WorkSafeBC)', 'bench height (m, 0 = up to 1.2)', 'bench width (m, 0 = 1.5 × height)', 'groundwater (m down)', 'dig stage' ] );
-	await setRow( 'bench height (m, 0 = up to 1.2)', 1 );
+	assert.deepEqual( await showing(), [ 'width (m)', 'length (m)', 'depth (m)', 'the rectangle is', 'sides', 'soil (WorkSafeBC)', 'bench height (…', 'bench width (…', 'groundwater (m down)' ] );
+	// Left at 0, they say what they work out to: two 1 m risers and 1.5 m benches, 2 m deep.
+	rows = await panelRows();
+	assert.equal( rows[ 'bench height (0 = 1 m)' ].value, '0' );
+	assert.equal( rows[ 'bench width (0 = 1.5 m)' ].value, '0' );
+	await setRow( 'bench height (…', 1 );
 	assert.equal( ( await params() ).benchHeight, 1 );
+	assert.ok( ( await panelRows() )[ 'bench height (m, 0 = auto)' ].shown );
 	assert.equal( ( await params() ).method, 'bench' );
 
 	// Shored: a system (sheet piles to start), its support levels and embedment; a trench box
@@ -601,26 +619,28 @@ test( 'P panel: the method for all sides or each, with what each needs; per-side
 	await setRow( 'sides', 'shored' );
 	rows = await panelRows();
 	assert.equal( rows.system.value, 'Sheet piles' );
-	assert.deepEqual( await showing(), [ 'width (m)', 'length (m)', 'depth (m)', 'the rectangle is', 'sides', 'system', 'soil (WorkSafeBC)', 'support levels', 'embedment (m, 0 = suggested)', 'groundwater (m down)', 'dig stage' ] );
+	assert.deepEqual( await showing(), [ 'width (m)', 'length (m)', 'depth (m)', 'the rectangle is', 'sides', 'system', 'soil (WorkSafeBC)', 'support levels', 'embedment (…', 'groundwater (m down)' ] );
+	// A 2 m cantilever: 1.5 times the depth, 3 m.
+	assert.equal( rows[ 'embedment (0 = 3 m)' ].value, '0' );
 	assert.equal( rows[ 'support levels' ].value, 'suggested' );
 	assert.equal( ( await params() ).support, 'sheet-piles' );
 	await setRow( 'system', 'Trench box' );
-	assert.deepEqual( await showing(), [ 'width (m)', 'length (m)', 'depth (m)', 'the rectangle is', 'sides', 'system', 'ends', 'soil (WorkSafeBC)', 'groundwater (m down)', 'dig stage' ] );
+	assert.deepEqual( await showing(), [ 'width (m)', 'length (m)', 'depth (m)', 'the rectangle is', 'sides', 'system', 'ends', 'soil (WorkSafeBC)', 'groundwater (m down)' ] );
 	await setRow( 'ends', 'sloped' );
-	assert.ok( ( await showing() ).includes( 'slope' ), 'sloped ends slope' );
+	assert.ok( ( await showing() ).includes( 'slope (…' ), 'sloped ends slope' );
 
 	// Per side: each side as it's cut now (a trench box's walls become sheet piles; its sloped
 	// ends stay sloped), in a sub-folder, named by the way each faces.
 	await setRow( 'sides', 'per side' );
 	rows = await panelRows();
 	assert.deepEqual( [ 1, 2, 3, 4 ].map( n => rows[ [ 'side 1 (N)', 'side 2 (E)', 'side 3 (S)', 'side 4 (W)' ][ n - 1 ] ] ).map( r => [ r.shown, r.value, r.folder ] ), [
-		[ true, 'sloped', 'each side' ], [ true, 'Sheet piles', 'each side' ], [ true, 'sloped', 'each side' ], [ true, 'Sheet piles', 'each side' ],
+		[ true, 'Sloped', 'each side' ], [ true, 'Sheet piles', 'each side' ], [ true, 'Sloped', 'each side' ], [ true, 'Sheet piles', 'each side' ],
 	] );
 	await setRow( 'side 2 (E)', 'Secant pile wall' );
-	await setRow( 'side 3 (S)', 'stepped (benched)' );
+	await setRow( 'side 3 (S)', 'Stepped (benched)' );
 	let p = await params();
 	assert.deepEqual( [ p.method, p.side1, p.side2, p.side3, p.side4 ], [ 'sides', 'slope', 'secant-piles', 'bench', 'sheet-piles' ] );
-	assert.deepEqual( ( await showing() ).filter( n => [ 'slope', 'bench height (m, 0 = up to 1.2)', 'support levels', 'system' ].includes( n ) ), [ 'slope', 'bench height (m, 0 = up to 1.2)', 'support levels' ] );
+	assert.deepEqual( ( await showing() ).filter( n => [ 'slope (…', 'bench height (…', 'support levels', 'system' ].includes( n ) ), [ 'slope (…', 'bench height (…', 'support levels' ] );
 
 	// Turned to face east, the sides keep their methods and are named afresh.
 	await page.evaluate( i => {
@@ -631,31 +651,35 @@ test( 'P panel: the method for all sides or each, with what each needs; per-side
 
 	}, i );
 	rows = await panelRows();
-	assert.deepEqual( [ 'side 1 (E)', 'side 2 (S)', 'side 3 (W)', 'side 4 (N)' ].map( name => rows[ name ]?.value ), [ 'sloped', 'Secant pile wall', 'stepped (benched)', 'Sheet piles' ] );
+	assert.deepEqual( [ 'side 1 (E)', 'side 2 (S)', 'side 3 (W)', 'side 4 (N)' ].map( name => rows[ name ]?.value ), [ 'Sloped', 'Secant pile wall', 'Stepped (benched)', 'Sheet piles' ] );
 
 	// Deeper, struts asked for between the walls: levels can be typed in.
 	await setRow( 'depth (m)', 8 );
 	await setRow( 'support levels', 'walers + struts' );
-	assert.ok( ( await showing() ).includes( 'levels (m down, blank = suggested)' ) );
-	await setRow( 'levels (m down, blank = suggested)', '4.5; 1.5' );
+	assert.ok( ( await showing() ).includes( 'levels (m down)' ) );
+	// Blank: the suggested levels show greyed in the box.
+	assert.equal( await page.evaluate( () => [ ...document.querySelectorAll( '.lil-controller' ) ].find( c => c.querySelector( '.lil-name' )?.textContent === 'levels (m down)' && c.style.display !== 'none' ).querySelector( 'input' ).placeholder ), '1.5, 3.65, 5.85' );
+	await setRow( 'levels (m down)', '4.5; 1.5' );
 	p = await params();
 	assert.equal( p.levels, '1.5, 4.5' );
 	assert.equal( p.bracing, 'struts' );
 
-	// The stage slider: as many steps as stages, the last the finished pit (saved as -1).
+	// The stage slider: as many steps as stages, counted from 1 as the stage readout counts them,
+	// the last the finished pit (saved as -1), and the label says so.
 	const count = await page.evaluate( i => window.exc.design.planExcavation( window.placed[ i ].params ).stages.length, i );
 	const slider = () => page.evaluate( () => {
 
 		const folder = [ ...document.querySelectorAll( '.lil-gui.lil-root > .lil-children > .lil-gui' ) ].find( f => ! f.classList.contains( 'lil-closed' ) && f.querySelector( '.lil-title' )?.textContent === 'Excavation' );
-		const row = [ ...folder.querySelectorAll( '.lil-controller' ) ].find( c => c.querySelector( '.lil-name' )?.textContent === 'dig stage' );
-		return { slider: !! row.querySelector( '.lil-slider' ), value: row.querySelector( 'input' ).value };
+		const row = [ ...folder.querySelectorAll( '.lil-controller' ) ].find( c => c.querySelector( '.lil-name' )?.textContent.startsWith( 'dig stage' ) );
+		return { slider: !! row.querySelector( '.lil-slider' ), value: row.querySelector( 'input' ).value, name: row.querySelector( '.lil-name' ).textContent };
 
 	} );
-	assert.deepEqual( await slider(), { slider: true, value: String( count - 1 ) } );
-	await setRow( 'dig stage', 1 );
+	assert.deepEqual( await slider(), { slider: true, value: String( count ), name: 'dig stage (finished)' } );
+	await setRow( 'dig stage (…', 2 );
 	assert.equal( ( await params() ).stage, 1 );
 	assert.match( ( await panelRows() ).stage.value, new RegExp( `^2 of ${ count }: ` ) );
-	await setRow( 'dig stage', count - 1 );
+	assert.deepEqual( await slider(), { slider: true, value: '2', name: `dig stage (of ${ count })` } );
+	await setRow( 'dig stage (…', count );
 	assert.equal( ( await params() ).stage, - 1 );
 	assert.equal( ( await panelRows() ).stage.shown, false );
 
@@ -693,7 +717,8 @@ test( 'side labels: numbered with the way each faces while the pit is selected, 
 	await page.evaluate( i => window.twin.sidebar.select( window.placed[ i ] ), i );
 	await frames( 3 );
 	assert.deepEqual( await labels(), [ '1 · NE', '2 · SE', '3 · SW', '4 · NW' ].map( text => ( { text, shown: true } ) ) );
-	// Each at the middle of its side's top edge, 0.3 m over the rim, on screen.
+	// Each a metre out from the middle of its side's top edge (clear of the handles there), 0.3 m
+	// over the rim, on screen.
 	const where = await page.evaluate( i => {
 
 		const entry = window.placed[ i ];
@@ -701,7 +726,7 @@ test( 'side labels: numbered with the way each faces while the pit is selected, 
 		const { top } = outlines( planExcavation( entry.params ).geom );
 		const frame = pitFrame( entry.state );
 		const [ u, v ] = [ ( top.u0 + top.u1 ) / 2, ( top.v0 + top.v1 ) / 2 ];
-		return [ [ u, top.v1 ], [ top.u1, v ], [ u, top.v0 ], [ top.u0, v ] ].map( ( [ a, b ] ) => pitToEnu( frame, a, b ) );
+		return [ [ u, top.v1 + 1 ], [ top.u1 + 1, v ], [ u, top.v0 - 1 ], [ top.u0 - 1, v ] ].map( ( [ a, b ] ) => pitToEnu( frame, a, b ) );
 
 	}, i );
 	const chips = await page.evaluate( () => [ ...document.querySelectorAll( '.earthworks-labels .side-label' ) ].filter( e => ! e.hidden ).map( e => {
@@ -753,8 +778,24 @@ test( 'the Excavation tool: the rectangle is the floor, the sides slope out for 
 	await page.mouse.move( a.x, a.y );
 	await page.mouse.down();
 	await page.mouse.move( b.x, b.y, { steps: 6 } );
+	// While it's dragged: the floor, the top of the cut it makes dashed round it (3 m out, 2 m
+	// deep at 1.5 : 1), and both sizes by the pointer.
+	const dragging = await page.evaluate( () => {
+
+		const lines = [];
+		window.twin.scene.traverse( o => o.isLineLoop && o.visible && lines.push( { dashed: o.material.isLineDashedMaterial, xs: [ ...o.geometry.attributes.position.array ].filter( ( _, k ) => k % 3 === 0 ) } ) );
+		const width = line => Math.max( ...line.xs ) - Math.min( ...line.xs );
+		const label = [ ...document.querySelectorAll( '.drawing-label' ) ].map( e => e.textContent );
+		return { floor: lines.filter( l => ! l.dashed ).map( width ), top: lines.filter( l => l.dashed ).map( width ), label };
+
+	} );
+	assert.equal( dragging.top.length, 1 );
+	assert.ok( near( dragging.top[ 0 ] - dragging.floor[ 0 ], 6, 0.05 ), JSON.stringify( dragging ) );
+	assert.match( dragging.label[ 0 ], /^floor [\d.]+ × [\d.]+ m · top [\d.]+ × [\d.]+ m · 2\.0 m deep · ≈ [\d,]+ m³ cut$/ );
 	await page.mouse.up();
 	await page.waitForFunction( () => window.twin.models.entries.some( e => e.kind === 'excavation' ) );
+	// Gone once it's made.
+	assert.equal( await page.evaluate( () => document.querySelectorAll( '.drawing-label' ).length ), 0 );
 	const made = await page.evaluate( () => {
 
 		const { models, earthworks, terrain } = window.twin;
@@ -787,7 +828,8 @@ test( 'the Excavation tool: the rectangle is the floor, the sides slope out for 
 	assert.equal( r.wrong, 0, JSON.stringify( r.first ) );
 	assert.ok( halfway > 1 && halfway < r.cut * 0.8, `${ halfway } of ${ r.cut } m³ while digging` );
 	// 2 m down at 1.5 : 1: 3 m out on every side.
-	assert.equal( r.top, `${ ( made.saved.width + 6 ).toFixed( 1 ) } × ${ ( made.saved.length + 6 ).toFixed( 1 ) } m` );
+	const [ topWidth, topLength ] = [ made.saved.width + 6, made.saved.length + 6 ];
+	assert.equal( r.top, `${ topWidth.toFixed( 1 ) } × ${ topLength.toFixed( 1 ) } m, ${ Math.round( topWidth * topLength ).toLocaleString( 'en-CA' ) } m²` );
 
 	// Dig again at a stage digs to that stage only.
 	await page.evaluate( () => {
@@ -839,7 +881,7 @@ test( 'resizing a pit drawn by its floor outlines the top of the cut and the flo
 	assert.ok( near( sorted[ 1 ].width, 12, 1e-6 ) && near( sorted[ 1 ].length, 20, 1e-6 ) && near( sorted[ 0 ].y - sorted[ 1 ].y, 3 + 0.08, 0.01 ), `floor ${ JSON.stringify( sorted[ 1 ] ) }` );
 	const r = await inspect( i );
 	assert.equal( r.wrong, 0 );
-	assert.equal( r.top, '16.5 × 29.0 m' );
+	assert.equal( r.top, '16.5 × 29.0 m, 479 m²' );
 
 } );
 

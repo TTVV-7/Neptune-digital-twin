@@ -18,13 +18,15 @@ const BAND = 0.75;
 
 // The first shoring's plans for old params, and a digest of what it drew (sorted vertices to
 // 0.1 mm, per material), for a pit at the origin facing north with its rim at 0.
+// What every trench system's notes end with (WorkSafeBC 20.81(1)(f), G20.81).
+const MAKERS_DATA = 'Used to the maker\'s tabulated data or certification for the soil and depth, with a copy on site (WorkSafeBC 20.81(1)(f), G20.81).';
 const OLD_PITS = [
 	{
 		params: { width: 3, length: 20, depth: 3, slope: 1, support: 'trench-box' },
 		summary: '3 boxes: 2 × 2.4 × 7.3 m (8 × 24 ft) + 1 × 2.4 × 4.9 m (8 × 16 ft), with stackers 2 × 1.2 × 7.3 m (4 × 24 ft) + 1 × 1.2 × 4.9 m (4 × 16 ft); 2.8 m between panels, top 0.7 m above the rim',
 		wall: 117.04320000000001,
 		weight: '17 t steel',
-		notes: [ 'Ends are open: slope them, or fit end plates, before anyone works there (WorkSafeBC 20.81(2)).', 'The boxes leave 0.2 m at each end.', '3 boxes line all of it; usually one or two are dragged along as the pipe goes in, and the trench behind them backfilled.' ],
+		notes: [ 'Ends are open: slope them, or fit end plates, before anyone works there (WorkSafeBC 20.81(2)).', 'The boxes leave 0.2 m at each end.', '3 boxes line all of it; usually one or two are dragged along as the pipe goes in, and the trench behind them backfilled.', MAKERS_DATA ],
 		meshes: { box: '432 1d1f261b7aa0c328', boxTrim: '21888 e6d82ec51848f8b9', spreader: '2592 d9771b901a70aa87', earth: '72 c4c6b4e3df630443' },
 	},
 	{
@@ -32,7 +34,7 @@ const OLD_PITS = [
 		summary: '6 boxes, 2 high: 4 × 2.4 × 7.3 m (8 × 24 ft) + 2 × 2.4 × 4.9 m (8 × 16 ft); 2.8 m between panels, top 0.4 m above the rim',
 		wall: 175.56480000000002,
 		weight: '23 t steel',
-		notes: [ 'Ends are open: slope them, or fit end plates, before anyone works there (WorkSafeBC 20.81(2)).', 'The boxes leave 0.2 m at each end.', '3 boxes line all of it; usually one or two are dragged along as the pipe goes in, and the trench behind them backfilled.' ],
+		notes: [ 'Ends are open: slope them, or fit end plates, before anyone works there (WorkSafeBC 20.81(2)).', 'The boxes leave 0.2 m at each end.', '3 boxes line all of it; usually one or two are dragged along as the pipe goes in, and the trench behind them backfilled.', MAKERS_DATA ],
 		meshes: { box: '432 98c424c97306c3bc', boxTrim: '23616 d82314591f25fe20', spreader: '3456 7e68fcd0fc73a745', earth: '72 441c133d4ff4e6be' },
 	},
 	{
@@ -40,7 +42,7 @@ const OLD_PITS = [
 		summary: '24 panels in 12 posts (bays 4.0 m or less), 2 high',
 		wall: 216,
 		weight: '40 t steel',
-		notes: [  ],
+		notes: [ MAKERS_DATA ],
 		meshes: { railPost: '432 bfb954216fc31062', railPanel: '1728 30298be0e8318ad6', earth: '144 010531afae457fc3' },
 	},
 	{
@@ -48,7 +50,7 @@ const OLD_PITS = [
 		summary: '8 shores 2.4 m apart, 3 cylinders each (24 in all), on 3.0 m rails',
 		wall: 108,
 		weight: '0.5 t aluminium',
-		notes: [ 'Ends are open: slope them or shore them too (WorkSafeBC 20.81(2)).', 'In loose or wet ground, add plywood sheeting behind the rails.' ],
+		notes: [ 'Ends are open: slope them or shore them too (WorkSafeBC 20.81(2)).', 'In loose or wet ground, add plywood sheeting behind the rails.', MAKERS_DATA ],
 		meshes: { aluminium: '576 ccf7de7fdf2d53e5', cylinder: '4608 2c439268583bbdb9', rod: '2304 30c4441a392ea0f9', earth: '144 5712252b90b4080e' },
 	},
 	{
@@ -82,6 +84,15 @@ const OLD_PITS = [
 		weight: '32 t steel',
 		notes: [ 'A professional engineer designs the wall: the pile length and spacing here are rough.', 'Over 4 m deep: soldier piles need walers with struts, rakers or tie-backs.', 'Over 6 m deep: the shoring is to a professional engineer\'s written design (WorkSafeBC 20.78).' ],
 		meshes: { pile: '3672 5392e5f2914c8a0e', timber: '26928 6ceaff571de47e06', earth: '144 f7c3a957240ceba0' },
+	},
+	{
+		// Too short for the shortest box: nothing drawn, as before.
+		params: { width: 1, length: 1, depth: 0.1, slope: 2, support: 'trench-box' },
+		summary: 'no box fits',
+		wall: 0,
+		weight: '',
+		notes: [ 'Too short for a trench box: the shortest is 2.4 m (8 ft).' ],
+		meshes: null,
 	},
 	{
 		params: { width: 8, length: 30, depth: 1.5, slope: 0.5, support: 'none' },
@@ -403,7 +414,7 @@ test( 'each wall system on its own sides, with as many piles or sheets drawn as 
 		[ { width: 24, length: 40, depth: 10, outline: 'floor', method: 'shore', support: 'secant-piles', bracing: 'tiebacks' }, /^182 secant piles \(0\.88 m, 150 mm overlap\) on all four sides, 15\.5 m long each, under a capping beam; walers at 3 levels with 162 tiebacks$/ ],
 		[ { width: 10, length: 8, depth: 3.5, outline: 'floor', method: 'shore', support: 'contiguous-piles', bracing: 'auto' }, /^58 contiguous piles \(0\.6 m, 100 mm gaps\) on all four sides, 9\.5 m long each, under a capping beam; cantilevered, with no support levels$/ ],
 		[ { width: 12, length: 20, depth: 8, outline: 'floor', slopeBy: 'soil', bracing: 'auto', method: 'sides', side1: 'sheet-piles', side2: 'slope', side3: 'sheet-piles', side4: 'slope' }, /^120 sheets \(Z-profile, 0\.6 m wide\) on sides 1 and 3, 13\.0 m long each; walers at 3 levels with 9 struts across and 3 king posts$/ ],
-		[ { width: 14, length: 10, depth: 6, outline: 'floor', bracing: 'auto', method: 'sides', side1: 'secant-piles', side2: 'sheet-piles', side3: 'contiguous-piles', side4: 'soldier-piles' }, /^19 sheets .* on side 2, 10\.0 m long each; 6 soldier piles \(HP310, 2\.3 m apart or less\) on side 4, 9\.5 m long each, 72 m² of timber lagging \(5\.4 m³\); 19 secant piles .* on side 1, .*; 20 contiguous piles .* on side 3, .*; walers at 2 levels with 6 struts across and 8 corner braces$/ ],
+		[ { width: 14, length: 10, depth: 6, outline: 'floor', bracing: 'auto', method: 'sides', side1: 'secant-piles', side2: 'sheet-piles', side3: 'contiguous-piles', side4: 'soldier-piles' }, /^19 sheets .* on side 2, 10\.0 m long each; 6 soldier piles \(HP310, 2\.3 m apart or less\) on side 4, 9\.5 m long each, 63 m² of timber lagging \(4\.7 m³\); 19 secant piles .* on side 1, .*; 20 contiguous piles .* on side 3, .*; walers at 2 levels with 6 struts across and 8 corner braces$/ ],
 	];
 	for ( const [ params, summary ] of cases ) {
 
@@ -500,17 +511,31 @@ test( 'dig stages: walls first, each level once it\'s in, lagging as it\'s dug; 
 test( 'P panel text: the support levels, and the checks less what the notes say, alike sides said once', () => {
 
 	const plan = planShoring( { width: 10, length: 8, depth: 3.5, outline: 'floor', method: 'shore', support: 'contiguous-piles', bracing: 'auto' } );
-	assert.equal( plan.levels, 'None (cantilever), suggested for 3.5 m deep: no support levels; embedment 5.3 m below the floor (1.5 times the depth); contiguous piles 9.5 m long.' );
+	assert.equal( plan.levels, 'None (cantilever), suggested for 3.5 m deep: no support levels; embedment 5.3 m below the floor (rule of thumb: 1.5 times the depth); contiguous piles 9.5 m long.' );
 	assert.match( plan.checks, /All four sides: water comes through the contiguous pile wall below the groundwater/ );
 	assert.equal( plan.checks.match( /water comes through/g ).length, 1 );
 	assert.equal( plan.weight, '173 m³ concrete' );
 	const deep = planShoring( { width: 24, length: 40, depth: 10, outline: 'floor', method: 'shore', support: 'secant-piles', bracing: 'tiebacks' } );
 	for ( const id of X.COVERED ) assert.ok( ! deep.design.flags.some( f => f.id === id && deep.checks.includes( f.text.slice( 0, 30 ) ) ), id );
-	assert.match( deep.levels, /no-dig zone 13\.9 m behind all four sides/ );
+	// 14.2 m: the wedge rises from the wall's face, 0.36 m behind the anchor heads on the walers.
+	assert.match( deep.levels, /no-dig zone 14\.2 m behind all four sides/ );
 	// Sloped trench ends: no open-ends note, boxes on the 14 m of floor between them (24 + 20 ft).
 	const sloped = planShoring( { width: 3, length: 20, depth: 3, outline: 'top', method: 'shore', support: 'trench-box', ends: 'sloped', slope: 1 } );
 	assert.ok( ! sloped.notes.some( n => n.startsWith( 'Ends are open' ) ) );
 	assert.match( sloped.summary, /^2 boxes: 1 × 2\.4 × 7\.3 m \(8 × 24 ft\) \+ 1 × 2\.4 × 6\.1 m \(8 × 20 ft\)/ );
+	// Sloped ends that leave too little floor for a box, either way round, and pits too short for
+	// one: no box, nothing shored, and no error (a pit like this would otherwise fail to load).
+	for ( const params of [ { width: 10, length: 3, depth: 3, slope: 1.5, support: 'trench-box', ends: 'sloped' }, { width: 3, length: 10, depth: 3, slope: 1.5, support: 'trench-box', ends: 'sloped' }, { width: 2, length: 2, depth: 2, slope: 1, support: 'trench-box' }, { width: 1.5, length: 2.3, depth: 1.5, slope: 1, support: 'trench-box' } ] ) {
+
+		const short = planShoring( params );
+		assert.equal( short.summary, 'no box fits', JSON.stringify( params ) );
+		assert.deepEqual( short.shored, [] );
+		const entry = place( params );
+		assert.equal( shoring.shown.has( entry ), false );
+		drop( entry );
+
+	}
+
 	// A per-side pit too steep: the sides named.
 	const steep = planShoring( { width: 10, length: 10, depth: 3, method: 'sides', side1: 'sheet-piles', side2: 'slope', side3: 'slope', side4: 'slope', slope: 0.5 } );
 	assert.ok( steep.notes.includes( 'Over 1.2 m deep with sides 2, 3, 4 steeper than WorkSafeBC allows even in hard, solid soil (3 : 4): slope, bench or shore them before anyone goes in (OHS Regulation 20.81).' ), steep.notes.join( ' / ' ) );

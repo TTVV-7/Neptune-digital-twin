@@ -4,18 +4,28 @@
 	position: fixed;
 	top: 12px;
 	left: 12px;
-	z-index: 1004;
+	/* Under the help (1004), which can be opened over it, and over the library and the panels. */
+	z-index: 1003;
 	box-sizing: border-box;
 	width: min( 600px, calc( 100vw - 24px ) );
 	max-height: calc( 100vh - 80px );
 	overflow-y: auto;
 	padding: 10px 12px 12px;
 	border-radius: 6px;
-	background: rgba( 16, 22, 28, 0.92 );
+	/* Opaque: the library under it would show through the drawing's labels. */
+	background: rgb( 16, 22, 28 );
 	font-size: 12px;
 	/* Its own layer, so the scene redrawn under it every frame doesn't repaint the drawing. */
 	will-change: transform;
 	contain: paint;
+}
+
+/* Where it and the cut-away don't fit side by side (excavation-section.js layoutCard), a sheet along
+   the bottom between the library and the P panel, the cut-away framed above it. */
+.section-card.sheet {
+	top: auto;
+	bottom: 12px;
+	max-height: 45vh;
 }
 
 /* On a phone the card takes the bottom of the screen and the cut-away shows above it. */
@@ -177,6 +187,14 @@
 	white-space: nowrap;
 }
 
+.section-card .compare th {
+	white-space: normal;
+}
+
+.section-card .compare td {
+	white-space: nowrap;
+}
+
 .section-card .compare tr.current th,
 .section-card .compare tr.current td {
 	color: #ffd29a;
@@ -198,6 +216,14 @@
 }
 
 .section-card .checks li.warn::marker {
+	color: #ffb347;
+}
+
+.section-card .checks summary.stop {
+	color: #ff8a7a;
+}
+
+.section-card .checks summary.warn {
 	color: #ffb347;
 }
 
@@ -231,6 +257,8 @@
 .xs-member[ data-member='bond' ] { fill: #ff7a52; }
 .xs-member[ data-cut ] { fill: #eef2f5; stroke: #10161c; stroke-width: 1; }
 .xs-fill.xs-beyond { fill-opacity: 0.3; stroke: #c9d1d8; stroke-opacity: 0.7; stroke-dasharray: 3 2; }
+/* A bond seen beyond the cut still reads against the hatched soil: what its labels are about. */
+.xs-member[ data-member='bond' ].xs-beyond { fill-opacity: 0.6; stroke: #ff7a52; stroke-opacity: 0.9; stroke-dasharray: none; }
 
 .xs-line { fill: none; stroke-linejoin: round; }
 .xs-dashed { stroke-dasharray: 5 4; }

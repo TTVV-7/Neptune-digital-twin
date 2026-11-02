@@ -400,7 +400,7 @@ their no-dig zone; a **dig stage** slider shows what's in as the pit goes down. 
 library closed too. The P panel lists what goes in (e.g. *3 boxes: 2 × 2.4 × 7.3 m (8 × 24 ft) +
 ...*, *120 sheets (Z-profile, 0.6 m wide) on sides 1 and 3, 13.0 m long each; walers at 3 levels
 with 9 struts across and 3 king posts*), the shored wall area, a rough weight, the support levels,
-warnings, and checks against WorkSafeBC Part 20 (and practice where it gives no number): water
+warnings, and planning checks drawn from WorkSafeBC Part 20 and practice (not a compliance check): water
 above the floor, slopes steeper than the soil allows, cantilevers too tall, levels too far apart,
 struts too long, tiebacks too shallow, pervious walls below the water. The library's **Shoring**
 category has trench boxes, a stacker, a panel, bundles of sheet piles and H-piles and a hydraulic
@@ -415,9 +415,11 @@ embedment, the support levels, struts, rakers and kicker blocks, tiebacks with t
 lengths and no-dig reach, the groundwater), with a slider to move the cut, and the scene is cut away
 in 3D to match. The card lists the quantities (cut, top of the cut, wall area, sheets or piles,
 walers, struts, rakers, tiebacks), compares the methods for the same floor (*Shored instead: 912 m³
-less cut*), and gives every WorkSafeBC check with its source. The P panel's **nearby** warns when
-the cut, a tieback no-dig zone, the spoil set-back or the adjacent band reaches something placed on
-the map. See [docs/excavation-section.md](docs/excavation-section.md).
+less cut*), and gives every planning check with its source (WorkSafeBC's, or practice's where it
+gives no number). The P panel's **nearby** warns when the cut, a tieback no-dig zone, the spoil
+set-back, the band behind shoring or the adjacent band reaches something placed on the map, and
+where the ground beyond a side slopes steeper than 3 : 1. See
+[docs/excavation-section.md](docs/excavation-section.md).
 
 ## Digging with an excavator
 

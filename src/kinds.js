@@ -28,6 +28,7 @@
 //                              // also have editor: true (a row's spacing). when( params ) -> false
 //                              // hides a field that doesn't apply (a cone's width)
 //     actions: [ { label: 'Pour', run( entry ) {} } ],  // P panel buttons
+//     actionsFirst: true,      // the buttons before the readouts, not after (a pit's run long)
 //     readouts: [ { label: 'volume', get( entry ) { return '50 m³'; } } ],  // read-only P panel
 //                              // lines, refreshed on each change (or panel.refresh( entry ))
 //     resize: {                // on-map handles to resize it (handles.js); without, it only turns
@@ -57,7 +58,10 @@
 //                              // method sets its support too)
 //     get( params ),           // the value shown, when it isn't params[ key ] (a stage slider whose
 //                              // last step is saved as -1); its changes go through patch
-//     group: 'sides',          // put in a sub-folder of that name, shown while any of its fields is
+//     group: 'each side',      // put in a sub-folder of that name, shown while any of its fields
+//                              // is shown
+//     placeholder( params ),   // a text field's greyed hint while it's empty (a pit's suggested
+//                              // support levels), or a string
 //
 // when() and enabled() are given the entry too, after the params.
 //

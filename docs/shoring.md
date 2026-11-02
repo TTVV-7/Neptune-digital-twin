@@ -134,8 +134,10 @@ their flanges as it's dug. Cheaper than sheet piles where water isn't a problem;
 
 - Drawn: HP310 piles about 2.4 m apart along the side's line (1.5 to 3 m is usual, FHWA GEC 4),
   standing 0.5 m out of the ground, with 75 x 300 mm lagging boards from the floor to 0.3 m out of
-  the ground. The lagging in the readout includes that 0.3 m. It goes in from the top down, 1.2 to
-  1.5 m at a time, as the face is dug: the dig stages show it so.
+  the ground. The lagging in the readout includes that 0.3 m, and only the face that's dug: where
+  the wall runs on into a slope's or benches' wing, the soil stands in front of the piles below the
+  slope, so no boards go there. It goes in from the top down, 1.2 to 1.5 m at a time, as the face
+  is dug: the dig stages show it so.
 - Pits saved before: piles all round, a toe of 0.75 of the depth (at least 1.5 m), and deeper than
   4 m a note that they need walers with struts, rakers or tie-backs.
 - Pervious: below the groundwater the checks say to dewater, grout, or use sheet or secant piles.
@@ -185,22 +187,25 @@ cantilever) up to 4 m deep; deeper, struts when there's a pair of opposite walls
 | Support levels | Drawn | Notes |
 | --- | --- | --- |
 | None (cantilever) | the walls only | flagged past 4 m, stopped past 5.5 m (USACE, Caltrans) |
-| Walers and struts | walers along every wall at each level; pipe struts square across between the pair of walls, at most 4.5 m apart; braces across the corners of pits 6 m and wider; king posts under struts longer than 12 m | struts past about 20 m flagged: rakers or tiebacks (NAVFAC DM 7.02). A wall with no wall opposite takes rakers |
+| Walers and struts | walers along every wall at each level; pipe struts square across between the pair of walls, at most 4.5 m apart; braces across the corners of pits 6 m and wider; king posts under struts longer than 12 m | struts past about 20 m flagged: rakers or tiebacks (NAVFAC DM 7.02). A wall with no wall opposite takes rakers. Walls too close for two walers and 0.3 m between them (a sheet-piled pit about 1 m wide) get no walers: the struts bear on their faces, with a warning that a trench system may suit better |
 | Rakers to kicker blocks | inclined struts from each waler down at the raker angle (45° by default) to a concrete kicker block (1.2 x 1 x 0.6 m) half cast into the floor | flagged when rakers and kickers take more than half the floor; the berm left for them flagged when steeper than the soil's slope |
-| Tiebacks | anchor heads on the walers; the strand out through the wall and down at the anchor angle (20° by default), its unbonded length past the active wedge (at least 4.5 m), then the grouted bond length (9 m by default) | the no-dig zone behind the wall is in the readout; flagged when the bond's centre is under less than 4.5 m of soil (FHWA GEC 4) |
+| Tiebacks | anchor heads on the walers; the strand out through the wall and down at the anchor angle (20° by default), its unbonded length past the active wedge (which rises from the foot of the wall's face, 0.36 m behind the heads) and max( 1.5 m, 0.2 H ) more, at least 4.5 m, then the grouted bond length (9 m by default) | the no-dig zone behind the wall is in the readout; flagged when the bond's centre is under less than 4.5 m of soil (FHWA GEC 4) |
 | One waler 0.7 m down | as pits saved before had it | |
 
 - **Levels**: suggested with the first a quarter of the depth down, 1.5 m at most, then the rest of
-  the depth split evenly so no gap, nor the last level to the floor, is over 3 m (CN's criteria; the
-  owner's "about every 3 m"): 6 m deep gives 1.5 and 3.75 m, 8 m 1.5, 3.65 and 5.85 m, 12 m 1.5,
-  4.15, 6.75 and 9.4 m. Typed levels are flagged if they don't keep to those limits.
-- **Embedment** below the floor: suggested as 1.5 times the depth for a cantilever in loose fill, half
-  the depth when braced or anchored, at least 1.5 m. The walls, and king posts 3 m below the floor,
-  are drawn down to it: it shows in a section.
+  the depth split evenly so no gap, nor the last level to the floor, is over 3 m (a rule of thumb
+  from CN's shoring criteria; the owner's "about every 3 m"): 6 m deep gives 1.5 and 3.75 m, 8 m
+  1.5, 3.65 and 5.85 m, 12 m 1.5, 4.15, 6.75 and 9.4 m. Left blank, the levels box shows the
+  suggested ones greyed. Typed levels are flagged if they don't keep to those limits, and come back
+  the same each time they're read (to 5 cm, at least 0.3 m apart).
+- **Embedment** below the floor: suggested, as a rule of thumb, as 1.5 times the depth for a
+  cantilever in loose fill, half the depth when braced or anchored, at least 1.5 m; while it's 0 its
+  label says what that comes to, e.g. *embedment (0 = 4 m)*. The walls, and king posts 3 m below
+  the floor, are drawn down to it: it shows in a section.
 - Pile and sheet lengths are the stick-up, the depth and the embedment, rounded up to 0.5 m.
 
 These are layouts to talk about, from rules of thumb, not a design: every wall and its support is a
-professional engineer's design (WorkSafeBC 20.78(2), G20.81), and the notes say so.
+professional engineer's design (WorkSafeBC 20.81(1)(d), G20.81), and the notes say so.
 
 ## Dig stages
 
@@ -212,7 +217,11 @@ The **dig stage** slider steps through how the pit is dug (excavation-design.js 
   before it's in; WorkSafeBC 20.83(1): top down);
 - with rakers: dig to below level 1, then the middle to the floor leaving a berm against the walls,
   then the kicker blocks and rakers at level 1, the berm down to below level 2, and so on;
-- trench systems: before digging, then dug and shored as it goes.
+- trench systems: before digging, then dug and shored as it goes (no slider for just the two:
+  the Show panel's Before / After shows them).
+
+The slider counts from 1, as the stage readout does, and its label says how many stages there are,
+or *finished* at the last.
 
 The shoring shows what's in at the stage: the walls once they're in, the levels installed, soldier
 pile lagging down to the depth dug. Nothing is rebuilt: each level is drawn after the one above it,
@@ -225,7 +234,7 @@ so a stage just draws less of each mesh.
 | shoring | What goes in and how many: boxes and their sizes, sheets and their length, piles and lagging |
 | shored wall | Area of excavation wall the support holds, m² |
 | weight (approx.) | Rough weight of the steel (aluminium for hydraulic shores), from typical weights: steel box panels 105 kg/m², slide rail panels 120 kg/m² and posts 200 kg/m, Z-sheets 65 kg/m, HP310 piles 79 kg/m |
-| shoring notes | Warnings: open ends, too wide or too deep for the system, needs bracing or an engineer, walls running into slopes, rakers' berm, tiebacks' no-dig zone, WorkSafeBC |
+| shoring notes | Warnings: open ends, too wide or too deep for the system, needs bracing or an engineer, walls running into slopes, rakers' berm, tiebacks' no-dig zone, WorkSafeBC; for trench systems, that they're used to the maker's tabulated data or certification for the soil and depth, with a copy on site (20.81(1)(f), G20.81) |
 | support levels | For walls: what holds them (and whether it's suggested), the levels, the struts and their span, corner braces and king posts, rakers and how much floor they take, tiebacks with their unbonded and bonded lengths and the no-dig zone behind each side, the embedment and the pile lengths |
 | checks | The WorkSafeBC and practice checks for the pit, the gravest first, each with its source: groundwater, steeper than the soil allows, benches, pervious walls below water, cantilevers, levels, strut spans, anchor cover, rakers' floor, hydraulic shores in soft or wet ground, ladders in a trench. What the shoring notes already say isn't said again |
 
@@ -255,8 +264,16 @@ Safety Regulation (sections 20.78 to 20.95). The parts the notes and drawings fo
 - **20.78:** an excavation over 6 m (20 ft) deep is dug to a qualified registered professional's
   written instructions, and one that uses support structures to a professional engineer's. The
   notes say which. So is one with water coming in (20.78(1)(c)), unless it's dewatered: the checks
-  compare the floor with the groundwater depth (2 m down by default at Neptune, until there's site
-  data).
+  compare the floor with the groundwater depth (2 m down by default at Neptune, said to be assumed
+  until it's set from site data). A structure in the adjacent band (20.78(1)(b)) and ground beyond a
+  side sloping steeper than 3 : 1 (20.78(1)(d)) are the section's nearby check
+  ([excavation-section.md](excavation-section.md)).
+- **20.81(1)(d), (f):** walls are a professional engineer's design; trench boxes, slide rail and
+  hydraulic shores are used to their maker's tabulated data or certification (G20.81). The notes
+  say so.
+- **20.86:** spoil over 0.6 m deep on average beside a supported excavation must be allowed for in
+  choosing the shoring. The nearby check flags a stockpile in the band behind a wall or trench
+  system, and **Spoil pile** puts the spoil beside a sloped or stepped side where there's one.
 
 Walls aren't picked from a supplier's table: their notes say a professional engineer designs the
 walls and their support, and that the lengths, sizes and levels here are rough. Where WorkSafeBC

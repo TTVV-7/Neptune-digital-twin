@@ -222,11 +222,24 @@ test( 'an old pit: its readouts, its section from the P panel, and its params le
 
 	}, i );
 	const rows = await panelOf();
-	assert.equal( rows[ 'design cut (flat ground)' ].value, expected.cut );
-	// 12 × 16 × 5 m with vertical sides.
+	// 12 × 16 × 5 m with vertical sides. The design's cut and the top's area are said once: in the
+	// pit's own readouts (cut, top of the cut) and the card's quantities, not again here.
 	assert.equal( expected.volume, 960 );
 	assert.match( expected.cut, /^960 m³ · 1,200 m³ loose · about 120 loads$/ );
-	assert.equal( rows.footprint.value, expected.footprint );
+	assert.equal( rows[ 'design cut (flat ground)' ], undefined );
+	assert.equal( rows.footprint, undefined );
+	assert.equal( rows[ 'top of the cut' ].value, '12.0 × 16.0 m, 192 m²' );
+	// Every pit says what the figures are, under a heading, as every note has one.
+	assert.match( rows[ 'planning aid' ].value, /^A planning aid, not a design or a compliance check/ );
+	assert.equal( await page.evaluate( () => [ ...document.querySelectorAll( '.lil-controller.note' ) ].find( c => c.querySelector( '.lil-name' ).textContent === 'planning aid' && c.style.display !== 'none' ).querySelector( '.lil-name' ).getBoundingClientRect().height > 0 ), true );
+	// The section's buttons come before the readouts.
+	assert.equal( await page.evaluate( () => {
+
+		const folder = [ ...document.querySelectorAll( '.lil-gui.lil-root .lil-gui' ) ].find( f => ! f.classList.contains( 'lil-closed' ) && f.querySelector( '.lil-title' )?.textContent === 'Excavation' );
+		const names = [ ...folder.querySelectorAll( '.lil-controller' ) ].map( c => c.querySelector( '.lil-name' )?.textContent );
+		return names.indexOf( 'Section across' ) < names.indexOf( 'cut (bank)' );
+
+	} ), true );
 	// The walls and what's in them are the shoring's readouts, not repeated here.
 	assert.equal( rows.quantities, undefined );
 	assert.match( rows.shoring.value, /^94 sheets, 56 m of wall, 9\.0 m long each/ );
@@ -239,7 +252,7 @@ test( 'an old pit: its readouts, its section from the P panel, and its params le
 	await clickPanel( 'Section across' );
 	const r = await read( i );
 	assert.equal( r.hidden, false );
-	assert.equal( r.title, 'Section across · Excavation' );
+	assert.equal( r.title, 'Section across · Excavation, top 12.0 × 16.0 m, 5.0 m deep' );
 	assert.equal( r.dims.depth.value, 5 );
 	assert.equal( r.dims.top.value, 12 );
 	assert.equal( r.dims.floor.value, 12 );
@@ -272,7 +285,7 @@ test( 'the section\'s dimensions are the design\'s: walls with struts, slopes, t
 	const a = await pit( mixed, 0, 0, 0 );
 	await section( a, false );
 	let r = await read( a );
-	assert.equal( r.title, 'Section across · Excavation' );
+	assert.equal( r.title, 'Section across · Excavation, top 36.0 × 20.0 m, 8.0 m deep' );
 	assert.equal( r.dims.depth.value, 8 );
 	assert.equal( r.dims.top.value, 36 );
 	assert.equal( r.dims.floor.value, 12 );
@@ -293,7 +306,7 @@ test( 'the section\'s dimensions are the design\'s: walls with struts, slopes, t
 
 	await page.click( '.section-card [data-cut="along"]' );
 	r = await read( a );
-	assert.equal( r.title, 'Section along · Excavation' );
+	assert.equal( r.title, 'Section along · Excavation, top 36.0 × 20.0 m, 8.0 m deep' );
 	assert.equal( r.dims.top.value, 20 );
 	assert.equal( r.dims.floor.value, 20 );
 	assert.deepEqual( r.plan.levels, [ 1.5, 3.65, 5.85 ] );
@@ -325,7 +338,7 @@ test( 'the section\'s dimensions are the design\'s: walls with struts, slopes, t
 	assert.ok( r.legend.includes( 'final' ) );
 
 	// Secant piles all round with tiebacks at 20°: the research's worked example (10 m deep, top
-	// row 1.5 m down: 6.17 m free, its bond's middle 5.15 m down).
+	// row 1.5 m down), with the heads on the walers: 6.49 m free, its bond's middle 5.26 m down.
 	const anchored = await pit( { width: 24, length: 40, depth: 10, outline: 'floor', method: 'shore', support: 'secant-piles', bracing: 'tiebacks', anchorAngle: 20 }, 200, 0, 0 );
 	await section( anchored, false );
 	r = await read( anchored );
@@ -342,8 +355,18 @@ test( 'the section\'s dimensions are the design\'s: walls with struts, slopes, t
 
 	}
 
-	assert.equal( r.labels[ 'free-2-1' ].text, 'free 6.17 m' );
-	assert.equal( r.dims[ 'cover-2' ].text, '5.15 cover' );
+	assert.equal( r.labels[ 'free-2-1' ].text, 'free 6.49 m' );
+	assert.equal( r.dims[ 'cover-2' ].text, '5.26 cover' );
+	// A tieback is at the middle of this one's sides: the cut goes through it.
+	assert.equal( await page.evaluate( () => window.twin.section.view.at ), 0 );
+	assert.ok( r.fills.some( f => f.member === 'bond' && ! f.beyond ) );
+	// This one's are 1.2 m either side of the middle: it opens where a row is in the cut, so their
+	// bonds are drawn in it rather than faintly beyond it.
+	const offset = await pit( { width: 12, length: 20, depth: 8, outline: 'floor', method: 'shore', support: 'sheet-piles', bracing: 'tiebacks' }, 250, 0, 0 );
+	await section( offset, false );
+	const opened = await page.evaluate( () => window.twin.section.view.at );
+	assert.ok( Math.abs( Math.abs( opened ) - 1.2 ) < 0.11, `cut at ${ opened }` );
+	assert.ok( ( await read( offset ) ).fills.some( f => f.member === 'bond' && ! f.beyond ) );
 	assert.ok( r.legend.includes( 'wedge' ) && r.legend.includes( 'bond' ) );
 	await shot( 'tiebacks-across' );
 
@@ -539,7 +562,11 @@ test( 'the quantities and the comparison are the shared module\'s', async () => 
 	assert.equal( r.compared.length, r.list.length );
 	r.compared.forEach( ( row, k ) => assert.equal( row.volume, r.list[ k ].volume ) );
 	assert.equal( r.compared[ 0 ].current, true );
-	assert.equal( r.checks, `Checks (${ r.flags })` );
+	// Gravest first, opened while any is a warning, the worst counted in the summary.
+	assert.match( r.checks, new RegExp( `^Checks \\(${ r.flags } · \\d+ warnings?\\)$` ) );
+	const order = await page.evaluate( () => ( { levels: [ ...window.twin.section.card.querySelectorAll( '.checks li' ) ].map( li => li.className ), open: window.twin.section.card.querySelector( '.checks' ).open } ) );
+	assert.deepEqual( order.levels, [ ...order.levels ].sort( ( a, b ) => [ 'stop', 'warn', 'note' ].indexOf( a ) - [ 'stop', 'warn', 'note' ].indexOf( b ) ) );
+	assert.equal( order.open, true );
 	// The design's example: shored instead of half sloped, 1,920 m³ less.
 	assert.match( r.text, /Sloped \(1\.5 : 1, soil C\) instead: 2,688 m³ more cut, top 36\.0 × 44\.0 m\./ );
 	assert.match( r.text, /Shored instead: 1,920 m³ less cut, top 12\.0 × 20\.0 m\./ );
@@ -550,8 +577,7 @@ test( 'the quantities and the comparison are the shared module\'s', async () => 
 	await page.evaluate( () => window.twin.section.close() );
 	await pit( { width: 10, length: 20, depth: 4, outline: 'floor', slopeBy: 'soil', soil: 'C' }, 100, 0, 0 );
 	const panel = await panelOf();
-	assert.match( panel[ 'design cut (flat ground)' ].value, /^1,712 m³ · / );
-	assert.equal( panel.footprint.value, '704 m² (22.0 × 32.0 m)' );
+	assert.equal( panel[ 'top of the cut' ].value, '22.0 × 32.0 m, 704 m²' );
 	assert.match( panel.compared.value, /Shored instead: 912 m³ less cut, top 10\.0 × 20\.0 m\./ );
 	assert.equal( panel.quantities, undefined );
 
@@ -617,7 +643,8 @@ test( 'what\'s placed nearby: in the cut, over the tiebacks, in the spoil set-ba
 	await place( { name: 'Site office', procedural: 'office-trailer-8x20', library: 'office-trailer-8x20', east: 500 + 6 + reach - 2, north: 0 } );
 	// A laydown area over the cut doesn't count.
 	await place( { name: 'Laydown A', kind: 'laydown', params: { label: 'Laydown A', width: 6, length: 6 }, east: 500, north: 0 } );
-	assert.equal( await nearby( anchored ), 'Tiebacks on side 2 run under Site office: consent, or steeper or shorter anchors (FHWA GEC 4 5.3.6).' );
+	// Over the tiebacks, and within the adjacent band too: both said, a PE's as the pit is shored.
+	assert.equal( await nearby( anchored ), 'Tiebacks on side 2 run under Site office: consent, or steeper or shorter anchors (FHWA GEC 4 5.3.6). Within 8.0 m of the toe (adjacent): Site office. A structure there means a PE\'s written instructions, as it\'s shored (WorkSafeBC 20.78(1)(b), (2)).' );
 	// The P panel says so once it's checked again.
 	await page.waitForFunction( () => [ ...document.querySelectorAll( '.lil-controller.note' ) ].some( c => c.querySelector( '.lil-name' )?.textContent === 'nearby' && c.style.display !== 'none' && c.querySelector( '.readout-note' ).textContent.startsWith( 'Tiebacks on side 2 run under Site office' ) ) );
 
@@ -631,7 +658,13 @@ test( 'what\'s placed nearby: in the cut, over the tiebacks, in the spoil set-ba
 	const old = await pit( { width: 12, length: 12, depth: 5, slope: 1, support: 'sheet-piles' }, 600, 0, 0 );
 	await place( { name: 'Stockpile 1', kind: 'stockpile', params: { shape: 'ridge', width: 1, length: 4, material: 'gravel' }, east: 600 + 6 + 0.75, north: 0 } );
 	await move( 'Site office', 600, - 6 - 3 - 1.2 );
-	assert.equal( await nearby( old ), 'Stockpile 1 is inside the spoil set-back (1.2 m, WorkSafeBC 20.90). Within 5.0 m of the toe (adjacent): Site office. A structure there means a QRP\'s written instructions (WorkSafeBC 20.78(1)(b)).' );
+	assert.equal( await nearby( old ), 'Stockpile 1 is inside the spoil set-back (1.2 m, WorkSafeBC 20.90). Stockpile 1 is beside the shoring on side 2: over 0.6 m deep on average, the shoring must allow for it (WorkSafeBC 20.86). Within 5.0 m of the toe (adjacent): Site office. A structure there means a PE\'s written instructions, as it\'s shored (WorkSafeBC 20.78(1)(b), (2)).' );
+	// Beside a sloped pit, spoil in its set-back has no shoring to load.
+	const sloped = await pit( { width: 12, length: 12, depth: 3, outline: 'floor', slopeBy: 'soil' }, 700, 0, 0 );
+	await move( 'Stockpile 1', 700 + 6 + 4.5 + 0.75 );
+	await move( 'Site office', 900 );
+	assert.equal( await nearby( sloped ), 'Stockpile 1 is inside the spoil set-back (1.2 m, WorkSafeBC 20.90).' );
+	await move( 'Stockpile 1', 600 + 6 + 0.75 );
 
 	// The no-dig zones: one behind each wall, draped on the ground, shown in build mode.
 	const zones = await page.evaluate( async ( { i, reach } ) => {
@@ -660,6 +693,107 @@ test( 'what\'s placed nearby: in the cut, over the tiebacks, in the spoil set-ba
 	assert.equal( zones.oldZones, false );
 	assert.equal( zones.root, zones.build );
 	await shot( 'nearby' );
+
+} );
+
+test( 'the card and the cut-away share the screen: panels folded, help on top, keys, another pit', async () => {
+
+	await clear();
+	// Build mode with the library open, as excavations are made, and the P panel showing the pit.
+	await page.evaluate( () => {
+
+		if ( ! window.twin.sidebar.isOpen() ) document.getElementById( 'library-toggle' ).click();
+
+	} );
+	const a = await pit( { width: 12, length: 20, depth: 8, outline: 'floor', method: 'sides', side1: 'sheet-piles', side3: 'sheet-piles', side2: 'slope', side4: 'slope', slopeBy: 'soil', bracing: 'auto' }, 0, 0, 0 );
+	const b = await pit( { width: 10, length: 10, depth: 3, outline: 'floor', slopeBy: 'soil' }, 120, 0, 0 );
+	await page.evaluate( i => window.twin.sidebar.select( window.pits[ i ] ), a );
+	const panels = () => page.evaluate( () => ( {
+		layers: ! document.querySelector( '#layers .layers-panel' ).hidden,
+		legend: ! document.querySelector( '#legend .legend-panel' ).hidden,
+		saved: [ localStorage.getItem( 'neptune-twin.legend' ), localStorage.getItem( 'neptune-twin.layers' ) ],
+	} ) );
+	const before = await panels();
+	await section( a, false, true );
+	await page.waitForTimeout( 300 );
+	const r = await page.evaluate( i => {
+
+		const { section, camera } = window.twin;
+		const { view } = section;
+		const rect = el => {
+
+			if ( ! el || el.hidden || el.getClientRects().length === 0 ) return null;
+			const b = el.getBoundingClientRect();
+			return b.width > 0 && b.height > 0 ? b : null;
+
+		};
+		// The middle of the cut face and the floor's corners there, on the screen.
+		const entry = window.pits[ i ];
+		const screen = ( u, y ) => {
+
+			const p = camera.position.clone().set( - ( entry.state.east + u ), view.rim + y, entry.state.north + view.at ).project( camera );
+			return [ ( p.x + 1 ) / 2 * innerWidth, ( 1 - p.y ) / 2 * innerHeight ];
+
+		};
+		const points = [ screen( 0, - 4 ), screen( - 6, - 8 ), screen( 6, - 8 ) ];
+		const covers = [ section.card, document.querySelector( '.lil-gui.lil-root' ), document.querySelector( '#layers .layers-panel' ), document.querySelector( '#legend .legend-panel' ), document.getElementById( 'library' ) ].map( rect ).filter( Boolean );
+		const under = points.filter( ( [ x, y ] ) => x < 0 || y < 0 || x > innerWidth || y > innerHeight || covers.some( c => x >= c.left && x <= c.right && y >= c.top && y <= c.bottom ) );
+		const card = section.card.getBoundingClientRect();
+		const library = document.getElementById( 'library' ).getBoundingClientRect();
+		return { under, sheet: section.card.classList.contains( 'sheet' ), overLibrary: card.left < library.right && card.top < library.bottom, esc: [ ...document.querySelectorAll( '#legend dd' ) ].map( d => d.textContent ) };
+
+	}, a );
+	// At 1280 × 800 there's no room beside the library for the card and the cut: a sheet along the
+	// bottom, the cut framed clear of it, the library and the P panel; the Show and Controls panels
+	// folded meanwhile, not as saved.
+	assert.equal( r.sheet, true );
+	assert.equal( r.overLibrary, false );
+	assert.deepEqual( r.under, [] );
+	const held = await panels();
+	assert.deepEqual( [ held.layers, held.legend ], [ false, false ] );
+	assert.deepEqual( held.saved, before.saved );
+	// Esc closes the section first, and the Controls say so.
+	assert.ok( r.esc.includes( 'Close the section' ), r.esc.join( ' / ' ) );
+
+	// The help opens over the card.
+	await page.evaluate( () => document.activeElement?.blur() );
+	await page.keyboard.press( 'KeyH' );
+	const help = await page.evaluate( () => {
+
+		const h = document.getElementById( 'help' ).getBoundingClientRect();
+		return document.elementFromPoint( h.left + 60, h.top + 60 )?.closest( '#help' ) !== null;
+
+	} );
+	assert.equal( help, true );
+	await page.keyboard.press( 'Escape' );
+	assert.equal( await page.evaluate( () => window.twin.section.view !== null ), true );
+
+	// The Cut at slider keeps the keys, and the camera stays put.
+	const keys = await page.evaluate( async () => {
+
+		const { section, camera } = window.twin;
+		const slider = section.card.querySelector( '.at input' );
+		slider.focus();
+		return { at: section.view.at, camera: camera.position.toArray() };
+
+	} );
+	for ( let k = 0; k < 3; k ++ ) await page.keyboard.press( 'ArrowRight' );
+	await page.waitForTimeout( 200 );
+	const moved = await page.evaluate( () => ( { at: window.twin.section.view.at, camera: window.twin.camera.position.toArray(), focused: document.activeElement === window.twin.section.card.querySelector( '.at input' ) } ) );
+	assert.ok( near( moved.at, keys.at + 0.3, 1e-9 ), `${ keys.at } -> ${ moved.at }` );
+	assert.equal( moved.focused, true );
+	assert.deepEqual( moved.camera, keys.camera );
+	await page.evaluate( () => document.activeElement?.blur() );
+
+	// Selecting another pit: the section follows it.
+	await page.evaluate( i => window.twin.sidebar.select( window.pits[ i ] ), b );
+	await page.waitForFunction( i => window.twin.section.view?.entry === window.pits[ i ], b );
+	assert.match( await page.evaluate( () => window.twin.section.card.querySelector( '.title' ).textContent ), /top 19\.0 × 19\.0 m, 3\.0 m deep$/ );
+
+	// Closed: the panels as they were.
+	await page.evaluate( () => window.twin.section.close() );
+	const after = await panels();
+	assert.deepEqual( after, before );
 
 } );
 

@@ -161,6 +161,7 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 			}
 
 			controller.name( labelOf( field, entry ) );
+			if ( field.placeholder !== undefined && controller.$input ) controller.$input.placeholder = placeholderOf( field, entry );
 			// Text and colours apply when finished, numbers and choices as they change. A colour is
 			// finished when its picker closes, as well as when it loses focus.
 			if ( field.type === 'text' || field.type === 'color' ) controller.onFinishChange( () => set( field ) );
@@ -182,6 +183,13 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 
 					const name = labelOf( field, entry );
 					if ( controller._name !== name ) controller.name( name );
+
+				}
+
+				if ( typeof field.placeholder === 'function' && controller.$input ) {
+
+					const hint = placeholderOf( field, entry );
+					if ( controller.$input.placeholder !== hint ) controller.$input.placeholder = hint;
 
 				}
 
@@ -210,9 +218,16 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 
 		};
 		refresh();
+		const addActions = () => {
+
+			for ( const action of kind.actions ) folder.add( { run: () => action.run( entry ) }, 'run' ).name( action.label );
+
+		};
+		// A kind with many readouts (a pit's) puts its buttons first, where they're seen.
+		if ( kind.actionsFirst ) addActions();
 		for ( const readout of kind.readouts ?? [] ) folder.add( readouts, readout.label ).disable();
 		readoutViews.set( entry, refresh );
-		for ( const action of kind.actions ) folder.add( { run: () => action.run( entry ) }, 'run' ).name( action.label );
+		if ( ! kind.actionsFirst ) addActions();
 		// Keep the copy and the views in step when params change elsewhere (e.g. a pour finishing).
 		paramViews.set( entry, { params, views: [ ...views ].map( ( [ field, view ] ) => [ view, () => valueOf( field ) ] ), fields: made } );
 
@@ -350,6 +365,13 @@ function fitKind( folder, kind, entry, { params, fields } ) {
 		} );
 
 	}
+
+}
+
+// A text field's hint while it's empty, likewise.
+function placeholderOf( field, entry ) {
+
+	return typeof field.placeholder === 'function' ? field.placeholder( entry.params, entry ) : String( field.placeholder );
 
 }
 

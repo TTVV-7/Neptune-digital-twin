@@ -58,6 +58,9 @@ const BOARD = { thick: 0.075, high: 0.3, gap: 0.012 };
 const CAP_DEPTH = 0.45;
 // Rough weights: kg per metre of a Z-sheet 0.6 m wide, of a W360 waler, of strut pipe (324, 508
 // and 610 mm, by span), and of a tieback's strand; concrete pile walls and blocks by volume.
+// Trench boxes, slide rail and hydraulic shores aren't designed on site: they're used as their maker
+// says for the soil and depth, or as an engineer certifies them.
+const MAKERS_DATA = 'Used to the maker\'s tabulated data or certification for the soil and depth, with a copy on site (WorkSafeBC 20.81(1)(f), G20.81).';
 const KG = { sheet: 65, waler: 100, strut: [ [ 12, 97 ], [ 20, 150 ], [ Infinity, 200 ] ], strand: 5, head: 30 };
 
 // The side slope the pit is dug to: vertical with any support.
@@ -130,6 +133,15 @@ function planTrench( { params, geom } ) {
 	const across = turned ? length : width;
 	const along = Math.max( 0, turned ? right.toe + left.toe : front.toe + back.toe );
 	const plan = geom.system === 'slide-rail' ? planSlideRail( { width, length, depth } ) : PLANNERS[ geom.system ]( { width, length, depth, across, along } );
+	// Too short for a box (or, with the ends sloped back, the floor between them): nothing to build
+	// or shore, as setUpShoring's update has it.
+	if ( ! plan.build ) {
+
+		plan.shored = [];
+		return plan;
+
+	}
+
 	const sloped = geom.sides.some( side => side.method === 'slope' );
 	if ( sloped ) plan.notes = plan.notes.filter( note => ! note.startsWith( 'Ends are open' ) );
 	plan.turned = turned;
@@ -187,6 +199,7 @@ function planTrenchBoxes( { width, length, depth, ...given } ) {
 	if ( open > 0.05 ) notes.push( `The boxes leave ${ metres( open ) } at each end.` );
 	// Lining a long trench all at once is rare: boxes go in with the pipe.
 	if ( lengths.length > 2 ) notes.push( `${ lengths.length } boxes line all of it; usually one or two are dragged along as the pipe goes in, and the trench behind them backfilled.` );
+	notes.push( MAKERS_DATA );
 
 	// Boxes by size, then the stackers on them, longest first: "2 × 2.4 × 7.3 m (8 × 24 ft)", height
 	// by length, as boxes are sold.
@@ -313,6 +326,7 @@ function planSlideRail( { width, length, depth } ) {
 	const kg = perimeter * height * 120 + posts * ( depth + top ) * 200 + struts * across * 90;
 	const notes = [];
 	if ( depth > 7.5 ) notes.push( 'Deeper than most slide rail systems go (about 7.5 m): check with the supplier, or use sheet piles.' );
+	notes.push( MAKERS_DATA );
 	return {
 		summary: `${ panels } panels in ${ posts } posts (bays ${ maxOf( walls.map( ( w, i ) => w.length / bays[ i ] ) ) } m or less), ${ stack.length } high${ struts ? `, ${ struts } strut${ struts === 1 ? '' : 's' } across` : '' }`,
 		wall: perimeter * depth,
@@ -383,6 +397,7 @@ function planHydraulic( { width, length, depth, ...given } ) {
 	if ( depth > MAX_SHORE_DEPTH ) notes.push( 'Deeper than hydraulic shoring tables go (about 6 m, 20 ft): use slide rail or sheet piles.' );
 	if ( depth > SAFE_DEPTH ) notes.push( 'Ends are open: slope them or shore them too (WorkSafeBC 20.81(2)).' );
 	notes.push( 'In loose or wet ground, add plywood sheeting behind the rails.' );
+	notes.push( MAKERS_DATA );
 	// About 5 kg/m of rail and 12 kg a cylinder.
 	const kg = count * ( 2 * rail * 5 + rows.length * 12 );
 	return {
@@ -630,7 +645,9 @@ function planWalls( { geom, plan: bp, quantities } ) {
 
 			const count = sum( runs, w => w.posts.length );
 			piles[ id ] = count;
-			const lagging = sum( runs, w => w.span * ( D + ABOVE ) );
+			// Where the face is dug (not in a slope's wing, where soil stands in front of the piles),
+			// as excavation-design.js counts it.
+			const lagging = sum( quantities.walls.filter( w => w.system === id ), w => w.lagging );
 			summary.push( `${ count } soldier piles (HP310, ${ maxOf( runs.map( w => w.spacing ) ) } m apart or less) on ${ where }, ${ metres( length ) } long each, ${ Math.round( lagging ) } m² of timber lagging (${ ( lagging * BOARD.thick ).toFixed( 1 ) } m³)` );
 			steel += count * length * H_PILE.kgPerM;
 
@@ -1131,8 +1148,8 @@ export function setUpShoring( { scene, models, terrain, layers, kind, rimOf } ) 
 
 // One side as the ground's shader takes it (shoring-ground.js): where its line is if it's vertical,
 // and how far behind it and along it it's shored. While rakers wait, the berm left against a wall
-// is eased across the wall's line much as a vertical side is (to a few centimetres), so it's
-// straightened too, between the floor's corners, where no slope beside it is shallower.
+// is eased across the wall's line exactly as a vertical side is (excavation-design.js depthAt), so
+// it's straightened too, between the floor's corners, where no slope beside it is shallower.
 function groundSide( geom, plan, side ) {
 
 	const berm = side.profile === 'berm';
@@ -1300,7 +1317,7 @@ function levelsText( { params, geom, plan, quantities } ) {
 	const head = `${ name }${ params.bracing === 'auto' ? `, suggested for ${ metres( D ) } deep` : '' }`;
 	if ( plan.levels.length ) {
 
-		const how = plan.suggested ? ' (the first within 1.5 m of the top, then no more than 3 m apart or above the floor)' : '';
+		const how = plan.suggested ? ' (a rule of thumb from CN\'s shoring criteria: the first within 1.5 m of the top, then no more than 3 m apart or above the floor)' : '';
 		parts.push( `${ head }: ${ plural( plan.levels.length, 'level' ) }, ${ listText( plan.levels.map( z => String( round( z, 2 ) ) ) ) } m down${ plan.type === 'classic' ? '' : how }` );
 
 	} else parts.push( `${ head }: no support levels` );
@@ -1309,7 +1326,7 @@ function levelsText( { params, geom, plan, quantities } ) {
 	const types = Object.entries( plan.sideTypes ).filter( ( [ , type ] ) => type !== plan.type && plan.type !== 'classic' && type !== 'none' );
 	if ( types.length ) parts.push( types.map( ( [ n, type ] ) => `side ${ n } ${ type === 'rakers' ? 'on rakers, with no wall opposite' : type }` ).join( ', ' ) );
 
-	if ( quantities.struts.count ) parts.push( `${ plural( quantities.struts.count, 'strut' ) } ${ metres( plan.struts.span ) } long${ quantities.corners ? `, ${ plural( quantities.corners, 'corner brace' ) }` : '' }${ quantities.kingPosts ? `, ${ plural( quantities.kingPosts, 'king post' ) } under them` : '' }` );
+	if ( quantities.struts.count ) parts.push( `${ plural( quantities.struts.count, 'strut' ) } ${ metres( Math.max( 0, plan.struts.span ) ) } long${ quantities.corners ? `, ${ plural( quantities.corners, 'corner brace' ) }` : '' }${ quantities.kingPosts ? `, ${ plural( quantities.kingPosts, 'king post' ) } under them` : '' }` );
 	else if ( quantities.corners ) parts.push( plural( quantities.corners, 'corner brace' ) );
 	const rakers = Object.values( plan.rakers );
 	if ( rakers.length ) parts.push( `${ plural( quantities.rakers.count, 'raker' ) } at ${ params.rakerAngle }° to ${ plural( quantities.kickers, 'kicker block' ) }, taking up to ${ metres( Math.max( ...rakers.map( r => r.reach ) ) ) } of the floor from the wall` );
@@ -1334,7 +1351,7 @@ function levelsText( { params, geom, plan, quantities } ) {
 
 	}
 
-	const how = params.toe > 0 ? 'as set' : plan.type === 'classic' ? 'as the first shoring had it' : plan.levels.length ? 'half the depth, 1.5 m at least' : '1.5 times the depth';
+	const how = params.toe > 0 ? 'as set' : plan.type === 'classic' ? 'as the first shoring had it' : plan.levels.length ? 'rule of thumb: half the depth, 1.5 m at least' : 'rule of thumb: 1.5 times the depth';
 	parts.push( `embedment ${ metres( plan.toe ) } below the floor (${ how })` );
 	parts.push( Object.entries( plan.pileLength ).map( ( [ id, length ] ) => `${ id === 'sheet-piles' ? 'sheets' : SYSTEMS[ id ].label.toLowerCase().replace( ' + lagging', '' ).replace( 'pile wall', 'piles' ) } ${ metres( length ) } long` ).join( ', ' ) );
 	return `${ parts.join( '; ' ) }.`;

@@ -336,7 +336,13 @@ test( 'P panel: shored with a system, no slope while shored, notes in full; Work
 	const panel = () => page.evaluate( () => {
 
 		const folder = [ ...document.querySelectorAll( '.lil-gui.lil-root .lil-gui' ) ].find( f => ! f.classList.contains( 'lil-closed' ) && f.querySelector( '.lil-title' )?.textContent === 'Excavation' );
-		const row = name => [ ...folder.querySelectorAll( '.lil-controller' ) ].find( c => c.querySelector( '.lil-name' )?.textContent === name );
+		// The slope's label says the ratio in use: 'slope (1 : 1)'.
+		const row = name => [ ...folder.querySelectorAll( '.lil-controller' ) ].find( c => {
+
+			const text = c.querySelector( '.lil-name' )?.textContent;
+			return name === 'slope' ? /^slope \([\d.]+ : 1|vertical\)/.test( text ) && text !== 'slope (h : v)' : text === name;
+
+		} );
 		const shows = name => row( name ).style.display !== 'none';
 		return {
 			sides: row( 'sides' ).querySelector( 'select' ).selectedOptions[ 0 ].textContent,
@@ -366,7 +372,12 @@ test( 'P panel: shored with a system, no slope while shored, notes in full; Work
 	await page.evaluate( () => {
 
 		const folder = [ ...document.querySelectorAll( '.lil-gui.lil-root .lil-gui' ) ].find( f => ! f.classList.contains( 'lil-closed' ) && f.querySelector( '.lil-title' )?.textContent === 'Excavation' );
-		const row = name => [ ...folder.querySelectorAll( '.lil-controller' ) ].find( c => c.querySelector( '.lil-name' )?.textContent === name );
+		const row = name => [ ...folder.querySelectorAll( '.lil-controller' ) ].find( c => {
+
+			const text = c.querySelector( '.lil-name' )?.textContent;
+			return name === 'slope' ? /^slope \([\d.]+ : 1|vertical\)/.test( text ) && text !== 'slope (h : v)' : text === name;
+
+		} );
 		const choose = ( name, text ) => {
 
 			const s = row( name ).querySelector( 'select' );

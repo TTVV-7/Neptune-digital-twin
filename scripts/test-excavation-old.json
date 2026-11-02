@@ -1513,5 +1513,91 @@
 			"sum": -256.1492336447958,
 			"digest": "129d4c46463e4b14ef37de0b241a8ca7710ab185dca077ee032116d7b8ba94bf"
 		}
+	},
+	{
+		"at": [
+			1500,
+			100,
+			0,
+			0
+		],
+		"params": {
+			"width": 1,
+			"length": 1,
+			"depth": 0.1,
+			"slope": 2,
+			"support": "trench-box"
+		},
+		"rim": 0,
+		"cut": 0.1250000000004996,
+		"footprint": [
+			-0.5,
+			0.03999999999999997,
+			-0.5,
+			0.5,
+			0.06,
+			0.5
+		],
+		"shoring": {
+			"summary": "no box fits",
+			"wall": 0,
+			"weight": "",
+			"notes": [
+				"Too short for a trench box: the shortest is 2.4 m (8 ft)."
+			]
+		},
+		"shown": false,
+		"floor": "1.0 × 1.0 m",
+		"resize": "1.0 × 1.0 m · 0.1 m deep · ≈ 0.1 m³ cut",
+		"label": "Excavation · 0.1 m³ cut",
+		"heights": {
+			"count": 976,
+			"cut": 21,
+			"sum": -0.8774215622711546,
+			"digest": "d099ba6f047dd971aabda1b8da60e864901505b85386360f54206e7b317bdfc4"
+		}
+	},
+	{
+		"at": [
+			1500,
+			140,
+			0,
+			0
+		],
+		"params": {
+			"width": 2,
+			"length": 2,
+			"depth": 2,
+			"slope": 1,
+			"support": "trench-box"
+		},
+		"rim": 0,
+		"cut": 8.500000000001382,
+		"footprint": [
+			-1,
+			0.03999999999999994,
+			-1,
+			1,
+			0.06,
+			1
+		],
+		"shoring": {
+			"summary": "no box fits",
+			"wall": 0,
+			"weight": "",
+			"notes": [
+				"Too short for a trench box: the shortest is 2.4 m (8 ft)."
+			]
+		},
+		"shown": false,
+		"floor": "2.0 × 2.0 m",
+		"resize": "2.0 × 2.0 m · 2.0 m deep · ≈ 8.0 m³ cut",
+		"label": "Excavation · 8.5 m³ cut",
+		"heights": {
+			"count": 1129,
+			"cut": 44,
+			"sum": -51.698542345764146,
+			"digest": "28217c14acf513b822c59f59fd0b0edffb0c938d208aa4a832db1e71f73086da"
+		}
 	}
 ]
