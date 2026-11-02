@@ -10,21 +10,11 @@
 		},
 		"wheels": [
 			{
-				"name": "wheel-rear-left",
+				"name": "wheel-front-right",
 				"at": [
-					-1.1,
+					1.1,
 					0.44,
-					1.17
-				],
-				"radius": 0.44,
-				"steers": false
-			},
-			{
-				"name": "wheel-front-left",
-				"at": [
-					-1.42,
-					0.44,
-					-1.08
+					-1.17
 				],
 				"radius": 0.44,
 				"steers": true
@@ -32,22 +22,32 @@
 			{
 				"name": "wheel-rear-right",
 				"at": [
-					1.1,
+					1.42,
 					0.44,
-					1.17
+					1.08
 				],
 				"radius": 0.44,
 				"steers": false
 			},
 			{
-				"name": "wheel-front-right",
+				"name": "wheel-front-left",
 				"at": [
-					1.42,
+					-1.1,
 					0.44,
-					-1.08
+					-1.17
 				],
 				"radius": 0.44,
 				"steers": true
+			},
+			{
+				"name": "wheel-rear-left",
+				"at": [
+					-1.42,
+					0.44,
+					1.08
+				],
+				"radius": 0.44,
+				"steers": false
 			}
 		],
 		"paintable": false,

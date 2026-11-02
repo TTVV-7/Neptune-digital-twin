@@ -1256,6 +1256,13 @@ its name, blurb, tuning and whether it needs the pass in `cars.js` and its id in
 The muscle car, say, was `--id muscle-car --length 4.7 --front=+z --paint Material --rims Material.001
 --lamps Material.004`.
 
+Look at a new car in the Garage and from its driver's seat (C) to check which way it faces: by its
+seat, steering wheel, lamps and exhaust. The dune buggy was first imported back to front, so it
+drove tail first (its wider axle is the rear one, not the front). It was turned round in its file
+rather than imported again: each part's node turned 180° about y, the wheels renamed front for rear
+and left for right (the new front pair steering), `cars.json`'s wheels to match, and its picture
+drawn again. Its one seat is in the middle, so its driver's-seat camera is too.
+
 `drive-car-thumbs.mjs` draws every picture the same way (World Drive's dev server in Chromium, the
 car from ahead and to its left, on nothing), whatever Sketchfab's own pictures were.
 

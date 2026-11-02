@@ -55,7 +55,9 @@ export const CARS = [
 		id: 'dune-buggy', name: 'Dune buggy', blurb: 'Light, bouncy, big air', pro: true,
 		drive: {
 			topSpeed: 145, accel: 11, brake: 14, reverse: 30,
-			cab: { ahead: 0.25, right: - 0.35, up: 1.2 },
+			// Its one seat is in the middle, under the cage's roof: a little behind the car's middle, as
+			// its nose is long and its engine short.
+			cab: { ahead: - 0.38, right: 0, up: 1.38 },
 			// Light on long springs: loose on the road, thrown higher, slower to fall, landing well off
 			// upright and bouncing as it does.
 			handling: { grip: 9, slip: 2.2, driftYaw: [ 52, 124 ], turn: [ 160, 66 ], lock: 36, gravity: 0.85, launch: 1.15, landTilt: 50, rebound: 0.2 },
