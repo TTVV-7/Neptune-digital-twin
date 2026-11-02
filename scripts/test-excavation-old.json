@@ -1,0 +1,1517 @@
+[
+	{
+		"at": [
+			1000,
+			-280,
+			0,
+			-2
+		],
+		"params": {
+			"width": 16,
+			"length": 14,
+			"depth": 3,
+			"slope": 0,
+			"support": "none"
+		},
+		"rim": -2,
+		"cut": 920.2500000000097,
+		"footprint": [
+			-8,
+			0.03999999999999957,
+			-7,
+			8,
+			0.06,
+			7
+		],
+		"shoring": {
+			"summary": "",
+			"wall": 0,
+			"weight": "",
+			"notes": [
+				"Over 1.2 m deep, with sides steeper than WorkSafeBC allows even in hard, solid soil (3 : 4): slope, bench or shore them before anyone goes in (OHS Regulation 20.81)."
+			]
+		},
+		"shown": false,
+		"floor": "16.0 × 14.0 m",
+		"resize": "16.0 × 14.0 m · 3.0 m deep · ≈ 672 m³ cut",
+		"label": "Excavation · 920 m³ cut",
+		"heights": {
+			"count": 4496,
+			"cut": 1676,
+			"sum": -6309.1037923914255,
+			"digest": "052f71bd0ce4d88114fe7b324f6aeee113682a39d595029faa09a7ab108f8b29"
+		}
+	},
+	{
+		"at": [
+			1000,
+			100,
+			0,
+			0
+		],
+		"params": {
+			"width": 20,
+			"length": 10,
+			"depth": 2,
+			"slope": 0,
+			"support": "none"
+		},
+		"rim": 0,
+		"cut": 400.5000000000487,
+		"footprint": [
+			-10,
+			0.039999999999999696,
+			-5,
+			10,
+			0.06,
+			5
+		],
+		"shoring": {
+			"summary": "",
+			"wall": 0,
+			"weight": "",
+			"notes": [
+				"Over 1.2 m deep, with sides steeper than WorkSafeBC allows even in hard, solid soil (3 : 4): slope, bench or shore them before anyone goes in (OHS Regulation 20.81)."
+			]
+		},
+		"shown": false,
+		"floor": "20.0 × 10.0 m",
+		"resize": "20.0 × 10.0 m · 2.0 m deep · ≈ 400 m³ cut",
+		"label": "Excavation · 401 m³ cut",
+		"heights": {
+			"count": 4756,
+			"cut": 946,
+			"sum": -1743.7877054137996,
+			"digest": "4e6dc9240805689fe21d2f9d20862a45b86e4d02c14b584ce5236d7220edf4b6"
+		}
+	},
+	{
+		"at": [
+			1000,
+			170,
+			117.5,
+			-1.2
+		],
+		"params": {
+			"width": 20,
+			"length": 10,
+			"depth": 2,
+			"slope": 0.5,
+			"support": "none"
+		},
+		"rim": -1.2,
+		"cut": 604.8629570290302,
+		"footprint": [
+			-10,
+			0.039999999999999696,
+			-5,
+			10,
+			0.06,
+			5
+		],
+		"shoring": {
+			"summary": "",
+			"wall": 0,
+			"weight": "",
+			"notes": [
+				"Over 1.2 m deep, with sides steeper than WorkSafeBC allows even in hard, solid soil (3 : 4): slope, bench or shore them before anyone goes in (OHS Regulation 20.81)."
+			]
+		},
+		"shown": false,
+		"floor": "18.0 × 8.0 m",
+		"resize": "20.0 × 10.0 m · 2.0 m deep · ≈ 343 m³ cut",
+		"label": "Excavation · 605 m³ cut",
+		"heights": {
+			"count": 4756,
+			"cut": 1041,
+			"sum": -2634.698969096824,
+			"digest": "cd007e801903778e4b0830e9e2aec9b892b3074e161cc73217f2b1e2037ba923"
+		}
+	},
+	{
+		"at": [
+			1000,
+			240,
+			0,
+			0
+		],
+		"params": {
+			"width": 20,
+			"length": 10,
+			"depth": 2,
+			"slope": 1,
+			"support": "none"
+		},
+		"rim": 0,
+		"cut": 290.5000000000486,
+		"footprint": [
+			-10,
+			0.039999999999999696,
+			-5,
+			10,
+			0.06,
+			5
+		],
+		"shoring": {
+			"summary": "",
+			"wall": 0,
+			"weight": "",
+			"notes": []
+		},
+		"shown": false,
+		"floor": "16.0 × 6.0 m",
+		"resize": "20.0 × 10.0 m · 2.0 m deep · ≈ 291 m³ cut",
+		"label": "Excavation · 291 m³ cut",
+		"heights": {
+			"count": 4756,
+			"cut": 811,
+			"sum": -1264.104616365461,
+			"digest": "c00e80ecd39ba26103e66e0542a800688fb79700371289654a6fc86e848f9682"
+		}
+	},
+	{
+		"at": [
+			1000,
+			310,
+			117.5,
+			-1.2
+		],
+		"params": {
+			"width": 20,
+			"length": 10,
+			"depth": 2,
+			"slope": 1.5,
+			"support": "none"
+		},
+		"rim": -1.2,
+		"cut": 553.958540093737,
+		"footprint": [
+			-10,
+			0.039999999999999696,
+			-5,
+			10,
+			0.06,
+			5
+		],
+		"shoring": {
+			"summary": "",
+			"wall": 0,
+			"weight": "",
+			"notes": []
+		},
+		"shown": false,
+		"floor": "14.0 × 4.0 m",
+		"resize": "20.0 × 10.0 m · 2.0 m deep · ≈ 244 m³ cut",
+		"label": "Excavation · 554 m³ cut",
+		"heights": {
+			"count": 4756,
+			"cut": 1411,
+			"sum": -2413.488252849316,
+			"digest": "dbf5dcd5b0e2985229aff84cc9b97fdd275b481d97fe0d79032203d4008d1d5c"
+		}
+	},
+	{
+		"at": [
+			1000,
+			380,
+			0,
+			0
+		],
+		"params": {
+			"width": 20,
+			"length": 10,
+			"depth": 2,
+			"slope": 2,
+			"support": "none"
+		},
+		"rim": 0,
+		"cut": 202.50000000004835,
+		"footprint": [
+			-10,
+			0.039999999999999696,
+			-5,
+			10,
+			0.06,
+			5
+		],
+		"shoring": {
+			"summary": "",
+			"wall": 0,
+			"weight": "",
+			"notes": []
+		},
+		"shown": false,
+		"floor": "12.0 × 2.0 m",
+		"resize": "20.0 × 10.0 m · 2.0 m deep · ≈ 203 m³ cut",
+		"label": "Excavation · 203 m³ cut",
+		"heights": {
+			"count": 4756,
+			"cut": 813,
+			"sum": -880.2432827965223,
+			"digest": "c94ec191da9412855809850aba51f8aa5bea5c450f5664328dfe41da0d4a1cf3"
+		}
+	},
+	{
+		"at": [
+			1060,
+			-280,
+			20,
+			-2
+		],
+		"params": {
+			"width": 16,
+			"length": 14,
+			"depth": 3,
+			"slope": 0.5,
+			"support": "none"
+		},
+		"rim": -2,
+		"cut": 810.3678375578369,
+		"footprint": [
+			-8,
+			0.03999999999999957,
+			-7,
+			8,
+			0.06,
+			7
+		],
+		"shoring": {
+			"summary": "",
+			"wall": 0,
+			"weight": "",
+			"notes": [
+				"Over 1.2 m deep, with sides steeper than WorkSafeBC allows even in hard, solid soil (3 : 4): slope, bench or shore them before anyone goes in (OHS Regulation 20.81)."
+			]
+		},
+		"shown": false,
+		"floor": "13.0 × 11.0 m",
+		"resize": "16.0 × 14.0 m · 3.0 m deep · ≈ 546 m³ cut",
+		"label": "Excavation · 810 m³ cut",
+		"heights": {
+			"count": 4496,
+			"cut": 2839,
+			"sum": -7921.871029742095,
+			"digest": "31b52741861da4a8c1fd7dabe310f9188dc9a04641fdc8968b3d03c0e4e38844"
+		}
+	},
+	{
+		"at": [
+			1070,
+			100,
+			30,
+			0
+		],
+		"params": {
+			"width": 12,
+			"length": 12,
+			"depth": 5,
+			"slope": 0,
+			"support": "trench-box"
+		},
+		"rim": 0,
+		"cut": 720.72043699826,
+		"footprint": [
+			-6,
+			0.03999999999999963,
+			-6,
+			6,
+			0.06,
+			6
+		],
+		"shoring": {
+			"summary": "4 boxes, 2 high: 2 × 2.4 × 7.3 m (8 × 24 ft) + 2 × 2.4 × 3.7 m (8 × 12 ft), with stackers 1 × 1.2 × 7.3 m (4 × 24 ft) + 1 × 1.2 × 3.7 m (4 × 12 ft); 11.8 m between panels, top 1.1 m above the rim",
+			"wall": 109.72800000000001,
+			"weight": "22 t steel",
+			"notes": [
+				"Too wide for a trench box (11.8 m between panels; spreaders reach about 4.5 m): use slide rail or sheet piles.",
+				"Ends are open: slope them, or fit end plates, before anyone works there (WorkSafeBC 20.81(2)).",
+				"The boxes leave 0.5 m at each end."
+			]
+		},
+		"shown": true,
+		"floor": "12.0 × 12.0 m",
+		"resize": "12.0 × 12.0 m · 5.0 m deep · ≈ 720 m³ cut",
+		"label": "Excavation · 721 m³ cut",
+		"heights": {
+			"count": 3425,
+			"cut": 776,
+			"sum": -3276.9096974278496,
+			"digest": "9f0d460f18186d13f01653cd8d0cc5ba6a5766867bba89f4cdb1af1725f44fb6"
+		}
+	},
+	{
+		"at": [
+			1070,
+			170,
+			245,
+			0.8
+		],
+		"params": {
+			"width": 12,
+			"length": 12,
+			"depth": 5,
+			"slope": 0.5,
+			"support": "trench-box"
+		},
+		"rim": 0.8,
+		"cut": 592.6473891622159,
+		"footprint": [
+			-6,
+			0.03999999999999963,
+			-6,
+			6,
+			0.06,
+			6
+		],
+		"shoring": {
+			"summary": "4 boxes, 2 high: 2 × 2.4 × 7.3 m (8 × 24 ft) + 2 × 2.4 × 3.7 m (8 × 12 ft), with stackers 1 × 1.2 × 7.3 m (4 × 24 ft) + 1 × 1.2 × 3.7 m (4 × 12 ft); 11.8 m between panels, top 1.1 m above the rim",
+			"wall": 109.72800000000001,
+			"weight": "22 t steel",
+			"notes": [
+				"Too wide for a trench box (11.8 m between panels; spreaders reach about 4.5 m): use slide rail or sheet piles.",
+				"Ends are open: slope them, or fit end plates, before anyone works there (WorkSafeBC 20.81(2)).",
+				"The boxes leave 0.5 m at each end."
+			]
+		},
+		"shown": true,
+		"floor": "12.0 × 12.0 m",
+		"resize": "12.0 × 12.0 m · 5.0 m deep · ≈ 720 m³ cut",
+		"label": "Excavation · 593 m³ cut",
+		"heights": {
+			"count": 3425,
+			"cut": 711,
+			"sum": -2647.0900966170143,
+			"digest": "7a998ee365eec68fff917484dd8050b99952244d4a035e25e6c9706819ada3f1"
+		}
+	},
+	{
+		"at": [
+			1070,
+			240,
+			30,
+			0
+		],
+		"params": {
+			"width": 12,
+			"length": 12,
+			"depth": 5,
+			"slope": 1,
+			"support": "trench-box"
+		},
+		"rim": 0,
+		"cut": 720.7204369982563,
+		"footprint": [
+			-6,
+			0.03999999999999963,
+			-6,
+			6,
+			0.06,
+			6
+		],
+		"shoring": {
+			"summary": "4 boxes, 2 high: 2 × 2.4 × 7.3 m (8 × 24 ft) + 2 × 2.4 × 3.7 m (8 × 12 ft), with stackers 1 × 1.2 × 7.3 m (4 × 24 ft) + 1 × 1.2 × 3.7 m (4 × 12 ft); 11.8 m between panels, top 1.1 m above the rim",
+			"wall": 109.72800000000001,
+			"weight": "22 t steel",
+			"notes": [
+				"Too wide for a trench box (11.8 m between panels; spreaders reach about 4.5 m): use slide rail or sheet piles.",
+				"Ends are open: slope them, or fit end plates, before anyone works there (WorkSafeBC 20.81(2)).",
+				"The boxes leave 0.5 m at each end."
+			]
+		},
+		"shown": true,
+		"floor": "12.0 × 12.0 m",
+		"resize": "12.0 × 12.0 m · 5.0 m deep · ≈ 720 m³ cut",
+		"label": "Excavation · 721 m³ cut",
+		"heights": {
+			"count": 3425,
+			"cut": 787,
+			"sum": -3309.503445919728,
+			"digest": "79024ad6049ae2427385b332b1ac35d2e596c8c33630e1b3c7bd76361f161a17"
+		}
+	},
+	{
+		"at": [
+			1070,
+			310,
+			245,
+			0.8
+		],
+		"params": {
+			"width": 12,
+			"length": 12,
+			"depth": 5,
+			"slope": 1.5,
+			"support": "trench-box"
+		},
+		"rim": 0.8,
+		"cut": 592.6473891622159,
+		"footprint": [
+			-6,
+			0.03999999999999963,
+			-6,
+			6,
+			0.06,
+			6
+		],
+		"shoring": {
+			"summary": "4 boxes, 2 high: 2 × 2.4 × 7.3 m (8 × 24 ft) + 2 × 2.4 × 3.7 m (8 × 12 ft), with stackers 1 × 1.2 × 7.3 m (4 × 24 ft) + 1 × 1.2 × 3.7 m (4 × 12 ft); 11.8 m between panels, top 1.1 m above the rim",
+			"wall": 109.72800000000001,
+			"weight": "22 t steel",
+			"notes": [
+				"Too wide for a trench box (11.8 m between panels; spreaders reach about 4.5 m): use slide rail or sheet piles.",
+				"Ends are open: slope them, or fit end plates, before anyone works there (WorkSafeBC 20.81(2)).",
+				"The boxes leave 0.5 m at each end."
+			]
+		},
+		"shown": true,
+		"floor": "12.0 × 12.0 m",
+		"resize": "12.0 × 12.0 m · 5.0 m deep · ≈ 720 m³ cut",
+		"label": "Excavation · 593 m³ cut",
+		"heights": {
+			"count": 3425,
+			"cut": 719,
+			"sum": -2706.219707097575,
+			"digest": "96749e010d677cfce1c0874e84ef671edf0fd92e58afdb36538741e480027a97"
+		}
+	},
+	{
+		"at": [
+			1070,
+			380,
+			30,
+			0
+		],
+		"params": {
+			"width": 12,
+			"length": 12,
+			"depth": 5,
+			"slope": 2,
+			"support": "trench-box"
+		},
+		"rim": 0,
+		"cut": 720.7204369982599,
+		"footprint": [
+			-6,
+			0.03999999999999963,
+			-6,
+			6,
+			0.06,
+			6
+		],
+		"shoring": {
+			"summary": "4 boxes, 2 high: 2 × 2.4 × 7.3 m (8 × 24 ft) + 2 × 2.4 × 3.7 m (8 × 12 ft), with stackers 1 × 1.2 × 7.3 m (4 × 24 ft) + 1 × 1.2 × 3.7 m (4 × 12 ft); 11.8 m between panels, top 1.1 m above the rim",
+			"wall": 109.72800000000001,
+			"weight": "22 t steel",
+			"notes": [
+				"Too wide for a trench box (11.8 m between panels; spreaders reach about 4.5 m): use slide rail or sheet piles.",
+				"Ends are open: slope them, or fit end plates, before anyone works there (WorkSafeBC 20.81(2)).",
+				"The boxes leave 0.5 m at each end."
+			]
+		},
+		"shown": true,
+		"floor": "12.0 × 12.0 m",
+		"resize": "12.0 × 12.0 m · 5.0 m deep · ≈ 720 m³ cut",
+		"label": "Excavation · 721 m³ cut",
+		"heights": {
+			"count": 3425,
+			"cut": 771,
+			"sum": -3277.81221562784,
+			"digest": "8caa6856da0f92b9c2beee5607ea5139a129261f87f814db0bffc51f52558a6e"
+		}
+	},
+	{
+		"at": [
+			1120,
+			-280,
+			40,
+			-2
+		],
+		"params": {
+			"width": 16,
+			"length": 14,
+			"depth": 3,
+			"slope": 1,
+			"support": "none"
+		},
+		"rim": -2,
+		"cut": 739.0911806471267,
+		"footprint": [
+			-8,
+			0.03999999999999957,
+			-7,
+			8,
+			0.06,
+			7
+		],
+		"shoring": {
+			"summary": "",
+			"wall": 0,
+			"weight": "",
+			"notes": []
+		},
+		"shown": false,
+		"floor": "10.0 × 8.0 m",
+		"resize": "16.0 × 14.0 m · 3.0 m deep · ≈ 438 m³ cut",
+		"label": "Excavation · 739 m³ cut",
+		"heights": {
+			"count": 4496,
+			"cut": 3012,
+			"sum": -7651.395176454187,
+			"digest": "7fa968696b01d4320a5d4f2c00f3f5389e1477e8b7d5efca3268b1bdb53efcca"
+		}
+	},
+	{
+		"at": [
+			1140,
+			100,
+			117.5,
+			-1.2
+		],
+		"params": {
+			"width": 3,
+			"length": 20,
+			"depth": 3,
+			"slope": 0,
+			"support": "slide-rail"
+		},
+		"rim": -1.2,
+		"cut": 280.98792030933384,
+		"footprint": [
+			-1.5,
+			0.03999999999999939,
+			-10,
+			1.5,
+			0.06,
+			10
+		],
+		"shoring": {
+			"summary": "24 panels in 12 posts (bays 4.0 m or less), 2 high, 4 struts across",
+			"wall": 138,
+			"weight": "31 t steel",
+			"notes": []
+		},
+		"shown": true,
+		"floor": "3.0 × 20.0 m",
+		"resize": "3.0 × 20.0 m · 3.0 m deep · ≈ 180 m³ cut",
+		"label": "Excavation · 281 m³ cut",
+		"heights": {
+			"count": 4244,
+			"cut": 378,
+			"sum": -1249.678414892403,
+			"digest": "8ed74d9b26870adfab9ea71584c8fee8f846120cd8baeb10acc83e4892ff4278"
+		}
+	},
+	{
+		"at": [
+			1140,
+			170,
+			0,
+			0
+		],
+		"params": {
+			"width": 3,
+			"length": 20,
+			"depth": 3,
+			"slope": 0.5,
+			"support": "slide-rail"
+		},
+		"rim": 0,
+		"cut": 180.75000000001626,
+		"footprint": [
+			-1.5,
+			0.03999999999999939,
+			-10,
+			1.5,
+			0.06,
+			10
+		],
+		"shoring": {
+			"summary": "24 panels in 12 posts (bays 4.0 m or less), 2 high, 4 struts across",
+			"wall": 138,
+			"weight": "31 t steel",
+			"notes": []
+		},
+		"shown": true,
+		"floor": "3.0 × 20.0 m",
+		"resize": "3.0 × 20.0 m · 3.0 m deep · ≈ 180 m³ cut",
+		"label": "Excavation · 181 m³ cut",
+		"heights": {
+			"count": 4244,
+			"cut": 322,
+			"sum": -804.304292071792,
+			"digest": "484bb6eda8f24961829c52fb1821c3a7eb4e59c5ad91ea1ee04b58decaf621f4"
+		}
+	},
+	{
+		"at": [
+			1140,
+			240,
+			117.5,
+			-1.2
+		],
+		"params": {
+			"width": 3,
+			"length": 20,
+			"depth": 3,
+			"slope": 1,
+			"support": "slide-rail"
+		},
+		"rim": -1.2,
+		"cut": 280.987920309334,
+		"footprint": [
+			-1.5,
+			0.03999999999999939,
+			-10,
+			1.5,
+			0.06,
+			10
+		],
+		"shoring": {
+			"summary": "24 panels in 12 posts (bays 4.0 m or less), 2 high, 4 struts across",
+			"wall": 138,
+			"weight": "31 t steel",
+			"notes": []
+		},
+		"shown": true,
+		"floor": "3.0 × 20.0 m",
+		"resize": "3.0 × 20.0 m · 3.0 m deep · ≈ 180 m³ cut",
+		"label": "Excavation · 281 m³ cut",
+		"heights": {
+			"count": 4244,
+			"cut": 378,
+			"sum": -1245.5889194297827,
+			"digest": "ab8cbb49cee781241bcfe84a32e440386f51856f4504e9c6ae9141939a183c0d"
+		}
+	},
+	{
+		"at": [
+			1140,
+			310,
+			0,
+			0
+		],
+		"params": {
+			"width": 3,
+			"length": 20,
+			"depth": 3,
+			"slope": 1.5,
+			"support": "slide-rail"
+		},
+		"rim": 0,
+		"cut": 180.75000000001626,
+		"footprint": [
+			-1.5,
+			0.03999999999999939,
+			-10,
+			1.5,
+			0.06,
+			10
+		],
+		"shoring": {
+			"summary": "24 panels in 12 posts (bays 4.0 m or less), 2 high, 4 struts across",
+			"wall": 138,
+			"weight": "31 t steel",
+			"notes": []
+		},
+		"shown": true,
+		"floor": "3.0 × 20.0 m",
+		"resize": "3.0 × 20.0 m · 3.0 m deep · ≈ 180 m³ cut",
+		"label": "Excavation · 181 m³ cut",
+		"heights": {
+			"count": 4244,
+			"cut": 321,
+			"sum": -792.3348807705111,
+			"digest": "6d6fc779c7ed476c312b7496546af8ec28ad0519d8d84057effccaf7696834fc"
+		}
+	},
+	{
+		"at": [
+			1140,
+			380,
+			117.5,
+			-1.2
+		],
+		"params": {
+			"width": 3,
+			"length": 20,
+			"depth": 3,
+			"slope": 2,
+			"support": "slide-rail"
+		},
+		"rim": -1.2,
+		"cut": 280.98792030933396,
+		"footprint": [
+			-1.5,
+			0.03999999999999939,
+			-10,
+			1.5,
+			0.06,
+			10
+		],
+		"shoring": {
+			"summary": "24 panels in 12 posts (bays 4.0 m or less), 2 high, 4 struts across",
+			"wall": 138,
+			"weight": "31 t steel",
+			"notes": []
+		},
+		"shown": true,
+		"floor": "3.0 × 20.0 m",
+		"resize": "3.0 × 20.0 m · 3.0 m deep · ≈ 180 m³ cut",
+		"label": "Excavation · 281 m³ cut",
+		"heights": {
+			"count": 4244,
+			"cut": 369,
+			"sum": -1221.5999691059171,
+			"digest": "890523d17b54e329f5c74bebfba7847c58b5cd2f707f422f20a061433eefb137"
+		}
+	},
+	{
+		"at": [
+			1180,
+			-280,
+			60,
+			-2
+		],
+		"params": {
+			"width": 16,
+			"length": 14,
+			"depth": 3,
+			"slope": 1.5,
+			"support": "none"
+		},
+		"rim": -2,
+		"cut": 683.8280574061253,
+		"footprint": [
+			-8,
+			0.03999999999999957,
+			-7,
+			8,
+			0.06,
+			7
+		],
+		"shoring": {
+			"summary": "",
+			"wall": 0,
+			"weight": "",
+			"notes": []
+		},
+		"shown": false,
+		"floor": "7.0 × 5.0 m",
+		"resize": "16.0 × 14.0 m · 3.0 m deep · ≈ 348 m³ cut",
+		"label": "Excavation · 684 m³ cut",
+		"heights": {
+			"count": 4496,
+			"cut": 3189,
+			"sum": -7433.398602841553,
+			"digest": "6eee5e4f23ab729b7deb1610541187727a8d27f01ab10b8ee4121a21fcba5437"
+		}
+	},
+	{
+		"at": [
+			1210,
+			100,
+			245,
+			0.8
+		],
+		"params": {
+			"width": 8,
+			"length": 30,
+			"depth": 4.5,
+			"slope": 0,
+			"support": "hydraulic"
+		},
+		"rim": 0.8,
+		"cut": 868.6240892843476,
+		"footprint": [
+			-4,
+			0.039999999999999085,
+			-15,
+			4,
+			0.06,
+			15
+		],
+		"shoring": {
+			"summary": "13 shores 2.4 m apart, 4 cylinders each (52 in all), on 4.5 m rails",
+			"wall": 270,
+			"weight": "1.2 t aluminium",
+			"notes": [
+				"Too wide for hydraulic shores (they reach about 4 m): use a trench box, slide rail or sheet piles.",
+				"Ends are open: slope them or shore them too (WorkSafeBC 20.81(2)).",
+				"In loose or wet ground, add plywood sheeting behind the rails."
+			]
+		},
+		"shown": true,
+		"floor": "8.0 × 30.0 m",
+		"resize": "8.0 × 30.0 m · 4.5 m deep · ≈ 1,080 m³ cut",
+		"label": "Excavation · 869 m³ cut",
+		"heights": {
+			"count": 7456,
+			"cut": 1097,
+			"sum": -3675.0978664101417,
+			"digest": "6d52ed2a9b621ece32aca1c5dc5164207e196e821c0477582f808d7454b30701"
+		}
+	},
+	{
+		"at": [
+			1210,
+			170,
+			30,
+			0
+		],
+		"params": {
+			"width": 8,
+			"length": 30,
+			"depth": 4.5,
+			"slope": 0.5,
+			"support": "hydraulic"
+		},
+		"rim": 0,
+		"cut": 1081.1735553349358,
+		"footprint": [
+			-4,
+			0.039999999999999085,
+			-15,
+			4,
+			0.06,
+			15
+		],
+		"shoring": {
+			"summary": "13 shores 2.4 m apart, 4 cylinders each (52 in all), on 4.5 m rails",
+			"wall": 270,
+			"weight": "1.2 t aluminium",
+			"notes": [
+				"Too wide for hydraulic shores (they reach about 4 m): use a trench box, slide rail or sheet piles.",
+				"Ends are open: slope them or shore them too (WorkSafeBC 20.81(2)).",
+				"In loose or wet ground, add plywood sheeting behind the rails."
+			]
+		},
+		"shown": true,
+		"floor": "8.0 × 30.0 m",
+		"resize": "8.0 × 30.0 m · 4.5 m deep · ≈ 1,080 m³ cut",
+		"label": "Excavation · 1,081 m³ cut",
+		"heights": {
+			"count": 7456,
+			"cut": 1191,
+			"sum": -4586.710589558227,
+			"digest": "7c49ab036cd43fc0fff232cb212fae70cfa8001d974a2fc157c39db96cd92f4e"
+		}
+	},
+	{
+		"at": [
+			1210,
+			240,
+			245,
+			0.8
+		],
+		"params": {
+			"width": 8,
+			"length": 30,
+			"depth": 4.5,
+			"slope": 1,
+			"support": "hydraulic"
+		},
+		"rim": 0.8,
+		"cut": 868.6240892843492,
+		"footprint": [
+			-4,
+			0.039999999999999085,
+			-15,
+			4,
+			0.06,
+			15
+		],
+		"shoring": {
+			"summary": "13 shores 2.4 m apart, 4 cylinders each (52 in all), on 4.5 m rails",
+			"wall": 270,
+			"weight": "1.2 t aluminium",
+			"notes": [
+				"Too wide for hydraulic shores (they reach about 4 m): use a trench box, slide rail or sheet piles.",
+				"Ends are open: slope them or shore them too (WorkSafeBC 20.81(2)).",
+				"In loose or wet ground, add plywood sheeting behind the rails."
+			]
+		},
+		"shown": true,
+		"floor": "8.0 × 30.0 m",
+		"resize": "8.0 × 30.0 m · 4.5 m deep · ≈ 1,080 m³ cut",
+		"label": "Excavation · 869 m³ cut",
+		"heights": {
+			"count": 7456,
+			"cut": 1088,
+			"sum": -3649.33994580297,
+			"digest": "f1c65c8821dda7932b21d2850b7cfb2e6b0e967c3d3a20c478d2843fff51997e"
+		}
+	},
+	{
+		"at": [
+			1210,
+			310,
+			30,
+			0
+		],
+		"params": {
+			"width": 8,
+			"length": 30,
+			"depth": 4.5,
+			"slope": 1.5,
+			"support": "hydraulic"
+		},
+		"rim": 0,
+		"cut": 1081.173555334934,
+		"footprint": [
+			-4,
+			0.039999999999999085,
+			-15,
+			4,
+			0.06,
+			15
+		],
+		"shoring": {
+			"summary": "13 shores 2.4 m apart, 4 cylinders each (52 in all), on 4.5 m rails",
+			"wall": 270,
+			"weight": "1.2 t aluminium",
+			"notes": [
+				"Too wide for hydraulic shores (they reach about 4 m): use a trench box, slide rail or sheet piles.",
+				"Ends are open: slope them or shore them too (WorkSafeBC 20.81(2)).",
+				"In loose or wet ground, add plywood sheeting behind the rails."
+			]
+		},
+		"shown": true,
+		"floor": "8.0 × 30.0 m",
+		"resize": "8.0 × 30.0 m · 4.5 m deep · ≈ 1,080 m³ cut",
+		"label": "Excavation · 1,081 m³ cut",
+		"heights": {
+			"count": 7456,
+			"cut": 1196,
+			"sum": -4610.224967484277,
+			"digest": "62ed1aa9979bb2f5bd89e254d049e46395b57a6872ea0782f0e093743bbd9496"
+		}
+	},
+	{
+		"at": [
+			1210,
+			380,
+			245,
+			0.8
+		],
+		"params": {
+			"width": 8,
+			"length": 30,
+			"depth": 4.5,
+			"slope": 2,
+			"support": "hydraulic"
+		},
+		"rim": 0.8,
+		"cut": 868.6240892843475,
+		"footprint": [
+			-4,
+			0.039999999999999085,
+			-15,
+			4,
+			0.06,
+			15
+		],
+		"shoring": {
+			"summary": "13 shores 2.4 m apart, 4 cylinders each (52 in all), on 4.5 m rails",
+			"wall": 270,
+			"weight": "1.2 t aluminium",
+			"notes": [
+				"Too wide for hydraulic shores (they reach about 4 m): use a trench box, slide rail or sheet piles.",
+				"Ends are open: slope them or shore them too (WorkSafeBC 20.81(2)).",
+				"In loose or wet ground, add plywood sheeting behind the rails."
+			]
+		},
+		"shown": true,
+		"floor": "8.0 × 30.0 m",
+		"resize": "8.0 × 30.0 m · 4.5 m deep · ≈ 1,080 m³ cut",
+		"label": "Excavation · 869 m³ cut",
+		"heights": {
+			"count": 7456,
+			"cut": 1093,
+			"sum": -3666.906321045765,
+			"digest": "1d7cf18f16b2a41ac520a6bc43e964fdfa04a5a933a2ea534e2fd6c4f4dbed2e"
+		}
+	},
+	{
+		"at": [
+			1240,
+			-280,
+			80,
+			-2
+		],
+		"params": {
+			"width": 16,
+			"length": 14,
+			"depth": 3,
+			"slope": 2,
+			"support": "sheet-piles"
+		},
+		"rim": -2,
+		"cut": 935.111060279607,
+		"footprint": [
+			-8,
+			0.03999999999999957,
+			-7,
+			8,
+			0.06,
+			7
+		],
+		"shoring": {
+			"summary": "100 sheets, 60 m of wall, 7.0 m long each (Z-profile, 0.6 m wide); waler round the inside",
+			"wall": 180,
+			"weight": "52 t steel",
+			"notes": [
+				"A professional engineer designs the wall: the sheet length and bracing here are rough."
+			]
+		},
+		"shown": true,
+		"floor": "16.0 × 14.0 m",
+		"resize": "16.0 × 14.0 m · 3.0 m deep · ≈ 672 m³ cut",
+		"label": "Excavation · 935 m³ cut",
+		"heights": {
+			"count": 4496,
+			"cut": 2748,
+			"sum": -8432.344177006862,
+			"digest": "fb83e58cf8ba1c3391a09ea36016645a87afb6655cef4b9d3f683f5b2a0d6ce9"
+		}
+	},
+	{
+		"at": [
+			1280,
+			100,
+			0,
+			0
+		],
+		"params": {
+			"width": 40,
+			"length": 25,
+			"depth": 6.5,
+			"slope": 0,
+			"support": "sheet-piles"
+		},
+		"rim": 0,
+		"cut": 6501.625000000075,
+		"footprint": [
+			-20,
+			0.03999999999999924,
+			-12.5,
+			20,
+			0.06,
+			12.5
+		],
+		"shoring": {
+			"summary": "218 sheets, 130 m of wall, 11.5 m long each (Z-profile, 0.6 m wide); waler round the inside, 4 corner braces",
+			"wall": 845,
+			"weight": "178 t steel",
+			"notes": [
+				"A professional engineer designs the wall: the sheet length and bracing here are rough.",
+				"Over 4 m deep and too wide to strut across: rakers or tie-backs.",
+				"Over 6 m deep: the shoring is to a professional engineer's written design (WorkSafeBC 20.78)."
+			]
+		},
+		"shown": true,
+		"floor": "40.0 × 25.0 m",
+		"resize": "40.0 × 25.0 m · 6.5 m deep · ≈ 6,500 m³ cut",
+		"label": "Excavation · 6,502 m³ cut",
+		"heights": {
+			"count": 13856,
+			"cut": 4284,
+			"sum": -26926.40405691675,
+			"digest": "40695dc2a27aaa9d647e92f1becf3b0a9db5c712f5dbf95b73675bed95b463c3"
+		}
+	},
+	{
+		"at": [
+			1280,
+			170,
+			117.5,
+			-1.2
+		],
+		"params": {
+			"width": 40,
+			"length": 25,
+			"depth": 6.5,
+			"slope": 0.5,
+			"support": "sheet-piles"
+		},
+		"rim": -1.2,
+		"cut": 7780.993093129035,
+		"footprint": [
+			-20,
+			0.03999999999999924,
+			-12.5,
+			20,
+			0.06,
+			12.5
+		],
+		"shoring": {
+			"summary": "218 sheets, 130 m of wall, 11.5 m long each (Z-profile, 0.6 m wide); waler round the inside, 4 corner braces",
+			"wall": 845,
+			"weight": "178 t steel",
+			"notes": [
+				"A professional engineer designs the wall: the sheet length and bracing here are rough.",
+				"Over 4 m deep and too wide to strut across: rakers or tie-backs.",
+				"Over 6 m deep: the shoring is to a professional engineer's written design (WorkSafeBC 20.78)."
+			]
+		},
+		"shown": true,
+		"floor": "40.0 × 25.0 m",
+		"resize": "40.0 × 25.0 m · 6.5 m deep · ≈ 6,500 m³ cut",
+		"label": "Excavation · 7,781 m³ cut",
+		"heights": {
+			"count": 13856,
+			"cut": 4400,
+			"sum": -32080.63289444531,
+			"digest": "858d378da040299578f0a92e86910a231c5ba586b5ea3c9b4f472e322cd4df86"
+		}
+	},
+	{
+		"at": [
+			1280,
+			240,
+			0,
+			0
+		],
+		"params": {
+			"width": 40,
+			"length": 25,
+			"depth": 6.5,
+			"slope": 1,
+			"support": "sheet-piles"
+		},
+		"rim": 0,
+		"cut": 6501.625000000039,
+		"footprint": [
+			-20,
+			0.03999999999999924,
+			-12.5,
+			20,
+			0.06,
+			12.5
+		],
+		"shoring": {
+			"summary": "218 sheets, 130 m of wall, 11.5 m long each (Z-profile, 0.6 m wide); waler round the inside, 4 corner braces",
+			"wall": 845,
+			"weight": "178 t steel",
+			"notes": [
+				"A professional engineer designs the wall: the sheet length and bracing here are rough.",
+				"Over 4 m deep and too wide to strut across: rakers or tie-backs.",
+				"Over 6 m deep: the shoring is to a professional engineer's written design (WorkSafeBC 20.78)."
+			]
+		},
+		"shown": true,
+		"floor": "40.0 × 25.0 m",
+		"resize": "40.0 × 25.0 m · 6.5 m deep · ≈ 6,500 m³ cut",
+		"label": "Excavation · 6,502 m³ cut",
+		"heights": {
+			"count": 13856,
+			"cut": 4254,
+			"sum": -26766.33791337947,
+			"digest": "62909f2cdb8588ec7202294b888d5adf4cb61fb02cc5426f1d3936399a60170f"
+		}
+	},
+	{
+		"at": [
+			1280,
+			310,
+			117.5,
+			-1.2
+		],
+		"params": {
+			"width": 40,
+			"length": 25,
+			"depth": 6.5,
+			"slope": 1.5,
+			"support": "sheet-piles"
+		},
+		"rim": -1.2,
+		"cut": 7780.993093129039,
+		"footprint": [
+			-20,
+			0.03999999999999924,
+			-12.5,
+			20,
+			0.06,
+			12.5
+		],
+		"shoring": {
+			"summary": "218 sheets, 130 m of wall, 11.5 m long each (Z-profile, 0.6 m wide); waler round the inside, 4 corner braces",
+			"wall": 845,
+			"weight": "178 t steel",
+			"notes": [
+				"A professional engineer designs the wall: the sheet length and bracing here are rough.",
+				"Over 4 m deep and too wide to strut across: rakers or tie-backs.",
+				"Over 6 m deep: the shoring is to a professional engineer's written design (WorkSafeBC 20.78)."
+			]
+		},
+		"shown": true,
+		"floor": "40.0 × 25.0 m",
+		"resize": "40.0 × 25.0 m · 6.5 m deep · ≈ 6,500 m³ cut",
+		"label": "Excavation · 7,781 m³ cut",
+		"heights": {
+			"count": 13856,
+			"cut": 4407,
+			"sum": -32156.12736314932,
+			"digest": "4dadea6b2a11462350a78900f890834495b55e8c2044b12fae47424e31af5a68"
+		}
+	},
+	{
+		"at": [
+			1280,
+			380,
+			0,
+			0
+		],
+		"params": {
+			"width": 40,
+			"length": 25,
+			"depth": 6.5,
+			"slope": 2,
+			"support": "sheet-piles"
+		},
+		"rim": 0,
+		"cut": 6501.6250000000755,
+		"footprint": [
+			-20,
+			0.03999999999999924,
+			-12.5,
+			20,
+			0.06,
+			12.5
+		],
+		"shoring": {
+			"summary": "218 sheets, 130 m of wall, 11.5 m long each (Z-profile, 0.6 m wide); waler round the inside, 4 corner braces",
+			"wall": 845,
+			"weight": "178 t steel",
+			"notes": [
+				"A professional engineer designs the wall: the sheet length and bracing here are rough.",
+				"Over 4 m deep and too wide to strut across: rakers or tie-backs.",
+				"Over 6 m deep: the shoring is to a professional engineer's written design (WorkSafeBC 20.78)."
+			]
+		},
+		"shown": true,
+		"floor": "40.0 × 25.0 m",
+		"resize": "40.0 × 25.0 m · 6.5 m deep · ≈ 6,500 m³ cut",
+		"label": "Excavation · 6,502 m³ cut",
+		"heights": {
+			"count": 13856,
+			"cut": 4262,
+			"sum": -26802.435636309794,
+			"digest": "4e33431e1664aa8021d5a3295087bc27a362e29ac80a13a650423b5df67d7e9f"
+		}
+	},
+	{
+		"at": [
+			1350,
+			100,
+			30,
+			0
+		],
+		"params": {
+			"width": 4,
+			"length": 4,
+			"depth": 3,
+			"slope": 0,
+			"support": "soldier-piles"
+		},
+		"rim": 0,
+		"cut": 48.4059168688583,
+		"footprint": [
+			-2,
+			0.039999999999999876,
+			-2,
+			2,
+			0.06,
+			2
+		],
+		"shoring": {
+			"summary": "8 soldier piles (HP310, 2.0 m apart or less, 6.0 m long each), 53 m² of timber lagging (4.0 m³)",
+			"wall": 48,
+			"weight": "3.8 t steel",
+			"notes": [
+				"A professional engineer designs the wall: the pile length and spacing here are rough."
+			]
+		},
+		"shown": true,
+		"floor": "4.0 × 4.0 m",
+		"resize": "4.0 × 4.0 m · 3.0 m deep · ≈ 48 m³ cut",
+		"label": "Excavation · 48 m³ cut",
+		"heights": {
+			"count": 1489,
+			"cut": 143,
+			"sum": -258.99939046042414,
+			"digest": "866c0508ba256ce773f3ecad003ebcf1c5195d3150e1c51e992c64ca210b135d"
+		}
+	},
+	{
+		"at": [
+			1350,
+			170,
+			245,
+			0.8
+		],
+		"params": {
+			"width": 4,
+			"length": 4,
+			"depth": 3,
+			"slope": 0.5,
+			"support": "soldier-piles"
+		},
+		"rim": 0.8,
+		"cut": 32.09998717468707,
+		"footprint": [
+			-2,
+			0.039999999999999876,
+			-2,
+			2,
+			0.06,
+			2
+		],
+		"shoring": {
+			"summary": "8 soldier piles (HP310, 2.0 m apart or less, 6.0 m long each), 53 m² of timber lagging (4.0 m³)",
+			"wall": 48,
+			"weight": "3.8 t steel",
+			"notes": [
+				"A professional engineer designs the wall: the pile length and spacing here are rough."
+			]
+		},
+		"shown": true,
+		"floor": "4.0 × 4.0 m",
+		"resize": "4.0 × 4.0 m · 3.0 m deep · ≈ 48 m³ cut",
+		"label": "Excavation · 32 m³ cut",
+		"heights": {
+			"count": 1489,
+			"cut": 115,
+			"sum": -195.5082906017159,
+			"digest": "86d9dc039b7a5897202757869f84a82adb6f849f3955c835abd63d57b6f41e35"
+		}
+	},
+	{
+		"at": [
+			1350,
+			240,
+			30,
+			0
+		],
+		"params": {
+			"width": 4,
+			"length": 4,
+			"depth": 3,
+			"slope": 1,
+			"support": "soldier-piles"
+		},
+		"rim": 0,
+		"cut": 48.4059168688583,
+		"footprint": [
+			-2,
+			0.039999999999999876,
+			-2,
+			2,
+			0.06,
+			2
+		],
+		"shoring": {
+			"summary": "8 soldier piles (HP310, 2.0 m apart or less, 6.0 m long each), 53 m² of timber lagging (4.0 m³)",
+			"wall": 48,
+			"weight": "3.8 t steel",
+			"notes": [
+				"A professional engineer designs the wall: the pile length and spacing here are rough."
+			]
+		},
+		"shown": true,
+		"floor": "4.0 × 4.0 m",
+		"resize": "4.0 × 4.0 m · 3.0 m deep · ≈ 48 m³ cut",
+		"label": "Excavation · 48 m³ cut",
+		"heights": {
+			"count": 1489,
+			"cut": 152,
+			"sum": -278.6469789293031,
+			"digest": "a4e3a75a64046f9c3b0843de09ab604132c84bff61b21cca0983f72666ab5f65"
+		}
+	},
+	{
+		"at": [
+			1350,
+			310,
+			245,
+			0.8
+		],
+		"params": {
+			"width": 4,
+			"length": 4,
+			"depth": 3,
+			"slope": 1.5,
+			"support": "soldier-piles"
+		},
+		"rim": 0.8,
+		"cut": 32.09998717468707,
+		"footprint": [
+			-2,
+			0.039999999999999876,
+			-2,
+			2,
+			0.06,
+			2
+		],
+		"shoring": {
+			"summary": "8 soldier piles (HP310, 2.0 m apart or less, 6.0 m long each), 53 m² of timber lagging (4.0 m³)",
+			"wall": 48,
+			"weight": "3.8 t steel",
+			"notes": [
+				"A professional engineer designs the wall: the pile length and spacing here are rough."
+			]
+		},
+		"shown": true,
+		"floor": "4.0 × 4.0 m",
+		"resize": "4.0 × 4.0 m · 3.0 m deep · ≈ 48 m³ cut",
+		"label": "Excavation · 32 m³ cut",
+		"heights": {
+			"count": 1489,
+			"cut": 98,
+			"sum": -165.76838763405723,
+			"digest": "568b8f7379b77555cddffb90709a69a0cc328b9d208d91a0503e052f0b0ee0cd"
+		}
+	},
+	{
+		"at": [
+			1350,
+			380,
+			30,
+			0
+		],
+		"params": {
+			"width": 4,
+			"length": 4,
+			"depth": 3,
+			"slope": 2,
+			"support": "soldier-piles"
+		},
+		"rim": 0,
+		"cut": 48.4059168688583,
+		"footprint": [
+			-2,
+			0.039999999999999876,
+			-2,
+			2,
+			0.06,
+			2
+		],
+		"shoring": {
+			"summary": "8 soldier piles (HP310, 2.0 m apart or less, 6.0 m long each), 53 m² of timber lagging (4.0 m³)",
+			"wall": 48,
+			"weight": "3.8 t steel",
+			"notes": [
+				"A professional engineer designs the wall: the pile length and spacing here are rough."
+			]
+		},
+		"shown": true,
+		"floor": "4.0 × 4.0 m",
+		"resize": "4.0 × 4.0 m · 3.0 m deep · ≈ 48 m³ cut",
+		"label": "Excavation · 48 m³ cut",
+		"heights": {
+			"count": 1489,
+			"cut": 141,
+			"sum": -256.1492336447958,
+			"digest": "129d4c46463e4b14ef37de0b241a8ca7710ab185dca077ee032116d7b8ba94bf"
+		}
+	}
+]

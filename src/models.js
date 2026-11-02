@@ -462,9 +462,13 @@ export class ModelManager extends EventDispatcher {
 	toConfig( entry ) {
 
 		const { state } = entry;
+		// A kind may leave params at their defaults out of what's saved (kinds.js save), so layouts
+		// saved before it had them save again as they were.
+		const kind = getKind( entry.kind );
+		const params = kind?.save ? kind.save( entry.params ) : { ...entry.params };
 		const config = {
 			name: state.name,
-			...( entry.kind ? { kind: entry.kind, params: { ...entry.params } } : entry.procedural ? { procedural: entry.procedural } : { url: entry.url } ),
+			...( entry.kind ? { kind: entry.kind, params } : entry.procedural ? { procedural: entry.procedural } : { url: entry.url } ),
 			east: round( state.east ),
 			north: round( state.north ),
 			up: state.snap ? null : round( state.up ),

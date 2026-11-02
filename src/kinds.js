@@ -9,6 +9,10 @@
 //     build( params ) { return object; },   // what's drawn; centred on the origin, base at y = 0,
 //                                           // front facing -Z. Rebuilt whenever params change.
 //     normalize( params ) { return params; },  // fill defaults and clamp (optional)
+//     save( params ) { return params; },  // the params as saved with the layout, e.g. without
+//                              // ones at the defaults that their absence means, so a layout saved
+//                              // before they existed saves again byte for byte (optional; a copy
+//                              // of them all otherwise). normalize() must undo it.
 //     snap: 'median',          // how the ground height is found while "snap to ground" is on:
 //                              // 'median' or 'lowest' of the ground around the footprint, with an
 //                              // '-original' suffix to ignore flatten areas and digging (see
@@ -36,12 +40,26 @@
 //       live: true,            // cheap to rebuild, so rebuilt while a handle is dragged; otherwise
 //                              // just an outline follows the handle until it's let go
 //       label( params ),       // the size as the label beside the handle shows it while dragging
+//       outlines( params ),    // { top, floor }: rectangles { u0, u1, v0, v1 } in its frame (u to
+//                              // its right, v to its front, metres from the middle) outlined while
+//                              // dragging instead of the rectangle: a pit's top of the cut, and its
+//                              // floor (or null) at the depth (optional)
 //     },
 //   } );
 //
-// A field may also have enabled( params ), which greys it out while it returns false (a shored
-// pit's side slope), and a readout note: true, which writes it out in full across the panel (a
-// warning). A readout that gives '' is left out.
+// A field may also have enabled( params ), which greys it out while it returns false, and a
+// readout note: true, which writes it out in full across the panel (a warning). A readout that
+// gives '' is left out. For fields that follow the params (a pit's sides and dig stages):
+//
+//     label( params, entry ),  // a label worked out afresh on each change (which way a side faces)
+//     min( params ), max( params ),  // a number's ends, likewise (a slider's last stage)
+//     patch( value, params ),  // the params a change sets, instead of { [ key ]: value } (a pit's
+//                              // method sets its support too)
+//     get( params ),           // the value shown, when it isn't params[ key ] (a stage slider whose
+//                              // last step is saved as -1); its changes go through patch
+//     group: 'sides',          // put in a sub-folder of that name, shown while any of its fields is
+//
+// when() and enabled() are given the entry too, after the params.
 //
 // Kinds made of library items (a row of barriers, rows.js) can also have:
 //

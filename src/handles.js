@@ -449,9 +449,12 @@ export function createHandles( { scene, camera, canvas, models } ) {
 		const rect = canvas.getBoundingClientRect();
 		toScreen( centre, camera, rect, middle );
 
-		// Metres from the middle to the furthest corner of the footprint, and out to the ring.
+		// Metres from the middle to the furthest corner of the footprint, and out to the ring. A
+		// kind with outlines (a pit, whose top of the cut can be wider than its rectangle) goes by
+		// the outer one.
 		const radius = shape === 'circle' ? kind.resize.radius( params ) : null;
-		const reach = shape === 'rect' ? Math.hypot( params.width, params.length ) / 2 : radius ?? footprintReach( entry );
+		const shapes = shape === 'rect' ? kind.resize.outlines?.( params ) ?? null : null;
+		const reach = shape === 'rect' ? ( shapes ? rectReach( shapes.top ) : Math.hypot( params.width, params.length ) / 2 ) : radius ?? footprintReach( entry );
 		const ringRadius = radius ?? reach + RING_GAP * worldPerPixel( centre );
 		for ( const line of [ ringHalo, ring, ringArc ] ) {
 
@@ -521,10 +524,9 @@ export function createHandles( { scene, camera, canvas, models } ) {
 		const resizing = drag && drag.handle.type !== 'turn';
 		if ( resizing && shape === 'rect' ) {
 
-			outline.position.copy( centre ).y += LIFT;
-			outline.rotation.y = yaw;
-			outline.scale.set( params.width, 1, params.length );
-			outline.visible = true;
+			// The rectangle, or the outer of the kind's outlines (a pit's top of the cut).
+			const { width, length } = params;
+			placeRect( outline, shapes?.top ?? { u0: - width / 2, u1: width / 2, v0: - length / 2, v1: length / 2 }, centre.y + LIFT, yaw );
 
 		} else if ( resizing && shape === 'circle' ) {
 
@@ -539,18 +541,33 @@ export function createHandles( { scene, camera, canvas, models } ) {
 			plumb.position.copy( centre );
 			plumb.scale.set( 1, params.depth, 1 );
 			plumb.visible = true;
-			// The floor, smaller than the top by the side slopes, while there is one.
-			const inset = 2 * ( params.slope ?? 0 ) * params.depth;
-			if ( params.width > inset && params.length > inset ) {
+			// The floor, as the kind outlines it (a pit's, inside its sides at the depth), while
+			// there is one; else smaller than the top by the side slopes.
+			if ( shapes ) {
 
-				floor.position.copy( centre ).y -= params.depth;
-				floor.rotation.y = yaw;
-				floor.scale.set( params.width - inset, 1, params.length - inset );
-				floor.visible = true;
+				if ( shapes.floor ) placeRect( floor, shapes.floor, centre.y - params.depth, yaw );
+
+			} else {
+
+				const inset = 2 * ( params.slope ?? 0 ) * params.depth;
+				const { width, length } = params;
+				if ( width > inset && length > inset ) placeRect( floor, { u0: ( inset - width ) / 2, u1: ( width - inset ) / 2, v0: ( inset - length ) / 2, v1: ( length - inset ) / 2 }, centre.y - params.depth, yaw );
 
 			}
 
 		}
+
+	}
+
+	// A square outline line drawn round a rectangle in the item's frame (u to its right, v to its
+	// front, from its middle), at height y.
+	function placeRect( line, { u0, u1, v0, v1 }, y, yaw ) {
+
+		line.position.copy( centre ).addScaledVector( right, ( u0 + u1 ) / 2 ).addScaledVector( front, ( v0 + v1 ) / 2 );
+		line.position.y = y;
+		line.rotation.y = yaw;
+		line.scale.set( u1 - u0, 1, v1 - v0 );
+		line.visible = true;
 
 	}
 
@@ -680,6 +697,13 @@ function overlayLine( scene, points, width, color, opacity, order ) {
 	line.userData.noCollide = true;
 	scene.add( line );
 	return line;
+
+}
+
+// Metres from the middle to the furthest corner of a rectangle { u0, u1, v0, v1 }.
+function rectReach( { u0, u1, v0, v1 } ) {
+
+	return Math.max( Math.hypot( u0, v0 ), Math.hypot( u1, v0 ), Math.hypot( u1, v1 ), Math.hypot( u0, v1 ) );
 
 }
 

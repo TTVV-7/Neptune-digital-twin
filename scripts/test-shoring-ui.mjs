@@ -305,7 +305,7 @@ test( 'box sizes follow the trench: 6, 13.4, 20 and 25.5 m long, 1.5, 2.4, 3 and
 
 } );
 
-test( 'P panel: support dropdown, slope greyed out, notes in full; WorkSafeBC note when unsupported', async () => {
+test( 'P panel: shored with a system, no slope while shored, notes in full; WorkSafeBC note when unsupported', async () => {
 
 	const notes = await page.evaluate( async () => {
 
@@ -335,9 +335,11 @@ test( 'P panel: support dropdown, slope greyed out, notes in full; WorkSafeBC no
 
 		const folder = [ ...document.querySelectorAll( '.lil-gui.lil-root .lil-gui' ) ].find( f => ! f.classList.contains( 'lil-closed' ) && f.querySelector( '.lil-title' )?.textContent === 'Excavation' );
 		const row = name => [ ...folder.querySelectorAll( '.lil-controller' ) ].find( c => c.querySelector( '.lil-name' )?.textContent === name );
+		const shows = name => row( name ).style.display !== 'none';
 		return {
-			slopeDisabled: row( 'side slope (h : v)' ).classList.contains( 'lil-disabled' ),
-			support: row( 'support' ).querySelector( 'select' ).selectedOptions[ 0 ].textContent,
+			sides: row( 'sides' ).querySelector( 'select' ).selectedOptions[ 0 ].textContent,
+			slopeShown: shows( 'slope' ) || shows( 'slope (h : v)' ),
+			support: shows( 'system' ) ? row( 'system' ).querySelector( 'select' ).selectedOptions[ 0 ].textContent : null,
 			notes: [ ...folder.querySelectorAll( '.lil-controller.note' ) ].filter( c => c.style.display !== 'none' ).map( c => c.querySelector( '.readout-note' ).textContent ),
 			wall: row( 'shored wall' )?.style.display === 'none' ? null : row( 'shored wall' )?.querySelector( 'input' ).value,
 			floor: row( 'floor' ).querySelector( 'input' ).value,
@@ -345,7 +347,8 @@ test( 'P panel: support dropdown, slope greyed out, notes in full; WorkSafeBC no
 
 	} );
 	let p = await panel();
-	assert.equal( p.slopeDisabled, true );
+	assert.equal( p.sides, 'shored' );
+	assert.equal( p.slopeShown, false );
 	assert.equal( p.support, 'Trench box' );
 	assert.equal( p.floor, '3.0 × 20.0 m' );
 	assert.equal( p.wall, '117 m²' );
@@ -355,24 +358,31 @@ test( 'P panel: support dropdown, slope greyed out, notes in full; WorkSafeBC no
 	await look( { east: 0, north: - 60, up: - 1.5, distance: 11, from: 205, elevation: 33 } );
 	await shot( 'panel-trench-box' );
 
-	// Through the dropdown, as a person would: none, with steep sides.
+	// Through the dropdowns, as a person would: sloped, with steep sides (its own ratio, as the
+	// first excavations had, 0.5 : 1).
 	await page.evaluate( () => {
 
 		const folder = [ ...document.querySelectorAll( '.lil-gui.lil-root .lil-gui' ) ].find( f => ! f.classList.contains( 'lil-closed' ) && f.querySelector( '.lil-title' )?.textContent === 'Excavation' );
-		const select = name => [ ...folder.querySelectorAll( '.lil-controller' ) ].find( c => c.querySelector( '.lil-name' )?.textContent === name ).querySelector( 'select' );
+		const row = name => [ ...folder.querySelectorAll( '.lil-controller' ) ].find( c => c.querySelector( '.lil-name' )?.textContent === name );
 		const choose = ( name, text ) => {
 
-			const s = select( name );
+			const s = row( name ).querySelector( 'select' );
 			s.selectedIndex = [ ...s.options ].findIndex( o => o.textContent === text );
 			s.dispatchEvent( new Event( 'change' ) );
 
 		};
-		choose( 'support', 'none / sloped' );
-		choose( 'side slope (h : v)', '0.5 : 1' );
+		choose( 'sides', 'sloped' );
+		choose( 'slope', 'a ratio of my own' );
+		const input = row( 'slope (h : v)' ).querySelector( 'input' );
+		input.value = '0.5';
+		input.dispatchEvent( new Event( 'input' ) );
 
 	} );
 	p = await panel();
-	assert.equal( p.slopeDisabled, false );
+	assert.equal( p.sides, 'sloped' );
+	assert.equal( p.slopeShown, true );
+	assert.equal( p.support, null );
+	assert.equal( await page.evaluate( () => window.panelPit.params.slope ), 0.5 );
 	assert.equal( p.wall, null );
 	assert.deepEqual( p.notes, [ steep ] );
 	assert.equal( await page.evaluate( () => window.twin.shoring.shown.has( window.panelPit ) ), false );
