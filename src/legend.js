@@ -71,9 +71,20 @@ export function createLegend( { controls, driver, models, getSidebar, getDriving
 	let insist = false;
 	// The panel standing on top of this one (stack()), as { root, panel, button, open, insist }.
 	let other = null;
+	// Both folded to their buttons for now, without changing what's saved or wanted: a section's
+	// cut-away needs the room (excavation-section.js). Opening either by hand lets go.
+	let held = false;
+
+	function hold( value ) {
+
+		held = value;
+		update();
+
+	}
 
 	function setOpen( value ) {
 
+		if ( value ) held = false;
 		open = value;
 		insist = value;
 		storage( () => localStorage.setItem( STORAGE_KEY, open ? 'open' : 'closed' ) );
@@ -241,9 +252,10 @@ export function createLegend( { controls, driver, models, getSidebar, getDriving
 			] : shape ? [ [ [ '~Drag' ], shape === 'rect' ? 'The square handles: resize' : 'The square handle: resize' ] ] : [],
 			...kind?.resize?.depth ? [ [ [ '~Drag' ], 'The arrow in the middle: depth' ] ] : [],
 			[ [ `~${ click }` ], `The buttons above it: ${ buttons.join( ', ' ) }` ],
-			[ [ 'P' ], points ? 'Spacing, item and position' : shape ? 'Exact size and position' : 'Exact position' ],
+			[ [ 'P' ], points ? 'Spacing, item and position' : kind?.resize?.depth ? 'Sides, shoring, section; exact size' : shape ? 'Exact size and position' : 'Exact position' ],
 			...drivable ? [ [ [ 'V' ], 'Drive it' ] ] : [],
-			[ [ 'Esc' ], 'Deselect' ],
+			// An open section closes first (excavation-section.js).
+			[ [ 'Esc' ], window.twin?.section?.view ? 'Close the section' : 'Deselect' ],
 		] };
 
 	}
@@ -285,7 +297,7 @@ export function createLegend( { controls, driver, models, getSidebar, getDriving
 		const sheet = visibleRect( library );
 		const sheetUp = !! sheet && sheet.top > 1;
 		const stacked = other && ! other.root.hidden ? other : null;
-		const wanted = [ open, !! stacked?.open ];
+		const wanted = [ open && ! held, !! stacked?.open && ! held ];
 		const tries = [ wanted, [ wanted[ 0 ], false ], [ false, wanted[ 1 ] ], [ false, false ] ]
 			.filter( ( [ a, b ], i, all ) => ! ( sheetUp && ( a || b ) ) && all.findIndex( ( [ c, d ] ) => c === a && d === b ) === i );
 		let column = null;
@@ -298,7 +310,7 @@ export function createLegend( { controls, driver, models, getSidebar, getDriving
 
 		if ( column?.open[ 0 ] ) insist = false;
 		if ( column?.open[ 1 ] ) stacked.insist = false;
-		const forced = [ open && insist, !! stacked?.open && stacked.insist ];
+		const forced = [ open && insist && ! held, !! stacked?.open && stacked.insist && ! held ];
 		if ( forced.some( ( force, i ) => force && ! column?.open[ i ] ) ) {
 
 			column = arrange( forced[ 0 ] || !! column?.open[ 0 ], forced[ 1 ] || !! column?.open[ 1 ], stacked, null ) ?? column;
@@ -458,6 +470,7 @@ export function createLegend( { controls, driver, models, getSidebar, getDriving
 		update,
 		isOpen: () => open,
 		setOpen,
+		hold,
 		// Another panel to stand on top of this one (see `other` above).
 		stack( value ) {
 

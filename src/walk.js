@@ -1134,6 +1134,8 @@ export function isTyping( e ) {
 	const t = e.target;
 	// A focused dropdown would also act on arrow and letter keys, changing its value.
 	if ( t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement || t?.isContentEditable ) return true;
+	// A focused slider steps with these keys (a section's Cut at): the camera mustn't move too.
+	if ( t instanceof HTMLInputElement && t.type === 'range' && /^(Arrow|Home$|End$|Page)/.test( e.code ) ) return true;
 	return t instanceof HTMLInputElement && ! [ 'button', 'checkbox', 'radio', 'range', 'submit', 'reset', 'color' ].includes( t.type );
 
 }

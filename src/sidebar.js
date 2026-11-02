@@ -3,6 +3,7 @@ import {
 	BoxHelper,
 	BufferGeometry,
 	LineBasicMaterial,
+	LineDashedMaterial,
 	LineLoop,
 	DirectionalLight,
 	HemisphereLight,
@@ -865,6 +866,47 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		} );
 		drawing.outline.geometry.setFromPoints( corners );
 		drawing.outline.visible = true;
+		// What the tool makes of it, where that's more than the rectangle (an excavation drawn by its
+		// floor reaches out to the top of its cut): outlined dashed, with its size by the pointer.
+		const preview = drawing.tool.preview?.( { width: Math.abs( rect.across ), length: Math.abs( rect.along ) } );
+		if ( preview ) showPreview( rect, preview );
+
+	}
+
+	// preview: { top: { u0, u1, v0, v1 } in the rectangle's frame (u across, v along), label }.
+	function showPreview( rect, { top, label } ) {
+
+		if ( top ) {
+
+			if ( ! drawing.top ) {
+
+				drawing.top = new LineLoop( new BufferGeometry(), new LineDashedMaterial( { color: drawing.tool.color ?? 0xff3322, dashSize: 0.8, gapSize: 0.5 } ) );
+				scene.add( drawing.top );
+
+			}
+
+			const rad = drawing.heading * Math.PI / 180;
+			const corners = [ [ top.u0, top.v0 ], [ top.u1, top.v0 ], [ top.u1, top.v1 ], [ top.u0, top.v1 ] ].map( ( [ u, v ] ) => new Vector3( - ( rect.east + u * Math.cos( rad ) + v * Math.sin( rad ) ), rect.height + 0.2, rect.north - u * Math.sin( rad ) + v * Math.cos( rad ) ) );
+			drawing.top.geometry.setFromPoints( corners );
+			drawing.top.computeLineDistances();
+			drawing.top.visible = true;
+
+		}
+
+		if ( label && pointer ) {
+
+			if ( ! drawing.label ) {
+
+				drawing.label = document.createElement( 'div' );
+				drawing.label.className = 'handle-label row-label drawing-label';
+				document.body.append( drawing.label );
+
+			}
+
+			if ( drawing.label.textContent !== label ) drawing.label.textContent = label;
+			drawing.label.style.transform = `translate( ${ pointer.x.toFixed( 1 ) }px, ${ ( pointer.y - 26 ).toFixed( 1 ) }px ) translate( -50%, -100% )`;
+
+		}
 
 	}
 
@@ -934,13 +976,16 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 	function stopDrawing() {
 
 		if ( ! drawing ) return;
-		if ( drawing.outline ) {
+		for ( const line of [ drawing.outline, drawing.top ] ) {
 
-			scene.remove( drawing.outline );
-			drawing.outline.geometry.dispose();
-			drawing.outline.material.dispose();
+			if ( ! line ) continue;
+			scene.remove( line );
+			line.geometry.dispose();
+			line.material.dispose();
 
 		}
+
+		drawing.label?.remove();
 
 		drawing.tool.card?.classList.remove( 'active' );
 		drawing = null;

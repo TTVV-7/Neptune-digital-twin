@@ -80,11 +80,13 @@ after( async () => {
 
 } );
 
+// Under SwiftShader (a CPU renderer) a layout with dozens of shored pits takes longer to load than
+// Playwright's 30 s, drawing the ground: so longer, and not waiting for every last resource.
 async function openApp() {
 
-	await page.goto( `${ base }/?prompt` );
-	await page.click( '#skip' );
-	await page.waitForFunction( () => window.twin?.sidebar && window.twin.shoring && window.twin.terrain );
+	await page.goto( `${ base }/?prompt`, { waitUntil: 'domcontentloaded', timeout: 120000 } );
+	await page.click( '#skip', { timeout: 120000 } );
+	await page.waitForFunction( () => window.twin?.sidebar && window.twin.shoring && window.twin.terrain, null, { timeout: 120000 } );
 
 }
 
@@ -305,7 +307,7 @@ test( 'box sizes follow the trench: 6, 13.4, 20 and 25.5 m long, 1.5, 2.4, 3 and
 
 } );
 
-test( 'P panel: support dropdown, slope greyed out, notes in full; WorkSafeBC note when unsupported', async () => {
+test( 'P panel: shored with a system, no slope while shored, notes in full; WorkSafeBC note when unsupported', async () => {
 
 	const notes = await page.evaluate( async () => {
 
@@ -334,18 +336,28 @@ test( 'P panel: support dropdown, slope greyed out, notes in full; WorkSafeBC no
 	const panel = () => page.evaluate( () => {
 
 		const folder = [ ...document.querySelectorAll( '.lil-gui.lil-root .lil-gui' ) ].find( f => ! f.classList.contains( 'lil-closed' ) && f.querySelector( '.lil-title' )?.textContent === 'Excavation' );
-		const row = name => [ ...folder.querySelectorAll( '.lil-controller' ) ].find( c => c.querySelector( '.lil-name' )?.textContent === name );
+		// The slope's label says the ratio in use: 'slope (1 : 1)'.
+		const row = name => [ ...folder.querySelectorAll( '.lil-controller' ) ].find( c => {
+
+			const text = c.querySelector( '.lil-name' )?.textContent;
+			return name === 'slope' ? /^slope \([\d.]+ : 1|vertical\)/.test( text ) && text !== 'slope (h : v)' : text === name;
+
+		} );
+		const shows = name => row( name ).style.display !== 'none';
 		return {
-			slopeDisabled: row( 'side slope (h : v)' ).classList.contains( 'lil-disabled' ),
-			support: row( 'support' ).querySelector( 'select' ).selectedOptions[ 0 ].textContent,
-			notes: [ ...folder.querySelectorAll( '.lil-controller.note' ) ].filter( c => c.style.display !== 'none' ).map( c => c.querySelector( '.readout-note' ).textContent ),
+			sides: row( 'sides' ).querySelector( 'select' ).selectedOptions[ 0 ].textContent,
+			slopeShown: shows( 'slope' ) || shows( 'slope (h : v)' ),
+			support: shows( 'system' ) ? row( 'system' ).querySelector( 'select' ).selectedOptions[ 0 ].textContent : null,
+			// The shoring's own notes (its summary and notes), not the checks or others' readouts.
+			notes: [ ...folder.querySelectorAll( '.lil-controller.note' ) ].filter( c => c.style.display !== 'none' && [ 'shoring', 'shoring notes' ].includes( c.querySelector( '.lil-name' )?.textContent ) ).map( c => c.querySelector( '.readout-note' ).textContent ),
 			wall: row( 'shored wall' )?.style.display === 'none' ? null : row( 'shored wall' )?.querySelector( 'input' ).value,
 			floor: row( 'floor' ).querySelector( 'input' ).value,
 		};
 
 	} );
 	let p = await panel();
-	assert.equal( p.slopeDisabled, true );
+	assert.equal( p.sides, 'shored' );
+	assert.equal( p.slopeShown, false );
 	assert.equal( p.support, 'Trench box' );
 	assert.equal( p.floor, '3.0 × 20.0 m' );
 	assert.equal( p.wall, '117 m²' );
@@ -355,24 +367,36 @@ test( 'P panel: support dropdown, slope greyed out, notes in full; WorkSafeBC no
 	await look( { east: 0, north: - 60, up: - 1.5, distance: 11, from: 205, elevation: 33 } );
 	await shot( 'panel-trench-box' );
 
-	// Through the dropdown, as a person would: none, with steep sides.
+	// Through the dropdowns, as a person would: sloped, with steep sides (its own ratio, as the
+	// first excavations had, 0.5 : 1).
 	await page.evaluate( () => {
 
 		const folder = [ ...document.querySelectorAll( '.lil-gui.lil-root .lil-gui' ) ].find( f => ! f.classList.contains( 'lil-closed' ) && f.querySelector( '.lil-title' )?.textContent === 'Excavation' );
-		const select = name => [ ...folder.querySelectorAll( '.lil-controller' ) ].find( c => c.querySelector( '.lil-name' )?.textContent === name ).querySelector( 'select' );
+		const row = name => [ ...folder.querySelectorAll( '.lil-controller' ) ].find( c => {
+
+			const text = c.querySelector( '.lil-name' )?.textContent;
+			return name === 'slope' ? /^slope \([\d.]+ : 1|vertical\)/.test( text ) && text !== 'slope (h : v)' : text === name;
+
+		} );
 		const choose = ( name, text ) => {
 
-			const s = select( name );
+			const s = row( name ).querySelector( 'select' );
 			s.selectedIndex = [ ...s.options ].findIndex( o => o.textContent === text );
 			s.dispatchEvent( new Event( 'change' ) );
 
 		};
-		choose( 'support', 'none / sloped' );
-		choose( 'side slope (h : v)', '0.5 : 1' );
+		choose( 'sides', 'sloped' );
+		choose( 'slope', 'a ratio of my own' );
+		const input = row( 'slope (h : v)' ).querySelector( 'input' );
+		input.value = '0.5';
+		input.dispatchEvent( new Event( 'input' ) );
 
 	} );
 	p = await panel();
-	assert.equal( p.slopeDisabled, false );
+	assert.equal( p.sides, 'sloped' );
+	assert.equal( p.slopeShown, true );
+	assert.equal( p.support, null );
+	assert.equal( await page.evaluate( () => window.panelPit.params.slope ), 0.5 );
 	assert.equal( p.wall, null );
 	assert.deepEqual( p.notes, [ steep ] );
 	assert.equal( await page.evaluate( () => window.twin.shoring.shown.has( window.panelPit ) ), false );
@@ -618,7 +642,7 @@ test( 'Shoring library pieces: listed with thumbnails, placed, turned, saved and
 	} );
 	await page.waitForTimeout( 800 );
 	await openApp();
-	await page.waitForFunction( n => window.twin.models.entries.filter( e => e.kind === 'excavation' ).length === n, before.pits.length );
+	await page.waitForFunction( n => window.twin.models.entries.filter( e => e.kind === 'excavation' ).length === n, before.pits.length, { timeout: 120000 } );
 	const afterReload = await page.evaluate( () => {
 
 		const { models, shoring } = window.twin;

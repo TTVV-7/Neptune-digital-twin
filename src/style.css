@@ -248,9 +248,22 @@ html, body {
 }
 
 /* Readout notes in the placement panel (a pit's shoring, a warning): wrapped text across the
-   panel rather than a field that would cut them short. */
+   panel rather than a field that would cut them short, under their name as a small heading, so a
+   few in a row can be told apart. */
+.lil-gui .lil-controller.note {
+	flex-direction: column;
+	align-items: stretch;
+}
+
 .lil-gui .lil-controller.note > .lil-name {
-	display: none;
+	width: auto;
+	min-width: 0;
+	padding-top: 4px;
+	line-height: 1.2;
+	font-size: 0.85em;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	opacity: 0.7;
 }
 
 .lil-gui .lil-controller.note.lil-disabled {

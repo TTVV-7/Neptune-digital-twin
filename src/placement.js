@@ -102,48 +102,108 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 	// A kind's fields, size first, then its read-only figures and its buttons.
 	function addKindControllers( entry, kind, folder ) {
 
-		// The controllers edit a copy, so a value the kind clamps shows clamped.
+		// The controllers edit a copy, so a value the kind clamps shows clamped. A field that shows
+		// something other than the param itself (get: a stage slider whose last step is -1) edits a
+		// view of its own instead.
 		const params = { ...entry.params };
-		const set = key => {
+		const views = new Map(); // field -> { value }
+		const valueOf = field => field.get ? field.get( entry.params, entry ) : entry.params[ field.key ];
+		const set = field => {
 
+			const view = views.get( field );
+			const value = view ? view.value : params[ field.key ];
 			// Leaving a field without changing it isn't an edit (and would rebuild the kind).
-			if ( params[ key ] === entry.params[ key ] ) return;
-			models.setParams( entry, { [ key ]: params[ key ] } );
+			if ( value === valueOf( field ) ) return;
+			// A field may change other params with it (patch: a pit's method sets its support too).
+			models.setParams( entry, field.patch ? field.patch( value, entry.params, entry ) : { [ field.key ]: value } );
 			Object.assign( params, entry.params );
+			for ( const [ f, v ] of views ) v.value = valueOf( f );
 			folder.controllersRecursive().forEach( c => c.updateDisplay() );
 			showFields();
 
 		};
+		// Fields in a group (a pit's sides) go in a sub-folder of their own, made where the first of
+		// them comes.
+		const groups = new Map(); // name -> sub-folder
+		const parentOf = field => {
+
+			if ( ! field.group ) return folder;
+			if ( ! groups.has( field.group ) ) groups.set( field.group, folder.addFolder( field.group ) );
+			return groups.get( field.group );
+
+		};
 		const fields = [ ...kind.fields.filter( f => f.size ), ...kind.fields.filter( f => ! f.size ) ];
-		const conditional = [];
+		const made = [];
 		for ( const field of fields ) {
 
+			const parent = parentOf( field );
+			let object = params;
+			let property = field.key;
+			if ( field.get ) {
+
+				object = { value: valueOf( field ) };
+				property = 'value';
+				views.set( field, object );
+
+			}
+
 			let controller;
-			if ( field.options ) controller = folder.add( params, field.key, field.options );
-			else if ( field.type === 'color' ) controller = folder.addColor( params, field.key );
+			if ( field.options ) controller = parent.add( object, property, field.options );
+			else if ( field.type === 'color' ) controller = parent.addColor( object, property );
 			else {
 
-				controller = folder.add( params, field.key );
-				if ( field.min !== undefined ) controller.min( field.min );
-				if ( field.max !== undefined ) controller.max( field.max );
+				controller = parent.add( object, property );
+				// Ends that follow the params (a function of them) are set in showFields.
+				if ( field.min !== undefined && typeof field.min !== 'function' ) controller.min( field.min );
+				if ( field.max !== undefined && typeof field.max !== 'function' ) controller.max( field.max );
 				if ( field.step !== undefined ) controller.step( field.step );
 
 			}
 
-			controller.name( field.label ?? field.key );
+			controller.name( labelOf( field, entry ) );
+			if ( field.placeholder !== undefined && controller.$input ) controller.$input.placeholder = placeholderOf( field, entry );
 			// Text and colours apply when finished, numbers and choices as they change. A colour is
 			// finished when its picker closes, as well as when it loses focus.
-			if ( field.type === 'text' || field.type === 'color' ) controller.onFinishChange( () => set( field.key ) );
-			else controller.onChange( () => set( field.key ) );
-			if ( field.type === 'color' ) controller.$input.addEventListener( 'change', () => set( field.key ) );
-			if ( field.when ) conditional.push( [ field, controller ] );
+			if ( field.type === 'text' || field.type === 'color' ) controller.onFinishChange( () => set( field ) );
+			else controller.onChange( () => set( field ) );
+			if ( field.type === 'color' ) controller.$input.addEventListener( 'change', () => set( field ) );
+			made.push( [ field, controller ] );
 
 		}
 
-		// Fields that don't apply to these params (a cone's width) are hidden.
+		// Fields that don't apply to these params (a cone's width) are hidden, and a sub-folder with
+		// none showing too. Labels and slider ends that follow the params (a side's compass point
+		// once the pit is turned, the last dig stage) are brought up to date.
 		const showFields = () => {
 
-			for ( const [ field, controller ] of conditional ) controller.show( !! field.when( entry.params ) );
+			for ( const [ field, controller ] of made ) {
+
+				if ( field.when ) controller.show( !! field.when( entry.params, entry ) );
+				if ( typeof field.label === 'function' ) {
+
+					const name = labelOf( field, entry );
+					if ( controller._name !== name ) controller.name( name );
+
+				}
+
+				if ( typeof field.placeholder === 'function' && controller.$input ) {
+
+					const hint = placeholderOf( field, entry );
+					if ( controller.$input.placeholder !== hint ) controller.$input.placeholder = hint;
+
+				}
+
+				for ( const end of [ 'min', 'max' ] ) {
+
+					if ( typeof field[ end ] !== 'function' ) continue;
+					const value = field[ end ]( entry.params, entry );
+					if ( controller[ `_${ end }` ] !== value ) controller[ end ]( value );
+
+				}
+
+			}
+
+			for ( const sub of groups.values() ) sub.show( sub.controllers.some( c => ! c._hidden ) );
 
 		};
 		showFields();
@@ -158,11 +218,18 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 
 		};
 		refresh();
+		const addActions = () => {
+
+			for ( const action of kind.actions ) folder.add( { run: () => action.run( entry ) }, 'run' ).name( action.label );
+
+		};
+		// A kind with many readouts (a pit's) puts its buttons first, where they're seen.
+		if ( kind.actionsFirst ) addActions();
 		for ( const readout of kind.readouts ?? [] ) folder.add( readouts, readout.label ).disable();
 		readoutViews.set( entry, refresh );
-		for ( const action of kind.actions ) folder.add( { run: () => action.run( entry ) }, 'run' ).name( action.label );
-		// Keep the copy in step when params change elsewhere (e.g. a pour finishing).
-		paramViews.set( entry, params );
+		if ( ! kind.actionsFirst ) addActions();
+		// Keep the copy and the views in step when params change elsewhere (e.g. a pour finishing).
+		paramViews.set( entry, { params, views: [ ...views ].map( ( [ field, view ] ) => [ view, () => valueOf( field ) ] ), fields: made } );
 
 	}
 
@@ -219,11 +286,13 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 		if ( folder._title !== entry.state.name ) folder.title( entry.state.name );
 		const controllers = folder.controllersRecursive();
 		const editing = controllers.find( c => c.domElement.contains( document.activeElement ) );
-		const params = paramViews.get( entry );
-		if ( params ) {
+		const copy = paramViews.get( entry );
+		if ( copy ) {
 
+			const { params, views } = copy;
 			const typed = editing?.object === params ? { [ editing.property ]: params[ editing.property ] } : {};
 			Object.assign( params, entry.params, typed );
+			for ( const [ view, value ] of views ) if ( editing?.object !== view ) view.value = value();
 
 		}
 
@@ -233,7 +302,15 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 
 	}
 
-	return { gui, focus, refresh };
+	// Whether the panel is showing this entry's settings (its folder open), as when it's selected.
+	function shows( entry ) {
+
+		const folder = folders.get( entry );
+		return !! folder && ! gui._hidden && ! gui._closed && ! folder._closed;
+
+	}
+
+	return { gui, focus, refresh, shows };
 
 }
 
@@ -255,19 +332,19 @@ function onDisplay( controller, fn ) {
 // A kind's fields that don't apply for now (enabled( params ) false: a shored pit's side slope)
 // are greyed out. Its readouts with nothing to say (no shoring, say) are left out, and notes
 // (readouts marked `note`, e.g. a warning) are written out in full across the panel, where a field
-// would cut them short. params: the copy the fields edit.
-function fitKind( folder, kind, entry, params ) {
+// would cut them short. params: the copy the fields edit; fields: [ field, controller ] pairs.
+function fitKind( folder, kind, entry, { params, fields } ) {
 
-	for ( const controller of folder.controllers.filter( c => c.object === params ) ) {
+	for ( const [ field, controller ] of fields ) {
 
-		const field = kind.fields.find( f => f.key === controller.property );
-		if ( field?.enabled ) onDisplay( controller, () => controller.enable( field.enabled( entry.params ) ) );
+		if ( field.enabled ) onDisplay( controller, () => controller.enable( field.enabled( entry.params, entry ) ) );
 
 	}
 
 	const specs = kind.readouts ?? [];
-	const readouts = folder.controllers.find( c => c.object !== params && c.property === specs[ 0 ]?.label )?.object;
-	for ( const controller of folder.controllers.filter( c => c.object === readouts ) ) {
+	const controllers = folder.controllersRecursive();
+	const readouts = controllers.find( c => c.object !== params && c.property === specs[ 0 ]?.label )?.object;
+	for ( const controller of controllers.filter( c => c.object === readouts ) ) {
 
 		let text = null;
 		if ( specs.find( r => r.label === controller.property )?.note ) {
@@ -288,6 +365,21 @@ function fitKind( folder, kind, entry, params ) {
 		} );
 
 	}
+
+}
+
+// A text field's hint while it's empty, likewise.
+function placeholderOf( field, entry ) {
+
+	return typeof field.placeholder === 'function' ? field.placeholder( entry.params, entry ) : String( field.placeholder );
+
+}
+
+// A field's label: a function of the params and the entry when it follows them (a pit's sides,
+// named by which way each faces).
+function labelOf( field, entry ) {
+
+	return typeof field.label === 'function' ? field.label( entry.params, entry ) : field.label ?? field.key;
 
 }
 
