@@ -19,6 +19,7 @@ import { CELL, CUT, MATERIALS, SWELL, Terrain, coneRadius, findMaterial, hideUnd
 import { addHitFilter } from './walk.js';
 import { createPourStream } from './pour.js';
 import { NO_SUPPORT, SHORING_READOUTS, SUPPORTS, normalizeSupport, setUpShoring, wallSlope } from './shoring.js';
+import { SECTION_ACTIONS, SECTION_READOUTS, clipTileMaterial, setUpSection } from './excavation-section.js';
 
 // Earthworks for laydown planning: excavations cut into the ground and stockpiles poured onto it.
 // Both are placed kinds (kinds.js), saved and moved like any library item; the ground itself is
@@ -55,7 +56,7 @@ const hullMaterial = new MeshBasicMaterial( { visible: false, side: DoubleSide }
 const pileLines = new Map( MATERIALS.map( m => [ m.id, new LineBasicMaterial( { color: new Color( m.colour ).offsetHSL( 0, 0, 0.15 ) } ) ] ) );
 for ( const material of [ capMaterial, pitLine, hullMaterial, ...pileLines.values() ] ) material.userData.shared = true;
 
-export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models, layout, sidebar, panel, flattening, layers, getGround, addGround, onUpdate, addMapEdit, toast } ) {
+export function setUpEarthworks( { scene, camera, renderer, canvas, controls, tiles, ground, models, layout, sidebar, panel, flattening, layers, getGround, addGround, onUpdate, addMapEdit, toast } ) {
 
 	const terrain = new Terrain( { tiles, ground, models, flattening, getGround, camera } );
 	if ( tiles ) {
@@ -66,7 +67,13 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 
 			if ( ! object.isMesh ) return;
 			object.userData.googleTile = true;
-			[ object.material ].flat().forEach( material => hideUnderEarthworks( material, terrain.mask ) );
+			[ object.material ].flat().forEach( material => {
+
+				hideUnderEarthworks( material, terrain.mask );
+				// And cut away with a pit in its section view.
+				clipTileMaterial( material );
+
+			} );
 
 		} );
 		tiles.forEachLoadedModel( hide );
@@ -133,6 +140,7 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 		actions: [
 			{ label: 'Dig', run: entry => dig( entry ) },
 			{ label: 'Spoil pile', run: entry => spoil( entry ) },
+			...SECTION_ACTIONS,
 		],
 		readouts: [
 			{ label: 'cut (bank)', get: entry => `${ cutOf( entry ).toFixed( 1 ) } m³` },
@@ -140,6 +148,7 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 			{ label: 'truck loads', get: entry => loads( cutOf( entry ) * SWELL ) },
 			{ label: 'floor', get: entry => floorSize( { ...entry.params, slope: wallSlope( entry.params ) } ) },
 			...SHORING_READOUTS,
+			...SECTION_READOUTS,
 		],
 	} );
 
@@ -449,6 +458,8 @@ export function setUpEarthworks( { scene, camera, canvas, tiles, ground, models,
 	// Trench boxes, sheet piles... drawn in pits that have them (after the listeners above, so
 	// their rims are up to date).
 	setUpShoring( { scene, models, terrain, layers, kind: EXCAVATION, rimOf: entry => designs.get( entry )?.rim } );
+	// The section view and quantities, after the shoring, which they show cut away.
+	setUpSection( { scene, camera, renderer, canvas, controls, models, terrain, layers, panel, onUpdate, toast, kind: EXCAVATION, designs, rimOf: entry => designs.get( entry )?.rim } );
 
 	// For tests and for other features (the excavator) to build on.
 	if ( window.twin ) Object.assign( window.twin, { terrain, earthworks: { dig, pour, spoil, designs, anims, labels, stream } } );
