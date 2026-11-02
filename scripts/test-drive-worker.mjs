@@ -713,7 +713,7 @@ describe( 'World Drive leaderboard', () => {
 
 			const { status, json } = await board( { period } );
 			assert.equal( status, 200 );
-			assert.deepEqual( json, { period, place: null, total: 1, rows: [ { rank: 1, name: 'Ace', score: 12430, tricks, place: 'Furka Pass', vehicle: 'go-kart', airTime: 2.4, date: '2026-10-30' } ] } );
+			assert.deepEqual( json, { period, place: null, total: 1, rows: [ { rank: 1, name: 'Ace', score: 12430, tricks, place: 'Furka Pass', vehicle: 'go-kart', airTime: 2.4, date: '2026-10-30', level: 1, title: 'rookie' } ] } );
 
 		}
 
@@ -872,7 +872,7 @@ describe( 'World Drive leaderboard', () => {
 		assert.equal( json.total, 25 );
 		assert.deepEqual( json.rows.map( row => row.rank ), Array.from( { length: 20 }, ( v, i ) => i + 1 ) );
 		assert.deepEqual( json.rows.map( row => row.name ), crowd.map( who => who.name ) );
-		assert.deepEqual( json.me, { rank: 25, name: 'Cat', score: 3000, tricks: 'Backflip!', place: 'Furka Pass', vehicle: 'go-kart', airTime: 1.2, date: '2026-10-30' } );
+		assert.deepEqual( json.me, { rank: 25, name: 'Cat', score: 3000, tricks: 'Backflip!', place: 'Furka Pass', vehicle: 'go-kart', airTime: 1.2, date: '2026-10-30', level: 1, title: 'rookie' } );
 		assert.equal( ( await board( { period: 'all', id: late.id } ) ).json.me.rank, 21 );
 		assert.equal( 'me' in ( await board( { period: 'all' } ) ).json, false );
 		assert.equal( ( await board( { period: 'all', id: 'Q'.repeat( 16 ) } ) ).json.me, null );
@@ -1456,7 +1456,7 @@ describe( 'World Drive Supporter Pass', () => {
 		const { json } = await board( { period: 'all', id: starred.id } );
 		const shown = Object.fromEntries( json.rows.map( row => [ row.name, row.supporter ?? false ] ) );
 		assert.deepEqual( shown, { 'Star Driver': true, 'Plain Driver': false, 'Eve Drives': false } );
-		assert.deepEqual( json.rows[ 0 ], { rank: 1, name: 'Star Driver', score: 9000, tricks: 'Backflip!', place: 'Furka Pass', vehicle: 'go-kart', airTime: 1.2, date: '2026-11-03', supporter: true } );
+		assert.deepEqual( json.rows[ 0 ], { rank: 1, name: 'Star Driver', score: 9000, tricks: 'Backflip!', place: 'Furka Pass', vehicle: 'go-kart', airTime: 1.2, date: '2026-11-03', level: 1, title: 'rookie', supporter: true } );
 		assert.equal( json.me.supporter, true );
 		// The board of one place, too.
 		assert.equal( ( await board( { period: 'all', place: 'Furka Pass' } ) ).json.rows.find( row => row.name === 'Star Driver' ).supporter, true );

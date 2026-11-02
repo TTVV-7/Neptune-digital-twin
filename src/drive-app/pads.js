@@ -102,8 +102,9 @@ const _c = new Color();
 
 // scene: what the pads are drawn in. driver: the Driver (drive.js). ground: the Ground (spawn.js),
 // whose rays see only the ground (the tiles or the test pad). water: water.js's, which says where
-// it's surely dry (none: anywhere goes). toggle: the pause menu's checkbox.
-export function createBoostPads( { scene, driver, ground, water = null, toggle = null } ) {
+// it's surely dry (none: anywhere goes). toggle: the pause menu's checkbox. onPad( pad ): a pad
+// driven over (its XP, progress.js).
+export function createBoostPads( { scene, driver, ground, water = null, toggle = null, onPad = () => {} } ) {
 
 	const group = new Group();
 	group.name = 'boost-pads';
@@ -292,6 +293,7 @@ export function createBoostPads( { scene, driver, ground, water = null, toggle =
 			const off = Math.hypot( pe - de * t, pn - dn * t );
 			if ( off > pad.radius + driver.width * REACH || Math.abs( driver.y - pad.at.y ) > HIGH ) continue;
 			driver.addBoost( pad.refill );
+			onPad( pad );
 			pad.state = 'used';
 			pad.timer = pad.respawn;
 			pad.flash = FLASH;

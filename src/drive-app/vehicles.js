@@ -5,6 +5,7 @@ import { loadCars } from './cars.js';
 import { LIBRARY_VEHICLES } from './catalog.js';
 import { applyLook, fxOf, lookFor } from './paint.js';
 import { isPro } from './pro.js';
+import { getLevel } from './progress.js';
 import { PRO_RIDES } from './rides/index.js';
 
 // What you can drive: the go-kart, built in code (kart.js), a few trucks from the library, loaded
@@ -80,10 +81,18 @@ export async function loadVehicle( models, vehicle, { east = 0, north = 0, headi
 
 }
 
-// The look it's driven in: the Garage's choices for it, those that need the pass only with it.
+// The look it's driven in: the Garage's choices for it, those that need the pass or a level only
+// with them.
 export function lookOf( vehicle ) {
 
-	return lookFor( vehicle, isPro() );
+	return lookFor( vehicle, access() );
+
+}
+
+// What this visitor has unlocked looks with: the pass (pro.js) and their level (progress.js).
+export function access() {
+
+	return { pro: isPro(), level: getLevel() };
 
 }
 

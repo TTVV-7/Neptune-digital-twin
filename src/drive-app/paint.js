@@ -11,15 +11,17 @@ import {
 } from 'three';
 import { DecalGeometry } from 'three/addons/geometries/DecalGeometry.js';
 import { BOOSTS } from './boosts.js';
+import { levelOnly, unlockLevel } from './levels.js';
 import { storage } from './places.js';
 
 // The Garage's paint shop: what each ride can wear, what this browser has chosen for each, and
 // putting it on a model. A look is { colour, finish, decal, number, rim, boost, flame, trail, smoke },
 // each the id of a choice below or in boosts.js (number is 0 to 99). The first few choices of each
-// are free; the rest come with the Supporter Pass (pro.js), and without it a saved look falls back
-// to the free ones. `boost` is the boost style; `flame` the classic flame's colour, which was the
-// only boost there was, so a look saved before the styles (a flame and no boost) is the classic
-// flame in the colour it had.
+// are free; the rest come with the Supporter Pass (pro.js), and about half of those with levels
+// too (levels.js's unlock track), and a few colours (levelOnly) only with levels. A saved look
+// falls back to what's unlocked. `boost` is the boost style; `flame` the classic flame's colour,
+// which was the only boost there was, so a look saved before the styles (a flame and no boost) is
+// the classic flame in the colour it had.
 //
 // Paint goes on what a model tags userData.paint = 'body' or 'rim' (the rides in rides/ and the
 // kart); decals are projected onto its bodywork in the boxes its userData.decals gives (see
@@ -40,6 +42,11 @@ export const SWATCHES = [
 	{ id: 'royal', name: 'Royal blue', hex: 0x2440c9 },
 	{ id: 'violet', name: 'Violet', hex: 0x7b3fe4 },
 	{ id: 'pink', name: 'Hot pink', hex: 0xff3fa4 },
+	// Only levels give these (levels.js), the pass doesn't: at 25, 35, 45 and 50.
+	{ id: 'copper', name: 'Copper', hex: 0xc0703f, levelOnly: true },
+	{ id: 'mint', name: 'Mint', hex: 0x7fe8c4, levelOnly: true },
+	{ id: 'plum', name: 'Plum', hex: 0x7a1f5c, levelOnly: true },
+	{ id: 'champion', name: 'Champion gold', hex: 0xe8b923, levelOnly: true },
 ];
 export const FINISHES = [
 	{ id: 'gloss', name: 'Gloss', free: true },
@@ -134,23 +141,35 @@ function stored() {
 
 }
 
-// Whether a choice needs the pass: anything not free, except the colour the vehicle comes in.
-export function isLocked( vehicle, part, id ) {
+// What unlocks a choice: null when it's free (or the colour the vehicle comes in), else { level,
+// pass }: the level that unlocks it (null if none does) and whether the Supporter Pass does.
+export function unlockOf( vehicle, part, id ) {
 
-	if ( part === 'number' ) return false;
-	if ( part === 'colour' && id === defaultLook( vehicle ).colour ) return false;
-	return ! LISTS[ part ].find( choice => choice.id === id )?.free;
+	if ( part === 'number' ) return null;
+	if ( part === 'colour' && id === defaultLook( vehicle ).colour ) return null;
+	if ( LISTS[ part ].find( choice => choice.id === id )?.free ) return null;
+	return { level: unlockLevel( part, id ), pass: ! levelOnly( part, id ) };
 
 }
 
-// The look to drive with: what's saved, with anything locked put back to its default without the
-// pass (it may have run out, or been chosen on a test page).
-export function lookFor( vehicle, pro ) {
+// Whether a choice is locked for someone with the pass or not and at a level: `access` is { pro,
+// level } (level 1 when it isn't given; true or false alone, as before levels, is the pass).
+export function isLocked( vehicle, part, id, access = {} ) {
+
+	const { pro = false, level = 1 } = access && typeof access === 'object' ? access : { pro: access === true };
+	const unlock = unlockOf( vehicle, part, id );
+	if ( ! unlock ) return false;
+	return ! ( ( unlock.pass && pro ) || ( unlock.level !== null && level >= unlock.level ) );
+
+}
+
+// The look to drive with: what's saved, with anything locked put back to its default (the pass may
+// have run out, a level not be there yet, or it was chosen on a test page). access: { pro, level }.
+export function lookFor( vehicle, access = {} ) {
 
 	const look = savedLook( vehicle );
-	if ( pro ) return look;
 	const plain = defaultLook( vehicle );
-	for ( const part of Object.keys( LISTS ) ) if ( isLocked( vehicle, part, look[ part ] ) ) look[ part ] = plain[ part ];
+	for ( const part of Object.keys( LISTS ) ) if ( isLocked( vehicle, part, look[ part ], access ) ) look[ part ] = plain[ part ];
 	return look;
 
 }

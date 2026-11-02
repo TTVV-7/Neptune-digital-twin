@@ -557,10 +557,11 @@ describe( 'Driving with others', () => {
 		const bob = await join( server, room, { vehicle: 'muscle-car', look: { colour: 'blue', decal: 'flames', boost: 'confetti', number: 42 }, place: null, away: true } );
 		assert.notEqual( bob.pid, alice.pid );
 		const [ seen ] = bob.welcome.players;
-		assert.deepEqual( bob.welcome.players, [ { pid: alice.pid, name: alice.welcome.name, star: false, vehicle: 'go-kart', look: { colour: 'red', number: 7 }, place: FURKA, away: false, s: null } ] );
+		// (A guest has no level or title: a player's are levels.js's, below.)
+		assert.deepEqual( bob.welcome.players, [ { pid: alice.pid, name: alice.welcome.name, star: false, level: null, title: null, vehicle: 'go-kart', look: { colour: 'red', number: 7 }, place: FURKA, away: false, s: null } ] );
 		assert.match( seen.name, /^Guest \d{4}$/ );
 		const joined = await alice.take( 'join' );
-		assert.deepEqual( joined, { t: 'join', player: { pid: bob.pid, name: bob.welcome.name, star: false, vehicle: 'muscle-car', look: { colour: 'blue', decal: 'flames', boost: 'confetti', number: 42 }, place: null, away: true, s: null } } );
+		assert.deepEqual( joined, { t: 'join', player: { pid: bob.pid, name: bob.welcome.name, star: false, level: null, title: null, vehicle: 'muscle-car', look: { colour: 'blue', decal: 'flames', boost: 'confetti', number: 42 }, place: null, away: true, s: null } } );
 		assert.match( joined.player.name, /^Guest \d{4}$/ );
 		assert.deepEqual( lurker.inbox, [], 'nothing for a page before its hello' );
 
@@ -579,7 +580,9 @@ describe( 'Driving with others', () => {
 		const rider = await player( 'Ghost Rider' );
 		const watcher = await join( server, room );
 		const named = await join( server, room, { player: { id: rider.id, secret: rider.secret }, name: 'Admin' } );
-		assert.deepEqual( ( await watcher.take( 'join' ) ).player.name, 'Ghost Rider' );
+		// With their level and title (levels.js) as the leaderboard has them.
+		const { player: seen } = await watcher.take( 'join' );
+		assert.deepEqual( [ seen.name, seen.level, seen.title ], [ 'Ghost Rider', 1, 'rookie' ] );
 		assert.deepEqual( [ named.welcome.name, named.welcome.star ], [ 'Ghost Rider', false ] );
 		assert.match( named.welcome.players[ 0 ].name, /^Guest \d{4}$/ );
 
@@ -598,6 +601,7 @@ describe( 'Driving with others', () => {
 			const { player } = await watcher.take( 'join' );
 			assert.match( player.name, /^Guest \d{4}$/, JSON.stringify( guest ) );
 			assert.equal( player.star, false );
+			assert.equal( player.level, null );
 			await page.close();
 			await watcher.take( 'leave' );
 
@@ -864,7 +868,7 @@ describe( 'Driving with others', () => {
 		// on the globe, with no car.
 		const carol = await join( server, room );
 		const seen = carol.welcome.players.find( p => p.pid === alice.pid );
-		assert.deepEqual( seen, { pid: alice.pid, name: seen.name, star: false, vehicle: 'muscle-car', look: { colour: 'blue', finish: 'matte', rim: 'spokes', flame: 'blue', trail: 'stars', smoke: 'white', number: 0 }, place, away: true, s: null } );
+		assert.deepEqual( seen, { pid: alice.pid, name: seen.name, star: false, level: null, title: null, vehicle: 'muscle-car', look: { colour: 'blue', finish: 'matte', rim: 'spokes', flame: 'blue', trail: 'stars', smoke: 'white', number: 0 }, place, away: true, s: null } );
 		alice.send( { t: 'place', place: FURKA } );
 		assert.deepEqual( ( await carol.take( 'place' ) ).place, FURKA );
 		const later = await join( server, room );

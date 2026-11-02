@@ -192,6 +192,26 @@ export function getBoard( { period, place = null, id = null } ) {
 
 }
 
+// --- levels (worker/drive/progress.js) ---
+// As the leaderboard's: none of these throw.
+
+// What was driven since the last report (levels.js's REPORT), with this visit's token: body { xp,
+// level, gained, unlocked, supporter, title, accepted: { areas, spots }, daily? }. keepalive: as
+// the page goes away (pagehide), so the browser sends it all the same.
+export function postProgress( { id, secret }, visit, report, { keepalive = false } = {} ) {
+
+	return send( 'POST', '/api/progress', { id, secret, visit, report }, { keepalive } );
+
+}
+
+// The title on this player's nametag (an id in levels.js's TITLES, '' for the newest): body
+// { level, title }.
+export function postTitle( { id, secret }, title ) {
+
+	return send( 'POST', '/api/player/title', { id, secret, title } );
+
+}
+
 // --- the Supporter Pass (worker/drive/accounts.js, supporter.js) ---
 // As the leaderboard's: none of these throw.
 
@@ -223,7 +243,7 @@ export function linkPlayer( { id, secret } ) {
 
 }
 
-async function send( method, path, body ) {
+async function send( method, path, body, { keepalive = false } = {} ) {
 
 	try {
 
@@ -231,6 +251,8 @@ async function send( method, path, body ) {
 			method,
 			headers: body ? { 'Content-Type': 'application/json', Accept: 'application/json' } : { Accept: 'application/json' },
 			body: body ? JSON.stringify( body ) : undefined,
+			// navigator.sendBeacon can't say the body is JSON, which the Worker asks of every post.
+			...( keepalive ? { keepalive: true } : {} ),
 		} );
 		// Done, with nothing to say (signing out).
 		if ( res.status === 204 ) return { ok: true, status: 204, body: {}, retryAfter: 0 };

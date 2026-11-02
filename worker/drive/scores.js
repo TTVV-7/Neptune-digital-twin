@@ -6,6 +6,7 @@ import { PLAYER_ID, authenticate, credentials, database, takeTurn } from './play
 import { setting } from './settings.js';
 import { hasPass, supporterEmails } from './supporter.js';
 import { VISIT_HOURS, readVisit } from './visits.js';
+import { standingOf, xpOf } from './progress.js';
 
 // The leaderboard (docs/world-drive.md): each player's best stunt score today, this week and all
 // time, everywhere and at each place. A score is a run's (src/drive.js: from dropping in to
@@ -67,7 +68,8 @@ const KEEP = 35 * 24 * 60 * 60 * 1000;
 const TOP = 20;
 
 // POST /api/score { id, secret, score, tricks, place, vehicle, airTime, runSeconds, visit }:
-// { best, rank, isNewBest } for the all-time board, and the same as `today` and `week`.
+// { best, rank, isNewBest } for the all-time board, and the same as `today` and `week`. (A run's XP
+// comes with the page's reports, progress.js, whether the leaderboard takes it or not.)
 export async function postScore( { request, env, url, limits, now } ) {
 
 	const db = database( env );
@@ -139,7 +141,8 @@ export async function postScore( { request, env, url, limits, now } ) {
 }
 
 // GET /api/leaderboard?period=today|week|all&place=...&id=...: the top TOP of a board, { period,
-// place, total, rows: [ { rank, name, score, tricks, place, vehicle, airTime, date, supporter? } ] },
+// place, total, rows: [ { rank, name, score, tricks, place, vehicle, airTime, date, level, title,
+// supporter? } ] } (level and title the player's now, levels.js's, title an id in its TITLES),
 // and with an id, `me`: that player's { rank, name, score, ... } on it (or null if they aren't on
 // it). supporter: true is a player linked to an account with the Supporter Pass (supporter.js),
 // looked up with the rows, so a refund takes the ⭐ away as the board is next made.
@@ -165,8 +168,8 @@ export async function leaderboard( { env, url, now } ) {
 	else {
 
 		const [ top, count ] = await db.batch( [
-			db.prepare( `SELECT p.name, b.score, b.tricks, b.place, b.vehicle, b.air_time, b.created_at, ${ hasPass( 'p.account_id', '?4' ) } AS supporter
-				FROM best_scores b JOIN players p ON p.id = b.player_id
+			db.prepare( `SELECT p.name, b.score, b.tricks, b.place, b.vehicle, b.air_time, b.created_at, ${ hasPass( 'p.account_id', '?4' ) } AS supporter,
+				${ xpOf( 'p' ) } AS xp, p.title FROM best_scores b JOIN players p ON p.id = b.player_id
 				WHERE b.period = ?1 AND b.place_key = ?2 ORDER BY b.score DESC, b.created_at, b.player_id LIMIT ?3` ).bind( period, where, TOP, supporterEmails( env ) ),
 			db.prepare( 'SELECT COUNT(*) AS total FROM best_scores WHERE period = ? AND place_key = ?' ).bind( period, where ),
 		] );
@@ -186,8 +189,8 @@ export async function leaderboard( { env, url, now } ) {
 		else {
 
 			const row = await db.prepare( `SELECT p.name, b.score, b.tricks, b.place, b.vehicle, b.air_time, b.created_at,
-				( SELECT COUNT(*) FROM best_scores o WHERE ${ ahead( 'o', 'b' ) } ) + 1 AS rank, ${ hasPass( 'p.account_id', '?4' ) } AS supporter
-				FROM best_scores b JOIN players p ON p.id = b.player_id WHERE b.player_id = ?1 AND b.period = ?2 AND b.place_key = ?3` ).bind( id, period, where, supporterEmails( env ) ).first();
+				( SELECT COUNT(*) FROM best_scores o WHERE ${ ahead( 'o', 'b' ) } ) + 1 AS rank, ${ hasPass( 'p.account_id', '?4' ) } AS supporter,
+				${ xpOf( 'p' ) } AS xp, p.title FROM best_scores b JOIN players p ON p.id = b.player_id WHERE b.player_id = ?1 AND b.period = ?2 AND b.place_key = ?3` ).bind( id, period, where, supporterEmails( env ) ).first();
 			answer.me = row ? { rank: row.rank, ...entry( row ) } : null;
 			await caches.default.put( mine, json( { me: answer.me }, 200, { 'Cache-Control': `public, max-age=${ BOARD_CACHE }` } ) );
 
@@ -203,10 +206,11 @@ export async function leaderboard( { env, url, now } ) {
 
 }
 
-// A row as the page shows it: the day it was set (UTC), not the time; supporter only for a supporter.
+// A row as the page shows it: the day it was set (UTC), not the time; the player's level and title
+// as they are now; supporter only for a supporter.
 function entry( row ) {
 
-	const shown = { name: row.name, score: row.score, tricks: row.tricks, place: row.place, vehicle: row.vehicle, airTime: row.air_time, date: dateOf( row.created_at ) };
+	const shown = { name: row.name, score: row.score, tricks: row.tricks, place: row.place, vehicle: row.vehicle, airTime: row.air_time, date: dateOf( row.created_at ), ...standingOf( row.xp, row.title ) };
 	return row.supporter ? { ...shown, supporter: true } : shown;
 
 }

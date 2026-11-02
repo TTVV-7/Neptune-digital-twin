@@ -285,9 +285,11 @@ describe( 'Supporter Pass, without it', () => {
 		await garage.waitFor();
 		await page.waitForFunction( () => window.drive.garage.preview?.model, null, { timeout: 20000 } );
 		assert.equal( await garage.locator( '.ride-tab[aria-pressed="true"]' ).textContent(), 'Go-kart' );
-		// Three colours free, nine locked; gloss free; every decal but none locked; orange flame free.
+		// Three colours free, nine the pass's (and four only levels give: scripts/test-drive-levels.mjs);
+		// gloss free; every decal but none locked; orange flame free.
 		assert.equal( await garage.locator( '[data-part="colour"] .choice:not(.locked)' ).count(), 3 );
-		assert.equal( await garage.locator( '[data-part="colour"] .choice.locked' ).count(), 9 );
+		assert.equal( await garage.locator( '[data-part="colour"] .choice.locked.pass' ).count(), 9 );
+		assert.equal( await garage.locator( '[data-part="colour"] .choice.locked.level-only' ).count(), 4 );
 		assert.deepEqual( await garage.locator( '[data-part="finish"] .choice:not(.locked)' ).allTextContents(), [ 'Gloss⭐' ] );
 		assert.deepEqual( await garage.locator( '[data-part="decal"] .choice:not(.locked)' ).allTextContents(), [ 'None⭐' ] );
 		assert.equal( await garage.locator( '[data-part="flame"] .choice:not(.locked)' ).count(), 1 );
@@ -717,7 +719,9 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 		await garage.waitFor();
 		await page.waitForFunction( () => window.drive.garage.preview?.model?.name === 'Sports coupe', null, { timeout: 20000 } );
 		assert.equal( await garage.locator( '.ride-tab[aria-pressed="true"]' ).textContent(), 'Sports coupe⭐' );
-		assert.equal( await garage.locator( '.choice.locked' ).count(), 0 );
+		// Everything the pass has: only the colours levels alone give are still locked.
+		assert.equal( await garage.locator( '.choice.locked:not(.level-only)' ).count(), 0 );
+		assert.equal( await garage.locator( '.choice.locked.level-only' ).count(), 4 );
 		const pick = ( part, id ) => garage.locator( `[data-part="${ part }"] .choice[data-id="${ id }"]` ).click();
 		await pick( 'colour', 'violet' );
 		await pick( 'finish', 'metallic' );
