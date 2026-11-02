@@ -66,14 +66,26 @@ const LOWEST = - 1500;
 // starts on the water's surface instead (sea.js). That's where the ground under the pin is more
 // than BED m under the sea's height and the pin is on the sea or a coast (sea.js's map of them,
 // never a lake nor land: not the Dead Sea's shore, 430 m under the sea), or more than BED m under
-// the surface of the big lake (lakes.js) it's on; or lower than LOWEST anywhere. BED is twice as
-// deep as the lowest land by the sea (the Netherlands' polders, 7 m under it), with room for the
-// sea's height as sea.js has it (a few metres out by islands) and for Google's own water by a coast
-// with the tide out: those drop in as before, on Google's ground and water. The sea is never more
-// than HIGHEST_SEA m over the ellipsoid, so ground higher than that less BED, and not by a big lake,
-// needn't ask how high the sea is nor where it is.
+// the surface of the big lake (lakes.js) it's on, with nothing within RIM m of it more than BED m
+// over the water's surface (below); or it's lower than LOWEST anywhere. BED is twice as deep as the
+// lowest land along most coasts (the Netherlands' polders, 7 m under the sea), with room for the
+// sea's height as sea.js has it (up to 9.5 m low by volcanic islands, 3.9 m high at worst) and for
+// Google's own water by a coast with the tide out: those drop in as before, on Google's ground and
+// water. The sea is never more than HIGHEST_SEA m over the ellipsoid, so ground higher than that
+// less BED, and not by a big lake, needn't ask how high the sea is nor where it is.
 const BED = 15;
 const HIGHEST_SEA = 86;
+// A coast's square on the map takes in land up to 4.6 km from the sea, and land that close can be
+// further under the sea than BED: the side of the Assal depression in Djibouti, in the square the
+// Ghoubbet's shore crosses, is 28 m under it; so can a dry dock, a pit or a cutting be. Each is
+// walled off from the water by ground over the water's height, or the water would be in it (the
+// Assal depression's rim is 16 to 40 m over the sea within 150 m of each spot of it in that square),
+// and the bed of open water has no such wall. So ground with anything more than BED m over the
+// water's surface within RIM m of it (rays down at each of these distances on BEARINGS bearings
+// round it) is land, not the bed. (A wide pit by the sea, its middle more than RIM m from its rim,
+// still isn't told from the bed.)
+const RIM = [ 50, 100, 150 ];
+const BEARINGS = 16;
 // Room (px) the pin's card takes over the panel when the panel is a sheet along the bottom.
 const PIN_CARD = 84;
 // What a place's name may hold on the leaderboard (as worker/drive/names.js takes it), and how long.
@@ -205,7 +217,7 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 
 	// What's driven on: Google's tiles (or the test pad), and out at sea the sea's own surface.
 	const sea = createSea( { scene } );
-	const grounds = () => sea.active ? [ tiles ? tiles.group : pad, sea.mesh ] : [ tiles ? tiles.group : pad ];
+	const grounds = () => sea.shown ? [ tiles ? tiles.group : pad, sea.mesh ] : [ tiles ? tiles.group : pad ];
 	const globe = new GlobeView( { camera, canvas, earth, surface: earth, ellipsoid, pin: $( 'pin' ) } );
 	scene.add( globe.air );
 	globe.place( globe.orbit( home.lat, home.lon ) );
@@ -543,7 +555,7 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 		// Now the ground (or the sea) is at y = 0, and the street can be seen: down behind where
 		// you'll start.
 		recentre( { lat, lon, height } );
-		if ( open ) sea.start( { lat, lon, height, over: water.over } );
+		if ( open ) sea.start( { lat, lon, height, over: water.over, lake: water.lake } );
 		state.place = { ...place, lat, lon, height };
 		const heading = ground.heading( 0, place.heading );
 		await globe.flyTo( { lat, lon, height, distance: 16, heading, pitch: - 15 }, { duration: 1.8, ground: ! open } );
@@ -589,9 +601,9 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 	// The water's surface to start on if the ground under the pin at ( lat, lon ), `floor` m over the
 	// ellipsoid and `y` in the scene, is the bed of the sea or a big lake: { height } over the
 	// ellipsoid, { over } how far that is over the sea's height (a lake's height, 0 for the sea) and
-	// { lake } (lakes.js's, or null for the sea); or else null. The test pad stands for ground at the water's
-	// surface wherever it's put (the test globe under it is the ellipsoid drawn with few faces, which
-	// sag hundreds of metres under it), lowered as far as a test lowers it.
+	// { lake } (lakes.js's, or null for the sea); or else null. The test pad stands for ground at the
+	// water's surface wherever it's put (the test globe under it is the ellipsoid drawn with few
+	// faces, which sag hundreds of metres under it), lowered as far as a test lowers it.
 	async function waterOver( lat, lon, floor, y ) {
 
 		const highest = Math.max( 0, ...lakesNear( lat, lon ).map( lake => lake.height ) ) + HIGHEST_SEA - BED;
@@ -599,9 +611,31 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 		const [ level, at ] = await Promise.all( [ seaLevel( lat, lon ), waterAt( lat, lon ) ] );
 		// How far over the sea's height the water is there: none on land (or without the map).
 		const over = at?.kind === 'lake' ? at.lake.height : at?.kind === 'sea' || at?.kind === 'coast' ? 0 : null;
-		const bed = tiles ? floor : level + ( over ?? 0 ) + y;
-		if ( over !== null && bed < level + over - BED ) return { height: level + over, over, lake: at.lake ?? null };
+		const surface = level + ( over ?? 0 );
+		const bed = tiles ? floor : surface + y;
+		// (The water's surface in the scene is as far over y as it's over the bed.)
+		if ( over !== null && bed < surface - BED && ! walled( y + surface - bed ) ) return { height: surface, over, lake: at.lake ?? null };
 		return bed < LOWEST ? { height: level, over: 0, lake: null } : null;
+
+	}
+
+	// Whether anything round the pin within RIM m stands more than BED m over `surface`, the water's
+	// surface (m, in the scene): looked for down from far over that to it (see RIM).
+	function walled( surface ) {
+
+		const top = surface + BED;
+		for ( const distance of RIM ) {
+
+			for ( let i = 0; i < BEARINGS; i ++ ) {
+
+				const angle = i / BEARINGS * Math.PI * 2;
+				if ( ground.heightBelow( Math.sin( angle ) * distance, Math.cos( angle ) * distance, top + GROUND_RANGE[ 1 ], GROUND_RANGE[ 1 ] ) !== null ) return true;
+
+			}
+
+		}
+
+		return false;
 
 	}
 
@@ -963,7 +997,7 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 		const dt = Math.min( timer.getDelta(), 0.1 );
 		if ( driver.active ) driver.update( dt );
 		// The open sea's surface stays round the vehicle.
-		if ( driver.active ) sea.follow( driver.east, driver.north );
+		if ( driver.active ) sea.follow( driver.east, driver.north, driver.y );
 		if ( state.mode === 'driving' && driver.active ) progress.drive( dt, driven() );
 		live?.update( car() );
 		pads.update( dt );

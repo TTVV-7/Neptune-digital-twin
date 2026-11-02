@@ -23,8 +23,11 @@
 // big lakes are (Natural Earth's); the pad lowered under the water's surface, as Google draws the
 // bed: more than 15 m in Santa Monica Bay and by its pier, the sea's surface; 14 m (the tide out),
 // on the pad as before; on the Dead Sea's shore (land), never; in Lake Baikal, the lake's surface
-// (455.5 m over the sea's), ridden on, floated on, and a splash off an island back onto it; and
-// without the map, only ground deeper than any land or lake bed the sea's;
+// (455.5 m over the sea's), ridden on, floated on, and a splash off an island back onto it; in a
+// coast's square by the Ghoubbet, the pad with ground 20 m over the sea 100 m off it (the Assal
+// depression's rim), on the pad as before; Lake Erie's surface gone out over land at Niagara's
+// gorge and back by the lake; and without the map, only ground deeper than any land or lake bed
+// the sea's;
 // the screens the Worker's answers lead to (used up, robot check, maps off, the visit itself); and
 // the leaderboard (its answers made here): the trophy and the panel, tabs, your own row, picking a
 // name and renaming, a landed jump posting the run (the card asking the first time, never stopping
@@ -1827,6 +1830,9 @@ describe( 'World Drive, the open sea', () => {
 			'Lake Superior': [ 47.7, - 87.5, 'Lake Superior' ], 'Lake Huron': [ 44.8, - 82.4, 'Lakes Michigan and Huron' ], 'Lake Titicaca': [ - 15.8, - 69.4, 'Lake Titicaca' ],
 			'Olkhon, an island in Baikal': [ 53.15, 107.35, 'land' ], 'the Dead Sea\'s shore': [ 31.5, 35.48, 'land' ], 'Death Valley': [ 36.25, - 116.83, 'land' ],
 			'Lake Assal': [ 11.65, 42.42, 'land' ], 'Denver': [ 39.74, - 104.99, 'land' ], 'Antarctica': [ - 89, 0, 'land' ],
+			// The side of the Assal depression, 28 m under the sea: in the square the Ghoubbet's shore
+			// crosses, so a coast's (the next test but one).
+			'by the Ghoubbet': [ 11.6045, 42.5004, 'coast' ],
 			// By Natural Earth's Lake Erie (which goes down the Niagara River), but the gorge below the
 			// falls is 75 m under the lake: only a square all of which is the lake is the lake.
 			'Niagara Falls': [ 43.08, - 79.07, 'land' ],
@@ -1965,6 +1971,82 @@ describe( 'World Drive, the open sea', () => {
 		// The drop-in's own question, with the bed as Google draws it, 1.6 km under the lake's surface.
 		const deep = await page.evaluate( async () => ( await window.drive.waterOver( 53.25, 108.1, null, - 1640 ) ) );
 		assert.ok( deep && deep.lake.name === 'Lake Baikal' && deep.over === 455.5 && Math.abs( deep.height - lake.level - 455.5 ) < 0.01, JSON.stringify( deep ) );
+		await padBack( page );
+		assert.deepEqual( page.errors, [] );
+		assert.deepEqual( page.outside, [] );
+
+	} );
+
+	test( 'land in a coast\'s square walled off from the sea (the side of the Assal depression by the Ghoubbet): the pad 28 m under the sea with ground 20 m over it 100 m off, on the pad as before; with that ground 10 m over the sea, or 200 m off, the sea\'s surface', async () => {
+
+		// A slab of ground 40 m across, `over` m over the sea's surface and `off` m east of the pin, cut
+		// from the pad (28 m under the sea) as the islands are; then the pin dropped in on.
+		const walled = async ( over, off ) => {
+
+			await page.evaluate( ( { over, off } ) => {
+
+				const pad = window.drive.ground.getColliders()[ 0 ];
+				pad.getObjectByName( 'test-wall' )?.removeFromParent();
+				const wall = pad.children.find( child => child.isMesh ).clone();
+				wall.name = 'test-wall';
+				wall.scale.set( 40 / 4000, 40 / 2000, 1 );
+				wall.position.set( - off, over + 28, 0 );
+				pad.add( wall );
+				wall.updateMatrixWorld( true );
+
+			}, { over, off } );
+			return dropInOver( page, '11.6045, 42.5004', 28 );
+
+		};
+		const rim = await walled( 20, 100 );
+		console.log( 'by the Ghoubbet, walled off:', JSON.stringify( rim ) );
+		assert.ok( ! rim.sea && rim.colliders === 1 && rim.toast === null && Math.abs( rim.y + 28 ) < 0.5, JSON.stringify( rim ) );
+		await shot( page, 'drive-open-sea-walled' );
+		const low = await walled( 10, 100 );
+		assert.ok( low.sea && low.colliders === 2 && Math.abs( low.height - low.level ) < 0.01 && Math.abs( low.y ) < 0.01, JSON.stringify( low ) );
+		const far = await walled( 20, 200 );
+		assert.ok( far.sea && far.colliders === 2 && Math.abs( far.y ) < 0.01, JSON.stringify( far ) );
+		await page.evaluate( () => window.drive.ground.getColliders()[ 0 ].getObjectByName( 'test-wall' ).removeFromParent() );
+		await padBack( page );
+		assert.deepEqual( page.errors, [] );
+		assert.deepEqual( page.outside, [] );
+
+	} );
+
+	test( 'the water\'s surface only by its own water: from Lake Erie\'s (the pad 40 m under it) out over land to Niagara\'s gorge, it\'s gone; back by the lake, in a hollow under its height it stays gone, and on ground over it it\'s there again', async () => {
+
+		const lake = await dropInOver( page, '42.8, -79.1', 40 );
+		assert.ok( lake.sea && lake.colliders === 2 && Math.abs( lake.height - lake.level - 173.4 ) < 0.01, JSON.stringify( lake ) );
+		const seen = await page.evaluate( async () => {
+
+			const { latLonToEnu } = await import( '/src/geo.js' );
+			const { sea, ground, place } = window.drive;
+			const now = () => ( { active: sea.active, shown: sea.shown, inScene: !! sea.mesh.parent, colliders: ground.getColliders().length } );
+			// All at once, between frames (each frame lays it round the kart, back on the lake). `over`:
+			// how far over the lake's height the vehicle is there, where the lake's surface is lower in
+			// the scene's flat frame as the Earth curves away (31 m lower at Buffalo, 20 km off).
+			const out = {};
+			const go = ( name, lat, lon, over ) => {
+
+				const { east, north } = latLonToEnu( lat, lon, place );
+				sea.follow( east, north, over - ( east * east + north * north ) / ( 2 * 6371000 ) );
+				out[ name ] = now();
+
+			};
+			// Below the falls, 6 squares from the lake's: 75 m under it.
+			go( 'gorge', 43.0885, - 79.0712, - 75 );
+			// Buffalo, a square from it: 3 m under the lake's height, then 3 m over it.
+			go( 'hollow', 42.886, - 78.878, - 3 );
+			go( 'buffalo', 42.887, - 78.878, 3 );
+			go( 'lake', 42.8, - 79.1, 0 );
+			return out;
+
+		} );
+		console.log( 'Lake Erie, out and back:', JSON.stringify( seen ) );
+		assert.deepEqual( seen.gorge, { active: true, shown: false, inScene: false, colliders: 1 } );
+		assert.deepEqual( seen.hollow, { active: true, shown: false, inScene: false, colliders: 1 } );
+		assert.deepEqual( seen.buffalo, { active: true, shown: true, inScene: true, colliders: 2 } );
+		assert.deepEqual( seen.lake, { active: true, shown: true, inScene: true, colliders: 2 } );
 		await padBack( page );
 		assert.deepEqual( page.errors, [] );
 		assert.deepEqual( page.outside, [] );

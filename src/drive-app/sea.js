@@ -11,16 +11,20 @@ import { LAKES } from './lakes.js';
 // any lake or land can be, gets a surface of its own from here: water at the sea's height or the
 // lake's, drawn round the vehicle out to the horizon and following it as it drives, which the
 // Driver drives on as on any ground and water.js knows is water (so a ride rides on it until it's
-// been on dry ground, the hovercraft floats, and nothing puts a boost pad on it).
+// been on dry ground, the hovercraft floats, and nothing puts a boost pad on it). It's only by its
+// own water: driven off over land, further than REACH of it, it goes (see REACH).
 //
 // The sea's height. Google's heights are over the WGS 84 ellipsoid, and the sea's surface isn't: it
 // lies on the geoid, from 107 m under the ellipsoid (south of India) to 85 m over it (by New
 // Guinea), so 0 would leave it far from the coast's own water. This takes it from NGA's EGM96
 // geoid, every degree (drive/public/sea/egm96.bin, made by scripts/make-sea-level.mjs), fetched the
-// first time it's wanted. Read bilinearly that's within 0.5 m of the full model on average; by
-// round volcanic islands (Hawaii, the Canaries) 2 to 6 m low. And the Earth curves away under the
-// scene's flat frame (8 m in 10 km), so the surface does too: each point of it is where the sea is
-// over that point of the Earth.
+// first time it's wanted. Read bilinearly that's within 0.5 m of the full model on average, and
+// within 2.5 m of it on 98 in 100 of the map's coasts' squares; it's furthest out by round volcanic
+// islands, whose own bump is narrower than a degree: up to 9.5 m low by Hawaii's Big Island, more
+// than 6 m low by Puerto Rico, Tenerife, Leyte, the Bonin Islands and the Aleutians. It's 3.9 m
+// high at worst (by Lake Maracaibo). And the Earth curves away under the scene's flat frame (8 m in
+// 10 km), so the surface does too: each point of it is where the sea is over that point of the
+// Earth.
 
 const TABLE = '/sea/egm96.bin';
 const ROWS = 181;
@@ -40,6 +44,16 @@ const EARTH_RADIUS = 6371000;
 const RINGS = [ 0, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536 ];
 const SEGMENTS = 64;
 const MOVE = 50;
+// It's water only by its own water: the map's squares of the sea and its coasts, or of the lake. Out
+// over land, with REACH whole squares or more between the vehicle's square and the nearest of them
+// (more than 9 km north or south, 7 km east or west at 43° N), ground under the water's height isn't
+// under that water (the plain below a lake's outlet: Niagara's gorge, below Lake Erie; a polder; a
+// depression inland from the sea, the Jordan valley), so it's gone there, and laid again when the
+// vehicle comes back within reach on ground ABOVE m or more over the water's height (not in a polder
+// under it, where it would be over the vehicle). Without the map, or laid where the map has no water
+// (ground deeper than any land, which is still the sea's), it stays round the vehicle wherever.
+const REACH = 2;
+const ABOVE = 0.5;
 // Its picture repeats every TILE m: the sea's colour, gently mottled so that driving over it is
 // seen to move (one even colour would look still at any speed), its brightness varying by little
 // more than Google's water does (water.js's evenness).
@@ -226,14 +240,18 @@ export function createSea( { scene } ) {
 	let level = 0;
 	let over = 0;
 	let laid = null;
+	// Which of the map's squares are its water's (see REACH), or null where it's kept wherever.
+	let ours = null;
 
-	// Laid round ( east, north ): each point where the water is over that point of the Earth, under
-	// the scene's flat frame (the Earth curving away from the place the scene is centred on), at the
-	// water's height by the vehicle (a lake's surface, like the sea's, lies along the geoid).
+	// Laid round ( east, north ), in the scene: each point where the water is over that point of the
+	// Earth, under the scene's flat frame (the Earth curving away from the place the scene is centred
+	// on), at the water's height by the vehicle (a lake's surface, like the sea's, lies along the
+	// geoid).
 	function lay( east, north ) {
 
 		const { lat, lon } = localToLatLon( enuToLocal( east, north, 0 ), place );
 		const height = seaLevelNow( lat, lon ) + over - level;
+		scene.add( mesh );
 		for ( let r = 0; r < RINGS.length; r ++ ) {
 
 			for ( let s = 0; s < ( r ? SEGMENTS : 1 ); s ++ ) {
@@ -258,24 +276,52 @@ export function createSea( { scene } ) {
 
 	}
 
+	// Whether ( lat, lon ) in degrees is within REACH of its water.
+	function near( lat, lon ) {
+
+		if ( ! ours ) return true;
+		for ( let row = - REACH; row <= REACH; row ++ ) {
+
+			for ( let column = - REACH; column <= REACH; column ++ ) {
+
+				if ( ours( waterAtNow( lat + row / PER_DEGREE, lon + column / PER_DEGREE ) ) ) return true;
+
+			}
+
+		}
+
+		return false;
+
+	}
+
 	return {
 
 		mesh,
 
+		// Whether there's open water (since a drop-in started on it, till it's cleared).
 		get active() {
 
 			return !! place;
 
 		},
 
+		// Whether it's there round the vehicle now (not gone, out over land: see REACH).
+		get shown() {
+
+			return !! place && !! mesh.parent;
+
+		},
+
 		// The sea at the place the scene is now centred on ({ lat, lon } in degrees), whose height
-		// over the ellipsoid (m) is the scene's y = 0 there; or a lake's surface there, `over` m over
-		// the sea's height.
-		start( { lat, lon, height, over: rise = 0 } ) {
+		// over the ellipsoid (m) is the scene's y = 0 there; or `lake`'s surface (lakes.js's) there,
+		// `over` m over the sea's height.
+		start( { lat, lon, height, over: rise = 0, lake = null } ) {
 
 			place = { lat, lon };
 			level = height;
 			over = rise;
+			const mine = lake ? at => at?.kind === 'lake' && at.lake === lake : at => at?.kind === 'sea' || at?.kind === 'coast';
+			ours = mine( waterAtNow( lat, lon ) ) ? mine : null;
 			if ( ! material.map ) {
 
 				material.map = picture( SEA );
@@ -284,15 +330,25 @@ export function createSea( { scene } ) {
 			}
 
 			lay( 0, 0 );
-			scene.add( mesh );
 
 		},
 
-		// Each frame while driving: still round the vehicle, at ( east, north ) in the scene.
-		follow( east, north ) {
+		// Each frame while driving: still round the vehicle, at ( east, north, y ) in the scene; or
+		// gone, out over land (see REACH).
+		follow( east, north, y = Infinity ) {
 
 			if ( ! place || Math.hypot( east - laid.east, north - laid.north ) < MOVE ) return;
-			lay( east, north );
+			const { lat, lon } = localToLatLon( enuToLocal( east, north, 0 ), place );
+			const surface = seaLevelNow( lat, lon ) + over - level - ( east * east + north * north ) / ( 2 * EARTH_RADIUS );
+			const here = near( lat, lon );
+			if ( here && ( mesh.parent || y >= surface + ABOVE ) ) lay( east, north );
+			else {
+
+				// (Asked again MOVE m on.)
+				if ( ! here ) mesh.removeFromParent();
+				laid = { east, north };
+
+			}
 
 		},
 
@@ -300,6 +356,7 @@ export function createSea( { scene } ) {
 		clear() {
 
 			place = null;
+			ours = null;
 			mesh.removeFromParent();
 
 		},

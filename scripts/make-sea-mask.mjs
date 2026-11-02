@@ -14,13 +14,15 @@
 // each of 8,640 squares from 180° W. A square is the sea (2) if all of it is, a coast (1) if the
 // sea's edge (a coast, an island's) crosses it, a lake (3) if all of it is that lake, and otherwise
 // land (0). A square a lake's shore crosses is land, unlike one on a coast: right by a lake there
-// can be ground far under its surface (the river out of it, below a falls or a dam: Niagara's
-// gorge, 75 m under Lake Erie, by a square of Natural Earth's Erie, which goes down the river to
-// the falls), and nothing by the sea is that far under it. It's kept as each row's runs of the
-// same, a row's runs adding up to its 8,640 squares: each as its length times 4 plus what it is,
-// and after a lake's, which lake (lakes.js's first is 0), each number in bytes of 7 bits, low bits
-// first, the top bit set on all but the last. Before the rows, 24 and how many lakes there are, so
-// that sea.js reads only a map made for its own list.
+// can be ground far under its surface and open to it (the river out of it, below a falls or a dam:
+// Niagara's gorge, 75 m under Lake Erie, by a square of Natural Earth's Erie, which goes down the
+// river to the falls), where land by the sea under its height (the side of the Assal depression,
+// 28 m under it in the square the Ghoubbet's shore crosses) is walled off from it by ground over
+// its height, which src/drive-app/main.js looks for. It's kept as each row's runs of the same, a
+// row's runs adding up to its 8,640 squares: each as its length times 4 plus what it is, and after
+// a lake's, which lake (lakes.js's first is 0), each number in bytes of 7 bits, low bits first, the
+// top bit set on all but the last. Before the rows, 24 and how many lakes there are, so that sea.js
+// reads only a map made for its own list.
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { LAKES } from '../src/drive-app/lakes.js';
