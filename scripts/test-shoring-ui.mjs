@@ -80,11 +80,13 @@ after( async () => {
 
 } );
 
+// Under SwiftShader (a CPU renderer) a layout with dozens of shored pits takes longer to load than
+// Playwright's 30 s, drawing the ground: so longer, and not waiting for every last resource.
 async function openApp() {
 
-	await page.goto( `${ base }/?prompt` );
-	await page.click( '#skip' );
-	await page.waitForFunction( () => window.twin?.sidebar && window.twin.shoring && window.twin.terrain );
+	await page.goto( `${ base }/?prompt`, { waitUntil: 'domcontentloaded', timeout: 120000 } );
+	await page.click( '#skip', { timeout: 120000 } );
+	await page.waitForFunction( () => window.twin?.sidebar && window.twin.shoring && window.twin.terrain, null, { timeout: 120000 } );
 
 }
 
@@ -338,7 +340,8 @@ test( 'P panel: support dropdown, slope greyed out, notes in full; WorkSafeBC no
 		return {
 			slopeDisabled: row( 'side slope (h : v)' ).classList.contains( 'lil-disabled' ),
 			support: row( 'support' ).querySelector( 'select' ).selectedOptions[ 0 ].textContent,
-			notes: [ ...folder.querySelectorAll( '.lil-controller.note' ) ].filter( c => c.style.display !== 'none' ).map( c => c.querySelector( '.readout-note' ).textContent ),
+			// The shoring's own notes (its summary and notes), not the checks or others' readouts.
+			notes: [ ...folder.querySelectorAll( '.lil-controller.note' ) ].filter( c => c.style.display !== 'none' && [ 'shoring', 'shoring notes' ].includes( c.querySelector( '.lil-name' )?.textContent ) ).map( c => c.querySelector( '.readout-note' ).textContent ),
 			wall: row( 'shored wall' )?.style.display === 'none' ? null : row( 'shored wall' )?.querySelector( 'input' ).value,
 			floor: row( 'floor' ).querySelector( 'input' ).value,
 		};
@@ -618,7 +621,7 @@ test( 'Shoring library pieces: listed with thumbnails, placed, turned, saved and
 	} );
 	await page.waitForTimeout( 800 );
 	await openApp();
-	await page.waitForFunction( n => window.twin.models.entries.filter( e => e.kind === 'excavation' ).length === n, before.pits.length );
+	await page.waitForFunction( n => window.twin.models.entries.filter( e => e.kind === 'excavation' ).length === n, before.pits.length, { timeout: 120000 } );
 	const afterReload = await page.evaluate( () => {
 
 		const { models, shoring } = window.twin;
