@@ -193,14 +193,19 @@ test( 'nothing is clipped until a section is cut away', async () => {
 
 	const r = await page.evaluate( async () => {
 
-		const { renderer, terrain, scene } = window.twin;
+		const { renderer, terrain, scene, section } = window.twin;
 		const { PAINT } = await import( '/src/shoring-models.js' );
+		const { clipTileMaterial } = await import( '/src/excavation-section.js' );
 		let ground = 0;
 		scene.traverse( o => o.isMesh && o.parent?.name === 'placeholder-ground' && o.material.clippingPlanes && ground ++ );
-		return { local: renderer.localClippingEnabled, terrain: terrain.material.clippingPlanes, paint: Object.values( PAINT ).filter( m => m.clippingPlanes ).length, ground };
+		// A Google tile's material is given the planes as it loads (earthworks.js), so a tile that's
+		// out of the scene when the first cut-away opens isn't missed; they do nothing till then.
+		const tile = new ( Object.values( PAINT )[ 0 ].constructor )();
+		clipTileMaterial( tile );
+		return { local: renderer.localClippingEnabled, terrain: terrain.material.clippingPlanes, paint: Object.values( PAINT ).filter( m => m.clippingPlanes ).length, ground, tile: tile.clippingPlanes === section.planes && tile.clipIntersection };
 
 	} );
-	assert.deepEqual( r, { local: false, terrain: null, paint: 0, ground: 0 } );
+	assert.deepEqual( r, { local: false, terrain: null, paint: 0, ground: 0, tile: true } );
 
 } );
 

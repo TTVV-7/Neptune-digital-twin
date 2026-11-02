@@ -149,9 +149,10 @@ and listed in the Show panel as **Tieback no-dig zones**, where they can be hidd
   counts from `planShoring( params ).piles`, as drawn), and the conflict check (`zoneRects`,
   `findConflicts`, `conflictsText`).
 - `src/excavation-section.js` draws it: the readouts and actions (wired into the excavation kind by
-  earthworks.js), the card and its SVG, the 3D cut-away (five shared clipping planes, given to the
-  terrain, tiles, shoring paint and models the first time one opens; the filled-in faces, depth
-  biased like laydown areas; the camera; a hit filter), the dimensions over the scene, and the
+  earthworks.js), the card and its SVG, the 3D cut-away (five shared clipping planes, given to each
+  Google tile as it loads, and to the terrain, shoring paint and models the first time one opens,
+  which is when the renderer's local clipping goes on; the filled-in faces, depth biased like
+  laydown areas; the camera; a hit filter), the dimensions over the scene, and the
   no-dig zones. `window.twin.section` has `open( entry, along )`, `close()`, `view`, `nearby( entry )`
   and the planes, cap, card and zones, for tests.
 - `terrain.groundAt( x, z )` reads the ground as it was before digging; `rectsOverlap` (terrain.js)

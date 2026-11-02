@@ -95,11 +95,15 @@ function clip( material ) {
 
 }
 
-// A Google tile material, cut away with a pit in its section view (once there's been one: tiles
-// loaded before then get the planes when it opens).
+// A Google tile material, cut away with a pit in its section view. It's given the planes as it
+// loads: until the first cut-away turns the renderer's local clipping on they're ignored (no shader
+// change, no cost), and a tile loaded earlier can't be missed then. The tiles renderer takes a tile
+// out of the scene while it's inactive and puts it back without loading it again, so one that's out
+// when the first cut-away opens (as the camera moves to frame the cut) wouldn't be found by
+// looking through the scene.
 export function clipTileMaterial( material ) {
 
-	if ( armed ) clip( material );
+	clip( material );
 
 }
 
