@@ -1,0 +1,4 @@
+# World Drive's sea data (scripts/make-sea-level.mjs, scripts/make-sea-mask.mjs) is binary: never
+# diffed as text nor its line ends changed on a checkout. mask.bin has no zero byte near its start,
+# which is how git would otherwise tell.
+drive/public/sea/*.bin binary

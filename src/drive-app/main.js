@@ -16,7 +16,7 @@ import { setUpPanel } from './panel.js';
 import { setUpGarage } from './garage.js';
 import { createBoostPads } from './pads.js';
 import { createWater } from './water.js';
-import { createSea, seaLevel } from './sea.js';
+import { createSea, lakesNear, seaLevel, waterAt } from './sea.js';
 import { setUpLeaderboard } from './leaderboard.js';
 import { buyArea } from './pass.js';
 import { fillAccountArea, fillBuyArea, linkPlayer, onLinked, setUpSupporter } from './supporter.js';
@@ -57,18 +57,22 @@ const GROUND_WAIT = [ 25, 15 ];
 // The tiles must have stopped loading this long (s) for the ground to count as there.
 const SETTLE = 0.6;
 // Where the ground is looked for (m above the ellipsoid): below the deepest sea floor (the
-// Challenger Deep, 10.9 km down) to above Everest. Ground under the pin lower than LOWEST is used
-// only as the sea floor (below).
+// Challenger Deep, 10.9 km down) to above Everest. Ground under the pin lower than LOWEST is deeper
+// than any land or lake bed (Baikal's is 1.2 km under the ellipsoid), so it's only ever the sea's.
 const GROUND_RANGE = [ - 11500, 9500 ];
 const LOWEST = - 1500;
 // Out past what Google photographs of a coast, its tiles are the sea bed with the sea's picture on
-// it: ground more than SEA_FLOOR m under the sea's height there is that, and the drive starts on
-// the sea's surface instead (sea.js). No land or lake is more than about 430 m under the sea (the
-// Dead Sea's shore), and this leaves room besides for a coarse tile's flat face cutting under the
-// curve of the Earth (one 150 km across, 480 m, as the test globe's do). The sea is never more than
-// HIGHEST_SEA m over the ellipsoid, so ground higher than that less SEA_FLOOR needn't ask how high
-// the sea is.
-const SEA_FLOOR = 1000;
+// it, and the same for some deep lakes far from their shores (Lake Baikal's): there the drive
+// starts on the water's surface instead (sea.js). That's where the ground under the pin is more
+// than BED m under the sea's height and the pin is on the sea or a coast (sea.js's map of them,
+// never a lake nor land: not the Dead Sea's shore, 430 m under the sea), or more than BED m under
+// the surface of the big lake (lakes.js) it's on; or lower than LOWEST anywhere. BED is twice as
+// deep as the lowest land by the sea (the Netherlands' polders, 7 m under it), with room for the
+// sea's height as sea.js has it (a few metres out by islands) and for Google's own water by a coast
+// with the tide out: those drop in as before, on Google's ground and water. The sea is never more
+// than HIGHEST_SEA m over the ellipsoid, so ground higher than that less BED, and not by a big lake,
+// needn't ask how high the sea is nor where it is.
+const BED = 15;
 const HIGHEST_SEA = 86;
 // Room (px) the pin's card takes over the panel when the panel is a sheet along the bottom.
 const PIN_CARD = 84;
@@ -512,11 +516,11 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 		// whatever the estimate was.
 		const { y, settled } = await settle( drop, GROUND_RANGE[ 1 ] - estimate, GROUND_RANGE[ 1 ] - GROUND_RANGE[ 0 ], GROUND_WAIT[ 0 ] );
 		if ( gone() ) return;
-		// Far under the sea's height (with the tiles done loading, not a coarse tile cutting under the
-		// curve of the Earth), it's the sea floor: the open sea, started on its surface.
+		// The bed of the sea or a lake (with the tiles done loading, not a coarse tile cutting under
+		// the curve of the Earth): the open water, started on its surface.
 		const floor = y === null ? null : estimate + y;
-		const level = floor !== null && settled && floor < HIGHEST_SEA - SEA_FLOOR ? await seaLevel( lat, lon ) : null;
-		const open = level !== null && floor < level - SEA_FLOOR;
+		const water = floor !== null && settled ? await waterOver( lat, lon, floor, y ) : null;
+		const open = water !== null;
 		if ( gone() ) return;
 		if ( floor === null || ( ! open && floor < LOWEST ) ) {
 
@@ -527,7 +531,7 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 
 		// A spot on a bridge starts on its deck, if its pin is a little off it, over the water; a pin
 		// on a roof (or anything else raised) starts on the street below it.
-		let height = open ? level : floor;
+		let height = open ? water.height : floor;
 		const start = open ? null : place.deck ? ground.deck( y ) : ground.street( y );
 		if ( start ) {
 
@@ -539,7 +543,7 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 		// Now the ground (or the sea) is at y = 0, and the street can be seen: down behind where
 		// you'll start.
 		recentre( { lat, lon, height } );
-		if ( open ) sea.start( { lat, lon, height } );
+		if ( open ) sea.start( { lat, lon, height, over: water.over } );
 		state.place = { ...place, lat, lon, height };
 		const heading = ground.heading( 0, place.heading );
 		await globe.flyTo( { lat, lon, height, distance: 16, heading, pitch: - 15 }, { duration: 1.8, ground: ! open } );
@@ -579,6 +583,25 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 		live?.setPlace( { name: placeLabel( state.place ), lat, lon, height } );
 		// The keys, on a keyboard; a touch screen has its labelled buttons instead.
 		if ( ! document.body.classList.contains( 'touch' ) ) screens.showKeys();
+
+	}
+
+	// The water's surface to start on if the ground under the pin at ( lat, lon ), `floor` m over the
+	// ellipsoid and `y` in the scene, is the bed of the sea or a big lake: { height } over the
+	// ellipsoid, { over } how far that is over the sea's height (a lake's height, 0 for the sea) and
+	// { lake } (lakes.js's, or null for the sea); or else null. The test pad stands for ground at the water's
+	// surface wherever it's put (the test globe under it is the ellipsoid drawn with few faces, which
+	// sag hundreds of metres under it), lowered as far as a test lowers it.
+	async function waterOver( lat, lon, floor, y ) {
+
+		const highest = Math.max( 0, ...lakesNear( lat, lon ).map( lake => lake.height ) ) + HIGHEST_SEA - BED;
+		if ( tiles ? floor > highest : y > - BED ) return null;
+		const [ level, at ] = await Promise.all( [ seaLevel( lat, lon ), waterAt( lat, lon ) ] );
+		// How far over the sea's height the water is there: none on land (or without the map).
+		const over = at?.kind === 'lake' ? at.lake.height : at?.kind === 'sea' || at?.kind === 'coast' ? 0 : null;
+		const bed = tiles ? floor : level + ( over ?? 0 ) + y;
+		if ( over !== null && bed < level + over - BED ) return { height: level + over, over, lake: at.lake ?? null };
+		return bed < LOWEST ? { height: level, over: 0, lake: null } : null;
 
 	}
 
@@ -1016,7 +1039,7 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 			return state.entry;
 
 		},
-		dropIn, toGlobe, resume, recentre,
+		dropIn, toGlobe, resume, recentre, waterOver,
 		where: () => formatLatLon( carto.lat * MathUtils.RAD2DEG, carto.lon * MathUtils.RAD2DEG ),
 	};
 

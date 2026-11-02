@@ -19,7 +19,12 @@
 // the open sea (the pad lowered 3 km, as Google's tiles are only the sea bed out there): the sea's
 // height (EGM96's), a typed pin there started on the sea's own surface, driven on, curving away
 // with the Earth, flown over and come down on with no splash, a splash off an island and back on
-// it, and gone back on the globe, a drop-in on land having none;
+// it, and gone back on the globe, a drop-in on land having none; the map of where the sea and the
+// big lakes are (Natural Earth's); the pad lowered under the water's surface, as Google draws the
+// bed: more than 15 m in Santa Monica Bay and by its pier, the sea's surface; 14 m (the tide out),
+// on the pad as before; on the Dead Sea's shore (land), never; in Lake Baikal, the lake's surface
+// (455.5 m over the sea's), ridden on, floated on, and a splash off an island back onto it; and
+// without the map, only ground deeper than any land or lake bed the sea's;
 // the screens the Worker's answers lead to (used up, robot check, maps off, the visit itself); and
 // the leaderboard (its answers made here): the trophy and the panel, tabs, your own row, picking a
 // name and renaming, a landed jump posting the run (the card asking the first time, never stopping
@@ -1552,6 +1557,57 @@ describe( 'World Drive water', () => {
 
 } );
 
+// A pin typed in on the globe with the pad `depth` m under the water's surface there (the sea's, or
+// a big lake's), as Google draws the bed out there: what the drop-in started on.
+async function dropInOver( page, where, depth ) {
+
+	if ( await mode( page ) !== 'globe' ) {
+
+		await page.keyboard.press( 'KeyM' );
+		await page.waitForFunction( () => window.drive.mode === 'globe' );
+
+	}
+
+	await page.evaluate( depth => {
+
+		const pad = window.drive.ground.getColliders()[ 0 ];
+		pad.position.y = - depth;
+		pad.updateMatrixWorld( true );
+
+	}, depth );
+	await page.locator( '.search input[name=q]' ).fill( where );
+	await page.locator( '.search input[name=q]' ).press( 'Enter' );
+	await flown( page );
+	await driveHere( page );
+	return page.evaluate( async () => {
+
+		const { driver: d, sea, water, ground, place } = window.drive;
+		const { seaLevel } = await import( '/src/drive-app/sea.js' );
+		const toast = document.querySelector( '#toast' );
+		return {
+			toast: toast.hidden ? null : toast.textContent, sea: sea.active, colliders: ground.getColliders().length,
+			height: place.height, level: await seaLevel( place.lat, place.lon ), y: d.y, look: water.look( d.east, d.north, d.y ),
+		};
+
+	} );
+
+}
+
+// Back on the globe with the pad where land is.
+async function padBack( page ) {
+
+	await page.keyboard.press( 'KeyM' );
+	await page.waitForFunction( () => window.drive.mode === 'globe' );
+	await page.evaluate( () => {
+
+		const pad = window.drive.ground.getColliders()[ 0 ];
+		pad.position.y = 0;
+		pad.updateMatrixWorld( true );
+
+	} );
+
+}
+
 // The open sea. Out past what Google photographs of a coast, its tiles are the sea bed under the
 // sea's picture (5 km down in the middle of the Pacific), with no surface: the test pad lowered
 // 3 km stands in for it. A drop-in there starts on a surface of the sea's own (sea.js) at the
@@ -1759,6 +1815,175 @@ describe( 'World Drive, the open sea', () => {
 		assert.ok( Math.abs( land.y ) < 0.01, JSON.stringify( land ) );
 		assert.deepEqual( page.errors, [] );
 		assert.deepEqual( page.outside, [] );
+
+	} );
+
+	test( 'the map of the sea and the big lakes: the sea and every sea joined to it, its coasts, each big lake by name (all of a square the lake), and land (the Dead Sea\'s shore, Death Valley, Lake Assal and Niagara Falls among it); only a pin by a big lake asks about one', async () => {
+
+		const places = {
+			'the middle of the Pacific': [ 30, - 140, 'sea' ], 'the Pacific at 180°': [ 30, 180, 'sea' ], 'Santa Monica Bay': [ 33.95, - 118.6, 'sea' ],
+			'20 km off Waikiki': [ 21.08, - 157.85, 'sea' ], 'the Strait of Georgia': [ 49.2, - 123.55, 'sea' ], 'the Black Sea': [ 43, 34, 'sea' ],
+			'Santa Monica Pier': [ 34.0065, - 118.4985, 'coast' ], 'Lake Baikal': [ 53.25, 108.1, 'Lake Baikal' ], 'the Caspian': [ 38.2, 51.2, 'the Caspian Sea' ],
+			'Lake Superior': [ 47.7, - 87.5, 'Lake Superior' ], 'Lake Huron': [ 44.8, - 82.4, 'Lakes Michigan and Huron' ], 'Lake Titicaca': [ - 15.8, - 69.4, 'Lake Titicaca' ],
+			'Olkhon, an island in Baikal': [ 53.15, 107.35, 'land' ], 'the Dead Sea\'s shore': [ 31.5, 35.48, 'land' ], 'Death Valley': [ 36.25, - 116.83, 'land' ],
+			'Lake Assal': [ 11.65, 42.42, 'land' ], 'Denver': [ 39.74, - 104.99, 'land' ], 'Antarctica': [ - 89, 0, 'land' ],
+			// By Natural Earth's Lake Erie (which goes down the Niagara River), but the gorge below the
+			// falls is 75 m under the lake: only a square all of which is the lake is the lake.
+			'Niagara Falls': [ 43.08, - 79.07, 'land' ],
+		};
+		const seen = await page.evaluate( async places => {
+
+			const { lakesNear, waterAt } = await import( '/src/drive-app/sea.js' );
+			const kinds = {};
+			for ( const [ name, [ lat, lon ] ] of Object.entries( places ) ) {
+
+				const at = await waterAt( lat, lon );
+				kinds[ name ] = at.kind === 'lake' ? at.lake.name : at.kind;
+
+			}
+
+			const near = ( lat, lon ) => lakesNear( lat, lon ).map( lake => lake.name );
+			return { kinds, near: { baikal: near( 53.25, 108.1 ), huron: near( 44.8, - 82.4 ), pacific: near( 30, - 140 ), denver: near( 39.74, - 104.99 ) } };
+
+		}, places );
+		assert.deepEqual( seen.kinds, Object.fromEntries( Object.entries( places ).map( ( [ name, [ , , kind ] ] ) => [ name, kind ] ) ) );
+		assert.deepEqual( seen.near, { baikal: [ 'Lake Baikal' ], huron: [ 'Lakes Michigan and Huron' ], pacific: [], denver: [] } );
+
+	} );
+
+	test( 'the pad more than 15 m under the sea\'s height on the sea or a coast (as Google draws the shelf\'s bed): started on the sea\'s surface; 14 m under it (Google\'s water with the tide out), on that as before; on land, however far under the sea (the Dead Sea\'s shore), never; deeper than any land or lake, anywhere', async () => {
+
+		const shelf = await dropInOver( page, '33.95, -118.6', 200 );
+		console.log( 'the shelf:', JSON.stringify( shelf ) );
+		assert.ok( shelf.sea && shelf.colliders === 2 && shelf.toast === null && Math.abs( shelf.height - shelf.level ) < 0.01, JSON.stringify( shelf ) );
+		assert.ok( Math.abs( shelf.y ) < 0.01 && Math.abs( shelf.look.level ) < 0.01 && ! shelf.look.dry, JSON.stringify( shelf ) );
+		await shot( page, 'drive-open-sea-shelf' );
+		const just = await dropInOver( page, '33.95, -118.6', 16 );
+		assert.ok( just.sea && Math.abs( just.height - just.level ) < 0.01 && Math.abs( just.y ) < 0.01, JSON.stringify( just ) );
+		const tide = await dropInOver( page, '33.95, -118.6', 14 );
+		console.log( 'the tide out:', JSON.stringify( tide ) );
+		assert.ok( ! tide.sea && tide.colliders === 1 && tide.toast === null && Math.abs( tide.y + 14 ) < 0.5, JSON.stringify( tide ) );
+		// By the pier, the map's square astride the coast: the sea too.
+		const coast = await dropInOver( page, '34.0065, -118.4985', 40 );
+		assert.ok( coast.sea && Math.abs( coast.y ) < 0.01, JSON.stringify( coast ) );
+		const shore = await dropInOver( page, '31.5, 35.48', 500 );
+		console.log( 'the Dead Sea\'s shore:', JSON.stringify( shore ) );
+		assert.ok( ! shore.sea && shore.colliders === 1 && shore.toast === null && Math.abs( shore.y + 500 ) < 0.5 && shore.look.dry, JSON.stringify( shore ) );
+		// The drop-in's own question, with the ground that far under where the pad stands for the
+		// water's surface: Death Valley 1 km down is still land; 2 km down, deeper than any land or
+		// lake bed, it's the sea's, wherever.
+		const asked = await page.evaluate( async () => {
+
+			const { waterOver } = window.drive;
+			const surface = async ( lat, lon, y ) => ( await waterOver( lat, lon, null, y ) )?.height ?? null;
+			return { pacific: await surface( 30, - 140, - 1150 ), valley: await surface( 36.25, - 116.83, - 1000 ), deep: await surface( 36.25, - 116.83, - 2000 ) };
+
+		} );
+		assert.equal( asked.pacific, - 28 );
+		assert.equal( asked.valley, null );
+		assert.ok( Math.abs( asked.deep + 30 ) < 5, JSON.stringify( asked ) );
+		await padBack( page );
+		assert.deepEqual( page.errors, [] );
+		assert.deepEqual( page.outside, [] );
+
+	} );
+
+	test( 'a big lake whose bed Google draws (the pad 200 m under Lake Baikal\'s surface): started on the lake\'s surface, 455.5 m over the sea\'s height, water like the sea: ridden on with no splash and no boost pads, a floating ride throwing up spray, and once it has been on dry ground (an island) driving off into it a splash and back on the island, not the bed; 14 m under it, on that as before', async () => {
+
+		const lake = await dropInOver( page, '53.25, 108.1', 200 );
+		console.log( 'Lake Baikal:', JSON.stringify( lake ) );
+		assert.ok( lake.sea && lake.colliders === 2 && lake.toast === null && Math.abs( lake.height - lake.level - 455.5 ) < 0.01, JSON.stringify( lake ) );
+		assert.ok( Math.abs( lake.y ) < 0.01 && Math.abs( lake.look.level ) < 0.01 && ! lake.look.dry, JSON.stringify( lake ) );
+		await page.evaluate( () => document.querySelector( '#drive-ui .keys' ).hidden = true );
+		await shot( page, 'drive-lake' );
+		const result = await page.evaluate( () => {
+
+			const { driver: d, sea, pads, ground, scene } = window.drive;
+			const spray = () => scene.getObjectByName( 'drive-fx' ).children.filter( o => o.isSprite && o.visible ).length;
+			const step = ( seconds, each ) => {
+
+				for ( let i = 0; i < Math.round( seconds * 60 ); i ++ ) {
+
+					d.update( 1 / 60 );
+					sea.follow( d.east, d.north );
+					pads.update( 1 / 60 );
+					if ( each?.() === false ) return;
+
+				}
+
+			};
+			for ( const code of [ ...d.keys ] ) d.release( code );
+			const out = { splashed: false, low: Infinity, high: - Infinity, onWater: 0, pads: 0, spray: 0 };
+			const watch = () => {
+
+				out.splashed ||= !! d.splash;
+				out.low = Math.min( out.low, d.y );
+				out.high = Math.max( out.high, d.y );
+				if ( d.onWater ) out.onWater += 1 / 60;
+				out.pads = Math.max( out.pads, pads.pads.filter( p => p.state !== 'free' ).length );
+
+			};
+			// Driven on for 4 s, then 2 s more floating (the hovercraft's tuning, on the kart).
+			d.press( 'KeyW' );
+			step( 4, watch );
+			out.dry = d.dry.length;
+			d.floats = true;
+			step( 2, () => {
+
+				watch();
+				out.spray = Math.max( out.spray, spray() );
+
+			} );
+			d.floats = false;
+			// An island 0.3 m over the lake, 40 m across, 20 m ahead: a slab cut from the pad.
+			const pad = ground.getColliders()[ 0 ];
+			const island = pad.children.find( child => child.isMesh ).clone();
+			const top = d.y + 0.3;
+			island.scale.set( 40 / 4000, 40 / 2000, 1 );
+			island.position.set( - d.east, top - pad.position.y, d.north + 40 );
+			pad.add( island );
+			island.updateMatrixWorld( true );
+			Object.assign( d, { heading: 0, course: 0, view: 0, speed: 8, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, flying: false, splash: null, dry: [], onWater: false } );
+			const start = d.north;
+			step( 12, () => ! d.splash );
+			out.island = { at: [ start + 20, start + 60 ], splashed: !! d.splash, wentIn: d.north, trail: d.dry.length };
+			step( 3, () => ! d.splash || undefined );
+			d.release( 'KeyW' );
+			step( 0.2 );
+			out.back = { north: d.north, splash: !! d.splash, island: d.y - top, bed: d.y - pad.position.y };
+			island.removeFromParent();
+			return out;
+
+		} );
+		console.log( 'Lake Baikal, driven on:', JSON.stringify( result ) );
+		assert.ok( result.onWater > 5.5 && result.dry === 0 && result.pads === 0 && Math.abs( result.low ) < 0.01 && Math.abs( result.high ) < 0.01, JSON.stringify( result ) );
+		assert.ok( result.spray > 0 && ! result.splashed, JSON.stringify( result ) );
+		assert.ok( result.island.splashed && result.island.wentIn > result.island.at[ 1 ] && result.island.trail > 3, JSON.stringify( result.island ) );
+		assert.ok( ! result.back.splash && Math.abs( result.back.island ) < 0.05 && result.back.north > result.island.at[ 0 ] && result.back.north < result.island.at[ 1 ] && result.back.bed > 199, JSON.stringify( result.back ) );
+		const near = await dropInOver( page, '53.25, 108.1', 14 );
+		assert.ok( ! near.sea && near.colliders === 1 && near.toast === null && Math.abs( near.y + 14 ) < 0.5, JSON.stringify( near ) );
+		// The drop-in's own question, with the bed as Google draws it, 1.6 km under the lake's surface.
+		const deep = await page.evaluate( async () => ( await window.drive.waterOver( 53.25, 108.1, null, - 1640 ) ) );
+		assert.ok( deep && deep.lake.name === 'Lake Baikal' && deep.over === 455.5 && Math.abs( deep.height - lake.level - 455.5 ) < 0.01, JSON.stringify( deep ) );
+		await padBack( page );
+		assert.deepEqual( page.errors, [] );
+		assert.deepEqual( page.outside, [] );
+
+	} );
+
+	test( 'without the map (it didn\'t load), the pad 200 m under the sea is ground as before, and only ground deeper than any land or lake bed is the sea\'s', async () => {
+
+		const other = await newPage();
+		await other.route( `${ BASE }/sea/mask.bin`, route => route.fulfill( { status: 404, body: '' } ) );
+		await openGlobe( other );
+		const shelf = await dropInOver( other, '33.95, -118.6', 200 );
+		assert.ok( ! shelf.sea && shelf.colliders === 1 && shelf.toast === null && Math.abs( shelf.y + 200 ) < 0.5, JSON.stringify( shelf ) );
+		const deep = await dropInOver( other, '30, -140', 3000 );
+		assert.ok( deep.sea && Math.abs( deep.height + 28 ) < 0.01 && Math.abs( deep.y ) < 0.01, JSON.stringify( deep ) );
+		await padBack( other );
+		assert.deepEqual( other.errors, [] );
+		assert.deepEqual( other.outside, [] );
+		await other.context().close();
 
 	} );
 

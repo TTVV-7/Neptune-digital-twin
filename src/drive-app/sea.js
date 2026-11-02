@@ -1,12 +1,15 @@
 import { BufferAttribute, BufferGeometry, CanvasTexture, Mesh, MeshBasicMaterial, RepeatWrapping, SRGBColorSpace } from 'three';
 import { enuToLocal, localToLatLon } from '../geo.js';
 import { useFastRaycast } from '../raycast.js';
+import { LAKES } from './lakes.js';
 
 // The open sea. Out past what Google photographs of a coast, its 3D tiles are the sea bed with the
 // sea's picture on it, and no surface at all: 180 m down in Santa Monica Bay, 5 km down in the
-// middle of the Pacific (measured, docs/world-drive.md). A drop-in there (main.js) whose ground is
-// deeper than any land or lake can be gets a surface of its own from here: water at the sea's
-// height, drawn round the vehicle out to the horizon and following it as it drives, which the
+// middle of the Pacific (measured, docs/world-drive.md); and the same for some deep lakes (Lake
+// Baikal's bed, 1.2 km under the ellipsoid). A drop-in there (main.js) whose ground is well under
+// the water's surface, on the sea or a coast or one of those lakes (waterAt, below), or deeper than
+// any lake or land can be, gets a surface of its own from here: water at the sea's height or the
+// lake's, drawn round the vehicle out to the horizon and following it as it drives, which the
 // Driver drives on as on any ground and water.js knows is water (so a ride rides on it until it's
 // been on dry ground, the hovercraft floats, and nothing puts a boost pad on it).
 //
@@ -22,6 +25,14 @@ import { useFastRaycast } from '../raycast.js';
 const TABLE = '/sea/egm96.bin';
 const ROWS = 181;
 const COLUMNS = 360;
+// Where the sea and the big lakes are: Natural Earth's every 1/24°, each square land, a coast, the
+// sea or one of lakes.js's lakes, as each row's runs of the same (drive/public/sea/mask.bin, made
+// by scripts/make-sea-mask.mjs, which says how it's kept).
+const MASK = '/sea/mask.bin';
+const PER_DEGREE = 24;
+const MASK_ROWS = 180 * PER_DEGREE;
+const MASK_COLUMNS = 360 * PER_DEGREE;
+const KINDS = [ 'land', 'coast', 'sea', 'lake' ];
 const EARTH_RADIUS = 6371000;
 // The disc of water round the vehicle: rings this far out (m), each in SEGMENTS, fine by the
 // vehicle and coarse at the horizon (from the flying ceiling's 150 m up, 44 km off). It's laid
@@ -40,6 +51,8 @@ const SEA = [ 48, 72, 124 ];
 
 let table = null;
 let loading = null;
+let mask = null;
+let masking = null;
 
 // The sea's height over the ellipsoid at ( lat, lon ) in degrees (m): a promise, the table being
 // fetched the first time. Without it (it didn't load), 0.
@@ -77,6 +90,104 @@ export function seaLevelNow( lat, lon ) {
 
 }
 
+// What's at ( lat, lon ) in degrees: { kind } 'sea' (all of the map's square there), 'coast' (the
+// sea's edge crosses it), 'lake' with { lake } (lakes.js's, all of the square) or 'land' (the rest,
+// a lake's shore among it); a promise, the map being fetched the first time. Without the map (it
+// didn't load), null.
+export function waterAt( lat, lon ) {
+
+	masking ??= fetch( MASK )
+		.then( response => response.ok ? response.arrayBuffer() : Promise.reject( new Error( `${ response.status }` ) ) )
+		.then( buffer => {
+
+			mask = readMask( new Uint8Array( buffer ) );
+
+		} )
+		.catch( () => {
+
+			// Asked again next time.
+			masking = null;
+
+		} );
+	return masking.then( () => waterAtNow( lat, lon ) );
+
+}
+
+// The same, from the map as it is now (null without it).
+export function waterAtNow( lat, lon ) {
+
+	if ( ! mask ) return null;
+	const row = Math.min( MASK_ROWS - 1, Math.max( 0, Math.floor( ( 90 - lat ) * PER_DEGREE ) ) );
+	const column = Math.floor( ( ( lon + 180 ) % 360 + 360 ) % 360 * PER_DEGREE ) % MASK_COLUMNS;
+	// Along the row's runs to the one the square is in.
+	const read = mask.reader( row );
+	for ( let at = 0; ; ) {
+
+		const run = read();
+		const kind = run % 4;
+		const lake = kind === 3 ? LAKES[ read() ] : null;
+		at += Math.floor( run / 4 );
+		if ( at > column ) return lake ? { kind: 'lake', lake } : { kind: KINDS[ kind ] };
+
+	}
+
+}
+
+// The lakes whose boxes ( lat, lon ) in degrees is in, the only ones a pin there can be on: no need
+// to fetch the map for one anywhere else.
+export function lakesNear( lat, lon ) {
+
+	return LAKES.filter( ( { box: [ south, west, north, east ] } ) => lat >= south && lat <= north && lon >= west && lon <= east );
+
+}
+
+// The map's bytes, with where each row starts: { reader( row ) }, each call to what that gives the
+// next number along the row. One made for another resolution or list of lakes isn't read.
+function readMask( bytes ) {
+
+	let at = 0;
+	const read = () => {
+
+		let n = 0;
+		for ( let shift = 0; ; shift += 7 ) {
+
+			if ( at >= bytes.length ) throw new Error( 'Not the map this expects' );
+			const byte = bytes[ at ++ ];
+			n += ( byte & 127 ) * 2 ** shift;
+			if ( byte < 128 ) return n;
+
+		}
+
+	};
+	if ( read() !== PER_DEGREE || read() !== LAKES.length ) throw new Error( 'Not the map this expects' );
+	const starts = new Uint32Array( MASK_ROWS );
+	for ( let row = 0; row < MASK_ROWS; row ++ ) {
+
+		starts[ row ] = at;
+		for ( let column = 0; column < MASK_COLUMNS; ) {
+
+			const run = read();
+			if ( run % 4 === 3 && read() >= LAKES.length ) throw new Error( 'Not the map this expects' );
+			column += Math.floor( run / 4 );
+
+		}
+
+	}
+
+	if ( at !== bytes.length ) throw new Error( 'Not the map this expects' );
+	return {
+
+		reader( row ) {
+
+			at = starts[ row ];
+			return read;
+
+		},
+
+	};
+
+}
+
 // scene: World Drive's scene, which the water goes in while there's a sea.
 export function createSea( { scene } ) {
 
@@ -108,19 +219,21 @@ export function createSea( { scene } ) {
 	// The vehicle's rays at it (a dozen a frame) go by a bounding volume hierarchy, as at the tiles.
 	useFastRaycast( mesh );
 
-	// The place the scene is centred on ({ lat, lon }) and the sea's height over the ellipsoid
-	// there (m): the scene's y = 0. Where it was last laid, in the scene.
+	// The place the scene is centred on ({ lat, lon }) and the water's height over the ellipsoid
+	// there (m): the scene's y = 0. How far over the sea's height the water is (a lake's height, 0
+	// for the sea). Where it was last laid, in the scene.
 	let place = null;
 	let level = 0;
+	let over = 0;
 	let laid = null;
 
-	// Laid round ( east, north ): each point where the sea is over that point of the Earth, under the
-	// scene's flat frame (the Earth curving away from the place the scene is centred on), at the
-	// sea's height by the vehicle.
+	// Laid round ( east, north ): each point where the water is over that point of the Earth, under
+	// the scene's flat frame (the Earth curving away from the place the scene is centred on), at the
+	// water's height by the vehicle (a lake's surface, like the sea's, lies along the geoid).
 	function lay( east, north ) {
 
 		const { lat, lon } = localToLatLon( enuToLocal( east, north, 0 ), place );
-		const height = seaLevelNow( lat, lon ) - level;
+		const height = seaLevelNow( lat, lon ) + over - level;
 		for ( let r = 0; r < RINGS.length; r ++ ) {
 
 			for ( let s = 0; s < ( r ? SEGMENTS : 1 ); s ++ ) {
@@ -156,11 +269,13 @@ export function createSea( { scene } ) {
 		},
 
 		// The sea at the place the scene is now centred on ({ lat, lon } in degrees), whose height
-		// over the ellipsoid (m) is the scene's y = 0 there.
-		start( { lat, lon, height } ) {
+		// over the ellipsoid (m) is the scene's y = 0 there; or a lake's surface there, `over` m over
+		// the sea's height.
+		start( { lat, lon, height, over: rise = 0 } ) {
 
 			place = { lat, lon };
 			level = height;
+			over = rise;
 			if ( ! material.map ) {
 
 				material.map = picture( SEA );
