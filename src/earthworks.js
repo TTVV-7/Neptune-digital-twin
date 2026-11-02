@@ -47,6 +47,7 @@ import {
 	slopeOf,
 	sideCompass,
 	sideLabel,
+	supportSpacing,
 	toPit,
 } from './excavation-design.js';
 
@@ -845,6 +846,10 @@ const PIT_FIELDS = [
 	{ key: 'bracing', label: 'support levels', options: LEVEL_OPTIONS, get: params => params.bracing === 'classic' ? 'auto' : params.bracing, when: params => anyWall( params ) && ! classic( params ) },
 	// Blank for the suggested levels, which show greyed in the box.
 	{ key: 'levels', label: 'levels (m down)', type: 'text', placeholder: params => designOf( params ).plan.levels.map( z => String( z ) ).join( ', ' ), when: params => anyWall( params ) && ! [ 'none', 'classic' ].includes( designOf( params ).plan.type ) },
+	// How many levels (the count is used when no levels are typed) and how far apart the supports
+	// stand along each wall: 0 for what's suggested, which the label says.
+	{ key: 'levelCount', label: params => params.levelCount > 0 ? 'number of levels (0 = auto)' : `number of levels (0 = ${ designOf( params ).plan.levels.length })`, min: 0, max: 12, step: 1, when: params => anyWall( params ) && ! params.levels && ! [ 'none', 'classic' ].includes( designOf( params ).plan.type ) },
+	{ key: 'spacing', label: params => autoLabel( 'support spacing', params.spacing, supportSpacing( { spacing: 0 }, designOf( params ).plan.type ) ), min: 0, step: 0.5, when: params => anyWall( params ) && ! [ 'none', 'classic' ].includes( designOf( params ).plan.type ) },
 	// A pit from before keeps the toe its first shoring worked out.
 	{ key: 'toe', label: params => autoLabel( 'embedment', params.toe, designOf( params ).plan.toe ), min: 0, step: 0.5, when: params => anyWall( params ) && ! classic( params ) },
 	{ key: 'rakerAngle', label: 'raker angle (°)', min: 30, max: 60, step: 1, when: params => levelTypes( params ).includes( 'rakers' ) },

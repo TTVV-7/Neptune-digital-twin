@@ -150,6 +150,10 @@ const MIN_FREE = 4.5;
 const BOND_COVER = 4.5;
 export const FRICTION_ANGLE = 32;
 export const ANCHOR_SPACING = 2.4;
+// Support spacing set by hand (the spacing param): no closer than tiebacks may be (1.2 m, Fig. 37b),
+// and no further than a planning tool should pretend a waler spans (tool default).
+export const MIN_SPACING = 1.2;
+export const MAX_SPACING = 20;
 // Embedment below the floor (tool defaults from the research: Illinois DOT and Enercalc for
 // cantilevers in loose fill, GEC 4's example for braced walls), at least 1.5 m.
 const TOE_CANTILEVER = 1.5;
@@ -209,6 +213,11 @@ export const DEFAULTS = {
 	ends: 'open',
 	bracing: 'classic',
 	levels: '',
+	// How many support levels (0: as suggested by the depth) and how far apart the supports stand
+	// along each wall (0: STRUT_SPACING for struts and rakers, ANCHOR_SPACING for tiebacks), so a
+	// big, deep pit needn't be a thicket of rakers.
+	levelCount: 0,
+	spacing: 0,
 	toe: 0,
 	rakerAngle: RAKER_ANGLE,
 	anchorAngle: ANCHOR_ANGLE,
@@ -261,6 +270,8 @@ export function normaliseExcavation( p = {} ) {
 		ends: p.ends === 'sloped' ? 'sloped' : 'open',
 		bracing: BRACING_VALUES.includes( p.bracing ) ? p.bracing : DEFAULTS.bracing,
 		levels: levelsText( p.levels ),
+		levelCount: Math.round( clamp( p.levelCount, 0, MAX_LEVELS, 0 ) ),
+		spacing: optional( p.spacing, MIN_SPACING, MAX_SPACING ),
 		toe: optional( p.toe, 0.5, 40 ),
 		rakerAngle: round( clamp( p.rakerAngle, 30, 60, RAKER_ANGLE ), 1 ),
 		anchorAngle: round( clamp( p.anchorAngle, 10, 45, ANCHOR_ANGLE ), 1 ),
@@ -830,7 +841,7 @@ export function bracingPlan( params, geom = excavationGeometry( params ) ) {
 
 	} );
 
-	if ( anyStruts && strutPair ) addStruts( geom, plan, strutPair, direct ? clear : span, direct );
+	if ( anyStruts && strutPair ) addStruts( geom, plan, strutPair, direct ? clear : span, direct, supportSpacing( params, 'struts' ) );
 	for ( const side of walls ) {
 
 		if ( plan.sideTypes[ side.n ] === 'rakers' ) addRakers( params, geom, plan, side );
@@ -855,17 +866,30 @@ function levelsFor( params, D, plan ) {
 
 	}
 
+	if ( params.levelCount > 0 ) return suggestedLevels( D, params.levelCount );
 	plan.suggested = true;
 	return suggestedLevels( D );
 
 }
 
-export function suggestedLevels( D ) {
+// The levels for a pit D deep: the first a quarter of the depth down, 1.5 m at most, then the rest
+// of the depth split evenly, into as many gaps as keep each under 3 m, or `count` levels in all
+// (at most as many as leave half a metre between them).
+export function suggestedLevels( D, count = 0 ) {
 
 	const first = Math.min( FIRST_LEVEL, D / 4 );
-	const more = Math.max( 0, Math.ceil( ( D - first ) / LEVEL_SPACING - 1e-9 ) - 1 );
-	const spacing = ( D - first ) / ( more + 1 );
-	return Array.from( { length: more + 1 }, ( _, i ) => Math.round( ( first + i * spacing ) * 20 ) / 20 );
+	const most = Math.max( 1, Math.floor( ( D - first ) / 0.5 ) );
+	const n = count > 0 ? Math.min( count, most ) : Math.max( 0, Math.ceil( ( D - first ) / LEVEL_SPACING - 1e-9 ) - 1 ) + 1;
+	const spacing = ( D - first ) / n;
+	return Array.from( { length: n }, ( _, i ) => Math.round( ( first + i * spacing ) * 20 ) / 20 );
+
+}
+
+// How far apart the supports stand along each wall: the spacing set, or the usual one for the
+// pit's support type (tiebacks closer than struts and rakers).
+export function supportSpacing( params, type ) {
+
+	return params.spacing > 0 ? params.spacing : type === 'tiebacks' ? ANCHOR_SPACING : STRUT_SPACING;
 
 }
 
@@ -935,13 +959,13 @@ function member( type, side, level, a, b, extra = {} ) {
 }
 
 // Positions along a run from t0 to t1 for struts or rakers: from `clear` in at each end, at most
-// STRUT_SPACING apart (the first shoring's rule).
-function positions( t0, t1, clear ) {
+// `spacing` apart (STRUT_SPACING unless set: the first shoring's rule).
+function positions( t0, t1, clear, spacing = STRUT_SPACING ) {
 
 	const from = t0 + clear;
 	const to = t1 - clear;
 	if ( to - from < 0.5 ) return clear > 1.5 ? [] : [ ( t0 + t1 ) / 2 ];
-	const n = Math.ceil( ( to - from ) / STRUT_SPACING - 0.01 ) + 1;
+	const n = Math.ceil( ( to - from ) / spacing - 0.01 ) + 1;
 	return Array.from( { length: n }, ( _, i ) => from + i * ( to - from ) / ( n - 1 ) );
 
 }
@@ -949,7 +973,7 @@ function positions( t0, t1, clear ) {
 // Struts square across between the strutted walls at every level, corner braces where two walls
 // meet in a pit at least 6 m across, and king posts under struts longer than 12 m. Direct: from
 // wall face to wall face, where there's no room for walers.
-function addStruts( geom, plan, [ a, b ], span, direct = false ) {
+function addStruts( geom, plan, [ a, b ], span, direct = false, spacing = STRUT_SPACING ) {
 
 	const sa = geom.sides[ a - 1 ];
 	const sb = geom.sides[ b - 1 ];
@@ -961,7 +985,7 @@ function addStruts( geom, plan, [ a, b ], span, direct = false ) {
 	// Corner braces only where two walls meet; without any, the struts may come closer to the ends.
 	const corners = cornersOf( geom ).filter( ( [ p, q ] ) => p.method === 'wall' && q.method === 'wall' );
 	const corner = corners.length && across >= CORNER_WIDTH ? Math.min( CORNER_LEG, across / 4 ) : 0;
-	const at = positions( t0, t1, Math.max( corner + 1, 1.5 ) );
+	const at = positions( t0, t1, Math.max( corner + 1, 1.5 ), spacing );
 	const posts = span > KING_POST_SPAN ? Math.ceil( span / KING_POST_SPAN - 1e-9 ) - 1 : 0;
 	plan.struts = { across: [ a, b ], span, positions: at, kingPosts: posts, direct };
 	const fa = direct ? SYSTEMS[ sa.system ].inner : faceOf( sa );
@@ -1020,7 +1044,7 @@ function addRakers( params, geom, plan, side ) {
 	const D = geom.depth;
 	const angle = params.rakerAngle * DEG;
 	const [ l, r ] = neighbours( geom.sides, side );
-	const along = positions( - l.toe, r.toe, 1.5 );
+	const along = positions( - l.toe, r.toe, 1.5, supportSpacing( params, 'rakers' ) );
 	const face = faceOf( side );
 	const rows = [];
 	plan.levels.forEach( ( z, level ) => {
@@ -1062,8 +1086,8 @@ function addTiebacks( params, geom, plan, side ) {
 		const total = free + bond;
 		const reach = total * Math.cos( theta ) - face;
 		const bondCentre = z + ( free + bond / 2 ) * Math.sin( theta );
-		// One every 2.4 m or so along the waler, half a spacing in from its ends.
-		const count = Math.max( 1, Math.round( ( extent[ 1 ] - extent[ 0 ] ) / ANCHOR_SPACING ) );
+		// One every 2.4 m or so along the waler (or the spacing set), half a spacing in from its ends.
+		const count = Math.max( 1, Math.round( ( extent[ 1 ] - extent[ 0 ] ) / supportSpacing( params, 'tiebacks' ) ) );
 		rows.push( { z, angle: params.anchorAngle, free, bond, reach, bondCentre, count } );
 		for ( let i = 0; i < count; i ++ ) {
 
@@ -1442,6 +1466,13 @@ export function excavationFlags( params, geom = excavationGeometry( params ), pl
 		if ( levels[ 0 ] > FIRST_LEVEL + 0.05 ) add( 'first-level', 'note', `First level ${ round( levels[ 0 ], 2 ) } m down: usually within 1.5 m of the top.`, 'CN shoring criteria item 11' );
 		if ( gaps.some( g => g > LEVEL_SPACING + 0.05 ) ) add( 'level-gap', 'note', 'Levels more than 3 m apart.', 'CN shoring criteria item 12' );
 		if ( D - levels[ levels.length - 1 ] > LEVEL_SPACING + 0.05 ) add( 'last-level', 'note', `The last level is ${ round( D - levels[ levels.length - 1 ], 2 ) } m above the floor: usually 3 m at most.`, 'CN shoring criteria item 13' );
+
+	}
+
+	if ( params.spacing > 0 && plan.levels.length && plan.type !== 'classic' ) {
+
+		const usual = supportSpacing( { spacing: 0 }, plan.type );
+		if ( params.spacing > usual + 0.05 ) add( 'spacing', 'note', `Supports ${ round( params.spacing, 2 ) } m apart along the walls (usually about ${ usual } m): the walers span that far between them, so they're bigger.`, 'planning default' );
 
 	}
 

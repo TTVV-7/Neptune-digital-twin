@@ -198,6 +198,14 @@ cantilever) up to 4 m deep; deeper, struts when there's a pair of opposite walls
   1.5, 3.65 and 5.85 m, 12 m 1.5, 4.15, 6.75 and 9.4 m. Left blank, the levels box shows the
   suggested ones greyed. Typed levels are flagged if they don't keep to those limits, and come back
   the same each time they're read (to 5 cm, at least 0.3 m apart).
+- **How many supports**, for a big, deep pit that would otherwise be a thicket of rakers: *number
+  of levels* (0 for the suggested ones; otherwise the first level as above and the rest of the depth
+  split evenly into that many, at least 0.5 m apart; levels typed in the box win) and *support
+  spacing* along each wall (0 for 4.5 m between struts and between rakers, 2.4 m between tiebacks;
+  otherwise 1.2 to 20 m, for all three). Fewer levels bring the notes on gaps over 3 m and the last
+  level's height over the floor; a spacing over the usual one notes that the walers span that far
+  between supports, so they're bigger. Both are saved only when set, so pits saved before load the
+  same.
 - **Embedment** below the floor: suggested, as a rule of thumb, as 1.5 times the depth for a
   cantilever in loose fill, half the depth when braced or anchored, at least 1.5 m; while it's 0 its
   label says what that comes to, e.g. *embedment (0 = 4 m)*. The walls, and king posts 3 m below

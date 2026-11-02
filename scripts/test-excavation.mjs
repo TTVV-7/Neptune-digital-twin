@@ -514,6 +514,51 @@ test( 'levels: suggested about every 3 m, the first within 1.5 m, or as typed', 
 
 } );
 
+test( 'how many supports: a number of levels and a spacing along the walls, or as suggested', () => {
+
+	const pit = { width: 60, length: 40, depth: 9, outline: 'floor', method: 'shore', support: 'sheet-piles', bracing: 'rakers' };
+	const plan = extra => X.bracingPlan( X.normaliseExcavation( { ...pit, ...extra } ) );
+	const count = ( extra, type ) => plan( extra ).members.filter( m => m.type === type ).length;
+
+	// A number of levels: the first within 1.5 m, the rest of the depth split evenly; typed levels win.
+	assert.deepEqual( plan( {} ).levels, X.suggestedLevels( 9 ) );
+	assert.deepEqual( X.suggestedLevels( 9, 1 ), [ 1.5 ] );
+	assert.deepEqual( X.suggestedLevels( 9, 2 ), [ 1.5, 5.25 ] );
+	assert.deepEqual( plan( { levelCount: 2 } ).levels, [ 1.5, 5.25 ] );
+	assert.equal( plan( { levelCount: 2 } ).suggested, false );
+	assert.deepEqual( plan( { levelCount: 1, levels: '2, 5' } ).levels, [ 2, 5 ] );
+	// No more than leave half a metre between them.
+	assert.equal( X.suggestedLevels( 3, 12 ).length, 4 );
+
+	// Spacing: fewer rakers and kickers (one each a level), struts and tiebacks the same way.
+	const rakers = count( {}, 'raker' );
+	assert.equal( count( {}, 'kicker' ), rakers );
+	assert.ok( count( { spacing: 9 }, 'raker' ) < rakers * 0.65, `${ count( { spacing: 9 }, 'raker' ) } of ${ rakers }` );
+	assert.equal( count( { levelCount: 1 }, 'raker' ) * 3, rakers );
+	const struts = { width: 30, length: 14, bracing: 'struts' };
+	assert.ok( count( { ...struts, spacing: 8 }, 'strut' ) < count( struts, 'strut' ) );
+	const tiebacks = { bracing: 'tiebacks' };
+	assert.ok( count( { ...tiebacks, spacing: 5 }, 'tieback' ) < count( tiebacks, 'tieback' ) / 2 + 1 );
+	assert.equal( X.supportSpacing( { spacing: 0 }, 'rakers' ), X.STRUT_SPACING );
+	assert.equal( X.supportSpacing( { spacing: 0 }, 'tiebacks' ), X.ANCHOR_SPACING );
+
+	// Clamped, and left out of a save at their defaults so pits saved before save the same.
+	const n = X.normaliseExcavation( { spacing: 0.3, levelCount: 40 } );
+	assert.equal( n.spacing, X.MIN_SPACING );
+	assert.equal( n.levelCount, 12 );
+	assert.equal( X.normaliseExcavation( { spacing: 99 } ).spacing, X.MAX_SPACING );
+	assert.equal( X.normaliseExcavation( { levelCount: - 2 } ).levelCount, 0 );
+	const saved = X.saveExcavation( X.normaliseExcavation( pit ) );
+	assert.ok( ! ( 'spacing' in saved ) && ! ( 'levelCount' in saved ), JSON.stringify( saved ) );
+	assert.deepEqual( X.saveExcavation( X.normaliseExcavation( { ...pit, spacing: 9, levelCount: 2 } ) ), { ...saved, levelCount: 2, spacing: 9 } );
+
+	// Said so: a spacing over the usual, and what fewer levels leave unsupported.
+	const flags = X.excavationFlags( X.normaliseExcavation( { ...pit, spacing: 9, levelCount: 1 } ) ).map( f => f.id );
+	assert.ok( flags.includes( 'spacing' ) && flags.includes( 'last-level' ), flags.join() );
+	assert.ok( ! X.excavationFlags( X.normaliseExcavation( pit ) ).some( f => f.id === 'spacing' ) );
+
+} );
+
 test( 'bracing: struts across the short way, corner braces, king posts past 12 m, rakers past 20 m', () => {
 
 	const at = ( width, length, depth, extra = {} ) => X.planExcavation( { width, length, depth, support: 'sheet-piles', bracing: 'auto', outline: 'floor', ...extra } );
