@@ -1160,6 +1160,15 @@ describe( 'World Drive\'s cars', () => {
 			const front = car.wheels.filter( wheel => wheel.steers );
 			assert.deepEqual( front.map( wheel => Math.sign( wheel.at[ 2 ] ) ), [ - 1, - 1 ], car.id );
 			assert.deepEqual( front.map( wheel => Math.sign( wheel.at[ 0 ] ) ).sort(), [ - 1, 1 ], car.id );
+			// The importer always makes the -z axle steer, so a car imported back to front still passes
+			// the checks above. The dune buggy was: its real front axle is the narrower one, so that's
+			// the pair that must steer.
+			if ( car.id === 'dune-buggy' ) {
+
+				const track = wheels => Math.max( ...wheels.map( wheel => Math.abs( wheel.at[ 0 ] ) ) );
+				assert.ok( track( front ) < track( car.wheels.filter( wheel => ! wheel.steers ) ), `dune buggy steers on its wider axle: ${ JSON.stringify( car.wheels ) }` );
+
+			}
 
 		}
 

@@ -1261,7 +1261,10 @@ seat, steering wheel, lamps and exhaust. The dune buggy was first imported back 
 drove tail first (its wider axle is the rear one, not the front). It was turned round in its file
 rather than imported again: each part's node turned 180° about y, the wheels renamed front for rear
 and left for right (the new front pair steering), `cars.json`'s wheels to match, and its picture
-drawn again. Its one seat is in the middle, so its driver's-seat camera is too.
+drawn again. Its one seat is in the middle, so its driver's-seat camera is too. Imported again from
+Sketchfab, it needs `--front` to name the side its seat, steering wheel and lamps face in the
+downloaded model (the opposite of the side first used), or it comes back tail first; the car checks
+in `test-drive-pro-ui.mjs` would say so (its steering pair must be the narrower axle).
 
 `drive-car-thumbs.mjs` draws every picture the same way (World Drive's dev server in Chromium, the
 car from ahead and to its left, on nothing), whatever Sketchfab's own pictures were.
