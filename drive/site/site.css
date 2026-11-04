@@ -1,0 +1,178 @@
+		/* The places' pages (build.js puts this in each): the game's dark sky and sunny accent, as text. */
+		:root {
+			--ink: #f4f7fb;
+			--muted: rgba( 244, 247, 251, 0.72 );
+			--line: rgba( 255, 255, 255, 0.12 );
+			--chip: rgba( 255, 255, 255, 0.07 );
+			--accent: #ffd23f;
+			--accent-ink: #1d1500;
+			--sky: #3ec1ff;
+			--font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+			color-scheme: dark;
+		}
+		* {
+			box-sizing: border-box;
+		}
+		body {
+			margin: 0;
+			font: 17px/1.6 var( --font );
+			color: var( --ink );
+			background: radial-gradient( ellipse at 50% -10%, #10264a 0%, #070c16 55% ) fixed, #070c16;
+		}
+		a {
+			color: var( --sky );
+		}
+		.top,
+		main,
+		footer {
+			max-width: 860px;
+			margin: 0 auto;
+			padding: 0 20px;
+		}
+		.top {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			padding-top: 18px;
+		}
+		.brand {
+			font: 900 italic 26px/1 var( --font );
+			letter-spacing: -0.5px;
+			text-transform: uppercase;
+			color: var( --ink );
+			text-decoration: none;
+		}
+		.brand b {
+			color: var( --accent );
+		}
+		.play,
+		.small-go {
+			padding: 8px 14px;
+			border: 1px solid var( --line );
+			border-radius: 10px;
+			background: var( --chip );
+			color: var( --ink );
+			font-weight: 800;
+			text-decoration: none;
+		}
+		.crumbs {
+			margin: 26px 0 0;
+			font-size: 14px;
+			color: var( --muted );
+		}
+		.hero {
+			margin: 18px 0 34px;
+		}
+		.region {
+			margin: 0;
+			font-size: 13px;
+			font-weight: 800;
+			letter-spacing: 1.2px;
+			text-transform: uppercase;
+			color: var( --muted );
+		}
+		h1 {
+			margin: 6px 0 12px;
+			font: 900 italic clamp( 32px, 6vw, 52px )/1.05 var( --font );
+			letter-spacing: -0.5px;
+		}
+		.lede {
+			margin: 0 0 22px;
+			font-size: 19px;
+			color: var( --muted );
+		}
+		.go {
+			display: inline-block;
+			padding: 16px 34px;
+			border-radius: 14px;
+			background: var( --accent );
+			color: var( --accent-ink );
+			font: 900 italic 22px/1 var( --font );
+			letter-spacing: 0.3px;
+			text-transform: uppercase;
+			text-decoration: none;
+			box-shadow: 0 5px 0 #c99a00, 0 10px 30px rgba( 255, 210, 63, 0.25 );
+		}
+		.go:active {
+			transform: translateY( 3px );
+			box-shadow: 0 2px 0 #c99a00;
+		}
+		.note {
+			font-size: 14px;
+			color: var( --muted );
+		}
+		h2 {
+			margin: 34px 0 10px;
+			font-size: 22px;
+		}
+		.keys {
+			font-size: 15px;
+			color: var( --muted );
+		}
+		kbd {
+			display: inline-block;
+			min-width: 1.6em;
+			padding: 0 6px;
+			border: 1px solid var( --line );
+			border-bottom-width: 2px;
+			border-radius: 6px;
+			background: rgba( 255, 255, 255, 0.08 );
+			font: 700 12px/1.6 var( --font );
+			text-align: center;
+			color: var( --ink );
+		}
+		.places,
+		.cards {
+			display: grid;
+			grid-template-columns: repeat( auto-fill, minmax( 160px, 1fr ) );
+			gap: 8px;
+			margin: 0;
+			padding: 0;
+			list-style: none;
+		}
+		.places a {
+			display: flex;
+			flex-direction: column;
+			height: 100%;
+			padding: 10px 12px;
+			border-radius: 10px;
+			background: var( --chip );
+			color: var( --ink );
+			font-weight: 750;
+			text-decoration: none;
+		}
+		.places a span {
+			font-size: 13px;
+			font-weight: 400;
+			color: var( --muted );
+		}
+		.cards {
+			grid-template-columns: repeat( auto-fill, minmax( 250px, 1fr ) );
+			gap: 12px;
+			margin-bottom: 24px;
+		}
+		.cards li {
+			padding: 16px 18px;
+			border: 1px solid var( --line );
+			border-radius: 14px;
+			background: var( --chip );
+		}
+		.cards h2 {
+			margin: 0;
+			font-size: 20px;
+		}
+		.cards p {
+			margin: 6px 0 0;
+			font-size: 15px;
+		}
+		.cards .small-go {
+			display: inline-block;
+			margin-top: 6px;
+		}
+		footer {
+			margin-top: 48px;
+			padding-bottom: 36px;
+			border-top: 1px solid var( --line );
+			font-size: 13px;
+			color: var( --muted );
+		}

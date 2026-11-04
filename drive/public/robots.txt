@@ -1,0 +1,7 @@
+# World Drive (worlddrive.app). Every page may be crawled; /api/ is the Worker that only the game
+# itself talks to (a visit, the search, the leaderboard), with nothing on it for a search engine.
+User-agent: *
+Allow: /
+Disallow: /api/
+
+Sitemap: https://worlddrive.app/sitemap.xml

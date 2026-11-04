@@ -319,7 +319,7 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo } ) {
 		link.setAttribute( 'aria-label', 'The party\'s link' );
 		link.addEventListener( 'focus', () => link.select() );
 		const copy = button( 'Copy', 'copy', () => copyLink( link, copy ) );
-		const share = button( 'Share', 'share', () => navigator.share?.( { title: 'World Drive', text: 'Drive with me in World Drive', url: link.value } ).catch( () => {} ) );
+		const share = button( 'Share', 'share', () => navigator.share?.( { title: 'World Drive', text: shareText(), url: link.value } ).catch( () => {} ) );
 		share.hidden = typeof navigator.share !== 'function';
 		const row = Object.assign( document.createElement( 'div' ), { className: 'link-row' } );
 		row.append( link, copy, share );
@@ -365,6 +365,15 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo } ) {
 
 			},
 		};
+
+	}
+
+	// What a shared party link says with it: where you're driving, by its name (not a dropped pin's
+	// coordinates). The link itself unfurls with the home page's card and words (its og: tags).
+	function shareText() {
+
+		const where = mode() !== 'globe' ? live.place?.name : null;
+		return where && ! /°/.test( where ) ? `Drive with me at ${ where } in World Drive` : 'Drive with me in World Drive';
 
 	}
 

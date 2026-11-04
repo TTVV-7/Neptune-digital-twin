@@ -4,10 +4,12 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig, loadEnv } from 'vite';
 import { GOOGLE_KEY_NAMES } from './vite.config.js';
 import { LIBRARY_VEHICLES } from './src/drive-app/catalog.js';
+import { driveSite } from './drive/site/build.js';
 
 // World Drive (worlddrive.app, docs/world-drive.md): its own page, drive/index.html with
-// src/drive-app/main.js, sharing src/ with the construction app. `npm run build:drive` builds it
-// into dist-drive/ for its own Worker (wrangler.drive.jsonc, worker/drive/).
+// src/drive-app/boot.js (which loads main.js), sharing src/ with the construction app, and its
+// places' pages (drive/site/). `npm run build:drive` builds it into dist-drive/ for its own Worker
+// (wrangler.drive.jsonc, worker/drive/).
 //
 // The built site never holds a Maps key. On worlddrive.app the Worker hands the key out once per
 // visit, after a Turnstile check and within the daily caps, so a key in the site would get round
@@ -37,6 +39,9 @@ export default defineConfig( ( { command, mode } ) => {
 		// drive/public/, which only this build publishes.
 		publicDir: join( ROOT, 'drive', 'public' ),
 		base: '/',
+		// TEST_VITE_CACHE: a folder of its own for the dev server's pre-bundled dependencies (else
+		// node_modules/.vite), so dev servers for tests running side by side don't redo each other's.
+		cacheDir: process.env.TEST_VITE_CACHE || undefined,
 		// The page is drive/index.html, but its code is in src/ beside the construction app's, as
 		// /src/... like that app's page has it.
 		resolve: { alias: [ { find: /^\/src\//, replacement: `${ join( ROOT, 'src' ) }/` } ] },
@@ -47,7 +52,8 @@ export default defineConfig( ( { command, mode } ) => {
 		define: {
 			__DEV_MAPS_KEY__: JSON.stringify( command === 'serve' ? envKey : '' ),
 		},
-		plugins: [ publishFromLibrary(), keyStaysOut( envKey ) ],
+		// driveSite: the places' pages, /drive/ and /sitemap.xml, for search engines (drive/site/).
+		plugins: [ publishFromLibrary(), driveSite(), keyStaysOut( envKey ) ],
 	};
 
 } );
