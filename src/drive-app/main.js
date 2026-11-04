@@ -310,10 +310,11 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 		player: () => board.player,
 		canName: () => worker && !! visit,
 		mode: () => state.mode,
-		onGarage: () => {
+		// A look to try on the ride being driven, or a ride (levels.js's ride rewards) to see.
+		onGarage: reward => {
 
 			pauseDrive();
-			garage.open( state.vehicle ?? panel.vehicle );
+			garage.open( ( reward?.kind === 'ride' && vehicles.find( v => v.id === reward.id ) ) || state.vehicle || panel.vehicle );
 
 		},
 		onNickname: () => {

@@ -164,10 +164,11 @@ describe( 'World Drive, desktop', () => {
 		assert.ok( await panel.isVisible() );
 		assert.match( await panel.locator( '.logo' ).textContent(), /World\s*Drive/ );
 		assert.equal( await panel.locator( '.spots button' ).count(), 12 );
-		// Then the cars (the muscle car free) and the Supporter Pass's rides, locked (see
-		// test-drive-pro-ui.mjs).
+		// Then the cars (the muscle car free, then levels' and the Supporter Pass's, locked) and the
+		// pass's rides (see test-drive-pro-ui.mjs).
 		assert.deepEqual( await panel.locator( '.vehicle b' ).allTextContents(), [
-			'Go-kart', 'Pickup', 'Muscle car', 'Neon racer', 'Night cruiser', 'Dune buggy', 'Farm truck', 'Police cruiser',
+			'Go-kart', 'Pickup', 'Muscle car', 'Golf cart', 'Tuk-tuk', 'Ice-cream van', 'Lawn tractor', 'Retro wedge', 'Formula racer',
+			'Neon racer', 'Night cruiser', 'Dune buggy', 'Farm truck', 'Police cruiser', 'Hypercar', 'Cyber muscle',
 			'Sports coupe', 'Monster truck', 'City bus', 'Hovercraft',
 		] );
 		assert.equal( await panel.locator( '.vehicle.picked b' ).textContent(), 'Go-kart' );
@@ -2606,8 +2607,9 @@ async function supporterPage( { me = SIGNED_OUT, signedInAs = ALICE, clientId = 
 }
 
 const locked = page => page.locator( '#globe-ui .vehicle.locked' ).count();
-// What the pass unlocks in the picker: five cars and four rides.
-const LOCKED = 9;
+// What the pass unlocks in the picker, at level 1: thirteen cars (six of them levels' too) and four
+// rides.
+const LOCKED = 17;
 const sheet = page => page.locator( '#pass .buy-area' );
 
 async function openPass( page ) {

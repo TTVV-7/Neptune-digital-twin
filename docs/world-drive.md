@@ -27,11 +27,15 @@ address, and the construction app is unchanged by it.
 
    Choosing a search result or a spot flies the globe down to it and pins it. The card under the pin
    says where it is, with **Drive here**.
-3. **Your ride**: the go-kart, a pickup or the muscle car, or with the
-   [Supporter Pass](#supporter-pass-content) five more [cars](#world-drives-cars) (a neon racer, a
-   night cruiser, a dune buggy, a farm truck and a police cruiser) and four rides built for it (a
-   sports coupe, a monster truck, a city bus and a hovercraft). The choice is remembered. **Garage**,
-   under the rides, paints them.
+3. **Your ride**: the go-kart, a pickup or the muscle car; six more [cars](#world-drives-cars) as
+   your [level](#levels) climbs (a golf cart at level 5, a tuk-tuk at 8, an ice-cream van at 15, a
+   lawn tractor at 22, a retro wedge at 30 and a formula racer at 40); or with the
+   [Supporter Pass](#supporter-pass-content) those six at once, seven cars of its own (a neon racer, a
+   night cruiser, a dune buggy, a farm truck, a police cruiser, a hypercar and a cyber muscle car) and
+   four rides built for it (a sports coupe, a monster truck, a city bus and a hovercraft). They're in
+   three rows that scroll sideways. A locked one says what it needs ("Lv 8 · or Pass", or the pass's
+   badge); picked, a level's says which level you're at, and the pass's opens its sheet. The choice
+   is remembered. **Garage**, under the rides, paints them.
 4. **Drive here.** The view flies down to the pin and waits for the ground to load ("Loading the
    ground..."), so the vehicle never drops through tiles that aren't there yet. It starts on the ground
    at the pin, facing along the street if there is one (a spot's road, or the longest clear line
@@ -1065,11 +1069,12 @@ dots, no **Driving now**, and with `LIVE` off on a page loaded then, not even an
 ## Levels
 
 Driving earns **XP**, and XP climbs **50 levels**, each with something to unlock. About half of the
-[Supporter Pass](#supporter-pass-content)'s Garage looks come with levels on the way to 40 (the pass
-still gives them all at once), and some rewards only levels give, supporters included: titles for
-your nametag, the level badge's frame and four colours. The pass's nine rides are never on the
-track. The rules are `src/drive-app/levels.js`, which the page and the Worker both import, so the
-page shows what the Worker counts.
+[Supporter Pass](#supporter-pass-content)'s Garage looks come with levels on the way to 40, and six
+[cars](#world-drives-cars) from 5 to 40 (the pass still gives them all at once), and some rewards
+only levels give, supporters included: titles for your nametag, the level badge's frame and four
+colours. The pass's own rides (its first nine and its two showpiece cars, the hypercar and the
+cyber muscle car) are never on the track. The rules are `src/drive-app/levels.js`, which the page and
+the Worker both import, so the page shows what the Worker counts.
 
 ### How XP is earned
 
@@ -1119,7 +1124,9 @@ in the air a lot, about 40 % less.
 
 ### The unlock track
 
-⭐: a Supporter Pass look, which the pass unlocks at once; "levels only": the pass doesn't give it.
+⭐: a Supporter Pass look or car, which the pass unlocks at once; "levels only": the pass doesn't
+give it. A car is driven from its level on (or with the pass), and is the first of its level's
+rewards.
 
 | Level | XP | Unlocks |
 | --- | --- | --- |
@@ -1127,24 +1134,24 @@ in the air a lot, about 40 % less.
 | 2 | 200 | Sunburst paint ⭐ |
 | 3 | 500 | Hearts boost ⭐ |
 | 4 | 900 | Title: Joyrider |
-| 5 | 1,450 | Lime paint ⭐ |
+| 5 | 1,450 | **Golf cart** ⭐; Lime paint ⭐ |
 | 6 | 2,100 | White rims ⭐ |
 | 7 | 2,900 | Plasma boost ⭐ |
-| 8 | 3,800 | Title: Drifter |
+| 8 | 3,800 | **Tuk-tuk** ⭐; Title: Drifter |
 | 9 | 4,850 | Racing stripes ⭐ |
 | 10 | 6,050 | Bronze badge |
 | 11 | 7,450 | Teal paint ⭐ |
 | 12 | 9,050 | Title: Street Racer |
 | 13 | 10,750 | Pixel boost ⭐ |
 | 14 | 12,650 | Blue flame ⭐ |
-| 15 | 14,850 | Title: Stunt Ace |
+| 15 | 14,850 | **Ice-cream van** ⭐; Title: Stunt Ace |
 | 16 | 17,250 | Smoke trail ⭐ |
 | 17 | 19,850 | Title: Speedster |
 | 18 | 22,750 | Electric blue paint ⭐ |
 | 19 | 25,850 | Title: Trickster |
 | 20 | 29,250 | Silver badge |
 | 21 | 32,950 | Red rims ⭐ |
-| 22 | 36,950 | Title: Explorer |
+| 22 | 36,950 | **Lawn tractor** ⭐; Title: Explorer |
 | 23 | 41,250 | Glitter boost ⭐ |
 | 24 | 45,950 | Title: Globetrotter |
 | 25 | 50,950 | Copper paint (levels only) |
@@ -1152,7 +1159,7 @@ in the air a lot, about 40 % less.
 | 27 | 62,150 | Title: Road Warrior |
 | 28 | 68,350 | Green flame ⭐ |
 | 29 | 74,950 | Title: Sky Pilot |
-| 30 | 82,050 | Gold badge |
+| 30 | 82,050 | **Retro wedge** ⭐; Gold badge |
 | 31 | 89,550 | Matte finish ⭐ |
 | 32 | 97,550 | Title: Daredevil |
 | 33 | 106,050 | Title: Trailblazer |
@@ -1162,7 +1169,7 @@ in the air a lot, about 40 % less.
 | 37 | 145,450 | Blue rims ⭐ |
 | 38 | 156,750 | Title: Storm Chaser |
 | 39 | 168,650 | Title: High Flyer |
-| 40 | 181,150 | Platinum badge; Purple flame ⭐ |
+| 40 | 181,150 | **Formula racer** ⭐; Platinum badge; Purple flame ⭐ |
 | 41 | 194,350 | Title: Thrill Seeker |
 | 42 | 208,250 | Title: Wheel Wizard |
 | 43 | 222,850 | Title: Night Owl |
@@ -1181,19 +1188,26 @@ blue and hot pink paint, metallic, flames and checker, gold, lime and pink rims,
 comet, neon rings, fireworks and ink boosts, pink and rainbow flames, and the sparkle and rainbow
 ribbon trails. The four level-only colours are in `paint.js`'s `SWATCHES` with `levelOnly`.
 
+The cars come about as often as a regular comes back for more: the golf cart in a first session,
+the tuk-tuk within the first hour, then each a little further apart than the last (15, 22, 30,
+40), so there's always one ahead until the formula racer at about 45 hours. The odd small ones come
+first and the fast ones later. They're `ride` rewards in `REWARDS` (`rideLevel`, `rideUnlock` and
+`rideLocked` say what a ride needs); the pass gives all six with the rest of its rides.
+
 ### What the Supporter Pass gives
 
-Every Garage look at once (the 19 on the track and the 19 that are the pass's alone), **+50% XP**,
-and the nine rides, as before; and still a ⭐ and 30 drives a day
+Every Garage look at once (the 19 on the track and the 19 that are the pass's alone), the six cars
+on the track and its own eleven rides, **+50% XP**; and still a ⭐ and 30 drives a day
 ([below](#supporter-pass-buying-it)). Levels' own rewards (titles, badges, the level-only colours)
 come with levels for everyone, supporters too. The ×1.5 is the Worker's: it looks up the pass of the
 account the player is linked to, never anything the page says.
 
-A supporter has the track's 19 pass looks already, so for them those levels bring nothing new:
+A supporter has the track's 19 pass looks and its six cars already, so for them those levels bring
+nothing new:
 18 of their level-ups from 2 to 39 (2, 3, 5, 6, 7, 9, 11, 13, 14, 16, 18, 21, 23, 26, 28, 31, 34
 and 37). The page says so rather than "Unlocked": a level-up says "Already yours with the pass:
-Sunburst paint", the profile card's "Next" is the next reward that's new to them, and the track
-tags those looks "✓ Pass". What levels add for a supporter is the titles, the badges and the
+Sunburst paint" (or "Golf cart, Lime paint"), the profile card's "Next" is the next reward that's
+new to them, and the track tags those looks and cars "✓ Pass". What levels add for a supporter is the titles, the badges and the
 level-only colours.
 
 ### What you see
@@ -1205,7 +1219,8 @@ level-only colours.
   sit at the left, under the horn. Toasts while driving move down under them.
 - **A level-up**: a burst of rays and "Level 7!", with "Unlocked: Plasma boost" (three at most, and
   "+6 more", when several levels came at once: the track has them all; a title says "Title:
-  Drifter"). A look there opens the Garage (pausing the drive) to try it on. It goes after 5 s (10
+  Drifter", a car "Ride: Tuk-tuk" with its picture). A look there opens the Garage (pausing the
+  drive) to try it on; a car opens it on that car. It goes after 5 s (10
   with the word on nicknames below), or stays while the pointer's on its buttons, and only its
   buttons catch clicks: it shows in the middle of a drive, under the bar and ending above where
   landed tricks' callouts start; on a touch screen at the left, clear of the buttons on the right
@@ -1222,6 +1237,12 @@ level-only colours.
   level with its XP and rewards (each with its swatch, boost picture or tag), done, next or still to
   come.
   Without a nickname, "Your progress is kept in this browser. Pick a nickname to save it."
+- **The ride pickers**: a level's car, while it's locked, wears "Lv 8 · or Pass" where the pass's
+  own wear its badge; picked, it says "The tuk-tuk comes at level 8: you're level 3. Drive on, or get
+  it now with the Supporter Pass." under the rides (the pass's opens its sheet), and the ride
+  doesn't change. From that level on it's driven like any other; one saved before is the go-kart
+  until then, as a pass ride is without the pass. The Garage's tab for it says "Lv 8" and its
+  banner "Comes at level 8, or with the ⭐ Supporter Pass".
 - **The Garage**: each locked choice says what unlocks it: "Lv 12 · or Pass" (a swatch, being
   small, only "Lv 12"), "Pass", or "Lv 25" for a level-only colour, with the whole sentence as its
   tooltip. Picking one the pass unlocks opens the pass's sheet; a level-only one says "Copper comes
@@ -1283,7 +1304,7 @@ for a player's first report, the claim, an hour):
 | Cap | |
 | --- | --- |
 | Time counted | 5 minutes at most per report (an hour for the first, the claim) |
-| km | 450 km/h of it: faster than any ride goes flat out with the booster (the night cruiser's 205, doubled), flying or not |
+| km | 450 km/h of it: faster than any ride goes flat out with the booster (the hypercar's 215, doubled), flying or not |
 | Air | a second a second |
 | Drift boosts, pads | one every 1.5 s, one every 2 s |
 | Minutes with others | a minute a minute |
@@ -1363,9 +1384,11 @@ Removing a player removes their discoveries with them.
 
 `npm run test:drive-levels` (`scripts/test-drive-levels.mjs`): the curve as a simulated regular
 climbs it (printing the play to levels 2, 5, 10, 30 and 50) and the track as written (every level
-from 2 to 50 gives something, level 2 within the first drive's bonuses, the pass's rides never on
-it, 19 of its 38 looks on it by level 40 and the showiest not, every look a choice the Garage has,
-the level-only colours never with the pass, the Garage's locks, a supporter's "Next"), reports'
+from 2 to 50 gives something, level 2 within the first drive's bonuses, its six cars (each a car
+the leaderboard takes, spread out from level 5) and the pass's own rides never on it, a level's car
+locked until its level unless with the pass and the pass's own whatever the level, 19 of its 38
+looks on it by level 40 and the showiest not, every look a choice the Garage has, the level-only
+colours never with the pass, the Garage's locks, a supporter's "Next"), reports'
 shapes and caps, and that progress.js asks no Durable Object; then the Worker under `wrangler dev`:
 a report's XP and its answer, every cap by the time since the last (a minute's worth, half a
 minute's, an hour later only five minutes', one sooner than 30 s after the last a 429), the claim
@@ -1392,7 +1415,12 @@ none is), on the leaderboard and over the car on another page driving with it; a
 for a second and a half (the day's bonus and the new area said once, what's shown never going
 down), one whose answer was lost sent again with its id after a reload and counted once, and 250
 areas sent 200 at a time; with the pass, everything unlocked but the level-only colours, the track
-and a level-up saying the pass looks are theirs already, and a supporter's report earning ×1.5; a
+and a level-up saying the pass looks are theirs already, and a supporter's report earning ×1.5;
+the cars levels bring (at level 7 the tuk-tuk locked, "Lv 8 · or Pass", picked saying which level
+and opening the pass from there, its Garage tab and banner; the golf cart driven, a pad's XP making
+level 8, whose level-up says "Ride: Tuk-tuk" with its picture and opens the Garage on it; then the
+tuk-tuk driven from the pause menu and on the track at 8; with the pass every car at once, and a
+level-up's car already the supporter's; at level 50 the pass's showpieces still locked); a
 phone (the bar clear of the speed, the level-up clear of the buttons); and no Worker at all. Pictures
 of the bar, level-ups, the profile card, the track and the Garage's locks at 1280 × 720 and on a 375
 × 740 touch screen with `TEST_SCREENSHOTS`.
@@ -1410,13 +1438,14 @@ only when the page is on `localhost` or `127.0.0.1` (`testPass` decides), never 
 
 **Locked things** show a small **⭐ Supporter Pass** badge (in the Garage, a ⭐ on each locked choice
 under one line saying what the stars mean), and picking one opens the pass's sheet
-instead (`src/drive-app/pass.js`): what the pass is and what comes with it (nine more rides, five cars
-and four built in code, each with its picture; every Garage look at once, which levels otherwise
-unlock some of over time; +50% XP; a ⭐ by your name on the leaderboard, 30 drives a day instead of
-8) and its buy
+instead (`src/drive-app/pass.js`): what the pass is and what comes with it (seventeen more rides,
+thirteen cars, six of which levels bring too, and four built in code, each with its picture in two
+rows; every Garage look at once, which levels otherwise unlock some of over time; +50% XP; a ⭐ by
+your name on the leaderboard, 30 drives a day instead of 8) and its buy
 area (`buyArea()`), which says **Coming soon** until the payments code fills it. The sheet also opens from **⭐ Supporter
 Pass** under the rides on the globe and in the pause menu. A ride or a look saved while the pass was
-on falls back to the go-kart, or to the free choices, without it. Nothing comes up by itself: the
+on falls back to the go-kart, or to the free choices, without it (a level's car, until its level).
+Nothing comes up by itself: the
 sheet only opens when something locked, or one of those buttons, is picked.
 
 The leaderboard takes runs in the pass's rides and cars as in the free ones (`PASS_RIDES` and
@@ -1446,48 +1475,79 @@ each (in their paint) and the badge until the pass is on.
 
 ### World Drive's cars
 
-Six cars from Sketchfab, each made ready to drive by `scripts/add-drive-car.mjs` (below) and tuned in
-`src/drive-app/cars.js`. The muscle car is free; the rest come with the pass, locked like the rides
-above, between the free rides and the built ones in the picker, each with its own picture. With
-thirteen rides, the pause menu has them in two rows that scroll sideways (the one being driven in
-view; on a phone about three across, the next peeking in, so each pass ride's badge fits), so it's
-no taller than it was and the pass's sign-in under them stays on screen; the Garage's row of rides
-scrolls to the one shown.
+Fourteen cars from Sketchfab, each made ready to drive by `scripts/add-drive-car.mjs` (below) and
+tuned in `src/drive-app/cars.js`. The muscle car is free; six come with [levels](#the-unlock-track)
+(from the golf cart at 5 to the formula racer at 40) or the pass, whichever is first; the rest only
+with the pass, locked like the rides above. In the picker they come after the free rides: the
+levels' cars in the order the levels bring them, then the pass's, each with its own picture. With
+twenty-one rides, the globe's panel has them in three rows and the pause menu in two, both
+scrolling sideways (the one picked in view; on a phone about three across, the next peeking in, so
+each locked one's badge fits), so neither is taller than it was with twelve and what's under them
+(the Garage, the pass, the pass's sign-in in the pause menu) stays on screen; the Garage's row of
+rides scrolls to the one shown.
 
 | Car | Model (CC BY 4.0) | Size | Top speed | Handling |
 | --- | --- | --- | --- | --- |
 | Muscle car (free) | "Classic Muscle car" by Lexyc16 | 4.7 × 2.1 m, 1.4 m tall | 175 km/h | 0 to 100 in 3.3 s. Loose: grip a little over the kart's, drifts that swing the tail far out; its paint is plain colour, so the Garage repaints it |
-| Neon racer | "Green Bug Stylized Scifi Car Free" by ferofluid | 4.3 × 2.3 m | 185 km/h | 0 to 100 in 2.5 s, the quickest of the cars; grips hardest and turns in sharpest (131°/s at 50 km/h) |
-| Night cruiser | "Blade Air Stylized Scifi Car Free" by ferofluid | 4.6 × 2.1 m | 205 km/h | 0 to 100 in 3.8 s. The fastest of everything, heavy: slow to turn, rolls on and on off the gas, thrown less by a hit |
+| Golf cart (level 5) | "Golf Cart" by pixelsquare | 2.4 × 1.2 m, 1.6 m tall | 70 km/h | Tiny and twitchy: 57 km/h after 3 s, darting into turns at a touch (195°/s at walking pace), sliding out easily and thrown up by every hit (3.2 m by the wall at 70 km/h); its body sways out of turns |
+| Tuk-tuk (level 8) | "Pakistani Rickshaw" by aminzafar | 2.7 × 1.3 m, 2.0 m tall, three wheels | 85 km/h | Slow and nimble: turning almost on the spot, leaning hard out of every turn, over on its side from a landing more than 26° off upright (a car takes 40°) and spun round hardest by a knock; its green panels take the Garage's paint |
+| Ice-cream van (level 15) | "Ice Cream Car Low_Poly" by Sidra | 4.8 × 2.4 m, 3.6 m tall with its cone | 120 km/h | 0 to 100 in 7.3 s, swaying, turning wide (84°/s at 50 km/h), barely thrown up, squashing and shaking when it hits something |
+| Lawn tractor (level 22) | "Lawn Tractor" by mirrol | 2.0 × 1.1 m | 60 km/h | The slowest of all, turning on the spot at walking pace (200°/s), light enough to be thrown high and bounce when it lands; plain orange paint, so the Garage repaints it |
+| Retro wedge (level 30) | "Stylized low-poly retro sports car" by Serg_str | 4.2 × 2.0 m | 190 km/h | 0 to 100 in 2.9 s. Light at the back: gripping well until the tail steps out into long drifts |
+| Formula racer (level 40) | "Stylized Formula One car" by TimMod | 4.6 × 2.3 m, 1.0 m tall | 210 km/h | 0 to 100 in 2.5 s; grips hardest, turns in sharpest at speed (the most of anything at 50 km/h) and stops hardest, but its lock is a racer's |
+| Neon racer | "Green Bug Stylized Scifi Car Free" by ferofluid | 4.3 × 2.3 m | 185 km/h | 0 to 100 in 2.5 s, the quickest of the first six cars; grips hard and turns in sharply (131°/s at 50 km/h) |
+| Night cruiser | "Blade Air Stylized Scifi Car Free" by ferofluid | 4.6 × 2.1 m | 205 km/h | 0 to 100 in 3.8 s. Long-legged and heavy: slow to turn, rolls on and on off the gas, thrown less by a hit |
 | Dune buggy | "Dune Buggy \"jump\"" by XP_Frost | 3.5 × 3.1 m (its wheels out on long arms) | 145 km/h | 0 to 100 in 3.1 s. Light and bouncy: loose on the road, thrown highest of the cars, slow to fall, landing up to 50° off upright and bouncing |
 | Farm truck | "Farm pickup truck" by Nekitron | 5.0 × 2.25 m, 2.8 m tall | 115 km/h | 0 to 100 in 9.4 s, turning wide (79°/s at 50 km/h), barely thrown up, squashes and shakes the view more |
 | Police cruiser | the police car of "LowPoly Cars Pickup, Sedan, Police, StationWagon" by JG3D | 4.0 × 2.3 m | 180 km/h | 0 to 100 in 3.5 s. A steady all-rounder; plain black-and-white livery, no words or crest |
+| Hypercar (the pass's showpiece) | "Fictional supercar - V12 Goblin" by ollitei | 4.6 × 2.2 m, 1.2 m tall | 215 km/h | The fastest of everything and the quickest away (0 to 100 in 2.1 s), gripping nearly as hard as the formula racer; low, so a hit throws it a little less |
+| Cyber muscle (the pass's showpiece) | "Futuristic Muscle car (Launch Control Ready)" by Jungle Jim | 4.7 × 2.5 m | 200 km/h | 0 to 100 in 2.7 s. Heavy and powerful: the longest, widest drifts of the cars; its black panels take the Garage's paint, the orange stays |
 
 Their wheels spin with the speed (each by its own size) and the front ones steer, turned against a
-drift as the rides' are. Nothing turns in the air faster than the kart, as for the rides.
+drift as the rides' are; the tuk-tuk's lone front wheel steers. The tall, narrow ones (the golf
+cart, the tuk-tuk, the ice-cream van and the lawn tractor) lean out of a turn: their body, not their
+wheels, rolls by up to their `lean` (rad, 0.13 for the tuk-tuk) at full lock from 43 km/h, and is
+upright again in the air. Nothing turns in the air faster than the kart, as for the rides.
+
+**Driver's seats.** Each car's `cab` is where its driver's eyes are for the driver's-seat camera
+(**C**), checked by looking from it: over the bars and wheels in the formula racer and the lawn
+tractor, over the steering wheel in the golf cart, behind the green panel in the tuk-tuk. The
+ice-cream van, the retro wedge and the cyber muscle car have their windows painted on (one picture
+with the rest of the body, nothing to see through), and the hypercar has no inside (its model is
+its outside alone), so their seat is a bonnet camera, over the bonnet just in front of the
+windscreen.
 
 **Where they live.** `drive/public/cars/`: each car's `.glb`, its picture in `thumbs/`, `cars.json`
 (file, size, wheels, triangles and the source: title, author, link, licence) and `CREDITS.md`.
 `vite.drive.config.js` makes `drive/public/` World Drive's public folder, so only its build publishes
 them (at `/cars/...`); the construction app's library (`public/library/`) and its build never see
-them. They add 2.8 MB to the built site (2.74 MB of models, 52 kB of pictures), and a model is only
-fetched for the car being driven or looked at in the Garage. CC BY asks for credit: each car's model, author, licence and link (and what was
+them. They add 7.1 MB to the built site (6.97 MB of models, the biggest 1.08 MB, and 113 kB of
+pictures), and a model is only fetched for the car being driven or looked at in the Garage (or
+driven by someone in your room). CC BY asks for credit: each car's model, author, licence and link (and what was
 changed) are in the About box, under the ride picker while it's picked, and in `CREDITS.md`.
 
 **Adding a car.** `npm run add-drive-car -- <sketchfab url> --id night-cruiser --length 4.6 --front=+z`
 (with the same Sketchfab token as `add-asset`), then `npm run drive-car-thumbs -- night-cruiser`, then
-its name, blurb, tuning and whether it needs the pass in `cars.js` and its id in `DRIVE_CARS`
-(`catalog.js`). The importer:
+its name, blurb, tuning and whether it needs the pass in `cars.js` (or a `ride` reward in
+`levels.js`'s `REWARDS` for a level's), its id in `DRIVE_CARS` (`catalog.js`) and its facts in the
+test's `FACING`. The importer:
 
 - checks the licence (downloadable, CC0 or CC BY only) and prints the description, to read for anyone
   else to credit (`--credit`) and any conditions;
 - bakes the model to its real size (`--length` along the front axis `--front` names), facing -Z on
-  y = 0, with nothing left in its transforms; `--part <node>` takes one car out of a set;
+  y = 0, with nothing left in its transforms; `--up` stands up a model saved lying on its side or
+  back (`+z` for one whose up is +z; `--front` then names the front once it's upright); `--part
+  <node>` takes one car out of a set, and `--leave` leaves out nodes or materials that aren't the car
+  (a shadow drawn on a plane under it, the patch of ground or the stand it was shown on, a shell
+  over its body), so they don't count in its size either;
 - finds the wheels by shape, whatever they're called: a tyre is a piece of its own standing on the
   ground at a corner, about as long as it's tall, and whatever sits wholly inside its circle (rim,
   hub, disc) turns with it. Each wheel becomes a node at its axle (`wheel-front-left`...) with its
   radius and whether it steers; the rest is `body`. A model whose tyres are joined to the body, or
-  rigged, is turned away with the reason;
+  rigged, is turned away with the reason. `--tyres` names the material (or node) the tyres are made
+  of, where something else would pass for one (the formula racer's front wing's end plates, low at
+  its corners, did); `--trike` takes a three-wheeler, its lone wheel in the middle at one end
+  (`wheel-front`, steering, for the tuk-tuk);
 - `--paint` and `--rims` name the materials the Garage may repaint (the muscle car's body and rims);
   `--lit` shades a model drawn unlit, as the rest of the world is;
 - `--lamps` names the material of lamps drawn as a real maker draws theirs (three bars a side is one
@@ -1495,7 +1555,18 @@ its name, blurb, tuning and whether it needs the pass in `cars.js` and its id in
 - compresses it (meshopt, WebP textures up to `--max-texture`, 1024; `--simplify` if it's heavy).
 
 The muscle car, say, was `--id muscle-car --length 4.7 --front=+z --paint Material --rims Material.001
---lamps Material.004`.
+--lamps Material.004`. The eight after it:
+
+| Car | Imported with |
+| --- | --- |
+| Golf cart | `--id golf-cart --length 2.4 --front=+z` |
+| Tuk-tuk | `--id tuk-tuk --length 2.7 --front=-z --trike --paint Green --rims LightGray` |
+| Ice-cream van | `--id ice-cream-van --length 4.8 --front=-z` |
+| Lawn tractor | `--id lawn-tractor --length 2 --front=+z --paint Cart_Color --rims Tire_2` |
+| Retro wedge | `--id retro-wedge --length 4.2 --front=+z` |
+| Formula racer | `--id formula-racer --length 4.6 --front=+z --leave Bolid_f1:Asphalt --tyres lambert2` |
+| Hypercar | `--id hypercar --length 4.6 --front=-z --leave car_shadow,clearcoat` (the clearcoat is a second skin over the body that the conversion of its old spec/gloss materials made opaque black) |
+| Cyber muscle | `--id cyber-muscle --length 4.7 --front=+z --paint Body_gameasset_Mat_1` |
 
 Look at a new car in the Garage and from its driver's seat (C) to check which way it faces: by its
 seat, steering wheel, lamps and exhaust. The dune buggy was first imported back to front, so it
@@ -1507,13 +1578,23 @@ Sketchfab, it needs `--front` to name the side its seat, steering wheel and lamp
 downloaded model (the opposite of the side first used), or it comes back tail first; the car checks
 in `test-drive-pro-ui.mjs` would say so (its steering pair must be the narrower axle).
 
+Since then each car is checked that way, by something about it that turns round with it, seen when
+it was imported (`FACING` in the test): its steering axle the narrower (the hypercar, the cyber
+muscle car) or its tyres the smaller (the lawn tractor); its nose shorter than its tail (the golf
+cart, the tuk-tuk, the ice-cream van, the cyber muscle car) or longer (the formula racer, the
+hypercar); its body highest behind the middle (the retro wedge's roof, the formula racer's wing,
+the hypercar's); a three-wheeler's lone wheel steering. A car added after these without one fails
+the test. Each was also looked at from ahead, behind and its left side as imported, driven on the
+test pad (pictures as it went away from the camera, turning) and from its driver's seat.
+
 `drive-car-thumbs.mjs` draws every picture the same way (World Drive's dev server in Chromium, the
 car from ahead and to its left, on nothing), whatever Sketchfab's own pictures were.
 
-**Choosing them** (Sketchfab, 31 October 2026: downloadable, CC0 or CC BY, under 60,000 triangles).
-CC0 cars hardly exist there, so all six are CC BY. Turned away was anything named after or drawn from
-a real car, maker, film or game (names, tags, descriptions and textures read), anything whose wheels
-couldn't be made to turn, and other people's concepts:
+**Choosing them** (Sketchfab, 31 October 2026: downloadable, CC0 or CC BY, under 60,000 triangles;
+and again on 4 November 2026 for sports cars and supercars, and fun and odd rides, up to 120,000).
+CC0 cars hardly exist there, so all fourteen are CC BY. Turned away was anything named after or drawn
+from a real car, maker, film or game (names, tags, descriptions and textures read), anything whose
+wheels couldn't be made to turn, and other people's concepts:
 
 | Model | Author | Verdict |
 | --- | --- | --- |
@@ -1523,6 +1604,25 @@ couldn't be made to turn, and other people's concepts:
 | [Dune Buggy "jump"](https://sketchfab.com/3d-models/dune-buggy-jump-c9838cac69904010923d5024168b0893) | XP_Frost | ✔ Dune buggy: a tube-frame buggy of no make (a race number only); wheels separated by shape; 29,000 |
 | [Farm pickup truck](https://sketchfab.com/3d-models/farm-pickup-truck-5615b16ba2e24f7ab6cd26eda7946ae8) | Nekitron | ✔ Farm truck: a hand-painted old truck of no make, separate wheels; 5,400 |
 | [LowPoly Cars Pickup, Sedan, Police, StationWagon](https://sketchfab.com/3d-models/lowpoly-cars-pickup-sedan-police-stationwagon-8fb25f8fc1064f4d88a98294c757eef5) | JG3D | ✔ Police cruiser (its police car only): generic livery with no words or crest, blank plates; 6,000 |
+| [Fictional supercar - V12 Goblin](https://sketchfab.com/3d-models/fictional-supercar-v12-goblin-0a20e49ad5774d778567cb5c3f345786) | ollitei | ✔ Hypercar: the author's own design ("a fictional car design project"), wheels separate; a shadow plane and a clearcoat skin left out; 66,000 |
+| [Stylized Formula One car](https://sketchfab.com/3d-models/stylized-formula-one-car-1e3caa8d9f8f4f5287ed33e1267fac33) | TimMod | ✔ Formula racer: an open-wheeler of no team, in plain bronze, no sponsors or numbers; the patch of ground it stands on left out; 32,000 |
+| [Stylized low-poly retro sports car](https://sketchfab.com/3d-models/stylized-low-poly-retro-sports-car-55ec976f0cb347fcb7cba7912f77d907) | Serg_str | ✔ Retro wedge: a generic 1980s pop-up-lamp coupe, no badges or plates; 6,400 |
+| [Futuristic Muscle car (Launch Control Ready)](https://sketchfab.com/3d-models/futuristic-muscle-car-launch-control-ready-47d7ffa796d84d1bbdebe9a007028e0e) | Jungle Jim | ✔ Cyber muscle: an original cyberpunk muscle car, separate wheels, plain black panels; 103,000 |
+| [Golf Cart](https://sketchfab.com/3d-models/golf-cart-5637f77fc2fd42439b006802741c1cc0) | pixelsquare | ✔ Golf cart: a chunky blue cart of no make; 10,500 |
+| [Pakistani Rickshaw](https://sketchfab.com/3d-models/pakistani-rickshaw-0d0c90ca58cc49f2bfcd43619f9e3111) | aminzafar | ✔ Tuk-tuk: a generic three-wheeled rickshaw in plain colours (a blank plate), each wheel its own part; 7,300 |
+| [Ice Cream Car Low_Poly](https://sketchfab.com/3d-models/ice-cream-car-low-poly-83900ff5231944569eda3ee2bc98a230) | Sidra | ✔ Ice-cream van: an old van of no make with a cone on its roof, "ICE CREAM" its only words, wheels separate; 3,300 |
+| [Lawn Tractor](https://sketchfab.com/3d-models/lawn-tractor-97ec916314324ed8a828176f3d310f82) | mirrol | ✔ Lawn tractor: a "simple retro lawn tractor" of no make, plain colours; 9,900 |
+| [Ice Cream Truck](https://sketchfab.com/3d-models/ice-cream-truck-57ba94f1def5409d8588a15d497e1368) | Pooi Woon Hoh | ✘ "Modeled after Sugar Shack", a real ice-cream truck's livery under a changed name |
+| [Generic Sport Coupé Car](https://sketchfab.com/3d-models/generic-sport-coupe-car-820a13c4831c41959ce75e6c2014e882) | MMC Works | ✘ A good GT coupe, but rigged: its wheels hang off bones |
+| [Golf Kart \| DAE IGP \| MoustacheKart](https://sketchfab.com/3d-models/golf-kart-dae-igp-moustachekart-4c961dfb4e9748539a18d2838d35d1a5) | Félicien Lebegge | ✘ Rigged too |
+| [Substance Futuristic Sports Car](https://sketchfab.com/3d-models/substance-futuristic-sports-car-1eee26c0b72342ddbec8601a6d05620d) | Samize | ✘ Textures for a model whose design is another artist's concept (the model's own page says so) |
+| [Le Mans Prototype](https://sketchfab.com/3d-models/le-mans-prototype-8f711f4dc62648fb8b9d5b3c6c1ec931), [Cyberpunk Car HyperCar Stylized](https://sketchfab.com/3d-models/cyberpunk-car-hypercar-stylized-c0d1ea5206bc4eadad4afe51577c31f6) | mudkipz321, ImADefaultCube117 | ✘ Each "based on" a named real car |
+| [low poly supercar](https://sketchfab.com/3d-models/low-poly-supercar-6a00959ab47b4fc5b08e8c92590904bd), [El Triello '70](https://sketchfab.com/3d-models/el-triello-70-retro-styled-model-fefa94b06cce47ab8ce4d96b973336dd), [Exterminator '00](https://sketchfab.com/3d-models/exterminator-00-low-poly-model-857f048c4bbb40b4be4fb0b765a52116), [Club '90](https://sketchfab.com/3d-models/club-90-low-poly-model-5c3f4d1c558746808711eb84ec4b5731) | the 86 guy, Daniel Zhabotinsky | ✘ Real cars' shapes: an Italian supercar's, a famous 1970 wedge concept's, a 2000s American coupe's, and a golf-cart maker's (by its name too) |
+| [Riva Speedster](https://sketchfab.com/3d-models/riva-speedster-2a69ee87b41f48b18d08fc6c1eb9055d) | leoferraro | ✘ Named after a boat maker, shown on its stand |
+| [Modern Sport Car 3D Concept - Firestorm Inferno](https://sketchfab.com/3d-models/modern-sport-car-3d-concept-firestorm-inferno-92cf1159a0314ad8880dbc720be6880c) | jojoclaim | ✘ All black (and a logo on it): a silhouette on the road |
+| [Ice Cream Truck](https://sketchfab.com/3d-models/ice-cream-truck-7b99fd196e7d414290688ed19c0dc7bd), [icecream truck challenge - o' trerrote](https://sketchfab.com/3d-models/icecream-truck-challenge-o-trerrote-efdffc58c8de442cacf2a13256650d10) | AlessioPassera, ross.afeltra | ✘ A tutorial's design, its cone twice the van's height; a well-known Italian three-wheeler's shape |
+| [Autorikshaw - Indian Tuk Tuk](https://sketchfab.com/3d-models/autorikshaw-indian-tuk-tuk-5775d012693741008acff9dad410e92d) | bhagathartworks | ✘ One mesh with see-through textures that drew as patches |
+| [The Ducky Kart](https://sketchfab.com/3d-models/the-ducky-kart-e042fc3fc3344a92854f0e7d943956db), [Vintage Kart (CycleKart)](https://sketchfab.com/3d-models/vintage-kart-cyclekart-962316b91e914fc1808f6fb574b46ba5), [Soap Box Racer I Built When I Was 11](https://sketchfab.com/3d-models/soap-box-racer-i-built-when-i-was-11-1f5e044044a140adbcf78edf0e23ca61), [Sigma](https://sketchfab.com/3d-models/sigma-752b0562e5d8463fa5864cde0620c8bb), [Pizza Food Vendor Truck](https://sketchfab.com/3d-models/pizza-food-vendor-truck-f9faf8cfe0b44b6ca1dc146411bc651b) | Coco Jinjo, Mike_hbrt, Jorma Rysky, NETRUNNER_pl, siapap | ✔ for later: fine, but eight was enough this time (a rubber-duck ride-on, a 1920s-style cyclekart, a home-made soapbox, a three-wheeled open sports car, a van with a slice of pizza on its roof) |
 | [Ice Cream Truck](https://sketchfab.com/3d-models/ice-cream-truck-b8b1294228044e64af8bfbae82c80ac0) | Bogdan Strielecki | ✘ Original and fun, but its tyres are one piece with the body: they couldn't turn |
 | [Toony Yellow Formula Racer](https://sketchfab.com/3d-models/toony-yellow-formula-racer-cartoon-race-2c5e07abb88a441d85584cab8733c0d2) | ARTEL_3D | ✘ The whole car is one welded piece: no wheels to turn |
 | [Colorful Cartoon Police Car](https://sketchfab.com/3d-models/colorful-cartoon-police-car-3d-model-c3b82fd5b86c4fd0931c0217b4670ee3) | Skill Artist | ✘ Stands at an angle in its file, so its wheels weren't found square; the JG3D car does the job |
@@ -1603,10 +1703,12 @@ whenever it's driven; picked while paused they're on it as soon as it drives on.
 nothing (site data blocked) still wears them for the visit, and a damaged value there is simply
 replaced by the next choice. Decals are projected
 onto the bodywork through boxes each ride gives (its `userData.decals`). The trucks from the library,
-and the cars whose paint is a picture on the model (all but the muscle car), keep their own paint:
-only their flame and trail change, and the Garage says so ("Its paint is part of the model, so it
-keeps it"). The muscle car's paint is plain colour, so it takes colours, finishes, rims and decals
-as the rides do (the free ones without the pass). A ride in the colour and finish it came in
+and the cars whose paint is a picture on the model (all but four), keep their own paint: only their
+flame and trail change, and the Garage says so ("Its paint is part of the model, so it keeps it").
+The muscle car's, the tuk-tuk's, the lawn tractor's and the cyber muscle car's paint is plain colour,
+so they take colours, finishes, rims and decals as the rides do (the free ones without the pass).
+A level's car, or the pass's, can be looked at and its look chosen before it's yours, as a pass
+ride's can; its choices open the pass's sheet until then. A ride in the colour and finish it came in
 keeps its own materials, so the kart nobody has painted is just as it was. The trails are cheap: a
 pool of sprites, or one ribbon whose buffers are rewritten in place, nothing made each frame. On the
 test pad (software rendering in the test's browser), the booster's flame made a frame about 7 %
@@ -1626,23 +1728,29 @@ or none kept at all), the world not drawn behind the Garage, the frame time with
 turning in the air faster than the kart, each ride going supersonic, the boost styles in the Garage
 (three free, the rest opening the sheet), a look saved before the styles keeping its flame's colour,
 every style drawn at 150 km/h (with a picture of each), making nothing new in a minute of boosting
-and timed, and the Garage and the locked rides' badges on a phone. And the cars: each listed in
-`cars.json`, `cars.js` and `DRIVE_CARS` alike, under 2 MB, CC BY or CC0 and in `CREDITS.md`, its real
-size, with four wheels and the front two steering; without the pass the muscle car free, pictured,
-credited under the picker and in About (all six, with links), driving, drifting, thrown up by a wall
-and landing, and the others opening the sheet; with it each car driving, drifting, thrown up and
-landing, going supersonic, its wheels spinning and the front ones steering the right way, its size
-as imported, and their handling against each other (the night cruiser fastest, the neon racer
-quickest to 100, the dune buggy thrown highest, the farm truck slowest); the Garage repainting the
-muscle car (colour, rims, decals) and saying the others keep their paint, with only a boost and
-trail to pick.
+and timed, and the Garage and the locked rides' badges (and the levels' cars' "Lv 8 · or Pass") on a
+phone. And the cars: each listed in `cars.json`, `cars.js` and `DRIVE_CARS` alike, one free, six
+levels' and the rest the pass's, under 2 MB, CC BY or CC0 and in `CREDITS.md`, its real size (the
+small odd ones shorter, the ice-cream van taller with its cone), with four wheels (the tuk-tuk
+three) and the front ones steering, facing the way it drives (`FACING`, above); without the pass
+the muscle car free, pictured, credited under the picker and in About (all fourteen, with links),
+driving, drifting, thrown up by a wall and landing, and the others opening the sheet; with it each
+car driving, drifting, thrown up and landing, going supersonic, its wheels spinning and the front
+ones steering the right way, the leaning ones' bodies leaning out of the turn, its size as imported,
+a picture from its driver's seat, and their handling against each other (among the first six the
+night cruiser fastest, the neon racer quickest to 100, the dune buggy thrown highest, the farm truck
+slowest; among them all the hypercar fastest and quickest, the formula racer turning sharpest at
+50 km/h, the golf cart, the tuk-tuk and the lawn tractor slower than every other, the lawn tractor
+slowest); the Garage repainting the muscle car (colour, rims, decals) and the tuk-tuk, the lawn
+tractor and the cyber muscle car (colour, stripes and a number on their bodywork), and saying the
+others keep their paint, with only a boost and trail to pick.
 
 ## Supporter Pass (buying it)
 
 The pass is one payment of **CA$4.99**, no subscription, through a Stripe Payment Link in World
-Drive's own Stripe account. It comes with what's [above](#supporter-pass-content) (five cars, the four
-rides and every Garage look at once), **+50% XP** for [levels](#levels), a **⭐ by your name on the
-leaderboard**, and **30 drives a day** instead of 8.
+Drive's own Stripe account. It comes with what's [above](#supporter-pass-content) (seven cars of its
+own, the six levels bring, the four rides and every Garage look at once), **+50% XP** for
+[levels](#levels), a **⭐ by your name on the leaderboard**, and **30 drives a day** instead of 8.
 A pass is a Google account's, so it's yours in any browser you sign in on: signing in is only ever
 for the pass, and driving and the leaderboard never need it.
 
@@ -1824,9 +1932,9 @@ UPDATE purchases SET account_id = 12 WHERE checkout_session = 'cs_live_...';
   `SUPPORTER_EMAILS` or the console to give one away.
 - A supporter on a new browser has the address's 8 drives until they sign in (in the pass's sheet,
   the pause menu or the used-up screen). Buying isn't offered on the used-up screen.
-- Runs in the pass's rides and cars are accepted on the leaderboard from anyone (`PASS_RIDES` and
-  `DRIVE_CARS` in `scores.js`): the lock is in the page, so a row may show one of those by a name
-  without a ⭐. Likewise the cars' models are public files, as the library's are.
+- Runs in the pass's rides and cars, and the levels' cars, are accepted on the leaderboard from
+  anyone at any level (`PASS_RIDES` and `DRIVE_CARS` in `scores.js`): the lock is in the page, so a
+  row may show one of those by a name without a ⭐ or at a lower level. Likewise the cars' models are public files, as the library's are.
 - No receipts or purchase history in the page: Stripe emails its own receipt if that's on in its
   settings.
 
@@ -2184,9 +2292,9 @@ src/drive-app/spawn.js       Ground: the ground's height, which way the street r
 src/drive-app/panel.js       search, spots, recent places, the ride picker, the pin's card
 src/drive-app/places.js      the start spots, typed coordinates, recent places
 src/drive-app/vehicles.js    the go-kart, the library trucks (catalog.js lists which), the cars and the
-                             pass's rides
-src/drive-app/cars.js        the cars (drive/public/cars/): names, tuning, which are free; loading one
-                             with its wheels turning, its paint and decals
+                             pass's rides; what's locked (rideLocked) and its chip
+src/drive-app/cars.js        the cars (drive/public/cars/): names, tuning, which need the pass; loading
+                             one with its wheels turning, its body leaning, its paint and decals
 src/drive-app/rides/         the Supporter Pass's rides, built in code, and parts.js they're built from
 src/drive-app/pro.js         whether this visitor has the Supporter Pass (off until payments say so)
 src/drive-app/pass.js        the Supporter Pass sheet and its badge
@@ -2209,7 +2317,7 @@ src/drive-app/api.js         /api/config, the visit with Turnstile, /api/search,
                              the Supporter Pass's calls
 src/drive-app/leaderboard.js the leaderboard: the panel, names, posting runs, the new-best card
 src/drive-app/levels.js      levels' rules, which the page and the Worker share: XP, the curve, the
-                             caps and the unlock track
+                             caps and the unlock track (looks, cars, titles, badges); what a ride needs
 src/drive-app/progress.js    levels in the page: counting what's driven, reporting it (or keeping it
                              here before a nickname), the level the Garage's locks follow
 src/drive-app/profile.js     what levels show: the XP bar and pop-ups, a level-up, the profile card,
@@ -2340,7 +2448,13 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   at the page's next hello there, not as it comes. A report whose answer was lost is counted once
   only while it's the player's last (another device reporting in between would let it count again),
   and if it listed more new places than its time allowed, the extra ones aren't sent again. A
-  nickname removed by the owner takes its XP with it.
+  nickname removed by the owner takes its XP with it. A level's car is locked only in the page, as
+  the pass's are: a run in one is taken on the leaderboard at any level.
+- [The cars](#world-drives-cars): the importer turns a car's wheels, not what steers them, so the
+  tuk-tuk's handlebars and the golf cart's and the lawn tractor's steering wheels stay still while
+  their front wheels steer. The tuk-tuk's green panels are small, so the Garage's stripes and number
+  on it are small too. The three with painted windows, and the hypercar with no inside, look from
+their bonnet rather than their seat.
 
 ## Credits
 
@@ -2349,5 +2463,9 @@ screen. The open sea's height is NGA's EGM96 geoid (public domain), from PROJ's 
 where the sea and the big lakes are is Natural Earth's ocean and lakes at 1:10 million (public
 domain, naturalearthdata.com), from its GitHub copy. Place search © OpenStreetMap contributors. The
 trucks and the cars are models from Sketchfab under CC BY 4.0, credited under **About World Drive**
-and on the ride picker (and the cars in `drive/public/cars/CREDITS.md`); the go-kart and the pass's
+and on the ride picker (and the cars in `drive/public/cars/CREDITS.md`): the muscle car by Lexyc16,
+the golf cart by pixelsquare, the tuk-tuk by aminzafar, the ice-cream van by Sidra, the lawn tractor
+by mirrol, the retro wedge by Serg_str, the formula racer by TimMod, the neon racer and the night
+cruiser by ferofluid, the dune buggy by XP_Frost, the farm truck by Nekitron, the police cruiser by
+JG3D, the hypercar by ollitei and the cyber muscle car by Jungle Jim. The go-kart and the pass's
 rides are built in code.

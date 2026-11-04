@@ -1,8 +1,9 @@
 // npm run test:drive-levels: World Drive's levels (src/drive-app/levels.js, worker/drive/progress.js,
 // docs/world-drive.md). The curve as a simulated regular climbs it, and the unlock track as it's
-// written (every level from 2 to 50 gives something, the pass's rides are never on it, about half
-// the pass's looks are, the level-only rewards never come with the pass, every look on it is one
-// the Garage has); then the Worker under `wrangler dev` on this machine, with a throwaway D1
+// written (every level from 2 to 50 gives something, six cars come with it and the pass's own rides
+// never do, a level's car locked until then unless with the pass, about half the pass's looks are
+// on it, the level-only rewards never come with the pass, every look on it is one the Garage has);
+// then the Worker under `wrangler dev` on this machine, with a throwaway D1
 // database: reports of what was driven and the XP they earn, every cap (too much for the time since
 // the last report, a report sent again, at most five minutes' worth), a forged, changed, expired or
 // someone else's visit, the wrong secret, reports the page couldn't send, areas and spots only once
@@ -23,9 +24,10 @@ import { after, before, describe, test } from 'node:test';
 import { CLIENT_ID, makeKey, makeToken, serveKeys, startWorker } from './worker-harness.mjs';
 import { DRIVE_CARS, PASS_RIDES } from '../src/drive-app/catalog.js';
 import {
-	CAPS, CLAIM_DAYS, DISCOVERIES_MAX, LEVEL_MAX, LEVEL_XP, REWARDS, SUPPORTER_XP, TITLES, TRICK, XP,
-	areaOf, badgeOf, capReport, checkReport, dailyXp, drivingXp, levelOf, nextReward, progressOf, rewardsAt, rewardsBetween, titleOf, trickXp, unlockLevel,
+	CAPS, CLAIM_DAYS, DISCOVERIES_MAX, LEVEL_MAX, LEVEL_XP, REWARDS, RIDES, SUPPORTER_XP, TITLES, TRICK, XP,
+	areaOf, badgeOf, capReport, checkReport, dailyXp, drivingXp, levelOf, nextReward, progressOf, rewardsAt, rewardsBetween, rideLevel, rideLocked, rideUnlock, titleOf, trickXp, unlockLevel,
 } from '../src/drive-app/levels.js';
+import { CARS } from '../src/drive-app/cars.js';
 import { BOOSTS } from '../src/drive-app/boosts.js';
 import { DECALS, FINISHES, FLAMES, RIMS, SMOKES, SWATCHES, TRAILS, isLocked, lookFor, saveLook, unlockOf } from '../src/drive-app/paint.js';
 import { SPOTS } from '../src/drive-app/places.js';
@@ -149,10 +151,13 @@ describe( 'Levels: the curve and the unlock track', () => {
 		assert.equal( nextReward( 1, { pro: true } ).id, 'joyrider' );
 		assert.equal( nextReward( 8, { pro: true } ).id, 'bronze' );
 		assert.equal( nextReward( 50, { pro: true } ), null );
+		// A level's car is next like anything else, and a supporter has it already.
+		assert.equal( nextReward( 4 ).id, 'golf-cart' );
+		assert.equal( nextReward( 4, { pro: true } ).id, 'drifter' );
 
 	} );
 
-	test( 'about half the pass\'s looks are on the track, by level 40; the pass\'s rides never are', () => {
+	test( 'about half the pass\'s looks are on the track, by level 40; six cars are, and the pass\'s own rides never', () => {
 
 		// Every look on the track is a choice the Garage has.
 		for ( const reward of REWARDS.filter( r => r.kind === 'look' ) ) assert.ok( LISTS[ reward.part ]?.some( choice => choice.id === reward.id ), `${ reward.part } ${ reward.id }` );
@@ -166,12 +171,64 @@ describe( 'Levels: the curve and the unlock track', () => {
 		for ( const reward of onTrack ) assert.ok( passLooks.includes( `${ reward.part }:${ reward.id }` ), reward.id );
 		// The showiest stay the pass's alone.
 		for ( const [ part, id ] of [ [ 'boost', 'lightning' ], [ 'boost', 'fireworks' ], [ 'boost', 'comet' ], [ 'trail', 'ribbon' ], [ 'flame', 'rainbow' ], [ 'rim', 'gold' ], [ 'finish', 'metallic' ] ] ) assert.equal( unlockLevel( part, id ), null, id );
-		// No ride, and nothing named after one.
+		// Six cars, from the golf cart at 5 to the formula racer at 40, each a car World Drive has and
+		// the leaderboard takes, with the pass too; never the pass's own (its first nine rides and
+		// its showpieces), and nothing else named after a ride.
+		assert.deepEqual( RIDES.map( r => [ r.level, r.id ] ), [ [ 5, 'golf-cart' ], [ 8, 'tuk-tuk' ], [ 15, 'ice-cream-van' ], [ 22, 'lawn-tractor' ], [ 30, 'retro-wedge' ], [ 40, 'formula-racer' ] ] );
+		const passOnly = new Set( [ ...PASS_RIDES, ...CARS.filter( car => car.pro ).map( car => car.id ) ] );
 		const rides = new Set( [ ...PASS_RIDES, ...DRIVE_CARS ] );
 		for ( const reward of REWARDS ) {
 
-			assert.ok( [ 'look', 'title', 'badge' ].includes( reward.kind ), reward.kind );
-			assert.ok( ! rides.has( reward.id ), reward.id );
+			assert.ok( [ 'look', 'ride', 'title', 'badge' ].includes( reward.kind ), reward.kind );
+			if ( reward.kind !== 'ride' ) assert.ok( ! rides.has( reward.id ), reward.id );
+			else {
+
+				assert.ok( DRIVE_CARS.includes( reward.id ) && ! passOnly.has( reward.id ), reward.id );
+				assert.equal( CARS.find( car => car.id === reward.id ).name, reward.name );
+				assert.equal( reward.pass, true, reward.id );
+
+			}
+
+		}
+
+		// Spread out: the first in a first session (level 5), then none within three levels of the last.
+		const gaps = RIDES.map( ( r, i ) => r.level - ( RIDES[ i - 1 ]?.level ?? 0 ) );
+		assert.ok( RIDES[ 0 ].level === 5 && gaps.every( gap => gap >= 3 ), JSON.stringify( gaps ) );
+
+	} );
+
+	test( 'a level\'s car: locked until that level unless with the pass; the pass\'s own whatever the level; the free ones never', () => {
+
+		const tuk = CARS.find( car => car.id === 'tuk-tuk' );
+		assert.equal( rideLevel( 'tuk-tuk' ), 8 );
+		assert.deepEqual( rideUnlock( tuk ), { level: 8, pass: true } );
+		assert.equal( rideLocked( tuk, { level: 7 } ), true );
+		assert.equal( rideLocked( tuk, { level: 8 } ), false );
+		assert.equal( rideLocked( tuk, { level: 1, pro: true } ), false );
+		// The pass's showpieces and first cars: only with it.
+		for ( const car of CARS.filter( c => c.pro ) ) {
+
+			assert.equal( rideLevel( car.id ), null, car.id );
+			assert.deepEqual( rideUnlock( car ), { level: null, pass: true }, car.id );
+			assert.equal( rideLocked( car, { level: 50 } ), true, car.id );
+			assert.equal( rideLocked( car, { pro: true } ), false, car.id );
+
+		}
+
+		// Free: the kart, the pickup, the muscle car.
+		for ( const id of [ 'go-kart', 'pickup-truck', 'muscle-car' ] ) {
+
+			assert.equal( rideUnlock( { id } ), null, id );
+			assert.equal( rideLocked( { id } ), false, id );
+
+		}
+
+		// Every level's car, at its level and the one before.
+		for ( const reward of RIDES ) {
+
+			const car = CARS.find( c => c.id === reward.id );
+			assert.equal( rideLocked( car, { level: reward.level - 1 } ), true, reward.id );
+			assert.equal( rideLocked( car, { level: reward.level } ), false, reward.id );
 
 		}
 

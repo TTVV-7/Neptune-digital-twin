@@ -422,6 +422,17 @@ button.reward:hover {
 	height: 22px;
 }
 
+/* A ride's picture is wider than the others' little icons. */
+.reward.ride .icon {
+	width: 34px;
+}
+
+.reward .ride-thumb {
+	width: 34px;
+	height: 22px;
+	object-fit: contain;
+}
+
 .reward .swatch {
 	width: 18px;
 	height: 18px;
@@ -742,4 +753,42 @@ dialog#leaderboard .lvl {
 	color: var( --accent );
 	font-size: 11px;
 	font-weight: 800;
+}
+
+/* --- levels' cars: a locked one's level on its card and tab, and the word on picking it ------ */
+
+/* Sky blue for the level, as the Garage's level-only choices, on the badge's shape. */
+.vehicle .level-chip {
+	background: linear-gradient( 135deg, #7fd6ff, var( --sky ) );
+	color: #04121d;
+	box-shadow: 0 2px 8px rgba( 62, 193, 255, 0.3 );
+}
+
+.vehicle .level-chip[hidden] {
+	display: none;
+}
+
+.ride-note {
+	margin: 8px 2px 0;
+	color: var( --sky );
+	font-size: 12px;
+	font-weight: 700;
+}
+
+.ride-note[hidden] {
+	display: none;
+}
+
+#garage .ride-tab .level-chip {
+	padding: 0 5px;
+	border-radius: 6px;
+	background: rgba( 62, 193, 255, 0.16 );
+	color: var( --sky );
+	font-size: 10px;
+	font-style: normal;
+	font-weight: 800;
+}
+
+#garage .ride-tab .level-chip[hidden] {
+	display: none;
 }

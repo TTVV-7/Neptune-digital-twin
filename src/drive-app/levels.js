@@ -13,8 +13,9 @@
 //
 // The unlock track: about half of the Supporter Pass's Garage looks come with levels on the way to
 // 40 (the pass still gives them all at once), and some rewards come only with levels, supporters
-// included: titles for the nametag, the level badge's frame, and four colours. The pass's nine
-// rides are never on it.
+// included: titles for the nametag, the level badge's frame, and four colours. Six of the cars come
+// with levels too, from the golf cart at 5 to the formula racer at 40 (and with the pass at once).
+// The pass's first nine rides and its two showpiece cars are never on it.
 
 import { cellOf, parseRoom } from './live-protocol.js';
 import { SPOTS } from './places.js';
@@ -59,7 +60,7 @@ export const SUPPORTER_XP = 1.5;
 // one report counts (a report every couple of minutes is the page's way); claim, the time (s) a
 // player's first report counts (what was driven before picking a nickname, kept in the browser and
 // claimed with it: an hour of these caps is several hours of real driving); kmh, faster than any
-// ride goes flat out with the booster, flying or not (the night cruiser's 205 km/h doubled); air,
+// ride goes flat out with the booster, flying or not (the hypercar's 215 km/h doubled); air,
 // seconds of air a second; drifts and pads, the most a second; rate, the most XP a minute from the
 // continuous sources (km, air, drift boosts, pads, minutes together) all at once, which no driving
 // comes near; places, new areas and spots a minute (whole ones: a report that comes sooner carries
@@ -130,9 +131,11 @@ export function progressOf( xp ) {
 // Each reward: { level, kind, id, name, ... }. kind 'look' is a Garage choice (part and id as in
 // paint.js and boosts.js), with pass: true when the Supporter Pass gives it too (the pass's looks
 // on the track) and pass: false when only the level does (the level-only colours, in paint.js's
-// SWATCHES with levelOnly); 'title' a title for your nametag; 'badge' the level badge's frame.
+// SWATCHES with levelOnly); 'ride' a car to drive (id as in cars.js and catalog.js's DRIVE_CARS),
+// which the pass gives too; 'title' a title for your nametag; 'badge' the level badge's frame.
 // Every level from 2 to 50 has something.
 const look = ( level, part, id, name, pass = true ) => ( { level, kind: 'look', part, id, name, pass } );
+const ride = ( level, id, name ) => ( { level, kind: 'ride', id, name, pass: true } );
 const title = ( level, id, name ) => ( { level, kind: 'title', id, name } );
 const badge = ( level, id, name ) => ( { level, kind: 'badge', id, name } );
 
@@ -142,9 +145,11 @@ export const REWARDS = [
 	look( 2, 'colour', 'sunburst', 'Sunburst paint' ),
 	look( 3, 'boost', 'hearts', 'Hearts boost' ),
 	title( 4, 'joyrider', 'Joyrider' ),
+	ride( 5, 'golf-cart', 'Golf cart' ),
 	look( 5, 'colour', 'lime', 'Lime paint' ),
 	look( 6, 'rim', 'white', 'White rims' ),
 	look( 7, 'boost', 'plasma', 'Plasma boost' ),
+	ride( 8, 'tuk-tuk', 'Tuk-tuk' ),
 	title( 8, 'drifter', 'Drifter' ),
 	look( 9, 'decal', 'stripes', 'Racing stripes' ),
 	badge( 10, 'bronze', 'Bronze badge' ),
@@ -152,6 +157,7 @@ export const REWARDS = [
 	title( 12, 'street-racer', 'Street Racer' ),
 	look( 13, 'boost', 'pixel', 'Pixel boost' ),
 	look( 14, 'flame', 'blue', 'Blue flame' ),
+	ride( 15, 'ice-cream-van', 'Ice-cream van' ),
 	title( 15, 'stunt-ace', 'Stunt Ace' ),
 	look( 16, 'trail', 'smoke', 'Smoke trail' ),
 	title( 17, 'speedster', 'Speedster' ),
@@ -159,6 +165,7 @@ export const REWARDS = [
 	title( 19, 'trickster', 'Trickster' ),
 	badge( 20, 'silver', 'Silver badge' ),
 	look( 21, 'rim', 'red', 'Red rims' ),
+	ride( 22, 'lawn-tractor', 'Lawn tractor' ),
 	title( 22, 'explorer', 'Explorer' ),
 	look( 23, 'boost', 'glitter', 'Glitter boost' ),
 	title( 24, 'globetrotter', 'Globetrotter' ),
@@ -167,6 +174,7 @@ export const REWARDS = [
 	title( 27, 'road-warrior', 'Road Warrior' ),
 	look( 28, 'flame', 'green', 'Green flame' ),
 	title( 29, 'sky-pilot', 'Sky Pilot' ),
+	ride( 30, 'retro-wedge', 'Retro wedge' ),
 	badge( 30, 'gold', 'Gold badge' ),
 	look( 31, 'finish', 'matte', 'Matte finish' ),
 	title( 32, 'daredevil', 'Daredevil' ),
@@ -177,6 +185,7 @@ export const REWARDS = [
 	look( 37, 'rim', 'blue', 'Blue rims' ),
 	title( 38, 'storm-chaser', 'Storm Chaser' ),
 	title( 39, 'high-flyer', 'High Flyer' ),
+	ride( 40, 'formula-racer', 'Formula racer' ),
 	badge( 40, 'platinum', 'Platinum badge' ),
 	look( 40, 'flame', 'purple', 'Purple flame' ),
 	title( 41, 'thrill-seeker', 'Thrill Seeker' ),
@@ -195,6 +204,7 @@ export const REWARDS = [
 
 export const TITLES = REWARDS.filter( reward => reward.kind === 'title' );
 export const BADGES = REWARDS.filter( reward => reward.kind === 'badge' );
+export const RIDES = REWARDS.filter( reward => reward.kind === 'ride' );
 
 // What reaching `level` gives.
 export function rewardsAt( level ) {
@@ -227,11 +237,39 @@ export function levelOnly( part, id ) {
 
 }
 
+// The level that unlocks a car (an id in catalog.js's DRIVE_CARS), or null when none does (a free
+// one, or the pass's alone).
+export function rideLevel( id ) {
+
+	return RIDES.find( reward => reward.id === id )?.level ?? null;
+
+}
+
+// What unlocks a ride ({ id, pro }, as vehicles.js lists them): null when it's free, else { level,
+// pass }: the level that does (null for the pass's alone: pro) and whether the pass does (it does
+// every ride that isn't free).
+export function rideUnlock( vehicle ) {
+
+	if ( vehicle.pro ) return { level: null, pass: true };
+	const level = rideLevel( vehicle.id );
+	return level === null ? null : { level, pass: true };
+
+}
+
+// Whether a ride can't be driven yet by someone with `access`, { pro, level }: a pass ride without
+// the pass, a level's before that level unless with the pass.
+export function rideLocked( vehicle, { pro = false, level = 1 } = {} ) {
+
+	const unlock = rideUnlock( vehicle );
+	return !! unlock && ! ( unlock.pass && pro ) && ! ( unlock.level !== null && level >= unlock.level );
+
+}
+
 // The next reward after `level`, or null at the top. pro: for a supporter, whose pass has its looks
-// already, the next that's new to them.
+// and rides already, the next that's new to them.
 export function nextReward( level, { pro = false } = {} ) {
 
-	return REWARDS.find( reward => reward.level > level && ! ( pro && reward.kind === 'look' && reward.pass ) ) ?? null;
+	return REWARDS.find( reward => reward.level > level && ! ( pro && reward.pass ) ) ?? null;
 
 }
 

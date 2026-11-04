@@ -1,5 +1,70 @@
 [
 	{
+		"id": "cyber-muscle",
+		"file": "cyber-muscle.glb",
+		"thumb": "thumbs/cyber-muscle.webp",
+		"dimensions": {
+			"length": 4.7,
+			"width": 2.46,
+			"height": 1.42
+		},
+		"wheels": [
+			{
+				"name": "wheel-front-right",
+				"at": [
+					0.95,
+					0.44,
+					-1.41
+				],
+				"radius": 0.42,
+				"steers": true
+			},
+			{
+				"name": "wheel-rear-left",
+				"at": [
+					-1.03,
+					0.47,
+					1.16
+				],
+				"radius": 0.42,
+				"steers": false
+			},
+			{
+				"name": "wheel-rear-right",
+				"at": [
+					1.03,
+					0.47,
+					1.16
+				],
+				"radius": 0.42,
+				"steers": false
+			},
+			{
+				"name": "wheel-front-left",
+				"at": [
+					-0.95,
+					0.44,
+					-1.41
+				],
+				"radius": 0.42,
+				"steers": true
+			}
+		],
+		"paintable": true,
+		"triangles": 103275,
+		"sizeKB": 982,
+		"source": {
+			"site": "Sketchfab",
+			"id": "47d7ffa796d84d1bbdebe9a007028e0e",
+			"url": "https://sketchfab.com/3d-models/futuristic-muscle-car-launch-control-ready-47d7ffa796d84d1bbdebe9a007028e0e",
+			"title": "Futuristic Muscle car (Launch Control Ready)",
+			"author": "Jungle Jim",
+			"authorUrl": "https://sketchfab.com/jungle_jim",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
 		"id": "dune-buggy",
 		"file": "dune-buggy.glb",
 		"thumb": "thumbs/dune-buggy.webp",
@@ -125,6 +190,338 @@
 			"title": "Farm pickup truck",
 			"author": "Nekitron",
 			"authorUrl": "https://sketchfab.com/nikita.nt.1998",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "formula-racer",
+		"file": "formula-racer.glb",
+		"thumb": "thumbs/formula-racer.webp",
+		"dimensions": {
+			"length": 4.6,
+			"width": 2.31,
+			"height": 1.01
+		},
+		"wheels": [
+			{
+				"name": "wheel-rear-right",
+				"at": [
+					0.87,
+					0.33,
+					1.64
+				],
+				"radius": 0.33,
+				"steers": false
+			},
+			{
+				"name": "wheel-rear-left",
+				"at": [
+					-0.87,
+					0.33,
+					1.64
+				],
+				"radius": 0.33,
+				"steers": false
+			},
+			{
+				"name": "wheel-front-left",
+				"at": [
+					-0.93,
+					0.33,
+					-1.3
+				],
+				"radius": 0.34,
+				"steers": true
+			},
+			{
+				"name": "wheel-front-right",
+				"at": [
+					0.93,
+					0.33,
+					-1.38
+				],
+				"radius": 0.34,
+				"steers": true
+			}
+		],
+		"paintable": false,
+		"leftOut": [
+			"Bolid_f1:Asphalt"
+		],
+		"triangles": 32366,
+		"sizeKB": 966,
+		"source": {
+			"site": "Sketchfab",
+			"id": "1e3caa8d9f8f4f5287ed33e1267fac33",
+			"url": "https://sketchfab.com/3d-models/stylized-formula-one-car-1e3caa8d9f8f4f5287ed33e1267fac33",
+			"title": "Stylized Formula One car",
+			"author": "TimMod",
+			"authorUrl": "https://sketchfab.com/timmod",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "golf-cart",
+		"file": "golf-cart.glb",
+		"thumb": "thumbs/golf-cart.webp",
+		"dimensions": {
+			"length": 2.4,
+			"width": 1.16,
+			"height": 1.58
+		},
+		"wheels": [
+			{
+				"name": "wheel-front-right",
+				"at": [
+					0.46,
+					0.22,
+					-0.98
+				],
+				"radius": 0.22,
+				"steers": true
+			},
+			{
+				"name": "wheel-rear-left",
+				"at": [
+					-0.46,
+					0.22,
+					0.79
+				],
+				"radius": 0.22,
+				"steers": false
+			},
+			{
+				"name": "wheel-rear-right",
+				"at": [
+					0.48,
+					0.22,
+					0.79
+				],
+				"radius": 0.22,
+				"steers": false
+			},
+			{
+				"name": "wheel-front-left",
+				"at": [
+					-0.46,
+					0.22,
+					-0.98
+				],
+				"radius": 0.22,
+				"steers": true
+			}
+		],
+		"paintable": false,
+		"triangles": 10529,
+		"sizeKB": 193,
+		"source": {
+			"site": "Sketchfab",
+			"id": "5637f77fc2fd42439b006802741c1cc0",
+			"url": "https://sketchfab.com/3d-models/golf-cart-5637f77fc2fd42439b006802741c1cc0",
+			"title": "Golf Cart",
+			"author": "pixelsquare",
+			"authorUrl": "https://sketchfab.com/pixelsquare",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "hypercar",
+		"file": "hypercar.glb",
+		"thumb": "thumbs/hypercar.webp",
+		"dimensions": {
+			"length": 4.6,
+			"width": 2.2,
+			"height": 1.17
+		},
+		"wheels": [
+			{
+				"name": "wheel-rear-left",
+				"at": [
+					-0.91,
+					0.37,
+					1.42
+				],
+				"radius": 0.37,
+				"steers": false
+			},
+			{
+				"name": "wheel-rear-right",
+				"at": [
+					0.91,
+					0.37,
+					1.42
+				],
+				"radius": 0.37,
+				"steers": false
+			},
+			{
+				"name": "wheel-front-left",
+				"at": [
+					-0.8,
+					0.35,
+					-1.22
+				],
+				"radius": 0.35,
+				"steers": true
+			},
+			{
+				"name": "wheel-front-right",
+				"at": [
+					0.8,
+					0.35,
+					-1.22
+				],
+				"radius": 0.35,
+				"steers": true
+			}
+		],
+		"paintable": false,
+		"leftOut": [
+			"car_shadow",
+			"clearcoat"
+		],
+		"triangles": 65703,
+		"sizeKB": 868,
+		"source": {
+			"site": "Sketchfab",
+			"id": "0a20e49ad5774d778567cb5c3f345786",
+			"url": "https://sketchfab.com/3d-models/fictional-supercar-v12-goblin-0a20e49ad5774d778567cb5c3f345786",
+			"title": "Fictional supercar - V12 Goblin",
+			"author": "ollitei",
+			"authorUrl": "https://sketchfab.com/ollitei",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "ice-cream-van",
+		"file": "ice-cream-van.glb",
+		"thumb": "thumbs/ice-cream-van.webp",
+		"dimensions": {
+			"length": 4.8,
+			"width": 2.4,
+			"height": 3.65
+		},
+		"wheels": [
+			{
+				"name": "wheel-rear-right",
+				"at": [
+					0.86,
+					0.34,
+					1.17
+				],
+				"radius": 0.36,
+				"steers": false
+			},
+			{
+				"name": "wheel-rear-left",
+				"at": [
+					-0.86,
+					0.34,
+					1.17
+				],
+				"radius": 0.36,
+				"steers": false
+			},
+			{
+				"name": "wheel-front-right",
+				"at": [
+					0.86,
+					0.34,
+					-1.71
+				],
+				"radius": 0.36,
+				"steers": true
+			},
+			{
+				"name": "wheel-front-left",
+				"at": [
+					-0.86,
+					0.34,
+					-1.71
+				],
+				"radius": 0.36,
+				"steers": true
+			}
+		],
+		"paintable": false,
+		"triangles": 3287,
+		"sizeKB": 50,
+		"source": {
+			"site": "Sketchfab",
+			"id": "83900ff5231944569eda3ee2bc98a230",
+			"url": "https://sketchfab.com/3d-models/ice-cream-car-low-poly-83900ff5231944569eda3ee2bc98a230",
+			"title": "Ice Cream Car Low_Poly",
+			"author": "Sidra",
+			"authorUrl": "https://sketchfab.com/Sidramax",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "lawn-tractor",
+		"file": "lawn-tractor.glb",
+		"thumb": "thumbs/lawn-tractor.webp",
+		"dimensions": {
+			"length": 2,
+			"width": 1.07,
+			"height": 1.09
+		},
+		"wheels": [
+			{
+				"name": "wheel-rear-left",
+				"at": [
+					-0.39,
+					0.32,
+					0.59
+				],
+				"radius": 0.31,
+				"steers": false
+			},
+			{
+				"name": "wheel-rear-right",
+				"at": [
+					0.39,
+					0.32,
+					0.59
+				],
+				"radius": 0.31,
+				"steers": false
+			},
+			{
+				"name": "wheel-front-left",
+				"at": [
+					-0.41,
+					0.25,
+					-0.55
+				],
+				"radius": 0.25,
+				"steers": true
+			},
+			{
+				"name": "wheel-front-right",
+				"at": [
+					0.41,
+					0.25,
+					-0.55
+				],
+				"radius": 0.25,
+				"steers": true
+			}
+		],
+		"paintable": true,
+		"triangles": 9920,
+		"sizeKB": 165,
+		"source": {
+			"site": "Sketchfab",
+			"id": "97ec916314324ed8a828176f3d310f82",
+			"url": "https://sketchfab.com/3d-models/lawn-tractor-97ec916314324ed8a828176f3d310f82",
+			"title": "Lawn Tractor",
+			"author": "mirrol",
+			"authorUrl": "https://sketchfab.com/mirrol",
 			"license": "CC Attribution",
 			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
 		}
@@ -387,6 +784,127 @@
 			"title": "LowPoly Cars Pickup, Sedan, Police, StationWagon",
 			"author": "JG3D",
 			"authorUrl": "https://sketchfab.com/jg-3d",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "retro-wedge",
+		"file": "retro-wedge.glb",
+		"thumb": "thumbs/retro-wedge.webp",
+		"dimensions": {
+			"length": 4.2,
+			"width": 2.02,
+			"height": 1.33
+		},
+		"wheels": [
+			{
+				"name": "wheel-front-left",
+				"at": [
+					-0.8,
+					0.35,
+					-1.28
+				],
+				"radius": 0.35,
+				"steers": true
+			},
+			{
+				"name": "wheel-rear-left",
+				"at": [
+					-0.8,
+					0.35,
+					1.31
+				],
+				"radius": 0.35,
+				"steers": false
+			},
+			{
+				"name": "wheel-front-right",
+				"at": [
+					0.8,
+					0.35,
+					-1.28
+				],
+				"radius": 0.35,
+				"steers": true
+			},
+			{
+				"name": "wheel-rear-right",
+				"at": [
+					0.8,
+					0.35,
+					1.31
+				],
+				"radius": 0.35,
+				"steers": false
+			}
+		],
+		"paintable": false,
+		"triangles": 6417,
+		"sizeKB": 763,
+		"source": {
+			"site": "Sketchfab",
+			"id": "55ec976f0cb347fcb7cba7912f77d907",
+			"url": "https://sketchfab.com/3d-models/stylized-low-poly-retro-sports-car-55ec976f0cb347fcb7cba7912f77d907",
+			"title": "Stylized low-poly retro sports car",
+			"author": "Serg_Stark...",
+			"authorUrl": "https://sketchfab.com/Serg_str",
+			"license": "CC Attribution",
+			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+		}
+	},
+	{
+		"id": "tuk-tuk",
+		"file": "tuk-tuk.glb",
+		"thumb": "thumbs/tuk-tuk.webp",
+		"dimensions": {
+			"length": 2.7,
+			"width": 1.27,
+			"height": 1.99
+		},
+		"wheels": [
+			{
+				"name": "wheel-front",
+				"at": [
+					0,
+					0.27,
+					-1.08
+				],
+				"radius": 0.27,
+				"steers": true
+			},
+			{
+				"name": "wheel-rear-right",
+				"at": [
+					0.48,
+					0.27,
+					0.92
+				],
+				"radius": 0.27,
+				"steers": false
+			},
+			{
+				"name": "wheel-rear-left",
+				"at": [
+					-0.48,
+					0.27,
+					0.92
+				],
+				"radius": 0.27,
+				"steers": false
+			}
+		],
+		"paintable": true,
+		"trike": true,
+		"triangles": 7284,
+		"sizeKB": 142,
+		"source": {
+			"site": "Sketchfab",
+			"id": "0d0c90ca58cc49f2bfcd43619f9e3111",
+			"url": "https://sketchfab.com/3d-models/pakistani-rickshaw-0d0c90ca58cc49f2bfcd43619f9e3111",
+			"title": "Pakistani Rickshaw",
+			"author": "aminzafar",
+			"authorUrl": "https://sketchfab.com/aminzafar",
 			"license": "CC Attribution",
 			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
 		}
