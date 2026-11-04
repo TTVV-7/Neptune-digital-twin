@@ -149,6 +149,8 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin } ) {
 					note.replaceChildren( `The ${ vehicle.name.toLowerCase() } comes at level ${ unlock.level }: you're level ${ getLevel() }. Drive on, or get it now with the `,
 						Object.assign( document.createElement( 'button' ), { type: 'button', className: 'link', textContent: 'Supporter Pass', onclick: () => openPass() } ), '.' );
 					note.hidden = false;
+					// Under three rows of rides it can be below the panel's fold: brought into view.
+					note.scrollIntoView( { block: 'nearest' } );
 					return;
 
 				}

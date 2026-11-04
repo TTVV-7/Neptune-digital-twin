@@ -1149,7 +1149,7 @@ const SMALL = [ 'golf-cart', 'tuk-tuk', 'lawn-tractor' ];
 // each by something that turns round with the car: narrower, the steering axle's track narrower
 // than the rear's; smaller, its tyres smaller; short-nose, the front overhang (nose to front axle)
 // shorter than the rear's; long-nose, longer; lone, a three-wheeler's lone wheel steers;
-// tail-high, the body highest behind the middle (a roof set back, a wing).
+// tail-high, the body highest behind the middle (a roof set back, a wing: peak, from its model).
 const span = ( wheels, along ) => Math.max( ...wheels.map( wheel => along( wheel ) ) );
 const FACTS = {
 	narrower: car => span( car.wheels.filter( w => w.steers ), w => Math.abs( w.at[ 0 ] ) ) < span( car.wheels.filter( w => ! w.steers ), w => Math.abs( w.at[ 0 ] ) ) * 0.95,
@@ -1157,7 +1157,7 @@ const FACTS = {
 	'short-nose': car => overhangs( car ).front < overhangs( car ).rear * 0.85,
 	'long-nose': car => overhangs( car ).front > overhangs( car ).rear * 1.15,
 	lone: car => car.wheels.filter( w => w.steers ).length === 1,
-	'tail-high': car => car.peak === undefined || car.peak > 0.1 * car.dimensions.length,
+	'tail-high': car => car.peak > 0.1 * car.dimensions.length,
 };
 const FACING = {
 	'dune-buggy': [ 'narrower' ],
@@ -1220,7 +1220,7 @@ describe( 'World Drive\'s cars', () => {
 
 	after( () => page?.context().close() );
 
-	test( 'each is listed and credited, small enough, its real size, with four wheels and the front two steering', () => {
+	test( 'each is listed and credited, small enough, its real size, with four wheels and the front two steering, facing the way it drives', async () => {
 
 		assert.deepEqual( CAR_SPECS.map( car => car.id ), DRIVE_CARS );
 		assert.deepEqual( CAR_SPECS.map( car => car.name ), CARS );
@@ -1238,6 +1238,8 @@ describe( 'World Drive\'s cars', () => {
 			assert.ok( [ 'CC Attribution', 'CC0 Public Domain' ].includes( car.source.license ), car.id );
 			assert.match( car.source.url, /^https:\/\/sketchfab\.com\/3d-models\//, car.id );
 			assert.ok( credits.includes( car.source.url ) && credits.includes( car.source.author ) && credits.includes( car.source.licenseUrl ), car.id );
+			// What was changed, as CC BY asks: a real place's number plate painted over (--blank), say.
+			if ( car.paintedOver ) assert.ok( credits.includes( `its ${ car.paintedOver.join( ' and ' ) } painted over` ), car.id );
 			// A car's size; the small odd ones (the golf cart, the tuk-tuk, the lawn tractor) shorter,
 			// and the ice-cream van taller, its cone standing on its roof.
 			const { length, width, height } = car.dimensions;
@@ -1262,24 +1264,15 @@ describe( 'World Drive\'s cars', () => {
 			// The importer always makes the -z axle steer, so a car imported back to front still passes
 			// the checks above (the dune buggy was, at first). Each car since is checked by something
 			// about it that turns round with it, seen when it was imported (FACING).
-			for ( const fact of FACING[ car.id ] ?? [] ) assert.ok( FACTS[ fact ]( car ), `${ car.id } faces the wrong way: not ${ fact } (${ JSON.stringify( car.wheels ) })` );
+			if ( FACING[ car.id ]?.includes( 'tail-high' ) ) car.peak = await peakOf( new URL( car.file, folder ) );
+			for ( const fact of FACING[ car.id ] ?? [] ) assert.ok( FACTS[ fact ]( car ), `${ car.id } faces the wrong way: not ${ fact } (${ JSON.stringify( { wheels: car.wheels, peak: car.peak } ) })` );
 
 		}
 
+		// The hypercar came with a real place's number plate (New York's), painted over.
+		assert.deepEqual( listed.find( car => car.id === 'hypercar' ).paintedOver, [ 'number plate' ] );
 		// Every car but the five that came before the dune buggy's lesson has its facts.
 		for ( const id of DRIVE_CARS ) assert.ok( FACING[ id ] || [ 'muscle-car', 'neon-racer', 'night-cruiser', 'farm-truck', 'police-cruiser' ].includes( id ), `${ id } has nothing to tell its front by` );
-
-	} );
-
-	test( 'each faces the way it drives: its body highest where it was seen to be', async () => {
-
-		// What FACTS[ 'tail-high' ] needs: where the body is highest, from its model.
-		for ( const car of listed.filter( car => FACING[ car.id ]?.includes( 'tail-high' ) ) ) {
-
-			car.peak = await peakOf( new URL( car.file, folder ) );
-			assert.ok( FACTS[ 'tail-high' ]( car ), `${ car.id } faces the wrong way: its highest point is at z = ${ car.peak }` );
-
-		}
 
 	} );
 
@@ -1306,6 +1299,7 @@ describe( 'World Drive\'s cars', () => {
 			const name = CAR_SPECS.find( spec => spec.id === car.id ).name;
 			const line = lines.find( text => text.startsWith( `${ name }:` ) );
 			assert.ok( line?.includes( car.source.title ) && line.includes( `by ${ car.source.author }` ) && line.includes( 'its wheels made to turn' ), `${ name }: ${ line }` );
+			if ( car.paintedOver ) assert.ok( line.includes( `its ${ car.paintedOver.join( ' and ' ) } painted over` ), `${ name }: ${ line }` );
 			assert.equal( await page.locator( `#about .credits a[href="${ car.source.url }"]` ).count(), 1, name );
 
 		}

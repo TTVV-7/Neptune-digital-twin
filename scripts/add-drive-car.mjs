@@ -4,7 +4,7 @@
 //   npm run add-drive-car -- <sketchfab url | uid> --id dune-buggy --length 4.2 [--front=+z] \
 //     [--up=+z] [--max-texture 1024] [--simplify 0.5] [--lit] [--paint Body,Trim] [--rims Rim] \
 //     [--part Car02] [--leave Shadow,Ground] [--tyres Tyre] [--trike] [--lamps TailLamp] \
-//     [--file local.glb] [--credit "Decal by ..."]
+//     [--blank "number plate=Body:0.15,0.14,0.23,0.24"] [--file local.glb] [--credit "Decal by ..."]
 //
 // Like add-asset.mjs, which fills the construction app's library: only downloadable Sketchfab
 // models under CC0 or CC Attribution, compressed (meshopt geometry, WebP textures no bigger than
@@ -32,6 +32,10 @@
 //   are rims (only inside the wheels): see paint.js. A textured model has none.
 // - --lamps names the materials of lamps drawn as a real maker draws theirs (three bars a side, say,
 //   which is that maker's mark): each side's become one plain lamp, the box round them.
+// - --blank paints over a patch of a material's pictures, every one it has (its colour, normals and
+//   the rest), with the colour just round the patch: a real place's number plate, say, or a
+//   sticker. "what=Material:u0,v0,u1,v1", the patch's corners as shares of the picture from its top
+//   left; what it was goes in the credits ("its number plate painted over"). It may be given again.
 //
 // The model's description is printed: read it for anyone else to credit (--credit) and for extra
 // conditions. Names, blurbs and handling are World Drive's own, in src/drive-app/cars.js.
@@ -87,6 +91,7 @@ const { values: opts, positionals } = parseArgs( {
 		tyres: { type: 'string' },
 		trike: { type: 'boolean' },
 		lamps: { type: 'string' },
+		blank: { type: 'string', multiple: true },
 		file: { type: 'string' },
 		credit: { type: 'string' },
 	},
@@ -107,6 +112,14 @@ const rims = new Set( opts.rims?.split( ',' ).map( name => name.trim() ) ?? [] )
 const lamps = new Set( opts.lamps?.split( ',' ).map( name => name.trim() ) ?? [] );
 const leave = new Set( opts.leave?.split( ',' ).map( name => name.trim() ) ?? [] );
 const tyreNames = new Set( opts.tyres?.split( ',' ).map( name => name.trim() ) ?? [] );
+const blanks = ( opts.blank ?? [] ).map( spec => {
+
+	const [ , what, material, box ] = spec.match( /^([^=]+)=(.+):([\d.]+(?:,[\d.]+){3})$/ ) ?? fail( `--blank ${ spec }: give it as "what=Material:u0,v0,u1,v1", say "number plate=Body:0.15,0.14,0.23,0.24".` );
+	const [ u0, v0, u1, v1 ] = box.split( ',' ).map( Number );
+	if ( ! ( u0 < u1 && v0 < v1 && u1 <= 1 && v1 <= 1 ) ) fail( `--blank ${ spec }: the patch's corners are shares of the picture, the first above and left of the second.` );
+	return { what: what.trim(), material, box: [ u0, v0, u1, v1 ] };
+
+} );
 
 await MeshoptEncoder.ready;
 await MeshoptDecoder.ready;
@@ -135,6 +148,16 @@ if ( opts.lit ) {
 		material.setExtension( 'KHR_materials_unlit', null ).setRoughnessFactor( 0.75 ).setMetallicFactor( 0 );
 
 	}
+
+}
+
+// Patches of its pictures painted over (--blank), in every picture its material has.
+for ( const { material: name, box } of blanks ) {
+
+	const material = root.listMaterials().find( m => m.getName() === name ) ?? fail( `--blank: there's no material called ${ name }: it has ${ root.listMaterials().map( m => m.getName() ).join( ', ' ) }.` );
+	const textures = root.listTextures().filter( texture => texture.listParents().some( parent => parent === material || parent.listParents().includes( material ) ) );
+	if ( ! textures.length ) fail( `--blank: ${ name } has no pictures to paint over.` );
+	for ( const texture of textures ) texture.setImage( await paintOver( texture.getImage(), box ) ).setMimeType( 'image/png' );
 
 }
 
@@ -369,6 +392,8 @@ const entry = {
 	// Its lamps made plain (--lamps), and what was left out of it (--leave), which the credits say.
 	...( plain.length ? { plainLamps: true } : {} ),
 	...( leave.size ? { leftOut: [ ...leave ] } : {} ),
+	// What was painted over (--blank).
+	...( blanks.length ? { paintedOver: [ ...new Set( blanks.map( blank => blank.what ) ) ] } : {} ),
 	triangles,
 	sizeKB: Math.round( output.byteLength / 1024 ),
 	source,
@@ -627,12 +652,41 @@ async function fromSketchfab( id ) {
 
 }
 
+// A picture (PNG, JPEG or WebP bytes) with the patch `box` (u0, v0, u1, v1: shares of it from its
+// top left) filled with the average of the pixels in a thin ring round it, as PNG.
+async function paintOver( image, [ u0, v0, u1, v1 ] ) {
+
+	const { data, info } = await sharp( image ).ensureAlpha().raw().toBuffer( { resolveWithObject: true } );
+	const { width, height } = info;
+	const x0 = Math.floor( u0 * width ), x1 = Math.ceil( u1 * width ), y0 = Math.floor( v0 * height ), y1 = Math.ceil( v1 * height );
+	const ring = Math.max( 2, Math.round( Math.min( width, height ) / 256 ) );
+	const sum = [ 0, 0, 0, 0 ];
+	let count = 0;
+	for ( let y = Math.max( 0, y0 - ring ); y < Math.min( height, y1 + ring ); y ++ ) {
+
+		for ( let x = Math.max( 0, x0 - ring ); x < Math.min( width, x1 + ring ); x ++ ) {
+
+			if ( x >= x0 && x < x1 && y >= y0 && y < y1 ) continue;
+			for ( let c = 0; c < 4; c ++ ) sum[ c ] += data[ ( y * width + x ) * 4 + c ];
+			count ++;
+
+		}
+
+	}
+
+	const fill = sum.map( total => Math.round( total / Math.max( 1, count ) ) );
+	for ( let y = y0; y < y1; y ++ ) for ( let x = x0; x < x1; x ++ ) data.set( fill, ( y * width + x ) * 4 );
+	return new Uint8Array( await sharp( data, { raw: { width, height, channels: 4 } } ).png().toBuffer() );
+
+}
+
 function credits( list ) {
 
 	const lines = list.map( car => `- \`${ car.file }\`: ${ car.part ? 'one car from ' : '' }"[${ car.source.title }](${ car.source.url })" by ` +
 		`${ car.source.authorUrl ? `[${ car.source.author }](${ car.source.authorUrl })` : car.source.author } on ${ car.source.site }, ` +
 		`licensed [${ car.source.license }](${ car.source.licenseUrl }).${ car.source.extraCredit ? ` ${ car.source.extraCredit }.` : '' } ` +
-		`Compressed, rescaled${ car.plainLamps ? ', its lamps made plain' : '' }${ car.leftOut ? `, ${ car.leftOut.join( ' and ' ) } left out` : '' } and its wheels made separate parts for World Drive.` );
+		`Compressed, rescaled${ car.plainLamps ? ', its lamps made plain' : '' }${ car.paintedOver ? `, its ${ car.paintedOver.join( ' and ' ) } painted over` : '' }` +
+		`${ car.leftOut ? `, ${ car.leftOut.join( ' and ' ) } left out` : '' } and its wheels made separate parts for World Drive.` );
 	return '# World Drive cars: credits\n\nThese models come from Sketchfab under the licences listed, and are published with World Drive ' +
 		'only (not the construction app\'s library). Keep this file with them; World Drive also credits each in its About box and ' +
 		`its ride picker. The rides built in code (src/kart.js, src/drive-app/rides/) are part of this project.\n\n${ lines.join( '\n' ) }\n`;

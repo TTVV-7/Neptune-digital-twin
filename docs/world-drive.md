@@ -1239,10 +1239,10 @@ level-only colours.
   Without a nickname, "Your progress is kept in this browser. Pick a nickname to save it."
 - **The ride pickers**: a level's car, while it's locked, wears "Lv 8 · or Pass" where the pass's
   own wear its badge; picked, it says "The tuk-tuk comes at level 8: you're level 3. Drive on, or get
-  it now with the Supporter Pass." under the rides (the pass's opens its sheet), and the ride
-  doesn't change. From that level on it's driven like any other; one saved before is the go-kart
-  until then, as a pass ride is without the pass. The Garage's tab for it says "Lv 8" and its
-  banner "Comes at level 8, or with the ⭐ Supporter Pass".
+  it now with the Supporter Pass." under the rides, the panel scrolling to it (the pass's opens its
+  sheet), and the ride doesn't change. From that level on it's driven like any other; one saved
+  before is the go-kart until then, as a pass ride is without the pass. The Garage's tab for it says
+  "Lv 8" and its banner "Comes at level 8, or with the ⭐ Supporter Pass".
 - **The Garage**: each locked choice says what unlocks it: "Lv 12 · or Pass" (a swatch, being
   small, only "Lv 12"), "Pass", or "Lv 25" for a level-only colour, with the whole sentence as its
   tooltip. Picking one the pass unlocks opens the pass's sheet; a level-only one says "Copper comes
@@ -1493,7 +1493,7 @@ rides scrolls to the one shown.
 | Tuk-tuk (level 8) | "Pakistani Rickshaw" by aminzafar | 2.7 × 1.3 m, 2.0 m tall, three wheels | 85 km/h | Slow and nimble: turning almost on the spot, leaning hard out of every turn, over on its side from a landing more than 26° off upright (a car takes 40°) and spun round hardest by a knock; its green panels take the Garage's paint |
 | Ice-cream van (level 15) | "Ice Cream Car Low_Poly" by Sidra | 4.8 × 2.4 m, 3.6 m tall with its cone | 120 km/h | 0 to 100 in 7.3 s, swaying, turning wide (84°/s at 50 km/h), barely thrown up, squashing and shaking when it hits something |
 | Lawn tractor (level 22) | "Lawn Tractor" by mirrol | 2.0 × 1.1 m | 60 km/h | The slowest of all, turning on the spot at walking pace (200°/s), light enough to be thrown high and bounce when it lands; plain orange paint, so the Garage repaints it |
-| Retro wedge (level 30) | "Stylized low-poly retro sports car" by Serg_str | 4.2 × 2.0 m | 190 km/h | 0 to 100 in 2.9 s. Light at the back: gripping well until the tail steps out into long drifts |
+| Retro wedge (level 30) | "Stylized low-poly retro sports car" by Serg_Stark... (Serg_str) | 4.2 × 2.0 m | 190 km/h | 0 to 100 in 2.9 s. Light at the back: gripping well until the tail steps out into long drifts |
 | Formula racer (level 40) | "Stylized Formula One car" by TimMod | 4.6 × 2.3 m, 1.0 m tall | 210 km/h | 0 to 100 in 2.5 s; grips hardest, turns in sharpest at speed (the most of anything at 50 km/h) and stops hardest, but its lock is a racer's |
 | Neon racer | "Green Bug Stylized Scifi Car Free" by ferofluid | 4.3 × 2.3 m | 185 km/h | 0 to 100 in 2.5 s, the quickest of the first six cars; grips hard and turns in sharply (131°/s at 50 km/h) |
 | Night cruiser | "Blade Air Stylized Scifi Car Free" by ferofluid | 4.6 × 2.1 m | 205 km/h | 0 to 100 in 3.8 s. Long-legged and heavy: slow to turn, rolls on and on off the gas, thrown less by a hit |
@@ -1552,6 +1552,10 @@ test's `FACING`. The importer:
   `--lit` shades a model drawn unlit, as the rest of the world is;
 - `--lamps` names the material of lamps drawn as a real maker draws theirs (three bars a side is one
   maker's mark): each side's become one plain lamp, the box round them, and the credits say so;
+- `--blank "number plate=car_body:0.148,0.137,0.231,0.243"` paints over a patch of a material's
+  pictures (a real place's number plate, a sticker), in every picture it has (colour, normals and
+  the rest), with the colour just round it: the patch's corners as shares of the picture from its
+  top left, found by looking at the picture. The credits say what was painted over;
 - compresses it (meshopt, WebP textures up to `--max-texture`, 1024; `--simplify` if it's heavy).
 
 The muscle car, say, was `--id muscle-car --length 4.7 --front=+z --paint Material --rims Material.001
@@ -1565,7 +1569,7 @@ The muscle car, say, was `--id muscle-car --length 4.7 --front=+z --paint Materi
 | Lawn tractor | `--id lawn-tractor --length 2 --front=+z --paint Cart_Color --rims Tire_2` |
 | Retro wedge | `--id retro-wedge --length 4.2 --front=+z` |
 | Formula racer | `--id formula-racer --length 4.6 --front=+z --leave Bolid_f1:Asphalt --tyres lambert2` |
-| Hypercar | `--id hypercar --length 4.6 --front=-z --leave car_shadow,clearcoat` (the clearcoat is a second skin over the body that the conversion of its old spec/gloss materials made opaque black) |
+| Hypercar | `--id hypercar --length 4.6 --front=-z --leave car_shadow,clearcoat --blank "number plate=car_body:0.148,0.137,0.231,0.243"` (the clearcoat is a second skin over the body that the conversion of its old spec/gloss materials made opaque black; the patch is its New York plate, in the corner of its body's pictures) |
 | Cyber muscle | `--id cyber-muscle --length 4.7 --front=+z --paint Body_gameasset_Mat_1` |
 
 Look at a new car in the Garage and from its driver's seat (C) to check which way it faces: by its
@@ -1604,9 +1608,9 @@ wheels couldn't be made to turn, and other people's concepts:
 | [Dune Buggy "jump"](https://sketchfab.com/3d-models/dune-buggy-jump-c9838cac69904010923d5024168b0893) | XP_Frost | ✔ Dune buggy: a tube-frame buggy of no make (a race number only); wheels separated by shape; 29,000 |
 | [Farm pickup truck](https://sketchfab.com/3d-models/farm-pickup-truck-5615b16ba2e24f7ab6cd26eda7946ae8) | Nekitron | ✔ Farm truck: a hand-painted old truck of no make, separate wheels; 5,400 |
 | [LowPoly Cars Pickup, Sedan, Police, StationWagon](https://sketchfab.com/3d-models/lowpoly-cars-pickup-sedan-police-stationwagon-8fb25f8fc1064f4d88a98294c757eef5) | JG3D | ✔ Police cruiser (its police car only): generic livery with no words or crest, blank plates; 6,000 |
-| [Fictional supercar - V12 Goblin](https://sketchfab.com/3d-models/fictional-supercar-v12-goblin-0a20e49ad5774d778567cb5c3f345786) | ollitei | ✔ Hypercar: the author's own design ("a fictional car design project"), wheels separate; a shadow plane and a clearcoat skin left out; 66,000 |
+| [Fictional supercar - V12 Goblin](https://sketchfab.com/3d-models/fictional-supercar-v12-goblin-0a20e49ad5774d778567cb5c3f345786) | ollitei | ✔ Hypercar: the author's own design ("a fictional car design project"), its badge the design's own, wheels separate; a shadow plane and a clearcoat skin left out, and its New York number plate (with the author's web address on it) painted over (`--blank`); 66,000 |
 | [Stylized Formula One car](https://sketchfab.com/3d-models/stylized-formula-one-car-1e3caa8d9f8f4f5287ed33e1267fac33) | TimMod | ✔ Formula racer: an open-wheeler of no team, in plain bronze, no sponsors or numbers; the patch of ground it stands on left out; 32,000 |
-| [Stylized low-poly retro sports car](https://sketchfab.com/3d-models/stylized-low-poly-retro-sports-car-55ec976f0cb347fcb7cba7912f77d907) | Serg_str | ✔ Retro wedge: a generic 1980s pop-up-lamp coupe, no badges or plates; 6,400 |
+| [Stylized low-poly retro sports car](https://sketchfab.com/3d-models/stylized-low-poly-retro-sports-car-55ec976f0cb347fcb7cba7912f77d907) | Serg_Stark... (Serg_str) | ✔ Retro wedge: a generic 1980s wedge coupe, louvres over its back window, no badges or plates; 6,400 |
 | [Futuristic Muscle car (Launch Control Ready)](https://sketchfab.com/3d-models/futuristic-muscle-car-launch-control-ready-47d7ffa796d84d1bbdebe9a007028e0e) | Jungle Jim | ✔ Cyber muscle: an original cyberpunk muscle car, separate wheels, plain black panels; 103,000 |
 | [Golf Cart](https://sketchfab.com/3d-models/golf-cart-5637f77fc2fd42439b006802741c1cc0) | pixelsquare | ✔ Golf cart: a chunky blue cart of no make; 10,500 |
 | [Pakistani Rickshaw](https://sketchfab.com/3d-models/pakistani-rickshaw-0d0c90ca58cc49f2bfcd43619f9e3111) | aminzafar | ✔ Tuk-tuk: a generic three-wheeled rickshaw in plain colours (a blank plate), each wheel its own part; 7,300 |
@@ -1730,7 +1734,8 @@ turning in the air faster than the kart, each ride going supersonic, the boost s
 every style drawn at 150 km/h (with a picture of each), making nothing new in a minute of boosting
 and timed, and the Garage and the locked rides' badges (and the levels' cars' "Lv 8 · or Pass") on a
 phone. And the cars: each listed in `cars.json`, `cars.js` and `DRIVE_CARS` alike, one free, six
-levels' and the rest the pass's, under 2 MB, CC BY or CC0 and in `CREDITS.md`, its real size (the
+levels' and the rest the pass's, under 2 MB, CC BY or CC0 and in `CREDITS.md` (with what was
+painted over: the hypercar's number plate, there and in About), its real size (the
 small odd ones shorter, the ice-cream van taller with its cone), with four wheels (the tuk-tuk
 three) and the front ones steering, facing the way it drives (`FACING`, above); without the pass
 the muscle car free, pictured, credited under the picker and in About (all fourteen, with links),
@@ -2465,7 +2470,7 @@ domain, naturalearthdata.com), from its GitHub copy. Place search © OpenStreetM
 trucks and the cars are models from Sketchfab under CC BY 4.0, credited under **About World Drive**
 and on the ride picker (and the cars in `drive/public/cars/CREDITS.md`): the muscle car by Lexyc16,
 the golf cart by pixelsquare, the tuk-tuk by aminzafar, the ice-cream van by Sidra, the lawn tractor
-by mirrol, the retro wedge by Serg_str, the formula racer by TimMod, the neon racer and the night
+by mirrol, the retro wedge by Serg_Stark... (Serg_str), the formula racer by TimMod, the neon racer and the night
 cruiser by ferofluid, the dune buggy by XP_Frost, the farm truck by Nekitron, the police cruiser by
 JG3D, the hypercar by ollitei and the cyber muscle car by Jungle Jim. The go-kart and the pass's
 rides are built in code.

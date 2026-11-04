@@ -383,8 +383,11 @@
 			"car_shadow",
 			"clearcoat"
 		],
+		"paintedOver": [
+			"number plate"
+		],
 		"triangles": 65703,
-		"sizeKB": 868,
+		"sizeKB": 866,
 		"source": {
 			"site": "Sketchfab",
 			"id": "0a20e49ad5774d778567cb5c3f345786",

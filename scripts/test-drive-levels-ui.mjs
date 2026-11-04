@@ -714,6 +714,8 @@ describe( 'World Drive levels: the cars they bring', () => {
 			await card( page, 'Tuk-tuk' ).click();
 			const note = page.locator( '#globe-ui .ride-note' );
 			assert.equal( await note.textContent(), 'The tuk-tuk comes at level 8: you\'re level 7. Drive on, or get it now with the Supporter Pass.' );
+			// In view, though it's under three rows of rides: the panel scrolled to it.
+			assert.ok( await note.evaluate( element => element.getBoundingClientRect().bottom <= element.closest( '.panel' ).getBoundingClientRect().bottom ), 'the note is below the fold' );
 			assert.equal( await page.locator( '#globe-ui .vehicle.picked b' ).textContent(), 'Go-kart' );
 			await shot( page, 'levels-ride-locked' );
 			await note.locator( 'button', { hasText: 'Supporter Pass' } ).click();

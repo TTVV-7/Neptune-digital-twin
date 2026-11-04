@@ -540,19 +540,21 @@ unlock six new cars (a golf cart at level 5, a tuk-tuk at 8, an ice-cream van at
 at 22, a retro wedge at 30 and a formula racer at 40), about half the Supporter Pass's Garage looks
 on the way to 40, and titles for your nametag, a level badge whose frame changes every ten levels
 and four colours that only levels give. While driving a slim XP bar shows under the place's name,
-with "+46 XP · 1.4 km" pop-ups and a burst at
-each level-up; the globe's panel has a profile card with the whole track. XP is kept with the
+with "+46 XP · 1.4 km" pop-ups and a burst at each level-up; the globe's panel has a profile card
+with the whole track. XP is kept with the
 leaderboard nickname in D1 (an account showing its best nickname's level), or in the browser until
 you pick one, which claims it. The Worker caps each report by the time since the last
 (`worker/drive/progress.js`, sharing its rules with the page in `src/drive-app/levels.js`), on a
 rate limiter rather than a Durable Object (see [Levels](docs/world-drive.md#levels)).
 
 World Drive's fourteen cars are models from Sketchfab (CC BY, credited in its About box and ride
-picker), kept out of the construction app's library: `npm run add-drive-car` imports one into
-`drive/public/cars/`, which only World Drive's build publishes, finding its wheels so they spin and
-steer (a three-wheeler's too, and standing up a model saved lying down), and `npm run
-drive-car-thumbs` draws its picture for the picker (see
-[World Drive's cars](docs/world-drive.md#world-drives-cars)).
+picker): sports cars and supercars (a retro wedge, a formula racer, a hypercar, a cyber muscle car)
+and fun and odd rides (a golf cart, a tuk-tuk, an ice-cream van, a lawn tractor) among them, each
+with handling of its own. They're kept out of the construction app's library: `npm run
+add-drive-car` imports one into `drive/public/cars/`, which only World Drive's build publishes,
+finding its wheels so they spin and steer (a three-wheeler's too, and standing up a model saved
+lying down, or painting over a real place's number plate), and `npm run drive-car-thumbs` draws its
+picture for the picker (see [World Drive's cars](docs/world-drive.md#world-drives-cars)).
 
 A **Supporter Pass** (one payment of CA$4.99 towards the running costs) unlocks seventeen more
 rides: the six cars levels bring, at once; seven cars of its own (a neon racer, a night cruiser, a

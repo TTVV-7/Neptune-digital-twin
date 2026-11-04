@@ -254,8 +254,8 @@ dialog#pass {
 	color: var( --muted );
 }
 
-/* All in one row, however many, so the sheet stays short. */
-/* Seventeen rides: two rows of them, so each picture is still big enough to make out. */
+/* Seventeen rides: two rows of them, so the sheet stays short and each picture is still big
+   enough to make out. */
 #pass .ride-icons {
 	display: grid;
 	grid-template-columns: repeat( 9, minmax( 0, 1fr ) );

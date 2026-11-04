@@ -129,12 +129,12 @@ export const CARS = [
 		drive: {
 			topSpeed: 185, accel: 12.5, brake: 20, reverse: 30,
 			cab: { ahead: 0.05, right: - 0.38, up: 1.25 },
-			// Quick away, gripping hard, turning in fastest of the cars.
+			// Quick away, gripping hard, turning in fastest of the first cars.
 			handling: { grip: 17, slip: 2.3, driftYaw: [ 44, 120 ], turn: [ 168, 72 ], lock: 38, drag: 0.85 },
 		},
 	},
 	{
-		id: 'night-cruiser', name: 'Night cruiser', blurb: 'Fastest, heavy, glides', pro: true,
+		id: 'night-cruiser', name: 'Night cruiser', blurb: 'Long-legged, heavy, glides', pro: true,
 		drive: {
 			topSpeed: 205, accel: 8, brake: 14, reverse: 26,
 			cab: { ahead: 0.05, right: - 0.36, up: 1.15 },
@@ -225,7 +225,7 @@ export async function loadCars() {
 		thumb: entry.thumb ? new URL( `${ BASE }${ entry.thumb }`, document.baseURI ).href : null,
 		credit: entry.source,
 		// What was done to it, for the credits: CC BY asks for that to be said.
-		changes: `compressed, rescaled${ entry.plainLamps ? ', its lamps made plain' : '' } and its wheels made to turn`,
+		changes: `compressed, rescaled${ entry.plainLamps ? ', its lamps made plain' : '' }${ entry.paintedOver ? `, its ${ entry.paintedOver.join( ' and ' ) } painted over` : '' } and its wheels made to turn`,
 		topSpeed: car.drive.topSpeed,
 		load: loader => loadCar( loader, car, entry ),
 		item: { ...car, file: entry.file },
@@ -255,7 +255,8 @@ export async function loadCar( loader, car, entry ) {
 	} );
 
 	// A body that leans (lean) does so in a group of its own, its wheels staying on the road; its
-	// decals go in that group too, to lean with it.
+	// decals go in that group too, to lean with it. It's marked, so what leans can be found (the
+	// cars' test looks for it).
 	let sprung = body;
 	if ( car.drive?.lean && body?.isMesh ) {
 
