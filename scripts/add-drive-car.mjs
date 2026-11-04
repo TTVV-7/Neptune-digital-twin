@@ -689,7 +689,10 @@ function credits( list ) {
 		`${ car.leftOut ? `, ${ car.leftOut.join( ' and ' ) } left out` : '' } and its wheels made separate parts for World Drive.` );
 	return '# World Drive cars: credits\n\nThese models come from Sketchfab under the licences listed, and are published with World Drive ' +
 		'only (not the construction app\'s library). Keep this file with them; World Drive also credits each in its About box and ' +
-		`its ride picker. The rides built in code (src/kart.js, src/drive-app/rides/) are part of this project.\n\n${ lines.join( '\n' ) }\n`;
+		`its ride picker. The rides built in code (src/kart.js, src/drive-app/rides/) are part of this project.\n\n${ lines.join( '\n' ) }\n` +
+		// The site's link pictures (scripts/drive-site-images.mjs) show the muscle car, credited here too.
+		'\nThe muscle car, drawn as World Drive draws it, is also the car on the pictures links to the site unfurl with ' +
+		'(`../og/`, `scripts/drive-site-images.mjs`).\n';
 
 }
 

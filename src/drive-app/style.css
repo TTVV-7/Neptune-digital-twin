@@ -298,6 +298,73 @@ button.primary:active,
 	margin: 8px 2px 0;
 }
 
+/* What World Drive is, at the foot of the panel (drive/index.html's .site-info). */
+#globe-ui .site-info {
+	margin-top: 22px;
+	padding-top: 14px;
+	border-top: 1px solid var( --line );
+	font-size: 13px;
+	line-height: 1.5;
+	color: var( --muted );
+}
+
+#globe-ui .site-info h2 {
+	margin: 0 0 8px;
+	font-size: 15px;
+	letter-spacing: 0;
+	text-transform: none;
+	color: var( --ink );
+}
+
+#globe-ui .site-info h3 {
+	margin: 16px 0 6px;
+	font-size: 12px;
+	font-weight: 800;
+	letter-spacing: 1.2px;
+	text-transform: uppercase;
+}
+
+#globe-ui .site-info p,
+#globe-ui .site-info ul,
+#globe-ui .site-info dl {
+	margin: 0 0 8px;
+}
+
+#globe-ui .site-info ul {
+	padding-left: 18px;
+}
+
+#globe-ui .site-info li {
+	margin-bottom: 4px;
+}
+
+#globe-ui .site-info b,
+#globe-ui .site-info dt {
+	color: var( --ink );
+	font-weight: 700;
+}
+
+#globe-ui .site-info dd {
+	margin: 2px 0 10px;
+}
+
+#globe-ui .site-info .site-places {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 12px;
+	padding: 0;
+	list-style: none;
+}
+
+#globe-ui .site-info .site-places li {
+	margin: 0;
+}
+
+#globe-ui .site-info kbd {
+	min-width: 0;
+	font-size: 10px;
+}
+
 /* The pin on the globe, and its card. */
 #pin {
 	position: fixed;
@@ -675,6 +742,14 @@ body.touch #pause kbd {
 	margin: 18px 0 14px;
 	color: var( --muted );
 	font-weight: 600;
+}
+
+/* What World Drive is, under its name while it starts: on the screen at once, before the game's
+   code has arrived (the largest thing the first paint shows, so the page counts as loaded then). */
+#splash .pitch {
+	margin: 14px 0 0;
+	font-size: 16px;
+	line-height: 1.45;
 }
 
 /* A dashed road line rolling by while World Drive starts. */

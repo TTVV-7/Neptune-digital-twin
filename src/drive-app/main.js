@@ -1,4 +1,3 @@
-import './style.css';
 import { Color, MathUtils, Matrix4, PerspectiveCamera, Quaternion, Scene, Timer, Vector3, WebGLRenderer } from 'three';
 import { addLights, createGoogleTiles, createPlaceholderGround, recentreTiles } from '../world.js';
 import { ModelManager } from '../models.js';
@@ -7,7 +6,6 @@ import { isTyping } from '../walk.js';
 import { useFastRaycast } from '../raycast.js';
 import { enuToLocal, localToLatLon } from '../geo.js';
 import { createDriveHud } from '../drive-hud.js';
-import { getConfig, startVisit } from './api.js';
 import { GlobeView } from './globe.js';
 import { Ground } from './spawn.js';
 import { createTestGlobe, placeEarth } from './test-globe.js';
@@ -25,7 +23,7 @@ import { onProChange } from './pro.js';
 import { applyLook } from './paint.js';
 import { createProgress, onLevelChange } from './progress.js';
 import { setUpProfile } from './profile.js';
-import { formatLatLon, rememberPlace } from './places.js';
+import { formatLatLon, LINK_PARAMS, linkedPlace, rememberPlace } from './places.js';
 import { createLive, flagsOf, velocityOf } from './live.js';
 import { createGhosts } from './ghosts.js';
 import { BUDGET_TOAST, setUpFriends } from './friends.js';
@@ -36,14 +34,12 @@ import * as screens from './screens.js';
 // World Drive (worlddrive.app, docs/world-drive.md): pick anywhere on Earth from a globe of
 // Google's photorealistic 3D tiles, drop in and drive it. One page load is one Google Maps session
 // (the root tileset is loaded once), so flying off somewhere else never reloads the tiles: the
-// scene is recentred on each new place instead (recentre below).
+// scene is recentred on each new place instead (recentre below). boot.js, the page's first script,
+// asks for the visit while this loads, then calls start.
 //
 // Modes: 'globe' (the globe and its panel), 'dropping' (flying down and waiting for the ground),
 // 'driving' and 'paused'. M goes back to the globe from any of the others.
 
-// Only the dev server has this (vite.drive.config.js): a key from the environment, for driving on
-// Google's tiles without the Worker. The built site always asks the Worker.
-const DEV_KEY = __DEV_MAPS_KEY__;
 const SKY = new Color( 0x9fcbee );
 const SPACE = new Color( 0x070c16 );
 // Field of view on the globe, and driving; supersonic (drive.js), the view widens by this much more,
@@ -117,61 +113,12 @@ const _side = new Vector3();
 const _ahead = new Vector3();
 const _velocity = new Vector3();
 
-boot();
-
-async function boot() {
-
-	screens.splash( 'Warming up the engine...' );
-	const config = await getConfig();
-	// The Vite dev server on its own: a key from the environment, or the test globe.
-	if ( ! config ) return start( { key: DEV_KEY || null, worker: false } );
-	if ( ! config.mapsOn ) return screens.notice( 'resting', { onTestPad: () => start( { key: null, googleClientId: config.googleClientId, live: !! config.live, liveReason: config.liveReason } ) } );
-	visit( config );
-
-}
-
-// Once per page load: the robot check, then the Maps key for this visit.
-async function visit( config ) {
-
-	screens.splash( 'Checking the road is clear...' );
-	const outcome = await startVisit( config.turnstileSiteKey, $( 'robot-check' ) );
-	if ( outcome.key ) return start( { key: outcome.key, left: outcome.left, visit: outcome.visit, googleClientId: config.googleClientId, live: !! config.live, liveReason: config.liveReason } );
-	if ( outcome.usedUp ) return usedUp( config, outcome );
-	if ( outcome.robot ) return screens.notice( 'robot', { onRetry: () => visit( config ) } );
-	screens.notice( 'error', { message: outcome.error, onRetry: () => visit( config ) } );
-
-}
-
-// Whether the visit has been asked for again as a supporter's (see usedUp).
-let askedAsSupporter = false;
-
-// Today's drives are used up. A supporter's are counted by their account, not this address (30 a
-// day), so with signing in set up the screen has a sign-in too: a supporter on a new browser, or
-// back from paying before Stripe's word arrived (?supporter=thanks, supporter.js), would otherwise be
-// stuck here until tomorrow. Once the account here has the pass, the visit is asked for again: once,
-// so a supporter who has had their 30 sees this screen rather than asking round and round.
-function usedUp( config, { retryAfter, reason } ) {
-
-	screens.notice( 'used-up', { retryAfter } );
-	if ( reason !== 'visitor' || ! config.googleClientId ) return;
-	const again = () => {
-
-		askedAsSupporter = true;
-		$( 'notice' ).hidden = true;
-		visit( config );
-
-	};
-	setUpSupporter( { worker: true, googleClientId: config.googleClientId, onPass: askedAsSupporter ? null : again } );
-	fillAccountArea( $( 'notice' ).querySelector( '.account' ) );
-
-}
-
 // key: the Maps key (none: the test globe and pad); left: free drives left today; visit: the
 // visit's token, for posting scores; worker: whether there's a Worker (not on the dev server alone);
 // googleClientId: the sign-in button's, for the Supporter Pass ('' when there's no signing in);
 // live: whether the Worker has driving with others on (its /api/config says), and liveReason why
 // not when it's off for the rest of the day.
-async function start( { key, left = null, visit: token = null, worker = true, googleClientId = '', live: liveOn = false, liveReason = '' } ) {
+export async function start( { key, left = null, visit: token = null, worker = true, googleClientId = '', live: liveOn = false, liveReason = '' } ) {
 
 	const visit = token ?? VISIT_TEST?.visit ?? null;
 	const vehicles = await loadVehicles();
@@ -482,6 +429,31 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 	}
 
 	setMode( 'globe' );
+
+	// A place's link (?spot= or ?at=, its "Drive here" on the places' pages, drive/site/): the
+	// globe flies there and pins it, so Drive here is one more tap; it never drops in by itself.
+	// Only once the panel shows (the pin is lifted clear of it), and on Google's tiles once their
+	// root has arrived, as that moves the Earth under the camera. Then it's out of the address (a
+	// ?party= stays), so a reload doesn't fly there again.
+	const linked = linkedPlace( location.search );
+	if ( linked ) {
+
+		const url = new URL( location.href );
+		for ( const name of LINK_PARAMS ) url.searchParams.delete( name );
+		history.replaceState( history.state, '', url );
+		let flown = false;
+		const flyToLinked = () => {
+
+			if ( flown || state.mode !== 'globe' || panel.pinned ) return;
+			flown = true;
+			flyToPlace( linked );
+
+		};
+
+		if ( tiles && ! tiles.root ) tiles.addEventListener( 'load-root-tileset', flyToLinked );
+		else flyToLinked();
+
+	}
 
 	// --- moving the scene to a new place, without loading anything again ---
 

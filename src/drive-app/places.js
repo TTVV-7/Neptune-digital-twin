@@ -1,5 +1,7 @@
-// Where to drive: the starting spots on the globe's panel, typed coordinates, and the places
-// you drove lately (kept in this browser).
+import { cleanPlace } from '../../worker/drive/names.js';
+
+// Where to drive: the starting spots on the globe's panel, typed coordinates, a place a link
+// opens on, and the places you drove lately (kept in this browser).
 
 // Spots worth a drive, each on its road as OpenStreetMap has it (Times Square on 7th Avenue, the
 // Grand Canyon's on Hermit Road, Monaco's on Boulevard Albert 1er, the Strip on Las Vegas
@@ -36,6 +38,32 @@ export function parseLatLon( text ) {
 	return { lat, lon };
 
 }
+
+// The place a link to the game pins on the globe, or null: ?spot=<a start spot's id>, or
+// ?at=<lat>,<lon> with name=, region= and heading= (degrees from north) if it has them. The places'
+// pages link here ("Drive here", drive/site/), and anyone can make such a link, so its name and
+// region are only taken as the leaderboard takes a place's name (letters, numbers and an address's
+// punctuation, nothing rude: cleanPlace), since the others driving there see it; else it's a
+// dropped pin.
+export function linkedPlace( search ) {
+
+	const params = new URLSearchParams( search );
+	const spot = SPOTS.find( s => s.id === params.get( 'spot' ) );
+	if ( spot ) return spot;
+	const at = parseLatLon( params.get( 'at' ) ?? '' );
+	if ( ! at ) return null;
+	const heading = Number( params.get( 'heading' ) ?? '' );
+	return {
+		name: cleanPlace( params.get( 'name' ) ?? '' ) ?? 'Dropped pin',
+		region: cleanPlace( params.get( 'region' ) ?? '' ) ?? '',
+		...at,
+		...( params.get( 'heading' ) && Number.isFinite( heading ) ? { heading: ( heading % 360 + 360 ) % 360 } : {} ),
+	};
+
+}
+
+// What linkedPlace reads, for taking it out of the address once it's been used.
+export const LINK_PARAMS = [ 'spot', 'at', 'name', 'region', 'heading' ];
 
 export function formatLatLon( lat, lon ) {
 

@@ -26,7 +26,9 @@ address, and the construction app is unchanged by it.
    - **Tap the globe** anywhere to drop a pin.
 
    Choosing a search result or a spot flies the globe down to it and pins it. The card under the pin
-   says where it is, with **Drive here**.
+   says where it is, with **Drive here**. A link to a place does the same once the visit has started:
+   a [place's page](#search-engines)'s **Drive here** (`/?spot=monaco`, or
+   `/?at=48.86,2.2945&name=Eiffel%20Tower` for anywhere).
 3. **Your ride**: the go-kart, a pickup or the muscle car; six more [cars](#world-drives-cars) as
    your [level](#levels) climbs (a golf cart at level 5, a tuk-tuk at 8, an ice-cream van at 15, a
    lawn tractor at 22, a retro wedge at 30 and a formula racer at 40); or with the
@@ -2269,8 +2271,157 @@ set
 
 The first deploy replaces the holding page. `worlddrive.app` and `www.worlddrive.app` are the Worker's
 custom domains (`routes` in `wrangler.drive.jsonc`; Cloudflare makes their DNS records and
-certificates). `www` sends you on to `worlddrive.app` with the path kept. There's no `workers.dev`
-address: the Turnstile widget only works on worlddrive.app, and one address keeps the counts simple.
+certificates). `www` sends you on to `worlddrive.app` with the path and query kept: a redirect rule in
+the Cloudflare dashboard (a 301, for everything on `www`, before the Worker or the assets see it),
+with the page's own script moving a page along too should the rule ever be off. There's no
+`workers.dev` address: the Turnstile widget only works on worlddrive.app, and one address keeps the
+counts simple (and [search engines](#search-engines) see one site).
+
+## Search engines
+
+Google hadn't indexed a single page of worlddrive.app: its head had a bare title and no picture,
+there was no sitemap, robots.txt was only Cloudflare's own block, and there was nothing for a crawler
+to read but the buttons' labels. Now it follows Google Search Central's guidance (linked at each
+point). The space it's in (other "drive the Earth" sites, a Steam game called WorldDrive, Google Earth
+driving simulators) is why every page says plainly what World Drive is and what it does that they
+don't: Google's photorealistic 3D cities, anywhere on Earth, arcade stunts, boosts, drifting and
+flying, other drivers as ghosts and party links, levels, free in the browser with nothing to
+download.
+
+### What a search engine reads
+
+- **The home page's head** (`drive/index.html`). A title that says what it is ("World Drive – Drive
+  Anywhere on Earth in 3D | Free Browser Driving Game") and a description of about 150 characters,
+  the most important first ([title links](https://developers.google.com/search/docs/appearance/title-link),
+  [snippets](https://developers.google.com/search/docs/appearance/snippet)); the canonical address
+  `https://worlddrive.app/`, so a party's link (`?party=`) or a place's (`?spot=`) counts as the home
+  page ([canonical URLs](https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls));
+  Open Graph and Twitter tags with the link card (below), so a link posted anywhere, a party's
+  included, unfurls with the picture, the name and what it is; the icons and the web app manifest.
+- **Structured data** (JSON-LD in the head): `WebSite` with the site's name
+  ([site names](https://developers.google.com/search/docs/appearance/site-names)), and the game as
+  `VideoGame` co-typed `WebApplication` ([software apps](https://developers.google.com/search/docs/appearance/structured-data/software-app):
+  Google only reads a game co-typed so), with its genres, `gamePlatform` "Web browser",
+  `applicationCategory` `GameApplication` (the value Google takes, rather than "Game"), free
+  (`offers.price` 0), and World Drive as its publisher. Google's app rich result also needs a rating
+  or reviews; World Drive has none to give, so none are made up, and it shows as an ordinary result.
+- **Words a crawler can read**, in the page itself, so they're there for a crawler that doesn't run
+  scripts and shown to everyone ([JavaScript SEO](https://developers.google.com/search/docs/crawling-indexing/javascript/javascript-seo-basics)):
+  the splash's line under the name (on the screen while World Drive loads), and at the foot of the
+  globe's panel, under the start spots: what World Drive is, what you can do, the keys, links to the
+  places' pages and a few questions (is it free, does it work on a phone, can I drive my own street,
+  can I play with friends, what's kept about me). It's plain text in the panel, there for anyone who
+  scrolls down, nothing hidden. **About World Drive** opens from there as before; its words are in
+  the page too.
+- **What Google renders.** Google runs the page as well, but robots.txt keeps it off `/api/`, so it
+  gets no settings and sees what the page shows without a Worker: the test globe, its note and the
+  panel with those words. It never starts a visit or meets the robot check, so it costs nothing and
+  never sees "We couldn't check you're a person".
+
+### The places' pages
+
+`/drive/` lists them; each place has its own at `/drive/<slug>/`: one for each start spot and seven
+more famous places (the Eiffel Tower, the Colosseum, Piccadilly Circus, the Burj Khalifa, Route 66
+through Oatman, Hollywood Boulevard and Copacabana). Their words are `drive/site/places.js`: what the
+place is, in a few true sentences, and what to do there in the game, with a title and description
+of its own. `drive/site/build.js` makes them as plain HTML when the site is built (and the dev server
+makes them as they're asked for), with their styles in the page and no script, so they show at once.
+Each has its canonical address, its own link card, breadcrumbs (`BreadcrumbList`, and a `WebPage`
+about the place with its coordinates), a big **Drive here**, links to every other place and home.
+
+**Drive here** opens the game with the place pinned: `/?spot=<id>` for a start spot,
+`/?at=<lat>,<lon>&name=...&region=...&heading=...` for the others (`linkedPlace` in
+`src/drive-app/places.js`, which works for any place). The visit and the robot check come first, as
+always; once the globe is up it flies there and pins it (on Google's tiles once their root has
+arrived, which moves the Earth under the camera), and **Drive here** on the pin's card drops in. It
+never drops in by itself. Then the place is out of the address, so a reload doesn't fly there again;
+a `?party=` stays. A link's name and region are taken only as the leaderboard takes a place's name
+(`cleanPlace`: letters, numbers and an address's punctuation, nothing rude), as the others driving
+there see it; otherwise it's a dropped pin. A link to somewhere that isn't on Earth, or a spot that
+isn't one, pins nothing.
+
+To add a place: an entry in `places.js` with true facts (check them), its own words (nothing copied
+from another page) and a pin on a road; then `npm run drive-site-images` draws its card. Each page
+has to be worth reading on its own: a pile of near-identical pages for every town would be what
+Google calls [doorway pages](https://developers.google.com/search/docs/essentials/spam-policies#doorways).
+
+### Sitemap, robots.txt and one address
+
+- **`/sitemap.xml`** is made by the build: the home page, `/drive/` and every place's page, each with
+  the day the files it's made from were last committed (`git log`), so its `lastmod` only moves when
+  the page does, which is the only `lastmod` Google trusts ([sitemaps](https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap)).
+- **`/robots.txt`** (`drive/public/robots.txt`): everything may be crawled but `/api/`, which only
+  the game talks to, and the sitemap's address
+  ([robots.txt](https://developers.google.com/search/docs/crawling-indexing/robots/intro)). The game's
+  scripts, styles and models stay open, as Google needs them to render the page. Cloudflare's managed
+  robots.txt, which is on for the zone (it was all robots.txt said before), puts its own block (the
+  Content Signals Policy, and any AI crawlers it's told to turn away) in front of this file's lines;
+  ours follow unchanged. Look at https://worlddrive.app/robots.txt after a deploy to see both.
+- **One address**: `www` is sent to `worlddrive.app` with a 301 (above), and every page names its
+  canonical address.
+
+### The load
+
+Google counts how fast a page shows ([Core Web Vitals](https://developers.google.com/search/docs/appearance/core-web-vitals):
+largest contentful paint within 2.5 s), and World Drive was one 1.37 MB script (411 kB compressed)
+that had to arrive and run before the visit was even asked for. Now `boot.js`, 10 kB, shows the splash
+and asks for the visit (the robot check included) while the game (`main.js`: three.js, the tiles and
+the rest) comes down beside it; the splash's line about World Drive is on the screen with the first
+paint and is its largest paint, so the page counts as loaded then; and on worlddrive.app the head
+opens the connections to Turnstile and to Google's tiles at once.
+
+Measured with `scripts/drive-static.mjs`'s `measureLoad` on the built site on the test globe, as a
+phone on Lighthouse's mobile settings (150 ms round trips, 1.6 Mbit/s, the CPU 4 times slower), three
+loads each:
+
+| | Before | After |
+| --- | --- | --- |
+| First contentful paint | 0.49 to 0.58 s | 0.43 to 0.52 s |
+| Largest contentful paint | 3.5 to 3.8 s (the test globe's message; on the real site the globe's panel, later still) | 0.43 to 0.52 s (the splash's line) |
+| Globe up, no Worker | 3.5 to 3.7 s | 3.4 to 3.7 s |
+| The game started, with a stand-in Worker and a 1.5 s robot check | 4.6 to 4.7 s | 3.2 s |
+| Script over the wire | 408 kB, all before anything ran | 414 kB: 4 kB first, the rest beside the visit |
+
+A place's page shows in about 0.25 s, with no script at all. Real visitors' numbers are in Cloudflare
+Web Analytics (its Core Web Vitals) and, once enough people visit, Search Console's Core Web Vitals
+report.
+
+### Link cards and icons
+
+`npm run drive-site-images` (`scripts/drive-site-images.mjs`) draws them into `drive/public/`:
+`og/world-drive.png` (1200 × 630, the card for the home page and a party's link: the name, the line
+under it and the muscle car driving over the curve of the Earth, all drawn, no Google imagery),
+`og/<slug>.png` for each place, `favicon.svg`, `favicon.ico` (16, 32 and 48 px), `apple-touch-icon.png`
+and the manifest's icons (`site.webmanifest`). Run it after adding a place, with Playwright, as the
+tests run (it starts the dev server on `TEST_VITE_PORT`). A party's **Share** says where you're
+driving ("Drive with me at Monaco harbour in World Drive"), and its link unfurls with the card.
+
+### How the search pages are tested
+
+`npm run test:drive-seo` builds the site and serves it as Cloudflare does: every page's title and
+description (each its own), canonical address, Open Graph and Twitter tags and card (a 1200 × 630
+PNG that's there), structured data (valid JSON, Google's fields, no ratings), one heading and words
+of its own on each place's page; the sitemap (every page, nothing else, real addresses, dates) and
+robots.txt; the icons and the manifest; every link within the site answering 200; the home page's
+words (over 350 of them, the places linked, shown on the panel, About opening from there); each
+place's **Drive here** opening the game on the test globe with its pin there and the address tidied,
+a drop-in from a link, the pin clear of the sheet on a phone, a `?party=` kept, a rude name or a place
+off the Earth refused; the dev server making the same pages; and the load above on a phone's
+connection (the first paint is the largest, under 2.5 s, before the game's code).
+
+### The owner's steps
+
+The domain is verified in Google Search Console already (a DNS record).
+
+1. **Search Console → Sitemaps**: submit `https://worlddrive.app/sitemap.xml`.
+2. **URL Inspection**: inspect `https://worlddrive.app/`, **Test live URL** (it should be "URL is
+   available to Google", with the page's words in the rendered HTML), then **Request indexing**; the
+   same for `/drive/` and a few places' pages. There's a daily limit on requests: a handful is enough,
+   as the sitemap and the links bring the rest.
+3. **Pages** (Indexing → Pages) over the next weeks: what's indexed, and why anything isn't. A new
+   domain takes days to weeks.
+4. **Bing Webmaster Tools**: add the site by importing it from Search Console, and submit the sitemap
+   there too (Bing's results also show in DuckDuckGo and Yahoo).
 
 ## The owner's Google Cloud steps
 
@@ -2379,20 +2530,28 @@ changing nothing, and a phone; and buying the pass with Google's script stood in
 from the sheet, the pause menu and the used-up screen, Buy's link, "Check again" before Stripe's
 word, unlocking on focus and on `?supporter=thanks`, on every load, signing out, the player linked,
 the ⭐, and "Coming soon" with no sign-in or no Worker answering). `npm run test:drive-pro-ui` tries
-the pass's rides, the Garage and the boost styles, `npm run test:drive-live` and
+the pass's rides, the Garage and the boost styles, `npm run test:drive-seo` what
+[search engines](#how-the-search-pages-are-tested) see, `npm run test:drive-live` and
 `npm run test:drive-live-ui` [driving with others](#how-its-tested), and `npm run test:drive-levels`
-and `npm run test:drive-levels-ui` [levels](#how-levels-are-tested).
+and `npm run test:drive-levels-ui` [levels](#how-levels-are-tested). `TEST_VITE_PORT` picks a test's port,
+and `TEST_VITE_CACHE` a folder for its dev server's pre-bundled dependencies (else
+`node_modules/.vite`), so tests run side by side on one checkout don't redo each other's.
 
 ## How it fits together
 
 ```
-drive/index.html             the page: panel, pin card, driving bar, keys card, screens
-src/drive-app/main.js        starts it: the visit, the tiles, modes (globe, dropping, driving,
-                             paused), dropping in, recentring, the render loop
+drive/index.html             the page: panel (and what World Drive is, at its foot), pin card,
+                             driving bar, keys card, screens; its head for search engines
+src/drive-app/boot.js        the page's first script: the splash, /api/config and the visit, while
+                             main.js loads
+src/drive-app/main.js        the game: the tiles, modes (globe, dropping, driving, paused), a
+                             place's link, dropping in, recentring, the render loop
+drive/site/                  the places' pages, /drive/ and /sitemap.xml (build.js, a Vite plugin;
+                             places.js their words; site.css their look)
 src/drive-app/globe.js       GlobeView: GlobeControls, the slow spin, flights, the pin, picking
 src/drive-app/spawn.js       Ground: the ground's height, which way the street runs, a bridge's deck
 src/drive-app/panel.js       search, spots, recent places, the ride picker, the pin's card
-src/drive-app/places.js      the start spots, typed coordinates, recent places
+src/drive-app/places.js      the start spots, typed coordinates, a place's link, recent places
 src/drive-app/vehicles.js    the go-kart, the library trucks (catalog.js lists which), the cars and the
                              pass's rides; what's locked (rideLocked) and its chip
 src/drive-app/cars.js        the cars (drive/public/cars/): names, tuning, which need the pass; loading
@@ -2441,6 +2600,8 @@ vite.drive.config.js         the build: no key, only the offered vehicles copied
                              on to DRIVE_API, WebSockets too
 drive/public/cars/           the cars' models, pictures, cars.json and CREDITS.md
 scripts/add-drive-car.mjs    imports a car from Sketchfab into it; drive-car-thumbs.mjs draws the pictures
+drive/public/                also robots.txt, site.webmanifest, the icons and og/ (the link cards,
+                             which scripts/drive-site-images.mjs draws with the icons)
 worker/drive/                the Worker: index.js (routes), limits.js (caps, the search queue and
                              the leaderboard's turns), turnstile.js, search.js; the leaderboard:
                              players.js, scores.js, boards.js, names.js (rules and the filter),
@@ -2584,7 +2745,9 @@ domain, naturalearthdata.com), from its GitHub copy. Place search © OpenStreetM
 trucks and the cars are models from Sketchfab under CC BY 4.0, credited under **About World Drive**
 and on the ride picker (and the cars in `drive/public/cars/CREDITS.md`): the muscle car by Lexyc16,
 the golf cart by pixelsquare, the tuk-tuk by aminzafar, the ice-cream van by Sidra, the lawn tractor
-by mirrol, the retro wedge by Serg_Stark... (Serg_str), the formula racer by TimMod, the neon racer and the night
-cruiser by ferofluid, the dune buggy by XP_Frost, the farm truck by Nekitron, the police cruiser by
-JG3D, the hypercar by ollitei and the cyber muscle car by Jungle Jim. The go-kart and the pass's
-rides are built in code.
+by mirrol, the retro wedge by Serg_Stark... (Serg_str), the formula racer by TimMod, the neon racer
+and the night cruiser by ferofluid, the dune buggy by XP_Frost, the farm truck by Nekitron, the
+police cruiser by JG3D, the hypercar by ollitei and the cyber muscle car by Jungle Jim. The go-kart
+and the pass's rides are built in code. The link cards (`drive/public/og/`) show the muscle car,
+drawn as World Drive draws it, on an Earth drawn in CSS: no picture of Google's tiles is used outside
+the map itself.

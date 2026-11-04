@@ -567,13 +567,18 @@ signing in with Google, so it's yours in any browser; Stripe's signed webhook re
 stays off ("Coming soon") until `GOOGLE_CLIENT_ID` and the webhook's secret are set (see
 [Supporter Pass (buying it)](docs/world-drive.md#supporter-pass-buying-it) for the owner's steps).
 
+For search engines and links, the site has a page for each start spot and a few more famous places
+(`/drive/<place>/`, built from `drive/site/`, each with a **Drive here** that opens the game with the
+place pinned), a sitemap, robots.txt, structured data and link cards (`npm run drive-site-images`
+draws them); see [Search engines](docs/world-drive.md#search-engines).
+
 How to play, the leaderboard (how cheating is limited, and looking after it in the D1 console), the
 settings and limits, deploying (`npm run deploy:drive` applies the database's migrations first), and
 the owner's Google Cloud steps (a separate project and key, restricted to worlddrive.app and the Map
 Tiles API, a daily quota and budget alerts) are in [docs/world-drive.md](docs/world-drive.md).
 Tests: `npm run test:drive-worker`, `npm run test:drive-ui`, `npm run test:drive-pro-ui`,
-`npm run test:drive-live`, `npm run test:drive-live-ui`, `npm run test:drive-levels` and
-`npm run test:drive-levels-ui`.
+`npm run test:drive-seo`, `npm run test:drive-live`, `npm run test:drive-live-ui`,
+`npm run test:drive-levels` and `npm run test:drive-levels-ui`.
 
 ## About the Sketchfab model
 
