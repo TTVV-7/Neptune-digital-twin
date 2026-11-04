@@ -146,8 +146,10 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin } ) {
 
 					// Locked: what the pass is, or for a level's ride which level (and that the pass has it).
 					if ( vehicle.pro ) return openPass();
-					note.replaceChildren( `The ${ vehicle.name.toLowerCase() } comes at level ${ unlock.level }: you're level ${ getLevel() }. Drive on, or get it now with the `,
-						Object.assign( document.createElement( 'button' ), { type: 'button', className: 'link', textContent: 'Supporter Pass', onclick: () => openPass() } ), '.' );
+					// The link and its full stop kept together, so the stop never wraps onto a line of its own.
+					const link = Object.assign( document.createElement( 'span' ), { className: 'pass-link' } );
+					link.append( Object.assign( document.createElement( 'button' ), { type: 'button', className: 'link', textContent: 'Supporter Pass', onclick: () => openPass() } ), '.' );
+					note.replaceChildren( `The ${ vehicle.name.toLowerCase() } comes at level ${ unlock.level }: you're level ${ getLevel() }. Drive on, or get it now with the `, link );
 					note.hidden = false;
 					// Under three rows of rides it can be below the panel's fold: brought into view.
 					note.scrollIntoView( { block: 'nearest' } );

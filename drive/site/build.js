@@ -252,7 +252,7 @@ function howToPlay() {
 
 	return `<section>
 		<h2>How to play</h2>
-		<p>World Drive is a free arcade driving game in your browser. Pick a ride (a go-kart, a pickup or a muscle car), drop in and drive: hit a wall and you bounce off it into the air, so spin, flip and roll and land on your wheels to score. Boost into overdrive, drift for a mini-turbo, fly over the rooftops, and drive with friends with a party link. Driving earns XP for 50 levels of paint, boost trails and titles.</p>
+		<p>World Drive is a free arcade driving game in your browser. Pick a ride (a go-kart, a pickup or a muscle car to start, and six more cars as you level up), drop in and drive: hit a wall and you bounce off it into the air, so spin, flip and roll and land on your wheels to score. Boost into overdrive, drift for a mini-turbo, fly over the rooftops, and drive with friends with a party link. Driving earns XP for 50 levels of cars, paint, boost trails and titles.</p>
 		<p class="keys"><kbd>W</kbd> <kbd>S</kbd> gas and brake · <kbd>A</kbd> <kbd>D</kbd> steer · <kbd>Space</kbd> drift · <kbd>Shift</kbd> boost · <kbd>F</kbd> fly · <kbd>R</kbd> back on the road · <kbd>M</kbd> back to the globe. On a phone or a tablet, buttons on the screen.</p>
 	</section>`;
 

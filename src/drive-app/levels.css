@@ -779,6 +779,10 @@ dialog#leaderboard .lvl {
 	display: none;
 }
 
+.ride-note .pass-link {
+	white-space: nowrap;
+}
+
 #garage .ride-tab .level-chip {
 	padding: 0 5px;
 	border-radius: 6px;

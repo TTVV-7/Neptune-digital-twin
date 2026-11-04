@@ -200,6 +200,14 @@ construction app's driving looks and behaves as it always has.
   somewhere else at a stop (R, or back from a splash), it doesn't lurch. It's in how the car is
   turned, so those driving with you see it too.
 
+Where each burst goes, and how big it is, follows from the vehicle's size rather than its model:
+the exhaust in the middle of its back a third of the way up, the sparks at its rear tyres, the rings
+and flashes as wide as it is. So they fit every ride, from the lawn tractor to the city bus: the
+[cars](#world-drives-cars) were each looked at lighting the booster, drifting to a mini-turbo and
+over a pad on the test pad, the flame between the formula racer's rear wheels and out of the
+ice-cream van's back doors (its cone makes it tall, so a third of the way up is halfway up the
+doors).
+
 Near the vehicle on its wheels, these bursts and the boost styles' particles fade out down to the
 ground under it (a plane through its lower rear tyre, 4 m round it for a kart, more for something
 bigger), so a flash or a ring at a low exhaust never ends along a hard line where the ground cuts it
@@ -246,10 +254,10 @@ the squat), running it dry (the glow, then nothing left), a pad (its burst carri
 flash), the ground the bursts fade out down to (and none in the air), a drift's three levels and its
 mini-turbo, a standing start's wheelspin and smoke, braking's dip and a turn's lean, no lurch put
 back at a stop, settling back level, nothing made in a dozen ignitions and the budgets kept; the
-effects going
-with a pause and made again; the speed lines thickening with speed and going, overdrive's white
-edges, the gauge pulsing, flashing and refilling; the switch turning it all off, kept across a
-reload, and on again; asking for less motion; and a phone's thinner bursts and fewer lines.
+effects going with a pause and made again; the speed lines thickening with speed and going,
+overdrive's white edges, the gauge pulsing, flashing and refilling; the switch turning it all off,
+kept across a reload, and on again; asking for less motion; and a phone's thinner bursts and fewer
+lines.
 `test-drive-live-ui.mjs` checks another's car lights and runs dry with their booster, and has a
 burst at each of their drift's charge levels and for its mini-turbo.
 
@@ -1579,11 +1587,12 @@ tuned in `src/drive-app/cars.js`. The muscle car is free; six come with [levels]
 (from the golf cart at 5 to the formula racer at 40) or the pass, whichever is first; the rest only
 with the pass, locked like the rides above. In the picker they come after the free rides: the
 levels' cars in the order the levels bring them, then the pass's, each with its own picture. With
-twenty-one rides, the globe's panel has them in three rows and the pause menu in two, both
-scrolling sideways (the one picked in view; on a phone about three across, the next peeking in, so
-each locked one's badge fits), so neither is taller than it was with twelve and what's under them
-(the Garage, the pass, the pass's sign-in in the pause menu) stays on screen; the Garage's row of
-rides scrolls to the one shown.
+twenty rides, the globe's panel has them in three rows and the pause menu in two, both scrolling
+sideways (the one picked in view; three across on the panel and four in the pause menu, the next
+column peeking in at the edge to say there are more, as a scrollbar may only show while scrolling;
+on a phone about three across, the next peeking in, so each locked one's badge fits), so neither is
+taller than it was with twelve and what's under them (the Garage, the pass, the pass's sign-in in
+the pause menu) stays on screen; the Garage's row of rides scrolls to the one shown.
 
 | Car | Model (CC BY 4.0) | Size | Top speed | Handling |
 | --- | --- | --- | --- | --- |
@@ -2734,7 +2743,9 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   move the view (the look, never the camera, so a jolt can't put it in a wall), and a jolt from the
   booster lighting right after a hit's shake adds to it. Others' cars show only what their flags
   say: no boost pad bursts or wheelspin, and a booster already lit when their car comes into view
-  shows no ignition.
+  shows no ignition. The exhaust is where the vehicle's size puts it, not found on the model: in
+  the middle of the back a third of the way up, not at the model's own exhaust pipe if it has one
+  (the ice-cream van's flame comes out of its back doors).
 
 ## Credits
 

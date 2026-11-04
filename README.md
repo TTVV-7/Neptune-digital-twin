@@ -490,18 +490,21 @@ testing with test cards and the known gaps are in [docs/premium.md](docs/premium
 ## World Drive (worlddrive.app)
 
 A second app in this repository, on its own address: pick anywhere on Earth from a globe of Google's
-3D tiles (search, a dozen start spots, recent places, or a tap on the globe), choose a go-kart, pickup
-or muscle car, press **Drive here** and drive the real world arcade-style: drift (Space), boost
-(Shift), fly (F), and hit something to bounce off it into the air, where **A**/**D** spin, **W**/**S** flip and
-**Q**/**E** roll for tricks that score (times a combo multiplier) when you land on your wheels; a
-wipeout loses the combo and rolls you back onto them. Boosting flat out hits **overdrive** (a sonic
-boom, streaks of air, a wider view), and glowing **boost pads** turn up on open ground as you drive
-to top the booster up (a switch in the pause menu turns them off). Drive or come down into **water**
-and it's a splash: spray and rings of foam, the vehicle sinking nose first, then back on the last
-dry ground you were on, facing away from it (the hovercraft rides on it). Google's mesh doesn't say
-what's water, so `src/drive-app/water.js` tells it by how Google draws it: level, one even colour,
-the lowest thing round about. **M** goes back to the globe to drop in somewhere else without
-reloading. Phones get a bottom sheet and touch buttons.
+3D tiles (search, a dozen start spots, recent places, or a tap on the globe), choose a go-kart,
+pickup or muscle car (more as your level climbs), press **Drive here** and drive the real world
+arcade-style: drift (Space), boost (Shift), fly (F), and hit something to bounce off it into the
+air, where **A**/**D** spin, **W**/**S** flip and **Q**/**E** roll for tricks that score (times a
+combo multiplier) when you land on your wheels; a wipeout loses the combo and rolls you back onto
+them. Boosting flat out hits **overdrive** (a sonic boom, streaks of air, a wider view), and glowing
+**boost pads** turn up on open ground as you drive to top the booster up (a switch in the pause menu
+turns them off). Lighting the booster, running it dry, a pad, each drift charge level and its
+mini-turbo have bursts of their own, the view jolts and streams with speed lines, and the body leans
+on its springs (**Camera effects** in the pause menu, or asking the system for less motion, keeps
+the view still). Drive or come down into **water** and it's a splash: spray and rings of foam, the
+vehicle sinking nose first, then back on the last dry ground you were on, facing away from it (the
+hovercraft rides on it). Google's mesh doesn't say what's water, so `src/drive-app/water.js` tells
+it by how Google draws it: level, one even colour, the lowest thing round about. **M** goes back to
+the globe to drop in somewhere else without reloading. Phones get a bottom sheet and touch buttons.
 
 It shares `src/` with this app but has its own page (`drive/index.html`, `src/drive-app/`), build
 (`npm run dev:drive`, `npm run build:drive` into `dist-drive/`) and Cloudflare Worker
