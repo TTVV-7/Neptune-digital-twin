@@ -480,6 +480,7 @@ function createPreview( canvas, models, getVehicle, onPaintable ) {
 	let fx = null;
 	let fxKey = '';
 	let demo = 0;
+	let lit = false;
 	let angle = 0.7;
 	let loading = 0;
 	let last = 0;
@@ -512,6 +513,9 @@ function createPreview( canvas, models, getVehicle, onPaintable ) {
 		if ( model && fx ) {
 
 			model.updateMatrixWorld( true );
+			// Run dry at the end of the show, as the booster does.
+			if ( lit && demo <= 0 ) fx.cool();
+			lit = demo > 0;
 			fx.update( { pivot: model, size, wheels, velocity: still, flame: demo > 0 ? 1 : 0, trail: demo > 0 ? 1 : 0, drifting: false, level: 0, grounded: true, dt } );
 
 		}
@@ -640,6 +644,8 @@ function createPreview( canvas, models, getVehicle, onPaintable ) {
 		wear,
 		boost() {
 
+			// Lit as it is driving, with its burst (unless it's burning already).
+			if ( demo <= 0 ) fx?.ignite();
 			demo = DEMO;
 
 		},
