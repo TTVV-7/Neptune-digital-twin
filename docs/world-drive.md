@@ -121,7 +121,7 @@ Hit something (a wall, a building, a parked car, a barrier) and you don't stop: 
   each), and so do boost pads. What it leaves behind is the ride's **boost style** from the
   [Garage](#the-garage): the classic flame, bubbles or confetti, or with the pass one of nine more.
 - **Overdrive.** Boost at 85 % or more of that doubled top speed for three quarters of a second and
-  you hit overdrive (the code calls it supersonic): a sonic boom (a shock ring blown out round you, a flash and a jolt), streaks of
+  you hit overdrive (the code calls it supersonic): a sonic boom (shock rings blown out round you, a flash and a jolt, the edges of the view flashing white), streaks of
   air streaming back past you, the view 9° wider and **OVERDRIVE** by the speed. It lasts, boosting
   or not, until you drop under three quarters of that speed: a moment after the gauge runs out, or at
   once if you hit something. Every ride can, each against its own top speed (the kart at about
@@ -151,6 +151,80 @@ Hit something (a wall, a building, a parked car, a barrier) and you don't stop: 
   it can't tell, as by a shore. It's three instanced meshes, and a try is two dozen rays at most,
   most of them ending after one or two, and for the few spots that get that far, five looks for
   water (on most ground a ray or seven each).
+
+### How boosting and driving look
+
+Each moment of boosting and driving has a burst of its own (`src/drive-bursts.js`). drive-fx.js only
+makes them for a Driver with the booster, drifts or stunts on, which only World Drive's has, so the
+construction app's driving looks and behaves as it always has.
+
+- **Lighting the booster.** A flash and a flare at the exhaust, a shock ring blown out behind it and
+  sparks popping out, in the boost style's colour (the classic flame's glow's), and the flame pops,
+  more than twice as long for a moment. Each style has its own burst besides (in the
+  [Garage's table](#the-garage)): a crackle of arcs, a strike of lightning, a party popper's
+  confetti, an old game's explosion of pixels... The car squats as it surges off, its nose kicked
+  up, and the view is jolted: 5° wider and nodded up for a moment, springing back in about a third
+  of a second.
+- **While it burns** the flame flickers harder, and speed lines stream out past the edges of the
+  view, from 30 % of the booster's top speed on, thicker and faster the faster you go. Overdrive's
+  sonic boom adds a wide ring that lingers as it spreads to seven times the vehicle's size, the
+  edges of the view flash white and the view is punched 7° wider for a moment, on top of its 9.
+- **Running dry.** The exhaust glows on and cools, white-hot in the style's colour, through orange
+  to a dull red and out in 0.9 s, with a few embers drifting off it. The car settles: its nose
+  dips as it slows back to its top speed, and it bounces back level.
+- **Boost pads.** Driven over one, a ring spreads over the pad, chevrons rise off it, sparkles fly
+  up round it and the vehicle lights up in the pad's colour for a quarter of a second. The gauge
+  fills up to what it took before your eyes, a shine running along it, with "+12%" by it.
+- **The gauge** glows on and off while it's full, ready to fire, and flashes red as it runs dry.
+- **Drifting.** Each charge level reached (yellow, teal, then pink) puts a ring on the ground and a
+  burst of sparks at each rear tyre in its colour, as the sparks after it are. Let go, the
+  mini-turbo has a flash, a ring and a spray of sparks out of the exhaust in the same colour,
+  bigger for a bigger boost; the flame pops and the view is jolted a little (1.2° wider for each
+  level).
+- **Flooring it from a standstill** spins the rear tyres up: they turn as if it were going 12 m/s
+  faster, and smoke, for 0.9 s at most or until it's doing 32 km/h.
+- **The body leans on its springs** (`BODY` in `src/drive.js`): nose up as it speeds up and down
+  under the brakes (about 3° braking hard in the kart), and out of a turn (less in a drift, which
+  leans it already), at most 4° either way besides the booster's kick, more on a ride with soft
+  suspension (its handling's `squash`: the monster truck). It leans about the wheels on the low
+  side, so they stay on the ground, and settles with a little bounce. It's in how the car is
+  turned, so those driving with you see it too.
+
+**Camera effects** in the pause menu (kept in this browser, `world-drive.camera-fx`; on until it's
+turned off) turns off everything done to the view: the jolts, the shake of a hit, the speed lines
+and overdrive's white edges (`src/drive-app/screen-fx.js`; main.js adds a jolt's `driver.punch` to
+the field of view). The bursts in the world stay. A visitor whose system asks for less motion
+(`prefers-reduced-motion`) has none of those whatever the switch says, and fewer flashes: no flare
+as the booster lights, the vehicle not lit up on a pad, and the gauge glowing steadily when it's
+full rather than pulsing, and flashing once as it runs dry. Overdrive's 9° wider view is as it
+was, either way. On a touch screen the bursts have 60 % of their sparks, and there are 24 speed
+lines rather than 48.
+
+**Others' cars** show what can be told from what they send (`FLAGS` in `live-protocol.js`, which is
+unchanged): the booster lighting and running dry, each drift charge level and the mini-turbo, and
+the lean. A boost pad taken and wheelspin aren't among what's sent, so those don't show on them.
+
+**What it costs.** Every burst comes out of pools made with the effects as a drive starts: one more
+batch of quads (160 of them, one draw, the oldest reused when it's full), one sprite for a pad's
+flash, and each style's own burst from its own batch's budget. The speed lines are one instanced
+batch of thin quads whose numbers are set once and placed on the screen by their shader: each frame
+only their time and thickness change. So a drive makes nothing new: in the tests below, a dozen
+ignitions and boosts run dry made no geometries, textures, objects or materials, and no more were
+alive than the budgets. Updating it all adds about 0.1 ms a frame. On the test pad, drawn in
+software with another test run sharing the machine (so give or take 5 %, frames of 70 to 100 ms),
+drawing them cost 2 to 11 % of a frame boosting, nothing that could be told from that drifting, and
+4 to 5 % driving over a pad every 0.6 s; on a phone-sized view about 5 % boosting and drifting, and
+nothing measurable over pads.
+
+`node --test scripts/test-drive-ui.mjs` ("World Drive boost and driving effects") tries it on the
+test pad with the classic flame, confetti and lightning: lighting the booster (the burst, the jolt,
+the squat), running it dry (the glow, then nothing left), a pad (its burst and flash), a drift's
+three levels and its mini-turbo, a standing start's wheelspin and smoke, braking's dip and a turn's
+lean, settling back level, nothing made in a dozen ignitions and the budgets kept; the effects going
+with a pause and made again; the speed lines thickening with speed and going, overdrive's white
+edges, the gauge pulsing, flashing and refilling; the switch turning it all off, kept across a
+reload, and on again; asking for less motion; and a phone's thinner bursts and fewer lines.
+`test-drive-live-ui.mjs` checks another's car lights and runs dry with their booster.
 
 ### Water
 
@@ -612,8 +686,10 @@ always was.
   rounds a bend rather than cutting its corners (in the tests, a kart driving off and turning was
   drawn within 5 to 9 cm of where it really was at the median, and 45 cm at most, as close as it
   was at 8 words a second with straight lines between). A word that's late, it carries on along the
-  bend it was taking. Their flame or boost style, trail, drift smoke and sparks,
-  overdrive's boom and streaks, splashes and the hovercraft's spray show for the nearest 6 within
+  bend it was taking. Their flame or boost style, trail, drift smoke and sparks, the bursts as
+  their booster lights and runs dry and as a drift charges and pays out
+  ([below](#how-boosting-and-driving-look)), overdrive's boom and streaks, splashes and the
+  hovercraft's spray show for the nearest 6 within
   300 m, and their wheels turn. A name tag hangs over each (hidden beyond 400 m), with a 📣 when they
   honk and "+1,234" when they land a trick. A car within 8 m of yours or of the camera turns
   see-through, so it never blocks the view. A paused driver's car stays parked where it stopped; a
@@ -1564,20 +1640,20 @@ turntable (drag to turn it; **▶ Boost** shows its boost and trail), and for ea
 **Boost styles** (`src/drive-boosts.js`; the Garage's list, with a little picture for each, is
 `src/drive-app/boosts.js`) are what the booster leaves behind:
 
-| Style | |
-| --- | --- |
-| Classic flame | The flame as it always was, in its colour |
-| Bubbles | Soap bubbles floating up and wobbling away, each popping at the end |
-| Confetti | Paper rectangles in party colours, tumbling over and over as they flutter down behind |
-| Plasma | A blue-white electric flame crackling with little arcs, throwing blue sparks |
-| Lightning | Forked bolts crackling back and out from the exhaust, struck again every few hundredths of a second |
-| Glitter | A stream of tiny twinkling stars in white, gold, pink, sky and lilac |
-| Comet | A throbbing white-blue head and a long glowing tail that narrows and turns blue behind it |
-| Neon rings | Glowing hoops thrown out flat across the way it's going, so the camera looks through them |
-| Fireworks | Little rockets bursting over it into balls of sparks in one colour, which fall and twinkle out |
-| Hearts | Hearts rising and swaying away, beating as they go |
-| Pixel | Chunky squares in a bright palette on a grid in the world, shrinking in steps and blinking out |
-| Ink | Blobs of bright paint flung out behind, leaving splats on the road for five seconds, drawn out longer the faster it goes |
+| Style | | As it lights ([more](#how-boosting-and-driving-look)) |
+| --- | --- | --- |
+| Classic flame | The flame as it always was, in its colour | The flame popping, a flash and a ring in its glow's colour |
+| Bubbles | Soap bubbles floating up and wobbling away, each popping at the end | A froth of big bubbles blown out round the exhaust |
+| Confetti | Paper rectangles in party colours, tumbling over and over as they flutter down behind | A party popper: a cone of confetti shot up and out |
+| Plasma | A blue-white electric flame crackling with little arcs, throwing blue sparks | Arcs crackling out all round the exhaust at once, and a spray of sparks |
+| Lightning | Forked bolts crackling back and out from the exhaust, struck again every few hundredths of a second | A strike: four long forks thrown out behind and to both sides, each with a flash |
+| Glitter | A stream of tiny twinkling stars in white, gold, pink, sky and lilac | A puff of stars bursting out every way |
+| Comet | A throbbing white-blue head and a long glowing tail that narrows and turns blue behind it | Its head flaring up, and a shower of specks |
+| Neon rings | Glowing hoops thrown out flat across the way it's going, so the camera looks through them | Three hoops at once, one inside the next |
+| Fireworks | Little rockets bursting over it into balls of sparks in one colour, which fall and twinkle out | A starburst at the exhaust and a salvo of three rockets bursting just over it |
+| Hearts | Hearts rising and swaying away, beating as they go | A ring of hearts thrown out round the exhaust, then rising |
+| Pixel | Chunky squares in a bright palette on a grid in the world, shrinking in steps and blinking out | An old game's explosion: pixels thrown out eight ways in rings, white-hot inside |
+| Ink | Blobs of bright paint flung out behind, leaving splats on the road for five seconds, drawn out longer the faster it goes | A big splash of blobs in a fan, and a few splats on the road at once |
 
 The flame colour was the Garage's only boost choice before the styles. It's now the classic flame's
 colour, shown under it, so a look saved before (a flame and no style) is the classic flame in the
@@ -2195,6 +2271,8 @@ src/drive-app/supporter.js   buying it: Google sign-in, the Payment Link, unlock
 src/drive-app/garage.js      the Garage: choices and the turntable; paint.js the looks and decals;
                              boosts.js the boost styles it offers
 src/drive-app/pads.js        boost pads: where they go, driving over them, the pause menu's switch
+src/drive-app/screen-fx.js   what's done to the view: speed lines, overdrive's white edges, the pause
+                             menu's Camera effects switch and asking for less motion
 src/drive-app/water.js       water on Google's mesh, told by how it's drawn: for splashes, the way
                              back from one, R and boost pads
 src/drive-app/sea.js         the open sea: its surface where Google draws only the bed of the sea
@@ -2242,6 +2320,12 @@ worker/google.js, sessions.js, stripe.js   shared with the construction app: Goo
 wrangler.drive.jsonc         the Worker's settings, domains, Durable Objects (the visit counts and
                              the rooms), rate limiters and D1 database
 ```
+
+The driving and its effects are shared with the construction app, World Drive's only with its
+options on: `src/drive.js` (the Driver; its feel, `BODY`, `SPIN` and the jolts, only with the
+booster, drifts or stunts), `src/drive-fx.js` (the flame, smoke, sparks and the rest),
+`src/drive-boosts.js` (the boost styles, each one's ignition, overdrive), `src/drive-bursts.js` (the
+bursts of each moment) and `src/drive-hud.js` (the HUD, its gauge pulsing and flashing).
 
 Shared modules take World Drive's place as a parameter, with the terminal as the default:
 `createGoogleTiles( { site } )` and `recentreTiles` in `src/world.js`, and the `site` argument of
@@ -2341,6 +2425,13 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   only while it's the player's last (another device reporting in between would let it count again),
   and if it listed more new places than its time allowed, the extra ones aren't sent again. A
   nickname removed by the owner takes its XP with it.
+- [How boosting and driving look](#how-boosting-and-driving-look): the lean tilts the whole model,
+  wheels and all, about the low side's axle, so on a steep lean a wheel on the other side lifts a
+  few centimetres off the road (a kart, which has no suspension, leans as a car would). The jolts
+  move the view (the look, never the camera, so a jolt can't put it in a wall), and a jolt from the
+  booster lighting right after a hit's shake adds to it. Others' cars show only what their flags
+  say: no boost pad bursts or wheelspin, and a booster already lit when their car comes into view
+  shows no ignition.
 
 ## Credits
 

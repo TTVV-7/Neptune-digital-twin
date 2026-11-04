@@ -567,9 +567,13 @@ describe( 'World Drive, driving with others', () => {
 
 	} );
 
-	test( 'A boosts: B\'s ghost has its flame', async () => {
+	test( 'A boosts: B\'s ghost has its flame, and the bursts of it lighting and running dry', async () => {
 
 		await placeCar( a, 0, 0, 0 );
+		// What B's ghost's effects set off, from A's flags changing.
+		await b.waitForFunction( () => window.drive.ghosts.list()[ 0 ]?.fx, null, { timeout: 15000 } );
+		const bursts = () => b.evaluate( () => window.drive.ghosts.list()[ 0 ].bursts );
+		const before = await bursts();
 		await a.evaluate( () => {
 
 			const d = window.drive.driver;
@@ -588,6 +592,9 @@ describe( 'World Drive, driving with others', () => {
 		await shot( b, 'live-3-boost' );
 		await a.evaluate( () => window.drive.driver.release( 'ShiftLeft' ) );
 		await b.waitForFunction( flag => ! ( window.drive.ghosts.list()[ 0 ].flags & flag ), FLAGS.firing, { timeout: 15000 } );
+		// Lit once, and run dry once, as A's booster was.
+		const after = await bursts();
+		assert.deepEqual( { ignite: after.ignite - before.ignite, cool: after.cool - before.cool }, { ignite: 1, cool: 1 }, JSON.stringify( { before, after } ) );
 
 	} );
 

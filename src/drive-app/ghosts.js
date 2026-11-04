@@ -67,8 +67,8 @@ const noRay = () => {};
 // scene: where the ghosts go; earth: the tiles' (or test globe's) group, whose matrixWorld takes
 // Earth-centred positions into the scene as it is now; vehicles: loadVehicles()'; loader: the
 // ModelManager's glTF loader; live: live.js's; tags: the element their names go in; own(): your
-// car's pivot, or null.
-export function createGhosts( { scene, earth, camera, vehicles, loader, live, tags, own } ) {
+// car's pivot, or null; effects: what drive-fx.js is asked for (the Driver's: fewer on a phone).
+export function createGhosts( { scene, earth, camera, vehicles, loader, live, tags, own, effects = undefined } ) {
 
 	const group = new Group();
 	group.name = 'ghosts';
@@ -161,6 +161,8 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 			// Where it's drawn: Earth-centred, and in the scene; its flags and velocity (Earth-centred).
 			p: new Vector3(), q: new Quaternion(), v: new Vector3(), flags: 0, scene: new Vector3(), distance: Infinity,
 			model: null, loading: null, failed: false, lookAt: 0, builtAt: - Infinity, builds: 0, fx: null, fxFlags: 0, faded: false, drawn: false,
+			// How many of each burst its effects have set off (for the tests).
+			bursts: { ignite: 0, cool: 0, tier: 0, turbo: 0 },
 			yaw: null, steer: 0, splashLevel: 0,
 			tag: makeTag( p ),
 		};
@@ -519,10 +521,27 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 
 		const { model, flags } = ghost;
 		const { pivot, size } = model;
-		ghost.fx ??= createDriveFx( group, fxOf( cleanLook( model.vehicle, ghost.look ) ), { water: true } );
+		const fresh = ! ghost.fx;
+		ghost.fx ??= createDriveFx( group, fxOf( cleanLook( model.vehicle, ghost.look ) ), { water: true, effects } );
 		const firing = flags & FLAGS.firing;
 		const boosting = flags & FLAGS.boost;
 		const speed = _v.length();
+		// What it just did, as its flags changed (not what it was doing when it came in sight): lit
+		// the booster or ran it dry, reached a drift's next charge level, or let go of the drift for
+		// its mini-turbo.
+		const was = fresh ? flags : ghost.fxFlags;
+		const level = ( flags & FLAGS.levelMask ) >> FLAGS.levelShift;
+		const wasLevel = ( was & FLAGS.levelMask ) >> FLAGS.levelShift;
+		const burst = ( name, ...args ) => {
+
+			ghost.fx[ name ]( ...args );
+			ghost.bursts[ name ] ++;
+
+		};
+		if ( firing && ! ( was & FLAGS.firing ) ) burst( 'ignite' );
+		else if ( ! firing && was & FLAGS.firing ) burst( 'cool' );
+		if ( flags & FLAGS.drift && level > wasLevel ) burst( 'tier', level );
+		if ( was & FLAGS.drift && ! ( flags & FLAGS.drift ) && boosting && wasLevel > 0 ) burst( 'turbo', wasLevel );
 		// The boom as it goes supersonic, and the splash as it goes in.
 		if ( flags & FLAGS.splash && ! ( ghost.fxFlags & FLAGS.splash ) ) {
 
@@ -757,7 +776,7 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 			return [ ...ghosts.values() ].map( ghost => ( {
 				pid: ghost.pid, name: ghost.name, star: ghost.star, level: ghost.level, title: ghost.title, vehicle: ghost.model?.vehicle.id ?? null, wanted: ghost.vehicle,
 				drawn: ghost.drawn, visible: !! ghost.model?.pivot.visible, away: ghost.away, paused: !! ( ghost.flags & FLAGS.paused ),
-				flags: ghost.flags, faded: ghost.faded, fx: !! ghost.fx, builds: ghost.builds, snaps: ghost.snaps.length,
+				flags: ghost.flags, faded: ghost.faded, fx: !! ghost.fx, bursts: { ...ghost.bursts }, builds: ghost.builds, snaps: ghost.snaps.length,
 				position: ghost.model ? ghost.model.pivot.position.toArray() : null,
 				quaternion: ghost.model ? ghost.model.pivot.quaternion.toArray() : null,
 				tag: ghost.tag.root,

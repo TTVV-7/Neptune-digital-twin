@@ -29,13 +29,13 @@ import {
 // when it's full), made once with its buffers, and each frame only the numbers in them change.
 
 // The picture sheet: CELLS across and down, each CELL pixels. SHAPES names the cells.
-const CELLS = 4;
+const CELLS = 5;
 const CELL = 128;
-const SHAPES = { soft: 0, glow: 1, star: 2, heart: 3, square: 4, pixel: 5, ring: 6, bubble: 7, splat: 8, drop: 11, streak: 12, bolt: 13, burst: 14, shock: 15 };
+export const SHAPES = { soft: 0, glow: 1, star: 2, heart: 3, square: 4, pixel: 5, ring: 6, bubble: 7, splat: 8, drop: 11, streak: 12, bolt: 13, burst: 14, shock: 15, chevron: 16, flare: 17, spark: 18 };
 // How each quad is drawn: facing the camera, stretched along its axis, or flat across it.
-const FACING = 0;
-const ALONG = 1;
-const FLAT = 2;
+export const FACING = 0;
+export const ALONG = 1;
+export const FLAT = 2;
 // Ink lies this far (m) over the road, so the road's own bumps don't cut it.
 const INK_LIFT = 0.05;
 
@@ -224,6 +224,50 @@ function getSheet() {
 
 	} );
 	draw( SHAPES.shock, m => radial( m, [ [ 0, 0 ], [ 0.55, 0 ], [ 0.78, 0.55 ], [ 0.87, 1 ], [ 0.93, 0.45 ], [ 1, 0 ] ], m - 2 ) );
+	// A chevron pointing up (a boost pad's), bright in the middle of its stroke with a soft glow round it.
+	draw( SHAPES.chevron, m => {
+
+		ctx.lineCap = 'round';
+		ctx.lineJoin = 'round';
+		for ( const [ width, alpha ] of [ [ 34, 0.18 ], [ 22, 0.45 ], [ 12, 1 ] ] ) {
+
+			ctx.beginPath();
+			ctx.moveTo( m - 40, m + 22 );
+			ctx.lineTo( m, m - 18 );
+			ctx.lineTo( m + 40, m + 22 );
+			ctx.lineWidth = width;
+			ctx.strokeStyle = `rgba(255,255,255,${ alpha })`;
+			ctx.stroke();
+
+		}
+
+	} );
+	// A flare: a hot point with a long thin streak through it, side to side, as a lens draws a flash.
+	draw( SHAPES.flare, m => {
+
+		radial( m, [ [ 0, 1 ], [ 0.1, 0.7 ], [ 0.3, 0.12 ], [ 1, 0 ] ], m * 0.5 );
+		const gradient = ctx.createLinearGradient( 0, 0, CELL, 0 );
+		for ( const [ at, alpha ] of [ [ 0, 0 ], [ 0.3, 0.25 ], [ 0.5, 1 ], [ 0.7, 0.25 ], [ 1, 0 ] ] ) gradient.addColorStop( at, `rgba(255,255,255,${ alpha })` );
+		ctx.fillStyle = gradient;
+		ctx.fillRect( 0, m - 3, CELL, 6 );
+
+	} );
+	// A spark, drawn along its axis: a white-hot head at the top and a tail tapering away under it.
+	draw( SHAPES.spark, m => {
+
+		const gradient = ctx.createLinearGradient( 0, CELL, 0, 0 );
+		gradient.addColorStop( 0, 'rgba(255,255,255,0)' );
+		gradient.addColorStop( 0.75, 'rgba(255,255,255,0.75)' );
+		gradient.addColorStop( 1, 'rgba(255,255,255,1)' );
+		ctx.fillStyle = gradient;
+		ctx.beginPath();
+		ctx.moveTo( m, CELL - 4 );
+		ctx.lineTo( m + 14, 18 );
+		ctx.arc( m, 18, 14, 0, Math.PI, true );
+		ctx.closePath();
+		ctx.fill();
+
+	} );
 
 	sheet = new CanvasTexture( canvas );
 	sheet.colorSpace = SRGBColorSpace;
@@ -315,7 +359,7 @@ void main() {
 
 // `particles` that live, move and fade, and room for `quads` put down for one frame only. Made
 // once; nothing in it is made again.
-class Batch {
+export class Batch {
 
 	constructor( root, { particles, quads = 0, blending = NormalBlending } ) {
 
@@ -506,8 +550,10 @@ class Batch {
 //
 // A style: `flame`, colours for the classic flame's cones and glow { outer, inner, halo } or just
 // { halo } for a glow alone, with how long (`length`) and how wildly (`flicker`) it burns, or null
-// for none; and make( root ), its batches and update( frame ). What a style does each frame is
-// made once, in make(), so a frame makes nothing new.
+// for none; `tint`, the colour its ignition flashes in (see drive-bursts.js); and make( root ), its
+// batches, update( frame ) and ignite( frame, detail ): a burst of its own as the booster lights,
+// `detail` of its usual count (fewer on a phone). What a style does each frame is made once, in
+// make(), so a frame makes nothing new; an ignition reuses its particles, the oldest first.
 
 // Particles emitted at `rate` a second (times power), spread along the exhaust's path this frame
 // so a fast vehicle doesn't leave them in clumps a frame apart. fn( k ) sets each up, `k` from 0 (a
@@ -548,6 +594,26 @@ function thrown( frame, p, inherit, back, up = 0, jitter = 0 ) {
 	p.carry.copy( frame.velocity ).multiplyScalar( inherit );
 	p.velocity.copy( frame.back ).multiplyScalar( back ).addScaledVector( frame.up, up )
 		.add( _a.set( Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5 ).multiplyScalar( jitter * 2 ) );
+
+}
+
+// Flung out of where it is any way at once, as a burst throws it: carried along at `inherit` of
+// the vehicle's velocity, out at about `speed` m/s (half that to half as much again), and `back`
+// m/s more out of its back and `up` m/s up.
+function flung( frame, p, inherit, speed, back = 0, up = 0 ) {
+
+	p.carry.copy( frame.velocity ).multiplyScalar( inherit );
+	_a.set( Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5 );
+	if ( _a.lengthSq() < 1e-6 ) _a.set( 0, 1, 0 );
+	p.velocity.copy( _a.normalize() ).multiplyScalar( speed * ( 0.5 + Math.random() ) ).addScaledVector( frame.back, back ).addScaledVector( frame.up, up );
+
+}
+
+// The way `angle` (rad) round the back of it, across the way it points: 0 to its right, a quarter
+// turn up. Into `target`.
+function around( frame, angle, target ) {
+
+	return target.copy( frame.right ).multiplyScalar( Math.cos( angle ) ).addScaledVector( frame.up, Math.sin( angle ) );
 
 }
 
@@ -618,6 +684,7 @@ const STYLES = {
 	// A blue-white electric flame that crackles with little arcs, throwing blue sparks.
 	plasma: {
 		flame: { outer: 0x2f8dff, inner: 0xf2fbff, halo: 0x7cc8ff, length: 1.15, flicker: 2.2 },
+		tint: 0x7cc8ff,
 		make( root ) {
 
 			const batch = new Batch( root, { particles: 150, blending: AdditiveBlending } );
@@ -661,6 +728,30 @@ const STYLES = {
 					batch.update( frame.dt, FLICKER );
 
 				},
+				// Lit: a crackle of arcs all round the exhaust at once, and a spray of sparks.
+				ignite( frame, detail ) {
+
+					f = frame;
+					for ( let i = 0; i < 6; i ++ ) {
+
+						around( frame, ( i + Math.random() * 0.6 ) / 6 * Math.PI * 2, out ).addScaledVector( frame.back, 0.5 ).normalize();
+						bolt( batch, frame, frame.nozzle, out, ( 0.6 + Math.random() * 0.5 ) * frame.scale, 4, 0.12 * frame.scale, 0.04 * frame.scale, 0.1 + Math.random() * 0.08, 0xf4fbff, 0x4aa8ff );
+
+					}
+
+					for ( let i = Math.round( 28 * detail ); i > 0; i -- ) {
+
+						const p = batch.spawn( 0.3 + Math.random() * 0.3 );
+						p.position.copy( frame.nozzle );
+						flung( frame, p, 0.85, 4, 2 );
+						p.frame = SHAPES.glow;
+						p.size = ( 0.09 + Math.random() * 0.08 ) * frame.scale;
+						p.colour.set( Math.random() < 0.5 ? 0x9fdcff : 0xffffff );
+						p.drag = 2;
+
+					}
+
+				},
 			};
 
 		},
@@ -670,6 +761,7 @@ const STYLES = {
 	// struck again.
 	lightning: {
 		flame: { outer: 0x7a4dff, inner: 0xffffff, halo: 0xb48cff, length: 0.55, flicker: 2 },
+		tint: 0xc8b0ff,
 		make( root ) {
 
 			const batch = new Batch( root, { particles: 220, blending: AdditiveBlending } );
@@ -716,6 +808,27 @@ const STYLES = {
 					batch.update( frame.dt, FLICKER );
 
 				},
+				// Lit: a strike, four long forks thrown out behind and to both sides at once, each with a
+				// flash where it ends.
+				ignite( frame ) {
+
+					for ( let n = 0; n < 4; n ++ ) {
+
+						const length = ( 2 + Math.random() ) * frame.scale;
+						way.copy( frame.back ).addScaledVector( frame.right, ( n - 1.5 ) * 0.9 ).addScaledVector( frame.up, 0.2 + Math.random() * 0.6 ).normalize();
+						const life = 0.16 + Math.random() * 0.08;
+						tip.copy( bolt( batch, frame, frame.nozzle, way, length, 7, 0.2 * frame.scale, 0.06 * frame.scale, life, 0xf3eaff, 0x8a5cff ) );
+						const flash = batch.spawn( life );
+						flash.position.copy( tip );
+						flash.carry.copy( frame.velocity );
+						flash.frame = SHAPES.glow;
+						flash.size = 0.45 * frame.scale;
+						flash.colour.set( 0xc8b0ff );
+						flash.kind = 1;
+
+					}
+
+				},
 			};
 
 		},
@@ -724,6 +837,7 @@ const STYLES = {
 	// Glitter: a stream of tiny twinkling stars in white, gold, pink, sky and lilac.
 	glitter: {
 		flame: { halo: 0xfff3c4, length: 0.6, flicker: 1 },
+		tint: 0xfff3c4,
 		make( root ) {
 
 			const batch = new Batch( root, { particles: 230, blending: AdditiveBlending } );
@@ -754,6 +868,24 @@ const STYLES = {
 					batch.update( frame.dt, TWINKLE );
 
 				},
+				// Lit: a puff of stars bursting out of the exhaust every way.
+				ignite( frame, detail ) {
+
+					for ( let i = Math.round( 60 * detail ); i > 0; i -- ) {
+
+						const p = batch.spawn( 0.5 + Math.random() * 0.5 );
+						p.position.copy( frame.nozzle );
+						flung( frame, p, 0.85, 3.5, 1.5, 0.8 );
+						p.frame = SHAPES.star;
+						p.size = ( 0.08 + Math.random() * 0.1 ) * frame.scale;
+						p.colour.set( colours[ n ++ % colours.length ] );
+						p.fall = 0.1;
+						p.drag = 2.2;
+						p.spin = ( Math.random() - 0.5 ) * 4;
+
+					}
+
+				},
 			};
 
 		},
@@ -762,6 +894,7 @@ const STYLES = {
 	// Soap bubbles floating up and wobbling away, each popping at the end.
 	bubbles: {
 		flame: null,
+		tint: 0xbff3ff,
 		make( root ) {
 
 			const batch = new Batch( root, { particles: 110 } );
@@ -805,6 +938,25 @@ const STYLES = {
 					batch.update( frame.dt, hooks );
 
 				},
+				// Lit: a froth of big bubbles blown out round the exhaust, popping sooner.
+				ignite( frame, detail ) {
+
+					for ( let i = Math.round( 16 * detail ); i > 0; i -- ) {
+
+						const p = batch.spawn( 0.6 + Math.random() * 0.5 );
+						p.position.copy( frame.nozzle ).addScaledVector( frame.right, ( Math.random() - 0.5 ) * 0.8 * frame.scale ).addScaledVector( frame.up, ( Math.random() - 0.3 ) * 0.5 * frame.scale );
+						flung( frame, p, 0.9, 2.2, 0.5, 1.2 );
+						p.frame = SHAPES.bubble;
+						p.size = ( 0.12 + Math.random() * 0.16 ) * frame.scale;
+						p.grow = p.size * 0.3;
+						p.colour.set( pick( tints ) );
+						p.alpha = 0.95;
+						p.fall = - 0.05;
+						p.drag = 1.6;
+
+					}
+
+				},
 			};
 
 		},
@@ -813,6 +965,7 @@ const STYLES = {
 	// Confetti: little paper rectangles in party colours, tumbling down as they flutter behind.
 	confetti: {
 		flame: null,
+		tint: 0xffd84d,
 		make( root ) {
 
 			const batch = new Batch( root, { particles: 180 } );
@@ -853,6 +1006,26 @@ const STYLES = {
 					batch.update( frame.dt, hooks );
 
 				},
+				// Lit: a party popper, a cone of confetti shot up and out behind.
+				ignite( frame, detail ) {
+
+					for ( let i = Math.round( 70 * detail ); i > 0; i -- ) {
+
+						const p = batch.spawn( 1 + Math.random() * 0.6 );
+						p.position.copy( frame.nozzle );
+						flung( frame, p, 0.95, 2.5, Math.random(), 3.5 + Math.random() * 3 );
+						p.frame = SHAPES.square;
+						p.size = ( 0.07 + Math.random() * 0.04 ) * frame.scale;
+						p.aspect = 0.55;
+						p.colour.set( pick( colours ) );
+						p.fall = 0.35;
+						p.drag = 1.8;
+						p.spin = ( Math.random() - 0.5 ) * 20;
+						p.turn = Math.random() * Math.PI;
+
+					}
+
+				},
 			};
 
 		},
@@ -861,6 +1034,7 @@ const STYLES = {
 	// Hearts rising and swaying away, beating as they go.
 	hearts: {
 		flame: { halo: 0xff6fb5, length: 0.5, flicker: 0.6 },
+		tint: 0xff6fb5,
 		make( root ) {
 
 			const batch = new Batch( root, { particles: 70 } );
@@ -903,6 +1077,27 @@ const STYLES = {
 					batch.update( frame.dt, hooks );
 
 				},
+				// Lit: a ring of hearts thrown out round the exhaust, then rising and swaying away.
+				ignite( frame, detail ) {
+
+					const count = Math.max( 6, Math.round( 10 * detail ) );
+					for ( let i = 0; i < count; i ++ ) {
+
+						const p = batch.spawn( 1 + Math.random() * 0.3 );
+						around( frame, i / count * Math.PI * 2, _v );
+						p.position.copy( frame.nozzle ).addScaledVector( _v, 0.2 * frame.scale );
+						p.carry.copy( frame.velocity ).multiplyScalar( 0.85 );
+						p.velocity.copy( _v ).multiplyScalar( 2.6 ).addScaledVector( frame.back, 1 ).addScaledVector( frame.up, 0.6 );
+						p.frame = SHAPES.heart;
+						p.size = ( 0.16 + Math.random() * 0.08 ) * frame.scale;
+						p.grow = p.size * 0.3;
+						p.colour.set( colours[ i % colours.length ] );
+						p.fall = - 0.1;
+						p.drag = 1.4;
+
+					}
+
+				},
 			};
 
 		},
@@ -912,6 +1107,7 @@ const STYLES = {
 	// blinking out, as an old game would draw them.
 	pixel: {
 		flame: null,
+		tint: 0xffe14d,
 		make( root ) {
 
 			const batch = new Batch( root, { particles: 150 } );
@@ -953,6 +1149,25 @@ const STYLES = {
 					batch.update( frame.dt, hooks );
 
 				},
+				// Lit: an old game's explosion, pixels thrown out eight ways in rings, white-hot inside.
+				ignite( frame, detail ) {
+
+					const rings = detail < 1 ? 2 : 3;
+					for ( let way = 0; way < 8; way ++ ) for ( let ring = 0; ring < rings; ring ++ ) {
+
+						const p = batch.spawn( 0.45 + ring * 0.12 );
+						around( frame, way / 8 * Math.PI * 2, _v );
+						p.position.copy( frame.nozzle );
+						p.carry.copy( frame.velocity ).multiplyScalar( 0.85 );
+						p.velocity.copy( _v ).multiplyScalar( 2 + ring * 1.6 ).addScaledVector( frame.back, 1.5 );
+						p.frame = SHAPES.pixel;
+						p.size = grid;
+						p.colour.set( [ 0xffffff, 0xffe14d, 0xff9a1f ][ ring ] );
+						p.drag = 1.2;
+
+					}
+
+				},
 			};
 
 		},
@@ -962,6 +1177,7 @@ const STYLES = {
 	// which fall and twinkle out.
 	fireworks: {
 		flame: { halo: 0xffe0a0, length: 0.5, flicker: 1 },
+		tint: 0xffe0a0,
 		make( root ) {
 
 			const batch = new Batch( root, { particles: 280, blending: AdditiveBlending } );
@@ -969,6 +1185,8 @@ const STYLES = {
 			const colours = [ 0xff4d6d, 0xffd23f, 0x4dff9a, 0x4dc3ff, 0xc77dff, 0xffffff ];
 			let f = null;
 			let scale = 1;
+			// Where an ignition's starburst bursts from, as a rocket would.
+			const shell = { position: new Vector3(), carry: new Vector3(), velocity: new Vector3() };
 			const rocket = k => {
 
 				// Up and only a little back, so they burst over the vehicle rather than by the camera.
@@ -1032,6 +1250,30 @@ const STYLES = {
 					batch.update( frame.dt, hooks );
 
 				},
+				// Lit: a starburst right at the exhaust, and a salvo of three rockets that burst just over it.
+				ignite( frame ) {
+
+					f = frame;
+					scale = frame.scale;
+					shell.position.copy( frame.nozzle );
+					shell.carry.copy( frame.velocity ).multiplyScalar( 0.9 );
+					shell.velocity.copy( frame.back ).multiplyScalar( 1.5 );
+					burst( shell );
+					for ( let i = 0; i < 3; i ++ ) {
+
+						const p = batch.spawn( 0.18 + i * 0.05 );
+						p.position.copy( frame.nozzle );
+						thrown( frame, p, 0.95, 1.2, 4.5 + Math.random(), 1 );
+						p.velocity.addScaledVector( frame.right, ( i - 1 ) * 2.5 );
+						p.frame = SHAPES.glow;
+						p.size = 0.12 * frame.scale;
+						p.colour.set( 0xfff0c0 );
+						p.fall = 0.6;
+						p.kind = 1;
+
+					}
+
+				},
 			};
 
 		},
@@ -1041,6 +1283,7 @@ const STYLES = {
 	// seconds, in one colour after another.
 	ink: {
 		flame: null,
+		tint: 0xff4da6,
 		make( root ) {
 
 			const batch = new Batch( root, { particles: 210 } );
@@ -1111,6 +1354,26 @@ const STYLES = {
 					batch.update( frame.dt, hooks );
 
 				},
+				// Lit: a big splash, blobs flung back and out in a fan, and on the road a few splats at once.
+				ignite( frame, detail ) {
+
+					f = frame;
+					for ( let i = Math.round( 26 * detail ); i > 0; i -- ) {
+
+						const p = batch.spawn( 0.35 + Math.random() * 0.25 );
+						p.position.copy( frame.nozzle );
+						thrown( frame, p, 0.6, 3 + Math.random() * 3, 2 + Math.random() * 2, 0.5 );
+						p.velocity.addScaledVector( frame.right, ( Math.random() - 0.5 ) * 6 );
+						p.frame = SHAPES.drop;
+						p.size = ( 0.08 + Math.random() * 0.08 ) * frame.scale;
+						p.colour.set( colours[ colour ] );
+						p.fall = 1;
+
+					}
+
+					if ( frame.grounded ) for ( let i = 0; i < 3; i ++ ) splat();
+
+				},
 			};
 
 		},
@@ -1120,6 +1383,7 @@ const STYLES = {
 	// looks through them, widening as they fade.
 	rings: {
 		flame: { halo: 0x6ff6ff, length: 0.5, flicker: 0.8 },
+		tint: 0x6ff6ff,
 		make( root ) {
 
 			const batch = new Batch( root, { particles: 40, blending: AdditiveBlending } );
@@ -1150,6 +1414,24 @@ const STYLES = {
 					batch.update( frame.dt );
 
 				},
+				// Lit: three hoops at once, one inside the next, thrown out wider and faster than the rest.
+				ignite( frame ) {
+
+					for ( let i = 0; i < 3; i ++ ) {
+
+						const p = batch.spawn( 0.45 + i * 0.1 );
+						p.position.copy( frame.nozzle );
+						thrown( frame, p, 0.93, 1 + i, 0, 0 );
+						p.axis.copy( frame.back );
+						p.mode = FLAT;
+						p.frame = SHAPES.ring;
+						p.size = ( 0.2 + i * 0.1 ) * frame.scale;
+						p.grow = ( 0.8 + i * 0.35 ) * frame.scale;
+						p.colour.set( colours[ n ++ % colours.length ] );
+
+					}
+
+				},
 			};
 
 		},
@@ -1159,6 +1441,7 @@ const STYLES = {
 	// fades behind it, with a dust of sparks.
 	comet: {
 		flame: { outer: 0x7fd8ff, inner: 0xffffff, halo: 0xd6f4ff, length: 0.45, flicker: 0.6 },
+		tint: 0xd6f4ff,
 		make( root ) {
 
 			// The tail's points, round a ring: one every STEP s, laid at the exhaust and drifting
@@ -1234,6 +1517,28 @@ const STYLES = {
 					batch.update( dt );
 
 				},
+				// Lit: its head flares up, and a shower of specks bursts off it.
+				ignite( frame, detail ) {
+
+					const flare = batch.spawn( 0.3 );
+					flare.position.copy( frame.nozzle );
+					flare.carry.copy( frame.velocity );
+					flare.frame = SHAPES.glow;
+					flare.size = 0.7 * frame.scale;
+					flare.grow = 0.4 * frame.scale;
+					flare.colour.copy( white );
+					for ( let i = Math.round( 36 * detail ); i > 0; i -- ) {
+
+						const p = batch.spawn( 0.4 + Math.random() * 0.3 );
+						p.position.copy( frame.nozzle );
+						flung( frame, p, 0.75, 4, 2 );
+						p.size = ( 0.06 + Math.random() * 0.05 ) * frame.scale;
+						p.colour.set( Math.random() < 0.5 ? 0xbfe8ff : 0xffffff );
+						p.drag = 1.5;
+
+					}
+
+				},
 			};
 
 		},
@@ -1252,8 +1557,16 @@ export function styleFlame( id ) {
 
 }
 
-// The style `id`'s particles, in `root`: { update( frame ), alive, budget }, or null for the
-// classic flame (or a name it doesn't know). Disposing of `root` disposes of them.
+// The colour a style's ignition flashes in (see drive-bursts.js), or undefined for the classic
+// flame, whose flash is its flame's.
+export function styleTint( id ) {
+
+	return STYLES[ id ]?.tint;
+
+}
+
+// The style `id`'s particles, in `root`: { update( frame ), ignite( frame, detail ), alive, budget },
+// or null for the classic flame (or a name it doesn't know). Disposing of `root` disposes of them.
 export function createBoostStyle( root, id ) {
 
 	const style = STYLES[ id ];
@@ -1261,6 +1574,8 @@ export function createBoostStyle( root, id ) {
 	const made = style.make( root );
 	return {
 		update: frame => made.update( frame ),
+		// Its own burst as the booster lights, `detail` (0 to 1) of its usual count.
+		ignite: ( frame, detail = 1 ) => made.ignite?.( frame, detail ),
 		// How many particles are alive, and the most there can be.
 		get alive() {
 
@@ -1278,8 +1593,9 @@ export function createBoostStyle( root, id ) {
 
 // --- supersonic --------------------------------------------------------------------------------
 
-// Going supersonic (see drive.js): a sonic boom once, a shock ring blown out round the vehicle with
-// a flash; and while it lasts, streaks of air streaming back past its body. Any style gets these.
+// Going supersonic (see drive.js): a sonic boom once, shock rings blown out round the vehicle with
+// a flash, the widest of them lingering as it spreads so it's seen from the chase camera; and while
+// it lasts, streaks of air streaming back past its body. Any style gets these.
 export function createSupersonic( root ) {
 
 	const batch = new Batch( root, { particles: 120, blending: AdditiveBlending } );
@@ -1335,19 +1651,22 @@ export function createSupersonic( root ) {
 		boom( frame, size ) {
 
 			const way = speed > 1 ? travel : frame.back;
-			for ( const [ picture, life, inherit, start, spread, colour ] of BOOM ) {
+			for ( const [ picture, life, inherit, start, spread, colour, alpha = 1, aspect = 1 ] of BOOM ) {
 
 				const p = batch.spawn( life );
 				p.position.copy( frame.middle );
 				p.carry.copy( frame.velocity ).multiplyScalar( inherit );
 				p.axis.copy( way );
-				// The flash faces the camera; the rings lie across the way it's going.
-				p.mode = picture === SHAPES.glow ? FACING : FLAT;
+				// The flashes face the camera; the rings lie across the way it's going.
+				const facing = picture === SHAPES.glow || picture === SHAPES.flare;
+				p.mode = facing ? FACING : FLAT;
 				p.frame = picture;
 				p.size = size * start;
 				p.grow = size * spread;
+				p.aspect = aspect;
 				p.colour.set( colour );
-				p.kind = picture === SHAPES.glow ? 2 : 1;
+				p.alpha = alpha;
+				p.kind = facing ? 2 : 1;
 
 			}
 
@@ -1369,10 +1688,16 @@ export function createSupersonic( root ) {
 
 }
 
-// The boom: a shock ring, a thinner ring inside it and a flash, each [ picture, life (s), share of
-// the vehicle's speed it keeps, size and growth (times the vehicle's size), colour ].
+// The boom: a shock ring, a thinner ring inside it and a flash, kept small enough not to white out
+// a phone's narrow view (World Drive flashes the edges of the view white instead, screen-fx.js); a
+// wide ring lingering as it spreads to seven times the vehicle's size, a second, bluer one inside
+// that, and a flare side to side. Each [ picture, life (s), share of the vehicle's speed it keeps,
+// size and growth (times the vehicle's size), colour, alpha, height for its width ].
 const BOOM = [
 	[ SHAPES.shock, 0.5, 0.6, 0.6, 4.5, 0xffffff ],
 	[ SHAPES.ring, 0.4, 0.75, 0.4, 3, 0xcfeaff ],
-	[ SHAPES.glow, 0.18, 1, 1.6, 1.4, 0xffffff ],
+	[ SHAPES.glow, 0.18, 1, 1.1, 1, 0xffffff, 0.75 ],
+	[ SHAPES.shock, 0.95, 0.7, 1, 6, 0xeaf6ff, 0.6 ],
+	[ SHAPES.ring, 0.75, 0.8, 0.8, 4, 0x9fd4ff, 0.6 ],
+	[ SHAPES.flare, 0.22, 1, 1.4, 1.2, 0xffffff, 0.5, 0.25 ],
 ];

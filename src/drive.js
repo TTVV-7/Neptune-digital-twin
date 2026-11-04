@@ -14,11 +14,14 @@ import { createDriveFx } from './drive-fx.js';
 // steering at low speed, and drifts on Space that pay out a boost; and `crash: 'launch'`, where
 // hitting something bounces the vehicle off it and throws it into the air, and in the air it can
 // spin, flip and roll for tricks that score when it lands on its wheels (crash: 'stop', the
-// default, stops it dead). And `water`, also off unless an app gives one (World Drive's
-// drive-app/water.js, which tells water from ground on Google's mesh): driving or coming down into
-// water is a splash, the vehicle sinking nose first, and a moment later it's back on the last dry
-// ground it was on, facing away from the water. A vehicle whose tuning says it `floats` (a
-// hovercraft) rides on water as on the ground.
+// default, stops it dead). With any of these three on, driving has World Drive's feel too: the
+// body leaning on its springs as it speeds up, brakes and turns, tyre smoke and wheelspin floored
+// from a standstill, the camera jolted as the booster lights, and bursts for each of those
+// moments (drive-fx.js); without them it drives and looks as it always has. And `water`, also off
+// unless an app gives one (World Drive's drive-app/water.js, which tells water from ground on
+// Google's mesh): driving or coming down into water is a splash, the vehicle sinking nose first,
+// and a moment later it's back on the last dry ground it was on, facing away from the water. A
+// vehicle whose tuning says it `floats` (a hovercraft) rides on water as on the ground.
 
 const KMH = 3.6;
 const GRAVITY = 9.81;
@@ -65,6 +68,23 @@ const BOOST_MIN = 0.15;
 // boosting or not, until the speed drops under `below` of that top speed: after the gauge runs
 // out, a moment more as it slows.
 const SUPERSONIC = { near: 0.85, after: 0.75, below: 0.75, ease: 4, shake: 0.25 };
+// The feel (with the booster, drifts or stunts on): the body leans on its springs, nose up as it
+// surges ahead and down under the brakes (`pitch` rad for each m/s² it speeds up or slows), and out
+// of a turn (`roll` rad for each m/s² across it, less while drifting, which leans it already), at
+// most `most` rad either way, scaled by its handling's squash (a soft ride leans more). The springs
+// (`stiffness` 1/s², `damping` 1/s) let it settle with a little bounce. The booster lighting kicks
+// its nose up at `kick` rad/s besides. It leans about the wheels on the low side, so they stay on
+// the ground.
+const BODY = { pitch: 0.004, roll: 0.0025, most: 0.07, stiffness: 90, damping: 9, kick: 0.9, drifting: 0.4 };
+// Floored from a standstill, its rear tyres spin up for `time` s at most, or until it's going
+// `until` m/s: smoking (drive-fx.js) and turning as if it were going `extra` m/s faster.
+const SPIN = { time: 0.9, until: 9, extra: 12 };
+// The camera jolted (see jolt), each on a spring that rings out in about a third of a second: the
+// field of view punched wider (degrees, `punch`, which an app adds to its own as it does `warp`)
+// and the view nodded up (shares of the vehicle's height). JOLTS: how much, for the booster
+// lighting, a mini-turbo (for each level) and the sonic boom.
+const JOLT = { stiffness: 120, damping: 16, gain: 25 };
+const JOLTS = { ignite: [ 5, 0.35 ], turbo: [ 1.2, 0.12 ], boom: [ 7, 0.45 ] };
 // Kart handling: the most it turns (°/s) at full lock, from walking pace to top speed.
 const KART_YAW = [ 150, 55 ];
 // Drifts start above DRIFT_MIN m/s, with a hop of DRIFT_HOP m/s. They turn at DRIFT_YAW °/s
@@ -266,13 +286,15 @@ const LEVEL = new Quaternion();
 export class Driver {
 
 	// fly, booster, drift: the options above, all off by default; crash: 'stop' or 'launch'.
+	// effects: what drive-fx.js is asked for ({ detail, calm }, see there), which an app may change
+	// as it drives; null for its defaults.
 	// onScore( run ), with stunts on: called each time a jump's tricks are landed, with the run so
 	// far (see runSoFar), for a leaderboard. water: null (the default: no water anywhere), or
 	// { look( east, north, y ) }, saying what's under ( east, north ), looked for down from just
 	// over y: { level, dry, shore }, level being the water's surface height there (null where it
 	// isn't water), dry whether it's surely dry ground (neither: it can't tell) and shore, where it
 	// can't tell, the height of water just past there (by its edge), if there is any.
-	constructor( { camera, models, controls, getColliders, hud, onStop, onScore = null, fly = false, booster = false, drift = false, crash = 'stop', water = null } ) {
+	constructor( { camera, models, controls, getColliders, hud, onStop, onScore = null, fly = false, booster = false, drift = false, crash = 'stop', water = null, effects = null } ) {
 
 		this.camera = camera;
 		this.models = models;
@@ -286,6 +308,11 @@ export class Driver {
 		this.drift = drift;
 		this.launch = crash === 'launch';
 		this.water = water;
+		// World Drive's feel (see BODY), with any of those on; and whether the camera may move for
+		// effect (hits' shakes and the jolts), which an app turns off for those who'd rather it didn't.
+		this.lively = booster || drift || this.launch;
+		this.motion = true;
+		this.effects = effects;
 		this.raycaster = new Raycaster();
 		this.keys = new Set();
 		// When each key last went down (by this.clock, the time driven), for the keys that count in
@@ -495,6 +522,10 @@ export class Driver {
 		this.driftHop = false;
 		this.boost = null;
 		this.stuckTime = 0;
+		// The feel (see BODY, SPIN, JOLT): the body's lean, the rear tyres' spin and the camera's jolts.
+		this.body = this.lively ? { pitch: { value: 0, speed: 0 }, roll: { value: 0, speed: 0 }, accel: 0, lateral: 0, lastSpeed: 0, lastCourse: this.course, throttle: false, spinFrom: - Infinity } : null;
+		this.wheelspin = 0;
+		this.jolts = { fov: { value: 0, speed: 0 }, nod: { value: 0, speed: 0 } };
 		// Stunts (crash: 'launch'): what it's doing in the air (see enterAir), the squash spring, the
 		// camera's shake and the way the chase camera looks (see placeCamera).
 		this.air = null;
@@ -552,7 +583,7 @@ export class Driver {
 		this.cabNear = this.cab ? this.measureCab() : null;
 		this.cabShown = false;
 		this.lastBase = null;
-		this.fx = this.booster || this.drift || this.launch ? createDriveFx( this.models.group.parent ?? this.models.group, spec.fx, { water: !! this.water } ) : null;
+		this.fx = this.booster || this.drift || this.launch ? createDriveFx( this.models.group.parent ?? this.models.group, spec.fx, { water: !! this.water, ...this.effects ? { effects: this.effects } : {} } ) : null;
 
 		this.keys.clear();
 		this.controls.keys?.clear();
@@ -586,6 +617,16 @@ export class Driver {
 		this.fx = null;
 		this.supersonic = false;
 		this.warp = 0;
+		this.wheelspin = 0;
+		this.jolts.fov.value = this.jolts.fov.speed = this.jolts.nod.value = this.jolts.nod.speed = 0;
+		// Parked as it stands, not leaning on its springs as it was a moment ago.
+		if ( this.body ) {
+
+			this.body.pitch.value = this.body.pitch.speed = this.body.roll.value = this.body.roll.speed = 0;
+			this.pose();
+			entry.pivot.updateMatrixWorld( true );
+
+		}
 
 		// Park it where it stopped, as it stands: tilted on the ground under its wheels or tracks, up
 		// a pile or down in a hole. If it's in the air it drops back onto the ground instead. Save that.
@@ -808,14 +849,17 @@ export class Driver {
 		}
 
 		const { pivot } = this.entry;
+		if ( this.body ) this.lean( dt, throttle );
 		this.pose();
 		if ( this.launch ) this.springSquash( dt );
 		pivot.updateMatrixWorld( true );
 		// Front wheels turned against a drift, as a kart's are. A model can also follow the vehicle
-		// leaving the ground and coming down (its suspension), and the gas.
+		// leaving the ground and coming down (its suspension), and the gas. Floored from a standstill,
+		// they spin faster than it goes.
 		const wheels = this.drifting ? this.steer * 0.3 - this.drifting * 0.6 : this.steer;
 		const airborne = ! this.grounded && ! this.flying;
-		for ( const animate of this.animators ) animate( { steer: wheels, speed: this.speed, dt, airborne, vy: this.vy, throttle } );
+		const turning = this.wheelspin > 0 ? this.speed + this.wheelspin * SPIN.extra : this.speed;
+		for ( const animate of this.animators ) animate( { steer: wheels, speed: turning, dt, airborne, vy: this.vy, throttle } );
 		this.updateFx( dt );
 
 		this.checkStuck( dt, throttle || brake, Math.hypot( this.east - east, this.north - north ) );
@@ -827,6 +871,7 @@ export class Driver {
 			driftCharge: this.drifting ? Math.min( 1, this.driftTime / DRIFT_LEVELS[ DRIFT_LEVELS.length - 1 ] ) : 0, driftHeld: this.drift && keys.has( 'Space' ),
 		} );
 		if ( this.booster ) this.hud.setBoost?.( this.gauge );
+		this.ringJolts( dt );
 		if ( this.launch ) {
 
 			// A combo lasts while tricks keep coming.
@@ -859,8 +904,13 @@ export class Driver {
 
 		}
 
-		enuToLocal( this.east, this.north, this.y, pivot.position );
-		pivot.rotation.set( this.pitch, headingToYaw( this.heading ), this.roll, 'YXZ' );
+		// Leaning on its springs (World Drive's feel, see lean), about the wheels on the low side: lifted
+		// by as much as its middle would take them down.
+		const pitch = this.body ? this.body.pitch.value : 0;
+		const roll = this.body ? this.body.roll.value : 0;
+		const lift = this.body ? this.wheelbase / 2 * Math.abs( Math.sin( pitch ) ) + this.width * 0.4 * Math.abs( Math.sin( roll ) ) : 0;
+		enuToLocal( this.east, this.north, this.y + lift, pivot.position );
+		pivot.rotation.set( this.pitch + pitch, headingToYaw( this.heading ), this.roll + roll, 'YXZ' );
 		if ( ! this.air ) return;
 		_c.copy( this.centre ).applyQuaternion( pivot.quaternion ).add( pivot.position );
 		pivot.quaternion.multiply( this.air.q );
@@ -917,7 +967,12 @@ export class Driver {
 			this.speed -= this.speed * 0.1 * dt;
 			this.driftTime += dt;
 			const level = DRIFT_LEVELS.filter( time => this.driftTime >= time ).length;
-			if ( this.grounded ) this.driftLevel = Math.max( this.driftLevel, level );
+			if ( this.grounded && level > this.driftLevel ) {
+
+				this.driftLevel = level;
+				this.fx?.tier( level );
+
+			}
 
 		} else {
 
@@ -954,6 +1009,8 @@ export class Driver {
 			// A kick at once, then the push (see thrust).
 			this.speed = Math.max( this.speed, Math.min( this.speed + boost.kick, this.spec.topSpeed / KMH * boost.speed ) );
 			this.hud.flash( boost.name );
+			this.fx?.turbo( this.driftLevel );
+			this.jolt( JOLTS.turbo[ 0 ] * this.driftLevel, JOLTS.turbo[ 1 ] * this.driftLevel );
 
 		}
 
@@ -966,6 +1023,10 @@ export class Driver {
 
 		if ( this.firing || this.gauge < BOOST_MIN ) return;
 		this.firing = true;
+		// Lit with a bang: a burst at the exhaust, the camera jolted and the nose kicked up.
+		this.fx?.ignite();
+		this.jolt( ...JOLTS.ignite );
+		if ( this.body ) this.body.pitch.speed += BODY.kick * this.handling.squash;
 
 	}
 
@@ -994,6 +1055,7 @@ export class Driver {
 
 				this.supersonic = true;
 				this.fx?.boom();
+				this.jolt( ...JOLTS.boom );
 				// (The shake dies away with stunts on, which is where it's used: see turnView.)
 				if ( this.launch ) this.shake = Math.max( this.shake, SUPERSONIC.shake );
 				this.hud.setSupersonic?.( true );
@@ -1020,7 +1082,13 @@ export class Driver {
 		if ( this.firing ) {
 
 			this.gauge = Math.max( 0, this.gauge - dt / BOOST_TIME );
-			if ( this.gauge === 0 ) this.firing = false;
+			if ( this.gauge === 0 ) {
+
+				// Run dry: the exhaust glows on and cools.
+				this.firing = false;
+				this.fx?.cool();
+
+			}
 			if ( this.speed < base * BOOST_SPEED ) this.speed = Math.min( this.speed + BOOST_ACCEL * dt, base * BOOST_SPEED );
 
 		} else {
@@ -1393,6 +1461,7 @@ export class Driver {
 		const ease = 1 - Math.exp( - 2.5 * dt );
 		this.pitch += ( NOSE_DOWN + Math.sin( t * 4.2 ) * 0.06 - this.pitch ) * ease;
 		this.roll += ( splash.roll + Math.sin( t * 3.1 ) * 0.07 - this.roll ) * ease;
+		if ( this.body ) this.lean( dt, false );
 		this.pose();
 		if ( this.launch ) this.springSquash( dt );
 		this.entry.pivot.updateMatrixWorld( true );
@@ -1452,7 +1521,7 @@ export class Driver {
 		_c.y = Math.max( _c.y, splash.level + 0.3 );
 		splash.look.lerp( _c, 1 - Math.exp( - 5 * dt ) );
 		_look.copy( splash.look );
-		if ( this.shake > 0.01 ) {
+		if ( this.motion && this.shake > 0.01 ) {
 
 			_look.x += Math.sin( this.clock * 47 ) * this.shake;
 			_look.y += Math.sin( this.clock * 61 + 1 ) * this.shake * 0.7;
@@ -1483,6 +1552,7 @@ export class Driver {
 		this.lastSafe = { east: this.east, north: this.north, y };
 		this.recentGood = this.lastGood = { east: this.east, north: this.north, y };
 		this.squash.value = this.squash.speed = 0;
+		if ( this.body ) this.body.pitch.value = this.body.pitch.speed = this.body.roll.value = this.body.roll.speed = this.body.accel = this.body.lateral = 0;
 		this.entry.pivot.scale.setScalar( this.scale );
 		this.pose();
 		this.entry.pivot.updateMatrixWorld( true );
@@ -1490,6 +1560,67 @@ export class Driver {
 		this.placeCamera( 1 );
 		this.hud.fade?.( false );
 		this.hud.flash( 'Back on dry land' );
+
+	}
+
+	// World Drive's feel: the body pitching and rolling on its springs toward how it's speeding up or
+	// slowing and how hard it's turning (on its wheels; elsewhere it settles back), and its rear
+	// tyres spinning up as it's floored from a standstill (see BODY, SPIN).
+	lean( dt, throttle ) {
+
+		const { body } = this;
+		const onWheels = this.grounded && ! this.air && ! this.flying && ! this.splash;
+		if ( dt > 0 ) {
+
+			// How fast it's speeding up (m/s²) and how hard it's turning (m/s² across the way it goes),
+			// eased, so a single jolt of a frame doesn't throw it about.
+			const accel = MathUtils.clamp( ( this.speed - body.lastSpeed ) / dt, - 40, 40 );
+			const turn = ( ( this.course - body.lastCourse ) % 360 + 540 ) % 360 - 180;
+			const lateral = MathUtils.clamp( this.speed * turn * MathUtils.DEG2RAD / dt, - 40, 40 );
+			const ease = Math.min( 1, dt * 10 );
+			body.accel += ( ( onWheels ? accel : 0 ) - body.accel ) * ease;
+			body.lateral += ( ( onWheels ? lateral : 0 ) - body.lateral ) * ease;
+
+		}
+
+		body.lastSpeed = this.speed;
+		body.lastCourse = this.course;
+		const soft = this.handling.squash;
+		const pitch = MathUtils.clamp( body.accel * BODY.pitch * soft, - BODY.most, BODY.most );
+		const roll = MathUtils.clamp( body.lateral * BODY.roll * soft * ( this.drifting ? BODY.drifting : 1 ), - BODY.most, BODY.most );
+		spring( body.pitch, pitch, dt, BODY.stiffness, BODY.damping );
+		spring( body.roll, roll, dt, BODY.stiffness, BODY.damping );
+
+		// Floored from a standstill (the gas going down with it all but stopped): the rear tyres spin.
+		if ( throttle && ! body.throttle && this.grounded && Math.abs( this.speed ) < 1 ) body.spinFrom = this.clock;
+		body.throttle = throttle;
+		const since = this.clock - body.spinFrom;
+		if ( throttle && onWheels && ! this.drifting && this.speed < SPIN.until && since < SPIN.time ) this.wheelspin = 1 - since / SPIN.time;
+		else this.wheelspin = Math.max( 0, this.wheelspin - dt * 4 );
+
+	}
+
+	// The camera jolted for effect: the view punched `fov` degrees wider and nodded up `nod` of the
+	// vehicle's height, each springing back (see JOLT). Not when the app has turned that off.
+	jolt( fov, nod ) {
+
+		if ( ! this.motion ) return;
+		this.jolts.fov.speed += fov * JOLT.gain;
+		this.jolts.nod.speed += nod * JOLT.gain;
+
+	}
+
+	ringJolts( dt ) {
+
+		for ( const s of [ this.jolts.fov, this.jolts.nod ] ) if ( s.value || s.speed ) spring( s, 0, dt, JOLT.stiffness, JOLT.damping );
+
+	}
+
+	// How much wider (degrees) the view is punched by a jolt just now: an app adds it to its field
+	// of view, as it does `warp`.
+	get punch() {
+
+		return this.jolts?.fov.value ?? 0;
 
 	}
 
@@ -1517,6 +1648,8 @@ export class Driver {
 			supersonic: this.supersonic,
 			// Sinking in water, foam round it; a hovercraft on water throws up spray as it goes.
 			water: this.splash ? { level: this.splash.level, sinking: true } : this.floats && this.onWater && this.grounded && ! this.flying ? { level: this.y, spray: MathUtils.clamp( Math.abs( this.speed ) / 25, 0, 1 ) } : null,
+			// Floored from a standstill, smoke off the rear tyres (not a hovercraft's, on its skirt).
+			burnout: this.floats ? 0 : this.wheelspin,
 			dt,
 		} );
 
@@ -2372,8 +2505,9 @@ export class Driver {
 
 		}
 
-		// Shaken by a hit: the view, not the camera, so the shake never puts it inside a wall.
-		if ( this.shake > 0.01 ) {
+		// Shaken by a hit: the view, not the camera, so the shake never puts it inside a wall. Jolted
+		// (the booster lighting, a mini-turbo, the sonic boom), it nods up for a moment.
+		if ( this.motion && this.shake > 0.01 ) {
 
 			_look.x += Math.sin( this.clock * 47 ) * this.shake;
 			_look.y += Math.sin( this.clock * 61 + 1 ) * this.shake * 0.7;
@@ -2381,6 +2515,7 @@ export class Driver {
 
 		}
 
+		if ( this.jolts.nod.value ) _look.y += this.jolts.nod.value * height;
 		this.camera.lookAt( _look );
 		// Keep the walk controller's view direction in step for when we get out.
 		this.controls.yaw = headingToYaw( this.heading );
@@ -2554,6 +2689,27 @@ function saveBest( score ) {
 	} catch {
 
 		// Storage blocked (a private window): it's kept for this visit only.
+
+	}
+
+}
+
+// `s` ({ value, speed }) on a spring toward `target`, of `stiffness` (1/s²) and `damping` (1/s): in
+// small steps, so a stiff one stays steady at a low frame rate, and at rest once it's there.
+function spring( s, target, dt, stiffness, damping ) {
+
+	for ( let left = dt; left > 1e-6; left -= 1 / 120 ) {
+
+		const step = Math.min( left, 1 / 120 );
+		s.speed -= ( stiffness * ( s.value - target ) + damping * s.speed ) * step;
+		s.value += s.speed * step;
+
+	}
+
+	if ( Math.abs( s.value - target ) < 1e-5 && Math.abs( s.speed ) < 1e-4 ) {
+
+		s.value = target;
+		s.speed = 0;
 
 	}
 

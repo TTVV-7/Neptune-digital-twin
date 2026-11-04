@@ -15,6 +15,7 @@ import { loadVehicle, loadVehicles, lookOf, specOf } from './vehicles.js';
 import { setUpPanel } from './panel.js';
 import { setUpGarage } from './garage.js';
 import { createBoostPads } from './pads.js';
+import { createScreenFx } from './screen-fx.js';
 import { createWater } from './water.js';
 import { createSea, lakesNear, seaLevel, waterAt } from './sea.js';
 import { setUpLeaderboard } from './leaderboard.js';
@@ -45,7 +46,8 @@ import * as screens from './screens.js';
 const DEV_KEY = __DEV_MAPS_KEY__;
 const SKY = new Color( 0x9fcbee );
 const SPACE = new Color( 0x070c16 );
-// Field of view on the globe, and driving; supersonic (drive.js), the view widens by this much more.
+// Field of view on the globe, and driving; supersonic (drive.js), the view widens by this much more,
+// and a jolt (the booster lighting, the sonic boom) punches it wider still for a moment.
 const GLOBE_FOV = 50;
 const DRIVE_FOV = 70;
 const SUPERSONIC_FOV = 9;
@@ -246,9 +248,13 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 
 		},
 		// What World Drive drives with: F flies, Shift (or B) boosts, the kart drifts, hitting something
-		// throws you into the air for stunts, and driving into water is a splash.
-		fly: true, booster: true, drift: true, crash: 'launch', water,
+		// throws you into the air for stunts, and driving into water is a splash. Its effects (bursts,
+		// fewer on a phone and calmer for those asking for less motion) as screen-fx.js sets them.
+		fly: true, booster: true, drift: true, crash: 'launch', water, effects: { detail: 1, calm: false },
 	} );
+	// Speed lines, overdrive's white edges and the camera's jolts and shakes, with their switch in
+	// the pause menu (screen-fx.js).
+	const screenFx = createScreenFx( { scene, driver, toggle: $( 'pause' ).querySelector( '.camera-toggle' ), touch: () => document.body.classList.contains( 'touch' ) } );
 
 	const state = { mode: 'globe', place: null, entry: null, vehicle: null, drop: null, leaving: false };
 	// Boost pads on the ground as you drive (pads.js), never on water, with their switch in the
@@ -376,7 +382,7 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 	const live = ( liveOn || liveReason === 'unknown' ) && typeof liveVisit === 'string' && liveVisit
 		? createLive( { earth, ellipsoid, visit: liveVisit, player: () => board.player, ride: { vehicle: panel.vehicle.id, look: lookOf( panel.vehicle ) } } )
 		: null;
-	const ghosts = live && createGhosts( { scene, earth, camera, vehicles, loader: models.loader, live, tags: $( 'live-tags' ), own: () => state.entry?.pivot ?? null } );
+	const ghosts = live && createGhosts( { scene, earth, camera, vehicles, loader: models.loader, live, tags: $( 'live-tags' ), own: () => state.entry?.pivot ?? null, effects: driver.effects } );
 	const friends = live && setUpFriends( { live, ghosts, vehicles, mode: () => state.mode, goTo } );
 	// Where people are driving now, on the globe (online.js): with driving with others, and nothing
 	// of it without.
@@ -988,6 +994,8 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 
 	const timer = new Timer();
 	timer.connect( document );
+	// The field of view as eased toward the globe's or driving's (the camera's has a jolt on top).
+	const view = { fov: camera.fov };
 	let slow = 0;
 	const carto = {};
 	const sky = new Color();
@@ -996,6 +1004,7 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 		timer.update( time );
 		const dt = Math.min( timer.getDelta(), 0.1 );
 		if ( driver.active ) driver.update( dt );
+		screenFx.update( dt, state.mode === 'driving' || state.mode === 'paused' );
 		// The open sea's surface stays round the vehicle.
 		if ( driver.active ) sea.follow( driver.east, driver.north, driver.y );
 		if ( state.mode === 'driving' && driver.active ) progress.drive( dt, driven() );
@@ -1011,10 +1020,14 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 		const space = MathUtils.smoothstep( altitude, ...SKY_BELOW );
 		scene.background = space < 1 ? sky.lerpColors( SKY, SPACE, space ) : null;
 		if ( testEarth ) testEarth.visible = state.mode === 'globe' || altitude > 20000;
-		const fov = state.mode === 'driving' || state.mode === 'paused' ? DRIVE_FOV + SUPERSONIC_FOV * driver.warp : GLOBE_FOV;
-		if ( Math.abs( camera.fov - fov ) > 0.01 ) {
+		const driving = state.mode === 'driving' || state.mode === 'paused';
+		const fov = driving ? DRIVE_FOV + SUPERSONIC_FOV * driver.warp : GLOBE_FOV;
+		if ( Math.abs( view.fov - fov ) > 0.01 ) view.fov += ( fov - view.fov ) * Math.min( 1, dt * 3 );
+		// A jolt's punch on top, at once rather than eased in.
+		const punched = view.fov + ( driving ? driver.punch : 0 );
+		if ( Math.abs( camera.fov - punched ) > 1e-3 ) {
 
-			camera.fov += ( fov - camera.fov ) * Math.min( 1, dt * 3 );
+			camera.fov = punched;
 			camera.updateProjectionMatrix();
 
 		}
@@ -1057,7 +1070,7 @@ async function start( { key, left = null, visit: token = null, worker = true, go
 	// For poking around from the browser console, and for the tests.
 	window.drive = {
 		scene, camera, renderer, tiles, globe, models, driver, ground, panel, leaderboard: board,
-		garage, supporter, pads, water, sea, live, ghosts, friends, online, progress, profile,
+		garage, supporter, pads, water, sea, live, ghosts, friends, online, progress, profile, screenFx,
 		get mode() {
 
 			return state.mode;

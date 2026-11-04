@@ -293,6 +293,8 @@ export function createBoostPads( { scene, driver, ground, water = null, toggle =
 			const off = Math.hypot( pe - de * t, pn - dn * t );
 			if ( off > pad.radius + driver.width * REACH || Math.abs( driver.y - pad.at.y ) > HIGH ) continue;
 			driver.addBoost( pad.refill );
+			// Its burst: a ring over it, chevrons rising off it, and the vehicle lit up.
+			driver.fx?.pickup( pad.at, pad.colour, pad.radius );
 			onPad( pad );
 			pad.state = 'used';
 			pad.timer = pad.respawn;
