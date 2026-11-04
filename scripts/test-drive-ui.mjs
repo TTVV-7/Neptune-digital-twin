@@ -1385,6 +1385,7 @@ describe( 'World Drive boost and driving effects', () => {
 			out.dry = { empty, firing: d.firing };
 			// A pad tops it up: it fills before your eyes, with a shine along it.
 			Object.assign( d, { speed: 12, gauge: 0.4, supersonic: false, firing: false } );
+			d.hud.setSupersonic( false );
 			pads.clear();
 			pads.place( 'small', 0, d.north + 5 );
 			let refill = null;

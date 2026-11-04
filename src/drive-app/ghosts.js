@@ -517,6 +517,14 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 
 	}
 
+	// One of a ghost's bursts set off (drive-fx.js's `name`, of drift level `level`), and counted.
+	function burst( ghost, name, level ) {
+
+		ghost.fx[ name ]( level );
+		ghost.bursts[ name ] ++;
+
+	}
+
 	function updateFx( ghost, dt ) {
 
 		const { model, flags } = ghost;
@@ -532,16 +540,10 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 		const was = fresh ? flags : ghost.fxFlags;
 		const level = ( flags & FLAGS.levelMask ) >> FLAGS.levelShift;
 		const wasLevel = ( was & FLAGS.levelMask ) >> FLAGS.levelShift;
-		const burst = ( name, ...args ) => {
-
-			ghost.fx[ name ]( ...args );
-			ghost.bursts[ name ] ++;
-
-		};
-		if ( firing && ! ( was & FLAGS.firing ) ) burst( 'ignite' );
-		else if ( ! firing && was & FLAGS.firing ) burst( 'cool' );
-		if ( flags & FLAGS.drift && level > wasLevel ) burst( 'tier', level );
-		if ( was & FLAGS.drift && ! ( flags & FLAGS.drift ) && boosting && wasLevel > 0 ) burst( 'turbo', wasLevel );
+		if ( firing && ! ( was & FLAGS.firing ) ) burst( ghost, 'ignite' );
+		else if ( ! firing && was & FLAGS.firing ) burst( ghost, 'cool' );
+		if ( flags & FLAGS.drift && level > wasLevel ) burst( ghost, 'tier', level );
+		if ( was & FLAGS.drift && ! ( flags & FLAGS.drift ) && boosting && wasLevel > 0 ) burst( ghost, 'turbo', wasLevel );
 		// The boom as it goes supersonic, and the splash as it goes in.
 		if ( flags & FLAGS.splash && ! ( ghost.fxFlags & FLAGS.splash ) ) {
 

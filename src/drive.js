@@ -1615,7 +1615,9 @@ export class Driver {
 
 	ringJolts( dt ) {
 
-		for ( const s of [ this.jolts.fov, this.jolts.nod ] ) if ( s.value || s.speed ) spring( s, 0, dt, JOLT.stiffness, JOLT.damping );
+		const { fov, nod } = this.jolts;
+		if ( fov.value || fov.speed ) spring( fov, 0, dt, JOLT.stiffness, JOLT.damping );
+		if ( nod.value || nod.speed ) spring( nod, 0, dt, JOLT.stiffness, JOLT.damping );
 
 	}
 
