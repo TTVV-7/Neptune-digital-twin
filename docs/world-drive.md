@@ -243,7 +243,8 @@ effects going
 with a pause and made again; the speed lines thickening with speed and going, overdrive's white
 edges, the gauge pulsing, flashing and refilling; the switch turning it all off, kept across a
 reload, and on again; asking for less motion; and a phone's thinner bursts and fewer lines.
-`test-drive-live-ui.mjs` checks another's car lights and runs dry with their booster.
+`test-drive-live-ui.mjs` checks another's car lights and runs dry with their booster, and has a
+burst at each of their drift's charge levels and for its mini-turbo.
 
 ### Water
 

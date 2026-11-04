@@ -3,8 +3,9 @@
 // Worker's rooms (worker/drive/live.js under `wrangler dev`, LIVE on) through the dev server's
 // proxy, two to four pages at once. Two drivers dropping in at the same spot share the area's room
 // and see each other's ghost: following the other car INTERP_MS behind, within a few tens of
-// centimetres, facing its way; its flame as it boosts; parked when it pauses; gone when it goes
-// back to the globe and back when it drops in again; another ride and paint when it changes; its
+// centimetres, facing its way; its flame as it boosts, and its bursts as the booster lights and
+// runs dry, as a drift charges and as it lets go; parked when it pauses; gone when it goes back to
+// the globe and back when it drops in again; another ride and paint when it changes; its
 // name from the leaderboard and ⭐ over it, a name with HTML in it shown as text; driven straight
 // through without a bump, see-through up close; its honk and its trick's points over it; and
 // gone, with what it was drawn with freed, when it leaves. The pickup (a skinned model) drawn where
@@ -595,6 +596,36 @@ describe( 'World Drive, driving with others', () => {
 		// Lit once, and run dry once, as A's booster was.
 		const after = await bursts();
 		assert.deepEqual( { ignite: after.ignite - before.ignite, cool: after.cool - before.cool }, { ignite: 1, cool: 1 }, JSON.stringify( { before, after } ) );
+
+	} );
+
+	test( 'A drifts: B\'s ghost has a burst as each charge level is reached, and for the mini-turbo', async () => {
+
+		await placeCar( a, 0, 0, 0 );
+		const bursts = () => b.evaluate( () => window.drive.ghosts.list()[ 0 ].bursts );
+		const before = await bursts();
+		// Held through all three of its levels (2.5 s), then let go.
+		await a.evaluate( () => {
+
+			const d = window.drive.driver;
+			d.speed = 16;
+			for ( const code of [ 'KeyW', 'Space', 'KeyD' ] ) d.press( code );
+
+		} );
+		await b.waitForFunction( ( { mask, shift } ) => ( window.drive.ghosts.list()[ 0 ].flags & mask ) >> shift === 3, { mask: FLAGS.levelMask, shift: FLAGS.levelShift }, { timeout: 15000 } );
+		await a.evaluate( () => {
+
+			const d = window.drive.driver;
+			d.release( 'Space' );
+			d.release( 'KeyD' );
+
+		} );
+		await b.waitForFunction( turbo => window.drive.ghosts.list()[ 0 ].bursts.turbo > turbo, before.turbo, { timeout: 15000 } );
+		const after = await bursts();
+		await placeCar( a, 0, 0, 0 );
+		// Each level (a car's sent at once when its flags change, and they're 0.8 s and more apart),
+		// and the mini-turbo once.
+		assert.deepEqual( { tier: after.tier - before.tier, turbo: after.turbo - before.turbo }, { tier: 3, turbo: 1 }, JSON.stringify( { before, after } ) );
 
 	} );
 
