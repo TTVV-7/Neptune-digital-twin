@@ -163,12 +163,13 @@ construction app's driving looks and behaves as it always has.
   more than twice as long for a moment. Each style has its own burst besides (in the
   [Garage's table](#the-garage)): a crackle of arcs, a strike of lightning, a party popper's
   confetti, an old game's explosion of pixels... The car squats as it surges off, its nose kicked
-  up, and the view is jolted: 5° wider and nodded up for a moment, springing back in about a third
-  of a second.
+  up, and the view is jolted: about 4.5° wider at most and nodded up for a moment, springing back
+  in about a third of a second.
 - **While it burns** the flame flickers harder, and speed lines stream out past the edges of the
   view, from 30 % of the booster's top speed on, thicker and faster the faster you go. Overdrive's
   sonic boom adds a wide ring that lingers as it spreads to seven times the vehicle's size, the
-  edges of the view flash white and the view is punched 7° wider for a moment, on top of its 9.
+  edges of the view flash white and the view is punched about 6° wider for a moment, on top of its
+  9.
 - **Running dry.** The exhaust glows on and cools, white-hot in the style's colour, through orange
   to a dull red and out in 0.9 s, with a few embers drifting off it. The car settles: its nose
   dips as it slows back to its top speed, and it bounces back level.
@@ -181,8 +182,8 @@ construction app's driving looks and behaves as it always has.
 - **Drifting.** Each charge level reached (yellow, teal, then pink) puts a ring on the ground and a
   burst of sparks at each rear tyre in its colour, as the sparks after it are. Let go, the
   mini-turbo has a flash, a ring and a spray of sparks out of the exhaust in the same colour,
-  bigger for a bigger boost; the flame pops and the view is jolted a little (1.2° wider for each
-  level).
+  bigger for a bigger boost; the flame pops and the view is jolted a little (about 1° wider for
+  each level).
 - **Flooring it from a standstill** spins the rear tyres up: they turn as if it were going 12 m/s
   faster, and smoke, for 0.9 s at most or until it's doing 32 km/h.
 - **The body leans on its springs** (`BODY` in `src/drive.js`): nose up as it speeds up and down
