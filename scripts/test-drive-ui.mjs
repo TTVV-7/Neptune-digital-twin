@@ -1146,17 +1146,34 @@ function effects( style ) {
 	out.dry.after = d.fx.particles.alive;
 	out.dry.punch = Math.round( d.punch * 1000 ) / 1000;
 
-	// A boost pad driven over: its burst, and the vehicle lit up.
+	// A boost pad driven over: its burst, carried along with the vehicle (its chevrons at its
+	// speed), and the vehicle lit up.
 	reset( 12 );
 	d.gauge = 0.5;
 	pads.place( 'small', 0, 6 );
 	let lit = false;
+	let carried = 0;
 	padded = true;
-	step( 60, () => lit ||= root().children.some( o => o.isSprite && o.visible && o.material.depthTest === false ) );
+	step( 60, () => {
+
+		lit ||= root().children.some( o => o.isSprite && o.visible && o.material.depthTest === false );
+		for ( const p of root().getObjectByName( 'drive-bursts' ).userData.batch.items ) if ( p.kind === 3 && p.age < p.life ) carried = Math.max( carried, p.carry.length() / d.speed );
+
+	} );
 	padded = false;
 	pads.clear();
-	out.pad = { lit, gauge: Math.round( d.gauge * 100 ) / 100 };
+	out.pad = { lit, gauge: Math.round( d.gauge * 100 ) / 100, carried: Math.round( carried * 100 ) / 100 };
 	step( 120 );
+
+	// On its wheels, the batches fade out down to the ground under it (the test pad's is at 0);
+	// in the air, they're as they are.
+	const floor = () => root().getObjectByName( 'drive-bursts' ).material.uniforms.uFloor.value;
+	reset( 10 );
+	step( 2 );
+	out.floor = { wheels: Math.round( floor().y * 100 ) / 100, at: Math.round( floor().w * 100 ) / 100 };
+	Object.assign( d, { y: 3, vy: 4, grounded: false } );
+	step( 1 );
+	out.floor.air = floor().w > 1e5;
 
 	// A drift held through all three charge levels and let go: a burst at each and the mini-turbo.
 	reset( 16 );
@@ -1205,6 +1222,13 @@ function effects( style ) {
 
 	} );
 	out.body = { dip: Math.round( dip * 1000 ) / 1000, lean: Math.round( lean * 1000 ) / 1000 };
+	// Stopped dead at 90 km/h by being put somewhere else (as R does): it doesn't lurch.
+	reset( 25 );
+	step( 30, () => d.speed = 25 );
+	d.speed = 0;
+	let lurch = 0;
+	step( 30, () => lurch = Math.max( lurch, Math.abs( d.body.pitch.value ) ) );
+	out.body.lurch = Math.round( lurch * 1000 ) / 1000;
 	reset( 0 );
 	step( 120 );
 	out.settled = { pitch: Math.round( d.body.pitch.value * 1e4 ) / 1e4 || 0, roll: Math.round( d.body.roll.value * 1e4 ) / 1e4 || 0, alive: d.fx.particles.alive };
@@ -1275,11 +1299,13 @@ describe( 'World Drive boost and driving effects', () => {
 			assert.ok( r.lit.alive >= 10 && r.lit.punch >= 3 && r.lit.nod > 0.1 && r.lit.squat > 0.03, JSON.stringify( r.lit ) );
 			// Run dry: it glows on, then everything's gone, the punch rung out.
 			assert.ok( ! r.dry.firing && r.dry.alive > 0 && r.dry.after === 0 && r.dry.punch === 0, JSON.stringify( r.dry ) );
-			assert.ok( r.pad.lit && r.pad.gauge > 0.6, JSON.stringify( r.pad ) );
+			assert.ok( r.pad.lit && r.pad.gauge > 0.6 && r.pad.carried > 0.95, JSON.stringify( r.pad ) );
+			// The plane under it: level, a few centimetres over the pad (through its rear tyres).
+			assert.ok( r.floor.wheels > 0.99 && r.floor.at < 0 && r.floor.at > - 0.2 && r.floor.air, JSON.stringify( r.floor ) );
 			// Drifting right it leans out of the turn; the mini-turbo jolts the view a little.
 			assert.ok( r.drift.roll > 0 && r.drift.punch > 1, JSON.stringify( r.drift ) );
 			assert.ok( r.launch.spin > 0.5 && r.launch.smoke > 4 && r.launch.after === 0, JSON.stringify( r.launch ) );
-			assert.ok( r.body.dip < - 0.02 && r.body.lean > 0.02, JSON.stringify( r.body ) );
+			assert.ok( r.body.dip < - 0.02 && r.body.lean > 0.02 && r.body.lurch < 0.005, JSON.stringify( r.body ) );
 			assert.deepEqual( r.settled, { pitch: 0, roll: 0, alive: 0 } );
 			assert.deepEqual( r.grew, {}, `${ r.style } made new things` );
 			assert.ok( r.most <= r.budget, `${ r.style }: ${ r.most } alive, over its budget of ${ r.budget }` );

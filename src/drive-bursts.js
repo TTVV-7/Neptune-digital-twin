@@ -25,6 +25,9 @@ const EMBER = new Color( 0xff5a1f );
 const ASH = new Color( 0x6a1000 );
 // A spark is drawn this long (m) for each m/s it flies at, give or take.
 const STRETCH = 0.03;
+// A boost pad's burst is carried along at this share of the vehicle's speed, so it's seen round
+// the vehicle rather than left on the pad behind it, under the camera.
+const PAD_CARRY = 0.9;
 
 const UP = new Vector3( 0, 1, 0 );
 const STILL = new Vector3();
@@ -193,20 +196,23 @@ export function createBursts( root, { detail = 1 } = {} ) {
 
 		},
 
-		// A boost pad driven over at `at` (world, on the ground), `radius` m across, in `colour`: a
-		// ring spreading over it, chevrons rising off it and sparkles thrown up round it. Left where
-		// the pad is.
-		pickup( at, colour, radius ) {
+		// A boost pad driven over at `at` (world, on the ground), `radius` m across, in `colour`, by a
+		// vehicle going at `velocity` (world, m/s): a ring spreading out over it, chevrons rising off
+		// it and sparkles thrown up round it, carried along with the vehicle.
+		pickup( at, colour, radius, velocity = STILL ) {
 
-			ring( _v.copy( at ).setY( at.y + 0.08 ), UP, STILL, 0.45, radius * 0.7, radius * 1.3, colour, 1, SHAPES.ring );
-			ring( _v.copy( at ).setY( at.y + 0.12 ), UP, STILL, 0.5, radius * 0.9, radius * 1.2, colour, 0.6 );
-			for ( let i = 0; i < 4; i ++ ) {
+			_a.copy( velocity ).multiplyScalar( PAD_CARRY );
+			ring( _v.copy( at ).setY( at.y + 0.08 ), UP, _a, 0.45, radius * 0.6, radius * 1.1, colour, 1, SHAPES.ring );
+			ring( _v.copy( at ).setY( at.y + 0.12 ), UP, _a, 0.5, radius * 0.8, radius, colour, 0.6 );
+			for ( let i = 0; i < 3; i ++ ) {
 
-				const p = batch.spawn( 0.5 + i * 0.06 );
-				p.position.copy( at ).setY( at.y + 0.4 + i * 0.35 );
-				p.velocity.set( 0, 2.2 + i * 0.3, 0 );
+				const p = batch.spawn( 0.45 + i * 0.06 );
+				p.position.copy( at ).setY( at.y + 0.5 + i * 0.4 );
+				// The chevrons keep up with it, rising over where the pad was taken.
+				p.carry.copy( velocity );
+				p.velocity.set( 0, 1.8 + i * 0.3, 0 );
 				p.frame = SHAPES.chevron;
-				p.size = Math.min( 0.55, radius * 0.3 ) * ( 1 - i * 0.1 );
+				p.size = Math.min( 0.45, radius * 0.25 ) * ( 1 - i * 0.12 );
 				p.colour.set( colour );
 				p.kind = 3;
 
@@ -217,6 +223,7 @@ export function createBursts( root, { detail = 1 } = {} ) {
 				const p = batch.spawn( 0.5 + Math.random() * 0.35 );
 				const angle = Math.random() * Math.PI * 2;
 				p.position.copy( at ).add( _v.set( Math.cos( angle ) * radius * 0.8, 0.15, Math.sin( angle ) * radius * 0.8 ) );
+				p.carry.copy( _a );
 				p.velocity.set( Math.cos( angle ) * 1.2, 2.5 + Math.random() * 2.5, Math.sin( angle ) * 1.2 );
 				p.frame = SHAPES.star;
 				p.size = 0.09 + Math.random() * 0.07;

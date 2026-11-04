@@ -172,9 +172,11 @@ construction app's driving looks and behaves as it always has.
 - **Running dry.** The exhaust glows on and cools, white-hot in the style's colour, through orange
   to a dull red and out in 0.9 s, with a few embers drifting off it. The car settles: its nose
   dips as it slows back to its top speed, and it bounces back level.
-- **Boost pads.** Driven over one, a ring spreads over the pad, chevrons rise off it, sparkles fly
-  up round it and the vehicle lights up in the pad's colour for a quarter of a second. The gauge
-  fills up to what it took before your eyes, a shine running along it, with "+12%" by it.
+- **Boost pads.** Driven over one, a ring spreads out from the pad, chevrons rise off it, sparkles
+  fly up round it and the vehicle lights up in the pad's colour for a quarter of a second. The burst
+  is carried along with the vehicle, so it's seen round it rather than left on the pad behind it,
+  under the camera. The gauge fills up to what it took before your eyes, a shine running along it,
+  with "+12%" by it.
 - **The gauge** glows on and off while it's full, ready to fire, and flashes red as it runs dry.
 - **Drifting.** Each charge level reached (yellow, teal, then pink) puts a ring on the ground and a
   burst of sparks at each rear tyre in its colour, as the sparks after it are. Let go, the
@@ -184,11 +186,19 @@ construction app's driving looks and behaves as it always has.
 - **Flooring it from a standstill** spins the rear tyres up: they turn as if it were going 12 m/s
   faster, and smoke, for 0.9 s at most or until it's doing 32 km/h.
 - **The body leans on its springs** (`BODY` in `src/drive.js`): nose up as it speeds up and down
-  under the brakes (about 3° braking hard in the kart), and out of a turn (less in a drift, which
-  leans it already), at most 4° either way besides the booster's kick, more on a ride with soft
-  suspension (its handling's `squash`: the monster truck). It leans about the wheels on the low
-  side, so they stay on the ground, and settles with a little bounce. It's in how the car is
+  under the brakes (nearly 4° braking hard in the kart), and out of a turn (less in a drift, which
+  leans it already), at most 4° either way besides the booster's kick, sooner and kicked up further
+  on a ride with soft suspension (its handling's `squash`: the farm truck wallows). It leans about
+  the wheels on the low side, so they stay on the ground, and settles with a little bounce. Put
+  somewhere else at a stop (R, or back from a splash), it doesn't lurch. It's in how the car is
   turned, so those driving with you see it too.
+
+Near the vehicle on its wheels, these bursts and the boost styles' particles fade out down to the
+ground under it (a plane through its lower rear tyre, 4 m round it for a kart, more for something
+bigger), so a flash or a ring at a low exhaust never ends along a hard line where the ground cuts it
+off. Particles lying flat on the ground (a drift level's ring, ink's splats) are drawn whole, and
+those further off are as they were. The flame's glow is as big as it always was, only brighter as
+it lights: a sprite that low would be cut off by the ground.
 
 **Camera effects** in the pause menu (kept in this browser, `world-drive.camera-fx`; on until it's
 turned off) turns off everything done to the view: the jolts, the shake of a hit, the speed lines
@@ -210,17 +220,26 @@ flash, and each style's own burst from its own batch's budget. The speed lines a
 batch of thin quads whose numbers are set once and placed on the screen by their shader: each frame
 only their time and thickness change. So a drive makes nothing new: in the tests below, a dozen
 ignitions and boosts run dry made no geometries, textures, objects or materials, and no more were
-alive than the budgets. Updating it all adds about 0.1 ms a frame. On the test pad, drawn in
-software with another test run sharing the machine (so give or take 5 %, frames of 70 to 100 ms),
-drawing them cost 2 to 11 % of a frame boosting, nothing that could be told from that drifting, and
-4 to 5 % driving over a pad every 0.6 s; on a phone-sized view about 5 % boosting and drifting, and
-nothing measurable over pads.
+alive than the budgets. Measured on the test pad, drawn in software (SwiftShader) on a machine
+shared with other test runs:
+
+- **What's drawn.** Driving along, exactly what it was before (94 draws, 6,762 triangles a frame);
+  boosting, one draw and about 120 triangles more; drifting and over pads, about 50 triangles more
+  and a draw or two while a burst lasts.
+- **Updating it all** was 0.2 to 0.3 ms a frame before and after: no difference that could be told.
+- **Drawing it**, the new effects shown and hidden by turns every two frames in the same run (so
+  both had the same load; driving plainly, where nothing new is drawn, read 6 % apart, which is the
+  noise): on a 1280 × 800 view, boosting (lit every 1.6 s, far more often than anyone does) took
+  10 % longer to draw (77 ms against 70), driving over a pad every 0.6 s 9 % (92 against 84) and
+  drifting no longer; on a phone-sized view, 2 to 5 % for each (boosting 33.2 ms against 32.6).
 
 `node --test scripts/test-drive-ui.mjs` ("World Drive boost and driving effects") tries it on the
 test pad with the classic flame, confetti and lightning: lighting the booster (the burst, the jolt,
-the squat), running it dry (the glow, then nothing left), a pad (its burst and flash), a drift's
-three levels and its mini-turbo, a standing start's wheelspin and smoke, braking's dip and a turn's
-lean, settling back level, nothing made in a dozen ignitions and the budgets kept; the effects going
+the squat), running it dry (the glow, then nothing left), a pad (its burst carried along and the
+flash), the ground the bursts fade out down to (and none in the air), a drift's three levels and its
+mini-turbo, a standing start's wheelspin and smoke, braking's dip and a turn's lean, no lurch put
+back at a stop, settling back level, nothing made in a dozen ignitions and the budgets kept; the
+effects going
 with a pause and made again; the speed lines thickening with speed and going, overdrive's white
 edges, the gauge pulsing, flashing and refilling; the switch turning it all off, kept across a
 reload, and on again; asking for less motion; and a phone's thinner bursts and fewer lines.
@@ -2427,7 +2446,9 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   nickname removed by the owner takes its XP with it.
 - [How boosting and driving look](#how-boosting-and-driving-look): the lean tilts the whole model,
   wheels and all, about the low side's axle, so on a steep lean a wheel on the other side lifts a
-  few centimetres off the road (a kart, which has no suspension, leans as a car would). The jolts
+  few centimetres off the road (a kart, which has no suspension, leans as a car would). The bursts
+  fade out down to a flat plane under the vehicle, so where the ground isn't flat round it (a kerb,
+  a crest) one can still meet the ground along a line, and in the air they don't fade at all. The jolts
   move the view (the look, never the camera, so a jolt can't put it in a wall), and a jolt from the
   booster lighting right after a hit's shake adds to it. Others' cars show only what their flags
   say: no boost pad bursts or wheelspin, and a booster already lit when their car comes into view

@@ -14,6 +14,7 @@ import {
 	ShaderMaterial,
 	SRGBColorSpace,
 	Vector3,
+	Vector4,
 } from 'three';
 
 // Boost styles: what the booster leaves behind it besides drive-fx.js's classic flame (World
@@ -290,8 +291,11 @@ attribute vec4 aAxis;
 attribute vec4 aShape;
 attribute vec4 aColour;
 uniform float uCells;
+uniform vec4 uFloor;
 varying vec2 vUv;
 varying vec4 vColour;
+varying vec3 vWorld;
+varying float vFloored;
 
 vec2 turn( vec2 p, float angle ) {
 
@@ -332,6 +336,12 @@ void main() {
 
 	gl_Position = projectionMatrix * mv;
 	#include <logdepthbuf_vertex>
+	// Where it is in the world (the batch's own frame), for the floor (see Batch.floor): back from
+	// the view, which a camera's matrix, turning and moving only, gives straight back.
+	vec3 rel = mv.xyz - viewMatrix[ 3 ].xyz;
+	vWorld = vec3( dot( viewMatrix[ 0 ].xyz, rel ), dot( viewMatrix[ 1 ].xyz, rel ), dot( viewMatrix[ 2 ].xyz, rel ) );
+	// Lying flat on it (a ring on the ground), it's drawn whole.
+	vFloored = aAxis.w > 1.5 && abs( dot( normalize( aAxis.xyz ), uFloor.xyz ) ) > 0.9 ? 0.0 : 1.0;
 	vec2 cell = vec2( mod( aShape.w, uCells ), floor( aShape.w / uCells ) );
 	// A little inside the cell, so its edge never takes in the next one's.
 	vUv = ( cell + vec2( corner.x, - corner.y ) * 0.485 + 0.5 ) / uCells;
@@ -343,13 +353,22 @@ void main() {
 const FRAGMENT = /* glsl */`
 #include <logdepthbuf_pars_fragment>
 uniform sampler2D map;
+uniform vec4 uFloor;
+uniform vec4 uNear;
+uniform float uSoft;
 varying vec2 vUv;
 varying vec4 vColour;
+varying vec3 vWorld;
+varying float vFloored;
 
 void main() {
 
 	vec4 picture = texture2D( map, vUv );
-	gl_FragColor = vec4( vColour.rgb * picture.rgb, vColour.a * picture.a );
+	// Near the vehicle, fading out down to the floor, so the ground never cuts it off along a hard
+	// line; further off, as it is (the floor under the vehicle isn't the ground there).
+	float near = 1.0 - smoothstep( 0.6, 1.0, distance( vWorld, uNear.xyz ) / uNear.w );
+	float floored = mix( 1.0, smoothstep( 0.0, uSoft, dot( uFloor.xyz, vWorld ) + uFloor.w ), near * vFloored );
+	gl_FragColor = vec4( vColour.rgb * picture.rgb, vColour.a * picture.a * floored );
 	if ( gl_FragColor.a < 0.004 ) discard;
 	#include <logdepthbuf_fragment>
 	#include <colorspace_fragment>
@@ -390,7 +409,8 @@ export class Batch {
 		this.attributes = [ [ this.centres, 3 ], [ this.axes, 4 ], [ this.shapes, 4 ], [ this.colours, 4 ] ];
 		geometry.instanceCount = 0;
 		const material = new ShaderMaterial( {
-			uniforms: { map: { value: getSheet() }, uCells: { value: CELLS } },
+			// No floor until one's given (see floor).
+			uniforms: { map: { value: getSheet() }, uCells: { value: CELLS }, uFloor: { value: new Vector4( 0, 1, 0, 1e6 ) }, uNear: { value: new Vector4( 0, 0, 0, 1 ) }, uSoft: { value: 1 } },
 			vertexShader: VERTEX,
 			fragmentShader: FRAGMENT,
 			transparent: true,
@@ -401,6 +421,8 @@ export class Batch {
 		} );
 		this.mesh = new Mesh( geometry, material );
 		this.mesh.name = 'boost-batch';
+		// So whoever made it can find it among the rest (drive-fx.js tells each where the ground is).
+		this.mesh.userData.batch = this;
 		// Its quads are all over the place and change every frame; it's never far from the vehicle.
 		this.mesh.frustumCulled = false;
 		this.mesh.raycast = () => {};
@@ -459,6 +481,23 @@ export class Batch {
 		colours[ i * 4 + 1 ] = colour.g;
 		colours[ i * 4 + 2 ] = colour.b;
 		colours[ i * 4 + 3 ] = alpha;
+
+	}
+
+	// The ground under the vehicle, a plane through `at` square to `up` (world, unit), or null for
+	// none: within `reach` m of `at` its quads fade out over the last `soft` m down to it rather than
+	// being cut off where they go into the ground (a flash or a ring at a low exhaust, say). Those
+	// lying flat on it are whole.
+	floor( at, up, soft, reach ) {
+
+		const { uFloor, uNear, uSoft } = this.mesh.material.uniforms;
+		if ( at ) {
+
+			uFloor.value.set( up.x, up.y, up.z, - up.dot( at ) );
+			uNear.value.set( at.x, at.y, at.z, reach );
+
+		} else uFloor.value.set( 0, 1, 0, 1e6 );
+		uSoft.value = soft;
 
 	}
 
@@ -545,8 +584,8 @@ export class Batch {
 // size: { width, height, length, rear, scale }, velocity (m/s, world), power (0 to 1: the booster
 // 1, a drift boost about half, 0 when off), grounded, dt, clock (s), nozzle and lastNozzle (the
 // exhaust, world, now and a frame ago), back, up and right (unit, world: out of its back, its up
-// and its right), middle (the middle of its box, world), scale (1 for a kart, more for something
-// bigger) }.
+// and its right), middle (the middle of its box, world), ground (on its wheels, a point a little
+// over the ground under it, world), scale (1 for a kart, more for something bigger) }.
 //
 // A style: `flame`, colours for the classic flame's cones and glow { outer, inner, halo } or just
 // { halo } for a glow alone, with how long (`length`) and how wildly (`flicker`) it burns, or null

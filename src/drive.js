@@ -74,8 +74,9 @@ const SUPERSONIC = { near: 0.85, after: 0.75, below: 0.75, ease: 4, shake: 0.25 
 // most `most` rad either way, scaled by its handling's squash (a soft ride leans more). The springs
 // (`stiffness` 1/s², `damping` 1/s) let it settle with a little bounce. The booster lighting kicks
 // its nose up at `kick` rad/s besides. It leans about the wheels on the low side, so they stay on
-// the ground.
-const BODY = { pitch: 0.004, roll: 0.0025, most: 0.07, stiffness: 90, damping: 9, kick: 0.9, drifting: 0.4 };
+// the ground. Its speed changing by `jump` m/s or more in a frame (put back on the road at a stop,
+// say), it wasn't speeding up or slowing down at all.
+const BODY = { pitch: 0.004, roll: 0.0025, most: 0.07, stiffness: 90, damping: 9, kick: 0.9, drifting: 0.4, jump: 8 };
 // Floored from a standstill, its rear tyres spin up for `time` s at most, or until it's going
 // `until` m/s: smoking (drive-fx.js) and turning as if it were going `extra` m/s faster.
 const SPIN = { time: 0.9, until: 9, extra: 12 };
@@ -1573,13 +1574,15 @@ export class Driver {
 		if ( dt > 0 ) {
 
 			// How fast it's speeding up (m/s²) and how hard it's turning (m/s² across the way it goes),
-			// eased, so a single jolt of a frame doesn't throw it about.
-			const accel = MathUtils.clamp( ( this.speed - body.lastSpeed ) / dt, - 40, 40 );
+			// eased, so a single jolt of a frame doesn't throw it about. Put somewhere else (back on its
+			// wheels after R or a splash, say) it hasn't sped up or turned at all.
 			const turn = ( ( this.course - body.lastCourse ) % 360 + 540 ) % 360 - 180;
+			const moved = onWheels && Math.abs( this.speed - body.lastSpeed ) < BODY.jump && Math.abs( turn ) < 45;
+			const accel = MathUtils.clamp( ( this.speed - body.lastSpeed ) / dt, - 40, 40 );
 			const lateral = MathUtils.clamp( this.speed * turn * MathUtils.DEG2RAD / dt, - 40, 40 );
 			const ease = Math.min( 1, dt * 10 );
-			body.accel += ( ( onWheels ? accel : 0 ) - body.accel ) * ease;
-			body.lateral += ( ( onWheels ? lateral : 0 ) - body.lateral ) * ease;
+			body.accel += ( ( moved ? accel : 0 ) - body.accel ) * ease;
+			body.lateral += ( ( moved ? lateral : 0 ) - body.lateral ) * ease;
 
 		}
 

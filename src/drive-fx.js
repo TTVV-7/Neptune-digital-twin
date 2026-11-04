@@ -102,6 +102,11 @@ const PAD_FLASH = 0.26;
 // Tyre smoke off the rear tyres floored from a standstill (`burnout`): a puff every BURNOUT_STEP s
 // from each at full spin.
 const BURNOUT_STEP = 0.045;
+// On its wheels, within FLOOR.reach m of it (a kart's; times the vehicle's scale), the batches of
+// quads (a style's, the bursts' and the sonic boom's) fade out over the last FLOOR.soft m down to
+// the ground under it, rather than being cut off along a hard line where a flash or a ring at a
+// low exhaust goes into it.
+const FLOOR = { soft: 0.22, reach: 4 };
 // How an app asks for its effects: `detail` (0 to 1) of their usual number of particles in a burst
 // (fewer on a phone); `calm`, fewer flashes (the visitor asked for less motion).
 const EFFECTS = { detail: 1, calm: false };
@@ -275,11 +280,16 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 	padFlash.raycast = () => {};
 	root.add( padFlash );
 	let padFlashLeft = 0;
+	// Every batch of quads made above, to be told where the ground is.
+	const batches = [];
+	root.traverse( o => o.userData.batch && batches.push( o.userData.batch ) );
 	// What the style and the supersonic effects are told each frame (see drive-boosts.js): one
 	// object, filled in again each time.
 	const frame = {
 		pivot: null, size: null, velocity: new Vector3(), power: 0, grounded: true, dt: 0, clock: 0, scale: 1,
 		nozzle: new Vector3(), lastNozzle: new Vector3(), back: new Vector3(), up: new Vector3(), right: new Vector3(), middle: new Vector3(),
+		// On its wheels, a point a little over the ground under it, for the batches' floor (see FLOOR).
+		ground: new Vector3(),
 	};
 	let framed = false;
 
@@ -605,6 +615,17 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 
 			flicker += dt;
 			setFrame( pivot, size, velocity, power, grounded, dt );
+			// The lower of its rear tyres, which stay down as it leans back (drive.js leans it about
+			// the wheels on the low side), a few centimetres over the ground.
+			if ( wheels.length ) {
+
+				pivot.localToWorld( frame.ground.copy( wheels[ 0 ] ) );
+				pivot.localToWorld( _p.copy( wheels[ wheels.length - 1 ] ) );
+				if ( _p.dot( frame.up ) < frame.ground.dot( frame.up ) ) frame.ground.copy( _p );
+
+			} else pivot.getWorldPosition( frame.ground );
+
+			for ( const batch of batches ) batch.floor( grounded ? frame.ground : null, frame.up, FLOOR.soft * frame.scale, FLOOR.reach * frame.scale );
 			goOff( wheels );
 			bursts.update( frame );
 			style?.update( frame );
@@ -628,12 +649,18 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 				// A style's flame may burn longer or shorter, and flicker more wildly; any flame flickers
 				// harder the harder it burns, and pops as it lights (surge).
 				const wild = styled?.flicker ?? 1;
-				const jitter = 0.85 + 0.3 * wild * ( 1 + 0.6 * power ) * Math.abs( Math.sin( flicker * 47 * wild ) * Math.sin( flicker * 31 * wild ) ) + 0.08 * power * Math.sin( flicker * 83 );
+				const flutter = Math.abs( Math.sin( flicker * 47 * wild ) * Math.sin( flicker * 31 * wild ) );
+				const steady = 0.85 + 0.3 * wild * flutter;
+				const jitter = steady + 0.18 * wild * power * flutter + 0.08 * power * Math.sin( flicker * 83 );
 				const pop = 1 + SURGE * surge;
-				flame.scale.set( scale * power * ( 1 + 0.35 * surge ), scale * power * ( 1 + 0.35 * surge ), scale * ( 0.6 + power * 2.6 ) * jitter * ( styled?.length ?? 1 ) * pop );
+				const swell = 1 + 0.35 * surge;
+				flame.scale.set( scale * power * swell, scale * power * swell, scale * ( 0.6 + power * 2.6 ) * jitter * ( styled?.length ?? 1 ) * pop );
 				outer.material.opacity = Math.min( 1, 0.25 + 0.35 * jitter + 0.3 * surge );
 				inner.material.opacity = 0.9;
-				halo.scale.setScalar( 1.6 * jitter * ( 1 + surge ) );
+				// The glow is as big as it always was, however hard the flame flickers or pops (any bigger,
+				// a sprite this low is cut off by the ground): only brighter as it lights. The bursts'
+				// flash, which fades out down to the ground, makes the light.
+				halo.scale.setScalar( 1.6 * steady / swell );
 				halo.material.opacity = Math.min( 1, 0.75 * power + 0.25 * surge );
 
 			}
@@ -774,7 +801,7 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 		// the vehicle lit up for a moment (not when the visitor asked for less motion).
 		pickup( at, colour, radius ) {
 
-			bursts.pickup( at, colour, radius );
+			bursts.pickup( at, colour, radius, framed ? frame.velocity : undefined );
 			if ( effects.calm || ! framed ) return;
 			padFlash.material.color.set( colour );
 			padFlashLeft = PAD_FLASH;
