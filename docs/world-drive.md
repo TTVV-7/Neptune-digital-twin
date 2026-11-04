@@ -2069,13 +2069,14 @@ counts simple (and [search engines](#search-engines) see one site).
 
 ## Search engines
 
-Google hadn't indexed a single page of worlddrive.app: its head had a bare title and no picture, there
-was no sitemap, robots.txt was only Cloudflare's own block, and there was nothing for a crawler to
-read but the buttons' labels. Now it follows Google Search Central's guidance (linked at each point), and the space it's
-in (other "drive the Earth" sites, a Steam game called WorldDrive, Google Earth driving simulators)
-is why every page says plainly what World Drive is and what it does that they don't: Google's
-photorealistic 3D cities, anywhere on Earth, arcade stunts, boosts, drifting and flying, other
-drivers as ghosts and party links, levels, free in the browser with nothing to download.
+Google hadn't indexed a single page of worlddrive.app: its head had a bare title and no picture,
+there was no sitemap, robots.txt was only Cloudflare's own block, and there was nothing for a crawler
+to read but the buttons' labels. Now it follows Google Search Central's guidance (linked at each
+point). The space it's in (other "drive the Earth" sites, a Steam game called WorldDrive, Google Earth
+driving simulators) is why every page says plainly what World Drive is and what it does that they
+don't: Google's photorealistic 3D cities, anywhere on Earth, arcade stunts, boosts, drifting and
+flying, other drivers as ghosts and party links, levels, free in the browser with nothing to
+download.
 
 ### What a search engine reads
 
@@ -2102,6 +2103,10 @@ drivers as ghosts and party links, levels, free in the browser with nothing to d
   can I play with friends, what's kept about me). It's plain text in the panel, there for anyone who
   scrolls down, nothing hidden. **About World Drive** opens from there as before; its words are in
   the page too.
+- **What Google renders.** Google runs the page as well, but robots.txt keeps it off `/api/`, so it
+  gets no settings and sees what the page shows without a Worker: the test globe, its note and the
+  panel with those words. It never starts a visit or meets the robot check, so it costs nothing and
+  never sees "We couldn't check you're a person".
 
 ### The places' pages
 
@@ -2318,7 +2323,9 @@ the ⭐, and "Coming soon" with no sign-in or no Worker answering). `npm run tes
 the pass's rides, the Garage and the boost styles, `npm run test:drive-seo` what
 [search engines](#how-the-search-pages-are-tested) see, `npm run test:drive-live` and
 `npm run test:drive-live-ui` [driving with others](#how-its-tested), and `npm run test:drive-levels`
-and `npm run test:drive-levels-ui` [levels](#how-levels-are-tested).
+and `npm run test:drive-levels-ui` [levels](#how-levels-are-tested). `TEST_VITE_PORT` picks a test's port,
+and `TEST_VITE_CACHE` a folder for its dev server's pre-bundled dependencies (else
+`node_modules/.vite`), so tests run side by side on one checkout don't redo each other's.
 
 ## How it fits together
 
