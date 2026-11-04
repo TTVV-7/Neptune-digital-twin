@@ -1,7 +1,9 @@
 import { searchPlaces } from './api.js';
 import { formatLatLon, parseLatLon, recentPlaces, SPOTS, storage } from './places.js';
 import { openPass, proBadge } from './pass.js';
-import { isPro, onProChange } from './pro.js';
+import { onProChange } from './pro.js';
+import { getLevel, onLevelChange } from './progress.js';
+import { rideLocked, rideUnlock, unlockChip } from './vehicles.js';
 import { drivers } from './online.js';
 
 // The globe's panel: search, the starting spots, recent places, the vehicle picker and who's
@@ -104,12 +106,21 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin } ) {
 	const saved = storage( () => localStorage.getItem( VEHICLE_KEY ) );
 	let picked = vehicles.find( v => v.id === saved ) ?? vehicles[ 0 ];
 	const pickers = [];
-	// A Supporter Pass ride (pro.js) is only driven with the pass; without it, the first ride is.
-	const usable = () => picked.pro && ! isPro() ? vehicles[ 0 ] : picked;
+	const notes = [];
+	// A Supporter Pass ride (pro.js) is only driven with the pass, and a level's (levels.js) from
+	// that level or with the pass (vehicles.js's rideLocked); while it's locked, the first ride is.
+	const usable = () => rideLocked( picked ) ? vehicles[ 0 ] : picked;
 	onProChange( () => mark() );
+	onLevelChange( () => mark() );
 
 	// A row of vehicle cards in `parent` (the panel's, and the pause menu's); onPick( vehicle ).
+	// Under it, what a locked level's ride needs, when it's picked.
 	function vehiclePicker( parent, onPick = () => {} ) {
+
+		const note = Object.assign( document.createElement( 'p' ), { className: 'ride-note small', hidden: true } );
+		note.setAttribute( 'role', 'status' );
+		parent.after( note );
+		notes.push( note );
 
 		const cards = vehicles.map( vehicle => {
 
@@ -124,11 +135,26 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin } ) {
 			const name = Object.assign( document.createElement( 'b' ), { textContent: vehicle.name } );
 			const blurb = Object.assign( document.createElement( 'span' ), { textContent: `${ vehicle.blurb } · ${ vehicle.topSpeed } km/h` } );
 			button.append( picture, name, blurb );
+			// A pass ride wears the pass's badge; a level's, while it's locked, the level (and "or Pass").
+			const unlock = rideUnlock( vehicle );
 			if ( vehicle.pro ) button.append( proBadge() );
+			else if ( unlock ) button.append( Object.assign( document.createElement( 'span' ), { className: 'pro-badge level-chip', textContent: unlockChip( unlock ) } ) );
 			button.addEventListener( 'click', () => {
 
-				// Locked: what the pass is, instead.
-				if ( vehicle.pro && ! isPro() ) return openPass();
+				note.hidden = true;
+				if ( rideLocked( vehicle ) ) {
+
+					// Locked: what the pass is, or for a level's ride which level (and that the pass has it).
+					if ( vehicle.pro ) return openPass();
+					note.replaceChildren( `The ${ vehicle.name.toLowerCase() } comes at level ${ unlock.level }: you're level ${ getLevel() }. Drive on, or get it now with the `,
+						Object.assign( document.createElement( 'button' ), { type: 'button', className: 'link', textContent: 'Supporter Pass', onclick: () => openPass() } ), '.' );
+					note.hidden = false;
+					// Under three rows of rides it can be below the panel's fold: brought into view.
+					note.scrollIntoView( { block: 'nearest' } );
+					return;
+
+				}
+
 				pick( vehicle );
 				onPick( vehicle );
 
@@ -139,6 +165,13 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin } ) {
 		parent.replaceChildren( ...cards );
 		pickers.push( parent );
 		mark();
+		// The rides scroll sideways: the one picked in view, without moving anything else.
+		requestAnimationFrame( () => {
+
+			const card = parent.querySelector( '.vehicle.picked' );
+			if ( card ) parent.scrollLeft += card.getBoundingClientRect().left - parent.getBoundingClientRect().left - ( parent.clientWidth - card.offsetWidth ) / 2;
+
+		} );
 
 	}
 
@@ -157,13 +190,19 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin } ) {
 			for ( const button of parent.querySelectorAll( '.vehicle' ) ) {
 
 				const on = button.dataset.id === usable().id;
+				const shut = rideLocked( vehicles.find( v => v.id === button.dataset.id ) );
 				button.classList.toggle( 'picked', on );
-				button.classList.toggle( 'locked', !! vehicles.find( v => v.id === button.dataset.id ).pro && ! isPro() );
+				button.classList.toggle( 'locked', shut );
 				button.setAttribute( 'aria-checked', String( on ) );
+				const chip = button.querySelector( '.level-chip' );
+				if ( chip ) chip.hidden = ! shut;
 
 			}
 
 		}
+
+		// A ride picked, a level reached or the pass: what a note said may not hold now.
+		for ( const note of notes ) note.hidden = true;
 
 		// The library's models are other people's work, under licences that ask for credit.
 		const credit = usable().credit;

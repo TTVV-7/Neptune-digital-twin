@@ -3,6 +3,7 @@ import { specFor } from '../drive.js';
 import { makeKart } from '../kart.js';
 import { loadCars } from './cars.js';
 import { LIBRARY_VEHICLES } from './catalog.js';
+import { rideLocked as lockedFor, rideUnlock } from './levels.js';
 import { applyLook, fxOf, lookFor } from './paint.js';
 import { isPro } from './pro.js';
 import { getLevel } from './progress.js';
@@ -10,10 +11,10 @@ import { PRO_RIDES } from './rides/index.js';
 
 // What you can drive: the go-kart, built in code (kart.js), a few trucks from the library, loaded
 // as models.js loads anything placed, so drive.js drives them as it does in the construction app,
-// then World Drive's own cars (cars.js: models from Sketchfab whose wheels turn, one free and the
-// rest with the pass), and after them the Supporter Pass's rides (rides/), built in code. What
-// needs the pass is locked without it (`pro`, see pro.js). Each wears its look from the Garage
-// (paint.js).
+// then World Drive's own cars (cars.js: models from Sketchfab whose wheels turn, one free, six with
+// levels or the pass and the rest with the pass), and after them the Supporter Pass's rides
+// (rides/), built in code. What needs the pass (`pro`, see pro.js) or a level (levels.js's ride
+// rewards) is locked without it: rideLocked. Each wears its look from the Garage (paint.js).
 
 const KART = {
 	id: 'go-kart',
@@ -89,10 +90,30 @@ export function lookOf( vehicle ) {
 
 }
 
-// What this visitor has unlocked looks with: the pass (pro.js) and their level (progress.js).
+// What this visitor has unlocked looks and rides with: the pass (pro.js) and their level
+// (progress.js).
 export function access() {
 
 	return { pro: isPro(), level: getLevel() };
+
+}
+
+// Whether a ride can't be driven yet (levels.js's rideLocked), by this visitor unless `who` says
+// otherwise.
+export function rideLocked( vehicle, who = access() ) {
+
+	return lockedFor( vehicle, who );
+
+}
+
+export { rideUnlock };
+
+// What a locked ride's chip says: "Lv 15 · or Pass", or for the pass's alone "Pass" (small: the
+// level alone, "Lv 15").
+export function unlockChip( { level, pass }, small = false ) {
+
+	if ( level === null ) return 'Pass';
+	return small || ! pass ? `Lv ${ level }` : `Lv ${ level } · or Pass`;
 
 }
 

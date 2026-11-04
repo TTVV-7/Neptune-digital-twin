@@ -116,7 +116,7 @@
 	overflow-y: auto;
 }
 
-/* With the cars there are thirteen rides: in the pause menu they go in two rows that scroll
+/* With the cars there are twenty-one rides: in the pause menu they go in two rows that scroll
    sideways, four across, so the menu stays as short as it was and what's under them (the
    Supporter Pass's sign-in) stays on screen. Room over them for the pass rides' badges. */
 #pause .vehicles {
@@ -124,6 +124,18 @@
 	grid-template-rows: repeat( 2, auto );
 	grid-auto-flow: column;
 	grid-auto-columns: calc( ( 100% - 18px ) / 4 );
+	padding: 9px 0 6px;
+	overflow-x: auto;
+	scrollbar-width: thin;
+}
+
+/* And on the globe's panel in three rows, three across, scrolling sideways the same way: three to
+   a row, the rides alone were taller than the rest of the panel. */
+#globe-ui .vehicles {
+	grid-template-columns: none;
+	grid-template-rows: repeat( 3, auto );
+	grid-auto-flow: column;
+	grid-auto-columns: calc( ( 100% - 12px ) / 3 );
 	padding: 9px 0 6px;
 	overflow-x: auto;
 	scrollbar-width: thin;
@@ -242,17 +254,17 @@ dialog#pass {
 	color: var( --muted );
 }
 
-/* All in one row, however many, so the sheet stays short. */
+/* Seventeen rides: two rows of them, so the sheet stays short and each picture is still big
+   enough to make out. */
 #pass .ride-icons {
 	display: grid;
-	grid-auto-flow: column;
-	grid-auto-columns: 1fr;
-	gap: 4px;
+	grid-template-columns: repeat( 9, minmax( 0, 1fr ) );
+	gap: 3px;
 	margin-top: 6px;
 }
 
 #pass .ride-icons .ride-icon {
-	height: 36px;
+	height: 30px;
 	padding: 2px;
 	border-radius: 8px;
 	background: rgba( 255, 255, 255, 0.06 );
