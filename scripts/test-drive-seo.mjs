@@ -600,7 +600,7 @@ describe( 'the dev server and the load', () => {
 			assert.equal( bare.status, 307 );
 			assert.equal( bare.headers.get( 'location' ), '/drive/monaco/' );
 			assert.match( await ( await fetch( `${ base }/drive/` ) ).text(), /<h1>Places to drive<\/h1>/ );
-			assert.match( await ( await fetch( `${ base }/sitemap.xml` ) ).text(), /<loc>https:\/\/worlddrive\.app\/drive\/route-66\/<\/loc>/ );
+			assert.match( await ( await fetch( `${ base }/sitemap.xml` ) ).text(), /<loc>https:\/\/worlddrive\.app\/drive\/colosseum\/<\/loc>/ );
 			assert.match( await ( await fetch( `${ base }/` ) ).text(), /<li><a href="\/drive\/copacabana\/" data-play="\/\?at=[^"]+">Copacabana<\/a><\/li>/ );
 
 		} finally {

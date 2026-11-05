@@ -2348,11 +2348,11 @@ download.
 
 ### The places' pages
 
-`/drive/` lists them; each place has its own at `/drive/<slug>/`: one for each start spot and six
-more famous places (the Eiffel Tower, the Colosseum, Piccadilly Circus, Route 66 through Oatman,
-Hollywood Boulevard and Copacabana). (The Burj Khalifa had a page until it was seen on Google's
-tiles that there are no 3D buildings in Dubai, only flat imagery: a place's page has to promise only
-what the game shows there.) Their words are `drive/site/places.js`: what the
+`/drive/` lists them; each place has its own at `/drive/<slug>/`: one for each start spot and five
+more famous places (the Eiffel Tower, the Colosseum, Piccadilly Circus, Hollywood Boulevard and
+Copacabana). (The Burj Khalifa had a page until it was seen on Google's tiles that there are no 3D
+buildings in Dubai, only flat imagery, and Route 66 through Oatman until every drop-in there, four on
+real tiles, found no 3D map at all: a place's page has to promise only what the game shows there.) Their words are `drive/site/places.js`: what the
 place is, in a few true sentences, and what to do there in the game, with a title and description
 of its own. `drive/site/build.js` makes them as plain HTML when the site is built (and the dev server
 makes them as they're asked for), with their styles in the page and no script, so they show at once.

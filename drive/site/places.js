@@ -288,24 +288,6 @@ export const PLACES = [
 		],
 	},
 	{
-		slug: 'route-66',
-		at: { lat: 35.026, lon: - 114.3832, heading: 317 },
-		name: 'Route 66 in Oatman',
-		region: 'Arizona, USA',
-		title: 'Drive Route 66 in Arizona in 3D',
-		description: 'Drive old Route 66 through Oatman and over Arizona\'s Black Mountains in 3D: desert, tight bends and Sitgreaves Pass. A free browser driving game.',
-		about: [
-			'Route 66 opened in 1926 as one of the first US highways, running from Chicago to Santa Monica, and was retired in 1985. In western Arizona its old road goes through Oatman, a gold-mining town where wild burros, descended from the miners\' pack animals, wander the main street.',
-			'East of town it climbs the Black Mountains to Sitgreaves Pass in a string of tight bends. The pin is on the main street in Oatman.',
-		],
-		todo: [
-			'Drive out of the north end of Oatman and up the bends to Sitgreaves Pass.',
-			'Drift the bends and boost on the straights across the desert.',
-			'Fly off the pass and glide down over the desert.',
-		],
-		open: true,
-	},
-	{
 		slug: 'hollywood-boulevard',
 		at: { lat: 34.1015, lon: - 118.3405, heading: 90 },
 		name: 'Hollywood Boulevard',
