@@ -761,10 +761,11 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 
 		},
 
-		// The sonic boom, going supersonic: a shock ring round it and a flash.
+		// The sonic boom, going supersonic: a shock ring round it and a flash (calmer for a visitor
+		// asking for less motion).
 		boom() {
 
-			if ( framed ) sonic.boom( frame, Math.max( frame.size.width, frame.size.height ) );
+			if ( framed ) sonic.boom( frame, Math.max( frame.size.width, frame.size.height ), !! effects.calm );
 
 		},
 

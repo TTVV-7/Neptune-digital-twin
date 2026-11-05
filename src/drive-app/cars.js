@@ -195,7 +195,8 @@ export const CARS = [
 		},
 		drive: {
 			topSpeed: 200, accel: 11.5, brake: 16, reverse: 30,
-			// Its windows are part of its bodywork: the view from over its bonnet.
+			// Its glass is tinted, with an instrument display drawn over it, too busy to drive through
+			// from inside: the view from over its bonnet.
 			cab: { ahead: 1.0, right: - 0.3, up: 1.28 },
 			// Heavy and powerful: the longest, widest drifts of the cars, a little loose on the road.
 			handling: { grip: 13, slip: 3.1, driftYaw: [ 52, 134 ], turn: [ 146, 60 ], lock: 34, drag: 0.8, launch: 0.9, squash: 1.1 },

@@ -40,7 +40,7 @@ export const PLACES = [
 		title: 'Drive Times Square, New York, in 3D',
 		description: 'Drive through Times Square and Midtown Manhattan in photorealistic 3D: the avenues, the screens and the skyscrapers. A free arcade driving game in your browser.',
 		about: [
-			'Times Square is where Broadway crosses Seventh Avenue in Midtown Manhattan. It was Longacre Square until 1904, when The New York Times moved into its new tower there and the city renamed the square after the paper.',
+			'Times Square is where Broadway crosses Seventh Avenue in Midtown Manhattan. It was Longacre Square until April 1904, when the city renamed it after The New York Times, which was finishing its new tower there.',
 			'Its walls of lit screens and billboards make it one of the most visited places in the world, and every New Year\'s Eve a ball drops from the top of One Times Square at midnight. The start spot is on Seventh Avenue, heading uptown.',
 		],
 		todo: [
@@ -224,7 +224,7 @@ export const PLACES = [
 		title: 'Drive Neptune Terminals in North Vancouver in 3D',
 		description: 'Drive the North Vancouver waterfront at Neptune Terminals in 3D: the berths, the ships and Burrard Inlet, with stunts and boosts. Free in your browser.',
 		about: [
-			'Neptune Terminals is a bulk terminal on the north shore of Burrard Inlet in North Vancouver, part of the Port of Vancouver, Canada\'s biggest port. Trains bring in steelmaking coal, potash and other bulk cargo, and ships load it at its berths.',
+			'Neptune Terminals is a bulk terminal on the north shore of Burrard Inlet in North Vancouver, part of the Port of Vancouver, Canada\'s biggest port. Trains bring in steelmaking coal from British Columbia and potash from Saskatchewan, and ships load them at its berths.',
 			'Across the water are the towers of downtown Vancouver, and behind it the North Shore mountains.',
 		],
 		todo: [
@@ -235,7 +235,7 @@ export const PLACES = [
 	},
 	{
 		slug: 'eiffel-tower',
-		at: { lat: 48.86, lon: 2.2945, heading: 56 },
+		at: { lat: 48.86, lon: 2.2945, heading: 236 },
 		name: 'Eiffel Tower',
 		called: 'the Eiffel Tower',
 		region: 'Paris, France',
@@ -254,7 +254,7 @@ export const PLACES = [
 	},
 	{
 		slug: 'colosseum',
-		at: { lat: 41.8925, lon: 12.4889, heading: 126 },
+		at: { lat: 41.892, lon: 12.4894, heading: 127 },
 		name: 'Colosseum',
 		called: 'the Colosseum',
 		region: 'Rome, Italy',
@@ -288,26 +288,8 @@ export const PLACES = [
 		],
 	},
 	{
-		slug: 'downtown-dubai',
-		at: { lat: 25.1908, lon: 55.2756 },
-		name: 'Burj Khalifa',
-		called: 'the Burj Khalifa',
-		region: 'Downtown Dubai, UAE',
-		title: 'Drive Round the Burj Khalifa in Dubai in 3D',
-		description: 'Drive Downtown Dubai in photorealistic 3D round the Burj Khalifa, the world\'s tallest building, and out onto Sheikh Zayed Road. Free in your browser.',
-		about: [
-			'The Burj Khalifa in Downtown Dubai has been the tallest building in the world since it opened in 2010, at 828 m.',
-			'Sheikh Mohammed bin Rashid Boulevard loops round the district at its foot, past the Dubai Mall and the lake of the Dubai Fountain, and Sheikh Zayed Road, the city\'s main highway, runs along its edge between lines of skyscrapers.',
-		],
-		todo: [
-			'Drive the boulevard round the Burj Khalifa.',
-			'Fly up beside the tower and glide back down.',
-			'Head out onto Sheikh Zayed Road and boost past the skyscrapers.',
-		],
-	},
-	{
 		slug: 'route-66',
-		at: { lat: 35.0262, lon: - 114.3823 },
+		at: { lat: 35.026, lon: - 114.3832, heading: 317 },
 		name: 'Route 66 in Oatman',
 		region: 'Arizona, USA',
 		title: 'Drive Route 66 in Arizona in 3D',
@@ -317,7 +299,7 @@ export const PLACES = [
 			'East of town it climbs the Black Mountains to Sitgreaves Pass in a string of tight bends. The pin is on the main street in Oatman.',
 		],
 		todo: [
-			'Drive east out of Oatman and up the bends to Sitgreaves Pass.',
+			'Drive out of the north end of Oatman and up the bends to Sitgreaves Pass.',
 			'Drift the bends and boost on the straights across the desert.',
 			'Fly off the pass and glide down over the desert.',
 		],
@@ -325,7 +307,7 @@ export const PLACES = [
 	},
 	{
 		slug: 'hollywood-boulevard',
-		at: { lat: 34.1016, lon: - 118.3405, heading: 90 },
+		at: { lat: 34.1015, lon: - 118.3405, heading: 90 },
 		name: 'Hollywood Boulevard',
 		region: 'Los Angeles, USA',
 		title: 'Drive Hollywood Boulevard in Los Angeles in 3D',

@@ -24,6 +24,7 @@ import { after, before, describe, test } from 'node:test';
 import { measureLoad, serveDist } from './drive-static.mjs';
 import { startVite } from './worker-harness.mjs';
 import { PLACES } from '../drive/site/places.js';
+import { sitePages } from '../drive/site/build.js';
 import { linkedPlace, SPOTS } from '../src/drive-app/places.js';
 
 const require = createRequire( import.meta.url );
@@ -308,17 +309,31 @@ describe( 'what search engines read', () => {
 		assert.match( res.headers.get( 'content-type' ), /xml/ );
 		const xml = await res.text();
 		assert.match( xml, /^<\?xml version="1\.0" encoding="UTF-8"\?>\n<urlset xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9">/ );
-		const entries = [ ...xml.matchAll( /<url>\s*<loc>([^<]+)<\/loc>\s*<lastmod>([^<]+)<\/lastmod>\s*<\/url>/g ) ].map( match => ( { loc: match[ 1 ], lastmod: match[ 2 ] } ) );
+		const entries = [ ...xml.matchAll( /<url>\s*<loc>([^<]+)<\/loc>\s*(?:<lastmod>([^<]+)<\/lastmod>\s*)?<\/url>/g ) ].map( match => ( { loc: match[ 1 ], lastmod: match[ 2 ] } ) );
 		assert.equal( entries.length, ( xml.match( /<url>/g ) ?? [] ).length );
 		assert.deepEqual( entries.map( entry => entry.loc ).sort(), pages.map( page => SITE + page.path ).sort() );
+		// Built from a shallow clone there are no dates (see lastChanged in drive/site/build.js).
+		const shallow = spawnSync( 'git', [ 'rev-parse', '--is-shallow-repository' ], { cwd: ROOT, encoding: 'utf8' } ).stdout.trim() === 'true';
 		for ( const { loc, lastmod } of entries ) {
 
 			assert.doesNotMatch( loc, /[?#]/ );
 			assert.ok( builtFile( loc.slice( SITE.length ) ), `${ loc } isn't a page` );
-			assert.match( lastmod, /^\d{4}-\d\d-\d\d$/ );
+			if ( shallow && ! process.env.TEST_SEO_DIST ) {
+
+				assert.equal( lastmod, undefined, `${ loc }: a date from a shallow clone` );
+				continue;
+
+			}
+
+			assert.match( lastmod ?? '', /^\d{4}-\d\d-\d\d$/, `${ loc }: no date` );
 			assert.ok( new Date( lastmod ) <= new Date( Date.now() + 86400000 ) && new Date( lastmod ) > new Date( '2026-01-01' ), `${ loc }: ${ lastmod }` );
 
 		}
+
+		// No date known (a shallow clone's): every page still listed, with no <lastmod> rather than a wrong one.
+		const undated = sitePages( { when: () => null } ).sitemap;
+		assert.equal( ( undated.match( /<url>/g ) ?? [] ).length, entries.length );
+		assert.doesNotMatch( undated, /lastmod|null|undefined/ );
 
 		const robots = await ( await fetch( `${ server.base }/robots.txt` ) ).text();
 		const lines = robots.split( '\n' ).map( line => line.trim() ).filter( line => line && ! line.startsWith( '#' ) );
@@ -364,8 +379,9 @@ describe( 'what search engines read', () => {
 		// In the page: the words are on the panel, not tucked away, and the pitch is on the splash.
 		const page = await browser.newPage( { viewport: { width: 1280, height: 800 } } );
 		await page.route( /^https?:\/\/(?!127\.0\.0\.1)/, route => route.abort() );
-		await page.goto( server.base );
-		assert.ok( await page.locator( '#splash .pitch' ).isVisible() );
+		// (Looked for as the page arrives: served from this machine, the globe can be up by its load event.)
+		await page.goto( server.base, { waitUntil: 'commit' } );
+		await page.locator( '#splash .pitch' ).waitFor( { state: 'visible', timeout: 10000 } );
 		await page.waitForFunction( () => window.drive?.mode === 'globe', null, { timeout: 60000 } );
 		const info = page.locator( '#globe-ui .site-info' );
 		await info.scrollIntoViewIfNeeded();
@@ -382,7 +398,76 @@ describe( 'what search engines read', () => {
 		// About still opens from it.
 		await page.locator( '#globe-ui .site-info .about-open' ).click();
 		assert.ok( await page.locator( 'dialog#about' ).isVisible() );
+		await page.locator( 'dialog#about button', { hasText: 'Close' } ).click();
+
+		// A tap on a place there flies the globe to it, as a start spot does, rather than leaving the
+		// game (which would end the visit, and the place's Drive here would spend another).
+		await page.evaluate( () => window.addEventListener( 'beforeunload', () => window.__left = true ) );
+		const times = page.locator( '#globe-ui .site-places a[href="/drive/times-square/"]' );
+		assert.equal( await times.getAttribute( 'data-play' ), '/?spot=manhattan' );
+		await times.click();
+		await page.waitForFunction( () => window.drive.globe.pin && ! window.drive.globe.flight, null, { timeout: 60000 } );
+		const manhattan = SPOTS.find( spot => spot.id === 'manhattan' );
+		const pin = await page.evaluate( () => ( { lat: window.drive.globe.pin.lat, lon: window.drive.globe.pin.lon, name: document.querySelector( '.pin-card .name' ).textContent } ) );
+		assert.deepEqual( pin, { lat: manhattan.lat, lon: manhattan.lon, name: manhattan.name } );
+		const eiffel = PLACES.find( place => place.slug === 'eiffel-tower' );
+		await page.locator( '#globe-ui .site-places a[href="/drive/eiffel-tower/"]' ).click();
+		await page.waitForFunction( lat => window.drive.globe.pin?.lat === lat && ! window.drive.globe.flight, eiffel.at.lat, { timeout: 60000 } );
+		assert.equal( await page.locator( '.pin-card .name' ).textContent(), 'Eiffel Tower' );
+		assert.equal( page.url(), `${ server.base }/` );
+		assert.equal( await page.evaluate( () => window.__left ?? false ), false, 'the page was left' );
+		// The list of them all opens in a tab of its own.
+		assert.equal( await page.locator( '#globe-ui .site-info a[href="/drive/"]' ).getAttribute( 'target' ), '_blank' );
 		await page.close();
+
+	} );
+
+	test( 'without WebGL (as Google\'s renderer has none) the panel\'s words show, with why there\'s no globe, and no visit is asked for', async t => {
+
+		const plain = await chromium.launch( { args: [ '--disable-webgl', '--disable-3d-apis' ] } );
+		t.after( () => plain.close() );
+		const page = await plain.newPage( { viewport: { width: 1280, height: 800 } } );
+		const errors = [];
+		const asked = [];
+		page.on( 'pageerror', err => errors.push( err.message ) );
+		page.on( 'request', request => asked.push( new URL( request.url() ).pathname ) );
+		await page.route( /^https?:\/\/(?!127\.0\.0\.1)/, route => route.abort() );
+		await page.goto( server.base );
+		const note = page.locator( '#globe-ui .no-webgl-note' );
+		await note.waitFor();
+		assert.match( await note.textContent(), /needs 3D graphics \(WebGL\)/ );
+		await page.waitForTimeout( 500 );
+		const seen = await page.evaluate( () => {
+
+			const info = document.querySelector( '#globe-ui .site-info' );
+			const shown = el => !! el && el.checkVisibility( { opacityProperty: true, visibilityProperty: true } );
+			return {
+				info: shown( info ),
+				title: shown( document.querySelector( '#globe-ui .logo' ) ),
+				search: shown( document.querySelector( '#globe-ui .search' ) ),
+				spots: shown( document.querySelector( '#globe-ui .spots' ) ),
+				splash: shown( document.getElementById( 'splash' ) ),
+				words: info.innerText.split( /\s+/ ).filter( word => /\p{L}/u.test( word ) ).length,
+				game: !! window.drive,
+			};
+
+		} );
+		assert.deepEqual( { ...seen, words: seen.words > 300 }, { info: true, title: true, search: false, spots: false, splash: false, words: true, game: false } );
+		// Neither the Worker nor the game's code was asked for: a visit would spend a drive on a blank page.
+		assert.deepEqual( asked.filter( path => path.startsWith( '/api/' ) ), [] );
+		assert.ok( ! asked.some( path => /\/assets\/main-[^/]*\.js$/.test( path ) ), asked.join( ' ' ) );
+		assert.deepEqual( errors, [] );
+		await page.locator( '#globe-ui .site-info a[href="/drive/golden-gate-bridge/"]' ).scrollIntoViewIfNeeded();
+		assert.ok( await page.locator( '#globe-ui .site-info a[href="/drive/golden-gate-bridge/"]' ).isVisible() );
+		await page.locator( '#globe-ui .site-info .about-open' ).click();
+		assert.ok( await page.locator( 'dialog#about' ).isVisible() );
+		if ( SHOTS ) await page.screenshot( { path: join( SHOTS, 'seo-no-webgl.png' ) } );
+		const phone = await plain.newPage( { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } );
+		await phone.route( /^https?:\/\/(?!127\.0\.0\.1)/, route => route.abort() );
+		await phone.goto( server.base );
+		await phone.locator( '#globe-ui .no-webgl-note' ).waitFor();
+		assert.ok( await phone.locator( '#globe-ui .site-info h2' ).isVisible() );
+		if ( SHOTS ) await phone.screenshot( { path: join( SHOTS, 'seo-no-webgl-phone.png' ) } );
 
 	} );
 
@@ -448,13 +533,13 @@ describe( 'Drive here: a place\'s link opens the game with it pinned', () => {
 	test( 'then Drive here drops in at the place, as a start spot does; on a phone the pin is clear of the sheet', async () => {
 
 		const page = await newPage();
-		await page.goto( `${ server.base }/?at=48.86,2.2945&name=Eiffel%20Tower&region=Paris%2C%20France&heading=56` );
+		await page.goto( `${ server.base }/?at=48.86,2.2945&name=Eiffel%20Tower&region=Paris%2C%20France&heading=236` );
 		await pinned( page );
 		await page.locator( '.pin-card .go' ).click();
 		await page.waitForFunction( () => window.drive.mode === 'driving', null, { timeout: 60000 } );
 		assert.equal( await page.locator( '#drive-ui .place' ).textContent(), 'Eiffel Tower' );
 		const recent = await page.evaluate( () => JSON.parse( localStorage.getItem( 'world-drive.recent' ) )[ 0 ] );
-		assert.deepEqual( [ recent.name, recent.region, recent.lat, recent.lon, recent.heading ], [ 'Eiffel Tower', 'Paris, France', 48.86, 2.2945, 56 ] );
+		assert.deepEqual( [ recent.name, recent.region, recent.lat, recent.lon, recent.heading ], [ 'Eiffel Tower', 'Paris, France', 48.86, 2.2945, 236 ] );
 		if ( SHOTS ) await page.screenshot( { path: join( SHOTS, 'seo-deep-link-driving.png' ) } );
 		assert.deepEqual( page.errors, [] );
 		await page.close();
@@ -516,7 +601,7 @@ describe( 'the dev server and the load', () => {
 			assert.equal( bare.headers.get( 'location' ), '/drive/monaco/' );
 			assert.match( await ( await fetch( `${ base }/drive/` ) ).text(), /<h1>Places to drive<\/h1>/ );
 			assert.match( await ( await fetch( `${ base }/sitemap.xml` ) ).text(), /<loc>https:\/\/worlddrive\.app\/drive\/route-66\/<\/loc>/ );
-			assert.match( await ( await fetch( `${ base }/` ) ).text(), /<li><a href="\/drive\/copacabana\/">Copacabana<\/a><\/li>/ );
+			assert.match( await ( await fetch( `${ base }/` ) ).text(), /<li><a href="\/drive\/copacabana\/" data-play="\/\?at=[^"]+">Copacabana<\/a><\/li>/ );
 
 		} finally {
 

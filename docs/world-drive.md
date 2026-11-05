@@ -28,7 +28,9 @@ address, and the construction app is unchanged by it.
    Choosing a search result or a spot flies the globe down to it and pins it. The card under the pin
    says where it is, with **Drive here**. A link to a place does the same once the visit has started:
    a [place's page](#search-engines)'s **Drive here** (`/?spot=monaco`, or
-   `/?at=48.86,2.2945&name=Eiffel%20Tower` for anywhere).
+   `/?at=48.86,2.2945&name=Eiffel%20Tower` for anywhere), and so does a tap on one of the places
+   listed at the foot of the panel (each a link to its page, which a middle-click or "open in new
+   tab" still opens: a plain tap stays in the game, as leaving it would end the visit).
 3. **Your ride**: the go-kart, a pickup or the muscle car; six more [cars](#world-drives-cars) as
    your [level](#levels) climbs (a golf cart at level 5, a tuk-tuk at 8, an ice-cream van at 15, a
    lawn tractor at 22, a retro wedge at 30 and a formula racer at 40); or with the
@@ -175,7 +177,9 @@ construction app's driving looks and behaves as it always has.
   view, from 30 % of the booster's top speed on, thicker and faster the faster you go. Overdrive's
   sonic boom adds a wide ring that lingers as it spreads to seven times the vehicle's size, the
   edges of the view flash white and the view is punched about 6° wider for a moment, on top of its
-  9.
+  9. The boom's rings keep up with the vehicle (0.97 of its speed): slower, at overdrive's speed
+  they fell back through the chase camera while still growing, and with the camera inside a ring's
+  bright band the whole view went white, twice.
 - **Running dry.** The exhaust glows on and cools, white-hot in the style's colour, through orange
   to a dull red and out in 0.9 s, with a few embers drifting off it. The car settles: its nose
   dips as it slows back to its top speed, and it bounces back level.
@@ -220,10 +224,12 @@ turned off) turns off everything done to the view: the jolts, the shake of a hit
 and overdrive's white edges (`src/drive-app/screen-fx.js`; main.js adds a jolt's `driver.punch` to
 the field of view). The bursts in the world stay. A visitor whose system asks for less motion
 (`prefers-reduced-motion`) has none of those whatever the switch says, and fewer flashes: no flare
-as the booster lights, the vehicle not lit up on a pad, and the gauge glowing steadily when it's
-full rather than pulsing, and flashing once as it runs dry. Overdrive's 9° wider view is as it
-was, either way. On a touch screen the bursts have 60 % of their sparks, and there are 24 speed
-lines rather than 48.
+as the booster lights nor in overdrive's boom, whose rings are fainter (0.6 as bright), the vehicle
+not lit up on a pad, and the gauge glowing steadily when it's full rather than pulsing, and flashing
+once as it runs dry. Overdrive's 9° wider view is as it was, either way. On a touch screen the
+bursts have 60 % of their sparks, and there are 24 speed lines rather than 48. The Garage's
+**▶ Boost** has the same effects as driving (main.js hands it `driver.effects`): no flare for a
+visitor asking for less motion, and a phone's fewer sparks.
 
 **Others' cars** show what can be told from what they send (`FLAGS` in `live-protocol.js`, which is
 unchanged): the booster lighting and running dry, each drift charge level and the mini-turbo, and
@@ -256,8 +262,11 @@ mini-turbo, a standing start's wheelspin and smoke, braking's dip and a turn's l
 back at a stop, settling back level, nothing made in a dozen ignitions and the budgets kept; the
 effects going with a pause and made again; the speed lines thickening with speed and going,
 overdrive's white edges, the gauge pulsing, flashing and refilling; the switch turning it all off,
-kept across a reload, and on again; asking for less motion; and a phone's thinner bursts and fewer
-lines.
+kept across a reload, and on again; asking for less motion; the sonic boom's rings keeping up with
+the kart (read back off the canvas frame by frame: under half of the view near white, 28 % at
+most, where rings falling back through the camera had 95 % of it), with no flare for a
+visitor asking for less motion, nor in the Garage's **▶ Boost**; and a phone's thinner bursts and
+fewer lines.
 `test-drive-live-ui.mjs` checks another's car lights and runs dry with their booster, and has a
 burst at each of their drift's charge levels and for its mini-turbo.
 
@@ -1620,10 +1629,11 @@ upright again in the air. Nothing turns in the air faster than the kart, as for 
 **Driver's seats.** Each car's `cab` is where its driver's eyes are for the driver's-seat camera
 (**C**), checked by looking from it: over the bars and wheels in the formula racer and the lawn
 tractor, over the steering wheel in the golf cart, behind the green panel in the tuk-tuk. The
-ice-cream van, the retro wedge and the cyber muscle car have their windows painted on (one picture
-with the rest of the body, nothing to see through), and the hypercar has no inside (its model is
-its outside alone), so their seat is a bonnet camera, over the bonnet just in front of the
-windscreen.
+ice-cream van and the retro wedge have their windows painted on (one picture with the rest of the
+body, nothing to see through), the cyber muscle car's tinted glass has an instrument display drawn
+over it (its cabin shows through, but from inside the road would be seen through the picture), and
+the hypercar has no inside (its model is its outside alone), so their seat is a bonnet camera,
+over the bonnet just in front of the windscreen.
 
 **Where they live.** `drive/public/cars/`: each car's `.glb`, its picture in `thumbs/`, `cars.json`
 (file, size, wheels, triangles and the source: title, author, link, licence) and `CREDITS.md`.
@@ -2064,10 +2074,11 @@ starts one. World Drive is built so that one page load is one session, however m
   billed session. After a few hours on one page, Google ends the session; World Drive then says to
   reload, which counts as a new visit.
 - The built site never contains the Maps key. The page asks the Worker for it once as it starts
-  (`POST /api/visit`), after an invisible Cloudflare Turnstile check, and only while the day's visits
-  are under two caps: **DAILY_VISITS** for everyone together (300) and **PER_VISITOR_DAILY** for each
-  visitor (8; a supporter signed in has **PER_VISITOR_DAILY_SUPPORTER**, 30, counted by their account).
-  Both start again at midnight UTC.
+  (`POST /api/visit`), after an invisible Cloudflare Turnstile check and once the game's code has
+  arrived (so a download that fails spends no drive: [the load](#the-load)), and only while the
+  day's visits are under two caps: **DAILY_VISITS** for everyone together (300) and
+  **PER_VISITOR_DAILY** for each visitor (8; a supporter signed in has
+  **PER_VISITOR_DAILY_SUPPORTER**, 30, counted by their account). Both start again at midnight UTC.
 - Over a cap the page shows **Today's free drives are used up**, with how long until fresh drives,
   and loads nothing from Google. A failed robot check shows **We couldn't check you're a person**
   with **Try again**. With no key set, it shows **World Drive is getting ready** (with a flat test pad
@@ -2321,17 +2332,27 @@ download.
   places' pages and a few questions (is it free, does it work on a phone, can I drive my own street,
   can I play with friends, what's kept about me). It's plain text in the panel, there for anyone who
   scrolls down, nothing hidden. **About World Drive** opens from there as before; its words are in
-  the page too.
-- **What Google renders.** Google runs the page as well, but robots.txt keeps it off `/api/`, so it
-  gets no settings and sees what the page shows without a Worker: the test globe, its note and the
-  panel with those words. It never starts a visit or meets the robot check, so it costs nothing and
-  never sees "We couldn't check you're a person".
+  the page too. In the game a plain tap on one of the places flies the globe there (main.js, by the
+  link's `data-play`) rather than leaving for its page, and the list of them all opens in a new tab.
+- **What Google renders.** Google runs the page as well, but its renderer has no WebGL
+  ([Google says so](https://developers.google.com/search/docs/crawling-indexing/javascript/fix-search-javascript)),
+  and robots.txt keeps it off `/api/`. `boot.js` looks for WebGL 2 (which three.js needs) before
+  anything else: without it there's no globe and no visit, and the panel shows only its words about
+  World Drive under the title, with a line on why there's no globe ("World Drive needs 3D graphics
+  (WebGL)..."). So that's what Google renders, and what a visitor whose browser has WebGL off or
+  blocked sees, rather than an empty page after a spent drive. Google never starts a visit or meets
+  the robot check, so it costs nothing and never sees "We couldn't check you're a person". A
+  renderer with WebGL but kept off `/api/` gets the test globe with the panel; on worlddrive.app its
+  6 s note then says the server couldn't be reached (the developer's "No Google 3D tiles here" note
+  is only for other addresses), as it does for a visitor whose `/api/config` didn't answer.
 
 ### The places' pages
 
-`/drive/` lists them; each place has its own at `/drive/<slug>/`: one for each start spot and seven
-more famous places (the Eiffel Tower, the Colosseum, Piccadilly Circus, the Burj Khalifa, Route 66
-through Oatman, Hollywood Boulevard and Copacabana). Their words are `drive/site/places.js`: what the
+`/drive/` lists them; each place has its own at `/drive/<slug>/`: one for each start spot and six
+more famous places (the Eiffel Tower, the Colosseum, Piccadilly Circus, Route 66 through Oatman,
+Hollywood Boulevard and Copacabana). (The Burj Khalifa had a page until it was seen on Google's
+tiles that there are no 3D buildings in Dubai, only flat imagery: a place's page has to promise only
+what the game shows there.) Their words are `drive/site/places.js`: what the
 place is, in a few true sentences, and what to do there in the game, with a title and description
 of its own. `drive/site/build.js` makes them as plain HTML when the site is built (and the dev server
 makes them as they're asked for), with their styles in the page and no script, so they show at once.
@@ -2344,13 +2365,16 @@ about the place with its coordinates), a big **Drive here**, links to every othe
 always; once the globe is up it flies there and pins it (on Google's tiles once their root has
 arrived, which moves the Earth under the camera), and **Drive here** on the pin's card drops in. It
 never drops in by itself. Then the place is out of the address, so a reload doesn't fly there again;
-a `?party=` stays. A link's name and region are taken only as the leaderboard takes a place's name
-(`cleanPlace`: letters, numbers and an address's punctuation, nothing rude), as the others driving
-there see it; otherwise it's a dropped pin. A link to somewhere that isn't on Earth, or a spot that
+a `?party=` stays. On Google's tiles that's once the root has arrived, not before, so if it doesn't
+come, the reload its error screen asks for still goes to the place. A link's name and region are
+taken only as the leaderboard takes a place's name (`cleanPlace`: letters, numbers and an address's
+punctuation, nothing rude), as the others driving there see it; otherwise it's a dropped pin. A link to somewhere that isn't on Earth, or a spot that
 isn't one, pins nothing.
 
 To add a place: an entry in `places.js` with true facts (check them), its own words (nothing copied
-from another page) and a pin on a road; then `npm run drive-site-images` draws its card. Each page
+from another page) and a pin on a road, dropped in on Google's tiles first (that there are 3D
+buildings there if the page says so, that the start is on the road and not beside it, and that the
+heading faces what the page is about); then `npm run drive-site-images` draws its card. Each page
 has to be worth reading on its own: a pile of near-identical pages for every town would be what
 Google calls [doorway pages](https://developers.google.com/search/docs/essentials/spam-policies#doorways).
 
@@ -2359,6 +2383,8 @@ Google calls [doorway pages](https://developers.google.com/search/docs/essential
 - **`/sitemap.xml`** is made by the build: the home page, `/drive/` and every place's page, each with
   the day the files it's made from were last committed (`git log`), so its `lastmod` only moves when
   the page does, which is the only `lastmod` Google trusts ([sitemaps](https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap)).
+  Built from a shallow clone (a build server's may be one), whose oldest commit seems to add every
+  file, there's no `lastmod` at all rather than that commit's date on every page.
 - **`/robots.txt`** (`drive/public/robots.txt`): everything may be crawled but `/api/`, which only
   the game talks to, and the sitemap's address
   ([robots.txt](https://developers.google.com/search/docs/crawling-indexing/robots/intro)). The game's
@@ -2373,11 +2399,22 @@ Google calls [doorway pages](https://developers.google.com/search/docs/essential
 
 Google counts how fast a page shows ([Core Web Vitals](https://developers.google.com/search/docs/appearance/core-web-vitals):
 largest contentful paint within 2.5 s), and World Drive was one 1.37 MB script (411 kB compressed)
-that had to arrive and run before the visit was even asked for. Now `boot.js`, 10 kB, shows the splash
-and asks for the visit (the robot check included) while the game (`main.js`: three.js, the tiles and
-the rest) comes down beside it; the splash's line about World Drive is on the screen with the first
-paint and is its largest paint, so the page counts as loaded then; and on worlddrive.app the head
-opens the connections to Turnstile and to Google's tiles at once.
+that had to arrive and run before the visit was even asked for. Now `boot.js`, 12 kB, shows the splash
+and runs the robot check while the game (`main.js`: three.js, the tiles and the rest) comes down
+beside it, then asks for the visit; the splash's line about World Drive is on the screen with the
+first paint and is its largest paint, so the page counts as loaded then; and on worlddrive.app the
+head opens the connections to Turnstile and to Google's tiles at once.
+
+The visit (`POST /api/visit`) is one of the day's drives, the visitor's and everyone's, so it waits
+for both the robot check and the game's code: a download that fails (a phone losing its connection)
+spends none, nor does each **Try again** after it, which reloads the page. Whichever of the two fails
+first says so: the robot check's screen, or "World Drive didn't finish loading. Check your
+connection" (a script that arrives but breaks as it runs, as on an older browser, says "World Drive
+couldn't start in this browser" instead, and both are logged to the console). The check's 45 s
+deadline counts from the start, Turnstile's script included, so a script that never arrives ends
+on the robot check's screen too rather than on the splash for good. Only the short POST and its
+siteverify come after the download, which on the phone below starts the game about 0.1 s later than
+asking for the visit beside it did.
 
 Measured with `scripts/drive-static.mjs`'s `measureLoad` on the built site on the test globe, as a
 phone on Lighthouse's mobile settings (150 ms round trips, 1.6 Mbit/s, the CPU 4 times slower), three
@@ -2385,11 +2422,11 @@ loads each:
 
 | | Before | After |
 | --- | --- | --- |
-| First contentful paint | 0.49 to 0.58 s | 0.43 to 0.52 s |
-| Largest contentful paint | 3.5 to 3.8 s (the test globe's message; on the real site the globe's panel, later still) | 0.43 to 0.52 s (the splash's line) |
-| Globe up, no Worker | 3.5 to 3.7 s | 3.4 to 3.7 s |
-| The game started, with a stand-in Worker and a 1.5 s robot check | 4.6 to 4.7 s | 3.2 s |
-| Script over the wire | 408 kB, all before anything ran | 414 kB: 4 kB first, the rest beside the visit |
+| First contentful paint | 0.49 to 0.58 s | 0.45 to 0.54 s |
+| Largest contentful paint | 3.5 to 3.8 s (the test globe's message; on the real site the globe's panel, later still) | 0.45 to 0.54 s (the splash's line) |
+| Globe up, no Worker | 3.5 to 3.7 s | 3.4 to 3.9 s |
+| The game started, with a stand-in Worker and a 1.5 s robot check | 4.6 to 4.7 s | 3.3 to 3.4 s |
+| Script over the wire | 408 kB, all before anything ran | 424 kB: 5 kB first, the rest beside the robot check |
 
 A place's page shows in about 0.25 s, with no script at all. Real visitors' numbers are in Cloudflare
 Web Analytics (its Core Web Vitals) and, once enough people visit, Search Console's Core Web Vitals
@@ -2411,9 +2448,13 @@ driving ("Drive with me at Monaco harbour in World Drive"), and its link unfurls
 description (each its own), canonical address, Open Graph and Twitter tags and card (a 1200 × 630
 PNG that's there), structured data (valid JSON, Google's fields, no ratings), one heading and words
 of its own on each place's page; the sitemap (every page, nothing else, real addresses, dates) and
-robots.txt; the icons and the manifest; every link within the site answering 200; the home page's
-words (over 350 of them, the places linked, shown on the panel, About opening from there); each
-place's **Drive here** opening the game on the test globe with its pin there and the address tidied,
+robots.txt (and with no date known, as from a shallow clone, no `lastmod` rather than a wrong one);
+the icons and the manifest; every link within the site answering 200; the home page's words (over 350
+of them, the places linked, shown on the panel, About opening from there, a tap on a place there
+flying the globe to it without leaving the page); the home page in a browser without WebGL (the
+panel's words shown with the line on why there's no globe, no visit and no game's code asked for, no
+errors, on a computer and a phone); each place's **Drive here** opening the game on the test globe
+with its pin there and the address tidied,
 a drop-in from a link, the pin clear of the sheet on a phone, a `?party=` kept, a rude name or a place
 off the Earth refused; the dev server making the same pages; and the load above on a phone's
 connection (the first paint is the largest, under 2.5 s, before the game's code).
@@ -2533,7 +2574,10 @@ and back on it; 14 m under the sea, on Google's water as before; the Dead Sea's 
 the map's sea, coasts, lakes and land; land walled off from the sea by ground over it, the side
 of the Assal depression, never; Lake Erie's surface gone out over land to Niagara's gorge and back
 by the lake; without the map, only the deep sea), the used-up,
-robot-check and getting-ready screens, and the leaderboard with its answers made in the test: tabs, your own row, picking a name and renaming, a
+robot-check and getting-ready screens, the visit asked for only once the game's code is here (a
+download that fails, and its Try again, spend none; a script that breaks is told from a dropped
+connection, and logged), a place's link kept in the address until Google's root has come, and the
+leaderboard with its answers made in the test: tabs, your own row, picking a name and renaming, a
 landed jump posting the run with the card asking first, each place's best posted, a dead connection
 changing nothing, and a phone; and buying the pass with Google's script stood in for: signing in
 from the sheet, the pause menu and the used-up screen, Buy's link, "Check again" before Stripe's
@@ -2551,8 +2595,9 @@ and `TEST_VITE_CACHE` a folder for its dev server's pre-bundled dependencies (el
 ```
 drive/index.html             the page: panel (and what World Drive is, at its foot), pin card,
                              driving bar, keys card, screens; its head for search engines
-src/drive-app/boot.js        the page's first script: the splash, /api/config and the visit, while
-                             main.js loads
+src/drive-app/boot.js        the page's first script: WebGL looked for (without it, the panel's
+                             words), the splash, /api/config and the robot check while main.js
+                             loads, then the visit
 src/drive-app/main.js        the game: the tiles, modes (globe, dropping, driving, paused), a
                              place's link, dropping in, recentring, the render loop
 drive/site/                  the places' pages, /drive/ and /sitemap.xml (build.js, a Vite plugin;
@@ -2733,8 +2778,8 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
 - [The cars](#world-drives-cars): the importer turns a car's wheels, not what steers them, so the
   tuk-tuk's handlebars and the golf cart's and the lawn tractor's steering wheels stay still while
   their front wheels steer. The tuk-tuk's green panels are small, so the Garage's stripes and number
-  on it are small too. The three with painted windows, and the hypercar with no inside, look from
-  their bonnet rather than their seat.
+  on it are small too. The two with painted windows, the cyber muscle car with a picture drawn
+  on its glass and the hypercar with no inside look from their bonnet rather than their seat.
 - [How boosting and driving look](#how-boosting-and-driving-look): the lean tilts the whole model,
   wheels and all, about the low side's axle, so on a steep lean a wheel on the other side lifts a
   few centimetres off the road (a kart, which has no suspension, leans as a car would). The bursts

@@ -1686,12 +1686,14 @@ export function createSupersonic( root ) {
 
 		},
 
-		// The boom, round the middle of its box, for a vehicle about `size` m across.
-		boom( frame, size ) {
+		// The boom, round the middle of its box, for a vehicle about `size` m across. `calm` (the
+		// visitor asked for less motion): no flare, and the rings fainter.
+		boom( frame, size, calm = false ) {
 
 			const way = speed > 1 ? travel : frame.back;
 			for ( const [ picture, life, inherit, start, spread, colour, alpha = 1, aspect = 1 ] of BOOM ) {
 
+				if ( calm && picture === SHAPES.flare ) continue;
 				const p = batch.spawn( life );
 				p.position.copy( frame.middle );
 				p.carry.copy( frame.velocity ).multiplyScalar( inherit );
@@ -1704,7 +1706,7 @@ export function createSupersonic( root ) {
 				p.grow = size * spread;
 				p.aspect = aspect;
 				p.colour.set( colour );
-				p.alpha = alpha;
+				p.alpha = alpha * ( calm && ! facing ? CALM_RINGS : 1 );
 				p.kind = facing ? 2 : 1;
 
 			}
@@ -1731,12 +1733,17 @@ export function createSupersonic( root ) {
 // a phone's narrow view (World Drive flashes the edges of the view white instead, screen-fx.js); a
 // wide ring lingering as it spreads to seven times the vehicle's size, a second, bluer one inside
 // that, and a flare side to side. Each [ picture, life (s), share of the vehicle's speed it keeps,
-// size and growth (times the vehicle's size), colour, alpha, height for its width ].
+// size and growth (times the vehicle's size), colour, alpha, height for its width ]. The rings keep
+// up with the vehicle (0.97 of its speed, drifting back a metre or few over their life): any
+// slower and at overdrive's speed they fall back through the chase camera while still growing, and
+// with the camera inside a ring's bright band the whole view goes white, twice.
 const BOOM = [
-	[ SHAPES.shock, 0.5, 0.6, 0.6, 4.5, 0xffffff ],
-	[ SHAPES.ring, 0.4, 0.75, 0.4, 3, 0xcfeaff ],
+	[ SHAPES.shock, 0.5, 0.97, 0.6, 4.5, 0xffffff ],
+	[ SHAPES.ring, 0.4, 0.97, 0.4, 3, 0xcfeaff ],
 	[ SHAPES.glow, 0.18, 1, 1.1, 1, 0xffffff, 0.75 ],
-	[ SHAPES.shock, 0.95, 0.7, 1, 6, 0xeaf6ff, 0.6 ],
-	[ SHAPES.ring, 0.75, 0.8, 0.8, 4, 0x9fd4ff, 0.6 ],
+	[ SHAPES.shock, 0.95, 0.97, 1, 6, 0xeaf6ff, 0.6 ],
+	[ SHAPES.ring, 0.75, 0.97, 0.8, 4, 0x9fd4ff, 0.6 ],
 	[ SHAPES.flare, 0.22, 1, 1.4, 1.2, 0xffffff, 0.5, 0.25 ],
 ];
+// How bright the boom's rings are for a visitor asking for less motion.
+const CALM_RINGS = 0.6;

@@ -54,7 +54,9 @@ const PARTS = [
 // vehicles: from loadVehicles(). panel: the globe's panel (for the ride picked there). models: the
 // world's ModelManager, whose loader loads the trucks for the turntable. current(): the ride being
 // driven, { entry, vehicle }, or null. onLook(): the ride being driven has a new look on.
-export function setUpGarage( { vehicles, panel, models, current, onLook = () => {} } ) {
+// effects: the driving's effects ({ detail, calm }, which screen-fx.js keeps up to date), so the
+// turntable's bursts are as calm and as many as driving's.
+export function setUpGarage( { vehicles, panel, models, current, onLook = () => {}, effects } ) {
 
 	const dialog = build();
 	const canvas = dialog.querySelector( 'canvas' );
@@ -315,7 +317,7 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 			vehicle.paintable = paintable;
 			mark();
 
-		} );
+		}, effects );
 		show( which ?? vehicles[ 0 ] );
 		preview.start();
 
@@ -451,8 +453,9 @@ function boostHidden( part, wearing ) {
 
 // A little scene of its own on the Garage's canvas: the ride on a lit disc, turning, its flame and
 // trail shown for a moment when picked (with drive-fx.js, as driving does). It only draws while
-// the Garage is open. onPaintable( yes ): whether the ride shown has paint to change.
-function createPreview( canvas, models, getVehicle, onPaintable ) {
+// the Garage is open. onPaintable( yes ): whether the ride shown has paint to change. effects: as
+// setUpGarage's.
+function createPreview( canvas, models, getVehicle, onPaintable, effects ) {
 
 	const renderer = new WebGLRenderer( { canvas, antialias: true, alpha: true } );
 	renderer.setPixelRatio( Math.min( window.devicePixelRatio, 2 ) );
@@ -622,7 +625,7 @@ function createPreview( canvas, models, getVehicle, onPaintable ) {
 		const key = JSON.stringify( want );
 		if ( key === fxKey ) return;
 		fx?.dispose();
-		fx = createDriveFx( scene, want );
+		fx = createDriveFx( scene, want, { effects } );
 		fxKey = key;
 
 	}

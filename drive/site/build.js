@@ -69,10 +69,12 @@ export function sitePages( { when = lastChanged } = {} ) {
 
 }
 
-// The home page's list of places (in its static content: drive/index.html).
+// The home page's list of places (in its static content: drive/index.html). Each links to its
+// page, and says where its Drive here goes (data-play), so a tap in the game flies the globe there
+// rather than leaving the visit (main.js).
 export function placesList() {
 
-	return sitePlaces().map( place => `<li><a href="${ place.path }">${ esc( place.name ) }</a></li>` ).join( '' );
+	return sitePlaces().map( place => `<li><a href="${ place.path }" data-play="${ esc( place.play ) }">${ esc( place.name ) }</a></li>` ).join( '' );
 
 }
 
@@ -324,11 +326,12 @@ function breadcrumbs( trail ) {
 
 }
 
+// A page without a date (see lastChanged) has no <lastmod>: none is better than a wrong one.
 function sitemapXml( entries ) {
 
 	return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${ entries.map( ( { path, date } ) => `\t<url>\n\t\t<loc>${ esc( SITE + path ) }</loc>\n\t\t<lastmod>${ date }</lastmod>\n\t</url>` ).join( '\n' ) }
+${ entries.map( ( { path, date } ) => `\t<url>\n\t\t<loc>${ esc( SITE + path ) }</loc>\n${ date ? `\t\t<lastmod>${ date }</lastmod>\n` : '' }\t</url>` ).join( '\n' ) }
 </urlset>
 `;
 
@@ -336,11 +339,15 @@ ${ entries.map( ( { path, date } ) => `\t<url>\n\t\t<loc>${ esc( SITE + path ) }
 
 // The day (YYYY-MM-DD) the last commit touching `files` was made, so a page's date in the sitemap
 // moves when what it says does (Google only trusts lastmod that does) and not on every build.
-// Outside git, or for files never committed, today.
+// Outside git, or for files never committed, today. In a shallow clone (a build server's, cloned
+// with only the last commits) the oldest commit there seems to add every file, so every page would
+// get that commit's date, moving on every deploy: null instead, and the sitemap gives no date.
 export function lastChanged( files ) {
 
 	try {
 
+		const shallow = execFileSync( 'git', [ 'rev-parse', '--is-shallow-repository' ], { cwd: ROOT, encoding: 'utf8', stdio: [ 'ignore', 'pipe', 'ignore' ] } ).trim();
+		if ( shallow === 'true' ) return null;
 		const date = execFileSync( 'git', [ 'log', '-1', '--format=%cs', '--', ...files ], { cwd: ROOT, encoding: 'utf8', stdio: [ 'ignore', 'pipe', 'ignore' ] } ).trim();
 		if ( /^\d{4}-\d\d-\d\d$/.test( date ) ) return date;
 

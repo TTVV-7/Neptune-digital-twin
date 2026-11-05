@@ -23,22 +23,10 @@ export async function getConfig() {
 
 }
 
-// Once per page load: get a Turnstile token (invisible unless Turnstile wants a click, then its
-// widget shows in `container`) and trade it for the Maps key. Answers { key, left, visit } (visit:
-// the token scores are posted with, see postScore), or { usedUp: true, retryAfter } over a daily
-// cap, { robot: true } when the check failed, or { error } for anything else.
-export async function startVisit( siteKey, container ) {
-
-	let token;
-	try {
-
-		token = await turnstileToken( siteKey, container );
-
-	} catch ( err ) {
-
-		return { robot: true, error: err.message };
-
-	}
+// Trades the robot check's token for the Maps key: one of the day's drives. Answers { key, left,
+// visit } (visit: the token scores are posted with, see postScore), or { usedUp: true, retryAfter }
+// over a daily cap, { robot: true } when the check failed, or { error } for anything else.
+export async function postVisit( token ) {
 
 	let res;
 	let body = {};
@@ -60,48 +48,71 @@ export async function startVisit( siteKey, container ) {
 
 }
 
+// Once per page load: a Turnstile token (invisible unless Turnstile wants a click, then its widget
+// shows in `container`), to trade for the Maps key with postVisit. Rejects when the check failed or
+// took too long. The deadline runs from the start, Turnstile's script included: a script that never
+// comes (a request stalled by a proxy) times out too, rather than leaving the splash waiting.
 let widget = null;
-function turnstileToken( siteKey, container ) {
+export function robotCheck( siteKey, container ) {
 
-	return loadTurnstile().then( turnstile => new Promise( ( resolve, reject ) => {
+	return new Promise( ( resolve, reject ) => {
 
-		const timer = setTimeout( () => reject( new Error( 'The robot check took too long' ) ), TURNSTILE_TIMEOUT );
-		// Trying again: the last widget goes first.
-		if ( widget !== null ) {
+		let over = false;
+		const timer = setTimeout( () => {
 
-			try {
+			over = true;
+			// Still no script: the next try asks for it afresh.
+			if ( ! loaded() ) forgetTurnstile();
+			reject( new Error( 'The robot check took too long' ) );
 
-				turnstile.remove( widget );
+		}, TURNSTILE_TIMEOUT );
 
-			} catch {
+		loadTurnstile().then( turnstile => {
 
-				// Already gone.
+			if ( over ) return;
+			// Trying again: the last widget goes first.
+			if ( widget !== null ) {
+
+				try {
+
+					turnstile.remove( widget );
+
+				} catch {
+
+					// Already gone.
+
+				}
 
 			}
 
-		}
+			container.replaceChildren();
+			widget = turnstile.render( container, {
+				sitekey: siteKey,
+				action: 'visit',
+				// Out of sight unless Turnstile needs a click.
+				appearance: 'interaction-only',
+				callback: token => {
 
-		container.replaceChildren();
-		widget = turnstile.render( container, {
-			sitekey: siteKey,
-			action: 'visit',
-			// Out of sight unless Turnstile needs a click.
-			appearance: 'interaction-only',
-			callback: token => {
+					clearTimeout( timer );
+					resolve( token );
 
-				clearTimeout( timer );
-				resolve( token );
+				},
+				'error-callback': () => {
 
-			},
-			'error-callback': () => {
+					clearTimeout( timer );
+					reject( new Error( 'The robot check didn\'t work' ) );
 
-				clearTimeout( timer );
-				reject( new Error( 'The robot check didn\'t work' ) );
+				},
+			} );
 
-			},
+		}, err => {
+
+			clearTimeout( timer );
+			reject( err );
+
 		} );
 
-	} ) );
+	} );
 
 }
 
@@ -110,18 +121,19 @@ function turnstileToken( siteKey, container ) {
 const loaded = () => typeof window.turnstile?.render === 'function';
 
 let turnstileLoading = null;
+let turnstileScript = null;
 function loadTurnstile() {
 
 	turnstileLoading ??= new Promise( ( resolve, reject ) => {
 
 		if ( loaded() ) return resolve( window.turnstile );
-		const script = document.createElement( 'script' );
+		const script = turnstileScript = document.createElement( 'script' );
 		script.src = TURNSTILE_SCRIPT;
 		script.async = true;
 		script.onload = () => loaded() ? resolve( window.turnstile ) : reject( new Error( 'Turnstile didn\'t load' ) );
 		script.onerror = () => {
 
-			turnstileLoading = null;
+			forgetTurnstile();
 			reject( new Error( 'Turnstile didn\'t load' ) );
 
 		};
@@ -129,6 +141,14 @@ function loadTurnstile() {
 
 	} );
 	return turnstileLoading;
+
+}
+
+function forgetTurnstile() {
+
+	turnstileLoading = null;
+	turnstileScript?.remove();
+	turnstileScript = null;
 
 }
 

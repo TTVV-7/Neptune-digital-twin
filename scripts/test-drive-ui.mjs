@@ -1577,6 +1577,110 @@ describe( 'World Drive boost and driving effects', () => {
 
 	} );
 
+	test( 'the sonic boom\'s rings keep up with the vehicle, so they never white out the view; asking for less motion it has no flare, nor has the Garage\'s ▶ Boost', async () => {
+
+		const calm = await newPage( { reducedMotion: 'reduce' } );
+		try {
+
+			await calm.goto( `${ BASE }/?pro=1` );
+			await calm.waitForFunction( () => window.drive?.mode === 'globe', null, { timeout: 30000 } );
+			// The Garage's turntable has driving's effects: lit, no flare for this visitor.
+			await calm.evaluate( () => window.drive.garage.open() );
+			await calm.waitForFunction( () => window.drive.garage.preview?.model && window.drive.garage.preview.fx, null, { timeout: 20000 } );
+			const garage = await calm.evaluate( async () => {
+
+				const { SHAPES } = await import( '/src/drive-boosts.js' );
+				const { preview } = window.drive.garage;
+				let scene = preview.model;
+				while ( scene.parent ) scene = scene.parent;
+				const batches = [];
+				scene.getObjectByName( 'drive-fx' ).traverse( o => o.userData.batch && batches.push( o.userData.batch ) );
+				preview.boost();
+				let flares = 0;
+				let alive = 0;
+				for ( let i = 0; i < 20; i ++ ) {
+
+					await new Promise( resolve => requestAnimationFrame( resolve ) );
+					alive = Math.max( alive, preview.fx.particles.alive );
+					for ( const batch of batches ) for ( const p of batch.items ) if ( p.age < p.life && p.frame === SHAPES.flare ) flares ++;
+
+				}
+
+				return { alive, flares };
+
+			} );
+			assert.ok( garage.alive > 5 && garage.flares === 0, JSON.stringify( garage ) );
+			await calm.keyboard.press( 'Escape' );
+
+			await calm.locator( '.spots button', { hasText: 'Golden Gate Bridge' } ).click();
+			await flown( calm );
+			await driveHere( calm );
+			const boom = await calm.evaluate( async () => {
+
+				const { SHAPES, FLAT } = await import( '/src/drive-boosts.js' );
+				const { driver: d, renderer, scene, camera, screenFx } = window.drive;
+				// Frame by frame by hand, each read back off the canvas.
+				renderer.setAnimationLoop( null );
+				const gl = renderer.getContext();
+				const pixels = new Uint8Array( gl.drawingBufferWidth * gl.drawingBufferHeight * 4 );
+				const bright = () => {
+
+					gl.readPixels( 0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixels );
+					let count = 0;
+					for ( let i = 0; i < pixels.length; i += 16 ) if ( ( 0.2126 * pixels[ i ] + 0.7152 * pixels[ i + 1 ] + 0.0722 * pixels[ i + 2 ] ) / 255 > 0.9 ) count ++;
+					return Math.round( count / ( pixels.length / 16 ) * 100 );
+
+				};
+				for ( const code of [ ...d.keys ] ) d.release( code );
+				Object.assign( d, { east: 0, north: 0, heading: 0, course: 0, view: 0, speed: 20, gauge: 1, firing: false, boost: null, supersonic: false, nearTop: 0, warp: 0 } );
+				for ( let i = 0; i < 120; i ++ ) d.update( 1 / 60 );
+				const top = d.spec.topSpeed / 3.6 * 2;
+				d.press( 'KeyW' );
+				d.press( 'KeyB' );
+				const tick = () => {
+
+					d.speed = top;
+					d.gauge = 1;
+					d.update( 1 / 60 );
+					screenFx.update( 1 / 60, true );
+
+				};
+				for ( let i = 0; i < 400 && ! d.supersonic; i ++ ) tick();
+				const batches = [];
+				scene.getObjectByName( 'drive-fx' ).traverse( o => o.userData.batch && batches.push( o.userData.batch ) );
+				const fresh = batches.flatMap( batch => batch.items.filter( p => p.age < p.life && p.age < 0.05 ) );
+				const rings = fresh.filter( p => p.mode === FLAT && ( p.frame === SHAPES.shock || p.frame === SHAPES.ring ) );
+				const out = { supersonic: d.supersonic, rings: rings.length, kept: Math.round( Math.min( ...rings.map( p => p.carry.length() ) ) / top * 100 ) / 100, flares: fresh.filter( p => p.frame === SHAPES.flare ).length, frames: [] };
+				for ( let k = 0; k < 24; k ++ ) {
+
+					tick();
+					camera.fov = 70 + 9 * d.warp + d.punch;
+					camera.updateProjectionMatrix();
+					renderer.render( scene, camera );
+					out.frames.push( bright() );
+
+				}
+
+				d.release( 'KeyB' );
+				d.release( 'KeyW' );
+				return out;
+
+			} );
+			console.log( 'sonic boom:', JSON.stringify( boom ) );
+			// Its four rings carried at 0.97 of the speed, so the camera is never inside one.
+			assert.ok( boom.supersonic && boom.rings === 4 && boom.kept > 0.95 && boom.flares === 0, JSON.stringify( boom ) );
+			// With them falling back through the camera the view went near white (over 50 % of it) for 6 frames, twice.
+			assert.ok( Math.max( ...boom.frames ) < 50, `the view went white: ${ boom.frames.join( ' ' ) }` );
+			assert.deepEqual( calm.errors, [] );
+
+		} finally {
+
+			await calm.context().close();
+
+		}
+
+	} );
+
 	test( 'on a phone, the bursts are thinner and there are half as many speed lines', async () => {
 
 		const phone = await newPage( { viewport: { width: 390, height: 844 }, touch: true } );
@@ -2679,6 +2783,68 @@ describe( 'World Drive with its Worker', () => {
 		await page.waitForTimeout( 1500 );
 		assert.equal( roots().length, 1, roots().join( ' ' ) );
 		assert.ok( roots()[ 0 ].includes( 'key=...' ), 'the key isn\'t what the tiles were asked with' );
+		await page.context().close();
+
+	} );
+
+	test( 'the visit is only asked for once the game\'s code is here: a download that fails, or each Try again after it, spends no drive', async () => {
+
+		const visits = [];
+		const page = await newPage( {
+			api: {
+				config: { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true },
+				turnstile: true,
+				visit: route => {
+
+					visits.push( route.request().url() );
+					route.fulfill( { contentType: 'application/json', body: JSON.stringify( { mapsKey: 'test-key-not-real', left: 5 } ) } );
+
+				},
+			},
+		} );
+		const logged = [];
+		page.on( 'console', message => message.type() === 'error' && logged.push( message.text() ) );
+		// (The dev server has it at /src/... or /@fs/.../src/..., outside its root.)
+		const MAIN = /^http:\/\/127\.0\.0\.1:\d+\/.*src\/drive-app\/main\.js(\?|$)/;
+		await page.route( MAIN, route => route.abort() );
+		await page.goto( BASE );
+		await page.locator( '#notice[data-kind="error"]' ).waitFor();
+		assert.match( await page.locator( '#notice .message' ).textContent(), /didn't finish loading\. Check your connection/ );
+		assert.ok( logged.some( text => /dynamically imported module|main\.js/.test( text ) ), logged.join( '\n' ) );
+		await page.locator( '#notice button', { hasText: 'Try again' } ).click();
+		await page.locator( '#notice[data-kind="error"]' ).waitFor();
+		await page.waitForTimeout( 500 );
+		assert.deepEqual( visits, [] );
+
+		// Its code that breaks as it runs (an older browser) is told apart from a dropped connection,
+		// and logged, again with no drive spent.
+		await page.unroute( MAIN );
+		await page.route( MAIN, route => route.fulfill( { contentType: 'text/javascript', body: 'throw new TypeError( \'boom: not in this browser\' );' } ) );
+		logged.length = 0;
+		await page.reload();
+		await page.locator( '#notice[data-kind="error"]' ).waitFor();
+		assert.match( await page.locator( '#notice .message' ).textContent(), /couldn't start in this browser/ );
+		assert.ok( logged.some( text => text.includes( 'boom: not in this browser' ) ), logged.join( '\n' ) );
+		assert.deepEqual( visits, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'a place\'s link stays in the address until Google\'s root has come, so the reload its error screen asks for still goes there', async () => {
+
+		const page = await newPage( {
+			api: {
+				config: { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true },
+				turnstile: true,
+				visit: route => route.fulfill( { contentType: 'application/json', body: JSON.stringify( { mapsKey: 'test-key-not-real', left: 5 } ) } ),
+			},
+		} );
+		// Google's tiles are blocked here, so the root fails.
+		await page.goto( `${ BASE }/?spot=monaco&party=ABCD234` );
+		await page.locator( '#notice[data-kind="error"]' ).waitFor( { timeout: 30000 } );
+		assert.match( await page.locator( '#notice .message' ).textContent(), /Google's 3D map didn't load/ );
+		assert.equal( new URL( page.url() ).search, '?spot=monaco&party=ABCD234' );
+		assert.equal( await page.evaluate( () => window.drive.globe.pin ), null );
 		await page.context().close();
 
 	} );

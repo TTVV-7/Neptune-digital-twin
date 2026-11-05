@@ -365,6 +365,23 @@ button.primary:active,
 	font-size: 10px;
 }
 
+/* Without WebGL (boot.js) there's no globe nor anything on the panel to use: only what World Drive
+   is, with a line on why there's no globe. About credits the rides' models only when they're shown. */
+body.no-webgl #globe-ui .panel > :not( .intro, .no-webgl-note, .site-info ),
+body.no-webgl #about h3,
+body.no-webgl #about .credits {
+	display: none;
+}
+
+#globe-ui .no-webgl-note {
+	margin: 0;
+	padding: 10px 12px;
+	border: 1px solid rgba( 255, 210, 63, 0.4 );
+	border-radius: 12px;
+	background: rgba( 255, 210, 63, 0.1 );
+	font-weight: 600;
+}
+
 /* The pin on the globe, and its card. */
 #pin {
 	position: fixed;
@@ -1811,6 +1828,11 @@ body:not( .touch ) #drive-ui .horn {
 		background: var( --panel-solid );
 		backdrop-filter: none;
 		-webkit-backdrop-filter: none;
+	}
+
+	/* Without WebGL there's no globe to leave room for: the sheet takes most of the screen. */
+	body.no-webgl #globe-ui .panel {
+		max-height: calc( 100% - 96px );
 	}
 
 	#globe-ui .intro {

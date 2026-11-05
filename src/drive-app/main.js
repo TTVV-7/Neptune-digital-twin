@@ -35,7 +35,7 @@ import * as screens from './screens.js';
 // Google's photorealistic 3D tiles, drop in and drive it. One page load is one Google Maps session
 // (the root tileset is loaded once), so flying off somewhere else never reloads the tiles: the
 // scene is recentred on each new place instead (recentre below). boot.js, the page's first script,
-// asks for the visit while this loads, then calls start.
+// runs the robot check while this loads, then asks for the visit and calls start.
 //
 // Modes: 'globe' (the globe and its panel), 'dropping' (flying down and waiting for the ground),
 // 'driving' and 'paused'. M goes back to the globe from any of the others.
@@ -160,7 +160,11 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		pad = createPlaceholderGround();
 		pad.visible = false;
 		scene.add( pad );
-		screens.toast( 'No Google 3D tiles here: a test globe, and a flat test pad wherever you drop in.', 6000 );
+		// On worlddrive.app there's always a Worker, so none answering means its settings didn't
+		// come (or a crawler kept off /api/ by robots.txt): a word for a visitor, not the developer's.
+		screens.toast( ! worker && location.hostname === 'worlddrive.app'
+			? 'Couldn\'t reach World Drive\'s server, so this is only a preview globe. Reload the page to drive on the 3D map.'
+			: 'No Google 3D tiles here: a test globe, and a flat test pad wherever you drop in.', 6000 );
 
 	}
 
@@ -221,6 +225,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	const garage = setUpGarage( {
 		vehicles, panel, models, current: () => state.entry && { entry: state.entry, vehicle: state.vehicle },
 		onLook: () => live?.setRide( state.vehicle.id, lookOf( state.vehicle ) ),
+		// Its ▶ Boost as driving's: no flare for a visitor asking for less motion, fewer sparks on a phone.
+		effects: driver.effects,
 	} );
 
 	// The leaderboard, from the trophy on the globe and in the pause menu. "Only here" is the place
@@ -319,6 +325,19 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	} ) );
 	$( 'globe-ui' ).querySelector( '.about-open' ).addEventListener( 'click', () => about.showModal() );
+	// The places under the panel's words link to their pages (for crawlers, and to open in a new tab),
+	// but a plain tap there flies the globe to the place, as a start spot does: leaving the page would
+	// end this visit, and its Drive here would spend another.
+	$( 'globe-ui' ).querySelector( '.site-places' ).addEventListener( 'click', event => {
+
+		const link = event.target.closest( 'a[data-play]' );
+		if ( ! link || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey ) return;
+		const place = linkedPlace( new URL( link.dataset.play, location.href ).search );
+		if ( ! place ) return;
+		event.preventDefault();
+		if ( state.mode === 'globe' ) flyToPlace( place );
+
+	} );
 	if ( left !== null && left <= 2 ) screens.toast( left === 0 ? 'This is your last free drive today.' : `${ left } more free drive${ left === 1 ? '' : 's' } today after this one.` );
 
 	// Driving with others (live.js, ghosts.js, friends.js): only when the Worker has it on and this
@@ -434,18 +453,20 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// globe flies there and pins it, so Drive here is one more tap; it never drops in by itself.
 	// Only once the panel shows (the pin is lifted clear of it), and on Google's tiles once their
 	// root has arrived, as that moves the Earth under the camera. Then it's out of the address (a
-	// ?party= stays), so a reload doesn't fly there again.
+	// ?party= stays), so a reload doesn't fly there again; not before, so the reload the root's
+	// error screen asks for still goes there.
 	const linked = linkedPlace( location.search );
 	if ( linked ) {
 
-		const url = new URL( location.href );
-		for ( const name of LINK_PARAMS ) url.searchParams.delete( name );
-		history.replaceState( history.state, '', url );
 		let flown = false;
 		const flyToLinked = () => {
 
-			if ( flown || state.mode !== 'globe' || panel.pinned ) return;
+			if ( flown ) return;
 			flown = true;
+			const url = new URL( location.href );
+			for ( const name of LINK_PARAMS ) url.searchParams.delete( name );
+			history.replaceState( history.state, '', url );
+			if ( state.mode !== 'globe' || panel.pinned ) return;
 			flyToPlace( linked );
 
 		};
