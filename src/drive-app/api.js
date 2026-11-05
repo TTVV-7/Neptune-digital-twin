@@ -86,24 +86,34 @@ export function robotCheck( siteKey, container ) {
 			}
 
 			container.replaceChildren();
-			widget = turnstile.render( container, {
-				sitekey: siteKey,
-				action: 'visit',
-				// Out of sight unless Turnstile needs a click.
-				appearance: 'interaction-only',
-				callback: token => {
+			try {
 
-					clearTimeout( timer );
-					resolve( token );
+				widget = turnstile.render( container, {
+					sitekey: siteKey,
+					action: 'visit',
+					// Out of sight unless Turnstile needs a click.
+					appearance: 'interaction-only',
+					callback: token => {
 
-				},
-				'error-callback': () => {
+						clearTimeout( timer );
+						resolve( token );
 
-					clearTimeout( timer );
-					reject( new Error( 'The robot check didn\'t work' ) );
+					},
+					'error-callback': () => {
 
-				},
-			} );
+						clearTimeout( timer );
+						reject( new Error( 'The robot check didn\'t work' ) );
+
+					},
+				} );
+
+			} catch ( err ) {
+
+				// A widget that can't be made (a bad site key, say) fails the check now, not at the deadline.
+				clearTimeout( timer );
+				reject( err );
+
+			}
 
 		}, err => {
 

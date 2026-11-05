@@ -2368,8 +2368,8 @@ never drops in by itself. Then the place is out of the address, so a reload does
 a `?party=` stays. On Google's tiles that's once the root has arrived, not before, so if it doesn't
 come, the reload its error screen asks for still goes to the place. A link's name and region are
 taken only as the leaderboard takes a place's name (`cleanPlace`: letters, numbers and an address's
-punctuation, nothing rude), as the others driving there see it; otherwise it's a dropped pin. A link to somewhere that isn't on Earth, or a spot that
-isn't one, pins nothing.
+punctuation, nothing rude), as the others driving there see it; otherwise it's a dropped pin. A link
+to somewhere that isn't on Earth, or a spot that isn't one, pins nothing.
 
 To add a place: an entry in `places.js` with true facts (check them), its own words (nothing copied
 from another page) and a pin on a road, dropped in on Google's tiles first (that there are 3D
@@ -2413,8 +2413,8 @@ connection" (a script that arrives but breaks as it runs, as on an older browser
 couldn't start in this browser" instead, and both are logged to the console). The check's 45 s
 deadline counts from the start, Turnstile's script included, so a script that never arrives ends
 on the robot check's screen too rather than on the splash for good. Only the short POST and its
-siteverify come after the download, which on the phone below starts the game about 0.1 s later than
-asking for the visit beside it did.
+siteverify come after the download, which on the phone below starts the game a few tenths of a
+second later than asking for the visit beside the download did (3.2 s).
 
 Measured with `scripts/drive-static.mjs`'s `measureLoad` on the built site on the test globe, as a
 phone on Lighthouse's mobile settings (150 ms round trips, 1.6 Mbit/s, the CPU 4 times slower), three
@@ -2425,7 +2425,7 @@ loads each:
 | First contentful paint | 0.49 to 0.58 s | 0.45 to 0.54 s |
 | Largest contentful paint | 3.5 to 3.8 s (the test globe's message; on the real site the globe's panel, later still) | 0.45 to 0.54 s (the splash's line) |
 | Globe up, no Worker | 3.5 to 3.7 s | 3.4 to 3.9 s |
-| The game started, with a stand-in Worker and a 1.5 s robot check | 4.6 to 4.7 s | 3.3 to 3.4 s |
+| The game started, with a stand-in Worker and a 1.5 s robot check | 4.6 to 4.7 s | 3.3 to 3.7 s |
 | Script over the wire | 408 kB, all before anything ran | 424 kB: 5 kB first, the rest beside the robot check |
 
 A place's page shows in about 0.25 s, with no script at all. Real visitors' numbers are in Cloudflare
@@ -2454,10 +2454,10 @@ of them, the places linked, shown on the panel, About opening from there, a tap 
 flying the globe to it without leaving the page); the home page in a browser without WebGL (the
 panel's words shown with the line on why there's no globe, no visit and no game's code asked for, no
 errors, on a computer and a phone); each place's **Drive here** opening the game on the test globe
-with its pin there and the address tidied,
-a drop-in from a link, the pin clear of the sheet on a phone, a `?party=` kept, a rude name or a place
-off the Earth refused; the dev server making the same pages; and the load above on a phone's
-connection (the first paint is the largest, under 2.5 s, before the game's code).
+with its pin there and the address tidied, a drop-in from a link, the pin clear of the sheet on a
+phone, a `?party=` kept, a rude name or a place off the Earth refused; the dev server making the
+same pages; and the load above on a phone's connection (the first paint is the largest, under 2.5 s,
+before the game's code).
 
 ### The owner's steps
 
@@ -2576,9 +2576,10 @@ of the Assal depression, never; Lake Erie's surface gone out over land to Niagar
 by the lake; without the map, only the deep sea), the used-up,
 robot-check and getting-ready screens, the visit asked for only once the game's code is here (a
 download that fails, and its Try again, spend none; a script that breaks is told from a dropped
-connection, and logged), a place's link kept in the address until Google's root has come, and the
-leaderboard with its answers made in the test: tabs, your own row, picking a name and renaming, a
-landed jump posting the run with the card asking first, each place's best posted, a dead connection
+connection, and logged), a Turnstile script that never comes ending on the robot check's screen at
+its deadline (and Try again asking for it afresh), a place's link kept in the address until Google's
+root has come, and the leaderboard with its answers made in the test: tabs, your own row, picking a
+name and renaming, a landed jump posting the run with the card asking first, each place's best posted, a dead connection
 changing nothing, and a phone; and buying the pass with Google's script stood in for: signing in
 from the sheet, the pause menu and the used-up screen, Buy's link, "Check again" before Stripe's
 word, unlocking on focus and on `?supporter=thanks`, on every load, signing out, the player linked,

@@ -2830,6 +2830,45 @@ describe( 'World Drive with its Worker', () => {
 
 	} );
 
+	test( 'a Turnstile script that never comes ends on the robot check\'s screen at the deadline, and Try again asks for it afresh', async () => {
+
+		const visits = [];
+		const page = await newPage( {
+			api: {
+				config: { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true },
+				visit: route => {
+
+					visits.push( route.request().url() );
+					route.abort();
+
+				},
+			},
+		} );
+		// Held and never answered, as by a proxy that stalls it.
+		const asked = [];
+		await page.route( /^https:\/\/challenges\.cloudflare\.com\/turnstile\//, route => asked.push( route.request().url() ) );
+		await page.clock.install();
+		await page.goto( BASE );
+		await page.waitForFunction( () => /Checking the road/.test( document.querySelector( '#splash .status' ).textContent ) && document.querySelector( 'script[src*="challenges.cloudflare.com"]' ) );
+		// 45 s on: the deadline, which counts from the start rather than from the script arriving.
+		await page.clock.fastForward( 46000 );
+		await page.locator( '#notice[data-kind="robot"]' ).waitFor( { timeout: 10000 } );
+		assert.equal( await page.locator( 'script[src*="challenges.cloudflare.com"]' ).count(), 0 );
+		// The stalled script is gone, and Try again puts a new one in to wait for. (Chromium joins it to
+		// the request still held rather than asking again, so that isn't counted here.)
+		await page.locator( '#notice button', { hasText: 'Try again' } ).click();
+		await page.waitForFunction( () => document.querySelectorAll( 'script[src*="challenges.cloudflare.com"]' ).length === 1 );
+		assert.ok( asked.length >= 1 );
+		assert.ok( await page.locator( '#notice' ).isHidden() );
+		assert.match( await page.locator( '#splash .status' ).textContent(), /Checking the road/ );
+		await page.clock.fastForward( 46000 );
+		await page.locator( '#notice[data-kind="robot"]' ).waitFor( { timeout: 10000 } );
+		assert.deepEqual( visits, [] );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
 	test( 'a place\'s link stays in the address until Google\'s root has come, so the reload its error screen asks for still goes there', async () => {
 
 		const page = await newPage( {
