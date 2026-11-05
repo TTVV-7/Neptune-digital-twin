@@ -20,7 +20,8 @@ import {
 	SpriteMaterial,
 	Vector3,
 } from 'three';
-import { createBoostStyle, createSupersonic, styleFlame } from './drive-boosts.js';
+import { createBoostStyle, createSupersonic, styleFlame, styleTint } from './drive-boosts.js';
+import { createBursts } from './drive-bursts.js';
 
 // What driving shows besides the vehicle: the booster's flame and glow, tyre smoke while drifting
 // and the sparks that say how big the drift boost will be; and with stunts, sparks, bits and a
@@ -28,10 +29,13 @@ import { createBoostStyle, createSupersonic, styleFlame } from './drive-boosts.j
 // hard. An app can colour the flame or swap it for a boost style of drive-boosts.js (plasma,
 // lightning, bubbles, a comet's tail...), and add a trail behind the vehicle while it boosts or
 // flies (World Drive's Garage): coloured smoke, sparkles or a rainbow ribbon. Going supersonic
-// (drive.js) adds a sonic boom and streaks of air past it. With water (World Drive's), coming down
-// in it throws up a splash: spray and droplets, rings of foam spreading over the surface and a patch
-// of foam where it went in, then foam bubbling round it as it sinks; a hovercraft on water throws a
-// little spray behind it. Kept cheap: a few cones, sprites and little boxes, reused from small
+// (drive.js) adds a sonic boom and streaks of air past it. The moments in between have bursts of
+// their own (drive-bursts.js): the booster lighting with a pop of its flame, running dry and
+// cooling, a boost pad driven over (and the vehicle flashing), a drift's charge levels and its
+// mini-turbo; and flooring it from a standstill smokes its tyres. With water (World Drive's),
+// coming down in it throws up a splash: spray and droplets, rings of foam spreading over the
+// surface and a patch of foam where it went in, then foam bubbling round it as it sinks; a
+// hovercraft on water throws a little spray behind it. Kept cheap: a few cones, sprites and little boxes, reused from small
 // pools, and ribbons and batches of quads whose buffers are written in place, nothing made each
 // frame and nothing that casts or catches rays.
 
@@ -89,11 +93,29 @@ const FOAM_LIFE = 2.6;
 const BUBBLE_STEP = 0.07;
 const SPRAY_STEP = 0.02;
 const WATER_COLOURS = [ 0xffffff, 0xe6f6ff, 0xc9ecff ];
+// The booster lighting makes its flame pop: SURGE times longer for a moment, dying away at
+// SURGE_FADE (1/s); a mini-turbo less. Burning, it flickers harder the harder it burns. A boost pad
+// driven over lights the vehicle up for PAD_FLASH s.
+const SURGE = 1.4;
+const SURGE_FADE = 7;
+const PAD_FLASH = 0.26;
+// Tyre smoke off the rear tyres floored from a standstill (`burnout`): a puff every BURNOUT_STEP s
+// from each at full spin.
+const BURNOUT_STEP = 0.045;
+// On its wheels, within FLOOR.reach m of it (a kart's; times the vehicle's scale), the batches of
+// quads (a style's, the bursts' and the sonic boom's) fade out over the last FLOOR.soft m down to
+// the ground under it, rather than being cut off along a hard line where a flash or a ring at a
+// low exhaust goes into it.
+const FLOOR = { soft: 0.22, reach: 4 };
+// How an app asks for its effects: `detail` (0 to 1) of their usual number of particles in a burst
+// (fewer on a phone); `calm`, fewer flashes (the visitor asked for less motion).
+const EFFECTS = { detail: 1, calm: false };
 
 const _v = new Vector3();
 const _p = new Vector3();
 const _across = new Vector3();
 const _q = new Quaternion();
+const _tyres = [ new Vector3(), new Vector3() ];
 
 let textures = null;
 function getTextures() {
@@ -201,8 +223,9 @@ function foam( at, wide, flecks ) {
 // look: { boost: 'classic' (the flame, if not given) or a style in drive-boosts.js, flame: the
 // classic flame's colour, a name in FLAMES or 'rainbow' (orange if not given), trail: null or {
 // kind: 'smoke', 'sparkle' or 'ribbon', colour (smoke's) } }. water: whether there's water to
-// splash in (its pools are only made then).
-export function createDriveFx( world, { boost = 'classic', flame: flameName = 'orange', trail = null } = {}, { water = false } = {} ) {
+// splash in (its pools are only made then). effects: as EFFECTS, read as they're needed, so an app
+// can change `calm` while it drives.
+export function createDriveFx( world, { boost = 'classic', flame: flameName = 'orange', trail = null } = {}, { water = false, effects = EFFECTS } = {} ) {
 
 	const { soft, glow, star: twinkle } = getTextures();
 	const root = new Group();
@@ -242,11 +265,31 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 	}
 
 	const sonic = createSupersonic( root );
+	// The bursts (drive-bursts.js), flashing in the style's colour, or the classic flame's glow's.
+	const bursts = createBursts( root, { detail: effects.detail ?? 1 } );
+	const tint = new Color( style ? styleTint( boost ) ?? 0xffffff : ( FLAMES[ flameName ] ?? FLAMES.orange )[ 2 ] );
+	// What's to go off at the next update, which knows where the vehicle is: the booster lit or run
+	// dry, a drift's charge level reached or its mini-turbo let go (each 1 to 3).
+	const due = { ignite: false, cool: false, tier: 0, turbo: 0 };
+	let surge = 0;
+	// A boost pad driven over lights the vehicle up: a glow over all of it, drawn over it.
+	const padFlash = new Sprite( new SpriteMaterial( { map: soft, color: 0xffffff, transparent: true, blending: AdditiveBlending, depthWrite: false, depthTest: false } ) );
+	padFlash.name = 'pad-flash';
+	padFlash.visible = false;
+	padFlash.renderOrder = 10;
+	padFlash.raycast = () => {};
+	root.add( padFlash );
+	let padFlashLeft = 0;
+	// Every batch of quads made above, to be told where the ground is.
+	const batches = [];
+	root.traverse( o => o.userData.batch && batches.push( o.userData.batch ) );
 	// What the style and the supersonic effects are told each frame (see drive-boosts.js): one
 	// object, filled in again each time.
 	const frame = {
 		pivot: null, size: null, velocity: new Vector3(), power: 0, grounded: true, dt: 0, clock: 0, scale: 1,
 		nozzle: new Vector3(), lastNozzle: new Vector3(), back: new Vector3(), up: new Vector3(), right: new Vector3(), middle: new Vector3(),
+		// On its wheels, a point a little over the ground under it, for the batches' floor (see FLOOR).
+		ground: new Vector3(),
 	};
 	let framed = false;
 
@@ -390,6 +433,7 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 	}
 
 	let smokeDue = 0;
+	let burnoutDue = 0;
 	let sparkDue = 0;
 	let scrapeDue = 0;
 	let trailDue = 0;
@@ -419,6 +463,40 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 		// The first frame has no frame before it.
 		if ( ! framed ) frame.lastNozzle.copy( frame.nozzle );
 		framed = true;
+
+	}
+
+	// What's due to go off (see `due`), now that `frame` says where the vehicle is: the bursts, and
+	// its style's own as the booster lights. `wheels`: its rear tyres, in its own frame.
+	function goOff( wheels ) {
+
+		if ( due.ignite ) {
+
+			// The rainbow flame flashes in whatever colour it's burning in now.
+			if ( rainbow && ! style ) tint.setHSL( flicker / RAINBOW_TURN % 1, 1, 0.65 );
+			bursts.ignite( frame, tint, !! effects.calm );
+			style?.ignite( frame, effects.detail ?? 1 );
+			surge = 1;
+
+		}
+
+		if ( due.cool ) bursts.cool( frame, tint );
+		if ( due.tier && wheels.length >= 2 ) {
+
+			for ( let i = 0; i < 2; i ++ ) frame.pivot.localToWorld( _tyres[ i ].copy( wheels[ i ] ) );
+			bursts.tier( frame, due.tier, _tyres );
+
+		}
+
+		if ( due.turbo ) {
+
+			bursts.turbo( frame, due.turbo );
+			surge = Math.max( surge, 0.4 + 0.15 * due.turbo );
+
+		}
+
+		due.ignite = due.cool = false;
+		due.tier = due.turbo = 0;
 
 	}
 
@@ -531,13 +609,28 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 		// tyres on the ground ], velocity: its own (m/s, world), flame: 0..1 (booster 1, a drift
 		// boost less), drifting, level: 0..3, scrape: { at, normal } where it's scraping along a wall
 		// (world) or null, grounded (on its wheels: ink is left on the road), supersonic, water: null
-		// or in it, { level: the surface's height (world), sinking, spray: 0..1 }, dt }.
-		update( { pivot, size, wheels, velocity, flame: power, trail: trailPower = 0, drifting, level, scrape = null, grounded = true, supersonic = false, water: wet = null, dt } ) {
+		// or in it, { level: the surface's height (world), sinking, spray: 0..1 }, burnout: 0..1, how
+		// hard its rear tyres spin floored from a standstill, dt }.
+		update( { pivot, size, wheels, velocity, flame: power, trail: trailPower = 0, drifting, level, scrape = null, grounded = true, supersonic = false, water: wet = null, burnout = 0, dt } ) {
 
 			flicker += dt;
 			setFrame( pivot, size, velocity, power, grounded, dt );
+			// The lower of its rear tyres, which stay down as it leans back (drive.js leans it about
+			// the wheels on the low side), a few centimetres over the ground.
+			if ( wheels.length ) {
+
+				pivot.localToWorld( frame.ground.copy( wheels[ 0 ] ) );
+				pivot.localToWorld( _p.copy( wheels[ wheels.length - 1 ] ) );
+				if ( _p.dot( frame.up ) < frame.ground.dot( frame.up ) ) frame.ground.copy( _p );
+
+			} else pivot.getWorldPosition( frame.ground );
+
+			for ( const batch of batches ) batch.floor( grounded ? frame.ground : null, frame.up, FLOOR.soft * frame.scale, FLOOR.reach * frame.scale );
+			goOff( wheels );
+			bursts.update( frame );
 			style?.update( frame );
 			sonic.update( frame, supersonic );
+			surge *= Math.exp( - SURGE_FADE * dt );
 			flame.visible = power > 0.01 && ( ! style || !! styled );
 			if ( flame.visible && rainbow && ! style ) {
 
@@ -553,16 +646,56 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 				const scale = Math.max( 0.35, Math.min( size.width, size.height ) * 0.45 );
 				pivot.localToWorld( flame.position.set( 0, size.height * 0.33 / size.scale, ( size.rear + 0.02 ) / size.scale ) );
 				pivot.getWorldQuaternion( flame.quaternion );
-				// A style's flame may burn longer or shorter, and flicker more wildly.
+				// A style's flame may burn longer or shorter, and flicker more wildly; any flame flickers
+				// harder the harder it burns, and pops as it lights (surge).
 				const wild = styled?.flicker ?? 1;
-				const jitter = 0.85 + 0.3 * wild * Math.abs( Math.sin( flicker * 47 * wild ) * Math.sin( flicker * 31 * wild ) );
-				flame.scale.set( scale * power, scale * power, scale * ( 0.6 + power * 2.6 ) * jitter * ( styled?.length ?? 1 ) );
-				outer.material.opacity = 0.25 + 0.35 * jitter;
+				const flutter = Math.abs( Math.sin( flicker * 47 * wild ) * Math.sin( flicker * 31 * wild ) );
+				const steady = 0.85 + 0.3 * wild * flutter;
+				const jitter = steady + 0.18 * wild * power * flutter + 0.08 * power * Math.sin( flicker * 83 );
+				const pop = 1 + SURGE * surge;
+				const swell = 1 + 0.35 * surge;
+				flame.scale.set( scale * power * swell, scale * power * swell, scale * ( 0.6 + power * 2.6 ) * jitter * ( styled?.length ?? 1 ) * pop );
+				outer.material.opacity = Math.min( 1, 0.25 + 0.35 * jitter + 0.3 * surge );
 				inner.material.opacity = 0.9;
-				halo.scale.setScalar( 1.6 * jitter );
-				halo.material.opacity = 0.75 * power;
+				// The glow is as big as it always was, however hard the flame flickers or pops (any bigger,
+				// a sprite this low is cut off by the ground): only brighter as it lights. The bursts'
+				// flash, which fades out down to the ground, makes the light.
+				halo.scale.setScalar( 1.6 * steady / swell );
+				halo.material.opacity = Math.min( 1, 0.75 * power + 0.25 * surge );
 
 			}
+
+			// A boost pad's flash over the vehicle.
+			if ( padFlashLeft > 0 ) {
+
+				padFlashLeft = Math.max( 0, padFlashLeft - dt );
+				const t = 1 - padFlashLeft / PAD_FLASH;
+				padFlash.position.copy( frame.middle );
+				padFlash.scale.setScalar( Math.max( size.length ?? size.width, size.width ) * ( 1.15 + 0.35 * t ) );
+				padFlash.material.opacity = 0.7 * Math.min( 1, t * 8 ) * ( 1 - t ) ** 2;
+
+			}
+
+			padFlash.visible = padFlashLeft > 0;
+
+			// Floored from a standstill: smoke off the rear tyres as they spin, thick at first.
+			if ( burnout > 0.02 && grounded ) {
+
+				burnoutDue -= dt * burnout;
+				while ( burnoutDue <= 0 ) {
+
+					burnoutDue += BURNOUT_STEP;
+					for ( const wheel of wheels ) {
+
+						pivot.localToWorld( _p.copy( wheel ) ).y += 0.15;
+						_v.set( ( Math.random() - 0.5 ) * 1.2, 0.3 + Math.random() * 0.4, ( Math.random() - 0.5 ) * 1.2 ).addScaledVector( frame.back, 0.8 ).addScaledVector( velocity, 0.5 );
+						emit( smoke, _p, _v, SMOKE_LIFE, 0.3 + 0.2 * burnout, 1.3, 0xe8e8e8 );
+
+					}
+
+				}
+
+			} else burnoutDue = 0;
 
 			// Smoke puffs from the rear tyres while sliding, dragged along a little behind the
 			// vehicle and rising and spreading as they fade.
@@ -628,18 +761,59 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 
 		},
 
-		// The sonic boom, going supersonic: a shock ring round it and a flash.
+		// The sonic boom, going supersonic: a shock ring round it and a flash (calmer for a visitor
+		// asking for less motion).
 		boom() {
 
-			if ( framed ) sonic.boom( frame, Math.max( frame.size.width, frame.size.height ) );
+			if ( framed ) sonic.boom( frame, Math.max( frame.size.width, frame.size.height ), !! effects.calm );
 
 		},
 
-		// How many of the boost style's and the supersonic effects' particles are alive, and the
-		// most there can be.
+		// The booster lighting: a burst at the exhaust and its flame popping (at the next update).
+		ignite() {
+
+			due.ignite = true;
+			due.cool = false;
+
+		},
+
+		// The booster run dry: the exhaust glowing on and cooling.
+		cool() {
+
+			due.cool = true;
+
+		},
+
+		// A drift's charge level `level` (1 to 3) reached: a burst at its rear tyres.
+		tier( level ) {
+
+			due.tier = Math.max( due.tier, level );
+
+		},
+
+		// A drift's mini-turbo let go, of level `level` (1 to 3): a burst out of the exhaust.
+		turbo( level ) {
+
+			due.turbo = Math.max( due.turbo, level );
+
+		},
+
+		// A boost pad driven over at `at` (world), `radius` m across, in `colour`: its burst there, and
+		// the vehicle lit up for a moment (not when the visitor asked for less motion).
+		pickup( at, colour, radius ) {
+
+			bursts.pickup( at, colour, radius, framed ? frame.velocity : undefined );
+			if ( effects.calm || ! framed ) return;
+			padFlash.material.color.set( colour );
+			padFlashLeft = PAD_FLASH;
+
+		},
+
+		// How many of the boost style's, the supersonic effects' and the bursts' particles are alive,
+		// and the most there can be.
 		get particles() {
 
-			return { alive: ( style?.alive ?? 0 ) + sonic.alive, budget: ( style?.budget ?? 0 ) + sonic.budget };
+			return { alive: ( style?.alive ?? 0 ) + sonic.alive + bursts.alive, budget: ( style?.budget ?? 0 ) + sonic.budget + bursts.budget };
 
 		},
 

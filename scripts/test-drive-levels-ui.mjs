@@ -9,9 +9,12 @@
 // "Pass", "Lv 25"); a report on its way (the day's bonus and a new area said once, the level
 // steady), one whose answer was lost sent again and counted once, and a backlog of areas sent a
 // report's worth at a time; with the pass, its looks unlocked and the level-only ones still not, a
-// level-up that says they're the supporter's already, and a supporter's report earning ×1.5; a
-// phone (the level-up clear of the buttons); and no Worker at all (the dev server alone), still
-// levels, kept in the browser. Pictures of each at 1280 × 720 and on a 375 × 740 touch screen.
+// level-up that says they're the supporter's already, and a supporter's report earning ×1.5; the
+// cars levels bring (locked before their level, saying which, and driven from it; a level-up that
+// brings one, opening the Garage on it; with the pass, all of them at once; the pass's own cars
+// never, whatever the level); a phone (the level-up clear of the buttons); and no Worker at all
+// (the dev server alone), still levels, kept in the browser. Pictures of each at 1280 × 720 and on
+// a 375 × 740 touch screen.
 //
 // The test pad has no visit: main.js's dev-only seam (window.worldDriveVisitTest) hands each page a
 // token made here with Turnstile's documented test secret, as /api/visit makes them, and
@@ -26,7 +29,7 @@ import { mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
-import { LEVEL_XP, XP, areaOf, levelOf, nextReward, rewardsAt, rewardsBetween } from '../src/drive-app/levels.js';
+import { LEVEL_XP, RIDES, XP, areaOf, levelOf, nextReward, rewardsAt, rewardsBetween } from '../src/drive-app/levels.js';
 import { makeVisit } from '../worker/drive/visits.js';
 import { startVite, startWorker } from './worker-harness.mjs';
 
@@ -103,12 +106,14 @@ async function makePlayer( name ) {
 }
 
 // A page on the test pad's globe with a visit's token (the dev-only seams), the leaderboard's
-// `player` if any; base: the Vite to use (ALONE: no Worker).
-async function levelsPage( { visit = null, live = false, player = null, touch = false, viewport = touch ? PHONE : DESK, query = '', base = BASE } = {} ) {
+// `player` if any; base: the Vite to use (ALONE: no Worker); xp: what this browser has driven
+// already (kept before a nickname), as it loads.
+async function levelsPage( { visit = null, live = false, player = null, touch = false, viewport = touch ? PHONE : DESK, query = '', base = BASE, xp = null } = {} ) {
 
 	const context = await browser.newContext( { viewport, hasTouch: touch, isMobile: touch } );
-	await context.addInitScript( ( { visit, live, player } ) => {
+	await context.addInitScript( ( { visit, live, player, xp } ) => {
 
+		if ( xp !== null ) localStorage.setItem( 'world-drive.progress', JSON.stringify( { local: { xp } } ) );
 		if ( visit ) window.worldDriveVisitTest = { visit };
 		if ( live ) window.worldDriveLiveTest = { visit };
 		localStorage.setItem( 'world-drive.pads', 'off' );
@@ -121,7 +126,7 @@ async function levelsPage( { visit = null, live = false, player = null, touch = 
 
 		} ).observe( document, { childList: true, subtree: true } );
 
-	}, { visit, live, player: player && { id: player.id, secret: player.secret, name: player.name } } );
+	}, { visit, live, player: player && { id: player.id, secret: player.secret, name: player.name }, xp } );
 	const page = await context.newPage();
 	page.errors = [];
 	page.reports = [];
@@ -675,6 +680,142 @@ describe( 'World Drive levels with the Supporter Pass', () => {
 		} finally {
 
 			await page.context().close();
+
+		}
+
+	} );
+
+} );
+
+describe( 'World Drive levels: the cars they bring', () => {
+
+	// A page with no Worker whose browser has driven `xp` already (as kept before a nickname).
+	async function at( xp, query = '' ) {
+
+		return levelsPage( { base: ALONE, query, xp } );
+
+	}
+
+	const LEVEL_CARS = [ 'Golf cart', 'Tuk-tuk', 'Ice-cream van', 'Lawn tractor', 'Retro wedge', 'Formula racer' ];
+	const card = ( page, name ) => page.locator( '#globe-ui .vehicle', { hasText: name } );
+
+	test( 'a level\'s car is locked before it, says which, and drives from it; the level-up that brings it opens the Garage on it', async () => {
+
+		const page = await at( LEVEL_XP[ 8 ] - 2 );
+		try {
+
+			assert.equal( ( await shown( page ) ).level, 7 );
+			// The golf cart (level 5) is there to drive; the tuk-tuk (8) and later ones say their level.
+			const locked = await page.locator( '#globe-ui .vehicle.locked b' ).allTextContents();
+			assert.deepEqual( locked.filter( name => LEVEL_CARS.includes( name ) ), LEVEL_CARS.slice( 1 ) );
+			assert.equal( await card( page, 'Golf cart' ).locator( '.level-chip' ).isVisible(), false );
+			assert.equal( await card( page, 'Tuk-tuk' ).locator( '.level-chip' ).textContent(), 'Lv 8 · or Pass' );
+			// Picked, it says which level (and that the pass has it), and the ride stays as it was.
+			await card( page, 'Tuk-tuk' ).click();
+			const note = page.locator( '#globe-ui .ride-note' );
+			assert.equal( await note.textContent(), 'The tuk-tuk comes at level 8: you\'re level 7. Drive on, or get it now with the Supporter Pass.' );
+			// In view, though it's under three rows of rides: the panel scrolled to it.
+			assert.ok( await note.evaluate( element => element.getBoundingClientRect().bottom <= element.closest( '.panel' ).getBoundingClientRect().bottom ), 'the note is below the fold' );
+			assert.equal( await page.locator( '#globe-ui .vehicle.picked b' ).textContent(), 'Go-kart' );
+			await shot( page, 'levels-ride-locked' );
+			await note.locator( 'button', { hasText: 'Supporter Pass' } ).click();
+			await page.locator( '#pass' ).waitFor();
+			await page.locator( '#pass .close' ).click();
+			// The Garage shows it, locked, with its level on its tab.
+			await page.locator( '#globe-ui .garage-open' ).click();
+			const garage = page.locator( '#garage' );
+			await garage.waitFor();
+			assert.equal( await garage.locator( '.ride-tab', { hasText: 'Tuk-tuk' } ).locator( '.level-chip' ).textContent(), 'Lv 8' );
+			await garage.locator( '.ride-tab', { hasText: 'Tuk-tuk' } ).click();
+			assert.equal( await garage.locator( '.locked-banner span' ).textContent(), 'Comes at level 8, or with the ⭐ Supporter Pass' );
+			await garage.locator( '.done' ).click();
+
+			// The golf cart drives; a pad's XP makes level 8, and its level-up brings the tuk-tuk.
+			await card( page, 'Golf cart' ).click();
+			assert.equal( await page.locator( '#globe-ui .vehicle.picked b' ).textContent(), 'Golf cart' );
+			await dropIn( page );
+			assert.equal( await page.evaluate( () => window.drive.driver.entry.state.name ), 'Golf cart' );
+			await page.evaluate( () => window.drive.progress.pad() );
+			const levelUp = page.locator( '#level-up' );
+			await levelUp.waitFor();
+			assert.equal( await levelUp.locator( '.heading' ).textContent(), 'Level 8!' );
+			assert.deepEqual( await levelUp.locator( '.reward' ).allTextContents(), [ 'Ride:Tuk-tuk', 'Title:Drifter' ] );
+			assert.match( await levelUp.locator( '.reward.ride img' ).getAttribute( 'src' ), /\/cars\/thumbs\/tuk-tuk\.webp$/ );
+			assert.equal( await levelUp.locator( 'button.reward.ride' ).getAttribute( 'aria-label' ), 'See the tuk-tuk in the Garage' );
+			await page.waitForTimeout( 600 );
+			await shot( page, 'levels-ride-level-up' );
+			await levelUp.locator( 'button.reward.ride' ).click();
+			await garage.waitFor();
+			await page.waitForFunction( () => window.drive.garage.preview?.model?.name === 'Tuk-tuk', null, { timeout: 20000 } );
+			assert.equal( await garage.locator( '.ride-tab[aria-pressed="true"]' ).getAttribute( 'data-id' ), 'tuk-tuk' );
+			assert.equal( await garage.locator( '.ride-tab[aria-pressed="true"] .level-chip' ).isVisible(), false );
+			assert.equal( await garage.locator( '.locked-banner' ).isVisible(), false );
+			await garage.locator( '.done' ).click();
+			// Unlocked in the pause menu too: driven from there.
+			assert.equal( await page.locator( '#pause .vehicle.locked', { hasText: 'Tuk-tuk' } ).count(), 0 );
+			await page.locator( '#pause .vehicle', { hasText: 'Tuk-tuk' } ).click();
+			await page.waitForFunction( () => window.drive.mode === 'driving' && window.drive.driver.entry.state.name === 'Tuk-tuk', null, { timeout: 30000 } );
+			await shot( page, 'levels-ride-driving' );
+			// The track has it at 8.
+			await page.evaluate( () => window.drive.toGlobe() );
+			await page.locator( '#globe-ui .profile .track-open' ).click();
+			assert.deepEqual( await page.locator( '#track li[data-level="8"] .reward' ).allTextContents(), [ 'Ride:Tuk-tukor ⭐ Pass', 'Title:Drifter' ] );
+			assert.equal( await page.locator( '#globe-ui .profile .next' ).textContent(), `Next: Racing stripes at Lv 9` );
+			await page.locator( '#track .close' ).click();
+			assert.deepEqual( page.errors, [] );
+
+		} finally {
+
+			await page.context().close();
+
+		}
+
+	} );
+
+	test( 'with the pass, every car at once; at the top level, the pass\'s own still not', async () => {
+
+		const pass = await at( 0, '?pro=1' );
+		try {
+
+			assert.equal( await pass.locator( '#globe-ui .vehicle.locked' ).count(), 0 );
+			assert.equal( await pass.locator( '#globe-ui .vehicle .level-chip:visible' ).count(), 0 );
+			await card( pass, 'Formula racer' ).click();
+			assert.equal( await pass.locator( '#globe-ui .vehicle.picked b' ).textContent(), 'Formula racer' );
+			// A level-up that brings a car a supporter has: said to be theirs already.
+			await dropIn( pass );
+			await pass.evaluate( event => window.drive.profile.levelUp( event ), { level: 5, from: 4, rewards: rewardsAt( 5 ), nickname: false } );
+			assert.equal( await pass.locator( '#level-up .had' ).textContent(), 'Already yours with the pass: Golf cart, Lime paint' );
+			assert.deepEqual( pass.errors, [] );
+
+		} finally {
+
+			await pass.context().close();
+
+		}
+
+		const top = await at( LEVEL_XP[ 50 ] );
+		try {
+
+			assert.equal( ( await shown( top ) ).level, 50 );
+			const locked = await top.locator( '#globe-ui .vehicle.locked b' ).allTextContents();
+			assert.ok( LEVEL_CARS.every( name => ! locked.includes( name ) ), locked.join( ', ' ) );
+			for ( const name of [ 'Hypercar', 'Cyber muscle' ] ) {
+
+				assert.ok( locked.includes( name ), name );
+				// Picked, the pass's sheet: no level brings it.
+				await card( top, name ).click();
+				await top.locator( '#pass' ).waitFor();
+				await top.locator( '#pass .close' ).click();
+
+			}
+
+			assert.equal( await top.locator( '#globe-ui .ride-note' ).isVisible(), false );
+			await shot( top, 'levels-ride-top' );
+			assert.deepEqual( top.errors, [] );
+
+		} finally {
+
+			await top.context().close();
 
 		}
 

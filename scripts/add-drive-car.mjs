@@ -2,8 +2,9 @@
 // kept apart from the construction app's library: only World Drive's build publishes it.
 //
 //   npm run add-drive-car -- <sketchfab url | uid> --id dune-buggy --length 4.2 [--front=+z] \
-//     [--max-texture 1024] [--simplify 0.5] [--lit] [--paint Body,Trim] [--rims Rim] [--part Car02] \
-//     [--lamps TailLamp] [--file local.glb] [--credit "Decal by ..."]
+//     [--up=+z] [--max-texture 1024] [--simplify 0.5] [--lit] [--paint Body,Trim] [--rims Rim] \
+//     [--part Car02] [--leave Shadow,Ground] [--tyres Tyre] [--trike] [--lamps TailLamp] \
+//     [--blank "number plate=Body:0.15,0.14,0.23,0.24"] [--file local.glb] [--credit "Decal by ..."]
 //
 // Like add-asset.mjs, which fills the construction app's library: only downloadable Sketchfab
 // models under CC0 or CC Attribution, compressed (meshopt geometry, WebP textures no bigger than
@@ -11,18 +12,30 @@
 // afterwards, by drive-car-thumbs.mjs. Then made ready to drive:
 //
 // - Baked to its real size (--length along its front axis, which --front names), facing -Z, its
-//   wheels on y = 0 and its middle over x = z = 0, with no transforms left in it.
+//   wheels on y = 0 and its middle over x = z = 0, with no transforms left in it. --up names the way
+//   up points in the file, for a model saved lying on its side or back (+y, glTF's up, unless it
+//   says); --front then names the way the front points once it's stood up.
 // - Its wheels found by their shape, whatever they're called: a tyre is a separate piece standing on
 //   the ground at a corner, about as long as it is tall; whatever else sits wholly inside its circle
-//   (rim, hub, brake disc) goes with it. Each wheel becomes a node of its own at its axle (named
-//   wheel-front-left and so on, with extras { wheel: { radius, steers } }), so it can spin about x
-//   and the front ones steer about y; everything else is one node, body.
+//   (rim, hub, brake disc) goes with it. --tyres names the materials (or nodes) the tyres are made
+//   of, where something else would pass for one (a racer's wing end plates, low at a corner). Each
+//   wheel becomes a node of its own at its axle (named wheel-front-left and so on, with extras
+//   { wheel: { radius, steers } }), so it can spin about x and the front ones steer about y;
+//   everything else is one node, body.
+// - A three-wheeler (--trike) has one wheel in the middle at one end, the front one steering (a
+//   tuk-tuk's) or the back one not.
 // - --part keeps only the node of that name and what's under it: one car from a pack of them.
+// - --leave names nodes (with what's under them) or materials left out of it: a shadow drawn on a
+//   plane under the car, the patch of ground or the stand it was shown on.
 // - --lit draws a model made unlit (KHR_materials_unlit) as lit paint, like the rest of the world.
 // - --paint names the materials that are bodywork the Garage may repaint, and --rims those that
 //   are rims (only inside the wheels): see paint.js. A textured model has none.
 // - --lamps names the materials of lamps drawn as a real maker draws theirs (three bars a side, say,
 //   which is that maker's mark): each side's become one plain lamp, the box round them.
+// - --blank paints over a patch of a material's pictures, every one it has (its colour, normals and
+//   the rest), with the colour just round the patch: a real place's number plate, say, or a
+//   sticker. "what=Material:u0,v0,u1,v1", the patch's corners as shares of the picture from its top
+//   left; what it was goes in the credits ("its number plate painted over"). It may be given again.
 //
 // The model's description is printed: read it for anyone else to credit (--credit) and for extra
 // conditions. Names, blurbs and handling are World Drive's own, in src/drive-app/cars.js.
@@ -34,7 +47,7 @@ import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
-import { dedup, getBounds, meshopt, metalRough, prune, simplify, textureCompress, transformMesh, weld } from '@gltf-transform/functions';
+import { dedup, meshopt, metalRough, prune, simplify, textureCompress, transformMesh, weld } from '@gltf-transform/functions';
 import { MeshoptDecoder, MeshoptEncoder, MeshoptSimplifier } from 'meshoptimizer';
 import sharp from 'sharp';
 
@@ -45,6 +58,14 @@ const CATALOG = new URL( 'cars.json', CARS );
 const CREDITS = new URL( 'CREDITS.md', CARS );
 const LICENSE_URLS = { cc0: 'https://creativecommons.org/publicdomain/zero/1.0/', by: 'https://creativecommons.org/licenses/by/4.0/' };
 const FRONTS = { '-z': 0, '+z': Math.PI, '+x': Math.PI / 2, '-x': - Math.PI / 2 };
+// Turning a model whose up isn't +y upright (--up): a quarter turn about x or z, column-major.
+const UPS = {
+	'+y': [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ],
+	'+z': [ 1, 0, 0, 0, 0, 0, - 1, 0, 0, 1, 0, 0, 0, 0, 0, 1 ],
+	'-z': [ 1, 0, 0, 0, 0, 0, 1, 0, 0, - 1, 0, 0, 0, 0, 0, 1 ],
+	'+x': [ 0, 1, 0, 0, - 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ],
+	'-x': [ 0, - 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ],
+};
 // Finding wheels, as shares of the car's height (and length): a tyre reaches down to within this
 // of the ground, is between these tall, and is round from the side to within this; what's inside
 // a tyre's circle, this much bigger, is part of its wheel.
@@ -59,13 +80,18 @@ const { values: opts, positionals } = parseArgs( {
 		id: { type: 'string' },
 		length: { type: 'string' },
 		front: { type: 'string', default: '-z' },
+		up: { type: 'string', default: '+y' },
 		'max-texture': { type: 'string', default: '1024' },
 		simplify: { type: 'string' },
 		lit: { type: 'boolean' },
 		paint: { type: 'string' },
 		rims: { type: 'string' },
 		part: { type: 'string' },
+		leave: { type: 'string' },
+		tyres: { type: 'string' },
+		trike: { type: 'boolean' },
 		lamps: { type: 'string' },
+		blank: { type: 'string', multiple: true },
 		file: { type: 'string' },
 		credit: { type: 'string' },
 	},
@@ -75,6 +101,7 @@ const uid = ( positionals[ 0 ] ?? '' ).match( /[0-9a-f]{32}/ )?.[ 0 ];
 if ( ! uid || ! opts.id || ! opts.length ) fail( 'Usage: npm run add-drive-car -- <sketchfab url> --id <id> --length <metres> [--front=-z|+z|+x|-x]' );
 if ( ! /^[a-z0-9-]+$/.test( opts.id ) ) fail( '--id may only contain lowercase letters, digits and dashes.' );
 if ( ! ( opts.front in FRONTS ) ) fail( `--front must be one of ${ Object.keys( FRONTS ).join( ', ' ) } (the way the car's front points in the file).` );
+if ( ! ( opts.up in UPS ) ) fail( `--up must be one of ${ Object.keys( UPS ).join( ', ' ) } (the way up points in the file).` );
 const realLength = Number( opts.length );
 if ( ! ( realLength > 0 ) ) fail( '--length must be the car\'s real length in metres.' );
 const simplifyRatio = opts.simplify === undefined ? null : Number( opts.simplify );
@@ -83,6 +110,16 @@ const maxTexture = Number( opts[ 'max-texture' ] );
 const painted = new Set( opts.paint?.split( ',' ).map( name => name.trim() ) ?? [] );
 const rims = new Set( opts.rims?.split( ',' ).map( name => name.trim() ) ?? [] );
 const lamps = new Set( opts.lamps?.split( ',' ).map( name => name.trim() ) ?? [] );
+const leave = new Set( opts.leave?.split( ',' ).map( name => name.trim() ) ?? [] );
+const tyreNames = new Set( opts.tyres?.split( ',' ).map( name => name.trim() ) ?? [] );
+const blanks = ( opts.blank ?? [] ).map( spec => {
+
+	const [ , what, material, box ] = spec.match( /^([^=]+)=(.+):([\d.]+(?:,[\d.]+){3})$/ ) ?? fail( `--blank ${ spec }: give it as "what=Material:u0,v0,u1,v1", say "number plate=Body:0.15,0.14,0.23,0.24".` );
+	const [ u0, v0, u1, v1 ] = box.split( ',' ).map( Number );
+	if ( ! ( u0 < u1 && v0 < v1 && u1 <= 1 && v1 <= 1 ) ) fail( `--blank ${ spec }: the patch's corners are shares of the picture, the first above and left of the second.` );
+	return { what: what.trim(), material, box: [ u0, v0, u1, v1 ] };
+
+} );
 
 await MeshoptEncoder.ready;
 await MeshoptDecoder.ready;
@@ -114,8 +151,19 @@ if ( opts.lit ) {
 
 }
 
+// Patches of its pictures painted over (--blank), in every picture its material has.
+for ( const { material: name, box } of blanks ) {
+
+	const material = root.listMaterials().find( m => m.getName() === name ) ?? fail( `--blank: there's no material called ${ name }: it has ${ root.listMaterials().map( m => m.getName() ).join( ', ' ) }.` );
+	const textures = root.listTextures().filter( texture => texture.listParents().some( parent => parent === material || parent.listParents().includes( material ) ) );
+	if ( ! textures.length ) fail( `--blank: ${ name } has no pictures to paint over.` );
+	for ( const texture of textures ) texture.setImage( await paintOver( texture.getImage(), box ) ).setMimeType( 'image/png' );
+
+}
+
 // 3. Bake every part into the car's own frame: metres, front -Z, standing on y = 0, middle over
-// x = z = 0. Parts are copied first, so a wheel drawn four times from one mesh becomes four.
+// x = z = 0. Parts are copied first, so a wheel drawn four times from one mesh becomes four, and
+// stood upright (--up); what --leave names isn't copied, so it has no say in the car's size.
 const scene = root.getDefaultScene() ?? root.listScenes()[ 0 ];
 let keep = scene;
 if ( opts.part ) {
@@ -125,8 +173,36 @@ if ( opts.part ) {
 
 }
 
+const parts = [];
+const left = new Set();
+( function collect( node ) {
+
+	if ( leave.has( node.getName() ) ) return left.add( node.getName() );
+	const mesh = node.getMesh?.();
+	if ( mesh ) {
+
+		const copy = doc.createMesh();
+		for ( const prim of mesh.listPrimitives() ) {
+
+			const material = prim.getMaterial()?.getName();
+			if ( leave.has( material ) ) left.add( material );
+			else copy.addPrimitive( prim.clone() );
+
+		}
+
+		transformMesh( copy, multiply( UPS[ opts.up ], node.getWorldMatrix() ) );
+		parts.push( ...copy.listPrimitives().map( prim => ( { prim, mesh: copy, node: node.getName() } ) ) );
+
+	}
+
+	for ( const child of node.listChildren() ) collect( child );
+
+} )( keep );
+const missing = [ ...leave ].filter( name => ! left.has( name ) );
+if ( missing.length ) fail( `There's no node or material called ${ missing.join( ' or ' ) } to leave out: it has ${ [ ...root.listNodes().map( node => node.getName() ), ...root.listMaterials().map( material => material.getName() ) ].filter( Boolean ).slice( 0, 60 ).join( ', ' ) }.` );
+
+const { min, max } = boxOf( parts.map( ( { prim } ) => boundsOf( prim ) ) );
 const turn = FRONTS[ opts.front ];
-const { min, max } = getBounds( keep );
 const along = opts.front.endsWith( 'x' ) ? 0 : 2;
 const scale = realLength / ( max[ along ] - min[ along ] );
 const cos = Math.cos( turn ), sin = Math.sin( turn );
@@ -138,17 +214,29 @@ const place = rotate.map( ( v, i ) => i < 12 ? v * scale : v );
 place[ 12 ] = - moved[ 0 ] * scale;
 place[ 13 ] = - moved[ 1 ] * scale;
 place[ 14 ] = - moved[ 2 ] * scale;
-const parts = [];
-keep.traverse( node => {
+for ( const mesh of new Set( parts.map( part => part.mesh ) ) ) transformMesh( mesh, place );
 
-	const mesh = node.getMesh();
-	if ( ! mesh ) return;
-	const copy = doc.createMesh();
-	for ( const prim of mesh.listPrimitives() ) copy.addPrimitive( prim.clone() );
-	transformMesh( copy, multiply( place, node.getWorldMatrix() ) );
-	parts.push( ...copy.listPrimitives().map( prim => ( { prim, mesh: copy } ) ) );
+// A primitive's box, from its positions.
+function boundsOf( prim ) {
 
-} );
+	const position = prim.getAttribute( 'POSITION' );
+	const box = { min: [ Infinity, Infinity, Infinity ], max: [ - Infinity, - Infinity, - Infinity ] };
+	const v = [];
+	for ( let i = 0; i < position.getCount(); i ++ ) {
+
+		position.getElement( i, v );
+		for ( let axis = 0; axis < 3; axis ++ ) {
+
+			box.min[ axis ] = Math.min( box.min[ axis ], v[ axis ] );
+			box.max[ axis ] = Math.max( box.max[ axis ], v[ axis ] );
+
+		}
+
+	}
+
+	return box;
+
+}
 
 function rotateVector( [ x, y, z ] ) {
 
@@ -164,23 +252,26 @@ if ( lamps.size && ! plain.length ) fail( `No part is made of ${ [ ...lamps ].jo
 for ( const { prim } of plain ) plainLamps( prim );
 
 // 4. Find the wheels.
-const pieces = parts.flatMap( ( { prim } ) => piecesOf( prim ) );
+const pieces = parts.flatMap( ( { prim, node } ) => piecesOf( prim ).map( piece => ( { ...piece, tyre: ! tyreNames.size || tyreNames.has( node ) || tyreNames.has( prim.getMaterial()?.getName() ) } ) ) );
+if ( tyreNames.size && ! pieces.some( piece => piece.tyre ) ) fail( `No part is a node or made of a material called ${ [ ...tyreNames ].join( ' or ' ) }.` );
 const all = boxOf( pieces.map( piece => piece.box ) );
 const size = [ all.max[ 0 ] - all.min[ 0 ], all.max[ 1 ] - all.min[ 1 ], all.max[ 2 ] - all.min[ 2 ] ];
-const tyres = pieces.filter( ( { box } ) => {
+// Which side of the car a piece is on: -1 left, 1 right, or 0 in the middle (only a three-wheeler's
+// lone wheel is a tyre there).
+const sideOf = box => Math.abs( box.min[ 0 ] + box.max[ 0 ] ) / 2 > size[ 0 ] * 0.15 ? Math.sign( box.min[ 0 ] + box.max[ 0 ] ) : 0;
+const tyres = pieces.filter( ( { box, tyre } ) => {
 
 	const tall = box.max[ 1 ] - box.min[ 1 ];
 	const long = box.max[ 2 ] - box.min[ 2 ];
-	const middle = ( box.min[ 0 ] + box.max[ 0 ] ) / 2;
 	return box.min[ 1 ] < all.min[ 1 ] + size[ 1 ] * GROUND && tall > size[ 1 ] * TYRE_HEIGHT[ 0 ] && tall < size[ 1 ] * TYRE_HEIGHT[ 1 ] &&
-		long / tall < ROUND && tall / long < ROUND && Math.abs( middle ) > size[ 0 ] * 0.15 && long < size[ 2 ] * 0.4;
+		long / tall < ROUND && tall / long < ROUND && ( sideOf( box ) !== 0 || opts.trike ) && long < size[ 2 ] * 0.4 && tyre;
 
 } );
 // One wheel for each tyre (or tyres side by side: a dually's, or one drawn as two pieces).
 const wheels = [];
 for ( const tyre of tyres.sort( ( a, b ) => volume( b.box ) - volume( a.box ) ) ) {
 
-	const wheel = wheels.find( w => Math.sign( w.at[ 0 ] ) === Math.sign( tyre.box.min[ 0 ] + tyre.box.max[ 0 ] ) && Math.abs( w.at[ 2 ] - ( tyre.box.min[ 2 ] + tyre.box.max[ 2 ] ) / 2 ) < w.radius );
+	const wheel = wheels.find( w => sideOf( w.box ) === sideOf( tyre.box ) && Math.abs( w.at[ 2 ] - ( tyre.box.min[ 2 ] + tyre.box.max[ 2 ] ) / 2 ) < w.radius );
 	if ( wheel ) {
 
 		wheel.box = boxOf( [ wheel.box, tyre.box ] );
@@ -193,7 +284,7 @@ for ( const tyre of tyres.sort( ( a, b ) => volume( b.box ) - volume( a.box ) ) 
 
 }
 
-if ( wheels.length < 4 || wheels.length % 2 ) fail( `Found ${ wheels.length } wheels (${ JSON.stringify( wheels.map( w => w.at.map( round ) ) ) }): a car needs pairs of them, at least four.` );
+if ( opts.trike ? wheels.length !== 3 : wheels.length < 4 || wheels.length % 2 ) fail( `Found ${ wheels.length } wheels (${ JSON.stringify( wheels.map( w => w.at.map( round ) ) ) }): ${ opts.trike ? 'a three-wheeler needs three' : 'a car needs pairs of them, at least four' }.` );
 // Whatever lies wholly within a wheel's circle (and no further in or out than its tyre, give or
 // take half its width) turns with it.
 for ( const wheel of wheels ) {
@@ -208,7 +299,8 @@ for ( const wheel of wheels ) {
 
 }
 
-// Axles front to back (front is -Z), a wheel each side: the front one steers.
+// Axles front to back (front is -Z), a wheel each side (or a three-wheeler's one in the middle):
+// the front one steers.
 const axles = [];
 for ( const wheel of [ ...wheels ].sort( ( a, b ) => a.at[ 2 ] - b.at[ 2 ] ) ) {
 
@@ -218,13 +310,15 @@ for ( const wheel of [ ...wheels ].sort( ( a, b ) => a.at[ 2 ] - b.at[ 2 ] ) ) {
 
 }
 
-if ( axles.some( axle => axle.length !== 2 || Math.sign( axle[ 0 ].at[ 0 ] ) === Math.sign( axle[ 1 ].at[ 0 ] ) ) ) fail( `The wheels don't pair up into axles: ${ JSON.stringify( axles.map( axle => axle.map( w => w.at.map( round ) ) ) ) }.` );
+const paired = axle => axle.length === 2 && sideOf( axle[ 0 ].box ) * sideOf( axle[ 1 ].box ) === - 1;
+const lone = axle => axle.length === 1 && sideOf( axle[ 0 ].box ) === 0;
+if ( axles.some( axle => ! paired( axle ) && ! ( opts.trike && lone( axle ) ) ) || ( opts.trike && ( axles.length !== 2 || ! axles.some( lone ) ) ) ) fail( `The wheels don't pair up into axles: ${ JSON.stringify( axles.map( axle => axle.map( w => w.at.map( round ) ) ) ) }.` );
 axles.forEach( ( axle, i ) => {
 
 	for ( const wheel of axle ) {
 
 		wheel.steers = i === 0;
-		wheel.name = `wheel-${ i === 0 ? 'front' : i === axles.length - 1 ? 'rear' : `middle-${ i }` }-${ wheel.at[ 0 ] < 0 ? 'left' : 'right' }`;
+		wheel.name = `wheel-${ i === 0 ? 'front' : i === axles.length - 1 ? 'rear' : `middle-${ i }` }${ lone( axle ) ? '' : wheel.at[ 0 ] < 0 ? '-left' : '-right' }`;
 
 	}
 
@@ -293,8 +387,13 @@ const entry = {
 	paintable: painted.size > 0,
 	// One car out of a set of them (--part).
 	...( opts.part ? { part: opts.part } : {} ),
-	// Its lamps made plain (--lamps), which the credits say.
+	// Three wheels (--trike), one of them in the middle.
+	...( opts.trike ? { trike: true } : {} ),
+	// Its lamps made plain (--lamps), and what was left out of it (--leave), which the credits say.
 	...( plain.length ? { plainLamps: true } : {} ),
+	...( leave.size ? { leftOut: [ ...leave ] } : {} ),
+	// What was painted over (--blank).
+	...( blanks.length ? { paintedOver: [ ...new Set( blanks.map( blank => blank.what ) ) ] } : {} ),
 	triangles,
 	sizeKB: Math.round( output.byteLength / 1024 ),
 	source,
@@ -553,15 +652,47 @@ async function fromSketchfab( id ) {
 
 }
 
+// A picture (PNG, JPEG or WebP bytes) with the patch `box` (u0, v0, u1, v1: shares of it from its
+// top left) filled with the average of the pixels in a thin ring round it, as PNG.
+async function paintOver( image, [ u0, v0, u1, v1 ] ) {
+
+	const { data, info } = await sharp( image ).ensureAlpha().raw().toBuffer( { resolveWithObject: true } );
+	const { width, height } = info;
+	const x0 = Math.floor( u0 * width ), x1 = Math.ceil( u1 * width ), y0 = Math.floor( v0 * height ), y1 = Math.ceil( v1 * height );
+	const ring = Math.max( 2, Math.round( Math.min( width, height ) / 256 ) );
+	const sum = [ 0, 0, 0, 0 ];
+	let count = 0;
+	for ( let y = Math.max( 0, y0 - ring ); y < Math.min( height, y1 + ring ); y ++ ) {
+
+		for ( let x = Math.max( 0, x0 - ring ); x < Math.min( width, x1 + ring ); x ++ ) {
+
+			if ( x >= x0 && x < x1 && y >= y0 && y < y1 ) continue;
+			for ( let c = 0; c < 4; c ++ ) sum[ c ] += data[ ( y * width + x ) * 4 + c ];
+			count ++;
+
+		}
+
+	}
+
+	const fill = sum.map( total => Math.round( total / Math.max( 1, count ) ) );
+	for ( let y = y0; y < y1; y ++ ) for ( let x = x0; x < x1; x ++ ) data.set( fill, ( y * width + x ) * 4 );
+	return new Uint8Array( await sharp( data, { raw: { width, height, channels: 4 } } ).png().toBuffer() );
+
+}
+
 function credits( list ) {
 
 	const lines = list.map( car => `- \`${ car.file }\`: ${ car.part ? 'one car from ' : '' }"[${ car.source.title }](${ car.source.url })" by ` +
 		`${ car.source.authorUrl ? `[${ car.source.author }](${ car.source.authorUrl })` : car.source.author } on ${ car.source.site }, ` +
 		`licensed [${ car.source.license }](${ car.source.licenseUrl }).${ car.source.extraCredit ? ` ${ car.source.extraCredit }.` : '' } ` +
-		`Compressed, rescaled${ car.plainLamps ? ', its lamps made plain' : '' } and its wheels made separate parts for World Drive.` );
+		`Compressed, rescaled${ car.plainLamps ? ', its lamps made plain' : '' }${ car.paintedOver ? `, its ${ car.paintedOver.join( ' and ' ) } painted over` : '' }` +
+		`${ car.leftOut ? `, ${ car.leftOut.join( ' and ' ) } left out` : '' } and its wheels made separate parts for World Drive.` );
 	return '# World Drive cars: credits\n\nThese models come from Sketchfab under the licences listed, and are published with World Drive ' +
 		'only (not the construction app\'s library). Keep this file with them; World Drive also credits each in its About box and ' +
-		`its ride picker. The rides built in code (src/kart.js, src/drive-app/rides/) are part of this project.\n\n${ lines.join( '\n' ) }\n`;
+		`its ride picker. The rides built in code (src/kart.js, src/drive-app/rides/) are part of this project.\n\n${ lines.join( '\n' ) }\n` +
+		// The site's link pictures (scripts/drive-site-images.mjs) show the muscle car, credited here too.
+		'\nThe muscle car, drawn as World Drive draws it, is also the car on the pictures links to the site unfurl with ' +
+		'(`../og/`, `scripts/drive-site-images.mjs`).\n';
 
 }
 

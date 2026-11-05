@@ -21,9 +21,9 @@ import { frontToYaw } from '../library.js';
 import { BOOSTS } from './boosts.js';
 import { applyLook, DECALS, defaultLook, FINISHES, FLAMES, fxOf, isLocked, isPaintable, lookFor, RIMS, saveLook, savedLook, SMOKES, SWATCHES, TRAILS, unlockOf } from './paint.js';
 import { openPass, proBadge } from './pass.js';
-import { isPro, onProChange } from './pro.js';
+import { onProChange } from './pro.js';
 import { getLevel, onLevelChange } from './progress.js';
-import { access } from './vehicles.js';
+import { access, rideLocked, rideUnlock, unlockChip } from './vehicles.js';
 
 // The Garage: each ride's paint, decals, rims, boost style and trail (paint.js), chosen with the
 // ride turning on a turntable, and kept in this browser for each ride. Opened from a Garage button
@@ -31,8 +31,8 @@ import { access } from './vehicles.js';
 // Each locked choice says what unlocks it: a level ("Lv 12", levels.js's track), the pass (pro.js:
 // a star, with one word on the pass above them all), or either ("Lv 12 · or Pass"). Choosing one
 // the pass unlocks opens the pass's sheet; one only a level unlocks says which. A ride that needs
-// the pass can still be looked at here. Changes made while paused are on the ride as soon as it
-// drives on.
+// the pass or a level (vehicles.js's rideLocked) can still be looked at here, its tab starred or
+// saying the level. Changes made while paused are on the ride as soon as it drives on.
 
 // How fast the turntable turns (rad/s), and how long a flame or trail shows when it's picked (s).
 const TURN = 0.45;
@@ -54,7 +54,9 @@ const PARTS = [
 // vehicles: from loadVehicles(). panel: the globe's panel (for the ride picked there). models: the
 // world's ModelManager, whose loader loads the trucks for the turntable. current(): the ride being
 // driven, { entry, vehicle }, or null. onLook(): the ride being driven has a new look on.
-export function setUpGarage( { vehicles, panel, models, current, onLook = () => {} } ) {
+// effects: the driving's effects ({ detail, calm }, which screen-fx.js keeps up to date), so the
+// turntable's bursts are as calm and as many as driving's.
+export function setUpGarage( { vehicles, panel, models, current, onLook = () => {}, effects } ) {
 
 	const dialog = build();
 	const canvas = dialog.querySelector( 'canvas' );
@@ -77,7 +79,8 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 			<button type="button" class="pass-open">⭐ Supporter Pass</button>`;
 		row.querySelector( '.garage-open' ).addEventListener( 'click', () => open( which() ) );
 		row.querySelector( '.pass-open' ).addEventListener( 'click', () => openPass() );
-		root.querySelector( '.vehicles' ).after( row );
+		// Under the rides, and the word on a locked one picked (panel.js) if there is one.
+		( root.querySelector( '.vehicles + .ride-note' ) ?? root.querySelector( '.vehicles' ) ).after( row );
 
 	}
 
@@ -92,6 +95,7 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 		tab.dataset.id = v.id;
 		tab.textContent = v.name;
 		if ( v.pro ) tab.append( Object.assign( document.createElement( 'i' ), { className: 'star', textContent: '⭐', title: 'Supporter Pass' } ) );
+		else if ( rideUnlock( v ) ) tab.append( Object.assign( document.createElement( 'i' ), { className: 'level-chip', textContent: unlockChip( rideUnlock( v ), true ), title: `Comes at level ${ rideUnlock( v ).level }, or with the Supporter Pass` } ) );
 		tab.addEventListener( 'click', () => show( v ) );
 		return tab;
 
@@ -161,7 +165,7 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 
 	function locked( part, id ) {
 
-		return ( !! vehicle.pro && ! isPro() ) || isLocked( vehicle, part, id, access() );
+		return rideLocked( vehicle ) || isLocked( vehicle, part, id, access() );
 
 	}
 
@@ -172,7 +176,7 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 
 			// Only a level gives it: which one (the pass's sheet would only disappoint).
 			const unlock = unlockOf( vehicle, part, id );
-			if ( unlock && ! unlock.pass && ! ( vehicle.pro && ! isPro() ) ) {
+			if ( unlock && ! unlock.pass && ! rideLocked( vehicle ) ) {
 
 				const name = PARTS.find( p => p.part === part ).list.find( choice => choice.id === id )?.name ?? id;
 				levelNote.textContent = `${ name } comes at level ${ unlock.level }: you're level ${ getLevel() }. Drive on!`;
@@ -213,18 +217,26 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 
 	}
 
-	// What the turntable shows: the look as chosen, or for a ride that needs the pass (a look round
-	// it), as saved; anything else locked, as it would be driven.
+	// What the turntable shows: the look as chosen, or for a locked ride (a look round it), as saved;
+	// anything else locked, as it would be driven.
 	function shown() {
 
-		return vehicle.pro ? look : lookFor( vehicle, access() );
+		return rideLocked( vehicle ) ? look : lookFor( vehicle, access() );
 
 	}
 
 	function mark() {
 
 		const wearing = shown();
-		for ( const tab of tabs.children ) tab.setAttribute( 'aria-pressed', String( tab.dataset.id === vehicle.id ) );
+		const rideShut = rideLocked( vehicle );
+		for ( const tab of tabs.children ) {
+
+			tab.setAttribute( 'aria-pressed', String( tab.dataset.id === vehicle.id ) );
+			const chip = tab.querySelector( '.level-chip' );
+			if ( chip ) chip.hidden = ! rideLocked( vehicles.find( v => v.id === tab.dataset.id ) );
+
+		}
+
 		// With the cars there are more rides than fit across: the one shown is scrolled into view.
 		tabs.querySelector( '[aria-pressed="true"]' )?.scrollIntoView( { block: 'nearest', inline: 'nearest' } );
 		const paintable = vehicle.paintable !== false;
@@ -241,8 +253,8 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 				const on = button.dataset.id === wearing[ part ];
 				const shut = locked( part, button.dataset.id );
 				const unlock = shut ? unlockOf( vehicle, part, button.dataset.id ) : null;
-				// A pass ride's choices are all the pass's, whatever a level would unlock on the others.
-				const pass = !! unlock?.pass || ( shut && !! vehicle.pro && ! isPro() );
+				// A locked ride's choices are all the pass's, whatever a level would unlock on the others.
+				const pass = !! unlock?.pass || ( shut && rideShut );
 				anyLocked ||= pass && ! section.hidden;
 				button.classList.toggle( 'on', on );
 				button.setAttribute( 'aria-pressed', String( on ) );
@@ -250,7 +262,7 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 				button.classList.toggle( 'pass', pass );
 				button.classList.toggle( 'level-only', shut && ! pass );
 				const chip = button.querySelector( '.unlock' );
-				const says = unlock && ! ( vehicle.pro && ! isPro() );
+				const says = unlock && ! rideShut;
 				chip.textContent = says ? unlockText( unlock, button.classList.contains( 'swatch' ) ) : '';
 				button.title = says ? `${ button.dataset.name }: ${ unlockSentence( unlock ) }` : button.dataset.name;
 
@@ -258,15 +270,17 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 
 		}
 
-		// Once, over the choices, rather than on each part: the stars say which. A pass ride has its
+		// Once, over the choices, rather than on each part: the stars say which. A locked ride has its
 		// own word on the pass, over the turntable.
-		passNote.hidden = ! anyLocked || !! vehicle.pro;
+		passNote.hidden = ! anyLocked || rideShut;
 
 		const number = options.querySelector( '.number' );
 		number.hidden = wearing.decal !== 'number';
 		number.querySelector( 'input' ).value = wearing.number;
 		dialog.querySelector( '.paint-note' ).hidden = paintable;
-		dialog.querySelector( '.locked-banner' ).hidden = ! vehicle.pro || isPro();
+		const banner = dialog.querySelector( '.locked-banner' );
+		banner.hidden = ! rideShut;
+		banner.querySelector( 'span' ).textContent = vehicle.pro ? '⭐ A Supporter Pass ride' : `Comes at level ${ rideUnlock( vehicle )?.level }, or with the ⭐ Supporter Pass`;
 		dialog.querySelector( '.ride-name' ).textContent = vehicle.name;
 
 	}
@@ -276,7 +290,7 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 
 		for ( const v of vehicles ) {
 
-			const swatch = SWATCHES.find( s => s.id === lookFor( v, v.pro ? { ...access(), pro: true } : access() ).colour );
+			const swatch = SWATCHES.find( s => s.id === lookFor( v, rideUnlock( v ) ? { ...access(), pro: true } : access() ).colour );
 			for ( const shape of document.querySelectorAll( `.vehicle[data-id="${ v.id }"] [data-paint]` ) ) shape.setAttribute( 'fill', `#${ swatch.hex.toString( 16 ).padStart( 6, '0' ) }` );
 
 		}
@@ -303,7 +317,7 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 			vehicle.paintable = paintable;
 			mark();
 
-		} );
+		}, effects );
 		show( which ?? vehicles[ 0 ] );
 		preview.start();
 
@@ -439,8 +453,9 @@ function boostHidden( part, wearing ) {
 
 // A little scene of its own on the Garage's canvas: the ride on a lit disc, turning, its flame and
 // trail shown for a moment when picked (with drive-fx.js, as driving does). It only draws while
-// the Garage is open. onPaintable( yes ): whether the ride shown has paint to change.
-function createPreview( canvas, models, getVehicle, onPaintable ) {
+// the Garage is open. onPaintable( yes ): whether the ride shown has paint to change. effects: as
+// setUpGarage's.
+function createPreview( canvas, models, getVehicle, onPaintable, effects ) {
 
 	const renderer = new WebGLRenderer( { canvas, antialias: true, alpha: true } );
 	renderer.setPixelRatio( Math.min( window.devicePixelRatio, 2 ) );
@@ -468,6 +483,7 @@ function createPreview( canvas, models, getVehicle, onPaintable ) {
 	let fx = null;
 	let fxKey = '';
 	let demo = 0;
+	let lit = false;
 	let angle = 0.7;
 	let loading = 0;
 	let last = 0;
@@ -500,6 +516,9 @@ function createPreview( canvas, models, getVehicle, onPaintable ) {
 		if ( model && fx ) {
 
 			model.updateMatrixWorld( true );
+			// Run dry at the end of the show, as the booster does.
+			if ( lit && demo <= 0 ) fx.cool();
+			lit = demo > 0;
 			fx.update( { pivot: model, size, wheels, velocity: still, flame: demo > 0 ? 1 : 0, trail: demo > 0 ? 1 : 0, drifting: false, level: 0, grounded: true, dt } );
 
 		}
@@ -606,7 +625,7 @@ function createPreview( canvas, models, getVehicle, onPaintable ) {
 		const key = JSON.stringify( want );
 		if ( key === fxKey ) return;
 		fx?.dispose();
-		fx = createDriveFx( scene, want );
+		fx = createDriveFx( scene, want, { effects } );
 		fxKey = key;
 
 	}
@@ -628,6 +647,8 @@ function createPreview( canvas, models, getVehicle, onPaintable ) {
 		wear,
 		boost() {
 
+			// Lit as it is driving, with its burst (unless it's burning already).
+			if ( demo <= 0 ) fx?.ignite();
 			demo = DEMO;
 
 		},

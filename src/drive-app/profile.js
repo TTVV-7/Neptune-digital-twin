@@ -6,12 +6,12 @@ import { isPro, onProChange } from './pro.js';
 
 // What players see of levels (levels.js, progress.js): while driving, a slim XP bar with the
 // level under the place's name and small "+46 XP · 1.4 km" pop-ups by it; a level-up's burst,
-// "Level 7! Unlocked: Plasma boost", whose look opens the Garage; on the globe's panel a card with
-// the nickname, the level badge, the bar to the next level, the next reward, the title picker and
-// "All rewards", which opens the whole track. A supporter's pass has the track's pass looks already,
-// so for them those aren't news: a level-up says they're theirs already, and "Next" is the next
-// reward that's new to them. All World Drive's own: drive-hud.js (which the construction app
-// shares) is left as it is.
+// "Level 7! Unlocked: Plasma boost", whose look (or ride) opens the Garage; on the globe's panel a
+// card with the nickname, the level badge, the bar to the next level, the next reward, the title
+// picker and "All rewards", which opens the whole track. A supporter's pass has the track's pass
+// looks and rides already, so for them those aren't news: a level-up says they're theirs already,
+// and "Next" is the next reward that's new to them. All World Drive's own: drive-hud.js (which the
+// construction app shares) is left as it is.
 
 // How long (ms) a level-up shows, and a pop-up.
 const LEVEL_UP_TIME = 5200;
@@ -32,8 +32,8 @@ const ICONS = {
 
 // progress: from createProgress (progress.js). player(): the leaderboard player or null. canName():
 // whether a nickname can be picked now (a Worker and a visit). onGarage( reward ): open the
-// Garage; onNickname(): show where a nickname is picked; onTitle(): a new title was picked.
-// mode(): main.js's mode ('driving', 'globe'...).
+// Garage (on a ride reward's ride); onNickname(): show where a nickname is picked; onTitle(): a new
+// title was picked. mode(): main.js's mode ('driving', 'globe'...).
 export function setUpProfile( { progress, player, canName = () => false, onGarage = () => {}, onNickname = () => {}, onTitle = () => {}, mode = () => 'globe' } ) {
 
 	// --- driving: the bar and the pop-ups ---
@@ -110,9 +110,9 @@ export function setUpProfile( { progress, player, canName = () => false, onGarag
 		const { level, rewards, nickname } = event;
 		badge( card.querySelector( '.level-badge' ), level );
 		card.querySelector( '.heading' ).textContent = `Level ${ level }!`;
-		// What's new: for a supporter, not the pass's looks, which they have already.
+		// What's new: for a supporter, not the pass's looks and rides, which they have already.
 		const pro = isPro();
-		const owned = reward => pro && reward.kind === 'look' && reward.pass;
+		const owned = reward => pro && !! reward.pass;
 		const news = rewards.filter( r => ( r.kind !== 'badge' || r.level > 1 ) && ! owned( r ) );
 		const had = rewards.filter( owned );
 		const unlocked = card.querySelector( '.unlocked' );
@@ -123,13 +123,14 @@ export function setUpProfile( { progress, player, canName = () => false, onGarag
 			unlocked.append( element( 'span', 'small', 'Unlocked:' ) );
 			for ( const reward of news.slice( 0, MOST ) ) {
 
-				// A look opens the Garage, to try it on.
-				const item = element( reward.kind === 'look' ? 'button' : 'span', `reward ${ reward.kind }` );
-				if ( reward.kind === 'look' ) {
+				// A look opens the Garage, to try it on; a ride, to see it there.
+				const opens = reward.kind === 'look' || reward.kind === 'ride';
+				const item = element( opens ? 'button' : 'span', `reward ${ reward.kind }` );
+				if ( opens ) {
 
 					item.type = 'button';
-					item.title = 'Try it on in the Garage';
-					item.setAttribute( 'aria-label', `Try ${ reward.name } on in the Garage` );
+					item.title = reward.kind === 'ride' ? 'See it in the Garage' : 'Try it on in the Garage';
+					item.setAttribute( 'aria-label', reward.kind === 'ride' ? `See the ${ reward.name.toLowerCase() } in the Garage` : `Try ${ reward.name } on in the Garage` );
 					item.addEventListener( 'click', () => {
 
 						hideLevelUp();
@@ -237,7 +238,7 @@ export function setUpProfile( { progress, player, canName = () => false, onGarag
 
 		const level = progress.level;
 		const pro = isPro();
-		track.querySelector( '.lead' ).textContent = `XP comes from driving: each km, air off jumps, drift boosts, boost pads, landed tricks, new areas and start spots, driving with others, and the day's first drive. ${ pro ? 'Your Supporter Pass has every ⭐ look already, and +50% XP.' : '⭐ rewards come with the Supporter Pass too, all at once (with +50% XP).' }`;
+		track.querySelector( '.lead' ).textContent = `XP comes from driving: each km, air off jumps, drift boosts, boost pads, landed tricks, new areas and start spots, driving with others, and the day's first drive. ${ pro ? 'Your Supporter Pass has every ⭐ look and ride already, and +50% XP.' : '⭐ rewards come with the Supporter Pass too, all at once (with +50% XP).' }`;
 		const list = track.querySelector( '.levels' );
 		list.replaceChildren( ...Array.from( { length: LEVEL_MAX }, ( _, i ) => {
 
@@ -254,7 +255,7 @@ export function setUpProfile( { progress, player, canName = () => false, onGarag
 
 				const item = element( 'span', `reward ${ reward.kind }${ reward.pass ? ' pass' : '' }${ pro && reward.pass ? ' owned' : '' }` );
 				item.append( icon( reward ), ...label( reward ) );
-				if ( reward.kind === 'look' ) item.append( element( 'i', 'tag', reward.pass ? pro ? '✓ Pass' : 'or ⭐ Pass' : 'Levels only' ) );
+				if ( reward.kind === 'look' || reward.kind === 'ride' ) item.append( element( 'i', 'tag', reward.pass ? pro ? '✓ Pass' : 'or ⭐ Pass' : 'Levels only' ) );
 				rewards.append( item );
 
 			}
@@ -352,6 +353,7 @@ export function icon( reward ) {
 	const holder = element( 'span', 'icon' );
 	holder.setAttribute( 'aria-hidden', 'true' );
 	if ( reward.kind === 'title' ) holder.innerHTML = ICONS.title;
+	else if ( reward.kind === 'ride' ) holder.append( Object.assign( document.createElement( 'img' ), { className: 'ride-thumb', src: new URL( `cars/thumbs/${ reward.id }.webp`, document.baseURI ).href, alt: '', loading: 'lazy' } ) );
 	else if ( reward.kind === 'badge' ) {
 
 		const mark = element( 'span', 'level-badge tiny' );
@@ -375,10 +377,11 @@ export function icon( reward ) {
 
 }
 
-// A reward's name, a title's said to be one ("Title: Joyrider").
+// A reward's name, a title's and a ride's said to be one ("Title: Joyrider", "Ride: Tuk-tuk").
 function label( reward ) {
 
-	return reward.kind === 'title' ? [ element( 'span', 'kind', 'Title:' ), element( 'span', '', reward.name ) ] : [ element( 'span', '', reward.name ) ];
+	const kind = { title: 'Title:', ride: 'Ride:' }[ reward.kind ];
+	return kind ? [ element( 'span', 'kind', kind ), element( 'span', '', reward.name ) ] : [ element( 'span', '', reward.name ) ];
 
 }
 

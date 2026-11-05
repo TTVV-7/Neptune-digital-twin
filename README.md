@@ -490,18 +490,21 @@ testing with test cards and the known gaps are in [docs/premium.md](docs/premium
 ## World Drive (worlddrive.app)
 
 A second app in this repository, on its own address: pick anywhere on Earth from a globe of Google's
-3D tiles (search, a dozen start spots, recent places, or a tap on the globe), choose a go-kart, pickup
-or muscle car, press **Drive here** and drive the real world arcade-style: drift (Space), boost
-(Shift), fly (F), and hit something to bounce off it into the air, where **A**/**D** spin, **W**/**S** flip and
-**Q**/**E** roll for tricks that score (times a combo multiplier) when you land on your wheels; a
-wipeout loses the combo and rolls you back onto them. Boosting flat out hits **overdrive** (a sonic
-boom, streaks of air, a wider view), and glowing **boost pads** turn up on open ground as you drive
-to top the booster up (a switch in the pause menu turns them off). Drive or come down into **water**
-and it's a splash: spray and rings of foam, the vehicle sinking nose first, then back on the last
-dry ground you were on, facing away from it (the hovercraft rides on it). Google's mesh doesn't say
-what's water, so `src/drive-app/water.js` tells it by how Google draws it: level, one even colour,
-the lowest thing round about. **M** goes back to the globe to drop in somewhere else without
-reloading. Phones get a bottom sheet and touch buttons.
+3D tiles (search, a dozen start spots, recent places, or a tap on the globe), choose a go-kart,
+pickup or muscle car (more as your level climbs), press **Drive here** and drive the real world
+arcade-style: drift (Space), boost (Shift), fly (F), and hit something to bounce off it into the
+air, where **A**/**D** spin, **W**/**S** flip and **Q**/**E** roll for tricks that score (times a
+combo multiplier) when you land on your wheels; a wipeout loses the combo and rolls you back onto
+them. Boosting flat out hits **overdrive** (a sonic boom, streaks of air, a wider view), and glowing
+**boost pads** turn up on open ground as you drive to top the booster up (a switch in the pause menu
+turns them off). Lighting the booster, running it dry, a pad, each drift charge level and its
+mini-turbo have bursts of their own, the view jolts and streams with speed lines, and the body leans
+on its springs (**Camera effects** in the pause menu, or asking the system for less motion, keeps
+the view still). Drive or come down into **water** and it's a splash: spray and rings of foam, the
+vehicle sinking nose first, then back on the last dry ground you were on, facing away from it (the
+hovercraft rides on it). Google's mesh doesn't say what's water, so `src/drive-app/water.js` tells
+it by how Google draws it: level, one even colour, the lowest thing round about. **M** goes back to
+the globe to drop in somewhere else without reloading. Phones get a bottom sheet and touch buttons.
 
 It shares `src/` with this app but has its own page (`drive/index.html`, `src/drive-app/`), build
 (`npm run dev:drive`, `npm run build:drive` into `dist-drive/`) and Cloudflare Worker
@@ -536,38 +539,49 @@ visits need, and `LIVE` in `wrangler.drive.jsonc` switches it all off (see
 **Levels**: driving earns XP (each km, air off jumps, drift boosts, boost pads, landed tricks, the
 first drive in each area and at each start spot, minutes with others, and the day's first drive,
 more for days in a row), climbing 50 levels: level 2 in the first few minutes, 50 a long goal. Levels
-unlock about half the Supporter Pass's Garage looks on the way to 40, and titles for your nametag, a
-level badge whose frame changes every ten levels and four colours that only levels give. While
-driving a slim XP bar shows under the place's name, with "+46 XP · 1.4 km" pop-ups and a burst at
-each level-up; the globe's panel has a profile card with the whole track. XP is kept with the
+unlock six new cars (a golf cart at level 5, a tuk-tuk at 8, an ice-cream van at 15, a lawn tractor
+at 22, a retro wedge at 30 and a formula racer at 40), about half the Supporter Pass's Garage looks
+on the way to 40, and titles for your nametag, a level badge whose frame changes every ten levels
+and four colours that only levels give. While driving a slim XP bar shows under the place's name,
+with "+46 XP · 1.4 km" pop-ups and a burst at each level-up; the globe's panel has a profile card
+with the whole track. XP is kept with the
 leaderboard nickname in D1 (an account showing its best nickname's level), or in the browser until
 you pick one, which claims it. The Worker caps each report by the time since the last
 (`worker/drive/progress.js`, sharing its rules with the page in `src/drive-app/levels.js`), on a
 rate limiter rather than a Durable Object (see [Levels](docs/world-drive.md#levels)).
 
-World Drive's cars are models from Sketchfab (CC BY, credited in its About box and ride picker),
-kept out of the construction app's library: `npm run add-drive-car` imports one into
-`drive/public/cars/`, which only World Drive's build publishes, finding its wheels so they spin and
-steer, and `npm run drive-car-thumbs` draws its picture for the picker (see
-[World Drive's cars](docs/world-drive.md#world-drives-cars)).
+World Drive's fourteen cars are models from Sketchfab (CC BY, credited in its About box and ride
+picker): sports cars and supercars (a retro wedge, a formula racer, a hypercar, a cyber muscle car)
+and fun and odd rides (a golf cart, a tuk-tuk, an ice-cream van, a lawn tractor) among them, each
+with handling of its own. They're kept out of the construction app's library: `npm run
+add-drive-car` imports one into `drive/public/cars/`, which only World Drive's build publishes,
+finding its wheels so they spin and steer (a three-wheeler's too, and standing up a model saved
+lying down, or painting over a real place's number plate), and `npm run drive-car-thumbs` draws its
+picture for the picker (see [World Drive's cars](docs/world-drive.md#world-drives-cars)).
 
-A **Supporter Pass** (one payment of CA$4.99 towards the running costs) unlocks nine more rides:
-five more cars (a neon racer, a night cruiser, a dune buggy, a farm truck and a police cruiser) and
-four built in code (a sports coupe, a monster truck, a city bus and a hovercraft), each handling its
-own way; every look in the Garage at once (paint, finishes, decals, rims, nine more boost styles,
+A **Supporter Pass** (one payment of CA$4.99 towards the running costs) unlocks seventeen more
+rides: the six cars levels bring, at once; seven cars of its own (a neon racer, a night cruiser, a
+dune buggy, a farm truck, a police cruiser and two showpieces, a hypercar and a cyber muscle car);
+and four built in code (a sports coupe, a monster truck, a city bus and a hovercraft), each handling
+its own way; every look in the Garage at once (paint, finishes, decals, rims, nine more boost styles,
 flame colours and trails, some of which levels unlock over time), +50% XP, a ⭐ on the leaderboard and
 30 drives a day. It's bought with a Stripe Payment Link after
 signing in with Google, so it's yours in any browser; Stripe's signed webhook records it. Buying
 stays off ("Coming soon") until `GOOGLE_CLIENT_ID` and the webhook's secret are set (see
 [Supporter Pass (buying it)](docs/world-drive.md#supporter-pass-buying-it) for the owner's steps).
 
+For search engines and links, the site has a page for each start spot and a few more famous places
+(`/drive/<place>/`, built from `drive/site/`, each with a **Drive here** that opens the game with the
+place pinned), a sitemap, robots.txt, structured data and link cards (`npm run drive-site-images`
+draws them); see [Search engines](docs/world-drive.md#search-engines).
+
 How to play, the leaderboard (how cheating is limited, and looking after it in the D1 console), the
 settings and limits, deploying (`npm run deploy:drive` applies the database's migrations first), and
 the owner's Google Cloud steps (a separate project and key, restricted to worlddrive.app and the Map
 Tiles API, a daily quota and budget alerts) are in [docs/world-drive.md](docs/world-drive.md).
 Tests: `npm run test:drive-worker`, `npm run test:drive-ui`, `npm run test:drive-pro-ui`,
-`npm run test:drive-live`, `npm run test:drive-live-ui`, `npm run test:drive-levels` and
-`npm run test:drive-levels-ui`.
+`npm run test:drive-seo`, `npm run test:drive-live`, `npm run test:drive-live-ui`,
+`npm run test:drive-levels` and `npm run test:drive-levels-ui`.
 
 ## About the Sketchfab model
 

@@ -1,5 +1,6 @@
-// A driving HUD any app can use with a Driver (drive.js): the speed, a boost gauge (which flashes
-// when something tops it up), FLYING with the height, SUPERSONIC, drift and jump readouts, big messages ("Crash!", "1.2 s air") and, on a touch screen,
+// A driving HUD any app can use with a Driver (drive.js): the speed, a boost gauge (which glows on
+// and off when it's full, flashes red as it runs dry, and fills up before your eyes when something
+// tops it up), FLYING with the height, SUPERSONIC, drift and jump readouts, big messages ("Crash!", "1.2 s air") and, on a touch screen,
 // buttons to drive with. With kart handling a DRIFT button (SPACE) sits under the speed, and its
 // chip lights up while drifting with the mini-turbo's charge. With stunts (crash: 'launch') a hit
 // pops up a word ("WHAM!"), tricks pop up as they're landed, and the score, its combo multiplier
@@ -25,6 +26,7 @@ const FLASH_PER_CHAR = 30;
 const POP_TIME = 750;
 const SPLASH_TIME = 1500;
 const REFUEL_TIME = 700;
+const EMPTY_TIME = 650;
 const TRICKS_TIME = 2200;
 // Messages that name keys, as they read on a touch screen, which has the buttons instead.
 const TOUCH_WORDS = [
@@ -214,6 +216,75 @@ const CSS = `
 	to {
 		box-shadow: 0 0 0 9px rgba( 255, 210, 63, 0 );
 	}
+}
+
+/* ...filling up to what it took rather than jumping there, with a shine running along it. */
+.dhud .dhud-boost.refuel .dhud-bar i {
+	transition: width 0.45s cubic-bezier( 0.2, 0.9, 0.3, 1 );
+}
+
+.dhud .dhud-boost.refuel .dhud-bar i::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	border-radius: inherit;
+	background: linear-gradient( 90deg, transparent, rgba( 255, 255, 255, 0.85 ), transparent );
+	animation: dhud-shine 0.55s ease-out both;
+}
+
+@keyframes dhud-shine {
+	from {
+		transform: translateX( -100% );
+	}
+	to {
+		transform: translateX( 100% );
+	}
+}
+
+/* Full: it glows on and off, ready to fire. */
+.dhud .dhud-boost.ready .dhud-bar {
+	animation: dhud-ready 1.2s ease-in-out infinite;
+}
+
+@keyframes dhud-ready {
+	50% {
+		box-shadow: 0 0 10px 2px rgba( 255, 210, 63, 0.75 );
+		background: rgba( 255, 210, 63, 0.35 );
+	}
+}
+
+/* Run dry: the empty gauge flashes red. */
+.dhud .dhud-boost.empty .dhud-bar {
+	animation: dhud-empty 0.2s ease-in-out 3;
+}
+
+.dhud .dhud-boost.empty b {
+	color: #ff2d55;
+}
+
+@keyframes dhud-empty {
+	50% {
+		background: rgba( 255, 45, 85, 0.8 );
+		box-shadow: 0 0 10px rgba( 255, 45, 85, 0.85 );
+	}
+}
+
+/* Asked for less motion: a steady glow when full, and one flash run dry. */
+@media ( prefers-reduced-motion: reduce ) {
+
+	.dhud .dhud-boost.ready .dhud-bar {
+		animation: none;
+		box-shadow: 0 0 8px 1px rgba( 255, 210, 63, 0.6 );
+	}
+
+	.dhud .dhud-boost.empty .dhud-bar {
+		animation: dhud-empty 0.6s ease-in-out 1;
+	}
+
+	.dhud .dhud-boost.refuel .dhud-bar i::after {
+		animation: none;
+	}
+
 }
 
 /* The DRIFT chip, lit up while drifting, filling with the mini-turbo's charge in its colour. */
@@ -818,6 +889,7 @@ export function createDriveHud( parent = document.body ) {
 	let flashTimer;
 	let tricksTimer;
 	let refuelTimer;
+	let emptyTimer;
 	let scoring = false;
 	let tilt = 1;
 	let panel = null;
@@ -960,7 +1032,8 @@ export function createDriveHud( parent = document.body ) {
 			clearTimeout( tricksTimer );
 			tricks.hidden = true;
 			clearTimeout( refuelTimer );
-			boostRow.classList.remove( 'refuel' );
+			clearTimeout( emptyTimer );
+			boostRow.classList.remove( 'refuel', 'empty' );
 			boostLabel.textContent = 'BOOST';
 			pops.replaceChildren();
 			fade.classList.remove( 'on' );
@@ -1055,15 +1128,22 @@ export function createDriveHud( parent = document.body ) {
 
 		},
 
-		// The booster's gauge, 0 to 1 (null hides it).
+		// The booster's gauge, 0 to 1 (null hides it). Run dry, it flashes red for a moment.
 		setBoost( level ) {
 
+			const was = shown.get( 'gauge' );
 			set( 'gauge', level === null ? null : Math.round( level * 100 ), value => {
 
 				boostRow.hidden = value === null || !! panel;
 				if ( value === null ) return;
 				boostBar.style.width = `${ value }%`;
 				boostRow.classList.toggle( 'ready', value >= 100 );
+				if ( value > 0 || ! was ) return;
+				boostRow.classList.remove( 'empty' );
+				void boostRow.offsetWidth;
+				boostRow.classList.add( 'empty' );
+				clearTimeout( emptyTimer );
+				emptyTimer = setTimeout( () => boostRow.classList.remove( 'empty' ), EMPTY_TIME );
 
 			} );
 
@@ -1088,9 +1168,13 @@ export function createDriveHud( parent = document.body ) {
 
 			if ( share <= 0 ) return;
 			boostLabel.textContent = `+${ Math.round( share * 100 ) }%`;
-			boostRow.classList.remove( 'refuel' );
+			// From where it was, so it's seen to fill up to where it is now.
+			const to = boostBar.style.width;
+			boostBar.style.width = `${ Math.max( 0, ( parseFloat( to ) || 0 ) - share * 100 ) }%`;
+			boostRow.classList.remove( 'refuel', 'empty' );
 			void boostRow.offsetWidth;
 			boostRow.classList.add( 'refuel' );
+			boostBar.style.width = to;
 			clearTimeout( refuelTimer );
 			refuelTimer = setTimeout( () => {
 

@@ -92,9 +92,9 @@ after( async () => {
 
 // A page with everything off this machine blocked, and the search answered here: searches says
 // what was asked.
-async function newPage( { viewport = { width: 1280, height: 800 }, touch = false, api = {} } = {} ) {
+async function newPage( { viewport = { width: 1280, height: 800 }, touch = false, api = {}, reducedMotion = 'no-preference' } = {} ) {
 
-	const context = await browser.newContext( { viewport, hasTouch: touch, isMobile: touch } );
+	const context = await browser.newContext( { viewport, hasTouch: touch, isMobile: touch, reducedMotion } );
 	const page = await context.newPage();
 	page.searches = [];
 	page.outside = [];
@@ -164,10 +164,11 @@ describe( 'World Drive, desktop', () => {
 		assert.ok( await panel.isVisible() );
 		assert.match( await panel.locator( '.logo' ).textContent(), /World\s*Drive/ );
 		assert.equal( await panel.locator( '.spots button' ).count(), 12 );
-		// Then the cars (the muscle car free) and the Supporter Pass's rides, locked (see
-		// test-drive-pro-ui.mjs).
+		// Then the cars (the muscle car free, then levels' and the Supporter Pass's, locked) and the
+		// pass's rides (see test-drive-pro-ui.mjs).
 		assert.deepEqual( await panel.locator( '.vehicle b' ).allTextContents(), [
-			'Go-kart', 'Pickup', 'Muscle car', 'Neon racer', 'Night cruiser', 'Dune buggy', 'Farm truck', 'Police cruiser',
+			'Go-kart', 'Pickup', 'Muscle car', 'Golf cart', 'Tuk-tuk', 'Ice-cream van', 'Lawn tractor', 'Retro wedge', 'Formula racer',
+			'Neon racer', 'Night cruiser', 'Dune buggy', 'Farm truck', 'Police cruiser', 'Hypercar', 'Cyber muscle',
 			'Sports coupe', 'Monster truck', 'City bus', 'Hovercraft',
 		] );
 		assert.equal( await panel.locator( '.vehicle.picked b' ).textContent(), 'Go-kart' );
@@ -1051,6 +1052,663 @@ describe( 'World Drive boosts: supersonic and boost pads', () => {
 		assert.ok( on.enabled && on.lit > 3 && on.kept === 'on', JSON.stringify( on ) );
 		assert.deepEqual( page.errors, [] );
 		assert.deepEqual( page.outside, [] );
+
+	} );
+
+} );
+
+// The boost and driving effects: each moment's burst (drive-bursts.js and each style's own), the
+// body leaning (drive.js), the camera's jolts, speed lines and overdrive's white edges
+// (screen-fx.js), the gauge pulsing and flashing (drive-hud.js), and the pause menu's "Camera
+// effects" switch, with a visitor's ask for less motion. Stepped by the test, a frame at a time.
+function effects( style ) {
+
+	const { driver: d, pads, scene, renderer } = window.drive;
+	const root = () => scene.getObjectByName( 'drive-fx' );
+	const memory = () => {
+
+		const materials = new Set();
+		let objects = 0;
+		root().traverse( o => {
+
+			objects ++;
+			if ( o.material ) materials.add( o.material );
+
+		} );
+		return { geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures, objects, materials: materials.size };
+
+	};
+	// Boost pads only where the test puts one: none put down as it drives.
+	let padded = false;
+	const step = ( frames, each ) => {
+
+		for ( let i = 0; i < frames; i ++ ) {
+
+			d.update( 1 / 60 );
+			if ( padded ) pads.update( 1 / 60 );
+			if ( d.north > 800 ) d.north -= 1000;
+			if ( Math.abs( d.east ) > 800 ) d.east = 0;
+			out.most = Math.max( out.most, d.fx.particles.alive );
+			each?.( i );
+
+		}
+
+	};
+	const reset = ( speed = 0 ) => {
+
+		for ( const code of [ ...d.keys ] ) d.release( code );
+		Object.assign( d, { east: 0, north: 0, y: 0, heading: 0, course: 0, view: 0, speed, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, flying: false, drifting: 0, driftLevel: 0, boost: null, firing: false, gauge: 1, supersonic: false, nearTop: 0 } );
+		pads.clear();
+		step( 1 );
+
+	};
+	// What the effects were asked to do, as they're asked.
+	const calls = [];
+	for ( const name of [ 'ignite', 'cool', 'tier', 'turbo', 'pickup' ] ) {
+
+		const call = d.fx[ name ].bind( d.fx );
+		d.fx[ name ] = ( ...args ) => {
+
+			calls.push( name === 'tier' || name === 'turbo' ? `${ name } ${ args[ 0 ] }` : name );
+			return call( ...args );
+
+		};
+
+	}
+
+	const out = { most: 0, budget: d.fx.particles.budget, style };
+	reset( 15 );
+	const before = memory();
+
+	// Lit at 55 km/h: its burst, the nose kicked up, and the view jolted wider and back.
+	d.press( 'KeyW' );
+	step( 10 );
+	d.press( 'KeyB' );
+	d.release( 'KeyB' );
+	let punch = 0;
+	let nod = 0;
+	let squat = 0;
+	step( 1 );
+	out.lit = { alive: d.fx.particles.alive };
+	step( 20, () => {
+
+		punch = Math.max( punch, d.punch );
+		nod = Math.max( nod, d.jolts.nod.value );
+		squat = Math.max( squat, d.body.pitch.value );
+
+	} );
+	Object.assign( out.lit, { punch: Math.round( punch * 10 ) / 10, nod: Math.round( nod * 1000 ) / 1000, squat: Math.round( squat * 1000 ) / 1000 } );
+	// Run dry: the exhaust glows on and cools; then, a while later, nothing's left.
+	d.gauge = 0.01;
+	step( 2 );
+	out.dry = { firing: d.firing, alive: d.fx.particles.alive };
+	d.release( 'KeyW' );
+	step( 150 );
+	out.dry.after = d.fx.particles.alive;
+	out.dry.punch = Math.round( d.punch * 1000 ) / 1000;
+
+	// A boost pad driven over: its burst, carried along with the vehicle (its chevrons at its
+	// speed), and the vehicle lit up.
+	reset( 12 );
+	d.gauge = 0.5;
+	pads.place( 'small', 0, 6 );
+	let lit = false;
+	let carried = 0;
+	padded = true;
+	step( 60, () => {
+
+		lit ||= root().children.some( o => o.isSprite && o.visible && o.material.depthTest === false );
+		for ( const p of root().getObjectByName( 'drive-bursts' ).userData.batch.items ) if ( p.kind === 3 && p.age < p.life ) carried = Math.max( carried, p.carry.length() / d.speed );
+
+	} );
+	padded = false;
+	pads.clear();
+	out.pad = { lit, gauge: Math.round( d.gauge * 100 ) / 100, carried: Math.round( carried * 100 ) / 100 };
+	step( 120 );
+
+	// On its wheels, the batches fade out down to the ground under it (the test pad's is at 0);
+	// in the air, they're as they are.
+	const floor = () => root().getObjectByName( 'drive-bursts' ).material.uniforms.uFloor.value;
+	reset( 10 );
+	step( 2 );
+	out.floor = { wheels: Math.round( floor().y * 100 ) / 100, at: Math.round( floor().w * 100 ) / 100 };
+	Object.assign( d, { y: 3, vy: 4, grounded: false } );
+	step( 1 );
+	out.floor.air = floor().w > 1e5;
+
+	// A drift held through all three charge levels and let go: a burst at each and the mini-turbo.
+	reset( 16 );
+	d.press( 'KeyW' );
+	d.press( 'Space' );
+	d.press( 'KeyD' );
+	step( 170, () => d.speed = Math.max( d.speed, 16 ) );
+	let roll = 0;
+	step( 1, () => roll = d.body.roll.value );
+	d.release( 'Space' );
+	d.release( 'KeyD' );
+	punch = 0;
+	step( 15, () => punch = Math.max( punch, d.punch ) );
+	out.drift = { roll: Math.round( roll * 1000 ) / 1000, punch: Math.round( punch * 10 ) / 10 };
+	step( 120 );
+
+	// Floored from a standstill: the rear tyres spin and smoke, for a moment.
+	reset( 0 );
+	d.press( 'KeyW' );
+	let spin = 0;
+	let smoke = 0;
+	step( 20, () => {
+
+		spin = Math.max( spin, d.wheelspin );
+		smoke = Math.max( smoke, root().children.filter( o => o.isSprite && o.visible && o.material.depthTest !== false ).length );
+
+	} );
+	step( 60 );
+	out.launch = { spin: Math.round( spin * 100 ) / 100, smoke, after: Math.round( d.wheelspin * 100 ) / 100 };
+
+	// Braking hard from 80 km/h: the nose dips; turning at 50, it leans out of the turn.
+	reset( 80 / 3.6 );
+	d.release( 'KeyW' );
+	d.press( 'KeyS' );
+	let dip = 0;
+	step( 30, () => dip = Math.min( dip, d.body.pitch.value ) );
+	d.release( 'KeyS' );
+	reset( 50 / 3.6 );
+	d.press( 'KeyW' );
+	d.press( 'KeyD' );
+	let lean = 0;
+	step( 40, () => {
+
+		d.speed = 50 / 3.6;
+		lean = Math.max( lean, d.body.roll.value );
+
+	} );
+	out.body = { dip: Math.round( dip * 1000 ) / 1000, lean: Math.round( lean * 1000 ) / 1000 };
+	// Stopped dead at 90 km/h by being put somewhere else (as R does): it doesn't lurch.
+	reset( 25 );
+	step( 30, () => d.speed = 25 );
+	d.speed = 0;
+	let lurch = 0;
+	step( 30, () => lurch = Math.max( lurch, Math.abs( d.body.pitch.value ) ) );
+	out.body.lurch = Math.round( lurch * 1000 ) / 1000;
+	reset( 0 );
+	step( 120 );
+	out.settled = { pitch: Math.round( d.body.pitch.value * 1e4 ) / 1e4 || 0, roll: Math.round( d.body.roll.value * 1e4 ) / 1e4 || 0, alive: d.fx.particles.alive };
+
+	// Lit again and again for a few seconds: nothing new made, and never more alive than its budget.
+	reset( 20 );
+	d.press( 'KeyW' );
+	for ( let i = 0; i < 12; i ++ ) {
+
+		d.gauge = 1;
+		d.press( 'KeyB' );
+		d.release( 'KeyB' );
+		step( 25 );
+		d.gauge = 0.001;
+		step( 5 );
+
+	}
+
+	reset( 0 );
+	out.grew = Object.fromEntries( Object.entries( memory() ).filter( ( [ key, value ] ) => value !== before[ key ] ).map( ( [ key, value ] ) => [ key, `${ before[ key ] } → ${ value }` ] ) );
+	out.calls = [ ...new Set( calls ) ];
+	return out;
+
+}
+
+describe( 'World Drive boost and driving effects', () => {
+
+	let page;
+
+	before( async () => {
+
+		page = await newPage();
+
+	} );
+
+	after( () => page?.context().close() );
+
+	test( 'the booster lighting and running dry, a pad, a drift\'s levels and its mini-turbo each have their burst; the body leans; the view is jolted; nothing new is made', async () => {
+
+		await page.goto( `${ BASE }/?pro=1` );
+		await page.waitForFunction( () => window.drive?.mode === 'globe', null, { timeout: 30000 } );
+		await page.locator( '.spots button', { hasText: 'Golden Gate Bridge' } ).click();
+		await flown( page );
+		await driveHere( page );
+		await page.evaluate( () => document.querySelector( '#drive-ui .keys' ).hidden = true );
+		const results = [];
+		for ( const style of [ 'classic', 'confetti', 'lightning' ] ) {
+
+			const result = await page.evaluate( async ( { style, run } ) => {
+
+				const { createDriveFx } = await import( '/src/drive-fx.js' );
+				const { driver: d } = window.drive;
+				d.fx.dispose();
+				d.fx = createDriveFx( d.models.group.parent, { boost: style, flame: 'orange', trail: null }, { water: true, effects: d.effects } );
+				return new Function( `return ( ${ run } )( ${ JSON.stringify( style ) } )` )();
+
+			}, { style, run: effects.toString() } );
+			console.log( 'effects:', JSON.stringify( result ) );
+			results.push( result );
+
+		}
+
+		for ( const r of results ) {
+
+			// Each moment set its effects off.
+			assert.deepEqual( [ ...r.calls ].sort(), [ 'cool', 'ignite', 'pickup', 'tier 1', 'tier 2', 'tier 3', 'turbo 3' ], JSON.stringify( r ) );
+			// Lit: a burst, the view punched a few degrees wider and nodded, the nose up.
+			assert.ok( r.lit.alive >= 10 && r.lit.punch >= 3 && r.lit.nod > 0.1 && r.lit.squat > 0.03, JSON.stringify( r.lit ) );
+			// Run dry: it glows on, then everything's gone, the punch rung out.
+			assert.ok( ! r.dry.firing && r.dry.alive > 0 && r.dry.after === 0 && r.dry.punch === 0, JSON.stringify( r.dry ) );
+			assert.ok( r.pad.lit && r.pad.gauge > 0.6 && r.pad.carried > 0.95, JSON.stringify( r.pad ) );
+			// The plane under it: level, a few centimetres over the pad (through its rear tyres).
+			assert.ok( r.floor.wheels > 0.99 && r.floor.at < 0 && r.floor.at > - 0.2 && r.floor.air, JSON.stringify( r.floor ) );
+			// Drifting right it leans out of the turn; the mini-turbo jolts the view a little.
+			assert.ok( r.drift.roll > 0 && r.drift.punch > 1, JSON.stringify( r.drift ) );
+			assert.ok( r.launch.spin > 0.5 && r.launch.smoke > 4 && r.launch.after === 0, JSON.stringify( r.launch ) );
+			assert.ok( r.body.dip < - 0.02 && r.body.lean > 0.02 && r.body.lurch < 0.005, JSON.stringify( r.body ) );
+			assert.deepEqual( r.settled, { pitch: 0, roll: 0, alive: 0 } );
+			assert.deepEqual( r.grew, {}, `${ r.style } made new things` );
+			assert.ok( r.most <= r.budget, `${ r.style }: ${ r.most } alive, over its budget of ${ r.budget }` );
+
+		}
+
+		// Paused, the effects go with the drive; driving on, they're made again.
+		await page.evaluate( () => window.before = window.drive.scene.getObjectByName( 'drive-fx' ) );
+		await page.keyboard.press( 'Escape' );
+		await page.locator( '#pause' ).waitFor();
+		const paused = await page.evaluate( () => ( { fx: window.drive.driver.fx, root: !! window.drive.scene.getObjectByName( 'drive-fx' ), mode: window.drive.mode } ) );
+		await page.locator( '#pause .resume' ).click();
+		await page.waitForFunction( () => window.drive.mode === 'driving' );
+		const again = await page.evaluate( () => {
+
+			const after = window.drive.scene.getObjectByName( 'drive-fx' );
+			return !! after && after !== window.before && !! window.drive.driver.fx;
+
+		} );
+		assert.deepEqual( { ...paused, again }, { fx: null, root: false, mode: 'paused', again: true } );
+		assert.deepEqual( page.errors, [] );
+
+	} );
+
+	test( 'boosting: speed lines thicken with the speed, overdrive flashes the edges of the view white, and the gauge pulses full, flashes run dry and fills up from a pad', async () => {
+
+		await page.evaluate( () => window.untilFrame = ( done, most = 600 ) => new Promise( resolve => {
+
+			let left = most;
+			const frame = () => done() || -- left <= 0 ? resolve() : requestAnimationFrame( frame );
+			requestAnimationFrame( frame );
+
+		} ) );
+		const run = await page.evaluate( async () => {
+
+			const { driver: d, screenFx, scene, pads } = window.drive;
+			const lines = scene.getObjectByName( 'speed-lines' );
+			const bar = document.querySelector( '#hud .dhud-boost' );
+			const whiteout = document.getElementById( 'whiteout' );
+			const top = d.spec.topSpeed / 3.6 * 2;
+			for ( const code of [ ...d.keys ] ) d.release( code );
+			const out = {};
+			// Driving at 80 km/h, no lines.
+			Object.assign( d, { east: 0, north: 0, heading: 0, course: 0, view: 0, speed: 80 / 3.6, gauge: 1, firing: false, boost: null, supersonic: false, nearTop: 0 } );
+			const hold = speed => () => {
+
+				d.speed = speed;
+				if ( d.north > 800 ) d.north -= 1000;
+
+			};
+			await window.untilFrame( () => ( hold( 80 / 3.6 )(), false ), 20 );
+			out.cruising = { lines: screenFx.lines, shown: lines.visible, ready: bar.classList.contains( 'ready' ), pulse: getComputedStyle( bar.querySelector( '.dhud-bar' ) ).animationName };
+			// Boosting at 70 % of the booster's top, then at its top: thicker.
+			d.firing = true;
+			await window.untilFrame( () => {
+
+				hold( top * 0.6 )();
+				d.gauge = 0.9;
+				return false;
+
+			}, 30 );
+			out.boosting = { lines: Math.round( screenFx.lines * 100 ) / 100, shown: lines.visible };
+			let white = false;
+			await window.untilFrame( () => {
+
+				hold( top )();
+				d.gauge = 0.9;
+				white ||= whiteout.classList.contains( 'on' );
+				return d.supersonic && white;
+
+			} );
+			out.overdrive = { lines: Math.round( screenFx.lines * 100 ) / 100, white, supersonic: d.supersonic };
+			// Run dry: the gauge flashes.
+			d.gauge = 0.004;
+			let empty = false;
+			await window.untilFrame( () => ( empty ||= bar.classList.contains( 'empty' ) ), 60 );
+			out.dry = { empty, firing: d.firing };
+			// A pad tops it up: it fills before your eyes, with a shine along it.
+			Object.assign( d, { speed: 12, gauge: 0.4, supersonic: false, firing: false } );
+			d.hud.setSupersonic( false );
+			pads.clear();
+			pads.place( 'small', 0, d.north + 5 );
+			let refill = null;
+			await window.untilFrame( () => {
+
+				d.speed = 12;
+				if ( bar.classList.contains( 'refuel' ) ) refill = getComputedStyle( bar.querySelector( '.dhud-bar i' ) ).transitionProperty;
+				return !! refill;
+
+			}, 200 );
+			out.refill = refill;
+			// Slowed right down: the lines go.
+			await window.untilFrame( () => ( d.speed = 5, screenFx.lines === 0 ), 300 );
+			out.slow = { lines: screenFx.lines, shown: lines.visible };
+			d.gauge = 1;
+			await window.untilFrame( () => bar.classList.contains( 'ready' ), 60 );
+			out.full = { ready: bar.classList.contains( 'ready' ), pulse: getComputedStyle( bar.querySelector( '.dhud-bar' ) ).animationName };
+			return out;
+
+		} );
+		console.log( 'speed lines and the gauge:', JSON.stringify( run ) );
+		assert.deepEqual( run.cruising, { lines: 0, shown: false, ready: true, pulse: 'dhud-ready' } );
+		assert.ok( run.boosting.lines > 0.2 && run.boosting.shown, JSON.stringify( run.boosting ) );
+		assert.ok( run.overdrive.supersonic && run.overdrive.white && run.overdrive.lines > run.boosting.lines, JSON.stringify( run.overdrive ) );
+		assert.deepEqual( run.dry, { empty: true, firing: false } );
+		assert.match( run.refill ?? '', /width/ );
+		assert.deepEqual( run.slow, { lines: 0, shown: false } );
+		assert.deepEqual( run.full, { ready: true, pulse: 'dhud-ready' } );
+		await shot( page, 'effects-gauge' );
+		assert.deepEqual( page.errors, [] );
+
+	} );
+
+	test( 'the pause menu\'s "Camera effects" switch turns off the jolts, shakes, speed lines and white edges, kept across a reload, and on again', async () => {
+
+		await page.keyboard.press( 'Escape' );
+		await page.locator( '#pause' ).waitFor();
+		const toggle = page.locator( '#pause .camera-toggle' );
+		assert.ok( await toggle.isChecked() );
+		await shot( page, 'effects-switch' );
+		await toggle.uncheck();
+		assert.deepEqual( await page.evaluate( () => ( { motion: window.drive.driver.motion, enabled: window.drive.screenFx.enabled, kept: localStorage.getItem( 'world-drive.camera-fx' ) } ) ), { motion: false, enabled: false, kept: 'off' } );
+		await page.locator( '#pause .resume' ).click();
+		await page.waitForFunction( () => window.drive.mode === 'driving' );
+		const still = page => page.evaluate( async () => {
+
+			const { driver: d, screenFx } = window.drive;
+			for ( const code of [ ...d.keys ] ) d.release( code );
+			Object.assign( d, { east: 0, north: 0, heading: 0, course: 0, view: 0, speed: 20, gauge: 1, firing: false, boost: null, supersonic: false, nearTop: 0, shake: 0 } );
+			const top = d.spec.topSpeed / 3.6 * 2;
+			const out = { punch: 0, nod: 0, lines: 0, white: false, burst: 0 };
+			d.press( 'KeyB' );
+			out.burst = d.fx.particles.alive;
+			await window.untilFrame( () => {
+
+				d.gauge = 1;
+				d.speed = top;
+				if ( d.north > 800 ) d.north -= 1000;
+				out.punch = Math.max( out.punch, Math.abs( d.punch ) );
+				out.nod = Math.max( out.nod, Math.abs( d.jolts.nod.value ) );
+				out.lines = Math.max( out.lines, screenFx.lines );
+				out.white ||= document.getElementById( 'whiteout' ).classList.contains( 'on' );
+				return d.supersonic && false;
+
+			}, 90 );
+			out.supersonic = d.supersonic;
+			out.burst = d.fx.particles.alive > 0;
+			d.firing = false;
+			d.gauge = 1;
+			d.speed = 0;
+			return out;
+
+		} );
+		const off = await still( page );
+		console.log( 'camera effects off:', JSON.stringify( off ) );
+		// Still the bursts in the world, but nothing done to the view.
+		assert.deepEqual( off, { punch: 0, nod: 0, lines: 0, white: false, burst: true, supersonic: true } );
+
+		// Still off after a reload; on again from the pause menu.
+		await page.goto( `${ BASE }/?pro=1` );
+		await page.waitForFunction( () => window.drive?.mode === 'globe', null, { timeout: 30000 } );
+		await page.locator( '.spots button', { hasText: 'Golden Gate Bridge' } ).click();
+		await flown( page );
+		await driveHere( page );
+		assert.equal( await page.evaluate( () => window.drive.driver.motion ), false );
+		await page.keyboard.press( 'Escape' );
+		await page.locator( '#pause' ).waitFor();
+		assert.equal( await toggle.isChecked(), false );
+		await toggle.check();
+		await page.locator( '#pause .resume' ).click();
+		await page.waitForFunction( () => window.drive.mode === 'driving' );
+		assert.deepEqual( await page.evaluate( () => ( { motion: window.drive.driver.motion, kept: localStorage.getItem( 'world-drive.camera-fx' ) } ) ), { motion: true, kept: 'on' } );
+		assert.deepEqual( page.errors, [] );
+		assert.deepEqual( page.outside, [] );
+
+	} );
+
+	test( 'asking for less motion: no jolts, shakes, speed lines or white edges whatever the switch says, fewer flashes, a steady gauge', async () => {
+
+		const calm = await newPage( { reducedMotion: 'reduce' } );
+		try {
+
+			await calm.goto( `${ BASE }/?pro=1` );
+			await calm.waitForFunction( () => window.drive?.mode === 'globe', null, { timeout: 30000 } );
+			await calm.locator( '.spots button', { hasText: 'Golden Gate Bridge' } ).click();
+			await flown( calm );
+			await driveHere( calm );
+			await calm.evaluate( () => window.untilFrame = ( done, most = 600 ) => new Promise( resolve => {
+
+				let left = most;
+				const frame = () => done() || -- left <= 0 ? resolve() : requestAnimationFrame( frame );
+				requestAnimationFrame( frame );
+
+			} ) );
+			const run = await calm.evaluate( async () => {
+
+				const { driver: d, pads, scene } = window.drive;
+				const out = { motion: d.motion, calm: d.effects.calm, switch: document.querySelector( '#pause .camera-toggle' ).checked };
+				for ( const code of [ ...d.keys ] ) d.release( code );
+				// A hard hit's shake isn't put on the view.
+				Object.assign( d, { east: 0, north: 0, heading: 0, course: 0, view: 0, speed: 12, gauge: 0.4, firing: false, boost: null, supersonic: false, nearTop: 0 } );
+				d.shake = 0.6;
+				const look = new window.drive.camera.position.constructor();
+				d.placeCamera( 0 );
+				window.drive.camera.getWorldDirection( look );
+				const shaken = look.clone();
+				d.shake = 0;
+				d.placeCamera( 0 );
+				window.drive.camera.getWorldDirection( look );
+				out.shaken = Math.round( shaken.angleTo( look ) * 1e4 ) / 1e4;
+				// A pad's burst, without lighting the vehicle up.
+				pads.clear();
+				pads.place( 'small', 0, d.north + 5 );
+				let lit = false;
+				let burst = 0;
+				for ( let i = 0; i < 60; i ++ ) {
+
+					d.speed = 12;
+					d.update( 1 / 60 );
+					pads.update( 1 / 60 );
+					burst = Math.max( burst, d.fx.particles.alive );
+					lit ||= scene.getObjectByName( 'drive-fx' ).children.some( o => o.isSprite && o.visible && o.material.depthTest === false );
+
+				}
+
+				Object.assign( out, { lit, burst } );
+				d.gauge = 1;
+				await window.untilFrame( () => document.querySelector( '#hud .dhud-boost' ).classList.contains( 'ready' ), 60 );
+				out.pulse = getComputedStyle( document.querySelector( '#hud .dhud-boost .dhud-bar' ) ).animationName;
+				return out;
+
+			} );
+			const off = await calm.evaluate( async () => {
+
+				const { driver: d, screenFx } = window.drive;
+				const top = d.spec.topSpeed / 3.6 * 2;
+				const out = { punch: 0, lines: 0, white: false };
+				Object.assign( d, { speed: top, gauge: 1, firing: false } );
+				d.press( 'KeyB' );
+				await window.untilFrame( () => {
+
+					d.gauge = 1;
+					d.speed = top;
+					if ( d.north > 800 ) d.north -= 1000;
+					out.punch = Math.max( out.punch, Math.abs( d.punch ) );
+					out.lines = Math.max( out.lines, screenFx.lines );
+					out.white ||= document.getElementById( 'whiteout' ).classList.contains( 'on' );
+					return false;
+
+				}, 90 );
+				out.supersonic = d.supersonic;
+				d.firing = false;
+				d.speed = 0;
+				return out;
+
+			} );
+			console.log( 'less motion:', JSON.stringify( { ...run, ...off } ) );
+			assert.deepEqual( run, { motion: false, calm: true, switch: true, shaken: 0, lit: false, burst: run.burst, pulse: 'none' } );
+			assert.ok( run.burst > 10, JSON.stringify( run ) );
+			assert.deepEqual( off, { punch: 0, lines: 0, white: false, supersonic: true } );
+			assert.deepEqual( calm.errors, [] );
+
+		} finally {
+
+			await calm.context().close();
+
+		}
+
+	} );
+
+	test( 'the sonic boom\'s rings keep up with the vehicle, so they never white out the view; asking for less motion it has no flare, nor has the Garage\'s ▶ Boost', async () => {
+
+		const calm = await newPage( { reducedMotion: 'reduce' } );
+		try {
+
+			await calm.goto( `${ BASE }/?pro=1` );
+			await calm.waitForFunction( () => window.drive?.mode === 'globe', null, { timeout: 30000 } );
+			// The Garage's turntable has driving's effects: lit, no flare for this visitor.
+			await calm.evaluate( () => window.drive.garage.open() );
+			await calm.waitForFunction( () => window.drive.garage.preview?.model && window.drive.garage.preview.fx, null, { timeout: 20000 } );
+			const garage = await calm.evaluate( async () => {
+
+				const { SHAPES } = await import( '/src/drive-boosts.js' );
+				const { preview } = window.drive.garage;
+				let scene = preview.model;
+				while ( scene.parent ) scene = scene.parent;
+				const batches = [];
+				scene.getObjectByName( 'drive-fx' ).traverse( o => o.userData.batch && batches.push( o.userData.batch ) );
+				preview.boost();
+				let flares = 0;
+				let alive = 0;
+				for ( let i = 0; i < 20; i ++ ) {
+
+					await new Promise( resolve => requestAnimationFrame( resolve ) );
+					alive = Math.max( alive, preview.fx.particles.alive );
+					for ( const batch of batches ) for ( const p of batch.items ) if ( p.age < p.life && p.frame === SHAPES.flare ) flares ++;
+
+				}
+
+				return { alive, flares };
+
+			} );
+			assert.ok( garage.alive > 5 && garage.flares === 0, JSON.stringify( garage ) );
+			await calm.keyboard.press( 'Escape' );
+
+			await calm.locator( '.spots button', { hasText: 'Golden Gate Bridge' } ).click();
+			await flown( calm );
+			await driveHere( calm );
+			const boom = await calm.evaluate( async () => {
+
+				const { SHAPES, FLAT } = await import( '/src/drive-boosts.js' );
+				const { driver: d, renderer, scene, camera, screenFx } = window.drive;
+				// Frame by frame by hand, each read back off the canvas.
+				renderer.setAnimationLoop( null );
+				const gl = renderer.getContext();
+				const pixels = new Uint8Array( gl.drawingBufferWidth * gl.drawingBufferHeight * 4 );
+				const bright = () => {
+
+					gl.readPixels( 0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixels );
+					let count = 0;
+					for ( let i = 0; i < pixels.length; i += 16 ) if ( ( 0.2126 * pixels[ i ] + 0.7152 * pixels[ i + 1 ] + 0.0722 * pixels[ i + 2 ] ) / 255 > 0.9 ) count ++;
+					return Math.round( count / ( pixels.length / 16 ) * 100 );
+
+				};
+				for ( const code of [ ...d.keys ] ) d.release( code );
+				Object.assign( d, { east: 0, north: 0, heading: 0, course: 0, view: 0, speed: 20, gauge: 1, firing: false, boost: null, supersonic: false, nearTop: 0, warp: 0 } );
+				for ( let i = 0; i < 120; i ++ ) d.update( 1 / 60 );
+				const top = d.spec.topSpeed / 3.6 * 2;
+				d.press( 'KeyW' );
+				d.press( 'KeyB' );
+				const tick = () => {
+
+					d.speed = top;
+					d.gauge = 1;
+					d.update( 1 / 60 );
+					screenFx.update( 1 / 60, true );
+
+				};
+				for ( let i = 0; i < 400 && ! d.supersonic; i ++ ) tick();
+				const batches = [];
+				scene.getObjectByName( 'drive-fx' ).traverse( o => o.userData.batch && batches.push( o.userData.batch ) );
+				const fresh = batches.flatMap( batch => batch.items.filter( p => p.age < p.life && p.age < 0.05 ) );
+				const rings = fresh.filter( p => p.mode === FLAT && ( p.frame === SHAPES.shock || p.frame === SHAPES.ring ) );
+				const out = { supersonic: d.supersonic, rings: rings.length, kept: Math.round( Math.min( ...rings.map( p => p.carry.length() ) ) / top * 100 ) / 100, flares: fresh.filter( p => p.frame === SHAPES.flare ).length, frames: [] };
+				for ( let k = 0; k < 24; k ++ ) {
+
+					tick();
+					camera.fov = 70 + 9 * d.warp + d.punch;
+					camera.updateProjectionMatrix();
+					renderer.render( scene, camera );
+					out.frames.push( bright() );
+
+				}
+
+				d.release( 'KeyB' );
+				d.release( 'KeyW' );
+				return out;
+
+			} );
+			console.log( 'sonic boom:', JSON.stringify( boom ) );
+			// Its four rings carried at 0.97 of the speed, so the camera is never inside one.
+			assert.ok( boom.supersonic && boom.rings === 4 && boom.kept > 0.95 && boom.flares === 0, JSON.stringify( boom ) );
+			// With them falling back through the camera the view went near white (over 50 % of it) for 6 frames, twice.
+			assert.ok( Math.max( ...boom.frames ) < 50, `the view went white: ${ boom.frames.join( ' ' ) }` );
+			assert.deepEqual( calm.errors, [] );
+
+		} finally {
+
+			await calm.context().close();
+
+		}
+
+	} );
+
+	test( 'on a phone, the bursts are thinner and there are half as many speed lines', async () => {
+
+		const phone = await newPage( { viewport: { width: 390, height: 844 }, touch: true } );
+		try {
+
+			await phone.goto( `${ BASE }/?pro=1` );
+			await phone.waitForFunction( () => window.drive?.mode === 'globe', null, { timeout: 30000 } );
+			await phone.evaluate( () => window.drive.dropIn( { name: 'Test pad', lat: 37.8199, lon: - 122.4783, height: 0 } ) );
+			await phone.waitForFunction( () => window.drive.mode === 'driving', null, { timeout: 60000 } );
+			const run = await phone.evaluate( async () => {
+
+				const { driver: d, scene } = window.drive;
+				for ( const code of [ ...d.keys ] ) d.release( code );
+				Object.assign( d, { east: 0, north: 0, heading: 0, course: 0, view: 0, speed: d.spec.topSpeed / 3.6 * 1.6, gauge: 1, firing: false, boost: null } );
+				d.press( 'KeyB' );
+				await new Promise( resolve => setTimeout( resolve, 600 ) );
+				return { detail: d.effects.detail, lines: scene.getObjectByName( 'speed-lines' ).geometry.instanceCount, shown: scene.getObjectByName( 'speed-lines' ).visible };
+
+			} );
+			assert.deepEqual( run, { detail: 0.6, lines: 24, shown: true } );
+			await shot( phone, 'effects-phone' );
+			assert.deepEqual( phone.errors, [] );
+
+		} finally {
+
+			await phone.context().close();
+
+		}
 
 	} );
 
@@ -2129,6 +2787,107 @@ describe( 'World Drive with its Worker', () => {
 
 	} );
 
+	test( 'the visit is only asked for once the game\'s code is here: a download that fails, or each Try again after it, spends no drive', async () => {
+
+		const visits = [];
+		const page = await newPage( {
+			api: {
+				config: { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true },
+				turnstile: true,
+				visit: route => {
+
+					visits.push( route.request().url() );
+					route.fulfill( { contentType: 'application/json', body: JSON.stringify( { mapsKey: 'test-key-not-real', left: 5 } ) } );
+
+				},
+			},
+		} );
+		const logged = [];
+		page.on( 'console', message => message.type() === 'error' && logged.push( message.text() ) );
+		// (The dev server has it at /src/... or /@fs/.../src/..., outside its root.)
+		const MAIN = /^http:\/\/127\.0\.0\.1:\d+\/.*src\/drive-app\/main\.js(\?|$)/;
+		await page.route( MAIN, route => route.abort() );
+		await page.goto( BASE );
+		await page.locator( '#notice[data-kind="error"]' ).waitFor();
+		assert.match( await page.locator( '#notice .message' ).textContent(), /didn't finish loading\. Check your connection/ );
+		assert.ok( logged.some( text => /dynamically imported module|main\.js/.test( text ) ), logged.join( '\n' ) );
+		await page.locator( '#notice button', { hasText: 'Try again' } ).click();
+		await page.locator( '#notice[data-kind="error"]' ).waitFor();
+		await page.waitForTimeout( 500 );
+		assert.deepEqual( visits, [] );
+
+		// Its code that breaks as it runs (an older browser) is told apart from a dropped connection,
+		// and logged, again with no drive spent.
+		await page.unroute( MAIN );
+		await page.route( MAIN, route => route.fulfill( { contentType: 'text/javascript', body: 'throw new TypeError( \'boom: not in this browser\' );' } ) );
+		logged.length = 0;
+		await page.reload();
+		await page.locator( '#notice[data-kind="error"]' ).waitFor();
+		assert.match( await page.locator( '#notice .message' ).textContent(), /couldn't start in this browser/ );
+		assert.ok( logged.some( text => text.includes( 'boom: not in this browser' ) ), logged.join( '\n' ) );
+		assert.deepEqual( visits, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'a Turnstile script that never comes ends on the robot check\'s screen at the deadline, and Try again asks for it afresh', async () => {
+
+		const visits = [];
+		const page = await newPage( {
+			api: {
+				config: { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true },
+				visit: route => {
+
+					visits.push( route.request().url() );
+					route.abort();
+
+				},
+			},
+		} );
+		// Held and never answered, as by a proxy that stalls it.
+		const asked = [];
+		await page.route( /^https:\/\/challenges\.cloudflare\.com\/turnstile\//, route => asked.push( route.request().url() ) );
+		await page.clock.install();
+		await page.goto( BASE );
+		await page.waitForFunction( () => /Checking the road/.test( document.querySelector( '#splash .status' ).textContent ) && document.querySelector( 'script[src*="challenges.cloudflare.com"]' ) );
+		// 45 s on: the deadline, which counts from the start rather than from the script arriving.
+		await page.clock.fastForward( 46000 );
+		await page.locator( '#notice[data-kind="robot"]' ).waitFor( { timeout: 10000 } );
+		assert.equal( await page.locator( 'script[src*="challenges.cloudflare.com"]' ).count(), 0 );
+		// The stalled script is gone, and Try again puts a new one in to wait for. (Chromium joins it to
+		// the request still held rather than asking again, so that isn't counted here.)
+		await page.locator( '#notice button', { hasText: 'Try again' } ).click();
+		await page.waitForFunction( () => document.querySelectorAll( 'script[src*="challenges.cloudflare.com"]' ).length === 1 );
+		assert.ok( asked.length >= 1 );
+		assert.ok( await page.locator( '#notice' ).isHidden() );
+		assert.match( await page.locator( '#splash .status' ).textContent(), /Checking the road/ );
+		await page.clock.fastForward( 46000 );
+		await page.locator( '#notice[data-kind="robot"]' ).waitFor( { timeout: 10000 } );
+		assert.deepEqual( visits, [] );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'a place\'s link stays in the address until Google\'s root has come, so the reload its error screen asks for still goes there', async () => {
+
+		const page = await newPage( {
+			api: {
+				config: { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true },
+				turnstile: true,
+				visit: route => route.fulfill( { contentType: 'application/json', body: JSON.stringify( { mapsKey: 'test-key-not-real', left: 5 } ) } ),
+			},
+		} );
+		// Google's tiles are blocked here, so the root fails.
+		await page.goto( `${ BASE }/?spot=monaco&party=ABCD234` );
+		await page.locator( '#notice[data-kind="error"]' ).waitFor( { timeout: 30000 } );
+		assert.match( await page.locator( '#notice .message' ).textContent(), /Google's 3D map didn't load/ );
+		assert.equal( new URL( page.url() ).search, '?spot=monaco&party=ABCD234' );
+		assert.equal( await page.evaluate( () => window.drive.globe.pin ), null );
+		await page.context().close();
+
+	} );
+
 	test( 'maps off: the getting-ready screen, and the test pad still drives', async () => {
 
 		const page = await newPage( { api: { config: { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: false }, turnstile: true, visit: route => route.abort() } } );
@@ -2606,8 +3365,9 @@ async function supporterPage( { me = SIGNED_OUT, signedInAs = ALICE, clientId = 
 }
 
 const locked = page => page.locator( '#globe-ui .vehicle.locked' ).count();
-// What the pass unlocks in the picker: five cars and four rides.
-const LOCKED = 9;
+// What the pass unlocks in the picker, at level 1: thirteen cars (six of them levels' too) and four
+// rides.
+const LOCKED = 17;
 const sheet = page => page.locator( '#pass .buy-area' );
 
 async function openPass( page ) {
