@@ -184,13 +184,15 @@ If your model comes in back to front, try heading 180.
 
 `public/models/b2d2-repair.glb` is Dumper 2's below-grade structure (C31 gallery, transfer pit,
 C32 tunnel, the steel plates at grade) with the repair areas marked up in the **B2D2 Repair Model**
-artifact, as cyan patches with a dark outline. It's in `MODELS` with `recenter: false`: the model's
-origin is the middle of C31 at grade, so snapping puts grade on Google's ground and the structure
-goes underground. Ground level, the dumper building and the conveyors are left out, since Google's
-mesh already shows them. Heading 0 points C31's grid numbers (0 to 69) east.
+artifact, as cyan patches with a dark outline, and the dumper building as a see-through orange
+shell to line the model up against Google's copy of it. It's in `MODELS` with `recenter: false`:
+the model's origin is the middle of C31 at grade, so snapping puts grade on Google's ground and
+the structure goes underground. Ground level and the conveyors are left out, since Google's mesh
+already shows them. Heading 0 points C31's grid numbers (0 to 69) east.
 
-It starts at the terminal centre, not yet lined up: select it, press **P**, set *east*, *north* and
-*heading* (or **Move to where I am**), then **Copy config** over its entry in `src/config.js`. To
+It starts at the terminal centre, not yet lined up: in the **P** panel set *east*, *north* and
+*heading* (or **Move to where I am**) until the orange shell sits on Google's dumper building, then
+**Copy config** over its entry in `src/config.js`. To
 see inside, press **G** (ghost) and fly down through the ground into the gallery or tunnel.
 
 To bring in newer markups, save the artifact's `markups` collection (one JSON file per markup, or

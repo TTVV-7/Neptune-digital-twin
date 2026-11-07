@@ -40,13 +40,15 @@ const { values: opts } = parseArgs( { options: {
 
 // Artifact frame -> model frame: subtract this point.
 const ORIGIN = [ 34.5, 5.1, - 4 ];
-// The structure layers kept. Ground, the dumper building and the conveyors/tent are left out:
+// The structure layers kept. The dumper building is a see-through orange shell, for lining the
+// model up against Google's copy of the building. Ground and the conveyors/tent are left out:
 // Google's mesh already shows what's at grade, and a second copy would flicker against it.
 const STRUCTURE = {
 	c31: { name: 'C31 gallery', color: '#b9c0c8' },
 	pit: { name: 'Transfer pit', color: '#9fb0c2' },
 	c32: { name: 'C32 tunnel', color: '#c9c4b8' },
 	steel: { name: 'Steel plates at grade', color: '#c9cfd5', metal: true },
+	building: { name: 'Dumper building (for lining up)', color: '#ff8a1f', alpha: 0.35 },
 };
 const AREA_COLOR = '#0e8fa8'; // the artifact's repair-area colour
 const EDGE_COLOR = '#06414d';
@@ -155,10 +157,11 @@ if ( opts.site ) {
 		}
 
 		const material = doc.createMaterial( layer.name )
-			.setBaseColorFactor( rgba( layer.color ) )
+			.setBaseColorFactor( rgba( layer.color, layer.alpha ?? 1 ) )
 			.setMetallicFactor( layer.metal ? 0.8 : 0 )
 			.setRoughnessFactor( layer.metal ? 0.35 : 0.9 )
 			.setDoubleSided( true );
+		if ( layer.alpha ) material.setAlphaMode( 'BLEND' );
 		const out = doc.createPrimitive()
 			.setAttribute( 'POSITION', doc.createAccessor().setType( 'VEC3' ).setArray( pos ).setBuffer( buffer ) )
 			.setIndices( doc.createAccessor().setType( 'SCALAR' ).setArray( new Uint32Array( index.getArray() ) ).setBuffer( buffer ) )
