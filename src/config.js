@@ -55,6 +55,20 @@ export const ZOOM = {
 // Use the in-app placement panel (press P) to line a model up with the Google tiles,
 // then press "Copy config" and paste the result over the entry below.
 export const MODELS = [
+	// Dumper 2: C31 gallery, transfer pit and C32 tunnel with the repair areas marked up in the
+	// B2D2 Repair Model artifact (scripts/b2d2-repair-model.mjs builds it). Its origin is the middle
+	// of C31 at grade, so `up: null` sets grade on the ground and the structure goes below it.
+	// Not yet lined up: move it with P, then Copy config over this entry.
+	{
+		name: 'B2D2 repair model',
+		url: 'models/b2d2-repair.glb',
+		east: 0,
+		north: 0,
+		up: null,
+		heading: 0,
+		scale: 1,
+		recenter: false,
+	},
 	// {
 	// 	name: 'My section of the port',
 	// 	url: 'models/my-section.glb',
