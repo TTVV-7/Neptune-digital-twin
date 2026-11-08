@@ -34,6 +34,7 @@ import { DRIVE_CARS, PASS_RIDES } from '../src/drive-app/catalog.js';
 import { addressOf } from '../worker/drive/settings.js';
 import { purchaseFor, purchaseSettings } from '../worker/drive/supporter.js';
 import { VISIT_HOURS, makeVisit } from '../worker/drive/visits.js';
+import { checkCounts, loadBucket, referrerOf } from '../src/drive-app/stats-protocol.js';
 
 const PORT = Number( process.env.TEST_DRIVE_WORKER_PORT ) || 8796;
 const MAPS_KEY = 'test-maps-key-not-real';
@@ -1131,6 +1132,7 @@ describe( 'World Drive Supporter Pass', () => {
 				SUPPORTER_PAYMENT_LINK: PASS_LINK,
 				STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET,
 				SUPPORTER_EMAILS: ' Friend@Example.com, ',
+				ADMIN_EMAILS: 'nobody@example.com, Boss@Example.com ',
 				// PER_VISITOR_DAILY (8), PER_VISITOR_DAILY_SUPPORTER (30) and SUPPORTER_PRICE ("CA$4.99")
 				// are wrangler.drive.jsonc's, and SUPPORTER_PAYMENT_LINK_ID isn't set: the account is
 				// World Drive's own, so any paid checkout on it counts.
@@ -1553,6 +1555,60 @@ describe( 'World Drive Supporter Pass', () => {
 
 	} );
 
+	// Play stats (stats.js): counts a day, from visits, for ADMIN_EMAILS only.
+	const STATS_DAY = PASS_DAY + 3 * DAY;
+	const statsRows = day => Object.fromEntries( server.d1( `SELECT metric, key, n FROM stats_daily WHERE day = '${ day }'` ).map( r => [ `${ r.metric }:${ r.key }`, r.n ] ) );
+
+	test( 'play stats: each visit counted with its hour, and a visit\'s counts added up a day, within limits', async () => {
+
+		const ip = nextIp();
+		const visited = await call( server, '/api/visit', { method: 'POST', headers: { Origin: server.base, 'Content-Type': 'application/json' }, body: JSON.stringify( { token: TOKEN } ), ip, time: STATS_DAY } );
+		assert.equal( visited.status, 200, visited.text );
+		const token = visited.json.visit;
+		const post = ( counts, { visit = token, time = STATS_DAY + MINUTE, ...rest } = {} ) => send( 'POST', '/api/stats', { visit, counts }, { ip, time, ...rest } );
+
+		assert.equal( ( await post( { 'play:go-kart': 120.7, 'garage_edit:colour': 3, 'garage_open:all': 1, 'dropin:furka': 1, 'ride:go-kart': 1, 'load:google.com': 1, 'load_time:2-5 s': 1, 'load_ms:total': 3456 } ) ).status, 204 );
+		// What isn't a count it knows is left out: another metric, a ride or spot or part that isn't one, nothing, less than one.
+		assert.equal( ( await post( { 'play:go-kart': 60, 'nope:x': 5, 'play:not-a-ride': 9, 'dropin:my-street': 1, 'garage_edit:engine': 2, 'garage_open:all': 0, 'party:made': - 3, 'load:<b>': 1 } ) ).status, 204 );
+		// No more than a post may add: 600 s of play, one load.
+		assert.equal( ( await post( { 'play:go-kart': 1e9, 'load:direct': 5 } ) ).status, 204 );
+		const day = new Date( STATS_DAY ).toISOString().slice( 0, 10 );
+		assert.deepEqual( statsRows( day ), {
+			'visit:all': 1, 'visit_hour:12': 1,
+			'play:go-kart': 120 + 60 + 600, 'garage_edit:colour': 3, 'garage_open:all': 1, 'dropin:furka': 1, 'ride:go-kart': 1,
+			'load:google.com': 1, 'load:direct': 1, 'load_time:2-5 s': 1, 'load_ms:total': 3456,
+		} );
+
+		// Only with the visit's token, as JSON from the site itself.
+		assert.equal( ( await post( { 'play:go-kart': 1 }, { visit: null } ) ).status, 403 );
+		assert.equal( ( await post( { 'play:go-kart': 1 }, { visit: token.slice( 0, - 2 ) + 'xx' } ) ).status, 403 );
+		assert.equal( ( await post( { 'play:go-kart': 1 }, { time: STATS_DAY + 7 * HOUR } ) ).status, 403, 'a visit run out' );
+		assert.equal( ( await post( [ 1 ] ) ).status, 400 );
+		assert.equal( ( await post( Object.fromEntries( Array.from( { length: 61 }, ( _, i ) => [ `x:${ i }`, 1 ] ) ) ) ).status, 400 );
+		assert.equal( ( await post( { 'play:go-kart': 1 }, { headers: { Origin: 'https://example.com' } } ) ).status, 403 );
+		assert.equal( statsRows( day )[ 'play:go-kart' ], 780 );
+
+	} );
+
+	test( 'play stats: only a signed-in account in ADMIN_EMAILS sees them', async () => {
+
+		const ask = ( cookie, days = '' ) => call( server, `/api/admin/stats${ days }`, { headers: cookie ? { Cookie: cookie } : {}, time: STATS_DAY + HOUR } );
+		assert.equal( ( await ask() ).status, 401 );
+		const eve = await signIn( { sub: '1090', email: 'eve@example.com', name: 'Eve' } );
+		assert.equal( ( await ask( eve.cookie ) ).status, 403 );
+		const boss = await signIn( { sub: '1091', email: 'boss@example.com', name: 'Boss' } );
+		const res = await ask( boss.cookie, '?days=7' );
+		assert.equal( res.status, 200, res.text );
+		assert.equal( res.headers.get( 'Cache-Control' ), 'no-store' );
+		const day = new Date( STATS_DAY ).toISOString().slice( 0, 10 );
+		assert.equal( res.json.to, day );
+		assert.equal( res.json.from, new Date( STATS_DAY - 6 * DAY ).toISOString().slice( 0, 10 ) );
+		assert.ok( res.json.rows.some( ( [ d, metric, key, n ] ) => d === day && metric === 'play' && key === 'go-kart' && n === 780 ) );
+		// A day's rows only within the days asked for.
+		assert.deepEqual( ( await call( server, '/api/admin/stats?days=1', { headers: { Cookie: boss.cookie }, time: STATS_DAY + 2 * DAY } ) ).json.rows, [] );
+
+	} );
+
 } );
 
 // The webhook keeps payments whether or not buying is on, and with SUPPORTER_PAYMENT_LINK_ID set
@@ -1959,3 +2015,27 @@ function listFiles( dir ) {
 	} );
 
 }
+
+describe( 'Play stats\' counts', () => {
+
+	test( 'a referrer is only its host, and this site\'s own or none is direct', () => {
+
+		assert.equal( referrerOf( '', 'worlddrive.app' ), 'direct' );
+		assert.equal( referrerOf( 'https://worlddrive.app/drive/furka-pass', 'worlddrive.app' ), 'direct' );
+		assert.equal( referrerOf( 'https://www.Google.com/search?q=my+street', 'worlddrive.app' ), 'google.com' );
+		assert.equal( referrerOf( 'android-app://com.reddit.frontpage/', 'worlddrive.app' ), 'com.reddit.frontpage' );
+		assert.equal( referrerOf( 'not a url', 'worlddrive.app' ), null );
+
+	} );
+
+	test( 'load times in buckets, and counts held to what a post may add', () => {
+
+		assert.deepEqual( [ 0, 1999, 2000, 9999, 25000 ].map( loadBucket ), [ 'under 2 s', 'under 2 s', '2-5 s', '5-10 s', 'over 20 s' ] );
+		assert.deepEqual( checkCounts( { 'play:go-kart': 500, 'play:muscle-car': 500, 'party:made': 9 } ), [ [ 'play', 'go-kart', 500 ], [ 'play', 'muscle-car', 100 ], [ 'party', 'made', 5 ] ] );
+		assert.equal( checkCounts( null ), null );
+		assert.equal( checkCounts( 'x' ), null );
+		assert.deepEqual( checkCounts( { 'constructor:x': 1, '__proto__:x': 1, 'toString:all': 1 } ), [] );
+
+	} );
+
+} );

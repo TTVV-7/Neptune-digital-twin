@@ -25,6 +25,8 @@ import { createProgress, onLevelChange } from './progress.js';
 import { setUpProfile } from './profile.js';
 import { formatLatLon, LINK_PARAMS, linkedPlace, rememberPlace } from './places.js';
 import { createLive, flagsOf, velocityOf } from './live.js';
+import { createStats } from './stats.js';
+import { METRICS } from './stats-protocol.js';
 import { createGhosts } from './ghosts.js';
 import { BUDGET_TOAST, setUpFriends } from './friends.js';
 import { createOnline } from './online.js';
@@ -121,6 +123,8 @@ const _velocity = new Vector3();
 export async function start( { key, left = null, visit: token = null, worker = true, googleClientId = '', live: liveOn = false, liveReason = '' } ) {
 
 	const visit = token ?? VISIT_TEST?.visit ?? null;
+	// Play stats for the owner's admin page (stats.js): only a real visit's, counts with nothing of who.
+	const stats = createStats( { visit: token } );
 	const vehicles = await loadVehicles();
 	screens.hideSplash();
 
@@ -225,6 +229,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	const garage = setUpGarage( {
 		vehicles, panel, models, current: () => state.entry && { entry: state.entry, vehicle: state.vehicle },
 		onLook: () => live?.setRide( state.vehicle.id, lookOf( state.vehicle ) ),
+		onOpen: () => stats.add( 'garage_open', 'all' ),
+		onEdit: part => stats.add( 'garage_edit', part ),
 		// Its ▶ Boost as driving's: no flare for a visitor asking for less motion, fewer sparks on a phone.
 		effects: driver.effects,
 	} );
@@ -350,7 +356,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		? createLive( { earth, ellipsoid, visit: liveVisit, player: () => board.player, ride: { vehicle: panel.vehicle.id, look: lookOf( panel.vehicle ) } } )
 		: null;
 	const ghosts = live && createGhosts( { scene, earth, camera, vehicles, loader: models.loader, live, tags: $( 'live-tags' ), own: () => state.entry?.pivot ?? null, effects: driver.effects } );
-	const friends = live && setUpFriends( { live, ghosts, vehicles, mode: () => state.mode, goTo } );
+	const friends = live && setUpFriends( { live, ghosts, vehicles, mode: () => state.mode, goTo, onInvite: () => stats.add( 'party', 'made' ) } );
 	// Where people are driving now, on the globe (online.js): with driving with others, and nothing
 	// of it without.
 	const globeUi = $( 'globe-ui' );
@@ -367,7 +373,12 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// A party's link (?party=CODE): its room, from the globe on. With driving with others off for
 	// the rest of the day (its budget spent), a word on why nothing comes of the link.
 	const partyCode = cleanPartyCode( new URLSearchParams( location.search ).get( 'party' ) );
-	if ( friends && partyCode ) friends.joinParty( partyCode );
+	if ( friends && partyCode ) {
+
+		friends.joinParty( partyCode );
+		stats.add( 'party', 'joined' );
+
+	}
 	else if ( partyCode && liveReason === BUDGET_SPENT ) screens.toast( BUDGET_TOAST, 10000 );
 	// Levels show from here on (a level-up says hello again in the room, so after that's made).
 	progress.start();
@@ -448,6 +459,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	}
 
 	setMode( 'globe' );
+	// How long from asking for the page to the globe, and from where.
+	stats.loaded( performance.now() );
 
 	// A place's link (?spot= or ?at=, its "Drive here" on the places' pages, drive/site/): the
 	// globe flies there and pins it, so Drive here is one more tap; it never drops in by itself.
@@ -591,6 +604,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		screens.hideLoading();
 		progress.dropped();
 		drive();
+		stats.add( 'dropin', METRICS.dropin.key( state.place?.id ) ?? 'other' );
+		stats.add( 'ride', vehicle.id );
 		live?.setRide( vehicle.id, lookOf( vehicle ) );
 		live?.setPlace( { name: placeLabel( state.place ), lat, lon, height } );
 		// The keys, on a keyboard; a touch screen has its labelled buttons instead.
@@ -1001,7 +1016,14 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		screenFx.update( dt, state.mode === 'driving' || state.mode === 'paused' );
 		// The open sea's surface stays round the vehicle.
 		if ( driver.active ) sea.follow( driver.east, driver.north, driver.y );
-		if ( state.mode === 'driving' && driver.active ) progress.drive( dt, driven() );
+		if ( state.mode === 'driving' && driver.active ) {
+
+			progress.drive( dt, driven() );
+			stats.add( 'play', state.vehicle.id, dt );
+			if ( live?.players.size ) stats.add( 'play_with_others', 'all', dt );
+
+		}
+
 		live?.update( car() );
 		pads.update( dt );
 		globe.update( dt );
