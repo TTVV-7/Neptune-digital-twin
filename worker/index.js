@@ -2,6 +2,7 @@ import { HttpError, checkSameOrigin, errorResponse, json } from './http.js';
 import { currentUser, publicUser, signIn, signOut } from './sessions.js';
 import { createLayout, deleteLayout, getLayout, getShared, isShared, listLayouts, shareLayout, unshareLayout, updateLayout } from './layouts.js';
 import { premiumFor, stripeWebhook } from './premium.js';
+import { listPlacements, savePlacement } from './placements.js';
 
 // The Cloudflare Worker behind the app: "Sign in with Google", layouts saved to your account
 // and shared by link (see docs/accounts.md), and premium equipment bought with Stripe
@@ -18,8 +19,11 @@ import { premiumFor, stripeWebhook } from './premium.js';
 //   ALLOWED_DOMAINS       optional, comma-separated: ...or anyone in these Google Workspace domains
 //   GOOGLE_JWKS_URL       tests only: where to get the keys ID tokens are signed with
 //   STRIPE_*, PREMIUM_*   premium equipment, off unless set (see premium.js)
+//   PLACEMENT_KEY         secret, optional: the passcode for saving models' positions for everyone
+//                         (placements.js); without it they can't be saved
 // Without a database or GOOGLE_CLIENT_ID there are no accounts: /api/config tells the app to run
-// on its own, as on a static host, and everything else answers 503.
+// on its own, as on a static host, and everything else answers 503, except models' positions
+// (accounts: false), which need only the database.
 
 // auth: 'required' (the default) answers 401 when signed out; 'optional' looks the user up if
 // there's a session; 'none' doesn't. sameOrigin: false skips the cross-site check, for Stripe's
@@ -38,6 +42,8 @@ const ROUTES = [
 	{ method: 'DELETE', path: '/api/layouts/:id/share', handler: unshareLayout },
 	{ method: 'GET', path: '/api/shared/:token', handler: getShared, auth: 'none' },
 	{ method: 'POST', path: '/api/stripe/webhook', handler: stripeWebhook, auth: 'none', sameOrigin: false },
+	{ method: 'GET', path: '/api/placements', handler: listPlacements, auth: 'none', accounts: false },
+	{ method: 'PUT', path: '/api/placements', handler: savePlacement, auth: 'none', accounts: false },
 ];
 
 export default {
@@ -74,7 +80,11 @@ async function handle( request, env, url ) {
 
 	}
 
-	if ( ! env.DB || ! env.GOOGLE_CLIENT_ID ) return withoutAccounts( request, url, env );
+	if ( route.accounts === false ) {
+
+		if ( ! env.DB ) throw new HttpError( 503, 'No database' );
+
+	} else if ( ! env.DB || ! env.GOOGLE_CLIENT_ID ) return withoutAccounts( request, url, env );
 	if ( route.sameOrigin !== false ) checkSameOrigin( request, url );
 	const auth = route.auth ?? 'required';
 	const user = auth === 'none' ? null : await currentUser( request, env, url );

@@ -26,6 +26,7 @@ const SETTINGS = [
 	'STRIPE_WEBHOOK_SECRET',
 	'PREMIUM_PRICE',
 	'PREMIUM_EMAILS',
+	'PLACEMENT_KEY',
 ];
 const PATH_PARAM = '__path';
 

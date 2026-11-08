@@ -66,4 +66,18 @@ export const MIGRATIONS = [
 			CREATE INDEX IF NOT EXISTS purchases_by_payment ON purchases ( payment_intent );
 		`,
 	},
+	{
+		version: 3,
+		// worker/migrations/0003_placements.sql: models' positions saved from the live site.
+		sql: `
+			CREATE TABLE IF NOT EXISTS placements (
+				url TEXT PRIMARY KEY,
+				east DOUBLE PRECISION NOT NULL,
+				north DOUBLE PRECISION NOT NULL,
+				up DOUBLE PRECISION,
+				heading DOUBLE PRECISION NOT NULL,
+				updated_at BIGINT NOT NULL
+			);
+		`,
+	},
 ];

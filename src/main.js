@@ -5,6 +5,7 @@ import { enuToLocal, localToEnu, localToLatLon, yawToHeading } from './geo.js';
 import { addLights, createGoogleTiles, createPlaceholderGround } from './world.js';
 import { ModelManager } from './models.js';
 import { createPlacementPanel, toast } from './placement.js';
+import { useSavedPlacements } from './placements.js';
 import { loadLibrary } from './library.js';
 import { setUpLayout } from './layout.js';
 import { createSidebar } from './sidebar.js';
@@ -206,6 +207,8 @@ function start( apiKey, keySource ) {
 	// feature registers (laydown areas, excavations, stockpiles) wait until the features are set up.
 	const loadFromConfig = config => models.load( { ...config, inConfig: true } )
 		.catch( err => showBanner( `Could not load ${ config.name ?? config.url ?? config.kind }: ${ err.message }` ) );
+	// Moved to where they were last saved on the live site, if they were (placements.js).
+	useSavedPlacements( models );
 	const afterFeatures = MODELS.filter( config => config.kind && ! getKind( config.kind ) );
 	for ( const config of MODELS ) if ( ! afterFeatures.includes( config ) ) loadFromConfig( config );
 

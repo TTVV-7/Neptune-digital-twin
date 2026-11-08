@@ -51,6 +51,11 @@ and Secrets*, not in `wrangler.jsonc` (`keep_vars` keeps them across deploys). E
 takes effect at once. Until the two below are set, the site works without accounts: it asks each
 visitor for a Maps key (kept in their browser) and has no sign-in.
 
+A **Secret** named `PLACEMENT_KEY`, any passcode you like, lets models from `MODELS` be dragged
+into place on the live site and saved there for everyone (the P panel's **Save position for
+everyone** asks for it once per browser). It needs only the database, not sign-in. Change it to
+stop anyone who had the old one; without it, positions can't be saved.
+
 1. **Maps key.** A **Secret** named `GOOGLE_MAPS_API_KEY` holds the Maps key; it's never in the
    site's files. By default only signed-in people and share-link viewers get it from the Worker.
    The **Text** variable `MAPS_KEY_FOR` set to `everyone` hands it to every visitor instead, so
@@ -134,6 +139,8 @@ Tests (both run everything on your computer, with test keys standing in for Goog
 | `POST / DELETE /api/layouts/:id/share` | Share by link (returns `shareToken`; sharing again keeps the same link) / stop |
 | `GET /api/shared/:token` | Anyone with the link: `name, site, data, updatedAt, owner` (first name) |
 | `POST /api/stripe/webhook` | Stripe's webhook for premium, checked by its signature ([premium.md](premium.md)) |
+| `GET /api/placements` | Anyone: `{ placements: { <model url>: { east, north, up, heading, updatedAt } } }`, where models from `MODELS` were last saved. Needs only the database, not sign-in |
+| `PUT /api/placements` `{ url, east, north, up, heading }` | Save where a model from `MODELS` stands, for everyone. Needs the `X-Edit-Key` header to match the `PLACEMENT_KEY` secret (403 without it, or when it isn't set). The P panel's **Save position for everyone** sends it |
 
 `premium` is `{ enabled: false }` until Stripe is set up, then `{ enabled: true, link, price,
 unlocked, clientReferenceId? }`.

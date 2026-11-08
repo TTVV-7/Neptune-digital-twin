@@ -191,10 +191,14 @@ at grade, so snapping puts grade on Google's ground and the structure goes under
 level is left out, since it would flicker against Google's ground. Heading 0 points C31's grid
 numbers (0 to 69) east. It's compressed with meshopt (334 KB).
 
-It starts at the terminal centre, not yet lined up: in the **P** panel set *east*, *north* and
-*heading* (or **Move to where I am**) until the orange shell sits on Google's dumper building, then
-**Copy config** over its entry in `src/config.js`. To
-see inside, press **G** (ghost) and fly down through the ground into the gallery or tunnel.
+To line it up, click the orange shell and drag it onto Google's dumper building; turn it with the
+round handle (or **R**), and fine-tune in the **P** panel. Then **Save position for everyone** in
+the P panel: on the live site that keeps it there for every visitor, with no change to the code.
+It asks once for the edit passcode, the Worker's `PLACEMENT_KEY` secret; viewers without it can
+still move it, but only in their own browser. A saved position wins over the one in
+`src/config.js` (`GET` / `PUT /api/placements`, [docs/accounts.md](docs/accounts.md)).
+**Copy config** into `src/config.js` makes it the default for a new copy of the site too.
+To see inside, press **G** (ghost) and fly down through the ground into the gallery or tunnel.
 
 To bring in newer markups, save the artifact's `markups` collection (one JSON file per markup, or
 a `{ markups: [...] }` file) and rebuild; a folder is also saved as `scripts/data/b2d2-markups.json`:

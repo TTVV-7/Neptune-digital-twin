@@ -21,6 +21,7 @@ const PAYMENT_LINK = 'https://buy.stripe.com/test_00g5kE1aB2cD3eF4gH';
 const PAYMENT_LINK_ID = 'plink_1TestPremiumLink00000000';
 const WEBHOOK_SECRET = 'whsec_test_not_a_real_secret_0123456789';
 const PRICE = 'CA$19, one time';
+const PLACEMENT_KEY = 'test placement passcode';
 
 const TARGETS = {
 	d1: {
@@ -78,6 +79,7 @@ function apiTests( target ) {
 			STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET,
 			PREMIUM_PRICE: PRICE,
 			PREMIUM_EMAILS: 'dana@neptune.example',
+			PLACEMENT_KEY,
 		} );
 
 	} );
@@ -682,6 +684,40 @@ function apiTests( target ) {
 
 	} );
 
+	test( 'models\' positions: anyone reads them, only the passcode saves them', async () => {
+
+		const viewer = client();
+		const url = 'models/b2d2-repair.glb';
+		const spot = { url, east: 120.5, north: - 40.25, up: null, heading: 372.5 };
+		const save = ( body, key = PLACEMENT_KEY, init = {} ) => viewer.send( 'PUT', '/api/placements', { body, headers: key === null ? {} : { 'X-Edit-Key': key }, ...init } );
+
+		assert.deepEqual( ( await viewer.send( 'GET', '/api/placements' ) ).body, { placements: {} } );
+		assert.equal( ( await save( spot, null ) ).status, 403 );
+		assert.equal( ( await save( spot, 'not the passcode' ) ).status, 403 );
+		// Not from this site's pages, or not JSON: refused like any other change.
+		assert.equal( ( await save( spot, PLACEMENT_KEY, { origin: 'https://elsewhere.example' } ) ).status, 403 );
+
+		for ( const bad of [ { ...spot, url: '../secret.glb' }, { ...spot, url: 'models/../x.glb' }, { ...spot, url: 'https://x.example/m.glb' }, { ...spot, east: 1e9 }, { ...spot, north: 'far' }, { ...spot, up: 'high' }, { ...spot, heading: null } ] ) {
+
+			assert.equal( ( await save( bad ) ).status, 400, JSON.stringify( bad ) );
+
+		}
+
+		const saved = await save( spot, ` ${ PLACEMENT_KEY } ` );
+		assert.equal( saved.status, 200, JSON.stringify( saved.body ) );
+		assert.equal( saved.body.heading, 12.5 );
+		assert.equal( ( await save( { ...spot, east: 121, up: 3.25, heading: 90 } ) ).status, 200 );
+		assert.equal( ( await save( { url: 'models/other.glb', east: 0, north: 0, up: null, heading: 0 } ) ).status, 200 );
+
+		const { placements } = ( await client().send( 'GET', '/api/placements', { origin: null } ) ).body;
+		assert.deepEqual( Object.keys( placements ).sort(), [ url, 'models/other.glb' ] );
+		const { updatedAt, ...where } = placements[ url ];
+		assert.deepEqual( where, { east: 121, north: - 40.25, up: 3.25, heading: 90 } );
+		assert.ok( updatedAt > 0 );
+		assert.equal( placements[ 'models/other.glb' ].up, null );
+
+	} );
+
 	test( 'signing out ends the session on the server', async () => {
 
 		const cookie = alice.cookie;
@@ -818,6 +854,40 @@ function vercelTests() {
 		} finally {
 
 			await api.stop?.();
+
+		}
+
+	} );
+
+	test( 'models\' positions work with a database but no accounts; saving needs PLACEMENT_KEY set', async () => {
+
+		const json = key => ( { method: 'PUT', headers: { Origin: PUBLIC_ORIGIN, 'Content-Type': 'application/json', ...( key ? { 'X-Edit-Key': key } : {} ) }, body: JSON.stringify( { url: 'models/b2d2-repair.glb', east: 1, north: 2, up: null, heading: 3 } ) } );
+		const api = await startVercelApi( { origin: PUBLIC_ORIGIN, vars: { PLACEMENT_KEY } } );
+		try {
+
+			assert.deepEqual( await ( await api.fetch( '/api/config' ) ).json(), local );
+			assert.equal( ( await api.fetch( '/api/layouts' ) ).status, 503 );
+			assert.equal( ( await api.fetch( '/api/placements', json( PLACEMENT_KEY ) ) ).status, 200 );
+			const { placements } = await ( await api.fetch( '/api/placements' ) ).json();
+			assert.equal( placements[ 'models/b2d2-repair.glb' ].heading, 3 );
+
+		} finally {
+
+			await api.stop?.();
+
+		}
+
+		// No passcode set: nothing can be saved, whatever is sent.
+		const unset = await startVercelApi( { origin: PUBLIC_ORIGIN, vars: {} } );
+		try {
+
+			const res = await unset.fetch( '/api/placements', json( 'anything' ) );
+			assert.equal( res.status, 403 );
+			assert.deepEqual( await res.json(), { error: 'Saving positions isn\'t set up' } );
+
+		} finally {
+
+			await unset.stop?.();
 
 		}
 

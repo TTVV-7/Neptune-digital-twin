@@ -1,6 +1,7 @@
 import GUI from 'lil-gui';
 import { isTyping } from './walk.js';
 import { getKind } from './kinds.js';
+import { savePlacement } from './placements.js';
 
 // Common model units, as the scale that converts them to metres.
 const UNITS = { metres: 1, centimetres: 0.01, millimetres: 0.001, feet: 0.3048, inches: 0.0254 };
@@ -90,8 +91,15 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 				models.remove( entry );
 
 			},
+			async saveForEveryone() {
+
+				toast( await savePlacement( entry ) );
+
+			},
 		};
 		folder.add( actions, 'moveHere' ).name( 'Move to where I am' );
+		// A model from config.js: where it stands can be saved on the live site for everyone.
+		if ( entry.inConfig && entry.url ) folder.add( actions, 'saveForEveryone' ).name( 'Save position for everyone' );
 		folder.add( actions, 'copyConfig' ).name( 'Copy config' );
 		folder.add( actions, 'remove' ).name( 'Remove' );
 
