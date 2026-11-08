@@ -108,6 +108,37 @@
 	margin: 0 5px 0 3px;
 }
 
+#layers .xray {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 8px;
+	font-size: 12px;
+	color: var( --muted );
+}
+
+#layers .xray label {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+#layers .xray.on label {
+	color: var( --text );
+}
+
+#layers .xray .xray-amount {
+	flex: 1;
+	min-width: 50px;
+	accent-color: var( --accent );
+}
+
+#layers .xray .xray-amount:disabled {
+	opacity: 0.4;
+}
+
 #layers .note,
 #layers .empty {
 	margin: 8px 0 0;

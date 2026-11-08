@@ -102,6 +102,7 @@
 				<section>
 					<h3>Showing</h3>
 					<table>
+						<tr><td><kbd>U</kbd></td><td>See through the ground: Google's map see-through, to see models below grade (a gallery, a tunnel); the Show panel's slider says how see-through</td></tr>
 						<tr><td><kbd>B</kbd></td><td>Before / after: the site as Google captured it (nothing flattened, dug, piled or placed), or with your changes</td></tr>
 						<tr><td>Show panel</td><td>Above the Controls (the eye when folded): hide flatten areas, excavations, stockpiles, laydown areas, shoring, tieback no-dig zones, labels or a whole category such as Vehicles</td></tr>
 						<tr><td>Hide</td><td>On the selected item's toolbar: hide just that one. The Show panel lists it to show again</td></tr>
@@ -141,6 +142,10 @@
 					<kbd>B</kbd>
 				</div>
 				<p class="note before-note" hidden>The site as Google captured it, without anything you flattened, dug, piled or placed.</p>
+				<div class="xray" hidden>
+					<label title="Google's map drawn see-through, to see models below grade (U)"><input type="checkbox" class="xray-on"> See through the ground <kbd>U</kbd></label>
+					<input type="range" class="xray-amount" min="0.05" max="0.8" step="0.05" aria-label="How solid the ground is when seeing through it" title="How solid the ground is">
+				</div>
 				<div class="rows"></div>
 				<div class="hidden-items" hidden>
 					<header>

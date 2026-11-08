@@ -10,6 +10,7 @@ import { loadLibrary } from './library.js';
 import { setUpLayout } from './layout.js';
 import { createSidebar } from './sidebar.js';
 import { setUpFlattening } from './flatten.js';
+import { setUpXray } from './xray.js';
 import { createDriveHud, Driver } from './drive.js';
 import { isTyping, WalkController } from './walk.js';
 import { setUpEarthworks } from './earthworks.js';
@@ -200,6 +201,8 @@ function start( apiKey, keySource ) {
 	const feetPosition = () => camera.position.clone().setY( camera.position.y - PLAYER.eyeHeight );
 	const panel = createPlacementPanel( models, { getPlayerPosition: feetPosition } );
 	const flattening = setUpFlattening( { tiles, models } );
+	// See through the ground (U, the Show panel): for models below grade.
+	const xray = setUpXray( { tiles, renderer } );
 	models.originalHeight = ( x, z, detail ) => flattening.originalHeight( x, z, ground, detail );
 	const driver = new Driver( { camera, models, controls, getColliders: () => [ ...grounds, models.group ], hud: createDriveHud() } );
 
@@ -334,7 +337,7 @@ function start( apiKey, keySource ) {
 	// Handy for poking around from the browser console.
 	// startDriving( entry ) drives a placed vehicle or machine (what the selection's Drive button
 	// calls); with no entry it does what V does. isDrivable( entry ) says whether it can be driven.
-	window.twin = { scene, camera, renderer, controls, models, tiles, SITE, layout, driver, flattening, legend, get sidebar() {
+	window.twin = { scene, camera, renderer, controls, models, tiles, SITE, layout, driver, flattening, xray, legend, get sidebar() {
 
 		return sidebar;
 
