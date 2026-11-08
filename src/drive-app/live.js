@@ -126,6 +126,18 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 	// The keepalive, the minute back on the globe and the wait to try again run on a timer of their
 	// own, so they go on while frames don't (a tab in the background).
 	setInterval( tick, 1000 );
+	// A page out of sight (another tab or window in front, minimised, a phone's screen off) draws no
+	// frames, so update() stops and its car would be gone for the others STALE_MS later: as it
+	// hides, its car is parked where it is instead, standing still and paused, so it stays there for
+	// them ("paused" in their list) and is what a newcomer is sent. Its next frame, back in sight,
+	// says otherwise at once.
+	if ( typeof document !== 'undefined' ) document.addEventListener( 'visibilitychange', () => {
+
+		if ( document.visibilityState !== 'hidden' || ! latest ) return;
+		latest = parked( latest );
+		if ( players.size && spend() ) sendState();
+
+	} );
 
 	function emit( type, data ) {
 
@@ -423,6 +435,13 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 	// The car as it is now, to a room that has just had someone come after this page had it to itself
 	// (and so had sent none): they see it at once, wherever it's got to, even with no frames coming
 	// (a tab in the background). Not on the globe: that's no car.
+	// A state `s` as its car parked: where it is, still, paused, its wheels on the ground if they were.
+	function parked( s ) {
+
+		return [ ...s.slice( 0, 7 ), 0, 0, 0, FLAGS.paused | ( s[ 10 ] & FLAGS.grounded ) ];
+
+	}
+
 	function sendState() {
 
 		if ( ! latest || away || ! isLive() ) return;
