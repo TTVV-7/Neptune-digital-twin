@@ -657,23 +657,32 @@ describe( 'World Drive, driving with others', () => {
 			document.dispatchEvent( new Event( 'visibilitychange' ) );
 
 		} );
-		await b.waitForFunction( () => window.drive.ghosts.list()[ 0 ]?.paused, null, { timeout: 5000 } );
-		const before = ( await whereAll( b ) ).others[ 0 ].at;
-		await b.waitForTimeout( STALE_MS + 2000 );
-		const seen = ( await ghosts( b ) )[ 0 ];
-		assert.ok( seen?.visible && seen.paused, 'A\'s car went from B while A was out of sight' );
-		assert.ok( distance( before, ( await whereAll( b ) ).others[ 0 ].at ) < 0.05, 'a parked ghost moved' );
+		try {
 
-		// Back in sight: frames again, and driving on B at once.
-		await a.evaluate( () => {
+			// (Within a second or two: as soon as its budget for messages has room, if it hasn't just then.)
+			await b.waitForFunction( () => window.drive.ghosts.list()[ 0 ]?.paused, null, { timeout: 5000 } );
+			const before = ( await whereAll( b ) ).others[ 0 ].at;
+			await b.waitForTimeout( STALE_MS + 2000 );
+			const seen = ( await ghosts( b ) )[ 0 ];
+			assert.ok( seen?.visible && seen.paused, 'A\'s car went from B while A was out of sight' );
+			assert.ok( distance( before, ( await whereAll( b ) ).others[ 0 ].at ) < 0.05, 'a parked ghost moved' );
 
-			const { raf, held } = window.worldDriveHidden;
-			window.requestAnimationFrame = raf;
-			delete document.visibilityState;
-			document.dispatchEvent( new Event( 'visibilitychange' ) );
-			for ( const fn of held ) raf( fn );
+		} finally {
 
-		} );
+			// Back in sight: frames again.
+			await a.evaluate( () => {
+
+				const { raf, held } = window.worldDriveHidden;
+				window.requestAnimationFrame = raf;
+				delete document.visibilityState;
+				document.dispatchEvent( new Event( 'visibilitychange' ) );
+				for ( const fn of held ) raf( fn );
+
+			} );
+
+		}
+
+		// And driving on B at once.
 		await b.waitForFunction( () => window.drive.ghosts.list()[ 0 ] && ! window.drive.ghosts.list()[ 0 ].paused, null, { timeout: 5000 } );
 
 	} );
