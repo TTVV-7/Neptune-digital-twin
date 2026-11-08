@@ -199,12 +199,20 @@ If your model comes in back to front, try heading 180.
 
 `public/models/b2d2-repair.glb` is Dumper 2's below-grade structure (C31 gallery, transfer pit,
 C32 tunnel, the steel plates at grade) with the repair areas marked up in the **B2D2 Repair Model**
-artifact, as cyan patches with a dark outline, the dumper building as a see-through orange shell
+artifact, the dumper building as a see-through orange shell
 to line the model up against Google's copy of it, and the conveyors, tent and temporary works,
 also see-through. It's in `MODELS` with `recenter: false`: the model's origin is the middle of C31
 at grade, so snapping puts grade on Google's ground and the structure goes underground. Ground
 level is left out, since it would flicker against Google's ground. Heading 0 points C31's grid
-numbers (0 to 69) east. It's compressed with meshopt (334 KB).
+numbers (0 to 69) east. It's compressed with meshopt (about 1 MB).
+
+Areas marked **Chipped / hydro-demo** are drawn as they are on site: the area is cut out of the
+wall, floor or soffit it was marked on, and in its place is a recess of rough, fresh concrete about
+100 mm deep (a measured depth in the markup wins) with the rebar exposed in it: 15M bars both ways
+at 300 mm and 50 mm cover, running on into the concrete past the edge. These are typical numbers,
+not read from the drawings: `CHIP` at the top of the script sets them. The chipping is random but
+the same on every rebuild. Other areas (marked on site, not yet chipped) are cyan patches with a
+dark outline.
 
 To line it up, click the orange shell and drag it onto Google's dumper building; turn it with the
 round handle (or **R**), and fine-tune in the **P** panel. Then **Save position for everyone** in
@@ -224,8 +232,9 @@ a `{ markups: [...] }` file) and rebuild; a folder is also saved as `scripts/dat
 node scripts/b2d2-repair-model.mjs --markups path/to/markups
 ```
 
-Each patch's node keeps its grid, face, area, defect, status and notes in glTF `extras`.
-`--site site.json` (the artifact's site model) rebuilds the structure too.
+It's built from `source-models/b2d2-site-model.glb` (the artifact's model; `--site` takes another,
+or the artifact's `site.json`). Each area's node keeps its grid, face, area, defect, status and
+notes in glTF `extras`.
 
 ### Converting to .glb
 
