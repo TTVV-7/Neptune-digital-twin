@@ -6,6 +6,7 @@ import { addLights, createGoogleTiles, createPlaceholderGround } from './world.j
 import { ModelManager } from './models.js';
 import { createPlacementPanel, toast } from './placement.js';
 import { useSavedPlacements } from './placements.js';
+import { setUpUnderground } from './underground.js';
 import { loadLibrary } from './library.js';
 import { setUpLayout } from './layout.js';
 import { createSidebar } from './sidebar.js';
@@ -221,6 +222,7 @@ function start( apiKey, keySource ) {
 	let sidebar = null;
 	let driving = null;
 	let layers = null;
+	let underground = null;
 	libraryLoaded.then( async library => {
 
 		sidebar = createSidebar( {
@@ -275,6 +277,8 @@ function start( apiKey, keySource ) {
 			}
 
 		} ) );
+		// Under Google's ground in your own models: the mesh over them cut away (U, or by itself).
+		underground = setUpUnderground( features );
 		for ( const config of afterFeatures ) loadFromConfig( config );
 		return layout.restore();
 
@@ -289,7 +293,7 @@ function start( apiKey, keySource ) {
 
 	} );
 
-	const legend = createLegend( { controls, driver, models, getSidebar: () => sidebar, getDriving: () => driving, getLayers: () => layers, toggleHelp } );
+	const legend = createLegend( { controls, driver, models, getSidebar: () => sidebar, getDriving: () => driving, getLayers: () => layers, getUnderground: () => underground, toggleHelp } );
 	setUpZoom( { canvas: renderer.domElement, camera, controls, driver, getColliders: () => [ ...grounds, models.group ] } );
 
 	window.addEventListener( 'resize', () => {
@@ -324,7 +328,7 @@ function start( apiKey, keySource ) {
 			hudTimer = 0.25;
 			driving?.update();
 			legend.update();
-			updateStatus( camera, controls, tiles, driver, driving, layers );
+			updateStatus( camera, controls, tiles, driver, driving, layers, underground );
 			updateAttribution( tiles, models, mapEdits.some( edited => edited() ) );
 
 		}
@@ -342,11 +346,15 @@ function start( apiKey, keySource ) {
 
 		return layers;
 
+	}, get underground() {
+
+		return underground;
+
 	}, startDriving: async entry => driving ? driving.startDriving( entry ) : null, isDrivable: entry => !! driving?.isDrivable( entry ) };
 
 }
 
-function updateStatus( camera, controls, tiles, driver, driving, layers ) {
+function updateStatus( camera, controls, tiles, driver, driving, layers, underground ) {
 
 	const { lat, lon } = localToLatLon( camera.position );
 	const { east, north } = localToEnu( camera.position );
@@ -359,6 +367,8 @@ function updateStatus( camera, controls, tiles, driver, driving, layers ) {
 	];
 	if ( driving ) lines.push( driving.describe() );
 	if ( layers?.before ) lines.push( 'BEFORE: the site as Google captured it (B for after)' );
+	if ( underground?.on ) lines.push( 'UNDERGROUND: Google\'s ground cut away over your models (U)' );
+	else if ( underground?.active ) lines.push( 'Under the ground in your model: Google\'s ground cut away over it' );
 	if ( tiles && tiles.loadProgress < 1 ) lines.push( `loading tiles ${ Math.round( tiles.loadProgress * 100 ) }%` );
 
 	const status = $( 'status' );

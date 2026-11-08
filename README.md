@@ -77,6 +77,7 @@ things and switches between before and after (see [Showing and hiding](#showing-
 | E / Q | Up / down (fly); C also goes down |
 | Wheel | Zoom toward the point under the cursor, or away from it; Shift for bigger steps. A trackpad's pinch zooms too |
 | G | Ghost: walk and fly through walls and buildings, to look inside; G again to bump into them |
+| U | See underground: Google's ground cut away over your own models, to look and walk down into them; U again to put it back (see [Models under the ground](#models-under-the-ground)) |
 | T | Turn the view along walls you run into: on / off |
 
 | Looking | |
@@ -173,6 +174,20 @@ building; the status top left says when it's on.
 4. Click **Copy config**, copy the file into `public/models/`, and paste the entry into `MODELS` in
    [src/config.js](src/config.js). It will now load every time.
 
+### Models under the ground
+
+Part of a model can lie below Google's ground: a tunnel, a basement, a pit. Google's mesh is a
+surface, so from inside the model it would show through the floor and walls and stop you walking.
+While you're inside one of your own models (dropped in or in `MODELS`; not library items or
+earthworks) and below Google's ground there, Google's mesh is cut away over the model's footprint:
+not drawn, and you walk and fly through where it was. The status readout says so. Above the
+ground again, it comes back.
+
+To get in, fly (**F**) with ghost on (**G**) down through the ground into the model, then **F** to
+walk inside it. **U** (see underground) cuts Google's ground away over all your models wherever you
+are, to look down into them from above, or to walk in through an opening. Snapping a model to the
+ground still uses Google's ground as it is, so cutting it away doesn't move the model.
+
 By default the model is recentred, so *east/north* is the middle of its footprint and *up* is its base.
 That stops CAD files with real-world coordinates (UTM eastings in the hundreds of thousands) from
 landing kilometres away. Add `recenter: false` to an entry to keep the file's own origin.
@@ -198,7 +213,9 @@ It asks once for the edit passcode, the Worker's `PLACEMENT_KEY` secret; viewers
 still move it, but only in their own browser. A saved position wins over the one in
 `src/config.js` (`GET` / `PUT /api/placements`, [docs/accounts.md](docs/accounts.md)).
 **Copy config** into `src/config.js` makes it the default for a new copy of the site too.
-To see inside, press **G** (ghost) and fly down through the ground into the gallery or tunnel.
+To see inside, press **U** to cut Google's ground away over it, or press **G** (ghost) and fly down
+through the ground into the gallery or tunnel, then **F** to walk; Google's ground stays cut away
+while you're under it there ([Models under the ground](#models-under-the-ground)).
 
 To bring in newer markups, save the artifact's `markups` collection (one JSON file per markup, or
 a `{ markups: [...] }` file) and rebuild; a folder is also saved as `scripts/data/b2d2-markups.json`:
@@ -629,6 +646,8 @@ src/main.js         sets everything up and runs the render loop
 src/world.js        Google tiles, lights, the flat stand-in ground
 src/walk.js         walk/fly controller with gravity, collisions, bounces, the view turn and the zoom's glide
 src/zoom.js         the mouse wheel and trackpad pinch: zoom toward the cursor, chase camera distance
+src/underground.js  under Google's ground in your own models: the mesh over them cut away (U, or by itself)
+src/placements.js   models' positions saved on the live site for everyone (Save position for everyone)
 src/legend.js       the Controls panel: the keys for what you're doing now
 src/layers.js       the Show panel: layers, hidden items and Before / After (B)
 src/drive-prompt.js V: what it drives, the "Press V to drive" prompt and twin.startDriving()

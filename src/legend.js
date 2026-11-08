@@ -50,7 +50,7 @@ const EXCAVATOR = [
 // controls, driver, models: the walk controller, race mode and what's placed. getSidebar: the
 // library sidebar, once loaded. getDriving: what V does (drive-prompt.js), once loaded.
 // getLayers: the Show panel, once loaded. toggleHelp: shows or hides the full help.
-export function createLegend( { controls, driver, models, getSidebar, getDriving, getLayers, toggleHelp } ) {
+export function createLegend( { controls, driver, models, getSidebar, getDriving, getLayers, getUnderground, toggleHelp } ) {
 
 	const root = document.getElementById( 'legend' );
 	const openButton = root.querySelector( '.legend-open' );
@@ -139,6 +139,15 @@ export function createLegend( { controls, driver, models, getSidebar, getDriving
 
 	}
 
+	// Only with Google's tiles, where there's ground to be under.
+	function undergroundRows() {
+
+		const underground = getUnderground?.();
+		if ( ! underground ) return [];
+		return [ [ [ 'U' ], underground.on ? 'Underground is on: U puts Google\'s ground back' : 'See underground: into your own models' ] ];
+
+	}
+
 	function walkRows() {
 
 		return { title: 'Walking', rows: [
@@ -149,6 +158,7 @@ export function createLegend( { controls, driver, models, getSidebar, getDriving
 			...zoom,
 			driveRow(),
 			beforeRow(),
+			...undergroundRows(),
 			[ [ 'L' ], 'Library: place equipment' ],
 		] };
 
@@ -165,6 +175,7 @@ export function createLegend( { controls, driver, models, getSidebar, getDriving
 			[ [ 'G' ], controls.ghost ? 'Ghost is on: G to bump into walls' : 'Ghost: fly through walls' ],
 			driveRow(),
 			beforeRow(),
+			...undergroundRows(),
 			[ [ 'L' ], 'Library: place equipment' ],
 		] };
 

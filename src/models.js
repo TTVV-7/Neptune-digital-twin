@@ -261,8 +261,25 @@ export class ModelManager extends EventDispatcher {
 
 	// The ground height snapping puts the model on, or null where there's no ground yet. With
 	// `detail`, detail.error is how coarse the coarsest ground it read was, for kinds that snap to
-	// the ground as Google made it (see flatten.js), and 0 for the rest.
+	// the ground as Google made it (see flatten.js), and 0 for the rest. `snapping` is true
+	// meanwhile, for hit filters that should let it see the ground as it is (underground.js cuts
+	// Google's mesh away over your models, but not for snapping).
 	groundHeight( entry, detail = null ) {
+
+		this.snapping = true;
+		try {
+
+			return this.readGround( entry, detail );
+
+		} finally {
+
+			this.snapping = false;
+
+		}
+
+	}
+
+	readGround( entry, detail ) {
 
 		const { pivot, state, footprint } = entry;
 		const mode = getKind( entry.kind )?.snap ?? 'median';
