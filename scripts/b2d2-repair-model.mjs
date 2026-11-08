@@ -27,8 +27,9 @@ import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { Document, NodeIO } from '@gltf-transform/core';
-import { KHRMaterialsUnlit } from '@gltf-transform/extensions';
-import { prune } from '@gltf-transform/functions';
+import { ALL_EXTENSIONS, KHRMaterialsUnlit } from '@gltf-transform/extensions';
+import { meshopt, prune } from '@gltf-transform/functions';
+import { MeshoptDecoder, MeshoptEncoder } from 'meshoptimizer';
 import { ShapeUtils, Vector2, Vector3 } from 'three';
 
 const ROOT = new URL( '../', import.meta.url );
@@ -41,14 +42,16 @@ const { values: opts } = parseArgs( { options: {
 // Artifact frame -> model frame: subtract this point.
 const ORIGIN = [ 34.5, 5.1, - 4 ];
 // The structure layers kept. The dumper building is a see-through orange shell, for lining the
-// model up against Google's copy of the building. Ground and the conveyors/tent are left out:
-// Google's mesh already shows what's at grade, and a second copy would flicker against it.
+// model up against Google's copy of the building, and the conveyors, tent and temporary works are
+// see-through too, so they don't flicker against Google's copy where they meet it. Ground level is
+// left out: it would lie right on Google's ground and flicker against it.
 const STRUCTURE = {
 	c31: { name: 'C31 gallery', color: '#b9c0c8' },
 	pit: { name: 'Transfer pit', color: '#9fb0c2' },
 	c32: { name: 'C32 tunnel', color: '#c9c4b8' },
 	steel: { name: 'Steel plates at grade', color: '#c9cfd5', metal: true },
 	building: { name: 'Dumper building (for lining up)', color: '#ff8a1f', alpha: 0.35 },
+	equip: { name: 'Conveyors, tent & temporary works', color: '#7f8fa3', alpha: 0.6 },
 };
 const AREA_COLOR = '#0e8fa8'; // the artifact's repair-area colour
 const EDGE_COLOR = '#06414d';
@@ -126,7 +129,11 @@ const zoneName = z => ( { c31: 'C31 gallery', c32: 'C32 tunnel', pit: 'Transfer 
 
 // ---------- Build ----------
 
-const io = new NodeIO().registerExtensions( [ KHRMaterialsUnlit ] );
+await MeshoptDecoder.ready;
+await MeshoptEncoder.ready;
+const io = new NodeIO()
+	.registerExtensions( ALL_EXTENSIONS )
+	.registerDependencies( { 'meshopt.decoder': MeshoptDecoder, 'meshopt.encoder': MeshoptEncoder } );
 let doc;
 
 if ( opts.site ) {
@@ -229,6 +236,8 @@ for ( const m of markups ) {
 
 }
 
+// Compressed (the conveyors are most of it); the twin's loader has the meshopt decoder.
+await doc.transform( meshopt( { encoder: MeshoptEncoder, level: 'medium' } ) );
 await io.write( opts.out, doc );
 const size = ( await stat( opts.out ) ).size;
 console.log( `Wrote ${ opts.out }: ${ markups.length } repair areas, ${ total.toFixed( 2 ) } m², ${ ( size / 1024 ).toFixed( 0 ) } KB` );
