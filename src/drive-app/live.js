@@ -135,7 +135,7 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 	if ( typeof document !== 'undefined' ) document.addEventListener( 'visibilitychange', () => {
 
 		if ( document.visibilityState !== 'hidden' || ! latest ) return;
-		latest = parked( latest );
+		latest = parked( latest ) ?? latest;
 		parking = true;
 		park();
 
@@ -456,6 +456,7 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 	// A state `s` as its car parked: where it is, still, paused, its wheels on the ground if they were.
 	function parked( s ) {
 
+		if ( s.length !== 11 ) return null;
 		return [ ...s.slice( 0, 7 ), 0, 0, 0, FLAGS.paused | ( s[ 10 ] & FLAGS.grounded ) ];
 
 	}
@@ -715,7 +716,10 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 		update( car ) {
 
 			if ( ended ) return;
-			const s = car ? stateOf( car ) : null;
+			// Out of sight, a frame the browser still draws (one already asked for, or the slow ones
+			// some keep drawing) says parked too, as the page did as it hid.
+			const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+			const s = car ? ( hidden ? parked( stateOf( car ) ?? [] ) : stateOf( car ) ) : null;
 			latest = s;
 			if ( ! s ) return;
 			const now = performance.now();
