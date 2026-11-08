@@ -85,7 +85,8 @@
 		// Each player's reports of what they drove, for their XP (worker/drive/progress.js), and title
 		// changes: at most 10 a minute (a page reports every couple of minutes). On the rate limiter
 		// rather than DriveLimits, so levels cost no Durable Object request at all.
-		{ "name": "PROGRESS_POSTS", "namespace_id": "4802", "simple": { "limit": 10, "period": 60 } }
+		{ "name": "PROGRESS_POSTS", "namespace_id": "4802", "simple": { "limit": 10, "period": 60 } },
+		{ "name": "STATS_POSTS", "namespace_id": "4803", "simple": { "limit": 6, "period": 60 } }
 	],
 	"migrations": [
 		{ "tag": "v1", "new_sqlite_classes": [ "DriveLimits" ] },

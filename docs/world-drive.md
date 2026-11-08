@@ -736,8 +736,11 @@ always was.
   hovercraft's spray show for the nearest 6 within
   300 m, and their wheels turn. A name tag hangs over each (hidden beyond 400 m), with a 📣 when they
   honk and "+1,234" when they land a trick. A car within 8 m of yours or of the camera turns
-  see-through, so it never blocks the view. A paused driver's car stays parked where it stopped; a
-  driver back on the globe disappears, and so does a car with no word of it for 15 s. At most the
+  see-through, so it never blocks the view. A paused driver's car stays parked where it stopped, and
+  so does the car of a driver whose page goes out of sight (another tab or window in front of it,
+  minimised, or a phone's screen off: the browser stops drawing it, so it sends nothing more, and as
+  it hides it says it's parked, "paused" in the list); a driver back on the globe disappears, and so
+  does a car with no word of it for 15 s. At most the
   12 nearest are drawn. A new ride or paint shows once it has held for a second (and no more than
   once every 5 s for each car), swapped in when it's ready, so someone clicking through colours in
   the Garage (or changing ride twenty times a second on purpose) costs the others one build; a model
@@ -2213,6 +2216,55 @@ A removed player's browser is asked for a new name the next time it posts. There
 ban; a determined nuisance is limited by the visit caps, and an address can be blocked with a
 Cloudflare WAF rule if it comes to that.
 
+## Play stats
+
+The owner's page of how World Drive is played: **`https://worlddrive.app/admin.html`**, for a Google
+account in `ADMIN_EMAILS`, signed in on worlddrive.app (the globe's panel). It shows, for the last 7,
+30 or 90 days or the year:
+
+- **Visits** (each Maps key handed out, counted by the Worker as `/api/visit` answers) a day, and by
+  hour of the day (counted in UTC hours, shown in the viewer's time).
+- **Play time**: seconds driven, not paused, by ride, a day; per visit; and how much of it was with
+  others in the room.
+- **Drop-ins**: where (each start spot, or "elsewhere" for a search or a pin: never where), and in
+  which ride.
+- **The Garage**: how often it's opened, and each change made in it, by part (colour, finish, decal,
+  rims, boost, flame, trail, smoke).
+- **Where people come from** (the referring site's host name, or direct), and **load time** (from
+  asking for the page to the globe showing: in buckets, and the mean).
+- **Parties** made (Invite friends) and joined (a party's link).
+
+Referrers, countries, browsers and page speed in more detail are Cloudflare Web Analytics', in
+Cloudflare's dashboard (Analytics & Logs → Web Analytics), from its beacon in `drive/index.html`.
+
+**No cookie, so no consent banner.** Only counts a day are kept: no id of the visitor, their
+player or their browser, no address, nothing stored in the browser for it, and nothing that follows
+anyone from one visit to the next. A drop-in somewhere other than a start spot is "other", since a
+search can be someone's own street.
+
+**How it works.** The page (`src/drive-app/stats.js`) adds up what it counts and posts it to `POST
+/api/stats` with the visit's token, every 3 minutes and as the page goes out of sight or closes
+(`keepalive`), keeping the fractions of a second for the next post and a post that didn't go for
+the next try; a 403 (the visit run out) stops it for the visit. It counts nothing without a visit's
+token (the test pad, the dev server alone). The Worker (`worker/drive/stats.js`) takes only what
+`src/drive-app/stats-protocol.js` (which both share) says may be counted, each metric's keys checked
+(a ride, a start spot, a Garage part...) and held to what one post may add (600 s of play, one load,
+20 drop-ins...), only with a good visit token and at most `STATS_POSTS` posts a minute a visit, so
+a script can't add more than a few visits' worth; then one upsert a row into D1's `stats_daily`
+(day, metric, key, n). `GET /api/admin/stats?days=30` answers the rows for those days, to an account
+in `ADMIN_EMAILS` (401 signed out, 403 anyone else), and deletes rows older than 400 days. The page
+draws them with no library and nothing loaded from elsewhere, and `noindex`.
+
+**What it costs.** D1 only: a visit is a row or two written as it starts, and a few rows each 3
+minutes it plays (an hour's drive about 60 rows); the admin page reads a few hundred rows a day
+shown. Well within the Free plan's 100,000 rows written and 5 million read a day at the visit caps.
+
+**The owner's steps.** Deploy (`npm run deploy:drive` applies `0004_stats.sql` first), then set
+`ADMIN_EMAILS` to your Google account's email (dashboard: Workers & Pages → world-drive → Settings →
+Variables and Secrets, as a secret; or `npx wrangler secret put ADMIN_EMAILS -c
+wrangler.drive.jsonc`), sign in on worlddrive.app, and open `/admin.html`. Counts start from that
+deploy: there's nothing from before it.
+
 ## Settings
 
 In `wrangler.drive.jsonc` (`vars`, set on every deploy; change them there, not in the dashboard):
@@ -2238,6 +2290,7 @@ Settings → Variables and Secrets, or `npx wrangler secret put NAME -c wrangler
 | `TURNSTILE_SECRET` | The Turnstile widget's secret key |
 | `STRIPE_WEBHOOK_SECRET` | The Supporter Pass webhook's signing secret, `whsec_...`; buying stays off without it |
 | `SUPPORTER_EMAILS` | Optional, comma-separated: people with the pass without paying |
+| `ADMIN_EMAILS` | Comma-separated: the Google accounts that may see [the play stats](#play-stats) at `/admin.html` |
 
 `keep_vars` is on, so anything set in the dashboard that isn't in `vars` survives a deploy. A few
 more aren't in `vars` and needn't be set; add them in the dashboard (plain text) to change them:
@@ -2249,13 +2302,15 @@ more aren't in `vars` and needn't be set; add them in the dashboard (plain text)
 | `SUPPORTER_PAYMENT_LINK_ID` | none | The Payment Link's `plink_...` id: only its checkouts are a Supporter Pass |
 | `LIVE_PARTY_MAX`, `LIVE_NEARBY_MAX` | 8, 20 | The most in a party, and in each of an area's rooms |
 
-Two rate limiters are `ratelimits` in `wrangler.drive.jsonc` (Cloudflare's, which cost no Durable
-Object request): `LIVE_CONNECTS` (each visit's connections to rooms, 20 a minute) and
-`PROGRESS_POSTS` (each player's [level](#levels) reports and title changes, 10 a minute).
+Three rate limiters are `ratelimits` in `wrangler.drive.jsonc` (Cloudflare's, which cost no Durable
+Object request): `LIVE_CONNECTS` (each visit's connections to rooms, 20 a minute),
+`PROGRESS_POSTS` (each player's [level](#levels) reports and title changes, 10 a minute) and
+`STATS_POSTS` (each visit's posts of [play stats](#play-stats), 6 a minute).
 
 The leaderboard's, levels' and the Supporter Pass's database is the `DB` binding in
 `wrangler.drive.jsonc` (D1 **world-drive**, already made); its tables are `worker/drive/migrations`
-(`0003_levels.sql` levels': XP and the rest on `players`, and `discoveries`).
+(`0003_levels.sql` levels': XP and the rest on `players`, and `discoveries`; `0004_stats.sql` the
+[play stats'](#play-stats) `stats_daily`).
 
 ## Deploying
 

@@ -9,6 +9,7 @@ import { makeVisit } from './visits.js';
 import { currentAccount, getMe, linkPlayer, signIn, signOut } from './accounts.js';
 import { isSupporter, stripeWebhook } from './supporter.js';
 import { live, liveToday, online } from './live.js';
+import { adminStats, countVisit, postStats } from './stats.js';
 import { BUDGET_SPENT } from '../../src/drive-app/live-protocol.js';
 
 export { DriveLimits } from './limits.js';
@@ -45,6 +46,9 @@ export { DriveRoom } from './live.js';
 //   LIVE_PARTY_MAX, LIVE_NEARBY_MAX   the most in a party (8 if unset) and in an area's room (20)
 //   LIVE_VISIT_CONNECTS   the most connections to rooms a visit makes in a day (200 if unset)
 //   ROOMS                 the Durable Object binding for the rooms (DriveRoom, live.js)
+//   ADMIN_EMAILS          secret or var, comma-separated: the Google accounts that may see the play
+//                         stats (GET /api/admin/stats, the page at /admin.html; see stats.js)
+//   STATS_POSTS           the rate limiter binding for each visit's posts of play stats (stats.js)
 //   LIVE_CONNECTS         the rate limiter binding for each visit's connections to rooms (live.js)
 //   PROGRESS_POSTS        the rate limiter binding for each player's reports of what they drove
 //                         (progress.js)
@@ -72,6 +76,8 @@ const ROUTES = [
 	{ method: 'GET', path: '/api/me', handler: getMe },
 	{ method: 'GET', path: '/api/live', handler: live },
 	{ method: 'GET', path: '/api/online', handler: online },
+	{ method: 'POST', path: '/api/stats', handler: postStats },
+	{ method: 'GET', path: '/api/admin/stats', handler: adminStats },
 	{ method: 'POST', path: '/api/stripe/webhook', handler: stripeWebhook, sameOrigin: false },
 ];
 
@@ -145,7 +151,7 @@ async function getConfig( { env, limits, now } ) {
 // scores (visits.js). Over a cap: 429 with retryAfter, the seconds until midnight UTC, when the
 // counts start again. A supporter signed in here is counted by their account, with a cap of their
 // own; everyone else by their address.
-async function visit( { request, env, url, limits, now } ) {
+async function visit( { request, env, url, ctx, limits, now } ) {
 
 	const body = await readJson( request, 8192 );
 	const token = isObject( body ) && typeof body.token === 'string' ? body.token : '';
@@ -174,6 +180,8 @@ async function visit( { request, env, url, limits, now } ) {
 
 	}
 
+	// Counted for the admin page's stats (stats.js), without holding up the answer.
+	ctx?.waitUntil?.( countVisit( env, now ) );
 	return json( { mapsKey: key, left: outcome.left, visit: await makeVisit( env, now ) } );
 
 }

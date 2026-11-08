@@ -18,8 +18,9 @@ const HEAR_RANGE = 150;
 const NEARBY_TOASTS = 10000;
 
 // live, ghosts: live.js's and ghosts.js's; vehicles: loadVehicles()', for the rides' names; mode():
-// main.js's mode; goTo( pid ): drive to where that driver is (next to them, or dropping in there).
-export function setUpFriends( { live, ghosts, vehicles, mode, goTo } ) {
+// main.js's mode; goTo( pid ): drive to where that driver is (next to them, or dropping in there);
+// onInvite(): Invite friends made a party (for the play stats).
+export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = () => {} } ) {
 
 	const $ = id => document.getElementById( id );
 	const driveUi = $( 'drive-ui' );
@@ -312,7 +313,7 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo } ) {
 	function makeArea( root, inPause ) {
 
 		const title = Object.assign( document.createElement( inPause ? 'h3' : 'h2' ), { textContent: 'Drive with friends' } );
-		const invite = button( 'Invite friends', 'invite', () => live.invite() );
+		const invite = button( 'Invite friends', 'invite', () => live.invite() && onInvite() );
 		const party = Object.assign( document.createElement( 'div' ), { className: 'party' } );
 		const code = Object.assign( document.createElement( 'p' ), { className: 'code' } );
 		const link = Object.assign( document.createElement( 'input' ), { className: 'link-text', readOnly: true, type: 'text' } );
