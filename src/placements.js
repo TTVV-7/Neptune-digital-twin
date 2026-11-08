@@ -3,6 +3,8 @@
 // asks for the edit passcode once (kept in this browser). Without the API (npm run dev, a static
 // host) nothing is saved and models stand where config.js puts them.
 
+import { loadConfig } from './cloud.js';
+
 const API = new URL( 'api/placements', document.baseURI );
 const KEY_STORE = 'twin.placementKey';
 const TIMEOUT = 8000;
@@ -34,6 +36,8 @@ export function useSavedPlacements( models ) {
 
 async function fetchPlacements() {
 
+	// No server (cloud.js asked already): nothing saved, and no request that can only fail.
+	if ( ! await loadConfig() ) return {};
 	try {
 
 		const res = await fetch( API, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout( TIMEOUT ) } );

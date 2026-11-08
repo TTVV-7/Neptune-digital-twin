@@ -244,8 +244,10 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 	models.addEventListener( 'add', ( { entry } ) => {
 
 		addEntry( entry );
-		// Your own dropped models usually need lining up; library items are placed with the mouse.
-		if ( ! entry.library ) focus( entry );
+		// Your own dropped models usually need lining up; library items are placed with the mouse,
+		// and models from MODELS in config.js are placed already (clicking one opens the panel), so
+		// the panel doesn't open by itself for everyone who visits.
+		if ( ! entry.library && ! entry.inConfig ) focus( entry );
 
 	} );
 	models.addEventListener( 'change', ( { entry } ) => refresh( entry ) );

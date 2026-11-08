@@ -1135,6 +1135,16 @@ export class Terrain extends EventDispatcher {
 
 	}
 
+	// The chunk that eases node (i, j)'s ground toward new samples when no chunk owns it (it's on
+	// the far edge of the earthworks): the first of those keeping a copy, in forCopies' order.
+	easer( i, j ) {
+
+		let first = null;
+		this.forCopies( i, j, chunk => first ??= chunk );
+		return first;
+
+	}
+
 	// Every stored copy of node (i, j): fn( chunk, k ).
 	forCopies( i, j, fn ) {
 
@@ -1298,6 +1308,14 @@ export class Terrain extends EventDispatcher {
 		for ( const chunk of this.chunks.values() ) {
 
 			if ( ! chunk.ready || chunk.sampledLoads === this.tileLoads ) continue;
+			// Waiting for its quick look, or part way through it: left to finish rather than started
+			// again. Tiles go on loading all the while the map streams in, so starting over every
+			// time any did meant a chunk (with a few earthworks, all of them) never got through its
+			// quick look, and kept the ground from the coarse tiles that load first, metres or even
+			// hundreds of metres out, for good: pits dug from it, piles sat on it. Tiles that load
+			// meanwhile are in the nodes it reads after them, and it's checked again next time. A
+			// chunk part way through its full read starts over, with a quick look at the sharper tiles.
+			if ( this.sampling.includes( chunk ) && ( ! chunk.fine || chunk.fine.next < LOOK ) ) continue;
 			chunk.sampledLoads = this.tileLoads;
 			if ( ! this.sharper( chunk ) ) continue;
 			chunk.fine = null;
@@ -1335,13 +1353,33 @@ export class Terrain extends EventDispatcher {
 			if ( ! blend ) continue;
 			blend.t = Math.min( 1, blend.t + dt / BLEND_TIME );
 			const t = blend.t * blend.t * ( 3 - 2 * blend.t );
-			// Only the nodes this chunk owns; its edge copies come from their owners.
-			for ( let lj = 0; lj < CELLS; lj ++ ) {
+			// The nodes this chunk owns; its edge copies come from their owners. A node on its far
+			// edges with no chunk there to own it is eased by one of the chunks that keep a copy
+			// (easer()), which writes it to all of them: otherwise it kept the ground it was first
+			// read with, from the coarse tiles that load first (hundreds of metres out).
+			for ( let lj = 0; lj <= CELLS; lj ++ ) {
 
-				for ( let li = 0; li < CELLS; li ++ ) {
+				for ( let li = 0; li <= CELLS; li ++ ) {
 
 					const k = lj * NODES + li;
-					chunk.h0[ k ] = blend.from[ k ] + ( blend.to[ k ] - blend.from[ k ] ) * t;
+					const value = blend.from[ k ] + ( blend.to[ k ] - blend.from[ k ] ) * t;
+					if ( li < CELLS && lj < CELLS ) {
+
+						chunk.h0[ k ] = value;
+						continue;
+
+					}
+
+					const i = chunk.i0 + li;
+					const j = chunk.j0 + lj;
+					if ( this.owner( i, j ) || this.easer( i, j ) !== chunk ) continue;
+					const err = chunk.err[ k ];
+					this.forCopies( i, j, ( copy, kk ) => {
+
+						copy.h0[ kk ] = value;
+						copy.err[ kk ] = err;
+
+					} );
 
 				}
 

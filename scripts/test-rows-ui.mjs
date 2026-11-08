@@ -15,7 +15,7 @@ import { mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { after, before, beforeEach, test } from 'node:test';
-import { startVite } from './worker-harness.mjs';
+import { dropProjectModels, startVite } from './worker-harness.mjs';
 
 const require = createRequire( import.meta.url );
 const PORT = Number( process.env.TEST_VITE_PORT ) || 5196;
@@ -105,6 +105,7 @@ async function openApp( p, clear = false ) {
 	if ( clear ) await p.evaluate( () => localStorage.clear() );
 	await p.click( '#skip' );
 	await p.waitForFunction( () => window.twin?.sidebar && window.twin.rows && ! window.twin.layout.loading, null, { timeout: 120000 } );
+	await dropProjectModels( p );
 	await p.addStyleTag( { content: '#banner { display: none !important; }' } );
 
 }

@@ -14,7 +14,7 @@ import { mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
-import { CLIENT_ID, GOOGLE_STUB, makeKey, makeToken, serveKeys, startVite, startWorker, stripeSignature } from './worker-harness.mjs';
+import { CLIENT_ID, GOOGLE_STUB, dropProjectModels, makeKey, makeToken, serveKeys, startVite, startWorker, stripeSignature } from './worker-harness.mjs';
 
 const require = createRequire( import.meta.url );
 const VITE_PORT = Number( process.env.TEST_VITE_PORT ) || 5198;
@@ -276,6 +276,7 @@ async function openApp( target, url = `${ BASE }/?prompt` ) {
 	await target.goto( url );
 	await target.locator( '#skip' ).click();
 	await target.waitForFunction( () => window.twin?.sidebar, null, { timeout: 60000 } );
+	await dropProjectModels( target );
 	await target.waitForTimeout( 500 );
 
 }

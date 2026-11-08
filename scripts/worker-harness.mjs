@@ -293,3 +293,21 @@ function freePort() {
 	} );
 
 }
+
+// Takes the project's own models (MODELS in src/config.js, such as the B2D2 repair model at the
+// terminal centre) out of a test page once they've loaded, so tests that count, walk into or
+// save what's placed see only what they placed themselves, whatever the project keeps there.
+export async function dropProjectModels( page ) {
+
+	await page.evaluate( async () => {
+
+		const { MODELS } = await import( '/src/config.js' );
+		const { models } = window.twin;
+		const fromConfig = () => models.entries.filter( entry => entry.inConfig );
+		const end = performance.now() + 20000;
+		while ( fromConfig().length < MODELS.length && performance.now() < end ) await new Promise( resolve => setTimeout( resolve, 50 ) );
+		for ( const entry of fromConfig() ) models.remove( entry );
+
+	} );
+
+}

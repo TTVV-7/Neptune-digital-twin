@@ -13,7 +13,7 @@ import { mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
-import { startVite } from './worker-harness.mjs';
+import { dropProjectModels, startVite } from './worker-harness.mjs';
 
 const require = createRequire( import.meta.url );
 const PORT = Number( process.env.TEST_VITE_PORT ) || 5198;
@@ -144,6 +144,7 @@ async function openApp() {
 	await page.goto( `${ base }/?prompt` );
 	await page.click( '#skip' );
 	await page.waitForFunction( () => window.twin?.sidebar && window.twin.layout );
+	await dropProjectModels( page );
 
 }
 

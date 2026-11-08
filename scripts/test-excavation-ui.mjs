@@ -929,3 +929,62 @@ test( 'a new pit saved and reloaded: its params, stage and ground as they were',
 	assert.deepEqual( errors, [] );
 
 } );
+
+test( 'with the map still streaming in, the ground under earthworks comes from the sharp tiles, to their edges', async () => {
+
+	// The real ground code against a made-up map: at first only the coarse tile that loads first
+	// (the ground 1490 m up, as Google's first tile has it here), then sharp ones (the ground at 0),
+	// with tiles going on loading all the while and each read slow, as raycasting Google's mesh is.
+	// Reads restarting whenever a tile loaded used to keep a chunk from ever getting through its
+	// quick look; and nodes on the far edges of the earthworks, which no chunk owns, kept the coarse
+	// ground for good.
+	await openApp();
+	const result = await page.evaluate( async () => {
+
+		const { Terrain } = await import( '/src/terrain.js' );
+		const { models, camera } = window.twin;
+		const Dispatcher = Object.getPrototypeOf( models.constructor );
+		const tiles = new Dispatcher();
+		let sharp = false;
+		const flattening = {
+			originalHeight( x, z, ground, detail ) {
+
+				const t0 = performance.now();
+				while ( performance.now() - t0 < 0.4 );
+				if ( detail ) detail.error = sharp ? 2 : 32872;
+				return sharp ? 0 : 1490;
+
+			},
+		};
+		const terrain = new Terrain( { tiles, ground: null, models: Object.assign( new Dispatcher(), { entries: [] } ), flattening, getGround: () => [], camera } );
+		// Four pits in chunks of their own, each 3 m deep in a 10 m square.
+		for ( const [ x, z ] of [ [ 5, 5 ], [ 45, 5 ], [ 5, 45 ], [ 85, 85 ] ] ) {
+
+			terrain.setDesign( `pit ${ x },${ z }`, { type: 'cut', top: 1, order: () => 0, bounds: () => ( { minX: x - 5, maxX: x + 5, minZ: z - 5, maxZ: z + 5 } ), height: () => - 3 } );
+
+		}
+
+		const worst = () => {
+
+			let high = 0;
+			for ( const chunk of terrain.chunks.values() ) for ( const h of chunk.h0 ) high = Math.max( high, Math.abs( h ) );
+			return high;
+
+		};
+		let step = 0;
+		for ( ; step < 900; step ++ ) {
+
+			sharp = step >= 5;
+			tiles.dispatchEvent( { type: 'load-model' } );
+			terrain.update( 0.1 );
+			if ( sharp && worst() < 0.01 ) break;
+
+		}
+
+		return { chunks: terrain.chunks.size, seconds: step / 10, worst: worst() };
+
+	} );
+	console.log( `ground under ${ result.chunks } chunks sharp after ${ result.seconds } s of streaming` );
+	assert.ok( result.worst < 0.01, `ground still ${ result.worst.toFixed( 1 ) } m off after ${ result.seconds } s: ${ JSON.stringify( result ) }` );
+
+} );
