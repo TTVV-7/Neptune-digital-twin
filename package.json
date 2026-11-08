@@ -56,6 +56,7 @@
     "@gltf-transform/extensions": "^4.5.1",
     "@gltf-transform/functions": "^4.5.1",
     "meshoptimizer": "^1.3.0",
+    "polygon-clipping": "^0.15.7",
     "sharp": "^0.35.5",
     "vite": "^8.3.5",
     "wrangler": "^4.156.0"
