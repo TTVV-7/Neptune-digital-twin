@@ -129,7 +129,7 @@ things and switches between before and after (see [Showing and hiding](#showing-
 
 | Showing | |
 | --- | --- |
-| U | See through the ground: Google's map see-through, to see models below grade |
+| Y | See through the ground: Google's map see-through (rather than cut away, as U does), to see models below grade |
 | B | Before / after: the site as Google captured it (nothing flattened, dug, piled or placed), or with your changes |
 | Show panel | Above the Controls (an eye when folded): hide flatten areas, excavations, stockpiles, laydown areas, shoring in pits, tieback no-dig zones, labels, or a whole category such as Vehicles |
 | Hide (toolbar) | Hide just the selected item; the Show panel lists it to show again |
@@ -385,12 +385,13 @@ which you chose, and on a phone it starts folded.
   digging, and pits no longer hide any of Google's mesh; nothing you placed is drawn. *After* puts
   it all back, exactly as it was, at once. The status readout says when you're looking at Before.
   Placing something new switches back to After. It waits while you're driving.
-- **See through the ground** (or **U**): Google's mesh drawn see-through, so a model set below
+- **See through the ground** (or **Y**): Google's mesh drawn see-through, so a model set below
   grade (a gallery, a pit, a tunnel, as the B2D2 repair model is once lowered with P) shows through
   the ground and the buildings over it. Only the nearest of Google's surfaces is laid over it, and
   the slider beside the switch says how solid that is. It only changes how the map is drawn:
   walking, driving, clicking and the ground under things are as ever. Not remembered: a reload
-  shows the ground solid again (`src/xray.js`).
+  shows the ground solid again (`src/xray.js`). **U** (see underground) cuts the ground away over
+  your models instead; the two can be on together.
 - **Layers**, each with an eye and a count: *Flatten areas* (the red boxes; the ground stays
   flattened), *Excavations* and *Stockpiles* (their outlines and labels; the ground stays dug and
   piled), *Laydown areas*, *Shoring in pits*, *Labels* (every floating label), then one row per
@@ -666,7 +667,7 @@ src/underground.js  under Google's ground in your own models: the mesh over them
 src/placements.js   models' positions saved on the live site for everyone (Save position for everyone)
 src/legend.js       the Controls panel: the keys for what you're doing now
 src/layers.js       the Show panel: layers, hidden items and Before / After (B)
-src/xray.js         see through the ground (U): Google's mesh see-through, for models below grade
+src/xray.js         see through the ground (Y): Google's mesh see-through, for models below grade
 src/drive-prompt.js V: what it drives, the "Press V to drive" prompt and twin.startDriving()
 src/models.js       loads and places your glTF models
 src/placement.js    the P panel

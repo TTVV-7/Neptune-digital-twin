@@ -1,7 +1,7 @@
 import { isTyping } from './walk.js';
 import { toast } from './placement.js';
 
-// See through the ground (the Show panel's switch, or U): Google's mesh drawn see-through, so a
+// See through the ground (the Show panel's switch, or Y): Google's mesh drawn see-through, so a
 // model set below grade (a gallery, a pit, a tunnel: the B2D2 repair model) shows through the
 // ground and the buildings over it. How see-through is the slider beside it. It only changes how
 // the tiles are drawn: walking, driving, clicking and the ground under things are as ever.
@@ -87,7 +87,7 @@ export function setUpXray( { tiles, renderer } ) {
 		root.classList.toggle( 'on', on );
 		renderer.setTransparentSort( on ? transparentSort : null );
 		tiles.forEachLoadedModel( restyle );
-		if ( say ) toast( on ? 'Seeing through the ground: U to make it solid again' : 'The ground is solid again' );
+		if ( say ) toast( on ? 'Seeing through the ground: Y to make it solid again' : 'The ground is solid again' );
 
 	}
 
@@ -98,10 +98,10 @@ export function setUpXray( { tiles, renderer } ) {
 		if ( on ) tiles.forEachLoadedModel( restyle );
 
 	} );
-	// U, wherever the panel is.
+	// Y, wherever the panel is. (U is see underground's: the ground cut away, underground.js.)
 	window.addEventListener( 'keydown', e => {
 
-		if ( e.code !== 'KeyU' || e.repeat || isTyping( e ) || e.ctrlKey || e.metaKey || e.altKey ) return;
+		if ( e.code !== 'KeyY' || e.repeat || isTyping( e ) || e.ctrlKey || e.metaKey || e.altKey ) return;
 		set( ! on, { say: true } );
 
 	}, true );
