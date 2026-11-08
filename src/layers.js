@@ -17,8 +17,9 @@ import { toast } from './placement.js';
 // hand are part of the plan: saved with the layout, and hidden on its share link too (models.js).
 // Whatever is hidden isn't drawn, clicked or bumped into; nothing is moved or deleted.
 //
-// Other modules add layers of their own with addLayer( id, { name, count(), setShown( on ) } ),
-// and follow Before / After with onBeforeAfter( before => ... ).
+// Other modules add layers of their own with addLayer( id, { name, count(), setShown( on ) } )
+// (count() true: always listed, with no number), and follow Before / After with
+// onBeforeAfter( before => ... ).
 
 const STORAGE_KEY = 'neptune-twin.layers';
 // Narrower than this (px) counts as a phone: the panel starts folded away, as the Controls do.
@@ -312,7 +313,7 @@ export function createLayers( { models, layout, library, flattening, isDriving, 
 			row.dataset.layer = id;
 			row.setAttribute( 'aria-pressed', String( on ) );
 			row.title = on ? `Hide ${ name.toLowerCase() }` : `Show ${ name.toLowerCase() }`;
-			row.innerHTML = `${ on ? EYE : EYE_OFF }<span class="name"></span><span class="count">${ count }</span>`;
+			row.innerHTML = `${ on ? EYE : EYE_OFF }<span class="name"></span><span class="count">${ count === true ? '' : count }</span>`;
 			row.querySelector( '.name' ).textContent = name;
 			return row;
 

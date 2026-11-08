@@ -26,7 +26,8 @@
 // concrete past the edge. The roughness is random but seeded by the markup's id, so a rebuild
 // comes out the same. Other areas are a flat cyan patch 3 cm off their face (toward where they were
 // marked from), unlit so they read underground, with a darker outline. Every area's node carries
-// its markup in `extras` (grid, face, area, defect, status, notes).
+// its markup in `extras` (grid, face, area, defect, status, notes), and xraySolid, so the twin's
+// "See-through models" leaves the areas solid while the concrete round them goes see-through.
 
 import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -52,7 +53,9 @@ const ORIGIN = [ 34.5, 5.1, - 4 ];
 // see-through orange shell, for lining the model up against Google's copy of the building, and
 // the conveyors, tent and temporary works are see-through too, so they don't flicker against
 // Google's copy where they meet it. Ground level is left out: it would lie right on Google's
-// ground and flicker against it. `cut`: chipped areas are cut out of it.
+// ground and flicker against it. `cut`: chipped areas are cut out of it. The see-through layers
+// don't stop you walking or flying (node extras noCollide, which the twin reads), so the shell
+// over C31 doesn't keep you out of it.
 const STRUCTURE = {
 	c31: { name: 'C31 gallery', color: '#b9c0c8', cut: true },
 	pit: { name: 'Transfer pit', color: '#9fb0c2', cut: true },
@@ -573,7 +576,9 @@ for ( const [ key, layer ] of Object.entries( STRUCTURE ) ) {
 
 	}
 
-	structure.addChild( doc.createNode( layer.name ).setMesh( doc.createMesh( layer.name ).addPrimitive( prim ) ) );
+	const node = doc.createNode( layer.name ).setMesh( doc.createMesh( layer.name ).addPrimitive( prim ) );
+	if ( layer.alpha ) node.setExtras( { noCollide: true } );
+	structure.addChild( node );
 
 }
 
@@ -696,6 +701,8 @@ for ( const m of markups ) {
 	repairs.addChild( doc.createNode( name ).setMesh( mesh ).setExtras( {
 		id: m.id, zone: zoneName( m.zone ), face: m.face, grid: m.grid, area_m2: m.area,
 		defect: f.type ?? null, depth: f.depth ?? null, status: f.status ?? null, notes: f.text ?? '', source: m.src ?? null,
+		// Stays solid when the twin's "See-through models" makes the rest see-through.
+		xraySolid: true,
 	} ) );
 	total += m.area ?? 0;
 

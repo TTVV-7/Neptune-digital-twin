@@ -188,6 +188,19 @@ walk inside it. **U** (see underground) cuts Google's ground away over all your 
 are, to look down into them from above, or to walk in through an opening. Snapping a model to the
 ground still uses Google's ground as it is, so cutting it away doesn't move the model.
 
+The **Show** panel has the same with a tap, plus two more, remembered in your browser:
+
+- **Ground over your models**: eye off is the same as **U**.
+- **Solid models**: eye off makes your models see-through, so a closed gallery or tunnel seen from
+  above shows what's inside. Parts marked `xraySolid` in their glTF node extras stay solid: the
+  B2D2 model's repair areas, chipped concrete and rebar.
+- **Google 3D map**: eye off hides Google's tiles altogether, drawn and solid, so only your models
+  and earthworks are left to see and fly into. Your models stay where they are.
+
+Parts of a model marked `noCollide` in their node extras don't stop you walking or flying (the
+B2D2 model's see-through building shell and conveyors). Concrete you can see through still does,
+like a real wall: go through with ghost (**G**).
+
 By default the model is recentred, so *east/north* is the middle of its footprint and *up* is its base.
 That stops CAD files with real-world coordinates (UTM eastings in the hundreds of thousands) from
 landing kilometres away. Add `recenter: false` to an entry to keep the file's own origin.

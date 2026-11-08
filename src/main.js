@@ -369,6 +369,7 @@ function updateStatus( camera, controls, tiles, driver, driving, layers, undergr
 	if ( layers?.before ) lines.push( 'BEFORE: the site as Google captured it (B for after)' );
 	if ( underground?.on ) lines.push( 'UNDERGROUND: Google\'s ground cut away over your models (U)' );
 	else if ( underground?.active ) lines.push( 'Under the ground in your model: Google\'s ground cut away over it' );
+	if ( underground?.mapHidden ) lines.push( 'Google 3D map hidden (Show panel)' );
 	if ( tiles && tiles.loadProgress < 1 ) lines.push( `loading tiles ${ Math.round( tiles.loadProgress * 100 ) }%` );
 
 	const status = $( 'status' );
