@@ -25,6 +25,7 @@ import { parseArgs } from 'node:util';
 import { NodeIO } from '@gltf-transform/core';
 import { PDFDict, PDFDocument, PDFName } from 'pdf-lib';
 import { BufferAttribute, BufferGeometry, DoubleSide, Mesh, MeshBasicMaterial, Raycaster, Vector3 } from 'three';
+import { area3, fEL, gridRef, letRange, numRange, zoneOf } from '../src/repair-geometry.js';
 
 const ROOT = new URL( '../', import.meta.url );
 const { values: opts, positionals } = parseArgs( { allowPositionals: true, options: {
@@ -188,39 +189,7 @@ async function readSite( path ) {
 
 // ---------- Naming, as the artifact does ----------
 
-const L24 = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-const letter = i => i < 0 ? '<AA' : i < 24 ? 'A' + L24[ i ] : i < 48 ? 'B' + L24[ i - 24 ] : '>BY';
-const numRange = ( a, b ) => {
-
-	const lo = Math.floor( a + 1e-6 ), hi = Math.ceil( b - 1e-6 );
-	return hi - lo < 1 ? String( lo ) : `${ lo }–${ hi }`;
-
-};
-const letRange = ( a, b ) => {
-
-	const lo = Math.floor( a + 1e-6 ), hi = Math.max( lo + 1, Math.ceil( b - 1e-6 ) );
-	return `${ letter( lo ) }–${ letter( hi ) }`;
-
-};
-const fEL = y => `EL ${ y >= 0 ? '+' : '−' }${ Math.abs( y ).toFixed( 2 ) }`;
-function gridRef( P ) {
-
-	const xs = P.map( p => p[ 0 ] ), zs = P.map( p => - p[ 2 ] ), ys = P.map( p => p[ 1 ] );
-	const [ ya, yb ] = [ Math.min( ...ys ), Math.max( ...ys ) ];
-	return `Grid ${ numRange( Math.min( ...xs ), Math.max( ...xs ) ) } / ${ letRange( Math.min( ...zs ), Math.max( ...zs ) ) } · ${ fEL( ya ) }${ yb - ya > 0.05 ? ` to ${ fEL( yb ) }` : '' }`;
-
-}
-
-function zoneOf( [ x, y, z ] ) {
-
-	const Z = - z;
-	if ( y > 4.3 ) return 'ground';
-	if ( Z > 8.6 && x < 6.5 ) return 'c32';
-	if ( x < 9.2 ) return 'pit';
-	if ( x <= 69.3 ) return 'c31';
-	return 'ground';
-
-}
+// Grid references, zones and areas: src/repair-geometry.js, which the twin's area editor uses too.
 
 // The face's name: the first import's names where it has them.
 function faceOf( view, zone, n, pony, x ) {
@@ -236,22 +205,6 @@ function faceOf( view, zone, n, pony, x ) {
 	if ( zone === 'c32' ) return nx > 0 ? 'south wall' : 'north wall';
 	if ( Math.abs( nz ) >= Math.abs( nx ) ) return nz < 0 ? 'east wall (AA side)' : 'west wall (AJ side)';
 	return nx > 0 ? 'south wall (grid 0 end)' : 'north wall (grid 69 end)';
-
-}
-
-// Area of a flat polygon in 3D (Newell).
-function area3( P ) {
-
-	const n = [ 0, 0, 0 ];
-	P.forEach( ( p, i ) => {
-
-		const q = P[ ( i + 1 ) % P.length ];
-		n[ 0 ] += ( p[ 1 ] - q[ 1 ] ) * ( p[ 2 ] + q[ 2 ] );
-		n[ 1 ] += ( p[ 2 ] - q[ 2 ] ) * ( p[ 0 ] + q[ 0 ] );
-		n[ 2 ] += ( p[ 0 ] - q[ 0 ] ) * ( p[ 1 ] + q[ 1 ] );
-
-	} );
-	return Math.hypot( ...n ) / 2;
 
 }
 

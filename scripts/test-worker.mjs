@@ -756,7 +756,7 @@ function apiTests( target ) {
 
 	} );
 
-	test( 'repair areas moved in the twin: anyone lists them, only the passcode saves or puts them back', async () => {
+	test( 'repair areas moved, added or taken away in the twin: anyone lists them, only the passcode saves or puts them back', async () => {
 
 		const viewer = client();
 		const send = ( method, path, body, key = PLACEMENT_KEY, init = {} ) => viewer.send( method, `/api/area-edits/${ path }`, { body, headers: key === null ? {} : { 'X-Edit-Key': key }, ...init } );
@@ -794,6 +794,19 @@ function apiTests( target ) {
 		assert.deepEqual( ( await viewer.send( 'GET', '/api/area-edits/b2d2-repair' ) ).body.edits.map( e => e.id ), [ 'area-1' ] );
 		assert.deepEqual( ( await viewer.send( 'GET', '/api/area-edits/other-model' ) ).body.edits.map( e => e.id ), [ 'area-1' ] );
 		for ( const path of [ 'b2d2-repair/area-1', 'other-model/area-1' ] ) assert.equal( ( await send( 'DELETE', path, {} ) ).status, 204 );
+
+		// Added in the twin, with its details; and one of the drawing's taken away.
+		const added = { ...area, added: true, f: { type: 'Spall', status: 'Chipped / hydro-demo', chipped: '2026-11-09', text: 'Found on the walk-round', colour: 'not kept' }, zone: 'c31', face: 'floor', grid: 'Grid 30–31 / AE–AF · EL −2.04', area: 1 };
+		for ( const body of [
+			{ ...added, f: 'x' }, { ...added, f: { ...added.f, text: 'x'.repeat( 2000 ) } }, { ...added, f: { ...added.f, type: 5 } },
+			{ ...added, zone: { x: 1 } }, { ...added, area: - 1 }, { ...added, area: 'big' }, { ...added, f: undefined },
+		] ) assert.equal( ( await send( 'PUT', 'b2d2-repair/twin-0001', body ) ).status, 400, JSON.stringify( body ) );
+		assert.equal( ( await send( 'PUT', 'b2d2-repair/twin-0001', added ) ).status, 200 );
+		assert.equal( ( await send( 'PUT', 'b2d2-repair/area-3', { deleted: true, pts: 'ignored' } ) ).status, 200 );
+		const kept = ( await viewer.send( 'GET', '/api/area-edits/b2d2-repair' ) ).body.edits.map( ( { updatedAt, ...e } ) => e );
+		const { colour, ...f } = added.f;
+		assert.deepEqual( kept, [ { id: 'area-3', deleted: true }, { id: 'twin-0001', ...added, f } ] );
+		for ( const path of [ 'b2d2-repair/area-3', 'b2d2-repair/twin-0001' ] ) assert.equal( ( await send( 'DELETE', path, {} ) ).status, 204 );
 
 	} );
 

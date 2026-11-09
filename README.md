@@ -239,26 +239,36 @@ still move it, but only in their own browser. A saved position wins over the one
 Google's ground away over it). Any model can carry views: `views: [ { name, from, at,
 underground } ]` in its glTF scene's extras, in the model's own frame (`src/views.js`).
 
-**Moving areas in the twin.** An area in the wrong spot, or turned the wrong way, can be fixed
-right in the twin: **Edit areas** at the end of the views bar opens a panel. Click an area to pick it
-(the click goes through walls, so it's easiest with **Solid models** off in the Show panel), then:
+**Fixing areas in the twin.** Areas in the wrong spot, turned the wrong way, missing or not
+there any more can be fixed right in the twin: **Edit areas** at the end of the views bar opens a
+panel. Click an area to pick it (the click goes through walls, so it's easiest with **Solid
+models** off in the Show panel), then:
 
 - **drag** it to slide it along its wall, floor or soffit;
 - **← → ↑ ↓** nudge it as you see it (1 cm to 1 m a press), **⟲ ⟳** turn it in its face (1° to 90°);
 - **Move to another surface…**, then click the wall, floor or soffit it belongs on: it goes there,
   its middle where you clicked, facing you;
-- **Back to the drawing** puts it where the markups have it, and **Undo** takes back the last change.
+- change its **Status** (*Chipped / hydro-demo*, cut in with rebar, or *Marked, not chipped yet*,
+  a flat cyan patch), **Chipped** date (its rim's colour: the drawings' colours for 2 to 8 November,
+  others for later dates), **Defect** and **Notes**;
+- **Delete area** takes it away (**Bring back** returns the drawing's ones), **Back to the drawing**
+  puts one of the drawing's areas back as the markups have it, and **Undo** takes back the last change.
 
-It's rebuilt as you go with the build's own code (`src/repair-geometry.js`): the recess, rebar and
-coloured rim go with it, and the concrete is cut again where it now is. Right-drag looks round and
-WASD moves while editing; clicks are the editor's. **Save for everyone** sends every moved area to
-the site with the admin passcode (the one for Save position for everyone), and everyone who opens
-it then sees them there (`/api/area-edits`, [docs/accounts.md](docs/accounts.md)); until then only
-you see them, and closing the page asks first. A move is kept by the area's id, so it outlasts a rebuild
-from a new progress drawing that keeps the id, and wins over where that drawing puts the area:
-**Back to the drawing** (and save) takes the drawing's. The script writes
-`public/models/b2d2-repair.json` beside the model for this: the areas as drawn and the concrete
-they're cut out of.
+**+ Add area** draws a new one on the wall, floor or soffit you start on: drag a box (square to the
+face, level on a wall), or click its corners one by one and click the first again, double-click
+or press Enter to finish (Backspace takes a corner back, Esc stops). It takes the details last set
+(chipped today, by default) and is named from where it is: zone, face, grid and m².
+
+Areas are rebuilt as you go with the build's own code (`src/repair-geometry.js`): the recess, rebar
+and coloured rim go with them, and the concrete is cut again. Right-drag looks round and WASD
+moves while editing; clicks are the editor's. **Save for everyone** sends every change to the site
+with the admin passcode (the one for Save position for everyone), and everyone who opens it then
+sees them (`/api/area-edits`, [docs/accounts.md](docs/accounts.md)); until then only you see them,
+and closing the page asks first. Changes are kept by the area's id, so they outlast a rebuild from
+a new progress drawing that keeps the id, and win over what that drawing has for the area: **Back
+to the drawing** (and save) takes the drawing's. Areas added in the twin live on the site, not in
+`scripts/data/b2d2-markups.json`. The script writes `public/models/b2d2-repair.json` beside the
+model for this: the areas as drawn and the concrete they're cut out of.
 
 To see inside, press **U** to cut Google's ground away over it, or press **G** (ghost) and fly down
 through the ground into the gallery or tunnel, then **F** to walk; Google's ground stays cut away
@@ -715,7 +725,7 @@ src/walk.js         walk/fly controller with gravity, collisions, bounces, the v
 src/zoom.js         the mouse wheel and trackpad pinch: zoom toward the cursor, chase camera distance
 src/underground.js  under Google's ground in your own models: the mesh over them cut away (U, or by itself)
 src/views.js        preset views carried by models (the bar at the top): glide the camera to each
-src/repair-areas.js Edit areas: move the B2D2 model's repair areas in the twin, saved for everyone
+src/repair-areas.js Edit areas: move, add, change and delete the B2D2 model's repair areas, saved for everyone
 src/repair-geometry.js  the repair areas' geometry (cut-outs, recesses, rebar), shared with the build
 src/placements.js   models' positions saved on the live site for everyone (Save position for everyone),
                     and the admin passcode for anything saved for everyone

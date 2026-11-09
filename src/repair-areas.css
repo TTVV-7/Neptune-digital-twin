@@ -1,5 +1,5 @@
 /* Editing the B2D2 model's repair areas (repair-areas.js): the views bar's Edit areas button and
-   the panel, on the left under the status lines. */
+   the panel, on the left under the status lines, with an area's details. */
 #views .edit-areas {
 	background: rgba( 255, 210, 31, 0.14 );
 	color: #ffe27a;
@@ -17,6 +17,7 @@
 	width: 290px;
 	max-width: calc( 100% - 32px );
 	max-height: calc( 100% - 200px );
+	overflow-x: hidden;
 	overflow-y: auto;
 	box-sizing: border-box;
 	padding: 10px 12px 12px;
@@ -117,6 +118,70 @@
 	background: #2f6fd1;
 	border-color: #2f6fd1;
 	color: #fff;
+}
+
+#area-editor .details {
+	display: grid;
+	gap: 5px;
+	margin: 8px 0;
+	padding: 8px 0;
+	border-top: 1px solid rgba( 255, 255, 255, 0.12 );
+	border-bottom: 1px solid rgba( 255, 255, 255, 0.12 );
+}
+
+#area-editor .details label {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+#area-editor .details label > span {
+	width: 54px;
+	flex: none;
+	color: #b8c4cf;
+}
+
+#area-editor .details label.notes {
+	align-items: flex-start;
+}
+
+#area-editor .details select,
+#area-editor .details input,
+#area-editor .details textarea {
+	flex: 1 1 0;
+	width: 0;
+	min-width: 0;
+	box-sizing: border-box;
+	margin: 0;
+	font: inherit;
+	color: inherit;
+	background: rgba( 255, 255, 255, 0.08 );
+	border: 1px solid rgba( 255, 255, 255, 0.18 );
+	border-radius: 6px;
+	padding: 4px 6px;
+	resize: vertical;
+}
+
+#area-editor .swatch {
+	flex: none;
+	width: 14px;
+	height: 14px;
+	border-radius: 3px;
+	border: 1px solid rgba( 255, 255, 255, 0.4 );
+}
+
+#area-editor .taken {
+	font-size: 12px;
+	color: #b8c4cf;
+}
+
+#area-editor .taken button {
+	padding: 2px 8px;
+	font-size: 12px;
+}
+
+#area-editor button.delete:not( :disabled ):hover {
+	background: rgba( 239, 68, 68, 0.3 );
 }
 
 #area-editor footer {

@@ -1,9 +1,9 @@
 import { HttpError, json, noContent, readJson } from './http.js';
 import { checkEditKey } from './placements.js';
 
-// Repair areas the admin moved in the twin (src/repair-areas.js): for a model with areas (the
-// B2D2 repair model), each moved area's outline and the way it faces, by the area's id, in the
-// model's markup frame. Anyone can read them, so everyone sees the areas where the admin put them;
+// Repair areas the admin moved, added or took away in the twin (src/repair-areas.js): for a model
+// with areas (the B2D2 repair model), by the area's id, each moved or added area's outline and the
+// way it faces, in the model's markup frame, and its details for one added. Anyone can read them, so everyone sees the areas where the admin put them;
 // saving or putting one back where it was drawn needs the edit passcode (PLACEMENT_KEY), as for
 // models' positions. They work without accounts, needing only the database.
 
@@ -47,7 +47,7 @@ export async function saveAreaEdit( { request, env, params } ) {
 
 }
 
-// Back where the drawing has it.
+// Back where the drawing has it (or, for one added in the twin, gone).
 export async function deleteAreaEdit( { request, env, params } ) {
 
 	await checkEditKey( request, env );
@@ -58,13 +58,52 @@ export async function deleteAreaEdit( { request, env, params } ) {
 
 }
 
-// { pts: [ [ x, y, z ], ... ] (three corners or more), n: [ x, y, z ] }: nothing else is kept.
+// What's kept of an area: { deleted: true } for one taken away, or where it is, { pts: [ [ x, y,
+// z ], ... ] (three corners or more), n: [ x, y, z ] }, with, for one added in the twin (added:
+// true) or one whose details were changed, its details: f { type, status, chipped, text }, zone,
+// face, grid and area (m²). Nothing else is kept.
+const TEXT = { type: 100, status: 100, chipped: 40, text: 1000 };
+const LABELS = { zone: 40, face: 120, grid: 120 };
+
 function checkEdit( body ) {
 
+	if ( body?.deleted === true ) return { deleted: true };
 	const point = p => Array.isArray( p ) && p.length === 3 && p.every( v => typeof v === 'number' && Number.isFinite( v ) && Math.abs( v ) <= REACH );
-	const { pts, n } = body ?? {};
+	const { pts, n, f, area, added } = body ?? {};
 	if ( ! Array.isArray( pts ) || pts.length < 3 || pts.length > MAX_CORNERS || ! pts.every( point ) ) throw new HttpError( 400, 'Bad outline' );
 	if ( ! point( n ) || Math.hypot( ...n ) < 1e-6 ) throw new HttpError( 400, 'Bad normal' );
-	return { pts, n };
+	const edit = { pts, n };
+	if ( added === true ) edit.added = true;
+	if ( f != null ) {
+
+		if ( typeof f !== 'object' || Array.isArray( f ) ) throw new HttpError( 400, 'Bad details' );
+		edit.f = {};
+		for ( const [ key, max ] of Object.entries( TEXT ) ) {
+
+			if ( f[ key ] == null ) continue;
+			if ( typeof f[ key ] !== 'string' || f[ key ].length > max ) throw new HttpError( 400, 'Bad details' );
+			edit.f[ key ] = f[ key ];
+
+		}
+
+	}
+
+	for ( const [ key, max ] of Object.entries( LABELS ) ) {
+
+		if ( body[ key ] == null ) continue;
+		if ( typeof body[ key ] !== 'string' || body[ key ].length > max ) throw new HttpError( 400, 'Bad details' );
+		edit[ key ] = body[ key ];
+
+	}
+
+	if ( area != null ) {
+
+		if ( typeof area !== 'number' || ! Number.isFinite( area ) || area < 0 || area > 10000 ) throw new HttpError( 400, 'Bad area' );
+		edit.area = area;
+
+	}
+
+	if ( edit.added && ! edit.f ) throw new HttpError( 400, 'Bad details' );
+	return edit;
 
 }

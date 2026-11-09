@@ -35,6 +35,81 @@ export const zoneName = z => ( { c31: 'C31 gallery', c32: 'C32 tunnel', pit: 'Tr
 // What the twin's tooltips and the build call an area.
 export const areaName = m => `${ m.f?.type || 'Repair area' } · ${ zoneName( m.zone ) } ${ m.face ?? '' } · ${ ( m.area ?? 0 ).toFixed( 2 ) } m²`;
 
+// ---------- Naming, as the B2D2 Repair Model artifact does ----------
+
+const L24 = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+const letter = i => i < 0 ? '<AA' : i < 24 ? 'A' + L24[ i ] : i < 48 ? 'B' + L24[ i - 24 ] : '>BY';
+export const numRange = ( a, b ) => {
+
+	const lo = Math.floor( a + 1e-6 ), hi = Math.ceil( b - 1e-6 );
+	return hi - lo < 1 ? String( lo ) : `${ lo }–${ hi }`;
+
+};
+export const letRange = ( a, b ) => {
+
+	const lo = Math.floor( a + 1e-6 ), hi = Math.max( lo + 1, Math.ceil( b - 1e-6 ) );
+	return `${ letter( lo ) }–${ letter( hi ) }`;
+
+};
+export const fEL = y => `EL ${ y >= 0 ? '+' : '−' }${ Math.abs( y ).toFixed( 2 ) }`;
+
+// "Grid 54–56 / AH–AJ · EL −0.08 to EL +0.92": numeric and letter grid, and elevation.
+export function gridRef( P ) {
+
+	const xs = P.map( p => p[ 0 ] ), zs = P.map( p => - p[ 2 ] ), ys = P.map( p => p[ 1 ] );
+	const [ ya, yb ] = [ Math.min( ...ys ), Math.max( ...ys ) ];
+	return `Grid ${ numRange( Math.min( ...xs ), Math.max( ...xs ) ) } / ${ letRange( Math.min( ...zs ), Math.max( ...zs ) ) } · ${ fEL( ya ) }${ yb - ya > 0.05 ? ` to ${ fEL( yb ) }` : '' }`;
+
+}
+
+// Which part of the structure a point is in.
+export function zoneOf( [ x, y, z ] ) {
+
+	const Z = - z;
+	if ( y > 4.3 ) return 'ground';
+	if ( Z > 8.6 && x < 6.5 ) return 'c32';
+	if ( x < 9.2 ) return 'pit';
+	if ( x <= 69.3 ) return 'c31';
+	return 'ground';
+
+}
+
+// Area of a flat polygon in 3D (Newell).
+export function area3( P ) {
+
+	const n = [ 0, 0, 0 ];
+	P.forEach( ( p, i ) => {
+
+		const q = P[ ( i + 1 ) % P.length ];
+		n[ 0 ] += ( p[ 1 ] - q[ 1 ] ) * ( p[ 2 ] + q[ 2 ] );
+		n[ 1 ] += ( p[ 2 ] - q[ 2 ] ) * ( p[ 0 ] + q[ 0 ] );
+		n[ 2 ] += ( p[ 0 ] - q[ 0 ] ) * ( p[ 1 ] + q[ 1 ] );
+
+	} );
+	return Math.hypot( ...n ) / 2;
+
+}
+
+// Zone, face, grid reference and area of an outline drawn on the structure (pts, and n out of the
+// concrete toward where it was drawn from), named as the progress drawings' areas are.
+export function describeArea( pts, n ) {
+
+	const middle = pts.reduce( ( s, p ) => s.map( ( c, i ) => c + p[ i ] / pts.length ), [ 0, 0, 0 ] );
+	const zone = zoneOf( middle );
+	const [ nx, ny, nz ] = n;
+	let face;
+	if ( ny > 0.75 ) face = zone === 'pit' ? 'pit floor (B2)' : zone === 'ground' ? 'slab top' : 'floor';
+	else if ( ny < - 0.75 ) face = zone === 'pit' ? 'pit soffit' : 'soffit';
+	else if ( zone === 'pit' && Math.abs( nx ) > Math.abs( nz ) ) face = middle[ 0 ] > 4 ? 'pit north wall (grid 8)' : 'pit south wall (grid 0)';
+	else if ( zone === 'pit' ) face = nz < 0 ? 'pit east wall (AA side)' : 'pit west wall (AJ side)';
+	else if ( zone === 'c32' ) face = nx > 0 ? 'south wall' : 'north wall';
+	else if ( zone === 'ground' ) face = Math.abs( nz ) >= Math.abs( nx ) ? ( nz < 0 ? 'east pony wall at grade (AA side)' : 'west pony wall at grade (AJ side)' ) : 'wall at grade';
+	else if ( Math.abs( nz ) >= Math.abs( nx ) ) face = nz < 0 ? 'east wall (AA side)' : 'west wall (AJ side)';
+	else face = nx > 0 ? 'south wall (grid 0 end)' : 'north wall (grid 69 end)';
+	return { zone, face, grid: gridRef( pts ), area: +area3( pts ).toFixed( 3 ) };
+
+}
+
 // A markup's face as a plane: N out of the concrete toward where it was marked from, U and V
 // across it (U level on walls, along x on floors and soffits, so bars line up from one area to the
 // next on the same face), h its offset along N, and the outline in (s, t) = (along U, along V),

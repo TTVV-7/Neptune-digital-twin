@@ -332,7 +332,7 @@ test( 'the admin saves an item for everyone with the passcode; everyone sees it;
 
 } );
 
-test( 'the admin moves a B2D2 repair area and saves it for everyone; put back, it\'s where the drawing has it', async () => {
+test( 'the admin moves and adds B2D2 repair areas and saves them for everyone; put back, they\'re as the drawing has them', async () => {
 
 	const admin = await newPage();
 	const answers = [ PASSCODE ];
@@ -377,7 +377,7 @@ test( 'the admin moves a B2D2 repair area and saves it for everyone; put back, i
 	await admin.mouse.move( target.x + 60, target.y - 20, { steps: 8 } );
 	await admin.mouse.up();
 	const dragged = await area( target.id );
-	assert.ok( dragged.dirty && dragged.moved );
+	assert.ok( dragged.dirty && dragged.changed );
 	assert.notDeepEqual( dragged.pts, drawn.pts );
 	// Still on its face: the same normal, every corner the same distance along it.
 	assert.deepEqual( dragged.n, drawn.n );
@@ -392,7 +392,7 @@ test( 'the admin moves a B2D2 repair area and saves it for everyone; put back, i
 
 	const saved = () => admin.evaluate( async () => ( await ( await fetch( '/api/area-edits/b2d2-repair' ) ).json() ).edits );
 	await admin.locator( '#area-editor .save' ).click();
-	await admin.waitForFunction( () => [ ...document.querySelectorAll( '.toast' ) ].some( t => /^Saved for everyone: 1 area/.test( t.textContent ) ) );
+	await admin.waitForFunction( () => [ ...document.querySelectorAll( '.toast' ) ].some( t => /^Saved for everyone: 1 change/.test( t.textContent ) ) );
 	const [ edit ] = await saved();
 	assert.equal( edit.id, target.id );
 	assert.deepEqual( edit.pts, moved.pts );
@@ -400,7 +400,7 @@ test( 'the admin moves a B2D2 repair area and saves it for everyone; put back, i
 	// Someone else sees it where the admin put it.
 	const viewer = await newPage();
 	await openApp( viewer, undefined, { keepProjectModels: true } );
-	await viewer.waitForFunction( id => window.twin.repairAreas?.areas().find( a => a.id === id )?.moved, target.id, { timeout: 60000 } );
+	await viewer.waitForFunction( id => window.twin.repairAreas?.areas().find( a => a.id === id )?.changed, target.id, { timeout: 60000 } );
 	assert.deepEqual( ( await viewer.evaluate( id => window.twin.repairAreas.areas().find( a => a.id === id ), target.id ) ).pts, moved.pts );
 	assert.equal( await viewer.locator( '#area-editor' ).isVisible(), false );
 
@@ -409,9 +409,61 @@ test( 'the admin moves a B2D2 repair area and saves it for everyone; put back, i
 	assert.deepEqual( ( await area( target.id ) ).pts, drawn.pts );
 	await admin.evaluate( () => document.querySelectorAll( '.toast' ).forEach( t => t.remove() ) );
 	await admin.locator( '#area-editor .save' ).click();
-	await admin.waitForFunction( () => [ ...document.querySelectorAll( '.toast' ) ].some( t => /^Saved for everyone: 1 area/.test( t.textContent ) ) );
+	await admin.waitForFunction( () => [ ...document.querySelectorAll( '.toast' ) ].some( t => /^Saved for everyone: 1 change/.test( t.textContent ) ) );
 	assert.deepEqual( await saved(), [] );
+
+	// A new area: a box dragged on the concrete in the middle of the view, dated, saved.
+	await admin.locator( '#area-editor .add' ).click();
+	await admin.waitForFunction( () => window.twin.repairAreas.drawing );
+	const spot = await admin.evaluate( () => {
+
+		// Somewhere on the concrete near the middle of the screen, clear of the panels.
+		const { models, camera, renderer } = window.twin;
+		const rect = renderer.domElement.getBoundingClientRect();
+		const ray = new camera.position.constructor();
+		for ( const [ x, y ] of [ [ 0.5, 0.8 ], [ 0.55, 0.75 ], [ 0.45, 0.85 ], [ 0.6, 0.6 ] ] ) {
+
+			const raycaster = new ( models.raycaster.constructor )();
+			raycaster.setFromCamera( { x: x * 2 - 1, y: - ( y * 2 - 1 ) }, camera );
+			const hit = raycaster.intersectObject( models.group, true ).find( h => /gallery|pit|tunnel/i.test( h.object.name ) );
+			if ( hit ) return { x: rect.left + x * rect.width, y: rect.top + y * rect.height };
+
+		}
+
+		return null;
+
+	} );
+	assert.ok( spot, 'concrete in view to draw on' );
+	// Messages over the view would take the press.
+	await admin.evaluate( () => document.querySelectorAll( '.toast' ).forEach( t => t.remove() ) );
+	await admin.mouse.move( spot.x - 40, spot.y - 20 );
+	await admin.mouse.down();
+	await admin.mouse.move( spot.x + 40, spot.y + 20, { steps: 6 } );
+	await admin.mouse.up();
+	const made = ( await admin.evaluate( () => window.twin.repairAreas.areas() ) ).filter( a => a.added );
+	assert.equal( made.length, 1 );
+	assert.equal( made[ 0 ].pts.length, 4 );
+	assert.ok( made[ 0 ].area > 0.01 && made[ 0 ].grid.startsWith( 'Grid ' ), JSON.stringify( made[ 0 ] ) );
+	await admin.locator( '#area-editor [data-field=chipped]' ).fill( '2026-11-09' );
+	await admin.locator( '#area-editor [data-field=chipped]' ).press( 'Tab' );
+	await admin.evaluate( () => document.querySelectorAll( '.toast' ).forEach( t => t.remove() ) );
+	await admin.locator( '#area-editor .save' ).click();
+	await admin.waitForFunction( () => [ ...document.querySelectorAll( '.toast' ) ].some( t => /^Saved for everyone: 1 change/.test( t.textContent ) ) );
+	const [ added ] = await saved();
+	assert.equal( added.id, made[ 0 ].id );
+	assert.equal( added.added, true );
+	assert.equal( added.f.chipped, '2026-11-09' );
+	await viewer.reload();
+	await viewer.locator( '#skip' ).click();
+	await viewer.waitForFunction( id => window.twin.repairAreas?.areas().some( a => a.id === id ), added.id, { timeout: 60000 } );
 	await shot( admin, 'area-editor' );
+
+	// Deleted, it's gone for everyone.
+	await admin.locator( '#area-editor .delete' ).click();
+	await admin.evaluate( () => document.querySelectorAll( '.toast' ).forEach( t => t.remove() ) );
+	await admin.locator( '#area-editor .save' ).click();
+	await admin.waitForFunction( () => [ ...document.querySelectorAll( '.toast' ) ].some( t => /^Saved for everyone: 1 change/.test( t.textContent ) ) );
+	assert.deepEqual( await saved(), [] );
 	await admin.locator( '#area-editor .done' ).click();
 	assert.equal( await admin.locator( '#area-editor' ).isVisible(), false );
 	await admin.context().close();

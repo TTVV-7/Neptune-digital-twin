@@ -54,7 +54,7 @@ visitor for a Maps key (kept in their browser) and has no sign-in.
 A **Secret** named `PLACEMENT_KEY`, any passcode you like, is the admin's passcode for saving
 on the live site for everyone: where models from `MODELS` stand (the P panel's **Save position
 for everyone**), items placed in the app (**Save for everyone**, which everyone then sees as
-part of the site), and the B2D2 model's repair areas moved with **Edit areas**. The app asks for
+part of the site), and changes to the B2D2 model's repair areas made with **Edit areas**. The app asks for
 it once per browser. It needs only the database, not
 sign-in. Change it to stop anyone who had the old one; without it, nothing can be saved for
 everyone.
@@ -146,8 +146,8 @@ Tests (both run everything on your computer, with test keys standing in for Goog
 | `PUT /api/placements` `{ url, east, north, up, heading }` | Save where a model from `MODELS` stands, for everyone. Needs the `X-Edit-Key` header to match the `PLACEMENT_KEY` secret (403 without it, or when it isn't set). The P panel's **Save position for everyone** sends it |
 | `GET /api/shared-items` | Anyone: `{ items: [ { id, config, updatedAt } ] }`, the items saved for everyone, each the config the app places it from. Needs only the database |
 | `PUT / DELETE /api/shared-items/:id` `{ config }` | Save (add or replace) or remove an item for everyone. Needs `X-Edit-Key` to match `PLACEMENT_KEY`; a model file must be the site's own (`models/` or `library/`); at most 500 items of 32 KB |
-| `GET /api/area-edits/:model` | Anyone: `{ edits: [ { id, pts, n, updatedAt } ] }`, the repair areas of a model (its file name without `.glb`, e.g. `b2d2-repair`) moved in the twin: each area's outline and normal in the model's markup frame. Needs only the database |
-| `PUT / DELETE /api/area-edits/:model/:id` `{ pts, n }` | Save where an area is moved to, or put it back where the drawing has it, for everyone. Needs `X-Edit-Key` to match `PLACEMENT_KEY`; three to 200 corners; at most 2000 areas a model |
+| `GET /api/area-edits/:model` | Anyone: `{ edits: [ { id, ..., updatedAt } ] }`, the repair areas of a model (its file name without `.glb`, e.g. `b2d2-repair`) changed in the twin: each moved or added area's outline and normal (`pts`, `n`) in the model's markup frame, with its details (`f`: status, chipped, type, text; `zone`, `face`, `grid`, `area`) where changed or added (`added: true`), or `deleted: true` for one taken away. Needs only the database |
+| `PUT / DELETE /api/area-edits/:model/:id` `{ pts, n, f?, zone?, face?, grid?, area?, added? }` or `{ deleted: true }` | Save an area's change for everyone, or forget it (the drawing's area back as drawn; one added in the twin gone). Needs `X-Edit-Key` to match `PLACEMENT_KEY`; three to 200 corners; at most 2000 areas a model |
 
 `premium` is `{ enabled: false }` until Stripe is set up, then `{ enabled: true, link, price,
 unlocked, clientReferenceId? }`.
