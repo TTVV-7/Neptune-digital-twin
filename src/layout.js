@@ -364,6 +364,14 @@ function parse( value ) {
 
 // Saved items refer to library items by id. If the library now makes an item differently (e.g. a
 // built-in piece replaced by a downloaded model), use the current definition at the same spot.
+// A saved library item as the library has it now (a built-in piece replaced by a downloaded
+// model, say); anything else as it is. Also for items saved for everyone (shared-items.js).
+export function resolveItem( config, library ) {
+
+	return resolve( config, library );
+
+}
+
 function resolve( config, library ) {
 
 	const item = config.library && library.find( i => i.id === config.library );

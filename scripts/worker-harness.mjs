@@ -303,7 +303,8 @@ export async function dropProjectModels( page ) {
 
 		const { MODELS } = await import( '/src/config.js' );
 		const { models } = window.twin;
-		const fromConfig = () => models.entries.filter( entry => entry.inConfig );
+		// Not items the admin saved for everyone (shared-items.js), which tests of that need.
+		const fromConfig = () => models.entries.filter( entry => entry.inConfig && ! entry.sharedId );
 		const end = performance.now() + 20000;
 		while ( fromConfig().length < MODELS.length && performance.now() < end ) await new Promise( resolve => setTimeout( resolve, 50 ) );
 		for ( const entry of fromConfig() ) models.remove( entry );

@@ -2,6 +2,7 @@ import GUI from 'lil-gui';
 import { isTyping } from './walk.js';
 import { getKind } from './kinds.js';
 import { savePlacement } from './placements.js';
+import { removeShared, saveShared } from './shared-items.js';
 
 // Common model units, as the scale that converts them to metres.
 const UNITS = { metres: 1, centimetres: 0.01, millimetres: 0.001, feet: 0.3048, inches: 0.0254 };
@@ -96,10 +97,25 @@ export function createPlacementPanel( models, { getPlayerPosition } ) {
 				toast( await savePlacement( entry ) );
 
 			},
+			async saveShared() {
+
+				toast( await saveShared( entry, models ) );
+				removeButton.show( !! entry.sharedId );
+
+			},
+			async removeShared() {
+
+				toast( await removeShared( entry, models ) );
+
+			},
 		};
 		folder.add( actions, 'moveHere' ).name( 'Move to where I am' );
-		// A model from config.js: where it stands can be saved on the live site for everyone.
-		if ( entry.inConfig && entry.url ) folder.add( actions, 'saveForEveryone' ).name( 'Save position for everyone' );
+		// On the live site, for everyone: a model from config.js, where it stands; anything else,
+		// the item itself (the admin's passcode is asked for).
+		const fromModels = entry.inConfig && ! entry.sharedId;
+		if ( fromModels && entry.url ) folder.add( actions, 'saveForEveryone' ).name( 'Save position for everyone' );
+		if ( ! fromModels ) folder.add( actions, 'saveShared' ).name( 'Save for everyone (admin)' );
+		const removeButton = folder.add( actions, 'removeShared' ).name( 'Remove for everyone (admin)' ).show( !! entry.sharedId );
 		folder.add( actions, 'copyConfig' ).name( 'Copy config' );
 		folder.add( actions, 'remove' ).name( 'Remove' );
 

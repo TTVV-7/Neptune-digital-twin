@@ -12,6 +12,17 @@ const URL_PATTERN = /^models\/[A-Za-z0-9._\- ]{1,120}\.(glb|gltf)$/;
 const REACH = 20000;
 const HEIGHT = 2000;
 
+// The admin's edit passcode (PLACEMENT_KEY) in the X-Edit-Key header, for anything saved for
+// everyone: models' positions here, and items (shared-items.js).
+export async function checkEditKey( request, env ) {
+
+	if ( ! env.PLACEMENT_KEY ) throw new HttpError( 403, 'Saving for everyone isn\'t set up' );
+	const given = request.headers.get( 'X-Edit-Key' ) ?? '';
+	// Compared as hashes, so the time it takes says nothing about how much of it was right.
+	if ( ! given || await sha256Hex( given.trim() ) !== await sha256Hex( String( env.PLACEMENT_KEY ).trim() ) ) throw new HttpError( 403, 'Wrong passcode' );
+
+}
+
 export async function listPlacements( { env } ) {
 
 	const { results } = await env.DB.prepare( 'SELECT url, east, north, up, heading, updated_at FROM placements' ).all();
@@ -23,10 +34,7 @@ export async function listPlacements( { env } ) {
 
 export async function savePlacement( { request, env } ) {
 
-	if ( ! env.PLACEMENT_KEY ) throw new HttpError( 403, 'Saving positions isn\'t set up' );
-	const given = request.headers.get( 'X-Edit-Key' ) ?? '';
-	// Compared as hashes, so the time it takes says nothing about how much of it was right.
-	if ( ! given || await sha256Hex( given.trim() ) !== await sha256Hex( String( env.PLACEMENT_KEY ).trim() ) ) throw new HttpError( 403, 'Wrong passcode' );
+	await checkEditKey( request, env );
 
 	const body = await readJson( request, 4096 );
 	const { url, east, north, up, heading } = body ?? {};

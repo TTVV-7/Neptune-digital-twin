@@ -56,24 +56,35 @@ async function fetchPlacements() {
 // Saves where a model from config.js stands now, for everyone. Resolves to a message to show.
 export async function savePlacement( entry ) {
 
-	let key = readKey();
-	if ( ! key ) key = window.prompt( 'Passcode for saving positions for everyone:' )?.trim();
-	if ( ! key ) return 'Not saved.';
-
 	const { east, north, up, snap, heading } = entry.state;
+	const result = await sendForEveryone( 'PUT', API, { url: entry.url, east, north, up: snap ? null : up, heading } );
+	return result.ok ? `Saved. Everyone now sees ${ entry.state.name } here.` : result.message;
+
+}
+
+// A change for everyone (models' positions, shared items): sent with the admin's passcode, asked
+// for the first time and kept in this browser once it works (forgotten when it doesn't). Resolves
+// to { ok, body } or { ok: false, message } saying why not.
+export async function sendForEveryone( method, url, payload ) {
+
+	let key = readKey();
+	if ( ! key ) key = window.prompt( 'Admin passcode, for saving for everyone:' )?.trim();
+	if ( ! key ) return { ok: false, message: 'Not saved.' };
+
 	let res;
 	try {
 
-		res = await fetch( API, {
-			method: 'PUT',
+		res = await fetch( url, {
+			method,
 			headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-Edit-Key': key },
-			body: JSON.stringify( { url: entry.url, east, north, up: snap ? null : up, heading } ),
+			// Always JSON, even with nothing to say: the server takes nothing else from a page.
+			body: JSON.stringify( payload ?? {} ),
 			signal: AbortSignal.timeout( TIMEOUT ),
 		} );
 
 	} catch {
 
-		return 'Couldn\'t reach the site to save. Check your connection and try again.';
+		return { ok: false, message: 'Couldn\'t reach the site. Check your connection and try again.' };
 
 	}
 
@@ -81,20 +92,20 @@ export async function savePlacement( entry ) {
 	if ( res.ok ) {
 
 		writeKey( key );
-		return `Saved. Everyone now sees ${ entry.state.name } here.`;
+		return { ok: true, body };
 
 	}
 
 	if ( res.status === 403 && body.error === 'Wrong passcode' ) {
 
 		writeKey( null );
-		return 'Wrong passcode, not saved. Try again.';
+		return { ok: false, message: 'Wrong passcode, nothing saved. Try again.' };
 
 	}
 
-	if ( res.status === 403 ) return 'Saving positions isn\'t set up on this site (no PLACEMENT_KEY).';
-	if ( res.status === 404 || ! body.error ) return 'Saving for everyone only works on the live site. Use Copy config here.';
-	return `Not saved: ${ body.error }.`;
+	if ( res.status === 403 ) return { ok: false, message: 'Saving for everyone isn\'t set up on this site (no PLACEMENT_KEY).' };
+	if ( res.status === 404 || ! body.error ) return { ok: false, message: 'Saving for everyone only works on the live site.' };
+	return { ok: false, message: `Not saved: ${ body.error }.` };
 
 }
 

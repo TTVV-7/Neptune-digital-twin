@@ -287,6 +287,12 @@ What each machine is, its size and where it came from is in [docs/equipment.md](
 - **Look around** while editing by holding the right mouse button.
 - **Save:** what you place is saved in this browser. **Export layout** downloads it as a file and
   **Import** loads one, e.g. to share a layout or move it to another computer.
+- **Save for everyone (admin):** on the live site, the P panel of anything you place (equipment,
+  a flatten area, an excavation, a stockpile, a laydown area, a row) has **Save for everyone**. It
+  asks once per browser for the admin passcode (the Worker's `PLACEMENT_KEY` secret), and from then
+  on everyone who opens the site sees that item; it leaves your own layout so it isn't there
+  twice. Move or change it and save again to update it, or **Remove for everyone**. What visitors
+  place or move stays in their own browser. Excavator digging isn't saved for everyone.
 - **Flatten area** (top of the list): drag a rectangle on the ground and everything in Google's 3D
   mesh inside it (rail cars, parked trucks, a shed) is pressed flat to the lowest ground around it,
   to clear space for a layout. Draw it a little bigger than what you want gone: Google's mesh is made
@@ -669,7 +675,9 @@ src/world.js        Google tiles, lights, the flat stand-in ground
 src/walk.js         walk/fly controller with gravity, collisions, bounces, the view turn and the zoom's glide
 src/zoom.js         the mouse wheel and trackpad pinch: zoom toward the cursor, chase camera distance
 src/underground.js  under Google's ground in your own models: the mesh over them cut away (U, or by itself)
-src/placements.js   models' positions saved on the live site for everyone (Save position for everyone)
+src/placements.js   models' positions saved on the live site for everyone (Save position for everyone),
+                    and the admin passcode for anything saved for everyone
+src/shared-items.js items the admin saved for everyone: loaded for everyone, Save / Remove for everyone
 src/legend.js       the Controls panel: the keys for what you're doing now
 src/layers.js       the Show panel: layers, hidden items and Before / After (B)
 src/drive-prompt.js V: what it drives, the "Press V to drive" prompt and twin.startDriving()

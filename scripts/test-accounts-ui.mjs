@@ -22,6 +22,7 @@ const BASE = `http://127.0.0.1:${ VITE_PORT }`;
 const GOOGLE_SCRIPT = 'https://accounts.google.com/gsi/client';
 const MAPS_KEY = 'test-maps-key-not-real';
 const LAYOUT_KEY = 'neptune-twin.layout.Neptune Terminals';
+const PASSCODE = 'admin passcode for tests';
 
 let chromium;
 let browser;
@@ -48,7 +49,7 @@ before( async () => {
 	if ( SHOTS ) mkdirSync( SHOTS, { recursive: true } );
 	googleKey = await makeKey( 'ui-key' );
 	keys = await serveKeys( [ googleKey.jwk ] );
-	worker = await startWorker( { port: WORKER_PORT, vars: { GOOGLE_CLIENT_ID: CLIENT_ID, GOOGLE_JWKS_URL: keys.url, GOOGLE_MAPS_API_KEY: MAPS_KEY, ALLOWED_EMAILS: '', ALLOWED_DOMAINS: '' } } );
+	worker = await startWorker( { port: WORKER_PORT, vars: { GOOGLE_CLIENT_ID: CLIENT_ID, GOOGLE_JWKS_URL: keys.url, GOOGLE_MAPS_API_KEY: MAPS_KEY, ALLOWED_EMAILS: '', ALLOWED_DOMAINS: '', PLACEMENT_KEY: PASSCODE } } );
 	vite = await startVite( VITE_PORT, { TWIN_API: worker.base } );
 	browser = await chromium.launch( { args: [ '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader' ] } );
 
@@ -278,6 +279,56 @@ test( 'sign out keeps the layout in this browser', async () => {
 	assert.equal( ( await localLayout( page ) ).items.length, 3 );
 	assert.equal( await page.evaluate( () => localStorage.getItem( 'neptune-twin.cloud.Neptune Terminals' ) ), null );
 	await page.context().close();
+
+} );
+
+test( 'the admin saves an item for everyone with the passcode; everyone sees it; removed, it\'s gone', async () => {
+
+	const admin = await newPage();
+	const answers = [ 'not it', PASSCODE ];
+	admin.on( 'dialog', d => d.accept( answers.shift() ) );
+	await openApp( admin );
+	await admin.evaluate( () => localStorage.removeItem( 'neptune-twin.layout.Neptune Terminals' ) );
+	await placeItems( admin, [ 'jersey-barrier' ] );
+	const save = async label => {
+
+		await admin.evaluate( () => window.twin.sidebar.select( window.twin.models.entries.find( e => e.library === 'jersey-barrier' ) ) );
+		await admin.locator( '.lil-gui .lil-controller.lil-function:visible', { hasText: label } ).click();
+		await admin.waitForFunction( () => document.querySelector( '.toast' ) );
+		const text = await admin.evaluate( () => [ ...document.querySelectorAll( '.toast' ) ].pop().textContent );
+		await admin.evaluate( () => document.querySelectorAll( '.toast' ).forEach( t => t.remove() ) );
+		return text;
+
+	};
+	const listed = () => admin.evaluate( async () => ( await ( await fetch( '/api/shared-items' ) ).json() ).items );
+
+	assert.match( await save( 'Save for everyone' ), /Wrong passcode/ );
+	assert.deepEqual( await listed(), [] );
+	assert.match( await save( 'Save for everyone' ), /^Saved for everyone: / );
+	const [ item ] = await listed();
+	assert.equal( item.config.library, 'jersey-barrier' );
+	// Out of the admin's own layout, so it isn't there twice after a reload.
+	await admin.waitForFunction( () => JSON.parse( localStorage.getItem( 'neptune-twin.layout.Neptune Terminals' ) )?.items.length === 0 );
+
+	// Someone else sees it, as part of the site rather than their own layout.
+	const viewer = await newPage();
+	await openApp( viewer );
+	await viewer.waitForFunction( () => window.twin.models.entries.some( e => e.sharedId && e.library === 'jersey-barrier' ), null, { timeout: 30000 } );
+	assert.deepEqual( await viewer.evaluate( () => window.twin.layout.getData().items ), [] );
+
+	// Moved and saved again, then removed for everyone.
+	await moveItem( admin, 'jersey-barrier', 5 );
+	assert.match( await save( 'Save for everyone' ), /as it is now/ );
+	assert.equal( ( await listed() )[ 0 ].config.east, item.config.east + 5 );
+	assert.match( await save( 'Remove for everyone' ), /^Removed for everyone: / );
+	assert.deepEqual( await listed(), [] );
+	await viewer.reload();
+	await viewer.locator( '#skip' ).click();
+	await viewer.waitForFunction( () => window.twin?.sidebar && ! window.twin.layout.loading, null, { timeout: 60000 } );
+	await viewer.waitForTimeout( 1500 );
+	assert.equal( await viewer.evaluate( () => window.twin.models.entries.some( e => e.library === 'jersey-barrier' ) ), false );
+	await admin.context().close();
+	await viewer.context().close();
 
 } );
 

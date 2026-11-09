@@ -80,4 +80,16 @@ export const MIGRATIONS = [
 			);
 		`,
 	},
+	{
+		version: 4,
+		// worker/migrations/0004_shared_items.sql: items saved for everyone.
+		sql: `
+			CREATE TABLE IF NOT EXISTS shared_items (
+				id TEXT PRIMARY KEY,
+				data TEXT NOT NULL,
+				created_at BIGINT NOT NULL,
+				updated_at BIGINT NOT NULL
+			);
+		`,
+	},
 ];

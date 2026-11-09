@@ -131,6 +131,8 @@ export class ModelManager extends EventDispatcher {
 			placing: !! config.placing,
 			// From MODELS in config.js, which loads every time, rather than placed in this browser.
 			inConfig: !! config.inConfig,
+			// Saved for everyone by the admin (shared-items.js): its id there.
+			sharedId: config.sharedId ?? null,
 			// Hidden by hand (the selection toolbar's Hide): saved with the layout.
 			hidden: config.hidden === true,
 			footprint: new Box3().setFromObject( content ),

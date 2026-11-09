@@ -718,6 +718,44 @@ function apiTests( target ) {
 
 	} );
 
+	test( 'items saved for everyone: anyone lists them, only the passcode saves or removes them', async () => {
+
+		const viewer = client();
+		const send = ( method, id, body, key = PLACEMENT_KEY, init = {} ) => viewer.send( method, `/api/shared-items/${ id }`, { body, headers: key === null ? {} : { 'X-Edit-Key': key }, ...init } );
+		const pile = { name: 'Gravel pile', kind: 'stockpile', params: { shape: 'cone', volume: 50 }, east: 12.5, north: - 40, up: null, heading: 30, scale: 1, placing: true, inConfig: true };
+		const truck = { name: 'Dump truck', library: 'dump-truck-tandem', url: 'library/dump-truck-tandem.glb', east: 0, north: 5, up: null, heading: 0, scale: 1 };
+
+		assert.deepEqual( ( await viewer.send( 'GET', '/api/shared-items' ) ).body, { items: [] } );
+		assert.equal( ( await send( 'PUT', 'pile-0001', { config: pile }, null ) ).status, 403 );
+		assert.equal( ( await send( 'PUT', 'pile-0001', { config: pile }, 'nope' ) ).status, 403 );
+		assert.equal( ( await send( 'PUT', 'pile-0001', { config: pile }, PLACEMENT_KEY, { origin: 'https://elsewhere.example' } ) ).status, 403 );
+		for ( const [ id, config ] of [
+			[ 'bad id!', pile ], [ 'short', pile ],
+			[ 'item-0001', { ...truck, url: 'https://elsewhere.example/x.glb' } ], [ 'item-0001', { ...truck, url: 'library/../../x.glb' } ],
+			[ 'item-0001', { name: 'nothing to place', east: 0, north: 0 } ], [ 'item-0001', { ...pile, east: 1e9 } ], [ 'item-0001', { ...pile, params: 'x' } ],
+		] ) assert.equal( ( await send( 'PUT', id, { config } ) ).status, 400, `${ id } ${ JSON.stringify( config ) }` );
+		assert.equal( ( await send( 'PUT', 'item-0001', { config: { ...pile, note: 'x'.repeat( 40000 ) } } ) ).status, 413 );
+
+		const saved = await send( 'PUT', 'pile-0001', { config: pile }, ` ${ PLACEMENT_KEY } ` );
+		assert.equal( saved.status, 200, JSON.stringify( saved.body ) );
+		// How it was being used in that browser isn't kept.
+		assert.equal( 'placing' in saved.body.config || 'inConfig' in saved.body.config, false );
+		assert.equal( ( await send( 'PUT', 'truck-0001', { config: truck } ) ).status, 200 );
+		// Saving again replaces it.
+		assert.equal( ( await send( 'PUT', 'pile-0001', { config: { ...pile, east: 20 } } ) ).status, 200 );
+
+		const listed = ( await client().send( 'GET', '/api/shared-items', { origin: null } ) ).body.items;
+		assert.deepEqual( listed.map( item => item.id ), [ 'pile-0001', 'truck-0001' ] );
+		assert.equal( listed[ 0 ].config.east, 20 );
+		assert.deepEqual( listed[ 1 ].config, truck );
+
+		assert.equal( ( await send( 'DELETE', 'truck-0001', {}, 'nope' ) ).status, 403 );
+		assert.equal( ( await send( 'DELETE', 'truck-0001', {} ) ).status, 204 );
+		assert.deepEqual( ( await viewer.send( 'GET', '/api/shared-items' ) ).body.items.map( item => item.id ), [ 'pile-0001' ] );
+		assert.equal( ( await send( 'DELETE', 'pile-0001', {} ) ).status, 204 );
+
+	} );
+
 	test( 'signing out ends the session on the server', async () => {
 
 		const cookie = alice.cookie;
@@ -883,7 +921,7 @@ function vercelTests() {
 
 			const res = await unset.fetch( '/api/placements', json( 'anything' ) );
 			assert.equal( res.status, 403 );
-			assert.deepEqual( await res.json(), { error: 'Saving positions isn\'t set up' } );
+			assert.deepEqual( await res.json(), { error: 'Saving for everyone isn\'t set up' } );
 
 		} finally {
 

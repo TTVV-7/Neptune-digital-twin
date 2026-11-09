@@ -7,6 +7,7 @@ import { ModelManager } from './models.js';
 import { createPlacementPanel, toast } from './placement.js';
 import { useSavedPlacements } from './placements.js';
 import { setUpUnderground } from './underground.js';
+import { loadSharedItems } from './shared-items.js';
 import { loadLibrary } from './library.js';
 import { setUpLayout } from './layout.js';
 import { createSidebar } from './sidebar.js';
@@ -280,6 +281,8 @@ function start( apiKey, keySource ) {
 		// Under Google's ground in your own models: the mesh over them cut away (U, or by itself).
 		underground = setUpUnderground( features );
 		for ( const config of afterFeatures ) loadFromConfig( config );
+		// What the admin saved for everyone on the live site, once the kinds it may use are known.
+		loadSharedItems( { models, getLibrary: () => libraryLoaded, onError: message => showBanner( message, 10000 ) } );
 		return layout.restore();
 
 	} );
