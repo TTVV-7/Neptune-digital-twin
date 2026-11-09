@@ -643,6 +643,43 @@ export class Terrain extends EventDispatcher {
 
 	}
 
+	// Put the ground back inside a rectangle (rectFrame): nothing dug or dumped there by hand any
+	// more, and bites taken out of piles there undone. Excavations and stockpiles are left as they
+	// are. Returns whether there was anything to fill in.
+	fillFreeform( r ) {
+
+		const bounds = rectBounds( r );
+		let changed = false;
+		for ( const chunk of this.chunks.values() ) {
+
+			const range = nodeRange( chunk, bounds );
+			if ( ! range ) continue;
+			this.forRange( chunk, range, ( k, x, z ) => {
+
+				if ( insideRect( r, x, z ) < 0 || ( chunk.dug[ k ] === 0 && chunk.loose[ k ] === 0 ) ) return;
+				chunk.dug[ k ] = 0;
+				chunk.loose[ k ] = 0;
+				chunk.looseMat[ k ] = 0;
+				this.dirty.add( chunk.key );
+				changed = true;
+
+			} );
+
+		}
+
+		if ( changed ) this.onFreeformChange?.();
+		return changed;
+
+	}
+
+	// Whether anything has been dug or dumped by hand anywhere.
+	hasFreeform() {
+
+		for ( const chunk of this.chunks.values() ) for ( let k = 0; k < COUNT; k ++ ) if ( chunk.dug[ k ] !== 0 || chunk.loose[ k ] !== 0 ) return true;
+		return false;
+
+	}
+
 	// Forget the bites taken out of a stockpile (call before it's moved, changed or deleted): they
 	// were taken out of that pile, not out of the ground or whatever is put there next.
 	dropBites( key ) {

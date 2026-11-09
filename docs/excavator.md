@@ -83,8 +83,11 @@ Drive the truck away (V) and the load goes with it.
 
 ## Notes
 
-- Getting out leaves the ground as it is. The library's **Clear** puts it back, along with
-  everything else.
+- Getting out leaves the ground as it is. To put it back, open the library (**L**): the **Fill in**
+  tool puts the ground back in a rectangle you drag over the digging (a click fills a 6 m square),
+  and **Fill in digging**, beside **Clear**, puts all of it back. Holes and heaps both go, and bites
+  out of stockpiles are undone; excavations, stockpiles and what's placed stay. Each has **Undo**
+  for a few seconds. **Clear** takes everything away, digging and all.
 - Getting out in the middle of a pass drops what's in the bucket where the bucket is: into the
   truck it was being swung to if it's over that truck by now, else onto the ground. If that truck
   is removed while the bucket is on its way, that pass is dumped on the ground instead.

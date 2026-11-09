@@ -91,7 +91,7 @@ things and switches between before and after (see [Showing and hiding](#showing-
 | Click a card, then the ground | Place it; Shift+click places another |
 | Drag a card onto the map | Place it there |
 | R or the wheel | Turn the item you're placing |
-| Tools (top of the library) | Laydown area, Excavation, Stockpile, Flatten area: drag a rectangle, or click for the usual size |
+| Tools (top of the library) | Laydown area, Excavation, Stockpile, Flatten area: drag a rectangle, or click for the usual size. Fill in: drag over an excavator's digging to put the ground back (**Fill in digging**, beside Clear, puts all of it back) |
 | Row (on a card) | Row: draw a line to place many. Click points on the ground, double-click or Enter to finish, or click the first point to close a loop; drag for a straight row. Backspace takes a point back (see [Rows](#rows-many-of-an-item-along-a-line)) |
 | Dots on a selected row | Drag one to move that point; drag or click a plus to add one; double-click a dot to take it out |
 | Click a placed item | Select it; drag it to move it |

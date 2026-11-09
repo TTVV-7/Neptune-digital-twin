@@ -988,3 +988,69 @@ test( 'with the map still streaming in, the ground under earthworks comes from t
 	assert.ok( result.worst < 0.01, `ground still ${ result.worst.toFixed( 1 ) } m off after ${ result.seconds } s: ${ JSON.stringify( result ) }` );
 
 } );
+
+test( 'an excavator\'s digging filled in: in a rectangle with the Fill in tool, or all of it, with Undo', async () => {
+
+	await openApp();
+	await fresh();
+	await page.evaluate( () => localStorage.removeItem( 'neptune-twin.layout.Neptune Terminals' ) );
+	// Two holes and a heap, as an excavator leaves them (x is minus east), beside a pit placed with
+	// the Excavation tool, which filling in leaves alone.
+	const [ E, N ] = [ - 1500, 1300 ];
+	await place( { width: 6, length: 6, depth: 2 }, E + 12, N, 0 );
+	const read = () => page.evaluate( ( [ E, N ] ) => {
+
+		const { terrain, models } = window.twin;
+		terrain.flush();
+		// Where nothing has been dug yet there are no earthworks: the ground itself.
+		const at = ( east, north ) => +( terrain.surfaceAt( - east, north ) ?? terrain.heightAt( - east, north ) ).toFixed( 2 );
+		const pit = models.entries.find( e => e.kind === 'excavation' );
+		return { a: at( E - 8, N ), b: at( E, N ), heap: at( E, N + 8 ), pit: +terrain.designVolume( pit ).cut.toFixed( 1 ), any: terrain.hasFreeform() };
+
+	}, [ E, N ] );
+	const flat = await read();
+	await page.evaluate( ( [ E, N ] ) => {
+
+		const { terrain } = window.twin;
+		terrain.dig( { x: - ( E - 8 ), z: N, width: 2, length: 2, volume: 4 } );
+		terrain.dig( { x: - E, z: N, width: 2, length: 2, volume: 4 } );
+		terrain.deposit( { x: - E, z: N + 8, volume: 3 } );
+
+	}, [ E, N ] );
+	const dug = await read();
+	assert.ok( dug.a < flat.a - 0.5 && dug.b < flat.b - 0.5 && dug.heap > flat.heap + 0.2, JSON.stringify( { flat, dug } ) );
+
+	// The tool, dragged over the first hole only.
+	await pose( E - 4, N - 25, 30, 0, - 50 );
+	await page.evaluate( () => [ ...document.querySelectorAll( '#library .card.tool' ) ].find( c => c.querySelector( '.name' ).textContent === 'Fill in' ).click() );
+	const from = await screenOf( E - 10, N - 2 );
+	const to = await screenOf( E - 6, N + 2 );
+	await page.mouse.move( from.x, from.y );
+	await page.mouse.down();
+	await page.mouse.move( to.x, to.y, { steps: 6 } );
+	await page.mouse.up();
+	await frames( 2 );
+	const one = await read();
+	assert.deepEqual( [ one.a, one.b, one.heap, one.pit ], [ flat.a, dug.b, dug.heap, flat.pit ], JSON.stringify( { flat, dug, one } ) );
+	assert.match( await page.locator( '.toast' ).last().textContent(), /Filled in the digging there/ );
+
+	// Undo puts the hole back.
+	await page.locator( '.toast button', { hasText: 'Undo' } ).last().click();
+	await frames( 2 );
+	assert.equal( ( await read() ).a, dug.a );
+
+	// All of it, from beside Clear: the holes and the heap, not the pit.
+	await page.locator( '#library footer .fill-in' ).click();
+	await frames( 2 );
+	const none = await read();
+	assert.deepEqual( none, { ...flat, any: false } );
+	// Saved like that.
+	await page.waitForTimeout( 800 );
+	assert.equal( await page.evaluate( () => window.twin.layout.getData().extras.terrain ?? null ), null );
+
+	// Nothing left to fill: says so, and changes nothing.
+	await page.locator( '#library footer .fill-in' ).click();
+	assert.match( await page.locator( '.toast' ).last().textContent(), /Nothing dug or dumped/ );
+	assert.deepEqual( errors, [] );
+
+} );

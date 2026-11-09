@@ -79,6 +79,7 @@ const MAX_VOLUME = 20000;
 const DEG = MathUtils.DEG2RAD;
 
 const PIT_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#2a3844"/><path d="M4 24h12l9 18h14l9-18h12v30H4z" fill="#5b4a3a"/><path d="M16 24l9 18h14l9-18" fill="#6d5a47" stroke="#d9822b" stroke-width="2"/><path d="M4 24h12M48 24h12" stroke="#8a8f86" stroke-width="3"/><path d="M32 6v12m-5-5 5 5 5-5" stroke="#eef2f5" stroke-width="2.5" fill="none"/></svg>';
+const FILL_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#2a3844"/><path d="M4 30h14l5 14h18l5-14h14v24H4z" fill="#5b4a3a"/><path d="M18 30l5 14h18l5-14" fill="#8a7a62" stroke="#d9822b" stroke-width="2" stroke-dasharray="3 3"/><path d="M4 30h14M46 30h14" stroke="#8a8f86" stroke-width="3"/><path d="M32 8v16m-6-6 6 6 6-6" stroke="#eef2f5" stroke-width="2.5" fill="none"/></svg>';
 const PILE_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#2a3844"/><path d="M4 52h56" stroke="#8a8f86" stroke-width="3"/><path d="M10 51 32 30l22 21z" fill="#9a958b"/><path d="M32 30 21 41l4 2 7-6 6 5 4-1z" fill="#b5b0a6"/><g fill="#c8b083"><circle cx="31" cy="8" r="1.8"/><circle cx="33" cy="14" r="1.8"/><circle cx="31" cy="20" r="1.8"/><circle cx="32.5" cy="25.5" r="1.8"/></g></svg>';
 
 const capMaterial = new MeshBasicMaterial( { color: 0xd9822b, transparent: true, opacity: 0.16, side: DoubleSide, depthWrite: false } );
@@ -288,6 +289,50 @@ export function setUpEarthworks( { scene, camera, renderer, canvas, controls, ti
 
 		},
 	} );
+
+	// Undoing an excavator's work: the ground put back where it dug or dumped, in a rectangle or
+	// everywhere, with Undo for a few seconds. Excavations, stockpiles and what's placed stay.
+	const fillIn = ( fill, done, nothing ) => {
+
+		const before = terrain.saveFreeform();
+		if ( ! fill() ) {
+
+			toast( nothing );
+			return;
+
+		}
+
+		sidebar.toolbar.offerUndo( done, () => terrain.loadFreeform( before ) );
+
+	};
+	sidebar.addTool( {
+		name: 'Fill in',
+		hint: 'Drag over digging to put the ground back',
+		title: 'Drag a rectangle over ground an excavator dug or dumped on: it\'s put back as it was. Click for a 6 m square. Excavations, stockpiles and what\'s placed stay; Undo for a few seconds after.',
+		icon: FILL_ICON,
+		mode: 'rect',
+		color: 0x8a7a62,
+		defaultSize: [ 6, 6 ],
+		onDone: ( { east, north, heading, width, length } ) => fillIn(
+			() => terrain.fillFreeform( rectFrame( east, north, heading, width / 2, length / 2 ) ),
+			'Filled in the digging there',
+			'Nothing dug or dumped by an excavator there to fill in',
+		),
+	} );
+	// And all of it, beside the library's Clear (which takes everything away).
+	const clearButton = document.querySelector( '#library footer .buttons .clear' );
+	if ( clearButton ) {
+
+		const button = Object.assign( document.createElement( 'button' ), { type: 'button', className: 'fill-in', textContent: 'Fill in digging' } );
+		button.title = 'Put back all the ground an excavator dug or dumped on. Excavations, stockpiles and what\'s placed stay; Undo for a few seconds after.';
+		button.addEventListener( 'click', () => fillIn(
+			() => terrain.hasFreeform() && ( terrain.resetFreeform(), true ),
+			'Filled in all the excavator\'s digging',
+			'Nothing dug or dumped by an excavator to fill in',
+		) );
+		clearButton.before( button );
+
+	}
 
 	// --- keeping the terrain in step with the placed entries ---------------------------------
 
