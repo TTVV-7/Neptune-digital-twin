@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>World Drive stats</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<!--
+	The owner's play stats (docs/world-drive.md, "Play stats"): GET /api/admin/stats, for a Google
+	account in ADMIN_EMAILS signed in on worlddrive.app (worker/drive/stats.js). Counts a day only,
+	nothing of who. Charts drawn as plain SVG here, with nothing loaded from anywhere else.
+-->
+<style>
+	:root {
+		--bg: #f6f7f9; --card: #fff; --text: #16191d; --muted: #5d6670; --line: #e3e6ea;
+		--accent: #1f7a4d; --accent-2: #8fc9a9; --bar-bg: #eef1f4;
+		color-scheme: light dark;
+	}
+	@media (prefers-color-scheme: dark) {
+		:root { --bg: #111417; --card: #1a1e22; --text: #eef1f4; --muted: #9aa4ae; --line: #2a3036; --accent: #4cc387; --accent-2: #b5e8cc; --bar-bg: #23292e; }
+	}
+	* { box-sizing: border-box; }
+	body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+	main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 48px; }
+	header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+	h1 { font-size: 22px; margin: 0; }
+	h2 { font-size: 15px; margin: 0 0 10px; }
+	.muted { color: var(--muted); }
+	select { font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); }
+	.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; margin-bottom: 16px; }
+	.tile, .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+	.tile .label { color: var(--muted); font-size: 13px; }
+	.tile .value { font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; margin-top: 2px; }
+	.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; margin-top: 12px; }
+	.wide { grid-column: 1 / -1; }
+	svg { display: block; width: 100%; height: auto; }
+	svg text { fill: var(--muted); font-size: 11px; }
+	.bars { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+	.bars td { padding: 4px 0; vertical-align: middle; }
+	.bars td.name { width: 38%; padding-right: 8px; overflow-wrap: anywhere; }
+	.bars td.num { width: 1%; white-space: nowrap; padding-left: 8px; text-align: right; }
+	.bar { height: 10px; border-radius: 5px; background: var(--bar-bg); overflow: hidden; }
+	.bar > span { display: block; height: 100%; background: var(--accent); border-radius: 5px; }
+	.notice { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
+	a { color: var(--accent); }
+	/* On a phone the days' chart keeps a width it can be read at, and scrolls inside its card. */
+	.scroll { overflow-x: auto; }
+	.scroll svg { min-width: 640px; }
+	.legend { display: flex; gap: 14px; font-size: 13px; color: var(--muted); margin: -4px 0 6px; }
+	.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+</style>
+</head>
+<body>
+<main>
+	<header>
+		<div>
+			<h1>World Drive stats</h1>
+			<div class="muted" id="range"></div>
+		</div>
+		<label class="muted">Period
+			<select id="days">
+				<option value="7">Last 7 days</option>
+				<option value="30" selected>Last 30 days</option>
+				<option value="90">Last 90 days</option>
+				<option value="365">Last year</option>
+			</select>
+		</label>
+	</header>
+	<div id="out"><p class="muted">Loading...</p></div>
+	<p class="muted" style="margin-top:24px;font-size:13px">Counts only, nothing of who. Days are UTC. Referrers, countries and page speed in more detail are in Cloudflare's dashboard (Web Analytics).</p>
+</main>
+<script>
+( () => {
+
+	const out = document.getElementById( 'out' );
+	const select = document.getElementById( 'days' );
+	const DAY = 86400000;
+	const esc = text => String( text ).replace( /[&<>"']/g, c => ( { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' } )[ c ] );
+	const num = n => Math.round( n ).toLocaleString();
+	const hours = seconds => seconds >= 3600 ? `${ ( seconds / 3600 ).toFixed( seconds >= 36000 ? 0 : 1 ) } h` : `${ Math.round( seconds / 60 ) } min`;
+	const pretty = id => id.replace( /-/g, ' ' ).replace( /^./, c => c.toUpperCase() );
+	const LOAD_ORDER = [ 'under 2 s', '2-5 s', '5-10 s', '10-20 s', 'over 20 s' ];
+
+	select.addEventListener( 'change', load );
+	load();
+
+	async function load() {
+
+		out.innerHTML = '<p class="muted">Loading...</p>';
+		let res;
+		try {
+
+			res = await fetch( `/api/admin/stats?days=${ select.value }`, { credentials: 'same-origin' } );
+
+		} catch {
+
+			return notice( 'Couldn\'t reach the server. Try again in a moment.' );
+
+		}
+
+		if ( res.status === 401 ) return notice( 'Sign in first: open <a href="/">World Drive</a>, sign in with Google on the globe\'s panel, then come back here.' );
+		if ( res.status === 403 ) return notice( 'This Google account isn\'t an admin. The accounts that are go in the Worker\'s ADMIN_EMAILS setting.' );
+		if ( ! res.ok ) return notice( `Something went wrong (${ res.status }).` );
+		show( await res.json() );
+
+	}
+
+	function notice( html ) {
+
+		out.innerHTML = `<div class="notice">${ html }</div>`;
+
+	}
+
+	function show( { from, to, rows } ) {
+
+		document.getElementById( 'range' ).textContent = `${ from } to ${ to }`;
+		// metric => key => total, and metric => day => total.
+		const byKey = new Map();
+		const byDay = new Map();
+		for ( const [ day, metric, key, n ] of rows ) {
+
+			if ( ! byKey.has( metric ) ) byKey.set( metric, new Map() );
+			byKey.get( metric ).set( key, ( byKey.get( metric ).get( key ) ?? 0 ) + n );
+			if ( ! byDay.has( metric ) ) byDay.set( metric, new Map() );
+			byDay.get( metric ).set( day, ( byDay.get( metric ).get( day ) ?? 0 ) + n );
+
+		}
+
+		const keys = metric => byKey.get( metric ) ?? new Map();
+		const total = metric => [ ...keys( metric ).values() ].reduce( ( a, b ) => a + b, 0 );
+		const days = [];
+		for ( let t = Date.parse( from ); t <= Date.parse( to ); t += DAY ) days.push( new Date( t ).toISOString().slice( 0, 10 ) );
+		const daily = metric => days.map( d => byDay.get( metric )?.get( d ) ?? 0 );
+
+		const visits = total( 'visit' );
+		const play = total( 'play' );
+		const loads = total( 'load_time' );
+		const garageOpens = total( 'garage_open' );
+		const tiles = [
+			[ 'Visits', num( visits ) ],
+			[ 'Play time', hours( play ) ],
+			[ 'Play per visit', visits ? hours( play / visits ) : '-' ],
+			[ 'Drop-ins', num( total( 'dropin' ) ) ],
+			[ 'With others', play ? `${ Math.round( 100 * total( 'play_with_others' ) / play ) }%` : '-' ],
+			[ 'Garage opened', num( garageOpens ) ],
+			[ 'Garage changes', num( total( 'garage_edit' ) ) ],
+			[ 'Mean load', loads ? `${ ( total( 'load_ms' ) / loads / 1000 ).toFixed( 1 ) } s` : '-' ],
+			[ 'Parties made / joined', `${ num( keys( 'party' ).get( 'made' ) ?? 0 ) } / ${ num( keys( 'party' ).get( 'joined' ) ?? 0 ) }` ],
+		];
+
+		// Visits by hour of the day, in this browser's time (counted in UTC hours).
+		const offset = - Math.round( new Date().getTimezoneOffset() / 60 );
+		const byHour = Array.from( { length: 24 }, ( _, h ) => keys( 'visit_hour' ).get( String( ( h - offset + 48 ) % 24 ).padStart( 2, '0' ) ) ?? 0 );
+
+		const playByRide = new Map( [ ...keys( 'play' ) ].map( ( [ k, v ] ) => [ pretty( k ), v ] ) );
+		out.innerHTML = `
+			<div class="tiles">${ tiles.map( ( [ label, value ] ) => `<div class="tile"><div class="label">${ esc( label ) }</div><div class="value">${ esc( value ) }</div></div>` ).join( '' ) }</div>
+			<div class="card wide">
+				<h2>Each day</h2>
+				<div class="legend"><span><i style="background:var(--accent)"></i>Visits</span><span><i style="background:var(--accent-2)"></i>Play time (hours, its own scale)</span></div>
+				<div class="scroll">${ dayChart( days, daily( 'visit' ), daily( 'play' ).map( s => s / 3600 ) ) }</div>
+			</div>
+			<div class="grid">
+				<div class="card"><h2>When people load in <span class="muted">(your time)</span></h2>${ hourChart( byHour, offset ) }</div>
+				<div class="card"><h2>Where they come from</h2>${ bars( keys( 'load' ), num, 10 ) }</div>
+				<div class="card"><h2>Play time by ride</h2>${ bars( playByRide, hours, 12 ) }</div>
+				<div class="card"><h2>Rides dropped in with</h2>${ bars( new Map( [ ...keys( 'ride' ) ].map( ( [ k, v ] ) => [ pretty( k ), v ] ) ), num, 12 ) }</div>
+				<div class="card"><h2>Where they drop in</h2>${ bars( new Map( [ ...keys( 'dropin' ) ].map( ( [ k, v ] ) => [ k === 'other' ? 'Elsewhere (search or pin)' : pretty( k ), v ] ) ), num, 12 ) }</div>
+				<div class="card"><h2>Garage changes by part <span class="muted">(${ num( garageOpens ) } opens)</span></h2>${ bars( new Map( [ ...keys( 'garage_edit' ) ].map( ( [ k, v ] ) => [ pretty( k ), v ] ) ), num, 8 ) }</div>
+				<div class="card"><h2>Load time</h2>${ bars( new Map( LOAD_ORDER.map( k => [ k, keys( 'load_time' ).get( k ) ?? 0 ] ) ), num, 5, false ) }</div>
+			</div>`;
+
+	}
+
+	// A table of bars, biggest first (unless sorted is false), the top `most` of them.
+	function bars( map, format, most, sorted = true ) {
+
+		let entries = [ ...map ];
+		if ( sorted ) entries.sort( ( a, b ) => b[ 1 ] - a[ 1 ] );
+		entries = entries.slice( 0, most );
+		if ( ! entries.length || entries.every( ( [ , v ] ) => ! v ) ) return '<p class="muted">Nothing yet.</p>';
+		const top = Math.max( ...entries.map( ( [ , v ] ) => v ) );
+		return `<table class="bars">${ entries.map( ( [ k, v ] ) => `<tr><td class="name">${ esc( k ) }</td><td><div class="bar"><span style="width:${ top ? ( 100 * v / top ).toFixed( 1 ) : 0 }%"></span></div></td><td class="num">${ esc( format( v ) ) }</td></tr>` ).join( '' ) }</table>`;
+
+	}
+
+	// Visits a day as bars, play hours as a line on its own scale.
+	function dayChart( days, visits, play ) {
+
+		const W = 900, H = 220, L = 34, B = 22, T = 8;
+		const top = Math.max( 1, ...visits );
+		const playTop = Math.max( 0.1, ...play );
+		const step = ( W - L ) / days.length;
+		const y = v => T + ( H - B - T ) * ( 1 - v / top );
+		const py = v => T + ( H - B - T ) * ( 1 - v / playTop );
+		const every = Math.ceil( days.length / 10 );
+		let svg = `<svg viewBox="0 0 ${ W } ${ H }" role="img" aria-label="Visits and play time each day">`;
+		for ( const f of [ 0, 0.5, 1 ] ) svg += `<line x1="${ L }" x2="${ W }" y1="${ y( top * f ) }" y2="${ y( top * f ) }" stroke="var(--line)"/><text x="${ L - 6 }" y="${ y( top * f ) + 4 }" text-anchor="end">${ num( top * f ) }</text>`;
+		days.forEach( ( d, i ) => {
+
+			const x = L + i * step;
+			svg += `<rect x="${ x + step * 0.15 }" y="${ y( visits[ i ] ) }" width="${ step * 0.7 }" height="${ H - B - y( visits[ i ] ) }" rx="2" fill="var(--accent)"><title>${ d }: ${ visits[ i ] } visits, ${ play[ i ].toFixed( 1 ) } h played</title></rect>`;
+			if ( i % every === 0 ) svg += `<text x="${ x + step / 2 }" y="${ H - 6 }" text-anchor="middle">${ d.slice( 5 ) }</text>`;
+
+		} );
+		svg += `<polyline fill="none" stroke="var(--accent-2)" stroke-width="2.5" points="${ play.map( ( v, i ) => `${ L + i * step + step / 2 },${ py( v ) }` ).join( ' ' ) }"/>`;
+		return svg + '</svg>';
+
+	}
+
+	function hourChart( counts, offset ) {
+
+		const W = 340, H = 140, B = 20, T = 6;
+		const top = Math.max( 1, ...counts );
+		const step = W / 24;
+		let svg = `<svg viewBox="0 0 ${ W } ${ H }" role="img" aria-label="Visits by hour of the day">`;
+		counts.forEach( ( n, h ) => {
+
+			const height = ( H - B - T ) * n / top;
+			svg += `<rect x="${ h * step + 2 }" y="${ H - B - height }" width="${ step - 4 }" height="${ height }" rx="2" fill="var(--accent)"><title>${ String( h ).padStart( 2, '0' ) }:00: ${ n } visits</title></rect>`;
+			if ( h % 3 === 0 ) svg += `<text x="${ h * step + step / 2 }" y="${ H - 5 }" text-anchor="middle">${ h }</text>`;
+
+		} );
+		return svg + `</svg><p class="muted" style="font-size:12px;margin:6px 0 0">UTC${ offset >= 0 ? '+' : '' }${ offset }</p>`;
+
+	}
+
+} )();
+</script>
+</body>
+</html>

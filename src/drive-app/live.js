@@ -126,6 +126,36 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 	// The keepalive, the minute back on the globe and the wait to try again run on a timer of their
 	// own, so they go on while frames don't (a tab in the background).
 	setInterval( tick, 1000 );
+	// A page out of sight (another tab or window in front, minimised, a phone's screen off) draws no
+	// frames, so update() stops and its car would be gone for the others STALE_MS later: as it
+	// hides, its car is parked where it is instead, standing still and paused, so it stays there for
+	// them ("paused" in their list) and is what a newcomer is sent. Its next frame, back in sight,
+	// says otherwise at once. With no budget for it just then, tick tries again each second.
+	let parking = false;
+	if ( typeof document !== 'undefined' ) document.addEventListener( 'visibilitychange', () => {
+
+		if ( document.visibilityState !== 'hidden' || ! latest ) return;
+		latest = parked( latest ) ?? latest;
+		parking = true;
+		park();
+
+	} );
+
+	function park() {
+
+		if ( ! parking || ! latest || ! ( latest[ 10 ] & FLAGS.paused ) ) {
+
+			parking = false;
+			return;
+
+		}
+
+		if ( ! isLive() || ! players.size || flagsSent === latest[ 10 ] ) return;
+		if ( ! spend() ) return;
+		sendState();
+		parking = false;
+
+	}
 
 	function emit( type, data ) {
 
@@ -423,6 +453,14 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 	// The car as it is now, to a room that has just had someone come after this page had it to itself
 	// (and so had sent none): they see it at once, wherever it's got to, even with no frames coming
 	// (a tab in the background). Not on the globe: that's no car.
+	// A state `s` as its car parked: where it is, still, paused, its wheels on the ground if they were.
+	function parked( s ) {
+
+		if ( s.length !== 11 ) return null;
+		return [ ...s.slice( 0, 7 ), 0, 0, 0, FLAGS.paused | ( s[ 10 ] & FLAGS.grounded ) ];
+
+	}
+
 	function sendState() {
 
 		if ( ! latest || away || ! isLive() ) return;
@@ -439,6 +477,7 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 		// Back on the globe for a minute: the area's room goes.
 		if ( room && wanted() !== room ) sync();
 		if ( ! isLive() ) return;
+		park();
 		const now = performance.now();
 		// Nothing heard since a keepalive SILENT_MS ago: the way to the room has gone quiet (no word of
 		// it closing gets through either), so it's a dropped connection, tried again as one.
@@ -677,7 +716,10 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 		update( car ) {
 
 			if ( ended ) return;
-			const s = car ? stateOf( car ) : null;
+			// Out of sight, a frame the browser still draws (one already asked for, or the slow ones
+			// some keep drawing) says parked too, as the page did as it hid.
+			const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+			const s = car ? ( hidden ? parked( stateOf( car ) ?? [] ) : stateOf( car ) ) : null;
 			latest = s;
 			if ( ! s ) return;
 			const now = performance.now();

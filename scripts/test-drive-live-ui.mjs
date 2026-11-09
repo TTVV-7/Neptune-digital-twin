@@ -50,7 +50,7 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { WebSocket } from 'ws';
-import { FLAGS, INTERP_MS, NEARBY_SHARDS, PARTY_MAX, PROTOCOL, SEND_HZ, cellOf, makePartyCode, parseRoom, shardOf } from '../src/drive-app/live-protocol.js';
+import { FLAGS, INTERP_MS, NEARBY_SHARDS, PARTY_MAX, PROTOCOL, SEND_HZ, STALE_MS, cellOf, makePartyCode, parseRoom, shardOf } from '../src/drive-app/live-protocol.js';
 import { makeVisit } from '../worker/drive/visits.js';
 import { startVite, startWorker } from './worker-harness.mjs';
 
@@ -640,6 +640,50 @@ describe( 'World Drive, driving with others', () => {
 		await b.evaluate( () => window.drive.ghosts.hide( 'Ana', false ) );
 		assert.ok( kept <= 4, `${ kept } of A's states kept` );
 		await b.waitForFunction( () => window.drive.ghosts.list()[ 0 ]?.visible );
+
+	} );
+
+	test( 'A out of sight (another window in front): no frames, but parked on B rather than gone after STALE_MS', async () => {
+
+		await placeCar( a, 0, 0, 0 );
+		await b.waitForFunction( () => window.drive.ghosts.list()[ 0 ]?.visible && ! window.drive.ghosts.list()[ 0 ].paused, null, { timeout: 15000 } );
+		// As a browser does for a page out of sight: it says it's hidden, and draws no more frames.
+		await a.evaluate( () => {
+
+			const raf = window.requestAnimationFrame;
+			window.worldDriveHidden = { raf, held: [] };
+			window.requestAnimationFrame = fn => window.worldDriveHidden.held.push( fn );
+			Object.defineProperty( document, 'visibilityState', { configurable: true, get: () => 'hidden' } );
+			document.dispatchEvent( new Event( 'visibilitychange' ) );
+
+		} );
+		try {
+
+			// (Within a second or two: as soon as its budget for messages has room, if it hasn't just then.)
+			await b.waitForFunction( () => window.drive.ghosts.list()[ 0 ]?.paused, null, { timeout: 5000 } );
+			const before = ( await whereAll( b ) ).others[ 0 ].at;
+			await b.waitForTimeout( STALE_MS + 2000 );
+			const seen = ( await ghosts( b ) )[ 0 ];
+			assert.ok( seen?.visible && seen.paused, 'A\'s car went from B while A was out of sight' );
+			assert.ok( distance( before, ( await whereAll( b ) ).others[ 0 ].at ) < 0.05, 'a parked ghost moved' );
+
+		} finally {
+
+			// Back in sight: frames again.
+			await a.evaluate( () => {
+
+				const { raf, held } = window.worldDriveHidden;
+				window.requestAnimationFrame = raf;
+				delete document.visibilityState;
+				document.dispatchEvent( new Event( 'visibilitychange' ) );
+				for ( const fn of held ) raf( fn );
+
+			} );
+
+		}
+
+		// And driving on B at once.
+		await b.waitForFunction( () => window.drive.ghosts.list()[ 0 ] && ! window.drive.ghosts.list()[ 0 ].paused, null, { timeout: 5000 } );
 
 	} );
 
