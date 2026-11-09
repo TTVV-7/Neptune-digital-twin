@@ -20,7 +20,7 @@ import { isTyping } from './walk.js';
 // can be moved but not saved.
 
 const API = new URL( 'api/area-edits/', document.baseURI );
-const TIMEOUT = 8000;
+const TIMEOUT = 15000;
 // While dragging, the concrete is cut again at most this often (seconds), and once it stops.
 const RECUT = 0.12;
 // A press moves this far (px) before it's a drag rather than a click.
@@ -185,28 +185,42 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar } ) {
 
 	}
 
+	// Where the admin moved areas to, for everyone. A slow or failed answer is tried again, so a
+	// busy moment as the site opens doesn't leave the areas where the drawing has them.
 	async function loadSaved( s ) {
 
 		if ( ! await loadConfig() ) return;
-		let edits;
-		try {
+		for ( let attempt = 0; attempt < 4; attempt ++ ) {
 
-			const res = await fetch( new URL( s.model, API ), { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout( TIMEOUT ) } );
-			if ( ! res.ok || ! /json/.test( res.headers.get( 'Content-Type' ) ?? '' ) ) return;
-			( { edits } = await res.json() );
+			if ( attempt ) await new Promise( resolve => setTimeout( resolve, 2000 * attempt ) );
+			if ( states.get( s.entry ) !== s ) return;
+			try {
 
-		} catch {
+				const res = await fetch( new URL( s.model, API ), { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout( TIMEOUT ) } );
+				// No such API here (an older server): nothing to load.
+				if ( ! res.ok || ! /json/.test( res.headers.get( 'Content-Type' ) ?? '' ) ) {
 
-			return;
+					if ( res.status >= 500 ) continue;
+					return;
+
+				}
+
+				const { edits } = await res.json();
+				if ( ! edits?.length || states.get( s.entry ) !== s ) return;
+				for ( const { id, pts, n } of edits ) s.saved.set( id, { pts, n } );
+				await ensureData( s );
+				for ( const id of s.saved.keys() ) if ( s.base.has( id ) && ! s.local.has( id ) ) rebuild( s, id );
+				cut( s );
+				render();
+				return;
+
+			} catch {
+
+				// Tried again.
+
+			}
 
 		}
-
-		if ( ! edits?.length || states.get( s.entry ) !== s ) return;
-		for ( const { id, pts, n } of edits ) s.saved.set( id, { pts, n } );
-		await ensureData( s );
-		for ( const id of s.saved.keys() ) if ( s.base.has( id ) ) rebuild( s, id );
-		cut( s );
-		render();
 
 	}
 
@@ -215,7 +229,7 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar } ) {
 
 		s.loading ??= ( async () => {
 
-			const res = await fetch( s.dataUrl, { signal: AbortSignal.timeout( TIMEOUT * 2 ) } );
+			const res = await fetch( s.dataUrl, { signal: AbortSignal.timeout( TIMEOUT * 3 ) } );
 			if ( ! res.ok ) throw new Error( `${ res.status }` );
 			const data = await res.json();
 			s.data = data;
@@ -256,6 +270,12 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar } ) {
 			for ( const m of data.markups ) s.planes.set( m.id, areaParts( markupOf( s, m.id ), s.all ).plane );
 
 		} )();
+		// A failed load can be tried again.
+		s.loading.catch( () => {
+
+			s.loading = null;
+
+		} );
 		return s.loading;
 
 	}
