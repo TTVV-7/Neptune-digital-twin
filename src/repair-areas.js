@@ -416,7 +416,16 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar } ) {
 
 	}
 
+	// Under the status lines, which grow and shrink (underground, loading tiles), on a wide screen.
+	const status = document.getElementById( 'status' );
 	onUpdate?.( dt => {
+
+		if ( editing && status && window.innerWidth > 700 ) {
+
+			const top = status.hidden ? 12 : Math.round( status.getBoundingClientRect().bottom + 10 );
+			if ( panel.style.top !== `${ top }px` ) panel.style.top = `${ top }px`;
+
+		}
 
 		sinceCut += dt;
 		if ( dirtyCut && ( ! press?.dragging || sinceCut > RECUT ) ) cut( dirtyCut );

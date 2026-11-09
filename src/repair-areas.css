@@ -146,6 +146,7 @@ canvas.picking-surface {
 		left: 16px;
 		width: auto;
 		max-height: 45%;
+		top: auto !important;
 	}
 
 }
