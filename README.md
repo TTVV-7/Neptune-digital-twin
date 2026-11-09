@@ -238,8 +238,21 @@ To see inside, press **U** to cut Google's ground away over it, or press **G** (
 through the ground into the gallery or tunnel, then **F** to walk; Google's ground stays cut away
 while you're under it there ([Models under the ground](#models-under-the-ground)).
 
-To bring in newer markups, save the artifact's `markups` collection (one JSON file per markup, or
-a `{ markups: [...] }` file) and rebuild; a folder is also saved as `scripts/data/b2d2-markups.json`:
+**From a progress drawing.** A Bluebeam progress markup of the Hatch drawings (ST005 to ST010,
+filled polygons coloured by date as its legend says) is read straight into the model's areas:
+
+```bash
+node scripts/b2d2-progress.mjs "2026.11.08 - Progress.pdf"
+node scripts/b2d2-repair-model.mjs
+```
+
+The first finds each page's sheet from its title block (with `pdftotext`, or `--sheets ST007,...`),
+places each polygon on the wall, floor or soffit of the model it's drawn on, keeps the ids of areas
+that are still there, and lists what's new, what's gone and anything it couldn't place (`--dry-run`
+only lists). Areas take the drawing's measured m². Each chipped area gets a rim in its date's colour.
+
+To bring in markups from the artifact instead, save its `markups` collection (one JSON file per
+markup, or a `{ markups: [...] }` file) and rebuild; a folder is also saved as `scripts/data/b2d2-markups.json`:
 
 ```bash
 node scripts/b2d2-repair-model.mjs --markups path/to/markups

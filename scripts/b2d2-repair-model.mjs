@@ -78,7 +78,7 @@ const CHIPPED = 'Chipped / hydro-demo';
 // A chipped area, in metres: how deep (a markup's measured depth wins), how far the edge steps in
 // on its way down, how far apart the points along it are, and the rebar (15M bars, 300 mm both
 // ways, 50 mm cover), which runs on this far into the concrete past the edge.
-const CHIP = { depth: 0.1, inset: 0.03, step: 0.05, bar: 0.016, spacing: 0.3, cover: 0.05, runOn: 0.12, sides: 8 };
+const CHIP = { depth: 0.1, inset: 0.03, step: 0.08, bar: 0.016, spacing: 0.3, cover: 0.05, runOn: 0.12, sides: 8 };
 // A face an area was marked on: parallel to it and this close (m). Failing that, the nearest
 // parallel face this close is taken as the one meant.
 const ON_FACE = 0.03;
@@ -600,6 +600,41 @@ const chippedMat = doc.createMaterial( 'Chipped concrete' )
 	.setMetallicFactor( 0 )
 	.setRoughnessFactor( 0.95 )
 	.setDoubleSided( true );
+// A chipped area's rim on the face round it, coloured by when it was chipped as the progress
+// drawings' legend has it (f.chipped, from scripts/b2d2-progress.mjs).
+const CHIPPED_COLOURS = { '2026-11-02': '#22c55e', '2026-11-03': '#06b6d4', '2026-11-04': '#f97316', '2026-11-05/08': '#ec4899' };
+const RIM = 0.04;
+const rimMats = new Map();
+const rimMat = date => {
+
+	const hex = CHIPPED_COLOURS[ date ] ?? '#94a3b8';
+	if ( ! rimMats.has( hex ) ) rimMats.set( hex, flatMaterial( `Chipped ${ date ?? '' }`.trim(), hex, 1 ) );
+	return rimMats.get( hex );
+
+};
+
+// Strips on the face round the outline, outside it, a hair off the face toward where it was seen.
+function rim( plane ) {
+
+	const pos = [], idx = [];
+	const poly = plane.poly;
+	for ( let i = 0; i < poly.length; i ++ ) {
+
+		const [ a, b ] = [ poly[ i ], poly[ ( i + 1 ) % poly.length ] ];
+		const len = Math.hypot( b[ 0 ] - a[ 0 ], b[ 1 ] - a[ 1 ] );
+		if ( len < 1e-6 ) continue;
+		// Outward: right of an anticlockwise outline.
+		const out = [ ( b[ 1 ] - a[ 1 ] ) / len * RIM, - ( b[ 0 ] - a[ 0 ] ) / len * RIM ];
+		const k = pos.length / 3;
+		for ( const [ s, t ] of [ a, b, [ b[ 0 ] + out[ 0 ], b[ 1 ] + out[ 1 ] ], [ a[ 0 ] + out[ 0 ], a[ 1 ] + out[ 1 ] ] ] ) pos.push( ...toWorld( plane, s, t, - 0.003 ).toArray() );
+		idx.push( k, k + 1, k + 2, k, k + 2, k + 3 );
+
+	}
+
+	return { pos, idx, normal: plane.N.toArray() };
+
+}
+
 const rebarMat = doc.createMaterial( 'Exposed rebar' ).setBaseColorFactor( rgba( '#7c4a2d' ) ).setMetallicFactor( 0.5 ).setRoughnessFactor( 0.65 );
 
 // A flat patch's triangles (fill, and outline strips inside each edge), 3 cm off the face.
@@ -677,6 +712,8 @@ for ( const m of markups ) {
 		const depth = f.depthMm > 0 ? f.depthMm / 1000 : CHIP.depth;
 		const bars = rebar( plane );
 		mesh.addPrimitive( loosePrim( recess( plane, depth, random( m.id ) ), chippedMat ) );
+		const edge = rim( plane );
+		mesh.addPrimitive( flatPrim( edge, edge.normal, rimMat( f.chipped ) ) );
 		if ( bars.idx.length ) {
 
 			mesh.addPrimitive( doc.createPrimitive()
@@ -699,7 +736,7 @@ for ( const m of markups ) {
 	}
 
 	repairs.addChild( doc.createNode( name ).setMesh( mesh ).setExtras( {
-		id: m.id, zone: zoneName( m.zone ), face: m.face, grid: m.grid, area_m2: m.area,
+		id: m.id, zone: zoneName( m.zone ), face: m.face, grid: m.grid, area_m2: m.area, chipped: f.chipped ?? null,
 		defect: f.type ?? null, depth: f.depth ?? null, status: f.status ?? null, notes: f.text ?? '', source: m.src ?? null,
 		// Stays solid when the twin's "See-through models" makes the rest see-through.
 		xraySolid: true,
