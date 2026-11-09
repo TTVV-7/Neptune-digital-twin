@@ -173,6 +173,8 @@ export function setUpViews( { models, controls, onUpdate, getUnderground, toast 
 
 		},
 		update: render,
+		// For a model's other tools to sit in (repair-areas.js's Edit areas).
+		bar,
 	};
 
 }

@@ -4,6 +4,7 @@ import { createLayout, deleteLayout, getLayout, getShared, isShared, listLayouts
 import { premiumFor, stripeWebhook } from './premium.js';
 import { listPlacements, savePlacement } from './placements.js';
 import { deleteSharedItem, listSharedItems, saveSharedItem } from './shared-items.js';
+import { deleteAreaEdit, listAreaEdits, saveAreaEdit } from './area-edits.js';
 
 // The Cloudflare Worker behind the app: "Sign in with Google", layouts saved to your account
 // and shared by link (see docs/accounts.md), and premium equipment bought with Stripe
@@ -21,11 +22,12 @@ import { deleteSharedItem, listSharedItems, saveSharedItem } from './shared-item
 //   GOOGLE_JWKS_URL       tests only: where to get the keys ID tokens are signed with
 //   STRIPE_*, PREMIUM_*   premium equipment, off unless set (see premium.js)
 //   PLACEMENT_KEY         secret, optional: the admin's passcode for saving for everyone: models'
-//                         positions (placements.js) and items (shared-items.js); without it
+//                         positions (placements.js), items (shared-items.js) and repair areas
+//                         moved in the twin (area-edits.js); without it
 //                         nothing can be saved for everyone
 // Without a database or GOOGLE_CLIENT_ID there are no accounts: /api/config tells the app to run
 // on its own, as on a static host, and everything else answers 503, except what's saved for
-// everyone (accounts: false: models' positions, shared items), which needs only the database.
+// everyone (accounts: false: models' positions, shared items, moved areas), which needs only the database.
 
 // auth: 'required' (the default) answers 401 when signed out; 'optional' looks the user up if
 // there's a session; 'none' doesn't. sameOrigin: false skips the cross-site check, for Stripe's
@@ -49,6 +51,9 @@ const ROUTES = [
 	{ method: 'GET', path: '/api/shared-items', handler: listSharedItems, auth: 'none', accounts: false },
 	{ method: 'PUT', path: '/api/shared-items/:id', handler: saveSharedItem, auth: 'none', accounts: false },
 	{ method: 'DELETE', path: '/api/shared-items/:id', handler: deleteSharedItem, auth: 'none', accounts: false },
+	{ method: 'GET', path: '/api/area-edits/:model', handler: listAreaEdits, auth: 'none', accounts: false },
+	{ method: 'PUT', path: '/api/area-edits/:model/:id', handler: saveAreaEdit, auth: 'none', accounts: false },
+	{ method: 'DELETE', path: '/api/area-edits/:model/:id', handler: deleteAreaEdit, auth: 'none', accounts: false },
 ];
 
 export default {

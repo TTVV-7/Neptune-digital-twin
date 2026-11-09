@@ -53,8 +53,9 @@ visitor for a Maps key (kept in their browser) and has no sign-in.
 
 A **Secret** named `PLACEMENT_KEY`, any passcode you like, is the admin's passcode for saving
 on the live site for everyone: where models from `MODELS` stand (the P panel's **Save position
-for everyone**), and items placed in the app (**Save for everyone**, which everyone then sees as
-part of the site). The P panel asks for it once per browser. It needs only the database, not
+for everyone**), items placed in the app (**Save for everyone**, which everyone then sees as
+part of the site), and the B2D2 model's repair areas moved with **Edit areas**. The app asks for
+it once per browser. It needs only the database, not
 sign-in. Change it to stop anyone who had the old one; without it, nothing can be saved for
 everyone.
 
@@ -145,6 +146,8 @@ Tests (both run everything on your computer, with test keys standing in for Goog
 | `PUT /api/placements` `{ url, east, north, up, heading }` | Save where a model from `MODELS` stands, for everyone. Needs the `X-Edit-Key` header to match the `PLACEMENT_KEY` secret (403 without it, or when it isn't set). The P panel's **Save position for everyone** sends it |
 | `GET /api/shared-items` | Anyone: `{ items: [ { id, config, updatedAt } ] }`, the items saved for everyone, each the config the app places it from. Needs only the database |
 | `PUT / DELETE /api/shared-items/:id` `{ config }` | Save (add or replace) or remove an item for everyone. Needs `X-Edit-Key` to match `PLACEMENT_KEY`; a model file must be the site's own (`models/` or `library/`); at most 500 items of 32 KB |
+| `GET /api/area-edits/:model` | Anyone: `{ edits: [ { id, pts, n, updatedAt } ] }`, the repair areas of a model (its file name without `.glb`, e.g. `b2d2-repair`) moved in the twin: each area's outline and normal in the model's markup frame. Needs only the database |
+| `PUT / DELETE /api/area-edits/:model/:id` `{ pts, n }` | Save where an area is moved to, or put it back where the drawing has it, for everyone. Needs `X-Edit-Key` to match `PLACEMENT_KEY`; three to 200 corners; at most 2000 areas a model |
 
 `premium` is `{ enabled: false }` until Stripe is set up, then `{ enabled: true, link, price,
 unlocked, clientReferenceId? }`.

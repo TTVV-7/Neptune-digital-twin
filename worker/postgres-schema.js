@@ -92,4 +92,17 @@ export const MIGRATIONS = [
 			);
 		`,
 	},
+	{
+		version: 5,
+		// worker/migrations/0005_area_edits.sql: repair areas the admin moved in the twin.
+		sql: `
+			CREATE TABLE IF NOT EXISTS area_edits (
+				model TEXT NOT NULL,
+				id TEXT NOT NULL,
+				data TEXT NOT NULL,
+				updated_at BIGINT NOT NULL,
+				PRIMARY KEY ( model, id )
+			);
+		`,
+	},
 ];

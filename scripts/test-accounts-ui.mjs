@@ -332,6 +332,93 @@ test( 'the admin saves an item for everyone with the passcode; everyone sees it;
 
 } );
 
+test( 'the admin moves a B2D2 repair area and saves it for everyone; put back, it\'s where the drawing has it', async () => {
+
+	const admin = await newPage();
+	const answers = [ PASSCODE ];
+	admin.on( 'dialog', d => d.accept( answers.shift() ) );
+	await openApp( admin, undefined, { keepProjectModels: true } );
+	await admin.waitForFunction( () => window.twin.repairAreas?.areas && window.twin.models.entries.some( e => e.url?.endsWith( 'b2d2-repair.glb' ) && ! e.placing ), null, { timeout: 60000 } );
+	await admin.evaluate( () => window.twin.views.go( 'C31' ) );
+	await admin.waitForFunction( () => ! window.twin.views.gliding );
+	await admin.locator( '#views .edit-areas' ).click();
+	await admin.evaluate( () => window.twin.repairAreas.ready() );
+	const area = id => admin.evaluate( id => window.twin.repairAreas.areas().find( a => a.id === id ), id );
+
+	// A click on the nearest area in view picks it: not the model, and not the mouse captured.
+	const target = await admin.evaluate( () => {
+
+		const { models, camera, renderer } = window.twin;
+		const found = [];
+		models.group.traverse( node => {
+
+			if ( ! node.userData.xraySolid || ! node.userData.id ) return;
+			const mesh = node.children.find( o => o.isMesh );
+			mesh.geometry.computeBoundingBox();
+			const at = mesh.localToWorld( mesh.geometry.boundingBox.getCenter( mesh.position.clone() ) );
+			const distance = at.distanceTo( camera.position );
+			at.project( camera );
+			const rect = renderer.domElement.getBoundingClientRect();
+			if ( at.z < 1 && Math.abs( at.x ) < 0.5 && Math.abs( at.y ) < 0.5 ) found.push( { id: node.userData.id, distance, x: rect.left + ( at.x + 1 ) / 2 * rect.width, y: rect.top + ( 1 - at.y ) / 2 * rect.height } );
+
+		} );
+		return found.sort( ( a, b ) => a.distance - b.distance )[ 0 ];
+
+	} );
+	assert.ok( target, 'an area in view' );
+	await admin.mouse.click( target.x, target.y );
+	assert.match( await admin.locator( '#area-editor .what' ).textContent(), /C31 gallery/ );
+	assert.equal( await admin.evaluate( () => !! document.pointerLockElement ), false );
+	const drawn = await area( target.id );
+
+	// Dragged along its face, then nudged and turned.
+	await admin.mouse.move( target.x, target.y );
+	await admin.mouse.down();
+	await admin.mouse.move( target.x + 60, target.y - 20, { steps: 8 } );
+	await admin.mouse.up();
+	const dragged = await area( target.id );
+	assert.ok( dragged.dirty && dragged.moved );
+	assert.notDeepEqual( dragged.pts, drawn.pts );
+	// Still on its face: the same normal, every corner the same distance along it.
+	assert.deepEqual( dragged.n, drawn.n );
+	const along = a => a.pts.map( p => p.reduce( ( s, v, i ) => s + v * a.n[ i ], 0 ) );
+	along( dragged ).forEach( ( d, i ) => assert.ok( Math.abs( d - along( drawn )[ i ] ) < 1e-3 ) );
+	await admin.locator( '#area-editor [data-move=up]' ).click();
+	await admin.locator( '#area-editor [data-turn="1"]' ).click();
+	await admin.locator( '#area-editor .undo' ).click();
+	const moved = await area( target.id );
+	assert.ok( Math.abs( moved.pts[ 0 ][ 1 ] - dragged.pts[ 0 ][ 1 ] - 0.05 ) < 1e-6, 'up 5 cm' );
+	assert.equal( await admin.locator( '#area-editor .save' ).textContent(), 'Save for everyone (1)' );
+
+	const saved = () => admin.evaluate( async () => ( await ( await fetch( '/api/area-edits/b2d2-repair' ) ).json() ).edits );
+	await admin.locator( '#area-editor .save' ).click();
+	await admin.waitForFunction( () => [ ...document.querySelectorAll( '.toast' ) ].some( t => /^Saved for everyone: 1 area/.test( t.textContent ) ) );
+	const [ edit ] = await saved();
+	assert.equal( edit.id, target.id );
+	assert.deepEqual( edit.pts, moved.pts );
+
+	// Someone else sees it where the admin put it.
+	const viewer = await newPage();
+	await openApp( viewer, undefined, { keepProjectModels: true } );
+	await viewer.waitForFunction( id => window.twin.repairAreas?.areas().find( a => a.id === id )?.moved, target.id, { timeout: 60000 } );
+	assert.deepEqual( ( await viewer.evaluate( id => window.twin.repairAreas.areas().find( a => a.id === id ), target.id ) ).pts, moved.pts );
+	assert.equal( await viewer.locator( '#area-editor' ).isVisible(), false );
+
+	// Back to the drawing, saved: gone from the server.
+	await admin.locator( '#area-editor .drawing' ).click();
+	assert.deepEqual( ( await area( target.id ) ).pts, drawn.pts );
+	await admin.evaluate( () => document.querySelectorAll( '.toast' ).forEach( t => t.remove() ) );
+	await admin.locator( '#area-editor .save' ).click();
+	await admin.waitForFunction( () => [ ...document.querySelectorAll( '.toast' ) ].some( t => /^Saved for everyone: 1 area/.test( t.textContent ) ) );
+	assert.deepEqual( await saved(), [] );
+	await shot( admin, 'area-editor' );
+	await admin.locator( '#area-editor .done' ).click();
+	assert.equal( await admin.locator( '#area-editor' ).isVisible(), false );
+	await admin.context().close();
+	await viewer.context().close();
+
+} );
+
 test( 'without the Worker the app is as before: no account, one failed request', async () => {
 
 	vite.stop();
@@ -367,12 +454,12 @@ async function newPage() {
 
 }
 
-async function openApp( target, url = `${ BASE }/?prompt` ) {
+async function openApp( target, url = `${ BASE }/?prompt`, { keepProjectModels = false } = {} ) {
 
 	await target.goto( url );
 	await target.locator( '#skip' ).click();
 	await target.waitForFunction( () => window.twin?.sidebar, null, { timeout: 60000 } );
-	await dropProjectModels( target );
+	if ( ! keepProjectModels ) await dropProjectModels( target );
 	await target.waitForTimeout( 500 );
 
 }

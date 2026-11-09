@@ -19,26 +19,23 @@
 // with `recenter: false` and `up: null` the twin sets grade on Google's ground, and the gallery,
 // pit and tunnel go below it. Heading 0 points C31's grid numbers (0 toward 69) east.
 //
-// Areas chipped or hydro-demolished (status "Chipped / hydro-demo") are drawn as they are on site:
-// the area is cut out of the wall, floor or soffit it was marked on, and in its place is a recess
-// of rough, fresh concrete (CHIP.depth deep, the edge stepping in irregularly) with the rebar mat
-// exposed in it: bars both ways at CHIP.spacing, CHIP.cover behind the face, running on into the
-// concrete past the edge. The roughness is random but seeded by the markup's id, so a rebuild
-// comes out the same. Its rim on the face is coloured by when it was chipped. Other areas are a flat cyan patch 3 cm off their face (toward where they were
-// marked from), unlit so they read underground, with a darker outline. Every area's node carries
-// its markup in `extras` (grid, face, area, defect, status, notes), and xraySolid, so the twin's
-// "See-through models" leaves the areas solid while the concrete round them goes see-through.
+// How the areas are drawn (chipped ones cut out of their face, with a recess of fresh concrete and
+// the rebar mat in it) is src/repair-geometry.js, which the twin's area editor runs too. Every
+// area's node carries its markup in `extras` (id, grid, face, area, defect, status, notes), and
+// xraySolid, so the twin's "Solid models" off leaves the areas solid while the concrete round them
+// goes see-through. Next to the model goes its .json: the areas and the layers they're cut out of,
+// for the editor (src/repair-areas.js) to rebuild them from where the admin moves them.
 
 import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { Document, NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS, KHRMaterialsUnlit } from '@gltf-transform/extensions';
 import { meshopt } from '@gltf-transform/functions';
 import { MeshoptDecoder, MeshoptEncoder } from 'meshoptimizer';
-import polygonClipping from 'polygon-clipping';
 import sharp from 'sharp';
-import { ShapeUtils, Vector2, Vector3 } from 'three';
+import { Vector3 } from 'three';
+import { areaExtras, areaName, buildRepairs, random, triNormal } from '../src/repair-geometry.js';
 
 const ROOT = new URL( '../', import.meta.url );
 const { values: opts } = parseArgs( { options: {
@@ -46,6 +43,8 @@ const { values: opts } = parseArgs( { options: {
 	markups: { type: 'string', default: new URL( 'scripts/data/b2d2-markups.json', ROOT ).pathname },
 	out: { type: 'string', default: new URL( 'public/models/b2d2-repair.glb', ROOT ).pathname },
 } } );
+
+const DATA = opts.out.replace( /\.glb$/, '' ) + '.json';
 
 // Artifact frame -> model frame: subtract this point.
 const ORIGIN = [ 34.5, 5.1, - 4 ];
@@ -71,8 +70,6 @@ const SOURCE_NAMES = {
 };
 const AREA_COLOR = '#0e8fa8'; // the artifact's repair-area colour
 const EDGE_COLOR = '#06414d';
-const OFFSET = 0.03; // m off the face
-const EDGE = 0.04; // outline width, m
 
 // Preset views, as the B2D2 Repair Model artifact has them (artifact frame: where the camera is and
 // what it looks at). Saved in the model's scene extras, in the model's frame, for the twin's views
@@ -86,15 +83,6 @@ const VIEWS = [
 	{ name: 'Ground', from: [ 67.5, 7.0, - 4.95 ], at: [ 20, 5.3, - 4.95 ] },
 ];
 
-const CHIPPED = 'Chipped / hydro-demo';
-// A chipped area, in metres: how deep (a markup's measured depth wins), how far the edge steps in
-// on its way down, how far apart the points along it are, and the rebar (15M bars, 300 mm both
-// ways, 50 mm cover), which runs on this far into the concrete past the edge.
-const CHIP = { depth: 0.1, inset: 0.03, step: 0.08, bar: 0.016, spacing: 0.3, cover: 0.05, runOn: 0.12, sides: 8 };
-// A face an area was marked on: parallel to it and this close (m). Failing that, the nearest
-// parallel face this close is taken as the one meant.
-const ON_FACE = 0.03;
-const NEAR_FACE = 0.25;
 
 const srgbToLinear = c => c <= 0.04045 ? c / 12.92 : ( ( c + 0.055 ) / 1.055 ) ** 2.4;
 const rgba = ( hex, a = 1 ) => [ 1, 3, 5 ].map( i => srgbToLinear( parseInt( hex.slice( i, i + 2 ), 16 ) / 255 ) ).concat( a );
@@ -124,91 +112,7 @@ async function readMarkups( path ) {
 
 }
 
-const zoneName = z => ( { c31: 'C31 gallery', c32: 'C32 tunnel', pit: 'Transfer pit', ground: 'Ground level' } )[ z ] ?? 'Site';
-
-// A markup's face as a plane, in the artifact's frame: N out of the concrete toward where it was
-// marked from, U and V across it (U level on walls, along x on floors and soffits, so bars line
-// up from one area to the next on the same face), h its offset along N, and the outline in (s, t)
-// = (along U, along V), anticlockwise.
-function planeOf( m, N ) {
-
-	const U = Math.abs( N.y ) < 0.75
-		? new Vector3().crossVectors( new Vector3( 0, 1, 0 ), N ).normalize()
-		: new Vector3( 1, 0, 0 ).addScaledVector( N, - N.x ).normalize();
-	const V = new Vector3().crossVectors( N, U );
-	const plane = { N, U, V, h: N.dot( new Vector3( ...m.pts[ 0 ] ) ) };
-	plane.poly = m.pts.map( p => toPlane( plane, p ) );
-	if ( ShapeUtils.isClockWise( plane.poly.map( ( [ s, t ] ) => new Vector2( s, t ) ) ) ) plane.poly.reverse();
-	return plane;
-
-}
-
-// The plane of the outline's own corners where that lies on a face of the structure, else the
-// plane through its first corner square to its saved normal, with the outline laid onto it: some
-// were saved with a rounded normal (straight up on C32's sloping floor), one with its corners
-// tilted off the face it was marked on (the pit floor).
-function choosePlane( m, triangles ) {
-
-	const own = planeOf( m, outlineNormal( m ) );
-	if ( triangles.some( tri => onFace( tri, own, NEAR_FACE ) ) ) return own;
-	const given = planeOf( m, new Vector3( ...m.n ).normalize() );
-	if ( triangles.some( tri => onFace( tri, given, NEAR_FACE ) ) ) {
-
-		given.laid = true;
-		return given;
-
-	}
-
-	return own;
-
-}
-
-// The plane of the outline's own corners (Newell's method), facing the way the markup's normal does.
-function outlineNormal( m ) {
-
-	const given = new Vector3( ...m.n ).normalize();
-	const n = new Vector3();
-	m.pts.forEach( ( p, i ) => {
-
-		const q = m.pts[ ( i + 1 ) % m.pts.length ];
-		n.x += ( p[ 1 ] - q[ 1 ] ) * ( p[ 2 ] + q[ 2 ] );
-		n.y += ( p[ 2 ] - q[ 2 ] ) * ( p[ 0 ] + q[ 0 ] );
-		n.z += ( p[ 0 ] - q[ 0 ] ) * ( p[ 1 ] + q[ 1 ] );
-
-	} );
-	if ( n.length() < 1e-6 ) return given;
-	n.normalize();
-	return n.dot( given ) < 0 ? n.negate() : n;
-
-}
-
-const toPlane = ( { U, V }, p ) => {
-
-	const v = Array.isArray( p ) ? new Vector3( ...p ) : p;
-	return [ v.dot( U ), v.dot( V ) ];
-
-};
-// depth: behind the face, into the concrete.
-const toWorld = ( { U, V, N, h }, s, t, depth = 0 ) => new Vector3().addScaledVector( U, s ).addScaledVector( V, t ).addScaledVector( N, h - depth );
-
-// The same random numbers for the same markup every time (mulberry32, seeded by its id).
-function random( seed ) {
-
-	let a = [ ...String( seed ) ].reduce( ( h, c ) => Math.imul( h ^ c.charCodeAt( 0 ), 2654435761 ), 1779033703 ) >>> 0;
-	return () => {
-
-		a = ( a + 0x6d2b79f5 ) >>> 0;
-		let t = Math.imul( a ^ ( a >>> 15 ), 1 | a );
-		t = ( t + Math.imul( t ^ ( t >>> 7 ), 61 | t ) ) ^ t;
-		return ( ( t ^ ( t >>> 14 ) ) >>> 0 ) / 4294967296;
-
-	};
-
-}
-
 // ---------- The structure, with chipped areas cut out ----------
-
-const triNormal = ( a, b, c ) => new Vector3().subVectors( b, a ).cross( new Vector3().subVectors( c, a ) ).normalize();
 
 // Per layer: { positions (artifact frame, three per vertex), index }.
 async function readSite( io, path ) {
@@ -226,248 +130,6 @@ async function readSite( io, path ) {
 	}
 
 	return layers;
-
-}
-
-// The triangles of a layer, each { a, b, c } (Vector3s).
-function trianglesOf( { positions, index } ) {
-
-	const at = i => new Vector3( positions[ i * 3 ], positions[ i * 3 + 1 ], positions[ i * 3 + 2 ] );
-	const out = [];
-	for ( let i = 0; i < index.length; i += 3 ) out.push( { a: at( index[ i ] ), b: at( index[ i + 1 ] ), c: at( index[ i + 2 ] ) } );
-	return out;
-
-}
-
-// Whether a triangle lies in an area's plane (within `within`) and its box reaches the area.
-function onFace( tri, plane, within ) {
-
-	const n = triNormal( tri.a, tri.b, tri.c );
-	if ( Math.abs( n.dot( plane.N ) ) < 0.98 ) return false;
-	if ( Math.abs( plane.N.dot( tri.a ) - plane.h ) > within ) return false;
-	const st = [ tri.a, tri.b, tri.c ].map( p => toPlane( plane, p ) );
-	const [ s0, s1 ] = [ Math.min( ...plane.poly.map( p => p[ 0 ] ) ), Math.max( ...plane.poly.map( p => p[ 0 ] ) ) ];
-	const [ t0, t1 ] = [ Math.min( ...plane.poly.map( p => p[ 1 ] ) ), Math.max( ...plane.poly.map( p => p[ 1 ] ) ) ];
-	return Math.max( ...st.map( p => p[ 0 ] ) ) > s0 && Math.min( ...st.map( p => p[ 0 ] ) ) < s1 && Math.max( ...st.map( p => p[ 1 ] ) ) > t0 && Math.min( ...st.map( p => p[ 1 ] ) ) < t1;
-
-}
-
-// Each chipped area's plane moved onto the face it was marked on, where that's a little off
-// (marked on a drawing's plane rather than the model's face, say).
-function settleOnFaces( planes, triangles ) {
-
-	for ( const plane of planes ) {
-
-		if ( triangles.some( tri => onFace( tri, plane, ON_FACE ) ) ) continue;
-		const near = triangles.filter( tri => onFace( tri, plane, NEAR_FACE ) ).map( tri => plane.N.dot( tri.a ) - plane.h ).sort( ( a, b ) => Math.abs( a ) - Math.abs( b ) );
-		if ( near.length ) {
-
-			plane.h += near[ 0 ];
-			plane.moved = near[ 0 ];
-
-		} else plane.loose = true;
-
-	}
-
-}
-
-// A layer's triangles with the chipped areas on them cut out, as a flat list of positions.
-function cutOut( triangles, planes ) {
-
-	const out = [];
-	let cut = 0;
-	for ( const tri of triangles ) {
-
-		const on = planes.filter( plane => onFace( tri, plane, ON_FACE ) );
-		if ( on.length === 0 ) {
-
-			out.push( ...tri.a.toArray(), ...tri.b.toArray(), ...tri.c.toArray() );
-			continue;
-
-		}
-
-		// In the first area's plane; the triangle's own offset along it, so it stays where it was.
-		const plane = { ...on[ 0 ], h: on[ 0 ].N.dot( tri.a ) };
-		const ring = points => [ ...points, points[ 0 ] ];
-		const left = polygonClipping.difference(
-			[ ring( [ tri.a, tri.b, tri.c ].map( p => toPlane( plane, p ) ) ) ],
-			...on.map( other => [ ring( other.poly.map( ( [ s, t ] ) => toPlane( plane, toWorld( other, s, t ) ) ) ) ] ),
-		);
-		const facing = triNormal( tri.a, tri.b, tri.c );
-		for ( const polygon of left ) {
-
-			const [ outer, ...holes ] = polygon.map( r => r.slice( 0, - 1 ).map( ( [ s, t ] ) => new Vector2( s, t ) ) );
-			const points = [ outer, ...holes ].flat();
-			for ( const [ i, j, k ] of ShapeUtils.triangulateShape( outer, holes ) ) {
-
-				let [ a, b, c ] = [ i, j, k ].map( n => toWorld( plane, points[ n ].x, points[ n ].y ) );
-				if ( triNormal( a, b, c ).dot( facing ) < 0 ) [ b, c ] = [ c, b ];
-				out.push( ...a.toArray(), ...b.toArray(), ...c.toArray() );
-
-			}
-
-		}
-
-		cut ++;
-
-	}
-
-	return { positions: new Float32Array( out ), cut };
-
-}
-
-// ---------- A chipped area: the recess and its rebar ----------
-
-// The outline with points every CHIP.step along its edges.
-function resample( poly ) {
-
-	const out = [];
-	for ( let i = 0; i < poly.length; i ++ ) {
-
-		const [ a, b ] = [ poly[ i ], poly[ ( i + 1 ) % poly.length ] ];
-		const n = Math.max( 1, Math.round( Math.hypot( b[ 0 ] - a[ 0 ], b[ 1 ] - a[ 1 ] ) / CHIP.step ) );
-		for ( let k = 0; k < n; k ++ ) out.push( [ a[ 0 ] + ( b[ 0 ] - a[ 0 ] ) * k / n, a[ 1 ] + ( b[ 1 ] - a[ 1 ] ) * k / n, k === 0 ? i : - 1 ] );
-
-	}
-
-	return out;
-
-}
-
-// Triangles (positions and uvs, flat lists) of the recess: from the outline on the face, a broken
-// edge in two steps (in and down a little at random, then further, wandering in and out along its
-// length), and the floor, at about `depth` behind the face.
-function recess( plane, depth, rand ) {
-
-	const rim = resample( plane.poly );
-	const n = rim.length;
-	// Inward (left of an anticlockwise outline) across each edge, and at each point the edges' mean.
-	const edgeIn = rim.map( ( p, i ) => {
-
-		const q = rim[ ( i + 1 ) % n ];
-		const len = Math.hypot( q[ 0 ] - p[ 0 ], q[ 1 ] - p[ 1 ] ) || 1;
-		return [ - ( q[ 1 ] - p[ 1 ] ) / len, ( q[ 0 ] - p[ 0 ] ) / len ];
-
-	} );
-	const inward = rim.map( ( p, i ) => {
-
-		const [ a, b ] = [ edgeIn[ ( i - 1 + n ) % n ], edgeIn[ i ] ];
-		const d = [ a[ 0 ] + b[ 0 ], a[ 1 ] + b[ 1 ] ];
-		const len = Math.hypot( ...d ) || 1;
-		return [ d[ 0 ] / len, d[ 1 ] / len ];
-
-	} );
-	// Wandering in and out along the edge: random, smoothed over a few points.
-	const wander = () => {
-
-		const raw = rim.map( rand );
-		return raw.map( ( _, i ) => ( raw[ ( i - 1 + n ) % n ] + 2 * raw[ i ] + raw[ ( i + 1 ) % n ] ) / 4 );
-
-	};
-	const [ w1, w2 ] = [ wander(), wander() ];
-	const ring = ( inset, deep ) => rim.map( ( p, i ) => [ p[ 0 ] + inward[ i ][ 0 ] * inset( i ), p[ 1 ] + inward[ i ][ 1 ] * inset( i ), deep( i ) ] );
-	const mid = ring( i => CHIP.inset * ( 0.2 + 0.9 * w1[ i ] ), i => depth * ( 0.25 + 0.4 * w2[ i ] ) );
-	const inner = ring( i => CHIP.inset * ( 0.8 + 1.2 * w1[ i ] * w2[ i ] + 0.3 * rand() ), () => depth * ( 0.85 + 0.3 * rand() ) );
-	const top = rim.map( p => [ p[ 0 ], p[ 1 ], 0 ] );
-
-	const pos = [], uv = [];
-	const add = ( s, t, d ) => {
-
-		pos.push( ...toWorld( plane, s, t, d ).toArray() );
-		uv.push( s * 2, t * 2 + d * 2 );
-
-	};
-	for ( const [ outer, under ] of [ [ top, mid ], [ mid, inner ] ] ) {
-
-		for ( let i = 0; i < n; i ++ ) {
-
-			const j = ( i + 1 ) % n;
-			add( ...outer[ i ] ); add( ...outer[ j ] ); add( ...under[ j ] );
-			add( ...outer[ i ] ); add( ...under[ j ] ); add( ...under[ i ] );
-
-		}
-
-	}
-
-	const floor = inner.map( ( [ s, t ] ) => new Vector2( s, t ) );
-	for ( const tri of ShapeUtils.triangulateShape( floor, [] ) ) for ( const k of tri ) add( ...inner[ k ] );
-	return { pos, uv };
-
-}
-
-// Where a line across the outline is inside it: [ from, to ] pairs along the line. The line is
-// `fixed` (0: s, 1: t) = value; the pairs are in the other coordinate.
-function spans( poly, fixed, value ) {
-
-	const free = 1 - fixed;
-	const hits = [];
-	for ( let i = 0; i < poly.length; i ++ ) {
-
-		const [ a, b ] = [ poly[ i ], poly[ ( i + 1 ) % poly.length ] ];
-		if ( ( a[ fixed ] > value ) === ( b[ fixed ] > value ) ) continue;
-		hits.push( a[ free ] + ( b[ free ] - a[ free ] ) * ( value - a[ fixed ] ) / ( b[ fixed ] - a[ fixed ] ) );
-
-	}
-
-	hits.sort( ( a, b ) => a - b );
-	const out = [];
-	for ( let i = 0; i + 1 < hits.length; i += 2 ) out.push( [ hits[ i ], hits[ i + 1 ] ] );
-	return out;
-
-}
-
-// The exposed rebar mat: bars along U (on lines of constant t) nearest the face, bars along V
-// behind them, at CHIP.spacing on a grid that lines up across the face. Positions, normals, index.
-function rebar( plane ) {
-
-	const pos = [], nor = [], idx = [];
-	const r = CHIP.bar / 2;
-	const bar = ( from, to ) => {
-
-		const axis = new Vector3().subVectors( to, from ).normalize();
-		const side = new Vector3().crossVectors( axis, plane.N ).normalize();
-		const base = pos.length / 3;
-		for ( let k = 0; k < CHIP.sides; k ++ ) {
-
-			const angle = k / CHIP.sides * Math.PI * 2;
-			const out = side.clone().multiplyScalar( Math.cos( angle ) ).addScaledVector( plane.N, Math.sin( angle ) );
-			for ( const end of [ from, to ] ) {
-
-				pos.push( ...end.clone().addScaledVector( out, r ).toArray() );
-				nor.push( ...out.toArray() );
-
-			}
-
-		}
-
-		for ( let k = 0; k < CHIP.sides; k ++ ) {
-
-			const [ a, b ] = [ base + k * 2, base + ( ( k + 1 ) % CHIP.sides ) * 2 ];
-			idx.push( a, b, a + 1, b, b + 1, a + 1 );
-
-		}
-
-	};
-
-	const lines = ( fixed, depth ) => {
-
-		const values = plane.poly.map( p => p[ fixed ] );
-		for ( let k = Math.ceil( Math.min( ...values ) / CHIP.spacing ); k * CHIP.spacing < Math.max( ...values ); k ++ ) {
-
-			const value = k * CHIP.spacing;
-			for ( const [ a, b ] of spans( plane.poly, fixed, value ) ) {
-
-				const at = v => fixed === 1 ? toWorld( plane, v, value, depth ) : toWorld( plane, value, v, depth );
-				bar( at( a - CHIP.runOn ), at( b + CHIP.runOn ) );
-
-			}
-
-		}
-
-	};
-	lines( 1, CHIP.cover + r );
-	lines( 0, CHIP.cover + CHIP.bar + r );
-	return { pos, nor, idx };
 
 }
 
@@ -547,14 +209,17 @@ const io = new NodeIO()
 
 const markups = ( await readMarkups( opts.markups ) ).filter( m => m.kind === 'area' && m.pts?.length >= 3 && m.n );
 const site = await readSite( io, opts.site );
-const cutTriangles = Object.entries( STRUCTURE ).filter( ( [ key, layer ] ) => layer.cut && site[ key ] ).flatMap( ( [ key ] ) => trianglesOf( site[ key ] ) );
-const chipped = new Map( markups.filter( m => m.f?.status === CHIPPED ).map( m => [ m, choosePlane( m, cutTriangles ) ] ) );
-settleOnFaces( [ ...chipped.values() ], cutTriangles );
+// The layers areas are cut out of, in the artifact's frame, uncut: the twin's area editor cuts
+// them again where areas are moved to (src/repair-areas.js).
+const cutLayers = Object.fromEntries( Object.entries( STRUCTURE ).filter( ( [ key, layer ] ) => layer.cut && site[ key ] ).map( ( [ key ] ) => [ key, site[ key ] ] ) );
+const built = buildRepairs( markups, cutLayers );
 
 const doc = new Document();
 const buffer = doc.createBuffer();
 const scene = doc.createScene( 'B2D2 repair model' ).setExtras( {
 	views: VIEWS.map( ( { from, at, ...view } ) => ( { ...view, from: from.map( ( c, i ) => +( c - ORIGIN[ i ] ).toFixed( 3 ) ), at: at.map( ( c, i ) => +( c - ORIGIN[ i ] ).toFixed( 3 ) ) } ) ),
+	// What the twin's area editor rebuilds the areas from, next to the model (see the end).
+	repairs: basename( DATA ),
 } );
 const structure = doc.createNode( 'Structure' );
 scene.addChild( structure );
@@ -580,7 +245,7 @@ for ( const [ key, layer ] of Object.entries( STRUCTURE ) ) {
 	const prim = doc.createPrimitive().setMaterial( material );
 	if ( layer.cut ) {
 
-		const { positions, cut } = cutOut( trianglesOf( site[ key ] ), [ ...chipped.values() ] );
+		const { positions, cut } = built.layers[ key ];
 		holes += cut;
 		prim.setAttribute( 'POSITION', accessor( 'VEC3', shifted( positions ) ) );
 
@@ -617,7 +282,6 @@ const chippedMat = doc.createMaterial( 'Chipped concrete' )
 // A chipped area's rim on the face round it, coloured by when it was chipped as the progress
 // drawings' legend has it (f.chipped, from scripts/b2d2-progress.mjs).
 const CHIPPED_COLOURS = { '2026-11-02': '#22c55e', '2026-11-03': '#06b6d4', '2026-11-04': '#f97316', '2026-11-05/08': '#ec4899' };
-const RIM = 0.04;
 const rimMats = new Map();
 const rimMat = date => {
 
@@ -626,59 +290,7 @@ const rimMat = date => {
 	return rimMats.get( hex );
 
 };
-
-// Strips on the face round the outline, outside it, a hair off the face toward where it was seen.
-function rim( plane ) {
-
-	const pos = [], idx = [];
-	const poly = plane.poly;
-	for ( let i = 0; i < poly.length; i ++ ) {
-
-		const [ a, b ] = [ poly[ i ], poly[ ( i + 1 ) % poly.length ] ];
-		const len = Math.hypot( b[ 0 ] - a[ 0 ], b[ 1 ] - a[ 1 ] );
-		if ( len < 1e-6 ) continue;
-		// Outward: right of an anticlockwise outline.
-		const out = [ ( b[ 1 ] - a[ 1 ] ) / len * RIM, - ( b[ 0 ] - a[ 0 ] ) / len * RIM ];
-		const k = pos.length / 3;
-		for ( const [ s, t ] of [ a, b, [ b[ 0 ] + out[ 0 ], b[ 1 ] + out[ 1 ] ], [ a[ 0 ] + out[ 0 ], a[ 1 ] + out[ 1 ] ] ] ) pos.push( ...toWorld( plane, s, t, - 0.003 ).toArray() );
-		idx.push( k, k + 1, k + 2, k, k + 2, k + 3 );
-
-	}
-
-	return { pos, idx, normal: plane.N.toArray() };
-
-}
-
 const rebarMat = doc.createMaterial( 'Exposed rebar' ).setBaseColorFactor( rgba( '#7c4a2d' ) ).setMetallicFactor( 0.5 ).setRoughnessFactor( 0.65 );
-
-// A flat patch's triangles (fill, and outline strips inside each edge), 3 cm off the face.
-function patch( m ) {
-
-	const N = new Vector3( ...m.n ).normalize();
-	const a = Math.abs( N.y ) < 0.9 ? new Vector3( 0, 1, 0 ) : new Vector3( 1, 0, 0 );
-	const u = new Vector3().crossVectors( a, N ).normalize();
-	const v = new Vector3().crossVectors( N, u );
-	const P = m.pts.map( p => new Vector3( ...p ).addScaledVector( N, OFFSET ) );
-	const flat = P.map( p => new Vector2( p.dot( u ), p.dot( v ) ) );
-	if ( ShapeUtils.isClockWise( flat ) ) { P.reverse(); flat.reverse(); }
-	const fill = { pos: P.flatMap( p => p.toArray() ), idx: ShapeUtils.triangulateShape( flat, [] ).flat() };
-	const pos = [], idx = [];
-	for ( let i = 0; i < P.length; i ++ ) {
-
-		const [ p, q ] = [ P[ i ], P[ ( i + 1 ) % P.length ] ];
-		const along = q.clone().sub( p );
-		if ( along.lengthSq() < 1e-8 ) continue;
-		const inward = new Vector3().crossVectors( N, along ).normalize().multiplyScalar( EDGE );
-		const k = pos.length / 3;
-		// A hair above the fill so it isn't hidden by it.
-		for ( const corner of [ p, q, q.clone().add( inward ), p.clone().add( inward ) ] ) pos.push( ...corner.clone().addScaledVector( N, 0.002 ).toArray() );
-		idx.push( k, k + 1, k + 2, k, k + 2, k + 3 );
-
-	}
-
-	return { fill, edge: { pos, idx }, normal: N.toArray() };
-
-}
 
 const flatPrim = ( { pos, idx }, normal, material ) => {
 
@@ -715,25 +327,21 @@ const loosePrim = ( { pos, uv }, material ) => {
 const repairs = doc.createNode( 'Repair areas' );
 scene.addChild( repairs );
 let total = 0;
-for ( const m of markups ) {
+for ( const { m, plane, parts } of built.areas ) {
 
 	const f = m.f ?? {};
-	const name = `${ f.type || 'Repair area' } · ${ zoneName( m.zone ) } ${ m.face ?? '' } · ${ ( m.area ?? 0 ).toFixed( 2 ) } m²`;
+	const name = areaName( m );
 	const mesh = doc.createMesh( name );
-	const plane = chipped.get( m );
 	if ( plane ) {
 
-		const depth = f.depthMm > 0 ? f.depthMm / 1000 : CHIP.depth;
-		const bars = rebar( plane );
-		mesh.addPrimitive( loosePrim( recess( plane, depth, random( m.id ) ), chippedMat ) );
-		const edge = rim( plane );
-		mesh.addPrimitive( flatPrim( edge, edge.normal, rimMat( f.chipped ) ) );
-		if ( bars.idx.length ) {
+		mesh.addPrimitive( loosePrim( parts.recess, chippedMat ) );
+		mesh.addPrimitive( flatPrim( parts.rim, parts.rim.normal, rimMat( f.chipped ) ) );
+		if ( parts.rebar.idx.length ) {
 
 			mesh.addPrimitive( doc.createPrimitive()
-				.setAttribute( 'POSITION', accessor( 'VEC3', shifted( bars.pos ) ) )
-				.setAttribute( 'NORMAL', accessor( 'VEC3', new Float32Array( bars.nor ) ) )
-				.setIndices( accessor( 'SCALAR', new Uint32Array( bars.idx ) ) )
+				.setAttribute( 'POSITION', accessor( 'VEC3', shifted( parts.rebar.pos ) ) )
+				.setAttribute( 'NORMAL', accessor( 'VEC3', new Float32Array( parts.rebar.nor ) ) )
+				.setIndices( accessor( 'SCALAR', new Uint32Array( parts.rebar.idx ) ) )
 				.setMaterial( rebarMat ) );
 
 		}
@@ -744,17 +352,11 @@ for ( const m of markups ) {
 
 	} else {
 
-		const g = patch( m );
-		mesh.addPrimitive( flatPrim( g.fill, g.normal, fillMat ) ).addPrimitive( flatPrim( g.edge, g.normal, edgeMat ) );
+		mesh.addPrimitive( flatPrim( parts.fill, parts.normal, fillMat ) ).addPrimitive( flatPrim( parts.edge, parts.normal, edgeMat ) );
 
 	}
 
-	repairs.addChild( doc.createNode( name ).setMesh( mesh ).setExtras( {
-		id: m.id, zone: zoneName( m.zone ), face: m.face, grid: m.grid, area_m2: m.area, chipped: f.chipped ?? null,
-		defect: f.type ?? null, depth: f.depth ?? null, status: f.status ?? null, notes: f.text ?? '', source: m.src ?? null,
-		// Stays solid when the twin's "See-through models" makes the rest see-through.
-		xraySolid: true,
-	} ) );
+	repairs.addChild( doc.createNode( name ).setMesh( mesh ).setExtras( areaExtras( m ) ) );
 	total += m.area ?? 0;
 
 }
@@ -762,5 +364,14 @@ for ( const m of markups ) {
 // Compressed (the conveyors are most of it); the twin's loader has the meshopt decoder.
 await doc.transform( meshopt( { encoder: MeshoptEncoder, level: 'medium' } ) );
 await io.write( opts.out, doc );
+
+// For the twin's area editor (src/repair-areas.js), which rebuilds the areas the admin moves with
+// the same code (src/repair-geometry.js): the areas as marked, the layers they're cut out of
+// (uncut), and where the model's origin is, all in the artifact's frame.
+await writeFile( DATA, JSON.stringify( {
+	origin: ORIGIN,
+	layers: Object.fromEntries( Object.entries( cutLayers ).map( ( [ key, { positions, index } ] ) => [ key, { name: STRUCTURE[ key ].name, positions: Array.from( positions ), index: Array.from( index ) } ] ) ),
+	markups: markups.map( ( { id, n, pts, area, face, zone, grid, f, src } ) => ( { id, n, pts, area, face, zone, grid, f, src } ) ),
+} ) + '\n' );
 const size = ( await stat( opts.out ) ).size;
-console.log( `Wrote ${ opts.out }: ${ markups.length } repair areas (${ chipped.size } chipped, cut out of ${ holes } triangles), ${ total.toFixed( 2 ) } m², ${ ( size / 1024 ).toFixed( 0 ) } KB` );
+console.log( `Wrote ${ opts.out }: ${ markups.length } repair areas (${ built.areas.filter( a => a.plane ).length } chipped, cut out of ${ holes } triangles), ${ total.toFixed( 2 ) } m², ${ ( size / 1024 ).toFixed( 0 ) } KB` );

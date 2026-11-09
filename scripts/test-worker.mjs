@@ -756,6 +756,47 @@ function apiTests( target ) {
 
 	} );
 
+	test( 'repair areas moved in the twin: anyone lists them, only the passcode saves or puts them back', async () => {
+
+		const viewer = client();
+		const send = ( method, path, body, key = PLACEMENT_KEY, init = {} ) => viewer.send( method, `/api/area-edits/${ path }`, { body, headers: key === null ? {} : { 'X-Edit-Key': key }, ...init } );
+		const area = { pts: [ [ 30, 4.2, - 5.6 ], [ 31, 4.2, - 5.6 ], [ 31, 3.2, - 5.6 ], [ 30, 3.2, - 5.6 ] ], n: [ 0, 0, 1 ] };
+
+		assert.deepEqual( ( await viewer.send( 'GET', '/api/area-edits/b2d2-repair' ) ).body, { edits: [] } );
+		assert.equal( ( await viewer.send( 'GET', '/api/area-edits/bad%20model' ) ).status, 400 );
+		assert.equal( ( await send( 'PUT', 'b2d2-repair/area-1', area, null ) ).status, 403 );
+		assert.equal( ( await send( 'PUT', 'b2d2-repair/area-1', area, 'nope' ) ).status, 403 );
+		assert.equal( ( await send( 'PUT', 'b2d2-repair/area-1', area, PLACEMENT_KEY, { origin: 'https://elsewhere.example' } ) ).status, 403 );
+		for ( const [ path, body ] of [
+			[ 'b2d2-repair/bad%20id', area ], [ 'bad%20model/area-1', area ],
+			[ 'b2d2-repair/area-1', { ...area, pts: area.pts.slice( 0, 2 ) } ], [ 'b2d2-repair/area-1', { ...area, pts: [ ...area.pts.slice( 1 ), [ 1, 2 ] ] } ],
+			[ 'b2d2-repair/area-1', { ...area, pts: [ ...area.pts.slice( 1 ), [ 1e9, 0, 0 ] ] } ], [ 'b2d2-repair/area-1', { ...area, n: [ 0, 0, 0 ] } ],
+			[ 'b2d2-repair/area-1', { ...area, n: 'up' } ], [ 'b2d2-repair/area-1', { pts: 'x', n: [ 0, 1, 0 ] } ],
+		] ) assert.equal( ( await send( 'PUT', path, body ) ).status, 400, `${ path } ${ JSON.stringify( body ) }` );
+
+		const saved = await send( 'PUT', 'b2d2-repair/area-1', { ...area, extra: 'not kept' }, ` ${ PLACEMENT_KEY } ` );
+		assert.equal( saved.status, 200, JSON.stringify( saved.body ) );
+		assert.equal( 'extra' in saved.body, false );
+		assert.equal( ( await send( 'PUT', 'b2d2-repair/area-2', area ) ).status, 200 );
+		assert.equal( ( await send( 'PUT', 'other-model/area-1', area ) ).status, 200 );
+		// Saving again replaces it.
+		const moved = { ...area, pts: area.pts.map( ( [ x, y, z ] ) => [ x + 0.5, y, z ] ) };
+		assert.equal( ( await send( 'PUT', 'b2d2-repair/area-1', moved ) ).status, 200 );
+
+		const { edits } = ( await client().send( 'GET', '/api/area-edits/b2d2-repair', { origin: null } ) ).body;
+		assert.deepEqual( edits.map( e => e.id ), [ 'area-1', 'area-2' ] );
+		const { id, updatedAt, ...first } = edits[ 0 ];
+		assert.deepEqual( first, moved );
+		assert.ok( updatedAt > 0 );
+
+		assert.equal( ( await send( 'DELETE', 'b2d2-repair/area-2', {}, 'nope' ) ).status, 403 );
+		assert.equal( ( await send( 'DELETE', 'b2d2-repair/area-2', {} ) ).status, 204 );
+		assert.deepEqual( ( await viewer.send( 'GET', '/api/area-edits/b2d2-repair' ) ).body.edits.map( e => e.id ), [ 'area-1' ] );
+		assert.deepEqual( ( await viewer.send( 'GET', '/api/area-edits/other-model' ) ).body.edits.map( e => e.id ), [ 'area-1' ] );
+		for ( const path of [ 'b2d2-repair/area-1', 'other-model/area-1' ] ) assert.equal( ( await send( 'DELETE', path, {} ) ).status, 204 );
+
+	} );
+
 	test( 'signing out ends the session on the server', async () => {
 
 		const cookie = alice.cookie;
