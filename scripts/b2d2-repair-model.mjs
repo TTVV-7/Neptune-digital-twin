@@ -24,7 +24,7 @@
 // of rough, fresh concrete (CHIP.depth deep, the edge stepping in irregularly) with the rebar mat
 // exposed in it: bars both ways at CHIP.spacing, CHIP.cover behind the face, running on into the
 // concrete past the edge. The roughness is random but seeded by the markup's id, so a rebuild
-// comes out the same. Other areas are a flat cyan patch 3 cm off their face (toward where they were
+// comes out the same. Its rim on the face is coloured by when it was chipped. Other areas are a flat cyan patch 3 cm off their face (toward where they were
 // marked from), unlit so they read underground, with a darker outline. Every area's node carries
 // its markup in `extras` (grid, face, area, defect, status, notes), and xraySolid, so the twin's
 // "See-through models" leaves the areas solid while the concrete round them goes see-through.
@@ -73,6 +73,18 @@ const AREA_COLOR = '#0e8fa8'; // the artifact's repair-area colour
 const EDGE_COLOR = '#06414d';
 const OFFSET = 0.03; // m off the face
 const EDGE = 0.04; // outline width, m
+
+// Preset views, as the B2D2 Repair Model artifact has them (artifact frame: where the camera is and
+// what it looks at). Saved in the model's scene extras, in the model's frame, for the twin's views
+// bar (src/views.js); `underground`: Google's ground is cut away over the model for it.
+const FL = z => - 6.82 + 0.241 * z;
+const VIEWS = [
+	{ name: 'Overview', from: [ 82, 42, 42 ], at: [ 30, - 1, - 16 ], underground: true },
+	{ name: 'C31', from: [ 66, - 0.6, - 5 ], at: [ 30, - 0.8, - 5 ] },
+	{ name: 'C32', from: [ 2.9, FL( 38 ) + 1.5, - 38 ], at: [ 2.9, FL( 16 ) + 1.2, - 16 ] },
+	{ name: 'Pit', from: [ 8.2, - 3.0, - 1.4 ], at: [ 2.5, - 5.4, - 6 ] },
+	{ name: 'Ground', from: [ 67.5, 7.0, - 4.95 ], at: [ 20, 5.3, - 4.95 ] },
+];
 
 const CHIPPED = 'Chipped / hydro-demo';
 // A chipped area, in metres: how deep (a markup's measured depth wins), how far the edge steps in
@@ -541,7 +553,9 @@ settleOnFaces( [ ...chipped.values() ], cutTriangles );
 
 const doc = new Document();
 const buffer = doc.createBuffer();
-const scene = doc.createScene( 'B2D2 repair model' );
+const scene = doc.createScene( 'B2D2 repair model' ).setExtras( {
+	views: VIEWS.map( ( { from, at, ...view } ) => ( { ...view, from: from.map( ( c, i ) => +( c - ORIGIN[ i ] ).toFixed( 3 ) ), at: at.map( ( c, i ) => +( c - ORIGIN[ i ] ).toFixed( 3 ) ) } ) ),
+} );
 const structure = doc.createNode( 'Structure' );
 scene.addChild( structure );
 const shifted = positions => {

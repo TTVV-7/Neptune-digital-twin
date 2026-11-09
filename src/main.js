@@ -8,6 +8,7 @@ import { createPlacementPanel, toast } from './placement.js';
 import { useSavedPlacements } from './placements.js';
 import { setUpUnderground } from './underground.js';
 import { loadSharedItems } from './shared-items.js';
+import { setUpViews } from './views.js';
 import { loadLibrary } from './library.js';
 import { setUpLayout } from './layout.js';
 import { createSidebar } from './sidebar.js';
@@ -224,6 +225,7 @@ function start( apiKey, keySource ) {
 	let driving = null;
 	let layers = null;
 	let underground = null;
+	let views = null;
 	libraryLoaded.then( async library => {
 
 		sidebar = createSidebar( {
@@ -280,6 +282,8 @@ function start( apiKey, keySource ) {
 		} ) );
 		// Under Google's ground in your own models: the mesh over them cut away (U, or by itself).
 		underground = setUpUnderground( features );
+		// Preset views of models that carry them (the B2D2 model's Overview, C31, C32, Pit, Ground).
+		views = setUpViews( { models, controls, onUpdate: features.onUpdate, getUnderground: () => underground, toast } );
 		for ( const config of afterFeatures ) loadFromConfig( config );
 		// What the admin saved for everyone on the live site, once the kinds it may use are known.
 		loadSharedItems( { models, getLibrary: () => libraryLoaded, onError: message => showBanner( message, 10000 ) } );
@@ -352,6 +356,10 @@ function start( apiKey, keySource ) {
 	}, get underground() {
 
 		return underground;
+
+	}, get views() {
+
+		return views;
 
 	}, startDriving: async entry => driving ? driving.startDriving( entry ) : null, isDrivable: entry => !! driving?.isDrivable( entry ) };
 

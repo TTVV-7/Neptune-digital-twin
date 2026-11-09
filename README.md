@@ -234,6 +234,11 @@ It asks once for the edit passcode, the Worker's `PLACEMENT_KEY` secret; viewers
 still move it, but only in their own browser. A saved position wins over the one in
 `src/config.js` (`GET` / `PUT /api/placements`, [docs/accounts.md](docs/accounts.md)).
 **Copy config** into `src/config.js` makes it the default for a new copy of the site too.
+**Preset views**, as the artifact has them, are in a bar at the top: **Overview**, **C31**, **C32**,
+**Pit** and **Ground** glide the camera there, wherever the model is placed (Overview also cuts
+Google's ground away over it). Any model can carry views: `views: [ { name, from, at,
+underground } ]` in its glTF scene's extras, in the model's own frame (`src/views.js`).
+
 To see inside, press **U** to cut Google's ground away over it, or press **G** (ghost) and fly down
 through the ground into the gallery or tunnel, then **F** to walk; Google's ground stays cut away
 while you're under it there ([Models under the ground](#models-under-the-ground)).
@@ -688,6 +693,7 @@ src/world.js        Google tiles, lights, the flat stand-in ground
 src/walk.js         walk/fly controller with gravity, collisions, bounces, the view turn and the zoom's glide
 src/zoom.js         the mouse wheel and trackpad pinch: zoom toward the cursor, chase camera distance
 src/underground.js  under Google's ground in your own models: the mesh over them cut away (U, or by itself)
+src/views.js        preset views carried by models (the bar at the top): glide the camera to each
 src/placements.js   models' positions saved on the live site for everyone (Save position for everyone),
                     and the admin passcode for anything saved for everyone
 src/shared-items.js items the admin saved for everyone: loaded for everyone, Save / Remove for everyone
