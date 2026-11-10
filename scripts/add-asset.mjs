@@ -311,7 +311,7 @@ function credits( list ) {
 		`${ item.source.authorUrl ? `[${ item.source.author }](${ item.source.authorUrl })` : item.source.author } on ${ item.source.site }, ` +
 		`licensed [${ item.source.license }](${ item.source.licenseUrl }).${ item.source.extraCredit ? ` ${ item.source.extraCredit }.` : '' } Compressed and rescaled for this project.` );
 	return '# Asset library credits\n\nThese models come from Sketchfab and Poly Haven under the licences listed. ' +
-		`Keep this file with them. Items generated in code (src/procedural.js) and our own models (marked `own` in library.json) are part of this project.\n\n${ lines.join( '\n' ) }\n`;
+		`Keep this file with them. Items generated in code (src/procedural.js) and our own models (marked \`own\` in library.json) are part of this project.\n\n${ lines.join( '\n' ) }\n`;
 
 }
 
