@@ -271,12 +271,12 @@ models** off in the Show panel), then:
 - give it its **Panel no.**, which then floats on the panel for everyone (a **Panel numbers** row in
   the Show panel hides them);
 - move it on to the next stage with **Status**, each with its own look and rim colour, and the day
-  it got there (today, unless you change it):
+  it got there (today, unless you change it; put back a stage, it loses the later stages' days):
   - *Marked, not chipped yet*: a flat cyan patch;
   - *Chipped / hydro-demo*: cut in, rough concrete and rusty bars, the rim coloured by the day (the
     drawings' colours for 2 to 8 November, others for later days);
   - *Sandblasted*: the recess blasted clean and light, bright steel bars, a white rim;
-  - *Epoxy coated*: the recess and bars under green epoxy, a dark green rim;
+  - *Epoxy coated*: the bars coated green, in the recess as sandblasting left it, a dark green rim;
   - *Shotcreted*: filled flush with fresh shotcrete, a slate rim;
 - set its **Defect** and **Notes**;
 - **Delete area** takes it away (**Bring back** returns the drawing's ones), **Back to the drawing**
@@ -292,6 +292,16 @@ panel. Adding, captioning and deleting ask for the admin passcode and happen at 
 part of Save for everyone). The pictures live in the `neptune-twin-photos` R2 bucket and what
 they show in the database (`/api/area-photos`, [docs/accounts.md](docs/accounts.md)). An area you
 added and then delete takes its photos with it.
+
+**Timeline.** **Timeline** in the views bar plays the repairs back. A bar along the bottom has a
+slider of days, from the day before the first chipping to today: the areas are drawn as they were
+by the end of the day it's on, from the day each reached each stage (the progress drawings' days
+for chipping, then the days set with **Status**). An area isn't there before the day it was
+chipped (the concrete is whole), then it's chipped, sandblasted, epoxy coated and shotcreted in
+turn; one with no days is as it is now throughout. **▶** runs through the days (slow, normal or
+fast), a timelapse of the work so far, and the bar counts the areas and m² at each stage that day.
+**×**, or starting to edit, puts everything back as it is now. Nothing is saved by it, and it's
+there for everyone, so the days are worth keeping right as the work goes on.
 
 **+ Add area** draws a new one on the wall, floor or soffit you start on: drag a box (square to the
 face, level on a wall), or click its corners one by one and click the first again, double-click
@@ -791,6 +801,7 @@ src/views.js        preset views carried by models (the bar at the top): glide t
 src/repair-areas.js Edit areas: move, add, change and delete the B2D2 model's repair areas, saved for everyone
 src/repair-geometry.js  the repair areas' geometry (cut-outs, recesses, rebar), shared with the build
 src/repair-photos.js    photos of repair areas: the strip in the editor's panel, sending, the large view
+src/repair-timeline.js  Timeline: the repair areas played back day by day, as each reached each stage
 src/model-edits.js  Edit model: beams added to the B2D2 model and its walls painted, saved for everyone
 src/placements.js   models' positions saved on the live site for everyone (Save position for everyone),
                     and the admin passcode for anything saved for everyone

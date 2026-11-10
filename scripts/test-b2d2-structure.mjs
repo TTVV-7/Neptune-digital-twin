@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import { Vector3 } from 'three';
-import { areaParts, choosePlane, faceSeen, trianglesOf, triNormal } from '../src/repair-geometry.js';
+import { areaParts, CHIPPED, choosePlane, dayOf, EPOXY, faceSeen, LOOKS, SANDBLASTED, SHOTCRETED, stageAt, trianglesOf, triNormal } from '../src/repair-geometry.js';
 
 const data = JSON.parse( await readFile( new URL( '../public/models/b2d2-repair.json', import.meta.url ), 'utf8' ) );
 const layers = Object.fromEntries( Object.entries( data.layers ).map( ( [ key, l ] ) => [ key, trianglesOf( { positions: Float32Array.from( l.positions ), index: Uint32Array.from( l.index ) } ) ] ) );
@@ -147,3 +147,47 @@ test( 'an area follows its face where the structure was moved, and onto the side
 	assert.ok( triNormal( top.a, top.b, top.c ).y > 0.99 );
 
 } );
+
+test( 'epoxy coated: only the bars are green, in the recess as sandblasting left it', () => {
+
+	assert.deepEqual( LOOKS[ EPOXY ].concrete, LOOKS[ SANDBLASTED ].concrete );
+	assert.equal( LOOKS[ EPOXY ].rebar.color, '#2dbd62' );
+	assert.notEqual( LOOKS[ EPOXY ].rebar.color, LOOKS[ SANDBLASTED ].rebar.color );
+
+} );
+
+test( 'looking back: an area is at the stage it had reached by the end of a day, and not there before it was chipped', () => {
+
+	assert.equal( dayOf( '2026-11-05/08' ), '2026-11-08' );
+	assert.equal( dayOf( '2026-11-02' ), '2026-11-02' );
+	assert.equal( dayOf( undefined ), null );
+	assert.equal( dayOf( 'last week' ), null );
+
+	const done = { f: { status: SHOTCRETED, chipped: '2026-11-05/08', sandblasted: '2026-11-12', epoxy: '2026-11-13', shotcreted: '2026-11-20' } };
+	assert.equal( stageAt( done, '2026-11-07' ), null );
+	assert.equal( stageAt( done, '2026-11-08' ), CHIPPED );
+	assert.equal( stageAt( done, '2026-11-12' ), SANDBLASTED );
+	assert.equal( stageAt( done, '2026-11-19' ), EPOXY );
+	assert.equal( stageAt( done, '2026-11-20' ), SHOTCRETED );
+	assert.equal( stageAt( done, '2027-01-01' ), SHOTCRETED );
+
+	// Days left over from a stage it was put back from don't count.
+	const back = { f: { status: CHIPPED, chipped: '2026-11-02', sandblasted: '2026-11-10', shotcreted: '2026-11-10' } };
+	assert.equal( stageAt( back, '2026-11-01' ), null );
+	assert.equal( stageAt( back, '2026-11-30' ), CHIPPED );
+	// A stage with no day is skipped: it's as the last one with a day says.
+	assert.equal( stageAt( { f: { status: EPOXY, chipped: '2026-11-02', epoxy: '2026-11-14' } }, '2026-11-13' ), CHIPPED );
+	// Nothing to go by: as it is now.
+	assert.equal( stageAt( { f: { status: SANDBLASTED } }, '2026-01-01' ), SANDBLASTED );
+	assert.equal( stageAt( { f: { status: 'Marked, not chipped yet' } }, '2026-01-01' ), 'Marked, not chipped yet' );
+	assert.equal( stageAt( {}, '2026-01-01' ), null );
+
+	// Every area of the drawings has the day it was chipped, so the timeline has them all.
+	assert.ok( data.markups.every( m => dayOf( m.f?.chipped ) ) );
+	const by = day => data.markups.filter( m => stageAt( m, day ) ).length;
+	assert.equal( by( '2026-11-01' ), 0 );
+	assert.ok( by( '2026-11-02' ) > 0 && by( '2026-11-02' ) < by( '2026-11-04' ) );
+	assert.equal( by( '2026-11-08' ), data.markups.length );
+
+} );
+

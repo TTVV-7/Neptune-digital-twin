@@ -35,10 +35,40 @@ export const STAGES = [
 ];
 export const stageOf = status => STAGES.find( stage => stage.status === status ) ?? STAGES[ 0 ];
 
+// The day a stage's date says, as 'YYYY-MM-DD', or null if it doesn't say one. A span of days
+// ('2026-11-05/08', as the progress drawings give) is its last: by then it was done.
+export function dayOf( date ) {
+
+	const said = /^(\d{4})-(\d{2})-(\d{2})(?:\/(\d{2}))?/.exec( date ?? '' );
+	return said ? `${ said[ 1 ] }-${ said[ 2 ] }-${ said[ 4 ] ?? said[ 3 ] }` : null;
+
+}
+
+// The stage an area had reached by the end of a day ('YYYY-MM-DD'), from the days it reached
+// each: its status then, or null if it hadn't been chipped yet. An area with no days to go by,
+// or only marked, is as it is now whenever.
+export function stageAt( m, day ) {
+
+	const f = m.f ?? {};
+	const now = STAGES.indexOf( stageOf( f.status ) );
+	let reached = null, dated = false;
+	for ( let i = 1; i <= now; i ++ ) {
+
+		const on = dayOf( f[ STAGES[ i ].date ] );
+		if ( ! on ) continue;
+		dated = true;
+		if ( on <= day ) reached = STAGES[ i ].status;
+
+	}
+
+	return dated ? reached : f.status ?? null;
+
+}
+
 // How each stage past marking looks. The area is cut out of its face, and in it:
 // - chipped: a recess of rough, broken concrete (the chipped concrete's texture) with rusty bars;
 // - sandblasted: the same recess blasted clean, light and even, the bars bright steel;
-// - epoxy coated: the recess and the bars under a coat of green epoxy, a little glossy;
+// - epoxy coated: the bars coated in green epoxy, in the blasted recess as it was;
 // - shotcreted: filled again, a touch proud of the face, in fresh shotcrete, no bars to see.
 // `concrete` and `rebar` are material settings (the chipped concrete's own texture with `map`,
 // else the colour over its relief); `rim` the colour of the strip round the area on its face
@@ -46,7 +76,7 @@ export const stageOf = status => STAGES.find( stage => stage.status === status )
 export const LOOKS = {
 	[ CHIPPED ]: { concrete: { map: true, color: '#ffffff', roughness: 0.95 }, rebar: { color: '#7c4a2d', metalness: 0.5, roughness: 0.65 } },
 	[ SANDBLASTED ]: { concrete: { color: '#cfccc4', roughness: 0.9 }, rebar: { color: '#c9ced4', metalness: 0.3, roughness: 0.4 }, rim: '#f1f5f9' },
-	[ EPOXY ]: { concrete: { color: '#3d9c5c', roughness: 0.4 }, rebar: { color: '#2dbd62', metalness: 0, roughness: 0.35 }, rim: '#047857' },
+	[ EPOXY ]: { concrete: { color: '#cfccc4', roughness: 0.9 }, rebar: { color: '#2dbd62', metalness: 0, roughness: 0.35 }, rim: '#047857' },
 	[ SHOTCRETED ]: { filled: true, concrete: { color: '#b9b6ae', roughness: 1 }, rim: '#475569' },
 };
 // What the concrete's and the bars' materials are called for a stage, in the model and the twin.

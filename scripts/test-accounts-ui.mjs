@@ -508,6 +508,112 @@ test( 'the admin moves and adds B2D2 repair areas and saves them for everyone; p
 
 } );
 
+test( 'the timeline plays the B2D2 repairs back: no area before its day, each at the stage it had reached, and as now again when editing starts', async () => {
+
+	const page = await newPage();
+	await openApp( page, undefined, { keepProjectModels: true } );
+	await page.waitForFunction( () => window.twin.repairTimeline && window.twin.models.entries.some( e => e.url?.endsWith( 'b2d2-repair.glb' ) && ! e.placing ), null, { timeout: 60000 } );
+	await page.evaluate( () => window.twin.repairAreas.ready() );
+	// The areas drawn in the model, and what the bar says of them.
+	const drawn = () => page.evaluate( () => {
+
+		const ids = new Set();
+		window.twin.models.group.traverse( node => node.userData.xraySolid && node.userData.id && ids.add( node.userData.id ) );
+		return ids.size;
+
+	} );
+	const counts = () => page.evaluate( () => Object.fromEntries( window.twin.repairAreas.timeline.summary().filter( row => row.count ).map( row => [ row.stage, row.count ] ) ) );
+	const label = () => page.locator( '#repair-timeline .day' ).textContent();
+	// The slider put on a day (its last stop is now), as dragging it does.
+	const to = async day => {
+
+		const i = await page.evaluate( day => day ? window.twin.repairTimeline.days.indexOf( day ) : window.twin.repairTimeline.days.length, day );
+		assert.ok( i >= 0, `${ day } is on the slider` );
+		await page.locator( '#repair-timeline .days' ).fill( String( i ) );
+		await page.waitForFunction( day => window.twin.repairAreas.timeline.day === day, day );
+
+	};
+	const areas = await page.evaluate( () => window.twin.repairAreas.areas() );
+	const total = await drawn();
+	assert.equal( total, areas.length );
+	// The day each was chipped: a span of days is its last.
+	const chipped = a => a.f.chipped.replace( /^(\d{4}-\d{2}-)\d{2}\/(\d{2})$/, '$1$2' );
+	const first = areas.map( chipped ).sort()[ 0 ];
+	assert.equal( first, '2026-11-02' );
+
+	// One area taken on two stages, not saved: sandblasted on the 6th, epoxy coated today.
+	const taken = areas.find( a => chipped( a ) === first );
+	await page.locator( '#views .edit-areas' ).click();
+	await page.evaluate( id => window.twin.repairAreas.select( id ), taken.id );
+	await page.locator( '#area-editor [data-field=status]' ).selectOption( 'Sandblasted' );
+	await page.locator( '#area-editor [data-field=date]' ).fill( '2026-11-06' );
+	await page.locator( '#area-editor [data-field=date]' ).press( 'Enter' );
+	await page.locator( '#area-editor [data-field=status]' ).selectOption( 'Shotcreted' );
+	// Put back a stage, it loses the later stage's day; on again, it reached that one today.
+	await page.locator( '#area-editor [data-field=status]' ).selectOption( 'Epoxy coated' );
+	const today = await page.evaluate( () => {
+
+		const d = new Date();
+		return `${ d.getFullYear() }-${ String( d.getMonth() + 1 ).padStart( 2, '0' ) }-${ String( d.getDate() ).padStart( 2, '0' ) }`;
+
+	} );
+	const { f } = await page.evaluate( id => window.twin.repairAreas.areas().find( a => a.id === id ), taken.id );
+	assert.deepEqual( { chipped: f.chipped, sandblasted: f.sandblasted, epoxy: f.epoxy, shotcreted: f.shotcreted }, { chipped: taken.f.chipped, sandblasted: '2026-11-06', epoxy: today, shotcreted: undefined } );
+
+	// Opened, the editor stops and it's at now; the day before the first chipping there's no area.
+	await page.locator( '#views .timeline-toggle' ).click();
+	await page.locator( '#repair-timeline' ).waitFor();
+	assert.equal( await page.locator( '#area-editor' ).isVisible(), false );
+	assert.match( await label(), / · now$/ );
+	assert.deepEqual( await counts(), { Chipped: total - 1, 'Epoxy coated': 1 } );
+	await to( '2026-11-01' );
+	assert.equal( await drawn(), 0 );
+	assert.equal( await page.locator( '#repair-timeline .counts' ).textContent(), 'Nothing chipped yet' );
+	assert.match( await label(), /Nov 1, 2026$/ );
+	// Then those chipped by the end of each day, the one taken on at the stage it had reached.
+	const by = day => areas.filter( a => chipped( a ) <= day ).length;
+	assert.ok( by( '2026-11-02' ) > 0 && by( '2026-11-02' ) < by( '2026-11-04' ) && by( '2026-11-04' ) < total );
+	await to( '2026-11-02' );
+	assert.equal( await drawn(), by( '2026-11-02' ) );
+	assert.deepEqual( await counts(), { Chipped: by( '2026-11-02' ) } );
+	await to( '2026-11-04' );
+	assert.equal( await drawn(), by( '2026-11-04' ) );
+	await to( '2026-11-06' );
+	assert.deepEqual( await counts(), { Chipped: by( '2026-11-06' ) - 1, Sandblasted: 1 } );
+	assert.match( await page.locator( '#repair-timeline .counts' ).textContent(), /Sandblasted 1 · \d+\.\d m²/ );
+
+	// Played from the end, it starts over and runs to now.
+	await to( null );
+	assert.equal( await drawn(), total );
+	await page.locator( '#repair-timeline .speed' ).selectOption( { label: 'Fast' } );
+	await page.locator( '#repair-timeline .play' ).click();
+	await page.waitForFunction( () => window.twin.repairAreas.timeline.day !== null );
+	assert.equal( await page.locator( '#repair-timeline .play' ).textContent(), '❚❚' );
+	await page.waitForFunction( () => window.twin.repairAreas.timeline.day === null && document.querySelector( '#repair-timeline .play' ).textContent === '▶', null, { timeout: 30000 } );
+	assert.deepEqual( await counts(), { Chipped: total - 1, 'Epoxy coated': 1 } );
+
+	// Looking back, then editing: the bar closes and the areas are as they are now.
+	await to( '2026-11-02' );
+	await page.locator( '#views .edit-areas' ).click();
+	assert.equal( await page.locator( '#repair-timeline' ).isVisible(), false );
+	assert.equal( await page.evaluate( () => window.twin.repairAreas.timeline.day ), null );
+	assert.equal( await drawn(), total );
+	// So does editing the model, and × on the bar.
+	await page.locator( '#views .timeline-toggle' ).click();
+	await to( '2026-11-02' );
+	await page.locator( '#views .edit-model' ).click();
+	assert.equal( await page.locator( '#repair-timeline' ).isVisible(), false );
+	assert.equal( await drawn(), total );
+	await page.locator( '#views .timeline-toggle' ).click();
+	assert.equal( await page.locator( '#model-editor' ).isVisible(), false );
+	await to( '2026-11-01' );
+	await page.locator( '#repair-timeline .close' ).click();
+	assert.equal( await page.locator( '#repair-timeline' ).isVisible(), false );
+	assert.equal( await drawn(), total );
+	await page.context().close();
+
+} );
+
 test( 'the admin adds a beam to the B2D2 model and paints a wall, for everyone; removed, they\'re gone', async () => {
 
 	const admin = await newPage();

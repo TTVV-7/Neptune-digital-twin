@@ -4,7 +4,7 @@ import { loadConfig } from './cloud.js';
 import { sendForEveryone } from './placements.js';
 import { useFastRaycast } from './raycast.js';
 import { createAreaPhotos } from './repair-photos.js';
-import { areaExtras, areaName, areaParts, basisOf, CHIPPED, cutOut, describeArea, LOOKS, lookNames, outlineNormal, rimOf, STAGES, stageOf, trianglesOf } from './repair-geometry.js';
+import { areaExtras, areaName, areaParts, basisOf, CHIPPED, cutOut, dayOf, describeArea, LOOKS, lookNames, outlineNormal, rimOf, stageAt, STAGES, stageOf, trianglesOf } from './repair-geometry.js';
 import { isTyping } from './walk.js';
 
 // Fixing the B2D2 model's repair areas in the twin: moving areas drawn in the wrong spot or turned
@@ -79,7 +79,10 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 	const history = []; // { s, id, had, value }, for Undo
 	let numbersShown = true; // the Show panel's Panel numbers row
 	let numbersCounted = 0;
-	const onEditing = []; // told when editing areas starts (the model editor, to stop)
+	const onEditing = []; // told when editing areas starts, or looking back (the model editor, to stop)
+	const onNow = []; // told when an editor starts, so the areas are as they are now (the timeline, to close)
+	const onRender = []; // told when what's shown of the areas may have changed (the timeline's bar)
+	let asOf = null; // looking back: the day ('YYYY-MM-DD') the areas are drawn as of; null: now
 	// What a new area is, as the last one drawn was.
 	const defaults = { status: CHIPPED, type: 'Exposed rebar', text: '' };
 
@@ -190,6 +193,7 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 
 		toggle.hidden = states.size === 0;
 		toggle.classList.toggle( 'active', editing );
+		for ( const told of onRender ) told();
 		// The Show panel's row counts the numbers: told when there are more or fewer.
 		const shown = numbers().length;
 		if ( shown !== numbersCounted ) {
@@ -268,8 +272,9 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 
 			if ( controls.locked ) document.exitPointerLock?.();
 			for ( const s of states.values() ) ensureData( s ).catch( () => toast?.( 'Couldn\'t load the repair areas\' data, so they can\'t be changed.' ) );
-			// One editor at a time has the clicks.
+			// One editor at a time has the clicks, and areas are edited as they are now.
 			for ( const told of onEditing ) told();
+			backToNow();
 
 		} else {
 
@@ -304,6 +309,8 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 			local: new Map(),
 			planes: new Map(),
 			nodes: new Map(),
+			// The status each area is drawn at, once it has been drawn again here (null: not drawn).
+			drawn: new Map(),
 		};
 		states.set( entry, s );
 		render();
@@ -560,10 +567,19 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 		} else {
 
 			if ( ( f[ field ] ?? '' ) === value ) return;
+			const was = STAGES.indexOf( stageOf( f.status ) );
 			f[ field ] = value;
-			// Reached a new stage today, unless it has a day for it already.
-			const { date } = stageOf( f.status );
-			if ( field === 'status' && date && ! f[ date ] ) f[ date ] = today();
+			if ( field === 'status' ) {
+
+				// An area's days are those of the stages it has reached (the timeline plays them back):
+				// going back a stage, the later ones' go; going on, it reached the new one today.
+				const now = STAGES.indexOf( stageOf( value ) );
+				for ( const stage of STAGES.slice( Math.min( was, now ) + 1 ) ) if ( stage.date ) delete f[ stage.date ];
+				const { date } = STAGES[ now ];
+				if ( date && ! f[ date ] ) f[ date ] = today();
+
+			}
+
 			// What the next one drawn is.
 			defaults[ field ] = value;
 
@@ -591,9 +607,54 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 
 	};
 
-	const partsOf = ( s, id ) => {
+	// The areas drawn as they were by the end of a day, or (null) as they are now: those whose stage
+	// was another then are drawn again, and the concrete cut to suit. The models' data is loaded.
+	function lookBack( day ) {
+
+		asOf = day;
+		for ( const s of states.values() ) {
+
+			if ( ! s.data ) continue;
+			let changed = false;
+			for ( const id of ids( s ) ) {
+
+				const now = s.drawn.has( id ) ? s.drawn.get( id ) : s.base.get( id )?.f?.status ?? null;
+				if ( ( drawnAs( s, id )?.f?.status ?? null ) === now ) continue;
+				rebuild( s, id );
+				changed = true;
+
+			}
+
+			if ( changed ) cut( s );
+
+		}
+
+		render();
+
+	}
+
+	// An editor starts: no more looking back.
+	function backToNow() {
+
+		for ( const told of onNow ) told();
+		if ( asOf !== null ) lookBack( null );
+
+	}
+
+	// The area as it's drawn: as it is now, or, looking back (the timeline), at the stage it had
+	// reached by that day. Null if there's none to draw: taken away, or not chipped yet then.
+	function drawnAs( s, id ) {
 
 		const m = markupOf( s, id );
+		if ( ! m || asOf === null ) return m;
+		const status = stageAt( m, asOf );
+		return status && { ...m, f: { ...m.f, status } };
+
+	}
+
+	const partsOf = ( s, id ) => {
+
+		const m = drawnAs( s, id );
 		return m && { m, ...areaParts( m, s.all ) };
 
 	};
@@ -604,9 +665,10 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 		const old = s.nodes.get( id );
 		const built = partsOf( s, id );
 		s.planes.set( id, built?.plane ?? null );
+		s.drawn.set( id, built?.m.f?.status ?? null );
 		if ( ! built ) {
 
-			// Taken away.
+			// Taken away, or not there yet on the day looked back to.
 			old?.removeFromParent();
 			discard( old );
 			s.nodes.delete( id );
@@ -1513,6 +1575,64 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 
 		},
 		startDrawing, nudge, turn, undo, save,
+		// Looking back (repair-timeline.js): the days anything reached a stage, the areas drawn as
+		// they were by the end of a day (null: as they are now), and how many areas and m² were at
+		// each stage then.
+		timeline: {
+			async days() {
+
+				await Promise.all( [ ...states.values() ].map( ensureData ) );
+				const days = new Set();
+				for ( const s of states.values() ) for ( const id of ids( s ) ) {
+
+					// Of the stages it has reached (stageAt goes by the same).
+					const f = markupOf( s, id )?.f ?? {};
+					for ( const stage of STAGES.slice( 0, STAGES.indexOf( stageOf( f.status ) ) + 1 ) ) if ( stage.date && dayOf( f[ stage.date ] ) ) days.add( dayOf( f[ stage.date ] ) );
+
+				}
+
+				return [ ...days ].sort();
+
+			},
+			get day() {
+
+				return asOf;
+
+			},
+			async setDay( day ) {
+
+				await Promise.all( [ ...states.values() ].map( ensureData ) );
+				lookBack( day );
+
+			},
+			// The timeline opens: the editors stop. And it's told (to close) when one starts.
+			stopEditing() {
+
+				setEditing( false );
+				for ( const told of onEditing ) told();
+
+			},
+			onStopped: told => onNow.push( told ),
+			// Told when the areas, or the models that have them, may have changed.
+			onChange: told => onRender.push( told ),
+			summary() {
+
+				const rows = STAGES.map( stage => ( { stage: stage.short, count: 0, area: 0 } ) );
+				for ( const s of states.values() ) for ( const id of s.base ? ids( s ) : [] ) {
+
+					const m = drawnAs( s, id );
+					if ( ! m ) continue;
+					const row = rows[ STAGES.indexOf( stageOf( m.f?.status ) ) ];
+					row.count ++;
+					row.area += m.area ?? 0;
+
+				}
+
+				return rows;
+
+			},
+			has: () => states.size > 0,
+		},
 		// For the model editor (model-edits.js), which changes the same models: their states (s.model,
 		// s.entry, s.content, s.origin, s.triangles by layer, s.group, and s.painted, the colours of
 		// painted triangles by layer, which it sets), their data once it's loaded, the concrete under
@@ -1522,7 +1642,12 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 			states: () => [ ...states.values() ],
 			ensureData, concreteAt, concreteAlong, faceHit, toModel, toModelPoint, toScene,
 			recut: cut,
-			stop: () => setEditing( false ),
+			stop() {
+
+				setEditing( false );
+				backToNow();
+
+			},
 			onEditing: told => onEditing.push( told ),
 		},
 	};
