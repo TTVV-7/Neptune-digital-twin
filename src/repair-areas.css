@@ -538,9 +538,9 @@ canvas.picking-surface {
 	outline-offset: 1px;
 }
 
-/* The hint line would be under it. */
+/* The hint line would be under it: it goes above (repair-timeline.js says where the bar's top is). */
 body.repair-timeline-open #hint {
-	bottom: 112px;
+	bottom: var( --repair-timeline-top, 112px );
 }
 
 /* Less room: above the Library button, the day on a line of its own. */
@@ -556,10 +556,6 @@ body.repair-timeline-open #hint {
 		grid-row: 2;
 		grid-column: 1 / -1;
 		min-width: 0;
-	}
-
-	body.repair-timeline-open #hint {
-		bottom: 172px;
 	}
 
 }

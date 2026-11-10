@@ -11,6 +11,8 @@ const SPEEDS = [ [ 'Slow', 1.4 ], [ 'Normal', 0.7 ], [ 'Fast', 0.3 ] ];
 // Longer than this (days) from first to last, the slider goes from one day something happened to
 // the next rather than day by day.
 const LONGEST = 400;
+// Between the bar and Google's credits under it, in px.
+const GAP = 8;
 const COLOURS = { Marked: '#0e8fa8', Chipped: '#7c4a2d', Sandblasted: '#f1f5f9', 'Epoxy coated': '#047857', Shotcreted: '#475569' };
 
 const today = () => {
@@ -79,8 +81,32 @@ export function setUpRepairTimeline( { timeline, bar, toast } ) {
 		$( '.counts' ).innerHTML = rows.length
 			? rows.map( row => `<span><i style="background:${ COLOURS[ row.stage ] ?? '#888' }"></i>${ row.stage } ${ row.count } · ${ row.area.toFixed( 1 ) } m²</span>` ).join( '' )
 			: '<span>Nothing chipped yet</span>';
+		place();
 
 	}
+
+	// Google's logo and credits along the bottom have to stay in sight: the bar goes above those it
+	// would lie over (they come and go, and wrap taller, with the tiles and the window).
+	function place() {
+
+		if ( ! open ) return;
+		strip.style.bottom = '';
+		const own = strip.getBoundingClientRect();
+		const tops = [ ...document.querySelectorAll( '#attribution img, #attribution .credits' ) ]
+			.map( el => el.getBoundingClientRect() )
+			.filter( r => r.width && r.height && r.top > window.innerHeight / 2 && r.right > own.left && r.left < own.right )
+			.map( r => r.top );
+		const bottom = Math.max( window.innerHeight - own.bottom, tops.length ? window.innerHeight - Math.min( ...tops ) + GAP : 0 );
+		if ( tops.length ) strip.style.bottom = `${ bottom }px`;
+		// For the hint line, which goes above the bar (repair-areas.css).
+		document.documentElement.style.setProperty( '--repair-timeline-top', `${ Math.round( bottom + own.height + GAP ) }px` );
+
+	}
+
+	window.addEventListener( 'resize', place );
+	const credits = document.getElementById( 'attribution' );
+	if ( credits && window.ResizeObserver ) new ResizeObserver( place ).observe( credits );
+	if ( credits ) new MutationObserver( place ).observe( credits, { attributes: true, childList: true, subtree: true, characterData: true } );
 
 	async function go( i ) {
 
