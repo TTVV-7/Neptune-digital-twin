@@ -219,6 +219,26 @@ at grade, so snapping puts grade on Google's ground and the structure goes under
 level is left out, since it would flicker against Google's ground. Heading 0 points C31's grid
 numbers (0 to 69) east. It's compressed with meshopt (about 1 MB).
 
+**On the drawings' grid.** The Shapr3D model had the transfer pit 0.5 to 0.9 m off the Hatch
+drawings' grid with its two sides swapped, its B1 slab one thick plate with the wrong openings,
+C32 0.64 m off with it, and the gallery's cross beams drifting along it. `scripts/b2d2-structure.mjs`
+puts the structure where the drawings have it, in plan, as the model is built (the source file is
+left as it came):
+
+- the **transfer pit** (grid 0 to 8), redrawn: walls, floor and sump; the **B1 slab** with its
+  central opening and two grated openings, and beams **B1 to B6** under it; at grade the lid with its
+  three openings, the **cross beam**, the **shed support beam** and the train support beams over the pit;
+- the **C31 gallery**: walls, floor and hopper plates kept, between the pit and the north end where
+  the drawings have them; at grade the pony walls, **train support beams 1 and 2**, cross beams
+  **G1 to G14** at 4.445 m, the steel plates between them, and the north end's two openings;
+- **C32** moved over to the drawings' line and brought up to the pit's wall.
+
+Plan dimensions are read off the linework of 620-24070-DWG-ST005 (ground floor and B1 plans), to
+the centimetre: they're the numbers at the top of the script. Heights are the Shapr3D model's
+(the plans don't give them); the depths of beams the model didn't have are scaled off the beam
+elevations of -ST010 and -ST011, to about 5 cm. The building, conveyors and tent are as they were,
+so they may sit a little off the corrected concrete.
+
 Areas marked **Chipped / hydro-demo** are drawn as they are on site: the area is cut out of the
 wall, floor or soffit it was marked on, and in its place is a recess of rough, fresh concrete about
 100 mm deep (a measured depth in the markup wins) with the rebar exposed in it: 15M bars both ways
@@ -286,7 +306,8 @@ with the admin passcode (the one for Save position for everyone), and everyone w
 sees them (`/api/area-edits`, [docs/accounts.md](docs/accounts.md)); until then only you see them,
 and closing the page asks first. Changes are kept by the area's id, so they outlast a rebuild from
 a new progress drawing that keeps the id, and win over what that drawing has for the area: **Back
-to the drawing** (and save) takes the drawing's. Areas added in the twin live on the site, not in
+to the drawing** (and save) takes the drawing's. An area keeps its place along its face; if the
+face itself is moved (the structure corrected, as above), the area follows it up to a metre. Areas added in the twin live on the site, not in
 `scripts/data/b2d2-markups.json`. The script writes `public/models/b2d2-repair.json` beside the
 model for this: the areas as drawn and the concrete they're cut out of.
 
@@ -324,7 +345,8 @@ node scripts/b2d2-repair-model.mjs
 
 The first finds each page's sheet from its title block (with `pdftotext`, or `--sheets ST007,...`),
 places each polygon on the wall, floor or soffit of the model it's drawn on, keeps the ids of areas
-that are still there, and lists what's new, what's gone and anything it couldn't place (`--dry-run`
+that are still there (within 0.6 m of where they were; `--match 1.2` after the structure has been
+moved), and lists what's new, what's gone and anything it couldn't place (`--dry-run`
 only lists). Areas take the drawing's measured m². Each chipped area gets a rim in its date's colour.
 
 To bring in markups from the artifact instead, save its `markups` collection (one JSON file per
@@ -335,7 +357,8 @@ node scripts/b2d2-repair-model.mjs --markups path/to/markups
 ```
 
 It's built from `source-models/b2d2-site-model.glb` (the artifact's model; `--site` takes another,
-or the artifact's `site.json`). Each area's node keeps its grid, face, area, defect, status and
+or the artifact's `site.json`), with the structure put on the drawings' grid by
+`scripts/b2d2-structure.mjs`. Each area's node keeps its grid, face, area, defect, status and
 notes in glTF `extras`.
 
 ### Converting to .glb

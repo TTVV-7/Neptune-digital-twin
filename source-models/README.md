@@ -17,3 +17,7 @@ Coordinates are in metres on the Hatch grids, not real-world:
 
 `scripts/b2d2-repair-model.mjs --site` builds the twin's `public/models/b2d2-repair.glb` from the
 artifact's `site.json` (the same model) plus the repair markups.
+
+The file is kept as it came. Its transfer pit, C32 and the gallery's framing at grade are 0.3 to
+0.9 m off the Hatch drawings' grid; `scripts/b2d2-structure.mjs` puts them right as the twin's
+model is built (see the README's B2D2 section), so nothing here needs redrawing in Shapr3D.

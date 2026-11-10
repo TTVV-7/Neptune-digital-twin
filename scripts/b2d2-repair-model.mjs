@@ -35,6 +35,7 @@ import { meshopt } from '@gltf-transform/functions';
 import { MeshoptDecoder, MeshoptEncoder } from 'meshoptimizer';
 import sharp from 'sharp';
 import { Vector3 } from 'three';
+import { C32_LINE, correctStructure, PIT_INSIDE } from './b2d2-structure.mjs';
 import { areaExtras, areaName, buildRepairs, CHIPPED, LOOKS, lookNames, random, rimOf, triNormal } from '../src/repair-geometry.js';
 
 const ROOT = new URL( '../', import.meta.url );
@@ -78,8 +79,9 @@ const FL = z => - 6.82 + 0.241 * z;
 const VIEWS = [
 	{ name: 'Overview', from: [ 82, 42, 42 ], at: [ 30, - 1, - 16 ], underground: true },
 	{ name: 'C31', from: [ 66, - 0.6, - 5 ], at: [ 30, - 0.8, - 5 ] },
-	{ name: 'C32', from: [ 2.9, FL( 38 ) + 1.5, - 38 ], at: [ 2.9, FL( 16 ) + 1.2, - 16 ] },
-	{ name: 'Pit', from: [ 8.2, - 3.0, - 1.4 ], at: [ 2.5, - 5.4, - 6 ] },
+	{ name: 'C32', from: [ C32_LINE, FL( 38 ) + 1.5, - 38 ], at: [ C32_LINE, FL( 16 ) + 1.2, - 16 ] },
+	// From the pit's north-east corner, under the B1 slab, across to C32's mouth.
+	{ name: 'Pit', from: [ PIT_INSIDE.x[ 1 ] - 0.4, - 3.0, - 0.7 ], at: [ 1.8, - 5.2, - 6 ] },
 	{ name: 'Ground', from: [ 67.5, 7.0, - 4.95 ], at: [ 20, 5.3, - 4.95 ] },
 ];
 
@@ -208,7 +210,8 @@ const io = new NodeIO()
 	.registerDependencies( { 'meshopt.decoder': MeshoptDecoder, 'meshopt.encoder': MeshoptEncoder } );
 
 const markups = ( await readMarkups( opts.markups ) ).filter( m => m.kind === 'area' && m.pts?.length >= 3 && m.n );
-const site = await readSite( io, opts.site );
+// The Shapr3D model's structure, put on the drawings' grid (scripts/b2d2-structure.mjs).
+const site = correctStructure( await readSite( io, opts.site ) );
 // The layers areas are cut out of, in the artifact's frame, uncut: the twin's area editor cuts
 // them again where areas are moved to (src/repair-areas.js).
 const cutLayers = Object.fromEntries( Object.entries( STRUCTURE ).filter( ( [ key, layer ] ) => layer.cut && site[ key ] ).map( ( [ key ] ) => [ key, site[ key ] ] ) );

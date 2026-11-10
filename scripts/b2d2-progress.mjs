@@ -11,7 +11,9 @@
 // soffit of the model (source-models/b2d2-site-model.glb) finds the face it's on, and the outline
 // is laid on it. Two places where the drawings and the model differ are fitted as the artifact's
 // first import did: the pony walls at grade (heights scaled into the model's band, PONY) and C32's
-// floor plan (its 0-4 grid across the model's 3.35 m between the walls, C32_ACROSS).
+// floor plan (its 0-4 grid across the model's 3.35 m between the walls, C32_ACROSS). The model is
+// the site model with its structure put on the drawings' grid (scripts/b2d2-structure.mjs), as the
+// build has it.
 //
 // The progress areas already in the snapshot (src containing "progress") are replaced by the
 // drawing's, keeping the id of each that's still there (same face, within 0.3 m), so the artifact
@@ -26,6 +28,7 @@ import { NodeIO } from '@gltf-transform/core';
 import { PDFDict, PDFDocument, PDFName } from 'pdf-lib';
 import { BufferAttribute, BufferGeometry, DoubleSide, Mesh, MeshBasicMaterial, Raycaster, Vector3 } from 'three';
 import { area3, fEL, gridRef, letRange, numRange, zoneOf } from '../src/repair-geometry.js';
+import { C32_INSIDE, C32_LINE, correctStructure, PIT_INSIDE } from './b2d2-structure.mjs';
 
 const ROOT = new URL( '../', import.meta.url );
 const { values: opts, positionals } = parseArgs( { allowPositionals: true, options: {
@@ -33,6 +36,9 @@ const { values: opts, positionals } = parseArgs( { allowPositionals: true, optio
 	site: { type: 'string', default: new URL( 'source-models/b2d2-site-model.glb', ROOT ).pathname },
 	markups: { type: 'string', default: new URL( 'scripts/data/b2d2-markups.json', ROOT ).pathname },
 	'dry-run': { type: 'boolean' },
+	// How far (m) an area may be from where the snapshot has it and still be the same area: more
+	// when the model's faces have been moved since (--match 1.2 after the structure was corrected).
+	match: { type: 'string', default: '0.6' },
 } } );
 const pdfPath = positionals[ 0 ];
 if ( ! pdfPath ) throw new Error( 'Usage: node scripts/b2d2-progress.mjs <progress.pdf> [--sheets ST007,ST005,...] [--dry-run]' );
@@ -65,8 +71,11 @@ const VIEWS = {
 // first import's areas, within 4 mm).
 const PONY = { from: 2.3, a: 0.8125, b: 2.0536 };
 // C32's floor and ceiling plans: their 0-4 grid across C32 between its walls in the model.
-const C32_ACROSS = { x0: 1.25, k: 0.8375 };
-const PIT_END = 8.2; // letter grid: C32 starts past the pit
+const C32_ACROSS = { x0: C32_INSIDE[ 0 ], k: ( C32_INSIDE[ 1 ] - C32_INSIDE[ 0 ] ) / 4 };
+const PIT_END = PIT_INSIDE.outer.l[ 1 ]; // letter grid: C32 starts past the pit
+const PIT_NORTH = PIT_INSIDE.outer.x[ 1 ]; // C31's grid: the gallery starts past the pit
+// Section E's faces nearer grid 0 than this are the pit's south wall; C32's south wall is beyond.
+const PIT_SOUTH = ( PIT_INSIDE.x[ 0 ] + C32_INSIDE[ 0 ] ) / 2;
 const FL = z => - 6.82 + 0.241 * z; // C32's floor, by letter grid (Hatch)
 
 // Where to look from, for a point (p, q) of a view: a ray from inside onto the face drawn, and the
@@ -83,8 +92,8 @@ function rayOf( view, p, q, pony ) {
 		case 'wallW': return { at: new Vector3( p, y, pony ? - 6.9 : - 4 ), dir: new Vector3( 0, 0, - 1 ) };
 		case 'wallE': return { at: new Vector3( p, y, pony ? - 3 : - 4 ), dir: new Vector3( 0, 0, 1 ) };
 		case 'wallN': return { at: new Vector3( 60, y, - p ), dir: new Vector3( 1, 0, 0 ) };
-		case 'wallD': return { at: new Vector3( 2.9, y, - p ), dir: new Vector3( 1, 0, 0 ) };
-		case 'wallS': return { at: new Vector3( 2.9, y, - p ), dir: new Vector3( - 1, 0, 0 ) };
+		case 'wallD': return { at: new Vector3( C32_LINE, y, - p ), dir: new Vector3( 1, 0, 0 ) };
+		case 'wallS': return { at: new Vector3( C32_LINE, y, - p ), dir: new Vector3( - 1, 0, 0 ) };
 		case 'gnd': return { at: new Vector3( p, 20, - q ), dir: new Vector3( 0, - 1, 0 ) };
 		case 'b1': return { at: new Vector3( p, - 0.5, - q ), dir: new Vector3( 0, - 1, 0 ) };
 		case 'ceil31': return { at: new Vector3( p, 0, - q ), dir: new Vector3( 0, 1, 0 ) };
@@ -167,17 +176,28 @@ function viewOf( poly ) {
 async function readSite( path ) {
 
 	const doc = await new NodeIO().read( path );
-	const meshes = [];
+	// The structure the areas are on (not the building, conveyors or ground), as the build has it:
+	// on the drawings' grid (scripts/b2d2-structure.mjs).
+	const names = { c31: 'C31 gallery', pit: 'Transfer pit', c32: 'C32 tunnel', steel: 'Steel plates at grade' };
+	const site = {};
 	for ( const mesh of doc.getRoot().listMeshes() ) {
 
-		// The structure the areas are on; not the building, conveyors or ground.
-		if ( ! [ 'C31 gallery', 'Transfer pit', 'C32 tunnel' ].includes( mesh.getName() ) ) continue;
+		const key = Object.keys( names ).find( k => names[ k ] === mesh.getName() );
+		if ( ! key ) continue;
 		const prim = mesh.listPrimitives()[ 0 ];
+		site[ key ] = { positions: Float32Array.from( prim.getAttribute( 'POSITION' ).getArray() ), index: Uint32Array.from( prim.getIndices().getArray() ) };
+
+	}
+
+	const meshes = [];
+	for ( const [ key, { positions, index } ] of Object.entries( correctStructure( site ) ) ) {
+
+		if ( key === 'steel' ) continue;
 		const geometry = new BufferGeometry();
-		geometry.setAttribute( 'position', new BufferAttribute( Float32Array.from( prim.getAttribute( 'POSITION' ).getArray() ), 3 ) );
-		geometry.setIndex( new BufferAttribute( Uint32Array.from( prim.getIndices().getArray() ), 1 ) );
+		geometry.setAttribute( 'position', new BufferAttribute( positions, 3 ) );
+		geometry.setIndex( new BufferAttribute( index, 1 ) );
 		const m = new Mesh( geometry, new MeshBasicMaterial( { side: DoubleSide } ) );
-		m.name = mesh.getName();
+		m.name = names[ key ];
 		m.updateMatrixWorld();
 		meshes.push( m );
 
@@ -196,7 +216,7 @@ function faceOf( view, zone, n, pony, x ) {
 
 	// Sections D and E cross the pit's ends (grid 8, grid 0) as well as C32's walls.
 	if ( view === 'wallD' && x > 6 ) return 'pit north wall (grid 8)';
-	if ( view === 'wallS' && x < 0.9 ) return 'pit south wall (grid 0)';
+	if ( view === 'wallS' && x < PIT_SOUTH ) return 'pit south wall (grid 0)';
 	if ( pony ) return view === 'wallW' ? 'west pony wall at grade (AJ side)' : 'east pony wall at grade (AA side)';
 	const [ nx, ny, nz ] = n;
 	if ( ny > 0.75 ) return zone === 'pit' ? 'pit floor (B2)' : zone === 'ground' ? 'slab top' : 'floor';
@@ -275,12 +295,12 @@ for ( const poly of polys ) {
 	}
 
 	const middle = placed.pts.reduce( ( s, p ) => s.map( ( c, i ) => c + p[ i ] / placed.pts.length ), [ 0, 0, 0 ] );
-	const pitEnd = ( poly.view === 'wallD' && middle[ 0 ] > 6 ) || ( poly.view === 'wallS' && middle[ 0 ] < 0.9 );
+	const pitEnd = ( poly.view === 'wallD' && middle[ 0 ] > 6 ) || ( poly.view === 'wallS' && middle[ 0 ] < PIT_SOUTH );
 	// The ground floor plan is the slab at grade, between the pony walls and the beams. Sections D and
 	// E show C32's walls but where they cross the pit's ends; the B1 plan, the slab at B1 level.
 	const section = poly.view === 'wallD' || poly.view === 'wallS';
 	// Sections A and B over grid 0-8 below grade: the pit's side walls.
-	const pitSide = ( poly.view === 'wallW' || poly.view === 'wallE' ) && ! placed.pony && middle[ 0 ] < PIT_END;
+	const pitSide = ( poly.view === 'wallW' || poly.view === 'wallE' ) && ! placed.pony && middle[ 0 ] < PIT_NORTH;
 	const zone = pitEnd || pitSide ? 'pit' : poly.view === 'gnd' ? 'ground' : section ? 'c32' : zoneOf( middle );
 	const face = poly.view === 'gnd' ? 'ground floor slab'
 		: poly.view === 'b1' && zone !== 'c31' ? 'B1 level slab (pit corner)'
@@ -308,6 +328,7 @@ for ( const poly of polys ) {
 }
 
 // Ids: an area already in the snapshot keeps its id: facing the same way, its middle within 0.6 m
+// (--match)
 // (the first import laid one on the pit's sump rather than its floor) and the nearest.
 const centre = m => m.pts.reduce( ( s, p ) => s.map( ( c, i ) => c + p[ i ] / m.pts.length ), [ 0, 0, 0 ] );
 const taken = new Set();
@@ -317,7 +338,7 @@ for ( const m of made ) {
 	const c = centre( m );
 	const distance = o => Math.hypot( ...centre( o ).map( ( v, i ) => v - c[ i ] ) );
 	const facing = o => o.n[ 0 ] * m.n[ 0 ] + o.n[ 1 ] * m.n[ 1 ] + o.n[ 2 ] * m.n[ 2 ] > 0.9;
-	const match = before.filter( o => ! taken.has( o.id ) && facing( o ) && distance( o ) < 0.6 ).sort( ( a, b ) => distance( a ) - distance( b ) )[ 0 ];
+	const match = before.filter( o => ! taken.has( o.id ) && facing( o ) && distance( o ) < Number( opts.match ) ).sort( ( a, b ) => distance( a ) - distance( b ) )[ 0 ];
 	if ( match ) {
 
 		m.id = match.id;

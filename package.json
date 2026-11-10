@@ -20,6 +20,7 @@
     "dev:api": "node scripts/dev-api.mjs",
     "dev:drive-api": "node scripts/dev-drive-api.mjs",
     "test:worker": "node --test scripts/test-worker.mjs",
+    "test:b2d2": "node --test scripts/test-b2d2-structure.mjs",
     "test:accounts-ui": "node --test scripts/test-accounts-ui.mjs",
     "test:premium-ui": "node --test scripts/test-premium-ui.mjs",
     "test:shoring-ui": "node --test scripts/test-shoring-ui.mjs",

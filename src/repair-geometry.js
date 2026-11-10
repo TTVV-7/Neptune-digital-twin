@@ -287,12 +287,35 @@ export function onFace( tri, plane, within ) {
 
 }
 
-// Each chipped area's plane moved onto the face it was marked on, where that's a little off
-// (marked on a drawing's plane rather than the model's face, say).
+// An area that isn't on a face follows its face up to this far (m): where the model's walls have
+// been put right since the area was marked or moved, by more than NEAR_FACE.
+export const FOLLOW = 1;
+
+// Each area's plane moved onto the face it's marked on, where that's off it: a little (marked on
+// a drawing's plane rather than the model's face, say), or as far as FOLLOW where the face itself
+// has moved. The face is the one seen from in front of the area, looking the way the area does:
+// so a wall that moved by about its own thickness doesn't take the area onto its far side, nor
+// does a face buried in the concrete behind the one that shows.
 export function settleOnFaces( planes, triangles ) {
 
 	for ( const plane of planes ) {
 
+		const seen = faceSeen( plane, triangles );
+		if ( seen !== null ) {
+
+			if ( Math.abs( seen ) > ON_FACE ) {
+
+				plane.h += seen;
+				plane.moved = seen;
+
+			}
+
+			continue;
+
+		}
+
+		// No face looks its way there (a part whose faces are wound the other way round, or the
+		// area is off the edge of its face): the nearest face in its plane, whichever way it looks.
 		if ( triangles.some( tri => onFace( tri, plane, ON_FACE ) ) ) continue;
 		const near = triangles.filter( tri => onFace( tri, plane, NEAR_FACE ) ).map( tri => plane.N.dot( tri.a ) - plane.h ).sort( ( a, b ) => Math.abs( a ) - Math.abs( b ) );
 		if ( near.length ) {
@@ -303,6 +326,55 @@ export function settleOnFaces( planes, triangles ) {
 		} else plane.loose = true;
 
 	}
+
+}
+
+// How far along its normal (toward where it's seen from, or negative, away) an area's plane is
+// from the face it's seen on: the first face looking the way the area does that a ray meets
+// coming at the area from FOLLOW in front of it, at the middle of its outline, else at a corner.
+// Null if there's none within FOLLOW.
+export function faceSeen( plane, triangles ) {
+
+	const { N, poly } = plane;
+	const facing = triangles.filter( tri => triNormal( tri.a, tri.b, tri.c ).dot( N ) > 0.98 );
+	const from = FOLLOW + 0.05;
+	const back = N.clone().negate();
+	const middle = poly.reduce( ( m, [ s, t ] ) => [ m[ 0 ] + s / poly.length, m[ 1 ] + t / poly.length ], [ 0, 0 ] );
+	for ( const [ s, t ] of [ middle, ...poly ] ) {
+
+		const origin = toWorld( plane, s, t, - from );
+		let first = Infinity;
+		for ( const tri of facing ) {
+
+			const d = rayHit( origin, back, tri );
+			if ( d !== null && d < first ) first = d;
+
+		}
+
+		if ( Math.abs( from - first ) <= FOLLOW ) return from - first;
+
+	}
+
+	return null;
+
+}
+
+// Where along a ray (from `origin`, the way of `direction`, a unit vector) it meets a triangle:
+// the distance, or null.
+function rayHit( origin, direction, { a, b, c } ) {
+
+	const e1 = new Vector3().subVectors( b, a ), e2 = new Vector3().subVectors( c, a );
+	const p = new Vector3().crossVectors( direction, e2 );
+	const det = e1.dot( p );
+	if ( Math.abs( det ) < 1e-9 ) return null;
+	const s = new Vector3().subVectors( origin, a );
+	const u = s.dot( p ) / det;
+	if ( u < - 1e-6 || u > 1 + 1e-6 ) return null;
+	const q = new Vector3().crossVectors( s, e1 );
+	const v = direction.dot( q ) / det;
+	if ( v < - 1e-6 || u + v > 1 + 1e-6 ) return null;
+	const distance = e2.dot( q ) / det;
+	return distance > 1e-6 ? distance : null;
 
 }
 
