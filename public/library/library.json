@@ -17,6 +17,23 @@
 		"own": "Weave-Trial: railbridge/Dumper_Access.glb"
 	},
 	{
+		"id": "scaffold-tower-frame",
+		"name": "Frame scaffold tower (2 lifts, guardrails)",
+		"category": "Access & scaffolding",
+		"file": "scaffold-tower-frame.glb",
+		"thumb": "thumbs/scaffold-tower-frame.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 2.44,
+			"width": 1.67,
+			"height": 5.36
+		},
+		"triangles": 35444,
+		"sizeKB": 223,
+		"own": "Weave-Trial: construction_site/Frame_Scaffold_Tower.glb"
+	},
+	{
 		"id": "steel-stair-12ft",
 		"name": "Industrial steel stair (12 ft)",
 		"category": "Access & scaffolding",
@@ -146,6 +163,40 @@
 		}
 	},
 	{
+		"id": "jersey-barrier-run-3",
+		"name": "Concrete jersey barrier run (3 x 10 ft, pinned)",
+		"category": "Barriers & fencing",
+		"file": "jersey-barrier-run-3.glb",
+		"thumb": "thumbs/jersey-barrier-run-3.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 9.57,
+			"width": 0.61,
+			"height": 0.81
+		},
+		"triangles": 30214,
+		"sizeKB": 184,
+		"own": "Weave-Trial: construction_site/Jersey_Barrier_Run_3x10ft.glb"
+	},
+	{
+		"id": "jersey-barrier-cad",
+		"name": "Concrete jersey barrier, CAD model (10 ft)",
+		"category": "Barriers & fencing",
+		"file": "jersey-barrier-cad.glb",
+		"thumb": "thumbs/jersey-barrier-cad.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 3.26,
+			"width": 0.61,
+			"height": 0.81
+		},
+		"triangles": 19788,
+		"sizeKB": 109,
+		"own": "Weave-Trial: construction_site/Jersey_Barrier_NJ_10ft.glb"
+	},
+	{
 		"id": "fence-panel-chainlink",
 		"name": "Temporary fence panel, chain-link detailed (10 x 6 ft)",
 		"category": "Barriers & fencing",
@@ -206,6 +257,40 @@
 			"license": "CC Attribution",
 			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
 		}
+	},
+	{
+		"id": "water-barrier-6ft",
+		"name": "Water-filled barrier, CAD model (6 ft)",
+		"category": "Barriers & fencing",
+		"file": "water-barrier-6ft.glb",
+		"thumb": "thumbs/water-barrier-6ft.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 1.86,
+			"width": 0.59,
+			"height": 1.1
+		},
+		"triangles": 5510,
+		"sizeKB": 50,
+		"own": "Weave-Trial: construction_site/Water_Filled_Barrier_6ft.glb"
+	},
+	{
+		"id": "concrete-boom-pump-38m",
+		"name": "Concrete boom pump truck (38 m, stowed)",
+		"category": "Concrete & batching",
+		"file": "concrete-boom-pump-38m.glb",
+		"thumb": "thumbs/concrete-boom-pump-38m.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 11.67,
+			"width": 7.9,
+			"height": 3.94
+		},
+		"triangles": 47996,
+		"sizeKB": 455,
+		"own": "Weave-Trial: construction_site/Concrete_Boom_Pump_38m.glb"
 	},
 	{
 		"id": "concrete-line-pump-trailer",
@@ -416,6 +501,23 @@
 		}
 	},
 	{
+		"id": "scissor-lift-26ft-raised",
+		"name": "Scissor lift, raised (26 ft, electric)",
+		"category": "Cranes & lifts",
+		"file": "scissor-lift-26ft-raised.glb",
+		"thumb": "thumbs/scissor-lift-26ft-raised.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 2.99,
+			"width": 1.21,
+			"height": 5.04
+		},
+		"triangles": 57396,
+		"sizeKB": 402,
+		"own": "Weave-Trial: construction_site/Electric_Scissor_Lift_26ft.glb"
+	},
+	{
 		"id": "scissor-lift-32ft",
 		"name": "Scissor lift (32 ft, electric)",
 		"category": "Cranes & lifts",
@@ -481,6 +583,23 @@
 		}
 	},
 	{
+		"id": "backhoe-loader-cad",
+		"name": "Backhoe loader, CAD model (14 ft)",
+		"category": "Heavy equipment",
+		"file": "backhoe-loader-cad.glb",
+		"thumb": "thumbs/backhoe-loader-cad.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 8.92,
+			"width": 3.4,
+			"height": 3.81
+		},
+		"triangles": 94524,
+		"sizeKB": 687,
+		"own": "Weave-Trial: construction_site/Backhoe_Loader.glb"
+	},
+	{
 		"id": "crawler-dozer-d6",
 		"name": "Crawler dozer (D6 class, 22 t)",
 		"category": "Heavy equipment",
@@ -511,6 +630,23 @@
 			"brake": 4,
 			"reverse": 14
 		}
+	},
+	{
+		"id": "crawler-dozer-20t",
+		"name": "Crawler dozer, CAD model (20 t)",
+		"category": "Heavy equipment",
+		"file": "crawler-dozer-20t.glb",
+		"thumb": "thumbs/crawler-dozer-20t.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 6.64,
+			"width": 3.38,
+			"height": 3.28
+		},
+		"triangles": 84044,
+		"sizeKB": 597,
+		"own": "Weave-Trial: construction_site/Crawler_Dozer_20t.glb"
 	},
 	{
 		"id": "excavator-20t-detailed",
@@ -548,6 +684,23 @@
 				"up": 1.95
 			}
 		}
+	},
+	{
+		"id": "mini-excavator-cad",
+		"name": "Mini excavator, CAD model (3.5 t)",
+		"category": "Heavy equipment",
+		"file": "mini-excavator-cad.glb",
+		"thumb": "thumbs/mini-excavator-cad.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 4.47,
+			"width": 1.74,
+			"height": 2.62
+		},
+		"triangles": 38700,
+		"sizeKB": 248,
+		"own": "Weave-Trial: construction_site/Mini_Excavator_3-5t.glb"
 	},
 	{
 		"id": "mini-excavator-detailed",
@@ -646,6 +799,23 @@
 		}
 	},
 	{
+		"id": "skid-steer-loader-cad",
+		"name": "Skid steer loader, CAD model (68 in bucket)",
+		"category": "Heavy equipment",
+		"file": "skid-steer-loader-cad.glb",
+		"thumb": "thumbs/skid-steer-loader-cad.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 3.07,
+			"width": 1.83,
+			"height": 2.01
+		},
+		"triangles": 32884,
+		"sizeKB": 218,
+		"own": "Weave-Trial: construction_site/Skid_Steer_Loader.glb"
+	},
+	{
 		"id": "roller-smooth-drum",
 		"name": "Smooth drum roller (4.5 t)",
 		"category": "Heavy equipment",
@@ -710,6 +880,23 @@
 		}
 	},
 	{
+		"id": "roller-single-drum-84in",
+		"name": "Vibratory roller, single drum 84 in (11 t)",
+		"category": "Heavy equipment",
+		"file": "roller-single-drum-84in.glb",
+		"thumb": "thumbs/roller-single-drum-84in.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 6,
+			"width": 2.33,
+			"height": 3.14
+		},
+		"triangles": 62160,
+		"sizeKB": 461,
+		"own": "Weave-Trial: construction_site/Vibratory_Soil_Roller_84in.glb"
+	},
+	{
 		"id": "wheel-loader",
 		"name": "Wheel loader (3.5 m³)",
 		"category": "Heavy equipment",
@@ -740,6 +927,41 @@
 			"brake": 5,
 			"reverse": 20
 		}
+	},
+	{
+		"id": "wheel-loader-3yd",
+		"name": "Wheel loader, CAD model (3 yd³)",
+		"category": "Heavy equipment",
+		"file": "wheel-loader-3yd.glb",
+		"thumb": "thumbs/wheel-loader-3yd.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 8.27,
+			"width": 2.92,
+			"height": 3.57
+		},
+		"triangles": 81800,
+		"sizeKB": 610,
+		"own": "Weave-Trial: construction_site/Wheel_Loader_3yd.glb"
+	},
+	{
+		"id": "conveyor-gallery-12m",
+		"name": "Conveyor gallery module on bent (12 m)",
+		"category": "Material handling",
+		"file": "conveyor-gallery-12m.glb",
+		"thumb": "thumbs/conveyor-gallery-12m.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 12.55,
+			"width": 5.9,
+			"height": 9
+		},
+		"triangles": 36390,
+		"sizeKB": 302,
+		"rowLength": 12,
+		"own": "Weave-Trial: construction_site/Conveyor_Gallery_Module.glb"
 	},
 	{
 		"id": "container-handler-empty",
@@ -814,6 +1036,23 @@
 			"brake": 6,
 			"reverse": 15
 		}
+	},
+	{
+		"id": "radial-stacker-100ft",
+		"name": "Radial stacking conveyor (36 in x 100 ft)",
+		"category": "Material handling",
+		"file": "radial-stacker-100ft.glb",
+		"thumb": "thumbs/radial-stacker-100ft.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 30.73,
+			"width": 4.95,
+			"height": 11.55
+		},
+		"triangles": 41112,
+		"sizeKB": 355,
+		"own": "Weave-Trial: construction_site/Radial_Stacking_Conveyor.glb"
 	},
 	{
 		"id": "telehandler-10k",
@@ -922,6 +1161,57 @@
 		"own": "Weave-Trial: construction_site/Telehandler_10000lb_56ft.glb"
 	},
 	{
+		"id": "bulk-bag-concrete",
+		"name": "Bulk bag of concrete",
+		"category": "Materials",
+		"file": "bulk-bag-concrete.glb",
+		"thumb": "thumbs/bulk-bag-concrete.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 1.08,
+			"width": 1.08,
+			"height": 1.12
+		},
+		"triangles": 27740,
+		"sizeKB": 145,
+		"own": "Weave-Trial: bulkbag/Bulk_Bag_Concrete.step"
+	},
+	{
+		"id": "bulk-bag-concrete-on-pallet",
+		"name": "Bulk bag of concrete on a pallet",
+		"category": "Materials",
+		"file": "bulk-bag-concrete-on-pallet.glb",
+		"thumb": "thumbs/bulk-bag-concrete-on-pallet.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 1.2,
+			"width": 1.08,
+			"height": 1.28
+		},
+		"triangles": 28006,
+		"sizeKB": 150,
+		"own": "Weave-Trial: bulkbag/Bulk_Bag_Concrete_on_Pallet.step"
+	},
+	{
+		"id": "rcp-pipe-stack-24in",
+		"name": "Concrete pipe stack (24 in RCP)",
+		"category": "Materials",
+		"file": "rcp-pipe-stack-24in.glb",
+		"thumb": "thumbs/rcp-pipe-stack-24in.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 2.61,
+			"width": 3.05,
+			"height": 2.78
+		},
+		"triangles": 41640,
+		"sizeKB": 339,
+		"own": "Weave-Trial: construction_site/Concrete_Pipe_Stack_24in.glb"
+	},
+	{
 		"id": "ibc-tote",
 		"name": "IBC tote (1000 L)",
 		"category": "Materials",
@@ -963,6 +1253,40 @@
 		"triangles": 29954,
 		"sizeKB": 200,
 		"own": "Weave-Trial: construction_site/Pallet_of_Concrete_Bags.glb"
+	},
+	{
+		"id": "pallet-cmu-blocks",
+		"name": "Pallet of concrete blocks (90 CMU)",
+		"category": "Materials",
+		"file": "pallet-cmu-blocks.glb",
+		"thumb": "thumbs/pallet-cmu-blocks.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 1.22,
+			"width": 1.02,
+			"height": 1.32
+		},
+		"triangles": 7956,
+		"sizeKB": 103,
+		"own": "Weave-Trial: construction_site/Pallet_of_CMU_Blocks.glb"
+	},
+	{
+		"id": "steel-beam-bundle-w12",
+		"name": "Steel beam bundle (12 x W12x26, 6 m)",
+		"category": "Materials",
+		"file": "steel-beam-bundle-w12.glb",
+		"thumb": "thumbs/steel-beam-bundle-w12.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 6.1,
+			"width": 1.12,
+			"height": 1.2
+		},
+		"triangles": 780,
+		"sizeKB": 13,
+		"own": "Weave-Trial: construction_site/Steel_Beam_Bundle_W12x26.glb"
 	},
 	{
 		"id": "oil-drum",
@@ -1008,6 +1332,176 @@
 		"own": "Weave-Trial: construction_site/Towable_Air_Compressor.glb"
 	},
 	{
+		"id": "cable-reel",
+		"name": "Cable reel, wooden",
+		"category": "Power & air",
+		"file": "cable-reel.glb",
+		"thumb": "thumbs/cable-reel.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 1.99,
+			"width": 0.9,
+			"height": 1.25
+		},
+		"triangles": 32348,
+		"sizeKB": 231,
+		"own": "Weave-Trial: construction_site/Cable_Reel_Wooden.glb"
+	},
+	{
+		"id": "light-tower-led",
+		"name": "LED light tower, towable (30 ft mast)",
+		"category": "Power & air",
+		"file": "light-tower-led.glb",
+		"thumb": "thumbs/light-tower-led.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 3.73,
+			"width": 3.6,
+			"height": 9.66
+		},
+		"triangles": 26392,
+		"sizeKB": 168,
+		"own": "Weave-Trial: construction_site/LED_Light_Tower.glb"
+	},
+	{
+		"id": "rail-gondola-coal",
+		"name": "Coal rail car (rotary-dump gondola)",
+		"category": "Rail",
+		"file": "rail-gondola-coal.glb",
+		"thumb": "thumbs/rail-gondola-coal.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 16.18,
+			"width": 3.27,
+			"height": 4.23
+		},
+		"triangles": 49456,
+		"sizeKB": 356,
+		"own": "Weave-Trial: construction_site/Rail_Gondola_Coal.glb"
+	},
+	{
+		"id": "railcar-mover",
+		"name": "Railcar mover (road-rail)",
+		"category": "Rail",
+		"file": "railcar-mover.glb",
+		"thumb": "thumbs/railcar-mover.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 6.8,
+			"width": 2.95,
+			"height": 3.25
+		},
+		"triangles": 54712,
+		"sizeKB": 447,
+		"own": "Weave-Trial: construction_site/Road_Rail_Railcar_Mover.glb"
+	},
+	{
+		"id": "pipe-pile-stack-36in",
+		"name": "Steel pipe pile stack (36 in x 12 m)",
+		"category": "Shoring",
+		"file": "pipe-pile-stack-36in.glb",
+		"thumb": "thumbs/pipe-pile-stack-36in.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 12.09,
+			"width": 3.4,
+			"height": 3.36
+		},
+		"triangles": 49180,
+		"sizeKB": 433,
+		"own": "Weave-Trial: construction_site/Steel_Pipe_Pile_Stack.glb"
+	},
+	{
+		"id": "trench-shield-8x20-cad",
+		"name": "Trench shield, CAD model (8 x 20 ft)",
+		"category": "Shoring",
+		"file": "trench-shield-8x20-cad.glb",
+		"thumb": "thumbs/trench-shield-8x20-cad.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 6.37,
+			"width": 1.55,
+			"height": 2.64
+		},
+		"triangles": 29440,
+		"sizeKB": 209,
+		"own": "Weave-Trial: construction_site/Trench_Shield_8x20ft.glb"
+	},
+	{
+		"id": "vibratory-pile-hammer",
+		"name": "Vibratory pile hammer with power pack",
+		"category": "Shoring",
+		"file": "vibratory-pile-hammer.glb",
+		"thumb": "thumbs/vibratory-pile-hammer.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 7.89,
+			"width": 2.59,
+			"height": 3.56
+		},
+		"triangles": 58012,
+		"sizeKB": 481,
+		"own": "Weave-Trial: construction_site/Vibratory_Pile_Hammer.glb"
+	},
+	{
+		"id": "wheelbarrow",
+		"name": "Contractor wheelbarrow",
+		"category": "Site services",
+		"file": "wheelbarrow.glb",
+		"thumb": "thumbs/wheelbarrow.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 1.66,
+			"width": 0.74,
+			"height": 0.71
+		},
+		"triangles": 11916,
+		"sizeKB": 89,
+		"own": "Weave-Trial: construction_site/Contractor_Wheelbarrow.glb"
+	},
+	{
+		"id": "wheel-wash",
+		"name": "Drive-through wheel wash",
+		"category": "Site services",
+		"file": "wheel-wash.glb",
+		"thumb": "thumbs/wheel-wash.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 12.26,
+			"width": 10.09,
+			"height": 3.62
+		},
+		"triangles": 64116,
+		"sizeKB": 455,
+		"own": "Weave-Trial: construction_site/Drive_Through_Wheel_Wash.glb"
+	},
+	{
+		"id": "dust-fog-cannon",
+		"name": "Dust suppression fog cannon (trailer)",
+		"category": "Site services",
+		"file": "dust-fog-cannon.glb",
+		"thumb": "thumbs/dust-fog-cannon.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 3.68,
+			"width": 2.08,
+			"height": 3.33
+		},
+		"triangles": 51246,
+		"sizeKB": 407,
+		"own": "Weave-Trial: construction_site/Dust_Fog_Cannon.glb"
+	},
+	{
 		"id": "porta-potty",
 		"name": "Portable toilet",
 		"category": "Site services",
@@ -1034,6 +1528,23 @@
 		}
 	},
 	{
+		"id": "porta-potty-cad",
+		"name": "Portable toilet, CAD model",
+		"category": "Site services",
+		"file": "porta-potty-cad.glb",
+		"thumb": "thumbs/porta-potty-cad.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 1.36,
+			"width": 1.15,
+			"height": 2.49
+		},
+		"triangles": 7284,
+		"sizeKB": 52,
+		"own": "Weave-Trial: construction_site/Portable_Toilet.glb"
+	},
+	{
 		"id": "jobsite-trailer-10x50",
 		"name": "Jobsite trailer (10 x 50 ft)",
 		"category": "Site trailers & containers",
@@ -1058,6 +1569,40 @@
 			"license": "CC Attribution",
 			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
 		}
+	},
+	{
+		"id": "site-office-10x40-cad",
+		"name": "Mobile site office, CAD model (10 x 40 ft)",
+		"category": "Site trailers & containers",
+		"file": "site-office-10x40-cad.glb",
+		"thumb": "thumbs/site-office-10x40-cad.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 14.78,
+			"width": 5.77,
+			"height": 3.75
+		},
+		"triangles": 33744,
+		"sizeKB": 310,
+		"own": "Weave-Trial: construction_site/Mobile_Site_Office_10x40ft.glb"
+	},
+	{
+		"id": "container-20-iso",
+		"name": "Shipping container, detailed (20 ft ISO)",
+		"category": "Site trailers & containers",
+		"file": "container-20-iso.glb",
+		"thumb": "thumbs/container-20-iso.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 6.11,
+			"width": 2.44,
+			"height": 2.59
+		},
+		"triangles": 15688,
+		"sizeKB": 104,
+		"own": "Weave-Trial: construction_site/Shipping_Container_20ft.glb"
 	},
 	{
 		"id": "tool-crib-10",
@@ -1101,6 +1646,23 @@
 		"triangles": 76288,
 		"sizeKB": 522,
 		"own": "Weave-Trial: hoarding/Rain_Hoarding.step"
+	},
+	{
+		"id": "arrow-board-trailer",
+		"name": "Arrow board trailer (solar)",
+		"category": "Traffic control",
+		"file": "arrow-board-trailer.glb",
+		"thumb": "thumbs/arrow-board-trailer.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 3.81,
+			"width": 2.48,
+			"height": 3.39
+		},
+		"triangles": 62504,
+		"sizeKB": 518,
+		"own": "Weave-Trial: construction_site/Solar_Arrow_Board_Trailer.glb"
 	},
 	{
 		"id": "traffic-cone",
@@ -1172,6 +1734,57 @@
 		}
 	},
 	{
+		"id": "traffic-drum-36in",
+		"name": "Traffic drum, CAD model (36 in channelizer)",
+		"category": "Traffic control",
+		"file": "traffic-drum-36in.glb",
+		"thumb": "thumbs/traffic-drum-36in.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 0.91,
+			"width": 0.91,
+			"height": 1.34
+		},
+		"triangles": 22480,
+		"sizeKB": 194,
+		"own": "Weave-Trial: construction_site/Traffic_Drum_Channelizer.glb"
+	},
+	{
+		"id": "barricade-type-3-road-closed",
+		"name": "Type III barricade, ROAD CLOSED",
+		"category": "Traffic control",
+		"file": "barricade-type-3-road-closed.glb",
+		"thumb": "thumbs/barricade-type-3-road-closed.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 2.44,
+			"width": 1.28,
+			"height": 2.52
+		},
+		"triangles": 16644,
+		"sizeKB": 128,
+		"own": "Weave-Trial: construction_site/Type_III_Barricade_Road_Closed.glb"
+	},
+	{
+		"id": "articulated-dump-truck-30t",
+		"name": "Articulated dump truck (30 t)",
+		"category": "Vehicles",
+		"file": "articulated-dump-truck-30t.glb",
+		"thumb": "thumbs/articulated-dump-truck-30t.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 10.63,
+			"width": 3.03,
+			"height": 3.75
+		},
+		"triangles": 118174,
+		"sizeKB": 755,
+		"own": "Weave-Trial: construction_site/Articulated_Dump_Truck_30t.glb"
+	},
+	{
 		"id": "articulated-dump-truck",
 		"name": "Articulated dump truck (40 t)",
 		"category": "Vehicles",
@@ -1236,6 +1849,23 @@
 		}
 	},
 	{
+		"id": "concrete-mixer-truck-8m3",
+		"name": "Concrete mixer truck, CAD model (8 m³)",
+		"category": "Vehicles",
+		"file": "concrete-mixer-truck-8m3.glb",
+		"thumb": "thumbs/concrete-mixer-truck-8m3.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 9.47,
+			"width": 3.07,
+			"height": 4.01
+		},
+		"triangles": 130208,
+		"sizeKB": 904,
+		"own": "Weave-Trial: construction_site/Concrete_Mixer_Truck_8m3.glb"
+	},
+	{
 		"id": "dump-truck-tandem",
 		"name": "Dump truck (tandem axle)",
 		"category": "Vehicles",
@@ -1294,6 +1924,23 @@
 		}
 	},
 	{
+		"id": "fuel-lube-truck",
+		"name": "Fuel and lube service truck",
+		"category": "Vehicles",
+		"file": "fuel-lube-truck.glb",
+		"thumb": "thumbs/fuel-lube-truck.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 9.65,
+			"width": 3.05,
+			"height": 3.48
+		},
+		"triangles": 57138,
+		"sizeKB": 475,
+		"own": "Weave-Trial: construction_site/Fuel_Lube_Service_Truck.glb"
+	},
+	{
 		"id": "haul-truck-hd465",
 		"name": "Haul truck (off-highway, 55 t)",
 		"category": "Vehicles",
@@ -1325,6 +1972,23 @@
 				"up": 3.55
 			}
 		}
+	},
+	{
+		"id": "hydrovac-truck",
+		"name": "Hydrovac excavation truck",
+		"category": "Vehicles",
+		"file": "hydrovac-truck.glb",
+		"thumb": "thumbs/hydrovac-truck.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 11.12,
+			"width": 3.81,
+			"height": 3.82
+		},
+		"triangles": 55162,
+		"sizeKB": 456,
+		"own": "Weave-Trial: construction_site/Hydrovac_Truck.glb"
 	},
 	{
 		"id": "pickup-truck",
@@ -1391,6 +2055,40 @@
 				"up": 2.42
 			}
 		}
+	},
+	{
+		"id": "road-sweeper",
+		"name": "Vacuum road sweeper truck",
+		"category": "Vehicles",
+		"file": "road-sweeper.glb",
+		"thumb": "thumbs/road-sweeper.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 8.65,
+			"width": 3.07,
+			"height": 3.21
+		},
+		"triangles": 56072,
+		"sizeKB": 454,
+		"own": "Weave-Trial: construction_site/Vacuum_Road_Sweeper.glb"
+	},
+	{
+		"id": "water-truck-4000gal",
+		"name": "Water truck, dust control (4,000 gal)",
+		"category": "Vehicles",
+		"file": "water-truck-4000gal.glb",
+		"thumb": "thumbs/water-truck-4000gal.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 9.73,
+			"width": 3.05,
+			"height": 3.39
+		},
+		"triangles": 56784,
+		"sizeKB": 447,
+		"own": "Weave-Trial: construction_site/Water_Truck_4000gal.glb"
 	},
 	{
 		"id": "frontload-4yd",

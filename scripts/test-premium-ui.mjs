@@ -103,7 +103,7 @@ test( 'signed out, the Pro equipment is locked and explains itself', async () =>
 	await page.locator( '#library .card', { hasText: 'Crawler crane' } ).scrollIntoViewIfNeeded();
 	await shot( page.locator( '#library' ), 'locked-library' );
 
-	await page.locator( '#library .card', { hasText: 'Scissor lift' } ).click();
+	await page.locator( '#library .card[data-item="scissor-lift-32ft"]' ).click();
 	const dialog = page.locator( '.premium-dialog' );
 	await dialog.waitFor();
 	assert.match( await dialog.locator( 'p.small' ).first().textContent(), /Scissor lift \(32 ft, electric\) is part of the Pro equipment pack/ );
@@ -176,7 +176,7 @@ test( 'paying in the other tab unlocks the pack when the window gets focus back'
 	assert.equal( await page.locator( '#library .card .pro:visible' ).count(), 0 );
 
 	// Now it places like anything else.
-	await page.locator( '#library .card', { hasText: 'Scissor lift' } ).click();
+	await page.locator( '#library .card[data-item="scissor-lift-32ft"]' ).click();
 	await page.waitForFunction( () => window.twin.models.entries.some( e => e.placing && e.library === 'scissor-lift-32ft' ) );
 	await page.keyboard.press( 'Escape' );
 	await page.waitForFunction( () => window.twin.models.entries.length === 0 );

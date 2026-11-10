@@ -8,7 +8,7 @@ Since then, a tower crane, four more mobile cranes, two more telehandlers and si
 (generators, compressors, a fuel tank) have been added, built in code: see
 [Plant built in code](#plant-built-in-code) below.
 
-And 20 models of our own, drawn in CAD, have been brought in from the Weave-Trial repository: see
+And 61 models of our own, drawn in CAD, have been brought in from the Weave-Trial repository: see
 [Our own models](#our-own-models).
 
 ## What was added
@@ -58,45 +58,99 @@ Sizes are length × width × height in metres, as shown on the library cards. To
 
 ## Our own models
 
-20 models we drew in CAD in the [Weave-Trial](https://github.com/TTVV-7/Weave-Trial) repository, at real
-size. They're ours, so they need no credit and aren't in the Pro pack. They don't drive (yet): they
-have no `drive` tuning in `library.json`. Sizes are length × width × height in metres, as the cards
-show them; the last column is the file each came from in Weave-Trial. The telehandler poses, the
-rain hoarding and the crane are STEP files there, converted with `scripts/step-to-glb.py`; all of
-them were then brought in with `npm run add-own-asset` (see the README), and
-`npm run test:own-models-ui` checks each one in a browser.
+61 models we drew in CAD in the [Weave-Trial](https://github.com/TTVV-7/Weave-Trial) repository, at real
+size: the Construction Site sets 1 to 4 that are on Cults3D as 1:50 prints, the bulk bags, the rail
+bridges, the rain hoarding, the Mammoet 1824 crane and the telehandler's boom positions. They're
+ours, so they need no credit and aren't in the Pro pack. Sizes are length × width × height in
+metres, as the cards show them; the last column is the file each came from in Weave-Trial (sets 2
+to 4 are on its `claude/zen-darwin-fzhu3j` branch, the bulk bags on `claude/gifted-gates-mcxggn`).
+The telehandler poses, the rain hoarding, the crane and the bulk bags are STEP files there,
+converted with `scripts/step-to-glb.py`; all of them were then brought in with
+`npm run add-own-asset` (see the README), and `npm run test:own-models-ui` checks each one in a
+browser.
 
 | Item | Category | Size | Triangles | From |
 | --- | --- | --- | --- | --- |
+| Articulated dump truck (30 t) | Vehicles | 10.63 × 3.03 × 3.75 | 118,174 | `construction_site/Articulated_Dump_Truck_30t.glb` |
+| Concrete mixer truck, CAD model (8 m³) | Vehicles | 9.47 × 3.07 × 4.01 | 130,208 | `construction_site/Concrete_Mixer_Truck_8m3.glb` |
+| Fuel and lube service truck | Vehicles | 9.65 × 3.05 × 3.48 | 57,138 | `construction_site/Fuel_Lube_Service_Truck.glb` |
+| Hydrovac excavation truck | Vehicles | 11.12 × 3.81 × 3.82 | 55,162 | `construction_site/Hydrovac_Truck.glb` |
+| Vacuum road sweeper truck | Vehicles | 8.65 × 3.07 × 3.21 | 56,072 | `construction_site/Vacuum_Road_Sweeper.glb` |
+| Water truck, dust control (4,000 gal) | Vehicles | 9.73 × 3.05 × 3.39 | 56,784 | `construction_site/Water_Truck_4000gal.glb` |
+| Backhoe loader, CAD model (14 ft) | Heavy equipment | 8.92 × 3.4 × 3.81 | 94,524 | `construction_site/Backhoe_Loader.glb` |
+| Crawler dozer, CAD model (20 t) | Heavy equipment | 6.64 × 3.38 × 3.28 | 84,044 | `construction_site/Crawler_Dozer_20t.glb` |
+| Mini excavator, CAD model (3.5 t) | Heavy equipment | 4.47 × 1.74 × 2.62 | 38,700 | `construction_site/Mini_Excavator_3-5t.glb` |
+| Skid steer loader, CAD model (68 in bucket) | Heavy equipment | 3.07 × 1.83 × 2.01 | 32,884 | `construction_site/Skid_Steer_Loader.glb` |
+| Vibratory roller, single drum 84 in (11 t) | Heavy equipment | 6 × 2.33 × 3.14 | 62,160 | `construction_site/Vibratory_Soil_Roller_84in.glb` |
+| Wheel loader, CAD model (3 yd³) | Heavy equipment | 8.27 × 2.92 × 3.57 | 81,800 | `construction_site/Wheel_Loader_3yd.glb` |
 | Carry-deck crane, Mammoet 1824 (boom up, outriggers set) | Cranes & lifts | 8.25 × 6.55 × 8.62 | 10,800 | `crane_model/mammoet_1824_crane.step` |
+| Scissor lift, raised (26 ft, electric) | Cranes & lifts | 2.99 × 1.21 × 5.04 | 57,396 | `construction_site/Electric_Scissor_Lift_26ft.glb` |
+| Conveyor gallery module on bent (12 m) | Material handling | 12.55 × 5.9 × 9 | 36,390 | `construction_site/Conveyor_Gallery_Module.glb` |
+| Radial stacking conveyor (36 in x 100 ft) | Material handling | 30.73 × 4.95 × 11.55 | 41,112 | `construction_site/Radial_Stacking_Conveyor.glb` |
 | Telehandler, blue (10,000 lb, 56 ft), boom at 30° | Material handling | 8.39 × 2.6 × 5.1 | 4,272 | `telehandler/step/Genie_GTH-1056_raised_30deg.step` |
 | Telehandler, blue (10,000 lb, 56 ft), boom at 45°, out 5 m | Material handling | 11.4 × 2.6 × 9.66 | 4,272 | `telehandler/step/Genie_GTH-1056_raised_45deg_extended_5m.step` |
 | Telehandler, blue (10,000 lb, 56 ft), boom at 65°, out 10 m | Material handling | 11.1 × 2.6 × 17.04 | 4,272 | `telehandler/step/Genie_GTH-1056_max_65deg_extended_10m.step` |
 | Telehandler, blue (10,000 lb, 56 ft), boom stowed | Material handling | 8.73 × 2.6 × 2.59 | 11,756 | `construction_site/Telehandler_10000lb_56ft.glb` |
+| Concrete boom pump truck (38 m, stowed) | Concrete & batching | 11.67 × 7.9 × 3.94 | 47,996 | `construction_site/Concrete_Boom_Pump_38m.glb` |
 | Concrete line pump, trailer (twin axle) | Concrete & batching | 6.1 × 2.41 × 2.6 | 10,056 | `construction_site/Trailer_Concrete_Line_Pump.glb` |
 | Mixer stand (steel portal frame) | Concrete & batching | 2.15 × 2.15 × 1.55 | 772 | `construction_site/Mixer_Stand.glb` |
 | Planetary concrete mixer (500 L) | Concrete & batching | 1.75 × 1.68 × 1.98 | 6,588 | `construction_site/Planetary_Concrete_Mixer_500L.glb` |
 | Planetary concrete mixer on stand (500 L) | Concrete & batching | 2.15 × 2.15 × 3.35 | 7,360 | `construction_site/Planetary_Mixer_on_Stand.glb` |
+| Coal rail car (rotary-dump gondola) | Rail | 16.18 × 3.27 × 4.23 | 49,456 | `construction_site/Rail_Gondola_Coal.glb` |
+| Railcar mover (road-rail) | Rail | 6.8 × 2.95 × 3.25 | 54,712 | `construction_site/Road_Rail_Railcar_Mover.glb` |
+| Mobile site office, CAD model (10 x 40 ft) | Site trailers & containers | 14.78 × 5.77 × 3.75 | 33,744 | `construction_site/Mobile_Site_Office_10x40ft.glb` |
+| Shipping container, detailed (20 ft ISO) | Site trailers & containers | 6.11 × 2.44 × 2.59 | 15,688 | `construction_site/Shipping_Container_20ft.glb` |
 | Rain hoarding, tube and fitting 12 × 8 m (4 m eaves, one end open) | Temporary covers | 13.8 × 10.6 × 5.34 | 76,288 | `hoarding/Rain_Hoarding.step` |
 | Roll-off dumpster, detailed (20 yd) | Waste | 6.07 × 2.44 × 1.55 | 4,020 | `construction_site/Roll_Off_Dumpster_20yd.glb` |
+| Concrete jersey barrier run (3 x 10 ft, pinned) | Barriers & fencing | 9.57 × 0.61 × 0.81 | 30,214 | `construction_site/Jersey_Barrier_Run_3x10ft.glb` |
+| Concrete jersey barrier, CAD model (10 ft) | Barriers & fencing | 3.26 × 0.61 × 0.81 | 19,788 | `construction_site/Jersey_Barrier_NJ_10ft.glb` |
 | Temporary fence panel, chain-link detailed (10 x 6 ft) | Barriers & fencing | 3.25 × 0.64 × 1.89 | 17,244 | `construction_site/Temporary_Fence_Panel_6x10ft.glb` |
 | Temporary fence run, chain-link detailed (50 ft, 5 panels) | Barriers & fencing | 15.45 × 0.64 × 1.89 | 85,448 | `construction_site/Temporary_Fence_Run_50ft.glb` |
+| Water-filled barrier, CAD model (6 ft) | Barriers & fencing | 1.86 × 0.59 × 1.1 | 5,510 | `construction_site/Water_Filled_Barrier_6ft.glb` |
+| Arrow board trailer (solar) | Traffic control | 3.81 × 2.48 × 3.39 | 62,504 | `construction_site/Solar_Arrow_Board_Trailer.glb` |
 | Traffic cone, two reflective collars (28 in) | Traffic control | 0.36 × 0.36 × 0.71 | 7,690 | `construction_site/Traffic_Cone_28in.glb` |
+| Traffic drum, CAD model (36 in channelizer) | Traffic control | 0.91 × 0.91 × 1.34 | 22,480 | `construction_site/Traffic_Drum_Channelizer.glb` |
+| Type III barricade, ROAD CLOSED | Traffic control | 2.44 × 1.28 × 2.52 | 16,644 | `construction_site/Type_III_Barricade_Road_Closed.glb` |
+| Contractor wheelbarrow | Site services | 1.66 × 0.74 × 0.71 | 11,916 | `construction_site/Contractor_Wheelbarrow.glb` |
+| Drive-through wheel wash | Site services | 12.26 × 10.09 × 3.62 | 64,116 | `construction_site/Drive_Through_Wheel_Wash.glb` |
+| Dust suppression fog cannon (trailer) | Site services | 3.68 × 2.08 × 3.33 | 51,246 | `construction_site/Dust_Fog_Cannon.glb` |
+| Portable toilet, CAD model | Site services | 1.36 × 1.15 × 2.49 | 7,284 | `construction_site/Portable_Toilet.glb` |
 | Air compressor, towable, twin axle (5 m) | Power & air | 5.05 × 1.85 × 2.29 | 10,960 | `construction_site/Towable_Air_Compressor.glb` |
+| Cable reel, wooden | Power & air | 1.99 × 0.9 × 1.25 | 32,348 | `construction_site/Cable_Reel_Wooden.glb` |
+| LED light tower, towable (30 ft mast) | Power & air | 3.73 × 3.6 × 9.66 | 26,392 | `construction_site/LED_Light_Tower.glb` |
 | Dumper access bridge (22 m span, stair one side) | Access & scaffolding | 23.75 × 10.97 × 10.7 | 128,952 | `railbridge/Dumper_Access.glb` |
+| Frame scaffold tower (2 lifts, guardrails) | Access & scaffolding | 2.44 × 1.67 × 5.36 | 35,444 | `construction_site/Frame_Scaffold_Tower.glb` |
 | Industrial steel stair (12 ft) | Access & scaffolding | 4.7 × 1.06 × 4.69 | 13,508 | `construction_site/Industrial_Steel_Stair_12ft.glb` |
 | Rail crossover gantry (7 m clear, stair one side) | Access & scaffolding | 8.85 × 7.89 × 8.38 | 72,640 | `construction_site/Rail_Crossover_Gantry.glb` |
 | Rail footbridge (two arched spans, stairs both ends) | Access & scaffolding | 24.73 × 14.46 × 9.35 | 142,298 | `railbridge/Rail_Footbridge.glb` |
+| Steel pipe pile stack (36 in x 12 m) | Shoring | 12.09 × 3.4 × 3.36 | 49,180 | `construction_site/Steel_Pipe_Pile_Stack.glb` |
+| Trench shield, CAD model (8 x 20 ft) | Shoring | 6.37 × 1.55 × 2.64 | 29,440 | `construction_site/Trench_Shield_8x20ft.glb` |
+| Vibratory pile hammer with power pack | Shoring | 7.89 × 2.59 × 3.56 | 58,012 | `construction_site/Vibratory_Pile_Hammer.glb` |
+| Bulk bag of concrete | Materials | 1.08 × 1.08 × 1.12 | 27,740 | `bulkbag/Bulk_Bag_Concrete.step` |
+| Bulk bag of concrete on a pallet | Materials | 1.2 × 1.08 × 1.28 | 28,006 | `bulkbag/Bulk_Bag_Concrete_on_Pallet.step` |
+| Concrete pipe stack (24 in RCP) | Materials | 3.05 × 2.61 × 2.78 | 41,640 | `construction_site/Concrete_Pipe_Stack_24in.glb` |
 | Pallet of concrete bags (27 bags) | Materials | 1.23 × 1.02 × 0.79 | 29,954 | `construction_site/Pallet_of_Concrete_Bags.glb` |
+| Pallet of concrete blocks (90 CMU) | Materials | 1.22 × 1.02 × 1.32 | 7,956 | `construction_site/Pallet_of_CMU_Blocks.glb` |
+| Steel beam bundle (12 x W12x26, 6 m) | Materials | 6.1 × 1.12 × 1.2 | 780 | `construction_site/Steel_Beam_Bundle_W12x26.glb` |
 
 - These are simplified models: the right envelope and layout, not manufacturer replicas. The stair's
   height, the crossover's clearance and the mixer stand are typical values, not a particular site's.
-- The chain-link is modelled as wires 100 mm apart (real 2 in mesh is too dense to model), and it
-  and the bags were simplified on the way in, to 40% and 15% of their triangles.
-- The bridges, gantry and hoarding are placed by the middle of their box. The crossover gantry's
-  track runs under the middle of its span.
-- Some overlap built-in pieces (a 20 yd roll-off, a fence panel, a traffic cone, telehandlers); both
-  are kept, the detailed ones for close-up views.
+- The files in `public/library/` are display copies: merged, compressed and not printable. The print
+  files and the editable STEP stay in Weave-Trial and on Cults3D.
+- The trucks under **Vehicles** can be driven like any other vehicle there (**V**), on the usual
+  handling: none has `drive` tuning or a `drive.cab` point of its own yet. The machines under
+  **Heavy equipment** and the rail car and railcar mover under **Rail** (a new category) don't drive.
+- The excavator can load the articulated dump truck (its name has "dump" in it), into the usual bed.
+- The chain-link is modelled as wires 100 mm apart (real 2 in mesh is too dense to model). It, the
+  bags, the cable reel, the pipe stack, the barrier run, the arrow board and the traffic drum were
+  simplified on the way in, to between 15% and 50% of their triangles.
+- The bridges, gantry, hoarding and conveyors are placed by the middle of their box. The crossover
+  gantry's track runs under the middle of its span. A row of conveyor gallery modules places one
+  every 12 m, so the galleries join.
+- Many overlap pieces that were already here (a 20 yd roll-off, fence panels, a jersey barrier, a
+  traffic cone and drum, a portable toilet, a 10 × 40 ft office, a mini excavator, a skid steer, a
+  wheel loader, a dozer, a backhoe, a mixer truck, telehandlers). Both are kept: ours are marked
+  "CAD model" or "detailed" in their names, and nothing already placed in a saved layout changes.
 
 ## Plant built in code
 

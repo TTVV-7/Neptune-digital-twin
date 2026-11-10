@@ -360,13 +360,13 @@ Three kinds of items:
   (`src/crane-models.js`) and the tower crane (`src/tower-crane.js`).
 - **Downloaded** (`public/library/`): models from Sketchfab and Poly Haven, listed in `library.json` with
   their size, facing and licence. `CREDITS.md` credits the authors; the app shows the credits under **H**.
-- **Our own** (`public/library/` too, marked `own` in `library.json`): models we drew in CAD in the
-  [Weave-Trial](https://github.com/TTVV-7/Weave-Trial) repository, at real size: a trailer concrete
-  line pump, a planetary mixer and its stand, a pallet of concrete bags, a twin-axle compressor, a
-  detailed 20 yd roll-off, chain-link fence panels, a steel stair, a rail crossover gantry and two
-  rail footbridges, a tube-and-fitting rain hoarding, the Mammoet 1824 carry-deck crane and a blue
-  telehandler in four boom positions. They're free, need no credit, and are listed in
-  [docs/equipment.md](docs/equipment.md#our-own-models).
+- **Our own** (`public/library/` too, marked `own` in `library.json`): 61 models we drew in CAD in the
+  [Weave-Trial](https://github.com/TTVV-7/Weave-Trial) repository, at real size. They are the
+  Construction Site sets that are on Cults3D as 1:50 prints (trucks, earthmoving machines, a
+  concrete boom pump and line pump, a mixer, conveyors, a coal rail car and railcar mover, a wheel
+  wash, pile and pipe stacks, barriers, pallets and site furniture), plus two rail footbridges, a
+  rain hoarding, the Mammoet 1824 carry-deck crane and a telehandler in four boom positions.
+  They're free, need no credit, and are listed in [docs/equipment.md](docs/equipment.md#our-own-models).
 
 To add a downloaded model, put a Sketchfab API token (sketchfab.com → Settings → Password & API) in an
 environment variable named `SKETCHFAB_API_TOKEN` (Poly Haven needs none) and run:

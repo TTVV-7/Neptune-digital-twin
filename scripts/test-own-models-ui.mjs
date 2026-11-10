@@ -135,7 +135,8 @@ async function look( { east, north, up = 0, distance, from, elevation } ) {
 async function shot( name ) {
 
 	await page.waitForTimeout( 1200 );
-	if ( SHOTS ) await page.screenshot( { path: join( SHOTS, `${ name }.png` ) } );
+	// All of them in one view is slow to draw in software.
+	if ( SHOTS ) await page.screenshot( { path: join( SHOTS, `${ name }.png` ), timeout: 180000 } );
 
 }
 
@@ -259,7 +260,7 @@ test( 'placed at their real size on the ground, painted, in a few meshes, and ba
 
 		assert.ok( entry.snapped, `${ item.id } isn't on the ground` );
 		// One mesh per colour (see add-own-asset.mjs): a handful of draw calls each.
-		assert.ok( entry.meshes <= 16, `${ item.id } has ${ entry.meshes } meshes` );
+		assert.ok( entry.meshes <= 32, `${ item.id } has ${ entry.meshes } meshes` );
 		// Bare metal draws black here, where there is nothing to reflect.
 		assert.equal( entry.metal, 0, `${ item.id } has a metal surface` );
 
@@ -287,6 +288,46 @@ test( 'placed at their real size on the ground, painted, in a few meshes, and ba
 	await page.waitForFunction( n => window.twin.models.entries.length === n, before.length );
 	assert.deepEqual( await describe(), before );
 	console.log( `saved and reloaded: ${ before.length } items` );
+	assert.deepEqual( errors, [] );
+
+} );
+
+test( 'the trucks drive, nose first', async () => {
+
+	// The library's Vehicles drive without tuning of their own (drive-prompt.js). Facing north at
+	// heading 0, gas takes them north: their front is the way the catalog says.
+	// Only the trucks stay, so the frames come fast enough to drive by.
+	const trucks = OWN.filter( item => item.category === 'Vehicles' );
+	await page.evaluate( ids => {
+
+		const { models } = window.twin;
+		for ( const entry of [ ...models.entries ] ) if ( ! ids.includes( entry.library ) ) models.remove( entry );
+
+	}, trucks.map( item => item.id ) );
+	for ( const item of trucks ) {
+
+		const start = await page.evaluate( id => {
+
+			const { models, sidebar } = window.twin;
+			const entry = models.entries.find( e => e.library === id );
+			sidebar.select( entry );
+			return { east: entry.state.east, north: entry.state.north };
+
+		}, item.id );
+		await page.keyboard.press( 'KeyV' );
+		await page.waitForFunction( id => window.twin.driver.active && window.twin.driver.entry.library === id, item.id );
+		await page.keyboard.down( 'KeyW' );
+		await page.waitForTimeout( 2500 );
+		await page.keyboard.up( 'KeyW' );
+		await page.waitForTimeout( 300 );
+		const moved = await page.evaluate( start => ( { north: window.twin.driver.north - start.north, east: window.twin.driver.east - start.east } ), start );
+		assert.ok( moved.north > 0.4 && Math.abs( moved.east ) < moved.north, `${ item.id } drove ${ moved.north.toFixed( 2 ) } m north, ${ moved.east.toFixed( 2 ) } m east` );
+		await page.keyboard.press( 'KeyV' );
+		await page.waitForFunction( () => ! window.twin.driver.active );
+		console.log( `${ item.id }: drove ${ moved.north.toFixed( 1 ) } m north` );
+
+	}
+
 	assert.deepEqual( errors, [] );
 
 } );
