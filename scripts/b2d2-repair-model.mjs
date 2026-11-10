@@ -35,7 +35,7 @@ import { meshopt } from '@gltf-transform/functions';
 import { MeshoptDecoder, MeshoptEncoder } from 'meshoptimizer';
 import sharp from 'sharp';
 import { Vector3 } from 'three';
-import { areaExtras, areaName, buildRepairs, random, triNormal } from '../src/repair-geometry.js';
+import { areaExtras, areaName, buildRepairs, CHIPPED, LOOKS, lookNames, random, rimOf, triNormal } from '../src/repair-geometry.js';
 
 const ROOT = new URL( '../', import.meta.url );
 const { values: opts } = parseArgs( { options: {
@@ -272,25 +272,45 @@ const flatMaterial = ( name, hex, alpha ) => {
 const fillMat = flatMaterial( 'Repair area', AREA_COLOR, 0.7 );
 const edgeMat = flatMaterial( 'Repair area outline', EDGE_COLOR, 1 );
 const textures = await concreteTextures();
-const chippedMat = doc.createMaterial( 'Chipped concrete' )
-	.setBaseColorTexture( doc.createTexture( 'Chipped concrete' ).setImage( textures.colour ).setMimeType( 'image/jpeg' ) )
-	.setNormalTexture( doc.createTexture( 'Chipped concrete normals' ).setImage( textures.normal ).setMimeType( 'image/jpeg' ) )
-	.setNormalScale( 1.5 )
-	.setMetallicFactor( 0 )
-	.setRoughnessFactor( 0.95 )
-	.setDoubleSided( true );
-// A chipped area's rim on the face round it, coloured by when it was chipped as the progress
-// drawings' legend has it (f.chipped, from scripts/b2d2-progress.mjs).
-const CHIPPED_COLOURS = { '2026-11-02': '#22c55e', '2026-11-03': '#06b6d4', '2026-11-04': '#f97316', '2026-11-05/08': '#ec4899' };
-const rimMats = new Map();
-const rimMat = date => {
+const colours = doc.createTexture( 'Chipped concrete' ).setImage( textures.colour ).setMimeType( 'image/jpeg' );
+const normals = doc.createTexture( 'Chipped concrete normals' ).setImage( textures.normal ).setMimeType( 'image/jpeg' );
+// The concrete and the bars of each stage (LOOKS in src/repair-geometry.js), made as they're needed.
+const lookMats = new Map();
+const lookMat = ( status, part ) => {
 
-	const hex = CHIPPED_COLOURS[ date ] ?? '#94a3b8';
-	if ( ! rimMats.has( hex ) ) rimMats.set( hex, flatMaterial( `Chipped ${ date ?? '' }`.trim(), hex, 1 ) );
-	return rimMats.get( hex );
+	const name = lookNames( status )[ part ];
+	if ( ! lookMats.has( name ) ) {
+
+		const look = LOOKS[ status ][ part ];
+		const material = doc.createMaterial( name ).setBaseColorFactor( rgba( look.color ) ).setMetallicFactor( look.metalness ?? 0 ).setRoughnessFactor( look.roughness );
+		if ( part === 'concrete' ) {
+
+			if ( look.map ) material.setBaseColorTexture( colours );
+			material.setNormalTexture( normals ).setNormalScale( 1.5 ).setDoubleSided( true );
+
+		}
+
+		lookMats.set( name, material );
+
+	}
+
+	return lookMats.get( name );
 
 };
-const rebarMat = doc.createMaterial( 'Exposed rebar' ).setBaseColorFactor( rgba( '#7c4a2d' ) ).setMetallicFactor( 0.5 ).setRoughnessFactor( 0.65 );
+// The chipped look's first, as the model has always had them (ones not used are left out of the file).
+lookMat( CHIPPED, 'concrete' );
+lookMat( CHIPPED, 'rebar' );
+// An area's rim on the face round it: a chipped one's coloured by when it was chipped as the
+// progress drawings' legend has it (f.chipped, from scripts/b2d2-progress.mjs), the later stages'
+// by the stage (rimOf).
+const rimMats = new Map();
+const rimMat = m => {
+
+	const { name, colour } = rimOf( m );
+	if ( ! rimMats.has( name ) ) rimMats.set( name, flatMaterial( name, colour, 1 ) );
+	return rimMats.get( name );
+
+};
 
 const flatPrim = ( { pos, idx }, normal, material ) => {
 
@@ -329,20 +349,20 @@ scene.addChild( repairs );
 let total = 0;
 for ( const { m, plane, parts } of built.areas ) {
 
-	const f = m.f ?? {};
 	const name = areaName( m );
 	const mesh = doc.createMesh( name );
 	if ( plane ) {
 
-		mesh.addPrimitive( loosePrim( parts.recess, chippedMat ) );
-		mesh.addPrimitive( flatPrim( parts.rim, parts.rim.normal, rimMat( f.chipped ) ) );
-		if ( parts.rebar.idx.length ) {
+		const status = m.f.status;
+		mesh.addPrimitive( loosePrim( parts.filled ?? parts.recess, lookMat( status, 'concrete' ) ) );
+		mesh.addPrimitive( flatPrim( parts.rim, parts.rim.normal, rimMat( m ) ) );
+		if ( parts.rebar?.idx.length ) {
 
 			mesh.addPrimitive( doc.createPrimitive()
 				.setAttribute( 'POSITION', accessor( 'VEC3', shifted( parts.rebar.pos ) ) )
 				.setAttribute( 'NORMAL', accessor( 'VEC3', new Float32Array( parts.rebar.nor ) ) )
 				.setIndices( accessor( 'SCALAR', new Uint32Array( parts.rebar.idx ) ) )
-				.setMaterial( rebarMat ) );
+				.setMaterial( lookMat( status, 'rebar' ) ) );
 
 		}
 

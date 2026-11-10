@@ -12,12 +12,75 @@
 // irregularly) with the rebar mat exposed in it: bars both ways at CHIP.spacing, CHIP.cover behind
 // the face, running on into the concrete past the edge. The roughness is random but seeded by the
 // markup's id, so a rebuild comes out the same. A rim round it on the face carries the colour of
-// when it was chipped. Other areas are a flat patch OFFSET off their face, with an outline.
+// when it was chipped. The stages after (sandblasted, epoxy coated, shotcreted) each have their own
+// look: LOOKS. Areas only marked are a flat patch OFFSET off their face, with an outline.
 
 import polygonClipping from 'polygon-clipping';
 import { ShapeUtils, Vector2, Vector3 } from 'three';
 
+export const MARKED = 'Marked, not chipped yet';
 export const CHIPPED = 'Chipped / hydro-demo';
+export const SANDBLASTED = 'Sandblasted';
+export const EPOXY = 'Epoxy coated';
+export const SHOTCRETED = 'Shotcreted';
+
+// The stages of a repair, in order: an area's status (f.status) is one of these, and `date` is
+// where in f the day it reached that stage is kept (f.chipped, as the progress drawings give it).
+export const STAGES = [
+	{ status: MARKED, date: null, short: 'Marked' },
+	{ status: CHIPPED, date: 'chipped', short: 'Chipped' },
+	{ status: SANDBLASTED, date: 'sandblasted', short: 'Sandblasted' },
+	{ status: EPOXY, date: 'epoxy', short: 'Epoxy coated' },
+	{ status: SHOTCRETED, date: 'shotcreted', short: 'Shotcreted' },
+];
+export const stageOf = status => STAGES.find( stage => stage.status === status ) ?? STAGES[ 0 ];
+
+// How each stage past marking looks. The area is cut out of its face, and in it:
+// - chipped: a recess of rough, broken concrete (the chipped concrete's texture) with rusty bars;
+// - sandblasted: the same recess blasted clean, light and even, the bars bright steel;
+// - epoxy coated: the recess and the bars under a coat of green epoxy, a little glossy;
+// - shotcreted: filled again, a touch proud of the face, in fresh shotcrete, no bars to see.
+// `concrete` and `rebar` are material settings (the chipped concrete's own texture with `map`,
+// else the colour over its relief); `rim` the colour of the strip round the area on its face
+// (a chipped area's is by the day it was chipped: rimOf).
+export const LOOKS = {
+	[ CHIPPED ]: { concrete: { map: true, color: '#ffffff', roughness: 0.95 }, rebar: { color: '#7c4a2d', metalness: 0.5, roughness: 0.65 } },
+	[ SANDBLASTED ]: { concrete: { color: '#cfccc4', roughness: 0.9 }, rebar: { color: '#c9ced4', metalness: 0.3, roughness: 0.4 }, rim: '#f1f5f9' },
+	[ EPOXY ]: { concrete: { color: '#3d9c5c', roughness: 0.4 }, rebar: { color: '#2dbd62', metalness: 0, roughness: 0.35 }, rim: '#047857' },
+	[ SHOTCRETED ]: { filled: true, concrete: { color: '#b9b6ae', roughness: 1 }, rim: '#475569' },
+};
+// What the concrete's and the bars' materials are called for a stage, in the model and the twin.
+export const lookNames = status => status === CHIPPED
+	? { concrete: 'Chipped concrete', rebar: 'Exposed rebar' }
+	: { concrete: `${ status } concrete`, rebar: `${ status } rebar` };
+// Shotcrete stands this far (m) proud of the face.
+const PROUD = 0.012;
+
+// The rims of chipped areas, by when they were chipped: the progress drawings' colours, then
+// others for later days.
+const CHIPPED_COLOURS = { '2026-11-02': '#22c55e', '2026-11-03': '#06b6d4', '2026-11-04': '#f97316', '2026-11-05/08': '#ec4899' };
+const LATER_COLOURS = [ '#eab308', '#8b5cf6', '#ef4444', '#3b82f6', '#84cc16', '#f43f5e', '#14b8a6', '#a855f7' ];
+const UNDATED = '#94a3b8';
+
+export function chippedColour( date ) {
+
+	if ( ! date ) return UNDATED;
+	if ( CHIPPED_COLOURS[ date ] ) return CHIPPED_COLOURS[ date ];
+	const h = [ ...date ].reduce( ( h, c ) => ( h * 31 + c.charCodeAt( 0 ) ) >>> 0, 7 );
+	return LATER_COLOURS[ h % LATER_COLOURS.length ];
+
+}
+
+// The strip round an area on its face: its material's name and colour. Null for a marked area.
+export function rimOf( m ) {
+
+	const f = m.f ?? {};
+	const look = LOOKS[ f.status ];
+	if ( ! look ) return null;
+	if ( look.rim ) return { name: `${ f.status } rim`, colour: look.rim };
+	return { name: `Chipped ${ f.chipped ?? '' }`.trim(), colour: chippedColour( f.chipped ) };
+
+}
 // A chipped area, in metres: how deep (a markup's measured depth wins), how far the edge steps in
 // on its way down, how far apart the points along it are, and the rebar (15M bars, 300 mm both
 // ways, 50 mm cover), which runs on this far into the concrete past the edge.
@@ -33,7 +96,7 @@ const RIM = 0.04; // a chipped area's rim's width, m
 export const zoneName = z => ( { c31: 'C31 gallery', c32: 'C32 tunnel', pit: 'Transfer pit', ground: 'Ground level' } )[ z ] ?? 'Site';
 
 // What the twin's tooltips and the build call an area.
-export const areaName = m => `${ m.f?.type || 'Repair area' } · ${ zoneName( m.zone ) } ${ m.face ?? '' } · ${ ( m.area ?? 0 ).toFixed( 2 ) } m²`;
+export const areaName = m => `${ m.no ? `No. ${ m.no } · ` : '' }${ m.f?.type || 'Repair area' } · ${ zoneName( m.zone ) } ${ m.face ?? '' } · ${ ( m.area ?? 0 ).toFixed( 2 ) } m²`;
 
 // ---------- Naming, as the B2D2 Repair Model artifact does ----------
 
@@ -511,14 +574,16 @@ export function buildRepairs( markups, layers ) {
 
 }
 
-// One area's geometry, against the triangles of the layers areas are cut out of: for a chipped
-// area its plane (settled onto its face) and parts { recess, rim, rebar }; for another, no plane
-// and parts { fill, edge, normal }.
+// One area's geometry, against the triangles of the layers areas are cut out of. For an area past
+// marking, its plane (settled onto its face) and parts { recess, rim, rebar }, or { filled, rim }
+// once it's shotcreted; for a marked one, no plane and parts { fill, edge, normal }.
 export function areaParts( m, triangles ) {
 
-	if ( m.f?.status !== CHIPPED ) return { plane: null, parts: patch( m ) };
+	const look = LOOKS[ m.f?.status ];
+	if ( ! look ) return { plane: null, parts: patch( m ) };
 	const plane = choosePlane( m, triangles );
 	settleOnFaces( [ plane ], triangles );
+	if ( look.filled ) return { plane, parts: { filled: recess( plane, - PROUD, random( m.id ) ), rim: rim( plane ) } };
 	const depth = m.f.depthMm > 0 ? m.f.depthMm / 1000 : CHIP.depth;
 	return { plane, parts: { recess: recess( plane, depth, random( m.id ) ), rim: rim( plane ), rebar: rebar( plane ) } };
 
@@ -528,11 +593,14 @@ export function areaParts( m, triangles ) {
 export function areaExtras( m ) {
 
 	const f = m.f ?? {};
-	return {
+	const extras = {
 		id: m.id, zone: zoneName( m.zone ), face: m.face, grid: m.grid, area_m2: m.area, chipped: f.chipped ?? null,
 		defect: f.type ?? null, depth: f.depth ?? null, status: f.status ?? null, notes: f.text ?? '', source: m.src ?? null,
 		// Stays solid when the twin's "See-through models" makes the rest see-through.
 		xraySolid: true,
 	};
+	if ( m.no ) extras.no = m.no;
+	for ( const { date } of STAGES ) if ( date && date !== 'chipped' && f[ date ] ) extras[ date ] = f[ date ];
+	return extras;
 
 }

@@ -136,7 +136,7 @@
 }
 
 #area-editor .details label > span {
-	width: 54px;
+	width: 80px;
 	flex: none;
 	color: #b8c4cf;
 }
@@ -168,6 +168,33 @@
 	height: 14px;
 	border-radius: 3px;
 	border: 1px solid rgba( 255, 255, 255, 0.4 );
+}
+
+#area-editor .summary {
+	width: 100%;
+	margin: 8px 0;
+	border-collapse: collapse;
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+}
+
+#area-editor .summary td {
+	padding: 2px 0;
+}
+
+#area-editor .summary td + td {
+	text-align: right;
+	padding-left: 8px;
+}
+
+#area-editor .summary i {
+	display: inline-block;
+	width: 10px;
+	height: 10px;
+	margin-right: 6px;
+	border-radius: 2px;
+	border: 1px solid rgba( 255, 255, 255, 0.35 );
+	vertical-align: -1px;
 }
 
 #area-editor .taken {

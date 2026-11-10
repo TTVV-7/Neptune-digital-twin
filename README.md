@@ -248,16 +248,25 @@ models** off in the Show panel), then:
 - **← → ↑ ↓** nudge it as you see it (1 cm to 1 m a press), **⟲ ⟳** turn it in its face (1° to 90°);
 - **Move to another surface…**, then click the wall, floor or soffit it belongs on: it goes there,
   its middle where you clicked, facing you;
-- change its **Status** (*Chipped / hydro-demo*, cut in with rebar, or *Marked, not chipped yet*,
-  a flat cyan patch), **Chipped** date (its rim's colour: the drawings' colours for 2 to 8 November,
-  others for later dates), **Defect** and **Notes**;
+- give it its **Panel no.**, which then floats on the panel for everyone (a **Panel numbers** row in
+  the Show panel hides them);
+- move it on to the next stage with **Status**, each with its own look and rim colour, and the day
+  it got there (today, unless you change it):
+  - *Marked, not chipped yet*: a flat cyan patch;
+  - *Chipped / hydro-demo*: cut in, rough concrete and rusty bars, the rim coloured by the day (the
+    drawings' colours for 2 to 8 November, others for later days);
+  - *Sandblasted*: the recess blasted clean and light, bright steel bars, a white rim;
+  - *Epoxy coated*: the recess and bars under green epoxy, a dark green rim;
+  - *Shotcreted*: filled flush with fresh shotcrete, a slate rim;
+- set its **Defect** and **Notes**;
 - **Delete area** takes it away (**Bring back** returns the drawing's ones), **Back to the drawing**
   puts one of the drawing's areas back as the markups have it, and **Undo** takes back the last change.
 
 **+ Add area** draws a new one on the wall, floor or soffit you start on: drag a box (square to the
 face, level on a wall), or click its corners one by one and click the first again, double-click
-or press Enter to finish (Backspace takes a corner back, Esc stops). It takes the details last set
-(chipped today, by default) and is named from where it is: zone, face, grid and m².
+or press Enter to finish (Backspace takes a corner back, Esc stops). It takes the status
+and defect last set (chipped today, by default) and is named from where it is: zone, face, grid and
+m². With nothing picked, the panel counts the areas and m² at each stage.
 
 Areas are rebuilt as you go with the build's own code (`src/repair-geometry.js`): the recess, rebar
 and coloured rim go with them, and the concrete is cut again. Right-drag looks round and WASD

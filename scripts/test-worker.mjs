@@ -796,10 +796,10 @@ function apiTests( target ) {
 		for ( const path of [ 'b2d2-repair/area-1', 'other-model/area-1' ] ) assert.equal( ( await send( 'DELETE', path, {} ) ).status, 204 );
 
 		// Added in the twin, with its details; and one of the drawing's taken away.
-		const added = { ...area, added: true, f: { type: 'Spall', status: 'Chipped / hydro-demo', chipped: '2026-11-09', text: 'Found on the walk-round', colour: 'not kept' }, zone: 'c31', face: 'floor', grid: 'Grid 30–31 / AE–AF · EL −2.04', area: 1 };
+		const added = { ...area, added: true, no: 'C31-07', f: { type: 'Spall', status: 'Epoxy coated', chipped: '2026-11-09', sandblasted: '2026-11-10', epoxy: '2026-11-11', text: 'Found on the walk-round', colour: 'not kept' }, zone: 'c31', face: 'floor', grid: 'Grid 30–31 / AE–AF · EL −2.04', area: 1 };
 		for ( const body of [
 			{ ...added, f: 'x' }, { ...added, f: { ...added.f, text: 'x'.repeat( 2000 ) } }, { ...added, f: { ...added.f, type: 5 } },
-			{ ...added, zone: { x: 1 } }, { ...added, area: - 1 }, { ...added, area: 'big' }, { ...added, f: undefined },
+			{ ...added, zone: { x: 1 } }, { ...added, area: - 1 }, { ...added, area: 'big' }, { ...added, f: undefined }, { ...added, no: 7 }, { ...added, no: 'x'.repeat( 50 ) },
 		] ) assert.equal( ( await send( 'PUT', 'b2d2-repair/twin-0001', body ) ).status, 400, JSON.stringify( body ) );
 		assert.equal( ( await send( 'PUT', 'b2d2-repair/twin-0001', added ) ).status, 200 );
 		assert.equal( ( await send( 'PUT', 'b2d2-repair/area-3', { deleted: true, pts: 'ignored' } ) ).status, 200 );

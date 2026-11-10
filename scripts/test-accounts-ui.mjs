@@ -444,18 +444,38 @@ test( 'the admin moves and adds B2D2 repair areas and saves them for everyone; p
 	assert.equal( made.length, 1 );
 	assert.equal( made[ 0 ].pts.length, 4 );
 	assert.ok( made[ 0 ].area > 0.01 && made[ 0 ].grid.startsWith( 'Grid ' ), JSON.stringify( made[ 0 ] ) );
-	await admin.locator( '#area-editor [data-field=chipped]' ).fill( '2026-11-09' );
-	await admin.locator( '#area-editor [data-field=chipped]' ).press( 'Tab' );
+	// Numbered, and on to the next stage, on a day of its own.
+	await admin.locator( '#area-editor [data-field=no]' ).fill( 'C31-01' );
+	await admin.locator( '#area-editor [data-field=no]' ).press( 'Enter' );
+	await admin.locator( '#area-editor [data-field=status]' ).selectOption( 'Sandblasted' );
+	assert.equal( await admin.locator( '#area-editor .date span' ).textContent(), 'Sandblasted' );
+	await admin.locator( '#area-editor [data-field=date]' ).fill( '2026-11-09' );
+	await admin.locator( '#area-editor [data-field=date]' ).press( 'Tab' );
 	await admin.evaluate( () => document.querySelectorAll( '.toast' ).forEach( t => t.remove() ) );
 	await admin.locator( '#area-editor .save' ).click();
 	await admin.waitForFunction( () => [ ...document.querySelectorAll( '.toast' ) ].some( t => /^Saved for everyone: 1 change/.test( t.textContent ) ) );
 	const [ added ] = await saved();
 	assert.equal( added.id, made[ 0 ].id );
 	assert.equal( added.added, true );
-	assert.equal( added.f.chipped, '2026-11-09' );
+	assert.equal( added.no, 'C31-01' );
+	assert.equal( added.f.status, 'Sandblasted' );
+	assert.equal( added.f.sandblasted, '2026-11-09' );
 	await viewer.reload();
 	await viewer.locator( '#skip' ).click();
 	await viewer.waitForFunction( id => window.twin.repairAreas?.areas().some( a => a.id === id ), added.id, { timeout: 60000 } );
+	// Drawn at its stage, with its number floating on it.
+	const drawn3d = await viewer.evaluate( id => {
+
+		let node;
+		window.twin.models.group.traverse( o => {
+
+			if ( o.userData.id === id ) node = o;
+
+		} );
+		return { materials: node.children.filter( o => o.isMesh ).map( o => o.material.name ), numbers: node.children.filter( o => o.isSprite ).length, no: node.userData.no };
+
+	}, added.id );
+	assert.deepEqual( drawn3d, { materials: [ 'Sandblasted concrete', 'Sandblasted rim', 'Sandblasted rebar' ], numbers: 1, no: 'C31-01' } );
 	await shot( admin, 'area-editor' );
 
 	// Deleted, it's gone for everyone.
