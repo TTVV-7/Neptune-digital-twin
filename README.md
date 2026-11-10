@@ -350,7 +350,7 @@ What each machine is, its size and where it came from is in [docs/equipment.md](
   delete it, which brings the original back, and **B** shows the original everywhere for a moment.
   It only changes what this app draws; Google's data isn't touched.
 
-Two kinds of items:
+Three kinds of items:
 
 - **Built in** (`src/procedural.js`): simple standard pieces generated in code at exact North American
   dimensions, e.g. a 10 ft New Jersey barrier, 20/40 ft ISO containers, site office trailers from 8 x 20
@@ -360,6 +360,13 @@ Two kinds of items:
   (`src/crane-models.js`) and the tower crane (`src/tower-crane.js`).
 - **Downloaded** (`public/library/`): models from Sketchfab and Poly Haven, listed in `library.json` with
   their size, facing and licence. `CREDITS.md` credits the authors; the app shows the credits under **H**.
+- **Our own** (`public/library/` too, marked `own` in `library.json`): models we drew in CAD in the
+  [Weave-Trial](https://github.com/TTVV-7/Weave-Trial) repository, at real size: a trailer concrete
+  line pump, a planetary mixer and its stand, a pallet of concrete bags, a twin-axle compressor, a
+  detailed 20 yd roll-off, chain-link fence panels, a steel stair, a rail crossover gantry and two
+  rail footbridges, a tube-and-fitting rain hoarding, the Mammoet 1824 carry-deck crane and a blue
+  telehandler in four boom positions. They're free, need no credit, and are listed in
+  [docs/equipment.md](docs/equipment.md#our-own-models).
 
 To add a downloaded model, put a Sketchfab API token (sketchfab.com → Settings → Password & API) in an
 environment variable named `SKETCHFAB_API_TOKEN` (Poly Haven needs none) and run:
@@ -385,6 +392,21 @@ npm run add-asset -- https://polyhaven.com/a/<asset> --id oil-drum --category Ma
 - Textures are shrunk to 1024 px and geometry compressed; `--max-texture 2048` keeps more detail.
 - The script prints the model's description. Read it: if it names someone else to credit (a logo's
   designer, say), run again with `--credit "Logo by ..."` so they're listed too.
+
+To add a model of our own (a GLB already in metres; a STEP file goes through
+`python scripts/step-to-glb.py model.step model.glb` first, which needs `pip install cadquery-ocp vtk`):
+
+```bash
+npm run add-own-asset -- model.glb --id steel-stair --name "Industrial steel stair (12 ft)" --category "Access & scaffolding" --front=+x
+```
+
+- CAD exports come as one small mesh per face, in bare metal that draws black here. The script joins
+  them into one mesh per colour, paints them, stands the model on the ground and compresses it.
+- `--simplify 0.4` keeps that fraction of the triangles, for the heavy ones (chain-link, rounded bags).
+- `--row-length 3.05` is how far apart a row places them when that isn't their full length (fence
+  panels share a foot). `--from "Weave-Trial: path/to/file"` notes where the model came from.
+- The card's picture is drawn from the model, which needs Playwright's Chromium (`npm i -D playwright`
+  and `npx playwright install chromium`); `--thumb picture.png` uses a picture instead.
 
 ## Rows: many of an item along a line
 
@@ -782,7 +804,9 @@ worker/premium.js   premium settings and the Stripe webhook
 worker/vercel.js    the Worker as a Vercel Function; worker/postgres.js gives it D1's API on Postgres
 api/index.js        the Vercel Function (vercel.json sends /api/* to it)
 scripts/add-asset.mjs   imports a model from Sketchfab or Poly Haven into public/library
-public/library/     downloaded models, library.json catalog, thumbs/ and CREDITS.md
+scripts/add-own-asset.mjs  imports a model of our own (a CAD-built GLB) into public/library
+scripts/step-to-glb.py  turns a STEP file into a GLB for add-own-asset
+public/library/     downloaded models and our own, library.json catalog, thumbs/ and CREDITS.md
 scripts/add-drive-car.mjs, drive-car-thumbs.mjs   import a car for World Drive into drive/public/cars
                     (its own cars.json, thumbs/ and CREDITS.md; World Drive's build only)
 src/geo.js          lat/lon <-> local metres

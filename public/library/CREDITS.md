@@ -1,6 +1,6 @@
 # Asset library credits
 
-These models come from Sketchfab and Poly Haven under the licences listed. Keep this file with them. Items generated in code (src/procedural.js) are part of this project.
+These models come from Sketchfab and Poly Haven under the licences listed. Keep this file with them. Items generated in code (src/procedural.js) and our own models (marked `own` in library.json) are part of this project.
 
 - **Rolling stairs (10 step)** (`rolling-stairs.glb`): "[Rolling Ladder](https://sketchfab.com/3d-models/rolling-ladder-901590d676494d3faec9d2a9504e6e93)" by [garg1](https://sketchfab.com/garg1) on Sketchfab, licensed [CC Attribution](https://creativecommons.org/licenses/by/4.0/). Compressed and rescaled for this project.
 - **Scaffold run (6 bays, 3 lifts)** (`scaffold-run.glb`): "[Realistic Metal Scaffolding](https://sketchfab.com/3d-models/realistic-metal-scaffolding-c1f03864ec72449c8968f0630c287c8d)" by [Jungle Jim](https://sketchfab.com/jungle_jim) on Sketchfab, licensed [CC Attribution](https://creativecommons.org/licenses/by/4.0/). Compressed and rescaled for this project.

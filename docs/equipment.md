@@ -8,6 +8,9 @@ Since then, a tower crane, four more mobile cranes, two more telehandlers and si
 (generators, compressors, a fuel tank) have been added, built in code: see
 [Plant built in code](#plant-built-in-code) below.
 
+And 20 models of our own, drawn in CAD, have been brought in from the Weave-Trial repository: see
+[Our own models](#our-own-models).
+
 ## What was added
 
 Sizes are length × width × height in metres, as shown on the library cards. Top speeds are in km/h
@@ -52,6 +55,48 @@ Sizes are length × width × height in metres, as shown on the library cards. To
 | Dump truck (tandem axle) | 9.42 × 2.94 × 3.39 | 100 | [Highway Dumptruck (Tandem)](https://sketchfab.com/3d-models/highway-dumptruck-tandem-ff2dc9c8283d48a4a7f2127cc21bcbc4) | doty_aecom |
 | Articulated dump truck (40 t) | 10.82 × 3.48 × 4.14 | 55 | [Articulated Dumptruck](https://sketchfab.com/3d-models/articulated-dumptruck-9775ab1c4fd242beae12a98149823b33) | doty_aecom |
 | Concrete mixer truck (10 yd³) | 8.52 × 2.6 × 3.81 | 100 | [Concrete Mixer Truck](https://sketchfab.com/3d-models/concrete-mixer-truck-8d1d88a5955f4e7da13562bb7bec146f) | doty_aecom |
+
+## Our own models
+
+20 models we drew in CAD in the [Weave-Trial](https://github.com/TTVV-7/Weave-Trial) repository, at real
+size. They're ours, so they need no credit and aren't in the Pro pack. They don't drive (yet): they
+have no `drive` tuning in `library.json`. Sizes are length × width × height in metres, as the cards
+show them; the last column is the file each came from in Weave-Trial. The telehandler poses, the
+rain hoarding and the crane are STEP files there, converted with `scripts/step-to-glb.py`; all of
+them were then brought in with `npm run add-own-asset` (see the README), and
+`npm run test:own-models-ui` checks each one in a browser.
+
+| Item | Category | Size | Triangles | From |
+| --- | --- | --- | --- | --- |
+| Carry-deck crane, Mammoet 1824 (boom up, outriggers set) | Cranes & lifts | 8.25 × 6.55 × 8.62 | 10,800 | `crane_model/mammoet_1824_crane.step` |
+| Telehandler, blue (10,000 lb, 56 ft), boom at 30° | Material handling | 8.39 × 2.6 × 5.1 | 4,272 | `telehandler/step/Genie_GTH-1056_raised_30deg.step` |
+| Telehandler, blue (10,000 lb, 56 ft), boom at 45°, out 5 m | Material handling | 11.4 × 2.6 × 9.66 | 4,272 | `telehandler/step/Genie_GTH-1056_raised_45deg_extended_5m.step` |
+| Telehandler, blue (10,000 lb, 56 ft), boom at 65°, out 10 m | Material handling | 11.1 × 2.6 × 17.04 | 4,272 | `telehandler/step/Genie_GTH-1056_max_65deg_extended_10m.step` |
+| Telehandler, blue (10,000 lb, 56 ft), boom stowed | Material handling | 8.73 × 2.6 × 2.59 | 11,756 | `construction_site/Telehandler_10000lb_56ft.glb` |
+| Concrete line pump, trailer (twin axle) | Concrete & batching | 6.1 × 2.41 × 2.6 | 10,056 | `construction_site/Trailer_Concrete_Line_Pump.glb` |
+| Mixer stand (steel portal frame) | Concrete & batching | 2.15 × 2.15 × 1.55 | 772 | `construction_site/Mixer_Stand.glb` |
+| Planetary concrete mixer (500 L) | Concrete & batching | 1.75 × 1.68 × 1.98 | 6,588 | `construction_site/Planetary_Concrete_Mixer_500L.glb` |
+| Planetary concrete mixer on stand (500 L) | Concrete & batching | 2.15 × 2.15 × 3.35 | 7,360 | `construction_site/Planetary_Mixer_on_Stand.glb` |
+| Rain hoarding, tube and fitting 12 × 8 m (4 m eaves, one end open) | Temporary covers | 13.8 × 10.6 × 5.34 | 76,288 | `hoarding/Rain_Hoarding.step` |
+| Roll-off dumpster, detailed (20 yd) | Waste | 6.07 × 2.44 × 1.55 | 4,020 | `construction_site/Roll_Off_Dumpster_20yd.glb` |
+| Temporary fence panel, chain-link detailed (10 x 6 ft) | Barriers & fencing | 3.25 × 0.64 × 1.89 | 17,244 | `construction_site/Temporary_Fence_Panel_6x10ft.glb` |
+| Temporary fence run, chain-link detailed (50 ft, 5 panels) | Barriers & fencing | 15.45 × 0.64 × 1.89 | 85,448 | `construction_site/Temporary_Fence_Run_50ft.glb` |
+| Traffic cone, two reflective collars (28 in) | Traffic control | 0.36 × 0.36 × 0.71 | 7,690 | `construction_site/Traffic_Cone_28in.glb` |
+| Air compressor, towable, twin axle (5 m) | Power & air | 5.05 × 1.85 × 2.29 | 10,960 | `construction_site/Towable_Air_Compressor.glb` |
+| Dumper access bridge (22 m span, stair one side) | Access & scaffolding | 23.75 × 10.97 × 10.7 | 128,952 | `railbridge/Dumper_Access.glb` |
+| Industrial steel stair (12 ft) | Access & scaffolding | 4.7 × 1.06 × 4.69 | 13,508 | `construction_site/Industrial_Steel_Stair_12ft.glb` |
+| Rail crossover gantry (7 m clear, stair one side) | Access & scaffolding | 8.85 × 7.89 × 8.38 | 72,640 | `construction_site/Rail_Crossover_Gantry.glb` |
+| Rail footbridge (two arched spans, stairs both ends) | Access & scaffolding | 24.73 × 14.46 × 9.35 | 142,298 | `railbridge/Rail_Footbridge.glb` |
+| Pallet of concrete bags (27 bags) | Materials | 1.23 × 1.02 × 0.79 | 29,954 | `construction_site/Pallet_of_Concrete_Bags.glb` |
+
+- These are simplified models: the right envelope and layout, not manufacturer replicas. The stair's
+  height, the crossover's clearance and the mixer stand are typical values, not a particular site's.
+- The chain-link is modelled as wires 100 mm apart (real 2 in mesh is too dense to model), and it
+  and the bags were simplified on the way in, to 40% and 15% of their triangles.
+- The bridges, gantry and hoarding are placed by the middle of their box. The crossover gantry's
+  track runs under the middle of its span.
+- Some overlap built-in pieces (a 20 yd roll-off, a fence panel, a traffic cone, telehandlers); both
+  are kept, the detailed ones for close-up views.
 
 ## Plant built in code
 

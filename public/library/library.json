@@ -1,5 +1,73 @@
 [
 	{
+		"id": "dumper-access-bridge",
+		"name": "Dumper access bridge (22 m span, stair one side)",
+		"category": "Access & scaffolding",
+		"file": "dumper-access-bridge.glb",
+		"thumb": "thumbs/dumper-access-bridge.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 23.75,
+			"width": 10.97,
+			"height": 10.7
+		},
+		"triangles": 128952,
+		"sizeKB": 801,
+		"own": "Weave-Trial: railbridge/Dumper_Access.glb"
+	},
+	{
+		"id": "steel-stair-12ft",
+		"name": "Industrial steel stair (12 ft)",
+		"category": "Access & scaffolding",
+		"file": "steel-stair-12ft.glb",
+		"thumb": "thumbs/steel-stair-12ft.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 4.7,
+			"width": 1.06,
+			"height": 4.69
+		},
+		"triangles": 13508,
+		"sizeKB": 90,
+		"own": "Weave-Trial: construction_site/Industrial_Steel_Stair_12ft.glb"
+	},
+	{
+		"id": "rail-crossover-gantry",
+		"name": "Rail crossover gantry (7 m clear, stair one side)",
+		"category": "Access & scaffolding",
+		"file": "rail-crossover-gantry.glb",
+		"thumb": "thumbs/rail-crossover-gantry.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 8.85,
+			"width": 7.89,
+			"height": 8.38
+		},
+		"triangles": 72640,
+		"sizeKB": 485,
+		"own": "Weave-Trial: construction_site/Rail_Crossover_Gantry.glb"
+	},
+	{
+		"id": "rail-footbridge",
+		"name": "Rail footbridge (two arched spans, stairs both ends)",
+		"category": "Access & scaffolding",
+		"file": "rail-footbridge.glb",
+		"thumb": "thumbs/rail-footbridge.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 24.73,
+			"width": 14.46,
+			"height": 9.35
+		},
+		"triangles": 142298,
+		"sizeKB": 870,
+		"own": "Weave-Trial: railbridge/Rail_Footbridge.glb"
+	},
+	{
 		"id": "rolling-stairs",
 		"name": "Rolling stairs (10 step)",
 		"category": "Access & scaffolding",
@@ -78,6 +146,42 @@
 		}
 	},
 	{
+		"id": "fence-panel-chainlink",
+		"name": "Temporary fence panel, chain-link detailed (10 x 6 ft)",
+		"category": "Barriers & fencing",
+		"file": "fence-panel-chainlink.glb",
+		"thumb": "thumbs/fence-panel-chainlink.webp",
+		"front": "-z",
+		"scale": 1,
+		"dimensions": {
+			"length": 0.64,
+			"width": 3.25,
+			"height": 1.89
+		},
+		"triangles": 17244,
+		"sizeKB": 128,
+		"rowLength": 3.048,
+		"own": "Weave-Trial: construction_site/Temporary_Fence_Panel_6x10ft.glb"
+	},
+	{
+		"id": "fence-run-chainlink-50ft",
+		"name": "Temporary fence run, chain-link detailed (50 ft, 5 panels)",
+		"category": "Barriers & fencing",
+		"file": "fence-run-chainlink-50ft.glb",
+		"thumb": "thumbs/fence-run-chainlink-50ft.webp",
+		"front": "-z",
+		"scale": 1,
+		"dimensions": {
+			"length": 0.64,
+			"width": 15.45,
+			"height": 1.89
+		},
+		"triangles": 85448,
+		"sizeKB": 566,
+		"rowLength": 15.24,
+		"own": "Weave-Trial: construction_site/Temporary_Fence_Run_50ft.glb"
+	},
+	{
 		"id": "water-barrier",
 		"name": "Water-filled barrier (plastic)",
 		"category": "Barriers & fencing",
@@ -102,6 +206,74 @@
 			"license": "CC Attribution",
 			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
 		}
+	},
+	{
+		"id": "concrete-line-pump-trailer",
+		"name": "Concrete line pump, trailer (twin axle)",
+		"category": "Concrete & batching",
+		"file": "concrete-line-pump-trailer.glb",
+		"thumb": "thumbs/concrete-line-pump-trailer.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 6.1,
+			"width": 2.41,
+			"height": 2.6
+		},
+		"triangles": 10056,
+		"sizeKB": 68,
+		"own": "Weave-Trial: construction_site/Trailer_Concrete_Line_Pump.glb"
+	},
+	{
+		"id": "mixer-stand",
+		"name": "Mixer stand (steel portal frame)",
+		"category": "Concrete & batching",
+		"file": "mixer-stand.glb",
+		"thumb": "thumbs/mixer-stand.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 2.15,
+			"width": 2.15,
+			"height": 1.55
+		},
+		"triangles": 772,
+		"sizeKB": 12,
+		"own": "Weave-Trial: construction_site/Mixer_Stand.glb"
+	},
+	{
+		"id": "planetary-mixer-500l",
+		"name": "Planetary concrete mixer (500 L)",
+		"category": "Concrete & batching",
+		"file": "planetary-mixer-500l.glb",
+		"thumb": "thumbs/planetary-mixer-500l.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 1.68,
+			"width": 1.75,
+			"height": 1.98
+		},
+		"triangles": 6588,
+		"sizeKB": 45,
+		"own": "Weave-Trial: construction_site/Planetary_Concrete_Mixer_500L.glb"
+	},
+	{
+		"id": "planetary-mixer-on-stand",
+		"name": "Planetary concrete mixer on stand (500 L)",
+		"category": "Concrete & batching",
+		"file": "planetary-mixer-on-stand.glb",
+		"thumb": "thumbs/planetary-mixer-on-stand.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 2.15,
+			"width": 2.15,
+			"height": 3.35
+		},
+		"triangles": 7360,
+		"sizeKB": 57,
+		"own": "Weave-Trial: construction_site/Planetary_Mixer_on_Stand.glb"
 	},
 	{
 		"id": "crane-all-terrain",
@@ -184,6 +356,23 @@
 				"up": 3.35
 			}
 		}
+	},
+	{
+		"id": "crane-carry-deck-mammoet-1824",
+		"name": "Carry-deck crane, Mammoet 1824 (boom up, outriggers set)",
+		"category": "Cranes & lifts",
+		"file": "crane-carry-deck-mammoet-1824.glb",
+		"thumb": "thumbs/crane-carry-deck-mammoet-1824.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 8.25,
+			"width": 6.55,
+			"height": 8.62
+		},
+		"triangles": 10800,
+		"sizeKB": 98,
+		"own": "Weave-Trial: crane_model/mammoet_1824_crane.step"
 	},
 	{
 		"id": "crane-crawler",
@@ -665,6 +854,74 @@
 		}
 	},
 	{
+		"id": "telehandler-10k-raised-30",
+		"name": "Telehandler, blue (10,000 lb, 56 ft), boom at 30°",
+		"category": "Material handling",
+		"file": "telehandler-10k-raised-30.glb",
+		"thumb": "thumbs/telehandler-10k-raised-30.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 8.39,
+			"width": 2.6,
+			"height": 5.1
+		},
+		"triangles": 4272,
+		"sizeKB": 42,
+		"own": "Weave-Trial: telehandler/step/Genie_GTH-1056_raised_30deg.step"
+	},
+	{
+		"id": "telehandler-10k-raised-45",
+		"name": "Telehandler, blue (10,000 lb, 56 ft), boom at 45°, out 5 m",
+		"category": "Material handling",
+		"file": "telehandler-10k-raised-45.glb",
+		"thumb": "thumbs/telehandler-10k-raised-45.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 11.4,
+			"width": 2.6,
+			"height": 9.66
+		},
+		"triangles": 4272,
+		"sizeKB": 42,
+		"own": "Weave-Trial: telehandler/step/Genie_GTH-1056_raised_45deg_extended_5m.step"
+	},
+	{
+		"id": "telehandler-10k-raised-65",
+		"name": "Telehandler, blue (10,000 lb, 56 ft), boom at 65°, out 10 m",
+		"category": "Material handling",
+		"file": "telehandler-10k-raised-65.glb",
+		"thumb": "thumbs/telehandler-10k-raised-65.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 11.1,
+			"width": 2.6,
+			"height": 17.04
+		},
+		"triangles": 4272,
+		"sizeKB": 41,
+		"own": "Weave-Trial: telehandler/step/Genie_GTH-1056_max_65deg_extended_10m.step"
+	},
+	{
+		"id": "telehandler-10k-stowed",
+		"name": "Telehandler, blue (10,000 lb, 56 ft), boom stowed",
+		"category": "Material handling",
+		"file": "telehandler-10k-stowed.glb",
+		"thumb": "thumbs/telehandler-10k-stowed.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 8.73,
+			"width": 2.6,
+			"height": 2.59
+		},
+		"triangles": 11756,
+		"sizeKB": 81,
+		"own": "Weave-Trial: construction_site/Telehandler_10000lb_56ft.glb"
+	},
+	{
 		"id": "ibc-tote",
 		"name": "IBC tote (1000 L)",
 		"category": "Materials",
@@ -691,6 +948,23 @@
 		}
 	},
 	{
+		"id": "pallet-concrete-bags",
+		"name": "Pallet of concrete bags (27 bags)",
+		"category": "Materials",
+		"file": "pallet-concrete-bags.glb",
+		"thumb": "thumbs/pallet-concrete-bags.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 1.23,
+			"width": 1.02,
+			"height": 0.79
+		},
+		"triangles": 29954,
+		"sizeKB": 200,
+		"own": "Weave-Trial: construction_site/Pallet_of_Concrete_Bags.glb"
+	},
+	{
 		"id": "oil-drum",
 		"name": "Steel drum (55 gal)",
 		"category": "Materials",
@@ -715,6 +989,23 @@
 			"license": "CC0",
 			"licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/"
 		}
+	},
+	{
+		"id": "compressor-towable-twin-axle",
+		"name": "Air compressor, towable, twin axle (5 m)",
+		"category": "Power & air",
+		"file": "compressor-towable-twin-axle.glb",
+		"thumb": "thumbs/compressor-towable-twin-axle.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 5.05,
+			"width": 1.85,
+			"height": 2.29
+		},
+		"triangles": 10960,
+		"sizeKB": 76,
+		"own": "Weave-Trial: construction_site/Towable_Air_Compressor.glb"
 	},
 	{
 		"id": "porta-potty",
@@ -795,6 +1086,23 @@
 		}
 	},
 	{
+		"id": "rain-hoarding-12x8",
+		"name": "Rain hoarding, tube and fitting 12 × 8 m (4 m eaves, one end open)",
+		"category": "Temporary covers",
+		"file": "rain-hoarding-12x8.glb",
+		"thumb": "thumbs/rain-hoarding-12x8.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 13.8,
+			"width": 10.6,
+			"height": 5.34
+		},
+		"triangles": 76288,
+		"sizeKB": 522,
+		"own": "Weave-Trial: hoarding/Rain_Hoarding.step"
+	},
+	{
 		"id": "traffic-cone",
 		"name": "Traffic cone (28 in)",
 		"category": "Traffic control",
@@ -819,6 +1127,23 @@
 			"license": "CC Attribution",
 			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
 		}
+	},
+	{
+		"id": "traffic-cone-collars",
+		"name": "Traffic cone, two reflective collars (28 in)",
+		"category": "Traffic control",
+		"file": "traffic-cone-collars.glb",
+		"thumb": "thumbs/traffic-cone-collars.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 0.36,
+			"width": 0.36,
+			"height": 0.71
+		},
+		"triangles": 7690,
+		"sizeKB": 48,
+		"own": "Weave-Trial: construction_site/Traffic_Cone_28in.glb"
 	},
 	{
 		"id": "traffic-drum",
@@ -1093,5 +1418,22 @@
 			"licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
 			"extraCredit": "HWM logo by Geoff Siler"
 		}
+	},
+	{
+		"id": "rolloff-20-detailed",
+		"name": "Roll-off dumpster, detailed (20 yd)",
+		"category": "Waste",
+		"file": "rolloff-20-detailed.glb",
+		"thumb": "thumbs/rolloff-20-detailed.webp",
+		"front": "+x",
+		"scale": 1,
+		"dimensions": {
+			"length": 6.07,
+			"width": 2.44,
+			"height": 1.55
+		},
+		"triangles": 4020,
+		"sizeKB": 32,
+		"own": "Weave-Trial: construction_site/Roll_Off_Dumpster_20yd.glb"
 	}
 ]
