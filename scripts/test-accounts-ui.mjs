@@ -508,6 +508,120 @@ test( 'the admin moves and adds B2D2 repair areas and saves them for everyone; p
 
 } );
 
+test( 'the admin adds a beam to the B2D2 model and paints a wall, for everyone; removed, they\'re gone', async () => {
+
+	const admin = await newPage();
+	admin.on( 'dialog', d => d.accept( PASSCODE ) );
+	await openApp( admin, undefined, { keepProjectModels: true } );
+	await admin.waitForFunction( () => window.twin.modelEdits && window.twin.models.entries.some( e => e.url?.endsWith( 'b2d2-repair.glb' ) && ! e.placing ), null, { timeout: 60000 } );
+	await admin.evaluate( () => window.twin.views.go( 'C31' ) );
+	await admin.waitForFunction( () => ! window.twin.views.gliding );
+	await admin.locator( '#views .edit-model' ).click();
+	await admin.evaluate( () => window.twin.repairAreas.ready() );
+	const edits = () => admin.evaluate( () => window.twin.modelEdits.edits() );
+	const saved = () => admin.evaluate( async () => ( await ( await fetch( '/api/model-edits/b2d2-repair' ) ).json() ).edits );
+	const size = admin.viewportSize();
+
+	// A click on a side wall of the gallery: a beam straight across to the wall facing it.
+	let wall = null;
+	const canvasAt = ( x, y ) => admin.evaluate( ( [ x, y ] ) => document.elementFromPoint( x, y ) === window.twin.renderer.domElement, [ x, y ] );
+	// (Between the panels at the sides of the page, which would take the click.)
+	for ( const [ x, y ] of [ [ 0.62, 0.44 ], [ 0.38, 0.44 ], [ 0.64, 0.5 ], [ 0.36, 0.5 ] ] ) {
+
+		if ( ! await canvasAt( x * size.width, y * size.height ) ) continue;
+		await admin.locator( '#model-editor .add-beam' ).click();
+		await admin.mouse.click( x * size.width, y * size.height );
+		if ( ( await edits() ).length ) {
+
+			wall = { x: x * size.width, y: y * size.height };
+			break;
+
+		}
+
+		await admin.keyboard.press( 'Escape' );
+
+	}
+
+	assert.ok( wall, 'a wall in view to hang a beam from' );
+	const [ beam ] = await edits();
+	assert.equal( beam.kind, 'beam' );
+	const span = Math.hypot( ...beam.a.map( ( v, i ) => v - beam.b[ i ] ) );
+	assert.ok( span > 1 && span < 12, `across the gallery: ${ span } m` );
+	assert.ok( Math.abs( beam.a[ 1 ] - beam.b[ 1 ] ) < 0.01, 'level' );
+	assert.match( await admin.locator( '#model-editor .what' ).textContent(), /0\.4 × 0\.6 m/ );
+	await admin.locator( '#model-editor [data-field=depth]' ).fill( '0.8' );
+	await admin.locator( '#model-editor [data-field=depth]' ).press( 'Enter' );
+	await admin.locator( '#model-editor [data-field=name]' ).fill( 'B-01' );
+	await admin.locator( '#model-editor [data-field=name]' ).press( 'Enter' );
+	const high = ( await edits() )[ 0 ].a[ 1 ];
+	await admin.locator( '#model-editor .to-floor' ).click();
+	assert.ok( ( await edits() )[ 0 ].a[ 1 ] < high, 'down to the floor' );
+	await admin.locator( '#model-editor .undo' ).click();
+	assert.equal( ( await edits() )[ 0 ].a[ 1 ], high );
+
+	// The wall it hangs from, painted: the whole face.
+	await admin.locator( '#model-editor .paint' ).click();
+	await admin.locator( '#model-editor .paint-swatches [title="Yellow"]' ).click();
+	await admin.mouse.click( wall.x, wall.y );
+	const painted = ( await edits() ).find( e => e.kind === 'paint' );
+	assert.ok( painted, 'a face painted' );
+	assert.equal( painted.colour, '#f2c14e' );
+	// Again in another colour: the same face, not a second coat.
+	await admin.locator( '#model-editor .paint-swatches [title="Blue"]' ).click();
+	await admin.mouse.click( wall.x, wall.y );
+	assert.deepEqual( ( await edits() ).filter( e => e.kind === 'paint' ).map( e => [ e.id, e.colour ] ), [ [ painted.id, '#4f7cac' ] ] );
+	await admin.keyboard.press( 'Escape' );
+
+	await admin.locator( '#model-editor .save' ).click();
+	await admin.waitForFunction( () => [ ...document.querySelectorAll( '.toast' ) ].some( t => /^Saved for everyone: 2 changes to the model/.test( t.textContent ) ) );
+	assert.deepEqual( ( await saved() ).map( e => [ e.kind, e.name ?? e.colour ] ).sort(), [ [ 'beam', 'B-01' ], [ 'paint', '#4f7cac' ] ] );
+
+	// Someone else sees the beam, solid, and the wall in its colour; the areas' editor leaves both be.
+	const viewer = await newPage();
+	await openApp( viewer, undefined, { keepProjectModels: true } );
+	await viewer.waitForFunction( () => window.twin.modelEdits?.edits().length === 2, null, { timeout: 60000 } );
+	const seen = () => viewer.evaluate( () => {
+
+		const found = { beams: [], painted: 0 };
+		window.twin.models.group.traverse( o => {
+
+			if ( o.userData.beam ) found.beams.push( [ o.name, o.geometry.parameters.height ] );
+			if ( o.isMesh && o.geometry.attributes.color ) found.painted ++;
+
+		} );
+		return found;
+
+	} );
+	assert.deepEqual( await seen(), { beams: [ [ 'B-01', 0.8 ] ], painted: 1 } );
+	await viewer.locator( '#views .edit-areas' ).click();
+	await viewer.evaluate( () => window.twin.repairAreas.ready() );
+	await viewer.evaluate( () => {
+
+		const { repairAreas } = window.twin;
+		repairAreas.select( repairAreas.areas().find( a => ! a.deleted ).id );
+		repairAreas.nudge( 'right' );
+
+	} );
+	assert.deepEqual( await seen(), { beams: [ [ 'B-01', 0.8 ] ], painted: 1 } );
+
+	// The beam deleted and the wall given its own colour back.
+	await admin.evaluate( id => window.twin.modelEdits.select( id ), beam.id );
+	await admin.locator( '#model-editor .delete' ).click();
+	await admin.locator( '#model-editor .paint' ).click();
+	await admin.locator( '#model-editor .paint-swatches .original' ).click();
+	await admin.mouse.click( wall.x, wall.y );
+	await admin.keyboard.press( 'Escape' );
+	assert.deepEqual( await edits(), [] );
+	await admin.evaluate( () => document.querySelectorAll( '.toast' ).forEach( t => t.remove() ) );
+	await admin.locator( '#model-editor .save' ).click();
+	await admin.waitForFunction( () => [ ...document.querySelectorAll( '.toast' ) ].some( t => /^Saved for everyone: 2 changes to the model/.test( t.textContent ) ) );
+	assert.deepEqual( await saved(), [] );
+	await shot( admin, 'model-editor' );
+	await admin.context().close();
+	await viewer.context().close();
+
+} );
+
 test( 'without the Worker the app is as before: no account, one failed request', async () => {
 
 	vite.stop();

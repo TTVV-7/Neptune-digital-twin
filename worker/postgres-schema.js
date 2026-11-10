@@ -128,4 +128,17 @@ export const MIGRATIONS = [
 			CREATE INDEX IF NOT EXISTS area_photos_by_area ON area_photos ( model, area, created_at );
 		`,
 	},
+	{
+		version: 7,
+		// worker/migrations/0007_model_edits.sql: beams added to a model and faces painted, in the twin.
+		sql: `
+			CREATE TABLE IF NOT EXISTS model_edits (
+				model TEXT NOT NULL,
+				id TEXT NOT NULL,
+				data TEXT NOT NULL,
+				updated_at BIGINT NOT NULL,
+				PRIMARY KEY ( model, id )
+			);
+		`,
+	},
 ];

@@ -54,7 +54,7 @@ visitor for a Maps key (kept in their browser) and has no sign-in.
 A **Secret** named `PLACEMENT_KEY`, any passcode you like, is the admin's passcode for saving
 on the live site for everyone: where models from `MODELS` stand (the P panel's **Save position
 for everyone**), items placed in the app (**Save for everyone**, which everyone then sees as
-part of the site), and changes to the B2D2 model's repair areas made with **Edit areas**, their photos included. The app asks for
+part of the site), changes to the B2D2 model's repair areas made with **Edit areas**, their photos included, and beams and paint added with **Edit model**. The app asks for
 it once per browser. It needs only the database, not
 sign-in. Change it to stop anyone who had the old one; without it, nothing can be saved for
 everyone.
@@ -155,6 +155,8 @@ Tests (both run everything on your computer, with test keys standing in for Goog
 | `POST /api/area-photos/:model/:area` `{ stage, taken, caption, width, height }` | Start a photo: answers with its `id`. Needs `X-Edit-Key`; at most 5,000 photos a model |
 | `PUT /api/area-photos/:model/:area/:id/:kind` (the image's bytes) | Send `thumb`, `view`, then `full` (at most 400 KB, 4 MB, 40 MB; JPEG, PNG, WebP or HEIC). The photo is listed once `full` has arrived. Needs `X-Edit-Key` |
 | `PUT / DELETE /api/area-photos/:model/:area/:id` `{ caption?, stage?, taken? }` | Change a photo's caption, stage or day, or delete it, files and all. Needs `X-Edit-Key` |
+| `GET /api/model-edits/:model` | Anyone: `{ edits: [ { id, kind, ..., updatedAt } ] }`, what was added to a model's structure in the twin: beams (`kind: 'beam'`, ends `a` and `b`, `width`, `depth`, `colour`, `name`) and painted faces (`kind: 'paint'`, `layer`, a point `at` on the face and its normal `n`, `colour`), in the model's markup frame. Needs only the database |
+| `PUT / DELETE /api/model-edits/:model/:id` (a beam or a painted face, as above) | Save or remove one, for everyone. Needs `X-Edit-Key` to match `PLACEMENT_KEY`; at most 2,000 a model |
 
 `premium` is `{ enabled: false }` until Stripe is set up, then `{ enabled: true, link, price,
 unlocked, clientReferenceId? }`.

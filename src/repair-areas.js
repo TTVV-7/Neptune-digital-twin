@@ -1,5 +1,5 @@
 import './repair-areas.css';
-import { BufferAttribute, BufferGeometry, CanvasTexture, DoubleSide, Group, Line, LineBasicMaterial, LineLoop, Matrix3, Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial, Plane, PropertyBinding, Raycaster, Sprite, SpriteMaterial, SRGBColorSpace, Vector2, Vector3 } from 'three';
+import { BufferAttribute, BufferGeometry, CanvasTexture, Color, DoubleSide, Group, Line, LineBasicMaterial, LineLoop, Matrix3, Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial, Plane, PropertyBinding, Raycaster, Sprite, SpriteMaterial, SRGBColorSpace, Vector2, Vector3 } from 'three';
 import { loadConfig } from './cloud.js';
 import { sendForEveryone } from './placements.js';
 import { useFastRaycast } from './raycast.js';
@@ -79,6 +79,7 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 	const history = []; // { s, id, had, value }, for Undo
 	let numbersShown = true; // the Show panel's Panel numbers row
 	let numbersCounted = 0;
+	const onEditing = []; // told when editing areas starts (the model editor, to stop)
 	// What a new area is, as the last one drawn was.
 	const defaults = { status: CHIPPED, type: 'Exposed rebar', text: '' };
 
@@ -267,6 +268,8 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 
 			if ( controls.locked ) document.exitPointerLock?.();
 			for ( const s of states.values() ) ensureData( s ).catch( () => toast?.( 'Couldn\'t load the repair areas\' data, so they can\'t be changed.' ) );
+			// One editor at a time has the clicks.
+			for ( const told of onEditing ) told();
 
 		} else {
 
@@ -794,6 +797,45 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 
 	}
 
+	// Faces of a layer painted in the model editor (model-edits.js): `painted` is the colour of
+	// each painted triangle of the layer by its number. They're coloured corner by corner, the rest
+	// in the layer's own colour, which the material then leaves to them.
+	const _colour = new Color();
+	function paint( mesh, geometry, painted, source ) {
+
+		const material = mesh.material;
+		if ( painted?.size ) {
+
+			material.userData.ownColour ??= material.color.getHex();
+			const colours = new Float32Array( source.length * 9 );
+			source.forEach( ( triangle, i ) => {
+
+				const colour = painted.get( triangle );
+				if ( colour ) _colour.set( colour );
+				else _colour.setHex( material.userData.ownColour );
+				for ( let k = 0; k < 3; k ++ ) _colour.toArray( colours, i * 9 + k * 3 );
+
+			} );
+			geometry.setAttribute( 'color', new BufferAttribute( colours, 3 ) );
+			material.color.setRGB( 1, 1, 1 );
+			if ( ! material.vertexColors ) {
+
+				material.vertexColors = true;
+				material.needsUpdate = true;
+
+			}
+
+		} else if ( material.userData.ownColour != null ) {
+
+			material.color.setHex( material.userData.ownColour );
+			delete material.userData.ownColour;
+			material.vertexColors = false;
+			material.needsUpdate = true;
+
+		}
+
+	}
+
 	// The concrete the areas are cut out of, cut again where they are now.
 	function cut( s ) {
 
@@ -801,9 +843,10 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 		const planes = ids( s ).map( id => s.planes.get( id ) ).filter( Boolean );
 		for ( const [ key, mesh ] of Object.entries( s.layerMeshes ) ) {
 
-			const { positions } = cutOut( s.triangles[ key ], planes );
+			const { positions, source } = cutOut( s.triangles[ key ], planes );
 			const g = new BufferGeometry();
 			g.setAttribute( 'position', new BufferAttribute( shifted( s, positions ), 3 ) );
+			paint( mesh, g, s.painted?.get( key ), source );
 			const old = mesh.geometry;
 			mesh.geometry = g;
 			old.dispose();
@@ -1130,21 +1173,38 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 	// behind the hole.
 	function concreteAt( s, e ) {
 
-		s.uncut ??= Object.values( s.triangles ).map( triangles => {
+		for ( const mesh of uncut( s ) ) mesh.matrixWorld.copy( ( s.group?.parent ?? s.content ).matrixWorld );
+		return ray( e ).intersectObjects( s.uncut, false )[ 0 ] ?? null;
+
+	}
+
+	// The layers as they are without the areas cut out, one mesh each (userData.layer: which), a
+	// triangle of the mesh for each of the layer's, in the same order. Never drawn or in the scene:
+	// only for rays, where the model stands now.
+	function uncut( s ) {
+
+		s.uncut ??= Object.entries( s.triangles ).map( ( [ key, triangles ] ) => {
 
 			const positions = new Float32Array( triangles.length * 9 );
 			triangles.forEach( ( { a, b, c }, i ) => [ a, b, c ].forEach( ( p, k ) => p.toArray( positions, i * 9 + k * 3 ) ) );
 			const geometry = new BufferGeometry();
 			geometry.setAttribute( 'position', new BufferAttribute( shifted( s, positions ), 3 ) );
-			// Never drawn or in the scene: only for these rays, where the model stands now.
 			const mesh = new Mesh( geometry, new MeshBasicMaterial( { side: DoubleSide } ) );
 			mesh.matrixAutoUpdate = false;
+			mesh.userData.layer = key;
 			return mesh;
 
 		} );
-		const frame = ( s.group?.parent ?? s.content ).matrixWorld;
-		for ( const mesh of s.uncut ) mesh.matrixWorld.copy( frame );
-		return ray( e ).intersectObjects( s.uncut, false )[ 0 ] ?? null;
+		return s.uncut;
+
+	}
+
+	// The concrete a ray in the scene meets first (a beam looking for the wall across from it).
+	function concreteAlong( s, origin, direction ) {
+
+		for ( const mesh of uncut( s ) ) mesh.matrixWorld.copy( ( s.group?.parent ?? s.content ).matrixWorld );
+		_raycaster.set( origin, direction );
+		return _raycaster.intersectObjects( s.uncut, false )[ 0 ] ?? null;
 
 	}
 
@@ -1453,6 +1513,18 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 
 		},
 		startDrawing, nudge, turn, undo, save,
+		// For the model editor (model-edits.js), which changes the same models: their states (s.model,
+		// s.entry, s.content, s.origin, s.triangles by layer, s.group, and s.painted, the colours of
+		// painted triangles by layer, which it sets), their data once it's loaded, the concrete under
+		// the pointer or along a ray (uncut: userData.layer and faceIndex say which triangle), frames,
+		// and the concrete cut again (after painting).
+		host: {
+			states: () => [ ...states.values() ],
+			ensureData, concreteAt, concreteAlong, faceHit, toModel, toModelPoint, toScene,
+			recut: cut,
+			stop: () => setEditing( false ),
+			onEditing: told => onEditing.push( told ),
+		},
 	};
 
 }

@@ -306,18 +306,21 @@ export function settleOnFaces( planes, triangles ) {
 
 }
 
-// A layer's triangles with the chipped areas on them cut out, as a flat list of positions.
+// A layer's triangles with the chipped areas on them cut out, as a flat list of positions, and
+// for each triangle of it the one of the layer's it came from (`source`: what's painted follows).
 export function cutOut( triangles, planes ) {
 
 	const out = [];
+	const source = [];
 	let cut = 0;
-	for ( const tri of triangles ) {
+	triangles.forEach( ( tri, index ) => {
 
 		const on = planes.filter( plane => onFace( tri, plane, ON_FACE ) );
 		if ( on.length === 0 ) {
 
 			out.push( ...tri.a.toArray(), ...tri.b.toArray(), ...tri.c.toArray() );
-			continue;
+			source.push( index );
+			return;
 
 		}
 
@@ -338,6 +341,7 @@ export function cutOut( triangles, planes ) {
 				let [ a, b, c ] = [ i, j, k ].map( n => toWorld( plane, points[ n ].x, points[ n ].y ) );
 				if ( triNormal( a, b, c ).dot( facing ) < 0 ) [ b, c ] = [ c, b ];
 				out.push( ...a.toArray(), ...b.toArray(), ...c.toArray() );
+				source.push( index );
 
 			}
 
@@ -345,9 +349,76 @@ export function cutOut( triangles, planes ) {
 
 		cut ++;
 
+	} );
+	return { positions: new Float32Array( out ), cut, source };
+
+}
+
+// ---------- Faces of the structure ----------
+
+// The whole face a triangle of a layer is part of: the triangles in its plane joined to it corner
+// to corner (a wall from end to end, a floor, a soffit), as their numbers in the layer.
+export function coplanarFace( triangles, seed ) {
+
+	const N = triNormal( triangles[ seed ].a, triangles[ seed ].b, triangles[ seed ].c );
+	const h = N.dot( triangles[ seed ].a );
+	const inPlane = tri => Math.abs( triNormal( tri.a, tri.b, tri.c ).dot( N ) ) > 0.999 && [ tri.a, tri.b, tri.c ].every( p => Math.abs( N.dot( p ) - h ) < 0.005 );
+	// Corners to the millimetre: which of the plane's triangles meet at each.
+	const corner = p => `${ Math.round( p.x * 1000 ) },${ Math.round( p.y * 1000 ) },${ Math.round( p.z * 1000 ) }`;
+	const at = new Map();
+	const flat = [];
+	triangles.forEach( ( tri, i ) => {
+
+		if ( ! inPlane( tri ) ) return;
+		flat.push( i );
+		for ( const p of [ tri.a, tri.b, tri.c ] ) at.set( corner( p ), [ ...( at.get( corner( p ) ) ?? [] ), i ] );
+
+	} );
+	const face = new Set( [ seed ] );
+	const queue = [ seed ];
+	while ( queue.length ) {
+
+		const tri = triangles[ queue.pop() ];
+		for ( const p of [ tri.a, tri.b, tri.c ] ) for ( const next of at.get( corner( p ) ) ?? [] ) {
+
+			if ( face.has( next ) ) continue;
+			face.add( next );
+			queue.push( next );
+
+		}
+
 	}
 
-	return { positions: new Float32Array( out ), cut };
+	return [ ...face ];
+
+}
+
+// The triangle of a layer a point is on, facing along n either way: its number, or -1. A point
+// just off every triangle (a rebuilt model's faces moved a little) takes the nearest facing that way.
+export function triangleAt( triangles, point, n ) {
+
+	const P = Array.isArray( point ) ? new Vector3( ...point ) : point;
+	const N = ( Array.isArray( n ) ? new Vector3( ...n ) : n.clone() ).normalize();
+	let best = - 1, bestDistance = 0.5;
+	triangles.forEach( ( tri, i ) => {
+
+		const normal = triNormal( tri.a, tri.b, tri.c );
+		if ( Math.abs( normal.dot( N ) ) < 0.98 ) return;
+		const off = Math.abs( normal.dot( P ) - normal.dot( tri.a ) );
+		if ( off > 0.05 ) return;
+		// How far outside the triangle the point is, along its plane (0 inside).
+		const edges = [ [ tri.a, tri.b ], [ tri.b, tri.c ], [ tri.c, tri.a ] ];
+		const outside = Math.max( 0, ...edges.map( ( [ p, q ] ) => new Vector3().subVectors( q, p ).cross( new Vector3().subVectors( P, p ) ).dot( normal ) / - p.distanceTo( q ) ) );
+		const distance = outside + off;
+		if ( distance < bestDistance ) {
+
+			best = i;
+			bestDistance = distance;
+
+		}
+
+	} );
+	return best;
 
 }
 

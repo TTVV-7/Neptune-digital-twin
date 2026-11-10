@@ -290,6 +290,26 @@ to the drawing** (and save) takes the drawing's. Areas added in the twin live on
 `scripts/data/b2d2-markups.json`. The script writes `public/models/b2d2-repair.json` beside the
 model for this: the areas as drawn and the concrete they're cut out of.
 
+**Changing the model in the twin.** **Edit model**, beside Edit areas in the views bar, adds to
+the structure and recolours it:
+
+- **+ Add beam**, then click where the beam meets a wall: it runs straight across to the wall facing
+  it. With **Straight across** unticked, click each end instead (anywhere on the concrete: along a
+  wall, floor to soffit for a post). A picked beam (click it) takes a **Name**, **Width**, **Depth**,
+  **Length** (about its middle) and **Colour** (concrete, steel and other presets, or any colour),
+  moves with **← → ↑ ↓** as you see it, goes **Up to the soffit** or **Down to the floor**, or is
+  deleted. It starts 0.4 × 0.6 m, then as the last one was set. Beams are part of the model: solid
+  to walk into, moved and hidden with it.
+- **Paint**, then pick a colour and click a wall, floor or soffit: the whole face takes it, as the
+  model has that face (a wall from end to end). Click another to paint it too, or the same again in
+  another colour; **Original** gives a face its own colour back. Repair areas on a painted face
+  stay as they are.
+
+**Save for everyone** sends beams and paint to the site with the admin passcode (`/api/model-edits`,
+[docs/accounts.md](docs/accounts.md)), and everyone then sees the model that way. They're kept in
+the model's own frame, so they stay put when the model is moved, and they aren't written into
+`b2d2-repair.glb`: a rebuild of the file keeps them.
+
 To see inside, press **U** to cut Google's ground away over it, or press **G** (ghost) and fly down
 through the ground into the gallery or tunnel, then **F** to walk; Google's ground stays cut away
 while you're under it there ([Models under the ground](#models-under-the-ground)).
@@ -748,6 +768,7 @@ src/views.js        preset views carried by models (the bar at the top): glide t
 src/repair-areas.js Edit areas: move, add, change and delete the B2D2 model's repair areas, saved for everyone
 src/repair-geometry.js  the repair areas' geometry (cut-outs, recesses, rebar), shared with the build
 src/repair-photos.js    photos of repair areas: the strip in the editor's panel, sending, the large view
+src/model-edits.js  Edit model: beams added to the B2D2 model and its walls painted, saved for everyone
 src/placements.js   models' positions saved on the live site for everyone (Save position for everyone),
                     and the admin passcode for anything saved for everyone
 src/shared-items.js items the admin saved for everyone: loaded for everyone, Save / Remove for everyone

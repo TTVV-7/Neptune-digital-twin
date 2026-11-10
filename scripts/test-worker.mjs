@@ -811,6 +811,33 @@ function apiTests( target ) {
 
 	} );
 
+	test( 'beams and paint added to a model in the twin: anyone lists them, only the passcode saves or removes them', async () => {
+
+		const viewer = client();
+		const send = ( method, path, body, key = PLACEMENT_KEY ) => viewer.send( method, `/api/model-edits/${ path }`, { body, headers: key === null ? {} : { 'X-Edit-Key': key } } );
+		const beam = { kind: 'beam', a: [ 30, 1.2, - 7.2 ], b: [ 30, 1.2, - 0.8 ], width: 0.4, depth: 0.6, colour: '#9aa3ad', name: 'B1' };
+		const paint = { kind: 'paint', layer: 'c31', at: [ 40, 0.5, - 7.17 ], n: [ 0, 0, 1 ], colour: '#F2C14E' };
+
+		assert.deepEqual( ( await viewer.send( 'GET', '/api/model-edits/b2d2-repair' ) ).body, { edits: [] } );
+		assert.equal( ( await send( 'PUT', 'b2d2-repair/beam-1', beam, null ) ).status, 403 );
+		assert.equal( ( await send( 'PUT', 'b2d2-repair/beam-1', beam, 'nope' ) ).status, 403 );
+		for ( const body of [
+			{ ...beam, kind: 'column' }, { ...beam, colour: 'red' }, { ...beam, b: beam.a }, { ...beam, a: [ 1, 2 ] }, { ...beam, width: 0 }, { ...beam, depth: 50 },
+			{ ...beam, name: 'x'.repeat( 200 ) }, { ...paint, layer: 'bad layer!' }, { ...paint, n: [ 0, 0, 0 ] }, { ...paint, at: 'here' }, 'beam',
+		] ) assert.equal( ( await send( 'PUT', 'b2d2-repair/beam-1', body ) ).status, 400, JSON.stringify( body ) );
+
+		assert.equal( ( await send( 'PUT', 'b2d2-repair/beam-1', { ...beam, extra: 'not kept' } ) ).status, 200 );
+		assert.equal( ( await send( 'PUT', 'b2d2-repair/paint-1', paint ) ).status, 200 );
+		assert.equal( ( await send( 'PUT', 'b2d2-repair/beam-1', { ...beam, depth: 0.8 } ) ).status, 200, 'saving again replaces it' );
+		const edits = ( await client().send( 'GET', '/api/model-edits/b2d2-repair', { origin: null } ) ).body.edits.map( ( { updatedAt, ...e } ) => e );
+		assert.deepEqual( edits.sort( ( a, b ) => a.id.localeCompare( b.id ) ), [ { id: 'beam-1', ...beam, depth: 0.8 }, { id: 'paint-1', ...paint } ] );
+
+		assert.equal( ( await send( 'DELETE', 'b2d2-repair/beam-1', {}, 'nope' ) ).status, 403 );
+		for ( const id of [ 'beam-1', 'paint-1' ] ) assert.equal( ( await send( 'DELETE', `b2d2-repair/${ id }`, {} ) ).status, 204 );
+		assert.deepEqual( ( await viewer.send( 'GET', '/api/model-edits/b2d2-repair' ) ).body, { edits: [] } );
+
+	} );
+
 	test( 'photos of repair areas: anyone sees them, only the passcode adds, captions or removes them', async () => {
 
 		const viewer = client();

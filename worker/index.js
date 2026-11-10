@@ -5,6 +5,7 @@ import { premiumFor, stripeWebhook } from './premium.js';
 import { listPlacements, savePlacement } from './placements.js';
 import { deleteSharedItem, listSharedItems, saveSharedItem } from './shared-items.js';
 import { deleteAreaEdit, listAreaEdits, saveAreaEdit } from './area-edits.js';
+import { deleteModelEdit, listModelEdits, saveModelEdit } from './model-edits.js';
 import { createAreaPhoto, deleteAreaPhoto, getAreaPhotoFile, listAreaPhotos, putAreaPhotoFile, updateAreaPhoto } from './area-photos.js';
 
 // The Cloudflare Worker behind the app: "Sign in with Google", layouts saved to your account
@@ -24,8 +25,9 @@ import { createAreaPhoto, deleteAreaPhoto, getAreaPhotoFile, listAreaPhotos, put
 //   STRIPE_*, PREMIUM_*   premium equipment, off unless set (see premium.js)
 //   PLACEMENT_KEY         secret, optional: the admin's passcode for saving for everyone: models'
 //                         positions (placements.js), items (shared-items.js), repair areas
-//                         changed in the twin (area-edits.js) and their photos (area-photos.js,
-//                         kept in the PHOTOS bucket, R2: wrangler.jsonc); without it
+//                         changed in the twin (area-edits.js), their photos (area-photos.js,
+//                         kept in the PHOTOS bucket, R2: wrangler.jsonc) and beams and paint
+//                         added to a model (model-edits.js); without it
 //                         nothing can be saved for everyone
 // Without a database or GOOGLE_CLIENT_ID there are no accounts: /api/config tells the app to run
 // on its own, as on a static host, and everything else answers 503, except what's saved for
@@ -57,6 +59,9 @@ const ROUTES = [
 	{ method: 'GET', path: '/api/area-edits/:model', handler: listAreaEdits, auth: 'none', accounts: false },
 	{ method: 'PUT', path: '/api/area-edits/:model/:id', handler: saveAreaEdit, auth: 'none', accounts: false },
 	{ method: 'DELETE', path: '/api/area-edits/:model/:id', handler: deleteAreaEdit, auth: 'none', accounts: false },
+	{ method: 'GET', path: '/api/model-edits/:model', handler: listModelEdits, auth: 'none', accounts: false },
+	{ method: 'PUT', path: '/api/model-edits/:model/:id', handler: saveModelEdit, auth: 'none', accounts: false },
+	{ method: 'DELETE', path: '/api/model-edits/:model/:id', handler: deleteModelEdit, auth: 'none', accounts: false },
 	{ method: 'GET', path: '/api/area-photos/:model', handler: listAreaPhotos, auth: 'none', accounts: false },
 	{ method: 'POST', path: '/api/area-photos/:model/:area', handler: createAreaPhoto, auth: 'none', accounts: false },
 	{ method: 'PUT', path: '/api/area-photos/:model/:area/:id', handler: updateAreaPhoto, auth: 'none', accounts: false },
