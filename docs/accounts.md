@@ -54,7 +54,7 @@ visitor for a Maps key (kept in their browser) and has no sign-in.
 A **Secret** named `PLACEMENT_KEY`, any passcode you like, is the admin's passcode for saving
 on the live site for everyone: where models from `MODELS` stand (the P panel's **Save position
 for everyone**), items placed in the app (**Save for everyone**, which everyone then sees as
-part of the site), and changes to the B2D2 model's repair areas made with **Edit areas**. The app asks for
+part of the site), and changes to the B2D2 model's repair areas made with **Edit areas**, their photos included. The app asks for
 it once per browser. It needs only the database, not
 sign-in. Change it to stop anyone who had the old one; without it, nothing can be saved for
 everyone.
@@ -89,8 +89,10 @@ everyone.
    accounts are free to make), so keep one set.
 
 To set it up again elsewhere (another account or name): `npx wrangler d1 create <name>`, put its
-`database_id` in `wrangler.jsonc`, then `npm run deploy:cloudflare`, and the settings above with
-`npx wrangler secret put` or the dashboard.
+`database_id` in `wrangler.jsonc`, make the photos' bucket with `npx wrangler r2 bucket create
+neptune-twin-photos` (or another name, put in `wrangler.jsonc` under `r2_buckets`; the deploy fails
+if the bucket named there doesn't exist), then `npm run deploy:cloudflare`, and the settings above
+with `npx wrangler secret put` or the dashboard.
 
 ## Trying it on your computer
 
@@ -148,6 +150,11 @@ Tests (both run everything on your computer, with test keys standing in for Goog
 | `PUT / DELETE /api/shared-items/:id` `{ config }` | Save (add or replace) or remove an item for everyone. Needs `X-Edit-Key` to match `PLACEMENT_KEY`; a model file must be the site's own (`models/` or `library/`); at most 500 items of 32 KB |
 | `GET /api/area-edits/:model` | Anyone: `{ edits: [ { id, ..., updatedAt } ] }`, the repair areas of a model (its file name without `.glb`, e.g. `b2d2-repair`) changed in the twin: each moved or added area's outline and normal (`pts`, `n`) in the model's markup frame, with its details (`f`: status, type, text, and the day it reached each stage: chipped, sandblasted, epoxy, shotcreted; `no`, its panel number; `zone`, `face`, `grid`, `area`) where changed or added (`added: true`), or `deleted: true` for one taken away. Needs only the database |
 | `PUT / DELETE /api/area-edits/:model/:id` `{ pts, n, f?, no?, zone?, face?, grid?, area?, added? }` or `{ deleted: true }` | Save an area's change for everyone, or forget it (the drawing's area back as drawn; one added in the twin gone). Needs `X-Edit-Key` to match `PLACEMENT_KEY`; three to 200 corners; at most 2000 areas a model |
+| `GET /api/area-photos/:model` | Anyone: `{ photos: [ { id, area, stage, taken, caption, width, height, size, createdAt } ] }`, the photos of a model's repair areas. Needs the database; empty without the `PHOTOS` bucket |
+| `GET /api/area-photos/:model/:area/:id/:kind` | Anyone: a photo's file, `full` (as taken), `view` (for the screen) or `thumb`. They never change, so they're served to be kept (`immutable`) |
+| `POST /api/area-photos/:model/:area` `{ stage, taken, caption, width, height }` | Start a photo: answers with its `id`. Needs `X-Edit-Key`; at most 5,000 photos a model |
+| `PUT /api/area-photos/:model/:area/:id/:kind` (the image's bytes) | Send `thumb`, `view`, then `full` (at most 400 KB, 4 MB, 40 MB; JPEG, PNG, WebP or HEIC). The photo is listed once `full` has arrived. Needs `X-Edit-Key` |
+| `PUT / DELETE /api/area-photos/:model/:area/:id` `{ caption?, stage?, taken? }` | Change a photo's caption, stage or day, or delete it, files and all. Needs `X-Edit-Key` |
 
 `premium` is `{ enabled: false }` until Stripe is set up, then `{ enabled: true, link, price,
 unlocked, clientReferenceId? }`.

@@ -262,6 +262,17 @@ models** off in the Show panel), then:
 - **Delete area** takes it away (**Bring back** returns the drawing's ones), **Back to the drawing**
   puts one of the drawing's areas back as the markups have it, and **Undo** takes back the last change.
 
+**Photos.** A picked area has a **Photos** strip in the panel. **Add photos** takes pictures from
+your device (several at once; JPEG, PNG, WebP, or HEIC where the browser can open it, up to 40 MB
+each) and keeps each on the site as it was taken, with a copy sized for the screen and a small one
+for the strip. Each is filed under the stage the panel is at and the day it was taken. Click one to
+see it large, step through them (← →), give it a caption, open it **Full size** or delete it. A
+panel with photos shows a camera and how many on its number, and anyone can look at them in the
+panel. Adding, captioning and deleting ask for the admin passcode and happen at once (they aren't
+part of Save for everyone). The pictures live in the `neptune-twin-photos` R2 bucket and what
+they show in the database (`/api/area-photos`, [docs/accounts.md](docs/accounts.md)). An area you
+added and then delete takes its photos with it.
+
 **+ Add area** draws a new one on the wall, floor or soffit you start on: drag a box (square to the
 face, level on a wall), or click its corners one by one and click the first again, double-click
 or press Enter to finish (Backspace takes a corner back, Esc stops). It takes the status
@@ -736,6 +747,7 @@ src/underground.js  under Google's ground in your own models: the mesh over them
 src/views.js        preset views carried by models (the bar at the top): glide the camera to each
 src/repair-areas.js Edit areas: move, add, change and delete the B2D2 model's repair areas, saved for everyone
 src/repair-geometry.js  the repair areas' geometry (cut-outs, recesses, rebar), shared with the build
+src/repair-photos.js    photos of repair areas: the strip in the editor's panel, sending, the large view
 src/placements.js   models' positions saved on the live site for everyone (Save position for everyone),
                     and the admin passcode for anything saved for everyone
 src/shared-items.js items the admin saved for everyone: loaded for everyone, Save / Remove for everyone

@@ -105,4 +105,27 @@ export const MIGRATIONS = [
 			);
 		`,
 	},
+	{
+		version: 6,
+		// worker/migrations/0006_area_photos.sql: photos of repair areas (the files are in R2, which
+		// this copy of the site doesn't have, so the table stays empty here).
+		sql: `
+			CREATE TABLE IF NOT EXISTS area_photos (
+				id TEXT PRIMARY KEY,
+				model TEXT NOT NULL,
+				area TEXT NOT NULL,
+				stage TEXT NOT NULL DEFAULT '',
+				taken TEXT NOT NULL DEFAULT '',
+				caption TEXT NOT NULL DEFAULT '',
+				width INTEGER NOT NULL DEFAULT 0,
+				height INTEGER NOT NULL DEFAULT 0,
+				size BIGINT NOT NULL DEFAULT 0,
+				type TEXT NOT NULL DEFAULT '',
+				ready INTEGER NOT NULL DEFAULT 0,
+				created_at BIGINT NOT NULL
+			);
+
+			CREATE INDEX IF NOT EXISTS area_photos_by_area ON area_photos ( model, area, created_at );
+		`,
+	},
 ];

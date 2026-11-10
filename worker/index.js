@@ -5,6 +5,7 @@ import { premiumFor, stripeWebhook } from './premium.js';
 import { listPlacements, savePlacement } from './placements.js';
 import { deleteSharedItem, listSharedItems, saveSharedItem } from './shared-items.js';
 import { deleteAreaEdit, listAreaEdits, saveAreaEdit } from './area-edits.js';
+import { createAreaPhoto, deleteAreaPhoto, getAreaPhotoFile, listAreaPhotos, putAreaPhotoFile, updateAreaPhoto } from './area-photos.js';
 
 // The Cloudflare Worker behind the app: "Sign in with Google", layouts saved to your account
 // and shared by link (see docs/accounts.md), and premium equipment bought with Stripe
@@ -22,14 +23,16 @@ import { deleteAreaEdit, listAreaEdits, saveAreaEdit } from './area-edits.js';
 //   GOOGLE_JWKS_URL       tests only: where to get the keys ID tokens are signed with
 //   STRIPE_*, PREMIUM_*   premium equipment, off unless set (see premium.js)
 //   PLACEMENT_KEY         secret, optional: the admin's passcode for saving for everyone: models'
-//                         positions (placements.js), items (shared-items.js) and repair areas
-//                         moved in the twin (area-edits.js); without it
+//                         positions (placements.js), items (shared-items.js), repair areas
+//                         changed in the twin (area-edits.js) and their photos (area-photos.js,
+//                         kept in the PHOTOS bucket, R2: wrangler.jsonc); without it
 //                         nothing can be saved for everyone
 // Without a database or GOOGLE_CLIENT_ID there are no accounts: /api/config tells the app to run
 // on its own, as on a static host, and everything else answers 503, except what's saved for
 // everyone (accounts: false: models' positions, shared items, moved areas), which needs only the database.
 
-// auth: 'required' (the default) answers 401 when signed out; 'optional' looks the user up if
+// bytes: true takes an image's bytes instead of JSON (a photo's file). auth: 'required' (the
+// default) answers 401 when signed out; 'optional' looks the user up if
 // there's a session; 'none' doesn't. sameOrigin: false skips the cross-site check, for Stripe's
 // webhook only: it comes from Stripe's servers, not a page, and is signed instead.
 const ROUTES = [
@@ -54,6 +57,12 @@ const ROUTES = [
 	{ method: 'GET', path: '/api/area-edits/:model', handler: listAreaEdits, auth: 'none', accounts: false },
 	{ method: 'PUT', path: '/api/area-edits/:model/:id', handler: saveAreaEdit, auth: 'none', accounts: false },
 	{ method: 'DELETE', path: '/api/area-edits/:model/:id', handler: deleteAreaEdit, auth: 'none', accounts: false },
+	{ method: 'GET', path: '/api/area-photos/:model', handler: listAreaPhotos, auth: 'none', accounts: false },
+	{ method: 'POST', path: '/api/area-photos/:model/:area', handler: createAreaPhoto, auth: 'none', accounts: false },
+	{ method: 'PUT', path: '/api/area-photos/:model/:area/:id', handler: updateAreaPhoto, auth: 'none', accounts: false },
+	{ method: 'DELETE', path: '/api/area-photos/:model/:area/:id', handler: deleteAreaPhoto, auth: 'none', accounts: false },
+	{ method: 'GET', path: '/api/area-photos/:model/:area/:id/:kind', handler: getAreaPhotoFile, auth: 'none', accounts: false },
+	{ method: 'PUT', path: '/api/area-photos/:model/:area/:id/:kind', handler: putAreaPhotoFile, auth: 'none', accounts: false, bytes: true },
 ];
 
 export default {
@@ -95,7 +104,7 @@ async function handle( request, env, url ) {
 		if ( ! env.DB ) throw new HttpError( 503, 'No database' );
 
 	} else if ( ! env.DB || ! env.GOOGLE_CLIENT_ID ) return withoutAccounts( request, url, env );
-	if ( route.sameOrigin !== false ) checkSameOrigin( request, url );
+	if ( route.sameOrigin !== false ) checkSameOrigin( request, url, route.bytes === true );
 	const auth = route.auth ?? 'required';
 	const user = auth === 'none' ? null : await currentUser( request, env, url );
 	if ( auth === 'required' && ! user ) throw new HttpError( 401, 'Sign in first' );

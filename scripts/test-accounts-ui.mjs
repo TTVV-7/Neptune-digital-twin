@@ -12,6 +12,7 @@ import { mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
+import sharp from 'sharp';
 import { CLIENT_ID, GOOGLE_STUB, dropProjectModels, makeKey, makeToken, serveKeys, startVite, startWorker } from './worker-harness.mjs';
 
 const require = createRequire( import.meta.url );
@@ -336,7 +337,7 @@ test( 'the admin moves and adds B2D2 repair areas and saves them for everyone; p
 
 	const admin = await newPage();
 	const answers = [ PASSCODE ];
-	admin.on( 'dialog', d => d.accept( answers.shift() ) );
+	admin.on( 'dialog', d => d.type() === 'prompt' && d.accept( answers.shift() ) );
 	await openApp( admin, undefined, { keepProjectModels: true } );
 	await admin.waitForFunction( () => window.twin.repairAreas?.areas && window.twin.models.entries.some( e => e.url?.endsWith( 'b2d2-repair.glb' ) && ! e.placing ), null, { timeout: 60000 } );
 	await admin.evaluate( () => window.twin.views.go( 'C31' ) );
@@ -478,12 +479,28 @@ test( 'the admin moves and adds B2D2 repair areas and saves them for everyone; p
 	assert.deepEqual( drawn3d, { materials: [ 'Sandblasted concrete', 'Sandblasted rim', 'Sandblasted rebar' ], numbers: 1, no: 'C31-01' } );
 	await shot( admin, 'area-editor' );
 
-	// Deleted, it's gone for everyone.
+	// A photo of it: kept on the site at the stage the panel is at, for everyone to see.
+	const picture = await sharp( { create: { width: 1600, height: 1200, channels: 3, background: '#8a6a4a' } } ).jpeg().toBuffer();
+	await admin.evaluate( () => document.querySelectorAll( '.toast' ).forEach( t => t.remove() ) );
+	await admin.locator( '#area-editor .photos input[type=file]' ).setInputFiles( { name: 'panel.jpg', mimeType: 'image/jpeg', buffer: picture } );
+	await admin.waitForFunction( () => [ ...document.querySelectorAll( '.toast' ) ].some( t => /^1 photo added/.test( t.textContent ) ), null, { timeout: 60000 } );
+	const shots = () => admin.evaluate( async () => ( await ( await fetch( '/api/area-photos/b2d2-repair' ) ).json() ).photos );
+	const [ shot1 ] = await shots();
+	assert.deepEqual( [ shot1.area, shot1.stage, shot1.width, shot1.height, shot1.size ], [ added.id, 'Sandblasted', 1600, 1200, picture.length ] );
+	await admin.locator( '#area-editor .photos .strip button' ).click();
+	await admin.waitForFunction( () => document.querySelector( '#area-photo img' )?.naturalWidth === 1600 );
+	await admin.keyboard.press( 'Escape' );
+	assert.equal( await admin.locator( '#area-photo' ).isVisible(), false );
+	assert.match( await admin.locator( '#area-editor .what' ).textContent(), /C31-01/, 'the area is still picked' );
+
+	// Deleted, it's gone for everyone, its photo with it.
+	admin.on( 'dialog', d => d.type() === 'confirm' && d.accept() );
 	await admin.locator( '#area-editor .delete' ).click();
 	await admin.evaluate( () => document.querySelectorAll( '.toast' ).forEach( t => t.remove() ) );
 	await admin.locator( '#area-editor .save' ).click();
 	await admin.waitForFunction( () => [ ...document.querySelectorAll( '.toast' ) ].some( t => /^Saved for everyone: 1 change/.test( t.textContent ) ) );
 	assert.deepEqual( await saved(), [] );
+	await admin.waitForFunction( async () => ( await ( await fetch( '/api/area-photos/b2d2-repair' ) ).json() ).photos.length === 0 );
 	await admin.locator( '#area-editor .done' ).click();
 	assert.equal( await admin.locator( '#area-editor' ).isVisible(), false );
 	await admin.context().close();

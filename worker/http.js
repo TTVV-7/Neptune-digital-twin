@@ -58,12 +58,14 @@ export function errorResponse( err ) {
 // cookie, but it can't send JSON without a CORS preflight (which we never answer), and the
 // browser always says where the request came from in Origin. So every request that changes
 // something must be JSON and come from this site's own pages.
-export function checkSameOrigin( request, url ) {
+// A route that takes a file's bytes (`bytes`, a photo) takes them as an image instead: no page
+// elsewhere can send one with the passcode's header without a preflight either.
+export function checkSameOrigin( request, url, bytes = false ) {
 
 	if ( SAFE_METHODS.has( request.method ) ) return;
 	if ( request.headers.get( 'Origin' ) !== url.origin ) throw new HttpError( 403, 'Forbidden' );
 	const type = ( request.headers.get( 'Content-Type' ) ?? '' ).split( ';' )[ 0 ].trim().toLowerCase();
-	if ( type !== 'application/json' ) throw new HttpError( 415, 'Send JSON' );
+	if ( bytes ? ! type.startsWith( 'image/' ) : type !== 'application/json' ) throw new HttpError( 415, bytes ? 'Not a photo' : 'Send JSON' );
 
 }
 

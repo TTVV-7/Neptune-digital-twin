@@ -3,6 +3,7 @@ import { BufferAttribute, BufferGeometry, CanvasTexture, DoubleSide, Group, Line
 import { loadConfig } from './cloud.js';
 import { sendForEveryone } from './placements.js';
 import { useFastRaycast } from './raycast.js';
+import { createAreaPhotos } from './repair-photos.js';
 import { areaExtras, areaName, areaParts, basisOf, CHIPPED, cutOut, describeArea, LOOKS, lookNames, outlineNormal, rimOf, STAGES, stageOf, trianglesOf } from './repair-geometry.js';
 import { isTyping } from './walk.js';
 
@@ -157,6 +158,8 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 
 		if ( ! selected ) return;
 		const { s, id } = selected;
+		const shots = photos.count( s.model, id );
+		if ( shots && ! s.base.has( id ) && ! window.confirm( `Delete this area and its ${ shots } photo${ shots === 1 ? '' : 's' }? The photos go for good when you save.` ) ) return;
 		change( s, id, { deleted: true } );
 		select( null );
 
@@ -171,6 +174,16 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 	for ( const field of panel.querySelectorAll( '[data-field]' ) ) field.addEventListener( 'change', () => setDetail( field.dataset.field, field.value.trim() ) );
 	$( '.undo' ).addEventListener( 'click', undo );
 	$( '.save' ).addEventListener( 'click', save );
+
+	// The picked area's photos (repair-photos.js), under its details. A panel with photos says so
+	// on its number, for everyone.
+	const photos = createAreaPhotos( { toast, onChange: ( model, area ) => {
+
+		for ( const s of states.values() ) if ( s.model === model && s.data ) rebuild( s, area );
+		render();
+
+	} } );
+	$( '.details' ).after( photos.section );
 
 	function render() {
 
@@ -226,6 +239,12 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 					? dirty ? 'Added, not saved yet. ' : 'Added in the twin, saved for everyone. '
 					: dirty ? 'Changed, not saved yet. ' : where ? 'Changed, and saved for everyone. ' : 'As the drawing has it. ' }Drag it to slide it along its face.`
 				: 'Right-drag to look round, and WASD or the arrow keys to move, as usual.';
+		photos.show( m && ! drawing ? {
+			model: selected.s.model, area: selected.id, stage: m.f?.status,
+			name: `${ m.no ? `No. ${ m.no } · ` : '' }${ m.face ?? '' }`.trim(),
+			// One drawn here and not saved yet isn't on the site for photos to belong to.
+			locked: added && dirty ? 'Save the area for everyone first, then add its photos.' : '',
+		} : null );
 		summarise( ! m && ! drawing );
 		const taken = [ ...states.values() ].reduce( ( n, s ) => n + takenAway( s ).length, 0 );
 		$( '.taken' ).hidden = taken === 0 || !! drawing;
@@ -286,6 +305,15 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 		states.set( entry, s );
 		render();
 		loadSaved( s );
+		// Panels with photos say so on their numbers.
+		photos.load( s.model ).then( async any => {
+
+			if ( ! any || states.get( entry ) !== s ) return;
+			await ensureData( s );
+			for ( const area of photos.areas( s.model ) ) rebuild( s, area );
+			render();
+
+		} ).catch( () => {} );
 
 	}
 
@@ -616,7 +644,7 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 		}
 
 		useFastRaycast( node );
-		if ( m.no ) node.add( numberOf( s, m, plane ) );
+		if ( m.no || photos.count( s.model, id ) ) node.add( numberOf( s, m, plane ) );
 		if ( old?.parent ) {
 
 			old.parent.children.splice( old.parent.children.indexOf( old ), 1, node );
@@ -652,17 +680,23 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 
 
 	// A panel's number, floating just off the middle of it: always facing you, hidden by what's in
-	// front of it, and about the same size on the screen from close up to across the gallery.
+	// front of it, and about the same size on the screen from close up to across the gallery. With
+	// a camera and how many, if it has photos.
 	function numberOf( s, m, plane ) {
 
-		const text = String( m.no );
+		const no = m.no ? String( m.no ) : '';
+		const shots = photos.count( s.model, m.id );
 		const canvas = document.createElement( 'canvas' );
 		const ctx = canvas.getContext( '2d' );
-		const font = '600 44px system-ui, -apple-system, "Segoe UI", sans-serif';
-		ctx.font = font;
-		canvas.width = Math.ceil( ctx.measureText( text ).width ) + 36;
+		const big = '600 44px system-ui, -apple-system, "Segoe UI", sans-serif';
+		const small = '600 32px system-ui, -apple-system, "Segoe UI", sans-serif';
+		ctx.font = big;
+		const noWidth = no ? ctx.measureText( no ).width : 0;
+		ctx.font = small;
+		const shotsWidth = shots ? 36 + ctx.measureText( String( shots ) ).width : 0;
+		const gap = no && shots ? 16 : 0;
+		canvas.width = Math.ceil( noWidth + gap + shotsWidth ) + 36;
 		canvas.height = 64;
-		ctx.font = font;
 		ctx.fillStyle = '#0f1b2b';
 		ctx.strokeStyle = '#ffffff';
 		ctx.lineWidth = 3;
@@ -670,10 +704,34 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 		ctx.roundRect( 2, 2, canvas.width - 4, canvas.height - 4, 14 );
 		ctx.fill();
 		ctx.stroke();
-		ctx.fillStyle = '#ffffff';
-		ctx.textAlign = 'center';
+		ctx.textAlign = 'left';
 		ctx.textBaseline = 'middle';
-		ctx.fillText( text, canvas.width / 2, canvas.height / 2 + 2 );
+		if ( no ) {
+
+			ctx.font = big;
+			ctx.fillStyle = '#ffffff';
+			ctx.fillText( no, 18, 34 );
+
+		}
+
+		if ( shots ) {
+
+			const x = 18 + noWidth + gap;
+			ctx.fillStyle = '#9fd0ff';
+			ctx.beginPath();
+			ctx.roundRect( x, 23, 28, 20, 4 );
+			ctx.fill();
+			ctx.fillRect( x + 8, 18, 12, 6 );
+			ctx.fillStyle = '#0f1b2b';
+			ctx.beginPath();
+			ctx.arc( x + 14, 33, 6, 0, Math.PI * 2 );
+			ctx.fill();
+			ctx.fillStyle = '#9fd0ff';
+			ctx.font = small;
+			ctx.fillText( String( shots ), x + 36, 34 );
+
+		}
+
 		const map = new CanvasTexture( canvas );
 		map.colorSpace = SRGBColorSpace;
 		const sprite = new Sprite( new SpriteMaterial( { map, transparent: true, depthWrite: false } ) );
@@ -1046,6 +1104,8 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 			else s.saved.set( id, edit );
 			s.local.delete( id );
 			done ++;
+			// One added here and now gone for good: its photos go with it.
+			if ( gone && ! s.base.has( id ) ) await photos.removeAll( s.model, id );
 
 		}
 
