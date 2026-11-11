@@ -446,6 +446,11 @@ button.reward:hover {
 	border: 5px solid var( --swatch );
 }
 
+/* An underglow's swatch glows. */
+.reward .swatch.glow {
+	box-shadow: inset 0 0 0 1px rgba( 255, 255, 255, 0.3 ), 0 0 7px 1px var( --swatch );
+}
+
 .reward .tag {
 	padding: 1px 5px;
 	border-radius: 6px;

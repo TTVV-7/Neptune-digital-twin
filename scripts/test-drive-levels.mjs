@@ -29,7 +29,7 @@ import {
 } from '../src/drive-app/levels.js';
 import { CARS } from '../src/drive-app/cars.js';
 import { BOOSTS } from '../src/drive-app/boosts.js';
-import { DECALS, FINISHES, FLAMES, RIMS, SMOKES, SWATCHES, TRAILS, isLocked, lookFor, saveLook, unlockOf } from '../src/drive-app/paint.js';
+import { DECALS, FINISHES, FLAMES, GLOWS, HORNS, RIMS, SMOKES, SWATCHES, TRAILS, isLocked, lookFor, saveLook, unlockOf } from '../src/drive-app/paint.js';
 import { SPOTS } from '../src/drive-app/places.js';
 import { makeVisit } from '../worker/drive/visits.js';
 
@@ -45,7 +45,7 @@ const NOON = Date.UTC( 2026, 10, 1, 12 );
 const KART = { id: 'go-kart', colour: 'blaze' };
 const pick = ( { colour, boost, rim, trail } ) => ( { colour, boost, rim, trail } );
 // The Garage's lists, by part (paint.js, boosts.js).
-const LISTS = { colour: SWATCHES, finish: FINISHES, decal: DECALS, rim: RIMS, boost: BOOSTS, flame: FLAMES, trail: TRAILS };
+const LISTS = { colour: SWATCHES, finish: FINISHES, decal: DECALS, rim: RIMS, glow: GLOWS, boost: BOOSTS, flame: FLAMES, trail: TRAILS, horn: HORNS };
 const PLACES = [ [ 46.5725, 8.4153 ], [ 49.30653, - 123.04957 ], [ 37.8199, - 122.4783 ], [ 40.75765, - 73.98577 ], [ 43.73658, 7.42144 ], [ 35.6595, 139.7005 ], [ - 33.8523, 151.2108 ] ];
 const AREAS = PLACES.map( ( [ lat, lon ] ) => areaOf( lat, lon ) );
 
@@ -170,7 +170,19 @@ describe( 'Levels: the curve and the unlock track', () => {
 		assert.ok( onTrack.every( r => r.level >= 2 && r.level <= 49 ) );
 		for ( const reward of onTrack ) assert.ok( passLooks.includes( `${ reward.part }:${ reward.id }` ), reward.id );
 		// The showiest stay the pass's alone.
-		for ( const [ part, id ] of [ [ 'boost', 'lightning' ], [ 'boost', 'fireworks' ], [ 'boost', 'comet' ], [ 'boost', 'galaxy' ], [ 'boost', 'laser' ], [ 'trail', 'ribbon' ], [ 'trail', 'neon' ], [ 'flame', 'rainbow' ], [ 'rim', 'gold' ], [ 'finish', 'metallic' ] ] ) assert.equal( unlockLevel( part, id ), null, id );
+		for ( const [ part, id ] of [ [ 'boost', 'lightning' ], [ 'boost', 'fireworks' ], [ 'boost', 'comet' ], [ 'boost', 'galaxy' ], [ 'boost', 'laser' ], [ 'trail', 'ribbon' ], [ 'trail', 'neon' ], [ 'flame', 'rainbow' ], [ 'rim', 'gold' ], [ 'finish', 'metallic' ], [ 'finish', 'chrome' ], [ 'finish', 'shift' ], [ 'glow', 'rainbow' ] ] ) assert.equal( unlockLevel( part, id ), null, id );
+		// The Garage's later looks on the track (the underglow, horns, more paint, finishes, decals and
+		// rims), each where the track had only a title or a badge, and the only look there.
+		for ( const [ level, part, id ] of [
+			[ 10, 'glow', 'blue' ], [ 17, 'colour', 'sky' ], [ 20, 'decal', 'bolts' ], [ 24, 'rim', 'black' ], [ 29, 'finish', 'satin' ], [ 32, 'horn', 'air' ], [ 36, 'colour', 'candy' ],
+			[ 38, 'glow', 'green' ], [ 41, 'decal', 'camo' ], [ 42, 'rim', 'chrome' ], [ 44, 'colour', 'gunmetal' ], [ 46, 'finish', 'pearl' ], [ 48, 'horn', 'fanfare' ], [ 49, 'glow', 'purple' ],
+		] ) {
+
+			assert.equal( unlockLevel( part, id ), level, id );
+			assert.equal( rewardsAt( level ).filter( r => r.kind === 'look' ).length, 1, id );
+			assert.ok( rewardsAt( level ).some( r => r.kind === 'title' || r.kind === 'badge' ), id );
+
+		}
 		// Six cars, from the golf cart at 5 to the formula racer at 40, each a car World Drive has and
 		// the leaderboard takes, with the pass too; never the pass's own (its first nine rides and
 		// its showpieces), and nothing else named after a ride.

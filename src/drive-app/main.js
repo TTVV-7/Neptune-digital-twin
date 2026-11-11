@@ -23,6 +23,7 @@ import { buyArea, onPassOpen } from './pass.js';
 import { fillAccountArea, fillBuyArea, linkPlayer, onLinked, setUpSupporter } from './supporter.js';
 import { onProChange } from './pro.js';
 import { applyLook } from './paint.js';
+import { liftGlow } from './underglow.js';
 import { createProgress, onLevelChange } from './progress.js';
 import { setUpProfile } from './profile.js';
 import { formatLatLon, LINK_PARAMS, linkedPlace, rememberPlace, worldOf } from './places.js';
@@ -1297,6 +1298,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		timer.update( time );
 		const dt = Math.min( timer.getDelta(), 0.1 );
 		if ( driver.active ) driver.update( dt );
+		// The underglow fades as the ground falls away (a jump, flying) and comes back on it.
+		if ( state.entry ) liftGlow( state.entry.pivot, flagsOf( driver, state.mode === 'paused' ), dt );
 		screenFx.update( dt, state.mode === 'driving' || state.mode === 'paused' );
 		// The open sea's surface stays round the vehicle.
 		if ( driver.active ) sea.follow( driver.east, driver.north, driver.y );

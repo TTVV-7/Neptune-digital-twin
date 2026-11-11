@@ -3,7 +3,8 @@
 // the real Moon here, not a stand-in: the globe turned to it (its files fetched only then), its
 // spots, its own search and its recent places kept apart; a drop-in on its ground, with its gravity,
 // its sky and no water; a hop as high as on the Earth that stays up two and a half times as long and
-// isn't scored as big air; the ground made sharp round the vehicle; M back to its globe, and back to
+// isn't scored as big air; an underglow lying on its ground under the kart, as on the Earth; the
+// ground made sharp round the vehicle; M back to its globe, and back to
 // the Earth; a link to a Moon spot; and a phone. Every request that isn't to the local server is
 // blocked.
 //
@@ -221,6 +222,35 @@ describe( 'World Drive on the Moon', () => {
 		await page.keyboard.up( 'KeyW' );
 		assert.ok( await page.evaluate( () => window.drive.driver.grounded ) );
 		await shot( page, 'moon-2-driving' );
+		assert.deepEqual( page.errors, [] );
+
+	} );
+
+	test( 'an underglow lies on its ground under the kart, as on the Earth', async () => {
+
+		const glow = await page.evaluate( async () => {
+
+			const { applyLook, lookFor } = await import( '/src/drive-app/paint.js' );
+			const { entry, driver: d, ground } = window.drive;
+			const kart = { id: 'go-kart', colour: 'blaze' };
+			applyLook( entry.pivot, { ...lookFor( kart ), glow: 'ice' }, kart );
+			const glow = entry.pivot.userData.glow;
+			// A few frames (about one a second here), the glow eased in each as main.js does.
+			const end = performance.now() + 3000;
+			while ( performance.now() < end ) await new Promise( requestAnimationFrame );
+			const under = ground.heightAt( - d.east, d.north, d.y + 30, 60 );
+			return { visible: glow.visible, lift: glow.userData.lift, grounded: d.grounded, over: glow.getWorldPosition( glow.position.clone() ).y - under };
+
+		} );
+		assert.ok( glow.visible && glow.lift > 0.99 && glow.grounded && Math.abs( glow.over ) < 0.3, JSON.stringify( glow ) );
+		await shot( page, 'moon-underglow' );
+		await page.evaluate( async () => {
+
+			const { applyLook, lookFor } = await import( '/src/drive-app/paint.js' );
+			const kart = { id: 'go-kart', colour: 'blaze' };
+			applyLook( window.drive.entry.pivot, lookFor( kart ), kart );
+
+		} );
 		assert.deepEqual( page.errors, [] );
 
 	} );

@@ -9,12 +9,15 @@
 // how high the same wall throws them, and that it goes supersonic); the hovercraft hovers with no
 // wheels, and rides over water (the test pad's sea, as Google draws water) throwing up spray, where
 // the coupe drives across it too but with none, and no boost pads put down on it; the Garage's
-// paint, decals, boost style,
-// flame and trail go on the ride being driven and are still there after a reload, and a look saved
-// before the boost styles keeps its flame's colour; what a trail and the booster cost a frame;
-// every boost style drawn at 150 km/h (a picture of each), keeping to its budget and making nothing
-// new in a minute of boosting, and what each costs a frame; every flame colour drawn in its own
-// colours and every trail drawn behind the kart; and the Garage and the badges on a phone. And World Drive's cars (src/drive-app/cars.js): listed, credited, small and their real
+// paint, decals, underglow, boost style, flame, trail and horn go on the ride being driven and are
+// still there after a reload, and a look saved before the boost styles keeps its flame's colour; the
+// underglow under every kind of ride (the kart, a ride, the cars and the library's pickup), sized to
+// it and left out of its size, and the new finishes, rims and decals; another driver's ghost wearing
+// their underglow, fading off the ground, and their horn heard in its own sound; what a trail and the
+// booster cost a frame; every boost style drawn at 150 km/h (a picture of each), keeping to its budget
+// and making nothing new in a minute of boosting, and what each costs a frame; every flame colour
+// drawn in its own colours and every trail drawn behind the kart; and the Garage and the badges on a
+// phone (375 px across, its row of groups all on screen). And World Drive's cars (src/drive-app/cars.js): listed, credited, small and their real
 // size, with wheels that steer, each facing the way it drives; the muscle car free, the levels'
 // cars saying their level and the rest locked; each driving, drifting, thrown up and landing, going
 // supersonic, its wheels spinning and steering, the tall ones leaning out of a turn, and a look from
@@ -316,15 +319,32 @@ describe( 'Supporter Pass, without it', () => {
 		await garage.waitFor();
 		await page.waitForFunction( () => window.drive.garage.preview?.model, null, { timeout: 20000 } );
 		assert.equal( await garage.locator( '.ride-tab[aria-pressed="true"]' ).textContent(), 'Go-kart' );
-		// Three colours free, nine the pass's (and four only levels give: scripts/test-drive-levels.mjs);
-		// gloss free; every decal but none locked; orange flame free.
+		// Three colours free, seventeen the pass's (and four only levels give: scripts/test-drive-levels.mjs);
+		// gloss free; every decal but none locked; no underglow free but none; orange flame free; the
+		// beep the only free horn.
 		assert.equal( await garage.locator( '[data-part="colour"] .choice:not(.locked)' ).count(), 3 );
-		assert.equal( await garage.locator( '[data-part="colour"] .choice.locked.pass' ).count(), 9 );
+		assert.equal( await garage.locator( '[data-part="colour"] .choice.locked.pass' ).count(), 17 );
 		assert.equal( await garage.locator( '[data-part="colour"] .choice.locked.level-only' ).count(), 4 );
 		assert.deepEqual( await garage.locator( '[data-part="finish"] .choice:not(.locked)' ).allTextContents(), [ 'Gloss⭐' ] );
+		assert.equal( await garage.locator( '[data-part="finish"] .choice.locked' ).count(), 6 );
 		assert.deepEqual( await garage.locator( '[data-part="decal"] .choice:not(.locked)' ).allTextContents(), [ 'None⭐' ] );
+		assert.equal( await garage.locator( '[data-part="decal"] .choice.locked' ).count(), 8 );
+		assert.equal( await garage.locator( '[data-part="rim"] .choice.locked' ).count(), 10 );
+		assert.deepEqual( await garage.locator( '[data-part="glow"] .choice:not(.locked)' ).evaluateAll( list => list.map( b => b.dataset.id ) ), [ 'none' ] );
+		assert.equal( await garage.locator( '[data-part="glow"] .choice.locked.pass' ).count(), 9 );
 		assert.equal( await garage.locator( '[data-part="flame"] .choice:not(.locked)' ).count(), 1 );
 		assert.deepEqual( await garage.locator( '[data-part="trail"] .choice:not(.locked)' ).allTextContents(), [ 'None⭐' ] );
+		assert.deepEqual( await garage.locator( '[data-part="horn"] .choice:not(.locked)' ).allTextContents(), [ 'Beep⭐' ] );
+		assert.equal( await garage.locator( '[data-part="horn"] .choice.locked.pass' ).count(), 5 );
+		// The levels' new looks say so: neon blue underglow at 10, the air horn at 32.
+		assert.equal( await garage.locator( '[data-part="glow"] .choice[data-id="blue"] .unlock' ).textContent(), 'Lv 10' );
+		assert.equal( await garage.locator( '[data-part="horn"] .choice[data-id="air"] .unlock' ).textContent(), 'Lv 32 · or Pass' );
+		// A row of the groups over the choices; the swatch picked named by its heading.
+		const jump = garage.locator( '.jump button' );
+		assert.deepEqual( await jump.allTextContents(), [ 'Paint', 'Rims', 'Underglow', 'Boost', 'Trail', 'Horn' ] );
+		assert.equal( await garage.locator( '.jump [aria-current="true"]' ).textContent(), 'Paint' );
+		assert.equal( await garage.locator( '[data-part="colour"] h3' ).textContent(), 'Body colourBlaze orange' );
+		assert.equal( await garage.locator( '[data-part="glow"] h3 .picked' ).textContent(), 'None' );
 		// One word on the pass over the choices, not a badge on every part.
 		assert.equal( await garage.locator( '.pass-note .pro-badge' ).textContent(), '⭐ Supporter Pass' );
 		assert.ok( await garage.locator( '.pass-note' ).isVisible() );
@@ -349,11 +369,35 @@ describe( 'Supporter Pass, without it', () => {
 		await garage.locator( '[data-part="flame"] .choice[data-id="rainbow"]' ).click();
 		await page.locator( '#pass' ).waitFor();
 		await page.locator( '#pass .close' ).click();
+		await garage.locator( '[data-part="glow"] .choice[data-id="blue"]' ).click();
+		await page.locator( '#pass' ).waitFor();
+		await page.locator( '#pass .close' ).click();
+		await garage.locator( '[data-part="horn"] .choice[data-id="laser"]' ).click();
+		await page.locator( '#pass' ).waitFor();
+		await page.locator( '#pass .close' ).click();
 		// Free: on.
 		await garage.locator( '[data-part="colour"] .choice[data-id="red"]' ).click();
 		const saved = await page.evaluate( () => JSON.parse( localStorage.getItem( 'world-drive.garage' ) )[ 'go-kart' ] );
-		assert.deepEqual( { colour: saved.colour, flame: saved.flame, trail: saved.trail, decal: saved.decal }, { colour: 'red', flame: 'orange', trail: 'none', decal: 'none' } );
+		assert.deepEqual( { colour: saved.colour, flame: saved.flame, trail: saved.trail, decal: saved.decal, glow: saved.glow, horn: saved.horn }, { colour: 'red', flame: 'orange', trail: 'none', decal: 'none', glow: 'none', horn: 'beep' } );
 		assert.ok( await garage.locator( '[data-part="colour"] .choice[data-id="red"]' ).evaluate( b => b.classList.contains( 'on' ) ) );
+		assert.equal( await garage.locator( '[data-part="colour"] h3 .picked' ).textContent(), 'Racing red' );
+		// The beep is heard as it's picked (a horn can't be seen on the turntable).
+		const played = await page.evaluate( () => window.drive.garage.hornsPlayed );
+		await garage.locator( '[data-part="horn"] .choice[data-id="beep"]' ).click();
+		assert.equal( await page.evaluate( () => window.drive.garage.hornsPlayed ), played + 1 );
+		// The row goes to each group: the horn's heading comes up under it, and it's lit.
+		await garage.locator( '.jump [data-group="Horn"]' ).click();
+		await page.waitForFunction( () => document.querySelector( '#garage .jump [aria-current="true"]' )?.dataset.group === 'Horn', null, { timeout: 5000 } );
+		const under = await page.evaluate( () => {
+
+			const row = document.querySelector( '#garage .jump' ).getBoundingClientRect();
+			const heading = document.querySelector( '#garage [data-part="horn"] h3' ).getBoundingClientRect();
+			return heading.top >= row.bottom - 1 && heading.bottom <= document.querySelector( '#garage .options' ).getBoundingClientRect().bottom;
+
+		} );
+		assert.ok( under );
+		await garage.locator( '.jump [data-group="Paint"]' ).click();
+		await page.waitForFunction( () => document.querySelector( '#garage .options' ).scrollTop < 5, null, { timeout: 5000 } );
 		await page.waitForTimeout( 400 );
 		await shot( page, 'pro-garage-free' );
 
@@ -401,12 +445,15 @@ describe( 'Supporter Pass, without it', () => {
 		await page.locator( '#pass .close' ).click();
 		await page.waitForTimeout( 300 );
 		await shot( page, 'pro-garage-locked-ride' );
-		// The trucks keep their paint: flame and trail only.
+		// The trucks keep their paint: underglow, flame, trail and horn only, and the row says so.
 		await garage.locator( '.ride-tab', { hasText: 'Pickup' } ).click();
 		await page.waitForFunction( () => window.drive.garage.preview.model && window.drive.garage.vehicle.id === 'pickup-truck' && window.drive.garage.vehicle.paintable === false, null, { timeout: 30000 } );
 		assert.ok( await garage.locator( '.paint-note' ).isVisible() );
 		assert.equal( await garage.locator( '[data-part="colour"]' ).isVisible(), false );
 		assert.ok( await garage.locator( '[data-part="flame"]' ).isVisible() );
+		assert.ok( await garage.locator( '[data-part="glow"]' ).isVisible() );
+		assert.ok( await garage.locator( '[data-part="horn"]' ).isVisible() );
+		assert.deepEqual( await garage.locator( '.jump button:not([hidden])' ).allTextContents(), [ 'Underglow', 'Boost', 'Trail', 'Horn' ] );
 		await garage.locator( '.done' ).click();
 		await garage.waitFor( { state: 'hidden' } );
 		// And the world is drawn again.
@@ -792,6 +839,8 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 		await pick( 'rim', 'gold' );
 		await pick( 'flame', 'blue' );
 		await pick( 'trail', 'ribbon' );
+		await pick( 'glow', 'pink' );
+		await pick( 'horn', 'air' );
 		await page.waitForTimeout( 1200 );
 		await shot( page, 'pro-garage-coupe' );
 		await pick( 'decal', 'flames' );
@@ -810,9 +859,11 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 
 			} );
 			const decals = pivot.getObjectByName( 'decals' );
+			const glow = pivot.userData.glow;
 			return {
 				body: [ ...new Set( body.map( m => `${ m.color.getHexString() } ${ m.metalness }` ) ) ], rims: [ ...new Set( rims.map( m => m.color.getHexString() ) ) ],
 				decals: decals ? decals.children.reduce( ( sum, m ) => sum + m.geometry.attributes.position.count, 0 ) : 0,
+				glow: glow ? `${ glow.userData.colour.toString( 16 ) } ${ glow.visible }` : null,
 			};
 
 		} );
@@ -820,15 +871,20 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 		assert.deepEqual( before.body, [ '7b3fe4 0.7' ] );
 		assert.deepEqual( before.rims, [ 'd9a63a' ] );
 		assert.ok( before.decals > 30, JSON.stringify( before ) );
+		assert.equal( before.glow, 'ff2bc4 true' );
 		// A close look at each of the others, in a look of its own.
-		for ( const [ name, colour, decal, trail, boost ] of [ [ 'Monster truck', 'black', 'flames', 'smoke', 'fireworks' ], [ 'City bus', 'teal', 'checker', 'none', 'bubbles' ], [ 'Hovercraft', 'pink', 'number', 'sparkle', 'comet' ] ] ) {
+		for ( const [ name, colour, decal, trail, boost, glow, finish ] of [
+			[ 'Monster truck', 'black', 'flames', 'smoke', 'fireworks', 'green', 'shift' ], [ 'City bus', 'teal', 'checker', 'none', 'bubbles', 'red', 'satin' ], [ 'Hovercraft', 'pink', 'number', 'sparkle', 'comet', 'ice', 'pearl' ],
+		] ) {
 
 			await garage.locator( '.ride-tab', { hasText: name } ).click();
 			await page.waitForFunction( ride => window.drive.garage.preview.model?.name === ride, name, { timeout: 20000 } );
 			await pick( 'colour', colour );
+			await pick( 'finish', finish );
 			await pick( 'decal', decal );
 			await pick( 'trail', trail );
 			await pick( 'boost', boost );
+			await pick( 'glow', glow );
 			await page.waitForTimeout( 900 );
 			await shot( page, `pro-garage-${ name.toLowerCase().replace( ' ', '-' ) }` );
 
@@ -871,10 +927,156 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 		assert.deepEqual( after.body, before.body );
 		assert.deepEqual( after.rims, before.rims );
 		assert.ok( after.decals > 30 );
+		assert.equal( after.glow, before.glow );
+		assert.equal( await page.evaluate( () => JSON.parse( localStorage.getItem( 'world-drive.garage' ) )[ 'sports-coupe' ].horn ), 'air' );
 		assert.deepEqual( await page.evaluate( () => window.drive.driver.spec.fx ), fx.spec );
 		// The hovercraft's comet, too, kept and driven with.
 		await swapTo( page, 'Hovercraft' );
 		assert.deepEqual( await page.evaluate( () => window.drive.driver.spec.fx ), { boost: 'comet', flame: 'orange', trail: { kind: 'sparkle', colour: 0xeef1f4 } } );
+		assert.deepEqual( page.errors, [] );
+
+	} );
+
+	test( 'the underglow goes under every kind of ride, sized to it and left out of its size; the new finishes, rims and decals go on', async () => {
+
+		await page.keyboard.press( 'Escape' );
+		await page.locator( '#pause' ).waitFor();
+		await page.locator( '#pause .garage-open' ).click();
+		const garage = page.locator( '#garage' );
+		await garage.waitFor();
+		await page.waitForFunction( () => window.drive.garage.preview?.model, null, { timeout: 20000 } );
+		const pick = ( part, id ) => garage.locator( `[data-part="${ part }"] .choice[data-id="${ id }"]` ).click();
+		const show = async name => {
+
+			const was = await page.evaluate( () => window.drive.garage.preview.model.uuid );
+			await garage.locator( '.ride-tab', { hasText: name } ).click();
+			await page.waitForFunction( was => window.drive.garage.preview.model?.uuid !== was, was, { timeout: 60000 } );
+
+		};
+
+		// Under the kart, a ride, the cars (painted or not) and the library's pickup: the footprint
+		// and the same margin all round it, just over the ground, and the ride measured as before.
+		for ( const [ name, glow ] of [ [ 'Go-kart', 'amber' ], [ 'City bus', 'blue' ], [ 'Muscle car', 'rainbow' ], [ 'Hypercar', 'white' ], [ 'Pickup', 'green' ] ] ) {
+
+			await show( name );
+			await pick( 'glow', glow );
+			const under = await page.evaluate( () => {
+
+				const { preview } = window.drive.garage;
+				const model = preview.model;
+				const glow = model.userData.glow;
+				preview.stop();
+				model.parent.rotation.y = 0;
+				model.parent.updateMatrixWorld( true );
+				const Box3 = glow.geometry.boundingBox.constructor;
+				const ride = new Box3().setFromObject( model );
+				model.remove( glow );
+				const without = new Box3().setFromObject( model );
+				model.add( glow );
+				glow.updateMatrixWorld( true );
+				const spread = new Box3().setFromBufferAttribute( glow.geometry.attributes.position ).applyMatrix4( glow.matrixWorld );
+				preview.start();
+				const round = v => Math.round( v * 100 ) / 100;
+				return {
+					same: ride.equals( without ), sides: [ ride.min.x - spread.min.x, spread.max.x - ride.max.x, ride.min.z - spread.min.z, spread.max.z - ride.max.z ].map( round ),
+					over: round( spread.min.y - ride.min.y ), colour: glow.userData.colour, additive: glow.material.blending === 2 && ! glow.material.depthWrite, visible: glow.visible,
+				};
+
+			} );
+			const wanted = await page.evaluate( async id => {
+
+				const { GLOWS } = await import( '/src/drive-app/paint.js' );
+				const glow = GLOWS.find( choice => choice.id === id );
+				return glow.hex ?? glow.id;
+
+			}, glow );
+			assert.ok( under.same && under.additive && under.visible && under.colour === wanted, `${ name }: ${ JSON.stringify( under ) }` );
+			assert.ok( under.sides.every( side => side >= 0.55 && side <= 1.45 && Math.abs( side - under.sides[ 0 ] ) < 0.02 ), `${ name }: ${ JSON.stringify( under ) }` );
+			assert.ok( under.over > 0.03 && under.over < 0.08, `${ name }: ${ JSON.stringify( under ) }` );
+			await page.waitForTimeout( 400 );
+			await shot( page, `pro-garage-glow-${ name.toLowerCase().replace( ' ', '-' ) }` );
+
+		}
+
+		// None takes it away.
+		await pick( 'glow', 'none' );
+		assert.equal( await page.evaluate( () => window.drive.garage.preview.model.userData.glow ?? null ), null );
+
+		// The new finishes and rims on the coupe's paint, and the new decals on its bodywork and the
+		// kart's.
+		await show( 'Sports coupe' );
+		const paint = () => page.evaluate( () => {
+
+			const body = [];
+			const rims = [];
+			window.drive.garage.preview.model.traverse( o => {
+
+				if ( o.userData.paint === 'body' ) body.push( o.material );
+				if ( o.userData.paint === 'rim' ) rims.push( o.material );
+
+			} );
+			const [ b ] = body;
+			const [ r ] = rims;
+			return {
+				body: { roughness: b.roughness, metalness: b.metalness, iridescence: b.iridescence, sheen: b.sheen }, kinds: new Set( body ).size,
+				rim: { roughness: r.roughness, metalness: r.metalness, emissive: r.emissiveIntensity },
+			};
+
+		} );
+		const finishes = {};
+		for ( const finish of [ 'satin', 'pearl', 'chrome', 'shift' ] ) {
+
+			await pick( 'finish', finish );
+			finishes[ finish ] = ( await paint() ).body;
+
+		}
+
+		assert.deepEqual( finishes, {
+			satin: { roughness: 0.55, metalness: 0.15, iridescence: 0, sheen: 0 },
+			pearl: { roughness: 0.32, metalness: 0.1, iridescence: 0.45, sheen: 1 },
+			chrome: { roughness: 0.05, metalness: 1, iridescence: 0, sheen: 0 },
+			shift: { roughness: 0.24, metalness: 1, iridescence: 1, sheen: 0.6 },
+		} );
+		const rims = {};
+		for ( const rim of [ 'chrome', 'black', 'bronze', 'neon' ] ) {
+
+			await pick( 'rim', rim );
+			rims[ rim ] = ( await paint() ).rim;
+
+		}
+
+		assert.deepEqual( rims, {
+			chrome: { roughness: 0.04, metalness: 1, emissive: 0 },
+			black: { roughness: 0.5, metalness: 0.3, emissive: 0 },
+			bronze: { roughness: 0.22, metalness: 0.8, emissive: 0 },
+			neon: { roughness: 0.22, metalness: 0.8, emissive: 0.55 },
+		} );
+		await pick( 'finish', 'gloss' );
+		const decals = () => page.evaluate( () => {
+
+			const group = window.drive.garage.preview.model.getObjectByName( 'decals' );
+			return group ? group.children.map( mesh => mesh.geometry.attributes.position.count ) : [];
+
+		} );
+		for ( const name of [ 'Sports coupe', 'Go-kart' ] ) {
+
+			if ( name !== 'Sports coupe' ) await show( name );
+			for ( const decal of [ 'bolts', 'camo', 'dots', 'two-tone' ] ) {
+
+				await pick( 'decal', decal );
+				const counts = await decals();
+				// Down both sides (camo and dots over the top too), every piece with something on it.
+				assert.ok( counts.length >= 2 && counts.every( count => count >= 3 ) && counts.reduce( ( a, b ) => a + b ) > 30, `${ name } ${ decal }: ${ counts }` );
+				await page.waitForTimeout( 300 );
+				await shot( page, `pro-garage-${ name.toLowerCase().replace( ' ', '-' ) }-${ decal }` );
+
+			}
+
+		}
+
+		await garage.locator( '.done' ).click();
+		await page.locator( '#pause .resume' ).click();
+		await page.waitForFunction( () => window.drive.mode === 'driving' );
 		assert.deepEqual( page.errors, [] );
 
 	} );
@@ -1235,6 +1437,131 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 
 } );
 
+describe( 'Driving with others: their underglow and horn', () => {
+
+	// The others' ghosts (ghosts.js) and the horns heard (friends.js), with a stand-in for the room
+	// (live.js) saying what it would: test-drive-live-ui.mjs drives them with a real one.
+	test( 'a ghost wears its driver\'s underglow, fading off the ground as yours does; their horn is heard in its own sound, and yours in yours', async () => {
+
+		const page = await newPage();
+		await openGlobe( page, '?pro=1' );
+		await dropIn( page );
+		await page.evaluate( async () => {
+
+			const { createGhosts } = await import( '/src/drive-app/ghosts.js' );
+			const { setUpFriends } = await import( '/src/drive-app/friends.js' );
+			const { loadVehicles } = await import( '/src/drive-app/vehicles.js' );
+			const { FLAGS, packState } = await import( '/src/drive-app/live-protocol.js' );
+			const { scene, camera, globe, models, driver: d } = window.drive;
+			const handlers = {};
+			const players = new Map();
+			const live = {
+				players, status: 'live', ended: null, party: null, nearby: true, self: null, place: null, away: false,
+				ride: { vehicle: 'go-kart', look: { horn: 'fanfare' } },
+				on: ( type, fn ) => ( handlers[ type ] ??= [] ).push( fn ),
+				honk: () => true, invite: () => null, leaveParty: () => {}, setNearby: () => {}, joinParty: () => {},
+			};
+			const emit = ( type, data ) => ( handlers[ type ] ?? [] ).forEach( fn => fn( data ) );
+			const vehicles = await loadVehicles();
+			const ghosts = createGhosts( { scene, earth: globe.earth, camera, vehicles, loader: models.loader, live, tags: document.getElementById( 'live-tags' ), own: () => d.entry.pivot } );
+			const friends = setUpFriends( { live, ghosts, vehicles, mode: () => 'driving', goTo: () => {} } );
+			// Ana's car 10 m ahead of yours and a little to the left (past where a ghost turns
+			// see-through), as the room says it (Earth-centred), in her look from a newer page: an
+			// underglow, a horn and a part this page doesn't know.
+			const pivot = d.entry.pivot;
+			const earth = globe.earth.matrixWorld.clone().invert();
+			const at = pivot.localToWorld( pivot.position.clone().set( - 3, 0, - 10 ) ).applyMatrix4( earth );
+			const turn = pivot.getWorldQuaternion( pivot.quaternion.clone() ).premultiply( globe.earth.getWorldQuaternion( pivot.quaternion.clone() ).invert() );
+			const still = { x: 0, y: 0, z: 0 };
+			const state = flags => packState( at, turn, still, flags );
+			const ana = { pid: 'anaANA01', name: 'Ana', star: false, level: 12, title: null, vehicle: 'go-kart', look: { colour: 'red', glow: 'pink', horn: 'air', aura: 'gold' }, place: null, away: false, s: state( FLAGS.grounded ) };
+			players.set( ana.pid, ana );
+			emit( 'welcome', { players: [ ana ] } );
+			window.others = { ghosts, friends, emit, ana, state, FLAGS };
+
+		} );
+		// Drawn as the room's words come (as main.js does each frame), until her ride is built.
+		const run = seconds => page.evaluate( async seconds => {
+
+			const { ghosts } = window.others;
+			for ( let t = 0; t < seconds; t += 0.05 ) {
+
+				ghosts.update( 0.05, true );
+				await new Promise( resolve => setTimeout( resolve, 50 ) );
+
+			}
+
+		}, seconds );
+		const glow = () => page.evaluate( () => {
+
+			const pivot = window.others.ghosts.group.children[ 0 ];
+			const glow = pivot?.userData.glow;
+			return glow ? { colour: glow.userData.colour, lift: Math.round( glow.userData.lift * 100 ) / 100, visible: glow.visible, builds: window.others.ghosts.list()[ 0 ].builds } : null;
+
+		} );
+		await run( 2 );
+		assert.deepEqual( await glow(), { colour: 0xff2bc4, lift: 1, visible: true, builds: 1 } );
+		await shot( page, 'pro-ghost-underglow' );
+		// Off the ground (in the air off a jump), it stays a moment, then fades out; down again, it's back.
+		await page.evaluate( () => {
+
+			const { emit, ana, state, FLAGS } = window.others;
+			emit( 'states', { at: performance.now(), states: [ { pid: ana.pid, s: state( FLAGS.air ), age: 0 } ] } );
+
+		} );
+		await run( 2 );
+		assert.deepEqual( await glow(), { colour: 0xff2bc4, lift: 0, visible: false, builds: 1 } );
+		await page.evaluate( () => {
+
+			const { emit, ana, state, FLAGS } = window.others;
+			emit( 'states', { at: performance.now(), states: [ { pid: ana.pid, s: state( FLAGS.grounded ), age: 0 } ] } );
+
+		} );
+		await run( 1.5 );
+		assert.deepEqual( await glow(), { colour: 0xff2bc4, lift: 1, visible: true, builds: 1 } );
+		// A new horn is no new model; a new underglow is, once it has held.
+		await page.evaluate( () => {
+
+			const { emit, ana } = window.others;
+			emit( 'look', { pid: ana.pid, vehicle: 'go-kart', look: { ...ana.look, horn: 'bike' } } );
+
+		} );
+		await run( 1.5 );
+		assert.equal( ( await glow() ).builds, 1 );
+		await page.evaluate( () => {
+
+			const { emit, ana } = window.others;
+			emit( 'look', { pid: ana.pid, vehicle: 'go-kart', look: { ...ana.look, glow: 'rainbow' } } );
+
+		} );
+		await run( 2 );
+		assert.deepEqual( await glow(), { colour: 'rainbow', lift: 1, visible: true, builds: 2 } );
+
+		// Her honk in her horn; one this page doesn't know is the beep; yours in yours.
+		const heard = await page.evaluate( () => {
+
+			const { friends, emit, ana } = window.others;
+			// (Sound waits for a click or a key.)
+			document.body.dispatchEvent( new PointerEvent( 'pointerdown', { bubbles: true } ) );
+			const out = [];
+			emit( 'honk', { pid: ana.pid } );
+			out.push( friends.lastHorn );
+			ana.look = { ...ana.look, horn: 'kazoo' };
+			emit( 'honk', { pid: ana.pid } );
+			out.push( friends.lastHorn );
+			friends.honk();
+			out.push( friends.lastHorn );
+			return { out, beeps: friends.beeps };
+
+		} );
+		assert.deepEqual( heard, { out: [ 'air', 'beep', 'fanfare' ], beeps: 3 } );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+} );
+
 describe( 'The Garage on a phone', () => {
 
 	test( 'without the pass, the locked rides wear their badge there too', async () => {
@@ -1261,7 +1588,7 @@ describe( 'The Garage on a phone', () => {
 
 	test( 'it fills the screen, the ride and its choices fit across, and it closes', async () => {
 
-		const page = await newPage( { viewport: { width: 390, height: 844 }, touch: true } );
+		const page = await newPage( { viewport: { width: 375, height: 812 }, touch: true } );
 		await openGlobe( page, '?pro=1' );
 		await page.locator( '#globe-ui .vehicle', { hasText: 'Hovercraft' } ).tap();
 		await shot( page, 'pro-phone-globe' );
@@ -1276,16 +1603,26 @@ describe( 'The Garage on a phone', () => {
 			const sheet = box( '#garage' );
 			return {
 				sheet: [ sheet.width, sheet.height ], stage: box( '#garage .stage' ).height, done: box( '#garage .done' ).bottom,
-				wide: Math.max( document.querySelector( '#garage' ).scrollWidth, document.querySelector( '#garage .options' ).scrollWidth ), swatch: box( '#garage .choice.swatch' ).width,
+				wide: Math.max( document.querySelector( '#garage' ).scrollWidth, document.querySelector( '#garage .options' ).scrollWidth, document.documentElement.scrollWidth ), swatch: box( '#garage .choice.swatch' ).width,
+				// The row of groups: each of its buttons on screen, none cut off.
+				jump: [ ...document.querySelectorAll( '#garage .jump button' ) ].map( button => button.getBoundingClientRect() ).every( b => b.left >= 0 && b.right <= innerWidth && b.width > 30 ),
 			};
 
 		} );
-		assert.deepEqual( layout.sheet, [ 390, 844 ] );
-		assert.ok( layout.stage > 200 && layout.done <= 844 && layout.wide <= 390 && layout.swatch >= 32, JSON.stringify( layout ) );
+		assert.deepEqual( layout.sheet, [ 375, 812 ] );
+		assert.ok( layout.stage > 200 && layout.done <= 812 && layout.wide <= 375 && layout.swatch >= 32 && layout.jump, JSON.stringify( layout ) );
 		await shot( page, 'pro-phone-garage' );
 		await garage.locator( '[data-part="trail"] .choice[data-id="sparkle"]' ).tap();
 		await page.waitForTimeout( 900 );
 		await shot( page, 'pro-phone-garage-sparkle' );
+		// Straight to the underglow from the row, and one on.
+		await garage.locator( '.jump [data-group="Underglow"]' ).tap();
+		await page.waitForFunction( () => document.querySelector( '#garage .jump [aria-current="true"]' )?.dataset.group === 'Underglow', null, { timeout: 5000 } );
+		await garage.locator( '[data-part="glow"] .choice[data-id="purple"]' ).tap();
+		assert.equal( await garage.locator( '[data-part="glow"] h3 .picked' ).textContent(), 'Purple' );
+		assert.ok( await page.evaluate( () => document.documentElement.scrollWidth <= innerWidth ) );
+		await page.waitForTimeout( 600 );
+		await shot( page, 'pro-phone-garage-underglow' );
 		await garage.locator( '.options' ).evaluate( el => el.scrollTop = el.scrollHeight );
 		await shot( page, 'pro-phone-garage-scrolled' );
 		await garage.locator( '.done' ).tap();
@@ -1655,11 +1992,12 @@ describe( 'World Drive\'s cars', () => {
 
 			}
 
-			// Only the flame and trail: its paint is part of the model, and the Garage says so.
+			// Only the underglow, flame, trail and horn: its paint is part of the model, and the Garage
+			// says so.
 			assert.ok( await garage.locator( '.paint-note' ).isVisible(), name );
-			assert.match( await garage.locator( '.paint-note' ).textContent(), /keeps it: pick its boost and trail/ );
+			assert.match( await garage.locator( '.paint-note' ).textContent(), /keeps it: pick its underglow, boost, trail and horn/ );
 			for ( const part of [ 'colour', 'finish', 'decal', 'rim' ] ) assert.equal( await garage.locator( `[data-part="${ part }"]` ).isVisible(), false, `${ name } ${ part }` );
-			assert.ok( await garage.locator( '[data-part="flame"]' ).isVisible() && await garage.locator( '[data-part="trail"]' ).isVisible(), name );
+			for ( const part of [ 'glow', 'flame', 'trail', 'horn' ] ) assert.ok( await garage.locator( `[data-part="${ part }"]` ).isVisible(), `${ name } ${ part }` );
 			await page.waitForTimeout( 500 );
 			await shot( page, `cars-garage-${ idOf( name ) }` );
 
