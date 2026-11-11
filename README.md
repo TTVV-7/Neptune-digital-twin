@@ -702,15 +702,16 @@ arcade-style: drift (Space), boost (Shift), fly (F), and hit something to bounce
 air, where **A**/**D** spin, **W**/**S** flip and **Q**/**E** roll for tricks that score (times a
 combo multiplier) when you land on your wheels; a wipeout loses the combo and rolls you back onto
 them. Boosting flat out hits **overdrive** (a sonic boom, streaks of air, a wider view), and glowing
-**boost pads** turn up on open ground as you drive to top the booster up (a switch in the pause menu
-turns them off). Lighting the booster, running it dry, a pad, each drift charge level and its
-mini-turbo have bursts of their own, the view jolts and streams with speed lines, and the body leans
-on its springs (**Camera effects** in the pause menu, or asking the system for less motion, keeps
-the view still). Drive or come down into **water** and it's a splash: spray and rings of foam, the
-vehicle sinking nose first, then back on the last dry ground you were on, facing away from it (the
-hovercraft rides on it). Google's mesh doesn't say what's water, so `src/drive-app/water.js` tells
-it by how Google draws it: level, one even colour, the lowest thing round about. **M** goes back to
-the globe to drop in somewhere else without reloading. Phones get a bottom sheet and touch buttons.
+**boost pads** can turn up on open ground as you drive to top the booster up (they're off until a
+switch in the pause menu turns them on). Lighting the booster, running it dry, a pad, each drift
+charge level and its mini-turbo have bursts of their own, the view jolts and streams with speed
+lines, and the body leans on its springs (**Camera effects** in the pause menu, or asking the
+system for less motion, keeps the view still). Every ride drives on **water** as on the ground, off
+a quay or down a beach and out across it; the hovercraft throws up spray there. Google's mesh
+doesn't say what's water, so `src/drive-app/water.js` tells it by how Google draws it (level, one
+even colour, the lowest thing round about), for that spray and to keep boost pads off it. **M**
+goes back to the globe to drop in somewhere else without reloading. Phones get a bottom sheet and
+touch buttons.
 
 It shares `src/` with this app but has its own page (`drive/index.html`, `src/drive-app/`), build
 (`npm run dev:drive`, `npm run build:drive` into `dist-drive/`) and Cloudflare Worker
@@ -851,13 +852,12 @@ src/handles.js      on-map handles for the selected item: turning, resizing area
 src/toolbar.js      the toolbar over the selected item, its size editor and Undo after deleting
 src/flatten.js      flatten areas: press Google's mesh flat inside a rectangle
 src/drive.js        race mode: driving, jumps, cameras, speedometer; flying, booster, drifts, stunts
-                    (crash: 'launch': bounce and launch, air tricks, score) and water (a splash, then
-                    back on dry land) as options
+                    (crash: 'launch': bounce and launch, air tricks, score) and water (where a
+                    hovercraft throws up spray) as options
 src/drive-hud.js    a self-contained driving HUD with touch buttons, the DRIFT button, hit words,
-                    trick pop-ups and the score, a splash's word and the fade after it, for other
-                    apps (World Drive)
+                    trick pop-ups and the score, for other apps (World Drive)
 src/drive-fx.js     booster flame, tyre smoke and drift sparks; a hit's sparks and bits, scrapes, dust;
-                    a splash's spray and foam, a hovercraft's spray
+                    a hovercraft's spray, and a splash's spray and foam (others' cars from older pages)
 src/drive-boosts.js boost styles (plasma, lightning, bubbles, a comet...) and the supersonic boom and
                     streaks, each a fixed batch of quads drawn in one go, for drive-fx.js
 src/kart.js         the go-kart model and its library item

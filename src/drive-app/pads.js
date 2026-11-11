@@ -25,11 +25,11 @@ import { storage } from './places.js';
 // the lumpy tops of bushes), and more on the way there from the vehicle keep it off roofs, shelters
 // and banks beside the road: the ground must climb or fall gently all the way, as a street does,
 // never in a step that stays up, as at a roof's edge or up an embankment. Never on water either
-// (water.js), which is as flat and open as anything on Google's mesh: going for a pad there is a
-// splash for all but the hovercraft. A modest number, recycled as you leave them behind; one
-// that's driven over goes dark and lights again a few seconds later (with the gauge full, it's
-// left lit). The booster still recharges by itself (drive.js): pads only add to it. The pause
-// menu's switch turns them off (kept in this browser); they're on unless it's been used.
+// (water.js): it's as flat and open as anything on Google's mesh, so by a coast or a river it would
+// take most of them, away from the streets they're for. A modest number, recycled as you leave
+// them behind; one that's driven over goes dark and lights again a few seconds later (with the
+// gauge full, it's left lit). The booster still recharges by itself (drive.js): pads only add to
+// it. They're off until the pause menu's switch turns them on (kept in this browser).
 //
 // They cost little: three instanced meshes (the pads, their glow and their light) and a try at a
 // new spot every TRY s, of two dozen rays at most (most tries end after one or two) and, for a spot
@@ -153,7 +153,8 @@ export function createBoostPads( { scene, driver, ground, water = null, toggle =
 
 	}
 
-	let enabled = storage( () => localStorage.getItem( KEY ) ) !== 'off';
+	// Off unless this browser has had them switched on.
+	let enabled = storage( () => localStorage.getItem( KEY ) ) === 'on';
 	let clock = 0;
 	let due = 0;
 	let checked = 0;

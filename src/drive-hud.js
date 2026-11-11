@@ -4,10 +4,9 @@
 // buttons to drive with. With kart handling a DRIFT button (SPACE) sits under the speed, and its
 // chip lights up while drifting with the mini-turbo's charge. With stunts (crash: 'launch') a hit
 // pops up a word ("WHAM!"), tricks pop up as they're landed, and the score, its combo multiplier
-// and the best score show under the speed. Coming down in water (World Drive's) pops up a splash's
-// word, and the view fades out and back in as the vehicle is put back on dry land. It makes its
-// own elements and styles inside `parent`, so it needs nothing in the page. Give it to the Driver
-// as `hud`; the Driver calls attach() to wire up the buttons.
+// and the best score show under the speed. It makes its own elements and styles inside `parent`, so
+// it needs nothing in the page. Give it to the Driver as `hud`; the Driver calls attach() to wire up
+// the buttons.
 //
 // Where it sits can be moved with CSS custom properties on the page: --drive-hud-top,
 // --drive-hud-bottom and --drive-hud-side (insets in px, e.g. to clear a map credit line).
@@ -21,10 +20,8 @@ const SPEED_SCALE = 200;
 // How long a message stays (ms), a little longer for a long one.
 const FLASH_TIME = 1500;
 const FLASH_PER_CHAR = 30;
-// How long a hit's word and landed tricks stay (ms), and a top-up's on the boost gauge; a splash's
-// word stays longer, while the vehicle sinks.
+// How long a hit's word and landed tricks stay (ms), and a top-up's on the boost gauge.
 const POP_TIME = 750;
-const SPLASH_TIME = 1500;
 const REFUEL_TIME = 700;
 const EMPTY_TIME = 650;
 const TRICKS_TIME = 2200;
@@ -422,56 +419,6 @@ const CSS = `
 	font-size: clamp( 28px, 5.5vw, 60px );
 }
 
-/* Coming down in water: bigger, sea-green and white, wobbling as it bobs up and drifts off. */
-.dhud .dhud-pop.splash {
-	top: 50%;
-	color: #8ff0ff;
-	font-size: clamp( 44px, 9vw, 104px );
-	-webkit-text-stroke: 4px #032b44;
-	text-shadow: 0 6px 0 rgba( 3, 43, 68, 0.45 ), 0 0 26px rgba( 143, 240, 255, 0.55 );
-	animation: dhud-splash 1.5s ease-out forwards;
-}
-
-@keyframes dhud-splash {
-	0% {
-		opacity: 0;
-		transform: translate( -50%, -10% ) rotate( var( --tilt, -6deg ) ) scale( calc( var( --size, 1 ) * 0.4 ) );
-	}
-	14% {
-		opacity: 1;
-		transform: translate( -50%, -62% ) rotate( var( --tilt, -6deg ) ) scale( calc( var( --size, 1 ) * 1.18 ) );
-	}
-	30% {
-		transform: translate( -50%, -50% ) rotate( calc( var( --tilt, -6deg ) * -0.6 ) ) scale( var( --size, 1 ) );
-	}
-	46% {
-		transform: translate( -50%, -54% ) rotate( calc( var( --tilt, -6deg ) * 0.5 ) ) scale( var( --size, 1 ) );
-	}
-	62% {
-		transform: translate( -50%, -50% ) rotate( calc( var( --tilt, -6deg ) * -0.3 ) ) scale( var( --size, 1 ) );
-	}
-	80% {
-		opacity: 1;
-	}
-	100% {
-		opacity: 0;
-		transform: translate( -50%, -70% ) rotate( 0deg ) scale( calc( var( --size, 1 ) * 1.08 ) );
-	}
-}
-
-/* The fade out and back in as a vehicle in the water is put back on dry land: deep water. */
-.dhud .dhud-fade {
-	position: absolute;
-	inset: 0;
-	background: radial-gradient( circle at 50% 40%, #1c6a8f, #04263b 75% );
-	opacity: 0;
-	transition: opacity 0.22s ease-in;
-}
-
-.dhud .dhud-fade.on {
-	opacity: 1;
-}
-
 @keyframes dhud-wham {
 	0% {
 		opacity: 0;
@@ -832,7 +779,6 @@ export function createDriveHud( parent = document.body ) {
 	root.classList.toggle( 'dhud-fixed', parent === document.body );
 	root.hidden = true;
 	root.innerHTML = `
-		<div class="dhud-fade"></div>
 		<div class="dhud-flash" hidden></div>
 		<div class="dhud-tricks" hidden></div>
 		<div class="dhud-pops"></div>
@@ -881,7 +827,6 @@ export function createDriveHud( parent = document.body ) {
 	const best = $( '.dhud-best' );
 	const tricks = $( '.dhud-tricks' );
 	const pops = $( '.dhud-pops' );
-	const fade = $( '.dhud-fade' );
 	const keys = $( '.dhud-keys' );
 	// The readouts a machine's panel replaces: not the name, nor the DRIFT button (see describeKeys).
 	const readouts = [ ...cluster.children ].filter( element => ! element.classList.contains( 'dhud-name' ) && element !== driftHold );
@@ -1036,7 +981,6 @@ export function createDriveHud( parent = document.body ) {
 			boostRow.classList.remove( 'refuel', 'empty' );
 			boostLabel.textContent = 'BOOST';
 			pops.replaceChildren();
-			fade.classList.remove( 'on' );
 			panel?.remove();
 			panel = null;
 			for ( const button of root.querySelectorAll( '.dhud-touch .down' ) ) button.classList.remove( 'down' );
@@ -1087,8 +1031,7 @@ export function createDriveHud( parent = document.body ) {
 
 		},
 
-		// A hit's word ("WHAM!"), `power` 0 to 1 by how hard; kind 'wipeout' for a wipeout, 'splash'
-		// for coming down in water.
+		// A hit's word ("WHAM!"), `power` 0 to 1 by how hard; kind 'wipeout' for a wipeout.
 		pop( word, power = 0.5, kind = '' ) {
 
 			const element = document.createElement( 'div' );
@@ -1099,14 +1042,7 @@ export function createDriveHud( parent = document.body ) {
 			element.style.setProperty( '--tilt', `${ tilt * ( 4 + power * 5 ) }deg` );
 			element.style.setProperty( '--size', String( 0.75 + power * 0.5 ) );
 			pops.replaceChildren( element );
-			setTimeout( () => element.remove(), kind === 'splash' ? SPLASH_TIME : POP_TIME );
-
-		},
-
-		// The view faded out (to deep water), or back in.
-		fade( on ) {
-
-			fade.classList.toggle( 'on', !! on );
+			setTimeout( () => element.remove(), POP_TIME );
 
 		},
 
@@ -1119,10 +1055,10 @@ export function createDriveHud( parent = document.body ) {
 		},
 
 		// Tricks landed: { lines, points, mult, combo }, the points before the multiplier; or lost in
-		// a wipeout: { lines, mult, lost }, or in some other bail, which `bail` names ("Sunk").
-		tricks( { lines, points: gained = 0, mult: times = 1, combo = false, lost = false, bail = 'Wipeout' } ) {
+		// a wipeout: { lines, mult, lost }.
+		tricks( { lines, points: gained = 0, mult: times = 1, combo = false, lost = false } ) {
 
-			const last = lost ? ( times > 1 ? `Combo ×${ times } lost` : bail ) : `${ combo ? 'Combo! ' : '' }+${ gained.toLocaleString( 'en-CA' ) }${ times > 1 ? ` ×${ times }` : '' }`;
+			const last = lost ? ( times > 1 ? `Combo ×${ times } lost` : 'Wipeout' ) : `${ combo ? 'Combo! ' : '' }+${ gained.toLocaleString( 'en-CA' ) }${ times > 1 ? ` ×${ times }` : '' }`;
 			showTricks( [ ...lines, last ], lost ? 'lost' : 'landed' );
 			tricksTimer = setTimeout( () => tricks.hidden = true, TRICKS_TIME );
 

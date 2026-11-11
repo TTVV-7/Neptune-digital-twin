@@ -45,7 +45,7 @@ export const PRO_RIDES = [
 		</svg>`,
 	},
 	{
-		id: 'hovercraft', name: 'Hovercraft', blurb: 'Floats, slides, crosses water', pro: true, colour: 'sunburst', build: makeHovercraft, drive: HOVERCRAFT_DRIVE,
+		id: 'hovercraft', name: 'Hovercraft', blurb: 'Floats, slides, sprays over water', pro: true, colour: 'sunburst', build: makeHovercraft, drive: HOVERCRAFT_DRIVE,
 		// No wheels: the Garage's rim colour goes on its fan's duct and rudders.
 		rims: 'Trim',
 		icon: `<svg viewBox="0 0 64 40" aria-hidden="true">

@@ -10,9 +10,9 @@ import { LAKES } from './lakes.js';
 // the water's surface, on the sea or a coast or one of those lakes (waterAt, below), or deeper than
 // any lake or land can be, gets a surface of its own from here: water at the sea's height or the
 // lake's, drawn round the vehicle out to the horizon and following it as it drives, which the
-// Driver drives on as on any ground and water.js knows is water (so a ride rides on it until it's
-// been on dry ground, the hovercraft floats, and nothing puts a boost pad on it). It's only by its
-// own water: driven off over land, further than REACH of it, it goes (see REACH).
+// Driver drives on as on any ground and water.js knows is water (so the hovercraft throws up spray
+// on it, and nothing puts a boost pad on it). It's only by its own water: driven off over land,
+// further than REACH of it, it goes (see REACH).
 //
 // The sea's height. Google's heights are over the WGS 84 ellipsoid, and the sea's surface isn't: it
 // lies on the geoid, from 107 m under the ellipsoid (south of India) to 85 m over it (by New

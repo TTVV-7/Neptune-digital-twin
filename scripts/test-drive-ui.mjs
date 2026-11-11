@@ -8,24 +8,26 @@
 // picker and changing ride from the pause menu; M back to the globe and teleporting again with no
 // reload; recent places and the picked ride kept across a reload; a phone with touch buttons;
 // boosting flat out going supersonic in each free ride (the boom, the streaks, the tag and the
-// wider view, and its end), and boost pads (put down on open ground as it drives and never on a
-// roof, a car, a slope or from high up, moved onto sharper ground, a small one's 12 % and a big
-// one's fill, dark then lit again, left lit with the gauge full, recycled, and the pause menu's
-// switch kept across a reload); water (the pad's sea given one even sea colour, as Google draws
-// water): off its edge at speed, off a ramp and slowly down a beach, each a splash, sinking nose
-// first with the camera holding on it, the combo lost, then back on the dry ground it came from
-// facing away; flying over it until coming down, R in it and R by it, and boost pads never on it;
-// Google's other water colours, a bluish lawn among ball fields and a lagoon's turquoise; a
-// canal's water by its wall never taken for dry; slowly off a quay, a splash right by it; never
-// the same splash twice; the way back past a spot level with the water, and kept across a pause;
+// wider view, and its end), and boost pads (off until the pause menu's switch turns them on, kept
+// across a reload, and off again; put down on open ground as it drives and never on a roof, a car,
+// a slope or from high up, moved onto sharper ground, a small one's 12 % and a big one's fill,
+// dark then lit again, left lit with the gauge full, recycled; the tests that need them switch
+// them on); water (the pad's sea given one even sea colour, as Google draws water), driven on as
+// on the ground: off its edge at speed and slowly, down onto its surface and on across it, never
+// sinking or put back; off a ramp, a spin landed on it scoring; slowly down a beach, out across the
+// sea and back up onto the land; flown out and let down onto it, and R on it and by it putting it a
+// few metres on, on the water; paused on it and driven on, and sending others no splash or spray;
+// boost pads never on it; Google's other water colours, a bluish lawn among ball fields and a
+// lagoon's turquoise; a canal's water by its wall never taken for dry;
 // the open sea (the pad lowered 3 km, as Google's tiles are only the sea bed out there): the sea's
 // height (EGM96's), a typed pin there started on the sea's own surface, driven on, curving away
-// with the Earth, flown over and come down on with no splash, a splash off an island and back on
-// it, and gone back on the globe, a drop-in on land having none; the map of where the sea and the
-// big lakes are (Natural Earth's); the pad lowered under the water's surface, as Google draws the
-// bed: more than 15 m in Santa Monica Bay and by its pier, the sea's surface; 14 m (the tide out),
-// on the pad as before; on the Dead Sea's shore (land), never; in Lake Baikal, the lake's surface
-// (455.5 m over the sea's), ridden on, floated on, and a splash off an island back onto it; in a
+// with the Earth, flown over and come down on, no boost pads on it, from an island out across it
+// and back onto the island, and gone back on the globe, a drop-in on land having none; the map of
+// where the sea and the big lakes are (Natural Earth's); the pad lowered under the water's
+// surface, as Google draws the bed: more than 15 m in Santa Monica Bay and by its pier, the sea's
+// surface; 14 m (the tide out), on the pad as before; on the Dead Sea's shore (land), never; in
+// Lake Baikal, the lake's surface (455.5 m over the sea's), ridden on, floated on, and from an
+// island out across it, not its bed; in a
 // coast's square by the Ghoubbet, the pad with ground 20 m over the sea 100 m off it (the Assal
 // depression's rim), on the pad as before; Lake Erie's surface gone out over land at Niagara's
 // gorge and back by the lake; and without the map, only ground deeper than any land or lake bed
@@ -983,6 +985,8 @@ describe( 'World Drive boosts: supersonic and boost pads', () => {
 		const result = await page.evaluate( () => {
 
 			const { driver: d, ground, pads } = window.drive;
+			// They're off until they're switched on.
+			pads.enabled = true;
 			const pad = ground.getColliders()[ 0 ];
 			const land = pad.children.find( child => child.isMesh );
 			// Flat tops cut from the pad: roofs 12 m up, cars' roofs 1.5 m up and a bus shelter 3 m
@@ -1100,6 +1104,7 @@ describe( 'World Drive boosts: supersonic and boost pads', () => {
 		const run = await page.evaluate( () => {
 
 			const { driver: d, pads } = window.drive;
+			pads.enabled = true;
 			const label = document.querySelector( '#hud .dhud-boost b' );
 			const taken = [];
 			const add = d.addBoost;
@@ -1205,24 +1210,10 @@ describe( 'World Drive boosts: supersonic and boost pads', () => {
 
 	} );
 
-	test( 'the pause menu turns boost pads off, kept across a reload, and on again', async () => {
+	test( 'boost pads are off at first; the pause menu turns them on, kept across a reload, and off again', async () => {
 
-		await page.keyboard.press( 'Escape' );
-		await page.locator( '#pause' ).waitFor();
-		const toggle = page.locator( '#pause .pads-toggle' );
-		assert.ok( await toggle.isChecked() );
-		await shot( page, 'boost-pads-switch' );
-		await toggle.uncheck();
-		const off = await page.evaluate( () => {
-
-			const { pads } = window.drive;
-			return { enabled: pads.enabled, shown: pads.group.visible, lit: pads.pads.filter( p => p.state !== 'free' ).length, kept: localStorage.getItem( 'world-drive.pads' ) };
-
-		} );
-		assert.deepEqual( off, { enabled: false, shown: false, lit: 0, kept: 'off' } );
-		await page.locator( '#pause .resume' ).click();
-		await page.waitForFunction( () => window.drive.mode === 'driving' );
-		const driving = await page.evaluate( () => {
+		// Driven on for 5 s: whether pads are on, shown and put down, and what's kept.
+		const drove = () => page.evaluate( () => {
 
 			const { driver: d, pads } = window.drive;
 			Object.assign( d, { east: 0, north: 0, heading: 0, course: 0, speed: 60 / 3.6, gauge: 0.5 } );
@@ -1233,38 +1224,51 @@ describe( 'World Drive boosts: supersonic and boost pads', () => {
 
 			}
 
-			return pads.pads.filter( p => p.state !== 'free' ).length;
+			return { enabled: pads.enabled, shown: pads.group.visible, lit: pads.pads.filter( p => p.state !== 'free' ).length, kept: localStorage.getItem( 'world-drive.pads' ) };
 
 		} );
-		assert.equal( driving, 0 );
+		const goldenGate = async () => {
 
-		// Still off after a reload; on again from the pause menu, and pads come.
+			await openGlobe( page );
+			await page.locator( '.spots button', { hasText: 'Golden Gate Bridge' } ).click();
+			await flown( page );
+			await driveHere( page );
+
+		};
+		// A browser that has never switched them on (the tests before this did): off, none put down.
 		await openGlobe( page );
-		await page.locator( '.spots button', { hasText: 'Golden Gate Bridge' } ).click();
-		await flown( page );
-		await driveHere( page );
-		assert.equal( await page.evaluate( () => window.drive.pads.enabled ), false );
+		await page.evaluate( () => localStorage.removeItem( 'world-drive.pads' ) );
+		await goldenGate();
+		assert.deepEqual( await drove(), { enabled: false, shown: false, lit: 0, kept: null } );
 		await page.keyboard.press( 'Escape' );
 		await page.locator( '#pause' ).waitFor();
+		const toggle = page.locator( '#pause .pads-toggle' );
 		assert.equal( await toggle.isChecked(), false );
+		await shot( page, 'boost-pads-switch' );
+		// On from the pause menu, and pads come.
 		await toggle.check();
 		await page.locator( '#pause .resume' ).click();
 		await page.waitForFunction( () => window.drive.mode === 'driving' );
-		const on = await page.evaluate( () => {
+		const on = await drove();
+		assert.ok( on.enabled && on.shown && on.lit > 3 && on.kept === 'on', JSON.stringify( on ) );
 
-			const { driver: d, pads } = window.drive;
-			Object.assign( d, { east: 0, north: 0, heading: 0, course: 0, speed: 60 / 3.6 } );
-			for ( let i = 0; i < 300; i ++ ) {
+		// Still on after a reload; off again from the pause menu, and they go.
+		await goldenGate();
+		assert.equal( await page.evaluate( () => window.drive.pads.enabled ), true );
+		await page.keyboard.press( 'Escape' );
+		await page.locator( '#pause' ).waitFor();
+		assert.ok( await toggle.isChecked() );
+		await toggle.uncheck();
+		const off = await page.evaluate( () => {
 
-				d.update( 1 / 60 );
-				pads.update( 1 / 60 );
-
-			}
-
-			return { enabled: pads.enabled, lit: pads.pads.filter( p => p.state !== 'free' ).length, kept: localStorage.getItem( 'world-drive.pads' ) };
+			const { pads } = window.drive;
+			return { enabled: pads.enabled, shown: pads.group.visible, lit: pads.pads.filter( p => p.state !== 'free' ).length, kept: localStorage.getItem( 'world-drive.pads' ) };
 
 		} );
-		assert.ok( on.enabled && on.lit > 3 && on.kept === 'on', JSON.stringify( on ) );
+		assert.deepEqual( off, { enabled: false, shown: false, lit: 0, kept: 'off' } );
+		await page.locator( '#pause .resume' ).click();
+		await page.waitForFunction( () => window.drive.mode === 'driving' );
+		assert.deepEqual( await drove(), { enabled: false, shown: false, lit: 0, kept: 'off' } );
 		assert.deepEqual( page.errors, [] );
 		assert.deepEqual( page.outside, [] );
 
@@ -1293,7 +1297,9 @@ function effects( style ) {
 		return { geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures, objects, materials: materials.size };
 
 	};
-	// Boost pads only where the test puts one: none put down as it drives.
+	// Boost pads switched on (they're off until they are), and only where the test puts one: none
+	// put down as it drives.
+	pads.enabled = true;
 	let padded = false;
 	const step = ( frames, each ) => {
 
@@ -1602,6 +1608,7 @@ describe( 'World Drive boost and driving effects', () => {
 			// A pad tops it up: it fills before your eyes, with a shine along it.
 			Object.assign( d, { speed: 12, gauge: 0.4, supersonic: false, firing: false } );
 			d.hud.setSupersonic( false );
+			pads.enabled = true;
 			pads.clear();
 			pads.place( 'small', 0, d.north + 5 );
 			let refill = null;
@@ -1733,6 +1740,7 @@ describe( 'World Drive boost and driving effects', () => {
 				window.drive.camera.getWorldDirection( look );
 				out.shaken = Math.round( shaken.angleTo( look ) * 1e4 ) / 1e4;
 				// A pad's burst, without lighting the vehicle up.
+				pads.enabled = true;
 				pads.clear();
 				pads.place( 'small', 0, d.north + 5 );
 				let lit = false;
@@ -1980,15 +1988,14 @@ async function setUpWater( page ) {
 
 			},
 
-			// Stopped at ( 0, north ) on whatever is there, facing `heading` at `kmh`, with no trail.
+			// At ( 0, north ) on whatever is there, facing `heading` at `kmh`.
 			reset( north, heading, kmh = 0 ) {
 
 				for ( const code of [ ...d.keys ] ) d.release( code );
 				const y = d.groundAt( 0, north, 10 );
-				Object.assign( d, { east: 0, north, y, heading, course: heading, view: heading, speed: kmh / 3.6, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, flying: false, drifting: 0, driftHop: false, boost: null, firing: false, splash: null, dry: [], wetIn: 0, onWater: false, mult: 1 } );
+				Object.assign( d, { east: 0, north, y, heading, course: heading, view: heading, speed: kmh / 3.6, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, flying: false, drifting: 0, driftHop: false, boost: null, firing: false, wetIn: 0, onWater: false, mult: 1 } );
 				d.lastSafe = { east: 0, north, y };
 				d.lastBase = null;
-				d.hud.fade( false );
 				d.update( 1 / 60 );
 
 			},
@@ -2005,15 +2012,14 @@ async function setUpWater( page ) {
 
 			},
 
-			// What the HUD says: the splash's word, the fade, the message and the tricks line.
+			// What the HUD says: a word popped up (a hit's), the message and the tricks line.
 			hud: () => ( {
-				word: $( '.dhud-pop.splash' )?.textContent ?? null,
-				fade: $( '.dhud-fade' ).classList.contains( 'on' ),
+				pop: $( '.dhud-pop' )?.textContent ?? null,
 				flash: $( '.dhud-flash' ).hidden ? null : $( '.dhud-flash' ).textContent,
 				tricks: $( '.dhud-tricks' ).hidden ? null : $( '.dhud-tricks' ).textContent,
 			} ),
 
-			// The splash's spray (sprites) and foam (flat quads) showing.
+			// Sprites (spray, smoke, sparks) and foam on the water (flat quads) showing.
 			fx() {
 
 				const root = scene.getObjectByName( 'drive-fx' );
@@ -2046,83 +2052,66 @@ describe( 'World Drive water', () => {
 
 	after( () => page?.context().close() );
 
-	test( 'off the edge into water at speed: a splash, it sinks nose first with the camera on it, then it\'s back on the dry ground it came from, facing away', async () => {
+	test( 'off the edge into water, at speed and slowly: down onto its surface and on across it as on the ground, never sinking, splashing or put back', async () => {
 
 		const result = await page.evaluate( () => {
 
-			const { driver: d, camera, water } = window.drive;
+			const { driver: d, water } = window.drive;
 			const kit = window.waterKit;
 			const out = { seaIsWater: water.at( 0, - 340, - 1 ), landIsWater: water.at( 0, - 200, 0 ) };
-			kit.reset( - 200, 180, 70 );
-			d.press( 'KeyW' );
-			let flew = 0;
-			kit.step( 8, () => {
+			// From ( 0, north ) south off the edge at `kmh` (held to `most`), the gas down, for
+			// `seconds`: how low it went over the water, whether it was ever put back (a metre or more
+			// north again in a frame), what the HUD said and the foam on the water.
+			const off = ( north, kmh, most, seconds ) => {
 
-				if ( ! d.grounded || d.air ) flew ++;
-				return ! d.splash;
+				kit.reset( north, 180, kmh );
+				d.press( 'KeyW' );
+				const run = { flew: 0, low: Infinity, back: false, foam: 0, words: new Set() };
+				let was = d.north;
+				kit.step( seconds, () => {
 
-			} );
-			d.release( 'KeyW' );
-			if ( ! d.splash ) return { ...out, splashed: false };
-			const { level } = d.splash;
-			Object.assign( out, { splashed: true, flew: flew / 60, wentIn: d.north, level, height: d.height, hud: kit.hud(), fx: kit.fx() } );
-			// Sinking: how low and how far nose down; the camera held above the water, not rising or
-			// falling, with the vehicle in the middle of the view.
-			let low = Infinity, nose = 0, cameraY = [ Infinity, - Infinity ], aside = 0, fadeAt = null, back = null;
-			const ndc = d.entry.pivot.position.clone();
-			let t = 0;
-			kit.step( 3, () => {
+					d.speed = Math.min( d.speed, most / 3.6 );
+					if ( ! d.grounded || d.air ) run.flew += 1 / 60;
+					if ( d.north < - 281 ) run.low = Math.min( run.low, d.y );
+					if ( d.north > was + 1 ) run.back = true;
+					was = d.north;
+					const { pop, flash } = kit.hud();
+					for ( const word of [ pop, flash ] ) if ( word ) run.words.add( word );
+					run.foam = Math.max( run.foam, kit.fx().foam );
 
-				t += 1 / 60;
-				if ( ! d.splash ) {
+				} );
+				d.release( 'KeyW' );
+				return { ...run, words: [ ...run.words ], north: d.north, y: d.y, kmh: d.speed * 3.6, heading: d.heading, grounded: d.grounded && ! d.air, wet: water.at( d.east, d.north, d.y ) };
 
-					back = t;
-					return false;
-
-				}
-
-				low = Math.min( low, d.y );
-				nose = Math.min( nose, d.pitch );
-				cameraY = [ Math.min( cameraY[ 0 ], camera.position.y ), Math.max( cameraY[ 1 ], camera.position.y ) ];
-				d.middle( ndc ).project( camera );
-				if ( d.splash.t > 0.3 ) aside = Math.max( aside, Math.abs( ndc.x ), Math.abs( ndc.y ) );
-				if ( fadeAt === null && kit.hud().fade ) fadeAt = d.splash.t;
-
-			} );
-			Object.assign( out, { low, nose, cameraY, aside, fadeAt, back } );
-			Object.assign( out, { after: { north: d.north, y: d.y, heading: d.heading, speed: d.speed, splash: !! d.splash, onWater: water.at( d.east, d.north, d.y ), lastDry: d.dry.at( - 1 ) }, hudAfter: kit.hud() } );
-			// And it drives on, away from the water.
-			const north = d.north;
-			d.press( 'KeyW' );
-			kit.step( 1 );
-			d.release( 'KeyW' );
-			out.drove = d.north - north;
+			};
+			out.fast = off( - 200, 70, 200, 6 );
+			out.slow = off( - 268, 14, 14, 8 );
 			return out;
 
 		} );
 		console.log( 'water, off the edge:', JSON.stringify( result ) );
 		assert.ok( result.seaIsWater !== null && Math.abs( result.seaIsWater + 2 ) < 0.01, 'the sea isn\'t water' );
 		assert.equal( result.landIsWater, null );
-		assert.ok( result.splashed, 'no splash' );
-		// In the water, at its surface.
-		assert.ok( result.wentIn < - 282 && Math.abs( result.level + 2 ) < 0.01, JSON.stringify( result ) );
-		assert.ok( [ 'SPLASH!', 'KER-SPLOOSH!' ].includes( result.hud.word ), JSON.stringify( result.hud ) );
-		assert.ok( result.fx.sprites >= 40 && result.fx.foam >= 2, JSON.stringify( result.fx ) );
-		// Sinking nose first, the camera holding still above the water with it in the middle of the view.
-		assert.ok( result.low < result.level - result.height * 0.4 && result.nose < - 0.3, JSON.stringify( result ) );
-		assert.ok( result.cameraY[ 0 ] >= result.level + 1.5 && result.cameraY[ 1 ] - result.cameraY[ 0 ] < 0.01 && result.aside < 0.6, JSON.stringify( result ) );
-		// The view fades out after about a second and a half, and it's back about a quarter of a second later.
-		assert.ok( result.fadeAt >= 1.4 && result.fadeAt <= 1.6 && result.back >= 1.6 && result.back <= 2, JSON.stringify( result ) );
-		// Back on the land it drove off, a few metres from the edge, stopped and facing away from the water.
-		assert.ok( result.after.north > - 280 + 4 && result.after.north < - 200 && Math.abs( result.after.y ) < 0.01, JSON.stringify( result.after ) );
-		assert.ok( Math.abs( ( result.after.heading + 540 ) % 360 - 180 ) < 15 && result.after.speed === 0 && ! result.after.splash && result.after.onWater === null, JSON.stringify( result.after ) );
-		assert.ok( ! result.hudAfter.fade && result.hudAfter.flash === 'Back on dry land', JSON.stringify( result.hudAfter ) );
-		assert.ok( result.drove > 2, `drove ${ result.drove } m on from there` );
+		for ( const run of [ result.fast, result.slow ] ) {
+
+			// Out over the water, on its surface: never under it, never back on the land.
+			assert.ok( run.north < - 290 && run.grounded && Math.abs( run.y + 2 ) < 0.01 && run.low > - 2.01, JSON.stringify( run ) );
+			assert.ok( run.wet !== null && Math.abs( run.wet + 2 ) < 0.01 && ! run.back, JSON.stringify( run ) );
+			// Still going the way it went, with no splash's word, foam or "Back on dry land" (only
+			// how long it was in the air off the edge, and the hint the first time it's in the air).
+			assert.ok( Math.abs( ( run.heading % 360 + 360 ) % 360 - 180 ) < 5 && run.foam === 0, JSON.stringify( run ) );
+			assert.ok( run.words.every( word => / s air$|^In the air: /.test( word ) ), JSON.stringify( run.words ) );
+
+		}
+
+		// At speed it flies off the edge and drives on far out; slowly it drops off and drives on.
+		assert.ok( result.fast.flew > 0.3 && result.fast.north < - 330 && result.fast.kmh > 60, JSON.stringify( result.fast ) );
+		assert.ok( result.slow.kmh > 13, JSON.stringify( result.slow ) );
 		assert.deepEqual( page.errors, [] );
 
 	} );
 
-	test( 'off a ramp into it: the trick in the air and the combo are lost, as in a wipeout', async () => {
+	test( 'off a ramp over the water: a spin in the air comes down on the water and scores, as on the ground', async () => {
 
 		const result = await page.evaluate( () => {
 
@@ -2133,7 +2122,7 @@ describe( 'World Drive water', () => {
 			kit.reset( - 230, 180, 80 );
 			Object.assign( d, { mult: 3, lastTrick: d.clock, score: 5000 } );
 			d.press( 'KeyW' );
-			let top = 0, spun = false;
+			let top = 0, spun = false, landed = null;
 			kit.step( 8, () => {
 
 				top = Math.max( top, d.y );
@@ -2145,28 +2134,29 @@ describe( 'World Drive water', () => {
 
 				}
 
-				return ! d.splash;
+				if ( spun && ! d.air && d.grounded ) {
+
+					landed = { north: d.north, y: d.y };
+					return false;
+
+				}
 
 			} );
 			d.release( 'KeyA' );
-			const out = { top, spun, splashed: !! d.splash, north: d.north, mult: d.mult, score: d.score, air: d.air, hud: window.waterKit.hud() };
-			kit.step( 2.5, () => !! d.splash );
-			Object.assign( out, { after: { north: d.north, y: d.y, heading: d.heading } } );
+			const out = { top, spun, landed, score: d.score, hud: kit.hud() };
 			kit.remove( ramp );
 			return out;
 
 		} );
 		console.log( 'water, off a ramp:', JSON.stringify( result ) );
-		assert.ok( result.top > 2.5 && result.spun && result.splashed && result.north < - 290, JSON.stringify( result ) );
-		// Lost: the spin it was doing and the ×3 combo; the score it had is kept.
-		assert.ok( /Spin!/.test( result.hud.tricks ) && /Combo ×3 lost/.test( result.hud.tricks ), JSON.stringify( result.hud ) );
-		assert.ok( result.mult === 1 && result.score === 5000 && result.air === null, JSON.stringify( result ) );
-		// Back before the ramp's end, facing away from the water.
-		assert.ok( result.after.north > - 280 + 4 && Math.abs( ( result.after.heading + 540 ) % 360 - 180 ) < 15, JSON.stringify( result.after ) );
+		assert.ok( result.top > 2.5 && result.spun && result.landed && result.landed.north < - 290 && Math.abs( result.landed.y + 2 ) < 0.01, JSON.stringify( result ) );
+		// Landed: the spin it did pays out, and the score it had goes up.
+		assert.ok( /Spin!/.test( result.hud.tricks ) && /\+/.test( result.hud.tricks ) && ! /lost/.test( result.hud.tricks ), JSON.stringify( result.hud ) );
+		assert.ok( result.score > 5000, JSON.stringify( result ) );
 
 	} );
 
-	test( 'driving slowly off a beach into the sea does the same', async () => {
+	test( 'slowly down a beach into the sea, out across the water and back up the beach onto the land', async () => {
 
 		const result = await page.evaluate( () => {
 
@@ -2174,33 +2164,40 @@ describe( 'World Drive water', () => {
 			const kit = window.waterKit;
 			// 20 m wide, from the land's edge down into the sea (under it from north = -300).
 			const beach = kit.slab( 20, 40, 0, - 300, - 2, - 0.1 );
+			const drive = ( seconds, until ) => {
+
+				d.press( 'KeyW' );
+				let low = Infinity;
+				kit.step( seconds, () => {
+
+					d.speed = Math.min( d.speed, 11 / 3.6 );
+					low = Math.min( low, d.y );
+					return ! until();
+
+				} );
+				d.release( 'KeyW' );
+				return { north: d.north, y: d.y, low, wet: water.at( d.east, d.north, d.y ), flash: kit.hud().flash };
+
+			};
 			kit.reset( - 262, 180, 11 );
-			let into = null;
-			kit.step( 20, () => {
-
-				d.speed = 11 / 3.6;
-				if ( into === null && d.y < - 1.99 ) into = d.north;
-				return ! d.splash;
-
-			} );
-			const out = { splashed: !! d.splash, at: d.north, into, hud: kit.hud(), level: d.splash?.level };
-			kit.step( 2.5, () => !! d.splash );
-			Object.assign( out, { after: { north: d.north, y: d.y, heading: d.heading, wet: water.at( d.east, d.north, d.y ) } } );
+			const out = drive( 30, () => d.north < - 330 );
+			// Turned round out there, and back.
+			Object.assign( d, { heading: 0, course: 0, view: 0, speed: 0 } );
+			out.back = drive( 30, () => d.north > - 262 );
 			kit.remove( beach );
 			return out;
 
 		} );
-		console.log( 'water, off a beach:', JSON.stringify( result ) );
-		assert.ok( result.splashed, 'drove into the sea without a splash' );
-		// Slowly in: a small splash, once it's well out in the water.
-		assert.ok( result.hud.word === 'SPLISH!' && result.at < - 300 && result.at > - 320, JSON.stringify( result ) );
-		// Back up the beach, dry, facing up it, away from the sea.
-		assert.ok( result.after.north > result.at + 8 && result.after.y > - 1.5 && result.after.wet === null, JSON.stringify( result.after ) );
-		assert.ok( Math.abs( ( result.after.heading + 540 ) % 360 - 180 ) < 15, JSON.stringify( result.after ) );
+		console.log( 'water, off a beach and back:', JSON.stringify( result ) );
+		// Out past the beach's foot, on the water's surface, never under it.
+		assert.ok( result.north < - 330 && Math.abs( result.y + 2 ) < 0.01 && result.low > - 2.01 && Math.abs( result.wet + 2 ) < 0.01, JSON.stringify( result ) );
+		// Back up the beach onto the land, dry, driven all the way.
+		assert.ok( result.back.north > - 262 && Math.abs( result.back.y ) < 0.05 && result.back.wet === null && result.back.low > - 2.01, JSON.stringify( result.back ) );
+		assert.ok( result.flash !== 'Back on dry land' && result.back.flash !== 'Back on dry land', JSON.stringify( result ) );
 
 	} );
 
-	test( 'flying over water is fine until it comes down in it; R in the water is back on dry land at once, and R by the water never puts it in', async () => {
+	test( 'flown out over the water and let down, it lands on the surface and drives on; R on the water, and on its edge facing it, put it a few metres on, on the water', async () => {
 
 		const result = await page.evaluate( () => {
 
@@ -2208,33 +2205,78 @@ describe( 'World Drive water', () => {
 			const kit = window.waterKit;
 			kit.reset( - 250, 180, 60 );
 			const out = {};
-			// Up on F, out over the sea.
+			// Up on F, out over the sea, and down again with it let go.
 			d.press( 'KeyF' );
 			kit.step( 4 );
-			Object.assign( out, { flying: d.flying, overSea: d.north < - 300, high: d.y, splashFlying: !! d.splash } );
+			Object.assign( out, { flying: d.flying, overSea: d.north < - 300, high: d.y } );
 			d.release( 'KeyF' );
-			kit.step( 30, () => ! d.splash );
-			Object.assign( out, { downIn: !! d.splash, at: d.north, flyingAfter: d.flying } );
-			// R a moment into the splash.
-			kit.step( 0.3 );
+			kit.step( 30, () => d.flying || ! d.grounded );
+			Object.assign( out, { down: { north: d.north, y: d.y, flying: d.flying, grounded: d.grounded } } );
+			d.press( 'KeyW' );
+			kit.step( 1 );
+			d.release( 'KeyW' );
+			Object.assign( out, { drove: out.down.north - d.north, on: d.y } );
+			// R out there: a few metres on, still on the water.
+			const north = d.north;
 			d.press( 'KeyR' );
 			d.release( 'KeyR' );
-			Object.assign( out, { afterR: { splash: !! d.splash, north: d.north, y: d.y, fade: kit.hud().fade } } );
-			// R on the edge facing the water: not the few metres on, into the sea.
+			Object.assign( out, { afterR: { moved: north - d.north, y: d.y, speed: d.speed } } );
+			// R on the edge facing the water: the few metres on are the water, and that's where it goes.
 			kit.reset( - 277, 180 );
 			kit.step( 0.2 );
 			d.press( 'KeyR' );
 			d.release( 'KeyR' );
 			kit.step( 0.3 );
-			Object.assign( out, { edgeR: { north: d.north, y: d.y, splash: !! d.splash } } );
+			Object.assign( out, { edgeR: { north: d.north, y: d.y } } );
 			return out;
 
 		} );
 		console.log( 'water, flying and R:', JSON.stringify( result ) );
-		assert.ok( result.flying && result.overSea && result.high > 5 && ! result.splashFlying, JSON.stringify( result ) );
-		assert.ok( result.downIn && result.at < - 300 && ! result.flyingAfter, JSON.stringify( result ) );
-		assert.ok( ! result.afterR.splash && result.afterR.north > - 280 && Math.abs( result.afterR.y ) < 0.01 && ! result.afterR.fade, JSON.stringify( result.afterR ) );
-		assert.ok( result.edgeR.north > - 280 && ! result.edgeR.splash, JSON.stringify( result.edgeR ) );
+		assert.ok( result.flying && result.overSea && result.high > 5, JSON.stringify( result ) );
+		assert.ok( result.down.north < - 300 && ! result.down.flying && result.down.grounded && Math.abs( result.down.y + 2 ) < 0.01, JSON.stringify( result.down ) );
+		assert.ok( result.drove > 3 && Math.abs( result.on + 2 ) < 0.01, JSON.stringify( result ) );
+		assert.ok( Math.abs( result.afterR.moved - 4 ) < 0.01 && Math.abs( result.afterR.y + 2 ) < 0.01 && result.afterR.speed === 0, JSON.stringify( result.afterR ) );
+		assert.ok( result.edgeR.north < - 280 && Math.abs( result.edgeR.y + 2 ) < 0.01, JSON.stringify( result.edgeR ) );
+
+	} );
+
+	test( 'paused out on the water, it\'s parked there and drives on from there; what it sends others says it\'s on the ground, never sinking or throwing up spray', async () => {
+
+		const result = await page.evaluate( async () => {
+
+			const { driver: d } = window.drive;
+			const kit = window.waterKit;
+			const { flagsOf } = await import( '/src/drive-app/live.js' );
+			const { FLAGS } = await import( '/src/drive-app/live-protocol.js' );
+			kit.reset( - 320, 180, 30 );
+			d.press( 'KeyW' );
+			kit.step( 1 );
+			d.release( 'KeyW' );
+			kit.step( 1 );
+			const flags = flagsOf( d, false );
+			const out = {
+				flags: { grounded: !! ( flags & FLAGS.grounded ), splash: !! ( flags & FLAGS.splash ), spray: !! ( flags & FLAGS.spray ) },
+				before: { north: d.north, y: d.y },
+			};
+			d.stop();
+			await new Promise( resolve => setTimeout( resolve, 100 ) );
+			const paused = window.drive.mode;
+			window.drive.resume();
+			Object.assign( out, { paused, resumed: window.drive.mode, after: { north: d.north, y: d.y, grounded: d.grounded } } );
+			d.press( 'KeyW' );
+			kit.step( 1 );
+			d.release( 'KeyW' );
+			Object.assign( out, { drove: out.after.north - d.north, y: d.y } );
+			return out;
+
+		} );
+		console.log( 'water, paused on it:', JSON.stringify( result ) );
+		assert.deepEqual( result.flags, { grounded: true, splash: false, spray: false } );
+		assert.ok( result.before.north < - 320 && Math.abs( result.before.y + 2 ) < 0.01, JSON.stringify( result ) );
+		assert.ok( result.paused === 'paused' && result.resumed === 'driving', JSON.stringify( result ) );
+		assert.ok( Math.abs( result.after.north - result.before.north ) < 0.05 && Math.abs( result.after.y + 2 ) < 0.01 && result.after.grounded, JSON.stringify( result.after ) );
+		assert.ok( result.drove > 2 && Math.abs( result.y + 2 ) < 0.01, JSON.stringify( result ) );
+		assert.deepEqual( page.errors, [] );
 
 	} );
 
@@ -2244,6 +2286,8 @@ describe( 'World Drive water', () => {
 
 			const { driver: d, pads } = window.drive;
 			const kit = window.waterKit;
+			// They're off until they're switched on.
+			pads.enabled = true;
 			const beach = kit.slab( 20, 40, 0, - 300, - 2, - 0.1 );
 			// Stopped on the beach just over the sea, facing out to sea: most spots tried are on it.
 			kit.reset( - 296, 180 );
@@ -2354,83 +2398,6 @@ describe( 'World Drive water', () => {
 
 	} );
 
-	test( 'slowly off a quay: down into the water by its edge is a splash there, not a dozen metres out', async () => {
-
-		const result = await page.evaluate( () => {
-
-			const { driver: d } = window.drive;
-			const kit = window.waterKit;
-			kit.reset( - 268, 180, 14 );
-			d.press( 'KeyW' );
-			kit.step( 10, () => {
-
-				d.speed = Math.min( d.speed, 14 / 3.6 );
-				return ! d.splash;
-
-			} );
-			d.release( 'KeyW' );
-			const out = { splashed: !! d.splash, at: d.north, level: d.splash?.level, word: kit.hud().word };
-			kit.step( 2.5, () => !! d.splash );
-			Object.assign( out, { after: { north: d.north, y: d.y, heading: d.heading } } );
-			return out;
-
-		} );
-		console.log( 'water, off a quay:', JSON.stringify( result ) );
-		assert.ok( result.splashed && result.at < - 280 && result.at > - 288 && Math.abs( result.level + 2 ) < 0.01, JSON.stringify( result ) );
-		assert.ok( result.after.north > - 280 && Math.abs( result.after.y ) < 0.01 && Math.abs( ( result.after.heading + 540 ) % 360 - 180 ) < 15, JSON.stringify( result.after ) );
-
-	} );
-
-	test( 'never the same splash over and over: put back on a spot that turns out to be water, it\'s let be; the way back is never level with the water if it can help it; a pause keeps the way back', async () => {
-
-		const result = await page.evaluate( async () => {
-
-			const { driver: d } = window.drive;
-			const kit = window.waterKit;
-			const out = {};
-			let splashes = 0;
-			const start = d.startSplash;
-			d.startSplash = function ( ...args ) {
-
-				splashes ++;
-				return start.apply( this, args );
-
-			};
-			// The only way back is on the sea (as if coarse tiles there had looked dry).
-			kit.reset( - 340, 180 );
-			d.dry = [ { east: 0, north: - 330, y: - 2, heading: 0 } ];
-			d.startSplash( - 2, 3 );
-			kit.step( 2.5, () => !! d.splash );
-			Object.assign( out, { back: { north: d.north, y: d.y } } );
-			kit.step( 5 );
-			Object.assign( out, { splashes, left: d.dry.length, after: { north: d.north, y: d.y, splash: !! d.splash } } );
-			// A way back with a spot about level with the water nearest it (a pontoon, say): the one
-			// on the land before it is taken.
-			d.dry = [ { east: 0, north: - 236, y: 0, heading: 180 }, { east: 0, north: - 250, y: - 1.8, heading: 180 }, { east: 0, north: - 276, y: 0, heading: 180 } ];
-			out.dryBack = d.dryBack( 0, - 300, - 2 ).north;
-			d.startSplash = start;
-			// Driven along the land, paused and driven on: the trail is still there.
-			kit.reset( - 150, 0 );
-			d.press( 'KeyW' );
-			kit.step( 3 );
-			d.release( 'KeyW' );
-			const trail = d.dry.length;
-			d.stop();
-			await new Promise( resolve => setTimeout( resolve, 100 ) );
-			const paused = window.drive.mode;
-			window.drive.resume();
-			Object.assign( out, { trail, paused, resumed: window.drive.mode, trailAfter: d.dry.length } );
-			return out;
-
-		} );
-		console.log( 'water, no splash loop:', JSON.stringify( result ) );
-		assert.ok( Math.abs( result.back.north + 330 ) < 1, JSON.stringify( result ) );
-		assert.ok( result.splashes === 1 && result.left === 0 && ! result.after.splash && Math.abs( result.after.y + 2 ) < 0.01, JSON.stringify( result ) );
-		assert.equal( result.dryBack, - 236 );
-		assert.ok( result.trail > 3 && result.paused === 'paused' && result.resumed === 'driving' && result.trailAfter === result.trail, JSON.stringify( result ) );
-
-	} );
-
 } );
 
 // A pin typed in on the globe with the pad `depth` m under the water's surface there (the sea's, or
@@ -2518,7 +2485,7 @@ describe( 'World Drive, the open sea', () => {
 
 	} );
 
-	test( 'dropped in on the open sea: started on its surface at the sea\'s height, riding on it, the Earth curving away under it, flying and coming down on it, never a splash or a boost pad', async () => {
+	test( 'dropped in on the open sea: started on its surface at the sea\'s height, riding on it, the Earth curving away under it, flying and coming down on it, never a boost pad', async () => {
 
 		// The sea bed 3 km down; the pin typed in, as anyone would.
 		await page.evaluate( () => {
@@ -2542,6 +2509,8 @@ describe( 'World Drive, the open sea', () => {
 				toast: toast.hidden ? null : toast.textContent, sea: sea.active, colliders: ground.getColliders().length, height: place.height,
 				start: { y: d.y, heading: d.heading }, look: water.look( 0, 0, 0 ), dry: water.look( 0, 0, 0 ).dry,
 			};
+			// They're off until they're switched on.
+			pads.enabled = true;
 			const step = ( seconds, each ) => {
 
 				for ( let i = 0; i < Math.round( seconds * 60 ); i ++ ) {
@@ -2554,21 +2523,20 @@ describe( 'World Drive, the open sea', () => {
 				}
 
 			};
-			// Driven on for 6 s: on the water all the way, with nowhere dry to go back to.
+			// Driven on for 6 s: on the water all the way.
 			for ( const code of [ ...d.keys ] ) d.release( code );
-			const drive = { splashed: false, low: Infinity, high: - Infinity, onWater: 0, pads: 0 };
+			const drive = { low: Infinity, high: - Infinity, onWater: 0, pads: 0 };
 			d.press( 'KeyW' );
 			step( 6, () => {
 
-				drive.splashed ||= !! d.splash;
 				drive.low = Math.min( drive.low, d.y );
 				drive.high = Math.max( drive.high, d.y );
-				if ( d.onWater ) drive.onWater += 1 / 60;
+				if ( water.at( d.east, d.north, d.y ) !== null ) drive.onWater += 1 / 60;
 				drive.pads = Math.max( drive.pads, pads.pads.filter( p => p.state !== 'free' ).length );
 
 			} );
 			d.release( 'KeyW' );
-			Object.assign( drive, { north: d.north, dry: d.dry.length } );
+			drive.north = d.north;
 			out.drive = drive;
 			// 5 km on, the sea is 2 m lower than where the scene is centred: the Earth curving away.
 			Object.assign( d, { east: 0, north: 5000, speed: 10, grounded: true } );
@@ -2579,19 +2547,10 @@ describe( 'World Drive, the open sea', () => {
 			step( 2 );
 			const high = d.y - out.far.y;
 			d.release( 'KeyF' );
-			let splashed = false;
-			step( 20, () => {
-
-				splashed ||= !! d.splash;
-				return ! d.grounded || d.flying;
-
-			} );
-			step( 0.5, () => {
-
-				splashed ||= !! d.splash;
-
-			} );
-			out.flew = { high, splashed, flying: d.flying, grounded: d.grounded, y: d.y, onWater: d.onWater };
+			step( 20, () => ! d.grounded || d.flying );
+			step( 0.5 );
+			out.flew = { high, flying: d.flying, grounded: d.grounded, y: d.y, onWater: water.at( d.east, d.north, d.y ) !== null };
+			pads.enabled = false;
 			return out;
 
 		} );
@@ -2601,20 +2560,20 @@ describe( 'World Drive, the open sea', () => {
 		// The sea's height there (EGM96: 28 m under the ellipsoid), at the scene's y = 0.
 		assert.ok( Math.abs( result.height + 28 ) < 1, `the sea at ${ result.height } m` );
 		assert.ok( Math.abs( result.start.y ) < 0.01 && result.look.level !== null && Math.abs( result.look.level ) < 0.01 && ! result.dry, JSON.stringify( result ) );
-		assert.ok( ! result.drive.splashed && result.drive.north > 60 && result.drive.onWater > 5.5 && result.drive.dry === 0, JSON.stringify( result.drive ) );
+		assert.ok( result.drive.north > 60 && result.drive.onWater > 5.5, JSON.stringify( result.drive ) );
 		assert.ok( Math.abs( result.drive.low ) < 0.01 && Math.abs( result.drive.high ) < 0.01 && result.drive.pads === 0, JSON.stringify( result.drive ) );
 		assert.ok( Math.abs( result.far.y - result.far.expected ) < 0.1 && result.far.expected < - 1.9 && Math.abs( result.far.look - result.far.y ) < 0.01, JSON.stringify( result.far ) );
-		assert.ok( result.flew.high > 5 && ! result.flew.splashed && ! result.flew.flying && result.flew.grounded && result.flew.onWater, JSON.stringify( result.flew ) );
+		assert.ok( result.flew.high > 5 && ! result.flew.flying && result.flew.grounded && result.flew.onWater, JSON.stringify( result.flew ) );
 		assert.ok( Math.abs( result.flew.y - result.far.y ) < 0.1, JSON.stringify( result.flew ) );
 		assert.deepEqual( page.errors, [] );
 
 	} );
 
-	test( 'once it has been on dry ground (an island), driving off into the open sea is a splash and back on the island; back on the globe the sea goes, and a drop-in on land has none', async () => {
+	test( 'from an island, driven off into the open sea it drives on across the sea\'s surface, and turned round, back up onto the island; back on the globe the sea goes, and a drop-in on land has none', async () => {
 
 		const result = await page.evaluate( () => {
 
-			const { driver: d, sea, ground } = window.drive;
+			const { driver: d, sea, ground, water } = window.drive;
 			// An island 0.3 m over the sea, 40 m across, 20 m ahead: a slab cut from the pad, 3 km up
 			// from it.
 			const pad = ground.getColliders()[ 0 ];
@@ -2626,7 +2585,7 @@ describe( 'World Drive, the open sea', () => {
 			pad.add( island );
 			island.updateMatrixWorld( true );
 			for ( const code of [ ...d.keys ] ) d.release( code );
-			Object.assign( d, { heading: 0, course: 0, view: 0, speed: 8, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, flying: false, splash: null, dry: [], onWater: false } );
+			Object.assign( d, { heading: 0, course: 0, view: 0, speed: 8, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, flying: false, onWater: false } );
 			const $ = selector => document.querySelector( `#hud ${ selector }` );
 			const step = ( seconds, each ) => {
 
@@ -2639,29 +2598,35 @@ describe( 'World Drive, the open sea', () => {
 				}
 
 			};
-			d.press( 'KeyW' );
-			let word = null;
+			// Up onto the island, over it and off its far end, on till 40 m past it.
 			const start = d.north;
-			step( 12, () => {
+			let onIsland = 0, was = d.north, putBack = false;
+			d.press( 'KeyW' );
+			step( 20, () => {
 
-				word ??= d.splash && ( $( '.dhud-pop.splash' )?.textContent ?? null );
-				return ! d.splash;
+				if ( Math.abs( d.y - top ) < 0.05 ) onIsland += 1 / 60;
+				if ( d.north < was - 1 ) putBack = true;
+				was = d.north;
+				return d.north < start + 100;
 
 			} );
+			const out = { islandAt: [ start + 20, start + 60 ], onIsland, putBack, off: { north: d.north, y: d.y, level: water.at( d.east, d.north, d.y ), grounded: d.grounded, flash: $( '.dhud-flash' ).hidden ? null : $( '.dhud-flash' ).textContent } };
+			// Turned round out there, and back onto the island.
+			Object.assign( d, { heading: 180, course: 180, view: 180 } );
+			step( 20, () => d.north > start + 40 );
 			d.release( 'KeyW' );
-			const out = { islandAt: [ start + 20, start + 60 ], splashed: !! d.splash, wentIn: d.north, trail: d.dry.length, word };
-			step( 3, () => ! d.splash || undefined );
 			step( 0.2 );
-			Object.assign( out, { back: { north: d.north, y: d.y, splash: !! d.splash, flash: $( '.dhud-flash' ).hidden ? null : $( '.dhud-flash' ).textContent, island: d.y - top } } );
+			out.back = { north: d.north, island: d.y - top };
 			island.removeFromParent();
 			return out;
 
 		} );
 		console.log( 'the open sea, an island:', JSON.stringify( result ) );
-		assert.ok( result.splashed && result.wentIn > result.islandAt[ 1 ] && result.trail > 3, JSON.stringify( result ) );
-		assert.ok( [ 'SPLISH!', 'SPLASH!', 'KER-SPLOOSH!' ].includes( result.word ), JSON.stringify( result ) );
-		assert.ok( ! result.back.splash && Math.abs( result.back.island ) < 0.05 && result.back.north > result.islandAt[ 0 ] && result.back.north < result.islandAt[ 1 ], JSON.stringify( result.back ) );
-		assert.equal( result.back.flash, 'Back on dry land' );
+		// Over the island and on out across the sea, on its surface, never put back.
+		assert.ok( result.onIsland > 1 && ! result.putBack && result.off.north > result.islandAt[ 1 ] + 30, JSON.stringify( result ) );
+		assert.ok( result.off.level !== null && Math.abs( result.off.y - result.off.level ) < 0.01 && result.off.grounded && result.off.flash !== 'Back on dry land', JSON.stringify( result.off ) );
+		// And back up onto it.
+		assert.ok( Math.abs( result.back.island ) < 0.05 && result.back.north > result.islandAt[ 0 ] && result.back.north < result.islandAt[ 1 ], JSON.stringify( result.back ) );
 
 		// M: the globe, and the sea gone with the place.
 		await page.keyboard.press( 'KeyM' );
@@ -2767,7 +2732,7 @@ describe( 'World Drive, the open sea', () => {
 
 	} );
 
-	test( 'a big lake whose bed Google draws (the pad 200 m under Lake Baikal\'s surface): started on the lake\'s surface, 455.5 m over the sea\'s height, water like the sea: ridden on with no splash and no boost pads, a floating ride throwing up spray, and once it has been on dry ground (an island) driving off into it a splash and back on the island, not the bed; 14 m under it, on that as before', async () => {
+	test( 'a big lake whose bed Google draws (the pad 200 m under Lake Baikal\'s surface): started on the lake\'s surface, 455.5 m over the sea\'s height, water like the sea: ridden on with no boost pads, a floating ride throwing up spray, and from an island driven off into it, on across its surface, not the bed; 14 m under it, on that as before', async () => {
 
 		const lake = await dropInOver( page, '53.25, 108.1', 200 );
 		console.log( 'Lake Baikal:', JSON.stringify( lake ) );
@@ -2777,7 +2742,7 @@ describe( 'World Drive, the open sea', () => {
 		await shot( page, 'drive-lake' );
 		const result = await page.evaluate( () => {
 
-			const { driver: d, sea, pads, ground, scene } = window.drive;
+			const { driver: d, sea, pads, ground, scene, water } = window.drive;
 			const spray = () => scene.getObjectByName( 'drive-fx' ).children.filter( o => o.isSprite && o.visible ).length;
 			const step = ( seconds, each ) => {
 
@@ -2792,20 +2757,20 @@ describe( 'World Drive, the open sea', () => {
 
 			};
 			for ( const code of [ ...d.keys ] ) d.release( code );
-			const out = { splashed: false, low: Infinity, high: - Infinity, onWater: 0, pads: 0, spray: 0 };
+			// They're off until they're switched on.
+			pads.enabled = true;
+			const out = { low: Infinity, high: - Infinity, onWater: 0, pads: 0, spray: 0 };
 			const watch = () => {
 
-				out.splashed ||= !! d.splash;
 				out.low = Math.min( out.low, d.y );
 				out.high = Math.max( out.high, d.y );
-				if ( d.onWater ) out.onWater += 1 / 60;
+				if ( water.at( d.east, d.north, d.y ) !== null ) out.onWater += 1 / 60;
 				out.pads = Math.max( out.pads, pads.pads.filter( p => p.state !== 'free' ).length );
 
 			};
 			// Driven on for 4 s, then 2 s more floating (the hovercraft's tuning, on the kart).
 			d.press( 'KeyW' );
 			step( 4, watch );
-			out.dry = d.dry.length;
 			d.floats = true;
 			step( 2, () => {
 
@@ -2814,7 +2779,9 @@ describe( 'World Drive, the open sea', () => {
 
 			} );
 			d.floats = false;
-			// An island 0.3 m over the lake, 40 m across, 20 m ahead: a slab cut from the pad.
+			pads.enabled = false;
+			// An island 0.3 m over the lake, 40 m across, 20 m ahead: a slab cut from the pad. Over it
+			// and off its far end, on till 40 m past it.
 			const pad = ground.getColliders()[ 0 ];
 			const island = pad.children.find( child => child.isMesh ).clone();
 			const top = d.y + 0.3;
@@ -2822,23 +2789,29 @@ describe( 'World Drive, the open sea', () => {
 			island.position.set( - d.east, top - pad.position.y, d.north + 40 );
 			pad.add( island );
 			island.updateMatrixWorld( true );
-			Object.assign( d, { heading: 0, course: 0, view: 0, speed: 8, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, flying: false, splash: null, dry: [], onWater: false } );
+			Object.assign( d, { heading: 0, course: 0, view: 0, speed: 8, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, flying: false, onWater: false } );
 			const start = d.north;
-			step( 12, () => ! d.splash );
-			out.island = { at: [ start + 20, start + 60 ], splashed: !! d.splash, wentIn: d.north, trail: d.dry.length };
-			step( 3, () => ! d.splash || undefined );
+			let onIsland = 0;
+			step( 20, () => {
+
+				if ( Math.abs( d.y - top ) < 0.05 ) onIsland += 1 / 60;
+				return d.north < start + 100;
+
+			} );
 			d.release( 'KeyW' );
 			step( 0.2 );
-			out.back = { north: d.north, splash: !! d.splash, island: d.y - top, bed: d.y - pad.position.y };
+			out.island = { at: [ start + 20, start + 60 ], onIsland, north: d.north, lake: d.y - ( top - 0.3 ), bed: d.y - pad.position.y, wet: water.at( d.east, d.north, d.y ) !== null };
 			island.removeFromParent();
 			return out;
 
 		} );
 		console.log( 'Lake Baikal, driven on:', JSON.stringify( result ) );
-		assert.ok( result.onWater > 5.5 && result.dry === 0 && result.pads === 0 && Math.abs( result.low ) < 0.01 && Math.abs( result.high ) < 0.01, JSON.stringify( result ) );
-		assert.ok( result.spray > 0 && ! result.splashed, JSON.stringify( result ) );
-		assert.ok( result.island.splashed && result.island.wentIn > result.island.at[ 1 ] && result.island.trail > 3, JSON.stringify( result.island ) );
-		assert.ok( ! result.back.splash && Math.abs( result.back.island ) < 0.05 && result.back.north > result.island.at[ 0 ] && result.back.north < result.island.at[ 1 ] && result.back.bed > 199, JSON.stringify( result.back ) );
+		assert.ok( result.onWater > 5.5 && result.pads === 0 && Math.abs( result.low ) < 0.01 && Math.abs( result.high ) < 0.01, JSON.stringify( result ) );
+		assert.ok( result.spray > 0, JSON.stringify( result ) );
+		// Over the island and on out across the lake, on its surface (the lake's curve over 100 m is
+		// a few centimetres), far over its bed.
+		assert.ok( result.island.onIsland > 1 && result.island.north > result.island.at[ 1 ] + 30 && result.island.wet, JSON.stringify( result.island ) );
+		assert.ok( Math.abs( result.island.lake ) < 0.05 && result.island.bed > 199, JSON.stringify( result.island ) );
 		const near = await dropInOver( page, '53.25, 108.1', 14 );
 		assert.ok( ! near.sea && near.colliders === 1 && near.toast === null && Math.abs( near.y + 14 ) < 0.5, JSON.stringify( near ) );
 		// The drop-in's own question, with the bed as Google draws it, 1.6 km under the lake's surface.

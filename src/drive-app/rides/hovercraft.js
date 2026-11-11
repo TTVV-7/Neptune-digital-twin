@@ -6,8 +6,8 @@ import { BLACK, block, CHROME, DARK, driver, GLASS, HEADLIGHT, mat, merge, paint
 // the back with rudders behind it. No wheels: it floats HOVER m over the ground, bobbing a little,
 // over a soft shadow, so roads, grass and water are all the same to it. 4.2 m long and 2.1 m wide,
 // 1.9 m tall to the top of the duct, on y = 0, facing -Z. The fan spins faster with the gas and
-// the speed, and the rudders swing with the steering (onDrive). Where World Drive finds water, the
-// others splash and sink: it `floats` on (drive.js), throwing up spray behind it.
+// the speed, and the rudders swing with the steering (onDrive). Every ride drives across water in
+// World Drive, but only this one `floats` (drive.js): on water it throws up spray behind it.
 
 const HOVER = 0.16;
 const BODY_COLOUR = 0xffc21a;

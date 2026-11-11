@@ -28,7 +28,7 @@ export const PLACES = [
 		todo: [
 			'Start on the deck and drive between the two towers to the Marin side.',
 			'Hit the booster on the span and hold it into overdrive.',
-			'Fly up beside a tower and glide back down over the bay. Miss the deck and it\'s a splash.',
+			'Fly up beside a tower and glide back down over the bay: land on the deck, or on the water and drive on across it.',
 			'Head into the city: search for Lombard Street or Twin Peaks and drop in there.',
 		],
 	},
@@ -66,7 +66,7 @@ export const PLACES = [
 			'Follow the Grand Prix circuit from the start line on Boulevard Albert 1er.',
 			'Find the tunnel and boost through it.',
 			'Drift the hairpin, one of the slowest corners in Formula 1, and let go for a mini-turbo.',
-			'Drive off the quay and into the harbour for a splash.',
+			'Drive off the quay and out across the harbour among the yachts.',
 		],
 	},
 	{
@@ -194,7 +194,7 @@ export const PLACES = [
 		todo: [
 			'Start on the deck and drive it end to end, high over the shipping channel.',
 			'Boost across the span to the North Shore.',
-			'Go over the railing and it\'s a splash in Burrard Inlet.',
+			'Go over the railing, come down on Burrard Inlet and drive across the water to the shore.',
 		],
 	},
 	{
@@ -317,7 +317,7 @@ export const PLACES = [
 		],
 		todo: [
 			'Drive the length of the avenue along the beach.',
-			'Drive off the sand into the sea for a splash.',
+			'Drive down off the sand and out across the sea.',
 			'Fly up for the view of the bay and the hills round it.',
 		],
 	},

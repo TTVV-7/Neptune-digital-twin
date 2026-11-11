@@ -950,8 +950,7 @@ export function flagsOf( driver, paused ) {
 	if ( d.flying ) flags |= FLAGS.flying;
 	if ( ! d.grounded && ! d.flying ) flags |= FLAGS.air;
 	if ( d.supersonic ) flags |= FLAGS.supersonic;
-	if ( d.splash ) flags |= FLAGS.splash;
-	if ( d.grounded && ! d.flying && ! d.air && ! d.splash ) flags |= FLAGS.grounded;
+	if ( d.grounded && ! d.flying && ! d.air ) flags |= FLAGS.grounded;
 	if ( d.floats && d.onWater && d.grounded && ! d.flying ) flags |= FLAGS.spray;
 	if ( d.drifting ) flags |= MathUtils.clamp( d.driftLevel | 0, 0, 3 ) << FLAGS.levelShift;
 	return flags;

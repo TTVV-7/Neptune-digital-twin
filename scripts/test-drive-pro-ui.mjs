@@ -7,8 +7,9 @@
 // counts on this computer. With ?pro=1 here: each new ride drives, drifts, is thrown up by a wall
 // and lands, and their handling is measured against the kart's (top speed, 0 to 100 km/h, turning,
 // how high the same wall throws them, and that it goes supersonic); the hovercraft hovers with no
-// wheels, and rides over water (the test pad's sea, as Google draws water) throwing up spray where
-// the coupe splashes, with no boost pads put down on it; the Garage's paint, decals, boost style,
+// wheels, and rides over water (the test pad's sea, as Google draws water) throwing up spray, where
+// the coupe drives across it too but with none, and no boost pads put down on it; the Garage's
+// paint, decals, boost style,
 // flame and trail go on the ride being driven and are still there after a reload, and a look saved
 // before the boost styles keeps its flame's colour; what a trail and the booster cost a frame;
 // every boost style drawn at 150 km/h (a picture of each), keeping to its budget and making nothing
@@ -655,7 +656,7 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 
 	} );
 
-	test( 'the hovercraft rides over water, throwing up spray, where the others splash; no boost pads on the water', async () => {
+	test( 'the hovercraft rides over water, throwing up spray; the coupe drives across it too, with none; no boost pads on the water', async () => {
 
 		// The pad's sea, 2 m below its land south of north = -280, as Google draws water: one even
 		// colour (see water.js and test-drive-ui.mjs).
@@ -681,25 +682,35 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 				}
 
 				for ( const code of [ ...d.keys ] ) d.release( code );
-				Object.assign( d, { east: 0, north: - 230, y: 0, heading: 180, course: 180, view: 180, speed: 60 / 3.6, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, flying: false, drifting: 0, boost: null, firing: false, splash: null, dry: [], wetIn: 0, onWater: false } );
+				Object.assign( d, { east: 0, north: - 230, y: 0, heading: 180, course: 180, view: 180, speed: 60 / 3.6, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, flying: false, drifting: 0, boost: null, firing: false, wetIn: 0, onWater: false } );
+				// They're off until they're switched on.
+				pads.enabled = true;
 				pads.clear();
 				const spray = () => scene.getObjectByName( 'drive-fx' ).children.filter( o => o.isSprite && o.visible ).length;
-				const out = { name: d.entry.state.name, splashed: false, onWater: 0, low: Infinity, high: - Infinity, sprayOnLand: 0, sprayOnWater: 0, padsOnSea: 0, pads: 0 };
+				// onWater: how long the Driver said it was on water (only for what floats, for its
+				// spray); out: how long it was on the sea's surface, well out past the edge (by then a
+				// landing's dust off it has settled), and the sprites showing there.
+				const out = { name: d.entry.state.name, onWater: 0, out: 0, low: Infinity, high: - Infinity, sprayOnLand: 0, sprayOnWater: 0, sprayOut: 0, padsOnSea: 0, pads: 0 };
 				const seen = new Set();
 				d.press( 'KeyW' );
-				for ( let i = 0; i < 10 * 60 && ! out.splashed; i ++ ) {
+				for ( let i = 0; i < 10 * 60; i ++ ) {
 
 					d.update( 1 / 60 );
 					pads.update( 1 / 60 );
-					out.splashed = !! d.splash;
 					if ( d.onWater ) {
 
 						out.onWater += 1 / 60;
-						out.low = Math.min( out.low, d.y );
-						out.high = Math.max( out.high, d.y );
 						out.sprayOnWater = Math.max( out.sprayOnWater, spray() );
 
 					} else if ( d.north > - 270 ) out.sprayOnLand = Math.max( out.sprayOnLand, spray() );
+					if ( d.north < - 360 ) {
+
+						out.out += 1 / 60;
+						out.low = Math.min( out.low, d.y );
+						out.high = Math.max( out.high, d.y );
+						out.sprayOut = Math.max( out.sprayOut, spray() );
+
+					}
 					for ( const p of pads.pads ) {
 
 						const key = `${ p.index }:${ p.at.z.toFixed( 1 ) }`;
@@ -713,11 +724,11 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 				}
 
 				d.release( 'KeyW' );
+				pads.enabled = false;
 				out.north = d.north;
 				// Back on the land, for what comes next.
 				for ( let i = 0; i < 150; i ++ ) d.update( 1 / 60 );
-				Object.assign( d, { east: 0, north: 0, y: 0, heading: 0, course: 0, view: 0, speed: 0, splash: null } );
-				d.hud.fade( false );
+				Object.assign( d, { east: 0, north: 0, y: 0, heading: 0, course: 0, view: 0, speed: 0 } );
 				return out;
 
 			} );
@@ -726,16 +737,19 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 		const hover = await across( 'Hovercraft' );
 		console.log( 'hovercraft over the water:', JSON.stringify( hover ) );
 		assert.equal( hover.name, 'Hovercraft' );
-		// Out over the sea for seconds, on its surface, never splashing, spray behind it there only.
-		assert.ok( ! hover.splashed && hover.onWater > 5 && hover.north < - 500, JSON.stringify( hover ) );
+		// Out over the sea for seconds, on its surface, spray behind it there only.
+		assert.ok( hover.onWater > 5 && hover.out > 3 && hover.north < - 500, JSON.stringify( hover ) );
 		assert.ok( Math.abs( hover.low + 2 ) < 0.05 && Math.abs( hover.high + 2 ) < 0.05, JSON.stringify( hover ) );
 		assert.ok( hover.sprayOnLand === 0 && hover.sprayOnWater >= 10, JSON.stringify( hover ) );
-		assert.equal( hover.padsOnSea, 0 );
+		assert.ok( hover.pads > 0 && hover.padsOnSea === 0, JSON.stringify( hover ) );
 		await shot( page, 'pro-hovercraft-water' );
 
+		// The coupe off the edge and on across the sea as on the ground: on its surface (its wheels
+		// on it, its pivot there), with no spray, as it doesn't float.
 		const coupe = await across( 'Sports coupe' );
-		console.log( 'sports coupe into the water:', JSON.stringify( coupe ) );
-		assert.ok( coupe.splashed && coupe.north < - 280, JSON.stringify( coupe ) );
+		console.log( 'sports coupe across the water:', JSON.stringify( coupe ) );
+		assert.ok( coupe.out > 3 && coupe.north < - 500 && Math.abs( coupe.low + 2 ) < 0.05 && Math.abs( coupe.high + 2 ) < 0.05, JSON.stringify( coupe ) );
+		assert.ok( coupe.onWater === 0 && coupe.sprayOut === 0 && coupe.padsOnSea === 0, JSON.stringify( coupe ) );
 		assert.deepEqual( page.errors, [] );
 
 	} );

@@ -131,7 +131,7 @@ Hit something (a wall, a building, a parked car, a barrier) and you don't stop: 
 
 - **The booster** (**Shift**, or **B**) fires the whole gauge, 2.5 s of it (it needs 15 % to light), pushing you up
   to twice the ride's top speed. The gauge refills by itself in 8 s; landed tricks top it up (a fifth
-  each), and so do boost pads. What it leaves behind is the ride's **boost style** from the
+  each), and so do boost pads (once they're switched on). What it leaves behind is the ride's **boost style** from the
   [Garage](#the-garage): the classic flame, bubbles or confetti, or with the pass one of nine more.
 - **Overdrive.** Boost at 85 % or more of that doubled top speed for three quarters of a second and
   you hit overdrive (the code calls it supersonic): a sonic boom (shock rings blown out round you, a flash and a jolt, the edges of the view flashing white), streaks of
@@ -140,12 +140,15 @@ Hit something (a wall, a building, a parked car, a barrier) and you don't stop: 
   once if you hit something. Every ride can, each against its own top speed (the kart at about
   190 km/h, the pickup at about 290). It's all in `src/drive.js` (`SUPERSONIC`) and `drive-boosts.js`;
   World Drive widens the view by `driver.warp`.
-- **Boost pads.** Glowing pads turn up on the ground ahead of and round you as you drive, each under
-  a column of light: small gold ones (+12 % of the gauge) and big orange ones (a full gauge). Drive over
-  one and it goes dark, lighting again 4 s later (a big one 10 s); with the gauge already full you
-  leave it for later. There are at most 12 (9 small, 3 big), 15 m apart or more, and those you leave
-  far behind are put down ahead again. They never go down on [water](#water), nor by it. **Boost
-  pads on the road** in the pause menu turns them off (kept in this browser).
+- **Boost pads.** Switched on, glowing pads turn up on the ground ahead of and round you as you drive,
+  each under a column of light: small gold ones (+12 % of the gauge) and big orange ones (a full
+  gauge). Drive over one and it goes dark, lighting again 4 s later (a big one 10 s); with the gauge
+  already full you leave it for later. There are at most 12 (9 small, 3 big), 15 m apart or more,
+  and those you leave far behind are put down ahead again. They never go down on [water](#water),
+  nor by it. They're off until **Boost pads on the road** in the pause menu turns them on, and that's
+  kept in this browser (`world-drive.pads` in its storage: `on`, or `off` once turned off again;
+  until 11 November 2026 they were on unless it said `off`, so a browser that turned them off then
+  keeps them off). Pads driven over still earn their XP ([levels](#how-xp-is-earned)).
 
   Where they go (`src/drive-app/pads.js`): every 0.08 s one spot is tried, 30 to 100 m ahead along
   the way you're going (within 50° either side) or, one try in three, anywhere 25 to 70 m round you.
@@ -206,7 +209,7 @@ construction app's driving looks and behaves as it always has.
   leans it already), at most 4° either way besides the booster's kick, sooner and kicked up further
   on a ride with soft suspension (its handling's `squash`: the farm truck wallows). It leans about
   the wheels on the low side, so they stay on the ground, and settles with a little bounce. Put
-  somewhere else at a stop (R, or back from a splash), it doesn't lurch. It's in how the car is
+  somewhere else at a stop (R, say), it doesn't lurch. It's in how the car is
   turned, so those driving with you see it too.
 
 Where each burst goes, and how big it is, follows from the vehicle's size rather than its model:
@@ -278,53 +281,36 @@ burst at each of their drift's charge levels and for its mini-turbo.
 ### Water
 
 Google's 3D tiles don't say what's water: a bay, a harbour or a river is just more ground in them,
-so everything used to drive on the sea. Now driving into water, or coming down in it, is a splash:
+and every ride drives on it as on any other ground. Drive off a quay, down a beach or over a
+bridge's railing, or come down onto the water out of the air, and you're on its surface, driving on
+as you would on a car park: no splash, nothing sinks and nothing puts you back. A trick landed on
+the water scores as on the ground. **R** puts you a few metres on as it does anywhere, out there or
+on the edge facing the water: on the water, if that's where those few metres are. **Go to** beside
+another driver who's out on the water puts you there too, and Esc parks you on the water, to drive
+on from there.
 
-- **The splash.** Droplets and spray thrown up round you, a ring of foam spreading over the water
-  over a patch of foam where you went in, and a word for how hard: **SPLISH!** driving in slowly,
-  **SPLASH!**, or **KER-SPLOOSH!** off something high (how fast you came down, and 0.4 of how fast
-  you were going, 4 and 14 m/s being the steps). The vehicle slows hard in the water, dips under
-  by how hard it hit and bobs back up, tips nose down and sinks, rocking, sending ripples of foam
-  out every half second, while the camera holds on it: it stops turning after you and rising and
-  falling with you, only carried along as you drift on.
-- **Back on dry land.** A second and a half in, the view fades out to deep water and back in a
-  quarter of a second later, "Back on dry land", with you stopped on the last dry ground you were
-  on: the newest spot on a trail kept as you drive (one every 3 m on ground that's surely dry, the
-  last 24) at least 8 m back from the last of them (about where you left the shore, the quay, the
-  pier or the bridge's deck) and 20 m from where you went in, and not one within a metre of the
-  water's level if there's one that isn't (water the tiles drew unlike water would be about level
-  with it, give or take how far Google's water slopes across a harbour). You face the way you were
-  going there, or the other way if that was toward the water: straight off a beach into the sea, you
-  come back facing up the beach; off a bridge, along its deck. Each splash trims the trail to that
-  spot, so another goes back further. Put back on a spot that then turns out to be water (sharper
-  tiles telling what coarser ones couldn't), that spot is dropped from the trail and, with nothing
-  older on it, there's no splash rather than the same one over and over. A pause (Esc) keeps the
-  trail.
-- **R** in the water does it at once, and **R** by the water never puts you in it (only onto ground
-  that's surely dry, else where you last drove freely). Esc while sinking parks you back on dry land.
-- **Like a wipeout**: tricks you were doing in the air and the combo are lost ("Combo ×3 lost", or
-  "Sunk"); the score so far is kept.
-- **Off a quay or a bank**, down into the water by its edge is a splash there and then: within a
-  dozen metres of the shore it can't tell water from the shore (below), but coming down into it,
-  half a metre or more from the last dry ground or landing there, is coming down into the water.
-  **Slowly** off a beach into the sea is the same once you're about a dozen metres out (until then
-  the beach is in reach of the rings it's told by). **Flying** (F) over water is fine until you
-  come down in it.
-- **The hovercraft** rides on water as on land, throwing up spray behind it as it goes.
-  **Boost pads** never go down on water, nor by it.
-- **Dropped in on water** (a pin on the sea), you ride on it until you've been on dry ground: with
-  nowhere to go back to, a splash would only be followed by another. So too on the
-  [open sea](#the-open-sea) (and a big lake's open water), where there may be no dry ground for a
-  thousand kilometres: any ride drives on it, and flies and comes down on it, until it reaches land;
-  from then on, back into it is a splash and back on that land.
+Until 11 November 2026 driving or coming down into water was a splash: every ride but the
+hovercraft sank nose first and was put back on the last dry ground it had been on, facing away from
+the water. It's gone, at the owner's asking, and with it the Driver's splash, its trail of dry
+ground to go back to and the HUD's splash word and fade. The measurements in this section (how
+water is told, the open sea, the big lakes) were made while it was a splash, which is why they
+speak of splashes and of the way back; `water.js` tells water the same way still, for three things
+(all on the Earth: the Moon has none):
 
-It's the Driver's `water` option (`src/drive.js`; off unless an app gives one, so the construction
-app's driving never splashes), which World Drive gives `src/drive-app/water.js`. The Driver looks
-every 0.2 s on the ground and wherever it comes down (off a jump, a wipeout's first touch, a drift's
-hop, gliding down from flying). The hovercraft says `floats: true` in its tuning. The splash's
-droplets, spray, foam and ripples are `drive-fx.js` (fixed pools made with the vehicle's other
-effects, only when there's water: 150 droplets, 48 puffs, 6 rings and 2 patches of foam), and its
-word and the fade `drive-hud.js`.
+- **The hovercraft** rides on water as every ride does, but throws up spray behind it there. It
+  says `floats: true` in its tuning, and under it the Driver looks for water every 0.2 s while it's
+  on the ground: that's the Driver's `water` option (`src/drive.js`; off unless an app gives one, so
+  the construction app's driving never looks), which World Drive gives `src/drive-app/water.js`.
+  The spray comes out of `drive-fx.js`'s pools, made with a vehicle's other effects when there's
+  water (150 droplets and 48 puffs, and 6 rings and 2 patches of foam).
+- **Boost pads** never go down on water, nor by it: they belong on the streets, and Google's water,
+  as flat and open as anything on its mesh, would take most of them by a coast or a river.
+- **The open sea**: a drop-in far out at sea, where Google draws only the sea bed, starts on a
+  surface of the sea's own ([below](#the-open-sea)), which water.js calls water like any other.
+
+**Others' cars** from a page loaded before the change can still say they're sinking
+(`FLAGS.splash` in `live-protocol.js`, which `live.js` no longer sends): `ghosts.js` shows their
+car's splash and its foam as it sinks, as it did, and nothing else comes of it.
 
 #### How water is told from the ground
 
@@ -358,16 +344,16 @@ more than 10), over something lower, or uneven close by (within 5 m) with no wat
 on past what's uneven (water by its edge has the shore close by too, and 13 m out the rings are
 clear of it), nor water-coloured ground at its level there that it can't tell either (water in a
 canal, by a sea wall or among boats). What's left, water-coloured and level close by but not all
-round, is as often water by a shore, a pier or a ship as an even grey square, so it can't tell: no
-splash, and it isn't taken for dry ground, but it says where the water past the edge is, which the
-Driver takes for water when it came down into it. So is a colour in between (a brown, a green) on
-level, even ground that's the lowest round about. And turquoise (green and blue both 40 or more over
-red) is never dry, whatever its shape: Geneva's clear lake, the Bellagio's and the sea by
-Copacabana's surf are drawn from photographs, beds and all, neither level nor even. The trail back
-from a splash, R's few metres on and boost pads take only surely dry ground. What it can't be sure
-of (no picture, a ray that finds nothing) is never water: it misses a little water rather than
-splash on a road. It looks at the cheapest things first: on most ground one ray, on a road seven or
-so; all of it is 23 rays.
+round, is as often water by a shore, a pier or a ship as an even grey square, so it can't tell: it
+isn't taken for water, nor for dry ground. (While water was a splash it also said where the water
+past the edge was, which the Driver took for water when the vehicle came down into it there.) So
+is a colour in between (a brown, a green) on level, even ground that's the lowest round about. And
+turquoise (green and blue both 40 or more over red) is never dry, whatever its shape: Geneva's
+clear lake, the Bellagio's and the sea by Copacabana's surf are drawn from photographs, beds and
+all, neither level nor even. Boost pads take only surely dry ground (and so did the trail back from
+a splash and R's few metres on, while water was a splash). What it can't be sure of (no picture, a ray that finds nothing) is never water: it
+misses a little water rather than take a road for it. It looks at the cheapest things first: on
+most ground one ray, on a road seven or so; all of it is 23 rays.
 
 **First measured** on Google's tiles, 31 October 2026, with the first rule (water's colour no
 warmer than blue at least red less 2 and no greener than green less 6, level to 35 cm, nothing 1 m
@@ -538,9 +524,9 @@ sea's does), curving away under the scene's flat frame as the Earth does, 2 m lo
 one deep blue, mottled so that driving over it is seen to move (Google's picture of the bed out
 there is its shaded relief, as dark as (12, 13, 19) at 30° N, 140° W, so it isn't taken from that).
 The Driver drives on it as on any ground, and water.js calls anywhere on it water, so it is water
-like any other: you ride on it until you've been on dry ground (an island, a coast), the hovercraft
-floats on it throwing up spray, no boost pad goes down on it, and once you've been on dry ground,
-driving or coming down into it is a splash and back on that ground, not the bed. The flight down to
+like any other: every ride drives on it, the hovercraft throwing up spray, no boost pad goes down
+on it, and driven or flown off an island or a coast out onto it, you're on its surface, not the
+bed. The flight down to
 it doesn't look for Google's ground (it would come down onto the bed). M, or a drop-in anywhere
 else, takes it away. It's only by its own water: out over land, with two of the map's squares or
 more between the vehicle's and the nearest of its water's (the sea's and its coasts', or the lake's
@@ -766,7 +752,7 @@ key, so it's the real Moon under `npm run dev:drive` too.
   show none of its craters.
 - **No water**: `water.none` (`water.js`) says everywhere is surely dry, and the Driver is given no
   water at all; the grey dust, flat and even on a mare's floor, would otherwise look like water to
-  it. **Boost pads** go down by
+  it. **Boost pads**, switched on, go down by
   [their own rules](#boosting) for the Moon (`MOON_RULES` in `pads.js`): ground tilted up to 25° and
   bumpy to 40 cm round the pad, reached over ground rising or falling up to 3 m every 7 m (a crater's
   rim), up to 40 m over or under where the vehicle last stood, and while it's up to 60 m over the
@@ -882,9 +868,9 @@ always was.
   for a screen reader). Tap or click it for **the list**, nearest first: each driver's name (⭐ for
   the Supporter Pass), ride and distance, or "paused", "on the globe" or "at <place>". **Go to** puts
   you 5 m to their right, facing their way: within 10 km, straight there in the same scene, on the
-  ground within 3 m of their car's height (as R takes it: never the roof, tree or deck over them) and
-  not where it's surely water (unless your ride floats), with a fresh trail of dry ground from there;
-  farther, or with no such ground, a drop-in at their spot in your own ride, which finds the street.
+  ground (or the water) within 3 m of their car's height (as R takes it: never the roof, tree or
+  deck over them); farther, or with no such ground, a drop-in at their spot in your own ride, which
+  finds the street.
   **Hide** hides that driver for this visit (**Show** brings them back).
 - **Other cars** are drawn 0.3 s behind where their drivers are, moving smoothly and turning with
   them: each page hears of the others' cars 5 times a second, and draws them along a curve through
@@ -894,8 +880,9 @@ always was.
   was at 8 words a second with straight lines between). A word that's late, it carries on along the
   bend it was taking. Their flame or boost style, trail, drift smoke and sparks, the bursts as
   their booster lights and runs dry and as a drift charges and pays out
-  ([below](#how-boosting-and-driving-look)), overdrive's boom and streaks, splashes and the
-  hovercraft's spray show for the nearest 6 within
+  ([below](#how-boosting-and-driving-look)), overdrive's boom and streaks, the hovercraft's spray
+  (and a sinking car's splash, from a page loaded while water was still a splash: [water](#water))
+  show for the nearest 6 within
   300 m, and their wheels turn. A name tag hangs over each (hidden beyond 400 m), with a 📣 when they
   honk and "+1,234" when they land a trick. A car within 8 m of yours or of the camera turns
   see-through, so it never blocks the view. A paused driver's car stays parked where it stopped, and
@@ -1743,7 +1730,7 @@ place of its constants: see `HANDLING` there; vehicles without it handle as befo
 | Sports coupe | 4.4 × 1.9 m | 195 km/h | Quick (0 to 100 in 2.6 s, the kart's 5.2), grips hard, turns in sharply, long wide drifts |
 | Monster truck | 5.4 × 3.5 m, 3.4 m tall | 125 km/h | Thrown about twice as high by the same hit (gravity at 0.75 in the air, launches × 1.3), quicker to flip than its size would make it (as quick as the kart) and landing up to 55° off upright, bouncing on soft springs; its bumpers are 1.5 m up, so it drives up over cars, barriers and kerbs |
 | City bus | 12 × 2.55 m, 3.2 m tall | 90 km/h | Slow away (22 km/h after 3 s), rolls on and on off the gas, turns wide; barely thrown up by a crash, slow to turn in the air, and squashes and shakes the view the most |
-| Hovercraft | 4.2 × 2.1 m | 135 km/h | No wheels: it floats 16 cm up on its skirt, over [water](#water) too (where the others splash), throwing up spray there; slides wide through every turn (about 50° at 50 km/h, under 10° for the others), glides on and stops slowly, and bounces on its cushion |
+| Hovercraft | 4.2 × 2.1 m | 135 km/h | No wheels: it floats 16 cm up on its skirt, over [water](#water) too (which every ride drives on), throwing up spray there; slides wide through every turn (about 50° at 50 km/h, under 10° for the others), glides on and stops slowly, and bounces on its cushion |
 
 Wheels spin and front wheels steer (the monster truck steers all four, the back ones the other way);
 the monster truck's body rides on springs that sink and rebound as it lands and lean it out of
@@ -2008,7 +1995,8 @@ two to four times as long a frame.
 rides and choices opening the sheet, `?pro=1` counting only on this computer, the free kart
 unchanged, each ride driving, drifting, thrown up by a wall and landing, their handling measured
 against each other, the hovercraft hovering with no wheels and riding over the test pad's sea
-(spray behind it there only, no boost pads on it) where the coupe splashes, the monster truck over
+(spray behind it there only, no boost pads on it) and the coupe driving across it too with none,
+the monster truck over
 a car, the
 Garage's choices on the ride and kept across a reload (and still made with a damaged saved value,
 or none kept at all), the world not drawn behind the Garage, the frame time with trails, nothing
@@ -2934,20 +2922,21 @@ and driving, the play stats it posts (the funnel once a visit, the device, searc
 never what was typed, play time, a drop-in's time and one left for the globe), stunts (a wall throwing the kart into the air and never through it, a backflip landed
 for points, the DRIFT button), changing ride, M and teleporting again without a reload, recent
 places, a phone with touch buttons, boosting flat out going supersonic in each free ride (the boom,
-the streaks, the tag and the wider view, and its end as it slows), boost pads on the test pad (put
-down as it drives, never on a roof, a car, a shelter or a slope nor from high up, moved onto sharper
-ground, a small one's 12 % and a big one's fill, dark then lit again, left lit with a full gauge,
-recycled, and the pause menu's switch kept across a reload), water (the test pad's sea given one
-even sea colour, as Google draws water: off its edge at speed, off a ramp with a spin and a ×3
-combo lost, slowly down a beach into it, each a splash, sinking nose first with the camera holding
-on it and the view fading, then back on the dry ground it came from facing away; flying over it
-until coming down, R in it and by it, and boost pads never on it or by it; Google's other water
+the streaks, the tag and the wider view, and its end as it slows), boost pads on the test pad (off
+until the pause menu's switch turns them on, kept across a reload, and off again; put down as it
+drives, never on a roof, a car, a shelter or a slope nor from high up, moved onto sharper ground, a
+small one's 12 % and a big one's fill, dark then lit again, left lit with a full gauge, recycled;
+each test that needs them switches them on), water (the test pad's sea given one even sea colour,
+as Google draws water, driven on as on the ground: off its edge at speed and slowly, down onto its
+surface and on across it, never sinking, splashing or put back; off a ramp, a spin landed on it
+scoring; slowly down a beach, out across the sea and back up onto the land; flown out and let down
+onto it; R on it and by it putting it a few metres on, on the water; paused out on it and driven
+on, sending others no splash or spray; boost pads never on it or by it; Google's other water
 colours, a bluish lawn among ball fields and a lagoon's turquoise; a canal's water by its wall
-never taken for dry; slowly off a quay, a splash right by it; never the same splash twice; the way
-back past a spot level with the water and kept across a pause), the open sea and the big lakes (the
-pad lowered under the water's surface, as Google draws the bed: started on the sea's surface or Lake
-Baikal's, ridden on, flown over and come down on, a floating ride's spray, a splash off an island
-and back on it; 14 m under the sea, on Google's water as before; the Dead Sea's shore, land, never;
+never taken for dry), the open sea and the big lakes (the pad lowered under the water's surface,
+as Google draws the bed: started on the sea's surface or Lake Baikal's, ridden on, flown over and
+come down on, no boost pads on it, a floating ride's spray, from an island out across it and back
+onto the island; 14 m under the sea, on Google's water as before; the Dead Sea's shore, land, never;
 the map's sea, coasts, lakes and land; land walled off from the sea by ground over it, the side
 of the Assal depression, never; Lake Erie's surface gone out over land to Niagara's gorge and back
 by the lake; without the map, only the deep sea), the used-up,
@@ -3002,8 +2991,8 @@ src/drive-app/garage.js      the Garage: choices and the turntable; paint.js the
 src/drive-app/pads.js        boost pads: where they go, driving over them, the pause menu's switch
 src/drive-app/screen-fx.js   what's done to the view: speed lines, overdrive's white edges, the pause
                              menu's Camera effects switch and asking for less motion
-src/drive-app/water.js       water on Google's mesh, told by how it's drawn: for splashes, the way
-                             back from one, R and boost pads
+src/drive-app/water.js       water on Google's mesh, told by how it's drawn: for the hovercraft's
+                             spray and to keep boost pads off it
 src/drive-app/sea.js         the open sea: its surface where Google draws only the bed of the sea
                              or a big lake, round the vehicle while it's by that water, the sea's
                              height (EGM96, drive/public/sea/egm96.bin, which
@@ -3102,9 +3091,8 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   [the table](#the-big-lakes), and the shelf and the lakes if the map didn't load. water.js tells
   that bed from dry ground by how it's drawn, as it does Google's water, and the bed under the
   water's picture is mostly the water's colour, level close by and the lowest round about, so mostly
-  water to it (Santa Monica Bay's was, 184 m down, and Baikal's), and you ride on it until you've
-  been on dry ground; but not always (20 km off Waikiki, 578 m down, it was dry ground), and dry
-  ground is where the way back from a later splash puts you, back on the bed. Close in, by a coast,
+  water to it (Santa Monica Bay's was, 184 m down, and Baikal's), but not always (20 km off Waikiki,
+  578 m down, it was dry ground, so boost pads could go down on it there). Close in, by a coast,
   it's mostly Google's own water, at the water's height. The other way, land more than 15 m under
   the sea in a coast's square with nothing over the sea's height within 150 m of it (the middle of a
   wide pit dug by a coast) would still start on the sea's surface.
@@ -3134,11 +3122,9 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   Venice's: the rings reach the banks), in a bridge's shadow, at a seam between sharper and coarser
   tiles, where it slopes on a coarse tile (surf, parts of Hong Kong's harbour), and teal or olive
   grey water within 35 m of a bank or a moored boat; and within about 12 m of a shore, a pier or a
-  ship it can't tell water from an even grey square, so there you ride on it (a kart dropped between
-  a jetty and the ship moored at it floated), unless you came down into it. Out from there, it
-  splashes. Where it can't tell it never puts boost pads down nor takes you back there, but surf's
-  foam is bright, so it's taken for dry ground: pads can go down on a wide band of surf, and the way
-  back from the sea off a beach can be in the surf.
+  ship it can't tell water from an even grey square. What it misses only matters for the
+  hovercraft's spray (none there) and boost pads: where it can't tell it never puts them down, but
+  surf's foam is bright, so it's taken for dry ground, and pads can go down on a wide band of surf.
 - [Driving with others](#driving-with-others): each page says where its own car is, and the room
   only checks it's somewhere a car could be (on Earth, at a speed a ride can go), so someone who
   digs into the page can put their ghost anywhere; it can't touch anyone, as nothing collides. A car

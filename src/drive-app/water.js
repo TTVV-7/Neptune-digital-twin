@@ -2,11 +2,12 @@ import { Vector2, Vector3 } from 'three';
 import { enuToLocal } from '../geo.js';
 
 // Water on Google's mesh. Google's 3D tiles don't say what's water: a bay, a harbour or a river is
-// just more ground, so without this the vehicles drive on the sea. It's told from the ground by
-// how Google draws it, which is unlike anything else there: flat as a table (most of it to the
-// millimetre), its picture one even colour (a fill, not a photo: no waves, boats' wakes or
-// glints), and at the lowest level round about. So a spot is water when, from rays looking down
-// round it (see look):
+// just more ground, and every ride drives on it as on any other. But boost pads (pads.js) belong on
+// the streets, not the water, and the hovercraft throws up spray on it (drive.js), so it's told
+// from the ground by how Google draws it, which is unlike anything else there: flat as a table
+// (most of it to the millimetre), its picture one even colour (a fill, not a photo: no waves,
+// boats' wakes or glints), and at the lowest level round about. So a spot is water when, from rays
+// looking down round it (see look):
 //
 // - the ground there is coloured like water (bluish, grey or a river's brownish grey; not green
 //   like a field, warm like sand or soil, nor bright like concrete), read from the tile's own
@@ -23,13 +24,11 @@ import { enuToLocal } from '../geo.js';
 // New York, Amsterdam, Venice, Hong Kong, Monaco, Geneva, London, Chicago, Rio, Turin, Tokyo and
 // the Bonneville Salt Flats (docs/world-drive.md), it never took a road, a car park, an apron, a
 // field, a lawn, a court, a beach, a plaza, a roof or a bridge's deck for water, and found most
-// open water. It prefers missing a little water to a false splash: what it can't be sure of (a ray
-// that finds nothing, a picture it can't read) isn't water. Nor is water within a ring's reach of
-// a shore, a pier or a ship, which it can't tell from an even grey square; there it says it can't
-// tell, rather than that it's dry, so nothing is put back or put down there as if it were dry
-// ground (drive.js's trail back from a splash, boost pads), and says where the water it found
-// past the edge is (drive.js takes that for water when the vehicle came down into it, off a quay
-// or a bank). Ground is only surely dry when it's coloured unlike water, or isn't level or the
+// open water. It prefers missing a little water to taking a road for it: what it can't be sure of
+// (a ray that finds nothing, a picture it can't read) isn't water. Nor is water within a ring's
+// reach of a shore, a pier or a ship, which it can't tell from an even grey square; there it says
+// it can't tell, rather than that it's dry, so no boost pad is put down there as if it were dry
+// ground. Ground is only surely dry when it's coloured unlike water, or isn't level or the
 // lowest round about; a colour in between (a river's brown, or grass's) on level ground that's
 // the lowest round about can't be told, and a colour only water has (the turquoise of a lagoon, a
 // clear lake or the sea by the surf, which Google draws from photographs, beds and all, neither
@@ -168,9 +167,8 @@ export function createWater( ground ) {
 	// height (m, in the scene) where it's water, else null; and whether it's surely dry ground:
 	// coloured unlike water, over something lower, or (a road, a field) uneven close by with no
 	// water at its level just past that. What's left, water-coloured and level close by but not all
-	// round, is water by a shore, a pier or a ship as often as anything: not water, nor surely dry,
-	// and { shore } the height of the water found past the edge. `probing`: whether to look past
-	// what's uneven close by (not when this is the look past it).
+	// round, is water by a shore, a pier or a ship as often as anything: not water, nor surely dry.
+	// `probing`: whether to look past what's uneven close by (not when this is the look past it).
 	function look( east, north, y, probing = true ) {
 
 		if ( none ) return DRY;
@@ -199,7 +197,7 @@ export function createWater( ground ) {
 			const angle = ( away( near, colours ) + 0.5 ) / NEAR.count * Math.PI * 2 + Math.PI;
 			const past = look( east + Math.sin( angle ) * PROBE, north + Math.cos( angle ) * PROBE, h, false );
 			const atLevel = Math.abs( past.height - h ) <= FLAT;
-			if ( past.level !== null && atLevel ) return waterLike( colour, TEAL ) ? { level: null, dry: false, shore: past.level } : UNSURE;
+			if ( past.level !== null && atLevel ) return UNSURE;
 			return ! past.dry && atLevel && waterLike( colour, TEAL ) ? UNSURE : dry;
 
 		}

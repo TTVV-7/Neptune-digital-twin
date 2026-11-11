@@ -245,8 +245,9 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 		},
 		// What World Drive drives with: F flies, Shift (or B) boosts, the kart drifts, hitting something
-		// throws you into the air for stunts, and driving into water is a splash. Its effects (bursts,
-		// fewer on a phone and calmer for those asking for less motion) as screen-fx.js sets them.
+		// throws you into the air for stunts, and the hovercraft throws up spray on water (which every
+		// ride drives on as on the ground). Its effects (bursts, fewer on a phone and calmer for those
+		// asking for less motion) as screen-fx.js sets them.
 		fly: true, booster: true, drift: true, crash: 'launch', water, effects: { detail: 1, calm: false },
 	} );
 	// Speed lines, overdrive's white edges and the camera's jolts and shakes, with their switch in
@@ -1083,7 +1084,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		const d = driver;
 		return {
 			speed: velocityOf( d, _velocity ).length(),
-			air: ! d.grounded && ! d.flying && ! d.splash,
+			air: ! d.grounded && ! d.flying,
 			boost: d.boost,
 			// (On the Moon, nobody's driving with you, and it's none of the Earth's areas or spots.)
 			together: ! onMoon() && !! live && [ ...live.players.values() ].some( p => ! p.away ),
@@ -1172,15 +1173,14 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	}
 
-	// Your car to `spot` (besideOf's) in this scene, on the ground there, driving on. Only ground
-	// within 3 m of their car's height, as R takes (not a roof, a tree or a deck over them), and not
-	// where it's surely water for a ride that doesn't float; false otherwise, or where there's no
-	// ground loaded there to put it on, and it's a drop-in instead (which finds the street).
+	// Your car to `spot` (besideOf's) in this scene, on the ground there (or the water: every ride
+	// drives on it), driving on. Only ground within 3 m of their car's height, as R takes (not a
+	// roof, a tree or a deck over them); false otherwise, or where there's no ground loaded there to
+	// put it on, and it's a drop-in instead (which finds the street).
 	function moveCar( { local, heading } ) {
 
 		const y = ground.heightAt( local.x, local.z, local.y + 3, 6 );
 		if ( y === null ) return false;
-		if ( ! specOf( state.vehicle ).floats && water.at( - local.x, local.z, y ) !== null ) return false;
 		const { entry } = state;
 		state.leaving = true;
 		if ( driver.active ) driver.stop();
@@ -1194,8 +1194,6 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		models.apply( entry );
 		entry.state.snap = snap;
 		screens.pause( false );
-		// A fresh trail of dry ground from here: a splash isn't to take it back where it came from.
-		driver.trailOf = null;
 		drive();
 		return true;
 

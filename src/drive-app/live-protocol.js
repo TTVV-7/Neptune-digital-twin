@@ -127,7 +127,7 @@ export const FLUSH_MS = 100;
 // Other cars are drawn this far (ms) behind the latest word of them, so there's a position on each
 // side of now to move between: words come 1000 / SEND_HZ ms apart (a frame more as they fall), and
 // one the room held back comes with the next. A jump of more than TELEPORT m from one to the next
-// is a jump (R, a splash's way back, a new drop-in), not a drive. A car with no word for STALE_MS
+// is a jump (R, a new drop-in), not a drive. A car with no word for STALE_MS
 // (seven still states running) is taken away.
 export const INTERP_MS = 300;
 export const TELEPORT = 60;
@@ -219,7 +219,7 @@ export const FLAGS = {
 	flying: 8, // flying (F)
 	air: 16, // in the air off a jump or a bounce (tricks)
 	supersonic: 32,
-	splash: 64, // sinking in water
+	splash: 64, // sinking in water (only from an older page: World Drive no longer splashes)
 	grounded: 128, // its wheels on the ground (ink, dust)
 	paused: 256, // its driver paused: parked where it is
 	spray: 512, // a hovercraft on water
