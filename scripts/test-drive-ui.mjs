@@ -1730,7 +1730,8 @@ describe( 'World Drive boost and driving effects', () => {
 			for ( const code of [ ...d.keys ] ) d.release( code );
 			const out = {};
 			// Driving at 80 km/h, no lines.
-			Object.assign( d, { east: 0, north: 0, heading: 0, course: 0, view: 0, speed: 80 / 3.6, gauge: 1, firing: false, boost: null, supersonic: false, nearTop: 0 } );
+			// (Overdrive's view, from the tests before, eases out: it's put straight.)
+			Object.assign( d, { east: 0, north: 0, heading: 0, course: 0, view: 0, speed: 80 / 3.6, gauge: 1, firing: false, boost: null, supersonic: false, nearTop: 0, warp: 0 } );
 			const hold = speed => () => {
 
 				d.speed = speed;
@@ -1738,6 +1739,7 @@ describe( 'World Drive boost and driving effects', () => {
 
 			};
 			await window.untilFrame( () => ( hold( 80 / 3.6 )(), false ), 20 );
+			await window.untilFrame( () => ( hold( 80 / 3.6 )(), screenFx.lines === 0 ), 120 );
 			out.cruising = { lines: screenFx.lines, shown: lines.visible, ready: bar.classList.contains( 'ready' ), pulse: getComputedStyle( bar.querySelector( '.dhud-bar' ) ).animationName };
 			// Boosting at 70 % of the booster's top, then at its top: thicker.
 			d.firing = true;
