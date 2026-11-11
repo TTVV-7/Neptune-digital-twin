@@ -2384,7 +2384,11 @@ The owner's page of how World Drive is played: **`https://worlddrive.app/admin.h
 account in `ADMIN_EMAILS`, signed in on worlddrive.app (the globe's panel). It shows the last 7, 30 or
 90 days or the year (UTC days, the last of them today so far), each figure with ▲ or ▼ against the
 as many days just before (in per cent, or in points for a share; green for better and red for worse,
-fewer being better for problems and load times):
+fewer being better for problems and load times). A figure is compared only when its counts cover the
+period before from its first day: the play figures from the first day with visits counted, the
+funnel's, the Moon's, searches' and problems' from the first with the funnel counted (they began a
+deploy later), so a period before the counts began, or only partly after, shows no false rise; the
+page says which have no ▲ or ▼, and why. The facts from the Worker's own tables are always compared. On it:
 
 - **Tiles**: today so far (visits and play time), visits, play time, play per visit, drop-ins, the
   share of visits that drove and that drove 10 minutes or more, the share of play with others and on
@@ -2470,7 +2474,8 @@ it takes.
 `GET /api/admin/stats?days=30` answers, to an account in `ADMIN_EMAILS` (401 signed out, 403 anyone
 else), those days' rows and the facts in the same `[ day, metric, key, n ]` shape; the as many days
 before, added up by metric and key in D1 (what the page compares with: a year's comparison is a few
-hundred rows, not tens of thousands); the totals; and how far back the counts and the scores log go.
+hundred rows, not tens of thousands), with the first day in them with visits and with the funnel
+counted (`previous.first`, each null if none); the totals; and how far back the counts and the scores log go.
 A year at most, and rows older than two years (730 days, so a year can be set against the year
 before; it was 400 days before the comparisons) are deleted as it's asked. Every query is bounded by
 the days asked for, but the totals, which count the tables whole. The page draws it all with no
@@ -2686,7 +2691,7 @@ globe to the Moon and pins the spot there, and never drops in by itself.
 
 Their words are `drive/site/moon.js` (`MOON_PAGES`, and the paragraphs every Moon page shares).
 They keep to well-known facts (Apollo 11 on 20 July 1969, Apollo 15 the first to take the Lunar
-Roving Vehicle, Apollo 17 the last Apollo landing, Chang'e 4 the first landing on the far side), and
+Roving Vehicle, Apollo 17 the last Apollo landing, Chang'e 4 the first soft landing on the far side), and
 a number that isn't certain is left out. And they're honest about the game: its big shapes are the
 real Moon's, its heights every quarter of a degree (7.6 km apart), so anything narrower (Hadley
 Rille itself, the Taurus-Littrow valley's depth, Copernicus's terraces) is softened or not there;

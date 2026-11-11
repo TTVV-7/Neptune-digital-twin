@@ -1637,6 +1637,8 @@ describe( 'World Drive Supporter Pass', () => {
 		// Well clear of the other tests' days.
 		const ADMIN_DAY = PASS_DAY + 60 * DAY;
 		const dayAt = time => new Date( time ).toISOString().slice( 0, 10 );
+		// The boss's account made well before the days asked about (if no other test has), so it isn't one of their new accounts.
+		await signIn( { sub: '1091', email: 'boss@example.com', name: 'Boss' }, { time: ADMIN_DAY - 20 * DAY } );
 		const boss = await signIn( { sub: '1091', email: 'boss@example.com', name: 'Boss' }, { time: ADMIN_DAY } );
 		const ask = ( days = 7 ) => call( server, `/api/admin/stats?days=${ days }`, { headers: { Cookie: boss.cookie }, time: ADMIN_DAY } );
 		const was = ( await ask() ).json.totals;
@@ -1686,7 +1688,7 @@ describe( 'World Drive Supporter Pass', () => {
 		assert.deepEqual( rows.map( ( [ day ] ) => day ), rows.map( ( [ day ] ) => day ).sort() );
 		// The week before, added up by metric and key.
 		assert.deepEqual( { ...previous, rows: sorted( previous.rows ) }, {
-			from: dayAt( ADMIN_DAY - 13 * DAY ), to: dayAt( ADMIN_DAY - 7 * DAY ),
+			from: dayAt( ADMIN_DAY - 13 * DAY ), to: dayAt( ADMIN_DAY - 7 * DAY ), first: { visit: null, funnel: null },
 			rows: sorted( [ [ 'play', 'go-kart', 150 ], [ 'players', 'new', 1 ], [ 'scores', 'new_best', 1 ], [ 'accounts', 'new', 1 ], [ 'purchases', 'paid', 1 ], [ 'revenue', 'usd', 999 ] ] ),
 		} );
 		// Now: three more players and accounts, three more with the pass (Nia's and Pia's bought, Oto's
@@ -1698,6 +1700,8 @@ describe( 'World Drive Supporter Pass', () => {
 		const year = ( await ask( 9999 ) ).json;
 		assert.deepEqual( [ year.from, year.previous.from, year.previous.to ], [ dayAt( ADMIN_DAY - 364 * DAY ), dayAt( ADMIN_DAY - 729 * DAY ), dayAt( ADMIN_DAY - 365 * DAY ) ] );
 		assert.deepEqual( year.previous.rows.find( ( [ metric ] ) => metric === 'visit' ), [ 'visit', 'all', 1 ] );
+		// Its first day of visits is the period's first (so the page compares the play figures), and it has no funnel.
+		assert.deepEqual( year.previous.first, { visit: year.previous.from, funnel: null } );
 		for ( let tries = 0; server.d1( `SELECT day FROM stats_daily WHERE day = '${ dayAt( ADMIN_DAY - 731 * DAY ) }'` ).length && tries < 20; tries ++ ) await new Promise( resolve => setTimeout( resolve, 100 ) );
 		assert.deepEqual( server.d1( `SELECT day FROM stats_daily WHERE metric = 'visit' AND day < '${ dayAt( ADMIN_DAY - 700 * DAY ) }'` ), [ { day: dayAt( ADMIN_DAY - 729 * DAY ) } ] );
 

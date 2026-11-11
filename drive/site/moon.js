@@ -42,7 +42,7 @@ export const MOON_PAGES = [
 		spot: 'moon-apollo-15',
 		name: 'Hadley Rille',
 		region: 'Apollo 15 · Apennine Mountains',
-		title: 'Drive Hadley Rille, Where Astronauts First Drove on the Moon',
+		title: 'Drive the Apollo 15 Site, Where Astronauts First Drove on the Moon',
 		description: 'Drive the Moon where Apollo 15\'s astronauts first drove there in 1971: the plain at Hadley, below the Apennine Mountains, from NASA\'s maps. Free in your browser.',
 		about: [
 			'Apollo 15 landed on 30 July 1971 on the plain at Hadley, between Hadley Rille and the Apennine Mountains, which form the south-eastern edge of the Sea of Rains (Mare Imbrium). David Scott and James Irwin spent nearly three days there while Alfred Worden orbited above.',
@@ -239,7 +239,7 @@ export const MOON_PAGES = [
 		called: 'Von Kármán',
 		region: 'The far side · Chang\'e 4, 2019',
 		title: 'Drive Von Kármán Crater, Where Chang\'e 4 Landed',
-		description: 'Drive Von Kármán, the crater where China\'s Chang\'e 4 made the first landing on the Moon\'s far side in 2019, in 3D from NASA\'s maps. Free in your browser.',
+		description: 'Drive Von Kármán, the crater where China\'s Chang\'e 4 made the first soft landing on the Moon\'s far side in 2019, in 3D from NASA\'s maps. Free in your browser.',
 		about: [
 			'Von Kármán is a large crater on the far side of the Moon, inside the South Pole-Aitken basin, the biggest and oldest of the Moon\'s known impact basins. It\'s named after Theodore von Kármán, the Hungarian-American engineer who was a pioneer of aeronautics and rocketry.',
 			'On 3 January 2019 China\'s Chang\'e 4 landed on its floor, the first spacecraft to land gently on the far side, and sent out the rover Yutu-2. As the far side never faces the Earth, they talked to it through a relay satellite, Queqiao, out beyond the Moon.',
@@ -264,5 +264,5 @@ export const MOON_DRIVING = [
 	'<b>A sixth of the gravity.</b> A jump goes as high as on the Earth and lasts two and a half times as long, so there\'s time for more spins and flips (each is worth fewer points, to be fair to the Earth\'s).',
 	'<b>The Earth in the sky.</b> Over the near side it hangs in the black sky, lit by the same sun, so it shows a phase. From the far side it\'s never in sight.',
 	'<b>No water and no roads.</b> Grey dust and rock to the horizon, plains, crater rims and mountainsides.',
-	'<b>On your own.</b> Driving with others is on the Earth: on the Moon you drive alone, and levels and the leaderboard count there as anywhere.',
+	'<b>On your own.</b> Driving with others is on the Earth: on the Moon you drive alone. Driving, air, drifts and tricks still earn XP, and your best runs go on the leaderboard (the bonuses for new start spots and areas are the Earth\'s).',
 ];

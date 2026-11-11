@@ -138,9 +138,10 @@ export async function adminStats( context ) {
 	const start = Date.parse( `${ before.from }T00:00:00Z` );
 	const end = Date.parse( `${ to }T00:00:00Z` ) + DAY;
 	context.ctx?.waitUntil?.( db.prepare( 'DELETE FROM stats_daily WHERE day < ?' ).bind( dayOf( now - KEEP_DAYS * DAY ) ).run().catch( () => {} ) );
-	const [ counts, earlier, totals, ...facts ] = await db.batch( [
+	const [ counts, earlier, firsts, totals, ...facts ] = await db.batch( [
 		db.prepare( 'SELECT day, metric, key, n FROM stats_daily WHERE day >= ? AND day <= ? ORDER BY day' ).bind( from, to ),
 		db.prepare( 'SELECT metric, key, SUM( n ) AS n FROM stats_daily WHERE day >= ? AND day <= ? GROUP BY metric, key' ).bind( before.from, before.to ),
+		db.prepare( `SELECT metric, MIN( day ) AS first FROM stats_daily WHERE day >= ? AND day <= ? AND metric IN ( 'visit', 'funnel' ) GROUP BY metric` ).bind( before.from, before.to ),
 		db.prepare( TOTALS ).bind( supporterEmails( env ) ),
 		...FACTS.map( ( [ , sql ] ) => db.prepare( sql ).bind( start, end ) ),
 	] );
@@ -166,9 +167,14 @@ export async function adminStats( context ) {
 	} );
 	rows.sort( ( a, b ) => a[ 0 ] < b[ 0 ] ? - 1 : a[ 0 ] > b[ 0 ] ? 1 : 0 );
 	const { players, accounts, supporters, unclaimed } = totals.results[ 0 ];
+	// The first day of the period before with each kind of count: the visits (and the counts begun
+	// with them) and the funnel (and the counts begun with it). A figure is only fairly compared when
+	// its counts cover that period from its first day.
+	const first = { visit: null, funnel: null };
+	for ( const r of firsts.results ) first[ r.metric ] = r.first;
 	return json( {
 		from, to, rows,
-		previous: { ...before, rows: [ ...previous.values() ] },
+		previous: { ...before, first, rows: [ ...previous.values() ] },
 		totals: { players, accounts, supporters, unclaimed },
 		kept: { stats: KEEP_DAYS, scores: KEEP_SCORES / DAY },
 	} );

@@ -182,8 +182,15 @@
 		for ( let t = Date.parse( from ); t <= Date.parse( to ); t += DAY ) days.push( new Date( t ).toISOString().slice( 0, 10 ) );
 		const daily = metric => days.map( d => byDay.get( metric )?.get( d ) ?? 0 );
 		const today = metric => byDay.get( metric )?.get( to ) ?? 0;
-		// Whether there's anything from the period before to compare with (counts started since, say).
-		const comparable = earlier( 'visit' ) > 0;
+		// Whether the period before is counted from its first day, so it's fair to compare with: the
+		// play counts (begun with the visits), and the newer ones (begun with the funnel: worlds,
+		// searches, problems). A period before them, or only partly after, would show false rises.
+		const comparable = !! previous.from && previous.first?.visit === previous.from;
+		const comparableNew = comparable && previous.first?.funnel === previous.from;
+		// The tiles from the newer counts, and those from the Worker's own tables (always comparable).
+		const NEWER = [ 'Visits that drove', 'Drove 10 min or more', 'On the Moon', 'Searches', 'Problems' ];
+		const TABLES = [ 'New players', 'New accounts', 'Passes bought' ];
+		const compared = label => TABLES.includes( label ) || ( NEWER.includes( label ) ? comparableNew : comparable );
 
 		const visits = total( 'visit' );
 		const play = total( 'play' );
@@ -234,9 +241,9 @@
 		out.innerHTML = `
 			<div class="tiles">
 				<div class="tile today"><div class="label">Today so far (UTC)</div><div class="value">${ esc( num( today( 'visit' ) ) ) }</div><div class="change muted">visits · ${ esc( hours( today( 'play' ) ) ) } played</div></div>
-				${ tiles.map( ( [ label, value, change, fewerIsBetter ] ) => `<div class="tile"><div class="label">${ esc( label ) }</div><div class="value">${ esc( value ) }</div>${ comparable || [ 'New players', 'New accounts', 'Passes bought' ].includes( label ) ? changeOf( change, fewerIsBetter ) : '' }</div>` ).join( '' ) }
+				${ tiles.map( ( [ label, value, change, fewerIsBetter ] ) => `<div class="tile"><div class="label">${ esc( label ) }</div><div class="value">${ esc( value ) }</div>${ compared( label ) ? changeOf( change, fewerIsBetter ) : '' }</div>` ).join( '' ) }
 			</div>
-			${ comparable ? '' : '<p class="note" style="margin:-6px 0 12px">No counts from the period before this one to compare with (they start later), so the play figures have no ▲ or ▼.</p>' }
+			${ comparable ? comparableNew ? '' : '<p class="note" style="margin:-6px 0 12px">The newer counts (how far visits get, the Moon, searches, problems) don\'t cover all of the period before this one, so they have no ▲ or ▼.</p>' : '<p class="note" style="margin:-6px 0 12px">The counts don\'t cover all of the period before this one (they start later), so the play figures have no ▲ or ▼.</p>' }
 			${ firstDay && firstDay > from ? `<p class="note" style="margin:-6px 0 12px">Counts start on ${ esc( firstDay ) }: nothing before it.</p>` : '' }
 			<div class="card wide">
 				<h2>Each day</h2>
@@ -249,8 +256,8 @@
 				<div class="card"><h2>Earth and Moon</h2>${ facts( [
 					[ 'Play on the Earth', hours( total( 'play_world', 'earth' ) ), percent( total( 'play_world', 'earth' ), worldPlay ) ],
 					[ 'Play on the Moon', hours( moonPlay ), percent( moonPlay, worldPlay ) ],
-					[ 'Turns to the Moon', num( total( 'world', 'moon' ) ), comparable ? changeText( [ total( 'world', 'moon' ), earlier( 'world', 'moon' ) ] ) : '' ],
-					[ 'Drop-ins on the Moon', num( total( 'dropin', 'moon' ) ), percent( total( 'dropin', 'moon' ), total( 'dropin' ) ) + ' of drop-ins' ],
+					[ 'Turns to the Moon', num( total( 'world', 'moon' ) ), comparableNew ? changeText( [ total( 'world', 'moon' ), earlier( 'world', 'moon' ) ] ) : '' ],
+					[ 'Drop-ins on the Moon', num( total( 'dropin', 'moon' ) ), total( 'dropin' ) ? percent( total( 'dropin', 'moon' ), total( 'dropin' ) ) + ' of drop-ins' : '' ],
 				] ) }</div>
 				<div class="card"><h2>Searches</h2>${ bars( named( 'search', SEARCHES ), num, 4, false ) }<p class="note">Found nothing: ${ esc( percent( total( 'search', 'nothing' ), total( 'search', 'earth' ) + total( 'search', 'moon' ) ) ) } of map and Moon searches. Never what was typed.</p></div>
 				<div class="card"><h2>Drop-in time <span class="muted">(Drive here to driving)</span></h2>${ bars( new Map( DROPIN_ORDER.map( k => [ k, total( 'dropin_time', k ) ] ) ), num, 5, false, shares( new Map( DROPIN_ORDER.map( k => [ k, total( 'dropin_time', k ) ] ) ) ) ) }</div>
