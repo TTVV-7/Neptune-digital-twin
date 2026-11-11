@@ -1,7 +1,9 @@
 // npm run test:drive-ui: World Drive (drive/index.html, src/drive-app/) in a real browser, on the
 // Vite dev server with no Maps key: the test globe and the flat test pad stand in for Google's
 // tiles. The globe and its panel; search (the Worker's /api/search answered here) only on Enter;
-// typed coordinates; start spots; a tap on the globe; dropping in and driving; stunts (a wall
+// typed coordinates; start spots; a tap on the globe; dropping in and driving; the play stats the
+// page counts, seen in its posts (the funnel, the device, searches by kind and never what was typed,
+// play time, a drop-in's time and one left for the globe); stunts (a wall
 // throwing the kart into the air, a backflip landed for points, the DRIFT button); the vehicle
 // picker and changing ride from the pause menu; M back to the globe and teleporting again with no
 // reload; recent places and the picked ride kept across a reload; a phone with touch buttons;
@@ -554,6 +556,134 @@ describe( 'World Drive, desktop', () => {
 		assert.equal( await page.locator( '#globe-ui .vehicle.picked b' ).textContent(), 'Muscle car' );
 		assert.deepEqual( page.outside, [] );
 		assert.deepEqual( page.errors, [] );
+
+	} );
+
+} );
+
+// The play stats (src/drive-app/stats.js, docs/world-drive.md "Play stats"), seen in the page's
+// posts to /api/stats, answered here. The dev server has no visit, so the stats alone are handed a
+// test one (worldDriveStatsTest, main.js), and each test posts at once rather than waiting the 3
+// minutes or for the page to go out of sight.
+describe( 'World Drive play stats', () => {
+
+	// A page that counts, its posts kept in page.posts.
+	async function countingPage( options ) {
+
+		const page = await newPage( options );
+		page.posts = [];
+		await page.addInitScript( () => {
+
+			window.worldDriveStatsTest = { visit: 'v1.stats-test' };
+
+		} );
+		await page.route( `${ BASE }/api/stats`, route => {
+
+			page.posts.push( JSON.parse( route.request().postData() ) );
+			route.fulfill( { status: 204 } );
+
+		} );
+		return page;
+
+	}
+
+	// Everything the page has posted, posting what it has counted now: { 'metric:key': n }, and only
+	// those of `metrics` if given.
+	async function posted( page, ...metrics ) {
+
+		await page.evaluate( () => window.drive.stats.post() );
+		const all = {};
+		for ( const { counts } of page.posts ) {
+
+			for ( const [ name, n ] of Object.entries( counts ) ) {
+
+				if ( ! metrics.length || metrics.includes( name.split( ':' )[ 0 ] ) ) all[ name ] = ( all[ name ] ?? 0 ) + n;
+
+			}
+
+		}
+
+		return all;
+
+	}
+
+	test( 'a visit\'s funnel as it goes (the globe, a pin, a drop-in, driving), once each; its device; searches by kind, never what was typed; play time; a drop-in\'s time, and one left for the globe', async () => {
+
+		const page = await countingPage();
+		try {
+
+			await openGlobe( page );
+			assert.deepEqual( await posted( page, 'funnel', 'device', 'load' ), { 'funnel:globe': 1, 'device:computer': 1, 'load:direct': 1 } );
+			assert.equal( page.posts[ 0 ].visit, 'v1.stats-test' );
+			assert.equal( Object.keys( await posted( page, 'load_time' ) ).length, 1 );
+
+			// A map search, one that finds nothing, and coordinates typed (pinned at once).
+			const input = page.locator( '.search input' );
+			await input.fill( 'Furka pass' );
+			await input.press( 'Enter' );
+			await page.locator( '.results button' ).first().waitFor();
+			await input.fill( 'Nowhereville' );
+			await input.press( 'Enter' );
+			await page.locator( '.search-status', { hasText: 'Nothing found' } ).waitFor();
+			await input.fill( '46.5725, 8.4153' );
+			await input.press( 'Enter' );
+			await page.waitForFunction( () => window.drive.panel.pinned );
+			await flown( page );
+			assert.deepEqual( await posted( page, 'search', 'funnel' ), { 'search:earth': 2, 'search:nothing': 1, 'search:coordinates': 1, 'funnel:globe': 1, 'funnel:pin': 1 } );
+			assert.doesNotMatch( JSON.stringify( page.posts ), /furka|nowhere|46\.57|8\.41/i, 'what was typed' );
+
+			// A start spot (pinned again: still one pin) and a drop-in there.
+			await page.locator( '.spots button', { hasText: 'Golden Gate Bridge' } ).click();
+			await flown( page );
+			await driveHere( page );
+			const dropped = await posted( page, 'funnel', 'dropin', 'ride', 'dropin_time' );
+			assert.deepEqual( Object.keys( dropped ).filter( name => name.startsWith( 'dropin_time:' ) ).length, 1, JSON.stringify( dropped ) );
+			assert.deepEqual( Object.fromEntries( Object.entries( dropped ).filter( ( [ name ] ) => ! name.startsWith( 'dropin_time:' ) ) ), {
+				'funnel:globe': 1, 'funnel:pin': 1, 'funnel:dropin': 1, 'funnel:driving': 1, 'dropin:golden-gate': 1, 'ride:go-kart': 1,
+			} );
+
+			// Play time, by ride and by world, in whole seconds as it's posted.
+			await page.keyboard.down( 'KeyW' );
+			await page.waitForFunction( () => window.drive.stats.counts[ 'play_world:earth' ] >= 1.5, null, { timeout: 60000 } );
+			await page.keyboard.up( 'KeyW' );
+			const played = await posted( page, 'play', 'play_world' );
+			assert.ok( played[ 'play:go-kart' ] >= 1 && played[ 'play_world:earth' ] >= 1, JSON.stringify( played ) );
+			assert.deepEqual( Object.keys( played ).sort(), [ 'play:go-kart', 'play_world:earth' ] );
+
+			// Back to the globe, then a drop-in left for the globe before it's driving: a problem, and no
+			// second drop-in in the funnel.
+			await page.keyboard.press( 'KeyM' );
+			await page.waitForFunction( () => window.drive.mode === 'globe' );
+			await page.locator( '.spots button', { hasText: 'Golden Gate Bridge' } ).click();
+			await flown( page );
+			await page.locator( '.pin-card .go' ).click();
+			assert.equal( await mode( page ), 'dropping' );
+			await page.keyboard.press( 'Escape' );
+			await page.waitForFunction( () => window.drive.mode === 'globe' );
+			assert.deepEqual( await posted( page, 'problem', 'funnel' ), { 'problem:drop_abandoned': 1, 'funnel:globe': 1, 'funnel:pin': 1, 'funnel:dropin': 1, 'funnel:driving': 1 } );
+			assert.deepEqual( page.errors, [] );
+
+		} finally {
+
+			await page.context().close();
+
+		}
+
+	} );
+
+	test( 'on a phone, the device is a phone', async () => {
+
+		const page = await countingPage( { viewport: { width: 390, height: 844 }, touch: true } );
+		try {
+
+			await openGlobe( page );
+			assert.deepEqual( await posted( page, 'device', 'funnel' ), { 'device:phone': 1, 'funnel:globe': 1 } );
+
+		} finally {
+
+			await page.context().close();
+
+		}
 
 	} );
 

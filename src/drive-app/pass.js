@@ -19,12 +19,27 @@ const LEVEL_CARS = CARS.filter( car => RIDES.some( reward => reward.id === car.i
 const PASS_CARS = CARS.filter( car => car.pro || LEVEL_CARS.includes( car ) );
 
 let sheet = null;
+// Called each time the sheet opens (main.js counts it for the play stats).
+let onOpen = () => {};
 
 export function openPass() {
 
 	sheet ??= build();
-	if ( ! sheet.open ) sheet.showModal();
+	if ( ! sheet.open ) {
+
+		sheet.showModal();
+		onOpen();
+
+	}
+
 	sheet.querySelector( '.close' ).focus();
+
+}
+
+// fn() each time the sheet opens, from wherever it's opened.
+export function onPassOpen( fn ) {
+
+	onOpen = fn;
 
 }
 

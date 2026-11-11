@@ -17,7 +17,11 @@
 // a payment once, bank debits, bought before signing in, refunds, chargebacks, either delivered
 // before their checkout, another link's checkouts, test-mode payments with a live link), the
 // same-origin checks it alone goes without, SUPPORTER_EMAILS, 30 drives a day for a supporter, the
-// ⭐ on the leaderboard, the owner's SQL, and buying off without its settings.
+// ⭐ on the leaderboard, the owner's SQL, and buying off without its settings. And the play stats:
+// each metric's keys checked and held to what a post may add, MAX_COUNTS a post, only with a visit's
+// token, and the admin page's answer (ADMIN_EMAILS only): the counts a day with what the
+// leaderboard's and the pass's tables say of each day (refunds left out), the as many days before
+// added up, the totals now, and rows older than two years gone.
 // TEST_DRIVE_WORKER_PORT=8796 moves the five wrangler servers (that port and the next four).
 
 import assert from 'node:assert/strict';
@@ -30,11 +34,13 @@ import { after, before, describe, test } from 'node:test';
 import { CLIENT_ID, makeKey, makeToken, serveKeys, startWorker, stripeSignature } from './worker-harness.mjs';
 import { sessionCookies } from '../worker/sessions.js';
 import { MAX_SCORE, RATE, SCORING, maxRate } from '../worker/drive/scores.js';
-import { DRIVE_CARS, PASS_RIDES } from '../src/drive-app/catalog.js';
+import { DRIVE_CARS, LIBRARY_VEHICLES, PASS_RIDES } from '../src/drive-app/catalog.js';
 import { addressOf } from '../worker/drive/settings.js';
 import { purchaseFor, purchaseSettings } from '../worker/drive/supporter.js';
 import { VISIT_HOURS, makeVisit } from '../worker/drive/visits.js';
-import { checkCounts, loadBucket, referrerOf } from '../src/drive-app/stats-protocol.js';
+import { DEVICES, FUNNEL, MAX_COUNTS, METRICS, PROBLEMS, SEARCHES, checkCounts, deviceOf, dropinBucket, droveSteps, loadBucket, referrerOf } from '../src/drive-app/stats-protocol.js';
+import { LOOK_PARTS } from '../src/drive-app/live-protocol.js';
+import { SPOTS } from '../src/drive-app/places.js';
 
 const PORT = Number( process.env.TEST_DRIVE_WORKER_PORT ) || 8796;
 const MAPS_KEY = 'test-maps-key-not-real';
@@ -1160,9 +1166,9 @@ describe( 'World Drive Supporter Pass', () => {
 
 	// Signs in with an ID token for `claims` (or `credential` as given): the answer, and the cookie
 	// to send back.
-	async function signIn( claims = {}, { credential, key = googleKey, cookie } = {} ) {
+	async function signIn( claims = {}, { credential, key = googleKey, cookie, time } = {} ) {
 
-		const res = await send( 'POST', '/api/session', { credential: credential ?? await makeToken( key, claims ) }, { cookie } );
+		const res = await send( 'POST', '/api/session', { credential: credential ?? await makeToken( key, claims ) }, { cookie, time } );
 		const token = /^__Host-wd_session=([\w-]{43});/.exec( res.headers.get( 'Set-Cookie' ) ?? '' )?.[ 1 ];
 		return { ...res, token, cookie: token ? `__Host-wd_session=${ token }` : null };
 
@@ -1568,15 +1574,30 @@ describe( 'World Drive Supporter Pass', () => {
 		const post = ( counts, { visit = token, time = STATS_DAY + MINUTE, ...rest } = {} ) => send( 'POST', '/api/stats', { visit, counts }, { ip, time, ...rest } );
 
 		assert.equal( ( await post( { 'play:go-kart': 120.7, 'garage_edit:colour': 3, 'garage_open:all': 1, 'dropin:furka': 1, 'ride:go-kart': 1, 'load:google.com': 1, 'load_time:2-5 s': 1, 'load_ms:total': 3456 } ) ).status, 204 );
-		// What isn't a count it knows is left out: another metric, a ride or spot or part that isn't one, nothing, less than one.
-		assert.equal( ( await post( { 'play:go-kart': 60, 'nope:x': 5, 'play:not-a-ride': 9, 'dropin:my-street': 1, 'garage_edit:engine': 2, 'garage_open:all': 0, 'party:made': - 3, 'load:<b>': 1 } ) ).status, 204 );
-		// No more than a post may add: 600 s of play, one load.
-		assert.equal( ( await post( { 'play:go-kart': 1e9, 'load:direct': 5 } ) ).status, 204 );
+		// What isn't a count it knows is left out: another metric, a ride or spot or part that isn't one, nothing, less than one;
+		// and no other funnel step, device, world, search, bucket, problem or button, nor anything typed.
+		assert.equal( ( await post( {
+			'play:go-kart': 60, 'nope:x': 5, 'play:not-a-ride': 9, 'dropin:my-street': 1, 'garage_edit:engine': 2, 'garage_open:all': 0, 'party:made': - 3, 'load:<b>': 1,
+			'funnel:drove_5m': 1, 'funnel:': 1, 'device:watch': 1, 'device:Phone': 1, 'world:earth': 1, 'world:mars': 1, 'play_world:mars': 5, 'search:my street': 1,
+			'search:51.5, -0.1': 1, 'dropin_time:3 s': 1, 'problem:boom': 1, 'board:close': 1, 'pass:steal': 1, 'level_up:9': 1,
+		} ) ).status, 204 );
+		// No more than a post may add: 600 s of play, one load, the funnel's seven steps together, one device.
+		assert.equal( ( await post( { 'play:go-kart': 1e9, 'load:direct': 5, 'funnel:globe': 50, 'device:computer': 3, 'device:tablet': 1 } ) ).status, 204 );
+		// How far the visit got, on what, on which world, its searches (never what was typed), how long
+		// the drop-in took, what went wrong, the leaderboard, the pass and levels.
+		assert.equal( ( await post( {
+			'funnel:pin': 1, 'funnel:dropin': 1, 'funnel:driving': 1, 'funnel:drove_1m': 1, 'device:phone': 1,
+			'world:moon': 2, 'play_world:earth': 90.5, 'play_world:moon': 30, 'search:earth': 2, 'search:moon': 1, 'search:coordinates': 1, 'search:nothing': 1,
+			'dropin_time:10-20 s': 1, 'problem:no_ground': 1, 'problem:drop_abandoned': 1, 'board:open': 1, 'board:named': 1, 'pass:open': 2, 'pass:buy': 1, 'level_up:all': 1,
+		} ) ).status, 204 );
 		const day = new Date( STATS_DAY ).toISOString().slice( 0, 10 );
 		assert.deepEqual( statsRows( day ), {
 			'visit:all': 1, 'visit_hour:12': 1,
 			'play:go-kart': 120 + 60 + 600, 'garage_edit:colour': 3, 'garage_open:all': 1, 'dropin:furka': 1, 'ride:go-kart': 1,
 			'load:google.com': 1, 'load:direct': 1, 'load_time:2-5 s': 1, 'load_ms:total': 3456,
+			'funnel:globe': FUNNEL.length, 'funnel:pin': 1, 'funnel:dropin': 1, 'funnel:driving': 1, 'funnel:drove_1m': 1, 'device:phone': 1, 'device:computer': 1,
+			'world:moon': 2, 'play_world:earth': 90, 'play_world:moon': 30, 'search:earth': 2, 'search:moon': 1, 'search:coordinates': 1, 'search:nothing': 1,
+			'dropin_time:10-20 s': 1, 'problem:no_ground': 1, 'problem:drop_abandoned': 1, 'board:open': 1, 'board:named': 1, 'pass:open': 2, 'pass:buy': 1, 'level_up:all': 1,
 		} );
 
 		// Only with the visit's token, as JSON from the site itself.
@@ -1584,7 +1605,9 @@ describe( 'World Drive Supporter Pass', () => {
 		assert.equal( ( await post( { 'play:go-kart': 1 }, { visit: token.slice( 0, - 2 ) + 'xx' } ) ).status, 403 );
 		assert.equal( ( await post( { 'play:go-kart': 1 }, { time: STATS_DAY + 7 * HOUR } ) ).status, 403, 'a visit run out' );
 		assert.equal( ( await post( [ 1 ] ) ).status, 400 );
-		assert.equal( ( await post( Object.fromEntries( Array.from( { length: 61 }, ( _, i ) => [ `x:${ i }`, 1 ] ) ) ) ).status, 400 );
+		// MAX_COUNTS counts a post at most: one more and it's turned away whole.
+		assert.equal( ( await post( Object.fromEntries( Array.from( { length: MAX_COUNTS }, ( _, i ) => [ `x:${ i }`, 1 ] ) ) ) ).status, 204 );
+		assert.equal( ( await post( Object.fromEntries( Array.from( { length: MAX_COUNTS + 1 }, ( _, i ) => [ `x:${ i }`, 1 ] ) ) ) ).status, 400 );
 		assert.equal( ( await post( { 'play:go-kart': 1 }, { headers: { Origin: 'https://example.com' } } ) ).status, 403 );
 		assert.equal( statsRows( day )[ 'play:go-kart' ], 780 );
 
@@ -1606,6 +1629,77 @@ describe( 'World Drive Supporter Pass', () => {
 		assert.ok( res.json.rows.some( ( [ d, metric, key, n ] ) => d === day && metric === 'play' && key === 'go-kart' && n === 780 ) );
 		// A day's rows only within the days asked for.
 		assert.deepEqual( ( await call( server, '/api/admin/stats?days=1', { headers: { Cookie: boss.cookie }, time: STATS_DAY + 2 * DAY } ) ).json.rows, [] );
+
+	} );
+
+	test( 'play stats: the admin page is told each day\'s new players, new bests, accounts and passes (none taken back), the as many days before added up, and the totals now', async () => {
+
+		// Well clear of the other tests' days.
+		const ADMIN_DAY = PASS_DAY + 60 * DAY;
+		const dayAt = time => new Date( time ).toISOString().slice( 0, 10 );
+		const boss = await signIn( { sub: '1091', email: 'boss@example.com', name: 'Boss' }, { time: ADMIN_DAY } );
+		const ask = ( days = 7 ) => call( server, `/api/admin/stats?days=${ days }`, { headers: { Cookie: boss.cookie }, time: ADMIN_DAY } );
+		const was = ( await ask() ).json.totals;
+
+		// Google accounts: one this morning, one three days ago, one in the week before.
+		for ( const [ sub, name, time ] of [ [ '1201', 'nia', ADMIN_DAY - 2 * HOUR ], [ '1202', 'oto', ADMIN_DAY - 3 * DAY ], [ '1203', 'pia', ADMIN_DAY - 9 * DAY ] ] ) {
+
+			assert.equal( ( await signIn( { sub, email: `${ name }@example.com`, name }, { time } ) ).status, 200 );
+
+		}
+
+		const account = sub => server.d1( `SELECT id FROM accounts WHERE google_sub = '${ sub }'` )[ 0 ].id;
+		// Players: two today, one in the week before; and the scores log (each a new best): two today,
+		// one yesterday, one in the week before.
+		server.d1( `INSERT INTO players ( id, name, name_key, secret_hash, created_at, last_seen_at ) VALUES
+			( 'admin-player-01', 'Admin Ada', 'admin-ada', 'x', ${ ADMIN_DAY - HOUR }, ${ ADMIN_DAY - HOUR } ),
+			( 'admin-player-02', 'Admin Bo', 'admin-bo', 'x', ${ ADMIN_DAY - 3 * HOUR }, ${ ADMIN_DAY - HOUR } ),
+			( 'admin-player-03', 'Admin Cy', 'admin-cy', 'x', ${ ADMIN_DAY - 8 * DAY }, ${ ADMIN_DAY - 8 * DAY } )` );
+		server.d1( `INSERT INTO scores ( player_id, score, tricks, place, vehicle, air_time, run_seconds, visit, created_at ) VALUES
+			${ [ [ 1, HOUR ], [ 2, 2 * HOUR ], [ 1, DAY ], [ 3, 8 * DAY ] ].map( ( [ who, ago ] ) => `( 'admin-player-0${ who }', 100, 'Backflip!', 'Furka Pass', 'go-kart', 1, 60, 'v', ${ ADMIN_DAY - ago } )` ).join( ', ' ) }` );
+		// Passes: two bought today (one by an email nobody has signed in with), one refunded, one given
+		// by hand (to Oto's email), and one bought in US dollars in the week before.
+		server.d1( `INSERT INTO purchases ( checkout_session, account_id, email, amount, currency, payment_intent, status, created_at, refunded_at ) VALUES
+			( 'cs_admin_1', ${ account( '1201' ) }, 'nia@example.com', 499, 'cad', 'pi_admin_1', 'paid', ${ ADMIN_DAY - HOUR }, NULL ),
+			( 'cs_admin_2', NULL, 'zed.admin@example.com', 499, 'cad', 'pi_admin_2', 'paid', ${ ADMIN_DAY - HOUR }, NULL ),
+			( 'cs_admin_3', ${ account( '1202' ) }, 'oto@example.com', 499, 'cad', 'pi_admin_3', 'refunded', ${ ADMIN_DAY - 2 * DAY }, ${ ADMIN_DAY - DAY } ),
+			( 'granted-admin', NULL, 'oto@example.com', NULL, NULL, NULL, 'granted', ${ ADMIN_DAY - 2 * DAY }, NULL ),
+			( 'cs_admin_4', ${ account( '1203' ) }, 'pia@example.com', 999, 'usd', 'pi_admin_4', 'paid', ${ ADMIN_DAY - 10 * DAY }, NULL )` );
+		// And the page's counts: today's, two days of the week before, and older ones (one older than
+		// two years).
+		server.d1( `INSERT INTO stats_daily ( day, metric, key, n ) VALUES ( '${ dayAt( ADMIN_DAY ) }', 'funnel', 'globe', 3 ),
+			( '${ dayAt( ADMIN_DAY - 8 * DAY ) }', 'play', 'go-kart', 100 ), ( '${ dayAt( ADMIN_DAY - 9 * DAY ) }', 'play', 'go-kart', 50 ),
+			( '${ dayAt( ADMIN_DAY - 20 * DAY ) }', 'play', 'go-kart', 7 ), ( '${ dayAt( ADMIN_DAY - 729 * DAY ) }', 'visit', 'all', 1 ), ( '${ dayAt( ADMIN_DAY - 731 * DAY ) }', 'visit', 'all', 1 )` );
+
+		const res = await ask();
+		assert.equal( res.status, 200, res.text );
+		const { from, to, rows, previous, totals, kept } = res.json;
+		assert.deepEqual( [ from, to ], [ dayAt( ADMIN_DAY - 6 * DAY ), dayAt( ADMIN_DAY ) ] );
+		const sorted = list => [ ...list ].sort( ( a, b ) => JSON.stringify( a ).localeCompare( JSON.stringify( b ) ) );
+		const today = dayAt( ADMIN_DAY );
+		// In the rows' shape, the counts' and the tables' alike, by day.
+		assert.deepEqual( sorted( rows ), sorted( [
+			[ today, 'funnel', 'globe', 3 ], [ today, 'players', 'new', 2 ], [ today, 'scores', 'new_best', 2 ], [ dayAt( ADMIN_DAY - DAY ), 'scores', 'new_best', 1 ],
+			[ today, 'accounts', 'new', 1 ], [ dayAt( ADMIN_DAY - 3 * DAY ), 'accounts', 'new', 1 ],
+			[ today, 'purchases', 'paid', 2 ], [ dayAt( ADMIN_DAY - 2 * DAY ), 'purchases', 'granted', 1 ], [ today, 'revenue', 'cad', 998 ],
+		] ) );
+		assert.deepEqual( rows.map( ( [ day ] ) => day ), rows.map( ( [ day ] ) => day ).sort() );
+		// The week before, added up by metric and key.
+		assert.deepEqual( { ...previous, rows: sorted( previous.rows ) }, {
+			from: dayAt( ADMIN_DAY - 13 * DAY ), to: dayAt( ADMIN_DAY - 7 * DAY ),
+			rows: sorted( [ [ 'play', 'go-kart', 150 ], [ 'players', 'new', 1 ], [ 'scores', 'new_best', 1 ], [ 'accounts', 'new', 1 ], [ 'purchases', 'paid', 1 ], [ 'revenue', 'usd', 999 ] ] ),
+		} );
+		// Now: three more players and accounts, three more with the pass (Nia's and Pia's bought, Oto's
+		// given), and one bought by an email nobody has signed in with.
+		assert.deepEqual( totals, { players: was.players + 3, accounts: was.accounts + 3, supporters: was.supporters + 3, unclaimed: was.unclaimed + 1 } );
+		assert.deepEqual( kept, { stats: 730, scores: 35 } );
+
+		// A year at most, compared with the year before it; rows older than two years go as it's asked.
+		const year = ( await ask( 9999 ) ).json;
+		assert.deepEqual( [ year.from, year.previous.from, year.previous.to ], [ dayAt( ADMIN_DAY - 364 * DAY ), dayAt( ADMIN_DAY - 729 * DAY ), dayAt( ADMIN_DAY - 365 * DAY ) ] );
+		assert.deepEqual( year.previous.rows.find( ( [ metric ] ) => metric === 'visit' ), [ 'visit', 'all', 1 ] );
+		for ( let tries = 0; server.d1( `SELECT day FROM stats_daily WHERE day = '${ dayAt( ADMIN_DAY - 731 * DAY ) }'` ).length && tries < 20; tries ++ ) await new Promise( resolve => setTimeout( resolve, 100 ) );
+		assert.deepEqual( server.d1( `SELECT day FROM stats_daily WHERE metric = 'visit' AND day < '${ dayAt( ADMIN_DAY - 700 * DAY ) }'` ), [ { day: dayAt( ADMIN_DAY - 729 * DAY ) } ] );
 
 	} );
 
@@ -2035,6 +2129,64 @@ describe( 'Play stats\' counts', () => {
 		assert.equal( checkCounts( null ), null );
 		assert.equal( checkCounts( 'x' ), null );
 		assert.deepEqual( checkCounts( { 'constructor:x': 1, '__proto__:x': 1, 'toString:all': 1 } ), [] );
+
+	} );
+
+	test( 'the funnel, devices, searches, drop-in times and problems: only their own keys, each held to what a post may add', () => {
+
+		assert.deepEqual( FUNNEL, [ 'globe', 'pin', 'dropin', 'driving', 'drove_1m', 'drove_10m', 'drove_30m' ] );
+		assert.deepEqual( checkCounts( Object.fromEntries( [ ...FUNNEL, 'drove_2m', 'Globe' ].map( step => [ `funnel:${ step }`, 1 ] ) ) ), FUNNEL.map( step => [ 'funnel', step, 1 ] ) );
+		// (Each step once a visit: seven in a post at most, all of them together.)
+		assert.deepEqual( checkCounts( { 'funnel:globe': 5, 'funnel:pin': 5 } ), [ [ 'funnel', 'globe', 5 ], [ 'funnel', 'pin', 2 ] ] );
+		assert.deepEqual( checkCounts( Object.fromEntries( [ ...DEVICES, 'watch' ].map( device => [ `device:${ device }`, 1 ] ) ) ), [ [ 'device', 'phone', 1 ] ] );
+		assert.deepEqual( checkCounts( Object.fromEntries( [ ...SEARCHES, 'Furka Pass', '46.57, 8.41' ].map( kind => [ `search:${ kind }`, 30 ] ) ) ), [ [ 'search', 'earth', 30 ], [ 'search', 'moon', 10 ] ] );
+		assert.deepEqual( checkCounts( Object.fromEntries( [ ...PROBLEMS, 'other' ].map( problem => [ `problem:${ problem }`, 1 ] ) ) ), PROBLEMS.map( problem => [ 'problem', problem, 1 ] ) );
+		assert.deepEqual( checkCounts( { 'world:moon': 25, 'world:earth': 1, 'play_world:moon': 700, 'play_world:earth': 9, 'level_up:all': 11 } ), [ [ 'world', 'moon', 20 ], [ 'play_world', 'moon', 600 ], [ 'level_up', 'all', 10 ] ] );
+		assert.deepEqual( checkCounts( { 'board:open': 1, 'board:named': 1, 'board:x': 1, 'pass:open': 1, 'pass:buy': 1, 'pass:refund': 1 } ), [ [ 'board', 'open', 1 ], [ 'board', 'named', 1 ], [ 'pass', 'open', 1 ], [ 'pass', 'buy', 1 ] ] );
+		assert.deepEqual( [ 0, 4999, 5000, 19999, 20000, 39999, 40000, 1e6 ].map( dropinBucket ), [ 'under 5 s', 'under 5 s', '5-10 s', '10-20 s', '20-40 s', '20-40 s', 'over 40 s', 'over 40 s' ] );
+		assert.deepEqual( checkCounts( Object.fromEntries( [ 'under 5 s', '5-10 s', '10-20 s', '20-40 s', 'over 40 s', '1 s' ].map( bucket => [ `dropin_time:${ bucket }`, 1 ] ) ) ).length, 5 );
+
+	} );
+
+	test( 'driving time passes the funnel\'s 1, 10 and 30 minutes once each; a device is told by its pointer and screen', () => {
+
+		assert.deepEqual( droveSteps( 0, 59.9 ), [] );
+		assert.deepEqual( droveSteps( 59.9, 60 ), [ 'drove_1m' ] );
+		assert.deepEqual( droveSteps( 60, 61 ), [], 'passed already' );
+		assert.deepEqual( droveSteps( 599.95, 1800.05 ), [ 'drove_10m', 'drove_30m' ] );
+		assert.deepEqual( droveSteps( 1800, 99999 ), [] );
+		// A mouse or a trackpad is a computer, whatever its screen; a finger, a tablet from 600 px across
+		// its shorter side, else a phone.
+		assert.equal( deviceOf( { coarse: false, width: 390, height: 844 } ), 'computer' );
+		assert.equal( deviceOf( { coarse: true, width: 390, height: 844 } ), 'phone' );
+		assert.equal( deviceOf( { coarse: true, width: 844, height: 390 } ), 'phone' );
+		assert.equal( deviceOf( { coarse: true, width: 820, height: 1180 } ), 'tablet' );
+		assert.equal( deviceOf( { coarse: true, width: 1366, height: 1024 } ), 'tablet' );
+		for ( const device of [ 'computer', 'phone', 'tablet' ] ) assert.equal( METRICS.device.key( device ), device );
+
+	} );
+
+	test( 'every count a page can make fits in a post: MAX_COUNTS of the longest, well under the Worker\'s 8 KB', () => {
+
+		// Every key of every metric, as the page names them, and a referring site as long as one can be.
+		const rides = [ 'go-kart', ...LIBRARY_VEHICLES, ...DRIVE_CARS, ...PASS_RIDES ];
+		const keysOf = {
+			load: [ 'a'.repeat( 30 ) + '.' + 'b'.repeat( 33 ) ], load_time: [ 'under 2 s', '2-5 s', '5-10 s', '10-20 s', 'over 20 s' ], load_ms: [ 'total' ],
+			dropin: [ ...SPOTS.map( spot => spot.id ), 'other', 'moon' ], ride: rides, play: rides, play_with_others: [ 'all' ], garage_open: [ 'all' ], garage_edit: LOOK_PARTS,
+			party: [ 'made', 'joined' ], funnel: FUNNEL, device: DEVICES, world: [ 'moon' ], play_world: [ 'earth', 'moon' ], search: SEARCHES,
+			dropin_time: [ 'under 5 s', '5-10 s', '10-20 s', '20-40 s', 'over 40 s' ], problem: PROBLEMS, board: [ 'open', 'named' ], pass: [ 'open', 'buy' ], level_up: [ 'all' ],
+		};
+		assert.deepEqual( Object.keys( keysOf ).sort(), Object.keys( METRICS ).sort(), 'every metric' );
+		const names = Object.entries( keysOf ).flatMap( ( [ metric, keys ] ) => keys.map( key => {
+
+			assert.equal( METRICS[ metric ].key( key ), key, `${ metric }:${ key }` );
+			return `${ metric }:${ key }`;
+
+		} ) );
+		// The longest MAX_COUNTS of them, each with the most it may hold, and a visit's token.
+		const longest = names.sort( ( a, b ) => b.length - a.length ).slice( 0, MAX_COUNTS );
+		const body = JSON.stringify( { visit: `v1.${ 'x'.repeat( 22 ) }.1800000000.${ 'y'.repeat( 43 ) }`, counts: Object.fromEntries( longest.map( name => [ name, 120000 ] ) ) } );
+		assert.ok( new TextEncoder().encode( body ).length < 8192 * 0.8, `${ body.length } bytes` );
 
 	} );
 

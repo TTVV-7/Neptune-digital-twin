@@ -49,6 +49,8 @@ let google = null;
 let asking = null;
 // Called once the account signed in here has the pass (see setUpSupporter), or null.
 let onPass = null;
+// Called as Buy opens the Payment Link (for the play stats).
+let onBuy = () => {};
 let handle = null;
 const areas = new Map();
 const observers = new Set();
@@ -60,11 +62,13 @@ const linked = new Set();
 // googleClientId: /api/config's; player(): this browser's leaderboard player, { id, secret } or null.
 // The used-up screen sets it up first (main.js), with onPass(): called once, as soon as the account
 // here has the pass, to ask for the visit again. Set up again as the drive starts, it only takes the
-// new player() and onPass (none): the questions already asked, and their answers, carry on.
-export function setUpSupporter( { worker, googleClientId, player, onPass: whenPass = null } ) {
+// new player(), onPass (none) and onBuy(): Buy opening the Payment Link, for the play stats. The
+// questions already asked, and their answers, carry on.
+export function setUpSupporter( { worker, googleClientId, player, onPass: whenPass = null, onBuy: whenBuy = null } ) {
 
 	getPlayer = player ?? getPlayer;
 	onPass = whenPass;
+	onBuy = whenBuy ?? onBuy;
 	if ( handle ) {
 
 		if ( me?.signedIn ) linkPlayer();
@@ -139,6 +143,7 @@ export function openSupporterCheckout() {
 	if ( me.email ) url.searchParams.set( 'prefilled_email', me.email );
 	waitingSince = Date.now();
 	window.open( url.href, '_blank', 'noopener' );
+	onBuy();
 	render();
 	return true;
 

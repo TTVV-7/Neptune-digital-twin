@@ -19,7 +19,7 @@ import { createScreenFx } from './screen-fx.js';
 import { createWater } from './water.js';
 import { createSea, lakesNear, seaLevel, waterAt } from './sea.js';
 import { setUpLeaderboard } from './leaderboard.js';
-import { buyArea } from './pass.js';
+import { buyArea, onPassOpen } from './pass.js';
 import { fillAccountArea, fillBuyArea, linkPlayer, onLinked, setUpSupporter } from './supporter.js';
 import { onProChange } from './pro.js';
 import { applyLook } from './paint.js';
@@ -28,7 +28,7 @@ import { setUpProfile } from './profile.js';
 import { formatLatLon, LINK_PARAMS, linkedPlace, rememberPlace, worldOf } from './places.js';
 import { createLive, flagsOf, velocityOf } from './live.js';
 import { createStats } from './stats.js';
-import { METRICS } from './stats-protocol.js';
+import { METRICS, dropinBucket } from './stats-protocol.js';
 import { createGhosts } from './ghosts.js';
 import { BUDGET_TOAST, setUpFriends } from './friends.js';
 import { createOnline } from './online.js';
@@ -127,6 +127,9 @@ const LIVE_TEST = import.meta.env.DEV ? window.worldDriveLiveTest ?? null : null
 // token, { visit }, for the leaderboard and levels on the test pad, as if it were a visit on
 // Google's map.
 const VISIT_TEST = import.meta.env.DEV ? window.worldDriveVisitTest ?? null : null;
+// And a visit's token for the play stats alone, { visit } (scripts/test-drive-ui.mjs, which answers
+// their posts itself), so what the page counts can be seen on the test pad.
+const STATS_TEST = import.meta.env.DEV ? window.worldDriveStatsTest ?? null : null;
 
 const $ = id => document.getElementById( id );
 const frame = () => new Promise( resolve => requestAnimationFrame( resolve ) );
@@ -148,7 +151,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	const visit = token ?? VISIT_TEST?.visit ?? null;
 	// Play stats for the owner's admin page (stats.js): only a real visit's, counts with nothing of who.
-	const stats = createStats( { visit: token } );
+	const stats = createStats( { visit: token ?? STATS_TEST?.visit ?? null } );
 	const vehicles = await loadVehicles();
 	screens.hideSplash();
 
@@ -262,12 +265,15 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		onDrive: place => dropIn( place ),
 		onClearPin: () => pinAt( null ),
 		onWorld: world => setWorld( world ),
+		// (Its kind only, for the play stats: never what was typed.)
+		onSearch: kind => stats.add( 'search', kind ),
 	} );
 	panel.vehiclePicker( $( 'pause' ).querySelector( '.vehicles' ), vehicle => swapVehicle( vehicle ) );
 	globe.onPick = place => {
 
 		stayPut();
 		pinAt( { ...place, name: 'Dropped pin', region: '', ...onMoon() ? { world: MOON } : {} } );
+		stats.once( 'funnel', 'pin' );
 
 	};
 	// The Garage and the Supporter Pass, by both ride pickers (garage.js, pass.js).
@@ -293,11 +299,13 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		// once linked, onLinked below has sent the claim already).
 		onPlayer: async () => {
 
+			stats.add( 'board', 'named' );
 			await linkPlayer();
 			progress.report();
 
 		},
 		onName: () => live?.rehello(),
+		onOpen: () => stats.add( 'board', 'open' ),
 	} );
 	board.setVisit( visit );
 
@@ -313,7 +321,12 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		player: () => board.player,
 		onChange: () => profile?.render(),
 		onPop: event => profile?.pop( event ),
-		onLevelUp: event => profile?.levelUp( event ),
+		onLevelUp: event => {
+
+			stats.add( 'level_up', 'all' );
+			profile?.levelUp( event );
+
+		},
 	} );
 	profile = setUpProfile( {
 		progress,
@@ -356,8 +369,10 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	}
 
 	// Buying the Supporter Pass in its sheet, and signing in for it there and in the pause menu
-	// (supporter.js). Without sign-in set up the sheet just says "Coming soon".
-	const supporter = setUpSupporter( { worker, googleClientId, player: () => board.player } );
+	// (supporter.js). Without sign-in set up the sheet just says "Coming soon". Its sheet opened, and
+	// Buy followed to Stripe, are counted for the play stats.
+	const supporter = setUpSupporter( { worker, googleClientId, player: () => board.player, onBuy: () => stats.add( 'pass', 'buy' ) } );
+	onPassOpen( () => stats.add( 'pass', 'open' ) );
 	if ( supporter.on ) {
 
 		fillBuyArea( buyArea() );
@@ -466,6 +481,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		const pin = { ...place, height };
 		globe.setPin( pin );
 		panel.setPin( pin );
+		stats.once( 'funnel', 'pin' );
 		const view = { lat: place.lat, lon: place.lon, height: height ?? 0, distance: 2200, heading: place.heading ?? 0, pitch: - 50 };
 		globe.flyTo( globe.lifted( view, pinLift(), GLOBE_FOV ) ).then( arrived => {
 
@@ -515,7 +531,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	}
 
 	setMode( 'globe' );
-	// How long from asking for the page to the globe, and from where.
+	// How long from asking for the page to the globe, from where, and on what (the funnel's first step).
 	stats.loaded( performance.now() );
 
 	// A place's link (?spot= or ?at=, its "Drive here" on the places' pages, drive/site/): the
@@ -588,6 +604,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 					switching = null;
 					panel.setWorld( world );
 					screens.toast( `The Moon didn't load (${ err.message }). Try again in a moment.`, 7000 );
+					stats.add( 'problem', 'moon_failed' );
 
 				}
 
@@ -610,6 +627,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		lastLook[ world ] = { lat: pose.lat, lon: pose.lon };
 		world = next;
 		const moonly = onMoon();
+		if ( moonly ) stats.add( 'world', MOON );
 		moon.group.visible = moonly;
 		earth.visible = ! moonly;
 		pinAt( null );
@@ -643,11 +661,14 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	async function dropIn( place ) {
 
 		if ( state.mode !== 'globe' ) return;
+		// When Drive here was pressed, for how long the drop-in takes (the play stats).
+		const began = performance.now();
 		// (A place on the other world: Join, from the Moon, to someone driving on the Earth.)
 		if ( worldOf( place ) !== world && ! await setWorld( worldOf( place ) ) ) return;
 		stayPut();
-		if ( onMoon() ) return dropInMoon( place );
-		const drop = state.drop = { cancelled: false };
+		stats.once( 'funnel', 'dropin' );
+		if ( onMoon() ) return dropInMoon( place, began );
+		const drop = state.drop = { cancelled: false, began };
 		const gone = () => drop.cancelled || state.drop !== drop;
 		let { lat, lon } = place;
 		state.place = place;
@@ -726,9 +747,9 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// any of it is built (moon-height.js), so the scene is centred on the ground at the pin at once;
 	// then the squares round it are built on the way down (moon.js, faster while the loading screen is
 	// up). Facing the way with the most open ground (ground.heading), and you're off.
-	async function dropInMoon( place ) {
+	async function dropInMoon( place, began ) {
 
-		const drop = state.drop = { cancelled: false };
+		const drop = state.drop = { cancelled: false, began };
 		const gone = () => drop.cancelled || state.drop !== drop;
 		const { lat, lon } = place;
 		state.place = place;
@@ -797,11 +818,12 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		} catch ( err ) {
 
 			// A model that didn't come (the pickup is 2.8 MB): the go-kart instead, which is drawn here and
-			// can't fail to load, rather than no drive at all.
+			// can't fail to load, rather than no drive at all. A problem for the play stats either way.
+			stats.add( 'problem', 'ride_failed' );
 			const kart = vehicles.find( v => v.id === 'go-kart' ) ?? null;
 			if ( ! kart || kart === vehicle ) {
 
-				noGround( `The ${ vehicle.name.toLowerCase() } didn't load (${ err.message }). Try again or pick another ride.` );
+				noGround( `The ${ vehicle.name.toLowerCase() } didn't load (${ err.message }). Try again or pick another ride.`, null );
 				return;
 
 			}
@@ -831,6 +853,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		drive();
 		stats.add( 'dropin', onMoon() ? MOON : METRICS.dropin.key( state.place?.id ) ?? 'other' );
 		stats.add( 'ride', vehicle.id );
+		stats.add( 'dropin_time', dropinBucket( performance.now() - drop.began ) );
+		stats.once( 'funnel', 'driving' );
 		live?.setRide( vehicle.id, lookOf( vehicle ) );
 		// On the Moon nobody's told where you are: you're on the globe as far as they know.
 		if ( onMoon() ) live?.setAway();
@@ -906,8 +930,11 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	}
 
-	function noGround( message ) {
+	// A drop-in that can't go on: back to the globe, saying why, and counted as `problem` (none when
+	// it's counted already) for the play stats.
+	function noGround( message, problem = 'no_ground' ) {
 
+		if ( problem ) stats.add( 'problem', problem );
 		state.drop = null;
 		removeVehicle();
 		screens.hideLoading();
@@ -995,6 +1022,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 		if ( state.mode === 'globe' && ! fromHere ) return;
 		const was = carSpot();
+		// A drop-in left before it was driving (noGround has ended its own, so isn't one).
+		if ( state.mode === 'dropping' && state.drop ) stats.add( 'problem', 'drop_abandoned' );
 		// What was driven goes to the Worker (or, before a nickname, is kept here).
 		progress.report();
 		if ( state.drop ) state.drop.cancelled = true;
@@ -1237,14 +1266,17 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		if ( ! tile ) {
 
 			screens.notice( 'error', { message: `Google's 3D map didn't load (${ message }). Reload the page to try again.`, onRetry: () => window.location.reload() } );
+			stats.once( 'problem', 'map_failed' );
 			return;
 
 		}
 
-		// After a few hours the visit's Google session runs out; a new one is a new visit.
+		// After a few hours the visit's Google session runs out; a new one is a new visit. (Each tile
+		// refused says so: counted once.)
 		if ( refused ) {
 
 			screens.toast( 'This drive\'s map session has ended. Reload the page for a fresh one.', 15000 );
+			stats.once( 'problem', 'map_session_ended' );
 			return;
 
 		}
@@ -1273,8 +1305,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		if ( state.mode === 'driving' && driver.active ) {
 
 			progress.drive( dt, driven() );
-			stats.add( 'play', state.vehicle.id, dt );
-			if ( live?.players.size && ! onMoon() ) stats.add( 'play_with_others', 'all', dt );
+			// Play time by ride and world, with others or not, and the funnel's minutes driven.
+			stats.drove( state.vehicle.id, world, dt, !! live?.players.size && ! onMoon() );
 
 		}
 
@@ -1417,7 +1449,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// For poking around from the browser console, and for the tests.
 	window.drive = {
 		scene, camera, renderer, tiles, globe, models, driver, ground, panel, leaderboard: board,
-		garage, supporter, pads, water, sea, live, ghosts, friends, online, progress, profile, screenFx,
+		garage, supporter, pads, water, sea, live, ghosts, friends, online, progress, profile, screenFx, stats,
 		get mode() {
 
 			return state.mode;

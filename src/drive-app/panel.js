@@ -26,8 +26,10 @@ const WORDS = {
 
 // root: #globe-ui. vehicles: from loadVehicles(). flyTo( place ): fly the globe there and pin it.
 // onDrive( place ): drop in at the pin. onWorld( world ): the Earth or the Moon picked ('earth' or
-// 'moon'); main.js turns the globe and calls setWorld once it's there.
-export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorld = () => {} } ) {
+// 'moon'); main.js turns the globe and calls setWorld once it's there. onSearch( kind ): a search
+// made, for the play stats: 'earth' (the map asked), 'moon' (the Moon's places), 'coordinates'
+// (typed), and 'nothing' as well for one that found nothing; never what was typed.
+export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorld = () => {}, onSearch = () => {} } ) {
 
 	const $ = selector => root.querySelector( selector );
 	const form = $( '.search' );
@@ -87,6 +89,7 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorl
 		const typed = parseLatLon( text );
 		if ( typed ) {
 
+			onSearch( 'coordinates' );
 			showResults( [] );
 			say( '' );
 			flyTo( world === MOON
@@ -101,6 +104,8 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorl
 
 			searching ++;
 			const found = searchMoon( text );
+			onSearch( MOON );
+			if ( ! found.length ) onSearch( 'nothing' );
 			say( found.length ? '' : `Nothing found for "${ text }". ${ WORDS.moon.none }` );
 			results.replaceChildren( ...found.map( place => item( place.name, place.region, () => {
 
@@ -116,10 +121,12 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorl
 		const ask = ++ searching;
 		say( 'Searching...' );
 		showResults( [] );
+		onSearch( 'earth' );
 		try {
 
 			const found = await searchPlaces( text );
 			if ( ask !== searching ) return;
+			if ( ! found.length ) onSearch( 'nothing' );
 			say( found.length ? '' : `Nothing found for "${ text }". ${ WORDS.earth.none }` );
 			showResults( found );
 

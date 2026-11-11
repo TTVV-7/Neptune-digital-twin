@@ -1,4 +1,4 @@
-import { MAX_COUNTS, METRICS, loadBucket, referrerOf } from './stats-protocol.js';
+import { MAX_COUNTS, METRICS, deviceOf, droveSteps, loadBucket, referrerOf } from './stats-protocol.js';
 
 // Play stats (docs/world-drive.md, "Play stats"): the page's counts for the owner's admin page,
 // added up here and posted to /api/stats (worker/drive/stats.js) every POST_MS and as the page goes
@@ -13,6 +13,9 @@ export function createStats( { visit, fetch: send = ( ...args ) => fetch( ...arg
 
 	// 'metric:key' => how many (times can be fractions of a second until posted).
 	const counts = new Map();
+	// What's counted once a visit (once), and the seconds driven this visit (drove), for the funnel.
+	const counted = new Set();
+	let driven = 0;
 	let off = typeof visit !== 'string' || ! visit;
 	let posting = false;
 
@@ -22,6 +25,17 @@ export function createStats( { visit, fetch: send = ( ...args ) => fetch( ...arg
 		const name = `${ metric }:${ key }`;
 		if ( ! counts.has( name ) && counts.size >= MAX_COUNTS ) return;
 		counts.set( name, ( counts.get( name ) ?? 0 ) + n );
+
+	}
+
+	// One of `metric:key` the first time this visit, and never again (the funnel's steps, the device,
+	// a problem that would otherwise be counted at every tile).
+	function once( metric, key ) {
+
+		const name = `${ metric }:${ key }`;
+		if ( counted.has( name ) ) return;
+		counted.add( name );
+		add( metric, key );
 
 	}
 
@@ -84,15 +98,33 @@ export function createStats( { visit, fetch: send = ( ...args ) => fetch( ...arg
 	return {
 
 		add,
+		once,
 		post,
 
-		// The page opened `ms` after it was asked for (the globe showing), from `referrer`.
+		// The page opened `ms` after it was asked for (the globe showing: the funnel's first step),
+		// from `referrer`, on this device (deviceOf: the main pointer and the screen's size).
 		loaded( ms, referrer = document.referrer ) {
 
 			const from = referrerOf( referrer, location.hostname );
 			if ( from ) add( 'load', from );
 			add( 'load_time', loadBucket( ms ) );
 			add( 'load_ms', 'total', Math.min( Math.round( ms ), METRICS.load_ms.most ) );
+			once( 'funnel', 'globe' );
+			once( 'device', deviceOf( { coarse: matchMedia( '(pointer: coarse)' ).matches, width: screen.width, height: screen.height } ) );
+
+		},
+
+		// `dt` seconds driven (not paused) in `ride` on `world` ('earth' or 'moon'), `together` with
+		// others in the room: the play time, and the funnel's steps as this visit's driving passes 1,
+		// 10 and 30 minutes.
+		drove( ride, world, dt, together ) {
+
+			add( 'play', ride, dt );
+			add( 'play_world', world, dt );
+			if ( together ) add( 'play_with_others', 'all', dt );
+			const before = driven;
+			driven += dt;
+			for ( const step of droveSteps( before, driven ) ) once( 'funnel', step );
 
 		},
 

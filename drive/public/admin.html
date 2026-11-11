@@ -9,30 +9,41 @@
 <!--
 	The owner's play stats (docs/world-drive.md, "Play stats"): GET /api/admin/stats, for a Google
 	account in ADMIN_EMAILS signed in on worlddrive.app (worker/drive/stats.js). Counts a day only,
-	nothing of who. Charts drawn as plain SVG here, with nothing loaded from anywhere else.
+	nothing of who: the page's and the visits' counts, and what the Worker's own tables say of each day
+	(new players, new bests, accounts, passes and their money). Each figure is set against the as many
+	days before the period shown, which the Worker sends added up. Charts drawn as plain SVG here, with
+	nothing loaded from anywhere else.
 -->
 <style>
 	:root {
 		--bg: #f6f7f9; --card: #fff; --text: #16191d; --muted: #5d6670; --line: #e3e6ea;
-		--accent: #1f7a4d; --accent-2: #8fc9a9; --bar-bg: #eef1f4;
+		--accent: #1f7a4d; --accent-2: #8fc9a9; --bar-bg: #eef1f4; --up: #1f7a4d; --down: #b3261e;
 		color-scheme: light dark;
 	}
 	@media (prefers-color-scheme: dark) {
-		:root { --bg: #111417; --card: #1a1e22; --text: #eef1f4; --muted: #9aa4ae; --line: #2a3036; --accent: #4cc387; --accent-2: #b5e8cc; --bar-bg: #23292e; }
+		:root { --bg: #111417; --card: #1a1e22; --text: #eef1f4; --muted: #9aa4ae; --line: #2a3036; --accent: #4cc387; --accent-2: #b5e8cc; --bar-bg: #23292e; --up: #4cc387; --down: #ff8a80; }
 	}
 	* { box-sizing: border-box; }
 	body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
 	main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 48px; }
 	header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+	.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 	h1 { font-size: 22px; margin: 0; }
 	h2 { font-size: 15px; margin: 0 0 10px; }
+	h3 { font-size: 13px; margin: 12px 0 6px; color: var(--muted); font-weight: 600; }
 	.muted { color: var(--muted); }
-	select { font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); }
-	.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; margin-bottom: 16px; }
-	.tile, .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+	.small { font-size: 12px; }
+	select, button { font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); }
+	button { cursor: pointer; }
+	.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 16px; }
+	.tile, .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; min-width: 0; }
 	.tile .label { color: var(--muted); font-size: 13px; }
-	.tile .value { font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; margin-top: 2px; }
-	.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; margin-top: 12px; }
+	.tile .value { font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; margin-top: 2px; overflow-wrap: anywhere; }
+	.tile .change { font-size: 12px; font-variant-numeric: tabular-nums; margin-top: 2px; }
+	.tile.today { border-color: var(--accent); }
+	.up { color: var(--up); }
+	.down { color: var(--down); }
+	.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 12px; margin-top: 12px; }
 	.wide { grid-column: 1 / -1; }
 	svg { display: block; width: 100%; height: auto; }
 	svg text { fill: var(--muted); font-size: 11px; }
@@ -40,15 +51,24 @@
 	.bars td { padding: 4px 0; vertical-align: middle; }
 	.bars td.name { width: 38%; padding-right: 8px; overflow-wrap: anywhere; }
 	.bars td.num { width: 1%; white-space: nowrap; padding-left: 8px; text-align: right; }
+	.bars td.share { width: 1%; white-space: nowrap; padding-left: 8px; text-align: right; color: var(--muted); font-size: 13px; }
 	.bar { height: 10px; border-radius: 5px; background: var(--bar-bg); overflow: hidden; }
 	.bar > span { display: block; height: 100%; background: var(--accent); border-radius: 5px; }
+	.facts { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+	.facts td { padding: 5px 0; border-bottom: 1px solid var(--line); }
+	.facts td.num { text-align: right; white-space: nowrap; padding-left: 8px; }
+	.facts td.change { text-align: right; white-space: nowrap; padding-left: 8px; font-size: 12px; width: 1%; }
+	.facts tr:last-child td { border-bottom: 0; }
 	.notice { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
+	.note { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
 	a { color: var(--accent); }
-	/* On a phone the days' chart keeps a width it can be read at, and scrolls inside its card. */
+	/* On a phone the days' charts keep a width they can be read at, and scroll inside their card. */
 	.scroll { overflow-x: auto; }
 	.scroll svg { min-width: 640px; }
-	.legend { display: flex; gap: 14px; font-size: 13px; color: var(--muted); margin: -4px 0 6px; }
+	.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--muted); margin: -4px 0 6px; }
 	.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+	.pickers { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+	.pickers select { max-width: 100%; }
 </style>
 </head>
 <body>
@@ -58,36 +78,59 @@
 			<h1>World Drive stats</h1>
 			<div class="muted" id="range"></div>
 		</div>
-		<label class="muted">Period
-			<select id="days">
-				<option value="7">Last 7 days</option>
-				<option value="30" selected>Last 30 days</option>
-				<option value="90">Last 90 days</option>
-				<option value="365">Last year</option>
-			</select>
-		</label>
+		<div class="controls">
+			<label class="muted">Period
+				<select id="days">
+					<option value="7">Last 7 days</option>
+					<option value="30" selected>Last 30 days</option>
+					<option value="90">Last 90 days</option>
+					<option value="365">Last year</option>
+				</select>
+			</label>
+			<button type="button" id="csv" disabled>Download CSV</button>
+		</div>
 	</header>
 	<div id="out"><p class="muted">Loading...</p></div>
-	<p class="muted" style="margin-top:24px;font-size:13px">Counts only, nothing of who. Days are UTC. Referrers, countries and page speed in more detail are in Cloudflare's dashboard (Web Analytics).</p>
+	<p class="muted" style="margin-top:24px;font-size:13px">Counts only, nothing of who. Days are UTC, and each period ends with today so far. ▲ and ▼ compare with the as many days just before it. Referrers, countries and page speed in more detail are in Cloudflare's dashboard (Web Analytics).</p>
 </main>
 <script>
 ( () => {
 
 	const out = document.getElementById( 'out' );
 	const select = document.getElementById( 'days' );
+	const csvButton = document.getElementById( 'csv' );
 	const DAY = 86400000;
 	const esc = text => String( text ).replace( /[&<>"']/g, c => ( { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' } )[ c ] );
 	const num = n => Math.round( n ).toLocaleString();
 	const hours = seconds => seconds >= 3600 ? `${ ( seconds / 3600 ).toFixed( seconds >= 36000 ? 0 : 1 ) } h` : `${ Math.round( seconds / 60 ) } min`;
-	const pretty = id => id.replace( /-/g, ' ' ).replace( /^./, c => c.toUpperCase() );
+	const percent = ( part, whole ) => whole ? `${ Math.round( 100 * part / whole ) }%` : '-';
+	const pretty = id => id.replace( /[-_]/g, ' ' ).replace( /^./, c => c.toUpperCase() );
 	const LOAD_ORDER = [ 'under 2 s', '2-5 s', '5-10 s', '10-20 s', 'over 20 s' ];
+	const DROPIN_ORDER = [ 'under 5 s', '5-10 s', '10-20 s', '20-40 s', 'over 40 s' ];
+	// The funnel's steps after the visit itself (src/drive-app/stats-protocol.js, FUNNEL).
+	const FUNNEL = [ [ 'globe', 'Globe shown' ], [ 'pin', 'A place pinned' ], [ 'dropin', 'A drop-in started' ], [ 'driving', 'Driving' ], [ 'drove_1m', 'Drove 1 min' ], [ 'drove_10m', 'Drove 10 min' ], [ 'drove_30m', 'Drove 30 min' ] ];
+	const DEVICES = [ [ 'phone', 'Phone' ], [ 'tablet', 'Tablet' ], [ 'computer', 'Computer' ] ];
+	const SEARCHES = [ [ 'earth', 'Map searches' ], [ 'moon', 'Moon searches' ], [ 'coordinates', 'Coordinates typed' ], [ 'nothing', 'Found nothing' ] ];
+	const PROBLEMS = [ [ 'no_ground', 'No ground at a drop-in' ], [ 'ride_failed', 'A ride didn\'t load' ], [ 'moon_failed', 'The Moon didn\'t load' ], [ 'map_failed', 'Google\'s map didn\'t load' ], [ 'map_session_ended', 'Map session ended' ], [ 'drop_abandoned', 'Drop-in left for the globe' ] ];
+	// What each metric is, for the chart of any metric by day.
+	const NAMES = {
+		visit: 'Visits', visit_hour: 'Visits by UTC hour', load: 'Loads by referring site', load_time: 'Load time (buckets)', load_ms: 'Load time (ms, all together)',
+		dropin: 'Drop-ins by place', ride: 'Drop-ins by ride', play: 'Play time by ride (s)', play_with_others: 'Play with others (s)', play_world: 'Play time by world (s)',
+		garage_open: 'Garage opened', garage_edit: 'Garage changes', party: 'Parties', funnel: 'Funnel steps', device: 'Devices', world: 'Turns to the Moon',
+		search: 'Searches', dropin_time: 'Drop-in time (buckets)', problem: 'Problems', board: 'Leaderboard', pass: 'Supporter Pass', level_up: 'Level-ups',
+		players: 'New players (nicknames)', scores: 'New bests (scores log)', accounts: 'New Google accounts', purchases: 'Passes by status', revenue: 'Revenue (smallest unit)',
+	};
 
+	let shown = null;
 	select.addEventListener( 'change', load );
+	csvButton.addEventListener( 'click', () => shown && download( shown ) );
 	load();
 
 	async function load() {
 
 		out.innerHTML = '<p class="muted">Loading...</p>';
+		csvButton.disabled = true;
+		shown = null;
 		let res;
 		try {
 
@@ -102,7 +145,9 @@
 		if ( res.status === 401 ) return notice( 'Sign in first: open <a href="/">World Drive</a>, sign in with Google on the globe\'s panel, then come back here.' );
 		if ( res.status === 403 ) return notice( 'This Google account isn\'t an admin. The accounts that are go in the Worker\'s ADMIN_EMAILS setting.' );
 		if ( ! res.ok ) return notice( `Something went wrong (${ res.status }).` );
-		show( await res.json() );
+		shown = await res.json();
+		show( shown );
+		csvButton.disabled = false;
 
 	}
 
@@ -112,76 +157,264 @@
 
 	}
 
-	function show( { from, to, rows } ) {
+	function show( { from, to, rows, previous = { from: '', to: '', rows: [] }, totals = {}, kept = {} } ) {
 
-		document.getElementById( 'range' ).textContent = `${ from } to ${ to }`;
-		// metric => key => total, and metric => day => total.
+		document.getElementById( 'range' ).textContent = `${ from } to ${ to } (today so far), UTC`;
+		// metric => key => total, and metric => day => total; and the period before's metric => key => total.
 		const byKey = new Map();
 		const byDay = new Map();
+		const keyDay = new Map();
 		for ( const [ day, metric, key, n ] of rows ) {
 
-			if ( ! byKey.has( metric ) ) byKey.set( metric, new Map() );
-			byKey.get( metric ).set( key, ( byKey.get( metric ).get( key ) ?? 0 ) + n );
-			if ( ! byDay.has( metric ) ) byDay.set( metric, new Map() );
-			byDay.get( metric ).set( day, ( byDay.get( metric ).get( day ) ?? 0 ) + n );
+			addTo( byKey, metric, key, n );
+			addTo( byDay, metric, day, n );
+			addTo( keyDay, `${ metric }:${ key }`, day, n );
 
 		}
 
+		const before = new Map();
+		for ( const [ metric, key, n ] of previous.rows ) addTo( before, metric, key, n );
+
 		const keys = metric => byKey.get( metric ) ?? new Map();
-		const total = metric => [ ...keys( metric ).values() ].reduce( ( a, b ) => a + b, 0 );
+		const total = ( metric, key ) => key === undefined ? sum( keys( metric ).values() ) : keys( metric ).get( key ) ?? 0;
+		const earlier = ( metric, key ) => key === undefined ? sum( ( before.get( metric ) ?? new Map() ).values() ) : before.get( metric )?.get( key ) ?? 0;
 		const days = [];
 		for ( let t = Date.parse( from ); t <= Date.parse( to ); t += DAY ) days.push( new Date( t ).toISOString().slice( 0, 10 ) );
 		const daily = metric => days.map( d => byDay.get( metric )?.get( d ) ?? 0 );
+		const today = metric => byDay.get( metric )?.get( to ) ?? 0;
+		// Whether there's anything from the period before to compare with (counts started since, say).
+		const comparable = earlier( 'visit' ) > 0;
 
 		const visits = total( 'visit' );
 		const play = total( 'play' );
 		const loads = total( 'load_time' );
 		const garageOpens = total( 'garage_open' );
+		const searches = total( 'search' ) - total( 'search', 'nothing' );
+		const searchesBefore = earlier( 'search' ) - earlier( 'search', 'nothing' );
+		const moonPlay = total( 'play_world', 'moon' );
+		const worldPlay = total( 'play_world' );
+		const moneyNow = money( keys( 'revenue' ) );
+		// [ label, value, change ]: change is [ now, before ] compared as a change in per cent, or for a
+		// share [ now, before, 'points' ] as the difference in points.
+		const share = ( part, whole ) => whole ? 100 * part / whole : 0;
 		const tiles = [
-			[ 'Visits', num( visits ) ],
-			[ 'Play time', hours( play ) ],
-			[ 'Play per visit', visits ? hours( play / visits ) : '-' ],
-			[ 'Drop-ins', num( total( 'dropin' ) ) ],
-			[ 'With others', play ? `${ Math.round( 100 * total( 'play_with_others' ) / play ) }%` : '-' ],
-			[ 'Garage opened', num( garageOpens ) ],
-			[ 'Garage changes', num( total( 'garage_edit' ) ) ],
-			[ 'Mean load', loads ? `${ ( total( 'load_ms' ) / loads / 1000 ).toFixed( 1 ) } s` : '-' ],
-			[ 'Parties made / joined', `${ num( keys( 'party' ).get( 'made' ) ?? 0 ) } / ${ num( keys( 'party' ).get( 'joined' ) ?? 0 ) }` ],
+			[ 'Visits', num( visits ), [ visits, earlier( 'visit' ) ] ],
+			[ 'Play time', hours( play ), [ play, earlier( 'play' ) ] ],
+			[ 'Play per visit', visits ? hours( play / visits ) : '-', [ visits ? play / visits : 0, earlier( 'visit' ) ? earlier( 'play' ) / earlier( 'visit' ) : 0 ] ],
+			[ 'Drop-ins', num( total( 'dropin' ) ), [ total( 'dropin' ), earlier( 'dropin' ) ] ],
+			[ 'Visits that drove', percent( total( 'funnel', 'driving' ), visits ), [ share( total( 'funnel', 'driving' ), visits ), share( earlier( 'funnel', 'driving' ), earlier( 'visit' ) ), 'points' ] ],
+			[ 'Drove 10 min or more', percent( total( 'funnel', 'drove_10m' ), visits ), [ share( total( 'funnel', 'drove_10m' ), visits ), share( earlier( 'funnel', 'drove_10m' ), earlier( 'visit' ) ), 'points' ] ],
+			[ 'With others', percent( total( 'play_with_others' ), play ), [ share( total( 'play_with_others' ), play ), share( earlier( 'play_with_others' ), earlier( 'play' ) ), 'points' ] ],
+			[ 'On the Moon', percent( moonPlay, worldPlay ), [ share( moonPlay, worldPlay ), share( earlier( 'play_world', 'moon' ), earlier( 'play_world' ) ), 'points' ] ],
+			[ 'Searches', num( searches ), [ searches, searchesBefore ] ],
+			[ 'Problems', num( total( 'problem' ) ), [ total( 'problem' ), earlier( 'problem' ) ], true ],
+			[ 'Mean load', loads ? `${ ( total( 'load_ms' ) / loads / 1000 ).toFixed( 1 ) } s` : '-', [ loads ? total( 'load_ms' ) / loads : 0, earlier( 'load_time' ) ? earlier( 'load_ms' ) / earlier( 'load_time' ) : 0 ], true ],
+			[ 'New players', num( total( 'players' ) ), [ total( 'players' ), earlier( 'players' ) ] ],
+			[ 'New accounts', num( total( 'accounts' ) ), [ total( 'accounts' ), earlier( 'accounts' ) ] ],
+			[ 'Passes bought', num( total( 'purchases', 'paid' ) ), [ total( 'purchases', 'paid' ), earlier( 'purchases', 'paid' ) ] ],
+			[ 'Revenue', moneyNow.text, null ],
 		];
 
 		// Visits by hour of the day, in this browser's time (counted in UTC hours).
 		const offset = - Math.round( new Date().getTimezoneOffset() / 60 );
 		const byHour = Array.from( { length: 24 }, ( _, h ) => keys( 'visit_hour' ).get( String( ( h - offset + 48 ) % 24 ).padStart( 2, '0' ) ) ?? 0 );
+		const named = ( metric, names ) => new Map( names.map( ( [ key, name ] ) => [ name, total( metric, key ) ] ) );
+		const renamed = metric => new Map( [ ...keys( metric ) ].map( ( [ k, v ] ) => [ pretty( k ), v ] ) );
 
-		const playByRide = new Map( [ ...keys( 'play' ) ].map( ( [ k, v ] ) => [ pretty( k ), v ] ) );
+		// The funnel: the visits, then each step, with its share of the visits and of the step before.
+		const steps = [ [ 'Visits', visits ], ...FUNNEL.map( ( [ key, name ] ) => [ name, total( 'funnel', key ) ] ) ];
+		const funnelRows = steps.map( ( [ name, n ], i ) => [ name, n, i ? `${ percent( n, visits ) } · ${ percent( n, steps[ i - 1 ][ 1 ] ) }` : '' ] );
+
+		// The scores log goes back kept.scores days: this period's new bests are all there only if it's
+		// no longer, and the period before's only if both together are.
+		const scoresKept = kept.scores ?? 35;
+		const scoresPartial = scoresKept < days.length;
+		const scoresNote = scoresPartial ? 'partial' : scoresKept < 2 * days.length ? '' : changeText( [ total( 'scores' ), earlier( 'scores' ) ] );
+		const firstDay = rows.find( ( [ , metric ] ) => metric === 'visit' )?.[ 0 ];
 		out.innerHTML = `
-			<div class="tiles">${ tiles.map( ( [ label, value ] ) => `<div class="tile"><div class="label">${ esc( label ) }</div><div class="value">${ esc( value ) }</div></div>` ).join( '' ) }</div>
+			<div class="tiles">
+				<div class="tile today"><div class="label">Today so far (UTC)</div><div class="value">${ esc( num( today( 'visit' ) ) ) }</div><div class="change muted">visits · ${ esc( hours( today( 'play' ) ) ) } played</div></div>
+				${ tiles.map( ( [ label, value, change, fewerIsBetter ] ) => `<div class="tile"><div class="label">${ esc( label ) }</div><div class="value">${ esc( value ) }</div>${ comparable || [ 'New players', 'New accounts', 'Passes bought' ].includes( label ) ? changeOf( change, fewerIsBetter ) : '' }</div>` ).join( '' ) }
+			</div>
+			${ comparable ? '' : '<p class="note" style="margin:-6px 0 12px">No counts from the period before this one to compare with (they start later), so the play figures have no ▲ or ▼.</p>' }
+			${ firstDay && firstDay > from ? `<p class="note" style="margin:-6px 0 12px">Counts start on ${ esc( firstDay ) }: nothing before it.</p>` : '' }
 			<div class="card wide">
 				<h2>Each day</h2>
 				<div class="legend"><span><i style="background:var(--accent)"></i>Visits</span><span><i style="background:var(--accent-2)"></i>Play time (hours, its own scale)</span></div>
 				<div class="scroll">${ dayChart( days, daily( 'visit' ), daily( 'play' ).map( s => s / 3600 ) ) }</div>
 			</div>
 			<div class="grid">
+				<div class="card wide"><h2>How far visits get</h2>${ bars( new Map( funnelRows.map( ( [ name, n ] ) => [ name, n ] ) ), num, 8, false, new Map( funnelRows.map( ( [ name, , note ] ) => [ name, note ] ) ) ) }<p class="note">Each step's share of the visits, then of the step before. Each is counted once a visit, as it's reached, and the minutes are the visit's driving, not paused. A party's Join can drop in without a pin, so a step can be more than the one before.</p></div>
+				<div class="card"><h2>Devices</h2>${ bars( named( 'device', DEVICES ), num, 3, false, shares( named( 'device', DEVICES ) ) ) }<p class="note">A fine pointer (a mouse, a trackpad) is a computer; a touch screen is a tablet when its shorter side is 600 px or more, else a phone.</p></div>
+				<div class="card"><h2>Earth and Moon</h2>${ facts( [
+					[ 'Play on the Earth', hours( total( 'play_world', 'earth' ) ), percent( total( 'play_world', 'earth' ), worldPlay ) ],
+					[ 'Play on the Moon', hours( moonPlay ), percent( moonPlay, worldPlay ) ],
+					[ 'Turns to the Moon', num( total( 'world', 'moon' ) ), comparable ? changeText( [ total( 'world', 'moon' ), earlier( 'world', 'moon' ) ] ) : '' ],
+					[ 'Drop-ins on the Moon', num( total( 'dropin', 'moon' ) ), percent( total( 'dropin', 'moon' ), total( 'dropin' ) ) + ' of drop-ins' ],
+				] ) }</div>
+				<div class="card"><h2>Searches</h2>${ bars( named( 'search', SEARCHES ), num, 4, false ) }<p class="note">Found nothing: ${ esc( percent( total( 'search', 'nothing' ), total( 'search', 'earth' ) + total( 'search', 'moon' ) ) ) } of map and Moon searches. Never what was typed.</p></div>
+				<div class="card"><h2>Drop-in time <span class="muted">(Drive here to driving)</span></h2>${ bars( new Map( DROPIN_ORDER.map( k => [ k, total( 'dropin_time', k ) ] ) ), num, 5, false, shares( new Map( DROPIN_ORDER.map( k => [ k, total( 'dropin_time', k ) ] ) ) ) ) }</div>
+				<div class="card"><h2>Problems</h2>${ bars( named( 'problem', PROBLEMS ), num, 6 ) }<p class="note">Map ones once a visit at most; the others each time.</p></div>
+				<div class="card"><h2>Leaderboard, pass and levels</h2>${ facts( [
+					[ 'Leaderboard opened', num( total( 'board', 'open' ) ), '' ],
+					[ 'Nicknames picked', num( total( 'board', 'named' ) ), '' ],
+					[ 'Supporter Pass sheet opened', num( total( 'pass', 'open' ) ), '' ],
+					[ 'Buy followed to Stripe', num( total( 'pass', 'buy' ) ), percent( total( 'pass', 'buy' ), total( 'pass', 'open' ) ) + ' of opens' ],
+					[ 'Levels reached', num( total( 'level_up' ) ), '' ],
+					[ 'Parties made / joined', `${ num( total( 'party', 'made' ) ) } / ${ num( total( 'party', 'joined' ) ) }`, '' ],
+				] ) }</div>
+				<div class="card"><h2>From the leaderboard and the pass</h2>${ facts( [
+					[ 'New players (nicknames)', num( total( 'players' ) ), changeText( [ total( 'players' ), earlier( 'players' ) ] ) ],
+					[ 'New bests on the boards', num( total( 'scores' ) ), scoresNote ],
+					[ 'New Google accounts', num( total( 'accounts' ) ), changeText( [ total( 'accounts' ), earlier( 'accounts' ) ] ) ],
+					...[ ...keys( 'purchases' ) ].map( ( [ status, n ] ) => [ `Passes ${ status === 'paid' ? 'bought' : status }`, num( n ), changeText( [ n, earlier( 'purchases', status ) ] ) ] ),
+					[ 'Revenue', moneyNow.text, `${ money( before.get( 'revenue' ) ?? new Map() ).text } before` ],
+				] ) }
+				<h3>Now</h3>${ facts( [
+					[ 'Players', num( totals.players ?? 0 ), '' ],
+					[ 'Google accounts', num( totals.accounts ?? 0 ), '' ],
+					[ 'Accounts with the pass', num( totals.supporters ?? 0 ), '' ],
+					[ 'Passes nobody has signed in for yet', num( totals.unclaimed ?? 0 ), '' ],
+				] ) }
+				<p class="note">Counted from the Worker's own tables as you ask. Purchases refunded or charged back are left out, and players the owner removed. New bests are runs that beat a player's best on a board, from the scores log, which keeps only the last ${ esc( scoresKept ) } days${ scoresPartial ? ': this period\'s count is partial' : scoresKept < 2 * days.length ? ': too few for the period before, so no comparison' : '' }.</p></div>
 				<div class="card"><h2>When people load in <span class="muted">(your time)</span></h2>${ hourChart( byHour, offset ) }</div>
 				<div class="card"><h2>Where they come from</h2>${ bars( keys( 'load' ), num, 10 ) }</div>
-				<div class="card"><h2>Play time by ride</h2>${ bars( playByRide, hours, 12 ) }</div>
-				<div class="card"><h2>Rides dropped in with</h2>${ bars( new Map( [ ...keys( 'ride' ) ].map( ( [ k, v ] ) => [ pretty( k ), v ] ) ), num, 12 ) }</div>
-				<div class="card"><h2>Where they drop in</h2>${ bars( new Map( [ ...keys( 'dropin' ) ].map( ( [ k, v ] ) => [ k === 'other' ? 'Elsewhere (search or pin)' : pretty( k ), v ] ) ), num, 12 ) }</div>
-				<div class="card"><h2>Garage changes by part <span class="muted">(${ num( garageOpens ) } opens)</span></h2>${ bars( new Map( [ ...keys( 'garage_edit' ) ].map( ( [ k, v ] ) => [ pretty( k ), v ] ) ), num, 8 ) }</div>
-				<div class="card"><h2>Load time</h2>${ bars( new Map( LOAD_ORDER.map( k => [ k, keys( 'load_time' ).get( k ) ?? 0 ] ) ), num, 5, false ) }</div>
+				<div class="card"><h2>Play time by ride</h2>${ bars( renamed( 'play' ), hours, 12 ) }</div>
+				<div class="card"><h2>Rides dropped in with</h2>${ bars( renamed( 'ride' ), num, 12 ) }</div>
+				<div class="card"><h2>Where they drop in</h2>${ bars( new Map( [ ...keys( 'dropin' ) ].map( ( [ k, v ] ) => [ k === 'other' ? 'Elsewhere (search or pin)' : k === 'moon' ? 'The Moon' : pretty( k ), v ] ) ), num, 12 ) }</div>
+				<div class="card"><h2>Garage changes by part <span class="muted">(${ num( garageOpens ) } opens)</span></h2>${ bars( renamed( 'garage_edit' ), num, 8 ) }</div>
+				<div class="card"><h2>Load time</h2>${ bars( new Map( LOAD_ORDER.map( k => [ k, total( 'load_time', k ) ] ) ), num, 5, false ) }</div>
+				<div class="card wide" id="any">
+					<h2>Any count by day</h2>
+					<div class="pickers">
+						<select id="metric" aria-label="What to chart">${ [ ...byKey.keys() ].sort( ( a, b ) => ( NAMES[ a ] ?? a ).localeCompare( NAMES[ b ] ?? b ) ).map( m => `<option value="${ esc( m ) }"${ m === 'visit' ? ' selected' : '' }>${ esc( NAMES[ m ] ?? m ) }</option>` ).join( '' ) }</select>
+						<select id="key" aria-label="Which of it"></select>
+					</div>
+					<div class="scroll" id="any-chart"></div>
+				</div>
 			</div>`;
+
+		// The chart of any count by day: the metric picked, all its keys together or one of them.
+		const metricPick = document.getElementById( 'metric' );
+		const keyPick = document.getElementById( 'key' );
+		const chart = document.getElementById( 'any-chart' );
+		const keyOptions = () => {
+
+			const list = [ ...keys( metricPick.value ).keys() ].sort();
+			keyPick.innerHTML = `<option value="">All${ list.length > 1 ? ` (${ list.length })` : '' }</option>` + list.map( k => `<option value="${ esc( k ) }">${ esc( k ) }</option>` ).join( '' );
+			keyPick.hidden = list.length < 2;
+
+		};
+
+		const draw = () => {
+
+			const metric = metricPick.value;
+			const series = keyPick.value ? days.map( d => keyDay.get( `${ metric }:${ keyPick.value }` )?.get( d ) ?? 0 ) : daily( metric );
+			chart.innerHTML = metric ? barChart( days, series, NAMES[ metric ] ?? metric ) : '<p class="muted">Nothing yet.</p>';
+
+		};
+
+		metricPick.addEventListener( 'change', () => {
+
+			keyOptions();
+			draw();
+
+		} );
+		keyPick.addEventListener( 'change', draw );
+		keyOptions();
+		draw();
 
 	}
 
-	// A table of bars, biggest first (unless sorted is false), the top `most` of them.
-	function bars( map, format, most, sorted = true ) {
+	function addTo( map, outer, inner, n ) {
+
+		if ( ! map.has( outer ) ) map.set( outer, new Map() );
+		map.get( outer ).set( inner, ( map.get( outer ).get( inner ) ?? 0 ) + n );
+
+	}
+
+	function sum( values ) {
+
+		let all = 0;
+		for ( const n of values ) all += n;
+		return all;
+
+	}
+
+	// Each one's share of them all, as the bars' notes.
+	function shares( map ) {
+
+		const all = sum( map.values() );
+		return new Map( [ ...map ].map( ( [ k, v ] ) => [ k, percent( v, all ) ] ) );
+
+	}
+
+	// How [ now, before ] changed: ▲ or ▼ by how much (in per cent, or in points for a share), coloured
+	// good or bad (fewer being better for problems and load times).
+	function changeOf( change, fewerIsBetter = false ) {
+
+		if ( ! change ) return '';
+		const text = changeText( change );
+		if ( ! text ) return '';
+		const more = text.startsWith( '▲' ) || text === 'new';
+		const less = text.startsWith( '▼' );
+		return `<div class="change ${ ! more && ! less ? 'muted' : more !== fewerIsBetter ? 'up' : 'down' }">${ esc( text ) }</div>`;
+
+	}
+
+	function changeText( [ now, before, kind ] ) {
+
+		if ( kind === 'points' ) {
+
+			const points = Math.round( now - before );
+			return points === 0 ? '= same' : `${ points > 0 ? '▲' : '▼' } ${ Math.abs( points ) } pts`;
+
+		}
+
+		if ( ! before ) return now ? 'new' : '';
+		const change = Math.round( 100 * ( now - before ) / before );
+		return change === 0 ? '= same' : `${ change > 0 ? '▲' : '▼' } ${ Math.abs( change ) }%`;
+
+	}
+
+	// Money by currency (in its smallest unit, as Stripe has it) as text: "CA$9.98", or several.
+	function money( byCurrency ) {
+
+		const parts = [ ...byCurrency ].filter( ( [ , n ] ) => n ).map( ( [ currency, n ] ) => {
+
+			try {
+
+				const format = new Intl.NumberFormat( undefined, { style: 'currency', currency: currency.toUpperCase() } );
+				return format.format( n / 10 ** format.resolvedOptions().maximumFractionDigits );
+
+			} catch {
+
+				return `${ num( n ) } ${ currency }`;
+
+			}
+
+		} );
+		return { text: parts.join( ' + ' ) || '0' };
+
+	}
+
+	// A table of [ name, value, note ] rows.
+	function facts( list ) {
+
+		return `<table class="facts">${ list.map( ( [ name, value, note ] ) => `<tr><td>${ esc( name ) }</td><td class="num">${ esc( value ) }</td><td class="change muted">${ esc( note ?? '' ) }</td></tr>` ).join( '' ) }</table>`;
+
+	}
+
+	// A table of bars, biggest first (unless sorted is false), the top `most` of them, with a note
+	// for each (notes: name => text) if there are notes.
+	function bars( map, format, most, sorted = true, notes = null ) {
 
 		let entries = [ ...map ];
 		if ( sorted ) entries.sort( ( a, b ) => b[ 1 ] - a[ 1 ] );
 		entries = entries.slice( 0, most );
 		if ( ! entries.length || entries.every( ( [ , v ] ) => ! v ) ) return '<p class="muted">Nothing yet.</p>';
 		const top = Math.max( ...entries.map( ( [ , v ] ) => v ) );
-		return `<table class="bars">${ entries.map( ( [ k, v ] ) => `<tr><td class="name">${ esc( k ) }</td><td><div class="bar"><span style="width:${ top ? ( 100 * v / top ).toFixed( 1 ) : 0 }%"></span></div></td><td class="num">${ esc( format( v ) ) }</td></tr>` ).join( '' ) }</table>`;
+		return `<table class="bars">${ entries.map( ( [ k, v ] ) => `<tr><td class="name">${ esc( k ) }</td><td><div class="bar"><span style="width:${ top ? ( 100 * v / top ).toFixed( 1 ) : 0 }%"></span></div></td><td class="num">${ esc( format( v ) ) }</td>${ notes ? `<td class="share">${ esc( notes.get( k ) ?? '' ) }</td>` : '' }</tr>` ).join( '' ) }</table>`;
 
 	}
 
@@ -209,6 +442,28 @@
 
 	}
 
+	// One count a day as bars, the last (today so far) paler.
+	function barChart( days, values, label ) {
+
+		const W = 900, H = 200, L = 44, B = 22, T = 8;
+		const top = Math.max( 1, ...values );
+		const step = ( W - L ) / days.length;
+		const y = v => T + ( H - B - T ) * ( 1 - v / top );
+		const every = Math.ceil( days.length / 10 );
+		let svg = `<svg viewBox="0 0 ${ W } ${ H }" role="img" aria-label="${ esc( label ) } each day">`;
+		for ( const f of [ 0, 0.5, 1 ] ) svg += `<line x1="${ L }" x2="${ W }" y1="${ y( top * f ) }" y2="${ y( top * f ) }" stroke="var(--line)"/><text x="${ L - 6 }" y="${ y( top * f ) + 4 }" text-anchor="end">${ num( top * f ) }</text>`;
+		days.forEach( ( d, i ) => {
+
+			const x = L + i * step;
+			const last = i === days.length - 1;
+			svg += `<rect x="${ x + step * 0.15 }" y="${ y( values[ i ] ) }" width="${ step * 0.7 }" height="${ H - B - y( values[ i ] ) }" rx="2" fill="var(${ last ? '--accent-2' : '--accent' })"><title>${ d }${ last ? ' (so far)' : '' }: ${ num( values[ i ] ) }</title></rect>`;
+			if ( i % every === 0 ) svg += `<text x="${ x + step / 2 }" y="${ H - 6 }" text-anchor="middle">${ d.slice( 5 ) }</text>`;
+
+		} );
+		return svg + `</svg><p class="note">Total ${ esc( num( values.reduce( ( a, b ) => a + b, 0 ) ) ) }; today so far the paler bar.</p>`;
+
+	}
+
 	function hourChart( counts, offset ) {
 
 		const W = 340, H = 140, B = 20, T = 6;
@@ -223,6 +478,21 @@
 
 		} );
 		return svg + `</svg><p class="muted" style="font-size:12px;margin:6px 0 0">UTC${ offset >= 0 ? '+' : '' }${ offset }</p>`;
+
+	}
+
+	// The period's rows as a CSV file: day, metric, key, n.
+	function download( { from, to, rows } ) {
+
+		const cell = value => /[",\n]/.test( String( value ) ) ? `"${ String( value ).replace( /"/g, '""' ) }"` : String( value );
+		const text = [ 'day,metric,key,n', ...rows.map( row => row.map( cell ).join( ',' ) ) ].join( '\n' ) + '\n';
+		const link = document.createElement( 'a' );
+		link.href = URL.createObjectURL( new Blob( [ text ], { type: 'text/csv' } ) );
+		link.download = `world-drive-stats-${ from }-to-${ to }.csv`;
+		document.body.append( link );
+		link.click();
+		link.remove();
+		setTimeout( () => URL.revokeObjectURL( link.href ), 1000 );
 
 	}
 
