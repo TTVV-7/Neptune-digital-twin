@@ -239,6 +239,9 @@ async function livePage( { token, player = null, path = '/', touch = false, view
 
 		window.worldDriveLiveTest = { visit, ...( online ? { online } : {} ) };
 		localStorage.setItem( 'world-drive.pads', 'off' );
+		// The go-kart, as before the pickup (219,000 triangles, slow in the software renderer) was the
+		// default, unless a ride is picked already.
+		if ( ! localStorage.getItem( 'world-drive.vehicle' ) ) localStorage.setItem( 'world-drive.vehicle', 'go-kart' );
 		if ( player ) localStorage.setItem( 'world-drive.player', JSON.stringify( player ) );
 
 	}, { visit: token, player, online } );

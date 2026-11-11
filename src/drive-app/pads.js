@@ -85,6 +85,13 @@ const ROUND = Array.from( { length: 8 }, ( _, i ) => [ Math.sin( i * Math.PI / 4
 // Pads are only put down with the vehicle at most this high (m) over where it last stood on the
 // ground: flying high, the street below is too far off to know.
 const ABOVE = 20;
+// Those rules as they are on the Earth, and on the Moon (main.js sets which, as `rules`), where the
+// ground is rolling dust and craters with no roofs or banks to keep pads off: a pad goes on ground
+// tilted up to 25° and bumpy to 40 cm round it, reached over ground rising or falling up to 3 m
+// every 7 m (a crater's rim), up to 40 m over or under where the vehicle last stood; and while it's
+// up to 60 m over the ground in its long, slow jumps.
+export const EARTH_RULES = Object.freeze( { level: LEVEL, flat: FLAT, tilt: TILT, rise: RISE, above: ABOVE } );
+export const MOON_RULES = Object.freeze( { level: 40, flat: 0.4, tilt: 0.9, rise: 3, above: 60 } );
 // Where water.js says there's water, or can't tell, as by a shore, there's no pad, nor this far
 // (m) from it.
 const DRY_REACH = 8;
@@ -106,6 +113,7 @@ const _c = new Color();
 // driven over (its XP, progress.js).
 export function createBoostPads( { scene, driver, ground, water = null, toggle = null, onPad = () => {} } ) {
 
+	let rules = EARTH_RULES;
 	const group = new Group();
 	group.name = 'boost-pads';
 	scene.add( group );
@@ -215,13 +223,13 @@ export function createBoostPads( { scene, driver, ground, water = null, toggle =
 		const from = driver.lastSafe ?? driver;
 		const street = from.y;
 		const y = topAt( east, north, street );
-		if ( y === null || _normal.y < TILT || Math.abs( y - street ) > LEVEL ) return;
+		if ( y === null || _normal.y < rules.tilt || Math.abs( y - street ) > rules.level ) return;
 		const normal = _at.copy( _normal );
 		const reach = pad.radius + FLAT_REACH;
 		for ( const [ de, dn ] of ROUND ) {
 
 			const around = topAt( east + de * reach, north + dn * reach, street );
-			if ( around === null || Math.abs( around - y ) > FLAT ) return;
+			if ( around === null || Math.abs( around - y ) > rules.flat ) return;
 
 		}
 
@@ -235,7 +243,7 @@ export function createBoostPads( { scene, driver, ground, water = null, toggle =
 
 			const next = i === steps ? y : topAt( from.east + ( east - from.east ) * i / steps, from.north + ( north - from.north ) * i / steps, street );
 			if ( next === null ) return;
-			if ( Math.abs( next - height ) <= RISE ) {
+			if ( Math.abs( next - height ) <= rules.rise ) {
 
 				height = next;
 				passing = false;
@@ -395,7 +403,7 @@ export function createBoostPads( { scene, driver, ground, water = null, toggle =
 			if ( due <= 0 ) {
 
 				due = TRY;
-				if ( driver.y - ( driver.lastSafe?.y ?? driver.y ) < ABOVE ) tryOne();
+				if ( driver.y - ( driver.lastSafe?.y ?? driver.y ) < rules.above ) tryOne();
 
 			}
 
@@ -404,6 +412,18 @@ export function createBoostPads( { scene, driver, ground, water = null, toggle =
 		},
 
 		clear,
+
+		// Where the pads may go: EARTH_RULES or MOON_RULES.
+		get rules() {
+
+			return rules;
+
+		},
+		set rules( value ) {
+
+			rules = value;
+
+		},
 
 		get enabled() {
 

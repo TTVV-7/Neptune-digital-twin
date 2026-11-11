@@ -24,14 +24,18 @@ import { useFastRaycast } from './raycast.js';
 
 export const dracoLoader = new DRACOLoader().setDecoderPath( 'https://www.gstatic.com/draco/versioned/decoders/1.5.7/' );
 
+// The sky's light and the sun's, returned as { hemisphere, sun } for an app that changes them
+// (World Drive's Moon).
 export function addLights( scene ) {
 
 	scene.background = new Color( 0xbfd9ee );
-	scene.add( new HemisphereLight( 0xffffff, 0x556655, 1.5 ) );
+	const hemisphere = new HemisphereLight( 0xffffff, 0x556655, 1.5 );
+	scene.add( hemisphere );
 
 	const sun = new DirectionalLight( 0xffffff, 2 );
 	sun.position.copy( enuToLocal( - 300, - 600, 800 ) );
 	scene.add( sun );
+	return { hemisphere, sun };
 
 }
 

@@ -161,6 +161,54 @@ button.primary:active,
 	color: var( --muted );
 }
 
+/* The Earth or the Moon: two halves of a pill, the one picked in the accent, as the leaderboard's
+   tabs are. */
+.worlds {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 4px;
+	margin: 0 0 12px;
+	padding: 4px;
+	border-radius: 12px;
+	background: var( --chip );
+}
+
+.worlds button {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	padding: 8px 4px;
+	border: 0;
+	border-radius: 9px;
+	background: none;
+	font-weight: 800;
+	color: var( --muted );
+}
+
+.worlds button:hover {
+	color: var( --ink );
+}
+
+.worlds button[aria-checked='true'] {
+	background: var( --accent );
+	color: var( --accent-ink );
+}
+
+.worlds button[aria-busy='true'] {
+	opacity: 0.6;
+	cursor: progress;
+}
+
+/* On the Moon there's no map search (its own places are searched), nobody else driving, and no
+   party to drive with: you drive it on your own (main.js). */
+body[data-world='moon'] #globe-ui :is( .osm, .online, .online-dots, .friends, .party-banner ),
+body[data-world='moon'] #pause .friends,
+body[data-world='moon'] #drive-ui :is( .live-chip, .players, .horn, .live-key ),
+body[data-world='moon'] #live-tags {
+	display: none !important;
+}
+
 .search {
 	display: flex;
 	gap: 8px;
@@ -927,6 +975,25 @@ body[data-mode='paused'] #toast {
 	overflow: hidden;
 	white-space: nowrap;
 	text-overflow: ellipsis;
+}
+
+/* On the Moon, NASA's credit where Google's would be. */
+#moon-credit {
+	position: fixed;
+	right: 10px;
+	bottom: calc( 8px + var( --safe-bottom ) );
+	z-index: 12;
+	font-size: 10px;
+	color: rgba( 255, 255, 255, 0.75 );
+	text-shadow: 0 1px 2px rgba( 0, 0, 0, 0.8 );
+	pointer-events: none;
+}
+
+body.touch[data-mode='driving'] #moon-credit {
+	right: auto;
+	left: 50%;
+	bottom: calc( 6px + var( --safe-bottom ) );
+	transform: translateX( -50% );
 }
 
 /* Driving on a touch screen: one line along the bottom edge, under the driving buttons. */

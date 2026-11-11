@@ -296,9 +296,9 @@ describe( 'what search engines read', () => {
 		}
 
 		assert.ok( checked.size > 30, `only ${ checked.size } links` );
-		// Off the site, only OpenStreetMap's copyright page.
+		// Off the site, only the credits: OpenStreetMap's copyright page, and NASA's for the Moon.
 		const outside = new Set( pages.flatMap( ( { html } ) => linksOf( html ) ).filter( href => /^https?:/.test( href ) && ! href.startsWith( SITE ) ) );
-		assert.deepEqual( [ ...outside ], [ 'https://www.openstreetmap.org/copyright' ] );
+		assert.deepEqual( [ ...outside ], [ 'https://www.openstreetmap.org/copyright', 'https://svs.gsfc.nasa.gov/4720/' ] );
 
 	} );
 

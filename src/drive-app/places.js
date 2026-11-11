@@ -1,4 +1,5 @@
 import { cleanPlace } from '../../worker/drive/names.js';
+import { MOON, moonSpot } from './moon-places.js';
 
 // Where to drive: the starting spots on the globe's panel, typed coordinates, a place a link
 // opens on, and the places you drove lately (kept in this browser).
@@ -25,6 +26,8 @@ export const SPOTS = [
 ];
 
 const RECENT_KEY = 'world-drive.recent';
+// The Moon's recent places are kept apart (moon-places.js), six of its own.
+const RECENT_MOON_KEY = 'world-drive.recent-moon';
 const RECENT_MAX = 6;
 
 // "49.3054, -123.0491", "49.3054 -123.0491" or "49.3054° N, 123.0491° W" as { lat, lon }, or null.
@@ -40,7 +43,8 @@ export function parseLatLon( text ) {
 }
 
 // The place a link to the game pins on the globe, or null: ?spot=<a start spot's id>, or
-// ?at=<lat>,<lon> with name=, region= and heading= (degrees from north) if it has them. The places'
+// ?at=<lat>,<lon> with name=, region= and heading= (degrees from north) if it has them; on the Moon
+// (moon-places.js), a Moon spot's id ("moon-tycho"), or ?at= with world=moon. The places'
 // pages link here ("Drive here", drive/site/), and anyone can make such a link, so its name and
 // region are only taken as the leaderboard takes a place's name (letters, numbers and an address's
 // punctuation, nothing rude: cleanPlace), since the others driving there see it; else it's a
@@ -48,7 +52,8 @@ export function parseLatLon( text ) {
 export function linkedPlace( search ) {
 
 	const params = new URLSearchParams( search );
-	const spot = SPOTS.find( s => s.id === params.get( 'spot' ) );
+	const id = params.get( 'spot' );
+	const spot = SPOTS.find( s => s.id === id ) ?? ( id?.startsWith( 'moon-' ) ? moonSpot( id ) : null );
 	if ( spot ) return spot;
 	const at = parseLatLon( params.get( 'at' ) ?? '' );
 	if ( ! at ) return null;
@@ -58,12 +63,13 @@ export function linkedPlace( search ) {
 		region: cleanPlace( params.get( 'region' ) ?? '' ) ?? '',
 		...at,
 		...( params.get( 'heading' ) && Number.isFinite( heading ) ? { heading: ( heading % 360 + 360 ) % 360 } : {} ),
+		...( params.get( 'world' ) === MOON ? { world: MOON } : {} ),
 	};
 
 }
 
 // What linkedPlace reads, for taking it out of the address once it's been used.
-export const LINK_PARAMS = [ 'spot', 'at', 'name', 'region', 'heading' ];
+export const LINK_PARAMS = [ 'spot', 'at', 'name', 'region', 'heading', 'world' ];
 
 export function formatLatLon( lat, lon ) {
 
@@ -101,21 +107,34 @@ export function metresBetween( latA, lonA, latB, lonB ) {
 
 }
 
-// Latest first: [ { name, region, lat, lon, heading, deck } ].
-export function recentPlaces() {
+// Latest first, on the Earth or the Moon (`world`): [ { name, region, lat, lon, heading, deck } ],
+// the Moon's with world: 'moon'.
+export function recentPlaces( world = 'earth' ) {
 
-	const list = storage( () => JSON.parse( localStorage.getItem( RECENT_KEY ) ) );
+	const moon = world === MOON;
+	const list = storage( () => JSON.parse( localStorage.getItem( moon ? RECENT_MOON_KEY : RECENT_KEY ) ) );
 	if ( ! Array.isArray( list ) ) return [];
-	return list.filter( place => typeof place?.name === 'string' && Number.isFinite( place.lat ) && Number.isFinite( place.lon ) ).slice( 0, RECENT_MAX );
+	return list
+		.filter( place => typeof place?.name === 'string' && Number.isFinite( place.lat ) && Number.isFinite( place.lon ) )
+		.slice( 0, RECENT_MAX )
+		.map( place => moon ? { ...place, world: MOON } : place );
 
 }
 
-export function rememberPlace( { name, region = '', lat, lon, heading, deck } ) {
+// Which world a place is on: 'moon' or 'earth'.
+export function worldOf( place ) {
 
+	return place?.world === MOON ? MOON : 'earth';
+
+}
+
+export function rememberPlace( { name, region = '', lat, lon, heading, deck, world } ) {
+
+	const moon = world === MOON;
 	const same = place => Math.abs( place.lat - lat ) < 1e-4 && Math.abs( place.lon - lon ) < 1e-4;
 	const place = { name, region, lat, lon, ...( Number.isFinite( heading ) ? { heading } : {} ), ...( deck ? { deck: true } : {} ) };
-	const list = [ place, ...recentPlaces().filter( place => ! same( place ) ) ].slice( 0, RECENT_MAX );
-	storage( () => localStorage.setItem( RECENT_KEY, JSON.stringify( list ) ) );
+	const list = [ place, ...recentPlaces( worldOf( { world } ) ).filter( place => ! same( place ) ).map( ( { world, ...rest } ) => rest ) ].slice( 0, RECENT_MAX );
+	storage( () => localStorage.setItem( moon ? RECENT_MOON_KEY : RECENT_KEY, JSON.stringify( list ) ) );
 	return list;
 
 }

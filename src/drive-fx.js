@@ -225,7 +225,7 @@ function foam( at, wide, flecks ) {
 // kind: 'smoke', 'sparkle' or 'ribbon', colour (smoke's) } }. water: whether there's water to
 // splash in (its pools are only made then). effects: as EFFECTS, read as they're needed, so an app
 // can change `calm` while it drives.
-export function createDriveFx( world, { boost = 'classic', flame: flameName = 'orange', trail = null } = {}, { water = false, effects = EFFECTS } = {} ) {
+export function createDriveFx( world, { boost = 'classic', flame: flameName = 'orange', trail = null } = {}, { water = false, effects = EFFECTS, gravity = 1 } = {} ) {
 
 	const { soft, glow, star: twinkle } = getTextures();
 	const root = new Group();
@@ -378,7 +378,7 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 			}
 
 			const t = item.age / item.life;
-			item.velocity.y -= GRAVITY * item.fall * dt;
+			item.velocity.y -= GRAVITY * gravity * item.fall * dt;
 			item.sprite.position.addScaledVector( item.velocity, dt );
 			const twinkle = item.twinkle ? 0.55 + 0.45 * Math.sin( item.age * 38 + item.twinkle ) : 1;
 			item.sprite.scale.setScalar( ( item.size + item.grow * t ) * twinkle );
@@ -404,7 +404,7 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 			}
 
 			const { mesh, velocity, spin } = item;
-			velocity.y -= GRAVITY * dt;
+			velocity.y -= GRAVITY * gravity * dt;
 			mesh.position.addScaledVector( velocity, dt );
 			if ( mesh.position.y < item.floor ) {
 

@@ -26,6 +26,11 @@ import { createDriveFx } from './drive-fx.js';
 const KMH = 3.6;
 const GRAVITY = 9.81;
 const JUMP_SPEED = 7;
+// The ground is looked for this far (m) under the wheels; fallen this far (m) under where it last
+// stood, with none found, it's put back there. Both further in low gravity (by 1 / gravity), where
+// a jump goes higher over the ground falling away beneath it.
+const REACH_DOWN = 400;
+const FALL_RESET = 200;
 // Ground this much below the wheels means the vehicle has left it (off a ramp or a crest).
 const LEAVE_GROUND = 0.35;
 // Hitting a wall faster than this (m/s) into it says "Crash!".
@@ -294,8 +299,10 @@ export class Driver {
 	// { look( east, north, y ) }, saying what's under ( east, north ), looked for down from just
 	// over y: { level, dry, shore }, level being the water's surface height there (null where it
 	// isn't water), dry whether it's surely dry ground (neither: it can't tell) and shore, where it
-	// can't tell, the height of water just past there (by its edge), if there is any.
-	constructor( { camera, models, controls, getColliders, hud, onStop, onScore = null, fly = false, booster = false, drift = false, crash = 'stop', water = null, effects = null } ) {
+	// can't tell, the height of water just past there (by its edge), if there is any. gravity: the
+	// world's, as a share of the Earth's (World Drive's Moon: 0.165), which an app may change between
+	// drives (see leap).
+	constructor( { camera, models, controls, getColliders, hud, onStop, onScore = null, fly = false, booster = false, drift = false, crash = 'stop', water = null, effects = null, gravity = 1 } ) {
 
 		this.camera = camera;
 		this.models = models;
@@ -309,6 +316,7 @@ export class Driver {
 		this.drift = drift;
 		this.launch = crash === 'launch';
 		this.water = water;
+		this.gravity = gravity;
 		// World Drive's feel (see BODY), with any of those on; and whether the camera may move for
 		// effect (hits' shakes and the jolts), which an app turns off for those who'd rather it didn't.
 		this.lively = booster || drift || this.launch;
@@ -584,7 +592,7 @@ export class Driver {
 		this.cabNear = this.cab ? this.measureCab() : null;
 		this.cabShown = false;
 		this.lastBase = null;
-		this.fx = this.booster || this.drift || this.launch ? createDriveFx( this.models.group.parent ?? this.models.group, spec.fx, { water: !! this.water, ...this.effects ? { effects: this.effects } : {} } ) : null;
+		this.fx = this.booster || this.drift || this.launch ? createDriveFx( this.models.group.parent ?? this.models.group, spec.fx, { water: !! this.water, gravity: this.gravity, ...this.effects ? { effects: this.effects } : {} } ) : null;
 
 		this.keys.clear();
 		this.controls.keys?.clear();
@@ -775,8 +783,8 @@ export class Driver {
 		} else if ( heights.length === 0 ) {
 
 			// Off the edge of the world: put it back where it last stood.
-			if ( this.y < this.lastSafe.y - 200 ) Object.assign( this, this.lastSafe, { speed: 0, vy: 0 } );
-			this.vy -= GRAVITY * this.handling.gravity * dt;
+			if ( this.y < this.lastSafe.y - FALL_RESET / this.gravity ) Object.assign( this, this.lastSafe, { speed: 0, vy: 0 } );
+			this.vy -= this.fall * dt;
 			this.y += this.vy * dt;
 
 		} else {
@@ -792,7 +800,7 @@ export class Driver {
 				// a steep lump in Google's mesh (a building's skirt) taken at 90 km/h climbs at 24 m/s,
 				// which threw the kart 25 m into the sky.
 				this.grounded = false;
-				if ( this.launch ) this.vy = Math.min( this.vy, LAUNCH.max * this.handling.launch );
+				if ( this.launch ) this.vy = Math.min( this.vy, LAUNCH.max * this.handling.launch * this.leap );
 				if ( this.launch && ! this.driftHop && ! this.drifting ) this.enterAir();
 
 			}
@@ -813,7 +821,7 @@ export class Driver {
 
 			} else {
 
-				this.vy -= GRAVITY * this.handling.gravity * dt;
+				this.vy -= this.fall * dt;
 				this.y += this.vy * dt;
 				this.airTime += dt;
 				this.pitch += ( MathUtils.clamp( this.vy / Math.max( 1, Math.abs( this.speed ) ), - 0.5, 0.5 ) - this.pitch ) * Math.min( 1, dt * 2 );
@@ -932,13 +940,14 @@ export class Driver {
 		const steer = this.steerInput();
 		if ( this.drift && steer !== 0 && this.speed > DRIFT_MIN ) {
 
-			this.vy = DRIFT_HOP;
+			// (As short as on the Earth, wherever: it's a flick into the drift, not a jump.)
+			this.vy = DRIFT_HOP * this.gravity;
 			this.driftHop = true;
 			this.startDrift( steer );
 
 		} else {
 
-			this.vy = JUMP_SPEED;
+			this.vy = JUMP_SPEED * this.leap;
 			this.driftHop = false;
 
 		}
@@ -1858,8 +1867,8 @@ export class Driver {
 		if ( into >= BOUNCE_SCORE ) air.hits ++;
 		air.wall = { east: wall.east, north: wall.north, until: this.clock + WALL_GUARD };
 		const { launch } = this.handling;
-		const hop = Math.min( LAUNCH.max, LAUNCH.base + LAUNCH.gain * into ) * launch;
-		this.vy = first ? Math.max( Math.min( this.vy, LAUNCH.max * launch ), hop ) : this.vy + hop * 0.3;
+		const hop = Math.min( LAUNCH.max, LAUNCH.base + LAUNCH.gain * into ) * launch * this.leap;
+		this.vy = first ? Math.max( Math.min( this.vy, LAUNCH.max * launch * this.leap ), hop ) : this.vy + hop * 0.3;
 		this.setVelocity( be, bn );
 		this.kick( contact, wall, into, first ? 1 : 0.5 );
 
@@ -2089,7 +2098,7 @@ export class Driver {
 
 		}
 
-		this.vy -= GRAVITY * this.handling.gravity * dt;
+		this.vy -= this.fall * dt;
 		const reach = this.extent( UP, air.q );
 		if ( this.vy > 0 ) {
 
@@ -2102,7 +2111,7 @@ export class Driver {
 		if ( ground === null ) {
 
 			// Off the edge of the world: put it back where it last stood.
-			if ( this.y < this.lastSafe.y - 200 ) {
+			if ( this.y < this.lastSafe.y - FALL_RESET / this.gravity ) {
 
 				Object.assign( this, this.lastSafe, { speed: 0, vy: 0, pitch: 0, roll: 0, grounded: true, airTime: 0 } );
 				this.air = null;
@@ -2159,7 +2168,7 @@ export class Driver {
 		const { rebound } = this.handling;
 		if ( rebound > 0 && fall > 5 ) {
 
-			this.vy = Math.min( fall * rebound, 4 );
+			this.vy = Math.min( fall * rebound, 4 * this.leap );
 			this.grounded = false;
 			this.driftHop = true;
 
@@ -2177,7 +2186,7 @@ export class Driver {
 		air.wipeout = true;
 		this.y = Math.max( this.y, ground + this.extent( UP, air.q ) - this.centre.y );
 		if ( ! air.flew ) this.bestAir = Math.max( this.bestAir, air.time );
-		this.vy = MathUtils.clamp( hard * 0.3, WIPE_HOP * 0.6, WIPE_HOP );
+		this.vy = MathUtils.clamp( hard * 0.3, WIPE_HOP * 0.6 * this.leap, WIPE_HOP * this.leap );
 		this.speed *= WIPE_KEEP;
 		air.spin.multiplyScalar( 0.5 );
 		this.squashBy( Math.max( 2, hard * SQUASH.land ), 'land' );
@@ -2278,15 +2287,21 @@ export class Driver {
 		const { turned } = air;
 		const degrees = angle => Math.abs( angle ) * MathUtils.RAD2DEG;
 		const tricks = [];
+		// Turns are worth less in low gravity, by as much as the jumps there last longer (leap): there's
+		// that much more time in each for turning. (To the nearest 10, as every score is.)
+		const turn = points => Math.max( 10, Math.round( points * this.leap / 10 ) * 10 );
 		const halves = Math.floor( ( degrees( turned.y ) + SPIN_TOL ) / 180 );
-		if ( halves > 0 ) tricks.push( { name: `${ halves * 180 } Spin!`, points: POINTS.spin * halves } );
+		if ( halves > 0 ) tricks.push( { name: `${ halves * 180 } Spin!`, points: turn( POINTS.spin * halves ) } );
 		const flips = Math.floor( ( degrees( turned.x ) + FLIP_TOL ) / 360 );
 		const flip = turned.x > 0 ? 'Backflip' : 'Frontflip';
-		if ( flips > 0 ) tricks.push( { name: flips > 1 ? `${ flip } ×${ flips }` : `${ flip }!`, points: POINTS.flip * flips } );
+		if ( flips > 0 ) tricks.push( { name: flips > 1 ? `${ flip } ×${ flips }` : `${ flip }!`, points: turn( POINTS.flip * flips ) } );
 		const rolls = Math.floor( ( degrees( turned.z ) + FLIP_TOL ) / 360 );
-		if ( rolls > 0 ) tricks.push( { name: rolls > 1 ? `Barrel roll ×${ rolls }` : 'Barrel roll!', points: POINTS.roll * rolls } );
+		if ( rolls > 0 ) tricks.push( { name: rolls > 1 ? `Barrel roll ×${ rolls }` : 'Barrel roll!', points: turn( POINTS.roll * rolls ) } );
 		if ( air.hits > 0 && ! air.flew ) tricks.push( { name: air.hits > 1 ? `Wall bounce ×${ air.hits }` : 'Wall bounce', points: POINTS.bounce * air.hits } );
-		if ( air.time >= BIG_AIR && ! air.flew ) tricks.push( { name: `Big air ${ air.time.toFixed( 1 ) } s`, points: Math.round( air.time * POINTS.air ), pending: 'Big air' } );
+		// In low gravity it's counted as the time the same jump would have taken on the Earth (see
+		// leap), so the Moon's long, slow jumps don't score more than the Earth's.
+		const earthAir = air.time * this.leap;
+		if ( earthAir >= BIG_AIR && ! air.flew ) tricks.push( { name: `Big air ${ air.time.toFixed( 1 ) } s`, points: Math.round( earthAir * POINTS.air ), pending: 'Big air' } );
 		return tricks;
 
 	}
@@ -2634,11 +2649,29 @@ export class Driver {
 
 	}
 
+	// How fast (m/s²) it falls in the air: the world's gravity, as much of it as the ride's tuning
+	// says (handling.gravity: the floatier rides less).
+	get fall() {
+
+		return GRAVITY * this.gravity * this.handling.gravity;
+
+	}
+
+	// What a hop, a hit's throw, a crest's climb, a wipeout's tumble and a bounce on soft springs are
+	// multiplied by in low gravity: the square root of it, so each goes as high as on the Earth and
+	// stays up longer (on the Moon 2.5 times as long). Thrown as hard as on the Earth they'd go six
+	// times as high, for six times as long: a hit's throw 52 m up and a hop 8.6 s in the air.
+	get leap() {
+
+		return Math.sqrt( this.gravity );
+
+	}
+
 	// The ground's height under ( east, north ), looked for down from `from` (m up).
 	groundAt( east, north, from = this.y + 4 ) {
 
 		enuToLocal( east, north, from, _origin );
-		const hit = this.cast( _origin, DOWN, 400 );
+		const hit = this.cast( _origin, DOWN, REACH_DOWN / this.gravity );
 		return hit ? hit.point.y : null;
 
 	}

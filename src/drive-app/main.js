@@ -9,10 +9,12 @@ import { createDriveHud } from '../drive-hud.js';
 import { GlobeView } from './globe.js';
 import { Ground } from './spawn.js';
 import { createTestGlobe, placeEarth } from './test-globe.js';
+import { createMoon, MOON_ELLIPSOID, MOON_RADIUS } from './moon.js';
+import { MOON } from './moon-places.js';
 import { loadVehicle, loadVehicles, lookOf, specOf } from './vehicles.js';
 import { setUpPanel } from './panel.js';
 import { setUpGarage } from './garage.js';
-import { createBoostPads } from './pads.js';
+import { createBoostPads, EARTH_RULES, MOON_RULES } from './pads.js';
 import { createScreenFx } from './screen-fx.js';
 import { createWater } from './water.js';
 import { createSea, lakesNear, seaLevel, waterAt } from './sea.js';
@@ -23,7 +25,7 @@ import { onProChange } from './pro.js';
 import { applyLook } from './paint.js';
 import { createProgress, onLevelChange } from './progress.js';
 import { setUpProfile } from './profile.js';
-import { formatLatLon, LINK_PARAMS, linkedPlace, rememberPlace } from './places.js';
+import { formatLatLon, LINK_PARAMS, linkedPlace, rememberPlace, worldOf } from './places.js';
 import { createLive, flagsOf, velocityOf } from './live.js';
 import { createStats } from './stats.js';
 import { METRICS } from './stats-protocol.js';
@@ -41,6 +43,11 @@ import * as screens from './screens.js';
 //
 // Modes: 'globe' (the globe and its panel), 'dropping' (flying down and waiting for the ground),
 // 'driving' and 'paused'. M goes back to the globe from any of the others.
+//
+// Worlds: the Earth (Google's tiles) and the Moon (moon.js), picked on the globe's panel. On the Moon
+// the globe is the Moon's, what's driven on is its ground, gravity is the Moon's and there's no water;
+// and you drive on your own: nothing is sent to the room of who's driving (it's as if you were on the
+// globe), and the others' ghosts aren't drawn.
 
 const SKY = new Color( 0x9fcbee );
 const SPACE = new Color( 0x070c16 );
@@ -95,6 +102,21 @@ const PLACE_LENGTH = 60;
 // off, it's a drop-in where they are. Either way you start this far (m) to their side.
 const GO_NEAR = 10000;
 const GO_BESIDE = 5;
+// The Moon: its gravity as a share of the Earth's (1.62 m/s²); where its globe first shows it (by the
+// Apollo sites, on the side facing the Earth); the heights its ground can be at (m over its sphere:
+// Antoniadi crater's floor is 9.1 km down, the Selenean summit 10.8 km up, and made-up craters go a
+// little further); and its sun while driving, from the south-west, 20° up, so every crater rim and
+// rock has its light and shade. On its globe the sun is over the viewer's left shoulder instead, so
+// the side in view is lit. Its sunlight and the light from its sky (the Earth's light, and none from
+// a sky of its own) on the vehicles.
+const MOON_GRAVITY = 1.62 / 9.81;
+const MOON_FIRST = { lat: 12, lon: 18 };
+const MOON_HEIGHTS = { lowest: - 12000, highest: 12000 };
+const MOON_SUN = enuToLocal( - 0.7, - 0.62, 0.34 ).normalize();
+const MOON_LIGHT = { sun: 3, sky: 0.3 };
+// The longest air (s) a run may post: the Worker's limit (worker/drive/scores.js, MAX_AIR), which
+// the Moon's slow jumps could pass.
+const MAX_AIR = 120;
 // Only the dev server: a test (scripts/test-drive-live-ui.mjs) can hand the page a visit's token,
 // { visit }, for driving with others on the test pad, which has no visit of its own, and make who's
 // driving now ask more often and go idle sooner, online: { poll, idle } (ms). Whether it's on is
@@ -114,6 +136,8 @@ const _q = new Quaternion();
 const _side = new Vector3();
 const _ahead = new Vector3();
 const _velocity = new Vector3();
+const _focus = new Vector3();
+const _sun = new Vector3();
 
 // key: the Maps key (none: the test globe and pad); left: free drives left today; visit: the
 // visit's token, for posting scores; worker: whether there's a Worker (not on the dev server alone);
@@ -136,7 +160,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	const scene = new Scene();
 	const camera = new PerspectiveCamera( GLOBE_FOV, window.innerWidth / window.innerHeight, 1, 1e8 );
-	addLights( scene );
+	const lights = addLights( scene );
+	const earthLight = { sun: lights.sun.position.clone(), intensity: lights.sun.intensity, sky: lights.hemisphere.intensity };
 	// Space shows the page's starry background through the canvas; near the ground, the sky.
 	scene.background = null;
 
@@ -174,9 +199,23 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	// What's driven on: Google's tiles (or the test pad), and out at sea the sea's own surface.
 	const sea = createSea( { scene } );
-	const grounds = () => sea.shown ? [ tiles ? tiles.group : pad, sea.mesh ] : [ tiles ? tiles.group : pad ];
+	// And on the Moon, its ground (moon.js), shown when it's picked. Which world it is: 'earth' or
+	// 'moon'.
+	const moon = createMoon();
+	moon.group.visible = false;
+	scene.add( moon.group, moon.earth );
+	let world = 'earth';
+	const onMoon = () => world === MOON;
+	// Where the globe was looking on each world when it last left it, and a turn to the Moon waiting
+	// for it to load (setWorld).
+	const lastLook = { earth: null, moon: null };
+	let switching = null;
+	const grounds = () => onMoon() ? [ moon.terrain ] : sea.shown ? [ tiles ? tiles.group : pad, sea.mesh ] : [ tiles ? tiles.group : pad ];
 	const globe = new GlobeView( { camera, canvas, earth, surface: earth, ellipsoid, pin: $( 'pin' ) } );
 	scene.add( globe.air );
+	// The globe as each world has it (GlobeView.setBody).
+	const earthBody = { earth, surface: earth, ellipsoid };
+	const moonBody = { earth: moon.group, surface: moon.terrain, ellipsoid: MOON_ELLIPSOID, radius: MOON_RADIUS, air: false, ...MOON_HEIGHTS, heightAt: ( lat, lon ) => moon.heightAt( lat, lon ) };
 	globe.place( globe.orbit( home.lat, home.lon ) );
 	globe.capture();
 	// Until Google's root tileset arrives the tiles sit in the Earth's own frame; then
@@ -197,7 +236,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		// Each landed jump, for the leaderboard: where, and in what; and for levels.
 		onScore: run => {
 
-			board.onScore( { ...run, place: placeLabel( state.place ), vehicle: state.vehicle?.id } );
+			board.onScore( { ...run, airTime: Math.min( run.airTime, MAX_AIR ), place: placeLabel( state.place ), vehicle: state.vehicle?.id } );
 			progress.landed( run, state.entry );
 			landed( run );
 
@@ -222,9 +261,10 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		flyTo: place => flyToPlace( place ),
 		onDrive: place => dropIn( place ),
 		onClearPin: () => pinAt( null ),
+		onWorld: world => setWorld( world ),
 	} );
 	panel.vehiclePicker( $( 'pause' ).querySelector( '.vehicles' ), vehicle => swapVehicle( vehicle ) );
-	globe.onPick = place => pinAt( { ...place, name: 'Dropped pin', region: '' } );
+	globe.onPick = place => pinAt( { ...place, name: 'Dropped pin', region: '', ...onMoon() ? { world: MOON } : {} } );
 	// The Garage and the Supporter Pass, by both ride pickers (garage.js, pass.js).
 	const garage = setUpGarage( {
 		vehicles, panel, models, current: () => state.entry && { entry: state.entry, vehicle: state.vehicle },
@@ -356,12 +396,14 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		? createLive( { earth, ellipsoid, visit: liveVisit, player: () => board.player, ride: { vehicle: panel.vehicle.id, look: lookOf( panel.vehicle ) } } )
 		: null;
 	const ghosts = live && createGhosts( { scene, earth, camera, vehicles, loader: models.loader, live, tags: $( 'live-tags' ), own: () => state.entry?.pivot ?? null, effects: driver.effects } );
-	const friends = live && setUpFriends( { live, ghosts, vehicles, mode: () => state.mode, goTo, onInvite: () => stats.add( 'party', 'made' ) } );
+	// (On the Moon, they're told it's the Moon's: nothing of who's driving is for there.)
+	const liveMode = () => onMoon() ? MOON : state.mode;
+	const friends = live && setUpFriends( { live, ghosts, vehicles, mode: liveMode, goTo, onInvite: () => stats.add( 'party', 'made' ) } );
 	// Where people are driving now, on the globe (online.js): with driving with others, and nothing
 	// of it without.
 	const globeUi = $( 'globe-ui' );
 	const online = live && createOnline( {
-		camera, earth, ellipsoid, canvas, live, panel, mode: () => state.mode, onPick: flyToPlace, onZoom: zoomTo,
+		camera, earth, ellipsoid, canvas, live, panel, mode: liveMode, onPick: flyToPlace, onZoom: zoomTo,
 		// The Garage covers the globe (the whole screen on a phone): nothing's asked while it's open.
 		paused: () => garage.isOpen,
 		layer: globeUi.querySelector( '.online-dots' ),
@@ -408,9 +450,11 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	}
 
-	// A spot, a search result or where people are driving: the globe flies there, pinned.
-	function flyToPlace( place ) {
+	// A spot, a search result or where people are driving: the globe flies there, pinned (on its own
+	// world, turned to first).
+	async function flyToPlace( place ) {
 
+		if ( worldOf( place ) !== world && ! await setWorld( worldOf( place ), { at: place } ) ) return;
 		const height = globe.surfaceHeight( place.lat, place.lon );
 		const pin = { ...place, height };
 		globe.setPin( pin );
@@ -435,12 +479,17 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	// A place's name as the leaderboard has it: a dropped pin by where it is (to about a kilometre,
 	// so pins near each other are one place), and only the characters the Worker takes.
+	// On the Moon it says so ("Tycho crater (Moon)", "Moon, 43.31° S, 11.36° W"), so it's never the
+	// board of the place on the Earth with the same name or at the same latitude and longitude.
 	function placeLabel( place ) {
 
 		if ( ! place ) return null;
-		const name = place.name === 'Dropped pin' ? formatLatLon( place.lat, place.lon ).replace( /(\.\d\d)\d+/g, '$1' ) : place.name;
-		const label = [ ...String( name ).replace( /[–—]/g, '-' ).replace( PLACE_TEXT, ' ' ).replace( /\s+/g, ' ' ).trim() ].slice( 0, PLACE_LENGTH ).join( '' ).trim();
-		return label || formatLatLon( place.lat, place.lon );
+		const moonly = worldOf( place ) === MOON;
+		const pin = place.name === 'Dropped pin';
+		let name = pin ? formatLatLon( place.lat, place.lon ).replace( /(\.\d\d)\d+/g, '$1' ) : place.name;
+		if ( moonly ) name = pin ? `Moon, ${ name }` : `${ name } (Moon)`;
+		const clean = text => [ ...String( text ).replace( /[–—]/g, '-' ).replace( PLACE_TEXT, ' ' ).replace( /\s+/g, ' ' ).trim() ].slice( 0, PLACE_LENGTH ).join( '' ).trim();
+		return clean( name ) || clean( `${ moonly ? 'Moon, ' : '' }${ formatLatLon( place.lat, place.lon ) }` );
 
 	}
 
@@ -454,7 +503,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		globe.setEnabled( mode === 'globe' );
 		$( 'globe-ui' ).hidden = mode !== 'globe';
 		$( 'drive-ui' ).hidden = mode !== 'driving' && mode !== 'paused';
-		if ( pad ) pad.visible = mode !== 'globe';
+		if ( pad ) pad.visible = mode !== 'globe' && ! onMoon();
 
 	}
 
@@ -484,7 +533,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 		};
 
-		if ( tiles && ! tiles.root ) tiles.addEventListener( 'load-root-tileset', flyToLinked );
+		if ( tiles && ! tiles.root && worldOf( linked ) !== MOON ) tiles.addEventListener( 'load-root-tileset', flyToLinked );
 		else flyToLinked();
 
 	}
@@ -494,9 +543,74 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	function recentre( place ) {
 
 		globe.capture();
-		if ( tiles ) recentreTiles( tiles, place );
+		if ( onMoon() ) placeEarth( moon.group, MOON_ELLIPSOID, place );
+		else if ( tiles ) recentreTiles( tiles, place );
 		else placeEarth( earth, ellipsoid, place );
 		globe.restore();
+
+	}
+
+	// --- the Earth or the Moon ---
+
+	// Turn the globe to the Earth or the Moon (only from the globe), the first time to the Moon once
+	// it has loaded. `at`: a place to look at there (else where it was looking when it left). Resolves
+	// true once it's turned, false if it didn't (the Moon didn't load, or another turn took over).
+	async function setWorld( next, { at = null } = {} ) {
+
+		if ( state.mode !== 'globe' ) return false;
+		if ( next === world ) {
+
+			switching = null;
+			panel.setWorld( world );
+			return true;
+
+		}
+
+		const ticket = switching = {};
+		if ( next === MOON && ! moon.ready ) {
+
+			panel.setWorld( world, { busy: MOON } );
+			try {
+
+				await moon.load();
+
+			} catch ( err ) {
+
+				if ( switching === ticket ) {
+
+					switching = null;
+					panel.setWorld( world );
+					screens.toast( `The Moon didn't load (${ err.message }). Try again in a moment.`, 7000 );
+
+				}
+
+				return false;
+
+			}
+
+		}
+
+		if ( switching !== ticket || state.mode !== 'globe' ) return false;
+		switching = null;
+		const pose = globe.pose();
+		lastLook[ world ] = { lat: pose.lat, lon: pose.lon };
+		world = next;
+		const moonly = onMoon();
+		moon.group.visible = moonly;
+		earth.visible = ! moonly;
+		pinAt( null );
+		globe.setBody( moonly ? moonBody : earthBody );
+		panel.setWorld( world );
+		const look = at ?? lastLook[ world ] ?? ( moonly ? MOON_FIRST : home );
+		// The Moon's frame on the place looked at, as the Earth's is on the last place driven.
+		if ( moonly ) placeEarth( moon.group, MOON_ELLIPSOID, { lat: look.lat, lon: look.lon, height: 0 } );
+		lightFor();
+		// In from further out, as if arriving.
+		const orbit = globe.orbit( look.lat, look.lon );
+		globe.place( { ...orbit, distance: orbit.distance * 2.4 } );
+		globe.capture();
+		if ( ! at ) globe.flyTo( orbit, { duration: 2.2 } );
+		return true;
 
 	}
 
@@ -505,6 +619,9 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	async function dropIn( place ) {
 
 		if ( state.mode !== 'globe' ) return;
+		// (A place on the other world: Join, from the Moon, to someone driving on the Earth.)
+		if ( worldOf( place ) !== world && ! await setWorld( worldOf( place ) ) ) return;
+		if ( onMoon() ) return dropInMoon( place );
 		const drop = state.drop = { cancelled: false };
 		const gone = () => drop.cancelled || state.drop !== drop;
 		let { lat, lon } = place;
@@ -576,7 +693,76 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		screens.loading( 'Loading the ground...', 0 );
 		await settle( drop, 300, 600, GROUND_WAIT[ 1 ] );
 		if ( gone() ) return;
+		await arrive( drop, vehicle, vehicleLoading, heading );
 
+	}
+
+	// On the Moon: no tiles to wait for, no sea and no streets. Its ground's height is known before
+	// any of it is built (moon-height.js), so the scene is centred on the ground at the pin at once;
+	// then the squares round it are built on the way down (moon.js, faster while the loading screen is
+	// up). Facing the way with the most open ground (ground.heading), and you're off.
+	async function dropInMoon( place ) {
+
+		const drop = state.drop = { cancelled: false };
+		const gone = () => drop.cancelled || state.drop !== drop;
+		const { lat, lon } = place;
+		state.place = place;
+		rememberPlace( place );
+		panel.refreshRecent();
+		pinAt( null );
+		pads.clear();
+		sea.clear();
+		setMode( 'dropping' );
+		$( 'drive-ui' ).querySelector( '.place' ).textContent = place.name;
+		screens.loading( `Dropping in: ${ place.name }` );
+		const height = moon.heightAt( lat, lon ) ?? 0;
+		recentre( { lat, lon, height } );
+		state.place = { ...place, height };
+		removeVehicle();
+		const vehicle = panel.vehicle;
+		const vehicleLoading = loadVehicle( models, vehicle ).then( entry => {
+
+			entry.pivot.visible = false;
+			return entry;
+
+		} );
+		vehicleLoading.catch( () => {} );
+		moon.rush = true;
+		try {
+
+			await globe.flyTo( { lat, lon, height, distance: 320, heading: place.heading ?? globe.pose().heading, pitch: - 40 } );
+			if ( gone() ) return;
+			screens.loading( 'Loading the ground...', 0 );
+			await settle( drop, 300, 600, GROUND_WAIT[ 0 ] );
+			if ( gone() ) return;
+			const heading = ground.heading( 0, place.heading );
+			await globe.flyTo( { lat, lon, height, distance: 16, heading, pitch: - 15 }, { duration: 1.8 } );
+			if ( gone() ) return;
+			screens.loading( 'Loading the ground...', 0 );
+			const { y } = await settle( drop, 300, 600, GROUND_WAIT[ 1 ] );
+			if ( gone() ) return;
+			if ( y === null ) {
+
+				noGround( 'The Moon\'s ground didn\'t load here. Try again, or somewhere else.' );
+				return;
+
+			}
+
+			await arrive( drop, vehicle, vehicleLoading, heading );
+
+		} finally {
+
+			moon.rush = false;
+
+		}
+
+	}
+
+	// The end of a drop-in, the camera down by where you'll start: the vehicle on the ground (out of
+	// the way of anything in front), and driving.
+	async function arrive( drop, vehicle, vehicleLoading, heading ) {
+
+		const gone = () => drop.cancelled || state.drop !== drop;
 		let entry;
 		try {
 
@@ -584,8 +770,19 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 		} catch ( err ) {
 
-			noGround( `The ${ vehicle.name.toLowerCase() } didn't load (${ err.message }). Try again or pick another ride.` );
-			return;
+			// A model that didn't come (the pickup is 2.8 MB): the go-kart instead, which is drawn here and
+			// can't fail to load, rather than no drive at all.
+			const kart = vehicles.find( v => v.id === 'go-kart' ) ?? null;
+			if ( ! kart || kart === vehicle ) {
+
+				noGround( `The ${ vehicle.name.toLowerCase() } didn't load (${ err.message }). Try again or pick another ride.` );
+				return;
+
+			}
+
+			screens.toast( `The ${ vehicle.name.toLowerCase() } didn't load (${ err.message }), so here's the ${ kart.name.toLowerCase() }.`, 7000 );
+			vehicle = kart;
+			entry = await loadVehicle( models, kart );
 
 		}
 
@@ -604,10 +801,12 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		screens.hideLoading();
 		progress.dropped();
 		drive();
-		stats.add( 'dropin', METRICS.dropin.key( state.place?.id ) ?? 'other' );
+		stats.add( 'dropin', onMoon() ? MOON : METRICS.dropin.key( state.place?.id ) ?? 'other' );
 		stats.add( 'ride', vehicle.id );
 		live?.setRide( vehicle.id, lookOf( vehicle ) );
-		live?.setPlace( { name: placeLabel( state.place ), lat, lon, height } );
+		// On the Moon nobody's told where you are: you're on the globe as far as they know.
+		if ( onMoon() ) live?.setAway();
+		else live?.setPlace( { name: placeLabel( state.place ), lat: state.place.lat, lon: state.place.lon, height: state.place.height } );
 		// The keys, on a keyboard; a touch screen has its labelled buttons instead.
 		if ( ! document.body.classList.contains( 'touch' ) ) screens.showKeys();
 
@@ -668,9 +867,11 @@ export async function start( { key, left = null, visit: token = null, worker = t
 			if ( drop.cancelled ) return { y: null, settled: false };
 			const now = performance.now();
 			const y = ground.heightAt( 0, 0, top, depth );
-			quiet = y !== null && ! tiles?.isLoading ? quiet + ( now - last ) / 1000 : 0;
+			// (On the Moon, its squares still to build.)
+			const loading = onMoon() ? moon.pending > 0 : !! tiles?.isLoading;
+			quiet = y !== null && ! loading ? quiet + ( now - last ) / 1000 : 0;
 			last = now;
-			screens.setProgress( tiles ? tiles.loadProgress : 1 );
+			screens.setProgress( onMoon() ? moon.progress : tiles ? tiles.loadProgress : 1 );
 			if ( quiet >= SETTLE || now - begun > timeout * 1000 ) return { y, settled: quiet >= SETTLE };
 
 		}
@@ -692,6 +893,12 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	function drive() {
 
 		setMode( 'driving' );
+		// The Moon's gravity, and no water there (which its grey dust would look like to water.js).
+		const moonly = onMoon();
+		driver.gravity = moonly ? MOON_GRAVITY : 1;
+		driver.water = moonly ? null : water;
+		water.none = moonly;
+		pads.rules = moonly ? MOON_RULES : EARTH_RULES;
 		driver.start( state.entry, specOf( state.vehicle ) );
 
 	}
@@ -775,7 +982,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		globe.cancelFlight();
 		setMode( 'globe' );
 		live?.setAway();
-		online?.left( was );
+		if ( was ) online?.left( was );
 		const { lat, lon } = state.place ?? globe.pose();
 		globe.flyTo( globe.orbit( lat, lon ) );
 
@@ -786,7 +993,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// Where the car is ({ lat, lon }), or null without one.
 	function carSpot() {
 
-		if ( ! state.entry ) return null;
+		if ( ! state.entry || onMoon() ) return null;
 		earth.updateWorldMatrix( true, false );
 		state.entry.pivot.getWorldPosition( _p ).applyMatrix4( _inverse.copy( earth.matrixWorld ).invert() );
 		const spot = ellipsoid.getPositionToCartographic( _p, {} );
@@ -806,7 +1013,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 		const gained = run.score - runScore;
 		runScore = run.score;
-		if ( gained >= 1 ) live?.trick( gained );
+		if ( gained >= 1 && ! onMoon() ) live?.trick( gained );
 
 	}
 
@@ -818,9 +1025,16 @@ export async function start( { key, left = null, visit: token = null, worker = t
 			speed: velocityOf( d, _velocity ).length(),
 			air: ! d.grounded && ! d.flying && ! d.splash,
 			boost: d.boost,
-			together: !! live && [ ...live.players.values() ].some( p => ! p.away ),
-			where: carWhere,
+			// (On the Moon, nobody's driving with you, and it's none of the Earth's areas or spots.)
+			together: ! onMoon() && !! live && [ ...live.players.values() ].some( p => ! p.away ),
+			where: onMoon() ? nowhere : carWhere,
 		};
+
+	}
+
+	function nowhere() {
+
+		return {};
 
 	}
 
@@ -839,7 +1053,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// The car, for live.js to send: where it is, how fast it's going and what it's doing.
 	function car() {
 
-		if ( ( state.mode !== 'driving' && state.mode !== 'paused' ) || ! state.entry ) return null;
+		if ( ( state.mode !== 'driving' && state.mode !== 'paused' ) || ! state.entry || onMoon() ) return null;
 		return { pivot: state.entry.pivot, velocity: velocityOf( driver, _velocity ), flags: flagsOf( driver, state.mode === 'paused' ) };
 
 	}
@@ -852,6 +1066,15 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		if ( ! other || other.away ) return;
 		const spot = besideOf( other );
 		if ( ! spot ) return;
+		// From the Moon, they're on the Earth: back there, and a drop-in beside them.
+		if ( onMoon() ) {
+
+			if ( state.mode !== 'globe' ) toGlobe();
+			dropIn( { name: other.place?.name || 'Dropped pin', lat: spot.lat, lon: spot.lon, height: spot.height, heading: spot.heading } );
+			return;
+
+		}
+
 		const here = state.mode === 'driving' || state.mode === 'paused';
 		if ( here && state.entry && spot.local.length() < GO_NEAR && moveCar( spot ) ) return;
 		if ( state.mode !== 'globe' ) toGlobe();
@@ -1020,7 +1243,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 			progress.drive( dt, driven() );
 			stats.add( 'play', state.vehicle.id, dt );
-			if ( live?.players.size ) stats.add( 'play_with_others', 'all', dt );
+			if ( live?.players.size && ! onMoon() ) stats.add( 'play_with_others', 'all', dt );
 
 		}
 
@@ -1028,14 +1251,25 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		pads.update( dt );
 		globe.update( dt );
 
-		// How high the camera is decides the sky, the field of view and, while driving, clipping.
+		// How high the camera is (over the world it's on) decides the sky, the field of view and, while
+		// driving, clipping. The Moon has no sky: its stars, turned with it.
 		camera.updateMatrixWorld();
-		_p.copy( camera.position ).applyMatrix4( _inverse.copy( earth.matrixWorld ).invert() );
-		ellipsoid.getPositionToCartographic( _p, carto );
+		_p.copy( camera.position ).applyMatrix4( _inverse.copy( globe.earth.matrixWorld ).invert() );
+		globe.ellipsoid.getPositionToCartographic( _p, carto );
 		const altitude = carto.height - ( state.place?.height ?? 0 );
-		const space = MathUtils.smoothstep( altitude, ...SKY_BELOW );
-		scene.background = space < 1 ? sky.lerpColors( SKY, SPACE, space ) : null;
-		if ( testEarth ) testEarth.visible = state.mode === 'globe' || altitude > 20000;
+		if ( onMoon() ) {
+
+			scene.background = moon.stars;
+			scene.backgroundRotation.setFromQuaternion( moon.group.quaternion );
+
+		} else {
+
+			const space = MathUtils.smoothstep( altitude, ...SKY_BELOW );
+			scene.background = space < 1 ? sky.lerpColors( SKY, SPACE, space ) : null;
+
+		}
+
+		if ( testEarth ) testEarth.visible = ! onMoon() && ( state.mode === 'globe' || altitude > 20000 );
 		const driving = state.mode === 'driving' || state.mode === 'paused';
 		const fov = driving ? DRIVE_FOV + SUPERSONIC_FOV * driver.warp : GLOBE_FOV;
 		if ( Math.abs( view.fov - fov ) > 0.01 ) view.fov += ( fov - view.fov ) * Math.min( 1, dt * 3 );
@@ -1051,9 +1285,16 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		if ( state.mode === 'driving' || state.mode === 'paused' ) globe.clip( altitude );
 
 		camera.updateMatrixWorld();
-		tiles?.update();
+		// On the Moon, Google's tiles are left as they are (none load under the hidden Earth), and the
+		// Moon's ground is made sharp round the camera and the vehicle.
+		if ( onMoon() ) {
+
+			moon.update( camera, state.entry ? state.entry.pivot.getWorldPosition( _focus ) : null );
+			moonLight( dt );
+
+		} else tiles?.update();
 		models.update( dt );
-		ghosts?.update( dt, state.mode === 'driving' || state.mode === 'paused' );
+		ghosts?.update( dt, ! onMoon() && ( state.mode === 'driving' || state.mode === 'paused' ) );
 		online?.update();
 		// Not while the Garage is open: its turntable draws instead, and on a phone it covers the
 		// screen, so drawing the world behind it as well would only halve the frame rate.
@@ -1070,11 +1311,67 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	} );
 
-	// Google's terms: the Google Maps logo and the data providers whenever the tiles are on screen.
+	// The Moon's sun: over the viewer's shoulder on the globe, so the side in view is lit, and fixed
+	// in the scene while dropping in and driving (MOON_SUN), easing from one to the other; on the
+	// ground (moon.js) and the vehicles alike. The Earth in the sky with it, off the globe.
+	const moonSun = MOON_SUN.clone();
+	function moonLight( dt ) {
+
+		if ( state.mode === 'globe' ) globeSun( _sun );
+		else _sun.copy( MOON_SUN );
+		moonSun.lerp( _sun, Math.min( 1, dt * 1.5 ) ).normalize();
+		moon.setSun( moonSun );
+		lights.sun.position.copy( moonSun ).multiplyScalar( 1000 );
+		moon.earth.visible = state.mode !== 'globe';
+		if ( moon.earth.visible ) moon.placeEarth( camera, camera.far * 0.6 );
+
+	}
+
+	// The sun on the Moon's globe: from space, over the viewer's left shoulder (the side in view lit,
+	// as a Moon nearly full); coming down to the ground, low across it from the left and ahead (30° up),
+	// as head-on light would show none of its craters.
+	const _up = new Vector3();
+	const _left = new Vector3();
+	function globeSun( target ) {
+
+		const high = MathUtils.smoothstep( globe.altitude(), 40000, 400000 );
+		target.set( - 0.45, 0.55, 0.7 ).transformDirection( camera.matrixWorld );
+		if ( high >= 1 ) return target;
+		_up.setFromMatrixPosition( camera.matrixWorld ).sub( _p.setFromMatrixPosition( moon.group.matrixWorld ) ).normalize();
+		_left.set( - 1, 0, - 0.6 ).transformDirection( camera.matrixWorld ).addScaledVector( _up, - _left.dot( _up ) ).normalize();
+		_left.multiplyScalar( Math.cos( 30 * MathUtils.DEG2RAD ) ).addScaledVector( _up, Math.sin( 30 * MathUtils.DEG2RAD ) );
+		return target.lerp( _left, 1 - high ).normalize();
+
+	}
+
+	// The lights for the world: the Earth's as addLights made them, or the Moon's harsh sun and dark
+	// sky.
+	function lightFor() {
+
+		if ( onMoon() ) {
+
+			lights.sun.intensity = MOON_LIGHT.sun;
+			lights.hemisphere.intensity = MOON_LIGHT.sky;
+			if ( state.mode === 'globe' ) globeSun( moonSun );
+
+		} else {
+
+			lights.sun.position.copy( earthLight.sun );
+			lights.sun.intensity = earthLight.intensity;
+			lights.hemisphere.intensity = earthLight.sky;
+			moon.earth.visible = false;
+
+		}
+
+	}
+
+	// Google's terms: the Google Maps logo and the data providers whenever the tiles are on screen;
+	// on the Moon, NASA's credit instead.
 	function updateAttribution() {
 
+		$( 'moon-credit' ).hidden = ! onMoon();
 		const root = $( 'attribution' );
-		root.hidden = ! tiles || tiles.visibleTiles.size === 0;
+		root.hidden = onMoon() || ! tiles || tiles.visibleTiles.size === 0;
 		if ( root.hidden ) return;
 		root.querySelector( '.credits' ).textContent = tiles.getAttributions()
 			.filter( a => a.type === 'string' && a.value )
@@ -1102,6 +1399,12 @@ export async function start( { key, left = null, visit: token = null, worker = t
 			return state.entry;
 
 		},
+		get world() {
+
+			return world;
+
+		},
+		moon, setWorld,
 		dropIn, toGlobe, resume, recentre, waterOver,
 		where: () => formatLatLon( carto.lat * MathUtils.RAD2DEG, carto.lon * MathUtils.RAD2DEG ),
 	};

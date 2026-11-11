@@ -81,9 +81,24 @@ after( async () => {
 
 } );
 
-async function newPage( { viewport = { width: 1280, height: 800 }, touch = false } = {} ) {
+// ride: picked unless one already is, so the tests drive the go-kart (drawn in code) as before the
+// pickup (219,000 triangles, slow in Chromium's software renderer) was the default.
+async function newPage( { viewport = { width: 1280, height: 800 }, touch = false, ride = 'go-kart' } = {} ) {
 
 	const context = await browser.newContext( { viewport, hasTouch: touch, isMobile: touch } );
+	if ( ride ) await context.addInitScript( ride => {
+
+		try {
+
+			if ( ! localStorage.getItem( 'world-drive.vehicle' ) ) localStorage.setItem( 'world-drive.vehicle', ride );
+
+		} catch {
+
+			// Storage blocked: the default it is.
+
+		}
+
+	}, ride );
 	const page = await context.newPage();
 	page.outside = [];
 	page.errors = [];
@@ -423,6 +438,8 @@ describe( 'Supporter Pass, without it', () => {
 
 		} );
 		await openGlobe( blocked );
+		// (With nothing kept, the ride is the default, the pickup, whose paint is its model's: the kart.)
+		await blocked.locator( '#globe-ui .vehicle', { hasText: 'Go-kart' } ).click();
 		assert.equal( await pickWhite( blocked ), 'white' );
 		await dropIn( blocked );
 		const colours = await blocked.evaluate( () => {
@@ -464,8 +481,9 @@ describe( 'Supporter Pass, without it', () => {
 
 		} );
 		await openGlobe( page );
-		// The saved pass ride can't be driven: the kart is.
-		assert.equal( await page.locator( '#globe-ui .vehicle.picked b' ).textContent(), 'Go-kart' );
+		// The saved pass ride can't be driven: the default ride is, the pickup. Then the kart.
+		assert.equal( await page.locator( '#globe-ui .vehicle.picked b' ).textContent(), 'Pickup' );
+		await page.locator( '#globe-ui .vehicle', { hasText: 'Go-kart' } ).click();
 		await dropIn( page );
 		const kart = await page.evaluate( () => {
 

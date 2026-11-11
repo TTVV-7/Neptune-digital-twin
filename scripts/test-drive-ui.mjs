@@ -40,6 +40,9 @@
 // unchanged. Every request that isn't to the local server is blocked, so nothing reaches Google,
 // Cloudflare, Stripe or OpenStreetMap.
 //
+// The rides: the pickup the default until another is picked, and the go-kart if its model doesn't
+// load; the other tests drive the kart (see pickRide).
+//
 // Needs Playwright with Chromium, as test-accounts-ui.mjs does. TEST_VITE_PORT picks the port;
 // TEST_SCREENSHOTS=<folder> saves pictures.
 
@@ -91,10 +94,12 @@ after( async () => {
 } );
 
 // A page with everything off this machine blocked, and the search answered here: searches says
-// what was asked.
-async function newPage( { viewport = { width: 1280, height: 800 }, touch = false, api = {}, reducedMotion = 'no-preference' } = {} ) {
+// what was asked. ride: the ride picked unless one already is (see pickRide); null for the site's
+// own default, the pickup.
+async function newPage( { viewport = { width: 1280, height: 800 }, touch = false, api = {}, reducedMotion = 'no-preference', ride = 'go-kart' } = {} ) {
 
 	const context = await browser.newContext( { viewport, hasTouch: touch, isMobile: touch, reducedMotion } );
+	await pickRide( context, ride );
 	const page = await context.newPage();
 	page.searches = [];
 	page.outside = [];
@@ -119,6 +124,28 @@ async function newPage( { viewport = { width: 1280, height: 800 }, touch = false
 	if ( api.config ) await page.route( `${ BASE }/api/config`, route => route.fulfill( { contentType: 'application/json', body: JSON.stringify( api.config ) } ) );
 	if ( api.visit ) await page.route( `${ BASE }/api/visit`, route => api.visit( route ) );
 	return page;
+
+}
+
+// The tests drive the go-kart, as they did before the pickup was the default: it's drawn in code,
+// where the pickup is a model of 219,000 triangles, which Chromium's software renderer (no GPU here)
+// draws at about one frame a second. Only where no ride is picked yet, so a ride picked in a test
+// (and kept across a reload) stays picked. The pickup being the default has its own test.
+async function pickRide( context, ride ) {
+
+	if ( ride ) await context.addInitScript( ride => {
+
+		try {
+
+			if ( ! localStorage.getItem( 'world-drive.vehicle' ) ) localStorage.setItem( 'world-drive.vehicle', ride );
+
+		} catch {
+
+			// Storage blocked: the default it is.
+
+		}
+
+	}, ride );
 
 }
 
@@ -527,6 +554,64 @@ describe( 'World Drive, desktop', () => {
 		assert.equal( await page.locator( '#globe-ui .vehicle.picked b' ).textContent(), 'Muscle car' );
 		assert.deepEqual( page.outside, [] );
 		assert.deepEqual( page.errors, [] );
+
+	} );
+
+} );
+
+describe( 'World Drive\'s default ride', () => {
+
+	test( 'is the pickup until another is picked, and while the one picked is locked', async () => {
+
+		const page = await newPage( { ride: null } );
+		try {
+
+			await openGlobe( page );
+			const panel = page.locator( '#globe-ui' );
+			assert.equal( await panel.locator( '.vehicle.picked b' ).textContent(), 'Pickup' );
+			// Its model is someone else's, credited under the rides.
+			assert.match( await panel.locator( '.credit' ).textContent(), /^Model: "American pickup truck" by local\.yany, CC BY 4\.0/ );
+			// The kart is still first in the row.
+			assert.equal( await panel.locator( '.vehicle b' ).first().textContent(), 'Go-kart' );
+
+			// A ride saved that can't be driven (the pass's): the pickup again.
+			await page.evaluate( () => localStorage.setItem( 'world-drive.vehicle', 'monster-truck' ) );
+			await openGlobe( page );
+			assert.equal( await panel.locator( '.vehicle.picked b' ).textContent(), 'Pickup' );
+
+			// Picked, the kart stays picked.
+			await panel.locator( '.vehicle', { hasText: 'Go-kart' } ).click();
+			await openGlobe( page );
+			assert.equal( await panel.locator( '.vehicle.picked b' ).textContent(), 'Go-kart' );
+			assert.deepEqual( page.errors, [] );
+			assert.deepEqual( page.outside, [] );
+
+		} finally {
+
+			await page.context().close();
+
+		}
+
+	} );
+
+	test( 'a pickup that doesn\'t load is a drive in the go-kart, not none', async () => {
+
+		const page = await newPage( { ride: null } );
+		try {
+
+			await page.route( `${ BASE }/library/pickup-truck.glb`, route => route.fulfill( { status: 404, body: '' } ) );
+			await openGlobe( page );
+			await page.evaluate( () => window.drive.dropIn( { name: 'Test pad', lat: 46.5725, lon: 8.4153 } ) );
+			await page.waitForFunction( () => window.drive.mode === 'driving', null, { timeout: 60000 } );
+			assert.equal( await page.evaluate( () => window.drive.driver.entry.state.name ), 'Go-kart' );
+			assert.match( await page.locator( '#toast' ).textContent(), /The pickup didn't load .*, so here's the go-kart\./ );
+			assert.deepEqual( page.errors, [] );
+
+		} finally {
+
+			await page.context().close();
+
+		}
 
 	} );
 

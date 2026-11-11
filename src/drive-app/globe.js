@@ -22,6 +22,10 @@ import { CAMERA_FRAME, GlobeControls } from '3d-tiles-renderer';
 // The scene's frame follows the place being driven (main.js recentres it), so the Earth's own
 // frame, centred on the Earth with Z through the North Pole, is `earth`'s world matrix: the tiles'
 // group, or the test globe. Poses are kept in that frame, so a recentre never moves the view.
+//
+// It's the Moon's globe too (moon.js): setBody swaps the Earth for another body, its frame, what's
+// tapped, its ellipsoid and size, and whether it has air to glow round it. Everything below goes
+// by the body's: "the Earth" in what follows is whichever it is.
 
 const DEG = MathUtils.DEG2RAD;
 // The globe turns this fast (degrees a second) when it's left alone this long (s).
@@ -39,6 +43,8 @@ const EARTH_RADIUS = 6371000;
 // height found on one of those is no use for flying down to, or for a pin.
 const LOWEST = - 500;
 const HIGHEST = 9000;
+// The body's size and those heights, as GlobeView starts: the Earth's.
+const EARTH = { radius: EARTH_RADIUS, air: true, lowest: LOWEST, highest: HIGHEST };
 // How often (s) the ground's height under a pin, or where a flight is headed, is looked at again
 // as sharper tiles load.
 const RECHECK = 0.25;
@@ -90,6 +96,7 @@ export class GlobeView {
 		this.controls = new GlobeControls( surface, camera, canvas );
 		this.controls.setEllipsoid( ellipsoid, earth );
 		this.controls.enableDamping = true;
+		this.body = EARTH;
 		this.controls.addEventListener( 'start', () => this.touched() );
 
 		this.air = makeAtmosphere();
@@ -124,6 +131,26 @@ export class GlobeView {
 
 	}
 
+	// Turn to another body: `earth` its frame (the object whose world matrix is it), `surface` what's
+	// tapped and looked at, its ellipsoid, and { radius (m), air (whether it glows), lowest and
+	// highest (m, the heights its ground can be at), heightAt( lat, lon ) (m, its ground's height
+	// worked out, for a body that can: the Moon's; else it's looked for on what has loaded) }. Any
+	// flight is dropped, and the pin; the camera is where it was in the scene, so put it somewhere.
+	setBody( { earth, surface, ellipsoid, radius = EARTH_RADIUS, air = true, lowest = LOWEST, highest = HIGHEST, heightAt = null } ) {
+
+		this.cancelFlight();
+		this.setPin( null );
+		this.earth = earth;
+		this.surface = surface;
+		this.ellipsoid = ellipsoid;
+		this.body = { radius, air, lowest, highest, heightAt };
+		this.controls.setEllipsoid( ellipsoid, earth );
+		this.controls.setScene( surface );
+		// Whatever it was doing (a drag, the inertia of a spin) was on the other body.
+		this.controls.setCamera( this.camera );
+
+	}
+
 	// On for the globe, off while driving (the drive moves the camera then).
 	setEnabled( on ) {
 
@@ -145,7 +172,7 @@ export class GlobeView {
 
 			this.controls.update( dt );
 			// Left alone with nothing picked, the globe turns as the Earth does: west to east.
-			if ( ! this.pin && performance.now() - this.lastTouch > SPIN_AFTER * 1000 && this.altitude() > 2e6 ) {
+			if ( ! this.pin && performance.now() - this.lastTouch > SPIN_AFTER * 1000 && this.altitude() > this.body.radius / 3 ) {
 
 				_axis.set( 0, 0, 1 ).transformDirection( this.earth.matrixWorld );
 				_centre.setFromMatrixPosition( this.earth.matrixWorld );
@@ -254,7 +281,8 @@ export class GlobeView {
 		const vertical = camera.fov * DEG;
 		const horizontal = 2 * Math.atan( Math.tan( vertical / 2 ) * camera.aspect );
 		const angle = Math.min( vertical, horizontal ) * ( camera.aspect < 1 ? 0.33 : 0.38 );
-		return { lat, lon, height: 0, distance: EARTH_RADIUS / Math.sin( angle ) - EARTH_RADIUS, heading: 0, pitch: - 90 };
+		const { radius } = this.body;
+		return { lat, lon, height: 0, distance: radius / Math.sin( angle ) - radius, heading: 0, pitch: - 90 };
 
 	}
 
@@ -268,10 +296,15 @@ export class GlobeView {
 		if ( ! lift || down - above < 5 * DEG ) return to;
 		const shift = to.distance * ( Math.sin( down ) / Math.tan( down - above ) - Math.cos( down ) );
 		const heading = to.heading * DEG;
+		// Metres in a degree of latitude and of longitude at the equator: on the Earth as geo.js has
+		// them, on a round body (the Moon) the same.
+		const earth = this.body.radius === EARTH_RADIUS;
+		const north = earth ? 111132 : this.body.radius * DEG;
+		const east = earth ? 111320 : north;
 		return {
 			...to,
-			lat: to.lat - shift * Math.cos( heading ) / 111132,
-			lon: to.lon - shift * Math.sin( heading ) / ( 111320 * Math.max( 0.01, Math.cos( to.lat * DEG ) ) ),
+			lat: to.lat - shift * Math.cos( heading ) / north,
+			lon: to.lon - shift * Math.sin( heading ) / ( east * Math.max( 0.01, Math.cos( to.lat * DEG ) ) ),
 		};
 
 	}
@@ -287,14 +320,14 @@ export class GlobeView {
 		this.ellipsoid.getCartographicToPosition( from.lat * DEG, from.lon * DEG, 0, _a );
 		this.ellipsoid.getCartographicToPosition( to.lat * DEG, to.lon * DEG, 0, _b );
 		const angle = _a.angleTo( _b );
-		const arc = angle * EARTH_RADIUS;
+		const arc = angle * this.body.radius;
 		const near = Math.min( from.distance, to.distance );
 		const far = Math.max( from.distance, to.distance );
 		// Going far, the view climbs on the way so the trip is seen from high enough.
-		const top = Math.min( Math.max( far, arc * 0.9 ), 2.5e7 );
+		const top = Math.min( Math.max( far, arc * 0.9 ), 4 * this.body.radius );
 		const logs = [ Math.log( from.distance ), Math.log( to.distance ) ];
 		const lift = top > far * 1.05 ? 2 * Math.log( top ) - ( logs[ 0 ] + logs[ 1 ] ) / 2 : ( logs[ 0 ] + logs[ 1 ] ) / 2;
-		duration ??= MathUtils.clamp( 1.2 + arc / 3e6 + Math.log( far / Math.max( near, 1 ) ) * 0.15, 1.2, 4.5 );
+		duration ??= MathUtils.clamp( 1.2 + arc / ( 0.47 * this.body.radius ) + Math.log( far / Math.max( near, 1 ) ) * 0.15, 1.2, 4.5 );
 
 		this.flight?.resolve( false );
 		return new Promise( resolve => {
@@ -361,7 +394,7 @@ export class GlobeView {
 
 		const h = Math.max( 2, altitude );
 		this.camera.near = MathUtils.clamp( h / 1000, 0.1, 5000 );
-		this.camera.far = Math.sqrt( h * ( 2 * EARTH_RADIUS + h ) ) + 2e5;
+		this.camera.far = Math.sqrt( h * ( 2 * this.body.radius + h ) ) + 2e5;
 		this.camera.updateProjectionMatrix();
 
 	}
@@ -383,11 +416,12 @@ export class GlobeView {
 
 	}
 
-	// Whether a point (in the Earth's frame) is at a height the ground can really be: see LOWEST.
+	// Whether a point (in the Earth's frame) is at a height the ground can really be: see LOWEST (or
+	// the body's).
 	plausible( point ) {
 
 		const height = this.ellipsoid.getPositionElevation( point );
-		return height >= LOWEST && height <= HIGHEST;
+		return height >= this.body.lowest && height <= this.body.highest;
 
 	}
 
@@ -395,6 +429,7 @@ export class GlobeView {
 	// there, or only tiles too coarse to tell).
 	surfaceHeight( lat, lon ) {
 
+		if ( this.body.heightAt ) return this.body.heightAt( lat, lon );
 		const { ellipsoid } = this;
 		ellipsoid.getCartographicToPosition( lat * DEG, lon * DEG, 12000, _pos ).applyMatrix4( this.earth.matrixWorld );
 		ellipsoid.getCartographicToNormal( lat * DEG, lon * DEG, _normal ).transformDirection( this.earth.matrixWorld ).negate();
@@ -403,7 +438,7 @@ export class GlobeView {
 		const hit = this.raycaster.intersectObject( this.surface, true ).find( h => h.object.isMesh && h.object.visible );
 		if ( ! hit ) return null;
 		ellipsoid.getPositionToCartographic( _pos.copy( hit.point ).applyMatrix4( _inverse.copy( this.earth.matrixWorld ).invert() ), _carto );
-		return _carto.height >= LOWEST && _carto.height <= HIGHEST ? _carto.height : null;
+		return _carto.height >= this.body.lowest && _carto.height <= this.body.highest ? _carto.height : null;
 
 	}
 
@@ -439,7 +474,7 @@ export class GlobeView {
 		const { air, camera } = this;
 		_centre.setFromMatrixPosition( this.earth.matrixWorld );
 		const altitude = camera.position.distanceTo( _centre ) - EARTH_RADIUS;
-		air.visible = this.enabled && altitude > AIR_FROM;
+		air.visible = this.body.air && this.enabled && altitude > AIR_FROM;
 		if ( ! air.visible ) return;
 		const radius = this.ellipsoid.radius;
 		air.matrix.makeScale( radius.x * AIR, radius.y * AIR, radius.z * AIR ).premultiply( this.earth.matrixWorld );
