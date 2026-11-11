@@ -800,7 +800,8 @@ export class Driver {
 				// a steep lump in Google's mesh (a building's skirt) taken at 90 km/h climbs at 24 m/s,
 				// which threw the kart 25 m into the sky.
 				this.grounded = false;
-				if ( this.launch ) this.vy = Math.min( this.vy, LAUNCH.max * this.handling.launch * this.leap );
+				// (In low gravity the climb it carries off is multiplied by leap too, as a hop is.)
+				if ( this.launch ) this.vy = Math.min( this.vy * this.leap, LAUNCH.max * this.handling.launch * this.leap );
 				if ( this.launch && ! this.driftHop && ! this.drifting ) this.enterAir();
 
 			}
@@ -831,7 +832,7 @@ export class Driver {
 					// A drift's little hop isn't a jump.
 					if ( this.airTime > 0.4 && ! this.driftHop ) this.hud.flash( `${ this.airTime.toFixed( 1 ) } s air` );
 					if ( ! this.driftHop ) this.bestAir = Math.max( this.bestAir, this.airTime );
-					if ( this.vy < - 12 ) this.speed *= 0.8;
+					if ( this.vy < - 12 * this.leap ) this.speed *= 0.8;
 					if ( this.launch ) this.squashBy( - this.vy * SQUASH.land, 'land' );
 					this.vy = 0;
 					this.airTime = 0;
@@ -2150,7 +2151,7 @@ export class Driver {
 		this.roll = _euler.z;
 		this.speed *= Math.cos( ( this.course - this.heading ) * MathUtils.DEG2RAD );
 		this.course = this.heading;
-		if ( this.vy < - 12 ) this.speed *= 0.8;
+		if ( this.vy < - 12 * this.leap ) this.speed *= 0.8;
 		this.squashBy( - this.vy * SQUASH.land, 'land' );
 		if ( this.vy < - 5 ) this.fx?.dust( enuToLocal( this.east, this.north, ground, _c ), MathUtils.clamp( - this.vy / 15, 0, 1 ), this.width );
 		if ( ! air.flew ) this.bestAir = Math.max( this.bestAir, air.time );
@@ -2166,7 +2167,7 @@ export class Driver {
 		// Soft suspension bounces it back up off a hard landing: a little hop, not a jump of its own
 		// (as a drift's hop isn't), so it lands again without tricks or a wipeout.
 		const { rebound } = this.handling;
-		if ( rebound > 0 && fall > 5 ) {
+		if ( rebound > 0 && fall > 5 * this.leap ) {
 
 			this.vy = Math.min( fall * rebound, 4 * this.leap );
 			this.grounded = false;
@@ -2288,8 +2289,10 @@ export class Driver {
 		const degrees = angle => Math.abs( angle ) * MathUtils.RAD2DEG;
 		const tricks = [];
 		// Turns are worth less in low gravity, by as much as the jumps there last longer (leap): there's
-		// that much more time in each for turning. (To the nearest 10, as every score is.)
-		const turn = points => Math.max( 10, Math.round( points * this.leap / 10 ) * 10 );
+		// that much more time in each for turning. Not flying, which lasts as long anywhere. (To the
+		// nearest 10, as every score is.)
+		const share = air.flew ? 1 : this.leap;
+		const turn = points => Math.max( 10, Math.round( points * share / 10 ) * 10 );
 		const halves = Math.floor( ( degrees( turned.y ) + SPIN_TOL ) / 180 );
 		if ( halves > 0 ) tricks.push( { name: `${ halves * 180 } Spin!`, points: turn( POINTS.spin * halves ) } );
 		const flips = Math.floor( ( degrees( turned.x ) + FLIP_TOL ) / 360 );
@@ -2660,7 +2663,9 @@ export class Driver {
 	// What a hop, a hit's throw, a crest's climb, a wipeout's tumble and a bounce on soft springs are
 	// multiplied by in low gravity: the square root of it, so each goes as high as on the Earth and
 	// stays up longer (on the Moon 2.5 times as long). Thrown as hard as on the Earth they'd go six
-	// times as high, for six times as long: a hit's throw 52 m up and a hop 8.6 s in the air.
+	// times as high, for six times as long: a hit's throw 52 m up and a hop 8.6 s in the air. What a
+	// landing's speed is measured against (a hard one losing speed, soft springs bouncing) is too, as
+	// what goes up that much slower comes down that much slower.
 	get leap() {
 
 		return Math.sqrt( this.gravity );

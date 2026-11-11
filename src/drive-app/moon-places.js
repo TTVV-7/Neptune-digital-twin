@@ -12,9 +12,9 @@ const moon = ( id, name, region, lat, lon, extra = {} ) => ( { id: `moon-${ id }
 
 // The panel's dozen: the Apollo sites, the great craters, a pole and the far side.
 export const MOON_SPOTS = [
-	moon( 'apollo-11', 'Tranquility Base', 'Apollo 11, 1969 · Sea of Tranquillity', 0.6741, 23.4730 ),
-	moon( 'apollo-15', 'Hadley Rille', 'Apollo 15, 1971 · Apennine Mountains', 26.1322, 3.6339 ),
-	moon( 'apollo-17', 'Taurus-Littrow valley', 'Apollo 17, 1972', 20.1908, 30.7717 ),
+	moon( 'apollo-11', 'Tranquility Base', 'Apollo 11, 1969 · Sea of Tranquillity', 0.6741, 23.4730, { also: [ 'Apollo 11' ] } ),
+	moon( 'apollo-15', 'Hadley Rille', 'Apollo 15, 1971 · Apennine Mountains', 26.1322, 3.6339, { also: [ 'Apollo 15' ] } ),
+	moon( 'apollo-17', 'Taurus-Littrow valley', 'Apollo 17, 1972', 20.1908, 30.7717, { also: [ 'Apollo 17' ] } ),
 	moon( 'tycho', 'Tycho crater', '85 km across, bright rays', - 43.31, - 11.36 ),
 	moon( 'copernicus', 'Copernicus crater', '93 km across, terraced walls', 9.62, - 20.08 ),
 	moon( 'aristarchus', 'Aristarchus', 'The brightest crater', 23.7, - 47.4 ),
@@ -23,20 +23,20 @@ export const MOON_SPOTS = [
 	moon( 'shackleton', 'Shackleton crater rim', 'The south pole', - 89.32, 129.78 ),
 	moon( 'orientale', 'Mare Orientale', 'A basin ringed by mountains', - 19.4, - 92.8 ),
 	moon( 'tsiolkovskiy', 'Tsiolkovskiy crater', 'The far side', - 20.4, 129.1 ),
-	moon( 'change-4', 'Von Kármán crater', 'Chang\'e 4, 2019 · the far side', - 45.4446, 177.5991 ),
+	moon( 'change-4', 'Von Kármán crater', 'Chang\'e 4, 2019 · the far side', - 45.4446, 177.5991, { also: [ 'Chang\'e 4' ] } ),
 ];
 
 // What the search finds, besides the spots: the seas, more craters, mountains and landers. `also`:
-// other names it's found by.
+// other names it's found by (a sea's English name, a landing site's mission).
 export const MOON_PLACES = [
 	...MOON_SPOTS,
 	moon( 'apollo-12', 'Apollo 12 site', 'Ocean of Storms, 1969', - 3.0124, - 23.4216 ),
-	moon( 'apollo-14', 'Fra Mauro', 'Apollo 14, 1971', - 3.6453, - 17.4714 ),
-	moon( 'apollo-16', 'Descartes Highlands', 'Apollo 16, 1972', - 8.973, 15.5002 ),
+	moon( 'apollo-14', 'Fra Mauro', 'Apollo 14, 1971', - 3.6453, - 17.4714, { also: [ 'Apollo 14' ] } ),
+	moon( 'apollo-16', 'Descartes Highlands', 'Apollo 16, 1972', - 8.973, 15.5002, { also: [ 'Apollo 16' ] } ),
 	moon( 'lunokhod-1', 'Lunokhod 1', 'Sea of Rains, 1970', 38.24, - 35.0 ),
 	moon( 'lunokhod-2', 'Lunokhod 2', 'Le Monnier, 1973', 25.85, 30.45 ),
 	moon( 'change-3', 'Chang\'e 3 site', 'Sea of Rains, 2013', 44.12, - 19.51 ),
-	moon( 'chandrayaan-3', 'Shiv Shakti point', 'Chandrayaan-3, 2023 · near the south pole', - 69.37, 32.32 ),
+	moon( 'chandrayaan-3', 'Shiv Shakti point', 'Chandrayaan-3, 2023 · near the south pole', - 69.37, 32.32, { also: [ 'Chandrayaan-3' ] } ),
 	moon( 'tranquillitatis', 'Mare Tranquillitatis', 'Sea of Tranquillity', 8.5, 31.4, { also: [ 'Sea of Tranquillity' ] } ),
 	moon( 'serenitatis', 'Mare Serenitatis', 'Sea of Serenity', 28.0, 17.5, { also: [ 'Sea of Serenity' ] } ),
 	moon( 'imbrium', 'Mare Imbrium', 'Sea of Rains', 32.8, - 15.6, { also: [ 'Sea of Rains' ] } ),

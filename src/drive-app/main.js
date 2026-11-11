@@ -264,7 +264,12 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		onWorld: world => setWorld( world ),
 	} );
 	panel.vehiclePicker( $( 'pause' ).querySelector( '.vehicles' ), vehicle => swapVehicle( vehicle ) );
-	globe.onPick = place => pinAt( { ...place, name: 'Dropped pin', region: '', ...onMoon() ? { world: MOON } : {} } );
+	globe.onPick = place => {
+
+		stayPut();
+		pinAt( { ...place, name: 'Dropped pin', region: '', ...onMoon() ? { world: MOON } : {} } );
+
+	};
 	// The Garage and the Supporter Pass, by both ride pickers (garage.js, pass.js).
 	const garage = setUpGarage( {
 		vehicles, panel, models, current: () => state.entry && { entry: state.entry, vehicle: state.vehicle },
@@ -455,6 +460,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	async function flyToPlace( place ) {
 
 		if ( worldOf( place ) !== world && ! await setWorld( worldOf( place ), { at: place } ) ) return;
+		stayPut();
 		const height = globe.surfaceHeight( place.lat, place.lon );
 		const pin = { ...place, height };
 		globe.setPin( pin );
@@ -590,7 +596,14 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 		}
 
-		if ( switching !== ticket || state.mode !== 'globe' ) return false;
+		// Something else since (back to the Earth, a place or a drop-in on it): staying.
+		if ( switching !== ticket || state.mode !== 'globe' ) {
+
+			if ( switching === ticket ) stayPut();
+			return false;
+
+		}
+
 		switching = null;
 		const pose = globe.pose();
 		lastLook[ world ] = { lat: pose.lat, lon: pose.lon };
@@ -604,13 +617,23 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		const look = at ?? lastLook[ world ] ?? ( moonly ? MOON_FIRST : home );
 		// The Moon's frame on the place looked at, as the Earth's is on the last place driven.
 		if ( moonly ) placeEarth( moon.group, MOON_ELLIPSOID, { lat: look.lat, lon: look.lon, height: 0 } );
-		lightFor();
-		// In from further out, as if arriving.
+		// In from further out, as if arriving (and the light by where the camera now is).
 		const orbit = globe.orbit( look.lat, look.lon );
 		globe.place( { ...orbit, distance: orbit.distance * 2.4 } );
 		globe.capture();
+		lightFor();
 		if ( ! at ) globe.flyTo( orbit, { duration: 2.2 } );
 		return true;
+
+	}
+
+	// Stay on this world: a turn to the other still waiting for it to load is dropped, and the panel
+	// says so (a place picked or a drop-in on this world meanwhile is what's wanted).
+	function stayPut() {
+
+		if ( ! switching ) return;
+		switching = null;
+		panel.setWorld( world );
 
 	}
 
@@ -621,6 +644,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		if ( state.mode !== 'globe' ) return;
 		// (A place on the other world: Join, from the Moon, to someone driving on the Earth.)
 		if ( worldOf( place ) !== world && ! await setWorld( worldOf( place ) ) ) return;
+		stayPut();
 		if ( onMoon() ) return dropInMoon( place );
 		const drop = state.drop = { cancelled: false };
 		const gone = () => drop.cancelled || state.drop !== drop;
@@ -752,7 +776,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 		} finally {
 
-			moon.rush = false;
+			// (Unless a newer drop-in has it now.)
+			if ( ! state.drop || state.drop === drop ) moon.rush = false;
 
 		}
 
@@ -798,6 +823,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		state.drop = null;
 		state.entry = entry;
 		state.vehicle = vehicle;
+		// (The go-kart, if the ride picked didn't load: the pickers show what's driven.)
+		panel.setDriven( vehicle );
 		screens.hideLoading();
 		progress.dropped();
 		drive();
@@ -942,6 +969,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 			models.remove( old );
 			state.entry = entry;
 			state.vehicle = vehicle;
+			panel.setDriven( vehicle );
 			live?.setRide( vehicle.id, lookOf( vehicle ) );
 			resume();
 
@@ -970,6 +998,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		progress.report();
 		if ( state.drop ) state.drop.cancelled = true;
 		state.drop = null;
+		moon.rush = false;
+		panel.setDriven( null );
 		state.leaving = true;
 		if ( driver.active ) driver.stop();
 		state.leaving = false;
@@ -1282,7 +1312,10 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 		}
 
-		if ( state.mode === 'driving' || state.mode === 'paused' ) globe.clip( altitude );
+		// (And while dropping in on the Moon, whose heights over its sphere go up to 10 km: a flight
+		// clips by the height over that, which so high leaves the near plane metres out, cutting into
+		// the ground in front of the camera as it comes down to it.)
+		if ( state.mode === 'driving' || state.mode === 'paused' || ( state.mode === 'dropping' && onMoon() ) ) globe.clip( altitude );
 
 		camera.updateMatrixWorld();
 		// On the Moon, Google's tiles are left as they are (none load under the hidden Earth), and the

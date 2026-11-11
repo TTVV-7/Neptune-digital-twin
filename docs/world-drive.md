@@ -707,9 +707,10 @@ key, so it's the real Moon under `npm run dev:drive` too.
 ### Going there
 
 - **Earth | Moon.** The first time, the Moon's two files are fetched (never before: the Earth never
-  asks for them), the heights (`/moon/height.bin`, 2.1 MB) and the picture (`/moon/colour.webp`,
-  0.7 MB), the Moon button dimmed meanwhile; if they don't come, a word says so and the globe stays
-  on the Earth. Then the globe turns to the Moon, coming in from further out, over the Apollo sites
+  asks for them, nor makes its stars), the heights (`/moon/height.bin`, 2.1 MB) and the picture
+  (`/moon/colour.webp`, 0.7 MB), the Moon button dimmed meanwhile; if they don't come, a word says so
+  and the globe stays on the Earth. Earth, or a place or a drop-in on the Earth, while they're on
+  their way stays on the Earth. Then the globe turns to the Moon, coming in from further out, over the Apollo sites
   (12° N, 18° E) the first time, else where it was looking when it left; the Earth's tiles are
   hidden and not updated, so none load under it. Earth turns back, to where it was.
 - **Start spots**: a dozen (`MOON_SPOTS` in `src/drive-app/moon-places.js`): Tranquility Base
@@ -720,8 +721,8 @@ key, so it's the real Moon under `npm run dev:drive` too.
 - **Search** finds the Moon's own places, all in the page (no map service knows the Moon): the spots
   and about forty more (`MOON_PLACES`: the other landing sites, the seas, more craters and mountains,
   the poles, the highest and lowest places), by their names or others ("Sea of Rains" is Mare
-  Imbrium), accents and apostrophes not minded ("schroteri", "change 4"). Typed coordinates are the
-  Moon's. A tap on the globe drops a pin.
+  Imbrium, "Apollo 11" Tranquility Base), accents and apostrophes not minded ("schroteri",
+  "change 4"). Typed coordinates are the Moon's. A tap on the globe drops a pin.
 - **Recent places** are kept apart, six of the Moon's own (`world-drive.recent-moon`), and the
   panel shows the world's. The Earth's are untouched.
 - **A link**: `/?spot=moon-tycho` (any Moon spot's id), or `/?at=-43.31,-11.36&world=moon`, turns the
@@ -740,7 +741,8 @@ key, so it's the real Moon under `npm run dev:drive` too.
 - **Gravity** is the Moon's, 1.62 m/s², a sixth of the Earth's: `driver.gravity = 0.165`
   (`src/drive.js`). What throws a vehicle up (a hop, a hit's throw, a crest's climb, a wipeout's
   tumble, a bounce on soft springs) is multiplied by its square root, 0.41 (`driver.leap`), so each
-  goes as high as on the Earth and stays up two and a half times as long: a hop 2.5 m up for 3.5 s
+  goes as high as on the Earth and stays up two and a half times as long (what a landing's speed is
+  measured against, for a hard one losing speed or soft springs bouncing, too): a hop 2.5 m up for 3.5 s
   (1.43 s on the Earth). Thrown as hard as on the Earth they'd go six times as high and stay up six
   times as long: a hit's throw 52 m up, a hop 8.6 s. A drift's little hop is as short as on the
   Earth. The ground is looked for 2.4 km down rather than 400 m, and a vehicle fallen 1.2 km under
@@ -749,7 +751,7 @@ key, so it's the real Moon under `npm run dev:drive` too.
 - **Scores** are fair to the Earth's: big air counts the time the same jump would have taken on the
   Earth (the air time × 0.41), so a plain hop is no more big air than on the Earth, and a spin, a
   flip or a roll is worth 0.41 of its points (to the nearest 10), there being that much longer to
-  turn in each jump; wall bounces are as they are. The leaderboard has the place as "Tycho crater
+  turn in each jump (not while flying, which lasts as long anywhere); wall bounces are as they are. The leaderboard has the place as "Tycho crater
   (Moon)", or for a pin "Moon, 43.31° S, 11.36° W", never the board of a place on the Earth with the
   same name or at the same latitude and longitude, and a run's longest air is posted up to the
   Worker's 120 s.
@@ -775,8 +777,8 @@ Driving with others is the Earth's: its rooms are areas of the Earth, its cars a
 Earth. On the Moon nothing is sent to a room (it's as if you were on the globe, away: the others see
 you "on the globe"), the others' ghosts aren't drawn, the panel's "Driving now" and its dots, the
 party banner, the pause menu's friends and the horn aren't shown, and no trick's points go to the
-room. A party's **Join** or the list's **Go to** from the Moon goes back to the Earth and drops in
-beside them. Levels count driving, air, drifts, pads and tricks there as anywhere, but not areas or
+room. **Join** on a party's word that someone went somewhere ("Sam went to Monaco"), from the Moon,
+goes back to the Earth and drops in beside them. Levels count driving, air, drifts, pads and tricks there as anywhere, but not areas or
 start spots (those are the Earth's) nor driving with others. A drop-in there is counted in the
 [play stats](#play-stats) as the Moon's, never where.
 
@@ -821,13 +823,17 @@ start spots (those are the Earth's) nor driving with others. A drop-in there is 
   skirt hangs from their edges to fill the gap. Each is a plain mesh with its own bounding volume
   hierarchy (`raycast.js`), so the Driver, Ground, the boost pads and the globe's taps hit it as they
   hit Google's tiles; only the squares drawn are where they're raycast (`moon.terrain`: three.js's
-  raycasts don't look at `visible`). Driving, about 240 squares are drawn (about 400,000 triangles);
-  squares are built 5 ms a frame at most, 40 ms while the loading screen is up.
+  raycasts don't look at `visible`). Driving, about 240 squares are drawn, 2,304 triangles each
+  with their skirts (about 550,000, of which about 400,000 were in view in the tests); squares are
+  built 5 ms a frame at most, 40 ms while the loading screen is up. A square's smaller squares are
+  only looked into once all four are built, so the ground comes down a size a frame, and the drop-in
+  waits until a frame wants nothing more built.
 - **Its look** is a shader of its own: the picture, brighter where moon-height.js says (fresh
   craters), Lambert's light with a share of Lommel-Seeliger's (how the Moon's dust really scatters
   light: its edge as bright as its middle at full Moon), a little earthshine where the sun doesn't
-  reach, and within 220 m fine grit and gravel (a tile of speckle, triplanar by the Moon's own axes)
-  so the ground is seen to move under you. Its frame is the Moon's own, as 3d-tiles-renderer's
+  reach, and within 220 m fine grit and gravel (a tile of speckle 4 m and 32 m across, triplanar by
+  the Moon's own axes, each square's measured from a corner of a 512 m grid so neighbours' meet) so
+  the ground is seen to move under you. Its frame is the Moon's own, as 3d-tiles-renderer's
   `Ellipsoid` has a body (Z through the north pole, X through 0° N 0° E), recentred on the place
   driven as the Earth's tiles are (`placeEarth`), and the globe (`GlobeView.setBody`) uses its size,
   its heights and its worked-out ground.

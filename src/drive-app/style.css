@@ -1983,6 +1983,14 @@ body:not( .touch ) #drive-ui .horn {
 		max-width: 70%;
 	}
 
+	/* NASA's, on the Moon, as Google's: not over the sheet. */
+	body[data-mode='globe'] #moon-credit {
+		top: calc( 84px + env( safe-area-inset-top, 0px ) );
+		bottom: auto;
+		left: 16px;
+		right: auto;
+	}
+
 	#drive-ui .topbar .to-globe kbd {
 		display: none;
 	}

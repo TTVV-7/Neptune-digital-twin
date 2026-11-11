@@ -123,6 +123,7 @@ describe( 'World Drive on the Moon', () => {
 
 		await openGlobe( page );
 		assert.deepEqual( page.moon, [], 'nothing of the Moon\'s is fetched on the Earth' );
+		assert.equal( await page.evaluate( () => window.drive.moon.stars ), null, 'nor its stars made' );
 		assert.equal( await page.locator( '#globe-ui .worlds [data-world="earth"]' ).getAttribute( 'aria-checked' ), 'true' );
 		assert.deepEqual( await names( page ), SPOTS.map( spot => spot.name ) );
 
@@ -160,6 +161,13 @@ describe( 'World Drive on the Moon', () => {
 		await search.fill( 'Schroteri' );
 		await search.press( 'Enter' );
 		assert.deepEqual( await page.locator( '#globe-ui .results button b' ).allTextContents(), [ 'Vallis Schröteri' ] );
+		// Landing sites by their missions.
+		await search.fill( 'Apollo 11' );
+		await search.press( 'Enter' );
+		assert.deepEqual( await page.locator( '#globe-ui .results button b' ).allTextContents(), [ 'Tranquility Base' ] );
+		await search.fill( 'change 4' );
+		await search.press( 'Enter' );
+		assert.deepEqual( await page.locator( '#globe-ui .results button b' ).allTextContents(), [ 'Von Kármán crater' ] );
 		await search.fill( 'Gotham' );
 		await search.press( 'Enter' );
 		assert.match( await page.locator( '#globe-ui .search-status' ).textContent(), /Nothing found for "Gotham"\. Try a crater/ );
@@ -304,6 +312,44 @@ describe( 'World Drive\'s Moon, by a link and on a phone', () => {
 			assert.equal( await page.locator( '.pin-card .name' ).textContent(), 'Tycho crater' );
 			// Out of the address once used.
 			assert.equal( new URL( page.url() ).search, '' );
+			assert.deepEqual( page.errors, [] );
+
+		} finally {
+
+			await page.context().close();
+
+		}
+
+	} );
+
+	test( 'a place on the Earth picked while the Moon is still loading stays on the Earth', async () => {
+
+		const page = await newPage();
+		try {
+
+			// The Moon's heights held back until let go.
+			let release;
+			const held = new Promise( resolve => release = resolve );
+			await page.route( `${ BASE }/moon/height.bin`, async route => {
+
+				await held;
+				route.continue();
+
+			} );
+			await openGlobe( page );
+			await page.locator( '#globe-ui .worlds [data-world="moon"]' ).click();
+			await page.waitForFunction( () => document.querySelector( '#globe-ui .worlds [data-world="moon"]' ).getAttribute( 'aria-busy' ) === 'true' );
+			await page.locator( '#globe-ui .spots button', { hasText: 'Furka Pass' } ).click();
+			release();
+			await page.waitForFunction( () => window.drive.moon.ready, null, { timeout: 60000 } );
+			await page.waitForTimeout( 500 );
+			assert.deepEqual( await page.evaluate( () => ( {
+				world: window.drive.world, pin: window.drive.panel.pinned?.id ?? null,
+				busy: document.querySelector( '#globe-ui .worlds [data-world="moon"]' ).getAttribute( 'aria-busy' ),
+				earth: document.querySelector( '#globe-ui .worlds [data-world="earth"]' ).getAttribute( 'aria-checked' ),
+			} ) ), { world: 'earth', pin: 'furka', busy: null, earth: 'true' } );
+			// And now it's loaded, Moon goes straight there.
+			await toMoon( page );
 			assert.deepEqual( page.errors, [] );
 
 		} finally {

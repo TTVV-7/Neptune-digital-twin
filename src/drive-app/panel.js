@@ -38,16 +38,19 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorl
 	let pinned = null;
 	let searching = 0;
 	let world = 'earth';
+	// The other world while it's loading (main.js's setWorld), so a click on this one stays here.
+	let busy = null;
 
 	// --- the Earth or the Moon ---
 
 	const worlds = [ ...root.querySelectorAll( '.worlds button' ) ];
-	for ( const button of worlds ) button.addEventListener( 'click', () => button.dataset.world !== world && onWorld( button.dataset.world ) );
+	for ( const button of worlds ) button.addEventListener( 'click', () => ( button.dataset.world !== world || busy ) && onWorld( button.dataset.world ) );
 
 	// The panel for `which` world: its switch, words, spots and recent places. While `busy` (the
 	// Moon loading), its button says so.
-	function setWorld( which, { busy = null } = {} ) {
+	function setWorld( which, { busy: loading = null } = {} ) {
 
+		busy = loading;
 		for ( const button of worlds ) {
 
 			button.setAttribute( 'aria-checked', String( button.dataset.world === which ) );
@@ -58,6 +61,8 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorl
 
 		if ( busy || which === world ) return;
 		world = which;
+		// (A search of the other world's still on its way is no use here.)
+		searching ++;
 		document.body.dataset.world = world;
 		const words = WORDS[ world ];
 		$( '.tagline' ).textContent = words.tagline;
@@ -180,6 +185,10 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorl
 	// A Supporter Pass ride (pro.js) is only driven with the pass, and a level's (levels.js) from
 	// that level or with the pass (vehicles.js's rideLocked); while it's locked, the default one is.
 	const usable = () => rideLocked( picked ) ? fallback : picked;
+	// What's being driven, if it isn't the ride picked (the go-kart when the picked one's model didn't
+	// load, main.js): shown picked meanwhile, without changing what's kept.
+	let driven = null;
+	const shown = () => driven ?? usable();
 	onProChange( () => mark() );
 	onLevelChange( () => mark() );
 
@@ -250,6 +259,7 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorl
 	function pick( vehicle ) {
 
 		picked = vehicle;
+		driven = null;
 		storage( () => localStorage.setItem( VEHICLE_KEY, vehicle.id ) );
 		mark();
 
@@ -261,7 +271,7 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorl
 
 			for ( const button of parent.querySelectorAll( '.vehicle' ) ) {
 
-				const on = button.dataset.id === usable().id;
+				const on = button.dataset.id === shown().id;
 				const shut = rideLocked( vehicles.find( v => v.id === button.dataset.id ) );
 				button.classList.toggle( 'picked', on );
 				button.classList.toggle( 'locked', shut );
@@ -338,6 +348,13 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorl
 		refreshRecent,
 		vehiclePicker,
 		setWorld,
+		// The ride being driven (null: off driving), for the pickers to show.
+		setDriven( vehicle ) {
+
+			driven = vehicle && vehicle !== usable() ? vehicle : null;
+			mark();
+
+		},
 		get world() {
 
 			return world;

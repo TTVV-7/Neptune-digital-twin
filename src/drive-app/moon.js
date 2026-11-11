@@ -7,6 +7,7 @@ import {
 	EquirectangularReflectionMapping,
 	FrontSide,
 	Group,
+	LinearFilter,
 	LinearMipmapLinearFilter,
 	MathUtils,
 	Matrix4,
@@ -65,10 +66,10 @@ const HORIZON = 150;
 // Building squares: this long (ms) a frame at most, more while the loading screen is up.
 const BUDGET = 5;
 const RUSH = 40;
-// The grit close by: a tile of it this many metres across, and a coarser one; they fade out by
-// this distance (m).
-const GRIT = 3;
-const GRAVEL = 23;
+// The grit close by: a tile of it this many metres across, and a coarser one (each dividing REPEAT,
+// below, so neighbouring squares' grit meets); they fade out by this distance (m).
+const GRIT = 4;
+const GRAVEL = 32;
 const GRIT_FAR = 220;
 // The Earth in the sky, over the middle of the near side (0° N 0° E, which always faces it): 1.9°
 // across as it really is, drawn at 2.5°, as big as it looks to someone standing there (a body low in
@@ -95,8 +96,9 @@ export function createMoon() {
 	let pending = 0;
 	let progress = 1;
 	let rush = false;
-	// The stars, for the sky.
-	const stars = starTexture();
+	// The stars, for the sky: made when the Moon loads (a picture of 4096 × 2048, 32 MB, which nobody
+	// staying on the Earth should pay for).
+	let stars = null;
 
 	// The Earth, hanging in the sky over the near side.
 	const earth = makeEarth();
@@ -107,13 +109,16 @@ export function createMoon() {
 
 		loading ??= Promise.all( [
 			fetch( HEIGHTS ).then( response => response.ok ? response.arrayBuffer() : Promise.reject( new Error( `the Moon's heights didn't load (${ response.status })` ) ) ),
-			new TextureLoader().loadAsync( PICTURE ),
+			// (An image that doesn't load rejects with its error event, which says nothing.)
+			new TextureLoader().loadAsync( PICTURE ).catch( () => Promise.reject( new Error( 'the Moon\'s picture didn\'t load' ) ) ),
 		] ).then( ( [ buffer, picture ] ) => {
 
 			setHeights( new Int16Array( buffer ) );
 			picture.colorSpace = SRGBColorSpace;
 			picture.anisotropy = 4;
 			material.uniforms.picture.value = picture;
+			material.uniforms.grit.value = gritTexture();
+			stars = starTexture();
 			for ( const root of roots ) build( root );
 			ready = true;
 
@@ -157,7 +162,10 @@ export function createMoon() {
 
 		}
 
-		pending = queue.length - built;
+		// Anything wanted this frame means more is to come: children are only looked into once all
+		// four are built, so the squares come down a size a frame, and a frame that built all it
+		// queued isn't one with nothing left to do.
+		pending = queue.length;
 		progress = want.size / ( want.size + pending );
 		for ( const mesh of drawn ) {
 
@@ -235,7 +243,8 @@ export function createMoon() {
 			return ready;
 
 		},
-		// Squares wanted but not built yet, and how much of what's wanted is drawn (0 to 1).
+		// Squares wanted this frame (0 once the ground is as fine as it's going to be), and how much of
+		// what's wanted is drawn (0 to 1).
 		get pending() {
 
 			return pending;
@@ -246,8 +255,12 @@ export function createMoon() {
 			return progress;
 
 		},
-		// The sky: stars all round, in the Moon's frame (main.js turns them with it).
-		stars,
+		// The sky: stars all round, in the Moon's frame (main.js turns them with it); null until loaded.
+		get stars() {
+
+			return stars;
+
+		},
 		// While the loading screen is up, build squares faster.
 		set rush( on ) {
 
@@ -607,7 +620,8 @@ function makeMaterial() {
 	return new ShaderMaterial( {
 		uniforms: {
 			picture: { value: blank() },
-			grit: { value: gritTexture() },
+			// (Made when the Moon loads, see load.)
+			grit: { value: blank() },
 			sun: { value: new Vector3( 0.3, 0.8, - 0.5 ).normalize() },
 			sunLight: { value: 2.2 },
 			ambient: { value: 0.035 },
@@ -769,6 +783,8 @@ function gritTexture() {
 	const texture = new DataTexture( data, size, size, RedFormat, UnsignedByteType );
 	texture.wrapS = texture.wrapT = RepeatWrapping;
 	texture.minFilter = LinearMipmapLinearFilter;
+	// (A DataTexture's own is nearest, which close up draws its pebbles as squares.)
+	texture.magFilter = LinearFilter;
 	texture.generateMipmaps = true;
 	texture.anisotropy = 8;
 	texture.needsUpdate = true;
