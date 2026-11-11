@@ -394,7 +394,7 @@ describe( 'World Drive levels in the page', () => {
 		assert.equal( await track.locator( 'li.done' ).count(), level );
 		assert.equal( await track.locator( 'li.next' ).getAttribute( 'data-level' ), String( level + 1 ) );
 		assert.deepEqual( await track.locator( 'li[data-level="7"] .reward' ).allTextContents(), [ 'Plasma boostor ⭐ Pass' ] );
-		assert.deepEqual( await track.locator( 'li[data-level="4"] .reward' ).allTextContents(), [ 'Title:Joyrider' ] );
+		assert.deepEqual( await track.locator( 'li[data-level="4"] .reward' ).allTextContents(), [ 'Title:Joyrider', 'Red flameor ⭐ Pass' ] );
 		// Each level's XP on one line.
 		const xp = await track.locator( 'li[data-level="30"] .level-head .xp' ).boundingBox();
 		assert.ok( xp.height < 16, `${ xp.height }` );
@@ -659,7 +659,7 @@ describe( 'World Drive levels with the Supporter Pass', () => {
 
 			}, { level: 4, from: 2, rewards: rewardsBetween( 2, 4 ), nickname: false } );
 			assert.deepEqual( await card.locator( '.reward' ).allTextContents(), [ 'Title:Joyrider' ] );
-			assert.equal( await card.locator( '.had' ).textContent(), 'Already yours with the pass: Hearts boost' );
+			assert.equal( await card.locator( '.had' ).textContent(), 'Already yours with the pass: Hearts boost, Red flame' );
 			await page.waitForTimeout( 600 );
 			await shot( page, 'levels-pass-level-up' );
 			await page.evaluate( () => window.drive.profile.hideLevelUp() );

@@ -748,7 +748,7 @@ first drive in each area and at each start spot, minutes with others, and the da
 more for days in a row), climbing 50 levels: level 2 in the first few minutes, 50 a long goal. Levels
 unlock six new cars (a golf cart at level 5, a tuk-tuk at 8, an ice-cream van at 15, a lawn tractor
 at 22, a retro wedge at 30 and a formula racer at 40), about half the Supporter Pass's Garage looks
-on the way to 40, and titles for your nametag, a level badge whose frame changes every ten levels
+on the way up, and titles for your nametag, a level badge whose frame changes every ten levels
 and four colours that only levels give. While driving a slim XP bar shows under the place's name,
 with "+46 XP · 1.4 km" pop-ups and a burst at each level-up; the globe's panel has a profile card
 with the whole track. XP is kept with the
@@ -782,8 +782,8 @@ A **Supporter Pass** (one payment of CA$4.99 towards the running costs) unlocks 
 rides: the six cars levels bring, at once; seven cars of its own (a neon racer, a night cruiser, a
 dune buggy, a farm truck, a police cruiser and two showpieces, a hypercar and a cyber muscle car);
 and four built in code (a sports coupe, a monster truck, a city bus and a hovercraft), each handling
-its own way; every look in the Garage at once (paint, finishes, decals, rims, nine more boost styles,
-flame colours and trails, some of which levels unlock over time), +50% XP, a ⭐ on the leaderboard and
+its own way; every look in the Garage at once (paint, finishes, decals, rims, seventeen more boost
+styles, flame colours and trails, some of which levels unlock over time), +50% XP, a ⭐ on the leaderboard and
 30 drives a day. It's bought with a Stripe Payment Link after
 signing in with Google, so it's yours in any browser; Stripe's signed webhook records it. Buying
 stays off ("Coming soon") until `GOOGLE_CLIENT_ID` and the webhook's secret are set (see
@@ -858,8 +858,9 @@ src/drive-hud.js    a self-contained driving HUD with touch buttons, the DRIFT b
                     trick pop-ups and the score, for other apps (World Drive)
 src/drive-fx.js     booster flame, tyre smoke and drift sparks; a hit's sparks and bits, scrapes, dust;
                     a hovercraft's spray, and a splash's spray and foam (others' cars from older pages)
-src/drive-boosts.js boost styles (plasma, lightning, bubbles, a comet...) and the supersonic boom and
-                    streaks, each a fixed batch of quads drawn in one go, for drive-fx.js
+src/drive-boosts.js boost styles (plasma, lightning, bubbles, a galaxy...) and the supersonic boom and
+                    streaks, each a fixed batch of quads drawn in one go (two for dragon fire and
+                    spooky), for drive-fx.js
 src/kart.js         the go-kart model and its library item
 src/layout.js       saves placed items in the browser; export/import
 src/kinds.js        placed things that aren't models (areas, pits, piles): how features register them

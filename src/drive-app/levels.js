@@ -11,8 +11,8 @@
 // report (CAPS), works out the XP and keeps it with the leaderboard player. A supporter's XP counts
 // SUPPORTER_XP times.
 //
-// The unlock track: about half of the Supporter Pass's Garage looks come with levels on the way to
-// 40 (the pass still gives them all at once), and some rewards come only with levels, supporters
+// The unlock track: about half of the Supporter Pass's Garage looks come with levels on the way up
+// (the pass still gives them all at once), and some rewards come only with levels, supporters
 // included: titles for the nametag, the level badge's frame, and four colours. Six of the cars come
 // with levels too, from the golf cart at 5 to the formula racer at 40 (and with the pass at once).
 // The pass's first nine rides and its two showpiece cars are never on it.
@@ -145,6 +145,7 @@ export const REWARDS = [
 	look( 2, 'colour', 'sunburst', 'Sunburst paint' ),
 	look( 3, 'boost', 'hearts', 'Hearts boost' ),
 	title( 4, 'joyrider', 'Joyrider' ),
+	look( 4, 'flame', 'red', 'Red flame' ),
 	ride( 5, 'golf-cart', 'Golf cart' ),
 	look( 5, 'colour', 'lime', 'Lime paint' ),
 	look( 6, 'rim', 'white', 'White rims' ),
@@ -155,6 +156,7 @@ export const REWARDS = [
 	badge( 10, 'bronze', 'Bronze badge' ),
 	look( 11, 'colour', 'teal', 'Teal paint' ),
 	title( 12, 'street-racer', 'Street Racer' ),
+	look( 12, 'boost', 'frost', 'Frost boost' ),
 	look( 13, 'boost', 'pixel', 'Pixel boost' ),
 	look( 14, 'flame', 'blue', 'Blue flame' ),
 	ride( 15, 'ice-cream-van', 'Ice-cream van' ),
@@ -163,6 +165,7 @@ export const REWARDS = [
 	title( 17, 'speedster', 'Speedster' ),
 	look( 18, 'colour', 'electric', 'Electric blue paint' ),
 	title( 19, 'trickster', 'Trickster' ),
+	look( 19, 'flame', 'gold', 'Gold flame' ),
 	badge( 20, 'silver', 'Silver badge' ),
 	look( 21, 'rim', 'red', 'Red rims' ),
 	ride( 22, 'lawn-tractor', 'Lawn tractor' ),
@@ -172,6 +175,7 @@ export const REWARDS = [
 	look( 25, 'colour', 'copper', 'Copper paint', false ),
 	look( 26, 'decal', 'number', 'Number decal' ),
 	title( 27, 'road-warrior', 'Road Warrior' ),
+	look( 27, 'boost', 'spooky', 'Spooky boost' ),
 	look( 28, 'flame', 'green', 'Green flame' ),
 	title( 29, 'sky-pilot', 'Sky Pilot' ),
 	ride( 30, 'retro-wedge', 'Retro wedge' ),
@@ -179,22 +183,26 @@ export const REWARDS = [
 	look( 31, 'finish', 'matte', 'Matte finish' ),
 	title( 32, 'daredevil', 'Daredevil' ),
 	title( 33, 'trailblazer', 'Trailblazer' ),
+	look( 33, 'flame', 'teal', 'Teal flame' ),
 	look( 34, 'colour', 'violet', 'Violet paint' ),
 	look( 35, 'colour', 'mint', 'Mint paint', false ),
 	title( 36, 'pathfinder', 'Pathfinder' ),
 	look( 37, 'rim', 'blue', 'Blue rims' ),
 	title( 38, 'storm-chaser', 'Storm Chaser' ),
 	title( 39, 'high-flyer', 'High Flyer' ),
+	look( 39, 'boost', 'dragon', 'Dragon fire boost' ),
 	ride( 40, 'formula-racer', 'Formula racer' ),
 	badge( 40, 'platinum', 'Platinum badge' ),
 	look( 40, 'flame', 'purple', 'Purple flame' ),
 	title( 41, 'thrill-seeker', 'Thrill Seeker' ),
 	title( 42, 'wheel-wizard', 'Wheel Wizard' ),
 	title( 43, 'night-owl', 'Night Owl' ),
+	look( 43, 'flame', 'white', 'White-hot flame' ),
 	title( 44, 'road-captain', 'Road Captain' ),
 	look( 45, 'colour', 'plum', 'Plum paint', false ),
 	title( 46, 'cartographer', 'Cartographer' ),
 	title( 47, 'supersonic', 'Supersonic' ),
+	look( 47, 'boost', 'afterburner', 'Afterburner boost' ),
 	title( 48, 'world-tourer', 'World Tourer' ),
 	title( 49, 'icon', 'Icon' ),
 	title( 50, 'legend', 'Legend' ),

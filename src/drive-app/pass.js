@@ -1,4 +1,5 @@
 import './pro.css';
+import { BOOSTS } from './boosts.js';
 import { CARS } from './cars.js';
 import { RIDES } from './levels.js';
 import { PRO_RIDES } from './rides/index.js';
@@ -17,6 +18,8 @@ const count = n => COUNTS[ n ] ?? String( n );
 // rewards), and the rides built for it.
 const LEVEL_CARS = CARS.filter( car => RIDES.some( reward => reward.id === car.id ) );
 const PASS_CARS = CARS.filter( car => car.pro || LEVEL_CARS.includes( car ) );
+// How many of the Garage's boost styles the pass adds to the free ones (boosts.js).
+const PASS_BOOSTS = BOOSTS.filter( style => ! style.free ).length;
 
 let sheet = null;
 // Called each time the sheet opens (main.js counts it for the play stats).
@@ -77,7 +80,7 @@ function build() {
 			<p class="lead">World Drive streams the real 3D world, and every drive costs us a little. The pass is one payment of <b>${ PRICE }</b> that helps keep it running, and comes with:</p>
 			<ul class="perks">
 				<li class="rides"><b>${ count( PASS_CARS.length + PRO_RIDES.length ) } more rides</b><span>${ count( PASS_CARS.length ) } cars and ${ count( PRO_RIDES.length ).toLowerCase() } built rides; levels bring ${ count( LEVEL_CARS.length ).toLowerCase() } too.</span><div class="ride-icons"></div></li>
-				<li><b>The whole Garage, now</b><span>Every look at once: all 12 colours, matte and metallic paint, stripes, a number, flames or checker, rim colours, nine more boost styles (lightning, fireworks, a comet...), flame colours and three trails. Levels unlock some of them as you drive; the pass doesn't wait.</span></li>
+				<li><b>The whole Garage, now</b><span>Every look at once: all 12 colours, matte and metallic paint, stripes, a number, flames or checker, rim colours, ${ count( PASS_BOOSTS ).toLowerCase() } more boost styles (lightning, fireworks, a galaxy, dragon fire...), flame colours and six trails. Levels unlock some of them as you drive; the pass doesn't wait.</span></li>
 				<li><b>+50% XP</b><span>Every level sooner, with its titles and level-only colours.</span></li>
 				<li><b>A ⭐ on the leaderboard</b><span>By your name, for everyone to see.</span></li>
 				<li><b>30 drives a day</b><span>Instead of 8.</span></li>

@@ -13,8 +13,8 @@
 // flame and trail go on the ride being driven and are still there after a reload, and a look saved
 // before the boost styles keeps its flame's colour; what a trail and the booster cost a frame;
 // every boost style drawn at 150 km/h (a picture of each), keeping to its budget and making nothing
-// new in a minute of boosting, and what each costs a frame; and the Garage and the badges on a
-// phone. And World Drive's cars (src/drive-app/cars.js): listed, credited, small and their real
+// new in a minute of boosting, and what each costs a frame; every flame colour drawn in its own
+// colours and every trail drawn behind the kart; and the Garage and the badges on a phone. And World Drive's cars (src/drive-app/cars.js): listed, credited, small and their real
 // size, with wheels that steer, each facing the way it drives; the muscle car free, the levels'
 // cars saying their level and the rest locked; each driving, drifting, thrown up and landing, going
 // supersonic, its wheels spinning and steering, the tall ones leaning out of a turn, and a look from
@@ -30,9 +30,11 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { startVite } from './worker-harness.mjs';
+import { BOOSTS } from '../src/drive-app/boosts.js';
 import { CARS as CAR_SPECS } from '../src/drive-app/cars.js';
 import { DRIVE_CARS } from '../src/drive-app/catalog.js';
-import { RIDES as LEVEL_RIDES } from '../src/drive-app/levels.js';
+import { RIDES as LEVEL_RIDES, unlockLevel } from '../src/drive-app/levels.js';
+import { FLAMES, TRAILS } from '../src/drive-app/paint.js';
 
 const require = createRequire( import.meta.url );
 const PORT = Number( process.env.TEST_VITE_PORT ) || 5531;
@@ -355,11 +357,25 @@ describe( 'Supporter Pass, without it', () => {
 		await page.waitForTimeout( 400 );
 		await shot( page, 'pro-garage-free' );
 
-		// Boost styles: three free and nine with the pass. A free one goes on and shows itself off;
+		// Boost styles: five free and seventeen with the pass, about half of those with a level too,
+		// each with its picture and saying what unlocks it. A free one goes on and shows itself off;
 		// the flame's colour only shows under the classic flame.
 		const boosts = garage.locator( '[data-part="boost"]' );
-		assert.deepEqual( await boosts.locator( '.choice:not(.locked)' ).allTextContents(), [ 'Classic flame⭐', 'Bubbles⭐', 'Confetti⭐' ] );
-		assert.equal( await boosts.locator( '.choice.locked' ).count(), 9 );
+		assert.deepEqual( await boosts.locator( '.choice:not(.locked)' ).allTextContents(), [ 'Classic flame⭐', 'Bubbles⭐', 'Confetti⭐', 'Music notes⭐', 'Cherry blossom⭐' ] );
+		assert.equal( await boosts.locator( '.choice.locked' ).count(), 17 );
+		const styleButtons = await boosts.locator( '.choice' ).evaluateAll( buttons => buttons.map( b => ( { id: b.dataset.id, picture: !! b.querySelector( 'svg path, svg circle, svg ellipse, svg rect' ), locked: b.classList.contains( 'locked' ), unlock: b.querySelector( '.unlock' )?.textContent ?? '' } ) ) );
+		assert.deepEqual( styleButtons.map( b => b.id ), BOOSTS.map( style => style.id ) );
+		for ( const button of styleButtons ) {
+
+			const level = unlockLevel( 'boost', button.id );
+			const free = BOOSTS.find( style => style.id === button.id ).free === true;
+			assert.ok( button.picture, `${ button.id } has no picture` );
+			assert.equal( button.locked, ! free, button.id );
+			if ( ! free ) assert.equal( button.unlock, level === null ? 'Pass' : `Lv ${ level } · or Pass`, button.id );
+
+		}
+
+		assert.deepEqual( styleButtons.filter( b => unlockLevel( 'boost', b.id ) !== null ).map( b => b.id ), [ 'plasma', 'glitter', 'hearts', 'pixel', 'afterburner', 'frost', 'dragon', 'spooky' ] );
 		assert.ok( await boosts.locator( '.choice[data-id="classic"]' ).evaluate( b => b.classList.contains( 'on' ) ) );
 		assert.ok( await garage.locator( '[data-part="flame"]' ).isVisible() );
 		await boosts.locator( '.choice[data-id="lightning"]' ).click();
@@ -984,7 +1000,7 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 		const garageStyles = await page.evaluate( async () => ( await import( '/src/drive-app/boosts.js' ) ).BOOSTS.map( style => style.id ) );
 		// The Garage offers each of drive-boosts.js's styles, and nothing else.
 		assert.deepEqual( [ ...garageStyles ].sort(), [ ...styles ].sort() );
-		assert.ok( styles.length >= 9 );
+		assert.ok( styles.length >= 22 );
 		const results = {};
 		for ( const style of styles ) {
 
@@ -1107,6 +1123,112 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 		}
 
 		await page.evaluate( () => window.drive.driver.firing = false );
+		assert.deepEqual( page.errors, [] );
+
+	} );
+
+	test( 'every flame colour and trail the Garage has is drawn: each flame in its own colours, each trail behind the kart', async () => {
+
+		if ( await page.evaluate( () => window.drive?.mode ) !== 'driving' ) {
+
+			await openGlobe( page, '?pro=1' );
+			await dropIn( page );
+
+		}
+
+		await page.evaluate( () => document.querySelector( '#drive-ui .keys' ).hidden = true );
+		const result = await page.evaluate( async () => {
+
+			const { createDriveFx, FLAMES: CONES } = await import( '/src/drive-fx.js' );
+			const { FLAMES, TRAILS } = await import( '/src/drive-app/paint.js' );
+			const { driver: d, renderer, scene, camera } = window.drive;
+			const gl = renderer.getContext();
+			const world = d.models.group.parent;
+			const { width, height } = gl.canvas;
+			const pixels = [ new Uint8Array( width * height * 4 ), new Uint8Array( width * height * 4 ) ];
+			const Vector3 = camera.position.constructor;
+			const at = new Vector3();
+			const back = new Vector3();
+			const right = new Vector3();
+			const up = new Vector3();
+			// Drawn from behind the kart and off to its right, a little higher than the chase camera,
+			// so what's left behind it is in view: the pixels that differ with its effects shown and
+			// hidden.
+			const drawn = root => {
+
+				const saved = [ camera.position.clone(), camera.quaternion.clone() ];
+				d.entry.pivot.getWorldPosition( at );
+				const turn = d.entry.pivot.getWorldQuaternion( camera.quaternion.clone() );
+				back.set( 0, 0, 1 ).applyQuaternion( turn );
+				right.set( 1, 0, 0 ).applyQuaternion( turn );
+				up.set( 0, 1, 0 ).applyQuaternion( turn );
+				camera.position.copy( at ).addScaledVector( back, 5 ).addScaledVector( right, 4.5 ).addScaledVector( up, 2.2 );
+				camera.lookAt( at.addScaledVector( back, 2.2 ).addScaledVector( up, 0.5 ) );
+				camera.updateMatrixWorld();
+				for ( const [ i, shown ] of [ [ 0, true ], [ 1, false ] ] ) {
+
+					root.visible = shown;
+					renderer.render( scene, camera );
+					gl.readPixels( 0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels[ i ] );
+
+				}
+
+				root.visible = true;
+				camera.position.copy( saved[ 0 ] );
+				camera.quaternion.copy( saved[ 1 ] );
+				let changed = 0;
+				for ( let i = 0; i < pixels[ 0 ].length; i += 4 ) if ( Math.abs( pixels[ 0 ][ i ] - pixels[ 1 ][ i ] ) + Math.abs( pixels[ 0 ][ i + 1 ] - pixels[ 1 ][ i + 1 ] ) + Math.abs( pixels[ 0 ][ i + 2 ] - pixels[ 1 ][ i + 2 ] ) > 30 ) changed ++;
+				return changed;
+
+			};
+			// A second and a half boosting at 60 km/h (the booster lit as it is, with no burst, so
+			// one run is drawn just like the next but for what's being tried).
+			const run = look => {
+
+				d.fx.dispose();
+				d.fx = createDriveFx( world, look );
+				const root = world.children.at( - 1 );
+				for ( const code of [ ...d.keys ] ) d.release( code );
+				Object.assign( d, { east: 0, north: 0, y: 0, heading: 0, course: 0, view: 0, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, flying: false, boost: null } );
+				for ( let i = 0; i < 90; i ++ ) {
+
+					Object.assign( d, { gauge: 1, firing: true, speed: 60 / 3.6 } );
+					d.update( 1 / 60 );
+
+				}
+
+				return root;
+
+			};
+			const out = { flames: {}, trails: {}, missing: [] };
+			for ( const { id } of FLAMES ) {
+
+				const root = run( { boost: 'classic', flame: id, trail: null } );
+				let cone = null;
+				root.traverse( o => cone ??= o.geometry?.type === 'ConeGeometry' ? o : null );
+				out.flames[ id ] = { drawn: drawn( root ), cone: cone.material.color.getHex(), own: id === 'rainbow' ? null : CONES[ id ]?.[ 0 ] ?? 'none' };
+
+			}
+
+			const plain = drawn( run( { boost: 'classic', flame: 'orange', trail: null } ) );
+			for ( const { id } of TRAILS ) if ( id !== 'none' ) out.trails[ id ] = drawn( run( { boost: 'classic', flame: 'orange', trail: { kind: id, colour: 0xeef1f4 } } ) ) - plain;
+			d.firing = false;
+			return out;
+
+		} );
+		console.log( 'flames and trails drawn (pixels):', JSON.stringify( result ) );
+		assert.deepEqual( Object.keys( result.flames ), FLAMES.map( flame => flame.id ) );
+		assert.ok( FLAMES.length >= 11 && TRAILS.length >= 7, `${ FLAMES.length } flames, ${ TRAILS.length } trails` );
+		for ( const [ id, flame ] of Object.entries( result.flames ) ) {
+
+			assert.ok( flame.drawn > 400, `the ${ id } flame didn't show: ${ flame.drawn } pixels` );
+			// In its own colour (drive-fx.js's for the name paint.js lists), not orange's.
+			if ( flame.own !== null ) assert.equal( flame.cone, flame.own, `the ${ id } flame's colour` );
+
+		}
+
+		// Each trail draws a good deal more than the flame alone.
+		for ( const [ id, more ] of Object.entries( result.trails ) ) assert.ok( more > 300, `the ${ id } trail didn't show: ${ more } pixels more than the flame alone` );
 		assert.deepEqual( page.errors, [] );
 
 	} );
