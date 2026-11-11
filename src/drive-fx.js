@@ -59,13 +59,19 @@ export const FLAMES = {
 	green: [ 0x22d04a, 0xe6ffd6, 0x5cff78 ],
 	purple: [ 0x8f3dff, 0xf0e0ff, 0xae6cff ],
 	pink: [ 0xff3d98, 0xffe2f1, 0xff72b6 ],
-	red: [ 0xff2410, 0xffd2a0, 0xff4a2a ],
+	// Its core red-hot rather than white-hot, so the whole flame reads red.
+	red: [ 0xe0140a, 0xff4a1a, 0xff2a10 ],
 	gold: [ 0xffb01a, 0xfff6c8, 0xffcf4a ],
 	teal: [ 0x10d6bc, 0xdcfff8, 0x3df0d6 ],
 	ice: [ 0x8ee6ff, 0xffffff, 0xbaf0ff ],
 	// A white-hot flame: barely warm at its edge, white through and through.
 	white: [ 0xfff0dc, 0xffffff, 0xfff6e8 ],
 };
+// Flames whose outer cone and glow are drawn over what's behind them rather than added to it (their
+// core is still added, over the cone), as a deep colour has to be: added to a bright sky or a grey
+// road, a red only ever comes out salmon, between the orange and the pink. A boost style's flame can
+// be too (its `deep`, in drive-boosts.js).
+const DEEP = new Set( [ 'red' ] );
 const RAINBOW_TURN = 1.6;
 // Trails. Smoke: a puff every SMOKE_TRAIL_STEP s that lasts SMOKE_TRAIL_LIFE s. Sparkles: one every
 // SPARKLE_STEP s, twinkling, in these colours. Fire: a tongue every FIRE_STEP s, cooling through
@@ -75,7 +81,9 @@ const RAINBOW_TURN = 1.6;
 // bands side by side ([ from, to: shares of the way across from its left, colour, how bright ])
 // across `half` of its width either side of its middle, glowing (additive) or not: the rainbow's
 // in bands of these hues, the neon streak's two lines of light off its back corners, as its tail
-// lights would draw them in a long exposure, each a bright core in a wider glow.
+// lights would draw them in a long exposure, each a bright core in a wider glow. Standing still
+// (under RIBBON_STILL m/s: on the Garage's turntable, which turns the vehicle but never moves it),
+// a ribbon is drawn out as if it drove on at RIBBON_SHOW of its length a second.
 const SMOKE_TRAIL_POOL = 56;
 const SMOKE_TRAIL_STEP = 0.03;
 const SMOKE_TRAIL_LIFE = 1.5;
@@ -94,6 +102,8 @@ const STAR_COLOURS = [ 0xffd23f, 0xfff0a0, 0xffffff, 0xffb02e ];
 const RIBBON_POINTS = 48;
 const RIBBON_STEP = 1 / 40;
 const RIBBON_LIFE = 0.9;
+const RIBBON_STILL = 0.05;
+const RIBBON_SHOW = 2.5;
 const RIBBON_HUES = [ 0, 0.08, 0.15, 0.33, 0.58, 0.77 ];
 const RAINBOW = {
 	bands: RIBBON_HUES.map( ( hue, i ) => [ i / RIBBON_HUES.length, ( i + 1 ) / RIBBON_HUES.length, new Color().setHSL( hue, 1, 0.55 ), 0.85 ] ),
@@ -323,6 +333,11 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 		halo.material.map = soft;
 
 	}
+
+	// A deep colour's cone and glow drawn over what's behind them (see DEEP). All three are in one
+	// spot, so they're drawn in the order they were made: the cone, the core added over it, and the
+	// glow, a soft haze round the exhaust, over both.
+	if ( style ? styled?.deep : DEEP.has( flameName ) ) outer.material.blending = halo.material.blending = NormalBlending;
 
 	const sonic = createSupersonic( root );
 	// The bursts (drive-bursts.js), flashing in the style's colour, or the classic flame's glow's.
@@ -574,7 +589,11 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 
 		if ( ribbon ) {
 
-			ribbon.update( pivot, size, power, dt );
+			// Standing still, every point would be laid in the same spot and the ribbon folded up into
+			// a short arc behind it: they're carried back out of its back instead, as if it drove on
+			// (see RIBBON_SHOW), so the Garage's turntable shows it drawn out as it is on the road.
+			const still = velocity.lengthSq() < RIBBON_STILL ** 2;
+			ribbon.update( pivot, size, power, dt, still ? _v.copy( frame.back ).multiplyScalar( RIBBON_SHOW * ( size.length ?? size.rear * 2 ) ) : null );
 			return;
 
 		}
@@ -1014,7 +1033,9 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 // any side (bands of colour along it instead would be one colour across the few metres the chase
 // camera sees at speed); the neon streak's a line of light at each side. Its points go round a
 // ring, and each frame they're written newest first into buffers made once; the colours are written
-// once, and only how faded each point is changes.
+// once, and only how faded each point is changes. Standing still, its points are carried back (see
+// update's `drift`), so it's drawn out behind it all the same, and curves away as the Garage's
+// turntable turns it, as it would behind a car turning.
 function makeRibbon( root, { bands, half: wide, additive } ) {
 
 	// Each band has two edges of its own, so its colour stops sharply at the next one's.
@@ -1063,9 +1084,19 @@ function makeRibbon( root, { bands, half: wide, additive } ) {
 
 		mesh,
 
-		update( pivot, size, power, dt ) {
+		// `drift`: standing still, the way (world, m/s) the points laid are carried, or null.
+		update( pivot, size, power, dt, drift = null ) {
 
 			clock += dt;
+			// The newest is put back on the vehicle below while it's still being laid.
+			if ( drift ) for ( const point of points ) {
+
+				if ( clock - point.born > RIBBON_LIFE ) continue;
+				point.left.addScaledVector( drift, dt );
+				point.right.addScaledVector( drift, dt );
+
+			}
+
 			if ( power > 0 ) {
 
 				due -= dt;

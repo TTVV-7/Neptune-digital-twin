@@ -121,7 +121,7 @@ export const FLAMES = [
 	{ id: 'purple', name: 'Purple', css: '#8f3dff' },
 	{ id: 'pink', name: 'Pink', css: '#ff3d98' },
 	{ id: 'rainbow', name: 'Rainbow', css: 'conic-gradient( #ff3d3d, #ffd23d, #3dff6e, #3dc8ff, #8f3dff, #ff3d98, #ff3d3d )' },
-	{ id: 'red', name: 'Red', css: '#ff2410' },
+	{ id: 'red', name: 'Red', css: '#e0140a' },
 	{ id: 'gold', name: 'Gold', css: 'radial-gradient( circle at 35% 30%, #fff6c8, #ffb01a 60% )' },
 	{ id: 'teal', name: 'Teal', css: '#10d6bc' },
 	{ id: 'ice', name: 'Ice', css: 'radial-gradient( circle at 35% 30%, #ffffff, #8ee6ff 65% )' },

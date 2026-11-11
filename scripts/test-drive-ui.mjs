@@ -1620,9 +1620,11 @@ describe( 'World Drive boost and driving effects', () => {
 		}
 
 		// These each throw fewer on a phone (a few of the first styles' strikes and hoops are the same
-		// there); the galaxy's bright core is left out for a visitor asking for less motion.
+		// there); for a visitor asking for less motion, the galaxy's bright core, the comet's flare, the
+		// flashes at the ends of lightning's forks and in the fireworks' starburst are left out, and
+		// the neon laser's starburst has half as many beams.
 		for ( const style of [ 'notes', 'petals', 'afterburner', 'frost', 'galaxy', 'dragon', 'butterflies', 'spooky', 'laser', 'slime' ] ) assert.ok( result[ style ].phone.own < result[ style ].desktop.own, style );
-		assert.ok( result.galaxy.calm.own < result.galaxy.desktop.own );
+		for ( const style of [ 'galaxy', 'comet', 'lightning', 'fireworks', 'laser' ] ) assert.ok( result[ style ].calm.own < result[ style ].desktop.own, `${ style }, calm: ${ JSON.stringify( result[ style ] ) }` );
 		assert.deepEqual( page.errors, [] );
 
 	} );

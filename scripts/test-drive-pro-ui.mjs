@@ -16,7 +16,8 @@
 // their underglow, fading off the ground, and their horn heard in its own sound; what a trail and the
 // booster cost a frame; every boost style drawn at 150 km/h (a picture of each), keeping to its budget
 // and making nothing new in a minute of boosting, and what each costs a frame; every flame colour
-// drawn in its own colours and every trail drawn behind the kart; and the Garage and the badges on a
+// drawn in its own colours and every trail drawn behind the kart, and the ribbons drawn out standing
+// still as on the Garage's turntable; and the Garage and the badges on a
 // phone (375 px across, its row of groups all on screen). And World Drive's cars (src/drive-app/cars.js): listed, credited, small and their real
 // size, with wheels that steer, each facing the way it drives; the muscle car free, the levels'
 // cars saying their level and the rest locked; each driving, drifting, thrown up and landing, going
@@ -1431,6 +1432,66 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 
 		// Each trail draws a good deal more than the flame alone.
 		for ( const [ id, more ] of Object.entries( result.trails ) ) assert.ok( more > 300, `the ${ id } trail didn't show: ${ more } pixels more than the flame alone` );
+		assert.deepEqual( page.errors, [] );
+
+	} );
+
+	test( 'a ribbon trail standing still, as on the Garage\'s turntable, is drawn out behind the ride as if it drove on, and moving it\'s as it was', async () => {
+
+		const result = await page.evaluate( async () => {
+
+			const { createDriveFx } = await import( '/src/drive-fx.js' );
+			const { driver: d } = window.drive;
+			const world = d.models.group.parent;
+			const Vector3 = d.entry.pivot.position.constructor;
+			// A ride 2 m long that never moves, boosting for three quarters of a second: standing
+			// still, or said to be going at 10 m/s (as the pivot isn't moved, what's laid stays in one
+			// spot then, as it always has).
+			const pivot = new d.entry.pivot.constructor();
+			world.add( pivot );
+			pivot.updateMatrixWorld( true );
+			const size = { width: 1.2, height: 1, length: 2, rear: 1, scale: 1 };
+			const wheels = [ new Vector3( - 0.5, 0.05, 0.6 ), new Vector3( 0.5, 0.05, 0.6 ) ];
+			const run = ( kind, velocity ) => {
+
+				const fx = createDriveFx( world, { boost: 'classic', flame: 'orange', trail: { kind, colour: 0xffffff } } );
+				const root = world.children.at( - 1 );
+				for ( let i = 0; i < 45; i ++ ) fx.update( { pivot, size, wheels, velocity, flame: 1, trail: 1, drifting: false, level: 0, grounded: true, dt: 1 / 60 } );
+				let ribbon = null;
+				root.traverse( o => ribbon ??= o.geometry?.attributes.color?.itemSize === 4 ? o : null );
+				// How far back what's drawn reaches, along the ride (its +Z).
+				const { index, attributes: { position } } = ribbon.geometry;
+				const at = new Vector3();
+				let near = Infinity;
+				let far = - Infinity;
+				for ( let i = 0; i < ribbon.geometry.drawRange.count; i ++ ) {
+
+					const { z } = pivot.worldToLocal( at.fromBufferAttribute( position, index.getX( i ) ) );
+					near = Math.min( near, z );
+					far = Math.max( far, z );
+
+				}
+
+				fx.dispose();
+				return Math.round( ( far - near ) * 100 ) / 100;
+
+			};
+			const out = {};
+			for ( const kind of [ 'ribbon', 'neon' ] ) out[ kind ] = { still: run( kind, new Vector3() ), moving: run( kind, new Vector3( 0, 0, - 10 ) ) };
+			world.remove( pivot );
+			return out;
+
+		} );
+		console.log( 'ribbons standing still and moving (m):', JSON.stringify( result ) );
+		for ( const [ kind, { still, moving } ] of Object.entries( result ) ) {
+
+			// Standing still, drawn out more than its length behind it (at RIBBON_SHOW of its length a
+			// second, 3.75 m); moving, each point stays where it was laid, here all in one spot.
+			assert.ok( still > 3, `the ${ kind } standing still reaches ${ still } m` );
+			assert.ok( moving < 0.05, `the ${ kind } moving reaches ${ moving } m` );
+
+		}
+
 		assert.deepEqual( page.errors, [] );
 
 	} );
