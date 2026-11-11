@@ -61,7 +61,7 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 
 	const dialog = build();
 	const canvas = dialog.querySelector( 'canvas' );
-	let vehicle = vehicles[ 0 ];
+	let vehicle = panel.vehicle;
 	let look = savedLook( vehicle );
 	let preview = null;
 
@@ -326,7 +326,7 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 			mark();
 
 		}, effects );
-		show( which ?? vehicles[ 0 ] );
+		show( which ?? panel.vehicle );
 		preview.start();
 
 	}

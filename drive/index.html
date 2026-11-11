@@ -111,6 +111,11 @@
 					<h1 class="logo">World <b>Drive</b></h1>
 					<p class="tagline">Pick anywhere on Earth. Drop in. Drive.</p>
 				</header>
+				<!-- The Earth, from Google's 3D map, or the Moon (moon.js). -->
+				<div class="worlds" role="radiogroup" aria-label="Where to drive">
+					<button type="button" role="radio" data-world="earth" aria-checked="true"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M2 10h16M10 2c3 3 3 13 0 16M10 2c-3 3-3 13 0 16" fill="none" stroke="currentColor" stroke-width="1.5"/></svg> Earth</button>
+					<button type="button" role="radio" data-world="moon" aria-checked="false"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M13.5 3.2A7.5 7.5 0 1 0 16.8 14 6 6 0 0 1 13.5 3.2z" fill="currentColor"/></svg> Moon</button>
+				</div>
 				<form class="search" role="search">
 					<input type="search" name="q" placeholder="A place, an address, or lat, lon" autocomplete="off" enterkeyhint="search" maxlength="120" aria-label="Search for a place" />
 					<button type="submit">Go</button>
@@ -145,9 +150,10 @@
 						<li><b>Stunts.</b> Hit a wall and you bounce off it into the air: spin, flip and roll, land on your wheels to score, and chain tricks into combos.</li>
 						<li><b>Boost and drift.</b> The booster takes you into overdrive, glowing pads on the road fill it up, and a drift pays out a mini-turbo.</li>
 						<li><b>Fly.</b> Lift off over the rooftops and glide back down.</li>
+						<li><b>Drive on the Moon.</b> Switch the globe to the Moon and drive its craters, seas and the Apollo landing sites, in low gravity, with the Earth in the sky.</li>
 						<li><b>Drive with others.</b> See who's driving nearby as ghost cars, or invite friends to a party with a link, wherever each of you is.</li>
 						<li><b>Levels and the leaderboard.</b> Driving earns XP for 50 levels of cars, paint, boost trails and titles, and your best runs go on the leaderboard.</li>
-						<li><b>Your ride.</b> A go-kart, a pickup or a muscle car to start, and six more cars as you level up, from a golf cart and a tuk-tuk to a formula racer, all painted in the Garage; the optional Supporter Pass adds more.</li>
+						<li><b>Your ride.</b> A pickup, a go-kart or a muscle car to start, and six more cars as you level up, from a golf cart and a tuk-tuk to a formula racer, all painted in the Garage; the optional Supporter Pass adds more.</li>
 					</ul>
 					<h3>How to play</h3>
 					<p><kbd>W</kbd> <kbd>S</kbd> gas and brake, <kbd>A</kbd> <kbd>D</kbd> steer, <kbd>Space</kbd> drift, <kbd>Shift</kbd> boost, <kbd>F</kbd> fly, <kbd>R</kbd> back on the road and <kbd>M</kbd> back to the globe. On a phone or a tablet, buttons on the screen.</p>
@@ -279,10 +285,12 @@
 			<img src="/google-maps-logo.svg" alt="Google Maps" />
 			<span class="credits"></span>
 		</div>
+		<!-- On the Moon (moon.js), whose pictures and heights are NASA's. -->
+		<div id="moon-credit" hidden>Moon: NASA LRO (LROC, LOLA)</div>
 
 		<dialog id="about" aria-labelledby="about-title">
 			<h2 id="about-title">World Drive</h2>
-			<p>Pick a spot anywhere on Earth, drop in and drive the real world in 3D: city streets, mountain passes, bridges, wherever you like.</p>
+			<p>Pick a spot anywhere on Earth, drop in and drive the real world in 3D: city streets, mountain passes, bridges, wherever you like. Or switch to the Moon and drive that.</p>
 			<p>The 3D world is Google's photorealistic map, streamed as you go. Every visit costs a little, so there's a limit on free drives each day, for everyone and for each visitor. A visit lasts as long as you keep the page open: fly off and drop in somewhere else as often as you like.</p>
 			<p>The leaderboard keeps the nickname you pick and your best scores, with where you set them and in what, and your XP and level, with the areas and start spots you've driven (until you pick a nickname, that's kept in this browser); nothing else about you.</p>
 			<p>While <b>Show me to drivers nearby</b> is on (it is unless you switch it off in the pause menu), or while you're in a party, the others driving there see your leaderboard nickname (or a guest name) with your level and title, your ride and where your car is in the game, including the spot you dropped in and its name. Nothing else about you, and never where you really are.</p>
@@ -290,6 +298,7 @@
 			<p>To see how the game is played, World Drive counts, for each day, things like how long people drive and in which rides, which start spots they drop in at, what they change in the Garage, which site they came from and how long the page took to load. Only totals, with nothing about who: no cookies, and nothing that tells one visitor from another.</p>
 			<p>Signing in with Google is only for the Supporter Pass. It keeps your Google account's name and email address, whether you have the pass, and which nickname is yours, so the pass and its ⭐ follow you to any browser. Payments are made with Stripe: World Drive never sees your card.</p>
 			<p>Map data &copy; Google and its data providers. Place search &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>.</p>
+			<p>The Moon: its pictures and heights are NASA's, from the Lunar Reconnaissance Orbiter's cameras (LROC) and laser altimeter (LOLA), as NASA's Scientific Visualization Studio's <a href="https://svs.gsfc.nasa.gov/4720/" target="_blank" rel="noopener">CGI Moon Kit</a> has them; the small craters and the rocks close by are made up. While you're on the Moon you drive on your own: nobody sees your car, and you don't see theirs.</p>
 			<h3>Vehicle models</h3>
 			<ul class="credits small"></ul>
 			<p class="small">World Drive is checked by Cloudflare Turnstile so the free drives go to people rather than robots.</p>

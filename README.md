@@ -16,7 +16,7 @@ Google's photorealistic 3D map, and you can drop your own detailed models on top
 - **Premium (work in progress, off until set up):** a Pro equipment pack bought once with Stripe.
 
 The same repository also holds a second app, **[World Drive](#world-drive-worlddriveapp)**: pick
-anywhere on Earth from a globe and drive it.
+anywhere on Earth from a globe and drive it, or the Moon.
 
 The step-by-step plan, with prompts you can paste to Claude, is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
@@ -691,8 +691,8 @@ testing with test cards and the known gaps are in [docs/premium.md](docs/premium
 ## World Drive (worlddrive.app)
 
 A second app in this repository, on its own address: pick anywhere on Earth from a globe of Google's
-3D tiles (search, a dozen start spots, recent places, or a tap on the globe), choose a go-kart,
-pickup or muscle car (more as your level climbs), press **Drive here** and drive the real world
+3D tiles (search, a dozen start spots, recent places, or a tap on the globe), start in the pickup
+or pick the go-kart or the muscle car (more as your level climbs), press **Drive here** and drive the real world
 arcade-style: drift (Space), boost (Shift), fly (F), and hit something to bounce off it into the
 air, where **A**/**D** spin, **W**/**S** flip and **Q**/**E** roll for tricks that score (times a
 combo multiplier) when you land on your wheels; a wipeout loses the combo and rolls you back onto
@@ -751,6 +751,18 @@ you pick one, which claims it. The Worker caps each report by the time since the
 (`worker/drive/progress.js`, sharing its rules with the page in `src/drive-app/levels.js`), on a
 rate limiter rather than a Durable Object (see [Levels](docs/world-drive.md#levels)).
 
+**The Moon**: **Moon** at the top of the globe's panel turns the globe to the Moon, made in the page
+rather than streamed (`src/drive-app/moon.js`): its shapes are NASA's (LRO's laser altimeter, every
+quarter degree, `drive/public/moon/height.bin`), its colours LRO's camera's mosaic
+(`drive/public/moon/colour.webp`; `npm run make-moon` makes both from NASA's CGI Moon Kit), and the
+craters smaller than a few kilometres are made up, the same on every visit, down to 3 m. Its
+ground is a quadtree of squares on a cube blown up into a sphere, a point every 1.3 m by the
+vehicle. It has a dozen start spots (the Apollo sites, Tycho, Copernicus, a pole, the far side) and
+its own search; you drive it in a sixth of the Earth's gravity (jumps as high, two and a half times
+as long, scored as on the Earth), under black sky with the Earth hanging in it, with no water, and on
+your own: driving with others is the Earth's. It needs no Google tiles, so `npm run dev:drive` has the
+real Moon without a key (see [The Moon](docs/world-drive.md#the-moon)).
+
 World Drive's fourteen cars are models from Sketchfab (CC BY, credited in its About box and ride
 picker): sports cars and supercars (a retro wedge, a formula racer, a hypercar, a cyber muscle car)
 and fun and odd rides (a golf cart, a tuk-tuk, an ice-cream van, a lawn tractor) among them, each
@@ -782,7 +794,7 @@ the owner's Google Cloud steps (a separate project and key, restricted to worldd
 Tiles API, a daily quota and budget alerts) are in [docs/world-drive.md](docs/world-drive.md).
 Tests: `npm run test:drive-worker`, `npm run test:drive-ui`, `npm run test:drive-pro-ui`,
 `npm run test:drive-seo`, `npm run test:drive-live`, `npm run test:drive-live-ui`,
-`npm run test:drive-levels` and `npm run test:drive-levels-ui`.
+`npm run test:drive-levels`, `npm run test:drive-levels-ui` and `npm run test:drive-moon-ui`.
 
 ## About the Sketchfab model
 
@@ -865,6 +877,7 @@ scripts/add-asset.mjs   imports a model from Sketchfab or Poly Haven into public
 public/library/     downloaded models, library.json catalog, thumbs/ and CREDITS.md
 scripts/add-drive-car.mjs, drive-car-thumbs.mjs   import a car for World Drive into drive/public/cars
                     (its own cars.json, thumbs/ and CREDITS.md; World Drive's build only)
+scripts/make-moon.mjs   World Drive's Moon (drive/public/moon/): NASA's heights and picture of it
 src/geo.js          lat/lon <-> local metres
 public/models/      put your .glb files here
 drive/index.html    World Drive's page; its code is src/drive-app/ (docs/world-drive.md)

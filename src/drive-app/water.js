@@ -88,6 +88,7 @@ export function createWater( ground ) {
 	// Each picture's copy (its pixels, or null where it couldn't be read), by texture.
 	const copies = new WeakMap();
 	let context = null;
+	let none = false;
 
 	function pixels( texture ) {
 
@@ -172,6 +173,7 @@ export function createWater( ground ) {
 	// what's uneven close by (not when this is the look past it).
 	function look( east, north, y, probing = true ) {
 
+		if ( none ) return DRY;
 		const hit = down( east, north, y + 2, 40 );
 		if ( ! hit ) return UNSURE;
 		// The open sea's own surface (sea.js), out where Google draws only the sea bed: water.
@@ -222,6 +224,19 @@ export function createWater( ground ) {
 	return {
 
 		look,
+
+		// A world with no water at all (World Drive's Moon, main.js): everywhere is surely dry. Its
+		// grey dust, flat and even on a mare's floor, would otherwise look like water to look().
+		get none() {
+
+			return none;
+
+		},
+		set none( on ) {
+
+			none = !! on;
+
+		},
 
 		// The height (m, in the scene) of the water's surface under ( east, north ), looked for down
 		// from just over y; null where there's no telling it's water.
