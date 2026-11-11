@@ -315,6 +315,22 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 		states.set( entry, s );
 		render();
 		loadSaved( s );
+		// The drawing's panel numbers, on the areas as the model has them.
+		ensureData( s ).then( () => {
+
+			if ( states.get( entry ) !== s ) return;
+			for ( const id of s.order ) {
+
+				const node = s.nodes.get( id );
+				const m = markupOf( s, id );
+				if ( ! m?.no || ! node || s.drawn.has( id ) || node.children.some( child => child.userData.number ) ) continue;
+				node.add( numberOf( s, m, s.planes.get( id ) ) );
+
+			}
+
+			render();
+
+		} ).catch( () => {} );
 		// Panels with photos say so on their numbers.
 		photos.load( s.model ).then( async any => {
 
@@ -556,6 +572,8 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 
 			if ( ( m.no ?? '' ) === value ) return;
 			if ( value ) edit.no = value;
+			// The drawing's number taken off: kept as none, rather than the drawing's again.
+			else if ( s.base.get( id )?.no ) edit.no = '';
 			else delete edit.no;
 
 		} else if ( field === 'date' ) {

@@ -400,7 +400,7 @@ await io.write( opts.out, doc );
 await writeFile( DATA, JSON.stringify( {
 	origin: ORIGIN,
 	layers: Object.fromEntries( Object.entries( cutLayers ).map( ( [ key, { positions, index } ] ) => [ key, { name: STRUCTURE[ key ].name, positions: Array.from( positions ), index: Array.from( index ) } ] ) ),
-	markups: markups.map( ( { id, n, pts, area, face, zone, grid, f, src } ) => ( { id, n, pts, area, face, zone, grid, f, src } ) ),
+	markups: markups.map( ( { id, no, n, pts, area, face, zone, grid, f, src } ) => ( { id, ...( no ? { no } : {} ), n, pts, area, face, zone, grid, f, src } ) ),
 } ) + '\n' );
 const size = ( await stat( opts.out ) ).size;
 console.log( `Wrote ${ opts.out }: ${ markups.length } repair areas (${ built.areas.filter( a => a.plane ).length } chipped, cut out of ${ holes } triangles), ${ total.toFixed( 2 ) } m², ${ ( size / 1024 ).toFixed( 0 ) } KB` );

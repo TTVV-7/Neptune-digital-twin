@@ -188,6 +188,34 @@ test( 'an area follows its face where the structure was moved, and onto the side
 
 } );
 
+test( 'the 10 November progress drawing: its dates, and the curb walls\' panel numbers CW0001 to CW0046 on the areas they point at', () => {
+
+	const days = new Set( data.markups.map( m => m.f.chipped ) );
+	for ( const day of [ '2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05/08', '2026-11-09', '2026-11-10' ] ) assert.ok( days.has( day ), day );
+	assert.equal( data.markups.filter( m => m.f.chipped === '2026-11-09' ).length, 13 );
+	assert.equal( data.markups.filter( m => m.f.chipped === '2026-11-10' ).length, 2 );
+	// Each number once, on a pony wall at grade: 1 to 20 along the east wall from the north end,
+	// 21 to 46 along the west wall from the pit.
+	const numbered = data.markups.filter( m => m.no );
+	assert.deepEqual( numbered.map( m => m.no ).sort(), Array.from( { length: 46 }, ( _, i ) => `CW${ String( i + 1 ).padStart( 4, '0' ) }` ) );
+	const along = ( face, from, to ) => {
+
+		const list = numbered.filter( m => m.face === face ).sort( ( a, b ) => a.no.localeCompare( b.no ) );
+		assert.equal( list[ 0 ].no, from );
+		assert.equal( list.at( - 1 ).no, to );
+		const x = m => m.pts.reduce( ( s, p ) => s + p[ 0 ] / m.pts.length, 0 );
+		// The labels take turns above and below the wall, so neighbours can be a little out of order.
+		for ( let i = 1; i < list.length; i ++ ) assert.ok( ( x( list[ i ] ) - x( list[ i - 1 ] ) ) * ( from === 'CW0001' ? - 1 : 1 ) > - 2, `${ list[ i ].no } after ${ list[ i - 1 ].no }` );
+		return list.map( x );
+
+	};
+	const east = along( 'east pony wall at grade (AA side)', 'CW0001', 'CW0020' );
+	const west = along( 'west pony wall at grade (AJ side)', 'CW0021', 'CW0046' );
+	assert.ok( east[ 0 ] > 55 && east.at( - 1 ) < 20, `east: ${ east[ 0 ] } to ${ east.at( - 1 ) }` );
+	assert.ok( west[ 0 ] < 12 && west.at( - 1 ) > 58, `west: ${ west[ 0 ] } to ${ west.at( - 1 ) }` );
+
+} );
+
 test( 'epoxy coated: only the bars are green, in the recess as sandblasting left it', () => {
 
 	assert.deepEqual( LOOKS[ EPOXY ].concrete, LOOKS[ SANDBLASTED ].concrete );
@@ -227,7 +255,8 @@ test( 'looking back: an area is at the stage it had reached by the end of a day,
 	const by = day => data.markups.filter( m => stageAt( m, day ) ).length;
 	assert.equal( by( '2026-11-01' ), 0 );
 	assert.ok( by( '2026-11-02' ) > 0 && by( '2026-11-02' ) < by( '2026-11-04' ) );
-	assert.equal( by( '2026-11-08' ), data.markups.length );
+	assert.equal( by( '2026-11-10' ), data.markups.length );
+	assert.ok( by( '2026-11-08' ) < by( '2026-11-10' ) );
 
 } );
 
