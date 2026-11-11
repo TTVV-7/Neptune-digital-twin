@@ -77,7 +77,7 @@ function build() {
 			<p class="lead">World Drive streams the real 3D world, and every drive costs us a little. The pass is one payment of <b>${ PRICE }</b> that helps keep it running, and comes with:</p>
 			<ul class="perks">
 				<li class="rides"><b>${ count( PASS_CARS.length + PRO_RIDES.length ) } more rides</b><span>${ count( PASS_CARS.length ) } cars and ${ count( PRO_RIDES.length ).toLowerCase() } built rides; levels bring ${ count( LEVEL_CARS.length ).toLowerCase() } too.</span><div class="ride-icons"></div></li>
-				<li><b>The whole Garage, now</b><span>Every look at once: all 12 colours, matte and metallic paint, stripes, a number, flames or checker, rim colours, nine more boost styles (lightning, fireworks, a comet...), flame colours and three trails. Levels unlock some of them as you drive; the pass doesn't wait.</span></li>
+				<li><b>The whole Garage, now</b><span>Every look at once: 20 colours, finishes up to chrome, eight decals, rims, underglow, horns, nine more boost styles (lightning, fireworks, a comet...), flame colours and trails. Levels unlock some as you drive; the pass doesn't wait.</span></li>
 				<li><b>+50% XP</b><span>Every level sooner, with its titles and level-only colours.</span></li>
 				<li><b>A ⭐ on the leaderboard</b><span>By your name, for everyone to see.</span></li>
 				<li><b>30 drives a day</b><span>Instead of 8.</span></li>

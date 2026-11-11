@@ -1,7 +1,7 @@
 import './levels.css';
 import { BOOSTS } from './boosts.js';
 import { LEVEL_MAX, LEVEL_XP, REWARDS, TITLES, badgeOf, nextReward, rewardsAt } from './levels.js';
-import { DECALS, FINISHES, FLAMES, RIMS, SWATCHES, TRAILS } from './paint.js';
+import { DECALS, FINISHES, FLAMES, GLOWS, HORNS, RIMS, SWATCHES, TRAILS } from './paint.js';
 import { isPro, onProChange } from './pro.js';
 
 // What players see of levels (levels.js, progress.js): while driving, a slim XP bar with the
@@ -28,6 +28,9 @@ const ICONS = {
 	stripes: svg( '<rect x="3" y="3" width="18" height="18" rx="4" fill="#d81e2c"/><path d="M9 3v18M15 3v18" stroke="#f6f7f9" stroke-width="3"/>' ),
 	number: svg( '<circle cx="12" cy="12" r="9.5" fill="#f6f7f9" stroke="#111317" stroke-width="1.6"/><text x="12" y="16.6" text-anchor="middle" font-size="12.5" font-weight="900" font-style="italic" fill="#111317" font-family="system-ui, sans-serif">7</text>' ),
 	smoke: svg( '<circle cx="8" cy="15" r="5" fill="#c9d1db"/><circle cx="14" cy="10" r="6" fill="#e8edf2"/><circle cx="18" cy="16" r="3.6" fill="#aeb8c4"/>' ),
+	bolts: svg( '<rect x="3" y="3" width="18" height="18" rx="4" fill="#2440c9"/><path d="M13.5 4 7 13h4.2L9.5 20l7.5-9.5h-4.3z" fill="#ffe14a" stroke="#1e1004" stroke-width="0.8" stroke-linejoin="round"/>' ),
+	camo: svg( '<rect x="3" y="3" width="18" height="18" rx="4" fill="#69703f"/><path d="M4 8c3-2 5 1 8-1s5 2 8 0v4c-3 2-5-1-8 1s-5-1-8 1zM6 17c2-2 4 0 6-1s3 1 5 0v3H6z" fill="#3f4a26"/><circle cx="16" cy="6.5" r="2" fill="#a3935f"/><circle cx="8" cy="14" r="1.8" fill="#23241c"/>' ),
+	horn: svg( '<path d="M4 9.5h3.5L14 5v14l-6.5-4.5H4z" fill="#ffd23f"/><path d="M16.5 9a4 4 0 0 1 0 6M18.8 6.8a7.2 7.2 0 0 1 0 10.4" fill="none" stroke="#ffd23f" stroke-width="1.8" stroke-linecap="round"/>' ),
 };
 
 // progress: from createProgress (progress.js). player(): the leaderboard player or null. canName():
@@ -362,9 +365,9 @@ export function icon( reward ) {
 		holder.append( mark );
 
 	} else if ( reward.part === 'boost' ) holder.innerHTML = BOOSTS.find( b => b.id === reward.id )?.icon ?? '';
-	else if ( reward.part === 'colour' || reward.part === 'rim' || reward.part === 'flame' ) {
+	else if ( reward.part === 'colour' || reward.part === 'rim' || reward.part === 'flame' || reward.part === 'glow' ) {
 
-		const list = { colour: SWATCHES, rim: RIMS, flame: FLAMES }[ reward.part ];
+		const list = { colour: SWATCHES, rim: RIMS, flame: FLAMES, glow: GLOWS }[ reward.part ];
 		const choice = list.find( c => c.id === reward.id );
 		const swatch = element( 'span', `swatch ${ reward.part }` );
 		swatch.style.setProperty( '--swatch', choice?.css ?? `#${ ( choice?.hex ?? 0 ).toString( 16 ).padStart( 6, '0' ) }` );
@@ -373,6 +376,7 @@ export function icon( reward ) {
 	} else if ( reward.part === 'decal' ) holder.innerHTML = ICONS[ reward.id ] ?? ICONS.stripes;
 	else if ( reward.part === 'trail' ) holder.innerHTML = ICONS.smoke;
 	else if ( reward.part === 'finish' ) holder.innerHTML = ICONS.finish;
+	else if ( reward.part === 'horn' ) holder.innerHTML = ICONS.horn;
 	return holder;
 
 }
@@ -397,5 +401,5 @@ function element( tag, className = '', text = null ) {
 // Every look on the track is a choice the Garage has (scripts/test-drive-levels.mjs checks).
 export const TRACK_LOOKS = REWARDS.filter( reward => reward.kind === 'look' ).map( reward => ( {
 	...reward,
-	known: !! { colour: SWATCHES, finish: FINISHES, decal: DECALS, rim: RIMS, boost: BOOSTS, flame: FLAMES, trail: TRAILS }[ reward.part ]?.some( choice => choice.id === reward.id ),
+	known: !! { colour: SWATCHES, finish: FINISHES, decal: DECALS, rim: RIMS, glow: GLOWS, boost: BOOSTS, flame: FLAMES, trail: TRAILS, horn: HORNS }[ reward.part ]?.some( choice => choice.id === reward.id ),
 } ) );

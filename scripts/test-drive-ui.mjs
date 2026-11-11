@@ -41,6 +41,8 @@
 // ⭐ on the board, and "Coming soon" with no sign-in or no Worker answering, the free game
 // unchanged. Every request that isn't to the local server is blocked, so nothing reaches Google,
 // Cloudflare, Stripe or OpenStreetMap.
+// And the Garage's underglow under the kart as it drives: on the ground under it and round it, left
+// out of its size, staying through a bump, fading out off the ground and flying, back as it lands.
 //
 // The rides: the pickup the default until another is picked, and the go-kart if its model doesn't
 // load; the other tests drive the kart (see pickRide).
@@ -1542,6 +1544,88 @@ describe( 'World Drive boost and driving effects', () => {
 
 		} );
 		assert.deepEqual( { ...paused, again }, { fx: null, root: false, mode: 'paused', again: true } );
+		assert.deepEqual( page.errors, [] );
+
+	} );
+
+	test( 'the underglow: on the ground under the kart and round it, left out of its size; through a bump it stays, off the ground and flying it fades out, and it\'s back as it lands', async () => {
+
+		const result = await page.evaluate( async () => {
+
+			const { applyLook, lookFor } = await import( '/src/drive-app/paint.js' );
+			const { liftGlow, setUnderglow } = await import( '/src/drive-app/underglow.js' );
+			const { FLAGS } = await import( '/src/drive-app/live-protocol.js' );
+			const { driver: d, entry } = window.drive;
+			const kart = { id: 'go-kart', colour: 'blaze' };
+			// Frames drawn (and the glow eased, as main.js does each) until `done`, for at most `seconds`
+			// (the software renderer's frames come slowly).
+			const until = async ( done, seconds ) => {
+
+				const end = performance.now() + seconds * 1000;
+				while ( ! done() && performance.now() < end ) await new Promise( requestAnimationFrame );
+
+			};
+			const round = v => Math.round( v * 100 ) / 100;
+			const out = {};
+			// Put on, it's left out of the kart's box (as drive.js and the others measure it).
+			const Box3 = entry.footprint.constructor;
+			const plain = new Box3().setFromObject( entry.pivot );
+			applyLook( entry.pivot, { ...lookFor( kart ), glow: 'ice' }, kart );
+			const glow = entry.pivot.userData.glow;
+			out.same = new Box3().setFromObject( entry.pivot ).equals( plain );
+			out.drawn = { parent: glow.parent === entry.pivot, additive: glow.material.blending === 2, depthWrite: glow.material.depthWrite, picture: !! glow.material.map };
+			// Its points: the kart's footprint and as far again all round, just over the ground (measured
+			// unturned, as drive.js measures the kart).
+			const turn = entry.pivot.quaternion.clone();
+			entry.pivot.quaternion.identity();
+			entry.pivot.updateMatrixWorld( true );
+			const own = new Box3().setFromObject( entry.pivot );
+			const spread = new Box3().setFromBufferAttribute( glow.geometry.attributes.position ).applyMatrix4( glow.matrixWorld );
+			entry.pivot.quaternion.copy( turn );
+			entry.pivot.updateMatrixWorld( true );
+			out.spread = [ own.min.x - spread.min.x, spread.max.x - own.max.x, own.min.z - spread.min.z, spread.max.z - own.max.z ].map( round );
+			out.over = round( spread.min.y - own.min.y );
+			await until( () => false, 0.5 );
+			out.driving = { visible: glow.visible, lift: round( glow.userData.lift ) };
+			// Flying, 40 m up (gliding down at 3 m/s): gone in about a second.
+			const ground = { y: d.y };
+			Object.assign( d, { y: d.y + 40, vy: 0, flying: true, grounded: false, air: null } );
+			await until( () => ! glow.visible, 8 );
+			out.flying = { visible: glow.visible, lift: round( glow.userData.lift ), flying: d.flying };
+			Object.assign( d, { y: ground.y, vy: 0, flying: false, grounded: true, air: null } );
+			await until( () => glow.userData.lift >= 0.995, 5 );
+			out.landed = { visible: glow.visible, lift: round( glow.userData.lift ) };
+
+			// The same by what a car's flags say (as a ghost's are), on one of its own: a bump (0.2 s off the
+			// ground) leaves it be; a jump fades it out; down again it's back; sinking in water, gone.
+			const other = new entry.pivot.constructor();
+			other.add( entry.pivot.children[ 0 ].clone() );
+			setUnderglow( other, 0xff2bc4 );
+			const lift = ( flags, seconds ) => {
+
+				for ( let t = 0; t < seconds - 1e-6; t += 0.05 ) liftGlow( other, flags, 0.05 );
+				return round( other.userData.glow.userData.lift );
+
+			};
+			out.flags = [ lift( FLAGS.air, 0.2 ), lift( FLAGS.air, 0.4 ), lift( FLAGS.air, 0.6 ), lift( FLAGS.grounded, 0.8 ), lift( FLAGS.splash, 1 ), lift( FLAGS.paused | FLAGS.grounded, 0.8 ), lift( FLAGS.flying, 1.2 ) ];
+			out.hidden = ! other.userData.glow.visible;
+			// None takes it away.
+			applyLook( entry.pivot, lookFor( kart ), kart );
+			out.none = entry.pivot.userData.glow ?? null;
+			return out;
+
+		} );
+		assert.equal( result.same, true );
+		assert.deepEqual( result.drawn, { parent: true, additive: true, depthWrite: false, picture: true } );
+		assert.ok( result.spread.every( side => side >= 0.55 && side <= 0.7 ), JSON.stringify( result ) );
+		assert.ok( result.over > 0.03 && result.over < 0.08, JSON.stringify( result ) );
+		assert.deepEqual( result.driving, { visible: true, lift: 1 } );
+		assert.deepEqual( result.flying, { visible: false, lift: 0, flying: true } );
+		assert.deepEqual( result.landed, { visible: true, lift: 1 } );
+		// 0.2 s up: all of it; 0.6 s: fading; 1.2 s: gone; down: back; in water: gone; parked: back.
+		const [ bump, fading, gone, back, water, parked, flown ] = result.flags;
+		assert.ok( bump === 1 && fading > 0 && fading < 1 && gone === 0 && back > 0.95 && water === 0 && parked > 0.95 && flown === 0 && result.hidden, JSON.stringify( result.flags ) );
+		assert.equal( result.none, null );
 		assert.deepEqual( page.errors, [] );
 
 	} );

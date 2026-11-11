@@ -289,7 +289,7 @@
 				<div class="card"><h2>Play time by ride</h2>${ bars( renamed( 'play' ), hours, 12 ) }</div>
 				<div class="card"><h2>Rides dropped in with</h2>${ bars( renamed( 'ride' ), num, 12 ) }</div>
 				<div class="card"><h2>Where they drop in</h2>${ bars( new Map( [ ...keys( 'dropin' ) ].map( ( [ k, v ] ) => [ k === 'other' ? 'Elsewhere (search or pin)' : k === 'moon' ? 'The Moon' : pretty( k ), v ] ) ), num, 12 ) }</div>
-				<div class="card"><h2>Garage changes by part <span class="muted">(${ num( garageOpens ) } opens)</span></h2>${ bars( renamed( 'garage_edit' ), num, 8 ) }</div>
+				<div class="card"><h2>Garage changes by part <span class="muted">(${ num( garageOpens ) } opens)</span></h2>${ bars( renamed( 'garage_edit' ), num, 10 ) }</div>
 				<div class="card"><h2>Load time</h2>${ bars( new Map( LOAD_ORDER.map( k => [ k, total( 'load_time', k ) ] ) ), num, 5, false ) }</div>
 				<div class="card wide" id="any">
 					<h2>Any count by day</h2>

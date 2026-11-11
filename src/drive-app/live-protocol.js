@@ -275,8 +275,10 @@ export function checkVehicle( id ) {
 }
 
 // The parts of a look (paint.js), each an id; number 0 to 99. Ids the page doesn't know are its
-// defaults there (paint.js), so the room only checks their shape.
-export const LOOK_PARTS = [ 'colour', 'finish', 'decal', 'rim', 'boost', 'flame', 'trail', 'smoke' ];
+// defaults there (paint.js), so the room only checks their shape. The underglow and the horn came
+// later: a page from before them leaves them out of the look it sends, and one that has them ignores
+// a part it doesn't know (paint.js's cleanLook), so they mix.
+export const LOOK_PARTS = [ 'colour', 'finish', 'decal', 'rim', 'glow', 'boost', 'flame', 'trail', 'smoke', 'horn' ];
 const LOOK_ID = /^[a-z0-9-]{1,24}$/;
 
 export function checkLook( look ) {

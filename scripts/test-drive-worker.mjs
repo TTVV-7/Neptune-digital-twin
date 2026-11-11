@@ -21,7 +21,9 @@
 // each metric's keys checked and held to what a post may add, MAX_COUNTS a post, only with a visit's
 // token, and the admin page's answer (ADMIN_EMAILS only): the counts a day with what the
 // leaderboard's and the pass's tables say of each day (refunds left out), the as many days before
-// added up, the totals now, and rows older than two years gone.
+// added up, the totals now, and rows older than two years gone. And the look a car travels with to
+// the others in its room (live-protocol.js's checkLook, which the rooms use): every part a page
+// sends, the underglow and the horn too, kept, anything else left out, a bad one turned away.
 // TEST_DRIVE_WORKER_PORT=8796 moves the five wrangler servers (that port and the next four).
 
 import assert from 'node:assert/strict';
@@ -39,7 +41,7 @@ import { addressOf } from '../worker/drive/settings.js';
 import { purchaseFor, purchaseSettings } from '../worker/drive/supporter.js';
 import { VISIT_HOURS, makeVisit } from '../worker/drive/visits.js';
 import { DEVICES, FUNNEL, MAX_COUNTS, METRICS, PROBLEMS, SEARCHES, checkCounts, deviceOf, dropinBucket, droveSteps, loadBucket, referrerOf } from '../src/drive-app/stats-protocol.js';
-import { LOOK_PARTS } from '../src/drive-app/live-protocol.js';
+import { LOOK_PARTS, checkLook } from '../src/drive-app/live-protocol.js';
 import { SPOTS } from '../src/drive-app/places.js';
 
 const PORT = Number( process.env.TEST_DRIVE_WORKER_PORT ) || 8796;
@@ -1573,7 +1575,7 @@ describe( 'World Drive Supporter Pass', () => {
 		const token = visited.json.visit;
 		const post = ( counts, { visit = token, time = STATS_DAY + MINUTE, ...rest } = {} ) => send( 'POST', '/api/stats', { visit, counts }, { ip, time, ...rest } );
 
-		assert.equal( ( await post( { 'play:go-kart': 120.7, 'garage_edit:colour': 3, 'garage_open:all': 1, 'dropin:furka': 1, 'ride:go-kart': 1, 'load:google.com': 1, 'load_time:2-5 s': 1, 'load_ms:total': 3456 } ) ).status, 204 );
+		assert.equal( ( await post( { 'play:go-kart': 120.7, 'garage_edit:colour': 3, 'garage_edit:glow': 2, 'garage_edit:horn': 1, 'garage_open:all': 1, 'dropin:furka': 1, 'ride:go-kart': 1, 'load:google.com': 1, 'load_time:2-5 s': 1, 'load_ms:total': 3456 } ) ).status, 204 );
 		// What isn't a count it knows is left out: another metric, a ride or spot or part that isn't one, nothing, less than one;
 		// and no other funnel step, device, world, search, bucket, problem or button, nor anything typed.
 		assert.equal( ( await post( {
@@ -1593,7 +1595,7 @@ describe( 'World Drive Supporter Pass', () => {
 		const day = new Date( STATS_DAY ).toISOString().slice( 0, 10 );
 		assert.deepEqual( statsRows( day ), {
 			'visit:all': 1, 'visit_hour:12': 1,
-			'play:go-kart': 120 + 60 + 600, 'garage_edit:colour': 3, 'garage_open:all': 1, 'dropin:furka': 1, 'ride:go-kart': 1,
+			'play:go-kart': 120 + 60 + 600, 'garage_edit:colour': 3, 'garage_edit:glow': 2, 'garage_edit:horn': 1, 'garage_open:all': 1, 'dropin:furka': 1, 'ride:go-kart': 1,
 			'load:google.com': 1, 'load:direct': 1, 'load_time:2-5 s': 1, 'load_ms:total': 3456,
 			'funnel:globe': FUNNEL.length, 'funnel:pin': 1, 'funnel:dropin': 1, 'funnel:driving': 1, 'funnel:drove_1m': 1, 'device:phone': 1, 'device:computer': 1,
 			'world:moon': 2, 'play_world:earth': 90, 'play_world:moon': 30, 'search:earth': 2, 'search:moon': 1, 'search:coordinates': 1, 'search:nothing': 1,
@@ -2191,6 +2193,24 @@ describe( 'Play stats\' counts', () => {
 		const longest = names.sort( ( a, b ) => b.length - a.length ).slice( 0, MAX_COUNTS );
 		const body = JSON.stringify( { visit: `v1.${ 'x'.repeat( 22 ) }.1800000000.${ 'y'.repeat( 43 ) }`, counts: Object.fromEntries( longest.map( name => [ name, 120000 ] ) ) } );
 		assert.ok( new TextEncoder().encode( body ).length < 8192 * 0.8, `${ body.length } bytes` );
+
+	} );
+
+} );
+
+describe( 'The look that travels', () => {
+
+	test( 'every part a page sends is kept, the underglow and the horn too; anything else is left out; a bad one is turned away', () => {
+
+		const look = { colour: 'candy', finish: 'shift', decal: 'camo', rim: 'chrome', glow: 'rainbow', boost: 'comet', flame: 'blue', trail: 'sparkle', smoke: 'white', horn: 'fanfare', number: 42 };
+		assert.deepEqual( LOOK_PARTS, [ 'colour', 'finish', 'decal', 'rim', 'glow', 'boost', 'flame', 'trail', 'smoke', 'horn' ] );
+		assert.deepEqual( checkLook( look ), look );
+		// A page from before the underglow and the horn sends neither: what it sends is all there is.
+		assert.deepEqual( checkLook( { colour: 'red', number: 7 } ), { colour: 'red', number: 7 } );
+		// A part from a newer page is left out; an id this one doesn't know passes (the pages that
+		// don't know it draw their own default), as long as it's an id.
+		assert.deepEqual( checkLook( { glow: 'aurora', horn: 'kazoo', sparkles: 'yes', toString: 'x' } ), { glow: 'aurora', horn: 'kazoo' } );
+		for ( const bad of [ { glow: 7 }, { horn: 'Air Horn!' }, { glow: 'x'.repeat( 25 ) }, { horn: '' }, { glow: [ 'pink' ] }, null, [ 'glow' ], 'pink' ] ) assert.equal( checkLook( bad ), null, JSON.stringify( bad ) );
 
 	} );
 

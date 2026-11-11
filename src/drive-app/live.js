@@ -925,6 +925,12 @@ export function createLive( { earth, ellipsoid, visit, player = () => null, ride
 			return place;
 
 		},
+		// The ride and look the others see now ({ vehicle, look }): your horn is the one in it.
+		get ride() {
+
+			return ride;
+
+		},
 
 	};
 

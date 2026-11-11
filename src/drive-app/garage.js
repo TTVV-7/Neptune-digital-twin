@@ -19,15 +19,18 @@ import {
 import { createDriveFx } from '../drive-fx.js';
 import { frontToYaw } from '../library.js';
 import { BOOSTS } from './boosts.js';
-import { applyLook, DECALS, defaultLook, FINISHES, FLAMES, fxOf, isLocked, isPaintable, lookFor, RIMS, saveLook, savedLook, SMOKES, SWATCHES, TRAILS, unlockOf } from './paint.js';
+import { hornAudio, playHorn } from './horns.js';
+import { applyLook, DECALS, defaultLook, FINISHES, FLAMES, fxOf, GLOWS, HORNS, isLocked, isPaintable, lookFor, RIMS, saveLook, savedLook, SMOKES, SWATCHES, TRAILS, unlockOf } from './paint.js';
 import { openPass, proBadge } from './pass.js';
 import { onProChange } from './pro.js';
 import { getLevel, onLevelChange } from './progress.js';
 import { access, rideLocked, rideUnlock, unlockChip } from './vehicles.js';
 
-// The Garage: each ride's paint, decals, rims, boost style and trail (paint.js), chosen with the
-// ride turning on a turntable, and kept in this browser for each ride. Opened from a Garage button
-// by the ride picker on the globe's panel and in the pause menu, beside one for the Supporter Pass.
+// The Garage: each ride's paint, decals, rims, underglow, boost style, trail and horn (paint.js),
+// chosen with the ride turning on a turntable, and kept in this browser for each ride. Opened from a
+// Garage button by the ride picker on the globe's panel and in the pause menu, beside one for the
+// Supporter Pass. A row over the choices goes straight to each group of them (paint, rims, underglow,
+// boost, trail, horn), all in one list that scrolls; a swatch's heading says which is picked.
 // Each locked choice says what unlocks it: a level ("Lv 12", levels.js's track), the pass (pro.js:
 // a star, with one word on the pass above them all), or either ("Lv 12 · or Pass"). Choosing one
 // the pass unlocks opens the pass's sheet; one only a level unlocks says which. A ride that needs
@@ -46,9 +49,22 @@ const PARTS = [
 	{ part: 'finish', title: 'Finish', list: FINISHES, kind: 'word', paint: true },
 	{ part: 'decal', title: 'Decal', list: DECALS, kind: 'word', paint: true },
 	{ part: 'rim', title: 'Rims', list: RIMS, kind: 'swatch', paint: true },
+	{ part: 'glow', title: 'Underglow', list: GLOWS, kind: 'swatch', note: 'A neon glow on the ground under it' },
 	...boostParts(),
 	{ part: 'trail', title: 'Trail', list: TRAILS, kind: 'word', note: 'Behind you while boosting or flying' },
 	{ part: 'smoke', title: 'Smoke colour', list: SMOKES, kind: 'swatch' },
+	{ part: 'horn', title: 'Horn', list: HORNS, kind: 'word', note: 'What you honk with (H), for those driving with you' },
+];
+// Each part's choices in a row of `swatches`, `words` or `styles` (pro.css, levels.css).
+const PLURAL = { swatch: 'swatches', word: 'words', style: 'styles' };
+// The row over the choices: each group's name and its parts, the first of them shown scrolled to.
+const GROUPS = [
+	{ name: 'Paint', parts: [ 'colour', 'finish', 'decal' ] },
+	{ name: 'Rims', parts: [ 'rim' ] },
+	{ name: 'Underglow', parts: [ 'glow' ] },
+	{ name: 'Boost', parts: [ 'boost', 'flame' ] },
+	{ name: 'Trail', parts: [ 'trail', 'smoke' ] },
+	{ name: 'Horn', parts: [ 'horn' ] },
 ];
 
 // vehicles: from loadVehicles(). panel: the globe's panel (for the ride picked there). models: the
@@ -64,6 +80,8 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 	let vehicle = panel.vehicle;
 	let look = savedLook( vehicle );
 	let preview = null;
+	// How many horns have been played here, for the tests.
+	let hornsPlayed = 0;
 
 	// The buttons by both ride pickers.
 	const globePanel = document.querySelector( '#globe-ui .panel' );
@@ -107,7 +125,7 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 
 		const section = document.createElement( 'section' );
 		section.dataset.part = part;
-		section.innerHTML = `<h3>${ title }</h3>${ note ? `<p class="note">${ note }</p>` : '' }<div class="choices ${ kind }s"></div>`;
+		section.innerHTML = `<h3><span class="title">${ title }</span><span class="picked"></span></h3>${ note ? `<p class="note">${ note }</p>` : '' }<div class="choices ${ PLURAL[ kind ] }"></div>`;
 		section.querySelector( '.choices' ).replaceChildren( ...list.map( choice => {
 
 			const button = document.createElement( 'button' );
@@ -148,6 +166,53 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 		}
 
 		options.append( section );
+
+	}
+
+	// The row of groups: each scrolls the list to its first part shown, just under the row (the first
+	// group, to the top, with the word on the pass over it), and the one in view is lit.
+	const jump = dialog.querySelector( '.jump' );
+	jump.replaceChildren( ...GROUPS.map( group => {
+
+		const button = document.createElement( 'button' );
+		button.type = 'button';
+		button.dataset.group = group.name;
+		button.textContent = group.name;
+		button.addEventListener( 'click', () => {
+
+			const section = shownSection( group );
+			if ( ! section ) return;
+			const first = GROUPS.find( shownSection ) === group;
+			const top = first ? 0 : options.scrollTop + section.getBoundingClientRect().top - options.getBoundingClientRect().top - jump.offsetHeight - 4;
+			options.scrollTo( { top, behavior: 'smooth' } );
+
+		} );
+		return button;
+
+	} ) );
+	options.addEventListener( 'scroll', () => markJump(), { passive: true } );
+
+	function shownSection( group ) {
+
+		return group.parts.map( part => options.querySelector( `section[data-part="${ part }"]` ) ).find( section => ! section.hidden );
+
+	}
+
+	// The group whose section is under the row now (the last, scrolled to the bottom).
+	function markJump() {
+
+		const line = options.getBoundingClientRect().top + jump.offsetHeight + 12;
+		const end = options.scrollTop + options.clientHeight >= options.scrollHeight - 2;
+		let current = null;
+		for ( const group of GROUPS ) {
+
+			const section = shownSection( group );
+			if ( section && ( end || section.getBoundingClientRect().top <= line ) ) current = group.name;
+
+		}
+
+		current ??= GROUPS.find( shownSection )?.name;
+		for ( const button of jump.children ) button.setAttribute( 'aria-current', String( button.dataset.group === current ) );
 
 	}
 
@@ -195,6 +260,14 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 		// Smoke's colour only shows with the smoke trail, and the flame's with the classic flame.
 		if ( part === 'smoke' ) look.trail = 'smoke';
 		if ( part === 'flame' ) look.boost = 'classic';
+		// A horn can't be seen on the turntable: it's heard (each pick, the same one again too).
+		if ( part === 'horn' ) {
+
+			playHorn( hornAudio(), id );
+			hornsPlayed ++;
+
+		}
+
 		changed( part );
 		onEdit( part );
 
@@ -246,10 +319,13 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 		for ( const section of options.querySelectorAll( 'section' ) ) {
 
 			const { part } = section.dataset;
-			const { paint, title } = PARTS.find( p => p.part === part );
+			const { paint, title, kind } = PARTS.find( p => p.part === part );
 			section.hidden = paint && ! paintable || part === 'smoke' && wearing.trail !== 'smoke' || boostHidden( part, wearing );
 			// A hovercraft's "rims" are its duct and rudders.
-			section.querySelector( 'h3' ).textContent = part === 'rim' ? vehicle.rims ?? title : title;
+			section.querySelector( 'h3 .title' ).textContent = part === 'rim' ? vehicle.rims ?? title : title;
+			// A swatch has no word on it: the one picked is named by the heading.
+			const picked = kind === 'swatch' ? section.querySelector( `.choice[data-id="${ wearing[ part ] }"]` )?.dataset.name ?? '' : '';
+			section.querySelector( 'h3 .picked' ).textContent = picked;
 			for ( const button of section.querySelectorAll( '.choice' ) ) {
 
 				const on = button.dataset.id === wearing[ part ];
@@ -275,6 +351,11 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 		// Once, over the choices, rather than on each part: the stars say which. A locked ride has its
 		// own word on the pass, over the turntable.
 		passNote.hidden = ! anyLocked || rideShut;
+		// The groups with nothing shown (a truck's paint and rims) go from the row; a hovercraft's rims
+		// are its trim there too.
+		for ( const button of jump.children ) button.hidden = ! shownSection( GROUPS.find( group => group.name === button.dataset.group ) );
+		jump.querySelector( '[data-group="Rims"]' ).textContent = vehicle.rims ?? 'Rims';
+		markJump();
 
 		const number = options.querySelector( '.number' );
 		number.hidden = wearing.decal !== 'number';
@@ -368,6 +449,11 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 			return preview;
 
 		},
+		get hornsPlayed() {
+
+			return hornsPlayed;
+
+		},
 	};
 
 }
@@ -393,9 +479,10 @@ function build() {
 					<div class="locked-banner" hidden><span>⭐ A Supporter Pass ride</span><button type="button" class="link">What's in the pass</button></div>
 				</div>
 				<div class="options">
+					<nav class="jump" aria-label="Go to"></nav>
 					<p class="pass-note" hidden>Starred choices come with the pass; levels unlock some of them as you drive. <button type="button" class="link">What's in it</button></p>
 					<p class="level-note" hidden role="status"></p>
-					<p class="paint-note small" hidden>Its paint is part of the model, so it keeps it: pick its boost and trail.</p>
+					<p class="paint-note small" hidden>Its paint is part of the model, so it keeps it: pick its underglow, boost, trail and horn.</p>
 				</div>
 			</div>
 			<footer>

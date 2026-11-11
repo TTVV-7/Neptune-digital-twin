@@ -6,14 +6,16 @@ import { frontToYaw } from '../library.js';
 import { FLAGS, INTERP_MS, STALE_MS, TELEPORT } from './live-protocol.js';
 import { levelLine } from './levels.js';
 import { applyLook, cleanLook, fxOf } from './paint.js';
+import { liftGlow } from './underglow.js';
 
-// The others driving with you (live.js): each a ghost of their ride, in their look from the Garage,
-// drawn INTERP_MS behind the latest word of it so there's a position on either side of now to move
-// between, with their boost, trail, drift sparks and spray, their name over it, a 📣 when they honk
-// and their points when they land a trick. Ghosts are only to look at: they're in a group of their
-// own, which nothing casts rays at (drive.js's colliders and camera, the ground, water and boost
-// pad probes and the globe's picking all look at the tiles or the test pad), and none of their
-// meshes can be hit anyway, so everyone drives through everyone.
+// The others driving with you (live.js): each a ghost of their ride, in their look from the Garage
+// (its underglow too, fading off the ground as yours does), drawn INTERP_MS behind the latest word of
+// it so there's a position on either side of now to move between, with their boost, trail, drift
+// sparks and spray, their name over it, a 📣 when they honk and their points when they land a
+// trick. Ghosts are only to look at: they're in a group of their own, which nothing casts rays at
+// (drive.js's colliders and camera, the ground, water and boost pad probes and the globe's
+// picking all look at the tiles or the test pad), and none of their meshes can be hit anyway, so
+// everyone drives through everyone.
 //
 // Their models are loaded as the Garage loads the turntable's (its builders, and models.js's loader
 // with its decoders): a ride built in code is built for each, and a model from a file is read once
@@ -303,7 +305,10 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 	function keyOf( ghost ) {
 
 		const vehicle = vehicleOf( ghost );
-		return `${ vehicle.id } ${ JSON.stringify( cleanLook( vehicle, ghost.look ) ) }`;
+		const look = cleanLook( vehicle, ghost.look );
+		// (Their horn is heard, not drawn: a new one is no new model.)
+		delete look.horn;
+		return `${ vehicle.id } ${ JSON.stringify( look ) }`;
 
 	}
 
@@ -577,6 +582,7 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 		pivot.quaternion.copy( _earth ).multiply( ghost.q );
 		pivot.updateMatrixWorld( true );
 		_v.copy( ghost.v ).applyQuaternion( _earth );
+		liftGlow( pivot, ghost.flags, dt );
 		if ( ! animators.length || dt <= 0 ) return;
 		// Its wheels turn with its speed along the way it faces, and steer by how fast it's turning.
 		_forward.set( 0, 0, - 1 ).applyQuaternion( pivot.quaternion );

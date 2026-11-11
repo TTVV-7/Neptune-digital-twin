@@ -892,8 +892,9 @@ always was.
   rounds a bend rather than cutting its corners (in the tests, a kart driving off and turning was
   drawn within 5 to 9 cm of where it really was at the median, and 45 cm at most, as close as it
   was at 8 words a second with straight lines between). A word that's late, it carries on along the
-  bend it was taking. Their flame or boost style, trail, drift smoke and sparks, the bursts as
-  their booster lights and runs dry and as a drift charges and pays out
+  bend it was taking. Each wears its driver's look, its underglow too (fading off the ground as
+  yours does, by what its car sends). Their flame or boost style, trail, drift smoke and sparks,
+  the bursts as their booster lights and runs dry and as a drift charges and pays out
   ([below](#how-boosting-and-driving-look)), overdrive's boom and streaks, splashes and the
   hovercraft's spray show for the nearest 6 within
   300 m, and their wheels turn. A name tag hangs over each (hidden beyond 400 m), with a 📣 when they
@@ -904,8 +905,9 @@ always was.
   it hides it says it's parked, "paused" in the list); a driver back on the globe disappears, and so
   does a car with no word of it for 15 s. At most the
   12 nearest are drawn. A new ride or paint shows once it has held for a second (and no more than
-  once every 5 s for each car), swapped in when it's ready, so someone clicking through colours in
-  the Garage (or changing ride twenty times a second on purpose) costs the others one build; a model
+  once every 5 s for each car; a new horn alone is no new model), swapped in when it's ready, so
+  someone clicking through colours in the Garage (or changing ride twenty times a second on
+  purpose) costs the others one build; a model
   read from a file is kept 15 s after the last car in it goes, so changing back, or a reconnect,
   reads nothing again. The pickup's skinned body is copied with skeletons of its own, so it's drawn
   with its ghost.
@@ -931,10 +933,12 @@ always was.
   already, so no toast repeats it. A full party says "That party is full: 8 drivers at most." and
   you drive on with those nearby.
 - **The horn**: **H** while driving, or 📣 at the top left on a touch screen. A 📣 shows over your
-  car on your screen and everyone else's, and a soft beep plays for your own honk and for those
-  within 150 m (once you've clicked, tapped or pressed a key: browsers want that before sound).
-  **Horn sounds** in the pause menu turns the beep off (kept in this browser). One honk every 0.8 s
-  at most.
+  car on your screen and everyone else's, and your horn from the [Garage](#the-garage) (the beep
+  unless you've picked another) plays for your own honk, and each driver's own for theirs within
+  150 m, quieter farther off (once you've clicked, tapped or pressed a key: browsers want that
+  before sound). It's part of the look that travels, so a page hears each driver's horn as they
+  picked it; one it doesn't know (from a newer page) is the beep. **Horn sounds** in the pause menu
+  turns them off (kept in this browser). One honk every 0.8 s at most.
 - **When it stops.** A dropped connection comes back by itself, waiting 1, 2, 5, 10 and then 30 s
   between tries, and so does one that goes quiet without a word (a network that drops everything):
   the page sends its keepalive when it has heard nothing for 25 s too, and with no answer 10 s later
@@ -955,7 +959,10 @@ always was.
   page says). Without one you're "Guest" and four figures, the same for the whole visit (made from
   it), so **Hide** holds and a friend coming back is the same guest. Never your Google name or
   email.
-- **Your ride and its look** from the Garage.
+- **Your ride and its look** from the Garage (paint, decals, rims, underglow, boost, trail and horn).
+  The look's parts are `LOOK_PARTS` in `live-protocol.js`; the room keeps only those, each an id
+  (`checkLook`), so a page that doesn't know a part (one from before the underglow and the horn)
+  never gets it, and one that doesn't know a choice draws its own instead.
 - **Where you drive in the game**: your car's position, turn and speed in the game's world, what
   it's doing (boosting, drifting, flying, paused), and where you dropped in (the place's name as the
   game shows it, and its coordinates). Never where you really are: World Drive never asks the
@@ -1350,7 +1357,7 @@ dots, no **Driving now**, and with `LIVE` off on a page loaded then, not even an
 ## Levels
 
 Driving earns **XP**, and XP climbs **50 levels**, each with something to unlock. About half of the
-[Supporter Pass](#supporter-pass-content)'s Garage looks come with levels on the way to 40, and six
+[Supporter Pass](#supporter-pass-content)'s Garage looks come with levels on the way to 49, and six
 [cars](#world-drives-cars) from 5 to 40 (the pass still gives them all at once), and some rewards
 only levels give, supporters included: titles for your nametag, the level badge's frame and four
 colours. The pass's own rides (its first nine and its two showpiece cars, the hypercar and the
@@ -1420,54 +1427,59 @@ rewards.
 | 7 | 2,900 | Plasma boost ⭐ |
 | 8 | 3,800 | **Tuk-tuk** ⭐; Title: Drifter |
 | 9 | 4,850 | Racing stripes ⭐ |
-| 10 | 6,050 | Bronze badge |
+| 10 | 6,050 | Bronze badge; Neon blue underglow ⭐ |
 | 11 | 7,450 | Teal paint ⭐ |
 | 12 | 9,050 | Title: Street Racer |
 | 13 | 10,750 | Pixel boost ⭐ |
 | 14 | 12,650 | Blue flame ⭐ |
 | 15 | 14,850 | **Ice-cream van** ⭐; Title: Stunt Ace |
 | 16 | 17,250 | Smoke trail ⭐ |
-| 17 | 19,850 | Title: Speedster |
+| 17 | 19,850 | Title: Speedster; Sky blue paint ⭐ |
 | 18 | 22,750 | Electric blue paint ⭐ |
 | 19 | 25,850 | Title: Trickster |
-| 20 | 29,250 | Silver badge |
+| 20 | 29,250 | Silver badge; Lightning bolts ⭐ |
 | 21 | 32,950 | Red rims ⭐ |
 | 22 | 36,950 | **Lawn tractor** ⭐; Title: Explorer |
 | 23 | 41,250 | Glitter boost ⭐ |
-| 24 | 45,950 | Title: Globetrotter |
+| 24 | 45,950 | Title: Globetrotter; Satin black rims ⭐ |
 | 25 | 50,950 | Copper paint (levels only) |
 | 26 | 56,350 | Number decal ⭐ |
 | 27 | 62,150 | Title: Road Warrior |
 | 28 | 68,350 | Green flame ⭐ |
-| 29 | 74,950 | Title: Sky Pilot |
+| 29 | 74,950 | Title: Sky Pilot; Satin finish ⭐ |
 | 30 | 82,050 | **Retro wedge** ⭐; Gold badge |
 | 31 | 89,550 | Matte finish ⭐ |
-| 32 | 97,550 | Title: Daredevil |
+| 32 | 97,550 | Title: Daredevil; Air horn ⭐ |
 | 33 | 106,050 | Title: Trailblazer |
 | 34 | 115,050 | Violet paint ⭐ |
 | 35 | 124,650 | Mint paint (levels only) |
-| 36 | 134,750 | Title: Pathfinder |
+| 36 | 134,750 | Title: Pathfinder; Candy apple red paint ⭐ |
 | 37 | 145,450 | Blue rims ⭐ |
-| 38 | 156,750 | Title: Storm Chaser |
+| 38 | 156,750 | Title: Storm Chaser; Neon green underglow ⭐ |
 | 39 | 168,650 | Title: High Flyer |
 | 40 | 181,150 | **Formula racer** ⭐; Platinum badge; Purple flame ⭐ |
-| 41 | 194,350 | Title: Thrill Seeker |
-| 42 | 208,250 | Title: Wheel Wizard |
+| 41 | 194,350 | Title: Thrill Seeker; Camo ⭐ |
+| 42 | 208,250 | Title: Wheel Wizard; Chrome rims ⭐ |
 | 43 | 222,850 | Title: Night Owl |
-| 44 | 238,150 | Title: Road Captain |
+| 44 | 238,150 | Title: Road Captain; Gunmetal paint ⭐ |
 | 45 | 254,250 | Plum paint (levels only) |
-| 46 | 271,050 | Title: Cartographer |
+| 46 | 271,050 | Title: Cartographer; Pearl finish ⭐ |
 | 47 | 288,650 | Title: Supersonic |
-| 48 | 307,050 | Title: World Tourer |
-| 49 | 326,350 | Title: Icon |
+| 48 | 307,050 | Title: World Tourer; Fanfare horn ⭐ |
+| 49 | 326,350 | Title: Icon; Purple underglow ⭐ |
 | 50 | 346,450 | Title: Legend; Legend badge; Champion gold paint (levels only) |
 
-That's 19 of the pass's 38 Garage looks (5 of its 9 colours, matte, stripes and a number, 3 of its
-6 rim colours, 4 of its 9 boost styles, 3 of its 5 flame colours and the smoke trail; a colour
-unlocked is a smoke colour too). The showiest stay the pass's alone: jet black, forest green, royal
-blue and hot pink paint, metallic, flames and checker, gold, lime and pink rims, the lightning,
-comet, neon rings, fireworks and ink boosts, pink and rainbow flames, and the sparkle and rainbow
-ribbon trails. The four level-only colours are in `paint.js`'s `SWATCHES` with `levelOnly`.
+That's 33 of the pass's 72 Garage looks (8 of its 17 colours, 3 of its 6 finishes, 4 of its 8
+decals, 5 of its 10 rim colours, 3 of its 9 underglows, 4 of its 9 boost styles, 3 of its 5 flame
+colours, the smoke trail and 2 of its 5 horns; a colour unlocked is a smoke colour too). The Garage's
+later looks (the underglow, the horns, the paint, finishes, decals and rims added with them) went
+where the track had a title or a badge alone, one at each, from 10 to 49, so the track has a look
+to drive for to the end. The showiest stay the pass's alone: jet black, forest green, royal blue and
+hot pink paint, metallic, chrome and colour-shift, flames, checker, polka dots and two-tone, gold,
+lime, pink, bronze and neon green rims, the rainbow underglow, the lightning, comet, neon rings,
+fireworks and ink boosts, pink and rainbow flames, the sparkle and rainbow ribbon trails, and the
+bike horn, ahooga and laser. The four level-only colours are in `paint.js`'s `SWATCHES` with
+`levelOnly`.
 
 The cars come about as often as a regular comes back for more: the golf cart in a first session,
 the tuk-tuk within the first hour, then each a little further apart than the last (15, 22, 30,
@@ -1477,13 +1489,13 @@ first and the fast ones later. They're `ride` rewards in `REWARDS` (`rideLevel`,
 
 ### What the Supporter Pass gives
 
-Every Garage look at once (the 19 on the track and the 19 that are the pass's alone), the six cars
+Every Garage look at once (the 33 on the track and the 39 that are the pass's alone), the six cars
 on the track and its own eleven rides, **+50% XP**; and still a ⭐ and 30 drives a day
 ([below](#supporter-pass-buying-it)). Levels' own rewards (titles, badges, the level-only colours)
 come with levels for everyone, supporters too. The ×1.5 is the Worker's: it looks up the pass of the
 account the player is linked to, never anything the page says.
 
-A supporter has the track's 19 pass looks and its six cars already, so for them those levels bring
+A supporter has the track's 33 pass looks and its six cars already, so for them those levels bring
 nothing new:
 18 of their level-ups from 2 to 39 (2, 3, 5, 6, 7, 9, 11, 13, 14, 16, 18, 21, 23, 26, 28, 31, 34
 and 37). The page says so rather than "Unlocked": a level-up says "Already yours with the pass:
@@ -1667,8 +1679,9 @@ Removing a player removes their discoveries with them.
 climbs it (printing the play to levels 2, 5, 10, 30 and 50) and the track as written (every level
 from 2 to 50 gives something, level 2 within the first drive's bonuses, its six cars (each a car
 the leaderboard takes, spread out from level 5) and the pass's own rides never on it, a level's car
-locked until its level unless with the pass and the pass's own whatever the level, 19 of its 38
-looks on it by level 40 and the showiest not, every look a choice the Garage has, the level-only
+locked until its level unless with the pass and the pass's own whatever the level, 33 of its 72
+looks on it by level 49 and the showiest not, the Garage's later looks each where a title or a badge
+was alone, every look a choice the Garage has, the level-only
 colours never with the pass, the Garage's locks, a supporter's "Next"), reports'
 shapes and caps, and that progress.js asks no Durable Object; then the Worker under `wrangler dev`:
 a report's XP and its answer, every cap by the time since the last (a minute's worth, half a
@@ -1940,13 +1953,61 @@ turntable (drag to turn it; **▶ Boost** shows its boost and trail), and for ea
 
 | | Free | With the pass, or a [level](#the-unlock-track) | With the pass | With a level only |
 | --- | --- | --- | --- | --- |
-| Body colour | Blaze orange, racing red, ice white | Sunburst (2), lime (5), teal (11), electric blue (18), violet (34) | Jet black, forest green, royal blue, hot pink | Copper (25), mint (35), plum (45), champion gold (50) |
-| Finish | Gloss | Matte (31) | Metallic | |
-| Decal | None | Racing stripes (9), a number, 0 to 99 (26) | Flames, checker | |
-| Rims (a hovercraft's trim) | Silver, graphite | White (6), red (21), blue (37) | Gold, lime, pink | |
+| Body colour | Blaze orange, racing red, ice white | Sunburst (2), lime (5), teal (11), sky blue (17), electric blue (18), violet (34), candy apple red (36), gunmetal (44) | Jet black, forest green, royal blue, hot pink, sunset orange, sand, pearl white, navy, burgundy | Copper (25), mint (35), plum (45), champion gold (50) |
+| Finish | Gloss | Satin (29), matte (31), pearl (46) | Metallic, chrome, colour-shift | |
+| Decal | None | Racing stripes (9), lightning bolts (20), a number, 0 to 99 (26), camo (41) | Flames, checker, polka dots, two-tone | |
+| Rims (a hovercraft's trim) | Silver, graphite | White (6), red (21), satin black (24), blue (37), chrome (42) | Gold, lime, pink, bronze, neon green | |
+| Underglow | None | Neon blue (10), neon green (38), purple (49) | Ice blue, hot pink, red, amber, white, rainbow | |
 | Boost style | Classic flame, bubbles, confetti | Hearts (3), plasma (7), pixel (13), glitter (23) | Lightning, comet, neon rings, fireworks, ink | |
 | Flame colour (the classic flame's) | Orange | Blue (14), green (28), purple (40) | Pink, rainbow | |
 | Trail (boosting or flying) | None | Smoke (16; its colours as the body colours unlock) | Sparkle, rainbow ribbon (six bands side by side) | |
+| Horn | Beep | Air horn (32), fanfare (48) | Bike horn, ahooga, laser | |
+
+With so many choices, a row of the groups sits over them (**Paint**, **Rims**, **Underglow**,
+**Boost**, **Trail**, **Horn**; a hovercraft's **Trim**, and a truck's paint and rims left out),
+staying at the top as the choices scroll, each going straight to its own and the one in view lit.
+Everything stays in the one list, so nothing's behind a tab. A swatch has no word on it, so the
+colour picked is named at the end of its part's heading (BODY COLOUR ... Candy apple red). On a
+phone, at 375 px across, the six fit in one line; on a narrower one that line scrolls sideways by
+itself, never the page.
+
+**Finishes.** Satin is between matte and gloss; pearl a soft white sheen over a deep clear coat with
+a faint shimmer of colours (a thin film's iridescence); chrome a mirror tinted with the colour (on
+white, plain chrome); colour-shift dark metal in the colour under a thin film whose reflections turn
+through the colours as the ride turns, as oil's on water do, with a sheen of a hue a third of the way
+round the colour wheel at its edges. They're three.js's `MeshPhysicalMaterial` (iridescence and
+sheen), made once each and shared, like the others. **Rims** are shiny metal in their colour unless
+the choice says otherwise: chrome a mirror, satin black dull, neon green glowing a little of its own.
+**Decals**, drawn like the first ones: lightning bolts down the sides (the ⚡ sign lying on its side,
+white-hot to yellow, as flames are); camo (olive with khaki, dark green, brown and black blobs, the
+same every time) and polka dots (white, or dark on light paint) all over, through the side's box made
+taller and the top's (for camo, wider too), each picture made for its box's size so the blobs and dots
+come out round; two-tone, a second colour (charcoal, or silver under dark paint) from the middle of
+the doors down to the bottom of the bodywork, from nose to tail, with a pinstripe over it.
+
+**Underglow** (`src/drive-app/underglow.js`) is a neon glow on the ground under the ride and round
+it, on every ride: the kart, the built rides, the cars and the library's trucks (paint or not), on
+the Earth and the Moon, on the turntable and under the others' ghosts. It isn't a light, which would
+cost every car a pass over the whole scene: it's one flat mesh in the ride's own frame, 5 cm over the
+ground its wheels stand on, drawn additively (no depth written) with a soft picture that's brightest
+at the edge of the footprint and fades out past it, so it's one draw call whatever the ride. It's
+sized from the ride's own box as its look goes on (a skinned body's, the pickup's, as its bones place
+it), spreading 0.45 of the ride's width past it (0.6 to 1.4 m) on every side; the mesh is nine pieces,
+the picture's corners rounded and its middle stretched along the sides, so the spread is the same
+on a kart as on a bus. Its own box is left empty, so nothing that measures the ride (drive.js's size
+and chase camera, the ghosts', the turntable's) counts it. Off the ground it stays 0.3 s (a bump in
+the road doesn't flicker it), then fades out over 0.6 s, as the ground it lights falls away: off a
+jump, flying, or sinking in water; back on the ground it's lit again within a moment. Yours follows
+what you're doing (main.js, each frame), a ghost what its driver's car sends (its flags). The
+rainbow goes round the colours every four seconds. Back on the globe the ride, and its glow with
+it, isn't drawn.
+
+**The horn** you honk with (**H**) is part of the look too (`src/drive-app/horns.js`): each a short
+sound made with WebAudio as it's needed (oscillators, a filter and a gain), nothing to load, none
+longer than the 0.8 s between honks. The beep is as it always was; the air horn three low buzzing
+notes at once; the bike horn two rubber-bulb squeaks; the ahooga an old car's swooping buzz; the
+fanfare four notes up a chord; the laser two falling zaps. Picking one in the Garage plays it. Only
+those [driving with you](#driving-with-others) hear it: your honk in your horn, theirs in theirs.
 
 **Boost styles** (`src/drive-boosts.js`; the Garage's list, with a little picture for each, is
 `src/drive-app/boosts.js`) are what the booster leaves behind:
@@ -1986,12 +2047,14 @@ drawing them added 2 to 10 % to a frame for most, and up to a fifth for those th
 of the view (lightning 15 %, fireworks 22 %).
 
 Choices are kept for each ride in this browser (`world-drive.garage` in localStorage) and put on
-whenever it's driven; picked while paused they're on it as soon as it drives on. A browser that keeps
+whenever it's driven; picked while paused they're on it as soon as it drives on. A look saved before
+the underglow and the horn has none and the beep. A browser that keeps
 nothing (site data blocked) still wears them for the visit, and a damaged value there is simply
 replaced by the next choice. Decals are projected
 onto the bodywork through boxes each ride gives (its `userData.decals`). The trucks from the library,
 and the cars whose paint is a picture on the model (all but four), keep their own paint: only their
-flame and trail change, and the Garage says so ("Its paint is part of the model, so it keeps it").
+underglow, boost, trail and horn change, and the Garage says so ("Its paint is part of the model, so
+it keeps it").
 The muscle car's, the tuk-tuk's, the lawn tractor's and the cyber muscle car's paint is plain colour,
 so they take colours, finishes, rims and decals as the rides do (the free ones without the pass).
 A level's car, or the pass's, can be looked at and its look chosen before it's yours, as a pass
@@ -2011,12 +2074,21 @@ against each other, the hovercraft hovering with no wheels and riding over the t
 (spray behind it there only, no boost pads on it) where the coupe splashes, the monster truck over
 a car, the
 Garage's choices on the ride and kept across a reload (and still made with a damaged saved value,
-or none kept at all), the world not drawn behind the Garage, the frame time with trails, nothing
+or none kept at all), the free and locked choices of each part (the underglow and horns too) and
+the levels' new looks saying their level, the row of groups going to each, a horn played as it's
+picked, the underglow under the kart, a ride, two cars and the pickup (its footprint and the same
+margin all round, just over the ground, the ride's size as it was), the new finishes, rims and
+decals on the coupe and the kart, a ghost wearing its driver's underglow (fading off the ground, a
+new horn building no new model) and their horn heard in its own sound (one this page doesn't know
+the beep, yours in yours), the world not drawn behind the Garage, the frame time with trails, nothing
 turning in the air faster than the kart, each ride going supersonic, the boost styles in the Garage
 (three free, the rest opening the sheet), a look saved before the styles keeping its flame's colour,
 every style drawn at 150 km/h (with a picture of each), making nothing new in a minute of boosting
-and timed, and the Garage and the locked rides' badges (and the levels' cars' "Lv 8 · or Pass") on a
-phone. And the cars: each listed in `cars.json`, `cars.js` and `DRIVE_CARS` alike, one free, six
+and timed, and the Garage (375 px across, its row of groups all on screen, no sideways scrolling)
+and the locked rides' badges (and the levels' cars' "Lv 8 · or Pass") on a phone. `test-drive-ui.mjs`
+drives the kart with an underglow (on the ground under it and round it, left out of its size, staying
+through a bump, fading out off the ground and flying, back as it lands), and `test-drive-moon-ui.mjs`
+has it lying on the Moon's ground. And the cars: each listed in `cars.json`, `cars.js` and `DRIVE_CARS` alike, one free, six
 levels' and the rest the pass's, under 2 MB, CC BY or CC0 and in `CREDITS.md` (with what was
 painted over: the hypercar's number plate, there and in About), its real size (the
 small odd ones shorter, the ice-cream van taller with its cone), with four wheels (the tuk-tuk
@@ -2431,7 +2503,7 @@ share), a day, as `metric:key`:
 | `world` | `moon` | Each time the globe turns to the Moon |
 | `search` | `earth`, `moon`, `coordinates`, `nothing` | Searches made: of the map, of the Moon's places, coordinates typed; and, as well, each map or Moon search that found nothing. Never what was typed |
 | `problem` | `no_ground`, `ride_failed`, `moon_failed`, `map_failed`, `map_session_ended`, `drop_abandoned` | What went wrong: no ground at a drop-in (no 3D map there, or the Moon's ground not loading), a ride's model not loading (whether the go-kart was driven instead or not), the Moon not loading, Google's map not loading at all, Google refusing the visit's tiles (its map session over), and a drop-in left for the globe before it was driving. The two map ones once a visit; the others each time |
-| `garage_open`, `garage_edit` | `all`; a part (colour, finish, decal, rim, boost, flame, trail, smoke) | The Garage opened, and each change made in it |
+| `garage_open`, `garage_edit` | `all`; a part (colour, finish, decal, rim, glow, boost, flame, trail, smoke, horn) | The Garage opened, and each change made in it |
 | `party` | `made`, `joined` | Parties made (Invite friends) and joined (a party's link) |
 | `board`, `pass`, `level_up` | `open`, `named`; `open`, `buy`; `all` | The leaderboard opened and a nickname picked (a new player); the Supporter Pass's sheet opened (from anywhere) and its Buy followed to Stripe; a level reached |
 
@@ -2998,7 +3070,8 @@ src/drive-app/pass.js        the Supporter Pass sheet and its badge
 src/drive-app/supporter.js   buying it: Google sign-in, the Payment Link, unlocking, the pause menu's
                              account line
 src/drive-app/garage.js      the Garage: choices and the turntable; paint.js the looks and decals;
-                             boosts.js the boost styles it offers
+                             boosts.js the boost styles it offers; underglow.js the glow under a
+                             ride; horns.js the horns' sounds
 src/drive-app/pads.js        boost pads: where they go, driving over them, the pause menu's switch
 src/drive-app/screen-fx.js   what's done to the view: speed lines, overdrive's white edges, the pause
                              menu's Camera effects switch and asking for less motion
@@ -3032,7 +3105,7 @@ src/drive-app/live.js        the page's connection to its room: which room, send
                              the room says
 src/drive-app/ghosts.js      the others' cars, their name tags and effects
 src/drive-app/friends.js     the chip and list, Drive with friends, the party's banner and toasts,
-                             the horn
+                             the horn (each driver's, horns.js)
 src/drive-app/online.js      who's driving now on the globe: /api/online, the dots, Driving now
 src/drive-app/screens.js     start screen, notices, loading card, pause, keys, messages
 src/drive-app/test-globe.js  the Earth without Google's tiles, for working without a key

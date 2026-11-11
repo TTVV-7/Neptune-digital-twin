@@ -724,9 +724,10 @@ player's best stunt run today, this week and all time (a nickname, no sign-up) i
 posted with the visit's signed token and checked against what the game can score.
 
 **Driving with others**: everyone else driving the same area (about 11 km across) shows up live as a
-ghost car you pass straight through, with their nickname, ride and Garage paint; **Invite friends**
-makes a party link (`/?party=CODE`) that brings friends to you anywhere on Earth, and **H** honks.
-No chat; the others see your nickname (or a guest name), your ride and where your car is in the
+ghost car you pass straight through, with their nickname, ride and Garage look (underglow too);
+**Invite friends** makes a party link (`/?party=CODE`) that brings friends to you anywhere on Earth,
+and **H** honks (in the horn picked in the Garage, which the others hear as yours). No chat; the
+others see your nickname (or a guest name), your ride and where your car is in the
 game, including the spot you dropped in, and nothing else of you. On the globe, a glowing dot
 wherever people are driving in an area right now shows how many (and the panel's **Driving now** the
 busiest areas): tap one to fly there and **Drive here** into their room (or, for several drawn as
@@ -747,7 +748,7 @@ first drive in each area and at each start spot, minutes with others, and the da
 more for days in a row), climbing 50 levels: level 2 in the first few minutes, 50 a long goal. Levels
 unlock six new cars (a golf cart at level 5, a tuk-tuk at 8, an ice-cream van at 15, a lawn tractor
 at 22, a retro wedge at 30 and a formula racer at 40), about half the Supporter Pass's Garage looks
-on the way to 40, and titles for your nametag, a level badge whose frame changes every ten levels
+on the way to 49, and titles for your nametag, a level badge whose frame changes every ten levels
 and four colours that only levels give. While driving a slim XP bar shows under the place's name,
 with "+46 XP · 1.4 km" pop-ups and a burst at each level-up; the globe's panel has a profile card
 with the whole track. XP is kept with the
@@ -781,8 +782,9 @@ A **Supporter Pass** (one payment of CA$4.99 towards the running costs) unlocks 
 rides: the six cars levels bring, at once; seven cars of its own (a neon racer, a night cruiser, a
 dune buggy, a farm truck, a police cruiser and two showpieces, a hypercar and a cyber muscle car);
 and four built in code (a sports coupe, a monster truck, a city bus and a hovercraft), each handling
-its own way; every look in the Garage at once (paint, finishes, decals, rims, nine more boost styles,
-flame colours and trails, some of which levels unlock over time), +50% XP, a ⭐ on the leaderboard and
+its own way; every look in the Garage at once (paint, finishes from satin to chrome and colour-shift,
+decals, rims, a neon underglow in nine colours and a rainbow, horns, nine more boost styles, flame
+colours and trails, some of which levels unlock over time), +50% XP, a ⭐ on the leaderboard and
 30 drives a day. It's bought with a Stripe Payment Link after
 signing in with Google, so it's yours in any browser; Stripe's signed webhook records it. Buying
 stays off ("Coming soon") until `GOOGLE_CLIENT_ID` and the webhook's secret are set (see

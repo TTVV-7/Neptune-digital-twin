@@ -1,3 +1,4 @@
+import { hornAudio, playHorn } from './horns.js';
 import { FLAGS, cellOf } from './live-protocol.js';
 import { storage } from './places.js';
 import { hideKeys, toast } from './screens.js';
@@ -7,7 +8,8 @@ import { hideKeys, toast } from './screens.js';
 // each with "Go to" and "Hide"; "Drive with friends" on the globe's panel and in the pause menu
 // (inviting friends with a link, the party's members, leaving it, and the switches); the banner
 // on the globe while in a party; the toasts as people come, go and drop in somewhere; and the horn
-// (H, or its button on a touch screen), with a soft beep for yours and those near.
+// (H, or its button on a touch screen), heard for yours and those near, each in its driver's horn
+// from the Garage (horns.js), which travels with their look.
 
 const HORN_KEY = 'world-drive.horn';
 // Driving with others off for the rest of the day, its budget spent (worker/drive/live.js).
@@ -37,6 +39,7 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 	];
 	let audio = null;
 	let beeps = 0;
+	let lastHorn = null;
 	let lastMode = null;
 	let nearbyToast = - Infinity;
 	// Who the party's banner names (their pid, or null), and what it says.
@@ -52,20 +55,12 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 
 	}, true );
 
-	// Sound needs a click or a key first; the horn's beep is made as it's needed, nothing to load.
+	// Sound needs a click or a key first; the horns are made as they're needed, nothing to load.
 	const unlock = () => {
 
 		if ( audio ) return;
-		try {
-
-			audio = new AudioContext();
-
-		} catch {
-
-			return;
-
-		}
-
+		audio = hornAudio();
+		if ( ! audio ) return;
 		window.removeEventListener( 'pointerdown', unlock, true );
 		window.removeEventListener( 'keydown', unlock, true );
 
@@ -131,7 +126,7 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 	live.on( 'honk', ( { pid } ) => {
 
 		const distance = ghosts.distanceTo( pid );
-		if ( distance !== null && distance <= HEAR_RANGE ) beep( 1 - 0.7 * distance / HEAR_RANGE );
+		if ( distance !== null && distance <= HEAR_RANGE ) beep( 1 - 0.7 * distance / HEAR_RANGE, live.players.get( pid )?.look?.horn );
 
 	} );
 
@@ -405,34 +400,16 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 
 		if ( mode() !== 'driving' || live.status === 'off' || ! live.honk() ) return;
 		ghosts.honkSelf();
-		beep( 1 );
+		beep( 1, live.ride?.look?.horn );
 
 	}
 
-	// A soft two-note beep, made here: no file to load.
-	function beep( volume ) {
+	// A horn (horns.js: an id from a look, the beep for one this page doesn't know), unless horn
+	// sounds are off. Counted, for the tests, with the last one's id.
+	function beep( volume, horn ) {
 
 		if ( ! hornOn || ! audio ) return;
-		if ( audio.state === 'suspended' ) audio.resume();
-		const t = audio.currentTime + 0.01;
-		const peak = 0.12 * volume;
-		const gain = audio.createGain();
-		gain.gain.setValueAtTime( 0.0001, t );
-		gain.gain.exponentialRampToValueAtTime( peak, t + 0.03 );
-		gain.gain.setValueAtTime( peak, t + 0.16 );
-		gain.gain.exponentialRampToValueAtTime( 0.0001, t + 0.38 );
-		gain.connect( audio.destination );
-		for ( const frequency of [ 415, 523 ] ) {
-
-			const tone = audio.createOscillator();
-			tone.type = 'triangle';
-			tone.frequency.value = frequency;
-			tone.connect( gain );
-			tone.start( t );
-			tone.stop( t + 0.4 );
-
-		}
-
+		lastHorn = playHorn( audio, horn, volume );
 		beeps ++;
 
 	}
@@ -443,10 +420,15 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 		honk,
 		joinParty: code => live.joinParty( code ),
 		refresh,
-		// How many beeps have sounded, for the tests.
+		// How many horns have sounded, and the last one's, for the tests.
 		get beeps() {
 
 			return beeps;
+
+		},
+		get lastHorn() {
+
+			return lastHorn;
 
 		},
 	};

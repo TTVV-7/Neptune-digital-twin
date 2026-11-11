@@ -1,4 +1,5 @@
 import {
+	Box3,
 	CanvasTexture,
 	EquirectangularReflectionMapping,
 	Euler,
@@ -11,21 +12,25 @@ import {
 } from 'three';
 import { DecalGeometry } from 'three/addons/geometries/DecalGeometry.js';
 import { BOOSTS } from './boosts.js';
+import { HORNS } from './horns.js';
 import { levelOnly, unlockLevel } from './levels.js';
 import { storage } from './places.js';
+import { setUnderglow } from './underglow.js';
 
 // The Garage's paint shop: what each ride can wear, what this browser has chosen for each, and
-// putting it on a model. A look is { colour, finish, decal, number, rim, boost, flame, trail, smoke },
-// each the id of a choice below or in boosts.js (number is 0 to 99). The first few choices of each
-// are free; the rest come with the Supporter Pass (pro.js), and about half of those with levels
-// too (levels.js's unlock track), and a few colours (levelOnly) only with levels. A saved look
-// falls back to what's unlocked. `boost` is the boost style; `flame` the classic flame's colour,
-// which was the only boost there was, so a look saved before the styles (a flame and no boost) is
-// the classic flame in the colour it had.
+// putting it on a model. A look is { colour, finish, decal, number, rim, glow, boost, flame, trail,
+// smoke, horn }, each the id of a choice below, in boosts.js or in horns.js (number is 0 to 99).
+// The first few choices of each are free; the rest come with the Supporter Pass (pro.js), and about
+// half of those with levels too (levels.js's unlock track), and a few colours (levelOnly) only with
+// levels. A saved look falls back to what's unlocked. `boost` is the boost style; `flame` the
+// classic flame's colour, which was the only boost there was, so a look saved before the styles (a
+// flame and no boost) is the classic flame in the colour it had. A look saved before the underglow
+// and the horn has none and the beep, as the rides had then.
 //
 // Paint goes on what a model tags userData.paint = 'body' or 'rim' (the rides in rides/ and the
 // kart); decals are projected onto its bodywork in the boxes its userData.decals gives (see
-// project). The library's trucks have neither: only their flame and trail change.
+// project). The library's trucks have neither: only their underglow, flame, trail and horn change.
+// The underglow goes under anything (underglow.js), sized to it.
 
 const KEY = 'world-drive.garage';
 
@@ -42,16 +47,30 @@ export const SWATCHES = [
 	{ id: 'royal', name: 'Royal blue', hex: 0x2440c9 },
 	{ id: 'violet', name: 'Violet', hex: 0x7b3fe4 },
 	{ id: 'pink', name: 'Hot pink', hex: 0xff3fa4 },
+	{ id: 'candy', name: 'Candy apple red', hex: 0xb3101e },
+	{ id: 'sunset', name: 'Sunset orange', hex: 0xff7a45 },
+	{ id: 'sand', name: 'Sand', hex: 0xd6bd8a },
+	{ id: 'pearl-white', name: 'Pearl white', hex: 0xf2ede2 },
+	{ id: 'sky', name: 'Sky blue', hex: 0x5cb8f0 },
+	{ id: 'navy', name: 'Navy', hex: 0x1c2a52 },
+	{ id: 'burgundy', name: 'Burgundy', hex: 0x6e1630 },
+	{ id: 'gunmetal', name: 'Gunmetal', hex: 0x4b525c },
 	// Only levels give these (levels.js), the pass doesn't: at 25, 35, 45 and 50.
 	{ id: 'copper', name: 'Copper', hex: 0xc0703f, levelOnly: true },
 	{ id: 'mint', name: 'Mint', hex: 0x7fe8c4, levelOnly: true },
 	{ id: 'plum', name: 'Plum', hex: 0x7a1f5c, levelOnly: true },
 	{ id: 'champion', name: 'Champion gold', hex: 0xe8b923, levelOnly: true },
 ];
+// How the paint takes the light (FINISH_SETTINGS, below): colour-shift's reflections turn through
+// the hues as the ride turns.
 export const FINISHES = [
 	{ id: 'gloss', name: 'Gloss', free: true },
 	{ id: 'matte', name: 'Matte' },
 	{ id: 'metallic', name: 'Metallic' },
+	{ id: 'satin', name: 'Satin' },
+	{ id: 'pearl', name: 'Pearl' },
+	{ id: 'chrome', name: 'Chrome' },
+	{ id: 'shift', name: 'Colour-shift' },
 ];
 export const DECALS = [
 	{ id: 'none', name: 'None', free: true },
@@ -59,7 +78,13 @@ export const DECALS = [
 	{ id: 'number', name: 'Number' },
 	{ id: 'flames', name: 'Flames' },
 	{ id: 'checker', name: 'Checker' },
+	{ id: 'bolts', name: 'Lightning bolts' },
+	{ id: 'camo', name: 'Camo' },
+	{ id: 'dots', name: 'Polka dots' },
+	{ id: 'two-tone', name: 'Two-tone' },
 ];
+// Rims are shiny metal in their colour unless they say otherwise: chrome a mirror, black satin, and
+// neon glowing a little of its own.
 export const RIMS = [
 	{ id: 'silver', name: 'Silver', hex: 0xd5dbe1, free: true },
 	{ id: 'graphite', name: 'Graphite', hex: 0x3a3e45, free: true },
@@ -69,6 +94,24 @@ export const RIMS = [
 	{ id: 'blue', name: 'Blue', hex: 0x2d7bff },
 	{ id: 'lime', name: 'Lime', hex: 0x8be02b },
 	{ id: 'pink', name: 'Pink', hex: 0xff4fae },
+	{ id: 'chrome', name: 'Chrome', hex: 0xf6f8fa, roughness: 0.04, metalness: 1, envMapIntensity: 1.7 },
+	{ id: 'black', name: 'Satin black', hex: 0x141518, roughness: 0.5, metalness: 0.3, envMapIntensity: 0.6 },
+	{ id: 'bronze', name: 'Bronze', hex: 0xa86a36 },
+	{ id: 'neon', name: 'Neon green', hex: 0x3cff2a, emissive: 0.55 },
+];
+// The underglow's colours (underglow.js draws it), and a rainbow going round them all. None's swatch
+// is crossed out.
+export const GLOWS = [
+	{ id: 'none', name: 'None', css: 'linear-gradient( 135deg, transparent 44%, #c9d3e0 44%, #c9d3e0 56%, transparent 56% ), #1b2436', free: true },
+	{ id: 'blue', name: 'Neon blue', hex: 0x2f6bff },
+	{ id: 'ice', name: 'Ice blue', hex: 0x1fd8ff },
+	{ id: 'green', name: 'Neon green', hex: 0x2bff5e },
+	{ id: 'purple', name: 'Purple', hex: 0x9b3dff },
+	{ id: 'pink', name: 'Hot pink', hex: 0xff2bc4 },
+	{ id: 'red', name: 'Red', hex: 0xff2438 },
+	{ id: 'amber', name: 'Amber', hex: 0xff9416 },
+	{ id: 'white', name: 'White', hex: 0xe6f0ff },
+	{ id: 'rainbow', name: 'Rainbow', css: 'conic-gradient( #ff3d3d, #ffd23d, #3dff6e, #3dc8ff, #8f3dff, #ff3d98, #ff3d3d )' },
 ];
 // The classic boost flame's colours, by drive-fx.js's names for them.
 export const FLAMES = [
@@ -88,8 +131,11 @@ export const TRAILS = [
 ];
 export const SMOKES = SWATCHES.filter( swatch => [ 'white', 'black', 'red', 'sunburst', 'lime', 'electric', 'violet', 'pink' ].includes( swatch.id ) );
 
-const BASE = { finish: 'gloss', decal: 'none', number: 7, rim: 'silver', boost: 'classic', flame: 'orange', trail: 'none', smoke: 'white' };
-const LISTS = { colour: SWATCHES, finish: FINISHES, decal: DECALS, rim: RIMS, boost: BOOSTS, flame: FLAMES, trail: TRAILS, smoke: SMOKES };
+// The horns, whose sounds horns.js makes, are a part of the look like the rest.
+export { HORNS };
+
+const BASE = { finish: 'gloss', decal: 'none', number: 7, rim: 'silver', glow: 'none', boost: 'classic', flame: 'orange', trail: 'none', smoke: 'white', horn: 'beep' };
+const LISTS = { colour: SWATCHES, finish: FINISHES, decal: DECALS, rim: RIMS, glow: GLOWS, boost: BOOSTS, flame: FLAMES, trail: TRAILS, smoke: SMOKES, horn: HORNS };
 
 // The look a vehicle comes with: its own colour (vehicle.colour, an id in SWATCHES) and the free
 // choices for the rest.
@@ -193,15 +239,15 @@ export function isPaintable( model ) {
 
 // --- putting a look on a model --------------------------------------------------------------
 
-// Paint `vehicle`'s model over its bodywork and rims, and put decals on top, replacing any from a
-// look before. In the colour and finish it comes in, and silver rims, it keeps its own materials,
-// so a ride nobody has been to the Garage with is just as it was built.
+// Paint `vehicle`'s model over its bodywork and rims, put decals on top and its underglow under it,
+// replacing any from a look before. In the colour and finish it comes in, and silver rims, it keeps
+// its own materials, so a ride nobody has been to the Garage with is just as it was built.
 export function applyLook( model, look, vehicle ) {
 
 	const plain = defaultLook( vehicle );
 	const swatch = SWATCHES.find( choice => choice.id === look.colour ) ?? SWATCHES[ 0 ];
 	const body = look.colour === plain.colour && look.finish === plain.finish ? null : paintMaterial( swatch.hex, look.finish );
-	const rim = look.rim === plain.rim ? null : rimMaterial( ( RIMS.find( choice => choice.id === look.rim ) ?? RIMS[ 0 ] ).hex );
+	const rim = look.rim === plain.rim ? null : rimMaterial( RIMS.find( choice => choice.id === look.rim ) ?? RIMS[ 0 ] );
 	model.traverse( o => {
 
 		const part = o.isMesh && o.userData.paint;
@@ -211,6 +257,8 @@ export function applyLook( model, look, vehicle ) {
 
 	} );
 	setDecals( model, look, swatch );
+	const glow = GLOWS.find( choice => choice.id === look.glow );
+	setUnderglow( model, ! glow || glow.id === 'none' ? null : glow.hex ?? glow.id );
 
 }
 
@@ -239,6 +287,21 @@ function getEnvironment() {
 
 }
 
+// How each finish takes the light. Satin between matte and gloss; pearl a soft white sheen and a
+// faint shimmer of colours over a deep clear coat; chrome a mirror tinted with the colour (white
+// paint is plain chrome); colour-shift a thin film over dark metal in the colour (its reflections
+// turn through the colours with the angle it's seen at, as oil's on water do), with a sheen a third
+// of the way round the colour wheel along its edges (see paintMaterial).
+const FINISH_SETTINGS = {
+	gloss: { roughness: 0.3, metalness: 0.05, clearcoat: 1, clearcoatRoughness: 0.08, envMapIntensity: 0.9 },
+	matte: { roughness: 0.82, metalness: 0, clearcoat: 0, envMapIntensity: 0.35 },
+	metallic: { roughness: 0.3, metalness: 0.7, clearcoat: 0.7, clearcoatRoughness: 0.12, envMapIntensity: 1.3 },
+	satin: { roughness: 0.55, metalness: 0.15, clearcoat: 0.3, clearcoatRoughness: 0.45, envMapIntensity: 0.6 },
+	pearl: { roughness: 0.32, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.05, sheen: 1, sheenColor: 0xfff6ee, sheenRoughness: 0.4, iridescence: 0.45, iridescenceIOR: 1.5, iridescenceThicknessRange: [ 280, 420 ], envMapIntensity: 1.1 },
+	chrome: { roughness: 0.05, metalness: 1, clearcoat: 1, clearcoatRoughness: 0.03, envMapIntensity: 1.6 },
+	shift: { roughness: 0.24, metalness: 1, clearcoat: 1, clearcoatRoughness: 0.04, iridescence: 1, iridescenceIOR: 1.7, iridescenceThicknessRange: [ 100, 400 ], sheen: 0.6, sheenRoughness: 0.35, envMapIntensity: 2 },
+};
+
 // Paint and rim materials, made once each and shared (removing a ride leaves them be).
 const paints = new Map();
 function paintMaterial( hex, finish ) {
@@ -246,12 +309,14 @@ function paintMaterial( hex, finish ) {
 	const key = `${ hex }-${ finish }`;
 	if ( ! paints.has( key ) ) {
 
-		const settings = {
-			gloss: { roughness: 0.3, metalness: 0.05, clearcoat: 1, clearcoatRoughness: 0.08, envMapIntensity: 0.9 },
-			matte: { roughness: 0.82, metalness: 0, clearcoat: 0, envMapIntensity: 0.35 },
-			metallic: { roughness: 0.3, metalness: 0.7, clearcoat: 0.7, clearcoatRoughness: 0.12, envMapIntensity: 1.3 },
-		}[ finish ] ?? {};
-		const material = new MeshPhysicalMaterial( { color: hex, envMap: getEnvironment(), ...settings } );
+		const material = new MeshPhysicalMaterial( { color: hex, envMap: getEnvironment(), ...FINISH_SETTINGS[ finish ] } );
+		if ( finish === 'shift' ) {
+
+			material.sheenColor.setHex( hex ).offsetHSL( 1 / 3, 0.2, 0.15 );
+			material.color.multiplyScalar( 0.35 );
+
+		}
+
 		material.userData.shared = true;
 		paints.set( key, material );
 
@@ -261,12 +326,13 @@ function paintMaterial( hex, finish ) {
 
 }
 
-function rimMaterial( hex ) {
+// A rim's material: shiny metal in its colour unless the choice says otherwise (RIMS).
+function rimMaterial( { hex, roughness = 0.22, metalness = 0.8, envMapIntensity = 1.1, emissive = 0 } ) {
 
-	const key = `rim-${ hex }`;
+	const key = `rim-${ hex }-${ roughness }-${ metalness }-${ emissive }`;
 	if ( ! paints.has( key ) ) {
 
-		const material = new MeshStandardMaterial( { color: hex, roughness: 0.22, metalness: 0.8, envMap: getEnvironment(), envMapIntensity: 1.1 } );
+		const material = new MeshStandardMaterial( { color: hex, roughness, metalness, envMap: getEnvironment(), envMapIntensity, emissive: emissive ? hex : 0x000000, emissiveIntensity: emissive } );
 		material.userData.shared = true;
 		paints.set( key, material );
 
@@ -283,13 +349,17 @@ function rimMaterial( hex ) {
 // bonnet, roof and deck; `side` [ along, up, deep ] in from the right side, and mirrored, the left;
 // `bonnet` a square `size` across, down onto where a number goes on top. They go in
 // userData.decalParent (the group the bodywork is in, if it moves on springs) or the model.
-// Stripes and the checker go along the top, flames down the sides, and a number on the bonnet and
-// both doors. On light paint, stripes are dark.
+// Stripes and the checker go along the top, flames and lightning bolts down the sides, and a number
+// on the bonnet and both doors. Camo and polka dots go all over: along the sides, taller than the
+// side's box, and over the top (camo wider than its box); two-tone below the line along the middle
+// of the doors, from nose to tail. On light paint, stripes and dots are dark.
 const DOWN = new Euler( Math.PI / 2, 0, 0 );
 const INTO_RIGHT = new Euler( 0, - Math.PI / 2, 0 );
 const INTO_LEFT = new Euler( 0, Math.PI / 2, 0 );
 const _at = new Vector3();
 const _size = new Vector3();
+const _body = new Box3();
+const _piece = new Box3();
 
 function setDecals( model, look, swatch ) {
 
@@ -330,9 +400,55 @@ function setDecals( model, look, swatch ) {
 		project( parent, group, map, side.at, [ size, size, side.size[ 2 ] ], INTO_RIGHT, { flipU: true } );
 		project( parent, group, map, mirror( side.at ), [ size, size, side.size[ 2 ] ], INTO_LEFT, { flipU: true } );
 
+	} else if ( look.decal === 'bolts' ) {
+
+		project( parent, group, bolts(), side.at, side.size, INTO_RIGHT );
+		project( parent, group, bolts(), mirror( side.at ), side.size, INTO_LEFT, { flipU: true } );
+
+	} else if ( look.decal === 'camo' || look.decal === 'dots' ) {
+
+		// Camo over the top as wide as the bodywork; dots, which would be drawn out into dashes where
+		// it curves down, only as wide as the top's box.
+		const tall = [ side.size[ 0 ] * 1.25, side.size[ 1 ] * 1.8, side.size[ 2 ] ];
+		const wide = look.decal === 'camo' ? [ Math.max( top.size[ 0 ], Math.abs( side.at[ 0 ] ) * 1.5 ), top.size[ 1 ], top.size[ 2 ] ] : top.size;
+		const pattern = look.decal === 'camo' ? camo : ( across, along ) => dots( across, along, light );
+		project( parent, group, pattern( wide[ 0 ], wide[ 1 ] ), top.at, wide, DOWN );
+		const sides = pattern( tall[ 0 ], tall[ 1 ] );
+		project( parent, group, sides, side.at, tall, INTO_RIGHT );
+		project( parent, group, sides, mirror( side.at ), tall, INTO_LEFT, { flipU: true } );
+
+	} else if ( look.decal === 'two-tone' ) {
+
+		// From the line along the middle of the doors down to the bottom of the bodywork, a little over
+		// the line for the pinstripe above it.
+		const body = bodyBox( parent );
+		const line = side.at[ 1 ] + side.size[ 1 ] * 0.12;
+		const box = [ body.max.z - body.min.z, line - body.min.y, side.size[ 2 ] ];
+		const at = [ side.at[ 0 ], ( line + body.min.y ) / 2, ( body.min.z + body.max.z ) / 2 ];
+		const map = twoTone( luminance( swatch.hex ) < 0.2, light, box[ 1 ] / side.size[ 1 ] );
+		project( parent, group, map, at, box, INTO_RIGHT );
+		project( parent, group, map, mirror( at ), box, INTO_LEFT, { flipU: true } );
+
 	}
 
 	parent.add( group );
+
+}
+
+// The box round the bodywork decals go on (as project finds it), in `parent`'s frame.
+function bodyBox( parent ) {
+
+	_body.makeEmpty();
+	for ( const mesh of parent.children ) {
+
+		if ( ! mesh.isMesh || ! ( mesh.userData.paint === 'body' || mesh.userData.decalable ) ) continue;
+		mesh.updateMatrix();
+		if ( ! mesh.geometry.boundingBox ) mesh.geometry.computeBoundingBox();
+		_body.union( _piece.copy( mesh.geometry.boundingBox ).applyMatrix4( mesh.matrix ) );
+
+	}
+
+	return _body;
 
 }
 
@@ -481,6 +597,151 @@ function flames() {
 		ctx.stroke();
 
 	} );
+
+}
+
+// Lightning bolts flashing back from the front (the left of the picture): a big one along the
+// middle and a thinner one over it, white-hot at their front to yellow, with a dark edge. Each is
+// the zigzag of the ⚡ sign lying on its side, its point to the back.
+const BOLT = [ [ 0.6, 0 ], [ 0.15, 0.55 ], [ 0.45, 0.55 ], [ 0.3, 1 ], [ 0.85, 0.42 ], [ 0.55, 0.42 ], [ 0.8, 0 ] ];
+function bolts() {
+
+	return picture( 'bolts', 512, 128, ( ctx, w, h ) => {
+
+		for ( const [ from, length, middle, thick ] of [ [ 0.03, 0.94, 0.56, 0.86 ], [ 0.3, 0.55, 0.24, 0.4 ] ] ) {
+
+			ctx.beginPath();
+			BOLT.forEach( ( [ across, along ], i ) => {
+
+				const x = ( from + along * length ) * w;
+				const y = ( middle + ( across - 0.5 ) * thick ) * h;
+				if ( i === 0 ) ctx.moveTo( x, y );
+				else ctx.lineTo( x, y );
+
+			} );
+			ctx.closePath();
+			const gradient = ctx.createLinearGradient( from * w, 0, ( from + length ) * w, 0 );
+			gradient.addColorStop( 0, '#fffbe0' );
+			gradient.addColorStop( 0.35, '#ffe14a' );
+			gradient.addColorStop( 1, '#ffb11a' );
+			ctx.fillStyle = gradient;
+			ctx.fill();
+			ctx.lineWidth = 5;
+			ctx.lineJoin = 'round';
+			ctx.strokeStyle = 'rgba( 30, 16, 4, 0.85 )';
+			ctx.stroke();
+
+		}
+
+	} );
+
+}
+
+// A picture for a box `across` by `along` (m) as its width and height: its longer side 512, so what's
+// drawn on it in metres comes out round on any ride.
+function sized( across, along ) {
+
+	const long = Math.max( across, along );
+	return [ Math.max( 32, Math.round( 512 * across / long ) ), Math.max( 32, Math.round( 512 * along / long ) ) ];
+
+}
+
+// Woodland camouflage: olive, with blobs of khaki, dark green, brown and black over it, their size a
+// share of the box's shorter side (`across` by `along`, m), so a kart's are smaller than a bus's.
+// The same blobs every time.
+function camo( across, along ) {
+
+	const [ width, height ] = sized( across, along );
+	return picture( `camo-${ width }-${ height }`, width, height, ( ctx, w, h ) => {
+
+		const random = seeded( 7 );
+		const blobSize = Math.min( w, h ) * 0.32;
+		ctx.fillStyle = '#69703f';
+		ctx.fillRect( 0, 0, w, h );
+		for ( const colour of [ '#a3935f', '#3f4a26', '#4a3a28', '#23241c' ] ) {
+
+			ctx.fillStyle = colour;
+			const count = Math.ceil( w * h / ( blobSize * blobSize ) * 0.55 );
+			for ( let i = 0; i < count; i ++ ) blob( ctx, random() * w, random() * h, blobSize * ( 0.45 + random() * 0.6 ), random );
+
+		}
+
+	} );
+
+}
+
+// A lumpy blob round ( x, y ), about `size` across and wider than it's tall: points round an oval at
+// random distances, joined by curves through the middles between them.
+function blob( ctx, x, y, size, random ) {
+
+	const points = Array.from( { length: 7 }, ( _, i ) => {
+
+		const angle = i / 7 * Math.PI * 2;
+		const reach = size * ( 0.55 + random() * 0.5 );
+		return [ x + Math.cos( angle ) * reach * 1.3, y + Math.sin( angle ) * reach * 0.8 ];
+
+	} );
+	const middle = ( a, b ) => [ ( a[ 0 ] + b[ 0 ] ) / 2, ( a[ 1 ] + b[ 1 ] ) / 2 ];
+	ctx.beginPath();
+	ctx.moveTo( ...middle( points[ 6 ], points[ 0 ] ) );
+	points.forEach( ( point, i ) => ctx.quadraticCurveTo( ...point, ...middle( point, points[ ( i + 1 ) % 7 ] ) ) );
+	ctx.fill();
+
+}
+
+// Polka dots in staggered rows, white (or, on light paint, dark), three rows across the shorter side
+// of a box `across` by `along` (m) whatever the ride, so they're round.
+function dots( across, along, dark ) {
+
+	const [ width, height ] = sized( across, along );
+	return picture( `dots-${ width }-${ height }-${ dark }`, width, height, ( ctx, w, h ) => {
+
+		const gap = Math.min( w, h ) / 3;
+		ctx.fillStyle = dark ? '#16181c' : '#f6f7f9';
+		for ( let row = 0; row * gap < h + gap; row ++ ) for ( let x = row % 2 ? gap / 2 : 0; x < w + gap; x += gap ) {
+
+			ctx.beginPath();
+			ctx.arc( x, row * gap + gap / 2, gap * 0.3, 0, Math.PI * 2 );
+			ctx.fill();
+
+		}
+
+	} );
+
+}
+
+// The lower colour of two-tone paint: charcoal (or, under dark paint, silver), with a pinstripe over
+// it, dark on light paint. `tall`: how many times as tall as the side's box it is, so the pinstripe is
+// as thick for every ride, against its side.
+function twoTone( silver, dark, tall ) {
+
+	return picture( `two-tone-${ silver }-${ dark }-${ Math.round( tall * 10 ) }`, 16, 256, ( ctx, w, h ) => {
+
+		// The pinstripe and the gap under it, each 5 % of the side's box.
+		const line = h * 0.05 / tall;
+		ctx.fillStyle = dark ? '#16181c' : '#f6f7f9';
+		ctx.fillRect( 0, 0, w, line );
+		ctx.fillStyle = silver ? '#c3c9d1' : '#1d2026';
+		ctx.fillRect( 0, line * 2.2, w, h );
+
+	} );
+
+}
+
+// The same numbers between 0 and 1 every time from `seed` (mulberry32), for patterns drawn alike on
+// every page.
+function seeded( seed ) {
+
+	let a = seed >>> 0;
+	return () => {
+
+		a = a + 0x6d2b79f5 >>> 0;
+		let t = a;
+		t = Math.imul( t ^ t >>> 15, t | 1 );
+		t ^= t + Math.imul( t ^ t >>> 7, t | 61 );
+		return ( ( t ^ t >>> 14 ) >>> 0 ) / 4294967296;
+
+	};
 
 }
 
