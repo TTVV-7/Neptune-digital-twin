@@ -35,13 +35,14 @@ import { meshopt } from '@gltf-transform/functions';
 import { MeshoptDecoder, MeshoptEncoder } from 'meshoptimizer';
 import sharp from 'sharp';
 import { Vector3 } from 'three';
-import { C32_LINE, correctStructure, PIT_INSIDE } from './b2d2-structure.mjs';
+import { C32_LINE, correctStructure, hopperBays, PIT_INSIDE } from './b2d2-structure.mjs';
 import { areaExtras, areaName, buildRepairs, CHIPPED, LOOKS, lookNames, random, rimOf, triNormal } from '../src/repair-geometry.js';
 
 const ROOT = new URL( '../', import.meta.url );
 const { values: opts } = parseArgs( { options: {
 	site: { type: 'string', default: new URL( 'source-models/b2d2-site-model.glb', ROOT ).pathname },
 	markups: { type: 'string', default: new URL( 'scripts/data/b2d2-markups.json', ROOT ).pathname },
+	works: { type: 'string', default: new URL( 'scripts/data/b2d2-works.json', ROOT ).pathname },
 	out: { type: 'string', default: new URL( 'public/models/b2d2-repair.glb', ROOT ).pathname },
 } } );
 
@@ -59,9 +60,9 @@ const ORIGIN = [ 34.5, 5.1, - 4 ];
 const STRUCTURE = {
 	c31: { name: 'C31 gallery', color: '#b9c0c8', cut: true },
 	pit: { name: 'Transfer pit', color: '#9fb0c2', cut: true },
-	// Train support beams, G1 to G14, the cross and shed support beams, B1 to B6: a colour of
-	// their own, to tell them from the slabs and walls.
-	beams: { name: 'Beams', color: '#b08d5f', cut: true },
+	// Train support beams, G1 to G14, the cross and shed support beams, B1 to B6: a layer of their
+	// own, in concrete a shade darker than the walls and slabs they carry.
+	beams: { name: 'Beams', color: '#9ea6b0', cut: true },
 	c32: { name: 'C32 tunnel', color: '#c9c4b8', cut: true },
 	steel: { name: 'Steel plates at grade', color: '#c9cfd5', metal: true },
 	building: { name: 'Dumper building (for lining up)', color: '#ff8a1f', alpha: 0.35 },
@@ -217,9 +218,37 @@ const io = new NodeIO()
 
 const markups = ( await readMarkups( opts.markups ) ).filter( m => m.kind === 'area' && m.pts?.length >= 3 && m.n );
 // The Shapr3D model's structure, put on the drawings' grid (scripts/b2d2-structure.mjs).
-const site = correctStructure( await readSite( io, opts.site ) );
+const source = await readSite( io, opts.site );
+const site = correctStructure( source );
 // The layers areas are cut out of, in the artifact's frame, uncut: the twin's area editor cuts
 // them again where areas are moved to (src/repair-areas.js).
+// What others took out, for the twin's timeline: the hoppers, bay by bay, each with the day it was
+// gone by (scripts/data/b2d2-works.json: from which end, and between which days, the first bay on
+// the day they started and the last on the day they finished). Read before anything is written, so
+// a bad file leaves the model as it was.
+const works = JSON.parse( await readFile( opts.works, 'utf8' ) );
+const removed = [];
+if ( works.hoppers ) {
+
+	const { name, by, started, finished, from } = works.hoppers;
+	const day = d => /^\d{4}-\d{2}-\d{2}$/.test( d ?? '' ) ? Date.parse( `${ d }T00:00:00Z` ) : NaN;
+	if ( Number.isNaN( day( started ) ) || Number.isNaN( day( finished ) ) ) throw new Error( `${ opts.works }: hoppers need started and finished as YYYY-MM-DD` );
+	if ( day( finished ) < day( started ) ) throw new Error( `${ opts.works }: hoppers finished before they started` );
+	if ( ! [ 'north', 'pit' ].includes( from ) ) throw new Error( `${ opts.works }: hoppers' from is 'north' or 'pit'` );
+	const days = Math.round( ( day( finished ) - day( started ) ) / 86400000 );
+	const bays = hopperBays( source );
+	const order = from === 'pit' ? bays : [ ...bays ].reverse();
+	removed.push( {
+		name, by: by ?? '', layer: 'c31', started, finished, from,
+		parts: order.map( ( bay, k ) => ( {
+			name: bay.name, x: bay.x,
+			removed: new Date( day( started ) + Math.round( k * days / Math.max( 1, bays.length - 1 ) ) * 86400000 ).toISOString().slice( 0, 10 ),
+			positions: Array.from( bay.positions, v => +v.toFixed( 4 ) ), index: Array.from( bay.index ),
+		} ) ),
+	} );
+
+}
+
 const cutLayers = Object.fromEntries( Object.entries( STRUCTURE ).filter( ( [ key, layer ] ) => layer.cut && site[ key ] ).map( ( [ key ] ) => [ key, site[ key ] ] ) );
 const built = buildRepairs( markups, cutLayers );
 
@@ -401,6 +430,8 @@ await writeFile( DATA, JSON.stringify( {
 	origin: ORIGIN,
 	layers: Object.fromEntries( Object.entries( cutLayers ).map( ( [ key, { positions, index } ] ) => [ key, { name: STRUCTURE[ key ].name, positions: Array.from( positions ), index: Array.from( index ) } ] ) ),
 	markups: markups.map( ( { id, no, n, pts, area, face, zone, grid, f, src } ) => ( { id, ...( no ? { no } : {} ), n, pts, area, face, zone, grid, f, src } ) ),
+	removed,
 } ) + '\n' );
 const size = ( await stat( opts.out ) ).size;
+for ( const r of removed ) console.log( `${ r.name } (${ r.by }): ${ r.parts.length } bays, from the ${ r.from } end, ${ r.parts.map( p => `${ p.name } ${ p.removed.slice( 5 ) }` ).join( ', ' ) }` );
 console.log( `Wrote ${ opts.out }: ${ markups.length } repair areas (${ built.areas.filter( a => a.plane ).length } chipped, cut out of ${ holes } triangles), ${ total.toFixed( 2 ) } m², ${ ( size / 1024 ).toFixed( 0 ) } KB` );

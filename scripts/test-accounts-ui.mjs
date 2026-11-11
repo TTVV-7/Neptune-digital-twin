@@ -581,9 +581,22 @@ test( 'the timeline plays the B2D2 repairs back: no area before its day, each at
 	assert.equal( await page.locator( '#area-editor' ).isVisible(), false );
 	assert.match( await label(), / · now$/ );
 	assert.deepEqual( await counts(), { Chipped: total - 1, 'Epoxy coated': 1 } );
+	// The hoppers others broke out (gone now) and who was at work, by day.
+	const hoppers = () => page.evaluate( () => {
+
+		let n = 0;
+		window.twin.scene.traverse( o => o.isMesh && /^Hoppers: /.test( o.name ) && n ++ );
+		return n;
+
+	} );
+	const crew = () => page.evaluate( () => window.twin.repairAreas.timeline.crew );
+	assert.equal( await hoppers(), 0 );
+	assert.equal( await crew(), 0 );
 	await to( '2026-11-01' );
 	assert.equal( await drawn(), 0 );
-	assert.equal( await page.locator( '#repair-timeline .counts' ).textContent(), 'Nothing chipped yet' );
+	assert.equal( await hoppers(), 12 );
+	assert.equal( await crew(), 0 );
+	assert.equal( await page.locator( '#repair-timeline .counts' ).textContent(), 'Nothing chipped yetHoppers 12 of 12 bays left (others, with machines)' );
 	assert.match( await label(), /Nov 1, 2026$/ );
 	// Then those chipped by the end of each day, the one taken on at the stage it had reached.
 	const by = day => areas.filter( a => chipped( a ) <= day ).length;
@@ -591,11 +604,24 @@ test( 'the timeline plays the B2D2 repairs back: no area before its day, each at
 	await to( '2026-11-02' );
 	assert.equal( await drawn(), by( '2026-11-02' ) );
 	assert.deepEqual( await counts(), { Chipped: by( '2026-11-02' ) } );
+	// Workers chipping that day's panels, a few of them, spread out.
+	assert.ok( await crew() >= 3 && await crew() <= 6, `${ await crew() } at work` );
 	await to( '2026-11-04' );
 	assert.equal( await drawn(), by( '2026-11-04' ) );
 	await to( '2026-11-06' );
 	assert.deepEqual( await counts(), { Chipped: by( '2026-11-06' ) - 1, Sandblasted: 1 } );
 	assert.match( await page.locator( '#repair-timeline .counts' ).textContent(), /Sandblasted 1 · \d+\.\d m²/ );
+	// Five bays of hoppers out by then (from the north end, 4 to 10 November), two that day, with a
+	// machine at each of those.
+	assert.equal( await hoppers(), 7 );
+	assert.match( await page.locator( '#repair-timeline .counts' ).textContent(), /Hoppers 7 of 12 bays left, 2 out today \(others, with machines\)/ );
+	assert.equal( await page.evaluate( () => {
+
+		let n = 0;
+		window.twin.scene.traverse( o => o.userData.kind === 'demolition-machine' && o.parent?.name === 'Crew' && n ++ );
+		return n;
+
+	} ), 2 );
 
 	// Played from the end, it starts over and runs to now.
 	await to( null );
@@ -625,6 +651,8 @@ test( 'the timeline plays the B2D2 repairs back: no area before its day, each at
 	await page.locator( '#repair-timeline .close' ).click();
 	assert.equal( await page.locator( '#repair-timeline' ).isVisible(), false );
 	assert.equal( await drawn(), total );
+	assert.equal( await hoppers(), 0 );
+	assert.equal( await crew(), 0 );
 	await page.context().close();
 
 } );

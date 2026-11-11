@@ -228,14 +228,20 @@ left as it came):
 - the **transfer pit** (grid 0 to 8), redrawn: walls, floor and sump; the **B1 slab** with its
   central opening and two grated openings, and beams **B1 to B6** under it; at grade the lid with its
   three openings, the **cross beam**, the **shed support beam** and the train support beams over the pit;
-- the **C31 gallery**: walls, floor and hopper plates kept, between the pit and the north end where
+- the **C31 gallery**: walls and floor kept, between the pit and the north end where
   the drawings have them; at grade the pony walls, **train support beams 1 and 2**, cross beams
   **G1 to G14** at 4.445 m, the steel plates between them, and the north end's two openings;
 - **C32** moved over to the drawings' line and brought up to the pit's wall;
-- the **beams** in a layer and colour of their own (tan), so they can be told from the slabs and
-  walls: train support beams 1 and 2 over the pit and along the gallery, G1 to G14, the cross
-  beam, the shed support beam and B1 to B6. At grade they're under Google's ground: the **Beams**
-  view cuts it away and looks down the gallery at them, and from inside C31 they're overhead.
+- the **beams** in a layer of their own, in concrete a shade darker than the slabs and walls:
+  train support beams 1 and 2 over the pit and along the gallery, G1 to G14, the cross beam, the
+  shed support beam and B1 to B6. At grade they're under Google's ground: the **Beams** view cuts it
+  away and looks down the gallery at them, and from inside C31 they're overhead;
+- the gallery's **hoppers** (the two sloped plates under the slot between the rail beams) taken out:
+  others broke them out with machines, bay by bay, by 10 November. They're kept in the model's data
+  bay by bay (G1–G2 at the pit to G12–G13 at the north end) with the day each went, for the
+  timeline: `scripts/data/b2d2-works.json` says from which end and between which days (4 to 10
+  November from the north end, the bays spread over the days, until we know better), and a rebuild
+  picks up a change.
 
 Plan dimensions are read off the linework of 620-24070-DWG-ST005 (ground floor and B1 plans), to
 the centimetre: they're the numbers at the top of the script. Heights are the Shapr3D model's
@@ -304,7 +310,12 @@ for chipping, then the days set with **Status**). An area isn't there before the
 chipped (the concrete is whole), then it's chipped, sandblasted, epoxy coated and shotcreted in
 turn; one with no days is as it is now throughout. **▶** runs through the days (slow, normal or
 fast), a timelapse of the work so far, and the bar counts the areas and m² at each stage that day.
-**×**, or starting to edit, puts everything back as it is now. Nothing is saved by it, and it's
+On each day a worker with a chipping hammer stands at the panels our crew chipped that day (up to
+six, spread out; over a span of days like 5 to 8 November each panel gets one of them): in front of
+a wall, bent over a floor panel or under a soffit, on a scaffold tower where it's out of reach. The
+hoppers stand until the day their bay went, with a demolition machine in each bay others broke out
+that day, and the bar counts the bays left. **×**, or starting to edit, puts everything back as it
+is now (`src/repair-crew.js` places them, `src/repair-crew-figures.js` draws them). Nothing is saved by it, and it's
 there for everyone, so the days are worth keeping right as the work goes on.
 
 **+ Add area** draws a new one on the wall, floor or soffit you start on: drag a box (square to the
@@ -823,6 +834,8 @@ src/repair-areas.js Edit areas: move, add, change and delete the B2D2 model's re
 src/repair-geometry.js  the repair areas' geometry (cut-outs, recesses, rebar), shared with the build
 src/repair-photos.js    photos of repair areas: the strip in the editor's panel, sending, the large view
 src/repair-timeline.js  Timeline: the repair areas played back day by day, as each reached each stage
+src/repair-crew.js      the timeline's crew: a worker with a chipping hammer at each panel chipped that day
+src/repair-crew-figures.js  the worker and the demolition machine, drawn and animated
 src/model-edits.js  Edit model: beams added to the B2D2 model and its walls painted, saved for everyone
 src/placements.js   models' positions saved on the live site for everyone (Save position for everyone),
                     and the admin passcode for anything saved for everyone
