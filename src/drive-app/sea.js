@@ -11,8 +11,10 @@ import { LAKES } from './lakes.js';
 // any lake or land can be, gets a surface of its own from here: water at the sea's height or the
 // lake's, drawn round the vehicle out to the horizon and following it as it drives, which the
 // Driver drives on as on any ground and water.js knows is water (so the hovercraft throws up spray
-// on it, and nothing puts a boost pad on it). It's only by its own water: driven off over land,
-// further than REACH of it, it goes (see REACH).
+// on it, and nothing puts a boost pad on it). So does a drive out from a coast, or into one of those
+// lakes, onto that bed (main.js's watchSea): it's laid there as the vehicle comes to it, and it rolls
+// or comes down onto it. It's only by its own water: driven off over land, further than REACH of
+// it, it goes (see REACH).
 //
 // The sea's height. Google's heights are over the WGS 84 ellipsoid, and the sea's surface isn't: it
 // lies on the geoid, from 107 m under the ellipsoid (south of India) to 85 m over it (by New
@@ -312,16 +314,19 @@ export function createSea( { scene } ) {
 
 		},
 
-		// The sea at the place the scene is now centred on ({ lat, lon } in degrees), whose height
-		// over the ellipsoid (m) is the scene's y = 0 there; or `lake`'s surface (lakes.js's) there,
-		// `over` m over the sea's height.
-		start( { lat, lon, height, over: rise = 0, lake = null } ) {
+		// The sea, with the scene centred on { lat, lon } (degrees), whose height over the ellipsoid
+		// (m) is the scene's y = 0 there; or `lake`'s surface (lakes.js's), `over` m over the sea's
+		// height. Laid round ( east, north ) in the scene, where its water was found: the place
+		// itself for a drop-in, or out from a coast as the vehicle drives (main.js's watchSea), and
+		// it's that spot's square of the map whose water it's by (see REACH).
+		start( { lat, lon, height, over: rise = 0, lake = null, east = 0, north = 0 } ) {
 
 			place = { lat, lon };
 			level = height;
 			over = rise;
 			const mine = lake ? at => at?.kind === 'lake' && at.lake === lake : at => at?.kind === 'sea' || at?.kind === 'coast';
-			ours = mine( waterAtNow( lat, lon ) ) ? mine : null;
+			const found = localToLatLon( enuToLocal( east, north, 0 ), place );
+			ours = mine( waterAtNow( found.lat, found.lon ) ) ? mine : null;
 			if ( ! material.map ) {
 
 				material.map = picture( SEA );
@@ -329,7 +334,7 @@ export function createSea( { scene } ) {
 
 			}
 
-			lay( 0, 0 );
+			lay( east, north );
 
 		},
 

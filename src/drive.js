@@ -544,7 +544,9 @@ export class Driver {
 		this.cabNear = this.cab ? this.measureCab() : null;
 		this.cabShown = false;
 		this.lastBase = null;
-		this.fx = this.booster || this.drift || this.launch ? createDriveFx( this.models.group.parent ?? this.models.group, spec.fx, { water: !! this.water, gravity: this.gravity, ...this.effects ? { effects: this.effects } : {} } ) : null;
+		// Its effects, with water's (drive-fx.js's pools of droplets, spray and foam) only for a ride
+		// that floats, the only one that throws any up: every other drives on water as on the ground.
+		this.fx = this.booster || this.drift || this.launch ? createDriveFx( this.models.group.parent ?? this.models.group, spec.fx, { water: !! this.water && this.floats, gravity: this.gravity, ...this.effects ? { effects: this.effects } : {} } ) : null;
 
 		this.keys.clear();
 		this.controls.keys?.clear();
