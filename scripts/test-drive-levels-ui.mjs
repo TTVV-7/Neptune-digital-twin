@@ -299,7 +299,7 @@ describe( 'World Drive levels in the page', () => {
 		await levelUp( 9, 10 );
 		await card.waitFor();
 		assert.equal( await card.locator( '.heading' ).textContent(), 'Level 10!' );
-		assert.deepEqual( await card.locator( '.reward' ).allTextContents(), [ '10Bronze badge' ] );
+		assert.deepEqual( await card.locator( '.reward' ).allTextContents(), [ '10Bronze badge', 'Neon blue underglow' ] );
 		// (Once it's come in: it springs a little past its size on the way.)
 		await card.locator( '.level-card' ).evaluate( el => Promise.all( el.getAnimations().map( a => a.finished ) ) );
 		const reward = await card.locator( '.unlocked .level-badge' ).boundingBox();

@@ -1666,7 +1666,7 @@ describe( 'World Drive boost and driving effects', () => {
 			// Flying, 40 m up (gliding down at 3 m/s): gone in about a second.
 			const ground = { y: d.y };
 			Object.assign( d, { y: d.y + 40, vy: 0, flying: true, grounded: false, air: null } );
-			await until( () => ! glow.visible, 8 );
+			await until( () => glow.userData.lift === 0, 8 );
 			out.flying = { visible: glow.visible, lift: round( glow.userData.lift ), flying: d.flying };
 			Object.assign( d, { y: ground.y, vy: 0, flying: false, grounded: true, air: null } );
 			await until( () => glow.userData.lift >= 0.995, 5 );
