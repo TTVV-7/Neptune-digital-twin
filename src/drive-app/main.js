@@ -1261,7 +1261,10 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	let slow = 0;
 	const carto = {};
 	const sky = new Color();
-	renderer.setAnimationLoop( time => {
+	renderer.setAnimationLoop( tick );
+	if ( import.meta.env.DEV ) captureHook( tick );
+
+	function tick( time ) {
 
 		timer.update( time );
 		const dt = Math.min( timer.getDelta(), 0.1 );
@@ -1342,7 +1345,41 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 		}
 
-	} );
+	}
+
+	// Only the dev server: a recording (a script driving the page) takes the frames over, so a
+	// machine that draws a frame a second still makes smooth video. start() stops the page's own
+	// frames; step( ms ) moves the game on that long and draws one frame, handing it back as a JPEG
+	// (read straight after drawing, so the canvas needs no preserveDrawingBuffer); stop() gives the
+	// frames back. The tiles still load in real time between steps. credit() is the map's credit
+	// on screen (Google's, or the Moon's), which a video of it must show too. The built site has
+	// none of it.
+	function captureHook( loop ) {
+
+		let at = 0;
+		window.worldDriveCapture = {
+			start() {
+
+				renderer.setAnimationLoop( null );
+				at = performance.now();
+
+			},
+			step( ms = 1000 / 30, quality = 0.9 ) {
+
+				at += ms;
+				loop( at );
+				return renderer.domElement.toDataURL( 'image/jpeg', quality );
+
+			},
+			stop() {
+
+				renderer.setAnimationLoop( loop );
+
+			},
+			credit: () => [ $( 'attribution' ), $( 'moon-credit' ) ].filter( el => el && ! el.hidden ).map( el => el.innerText.trim() ).filter( Boolean ).join( ' · ' ),
+		};
+
+	}
 
 	// The Moon's sun: over the viewer's shoulder on the globe, so the side in view is lit, and fixed
 	// in the scene while dropping in and driving (MOON_SUN), easing from one to the other; on the
