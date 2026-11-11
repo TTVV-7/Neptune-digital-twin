@@ -109,6 +109,46 @@ test( 'the gallery at grade: train support beams and G1 to G14 where the drawing
 
 } );
 
+test( 'the beams are a layer of their own: train support beams 1 and 2, G1 to G14, the cross and shed support beams, B1 to B6', () => {
+
+	assert.equal( data.layers.beams.name, 'Beams' );
+	// Straight down onto those at grade, and up to the soffits of those under a slab: met in the
+	// beams layer, where each is, and not in the gallery's or the pit's layer (down: nothing as
+	// high; up: only the slab above).
+	const beam = ( x, letter, el, name, from = 8 ) => {
+
+		const dir = from > el ? - 1 : 1;
+		const hit = triangles => {
+
+			const d = cast( [ x, from, letter ], [ 0, dir, 0 ], triangles );
+			return d === null ? null : from + dir * d;
+
+		};
+		near( hit( layers.beams ), el, name );
+		const rest = hit( [ ...layers.c31, ...layers.pit ] );
+		assert.ok( rest === null || ( rest - el ) * dir > 0.05, `${ name }: ${ rest } in the gallery's or the pit's layer` );
+
+	};
+	// The rail beams along the gallery, and under the pit's lid.
+	for ( const x of [ 10, 35, 60 ] ) {
+
+		beam( x, 4.12, 5.05, `train support beam 2 at ${ x }` );
+		beam( x, 5.63, 5.05, `train support beam 1 at ${ x }` );
+
+	}
+
+	beam( 3, 4.12, 4.26, 'train support beam 2 over the pit', 0 );
+	beam( 3, 5.63, 4.26, 'train support beam 1 over the pit', 0 );
+	// G1 to G12 between the rails, G13 and G14 under the north end's lid.
+	for ( const g of [ 7.86, 12.45, 16.89, 21.34, 25.78, 30.22, 34.67, 39.12, 43.56, 48.01, 52.45, 56.90 ] ) beam( g + 0.23, 4.9, 5.03, `G beam at ${ g }` );
+	for ( const x of [ 61.8, 65.25 ] ) beam( x, 7.2, 3.19, `G beam at ${ x }`, 0 );
+	// Under the pit's lid, and under its B1 slab.
+	beam( 4.65, 3.0, 3.42, 'cross beam', 0 );
+	beam( 1.0, 1.85, 4.15, 'shed support beam', 0 );
+	for ( const [ name, x, letter, el ] of [ [ 'B1', 2.0, 5, - 2.41 ], [ 'B2', 3, 6.17, - 2.41 ], [ 'B3', 4.57, 7, - 2.63 ], [ 'B4', 1.0, 3.6, - 2.41 ], [ 'B5', 1.0, 1.6, - 2.41 ], [ 'B6', 1.0, 7.7, - 2.41 ] ] ) beam( x, letter, el, name, - 4 );
+
+} );
+
 test( 'C32 meets the pit on the drawings\' line', () => {
 
 	const from = [ 2.285, - 0.5, 20 ];

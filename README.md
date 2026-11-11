@@ -231,7 +231,11 @@ left as it came):
 - the **C31 gallery**: walls, floor and hopper plates kept, between the pit and the north end where
   the drawings have them; at grade the pony walls, **train support beams 1 and 2**, cross beams
   **G1 to G14** at 4.445 m, the steel plates between them, and the north end's two openings;
-- **C32** moved over to the drawings' line and brought up to the pit's wall.
+- **C32** moved over to the drawings' line and brought up to the pit's wall;
+- the **beams** in a layer and colour of their own (tan), so they can be told from the slabs and
+  walls: train support beams 1 and 2 over the pit and along the gallery, G1 to G14, the cross
+  beam, the shed support beam and B1 to B6. At grade they're under Google's ground: the **Beams**
+  view cuts it away and looks down the gallery at them, and from inside C31 they're overhead.
 
 Plan dimensions are read off the linework of 620-24070-DWG-ST005 (ground floor and B1 plans), to
 the centimetre: they're the numbers at the top of the script. Heights are the Shapr3D model's
@@ -255,8 +259,8 @@ still move it, but only in their own browser. A saved position wins over the one
 `src/config.js` (`GET` / `PUT /api/placements`, [docs/accounts.md](docs/accounts.md)).
 **Copy config** into `src/config.js` makes it the default for a new copy of the site too.
 **Preset views**, as the artifact has them, are in a bar at the top: **Overview**, **C31**, **C32**,
-**Pit** and **Ground** glide the camera there, wherever the model is placed (Overview also cuts
-Google's ground away over it). Any model can carry views: `views: [ { name, from, at,
+**Pit**, **Ground** and **Beams** glide the camera there, wherever the model is placed (Overview and
+Beams also cut Google's ground away over it). Any model can carry views: `views: [ { name, from, at,
 underground } ]` in its glTF scene's extras, in the model's own frame (`src/views.js`).
 
 **Fixing areas in the twin.** Areas in the wrong spot, turned the wrong way, missing or not

@@ -13,7 +13,11 @@
 //   where the drawings have them; at grade the pony walls, slab strips, train support beams 1
 //   and 2 and cross beams G1 to G12 redrawn, the steel plates between them, and the north end's
 //   lid with its two openings and G13, G14;
-// - C32 moved over to the drawings' line and brought up to the pit's wall.
+// - C32 moved over to the drawings' line and brought up to the pit's wall;
+// - the beams on their own (their own layer and colour, so they can be told from the slabs and
+//   walls they carry): train support beams 1 and 2 the length of the pit and the gallery, G1 to
+//   G14 across the gallery, the cross beam and the shed support beam under the pit's lid, and B1
+//   to B6 under its B1 slab.
 //
 // Plan dimensions are read off 620-24070-DWG-ST005 (ground floor and basement B1 plans) and
 // -ST010 (B1 to B6): the linework of the PDF, to the centimetre. Heights are the model's, which
@@ -280,14 +284,10 @@ function pit() {
 	s.plate( 'l', [ l[ 1 ], outer.l[ 1 ] ], { x: outer.x, el: walls }, [ { x: C32.x, el: WAS.c32Mouth } ] );
 	s.plate( 'x', [ outer.x[ 0 ], x[ 0 ] ], { l, el: walls } );
 	s.plate( 'x', [ x[ 1 ], outer.x[ 1 ] ], { l, el: walls }, [ WAS.doorway ] );
-	// B1: the slab, open in the middle and at two gratings along the AA side; its beams under it.
+	// B1: the slab, open in the middle and at two gratings along the AA side (its beams: beams()).
 	s.plate( 'el', EL.b1, { x, l }, B1_OPENINGS );
-	for ( const beam of Object.values( B1_BEAMS ) ) s.box( beam, [ beam.to ?? EL.b1Beams, EL.b1[ 0 ] ] );
-	// At grade: the lid and what carries it.
+	// At grade: the lid (and what carries it: beams()).
 	s.plate( 'el', EL.lid, outer, LID_OPENINGS );
-	s.box( CROSS_BEAM, [ EL.crossBeam, EL.lid[ 0 ] ] );
-	s.box( SHED_BEAM, [ EL.shedBeam, EL.lid[ 0 ] ] );
-	for ( const across of Object.values( TRAIN_BEAMS ) ) s.box( { x, l: across }, [ EL.rail[ 0 ], EL.lid[ 0 ] ] );
 	return s.layer();
 
 }
@@ -311,11 +311,33 @@ function gallery( was ) {
 
 	const x = GALLERY.x;
 	const [ rail2, rail1 ] = [ TRAIN_BEAMS[ 2 ], TRAIN_BEAMS[ 1 ] ];
-	// Pony walls, the slab strips inside them as far as the steel plates, and the rail beams.
+	// Pony walls, and the slab strips inside them as far as the steel plates (the rail beams and the
+	// cross beams: beams()).
 	s.box( { x, l: PONY.east }, EL.pony ).box( { x, l: PONY.west }, EL.pony );
 	s.box( { x, l: [ PONY.east[ 1 ], rail2[ 0 ] - PLATE ] }, EL.strip ).box( { x, l: [ rail1[ 1 ] + PLATE, PONY.west[ 0 ] ] }, EL.strip );
-	s.box( { x, l: rail2 }, EL.rail ).box( { x, l: rail1 }, EL.rail );
-	// Cross beams G1 to G12: across under the rails, and up between them.
+	// The north end's lid, open twice (G13 and G14 under it: beams()).
+	s.plate( 'el', EL.endLid, { x: GALLERY.end, l: WAS.endLid.l }, END_OPENINGS );
+	return s.layer();
+
+}
+
+// ---------- The beams ----------
+
+// Every beam the drawings name, as the drawings have them in plan.
+function beams() {
+
+	const s = new Solid();
+	const [ rail2, rail1 ] = [ TRAIN_BEAMS[ 2 ], TRAIN_BEAMS[ 1 ] ];
+	// Train support beams 1 and 2 (the rail beams): over the pit, under its lid, and along the
+	// gallery to its north end.
+	for ( const across of [ rail2, rail1 ] ) {
+
+		s.box( { x: PIT.x, l: across }, [ EL.rail[ 0 ], EL.lid[ 0 ] ] );
+		s.box( { x: GALLERY.x, l: across }, EL.rail );
+
+	}
+
+	// G1 to G12: across the gallery under the rails, into its walls, and up between the rails.
 	for ( const g of G_BEAMS.filter( g => g < GALLERY.x[ 1 ] - 1 ) ) {
 
 		const span = [ g, g + G_WIDTH ];
@@ -324,9 +346,13 @@ function gallery( was ) {
 
 	}
 
-	// The north end's lid, open twice, and G13 and G14 under it.
-	s.plate( 'el', EL.endLid, { x: GALLERY.end, l: WAS.endLid.l }, END_OPENINGS );
+	// G13 and G14, under the north end's lid.
 	for ( const g of G_BEAMS.filter( g => g > GALLERY.x[ 1 ] - 1 ) ) s.box( { x: [ Math.max( g, GALLERY.end[ 0 ] ), g + G_WIDTH ], l: WAS.endBeams.l }, [ EL.endBeams, EL.endLid[ 0 ] ] );
+	// Under the pit's lid: the cross beam and the shed support beam.
+	s.box( CROSS_BEAM, [ EL.crossBeam, EL.lid[ 0 ] ] );
+	s.box( SHED_BEAM, [ EL.shedBeam, EL.lid[ 0 ] ] );
+	// B1 to B6, under the pit's B1 slab.
+	for ( const beam of Object.values( B1_BEAMS ) ) s.box( beam, [ beam.to ?? EL.b1Beams, EL.b1[ 0 ] ] );
 	return s.layer();
 
 }
@@ -362,10 +388,10 @@ function c32( was ) {
 }
 
 // The site's layers ({ key: { positions, index } }, keys c31, pit, c32, steel and the rest) with
-// the structure put on the drawings' grid.
+// the structure put on the drawings' grid, and the beams as a layer of their own (beams).
 export function correctStructure( site ) {
 
-	return { ...site, pit: pit(), c31: gallery( site.c31 ), steel: plates(), c32: c32( site.c32 ) };
+	return { ...site, pit: pit(), c31: gallery( site.c31 ), beams: beams(), steel: plates(), c32: c32( site.c32 ) };
 
 }
 

@@ -59,6 +59,9 @@ const ORIGIN = [ 34.5, 5.1, - 4 ];
 const STRUCTURE = {
 	c31: { name: 'C31 gallery', color: '#b9c0c8', cut: true },
 	pit: { name: 'Transfer pit', color: '#9fb0c2', cut: true },
+	// Train support beams, G1 to G14, the cross and shed support beams, B1 to B6: a colour of
+	// their own, to tell them from the slabs and walls.
+	beams: { name: 'Beams', color: '#b08d5f', cut: true },
 	c32: { name: 'C32 tunnel', color: '#c9c4b8', cut: true },
 	steel: { name: 'Steel plates at grade', color: '#c9cfd5', metal: true },
 	building: { name: 'Dumper building (for lining up)', color: '#ff8a1f', alpha: 0.35 },
@@ -83,6 +86,9 @@ const VIEWS = [
 	// From the pit's north-east corner, under the B1 slab, across to C32's mouth.
 	{ name: 'Pit', from: [ PIT_INSIDE.x[ 1 ] - 0.4, - 3.0, - 0.7 ], at: [ 1.8, - 5.2, - 6 ] },
 	{ name: 'Ground', from: [ 67.5, 7.0, - 4.95 ], at: [ 20, 5.3, - 4.95 ] },
+	// Over the pit's lid, under the building's roof, looking down the gallery at its beams at grade,
+	// with Google's ground cut away (it covers them otherwise).
+	{ name: 'Beams', from: [ 5, 10, - 4.6 ], at: [ 21, 4.4, - 4.9 ], underground: true },
 ];
 
 
