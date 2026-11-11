@@ -13,6 +13,7 @@ import {
 	Mesh,
 	MeshBasicMaterial,
 	MeshStandardMaterial,
+	NormalBlending,
 	PlaneGeometry,
 	Quaternion,
 	SRGBColorSpace,
@@ -28,7 +29,7 @@ import { createBursts } from './drive-bursts.js';
 // flash where it hits something, sparks while it scrapes along a wall and dust where it comes down
 // hard. An app can colour the flame or swap it for a boost style of drive-boosts.js (plasma,
 // lightning, bubbles, a comet's tail...), and add a trail behind the vehicle while it boosts or
-// flies (World Drive's Garage): coloured smoke, sparkles or a rainbow ribbon. Going supersonic
+// flies (World Drive's Garage): smoke, sparkles, fire, stars, a rainbow or neon. Going supersonic
 // (drive.js) adds a sonic boom and streaks of air past it. The moments in between have bursts of
 // their own (drive-bursts.js): the booster lighting with a pop of its flame, running dry and
 // cooling, a boost pad driven over (and the vehicle flashing), a drift's charge levels and its
@@ -58,11 +59,23 @@ export const FLAMES = {
 	green: [ 0x22d04a, 0xe6ffd6, 0x5cff78 ],
 	purple: [ 0x8f3dff, 0xf0e0ff, 0xae6cff ],
 	pink: [ 0xff3d98, 0xffe2f1, 0xff72b6 ],
+	red: [ 0xff2410, 0xffd2a0, 0xff4a2a ],
+	gold: [ 0xffb01a, 0xfff6c8, 0xffcf4a ],
+	teal: [ 0x10d6bc, 0xdcfff8, 0x3df0d6 ],
+	ice: [ 0x8ee6ff, 0xffffff, 0xbaf0ff ],
+	// A white-hot flame: barely warm at its edge, white through and through.
+	white: [ 0xfff0dc, 0xffffff, 0xfff6e8 ],
 };
 const RAINBOW_TURN = 1.6;
 // Trails. Smoke: a puff every SMOKE_TRAIL_STEP s that lasts SMOKE_TRAIL_LIFE s. Sparkles: one every
-// SPARKLE_STEP s, twinkling, in these colours. The ribbon: RIBBON_POINTS points across the back, one
-// every RIBBON_STEP s, each fading over RIBBON_LIFE s, in bands of these hues side by side.
+// SPARKLE_STEP s, twinkling, in these colours. Fire: a tongue every FIRE_STEP s, cooling through
+// FIRE_COLOURS over FIRE_LIFE s. Shooting stars: one every STAR_STEP s, tossed up, spinning and
+// falling away for STAR_LIFE s, in these colours. A ribbon (the rainbow, and the neon streak):
+// RIBBON_POINTS points across the back, one every RIBBON_STEP s, each fading over RIBBON_LIFE s, in
+// bands side by side ([ from, to: shares of the way across from its left, colour, how bright ])
+// across `half` of its width either side of its middle, glowing (additive) or not: the rainbow's
+// in bands of these hues, the neon streak's two lines of light off its back corners, as its tail
+// lights would draw them in a long exposure, each a bright core in a wider glow.
 const SMOKE_TRAIL_POOL = 56;
 const SMOKE_TRAIL_STEP = 0.03;
 const SMOKE_TRAIL_LIFE = 1.5;
@@ -70,10 +83,28 @@ const SPARKLE_POOL = 90;
 const SPARKLE_STEP = 0.012;
 const SPARKLE_LIFE = 0.9;
 const SPARKLE_COLOURS = [ 0xffffff, 0xfff0a0, 0xffb6ef, 0xa6f3ff ];
+const FIRE_POOL = 48;
+const FIRE_STEP = 0.016;
+const FIRE_LIFE = 0.5;
+const FIRE_COLOURS = [ 0xffe08a, 0xff8a1a, 0xe0240a ].map( hex => new Color( hex ) );
+const STAR_POOL = 30;
+const STAR_STEP = 0.05;
+const STAR_LIFE = 1.1;
+const STAR_COLOURS = [ 0xffd23f, 0xfff0a0, 0xffffff, 0xffb02e ];
 const RIBBON_POINTS = 48;
 const RIBBON_STEP = 1 / 40;
 const RIBBON_LIFE = 0.9;
 const RIBBON_HUES = [ 0, 0.08, 0.15, 0.33, 0.58, 0.77 ];
+const RAINBOW = {
+	bands: RIBBON_HUES.map( ( hue, i ) => [ i / RIBBON_HUES.length, ( i + 1 ) / RIBBON_HUES.length, new Color().setHSL( hue, 1, 0.55 ), 0.85 ] ),
+	half: 0.28,
+	additive: false,
+};
+const NEON = {
+	bands: [ [ 0, 0.12, 0x18c8ff, 0.45 ], [ 0.04, 0.08, 0xd2f8ff, 1 ], [ 0.88, 1, 0xff2dc8, 0.45 ], [ 0.92, 0.96, 0xffd6f4, 1 ] ].map( ( [ from, to, hex, bright ] ) => [ from, to, new Color( hex ), bright ] ),
+	half: 0.44,
+	additive: true,
+};
 // Water. A splash's droplets (falling back, gone in DROP_LIFE s) and spray (billows of mist,
 // MIST_LIFE s); a ring of foam spreading out from it for RING_LIFE s, to RING_REACH m (and more for
 // a harder splash) past the vehicle's side, over a patch of foam where it went in, for FOAM_LIFE s.
@@ -122,8 +153,37 @@ function getTextures() {
 
 	textures ??= { soft: radial( [ [ 0, 'rgba(255,255,255,1)' ], [ 0.4, 'rgba(255,255,255,0.55)' ], [ 1, 'rgba(255,255,255,0)' ] ] ),
 		glow: radial( [ [ 0, 'rgba(255,255,255,1)' ], [ 0.25, 'rgba(255,220,160,0.8)' ], [ 0.6, 'rgba(255,120,40,0.25)' ], [ 1, 'rgba(255,80,0,0)' ] ] ),
-		star: star() };
+		star: star(), shooting: shootingStar() };
 	return textures;
+
+}
+
+// A five-pointed star, plump as a cartoon draws one, with a grey edge so it reads against the sky,
+// for the shooting stars. The edge is a thick stroke under the fill, so only its outer half shows.
+function shootingStar() {
+
+	const canvas = document.createElement( 'canvas' );
+	canvas.width = canvas.height = 64;
+	const ctx = canvas.getContext( '2d' );
+	ctx.beginPath();
+	for ( let i = 0; i < 10; i ++ ) {
+
+		const angle = i / 10 * Math.PI * 2 - Math.PI / 2;
+		const reach = i % 2 ? 12.5 : 28;
+		ctx.lineTo( 32 + Math.cos( angle ) * reach, 34 + Math.sin( angle ) * reach );
+
+	}
+
+	ctx.closePath();
+	ctx.lineJoin = 'round';
+	ctx.lineWidth = 6;
+	ctx.strokeStyle = 'rgb(130,130,130)';
+	ctx.stroke();
+	ctx.fillStyle = '#fff';
+	ctx.fill();
+	const texture = new CanvasTexture( canvas );
+	texture.colorSpace = SRGBColorSpace;
+	return texture;
 
 }
 
@@ -222,12 +282,12 @@ function foam( at, wide, flecks ) {
 // vehicle's pivot each frame but isn't part of it, so it never counts as the vehicle's own shape.
 // look: { boost: 'classic' (the flame, if not given) or a style in drive-boosts.js, flame: the
 // classic flame's colour, a name in FLAMES or 'rainbow' (orange if not given), trail: null or {
-// kind: 'smoke', 'sparkle' or 'ribbon', colour (smoke's) } }. water: whether there's water to
+// kind: 'smoke', 'sparkle', 'ribbon', 'fire', 'stars' or 'neon', colour (smoke's) } }. water: whether there's water to
 // splash in (its pools are only made then). effects: as EFFECTS, read as they're needed, so an app
 // can change `calm` while it drives.
 export function createDriveFx( world, { boost = 'classic', flame: flameName = 'orange', trail = null } = {}, { water = false, effects = EFFECTS, gravity = 1 } = {} ) {
 
-	const { soft, glow, star: twinkle } = getTextures();
+	const { soft, glow, star: twinkle, shooting } = getTextures();
 	const root = new Group();
 	root.name = 'drive-fx';
 	world.add( root );
@@ -312,11 +372,13 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 
 	let nextDebris = 0;
 
-	// The trail, made only if there is one: its own pool, or the ribbon.
+	// The trail, made only if there is one: its own pool, or a ribbon.
 	const trailKind = trail?.kind;
 	const trailSmoke = trailKind === 'smoke' ? pool( SMOKE_TRAIL_POOL, () => new SpriteMaterial( { map: soft, color: 0xffffff, transparent: true, depthWrite: false } ) ) : null;
 	const sparkles = trailKind === 'sparkle' ? pool( SPARKLE_POOL, () => new SpriteMaterial( { map: twinkle, color: 0xffffff, transparent: true, blending: AdditiveBlending, depthWrite: false } ) ) : null;
-	const ribbon = trailKind === 'ribbon' ? makeRibbon( root ) : null;
+	const fire = trailKind === 'fire' ? pool( FIRE_POOL, () => new SpriteMaterial( { map: glow, color: 0xffffff, transparent: true, blending: AdditiveBlending, depthWrite: false } ) ) : null;
+	const shootingStars = trailKind === 'stars' ? pool( STAR_POOL, () => new SpriteMaterial( { map: shooting, color: 0xffffff, transparent: true, depthWrite: false } ) ) : null;
+	const ribbon = trailKind === 'ribbon' ? makeRibbon( root, RAINBOW ) : trailKind === 'neon' ? makeRibbon( root, NEON ) : null;
 	const smokeColour = new Color( trail?.colour ?? 0xffffff );
 
 	// Water, made only if there is any: droplets and spray (sprites, drawn as they are rather than
@@ -337,7 +399,7 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 			sprite.visible = false;
 			sprite.raycast = () => {};
 			root.add( sprite );
-			items.push( { sprite, age: Infinity, life: 1, velocity: new Vector3(), size: 1, grow: 0, fall: 0, twinkle: 0 } );
+			items.push( { sprite, age: Infinity, life: 1, velocity: new Vector3(), size: 1, grow: 0, fall: 0, twinkle: 0, spin: 0 } );
 
 		}
 
@@ -346,7 +408,8 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 	}
 
 	// `fall`: the share of gravity it falls with (a hit's sparks), 0 for what floats or rises.
-	// `twinkle`: a sparkle's twinkle, by a phase of its own (0 for none).
+	// `twinkle`: a sparkle's twinkle, by a phase of its own (0 for none). Returns the item, which
+	// turns at its `spin` (rad/s; none unless it's given one).
 	function emit( from, at, velocity, life, size, grow, colour, fall = 0, twinkle = 0 ) {
 
 		const item = from.items[ from.next ];
@@ -359,8 +422,10 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 		item.grow = grow;
 		item.fall = fall;
 		item.twinkle = twinkle;
+		item.spin = 0;
 		item.sprite.material.color.set( colour );
 		item.sprite.visible = true;
+		return item;
 
 	}
 
@@ -383,6 +448,7 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 			const twinkle = item.twinkle ? 0.55 + 0.45 * Math.sin( item.age * 38 + item.twinkle ) : 1;
 			item.sprite.scale.setScalar( ( item.size + item.grow * t ) * twinkle );
 			item.sprite.material.opacity = fade * ( 1 - t );
+			if ( item.spin ) item.sprite.material.rotation += item.spin * dt;
 
 		}
 
@@ -438,6 +504,7 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 	let scrapeDue = 0;
 	let trailDue = 0;
 	let sparkleCount = 0;
+	let starCount = 0;
 	let flicker = 0;
 	const colour = new Color();
 
@@ -475,7 +542,7 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 			// The rainbow flame flashes in whatever colour it's burning in now.
 			if ( rainbow && ! style ) tint.setHSL( flicker / RAINBOW_TURN % 1, 1, 0.65 );
 			bursts.ignite( frame, tint, !! effects.calm );
-			style?.ignite( frame, effects.detail ?? 1 );
+			style?.ignite( frame, effects.detail ?? 1, !! effects.calm );
 			surge = 1;
 
 		}
@@ -500,8 +567,9 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 
 	}
 
-	// The trail, while it boosts or flies (`power` over 0): puffs or sparkles left behind the back of
-	// it, drifting a little after it, or the ribbon drawn out from across its back.
+	// The trail, while it boosts or flies (`power` over 0): puffs, sparkles, tongues of fire or stars
+	// left behind the back of it, drifting a little after it, or a ribbon drawn out from across its
+	// back.
 	function updateTrail( pivot, size, velocity, power, dt ) {
 
 		if ( ribbon ) {
@@ -511,28 +579,41 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 
 		}
 
-		const from = trailSmoke ?? sparkles;
+		const from = trailSmoke ?? sparkles ?? fire ?? shootingStars;
 		if ( ! from ) return;
 		if ( power > 0 ) {
 
 			trailDue -= dt;
-			const step = trailSmoke ? SMOKE_TRAIL_STEP : SPARKLE_STEP;
+			const step = trailSmoke ? SMOKE_TRAIL_STEP : sparkles ? SPARKLE_STEP : fire ? FIRE_STEP : STAR_STEP;
 			while ( trailDue <= 0 ) {
 
 				trailDue += step;
 				// Somewhere across the back of it, a little behind.
 				const across = ( Math.random() - 0.5 ) * size.width * 0.7;
-				const up = size.height * ( trailSmoke ? 0.35 : 0.2 + Math.random() * 0.5 );
+				const up = size.height * ( sparkles ? 0.2 + Math.random() * 0.5 : 0.35 );
 				pivot.localToWorld( _p.set( across / size.scale, up / size.scale, ( size.rear + 0.15 ) / size.scale ) );
 				if ( trailSmoke ) {
 
 					_v.set( ( Math.random() - 0.5 ) * 0.6, 0.3 + Math.random() * 0.4, ( Math.random() - 0.5 ) * 0.6 ).addScaledVector( velocity, 0.2 );
 					emit( trailSmoke, _p, _v, SMOKE_TRAIL_LIFE, 0.55 + size.width * 0.2, 1.6 + size.width * 0.5, smokeColour );
 
-				} else {
+				} else if ( sparkles ) {
 
 					_v.set( ( Math.random() - 0.5 ) * 1.2, ( Math.random() - 0.3 ) * 1.2, ( Math.random() - 0.5 ) * 1.2 ).addScaledVector( velocity, 0.15 );
 					emit( sparkles, _p, _v, SPARKLE_LIFE * ( 0.6 + Math.random() * 0.6 ), 0.16 + Math.random() * 0.18, 0, SPARKLE_COLOURS[ sparkleCount ++ % SPARKLE_COLOURS.length ], 0.12, 1 + Math.random() * 6 );
+
+				} else if ( fire ) {
+
+					// Licking up off it and left behind, a little after it.
+					_v.set( ( Math.random() - 0.5 ) * 0.8, 0.8 + Math.random() * 0.8, ( Math.random() - 0.5 ) * 0.8 ).addScaledVector( velocity, 0.3 );
+					emit( fire, _p, _v, FIRE_LIFE * ( 0.7 + Math.random() * 0.5 ), 0.35 + size.width * 0.12, 0.25 + size.width * 0.15, FIRE_COLOURS[ 0 ] );
+
+				} else {
+
+					// Tossed up off it, spinning one way or the other, and falling away behind.
+					_v.set( ( Math.random() - 0.5 ) * 1.6, 1.5 + Math.random() * 1.5, ( Math.random() - 0.5 ) * 1.6 ).addScaledVector( velocity, 0.35 );
+					const star = emit( shootingStars, _p, _v, STAR_LIFE * ( 0.8 + Math.random() * 0.4 ), 0.26 + size.width * 0.05, - 0.16, STAR_COLOURS[ starCount ++ % STAR_COLOURS.length ], 0.5 );
+					star.spin = ( Math.random() < 0.5 ? - 1 : 1 ) * ( 3 + Math.random() * 3 );
 
 				}
 
@@ -541,6 +622,15 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 		} else trailDue = 0;
 
 		age( from, dt, trailSmoke ? 0.8 : 1 );
+		// Fire cools as it goes, from gold through orange to red.
+		if ( fire ) for ( const item of fire.items ) {
+
+			if ( item.age >= item.life ) continue;
+			const t = item.age / item.life * ( FIRE_COLOURS.length - 1 );
+			const i = Math.min( Math.floor( t ), FIRE_COLOURS.length - 2 );
+			item.sprite.material.color.lerpColors( FIRE_COLOURS[ i ], FIRE_COLOURS[ i + 1 ], t - i );
+
+		}
 
 	}
 
@@ -918,27 +1008,25 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 
 }
 
-// The rainbow ribbon: a strip across the back of the vehicle, drawn out behind it as it boosts or
-// flies, each point along it fading as it ages. Its colours are bands side by side, red on the left
-// to violet on the right, so it reads as a rainbow at any speed and from any side; bands of colour
-// along it instead would be one colour across the few metres the chase camera sees at speed. Its
-// points go round a ring, and each frame they're written newest first into buffers made once; the
-// colours are written once, and only how faded each point is changes.
-function makeRibbon( root ) {
+// A ribbon (RAINBOW or NEON above): a strip across the back of the vehicle, drawn out behind it as
+// it boosts or flies, each point along it fading as it ages. Its colours are bands side by side: the
+// rainbow's red on the left to violet on the right, so it reads as a rainbow at any speed and from
+// any side (bands of colour along it instead would be one colour across the few metres the chase
+// camera sees at speed); the neon streak's a line of light at each side. Its points go round a
+// ring, and each frame they're written newest first into buffers made once; the colours are written
+// once, and only how faded each point is changes.
+function makeRibbon( root, { bands, half: wide, additive } ) {
 
 	// Each band has two edges of its own, so its colour stops sharply at the next one's.
-	const bands = RIBBON_HUES.length;
-	const row = bands * 2;
+	const row = bands.length * 2;
 	const positions = new Float32Array( RIBBON_POINTS * row * 3 );
 	const colours = new Float32Array( RIBBON_POINTS * row * 4 );
 	const index = [];
-	const hue = new Color();
-	for ( let i = 0; i < RIBBON_POINTS; i ++ ) for ( let band = 0; band < bands; band ++ ) {
+	for ( let i = 0; i < RIBBON_POINTS; i ++ ) for ( let band = 0; band < bands.length; band ++ ) {
 
 		const a = i * row + band * 2;
-		hue.setHSL( RIBBON_HUES[ band ], 1, 0.55 );
-		hue.toArray( colours, a * 4 );
-		hue.toArray( colours, ( a + 1 ) * 4 );
+		bands[ band ][ 2 ].toArray( colours, a * 4 );
+		bands[ band ][ 2 ].toArray( colours, ( a + 1 ) * 4 );
 		if ( i < RIBBON_POINTS - 1 ) index.push( a, a + 1, a + row, a + 1, a + row + 1, a + row );
 
 	}
@@ -948,7 +1036,7 @@ function makeRibbon( root ) {
 	geometry.setAttribute( 'position', new BufferAttribute( positions, 3 ).setUsage( DynamicDrawUsage ) );
 	geometry.setAttribute( 'color', new BufferAttribute( colours, 4 ).setUsage( DynamicDrawUsage ) );
 	geometry.setDrawRange( 0, 0 );
-	const mesh = new Mesh( geometry, new MeshBasicMaterial( { vertexColors: true, transparent: true, side: DoubleSide, depthWrite: false } ) );
+	const mesh = new Mesh( geometry, new MeshBasicMaterial( { vertexColors: true, transparent: true, side: DoubleSide, depthWrite: false, blending: additive ? AdditiveBlending : NormalBlending } ) );
 	// Its bounds change every frame; it's never far from the vehicle, which is on screen.
 	mesh.frustumCulled = false;
 	mesh.raycast = () => {};
@@ -963,7 +1051,7 @@ function makeRibbon( root ) {
 	// The newest point, across the back of the vehicle as it is now.
 	function across( point, pivot, size ) {
 
-		const half = size.width * 0.28 / size.scale;
+		const half = size.width * wide / size.scale;
 		const up = size.height * 0.3 / size.scale;
 		const back = ( size.rear + 0.05 ) / size.scale;
 		pivot.localToWorld( point.left.set( - half, up, back ) );
@@ -1000,20 +1088,21 @@ function makeRibbon( root ) {
 				const point = points[ ( head - count + RIBBON_POINTS ) % RIBBON_POINTS ];
 				const age = clock - point.born;
 				if ( age > RIBBON_LIFE ) break;
-				const fade = ( 1 - age / RIBBON_LIFE ) * 0.85;
+				const fade = 1 - age / RIBBON_LIFE;
 				for ( let edge = 0; edge < row; edge ++ ) {
 
 					// Edge 2b and 2b + 1 are band b's left and right.
+					const band = bands[ edge >> 1 ];
 					const vertex = count * row + edge;
-					_across.lerpVectors( point.left, point.right, ( ( edge >> 1 ) + ( edge & 1 ) ) / bands ).toArray( positions, vertex * 3 );
-					colours[ vertex * 4 + 3 ] = fade;
+					_across.lerpVectors( point.left, point.right, band[ edge & 1 ] ).toArray( positions, vertex * 3 );
+					colours[ vertex * 4 + 3 ] = fade * band[ 3 ];
 
 				}
 
 			}
 
 			mesh.visible = count > 1;
-			geometry.setDrawRange( 0, Math.max( 0, count - 1 ) * bands * 6 );
+			geometry.setDrawRange( 0, Math.max( 0, count - 1 ) * bands.length * 6 );
 			if ( mesh.visible ) {
 
 				geometry.attributes.position.needsUpdate = true;

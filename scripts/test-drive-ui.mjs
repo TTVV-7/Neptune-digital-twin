@@ -1546,6 +1546,76 @@ describe( 'World Drive boost and driving effects', () => {
 
 	} );
 
+	test( 'every boost style lights with a burst of its own and streams its particles while boosting: thinner on a phone, and never more for a visitor asking for less motion', async () => {
+
+		const result = await page.evaluate( async () => {
+
+			const { createDriveFx } = await import( '/src/drive-fx.js' );
+			const { BOOST_STYLES } = await import( '/src/drive-boosts.js' );
+			const { driver: d } = window.drive;
+			const world = d.models.group.parent;
+			const kinds = { desktop: { detail: 1, calm: false }, phone: { detail: 0.6, calm: false }, calm: { detail: 1, calm: true } };
+			// Lit at 60 km/h: how many particles are alive the frame after (its burst, and the bursts
+			// every style has), and after two seconds of boosting (its stream alone: the bursts are
+			// gone by then).
+			const run = ( style, effects ) => {
+
+				d.fx.dispose();
+				d.fx = createDriveFx( world, { boost: style, flame: 'orange', trail: null }, { effects } );
+				for ( const code of [ ...d.keys ] ) d.release( code );
+				Object.assign( d, { east: 0, north: 0, y: 0, heading: 0, course: 0, view: 0, speed: 60 / 3.6, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, flying: false, drifting: 0, driftLevel: 0, boost: null, firing: false, gauge: 1, supersonic: false, nearTop: 0 } );
+				d.update( 1 / 60 );
+				d.fireBooster();
+				d.update( 1 / 60 );
+				const lit = d.fx.particles.alive;
+				for ( let i = 0; i < 120; i ++ ) {
+
+					Object.assign( d, { gauge: 1, speed: 60 / 3.6 } );
+					if ( d.north > 800 ) d.north -= 1000;
+					d.update( 1 / 60 );
+
+				}
+
+				return { lit, streaming: d.fx.particles.alive };
+
+			};
+			const out = {};
+			for ( const [ kind, effects ] of Object.entries( kinds ) ) {
+
+				// The classic flame has no particles of its own: what's alive as it lights is the bursts'.
+				const bursts = run( 'classic', effects ).lit;
+				for ( const style of BOOST_STYLES ) {
+
+					const { lit, streaming } = run( style, effects );
+					( out[ style ] ??= {} )[ kind ] = { own: lit - bursts, streaming };
+
+				}
+
+			}
+
+			d.fx.dispose();
+			d.fx = createDriveFx( world, { boost: 'classic', flame: 'orange', trail: null }, { effects: d.effects } );
+			return out;
+
+		} );
+		console.log( 'boost styles lit and boosting:', JSON.stringify( result ) );
+		assert.ok( Object.keys( result ).length >= 21 );
+		for ( const [ style, { desktop, phone, calm } ] of Object.entries( result ) ) {
+
+			assert.ok( desktop.own > 0 && desktop.streaming > 5, `${ style }: ${ JSON.stringify( desktop ) }` );
+			assert.ok( phone.own <= desktop.own && phone.own > 0 && phone.streaming > 5, `${ style } on a phone: ${ JSON.stringify( phone ) }` );
+			assert.ok( calm.own <= desktop.own && calm.own > 0 && calm.streaming > 5, `${ style }, calm: ${ JSON.stringify( calm ) }` );
+
+		}
+
+		// These each throw fewer on a phone (a few of the first styles' strikes and hoops are the same
+		// there); the galaxy's bright core is left out for a visitor asking for less motion.
+		for ( const style of [ 'notes', 'petals', 'afterburner', 'frost', 'galaxy', 'dragon', 'butterflies', 'spooky', 'laser', 'slime' ] ) assert.ok( result[ style ].phone.own < result[ style ].desktop.own, style );
+		assert.ok( result.galaxy.calm.own < result.galaxy.desktop.own );
+		assert.deepEqual( page.errors, [] );
+
+	} );
+
 	test( 'boosting: speed lines thicken with the speed, overdrive flashes the edges of the view white, and the gauge pulses full, flashes run dry and fills up from a pad', async () => {
 
 		await page.evaluate( () => window.untilFrame = ( done, most = 600 ) => new Promise( resolve => {

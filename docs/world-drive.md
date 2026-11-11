@@ -132,7 +132,8 @@ Hit something (a wall, a building, a parked car, a barrier) and you don't stop: 
 - **The booster** (**Shift**, or **B**) fires the whole gauge, 2.5 s of it (it needs 15 % to light), pushing you up
   to twice the ride's top speed. The gauge refills by itself in 8 s; landed tricks top it up (a fifth
   each), and so do boost pads. What it leaves behind is the ride's **boost style** from the
-  [Garage](#the-garage): the classic flame, bubbles or confetti, or with the pass one of nine more.
+  [Garage](#the-garage): the classic flame, bubbles, confetti, music notes or cherry blossom, or
+  with the pass (or, for some, a level) one of seventeen more.
 - **Overdrive.** Boost at 85 % or more of that doubled top speed for three quarters of a second and
   you hit overdrive (the code calls it supersonic): a sonic boom (shock rings blown out round you, a flash and a jolt, the edges of the view flashing white), streaks of
   air streaming back past you, the view 9° wider and **OVERDRIVE** by the speed. It lasts, boosting
@@ -229,10 +230,12 @@ turned off) turns off everything done to the view: the jolts, the shake of a hit
 and overdrive's white edges (`src/drive-app/screen-fx.js`; main.js adds a jolt's `driver.punch` to
 the field of view). The bursts in the world stay. A visitor whose system asks for less motion
 (`prefers-reduced-motion`) has none of those whatever the switch says, and fewer flashes: no flare
-as the booster lights nor in overdrive's boom, whose rings are fainter (0.6 as bright), the vehicle
-not lit up on a pad, and the gauge glowing steadily when it's full rather than pulsing, and flashing
-once as it runs dry. Overdrive's 9° wider view is as it was, either way. On a touch screen the
-bursts have 60 % of their sparks, and there are 24 speed lines rather than 48. The Garage's
+as the booster lights nor in overdrive's boom, whose rings are fainter (0.6 as bright), no bright
+core to the galaxy's burst and a fainter shock ring to the afterburner's (a style's `ignite` is told
+`calm`), the vehicle not lit up on a pad, and the gauge glowing steadily when it's full rather than
+pulsing, and flashing once as it runs dry. Overdrive's 9° wider view is as it was, either way. On a
+touch screen the bursts have 60 % of their sparks (and most styles' own bursts as they light fewer
+too), and there are 24 speed lines rather than 48. The Garage's
 **▶ Boost** has the same effects as driving (main.js hands it `driver.effects`): no flare for a
 visitor asking for less motion, and a phone's fewer sparks.
 
@@ -265,8 +268,11 @@ the squat), running it dry (the glow, then nothing left), a pad (its burst carri
 flash), the ground the bursts fade out down to (and none in the air), a drift's three levels and its
 mini-turbo, a standing start's wheelspin and smoke, braking's dip and a turn's lean, no lurch put
 back at a stop, settling back level, nothing made in a dozen ignitions and the budgets kept; the
-effects going with a pause and made again; the speed lines thickening with speed and going,
-overdrive's white edges, the gauge pulsing, flashing and refilling; the switch turning it all off,
+effects going with a pause and made again; every boost style lighting with a burst of its own and
+streaming its particles while it boosts, as a phone has it (no more, and fewer for the newer ones)
+and for a visitor asking for less motion (no more; the galaxy's without its bright core); the speed
+lines thickening with speed and going, overdrive's white edges, the gauge pulsing, flashing and
+refilling; the switch turning it all off,
 kept across a reload, and on again; asking for less motion; the sonic boom's rings keeping up with
 the kart (read back off the canvas frame by frame: under half of the view near white, 28 % at
 most, where rings falling back through the camera had 95 % of it), with no flare for a
@@ -1350,7 +1356,7 @@ dots, no **Driving now**, and with `LIVE` off on a page loaded then, not even an
 ## Levels
 
 Driving earns **XP**, and XP climbs **50 levels**, each with something to unlock. About half of the
-[Supporter Pass](#supporter-pass-content)'s Garage looks come with levels on the way to 40, and six
+[Supporter Pass](#supporter-pass-content)'s Garage looks come with levels on the way up, and six
 [cars](#world-drives-cars) from 5 to 40 (the pass still gives them all at once), and some rewards
 only levels give, supporters included: titles for your nametag, the level badge's frame and four
 colours. The pass's own rides (its first nine and its two showpiece cars, the hypercar and the
@@ -1414,7 +1420,7 @@ rewards.
 | 1 | 0 | Title: Rookie; Steel badge |
 | 2 | 200 | Sunburst paint ⭐ |
 | 3 | 500 | Hearts boost ⭐ |
-| 4 | 900 | Title: Joyrider |
+| 4 | 900 | Title: Joyrider; Red flame ⭐ |
 | 5 | 1,450 | **Golf cart** ⭐; Lime paint ⭐ |
 | 6 | 2,100 | White rims ⭐ |
 | 7 | 2,900 | Plasma boost ⭐ |
@@ -1422,14 +1428,14 @@ rewards.
 | 9 | 4,850 | Racing stripes ⭐ |
 | 10 | 6,050 | Bronze badge |
 | 11 | 7,450 | Teal paint ⭐ |
-| 12 | 9,050 | Title: Street Racer |
+| 12 | 9,050 | Title: Street Racer; Frost boost ⭐ |
 | 13 | 10,750 | Pixel boost ⭐ |
 | 14 | 12,650 | Blue flame ⭐ |
 | 15 | 14,850 | **Ice-cream van** ⭐; Title: Stunt Ace |
 | 16 | 17,250 | Smoke trail ⭐ |
 | 17 | 19,850 | Title: Speedster |
 | 18 | 22,750 | Electric blue paint ⭐ |
-| 19 | 25,850 | Title: Trickster |
+| 19 | 25,850 | Title: Trickster; Gold flame ⭐ |
 | 20 | 29,250 | Silver badge |
 | 21 | 32,950 | Red rims ⭐ |
 | 22 | 36,950 | **Lawn tractor** ⭐; Title: Explorer |
@@ -1437,37 +1443,38 @@ rewards.
 | 24 | 45,950 | Title: Globetrotter |
 | 25 | 50,950 | Copper paint (levels only) |
 | 26 | 56,350 | Number decal ⭐ |
-| 27 | 62,150 | Title: Road Warrior |
+| 27 | 62,150 | Title: Road Warrior; Spooky boost ⭐ |
 | 28 | 68,350 | Green flame ⭐ |
 | 29 | 74,950 | Title: Sky Pilot |
 | 30 | 82,050 | **Retro wedge** ⭐; Gold badge |
 | 31 | 89,550 | Matte finish ⭐ |
 | 32 | 97,550 | Title: Daredevil |
-| 33 | 106,050 | Title: Trailblazer |
+| 33 | 106,050 | Title: Trailblazer; Teal flame ⭐ |
 | 34 | 115,050 | Violet paint ⭐ |
 | 35 | 124,650 | Mint paint (levels only) |
 | 36 | 134,750 | Title: Pathfinder |
 | 37 | 145,450 | Blue rims ⭐ |
 | 38 | 156,750 | Title: Storm Chaser |
-| 39 | 168,650 | Title: High Flyer |
+| 39 | 168,650 | Title: High Flyer; Dragon fire boost ⭐ |
 | 40 | 181,150 | **Formula racer** ⭐; Platinum badge; Purple flame ⭐ |
 | 41 | 194,350 | Title: Thrill Seeker |
 | 42 | 208,250 | Title: Wheel Wizard |
-| 43 | 222,850 | Title: Night Owl |
+| 43 | 222,850 | Title: Night Owl; White-hot flame ⭐ |
 | 44 | 238,150 | Title: Road Captain |
 | 45 | 254,250 | Plum paint (levels only) |
 | 46 | 271,050 | Title: Cartographer |
-| 47 | 288,650 | Title: Supersonic |
+| 47 | 288,650 | Title: Supersonic; Afterburner boost ⭐ |
 | 48 | 307,050 | Title: World Tourer |
 | 49 | 326,350 | Title: Icon |
 | 50 | 346,450 | Title: Legend; Legend badge; Champion gold paint (levels only) |
 
-That's 19 of the pass's 38 Garage looks (5 of its 9 colours, matte, stripes and a number, 3 of its
-6 rim colours, 4 of its 9 boost styles, 3 of its 5 flame colours and the smoke trail; a colour
+That's 27 of the pass's 54 Garage looks (5 of its 9 colours, matte, stripes and a number, 3 of its
+6 rim colours, 8 of its 17 boost styles, 7 of its 10 flame colours and the smoke trail; a colour
 unlocked is a smoke colour too). The showiest stay the pass's alone: jet black, forest green, royal
 blue and hot pink paint, metallic, flames and checker, gold, lime and pink rims, the lightning,
-comet, neon rings, fireworks and ink boosts, pink and rainbow flames, and the sparkle and rainbow
-ribbon trails. The four level-only colours are in `paint.js`'s `SWATCHES` with `levelOnly`.
+comet, neon rings, fireworks, ink, galaxy, butterflies, neon laser and slime boosts, pink, rainbow
+and ice flames, and the sparkle, rainbow ribbon, fire, shooting stars and neon streak trails. The
+four level-only colours are in `paint.js`'s `SWATCHES` with `levelOnly`.
 
 The cars come about as often as a regular comes back for more: the golf cart in a first session,
 the tuk-tuk within the first hour, then each a little further apart than the last (15, 22, 30,
@@ -1477,13 +1484,13 @@ first and the fast ones later. They're `ride` rewards in `REWARDS` (`rideLevel`,
 
 ### What the Supporter Pass gives
 
-Every Garage look at once (the 19 on the track and the 19 that are the pass's alone), the six cars
+Every Garage look at once (the 27 on the track and the 27 that are the pass's alone), the six cars
 on the track and its own eleven rides, **+50% XP**; and still a ⭐ and 30 drives a day
 ([below](#supporter-pass-buying-it)). Levels' own rewards (titles, badges, the level-only colours)
 come with levels for everyone, supporters too. The ×1.5 is the Worker's: it looks up the pass of the
 account the player is linked to, never anything the page says.
 
-A supporter has the track's 19 pass looks and its six cars already, so for them those levels bring
+A supporter has the track's 27 pass looks and its six cars already, so for them those levels bring
 nothing new:
 18 of their level-ups from 2 to 39 (2, 3, 5, 6, 7, 9, 11, 13, 14, 16, 18, 21, 23, 26, 28, 31, 34
 and 37). The page says so rather than "Unlocked": a level-up says "Already yours with the pass:
@@ -1667,8 +1674,8 @@ Removing a player removes their discoveries with them.
 climbs it (printing the play to levels 2, 5, 10, 30 and 50) and the track as written (every level
 from 2 to 50 gives something, level 2 within the first drive's bonuses, its six cars (each a car
 the leaderboard takes, spread out from level 5) and the pass's own rides never on it, a level's car
-locked until its level unless with the pass and the pass's own whatever the level, 19 of its 38
-looks on it by level 40 and the showiest not, every look a choice the Garage has, the level-only
+locked until its level unless with the pass and the pass's own whatever the level, 27 of its 54
+looks on it by level 49 and the showiest not, every look a choice the Garage has, the level-only
 colours never with the pass, the Garage's locks, a supporter's "Next"), reports'
 shapes and caps, and that progress.js asks no Durable Object; then the Worker under `wrangler dev`:
 a report's XP and its answer, every cap by the time since the last (a minute's worth, half a
@@ -1944,9 +1951,9 @@ turntable (drag to turn it; **▶ Boost** shows its boost and trail), and for ea
 | Finish | Gloss | Matte (31) | Metallic | |
 | Decal | None | Racing stripes (9), a number, 0 to 99 (26) | Flames, checker | |
 | Rims (a hovercraft's trim) | Silver, graphite | White (6), red (21), blue (37) | Gold, lime, pink | |
-| Boost style | Classic flame, bubbles, confetti | Hearts (3), plasma (7), pixel (13), glitter (23) | Lightning, comet, neon rings, fireworks, ink | |
-| Flame colour (the classic flame's) | Orange | Blue (14), green (28), purple (40) | Pink, rainbow | |
-| Trail (boosting or flying) | None | Smoke (16; its colours as the body colours unlock) | Sparkle, rainbow ribbon (six bands side by side) | |
+| Boost style | Classic flame, bubbles, confetti, music notes, cherry blossom | Hearts (3), plasma (7), frost (12), pixel (13), glitter (23), spooky (27), dragon fire (39), afterburner (47) | Lightning, comet, neon rings, fireworks, ink, galaxy, butterflies, neon laser, slime | |
+| Flame colour (the classic flame's) | Orange | Red (4), blue (14), gold (19), green (28), teal (33), purple (40), white-hot (43) | Pink, rainbow, ice | |
+| Trail (boosting or flying) | None | Smoke (16; its colours as the body colours unlock) | Sparkle, rainbow ribbon (six bands side by side), fire, shooting stars, neon streak | |
 
 **Boost styles** (`src/drive-boosts.js`; the Garage's list, with a little picture for each, is
 `src/drive-app/boosts.js`) are what the booster leaves behind:
@@ -1965,16 +1972,32 @@ turntable (drag to turn it; **▶ Boost** shows its boost and trail), and for ea
 | Hearts | Hearts rising and swaying away, beating as they go | A ring of hearts thrown out round the exhaust, then rising |
 | Pixel | Chunky squares in a bright palette on a grid in the world, shrinking in steps and blinking out | An old game's explosion: pixels thrown out eight ways in rings, white-hot inside |
 | Ink | Blobs of bright paint flung out behind, leaving splats on the road for five seconds, drawn out longer the faster it goes | A big splash of blobs in a fan, and a few splats on the road at once |
+| Music notes | Eighth notes and beamed pairs in bright colours, rising and swaying away, all bobbing to one beat (two a second) | A chord: a ring of notes thrown out round the exhaust |
+| Cherry blossom | Pink petals fluttering out behind, tumbling over and over as they drift down, and now and then a whole flower | A gust of blossom swirling out round the exhaust |
+| Afterburner | A jet's long blue cone with a row of white shock diamonds burning in it, throbbing, a rosy glow at its tail and blue sparks streaming off it | A shock ring blown out behind, diamonds shot back down the cone, and a spray of sparks |
+| Frost | Snowflakes turning as they drift, and glints of ice, out of a cold mist | Shards of ice thrown out all round the exhaust, a cold puff and a flurry of snow |
+| Galaxy | A violet flame streaming twinkling stars through drifting pink and blue clouds of nebula | A little spiral galaxy, two arms of stars swirling out round a bright core |
+| Dragon fire | A deep red flame roaring out tongues of fire that cool from orange to a deep red, with glowing embers floating up and curls of dark smoke | A roar: a fireball of tongues, a shower of embers and a ring of smoke |
+| Butterflies | Butterflies in bright colours fluttering up and away, wings beating, each wandering its own way | A flutter of butterflies bursting out every way |
+| Spooky | Glowing wisps curling up out of a ghostly green flame, and now and then a little ghost floating off behind, bobbing as it goes | "Boo!": a ring of ghosts popping out round the exhaust, and a puff of wisps |
+| Neon laser | A laser show: beams in cyan, pink, lime and blue fanning up and out behind and sweeping, with bolts of light shot along them | A starburst of beams all round at once, and a hoop of light |
+| Slime | Blobs of green goo flung out behind, wobbling as they fly, bubbles that swell and pop, and puddles on the road for a couple of seconds | A splurt of blobs in a fan, a froth of bubbles and a puddle or two |
 
 The flame colour was the Garage's only boost choice before the styles. It's now the classic flame's
 colour, shown under it, so a look saved before (a flame and no style) is the classic flame in the
 colour it had; without the pass (or the level) a saved style is the classic flame again, as anything
 else locked goes back to its free choice.
 
-Each style is one batch of quads drawn from one picture sheet, in one draw call: billboards, strips
-along a line (a bolt, a comet's tail) or quads flat across a normal (a ring, a splat on the road).
-It has a fixed number of particles, made once with its buffers (its budget, 40 to 280; the oldest
-is reused when they're all in use), and each frame only the numbers in its buffers change, so
+Each style is one batch of quads drawn from one picture sheet, in one draw call (dragon fire and
+spooky two: their glowing parts are added to what's behind, their tongues of fire, smoke and ghosts
+drawn over it, so the fire stays red and the ghosts white against a bright sky): billboards, strips
+along a line (a bolt, a comet's tail, a laser's beam, a tongue of fire) or quads flat across a
+normal (a ring, a splat on the road). The sheet is drawn once on a canvas, 6 by 6 pictures of
+128 px: soft glows, stars, a heart, pixels, rings, bubbles, splats, sparks, a shock diamond, a
+snowflake, notes, a petal and a blossom, a ghost, a shard of ice, a puff of cloud, a butterfly, a
+wisp and a beam. A style has a fixed number of particles, made once with its buffers (its budget,
+40 to 280; the oldest is reused when they're all in use), and each frame only the numbers in its
+buffers change, so
 nothing is made while boosting. Most of what's thrown out is carried along at 85 to 97 % of the
 vehicle's speed (ink and a comet's tail less), with the air slowing only its own motion, so at
 150 km/h it trails a few metres behind, between the vehicle and the chase camera, rather than being left on the road, which at that
@@ -1983,7 +2006,10 @@ On the test pad (software rendering in the test's browser), a minute of boosting
 new (no geometries, textures, programs, objects or materials) and kept within its budget (at most
 205 alive, glitter's); the driving and its effects took 0.1 to 0.2 ms a frame with any style, and
 drawing them added 2 to 10 % to a frame for most, and up to a fifth for those that cover the most
-of the view (lightning 15 %, fireworks 22 %).
+of the view (lightning 15 %, fireworks 22 %). The ten styles that came after them, timed the same
+way but on a machine busy with other test runs (so the times are rougher), took 0.2 to 0.3 ms a
+frame, added under a tenth to a frame for most and about a seventh at most (dragon fire 14 %, the
+galaxy 11 %), and had at most 167 particles alive (the galaxy's).
 
 Choices are kept for each ride in this browser (`world-drive.garage` in localStorage) and put on
 whenever it's driven; picked while paused they're on it as soon as it drives on. A browser that keeps
@@ -1997,7 +2023,10 @@ so they take colours, finishes, rims and decals as the rides do (the free ones w
 A level's car, or the pass's, can be looked at and its look chosen before it's yours, as a pass
 ride's can; its choices open the pass's sheet until then. A ride in the colour and finish it came in
 keeps its own materials, so the kart nobody has painted is just as it was. The trails are cheap: a
-pool of sprites, or one ribbon whose buffers are rewritten in place, nothing made each frame. On the
+pool of sprites (smoke, sparkles, fire's tongues, recoloured from gold to red as they cool, and the
+shooting stars, turning as they fly) or one ribbon whose buffers are rewritten in place (the
+rainbow's six bands, or the neon streak's two lines of light off the back corners, each a white core
+in a glow of cyan or pink), nothing made each frame. On the
 test pad (software rendering in the test's browser), the booster's flame made a frame about 7 %
 slower and a trail behind it a few per cent more again; the driving and its effects took 0.2 to
 0.3 ms a frame with or without them. While the Garage is open the world behind it isn't drawn (its
@@ -2013,10 +2042,13 @@ a car, the
 Garage's choices on the ride and kept across a reload (and still made with a damaged saved value,
 or none kept at all), the world not drawn behind the Garage, the frame time with trails, nothing
 turning in the air faster than the kart, each ride going supersonic, the boost styles in the Garage
-(three free, the rest opening the sheet), a look saved before the styles keeping its flame's colour,
+(five free, the rest opening the sheet, each with its picture and saying what unlocks it: "Pass", or
+"Lv 12 · or Pass" for those on the track), a look saved before the styles keeping its flame's colour,
 every style drawn at 150 km/h (with a picture of each), making nothing new in a minute of boosting
-and timed, and the Garage and the locked rides' badges (and the levels' cars' "Lv 8 · or Pass") on a
-phone. And the cars: each listed in `cars.json`, `cars.js` and `DRIVE_CARS` alike, one free, six
+and timed, every flame colour drawn in its own colours and every trail drawn (seen from behind and
+off to the side, a good deal more than the flame alone), and the Garage and the locked rides'
+badges (and the levels' cars' "Lv 8 · or Pass") on a phone. And the cars: each listed in
+`cars.json`, `cars.js` and `DRIVE_CARS` alike, one free, six
 levels' and the rest the pass's, under 2 MB, CC BY or CC0 and in `CREDITS.md` (with what was
 painted over: the hypercar's number plate, there and in About), its real size (the
 small odd ones shorter, the ice-cream van taller with its cone), with four wheels (the tuk-tuk

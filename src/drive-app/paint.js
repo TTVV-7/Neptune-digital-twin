@@ -78,6 +78,11 @@ export const FLAMES = [
 	{ id: 'purple', name: 'Purple', css: '#8f3dff' },
 	{ id: 'pink', name: 'Pink', css: '#ff3d98' },
 	{ id: 'rainbow', name: 'Rainbow', css: 'conic-gradient( #ff3d3d, #ffd23d, #3dff6e, #3dc8ff, #8f3dff, #ff3d98, #ff3d3d )' },
+	{ id: 'red', name: 'Red', css: '#ff2410' },
+	{ id: 'gold', name: 'Gold', css: 'radial-gradient( circle at 35% 30%, #fff6c8, #ffb01a 60% )' },
+	{ id: 'teal', name: 'Teal', css: '#10d6bc' },
+	{ id: 'ice', name: 'Ice', css: 'radial-gradient( circle at 35% 30%, #ffffff, #8ee6ff 65% )' },
+	{ id: 'white', name: 'White-hot', css: 'radial-gradient( circle at 35% 30%, #ffffff, #fff0dc 55%, #ffd9a8 )' },
 ];
 // Trails behind it boosting or flying (drive-fx.js); smoke comes in any of SMOKES.
 export const TRAILS = [
@@ -85,6 +90,9 @@ export const TRAILS = [
 	{ id: 'smoke', name: 'Smoke' },
 	{ id: 'sparkle', name: 'Sparkle' },
 	{ id: 'ribbon', name: 'Rainbow ribbon' },
+	{ id: 'fire', name: 'Fire' },
+	{ id: 'stars', name: 'Shooting stars' },
+	{ id: 'neon', name: 'Neon streak' },
 ];
 export const SMOKES = SWATCHES.filter( swatch => [ 'white', 'black', 'red', 'sunburst', 'lime', 'electric', 'violet', 'pink' ].includes( swatch.id ) );
 

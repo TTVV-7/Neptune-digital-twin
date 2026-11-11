@@ -157,7 +157,7 @@ describe( 'Levels: the curve and the unlock track', () => {
 
 	} );
 
-	test( 'about half the pass\'s looks are on the track, by level 40; six cars are, and the pass\'s own rides never', () => {
+	test( 'about half the pass\'s looks are on the track, by level 49; six cars are, and the pass\'s own rides never', () => {
 
 		// Every look on the track is a choice the Garage has.
 		for ( const reward of REWARDS.filter( r => r.kind === 'look' ) ) assert.ok( LISTS[ reward.part ]?.some( choice => choice.id === reward.id ), `${ reward.part } ${ reward.id }` );
@@ -167,10 +167,10 @@ describe( 'Levels: the curve and the unlock track', () => {
 		const share = onTrack.length / passLooks.length;
 		console.log( `    ${ onTrack.length } of the pass's ${ passLooks.length } looks on the track (${ Math.round( share * 100 ) } %)` );
 		assert.ok( share >= 0.4 && share <= 0.6, `${ share }` );
-		assert.ok( onTrack.every( r => r.level >= 2 && r.level <= 40 ) );
+		assert.ok( onTrack.every( r => r.level >= 2 && r.level <= 49 ) );
 		for ( const reward of onTrack ) assert.ok( passLooks.includes( `${ reward.part }:${ reward.id }` ), reward.id );
 		// The showiest stay the pass's alone.
-		for ( const [ part, id ] of [ [ 'boost', 'lightning' ], [ 'boost', 'fireworks' ], [ 'boost', 'comet' ], [ 'trail', 'ribbon' ], [ 'flame', 'rainbow' ], [ 'rim', 'gold' ], [ 'finish', 'metallic' ] ] ) assert.equal( unlockLevel( part, id ), null, id );
+		for ( const [ part, id ] of [ [ 'boost', 'lightning' ], [ 'boost', 'fireworks' ], [ 'boost', 'comet' ], [ 'boost', 'galaxy' ], [ 'boost', 'laser' ], [ 'trail', 'ribbon' ], [ 'trail', 'neon' ], [ 'flame', 'rainbow' ], [ 'rim', 'gold' ], [ 'finish', 'metallic' ] ] ) assert.equal( unlockLevel( part, id ), null, id );
 		// Six cars, from the golf cart at 5 to the formula racer at 40, each a car World Drive has and
 		// the leaderboard takes, with the pass too; never the pass's own (its first nine rides and
 		// its showpieces), and nothing else named after a ride.
