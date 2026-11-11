@@ -3,7 +3,7 @@
 
 -- One row a UTC day ('2026-11-08'), metric ('play', 'dropin', 'garage_edit'...) and key (a ride, a
 -- start spot, a Garage part, a referring site...): `n` how many, or for a time, how many seconds or
--- milliseconds. A new count is an upsert of its row. Kept 400 days.
+-- milliseconds. A new count is an upsert of its row. Kept 730 days (stats.js, KEEP_DAYS).
 CREATE TABLE stats_daily (
 	day TEXT NOT NULL,
 	metric TEXT NOT NULL,

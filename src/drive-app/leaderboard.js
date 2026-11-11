@@ -30,8 +30,8 @@ const NO_VISIT = 'Names are picked on drives on the real 3D map.';
 // server on its own); getPlace(): the place being driven or pinned, for "only here", or null;
 // onPlayer(): a new player was made here (to link it to the account signed in, supporter.js, and
 // to claim the XP driven before, progress.js); onName(): a player made or renamed here (driving
-// with others says hello again with it, live.js).
-export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace, onPlayer = () => {}, onName = () => {} } ) {
+// with others says hello again with it, live.js); onOpen(): the boards opened (for the play stats).
+export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace, onPlayer = () => {}, onName = () => {}, onOpen = () => {} } ) {
 
 	const $ = selector => dialog.querySelector( selector );
 	const tabs = [ ...dialog.querySelectorAll( '.tabs button' ) ];
@@ -364,7 +364,13 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace, on
 
 	function open() {
 
-		if ( ! dialog.open ) dialog.showModal();
+		if ( ! dialog.open ) {
+
+			dialog.showModal();
+			onOpen();
+
+		}
+
 		renaming = false;
 		const place = getPlace();
 		here.hidden = ! place;

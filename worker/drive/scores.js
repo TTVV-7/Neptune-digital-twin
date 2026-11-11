@@ -63,8 +63,9 @@ const VEHICLES = new Set( [ 'go-kart', ...LIBRARY_VEHICLES, ...DRIVE_CARS, ...PA
 // The tricks of a run's best jump, as drive.js names them (tricksOf), joined with " + ".
 const TRICK = /^(?:(\d{3,5}) Spin!|(?:Back|Front)flip(?:!| ×\d{1,3})|Barrel roll(?:!| ×\d{1,3})|Wall bounce(?: ×\d{1,3})?|Big air \d{1,3}\.\d s)$/;
 const MAX_TRICKS = 120;
-// Kept: the log, and the day and week boards, for this long (ms).
-const KEEP = 35 * 24 * 60 * 60 * 1000;
+// Kept: the log, and the day and week boards, for this long (ms). (The admin page's scores a day
+// come from the log, so go back this far: stats.js.)
+export const KEEP = 35 * 24 * 60 * 60 * 1000;
 const TOP = 20;
 
 // POST /api/score { id, secret, score, tricks, place, vehicle, airTime, runSeconds, visit }:

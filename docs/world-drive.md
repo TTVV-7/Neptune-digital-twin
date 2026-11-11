@@ -780,7 +780,8 @@ party banner, the pause menu's friends and the horn aren't shown, and no trick's
 room. **Join** on a party's word that someone went somewhere ("Sam went to Monaco"), from the Moon,
 goes back to the Earth and drops in beside them. Levels count driving, air, drifts, pads and tricks there as anywhere, but not areas or
 start spots (those are the Earth's) nor driving with others. A drop-in there is counted in the
-[play stats](#play-stats) as the Moon's, never where.
+[play stats](#play-stats) as the Moon's, never where, its driving as the Moon's play time, and each
+turn of the globe to the Moon (and the Moon not loading) is counted too.
 
 ### How it's made
 
@@ -2378,51 +2379,115 @@ Cloudflare WAF rule if it comes to that.
 ## Play stats
 
 The owner's page of how World Drive is played: **`https://worlddrive.app/admin.html`**, for a Google
-account in `ADMIN_EMAILS`, signed in on worlddrive.app (the globe's panel). It shows, for the last 7,
-30 or 90 days or the year:
+account in `ADMIN_EMAILS`, signed in on worlddrive.app (the globe's panel). It shows the last 7, 30 or
+90 days or the year (UTC days, the last of them today so far), each figure with ▲ or ▼ against the
+as many days just before (in per cent, or in points for a share; green for better and red for worse,
+fewer being better for problems and load times):
 
-- **Visits** (each Maps key handed out, counted by the Worker as `/api/visit` answers) a day, and by
-  hour of the day (counted in UTC hours, shown in the viewer's time).
-- **Play time**: seconds driven, not paused, by ride, a day; per visit; and how much of it was with
-  others in the room.
-- **Drop-ins**: where (each start spot, "elsewhere" for a search or a pin, or the Moon: never where),
-  and in which ride.
-- **The Garage**: how often it's opened, and each change made in it, by part (colour, finish, decal,
-  rims, boost, flame, trail, smoke).
-- **Where people come from** (the referring site's host name, or direct), and **load time** (from
-  asking for the page to the globe showing: in buckets, and the mean).
-- **Parties** made (Invite friends) and joined (a party's link).
+- **Tiles**: today so far (visits and play time), visits, play time, play per visit, drop-ins, the
+  share of visits that drove and that drove 10 minutes or more, the share of play with others and on
+  the Moon, searches, problems, the mean load time, new players, new accounts, passes bought and the
+  revenue.
+- **Each day**: visits as bars and play time as a line; and **any count by day**, picked from what
+  the period has (all of a metric's keys together, or one), today's bar paler.
+- **How far visits get** (the funnel): visits, then the globe shown, a place pinned, a drop-in
+  started, driving, and driving 1, 10 and 30 minutes, each with its share of the visits and of the
+  step before. Where the shares drop is where visitors give up.
+- **Devices**: phones, tablets and computers. **Earth and Moon**: play on each, turns to the Moon and
+  drop-ins there. **Searches** by kind, and how many found nothing. **Drop-in time**, from Drive here
+  to driving, in buckets. **Problems.** **The leaderboard, the pass and levels**: the boards opened,
+  nicknames picked, the pass's sheet opened and its Buy followed to Stripe, levels reached, parties
+  made and joined.
+- **From the leaderboard and the pass** (the Worker's own tables, below): new players, new bests, new
+  Google accounts, passes by status and the revenue; and now, the players, the accounts, the accounts
+  with the pass and the passes nobody has signed in for yet.
+- As before: visits by hour of the day (counted in UTC hours, shown in the viewer's time), where
+  people come from, play time by ride, the rides and places dropped in with and at, the Garage's
+  changes by part, and load time.
+- **Download CSV**: the period's rows, `day,metric,key,n`, counts and the Worker's facts alike.
 
 Referrers, countries, browsers and page speed in more detail are Cloudflare Web Analytics', in
 Cloudflare's dashboard (Analytics & Logs → Web Analytics), from its beacon in `drive/index.html`.
 
+**What's counted** (`METRICS` in `src/drive-app/stats-protocol.js`, which the page and the Worker
+share), a day, as `metric:key`:
+
+| Metric | Keys | What it's for |
+| --- | --- | --- |
+| `visit`, `visit_hour` | `all`; the UTC hour | Visits (each Maps key handed out, counted by the Worker as `/api/visit` answers), and when |
+| `load` | the referring site's host name, or `direct` | Where people come from (once a visit) |
+| `load_time`, `load_ms` | a bucket (under 2 s to over 20 s); `total` | From asking for the page to the globe showing, and the milliseconds together for the mean |
+| `funnel` | `globe`, `pin`, `dropin`, `driving`, `drove_1m`, `drove_10m`, `drove_30m` | How far a visit gets, each step once a visit as it's reached: the globe shown, a place first pinned (a spot, a search result, a recent place, a link, a tap, an area of people driving), a drop-in first started, the first drive, and the visit's driving (not paused) passing 1, 10 and 30 minutes. A party's Join drops in without a pin, so a step can be more than the one before |
+| `device` | `phone`, `tablet`, `computer` | What the visit's on (once): a fine main pointer (a mouse, a trackpad) is a computer's, whatever its screen; a coarse one (a finger, `pointer: coarse`) is a tablet's when the screen's shorter side is 600 CSS px or more, else a phone's. A laptop with a touch screen is a computer, and so is a tablet with a trackpad |
+| `dropin`, `ride` | a start spot's id, `other` or `moon`; a ride | Where drop-ins are (never where, off a spot) and in what |
+| `dropin_time` | under 5 s, 5-10 s, 10-20 s, 20-40 s, over 40 s | How long each drop-in took, from Drive here to driving |
+| `play`, `play_world`, `play_with_others` | a ride; `earth` or `moon`; `all` | Seconds driven, not paused: by ride, by world, and with others in the room |
+| `world` | `moon` | Each time the globe turns to the Moon |
+| `search` | `earth`, `moon`, `coordinates`, `nothing` | Searches made: of the map, of the Moon's places, coordinates typed; and, as well, each map or Moon search that found nothing. Never what was typed |
+| `problem` | `no_ground`, `ride_failed`, `moon_failed`, `map_failed`, `map_session_ended`, `drop_abandoned` | What went wrong: no ground at a drop-in (no 3D map there, or the Moon's ground not loading), a ride's model not loading (whether the go-kart was driven instead or not), the Moon not loading, Google's map not loading at all, Google refusing the visit's tiles (its map session over), and a drop-in left for the globe before it was driving. The two map ones once a visit; the others each time |
+| `garage_open`, `garage_edit` | `all`; a part (colour, finish, decal, rim, boost, flame, trail, smoke) | The Garage opened, and each change made in it |
+| `party` | `made`, `joined` | Parties made (Invite friends) and joined (a party's link) |
+| `board`, `pass`, `level_up` | `open`, `named`; `open`, `buy`; `all` | The leaderboard opened and a nickname picked (a new player); the Supporter Pass's sheet opened (from anywhere) and its Buy followed to Stripe; a level reached |
+
+The Worker adds, as the admin page asks (nothing more is kept for it), what its own tables say of
+each day, by the UTC day of `created_at`: `players:new` (nicknames made; not those the owner has
+removed since), `scores:new_best` (runs that beat a player's best on a board: the `scores` log has
+only those, and only for 35 days, so for a longer period the page says the count is partial, and
+compares it only for the last 7 days), `accounts:new` (Google accounts signed in for the first
+time), `purchases:<status>` (`paid`, or `granted` by hand) and `revenue:<currency>` (in the
+currency's smallest unit, cents, shown as money), both leaving out purchases refunded or charged
+back; and totals now: players, accounts, the accounts with the pass (bought and not taken back, or in
+`SUPPORTER_EMAILS`), and passes not taken back that nobody has signed in for yet. Only counts: no
+name, email or id leaves those tables for it.
+
 **No cookie, so no consent banner.** Only counts a day are kept: no id of the visitor, their
 player or their browser, no address, nothing stored in the browser for it, and nothing that follows
-anyone from one visit to the next. A drop-in somewhere other than a start spot is "other", since a
-search can be someone's own street.
+anyone from one visit to the next. Never counted: where anyone is or searched for (a drop-in
+somewhere other than a start spot is "other", since a search can be someone's own street), what was
+typed (a search is only its kind), a device's make, model or screen size (only phone, tablet or
+computer), or a referring page's address (only its site's host name). The About dialog
+(`drive/index.html`) tells visitors what's counted.
 
 **How it works.** The page (`src/drive-app/stats.js`) adds up what it counts and posts it to `POST
 /api/stats` with the visit's token, every 3 minutes and as the page goes out of sight or closes
 (`keepalive`), keeping the fractions of a second for the next post and a post that didn't go for
-the next try; a 403 (the visit run out) stops it for the visit. It counts nothing without a visit's
-token (the test pad, the dev server alone). The Worker (`worker/drive/stats.js`) takes only what
-`src/drive-app/stats-protocol.js` (which both share) says may be counted, each metric's keys checked
-(a ride, a start spot, a Garage part...) and held to what one post may add (600 s of play, one load,
-20 drop-ins...), only with a good visit token and at most `STATS_POSTS` posts a minute a visit, so
-a script can't add more than a few visits' worth; then one upsert a row into D1's `stats_daily`
-(day, metric, key, n). `GET /api/admin/stats?days=30` answers the rows for those days, to an account
-in `ADMIN_EMAILS` (401 signed out, 403 anyone else), and deletes rows older than 400 days. The page
-draws them with no library and nothing loaded from elsewhere, and `noindex`.
+the next try; a 403 (the visit run out) stops it for the visit. What's once a visit (the funnel's
+steps, the device, the map problems) is remembered in the page's memory for the visit, and nowhere
+else. It counts nothing without a visit's token (the test pad, the dev server alone; on the dev
+server only, `scripts/test-drive-ui.mjs` hands the page a test one, `worldDriveStatsTest`, to see
+its posts). The Worker (`worker/drive/stats.js`) takes only what `stats-protocol.js` says may be
+counted, each metric's keys checked (a ride, a start spot, a funnel step, a search's kind...) and
+held to what one post may add (600 s of play, one load, the funnel's seven steps, one device, 20
+drop-ins...), at most 100 counts a post (`MAX_COUNTS`: the once-a-visit ones, the fraction of a
+second of play kept for each ride driven and a few minutes of everything else fit, and a post stays
+well under the Worker's 8 KB), only with a good visit token and at most `STATS_POSTS` posts a minute
+a visit, so a script can't add more than a few visits' worth; then one upsert a row into D1's
+`stats_daily` (day, metric, key, n). A page can't post the Worker's own facts: they aren't metrics
+it takes.
+
+`GET /api/admin/stats?days=30` answers, to an account in `ADMIN_EMAILS` (401 signed out, 403 anyone
+else), those days' rows and the facts in the same `[ day, metric, key, n ]` shape; the as many days
+before, added up by metric and key in D1 (what the page compares with: a year's comparison is a few
+hundred rows, not tens of thousands); the totals; and how far back the counts and the scores log go.
+A year at most, and rows older than two years (730 days, so a year can be set against the year
+before; it was 400 days before the comparisons) are deleted as it's asked. Every query is bounded by
+the days asked for, but the totals, which count the tables whole. The page draws it all with no
+library and nothing loaded from elsewhere, and is `noindex`.
 
 **What it costs.** D1 only: a visit is a row or two written as it starts, and a few rows each 3
-minutes it plays (an hour's drive about 60 rows); the admin page reads a few hundred rows a day
-shown. Well within the Free plan's 100,000 rows written and 5 million read a day at the visit caps.
+minutes it plays (an hour's drive about 60 rows); the admin page reads the period's rows and the
+period before's (up to about 150 a day each), and reads through `players`, `accounts` and
+`purchases` (which have no index on when they were made) for the facts and the totals: a few
+thousand rows a look. Well within the Free plan's 100,000 rows written and 5 million read a day at
+the visit caps.
 
 **The owner's steps.** Deploy (`npm run deploy:drive` applies `0004_stats.sql` first), then set
 `ADMIN_EMAILS` to your Google account's email (dashboard: Workers & Pages → world-drive → Settings →
 Variables and Secrets, as a secret; or `npx wrangler secret put ADMIN_EMAILS -c
 wrangler.drive.jsonc`), sign in on worlddrive.app, and open `/admin.html`. Counts start from that
-deploy: there's nothing from before it.
+deploy: there's nothing from before it, and the page says on which day they start. The funnel,
+devices, worlds, searches, drop-in times, problems and the leaderboard's and the pass's counts start
+from the deploy that brought them; the Worker's facts go back as far as its tables do.
 
 ## Settings
 
@@ -2748,11 +2813,13 @@ secret `1x0000000000000000000000000000000AA` always passes; secret
   through a seam only the dev server has (`window.worldDriveLiveTest = { visit }` before the page
   loads, see `scripts/test-drive-live-ui.mjs`). `window.worldDriveVisitTest = { visit }` hands the
   test pad a visit for everything a visit does (names, scores, [levels](#levels)' reports and
-  driving with others), as `scripts/test-drive-levels-ui.mjs` does.
+  driving with others), as `scripts/test-drive-levels-ui.mjs` does, and `window.worldDriveStatsTest
+  = { visit }` one for the [play stats](#play-stats) alone, as `scripts/test-drive-ui.mjs` does.
 - In the browser console, `window.drive` has the scene, the globe, the driver and `dropIn( { name,
   lat, lon } )`, levels' `progress` (`progress.level`, `progress.progress`, what's `unsent` and the
   report on its way, `flying`) and
-  `profile`, and with driving with others on, `live`, `ghosts` and `friends`.
+  `profile`, the play stats' `stats` (`stats.counts`, what's counted and not posted yet), and with
+  driving with others on, `live`, `ghosts` and `friends`.
 
 Tests: `npm run test:drive-worker` (the Worker under `wrangler dev`, with stand-ins for Turnstile and
 Nominatim: the caps, their reset at midnight UTC, Turnstile passing and failing, same-origin and JSON
@@ -2766,9 +2833,13 @@ signing in and every bad token turned away, the session cookie, `/api/me`, the w
 and five minutes, a payment once, bank debits, buying before signing in, refunds and chargebacks
 (either delivered before its checkout), another link's checkouts, test-mode payments with a live
 link, the same-origin checks only the webhook goes without, `SUPPORTER_EMAILS`, 30 drives a day for a
-supporter, the ⭐, the owner's SQL, and buying off without its settings), and `npm run test:drive-ui`
+supporter, the ⭐, the owner's SQL, and buying off without its settings; and the [play
+stats](#play-stats): each metric's keys checked and held to a post's most, `MAX_COUNTS`, and the
+admin page's answer with the facts from the leaderboard's and the pass's tables, refunds left out,
+the period before added up, the totals and the tidying after two years), and `npm run test:drive-ui`
 (the page in Chromium without a key: the globe and panel, search on Enter, spots, pins, dropping in
-and driving, stunts (a wall throwing the kart into the air and never through it, a backflip landed
+and driving, the play stats it posts (the funnel once a visit, the device, searches by kind and
+never what was typed, play time, a drop-in's time and one left for the globe), stunts (a wall throwing the kart into the air and never through it, a backflip landed
 for points, the DRIFT button), changing ride, M and teleporting again without a reload, recent
 places, a phone with touch buttons, boosting flat out going supersonic in each free ride (the boom,
 the streaks, the tag and the wider view, and its end as it slows), boost pads on the test pad (put
