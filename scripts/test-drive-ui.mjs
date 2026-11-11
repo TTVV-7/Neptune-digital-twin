@@ -3388,6 +3388,8 @@ describe( 'World Drive leaderboard', () => {
 		await shot( page, 'board-2-week' );
 		await dialog.locator( '.tabs button', { hasText: 'All time' } ).click();
 		await page.waitForFunction( () => document.querySelector( '#leaderboard .tabs [aria-selected="true"]' ).textContent === 'All time' );
+		// (The tab is lit as it's clicked: the board's asked for a moment after.)
+		for ( let i = 0; i < 50 && asked.boards.at( - 1 ).period !== 'all'; i ++ ) await page.waitForTimeout( 100 );
 		assert.equal( asked.boards.at( - 1 ).period, 'all' );
 
 		// Renaming: a taken name says so, a free one changes it and keeps the secret.
