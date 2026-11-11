@@ -67,7 +67,7 @@ address, and the construction app is unchanged by it.
 | Shift (or B) | Booster: flat out for a moment, overdrive |
 | F | Fly: hold to lift off, let go to glide down |
 | In the air | A / D spin, W / S flip (W forward, S back), Q / E roll (or Space with A / D) |
-| R | Stuck? Back on the road a few metres on (in water: back on dry land at once) |
+| R | Stuck? Back on the road a few metres on (on water too) |
 | C | Chase or driver's-seat camera |
 | Wheel | Chase camera nearer or farther |
 | M | Back to the globe |
@@ -289,11 +289,13 @@ burst at each of their drift's charge levels and for its mini-turbo.
 Google's 3D tiles don't say what's water: a bay, a harbour or a river is just more ground in them,
 and every ride drives on it as on any other ground. Drive off a quay, down a beach or over a
 bridge's railing, or come down onto the water out of the air, and you're on its surface, driving on
-as you would on a car park: no splash, nothing sinks and nothing puts you back. A trick landed on
-the water scores as on the ground. **R** puts you a few metres on as it does anywhere, out there or
-on the edge facing the water: on the water, if that's where those few metres are. **Go to** beside
-another driver who's out on the water puts you there too, and Esc parks you on the water, to drive
-on from there.
+as you would on a car park: no splash, nothing sinks and nothing puts you back. Out past where
+Google draws the water by a coast its tiles are the sea bed, sloping down under the sea: drive or
+fly out there and the sea's own surface is laid ahead of you, and you drive on at the sea's height
+([out from a coast](#out-from-a-coast)). A trick landed on the water scores as on the ground. **R**
+puts you a few metres on as it does anywhere, out there or on the edge facing the water: on the
+water, if that's where those few metres are. **Go to** beside another driver who's out on the water
+puts you there too, and Esc parks you on the water, to drive on from there.
 
 Until 11 November 2026 driving or coming down into water was a splash: every ride but the
 hovercraft sank nose first and was put back on the last dry ground it had been on, facing away from
@@ -307,12 +309,14 @@ speak of splashes and of the way back; `water.js` tells water the same way still
   says `floats: true` in its tuning, and under it the Driver looks for water every 0.2 s while it's
   on the ground: that's the Driver's `water` option (`src/drive.js`; off unless an app gives one, so
   the construction app's driving never looks), which World Drive gives `src/drive-app/water.js`.
-  The spray comes out of `drive-fx.js`'s pools, made with a vehicle's other effects when there's
-  water (150 droplets and 48 puffs, and 6 rings and 2 patches of foam).
+  The spray comes out of `drive-fx.js`'s pools (150 droplets and 48 puffs, and 6 rings and 2
+  patches of foam), made with a ride's other effects only when it floats: no other throws any up.
 - **Boost pads** never go down on water, nor by it: they belong on the streets, and Google's water,
   as flat and open as anything on its mesh, would take most of them by a coast or a river.
 - **The open sea**: a drop-in far out at sea, where Google draws only the sea bed, starts on a
-  surface of the sea's own ([below](#the-open-sea)), which water.js calls water like any other.
+  surface of the sea's own ([below](#the-open-sea)), which water.js calls water like any other; and
+  driven or flown out onto that bed from a coast, it's laid there, but not over ground coloured as
+  only dry land is ([out from a coast](#out-from-a-coast)).
 
 **Others' cars** from a page loaded before the change can still say they're sinking
 (`FLAGS.splash` in `live-protocol.js`, which `live.js` no longer sends): `ghosts.js` shows their
@@ -530,10 +534,10 @@ sea's does), curving away under the scene's flat frame as the Earth does, 2 m lo
 one deep blue, mottled so that driving over it is seen to move (Google's picture of the bed out
 there is its shaded relief, as dark as (12, 13, 19) at 30° N, 140° W, so it isn't taken from that).
 The Driver drives on it as on any ground, and water.js calls anywhere on it water, so it is water
-like any other: every ride drives on it, the hovercraft throwing up spray, no boost pad goes down
-on it, and driven or flown off an island or a coast out onto it, you're on its surface, not the
-bed. The flight down to
-it doesn't look for Google's ground (it would come down onto the bed). M, or a drop-in anywhere
+like any other: every ride drives on it, the hovercraft throwing up spray, no boost pad goes down on
+it, and driven or flown off an island or a coast out onto it, you're on its surface, not the bed;
+with none laid yet, it's laid as you go out ([out from a coast](#out-from-a-coast)). The flight down
+to it doesn't look for Google's ground (it would come down onto the bed). M, or a drop-in anywhere
 else, takes it away. It's only by its own water: out over land, with two of the map's squares or
 more between the vehicle's and the nearest of its water's (the sea's and its coasts', or the lake's
 own: more than 9 km north or south, 7 km east or west at 43° N), it's gone, so that the ground under
@@ -548,7 +552,7 @@ lake's box (a little wider than the lake), never asks how high the sea is nor wh
 it lies on the geoid, from 107 m under the ellipsoid south of India to 85 m over it by New Guinea,
 so the sea at 0 would have been tens of metres from a coast's own water. It's NGA's EGM96 geoid
 (public domain), every degree: `drive/public/sea/egm96.bin`, 65,160 bytes (181 rows from 90° N, of
-360 heights from 180° W, each a signed byte in metres), fetched the first time a drop-in needs it
+360 heights from 180° W, each a signed byte in metres), fetched the first time it's needed
 and read bilinearly. `node scripts/make-sea-level.mjs` makes it from PROJ's copy of the model's
 15-minute grid (https://cdn.proj.org/us_nga_egm96_15.tif, fetched, or a copy given). It's within
 0.5 m of the full model on average (1.9 m at the 99th percentile, 14 m at worst, by the deep
@@ -560,8 +564,8 @@ Aleutians. It's 3.9 m high at worst (by Lake Maracaibo). If it doesn't load, the
 
 **Where the sea and the big lakes are.** It's Natural Earth's ocean and lakes at 1:10 million
 (public domain), every 1/24° (4.6 km north to south, 3.4 km across at 43° N):
-`drive/public/sea/mask.bin`, 251,556 bytes, fetched with the sea's height the first time a drop-in
-needs it. A square is the sea if all of it is, a coast if the sea's edge (a coast, an island's)
+`drive/public/sea/mask.bin`, 251,556 bytes, fetched with the sea's height the first time it's
+needed. A square is the sea if all of it is, a coast if the sea's edge (a coast, an island's)
 crosses it, a big lake's if all of it is that lake, and otherwise land; the sea and a coast both
 count as the sea. Natural Earth's ocean is the sea and every sea joined to it (the Black Sea, the
 Baltic, Hudson Bay), one polygon all the way round the world, with no lake in it (its other polygon,
@@ -688,6 +692,59 @@ at Rochester (four squares from the lake's) had no lake's surface round it, and 
 square from them) had it again; from Lake Baikal's, at Irkutsk (11 squares off) it was gone. In the
 Strait of Georgia the kart drove on the sea for 4 s, on the water all the way, with no splash.
 
+#### Out from a coast
+
+Google draws water at the sea's height only close to a coast; past that its tiles are the bed, with
+the sea's picture on it, sloping down under the sea (in Santa Monica Bay from 7.6 m under it 500 m
+off the pier to 129 m under it 2 km out: [above](#the-big-lakes)). While driving into water was a
+splash, only the hovercraft got that far; with none, a ride driven down off the sand at Copacabana
+and out across the sea followed the bed down, metres then tens of metres under where the sea's
+surface should be. So while you drive on the Earth with none of [the open sea's](#the-open-sea)
+water round you, four times a second (`watchSea` in `src/drive-app/main.js`) the ground is looked at
+under you and ahead of you along your way (as far as you'll go in 1 s and in 3 s, and at least 15
+and 60 m), and where all of this holds there, the water's surface is laid as for a drop-in:
+
+- the ground is more than 1.5 m under the sea's height, on the sea or a coast on the map; or more
+  than 15 m under a big lake's, in a square of the map all of which is the lake (a square its shore
+  crosses is land, as below Niagara Falls; and Google draws some lakes' surfaces several metres from
+  the table's height, above); or, anywhere, lower than 1.5 km under the ellipsoid, which is all
+  there is if the map didn't load. Google's own water by a coast is within a metre or so of the
+  sea's height as EGM96 has it (1.0 m under it by Santa Monica Pier), so within 1.5 m it's driven on
+  as it is (and driven out from it onto the bed, you're lifted that much onto the sea's);
+- it isn't coloured as only dry land is, as water.js has it (sand, soil, brick, a field's green,
+  bright concrete; never turquoise; not where its picture can't be read): so not the side of the
+  Assal depression, desert 28 m under the sea in the Ghoubbet's coast square, nor a polder's fields
+  behind its dyke;
+- you're no lower than 1.5 m under the water's height yourself: not in a hollow or a polder under
+  it, where it would be over you (as when it comes back within reach, above).
+
+It's laid round that spot (sea.js's `start`, as for a drop-in, its reach the map's square there),
+and you roll onto it, or come down on it: driven out over Google's water and on over the bed, you're
+on at the water's height; flown out and let down, you land on it. Looking 60 m ahead, on a bed
+sloping down from the water's height 1 in 40 or more it's there before you're under that height; on
+a gentler one you can be up to 1.5 m under it first, and are lifted onto it. Every ride the same,
+the hovercraft throwing up spray on it; R out there puts you a few metres on, on it; from then on
+it's the open sea's surface as above, gone out over land past its reach. On the Moon nothing's
+looked at. The sea's height and the map are only fetched (once a drop-in) when the ground looked at
+is lower than any water could be there (86 m over the ellipsoid, or a big lake's height over that
+in its box) less 1.5 m; on higher ground a look is three rays down and nothing more. On the test
+pad a look took 0.04 to 0.09 ms in software rendering (three rays, and the map and the sea's height
+read); on Google's tiles a ray takes 0.03 to 0.07 ms ([above](#how-water-is-told-from-the-ground)),
+so four looks a second are a few tenths of a millisecond a second. (On the test pad, driving, its
+sea, 2 m under its land, is at the water's height: Google's water by a coast. A drop-in instead
+takes the pad for ground at the water's surface wherever it's put, as above.)
+
+**Tested** on the test pad (`npm run test:drive-ui`), not on Google's tiles: in Santa Monica Pier's
+square (a coast's), the pad's land 2 m over the sea, its water at the sea's height 60 m out, and
+then a bed sloping down 1 in 20 for 400 m. Driven out at 50 km/h, the surface was laid with the kart
+27 m short of the water's edge, and it drove on at the sea's height, never lower, 18 m over the bed
+at the end; R there put it 4 m on, on the water; flown out, the surface was laid under it 12 m up,
+and let go it came down on it. The same slope coloured as sand had no water over it, nor did it in
+Death Valley's square (land), and the kart drove on down it to 13 m under the sea. In Lake Baikal's
+square, flown out over the same slope, the lake's surface was laid only once the bed ahead was more
+than 15 m under it, and the kart came down on it. Without the map, off Santa Monica Pier, the kart
+drove on down the slope.
+
 ## The Moon
 
 The globe's panel has **Earth** and **Moon** at its top. The Moon is a whole Moon, made in the page
@@ -756,9 +813,9 @@ key, so it's the real Moon under `npm run dev:drive` too.
   globe from space it's over the viewer's left shoulder (the side in view lit, a Moon nearly full),
   and low across the ground from the left coming down to it, as light from straight ahead would
   show none of its craters.
-- **No water**: `water.none` (`water.js`) says everywhere is surely dry, and the Driver is given no
-  water at all; the grey dust, flat and even on a mare's floor, would otherwise look like water to
-  it. **Boost pads**, switched on, go down by
+- **No water**: `water.none` (`water.js`) says everywhere is surely dry, the Driver is given no
+  water at all and nothing looks for [the open sea](#out-from-a-coast); the grey dust, flat and even
+  on a mare's floor, would otherwise look like water to it. **Boost pads**, switched on, go down by
   [their own rules](#boosting) for the Moon (`MOON_RULES` in `pads.js`): ground tilted up to 25° and
   bumpy to 40 cm round the pad, reached over ground rising or falling up to 3 m every 7 m (a crater's
   rim), up to 40 m over or under where the vehicle last stood, and while it's up to 60 m over the
@@ -3044,7 +3101,10 @@ come down on, no boost pads on it, a floating ride's spray, from an island out a
 onto the island; 14 m under the sea, on Google's water as before; the Dead Sea's shore, land, never;
 the map's sea, coasts, lakes and land; land walled off from the sea by ground over it, the side
 of the Assal depression, never; Lake Erie's surface gone out over land to Niagara's gorge and back
-by the lake; without the map, only the deep sea), the used-up,
+by the lake; driven and flown out from a coast over a bed sloping under the sea, the sea's surface
+laid before the kart is under it, but not over ground coloured as sand nor in Death Valley's
+square, and a big lake's only over its bed 15 m under it; without the map, only the deep sea), the
+used-up,
 robot-check and getting-ready screens, the visit asked for only once the game's code is here (a
 download that fails, and its Try again, spend none; a script that breaks is told from a dropped
 connection, and logged), a Turnstile script that never comes ending on the robot check's screen at
@@ -3098,10 +3158,12 @@ src/drive-app/pads.js        boost pads: where they go, driving over them, the p
 src/drive-app/screen-fx.js   what's done to the view: speed lines, overdrive's white edges, the pause
                              menu's Camera effects switch and asking for less motion
 src/drive-app/water.js       water on Google's mesh, told by how it's drawn: for the hovercraft's
-                             spray and to keep boost pads off it
+                             spray and to keep boost pads off it; and dry land's colours, kept
+                             from under the open sea's surface
 src/drive-app/sea.js         the open sea: its surface where Google draws only the bed of the sea
-                             or a big lake, round the vehicle while it's by that water, the sea's
-                             height (EGM96, drive/public/sea/egm96.bin, which
+                             or a big lake (laid for a drop-in there, or as main.js's watchSea
+                             finds it out from a coast), round the vehicle while it's by that
+                             water, the sea's height (EGM96, drive/public/sea/egm96.bin, which
                              scripts/make-sea-level.mjs makes) and where the sea and the big lakes
                              are (Natural Earth's, drive/public/sea/mask.bin, which
                              scripts/make-sea-mask.mjs makes)
@@ -3199,9 +3261,24 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   water's picture is mostly the water's colour, level close by and the lowest round about, so mostly
   water to it (Santa Monica Bay's was, 184 m down, and Baikal's), but not always (20 km off Waikiki,
   578 m down, it was dry ground, so boost pads could go down on it there). Close in, by a coast,
-  it's mostly Google's own water, at the water's height. The other way, land more than 15 m under
-  the sea in a coast's square with nothing over the sea's height within 150 m of it (the middle of a
-  wide pit dug by a coast) would still start on the sea's surface.
+  it's mostly Google's own water, at the water's height. Started on a bed more than 1.5 m under the
+  water's height, you're too low for the water's surface to be laid as you drive on
+  ([out from a coast](#out-from-a-coast)): it would be over you. The other way, land more than 15 m
+  under the sea in a coast's square with nothing over the sea's height within 150 m of it (the
+  middle of a wide pit dug by a coast) would still start on the sea's surface.
+- Driven or flown out from a coast ([out from a coast](#out-from-a-coast)), the sea's surface is
+  laid where the ground is more than 1.5 m under its height and not coloured as dry land, which
+  doesn't tell the bed from Google's own water more than 1.5 m under EGM96's sea (its pictures taken
+  with the tide out, or EGM96 high: up to 3.9 m, by Lake Maracaibo), nor from land under the sea in
+  a coast's square that isn't coloured as dry land (a polder's grey streets and roofs behind its
+  dyke, a dry dock). Come at those from higher ground and the sea's surface is laid over them, that
+  far over Google's water; driven on from on that water, it's left as it is. On a bed sloping more
+  gently than 1 in 40 you can be up to 1.5 m under the surface when it's laid, and are lifted onto
+  it in a frame. Out from a big lake's shore the bed is followed down as before till a square of the
+  map that's all the lake (up to about 5 km out), and there the lake's surface is only laid over a
+  bed more than 15 m under it with you no more than 1.5 m under it: flown out and let down, it is;
+  driven out along a bed sloping down from the shore (off Chicago, above), you're under it by then,
+  and drive on along the bed. It wasn't tried on Google's tiles.
 - The open water's surface is EGM96's at a degree, a metre or a few from a coast's own water: 1 m
   under it off Kona (by round volcanic islands up to 9.5 m low, below Kilauea on the Big Island's
   south coast), so driving from the open sea to that coast is a step up onto Google's water; 1 m

@@ -244,6 +244,21 @@ export function createWater( ground ) {
 
 		},
 
+		// Whether the ground under ( east, north ), looked for down from `from` (m, in the scene) for
+		// `depth` m, is coloured as only dry ground is: sand, soil, brick, a field or concrete, as
+		// look() has them, never turquoise; not where there's no ground or no picture to read. One
+		// ray: main.js asks it of ground under the water's height by a coast (or a big lake) before
+		// laying the water's surface over it, so that land down there (a depression's dry side, a
+		// polder's fields) isn't taken for the bed.
+		land( east, north, from, depth ) {
+
+			if ( none ) return true;
+			const hit = down( east, north, from, depth );
+			const colour = hit ? colourOf( hit ) : null;
+			return !! colour && notWater( colour ) && ! deep( colour );
+
+		},
+
 		// Whether ( east, north ) and the ground `reach` m round it (north, east, south and west) are
 		// all surely dry, looked for down from just over y: somewhere for a boost pad, which isn't
 		// left by the water's edge either.
