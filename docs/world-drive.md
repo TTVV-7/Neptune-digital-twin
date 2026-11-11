@@ -726,7 +726,9 @@ key, so it's the real Moon under `npm run dev:drive` too.
 - **Recent places** are kept apart, six of the Moon's own (`world-drive.recent-moon`), and the
   panel shows the world's. The Earth's are untouched.
 - **A link**: `/?spot=moon-tycho` (any Moon spot's id), or `/?at=-43.31,-11.36&world=moon`, turns the
-  globe to the Moon and pins the place, as an Earth spot's link does.
+  globe to the Moon and pins the place, as an Earth spot's link does. Each spot has a page of its
+  own, `/moon/<slug>/`, whose **Drive here** is that link, and the home page's words list them (a
+  tap there turns the globe to the Moon too): see [The Moon's pages](#the-moons-pages).
 - On the Moon the panel says "Pick anywhere on the Moon", has no search credit (it's not
   OpenStreetMap's), and none of [driving with others](#on-the-moon-you-drive-on-your-own); NASA's
   credit is in the corner where Google's would be.
@@ -2520,13 +2522,16 @@ point). The space it's in (other "drive the Earth" sites, a Steam game called Wo
 driving simulators) is why every page says plainly what World Drive is and what it does that they
 don't: Google's photorealistic 3D cities, anywhere on Earth, arcade stunts, boosts, drifting and
 flying, other drivers as ghosts and party links, levels, free in the browser with nothing to
-download.
+download. "Drive on the Moon" is a search with only throwaway games in it, and World Drive's Moon
+is made from NASA's own maps of it, so [the Moon has pages of its own](#the-moons-pages) too.
 
 ### What a search engine reads
 
 - **The home page's head** (`drive/index.html`). A title that says what it is ("World Drive – Drive
-  Anywhere on Earth in 3D | Free Browser Driving Game") and a description of about 150 characters,
-  the most important first ([title links](https://developers.google.com/search/docs/appearance/title-link),
+  Anywhere on Earth in 3D | Free Browser Driving Game"; with the Moon it would be over 70 characters,
+  so the Moon is in the description instead) and a description of about 160 characters, the most
+  important first ("Drive anywhere on Earth in photorealistic 3D, or on the Moon: ...")
+  ([title links](https://developers.google.com/search/docs/appearance/title-link),
   [snippets](https://developers.google.com/search/docs/appearance/snippet)); the canonical address
   `https://worlddrive.app/`, so a party's link (`?party=`) or a place's (`?spot=`) counts as the home
   page ([canonical URLs](https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls));
@@ -2537,17 +2542,22 @@ download.
   `VideoGame` co-typed `WebApplication` ([software apps](https://developers.google.com/search/docs/appearance/structured-data/software-app):
   Google only reads a game co-typed so), with its genres, `gamePlatform` "Web browser",
   `applicationCategory` `GameApplication` (the value Google takes, rather than "Game"), free
-  (`offers.price` 0), and World Drive as its publisher. Google's app rich result also needs a rating
-  or reviews; World Drive has none to give, so none are made up, and it shows as an ordinary result.
+  (`offers.price` 0), and World Drive as its publisher; its description has the Moon in it too.
+  Google's app rich result also needs a rating or reviews; World Drive has none to give, so none are
+  made up, and it shows as an ordinary result.
 - **Words a crawler can read**, in the page itself, so they're there for a crawler that doesn't run
   scripts and shown to everyone ([JavaScript SEO](https://developers.google.com/search/docs/crawling-indexing/javascript/javascript-seo-basics)):
   the splash's line under the name (on the screen while World Drive loads), and at the foot of the
   globe's panel, under the start spots: what World Drive is, what you can do, the keys, links to the
-  places' pages and a few questions (is it free, does it work on a phone, can I drive my own street,
-  can I play with friends, what's kept about me). It's plain text in the panel, there for anyone who
-  scrolls down, nothing hidden. **About World Drive** opens from there as before; its words are in
-  the page too. In the game a plain tap on one of the places flies the globe there (main.js, by the
-  link's `data-play`) rather than leaving for its page, and the list of them all opens in a new tab.
+  places' pages and the Moon's (`<!-- places -->` and `<!-- moon places -->`, filled in by the
+  build) and a few questions (is it free, does it work on a phone, can I drive my own street, can I
+  drive on the Moon, can I play with friends, what's kept about me). It's plain text in the panel,
+  there for anyone who scrolls down, nothing hidden. **About World Drive** opens from there as
+  before; its words are in the page too. In the game a plain tap on one of the places flies the
+  globe there (main.js, by the link's `data-play`, for any link in the panel's words that has one)
+  rather than leaving for its page; on one of the Moon's it turns the globe to the Moon first, as
+  its link (`/?spot=moon-<id>`) does. The lists of them all, `/drive/` and `/moon/`, open in a new
+  tab.
 - **What Google renders.** Google runs the page as well, but its renderer has no WebGL
   ([Google says so](https://developers.google.com/search/docs/crawling-indexing/javascript/fix-search-javascript)),
   and robots.txt keeps it off `/api/`. `boot.js` looks for WebGL 2 (which three.js needs) before
@@ -2591,12 +2601,56 @@ buildings there if the page says so, that the start is on the road and not besid
 heading faces what the page is about); then `npm run drive-site-images` draws its card. Each page
 has to be worth reading on its own: a pile of near-identical pages for every town would be what
 Google calls [doorway pages](https://developers.google.com/search/docs/essentials/spam-policies#doorways).
+Each place's list of the others ends with the Moon, and `/drive/` says it's there.
+
+### The Moon's pages
+
+`/moon/` is about driving on the Moon in World Drive: what it is (the real Moon's shapes from the
+Lunar Reconnaissance Orbiter's laser altimeter, LOLA, and its colours from the orbiter's camera,
+LROC, NASA's and in the public domain; the small craters made up), what's different there (a sixth
+of the gravity, jumps as high and two and a half times as long, the Earth in the sky, no water, on
+your own), its places and a big **Drive on the Moon** that opens the game on the Moon with
+Tranquility Base pinned. Each of the Moon's twelve start spots (`MOON_SPOTS`) has its own page at
+`/moon/<slug>/` (Tranquility Base, Hadley Rille, the Taurus-Littrow valley, Tycho, Copernicus,
+Aristarchus, Plato, Mons Huygens, Shackleton, Mare Orientale, Tsiolkovskiy and Von Kármán), shaped
+as an Earth place's: its own title and description, breadcrumbs (World Drive › The Moon › the place),
+what the place is in a few true sentences, what to do there, how the Moon is in World Drive, the
+keys, links to the other Moon pages, `/moon/`, `/drive/` and home, and NASA's credit in the footer.
+Its **Drive here** is the spot's link, `/?spot=moon-<id>` (`linkedPlace`): the game turns the
+globe to the Moon and pins the spot there, and never drops in by itself.
+
+Their words are `drive/site/moon.js` (`MOON_PAGES`, and the paragraphs every Moon page shares).
+They keep to well-known facts (Apollo 11 on 20 July 1969, Apollo 15 the first to take the Lunar
+Roving Vehicle, Apollo 17 the last Apollo landing, Chang'e 4 the first landing on the far side), and
+a number that isn't certain is left out. And they're honest about the game: its big shapes are the
+real Moon's, its heights every quarter of a degree (7.6 km apart), so anything narrower (Hadley
+Rille itself, the Taurus-Littrow valley's depth, Copernicus's terraces) is softened or not there;
+the small craters you drive among are made up; and there are no landers, flags or rover tracks, so
+no page says you can see the Apollo hardware. A place's own `game` line says what's different about
+it in the game, where something is (Shackleton's floor lit, as World Drive lights every place on
+the Moon alike, with the sun 20° up). Their structured data is a `BreadcrumbList` and a `WebPage`
+about a `Place` contained in the Moon, with no schema.org `GeoCoordinates` (they're the Earth's): the
+page gives its selenographic latitude and longitude in its words instead.
+
+They live beside the files the game fetches from `/moon/` (`height.bin` and `colour.webp`, from
+`drive/public/moon/`): the build makes `dist-drive/moon/index.html` and
+`dist-drive/moon/<slug>/index.html` next to them, and Cloudflare's assets serve each as a folder's
+page, as the places' are. The dev server's `driveSite` makes the pages at `/moon/` and
+`/moon/<slug>/` (a `/moon/<slug>` without its slash is sent on to it, 307) and passes every other
+`/moon/` address, any with a file's ending, on untouched to be served from `drive/public/`.
+
+To add one: a start spot in `MOON_SPOTS` first (dropped in on, to see the ground is worth driving),
+then an entry in `moon.js` with its `spot`, true facts (check them, against more than one source,
+and leave out what isn't certain), its own words, and its `game` line if the game shows it
+differently; then `npm run drive-site-images -- moon <slug>` draws its card. A page for a place
+narrower than the Moon's heights can show would promise what the game hasn't got.
 
 ### Sitemap, robots.txt and one address
 
-- **`/sitemap.xml`** is made by the build: the home page, `/drive/` and every place's page, each with
-  the day the files it's made from were last committed (`git log`), so its `lastmod` only moves when
-  the page does, which is the only `lastmod` Google trusts ([sitemaps](https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap)).
+- **`/sitemap.xml`** is made by the build: the home page, `/drive/` and every place's page, `/moon/`
+  and every Moon place's page, each with the day the files it's made from were last committed
+  (`git log`: for the Moon's, `moon.js`, `build.js`, `site.css` and `moon-places.js`), so its
+  `lastmod` only moves when the page does, which is the only `lastmod` Google trusts ([sitemaps](https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap)).
   Built from a shallow clone (a build server's may be one), whose oldest commit seems to add every
   file, there's no `lastmod` at all rather than that commit's date on every page.
 - **`/robots.txt`** (`drive/public/robots.txt`): everything may be crawled but `/api/`, which only
@@ -2608,6 +2662,9 @@ Google calls [doorway pages](https://developers.google.com/search/docs/essential
   ours follow unchanged. Look at https://worlddrive.app/robots.txt after a deploy to see both.
 - **One address**: `www` is sent to `worlddrive.app` with a 301 (above), and every page names its
   canonical address.
+- **The owner's page** (`/admin.html`, the [play stats](#play-stats)) is `noindex, nofollow` and not
+  in the sitemap. robots.txt doesn't keep crawlers off it, as one that couldn't fetch it would never
+  see its `noindex` (and could still list the bare address from a link).
 
 ### The load
 
@@ -2656,22 +2713,52 @@ and the manifest's icons (`site.webmanifest`). Run it after adding a place, with
 tests run (it starts the dev server on `TEST_VITE_PORT`). A party's **Share** says where you're
 driving ("Drive with me at Monaco harbour in World Drive"), and its link unfurls with the card.
 
+The Moon's cards are pictures of World Drive's own Moon (NASA's data, drawn by the game, so nothing
+of Google's), drawn only when asked for: `npm run drive-site-images -- moon` draws `og/moon.png`
+(the Moon from space, as the globe shows it once turned there) and `og/moon-<slug>.png` for each
+Moon page; `-- moon tycho plato` just those, `-- moon hub` just the Moon's own. For each it opens
+the place's link in a page the card's size, with a ride picked (`world-drive.vehicle`: the go-kart
+or the muscle car) and the boost pads off, drops in, turns the ride to the camera and lets it settle
+on the ground that way, then holds it and the camera still (the driver's update and the field of
+view taken over), frames them, waits until the Moon's ground has nothing more to build round the
+camera and the ride, and photographs the 3D view with everything over it hidden; the words go over
+it in the same style as the other cards (`MOON_SHOTS` in the script says which ride and which way
+for each). At Tycho, Aristarchus and Plato, where the Earth is low enough in the sky (56° at most)
+to share a picture with the ground, the camera looks toward it, so it's on the card where it really
+is; elsewhere (where it's higher, or where looking at it would be looking into the sun, as at
+Taurus-Littrow, or on the far side) the camera looks across the sun, which is from the south-west,
+at the ride on the ground. Where
+looking up toward the Earth would put the camera under the ground, the ride and the camera go up
+together, as in a jump. Each is a palette PNG under 200 kB. In Chromium's software renderer a
+drop-in takes 15 to 30 s and the ground's building round the camera a minute or two more, so all
+thirteen take about half an hour.
+
 ### How the search pages are tested
 
-`npm run test:drive-seo` builds the site and serves it as Cloudflare does: every page's title and
-description (each its own), canonical address, Open Graph and Twitter tags and card (a 1200 × 630
-PNG that's there), structured data (valid JSON, Google's fields, no ratings), one heading and words
-of its own on each place's page; the sitemap (every page, nothing else, real addresses, dates) and
-robots.txt (and with no date known, as from a shallow clone, no `lastmod` rather than a wrong one);
-the icons and the manifest; every link within the site answering 200; the home page's words (over 350
-of them, the places linked, shown on the panel, About opening from there, a tap on a place there
-flying the globe to it without leaving the page); the home page in a browser without WebGL (the
-panel's words shown with the line on why there's no globe, no visit and no game's code asked for, no
+`npm run test:drive-seo` builds the site and serves it as Cloudflare does. A page marked `noindex`
+(the owner's `/admin.html`) is in the build but isn't one of the public pages it checks: it's
+checked to be `noindex, nofollow` and out of the sitemap. For the public pages: every page's title
+and description (each its own), canonical address, Open Graph and Twitter tags and card (a 1200 ×
+630 PNG that's there, under 250 kB; the Moon's own), structured data (valid JSON, Google's fields,
+no ratings, breadcrumbs that lead to real pages, and on the Moon's pages World Drive › The Moon and
+no `GeoCoordinates`), one heading and words of its own on each place's page and each Moon page (the
+Moon's saying where they are on it, that the small craters are made up and that there are no
+landers, flags or rover tracks, with their Drive here to their spot on the Moon, and links to the
+others, `/moon/`, `/drive/` and home); the Moon among each Earth place's others, and on `/drive/`;
+the sitemap (every public page, nothing else, real addresses, dates) and robots.txt (and with no
+date known, as from a shallow clone, no `lastmod` rather than a wrong one); the icons and the
+manifest; every link within the site answering 200, and the Moon's `height.bin` and `colour.webp`
+still served whole beside its pages; the home page's words (over 350 of them, the Moon in its head
+and its questions, the places and the Moon's linked, shown on the panel, About opening from there, a
+tap on a place there flying the globe to it and a tap on a Moon place turning the globe to the Moon
+and pinning it, without leaving the page); the home page in a browser without WebGL (the panel's
+words shown with the line on why there's no globe, no visit and no game's code asked for, no
 errors, on a computer and a phone); each place's **Drive here** opening the game on the test globe
-with its pin there and the address tidied, a drop-in from a link, the pin clear of the sheet on a
-phone, a `?party=` kept, a rude name or a place off the Earth refused; the dev server making the
-same pages; and the load above on a phone's connection (the first paint is the largest, under 2.5 s,
-before the game's code).
+with its pin there and the address tidied, Tycho's page's opening it on the Moon with Tycho pinned,
+a drop-in from a link, the pin clear of the sheet on a phone, a `?party=` kept, a rude name or a
+place off the Earth refused; the dev server making the same pages, the Moon's included, and passing
+the Moon's files on; and the load above on a phone's connection (the first paint is the largest,
+under 2.5 s, before the game's code).
 
 ### The owner's steps
 
@@ -2680,7 +2767,7 @@ The domain is verified in Google Search Console already (a DNS record).
 1. **Search Console → Sitemaps**: submit `https://worlddrive.app/sitemap.xml`.
 2. **URL Inspection**: inspect `https://worlddrive.app/`, **Test live URL** (it should be "URL is
    available to Google", with the page's words in the rendered HTML), then **Request indexing**; the
-   same for `/drive/` and a few places' pages. There's a daily limit on requests: a handful is enough,
+   same for `/drive/`, `/moon/` and a few places' pages. There's a daily limit on requests: a handful is enough,
    as the sitemap and the links bring the rest.
 3. **Pages** (Indexing → Pages) over the next weeks: what's indexed, and why anything isn't. A new
    domain takes days to weeks.

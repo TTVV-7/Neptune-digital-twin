@@ -376,10 +376,11 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	} ) );
 	$( 'globe-ui' ).querySelector( '.about-open' ).addEventListener( 'click', () => about.showModal() );
-	// The places under the panel's words link to their pages (for crawlers, and to open in a new tab),
-	// but a plain tap there flies the globe to the place, as a start spot does: leaving the page would
-	// end this visit, and its Drive here would spend another.
-	$( 'globe-ui' ).querySelector( '.site-places' ).addEventListener( 'click', event => {
+	// The places under the panel's words, the Earth's and the Moon's, link to their pages (for
+	// crawlers, and to open in a new tab), but a plain tap there flies the globe to the place, as a
+	// start spot does (a Moon place's turns the globe to the Moon first): leaving the page would end
+	// this visit, and its Drive here would spend another.
+	$( 'globe-ui' ).querySelector( '.site-info' ).addEventListener( 'click', event => {
 
 		const link = event.target.closest( 'a[data-play]' );
 		if ( ! link || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey ) return;
