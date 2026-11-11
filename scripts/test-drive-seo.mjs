@@ -1,15 +1,19 @@
 // npm run test:drive-seo: World Drive as search engines and link previews see it (docs/world-drive.md,
 // "Search engines"). It builds the site (npm run build:drive, into dist-drive/; TEST_SEO_DIST=<folder>
 // checks one already built there instead) and serves it as Cloudflare's assets do (drive-static.mjs).
-// Every page's title, description, canonical address, Open Graph and Twitter tags and structured
-// data (valid JSON with what Google asks for, and no ratings made up); the sitemap listing every
-// page and only real addresses, with dates; robots.txt; the icons and the manifest; every link
-// within the site answering; the home page's words for a crawler, in the page itself and shown on
-// the globe's panel; each place's "Drive here" opening the game on the test globe with its pin
-// there (the address tidied after, a ?party= kept, a link's rude name or bad place refused), and a
-// drop-in from it; the dev server making the same pages; and the load on a phone's connection:
-// what World Drive is shows at once, before the game's code, and counts as the page's largest
-// paint. Every request off this machine is blocked.
+// Every public page's title, description, canonical address, Open Graph and Twitter tags and
+// structured data (valid JSON with what Google asks for, and no ratings made up), the Moon's pages
+// among them (with no Earth coordinates); the owner's private page (admin.html) kept out of search
+// (noindex) and out of the sitemap; the sitemap listing every public page and only real addresses,
+// with dates; robots.txt; the icons and the manifest; every link within the site answering, and the
+// Moon's data files still served beside its pages; the home page's words for a crawler, in the page
+// itself and shown on the globe's panel, a tap on an Earth place there flying the globe to it and on
+// a Moon place turning it to the Moon; each place's "Drive here" opening the game on the test globe
+// with its pin there (the address tidied after, a ?party= kept, a link's rude name or bad place
+// refused), and a drop-in from it; a Moon page's opening the game on the Moon with its spot pinned;
+// the dev server making the same pages and passing the Moon's files on; and the load on a phone's
+// connection: what World Drive is shows at once, before the game's code, and counts as the page's
+// largest paint. Every request off this machine is blocked.
 //
 // Needs Playwright with Chromium, as test-drive-ui.mjs does. TEST_VITE_PORT picks the ports (it and
 // the next one); TEST_SCREENSHOTS=<folder> saves pictures.
@@ -23,8 +27,10 @@ import { fileURLToPath } from 'node:url';
 import { after, before, describe, test } from 'node:test';
 import { measureLoad, serveDist } from './drive-static.mjs';
 import { startVite } from './worker-harness.mjs';
+import { MOON_PAGES } from '../drive/site/moon.js';
 import { PLACES } from '../drive/site/places.js';
 import { sitePages } from '../drive/site/build.js';
+import { MOON_SPOTS } from '../src/drive-app/moon-places.js';
 import { linkedPlace, SPOTS } from '../src/drive-app/places.js';
 
 const require = createRequire( import.meta.url );
@@ -35,11 +41,18 @@ const DIST = process.env.TEST_SEO_DIST || join( ROOT, 'dist-drive' );
 const SITE = 'https://worlddrive.app';
 // Fewer words than this and the home page says too little for a search engine to know what it is.
 const HOME_WORDS = 350;
+// Each link card is fetched by every chat a link is posted in: no bigger than this (bytes).
+const CARD_BYTES = 250000;
+// The Moon's data files the game fetches, beside its pages under /moon/, and their sizes (bytes).
+const MOON_FILES = { '/moon/height.bin': 2073600, '/moon/colour.webp': 674590 };
 
 let chromium;
 let browser;
 let server;
+// The public pages (each { path, html }), and those marked noindex (the owner's admin.html), which
+// are in the build but not for search engines.
 let pages;
+let hidden;
 
 before( async () => {
 
@@ -64,7 +77,9 @@ before( async () => {
 
 	}
 
-	pages = htmlPages( DIST );
+	const built = htmlPages( DIST );
+	pages = built.filter( page => ! noindex( page.html ) );
+	hidden = built.filter( page => noindex( page.html ) );
 	server = await serveDist( DIST, PORT );
 	browser = await chromium.launch( { args: [ '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader' ] } );
 
@@ -95,6 +110,13 @@ function htmlPages( dir ) {
 
 	walk( dir );
 	return found;
+
+}
+
+// A page that asks search engines to leave it out (as the owner's play stats page does).
+function noindex( html ) {
+
+	return /<meta\s+name="robots"\s+content="[^"]*noindex/i.test( html );
 
 }
 
@@ -133,14 +155,24 @@ function builtFile( path ) {
 
 describe( 'what search engines read', () => {
 
-	test( 'the pages: the home page, the list of places and one page for each place, each at a clean address', () => {
+	test( 'the pages: the home page, the list of places, one page for each place, and the Moon\'s, each at a clean address', () => {
 
 		const paths = pages.map( page => page.path ).sort();
-		const expected = [ '/', '/drive/', ...PLACES.map( place => `/drive/${ place.slug }/` ) ].sort();
+		const expected = [ '/', '/drive/', ...PLACES.map( place => `/drive/${ place.slug }/` ), '/moon/', ...MOON_PAGES.map( place => `/moon/${ place.slug }/` ) ].sort();
 		assert.deepEqual( paths, expected );
-		for ( const place of PLACES ) assert.match( place.slug, /^[a-z0-9]+(-[a-z0-9]+)*$/, `${ place.slug } isn't a clean address` );
-		// One for each start spot, and those exist.
+		for ( const place of [ ...PLACES, ...MOON_PAGES ] ) assert.match( place.slug, /^[a-z0-9]+(-[a-z0-9]+)*$/, `${ place.slug } isn't a clean address` );
+		// One for each start spot, the Earth's and the Moon's, and those exist.
 		for ( const spot of SPOTS ) assert.ok( PLACES.some( place => place.spot === spot.id ), `no page for the start spot ${ spot.id }` );
+		for ( const spot of MOON_SPOTS ) assert.ok( MOON_PAGES.some( place => place.spot === spot.id ), `no page for the Moon's start spot ${ spot.id }` );
+
+	} );
+
+	test( 'the owner\'s play stats page (admin.html) is in the build but kept out of search: noindex, nofollow', () => {
+
+		const admin = hidden.find( page => page.path === '/admin.html' );
+		assert.ok( admin, 'no /admin.html in the build' );
+		for ( const { path, html } of hidden ) assert.equal( metaOf( html, 'robots' ), 'noindex, nofollow', path );
+		// (The sitemap leaves it out: see below.)
 
 	} );
 
@@ -177,6 +209,7 @@ describe( 'what search engines read', () => {
 			const file = builtFile( image.slice( SITE.length ) );
 			assert.ok( file, `${ path }: ${ image } isn't in the build` );
 			assert.deepEqual( pngSize( file ), [ 1200, 630 ], `${ path }: ${ image } isn't 1200 × 630` );
+			assert.ok( statSync( file ).size < CARD_BYTES, `${ path }: ${ image } is ${ statSync( file ).size } bytes` );
 			assert.equal( metaOf( html, 'og:image:width' ), '1200' );
 			assert.equal( metaOf( html, 'og:image:height' ), '630' );
 			assert.ok( metaOf( html, 'og:image:alt' )?.length > 10 );
@@ -188,6 +221,22 @@ describe( 'what search engines read', () => {
 		const golden = pages.find( page => page.path === '/drive/golden-gate-bridge/' ).html;
 		assert.equal( metaOf( golden, 'og:image' ), `${ SITE }/og/golden-gate-bridge.png` );
 		assert.equal( titleOf( golden ), 'Drive the Golden Gate Bridge in 3D – World Drive' );
+		// The Moon's page and each of its places have their own, drawn from World Drive's Moon.
+		const moon = pages.find( page => page.path === '/moon/' ).html;
+		assert.equal( metaOf( moon, 'og:image' ), `${ SITE }/og/moon.png` );
+		assert.equal( titleOf( moon ), 'Drive on the Moon in 3D, Free in Your Browser – World Drive' );
+		for ( const place of MOON_PAGES ) {
+
+			const { html } = pages.find( page => page.path === `/moon/${ place.slug }/` );
+			assert.equal( metaOf( html, 'og:image' ), `${ SITE }/og/moon-${ place.slug }.png`, place.slug );
+			assert.equal( titleOf( html ), `${ place.title } – World Drive` );
+			assert.equal( metaOf( html, 'description' ), place.description );
+
+		}
+
+		// The home page's words in its head say it has the Moon too.
+		const home = pages.find( page => page.path === '/' ).html;
+		for ( const key of [ 'description', 'og:description', 'twitter:description' ] ) assert.match( metaOf( home, key ), /Moon/, key );
 
 	} );
 
@@ -213,6 +262,7 @@ describe( 'what search engines read', () => {
 		assert.ok( game.publisher?.name );
 		assert.ok( builtFile( game.publisher.logo.slice( SITE.length ) ), 'the publisher\'s logo isn\'t in the build' );
 		assert.ok( builtFile( game.image.slice( SITE.length ) ) );
+		assert.match( game.description, /Moon/ );
 
 		for ( const { path, html } of pages ) {
 
@@ -232,10 +282,29 @@ describe( 'what search engines read', () => {
 
 			} );
 			assert.equal( crumbs.itemListElement.at( - 1 ).item, SITE + path );
+			if ( path.startsWith( '/moon/' ) ) {
+
+				// The Moon's: World Drive › The Moon (› the place), and no coordinates of schema.org's,
+				// which are the Earth's (the page says where it is on the Moon in its words).
+				assert.deepEqual( crumbs.itemListElement.slice( 0, 2 ).map( crumb => [ crumb.name, crumb.item ] ), [ [ 'World Drive', `${ SITE }/` ], [ 'The Moon', `${ SITE }/moon/` ] ], path );
+				assert.doesNotMatch( text, /GeoCoordinates|"geo"|latitude|longitude/, `${ path }: the Earth's coordinates on the Moon` );
+
+			}
+
 			const place = PLACES.find( p => `/drive/${ p.slug }/` === path );
-			if ( ! place ) continue;
+			const moonPlace = MOON_PAGES.find( p => `/moon/${ p.slug }/` === path );
+			if ( ! place && ! moonPlace ) continue;
 			const page = items.find( item => item[ '@type' ] === 'WebPage' );
 			assert.equal( page.url, SITE + path );
+			assert.equal( crumbs.itemListElement.length, 3 );
+			if ( moonPlace ) {
+
+				assert.equal( page.about.name, moonPlace.name );
+				assert.equal( page.about.containedInPlace.name, 'The Moon' );
+				continue;
+
+			}
+
 			assert.equal( page.about.name, place.name );
 			assert.ok( Number.isFinite( page.about.geo.latitude ) && Number.isFinite( page.about.geo.longitude ) );
 
@@ -266,8 +335,70 @@ describe( 'what search engines read', () => {
 			const links = linksOf( html );
 			for ( const other of PLACES ) if ( other !== place ) assert.ok( links.includes( `/drive/${ other.slug }/` ), `${ place.slug } doesn't link to ${ other.slug }` );
 			assert.ok( links.includes( '/' ) && links.includes( '/drive/' ) );
+			// And to the Moon, among the other places.
+			assert.match( html, /<ul class="places">[\s\S]*<li><a href="\/moon\/">The Moon<span>/, `${ place.slug }: no Moon among the other places` );
 
 		}
+
+		// The list of them all says the Moon is there too.
+		assert.ok( linksOf( pages.find( page => page.path === '/drive/' ).html ).includes( '/moon/' ), '/drive/ doesn\'t link to the Moon' );
+
+	} );
+
+	test( 'the Moon\'s pages: one heading, their own words, where on the Moon, a Drive here to its spot there, and links to the others', () => {
+
+		// Nothing shared with another place's page, the Earth's included.
+		const texts = new Set( PLACES.flatMap( place => place.about ) );
+		for ( const place of MOON_PAGES ) {
+
+			const { html } = pages.find( page => page.path === `/moon/${ place.slug }/` );
+			assert.equal( html.match( /<h1[\s>]/g )?.length, 1, `${ place.slug }: one h1` );
+			for ( const paragraph of [ ...place.about, ...place.game ? [ place.game ] : [] ] ) {
+
+				assert.ok( ! texts.has( paragraph ), `${ place.slug }: a paragraph from another page` );
+				texts.add( paragraph );
+
+			}
+
+			assert.ok( wordsOf( html ).length > 300, `${ place.slug }: only ${ wordsOf( html ).length } words` );
+			// Where it is, as selenographic latitude and longitude, from its start spot.
+			const spot = MOON_SPOTS.find( s => s.id === place.spot );
+			const where = `${ Math.abs( spot.lat ).toFixed( 2 ) }° ${ spot.lat < 0 ? 'S' : 'N' }, ${ Math.abs( spot.lon ).toFixed( 2 ) }° ${ spot.lon < 0 ? 'W' : 'E' }`;
+			assert.ok( html.includes( `On the Moon at ${ where }` ), `${ place.slug }: doesn't say it's at ${ where }` );
+			// Honest about the game: the small craters are made up, and nothing of the landers is there.
+			assert.match( html, /made up/, place.slug );
+			assert.match( html, /no landers, flags or rover tracks/, place.slug );
+			// Its Drive here turns the game to the Moon with its spot pinned (see linkedPlace).
+			const go = html.match( /<a class="go" href="([^"]+)"/ );
+			assert.ok( go, `${ place.slug }: no Drive here` );
+			assert.equal( decode( go[ 1 ] ), `/?spot=${ place.spot }` );
+			const linked = linkedPlace( new URL( decode( go[ 1 ] ), SITE ).search );
+			assert.deepEqual( [ linked?.id, linked?.world, linked?.name ], [ spot.id, 'moon', spot.name ], `${ place.slug }: Drive here pins ${ linked?.name }` );
+			const links = linksOf( html );
+			for ( const other of MOON_PAGES ) if ( other !== place ) assert.ok( links.includes( `/moon/${ other.slug }/` ), `${ place.slug } doesn't link to ${ other.slug }` );
+			for ( const page of [ '/', '/drive/', '/moon/' ] ) assert.ok( links.includes( page ), `${ place.slug } doesn't link to ${ page }` );
+			// NASA's credit, as the game gives it.
+			assert.ok( links.includes( 'https://svs.gsfc.nasa.gov/4720/' ), `${ place.slug }: no credit to NASA` );
+
+		}
+
+		// The Moon's own page: what it is, every place, and a Drive on the Moon that opens the game there.
+		const { html } = pages.find( page => page.path === '/moon/' );
+		assert.equal( html.match( /<h1[\s>]/g )?.length, 1 );
+		assert.ok( wordsOf( html ).length > 500, `/moon/: only ${ wordsOf( html ).length } words` );
+		const text = wordsOf( html ).join( ' ' );
+		for ( const phrase of [ 'LOLA', 'LROC', 'public domain', 'made up', 'a sixth of the gravity', 'two and a half times as long', 'The Earth in the sky', 'No water', 'On your own' ] ) assert.ok( text.toLowerCase().includes( phrase.toLowerCase() ), `/moon/: no "${ phrase }"` );
+		const links = linksOf( html );
+		for ( const place of MOON_PAGES ) {
+
+			assert.ok( links.includes( `/moon/${ place.slug }/` ), `/moon/ doesn't link to ${ place.slug }` );
+			assert.ok( links.includes( `/?spot=${ place.spot }` ), `/moon/ has no Drive here for ${ place.slug }` );
+
+		}
+
+		assert.ok( links.includes( '/drive/' ) && links.includes( '/' ) );
+		const go = decode( html.match( /<a class="go" href="([^"]+)"/ )[ 1 ] );
+		assert.equal( linkedPlace( new URL( go, SITE ).search )?.world, 'moon' );
 
 	} );
 
@@ -298,7 +429,20 @@ describe( 'what search engines read', () => {
 		assert.ok( checked.size > 30, `only ${ checked.size } links` );
 		// Off the site, only the credits: OpenStreetMap's copyright page, and NASA's for the Moon.
 		const outside = new Set( pages.flatMap( ( { html } ) => linksOf( html ) ).filter( href => /^https?:/.test( href ) && ! href.startsWith( SITE ) ) );
-		assert.deepEqual( [ ...outside ], [ 'https://www.openstreetmap.org/copyright', 'https://svs.gsfc.nasa.gov/4720/' ] );
+		assert.deepEqual( [ ...outside ].sort(), [ 'https://svs.gsfc.nasa.gov/4720/', 'https://www.openstreetmap.org/copyright' ] );
+
+		// The Moon's pages are beside the files the game fetches from /moon/, which are still there.
+		for ( const [ path, size ] of Object.entries( MOON_FILES ) ) {
+
+			const res = await fetch( server.base + path, { redirect: 'manual' } );
+			assert.equal( res.status, 200, path );
+			assert.equal( ( await res.arrayBuffer() ).byteLength, size, path );
+
+		}
+
+		// And an address without its slash is sent on to the page, as for the places'.
+		const bare = await fetch( `${ server.base }/moon/tycho`, { redirect: 'manual' } );
+		assert.deepEqual( [ bare.status, bare.headers.get( 'location' ) ], [ 307, '/moon/tycho/' ] );
 
 	} );
 
@@ -312,6 +456,10 @@ describe( 'what search engines read', () => {
 		const entries = [ ...xml.matchAll( /<url>\s*<loc>([^<]+)<\/loc>\s*(?:<lastmod>([^<]+)<\/lastmod>\s*)?<\/url>/g ) ].map( match => ( { loc: match[ 1 ], lastmod: match[ 2 ] } ) );
 		assert.equal( entries.length, ( xml.match( /<url>/g ) ?? [] ).length );
 		assert.deepEqual( entries.map( entry => entry.loc ).sort(), pages.map( page => SITE + page.path ).sort() );
+		// The Moon's pages among them; the owner's stats page (noindex) never.
+		for ( const path of [ '/moon/', ...MOON_PAGES.map( place => `/moon/${ place.slug }/` ) ] ) assert.ok( entries.some( entry => entry.loc === SITE + path ), `${ path } isn't in the sitemap` );
+		for ( const { path } of hidden ) assert.ok( ! xml.includes( SITE + path ), `${ path } is in the sitemap` );
+		assert.doesNotMatch( xml, /admin/ );
 		// Built from a shallow clone there are no dates (see lastChanged in drive/site/build.js).
 		const shallow = spawnSync( 'git', [ 'rev-parse', '--is-shallow-repository' ], { cwd: ROOT, encoding: 'utf8' } ).stdout.trim() === 'true';
 		for ( const { loc, lastmod } of entries ) {
@@ -371,10 +519,11 @@ describe( 'what search engines read', () => {
 		const words = wordsOf( html );
 		assert.ok( words.length >= HOME_WORDS, `only ${ words.length } words` );
 		const text = words.join( ' ' );
-		for ( const phrase of [ 'Drive anywhere on Earth', 'photorealistic 3D', 'free arcade driving game', 'nothing to download', 'Stunts', 'Boost', 'drift', 'Fly', 'party', 'levels' ] ) assert.ok( text.includes( phrase ), `no "${ phrase }"` );
+		for ( const phrase of [ 'Drive anywhere on Earth', 'photorealistic 3D', 'free arcade driving game', 'nothing to download', 'Stunts', 'Boost', 'drift', 'Fly', 'party', 'levels', 'Can I drive on the Moon?', 'NASA\'s maps' ] ) assert.ok( text.includes( phrase ), `no "${ phrase }"` );
 		const links = linksOf( html );
 		for ( const place of PLACES ) assert.ok( links.includes( `/drive/${ place.slug }/` ), `the home page doesn't link to ${ place.slug }` );
-		assert.ok( links.includes( '/drive/' ) );
+		for ( const place of MOON_PAGES ) assert.ok( links.includes( `/moon/${ place.slug }/` ), `the home page doesn't link to the Moon's ${ place.slug }` );
+		assert.ok( links.includes( '/drive/' ) && links.includes( '/moon/' ) );
 
 		// In the page: the words are on the panel, not tucked away, and the pitch is on the splash.
 		const page = await browser.newPage( { viewport: { width: 1280, height: 800 } } );
@@ -416,8 +565,18 @@ describe( 'what search engines read', () => {
 		assert.equal( await page.locator( '.pin-card .name' ).textContent(), 'Eiffel Tower' );
 		assert.equal( page.url(), `${ server.base }/` );
 		assert.equal( await page.evaluate( () => window.__left ?? false ), false, 'the page was left' );
-		// The list of them all opens in a tab of its own.
+		// A tap on one of the Moon's places turns the globe to the Moon (its files fetched now, from
+		// beside its pages) and flies there, pinned, still without leaving.
+		const tycho = page.locator( '#globe-ui .site-places a[href="/moon/tycho/"]' );
+		assert.equal( await tycho.getAttribute( 'data-play' ), '/?spot=moon-tycho' );
+		await tycho.click();
+		await page.waitForFunction( () => window.drive.world === 'moon' && window.drive.panel.pinned?.id === 'moon-tycho' && ! window.drive.globe.flight, null, { timeout: 120000 } );
+		assert.equal( await page.locator( '.pin-card .name' ).textContent(), 'Tycho crater' );
+		assert.equal( page.url(), `${ server.base }/` );
+		assert.equal( await page.evaluate( () => window.__left ?? false ), false, 'the page was left' );
+		// The lists of them all open in a tab of their own.
 		assert.equal( await page.locator( '#globe-ui .site-info a[href="/drive/"]' ).getAttribute( 'target' ), '_blank' );
+		assert.equal( await page.locator( '#globe-ui .site-info a[href="/moon/"]' ).getAttribute( 'target' ), '_blank' );
 		await page.close();
 
 	} );
@@ -530,6 +689,31 @@ describe( 'Drive here: a place\'s link opens the game with it pinned', () => {
 
 	} );
 
+	test( 'from a Moon page: the game starts, turns the globe to the Moon and pins its spot there, and the address is tidied', async () => {
+
+		const page = await newPage();
+		const place = MOON_PAGES.find( p => p.slug === 'tycho' );
+		const spot = MOON_SPOTS.find( s => s.id === place.spot );
+		await page.goto( `${ server.base }/moon/${ place.slug }/` );
+		await page.locator( 'a.go' ).click();
+		await page.waitForFunction( id => window.drive?.mode === 'globe' && window.drive.world === 'moon' && window.drive.panel.pinned?.id === id && ! window.drive.globe.flight, spot.id, { timeout: 120000 } );
+		const pin = await page.evaluate( () => {
+
+			const { lat, lon, world } = window.drive.globe.pin;
+			return { lat, lon, world, name: document.querySelector( '.pin-card .name' ).textContent, card: ! document.querySelector( '.pin-card' ).hidden };
+
+		} );
+		assert.deepEqual( pin, { lat: spot.lat, lon: spot.lon, world: 'moon', name: spot.name, card: true } );
+		// It never drops in by itself, and the place is out of the address.
+		assert.equal( await page.evaluate( () => window.drive.mode ), 'globe' );
+		assert.equal( new URL( page.url() ).search, '' );
+		if ( SHOTS ) await page.screenshot( { path: join( SHOTS, 'seo-moon-link.png' ) } );
+		assert.deepEqual( page.errors, [] );
+		assert.deepEqual( page.outside, [] );
+		await page.close();
+
+	} );
+
 	test( 'then Drive here drops in at the place, as a start spot does; on a phone the pin is clear of the sheet', async () => {
 
 		const page = await newPage();
@@ -587,7 +771,7 @@ describe( 'Drive here: a place\'s link opens the game with it pinned', () => {
 
 describe( 'the dev server and the load', () => {
 
-	test( 'the dev server makes the same pages: the places, the list, the sitemap, the home page\'s list', async () => {
+	test( 'the dev server makes the same pages: the places, the list, the Moon\'s, the sitemap, the home page\'s lists; the Moon\'s files pass through', async () => {
 
 		const vite = await startVite( PORT + 1, {}, 'vite.drive.config.js' );
 		try {
@@ -600,8 +784,28 @@ describe( 'the dev server and the load', () => {
 			assert.equal( bare.status, 307 );
 			assert.equal( bare.headers.get( 'location' ), '/drive/monaco/' );
 			assert.match( await ( await fetch( `${ base }/drive/` ) ).text(), /<h1>Places to drive<\/h1>/ );
-			assert.match( await ( await fetch( `${ base }/sitemap.xml` ) ).text(), /<loc>https:\/\/worlddrive\.app\/drive\/colosseum\/<\/loc>/ );
-			assert.match( await ( await fetch( `${ base }/` ) ).text(), /<li><a href="\/drive\/copacabana\/" data-play="\/\?at=[^"]+">Copacabana<\/a><\/li>/ );
+			const sitemap = await ( await fetch( `${ base }/sitemap.xml` ) ).text();
+			assert.match( sitemap, /<loc>https:\/\/worlddrive\.app\/drive\/colosseum\/<\/loc>/ );
+			assert.match( sitemap, /<loc>https:\/\/worlddrive\.app\/moon\/tycho\/<\/loc>/ );
+			const home = await ( await fetch( `${ base }/` ) ).text();
+			assert.match( home, /<li><a href="\/drive\/copacabana\/" data-play="\/\?at=[^"]+">Copacabana<\/a><\/li>/ );
+			assert.match( home, /<li><a href="\/moon\/tycho\/" data-play="\/\?spot=moon-tycho">Tycho crater<\/a><\/li>/ );
+
+			// The Moon's pages at /moon/ and /moon/<slug>/, and every other /moon/ address (the files the
+			// game fetches) passed on untouched.
+			assert.match( await ( await fetch( `${ base }/moon/` ) ).text(), /<h1>Drive on the Moon<\/h1>/ );
+			const tycho = await fetch( `${ base }/moon/tycho/` );
+			assert.equal( tycho.status, 200 );
+			assert.equal( titleOf( await tycho.text() ), 'Drive Tycho Crater on the Moon in 3D – World Drive' );
+			const moonBare = await fetch( `${ base }/moon/tycho`, { redirect: 'manual' } );
+			assert.deepEqual( [ moonBare.status, moonBare.headers.get( 'location' ) ], [ 307, '/moon/tycho/' ] );
+			for ( const [ path, size ] of Object.entries( MOON_FILES ) ) {
+
+				const res = await fetch( base + path );
+				assert.equal( res.status, 200, path );
+				assert.equal( ( await res.arrayBuffer() ).byteLength, size, path );
+
+			}
 
 		} finally {
 

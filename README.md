@@ -781,8 +781,11 @@ stays off ("Coming soon") until `GOOGLE_CLIENT_ID` and the webhook's secret are 
 
 For search engines and links, the site has a page for each start spot and a few more famous places
 (`/drive/<place>/`, built from `drive/site/`, each with a **Drive here** that opens the game with the
-place pinned), a sitemap, robots.txt, structured data and link cards (`npm run drive-site-images`
-draws them); see [Search engines](docs/world-drive.md#search-engines).
+place pinned), a page about driving on the Moon (`/moon/`) and one for each of the Moon's start spots
+(`/moon/<place>/`, from `drive/site/moon.js`, whose **Drive here** turns the globe to the Moon with
+the spot pinned), a sitemap, robots.txt, structured data and link cards (`npm run drive-site-images`
+draws them, and `npm run drive-site-images -- moon` the Moon's, from the game itself); see
+[Search engines](docs/world-drive.md#search-engines).
 
 How to play, the leaderboard (how cheating is limited, and looking after it in the D1 console), the
 settings and limits, deploying (`npm run deploy:drive` applies the database's migrations first), and
