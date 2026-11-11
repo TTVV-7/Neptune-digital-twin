@@ -1,0 +1,10 @@
+{
+	"about": "Work on the B2D2 structure by others, for the twin's timeline (scripts/b2d2-repair-model.mjs reads it). hoppers: the gallery's hoppers broken out bay by bay (G1-G2 against the pit to G12-G13 at the north end), from `started` to `finished`, the first bay on `started` and the last on `finished`, the rest spread between, starting at the `from` end ('north' or 'pit'). Change the days or the end and rebuild the model.",
+	"hoppers": {
+		"name": "Hoppers",
+		"by": "Others, with machines",
+		"started": "2026-11-04",
+		"finished": "2026-11-10",
+		"from": "north"
+	}
+}

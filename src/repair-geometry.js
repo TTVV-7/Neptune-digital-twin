@@ -35,14 +35,25 @@ export const STAGES = [
 ];
 export const stageOf = status => STAGES.find( stage => stage.status === status ) ?? STAGES[ 0 ];
 
-// The day a stage's date says, as 'YYYY-MM-DD', or null if it doesn't say one. A span of days
-// ('2026-11-05/08', as the progress drawings give) is its last: by then it was done.
-export function dayOf( date ) {
+// The days a stage's date says, as 'YYYY-MM-DD': one, or each day of a span ('2026-11-05/08', as the
+// progress drawings give; '2026-11-30/02' runs into the next month). [] if it doesn't say a day.
+export function daysOf( date ) {
 
 	const said = /^(\d{4})-(\d{2})-(\d{2})(?:\/(\d{2}))?/.exec( date ?? '' );
-	return said ? `${ said[ 1 ] }-${ said[ 2 ] }-${ said[ 4 ] ?? said[ 3 ] }` : null;
+	if ( ! said ) return [];
+	const [ year, month, first ] = said.slice( 1, 4 ).map( Number );
+	const last = said[ 4 ] === undefined ? first : Number( said[ 4 ] );
+	const from = Date.UTC( year, month - 1, first );
+	const to = Date.UTC( year, month - 1 + ( last < first ? 1 : 0 ), last );
+	const days = [];
+	for ( let t = from; t <= to && days.length < 62; t += 86400000 ) days.push( new Date( t ).toISOString().slice( 0, 10 ) );
+	return days;
 
 }
+
+// The day a stage's date says, or null if it doesn't say one. A span of days is its last: by then
+// it was done.
+export const dayOf = date => daysOf( date ).at( - 1 ) ?? null;
 
 // The stage an area had reached by the end of a day ('YYYY-MM-DD'), from the days it reached
 // each: its status then, or null if it hadn't been chipped yet. An area with no days to go by,

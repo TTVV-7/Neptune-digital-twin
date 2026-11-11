@@ -9,10 +9,13 @@
 // - the transfer pit, redrawn: walls, floor and sump, the B1 slab with its central opening and
 //   two grated openings and beams B1 to B6 under it, and at grade the lid with its three openings,
 //   the cross beam, the shed support beam and train support beams 1 and 2 over the pit;
-// - the C31 gallery: its walls, floor and hopper plates kept, between the pit and the north end
+// - the C31 gallery: its walls and floor kept, between the pit and the north end
 //   where the drawings have them; at grade the pony walls, slab strips, train support beams 1
 //   and 2 and cross beams G1 to G12 redrawn, the steel plates between them, and the north end's
 //   lid with its two openings and G13, G14;
+// - the gallery's hoppers (the two sloped plates under the slot between the rails) taken out of
+//   it: they were broken out by 10 November 2026. hopperBays() gives them back bay by bay, G1 to
+//   G13, for the timeline to show them until each bay went;
 // - C32 moved over to the drawings' line and brought up to the pit's wall;
 // - the beams on their own (their own layer and colour, so they can be told from the slabs and
 //   walls they carry): train support beams 1 and 2 the length of the pit and the gallery, G1 to
@@ -302,9 +305,9 @@ function gallery( was ) {
 
 		const north = part.min[ 0 ] > WAS.gallery.end[ 0 ] - 0.1;
 		const long = part.max[ 0 ] - part.min[ 0 ] > 40;
-		// Kept: the floor, the hopper plates and the walls up to their tops, and the north end below
-		// its lid. Everything at grade is redrawn below.
-		const keep = north ? part.max[ 1 ] < EL.endLid[ 0 ] : long && part.max[ 1 ] < EL.rail[ 0 ] + 0.01 && part.min[ 1 ] < EL.strip[ 0 ] - 1;
+		// Kept: the floor and the walls up to their tops, and the north end below its lid. Everything
+		// at grade is redrawn below, and the hoppers are gone (hopperBays).
+		const keep = north ? part.max[ 1 ] < EL.endLid[ 0 ] : long && ! isHopper( part ) && part.max[ 1 ] < EL.rail[ 0 ] + 0.01 && part.min[ 1 ] < EL.strip[ 0 ] - 1;
 		if ( keep ) s.add( was.positions, was.index, part.triangles, ( [ x, y, z ] ) => [ ( north ? end : along )( x ), y, z ] );
 
 	}
@@ -354,6 +357,40 @@ function beams() {
 	// B1 to B6, under the pit's B1 slab.
 	for ( const beam of Object.values( B1_BEAMS ) ) s.box( beam, [ beam.to ?? EL.b1Beams, EL.b1[ 0 ] ] );
 	return s.layer();
+
+}
+
+// The hoppers: the gallery's two long sloped plates under the slot between the rail beams, the
+// model's only parts the length of the gallery between EL 0.5 and 3.
+const HOPPER_EL = [ 0.5, 3 ];
+const isHopper = part => part.max[ 0 ] - part.min[ 0 ] > 40 && part.min[ 1 ] > HOPPER_EL[ 0 ] && part.max[ 1 ] < HOPPER_EL[ 1 ];
+
+// The hoppers bay by bay, from the pit to the north end: [ { name, x: [ x0, x1 ], positions, index } ].
+// A bay runs from the middle of one cross beam to the middle of the next (G1 against the pit to G13
+// at the north end). Each hopper plate is the same all along (a shape drawn out along the gallery),
+// so a bay's piece is the plate fitted between the bay's ends.
+export function hopperBays( site ) {
+
+	const was = site.c31;
+	const plates = partsOf( was ).filter( isHopper );
+	if ( plates.length !== 2 ) throw new Error( `expected the gallery's two hopper plates, found ${ plates.length }` );
+	for ( const part of plates ) for ( const t of part.triangles ) for ( let k = 0; k < 3; k ++ ) {
+
+		const x = was.positions[ was.index[ t * 3 + k ] * 3 ];
+		if ( Math.min( Math.abs( x - part.min[ 0 ] ), Math.abs( x - part.max[ 0 ] ) ) > 0.002 ) throw new Error( 'a hopper plate changes along the gallery: it can\'t be cut into bays this way' );
+
+	}
+
+	const middles = G_BEAMS.filter( g => g > GALLERY.x[ 0 ] && g < GALLERY.x[ 1 ] - 1 ).map( g => g + G_WIDTH / 2 );
+	const ends = [ GALLERY.x[ 0 ], ...middles, GALLERY.x[ 1 ] ];
+	return ends.slice( 0, - 1 ).map( ( x0, i ) => {
+
+		const x1 = ends[ i + 1 ];
+		const s = new Solid();
+		for ( const part of plates ) s.add( was.positions, was.index, part.triangles, ( [ x, y, z ] ) => [ x0 + ( x - part.min[ 0 ] ) / ( part.max[ 0 ] - part.min[ 0 ] ) * ( x1 - x0 ), y, z ] );
+		return { name: `G${ i + 1 }–G${ i + 2 } bay`, x: [ +x0.toFixed( 3 ), +x1.toFixed( 3 ) ], ...s.layer() };
+
+	} );
 
 }
 

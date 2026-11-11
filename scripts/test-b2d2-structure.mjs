@@ -8,7 +8,9 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import { Vector3 } from 'three';
-import { areaParts, CHIPPED, choosePlane, dayOf, EPOXY, faceSeen, LOOKS, SANDBLASTED, SHOTCRETED, stageAt, trianglesOf, triNormal } from '../src/repair-geometry.js';
+import { areaParts, CHIPPED, choosePlane, dayOf, daysOf, EPOXY, faceSeen, LOOKS, SANDBLASTED, SHOTCRETED, stageAt, trianglesOf, triNormal } from '../src/repair-geometry.js';
+import { floorBelow, originFor, workerSpot } from '../src/repair-crew.js';
+import { makeWorker } from '../src/repair-crew-figures.js';
 
 const data = JSON.parse( await readFile( new URL( '../public/models/b2d2-repair.json', import.meta.url ), 'utf8' ) );
 const layers = Object.fromEntries( Object.entries( data.layers ).map( ( [ key, l ] ) => [ key, trianglesOf( { positions: Float32Array.from( l.positions ), index: Uint32Array.from( l.index ) } ) ] ) );
@@ -216,6 +218,46 @@ test( 'the 10 November progress drawing: its dates, and the curb walls\' panel n
 
 } );
 
+test( 'the hoppers are out of the gallery, and kept bay by bay with the day each went, north end first, by 10 November', () => {
+
+	// Down the middle of the gallery from just under grade: the floor, no hopper plate on the way.
+	for ( const x of [ 10, 30, 50, 60 ] ) for ( const letter of [ 3.5, 6.2 ] ) {
+
+		const down = cast( [ x, 3, letter ], [ 0, - 1, 0 ] );
+		near( 3 - down, - 2.01, `the gallery's floor at grid ${ x }, letter ${ letter }` );
+
+	}
+
+	const [ hoppers ] = data.removed;
+	assert.equal( hoppers.name, 'Hoppers' );
+	assert.equal( hoppers.parts.length, 12 );
+	assert.equal( hoppers.parts[ 0 ].name, 'G12–G13 bay' );
+	assert.equal( hoppers.parts.at( - 1 ).name, 'G1–G2 bay' );
+	assert.equal( hoppers.parts[ 0 ].removed, '2026-11-04' );
+	assert.equal( hoppers.parts.at( - 1 ).removed, '2026-11-10' );
+	for ( let i = 1; i < 12; i ++ ) {
+
+		assert.ok( hoppers.parts[ i ].removed >= hoppers.parts[ i - 1 ].removed, 'in order' );
+		assert.ok( hoppers.parts[ i ].x[ 1 ] <= hoppers.parts[ i - 1 ].x[ 0 ] + 1e-6, 'bay after bay towards the pit' );
+
+	}
+
+	// The bays end to end from the pit's wall to the north end, each the two sloped plates.
+	const xs = hoppers.parts.flatMap( p => p.x ).sort( ( a, b ) => a - b );
+	near( xs[ 0 ], 8.00, 'the first bay starts at the pit' );
+	near( xs.at( - 1 ), 61.57, 'the last bay ends at the north end' );
+	for ( const part of hoppers.parts ) {
+
+		const tris = trianglesOf( { positions: part.positions, index: part.index } );
+		const sloped = tris.filter( t => Math.abs( triNormal( t.a, t.b, t.c ).y ) > 0.4 && Math.abs( triNormal( t.a, t.b, t.c ).y ) < 0.6 );
+		assert.ok( sloped.length >= 4, `${ part.name }: sloped faces` );
+		const ys = part.positions.filter( ( _, i ) => i % 3 === 1 );
+		assert.ok( Math.min( ...ys ) > 0.5 && Math.max( ...ys ) < 3, `${ part.name }: between EL 0.5 and 3` );
+
+	}
+
+} );
+
 test( 'epoxy coated: only the bars are green, in the recess as sandblasting left it', () => {
 
 	assert.deepEqual( LOOKS[ EPOXY ].concrete, LOOKS[ SANDBLASTED ].concrete );
@@ -229,6 +271,10 @@ test( 'looking back: an area is at the stage it had reached by the end of a day,
 	assert.equal( dayOf( '2026-11-05/08' ), '2026-11-08' );
 	assert.equal( dayOf( '2026-11-02' ), '2026-11-02' );
 	assert.equal( dayOf( undefined ), null );
+	// A span into the next month.
+	assert.equal( dayOf( '2026-11-30/02' ), '2026-12-02' );
+	assert.deepEqual( daysOf( '2026-11-30/02' ), [ '2026-11-30', '2026-12-01', '2026-12-02' ] );
+	assert.deepEqual( daysOf( '2026-11-05/08' ), [ '2026-11-05', '2026-11-06', '2026-11-07', '2026-11-08' ] );
 	assert.equal( dayOf( 'last week' ), null );
 
 	const done = { f: { status: SHOTCRETED, chipped: '2026-11-05/08', sandblasted: '2026-11-12', epoxy: '2026-11-13', shotcreted: '2026-11-20' } };
@@ -257,6 +303,42 @@ test( 'looking back: an area is at the stage it had reached by the end of a day,
 	assert.ok( by( '2026-11-02' ) > 0 && by( '2026-11-02' ) < by( '2026-11-04' ) );
 	assert.equal( by( '2026-11-10' ), data.markups.length );
 	assert.ok( by( '2026-11-08' ) < by( '2026-11-10' ) );
+
+} );
+
+test( 'the timeline\'s worker can chip nearly every area: the chisel on the panel, the feet on a floor or a scaffold deck, room to stand', () => {
+
+	const worker = makeWorker( { aim: 0 } );
+	const reach = aim => {
+
+		worker.userData.setAim( aim );
+		return worker.userData.reach();
+
+	};
+	let placed = 0, decks = 0;
+	for ( const m of data.markups ) {
+
+		const spot = workerSpot( m, all, reach );
+		if ( ! spot ) continue;
+		placed ++;
+		if ( spot.deck ) decks ++;
+		// Where the tip is: the reach from the feet, turned the way they face.
+		const r = reach( spot.aim );
+		const tip = originFor( new Vector3(), spot.facing, r ).negate().add( spot.feet );
+		const n = new Vector3( ...m.n ).normalize();
+		const middle = m.pts.reduce( ( c, p ) => c.add( new Vector3( ...p ) ), new Vector3() ).divideScalar( m.pts.length );
+		const off = tip.clone().sub( middle ).dot( n );
+		const along = tip.clone().sub( middle ).addScaledVector( n, - off ).length();
+		assert.ok( Math.abs( off ) < 0.08, `${ m.id } ${ m.face }: the chisel ${ off.toFixed( 3 ) } m off the panel` );
+		assert.ok( along < 0.35, `${ m.id } ${ m.face }: the chisel ${ along.toFixed( 2 ) } m from the panel's middle` );
+		// Standing on something: the floor, or a deck that high above it.
+		const floor = floorBelow( spot.feet.clone().setY( spot.feet.y - spot.deck + 0.3 ), all );
+		assert.ok( floor !== null && Math.abs( floor + spot.deck - spot.feet.y ) < 0.06, `${ m.id } ${ m.face }: feet at ${ spot.feet.y.toFixed( 2 ) }, floor ${ floor }` );
+
+	}
+
+	assert.ok( placed >= data.markups.length * 0.95, `${ placed } of ${ data.markups.length } placed` );
+	assert.ok( decks > 0, 'the high ones on a scaffold' );
 
 } );
 

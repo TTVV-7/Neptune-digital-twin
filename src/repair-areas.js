@@ -3,8 +3,9 @@ import { BufferAttribute, BufferGeometry, CanvasTexture, Color, DoubleSide, Grou
 import { loadConfig } from './cloud.js';
 import { sendForEveryone } from './placements.js';
 import { useFastRaycast } from './raycast.js';
+import { createCrew } from './repair-crew.js';
 import { createAreaPhotos } from './repair-photos.js';
-import { areaExtras, areaName, areaParts, basisOf, CHIPPED, cutOut, dayOf, describeArea, LOOKS, lookNames, outlineNormal, rimOf, stageAt, STAGES, stageOf, trianglesOf } from './repair-geometry.js';
+import { areaExtras, areaName, areaParts, basisOf, CHIPPED, cutOut, dayOf, daysOf, describeArea, LOOKS, lookNames, outlineNormal, rimOf, stageAt, STAGES, stageOf, trianglesOf } from './repair-geometry.js';
 import { isTyping } from './walk.js';
 
 // Fixing the B2D2 model's repair areas in the twin: moving areas drawn in the wrong spot or turned
@@ -43,6 +44,7 @@ const TYPES = [ 'Exposed rebar', 'Spall', 'Delamination', 'Crack', 'Honeycombing
 // Panel numbers float on their panels about this tall on the screen (as a share of the distance
 // to them), between these sizes in metres; a row in the Show panel hides them.
 const NUMBER = { perMetre: 0.022, min: 0.11, max: 0.5, off: 0.07 };
+const IDENTITY = new Matrix4();
 const NUMBERS_LAYER = 'panel-numbers';
 // What's kept of a markup's details for an area changed or added here (worker/area-edits.js).
 const DETAILS = [ 'status', 'type', 'text', ...STAGES.map( stage => stage.date ).filter( Boolean ) ];
@@ -323,8 +325,8 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 
 				const node = s.nodes.get( id );
 				const m = markupOf( s, id );
-				if ( ! m?.no || ! node || s.drawn.has( id ) || node.children.some( child => child.userData.number ) ) continue;
-				node.add( numberOf( s, m, s.planes.get( id ) ) );
+				if ( ! m?.no || ! node || s.drawn.has( id ) || numberIn( node ) ) continue;
+				addNumber( node, numberOf( s, m, s.planes.get( id ) ) );
 
 			}
 
@@ -407,6 +409,9 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 				for ( const [ key, layer ] of Object.entries( data.layers ) ) if ( object.isMesh && meshName( object ) === gltfName( layer.name ) ) s.layerMeshes[ key ] ??= object;
 
 			} );
+			// Each layer's own colour, as the model has it before any painting (model-edits.js paints
+			// with vertex colours on these materials): what others took out is drawn in it.
+			s.layerLooks = Object.fromEntries( Object.entries( s.layerMeshes ).map( ( [ key, mesh ] ) => [ key, { color: mesh.material.color.clone(), roughness: mesh.material.roughness, metalness: mesh.material.metalness } ] ) );
 			// The model's materials by name: a stage's concrete, bars and rim are taken from them, or
 			// made as the build makes them (materialFor) where the model has no area at that stage.
 			s.materials = named;
@@ -626,7 +631,8 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 	};
 
 	// The areas drawn as they were by the end of a day, or (null) as they are now: those whose stage
-	// was another then are drawn again, and the concrete cut to suit. The models' data is loaded.
+	// was another then are drawn again, and the concrete cut to suit; what others took out since is
+	// put back; and the crew and machines at work that day are shown. The models' data is loaded.
 	function lookBack( day ) {
 
 		asOf = day;
@@ -644,12 +650,109 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 			}
 
 			if ( changed ) cut( s );
+			showRemoved( s, day );
+			if ( day === null ) crew.clear( s );
+			else crew.show( s, chippingOn( s, day ), removedOn( s, day ) );
 
 		}
 
 		render();
 
 	}
+
+	// ---------- Looking back: what others took out, and who was at work ----------
+
+	const crew = createCrew( { onUpdate } );
+	// What others took out (the model's data: removed: [ { name, by, layer, from, parts: [ { name,
+	// x, removed, positions, index } ] } ], in the markup frame): each part is drawn again, in its
+	// layer's own colour, while looking back to a day before it went.
+	function showRemoved( s, day ) {
+
+		for ( const group of s.data.removed ?? [] ) for ( const part of group.parts ) {
+
+			const there = day !== null && part.removed > day;
+			if ( ! there ) {
+
+				part.mesh?.removeFromParent();
+				continue;
+
+			}
+
+			if ( ! part.mesh ) {
+
+				const geometry = new BufferGeometry();
+				geometry.setAttribute( 'position', new BufferAttribute( shifted( s, part.positions ), 3 ) );
+				geometry.setIndex( part.index );
+				const flat = geometry.toNonIndexed();
+				geometry.dispose();
+				flat.computeVertexNormals();
+				const look = s.layerLooks?.[ group.layer ];
+				group.material ??= new MeshStandardMaterial( { color: look?.color ?? '#b9c0c8', roughness: look?.roughness ?? 0.9, metalness: look?.metalness ?? 0, side: DoubleSide } );
+				part.mesh = new Mesh( flat, group.material );
+				part.mesh.name = `${ group.name }: ${ part.name } (removed ${ part.removed })`;
+				part.mesh.userData.noCollide = true;
+
+			}
+
+			// See-through with the rest of the model, or not (underground.js), as it is now.
+			const like = s.layerMeshes[ group.layer ]?.material;
+			if ( like && Boolean( like.userData.xray ) !== Boolean( group.material.userData.xray ) ) {
+
+				if ( like.userData.xray ) group.material.userData.xray = { transparent: false, opacity: 1, depthWrite: true };
+				else delete group.material.userData.xray;
+				Object.assign( group.material, { transparent: like.transparent, opacity: like.opacity, depthWrite: like.depthWrite } );
+				group.material.needsUpdate = true;
+
+			}
+
+			if ( ! part.mesh.parent ) s.content.add( part.mesh );
+
+		}
+
+	}
+
+	// A model gone: what was made for looking back goes with it.
+	function forgetRemoved( s ) {
+
+		for ( const group of s.data?.removed ?? [] ) {
+
+			for ( const part of group.parts ) {
+
+				part.mesh?.removeFromParent();
+				part.mesh?.geometry.dispose();
+				delete part.mesh;
+
+			}
+
+			group.material?.dispose();
+			delete group.material;
+
+		}
+
+	}
+
+	const hash = text => [ ...text ].reduce( ( h, c ) => ( h * 31 + c.charCodeAt( 0 ) ) >>> 0, 7 );
+	// The areas our crew was chipping on a day, of those that have been chipped. Over a span of days
+	// each is put on one of them.
+	function chippingOn( s, day ) {
+
+		const out = [];
+		for ( const id of ids( s ) ) {
+
+			const m = markupOf( s, id );
+			if ( ! m || STAGES.indexOf( stageOf( m.f?.status ) ) < STAGES.indexOf( stageOf( CHIPPED ) ) ) continue;
+			const days = daysOf( m.f?.chipped );
+			if ( ! days.includes( day ) ) continue;
+			if ( days.length === 1 || days[ hash( id ) % days.length ] === day ) out.push( { m } );
+
+		}
+
+		return out;
+
+	}
+
+	// The parts others took out on a day, and which way the work went.
+	const removedOn = ( s, day ) => ( s.data.removed ?? [] ).flatMap( group => group.parts.filter( part => part.removed === day ).map( part => ( { ...part, towards: group.from === 'pit' ? 1 : - 1 } ) ) );
 
 	// An editor starts: no more looking back.
 	function backToNow() {
@@ -727,7 +830,7 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 		}
 
 		useFastRaycast( node );
-		if ( m.no || photos.count( s.model, id ) ) node.add( numberOf( s, m, plane ) );
+		if ( m.no || photos.count( s.model, id ) ) addNumber( node, numberOf( s, m, plane ) );
 		if ( old?.parent ) {
 
 			old.parent.children.splice( old.parent.children.indexOf( old ), 1, node );
@@ -829,7 +932,25 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 
 	}
 
-	const numbers = () => [ ...states.values() ].flatMap( s => [ ...s.nodes.values() ].flatMap( node => node.children.filter( child => child.userData.number ) ) );
+	// A number goes on its area's node. The model's own area nodes carry a position and scale (how
+	// the file packs their corners), so there it sits in a holder that undoes them: the number is
+	// placed in the model's frame either way, right on its panel, at its own size.
+	function addNumber( node, sprite ) {
+
+		node.updateMatrix();
+		if ( node.matrix.equals( IDENTITY ) ) return node.add( sprite );
+		const holder = new Group();
+		holder.matrixAutoUpdate = false;
+		holder.matrix.copy( node.matrix ).invert();
+		holder.userData.numberHolder = true;
+		holder.add( sprite );
+		node.add( holder );
+
+	}
+
+	const numberIn = node => node.children.find( child => child.userData.number )
+		?? node.children.find( child => child.userData.numberHolder )?.children[ 0 ] ?? null;
+	const numbers = () => [ ...states.values() ].flatMap( s => [ ...s.nodes.values() ].map( numberIn ).filter( Boolean ) );
 	layers?.addLayer( NUMBERS_LAYER, {
 		name: 'Panel numbers',
 		count: () => numbers().length,
@@ -1554,6 +1675,8 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 		if ( dirtyCut === s ) dirtyCut = null;
 		for ( let i = history.length - 1; i >= 0; i -- ) if ( history[ i ].s === s ) history.splice( i, 1 );
 		if ( ! states.size && editing ) setEditing( false );
+		crew.clear( s );
+		forgetRemoved( s );
 		render();
 
 	} );
@@ -1609,6 +1732,9 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 
 				}
 
+				// And the days others took things out.
+				for ( const s of states.values() ) for ( const group of s.data?.removed ?? [] ) for ( const part of group.parts ) days.add( part.removed );
+
 				return [ ...days ].sort();
 
 			},
@@ -1647,6 +1773,23 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 				}
 
 				return rows;
+
+			},
+			// What others took out, as it stood by the end of the day looked back to: [ { name, by,
+			// left, total, removing } ] (left: parts still there; removing: taken out that day).
+			works() {
+
+				return [ ...states.values() ].flatMap( s => ( s.data?.removed ?? [] ).map( group => ( {
+					name: group.name, by: group.by, total: group.parts.length,
+					left: asOf === null ? 0 : group.parts.filter( part => part.removed > asOf ).length,
+					removing: asOf === null ? 0 : group.parts.filter( part => part.removed === asOf ).length,
+				} ) ) );
+
+			},
+			// How many people and machines are shown at work.
+			get crew() {
+
+				return crew.count;
 
 			},
 			has: () => states.size > 0,

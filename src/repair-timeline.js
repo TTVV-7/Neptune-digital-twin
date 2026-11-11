@@ -13,6 +13,8 @@ const SPEEDS = [ [ 'Slow', 1.4 ], [ 'Normal', 0.7 ], [ 'Fast', 0.3 ] ];
 const LONGEST = 400;
 // Between the bar and Google's credits under it, in px.
 const GAP = 8;
+const WORKS_COLOUR = '#b9c0c8';
+const escape = text => String( text ?? '' ).replace( /[&<>"]/g, c => ( { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' } )[ c ] );
 const COLOURS = { Marked: '#0e8fa8', Chipped: '#7c4a2d', Sandblasted: '#f1f5f9', 'Epoxy coated': '#047857', Shotcreted: '#475569' };
 
 const today = () => {
@@ -78,9 +80,12 @@ export function setUpRepairTimeline( { timeline, bar, toast } ) {
 		$( '.play' ).textContent = playing ? '❚❚' : '▶';
 		$( '.play' ).title = playing ? 'Pause' : 'Play the repairs through, day by day';
 		const rows = timeline.summary().filter( row => row.count );
-		$( '.counts' ).innerHTML = rows.length
+		// What others took out, while any of it was still there that day.
+		const works = day ? ( timeline.works?.() ?? [] ).filter( work => work.left || work.removing ) : [];
+		$( '.counts' ).innerHTML = ( rows.length
 			? rows.map( row => `<span><i style="background:${ COLOURS[ row.stage ] ?? '#888' }"></i>${ row.stage } ${ row.count } · ${ row.area.toFixed( 1 ) } m²</span>` ).join( '' )
-			: '<span>Nothing chipped yet</span>';
+			: '<span>Nothing chipped yet</span>' )
+			+ works.map( work => `<span class="works"><i style="background:${ WORKS_COLOUR }"></i>${ escape( work.name ) } ${ work.left } of ${ work.total } bays left${ work.removing ? `, ${ work.removing } out today` : '' }${ work.by ? ` (${ escape( String( work.by ).toLowerCase() ) })` : '' }</span>` ).join( '' );
 		place();
 
 	}
