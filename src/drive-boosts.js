@@ -21,7 +21,8 @@ import {
 // Drive's Garage picks one for each ride), and the supersonic effects that any of them gets at the
 // booster's top speed. Each style is particles drawn as quads from one picture sheet: a billboard
 // facing the camera, a strip stretched along a line (a bolt, a streak, a comet's tail) or a quad
-// lying flat across a normal (a ring, a splat of paint on the road), all of one batch in one draw.
+// lying flat across a normal (a ring, a splat of paint on the road), one batch in one draw (two for
+// dragon fire and spooky: a glowing one added over what's behind, and one drawn over it).
 //
 // They're made to read from the chase camera at speed: most of what's thrown out keeps going with
 // the vehicle (`inherit`, a share of its velocity), so it trails a few metres behind it rather than
@@ -877,12 +878,15 @@ export class Batch {
 // over the ground under it, world), scale (1 for a kart, more for something bigger) }.
 //
 // A style: `flame`, colours for the classic flame's cones and glow { outer, inner, halo } or just
-// { halo } for a glow alone, with how long (`length`) and how wildly (`flicker`) it burns, or null
-// for none; `tint`, the colour its ignition flashes in (see drive-bursts.js); and make( root ), its
-// batches, update( frame ) and ignite( frame, detail, calm ): a burst of its own as the booster
-// lights, `detail` of its usual count (fewer on a phone), with no flash of its own when `calm` (the
-// visitor asked for less motion). What a style does each frame is made once, in make(), so a frame
-// makes nothing new; an ignition reuses its particles, the oldest first.
+// { halo } for a glow alone, with how long (`length`) and how wildly (`flicker`) it burns and
+// whether its cone and glow are drawn over what's behind them (`deep`, as drive-fx.js's DEEP
+// flames are) rather than added to it, or null for none; `tint`, the colour its ignition flashes
+// in (see drive-bursts.js); and make( root ), its batches, update( frame ) and ignite( frame,
+// detail, calm ): a burst of its own as the booster lights, `detail` of its usual count (fewer on a
+// phone), with no flash of its own when `calm` (the visitor asked for less motion): no flare, bright
+// core or flash at a bolt's end, and any starburst or ring fainter. What a style does each frame is
+// made once, in make(), so a frame makes nothing new; an ignition reuses its particles, the oldest
+// first.
 
 // Particles emitted at `rate` a second (times power), spread along the exhaust's path this frame
 // so a fast vehicle doesn't leave them in clumps a frame apart. fn( k ) sets each up, `k` from 0 (a
@@ -1168,8 +1172,8 @@ const STYLES = {
 
 				},
 				// Lit: a strike, four long forks thrown out behind and to both sides at once, each with a
-				// flash where it ends.
-				ignite( frame ) {
+				// flash where it ends (not for a visitor asking for less motion).
+				ignite( frame, detail, calm ) {
 
 					for ( let n = 0; n < 4; n ++ ) {
 
@@ -1177,6 +1181,7 @@ const STYLES = {
 						way.copy( frame.back ).addScaledVector( frame.right, ( n - 1.5 ) * 0.9 ).addScaledVector( frame.up, 0.2 + Math.random() * 0.6 ).normalize();
 						const life = 0.16 + Math.random() * 0.08;
 						tip.copy( bolt( batch, frame, frame.nozzle, way, length, 7, 0.2 * frame.scale, 0.06 * frame.scale, life, 0xf3eaff, 0x8a5cff ) );
+						if ( calm ) continue;
 						const flash = batch.spawn( life );
 						flash.position.copy( tip );
 						flash.carry.copy( frame.velocity );
@@ -1559,7 +1564,8 @@ const STYLES = {
 				p.kind = 1;
 
 			};
-			const burst = from => {
+			// A ball of sparks in one colour where `from` is, round a flash (unless not `bright`).
+			const burst = ( from, bright = true ) => {
 
 				const colour = pick( colours );
 				for ( let i = 0; i < 14; i ++ ) {
@@ -1579,6 +1585,7 @@ const STYLES = {
 
 				}
 
+				if ( ! bright ) return;
 				const flash = batch.spawn( 0.14 );
 				flash.position.copy( from.position );
 				flash.carry.copy( from.carry );
@@ -1609,15 +1616,16 @@ const STYLES = {
 					batch.update( frame.dt, hooks );
 
 				},
-				// Lit: a starburst right at the exhaust, and a salvo of three rockets that burst just over it.
-				ignite( frame ) {
+				// Lit: a starburst right at the exhaust (without its flash for a visitor asking for less
+				// motion), and a salvo of three rockets that burst just over it.
+				ignite( frame, detail, calm ) {
 
 					f = frame;
 					scale = frame.scale;
 					shell.position.copy( frame.nozzle );
 					shell.carry.copy( frame.velocity ).multiplyScalar( 0.9 );
 					shell.velocity.copy( frame.back ).multiplyScalar( 1.5 );
-					burst( shell );
+					burst( shell, ! calm );
 					for ( let i = 0; i < 3; i ++ ) {
 
 						const p = batch.spawn( 0.18 + i * 0.05 );
@@ -1861,16 +1869,22 @@ const STYLES = {
 					batch.update( dt );
 
 				},
-				// Lit: its head flares up, and a shower of specks bursts off it.
-				ignite( frame, detail ) {
+				// Lit: its head flares up (not for a visitor asking for less motion), and a shower of
+				// specks bursts off it.
+				ignite( frame, detail, calm ) {
 
-					const flare = batch.spawn( 0.3 );
-					flare.position.copy( frame.nozzle );
-					flare.carry.copy( frame.velocity );
-					flare.frame = SHAPES.glow;
-					flare.size = 0.7 * frame.scale;
-					flare.grow = 0.4 * frame.scale;
-					flare.colour.copy( white );
+					if ( ! calm ) {
+
+						const flare = batch.spawn( 0.3 );
+						flare.position.copy( frame.nozzle );
+						flare.carry.copy( frame.velocity );
+						flare.frame = SHAPES.glow;
+						flare.size = 0.7 * frame.scale;
+						flare.grow = 0.4 * frame.scale;
+						flare.colour.copy( white );
+
+					}
+
 					for ( let i = Math.round( 36 * detail ); i > 0; i -- ) {
 
 						const p = batch.spawn( 0.4 + Math.random() * 0.3 );
@@ -2271,9 +2285,11 @@ const STYLES = {
 		},
 	},
 
-	// Galaxy: a violet flame streaming twinkling stars through drifting clouds of nebula.
+	// Galaxy: a violet flame streaming twinkling stars through drifting clouds of nebula. The flame is
+	// deep, and violet to its core: a paler core added to it, or the cone added to a bright sky or
+	// road, read as a white flame with a violet edge.
 	galaxy: {
-		flame: { outer: 0x6a2dff, inner: 0xffc8f4, halo: 0xa070ff, length: 0.85, flicker: 0.7 },
+		flame: { outer: 0x6a2dff, inner: 0x8a4cff, halo: 0xa070ff, length: 0.85, flicker: 0.7, deep: true },
 		tint: 0xc08cff,
 		make( root ) {
 
@@ -2767,11 +2783,12 @@ const STYLES = {
 					batch.update( frame.dt );
 
 				},
-				// Lit: a starburst of beams all round at once, and a hoop of light blown out behind.
-				ignite( frame, detail ) {
+				// Lit: a starburst of beams all round at once, and a hoop of light blown out behind. For a
+				// visitor asking for less motion, half as many beams, dim, and a fainter hoop.
+				ignite( frame, detail, calm ) {
 
 					f = frame;
-					const count = Math.max( 8, Math.round( 12 * detail ) );
+					const count = calm ? Math.max( 4, Math.round( 6 * detail ) ) : Math.max( 8, Math.round( 12 * detail ) );
 					for ( let i = 0; i < count; i ++ ) {
 
 						const p = batch.spawn( 0.28 );
@@ -2783,6 +2800,7 @@ const STYLES = {
 						p.frame = SHAPES.beam;
 						p.size = 0.07 * frame.scale;
 						p.colour.set( colours[ i % BEAMS ] );
+						p.alpha = calm ? 0.35 : 1;
 
 					}
 
@@ -2795,6 +2813,7 @@ const STYLES = {
 					hoop.size = 0.25 * frame.scale;
 					hoop.grow = 1.1 * frame.scale;
 					hoop.colour.set( colours[ 1 ] );
+					hoop.alpha = calm ? 0.6 : 1;
 
 				},
 			};
