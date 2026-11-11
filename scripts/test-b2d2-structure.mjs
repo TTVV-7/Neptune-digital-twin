@@ -109,6 +109,46 @@ test( 'the gallery at grade: train support beams and G1 to G14 where the drawing
 
 } );
 
+test( 'the beams are a layer of their own: train support beams 1 and 2, G1 to G14, the cross and shed support beams, B1 to B6', () => {
+
+	assert.equal( data.layers.beams.name, 'Beams' );
+	// Straight down onto those at grade, and up to the soffits of those under a slab: met in the
+	// beams layer, where each is, and not in the gallery's or the pit's layer (down: nothing as
+	// high; up: only the slab above).
+	const beam = ( x, letter, el, name, from = 8 ) => {
+
+		const dir = from > el ? - 1 : 1;
+		const hit = triangles => {
+
+			const d = cast( [ x, from, letter ], [ 0, dir, 0 ], triangles );
+			return d === null ? null : from + dir * d;
+
+		};
+		near( hit( layers.beams ), el, name );
+		const rest = hit( [ ...layers.c31, ...layers.pit ] );
+		assert.ok( rest === null || ( rest - el ) * dir > 0.05, `${ name }: ${ rest } in the gallery's or the pit's layer` );
+
+	};
+	// The rail beams along the gallery, and under the pit's lid.
+	for ( const x of [ 10, 35, 60 ] ) {
+
+		beam( x, 4.12, 5.05, `train support beam 2 at ${ x }` );
+		beam( x, 5.63, 5.05, `train support beam 1 at ${ x }` );
+
+	}
+
+	beam( 3, 4.12, 4.26, 'train support beam 2 over the pit', 0 );
+	beam( 3, 5.63, 4.26, 'train support beam 1 over the pit', 0 );
+	// G1 to G12 between the rails, G13 and G14 under the north end's lid.
+	for ( const g of [ 7.86, 12.45, 16.89, 21.34, 25.78, 30.22, 34.67, 39.12, 43.56, 48.01, 52.45, 56.90 ] ) beam( g + 0.23, 4.9, 5.03, `G beam at ${ g }` );
+	for ( const x of [ 61.8, 65.25 ] ) beam( x, 7.2, 3.19, `G beam at ${ x }`, 0 );
+	// Under the pit's lid, and under its B1 slab.
+	beam( 4.65, 3.0, 3.42, 'cross beam', 0 );
+	beam( 1.0, 1.85, 4.15, 'shed support beam', 0 );
+	for ( const [ name, x, letter, el ] of [ [ 'B1', 2.0, 5, - 2.41 ], [ 'B2', 3, 6.17, - 2.41 ], [ 'B3', 4.57, 7, - 2.63 ], [ 'B4', 1.0, 3.6, - 2.41 ], [ 'B5', 1.0, 1.6, - 2.41 ], [ 'B6', 1.0, 7.7, - 2.41 ] ] ) beam( x, letter, el, name, - 4 );
+
+} );
+
 test( 'C32 meets the pit on the drawings\' line', () => {
 
 	const from = [ 2.285, - 0.5, 20 ];
@@ -145,6 +185,34 @@ test( 'an area follows its face where the structure was moved, and onto the side
 	// The faces look out of the concrete: the lid's top up, the pit's south wall into the pit.
 	const top = all.find( t => Math.abs( t.a.y - 5.07 ) < 1e-3 && Math.abs( t.b.y - 5.07 ) < 1e-3 && Math.abs( t.c.y - 5.07 ) < 1e-3 );
 	assert.ok( triNormal( top.a, top.b, top.c ).y > 0.99 );
+
+} );
+
+test( 'the 10 November progress drawing: its dates, and the curb walls\' panel numbers CW0001 to CW0046 on the areas they point at', () => {
+
+	const days = new Set( data.markups.map( m => m.f.chipped ) );
+	for ( const day of [ '2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05/08', '2026-11-09', '2026-11-10' ] ) assert.ok( days.has( day ), day );
+	assert.equal( data.markups.filter( m => m.f.chipped === '2026-11-09' ).length, 13 );
+	assert.equal( data.markups.filter( m => m.f.chipped === '2026-11-10' ).length, 2 );
+	// Each number once, on a pony wall at grade: 1 to 20 along the east wall from the north end,
+	// 21 to 46 along the west wall from the pit.
+	const numbered = data.markups.filter( m => m.no );
+	assert.deepEqual( numbered.map( m => m.no ).sort(), Array.from( { length: 46 }, ( _, i ) => `CW${ String( i + 1 ).padStart( 4, '0' ) }` ) );
+	const along = ( face, from, to ) => {
+
+		const list = numbered.filter( m => m.face === face ).sort( ( a, b ) => a.no.localeCompare( b.no ) );
+		assert.equal( list[ 0 ].no, from );
+		assert.equal( list.at( - 1 ).no, to );
+		const x = m => m.pts.reduce( ( s, p ) => s + p[ 0 ] / m.pts.length, 0 );
+		// The labels take turns above and below the wall, so neighbours can be a little out of order.
+		for ( let i = 1; i < list.length; i ++ ) assert.ok( ( x( list[ i ] ) - x( list[ i - 1 ] ) ) * ( from === 'CW0001' ? - 1 : 1 ) > - 2, `${ list[ i ].no } after ${ list[ i - 1 ].no }` );
+		return list.map( x );
+
+	};
+	const east = along( 'east pony wall at grade (AA side)', 'CW0001', 'CW0020' );
+	const west = along( 'west pony wall at grade (AJ side)', 'CW0021', 'CW0046' );
+	assert.ok( east[ 0 ] > 55 && east.at( - 1 ) < 20, `east: ${ east[ 0 ] } to ${ east.at( - 1 ) }` );
+	assert.ok( west[ 0 ] < 12 && west.at( - 1 ) > 58, `west: ${ west[ 0 ] } to ${ west.at( - 1 ) }` );
 
 } );
 
@@ -187,7 +255,8 @@ test( 'looking back: an area is at the stage it had reached by the end of a day,
 	const by = day => data.markups.filter( m => stageAt( m, day ) ).length;
 	assert.equal( by( '2026-11-01' ), 0 );
 	assert.ok( by( '2026-11-02' ) > 0 && by( '2026-11-02' ) < by( '2026-11-04' ) );
-	assert.equal( by( '2026-11-08' ), data.markups.length );
+	assert.equal( by( '2026-11-10' ), data.markups.length );
+	assert.ok( by( '2026-11-08' ) < by( '2026-11-10' ) );
 
 } );
 

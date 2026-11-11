@@ -15,6 +15,10 @@
 // the site model with its structure put on the drawings' grid (scripts/b2d2-structure.mjs), as the
 // build has it.
 //
+// Panel numbers: a callout whose text is a panel number (CW0001) and whose leader ends on an area
+// gives that area its number (no), as the twin shows it. The numbers are written the same width
+// (CW00010 is CW0010).
+//
 // The progress areas already in the snapshot (src containing "progress") are replaced by the
 // drawing's, keeping the id of each that's still there (same face, within 0.3 m), so the artifact
 // and the twin keep talking about the same area. Anything else in the snapshot is kept as it is.
@@ -49,6 +53,8 @@ const COLOURS = [
 	{ rgb: [ 0, 1, 1 ], date: '2026-11-03', label: '2026.11.03' },
 	{ rgb: [ 1, 0.502, 0 ], date: '2026-11-04', label: '2026.11.04' },
 	{ rgb: [ 1, 0.502, 1 ], date: '2026-11-05/08', label: '2026.11.05 to 11.08' },
+	{ rgb: [ 0, 0, 1 ], date: '2026-11-09', label: '2026.11.09' },
+	{ rgb: [ 1, 1, 0 ], date: '2026-11-10', label: '2026.11.10' },
 ];
 
 // Where each view is on its sheet (page points from the top left: x = ax + bx × p, y = ay + by × q,
@@ -114,6 +120,7 @@ async function readPolygons( path ) {
 	const doc = await PDFDocument.load( await readFile( path ), { updateMetadata: false } );
 	const sheets = opts.sheets ? opts.sheets.split( ',' ).map( s => s.trim() ) : doc.getPages().map( ( _, i ) => sheetOf( path, i + 1 ) );
 	const out = [];
+	const labels = [];
 	doc.getPages().forEach( ( page, i ) => {
 
 		const height = page.getHeight();
@@ -121,7 +128,18 @@ async function readPolygons( path ) {
 		for ( let k = 0; annots && k < annots.size(); k ++ ) {
 
 			const a = annots.lookup( k, PDFDict );
-			if ( a.get( PDFName.of( 'Subtype' ) )?.toString() !== '/Polygon' ) continue;
+			const subtype = a.get( PDFName.of( 'Subtype' ) )?.toString();
+			// A panel number's callout: the leader starts (CL's first point) on the area.
+			if ( subtype === '/FreeText' ) {
+
+				const said = ( a.get( PDFName.of( 'Contents' ) )?.decodeText?.() ?? '' ).trim();
+				const cl = a.lookup( PDFName.of( 'CL' ) )?.asArray?.().map( n => n.asNumber() );
+				if ( PANEL.test( said ) && cl?.length >= 4 ) labels.push( { page: i + 1, said, tip: [ cl[ 0 ], height - cl[ 1 ] ] } );
+				continue;
+
+			}
+
+			if ( subtype !== '/Polygon' ) continue;
 			const ic = a.lookup( PDFName.of( 'IC' ) )?.asArray().map( n => n.asNumber() );
 			const colour = ic && COLOURS.find( c => near( c.rgb, ic ) );
 			if ( ! colour ) continue;
@@ -134,7 +152,63 @@ async function readPolygons( path ) {
 		}
 
 	} );
-	return out;
+	return { polys: out, labels };
+
+}
+
+// A panel number as the drawings write them: letters, then digits.
+const PANEL = /^([A-Z]{1,4})(\d{1,6})$/;
+
+// Each label's area: the polygon on its page its leader ends in, or failing that the one whose
+// edge is nearest the end, within NEAR_LABEL points. The numbers are written as wide as most are.
+const NEAR_LABEL = 12;
+function numberPanels( polys, labels ) {
+
+	const widths = labels.map( l => PANEL.exec( l.said )[ 2 ].length );
+	const width = widths.sort( ( a, b ) => widths.filter( w => w === b ).length - widths.filter( w => w === a ).length )[ 0 ];
+	const inside = ( [ x, y ], pts ) => {
+
+		let odd = false;
+		for ( let i = 0, j = pts.length - 1; i < pts.length; j = i ++ ) {
+
+			const [ xi, yi ] = pts[ i ], [ xj, yj ] = pts[ j ];
+			if ( ( yi > y ) !== ( yj > y ) && x < ( xj - xi ) * ( y - yi ) / ( yj - yi ) + xi ) odd = ! odd;
+
+		}
+
+		return odd;
+
+	};
+	const toEdge = ( [ x, y ], pts ) => Math.min( ...pts.map( ( a, i ) => {
+
+		const b = pts[ ( i + 1 ) % pts.length ];
+		const dx = b[ 0 ] - a[ 0 ], dy = b[ 1 ] - a[ 1 ];
+		const t = Math.max( 0, Math.min( 1, ( ( x - a[ 0 ] ) * dx + ( y - a[ 1 ] ) * dy ) / ( dx * dx + dy * dy || 1 ) ) );
+		return Math.hypot( x - a[ 0 ] - t * dx, y - a[ 1 ] - t * dy );
+
+	} ) );
+	const notes = [];
+	for ( const label of labels ) {
+
+		const [ , letters, digits ] = PANEL.exec( label.said );
+		const no = letters + String( Number( digits ) ).padStart( width, '0' );
+		if ( no !== label.said ) notes.push( `${ label.said } read as ${ no }` );
+		const mine = polys.filter( p => p.page === label.page );
+		const poly = mine.find( p => inside( label.tip, p.pts ) )
+			?? mine.map( p => ( { p, d: toEdge( label.tip, p.pts ) } ) ).filter( ( { d } ) => d <= NEAR_LABEL ).sort( ( a, b ) => a.d - b.d )[ 0 ]?.p;
+		if ( ! poly ) {
+
+			notes.push( `${ no }: its leader ends on no area (page ${ label.page }, ${ label.tip.map( Math.round ).join( ', ' ) })` );
+			continue;
+
+		}
+
+		if ( poly.no && poly.no !== no ) notes.push( `${ no } and ${ poly.no } point at the same area; kept ${ poly.no }` );
+		else poly.no = no;
+
+	}
+
+	return notes;
 
 }
 
@@ -178,7 +252,7 @@ async function readSite( path ) {
 	const doc = await new NodeIO().read( path );
 	// The structure the areas are on (not the building, conveyors or ground), as the build has it:
 	// on the drawings' grid (scripts/b2d2-structure.mjs).
-	const names = { c31: 'C31 gallery', pit: 'Transfer pit', c32: 'C32 tunnel', steel: 'Steel plates at grade' };
+	const names = { c31: 'C31 gallery', pit: 'Transfer pit', c32: 'C32 tunnel', steel: 'Steel plates at grade', beams: 'Beams' };
 	const site = {};
 	for ( const mesh of doc.getRoot().listMeshes() ) {
 
@@ -266,7 +340,8 @@ function place( poly, meshes ) {
 
 // ---------- Run ----------
 
-const polys = await readPolygons( pdfPath );
+const { polys, labels } = await readPolygons( pdfPath );
+const labelNotes = numberPanels( polys, labels );
 const meshes = await readSite( opts.site );
 const snapshot = JSON.parse( await readFile( opts.markups, 'utf8' ) );
 const kept = snapshot.markups.filter( m => ! /progress/.test( m.src ?? '' ) );
@@ -315,7 +390,7 @@ for ( const poly of polys ) {
 	const measured = poly.contents.match( /([\d.]+)\s*sq\s*m/ )?.[ 1 ];
 	const shift = poly.contents.match( /-\s*(Day|Night)/ )?.[ 1 ];
 	made.push( {
-		v: 2, kind: 'area', n: placed.n, zone, face, grid: gridRef( placed.pts ),
+		v: 2, kind: 'area', n: placed.n, zone, face, grid: gridRef( placed.pts ), ...( poly.no ? { no: poly.no } : {} ),
 		f: {
 			type: 'Exposed rebar', depth: null, depthMm: null, status: 'Chipped / hydro-demo', chipped: poly.colour.date,
 			text: `Chipped ${ poly.colour.label }${ shift ? ` (${ shift.toLowerCase() } shift)` : '' }, rebar exposed; condition not assessed yet. From ${ src } markup: ${ poly.sheet } ${ VIEWS[ poly.view ].name }, ${ where }${ measured ? `; Bluebeam ${ measured } m²` : '' }.`,
@@ -328,31 +403,34 @@ for ( const poly of polys ) {
 }
 
 // Ids: an area already in the snapshot keeps its id: facing the same way, its middle within 0.6 m
-// (--match)
-// (the first import laid one on the pit's sump rather than its floor) and the nearest.
+// (--match; more where the drawing's outline was moved) and the nearest, closest pairs first, so a
+// new area beside an old one doesn't take its id.
 const centre = m => m.pts.reduce( ( s, p ) => s.map( ( c, i ) => c + p[ i ] / m.pts.length ), [ 0, 0, 0 ] );
 const taken = new Set();
+const pairs = [];
+for ( const m of made ) for ( const o of before ) {
+
+	const facing = o.n[ 0 ] * m.n[ 0 ] + o.n[ 1 ] * m.n[ 1 ] + o.n[ 2 ] * m.n[ 2 ] > 0.9;
+	const distance = Math.hypot( ...centre( o ).map( ( v, i ) => v - centre( m )[ i ] ) );
+	if ( facing && distance < Number( opts.match ) ) pairs.push( { m, o, distance } );
+
+}
+
 let reused = 0;
+for ( const { m, o } of pairs.sort( ( a, b ) => a.distance - b.distance ) ) {
+
+	if ( m.id || taken.has( o.id ) ) continue;
+	m.id = o.id;
+	m.at = o.at ?? m.at;
+	m.photos = o.photos ?? [];
+	taken.add( o.id );
+	reused ++;
+
+}
+
 for ( const m of made ) {
 
-	const c = centre( m );
-	const distance = o => Math.hypot( ...centre( o ).map( ( v, i ) => v - c[ i ] ) );
-	const facing = o => o.n[ 0 ] * m.n[ 0 ] + o.n[ 1 ] * m.n[ 1 ] + o.n[ 2 ] * m.n[ 2 ] > 0.9;
-	const match = before.filter( o => ! taken.has( o.id ) && facing( o ) && distance( o ) < Number( opts.match ) ).sort( ( a, b ) => distance( a ) - distance( b ) )[ 0 ];
-	if ( match ) {
-
-		m.id = match.id;
-		m.at = match.at ?? m.at;
-		m.photos = match.photos ?? [];
-		taken.add( match.id );
-		reused ++;
-
-	} else {
-
-		m.id = 'prog-' + createHash( 'sha1' ).update( `${ m.face } ${ c.map( v => v.toFixed( 2 ) ).join( ',' ) }` ).digest( 'hex' ).slice( 0, 16 ).toUpperCase().replace( /[0-9]/g, d => 'ABCDEFGHIJ'[ d ] );
-
-	}
-
+	m.id ??= 'prog-' + createHash( 'sha1' ).update( `${ m.face } ${ centre( m ).map( v => v.toFixed( 2 ) ).join( ',' ) }` ).digest( 'hex' ).slice( 0, 16 ).toUpperCase().replace( /[0-9]/g, d => 'ABCDEFGHIJ'[ d ] );
 	delete m.layer;
 	delete m.subject;
 
@@ -373,6 +451,9 @@ for ( const [ date, { count, m2 } ] of Object.entries( byDate ).sort() ) console
 console.log( `  kept the id of ${ reused } areas already in the model; ${ made.length - reused } new; ${ gone.length } of the old ones not on this drawing` );
 for ( const o of gone ) console.log( `    not on it any more: ${ o.face }, ${ o.area } m² (${ ( o.f?.text ?? '' ).match( /markup: ([^;]*)/ )?.[ 1 ] ?? '' })` );
 for ( const s of skipped ) console.log( `  skipped: ${ s }` );
+const numbered = made.filter( m => m.no ).length;
+if ( labels.length ) console.log( `  ${ labels.length } panel numbers on the drawing; ${ numbered } areas numbered` );
+for ( const note of labelNotes ) console.log( `    ${ note }` );
 
 if ( ! opts[ 'dry-run' ] ) {
 

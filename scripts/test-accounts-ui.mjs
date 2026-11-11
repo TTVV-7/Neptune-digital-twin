@@ -541,9 +541,24 @@ test( 'the timeline plays the B2D2 repairs back: no area before its day, each at
 	const first = areas.map( chipped ).sort()[ 0 ];
 	assert.equal( first, '2026-11-02' );
 
+	// The drawing's panel numbers show on their panels (the Show panel counts them), and one taken
+	// off in the twin stays off rather than coming back from the drawing.
+	const numbers = () => page.evaluate( () => [ ...document.querySelectorAll( '#layers .layer' ) ].find( row => /Panel numbers/.test( row.textContent ) )?.querySelector( '.count' )?.textContent );
+	const numbered = areas.filter( a => a.no );
+	assert.equal( numbered.length, 46 );
+	await page.waitForFunction( () => [ ...document.querySelectorAll( '#layers .layer' ) ].some( row => /Panel numbers/.test( row.textContent ) && row.querySelector( '.count' )?.textContent === '46' ) );
+	await page.locator( '#views .edit-areas' ).click();
+	await page.evaluate( id => window.twin.repairAreas.select( id ), numbered[ 0 ].id );
+	assert.equal( await page.locator( '#area-editor [data-field=no]' ).inputValue(), numbered[ 0 ].no );
+	await page.locator( '#area-editor [data-field=no]' ).fill( '' );
+	await page.locator( '#area-editor [data-field=no]' ).press( 'Enter' );
+	assert.equal( ( await page.evaluate( id => window.twin.repairAreas.areas().find( a => a.id === id ), numbered[ 0 ].id ) ).no, '' );
+	assert.equal( await numbers(), '45' );
+	await page.evaluate( () => window.twin.repairAreas.undo() );
+	assert.equal( await numbers(), '46' );
+
 	// One area taken on two stages, not saved: sandblasted on the 6th, epoxy coated today.
 	const taken = areas.find( a => chipped( a ) === first );
-	await page.locator( '#views .edit-areas' ).click();
 	await page.evaluate( id => window.twin.repairAreas.select( id ), taken.id );
 	await page.locator( '#area-editor [data-field=status]' ).selectOption( 'Sandblasted' );
 	await page.locator( '#area-editor [data-field=date]' ).fill( '2026-11-06' );

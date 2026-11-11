@@ -88,7 +88,7 @@ const PROUD = 0.012;
 
 // The rims of chipped areas, by when they were chipped: the progress drawings' colours, then
 // others for later days.
-const CHIPPED_COLOURS = { '2026-11-02': '#22c55e', '2026-11-03': '#06b6d4', '2026-11-04': '#f97316', '2026-11-05/08': '#ec4899' };
+const CHIPPED_COLOURS = { '2026-11-02': '#22c55e', '2026-11-03': '#06b6d4', '2026-11-04': '#f97316', '2026-11-05/08': '#ec4899', '2026-11-09': '#3b82f6', '2026-11-10': '#eab308' };
 const LATER_COLOURS = [ '#eab308', '#8b5cf6', '#ef4444', '#3b82f6', '#84cc16', '#f43f5e', '#14b8a6', '#a855f7' ];
 const UNDATED = '#94a3b8';
 

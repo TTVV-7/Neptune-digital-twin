@@ -231,7 +231,11 @@ left as it came):
 - the **C31 gallery**: walls, floor and hopper plates kept, between the pit and the north end where
   the drawings have them; at grade the pony walls, **train support beams 1 and 2**, cross beams
   **G1 to G14** at 4.445 m, the steel plates between them, and the north end's two openings;
-- **C32** moved over to the drawings' line and brought up to the pit's wall.
+- **C32** moved over to the drawings' line and brought up to the pit's wall;
+- the **beams** in a layer and colour of their own (tan), so they can be told from the slabs and
+  walls: train support beams 1 and 2 over the pit and along the gallery, G1 to G14, the cross
+  beam, the shed support beam and B1 to B6. At grade they're under Google's ground: the **Beams**
+  view cuts it away and looks down the gallery at them, and from inside C31 they're overhead.
 
 Plan dimensions are read off the linework of 620-24070-DWG-ST005 (ground floor and B1 plans), to
 the centimetre: they're the numbers at the top of the script. Heights are the Shapr3D model's
@@ -255,8 +259,8 @@ still move it, but only in their own browser. A saved position wins over the one
 `src/config.js` (`GET` / `PUT /api/placements`, [docs/accounts.md](docs/accounts.md)).
 **Copy config** into `src/config.js` makes it the default for a new copy of the site too.
 **Preset views**, as the artifact has them, are in a bar at the top: **Overview**, **C31**, **C32**,
-**Pit** and **Ground** glide the camera there, wherever the model is placed (Overview also cuts
-Google's ground away over it). Any model can carry views: `views: [ { name, from, at,
+**Pit**, **Ground** and **Beams** glide the camera there, wherever the model is placed (Overview and
+Beams also cut Google's ground away over it). Any model can carry views: `views: [ { name, from, at,
 underground } ]` in its glTF scene's extras, in the model's own frame (`src/views.js`).
 
 **Fixing areas in the twin.** Areas in the wrong spot, turned the wrong way, missing or not
@@ -349,15 +353,20 @@ while you're under it there ([Models under the ground](#models-under-the-ground)
 filled polygons coloured by date as its legend says) is read straight into the model's areas:
 
 ```bash
-node scripts/b2d2-progress.mjs "2026.11.08 - Progress.pdf"
+node scripts/b2d2-progress.mjs "2026.11.10 - Progress.pdf"
 node scripts/b2d2-repair-model.mjs
 ```
 
 The first finds each page's sheet from its title block (with `pdftotext`, or `--sheets ST007,...`),
 places each polygon on the wall, floor or soffit of the model it's drawn on, keeps the ids of areas
-that are still there (within 0.6 m of where they were; `--match 1.2` after the structure has been
-moved), and lists what's new, what's gone and anything it couldn't place (`--dry-run`
-only lists). Areas take the drawing's measured m². Each chipped area gets a rim in its date's colour.
+that are still there (within 0.6 m of where they were, closest pairs first; `--match 1.2` after the
+structure has been moved, `--match 2.5` when outlines were moved on the drawing, as two C32 floor
+panels were on 10 November), and lists what's new, what's gone and anything it couldn't place
+(`--dry-run` only lists). Areas take the drawing's measured m². Each chipped area gets a rim in its
+date's colour, the legend's for 2 to 10 November (blue 9 November, yellow 10 November). A callout
+whose text is a panel number (the curb walls' CW0001 to CW0046) gives the area its leader ends on
+that number, which the twin shows on the panel; numbers are written four digits wide (the drawing's
+CW00010 is CW0010). A number changed in the twin wins over the drawing's.
 
 To bring in markups from the artifact instead, save its `markups` collection (one JSON file per
 markup, or a `{ markups: [...] }` file) and rebuild; a folder is also saved as `scripts/data/b2d2-markups.json`:
