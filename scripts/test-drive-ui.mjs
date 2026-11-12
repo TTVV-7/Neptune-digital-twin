@@ -4229,7 +4229,7 @@ describe( 'World Drive, the open sea', () => {
 
 	} );
 
-	test( 'New Orleans behind its levee (a coast\'s square by Lake Pontchartrain): driven off the levee down a street 2.5 m under the sea among houses whose roofs stand over it, flown over them and let down, and started in that street, nothing is laid; nor is it beside someone there at the sea\'s height, nor beside someone flying 3.5 m, 20 m or 200 m over the street (in this scene, even with the sea\'s surface already laid over it, or by the drop-in beside them, which starts on the street, with your own sea laid when you left or not), nor beside someone riding on a surface of their own over the street at the sea\'s height (in this scene, and joined from the globe)', async () => {
+	test( 'New Orleans behind its levee (a coast\'s square by Lake Pontchartrain): driven off the levee down a street 2.5 m under the sea among houses whose roofs stand over it, flown over them and let down, and started in that street, nothing is laid; nor is it beside someone there at the sea\'s height, nor beside someone flying 3.5 m, 20 m or 200 m over the street (in this scene, even with the sea\'s surface already laid over it, or by the drop-in beside them, which starts on the street, with your own sea laid when you left or not), nor beside someone riding on a surface of their own over the street at the sea\'s height, there or 25 m from a crossing (in this scene, and joined from the globe)', async () => {
 
 		const levee = await dropInOver( page, '30.03, -90.08', 0 );
 		assert.ok( ! levee.sea && levee.colliders === 1, JSON.stringify( levee ) );
@@ -4321,12 +4321,20 @@ describe( 'World Drive, the open sea', () => {
 			// put on the street, with no sea laid over it.
 			kit.reset( - 150, 0 );
 			const moved = moveCar( { local: new camera.position.constructor( 0, kit.surface, - 400 ), heading: 180 } );
-			const beside = { moved, sea: sea.active, north: d.north, y: d.y };
+			const beside = { at: - 400, moved, sea: sea.active, north: d.north, y: d.y };
 			// So too beside someone riding on a surface of their own at the sea's height over that
 			// street (as theirs laid within its reach covers it), their car 5 m east of the spot, over
-			// the street too: on the street, as the houses close it in, with nothing laid over it.
-			kit.reset( - 150, 0 );
-			const rider = { moved: moveCar( { local: new camera.position.constructor( 0, kit.surface + 0.1, - 400 ), heading: 180, riding: [ 5, 0 ] } ), sea: sea.active, north: d.north, y: d.y };
+			// the street too: on the street, as the houses close it in, with nothing laid over it. And
+			// so 25 m from a crossing (north -365 and -415), where a quarter of the way round is clear
+			// out to 75 m (down the crossing street, between two houses and the yards behind them, and
+			// on into the next street), but not out to 100 m, as laying it afresh looks.
+			const riders = [];
+			for ( const north of [ - 400, - 365, - 415 ] ) {
+
+				kit.reset( - 150, 0 );
+				riders.push( { at: north, moved: moveCar( { local: new camera.position.constructor( 0, kit.surface + 0.1, north ), heading: 180, riding: [ 5, 0 ] } ), sea: sea.active, north: d.north, y: d.y } );
+
+			}
 			// And beside someone flying 3.5 m (at the roofs' height), 20 m or 200 m over that street:
 			// nothing laid, and no ground within reach of them to put the car on, so Go to drops in
 			// beside them instead (below). The same with the sea's surface already laid in this scene,
@@ -4346,7 +4354,7 @@ describe( 'World Drive, the open sea', () => {
 
 			}
 
-			return { look, drove, flew, inside, beside, rider, fliers };
+			return { look, drove, flew, inside, beside, riders, fliers };
 
 		} );
 		console.log( 'New Orleans behind its levee:', JSON.stringify( result ) );
@@ -4366,16 +4374,22 @@ describe( 'World Drive, the open sea', () => {
 		const riding = await joinBeside( page, 30.03, - 90.08, - 2, 0.1, { colour: null, shift: 400 } );
 		console.log( 'a drop-in beside a rider over New Orleans:', JSON.stringify( riding ) );
 		await shot( page, 'drive-polder-beside-a-rider' );
+		// And 25 m from a crossing, the pin over the street at north -365 and -415 of the pad.
+		const crossing = [];
+		for ( const shift of [ 365, 415 ] ) crossing.push( { shift, ...await joinBeside( page, 30.03, - 90.08, - 2, 0.1, { colour: null, shift } ) } );
+		console.log( 'a drop-in beside a rider over New Orleans 25 m from a crossing:', JSON.stringify( crossing ) );
+		await shot( page, 'drive-polder-beside-a-rider-by-a-crossing' );
 		await page.evaluate( () => window.polderKit.remove() );
 		await padBack( page );
-		const { look, drove, flew, inside, beside, rider, fliers } = result;
+		const { look, drove, flew, inside, beside, riders, fliers } = result;
 		// Each look a few rays round the street ahead, a fraction of a millisecond here, and nothing laid.
 		assert.ok( ! look.laid && look.rays > 0 && look.rays < 48 && look.ms < 10, JSON.stringify( look ) );
 		assert.ok( ! drove.laid && drove.north < - 740 && Math.abs( drove.y + 4.5 ) < 0.3, JSON.stringify( drove ) );
 		// (Let down on a roof or in the street: dry either way.)
 		assert.ok( ! flew.laid && flew.high > 20 && flew.north < - 400 && flew.grounded && ( Math.abs( flew.y + 4.5 ) < 0.3 || Math.abs( flew.y - 1.5 ) < 0.3 ), JSON.stringify( flew ) );
 		assert.ok( ! inside.laid && Math.abs( inside.y + 4.5 ) < 0.3 && inside.north < - 690 && Math.abs( inside.end + 4.5 ) < 0.3, JSON.stringify( inside ) );
-		for ( const there of [ beside, rider ] ) assert.ok( there.moved && ! there.sea && Math.abs( there.north + 400 ) < 0.01 && Math.abs( there.y + 4.5 ) < 0.3, JSON.stringify( there ) );
+		assert.equal( riders.length, 3 );
+		for ( const there of [ beside, ...riders ] ) assert.ok( there.moved && ! there.sea && Math.abs( there.north - there.at ) < 0.01 && Math.abs( there.y + 4.5 ) < 0.3, JSON.stringify( there ) );
 		assert.equal( fliers.length, 3 );
 		for ( const { flier, laid } of fliers ) {
 
@@ -4384,7 +4398,8 @@ describe( 'World Drive, the open sea', () => {
 
 		}
 
-		for ( const there of [ dropped, yours, riding ] ) assert.ok( ! there.sea && there.colliders === 1 && Math.abs( there.y + 2.5 ) < 0.3, JSON.stringify( there ) );
+		assert.equal( crossing.length, 2 );
+		for ( const there of [ dropped, yours, riding, ...crossing ] ) assert.ok( ! there.sea && there.colliders === 1 && Math.abs( there.y + 2.5 ) < 0.3, JSON.stringify( there ) );
 		assert.deepEqual( page.errors, [] );
 		assert.deepEqual( page.outside, [] );
 
@@ -4700,7 +4715,7 @@ describe( 'World Drive, the open sea', () => {
 
 	} );
 
-	test( 'Lake Baikal\'s surface laid in a square of the lake (53.25° N, 108.452° E): beside someone flying 5 m or 20 m over its shelf 10 m under it in the next square east, which the lake\'s shore crosses (land on the map, as nearly all of a big lake\'s shelf is), on the surface under them, as in the lake\'s own square; over a hollow as far under it four squares from the lake\'s (as Niagara\'s gorge is from Lake Ontario\'s), not; and joined from 24 km off with that lake\'s surface yours, the drop-in beside one flying 20 m over the shelf in that square starts on the surface', async () => {
+	test( 'Lake Baikal\'s surface laid in a square of the lake (53.25° N, 108.452° E): beside someone flying 5 m or 20 m over its shelf 10 m under it in the next square east, which the lake\'s shore crosses (land on the map, as nearly all of a big lake\'s shelf is), on the surface under them, as in the lake\'s own square; over a shelf as far under it two squares from the lake\'s (53.25° N, 108.60° E, where the surface still reaches), or a hollow four squares from them (as Niagara\'s gorge is from Lake Ontario\'s), not; and joined from 24 km off with that lake\'s surface yours, the drop-in beside one flying 20 m over the shelf in that square starts on the surface, and laid there, beside one flying over the shelf two squares off, not either', async () => {
 
 		const lake = await dropInOver( page, '53.25, 108.452', 200 );
 		assert.ok( lake.sea && Math.abs( lake.y ) < 0.01, JSON.stringify( lake ) );
@@ -4708,7 +4723,7 @@ describe( 'World Drive, the open sea', () => {
 		const near = await page.evaluate( async () => {
 
 			const { driver: d, sea, water, camera, moveCar, ground, place } = window.drive;
-			const { enuToLocal, localToLatLon } = await import( '/src/geo.js' );
+			const { enuToLocal, latLonToEnu, localToLatLon } = await import( '/src/geo.js' );
 			const { waterAt } = await import( '/src/drive-app/sea.js' );
 			const V = camera.position.constructor;
 			// The sea's height and the map asked for first, as goBeside asks for them, and come.
@@ -4730,18 +4745,23 @@ describe( 'World Drive, the open sea', () => {
 				return mesh;
 
 			};
-			// From the start, to beside someone flying `over` m over ( east, north ).
+			// From the start, to beside someone flying `over` m over ( east, north ); and whether the
+			// lake's surface is there under them (drawn).
 			const to = async ( east, north, over ) => {
 
 				moveCar( { local: new V( 0, 0, 0 ), heading: 180 } );
+				const hit = ground.cast( new V( - east, over - curve( east, north ) + 3, north ), new V( 0, - 1, 0 ), 12000 );
 				const moved = moveCar( { local: new V( - east, over - curve( east, north ), north ), heading: 180 } );
 				const { lat, lon } = localToLatLon( enuToLocal( east, north, 0 ), place );
 				const at = await waterAt( lat, lon );
-				return { east, north, over, map: at?.lake?.name ?? at?.kind, moved, sea: sea.shown, at: [ d.east, d.north ], y: d.y, surface: water.at( d.east, d.north, d.y ), curve: curve( east, north ) };
+				return { east, north, over, lon, map: at?.lake?.name ?? at?.kind, drawn: hit?.object === sea.mesh, moved, sea: sea.shown, at: [ d.east, d.north ], y: d.y, surface: water.at( d.east, d.north, d.y ), curve: curve( east, north ) };
 
 			};
-			const shelves = [ shelf( - 500, 0 ), shelf( 1000, 0 ), shelf( 16500, - 16700 ) ];
-			const runs = { own: await to( - 500, 0, 20 ), low: await to( 1000, 0, 5 ), high: await to( 1000, 0, 20 ), far: await to( 16500, - 16700, 20 ) };
+			// Two squares from the lake's, 53.25° N, 108.60° E: land on the map, within sea.js's REACH
+			// of the lake's squares, so the surface is there under them still.
+			const two = latLonToEnu( 53.25, 108.6, place );
+			const shelves = [ shelf( - 500, 0 ), shelf( 1000, 0 ), shelf( 16500, - 16700 ), shelf( two.east, two.north ) ];
+			const runs = { own: await to( - 500, 0, 20 ), low: await to( 1000, 0, 5 ), high: await to( 1000, 0, 20 ), two: await to( two.east, two.north, 20 ), far: await to( 16500, - 16700, 20 ) };
 			for ( const mesh of shelves ) mesh.removeFromParent();
 			return runs;
 
@@ -4754,6 +4774,32 @@ describe( 'World Drive, the open sea', () => {
 		const laid = await dropInOver( page, '53.25, 108.1', 200 );
 		const far = await joinBeside( page, 53.25, 108.467, 10, 20, { rise: 455.5, flags: 8, globe: false } );
 		await shot( page, 'drive-beside-a-flier-over-a-lake-shore-square-far' );
+		// With it laid there, in the shore square, beside one flying 20 m over a shelf 10 m under it
+		// two squares from the lake's (53.25° N, 108.60° E): not, as with it laid in the lake's own.
+		far.two = await page.evaluate( async () => {
+
+			const { driver: d, sea, camera, moveCar, ground, place } = window.drive;
+			const { latLonToEnu } = await import( '/src/geo.js' );
+			const { waterAt } = await import( '/src/drive-app/sea.js' );
+			const V = camera.position.constructor;
+			const pad = ground.getColliders()[ 0 ];
+			const land = pad.children.find( child => child.isMesh && child.position.y > - 1 );
+			const { east, north } = latLonToEnu( 53.25, 108.6, place );
+			const curve = ( east * east + north * north ) / ( 2 * 6371000 );
+			// (The pad is 10 m under the surface here.)
+			const shelf = land.clone();
+			shelf.scale.set( 300 / 4000, 300 / 2000, 1 );
+			shelf.position.set( - east, - curve, north );
+			pad.add( shelf );
+			shelf.updateMatrixWorld( true );
+			const from = [ d.east, d.north ];
+			const hit = ground.cast( new V( - east, 23 - curve, north ), new V( 0, - 1, 0 ), 12000 );
+			const moved = moveCar( { local: new V( - east, 20 - curve, north ), heading: 180 } );
+			shelf.removeFromParent();
+			const at = await waterAt( 53.25, 108.6 );
+			return { east, north, map: at?.lake?.name ?? at?.kind, drawn: hit?.object === sea.mesh, moved, sea: sea.shown, lake: sea.lake?.name ?? null, from, at: [ d.east, d.north ] };
+
+		} );
 		// Laid there, in a square that's land on the map, it's still only by the lake's own: out over
 		// land four squares from them (53.1° N, 108.7° E), it's gone, as Niagara's gorge has none.
 		far.inland = await page.evaluate( () => {
@@ -4767,13 +4813,16 @@ describe( 'World Drive, the open sea', () => {
 		await padPlain( page );
 		await padBack( page );
 		console.log( 'a drop-in beside a flier over a shore square of Lake Baikal:', JSON.stringify( { laid, far } ) );
-		const { own, low, high, far: inland } = near;
+		const { own, low, high, two, far: inland } = near;
 		assert.equal( own.map, 'Lake Baikal' );
-		for ( const there of [ low, high, inland ] ) assert.equal( there.map, 'land' );
+		for ( const there of [ low, high, two, inland ] ) assert.equal( there.map, 'land' );
 		for ( const there of [ own, low, high ] ) assert.ok( there.moved && there.sea && there.surface !== null && Math.abs( there.y - there.surface ) < 0.01 && Math.abs( there.at[ 0 ] - there.east ) < 0.01 && Math.abs( there.y + there.curve ) < 0.1, JSON.stringify( there ) );
 		assert.ok( ! inland.moved && inland.sea && Math.abs( inland.at[ 0 ] ) < 0.01 && Math.abs( inland.at[ 1 ] ) < 0.01, JSON.stringify( inland ) );
+		// Two squares off, the surface under them, but not that lake's water on the map: not put on it.
+		assert.ok( two.drawn && ! two.moved && two.sea && Math.abs( two.lon - 108.6 ) < 0.001 && Math.abs( two.at[ 0 ] ) < 0.01 && Math.abs( two.at[ 1 ] ) < 0.01, JSON.stringify( two ) );
 		assert.ok( laid.sea && Math.abs( laid.y ) < 0.01, JSON.stringify( laid ) );
 		assert.ok( far.sea && far.lake === 'Lake Baikal' && far.colliders === 2 && Math.abs( far.height - far.level - 455.5 ) < 0.01 && Math.abs( far.y ) < 0.01, JSON.stringify( far ) );
+		assert.ok( far.two.map === 'land' && far.two.drawn && ! far.two.moved && far.two.sea && far.two.lake === 'Lake Baikal' && Math.abs( far.two.at[ 0 ] - far.two.from[ 0 ] ) < 0.01 && Math.abs( far.two.at[ 1 ] - far.two.from[ 1 ] ) < 0.01, JSON.stringify( far ) );
 		assert.ok( far.inland.shown && ! far.inland.then, JSON.stringify( far ) );
 		assert.deepEqual( page.errors, [] );
 		assert.deepEqual( page.outside, [] );
