@@ -40,10 +40,12 @@
 // and with each first ray into new ground made slow, as a tile's is, no more than one of those a
 // frame, still laid before the kart is under; New Orleans' streets under the sea behind its levee
 // among houses, driven into from the levee, flown over and started in, none, nor beside someone
-// flying over them; Go to beside a driver out on the sea's surface over the bed, or hopping or
-// flying over it, laid there and on it with them, in the scene and by a drop-in, and not at a pin's
-// height; with the surface laid already, beside someone flying over Lake Baikal's shelf, a sandy bed
-// or between a harbour's moles, on it with them (and by a drop-in, your surface laid when you left),
+// flying over them, nor, with its houses' fronts 20 m apart across a street, beside someone riding
+// or flying over it where a bearing threads between them past every ray down; Go to beside a driver
+// out on the sea's surface over the bed, or hopping or flying over it, laid there and on it with
+// them, in the scene and by a drop-in, and not at a pin's height; with the surface laid already,
+// beside someone flying over Lake Baikal's shelf, a sandy bed or between a harbour's moles, on it
+// with them (and by a drop-in, your surface laid when you left),
 // over Baikal's shelf in a square its shore crosses too, but not between moles a street's width
 // apart, over a hollow inland or four squares from the lake's, nor over New Orleans' streets, nor by
 // a drop-in from a sea laid on another coast; with none laid, beside someone riding on a surface of
@@ -3044,12 +3046,14 @@ async function setUpCoast( page, { strip = 60, houses = false } = {} ) {
 // the sea (6 m over the street), as in Lakeview: streets 10 m wide 60 m apart running south from the
 // levee (east = 0, ±60, ±120), each block between them two rows of houses back to back, 16 m deep
 // with 12 m of yards between, on lots 15 m along the street with 4 m between houses, and a street
-// across every seven lots; the pad's own sea out of the way. In the page as window.polderKit, the
-// driver stepped as coastKit steps it.
-async function setUpPolder( page ) {
+// across every seven lots; the pad's own sea out of the way. With `rows`, the two rows of each block
+// from and to that far (m) east of the street on its west side ([ [ 8, 24 ], [ 36, 52 ] ] as said:
+// house fronts 16 m apart across a street). In the page as window.polderKit, the driver stepped as
+// coastKit steps it.
+async function setUpPolder( page, { rows = [ [ 8, 24 ], [ 36, 52 ] ] } = {} ) {
 
 	await setUpPictures( page );
-	await page.evaluate( async () => {
+	await page.evaluate( async rows => {
 
 		document.querySelector( '#drive-ui .keys' ).hidden = true;
 		const { driver: d, sea, ground, watchSea } = window.drive;
@@ -3070,7 +3074,7 @@ async function setUpPolder( page ) {
 
 			for ( let block = 0; block < 3; block ++ ) {
 
-				for ( const [ a, b ] of [ [ 8, 24 ], [ 36, 52 ] ] ) {
+				for ( const [ a, b ] of rows ) {
 
 					for ( let lot = 0, north = - 295; north > - 920; lot ++, north -= 15 ) {
 
@@ -3130,7 +3134,7 @@ async function setUpPolder( page ) {
 		watchSea( 1 );
 		await new Promise( resolve => setTimeout( resolve, 200 ) );
 
-	} );
+	}, rows );
 
 }
 
@@ -4325,9 +4329,10 @@ describe( 'World Drive, the open sea', () => {
 			// So too beside someone riding on a surface of their own at the sea's height over that
 			// street (as theirs laid within its reach covers it), their car 5 m east of the spot, over
 			// the street too: on the street, as the houses close it in, with nothing laid over it. And
-			// so 25 m from a crossing (north -365 and -415), where a quarter of the way round is clear
-			// out to 75 m (down the crossing street, between two houses and the yards behind them, and
-			// on into the next street), but not out to 100 m, as laying it afresh looks.
+			// so 25 m from a crossing (north -365 and -415), where the rays down at 25, 50 and 75 m find
+			// a quarter of the way round clear (down the crossing street, between two houses and the
+			// yards behind them, and on into the next street), but the ray along each of those bearings
+			// meets a house.
 			const riders = [];
 			for ( const north of [ - 400, - 365, - 415 ] ) {
 
@@ -4400,6 +4405,50 @@ describe( 'World Drive, the open sea', () => {
 
 		assert.equal( crossing.length, 2 );
 		for ( const there of [ dropped, yours, riding, ...crossing ] ) assert.ok( ! there.sea && there.colliders === 1 && Math.abs( there.y + 2.5 ) < 0.3, JSON.stringify( there ) );
+		assert.deepEqual( page.errors, [] );
+		assert.deepEqual( page.outside, [] );
+
+	} );
+
+	test( 'New Orleans laid out with its houses\' fronts 20 m apart across a street (not 16 m): beside someone riding on a surface of their own at the sea\'s height over the street at north -321, where a bearing threads between the houses past every ray down along it (at 25, 50, 75 and 100 m), nothing is laid, in this scene and joined from the globe; nor beside someone flying 20 m over it with your sea\'s surface laid, in this scene or by the drop-in beside them', async () => {
+
+		await dropInOver( page, '30.03, -90.08', 0 );
+		await setUpPolder( page, { rows: [ [ 10, 24 ], [ 36, 50 ] ] } );
+		const result = await page.evaluate( async () => {
+
+			const { driver: d, sea, camera, moveCar, place } = window.drive;
+			const { seaLevel } = await import( '/src/drive-app/sea.js' );
+			const kit = window.polderKit;
+			const V = camera.position.constructor;
+			// Their car 5 m east of the spot, in the street too.
+			kit.reset( - 150, 0 );
+			const rider = { moved: moveCar( { local: new V( 0, kit.surface + 0.1, - 321 ), heading: 180, riding: [ 5, 0 ] } ), sea: sea.active, north: d.north, y: d.y };
+			// With the sea's surface laid (round the levee, reaching the streets), beside one flying 20 m
+			// over the same spot: no ground in reach of them, nor that surface among the houses.
+			kit.reset( - 150, 0 );
+			sea.start( { lat: place.lat, lon: place.lon, height: await seaLevel( place.lat, place.lon ) + 2, over: 0, lake: null, east: 0, north: - 150 } );
+			const flier = { laid: sea.shown, moved: moveCar( { local: new V( 0, kit.surface + 20, - 321 ), heading: 180 } ), north: d.north, y: d.y };
+			sea.clear();
+			kit.reset( - 150, 0 );
+			return { rider, flier };
+
+		} );
+		console.log( 'New Orleans with house fronts 20 m apart:', JSON.stringify( result ) );
+		await shot( page, 'drive-polder-wide-street' );
+		// From the globe, the pin over the street at north -321 of the pad: beside the rider, and beside
+		// the flier with your own sea's surface laid when you left.
+		const riding = await joinBeside( page, 30.03, - 90.08, - 2, 0.1, { colour: null, shift: 321 } );
+		console.log( 'a drop-in beside a rider there:', JSON.stringify( riding ) );
+		await shot( page, 'drive-polder-wide-street-beside-a-rider' );
+		const yours = await dropInBeside( page, 30.03, - 90.08, - 2, 20, { colour: null, shift: 321, laid: { lake: null } } );
+		console.log( 'a drop-in beside a flier there, your sea laid:', JSON.stringify( yours ) );
+		await shot( page, 'drive-polder-wide-street-beside-a-flier-your-sea-laid' );
+		await page.evaluate( () => window.polderKit.remove() );
+		await padBack( page );
+		const { rider, flier } = result;
+		assert.ok( rider.moved && ! rider.sea && Math.abs( rider.north + 321 ) < 0.01 && Math.abs( rider.y + 4.5 ) < 0.3, JSON.stringify( rider ) );
+		assert.ok( flier.laid && ! flier.moved && flier.north > - 160, JSON.stringify( flier ) );
+		for ( const there of [ riding, yours ] ) assert.ok( ! there.sea && there.colliders === 1 && Math.abs( there.y + 2.5 ) < 0.3, JSON.stringify( there ) );
 		assert.deepEqual( page.errors, [] );
 		assert.deepEqual( page.outside, [] );
 
