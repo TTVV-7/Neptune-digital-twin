@@ -1,6 +1,5 @@
-import { hornAudio, playHorn } from './horns.js';
+import { hornAudio, hornsOn, playHorn, setHornsOn } from './horns.js';
 import { FLAGS, cellOf } from './live-protocol.js';
-import { storage } from './places.js';
 import { hideKeys, toast } from './screens.js';
 
 // Driving with others on screen (live.js has the connection, ghosts.js the cars): the chip by the
@@ -11,7 +10,6 @@ import { hideKeys, toast } from './screens.js';
 // (H, or its button on a touch screen), heard for yours and those near, each in its driver's horn
 // from the Garage (horns.js), which travels with their look.
 
-const HORN_KEY = 'world-drive.horn';
 // Driving with others off for the rest of the day, its budget spent (worker/drive/live.js).
 export const BUDGET_TOAST = 'Lots of drivers today: driving with others is back after midnight UTC.';
 // Other cars' horns are heard this near (m).
@@ -32,7 +30,6 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 	const hornKey = driveUi.querySelector( '.live-key' );
 	const banner = $( 'globe-ui' ).querySelector( '.party-banner' );
 	const rides = new Map( vehicles.map( vehicle => [ vehicle.id, vehicle.name ] ) );
-	let hornOn = storage( () => localStorage.getItem( HORN_KEY ) ) !== 'off';
 	const areas = [
 		makeArea( $( 'globe-ui' ).querySelector( '.friends' ), false ),
 		makeArea( $( 'pause' ).querySelector( '.friends' ), true ),
@@ -326,12 +323,7 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 		// Being shown nearby is being counted on the globe too (online.js): the switch says so.
 		const counted = Object.assign( document.createElement( 'p' ), { className: 'note', textContent: 'Also counts you, with no name, on the globe\'s map of who\'s driving.' } );
 		const parts = [ title, invite, party, nearby.label, counted ];
-		const hornSetting = inPause ? setting( 'Horn sounds', hornOn, on => {
-
-			hornOn = on;
-			storage( () => localStorage.setItem( HORN_KEY, on ? 'on' : 'off' ) );
-
-		} ) : null;
+		const hornSetting = inPause ? setting( 'Horn sounds', hornsOn(), setHornsOn ) : null;
 		if ( hornSetting ) parts.push( hornSetting.label );
 		root.replaceChildren( ...parts );
 
@@ -343,7 +335,7 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 				invite.hidden = inParty();
 				party.hidden = ! inParty();
 				nearby.input.checked = live.nearby;
-				if ( hornSetting ) hornSetting.input.checked = hornOn;
+				if ( hornSetting ) hornSetting.input.checked = hornsOn();
 				if ( party.hidden ) return;
 				code.textContent = `Your party: ${ live.party }. Anyone with the link can join you.`;
 				link.value = `${ location.origin }/?party=${ live.party }`;
@@ -408,7 +400,7 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 	// sounds are off. Counted, for the tests, with the last one's id.
 	function beep( volume, horn ) {
 
-		if ( ! hornOn || ! audio ) return;
+		if ( ! hornsOn() || ! audio ) return;
 		lastHorn = playHorn( audio, horn, volume );
 		beeps ++;
 

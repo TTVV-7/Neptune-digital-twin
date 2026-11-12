@@ -12,13 +12,17 @@
 // paint, decals, underglow, boost style, flame, trail and horn go on the ride being driven and are
 // still there after a reload, and a look saved before the boost styles keeps its flame's colour; the
 // underglow under every kind of ride (the kart, a ride, the cars and the library's pickup), sized to
-// it and left out of its size, and the new finishes, rims and decals; another driver's ghost wearing
-// their underglow, fading off the ground, and their horn heard in its own sound; what a trail and the
-// booster cost a frame; every boost style drawn at 150 km/h (a picture of each), keeping to its budget
-// and making nothing new in a minute of boosting, and what each costs a frame; every flame colour
-// drawn in its own colours and every trail drawn behind the kart, and the ribbons drawn out standing
-// still as on the Garage's turntable; and the Garage and the badges on a
-// phone (375 px across, its row of groups all on screen). And World Drive's cars (src/drive-app/cars.js): listed, credited, small and their real
+// it and left out of its size, and the new finishes, rims and decals (pearl keeping dark paint's
+// colour, camo and polka dots never drawn out on any ride that takes decals); the Garage's row of
+// groups lighting the one gone to until the list is scrolled by hand, and a locked horn heard before
+// it's bought; another driver's ghost wearing their underglow, fading off the ground, and their horn
+// heard in its own sound, and Horn sounds switched off silencing it and the Garage's horns; what a
+// trail and the booster cost a frame; every boost style drawn at 150 km/h (a picture of each),
+// keeping to its budget and making nothing new in a minute of boosting, and what each costs a frame;
+// every flame colour drawn in its own colours and every trail drawn behind the kart, and the ribbons
+// drawn out standing still as on the Garage's turntable; and the Garage and the badges on a phone
+// (375 px across, its row of groups all on screen, the one tapped lit until a finger drags the list).
+// And World Drive's cars (src/drive-app/cars.js): listed, credited, small and their real
 // size, with wheels that steer, each facing the way it drives; the muscle car free, the levels'
 // cars saying their level and the rest locked; each driving, drifting, thrown up and landing, going
 // supersonic, its wheels spinning and steering, the tall ones leaning out of a turn, and a look from
@@ -38,7 +42,7 @@ import { BOOSTS } from '../src/drive-app/boosts.js';
 import { CARS as CAR_SPECS } from '../src/drive-app/cars.js';
 import { DRIVE_CARS } from '../src/drive-app/catalog.js';
 import { RIDES as LEVEL_RIDES, unlockLevel } from '../src/drive-app/levels.js';
-import { FLAMES, TRAILS } from '../src/drive-app/paint.js';
+import { FLAMES, SWATCHES, TRAILS } from '../src/drive-app/paint.js';
 
 const require = createRequire( import.meta.url );
 const PORT = Number( process.env.TEST_VITE_PORT ) || 5531;
@@ -134,6 +138,27 @@ async function shot( page, name ) {
 }
 
 const flown = page => page.waitForFunction( () => ! window.drive.globe.flight, null, { timeout: 60000 } );
+
+// The Garage's row of groups: the one lit, the last whose first part shown has its heading up to the
+// row (the one in view), and whether the list is scrolled to its end.
+const groups = page => page.evaluate( () => {
+
+	const options = document.querySelector( '#garage .options' );
+	const line = options.getBoundingClientRect().top + document.querySelector( '#garage .jump' ).offsetHeight + 12;
+	const parts = { Paint: [ 'colour', 'finish', 'decal' ], Rims: [ 'rim' ], Underglow: [ 'glow' ], Boost: [ 'boost', 'flame' ], Trail: [ 'trail', 'smoke' ], Horn: [ 'horn' ] };
+	const up = [ ...document.querySelectorAll( '#garage .jump button:not([hidden])' ) ].filter( button => {
+
+		const section = parts[ button.dataset.group ].map( part => options.querySelector( `section[data-part="${ part }"]` ) ).find( s => ! s.hidden );
+		return section.getBoundingClientRect().top <= line;
+
+	} );
+	return {
+		lit: document.querySelector( '#garage .jump [aria-current="true"]' )?.dataset.group,
+		inView: up.at( - 1 )?.dataset.group,
+		end: options.scrollTop + options.clientHeight >= options.scrollHeight - 2,
+	};
+
+} );
 
 // Drop in at Golden Gate Bridge on the test pad with the ride picked on the globe.
 async function dropIn( page ) {
@@ -373,8 +398,11 @@ describe( 'Supporter Pass, without it', () => {
 		await garage.locator( '[data-part="glow"] .choice[data-id="blue"]' ).click();
 		await page.locator( '#pass' ).waitFor();
 		await page.locator( '#pass .close' ).click();
+		// A locked horn is heard before it's bought (it isn't kept: see below).
+		const heard = await page.evaluate( () => window.drive.garage.hornsPlayed );
 		await garage.locator( '[data-part="horn"] .choice[data-id="laser"]' ).click();
 		await page.locator( '#pass' ).waitFor();
+		assert.deepEqual( await page.evaluate( () => [ window.drive.garage.hornsPlayed, window.drive.garage.lastHorn ] ), [ heard + 1, 'laser' ] );
 		await page.locator( '#pass .close' ).click();
 		// Free: on.
 		await garage.locator( '[data-part="colour"] .choice[data-id="red"]' ).click();
@@ -386,17 +414,39 @@ describe( 'Supporter Pass, without it', () => {
 		const played = await page.evaluate( () => window.drive.garage.hornsPlayed );
 		await garage.locator( '[data-part="horn"] .choice[data-id="beep"]' ).click();
 		assert.equal( await page.evaluate( () => window.drive.garage.hornsPlayed ), played + 1 );
-		// The row goes to each group: the horn's heading comes up under it, and it's lit.
+		// The row goes to each group, the one gone to lit, all the way there and after: Trail and the
+		// horn together are shorter than the list, so going to Trail ends at the bottom, where the horn
+		// had been lit as the one in view.
+		await garage.locator( '.jump [data-group="Trail"]' ).click();
+		const seen = new Set();
+		for ( let i = 0; i < 15; i ++ ) {
+
+			seen.add( ( await groups( page ) ).lit );
+			await page.waitForTimeout( 100 );
+
+		}
+
+		assert.deepEqual( [ ...seen ], [ 'Trail' ] );
+		assert.ok( ( await groups( page ) ).end, 'Trail and the horn fill the list now: this no longer tries its end' );
+		await shot( page, 'pro-garage-jump-trail' );
+		// Scrolled by hand (the wheel), the one in view is lit again, now Trail's heading is down the list.
+		const box = await garage.locator( '.options' ).boundingBox();
+		await page.mouse.move( box.x + box.width / 2, box.y + box.height / 2 );
+		await page.mouse.wheel( 0, - 240 );
+		await page.waitForTimeout( 800 );
+		const wheeled = await groups( page );
+		assert.ok( wheeled.lit === wheeled.inView && wheeled.lit !== 'Trail', JSON.stringify( wheeled ) );
+		// The horn's heading comes up under the row, and it's lit, from the moment it's clicked.
 		await garage.locator( '.jump [data-group="Horn"]' ).click();
-		await page.waitForFunction( () => document.querySelector( '#garage .jump [aria-current="true"]' )?.dataset.group === 'Horn', null, { timeout: 5000 } );
-		const under = await page.evaluate( () => {
+		assert.equal( ( await groups( page ) ).lit, 'Horn' );
+		await page.waitForFunction( () => {
 
 			const row = document.querySelector( '#garage .jump' ).getBoundingClientRect();
 			const heading = document.querySelector( '#garage [data-part="horn"] h3' ).getBoundingClientRect();
 			return heading.top >= row.bottom - 1 && heading.bottom <= document.querySelector( '#garage .options' ).getBoundingClientRect().bottom;
 
-		} );
-		assert.ok( under );
+		}, null, { timeout: 5000 } );
+		assert.equal( ( await groups( page ) ).lit, 'Horn' );
 		await garage.locator( '.jump [data-group="Paint"]' ).click();
 		await page.waitForFunction( () => document.querySelector( '#garage .options' ).scrollTop < 5, null, { timeout: 5000 } );
 		await page.waitForTimeout( 400 );
@@ -938,7 +988,7 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 
 	} );
 
-	test( 'the underglow goes under every kind of ride, sized to it and left out of its size; the new finishes, rims and decals go on', async () => {
+	test( 'the underglow goes under every kind of ride, sized to it and left out of its size; the new finishes, rims and decals go on, camo and polka dots drawn out on none', async () => {
 
 		await page.keyboard.press( 'Escape' );
 		await page.locator( '#pause' ).waitFor();
@@ -1034,10 +1084,26 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 
 		assert.deepEqual( finishes, {
 			satin: { roughness: 0.55, metalness: 0.15, iridescence: 0, sheen: 0 },
-			pearl: { roughness: 0.32, metalness: 0.1, iridescence: 0.45, sheen: 1 },
+			pearl: { roughness: 0.32, metalness: 0.1, iridescence: 0.45, sheen: 0.25 },
 			chrome: { roughness: 0.05, metalness: 1, iridescence: 0, sheen: 0 },
 			shift: { roughness: 0.24, metalness: 1, iridescence: 1, sheen: 0.6 },
 		} );
+		// Pearl's sheen is white over halfway to the paint's colour, mixed as the colours look (sRGB),
+		// so dark paint keeps its colour: on navy, a greyish blue (a full white sheen turned it silver,
+		// and one mixed as light was nearly grey).
+		await pick( 'colour', 'navy' );
+		await pick( 'finish', 'pearl' );
+		const sheen = await page.evaluate( () => {
+
+			let colour = null;
+			window.drive.garage.preview.model.traverse( o => colour ??= o.userData.paint === 'body' ? o.material.sheenColor.getHex() : null );
+			return colour;
+
+		} );
+		const navy = SWATCHES.find( swatch => swatch.id === 'navy' ).hex;
+		assert.ok( [ 16, 8, 0 ].every( shift => Math.abs( ( sheen >> shift & 255 ) - ( 0.45 * 255 + 0.55 * ( navy >> shift & 255 ) ) ) <= 2 ), sheen.toString( 16 ) );
+		await page.waitForTimeout( 300 );
+		await shot( page, 'pro-garage-coupe-navy-pearl' );
 		const rims = {};
 		for ( const rim of [ 'chrome', 'black', 'bronze', 'neon' ] ) {
 
@@ -1070,6 +1136,76 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 				assert.ok( counts.length >= 2 && counts.every( count => count >= 3 ) && counts.reduce( ( a, b ) => a + b ) > 30, `${ name } ${ decal }: ${ counts }` );
 				await page.waitForTimeout( 300 );
 				await shot( page, `pro-garage-${ name.toLowerCase().replace( ' ', '-' ) }-${ decal }` );
+
+			}
+
+		}
+
+		// Camo and polka dots, which go all over, are never drawn out much on any ride that takes
+		// decals: DecalGeometry draws a picture out along a face it meets at a slant (1 / cos of the
+		// angle), so each projection keeps to the faces it meets head on, and a dot on a kart's side
+		// pod is a dot, not a dash across the pod's top. For each triangle of each piece, from its
+		// corners and where they are in the picture (whose pixels are square in metres on the
+		// projector's box): how many times as far the picture is stretched one way as the other
+		// there. At most 1.56 (50° off) and a little for the pictures' rounding; projected through the
+		// side's box made taller and onto every face, it had been 4 to thousands of times, over up
+		// to two thirds of a piece.
+		const stretch = () => page.evaluate( () => {
+
+			const group = window.drive.garage.preview.model.getObjectByName( 'decals' );
+			return group.children.map( mesh => {
+
+				const { position, uv } = mesh.geometry.attributes;
+				const { width, height } = mesh.material.map.image;
+				let area = 0;
+				let drawnOut = 0;
+				let most = 1;
+				for ( let i = 0; i < position.count; i += 3 ) {
+
+					const corner = k => [ position.getX( i + k ), position.getY( i + k ), position.getZ( i + k ) ];
+					const pixel = k => [ uv.getX( i + k ) * width, uv.getY( i + k ) * height ];
+					const [ p0, p1, p2 ] = [ 0, 1, 2 ].map( corner );
+					const [ q0, q1, q2 ] = [ 0, 1, 2 ].map( pixel );
+					const e1 = p1.map( ( v, k ) => v - p0[ k ] );
+					const e2 = p2.map( ( v, k ) => v - p0[ k ] );
+					const f1 = [ q1[ 0 ] - q0[ 0 ], q1[ 1 ] - q0[ 1 ] ];
+					const f2 = [ q2[ 0 ] - q0[ 0 ], q2[ 1 ] - q0[ 1 ] ];
+					const det = f1[ 0 ] * f2[ 1 ] - f1[ 1 ] * f2[ 0 ];
+					const size = Math.hypot( e1[ 1 ] * e2[ 2 ] - e1[ 2 ] * e2[ 1 ], e1[ 2 ] * e2[ 0 ] - e1[ 0 ] * e2[ 2 ], e1[ 0 ] * e2[ 1 ] - e1[ 1 ] * e2[ 0 ] ) / 2;
+					if ( Math.abs( det ) < 1e-3 || size < 1e-8 ) continue;
+					// Where a step across and a step up the picture go on the bodywork, and how the two
+					// stretches between them compare.
+					const across = e1.map( ( v, k ) => ( v * f2[ 1 ] - e2[ k ] * f1[ 1 ] ) / det );
+					const up = e1.map( ( v, k ) => ( e2[ k ] * f1[ 0 ] - v * f2[ 0 ] ) / det );
+					const a = across.reduce( ( sum, v ) => sum + v * v, 0 );
+					const c = up.reduce( ( sum, v ) => sum + v * v, 0 );
+					const b = across.reduce( ( sum, v, k ) => sum + v * up[ k ], 0 );
+					const half = ( a + c ) / 2;
+					const spread = Math.sqrt( Math.max( 0, half * half - ( a * c - b * b ) ) );
+					const drawn = Math.sqrt( ( half + spread ) / Math.max( half - spread, 1e-30 ) );
+					area += size;
+					if ( drawn > 1.7 ) drawnOut += size;
+					if ( size > 1e-5 ) most = Math.max( most, drawn );
+
+				}
+
+				return { triangles: position.count / 3, drawnOut: Math.round( drawnOut / area * 1000 ) / 1000, most: Math.round( most * 100 ) / 100 };
+
+			} );
+
+		} );
+		for ( const name of [ 'Go-kart', 'Muscle car', 'Tuk-tuk', 'Lawn tractor', 'Cyber muscle', 'Sports coupe', 'City bus', 'Monster truck', 'Hovercraft' ] ) {
+
+			if ( await page.evaluate( () => window.drive.garage.vehicle.name ) !== name ) await show( name );
+			for ( const decal of [ 'dots', 'camo' ] ) {
+
+				await pick( 'decal', decal );
+				const pieces = await stretch();
+				// On the top and both sides, none drawn out.
+				assert.ok( pieces.length >= 3 && pieces.every( piece => piece.triangles >= 1 && piece.drawnOut === 0 && piece.most <= 1.65 ), `${ name } ${ decal }: ${ JSON.stringify( pieces ) }` );
+				if ( ! SHOTS ) continue;
+				await page.waitForTimeout( 300 );
+				await shot( page, `pro-garage-${ decal }-${ name.toLowerCase().replace( ' ', '-' ) }` );
 
 			}
 
@@ -1616,6 +1752,34 @@ describe( 'Driving with others: their underglow and horn', () => {
 
 		} );
 		assert.deepEqual( heard, { out: [ 'air', 'beep', 'fanfare' ], beeps: 3 } );
+
+		// Horn sounds switched off in the pause menu (horns.js keeps it): no honk is heard, nor a horn
+		// picked in the Garage, though it's still picked. On again, both are.
+		await page.keyboard.press( 'Escape' );
+		await page.locator( '#pause' ).waitFor();
+		const hornSounds = page.locator( '#pause .friends .setting', { hasText: 'Horn sounds' } ).locator( 'input' );
+		assert.ok( await hornSounds.isChecked() );
+		await hornSounds.uncheck();
+		assert.equal( await page.evaluate( () => localStorage.getItem( 'world-drive.horn' ) ), 'off' );
+		await page.locator( '#pause .garage-open' ).click();
+		const garage = page.locator( '#garage' );
+		await garage.waitFor();
+		await page.waitForFunction( () => window.drive.garage.preview?.model, null, { timeout: 20000 } );
+		const horns = () => page.evaluate( () => ( { garage: window.drive.garage.hornsPlayed, honks: window.others.friends.beeps, look: JSON.parse( localStorage.getItem( 'world-drive.garage' ) )?.[ 'go-kart' ]?.horn } ) );
+		const quiet = await horns();
+		await garage.locator( '[data-part="horn"] .choice[data-id="ahooga"]' ).click();
+		await page.evaluate( () => window.others.friends.honk() );
+		assert.deepEqual( await horns(), { ...quiet, look: 'ahooga' } );
+		await garage.locator( '.done' ).click();
+		await hornSounds.check();
+		assert.equal( await page.evaluate( () => localStorage.getItem( 'world-drive.horn' ) ), 'on' );
+		await page.locator( '#pause .garage-open' ).click();
+		await garage.waitFor();
+		await garage.locator( '[data-part="horn"] .choice[data-id="bike"]' ).click();
+		await page.evaluate( () => window.others.friends.honk() );
+		assert.deepEqual( await horns(), { garage: quiet.garage + 1, honks: quiet.honks + 1, look: 'bike' } );
+		assert.equal( await page.evaluate( () => window.drive.garage.lastHorn ), 'bike' );
+		await garage.locator( '.done' ).click();
 		assert.deepEqual( page.errors, [] );
 		await page.context().close();
 
@@ -1684,6 +1848,22 @@ describe( 'The Garage on a phone', () => {
 		assert.ok( await page.evaluate( () => document.documentElement.scrollWidth <= innerWidth ) );
 		await page.waitForTimeout( 600 );
 		await shot( page, 'pro-phone-garage-underglow' );
+		// Straight to Trail, and Trail lit (the list is short enough here for its heading to come up
+		// under the row). Dragged back a little with a finger, the one in view is lit.
+		await garage.locator( '.jump [data-group="Trail"]' ).tap();
+		await page.waitForTimeout( 1200 );
+		const tapped = await groups( page );
+		assert.ok( tapped.lit === 'Trail' && tapped.inView === 'Trail', JSON.stringify( tapped ) );
+		await shot( page, 'pro-phone-garage-trail' );
+		const list = await garage.locator( '.options' ).boundingBox();
+		const touch = await page.context().newCDPSession( page );
+		const finger = ( type, y ) => touch.send( 'Input.dispatchTouchEvent', { type, touchPoints: y === undefined ? [] : [ { x: list.x + list.width / 2, y: list.y + list.height / 3 + y } ] } );
+		await finger( 'touchStart', 0 );
+		for ( let y = 20; y <= 200; y += 20 ) await finger( 'touchMove', y );
+		await finger( 'touchEnd' );
+		await page.waitForTimeout( 800 );
+		const dragged = await groups( page );
+		assert.ok( dragged.lit === dragged.inView && dragged.lit !== 'Trail', JSON.stringify( dragged ) );
 		await garage.locator( '.options' ).evaluate( el => el.scrollTop = el.scrollHeight );
 		await shot( page, 'pro-phone-garage-scrolled' );
 		await garage.locator( '.done' ).tap();

@@ -3,7 +3,9 @@ import {
 	CanvasTexture,
 	EquirectangularReflectionMapping,
 	Euler,
+	Float32BufferAttribute,
 	Group,
+	MathUtils,
 	Mesh,
 	MeshPhysicalMaterial,
 	MeshStandardMaterial,
@@ -295,17 +297,19 @@ function getEnvironment() {
 
 }
 
-// How each finish takes the light. Satin between matte and gloss; pearl a soft white sheen and a
-// faint shimmer of colours over a deep clear coat; chrome a mirror tinted with the colour (white
-// paint is plain chrome); colour-shift a thin film over dark metal in the colour (its reflections
-// turn through the colours with the angle it's seen at, as oil's on water do), with a sheen a third
-// of the way round the colour wheel along its edges (see paintMaterial).
+// How each finish takes the light. Satin between matte and gloss; pearl a soft sheen, a pale tint
+// of the colour, and a faint shimmer of colours over a deep clear coat (a whiter sheen, or more of
+// it, lays white over the whole body: navy came out silver, candy apple red salmon pink); chrome a
+// mirror tinted with the colour (white paint is plain chrome); colour-shift a thin film over dark
+// metal in the colour (its reflections turn through the colours with the angle it's seen at, as
+// oil's on water do), with a sheen a third of the way round the colour wheel along its edges (see
+// paintMaterial).
 const FINISH_SETTINGS = {
 	gloss: { roughness: 0.3, metalness: 0.05, clearcoat: 1, clearcoatRoughness: 0.08, envMapIntensity: 0.9 },
 	matte: { roughness: 0.82, metalness: 0, clearcoat: 0, envMapIntensity: 0.35 },
 	metallic: { roughness: 0.3, metalness: 0.7, clearcoat: 0.7, clearcoatRoughness: 0.12, envMapIntensity: 1.3 },
 	satin: { roughness: 0.55, metalness: 0.15, clearcoat: 0.3, clearcoatRoughness: 0.45, envMapIntensity: 0.6 },
-	pearl: { roughness: 0.32, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.05, sheen: 1, sheenColor: 0xfff6ee, sheenRoughness: 0.4, iridescence: 0.45, iridescenceIOR: 1.5, iridescenceThicknessRange: [ 280, 420 ], envMapIntensity: 1.1 },
+	pearl: { roughness: 0.32, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.05, sheen: 0.25, sheenRoughness: 0.4, iridescence: 0.45, iridescenceIOR: 1.5, iridescenceThicknessRange: [ 280, 420 ], envMapIntensity: 1.1 },
 	chrome: { roughness: 0.05, metalness: 1, clearcoat: 1, clearcoatRoughness: 0.03, envMapIntensity: 1.6 },
 	shift: { roughness: 0.24, metalness: 1, clearcoat: 1, clearcoatRoughness: 0.04, iridescence: 1, iridescenceIOR: 1.7, iridescenceThicknessRange: [ 100, 400 ], sheen: 0.6, sheenRoughness: 0.35, envMapIntensity: 2 },
 };
@@ -318,6 +322,10 @@ function paintMaterial( hex, finish ) {
 	if ( ! paints.has( key ) ) {
 
 		const material = new MeshPhysicalMaterial( { color: hex, envMap: getEnvironment(), ...FINISH_SETTINGS[ finish ] } );
+		// Pearl's sheen is white over halfway to the paint's own colour, so the colour stays itself.
+		// It's mixed as the colours look (sRGB): mixed as light, dark paint's being next to none, it
+		// would be nearly grey.
+		if ( finish === 'pearl' ) material.sheenColor.setHex( hex ).convertLinearToSRGB().multiplyScalar( 0.55 ).addScalar( 0.45 ).convertSRGBToLinear();
 		if ( finish === 'shift' ) {
 
 			material.sheenColor.setHex( hex ).offsetHSL( 1 / 3, 0.2, 0.15 );
@@ -358,14 +366,27 @@ function rimMaterial( { hex, roughness = 0.22, metalness = 0.8, envMapIntensity 
 // `bonnet` a square `size` across, down onto where a number goes on top. They go in
 // userData.decalParent (the group the bodywork is in, if it moves on springs) or the model.
 // Stripes and the checker go along the top, flames and lightning bolts down the sides, and a number
-// on the bonnet and both doors. Camo and polka dots go all over: along the sides, taller than the
-// side's box, and over the top (camo wider than its box); two-tone below the line along the middle
-// of the doors, from nose to tail. On light paint, stripes and dots are dark.
+// on the bonnet and both doors. Camo and polka dots go all over, each projection onto only the faces
+// turned its way (see FACING): camo down onto the whole top of the bodywork and in from both sides
+// through a box taller than the side's, each from nose to tail; dots through the top's box and about
+// the side's own. Two-tone goes below the line along the middle of the doors, from nose to tail. On
+// light paint, stripes and dots are dark.
 const DOWN = new Euler( Math.PI / 2, 0, 0 );
 const INTO_RIGHT = new Euler( 0, - Math.PI / 2, 0 );
 const INTO_LEFT = new Euler( 0, Math.PI / 2, 0 );
+// A projection draws its picture out along a face it meets at a slant, by 1 / cos of the angle
+// between them: a polka dot on a kart's side pod, projected in from the side onto the pod's top,
+// came out a dash across it. So the all-over decals keep only the faces turned within 50° of the
+// way back to their projector (a dot drawn out 1.56 times at most); the rest are another
+// projection's (a top, from the top) or left bare (the nose and tail).
+const FACING = Math.cos( 50 * MathUtils.DEG2RAD );
 const _at = new Vector3();
 const _size = new Vector3();
+const _toward = new Vector3();
+const _face = new Vector3();
+const _a = new Vector3();
+const _b = new Vector3();
+const _c = new Vector3();
 const _body = new Box3();
 const _piece = new Box3();
 
@@ -415,15 +436,38 @@ function setDecals( model, look, swatch ) {
 
 	} else if ( look.decal === 'camo' || look.decal === 'dots' ) {
 
-		// Camo over the top as wide as the bodywork; dots, which would be drawn out into dashes where
-		// it curves down, only as wide as the top's box.
-		const tall = [ side.size[ 0 ] * 1.25, side.size[ 1 ] * 1.8, side.size[ 2 ] ];
-		const wide = look.decal === 'camo' ? [ Math.max( top.size[ 0 ], Math.abs( side.at[ 0 ] ) * 1.5 ), top.size[ 1 ], top.size[ 2 ] ] : top.size;
-		const pattern = look.decal === 'camo' ? camo : ( across, along ) => dots( across, along, light );
-		project( parent, group, pattern( wide[ 0 ], wide[ 1 ] ), top.at, wide, DOWN );
-		const sides = pattern( tall[ 0 ], tall[ 1 ] );
-		project( parent, group, sides, side.at, tall, INTO_RIGHT );
-		project( parent, group, sides, mirror( side.at ), tall, INTO_LEFT, { flipU: true } );
+		// Each projection only onto the faces it meets head on (FACING), so the side's stops where
+		// the bodywork turns up to the top, and the top's where it turns down. Camo goes down onto
+		// the whole top of the bodywork, side to side, and in from both sides, taller than their box,
+		// each from nose to tail, its blobs as big on the top as on the sides. Dots, whose drawing
+		// out shows most, keep to the top's box and about the side's own: through a side's box made
+		// taller, they reached up onto the faces turning to the top.
+		if ( look.decal === 'camo' ) {
+
+			const body = bodyBox( parent );
+			const long = body.max.z - body.min.z;
+			const middle = ( body.min.z + body.max.z ) / 2;
+			const tall = [ long, side.size[ 1 ] * 1.8, side.size[ 2 ] ];
+			const over = [ body.max.x - body.min.x, long, body.max.y - body.min.y + 0.1 ];
+			const spot = tall[ 1 ] * 0.32;
+			project( parent, group, camo( over[ 0 ], over[ 1 ], spot ), [ ( body.min.x + body.max.x ) / 2, ( body.min.y + body.max.y ) / 2, middle ], over, DOWN, { facing: FACING } );
+			const sides = camo( tall[ 0 ], tall[ 1 ], spot );
+			const at = [ side.at[ 0 ], side.at[ 1 ], middle ];
+			project( parent, group, sides, at, tall, INTO_RIGHT, { facing: FACING } );
+			project( parent, group, sides, mirror( at ), tall, INTO_LEFT, { flipU: true, facing: FACING } );
+
+		} else {
+
+			// Three rows across the top's box, and on the sides as many whole rows as come nearest
+			// to dots that size, so they're about as big on the sides as on the top.
+			const tall = [ side.size[ 0 ] * 1.25, side.size[ 1 ] * 1.05, side.size[ 2 ] ];
+			const gap = Math.min( top.size[ 0 ], top.size[ 1 ] ) / 3;
+			project( parent, group, dots( top.size[ 0 ], top.size[ 1 ], light ), top.at, top.size, DOWN, { facing: FACING } );
+			const sides = dots( tall[ 0 ], tall[ 1 ], light, Math.max( 1, Math.round( Math.min( tall[ 0 ], tall[ 1 ] ) / gap ) ) );
+			project( parent, group, sides, side.at, tall, INTO_RIGHT, { facing: FACING } );
+			project( parent, group, sides, mirror( side.at ), tall, INTO_LEFT, { flipU: true, facing: FACING } );
+
+		}
 
 	} else if ( look.decal === 'two-tone' ) {
 
@@ -468,16 +512,20 @@ function mirror( [ x, y, z ] ) {
 
 // Project `map` onto the bodywork in `parent` (its meshes tagged as body, or decalable) through
 // the box at `at`, `size` big, turned by `turn` (its z axis is the way it's projected). flipU and
-// flipV turn the picture round so it reads the right way from outside.
-function project( parent, group, map, at, size, turn, { flipU = false, flipV = false } = {} ) {
+// flipV turn the picture round so it reads the right way from outside. facing: if it's given, only
+// onto the faces turned toward the projector by at least this much (the cosine of the angle).
+function project( parent, group, map, at, size, turn, { flipU = false, flipV = false, facing = null } = {} ) {
 
 	_at.fromArray( at );
 	_size.fromArray( size );
+	// The way back to the projector, against the way it projects.
+	_toward.set( 0, 0, - 1 ).applyEuler( turn );
 	for ( const mesh of parent.children ) {
 
 		if ( ! mesh.isMesh || ! ( mesh.userData.paint === 'body' || mesh.userData.decalable ) ) continue;
 		mesh.updateMatrix();
 		const geometry = new DecalGeometry( { geometry: mesh.geometry, matrixWorld: mesh.matrix }, _at, turn, _size );
+		if ( facing !== null ) keepFacing( geometry, _toward, facing );
 		if ( geometry.attributes.position.count === 0 ) {
 
 			geometry.dispose();
@@ -491,6 +539,43 @@ function project( parent, group, map, at, size, turn, { flipU = false, flipV = f
 		decal.raycast = () => {};
 		decal.renderOrder = 1;
 		group.add( decal );
+
+	}
+
+}
+
+// Leave a decal's `geometry` (DecalGeometry's: each three corners a triangle) only the triangles
+// turned toward `toward` by at least `facing` (the cosine of the angle). Which way a triangle faces
+// is from its corners, as that's how far the picture is drawn out on it; its normals only say which
+// side of it is the outside.
+function keepFacing( geometry, toward, facing ) {
+
+	const { position, normal } = geometry.attributes;
+	const kept = [];
+	for ( let i = 0; i < position.count; i += 3 ) {
+
+		_a.fromBufferAttribute( position, i );
+		_b.fromBufferAttribute( position, i + 1 ).sub( _a );
+		_c.fromBufferAttribute( position, i + 2 ).sub( _a );
+		_face.crossVectors( _b, _c );
+		if ( normal ) {
+
+			_a.fromBufferAttribute( normal, i ).add( _b.fromBufferAttribute( normal, i + 1 ) ).add( _c.fromBufferAttribute( normal, i + 2 ) );
+			if ( _face.dot( _a ) < 0 ) _face.negate();
+
+		}
+
+		if ( _face.dot( toward ) > facing * _face.length() ) kept.push( i, i + 1, i + 2 );
+
+	}
+
+	if ( kept.length === position.count ) return;
+	for ( const [ name, attribute ] of Object.entries( geometry.attributes ) ) {
+
+		const size = attribute.itemSize;
+		const array = new Float32Array( kept.length * size );
+		kept.forEach( ( from, to ) => array.set( attribute.array.subarray( from * size, from * size + size ), to * size ) );
+		geometry.setAttribute( name, new Float32BufferAttribute( array, size ) );
 
 	}
 
@@ -654,16 +739,17 @@ function sized( across, along ) {
 
 }
 
-// Woodland camouflage: olive, with blobs of khaki, dark green, brown and black over it, their size a
-// share of the box's shorter side (`across` by `along`, m), so a kart's are smaller than a bus's.
-// The same blobs every time.
-function camo( across, along ) {
+// Woodland camouflage for a box `across` by `along` (m): olive, with blobs of khaki, dark green,
+// brown and black over it, about `spot` m across (setDecals makes them a share of the side's box,
+// so a kart's are smaller than a bus's, and the same on its top as on its sides). The same blobs
+// every time.
+function camo( across, along, spot ) {
 
 	const [ width, height ] = sized( across, along );
-	return picture( `camo-${ width }-${ height }`, width, height, ( ctx, w, h ) => {
+	const blobSize = Math.max( 4, Math.round( spot * width / across ) );
+	return picture( `camo-${ width }-${ height }-${ blobSize }`, width, height, ( ctx, w, h ) => {
 
 		const random = seeded( 7 );
-		const blobSize = Math.min( w, h ) * 0.32;
 		ctx.fillStyle = '#69703f';
 		ctx.fillRect( 0, 0, w, h );
 		for ( const colour of [ '#a3935f', '#3f4a26', '#4a3a28', '#23241c' ] ) {
@@ -697,14 +783,14 @@ function blob( ctx, x, y, size, random ) {
 
 }
 
-// Polka dots in staggered rows, white (or, on light paint, dark), three rows across the shorter side
-// of a box `across` by `along` (m) whatever the ride, so they're round.
-function dots( across, along, dark ) {
+// Polka dots in staggered rows, white (or, on light paint, dark), `rows` rows across the shorter side
+// of a box `across` by `along` (m) whatever the ride, so they're round and none is cut along it.
+function dots( across, along, dark, rows = 3 ) {
 
 	const [ width, height ] = sized( across, along );
-	return picture( `dots-${ width }-${ height }-${ dark }`, width, height, ( ctx, w, h ) => {
+	return picture( `dots-${ width }-${ height }-${ dark }-${ rows }`, width, height, ( ctx, w, h ) => {
 
-		const gap = Math.min( w, h ) / 3;
+		const gap = Math.min( w, h ) / rows;
 		ctx.fillStyle = dark ? '#16181c' : '#f6f7f9';
 		for ( let row = 0; row * gap < h + gap; row ++ ) for ( let x = row % 2 ? gap / 2 : 0; x < w + gap; x += gap ) {
 

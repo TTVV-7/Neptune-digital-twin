@@ -4,7 +4,11 @@
 // load, and none longer than the 0.8 s between honks (live-protocol.js's HONK_GAP). The beep was
 // the only horn there was, so it's the free one, and a look from before horns (or a horn this
 // page doesn't know, from a newer one) honks with it. friends.js plays the honks; the Garage
-// plays a horn as it's picked.
+// plays a horn as it's picked. Both stay quiet with horn sounds switched off (hornsOn).
+
+import { storage } from './places.js';
+
+const KEY = 'world-drive.horn';
 
 export const HORNS = [
 	{ id: 'beep', name: 'Beep', free: true },
@@ -14,6 +18,24 @@ export const HORNS = [
 	{ id: 'fanfare', name: 'Fanfare' },
 	{ id: 'laser', name: 'Laser' },
 ];
+
+// Whether horn sounds are on: the pause menu's switch (friends.js), kept in this browser, and on
+// unless it was switched off. Kept here as well, so the switch still works for the visit in a
+// browser that keeps nothing.
+let on = null;
+export function hornsOn() {
+
+	on ??= storage( () => localStorage.getItem( KEY ) ) !== 'off';
+	return on;
+
+}
+
+export function setHornsOn( yes ) {
+
+	on = yes;
+	storage( () => localStorage.setItem( KEY, yes ? 'on' : 'off' ) );
+
+}
 
 // One AudioContext for the page, made the first time it's asked for after a click or a key
 // (a browser won't start sound before), or null where there's none.

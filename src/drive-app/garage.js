@@ -19,7 +19,7 @@ import {
 import { createDriveFx } from '../drive-fx.js';
 import { frontToYaw } from '../library.js';
 import { BOOSTS } from './boosts.js';
-import { hornAudio, playHorn } from './horns.js';
+import { hornAudio, hornsOn, playHorn } from './horns.js';
 import { applyLook, DECALS, defaultLook, FINISHES, FLAMES, fxOf, GLOWS, HORNS, isLocked, isPaintable, lookFor, RIMS, saveLook, savedLook, SMOKES, SWATCHES, TRAILS, unlockOf } from './paint.js';
 import { openPass, proBadge } from './pass.js';
 import { onProChange } from './pro.js';
@@ -57,6 +57,8 @@ const PARTS = [
 ];
 // Each part's choices in a row of `swatches`, `words` or `styles` (pro.css, levels.css).
 const PLURAL = { swatch: 'swatches', word: 'words', style: 'styles' };
+// The keys that scroll the list of choices.
+const SCROLL_KEYS = [ 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' ' ];
 // The row over the choices: each group's name and its parts, the first of them shown scrolled to.
 const GROUPS = [
 	{ name: 'Paint', parts: [ 'colour', 'finish', 'decal' ] },
@@ -80,8 +82,9 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 	let vehicle = panel.vehicle;
 	let look = savedLook( vehicle );
 	let preview = null;
-	// How many horns have been played here, for the tests.
+	// How many horns have been played here, and the last one's id, for the tests.
 	let hornsPlayed = 0;
+	let lastHorn = null;
 
 	// The buttons by both ride pickers.
 	const globePanel = document.querySelector( '#globe-ui .panel' );
@@ -170,8 +173,12 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 	}
 
 	// The row of groups: each scrolls the list to its first part shown, just under the row (the first
-	// group, to the top, with the word on the pass over it), and the one in view is lit.
+	// group, to the top, with the word on the pass over it), and the one in view is lit. The one gone
+	// to stays lit, as the list scrolls there and after, until the list is scrolled some other way: on
+	// a wide screen the last groups together are shorter than the list, so going to Trail ends at the
+	// bottom, where the last group, the horn, would be the one in view.
 	const jump = dialog.querySelector( '.jump' );
+	let goneTo = null;
 	jump.replaceChildren( ...GROUPS.map( group => {
 
 		const button = document.createElement( 'button' );
@@ -184,13 +191,28 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 			if ( ! section ) return;
 			const first = GROUPS.find( shownSection ) === group;
 			const top = first ? 0 : options.scrollTop + section.getBoundingClientRect().top - options.getBoundingClientRect().top - jump.offsetHeight - 4;
+			goneTo = group;
 			options.scrollTo( { top, behavior: 'smooth' } );
+			markJump();
 
 		} );
 		return button;
 
 	} ) );
 	options.addEventListener( 'scroll', () => markJump(), { passive: true } );
+	// Scrolled by the player (a wheel, a finger, the keys or the scroll bar): what's in view is lit
+	// again. Not by a choice picked, which only changes what's shown, nor by the row scrolled
+	// sideways on a narrow phone.
+	const scrolledByHand = () => goneTo = null;
+	options.addEventListener( 'wheel', scrolledByHand, { passive: true } );
+	options.addEventListener( 'touchmove', e => e.target.closest( '.jump' ) || scrolledByHand(), { passive: true } );
+	options.addEventListener( 'pointerdown', e => e.target === options && scrolledByHand() );
+	options.addEventListener( 'keydown', e => {
+
+		// (In the number's box the keys are its own, and space on a button presses it.)
+		if ( SCROLL_KEYS.includes( e.key ) && ! e.target.matches( 'input' ) && ! ( e.key === ' ' && e.target.matches( 'button' ) ) ) scrolledByHand();
+
+	} );
 
 	function shownSection( group ) {
 
@@ -198,13 +220,14 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 
 	}
 
-	// The group whose section is under the row now (the last, scrolled to the bottom).
+	// The group gone to with the row, or else whose section is under the row now (the last, scrolled
+	// to the bottom).
 	function markJump() {
 
 		const line = options.getBoundingClientRect().top + jump.offsetHeight + 12;
 		const end = options.scrollTop + options.clientHeight >= options.scrollHeight - 2;
-		let current = null;
-		for ( const group of GROUPS ) {
+		let current = goneTo && shownSection( goneTo ) ? goneTo.name : null;
+		if ( ! current ) for ( const group of GROUPS ) {
 
 			const section = shownSection( group );
 			if ( section && ( end || section.getBoundingClientRect().top <= line ) ) current = group.name;
@@ -238,6 +261,15 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 	function choose( part, id ) {
 
 		levelNote.hidden = true;
+		// A horn can't be seen on the turntable: it's heard as it's picked (the same one again too),
+		// and a locked one is heard as well, before it's bought. Not with horn sounds switched off.
+		if ( part === 'horn' && hornsOn() ) {
+
+			lastHorn = playHorn( hornAudio(), id );
+			hornsPlayed ++;
+
+		}
+
 		if ( locked( part, id ) ) {
 
 			// Only a level gives it: which one (the pass's sheet would only disappoint).
@@ -260,14 +292,6 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 		// Smoke's colour only shows with the smoke trail, and the flame's with the classic flame.
 		if ( part === 'smoke' ) look.trail = 'smoke';
 		if ( part === 'flame' ) look.boost = 'classic';
-		// A horn can't be seen on the turntable: it's heard (each pick, the same one again too).
-		if ( part === 'horn' ) {
-
-			playHorn( hornAudio(), id );
-			hornsPlayed ++;
-
-		}
-
 		changed( part );
 		onEdit( part );
 
@@ -452,6 +476,11 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 		get hornsPlayed() {
 
 			return hornsPlayed;
+
+		},
+		get lastHorn() {
+
+			return lastHorn;
 
 		},
 	};
