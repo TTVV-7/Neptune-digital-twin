@@ -197,18 +197,26 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 
 			const top = topOf( group );
 			if ( top === null ) return;
-			goneTo = group;
-			goneTop = top;
-			away = Math.abs( options.scrollTop - top );
-			// Where an earlier scroll stopped no longer counts.
-			cancelAnimationFrame( still );
-			options.scrollTo( { top, behavior: 'smooth' } );
+			goTo( group, top );
 			markJump();
 
 		} );
 		return button;
 
 	} ) );
+
+	// Sends the list smoothly to `top`, where going to `group` leaves it.
+	function goTo( group, top ) {
+
+		goneTo = group;
+		goneTop = top;
+		away = Math.abs( options.scrollTop - top );
+		// Where an earlier scroll stopped no longer counts.
+		cancelAnimationFrame( still );
+		options.scrollTo( { top, behavior: 'smooth' } );
+
+	}
+
 	// Whether the browser tells when a scroll has ended (see stopping).
 	const ends = 'onscrollend' in options;
 	options.addEventListener( 'scroll', () => {
@@ -268,14 +276,27 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 	// leaves the list where it was, or pulls its end up, the place gone to coming up with it; one above
 	// it, the browser keeps what's in view where it was, which leaves the list just where going to the
 	// group now would. Either way it stays lit while the list is still on its way there or sitting
-	// there. Another ride's list (fresh) is new: the one gone to stays lit only if the list sits just
-	// where going to it on this list would leave it.
+	// there. Another ride's list (fresh) is new. A list still on its way goes on to the group's place
+	// on this one, rather than to where the jump was taking it on the last (which on a wide screen is
+	// the end, where the horn would be lit), unless this ride doesn't show the group. A list sitting
+	// there keeps the group lit only if it sits just where going to it on this list would leave it.
 	function stillGoneTo( fresh ) {
 
 		if ( ! goneTo ) return;
 		const there = away <= 2;
 		const off = fromGoneTo( fresh );
-		if ( off > 2 && ( fresh || there ) ) goneTo = null;
+		if ( fresh && ! there ) {
+
+			const top = topOf( goneTo );
+			if ( top !== null ) return goTo( goneTo, top );
+			// Not on this ride's list: the jump stops where the list is.
+			goneTo = null;
+			options.scrollTo( { top: options.scrollTop } );
+			return;
+
+		}
+
+		if ( off > 2 && there ) goneTo = null;
 		else away = off;
 
 	}
@@ -478,8 +499,6 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 		// are its trim there too.
 		for ( const button of jump.children ) button.hidden = ! shownSection( GROUPS.find( group => group.name === button.dataset.group ) );
 		jump.querySelector( '[data-group="Rims"]' ).textContent = vehicle.rims ?? 'Rims';
-		stillGoneTo( fresh );
-		markJump();
 
 		const number = options.querySelector( '.number' );
 		number.hidden = wearing.decal !== 'number';
@@ -489,6 +508,10 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 		banner.hidden = ! rideShut;
 		banner.querySelector( 'span' ).textContent = vehicle.pro ? '⭐ A Supporter Pass ride' : `Comes at level ${ rideUnlock( vehicle )?.level }, or with the ⭐ Supporter Pass`;
 		dialog.querySelector( '.ride-name' ).textContent = vehicle.name;
+		// Last, with everything in the list as it now is (the decal's number box and the word on paint
+		// that can't be changed too): where a group is now, and so where a jump on its way goes.
+		stillGoneTo( fresh );
+		markJump();
 
 	}
 
@@ -539,7 +562,14 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 
 	}
 
-	dialog.addEventListener( 'close', () => preview?.stop() );
+	dialog.addEventListener( 'close', () => {
+
+		preview?.stop();
+		// Closing ends a jump still on its way: its list stops where it is, and opened again, the one
+		// in view is lit.
+		if ( away > 2 ) goneTo = null;
+
+	} );
 	dialog.querySelector( '.done' ).addEventListener( 'click', () => dialog.close() );
 	dialog.querySelector( '.close' ).addEventListener( 'click', () => dialog.close() );
 	dialog.addEventListener( 'click', e => e.target === dialog && dialog.close() );

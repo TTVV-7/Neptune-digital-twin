@@ -14,8 +14,9 @@
 // underglow under every kind of ride (the kart, a ride, the cars and the library's pickup), sized to
 // it and left out of its size, and the new finishes, rims and decals (pearl keeping dark paint's
 // colour, camo and polka dots never drawn out on any ride that takes decals); the Garage's row of
-// groups lighting the one gone to while the list goes there and sits there (the one in view once the
-// wheel or Tab moves it, or another ride's longer list is shown), and a locked horn heard before it's
+// groups lighting the one gone to while the list goes there from the top and sits there (still it
+// when another ride is shown on its way there; the one in view once the wheel or Tab moves it, or
+// another ride's longer list is shown at rest), and a locked horn heard before it's
 // bought; another driver's ghost wearing their underglow, fading off the ground, and their horn
 // heard in its own sound, and Horn sounds switched off silencing it and the Garage's horns; what a
 // trail and the booster cost a frame; every boost style drawn at 150 km/h (a picture of each),
@@ -182,6 +183,17 @@ async function goneThere( page, group ) {
 
 	}, [ group, JUMP_GROUPS ], { timeout: 10000 } );
 	await waitFrames( page, 30 );
+
+}
+
+// The Garage's list sent back to its top with the row (Paint gone to) and still there, so that going
+// to a group from there scrolls the whole way: its scrollTop then, for the caller to check.
+async function listAtTop( page ) {
+
+	await page.locator( '#garage .jump [data-group="Paint"]' ).click();
+	await page.waitForFunction( () => document.querySelector( '#garage .options' ).scrollTop < 2, null, { timeout: 10000 } );
+	await waitFrames( page, 30 );
+	return page.evaluate( () => document.querySelector( '#garage .options' ).scrollTop );
 
 }
 
@@ -471,7 +483,9 @@ describe( 'Supporter Pass, without it', () => {
 		assert.equal( await page.evaluate( () => window.drive.garage.hornsPlayed ), played + 1 );
 		// The row goes to each group, the one gone to lit, all the way there and after: Trail and the
 		// horn together are shorter than the list, so going to Trail ends at the bottom, where the horn
-		// had been lit as the one in view.
+		// had been lit as the one in view. From the top (picking the beep has scrolled the list to its
+		// end), so every frame of the scroll down is watched.
+		assert.ok( await listAtTop( page ) < 2, 'the list isn\'t at its top' );
 		await garage.locator( '.jump [data-group="Trail"]' ).click();
 		await watchLit( page );
 		await goneThere( page, 'Trail' );
@@ -502,11 +516,14 @@ describe( 'Supporter Pass, without it', () => {
 
 		}, null, { timeout: 10000 } );
 		assert.equal( ( await groups( page ) ).lit, 'Horn' );
-		// Gone to Trail again, and then Tab: the focus goes on from the row into the list, which scrolls
-		// back up to what's focused, and the one in view is lit (over the top of the list, the first),
-		// not Trail.
+		// Gone to Trail again, from the top again (going to the horn ended at the bottom), and then Tab:
+		// the focus goes on from the row into the list, which scrolls back up to what's focused, and the
+		// one in view is lit (over the top of the list, the first), not Trail.
+		assert.ok( await listAtTop( page ) < 2, 'the list isn\'t at its top' );
 		await garage.locator( '.jump [data-group="Trail"]' ).click();
+		await watchLit( page );
 		await goneThere( page, 'Trail' );
+		assert.deepEqual( await litSeen( page ), [ 'Trail' ] );
 		assert.equal( ( await groups( page ) ).lit, 'Trail' );
 		for ( let i = 0; i < 4 && ( await groups( page ) ).end; i ++ ) await page.keyboard.press( 'Tab' );
 		await waitFrames( page, 30 );
@@ -517,6 +534,38 @@ describe( 'Supporter Pass, without it', () => {
 		await page.waitForFunction( () => document.querySelector( '#garage .options' ).scrollTop < 5, null, { timeout: 10000 } );
 		await page.waitForTimeout( 400 );
 		await shot( page, 'pro-garage-free' );
+		// Another ride shown while the list is still on its way to Trail (the muscle car, free, its list
+		// just as the kart's): the list goes on to Trail on the car's list, and Trail is lit all the way
+		// and at the end, never the horn.
+		assert.ok( await listAtTop( page ) < 2, 'the list isn\'t at its top' );
+		await watchLit( page );
+		const switched = await page.evaluate( () => new Promise( resolve => {
+
+			const options = document.querySelector( '#garage .options' );
+			document.querySelector( '#garage .jump [data-group="Trail"]' ).click();
+			const start = performance.now();
+			// As soon as the list is moving (or after 10 s without, for the check below to say so).
+			const moving = () => {
+
+				if ( options.scrollTop < 1 && performance.now() - start < 10000 ) return requestAnimationFrame( moving );
+				const at = options.scrollTop;
+				document.querySelector( '#garage .ride-tab[data-id="muscle-car"]' ).click();
+				resolve( { at, end: options.scrollHeight - options.clientHeight } );
+
+			};
+
+			requestAnimationFrame( moving );
+
+		} ) );
+		assert.ok( switched.at >= 1 && switched.at < switched.end - 20, `not on its way to Trail when the muscle car was shown: ${ JSON.stringify( switched ) }` );
+		await page.waitForFunction( () => window.drive.garage.preview.model?.name === 'Muscle car', null, { timeout: 20000 } );
+		await goneThere( page, 'Trail' );
+		assert.deepEqual( await litSeen( page ), [ 'Paint', 'Trail' ] );
+		const onCar = await groups( page );
+		assert.ok( onCar.lit === 'Trail' && onCar.end, JSON.stringify( onCar ) );
+		await shot( page, 'pro-garage-jump-midswitch' );
+		await garage.locator( '.ride-tab', { hasText: 'Go-kart' } ).click();
+		await page.waitForFunction( () => window.drive.garage.preview.model?.name === 'Go-kart', null, { timeout: 20000 } );
 
 		// Boost styles: five free and seventeen with the pass, about half of those with a level too,
 		// each with its picture and saying what unlocks it. A free one goes on and shows itself off;
