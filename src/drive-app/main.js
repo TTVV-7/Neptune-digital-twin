@@ -190,16 +190,33 @@ const CLOSE = 75;
 // under them, what they're riding on can only be a surface of their own. Someone on ground at about
 // the water's height (a levee, a quay, a beach, a bridge's deck) has that ground under their car,
 // and someone in the air isn't riding. Only on that water's squares of the map, as above, and not
-// where the ground round them is built up (see CLOSE): not a polder's streets someone rides over on
-// a surface of theirs laid within its reach. AT_SURFACE takes in what their height can be off the
-// surface's as it's worked out here, from the same table and the same lakes: a state's centimetre
-// (a dropped-in place's 5 cm), their body leaning on its springs (its pivot a few centimetres over
-// its wheels as most rides corner or brake, up to about half a metre for the bus braking flat out),
-// and their scene's frame curving away as a sphere where the Earth is an ellipsoid, as sea.js lays
-// the surface (within 10 km of where they dropped in, 5 cm at most; 0.2 m at 20 km; more than
-// AT_SURFACE only past 34 km, by the equator, or 45 km at mid-latitudes, where they're missed). It's
-// well under SEA_MARGIN, so they're a metre or more clear of the ground under them.
+// where the ground round them is built up (see CLOSE, looked at farther out: CLOSE_AFRESH): not a
+// polder's streets someone rides over on a surface of theirs laid within its reach. AT_SURFACE takes
+// in what their height can be off the surface's as it's worked out here, from the same table and the
+// same lakes: a state's centimetre (a dropped-in place's 5 cm), their body leaning on its springs
+// (its pivot a few centimetres over its wheels as most rides corner or brake, up to about half a
+// metre for the bus braking flat out), and their scene's frame curving away as a sphere where the
+// Earth is an ellipsoid, as sea.js lays the surface (within 10 km of where they dropped in, 5 cm at
+// most; 0.2 m at 20 km; more than AT_SURFACE only past 34 km, by the equator, or 45 km at
+// mid-latitudes, where they're missed). It's well under SEA_MARGIN, so they're a metre or more clear
+// of the ground under them.
 const AT_SURFACE = 0.5;
+// Laying it afresh beside a rider, the ground round the spot is looked at out to CLOSE_AFRESH m to
+// see that it isn't built up, not only CLOSE's. Out to CLOSE, a street 25 m from a crossing is open
+// (a bearing down the crossing street, through a gap between houses or the yards behind them, and on
+// into the next street): among the test pad's houses (scripts/test-drive-ui.mjs), beside a rider at
+// 60 of the 3,546 spots under the sea inside its town, every 5 m, you were put on a surface laid
+// there among them. Out to 100 m, at none; nor, with a dyke round the town, at any of the 4,806
+// among its houses. (With open ground under the water round it, a polder's fields, spots near the
+// town's edge, within a block of that ground, are open whatever the reach, as that ground itself
+// is: as above.) Keeping yours, CLOSE is enough, as it's laid over those streets already, and it
+// keeps more of a narrow channel open: out to 100 m, beside a rider in a channel between banks
+// standing over the water, it's laid only where a quarter of the way round is clear that far: both
+// banks more than 71 m off, or the one across more than 100 m (92 m with the near one more than
+// 38 m). In one 180 m wide or more, that's everywhere; 120 m, only within 18 m of a bank; 100 m or
+// narrower, nowhere, and you start on its bed. Out to CLOSE it's 53 m, or 75 m (69 m and 29 m):
+// docs/world-drive.md.
+const CLOSE_AFRESH = 100;
 // How far down (m) the ground is looked for there: from just over the vehicle to past the deepest
 // sea floor, so that flying high over the deep sea it finds the bed.
 const SEA_DEPTH = 12000;
@@ -1051,9 +1068,11 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		const top = y + surface - bed;
 		if ( bed >= surface - SEA_MARGIN ) return null;
 		const found = { height: surface, over: by.over, lake: by.lake };
-		// Over yours (see CLOSE), or theirs that they're riding on (see AT_SURFACE): unless built up.
+		// Over yours (see CLOSE), or theirs that they're riding on (see AT_SURFACE): unless built up,
+		// looked at farther out for theirs, as it's laid afresh (see CLOSE_AFRESH).
 		const yours = laid !== null && laid.lake === by.lake && height >= surface - ALONGSIDE;
-		if ( yours || riding !== null && rides( riding[ 0 ], riding[ 1 ], top + height - surface, top ) ) return builtUp( 0, 0, top ) ? null : found;
+		if ( yours ) return builtUp( 0, 0, top ) ? null : found;
+		if ( riding !== null && rides( riding[ 0 ], riding[ 1 ], top + height - surface, top ) ) return builtUp( 0, 0, top, CLOSE_AFRESH ) ? null : found;
 		// Else as watchSea lays it afresh: only on the water's own squares (not a big lake's shore's).
 		if ( ! isWater( at, by.lake ) || height < surface - ALONGSIDE || by.lake !== null && bed >= surface - BED ) return null;
 		return water.land( 0, 0, y + 1, 2 ) || ! opensOut( 0, 0, top ) ? null : found;
@@ -1099,11 +1118,12 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// OPEN that might be clear comes to it, from the run's far end back. With `round` (watchSea's:
 	// what's known so far of the bearings, carried on from frame to frame), no more rays than a
 	// frame's share (see OPEN_RAYS), and null if that isn't enough to know yet. With `close`, only
-	// OPEN_AT's distances up to CLOSE m, and by heights alone: whether it isn't built up (see CLOSE).
+	// OPEN_AT's distances up to that many metres (CLOSE, or CLOSE_AFRESH), and by heights alone:
+	// whether it isn't built up (see CLOSE).
 	function opensOut( east, north, surface, round = null, close = false ) {
 
 		const top = surface + RISE;
-		const reach = close ? OPEN_AT.filter( distance => distance <= CLOSE ) : OPEN_AT;
+		const reach = close ? OPEN_AT.filter( distance => distance <= close ) : OPEN_AT;
 		// (Without `round`, all the rays it needs, now: a Go to's, once.)
 		round ??= { clear: [], along: [], first: 0, spread: false };
 		const { clear, along } = round;
@@ -1158,10 +1178,11 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	// Whether the ground round ( east, north ) in the scene, under the water's surface at `surface`
 	// there (m, in the scene), is built up, as a city's streets under it are (see CLOSE): looked at
-	// with the sea's own surface left out, so that ground missing there counts as closing it.
-	function builtUp( east, north, surface ) {
+	// with the sea's own surface left out, so that ground missing there counts as closing it, out to
+	// `close` m (CLOSE, keeping yours; CLOSE_AFRESH, laying one beside a rider).
+	function builtUp( east, north, surface, close = CLOSE ) {
 
-		return underSea( () => ! opensOut( east, north, surface, null, true ) );
+		return underSea( () => ! opensOut( east, north, surface, null, close ) );
 
 	}
 
@@ -1309,7 +1330,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		const bed = bedAt( east, north, y + 4 );
 		if ( bed && bed.height + y + curve( east, north ) >= bed.level - ALONGSIDE && ! water.land( east, north, bed.y + 1, 2 ) && opensOut( east, north, bed.surface ) ) return bed;
 		const shallow = riding && bedAt( east, north, y + 4, true );
-		return shallow && rides( east + riding[ 0 ], north + riding[ 1 ], y, shallow.surface ) && ! builtUp( east, north, shallow.surface ) ? shallow : null;
+		return shallow && rides( east + riding[ 0 ], north + riding[ 1 ], y, shallow.surface ) && ! builtUp( east, north, shallow.surface, CLOSE_AFRESH ) ? shallow : null;
 
 	}
 
