@@ -317,8 +317,9 @@ export function createSea( { scene } ) {
 		// The sea, with the scene centred on { lat, lon } (degrees), whose height over the ellipsoid
 		// (m) is the scene's y = 0 there; or `lake`'s surface (lakes.js's), `over` m over the sea's
 		// height. Laid round ( east, north ) in the scene, where its water was found: the place
-		// itself for a drop-in, or out from a coast as the vehicle drives (main.js's watchSea), and
-		// it's that spot's square of the map whose water it's by (see REACH).
+		// itself for a drop-in, out from a coast as the vehicle drives (main.js's watchSea), or beside
+		// another driver out on it (main.js's moveCar), and it's that spot's square of the map whose
+		// water it's by (see REACH).
 		start( { lat, lon, height, over: rise = 0, lake = null, east = 0, north = 0 } ) {
 
 			place = { lat, lon };

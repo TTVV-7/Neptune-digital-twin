@@ -142,6 +142,16 @@ export function createWater( ground ) {
 
 	}
 
+	// Whether the ground a ray hit is coloured as only dry ground is (see land), or its picture
+	// can't be read; never the open sea's own surface (sea.js's).
+	function dryLand( hit ) {
+
+		if ( hit.object.userData.sea ) return false;
+		const colour = colourOf( hit );
+		return notWater( colour ) && ! deep( colour );
+
+	}
+
 	// The heights (m over `h`) round ( east, north ) on `ring`, null where a ray found nothing; with
 	// `colours`, the colour where each hit too.
 	function round( ring, east, north, h, colours = null ) {
@@ -246,16 +256,27 @@ export function createWater( ground ) {
 
 		// Whether the ground under ( east, north ), looked for down from `from` (m, in the scene) for
 		// `depth` m, is coloured as only dry ground is: sand, soil, brick, a field or concrete, as
-		// look() has them, never turquoise; not where there's no ground or no picture to read. One
-		// ray: main.js asks it of ground under the water's height by a coast (or a big lake) before
-		// laying the water's surface over it, so that land down there (a depression's dry side, a
-		// polder's fields) isn't taken for the bed.
+		// look() has them, never turquoise. One ray: main.js asks it of ground under the water's
+		// height by a coast (or a big lake) before laying the water's surface over it, so that land
+		// down there (a depression's dry side, a polder's fields) isn't taken for the bed. As look()
+		// takes what it can't be sure of for not water, this takes it for land: no ground there, or a
+		// picture that can't be read (Google's are read; the test pad's own ground has none).
 		land( east, north, from, depth ) {
 
 			if ( none ) return true;
 			const hit = down( east, north, from, depth );
-			const colour = hit ? colourOf( hit ) : null;
-			return !! colour && notWater( colour ) && ! deep( colour );
+			return ! hit || dryLand( hit );
+
+		},
+
+		// The ground under ( east, north ), looked for down from `from` (m, in the scene) for `depth`
+		// m: { y } its height (m, in the scene) and { land } whether it's coloured as only dry ground
+		// is, as land() has it; or null where there's none. main.js's rays round the ground it'd lay
+		// the water's surface over, to see that it's open to the water.
+		under( east, north, from, depth ) {
+
+			const hit = down( east, north, from, depth );
+			return hit ? { y: hit.point.y, land: none || dryLand( hit ) } : null;
 
 		},
 
