@@ -2156,11 +2156,18 @@ or after each scroll where the browser doesn't say when one ends), or moves on f
 starting on the row), the one in view is lit again. A choice picked there keeps it lit: a part
 shown or hidden below what's in view leaves the list where it was or pulls its end up (the place
 gone to coming up with it), and one above has the browser keep what's in view where it was, which
-is just where going to the group now leaves the list. Another ride shown (or a truck's paint
-turning out to be its model's, the first time it's shown) keeps it lit only if the list sits just
-where going to that group on the new list would leave it: from a bus gone to Trail, at the end of
-its list, to a monster truck whose smoke's colours make its list longer, the list is no longer at
-its end, and the one in view is lit.
+is just where going to the group now leaves the list. Another ride shown (or a ride's paint
+turning out to be its model's, the first time it's shown) while the list is still on its way sends
+it on to that group's place on the new list, worked out once all of the new list is in place (its
+decal's number box and the word on paint that can't be changed too), so the group stays lit all
+the way there: shown the muscle car on the kart's way to Trail, the list goes on to the end of the
+car's list with Trail lit, not the horn. A ride that doesn't show the group (a car whose paint is its
+model's has no Paint or Rims) stops the list where it is, and the one in view is lit. With the list
+sitting where it went, another ride keeps the group lit only if the list sits just where going to
+that group on the new list would leave it: from a bus gone to Trail, at the end of its list, to a
+monster truck whose smoke's colours make its list longer, the list is no longer at its end, and the
+one in view is lit. Closing the Garage ends a jump still on its way; opened again, the one in view
+is lit.
 Everything stays in the one list, so nothing's behind a tab. A swatch has no word on it, so the
 colour picked is named at the end of its part's heading (BODY COLOUR ... Candy apple red). On a
 phone, at 375 px across, the six fit in one line; on a narrower one that line scrolls sideways by
@@ -2327,10 +2334,12 @@ the monster truck over
 a car, the
 Garage's choices on the ride and kept across a reload (and still made with a damaged saved value,
 or none kept at all), the free and locked choices of each part (the underglow and horns too) and
-the levels' new looks saying their level, the row of groups going to each (Trail lit all the way, not
-the horn, until the list has got to its end and stopped there, waited for rather than timed; the
-one in view lit again once the wheel turns it, once Tab moves the focus back up the list, and once
-another ride's longer list is shown, and Trail kept lit on one whose list ends just there), a horn
+the levels' new looks saying their level, the row of groups going to each (Trail lit on every
+frame, never the horn, from the top of the list until it has got to its end and stopped there,
+waited for rather than timed, and the same with the muscle car shown while the list is still on its
+way; the one in view lit again once the wheel turns it, once Tab moves the focus back up the list,
+and once another ride's longer list is shown with the list at rest, and Trail kept lit on one whose
+list ends just there), a horn
 played as it's picked (a locked one too, not kept), the underglow under the kart, a
 ride, two cars and the pickup (its footprint and the same margin all round, just over the ground,
 the ride's size as it was), the new finishes (pearl's sheen tinted toward the paint), rims and
