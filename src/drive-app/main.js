@@ -17,7 +17,7 @@ import { setUpGarage } from './garage.js';
 import { createBoostPads, EARTH_RULES, MOON_RULES } from './pads.js';
 import { createScreenFx } from './screen-fx.js';
 import { createWater } from './water.js';
-import { createSea, lakesNear, seaLevel, seaLevelNow, waterAt, waterAtNow } from './sea.js';
+import { createSea, lakeShore, lakesNear, seaLevel, seaLevelNow, waterAt, waterAtNow } from './sea.js';
 import { setUpLeaderboard } from './leaderboard.js';
 import { buyArea, onPassOpen } from './pass.js';
 import { fillAccountArea, fillBuyArea, linkPlayer, onLinked, setUpSupporter } from './supporter.js';
@@ -33,7 +33,7 @@ import { METRICS, dropinBucket } from './stats-protocol.js';
 import { createGhosts } from './ghosts.js';
 import { BUDGET_TOAST, setUpFriends } from './friends.js';
 import { createOnline } from './online.js';
-import { BUDGET_SPENT, cleanPartyCode } from './live-protocol.js';
+import { BUDGET_SPENT, cleanPartyCode, FLAGS } from './live-protocol.js';
 import * as screens from './screens.js';
 
 // World Drive (worlddrive.app, docs/world-drive.md): pick anywhere on Earth from a globe of
@@ -165,18 +165,41 @@ const OPEN_MS = 4;
 // surface, not coloured as dry land and open to the water round it), it's laid there, as watchSea
 // would lay it, and you're put on it beside them.
 const ALONGSIDE = 1;
-// Those checks are for laying a surface afresh. With yours laid already (in this scene, or over the
-// same water when you left for a drop-in beside them: goTo's `laid`), beside someone flying over
+// Those checks are for laying a surface afresh. With yours laid already, beside someone flying over
 // that water you're put on it under them, as you'd drive on it there: it covers whatever of that
 // water's ground is under it, a big lake's shelf less than BED under it, a bed coloured as sand, or
-// one closed in farther off, in an inlet or between a harbour's moles. Only not where the ground
-// under them is built up, as a city's streets under the water behind a levee are: closed in close
-// by on every quarter of the way round, with no OPEN bearings one after another on which nothing at
-// OPEN_AT's distances up to CLOSE m stands more than RISE m over the surface (or is missing). By
-// heights alone, as a sandy bed's colour is a polder's fields' too. Houses either side of a street
-// close all but the bearings along it that near; a channel's banks, 160 m or more apart, don't, out
-// over its water (narrower, they close some of it: docs/world-drive.md).
+// one closed in farther off, in an inlet or between a harbour's moles. Yours laid is in this scene;
+// or, for a drop-in beside them (goBeside's `laid`), over the same big lake when you left, or over
+// the sea within reach of yours as it's laid now (sea.js's reaches: not a sea laid on another
+// coast, which says nothing of a field under the sea's height on this one). That water is, on the
+// map, a square of the sea or a coast for the sea's; for a big lake's, one of its squares or one its
+// shore crosses (sea.js's lakeShore), where most of a lake's shelf is, and where yours is kept as
+// you drive there too (sea.js's REACH). Only not where the ground under them is built up, as a
+// city's streets under the water behind a levee are: closed in close by on every quarter of the way
+// round, with no OPEN bearings one after another on which nothing at OPEN_AT's distances up to CLOSE
+// m stands more than RISE m over the surface (or is missing). By heights alone, as a sandy bed's
+// colour is a polder's fields' too. Houses either side of a street close all but the bearings along
+// it that near; a channel's banks, 160 m or more apart, don't, out over its water (narrower, they
+// close some of it: docs/world-drive.md).
 const CLOSE = 75;
+// And with none of it laid where you are, beside someone riding on that water's surface (their
+// wheels on it: live.js's FLAGS.grounded, or where they dropped in) at its height, to within
+// AT_SURFACE m, with the ground under their car and under the spot beside them more than SEA_MARGIN
+// under it, it's laid for you there, as you'd see them on it, where the look for laying it afresh
+// wouldn't (a big lake's shelf, a bed coloured as sand, an inlet): with Google's ground that far
+// under them, what they're riding on can only be a surface of their own. Someone on ground at about
+// the water's height (a levee, a quay, a beach, a bridge's deck) has that ground under their car,
+// and someone in the air isn't riding. Only on that water's squares of the map, as above, and not
+// where the ground round them is built up (see CLOSE): not a polder's streets someone rides over on
+// a surface of theirs laid within its reach. AT_SURFACE takes in what their height can be off the
+// surface's as it's worked out here, from the same table and the same lakes: a state's centimetre
+// (a dropped-in place's 5 cm), their body leaning on its springs (its pivot a few centimetres over
+// its wheels as most rides corner or brake, up to about half a metre for the bus braking flat out),
+// and their scene's frame curving away as a sphere where the Earth is an ellipsoid, as sea.js lays
+// the surface (within 10 km of where they dropped in, 5 cm at most; 0.2 m at 20 km; more than
+// AT_SURFACE only past 34 km, by the equator, or 45 km at mid-latitudes, where they're missed). It's
+// well under SEA_MARGIN, so they're a metre or more clear of the ground under them.
+const AT_SURFACE = 0.5;
 // How far down (m) the ground is looked for there: from just over the vehicle to past the deepest
 // sea floor, so that flying high over the deep sea it finds the bed.
 const SEA_DEPTH = 12000;
@@ -233,6 +256,18 @@ const riseOf = at => at?.kind === 'lake' ? at.lake.height : at?.kind === 'sea' |
 // Whether sea.js's waterAt says `at` is `lake`'s water (lakes.js's; null for the sea's): a square all
 // of which is that lake, or the sea or a coast.
 const isWater = ( at, lake ) => riseOf( at ) !== null && ( at.lake ?? null ) === lake;
+// Whose water ( lat, lon ) in degrees is beside another driver, where a surface of it is yours or
+// they're riding on it (see CLOSE and AT_SURFACE), from the map as it is now: { over, lake } as
+// riseOf and waterAt say on the sea, a coast or a big lake's square, or on land a big lake's whose
+// shore crosses its square (sea.js's lakeShore); else null.
+function waterBy( lat, lon ) {
+
+	const at = waterAtNow( lat, lon );
+	const shore = at?.kind === 'land' ? lakeShore( lat, lon ) : null;
+	if ( shore ) return { over: shore.height, lake: shore };
+	return riseOf( at ) === null ? null : { over: riseOf( at ), lake: at.lake ?? null };
+
+}
 const _p = new Vector3();
 const _inverse = new Matrix4();
 const _q = new Quaternion();
@@ -815,10 +850,10 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		if ( gone() ) return;
 		// The bed of the sea or a lake (with the tiles done loading, not a coarse tile cutting under
 		// the curve of the Earth): the open water, started on its surface; and beside another driver
-		// out on that surface over a shallower bed, or in the air over it (see ALONGSIDE), on it with
-		// them.
+		// out on that surface over a shallower bed, or in the air over it (see ALONGSIDE, CLOSE and
+		// AT_SURFACE), on it with them.
 		const floor = y === null ? null : estimate + y;
-		const water = floor !== null && settled ? await waterOver( lat, lon, floor, y ) ?? ( place.beside ? await waterBeside( lat, lon, place.height, floor, y, place.laid ) : null ) : null;
+		const water = floor !== null && settled ? await waterOver( lat, lon, floor, y ) ?? ( place.beside ? await waterBeside( lat, lon, place.height, floor, y, place.laid, place.riding ) : null ) : null;
 		const open = water !== null;
 		if ( gone() ) return;
 		if ( floor === null || ( ! open && floor < LOWEST ) ) {
@@ -996,24 +1031,44 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	}
 
-	// The same for a drop-in beside another driver (goTo's), `height` m over the ellipsoid being
+	// The same for a drop-in beside another driver (goBeside's), `height` m over the ellipsoid being
 	// theirs: the water's surface to start on with them where they're out on it, or in the air over
 	// it, over a bed less deep than that, as watchSea lays it (see ALONGSIDE); or else null. With
-	// `laid` (goTo's: { lake }, the water whose surface was yours when you left, a big lake of
-	// lakes.js's or null for the sea) and that their water too, it's as moveCar has it with yours laid
-	// in the scene (see CLOSE): over any ground more than SEA_MARGIN under it that isn't built up.
-	async function waterBeside( lat, lon, height, floor, y, laid = null ) {
+	// `laid` (goBeside's: { lake }, the water whose surface is yours, a big lake of lakes.js's or null
+	// for the sea) and that their water too, it's as moveCar has it with yours laid in the scene (see
+	// CLOSE): over any of that water's ground more than SEA_MARGIN under it that isn't built up. And
+	// so with `riding` (goBeside's: where their car is from the pin, [ east, north ] m, its wheels on
+	// something) where they're riding on that water's surface (see AT_SURFACE).
+	async function waterBeside( lat, lon, height, floor, y, laid = null, riding = null ) {
 
 		if ( ! Number.isFinite( height ) ) return null;
 		const [ level, at ] = await Promise.all( [ seaLevel( lat, lon ), waterAt( lat, lon ) ] );
-		const over = riseOf( at );
-		if ( over === null ) return null;
-		const surface = level + over;
+		const by = waterBy( lat, lon );
+		if ( by === null ) return null;
+		const surface = level + by.over;
 		const bed = tiles ? floor : surface + y;
-		const yours = laid !== null && isWater( at, laid.lake );
-		if ( height < surface - ALONGSIDE || bed >= surface - ( at.kind === 'lake' && ! yours ? BED : SEA_MARGIN ) ) return null;
-		if ( yours ? builtUp( 0, 0, y + surface - bed ) : water.land( 0, 0, y + 1, 2 ) || ! opensOut( 0, 0, y + surface - bed ) ) return null;
-		return { height: surface, over, lake: at.lake ?? null };
+		// (The water's surface in the scene is as far over y as it's over the bed.)
+		const top = y + surface - bed;
+		if ( bed >= surface - SEA_MARGIN ) return null;
+		const found = { height: surface, over: by.over, lake: by.lake };
+		// Over yours (see CLOSE), or theirs that they're riding on (see AT_SURFACE): unless built up.
+		const yours = laid !== null && laid.lake === by.lake && height >= surface - ALONGSIDE;
+		if ( yours || riding !== null && rides( riding[ 0 ], riding[ 1 ], top + height - surface, top ) ) return builtUp( 0, 0, top ) ? null : found;
+		// Else as watchSea lays it afresh: only on the water's own squares (not a big lake's shore's).
+		if ( ! isWater( at, by.lake ) || height < surface - ALONGSIDE || by.lake !== null && bed >= surface - BED ) return null;
+		return water.land( 0, 0, y + 1, 2 ) || ! opensOut( 0, 0, top ) ? null : found;
+
+	}
+
+	// Whether another driver whose car is at ( east, north, y ) in the scene, its wheels on something,
+	// is riding on the water's surface whose height is `surface` there (m, in the scene), a surface of
+	// their own (see AT_SURFACE): at that height, with the ground under their car (Google's, or the
+	// test pad: none of the sea's laid here) more than SEA_MARGIN under it.
+	function rides( east, north, y, surface ) {
+
+		if ( Math.abs( y - surface ) > AT_SURFACE ) return false;
+		const under = ground.heightBelow( east, north, y + 4, SEA_DEPTH );
+		return under !== null && under < surface - SEA_MARGIN;
 
 	}
 
@@ -1190,8 +1245,11 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// SEA_MARGIN): sea.start's { lat, lon, height, over, lake, east, north } for that water, the scene
 	// as it's centred, with { y } the ground's height and { surface } the water's (m, in the scene),
 	// and { level } the water's over the ellipsoid; or null, as it is till the sea's height and the
-	// map have come (asked for the first time the ground's low enough to need them).
-	function bedAt( east, north, from ) {
+	// map have come (asked for the first time the ground's low enough to need them). With `shallow`
+	// (beside someone riding on the water's surface: see AT_SURFACE), a square a big lake's shore
+	// crosses is that lake's water too (waterBy), and any of its ground more than SEA_MARGIN under it
+	// is deep enough; only ground on the water's squares.
+	function bedAt( east, north, from, shallow = false ) {
 
 		const y = ground.heightBelow( east, north, from, SEA_DEPTH );
 		if ( y === null ) return null;
@@ -1209,13 +1267,13 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		// The scene's y = 0 over the ellipsoid: where it was centred; on the test pad, PAD_SEA m over
 		// the water's height at the place.
 		const base = tiles ? place.height : seaLevelNow( place.lat, place.lon ) + ( riseOf( waterAtNow( place.lat, place.lon ) ) ?? 0 ) + PAD_SEA;
-		const at = waterAtNow( lat, lon );
+		const at = shallow ? waterBy( lat, lon ) : waterAtNow( lat, lon );
 		// How far over the sea's height the water is there: none on land (or without the map), where
 		// only ground deeper than any land or lake bed is the sea's.
-		const over = riseOf( at );
+		const over = shallow ? at?.over ?? null : riseOf( at );
 		const level = seaLevelNow( lat, lon ) + ( over ?? 0 );
 		const bed = base + y + curve( east, north );
-		if ( over === null ? bed >= LOWEST : bed >= level - ( at.kind === 'lake' ? BED : SEA_MARGIN ) ) return null;
+		if ( over === null ? shallow || bed >= LOWEST : bed >= level - ( ! shallow && at.kind === 'lake' ? BED : SEA_MARGIN ) ) return null;
 		return { lat: place.lat, lon: place.lon, height: base, over: over ?? 0, lake: at?.lake ?? null, east, north, y, level, surface: level - base - curve( east, north ) };
 
 	}
@@ -1241,14 +1299,17 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	// Beside another driver whose car is at ( east, north, y ) in the scene (moveCar's): bedAt's
 	// { ... } there, for sea.start, where they're out on the water's surface over its bed as watchSea
-	// lays it, or in the air over it (see ALONGSIDE), so that it's laid there for you too; or null.
-	// (Asked only with none of it round you here: with yours laid, see CLOSE.)
-	function besideWater( east, north, y ) {
+	// lays it, or in the air over it (see ALONGSIDE), so that it's laid there for you too; and with
+	// `riding` (besideOf's: their car's own spot from there, [ east, north ] m, its wheels on
+	// something), where they're riding on that water's surface (see AT_SURFACE); or null. (Asked only
+	// with none of it round you here: with yours laid, see CLOSE.)
+	function besideWater( east, north, y, riding = null ) {
 
 		if ( onMoon() || ! state.place ) return null;
 		const bed = bedAt( east, north, y + 4 );
-		if ( ! bed || bed.height + y + curve( east, north ) < bed.level - ALONGSIDE ) return null;
-		return water.land( east, north, bed.y + 1, 2 ) || ! opensOut( east, north, bed.surface ) ? null : bed;
+		if ( bed && bed.height + y + curve( east, north ) >= bed.level - ALONGSIDE && ! water.land( east, north, bed.y + 1, 2 ) && opensOut( east, north, bed.surface ) ) return bed;
+		const shallow = riding && bedAt( east, north, y + 4, true );
+		return shallow && rides( east + riding[ 0 ], north + riding[ 1 ], y, shallow.surface ) && ! builtUp( east, north, shallow.surface ) ? shallow : null;
 
 	}
 
@@ -1495,13 +1556,15 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	// goTo's, beside `other` (live.js's: { s } their car's last state, or { place } where they
 	// dropped in). With your own water's surface laid, a drop-in beside them over that water has it
-	// as this scene would, laid (`laid`: see CLOSE).
+	// as this scene would, laid (`laid`: see CLOSE): a big lake's wherever you are, the sea's only
+	// where it reaches them as it's laid now. And beside them riding on a surface of their own, the
+	// drop-in lays it for you too (`riding`: see AT_SURFACE).
 	async function goBeside( other ) {
 
 		const spot = besideOf( other );
 		if ( ! spot ) return;
-		const laid = sea.active ? { lake: sea.lake } : null;
-		const beside = { name: other.place?.name || 'Dropped pin', lat: spot.lat, lon: spot.lon, height: spot.height, heading: spot.heading, beside: true, laid };
+		const laid = sea.active && ( sea.lake !== null || sea.reaches( - spot.local.x, spot.local.z ) ) ? { lake: sea.lake } : null;
+		const beside = { name: other.place?.name || 'Dropped pin', lat: spot.lat, lon: spot.lon, height: spot.height, heading: spot.heading, beside: true, laid, riding: spot.riding };
 		// From the Moon, they're on the Earth: back there, and a drop-in beside them.
 		if ( onMoon() ) {
 
@@ -1529,7 +1592,9 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	}
 
 	// GO_BESIDE m to the right of another driver's car, from the last word of it (or where they
-	// dropped in), level with it: { lat, lon, height, heading, local: in this scene }.
+	// dropped in), level with it: { lat, lon, height, heading, local: in this scene }, and { riding }
+	// where their car is from there ([ east, north ] m) while its wheels are on something (FLAGS'
+	// grounded; where they dropped in, they started on it), else null.
 	function besideOf( other ) {
 
 		earth.updateWorldMatrix( true, false );
@@ -1538,11 +1603,12 @@ export async function start( { key, left = null, visit: token = null, worker = t
 			const { lat, lon, height } = other.place ?? {};
 			if ( ! Number.isFinite( lat ) ) return null;
 			ellipsoid.getCartographicToPosition( lat * MathUtils.DEG2RAD, lon * MathUtils.DEG2RAD, height, _p );
-			return { lat, lon, height, heading: 0, local: _p.clone().applyMatrix4( earth.matrixWorld ) };
+			return { lat, lon, height, heading: 0, local: _p.clone().applyMatrix4( earth.matrixWorld ), riding: [ 0, 0 ] };
 
 		}
 
 		const [ x, y, z, qx, qy, qz, qw ] = other.s;
+		const flags = other.s[ 10 ];
 		_q.set( qx, qy, qz, qw );
 		_p.set( x, y, z );
 		const carto = {};
@@ -1564,7 +1630,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		ellipsoid.getPositionToCartographic( _p, carto );
 		const lat = carto.lat * MathUtils.RAD2DEG;
 		const lon = carto.lon * MathUtils.RAD2DEG;
-		return { lat, lon, height: carto.height, heading, local: _p.clone().applyMatrix4( earth.matrixWorld ) };
+		// (Their car is as far back the other way: right and ahead are that step east and north.)
+		return { lat, lon, height: carto.height, heading, local: _p.clone().applyMatrix4( earth.matrixWorld ), riding: flags & FLAGS.grounded ? [ - right, - ahead ] : null };
 
 	}
 
@@ -1572,24 +1639,25 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// drives on it), driving on. Only ground within 3 m of their car's height, as R takes (not a
 	// roof, a tree or a deck over them); false otherwise, or where there's no ground loaded there to
 	// put it on, and it's a drop-in instead (which finds the street). Out on the water's surface where
-	// Google draws the bed, or in the air over it, with none of it laid here, it's laid there first
-	// (see ALONGSIDE); and with them higher over the water's surface laid here than that (a hop, a
-	// trick, flying), it's on that surface under them, where nothing's between (not a bridge's deck),
-	// they're over that water on the map (see isWater) and the ground under them isn't built up (see
-	// CLOSE): not a city's streets under the water within the reach of a surface laid before, which
-	// it would be over too.
-	function moveCar( { local, heading } ) {
+	// Google draws the bed, or in the air over it, or riding on a surface of their own (`riding`:
+	// besideOf's), with none of it laid here, it's laid there first (see ALONGSIDE and AT_SURFACE);
+	// and with them higher over the water's surface laid here than that (a hop, a trick, flying), it's
+	// on that surface under them, where nothing's between (not a bridge's deck), they're over that
+	// water on the map (see waterBy: a big lake's shore's square too) and the ground under them isn't
+	// built up (see CLOSE): not a city's streets under the water within the reach of a surface laid
+	// before, which it would be over too.
+	function moveCar( { local, heading, riding = null } ) {
 
 		// (A look round a spot where the car was is no longer of any use.)
 		seaWatch.spot = null;
-		const out = sea.shown ? null : besideWater( - local.x, local.z, local.y );
+		const out = sea.shown ? null : besideWater( - local.x, local.z, local.y, riding );
 		if ( out ) sea.start( out );
 		let y = ground.heightAt( local.x, local.z, local.y + 3, 6 );
 		if ( y === null && sea.shown ) {
 
 			const hit = ground.cast( _p.set( local.x, local.y + 3, local.z ), _side.set( 0, - 1, 0 ), SEA_DEPTH );
 			const { lat, lon } = localToLatLon( enuToLocal( - local.x, local.z, 0 ), state.place );
-			if ( hit?.object === sea.mesh && ( out || isWater( waterAtNow( lat, lon ), sea.lake ) && ! builtUp( - local.x, local.z, hit.point.y ) ) ) y = hit.point.y;
+			if ( hit?.object === sea.mesh && ( out || waterBy( lat, lon )?.lake === sea.lake && ! builtUp( - local.x, local.z, hit.point.y ) ) ) y = hit.point.y;
 
 		}
 

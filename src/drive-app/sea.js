@@ -149,6 +149,31 @@ export function waterAtNow( lat, lon ) {
 
 }
 
+// The big lake (lakes.js's) whose shore crosses the map's square at ( lat, lon ) in degrees, as near
+// as the map can say: a land square with one of that lake's squares among the eight round it. A
+// square a shore crosses has one, unless the lake's narrower than two squares there (a bay, a
+// strait): of Natural Earth's water of each big lake, its own squares and these hold 99.7 % of
+// Baikal's, 98.9 % of Erie's, 96.7 % of Ontario's and 93.4 % of Onega's. Null on the sea, a coast
+// or a lake's own square, and on land farther from a lake (Niagara's gorge below the falls is four
+// squares from Lake Ontario's and five from Erie's); from the map as it is now (null without it).
+export function lakeShore( lat, lon ) {
+
+	if ( waterAtNow( lat, lon )?.kind !== 'land' ) return null;
+	for ( let row = - 1; row <= 1; row ++ ) {
+
+		for ( let column = - 1; column <= 1; column ++ ) {
+
+			const next = row || column ? waterAtNow( lat + row / PER_DEGREE, lon + column / PER_DEGREE ) : null;
+			if ( next?.kind === 'lake' ) return next.lake;
+
+		}
+
+	}
+
+	return null;
+
+}
+
 // The lakes whose boxes ( lat, lon ) in degrees is in, the only ones a pin there can be on: no need
 // to fetch the map for one anywhere else.
 export function lakesNear( lat, lon ) {
@@ -323,12 +348,21 @@ export function createSea( { scene } ) {
 
 		},
 
+		// Whether it's round the vehicle now and reaches ( east, north ) in the scene, as it's laid:
+		// out to its edge (RINGS' last, 65 km), so that it's drawn there.
+		reaches( east, north ) {
+
+			return !! place && !! mesh.parent && Math.hypot( east - laid.east, north - laid.north ) <= RINGS[ RINGS.length - 1 ];
+
+		},
+
 		// The sea, with the scene centred on { lat, lon } (degrees), whose height over the ellipsoid
 		// (m) is the scene's y = 0 there; or `lake`'s surface (lakes.js's), `over` m over the sea's
 		// height. Laid round ( east, north ) in the scene, where its water was found: the place
 		// itself for a drop-in, out from a coast as the vehicle drives (main.js's watchSea), or beside
 		// another driver out on it (main.js's moveCar), and it's that spot's square of the map whose
-		// water it's by (see REACH).
+		// water it's by (see REACH). A lake's is always by the lake's squares: laid in a square its
+		// shore crosses (beside another driver), it's within reach of them there.
 		start( { lat, lon, height, over: rise = 0, lake = null, east = 0, north = 0 } ) {
 
 			place = { lat, lon };
@@ -337,7 +371,7 @@ export function createSea( { scene } ) {
 			ownLake = lake;
 			const mine = lake ? at => at?.kind === 'lake' && at.lake === lake : at => at?.kind === 'sea' || at?.kind === 'coast';
 			const found = localToLatLon( enuToLocal( east, north, 0 ), place );
-			ours = mine( waterAtNow( found.lat, found.lon ) ) ? mine : null;
+			ours = lake || mine( waterAtNow( found.lat, found.lon ) ) ? mine : null;
 			if ( ! material.map ) {
 
 				material.map = picture( SEA );
