@@ -991,7 +991,8 @@ always was.
   150 m, quieter farther off (once you've clicked, tapped or pressed a key: browsers want that
   before sound). It's part of the look that travels, so a page hears each driver's horn as they
   picked it; one it doesn't know (from a newer page) is the beep. **Horn sounds** in the pause menu
-  turns them off (kept in this browser). One honk every 0.8 s at most.
+  turns them off, and the Garage's horns played as they're picked too (kept in this browser, by
+  `horns.js`). One honk every 0.8 s at most.
 - **When it stops.** A dropped connection comes back by itself, waiting 1, 2, 5, 10 and then 30 s
   between tries, and so does one that goes quiet without a word (a network that drops everything):
   the page sends its keepalive when it has heard nothing for 25 s too, and with no answer 10 s later
@@ -2020,24 +2021,40 @@ turntable (drag to turn it; **▶ Boost** shows its boost and trail), and for ea
 With so many choices, a row of the groups sits over them (**Paint**, **Rims**, **Underglow**,
 **Boost**, **Trail**, **Horn**; a hovercraft's **Trim**, and a truck's paint and rims left out),
 staying at the top as the choices scroll, each going straight to its own and the one in view lit.
+The one gone to stays lit, as the list scrolls there and after, until the list is scrolled by hand
+(the wheel, a finger, the keys or the scroll bar): on a wide screen Trail and Horn together are
+shorter than the list, so going to Trail ends at the bottom, where the last group would otherwise
+count as the one in view.
 Everything stays in the one list, so nothing's behind a tab. A swatch has no word on it, so the
 colour picked is named at the end of its part's heading (BODY COLOUR ... Candy apple red). On a
 phone, at 375 px across, the six fit in one line; on a narrower one that line scrolls sideways by
 itself, never the page.
 
-**Finishes.** Satin is between matte and gloss; pearl a soft white sheen over a deep clear coat with
-a faint shimmer of colours (a thin film's iridescence); chrome a mirror tinted with the colour (on
-white, plain chrome); colour-shift dark metal in the colour under a thin film whose reflections turn
+**Finishes.** Satin is between matte and gloss; pearl a soft sheen (a quarter as strong as it can
+be) over a deep clear coat with a faint shimmer of colours (a thin film's iridescence), the sheen
+white over halfway to the paint's own colour, mixed as the colours look (sRGB), so navy is still navy
+and candy apple red still red (a full white sheen laid silver over dark paint and turned red salmon
+pink, and mixed as light, dark paint's being next to none, the tint was nearly grey); chrome a mirror
+tinted with the colour (on white, plain chrome); colour-shift dark metal in the colour under a thin
+film whose reflections turn
 through the colours as the ride turns, as oil's on water do, with a sheen of a hue a third of the way
 round the colour wheel at its edges. They're three.js's `MeshPhysicalMaterial` (iridescence and
 sheen), made once each and shared, like the others. **Rims** are shiny metal in their colour unless
 the choice says otherwise: chrome a mirror, satin black dull, neon green glowing a little of its own.
 **Decals**, drawn like the first ones: lightning bolts down the sides (the ⚡ sign lying on its side,
 white-hot to yellow, as flames are); camo (olive with khaki, dark green, brown and black blobs, the
-same every time) and polka dots (white, or dark on light paint) all over, through the side's box made
-taller and the top's (for camo, wider too), each picture made for its box's size so the blobs and dots
-come out round; two-tone, a second colour (charcoal, or silver under dark paint) from the middle of
-the doors down to the bottom of the bodywork, from nose to tail, with a pinstripe over it.
+same every time) and polka dots (white, or dark on light paint) all over. Camo goes down onto the
+whole top of the bodywork and in from both sides through a box taller than the side's, each from
+nose to tail, its blobs as big on top as on the sides. Dots go through the top's box (three rows
+across it) and about the side's own (as many whole rows as come nearest to dots that size, so
+they're about as big on the sides as on top). Each picture is made for its box's size so the blobs
+and dots come out round, and each projection goes only onto the faces turned within 50° of it: a
+projection draws its picture out along a face it meets at a slant (by 1 / cos of the angle), and
+through a side's box made taller a dot reached up onto a kart's side pod's top and came out a dash
+across it. Now a dot is drawn out 1.56 times at most; what one projection leaves, another meets head
+on, or it's left bare (the nose and tail, and with dots the tops of a kart's side pods). Two-tone is
+a second colour (charcoal, or silver under dark paint) from the middle of the doors down to the
+bottom of the bodywork, from nose to tail, with a pinstripe over it.
 
 **Underglow** (`src/drive-app/underglow.js`) is a neon glow on the ground under the ride and round
 it, on every ride: the kart, the built rides, the cars and the library's trucks (paint or not), on
@@ -2061,8 +2078,11 @@ it, isn't drawn.
 sound made with WebAudio as it's needed (oscillators, a filter and a gain), nothing to load, none
 longer than the 0.8 s between honks. The beep is as it always was; the air horn three low buzzing
 notes at once; the bike horn two rubber-bulb squeaks; the ahooga an old car's swooping buzz; the
-fanfare four notes up a chord; the laser two falling zaps. Picking one in the Garage plays it. Only
-those [driving with you](#driving-with-others) hear it: your honk in your horn, theirs in theirs.
+fanfare four notes up a chord; the laser two falling zaps. Picking one in the Garage plays it, a
+locked one too (heard before it's bought, though picking it doesn't keep it), unless **Horn sounds**
+is switched off in the pause menu: `horns.js` keeps that switch (`hornsOn`, `setHornsOn`) for the
+honks and the Garage alike. Only those [driving with you](#driving-with-others) hear it: your honk in
+your horn, theirs in theirs.
 
 **Boost styles** (`src/drive-boosts.js`; the Garage's list, with a little picture for each, is
 `src/drive-app/boosts.js`) are what the booster leaves behind:
@@ -2161,12 +2181,17 @@ the monster truck over
 a car, the
 Garage's choices on the ride and kept across a reload (and still made with a damaged saved value,
 or none kept at all), the free and locked choices of each part (the underglow and horns too) and
-the levels' new looks saying their level, the row of groups going to each, a horn played as it's
-picked, the underglow under the kart, a ride, two cars and the pickup (its footprint and the same
-margin all round, just over the ground, the ride's size as it was), the new finishes, rims and
-decals on the coupe and the kart, a ghost wearing its driver's underglow (fading off the ground, a
-new horn building no new model) and their horn heard in its own sound (one this page doesn't know
-the beep, yours in yours), the world not drawn behind the Garage, the frame time with trails, nothing
+the levels' new looks saying their level, the row of groups going to each (Trail lit all the way, not
+the horn, once the list has scrolled to its end, and the one in view lit again once the wheel turns
+it), a horn played as it's picked (a locked one too, not kept), the underglow under the kart, a
+ride, two cars and the pickup (its footprint and the same margin all round, just over the ground,
+the ride's size as it was), the new finishes (pearl's sheen tinted toward the paint), rims and
+decals on the coupe and the kart, camo and polka dots on every ride that takes decals drawn out no
+more than 1.65 times anywhere (each triangle's stretch, from its corners and its picture), a ghost
+wearing its driver's underglow (fading off the ground, a new horn building no new model) and their
+horn heard in its own sound (one this page doesn't know the beep, yours in yours), Horn sounds
+switched off in the pause menu silencing the honks and the Garage's horns alike (and on again, both
+heard), the world not drawn behind the Garage, the frame time with trails, nothing
 turning in the air faster than the kart, each ride going supersonic, the boost styles in the Garage
 (five free, the rest opening the sheet, each with its picture and saying what unlocks it: "Pass", or
 "Lv 12 · or Pass" for those on the track), a look saved before the styles keeping its flame's colour,
@@ -2175,7 +2200,8 @@ and timed, every flame colour drawn in its own colours and every trail drawn (se
 off to the side, a good deal more than the flame alone), the ribbons drawn out standing still as on
 the turntable (more than 3 m behind a 2 m ride in three quarters of a second) and as they were
 moving, and the Garage (375 px across, its row of
-groups all on screen, no sideways scrolling) and the locked rides' badges (and the levels' cars'
+groups all on screen, no sideways scrolling, Trail lit when it's tapped and the one in view once a
+finger drags the list back) and the locked rides' badges (and the levels' cars'
 "Lv 8 · or Pass") on a phone. `test-drive-ui.mjs` drives the kart with an underglow (on the ground
 under it and round it, left out of its size, staying through a bump, fading out off the ground and
 flying, back as it lands), and `test-drive-moon-ui.mjs` has it lying on the Moon's ground. And the
@@ -3166,7 +3192,7 @@ src/drive-app/supporter.js   buying it: Google sign-in, the Payment Link, unlock
                              account line
 src/drive-app/garage.js      the Garage: choices and the turntable; paint.js the looks and decals;
                              boosts.js the boost styles it offers; underglow.js the glow under a
-                             ride; horns.js the horns' sounds
+                             ride; horns.js the horns' sounds and the Horn sounds switch
 src/drive-app/pads.js        boost pads: where they go, driving over them, the pause menu's switch
 src/drive-app/screen-fx.js   what's done to the view: speed lines, overdrive's white edges, the pause
                              menu's Camera effects switch and asking for less motion
