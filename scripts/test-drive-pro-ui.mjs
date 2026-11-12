@@ -14,8 +14,9 @@
 // underglow under every kind of ride (the kart, a ride, the cars and the library's pickup), sized to
 // it and left out of its size, and the new finishes, rims and decals (pearl keeping dark paint's
 // colour, camo and polka dots never drawn out on any ride that takes decals); the Garage's row of
-// groups lighting the one gone to until the list is scrolled by hand, and a locked horn heard before
-// it's bought; another driver's ghost wearing their underglow, fading off the ground, and their horn
+// groups lighting the one gone to while the list goes there and sits there (the one in view once the
+// wheel or Tab moves it, or another ride's longer list is shown), and a locked horn heard before it's
+// bought; another driver's ghost wearing their underglow, fading off the ground, and their horn
 // heard in its own sound, and Horn sounds switched off silencing it and the Garage's horns; what a
 // trail and the booster cost a frame; every boost style drawn at 150 km/h (a picture of each),
 // keeping to its budget and making nothing new in a minute of boosting, and what each costs a frame;
@@ -139,13 +140,15 @@ async function shot( page, name ) {
 
 const flown = page => page.waitForFunction( () => ! window.drive.globe.flight, null, { timeout: 60000 } );
 
+// The Garage's row of groups, and each group's parts.
+const JUMP_GROUPS = { Paint: [ 'colour', 'finish', 'decal' ], Rims: [ 'rim' ], Underglow: [ 'glow' ], Boost: [ 'boost', 'flame' ], Trail: [ 'trail', 'smoke' ], Horn: [ 'horn' ] };
+
 // The Garage's row of groups: the one lit, the last whose first part shown has its heading up to the
 // row (the one in view), and whether the list is scrolled to its end.
-const groups = page => page.evaluate( () => {
+const groups = page => page.evaluate( parts => {
 
 	const options = document.querySelector( '#garage .options' );
 	const line = options.getBoundingClientRect().top + document.querySelector( '#garage .jump' ).offsetHeight + 12;
-	const parts = { Paint: [ 'colour', 'finish', 'decal' ], Rims: [ 'rim' ], Underglow: [ 'glow' ], Boost: [ 'boost', 'flame' ], Trail: [ 'trail', 'smoke' ], Horn: [ 'horn' ] };
 	const up = [ ...document.querySelectorAll( '#garage .jump button:not([hidden])' ) ].filter( button => {
 
 		const section = parts[ button.dataset.group ].map( part => options.querySelector( `section[data-part="${ part }"]` ) ).find( s => ! s.hidden );
@@ -157,6 +160,58 @@ const groups = page => page.evaluate( () => {
 		inView: up.at( - 1 )?.dataset.group,
 		end: options.scrollTop + options.clientHeight >= options.scrollHeight - 2,
 	};
+
+}, JUMP_GROUPS );
+
+// Until the Garage's list has got where going to `group` with the row takes it (its heading up to
+// the row, or the list's end) and stopped there: the smooth scroll can take seconds to get going on
+// a busy machine, so it's waited for rather than given a fixed time. Then 30 frames more, by when
+// the row has seen it stop (garage.js waits for ten still frames).
+async function goneThere( page, group ) {
+
+	await page.waitForFunction( ( [ group, parts ] ) => {
+
+		const options = document.querySelector( '#garage .options' );
+		const line = options.getBoundingClientRect().top + document.querySelector( '#garage .jump' ).offsetHeight + 12;
+		const section = parts[ group ].map( part => options.querySelector( `section[data-part="${ part }"]` ) ).find( s => ! s.hidden );
+		const there = section.getBoundingClientRect().top <= line || options.scrollTop + options.clientHeight >= options.scrollHeight - 2;
+		// Still since the last look, too.
+		const still = window.lastScrollTop === options.scrollTop;
+		window.lastScrollTop = options.scrollTop;
+		return there && still;
+
+	}, [ group, JUMP_GROUPS ], { timeout: 10000 } );
+	await waitFrames( page, 30 );
+
+}
+
+// `count` frames drawn.
+const waitFrames = ( page, count ) => page.evaluate( count => new Promise( resolve => {
+
+	const next = () => -- count > 0 ? requestAnimationFrame( next ) : resolve();
+	requestAnimationFrame( next );
+
+} ), count );
+
+// Every group the row lights from watchLit( page ), frame by frame, until litSeen( page ).
+const watchLit = page => page.evaluate( () => {
+
+	const seen = window.litSeen = new Set();
+	const look = () => {
+
+		if ( window.litSeen !== seen ) return;
+		seen.add( document.querySelector( '#garage .jump [aria-current="true"]' )?.dataset.group );
+		requestAnimationFrame( look );
+
+	};
+	look();
+
+} );
+const litSeen = page => page.evaluate( () => {
+
+	const seen = [ ...window.litSeen ];
+	window.litSeen = null;
+	return seen;
 
 } );
 
@@ -418,22 +473,22 @@ describe( 'Supporter Pass, without it', () => {
 		// horn together are shorter than the list, so going to Trail ends at the bottom, where the horn
 		// had been lit as the one in view.
 		await garage.locator( '.jump [data-group="Trail"]' ).click();
-		const seen = new Set();
-		for ( let i = 0; i < 15; i ++ ) {
-
-			seen.add( ( await groups( page ) ).lit );
-			await page.waitForTimeout( 100 );
-
-		}
-
-		assert.deepEqual( [ ...seen ], [ 'Trail' ] );
+		await watchLit( page );
+		await goneThere( page, 'Trail' );
+		assert.deepEqual( await litSeen( page ), [ 'Trail' ] );
 		assert.ok( ( await groups( page ) ).end, 'Trail and the horn fill the list now: this no longer tries its end' );
 		await shot( page, 'pro-garage-jump-trail' );
 		// Scrolled by hand (the wheel), the one in view is lit again, now Trail's heading is down the list.
 		const box = await garage.locator( '.options' ).boundingBox();
 		await page.mouse.move( box.x + box.width / 2, box.y + box.height / 2 );
 		await page.mouse.wheel( 0, - 240 );
-		await page.waitForTimeout( 800 );
+		await page.waitForFunction( () => {
+
+			const options = document.querySelector( '#garage .options' );
+			return options.scrollTop + options.clientHeight <= options.scrollHeight - 200;
+
+		}, null, { timeout: 10000 } );
+		await waitFrames( page, 30 );
 		const wheeled = await groups( page );
 		assert.ok( wheeled.lit === wheeled.inView && wheeled.lit !== 'Trail', JSON.stringify( wheeled ) );
 		// The horn's heading comes up under the row, and it's lit, from the moment it's clicked.
@@ -445,10 +500,21 @@ describe( 'Supporter Pass, without it', () => {
 			const heading = document.querySelector( '#garage [data-part="horn"] h3' ).getBoundingClientRect();
 			return heading.top >= row.bottom - 1 && heading.bottom <= document.querySelector( '#garage .options' ).getBoundingClientRect().bottom;
 
-		}, null, { timeout: 5000 } );
+		}, null, { timeout: 10000 } );
 		assert.equal( ( await groups( page ) ).lit, 'Horn' );
+		// Gone to Trail again, and then Tab: the focus goes on from the row into the list, which scrolls
+		// back up to what's focused, and the one in view is lit (over the top of the list, the first),
+		// not Trail.
+		await garage.locator( '.jump [data-group="Trail"]' ).click();
+		await goneThere( page, 'Trail' );
+		assert.equal( ( await groups( page ) ).lit, 'Trail' );
+		for ( let i = 0; i < 4 && ( await groups( page ) ).end; i ++ ) await page.keyboard.press( 'Tab' );
+		await waitFrames( page, 30 );
+		const tabbed = await groups( page );
+		assert.ok( ! tabbed.end && tabbed.lit === ( tabbed.inView ?? 'Paint' ) && tabbed.lit !== 'Trail', JSON.stringify( tabbed ) );
+		await shot( page, 'pro-garage-jump-tabbed' );
 		await garage.locator( '.jump [data-group="Paint"]' ).click();
-		await page.waitForFunction( () => document.querySelector( '#garage .options' ).scrollTop < 5, null, { timeout: 5000 } );
+		await page.waitForFunction( () => document.querySelector( '#garage .options' ).scrollTop < 5, null, { timeout: 10000 } );
 		await page.waitForTimeout( 400 );
 		await shot( page, 'pro-garage-free' );
 
@@ -940,6 +1006,33 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 			await shot( page, `pro-garage-${ name.toLowerCase().replace( ' ', '-' ) }` );
 
 		}
+
+		// Gone to Trail on the bus (no trail, so the list ends under it), and then the monster truck
+		// shown: its smoke's colours under its trail make its list longer, so the list is no longer at
+		// its end, nor where going to Trail would leave it, and the one in view is lit, not Trail. Gone
+		// to Trail on the truck, and back on the bus, whose shorter list ends just where going to Trail
+		// on it would: Trail stays lit.
+		const rideShown = async name => {
+
+			await garage.locator( '.ride-tab', { hasText: name } ).click();
+			await page.waitForFunction( ride => window.drive.garage.preview.model?.name === ride, name, { timeout: 20000 } );
+			await waitFrames( page, 30 );
+
+		};
+		await rideShown( 'City bus' );
+		await garage.locator( '.jump [data-group="Trail"]' ).click();
+		await goneThere( page, 'Trail' );
+		const onBus = await groups( page );
+		assert.ok( onBus.lit === 'Trail' && onBus.end, JSON.stringify( onBus ) );
+		await rideShown( 'Monster truck' );
+		const onTruck = await groups( page );
+		assert.ok( ! onTruck.end && onTruck.lit === onTruck.inView && onTruck.lit !== 'Trail', JSON.stringify( onTruck ) );
+		await shot( page, 'pro-garage-jump-switched' );
+		await garage.locator( '.jump [data-group="Trail"]' ).click();
+		await goneThere( page, 'Trail' );
+		await rideShown( 'City bus' );
+		const backOnBus = await groups( page );
+		assert.ok( backOnBus.lit === 'Trail' && backOnBus.end, JSON.stringify( backOnBus ) );
 
 		await garage.locator( '.done' ).click();
 		await page.locator( '#pause .resume' ).click();
@@ -1851,17 +1944,21 @@ describe( 'The Garage on a phone', () => {
 		// Straight to Trail, and Trail lit (the list is short enough here for its heading to come up
 		// under the row). Dragged back a little with a finger, the one in view is lit.
 		await garage.locator( '.jump [data-group="Trail"]' ).tap();
-		await page.waitForTimeout( 1200 );
+		await watchLit( page );
+		await goneThere( page, 'Trail' );
+		assert.deepEqual( await litSeen( page ), [ 'Trail' ] );
 		const tapped = await groups( page );
 		assert.ok( tapped.lit === 'Trail' && tapped.inView === 'Trail', JSON.stringify( tapped ) );
 		await shot( page, 'pro-phone-garage-trail' );
 		const list = await garage.locator( '.options' ).boundingBox();
+		const trailTop = await garage.locator( '.options' ).evaluate( options => options.scrollTop );
 		const touch = await page.context().newCDPSession( page );
 		const finger = ( type, y ) => touch.send( 'Input.dispatchTouchEvent', { type, touchPoints: y === undefined ? [] : [ { x: list.x + list.width / 2, y: list.y + list.height / 3 + y } ] } );
 		await finger( 'touchStart', 0 );
 		for ( let y = 20; y <= 200; y += 20 ) await finger( 'touchMove', y );
 		await finger( 'touchEnd' );
-		await page.waitForTimeout( 800 );
+		await page.waitForFunction( top => document.querySelector( '#garage .options' ).scrollTop < top - 100, trailTop, { timeout: 10000 } );
+		await waitFrames( page, 30 );
 		const dragged = await groups( page );
 		assert.ok( dragged.lit === dragged.inView && dragged.lit !== 'Trail', JSON.stringify( dragged ) );
 		await garage.locator( '.options' ).evaluate( el => el.scrollTop = el.scrollHeight );

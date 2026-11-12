@@ -57,8 +57,8 @@ const PARTS = [
 ];
 // Each part's choices in a row of `swatches`, `words` or `styles` (pro.css, levels.css).
 const PLURAL = { swatch: 'swatches', word: 'words', style: 'styles' };
-// The keys that scroll the list of choices.
-const SCROLL_KEYS = [ 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' ' ];
+// How many frames the list of choices is still before it counts as stopped (see stopping).
+const STILL_FRAMES = 10;
 // The row over the choices: each group's name and its parts, the first of them shown scrolled to.
 const GROUPS = [
 	{ name: 'Paint', parts: [ 'colour', 'finish', 'decal' ] },
@@ -174,11 +174,19 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 
 	// The row of groups: each scrolls the list to its first part shown, just under the row (the first
 	// group, to the top, with the word on the pass over it), and the one in view is lit. The one gone
-	// to stays lit, as the list scrolls there and after, until the list is scrolled some other way: on
-	// a wide screen the last groups together are shorter than the list, so going to Trail ends at the
-	// bottom, where the last group, the horn, would be the one in view.
+	// to stays lit while the list is on its way there and while it sits there: on a wide screen the
+	// last groups together are shorter than the list, so going to Trail ends at the bottom, where the
+	// last group, the horn, would be the one in view. It's judged by where the list is, not by what
+	// moved it (a wheel, a finger, the keys, the scroll bar, Tab, find in the page, a drag starting on
+	// the row): the list turning back, stopping short, or moving on once it's there lights the one in
+	// view again.
 	const jump = dialog.querySelector( '.jump' );
+	// The group gone to, the scrollTop it sent the list to (see fromGoneTo), how near the list has come
+	// to it so far (px), and the frame watching for where the list stops.
 	let goneTo = null;
+	let goneTop = 0;
+	let away = 0;
+	let still = 0;
 	jump.replaceChildren( ...GROUPS.map( group => {
 
 		const button = document.createElement( 'button' );
@@ -187,11 +195,13 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 		button.textContent = group.name;
 		button.addEventListener( 'click', () => {
 
-			const section = shownSection( group );
-			if ( ! section ) return;
-			const first = GROUPS.find( shownSection ) === group;
-			const top = first ? 0 : options.scrollTop + section.getBoundingClientRect().top - options.getBoundingClientRect().top - jump.offsetHeight - 4;
+			const top = topOf( group );
+			if ( top === null ) return;
 			goneTo = group;
+			goneTop = top;
+			away = Math.abs( options.scrollTop - top );
+			// Where an earlier scroll stopped no longer counts.
+			cancelAnimationFrame( still );
 			options.scrollTo( { top, behavior: 'smooth' } );
 			markJump();
 
@@ -199,20 +209,108 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 		return button;
 
 	} ) );
-	options.addEventListener( 'scroll', () => markJump(), { passive: true } );
-	// Scrolled by the player (a wheel, a finger, the keys or the scroll bar): what's in view is lit
-	// again. Not by a choice picked, which only changes what's shown, nor by the row scrolled
-	// sideways on a narrow phone.
-	const scrolledByHand = () => goneTo = null;
-	options.addEventListener( 'wheel', scrolledByHand, { passive: true } );
-	options.addEventListener( 'touchmove', e => e.target.closest( '.jump' ) || scrolledByHand(), { passive: true } );
-	options.addEventListener( 'pointerdown', e => e.target === options && scrolledByHand() );
-	options.addEventListener( 'keydown', e => {
+	// Whether the browser tells when a scroll has ended (see stopping).
+	const ends = 'onscrollend' in options;
+	options.addEventListener( 'scroll', () => {
 
-		// (In the number's box the keys are its own, and space on a button presses it.)
-		if ( SCROLL_KEYS.includes( e.key ) && ! e.target.matches( 'input' ) && ! ( e.key === ' ' && e.target.matches( 'button' ) ) ) scrolledByHand();
+		if ( goneTo ) {
 
-	} );
+			// Further from it than it has been (beyond a rounding): something else is scrolling the list,
+			// the other way, or on from where the jump left it.
+			const off = fromGoneTo( false );
+			if ( off > away + 2 ) goneTo = null;
+			else away = Math.min( away, off );
+			if ( ! ends ) stopping();
+
+		}
+
+		markJump();
+
+	}, { passive: true } );
+	options.addEventListener( 'scrollend', () => goneTo && stopping() );
+
+	// Where the list stopped decides it, once it has been still for a few frames after a scroll's end
+	// (or after each scroll, where a browser has no scrollend): a wheel's end can be told just after a
+	// group is clicked, and the jump's own scroll takes a frame or two to start. Stopped short of the
+	// place gone to, the one in view is lit.
+	function stopping() {
+
+		cancelAnimationFrame( still );
+		let at = options.scrollTop;
+		let frames = 0;
+		const look = () => {
+
+			if ( ! goneTo ) return;
+			if ( options.scrollTop !== at ) {
+
+				at = options.scrollTop;
+				frames = 0;
+
+			}
+
+			if ( ++ frames < STILL_FRAMES ) {
+
+				still = requestAnimationFrame( look );
+				return;
+
+			}
+
+			if ( fromGoneTo( false ) > 2 ) goneTo = null;
+			markJump();
+
+		};
+
+		still = requestAnimationFrame( look );
+
+	}
+
+	// What's shown has changed (mark). A choice picked shows or hides a part: one below what's in view
+	// leaves the list where it was, or pulls its end up, the place gone to coming up with it; one above
+	// it, the browser keeps what's in view where it was, which leaves the list just where going to the
+	// group now would. Either way it stays lit while the list is still on its way there or sitting
+	// there. Another ride's list (fresh) is new: the one gone to stays lit only if the list sits just
+	// where going to it on this list would leave it.
+	function stillGoneTo( fresh ) {
+
+		if ( ! goneTo ) return;
+		const there = away <= 2;
+		const off = fromGoneTo( fresh );
+		if ( off > 2 && ( fresh || there ) ) goneTo = null;
+		else away = off;
+
+	}
+
+	// How far the list is (px) from the place gone to, which becomes the nearer of where going to the
+	// group would leave it now and, unless the list is another ride's (fresh), where the jump sent it,
+	// as near as the list's end allows now.
+	function fromGoneTo( fresh ) {
+
+		const at = options.scrollTop;
+		const places = [ topOf( goneTo ) ];
+		if ( ! fresh ) places.push( Math.min( goneTop, options.scrollHeight - options.clientHeight ) );
+		let off = Infinity;
+		for ( const place of places ) if ( place !== null && Math.abs( at - place ) < off ) {
+
+			off = Math.abs( at - place );
+			goneTop = place;
+
+		}
+
+		return off;
+
+	}
+
+	// The scrollTop going to a group scrolls the list to: its first part shown just under the row (the
+	// first group, the top), as near as the list's end allows; null if none of it is shown.
+	function topOf( group ) {
+
+		const section = shownSection( group );
+		if ( ! section ) return null;
+		const first = GROUPS.find( shownSection ) === group;
+		const top = first ? 0 : options.scrollTop + section.getBoundingClientRect().top - options.getBoundingClientRect().top - jump.offsetHeight - 4;
+		return MathUtils.clamp( top, 0, options.scrollHeight - options.clientHeight );
+
+	}
 
 	function shownSection( group ) {
 
@@ -324,7 +422,8 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 
 	}
 
-	function mark() {
+	// fresh: another ride's list (see stillGoneTo).
+	function mark( fresh = false ) {
 
 		const wearing = shown();
 		const rideShut = rideLocked( vehicle );
@@ -379,6 +478,7 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 		// are its trim there too.
 		for ( const button of jump.children ) button.hidden = ! shownSection( GROUPS.find( group => group.name === button.dataset.group ) );
 		jump.querySelector( '[data-group="Rims"]' ).textContent = vehicle.rims ?? 'Rims';
+		stillGoneTo( fresh );
 		markJump();
 
 		const number = options.querySelector( '.number' );
@@ -411,7 +511,7 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 		vehicle = which;
 		look = savedLook( vehicle );
 		levelNote.hidden = true;
-		mark();
+		mark( true );
 		preview?.load( vehicle, shown() );
 
 	}
@@ -427,8 +527,11 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 
 		preview ??= createPreview( canvas, models, () => vehicle, paintable => {
 
+			// Its paint turning out to be its model's (the first time a truck is shown) hides the paint's
+			// parts: as new a list as another ride's.
+			const fresh = ( vehicle.paintable !== false ) !== paintable;
 			vehicle.paintable = paintable;
-			mark();
+			mark( fresh );
 
 		}, effects );
 		show( which ?? panel.vehicle );

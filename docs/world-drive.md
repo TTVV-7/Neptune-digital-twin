@@ -2021,10 +2021,20 @@ turntable (drag to turn it; **▶ Boost** shows its boost and trail), and for ea
 With so many choices, a row of the groups sits over them (**Paint**, **Rims**, **Underglow**,
 **Boost**, **Trail**, **Horn**; a hovercraft's **Trim**, and a truck's paint and rims left out),
 staying at the top as the choices scroll, each going straight to its own and the one in view lit.
-The one gone to stays lit, as the list scrolls there and after, until the list is scrolled by hand
-(the wheel, a finger, the keys or the scroll bar): on a wide screen Trail and Horn together are
-shorter than the list, so going to Trail ends at the bottom, where the last group would otherwise
-count as the one in view.
+The one gone to stays lit while the list scrolls there and while it sits there: on a wide screen
+Trail and Horn together are shorter than the list, so going to Trail ends at the bottom, where the
+last group would otherwise count as the one in view. Where the list is decides it, not what moved
+it: once the list turns back on its way, stops short (still for ten frames after the scroll's end,
+or after each scroll where the browser doesn't say when one ends), or moves on from where it went
+(the wheel, a finger, the keys, the scroll bar, Tab moving the focus, find in the page, a drag
+starting on the row), the one in view is lit again. A choice picked there keeps it lit: a part
+shown or hidden below what's in view leaves the list where it was or pulls its end up (the place
+gone to coming up with it), and one above has the browser keep what's in view where it was, which
+is just where going to the group now leaves the list. Another ride shown (or a truck's paint
+turning out to be its model's, the first time it's shown) keeps it lit only if the list sits just
+where going to that group on the new list would leave it: from a bus gone to Trail, at the end of
+its list, to a monster truck whose smoke's colours make its list longer, the list is no longer at
+its end, and the one in view is lit.
 Everything stays in the one list, so nothing's behind a tab. A swatch has no word on it, so the
 colour picked is named at the end of its part's heading (BODY COLOUR ... Candy apple red). On a
 phone, at 375 px across, the six fit in one line; on a narrower one that line scrolls sideways by
@@ -2182,8 +2192,10 @@ a car, the
 Garage's choices on the ride and kept across a reload (and still made with a damaged saved value,
 or none kept at all), the free and locked choices of each part (the underglow and horns too) and
 the levels' new looks saying their level, the row of groups going to each (Trail lit all the way, not
-the horn, once the list has scrolled to its end, and the one in view lit again once the wheel turns
-it), a horn played as it's picked (a locked one too, not kept), the underglow under the kart, a
+the horn, until the list has got to its end and stopped there, waited for rather than timed; the
+one in view lit again once the wheel turns it, once Tab moves the focus back up the list, and once
+another ride's longer list is shown, and Trail kept lit on one whose list ends just there), a horn
+played as it's picked (a locked one too, not kept), the underglow under the kart, a
 ride, two cars and the pickup (its footprint and the same margin all round, just over the ground,
 the ride's size as it was), the new finishes (pearl's sheen tinted toward the paint), rims and
 decals on the coupe and the kart, camo and polka dots on every ride that takes decals drawn out no
@@ -2200,8 +2212,9 @@ and timed, every flame colour drawn in its own colours and every trail drawn (se
 off to the side, a good deal more than the flame alone), the ribbons drawn out standing still as on
 the turntable (more than 3 m behind a 2 m ride in three quarters of a second) and as they were
 moving, and the Garage (375 px across, its row of
-groups all on screen, no sideways scrolling, Trail lit when it's tapped and the one in view once a
-finger drags the list back) and the locked rides' badges (and the levels' cars'
+groups all on screen, no sideways scrolling, Trail lit when it's tapped, all the way until its
+heading is under the row, and the one in view once a finger drags the list back) and the locked
+rides' badges (and the levels' cars'
 "Lv 8 · or Pass") on a phone. `test-drive-ui.mjs` drives the kart with an underglow (on the ground
 under it and round it, left out of its size, staying through a bump, fading out off the ground and
 flying, back as it lands), and `test-drive-moon-ui.mjs` has it lying on the Moon's ground. And the
