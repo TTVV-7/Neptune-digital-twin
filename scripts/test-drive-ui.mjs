@@ -1629,6 +1629,236 @@ describe( 'World Drive boost and driving effects', () => {
 
 	} );
 
+	test( 'the flame\'s cone, core and glow are drawn in the order they were made from every side (the red flame\'s and the galaxy\'s cone under their core), and their bounds hold all of the flame on any ride', async () => {
+
+		const result = await page.evaluate( async () => {
+
+			const { createDriveFx } = await import( '/src/drive-fx.js' );
+			const { driver: d, renderer, scene, camera } = window.drive;
+			const world = d.models.group.parent;
+			const Vector3 = camera.position.constructor;
+			const flameOf = root => root.children.find( o => o.isGroup && o.children.length === 3 && o.children[ 2 ].isSprite ).children;
+			// The kart boosting at 120 km/h, seen from the chase camera's place (behind it and over it)
+			// and from all round it 3.5 m out, every 30°, as the Garage's turntable shows it: the order
+			// the cone, the core and the glow are drawn in from each.
+			const order = {};
+			for ( const [ name, look ] of [ [ 'red', { boost: 'classic', flame: 'red', trail: null } ], [ 'galaxy', { boost: 'galaxy', flame: 'orange', trail: null } ], [ 'orange', { boost: 'classic', flame: 'orange', trail: null } ] ] ) {
+
+				d.fx.dispose();
+				d.fx = createDriveFx( world, look, { effects: d.effects } );
+				const parts = flameOf( world.children.at( - 1 ) );
+				const drawn = [];
+				parts.forEach( ( part, i ) => part.onBeforeRender = () => drawn.push( [ 'cone', 'core', 'glow' ][ i ] ) );
+				for ( const code of [ ...d.keys ] ) d.release( code );
+				Object.assign( d, { east: 0, north: 0, y: 0, heading: 0, course: 0, view: 0, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, flying: false, drifting: 0, driftLevel: 0, boost: null, supersonic: false } );
+				for ( let i = 0; i < 60; i ++ ) {
+
+					Object.assign( d, { gauge: 1, firing: true, speed: 120 / 3.6 } );
+					d.update( 1 / 60 );
+
+				}
+
+				const nozzle = parts[ 2 ].getWorldPosition( new Vector3() );
+				const turn = d.entry.pivot.getWorldQuaternion( camera.quaternion.clone() );
+				const seen = new Set();
+				for ( let angle = - 1; angle < 12; angle ++ ) {
+
+					// -1: the chase camera's place.
+					const way = angle < 0 ? new Vector3( 0, 1.6, 4.2 ) : new Vector3( Math.sin( angle * Math.PI / 6 ) * 3.5, 1.2, Math.cos( angle * Math.PI / 6 ) * 3.5 );
+					camera.position.copy( nozzle ).add( way.applyQuaternion( turn ) );
+					camera.lookAt( nozzle );
+					camera.updateMatrixWorld();
+					drawn.length = 0;
+					renderer.render( scene, camera );
+					seen.add( drawn.join( ' > ' ) );
+
+				}
+
+				order[ name ] = [ ...seen ];
+				for ( const part of parts ) part.onBeforeRender = () => {};
+
+			}
+
+			// The flame on rides from a little one to a bus, at a drift boost's power and the
+			// booster's as it lights (popping): how far any corner of either cone is outside its
+			// bounds as three.js places them, which frustum culling goes by.
+			const pivot = new d.entry.pivot.constructor();
+			world.add( pivot );
+			pivot.updateMatrixWorld( true );
+			let outside = - Infinity;
+			for ( const [ width, height, length ] of [ [ 0.6, 0.6, 1.2 ], [ 1.2, 1, 2 ], [ 2, 1.5, 4.5 ], [ 4, 4, 12 ] ] ) for ( const power of [ 0.55, 1 ] ) {
+
+				const fx = createDriveFx( world, { boost: 'classic', flame: 'red', trail: null } );
+				const [ outer, inner ] = flameOf( world.children.at( - 1 ) );
+				const size = { width, height, length, rear: length / 2, scale: 1 };
+				const wheels = [ new Vector3( - width / 3, 0.05, length / 3 ), new Vector3( width / 3, 0.05, length / 3 ) ];
+				fx.ignite();
+				for ( let i = 0; i < 20; i ++ ) {
+
+					fx.update( { pivot, size, wheels, velocity: new Vector3(), flame: power, trail: 0, drifting: false, level: 0, grounded: true, dt: 1 / 60 } );
+					outer.parent.updateMatrixWorld( true );
+					for ( const cone of [ outer, inner ] ) {
+
+						// As three.js works them out if they've none of their own.
+						if ( ! cone.geometry.boundingSphere ) cone.geometry.computeBoundingSphere();
+						const ball = cone.geometry.boundingSphere.clone().applyMatrix4( cone.matrixWorld );
+						const { position } = cone.geometry.attributes;
+						const at = new Vector3();
+						for ( let v = 0; v < position.count; v ++ ) outside = Math.max( outside, at.fromBufferAttribute( position, v ).applyMatrix4( cone.matrixWorld ).distanceTo( ball.center ) - ball.radius );
+
+					}
+
+				}
+
+				fx.dispose();
+
+			}
+
+			world.remove( pivot );
+			d.fx.dispose();
+			d.fx = createDriveFx( world, { boost: 'classic', flame: 'orange', trail: null }, { effects: d.effects } );
+			Object.assign( d, { firing: false, speed: 0, east: 0, north: 0, heading: 0, course: 0 } );
+			d.update( 1 / 60 );
+			return { order, outside };
+
+		} );
+		console.log( 'the flame\'s parts drawn, from every side:', JSON.stringify( result ) );
+		for ( const name of [ 'red', 'galaxy', 'orange' ] ) assert.deepEqual( result.order[ name ], [ 'cone > core > glow' ], name );
+		assert.ok( result.outside < 1e-4, `a cone is ${ result.outside } m outside its bounds` );
+		assert.deepEqual( page.errors, [] );
+
+	} );
+
+	test( 'the fireworks light without a flash of their own for a visitor asking for less motion: their starburst and the salvo of three rockets burst into as many sparks, with no flash', async () => {
+
+		const result = await page.evaluate( async () => {
+
+			const { createDriveFx } = await import( '/src/drive-fx.js' );
+			const { SHAPES } = await import( '/src/drive-boosts.js' );
+			const { driver: d } = window.drive;
+			const world = d.models.group.parent;
+			const Vector3 = d.entry.pivot.position.constructor;
+			// Lit on a kart that stands still with the booster off after, so no rockets stream out
+			// after the salvo: over the first half second, every flash (only the fireworks' bursts have
+			// one) and every spark of a burst, each counted once.
+			const pivot = new d.entry.pivot.constructor();
+			world.add( pivot );
+			pivot.updateMatrixWorld( true );
+			const size = { width: 1.2, height: 1, length: 2, rear: 1, scale: 1 };
+			const wheels = [ new Vector3( - 0.5, 0.05, 0.6 ), new Vector3( 0.5, 0.05, 0.6 ) ];
+			const run = calm => {
+
+				const fx = createDriveFx( world, { boost: 'fireworks', flame: 'orange', trail: null }, { effects: { detail: 1, calm } } );
+				const root = world.children.at( - 1 );
+				const batches = [];
+				root.traverse( o => o.userData.batch && batches.push( o.userData.batch ) );
+				const flashes = new Set();
+				const sparks = new Set();
+				fx.ignite();
+				for ( let i = 0; i < 30; i ++ ) {
+
+					fx.update( { pivot, size, wheels, velocity: new Vector3(), flame: 0, trail: 0, drifting: false, level: 0, grounded: true, dt: 1 / 60 } );
+					for ( const batch of batches ) for ( const p of batch.items ) {
+
+						if ( p.age >= p.life ) continue;
+						if ( p.frame === SHAPES.burst ) flashes.add( p );
+						if ( p.frame === SHAPES.star ) sparks.add( p );
+
+					}
+
+				}
+
+				fx.dispose();
+				return { flashes: flashes.size, sparks: sparks.size };
+
+			};
+			const out = { desktop: run( false ), calm: run( true ) };
+			world.remove( pivot );
+			return out;
+
+		} );
+		console.log( 'fireworks lit, the first half second:', JSON.stringify( result ) );
+		// The starburst and three rockets, each a ball of 14 sparks round a flash; calm, the same
+		// sparks and no flash at all.
+		assert.deepEqual( result, { desktop: { flashes: 4, sparks: 56 }, calm: { flashes: 0, sparks: 56 } } );
+		assert.deepEqual( page.errors, [] );
+
+	} );
+
+	test( 'a ribbon trail pinned against a wall, boosting with W held, folds up behind the kart: it isn\'t drawn out as on the Garage\'s turntable', async () => {
+
+		const result = await page.evaluate( async () => {
+
+			const { createDriveFx } = await import( '/src/drive-fx.js' );
+			const { driver: d, ground } = window.drive;
+			const world = d.models.group.parent;
+			const Vector3 = d.entry.pivot.position.constructor;
+			// A wall 60 m wide and 6 m high across the road, 30 m north (as the stunts test has it), and
+			// the kart 2 cm off it with the neon streak, boosting with W held for a second and a half:
+			// once it's up against it, pressing on into it stops it there every frame.
+			const pad = ground.getColliders()[ 0 ];
+			const land = pad.children.find( child => child.isMesh );
+			const wall = land.clone();
+			wall.material = land.material.clone();
+			wall.material.side = 2;
+			wall.rotation.set( 0, 0, 0 );
+			wall.scale.set( 60 / 4000, 6 / 2000, 1 );
+			wall.position.set( 0, 3, 30 );
+			pad.add( wall );
+			wall.updateMatrixWorld();
+			d.fx.dispose();
+			d.fx = createDriveFx( world, { boost: 'classic', flame: 'orange', trail: { kind: 'neon', colour: 0xffffff } }, { effects: d.effects } );
+			const root = world.children.at( - 1 );
+			let ribbon = null;
+			root.traverse( o => ribbon ??= o.geometry?.attributes.color?.itemSize === 4 ? o : null );
+			for ( const code of [ ...d.keys ] ) d.release( code );
+			Object.assign( d, { east: 0, north: 30 - d.front - 0.02, y: 0, heading: 0, course: 0, view: 0, speed: 0, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, flying: false, drifting: 0, driftLevel: 0, boost: null, supersonic: false } );
+			d.press( 'KeyW' );
+			let from = 0;
+			let fastest = 0;
+			for ( let i = 0; i < 90; i ++ ) {
+
+				Object.assign( d, { gauge: 1, firing: true } );
+				d.update( 1 / 60 );
+				// Its last second, pinned there.
+				if ( i === 29 ) from = d.north;
+				if ( i >= 30 ) fastest = Math.max( fastest, Math.abs( d.speed ) );
+
+			}
+
+			// How far back what's drawn reaches, along the kart (its +Z).
+			const { index, attributes: { position } } = ribbon.geometry;
+			const at = new Vector3();
+			let near = Infinity;
+			let far = - Infinity;
+			for ( let i = 0; i < ribbon.geometry.drawRange.count; i ++ ) {
+
+				const { z } = d.entry.pivot.worldToLocal( at.fromBufferAttribute( position, index.getX( i ) ) );
+				near = Math.min( near, z );
+				far = Math.max( far, z );
+
+			}
+
+			const out = { shown: ribbon.visible && ribbon.geometry.drawRange.count > 0, fastest, moved: Math.abs( d.north - from ), reach: Math.round( ( far - near ) * 100 ) / 100 };
+			d.release( 'KeyW' );
+			Object.assign( d, { firing: false, speed: 0 } );
+			pad.remove( wall );
+			d.fx.dispose();
+			d.fx = createDriveFx( world, { boost: 'classic', flame: 'orange', trail: null }, { effects: d.effects } );
+			Object.assign( d, { east: 0, north: 0, heading: 0, course: 0 } );
+			d.update( 1 / 60 );
+			return out;
+
+		} );
+		console.log( 'the neon streak pinned against a wall:', JSON.stringify( result ) );
+		// Held there, it's drawn, but laid in one spot behind the kart rather than streaming 3.5 m
+		// back as on the turntable (see test-drive-pro-ui.mjs).
+		assert.ok( result.shown && result.fastest < 0.05 && result.moved < 0.05, JSON.stringify( result ) );
+		assert.ok( result.reach < 0.3, `the neon streak reaches ${ result.reach } m behind a kart that isn't going anywhere` );
+		assert.deepEqual( page.errors, [] );
+
+	} );
+
 	test( 'the underglow: on the ground under the kart and round it, left out of its size; through a bump it stays, off the ground and flying it fades out, and it\'s back as it lands', async () => {
 
 		const result = await page.evaluate( async () => {

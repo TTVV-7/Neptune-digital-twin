@@ -17,6 +17,7 @@ import {
 	PlaneGeometry,
 	Quaternion,
 	SRGBColorSpace,
+	Sphere,
 	Sprite,
 	SpriteMaterial,
 	Vector3,
@@ -81,9 +82,11 @@ const RAINBOW_TURN = 1.6;
 // bands side by side ([ from, to: shares of the way across from its left, colour, how bright ])
 // across `half` of its width either side of its middle, glowing (additive) or not: the rainbow's
 // in bands of these hues, the neon streak's two lines of light off its back corners, as its tail
-// lights would draw them in a long exposure, each a bright core in a wider glow. Standing still
-// (under RIBBON_STILL m/s: on the Garage's turntable, which turns the vehicle but never moves it),
-// a ribbon is drawn out as if it drove on at RIBBON_SHOW of its length a second.
+// lights would draw them in a long exposure, each a bright core in a wider glow. On the Garage's
+// turntable (update's `preview`), which turns the vehicle but never moves it, a ribbon is drawn out
+// as if it drove on at RIBBON_SHOW of its length a second; anywhere else it's only ever laid where
+// the vehicle goes, so stopped (pinned against a wall, hovering, a ghost standing still) it folds
+// up behind it.
 const SMOKE_TRAIL_POOL = 56;
 const SMOKE_TRAIL_STEP = 0.03;
 const SMOKE_TRAIL_LIFE = 1.5;
@@ -102,7 +105,6 @@ const STAR_COLOURS = [ 0xffd23f, 0xfff0a0, 0xffffff, 0xffb02e ];
 const RIBBON_POINTS = 48;
 const RIBBON_STEP = 1 / 40;
 const RIBBON_LIFE = 0.9;
-const RIBBON_STILL = 0.05;
 const RIBBON_SHOW = 2.5;
 const RIBBON_HUES = [ 0, 0.08, 0.15, 0.33, 0.58, 0.77 ];
 const RAINBOW = {
@@ -308,6 +310,13 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 	const outer = new Mesh( new ConeGeometry( 0.5, 1, 14, 1, true ).rotateX( Math.PI / 2 ).translate( 0, 0, 0.5 ), additive( 0xff6a1a ) );
 	const inner = new Mesh( new ConeGeometry( 0.28, 0.6, 12, 1, true ).rotateX( Math.PI / 2 ).translate( 0, 0, 0.3 ), additive( 0xfff2b0 ) );
 	const halo = new Sprite( new SpriteMaterial( { map: glow, color: 0xffa040, transparent: true, blending: AdditiveBlending, depthWrite: false } ) );
+	// three.js draws see-through things farthest first, a mesh by the middle of its bounds and a
+	// sprite by where it is. Each cone's bounds are a ball round the exhaust, where the glow is (still
+	// round all of the cone, however it's stretched, so it's never wrongly left out of view): all
+	// three are as far from the camera from any side, and three.js draws things as far in the order
+	// they were made.
+	outer.geometry.boundingSphere = new Sphere( new Vector3(), 1 );
+	inner.geometry.boundingSphere = new Sphere( new Vector3(), 0.6 );
 	flame.add( outer, inner, halo );
 	for ( const part of flame.children ) part.raycast = () => {};
 	flame.visible = false;
@@ -334,9 +343,11 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 
 	}
 
-	// A deep colour's cone and glow drawn over what's behind them (see DEEP). All three are in one
-	// spot, so they're drawn in the order they were made: the cone, the core added over it, and the
-	// glow, a soft haze round the exhaust, over both.
+	// A deep colour's cone and glow drawn over what's behind them (see DEEP). All three sort as one
+	// spot (see their bounds above), so they're drawn in the order they were made, from behind as
+	// from the side or on the Garage's turntable: the cone, the core added over it, and the glow, a
+	// soft haze round the exhaust, over both. (With bounds of their own, three.js would sort the cone
+	// by its middle, half its length back, and from behind draw it last, over the core.)
 	if ( style ? styled?.deep : DEEP.has( flameName ) ) outer.material.blending = halo.material.blending = NormalBlending;
 
 	const sonic = createSupersonic( root );
@@ -584,16 +595,17 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 
 	// The trail, while it boosts or flies (`power` over 0): puffs, sparkles, tongues of fire or stars
 	// left behind the back of it, drifting a little after it, or a ribbon drawn out from across its
-	// back.
-	function updateTrail( pivot, size, velocity, power, dt ) {
+	// back. `preview`: on the Garage's turntable.
+	function updateTrail( pivot, size, velocity, power, dt, preview ) {
 
 		if ( ribbon ) {
 
-			// Standing still, every point would be laid in the same spot and the ribbon folded up into
-			// a short arc behind it: they're carried back out of its back instead, as if it drove on
-			// (see RIBBON_SHOW), so the Garage's turntable shows it drawn out as it is on the road.
-			const still = velocity.lengthSq() < RIBBON_STILL ** 2;
-			ribbon.update( pivot, size, power, dt, still ? _v.copy( frame.back ).multiplyScalar( RIBBON_SHOW * ( size.length ?? size.rear * 2 ) ) : null );
+			// On the turntable, which never moves it, every point would be laid in the same spot and
+			// the ribbon folded up into a short arc behind it: they're carried back out of its back
+			// instead, as if it drove on (see RIBBON_SHOW), so it's shown drawn out as it is on the
+			// road. Nowhere else: stopped on the road, against a wall or hovering, it isn't going
+			// anywhere, and folds up as a ribbon laid in one spot does.
+			ribbon.update( pivot, size, power, dt, preview ? _v.copy( frame.back ).multiplyScalar( RIBBON_SHOW * ( size.length ?? size.rear * 2 ) ) : null );
 			return;
 
 		}
@@ -719,8 +731,9 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 		// boost less), drifting, level: 0..3, scrape: { at, normal } where it's scraping along a wall
 		// (world) or null, grounded (on its wheels: ink is left on the road), supersonic, water: null
 		// or in it, { level: the surface's height (world), sinking, spray: 0..1 }, burnout: 0..1, how
-		// hard its rear tyres spin floored from a standstill, dt }.
-		update( { pivot, size, wheels, velocity, flame: power, trail: trailPower = 0, drifting, level, scrape = null, grounded = true, supersonic = false, water: wet = null, burnout = 0, dt } ) {
+		// hard its rear tyres spin floored from a standstill, preview: on the Garage's turntable (a
+		// ribbon trail's drawn out there as if it drove on), dt }.
+		update( { pivot, size, wheels, velocity, flame: power, trail: trailPower = 0, drifting, level, scrape = null, grounded = true, supersonic = false, water: wet = null, burnout = 0, preview = false, dt } ) {
 
 			flicker += dt;
 			setFrame( pivot, size, velocity, power, grounded, dt );
@@ -865,7 +878,7 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 			age( sparks, dt, 1 );
 			age( flash, dt, 1 );
 			ageDebris( dt );
-			updateTrail( pivot, size, velocity, trailPower, dt );
+			updateTrail( pivot, size, velocity, trailPower, dt, preview );
 			if ( surface ) updateWater( pivot, size, velocity, wet, dt );
 
 		},
@@ -1033,8 +1046,8 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 // any side (bands of colour along it instead would be one colour across the few metres the chase
 // camera sees at speed); the neon streak's a line of light at each side. Its points go round a
 // ring, and each frame they're written newest first into buffers made once; the colours are written
-// once, and only how faded each point is changes. Standing still, its points are carried back (see
-// update's `drift`), so it's drawn out behind it all the same, and curves away as the Garage's
+// once, and only how faded each point is changes. On the Garage's turntable, its points are carried
+// back (see update's `drift`), so it's drawn out behind it all the same, and curves away as the
 // turntable turns it, as it would behind a car turning.
 function makeRibbon( root, { bands, half: wide, additive } ) {
 
@@ -1084,7 +1097,7 @@ function makeRibbon( root, { bands, half: wide, additive } ) {
 
 		mesh,
 
-		// `drift`: standing still, the way (world, m/s) the points laid are carried, or null.
+		// `drift`: on the Garage's turntable, the way (world, m/s) the points laid are carried, or null.
 		update( pivot, size, power, dt, drift = null ) {
 
 			clock += dt;
