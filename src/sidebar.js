@@ -181,7 +181,7 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 		card.className = 'card';
 		card.dataset.item = item.id;
 		card.draggable = true;
-		card.title = item.source ? `${ item.source.title } by ${ item.source.author } (${ item.source.license })` : 'Built in';
+		card.title = item.source ? `${ item.source.title } by ${ item.source.author } (${ item.source.license })` : item.own ? 'Our own model' : 'Built in';
 		const thumb = document.createElement( 'img' );
 		thumb.alt = '';
 		thumb.loading = 'lazy';

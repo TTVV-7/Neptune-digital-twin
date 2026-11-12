@@ -185,8 +185,11 @@ ground again, it comes back.
 
 To get in, fly (**F**) with ghost on (**G**) down through the ground into the model, then **F** to
 walk inside it. **U** (see underground) cuts Google's ground away over all your models wherever you
-are, to look down into them from above, or to walk in through an opening. Snapping a model to the
-ground still uses Google's ground as it is, so cutting it away doesn't move the model.
+are, to look down into them from above, or to walk in through an opening. It's cut away only over
+a model's solid parts, each part on its own (for the B2D2 model: the gallery, the pit and C32), so
+the asphalt and yards round them stay; see-through parts that you can walk through (a building
+shell, conveyors) don't cut it. Snapping a model to the ground still uses Google's ground as it is,
+so cutting it away doesn't move the model.
 
 The **Show** panel has the same with a tap, plus two more, remembered in your browser:
 
@@ -234,8 +237,8 @@ left as it came):
 - **C32** moved over to the drawings' line and brought up to the pit's wall;
 - the **beams** in a layer of their own, in concrete a shade darker than the slabs and walls:
   train support beams 1 and 2 over the pit and along the gallery, G1 to G14, the cross beam, the
-  shed support beam and B1 to B6. At grade they're under Google's ground: the **Beams** view cuts it
-  away and looks down the gallery at them, and from inside C31 they're overhead;
+  shed support beam and B1 to B6. At grade they're under Google's ground (**U** cuts it away over
+  the structure), and from inside C31 they're overhead;
 - the gallery's **hoppers** (the two sloped plates under the slot between the rail beams) taken out:
   others broke them out with machines, bay by bay, by 10 November. They're kept in the model's data
   bay by bay (G1–G2 at the pit to G12–G13 at the north end) with the day each went, for the
@@ -265,8 +268,8 @@ still move it, but only in their own browser. A saved position wins over the one
 `src/config.js` (`GET` / `PUT /api/placements`, [docs/accounts.md](docs/accounts.md)).
 **Copy config** into `src/config.js` makes it the default for a new copy of the site too.
 **Preset views**, as the artifact has them, are in a bar at the top: **Overview**, **C31**, **C32**,
-**Pit**, **Ground** and **Beams** glide the camera there, wherever the model is placed (Overview and
-Beams also cut Google's ground away over it). Any model can carry views: `views: [ { name, from, at,
+**Pit** and **Ground** glide the camera there, wherever the model is placed (Overview also cuts
+Google's ground away over it). Any model can carry views: `views: [ { name, from, at,
 underground } ]` in its glTF scene's extras, in the model's own frame (`src/views.js`).
 
 **Fixing areas in the twin.** Areas in the wrong spot, turned the wrong way, missing or not
@@ -443,7 +446,7 @@ What each machine is, its size and where it came from is in [docs/equipment.md](
   delete it, which brings the original back, and **B** shows the original everywhere for a moment.
   It only changes what this app draws; Google's data isn't touched.
 
-Two kinds of items:
+Three kinds of items:
 
 - **Built in** (`src/procedural.js`): simple standard pieces generated in code at exact North American
   dimensions, e.g. a 10 ft New Jersey barrier, 20/40 ft ISO containers, site office trailers from 8 x 20
@@ -453,6 +456,13 @@ Two kinds of items:
   (`src/crane-models.js`) and the tower crane (`src/tower-crane.js`).
 - **Downloaded** (`public/library/`): models from Sketchfab and Poly Haven, listed in `library.json` with
   their size, facing and licence. `CREDITS.md` credits the authors; the app shows the credits under **H**.
+- **Our own** (`public/library/` too, marked `own` in `library.json`): 61 models we drew in CAD in the
+  [Weave-Trial](https://github.com/TTVV-7/Weave-Trial) repository, at real size. They are the
+  Construction Site sets that are on Cults3D as 1:50 prints (trucks, earthmoving machines, a
+  concrete boom pump and line pump, a mixer, conveyors, a coal rail car and railcar mover, a wheel
+  wash, pile and pipe stacks, barriers, pallets and site furniture), plus two rail footbridges, a
+  rain hoarding, the Mammoet 1824 carry-deck crane and a telehandler in four boom positions.
+  They're free, need no credit, and are listed in [docs/equipment.md](docs/equipment.md#our-own-models).
 
 To add a downloaded model, put a Sketchfab API token (sketchfab.com → Settings → Password & API) in an
 environment variable named `SKETCHFAB_API_TOKEN` (Poly Haven needs none) and run:
@@ -478,6 +488,21 @@ npm run add-asset -- https://polyhaven.com/a/<asset> --id oil-drum --category Ma
 - Textures are shrunk to 1024 px and geometry compressed; `--max-texture 2048` keeps more detail.
 - The script prints the model's description. Read it: if it names someone else to credit (a logo's
   designer, say), run again with `--credit "Logo by ..."` so they're listed too.
+
+To add a model of our own (a GLB already in metres; a STEP file goes through
+`python scripts/step-to-glb.py model.step model.glb` first, which needs `pip install cadquery-ocp vtk`):
+
+```bash
+npm run add-own-asset -- model.glb --id steel-stair --name "Industrial steel stair (12 ft)" --category "Access & scaffolding" --front=+x
+```
+
+- CAD exports come as one small mesh per face, in bare metal that draws black here. The script joins
+  them into one mesh per colour, paints them, stands the model on the ground and compresses it.
+- `--simplify 0.4` keeps that fraction of the triangles, for the heavy ones (chain-link, rounded bags).
+- `--row-length 3.05` is how far apart a row places them when that isn't their full length (fence
+  panels share a foot). `--from "Weave-Trial: path/to/file"` notes where the model came from.
+- The card's picture is drawn from the model, which needs Playwright's Chromium (`npm i -D playwright`
+  and `npx playwright install chromium`); `--thumb picture.png` uses a picture instead.
 
 ## Rows: many of an item along a line
 
@@ -900,7 +925,9 @@ worker/premium.js   premium settings and the Stripe webhook
 worker/vercel.js    the Worker as a Vercel Function; worker/postgres.js gives it D1's API on Postgres
 api/index.js        the Vercel Function (vercel.json sends /api/* to it)
 scripts/add-asset.mjs   imports a model from Sketchfab or Poly Haven into public/library
-public/library/     downloaded models, library.json catalog, thumbs/ and CREDITS.md
+scripts/add-own-asset.mjs  imports a model of our own (a CAD-built GLB) into public/library
+scripts/step-to-glb.py  turns a STEP file into a GLB for add-own-asset
+public/library/     downloaded models and our own, library.json catalog, thumbs/ and CREDITS.md
 scripts/add-drive-car.mjs, drive-car-thumbs.mjs   import a car for World Drive into drive/public/cars
                     (its own cars.json, thumbs/ and CREDITS.md; World Drive's build only)
 scripts/make-moon.mjs   World Drive's Moon (drive/public/moon/): NASA's heights and picture of it

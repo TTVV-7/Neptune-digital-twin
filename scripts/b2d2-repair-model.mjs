@@ -87,9 +87,6 @@ const VIEWS = [
 	// From the pit's north-east corner, under the B1 slab, across to C32's mouth.
 	{ name: 'Pit', from: [ PIT_INSIDE.x[ 1 ] - 0.4, - 3.0, - 0.7 ], at: [ 1.8, - 5.2, - 6 ] },
 	{ name: 'Ground', from: [ 67.5, 7.0, - 4.95 ], at: [ 20, 5.3, - 4.95 ] },
-	// Over the pit's lid, under the building's roof, looking down the gallery at its beams at grade,
-	// with Google's ground cut away (it covers them otherwise).
-	{ name: 'Beams', from: [ 5, 10, - 4.6 ], at: [ 21, 4.4, - 4.9 ], underground: true },
 ];
 
 

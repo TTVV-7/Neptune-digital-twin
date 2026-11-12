@@ -1,8 +1,9 @@
 import { PROCEDURAL_ITEMS } from './procedural.js';
 
 // The asset library: vehicles, site trailers, dumpsters and other pieces at real scale, not tied
-// to any one site. public/library/library.json lists downloaded models with their scale, which way
-// their front faces and their licence credit (add more with `npm run add-asset`, see README).
+// to any one site. public/library/library.json lists model files with their scale and which way
+// their front faces: downloaded ones with their licence credit (`npm run add-asset`, see README),
+// and our own, drawn in CAD, marked `own` (`npm run add-own-asset`).
 // Built-in pieces are generated in code by procedural.js.
 
 export const CATEGORY_ORDER = [
@@ -10,6 +11,8 @@ export const CATEGORY_ORDER = [
 	'Heavy equipment',
 	'Cranes & lifts',
 	'Material handling',
+	'Concrete & batching',
+	'Rail',
 	'Site trailers & containers',
 	'Temporary covers',
 	'Waste',

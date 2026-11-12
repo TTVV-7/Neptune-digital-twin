@@ -306,11 +306,12 @@ async function fromPolyHaven( id ) {
 
 function credits( list ) {
 
-	const lines = list.map( item => `- **${ item.name }** (\`${ item.file }\`): "[${ item.source.title }](${ item.source.url })" by ` +
+	// Our own models (add-own-asset.mjs) have no source and need no credit.
+	const lines = list.filter( item => item.source ).map( item => `- **${ item.name }** (\`${ item.file }\`): "[${ item.source.title }](${ item.source.url })" by ` +
 		`${ item.source.authorUrl ? `[${ item.source.author }](${ item.source.authorUrl })` : item.source.author } on ${ item.source.site }, ` +
 		`licensed [${ item.source.license }](${ item.source.licenseUrl }).${ item.source.extraCredit ? ` ${ item.source.extraCredit }.` : '' } Compressed and rescaled for this project.` );
 	return '# Asset library credits\n\nThese models come from Sketchfab and Poly Haven under the licences listed. ' +
-		`Keep this file with them. Items generated in code (src/procedural.js) are part of this project.\n\n${ lines.join( '\n' ) }\n`;
+		`Keep this file with them. Items generated in code (src/procedural.js) and our own models (marked \`own\` in library.json) are part of this project.\n\n${ lines.join( '\n' ) }\n`;
 
 }
 
