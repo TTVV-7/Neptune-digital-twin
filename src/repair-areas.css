@@ -1,16 +1,17 @@
-/* Editing the B2D2 model's repair areas (repair-areas.js): the views bar's Edit areas button and
-   the panel, on the left under the status lines, with an area's details. */
-#views .edit-areas {
+/* Editing the B2D2 model's repair areas (repair-areas.js) and the model itself (model-edits.js):
+   the views bar's Edit areas and Edit model buttons and their panels, on the left under the
+   status lines, with an area's or a beam's details. */
+#views :is( .edit-areas, .edit-model, .timeline-toggle ) {
 	background: rgba( 255, 210, 31, 0.14 );
 	color: #ffe27a;
 }
 
-#views .edit-areas.active {
+#views :is( .edit-areas, .edit-model, .timeline-toggle ).active {
 	background: #ffd21f;
 	color: #1d1d1d;
 }
 
-#area-editor {
+:is( #area-editor, #model-editor ) {
 	position: fixed;
 	top: 130px;
 	left: 12px;
@@ -29,51 +30,51 @@
 	z-index: 1002;
 }
 
-#area-editor[hidden],
-#area-editor [hidden] {
+:is( #area-editor, #model-editor )[hidden],
+:is( #area-editor, #model-editor ) [hidden] {
 	display: none;
 }
 
-#area-editor header {
+:is( #area-editor, #model-editor ) header {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
 	gap: 8px;
 }
 
-#area-editor h2 {
+:is( #area-editor, #model-editor ) h2 {
 	margin: 0;
 	font-size: 14px;
 	font-weight: 600;
 }
 
-#area-editor p {
+:is( #area-editor, #model-editor ) p {
 	margin: 8px 0;
 }
 
-#area-editor .what {
+:is( #area-editor, #model-editor ) .what {
 	font-weight: 600;
 }
 
-#area-editor .hint {
+:is( #area-editor, #model-editor ) .hint {
 	color: #b8c4cf;
 	font-size: 12px;
 }
 
-#area-editor .row {
+:is( #area-editor, #model-editor ) .row {
 	display: flex;
 	align-items: center;
 	gap: 4px;
 	margin: 6px 0;
 }
 
-#area-editor .label {
+:is( #area-editor, #model-editor ) .label {
 	width: 40px;
 	color: #b8c4cf;
 }
 
-#area-editor button,
-#area-editor select {
+:is( #area-editor, #model-editor ) button,
+:is( #area-editor, #model-editor ) select {
 	font: inherit;
 	color: inherit;
 	background: rgba( 255, 255, 255, 0.08 );
@@ -83,44 +84,44 @@
 	cursor: pointer;
 }
 
-#area-editor [data-move],
-#area-editor [data-turn] {
+:is( #area-editor, #model-editor ) [data-move],
+:is( #area-editor, #model-editor ) [data-turn] {
 	min-width: 32px;
 	font-size: 15px;
 	line-height: 1;
 	padding: 5px 6px;
 }
 
-#area-editor select {
+:is( #area-editor, #model-editor ) select {
 	margin-left: auto;
 }
 
-#area-editor button:hover:not( :disabled ) {
+:is( #area-editor, #model-editor ) button:hover:not( :disabled ) {
 	background: rgba( 255, 255, 255, 0.16 );
 }
 
-#area-editor button:disabled {
+:is( #area-editor, #model-editor ) button:disabled {
 	opacity: 0.45;
 	cursor: default;
 }
 
-#area-editor button.wide {
+:is( #area-editor, #model-editor ) button.wide {
 	flex: 1;
 }
 
-#area-editor button.active {
+:is( #area-editor, #model-editor ) button.active {
 	background: #ffd21f;
 	border-color: #ffd21f;
 	color: #1d1d1d;
 }
 
-#area-editor button.primary:not( :disabled ) {
+:is( #area-editor, #model-editor ) button.primary:not( :disabled ) {
 	background: #2f6fd1;
 	border-color: #2f6fd1;
 	color: #fff;
 }
 
-#area-editor .details {
+:is( #area-editor, #model-editor ) .details {
 	display: grid;
 	gap: 5px;
 	margin: 8px 0;
@@ -129,25 +130,25 @@
 	border-bottom: 1px solid rgba( 255, 255, 255, 0.12 );
 }
 
-#area-editor .details label {
+:is( #area-editor, #model-editor ) .details label {
 	display: flex;
 	align-items: center;
 	gap: 6px;
 }
 
-#area-editor .details label > span {
-	width: 54px;
+:is( #area-editor, #model-editor ) .details label > span {
+	width: 80px;
 	flex: none;
 	color: #b8c4cf;
 }
 
-#area-editor .details label.notes {
+:is( #area-editor, #model-editor ) .details label.notes {
 	align-items: flex-start;
 }
 
-#area-editor .details select,
-#area-editor .details input,
-#area-editor .details textarea {
+:is( #area-editor, #model-editor ) .details select,
+:is( #area-editor, #model-editor ) .details input,
+:is( #area-editor, #model-editor ) .details textarea {
 	flex: 1 1 0;
 	width: 0;
 	min-width: 0;
@@ -162,7 +163,7 @@
 	resize: vertical;
 }
 
-#area-editor .swatch {
+:is( #area-editor, #model-editor ) .swatch {
 	flex: none;
 	width: 14px;
 	height: 14px;
@@ -170,29 +171,220 @@
 	border: 1px solid rgba( 255, 255, 255, 0.4 );
 }
 
-#area-editor .taken {
+:is( #area-editor, #model-editor ) .photos {
+	margin: 8px 0;
+	padding-bottom: 8px;
+	border-bottom: 1px solid rgba( 255, 255, 255, 0.12 );
+}
+
+:is( #area-editor, #model-editor ) .photos-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+:is( #area-editor, #model-editor ) .photos-head .label {
+	width: auto;
+}
+
+:is( #area-editor, #model-editor ) .photos .strip {
+	display: grid;
+	grid-template-columns: repeat( 4, 1fr );
+	gap: 4px;
+	margin-top: 6px;
+}
+
+:is( #area-editor, #model-editor ) .photos .strip:empty {
+	display: none;
+}
+
+:is( #area-editor, #model-editor ) .photos .strip button {
+	padding: 0;
+	border: 0;
+	border-radius: 4px;
+	overflow: hidden;
+	aspect-ratio: 1;
+	background: rgba( 255, 255, 255, 0.06 );
+}
+
+:is( #area-editor, #model-editor ) .photos .strip img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+:is( #area-editor, #model-editor ) .photos-note {
+	margin: 6px 0 0;
 	font-size: 12px;
 	color: #b8c4cf;
 }
 
-#area-editor .taken button {
+/* One photo, large, over everything. */
+#area-photo {
+	position: fixed;
+	inset: 0;
+	z-index: 3000;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	padding: 16px;
+	box-sizing: border-box;
+	background: rgba( 8, 12, 18, 0.9 );
+	color: #e8eef3;
+	font: 13px/1.35 system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+#area-photo[hidden],
+#area-photo [hidden] {
+	display: none;
+}
+
+#area-photo figure {
+	margin: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 0;
+	max-width: min( 1400px, 100% );
+	max-height: 100%;
+}
+
+#area-photo img {
+	display: block;
+	max-width: 100%;
+	max-height: calc( 100vh - 110px );
+	min-height: 0;
+	margin: 0 auto;
+	object-fit: contain;
+	border-radius: 4px;
+	background: #111;
+}
+
+#area-photo figcaption {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 12px;
+}
+
+#area-photo .caption {
+	flex: 1 1 240px;
+	min-width: 0;
+	font: inherit;
+	color: inherit;
+	background: rgba( 255, 255, 255, 0.08 );
+	border: 1px solid rgba( 255, 255, 255, 0.18 );
+	border-radius: 6px;
+	padding: 5px 8px;
+}
+
+#area-photo .meta {
+	color: #b8c4cf;
+}
+
+#area-photo .actions {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+#area-photo a {
+	color: #9fd0ff;
+}
+
+#area-photo button {
+	font: inherit;
+	color: inherit;
+	background: rgba( 255, 255, 255, 0.1 );
+	border: 1px solid rgba( 255, 255, 255, 0.2 );
+	border-radius: 6px;
+	padding: 4px 10px;
+	cursor: pointer;
+}
+
+#area-photo button:hover {
+	background: rgba( 255, 255, 255, 0.2 );
+}
+
+#area-photo .delete:hover {
+	background: rgba( 239, 68, 68, 0.4 );
+}
+
+#area-photo .previous,
+#area-photo .next {
+	flex: none;
+	font-size: 26px;
+	line-height: 1;
+	padding: 10px 12px;
+}
+
+#area-photo .close {
+	position: absolute;
+	top: 12px;
+	right: 12px;
+	font-size: 20px;
+	line-height: 1;
+	padding: 6px 11px;
+}
+
+#area-photo :focus-visible {
+	outline: 2px solid #7fb2ff;
+	outline-offset: 1px;
+}
+
+:is( #area-editor, #model-editor ) .summary {
+	width: 100%;
+	margin: 8px 0;
+	border-collapse: collapse;
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+}
+
+:is( #area-editor, #model-editor ) .summary td {
+	padding: 2px 0;
+}
+
+:is( #area-editor, #model-editor ) .summary td + td {
+	text-align: right;
+	padding-left: 8px;
+}
+
+:is( #area-editor, #model-editor ) .summary i {
+	display: inline-block;
+	width: 10px;
+	height: 10px;
+	margin-right: 6px;
+	border-radius: 2px;
+	border: 1px solid rgba( 255, 255, 255, 0.35 );
+	vertical-align: -1px;
+}
+
+:is( #area-editor, #model-editor ) .taken {
+	font-size: 12px;
+	color: #b8c4cf;
+}
+
+:is( #area-editor, #model-editor ) .taken button {
 	padding: 2px 8px;
 	font-size: 12px;
 }
 
-#area-editor button.delete:not( :disabled ):hover {
+:is( #area-editor, #model-editor ) button.delete:not( :disabled ):hover {
 	background: rgba( 239, 68, 68, 0.3 );
 }
 
-#area-editor footer {
+:is( #area-editor, #model-editor ) footer {
 	display: flex;
 	gap: 6px;
 	justify-content: flex-end;
 	margin-top: 8px;
 }
 
-#area-editor button:focus-visible,
-#area-editor select:focus-visible {
+:is( #area-editor, #model-editor ) button:focus-visible,
+:is( #area-editor, #model-editor ) select:focus-visible {
 	outline: 2px solid #7fb2ff;
 	outline-offset: 1px;
 }
@@ -204,7 +396,7 @@ canvas.picking-surface {
 /* On a phone the bar sits lower (views.css): so does the panel, at the bottom. */
 @media ( max-width: 700px ) {
 
-	#area-editor {
+	:is( #area-editor, #model-editor ) {
 		top: auto;
 		bottom: 16px;
 		right: 16px;
@@ -212,6 +404,168 @@ canvas.picking-surface {
 		width: auto;
 		max-height: 45%;
 		top: auto !important;
+	}
+
+}
+
+/* The model editor's own bits: tick boxes and colours to pick. */
+#model-editor .check {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 6px 0;
+}
+
+#model-editor .swatches {
+	flex-wrap: wrap;
+	gap: 5px;
+}
+
+#model-editor .swatch-button {
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border-radius: 5px;
+	border: 1px solid rgba( 255, 255, 255, 0.35 );
+}
+
+#model-editor .swatch-button.active,
+#model-editor .original.active {
+	outline: 2px solid #ffd21f;
+	outline-offset: 1px;
+}
+
+#model-editor .original {
+	padding: 3px 8px;
+}
+
+#model-editor input[type=color] {
+	flex: none;
+	width: 44px;
+	height: 26px;
+	padding: 1px 2px;
+	cursor: pointer;
+}
+
+#model-editor label.row {
+	margin: 6px 0;
+}
+
+/* The repairs over time (repair-timeline.js): a bar along the bottom, between the Library button
+   and the Show and Controls panels. */
+#repair-timeline {
+	position: fixed;
+	bottom: 16px;
+	left: 124px;
+	right: 308px;
+	margin: 0 auto;
+	max-width: 760px;
+	box-sizing: border-box;
+	display: grid;
+	grid-template-columns: auto 1fr auto auto auto;
+	align-items: center;
+	gap: 6px 10px;
+	padding: 10px 12px;
+	/* Nearly solid: on a small screen it can lie over an open panel. */
+	background: rgba( 16, 22, 28, 0.94 );
+	border: 1px solid rgba( 255, 210, 31, 0.5 );
+	border-radius: 8px;
+	color: #e8eef3;
+	font: 13px/1.35 system-ui, -apple-system, 'Segoe UI', sans-serif;
+	z-index: 1003;
+}
+
+#repair-timeline[hidden] {
+	display: none;
+}
+
+#repair-timeline button,
+#repair-timeline select {
+	font: inherit;
+	color: inherit;
+	background: rgba( 255, 255, 255, 0.08 );
+	border: 1px solid rgba( 255, 255, 255, 0.18 );
+	border-radius: 6px;
+	padding: 4px 9px;
+	cursor: pointer;
+}
+
+#repair-timeline option {
+	color: #111;
+}
+
+#repair-timeline .play {
+	min-width: 36px;
+	background: #2f6fd1;
+	border-color: #2f6fd1;
+	color: #fff;
+}
+
+#repair-timeline .days {
+	width: 100%;
+	min-width: 0;
+	accent-color: #ffd21f;
+}
+
+#repair-timeline .day {
+	min-width: 170px;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+#repair-timeline .counts {
+	grid-column: 1 / -1;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 14px;
+	font-size: 12px;
+	color: #c9d3dc;
+}
+
+#repair-timeline .counts i {
+	display: inline-block;
+	width: 10px;
+	height: 10px;
+	margin-right: 5px;
+	border-radius: 2px;
+	border: 1px solid rgba( 255, 255, 255, 0.35 );
+	vertical-align: -1px;
+}
+
+#repair-timeline :focus-visible {
+	outline: 2px solid #7fb2ff;
+	outline-offset: 1px;
+}
+
+/* The hint line would be under it: it goes above (repair-timeline.js says where the bar's top is). */
+body.repair-timeline-open #hint {
+	bottom: var( --repair-timeline-top, 112px );
+}
+
+/* Less room: above the Library button, the day on a line of its own. */
+@media ( max-width: 1000px ) {
+
+	#repair-timeline {
+		left: 12px;
+		bottom: 60px;
+		grid-template-columns: auto 1fr auto auto;
+	}
+
+	#repair-timeline .day {
+		grid-row: 2;
+		grid-column: 1 / -1;
+		min-width: 0;
+	}
+
+}
+
+/* A phone: the whole width, above the panels' buttons. */
+@media ( max-width: 700px ) {
+
+	#repair-timeline {
+		right: 12px;
+		bottom: 104px;
 	}
 
 }

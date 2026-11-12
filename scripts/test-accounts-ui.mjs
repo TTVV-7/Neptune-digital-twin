@@ -12,6 +12,7 @@ import { mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
+import sharp from 'sharp';
 import { CLIENT_ID, GOOGLE_STUB, dropProjectModels, makeKey, makeToken, serveKeys, startVite, startWorker } from './worker-harness.mjs';
 
 const require = createRequire( import.meta.url );
@@ -336,7 +337,7 @@ test( 'the admin moves and adds B2D2 repair areas and saves them for everyone; p
 
 	const admin = await newPage();
 	const answers = [ PASSCODE ];
-	admin.on( 'dialog', d => d.accept( answers.shift() ) );
+	admin.on( 'dialog', d => d.type() === 'prompt' && d.accept( answers.shift() ) );
 	await openApp( admin, undefined, { keepProjectModels: true } );
 	await admin.waitForFunction( () => window.twin.repairAreas?.areas && window.twin.models.entries.some( e => e.url?.endsWith( 'b2d2-repair.glb' ) && ! e.placing ), null, { timeout: 60000 } );
 	await admin.evaluate( () => window.twin.views.go( 'C31' ) );
@@ -444,28 +445,327 @@ test( 'the admin moves and adds B2D2 repair areas and saves them for everyone; p
 	assert.equal( made.length, 1 );
 	assert.equal( made[ 0 ].pts.length, 4 );
 	assert.ok( made[ 0 ].area > 0.01 && made[ 0 ].grid.startsWith( 'Grid ' ), JSON.stringify( made[ 0 ] ) );
-	await admin.locator( '#area-editor [data-field=chipped]' ).fill( '2026-11-09' );
-	await admin.locator( '#area-editor [data-field=chipped]' ).press( 'Tab' );
+	// Numbered, and on to the next stage, on a day of its own.
+	await admin.locator( '#area-editor [data-field=no]' ).fill( 'C31-01' );
+	await admin.locator( '#area-editor [data-field=no]' ).press( 'Enter' );
+	await admin.locator( '#area-editor [data-field=status]' ).selectOption( 'Sandblasted' );
+	assert.equal( await admin.locator( '#area-editor .date span' ).textContent(), 'Sandblasted' );
+	await admin.locator( '#area-editor [data-field=date]' ).fill( '2026-11-09' );
+	await admin.locator( '#area-editor [data-field=date]' ).press( 'Tab' );
 	await admin.evaluate( () => document.querySelectorAll( '.toast' ).forEach( t => t.remove() ) );
 	await admin.locator( '#area-editor .save' ).click();
 	await admin.waitForFunction( () => [ ...document.querySelectorAll( '.toast' ) ].some( t => /^Saved for everyone: 1 change/.test( t.textContent ) ) );
 	const [ added ] = await saved();
 	assert.equal( added.id, made[ 0 ].id );
 	assert.equal( added.added, true );
-	assert.equal( added.f.chipped, '2026-11-09' );
+	assert.equal( added.no, 'C31-01' );
+	assert.equal( added.f.status, 'Sandblasted' );
+	assert.equal( added.f.sandblasted, '2026-11-09' );
 	await viewer.reload();
 	await viewer.locator( '#skip' ).click();
 	await viewer.waitForFunction( id => window.twin.repairAreas?.areas().some( a => a.id === id ), added.id, { timeout: 60000 } );
+	// Drawn at its stage, with its number floating on it.
+	const drawn3d = await viewer.evaluate( id => {
+
+		let node;
+		window.twin.models.group.traverse( o => {
+
+			if ( o.userData.id === id ) node = o;
+
+		} );
+		return { materials: node.children.filter( o => o.isMesh ).map( o => o.material.name ), numbers: node.children.filter( o => o.isSprite ).length, no: node.userData.no };
+
+	}, added.id );
+	assert.deepEqual( drawn3d, { materials: [ 'Sandblasted concrete', 'Sandblasted rim', 'Sandblasted rebar' ], numbers: 1, no: 'C31-01' } );
 	await shot( admin, 'area-editor' );
 
-	// Deleted, it's gone for everyone.
+	// A photo of it: kept on the site at the stage the panel is at, for everyone to see.
+	const picture = await sharp( { create: { width: 1600, height: 1200, channels: 3, background: '#8a6a4a' } } ).jpeg().toBuffer();
+	await admin.evaluate( () => document.querySelectorAll( '.toast' ).forEach( t => t.remove() ) );
+	await admin.locator( '#area-editor .photos input[type=file]' ).setInputFiles( { name: 'panel.jpg', mimeType: 'image/jpeg', buffer: picture } );
+	await admin.waitForFunction( () => [ ...document.querySelectorAll( '.toast' ) ].some( t => /^1 photo added/.test( t.textContent ) ), null, { timeout: 60000 } );
+	const shots = () => admin.evaluate( async () => ( await ( await fetch( '/api/area-photos/b2d2-repair' ) ).json() ).photos );
+	const [ shot1 ] = await shots();
+	assert.deepEqual( [ shot1.area, shot1.stage, shot1.width, shot1.height, shot1.size ], [ added.id, 'Sandblasted', 1600, 1200, picture.length ] );
+	await admin.locator( '#area-editor .photos .strip button' ).click();
+	await admin.waitForFunction( () => document.querySelector( '#area-photo img' )?.naturalWidth === 1600 );
+	await admin.keyboard.press( 'Escape' );
+	assert.equal( await admin.locator( '#area-photo' ).isVisible(), false );
+	assert.match( await admin.locator( '#area-editor .what' ).textContent(), /C31-01/, 'the area is still picked' );
+
+	// Deleted, it's gone for everyone, its photo with it.
+	admin.on( 'dialog', d => d.type() === 'confirm' && d.accept() );
 	await admin.locator( '#area-editor .delete' ).click();
 	await admin.evaluate( () => document.querySelectorAll( '.toast' ).forEach( t => t.remove() ) );
 	await admin.locator( '#area-editor .save' ).click();
 	await admin.waitForFunction( () => [ ...document.querySelectorAll( '.toast' ) ].some( t => /^Saved for everyone: 1 change/.test( t.textContent ) ) );
 	assert.deepEqual( await saved(), [] );
+	await admin.waitForFunction( async () => ( await ( await fetch( '/api/area-photos/b2d2-repair' ) ).json() ).photos.length === 0 );
 	await admin.locator( '#area-editor .done' ).click();
 	assert.equal( await admin.locator( '#area-editor' ).isVisible(), false );
+	await admin.context().close();
+	await viewer.context().close();
+
+} );
+
+test( 'the timeline plays the B2D2 repairs back: no area before its day, each at the stage it had reached, and as now again when editing starts', async () => {
+
+	const page = await newPage();
+	await openApp( page, undefined, { keepProjectModels: true } );
+	await page.waitForFunction( () => window.twin.repairTimeline && window.twin.models.entries.some( e => e.url?.endsWith( 'b2d2-repair.glb' ) && ! e.placing ), null, { timeout: 60000 } );
+	await page.evaluate( () => window.twin.repairAreas.ready() );
+	// The areas drawn in the model, and what the bar says of them.
+	const drawn = () => page.evaluate( () => {
+
+		const ids = new Set();
+		window.twin.models.group.traverse( node => node.userData.xraySolid && node.userData.id && ids.add( node.userData.id ) );
+		return ids.size;
+
+	} );
+	const counts = () => page.evaluate( () => Object.fromEntries( window.twin.repairAreas.timeline.summary().filter( row => row.count ).map( row => [ row.stage, row.count ] ) ) );
+	const label = () => page.locator( '#repair-timeline .day' ).textContent();
+	// The slider put on a day (its last stop is now), as dragging it does.
+	const to = async day => {
+
+		const i = await page.evaluate( day => day ? window.twin.repairTimeline.days.indexOf( day ) : window.twin.repairTimeline.days.length, day );
+		assert.ok( i >= 0, `${ day } is on the slider` );
+		await page.locator( '#repair-timeline .days' ).fill( String( i ) );
+		await page.waitForFunction( day => window.twin.repairAreas.timeline.day === day, day );
+
+	};
+	const areas = await page.evaluate( () => window.twin.repairAreas.areas() );
+	const total = await drawn();
+	assert.equal( total, areas.length );
+	// The day each was chipped: a span of days is its last.
+	const chipped = a => a.f.chipped.replace( /^(\d{4}-\d{2}-)\d{2}\/(\d{2})$/, '$1$2' );
+	const first = areas.map( chipped ).sort()[ 0 ];
+	assert.equal( first, '2026-11-02' );
+
+	// The drawing's panel numbers show on their panels (the Show panel counts them), and one taken
+	// off in the twin stays off rather than coming back from the drawing.
+	const numbers = () => page.evaluate( () => [ ...document.querySelectorAll( '#layers .layer' ) ].find( row => /Panel numbers/.test( row.textContent ) )?.querySelector( '.count' )?.textContent );
+	const numbered = areas.filter( a => a.no );
+	assert.equal( numbered.length, 46 );
+	await page.waitForFunction( () => [ ...document.querySelectorAll( '#layers .layer' ) ].some( row => /Panel numbers/.test( row.textContent ) && row.querySelector( '.count' )?.textContent === '46' ) );
+	await page.locator( '#views .edit-areas' ).click();
+	await page.evaluate( id => window.twin.repairAreas.select( id ), numbered[ 0 ].id );
+	assert.equal( await page.locator( '#area-editor [data-field=no]' ).inputValue(), numbered[ 0 ].no );
+	await page.locator( '#area-editor [data-field=no]' ).fill( '' );
+	await page.locator( '#area-editor [data-field=no]' ).press( 'Enter' );
+	assert.equal( ( await page.evaluate( id => window.twin.repairAreas.areas().find( a => a.id === id ), numbered[ 0 ].id ) ).no, '' );
+	assert.equal( await numbers(), '45' );
+	await page.evaluate( () => window.twin.repairAreas.undo() );
+	assert.equal( await numbers(), '46' );
+
+	// One area taken on two stages, not saved: sandblasted on the 6th, epoxy coated today.
+	const taken = areas.find( a => chipped( a ) === first );
+	await page.evaluate( id => window.twin.repairAreas.select( id ), taken.id );
+	await page.locator( '#area-editor [data-field=status]' ).selectOption( 'Sandblasted' );
+	await page.locator( '#area-editor [data-field=date]' ).fill( '2026-11-06' );
+	await page.locator( '#area-editor [data-field=date]' ).press( 'Enter' );
+	await page.locator( '#area-editor [data-field=status]' ).selectOption( 'Shotcreted' );
+	// Put back a stage, it loses the later stage's day; on again, it reached that one today.
+	await page.locator( '#area-editor [data-field=status]' ).selectOption( 'Epoxy coated' );
+	const today = await page.evaluate( () => {
+
+		const d = new Date();
+		return `${ d.getFullYear() }-${ String( d.getMonth() + 1 ).padStart( 2, '0' ) }-${ String( d.getDate() ).padStart( 2, '0' ) }`;
+
+	} );
+	const { f } = await page.evaluate( id => window.twin.repairAreas.areas().find( a => a.id === id ), taken.id );
+	assert.deepEqual( { chipped: f.chipped, sandblasted: f.sandblasted, epoxy: f.epoxy, shotcreted: f.shotcreted }, { chipped: taken.f.chipped, sandblasted: '2026-11-06', epoxy: today, shotcreted: undefined } );
+
+	// Opened, the editor stops and it's at now; the day before the first chipping there's no area.
+	await page.locator( '#views .timeline-toggle' ).click();
+	await page.locator( '#repair-timeline' ).waitFor();
+	assert.equal( await page.locator( '#area-editor' ).isVisible(), false );
+	assert.match( await label(), / · now$/ );
+	assert.deepEqual( await counts(), { Chipped: total - 1, 'Epoxy coated': 1 } );
+	// The hoppers others broke out (gone now) and who was at work, by day.
+	const hoppers = () => page.evaluate( () => {
+
+		let n = 0;
+		window.twin.scene.traverse( o => o.isMesh && /^Hoppers: /.test( o.name ) && n ++ );
+		return n;
+
+	} );
+	const crew = () => page.evaluate( () => window.twin.repairAreas.timeline.crew );
+	assert.equal( await hoppers(), 0 );
+	assert.equal( await crew(), 0 );
+	await to( '2026-11-01' );
+	assert.equal( await drawn(), 0 );
+	assert.equal( await hoppers(), 12 );
+	assert.equal( await crew(), 0 );
+	assert.equal( await page.locator( '#repair-timeline .counts' ).textContent(), 'Nothing chipped yetHoppers 12 of 12 bays left (others, with machines)' );
+	assert.match( await label(), /Nov 1, 2026$/ );
+	// Then those chipped by the end of each day, the one taken on at the stage it had reached.
+	const by = day => areas.filter( a => chipped( a ) <= day ).length;
+	assert.ok( by( '2026-11-02' ) > 0 && by( '2026-11-02' ) < by( '2026-11-04' ) && by( '2026-11-04' ) < total );
+	await to( '2026-11-02' );
+	assert.equal( await drawn(), by( '2026-11-02' ) );
+	assert.deepEqual( await counts(), { Chipped: by( '2026-11-02' ) } );
+	// Workers chipping that day's panels, a few of them, spread out.
+	assert.ok( await crew() >= 3 && await crew() <= 6, `${ await crew() } at work` );
+	await to( '2026-11-04' );
+	assert.equal( await drawn(), by( '2026-11-04' ) );
+	await to( '2026-11-06' );
+	assert.deepEqual( await counts(), { Chipped: by( '2026-11-06' ) - 1, Sandblasted: 1 } );
+	assert.match( await page.locator( '#repair-timeline .counts' ).textContent(), /Sandblasted 1 · \d+\.\d m²/ );
+	// Five bays of hoppers out by then (from the north end, 4 to 10 November), two that day, with a
+	// machine at each of those.
+	assert.equal( await hoppers(), 7 );
+	assert.match( await page.locator( '#repair-timeline .counts' ).textContent(), /Hoppers 7 of 12 bays left, 2 out today \(others, with machines\)/ );
+	assert.equal( await page.evaluate( () => {
+
+		let n = 0;
+		window.twin.scene.traverse( o => o.userData.kind === 'demolition-machine' && o.parent?.name === 'Crew' && n ++ );
+		return n;
+
+	} ), 2 );
+
+	// Played from the end, it starts over and runs to now.
+	await to( null );
+	assert.equal( await drawn(), total );
+	await page.locator( '#repair-timeline .speed' ).selectOption( { label: 'Fast' } );
+	await page.locator( '#repair-timeline .play' ).click();
+	await page.waitForFunction( () => window.twin.repairAreas.timeline.day !== null );
+	assert.equal( await page.locator( '#repair-timeline .play' ).textContent(), '❚❚' );
+	await page.waitForFunction( () => window.twin.repairAreas.timeline.day === null && document.querySelector( '#repair-timeline .play' ).textContent === '▶', null, { timeout: 30000 } );
+	assert.deepEqual( await counts(), { Chipped: total - 1, 'Epoxy coated': 1 } );
+
+	// Looking back, then editing: the bar closes and the areas are as they are now.
+	await to( '2026-11-02' );
+	await page.locator( '#views .edit-areas' ).click();
+	assert.equal( await page.locator( '#repair-timeline' ).isVisible(), false );
+	assert.equal( await page.evaluate( () => window.twin.repairAreas.timeline.day ), null );
+	assert.equal( await drawn(), total );
+	// So does editing the model, and × on the bar.
+	await page.locator( '#views .timeline-toggle' ).click();
+	await to( '2026-11-02' );
+	await page.locator( '#views .edit-model' ).click();
+	assert.equal( await page.locator( '#repair-timeline' ).isVisible(), false );
+	assert.equal( await drawn(), total );
+	await page.locator( '#views .timeline-toggle' ).click();
+	assert.equal( await page.locator( '#model-editor' ).isVisible(), false );
+	await to( '2026-11-01' );
+	await page.locator( '#repair-timeline .close' ).click();
+	assert.equal( await page.locator( '#repair-timeline' ).isVisible(), false );
+	assert.equal( await drawn(), total );
+	assert.equal( await hoppers(), 0 );
+	assert.equal( await crew(), 0 );
+	await page.context().close();
+
+} );
+
+test( 'the admin adds a beam to the B2D2 model and paints a wall, for everyone; removed, they\'re gone', async () => {
+
+	const admin = await newPage();
+	admin.on( 'dialog', d => d.accept( PASSCODE ) );
+	await openApp( admin, undefined, { keepProjectModels: true } );
+	await admin.waitForFunction( () => window.twin.modelEdits && window.twin.models.entries.some( e => e.url?.endsWith( 'b2d2-repair.glb' ) && ! e.placing ), null, { timeout: 60000 } );
+	await admin.evaluate( () => window.twin.views.go( 'C31' ) );
+	await admin.waitForFunction( () => ! window.twin.views.gliding );
+	await admin.locator( '#views .edit-model' ).click();
+	await admin.evaluate( () => window.twin.repairAreas.ready() );
+	const edits = () => admin.evaluate( () => window.twin.modelEdits.edits() );
+	const saved = () => admin.evaluate( async () => ( await ( await fetch( '/api/model-edits/b2d2-repair' ) ).json() ).edits );
+	const size = admin.viewportSize();
+
+	// A click on a side wall of the gallery: a beam straight across to the wall facing it.
+	let wall = null;
+	const canvasAt = ( x, y ) => admin.evaluate( ( [ x, y ] ) => document.elementFromPoint( x, y ) === window.twin.renderer.domElement, [ x, y ] );
+	// (Between the panels at the sides of the page, which would take the click.)
+	for ( const [ x, y ] of [ [ 0.62, 0.44 ], [ 0.38, 0.44 ], [ 0.64, 0.5 ], [ 0.36, 0.5 ] ] ) {
+
+		if ( ! await canvasAt( x * size.width, y * size.height ) ) continue;
+		await admin.locator( '#model-editor .add-beam' ).click();
+		await admin.mouse.click( x * size.width, y * size.height );
+		if ( ( await edits() ).length ) {
+
+			wall = { x: x * size.width, y: y * size.height };
+			break;
+
+		}
+
+		await admin.keyboard.press( 'Escape' );
+
+	}
+
+	assert.ok( wall, 'a wall in view to hang a beam from' );
+	const [ beam ] = await edits();
+	assert.equal( beam.kind, 'beam' );
+	const span = Math.hypot( ...beam.a.map( ( v, i ) => v - beam.b[ i ] ) );
+	assert.ok( span > 1 && span < 12, `across the gallery: ${ span } m` );
+	assert.ok( Math.abs( beam.a[ 1 ] - beam.b[ 1 ] ) < 0.01, 'level' );
+	assert.match( await admin.locator( '#model-editor .what' ).textContent(), /0\.4 × 0\.6 m/ );
+	await admin.locator( '#model-editor [data-field=depth]' ).fill( '0.8' );
+	await admin.locator( '#model-editor [data-field=depth]' ).press( 'Enter' );
+	await admin.locator( '#model-editor [data-field=name]' ).fill( 'B-01' );
+	await admin.locator( '#model-editor [data-field=name]' ).press( 'Enter' );
+	const high = ( await edits() )[ 0 ].a[ 1 ];
+	await admin.locator( '#model-editor .to-floor' ).click();
+	assert.ok( ( await edits() )[ 0 ].a[ 1 ] < high, 'down to the floor' );
+	await admin.locator( '#model-editor .undo' ).click();
+	assert.equal( ( await edits() )[ 0 ].a[ 1 ], high );
+
+	// The wall it hangs from, painted: the whole face.
+	await admin.locator( '#model-editor .paint' ).click();
+	await admin.locator( '#model-editor .paint-swatches [title="Yellow"]' ).click();
+	await admin.mouse.click( wall.x, wall.y );
+	const painted = ( await edits() ).find( e => e.kind === 'paint' );
+	assert.ok( painted, 'a face painted' );
+	assert.equal( painted.colour, '#f2c14e' );
+	// Again in another colour: the same face, not a second coat.
+	await admin.locator( '#model-editor .paint-swatches [title="Blue"]' ).click();
+	await admin.mouse.click( wall.x, wall.y );
+	assert.deepEqual( ( await edits() ).filter( e => e.kind === 'paint' ).map( e => [ e.id, e.colour ] ), [ [ painted.id, '#4f7cac' ] ] );
+	await admin.keyboard.press( 'Escape' );
+
+	await admin.locator( '#model-editor .save' ).click();
+	await admin.waitForFunction( () => [ ...document.querySelectorAll( '.toast' ) ].some( t => /^Saved for everyone: 2 changes to the model/.test( t.textContent ) ) );
+	assert.deepEqual( ( await saved() ).map( e => [ e.kind, e.name ?? e.colour ] ).sort(), [ [ 'beam', 'B-01' ], [ 'paint', '#4f7cac' ] ] );
+
+	// Someone else sees the beam, solid, and the wall in its colour; the areas' editor leaves both be.
+	const viewer = await newPage();
+	await openApp( viewer, undefined, { keepProjectModels: true } );
+	await viewer.waitForFunction( () => window.twin.modelEdits?.edits().length === 2, null, { timeout: 60000 } );
+	const seen = () => viewer.evaluate( () => {
+
+		const found = { beams: [], painted: 0 };
+		window.twin.models.group.traverse( o => {
+
+			if ( o.userData.beam ) found.beams.push( [ o.name, o.geometry.parameters.height ] );
+			if ( o.isMesh && o.geometry.attributes.color ) found.painted ++;
+
+		} );
+		return found;
+
+	} );
+	assert.deepEqual( await seen(), { beams: [ [ 'B-01', 0.8 ] ], painted: 1 } );
+	await viewer.locator( '#views .edit-areas' ).click();
+	await viewer.evaluate( () => window.twin.repairAreas.ready() );
+	await viewer.evaluate( () => {
+
+		const { repairAreas } = window.twin;
+		repairAreas.select( repairAreas.areas().find( a => ! a.deleted ).id );
+		repairAreas.nudge( 'right' );
+
+	} );
+	assert.deepEqual( await seen(), { beams: [ [ 'B-01', 0.8 ] ], painted: 1 } );
+
+	// The beam deleted and the wall given its own colour back.
+	await admin.evaluate( id => window.twin.modelEdits.select( id ), beam.id );
+	await admin.locator( '#model-editor .delete' ).click();
+	await admin.locator( '#model-editor .paint' ).click();
+	await admin.locator( '#model-editor .paint-swatches .original' ).click();
+	await admin.mouse.click( wall.x, wall.y );
+	await admin.keyboard.press( 'Escape' );
+	assert.deepEqual( await edits(), [] );
+	await admin.evaluate( () => document.querySelectorAll( '.toast' ).forEach( t => t.remove() ) );
+	await admin.locator( '#model-editor .save' ).click();
+	await admin.waitForFunction( () => [ ...document.querySelectorAll( '.toast' ) ].some( t => /^Saved for everyone: 2 changes to the model/.test( t.textContent ) ) );
+	assert.deepEqual( await saved(), [] );
+	await shot( admin, 'model-editor' );
 	await admin.context().close();
 	await viewer.context().close();
 

@@ -8,6 +8,7 @@ import { loadConfig } from './cloud.js';
 const API = new URL( 'api/placements', document.baseURI );
 const KEY_STORE = 'twin.placementKey';
 const TIMEOUT = 8000;
+const FILE_TIMEOUT = 120000;
 
 // Fetched once; models from config.js are moved to their saved spot as they load.
 export function useSavedPlacements( models ) {
@@ -62,9 +63,10 @@ export async function savePlacement( entry ) {
 
 }
 
-// A change for everyone (models' positions, shared items): sent with the admin's passcode, asked
-// for the first time and kept in this browser once it works (forgotten when it doesn't). Resolves
-// to { ok, body } or { ok: false, message } saying why not.
+// A change for everyone (models' positions, shared items, repair areas and their photos): sent
+// with the admin's passcode, asked for the first time and kept in this browser once it works
+// (forgotten when it doesn't). payload: what to send as JSON, or a Blob (a photo's file) to send
+// as it is. Resolves to { ok, body } or { ok: false, message } saying why not.
 export async function sendForEveryone( method, url, payload ) {
 
 	let key = readKey();
@@ -74,12 +76,14 @@ export async function sendForEveryone( method, url, payload ) {
 	let res;
 	try {
 
+		// A file (a photo) goes as it is, and is given longer.
+		const file = payload instanceof Blob;
 		res = await fetch( url, {
 			method,
-			headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-Edit-Key': key },
-			// Always JSON, even with nothing to say: the server takes nothing else from a page.
-			body: JSON.stringify( payload ?? {} ),
-			signal: AbortSignal.timeout( TIMEOUT ),
+			headers: { 'Content-Type': file ? payload.type : 'application/json', Accept: 'application/json', 'X-Edit-Key': key },
+			// Otherwise always JSON, even with nothing to say: the server takes nothing else from a page.
+			body: file ? payload : JSON.stringify( payload ?? {} ),
+			signal: AbortSignal.timeout( file ? FILE_TIMEOUT : TIMEOUT ),
 		} );
 
 	} catch {

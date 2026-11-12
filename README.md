@@ -16,7 +16,7 @@ Google's photorealistic 3D map, and you can drop your own detailed models on top
 - **Premium (work in progress, off until set up):** a Pro equipment pack bought once with Stripe.
 
 The same repository also holds a second app, **[World Drive](#world-drive-worlddriveapp)**: pick
-anywhere on Earth from a globe and drive it.
+anywhere on Earth from a globe and drive it, or the Moon.
 
 The step-by-step plan, with prompts you can paste to Claude, is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
@@ -185,8 +185,11 @@ ground again, it comes back.
 
 To get in, fly (**F**) with ghost on (**G**) down through the ground into the model, then **F** to
 walk inside it. **U** (see underground) cuts Google's ground away over all your models wherever you
-are, to look down into them from above, or to walk in through an opening. Snapping a model to the
-ground still uses Google's ground as it is, so cutting it away doesn't move the model.
+are, to look down into them from above, or to walk in through an opening. It's cut away only over
+a model's solid parts, each part on its own (for the B2D2 model: the gallery, the pit and C32), so
+the asphalt and yards round them stay; see-through parts that you can walk through (a building
+shell, conveyors) don't cut it. Snapping a model to the ground still uses Google's ground as it is,
+so cutting it away doesn't move the model.
 
 The **Show** panel has the same with a tap, plus two more, remembered in your browser:
 
@@ -219,6 +222,36 @@ at grade, so snapping puts grade on Google's ground and the structure goes under
 level is left out, since it would flicker against Google's ground. Heading 0 points C31's grid
 numbers (0 to 69) east. It's compressed with meshopt (about 1 MB).
 
+**On the drawings' grid.** The Shapr3D model had the transfer pit 0.5 to 0.9 m off the Hatch
+drawings' grid with its two sides swapped, its B1 slab one thick plate with the wrong openings,
+C32 0.64 m off with it, and the gallery's cross beams drifting along it. `scripts/b2d2-structure.mjs`
+puts the structure where the drawings have it, in plan, as the model is built (the source file is
+left as it came):
+
+- the **transfer pit** (grid 0 to 8), redrawn: walls, floor and sump; the **B1 slab** with its
+  central opening and two grated openings, and beams **B1 to B6** under it; at grade the lid with its
+  three openings, the **cross beam**, the **shed support beam** and the train support beams over the pit;
+- the **C31 gallery**: walls and floor kept, between the pit and the north end where
+  the drawings have them; at grade the pony walls, **train support beams 1 and 2**, cross beams
+  **G1 to G14** at 4.445 m, the steel plates between them, and the north end's two openings;
+- **C32** moved over to the drawings' line and brought up to the pit's wall;
+- the **beams** in a layer of their own, in concrete a shade darker than the slabs and walls:
+  train support beams 1 and 2 over the pit and along the gallery, G1 to G14, the cross beam, the
+  shed support beam and B1 to B6. At grade they're under Google's ground (**U** cuts it away over
+  the structure), and from inside C31 they're overhead;
+- the gallery's **hoppers** (the two sloped plates under the slot between the rail beams) taken out:
+  others broke them out with machines, bay by bay, by 10 November. They're kept in the model's data
+  bay by bay (G1–G2 at the pit to G12–G13 at the north end) with the day each went, for the
+  timeline: `scripts/data/b2d2-works.json` says from which end and between which days (4 to 10
+  November from the north end, the bays spread over the days, until we know better), and a rebuild
+  picks up a change.
+
+Plan dimensions are read off the linework of 620-24070-DWG-ST005 (ground floor and B1 plans), to
+the centimetre: they're the numbers at the top of the script. Heights are the Shapr3D model's
+(the plans don't give them); the depths of beams the model didn't have are scaled off the beam
+elevations of -ST010 and -ST011, to about 5 cm. The building, conveyors and tent are as they were,
+so they may sit a little off the corrected concrete.
+
 Areas marked **Chipped / hydro-demo** are drawn as they are on site: the area is cut out of the
 wall, floor or soffit it was marked on, and in its place is a recess of rough, fresh concrete about
 100 mm deep (a measured depth in the markup wins) with the rebar exposed in it: 15M bars both ways
@@ -248,16 +281,51 @@ models** off in the Show panel), then:
 - **← → ↑ ↓** nudge it as you see it (1 cm to 1 m a press), **⟲ ⟳** turn it in its face (1° to 90°);
 - **Move to another surface…**, then click the wall, floor or soffit it belongs on: it goes there,
   its middle where you clicked, facing you;
-- change its **Status** (*Chipped / hydro-demo*, cut in with rebar, or *Marked, not chipped yet*,
-  a flat cyan patch), **Chipped** date (its rim's colour: the drawings' colours for 2 to 8 November,
-  others for later dates), **Defect** and **Notes**;
+- give it its **Panel no.**, which then floats on the panel for everyone (a **Panel numbers** row in
+  the Show panel hides them);
+- move it on to the next stage with **Status**, each with its own look and rim colour, and the day
+  it got there (today, unless you change it; put back a stage, it loses the later stages' days):
+  - *Marked, not chipped yet*: a flat cyan patch;
+  - *Chipped / hydro-demo*: cut in, rough concrete and rusty bars, the rim coloured by the day (the
+    drawings' colours for 2 to 8 November, others for later days);
+  - *Sandblasted*: the recess blasted clean and light, bright steel bars, a white rim;
+  - *Epoxy coated*: the bars coated green, in the recess as sandblasting left it, a dark green rim;
+  - *Shotcreted*: filled flush with fresh shotcrete, a slate rim;
+- set its **Defect** and **Notes**;
 - **Delete area** takes it away (**Bring back** returns the drawing's ones), **Back to the drawing**
   puts one of the drawing's areas back as the markups have it, and **Undo** takes back the last change.
 
+**Photos.** A picked area has a **Photos** strip in the panel. **Add photos** takes pictures from
+your device (several at once; JPEG, PNG, WebP, or HEIC where the browser can open it, up to 40 MB
+each) and keeps each on the site as it was taken, with a copy sized for the screen and a small one
+for the strip. Each is filed under the stage the panel is at and the day it was taken. Click one to
+see it large, step through them (← →), give it a caption, open it **Full size** or delete it. A
+panel with photos shows a camera and how many on its number, and anyone can look at them in the
+panel. Adding, captioning and deleting ask for the admin passcode and happen at once (they aren't
+part of Save for everyone). The pictures live in the `neptune-twin-photos` R2 bucket and what
+they show in the database (`/api/area-photos`, [docs/accounts.md](docs/accounts.md)). An area you
+added and then delete takes its photos with it.
+
+**Timeline.** **Timeline** in the views bar plays the repairs back. A bar along the bottom has a
+slider of days, from the day before the first chipping to today: the areas are drawn as they were
+by the end of the day it's on, from the day each reached each stage (the progress drawings' days
+for chipping, then the days set with **Status**). An area isn't there before the day it was
+chipped (the concrete is whole), then it's chipped, sandblasted, epoxy coated and shotcreted in
+turn; one with no days is as it is now throughout. **▶** runs through the days (slow, normal or
+fast), a timelapse of the work so far, and the bar counts the areas and m² at each stage that day.
+On each day a worker with a chipping hammer stands at the panels our crew chipped that day (up to
+six, spread out; over a span of days like 5 to 8 November each panel gets one of them): in front of
+a wall, bent over a floor panel or under a soffit, on a scaffold tower where it's out of reach. The
+hoppers stand until the day their bay went, with a demolition machine in each bay others broke out
+that day, and the bar counts the bays left. **×**, or starting to edit, puts everything back as it
+is now (`src/repair-crew.js` places them, `src/repair-crew-figures.js` draws them). Nothing is saved by it, and it's
+there for everyone, so the days are worth keeping right as the work goes on.
+
 **+ Add area** draws a new one on the wall, floor or soffit you start on: drag a box (square to the
 face, level on a wall), or click its corners one by one and click the first again, double-click
-or press Enter to finish (Backspace takes a corner back, Esc stops). It takes the details last set
-(chipped today, by default) and is named from where it is: zone, face, grid and m².
+or press Enter to finish (Backspace takes a corner back, Esc stops). It takes the status
+and defect last set (chipped today, by default) and is named from where it is: zone, face, grid and
+m². With nothing picked, the panel counts the areas and m² at each stage.
 
 Areas are rebuilt as you go with the build's own code (`src/repair-geometry.js`): the recess, rebar
 and coloured rim go with them, and the concrete is cut again. Right-drag looks round and WASD
@@ -266,9 +334,30 @@ with the admin passcode (the one for Save position for everyone), and everyone w
 sees them (`/api/area-edits`, [docs/accounts.md](docs/accounts.md)); until then only you see them,
 and closing the page asks first. Changes are kept by the area's id, so they outlast a rebuild from
 a new progress drawing that keeps the id, and win over what that drawing has for the area: **Back
-to the drawing** (and save) takes the drawing's. Areas added in the twin live on the site, not in
+to the drawing** (and save) takes the drawing's. An area keeps its place along its face; if the
+face itself is moved (the structure corrected, as above), the area follows it up to a metre. Areas added in the twin live on the site, not in
 `scripts/data/b2d2-markups.json`. The script writes `public/models/b2d2-repair.json` beside the
 model for this: the areas as drawn and the concrete they're cut out of.
+
+**Changing the model in the twin.** **Edit model**, beside Edit areas in the views bar, adds to
+the structure and recolours it:
+
+- **+ Add beam**, then click where the beam meets a wall: it runs straight across to the wall facing
+  it. With **Straight across** unticked, click each end instead (anywhere on the concrete: along a
+  wall, floor to soffit for a post). A picked beam (click it) takes a **Name**, **Width**, **Depth**,
+  **Length** (about its middle) and **Colour** (concrete, steel and other presets, or any colour),
+  moves with **← → ↑ ↓** as you see it, goes **Up to the soffit** or **Down to the floor**, or is
+  deleted. It starts 0.4 × 0.6 m, then as the last one was set. Beams are part of the model: solid
+  to walk into, moved and hidden with it.
+- **Paint**, then pick a colour and click a wall, floor or soffit: the whole face takes it, as the
+  model has that face (a wall from end to end). Click another to paint it too, or the same again in
+  another colour; **Original** gives a face its own colour back. Repair areas on a painted face
+  stay as they are.
+
+**Save for everyone** sends beams and paint to the site with the admin passcode (`/api/model-edits`,
+[docs/accounts.md](docs/accounts.md)), and everyone then sees the model that way. They're kept in
+the model's own frame, so they stay put when the model is moved, and they aren't written into
+`b2d2-repair.glb`: a rebuild of the file keeps them.
 
 To see inside, press **U** to cut Google's ground away over it, or press **G** (ghost) and fly down
 through the ground into the gallery or tunnel, then **F** to walk; Google's ground stays cut away
@@ -278,14 +367,20 @@ while you're under it there ([Models under the ground](#models-under-the-ground)
 filled polygons coloured by date as its legend says) is read straight into the model's areas:
 
 ```bash
-node scripts/b2d2-progress.mjs "2026.11.08 - Progress.pdf"
+node scripts/b2d2-progress.mjs "2026.11.10 - Progress.pdf"
 node scripts/b2d2-repair-model.mjs
 ```
 
 The first finds each page's sheet from its title block (with `pdftotext`, or `--sheets ST007,...`),
 places each polygon on the wall, floor or soffit of the model it's drawn on, keeps the ids of areas
-that are still there, and lists what's new, what's gone and anything it couldn't place (`--dry-run`
-only lists). Areas take the drawing's measured m². Each chipped area gets a rim in its date's colour.
+that are still there (within 0.6 m of where they were, closest pairs first; `--match 1.2` after the
+structure has been moved, `--match 2.5` when outlines were moved on the drawing, as two C32 floor
+panels were on 10 November), and lists what's new, what's gone and anything it couldn't place
+(`--dry-run` only lists). Areas take the drawing's measured m². Each chipped area gets a rim in its
+date's colour, the legend's for 2 to 10 November (blue 9 November, yellow 10 November). A callout
+whose text is a panel number (the curb walls' CW0001 to CW0046) gives the area its leader ends on
+that number, which the twin shows on the panel; numbers are written four digits wide (the drawing's
+CW00010 is CW0010). A number changed in the twin wins over the drawing's.
 
 To bring in markups from the artifact instead, save its `markups` collection (one JSON file per
 markup, or a `{ markups: [...] }` file) and rebuild; a folder is also saved as `scripts/data/b2d2-markups.json`:
@@ -295,7 +390,8 @@ node scripts/b2d2-repair-model.mjs --markups path/to/markups
 ```
 
 It's built from `source-models/b2d2-site-model.glb` (the artifact's model; `--site` takes another,
-or the artifact's `site.json`). Each area's node keeps its grid, face, area, defect, status and
+or the artifact's `site.json`), with the structure put on the drawings' grid by
+`scripts/b2d2-structure.mjs`. Each area's node keeps its grid, face, area, defect, status and
 notes in glTF `extras`.
 
 ### Converting to .glb
@@ -636,8 +732,8 @@ testing with test cards and the known gaps are in [docs/premium.md](docs/premium
 ## World Drive (worlddrive.app)
 
 A second app in this repository, on its own address: pick anywhere on Earth from a globe of Google's
-3D tiles (search, a dozen start spots, recent places, or a tap on the globe), choose a go-kart,
-pickup or muscle car (more as your level climbs), press **Drive here** and drive the real world
+3D tiles (search, a dozen start spots, recent places, or a tap on the globe), start in the pickup
+or pick the go-kart or the muscle car (more as your level climbs), press **Drive here** and drive the real world
 arcade-style: drift (Space), boost (Shift), fly (F), and hit something to bounce off it into the
 air, where **A**/**D** spin, **W**/**S** flip and **Q**/**E** roll for tricks that score (times a
 combo multiplier) when you land on your wheels; a wipeout loses the combo and rolls you back onto
@@ -696,6 +792,18 @@ you pick one, which claims it. The Worker caps each report by the time since the
 (`worker/drive/progress.js`, sharing its rules with the page in `src/drive-app/levels.js`), on a
 rate limiter rather than a Durable Object (see [Levels](docs/world-drive.md#levels)).
 
+**The Moon**: **Moon** at the top of the globe's panel turns the globe to the Moon, made in the page
+rather than streamed (`src/drive-app/moon.js`): its shapes are NASA's (LRO's laser altimeter, every
+quarter degree, `drive/public/moon/height.bin`), its colours LRO's camera's mosaic
+(`drive/public/moon/colour.webp`; `npm run make-moon` makes both from NASA's CGI Moon Kit), and the
+craters smaller than a few kilometres are made up, the same on every visit, down to 3 m. Its
+ground is a quadtree of squares on a cube blown up into a sphere, a point every 1.3 m by the
+vehicle. It has a dozen start spots (the Apollo sites, Tycho, Copernicus, a pole, the far side) and
+its own search; you drive it in a sixth of the Earth's gravity (jumps as high, two and a half times
+as long, scored as on the Earth), under black sky with the Earth hanging in it, with no water, and on
+your own: driving with others is the Earth's. It needs no Google tiles, so `npm run dev:drive` has the
+real Moon without a key (see [The Moon](docs/world-drive.md#the-moon)).
+
 World Drive's fourteen cars are models from Sketchfab (CC BY, credited in its About box and ride
 picker): sports cars and supercars (a retro wedge, a formula racer, a hypercar, a cyber muscle car)
 and fun and odd rides (a golf cart, a tuk-tuk, an ice-cream van, a lawn tractor) among them, each
@@ -727,7 +835,7 @@ the owner's Google Cloud steps (a separate project and key, restricted to worldd
 Tiles API, a daily quota and budget alerts) are in [docs/world-drive.md](docs/world-drive.md).
 Tests: `npm run test:drive-worker`, `npm run test:drive-ui`, `npm run test:drive-pro-ui`,
 `npm run test:drive-seo`, `npm run test:drive-live`, `npm run test:drive-live-ui`,
-`npm run test:drive-levels` and `npm run test:drive-levels-ui`.
+`npm run test:drive-levels`, `npm run test:drive-levels-ui` and `npm run test:drive-moon-ui`.
 
 ## About the Sketchfab model
 
@@ -749,6 +857,11 @@ src/underground.js  under Google's ground in your own models: the mesh over them
 src/views.js        preset views carried by models (the bar at the top): glide the camera to each
 src/repair-areas.js Edit areas: move, add, change and delete the B2D2 model's repair areas, saved for everyone
 src/repair-geometry.js  the repair areas' geometry (cut-outs, recesses, rebar), shared with the build
+src/repair-photos.js    photos of repair areas: the strip in the editor's panel, sending, the large view
+src/repair-timeline.js  Timeline: the repair areas played back day by day, as each reached each stage
+src/repair-crew.js      the timeline's crew: a worker with a chipping hammer at each panel chipped that day
+src/repair-crew-figures.js  the worker and the demolition machine, drawn and animated
+src/model-edits.js  Edit model: beams added to the B2D2 model and its walls painted, saved for everyone
 src/placements.js   models' positions saved on the live site for everyone (Save position for everyone),
                     and the admin passcode for anything saved for everyone
 src/shared-items.js items the admin saved for everyone: loaded for everyone, Save / Remove for everyone
@@ -809,6 +922,7 @@ scripts/step-to-glb.py  turns a STEP file into a GLB for add-own-asset
 public/library/     downloaded models and our own, library.json catalog, thumbs/ and CREDITS.md
 scripts/add-drive-car.mjs, drive-car-thumbs.mjs   import a car for World Drive into drive/public/cars
                     (its own cars.json, thumbs/ and CREDITS.md; World Drive's build only)
+scripts/make-moon.mjs   World Drive's Moon (drive/public/moon/): NASA's heights and picture of it
 src/geo.js          lat/lon <-> local metres
 public/models/      put your .glb files here
 drive/index.html    World Drive's page; its code is src/drive-app/ (docs/world-drive.md)

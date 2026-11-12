@@ -30,7 +30,8 @@ const TARGETS = {
 
 			const worker = await startWorker( { port: PORT, vars } );
 			// Plain http on 127.0.0.1 is local development: the cookie isn't Secure there.
-			return { ...worker, fetch: ( path, init ) => fetch( worker.base + path, init ), cookieName: 'twin_session', secure: false, servesSite: true };
+			// photos: the PHOTOS bucket of wrangler.jsonc, kept on disk by wrangler dev.
+			return { ...worker, fetch: ( path, init ) => fetch( worker.base + path, init ), cookieName: 'twin_session', secure: false, servesSite: true, photos: true };
 
 		},
 	},
@@ -796,10 +797,10 @@ function apiTests( target ) {
 		for ( const path of [ 'b2d2-repair/area-1', 'other-model/area-1' ] ) assert.equal( ( await send( 'DELETE', path, {} ) ).status, 204 );
 
 		// Added in the twin, with its details; and one of the drawing's taken away.
-		const added = { ...area, added: true, f: { type: 'Spall', status: 'Chipped / hydro-demo', chipped: '2026-11-09', text: 'Found on the walk-round', colour: 'not kept' }, zone: 'c31', face: 'floor', grid: 'Grid 30–31 / AE–AF · EL −2.04', area: 1 };
+		const added = { ...area, added: true, no: 'C31-07', f: { type: 'Spall', status: 'Epoxy coated', chipped: '2026-11-09', sandblasted: '2026-11-10', epoxy: '2026-11-11', text: 'Found on the walk-round', colour: 'not kept' }, zone: 'c31', face: 'floor', grid: 'Grid 30–31 / AE–AF · EL −2.04', area: 1 };
 		for ( const body of [
 			{ ...added, f: 'x' }, { ...added, f: { ...added.f, text: 'x'.repeat( 2000 ) } }, { ...added, f: { ...added.f, type: 5 } },
-			{ ...added, zone: { x: 1 } }, { ...added, area: - 1 }, { ...added, area: 'big' }, { ...added, f: undefined },
+			{ ...added, zone: { x: 1 } }, { ...added, area: - 1 }, { ...added, area: 'big' }, { ...added, f: undefined }, { ...added, no: 7 }, { ...added, no: 'x'.repeat( 50 ) },
 		] ) assert.equal( ( await send( 'PUT', 'b2d2-repair/twin-0001', body ) ).status, 400, JSON.stringify( body ) );
 		assert.equal( ( await send( 'PUT', 'b2d2-repair/twin-0001', added ) ).status, 200 );
 		assert.equal( ( await send( 'PUT', 'b2d2-repair/area-3', { deleted: true, pts: 'ignored' } ) ).status, 200 );
@@ -807,6 +808,99 @@ function apiTests( target ) {
 		const { colour, ...f } = added.f;
 		assert.deepEqual( kept, [ { id: 'area-3', deleted: true }, { id: 'twin-0001', ...added, f } ] );
 		for ( const path of [ 'b2d2-repair/area-3', 'b2d2-repair/twin-0001' ] ) assert.equal( ( await send( 'DELETE', path, {} ) ).status, 204 );
+
+	} );
+
+	test( 'beams and paint added to a model in the twin: anyone lists them, only the passcode saves or removes them', async () => {
+
+		const viewer = client();
+		const send = ( method, path, body, key = PLACEMENT_KEY ) => viewer.send( method, `/api/model-edits/${ path }`, { body, headers: key === null ? {} : { 'X-Edit-Key': key } } );
+		const beam = { kind: 'beam', a: [ 30, 1.2, - 7.2 ], b: [ 30, 1.2, - 0.8 ], width: 0.4, depth: 0.6, colour: '#9aa3ad', name: 'B1' };
+		const paint = { kind: 'paint', layer: 'c31', at: [ 40, 0.5, - 7.17 ], n: [ 0, 0, 1 ], colour: '#F2C14E' };
+
+		assert.deepEqual( ( await viewer.send( 'GET', '/api/model-edits/b2d2-repair' ) ).body, { edits: [] } );
+		assert.equal( ( await send( 'PUT', 'b2d2-repair/beam-1', beam, null ) ).status, 403 );
+		assert.equal( ( await send( 'PUT', 'b2d2-repair/beam-1', beam, 'nope' ) ).status, 403 );
+		for ( const body of [
+			{ ...beam, kind: 'column' }, { ...beam, colour: 'red' }, { ...beam, b: beam.a }, { ...beam, a: [ 1, 2 ] }, { ...beam, width: 0 }, { ...beam, depth: 50 },
+			{ ...beam, name: 'x'.repeat( 200 ) }, { ...paint, layer: 'bad layer!' }, { ...paint, n: [ 0, 0, 0 ] }, { ...paint, at: 'here' }, 'beam',
+		] ) assert.equal( ( await send( 'PUT', 'b2d2-repair/beam-1', body ) ).status, 400, JSON.stringify( body ) );
+
+		assert.equal( ( await send( 'PUT', 'b2d2-repair/beam-1', { ...beam, extra: 'not kept' } ) ).status, 200 );
+		assert.equal( ( await send( 'PUT', 'b2d2-repair/paint-1', paint ) ).status, 200 );
+		assert.equal( ( await send( 'PUT', 'b2d2-repair/beam-1', { ...beam, depth: 0.8 } ) ).status, 200, 'saving again replaces it' );
+		const edits = ( await client().send( 'GET', '/api/model-edits/b2d2-repair', { origin: null } ) ).body.edits.map( ( { updatedAt, ...e } ) => e );
+		assert.deepEqual( edits.sort( ( a, b ) => a.id.localeCompare( b.id ) ), [ { id: 'beam-1', ...beam, depth: 0.8 }, { id: 'paint-1', ...paint } ] );
+
+		assert.equal( ( await send( 'DELETE', 'b2d2-repair/beam-1', {}, 'nope' ) ).status, 403 );
+		for ( const id of [ 'beam-1', 'paint-1' ] ) assert.equal( ( await send( 'DELETE', `b2d2-repair/${ id }`, {} ) ).status, 204 );
+		assert.deepEqual( ( await viewer.send( 'GET', '/api/model-edits/b2d2-repair' ) ).body, { edits: [] } );
+
+	} );
+
+	test( 'photos of repair areas: anyone sees them, only the passcode adds, captions or removes them', async () => {
+
+		const viewer = client();
+		const base = '/api/area-photos/b2d2-repair';
+		const key = { 'X-Edit-Key': PLACEMENT_KEY };
+		assert.deepEqual( ( await viewer.send( 'GET', base ) ).body, { photos: [] } );
+		if ( ! server.photos ) {
+
+			// No bucket here (the Vercel copy): nothing can be added.
+			assert.equal( ( await viewer.send( 'POST', `${ base }/area-1`, { body: { stage: 'Sandblasted' }, headers: key } ) ).status, 503 );
+			return;
+
+		}
+
+		const bytes = n => Uint8Array.from( { length: n }, ( _, i ) => i % 251 );
+		const put = ( path, body, { type = 'image/jpeg', headers = key, origin = server.base } = {} ) => server.fetch( path, { method: 'PUT', body, headers: { 'Content-Type': type, Origin: origin, ...headers } } );
+
+		assert.equal( ( await viewer.send( 'POST', `${ base }/area-1`, { body: {} } ) ).status, 403 );
+		assert.equal( ( await viewer.send( 'POST', `${ base }/bad%20area`, { body: {}, headers: key } ) ).status, 400 );
+		assert.equal( ( await viewer.send( 'POST', `${ base }/area-1`, { body: { caption: 'x'.repeat( 600 ) }, headers: key } ) ).status, 400 );
+		const made = await viewer.send( 'POST', `${ base }/area-1`, { body: { stage: 'Sandblasted', taken: '2026-11-10', caption: 'North end', width: 4000, height: 3000 }, headers: key } );
+		assert.equal( made.status, 201, JSON.stringify( made.body ) );
+		const { id } = made.body;
+		const file = kind => `${ base }/area-1/${ id }/${ kind }`;
+		// Not listed until all of it has arrived.
+		assert.deepEqual( ( await viewer.send( 'GET', base ) ).body.photos, [] );
+
+		assert.equal( ( await put( file( 'full' ), bytes( 3000 ) ) ).status, 409, 'the copies come first' );
+		assert.equal( ( await put( file( 'thumb' ), bytes( 100 ), { headers: {} } ) ).status, 403 );
+		assert.equal( ( await put( file( 'thumb' ), bytes( 100 ), { origin: 'https://elsewhere.example' } ) ).status, 403 );
+		assert.equal( ( await put( file( 'thumb' ), bytes( 100 ), { type: 'text/html' } ) ).status, 415 );
+		assert.equal( ( await put( file( 'thumb' ), bytes( 100 ), { type: 'image/svg+xml' } ) ).status, 415 );
+		assert.equal( ( await put( file( 'thumb' ), bytes( 500 * 1024 ) ) ).status, 413 );
+		assert.equal( ( await put( file( 'poster' ), bytes( 100 ) ) ).status, 404 );
+		assert.equal( ( await put( `${ base }/area-1/nosuchphoto/thumb`, bytes( 100 ) ) ).status, 404 );
+		assert.equal( ( await put( file( 'thumb' ), bytes( 100 ) ) ).status, 204 );
+		assert.equal( ( await put( file( 'view' ), bytes( 1000 ) ) ).status, 204 );
+		assert.equal( ( await put( file( 'full' ), bytes( 3000 ), { type: 'image/png' } ) ).status, 204 );
+
+		const [ listed ] = ( await client().send( 'GET', base, { origin: null } ) ).body.photos;
+		const { createdAt, ...rest } = listed;
+		assert.deepEqual( rest, { id, area: 'area-1', stage: 'Sandblasted', taken: '2026-11-10', caption: 'North end', width: 4000, height: 3000, size: 3000 } );
+		assert.ok( createdAt > 0 );
+
+		// Anyone can look at it; it never changes, so it may be kept.
+		const seen = await server.fetch( file( 'view' ) );
+		assert.equal( seen.status, 200 );
+		assert.equal( seen.headers.get( 'Content-Type' ), 'image/jpeg' );
+		assert.match( seen.headers.get( 'Cache-Control' ), /immutable/ );
+		assert.deepEqual( new Uint8Array( await seen.arrayBuffer() ), bytes( 1000 ) );
+		assert.equal( ( await server.fetch( file( 'full' ) ) ).headers.get( 'Content-Type' ), 'image/png' );
+
+		assert.equal( ( await viewer.send( 'PUT', `${ base }/area-1/${ id }`, { body: { caption: 'South end' } } ) ).status, 403 );
+		const captioned = await viewer.send( 'PUT', `${ base }/area-1/${ id }`, { body: { caption: 'South end', size: 1 }, headers: key } );
+		assert.equal( captioned.status, 200 );
+		assert.equal( captioned.body.caption, 'South end' );
+		assert.equal( captioned.body.size, 3000 );
+		assert.equal( ( await viewer.send( 'PUT', `${ base }/area-2/${ id }`, { body: { caption: 'x' }, headers: key } ) ).status, 404 );
+
+		assert.equal( ( await viewer.send( 'DELETE', `${ base }/area-1/${ id }`, { body: {} } ) ).status, 403 );
+		assert.equal( ( await viewer.send( 'DELETE', `${ base }/area-1/${ id }`, { body: {}, headers: key } ) ).status, 204 );
+		assert.deepEqual( ( await viewer.send( 'GET', base ) ).body.photos, [] );
+		assert.equal( ( await server.fetch( file( 'view' ) ) ).status, 404 );
 
 	} );
 

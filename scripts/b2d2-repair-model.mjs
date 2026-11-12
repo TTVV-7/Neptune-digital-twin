@@ -35,12 +35,14 @@ import { meshopt } from '@gltf-transform/functions';
 import { MeshoptDecoder, MeshoptEncoder } from 'meshoptimizer';
 import sharp from 'sharp';
 import { Vector3 } from 'three';
-import { areaExtras, areaName, buildRepairs, random, triNormal } from '../src/repair-geometry.js';
+import { C32_LINE, correctStructure, hopperBays, PIT_INSIDE } from './b2d2-structure.mjs';
+import { areaExtras, areaName, buildRepairs, CHIPPED, LOOKS, lookNames, random, rimOf, triNormal } from '../src/repair-geometry.js';
 
 const ROOT = new URL( '../', import.meta.url );
 const { values: opts } = parseArgs( { options: {
 	site: { type: 'string', default: new URL( 'source-models/b2d2-site-model.glb', ROOT ).pathname },
 	markups: { type: 'string', default: new URL( 'scripts/data/b2d2-markups.json', ROOT ).pathname },
+	works: { type: 'string', default: new URL( 'scripts/data/b2d2-works.json', ROOT ).pathname },
 	out: { type: 'string', default: new URL( 'public/models/b2d2-repair.glb', ROOT ).pathname },
 } } );
 
@@ -58,6 +60,9 @@ const ORIGIN = [ 34.5, 5.1, - 4 ];
 const STRUCTURE = {
 	c31: { name: 'C31 gallery', color: '#b9c0c8', cut: true },
 	pit: { name: 'Transfer pit', color: '#9fb0c2', cut: true },
+	// Train support beams, G1 to G14, the cross and shed support beams, B1 to B6: a layer of their
+	// own, in concrete a shade darker than the walls and slabs they carry.
+	beams: { name: 'Beams', color: '#9ea6b0', cut: true },
 	c32: { name: 'C32 tunnel', color: '#c9c4b8', cut: true },
 	steel: { name: 'Steel plates at grade', color: '#c9cfd5', metal: true },
 	building: { name: 'Dumper building (for lining up)', color: '#ff8a1f', alpha: 0.35 },
@@ -78,8 +83,9 @@ const FL = z => - 6.82 + 0.241 * z;
 const VIEWS = [
 	{ name: 'Overview', from: [ 82, 42, 42 ], at: [ 30, - 1, - 16 ], underground: true },
 	{ name: 'C31', from: [ 66, - 0.6, - 5 ], at: [ 30, - 0.8, - 5 ] },
-	{ name: 'C32', from: [ 2.9, FL( 38 ) + 1.5, - 38 ], at: [ 2.9, FL( 16 ) + 1.2, - 16 ] },
-	{ name: 'Pit', from: [ 8.2, - 3.0, - 1.4 ], at: [ 2.5, - 5.4, - 6 ] },
+	{ name: 'C32', from: [ C32_LINE, FL( 38 ) + 1.5, - 38 ], at: [ C32_LINE, FL( 16 ) + 1.2, - 16 ] },
+	// From the pit's north-east corner, under the B1 slab, across to C32's mouth.
+	{ name: 'Pit', from: [ PIT_INSIDE.x[ 1 ] - 0.4, - 3.0, - 0.7 ], at: [ 1.8, - 5.2, - 6 ] },
 	{ name: 'Ground', from: [ 67.5, 7.0, - 4.95 ], at: [ 20, 5.3, - 4.95 ] },
 ];
 
@@ -208,9 +214,38 @@ const io = new NodeIO()
 	.registerDependencies( { 'meshopt.decoder': MeshoptDecoder, 'meshopt.encoder': MeshoptEncoder } );
 
 const markups = ( await readMarkups( opts.markups ) ).filter( m => m.kind === 'area' && m.pts?.length >= 3 && m.n );
-const site = await readSite( io, opts.site );
+// The Shapr3D model's structure, put on the drawings' grid (scripts/b2d2-structure.mjs).
+const source = await readSite( io, opts.site );
+const site = correctStructure( source );
 // The layers areas are cut out of, in the artifact's frame, uncut: the twin's area editor cuts
 // them again where areas are moved to (src/repair-areas.js).
+// What others took out, for the twin's timeline: the hoppers, bay by bay, each with the day it was
+// gone by (scripts/data/b2d2-works.json: from which end, and between which days, the first bay on
+// the day they started and the last on the day they finished). Read before anything is written, so
+// a bad file leaves the model as it was.
+const works = JSON.parse( await readFile( opts.works, 'utf8' ) );
+const removed = [];
+if ( works.hoppers ) {
+
+	const { name, by, started, finished, from } = works.hoppers;
+	const day = d => /^\d{4}-\d{2}-\d{2}$/.test( d ?? '' ) ? Date.parse( `${ d }T00:00:00Z` ) : NaN;
+	if ( Number.isNaN( day( started ) ) || Number.isNaN( day( finished ) ) ) throw new Error( `${ opts.works }: hoppers need started and finished as YYYY-MM-DD` );
+	if ( day( finished ) < day( started ) ) throw new Error( `${ opts.works }: hoppers finished before they started` );
+	if ( ! [ 'north', 'pit' ].includes( from ) ) throw new Error( `${ opts.works }: hoppers' from is 'north' or 'pit'` );
+	const days = Math.round( ( day( finished ) - day( started ) ) / 86400000 );
+	const bays = hopperBays( source );
+	const order = from === 'pit' ? bays : [ ...bays ].reverse();
+	removed.push( {
+		name, by: by ?? '', layer: 'c31', started, finished, from,
+		parts: order.map( ( bay, k ) => ( {
+			name: bay.name, x: bay.x,
+			removed: new Date( day( started ) + Math.round( k * days / Math.max( 1, bays.length - 1 ) ) * 86400000 ).toISOString().slice( 0, 10 ),
+			positions: Array.from( bay.positions, v => +v.toFixed( 4 ) ), index: Array.from( bay.index ),
+		} ) ),
+	} );
+
+}
+
 const cutLayers = Object.fromEntries( Object.entries( STRUCTURE ).filter( ( [ key, layer ] ) => layer.cut && site[ key ] ).map( ( [ key ] ) => [ key, site[ key ] ] ) );
 const built = buildRepairs( markups, cutLayers );
 
@@ -272,25 +307,45 @@ const flatMaterial = ( name, hex, alpha ) => {
 const fillMat = flatMaterial( 'Repair area', AREA_COLOR, 0.7 );
 const edgeMat = flatMaterial( 'Repair area outline', EDGE_COLOR, 1 );
 const textures = await concreteTextures();
-const chippedMat = doc.createMaterial( 'Chipped concrete' )
-	.setBaseColorTexture( doc.createTexture( 'Chipped concrete' ).setImage( textures.colour ).setMimeType( 'image/jpeg' ) )
-	.setNormalTexture( doc.createTexture( 'Chipped concrete normals' ).setImage( textures.normal ).setMimeType( 'image/jpeg' ) )
-	.setNormalScale( 1.5 )
-	.setMetallicFactor( 0 )
-	.setRoughnessFactor( 0.95 )
-	.setDoubleSided( true );
-// A chipped area's rim on the face round it, coloured by when it was chipped as the progress
-// drawings' legend has it (f.chipped, from scripts/b2d2-progress.mjs).
-const CHIPPED_COLOURS = { '2026-11-02': '#22c55e', '2026-11-03': '#06b6d4', '2026-11-04': '#f97316', '2026-11-05/08': '#ec4899' };
-const rimMats = new Map();
-const rimMat = date => {
+const colours = doc.createTexture( 'Chipped concrete' ).setImage( textures.colour ).setMimeType( 'image/jpeg' );
+const normals = doc.createTexture( 'Chipped concrete normals' ).setImage( textures.normal ).setMimeType( 'image/jpeg' );
+// The concrete and the bars of each stage (LOOKS in src/repair-geometry.js), made as they're needed.
+const lookMats = new Map();
+const lookMat = ( status, part ) => {
 
-	const hex = CHIPPED_COLOURS[ date ] ?? '#94a3b8';
-	if ( ! rimMats.has( hex ) ) rimMats.set( hex, flatMaterial( `Chipped ${ date ?? '' }`.trim(), hex, 1 ) );
-	return rimMats.get( hex );
+	const name = lookNames( status )[ part ];
+	if ( ! lookMats.has( name ) ) {
+
+		const look = LOOKS[ status ][ part ];
+		const material = doc.createMaterial( name ).setBaseColorFactor( rgba( look.color ) ).setMetallicFactor( look.metalness ?? 0 ).setRoughnessFactor( look.roughness );
+		if ( part === 'concrete' ) {
+
+			if ( look.map ) material.setBaseColorTexture( colours );
+			material.setNormalTexture( normals ).setNormalScale( 1.5 ).setDoubleSided( true );
+
+		}
+
+		lookMats.set( name, material );
+
+	}
+
+	return lookMats.get( name );
 
 };
-const rebarMat = doc.createMaterial( 'Exposed rebar' ).setBaseColorFactor( rgba( '#7c4a2d' ) ).setMetallicFactor( 0.5 ).setRoughnessFactor( 0.65 );
+// The chipped look's first, as the model has always had them (ones not used are left out of the file).
+lookMat( CHIPPED, 'concrete' );
+lookMat( CHIPPED, 'rebar' );
+// An area's rim on the face round it: a chipped one's coloured by when it was chipped as the
+// progress drawings' legend has it (f.chipped, from scripts/b2d2-progress.mjs), the later stages'
+// by the stage (rimOf).
+const rimMats = new Map();
+const rimMat = m => {
+
+	const { name, colour } = rimOf( m );
+	if ( ! rimMats.has( name ) ) rimMats.set( name, flatMaterial( name, colour, 1 ) );
+	return rimMats.get( name );
+
+};
 
 const flatPrim = ( { pos, idx }, normal, material ) => {
 
@@ -329,20 +384,20 @@ scene.addChild( repairs );
 let total = 0;
 for ( const { m, plane, parts } of built.areas ) {
 
-	const f = m.f ?? {};
 	const name = areaName( m );
 	const mesh = doc.createMesh( name );
 	if ( plane ) {
 
-		mesh.addPrimitive( loosePrim( parts.recess, chippedMat ) );
-		mesh.addPrimitive( flatPrim( parts.rim, parts.rim.normal, rimMat( f.chipped ) ) );
-		if ( parts.rebar.idx.length ) {
+		const status = m.f.status;
+		mesh.addPrimitive( loosePrim( parts.filled ?? parts.recess, lookMat( status, 'concrete' ) ) );
+		mesh.addPrimitive( flatPrim( parts.rim, parts.rim.normal, rimMat( m ) ) );
+		if ( parts.rebar?.idx.length ) {
 
 			mesh.addPrimitive( doc.createPrimitive()
 				.setAttribute( 'POSITION', accessor( 'VEC3', shifted( parts.rebar.pos ) ) )
 				.setAttribute( 'NORMAL', accessor( 'VEC3', new Float32Array( parts.rebar.nor ) ) )
 				.setIndices( accessor( 'SCALAR', new Uint32Array( parts.rebar.idx ) ) )
-				.setMaterial( rebarMat ) );
+				.setMaterial( lookMat( status, 'rebar' ) ) );
 
 		}
 
@@ -371,7 +426,9 @@ await io.write( opts.out, doc );
 await writeFile( DATA, JSON.stringify( {
 	origin: ORIGIN,
 	layers: Object.fromEntries( Object.entries( cutLayers ).map( ( [ key, { positions, index } ] ) => [ key, { name: STRUCTURE[ key ].name, positions: Array.from( positions ), index: Array.from( index ) } ] ) ),
-	markups: markups.map( ( { id, n, pts, area, face, zone, grid, f, src } ) => ( { id, n, pts, area, face, zone, grid, f, src } ) ),
+	markups: markups.map( ( { id, no, n, pts, area, face, zone, grid, f, src } ) => ( { id, ...( no ? { no } : {} ), n, pts, area, face, zone, grid, f, src } ) ),
+	removed,
 } ) + '\n' );
 const size = ( await stat( opts.out ) ).size;
+for ( const r of removed ) console.log( `${ r.name } (${ r.by }): ${ r.parts.length } bays, from the ${ r.from } end, ${ r.parts.map( p => `${ p.name } ${ p.removed.slice( 5 ) }` ).join( ', ' ) }` );
 console.log( `Wrote ${ opts.out }: ${ markups.length } repair areas (${ built.areas.filter( a => a.plane ).length } chipped, cut out of ${ holes } triangles), ${ total.toFixed( 2 ) } m², ${ ( size / 1024 ).toFixed( 0 ) } KB` );

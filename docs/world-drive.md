@@ -1,7 +1,8 @@
 # World Drive (worlddrive.app)
 
 World Drive is the second app in this repository: pick anywhere on Earth from a globe of Google's
-photorealistic 3D tiles, drop in and drive the real world, arcade style. It shares `src/` with the
+photorealistic 3D tiles, drop in and drive the real world, arcade style; or switch the globe to
+[the Moon](#the-moon) and drive that. It shares `src/` with the
 construction app (the tiles, the models, the driving) but has its own page, build, Worker and
 address, and the construction app is unchanged by it.
 
@@ -31,7 +32,7 @@ address, and the construction app is unchanged by it.
    `/?at=48.86,2.2945&name=Eiffel%20Tower` for anywhere), and so does a tap on one of the places
    listed at the foot of the panel (each a link to its page, which a middle-click or "open in new
    tab" still opens: a plain tap stays in the game, as leaving it would end the visit).
-3. **Your ride**: the go-kart, a pickup or the muscle car; six more [cars](#world-drives-cars) as
+3. **Your ride**: the pickup to start with, or the go-kart or the muscle car; six more [cars](#world-drives-cars) as
    your [level](#levels) climbs (a golf cart at level 5, a tuk-tuk at 8, an ice-cream van at 15, a
    lawn tractor at 22, a retro wedge at 30 and a formula racer at 40); or with the
    [Supporter Pass](#supporter-pass-content) those six at once, seven cars of its own (a neon racer, a
@@ -39,7 +40,10 @@ address, and the construction app is unchanged by it.
    four rides built for it (a sports coupe, a monster truck, a city bus and a hovercraft). They're in
    three rows that scroll sideways. A locked one says what it needs ("Lv 8 · or Pass", or the pass's
    badge); picked, a level's says which level you're at, and the pass's opens its sheet. The choice
-   is remembered. **Garage**, under the rides, paints them.
+   is remembered; until one is picked (and while the one picked is locked) it's the pickup, or the
+   go-kart on a site without the pickup's model (it's the library's, `vehicles.js`). Should the
+   picked ride's model not load (the pickup's is 2.8 MB), the drop-in goes on in the go-kart, which
+   is drawn in code and can't fail to, with a word saying so. **Garage**, under the rides, paints them.
 4. **Drive here.** The view flies down to the pin and waits for the ground to load ("Loading the
    ground..."), so the vehicle never drops through tiles that aren't there yet. It starts on the ground
    at the pin, facing along the street if there is one (a spot's road, or the longest clear line
@@ -74,7 +78,8 @@ The keys card shows as each drive starts; **?** brings it back. Under the place'
 a slim bar shows your [level](#levels) and the XP to the next, with small "+46 XP" pop-ups under it. Flying, the booster, drifts, stunts,
 water and R come from `src/drive.js`, which World Drive starts with `fly`, `booster` and `drift` on,
 `crash: 'launch'` and its `water` (the construction app leaves them off: its crashes stop the
-vehicle dead, and nothing there is water).
+vehicle dead, and nothing there is water), and on the Moon its `gravity` (a share of the Earth's:
+[the Moon](#driving-there)).
 
 On a touch screen the globe's panel is a sheet along the bottom, and driving has on-screen buttons
 (the driving HUD's, `src/drive-hud.js`): steering bottom left; **Gas** with **Drift** over it at the
@@ -690,6 +695,160 @@ height as EGM96 has it there. Then as it is now (two loads, one root tileset req
 at Rochester (four squares from the lake's) had no lake's surface round it, and at Toronto (one
 square from them) had it again; from Lake Baikal's, at Irkutsk (11 squares off) it was gone. In the
 Strait of Georgia the kart drove on the sea for 4 s, on the water all the way, with no splash.
+
+## The Moon
+
+The globe's panel has **Earth** and **Moon** at its top. The Moon is a whole Moon, made in the page
+(`src/drive-app/moon.js`) rather than streamed: its shapes are the real Moon's down to a few
+kilometres, from NASA's Lunar Reconnaissance Orbiter, its colours LRO's photographs of the whole
+Moon, and everything smaller made up, the same on every visit. It needs no Google tiles and no Maps
+key, so it's the real Moon under `npm run dev:drive` too.
+
+### Going there
+
+- **Earth | Moon.** The first time, the Moon's two files are fetched (never before: the Earth never
+  asks for them, nor makes its stars), the heights (`/moon/height.bin`, 2.1 MB) and the picture
+  (`/moon/colour.webp`, 0.7 MB), the Moon button dimmed meanwhile; if they don't come, a word says so
+  and the globe stays on the Earth. Earth, or a place or a drop-in on the Earth, while they're on
+  their way stays on the Earth. Then the globe turns to the Moon, coming in from further out, over the Apollo sites
+  (12° N, 18° E) the first time, else where it was looking when it left; the Earth's tiles are
+  hidden and not updated, so none load under it. Earth turns back, to where it was.
+- **Start spots**: a dozen (`MOON_SPOTS` in `src/drive-app/moon-places.js`): Tranquility Base
+  (Apollo 11), Hadley Rille (Apollo 15), the Taurus-Littrow valley (Apollo 17), Tycho, Copernicus,
+  Aristarchus, Plato, Mons Huygens, Shackleton crater's rim by the south pole, Mare Orientale,
+  Tsiolkovskiy and Von Kármán (Chang'e 4) on the far side. Latitude north and longitude east are
+  positive, as the IAU's selenographic coordinates have them.
+- **Search** finds the Moon's own places, all in the page (no map service knows the Moon): the spots
+  and about forty more (`MOON_PLACES`: the other landing sites, the seas, more craters and mountains,
+  the poles, the highest and lowest places), by their names or others ("Sea of Rains" is Mare
+  Imbrium, "Apollo 11" Tranquility Base), accents and apostrophes not minded ("schroteri",
+  "change 4"). Typed coordinates are the Moon's. A tap on the globe drops a pin.
+- **Recent places** are kept apart, six of the Moon's own (`world-drive.recent-moon`), and the
+  panel shows the world's. The Earth's are untouched.
+- **A link**: `/?spot=moon-tycho` (any Moon spot's id), or `/?at=-43.31,-11.36&world=moon`, turns the
+  globe to the Moon and pins the place, as an Earth spot's link does.
+- On the Moon the panel says "Pick anywhere on the Moon", has no search credit (it's not
+  OpenStreetMap's), and none of [driving with others](#on-the-moon-you-drive-on-your-own); NASA's
+  credit is in the corner where Google's would be.
+
+### Driving there
+
+- **The drop-in** has no tiles to wait for, no sea and no streets: the ground's height at the pin
+  is worked out (the same sum that builds the ground, below), so the scene is centred on the ground
+  there at once, and the ground round it is built on the way down, faster while the loading screen
+  is up. The vehicle faces the way with the most open ground round it (`Ground.heading`, as on the
+  Earth). In Chromium's software renderer (no GPU) a drop-in took 13 to 18 s.
+- **Gravity** is the Moon's, 1.62 m/s², a sixth of the Earth's: `driver.gravity = 0.165`
+  (`src/drive.js`). What throws a vehicle up (a hop, a hit's throw, a crest's climb, a wipeout's
+  tumble, a bounce on soft springs) is multiplied by its square root, 0.41 (`driver.leap`), so each
+  goes as high as on the Earth and stays up two and a half times as long (what a landing's speed is
+  measured against, for a hard one losing speed or soft springs bouncing, too): a hop 2.5 m up for 3.5 s
+  (1.43 s on the Earth). Thrown as hard as on the Earth they'd go six times as high and stay up six
+  times as long: a hit's throw 52 m up, a hop 8.6 s. A drift's little hop is as short as on the
+  Earth. The ground is looked for 2.4 km down rather than 400 m, and a vehicle fallen 1.2 km under
+  where it last stood with no ground found is put back there (200 m on the Earth), as long jumps go
+  higher over ground falling away. Sparks and bits from a hit fall as slowly.
+- **Scores** are fair to the Earth's: big air counts the time the same jump would have taken on the
+  Earth (the air time × 0.41), so a plain hop is no more big air than on the Earth, and a spin, a
+  flip or a roll is worth 0.41 of its points (to the nearest 10), there being that much longer to
+  turn in each jump (not while flying, which lasts as long anywhere); wall bounces are as they are. The leaderboard has the place as "Tycho crater
+  (Moon)", or for a pin "Moon, 43.31° S, 11.36° W", never the board of a place on the Earth with the
+  same name or at the same latitude and longitude, and a run's longest air is posted up to the
+  Worker's 120 s.
+- **The sky** is black with stars (a picture all round, turned with the Moon) and the Earth hangs in
+  it over the near side, where the Moon always faces it: 1.9° across as it really is, drawn at 2.5°
+  (a body low in the sky looks bigger than it is), lit by the same sun, so it shows a phase. The sun
+  is from the south-west, 20° up, so every crater rim and rock has its light and its shade. On the
+  globe from space it's over the viewer's left shoulder (the side in view lit, a Moon nearly full),
+  and low across the ground from the left coming down to it, as light from straight ahead would
+  show none of its craters.
+- **No water**: `water.none` (`water.js`) says everywhere is surely dry, and the Driver is given no
+  water at all; the grey dust, flat and even on a mare's floor, would otherwise look like water to
+  it. **Boost pads** go down by
+  [their own rules](#boosting) for the Moon (`MOON_RULES` in `pads.js`): ground tilted up to 25° and
+  bumpy to 40 cm round the pad, reached over ground rising or falling up to 3 m every 7 m (a crater's
+  rim), up to 40 m over or under where the vehicle last stood, and while it's up to 60 m over the
+  ground in its long jumps. The Earth's rules keep pads off roofs and banks, and the Moon has none.
+- **M** goes back to the Moon's globe, **Earth** on the panel to the Earth's.
+
+### On the Moon you drive on your own
+
+Driving with others is the Earth's: its rooms are areas of the Earth, its cars are placed on the
+Earth. On the Moon nothing is sent to a room (it's as if you were on the globe, away: the others see
+you "on the globe"), the others' ghosts aren't drawn, the panel's "Driving now" and its dots, the
+party banner, the pause menu's friends and the horn aren't shown, and no trick's points go to the
+room. **Join** on a party's word that someone went somewhere ("Sam went to Monaco"), from the Moon,
+goes back to the Earth and drops in beside them. Levels count driving, air, drifts, pads and tricks there as anywhere, but not areas or
+start spots (those are the Earth's) nor driving with others. A drop-in there is counted in the
+[play stats](#play-stats) as the Moon's, never where.
+
+### How it's made
+
+- **The heights** are LRO's laser altimeter's (LOLA), as NASA's Scientific Visualization Studio's
+  [CGI Moon Kit](https://svs.gsfc.nasa.gov/4720/) has them (`ldem_4.tif`): four to the degree (7.6 km
+  apart at the equator), kilometres over or under a sphere of 1,737.4 km, from the 8.9 km deep floor
+  of Antoniadi crater to the Selenean summit 10.5 km up (both on the far side, as this grid has
+  them). `scripts/make-moon.mjs` (`npm run make-moon`) rounds them to the metre as signed 16-bit
+  integers: `drive/public/moon/height.bin`, 1440 × 720 from 90° N and 180° W, 2,073,600 bytes
+  (compressed it would be 1.4 MB; it's kept plain, as the sea's tables are). The page reads between
+  its points with smooth (Catmull-Rom) curves, across a pole from the row on the other side, the last
+  stretch to a pole easing to the polar row's mean (else every column would meet there at its own
+  height).
+- **The picture** is LRO's wide-angle camera's mosaic in colour, with the polar mosaics filled in
+  (`lroc_color_poles_4k.tif`), as WebP at quality 72: `drive/public/moon/colour.webp`, 4096 × 2048,
+  674,590 bytes. Read by each point's direction, so it has no seam where squares meet; across the
+  180th meridian its gradients are taken from a copy that doesn't jump.
+- **The made-up detail** (`src/drive-app/moon-height.js`): craters of thirteen sizes, from 12.8 km
+  across down to 3 m, as many of each as the Moon has (about four times as many each time the size
+  halves). For each size space is cut into cubes (32 km down to 7.8 m, each size turned another way
+  so they don't line up), and each may hold one crater centred in its middle 40 %, its ball reaching
+  at most 30 % of the cube: no crater reaches out of its cube, so a point only looks at the one cube
+  it's in, thirteen looks in all. A crater is where its ball cuts the surface (a crater centred off
+  the surface is just a smaller one): a bowl about a fifth as deep as it's wide (a ninth for the big
+  ones, whose floors are flat), a rim a thirtieth as high, and ejecta sloping away to half a radius
+  past the rim; most are old, shallow with soft rims, and the fresh ones are brighter inside and out.
+  Under them, four layers of gentle rolling ground (9 m over 900 m down to 8 cm over 18 m). At
+  Tranquility Base, measured every 2 m over 800 m square, half the ground slopes under 1.7° and one
+  point in a hundred over 26° (50° at most, short of the 60° a wall is), with 27 m between the
+  highest and lowest; at Tycho the slopes are steeper (13° in the middle) and the relief 229 m. A
+  point costs a few microseconds with everything in (1.8 to 3.6 µs, measured in Node).
+- **The ground** is a cube of six faces blown up into a sphere (equal-angle, so squares are much the
+  same size all over a face), each face a quadtree: a square of 32 × 32 squares of ground is split
+  into four where the camera (or the vehicle) is nearer its middle than 1.2 times its size, and
+  joined again past 1.4 times, so it's a point every 1.3 m by the vehicle (squares 41.6 m across,
+  the finest), every 13 to 26 m a kilometre off, and six squares for the whole Moon from space. A
+  square surely over the horizon (from ground 150 m lower than under the camera all the way, to its
+  own highest ground) isn't split. Each square's points are kept round its middle, so they're
+  precise to the millimetre so far from the Moon's middle; where a fine square meets a coarse one a
+  skirt hangs from their edges to fill the gap. Each is a plain mesh with its own bounding volume
+  hierarchy (`raycast.js`), so the Driver, Ground, the boost pads and the globe's taps hit it as they
+  hit Google's tiles; only the squares drawn are where they're raycast (`moon.terrain`: three.js's
+  raycasts don't look at `visible`). Driving, about 240 squares are drawn, 2,304 triangles each
+  with their skirts (about 550,000, of which about 400,000 were in view in the tests); squares are
+  built 5 ms a frame at most, 40 ms while the loading screen is up. A square's smaller squares are
+  only looked into once all four are built, so the ground comes down a size a frame, and the drop-in
+  waits until a frame wants nothing more built.
+- **Its look** is a shader of its own: the picture, brighter where moon-height.js says (fresh
+  craters), Lambert's light with a share of Lommel-Seeliger's (how the Moon's dust really scatters
+  light: its edge as bright as its middle at full Moon), a little earthshine where the sun doesn't
+  reach, and within 220 m fine grit and gravel (a tile of speckle 4 m and 32 m across, triplanar by
+  the Moon's own axes, each square's measured from a corner of a 512 m grid so neighbours' meet) so
+  the ground is seen to move under you. Its frame is the Moon's own, as 3d-tiles-renderer's
+  `Ellipsoid` has a body (Z through the north pole, X through 0° N 0° E), recentred on the place
+  driven as the Earth's tiles are (`placeEarth`), and the globe (`GlobeView.setBody`) uses its size,
+  its heights and its worked-out ground.
+
+### How the Moon is tested
+
+`npm run test:drive-moon-ui`: the globe turned to the Moon (its files fetched only then, its spots,
+its words, NASA's credit, the Earth hidden), its search (names, other names, accents, coordinates,
+nothing found), a drop-in at Tranquility Base (on its ground to 30 cm, the Moon's gravity, the
+stars and the Earth in the sky, no water and no sea, the Moon's pad rules, its ground the only thing
+driven on and at its finest by the vehicle), a hop as high as on the Earth that stays up 3 to 4.2 s
+and scores nothing, M back to the Moon's globe with its own recent places, back to the Earth
+(driving there as it was: its gravity, its water), `?spot=moon-tycho`, and a phone's sheet. The
+tests drive the go-kart: the Moon's ground is heavy drawing without a GPU, about a frame a second
+in Chromium's software renderer at 800 × 500.
 
 ## Driving with others
 
@@ -1360,7 +1519,7 @@ level-only colours.
   own wear its badge; picked, it says "The tuk-tuk comes at level 8: you're level 3. Drive on, or get
   it now with the Supporter Pass." under the rides, the panel scrolling to it (the pass's opens its
   sheet), and the ride doesn't change. From that level on it's driven like any other; one saved
-  before is the go-kart until then, as a pass ride is without the pass. The Garage's tab for it says
+  before is the pickup until then, as a pass ride is without the pass. The Garage's tab for it says
   "Lv 8" and its banner "Comes at level 8, or with the ⭐ Supporter Pass".
 - **The Garage**: each locked choice says what unlocks it: "Lv 12 · or Pass" (a swatch, being
   small, only "Lv 12"), "Pass", or "Lv 25" for a level-only colour, with the whole sentence as its
@@ -1563,7 +1722,7 @@ rows; every Garage look at once, which levels otherwise unlock some of over time
 your name on the leaderboard, 30 drives a day instead of 8) and its buy
 area (`buyArea()`), which says **Coming soon** until the payments code fills it. The sheet also opens from **⭐ Supporter
 Pass** under the rides on the globe and in the pause menu. A ride or a look saved while the pass was
-on falls back to the go-kart, or to the free choices, without it (a level's car, until its level).
+on falls back to the pickup, or to the free choices, without it (a level's car, until its level).
 Nothing comes up by itself: the
 sheet only opens when something locked, or one of those buttons, is picked.
 
@@ -2226,8 +2385,8 @@ account in `ADMIN_EMAILS`, signed in on worlddrive.app (the globe's panel). It s
   hour of the day (counted in UTC hours, shown in the viewer's time).
 - **Play time**: seconds driven, not paused, by ride, a day; per visit; and how much of it was with
   others in the room.
-- **Drop-ins**: where (each start spot, or "elsewhere" for a search or a pin: never where), and in
-  which ride.
+- **Drop-ins**: where (each start spot, "elsewhere" for a search or a pin, or the Moon: never where),
+  and in which ride.
 - **The Garage**: how often it's opened, and each change made in it, by part (colour, finish, decal,
   rims, boost, flame, trail, smoke).
 - **Where people come from** (the referring site's host name, or direct), and **load time** (from
@@ -2641,8 +2800,12 @@ word, unlocking on focus and on `?supporter=thanks`, on every load, signing out,
 the ⭐, and "Coming soon" with no sign-in or no Worker answering). `npm run test:drive-pro-ui` tries
 the pass's rides, the Garage and the boost styles, `npm run test:drive-seo` what
 [search engines](#how-the-search-pages-are-tested) see, `npm run test:drive-live` and
-`npm run test:drive-live-ui` [driving with others](#how-its-tested), and `npm run test:drive-levels`
-and `npm run test:drive-levels-ui` [levels](#how-levels-are-tested). `TEST_VITE_PORT` picks a test's port,
+`npm run test:drive-live-ui` [driving with others](#how-its-tested), `npm run test:drive-levels`
+and `npm run test:drive-levels-ui` [levels](#how-levels-are-tested), and `npm run test:drive-moon-ui`
+[the Moon](#how-the-moon-is-tested). The UI tests drive the go-kart unless a test picks another (the
+pickup, the default, is 219,000 triangles, about a frame a second in Chromium's software renderer);
+`npm run test:drive-ui` checks the pickup is the default, and that the go-kart takes over if its
+model doesn't load. `TEST_VITE_PORT` picks a test's port,
 and `TEST_VITE_CACHE` a folder for its dev server's pre-bundled dependencies (else
 `node_modules/.vite`), so tests run side by side on one checkout don't redo each other's.
 
@@ -2686,6 +2849,11 @@ src/drive-app/sea.js         the open sea: its surface where Google draws only t
                              scripts/make-sea-mask.mjs makes)
 src/drive-app/lakes.js       the big lakes whose beds Google may draw: their surfaces' heights,
                              with sources, and their outlines' names in Natural Earth
+src/drive-app/moon.js        the Moon: its ground's quadtree of squares, their look, its stars and
+                             the Earth in its sky; moon-height.js its ground's height anywhere (LOLA's
+                             heights, drive/public/moon/height.bin, and the made-up craters);
+                             moon-places.js its spots and the places its search finds. Its picture
+                             is drive/public/moon/colour.webp; scripts/make-moon.mjs makes both files
 src/drive-app/api.js         /api/config, the visit with Turnstile, /api/search, the leaderboard's and
                              the Supporter Pass's calls
 src/drive-app/leaderboard.js the leaderboard: the panel, names, posting runs, the new-best card
@@ -2737,6 +2905,15 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
 `localToLatLon` / `latLonToEnu` in `src/geo.js`.
 
 ## Known limits
+
+- On the Moon you drive on your own (see [there](#on-the-moon-you-drive-on-your-own)). Its shapes
+  are the real Moon's only down to a few kilometres; every crater smaller than about 20 km across
+  that you drive in is made up. Nothing casts a shadow there: a crater's far wall is darker for
+  facing away from the sun, but its floor isn't in its rim's shade. As on the Earth the scene isn't
+  recentred while driving, and the Moon curves away four times as fast: 10 km from the drop-in the
+  ground is 29 m lower and gravity 0.33° off true. Driving fast enough (in overdrive), the vehicle
+  can outrun the finest squares being built (5 ms a frame), and drives on the next size up (a point
+  every 2.6 m) until they catch up.
 
 - Where Google has no photogrammetry, the 3D tiles are smooth terrain with imagery on it: it still
   drives, without buildings.
@@ -2851,7 +3028,10 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
 ## Credits
 
 The 3D world is Google's: the Google Maps logo and the data providers show whenever the tiles are on
-screen. The open sea's height is NGA's EGM96 geoid (public domain), from PROJ's copy of it, and
+screen. The Moon's heights and pictures are NASA's (public domain), from the Lunar Reconnaissance
+Orbiter's laser altimeter (LOLA) and wide-angle camera (LROC), as NASA's Scientific Visualization
+Studio's CGI Moon Kit has them (https://svs.gsfc.nasa.gov/4720/), credited under **About World Drive**
+and in the corner while you're there. The open sea's height is NGA's EGM96 geoid (public domain), from PROJ's copy of it, and
 where the sea and the big lakes are is Natural Earth's ocean and lakes at 1:10 million (public
 domain, naturalearthdata.com), from its GitHub copy. Place search © OpenStreetMap contributors. The
 trucks and the cars are models from Sketchfab under CC BY 4.0, credited under **About World Drive**

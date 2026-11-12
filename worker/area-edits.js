@@ -60,10 +60,11 @@ export async function deleteAreaEdit( { request, env, params } ) {
 
 // What's kept of an area: { deleted: true } for one taken away, or where it is, { pts: [ [ x, y,
 // z ], ... ] (three corners or more), n: [ x, y, z ] }, with, for one added in the twin (added:
-// true) or one whose details were changed, its details: f { type, status, chipped, text }, zone,
-// face, grid and area (m²). Nothing else is kept.
-const TEXT = { type: 100, status: 100, chipped: 40, text: 1000 };
-const LABELS = { zone: 40, face: 120, grid: 120 };
+// true) or one whose details were changed, its details: f { type, status, text, and the day it
+// reached each stage: chipped, sandblasted, epoxy, shotcreted }, its panel number (no), zone, face,
+// grid and area (m²). Nothing else is kept.
+const TEXT = { type: 100, status: 100, chipped: 40, sandblasted: 40, epoxy: 40, shotcreted: 40, text: 1000 };
+const LABELS = { no: 40, zone: 40, face: 120, grid: 120 };
 
 function checkEdit( body ) {
 

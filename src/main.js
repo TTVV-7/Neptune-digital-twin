@@ -10,6 +10,8 @@ import { setUpUnderground } from './underground.js';
 import { loadSharedItems } from './shared-items.js';
 import { setUpViews } from './views.js';
 import { setUpRepairAreas } from './repair-areas.js';
+import { setUpModelEdits } from './model-edits.js';
+import { setUpRepairTimeline } from './repair-timeline.js';
 import { loadLibrary } from './library.js';
 import { setUpLayout } from './layout.js';
 import { createSidebar } from './sidebar.js';
@@ -228,6 +230,8 @@ function start( apiKey, keySource ) {
 	let underground = null;
 	let views = null;
 	let repairAreas = null;
+	let modelEdits = null;
+	let repairTimeline = null;
 	libraryLoaded.then( async library => {
 
 		sidebar = createSidebar( {
@@ -287,7 +291,11 @@ function start( apiKey, keySource ) {
 		// Preset views of models that carry them (the B2D2 model's Overview, C31, C32, Pit, Ground).
 		views = setUpViews( { models, controls, onUpdate: features.onUpdate, getUnderground: () => underground, toast } );
 		// Moving the B2D2 model's repair areas, and saving where they go for everyone.
-		repairAreas = setUpRepairAreas( { models, controls, onUpdate: features.onUpdate, toast, bar: views.bar } );
+		repairAreas = setUpRepairAreas( { models, controls, onUpdate: features.onUpdate, toast, bar: views.bar, layers } );
+		// Adding beams to it and painting its walls.
+		modelEdits = setUpModelEdits( { host: repairAreas.host, models, controls, onUpdate: features.onUpdate, toast, bar: views.bar } );
+		// The repairs played back over time.
+		repairTimeline = setUpRepairTimeline( { timeline: repairAreas.timeline, bar: views.bar, toast } );
 		for ( const config of afterFeatures ) loadFromConfig( config );
 		// What the admin saved for everyone on the live site, once the kinds it may use are known.
 		loadSharedItems( { models, getLibrary: () => libraryLoaded, onError: message => showBanner( message, 10000 ) } );
@@ -368,6 +376,14 @@ function start( apiKey, keySource ) {
 	}, get repairAreas() {
 
 		return repairAreas;
+
+	}, get modelEdits() {
+
+		return modelEdits;
+
+	}, get repairTimeline() {
+
+		return repairTimeline;
 
 	}, startDriving: async entry => driving ? driving.startDriving( entry ) : null, isDrivable: entry => !! driving?.isDrivable( entry ) };
 

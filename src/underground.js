@@ -1,4 +1,4 @@
-import { Raycaster, Vector3, Vector4 } from 'three';
+import { Box3, Matrix4, Raycaster, Vector3, Vector4 } from 'three';
 import { addHitFilter, isTyping } from './walk.js';
 
 // Under Google's ground in your own models (ones you dropped in or listed in MODELS, not library
@@ -124,9 +124,43 @@ export function setUpUnderground( { tiles, models, camera, toast, onUpdate, addM
 	const _point = new Vector3();
 	const _centre = new Vector3();
 	const _side = new Vector3();
-	const holeOf = entry => {
+	// Where to cut, in the model's own frame: over its solid parts only, each part's box (a gallery,
+	// a pit, a tunnel), not the whole model's: see-through or walk-through parts (a building shell,
+	// conveyors: noCollide) leave Google's ground round them as it is. Boxes inside another are left
+	// out. Worked out once a model is placed.
+	const _inverse = new Matrix4();
+	const _relative = new Matrix4();
+	const _box = new Box3();
+	const cutsOf = entry => {
 
-		const { pivot, footprint } = entry;
+		if ( entry.cuts && entry.cuts.footprint === entry.footprint ) return entry.cuts;
+		const { pivot } = entry;
+		pivot.updateWorldMatrix( true, true );
+		_inverse.copy( pivot.matrixWorld ).invert();
+		const passable = object => {
+
+			for ( let o = object; o && o !== pivot; o = o.parent ) if ( o.userData.noCollide ) return true;
+			return false;
+
+		};
+		const boxes = [];
+		pivot.traverse( object => {
+
+			if ( ! object.isMesh || passable( object ) ) return;
+			object.geometry.boundingBox ?? object.geometry.computeBoundingBox();
+			boxes.push( _box.copy( object.geometry.boundingBox ).applyMatrix4( _relative.multiplyMatrices( _inverse, object.matrixWorld ) ).clone() );
+
+		} );
+		const within = ( a, b ) => a !== b && a.min.x >= b.min.x - 0.01 && a.max.x <= b.max.x + 0.01 && a.min.z >= b.min.z - 0.01 && a.max.z <= b.max.z + 0.01;
+		const kept = boxes.filter( a => ! boxes.some( b => within( a, b ) && ! ( within( b, a ) && boxes.indexOf( b ) > boxes.indexOf( a ) ) ) );
+		entry.cuts = ( kept.length ? kept : [ entry.footprint ] ).sort( ( a, b ) => ( b.max.x - b.min.x ) * ( b.max.z - b.min.z ) - ( a.max.x - a.min.x ) * ( a.max.z - a.min.z ) );
+		entry.cuts.footprint = entry.footprint;
+		return entry.cuts;
+
+	};
+	const holeOf = ( entry, footprint ) => {
+
+		const { pivot } = entry;
 		pivot.updateWorldMatrix( true, false );
 		footprint.getCenter( _centre );
 		_side.set( _centre.x + 1, _centre.y, _centre.z );
@@ -176,7 +210,7 @@ export function setUpUnderground( { tiles, models, camera, toast, onUpdate, addM
 
 		}
 
-		holes = chosen.slice( 0, MAX_HOLES ).map( holeOf );
+		holes = chosen.flatMap( entry => cutsOf( entry ).map( box => holeOf( entry, box ) ) ).slice( 0, MAX_HOLES );
 		uniforms.twinHoleCount.value = holes.length;
 		holes.forEach( ( h, i ) => {
 

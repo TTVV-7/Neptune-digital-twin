@@ -12,12 +12,116 @@
 // irregularly) with the rebar mat exposed in it: bars both ways at CHIP.spacing, CHIP.cover behind
 // the face, running on into the concrete past the edge. The roughness is random but seeded by the
 // markup's id, so a rebuild comes out the same. A rim round it on the face carries the colour of
-// when it was chipped. Other areas are a flat patch OFFSET off their face, with an outline.
+// when it was chipped. The stages after (sandblasted, epoxy coated, shotcreted) each have their own
+// look: LOOKS. Areas only marked are a flat patch OFFSET off their face, with an outline.
 
 import polygonClipping from 'polygon-clipping';
 import { ShapeUtils, Vector2, Vector3 } from 'three';
 
+export const MARKED = 'Marked, not chipped yet';
 export const CHIPPED = 'Chipped / hydro-demo';
+export const SANDBLASTED = 'Sandblasted';
+export const EPOXY = 'Epoxy coated';
+export const SHOTCRETED = 'Shotcreted';
+
+// The stages of a repair, in order: an area's status (f.status) is one of these, and `date` is
+// where in f the day it reached that stage is kept (f.chipped, as the progress drawings give it).
+export const STAGES = [
+	{ status: MARKED, date: null, short: 'Marked' },
+	{ status: CHIPPED, date: 'chipped', short: 'Chipped' },
+	{ status: SANDBLASTED, date: 'sandblasted', short: 'Sandblasted' },
+	{ status: EPOXY, date: 'epoxy', short: 'Epoxy coated' },
+	{ status: SHOTCRETED, date: 'shotcreted', short: 'Shotcreted' },
+];
+export const stageOf = status => STAGES.find( stage => stage.status === status ) ?? STAGES[ 0 ];
+
+// The days a stage's date says, as 'YYYY-MM-DD': one, or each day of a span ('2026-11-05/08', as the
+// progress drawings give; '2026-11-30/02' runs into the next month). [] if it doesn't say a day.
+export function daysOf( date ) {
+
+	const said = /^(\d{4})-(\d{2})-(\d{2})(?:\/(\d{2}))?/.exec( date ?? '' );
+	if ( ! said ) return [];
+	const [ year, month, first ] = said.slice( 1, 4 ).map( Number );
+	const last = said[ 4 ] === undefined ? first : Number( said[ 4 ] );
+	const from = Date.UTC( year, month - 1, first );
+	const to = Date.UTC( year, month - 1 + ( last < first ? 1 : 0 ), last );
+	const days = [];
+	for ( let t = from; t <= to && days.length < 62; t += 86400000 ) days.push( new Date( t ).toISOString().slice( 0, 10 ) );
+	return days;
+
+}
+
+// The day a stage's date says, or null if it doesn't say one. A span of days is its last: by then
+// it was done.
+export const dayOf = date => daysOf( date ).at( - 1 ) ?? null;
+
+// The stage an area had reached by the end of a day ('YYYY-MM-DD'), from the days it reached
+// each: its status then, or null if it hadn't been chipped yet. An area with no days to go by,
+// or only marked, is as it is now whenever.
+export function stageAt( m, day ) {
+
+	const f = m.f ?? {};
+	const now = STAGES.indexOf( stageOf( f.status ) );
+	let reached = null, dated = false;
+	for ( let i = 1; i <= now; i ++ ) {
+
+		const on = dayOf( f[ STAGES[ i ].date ] );
+		if ( ! on ) continue;
+		dated = true;
+		if ( on <= day ) reached = STAGES[ i ].status;
+
+	}
+
+	return dated ? reached : f.status ?? null;
+
+}
+
+// How each stage past marking looks. The area is cut out of its face, and in it:
+// - chipped: a recess of rough, broken concrete (the chipped concrete's texture) with rusty bars;
+// - sandblasted: the same recess blasted clean, light and even, the bars bright steel;
+// - epoxy coated: the bars coated in green epoxy, in the blasted recess as it was;
+// - shotcreted: filled again, a touch proud of the face, in fresh shotcrete, no bars to see.
+// `concrete` and `rebar` are material settings (the chipped concrete's own texture with `map`,
+// else the colour over its relief); `rim` the colour of the strip round the area on its face
+// (a chipped area's is by the day it was chipped: rimOf).
+export const LOOKS = {
+	[ CHIPPED ]: { concrete: { map: true, color: '#ffffff', roughness: 0.95 }, rebar: { color: '#7c4a2d', metalness: 0.5, roughness: 0.65 } },
+	[ SANDBLASTED ]: { concrete: { color: '#cfccc4', roughness: 0.9 }, rebar: { color: '#c9ced4', metalness: 0.3, roughness: 0.4 }, rim: '#f1f5f9' },
+	[ EPOXY ]: { concrete: { color: '#cfccc4', roughness: 0.9 }, rebar: { color: '#2dbd62', metalness: 0, roughness: 0.35 }, rim: '#047857' },
+	[ SHOTCRETED ]: { filled: true, concrete: { color: '#b9b6ae', roughness: 1 }, rim: '#475569' },
+};
+// What the concrete's and the bars' materials are called for a stage, in the model and the twin.
+export const lookNames = status => status === CHIPPED
+	? { concrete: 'Chipped concrete', rebar: 'Exposed rebar' }
+	: { concrete: `${ status } concrete`, rebar: `${ status } rebar` };
+// Shotcrete stands this far (m) proud of the face.
+const PROUD = 0.012;
+
+// The rims of chipped areas, by when they were chipped: the progress drawings' colours, then
+// others for later days.
+const CHIPPED_COLOURS = { '2026-11-02': '#22c55e', '2026-11-03': '#06b6d4', '2026-11-04': '#f97316', '2026-11-05/08': '#ec4899', '2026-11-09': '#3b82f6', '2026-11-10': '#eab308' };
+const LATER_COLOURS = [ '#eab308', '#8b5cf6', '#ef4444', '#3b82f6', '#84cc16', '#f43f5e', '#14b8a6', '#a855f7' ];
+const UNDATED = '#94a3b8';
+
+export function chippedColour( date ) {
+
+	if ( ! date ) return UNDATED;
+	if ( CHIPPED_COLOURS[ date ] ) return CHIPPED_COLOURS[ date ];
+	const h = [ ...date ].reduce( ( h, c ) => ( h * 31 + c.charCodeAt( 0 ) ) >>> 0, 7 );
+	return LATER_COLOURS[ h % LATER_COLOURS.length ];
+
+}
+
+// The strip round an area on its face: its material's name and colour. Null for a marked area.
+export function rimOf( m ) {
+
+	const f = m.f ?? {};
+	const look = LOOKS[ f.status ];
+	if ( ! look ) return null;
+	if ( look.rim ) return { name: `${ f.status } rim`, colour: look.rim };
+	return { name: `Chipped ${ f.chipped ?? '' }`.trim(), colour: chippedColour( f.chipped ) };
+
+}
 // A chipped area, in metres: how deep (a markup's measured depth wins), how far the edge steps in
 // on its way down, how far apart the points along it are, and the rebar (15M bars, 300 mm both
 // ways, 50 mm cover), which runs on this far into the concrete past the edge.
@@ -33,7 +137,7 @@ const RIM = 0.04; // a chipped area's rim's width, m
 export const zoneName = z => ( { c31: 'C31 gallery', c32: 'C32 tunnel', pit: 'Transfer pit', ground: 'Ground level' } )[ z ] ?? 'Site';
 
 // What the twin's tooltips and the build call an area.
-export const areaName = m => `${ m.f?.type || 'Repair area' } · ${ zoneName( m.zone ) } ${ m.face ?? '' } · ${ ( m.area ?? 0 ).toFixed( 2 ) } m²`;
+export const areaName = m => `${ m.no ? `No. ${ m.no } · ` : '' }${ m.f?.type || 'Repair area' } · ${ zoneName( m.zone ) } ${ m.face ?? '' } · ${ ( m.area ?? 0 ).toFixed( 2 ) } m²`;
 
 // ---------- Naming, as the B2D2 Repair Model artifact does ----------
 
@@ -224,12 +328,35 @@ export function onFace( tri, plane, within ) {
 
 }
 
-// Each chipped area's plane moved onto the face it was marked on, where that's a little off
-// (marked on a drawing's plane rather than the model's face, say).
+// An area that isn't on a face follows its face up to this far (m): where the model's walls have
+// been put right since the area was marked or moved, by more than NEAR_FACE.
+export const FOLLOW = 1;
+
+// Each area's plane moved onto the face it's marked on, where that's off it: a little (marked on
+// a drawing's plane rather than the model's face, say), or as far as FOLLOW where the face itself
+// has moved. The face is the one seen from in front of the area, looking the way the area does:
+// so a wall that moved by about its own thickness doesn't take the area onto its far side, nor
+// does a face buried in the concrete behind the one that shows.
 export function settleOnFaces( planes, triangles ) {
 
 	for ( const plane of planes ) {
 
+		const seen = faceSeen( plane, triangles );
+		if ( seen !== null ) {
+
+			if ( Math.abs( seen ) > ON_FACE ) {
+
+				plane.h += seen;
+				plane.moved = seen;
+
+			}
+
+			continue;
+
+		}
+
+		// No face looks its way there (a part whose faces are wound the other way round, or the
+		// area is off the edge of its face): the nearest face in its plane, whichever way it looks.
 		if ( triangles.some( tri => onFace( tri, plane, ON_FACE ) ) ) continue;
 		const near = triangles.filter( tri => onFace( tri, plane, NEAR_FACE ) ).map( tri => plane.N.dot( tri.a ) - plane.h ).sort( ( a, b ) => Math.abs( a ) - Math.abs( b ) );
 		if ( near.length ) {
@@ -243,18 +370,70 @@ export function settleOnFaces( planes, triangles ) {
 
 }
 
-// A layer's triangles with the chipped areas on them cut out, as a flat list of positions.
+// How far along its normal (toward where it's seen from, or negative, away) an area's plane is
+// from the face it's seen on: the first face looking the way the area does that a ray meets
+// coming at the area from FOLLOW in front of it, at the middle of its outline, else at a corner.
+// Null if there's none within FOLLOW.
+export function faceSeen( plane, triangles ) {
+
+	const { N, poly } = plane;
+	const facing = triangles.filter( tri => triNormal( tri.a, tri.b, tri.c ).dot( N ) > 0.98 );
+	const from = FOLLOW + 0.05;
+	const back = N.clone().negate();
+	const middle = poly.reduce( ( m, [ s, t ] ) => [ m[ 0 ] + s / poly.length, m[ 1 ] + t / poly.length ], [ 0, 0 ] );
+	for ( const [ s, t ] of [ middle, ...poly ] ) {
+
+		const origin = toWorld( plane, s, t, - from );
+		let first = Infinity;
+		for ( const tri of facing ) {
+
+			const d = rayHit( origin, back, tri );
+			if ( d !== null && d < first ) first = d;
+
+		}
+
+		if ( Math.abs( from - first ) <= FOLLOW ) return from - first;
+
+	}
+
+	return null;
+
+}
+
+// Where along a ray (from `origin`, the way of `direction`, a unit vector) it meets a triangle:
+// the distance, or null.
+function rayHit( origin, direction, { a, b, c } ) {
+
+	const e1 = new Vector3().subVectors( b, a ), e2 = new Vector3().subVectors( c, a );
+	const p = new Vector3().crossVectors( direction, e2 );
+	const det = e1.dot( p );
+	if ( Math.abs( det ) < 1e-9 ) return null;
+	const s = new Vector3().subVectors( origin, a );
+	const u = s.dot( p ) / det;
+	if ( u < - 1e-6 || u > 1 + 1e-6 ) return null;
+	const q = new Vector3().crossVectors( s, e1 );
+	const v = direction.dot( q ) / det;
+	if ( v < - 1e-6 || u + v > 1 + 1e-6 ) return null;
+	const distance = e2.dot( q ) / det;
+	return distance > 1e-6 ? distance : null;
+
+}
+
+// A layer's triangles with the chipped areas on them cut out, as a flat list of positions, and
+// for each triangle of it the one of the layer's it came from (`source`: what's painted follows).
 export function cutOut( triangles, planes ) {
 
 	const out = [];
+	const source = [];
 	let cut = 0;
-	for ( const tri of triangles ) {
+	triangles.forEach( ( tri, index ) => {
 
 		const on = planes.filter( plane => onFace( tri, plane, ON_FACE ) );
 		if ( on.length === 0 ) {
 
 			out.push( ...tri.a.toArray(), ...tri.b.toArray(), ...tri.c.toArray() );
-			continue;
+			source.push( index );
+			return;
 
 		}
 
@@ -275,6 +454,7 @@ export function cutOut( triangles, planes ) {
 				let [ a, b, c ] = [ i, j, k ].map( n => toWorld( plane, points[ n ].x, points[ n ].y ) );
 				if ( triNormal( a, b, c ).dot( facing ) < 0 ) [ b, c ] = [ c, b ];
 				out.push( ...a.toArray(), ...b.toArray(), ...c.toArray() );
+				source.push( index );
 
 			}
 
@@ -282,9 +462,76 @@ export function cutOut( triangles, planes ) {
 
 		cut ++;
 
+	} );
+	return { positions: new Float32Array( out ), cut, source };
+
+}
+
+// ---------- Faces of the structure ----------
+
+// The whole face a triangle of a layer is part of: the triangles in its plane joined to it corner
+// to corner (a wall from end to end, a floor, a soffit), as their numbers in the layer.
+export function coplanarFace( triangles, seed ) {
+
+	const N = triNormal( triangles[ seed ].a, triangles[ seed ].b, triangles[ seed ].c );
+	const h = N.dot( triangles[ seed ].a );
+	const inPlane = tri => Math.abs( triNormal( tri.a, tri.b, tri.c ).dot( N ) ) > 0.999 && [ tri.a, tri.b, tri.c ].every( p => Math.abs( N.dot( p ) - h ) < 0.005 );
+	// Corners to the millimetre: which of the plane's triangles meet at each.
+	const corner = p => `${ Math.round( p.x * 1000 ) },${ Math.round( p.y * 1000 ) },${ Math.round( p.z * 1000 ) }`;
+	const at = new Map();
+	const flat = [];
+	triangles.forEach( ( tri, i ) => {
+
+		if ( ! inPlane( tri ) ) return;
+		flat.push( i );
+		for ( const p of [ tri.a, tri.b, tri.c ] ) at.set( corner( p ), [ ...( at.get( corner( p ) ) ?? [] ), i ] );
+
+	} );
+	const face = new Set( [ seed ] );
+	const queue = [ seed ];
+	while ( queue.length ) {
+
+		const tri = triangles[ queue.pop() ];
+		for ( const p of [ tri.a, tri.b, tri.c ] ) for ( const next of at.get( corner( p ) ) ?? [] ) {
+
+			if ( face.has( next ) ) continue;
+			face.add( next );
+			queue.push( next );
+
+		}
+
 	}
 
-	return { positions: new Float32Array( out ), cut };
+	return [ ...face ];
+
+}
+
+// The triangle of a layer a point is on, facing along n either way: its number, or -1. A point
+// just off every triangle (a rebuilt model's faces moved a little) takes the nearest facing that way.
+export function triangleAt( triangles, point, n ) {
+
+	const P = Array.isArray( point ) ? new Vector3( ...point ) : point;
+	const N = ( Array.isArray( n ) ? new Vector3( ...n ) : n.clone() ).normalize();
+	let best = - 1, bestDistance = 0.5;
+	triangles.forEach( ( tri, i ) => {
+
+		const normal = triNormal( tri.a, tri.b, tri.c );
+		if ( Math.abs( normal.dot( N ) ) < 0.98 ) return;
+		const off = Math.abs( normal.dot( P ) - normal.dot( tri.a ) );
+		if ( off > 0.05 ) return;
+		// How far outside the triangle the point is, along its plane (0 inside).
+		const edges = [ [ tri.a, tri.b ], [ tri.b, tri.c ], [ tri.c, tri.a ] ];
+		const outside = Math.max( 0, ...edges.map( ( [ p, q ] ) => new Vector3().subVectors( q, p ).cross( new Vector3().subVectors( P, p ) ).dot( normal ) / - p.distanceTo( q ) ) );
+		const distance = outside + off;
+		if ( distance < bestDistance ) {
+
+			best = i;
+			bestDistance = distance;
+
+		}
+
+	} );
+	return best;
 
 }
 
@@ -511,14 +758,16 @@ export function buildRepairs( markups, layers ) {
 
 }
 
-// One area's geometry, against the triangles of the layers areas are cut out of: for a chipped
-// area its plane (settled onto its face) and parts { recess, rim, rebar }; for another, no plane
-// and parts { fill, edge, normal }.
+// One area's geometry, against the triangles of the layers areas are cut out of. For an area past
+// marking, its plane (settled onto its face) and parts { recess, rim, rebar }, or { filled, rim }
+// once it's shotcreted; for a marked one, no plane and parts { fill, edge, normal }.
 export function areaParts( m, triangles ) {
 
-	if ( m.f?.status !== CHIPPED ) return { plane: null, parts: patch( m ) };
+	const look = LOOKS[ m.f?.status ];
+	if ( ! look ) return { plane: null, parts: patch( m ) };
 	const plane = choosePlane( m, triangles );
 	settleOnFaces( [ plane ], triangles );
+	if ( look.filled ) return { plane, parts: { filled: recess( plane, - PROUD, random( m.id ) ), rim: rim( plane ) } };
 	const depth = m.f.depthMm > 0 ? m.f.depthMm / 1000 : CHIP.depth;
 	return { plane, parts: { recess: recess( plane, depth, random( m.id ) ), rim: rim( plane ), rebar: rebar( plane ) } };
 
@@ -528,11 +777,14 @@ export function areaParts( m, triangles ) {
 export function areaExtras( m ) {
 
 	const f = m.f ?? {};
-	return {
+	const extras = {
 		id: m.id, zone: zoneName( m.zone ), face: m.face, grid: m.grid, area_m2: m.area, chipped: f.chipped ?? null,
 		defect: f.type ?? null, depth: f.depth ?? null, status: f.status ?? null, notes: f.text ?? '', source: m.src ?? null,
 		// Stays solid when the twin's "See-through models" makes the rest see-through.
 		xraySolid: true,
 	};
+	if ( m.no ) extras.no = m.no;
+	for ( const { date } of STAGES ) if ( date && date !== 'chipped' && f[ date ] ) extras[ date ] = f[ date ];
+	return extras;
 
 }

@@ -1,9 +1,11 @@
 import './repair-areas.css';
-import { BufferAttribute, BufferGeometry, Group, Line, LineBasicMaterial, LineLoop, Matrix3, Matrix4, Mesh, MeshBasicMaterial, DoubleSide, Plane, PropertyBinding, Raycaster, Vector2, Vector3 } from 'three';
+import { BufferAttribute, BufferGeometry, CanvasTexture, Color, DoubleSide, Group, Line, LineBasicMaterial, LineLoop, Matrix3, Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial, Plane, PropertyBinding, Raycaster, Sprite, SpriteMaterial, SRGBColorSpace, Vector2, Vector3 } from 'three';
 import { loadConfig } from './cloud.js';
 import { sendForEveryone } from './placements.js';
 import { useFastRaycast } from './raycast.js';
-import { areaExtras, areaName, areaParts, basisOf, CHIPPED, cutOut, describeArea, outlineNormal, trianglesOf } from './repair-geometry.js';
+import { createCrew } from './repair-crew.js';
+import { createAreaPhotos } from './repair-photos.js';
+import { areaExtras, areaName, areaParts, basisOf, CHIPPED, cutOut, dayOf, daysOf, describeArea, LOOKS, lookNames, outlineNormal, rimOf, stageAt, STAGES, stageOf, trianglesOf } from './repair-geometry.js';
 import { isTyping } from './walk.js';
 
 // Fixing the B2D2 model's repair areas in the twin: moving areas drawn in the wrong spot or turned
@@ -12,7 +14,10 @@ import { isTyping } from './walk.js';
 // scripts/b2d2-repair-model.mjs writes) gets "Edit areas" in the views bar. In it, a click picks
 // an area and dragging moves it along its face; the panel nudges it (left, right, up and down as
 // you look at it), turns it in its face, or moves it onto another wall, floor or soffit you click.
-// "Add area" draws one on the wall, floor or soffit you start on: drag a box, or click its corners.
+// A picked area also takes its panel number (floating on it for everyone), the stage it has reached
+// (chipped, sandblasted, epoxy coated, shotcreted: each with its look, LOOKS in repair-geometry.js)
+// and the day it got there. "Add area" draws one on the wall, floor or soffit you start on: drag a
+// box, or click its corners.
 // Every area is built with the build's own code (repair-geometry.js), chipped recess, rebar and
 // all, and the concrete it's cut out of is cut again.
 //
@@ -34,14 +39,15 @@ const SMALLEST = 0.005;
 const HIGHLIGHT = 0xffd21f;
 const STEPS = [ [ '1 cm', 0.01 ], [ '5 cm', 0.05 ], [ '10 cm', 0.1 ], [ '25 cm', 0.25 ], [ '1 m', 1 ] ];
 const TURNS = [ [ '1°', 1 ], [ '5°', 5 ], [ '15°', 15 ], [ '90°', 90 ] ];
-const MARKED = 'Marked, not chipped yet';
-const STATUSES = [ CHIPPED, MARKED ];
+const STATUSES = STAGES.map( stage => stage.status );
 const TYPES = [ 'Exposed rebar', 'Spall', 'Delamination', 'Crack', 'Honeycombing', 'Corroded rebar' ];
-// The rims of chipped areas, by when they were chipped: the progress drawings' colours, then
-// others for later dates.
-const CHIPPED_COLOURS = { '2026-11-02': '#22c55e', '2026-11-03': '#06b6d4', '2026-11-04': '#f97316', '2026-11-05/08': '#ec4899' };
-const MORE_COLOURS = [ '#eab308', '#8b5cf6', '#ef4444', '#3b82f6', '#84cc16', '#f43f5e', '#14b8a6', '#a855f7' ];
-const UNDATED = '#94a3b8';
+// Panel numbers float on their panels about this tall on the screen (as a share of the distance
+// to them), between these sizes in metres; a row in the Show panel hides them.
+const NUMBER = { perMetre: 0.022, min: 0.11, max: 0.5, off: 0.07 };
+const IDENTITY = new Matrix4();
+const NUMBERS_LAYER = 'panel-numbers';
+// What's kept of a markup's details for an area changed or added here (worker/area-edits.js).
+const DETAILS = [ 'status', 'type', 'text', ...STAGES.map( stage => stage.date ).filter( Boolean ) ];
 // An area marked but not chipped yet: the artifact's colours.
 const AREA_COLOUR = '#0e8fa8';
 const EDGE_COLOUR = '#06414d';
@@ -58,16 +64,7 @@ const today = () => {
 
 };
 
-export function rimColour( date ) {
-
-	if ( ! date ) return UNDATED;
-	if ( CHIPPED_COLOURS[ date ] ) return CHIPPED_COLOURS[ date ];
-	const h = [ ...date ].reduce( ( h, c ) => ( h * 31 + c.charCodeAt( 0 ) ) >>> 0, 7 );
-	return MORE_COLOURS[ h % MORE_COLOURS.length ];
-
-}
-
-export function setUpRepairAreas( { models, controls, onUpdate, toast, bar } ) {
+export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, layers } ) {
 
 	const camera = controls.camera;
 	const canvas = controls.domElement;
@@ -82,8 +79,14 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar } ) {
 	let dirtyCut = null; // a state whose concrete needs cutting again
 	let sinceCut = 0;
 	const history = []; // { s, id, had, value }, for Undo
+	let numbersShown = true; // the Show panel's Panel numbers row
+	let numbersCounted = 0;
+	const onEditing = []; // told when editing areas starts, or looking back (the model editor, to stop)
+	const onNow = []; // told when an editor starts, so the areas are as they are now (the timeline, to close)
+	const onRender = []; // told when what's shown of the areas may have changed (the timeline's bar)
+	let asOf = null; // looking back: the day ('YYYY-MM-DD') the areas are drawn as of; null: now
 	// What a new area is, as the last one drawn was.
-	const defaults = { status: CHIPPED, chipped: today(), type: 'Exposed rebar', text: '' };
+	const defaults = { status: CHIPPED, type: 'Exposed rebar', text: '' };
 
 	// ---------- The button and the panel ----------
 
@@ -118,8 +121,9 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar } ) {
 				<button type="button" class="surface wide" title="Then click the wall, floor or soffit it belongs on">Move to another surface…</button>
 			</div>
 			<div class="details">
-				<label><span>Status</span><select data-field="status">${ options( STATUSES ) }</select></label>
-				<label class="date"><span>Chipped</span><input data-field="chipped" list="area-dates" placeholder="2026-11-09" maxlength="40"><i class="swatch" title="Its rim's colour"></i></label>
+				<label><span>Panel no.</span><input data-field="no" maxlength="40" placeholder="none yet"></label>
+				<label><span>Status</span><select data-field="status">${ options( STATUSES ) }</select><i class="swatch" title="Its rim's colour"></i></label>
+				<label class="date"><span></span><input data-field="date" list="area-dates" placeholder="${ today() }" maxlength="40"></label>
 				<label><span>Defect</span><input data-field="type" list="area-types" maxlength="100"></label>
 				<label class="notes"><span>Notes</span><textarea data-field="text" rows="2" maxlength="1000"></textarea></label>
 			</div>
@@ -129,6 +133,7 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar } ) {
 			</div>
 		</div>
 		<p class="hint"></p>
+		<table class="summary" hidden><tbody></tbody></table>
 		<p class="taken" hidden><span></span> <button type="button" class="restore">Bring back</button></p>
 		<footer>
 			<button type="button" class="undo">Undo</button>
@@ -159,6 +164,8 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar } ) {
 
 		if ( ! selected ) return;
 		const { s, id } = selected;
+		const shots = photos.count( s.model, id );
+		if ( shots && ! s.base.has( id ) && ! window.confirm( `Delete this area and its ${ shots } photo${ shots === 1 ? '' : 's' }? The photos go for good when you save.` ) ) return;
 		change( s, id, { deleted: true } );
 		select( null );
 
@@ -174,10 +181,30 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar } ) {
 	$( '.undo' ).addEventListener( 'click', undo );
 	$( '.save' ).addEventListener( 'click', save );
 
+	// The picked area's photos (repair-photos.js), under its details. A panel with photos says so
+	// on its number, for everyone.
+	const photos = createAreaPhotos( { toast, onChange: ( model, area ) => {
+
+		for ( const s of states.values() ) if ( s.model === model && s.data ) rebuild( s, area );
+		render();
+
+	} } );
+	$( '.details' ).after( photos.section );
+
 	function render() {
 
 		toggle.hidden = states.size === 0;
 		toggle.classList.toggle( 'active', editing );
+		for ( const told of onRender ) told();
+		// The Show panel's row counts the numbers: told when there are more or fewer.
+		const shown = numbers().length;
+		if ( shown !== numbersCounted ) {
+
+			numbersCounted = shown;
+			layers?.update();
+
+		}
+
 		panel.hidden = ! editing;
 		document.body.classList.toggle( 'editing-areas', editing );
 		canvas?.classList.toggle( 'picking-surface', editing && ( picking || !! drawing ) );
@@ -199,11 +226,14 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar } ) {
 		if ( m ) {
 
 			const f = m.f ?? {};
-			for ( const field of panel.querySelectorAll( '[data-field]' ) ) if ( document.activeElement !== field ) field.value = f[ field.dataset.field ] ?? '';
-			if ( ! STATUSES.includes( f.status ) ) $( '[data-field=status]' ).value = MARKED;
-			$( '.date' ).hidden = f.status !== CHIPPED;
-			$( '.swatch' ).style.background = rimColour( f.chipped );
-			$( '#area-dates' ).innerHTML = options( [ ...new Set( [ ...Object.keys( CHIPPED_COLOURS ), ...allDates(), today() ] ) ].sort() );
+			const stage = stageOf( f.status );
+			const values = { ...f, status: stage.status, no: m.no, date: stage.date && f[ stage.date ] };
+			for ( const field of panel.querySelectorAll( '[data-field]' ) ) if ( document.activeElement !== field ) field.value = values[ field.dataset.field ] ?? '';
+			// The day it reached the stage it's at.
+			$( '.date' ).hidden = ! stage.date;
+			$( '.date span' ).textContent = stage.short;
+			$( '.swatch' ).style.background = rimOf( m )?.colour ?? AREA_COLOUR;
+			$( '#area-dates' ).innerHTML = options( [ ...new Set( [ ...allDates(), today() ] ) ].sort() );
 
 		}
 
@@ -216,6 +246,13 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar } ) {
 					? dirty ? 'Added, not saved yet. ' : 'Added in the twin, saved for everyone. '
 					: dirty ? 'Changed, not saved yet. ' : where ? 'Changed, and saved for everyone. ' : 'As the drawing has it. ' }Drag it to slide it along its face.`
 				: 'Right-drag to look round, and WASD or the arrow keys to move, as usual.';
+		photos.show( m && ! drawing ? {
+			model: selected.s.model, area: selected.id, stage: m.f?.status,
+			name: `${ m.no ? `No. ${ m.no } · ` : '' }${ m.face ?? '' }`.trim(),
+			// One drawn here and not saved yet isn't on the site for photos to belong to.
+			locked: added && dirty ? 'Save the area for everyone first, then add its photos.' : '',
+		} : null );
+		summarise( ! m && ! drawing );
 		const taken = [ ...states.values() ].reduce( ( n, s ) => n + takenAway( s ).length, 0 );
 		$( '.taken' ).hidden = taken === 0 || !! drawing;
 		$( '.taken span' ).textContent = `${ taken } of the drawing's areas taken away.`;
@@ -237,6 +274,9 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar } ) {
 
 			if ( controls.locked ) document.exitPointerLock?.();
 			for ( const s of states.values() ) ensureData( s ).catch( () => toast?.( 'Couldn\'t load the repair areas\' data, so they can\'t be changed.' ) );
+			// One editor at a time has the clicks, and areas are edited as they are now.
+			for ( const told of onEditing ) told();
+			backToNow();
 
 		} else {
 
@@ -271,10 +311,37 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar } ) {
 			local: new Map(),
 			planes: new Map(),
 			nodes: new Map(),
+			// The status each area is drawn at, once it has been drawn again here (null: not drawn).
+			drawn: new Map(),
 		};
 		states.set( entry, s );
 		render();
 		loadSaved( s );
+		// The drawing's panel numbers, on the areas as the model has them.
+		ensureData( s ).then( () => {
+
+			if ( states.get( entry ) !== s ) return;
+			for ( const id of s.order ) {
+
+				const node = s.nodes.get( id );
+				const m = markupOf( s, id );
+				if ( ! m?.no || ! node || s.drawn.has( id ) || numberIn( node ) ) continue;
+				addNumber( node, numberOf( s, m, s.planes.get( id ) ) );
+
+			}
+
+			render();
+
+		} ).catch( () => {} );
+		// Panels with photos say so on their numbers.
+		photos.load( s.model ).then( async any => {
+
+			if ( ! any || states.get( entry ) !== s ) return;
+			await ensureData( s );
+			for ( const area of photos.areas( s.model ) ) rebuild( s, area );
+			render();
+
+		} ).catch( () => {} );
 
 	}
 
@@ -342,15 +409,12 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar } ) {
 				for ( const [ key, layer ] of Object.entries( data.layers ) ) if ( object.isMesh && meshName( object ) === gltfName( layer.name ) ) s.layerMeshes[ key ] ??= object;
 
 			} );
-			// A model with only chipped areas has no flat patches' materials: made as the build makes them.
-			s.shared = {
-				fill: named.get( 'Repair area' ) ?? Object.assign( new MeshBasicMaterial( { color: AREA_COLOUR, transparent: true, opacity: 0.7, side: DoubleSide } ), { name: 'Repair area' } ),
-				edge: named.get( 'Repair area outline' ) ?? Object.assign( new MeshBasicMaterial( { color: EDGE_COLOUR, side: DoubleSide } ), { name: 'Repair area outline' } ),
-				rebar: named.get( 'Exposed rebar' ), recess: named.get( 'Chipped concrete' ),
-			};
-			// Chipped areas' rims, by date: "Chipped 2026-11-02" in the model, more made as needed.
-			s.rims = new Map();
-			for ( const [ name, material ] of named ) if ( name.startsWith( 'Chipped' ) && name !== 'Chipped concrete' ) s.rims.set( name.slice( 8 ), material );
+			// Each layer's own colour, as the model has it before any painting (model-edits.js paints
+			// with vertex colours on these materials): what others took out is drawn in it.
+			s.layerLooks = Object.fromEntries( Object.entries( s.layerMeshes ).map( ( [ key, mesh ] ) => [ key, { color: mesh.material.color.clone(), roughness: mesh.material.roughness, metalness: mesh.material.metalness } ] ) );
+			// The model's materials by name: a stage's concrete, bars and rim are taken from them, or
+			// made as the build makes them (materialFor) where the model has no area at that stage.
+			s.materials = named;
 			s.data = data;
 			for ( const id of ids( s ) ) s.planes.set( id, partsOf( s, id )?.plane ?? null );
 
@@ -370,23 +434,44 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar } ) {
 	// A mesh's name in the glTF: three.js names a node's only mesh after the node.
 	const meshName = object => object.name || object.parent?.name;
 
-	function rimFor( s, date ) {
+	// A material of the model's by name, or one made by `make` and kept under that name.
+	function materialFor( s, name, make ) {
 
-		const key = date ?? '';
-		if ( ! s.rims.has( key ) ) {
-
-			const like = s.rims.values().next().value;
-			// Like the model's own rims (unlit), in its own colour.
-			const material = like ? like.clone() : new MeshBasicMaterial( { side: DoubleSide } );
-			material.color.set( rimColour( date ) );
-			material.name = `Chipped ${ key }`.trim();
-			s.rims.set( key, material );
-
-		}
-
-		return s.rims.get( key );
+		if ( ! s.materials.has( name ) ) s.materials.set( name, Object.assign( make(), { name } ) );
+		return s.materials.get( name );
 
 	}
+
+	// The strip round an area on its face: unlit, in the colour of its stage (or the day it was chipped).
+	const rimFor = ( s, m ) => {
+
+		const { name, colour } = rimOf( m );
+		return materialFor( s, name, () => new MeshBasicMaterial( { color: colour, side: DoubleSide } ) );
+
+	};
+
+	// The concrete ('concrete') or the bars ('rebar') of a stage (LOOKS).
+	function lookFor( s, status, part ) {
+
+		return materialFor( s, lookNames( status )[ part ], () => {
+
+			const look = LOOKS[ status ][ part ];
+			const chipped = s.materials.get( lookNames( CHIPPED )[ part ] );
+			// Like the chipped look's (its relief, for the concrete), in this stage's colour and finish.
+			const material = chipped ? chipped.clone() : new MeshStandardMaterial( part === 'concrete' ? { side: DoubleSide } : {} );
+			if ( part === 'concrete' && ! look.map ) material.map = null;
+			material.color.set( look.color );
+			material.roughness = look.roughness;
+			material.metalness = look.metalness ?? 0;
+			return material;
+
+		} );
+
+	}
+
+	const patchFor = ( s, part ) => part === 'fill'
+		? materialFor( s, 'Repair area', () => new MeshBasicMaterial( { color: AREA_COLOUR, transparent: true, opacity: 0.7, side: DoubleSide } ) )
+		: materialFor( s, 'Repair area outline', () => new MeshBasicMaterial( { color: EDGE_COLOUR, side: DoubleSide } ) );
 
 	// ---------- What an area is now ----------
 
@@ -420,7 +505,12 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar } ) {
 	// The drawing's areas, then those added here, in the order they came.
 	const ids = s => [ ...new Set( [ ...( s.order ?? [] ), ...s.saved.keys(), ...s.local.keys() ] ) ];
 	const takenAway = s => s.base ? s.order.filter( id => effective( s, id )?.deleted ) : [];
-	const allDates = () => [ ...states.values() ].flatMap( s => ids( s ).map( id => markupOf( s, id )?.f?.chipped ) ).filter( Boolean );
+	const allDates = () => [ ...states.values() ].flatMap( s => ids( s ).flatMap( id => {
+
+		const f = markupOf( s, id )?.f ?? {};
+		return STAGES.map( stage => stage.date && f[ stage.date ] );
+
+	} ) ).filter( Boolean );
 
 	const same = ( a, b ) => JSON.stringify( a ?? null ) === JSON.stringify( b ?? null );
 	function isDirty( s, id ) {
@@ -472,19 +562,53 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar } ) {
 
 	}
 
-	// A detail of the selected area: status, chipped, type or text (notes).
+	// A detail of the selected area: its panel number (no), status, the day it reached the stage
+	// it's at (date), type or text (notes).
 	function setDetail( field, value ) {
 
 		if ( ! selected ) return;
 		const { s, id } = selected;
 		const m = markupOf( s, id );
-		if ( ! m || ( m.f?.[ field ] ?? '' ) === value ) return;
+		if ( ! m ) return;
 		const edit = placed( s, id, m.pts, m.n );
-		// Just the details kept for an area (worker/area-edits.js); an empty one stays empty.
-		edit.f = Object.fromEntries( [ 'status', 'chipped', 'type', 'text' ].filter( key => m.f?.[ key ] != null ).map( key => [ key, m.f[ key ] ] ) );
-		edit.f[ field ] = value;
-		// What the next one drawn is.
-		defaults[ field ] = value;
+		// Just the details kept for an area; an empty one stays empty.
+		const f = Object.fromEntries( DETAILS.filter( key => m.f?.[ key ] != null ).map( key => [ key, m.f[ key ] ] ) );
+		if ( field === 'no' ) {
+
+			if ( ( m.no ?? '' ) === value ) return;
+			if ( value ) edit.no = value;
+			// The drawing's number taken off: kept as none, rather than the drawing's again.
+			else if ( s.base.get( id )?.no ) edit.no = '';
+			else delete edit.no;
+
+		} else if ( field === 'date' ) {
+
+			const { date } = stageOf( f.status );
+			if ( ! date || ( f[ date ] ?? '' ) === value ) return;
+			f[ date ] = value;
+
+		} else {
+
+			if ( ( f[ field ] ?? '' ) === value ) return;
+			const was = STAGES.indexOf( stageOf( f.status ) );
+			f[ field ] = value;
+			if ( field === 'status' ) {
+
+				// An area's days are those of the stages it has reached (the timeline plays them back):
+				// going back a stage, the later ones' go; going on, it reached the new one today.
+				const now = STAGES.indexOf( stageOf( value ) );
+				for ( const stage of STAGES.slice( Math.min( was, now ) + 1 ) ) if ( stage.date ) delete f[ stage.date ];
+				const { date } = STAGES[ now ];
+				if ( date && ! f[ date ] ) f[ date ] = today();
+
+			}
+
+			// What the next one drawn is.
+			defaults[ field ] = value;
+
+		}
+
+		edit.f = f;
 		change( s, id, edit );
 
 	}
@@ -506,9 +630,152 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar } ) {
 
 	};
 
-	const partsOf = ( s, id ) => {
+	// The areas drawn as they were by the end of a day, or (null) as they are now: those whose stage
+	// was another then are drawn again, and the concrete cut to suit; what others took out since is
+	// put back; and the crew and machines at work that day are shown. The models' data is loaded.
+	function lookBack( day ) {
+
+		asOf = day;
+		for ( const s of states.values() ) {
+
+			if ( ! s.data ) continue;
+			let changed = false;
+			for ( const id of ids( s ) ) {
+
+				const now = s.drawn.has( id ) ? s.drawn.get( id ) : s.base.get( id )?.f?.status ?? null;
+				if ( ( drawnAs( s, id )?.f?.status ?? null ) === now ) continue;
+				rebuild( s, id );
+				changed = true;
+
+			}
+
+			if ( changed ) cut( s );
+			showRemoved( s, day );
+			if ( day === null ) crew.clear( s );
+			else crew.show( s, chippingOn( s, day ), removedOn( s, day ) );
+
+		}
+
+		render();
+
+	}
+
+	// ---------- Looking back: what others took out, and who was at work ----------
+
+	const crew = createCrew( { onUpdate } );
+	// What others took out (the model's data: removed: [ { name, by, layer, from, parts: [ { name,
+	// x, removed, positions, index } ] } ], in the markup frame): each part is drawn again, in its
+	// layer's own colour, while looking back to a day before it went.
+	function showRemoved( s, day ) {
+
+		for ( const group of s.data.removed ?? [] ) for ( const part of group.parts ) {
+
+			const there = day !== null && part.removed > day;
+			if ( ! there ) {
+
+				part.mesh?.removeFromParent();
+				continue;
+
+			}
+
+			if ( ! part.mesh ) {
+
+				const geometry = new BufferGeometry();
+				geometry.setAttribute( 'position', new BufferAttribute( shifted( s, part.positions ), 3 ) );
+				geometry.setIndex( part.index );
+				const flat = geometry.toNonIndexed();
+				geometry.dispose();
+				flat.computeVertexNormals();
+				const look = s.layerLooks?.[ group.layer ];
+				group.material ??= new MeshStandardMaterial( { color: look?.color ?? '#b9c0c8', roughness: look?.roughness ?? 0.9, metalness: look?.metalness ?? 0, side: DoubleSide } );
+				part.mesh = new Mesh( flat, group.material );
+				part.mesh.name = `${ group.name }: ${ part.name } (removed ${ part.removed })`;
+				part.mesh.userData.noCollide = true;
+
+			}
+
+			// See-through with the rest of the model, or not (underground.js), as it is now.
+			const like = s.layerMeshes[ group.layer ]?.material;
+			if ( like && Boolean( like.userData.xray ) !== Boolean( group.material.userData.xray ) ) {
+
+				if ( like.userData.xray ) group.material.userData.xray = { transparent: false, opacity: 1, depthWrite: true };
+				else delete group.material.userData.xray;
+				Object.assign( group.material, { transparent: like.transparent, opacity: like.opacity, depthWrite: like.depthWrite } );
+				group.material.needsUpdate = true;
+
+			}
+
+			if ( ! part.mesh.parent ) s.content.add( part.mesh );
+
+		}
+
+	}
+
+	// A model gone: what was made for looking back goes with it.
+	function forgetRemoved( s ) {
+
+		for ( const group of s.data?.removed ?? [] ) {
+
+			for ( const part of group.parts ) {
+
+				part.mesh?.removeFromParent();
+				part.mesh?.geometry.dispose();
+				delete part.mesh;
+
+			}
+
+			group.material?.dispose();
+			delete group.material;
+
+		}
+
+	}
+
+	const hash = text => [ ...text ].reduce( ( h, c ) => ( h * 31 + c.charCodeAt( 0 ) ) >>> 0, 7 );
+	// The areas our crew was chipping on a day, of those that have been chipped. Over a span of days
+	// each is put on one of them.
+	function chippingOn( s, day ) {
+
+		const out = [];
+		for ( const id of ids( s ) ) {
+
+			const m = markupOf( s, id );
+			if ( ! m || STAGES.indexOf( stageOf( m.f?.status ) ) < STAGES.indexOf( stageOf( CHIPPED ) ) ) continue;
+			const days = daysOf( m.f?.chipped );
+			if ( ! days.includes( day ) ) continue;
+			if ( days.length === 1 || days[ hash( id ) % days.length ] === day ) out.push( { m } );
+
+		}
+
+		return out;
+
+	}
+
+	// The parts others took out on a day, and which way the work went.
+	const removedOn = ( s, day ) => ( s.data.removed ?? [] ).flatMap( group => group.parts.filter( part => part.removed === day ).map( part => ( { ...part, towards: group.from === 'pit' ? 1 : - 1 } ) ) );
+
+	// An editor starts: no more looking back.
+	function backToNow() {
+
+		for ( const told of onNow ) told();
+		if ( asOf !== null ) lookBack( null );
+
+	}
+
+	// The area as it's drawn: as it is now, or, looking back (the timeline), at the stage it had
+	// reached by that day. Null if there's none to draw: taken away, or not chipped yet then.
+	function drawnAs( s, id ) {
 
 		const m = markupOf( s, id );
+		if ( ! m || asOf === null ) return m;
+		const status = stageAt( m, asOf );
+		return status && { ...m, f: { ...m.f, status } };
+
+	}
+
+	const partsOf = ( s, id ) => {
+
+		const m = drawnAs( s, id );
 		return m && { m, ...areaParts( m, s.all ) };
 
 	};
@@ -519,11 +786,12 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar } ) {
 		const old = s.nodes.get( id );
 		const built = partsOf( s, id );
 		s.planes.set( id, built?.plane ?? null );
+		s.drawn.set( id, built?.m.f?.status ?? null );
 		if ( ! built ) {
 
-			// Taken away.
+			// Taken away, or not there yet on the day looked back to.
 			old?.removeFromParent();
-			old?.traverse( object => object.geometry?.dispose() );
+			discard( old );
 			s.nodes.delete( id );
 			if ( selected?.s === s && selected.id === id ) select( null );
 			return;
@@ -549,29 +817,223 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar } ) {
 		node.userData = { ...areaExtras( m ), changed: !! effective( s, id ), added: ! s.base.has( id ) };
 		if ( plane ) {
 
-			node.add( new Mesh( geometry( parts.recess ), s.shared.recess ) );
-			node.add( new Mesh( geometry( parts.rim, parts.rim.normal ), rimFor( s, m.f?.chipped ) ) );
-			if ( parts.rebar.idx.length ) node.add( new Mesh( geometry( parts.rebar ), s.shared.rebar ) );
+			const status = m.f.status;
+			node.add( new Mesh( geometry( parts.filled ?? parts.recess ), lookFor( s, status, 'concrete' ) ) );
+			node.add( new Mesh( geometry( parts.rim, parts.rim.normal ), rimFor( s, m ) ) );
+			if ( parts.rebar?.idx.length ) node.add( new Mesh( geometry( parts.rebar ), lookFor( s, status, 'rebar' ) ) );
 
 		} else {
 
-			node.add( new Mesh( geometry( parts.fill, parts.normal ), s.shared.fill ) );
-			node.add( new Mesh( geometry( parts.edge, parts.normal ), s.shared.edge ) );
+			node.add( new Mesh( geometry( parts.fill, parts.normal ), patchFor( s, 'fill' ) ) );
+			node.add( new Mesh( geometry( parts.edge, parts.normal ), patchFor( s, 'edge' ) ) );
 
 		}
 
 		useFastRaycast( node );
+		if ( m.no || photos.count( s.model, id ) ) addNumber( node, numberOf( s, m, plane ) );
 		if ( old?.parent ) {
 
 			old.parent.children.splice( old.parent.children.indexOf( old ), 1, node );
 			node.parent = old.parent;
 			old.parent = null;
-			old.traverse( object => object.geometry?.dispose() );
+			discard( old );
 
 		} else s.group.add( node );
 		node.updateMatrixWorld( true );
 		s.nodes.set( id, node );
 		if ( selected?.s === s && selected.id === id ) highlight( s, id );
+
+	}
+
+	// An area's node no longer drawn: its own geometry and its number's picture go.
+	function discard( node ) {
+
+		node?.traverse( object => {
+
+			if ( object.isMesh ) object.geometry.dispose();
+			else if ( object.isSprite ) {
+
+				object.material.map?.dispose();
+				object.material.dispose();
+
+			}
+
+		} );
+
+	}
+
+	// ---------- Panel numbers ----------
+
+
+	// A panel's number, floating just off the middle of it: always facing you, hidden by what's in
+	// front of it, and about the same size on the screen from close up to across the gallery. With
+	// a camera and how many, if it has photos.
+	function numberOf( s, m, plane ) {
+
+		const no = m.no ? String( m.no ) : '';
+		const shots = photos.count( s.model, m.id );
+		const canvas = document.createElement( 'canvas' );
+		const ctx = canvas.getContext( '2d' );
+		const big = '600 44px system-ui, -apple-system, "Segoe UI", sans-serif';
+		const small = '600 32px system-ui, -apple-system, "Segoe UI", sans-serif';
+		ctx.font = big;
+		const noWidth = no ? ctx.measureText( no ).width : 0;
+		ctx.font = small;
+		const shotsWidth = shots ? 36 + ctx.measureText( String( shots ) ).width : 0;
+		const gap = no && shots ? 16 : 0;
+		canvas.width = Math.ceil( noWidth + gap + shotsWidth ) + 36;
+		canvas.height = 64;
+		ctx.fillStyle = '#0f1b2b';
+		ctx.strokeStyle = '#ffffff';
+		ctx.lineWidth = 3;
+		ctx.beginPath();
+		ctx.roundRect( 2, 2, canvas.width - 4, canvas.height - 4, 14 );
+		ctx.fill();
+		ctx.stroke();
+		ctx.textAlign = 'left';
+		ctx.textBaseline = 'middle';
+		if ( no ) {
+
+			ctx.font = big;
+			ctx.fillStyle = '#ffffff';
+			ctx.fillText( no, 18, 34 );
+
+		}
+
+		if ( shots ) {
+
+			const x = 18 + noWidth + gap;
+			ctx.fillStyle = '#9fd0ff';
+			ctx.beginPath();
+			ctx.roundRect( x, 23, 28, 20, 4 );
+			ctx.fill();
+			ctx.fillRect( x + 8, 18, 12, 6 );
+			ctx.fillStyle = '#0f1b2b';
+			ctx.beginPath();
+			ctx.arc( x + 14, 33, 6, 0, Math.PI * 2 );
+			ctx.fill();
+			ctx.fillStyle = '#9fd0ff';
+			ctx.font = small;
+			ctx.fillText( String( shots ), x + 36, 34 );
+
+		}
+
+		const map = new CanvasTexture( canvas );
+		map.colorSpace = SRGBColorSpace;
+		const sprite = new Sprite( new SpriteMaterial( { map, transparent: true, depthWrite: false } ) );
+		const N = plane?.N ?? new Vector3( ...m.n ).normalize();
+		sprite.position.copy( centroid( m.pts ).addScaledVector( N, NUMBER.off ).sub( s.origin ) );
+		sprite.userData = { number: true, aspect: canvas.width / canvas.height, noCollide: true };
+		sprite.scale.set( NUMBER.min * sprite.userData.aspect, NUMBER.min, 1 );
+		sprite.visible = numbersShown;
+		// Not something rays stop at: walking, clicking and the like pass through it.
+		sprite.raycast = () => {};
+		return sprite;
+
+	}
+
+	// A number goes on its area's node. The model's own area nodes carry a position and scale (how
+	// the file packs their corners), so there it sits in a holder that undoes them: the number is
+	// placed in the model's frame either way, right on its panel, at its own size.
+	function addNumber( node, sprite ) {
+
+		node.updateMatrix();
+		if ( node.matrix.equals( IDENTITY ) ) return node.add( sprite );
+		const holder = new Group();
+		holder.matrixAutoUpdate = false;
+		holder.matrix.copy( node.matrix ).invert();
+		holder.userData.numberHolder = true;
+		holder.add( sprite );
+		node.add( holder );
+
+	}
+
+	const numberIn = node => node.children.find( child => child.userData.number )
+		?? node.children.find( child => child.userData.numberHolder )?.children[ 0 ] ?? null;
+	const numbers = () => [ ...states.values() ].flatMap( s => [ ...s.nodes.values() ].map( numberIn ).filter( Boolean ) );
+	layers?.addLayer( NUMBERS_LAYER, {
+		name: 'Panel numbers',
+		count: () => numbers().length,
+		setShown: () => {
+
+			numbersShown = layers.isLayerShown( NUMBERS_LAYER );
+			for ( const sprite of numbers() ) sprite.visible = numbersShown;
+
+		},
+	} );
+	const _at = new Vector3();
+	onUpdate?.( () => {
+
+		if ( ! numbersShown ) return;
+		for ( const sprite of numbers() ) {
+
+			const height = Math.min( NUMBER.max, Math.max( NUMBER.min, sprite.getWorldPosition( _at ).distanceTo( camera.position ) * NUMBER.perMetre ) );
+			sprite.scale.set( height * sprite.userData.aspect, height, 1 );
+
+		}
+
+	} );
+
+	// ---------- The count by stage ----------
+
+	// How many areas and how many m² are at each stage, under the panel's hint.
+	function summarise( show ) {
+
+		const table = $( '.summary' );
+		const rows = STAGES.map( stage => ( { stage, count: 0, area: 0 } ) );
+		for ( const s of states.values() ) for ( const id of s.base ? ids( s ) : [] ) {
+
+			const m = markupOf( s, id );
+			if ( ! m ) continue;
+			const row = rows[ STAGES.indexOf( stageOf( m.f?.status ) ) ];
+			row.count ++;
+			row.area += m.area ?? 0;
+
+		}
+
+		table.hidden = ! show || rows.every( row => row.count === 0 );
+		if ( table.hidden ) return;
+		table.querySelector( 'tbody' ).innerHTML = rows.filter( row => row.count ).map( ( { stage, count, area } ) =>
+			`<tr><td><i style="background:${ LOOKS[ stage.status ]?.rim ?? ( stage.status === CHIPPED ? LOOKS[ CHIPPED ].rebar.color : AREA_COLOUR ) }"></i>${ stage.short }</td><td>${ count }</td><td>${ area.toFixed( 2 ) } m²</td></tr>` ).join( '' );
+
+	}
+
+	// Faces of a layer painted in the model editor (model-edits.js): `painted` is the colour of
+	// each painted triangle of the layer by its number. They're coloured corner by corner, the rest
+	// in the layer's own colour, which the material then leaves to them.
+	const _colour = new Color();
+	function paint( mesh, geometry, painted, source ) {
+
+		const material = mesh.material;
+		if ( painted?.size ) {
+
+			material.userData.ownColour ??= material.color.getHex();
+			const colours = new Float32Array( source.length * 9 );
+			source.forEach( ( triangle, i ) => {
+
+				const colour = painted.get( triangle );
+				if ( colour ) _colour.set( colour );
+				else _colour.setHex( material.userData.ownColour );
+				for ( let k = 0; k < 3; k ++ ) _colour.toArray( colours, i * 9 + k * 3 );
+
+			} );
+			geometry.setAttribute( 'color', new BufferAttribute( colours, 3 ) );
+			material.color.setRGB( 1, 1, 1 );
+			if ( ! material.vertexColors ) {
+
+				material.vertexColors = true;
+				material.needsUpdate = true;
+
+			}
+
+		} else if ( material.userData.ownColour != null ) {
+
+			material.color.setHex( material.userData.ownColour );
+			delete material.userData.ownColour;
+			material.vertexColors = false;
+			material.needsUpdate = true;
+
+		}
 
 	}
 
@@ -582,9 +1044,10 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar } ) {
 		const planes = ids( s ).map( id => s.planes.get( id ) ).filter( Boolean );
 		for ( const [ key, mesh ] of Object.entries( s.layerMeshes ) ) {
 
-			const { positions } = cutOut( s.triangles[ key ], planes );
+			const { positions, source } = cutOut( s.triangles[ key ], planes );
 			const g = new BufferGeometry();
 			g.setAttribute( 'position', new BufferAttribute( shifted( s, positions ), 3 ) );
+			paint( mesh, g, s.painted?.get( key ), source );
 			const old = mesh.geometry;
 			mesh.geometry = g;
 			old.dispose();
@@ -850,7 +1313,8 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar } ) {
 		}
 
 		const id = `twin-${ Array.from( crypto.getRandomValues( new Uint8Array( 8 ) ), b => b.toString( 16 ).padStart( 2, '0' ) ).join( '' ) }`;
-		const f = { status: defaults.status, type: defaults.type, ...( defaults.status === CHIPPED && defaults.chipped ? { chipped: defaults.chipped } : {} ), ...( defaults.text ? { text: defaults.text } : {} ) };
+		const stage = stageOf( defaults.status );
+		const f = { status: stage.status, type: defaults.type, ...( stage.date ? { [ stage.date ]: today() } : {} ), ...( defaults.text ? { text: defaults.text } : {} ) };
 		change( s, id, { pts: outlinePts, n, added: true, f, ...described } );
 		cut( s );
 		select( { s, id } );
@@ -884,6 +1348,8 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar } ) {
 			else s.saved.set( id, edit );
 			s.local.delete( id );
 			done ++;
+			// One added here and now gone for good: its photos go with it.
+			if ( gone && ! s.base.has( id ) ) await photos.removeAll( s.model, id );
 
 		}
 
@@ -903,8 +1369,45 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar } ) {
 
 	};
 
-	// The concrete under the pointer: a wall, floor or soffit areas can go on.
-	const concreteAt = ( s, e ) => ray( e ).intersectObjects( Object.values( s.layerMeshes ), false )[ 0 ] ?? null;
+	// The concrete under the pointer: a wall, floor or soffit areas can go on. As it is without the
+	// areas cut out of it, so a click over an area's recess lands on its face, not on whatever is
+	// behind the hole.
+	function concreteAt( s, e ) {
+
+		for ( const mesh of uncut( s ) ) mesh.matrixWorld.copy( ( s.group?.parent ?? s.content ).matrixWorld );
+		return ray( e ).intersectObjects( s.uncut, false )[ 0 ] ?? null;
+
+	}
+
+	// The layers as they are without the areas cut out, one mesh each (userData.layer: which), a
+	// triangle of the mesh for each of the layer's, in the same order. Never drawn or in the scene:
+	// only for rays, where the model stands now.
+	function uncut( s ) {
+
+		s.uncut ??= Object.entries( s.triangles ).map( ( [ key, triangles ] ) => {
+
+			const positions = new Float32Array( triangles.length * 9 );
+			triangles.forEach( ( { a, b, c }, i ) => [ a, b, c ].forEach( ( p, k ) => p.toArray( positions, i * 9 + k * 3 ) ) );
+			const geometry = new BufferGeometry();
+			geometry.setAttribute( 'position', new BufferAttribute( shifted( s, positions ), 3 ) );
+			const mesh = new Mesh( geometry, new MeshBasicMaterial( { side: DoubleSide } ) );
+			mesh.matrixAutoUpdate = false;
+			mesh.userData.layer = key;
+			return mesh;
+
+		} );
+		return s.uncut;
+
+	}
+
+	// The concrete a ray in the scene meets first (a beam looking for the wall across from it).
+	function concreteAlong( s, origin, direction ) {
+
+		for ( const mesh of uncut( s ) ) mesh.matrixWorld.copy( ( s.group?.parent ?? s.content ).matrixWorld );
+		_raycaster.set( origin, direction );
+		return _raycaster.intersectObjects( s.uncut, false )[ 0 ] ?? null;
+
+	}
 
 	// The area under the pointer, through walls: in here you pick areas, not concrete.
 	function areaAt( e ) {
@@ -1172,6 +1675,8 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar } ) {
 		if ( dirtyCut === s ) dirtyCut = null;
 		for ( let i = history.length - 1; i >= 0; i -- ) if ( history[ i ].s === s ) history.splice( i, 1 );
 		if ( ! states.size && editing ) setEditing( false );
+		crew.clear( s );
+		forgetRemoved( s );
 		render();
 
 	} );
@@ -1211,6 +1716,101 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar } ) {
 
 		},
 		startDrawing, nudge, turn, undo, save,
+		// Looking back (repair-timeline.js): the days anything reached a stage, the areas drawn as
+		// they were by the end of a day (null: as they are now), and how many areas and m² were at
+		// each stage then.
+		timeline: {
+			async days() {
+
+				await Promise.all( [ ...states.values() ].map( ensureData ) );
+				const days = new Set();
+				for ( const s of states.values() ) for ( const id of ids( s ) ) {
+
+					// Of the stages it has reached (stageAt goes by the same).
+					const f = markupOf( s, id )?.f ?? {};
+					for ( const stage of STAGES.slice( 0, STAGES.indexOf( stageOf( f.status ) ) + 1 ) ) if ( stage.date && dayOf( f[ stage.date ] ) ) days.add( dayOf( f[ stage.date ] ) );
+
+				}
+
+				// And the days others took things out.
+				for ( const s of states.values() ) for ( const group of s.data?.removed ?? [] ) for ( const part of group.parts ) days.add( part.removed );
+
+				return [ ...days ].sort();
+
+			},
+			get day() {
+
+				return asOf;
+
+			},
+			async setDay( day ) {
+
+				await Promise.all( [ ...states.values() ].map( ensureData ) );
+				lookBack( day );
+
+			},
+			// The timeline opens: the editors stop. And it's told (to close) when one starts.
+			stopEditing() {
+
+				setEditing( false );
+				for ( const told of onEditing ) told();
+
+			},
+			onStopped: told => onNow.push( told ),
+			// Told when the areas, or the models that have them, may have changed.
+			onChange: told => onRender.push( told ),
+			summary() {
+
+				const rows = STAGES.map( stage => ( { stage: stage.short, count: 0, area: 0 } ) );
+				for ( const s of states.values() ) for ( const id of s.base ? ids( s ) : [] ) {
+
+					const m = drawnAs( s, id );
+					if ( ! m ) continue;
+					const row = rows[ STAGES.indexOf( stageOf( m.f?.status ) ) ];
+					row.count ++;
+					row.area += m.area ?? 0;
+
+				}
+
+				return rows;
+
+			},
+			// What others took out, as it stood by the end of the day looked back to: [ { name, by,
+			// left, total, removing } ] (left: parts still there; removing: taken out that day).
+			works() {
+
+				return [ ...states.values() ].flatMap( s => ( s.data?.removed ?? [] ).map( group => ( {
+					name: group.name, by: group.by, total: group.parts.length,
+					left: asOf === null ? 0 : group.parts.filter( part => part.removed > asOf ).length,
+					removing: asOf === null ? 0 : group.parts.filter( part => part.removed === asOf ).length,
+				} ) ) );
+
+			},
+			// How many people and machines are shown at work.
+			get crew() {
+
+				return crew.count;
+
+			},
+			has: () => states.size > 0,
+		},
+		// For the model editor (model-edits.js), which changes the same models: their states (s.model,
+		// s.entry, s.content, s.origin, s.triangles by layer, s.group, and s.painted, the colours of
+		// painted triangles by layer, which it sets), their data once it's loaded, the concrete under
+		// the pointer or along a ray (uncut: userData.layer and faceIndex say which triangle), frames,
+		// and the concrete cut again (after painting).
+		host: {
+			states: () => [ ...states.values() ],
+			ensureData, concreteAt, concreteAlong, faceHit, toModel, toModelPoint, toScene,
+			recut: cut,
+			stop() {
+
+				setEditing( false );
+				backToNow();
+
+			},
+			onEditing: told => onEditing.push( told ),
+		},
 	};
 
 }

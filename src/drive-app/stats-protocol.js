@@ -6,8 +6,9 @@ import { SPOTS } from './places.js';
 // so the Worker imports it too.
 //
 // Only counts, never who: no cookie, nothing kept in the browser for it, no id of the visitor or
-// their player, no address. A drop-in at somewhere other than a start spot is 'other', never where
-// (a search can be someone's own street), and a referring site is only its host name.
+// their player, no address. A drop-in at somewhere other than a start spot is 'other' (or 'moon' on
+// the Moon), never where (a search can be someone's own street), and a referring site is only its
+// host name.
 
 // What may be counted, and for each: what its keys may be (a function giving the key cleaned, or
 // null), and the most one post may add to it (all its keys together), so a page can't add a day's
@@ -27,8 +28,8 @@ export const METRICS = {
 	// milliseconds all together (for the mean).
 	load_time: { key: key => BUCKET_NAMES.has( key ) ? key : null, most: 1 },
 	load_ms: { key: key => key === 'total' ? key : null, most: 120000 },
-	// Drop-ins: where (a start spot's id, or 'other'), and in which ride.
-	dropin: { key: key => SPOT_IDS.has( key ) || key === 'other' ? key : null, most: 20 },
+	// Drop-ins: where (a start spot's id, 'moon' anywhere on the Moon, or 'other'), and in which ride.
+	dropin: { key: key => SPOT_IDS.has( key ) || key === 'other' || key === 'moon' ? key : null, most: 20 },
 	ride: { key: checkVehicle, most: 20 },
 	// Seconds driven (not paused), in each ride; and of those, with others in the room.
 	play: { key: checkVehicle, most: 600 },

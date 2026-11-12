@@ -2,3 +2,5 @@
 # diffed as text nor its line ends changed on a checkout. mask.bin has no zero byte near its start,
 # which is how git would otherwise tell.
 drive/public/sea/*.bin binary
+# And so is its Moon's (scripts/make-moon.mjs).
+drive/public/moon/*.bin binary

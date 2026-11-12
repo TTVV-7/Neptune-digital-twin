@@ -117,6 +117,9 @@ async function levelsPage( { visit = null, live = false, player = null, touch = 
 		if ( visit ) window.worldDriveVisitTest = { visit };
 		if ( live ) window.worldDriveLiveTest = { visit };
 		localStorage.setItem( 'world-drive.pads', 'off' );
+		// The go-kart, as before the pickup (219,000 triangles, slow in the software renderer) was the
+		// default, unless a ride is picked already.
+		if ( ! localStorage.getItem( 'world-drive.vehicle' ) ) localStorage.setItem( 'world-drive.vehicle', 'go-kart' );
 		if ( player && ! localStorage.getItem( 'world-drive.player' ) ) localStorage.setItem( 'world-drive.player', JSON.stringify( player ) );
 		// Every pop-up's words, however briefly it showed.
 		window.popTexts = [];
