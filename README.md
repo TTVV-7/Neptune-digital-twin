@@ -719,8 +719,9 @@ charge level and its mini-turbo have bursts of their own, the view jolts and str
 lines, and the body leans on its springs (**Camera effects** in the pause menu, or asking the
 system for less motion, keeps the view still). Every ride drives on **water** as on the ground, off
 a quay or down a beach and out across it, and out past where Google draws it by a coast (its tiles
-are the sea bed there) onto a surface of the sea's own (`src/drive-app/sea.js`), laid before you
-get there; the hovercraft throws up spray there. Google's mesh doesn't say what's water, so
+are the sea bed there) onto a surface of the sea's own (`src/drive-app/sea.js`), laid as you get
+there (not over a city's streets under the sea behind its levee) and there for whoever joins you;
+the hovercraft throws up spray there. Google's mesh doesn't say what's water, so
 `src/drive-app/water.js` tells it by how Google draws it (level, one even colour, the lowest thing
 round about), for that spray and to keep boost pads off it. **M** goes back to the globe to drop in
 somewhere else without reloading. Phones get a bottom sheet and touch buttons.

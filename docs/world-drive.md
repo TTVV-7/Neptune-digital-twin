@@ -304,8 +304,10 @@ Google draws the water by a coast its tiles are the sea bed, sloping down under 
 fly out there and the sea's own surface is laid ahead of you, and you drive on at the sea's height
 ([out from a coast](#out-from-a-coast)). A trick landed on the water scores as on the ground. **R**
 puts you a few metres on as it does anywhere, out there or on the edge facing the water: on the
-water, if that's where those few metres are. **Go to** beside another driver who's out on the water
-puts you there too, and Esc parks you on the water, to drive on from there.
+water, if that's where those few metres are. **Go to** (or **Join**) beside another driver who's
+out on the water puts you there too, on its surface with them (out past Google's water, where they
+ride on the sea's own surface over its bed, that's laid there for you as well:
+[out from a coast](#out-from-a-coast)), and Esc parks you on the water, to drive on from there.
 
 Until 11 November 2026 driving or coming down into water was a splash: every ride but the
 hovercraft sank nose first and was put back on the last dry ground it had been on, facing away from
@@ -326,7 +328,8 @@ speak of splashes and of the way back; `water.js` tells water the same way still
 - **The open sea**: a drop-in far out at sea, where Google draws only the sea bed, starts on a
   surface of the sea's own ([below](#the-open-sea)), which water.js calls water like any other; and
   driven or flown out onto that bed from a coast, it's laid there, but not over ground coloured as
-  only dry land is ([out from a coast](#out-from-a-coast)).
+  only dry land is, nor over ground closed in by levees, houses and roofs as streets under the sea
+  behind a levee are ([out from a coast](#out-from-a-coast)).
 
 **Others' cars** from a page loaded before the change can still say they're sinking
 (`FLAGS.splash` in `live-protocol.js`, which `live.js` no longer sends): `ghosts.js` shows their
@@ -705,14 +708,16 @@ Strait of Georgia the kart drove on the sea for 4 s, on the water all the way, w
 #### Out from a coast
 
 Google draws water at the sea's height only close to a coast; past that its tiles are the bed, with
-the sea's picture on it, sloping down under the sea (in Santa Monica Bay from 7.6 m under it 500 m
-off the pier to 129 m under it 2 km out: [above](#the-big-lakes)). While driving into water was a
-splash, only the hovercraft got that far; with none, a ride driven down off the sand at Copacabana
-and out across the sea followed the bed down, metres then tens of metres under where the sea's
-surface should be. So while you drive on the Earth with none of [the open sea's](#the-open-sea)
-water round you, four times a second (`watchSea` in `src/drive-app/main.js`) the ground is looked at
-under you and ahead of you along your way (as far as you'll go in 1 s and in 3 s, and at least 15
-and 60 m), and where all of this holds there, the water's surface is laid as for a drop-in:
+the sea's picture on it, sloping down under the sea (in Santa Monica Bay 7.6 m under it 500 m off
+the pier and 129 m under it about 9 km off, about 1.4 m down in every 100 m between:
+[above](#the-big-lakes); further out, 2 m in 100). While driving into water was a splash, only the
+hovercraft got that far; with none, a ride driven down off the sand at Copacabana and out across
+the sea followed the bed down, metres then tens of metres under where the sea's surface should be.
+So while you drive on the Earth with none of [the open sea's](#the-open-sea) water round you, four
+times a second (`watchSea` in `src/drive-app/main.js`) the ground is looked at under you and ahead
+of you along your way (as far as you'll go in 1 s and in 3 s, and at least 15 and 60 m; behind you
+while you reverse), and where all of this holds there, the water's surface is laid as for a
+drop-in:
 
 - the ground is more than 1.5 m under the sea's height, on the sea or a coast on the map; or more
   than 15 m under a big lake's, in a square of the map all of which is the lake (a square its shore
@@ -721,38 +726,102 @@ and 60 m), and where all of this holds there, the water's surface is laid as for
   there is if the map didn't load. Google's own water by a coast is within a metre or so of the
   sea's height as EGM96 has it (1.0 m under it by Santa Monica Pier), so within 1.5 m it's driven on
   as it is (and driven out from it onto the bed, you're lifted that much onto the sea's);
-- it isn't coloured as only dry land is, as water.js has it (sand, soil, brick, a field's green,
-  bright concrete; never turquoise; not where its picture can't be read): so not the side of the
-  Assal depression, desert 28 m under the sea in the Ghoubbet's coast square, nor a polder's fields
-  behind its dyke;
 - you're no lower than 1.5 m under the water's height yourself: not in a hollow or a polder under
-  it, where it would be over you (as when it comes back within reach, above).
+  it, where it would be over you (as when it comes back within reach, above);
+- it isn't coloured as only dry land is, as water.js has it (sand, soil, brick, a field's green,
+  bright concrete; never turquoise): so not the side of the Assal depression, desert 28 m under the
+  sea in the Ghoubbet's coast square, nor a polder's fields behind its dyke. Ground whose picture
+  can't be read is taken for land, as water.js takes it for not water: Google's pictures are read
+  (only the test pad's own ground has none);
+- it's open to the water round it: of 16 bearings round it, five one after another (a quarter of
+  the way round) have nothing at 25, 50, 75, 100, 125 or 150 m along them standing more than 1 m
+  over the water's surface, coloured as only dry land is, or missing (rays down from far over it,
+  as for [walled off](#the-open-sea)).
+
+**Open to the water.** Ground more than 1.5 m under the sea in a coast's square isn't always its
+bed. New Orleans' streets are about 2 m under the sea behind the levee on Lake Pontchartrain, which
+is the sea on the map (it's joined to the Gulf), and its lakefront (Lakeview, Gentilly) is in coast
+squares; their grey asphalt and roofs aren't coloured as only dry land is. Before it looked for
+what follows (11 November 2026), on the test pad a kart driven off a levee toward such a street,
+2.5 m under the sea, had the sea laid over it 57 m short of the edge and drove across the city on
+it, and so did one flown over it. What tells them apart is that the bed of open water is open to
+it: on the seaward side the bed (or Google's water) goes on under the water's surface all the way
+round a wide arc, while ground under the sea in a city or a polder is closed in on most sides by
+its levee, quays, houses, roofs and trees, standing over the water's height, and a polder's fields
+and a park's lawns are coloured as land. On a straight coast the beach, a promenade and the houses
+behind it close at most the seven bearings on the land's side (those that reach it within 150 m),
+and nine are open; beside a pier running out to sea as well, five or more. Among houses, any of a
+bearing's six rays that hits a roof or a tree closes it: along the test pad's streets (below) no
+more than two bearings side by side were open (down a street), never five. A simulation of the same
+houses with rays at 50, 100 and 150 m only, as walled off has them, found five open side by side at
+45 of the 2,595 spots along those streets it tried, which is why it looks every 25 m. The bed isn't
+told from ground under the sea that's open, and not coloured as land, 150 m round on a quarter of
+the way (a wide car park or an airfield's apron behind a levee: [known limits](#known-limits)).
+
+It's looked at last, only for ground that's passed the rest, and for one spot a look at most; and a
+bearing's rays are only cast as a run of five that might be clear comes to it, from the run's far
+end back, since one that isn't clear rules out every run through it. Among the test pad's houses
+that was five rays a look (under 0.1 ms in software rendering), and finding the bed open off its
+coast, 36 (0.3 to 0.5 ms): on Google's tiles, at 0.03 to 0.07 ms a ray
+([above](#how-water-is-told-from-the-ground)), a millisecond or two, once. (At most it's 96 rays,
+every bearing's six.)
 
 It's laid round that spot (sea.js's `start`, as for a drop-in, its reach the map's square there),
 and you roll onto it, or come down on it: driven out over Google's water and on over the bed, you're
 on at the water's height; flown out and let down, you land on it. Looking 60 m ahead, on a bed
 sloping down from the water's height 1 in 40 or more it's there before you're under that height; on
-a gentler one you can be up to 1.5 m under it first, and are lifted onto it. Every ride the same,
-the hovercraft throwing up spray on it; R out there puts you a few metres on, on it; from then on
-it's the open sea's surface as above, gone out over land past its reach. On the Moon nothing's
-looked at. The sea's height and the map are only fetched (once a drop-in) when the ground looked at
-is lower than any water could be there (86 m over the ellipsoid, or a big lake's height over that
-in its box) less 1.5 m; on higher ground a look is three rays down and nothing more. On the test
-pad a look took 0.04 to 0.09 ms in software rendering (three rays, and the map and the sea's height
-read); on Google's tiles a ray takes 0.03 to 0.07 ms ([above](#how-water-is-told-from-the-ground)),
-so four looks a second are a few tenths of a millisecond a second. (On the test pad, driving, its
-sea, 2 m under its land, is at the water's height: Google's water by a coast. A drop-in instead
-takes the pad for ground at the water's surface wherever it's put, as above.)
+a gentler one you can be up to 1.5 m under it first, and are lifted onto it. Off Santa Monica the
+bed is the gentler kind (1.3 m down in 100 from the pier's water, 1.0 m under the sea's height, to
+7.6 m under it 500 m off), so there you'd be lifted. Every ride the same, the hovercraft throwing up
+spray on it; R out there puts you a few metres on, on it; from then on it's the open sea's surface
+as above, gone out over land past its reach. On the Moon nothing's looked at. The sea's height and
+the map are only fetched (once a drop-in) when the ground looked at is lower than any water could
+be there (86 m over the ellipsoid, or a big lake's height over that in its box) less 1.5 m; on
+higher ground a look is three rays down and nothing more. On the test pad such a look took 0.02 to
+0.09 ms in software rendering (three rays, and the map and the sea's height read); on Google's tiles
+a ray takes 0.03 to 0.07 ms, so four looks a second are a few tenths of a millisecond a second.
+(On the test pad, driving, its sea, 2 m under its land, is at the water's height: Google's water by
+a coast. A drop-in instead takes the pad for ground at the water's surface wherever it's put, as
+above.)
+
+**Beside another driver.** Go to or Join beside someone out on that surface puts you on it with
+them. Their height is what says they're out there: where it's within 1 m of the water's surface
+there (the sea's, on the sea or a coast; a big lake's, in a square all of which is the lake) and
+the ground under them is the bed as above (more than 1.5 m under that surface, or 15 m under a
+lake's; not coloured as dry land; open to the water round it), the surface is laid there for you
+too: in this scene (within 10 km), before your car is put beside them; farther off, for the drop-in
+beside them, which otherwise starts on a bed less than 15 m under the sea, as any drop-in does
+([the open sea](#the-open-sea)). Before, you were put on the bed under them, 1.5 to 15 m down, and
+stayed on it, too low for the surface to be laid as you drove on. A pin, a search or a start spot
+isn't anyone's height, and drops in as before.
 
 **Tested** on the test pad (`npm run test:drive-ui`), not on Google's tiles: in Santa Monica Pier's
-square (a coast's), the pad's land 2 m over the sea, its water at the sea's height 60 m out, and
-then a bed sloping down 1 in 20 for 400 m. Driven out at 50 km/h, the surface was laid with the kart
-27 m short of the water's edge, and it drove on at the sea's height, never lower, 18 m over the bed
-at the end; R there put it 4 m on, on the water; flown out, the surface was laid under it 12 m up,
-and let go it came down on it. The same slope coloured as sand had no water over it, nor did it in
-Death Valley's square (land), and the kart drove on down it to 13 m under the sea. In Lake Baikal's
-square, flown out over the same slope, the lake's surface was laid only once the bed ahead was more
-than 15 m under it, and the kart came down on it. Without the map, off Santa Monica Pier, the kart
+square (a coast's), the pad's land 2 m over the sea, its water at the sea's height 60 m out (one
+even colour, as Google draws it), and then a bed 1,200 m across in the sea's colours (as dark as
+Google's out at sea), sloping down 1 in 20 for 400 m and on, level. Driven out at 50 km/h, the
+surface was laid with the kart 27 m short of the water's edge, and it drove on at the sea's height,
+never lower, 18 m over the bed at the end; R there put it 4 m on, on the water; flown out over the
+bed in a lagoon's turquoise, the surface was laid under it 12 m up, and let go it came down on it.
+The same slope coloured as sand, or with no picture, had no water over it, nor did it in Death
+Valley's square (land), and the kart drove on down it to 13 m under the sea. With houses 10 m high
+a promenade's width (15 m) behind the beach and Google's water only 10 m wide, driven straight out,
+and reversed out, the surface was laid with the kart still on the land, 18 m short of the beach's
+edge; started on the bed 5.5 m under the sea's height, in a hollow, nothing was laid, and the kart
+drove on down the bed. Driven out with the keyboard, the page's frames looking as they do (no look
+but theirs), it was laid with the kart on Google's water, never under it, and it drove on on it. In
+Lake Baikal's square, flown out over the same slope, the lake's surface was laid only once the bed
+ahead was more than 15 m under it, and the kart came down on it. In New Orleans' square (a coast's,
+by Lake Pontchartrain), the pad's land the levee's top, 2 m over the sea, and south of it streets
+2.5 m under the sea, 60 m apart, with houses along them (two rows back to back on each block, 16 m
+deep on lots of 15 m, a street across every seven lots) whose roofs stand 3.5 m over the sea: driven
+off the levee and 470 m down a street, flown off it 59 m up over the houses and let down, and
+started in a street, nothing was laid, and the kart stayed on the streets. Go to beside a car out
+on the surface 2 m and 7 m over the bed laid it there and put the kart on it beside them, and
+driven on it stayed on it; beside one 3 m over the surface it laid nothing (and it would be a
+drop-in instead), and beside one at the sea's height in New Orleans' street it put the kart on the
+street, laying nothing. A drop-in beside a driver at the sea's height, the pad 7 m under it in the
+sea's colour, started on the surface; a pin at that height, and a drop-in beside a driver 3 m over
+the surface, started on the pad, 7 m under it. Without the map, off Santa Monica Pier, the kart
 drove on down the slope.
 
 ## The Moon
@@ -3157,9 +3226,13 @@ come down on, no boost pads on it, a floating ride's spray, from an island out a
 onto the island; 14 m under the sea, on Google's water as before; the Dead Sea's shore, land, never;
 the map's sea, coasts, lakes and land; land walled off from the sea by ground over it, the side
 of the Assal depression, never; Lake Erie's surface gone out over land to Niagara's gorge and back
-by the lake; driven and flown out from a coast over a bed sloping under the sea, the sea's surface
-laid before the kart is under it, but not over ground coloured as sand nor in Death Valley's
-square, and a big lake's only over its bed 15 m under it; without the map, only the deep sea), the
+by the lake; driven and flown out from a coast over a bed sloping under the sea in the sea's
+colours, the sea's surface laid before the kart is under it (by the frame loop's own look too, with
+houses behind the beach, and reversing out), but not over ground coloured as sand or with no
+picture, nor in Death Valley's square, nor with the kart in a hollow under it, and a big lake's
+only over its bed 15 m under it; New Orleans' streets under the sea behind its levee, among houses,
+driven into, flown over and started in, never; Go to beside a driver out on the sea's surface, in
+the scene and by a drop-in, on it with them; without the map, only the deep sea), the
 used-up,
 robot-check and getting-ready screens, the visit asked for only once the game's code is here (a
 download that fails, and its Try again, spend none; a script that breaks is told from a dropped
@@ -3317,24 +3390,38 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   water's picture is mostly the water's colour, level close by and the lowest round about, so mostly
   water to it (Santa Monica Bay's was, 184 m down, and Baikal's), but not always (20 km off Waikiki,
   578 m down, it was dry ground, so boost pads could go down on it there). Close in, by a coast,
-  it's mostly Google's own water, at the water's height. Started on a bed more than 1.5 m under the
-  water's height, you're too low for the water's surface to be laid as you drive on
-  ([out from a coast](#out-from-a-coast)): it would be over you. The other way, land more than 15 m
-  under the sea in a coast's square with nothing over the sea's height within 150 m of it (the
-  middle of a wide pit dug by a coast) would still start on the sea's surface.
+  it's mostly Google's own water, at the water's height; but a tap on the sea within a kilometre or
+  so of a beach can find the bed there less than 15 m under it (7.6 m, 500 m off Santa Monica Pier),
+  and starts on that, under the water. Started on a bed more than 1.5 m under the water's height,
+  you're too low for the water's surface to be laid as you drive on
+  ([out from a coast](#out-from-a-coast)): it would be over you, so you drive on along the bed. (Go
+  to or Join beside someone out on that surface is the exception: you're put on it with them.) The
+  other way, land more than 15 m under the sea in a coast's square with nothing over the sea's height
+  within 150 m of it (the middle of a wide pit dug by a coast) would still start on the sea's
+  surface.
 - Driven or flown out from a coast ([out from a coast](#out-from-a-coast)), the sea's surface is
-  laid where the ground is more than 1.5 m under its height and not coloured as dry land, which
-  doesn't tell the bed from Google's own water more than 1.5 m under EGM96's sea (its pictures taken
-  with the tide out, or EGM96 high: up to 3.9 m, by Lake Maracaibo), nor from land under the sea in
-  a coast's square that isn't coloured as dry land (a polder's grey streets and roofs behind its
-  dyke, a dry dock). Come at those from higher ground and the sea's surface is laid over them, that
-  far over Google's water; driven on from on that water, it's left as it is. On a bed sloping more
+  laid where the ground is more than 1.5 m under its height, not coloured as dry land and open to the
+  water round it, which doesn't tell the bed from Google's own water more than 1.5 m under EGM96's
+  sea (its pictures taken with the tide out, or EGM96 high: up to 3.9 m, by Lake Maracaibo): come at
+  that from higher ground and the sea's surface is laid over it, that far over Google's water;
+  driven on from on that water, it's left as it is. Nor does it tell the bed from ground under the
+  sea in a coast's square that's open and not coloured as land 150 m round on a quarter of the way
+  or more, with nothing standing over the water's height on it (a wide car park, an airfield's apron
+  or a dry dock's floor behind a levee): the surface is laid over that too. Streets among houses,
+  roofs and trees under the sea behind a levee, as New Orleans' are, aren't laid over; but that was
+  tried only on the test pad's boxes, not on Google's tiles, where houses, trees and levees are
+  lumps of mesh. Where Google draws the bed closed in on most sides itself (an inlet or a harbour
+  mouth less than about 90° wide within 150 m of its sides, or right by a pier with a breakwater on
+  the other side), it isn't laid there; driven on down that bed with none laid you're soon more than
+  1.5 m under the water's height, too low for it, and drive on along the bed. On a bed sloping more
   gently than 1 in 40 you can be up to 1.5 m under the surface when it's laid, and are lifted onto
   it in a frame. Out from a big lake's shore the bed is followed down as before till a square of the
   map that's all the lake (up to about 5 km out), and there the lake's surface is only laid over a
   bed more than 15 m under it with you no more than 1.5 m under it: flown out and let down, it is;
   driven out along a bed sloping down from the shore (off Chicago, above), you're under it by then,
-  and drive on along the bed. It wasn't tried on Google's tiles.
+  and drive on along the bed. Once it's laid it covers a polder's streets within its reach too
+  (below); Go to or Join beside someone riding on it there puts you on the streets, under them.
+  None of it was tried on Google's tiles.
 - The open water's surface is EGM96's at a degree, a metre or a few from a coast's own water: 1 m
   under it off Kona (by round volcanic islands up to 9.5 m low, below Kilauea on the Big Island's
   south coast), so driving from the open sea to that coast is a step up onto Google's water; 1 m
