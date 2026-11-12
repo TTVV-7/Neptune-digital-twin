@@ -44,7 +44,11 @@
 // flying over it, laid there and on it with them, in the scene and by a drop-in, and not at a pin's
 // height; with the surface laid already, beside someone flying over Lake Baikal's shelf, a sandy bed
 // or between a harbour's moles, on it with them (and by a drop-in, your surface laid when you left),
-// but not between moles a street's width apart, over a hollow inland, nor over New Orleans' streets;
+// over Baikal's shelf in a square its shore crosses too, but not between moles a street's width
+// apart, over a hollow inland or four squares from the lake's, nor over New Orleans' streets, nor by
+// a drop-in from a sea laid on another coast; with none laid, beside someone riding on a surface of
+// their own over a lake's shelf, a sandy bed or an inlet, on it with them, but not beside one on a
+// levee at the sea's height, one in the air at that height, nor one riding over New Orleans' streets;
 // and without the map, only ground deeper than any land or lake bed the sea's, for a
 // drop-in and driven out from a coast;
 // the screens the Worker's answers lead to (used up, robot check, maps off, the visit itself); and
@@ -3171,13 +3175,73 @@ async function dropInBeside( page, lat, lon, depth, over, { beside = true, colou
 
 }
 
-// Back as it was after dropInBeside: the pad's own ground, with no picture.
+// Back as it was after dropInBeside or joinBeside: the pad's own ground, with no picture, and none of
+// joinBeside's boxes.
 async function padPlain( page ) {
 
 	await page.evaluate( () => {
 
 		const land = window.drive.ground.getColliders()[ 0 ].children.find( child => child.isMesh && child.position.y > - 1 );
 		land.material = window.padLand ?? land.material;
+		window.joinBoxes?.removeFromParent();
+		window.joinBoxes = null;
+
+	} );
+
+}
+
+// Go to or Join (main.js's goBeside) another driver somewhere else: from the globe, with none of the
+// water's surface laid (unless `globe` is false: from where you're driving). Their car as live.js
+// sends it, Earth-centred, at ( lat, lon ), level and facing south, `over` m over the water's surface
+// there (the sea's height, and `rise` m over that for a big lake's), with `flags` (live-protocol.js's
+// FLAGS: grounded, 128, unless said; flying is 8), so that the pin is 5 m to its right, west of it;
+// or, with `dropped`, no car, only the place they dropped in there at that height (the pin). The pad `depth` m under that surface (as Google draws the bed), painted `colour` (null: no
+// picture, as it has) and moved `shift` m north, with `boxes` on it ([ west, east, south, north ] m
+// from the pin, as padKit.houses has them), standing from `floor` to `top` m over the surface. What
+// the drop-in started on; padPlain takes the picture and the boxes away.
+async function joinBeside( page, lat, lon, depth, over, { rise = 0, flags = 128, dropped = false, colour = [ 12, 13, 19 ], shift = 0, boxes = null, floor = - 30, top = 5, globe = true } = {} ) {
+
+	if ( globe && await mode( page ) !== 'globe' ) {
+
+		await page.keyboard.press( 'KeyM' );
+		await page.waitForFunction( () => window.drive.mode === 'globe' );
+
+	}
+
+	await setUpPictures( page );
+	await page.evaluate( async ( { lat, lon, depth, over, rise, flags, dropped, colour, shift, boxes, floor, top } ) => {
+
+		const { ground, camera, globe, goBeside } = window.drive;
+		const { seaLevel } = await import( '/src/drive-app/sea.js' );
+		const { toEcef } = await import( '/src/drive-app/live-protocol.js' );
+		const pad = ground.getColliders()[ 0 ];
+		const land = pad.children.find( child => child.isMesh && child.position.y > - 1 );
+		window.padLand ??= land.material;
+		land.material = colour ? window.padKit.picture( colour ) : window.padLand;
+		pad.position.y = - depth;
+		pad.position.z = shift;
+		pad.updateMatrixWorld( true );
+		// (In the pad's own frame the water's surface is `depth` m over it.)
+		window.joinBoxes?.removeFromParent();
+		window.joinBoxes = boxes ? await window.padKit.houses( boxes, depth + floor, top - floor ) : null;
+		// Its right (+X) west, up (+Y) up and back (+Z) north, Earth-centred.
+		const V = camera.position.constructor;
+		const [ la, lo ] = [ lat * Math.PI / 180, lon * Math.PI / 180 ];
+		const west = new V( Math.sin( lo ), - Math.cos( lo ), 0 );
+		const up = new V( Math.cos( la ) * Math.cos( lo ), Math.cos( la ) * Math.sin( lo ), Math.sin( la ) );
+		const north = new V( - Math.sin( la ) * Math.cos( lo ), - Math.sin( la ) * Math.sin( lo ), Math.cos( la ) );
+		const q = new camera.quaternion.constructor().setFromRotationMatrix( new globe.earth.matrixWorld.constructor().makeBasis( west, up, north ) );
+		const height = await seaLevel( lat, lon ) + rise + over;
+		const p = toEcef( lat, lon, height );
+		await goBeside( dropped ? { place: { name: 'A friend', lat, lon, height } } : { place: { name: 'A friend' }, s: [ p.x, p.y, p.z, q.x, q.y, q.z, q.w, 0, 0, 0, flags ] } );
+
+	}, { lat, lon, depth, over, rise, flags, dropped, colour, shift, boxes, floor, top } );
+	await page.waitForFunction( () => window.drive.mode === 'driving', null, { timeout: 60000 } );
+	return page.evaluate( async () => {
+
+		const { driver: d, sea, ground, place } = window.drive;
+		const { seaLevel } = await import( '/src/drive-app/sea.js' );
+		return { sea: sea.active, lake: sea.lake?.name ?? null, colliders: ground.getColliders().length, height: place.height, level: await seaLevel( place.lat, place.lon ), y: d.y, lat: place.lat, lon: place.lon };
 
 	} );
 
@@ -4165,7 +4229,7 @@ describe( 'World Drive, the open sea', () => {
 
 	} );
 
-	test( 'New Orleans behind its levee (a coast\'s square by Lake Pontchartrain): driven off the levee down a street 2.5 m under the sea among houses whose roofs stand over it, flown over them and let down, and started in that street, nothing is laid; nor is it beside someone there at the sea\'s height, nor beside someone flying 3.5 m, 20 m or 200 m over the street (in this scene, even with the sea\'s surface already laid over it, or by the drop-in beside them, which starts on the street, with your own sea laid when you left or not)', async () => {
+	test( 'New Orleans behind its levee (a coast\'s square by Lake Pontchartrain): driven off the levee down a street 2.5 m under the sea among houses whose roofs stand over it, flown over them and let down, and started in that street, nothing is laid; nor is it beside someone there at the sea\'s height, nor beside someone flying 3.5 m, 20 m or 200 m over the street (in this scene, even with the sea\'s surface already laid over it, or by the drop-in beside them, which starts on the street, with your own sea laid when you left or not), nor beside someone riding on a surface of their own over the street at the sea\'s height (in this scene, and joined from the globe)', async () => {
 
 		const levee = await dropInOver( page, '30.03, -90.08', 0 );
 		assert.ok( ! levee.sea && levee.colliders === 1, JSON.stringify( levee ) );
@@ -4258,6 +4322,11 @@ describe( 'World Drive, the open sea', () => {
 			kit.reset( - 150, 0 );
 			const moved = moveCar( { local: new camera.position.constructor( 0, kit.surface, - 400 ), heading: 180 } );
 			const beside = { moved, sea: sea.active, north: d.north, y: d.y };
+			// So too beside someone riding on a surface of their own at the sea's height over that
+			// street (as theirs laid within its reach covers it), their car 5 m east of the spot, over
+			// the street too: on the street, as the houses close it in, with nothing laid over it.
+			kit.reset( - 150, 0 );
+			const rider = { moved: moveCar( { local: new camera.position.constructor( 0, kit.surface + 0.1, - 400 ), heading: 180, riding: [ 5, 0 ] } ), sea: sea.active, north: d.north, y: d.y };
 			// And beside someone flying 3.5 m (at the roofs' height), 20 m or 200 m over that street:
 			// nothing laid, and no ground within reach of them to put the car on, so Go to drops in
 			// beside them instead (below). The same with the sea's surface already laid in this scene,
@@ -4277,7 +4346,7 @@ describe( 'World Drive, the open sea', () => {
 
 			}
 
-			return { look, drove, flew, inside, beside, fliers };
+			return { look, drove, flew, inside, beside, rider, fliers };
 
 		} );
 		console.log( 'New Orleans behind its levee:', JSON.stringify( result ) );
@@ -4292,16 +4361,21 @@ describe( 'World Drive, the open sea', () => {
 		const yours = await dropInBeside( page, 30.03, - 90.08, - 2, 20, { colour: null, shift: 400, laid: { lake: null } } );
 		console.log( 'the same with your sea laid:', JSON.stringify( yours ) );
 		await shot( page, 'drive-polder-beside-a-flier-your-sea-laid' );
+		// And joined from the globe beside someone riding on a surface of their own over that street
+		// at the sea's height: the street too, as the houses close it in.
+		const riding = await joinBeside( page, 30.03, - 90.08, - 2, 0.1, { colour: null, shift: 400 } );
+		console.log( 'a drop-in beside a rider over New Orleans:', JSON.stringify( riding ) );
+		await shot( page, 'drive-polder-beside-a-rider' );
 		await page.evaluate( () => window.polderKit.remove() );
 		await padBack( page );
-		const { look, drove, flew, inside, beside, fliers } = result;
+		const { look, drove, flew, inside, beside, rider, fliers } = result;
 		// Each look a few rays round the street ahead, a fraction of a millisecond here, and nothing laid.
 		assert.ok( ! look.laid && look.rays > 0 && look.rays < 48 && look.ms < 10, JSON.stringify( look ) );
 		assert.ok( ! drove.laid && drove.north < - 740 && Math.abs( drove.y + 4.5 ) < 0.3, JSON.stringify( drove ) );
 		// (Let down on a roof or in the street: dry either way.)
 		assert.ok( ! flew.laid && flew.high > 20 && flew.north < - 400 && flew.grounded && ( Math.abs( flew.y + 4.5 ) < 0.3 || Math.abs( flew.y - 1.5 ) < 0.3 ), JSON.stringify( flew ) );
 		assert.ok( ! inside.laid && Math.abs( inside.y + 4.5 ) < 0.3 && inside.north < - 690 && Math.abs( inside.end + 4.5 ) < 0.3, JSON.stringify( inside ) );
-		assert.ok( beside.moved && ! beside.sea && Math.abs( beside.north + 400 ) < 0.01 && Math.abs( beside.y + 4.5 ) < 0.3, JSON.stringify( beside ) );
+		for ( const there of [ beside, rider ] ) assert.ok( there.moved && ! there.sea && Math.abs( there.north + 400 ) < 0.01 && Math.abs( there.y + 4.5 ) < 0.3, JSON.stringify( there ) );
 		assert.equal( fliers.length, 3 );
 		for ( const { flier, laid } of fliers ) {
 
@@ -4310,7 +4384,7 @@ describe( 'World Drive, the open sea', () => {
 
 		}
 
-		for ( const there of [ dropped, yours ] ) assert.ok( ! there.sea && there.colliders === 1 && Math.abs( there.y + 2.5 ) < 0.3, JSON.stringify( there ) );
+		for ( const there of [ dropped, yours, riding ] ) assert.ok( ! there.sea && there.colliders === 1 && Math.abs( there.y + 2.5 ) < 0.3, JSON.stringify( there ) );
 		assert.deepEqual( page.errors, [] );
 		assert.deepEqual( page.outside, [] );
 
@@ -4621,6 +4695,166 @@ describe( 'World Drive, the open sea', () => {
 		for ( const { first, laid, runs } of [ wide, narrow ] ) assert.ok( first && laid && runs.length === 4, JSON.stringify( { first, laid, runs } ) );
 		for ( const there of wide.runs ) assert.ok( there.moved && there.sea && there.surface !== null && Math.abs( there.y - there.surface ) < 0.01 && Math.abs( there.at - there.north ) < 0.01 && Math.abs( there.surface + 2 ) < 0.1 && there.y > there.bed + 6.9, JSON.stringify( there ) );
 		for ( const there of narrow.runs ) assert.ok( ! there.moved && there.sea && Math.abs( there.at + 950 ) < 0.01, JSON.stringify( there ) );
+		assert.deepEqual( page.errors, [] );
+		assert.deepEqual( page.outside, [] );
+
+	} );
+
+	test( 'Lake Baikal\'s surface laid in a square of the lake (53.25° N, 108.452° E): beside someone flying 5 m or 20 m over its shelf 10 m under it in the next square east, which the lake\'s shore crosses (land on the map, as nearly all of a big lake\'s shelf is), on the surface under them, as in the lake\'s own square; over a hollow as far under it four squares from the lake\'s (as Niagara\'s gorge is from Lake Ontario\'s), not; and joined from 24 km off with that lake\'s surface yours, the drop-in beside one flying 20 m over the shelf in that square starts on the surface', async () => {
+
+		const lake = await dropInOver( page, '53.25, 108.452', 200 );
+		assert.ok( lake.sea && Math.abs( lake.y ) < 0.01, JSON.stringify( lake ) );
+		await setUpPictures( page );
+		const near = await page.evaluate( async () => {
+
+			const { driver: d, sea, water, camera, moveCar, ground, place } = window.drive;
+			const { enuToLocal, localToLatLon } = await import( '/src/geo.js' );
+			const { waterAt } = await import( '/src/drive-app/sea.js' );
+			const V = camera.position.constructor;
+			// The sea's height and the map asked for first, as goBeside asks for them, and come.
+			moveCar( { local: new V( 0, 20, 300 ), heading: 180 } );
+			await new Promise( resolve => setTimeout( resolve, 500 ) );
+			const pad = ground.getColliders()[ 0 ];
+			const land = pad.children.find( child => child.isMesh && child.position.y > - 1 );
+			window.padLand ??= land.material;
+			land.material = window.padKit.picture( [ 12, 13, 19 ] );
+			const curve = ( east, north ) => ( east * east + north * north ) / ( 2 * 6371000 );
+			// Ground 10 m under the lake's surface (as it curves away), 300 m square, round ( east, north ).
+			const shelf = ( east, north ) => {
+
+				const mesh = land.clone();
+				mesh.scale.set( 300 / 4000, 300 / 2000, 1 );
+				mesh.position.set( - east, 190 - curve( east, north ), north );
+				pad.add( mesh );
+				mesh.updateMatrixWorld( true );
+				return mesh;
+
+			};
+			// From the start, to beside someone flying `over` m over ( east, north ).
+			const to = async ( east, north, over ) => {
+
+				moveCar( { local: new V( 0, 0, 0 ), heading: 180 } );
+				const moved = moveCar( { local: new V( - east, over - curve( east, north ), north ), heading: 180 } );
+				const { lat, lon } = localToLatLon( enuToLocal( east, north, 0 ), place );
+				const at = await waterAt( lat, lon );
+				return { east, north, over, map: at?.lake?.name ?? at?.kind, moved, sea: sea.shown, at: [ d.east, d.north ], y: d.y, surface: water.at( d.east, d.north, d.y ), curve: curve( east, north ) };
+
+			};
+			const shelves = [ shelf( - 500, 0 ), shelf( 1000, 0 ), shelf( 16500, - 16700 ) ];
+			const runs = { own: await to( - 500, 0, 20 ), low: await to( 1000, 0, 5 ), high: await to( 1000, 0, 20 ), far: await to( 16500, - 16700, 20 ) };
+			for ( const mesh of shelves ) mesh.removeFromParent();
+			return runs;
+
+		} );
+		console.log( 'beside a flier over Lake Baikal\'s shelf in a square its shore crosses:', JSON.stringify( near ) );
+		await shot( page, 'drive-beside-a-flier-over-a-lake-shore-square' );
+		// Joined from 24 km off, Baikal's surface laid in a square of the lake at 53.25° N, 108.1° E:
+		// someone flying 20 m over the shelf in the square east of 108.452° E's.
+		await padBack( page );
+		const laid = await dropInOver( page, '53.25, 108.1', 200 );
+		const far = await joinBeside( page, 53.25, 108.467, 10, 20, { rise: 455.5, flags: 8, globe: false } );
+		await shot( page, 'drive-beside-a-flier-over-a-lake-shore-square-far' );
+		// Laid there, in a square that's land on the map, it's still only by the lake's own: out over
+		// land four squares from them (53.1° N, 108.7° E), it's gone, as Niagara's gorge has none.
+		far.inland = await page.evaluate( () => {
+
+			const { sea } = window.drive;
+			const shown = sea.shown;
+			sea.follow( 15500, - 16700, 0 );
+			return { shown, then: sea.shown };
+
+		} );
+		await padPlain( page );
+		await padBack( page );
+		console.log( 'a drop-in beside a flier over a shore square of Lake Baikal:', JSON.stringify( { laid, far } ) );
+		const { own, low, high, far: inland } = near;
+		assert.equal( own.map, 'Lake Baikal' );
+		for ( const there of [ low, high, inland ] ) assert.equal( there.map, 'land' );
+		for ( const there of [ own, low, high ] ) assert.ok( there.moved && there.sea && there.surface !== null && Math.abs( there.y - there.surface ) < 0.01 && Math.abs( there.at[ 0 ] - there.east ) < 0.01 && Math.abs( there.y + there.curve ) < 0.1, JSON.stringify( there ) );
+		assert.ok( ! inland.moved && inland.sea && Math.abs( inland.at[ 0 ] ) < 0.01 && Math.abs( inland.at[ 1 ] ) < 0.01, JSON.stringify( inland ) );
+		assert.ok( laid.sea && Math.abs( laid.y ) < 0.01, JSON.stringify( laid ) );
+		assert.ok( far.sea && far.lake === 'Lake Baikal' && far.colliders === 2 && Math.abs( far.height - far.level - 455.5 ) < 0.01 && Math.abs( far.y ) < 0.01, JSON.stringify( far ) );
+		assert.ok( far.inland.shown && ! far.inland.then, JSON.stringify( far ) );
+		assert.deepEqual( page.errors, [] );
+		assert.deepEqual( page.outside, [] );
+
+	} );
+
+	test( 'the sea\'s surface laid off Santa Monica: joined from there to someone flying 20 m over a sandbank 7 m under the sea 14 km off (coloured as land), within reach of that surface as it\'s laid, the drop-in starts on the sea\'s surface with them; to someone flying 20 m over a field 3 m under the sea in New Orleans (a coast\'s square, 2,500 km off), on the field, laying nothing, as from the globe', async () => {
+
+		const start = await dropInOver( page, '33.95, -118.6', 200 );
+		assert.ok( start.sea && Math.abs( start.y ) < 0.01, JSON.stringify( start ) );
+		const bank = await joinBeside( page, 33.85, - 118.5, 7, 20, { flags: 8, colour: [ 194, 178, 128 ], globe: false } );
+		await shot( page, 'drive-beside-a-flier-over-a-sandbank-your-sea-laid' );
+		const field = await joinBeside( page, 30.03, - 90.08, 3, 20, { flags: 8, colour: [ 86, 120, 60 ], globe: false } );
+		await shot( page, 'drive-beside-a-flier-over-a-field-a-sea-laid-far-off' );
+		const globe = await joinBeside( page, 30.03, - 90.08, 3, 20, { flags: 8, colour: [ 86, 120, 60 ] } );
+		await padPlain( page );
+		await padBack( page );
+		console.log( 'a drop-in beside a flier with the sea laid off Santa Monica:', JSON.stringify( { bank, field, globe } ) );
+		assert.ok( bank.sea && bank.lake === null && bank.colliders === 2 && Math.abs( bank.height - bank.level ) < 0.01 && Math.abs( bank.y ) < 0.01, JSON.stringify( bank ) );
+		for ( const there of [ field, globe ] ) assert.ok( ! there.sea && there.colliders === 1 && Math.abs( there.y + 3 ) < 0.3, JSON.stringify( there ) );
+		assert.deepEqual( page.errors, [] );
+		assert.deepEqual( page.outside, [] );
+
+	} );
+
+	test( 'joined from the globe (none of the water\'s surface laid) beside someone riding on a surface of their own at its height, Google\'s ground well under them: over Lake Baikal\'s shelf 10 m under it, in a square of the lake and in one its shore crosses, over a bed coloured as sand 7 m under the sea by Santa Monica Pier (and so beside where they dropped in), and in an inlet 160 m wide there (closed in on most sides within 150 m), the drop-in starts on the surface beside them; beside one on a levee at the sea\'s height over a field 3 m under it, and one in the air at that height over the field, it starts on the field, laying nothing', async () => {
+
+		const shelf = await joinBeside( page, 53.25, 108.1, 10, 0.1, { rise: 455.5 } );
+		await shot( page, 'drive-beside-a-rider-over-a-lake-shelf' );
+		const shore = await joinBeside( page, 53.25, 108.467, 10, 0.1, { rise: 455.5 } );
+		const sand = await joinBeside( page, 34.0065, - 118.4985, 7, 0.1, { colour: [ 194, 178, 128 ] } );
+		await shot( page, 'drive-beside-a-rider-over-a-sandy-bed' );
+		const dropped = await joinBeside( page, 34.0065, - 118.4985, 7, 0, { colour: [ 194, 178, 128 ], dropped: true } );
+		// Banks 30 m wide, 80 to 110 m east and west of the pin, 800 m long, 5 m over the sea.
+		const inlet = await joinBeside( page, 34.0065, - 118.4985, 7, 0.1, { boxes: [ [ 80, 110, - 400, 400 ], [ - 110, - 80, - 400, 400 ] ] } );
+		await shot( page, 'drive-beside-a-rider-in-an-inlet' );
+		// A levee 28 m wide under their car (5 m east of the pin, 2 m east of the pin's edge), its
+		// top at the sea's height, by a field 3 m under it.
+		const levee = await joinBeside( page, 34.0065, - 118.4985, 3, 0.1, { colour: [ 86, 120, 60 ], boxes: [ [ 2, 30, - 10, 10 ] ], top: 0 } );
+		await shot( page, 'drive-beside-a-rider-on-a-levee' );
+		const air = await joinBeside( page, 34.0065, - 118.4985, 3, 0.1, { colour: [ 86, 120, 60 ], flags: 16 } );
+		await padPlain( page );
+		await padBack( page );
+		console.log( 'a drop-in beside a rider on their own surface:', JSON.stringify( { shelf, shore, sand, dropped, inlet, levee, air } ) );
+		for ( const there of [ shelf, shore ] ) assert.ok( there.sea && there.lake === 'Lake Baikal' && there.colliders === 2 && Math.abs( there.height - there.level - 455.5 ) < 0.01 && Math.abs( there.y ) < 0.01, JSON.stringify( there ) );
+		for ( const there of [ sand, dropped, inlet ] ) assert.ok( there.sea && there.lake === null && there.colliders === 2 && Math.abs( there.height - there.level ) < 0.01 && Math.abs( there.y ) < 0.01, JSON.stringify( there ) );
+		for ( const there of [ levee, air ] ) assert.ok( ! there.sea && there.colliders === 1 && there.y < - 2.5, JSON.stringify( there ) );
+		assert.deepEqual( page.errors, [] );
+		assert.deepEqual( page.outside, [] );
+
+	} );
+
+	test( 'driving by Santa Monica Pier with none of the sea\'s surface laid, Go to beside someone riding on a surface of their own over a bed coloured as sand 2 m under it, out past Google\'s water: on the surface beside them, laid, not on the bed under it', async () => {
+
+		const coast = await dropInOver( page, '34.0065, -118.4985', 0 );
+		assert.ok( ! coast.sea && coast.colliders === 1, JSON.stringify( coast ) );
+		await setUpCoast( page );
+		const out = await page.evaluate( async () => {
+
+			const { driver: d, sea, water, camera, globe, goBeside } = window.drive;
+			const kit = window.coastKit;
+			kit.paint( [ 194, 178, 128 ] );
+			kit.reset( - 250, 0 );
+			// Their car on their surface at ( 0, -380 ), level and facing south (as the scene's own
+			// frame is turned: none), as live.js sends it.
+			const north = - 380;
+			const local = new camera.position.constructor( 0, kit.surface - north * north / ( 2 * 6371000 ) + 0.1, north );
+			globe.earth.updateWorldMatrix( true, false );
+			const position = local.applyMatrix4( globe.earth.matrixWorld.clone().invert() );
+			const quaternion = new camera.quaternion.constructor().setFromRotationMatrix( globe.earth.matrixWorld ).invert();
+			await goBeside( { s: [ position.x, position.y, position.z, quaternion.x, quaternion.y, quaternion.z, quaternion.w, 0, 0, 0, 128 ] } );
+			const there = { mode: window.drive.mode, sea: sea.shown, east: d.east, north: d.north, y: d.y, surface: water.at( d.east, d.north, d.y ), bed: kit.bedAt( north ) };
+			kit.paint( [ 12, 13, 19 ] );
+			return there;
+
+		} );
+		await shot( page, 'drive-beside-a-rider-over-a-shallow-sandy-bed' );
+		await page.evaluate( () => window.coastKit.remove() );
+		await padBack( page );
+		console.log( 'Go to beside a rider over a sandy bed 2 m under the sea:', JSON.stringify( out ) );
+		assert.ok( out.mode === 'driving' && out.sea && out.surface !== null && Math.abs( out.y - out.surface ) < 0.01 && Math.abs( out.surface + 2 ) < 0.1 && Math.abs( out.east + 5 ) < 0.05 && Math.abs( out.north + 380 ) < 0.05 && out.y > out.bed + 1.9, JSON.stringify( out ) );
 		assert.deepEqual( page.errors, [] );
 		assert.deepEqual( page.outside, [] );
 
