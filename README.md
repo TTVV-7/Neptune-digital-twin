@@ -185,8 +185,11 @@ ground again, it comes back.
 
 To get in, fly (**F**) with ghost on (**G**) down through the ground into the model, then **F** to
 walk inside it. **U** (see underground) cuts Google's ground away over all your models wherever you
-are, to look down into them from above, or to walk in through an opening. Snapping a model to the
-ground still uses Google's ground as it is, so cutting it away doesn't move the model.
+are, to look down into them from above, or to walk in through an opening. It's cut away only over
+a model's solid parts, each part on its own (for the B2D2 model: the gallery, the pit and C32), so
+the asphalt and yards round them stay; see-through parts that you can walk through (a building
+shell, conveyors) don't cut it. Snapping a model to the ground still uses Google's ground as it is,
+so cutting it away doesn't move the model.
 
 The **Show** panel has the same with a tap, plus two more, remembered in your browser:
 
@@ -234,8 +237,8 @@ left as it came):
 - **C32** moved over to the drawings' line and brought up to the pit's wall;
 - the **beams** in a layer of their own, in concrete a shade darker than the slabs and walls:
   train support beams 1 and 2 over the pit and along the gallery, G1 to G14, the cross beam, the
-  shed support beam and B1 to B6. At grade they're under Google's ground: the **Beams** view cuts it
-  away and looks down the gallery at them, and from inside C31 they're overhead;
+  shed support beam and B1 to B6. At grade they're under Google's ground (**U** cuts it away over
+  the structure), and from inside C31 they're overhead;
 - the gallery's **hoppers** (the two sloped plates under the slot between the rail beams) taken out:
   others broke them out with machines, bay by bay, by 10 November. They're kept in the model's data
   bay by bay (G1–G2 at the pit to G12–G13 at the north end) with the day each went, for the
@@ -265,8 +268,8 @@ still move it, but only in their own browser. A saved position wins over the one
 `src/config.js` (`GET` / `PUT /api/placements`, [docs/accounts.md](docs/accounts.md)).
 **Copy config** into `src/config.js` makes it the default for a new copy of the site too.
 **Preset views**, as the artifact has them, are in a bar at the top: **Overview**, **C31**, **C32**,
-**Pit**, **Ground** and **Beams** glide the camera there, wherever the model is placed (Overview and
-Beams also cut Google's ground away over it). Any model can carry views: `views: [ { name, from, at,
+**Pit** and **Ground** glide the camera there, wherever the model is placed (Overview also cuts
+Google's ground away over it). Any model can carry views: `views: [ { name, from, at,
 underground } ]` in its glTF scene's extras, in the model's own frame (`src/views.js`).
 
 **Fixing areas in the twin.** Areas in the wrong spot, turned the wrong way, missing or not
