@@ -771,37 +771,62 @@ yet; and on Google's tiles a tile's first ray builds its bounding volume hierarc
 (`src/raycast.js`), which once took 40 ms ([above](#how-water-is-told-from-the-ground)). Measured
 here (12 November 2026, in Chromium, with the game's own `raycast.js`, a ray straight down onto a
 mesh the size of a tile, on this shared machine), a mesh's first ray took 0.7 ms with 2,500
-triangles, 1.3 ms with 5,000, 3.3 ms with 10,000, 8 ms with 20,000, 15 ms with 40,000 and 28 ms with
-80,000 (about 0.35 ms a thousand; once 51 ms with 10,000, the machine pausing), and each ray after
-it a few thousandths of a millisecond; Node gave much the same. How many triangles Google's tiles
-have, and how many of them a look's rays reach first, wasn't measured: there's no key here. As a
-model (square tiles, each level half the last, shown as 3d-tiles-renderer shows them at its error
-target of 16 pixels in the 70° view while driving, each 8 to 64 times as wide as its geometric
-error, with leaves 10 to 40 m wide), a 300 m disc round the spot takes in 18 to about 210 tiles in
-view, and the 96 rays fall on 16 to 59 of them (only tiles in view are in the scene for a ray to
-reach). So the look that first found a coast's bed could have built dozens of hierarchies in one
-frame: 16 at 3 ms to 59 at 28 ms is 50 ms to over a second here, and more on a phone.
+triangles, 1.5 ms with 5,000, 2.8 ms with 10,000, 6 ms with 20,000, 13 ms with 40,000 and 29 ms with
+80,000 (about 0.3 ms a thousand; up to 40 ms with 80,000 with the machine busy, and 14 ms with
+10,000 for the first in the page, its code not yet compiled), and each ray after it a few
+thousandths of a millisecond; Node gave much the same. How many triangles Google's tiles have, and
+how many of them a look's rays reach first, wasn't measured: there's no key here. A ray reaches
+every tile 3d-tiles-renderer (0.5.3) has active, in view or not: with its quick raycast by tiles'
+bounds off (`src/world.js`, as it can miss Google's geometry poking out of its tile's bounds),
+`TilesRenderer.raycast` tries each active tile's mesh; and with `loadSiblings` (on by default) a
+tile in view that's refined has all its children used, those out of view too, which are loaded and
+made active and kept with the tiles' group for rays, though not drawn. So out of view there's ground
+for a ray everywhere: beside the tiles in view their siblings, as fine as they are, and farther off
+the siblings of tiles a level or more up, coarser and coarser. As a model of that (square tiles,
+each level half the last, refined in the 70° view while driving to the library's error target of
+16 pixels, each 8 to 64 times as wide as its geometric error, leaves 10 to 40 m wide; on a desktop's
+screen, or a phone's held either way), the 96 rays fall on 26 to 85 active tiles: 16 to 62 of them
+in view, and 8 to 34 out of it, 10 to 80 m wide. (Counting only tiles in view, as this said before,
+gave 16 to 59: too few.) So the look that first found a coast's bed could have built dozens of
+hierarchies in one frame: 26 at 2.8 ms to 85 at 29 ms is about 70 ms to two and a half seconds here,
+and more on a phone.
 
 So no frame casts more than 12 of them, nor any more once they've taken 4 ms in it: a quarter of a
 frame at 60 frames a second, or the one tile's hierarchy that took longer, as driving onto a new
 tile costs anyway. What's known of the spot's bearings is kept (`seaWatch`'s spot), and the look
-round it carried on in each frame after, as long as the spots the looks find stay in the same 10 m
-square (a spot found closed is looked round afresh at the next look, as more of Google's tiles may
-have come in round it); the surface is laid as soon as it's known to be open, with you still no
-lower than 1.5 m under it. That lays it a little later. On the test pad, off its coast, the 36 rays
-took three frames (four once) and it was laid where it was before, the kart 26 to 29 m short of the
-water's edge; with the first ray into each 25 m square made 5 ms slower, as if each were a tile of
-about 15,000 triangles reached for the first time, one of those a frame, the look took 36 frames
-(0.6 s, 55 rays, the spot moving into another square on the way) and it was laid 6 m farther on,
-the kart still 20 m short of the edge, on Google's water. On Google's tiles, at one new tile a frame,
-30 new tiles (about what those 36 rays reach with a tile every 25 m) at 100 km/h would be half a
-second and 14 m at 60 frames a second, or 1.5 s and 42 m at 20, against a look 83 m ahead. In the
-worst case modelled (59 new tiles, 20 frames a second, 100 km/h) it would be 3 s, as far as the
-look ahead: you could then be more than 1.5 m under the water by the time it's known to be open,
-and it isn't laid (you drive on along the bed, as when started on it). That's the trade-off taken
-for never stalling a frame for a second; none of it was tried on Google's tiles. (A Go to's look
-round the spot beside the other driver, below, still casts all it needs at once: it's a jump to
-somewhere else, whose tiles have their first rays then anyway.)
+round it carried on in each frame after till it's known, nothing else looked at meanwhile (a spot
+found closed is looked round afresh at the next look, as more of Google's tiles may have come in
+round it); the surface is laid as soon as it's known to be open, with you still no lower than 1.5 m
+under it. Looks in the meantime would have found newer spots farther on (at 100 km/h, 7 m on at each
+look), but those are the bed of the same water some metres along the way, and the surface laid round
+the first is the same one: it's laid kilometres round it (below), and again round you as you go.
+Until 12 November 2026 the look round a spot began afresh whenever a later look found one in another
+10 m square, which at speed was most looks, and each time its rays reached tiles new to them out at
+its edge: in the emulation below at 100 km/h and 20 frames a second it was laid in only 2 of 5 runs,
+the kart by then 1.1 m under the surface, and in the other 3 not at all, the kart driving on down
+the bed to 13 m under it.
+
+That lays it a little later than a look all in one frame would. On the test pad, off its coast,
+driven out at up to 50 km/h, the 36 rays took four frames and it was laid where it was before, the
+kart 28 m short of the water's edge. With the first ray into each 25 m square made 5 ms slower, as
+if each were a tile of about 15,000 triangles reached for the first time (one of those a frame), the
+look took 30 frames (its 36 rays, 30 of them slow) and it was laid with the kart 21 m short of the
+edge, on Google's water. At 100 km/h and 20 frames a second (a slow phone), set off 90 m short of
+the edge with the look falling at five points in its quarter of a second, it was laid every time,
+the kart 5 to 12 m short of the edge, 2.8 to 3.05 s after setting off: never more than three rays in
+a frame, one of them slow (5.1 to 5.3 ms a frame). Swept wider (60 to 300 km/h at 20 to 60 frames a
+second, the slow first ray 5 or 20 ms, on squares of 25 or 40 m, the look falling at five points
+each: 80 runs), it was laid every time with the kart never more than 0.1 m under the surface (from
+150 km/h up, at 60 frames a second, laid with the kart still on the land), never more than five rays
+in a frame; the longest frame's look in a run was 5 to 7 ms with the 5 ms slow rays (more, up to
+16 ms, in 9 of 70 runs) and 20 to 24 ms with the 20 ms ones. In the worst case modelled, all 96 rays
+needed, falling on 85 tiles none had reached (above), each taking more than 4 ms, it would take 85
+frames: 1.4 s at 60 frames a second, over 4 s at 20, at 100 km/h 118 m, farther than the 83 m it
+looks ahead; on a bed sloping down 1 in 20 from the water's edge you'd be more than 1.5 m under the
+water by then, and it isn't laid (you drive on along the bed, as when started on it). That's the
+trade-off taken for never stalling a frame for seconds; none of it was tried on Google's tiles. (A
+Go to's look round the spot beside the other driver, below, still casts all it needs at once: it's a
+jump to somewhere else, whose tiles have their first rays then anyway.)
 
 It's laid round that spot (sea.js's `start`, as for a drop-in, its reach the map's square there),
 and you roll onto it, or come down on it: driven out over Google's water and on over the bed, you're
@@ -822,21 +847,30 @@ a coast. A drop-in instead takes the pad for ground at the water's surface where
 above.)
 
 **Beside another driver.** Go to or Join beside someone out on that surface, or in the air over it
-(a hop, a trick, flying: every ride can fly), puts you on it with them. Their height is what says
-they're out there: where it's no more than 1 m under the water's surface there (the sea's, on the
-sea or a coast; a big lake's, in a square all of which is the lake), however high over it, as the
-look above lays it for a vehicle at any height over it, and the ground under them is the bed as
-above (more than 1.5 m under that surface, or 15 m under a lake's; not coloured as dry land; open
-to the water round it), the surface is laid there for you too: in this scene (within 10 km),
-before your car is put beside them, on the ground within 3 m under them as anywhere, or else on
-that surface under them, at its height, where nothing's in between (a bridge's deck, say: then it's
-a drop-in, as anywhere there's no ground within 3 m under them); farther off, for the drop-in beside
-them, which otherwise starts on a bed less than 15 m under the sea, as any drop-in does
-([the open sea](#the-open-sea)). Before, you were put on the bed under them, 1.5 to 15 m down, and
-stayed on it, too low for the surface to be laid as you drove on; until 12 November 2026 that was
-so for anyone more than 1 m over the surface too, even a hop. Over a city's streets under the sea
-(below) nothing is laid, however high they are, and you're put on the street. A pin, a search or a
-start spot isn't anyone's height, and drops in as before.
+(a hop, a trick, flying: every ride can fly), puts you on it with them. You're put 5 m to the right
+of the way they're heading, along the ground, at their height (`besideOf`): not along their car's
+own side, which mid barrel roll points down at the bed, or up. (Until 12 November 2026 it was along
+that side, and beside a car rolled onto its side 3 m over the surface, the bed 2 m under it, you
+were put on the bed; with the bed 7 m under, the drop-in beside them started on it.) Their height
+is what says they're out there: where it's no more than 1 m under the water's surface there (the
+sea's, on the sea or a coast; a big lake's, in a square all of which is the lake), however high
+over it, as the look above lays it for a vehicle at any height over it, and the ground under them
+is the bed as above (more than 1.5 m under that surface, or 15 m under a lake's; not coloured as dry
+land; open to the water round it), the surface is laid there for you too: in this scene (within
+10 km), before your car is put beside them, on the ground within 3 m under them as anywhere, or else
+on that surface under them, at its height, where nothing's in between (a bridge's deck, say: then
+it's a drop-in, as anywhere there's no ground within 3 m under them) and the ground under them is
+that bed, looked at under the surface where it's laid in your scene already; farther off, for the
+drop-in beside them, which otherwise starts on a bed less than 15 m under the sea, as any drop-in
+does ([the open sea](#the-open-sea)). Before, you were put on the bed under them, 1.5 to 15 m down,
+and stayed on it, too low for the surface to be laid as you drove on; until 12 November 2026 that
+was so for anyone more than 1 m over the surface too, even a hop. Over a city's streets under the
+sea (below) nothing is laid, however high they are, and you're put on the street: with your own
+surface already laid over those streets (as it is within its reach once it's laid:
+[known limits](#known-limits)), not on it under someone flying over them, since the ground under
+them isn't the open water's bed, but by a drop-in beside them, which starts on the street. (Until
+12 November 2026 you were put on that surface among the houses.) A pin, a search or a start spot
+isn't anyone's height, and drops in as before.
 
 **Tested** on the test pad (`npm run test:drive-ui`), not on Google's tiles: in Santa Monica Pier's
 square (a coast's), the pad's land 2 m over the sea, its water at the sea's height 60 m out (one
@@ -861,17 +895,23 @@ off the levee and 470 m down a street, flown off it 59 m up over the houses and 
 started in a street, nothing was laid, and the kart stayed on the streets. Go to beside a car out
 on the surface 2 m and 7 m over the bed laid it there and put the kart on it beside them, and
 driven on it stayed on it; so did Go to beside one 1.5 m over the surface (the bed 2 m under it),
-3 m over it, and flying 20 m over it, the kart on the surface under them. Beside one at the sea's
-height in New Orleans' street it put the kart on the street, laying nothing; beside one flying 20 m
-over that street it laid nothing and found no ground in reach (so it would be a drop-in), and the
+3 m over it, and flying 20 m over it, the kart on the surface under them; beside one rolled onto its
+side 3 m over the surface (the bed 2 m or 7 m under it), its own side pointing down or up, the spot
+was 5 m to the right of its heading at its height, as beside one not rolled, and the kart was put on
+the surface there, laid; and with the surface laid already, beside one flying 20 m over the bed, on
+it under them. Beside one at the sea's height in New Orleans' street it put the kart on the street,
+laying nothing; beside one flying 20 m over that street it laid nothing and found no ground in reach
+(so it would be a drop-in), and so too with the surface already laid over the street; and the
 drop-in beside them, with the street under the pin 2.5 m under the sea among those houses, started
 on the street with nothing laid. A drop-in beside a driver at the sea's height, the pad 7 m under it
 in the sea's colour, started on the surface, and so did one beside a driver 3 m and 20 m over it; a
 pin at that height started on the pad, 7 m under it. The look round a spot was spread over frames
-(above): off the pier, its 36 rays over three frames (four once), never more than 12 in one, in the
+(above): off the pier, its 36 rays over three or four frames, never more than 12 in one, in the
 page's own frames driven with the keyboard too; past the houses behind a beach, forward and
 reversing, and down New Orleans' street, never more than 12 a frame; with the first ray into each
-25 m square 5 ms slower, one of those a frame, and laid 6 m later, before the kart was under.
+25 m square 5 ms slower, one of those a frame, and laid 7 m later, before the kart was under; and
+so at 100 km/h and 20 frames a second, the look falling at five points in its quarter of a second,
+laid every time with the kart still on Google's water.
 Without the map, off Santa Monica Pier, the kart drove on down the slope.
 
 ## The Moon
@@ -3301,12 +3341,14 @@ of the Assal depression, never; Lake Erie's surface gone out over land to Niagar
 by the lake; driven and flown out from a coast over a bed sloping under the sea in the sea's
 colours, the sea's surface laid before the kart is under it (by the frame loop's own look too, with
 houses behind the beach, and reversing out), its look round the bed spread over frames (never
-more than 12 rays in one, nor more than one first ray into new ground made slow as a tile's), but
+more than 12 rays in one, nor more than one first ray into new ground made slow as a tile's) and
+carried on till it's known (laid in time at 100 km/h and 20 frames a second too), but
 not over ground coloured as sand or with no picture, nor in Death Valley's square, nor with the
 kart in a hollow under it, and a big lake's only over its bed 15 m under it; New Orleans' streets
 under the sea behind its levee, among houses, driven into, flown over and started in, never, nor
-beside someone flying over them; Go to beside a driver out on the sea's surface, or hopping or
-flying over it, in the scene and by a drop-in, on it with them; without the map, only the deep
+beside someone flying over them, even with the surface already laid; Go to beside a driver out on
+the sea's surface, or hopping, flying or rolled onto their side over it (beside them at their
+height), in the scene and by a drop-in, on it with them; without the map, only the deep
 sea), the used-up,
 robot-check and getting-ready screens, the visit asked for only once the game's code is here (a
 download that fails, and its Try again, spend none; a script that breaks is told from a dropped
@@ -3494,16 +3536,21 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   bed more than 15 m under it with you no more than 1.5 m under it: flown out and let down, it is;
   driven out along a bed sloping down from the shore (off Chicago, above), you're under it by then,
   and drive on along the bed. Once it's laid it covers a polder's streets within its reach too
-  (below); Go to or Join beside someone riding on it there puts you on the streets, under them. The
-  look round a spot to see that it's open is spread over frames, at most 12 rays and about 4 ms a
-  frame, and on Google's tiles its rays may be the first into dozens of tiles, each building its
-  hierarchy in a frame of its own: it may be known open a second or more after it's first looked at
-  (3 s in the worst case modelled, at 20 frames a second), and if you're more than 1.5 m under the
-  water by then it isn't laid. And Google's tiles out of the camera's view aren't in the scene for a
-  ray to reach (3d-tiles-renderer shows only those in view), so a bearing whose rays fall on ground
-  out of view counts as missing, not clear: with a narrow view (a phone held upright, about 36°
-  across while driving) fewer of the bearings round a spot may be found open, and the surface may
-  not be laid where it would be on a wider screen. None of it was tried on Google's tiles.
+  (below): Go to or Join beside someone riding on it there puts you on the streets under them where
+  it isn't laid in your scene, and on it where it is (beside someone flying over those streets,
+  though, it's a drop-in beside them, onto the street: the ground under them isn't the open water's
+  bed). The look round a spot to see that it's open is spread over frames, at most 12 rays and about
+  4 ms a frame, and carried on till it's known; on Google's tiles its rays may be the first into
+  dozens of tiles, each building its hierarchy in a frame of its own, so it may be known open a
+  second or more after it's first looked at (as a model, if all 96 of its rays were needed, falling
+  on 85 tiles none had reached, 85 frames: over 4 s at 20 frames a second), and if you're more
+  than 1.5 m under the water by then it isn't laid. Its rays reach the tiles 3d-tiles-renderer keeps
+  active out of the camera's view (the siblings of those in view, at every level:
+  [out from a coast](#out-from-a-coast)), not only those in view; but out there they're coarser the
+  farther they are from the tiles in view, so a bearing out of view (on a phone held upright, about
+  36° across while driving, 46 to 62 of the 96 rays' places, as modelled) is looked along on
+  ground drawn with less detail, its levees, quays and houses smoothed, which may find it clear
+  where finer tiles wouldn't, or the other way. None of it was tried on Google's tiles.
 - The open water's surface is EGM96's at a degree, a metre or a few from a coast's own water: 1 m
   under it off Kona (by round volcanic islands up to 9.5 m low, below Kilauea on the Big Island's
   south coast), so driving from the open sea to that coast is a step up onto Google's water; 1 m

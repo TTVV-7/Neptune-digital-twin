@@ -3987,7 +3987,7 @@ describe( 'World Drive, the open sea', () => {
 
 	} );
 
-	test( 'the look round a spot to see it\'s open to the water is spread over frames: driven out from a coast, out past houses behind the beach (forward and reversing) and down New Orleans\' street, no frame casts more than 12 of its rays; with each ray into ground no ray had reached as slow as a tile\'s first (5 ms, building its hierarchy), no more than one of those a frame, and the sea is still laid before the kart is 1.5 m under it', async () => {
+	test( 'the look round a spot to see it\'s open to the water is spread over frames: driven out from a coast, out past houses behind the beach (forward and reversing) and down New Orleans\' street, no frame casts more than 12 of its rays; with each ray into ground no ray had reached as slow as a tile\'s first (5 ms, building its hierarchy), no more than one of those a frame, and the sea is still laid before the kart is 1.5 m under it, at 50 km/h, and at 100 km/h and 20 frames a second wherever in its quarter of a second the look falls', async () => {
 
 		// In the page: drives as each kit has them, at up to 50 km/h, each frame's rays round a spot
 		// counted, with the most in one frame, how many in all and in how many frames, how low the
@@ -4045,6 +4045,41 @@ describe( 'World Drive, the open sea', () => {
 				return { ...run, north: d.north, y: d.y };
 
 			};
+			// The same, out from the coast at `fps` frames a second (as on a slow phone) and held at
+			// `kmh`: each frame's rays counted, and how long the frame's look took, till the sea's laid.
+			// Where in its quarter of a second the look falls is set by a look on the land first, and
+			// `phase` s of the next gone by.
+			window.countFrames = ( kit, { kmh, fps, phase } ) => {
+
+				kit.reset( - 250, kmh );
+				reached.clear();
+				window.drive.watchSea( 1 );
+				if ( phase ) window.drive.watchSea( phase );
+				rays = fresh = 0;
+				d.press( 'KeyW' );
+				const run = { phase, most: 0, rays: 0, fresh: 0, mostFresh: 0, low: Infinity, laid: null, ms: 0 };
+				for ( let i = 0; i < 20 * fps && ! run.laid && d.north > - 600; i ++ ) {
+
+					d.speed = kmh / 3.6;
+					d.update( 1 / fps );
+					sea.follow( d.east, d.north, d.y );
+					const begun = performance.now();
+					window.drive.watchSea( 1 / fps );
+					run.ms = Math.max( run.ms, performance.now() - begun );
+					run.most = Math.max( run.most, rays );
+					run.mostFresh = Math.max( run.mostFresh, fresh );
+					run.rays += rays;
+					run.fresh += fresh;
+					rays = fresh = 0;
+					if ( sea.shown ) run.laid = { north: d.north, y: d.y, s: ( i + 1 ) / fps };
+					else run.low = Math.min( run.low, d.y );
+
+				}
+
+				d.release( 'KeyW' );
+				return { ...run, ms: + run.ms.toFixed( 1 ), north: d.north, y: d.y };
+
+			};
 
 		} );
 		const uncounted = () => page.evaluate( () => {
@@ -4065,9 +4100,12 @@ describe( 'World Drive, the open sea', () => {
 			const plain = window.countDrive( kit );
 			window.countSlow = 5;
 			const slow = window.countDrive( kit );
+			// At 20 frames a second and 100 km/h, a look every five frames and the spot it finds 83 m
+			// ahead, 7 m on from the last; the look's place in its quarter of a second five ways.
+			const phone = [ 0, 0.05, 0.1, 0.15, 0.2 ].map( phase => window.countFrames( kit, { kmh: 100, fps: 20, phase } ) );
 			window.countSlow = 0;
 			kit.remove();
-			return { plain, slow };
+			return { plain, slow, phone };
 
 		} );
 		await uncounted();
@@ -4102,7 +4140,7 @@ describe( 'World Drive, the open sea', () => {
 		await uncounted();
 		await padBack( page );
 		console.log( 'a look round a spot, frame by frame:', JSON.stringify( { pier, seafront, polder } ) );
-		const { plain, slow } = pier;
+		const { plain, slow, phone } = pier;
 		// Off the pier: its 36 rays over three frames or more, and the sea laid as before, with the kart
 		// still on Google's water at the sea's height, never under it.
 		assert.ok( plain.most <= 12 && plain.rays >= 36 && plain.frames >= 3, JSON.stringify( plain ) );
@@ -4111,6 +4149,10 @@ describe( 'World Drive, the open sea', () => {
 		// and laid a few metres on, still on Google's water.
 		assert.ok( slow.most <= 12 && slow.mostFresh === 1 && slow.fresh >= 30 && slow.frames >= slow.fresh, JSON.stringify( slow ) );
 		assert.ok( slow.laid && slow.laid.north > - 345 && slow.laid.y > - 2.01 && slow.low > - 2.01, JSON.stringify( slow ) );
+		// At 20 frames a second and 100 km/h, wherever the looks fall: the look round the first spot
+		// found carried on till it's known (not begun again round each newer spot), never more than 12
+		// rays nor more than one slow one in a frame, and laid before the kart is 1.5 m under it.
+		for ( const run of phone ) assert.ok( run.most <= 12 && run.mostFresh === 1 && run.fresh >= 30 && run.laid && run.low > - 3.5 && run.laid.y > - 3.5, JSON.stringify( run ) );
 		for ( const run of [ seafront.ahead, seafront.back ] ) assert.ok( run.most <= 12 && run.rays > 12 && run.laid && run.low > - 3.5 && run.laid.y > - 3.5, JSON.stringify( run ) );
 		assert.ok( polder.most <= 12 && polder.rays > 0 && ! polder.laid && polder.north < - 740, JSON.stringify( polder ) );
 		assert.deepEqual( page.errors, [] );
@@ -4118,14 +4160,15 @@ describe( 'World Drive, the open sea', () => {
 
 	} );
 
-	test( 'New Orleans behind its levee (a coast\'s square by Lake Pontchartrain): driven off the levee down a street 2.5 m under the sea among houses whose roofs stand over it, flown over them and let down, and started in that street, nothing is laid; nor is it beside someone there at the sea\'s height, nor beside someone flying 20 m over the street (in this scene, or by the drop-in beside them, which starts on the street)', async () => {
+	test( 'New Orleans behind its levee (a coast\'s square by Lake Pontchartrain): driven off the levee down a street 2.5 m under the sea among houses whose roofs stand over it, flown over them and let down, and started in that street, nothing is laid; nor is it beside someone there at the sea\'s height, nor beside someone flying 20 m over the street (in this scene, even with the sea\'s surface already laid over it, or by the drop-in beside them, which starts on the street)', async () => {
 
 		const levee = await dropInOver( page, '30.03, -90.08', 0 );
 		assert.ok( ! levee.sea && levee.colliders === 1, JSON.stringify( levee ) );
 		await setUpPolder( page );
-		const result = await page.evaluate( () => {
+		const result = await page.evaluate( async () => {
 
-			const { driver: d, sea, camera, moveCar, water, watchSea } = window.drive;
+			const { driver: d, sea, camera, moveCar, water, watchSea, place } = window.drive;
+			const { seaLevel } = await import( '/src/drive-app/sea.js' );
 			const kit = window.polderKit;
 			// What a look costs on the levee facing the streets, each finding ground under the sea ahead
 			// and looking round it (its rays counted) to find it closed in.
@@ -4214,7 +4257,14 @@ describe( 'World Drive, the open sea', () => {
 			// of them to put the car on, so Go to drops in beside them instead (below).
 			kit.reset( - 150, 0 );
 			const flier = { moved: moveCar( { local: new camera.position.constructor( 0, kit.surface + 20, - 400 ), heading: 180 } ), sea: sea.active };
-			return { look, drove, flew, inside, beside, flier };
+			// The same with the sea's surface already laid in this scene, over the streets too (as
+			// driven out onto the lake and back: it covers the streets within its reach): still no
+			// ground in reach of them to put the car on, not that surface among the houses.
+			kit.reset( - 150, 0 );
+			sea.start( { lat: place.lat, lon: place.lon, height: await seaLevel( place.lat, place.lon ) + 2, over: 0, lake: null, east: 0, north: - 150 } );
+			const laid = { laid: sea.shown, moved: moveCar( { local: new camera.position.constructor( 0, kit.surface + 20, - 400 ), heading: 180 } ), north: d.north, y: d.y };
+			sea.clear();
+			return { look, drove, flew, inside, beside, flier, laid };
 
 		} );
 		console.log( 'New Orleans behind its levee:', JSON.stringify( result ) );
@@ -4226,7 +4276,7 @@ describe( 'World Drive, the open sea', () => {
 		await shot( page, 'drive-polder-beside-a-flier' );
 		await page.evaluate( () => window.polderKit.remove() );
 		await padBack( page );
-		const { look, drove, flew, inside, beside, flier } = result;
+		const { look, drove, flew, inside, beside, flier, laid } = result;
 		// Each look a few rays round the street ahead, a fraction of a millisecond here, and nothing laid.
 		assert.ok( ! look.laid && look.rays > 0 && look.rays < 48 && look.ms < 10, JSON.stringify( look ) );
 		assert.ok( ! drove.laid && drove.north < - 740 && Math.abs( drove.y + 4.5 ) < 0.3, JSON.stringify( drove ) );
@@ -4235,13 +4285,14 @@ describe( 'World Drive, the open sea', () => {
 		assert.ok( ! inside.laid && Math.abs( inside.y + 4.5 ) < 0.3 && inside.north < - 690 && Math.abs( inside.end + 4.5 ) < 0.3, JSON.stringify( inside ) );
 		assert.ok( beside.moved && ! beside.sea && Math.abs( beside.north + 400 ) < 0.01 && Math.abs( beside.y + 4.5 ) < 0.3, JSON.stringify( beside ) );
 		assert.ok( ! flier.moved && ! flier.sea, JSON.stringify( flier ) );
+		assert.ok( laid.laid && ! laid.moved && laid.north > - 160, JSON.stringify( laid ) );
 		assert.ok( ! dropped.sea && dropped.colliders === 1 && Math.abs( dropped.y + 2.5 ) < 0.3, JSON.stringify( dropped ) );
 		assert.deepEqual( page.errors, [] );
 		assert.deepEqual( page.outside, [] );
 
 	} );
 
-	test( 'Go to beside another driver out on the sea\'s surface where Google draws the bed, or in the air over it: in this scene (the bed 2 m and 7 m under them), it\'s laid there and you\'re on it with them, driving on, beside one hopping 1.5 m or 3 m over it, or flying 20 m over it, too; and a drop-in beside one far off (the bed 7 m under), at the surface, 3 m or 20 m over it, on the surface with them, where a pin at that height starts on the bed', async () => {
+	test( 'Go to beside another driver out on the sea\'s surface where Google draws the bed, or in the air over it: in this scene (the bed 2 m and 7 m under them), it\'s laid there and you\'re on it with them, driving on, beside one hopping 1.5 m or 3 m over it, or flying 20 m over it, too, and one rolled onto its side 3 m over it (beside them at their height, not 5 m under or over it), and a flier with the surface already laid; and a drop-in beside one far off (the bed 7 m under), at the surface, 3 m or 20 m over it, on the surface with them, where a pin at that height starts on the bed', async () => {
 
 		const coast = await dropInOver( page, '34.0065, -118.4985', 0 );
 		assert.ok( ! coast.sea && coast.colliders === 1, JSON.stringify( coast ) );
@@ -4266,6 +4317,35 @@ describe( 'World Drive, the open sea', () => {
 			kit.step( 3 );
 			d.release( 'KeyW' );
 			out.on = { north: d.north, y: d.y, surface: water.at( d.east, d.north, d.y ), bed: kit.bedAt( d.north ) };
+			// Beside a car facing out to sea and rolled `roll` degrees onto its side (a barrel roll: its
+			// own right-hand side pointing down, or up), as goTo finds the spot beside it (besideOf),
+			// from what it sends (live.js: where it is and how it's turned, Earth-centred): the spot,
+			// and where you're put.
+			const { globe, besideOf } = window.drive;
+			const rolled = ( north, over, roll ) => {
+
+				kit.reset( - 250, 0 );
+				const local = new camera.position.constructor( 0, kit.surface - north * north / ( 2 * 6371000 ) + over, north );
+				const quaternion = new camera.quaternion.constructor().setFromAxisAngle( new camera.position.constructor( 0, 0, 1 ), roll * Math.PI / 180 );
+				globe.earth.updateWorldMatrix( true, false );
+				const position = local.clone().applyMatrix4( globe.earth.matrixWorld.clone().invert() );
+				quaternion.premultiply( new camera.quaternion.constructor().setFromRotationMatrix( globe.earth.matrixWorld ).invert() ).normalize();
+				const own = {};
+				globe.ellipsoid.getPositionToCartographic( position, own );
+				const spot = besideOf( { s: [ position.x, position.y, position.z, quaternion.x, quaternion.y, quaternion.z, quaternion.w ] } );
+				const at = { east: - spot.local.x, north: spot.local.z, y: spot.local.y, rise: spot.height - own.height, heading: spot.heading };
+				const moved = moveCar( spot );
+				return { at, of: north, moved, sea: sea.shown, north: d.north, y: d.y, surface: water.at( d.east, d.north, d.y ), bed: kit.bedAt( north ) };
+
+			};
+			Object.assign( out, { level: rolled( - 380, 3, 0 ), down: rolled( - 380, 3, - 90 ), up: rolled( - 380, 3, 90 ), downDeeper: rolled( - 480, 3, - 90 ) } );
+			// With the surface laid here already (by a Go to beside someone out on it), beside a car
+			// flying 20 m over the bed: on the surface under them, as before.
+			kit.reset( - 250, 0 );
+			moveCar( { local: new camera.position.constructor( 0, kit.surface - 380 * 380 / ( 2 * 6371000 ), - 380 ), heading: 180 } );
+			const laid = sea.shown;
+			const again = moveCar( { local: new camera.position.constructor( 0, kit.surface - 480 * 480 / ( 2 * 6371000 ) + 20, - 480 ), heading: 180 } );
+			out.laidFlier = { laid, moved: again, sea: sea.shown, north: d.north, y: d.y, surface: water.at( d.east, d.north, d.y ), bed: kit.bedAt( - 480 ) };
 			kit.remove();
 			return out;
 
@@ -4275,6 +4355,18 @@ describe( 'World Drive, the open sea', () => {
 		// (On the surface, under them in the air: the car put there, not on the bed.)
 		for ( const there of [ shallow, hop, over, flier, deeper ] ) assert.ok( there.moved && there.sea && there.surface !== null && Math.abs( there.y - there.surface ) < 0.01 && Math.abs( there.surface + 2 ) < 0.1 && there.y > there.bed + 1.9, JSON.stringify( there ) );
 		assert.ok( on.north < deeper.north - 10 && on.surface !== null && Math.abs( on.y - on.surface ) < 0.01 && on.y > on.bed + 7, JSON.stringify( on ) );
+		// Beside a car rolled onto its side, its own side pointing down at the bed or up: the spot 5 m
+		// to the right of its heading (south, so west), at its height, as it is beside one not rolled;
+		// and put on the surface there with it, laid, not on the bed 2 m or 7 m under it.
+		const { level, down, up, downDeeper, laidFlier } = near;
+		for ( const there of [ level, down, up, downDeeper ] ) {
+
+			assert.ok( Math.abs( there.at.east + 5 ) < 0.05 && Math.abs( there.at.north - there.of ) < 0.05 && Math.abs( there.at.rise ) < 0.05 && Math.abs( there.at.heading - 180 ) < 0.5, JSON.stringify( there ) );
+			assert.ok( there.moved && there.sea && there.surface !== null && Math.abs( there.y - there.surface ) < 0.01 && Math.abs( there.surface + 2 ) < 0.1 && there.y > there.bed + 1.9, JSON.stringify( there ) );
+
+		}
+
+		assert.ok( laidFlier.laid && laidFlier.moved && laidFlier.sea && laidFlier.surface !== null && Math.abs( laidFlier.y - laidFlier.surface ) < 0.01 && Math.abs( laidFlier.north + 480 ) < 0.01 && laidFlier.y > laidFlier.bed + 6.9, JSON.stringify( laidFlier ) );
 		await padBack( page );
 		// Far off: a drop-in, the pad 7 m under the sea's surface with the sea's picture on it.
 		const friend = await dropInBeside( page, 33.95, - 118.6, 7, 0 );
