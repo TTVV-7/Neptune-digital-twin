@@ -128,29 +128,35 @@ const SEA_MARGIN = 1.5;
 // ground under the sea in a city or a polder is closed in on most sides by levees, quays, houses,
 // roofs and trees standing over the water's height, and a polder's fields and a park's lawns are
 // coloured as land. So the water's surface is only laid over ground with OPEN bearings or more one
-// after another (of BEARINGS round it: OPEN spans a quarter of the way round) on which nothing at any
-// of OPEN_AT's distances (m) stands more than RISE m over the water's surface, nor is coloured as
-// only dry land is, nor is missing (rays down from far over it, as for walled; a picture that can't
-// be read is taken for land). On a straight coast the beach, a promenade and the houses behind it
-// close at most the seven bearings on the land's side, and nine are open; beside a pier as well, five
-// or more. Among houses any of a bearing's six rays that hits a roof or a tree closes it: on the test
-// pad's streets (scripts/test-drive-ui.mjs) no more than two side by side were open, down a street,
-// where with only RIM's three rays each five were at some spots. (Ground under the sea open and not
-// coloured as land 150 m round on a quarter of the way, a wide car park behind a levee, still isn't
-// told from the bed.) It's looked at only for ground that's passed everything else, for one spot at
-// a time, and only as far as it needs: a bearing that isn't clear rules out every run of OPEN
-// through it. And it's spread over frames. A tile's first ray builds its bounding volume hierarchy
-// (src/raycast.js: on a mesh the size of a tile, in Chromium here, 3 ms for 10,000 triangles and
-// 29 ms for 80,000), and these rays reach out 150 m round a spot up to 60 m ahead, to tiles no other
-// ray has reached (those 3d-tiles-renderer keeps for rays out of view too, the siblings of those in
-// it): all 96 in one frame could have held it up for seconds just as the vehicle came to the sea.
-// So no frame casts more than OPEN_RAYS of them, nor any more once they've taken OPEN_MS (ms) in
-// it: a quarter of a frame at 60 a second, or the one tile's hierarchy that took longer, as driving
-// onto a new tile does anyway. What's known of the spot's bearings is kept (seaWatch's spot) and
+// after another (of BEARINGS round it: OPEN spans a quarter of the way round) on which nothing at
+// any of OPEN_AT's distances (m) stands more than RISE m over the water's surface, nor is coloured
+// as only dry land is, nor is missing (rays down from far over it, as for walled; a picture that
+// can't be read is taken for land), nor stands SKIM m over it within CLOSE m along them or between
+// them (rays along: see SKIM and FAN). On a straight coast the beach, a promenade and the houses
+// behind it close at most the seven bearings on the land's side, and nine are open; beside a pier as
+// well, five or more. Among houses any of a bearing's rays that hits a roof or a tree closes it: on
+// the test pad's streets (scripts/test-drive-ui.mjs) no more than two side by side were open, down a
+// street, where with only RIM's three rays each five were at some spots. Laid out more sparsely, a
+// quarter of the way round could thread between the houses past every ray down (lots 25 to 37 m
+// long, a boulevard 49 or 64 m across, a fifth of the lots empty), and flown 20 m over such towns'
+// streets it was laid among the houses at 4 to 473 of 5,000 to 7,000 spots each; with the rays
+// along, at none. (Ground under the sea open and not coloured as land 150 m round on a quarter of
+// the way, a wide car park behind a levee, still isn't told from the bed.) It's looked at only for
+// ground that's passed everything else, for one spot at a time, and only as far as it needs: a
+// bearing that isn't clear rules out every run of OPEN through it. And it's spread over frames. A
+// tile's first ray builds its bounding volume hierarchy (src/raycast.js: on a mesh the size of a
+// tile, in Chromium here, 3 ms for 10,000 triangles and 29 ms for 80,000), and these rays reach out
+// 150 m round a spot up to 60 m ahead, to tiles no other ray has reached (those 3d-tiles-renderer
+// keeps for rays out of view too, the siblings of those in it): all of them (up to 160: 96 down, 16
+// along the bearings and 48 between) in one frame could have held it up for seconds just as the
+// vehicle came to the sea. So no frame casts more than OPEN_RAYS of them, nor any more once they've
+// taken OPEN_MS (ms) in it: a quarter of a frame at 60 a second, or the one ray that took longer, as
+// driving onto a new tile does anyway (a ray down reaches one tile first, a ray along each tile it
+// passes through within CLOSE m). What's known of the spot's bearings is kept (seaWatch's spot) and
 // the look round it carried on each frame after till it's known, whatever spots the looks in the
-// meantime would find ahead, and the surface is laid as soon as it's known to be open. (Begun
-// afresh round each newer spot instead, 7 m on at each look at 100 km/h, its rays reached tiles new
-// to them out at its edge every time, and at 20 frames a second it was often never done.)
+// meantime would find ahead, and the surface is laid as soon as it's known to be open. (Begun afresh
+// round each newer spot instead, 7 m on at each look at 100 km/h, its rays reached tiles new to them
+// out at its edge every time, and at 20 frames a second it was often never done.)
 const OPEN = 5;
 const OPEN_AT = [ 25, 50, 75, 100, 125, 150 ];
 const RISE = 1;
@@ -170,17 +176,19 @@ const ALONGSIDE = 1;
 // water's ground is under it, a big lake's shelf less than BED under it, a bed coloured as sand, or
 // one closed in farther off, in an inlet or between a harbour's moles. Yours laid is in this scene;
 // or, for a drop-in beside them (goBeside's `laid`), over the same big lake when you left, or over
-// the sea within reach of yours as it's laid now (sea.js's reaches: not a sea laid on another
-// coast, which says nothing of a field under the sea's height on this one). That water is, on the
-// map, a square of the sea or a coast for the sea's; for a big lake's, one of its squares or one its
-// shore crosses (sea.js's lakeShore), where most of a lake's shelf is, and where yours is kept as
-// you drive there too (sea.js's REACH). Only not where the ground under them is built up, as a
-// city's streets under the water behind a levee are: closed in close by on every quarter of the way
-// round, with no OPEN bearings one after another on which nothing at OPEN_AT's distances up to CLOSE
-// m stands more than RISE m over the surface (or is missing), nor anything along them within CLOSE m
-// SKIM m over it. By heights alone, as a sandy bed's colour is a polder's fields' too. Houses either
-// side of a street close all but the bearings along it that near; a channel's banks, 130 m or more
-// apart, don't, out over its water (narrower, they close some of it: docs/world-drive.md).
+// the sea within reach of yours as it's laid now (sea.js's reaches: not a sea laid on another coast,
+// which says nothing of a field under the sea's height on this one). That water is, on the map, a
+// square of the sea or a coast for the sea's; for a big lake's, one of its squares or one its shore
+// crosses (sea.js's lakeShore), where most of a lake's shelf is, and where yours is kept as you
+// drive there too (sea.js's REACH). Only not where the ground under them is built up, as a city's
+// streets under the water behind a levee are: closed in close by on every quarter of the way round,
+// with no OPEN bearings one after another on which nothing at OPEN_AT's distances up to CLOSE m
+// stands more than RISE m over the surface (or is missing), nor anything along them or between them
+// within CLOSE m SKIM m over it (see FAN). By heights alone, as a sandy bed's colour is a polder's
+// fields' too. Houses either side of a street close all but the bearings along it that near; a
+// channel's banks, 130 m or more apart, don't, out over its water (narrower, they close some of it:
+// docs/world-drive.md). The look for laying it afresh (above) goes as far, and farther, with the
+// same rays along, so where it would lay a surface the ground isn't built up either.
 const CLOSE = 75;
 // The rays down see three points of a bearing, and a bearing can thread between houses past all
 // three: down a crossing street, through a gap between two houses or over the yards behind them, and
@@ -189,23 +197,40 @@ const CLOSE = 75;
 // laid out a little differently (the houses' fronts 20 m apart across a street, not 16; 6 m between
 // houses; yards 20 m deep; blocks 50 m across), at 18 to 31 % of the spots looked at along its
 // streets and yards; and a fourth ray down, at 100 m, still left 170 to 576 of those open. So a ray
-// along each bearing too, out to CLOSE: anything it meets SKIM m over the water's surface closes
-// the bearing, and that closes all of them, in each of those towns. How high: over what open water
-// has standing on it, and under houses' roofs. Google's own water is drawn up to about a metre over
-// the sea's height by some coasts, and isn't quite flat: over water drawn 1 m up with bumps of a
-// quarter of a metre, a ray 1 m up met it on all 16 bearings, one 1.5 m up or more on none. Boats
-// moored in a row 25 m off standing up to 2 m over the water, or a jetty's deck 15 m off less than
-// 2 m over it, aren't met; boats standing 2.5 m over it moored either side of a fairway 50 m wide
-// close it in, as a street's houses do. A beach rising 1 in 10 from the water 40 m off closes three bearings
-// toward it, and a bridge's deck 5 m up isn't met, only its piers. The test pad's roofs stand 3.5 m
-// over the water, and with them 2.5 m over it every spot is still closed; roofs lower than SKIM over
-// it (lower houses, or a town deeper under the water) are told by the rays down alone, as before
-// (with them 1.5 m over it, 50 of 3,546 spots open, as without this ray). It runs along the water's
-// level there (see skims): the water curves away from the scene's middle under its flat frame, 1 in
-// 640 at 10 km off, so a ray level in the frame comes 12 cm nearer it in 75 m toward the middle
-// (over water drawn 1 m up, 10 km off, one 1 m up met it on 7 or 8 bearings); the Earth's own curve
-// in 75 m is under half a millimetre.
+// along each bearing too, out to CLOSE, in every look (watchSea's, and those beside another driver):
+// anything it meets SKIM m over the water's surface closes the bearing, and that closes all of them,
+// in each of those towns. How high: over what open water has standing on it, and under houses'
+// roofs. Google's own water stands within a metre or so of the sea's height as it's worked out here
+// by most coasts (see SEA_MARGIN), and up to several metres over it by some (see BED: up to 9.5 m by
+// volcanic islands); where it stands more than RISE m over it the rays down already close the
+// bearings toward it, so the ray only needs to clear water drawn up to a metre over it, which isn't
+// quite flat: over water drawn 1 m up with bumps of a quarter of a metre, a ray 1 m up met it on all
+// 16 bearings, one 1.5 m up or more on none. Boats moored in a row 25 m off standing up to 2 m over
+// the water, or a jetty's deck 15 m off less than 2 m over it, aren't met; boats standing 2.5 m over
+// it moored either side of a fairway 50 m wide close it in, as a street's houses do. A beach rising
+// 1 in 10 from the water 40 m off closes three bearings toward it (as the rays down do), and a
+// bridge's deck 5 m up isn't met, only its piers. The test pad's roofs stand 3.5 m over the water,
+// and with them 2.5 m over it every spot is still closed; roofs lower than SKIM over it (lower
+// houses, or a town deeper under the water) are told by the rays down alone, as before (with them
+// 1.5 m over it, 50 of 3,546 spots open, as without this ray). It runs along the water's level there
+// (see skims): the water curves away from the scene's middle under its flat frame, 1 in 640 at 10 km
+// off, so a ray level in the frame comes 12 cm nearer it in 75 m toward the middle (over water drawn
+// 1 m up, 10 km off, one 1 m up met it on 7 or 8 bearings); the Earth's own curve in 75 m is under
+// half a millimetre.
 const SKIM = 2;
+// A run of OPEN clear bearings is OPEN lines 22.5° apart, and they can thread between houses
+// standing farther apart than the test pad's: from where a street meets a crossing or a boulevard
+// 45 m or more across, down the street, across the crossing and along the yards behind back-to-back
+// rows, with houses between them. In the test pad's town with a boulevard across it, the houses'
+// fronts either side 49 m apart, that left a quarter of the way round open by its edges at 42 of
+// 5,272 spots (with them 64 m apart, 942 of 5,648), and in suburbs with a crossing 46 to 56 m across
+// every 6th to 11th lot at 61 to 79 of 6,650 to 7,122. Over open water the whole quarter is clear,
+// not five lines of it. So a run is only open where FAN more rays along between each two of its
+// bearings, as along one (SKIM m up, out to CLOSE), meet nothing either: 5.6° apart, 7.4 m apart at
+// CLOSE. That closes every spot in those towns; between two clear bearings over open water, a
+// channel or an inlet, the rays between are clear too, so there it's as before. Each gap's rays are
+// cast once a look, as its run comes to it: at most 48 more rays, and 12 where it's open.
+const FAN = 3;
 // And with none of it laid where you are, beside someone riding on that water's surface (their
 // wheels on it: live.js's FLAGS.grounded, or where they dropped in) at its height, to within
 // AT_SURFACE m, with the ground under their car and under the spot beside them more than SEA_MARGIN
@@ -1078,6 +1103,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		if ( bed >= surface - SEA_MARGIN ) return null;
 		const found = { height: surface, over: by.over, lake: by.lake };
 		// Over yours (see CLOSE), or theirs that they're riding on (see AT_SURFACE): unless built up.
+		// (The look below lays it nowhere built up, so beside a rider this comes to what besideWater
+		// does in your scene, asking that look first.)
 		const yours = laid !== null && laid.lake === by.lake && height >= surface - ALONGSIDE;
 		if ( yours || riding !== null && rides( riding[ 0 ], riding[ 1 ], top + height - surface, top ) ) return builtUp( 0, 0, top ) ? null : found;
 		// Else as watchSea lays it afresh: only on the water's own squares (not a big lake's shore's).
@@ -1120,35 +1147,37 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	// Whether the ground round ( east, north ) in the scene is open to the water whose surface is
 	// `surface` there (m, in the scene), as the bed of open water is (see OPEN): OPEN of BEARINGS one
-	// after another with nothing at any of OPEN_AT's distances along them more than RISE m over that
-	// surface, coloured as only dry land is or missing. Each bearing is looked along only when a run of
-	// OPEN that might be clear comes to it, from the run's far end back. With `round` (watchSea's:
-	// what's known so far of the bearings, carried on from frame to frame), no more rays than a
-	// frame's share (see OPEN_RAYS), and null if that isn't enough to know yet. With `close`, only
-	// OPEN_AT's distances up to CLOSE m, with a ray along each bearing too (see SKIM), and by heights
-	// alone: whether it isn't built up (see CLOSE).
+	// after another with nothing along them within CLOSE m standing SKIM m over that surface (see
+	// SKIM), nor at any of OPEN_AT's distances along them more than RISE m over it, coloured as only
+	// dry land is or missing, and nothing SKIM m over it between them either (see FAN). Each bearing
+	// is looked along only when a run of OPEN that might be clear comes to it, from the run's far end
+	// back, and between its bearings only once they're all clear. With `round` (watchSea's: what's
+	// known so far of the bearings, carried on from frame to frame), no more rays than a frame's
+	// share (see OPEN_RAYS), and null if that isn't enough to know yet. With `close`, only OPEN_AT's
+	// distances up to CLOSE m, and by heights alone: whether it isn't built up (see CLOSE).
 	function opensOut( east, north, surface, round = null, close = false ) {
 
 		const top = surface + RISE;
 		const reach = close ? OPEN_AT.filter( distance => distance <= CLOSE ) : OPEN_AT;
 		// (Without `round`, all the rays it needs, now: a Go to's, once.)
-		round ??= { clear: [], along: [], first: 0, spread: false };
-		const { clear, along } = round;
+		round ??= { clear: [], along: [], gaps: [], fanned: [], first: 0, spread: false };
+		const { clear, along, gaps, fanned } = round;
 		const until = round.spread ? performance.now() + OPEN_MS : Infinity;
 		let cast = 0;
+		// Whether this frame's share of rays is spent (never without `round`).
+		const spent = () => round.spread && ( cast >= OPEN_RAYS || ( cast && performance.now() > until ) );
 		// Whether bearing i is clear (true or false), or null where this frame's rays ran out on it,
-		// to go on from there next time.
+		// to go on from there next time. Its rays in turn: down at each of the reach's distances, then
+		// the ray along it, SKIM m up: last, as the rays down have reached the tiles at their points
+		// first, one a ray, so that it passes through few no ray has reached (see OPEN_RAYS).
 		const isClear = i => {
 
 			const bearing = i % BEARINGS;
 			if ( clear[ bearing ] !== undefined ) return clear[ bearing ];
 			const angle = bearing / BEARINGS * Math.PI * 2;
-			// (With `close`, first the ray along it, SKIM m up: among houses that closes most bearings,
-			// each with that one ray.)
-			if ( close && skims( east, north, surface, angle ) ) return clear[ bearing ] = false;
-			for ( let k = along[ bearing ] ?? 0; k < reach.length; k ++ ) {
+			for ( let k = along[ bearing ] ?? 0; k <= reach.length; k ++ ) {
 
-				if ( round.spread && ( cast >= OPEN_RAYS || ( cast && performance.now() > until ) ) ) {
+				if ( spent() ) {
 
 					along[ bearing ] = k;
 					return null;
@@ -1156,22 +1185,52 @@ export async function start( { key, left = null, visit: token = null, worker = t
 				}
 
 				cast ++;
+				if ( k === reach.length ) return clear[ bearing ] = ! skims( east, north, surface, angle );
 				const distance = reach[ k ];
 				const at = water.under( east + Math.sin( angle ) * distance, north + Math.cos( angle ) * distance, top + GROUND_RANGE[ 1 ], GROUND_RANGE[ 1 ] + SEA_DEPTH );
 				if ( at === null || at.y > top || ( at.land && ! close ) ) return clear[ bearing ] = false;
 
 			}
 
-			return clear[ bearing ] = true;
+		};
+		// The same for between bearing i and the next: FAN rays along, as for a bearing, between them.
+		const isOpen = i => {
+
+			const gap = i % BEARINGS;
+			if ( gaps[ gap ] !== undefined ) return gaps[ gap ];
+			for ( let j = fanned[ gap ] ?? 1; j <= FAN; j ++ ) {
+
+				if ( spent() ) {
+
+					fanned[ gap ] = j;
+					return null;
+
+				}
+
+				cast ++;
+				if ( skims( east, north, surface, ( gap + j / ( FAN + 1 ) ) / BEARINGS * Math.PI * 2 ) ) return gaps[ gap ] = false;
+
+			}
+
+			return gaps[ gap ] = true;
 
 		};
 		while ( round.first < BEARINGS ) {
 
 			// A bearing that isn't clear rules out every run through it: the next run starts past it.
+			// And so does a gap between two bearings that isn't, once all the run's are clear.
 			let shut = - 1;
 			for ( let i = round.first + OPEN - 1; i >= round.first && shut < 0; i -- ) {
 
 				const known = isClear( i );
+				if ( known === null ) return null;
+				if ( ! known ) shut = i;
+
+			}
+
+			for ( let i = round.first + OPEN - 2; i >= round.first && shut < 0; i -- ) {
+
+				const known = isOpen( i );
 				if ( known === null ) return null;
 				if ( ! known ) shut = i;
 
@@ -1253,7 +1312,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 			if ( ! bed || bed.height + d.y + curve( d.east, d.north ) < bed.level - SEA_MARGIN || water.land( east, north, bed.y + 1, 2 ) ) continue;
 			// Last, and for this spot alone, as it can take dozens of rays: open to the water (a spot
 			// found closed is looked round afresh, as Google's tiles may have come in round it since).
-			seaWatch.spot = { bed, round: { clear: [], along: [], first: 0, spread: true }, open: null };
+			seaWatch.spot = { bed, round: { clear: [], along: [], gaps: [], fanned: [], first: 0, spread: true }, open: null };
 			lookRound();
 			return;
 
@@ -1345,7 +1404,10 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// lays it, or in the air over it (see ALONGSIDE), so that it's laid there for you too; and with
 	// `riding` (besideOf's: their car's own spot from there, [ east, north ] m, its wheels on
 	// something), where they're riding on that water's surface (see AT_SURFACE); or null. (Asked only
-	// with none of it round you here: with yours laid, see CLOSE.)
+	// with none of it round you here: with yours laid, see CLOSE.) The look for laying it afresh is
+	// asked first, and where it lays it the ground isn't built up either (see CLOSE), so beside a
+	// rider it comes to what the drop-in beside them does (waterBeside, which asks whether it's built
+	// up first).
 	function besideWater( east, north, y, riding = null ) {
 
 		if ( onMoon() || ! state.place ) return null;
