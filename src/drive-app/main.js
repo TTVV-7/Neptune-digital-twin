@@ -141,19 +141,21 @@ const SEA_MARGIN = 1.5;
 // a time, and only as far as it needs: a bearing that isn't clear rules out every run of OPEN
 // through it. And it's spread over frames. A tile's first ray builds its bounding volume hierarchy
 // (src/raycast.js: on a mesh the size of a tile, in Chromium here, 3 ms for 10,000 triangles and
-// 28 ms for 80,000), and these rays reach out 150 m round a spot up to 60 m ahead, to tiles no other
-// ray has reached: all 96 in one frame could have held it up for a second just as the vehicle came
-// to the sea. So no frame casts more than OPEN_RAYS of them, nor any more once they've taken OPEN_MS
-// (ms) in it: a quarter of a frame at 60 a second, or the one tile's hierarchy that took longer, as
-// driving onto a new tile does anyway. What's known of the spot's bearings is kept (seaWatch's
-// spot) and the look round it carried on each frame after, as long as the spots the looks find stay
-// in the same OPEN_CELL m square, and the surface is laid as soon as it's known to be open.
+// 29 ms for 80,000), and these rays reach out 150 m round a spot up to 60 m ahead, to tiles no other
+// ray has reached (those 3d-tiles-renderer keeps for rays out of view too, the siblings of those in
+// it): all 96 in one frame could have held it up for seconds just as the vehicle came to the sea.
+// So no frame casts more than OPEN_RAYS of them, nor any more once they've taken OPEN_MS (ms) in
+// it: a quarter of a frame at 60 a second, or the one tile's hierarchy that took longer, as driving
+// onto a new tile does anyway. What's known of the spot's bearings is kept (seaWatch's spot) and
+// the look round it carried on each frame after till it's known, whatever spots the looks in the
+// meantime would find ahead, and the surface is laid as soon as it's known to be open. (Begun
+// afresh round each newer spot instead, 7 m on at each look at 100 km/h, its rays reached tiles new
+// to them out at its edge every time, and at 20 frames a second it was often never done.)
 const OPEN = 5;
 const OPEN_AT = [ 25, 50, 75, 100, 125, 150 ];
 const RISE = 1;
 const OPEN_RAYS = 12;
 const OPEN_MS = 4;
-const OPEN_CELL = 10;
 // Beside another driver out on the water's surface where Google draws the bed (laid by their
 // watchSea), or in the air over it (a hop, a trick, flying), Go to or Join puts you on that surface
 // with them, not on the bed under them: where they're no more than ALONGSIDE m under the water's
@@ -300,7 +302,10 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// for it to load (setWorld).
 	const lastLook = { earth: null, moon: null };
 	let switching = null;
-	const grounds = () => onMoon() ? [ moon.terrain ] : sea.shown ? [ tiles ? tiles.group : pad, sea.mesh ] : [ tiles ? tiles.group : pad ];
+	// What's driven on: the Moon's ground, or Google's tiles (or the test pad) and the sea's surface
+	// where it's round the vehicle, unless that's left out for a moment (`bare`: underSea).
+	let bare = false;
+	const grounds = () => onMoon() ? [ moon.terrain ] : sea.shown && ! bare ? [ tiles ? tiles.group : pad, sea.mesh ] : [ tiles ? tiles.group : pad ];
 	const globe = new GlobeView( { camera, canvas, earth, surface: earth, ellipsoid, pin: $( 'pin' ) } );
 	scene.add( globe.air );
 	// The globe as each world has it (GlobeView.setBody).
@@ -1078,8 +1083,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// Each frame while driving on the Earth with none of sea.js's water round the vehicle: every
 	// SEA_EVERY s, whether the ground under it or ahead of it along its way is the bed of the sea or a
 	// big lake, out past where Google draws the water's surface, and if so the surface laid there
-	// (see SEA_MARGIN and OPEN); and in the frames between, the look round the spot found carried on
-	// (see OPEN_RAYS). The Moon has no water.
+	// (see SEA_MARGIN and OPEN); and while the look round the spot found isn't done, that carried on
+	// in each frame instead (see OPEN_RAYS). The Moon has no water.
 	function watchSea( dt ) {
 
 		if ( onMoon() || ! driver.active || sea.shown || ! state.place ) {
@@ -1090,13 +1095,20 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		}
 
 		seaWatch.in -= dt;
-		if ( seaWatch.in > 0 ) {
+		// Till it's known whether the spot found is open to the water (or the vehicle's gone too far
+		// down under that water for it), it's looked round and nothing else is looked at. Looks in the
+		// meantime would find newer spots farther on, but those are the bed of the same water, some
+		// metres along the way, and laid round the first the surface is the same one: sea.js lays it
+		// kilometres round, and again round the vehicle as it goes. Then the next look, at once if
+		// it's due.
+		if ( seaWatch.spot?.open === null ) {
 
-			if ( seaWatch.spot?.open === null ) lookRound();
+			lookRound();
 			return;
 
 		}
 
+		if ( seaWatch.in > 0 ) return;
 		seaWatch.in = SEA_EVERY;
 		const d = driver;
 		// Under it, and ahead along its way: forward, or back while it reverses.
@@ -1111,12 +1123,9 @@ export async function start( { key, left = null, visit: token = null, worker = t
 			// water would be over it; nor over ground coloured as dry land (its colour only now: a ray
 			// more, and a tile's picture copied the first time).
 			if ( ! bed || bed.height + d.y + curve( d.east, d.north ) < bed.level - SEA_MARGIN || water.land( east, north, bed.y + 1, 2 ) ) continue;
-			// Last, and for this spot alone, as it can take dozens of rays: open to the water. Carried on
-			// from what's known of the spot the last look found, if it's in the same square and not
-			// known yet; else afresh (a spot found closed is looked round again, as Google's tiles may
-			// have come in round it since).
-			const cell = `${ Math.round( east / OPEN_CELL ) } ${ Math.round( north / OPEN_CELL ) }`;
-			if ( seaWatch.spot?.cell !== cell || seaWatch.spot.open !== null ) seaWatch.spot = { cell, bed, round: { clear: [], along: [], first: 0, spread: true }, open: null };
+			// Last, and for this spot alone, as it can take dozens of rays: open to the water (a spot
+			// found closed is looked round afresh, as Google's tiles may have come in round it since).
+			seaWatch.spot = { bed, round: { clear: [], along: [], first: 0, spread: true }, open: null };
 			lookRound();
 			return;
 
@@ -1203,12 +1212,34 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// Beside another driver whose car is at ( east, north, y ) in the scene (moveCar's): bedAt's
 	// { ... } there, for sea.start, where they're out on the water's surface over its bed as watchSea
 	// lays it, or in the air over it (see ALONGSIDE), so that it's laid there for you too; or null.
+	// Where the surface is laid here already, it's the ground under it that's looked at.
 	function besideWater( east, north, y ) {
 
-		if ( onMoon() || ! state.place || sea.shown ) return null;
-		const bed = bedAt( east, north, y + 4 );
-		if ( ! bed || bed.height + y + curve( east, north ) < bed.level - ALONGSIDE ) return null;
-		return water.land( east, north, bed.y + 1, 2 ) || ! opensOut( east, north, bed.surface ) ? null : bed;
+		if ( onMoon() || ! state.place ) return null;
+		return underSea( () => {
+
+			const bed = bedAt( east, north, y + 4 );
+			if ( ! bed || bed.height + y + curve( east, north ) < bed.level - ALONGSIDE ) return null;
+			return water.land( east, north, bed.y + 1, 2 ) || ! opensOut( east, north, bed.surface ) ? null : bed;
+
+		} );
+
+	}
+
+	// What `look` finds with the sea's surface round the vehicle left out of the ground: the ground
+	// itself under it (Google's tiles, or the test pad).
+	function underSea( look ) {
+
+		bare = true;
+		try {
+
+			return look();
+
+		} finally {
+
+			bare = false;
+
+		}
 
 	}
 
@@ -1448,8 +1479,9 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		if ( here() && spot.local.length() < GO_NEAR ) {
 
 			// (Whether they're out on the water, or over it however high, needs the sea's height and
-			// the map, where the ground under them is low enough to be its bed: bedAt asks for them.)
-			bedAt( - spot.local.x, spot.local.z, spot.local.y + 4 );
+			// the map, where the ground under them, under any of the sea laid here, is low enough to be
+			// its bed: bedAt asks for them.)
+			underSea( () => bedAt( - spot.local.x, spot.local.z, spot.local.y + 4 ) );
 			if ( seaWatch.asked ) await seaWatch.asked;
 			if ( here() && moveCar( spot ) ) return;
 
@@ -1461,7 +1493,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	}
 
 	// GO_BESIDE m to the right of another driver's car, from the last word of it (or where they
-	// dropped in): { lat, lon, height, heading, local: in this scene }.
+	// dropped in), level with it: { lat, lon, height, heading, local: in this scene }.
 	function besideOf( other ) {
 
 		earth.updateWorldMatrix( true, false );
@@ -1476,16 +1508,26 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 		const [ x, y, z, qx, qy, qz, qw ] = other.s;
 		_q.set( qx, qy, qz, qw );
-		_p.set( x, y, z ).add( _side.set( 1, 0, 0 ).applyQuaternion( _q ).multiplyScalar( GO_BESIDE ) );
+		_p.set( x, y, z );
 		const carto = {};
+		ellipsoid.getPositionToCartographic( _p, carto );
+		// Their heading, from the way they face along the ground there (east and north).
+		const [ sinLat, cosLat, sinLon, cosLon ] = [ Math.sin( carto.lat ), Math.cos( carto.lat ), Math.sin( carto.lon ), Math.cos( carto.lon ) ];
+		_ahead.set( 0, 0, - 1 ).applyQuaternion( _q );
+		const east = - sinLon * _ahead.x + cosLon * _ahead.y;
+		const north = - sinLat * cosLon * _ahead.x - sinLat * sinLon * _ahead.y + cosLat * _ahead.z;
+		const turn = Math.atan2( east, north );
+		const heading = MathUtils.euclideanModulo( turn * MathUtils.RAD2DEG, 360 );
+		// To the right of that heading along the ground (east and north there), at their height: not
+		// along their car's own side, which in a barrel roll points down (at the bed, under the water
+		// they're over) or up.
+		const [ right, ahead ] = [ Math.cos( turn ) * GO_BESIDE, - Math.sin( turn ) * GO_BESIDE ];
+		_p.x += - sinLon * right - sinLat * cosLon * ahead;
+		_p.y += cosLon * right - sinLat * sinLon * ahead;
+		_p.z += cosLat * ahead;
 		ellipsoid.getPositionToCartographic( _p, carto );
 		const lat = carto.lat * MathUtils.RAD2DEG;
 		const lon = carto.lon * MathUtils.RAD2DEG;
-		// Their heading, from the way they face along the ground there (east and north).
-		_ahead.set( 0, 0, - 1 ).applyQuaternion( _q );
-		const east = - Math.sin( carto.lon ) * _ahead.x + Math.cos( carto.lon ) * _ahead.y;
-		const north = - Math.sin( carto.lat ) * Math.cos( carto.lon ) * _ahead.x - Math.sin( carto.lat ) * Math.sin( carto.lon ) * _ahead.y + Math.cos( carto.lat ) * _ahead.z;
-		const heading = MathUtils.euclideanModulo( Math.atan2( east, north ) * MathUtils.RAD2DEG, 360 );
 		return { lat, lon, height: carto.height, heading, local: _p.clone().applyMatrix4( earth.matrixWorld ) };
 
 	}
@@ -1496,15 +1538,17 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// put it on, and it's a drop-in instead (which finds the street). Out on the water's surface where
 	// Google draws the bed, or in the air over it, with none of it laid here, it's laid there first
 	// (see ALONGSIDE); and with them higher over the water's surface laid here than that (a hop, a
-	// trick, flying), it's on that surface under them, where nothing's between (not a bridge's deck).
+	// trick, flying), it's on that surface under them, where nothing's between (not a bridge's deck)
+	// and the ground under them is that bed, laid here just now or before: not a city's streets under
+	// the sea within the reach of a surface laid before, which it would be over too.
 	function moveCar( { local, heading } ) {
 
 		// (A look round a spot where the car was is no longer of any use.)
 		seaWatch.spot = null;
-		const out = besideWater( - local.x, local.z, local.y );
+		const out = sea.shown ? null : besideWater( - local.x, local.z, local.y );
 		if ( out ) sea.start( out );
 		let y = ground.heightAt( local.x, local.z, local.y + 3, 6 );
-		if ( y === null && sea.shown ) {
+		if ( y === null && sea.shown && ( out || besideWater( - local.x, local.z, local.y ) ) ) {
 
 			const hit = ground.cast( _p.set( local.x, local.y + 3, local.z ), _side.set( 0, - 1, 0 ), SEA_DEPTH );
 			if ( hit?.object === sea.mesh ) y = hit.point.y;
@@ -1804,7 +1848,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 		},
 		moon, setWorld,
-		dropIn, toGlobe, resume, recentre, waterOver, watchSea, moveCar,
+		dropIn, toGlobe, resume, recentre, waterOver, watchSea, moveCar, besideOf,
 		where: () => formatLatLon( carto.lat * MathUtils.RAD2DEG, carto.lon * MathUtils.RAD2DEG ),
 	};
 
