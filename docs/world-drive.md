@@ -235,8 +235,9 @@ the field of view). The bursts in the world stay. A visitor whose system asks fo
 (`prefers-reduced-motion`) has none of those whatever the switch says, and fewer flashes: no flare
 as the booster lights nor in overdrive's boom, whose rings are fainter (0.6 as bright); no flash of
 a style's own as it lights (its `ignite` is told `calm`): no bright core to the galaxy's burst, no
-flare to the comet's, no flashes at the ends of lightning's forks nor in the fireworks' starburst,
-the neon laser's starburst half as many beams and dim (0.35 as bright), and its hoop and the
+flare to the comet's, no flashes at the ends of lightning's forks nor in the fireworks' starburst
+and the bursts of the three rockets lit with it (their sparks are all there), the neon laser's
+starburst half as many beams and dim (0.35 as bright), and its hoop and the
 afterburner's shock ring fainter (0.6); the vehicle not lit up on a pad, and the gauge glowing
 steadily when it's full rather than pulsing, and flashing once as it runs dry. Overdrive's 9° wider view is as it was, either way. On a
 touch screen the bursts have 60 % of their sparks (and most styles' own bursts as they light fewer
@@ -276,7 +277,13 @@ back at a stop, settling back level, nothing made in a dozen ignitions and the b
 effects going with a pause and made again; every boost style lighting with a burst of its own and
 streaming its particles while it boosts, as a phone has it (no more, and fewer for the newer ones)
 and for a visitor asking for less motion (no more, and fewer for the galaxy, the comet, lightning,
-the fireworks and the neon laser, whose flashes are left out or thinned); the speed
+the fireworks and the neon laser, whose flashes are left out or thinned); the flame's cone, core and
+glow drawn in the order they were made from behind it and from all round it (the red flame's and the
+galaxy's too), and their bounds holding all of the flame on rides from a little one to a bus; the
+fireworks' first half second, their starburst and three rockets bursting into 56 sparks round four
+flashes, and for a visitor asking for less motion into the same sparks with no flash; the neon
+streak behind the kart pinned against a wall, boosting with W held, laid in one spot rather than
+drawn out as on the Garage's turntable; the speed
 lines thickening with speed and going, overdrive's white edges, the gauge pulsing, flashing and
 refilling; the switch turning it all off,
 kept across a reload, and on again; asking for less motion; the sonic boom's rings keeping up with
@@ -2119,7 +2126,15 @@ else locked goes back to its free choice. The flames' cones and glow are added t
 them, so they glow, but the red flame's outer cone and glow (and the galaxy's violet flame's) are
 drawn over it, the cone with a red-hot core (the galaxy's a violet one) added to it: added to a
 bright sky or a grey road, a red only ever came out salmon, between the orange and the pink, and
-the galaxy's flame white with a violet edge (`DEEP` in `drive-fx.js`, a style's `deep`).
+the galaxy's flame white with a violet edge (`DEEP` in `drive-fx.js`, a style's `deep`). Drawn over
+what's behind them, the order matters: three.js draws see-through things farthest first, a mesh by
+the middle of its bounds and a sprite (the glow) by where it is, so with bounds of their own the
+outer cone, whose middle is half its length back, would be drawn last from behind, over the core,
+hiding most of it, and the look would change as the turntable turned. Both cones' bounds are a ball
+round the exhaust, where the glow is (still round all of the cone however it's stretched, so it's
+never left out of view while any of it is on screen), so the three are as far from the camera from
+any side, and three.js draws them in the order they were made: the cone, the core over it and the
+glow over both.
 
 Each style is one batch of quads drawn from one picture sheet, in one draw call (dragon fire and
 spooky two: their glowing parts are added to what's behind, their tongues of fire, smoke and ghosts
@@ -2161,11 +2176,13 @@ keeps its own materials, so the kart nobody has painted is just as it was. The t
 pool of sprites (smoke, sparkles, fire's tongues, recoloured from gold to red as they cool, and the
 shooting stars, turning as they fly) or one ribbon whose buffers are rewritten in place (the
 rainbow's six bands, or the neon streak's two lines of light off the back corners, each a white core
-in a glow of cyan or pink), nothing made each frame. A ribbon is laid as the ride goes, so standing
-still, as on the turntable (which turns the ride but never moves it), it would fold up into a short
-arc behind it: there its points are carried back out of the ride's back as if it drove on, at 2.5
-of its lengths a second (`RIBBON_SHOW`), so it's drawn out as on the road, curving away as the
-turntable turns; moving (over 5 cm a second), it's as it was. On the
+in a glow of cyan or pink), nothing made each frame. A ribbon is laid as the ride goes, so on the
+turntable (which turns the ride but never moves it) it would fold up into a short arc behind it:
+there (the Garage tells the effects so, `preview`) its points are carried back out of the ride's
+back as if it drove on, at 2.5 of its lengths a second (`RIBBON_SHOW`), so it's drawn out as on the
+road, curving away as the turntable turns. Anywhere else it's as it was: stopped on the road (pinned
+against a wall while boosting, hovering at the flying ceiling, a ghost standing still), it isn't
+going anywhere, and folds up behind it. On the
 test pad (software rendering in the test's browser), the booster's flame made a frame about 7 %
 slower and a trail behind it a few per cent more again; the driving and its effects took 0.2 to
 0.3 ms a frame with or without them. While the Garage is open the world behind it isn't drawn (its
@@ -2197,9 +2214,9 @@ turning in the air faster than the kart, each ride going supersonic, the boost s
 "Lv 12 · or Pass" for those on the track), a look saved before the styles keeping its flame's colour,
 every style drawn at 150 km/h (with a picture of each), making nothing new in a minute of boosting
 and timed, every flame colour drawn in its own colours and every trail drawn (seen from behind and
-off to the side, a good deal more than the flame alone), the ribbons drawn out standing still as on
-the turntable (more than 3 m behind a 2 m ride in three quarters of a second) and as they were
-moving, and the Garage (375 px across, its row of
+off to the side, a good deal more than the flame alone), the ribbons drawn out on the turntable
+(more than 3 m behind a 2 m ride in three quarters of a second) and as they were standing still
+anywhere else and moving, and the Garage (375 px across, its row of
 groups all on screen, no sideways scrolling, Trail lit when it's tapped and the one in view once a
 finger drags the list back) and the locked rides' badges (and the levels' cars'
 "Lv 8 · or Pass") on a phone. `test-drive-ui.mjs` drives the kart with an underglow (on the ground

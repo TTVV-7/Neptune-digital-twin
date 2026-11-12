@@ -884,9 +884,9 @@ export class Batch {
 // in (see drive-bursts.js); and make( root ), its batches, update( frame ) and ignite( frame,
 // detail, calm ): a burst of its own as the booster lights, `detail` of its usual count (fewer on a
 // phone), with no flash of its own when `calm` (the visitor asked for less motion): no flare, bright
-// core or flash at a bolt's end, and any starburst or ring fainter. What a style does each frame is
-// made once, in make(), so a frame makes nothing new; an ignition reuses its particles, the oldest
-// first.
+// core or flash at a bolt's end or in a rocket's burst, and any starburst or ring fainter. What a
+// style does each frame is made once, in make(), so a frame makes nothing new; an ignition reuses
+// its particles, the oldest first.
 
 // Particles emitted at `rate` a second (times power), spread along the exhaust's path this frame
 // so a fast vehicle doesn't leave them in clumps a frame apart. fn( k ) sets each up, `k` from 0 (a
@@ -1595,11 +1595,13 @@ const STYLES = {
 				flash.colour.set( colour );
 
 			};
+			// A rocket (kind 1, or 3 for one of a calm ignition's salvo, which bursts without its flash)
+			// bursts as it dies; its sparks (2) twinkle out.
 			const hooks = {
-				died: p => p.kind === 1 && burst( p ),
+				died: p => ( p.kind === 1 || p.kind === 3 ) && burst( p, p.kind === 1 ),
 				look( p, t, view ) {
 
-					if ( p.kind === 1 ) view.alpha = 1;
+					if ( p.kind === 1 || p.kind === 3 ) view.alpha = 1;
 					// Sparks twinkle as they go out.
 					else if ( p.kind === 2 && t > 0.5 ) view.alpha *= 0.5 + 0.5 * Math.sin( p.age * 50 + p.phase );
 
@@ -1616,8 +1618,8 @@ const STYLES = {
 					batch.update( frame.dt, hooks );
 
 				},
-				// Lit: a starburst right at the exhaust (without its flash for a visitor asking for less
-				// motion), and a salvo of three rockets that burst just over it.
+				// Lit: a starburst right at the exhaust, and a salvo of three rockets that burst just over
+				// it (all without their flashes for a visitor asking for less motion).
 				ignite( frame, detail, calm ) {
 
 					f = frame;
@@ -1636,7 +1638,7 @@ const STYLES = {
 						p.size = 0.12 * frame.scale;
 						p.colour.set( 0xfff0c0 );
 						p.fall = 0.6;
-						p.kind = 1;
+						p.kind = calm ? 3 : 1;
 
 					}
 

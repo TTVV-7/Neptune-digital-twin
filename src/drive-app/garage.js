@@ -643,7 +643,7 @@ function createPreview( canvas, models, getVehicle, onPaintable, effects ) {
 			// Run dry at the end of the show, as the booster does.
 			if ( lit && demo <= 0 ) fx.cool();
 			lit = demo > 0;
-			fx.update( { pivot: model, size, wheels, velocity: still, flame: demo > 0 ? 1 : 0, trail: demo > 0 ? 1 : 0, drifting: false, level: 0, grounded: true, dt } );
+			fx.update( { pivot: model, size, wheels, velocity: still, flame: demo > 0 ? 1 : 0, trail: demo > 0 ? 1 : 0, drifting: false, level: 0, grounded: true, preview: true, dt } );
 
 		}
 
