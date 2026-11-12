@@ -242,8 +242,10 @@ export function createSea( { scene } ) {
 	let level = 0;
 	let over = 0;
 	let laid = null;
-	// Which of the map's squares are its water's (see REACH), or null where it's kept wherever.
+	// Which of the map's squares are its water's (see REACH), or null where it's kept wherever. The
+	// big lake (lakes.js's) whose surface it is, or null for the sea's.
 	let ours = null;
+	let ownLake = null;
 
 	// Laid round ( east, north ), in the scene: each point where the water is over that point of the
 	// Earth, under the scene's flat frame (the Earth curving away from the place the scene is centred
@@ -314,6 +316,13 @@ export function createSea( { scene } ) {
 
 		},
 
+		// Whose water it is while it's active: the big lake's (lakes.js's), or null for the sea's.
+		get lake() {
+
+			return ownLake;
+
+		},
+
 		// The sea, with the scene centred on { lat, lon } (degrees), whose height over the ellipsoid
 		// (m) is the scene's y = 0 there; or `lake`'s surface (lakes.js's), `over` m over the sea's
 		// height. Laid round ( east, north ) in the scene, where its water was found: the place
@@ -325,6 +334,7 @@ export function createSea( { scene } ) {
 			place = { lat, lon };
 			level = height;
 			over = rise;
+			ownLake = lake;
 			const mine = lake ? at => at?.kind === 'lake' && at.lake === lake : at => at?.kind === 'sea' || at?.kind === 'coast';
 			const found = localToLatLon( enuToLocal( east, north, 0 ), place );
 			ours = mine( waterAtNow( found.lat, found.lon ) ) ? mine : null;
@@ -363,6 +373,7 @@ export function createSea( { scene } ) {
 
 			place = null;
 			ours = null;
+			ownLake = null;
 			mesh.removeFromParent();
 
 		},
