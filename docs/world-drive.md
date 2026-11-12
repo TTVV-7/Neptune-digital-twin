@@ -852,24 +852,66 @@ of the way they're heading, along the ground, at their height (`besideOf`): not 
 own side, which mid barrel roll points down at the bed, or up. (Until 12 November 2026 it was along
 that side, and beside a car rolled onto its side 3 m over the surface, the bed 2 m under it, you
 were put on the bed; with the bed 7 m under, the drop-in beside them started on it.) Their height
-is what says they're out there: where it's no more than 1 m under the water's surface there (the
-sea's, on the sea or a coast; a big lake's, in a square all of which is the lake), however high
-over it, as the look above lays it for a vehicle at any height over it, and the ground under them
-is the bed as above (more than 1.5 m under that surface, or 15 m under a lake's; not coloured as dry
-land; open to the water round it), the surface is laid there for you too: in this scene (within
-10 km), before your car is put beside them, on the ground within 3 m under them as anywhere, or else
-on that surface under them, at its height, where nothing's in between (a bridge's deck, say: then
-it's a drop-in, as anywhere there's no ground within 3 m under them) and the ground under them is
-that bed, looked at under the surface where it's laid in your scene already; farther off, for the
-drop-in beside them, which otherwise starts on a bed less than 15 m under the sea, as any drop-in
-does ([the open sea](#the-open-sea)). Before, you were put on the bed under them, 1.5 to 15 m down,
-and stayed on it, too low for the surface to be laid as you drove on; until 12 November 2026 that
-was so for anyone more than 1 m over the surface too, even a hop. Over a city's streets under the
-sea (below) nothing is laid, however high they are, and you're put on the street: with your own
-surface already laid over those streets (as it is within its reach once it's laid:
-[known limits](#known-limits)), not on it under someone flying over them, since the ground under
-them isn't the open water's bed, but by a drop-in beside them, which starts on the street. (Until
-12 November 2026 you were put on that surface among the houses.) A pin, a search or a start spot
+is what says they're out there: no more than 1 m under the water's surface there (the sea's, on the
+sea or a coast; a big lake's, in a square all of which is the lake), however high over it, as the
+look above lays it for a vehicle at any height over it. Then:
+
+- **With none of that surface laid in your scene**, it's laid there for you where the ground under
+  them is the bed as above (more than 1.5 m under that surface, or 15 m under a lake's; not coloured
+  as dry land; open to the water round it): in this scene (within 10 km), before your car is put
+  beside them, on the ground within 3 m under them as anywhere, or else on that surface under them,
+  at its height, where nothing's in between (a bridge's deck, say: then it's a drop-in, as anywhere
+  there's no ground within 3 m under them); farther off, for the drop-in beside them, which
+  otherwise starts on a bed less than 15 m under the sea, as any drop-in does
+  ([the open sea](#the-open-sea)). Before, you were put on the bed under them, 1.5 to 15 m down, and
+  stayed on it, too low for the surface to be laid as you drove on; until 12 November 2026 that was
+  so for anyone more than 1 m over the surface too, even a hop. Elsewhere it isn't laid, and you
+  start where a pin would: over a city's streets under the sea (below), however high they are, on
+  the street; over a big lake's shelf less than 15 m under it, a bed coloured as sand or one closed
+  in on most sides (an inlet, a harbour's mouth), on that bed, under the water
+  ([known limits](#known-limits)).
+- **With your own surface laid already**, those checks aren't asked: they're for laying it afresh,
+  and it's over all of that water's ground under its height anyway, as you'd drive on it there.
+  Beside someone flying over that water (on the map, a square of the sea or a coast for the sea's
+  surface, one all of which is the lake for a lake's: not a hollow inland), with nothing in between,
+  you're put on it under them whatever the ground under it is: a big lake's shelf less than 15 m
+  under it, a bed coloured as sand, the bed of an inlet or of a harbour's mouth between its moles.
+  Only not where that ground is built up, as a city's streets under the water behind its levee are:
+  closed in close by on every quarter of the way round, with no five bearings of 16 one after
+  another with nothing at 25, 50 or 75 m along them standing more than 1 m over the surface (or
+  missing).
+  It goes by heights alone, as a sandy bed is coloured as a polder's fields are. Houses either side
+  of a street close all but the bearings along it that near; banks or moles 160 m or more apart
+  don't, out over the water between them. Over those streets it's a drop-in beside them, which
+  starts on the street. (Until 12 November 2026 you were put on that surface among the houses; then
+  for a while the checks for laying it afresh were asked with yours laid too, so beside someone
+  flying over a lake's shelf, a sandy bed or between a harbour's moles it was a drop-in as well, and
+  that started on the bed under the water.)
+- **Joined from farther off** (more than 10 km, a drop-in), with your surface laid when you left,
+  goTo says whose water it was (the sea's, or which lake's), and beside someone over that same water
+  the drop-in starts on its surface by the same rule: the ground under the pin more than 1.5 m under
+  it and not built up, as you'd have driven onto it there. From the globe or the Moon you have none
+  laid, and it's as for none above: beside someone flying over a lake's shelf, the drop-in starts on
+  the shelf.
+
+What that still gets wrong, with your surface laid: open ground under the water's height with
+nothing standing on it within 75 m (a polder's fields, a park, a wide car park behind a levee)
+isn't built up, so beside someone flying over it you're put on the surface over it, as you would be
+driving on it there; a channel less than about 120 m wide between banks or moles standing over the
+water is closed in close by over some or all of it, as a street is (below), so beside someone
+flying over that it's a drop-in, which starts on its bed if Google draws that more than 1.5 m under
+the water (water that narrow it mostly draws as water, at its height, which the drop-in starts
+on); and among the test pad's houses, 30 of the 2,607 spots under the sea looked at every 5 m (in
+a street 25 m from a crossing, where a bearing runs down the crossing street, through a yard and on
+into the next street) were open enough, and beside someone flying over one of them you were put on
+the surface among the houses. Measured on the test pad, beside someone flying 20 m over spots
+every 2 m across a channel between two banks standing 5 m over the sea, out over the coast's bed
+7 m under it: across one 160 m or 200 m wide, every spot was put on the surface; 120 m wide, all but
+one of 30 (8 m off its middle); 100 m wide, the half nearer its banks (in its middle both banks are
+within 75 m on the bearings across it); 80 m wide, 2 of 20, by a bank; 60 m or narrower, none. It's
+at most 48 rays, once a Go to: 7 to 33 there and on the streets, taking 0.1 to 26 ms, but 1.8 s for
+the first in the page, which copied the streets' picture (the rays read each hit's colour, though
+it isn't asked here: 0.7 ms at most for a picture of Google's). A pin, a search or a start spot
 isn't anyone's height, and drops in as before.
 
 **Tested** on the test pad (`npm run test:drive-ui`), not on Google's tiles: in Santa Monica Pier's
@@ -899,19 +941,28 @@ driven on it stayed on it; so did Go to beside one 1.5 m over the surface (the b
 side 3 m over the surface (the bed 2 m or 7 m under it), its own side pointing down or up, the spot
 was 5 m to the right of its heading at its height, as beside one not rolled, and the kart was put on
 the surface there, laid; and with the surface laid already, beside one flying 20 m over the bed, on
-it under them. Beside one at the sea's height in New Orleans' street it put the kart on the street,
-laying nothing; beside one flying 20 m over that street it laid nothing and found no ground in reach
-(so it would be a drop-in), and so too with the surface already laid over the street; and the
-drop-in beside them, with the street under the pin 2.5 m under the sea among those houses, started
-on the street with nothing laid. A drop-in beside a driver at the sea's height, the pad 7 m under it
-in the sea's colour, started on the surface, and so did one beside a driver 3 m and 20 m over it; a
-pin at that height started on the pad, 7 m under it. The look round a spot was spread over frames
-(above): off the pier, its 36 rays over three or four frames, never more than 12 in one, in the
-page's own frames driven with the keyboard too; past the houses behind a beach, forward and
-reversing, and down New Orleans' street, never more than 12 a frame; with the first ray into each
-25 m square 5 ms slower, one of those a frame, and laid 7 m later, before the kart was under; and
-so at 100 km/h and 20 frames a second, the look falling at five points in its quarter of a second,
-laid every time with the kart still on Google's water.
+it under them. With it laid already, so too beside one flying 5 m or 20 m over the same bed
+coloured as sand, 7 m and 13 m under the surface, and over the bed as far under it between two moles
+160 m apart running out from the shore, standing 5 m over the sea (closed in on most sides within
+150 m, which the look never lays a surface over); with the moles 40 m apart it found no ground in
+reach (a drop-in), nor over a hollow as far under the sea 8 km inland (land on the map). In Lake
+Baikal's square, its surface laid by a drop-in, beside one flying 5 m or 20 m over a shelf 10 m
+under it, the kart was put on the surface under them, as over its bed 200 m down; joined from 12 km
+off with that surface the kart's own, the drop-in beside one flying 20 m over such a shelf started
+on the surface, and from the globe, with none laid, on the shelf. Beside one at the sea's height in
+New Orleans' street it put the kart on the street, laying nothing; beside one flying 3.5 m, 20 m or
+200 m over that street it laid nothing and found no ground in reach (so it would be a drop-in), and
+so too with the surface already laid over the street; and the drop-in beside them, with the street
+under the pin 2.5 m under the sea among those houses, started on the street with nothing laid,
+with the kart's own sea's surface laid when it left or not. A drop-in beside a driver at the sea's
+height, the pad 7 m under it in the sea's colour, started on the surface, and so did one beside a
+driver 3 m and 20 m over it; a pin at that height started on the pad, 7 m under it. The look round
+a spot was spread over frames (above): off the pier, its 36 rays over three or four frames, never
+more than 12 in one, in the page's own frames driven with the keyboard too; past the houses behind
+a beach, forward and reversing, and down New Orleans' street, never more than 12 a frame; with the
+first ray into each 25 m square 5 ms slower, one of those a frame, and laid 7 m later, before the
+kart was under; and so at 100 km/h and 20 frames a second, the look falling at five points in its
+quarter of a second, laid every time with the kart still on Google's water.
 Without the map, off Santa Monica Pier, the kart drove on down the slope.
 
 ## The Moon
@@ -3348,8 +3399,10 @@ kart in a hollow under it, and a big lake's only over its bed 15 m under it; New
 under the sea behind its levee, among houses, driven into, flown over and started in, never, nor
 beside someone flying over them, even with the surface already laid; Go to beside a driver out on
 the sea's surface, or hopping, flying or rolled onto their side over it (beside them at their
-height), in the scene and by a drop-in, on it with them; without the map, only the deep
-sea), the used-up,
+height), in the scene and by a drop-in, on it with them; with the surface laid, beside someone
+flying over Lake Baikal's shelf, a sandy bed or the bed between a harbour's moles, on it with them,
+and by a drop-in from 12 km off over that shelf too, but not between moles a street's width apart
+nor over a hollow inland; without the map, only the deep sea), the used-up,
 robot-check and getting-ready screens, the visit asked for only once the game's code is here (a
 download that fails, and its Try again, spend none; a script that breaks is told from a dropped
 connection, and logged), a Turnstile script that never comes ending on the robot check's screen at
@@ -3512,9 +3565,9 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   you're too low for the water's surface to be laid as you drive on
   ([out from a coast](#out-from-a-coast)): it would be over you, so you drive on along the bed. (Go
   to or Join beside someone out on that surface, or in the air over it, is the exception: you're put
-  on it with them.) The other way, land more than 15 m under the sea in a coast's square with nothing
-  over the sea's height within 150 m of it (the middle of a wide pit dug by a coast) would still
-  start on the sea's surface.
+  on it with them, though not everywhere: below.) The other way, land more than 15 m under the sea
+  in a coast's square with nothing over the sea's height within 150 m of it (the middle of a wide
+  pit dug by a coast) would still start on the sea's surface.
 - Driven or flown out from a coast ([out from a coast](#out-from-a-coast)), the sea's surface is
   laid where the ground is more than 1.5 m under its height, not coloured as dry land and open to the
   water round it, which doesn't tell the bed from Google's own water more than 1.5 m under EGM96's
@@ -3538,8 +3591,8 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   and drive on along the bed. Once it's laid it covers a polder's streets within its reach too
   (below): Go to or Join beside someone riding on it there puts you on the streets under them where
   it isn't laid in your scene, and on it where it is (beside someone flying over those streets,
-  though, it's a drop-in beside them, onto the street: the ground under them isn't the open water's
-  bed). The look round a spot to see that it's open is spread over frames, at most 12 rays and about
+  though, it's a drop-in beside them, onto the street, as the houses close them in: next). The look
+  round a spot to see that it's open is spread over frames, at most 12 rays and about
   4 ms a frame, and carried on till it's known; on Google's tiles its rays may be the first into
   dozens of tiles, each building its hierarchy in a frame of its own, so it may be known open a
   second or more after it's first looked at (as a model, if all 96 of its rays were needed, falling
@@ -3551,6 +3604,26 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   36° across while driving, 46 to 62 of the 96 rays' places, as modelled) is looked along on
   ground drawn with less detail, its levees, quays and houses smoothed, which may find it clear
   where finer tiles wouldn't, or the other way. None of it was tried on Google's tiles.
+- Go to or Join beside someone over the water ([beside another driver](#out-from-a-coast)) goes by
+  what can be seen of the ground under them, which doesn't always say what it is. With none of that
+  water's surface laid in your scene, it's laid for you only where the look above would lay it
+  afresh, so beside someone over a big lake's shelf less than 15 m under it, a bed coloured as sand
+  or one closed in on most sides (an inlet, a harbour's mouth), riding on their own surface or
+  flying over it, you start on that bed under the water, as a pin there does, and stay on it: from
+  the globe, from the Moon, or with none laid where you are. With yours laid (in your scene, or over
+  the same water when you left, for a drop-in), you're put on it under someone flying over that
+  water wherever the ground under them isn't built up, told by heights alone within 75 m, which gets
+  three things wrong: open ground under the water's height with nothing standing on it that near (a
+  polder's fields, a park, a wide car park behind a levee) gets the surface over it, as you'd drive
+  on it there; a channel less than about 120 m wide between banks or moles standing over the water
+  is closed in over some or all of it, as a street among houses is, so beside someone flying over
+  that it's a drop-in, which starts on its bed if Google draws that more than 1.5 m under the water
+  (water that narrow it mostly draws as water, at its height); and among the test pad's houses, 30
+  of 2,607 spots under the sea (in a street 25 m from a crossing) were open enough, so beside
+  someone flying over one of them you're put on the surface among the houses. In your scene it
+  looks at the tiles round them as they are, coarser the farther off they are (up to 10 km), where
+  houses and levees may be smoothed away; and none of it was tried on Google's tiles, where they're
+  lumps of mesh.
 - The open water's surface is EGM96's at a degree, a metre or a few from a coast's own water: 1 m
   under it off Kona (by round volcanic islands up to 9.5 m low, below Kilauea on the Big Island's
   south coast), so driving from the open sea to that coast is a step up onto Google's water; 1 m
