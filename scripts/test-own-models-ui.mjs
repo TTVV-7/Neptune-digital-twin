@@ -316,8 +316,9 @@ test( 'the trucks drive, nose first', async () => {
 		}, item.id );
 		await page.keyboard.press( 'KeyV' );
 		await page.waitForFunction( id => window.twin.driver.active && window.twin.driver.entry.library === id, item.id );
+		// Gas until it has gone a couple of metres: frames come slowly in software, so not for a set time.
 		await page.keyboard.down( 'KeyW' );
-		await page.waitForTimeout( 2500 );
+		await page.waitForFunction( start => Math.hypot( window.twin.driver.east - start.east, window.twin.driver.north - start.north ) > 2, start, { timeout: 15000 } ).catch( () => {} );
 		await page.keyboard.up( 'KeyW' );
 		await page.waitForTimeout( 300 );
 		const moved = await page.evaluate( start => ( { north: window.twin.driver.north - start.north, east: window.twin.driver.east - start.east } ), start );
