@@ -97,9 +97,14 @@ async function visit( config ) {
 	if ( robot ) return screens.notice( 'robot', { onRetry: () => visit( config ) } );
 	if ( err ) return loadFailed( err );
 
-	const outcome = await postVisit( token );
-	if ( outcome.key ) return run( main, { key: outcome.key, left: outcome.left, visit: outcome.visit, googleClientId: config.googleClientId, live: !! config.live, liveReason: config.liveReason } );
-	if ( outcome.usedUp ) return usedUp( config, outcome );
+	const moonLink = opensOnMoon( location.search );
+	const outcome = await postVisit( token, { world: moonLink ? 'moon' : 'earth' } );
+	const settings = { googleClientId: config.googleClientId, live: !! config.live, liveReason: config.liveReason };
+	if ( outcome.key ) return run( main, { key: outcome.key, left: outcome.left, visit: outcome.visit, ...settings } );
+	// A link to the Moon: on the Moon, with none of the day's Earth drives spent. The Earth is a
+	// reload away (without the link, so that one does ask for a drive).
+	if ( outcome.moon ) return run( main, { key: null, visit: outcome.visit, ...settings, moonOnly: { onEarth: toEarth } } );
+	if ( outcome.usedUp ) return usedUp( config, outcome, main );
 	if ( outcome.robot ) return screens.notice( 'robot', { onRetry: () => visit( config ) } );
 	screens.notice( 'error', { message: outcome.error, onRetry: () => visit( config ) } );
 
@@ -107,16 +112,50 @@ async function visit( config ) {
 
 // Whether the visit has been asked for again as a supporter's (see usedUp).
 let askedAsSupporter = false;
+// Whether the game has started on the Moon from the used-up notice (see usedUp).
+let onMoonOnly = false;
 
-// Today's drives are used up. A supporter's are counted by their account, not this address (30 a
-// day), so with signing in set up the screen has a sign-in too: a supporter on a new browser, or
-// back from paying before Stripe's word arrived (?supporter=thanks, supporter.js), would otherwise be
-// stuck here until tomorrow. Once the account here has the pass, the visit is asked for again: once,
-// so a supporter who has had their 30 sees this screen rather than asking round and round.
+// A link to the Moon (a Moon spot's ?spot=moon-..., or ?at= with world=moon; places.js's linkedPlace).
+function opensOnMoon( search ) {
+
+	const params = new URLSearchParams( search );
+	return ( params.get( 'spot' ) ?? '' ).startsWith( 'moon-' ) || ( params.has( 'at' ) && params.get( 'world' ) === 'moon' );
+
+}
+
+// From a page opened on the Moon by a link, to the Earth: the same page without the link, which
+// asks for one of the day's drives as it loads (a ?party= stays).
+function toEarth() {
+
+	const url = new URL( location.href );
+	for ( const name of [ 'spot', 'at', 'name', 'region', 'heading', 'world' ] ) url.searchParams.delete( name );
+	location.assign( url );
+
+}
+
+// Today's Earth drives are used up. The Moon is ours to stream and costs nothing, so it's never
+// limited: the notice offers it, and the game starts there with the Earth closed (main.js's
+// moonOnly); picking the Earth shows this notice again. A supporter's drives are counted by their
+// account, not this address (30 a day), so with signing in set up the screen has a sign-in too: a
+// supporter on a new browser, or back from paying before Stripe's word arrived (?supporter=thanks,
+// supporter.js), would otherwise be stuck here until tomorrow. Once the account here has the pass,
+// the visit is asked for again: once, so a supporter who has had their 30 sees this screen rather
+// than asking round and round (a reload, if the game's already going on the Moon).
 // (supporter.js comes with the game's code, so it's waited for here.)
-async function usedUp( config, { retryAfter, reason } ) {
+async function usedUp( config, outcome, main ) {
 
-	screens.notice( 'used-up', { retryAfter } );
+	const { retryAfter, reason } = outcome;
+	const toMoon = () => {
+
+		if ( onMoonOnly ) return;
+		onMoonOnly = true;
+		run( main, {
+			key: null, visit: outcome.visit, googleClientId: config.googleClientId, live: !! config.live, liveReason: config.liveReason,
+			moonOnly: { onEarth: () => usedUp( config, outcome, main ) },
+		} );
+
+	};
+	screens.notice( 'used-up', { retryAfter, onMoon: toMoon } );
 	if ( reason !== 'visitor' || ! config.googleClientId ) return;
 	let supporter;
 	try {
@@ -134,6 +173,7 @@ async function usedUp( config, { retryAfter, reason } ) {
 	const again = () => {
 
 		askedAsSupporter = true;
+		if ( onMoonOnly ) return location.reload();
 		$( 'notice' ).hidden = true;
 		visit( config );
 

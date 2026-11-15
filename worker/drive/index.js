@@ -9,7 +9,7 @@ import { makeVisit } from './visits.js';
 import { currentAccount, getMe, linkPlayer, signIn, signOut } from './accounts.js';
 import { isSupporter, stripeWebhook } from './supporter.js';
 import { live, liveToday, online } from './live.js';
-import { adminStats, countVisit, postStats } from './stats.js';
+import { adminStats, countVisit, isAdmin, postStats } from './stats.js';
 import { BUDGET_SPENT } from '../../src/drive-app/live-protocol.js';
 
 export { DriveLimits } from './limits.js';
@@ -146,27 +146,49 @@ async function getConfig( { env, limits, now } ) {
 
 }
 
-// POST /api/visit { token }: the page asks for the Maps key once as it starts. Turnstile first,
-// then the caps (both counted at once), and only then the key, with the visit's token for posting
-// scores (visits.js). Over a cap: 429 with retryAfter, the seconds until midnight UTC, when the
-// counts start again. A supporter signed in here is counted by their account, with a cap of their
-// own; everyone else by their address.
+// POST /api/visit { token, world }: the page asks for the Maps key once as it starts. Turnstile
+// first, then the caps (both counted at once), and only then the key, with the visit's token for
+// posting scores (visits.js). The caps are the Earth's: Google's tiles cost a little each visit, and
+// the Moon (moon.js, our own ground) costs nothing to stream, so it's never limited:
+// - world: 'moon' (the page opened on a link to the Moon): no key and nothing counted, { moon: true,
+//   visit }. Going to the Earth from there reloads the page, which asks again without it.
+// - Over a cap: 429 with retryAfter (the seconds until midnight UTC, when the counts start again)
+//   and a visit all the same, so the page can still open on the Moon.
+// A supporter signed in here is counted by their account, with a cap of their own; the owner's
+// accounts (ADMIN_EMAILS) aren't counted at all; everyone else is counted by their address.
 async function visit( { request, env, url, ctx, limits, now } ) {
 
 	const body = await readJson( request, 8192 );
 	const token = isObject( body ) && typeof body.token === 'string' ? body.token : '';
 	if ( ! token || token.length > MAX_TOKEN ) throw new HttpError( 400, 'Bad request' );
+	const moon = body.world === 'moon';
 	if ( ! env.TURNSTILE_SECRET ) throw new HttpError( 503, 'Not set up yet' );
 
 	const ip = request.headers.get( 'CF-Connecting-IP' ) ?? '';
 	const check = await verifyTurnstile( env, token, ip );
 	if ( check.unavailable ) throw new HttpError( 503, 'Couldn\'t check right now. Try again' );
 	if ( ! check.ok ) throw new HttpError( 403, 'The robot check didn\'t pass' );
+
+	// Counted for the admin page's stats (stats.js), without holding up the answer.
+	if ( moon ) {
+
+		ctx?.waitUntil?.( countVisit( env, now ) );
+		return json( { moon: true, visit: await makeVisit( env, now ) } );
+
+	}
+
 	// Before counting: with no key there's nothing to count.
 	const key = mapsKey( env );
 	if ( ! key ) throw new HttpError( 503, 'Maps are off today' );
 
-	const supporter = await supporterOf( { request, env, url, now } );
+	const { supporter, admin } = await whoIsVisiting( { request, env, url, now } );
+	if ( admin ) {
+
+		ctx?.waitUntil?.( countVisit( env, now ) );
+		return json( { mapsKey: key, left: null, visit: await makeVisit( env, now ) } );
+
+	}
+
 	const outcome = await limits.visit( supporter ? `account:${ supporter.id }` : addressOf( request ), {
 		now,
 		daily: setting( env.DAILY_VISITS, 300 ),
@@ -176,29 +198,31 @@ async function visit( { request, env, url, ctx, limits, now } ) {
 
 		const { reason, retryAfter } = outcome;
 		const message = reason === 'daily' ? 'Today\'s free drives are used up' : 'You\'ve had today\'s free drives';
-		throw new HttpError( 429, message, { reason, retryAfter }, { 'Retry-After': String( retryAfter ) } );
+		throw new HttpError( 429, message, { reason, retryAfter, visit: await makeVisit( env, now ) }, { 'Retry-After': String( retryAfter ) } );
 
 	}
 
-	// Counted for the admin page's stats (stats.js), without holding up the answer.
 	ctx?.waitUntil?.( countVisit( env, now ) );
 	return json( { mapsKey: key, left: outcome.left, visit: await makeVisit( env, now ) } );
 
 }
 
-// The signed-in account if it has the Supporter Pass, else null. If the database can't say just now,
-// the visit goes ahead as anyone's rather than not at all.
-async function supporterOf( context ) {
+// Who's asking for a visit: { supporter } the signed-in account if it has the Supporter Pass, and
+// { admin } whether it's one of the owner's (ADMIN_EMAILS). If the database can't say just now, the
+// visit goes ahead as anyone's rather than not at all.
+async function whoIsVisiting( context ) {
 
 	try {
 
 		const account = await currentAccount( context );
-		return account && await isSupporter( context.env, account ) ? account : null;
+		if ( ! account ) return { supporter: null, admin: false };
+		if ( isAdmin( context.env, account ) ) return { supporter: null, admin: true };
+		return { supporter: await isSupporter( context.env, account ) ? account : null, admin: false };
 
 	} catch ( err ) {
 
 		console.error( 'Supporter check', err?.name, err?.message );
-		return null;
+		return { supporter: null, admin: false };
 
 	}
 

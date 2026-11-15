@@ -346,8 +346,10 @@ const _sun = new Vector3();
 // visit's token, for posting scores; worker: whether there's a Worker (not on the dev server alone);
 // googleClientId: the sign-in button's, for the Supporter Pass ('' when there's no signing in);
 // live: whether the Worker has driving with others on (its /api/config says), and liveReason why
-// not when it's off for the rest of the day.
-export async function start( { key, left = null, visit: token = null, worker = true, googleClientId = '', live: liveOn = false, liveReason = '' } ) {
+// not when it's off for the rest of the day; moonOnly: { onEarth } when there's no Earth this visit
+// (today's Earth drives are used up, or the page opened on a link to the Moon, boot.js): the
+// globe opens on the Moon, which is never limited, and picking the Earth calls onEarth instead.
+export async function start( { key, left = null, visit: token = null, worker = true, googleClientId = '', live: liveOn = false, liveReason = '', moonOnly = null } ) {
 
 	const visit = token ?? VISIT_TEST?.visit ?? null;
 	// Play stats for the owner's admin page (stats.js): only a real visit's, counts with nothing of who.
@@ -392,9 +394,11 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		pad = createPlaceholderGround();
 		pad.visible = false;
 		scene.add( pad );
+		// Only on the Moon this visit: the test globe stays out of sight.
+		if ( moonOnly ) earth.visible = false;
 		// On worlddrive.app there's always a Worker, so none answering means its settings didn't
 		// come (or a crawler kept off /api/ by robots.txt): a word for a visitor, not the developer's.
-		screens.toast( ! worker && location.hostname === 'worlddrive.app'
+		else screens.toast( ! worker && location.hostname === 'worlddrive.app'
 			? 'Couldn\'t reach World Drive\'s server, so this is only a preview globe. Reload the page to drive on the 3D map.'
 			: 'No Google 3D tiles here: a test globe, and a flat test pad wherever you drop in.', 6000 );
 
@@ -748,8 +752,9 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// root has arrived, as that moves the Earth under the camera. Then it's out of the address (a
 	// ?party= stays), so a reload doesn't fly there again; not before, so the reload the root's
 	// error screen asks for still goes there.
+	// (Only on the Moon this visit, a link to the Earth's left in the address for later.)
 	const linked = linkedPlace( location.search );
-	if ( linked ) {
+	if ( linked && ! ( moonOnly && worldOf( linked ) !== MOON ) ) {
 
 		let flown = false;
 		const flyToLinked = () => {
@@ -768,6 +773,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		else flyToLinked();
 
 	}
+
+	if ( moonOnly && worldOf( linked ) !== MOON ) setWorld( MOON );
 
 	// --- moving the scene to a new place, without loading anything again ---
 
@@ -789,6 +796,15 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	async function setWorld( next, { at = null } = {} ) {
 
 		if ( state.mode !== 'globe' ) return false;
+		// No Earth this visit (moonOnly): boot.js says why, and how to get there.
+		if ( moonOnly && next !== MOON ) {
+
+			panel.setWorld( world );
+			moonOnly.onEarth();
+			return false;
+
+		}
+
 		if ( next === world ) {
 
 			switching = null;

@@ -5365,22 +5365,80 @@ describe( 'World Drive, the open sea', () => {
 
 describe( 'World Drive with its Worker', () => {
 
-	test( 'over the daily cap: the used-up screen, with no globe', async () => {
+	test( 'over the daily cap: the used-up screen, with the Moon (never limited) a tap away; the Earth stays shut', async () => {
 
 		const page = await newPage( {
 			api: {
 				config: { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true },
 				turnstile: true,
-				visit: route => route.fulfill( { status: 429, contentType: 'application/json', body: JSON.stringify( { error: 'Today\'s free drives are used up', reason: 'daily', retryAfter: 5 * 3600 + 120 } ) } ),
+				visit: route => route.fulfill( { status: 429, contentType: 'application/json', body: JSON.stringify( { error: 'Today\'s free drives are used up', reason: 'daily', retryAfter: 5 * 3600 + 120, visit: 'v1.moon-visit' } ) } ),
 			},
 		} );
 		await page.goto( BASE );
 		await page.locator( '#notice[data-kind="used-up"]' ).waitFor();
-		assert.equal( await page.locator( '#notice .title' ).textContent(), 'Today\'s free drives are used up' );
-		assert.equal( await page.locator( '#notice .countdown' ).textContent(), 'Fresh drives in 5 h 2 min' );
+		assert.equal( await page.locator( '#notice .title' ).textContent(), 'Today\'s free Earth drives are used up' );
+		assert.match( await page.locator( '#notice .message' ).textContent(), /The Moon is free and unlimited/ );
+		assert.equal( await page.locator( '#notice .countdown' ).textContent(), 'Fresh Earth drives in 5 h 2 min' );
 		assert.equal( await page.evaluate( () => !! window.drive ), false, 'the globe started anyway' );
 		assert.equal( await page.locator( 'canvas' ).count(), 0 );
 		await shot( page, 'drive-notice-used-up' );
+
+		// On the Moon: no key, no Google tiles, the Earth's test globe out of sight.
+		await page.locator( '#notice button', { hasText: 'Drive on the Moon' } ).click();
+		await page.locator( '#notice' ).waitFor( { state: 'hidden' } );
+		await page.waitForFunction( () => window.drive?.mode === 'globe' && window.drive.world === 'moon', null, { timeout: 90000 } );
+		assert.equal( await page.evaluate( () => !! window.drive.tiles ), false );
+		assert.equal( await page.locator( '#globe-ui .worlds [data-world="moon"]' ).getAttribute( 'aria-checked' ), 'true' );
+		assert.ok( ! page.outside.some( url => /tile\.googleapis|maps\.googleapis/.test( url ) ), page.outside.join( ' ' ) );
+		await shot( page, 'drive-used-up-moon' );
+
+		// The Earth: the notice again, and still on the Moon; and from there back to it, the same game.
+		const canvases = await page.locator( 'canvas' ).count();
+		await page.locator( '#globe-ui .worlds [data-world="earth"]' ).click();
+		await page.locator( '#notice[data-kind="used-up"]' ).waitFor();
+		assert.equal( await page.evaluate( () => window.drive.world ), 'moon' );
+		assert.equal( await page.locator( '#globe-ui .worlds [data-world="moon"]' ).getAttribute( 'aria-checked' ), 'true' );
+		await page.locator( '#notice button', { hasText: 'Drive on the Moon' } ).click();
+		await page.locator( '#notice' ).waitFor( { state: 'hidden' } );
+		await page.waitForTimeout( 500 );
+		assert.equal( await page.locator( 'canvas' ).count(), canvases, 'a second game started' );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'a link to the Moon spends none of the day\'s Earth drives, and the Earth is a reload away that does', async () => {
+
+		const asked = [];
+		const page = await newPage( {
+			api: {
+				config: { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true },
+				turnstile: true,
+				visit: route => {
+
+					const body = JSON.parse( route.request().postData() );
+					asked.push( body.world ?? 'earth' );
+					// The Earth's visit: over the cap, so the page stays put to be looked at.
+					if ( body.world === 'moon' ) return route.fulfill( { contentType: 'application/json', body: JSON.stringify( { moon: true, visit: 'v1.moon-visit' } ) } );
+					route.fulfill( { status: 429, contentType: 'application/json', body: JSON.stringify( { error: 'Today\'s free drives are used up', reason: 'daily', retryAfter: 3600 } ) } );
+
+				},
+			},
+		} );
+		await page.goto( `${ BASE }?spot=moon-tycho&ref=news` );
+		await page.waitForFunction( () => window.drive?.mode === 'globe' && window.drive.world === 'moon', null, { timeout: 90000 } );
+		assert.deepEqual( asked, [ 'moon' ] );
+		assert.equal( await page.evaluate( () => !! window.drive.tiles ), false );
+		assert.ok( ! page.outside.some( url => /tile\.googleapis|maps\.googleapis/.test( url ) ), page.outside.join( ' ' ) );
+
+		// The Earth: the page again without the link (anything else in the address stays), asking for
+		// an Earth drive.
+		await page.locator( '#globe-ui .worlds [data-world="earth"]' ).click();
+		await page.locator( '#notice[data-kind="used-up"]' ).waitFor( { timeout: 60000 } );
+		assert.deepEqual( asked, [ 'moon', 'earth' ] );
+		const url = new URL( page.url() );
+		assert.equal( url.searchParams.get( 'spot' ), null );
+		assert.equal( url.searchParams.get( 'ref' ), 'news' );
 		await page.context().close();
 
 	} );
@@ -6203,7 +6261,7 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		let page = await usedUpPage( [ usedUp( 'visitor' ), mapsOff ], { signedInAs: { ...ALICE, supporter: true } } );
 		await page.goto( BASE );
 		await notice( page ).locator( '.account .stub-google' ).waitFor();
-		assert.equal( await notice( page ).locator( '.title' ).textContent(), 'Today\'s free drives are used up' );
+		assert.equal( await notice( page ).locator( '.title' ).textContent(), 'Today\'s free Earth drives are used up' );
 		assert.match( await notice( page ).locator( '.account' ).textContent(), /Have the Supporter Pass\? Sign in to use it here\./ );
 		await shot( page, 'pass-7-used-up-sign-in' );
 		await page.evaluate( () => window.testCredential = 'good-token' );

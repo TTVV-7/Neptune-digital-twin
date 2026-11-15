@@ -435,6 +435,10 @@ describe( 'World Drive Worker, Turnstile failing and maps off', () => {
 		assert.equal( res.status, 403 );
 		assert.equal( res.json.error, 'The robot check didn\'t pass' );
 		assert.equal( verifications.at( - 1 ).secret, FAIL_SECRET );
+		// The Moon too: never limited, but still behind the robot check.
+		const moon = await call( server, '/api/visit', { method: 'POST', headers: { Origin: server.base, 'Content-Type': 'application/json' }, body: JSON.stringify( { token: TOKEN, world: 'moon' } ), ip: '198.51.100.9' } );
+		assert.equal( moon.status, 403 );
+		assert.equal( moon.json.visit, undefined );
 
 	} );
 
@@ -1441,6 +1445,51 @@ describe( 'World Drive Supporter Pass', () => {
 		assert.equal( ( await drive( alice.cookie, PASS_DAY + DAY ) ).json.left, 29 );
 		// Counted as a hash, like an address: the account's id isn't stored either.
 		assert.ok( ! listFiles( server.state ).some( file => readFileSync( file ).toString( 'latin1' ).includes( `account:${ alice.id }` ) ) );
+
+	} );
+
+	test( 'the Moon is never limited: a link to it spends no drive, and over the cap there\'s a visit for it; the owner is never limited', async () => {
+
+		const ip = nextIp();
+		const drive = ( { cookie, world, time = PASS_DAY } = {} ) => call( server, '/api/visit', {
+			method: 'POST', headers: { Origin: server.base, 'Content-Type': 'application/json', ...( cookie ? { Cookie: cookie } : {} ) },
+			body: JSON.stringify( world ? { token: TOKEN, world } : { token: TOKEN } ), ip, time,
+		} );
+		// To the Moon: no key and nothing counted, however many times.
+		for ( let i = 0; i < 12; i ++ ) {
+
+			const res = await drive( { world: 'moon' } );
+			assert.equal( res.status, 200, res.text );
+			assert.equal( res.json.moon, true );
+			assert.match( res.json.visit, /^v1\./ );
+			assert.ok( ! res.text.includes( MAPS_KEY ) );
+
+		}
+
+		// So the address's 8 Earth drives are all still there.
+		for ( let i = 7; i >= 0; i -- ) assert.equal( ( await drive() ).json.left, i );
+		// Over the cap: no key, but a visit for the Moon (scores, stats).
+		const over = await drive();
+		assert.equal( over.status, 429 );
+		assert.equal( over.json.reason, 'visitor' );
+		assert.match( over.json.visit, /^v1\./ );
+		assert.ok( ! over.text.includes( MAPS_KEY ) );
+		// The Moon's still open.
+		assert.equal( ( await drive( { world: 'moon' } ) ).json.moon, true );
+
+		// The owner (ADMIN_EMAILS, any case), from the same used-up address: never limited.
+		const boss = await signIn( { sub: '1091', email: 'boss@example.com', name: 'Boss' }, { time: PASS_DAY } );
+		for ( let i = 0; i < 40; i ++ ) {
+
+			const res = await drive( { cookie: boss.cookie } );
+			assert.equal( res.status, 200, `drive ${ i + 1 }: ${ res.text }` );
+			assert.equal( res.json.mapsKey, MAPS_KEY );
+			assert.equal( res.json.left, null );
+
+		}
+
+		// And anyone else there still isn't.
+		assert.equal( ( await drive() ).status, 429 );
 
 	} );
 

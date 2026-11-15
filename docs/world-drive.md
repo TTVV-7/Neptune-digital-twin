@@ -85,7 +85,10 @@ On a touch screen the globe's panel is a sheet along the bottom, and driving has
 (the driving HUD's, `src/drive-hud.js`): steering bottom left; **Gas** with **Drift** over it at the
 right-hand edge, and **Brake**, **Boost** and **Fly** beside them; reset (↺) and **Cam** at the top
 right, under the bar with **Globe** and pause. Several can be held at once. In the air ◀ ▶ spin,
-**Gas** and **Brake** flip, and **Drift** held with ◀ ▶ rolls.
+**Gas** and **Brake** flip, and **Drift** held with ◀ ▶ rolls. The speed and boost sit at the top in
+the middle with the phone upright (over the sky); with it on its side they're one low row at the
+bottom in the middle, between the steering and the pedals, so they don't cover the road ahead
+(style.css).
 
 ### Stunts
 
@@ -2896,11 +2899,12 @@ for the pass, and driving and the leaderboard never need it.
   Google** (in the sheet, or in the pause menu: "Have the Supporter Pass? Sign in to use it here.")
   brings it back: that's "restore purchases". The pause menu also says who's signed in, with
   **Sign out**, which locks the pass again in that browser.
-- **The used-up screen** ("Today's free drives are used up", this address's 8 gone, not everyone's
+- **The used-up screen** ("Today's free Earth drives are used up", this address's 8 gone, not everyone's
   300) has the same sign-in, for a supporter on a new browser or one who cleared the site's data, and
   for a buyer brought back from Stripe before its webhook arrived (that tab starts a visit of its own,
   counted by the address until the pass is known). Once the account there has the pass, the visit
   is asked for again, once: a supporter who has had their 30 sees the screen, saying who's signed in.
+  (Already driving on the Moon from that screen, the page reloads instead.)
 - Signed in, the browser's leaderboard player is linked to the account (once), so a supporter's ⭐
   shows by their name on every board. Signing out forgets that it was linked (the note holds the
   email), so signing in again links it again.
@@ -3080,8 +3084,16 @@ starts one. World Drive is built so that one page load is one session, however m
   day's visits are under two caps: **DAILY_VISITS** for everyone together (300) and
   **PER_VISITOR_DAILY** for each visitor (8; a supporter signed in has
   **PER_VISITOR_DAILY_SUPPORTER**, 30, counted by their account). Both start again at midnight UTC.
-- Over a cap the page shows **Today's free drives are used up**, with how long until fresh drives,
-  and loads nothing from Google. A failed robot check shows **We couldn't check you're a person**
+  The owner's accounts (`ADMIN_EMAILS`, signed in) aren't counted at all.
+- **The Moon is never limited.** Its ground is our own (moon.js), so it costs nothing to stream.
+  A page opened on a link to the Moon (`?spot=moon-...`, or `?at=` with `world=moon`) asks for a
+  visit with `world: 'moon'`: after the robot check it gets `{ moon: true, visit }`, no key, and
+  nothing is counted. It opens on the Moon with the Earth closed (main.js's `moonOnly`): picking the
+  Earth reloads the page without the link, which asks for one of the day's Earth drives as usual.
+- Over a cap the page shows **Today's free Earth drives are used up**, with how long until fresh
+  ones, loads nothing from Google, and offers **Drive on the Moon**: the 429 carries a visit (for
+  scores and stats), and the game starts on the Moon without a key. Picking the Earth there shows
+  the screen again. A failed robot check shows **We couldn't check you're a person**
   with **Try again**. With no key set, it shows **World Drive is getting ready** (with a flat test pad
   to drive, which costs nothing).
 

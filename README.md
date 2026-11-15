@@ -756,7 +756,8 @@ It shares `src/` with this app but has its own page (`drive/index.html`, `src/dr
 (`worker/drive/`, `wrangler.drive.jsonc`, `npm run deploy:drive`). Each page load is one billed Google
 Maps session, so the built site holds no key: the Worker hands it out once per visit, after a
 Cloudflare Turnstile check, and only while the day's visits are under a cap for everyone (300) and
-for each visitor (8); over a cap the page says today's free drives are used up. Teleporting moves the
+for each visitor (8); over a cap the page says today's free Earth drives are used up and offers the
+Moon, which is never limited (its ground is our own, so it costs nothing to stream). Teleporting moves the
 loaded world rather than loading a new one, so it costs nothing extra. Place search goes through the
 Worker to OpenStreetMap's Nominatim, cached and at most once a second. A leaderboard keeps each
 player's best stunt run today, this week and all time (a nickname, no sign-up) in a D1 database,
