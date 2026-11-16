@@ -593,8 +593,10 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// leaving, and its frame runs after the car's.
 	let challenges = null;
 	let challengesLoading = null;
-	// Whether the keys card has been shown this visit: a challenge's drop-in shows it at GO instead of
-	// over the countdown, the visit's first time only (a first drive may well start as a challenge).
+	// Whether the keys card has been shown this visit: a challenge's drop-in shows it over its
+	// countdown instead (a longer one, to read it by), the visit's first time only (a first drive may
+	// well start as a challenge), and it's put away at GO, so nothing covers the road while the clock
+	// runs.
 	let keysShown = false;
 	async function openChallenges() {
 
@@ -605,7 +607,9 @@ export async function start( { key, left = null, visit: token = null, worker = t
 				world: () => world, moonOnly, mode: () => state.mode, place: () => state.place, vehicle: () => state.vehicle,
 				driver, ground, camera, scene, globe, moon, vehicles, stats,
 				startAt: place => startChallenge( place ), placeCar, toGlobe,
-				go: () => keysShown || showKeys(),
+				// (Gone by itself after 10 s too, for a run left before its GO.)
+				keys: () => ! keysShown && showKeys( 10000 ),
+				go: () => screens.hideKeys(),
 				driveUi: $( 'drive-ui' ), pauseCard: $( 'pause' ),
 			} ) );
 			try {
@@ -643,12 +647,14 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	}
 
-	// The keys card, on a keyboard (a touch screen has its labelled buttons instead).
-	function showKeys() {
+	// The keys card, on a keyboard (a touch screen has its labelled buttons instead), for `ms` (7 s
+	// unless said): whether it's shown.
+	function showKeys( ms ) {
 
-		if ( document.body.classList.contains( 'touch' ) ) return;
+		if ( document.body.classList.contains( 'touch' ) ) return false;
 		keysShown = true;
-		screens.showKeys();
+		screens.showKeys( ms );
+		return true;
 
 	}
 
@@ -1198,7 +1204,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		if ( onMoon() ) live?.setAway();
 		else live?.setPlace( { name: placeLabel( state.place ), lat: state.place.lat, lon: state.place.lon, height: state.place.height } );
 		// A challenge's start: its gates or items and its countdown (challenges.js), which shows the keys
-		// at GO if they haven't been this visit.
+		// over it if they haven't been this visit.
 		const started = challenges?.arrived( state.place ) ?? false;
 		// The keys, on a keyboard; a touch screen has its labelled buttons instead.
 		if ( ! started ) showKeys();

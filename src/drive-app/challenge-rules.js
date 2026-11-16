@@ -45,8 +45,9 @@ export const MAX_RUN = 2 * 60 * 60 * 1000;
 // started before the end, posted a moment after): the Worker's check, and the page's keeping of a
 // time that couldn't be posted (challenges.js).
 export const GRACE = 60 * 1000;
-// A rank is counted to this many rows ahead at most (the Worker's rank counts read only the rows
-// ahead, so a long board's last place costs no more than this): further down, it's "1000+".
+// A rank is found among a board's first this many times (the Worker keeps each board's order to
+// this many, so reading it costs no more than this, however long the board): further down, it's
+// "1000+".
 export const RANK_MOST = 1000;
 // A pass counts within a gate's radius across the ground, and up and down from its ground to its
 // top (on the Earth the lowest and the highest of what rays down across its zone meet: the street
@@ -94,8 +95,11 @@ export const KIND_ODDS = {
 };
 // Items are kept at least this far (m) from where the run starts, and a route laid out at most TRIES
 // times when a check (the Moon's ground, below) finds it wanting: the one with fewest faults is kept.
+// A checked landmark's drive with no road to come along is tried from every BEARING_STEP degrees
+// round it instead.
 const CLEAR_START = 60;
 const TRIES = 8;
+const BEARING_STEP = 5;
 
 // --- periods ---
 
@@ -216,34 +220,63 @@ export function kindFor( periodKind, u ) {
 // at `place` ({ name, lat, lon, heading }: heading, if it's known, the way along its road), laid out
 // with `random` (randomFrom's): { start: { lat, lon, heading }, points: [ [ lat, lon ] ], radius,
 // goal } (goal: the landmark's name, for a drive to one). Sprints and collectibles start at the place
-// itself; a landmark's drive starts a few kilometres off and ends at the place. `check( route, kind )`,
-// if given, says how many faults a route has (the Moon's ground too steep at its points or along its
-// legs: worker/drive/challenges.js); then up to TRIES are laid out and the one with fewest kept.
+// itself; a landmark's drive starts a few kilometres off and ends at the place. `check( route, kind,
+// enough )`, if given, says how many faults a route has (the Moon's ground too steep at its points or
+// along its legs: worker/drive/challenges.js), or that it has `enough` at least (the fewest so far: it
+// may stop counting there); then up to TRIES are laid out and the one with fewest kept.
 // Positions are to 6 decimals (10 cm).
 export function makeRoute( { kind, size, world, place }, random, check = null ) {
 
 	const shape = SHAPES[ world ]?.[ size ]?.[ kind ];
 	if ( ! shape ) throw new Error( `No ${ size } ${ kind } on ${ world }` );
 	let best = null;
-	// (Checked, a landmark's drive with no road to come along is tried from bearings spread evenly
-	// round it, from one chosen at random: on rough ground the way in that's clear may be narrow.)
-	const spin = check && kind === 'landmark' && ! Number.isFinite( place.heading ) ? random() : null;
-	for ( let i = 0; i < ( check ? TRIES : 1 ); i ++ ) {
+	const keep = route => {
 
-		const route = layOut( kind, world, place, shape, random, spin === null ? null : ( spin + i / TRIES ) % 1 );
-		const faults = check ? check( route, kind ) : 0;
+		const faults = check ? check( route, kind, best?.faults ?? Infinity ) : 0;
 		if ( ! best || faults < best.faults ) best = { route, faults };
-		if ( ! faults ) break;
+		return faults;
+
+	};
+	if ( check && kind === 'landmark' && ! Number.isFinite( place.heading ) ) {
+
+		// Checked, a landmark's drive with no road to come along: from every BEARING_STEP degrees round
+		// it at one distance, the first with fewest faults from a bearing chosen at random (so a tie is
+		// chosen at random too). On rough ground the way in that's clear may be narrow (at
+		// Shackleton's rim, a window of 20 degrees or so either way along it), which a few bearings
+		// spread round could miss. First each is only asked whether it has any fault (check's `enough`
+		// of 1, which stops at the first), and the first with none is the one; only where none is clear
+		// are they counted, the fewest kept. A few milliseconds at most, once a period.
+		// (Whole degrees and metres: what's tried can be told again from the route, as the tests do.)
+		const spin = Math.floor( random() * 360 );
+		const distance = Math.round( between( shape.distance, random ) );
+		const routes = [];
+		for ( let turn = 0; turn < 360; turn += BEARING_STEP ) {
+
+			const route = landmarkFrom( world, place, shape, spin + turn, distance );
+			if ( ! check( route, kind, 1 ) ) return route;
+			routes.push( route );
+
+		}
+
+		for ( const route of routes ) keep( route );
+		return best.route;
 
 	}
 
+	for ( let i = 0; i < ( check ? TRIES : 1 ); i ++ ) if ( ! keep( layOut( kind, world, place, shape, random ) ) ) break;
 	return best.route;
 
 }
 
-function layOut( kind, world, place, shape, random, turn ) {
+// A number from `range` ([ low, high ]) with `random`.
+function between( [ low, high ], random ) {
 
-	const between = ( [ low, high ] ) => low + ( high - low ) * random();
+	return low + ( high - low ) * random();
+
+}
+
+function layOut( kind, world, place, shape, random ) {
+
 	const known = Number.isFinite( place.heading );
 	const at = ( lat, lon ) => [ round( lat ), round( lon ) ];
 	if ( kind === 'sprint' ) {
@@ -255,7 +288,7 @@ function layOut( kind, world, place, shape, random, turn ) {
 		for ( let i = 0; i < shape.gates; i ++ ) {
 
 			if ( i ) bearing += ( random() * 2 - 1 ) * shape.turn;
-			[ lat, lon ] = destination( world, lat, lon, bearing, between( shape.spacing ) );
+			[ lat, lon ] = destination( world, lat, lon, bearing, between( shape.spacing, random ) );
 			points.push( at( lat, lon ) );
 
 		}
@@ -285,10 +318,18 @@ function layOut( kind, world, place, shape, random, turn ) {
 	}
 
 	// A landmark's drive: from a few kilometres back along the place's road (or, not knowing it, any
-	// way), facing the place.
-	const back = known ? place.heading + 180 + ( random() * 2 - 1 ) * shape.spread : ( turn ?? random() ) * 360;
-	const [ lat, lon ] = destination( world, place.lat, place.lon, back, between( shape.distance ) );
-	return { start: start( lat, lon, bearingTo( world, lat, lon, place.lat, place.lon ) ), points: [ at( place.lat, place.lon ) ], radius: shape.radius, goal: place.name };
+	// way).
+	const back = known ? place.heading + 180 + ( random() * 2 - 1 ) * shape.spread : random() * 360;
+	return landmarkFrom( world, place, shape, back, between( shape.distance, random ) );
+
+}
+
+// A drive to the landmark `place` from `distance` m off it on bearing `back` (degrees, from it),
+// facing it.
+function landmarkFrom( world, place, shape, back, distance ) {
+
+	const [ lat, lon ] = destination( world, place.lat, place.lon, back % 360, distance );
+	return { start: start( lat, lon, bearingTo( world, lat, lon, place.lat, place.lon ) ), points: [ [ round( place.lat ), round( place.lon ) ] ], radius: shape.radius, goal: place.name };
 
 }
 

@@ -25,8 +25,10 @@ import { MOON } from './moon-places.js';
 // the finish card puts the finished run away (its time still goes up), and driving on after a
 // pause that stopped a run is the end of it.
 
-// The countdown (s), and what's held at the start meanwhile.
+// The countdown (s), and what's held at the start meanwhile; READING (s) the visit's first, on a
+// computer, with the keys card over it ("Get ready" till the 3), put away at GO.
 const COUNTDOWN = 3;
+const READING = 6;
 // Gates and items as drawn (m): a sprint's ring at most RING round (its zone is the route's radius,
 // wider), a beam BEAM round and BEAM_HIGH up from the ground (twice that on the Moon, where it's
 // seen from further), an item ITEM across, ITEM_UP over the ground, turning at SPIN rad/s.
@@ -68,8 +70,9 @@ const RETRY = 4000;
 const TRIES = 3;
 const WAIT_MOST = 60;
 // At the finish the car is brought to a stop in STOPPING s (from its speed then, and at least
-// STOP_LEAST m/s each second), as the countdown holds it at the start: the finish card is over the
-// road, and on a phone over the buttons.
+// STOP_LEAST m/s each second, more than any ride's gas), its booster and drift boost put out, and
+// held where it stopped, as the countdown holds it at the start: the finish card is over the road,
+// and on a phone over the buttons.
 const STOPPING = 1;
 const STOP_LEAST = 12;
 // A new list is asked for as a listed challenge ends; if that fails (or still has it ended) it's
@@ -91,8 +94,9 @@ const _up = new Vector3( 0, 1, 0 );
 // app: what main.js hands over: visit(), player(), pickName( name, say ), world(), moonOnly
 // ({ onEarth } when there's no Earth this visit), mode(), place(), vehicle(), the driver, ground,
 // camera, scene, globe, moon and vehicles, stats, startAt( place ), placeCar( pose ), toGlobe(),
-// go() (a run's GO: the keys card, the visit's first time), and the drive's and the pause menu's
-// elements.
+// keys() (the keys card shown over a run's countdown, the visit's first time on a computer: true
+// if it is), go() (a run's GO: the keys card put away, so nothing covers the road while the clock
+// runs), and the drive's and the pause menu's elements.
 export function setUpChallenges( app ) {
 
 	const dialog = makeDialog();
@@ -304,13 +308,13 @@ export function setUpChallenges( app ) {
 		if ( board.hidden || asking !== boards ) return;
 		if ( ! answer.ok ) {
 
-			mine.textContent = 'The board isn\'t answering. Try again soon.';
+			mine.textContent = answer.status === 429 ? 'Asked too often just now. Try again in a minute.' : 'The board isn\'t answering. Try again soon.';
 			return;
 
 		}
 
 		const { rows: top, total, me } = answer.body;
-		rows.replaceChildren( ...top.map( row => rowItem( row, !! me && ! me.owner && row.rank === me.rank ) ) );
+		rows.replaceChildren( ...top.map( row => rowItem( row, !! me && ! me.owner && row.rank === me.rank && row.name === me.name ) ) );
 		if ( ! top.length ) rows.append( el( 'li', 'ch-none', 'No times yet: be the first!' ) );
 		if ( me?.owner ) mine.textContent = `Your best ${ formatTime( me.ms ) } would be #${ rankText( me.rank ) } (yours as the owner, kept off the board)`;
 		else if ( me ) mine.textContent = `You're #${ rankText( me.rank ) } of ${ Math.max( total, me.rank ) }, with ${ formatTime( me.ms ) }`;
@@ -401,14 +405,16 @@ export function setUpChallenges( app ) {
 	}
 
 	// main.js: the car is down at `place` and driving. The challenge's own start: its run begins, and
-	// true (the keys card isn't shown over the countdown).
+	// true (main.js shows no keys card of its own: the countdown does, the visit's first time, with
+	// time to read it, and puts it away at GO, as a first drive may well start as a challenge).
 	function arrived( place ) {
 
 		if ( ! pending || place?.challenge !== pending.id ) return false;
 		const challenge = pending;
 		pending = null;
 		const d = app.driver;
-		run = { challenge, gates: placeGates( challenge ), start: { east: d.east, north: d.north, heading: d.heading, up: d.y }, phase: 'countdown', left: COUNTDOWN, clock: 0, passes: [], id: runId() };
+		const reading = app.keys?.() ?? false;
+		run = { challenge, gates: placeGates( challenge ), start: { east: d.east, north: d.north, heading: d.heading, up: d.y }, phase: 'countdown', left: reading ? READING : COUNTDOWN, clock: 0, passes: [], id: runId() };
 		meshes.show( run );
 		showHud();
 		probeIn = 0;
@@ -521,7 +527,7 @@ export function setUpChallenges( app ) {
 				app.stats.add( 'challenge', 'start' );
 				app.go?.();
 
-			} else if ( now !== before || count.hidden ) showCount( String( now ) );
+			} else if ( count.hidden || ( now !== before && now <= COUNTDOWN ) ) showCount( now > COUNTDOWN ? 'Get ready' : String( now ), false, now > COUNTDOWN );
 
 		} else if ( run.phase === 'racing' && driving ) {
 
@@ -531,9 +537,20 @@ export function setUpChallenges( app ) {
 		} else if ( run.phase === 'done' && driving && ! finish.hidden ) {
 
 			// The finish card is up, over the road (and on a phone the buttons): the car brought to a
-			// stop, the gas held down or not, till it's put away (Retry, Back, Keep driving here).
-			const slower = Math.max( run.stopping, STOP_LEAST ) * dt;
-			d.speed = Math.sign( d.speed ) * Math.max( 0, Math.abs( d.speed ) - slower );
+			// stop and held there, the gas held down or not, till it's put away (Retry, Back, Keep driving
+			// here). Its booster and a drift's boost are put out (fired at the line, or again under the
+			// card), and what the gas adds (at most its accel half as much again, with Shift) is taken
+			// off on top of the braking, so it slows whatever's held down; stopped, it stays where it
+			// stopped.
+			cutThrust( d );
+			if ( run.stopAt ) Object.assign( d, { east: run.stopAt.east, north: run.stopAt.north, speed: 0 } );
+			else {
+
+				const slower = ( Math.max( run.stopping, STOP_LEAST ) + ( d.spec?.accel ?? 0 ) * 1.6 ) * dt;
+				d.speed = Math.sign( d.speed ) * Math.max( 0, Math.abs( d.speed ) - slower );
+				if ( d.speed === 0 ) run.stopAt = { east: d.east, north: d.north };
+
+			}
 
 		}
 
@@ -586,8 +603,9 @@ export function setUpChallenges( app ) {
 	function finished() {
 
 		run.phase = 'done';
-		// Slowing to a stop in STOPPING s from here (frame).
+		// Slowing to a stop in STOPPING s from here (frame), nothing pushing it on.
 		run.stopping = Math.abs( app.driver.speed ) / STOPPING;
+		cutThrust( app.driver );
 		// The time is the last pass's (to the millisecond, as the passes are). What's posted is a
 		// copy as it finished, the ride it was driven in too: a Retry starts a new run, another ride
 		// can be picked in a pause, and a post being tried again still has this one's.
@@ -597,6 +615,20 @@ export function setUpChallenges( app ) {
 		app.stats.add( 'challenge', 'finish' );
 		app.driver.hud.flash( 'Finished!' );
 		showFinish( run.result );
+
+	}
+
+	// The booster and a drift's or a trick's boost put out (as the booster running dry is).
+	function cutThrust( d ) {
+
+		if ( d.firing ) {
+
+			d.firing = false;
+			d.fx?.cool();
+
+		}
+
+		d.boost = null;
 
 	}
 
@@ -684,10 +716,11 @@ export function setUpChallenges( app ) {
 
 	}
 
-	function showCount( text, go = false ) {
+	function showCount( text, go = false, ready = false ) {
 
 		count.textContent = text;
 		count.classList.toggle( 'go', go );
+		count.classList.toggle( 'ready', ready );
 		count.hidden = false;
 		// The same again restarts its pop.
 		count.style.animation = 'none';
@@ -862,6 +895,7 @@ export function setUpChallenges( app ) {
 		if ( answer.status === 403 && reason === 'visit' ) return finishSay( 'This visit has run out. Reload the page to post times again.' );
 		if ( answer.status === 403 && reason === 'player' ) return finishSay( 'This browser\'s name was removed. Pick a new one on the leaderboard.' );
 		if ( answer.status === 400 ) return finishSay( 'That run didn\'t count. Try again.' );
+		if ( answer.status === 429 && reason === 'visit' ) return finishSay( 'That\'s all the times one visit can post. Reload the page to post more.' );
 		if ( answer.status === 429 ) return finishSay( 'That\'s all the times for today. Try again tomorrow.' );
 		finishSay( 'Couldn\'t reach World Drive, so your time wasn\'t posted.' );
 

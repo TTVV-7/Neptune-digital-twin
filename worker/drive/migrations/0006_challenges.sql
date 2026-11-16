@@ -98,3 +98,7 @@ CREATE TABLE challenge_places (
 -- When each player's last challenge time was taken: one every 10 s at most (as last_score_at is
 -- for scores, kept apart so a time never holds up a stunt score or the other way round).
 ALTER TABLE players ADD COLUMN last_time_at INTEGER NOT NULL DEFAULT 0;
+
+-- How many challenge times each visit has had taken: 100 at most (CHALLENGE_TIMES_PER_VISIT), so one
+-- robot check buys that many, whatever addresses its token is sent from.
+ALTER TABLE visits ADD COLUMN times INTEGER NOT NULL DEFAULT 0;

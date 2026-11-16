@@ -540,6 +540,12 @@ body.touch.ch-running #drive-ui .xp-pops {
 	color: var( --accent );
 }
 
+/* "Get ready", over the visit's first countdown with the keys card. */
+#drive-ui .ch-count.ready {
+	font-size: 44px;
+	white-space: nowrap;
+}
+
 @keyframes ch-count {
 	0% {
 		opacity: 0;

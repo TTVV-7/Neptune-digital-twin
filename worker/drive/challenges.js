@@ -8,8 +8,8 @@ import { MOON_PLACES } from '../../src/drive-app/moon-places.js';
 import { SPOTS } from '../../src/drive-app/places.js';
 import { PLACES } from '../../drive/site/places.js';
 import { adminAccount } from './admin.js';
-import { BOARD_CACHE, dateOf } from './boards.js';
-import { nameCell, topPlaces, townsFor } from './dropins.js';
+import { dateOf } from './boards.js';
+import { VISITOR_PREFIX, nameCell, topPlaces, townsFor } from './dropins.js';
 import { cleanPlace } from './names.js';
 import { PLAYER_ID, authenticate, credentials, database, takeTurn } from './players.js';
 import { standingOf, xpOf } from './progress.js';
@@ -40,20 +40,31 @@ import { readVisit } from './visits.js';
 // token of the right kind (an Earth challenge needs an Earth visit; the Moon's takes any), from a
 // player of the leaderboard's (id and secret), for a live challenge only, no longer than the visit
 // has lasted, every point passed in order (collectibles in any) and no leg quicker than the fastest
-// the game goes allows (challenge-rules.js's checkPasses), one every TIME_GAP from a player and
-// CHALLENGE_TIMES_PER_VISITOR_DAILY a day from a visitor (DriveLimits, by the day's salt; a player
-// whose visitor has had the day's is then held till midnight by their own gap, so their tries
-// after it write nothing and ask DriveLimits nothing). Only each player's best is kept. The owner's
-// runs (an 'o' visit) are taken and answered, but kept off the boards: the owner knows each place
-// and kind before it's live, and chooses them.
+// the game goes allows (challenge-rules.js's checkPasses), one every TIME_GAP from a player,
+// CHALLENGE_TIMES_PER_VISIT from a visit (what one robot check buys, from whatever addresses its
+// token is sent from) and CHALLENGE_TIMES_PER_VISITOR_DAILY a day from a visitor (DriveLimits, by
+// the day's salt, an IPv6 visitor by its /48; a player whose visitor has had the day's is then held
+// till midnight by their own gap, so their tries after it write nothing and ask DriveLimits
+// nothing). Only each player's best is kept. The owner's runs (an 'o' visit) are taken and
+// answered, but kept off the boards: the owner knows each place and kind before it's live, and
+// chooses them.
 //
-// Settings, none of which need setting: CHALLENGE_TIMES_PER_VISITOR_DAILY (TIMES_DAILY);
-// CHALLENGE_LOOKS, the rate limiter binding for the lists, the boards and the times posted, by a
-// keyed hash of the address that changes each day (looks); ADMIN_LOOKS the admin page's (admin.js).
+// What a look costs is bounded whoever asks (docs/world-drive.md, "What challenges cost"): a rank is
+// found in its board's order kept in Cloudflare's cache (boardOrders), never counted row by row, so a
+// player's own rows cost a few rows read however many players a script asks as; a finished board,
+// which can't change, is kept a day; and the looks that miss the cache and read D1 are held to
+// CHALLENGE_MISSES a minute from an address.
+//
+// Settings, none of which need setting: CHALLENGE_TIMES_PER_VISITOR_DAILY (TIMES_DAILY),
+// CHALLENGE_TIMES_PER_VISIT (TIMES_PER_VISIT); CHALLENGE_LOOKS, the rate limiter binding for the
+// lists, the boards and the times posted, and CHALLENGE_MISSES for the lists and boards that read
+// D1, both by a keyed hash of the address (an IPv6 one by its /48) that changes each day (looks);
+// ADMIN_LOOKS the admin page's (admin.js).
 
-// One time every TIME_GAP ms from a player; a visitor's times a day.
+// One time every TIME_GAP ms from a player; a visitor's times a day; a visit's times.
 export const TIME_GAP = 10 * 1000;
 const TIMES_DAILY = 300;
+const TIMES_PER_VISIT = 100;
 // How much longer (s) a run may say it lasted than its visit has (for clocks and frames). (And
 // GRACE, challenge-rules.js's: how long after a challenge's period ends a run finished in it is
 // still taken.)
@@ -64,12 +75,19 @@ const SLACK = 30;
 // script can't have the same board read over and over for nothing.
 export const REPOST = 5 * 60 * 1000;
 // The boards: the top TOP, the list's top LIST_TOP for each challenge, and the finish screen's
-// FINISH_TOP. Kept in Cloudflare's cache as the leaderboard's are, BOARD_CACHE s, a finished
-// challenge's too: its times can't change, but its names can (a rename, or the owner removing a
-// cheat or a rude name), and few look at an old board, so keeping it longer would save little.
+// FINISH_TOP. Kept in Cloudflare's cache as the leaderboard's are: a live challenge's board, the
+// list's tops and each player's own rows CHALLENGE_CACHE s (a new best clears them in the one of
+// Cloudflare's places it's posted in; elsewhere they're at most that behind), so the six live boards
+// are read from D1 at most once a minute each in a place, whoever asks; a finished challenge's board
+// FINISHED_CACHE s, as its times can't change (a name cleaned up on it shows within a day, or at
+// once after a purge of the cache: the docs); and each board's order (boardOrders: the first
+// RANK_MOST times, what a rank is found in) ORDER_KEPT s, a finished one's as long as its board.
 const TOP = 20;
 const LIST_TOP = 3;
 const FINISH_TOP = 5;
+const CHALLENGE_CACHE = 60;
+const FINISHED_CACHE = 24 * 60 * 60;
+const ORDER_KEPT = 10 * 60;
 // The six live challenges are kept in each Worker instance's memory this long (ms), so a list asks
 // D1 for them at most once a minute; a challenge the owner replaces is seen everywhere within it (a
 // time posted for the old one is checked against D1 itself).
@@ -134,7 +152,7 @@ export async function listChallenges( context ) {
 
 	const { env, url } = context;
 	const id = askedPlayer( url );
-	await looks( context );
+	const miss = await looks( context );
 	const db = database( env );
 	const rows = await liveChallenges( context );
 	const ids = rows.map( row => row.id );
@@ -144,17 +162,18 @@ export async function listChallenges( context ) {
 	if ( cached ) tops = await cached.json();
 	else {
 
+		await miss();
 		const results = await db.batch( [
 			...ids.map( challenge => topQuery( db, env, challenge, LIST_TOP ) ),
 			db.prepare( `SELECT id, drivers FROM challenges WHERE id IN ( ${ ids.map( () => '?' ).join( ', ' ) } )` ).bind( ...ids ),
 		] );
 		const drivers = new Map( results.at( - 1 ).results.map( row => [ row.id, row.drivers ] ) );
 		tops = Object.fromEntries( ids.map( ( challenge, i ) => [ challenge, { total: drivers.get( challenge ) ?? 0, top: results[ i ].results.map( entryOf ) } ] ) );
-		await caches.default.put( listed, json( tops, 200, { 'Cache-Control': `public, max-age=${ BOARD_CACHE }` } ) );
+		await caches.default.put( listed, json( tops, 200, { 'Cache-Control': `public, max-age=${ CHALLENGE_CACHE }` } ) );
 
 	}
 
-	const mine = id ? await myStanding( db, url, ids, id ) : {};
+	const mine = id ? await myStanding( context, db, ids, id, miss ) : {};
 	return json( {
 		now: context.now,
 		challenges: rows.map( row => ( { ...challengeOf( row ), ...tops[ row.id ], me: mine[ row.id ] ?? null } ) ),
@@ -165,14 +184,14 @@ export async function listChallenges( context ) {
 // GET /api/challenges/board?challenge=&id=: a challenge's board, live or past (a finished one's is
 // kept as it ended): { challenge: CHALLENGE + { replacedAt, finalAt }, total, rows: [ the TOP best ],
 // me } (me with a player's id: their { rank, name, ms, ... }, or null; the owner's own row says
-// owner: true and the rank it would have). A rank past RANK_MOST is RANK_MOST + 1 (rankOf).
+// owner: true and the rank it would have). A rank past RANK_MOST is RANK_MOST + 1 (rankIn).
 export async function challengeBoard( context ) {
 
 	const { env, url } = context;
 	const challenge = Number( url.searchParams.get( 'challenge' ) );
 	if ( ! Number.isSafeInteger( challenge ) || challenge < 1 ) throw bad();
 	const id = askedPlayer( url );
-	await looks( context );
+	const miss = await looks( context );
 	const db = database( env );
 	const key = boardKey( url, challenge );
 	const cached = await caches.default.match( key );
@@ -180,6 +199,7 @@ export async function challengeBoard( context ) {
 	if ( cached ) board = await cached.json();
 	else {
 
+		await miss();
 		const [ found, top ] = await db.batch( [
 			db.prepare( 'SELECT * FROM challenges WHERE id = ?' ).bind( challenge ),
 			topQuery( db, env, challenge, TOP ),
@@ -187,7 +207,9 @@ export async function challengeBoard( context ) {
 		const row = found.results[ 0 ];
 		if ( ! row ) throw new HttpError( 404, 'No such challenge' );
 		board = { challenge: { ...challengeOf( row ), replacedAt: row.replaced_at, finalAt: row.final_at }, total: row.drivers, rows: top.results.map( entryOf ) };
-		await caches.default.put( key, json( board, 200, { 'Cache-Control': `public, max-age=${ BOARD_CACHE }` } ) );
+		// A finished one's times can't change: kept a day, so asking for past boards in turn reads each
+		// once a day in a place, not once a minute.
+		await caches.default.put( key, json( board, 200, { 'Cache-Control': `public, max-age=${ row.final_at === null ? CHALLENGE_CACHE : FINISHED_CACHE }` } ) );
 
 	}
 
@@ -195,16 +217,29 @@ export async function challengeBoard( context ) {
 	const headers = { 'X-Board-Cache': cached ? 'hit' : 'miss' };
 	if ( id ) {
 
-		// The player's own row, kept as the board is (their new best clears it).
+		// The player's own row, kept as a live board is (their new best clears it): one read of it by
+		// its key, its rank where it's shown on the board, else its final place once the challenge is
+		// over, else found in the board's order (rankIn), so it costs a row or two however far down
+		// it is.
 		const mine = boardKey( url, challenge, id );
 		const kept = await caches.default.match( mine );
 		headers[ 'X-Player-Cache' ] = kept ? 'hit' : 'miss';
 		if ( kept ) return json( { ...answer, me: ( await kept.json() ).me }, 200, headers );
-		const row = await db.prepare( `SELECT p.name, t.ms, t.vehicle, t.owner, t.created_at, ${ hasPass( 'p.account_id', '?3' ) } AS supporter, ${ xpOf( 'p' ) } AS xp, p.title,
-			${ rankOf( 't' ) } AS rank
+		await miss();
+		const row = await db.prepare( `SELECT p.name, t.ms, t.vehicle, t.owner, t.created_at, t.final_rank, ${ hasPass( 'p.account_id', '?3' ) } AS supporter, ${ xpOf( 'p' ) } AS xp, p.title
 			FROM challenge_times t JOIN players p ON p.id = t.player_id WHERE t.challenge_id = ?1 AND t.player_id = ?2` ).bind( challenge, id, supporterEmails( env ) ).first();
-		answer.me = row ? { ...entryOf( row ), ...( row.owner ? { owner: true } : {} ) } : null;
-		await caches.default.put( mine, json( { me: answer.me }, 200, { 'Cache-Control': `public, max-age=${ BOARD_CACHE }` } ) );
+		let rank = null;
+		if ( row ) {
+
+			const final = board.challenge.finalAt !== null;
+			rank = ( row.owner ? null : board.rows.find( shown => shown.name === row.name && shown.ms === row.ms )?.rank )
+				?? ( final && ! row.owner ? row.final_rank : null )
+				?? rankIn( ( await boardOrders( context, db, [ challenge ], miss, final ? FINISHED_CACHE : ORDER_KEPT ) ).get( challenge ), row, id );
+
+		}
+
+		answer.me = row ? { ...entryOf( { ...row, rank } ), ...( row.owner ? { owner: true } : {} ) } : null;
+		await caches.default.put( mine, json( { me: answer.me }, 200, { 'Cache-Control': `public, max-age=${ CHALLENGE_CACHE }` } ) );
 
 	}
 
@@ -217,7 +252,8 @@ export async function challengeBoard( context ) {
 // the order passed). { ms: the player's best, rank, total, isNewBest, top: [ the FINISH_TOP best ] }
 // (rank among the players on the board; for the owner's runs, kept off it, the rank it would have,
 // with owner: true). 400 for a run the game couldn't have driven, 403 for a visit, a player or a
-// challenge that won't do, 429 too often (reason: 'daily' once the visitor's day is used up). The
+// challenge that won't do, 429 too often (reason: 'daily' once the visitor's day is used up,
+// 'visit' once the visit's CHALLENGE_TIMES_PER_VISIT are). The
 // same run posted again within REPOST of its being taken (its answer lost on the way, so the page
 // tries again) is answered as it was taken, nothing more written or counted; a run's id that's
 // another player's on the board is a 400 (reason: 'run'), so a run's id names one time.
@@ -226,7 +262,8 @@ export async function postTime( context ) {
 	const { request, env, limits, now, url } = context;
 	const db = database( env );
 	// A burst of posts from one address (a script), turned away before anything's read, as a burst of
-	// looks is.
+	// looks is. (Not CHALLENGE_MISSES: what a time reads is held by the gap, the visit's times and the
+	// visitor's day, below.)
 	await looks( context );
 	const body = await readJson( request, 2048 );
 	if ( ! isObject( body ) ) throw bad();
@@ -254,7 +291,7 @@ export async function postTime( context ) {
 	// One visit, one player, as for scores.
 	const [ , bound ] = await db.batch( [
 		db.prepare( 'INSERT INTO visits ( id, player_id, expires_at ) VALUES ( ?, ?, ? ) ON CONFLICT ( id ) DO NOTHING' ).bind( visit.id, id, visit.expiresAt ),
-		db.prepare( 'SELECT player_id FROM visits WHERE id = ?' ).bind( visit.id ),
+		db.prepare( 'SELECT player_id, times FROM visits WHERE id = ?' ).bind( visit.id ),
 	] );
 	if ( bound.results[ 0 ]?.player_id !== id ) throw new HttpError( 403, 'Forbidden', { reason: 'visit' } );
 	const was = await db.prepare( 'SELECT ms, owner, run_id, created_at FROM challenge_times WHERE challenge_id = ? AND player_id = ?' ).bind( challengeId, id ).first();
@@ -269,16 +306,33 @@ export async function postTime( context ) {
 		const key = answerKey( url, challengeId, id, run );
 		const kept = await caches.default.match( key );
 		if ( kept ) return json( await kept.json(), 200, { 'X-Time-Cache': 'hit' } );
-		const answer = await answerTime( db, env, challengeId, id, true );
+		const answer = await answerTime( context, db, challengeId, id, true );
 		await keepAnswer( key, answer, was.created_at + REPOST - now );
 		return json( answer, 200, { 'X-Time-Cache': 'miss' } );
 
 	}
 
-	// One time every TIME_GAP from a player, claimed in one statement so two at once can't both get
-	// in. A player held till midnight (their visitor's day used up, below) is turned away here.
-	const gap = await db.prepare( 'UPDATE players SET last_time_at = ?1, last_seen_at = ?1 WHERE id = ?2 AND last_time_at <= ?3' ).bind( now, id, now - TIME_GAP ).run();
+	// One time every TIME_GAP from a player, and CHALLENGE_TIMES_PER_VISIT from a visit (whatever
+	// addresses its token is sent from: each visit is a robot check, so that's all one buys), claimed
+	// together in one transaction so two at once can't both get in: the gap with the visit's count
+	// under its limit, then the count, only if the gap was just claimed (the visit is this player's
+	// alone, and their gap lets one in at a time). A player held till midnight (their visitor's day
+	// used up, below) is turned away here.
+	const perVisit = setting( env.CHALLENGE_TIMES_PER_VISIT, TIMES_PER_VISIT );
+	const [ gap ] = await db.batch( [
+		db.prepare( `UPDATE players SET last_time_at = ?1, last_seen_at = ?1 WHERE id = ?2 AND last_time_at <= ?3
+			AND EXISTS ( SELECT 1 FROM visits WHERE id = ?4 AND player_id = ?2 AND times < ?5 )` ).bind( now, id, now - TIME_GAP, visit.id, perVisit ),
+		db.prepare( 'UPDATE visits SET times = times + 1 WHERE id = ?1 AND player_id = ?2 AND ( SELECT last_time_at FROM players WHERE id = ?2 ) = ?3' ).bind( visit.id, id, now ),
+	] );
 	if ( ! gap.meta.changes ) {
+
+		if ( bound.results[ 0 ].times >= perVisit && player.last_time_at <= now - TIME_GAP ) {
+
+			// The visit's times used up: a new visit (the page reloaded, a robot check) posts more.
+			const retryAfter = Math.ceil( ( visit.expiresAt - now ) / 1000 );
+			throw new HttpError( 429, 'That\'s all the times for this visit', { retryAfter, reason: 'visit' }, { 'Retry-After': String( retryAfter ) } );
+
+		}
 
 		const held = Math.ceil( ( player.last_time_at + TIME_GAP - now ) / 1000 );
 		if ( held > TIME_GAP / 1000 ) throw new HttpError( 429, 'That\'s all for today. Try again tomorrow', { retryAfter: held, reason: 'daily' }, { 'Retry-After': String( held ) } );
@@ -289,15 +343,25 @@ export async function postTime( context ) {
 
 	try {
 
-		await takeTurn( limits, request, 'time', now, setting( env.CHALLENGE_TIMES_PER_VISITOR_DAILY, TIMES_DAILY ) );
+		// The visitor by their /48 (dropins.js's VISITOR_PREFIX): one free tunnel broker's customer holds
+		// 65,536 /64s, which would otherwise each be a visitor with a day of their own.
+		await takeTurn( limits, request, 'time', now, setting( env.CHALLENGE_TIMES_PER_VISITOR_DAILY, TIMES_DAILY ), VISITOR_PREFIX );
 
 	} catch ( err ) {
 
 		// The visitor's day used up: this player's gap is set to run out at midnight UTC (when the
 		// visitor's day starts again), so until then their tries stop at the gap above, before they
 		// write anything or ask DriveLimits again. Each of a visitor's players costs one more try,
-		// not one every TIME_GAP all day.
-		if ( err.status === 429 ) await db.prepare( 'UPDATE players SET last_time_at = ? WHERE id = ?' ).bind( periodOf( 'day', now ).ends - TIME_GAP, id ).run();
+		// not one every TIME_GAP all day. (The visit's count gives back the try it took.)
+		if ( err.status === 429 ) {
+
+			await db.batch( [
+				db.prepare( 'UPDATE players SET last_time_at = ? WHERE id = ?' ).bind( periodOf( 'day', now ).ends - TIME_GAP, id ),
+				db.prepare( 'UPDATE visits SET times = MAX( 0, times - 1 ) WHERE id = ? AND player_id = ?' ).bind( visit.id, id ),
+			] );
+
+		}
+
 		throw err;
 
 	}
@@ -335,13 +399,13 @@ export async function postTime( context ) {
 
 		if ( ! written.meta.changes ) throw new HttpError( 403, 'That challenge is over', { reason: 'challenge' } );
 		// So the player, and anyone asking here, sees it straight away (in this one of Cloudflare's
-		// places; elsewhere within BOARD_CACHE s). Nothing going wrong in it turns the best that's now
-		// kept into an error.
+		// places; elsewhere within CHALLENGE_CACHE s). Nothing going wrong in it turns the best that's
+		// now kept into an error.
 		await forgetTime( context, challengeId, id ).catch( err => console.error( 'Challenge caches', err?.name, err?.message ) );
 
 	}
 
-	const answer = await answerTime( db, env, challengeId, id, isNewBest );
+	const answer = await answerTime( context, db, challengeId, id, isNewBest );
 	// A new best's answer kept for the same run posted again (above).
 	if ( isNewBest ) await keepAnswer( answerKey( url, challengeId, id, run ), answer, REPOST );
 	return json( answer );
@@ -349,17 +413,27 @@ export async function postTime( context ) {
 }
 
 // postTime's answer, for `player` on challenge `id`: their best, its rank, the board's count and
-// top, and whether `isNewBest`.
-async function answerTime( db, env, id, player, isNewBest ) {
+// top, and whether `isNewBest`. A new best changes the board's order, so it's read afresh with the
+// rest (at most RANK_MOST rows: one read for each new best, which the gap, the visit's times and
+// the visitor's day hold) and kept for the looks after it here; a time that isn't one finds its
+// rank in the order kept.
+async function answerTime( context, db, id, player, isNewBest ) {
 
-	const [ standing, top ] = await db.batch( [
-		db.prepare( `SELECT t.ms, t.owner, ${ rankOf( 't' ) } AS rank, c.drivers
-			FROM challenge_times t JOIN challenges c ON c.id = t.challenge_id WHERE t.challenge_id = ? AND t.player_id = ?` ).bind( id, player ),
-		topQuery( db, env, id, FINISH_TOP ),
+	const [ standing, top, read ] = await db.batch( [
+		db.prepare( 'SELECT t.ms, t.owner, t.created_at, c.drivers FROM challenge_times t JOIN challenges c ON c.id = t.challenge_id WHERE t.challenge_id = ? AND t.player_id = ?' ).bind( id, player ),
+		topQuery( db, context.env, id, FINISH_TOP ),
+		...isNewBest ? [ orderQuery( db, id ) ] : [],
 	] );
+	let order;
+	if ( read ) {
+
+		order = orderFrom( read.results );
+		await keepOrder( context.url, id, order, ORDER_KEPT );
+
+	} else order = ( await boardOrders( context, db, [ id ], () => {} ) ).get( id );
 	const mine = standing.results[ 0 ];
 	return {
-		ms: mine.ms, rank: mine.rank, total: mine.drivers, isNewBest, top: top.results.map( entryOf ),
+		ms: mine.ms, rank: rankIn( order, mine, player ), total: mine.drivers, isNewBest, top: top.results.map( entryOf ),
 		...( mine.owner ? { owner: true } : {} ),
 	};
 
@@ -374,10 +448,10 @@ async function keepAnswer( key, answer, ms ) {
 
 }
 
-// The cached rows a new best on challenge `id` by `player` changes: its board and the player's own
-// row there, at once; and the list's tops and the player's rows on the six, with the six's ids
-// this instance knows (or, if it doesn't just now, in the background: finding them may mean
-// fixing a new period's six, which is no part of a time's answer).
+// The cached rows a new best on challenge `id` by `player` changes: its board, its order and the
+// player's own row there, at once; and the list's tops and the player's rows on the six, with the
+// six's ids this instance knows (or, if it doesn't just now, in the background: finding them may
+// mean fixing a new period's six, which is no part of a time's answer).
 async function forgetTime( context, id, player ) {
 
 	const { url, ctx } = context;
@@ -388,7 +462,7 @@ async function forgetTime( context, id, player ) {
 
 	};
 	const known = liveKnown( context.now );
-	await Promise.all( [ boardKey( url, id ), boardKey( url, id, player ), ...known ? lists( known ) : [] ].map( key => caches.default.delete( key ) ) );
+	await Promise.all( [ boardKey( url, id ), boardKey( url, id, player ), orderKey( url, id ), ...known ? lists( known ) : [] ].map( key => caches.default.delete( key ) ) );
 	if ( ! known ) await later( ctx, liveChallenges( context ).then( rows => Promise.all( lists( rows ).map( key => caches.default.delete( key ) ) ) ), 'Challenge caches' );
 
 }
@@ -437,18 +511,26 @@ async function adminAnswer( context ) {
 	] );
 	const drivers = new Map( counts.results.map( row => [ row.id, row.drivers ] ) );
 	const approved = places.results;
+	// The next of each as liveChallenges would fix them now: the longest first (the month, the week,
+	// then the day), each clear of what's fixed and of those worked out before it here (a next week's
+	// pick of yours that a Monday's day must keep clear of, as it will when they're fixed together).
 	const upcoming = [];
-	for ( const period of current.map( nextPeriod ) ) {
+	const fixed = [ ...rows ];
+	for ( const period of [ ...current ].reverse().map( nextPeriod ) ) {
 
 		for ( const world of WORLDS ) {
 
 			const pick = picks.results.find( p => p.period === period.key && p.world === world );
-			const chosen = pick ? pickedPlace( pick ) : await rotationPick( env, period, world, approved, rows );
-			upcoming.push( { period: period.kind, key: period.key, world, kind: chosen.kind, place: chosen.place.name, region: chosen.place.region, lat: chosen.place.lat, lon: chosen.place.lon, source: chosen.source, startsAt: period.starts } );
+			const chosen = pick ? pickedPlace( pick ) : await rotationPick( env, period, world, approved, fixed );
+			const { name, region, lat, lon } = chosen.place;
+			fixed.push( { period: period.key, world, place: name, starts_at: period.starts, ends_at: period.ends, pin: { name, lat, lon } } );
+			upcoming.push( { period: period.kind, key: period.key, world, kind: chosen.kind, place: name, region, lat, lon, source: chosen.source, startsAt: period.starts } );
 
 		}
 
 	}
+
+	upcoming.sort( ( a, b ) => PERIOD_KINDS.indexOf( a.period ) - PERIOD_KINDS.indexOf( b.period ) || WORLDS.indexOf( a.world ) - WORLDS.indexOf( b.world ) );
 
 	return json( {
 		now,
@@ -772,9 +854,11 @@ function samePlace( world, a, b ) {
 }
 
 // A fixed challenge's place ({ name, lat, lon }): its name, and its pin, where a sprint and
-// collectibles start and where a landmark's drive ends.
+// collectibles start and where a landmark's drive ends. (One the admin page has worked out but not
+// fixed has its pin as it is.)
 function pinOf( row ) {
 
+	if ( row.pin ) return row.pin;
 	const route = JSON.parse( row.route );
 	const [ lat, lon ] = row.kind === 'landmark' ? route.points[ 0 ] : [ route.start.lat, route.start.lon ];
 	return { name: row.place, lat, lon };
@@ -864,37 +948,94 @@ function topQuery( db, env, id, most ) {
 }
 
 // The player's best and rank on each of the challenges `ids` ({ [ id ]: { ms, rank, owner? } }),
-// kept as the boards are.
-async function myStanding( db, url, ids, player ) {
+// kept as the boards are: their rows by their keys (six at most), each rank found in its board's
+// order (boardOrders), so a look costs the same few rows read however far down the boards they are,
+// and however many players are asked as in turn.
+async function myStanding( context, db, ids, player, miss ) {
 
-	const key = mineKey( url, ids, player );
+	const key = mineKey( context.url, ids, player );
 	const kept = await caches.default.match( key );
 	if ( kept ) return kept.json();
-	const rows = ( await db.prepare( `SELECT t.challenge_id, t.ms, t.owner, ${ rankOf( 't' ) } AS rank
-		FROM challenge_times t WHERE t.player_id = ? AND t.challenge_id IN ( ${ ids.map( () => '?' ).join( ', ' ) } )` ).bind( player, ...ids ).all() ).results;
-	const mine = Object.fromEntries( rows.map( row => [ row.challenge_id, { ms: row.ms, rank: row.rank, ...( row.owner ? { owner: true } : {} ) } ] ) );
-	await caches.default.put( key, json( mine, 200, { 'Cache-Control': `public, max-age=${ BOARD_CACHE }` } ) );
+	await miss();
+	const rows = ( await db.prepare( `SELECT challenge_id, ms, owner, created_at FROM challenge_times WHERE player_id = ? AND challenge_id IN ( ${ ids.map( () => '?' ).join( ', ' ) } )` )
+		.bind( player, ...ids ).all() ).results;
+	const orders = await boardOrders( context, db, rows.map( row => row.challenge_id ), miss );
+	const mine = Object.fromEntries( rows.map( row => [ row.challenge_id, { ms: row.ms, rank: rankIn( orders.get( row.challenge_id ), row, player ), ...( row.owner ? { owner: true } : {} ) } ] ) );
+	await caches.default.put( key, json( mine, 200, { 'Cache-Control': `public, max-age=${ CHALLENGE_CACHE }` } ) );
 	return mine;
 
 }
 
-// SQL for row `t`'s rank on its board: one more than the rows ahead of it (ahead), counted to
-// RANK_MOST at most, so it's at most RANK_MOST + 1 (the page says "1000+"). With ahead's range on
-// the time, SQLite reads only the rows ahead from the board's index (challenge_times_board), so a
-// rank costs that many rows read, and no rank more than RANK_MOST.
-function rankOf( t ) {
+// The order of each of the boards `ids`: its first RANK_MOST times as [ ms, created_at, player ],
+// quickest first (the same time: who set it first), the owner's left out, as a Map by id. From
+// Cloudflare's cache; those it hasn't, read from the board's index in one batch (as many rows as the
+// board has, RANK_MOST at most: orderQuery) and kept `seconds`. So a board is read whole at most once
+// each ORDER_KEPT in a place (and again after a new best there: answerTime reads it afresh), whoever
+// asks, rather than a count of the rows ahead for each player looked at.
+async function boardOrders( context, db, ids, miss, seconds = ORDER_KEPT ) {
 
-	return `( SELECT COUNT(*) FROM ( SELECT 1 FROM challenge_times o WHERE ${ ahead( 'o', t ) } LIMIT ${ RANK_MOST } ) ) + 1`;
+	const { url } = context;
+	const orders = new Map();
+	const kept = await Promise.all( ids.map( id => caches.default.match( orderKey( url, id ) ) ) );
+	for ( const [ i, res ] of kept.entries() ) if ( res ) orders.set( ids[ i ], await res.json() );
+	const missing = ids.filter( id => ! orders.has( id ) );
+	if ( ! missing.length ) return orders;
+	await miss();
+	const read = await db.batch( missing.map( id => orderQuery( db, id ) ) );
+	await Promise.all( missing.map( ( id, i ) => {
+
+		const order = orderFrom( read[ i ].results );
+		orders.set( id, order );
+		return keepOrder( url, id, order, seconds );
+
+	} ) );
+	return orders;
 
 }
 
-// SQL for "row `o` is ahead of row `t` on t's board": a quicker time, or the same set earlier, and
-// not the owner's. (The time's range first, on its own, so SQLite seeks the index to it rather than
-// reading the whole board.)
-function ahead( o, t ) {
+// A board's order from D1: its first RANK_MOST rows by the board's index (challenge_times_board, its
+// key ending in the player's id), which covers the query, so it reads those rows and no more.
+function orderQuery( db, id ) {
 
-	return `${ o }.challenge_id = ${ t }.challenge_id AND ${ o }.owner = 0 AND ${ o }.ms <= ${ t }.ms AND ( ${ o }.ms < ${ t }.ms OR ( ${ o }.ms = ${ t }.ms
-		AND ( ${ o }.created_at < ${ t }.created_at OR ( ${ o }.created_at = ${ t }.created_at AND ${ o }.player_id < ${ t }.player_id ) ) ) )`;
+	return db.prepare( `SELECT ms, created_at, player_id FROM challenge_times WHERE challenge_id = ? AND owner = 0 ORDER BY ms, created_at, player_id LIMIT ${ RANK_MOST }` ).bind( id );
+
+}
+
+function orderFrom( rows ) {
+
+	return rows.map( row => [ row.ms, row.created_at, row.player_id ] );
+
+}
+
+// Board `id`'s `order` kept in Cloudflare's cache for `seconds`; nothing going wrong in it turns an
+// answer into an error.
+function keepOrder( url, id, order, seconds ) {
+
+	return caches.default.put( orderKey( url, id ), json( order, 200, { 'Cache-Control': `public, max-age=${ seconds }` } ) ).catch( err => console.error( 'Challenge caches', err?.name, err?.message ) );
+
+}
+
+// The rank of `player`'s time ({ ms, created_at }) in a board's `order`: one more than the times
+// ahead of it (quicker, or the same set earlier, or at the same moment by a player whose id sorts
+// first), found by halving. Their own time in the order (as it was when it was read: only a better
+// one has replaced it since, which is never ahead of it) isn't counted. An order of RANK_MOST times
+// all ahead says RANK_MOST + 1 (the page's "1000+"). The owner's time (kept out of the order) gets
+// the rank it would have.
+export function rankIn( order, { ms, created_at: at }, player ) {
+
+	let low = 0;
+	let high = order.length;
+	while ( low < high ) {
+
+		const middle = ( low + high ) >> 1;
+		const [ theirs, set, who ] = order[ middle ];
+		if ( theirs < ms || ( theirs === ms && ( set < at || ( set === at && who < player ) ) ) ) low = middle + 1;
+		else high = middle;
+
+	}
+
+	const own = order.findIndex( entry => entry[ 2 ] === player );
+	return Math.min( own >= 0 && own < low ? low - 1 : low, RANK_MOST ) + 1;
 
 }
 
@@ -945,6 +1086,13 @@ function boardKey( url, challenge, player = '' ) {
 
 }
 
+// Where a board's order (boardOrders) is kept.
+function orderKey( url, challenge ) {
+
+	return new Request( `${ url.origin }/api/challenges/order?challenge=${ challenge }` );
+
+}
+
 // Where a time's answer is kept for the same run posted again (postTime).
 function answerKey( url, challenge, player, run ) {
 
@@ -963,24 +1111,39 @@ function askedPlayer( url ) {
 
 // CHALLENGE_LOOKS (Cloudflare's rate limiter: no Durable Object request) for the lists, the boards
 // and the times posted: a burst of them (a script) is turned away before it reads anything. Each
-// address (an IPv6 one by its /64) is counted by lookKey, never as itself.
+// address (an IPv6 one by its /48) is counted by lookKey, never as itself. Returns the request's
+// miss(): CHALLENGE_MISSES asked, once, the first time a list or a board finds something it needs
+// missing from Cloudflare's cache and is to read D1 (a board's rows, the list's tops, a player's
+// own, a board's order), and a 429 past it; a page's own looks (the list as it opens, a board or
+// two, the list again after a time) are a few a minute, and those the cache has cost nothing.
 async function looks( { env, request, now } ) {
 
-	if ( env.CHALLENGE_LOOKS && ! ( await env.CHALLENGE_LOOKS.limit( { key: await lookKey( env, request, now ) } ) ).success ) {
+	const key = env.CHALLENGE_LOOKS || env.CHALLENGE_MISSES ? await lookKey( env, request, now ) : null;
+	if ( env.CHALLENGE_LOOKS && ! ( await env.CHALLENGE_LOOKS.limit( { key } ) ).success ) throw tooMany();
+	let asked = null;
+	return () => asked ??= ( async () => {
 
-		throw new HttpError( 429, 'Too many. Try again in a minute', { retryAfter: 60 }, { 'Retry-After': '60' } );
+		if ( env.CHALLENGE_MISSES && ! ( await env.CHALLENGE_MISSES.limit( { key } ) ).success ) throw tooMany();
 
-	}
+	} )();
 
 }
 
-// The key CHALLENGE_LOOKS counts an address by: an HMAC of the day and the address with the
-// challenges' derived key (seed), so no address is handed to the rate limiter as it is, and
-// tomorrow's key for it is another (as DriveLimits counts by a hash with the day's salt, without
-// asking it for the salt: that would be a Durable Object request a look).
+function tooMany() {
+
+	return new HttpError( 429, 'Too many. Try again in a minute', { retryAfter: 60 }, { 'Retry-After': '60' } );
+
+}
+
+// The key CHALLENGE_LOOKS and CHALLENGE_MISSES count an address by: an HMAC of the day and the
+// address with the challenges' derived key (seed), so no address is handed to the rate limiter as it
+// is, and tomorrow's key for it is another (as DriveLimits counts by a hash with the day's salt,
+// without asking it for the salt: that would be a Durable Object request a look). An IPv6 address by
+// its /48 (dropins.js's VISITOR_PREFIX): a /48, which a free tunnel broker hands out, holds 65,536
+// /64s, each of which would otherwise have limits of its own.
 export async function lookKey( env, request, now ) {
 
-	return hex( await seed( env, `look:${ dateOf( now ) }:${ addressOf( request ) }` ) ).slice( 0, 32 );
+	return hex( await seed( env, `look:${ dateOf( now ) }:${ addressOf( request, VISITOR_PREFIX ) }` ) ).slice( 0, 32 );
 
 }
 
@@ -1043,38 +1206,51 @@ async function moonCheck( env ) {
 // A route of `kind`'s faults on the Moon: POINT_FAULTS for each of its points (and its start) on
 // ground sloping MOON_SLOPE degrees or more, and one for each steep stretch along its legs in their
 // order (legFaults: a sprint's from the start through its gates, a landmark's from the start to it;
-// collectibles are taken in any order, so theirs aren't known). (The place itself, a sprint's or
-// collectibles' start and a landmark's goal, is where it is: it counts the same in every one laid
-// out.)
-export function moonFaults( route, kind ) {
+// collectibles are taken in any order, so theirs aren't known). The place itself (a sprint's or
+// collectibles' start, a landmark's goal) is where it is, the same in every one laid out, so it isn't
+// counted: no faults means nothing that could be better, and makeRoute stops there. Counting stops
+// once it reaches `enough` (makeRoute's best so far: a route with as many is no better), so a try
+// that's no better costs only as much of its legs as it takes to tell.
+export function moonFaults( route, kind, enough = Infinity ) {
 
 	const points = [ [ route.start.lat, route.start.lon ], ...route.points ];
-	const steep = points.filter( ( [ lat, lon ] ) => moonSteep( lat, lon ) ).length * POINT_FAULTS;
-	if ( kind === 'collect' ) return steep;
-	let stretches = 0;
-	for ( let i = 1; i < points.length; i ++ ) stretches += legFaults( ...points[ i - 1 ], ...points[ i ] );
-	return steep + stretches;
+	const own = kind === 'landmark' ? 1 : 0;
+	let faults = points.filter( ( point, i ) => i !== own && moonSteep( ...point ) ).length * POINT_FAULTS;
+	if ( kind === 'collect' ) return faults;
+	for ( let i = 1; i < points.length && faults < enough; i ++ ) faults += legFaults( ...points[ i - 1 ], ...points[ i ], enough - faults );
+	return faults;
 
 }
 
 // How many stretches of LEG_REACH m along the straight line from ( lat, lon ) to ( toLat, toLon ) on
 // the Moon rise or fall MOON_SLOPE degrees or more (a crater's wall, or a mountain's side, on the
 // way): heights every LEG_STEP m, craters under MOON_DETAIL m left out, each steep stretch counted
-// once (the next looked at from its end).
-export function legFaults( lat, lon, toLat, toLon ) {
+// once (the next looked at from its end). Counted from the start, up to `enough` at most (the
+// heights past where it got to aren't read). With `enough` 1 it's only whether there's any, which
+// is the same looked for from either end: from the far one, where a landmark's own crater wall or
+// mountainside is, so a leg that crosses one is told in a few reads.
+export function legFaults( lat, lon, toLat, toLon, enough = Infinity ) {
 
 	const length = metresOn( 'moon', lat, lon, toLat, toLon );
 	const steps = Math.ceil( length / LEG_STEP );
-	if ( steps < 1 ) return 0;
+	if ( steps < 1 || enough < 1 ) return 0;
 	const bearing = bearingTo( 'moon', lat, lon, toLat, toLon );
 	const step = length / steps;
-	const heights = Array.from( { length: steps + 1 }, ( _, i ) => moonHeightAt( ...destination( 'moon', lat, lon, bearing, i * step ), MOON_DETAIL ) );
+	const heights = [];
+	const height = i => heights[ i ] ??= moonHeightAt( ...destination( 'moon', lat, lon, bearing, i * step ), MOON_DETAIL );
 	const across = Math.max( 1, Math.round( LEG_REACH / step ) );
 	const most = Math.tan( MOON_SLOPE * Math.PI / 180 ) * across * step;
-	let faults = 0;
-	for ( let i = 0; i + across <= steps; i ++ ) {
+	if ( enough === 1 ) {
 
-		if ( Math.abs( heights[ i + across ] - heights[ i ] ) < most ) continue;
+		for ( let i = steps - across; i >= 0; i -- ) if ( Math.abs( height( i + across ) - height( i ) ) >= most ) return 1;
+		return 0;
+
+	}
+
+	let faults = 0;
+	for ( let i = 0; i + across <= steps && faults < enough; i ++ ) {
+
+		if ( Math.abs( height( i + across ) - height( i ) ) < most ) continue;
 		faults ++;
 		i += across - 1;
 

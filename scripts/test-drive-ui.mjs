@@ -6933,7 +6933,8 @@ describe( 'World Drive challenges', () => {
 
 			const id = Number( new URL( route.request().url() ).searchParams.get( 'challenge' ) );
 			const challenge = listed().find( c => c.id === id );
-			const rows = Array.from( { length: Math.min( 20, challenge.total ) }, ( _, i ) => row( i + 1, `Driver ${ i + 1 }`, 20000 + i * 900 ) );
+			// (Your own row among them, as the Worker has it, if you're in the top 20.)
+			const rows = Array.from( { length: Math.min( 20, challenge.total ) }, ( _, i ) => i + 1 === challenge.me?.rank ? row( i + 1, PLAYER.name, challenge.me.ms ) : row( i + 1, `Driver ${ i + 1 }`, 20000 + i * 900 ) );
 			json( route, { challenge, total: challenge.total, rows, me: challenge.me ? { ...row( challenge.me.rank, PLAYER.name, challenge.me.ms ) } : null } );
 
 		} );
@@ -7067,10 +7068,14 @@ describe( 'World Drive challenges', () => {
 		await page.locator( '.ch-card' ).first().waitFor();
 		await start( page, 11 );
 		assert.deepEqual( await page.evaluate( () => [ window.drive.place.name, window.drive.place.challenge, window.drive.world ] ), [ 'Furka Pass', 11, 'earth' ] );
-		assert.equal( await page.locator( '#drive-ui .keys' ).isVisible(), false, 'the keys card over the countdown' );
-		// The countdown: the gas held down doesn't move the car.
+		// The countdown: the visit's first drive started as a challenge, so the keys card is over it
+		// (a longer one, "Get ready" till the 3), and put away at GO (below).
 		await page.locator( '#drive-ui .ch-count' ).waitFor();
 		assert.equal( await page.evaluate( () => window.drive.challenges.run.phase ), 'countdown' );
+		assert.ok( await page.locator( '#drive-ui .keys' ).isVisible(), 'no keys card over the visit\'s first countdown' );
+		assert.equal( await page.locator( '#drive-ui .ch-count' ).textContent(), 'Get ready' );
+		assert.ok( await page.evaluate( () => window.drive.challenges.run.left > 3 ) );
+		// (The gas held down doesn't move the car.)
 		await page.keyboard.down( 'KeyW' );
 		await page.waitForTimeout( 600 );
 		const held = await page.evaluate( () => ( { east: window.drive.driver.east, north: window.drive.driver.north, phase: window.drive.challenges.run.phase } ) );
@@ -7093,27 +7098,26 @@ describe( 'World Drive challenges', () => {
 		}
 
 		assert.deepEqual( [ gates.beams, gates.rings, gates.items, gates.inScene ], [ 3, 3, false, true ] );
-		// Two draws for them all (the beams, the rings), whatever their number.
+		// Two draws for them all (the beams, the rings), whatever their number: counted as three.js
+		// draws them (each draw of a mesh calls its onBeforeRender once), over a few frames.
 		const draws = await page.evaluate( async () => {
 
-			const { renderer, challenges } = window.drive;
+			const { meshes } = window.drive.challenges;
 			const frame = () => new Promise( resolve => requestAnimationFrame( resolve ) );
+			const counts = { beams: 0, rings: 0, items: 0 };
+			for ( const name of Object.keys( counts ) ) meshes[ name ].onBeforeRender = () => counts[ name ] ++;
 			await frame();
-			await frame();
-			const shown = renderer.info.render.calls;
-			challenges.meshes.hide();
-			await frame();
-			await frame();
-			const hidden = renderer.info.render.calls;
-			challenges.meshes.show( challenges.run );
-			return shown - hidden;
+			const from = { ...counts };
+			const frames = 4;
+			for ( let i = 0; i < frames; i ++ ) await frame();
+			for ( const name of Object.keys( counts ) ) meshes[ name ].onBeforeRender = () => {};
+			return { frames, per: Object.fromEntries( Object.keys( counts ).map( name => [ name, ( counts[ name ] - from[ name ] ) / frames ] ) ) };
 
 		} );
-		assert.equal( draws, 2 );
+		assert.deepEqual( draws.per, { beams: 1, rings: 1, items: 0 }, JSON.stringify( draws ) );
 		await page.waitForFunction( () => window.drive.challenges.run?.phase === 'racing', null, { timeout: 60000 } );
-		// The keys card at GO: the visit's first drive started as a challenge, so not over the countdown
-		// but not missed either.
-		assert.ok( await page.locator( '#drive-ui .keys' ).isVisible(), 'no keys card at GO on the visit\'s first drive' );
+		// The keys card put away at GO: nothing over the road while the clock runs.
+		assert.equal( await page.locator( '#drive-ui .keys' ).isVisible(), false, 'the keys card over the road while the clock runs' );
 		assert.ok( await page.locator( '#drive-ui .ch-hud' ).isVisible() );
 		assert.equal( await page.locator( '#drive-ui .ch-hud .ch-gates' ).textContent(), '0 / 3' );
 		// The arrow: the gate ahead, straight up.
@@ -7141,19 +7145,36 @@ describe( 'World Drive challenges', () => {
 		assert.equal( await page.locator( '.ch-f-rows li.me .who b' ).textContent(), PLAYER.name );
 		assert.ok( await page.locator( '.ch-f-badge' ).isVisible() );
 		assert.equal( await page.locator( '#drive-ui .ch-hud .ch-clock' ).textContent(), formatTime( ms ) );
-		// The finish card over the road: the car brought to a stop under it, the gas held down or not.
+		// The finish card over the road: the car brought to a stop under it and held there, the gas held
+		// down and the booster fired (Shift) or not. Measured in the game's own time (the driver's clock,
+		// the frames' steps, each 0.1 s at most: a slow machine's frames are fewer, not longer): stopped
+		// within two seconds of it, and still there a second after, nothing firing.
 		await page.keyboard.down( 'KeyW' );
-		await page.waitForTimeout( 1500 );
-		const stopped = await page.evaluate( async () => {
+		await page.keyboard.down( 'ShiftLeft' );
+		const stopped = await page.evaluate( () => new Promise( resolve => {
 
 			const d = window.drive.driver;
-			const was = { east: d.east, north: d.north };
-			await new Promise( resolve => setTimeout( resolve, 500 ) );
-			return { speed: d.speed, moved: Math.hypot( d.east - was.east, d.north - was.north ) };
+			const from = d.clock;
+			let at = null;
+			let fastest = 0;
+			const step = () => {
 
-		} );
+				fastest = Math.max( fastest, Math.abs( d.speed ) );
+				if ( d.clock - from < 2 ) return requestAnimationFrame( step );
+				at ??= { east: d.east, north: d.north, clock: d.clock, speed: d.speed };
+				if ( d.clock - at.clock < 1 ) return requestAnimationFrame( step );
+				resolve( { stoppedSpeed: at.speed, speed: d.speed, moved: Math.hypot( d.east - at.east, d.north - at.north ), firing: d.firing, boost: !! d.boost, fastest } );
+
+			};
+			step();
+
+		} ) );
+		await page.keyboard.up( 'ShiftLeft' );
 		await page.keyboard.up( 'KeyW' );
-		assert.ok( Math.abs( stopped.speed ) < 0.5 && stopped.moved < 1, JSON.stringify( stopped ) );
+		assert.ok( Math.abs( stopped.stoppedSpeed ) < 0.5 && Math.abs( stopped.speed ) < 0.5 && stopped.moved < 0.2, JSON.stringify( stopped ) );
+		// (Never sped up past the line's 40 m/s: before, the booster under the card took it to 50 in two
+		// seconds and it was 100 m on.)
+		assert.ok( ! stopped.firing && ! stopped.boost && stopped.fastest < 44, JSON.stringify( stopped ) );
 		await shot( page, 'challenges-5-finish' );
 		assert.deepEqual( page.errors, [] );
 		await page.context().close();
@@ -7240,12 +7261,16 @@ describe( 'World Drive challenges', () => {
 		const page = await challengePage( { player: null } );
 		await page.locator( '#globe-ui .challenges-open' ).click();
 		await page.locator( '.ch-card' ).first().waitFor();
+		const recentBefore = await page.evaluate( () => localStorage.getItem( 'world-drive.recent' ) );
 		await start( page, 15 );
 		// A landmark's start is a pin on the way to it, not the landmark: named so on the top bar, by its
-		// coordinates where places are named (a stunt score's board), and not among the recent places.
-		const named = await page.evaluate( () => ( { name: window.drive.place.name, near: window.drive.place.near, bar: document.querySelector( '#drive-ui .place' ).textContent, recent: localStorage.getItem( 'world-drive.recent' ) ?? '' } ) );
+		// coordinates where places are named (a stunt score's board), and not among the recent places
+		// (nothing of it added there: no entry at its start, by any name).
+		const named = await page.evaluate( () => ( { name: window.drive.place.name, near: window.drive.place.near, bar: document.querySelector( '#drive-ui .place' ).textContent, recent: localStorage.getItem( 'world-drive.recent' ) } ) );
 		assert.deepEqual( [ named.name, named.near, named.bar ], [ 'Dropped pin', 'On the way to Eiffel Tower', 'On the way to Eiffel Tower' ], JSON.stringify( named ) );
-		assert.ok( ! named.recent.includes( 'Eiffel' ) && ! named.recent.includes( 'On the way' ), named.recent );
+		assert.equal( named.recent, recentBefore );
+		const { start: landmarkStart } = CHALLENGES.find( c => c.id === 15 ).route;
+		assert.ok( ! JSON.parse( named.recent ?? '[]' ).some( place => Math.abs( place.lat - landmarkStart.lat ) < 1e-4 && Math.abs( place.lon - landmarkStart.lon ) < 1e-4 ), named.recent );
 		await page.waitForFunction( () => window.drive.challenges.run?.phase === 'racing', null, { timeout: 60000 } );
 		await chase( page, 50 );
 		const form = page.locator( '.ch-finish .ch-f-form' );
@@ -7453,23 +7478,23 @@ describe( 'World Drive challenges', () => {
 
 	} );
 
-	test( 'the gates\' ground found a few rays a frame: with each first ray into a 25 m square 20 ms slow (as a tile\'s first builds its hierarchy), never two slow ones in a frame, none as the car arrives, and every star near the car on the ground soon after', async () => {
+	test( 'the gates\' ground found a few rays a frame: with each first ray into a 25 m square 20 ms slow (as a tile\'s first builds its hierarchy), never two slow ones in a frame, no ray once a frame\'s 4 ms are spent, none as the car arrives, every star near the car on the ground soon after, and one over 800 m off not looked at till the car comes near', async () => {
 
 		const page = await challengePage();
-		// A monthly's hunt: 15 stars over the pad, up to 700 m from its start.
-		const stars = Array.from( { length: 15 }, ( _, i ) => north( 100 + ( i % 5 ) * 140, ( Math.floor( i / 5 ) - 1 ) * 160 ) );
+		// A monthly's hunt: 15 stars over the pad, up to 700 m from its start, and a 16th 1,300 m off.
+		const stars = [ ...Array.from( { length: 15 }, ( _, i ) => north( 100 + ( i % 5 ) * 140, ( Math.floor( i / 5 ) - 1 ) * 160 ) ), north( 1300 ) ];
 		const hunt = { id: 21, period: 'month', key: 'month:2026-11', world: 'earth', kind: 'collect', place: 'Furka Pass', region: '', route: route( stars, 18 ), startsAt: NOW - 15 * 86400e3, endsAt: NOW + 14 * 86400e3, total: 0, top: [], me: null };
 		const answer = route => route.fulfill( { contentType: 'application/json', body: JSON.stringify( { now: Date.now(), challenges: [ ...listed(), { ...hunt, startsAt: Date.now() + hunt.startsAt, endsAt: Date.now() + hunt.endsAt } ] } ) } );
 		await page.route( `${ BASE }/api/challenges?*`, answer );
 		await page.route( `${ BASE }/api/challenges`, answer );
-		// Every ray down from the challenges' code timed by frame, the first into each 25 m square made
-		// 20 ms slower; and those cast as the car arrived (in the drop-in's own frame).
+		// Every ray down from the challenges' code timed, frame by frame, the first into each 25 m square
+		// made 20 ms slower; and those cast as the car arrived (in the drop-in's own frame).
 		await page.evaluate( () => {
 
 			const { ground } = window.drive;
 			const cast = ground.heightAt;
 			const seen = new Set();
-			const probes = window.probes = { frame: 0, slow: {}, ms: {}, atArrival: 0, rays: 0 };
+			const probes = window.probes = { frame: 0, slow: {}, rays: {}, atArrival: 0, count: 0 };
 			const tick = () => {
 
 				probes.frame ++;
@@ -7493,9 +7518,9 @@ describe( 'World Drive challenges', () => {
 
 				}
 
-				probes.rays ++;
+				probes.count ++;
 				const y = cast.call( this, x, z, ...rest );
-				probes.ms[ probes.frame ] = ( probes.ms[ probes.frame ] ?? 0 ) + performance.now() - began;
+				( probes.rays[ probes.frame ] ??= [] ).push( performance.now() - began );
 				return y;
 
 			};
@@ -7505,22 +7530,52 @@ describe( 'World Drive challenges', () => {
 		await page.locator( '.ch-card[data-id="21"]' ).waitFor();
 		await start( page, 21 );
 		const began = Date.now();
-		await page.waitForFunction( () => window.drive.challenges.run?.gates.every( gate => gate.probed && gate.ground !== null ), null, { timeout: 60000 } );
+		await page.waitForFunction( () => window.drive.challenges.run?.gates.slice( 0, 15 ).every( gate => gate.probed && gate.ground !== null ), null, { timeout: 60000 } );
 		const placed = Date.now() - began;
 		const probes = await page.evaluate( () => window.probes );
 		const slowest = Math.max( ...Object.values( probes.slow ) );
-		const busiest = Math.max( ...Object.values( probes.ms ) );
 		const slowRays = Object.values( probes.slow ).reduce( ( a, b ) => a + b, 0 );
-		// (For the docs: what it took, and what all of it in one frame would have.)
-		console.log( `challenge probes: ${ probes.rays } rays, ${ slowRays } slow, over ${ Object.keys( probes.ms ).length } frames; at most ${ slowest } slow and ${ busiest.toFixed( 1 ) } ms in a frame; all placed ${ placed } ms after driving began` );
+		const frames = Object.values( probes.rays );
+		const busiest = Math.max( ...frames.map( rays => rays.reduce( ( a, b ) => a + b, 0 ) ) );
+		// (For the docs: what it took.)
+		console.log( `challenge probes: ${ probes.count } rays, ${ slowRays } slow, over ${ frames.length } frames; at most ${ slowest } slow and ${ busiest.toFixed( 1 ) } ms of rays in a frame; all placed ${ placed } ms after driving began` );
+		// What the budget bounds, whatever the machine's load: never two slow rays in a frame, and no ray
+		// cast in a frame once those before it there had taken PROBE_MS (4 ms; a ray's time here is at
+		// most what the frame's clock saw, so the code saw at least as much spent).
 		assert.equal( slowest, 1, JSON.stringify( probes.slow ) );
-		assert.ok( busiest < 20 + 4 + 15, `${ busiest } ms in a frame` );
+		for ( const rays of frames ) {
+
+			let spent = 0;
+			for ( const [ i, ms ] of rays.entries() ) {
+
+				assert.ok( i === 0 || spent < 4, `a ray cast after ${ spent.toFixed( 1 ) } ms of rays in its frame: ${ JSON.stringify( rays ) }` );
+				spent += ms;
+
+			}
+
+		}
+
 		assert.ok( slowRays >= 15, String( slowRays ) );
 		// None as the car arrived (the drop-in's own frame, with its own work).
 		assert.equal( probes.atArrival, 0 );
 		// On the pad's ground, each.
-		const grounds = await page.evaluate( () => window.drive.challenges.run.gates.map( gate => gate.ground ) );
+		const grounds = await page.evaluate( () => window.drive.challenges.run.gates.slice( 0, 15 ).map( gate => gate.ground ) );
 		assert.ok( grounds.every( y => Math.abs( y ) < 0.05 ), JSON.stringify( grounds ) );
+		// The one 1,300 m off: not looked at from the start (PROBE_NEAR, 800 m: a far one's tiles are
+		// coarse), shown at the start's height meanwhile, however long the car waits there (the others
+		// all looked at, it'd be the next); looked at once the car is within 800 m of it.
+		const far = await page.evaluate( async () => {
+
+			for ( let i = 0; i < 40; i ++ ) await new Promise( resolve => requestAnimationFrame( resolve ) );
+			const { probed, ground } = window.drive.challenges.run.gates[ 15 ];
+			return [ probed, ground ];
+
+		} );
+		assert.deepEqual( far, [ false, null ] );
+		await page.waitForFunction( () => window.drive.challenges.run?.phase === 'racing', null, { timeout: 60000 } );
+		await page.evaluate( ( [ east, northing ] ) => Object.assign( window.drive.driver, { east, north: northing, speed: 0 } ), [ 0, 700 ] );
+		await page.waitForFunction( () => window.drive.challenges.run.gates[ 15 ].probed, null, { timeout: 30000 } );
+		assert.ok( Math.abs( await page.evaluate( () => window.drive.challenges.run.gates[ 15 ].ground ) ) < 0.05 );
 		assert.deepEqual( page.errors, [] );
 		await page.context().close();
 

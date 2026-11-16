@@ -65,9 +65,12 @@ export { DriveRoom } from './live.js';
 //   PROGRESS_POSTS        the rate limiter binding for each player's reports of what they drove
 //                         (progress.js)
 //   CHALLENGE_LOOKS       the rate limiter binding for the challenges' lists, boards and times, by
-//                         a keyed hash of the address and the day (never the address itself);
+//                         a keyed hash of the address (an IPv6 one by its /48) and the day (never
+//                         the address itself); CHALLENGE_MISSES the one for those of the lists and
+//                         boards that miss the cache and read D1, by the same key;
 //                         CHALLENGE_TIMES_PER_VISITOR_DAILY the times a visitor may post a day (300
-//                         if unset) (challenges.js)
+//                         if unset), CHALLENGE_TIMES_PER_VISIT the times a visit may post (100 if
+//                         unset) (challenges.js)
 //   TURNSTILE_VERIFY_URL, SEARCH_UPSTREAM, TEST_CLOCK, GOOGLE_JWKS_URL   tests only (see
 //                         scripts/test-drive-worker.mjs)
 
