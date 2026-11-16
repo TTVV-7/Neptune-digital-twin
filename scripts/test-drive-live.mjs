@@ -505,7 +505,9 @@ describe( 'Driving with others', () => {
 			'not one': 'nope',
 			'signed with another secret': await visitToken( Date.now(), FAIL_SECRET ),
 			'its expiry changed': [ v, id, String( Number( expires ) + 3600 ), signature ].join( '.' ),
-			'its id changed': [ v, `${ id.slice( 0, - 1 ) }${ id.endsWith( 'A' ) ? 'B' : 'A' }`, expires, signature ].join( '.' ),
+			'its id changed': [ v, `${ id.slice( 0, - 2 ) }${ id.at( - 2 ) === 'A' ? 'B' : 'A' }${ id.at( - 1 ) }`, expires, signature ].join( '.' ),
+			// (The id's last letter says which kind of visit it is: visits.js.)
+			'its kind changed': [ v, `${ id.slice( 0, - 1 ) }${ id.endsWith( 'e' ) ? 'm' : 'e' }`, expires, signature ].join( '.' ),
 			'one from seven hours ago': await visitToken( Date.now() - 7 * HOUR ),
 		};
 		for ( const [ what, bad ] of Object.entries( turnedAway ) ) assert.equal( ( await connect( server, room, { token: bad } ) ).status, 401, what );

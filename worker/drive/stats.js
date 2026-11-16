@@ -1,7 +1,9 @@
-import { HttpError, isObject, json, list, readJson } from '../http.js';
+import { HttpError, isObject, json, readJson } from '../http.js';
 import { checkCounts } from '../../src/drive-app/stats-protocol.js';
+import { checkPlaces } from '../../src/drive-app/dropin-cells.js';
 import { dayOf } from '../../src/drive-app/levels.js';
-import { currentAccount } from './accounts.js';
+import { KEEP_DAYS, adminAccount, askedDays } from './admin.js';
+import { recordPlaces } from './dropins.js';
 import { database } from './players.js';
 import { KEEP as KEEP_SCORES } from './scores.js';
 import { hasPass, supporterEmails } from './supporter.js';
@@ -14,13 +16,13 @@ import { readVisit } from './visits.js';
 // no consent banner. The admin page is also told what the leaderboard's and the Supporter Pass's own
 // tables say of each day (FACTS) and how many there are now (TOTALS), counted as it asks.
 //
+// A post carries the places of the drop-ins it counts too (dropins.js): where people drop in, to
+// about a kilometre, for the admin page's heat map, at no request of its own.
+//
 // Settings: ADMIN_EMAILS (a secret or var, comma-separated): the Google accounts that may see the
-// stats, signed in on worlddrive.app. STATS_POSTS: the rate limiter binding for each visit's posts.
+// stats, signed in on worlddrive.app (admin.js). STATS_POSTS: the rate limiter binding for each
+// visit's posts; ADMIN_LOOKS the admin page's asks' (admin.js).
 
-// The most days the admin page asks for (a year), and how long rows are kept: two of those, so a
-// year can be compared with the year before it.
-const MOST_DAYS = 365;
-const KEEP_DAYS = 2 * MOST_DAYS;
 const DAY = 24 * 60 * 60 * 1000;
 
 // What the admin page is told of each day from the leaderboard's and the Supporter Pass's own tables,
@@ -62,15 +64,20 @@ async function add( db, day, counts ) {
 
 }
 
-// POST /api/stats { visit, counts: { 'metric:key': n } }: what this visit played since its last
-// post. 204, whatever it counted: a page doesn't need to know. Only with the visit's token (so only
-// from visits that passed the robot check), held to STATS_POSTS a minute for each visit.
-export async function postStats( { request, env, now } ) {
+// POST /api/stats { visit, counts: { 'metric:key': n }, places: [ cell ] }: what this visit played
+// since its last post, and where its drop-ins in it were (dropin-cells.js's cells, each with its
+// drop-in in counts; dropins.js). 204, whatever it counted: a page doesn't need to know. Only with
+// the visit's token (so only from visits that passed the robot check), held to STATS_POSTS a minute
+// for each visit.
+export async function postStats( context ) {
 
+	const { request, env, now } = context;
 	const body = await readJson( request, 8192 );
 	if ( ! isObject( body ) ) throw new HttpError( 400, 'Bad request' );
 	const counts = checkCounts( body.counts );
 	if ( ! counts ) throw new HttpError( 400, 'Bad request' );
+	const places = checkPlaces( body.places, counts );
+	if ( ! places ) throw new HttpError( 400, 'Bad request' );
 	const visit = await readVisit( env, body.visit, now );
 	if ( ! visit ) throw new HttpError( 403, 'Forbidden', { reason: 'visit' } );
 	if ( env.STATS_POSTS && ! ( await env.STATS_POSTS.limit( { key: visit.id } ) ).success ) {
@@ -80,6 +87,7 @@ export async function postStats( { request, env, now } ) {
 	}
 
 	await add( database( env ), dayOf( now ), counts );
+	await recordPlaces( context, visit, places );
 	return new Response( null, { status: 204 } );
 
 }
@@ -102,16 +110,8 @@ export async function countVisit( env, now ) {
 
 }
 
-// Whether `account` ({ email }) may see the stats: its email in ADMIN_EMAILS (any case).
-export function isAdmin( env, account ) {
-
-	const email = typeof account?.email === 'string' ? account.email.toLowerCase() : '';
-	return !! email && list( env.ADMIN_EMAILS ).includes( email );
-
-}
-
 // GET /api/admin/stats?days=30, for the last `days` UTC days, today's (so far) included (30 if
-// unset, at most MOST_DAYS):
+// unset, at most a year: admin.js's askedDays):
 //   { from, to, rows: [ [ day, metric, key, n ] ],
 //     previous: { from, to, rows: [ [ metric, key, n ] ] },
 //     totals: { players, accounts, supporters, unclaimed }, kept: { stats, scores } }
@@ -119,18 +119,17 @@ export function isAdmin( env, account ) {
 // for the as many days before those, added up over them (what the page compares with: summed here,
 // so a year's comparison is a few hundred rows, not tens of thousands). totals: TOTALS's, now. kept:
 // how many days back the counts and the scores log go. 401 without a signed-in account, 403 for one
-// not in ADMIN_EMAILS. Rows older than KEEP_DAYS go as it's asked. Every query is bounded by the days
-// asked for (stats_daily by its key, the scores log by its index on created_at; players, accounts and
-// purchases have none on it, and are read through, which for the owner's occasional look is a few
-// thousand rows), but TOTALS, which counts the tables whole.
+// not in ADMIN_EMAILS, 429 past ADMIN_LOOKS a minute (admin.js). Rows older than KEEP_DAYS go as
+// it's asked. Every query is bounded by the days asked for (stats_daily by its key, the scores log
+// by its index on created_at; players, accounts and purchases have none on it, and are read
+// through, which for the owner's occasional look is a few thousand rows), but TOTALS, which counts
+// the tables whole.
 export async function adminStats( context ) {
 
 	const { env, url, now } = context;
-	const account = await currentAccount( context );
-	if ( ! account ) throw new HttpError( 401, 'Sign in first' );
-	if ( ! isAdmin( env, account ) ) throw new HttpError( 403, 'Not an admin' );
+	await adminAccount( context );
 	const db = database( env );
-	const days = Math.min( MOST_DAYS, Math.max( 1, Math.floor( Number( url.searchParams.get( 'days' ) ) ) || 30 ) );
+	const days = askedDays( url );
 	const to = dayOf( now );
 	const from = dayOf( now - ( days - 1 ) * DAY );
 	const before = { from: dayOf( now - ( 2 * days - 1 ) * DAY ), to: dayOf( now - days * DAY ) };

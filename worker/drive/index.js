@@ -9,7 +9,9 @@ import { makeVisit } from './visits.js';
 import { currentAccount, getMe, linkPlayer, signIn, signOut } from './accounts.js';
 import { isSupporter, stripeWebhook } from './supporter.js';
 import { live, liveToday, online } from './live.js';
-import { adminStats, countVisit, isAdmin, postStats } from './stats.js';
+import { adminStats, countVisit, postStats } from './stats.js';
+import { isAdmin } from './admin.js';
+import { adminDropins } from './dropins.js';
 import { BUDGET_SPENT } from '../../src/drive-app/live-protocol.js';
 
 export { DriveLimits } from './limits.js';
@@ -25,7 +27,8 @@ export { DriveRoom } from './live.js';
 // player's XP and level (progress.js). And the Supporter Pass (accounts.js, supporter.js): Google sign-in, the pass bought through Stripe, and
 // for supporters more drives a day and a ⭐ on the leaderboard. Driving with others (live.js) is a
 // WebSocket to a room, one Durable Object a party or area, that tells everyone where the others are;
-// /api/online says where people are driving now, for the globe's dots.
+// /api/online says where people are driving now, for the globe's dots. And the owner's play stats
+// (stats.js) with where people drop in (dropins.js), for the admin page.
 //
 // Settings (wrangler.drive.jsonc vars, or secrets):
 //   GOOGLE_MAPS_API_KEY   secret: the Maps key for World Drive's own Google Cloud project (a
@@ -47,8 +50,14 @@ export { DriveRoom } from './live.js';
 //   LIVE_VISIT_CONNECTS   the most connections to rooms a visit makes in a day (200 if unset)
 //   ROOMS                 the Durable Object binding for the rooms (DriveRoom, live.js)
 //   ADMIN_EMAILS          secret or var, comma-separated: the Google accounts that may see the play
-//                         stats (GET /api/admin/stats, the page at /admin.html; see stats.js)
+//                         stats (GET /api/admin/stats and /api/admin/dropins, the page at
+//                         /admin.html; see admin.js, stats.js and dropins.js)
+//   ADMIN_LOOKS           the rate limiter binding for the admin page's asks, by account (admin.js)
 //   STATS_POSTS           the rate limiter binding for each visit's posts of play stats (stats.js)
+//   DROPIN_PLACES_DAILY, DROPIN_PLACES_PER_VISITOR, DROPIN_PLACES_PER_VISIT   the most drop-in
+//                         places counted a day on each world for everyone (1500 if unset), each
+//                         visitor (30) and each visit (10); DROPIN_ASKS_PER_VISIT the most times a
+//                         day a visit's places are asked about (twice its places) (dropins.js)
 //   LIVE_CONNECTS         the rate limiter binding for each visit's connections to rooms (live.js)
 //   PROGRESS_POSTS        the rate limiter binding for each player's reports of what they drove
 //                         (progress.js)
@@ -78,6 +87,7 @@ const ROUTES = [
 	{ method: 'GET', path: '/api/online', handler: online },
 	{ method: 'POST', path: '/api/stats', handler: postStats },
 	{ method: 'GET', path: '/api/admin/stats', handler: adminStats },
+	{ method: 'GET', path: '/api/admin/dropins', handler: adminDropins },
 	{ method: 'POST', path: '/api/stripe/webhook', handler: stripeWebhook, sameOrigin: false },
 ];
 
@@ -154,6 +164,10 @@ async function getConfig( { env, limits, now } ) {
 //   visit }. Going to the Earth from there reloads the page, which asks again without it.
 // - Over a cap: 429 with retryAfter (the seconds until midnight UTC, when the counts start again)
 //   and a visit all the same, so the page can still open on the Moon.
+// Those two visits' tokens say so (visits.js: the Moon's), so they post no Earth drop-in places
+// (dropins.js); a visit the Earth's caps let through says it's the Earth's, and the owner's, on
+// either world, says it's theirs (so it posts no places at all: the admin page's Drive links
+// mustn't add to the places it shows).
 // A supporter signed in here is counted by their account, with a cap of their own; the owner's
 // accounts (ADMIN_EMAILS) aren't counted at all; everyone else is counted by their address.
 async function visit( { request, env, url, ctx, limits, now } ) {
@@ -173,7 +187,8 @@ async function visit( { request, env, url, ctx, limits, now } ) {
 	if ( moon ) {
 
 		ctx?.waitUntil?.( countVisit( env, now ) );
-		return json( { moon: true, visit: await makeVisit( env, now ) } );
+		const { admin } = await whoIsVisiting( { request, env, url, now }, { supporter: false } );
+		return json( { moon: true, visit: await makeVisit( env, now, admin ? 'owner' : 'moon' ) } );
 
 	}
 
@@ -185,7 +200,7 @@ async function visit( { request, env, url, ctx, limits, now } ) {
 	if ( admin ) {
 
 		ctx?.waitUntil?.( countVisit( env, now ) );
-		return json( { mapsKey: key, left: null, visit: await makeVisit( env, now ) } );
+		return json( { mapsKey: key, left: null, visit: await makeVisit( env, now, 'owner' ) } );
 
 	}
 
@@ -198,7 +213,7 @@ async function visit( { request, env, url, ctx, limits, now } ) {
 
 		const { reason, retryAfter } = outcome;
 		const message = reason === 'daily' ? 'Today\'s free drives are used up' : 'You\'ve had today\'s free drives';
-		throw new HttpError( 429, message, { reason, retryAfter, visit: await makeVisit( env, now ) }, { 'Retry-After': String( retryAfter ) } );
+		throw new HttpError( 429, message, { reason, retryAfter, visit: await makeVisit( env, now, 'moon' ) }, { 'Retry-After': String( retryAfter ) } );
 
 	}
 
@@ -207,17 +222,18 @@ async function visit( { request, env, url, ctx, limits, now } ) {
 
 }
 
-// Who's asking for a visit: { supporter } the signed-in account if it has the Supporter Pass, and
-// { admin } whether it's one of the owner's (ADMIN_EMAILS). If the database can't say just now, the
-// visit goes ahead as anyone's rather than not at all.
-async function whoIsVisiting( context ) {
+// Who's asking for a visit: { supporter } the signed-in account if it has the Supporter Pass (not
+// asked with supporter: false, for a Moon visit, which no pass changes), and { admin } whether it's
+// one of the owner's (ADMIN_EMAILS). Signed out, that's no request to the database. If the database
+// can't say just now, the visit goes ahead as anyone's rather than not at all.
+async function whoIsVisiting( context, { supporter = true } = {} ) {
 
 	try {
 
 		const account = await currentAccount( context );
 		if ( ! account ) return { supporter: null, admin: false };
 		if ( isAdmin( context.env, account ) ) return { supporter: null, admin: true };
-		return { supporter: await isSupporter( context.env, account ) ? account : null, admin: false };
+		return { supporter: supporter && await isSupporter( context.env, account ) ? account : null, admin: false };
 
 	} catch ( err ) {
 

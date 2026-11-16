@@ -1,10 +1,12 @@
 import { MAX_COUNTS, METRICS, deviceOf, droveSteps, loadBucket, referrerOf } from './stats-protocol.js';
+import { PLACES_PER_POST, cellOf } from './dropin-cells.js';
 
 // Play stats (docs/world-drive.md, "Play stats"): the page's counts for the owner's admin page,
 // added up here and posted to /api/stats (worker/drive/stats.js) every POST_MS and as the page goes
 // out of sight, with the visit's token. Only counts (stats-protocol.js says what may be counted):
 // no cookie, nothing kept in the browser, nothing of who. Without a visit (the test pad, the dev
-// server alone) it counts nothing.
+// server alone) it counts nothing. Each drop-in's place goes with them, as its cell about a
+// kilometre each way (dropin-cells.js), never where in it: "Where people drop in".
 
 const POST_MS = 3 * 60000;
 
@@ -16,6 +18,11 @@ export function createStats( { visit, fetch: send = ( ...args ) => fetch( ...arg
 	// What's counted once a visit (once), and the seconds driven this visit (drove), for the funnel.
 	const counted = new Set();
 	let driven = 0;
+	// The cells of the drop-ins counted since the last post (at most PLACES_PER_POST: one more waits
+	// for nothing, its drop-in is still counted), and those already posted this visit, which the
+	// Worker would only count once a day anyway.
+	const places = [];
+	const placed = new Set();
 	let off = typeof visit !== 'string' || ! visit;
 	let posting = false;
 
@@ -56,12 +63,13 @@ export function createStats( { visit, fetch: send = ( ...args ) => fetch( ...arg
 		}
 
 		if ( ! Object.keys( sent ).length ) return;
+		const going = places.splice( 0 );
 		posting = true;
 		let status = 0;
 		try {
 
 			status = ( await send( '/api/stats', {
-				method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( { visit, counts: sent } ), keepalive: true,
+				method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( { visit, counts: sent, ...( going.length ? { places: going } : {} ) } ), keepalive: true,
 			} ) ).status;
 
 		} catch {
@@ -79,11 +87,21 @@ export function createStats( { visit, fetch: send = ( ...args ) => fetch( ...arg
 
 			off = true;
 			counts.clear();
+			places.length = 0;
 			return;
 
 		}
 
-		if ( status !== 204 ) for ( const [ name, n ] of Object.entries( sent ) ) counts.set( name, ( counts.get( name ) ?? 0 ) + n );
+		if ( status === 204 ) for ( const cell of going ) placed.add( cell );
+		else {
+
+			for ( const [ name, n ] of Object.entries( sent ) ) counts.set( name, ( counts.get( name ) ?? 0 ) + n );
+			// Back in front of any counted since, with their drop-ins (the Worker takes a place only
+			// with its drop-in in the same post), as many as a post carries.
+			places.unshift( ...going );
+			places.length = Math.min( places.length, PLACES_PER_POST );
+
+		}
 
 	}
 
@@ -128,9 +146,27 @@ export function createStats( { visit, fetch: send = ( ...args ) => fetch( ...arg
 
 		},
 
+		// A drop-in arrived (driving) at ( lat, lon ) on `world` ('earth' or 'moon'): its place, as its
+		// cell, posted with its drop-in's count (the dropin metric, counted beside this). Once a visit
+		// for each cell, and no more than PLACES_PER_POST between posts.
+		dropped( world, lat, lon ) {
+
+			const cell = cellOf( world, lat, lon );
+			if ( off || ! cell || placed.has( cell ) || places.includes( cell ) || places.length >= PLACES_PER_POST ) return;
+			places.push( cell );
+
+		},
+
 		get counts() {
 
 			return Object.fromEntries( counts );
+
+		},
+
+		// The places waiting for the next post.
+		get places() {
+
+			return [ ...places ];
 
 		},
 

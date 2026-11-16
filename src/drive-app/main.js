@@ -1079,6 +1079,9 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		progress.dropped();
 		drive();
 		stats.add( 'dropin', onMoon() ? MOON : METRICS.dropin.key( state.place?.id ) ?? 'other' );
+		// And where, to about a kilometre (the cell it's in, never where in it), for the owner's map
+		// of where people drop in.
+		stats.dropped( onMoon() ? MOON : 'earth', state.place.lat, state.place.lon );
 		stats.add( 'ride', vehicle.id );
 		stats.add( 'dropin_time', dropinBucket( performance.now() - drop.began ) );
 		stats.once( 'funnel', 'driving' );
