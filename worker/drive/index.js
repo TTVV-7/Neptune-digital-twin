@@ -64,7 +64,8 @@ export { DriveRoom } from './live.js';
 //   LIVE_CONNECTS         the rate limiter binding for each visit's connections to rooms (live.js)
 //   PROGRESS_POSTS        the rate limiter binding for each player's reports of what they drove
 //                         (progress.js)
-//   CHALLENGE_LOOKS       the rate limiter binding for the challenges' lists and boards, by address;
+//   CHALLENGE_LOOKS       the rate limiter binding for the challenges' lists, boards and times, by
+//                         a keyed hash of the address and the day (never the address itself);
 //                         CHALLENGE_TIMES_PER_VISITOR_DAILY the times a visitor may post a day (300
 //                         if unset) (challenges.js)
 //   TURNSTILE_VERIFY_URL, SEARCH_UPSTREAM, TEST_CLOCK, GOOGLE_JWKS_URL   tests only (see

@@ -134,7 +134,12 @@
 	.ch-warn { border: 1px solid var(--down); border-radius: 8px; padding: 8px 10px; color: var(--text); }
 	.ch-warn p { margin: 0 0 8px; }
 	.ch-warn b { color: var(--down); }
-	@media (max-width: 520px) { .ch-table .wide-only, .ch-table .key { display: none; } }
+	@media (max-width: 520px) {
+		.ch-table .wide-only, .ch-table .key { display: none; }
+		/* Two buttons a row: one over the other. */
+		.ch-table .act.two { white-space: normal; }
+		.ch-table .act.two button { display: block; width: 100%; margin: 0 0 4px; }
+	}
 </style>
 </head>
 <body>
@@ -184,6 +189,8 @@
 		<div id="ch-live"></div>
 		<h3>Next up</h3>
 		<div id="ch-next"></div>
+		<h3>Your picks ahead</h3>
+		<div id="ch-picks"></div>
 		<h3>Choose one</h3>
 		<form class="ch-form" id="ch-form">
 			<label>Period <select name="period" id="ch-period"></select></label>
@@ -203,7 +210,7 @@
 		</form>
 		<h3>Busy drop-in places for the rotation</h3>
 		<div id="ch-busy"></div>
-		<p class="note">The rotation goes round the game's own places (the start spots, the places' pages and the Moon's places) and the busy drop-in places approved here, a new order each time round, one a period; a period's challenge is fixed the first time anyone asks for it, so nothing changed here changes a live one, unless you change that one, which starts a new board (the old one is kept apart). Busy places are where people drop in that aren't the game's own: anyone with many addresses can push one up the list, so none goes into the rotation without your approval. Your own runs (this page's accounts) are taken but kept off the boards, as you see every route before it's live.</p>
+		<p class="note">The rotation goes round the game's own places (the start spots, the places' pages and the Moon's places) and the busy drop-in places approved here, a new order each time round, one a period; a period's challenge is fixed the first time anyone asks for it, so nothing changed here changes a live one, unless you change that one, which starts a new board (the old one is kept apart). Busy places are where people drop in that aren't the game's own: anyone with many addresses can push one up the list, so none goes into the rotation without your approval. Your own runs (this page's accounts) are taken but kept off the boards, as you know each place and kind before it's live, and choose them. Back to the rotation on a live one the rotation chose leaves it as it is (it's the rotation's already).</p>
 	</section>
 	<div id="more"></div>
 	<p class="muted" style="margin-top:24px;font-size:13px">Counts only, nothing of who. Days are UTC, and each period ends with today so far. ▲ and ▼ compare with the as many days just before it. Referrers, countries and page speed in more detail are in Cloudflare's dashboard (Web Analytics).</p>
@@ -1589,7 +1596,8 @@
 	//
 	// GET /api/admin/challenges: the six live (the day's, the week's and the month's on each world) and
 	// the six next up, as they'd be fixed now (the owner's pick or the rotation's), the owner's picks
-	// ahead, the approved busy places and the featured and busy places to choose from. POST to choose a
+	// from the live periods on (however far ahead: each with Change and Back to the rotation), the
+	// approved busy places and the featured and busy places to choose from. POST to choose a
 	// period's challenge (a featured place, a busy place by its cell, or coordinates and a name), back
 	// to the rotation, or approve or unapprove a busy place. A live one changes only after a warning
 	// (with times on it, its board starts again; without, anyone driving it is turned away).
@@ -1648,6 +1656,7 @@
 			extra: `${ c.total } driver${ c.total === 1 ? '' : 's' }${ c.top[ 0 ] ? ` · best ${ time( c.top[ 0 ].ms ) } (${ esc( c.top[ 0 ].name ) })` : '' } · ${ left( c.endsAt - answer.now ) }`,
 		} ) ), true );
 		$( 'ch-next' ).innerHTML = table( answer.upcoming.map( c => ( { ...c, extra: `from ${ new Date( c.startsAt ).toISOString().slice( 0, 10 ) }` } ) ), false );
+		$( 'ch-picks' ).innerHTML = picksTable();
 		fillPeriods();
 		fillPlaces();
 		$( 'ch-busy' ).innerHTML = busyTable();
@@ -1662,6 +1671,49 @@
 			+ `<td><b>${ esc( row.place ) }</b><span class="ch-tag ${ row.source === 'owner' ? 'owner' : '' }">${ row.source === 'owner' ? 'yours' : 'rotation' }</span><div class="muted small">${ esc( KINDS[ row.kind ] ) }${ row.region ? ` · ${ esc( row.region ) }` : '' }</div></td>`
 			+ `<td class="wide-only small">${ row.extra }</td>`
 			+ `<td class="act"><button type="button" data-change="${ esc( row.key ) }" data-world="${ row.world }" data-kind="${ row.kind }">Change</button></td></tr>` ).join( '' ) }</tbody></table>`;
+
+	}
+
+	// The owner's picks from the live periods on, soonest first: each with Change (the form set to it)
+	// and Back to the rotation.
+	function picksTable() {
+
+		if ( ! data.picks.length ) return '<p class="muted">None: every period ahead is the rotation\'s.</p>';
+		return `<table class="ch-table"><thead><tr><th>World</th><th>Period</th><th>Challenge</th><th class="act"></th></tr></thead><tbody>${ data.picks.map( pick => '<tr>'
+			+ `<td>${ WORLDS[ pick.world ] }</td><td>${ PERIODS[ pick.period.slice( 0, pick.period.indexOf( ':' ) ) ] }<div class="muted small">${ esc( pick.period ) }${ liveOne( pick.period, pick.world ) ? ' · live now' : '' }</div></td>`
+			+ `<td><b>${ esc( pick.place ) }</b><div class="muted small">${ esc( KINDS[ pick.kind ] ) }${ pick.region ? ` · ${ esc( pick.region ) }` : '' }</div></td>`
+			+ `<td class="act two"><button type="button" data-change="${ esc( pick.period ) }" data-world="${ pick.world }" data-kind="${ pick.kind }">Change</button> <button type="button" data-unpick="${ esc( pick.period ) }" data-world="${ pick.world }">Back to the rotation</button></td></tr>` ).join( '' ) }</tbody></table>`;
+
+	}
+
+	// The form set to the period `key`: picked in the list if it's there (live or next), else as the
+	// day it starts on and its kind beside it.
+	function setPeriod( key ) {
+
+		const select = $( 'ch-period' );
+		if ( [ ...select.options ].some( option => option.value === key ) ) {
+
+			select.value = key;
+			$( 'ch-date' ).value = '';
+			return;
+
+		}
+
+		const [ kind, date ] = key.split( ':' );
+		select.value = 'date';
+		$( 'ch-date' ).value = kind === 'month' ? `${ date }-01` : date;
+		$( 'ch-date-kind' ).value = kind;
+
+	}
+
+	// Back to the rotation for `period` on `world`: a live one of yours asked about first (one the
+	// rotation chose stays as it is).
+	function unpick( period, world ) {
+
+		const body = { action: 'unpick', period, world };
+		const now = liveOne( period, world );
+		if ( now?.source === 'owner' ) return warnLive( body, now.total );
+		send( body );
 
 	}
 
@@ -1826,11 +1878,7 @@
 
 		const period = chosenPeriod();
 		if ( ! period.includes( ':' ) ) return say( period );
-		const body = { action: 'unpick', period, world: $( 'ch-world' ).value };
-		// A live one of yours, asked about first (one the rotation chose stays as it is).
-		const now = liveOne( period, body.world );
-		if ( now?.source === 'owner' ) return warnLive( body, now.total );
-		send( body );
+		unpick( period, $( 'ch-world' ).value );
 
 	} );
 	$( 'ch-world' ).addEventListener( 'change', fillPlaces );
@@ -1853,8 +1901,7 @@
 		if ( change ) {
 
 			// The form set to that one, to change it.
-			$( 'ch-period' ).value = change.dataset.change;
-			$( 'ch-date' ).value = '';
+			setPeriod( change.dataset.change );
 			$( 'ch-world' ).value = change.dataset.world;
 			$( 'ch-kind' ).value = change.dataset.kind;
 			fillPlaces();
@@ -1863,6 +1910,8 @@
 
 		}
 
+		const back = event.target.closest( 'button[data-unpick]' );
+		if ( back ) unpick( back.dataset.unpick, back.dataset.world );
 		const approve = event.target.closest( 'button[data-approve]' );
 		if ( approve ) send( { action: 'approve', world: approve.dataset.world, cell: approve.dataset.approve } );
 		const unapprove = event.target.closest( 'button[data-unapprove]' );

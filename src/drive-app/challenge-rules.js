@@ -41,6 +41,13 @@ export const LEG_SLACK = 100;
 export const START_SLACK = 100;
 // The longest run that's taken (ms): a monthly's route is a few minutes at most.
 export const MAX_RUN = 2 * 60 * 60 * 1000;
+// How long after a challenge's period ends (ms) a run finished in it is still taken (a run that
+// started before the end, posted a moment after): the Worker's check, and the page's keeping of a
+// time that couldn't be posted (challenges.js).
+export const GRACE = 60 * 1000;
+// A rank is counted to this many rows ahead at most (the Worker's rank counts read only the rows
+// ahead, so a long board's last place costs no more than this): further down, it's "1000+".
+export const RANK_MOST = 1000;
 // A pass counts within a gate's radius across the ground, and up and down from its ground to its
 // top (on the Earth the lowest and the highest of what rays down across its zone meet: the street
 // beside a tower and the tower's roof, or the water under a bridge and its deck; on the Moon both
@@ -209,18 +216,22 @@ export function kindFor( periodKind, u ) {
 // at `place` ({ name, lat, lon, heading }: heading, if it's known, the way along its road), laid out
 // with `random` (randomFrom's): { start: { lat, lon, heading }, points: [ [ lat, lon ] ], radius,
 // goal } (goal: the landmark's name, for a drive to one). Sprints and collectibles start at the place
-// itself; a landmark's drive starts a few kilometres off and ends at the place. `check( route )`, if
-// given, says how many faults a route has (the Moon's ground too steep: worker/drive/challenges.js);
-// then up to TRIES are laid out and the one with fewest kept. Positions are to 6 decimals (10 cm).
+// itself; a landmark's drive starts a few kilometres off and ends at the place. `check( route, kind )`,
+// if given, says how many faults a route has (the Moon's ground too steep at its points or along its
+// legs: worker/drive/challenges.js); then up to TRIES are laid out and the one with fewest kept.
+// Positions are to 6 decimals (10 cm).
 export function makeRoute( { kind, size, world, place }, random, check = null ) {
 
 	const shape = SHAPES[ world ]?.[ size ]?.[ kind ];
 	if ( ! shape ) throw new Error( `No ${ size } ${ kind } on ${ world }` );
 	let best = null;
+	// (Checked, a landmark's drive with no road to come along is tried from bearings spread evenly
+	// round it, from one chosen at random: on rough ground the way in that's clear may be narrow.)
+	const spin = check && kind === 'landmark' && ! Number.isFinite( place.heading ) ? random() : null;
 	for ( let i = 0; i < ( check ? TRIES : 1 ); i ++ ) {
 
-		const route = layOut( kind, world, place, shape, random );
-		const faults = check ? check( route ) : 0;
+		const route = layOut( kind, world, place, shape, random, spin === null ? null : ( spin + i / TRIES ) % 1 );
+		const faults = check ? check( route, kind ) : 0;
 		if ( ! best || faults < best.faults ) best = { route, faults };
 		if ( ! faults ) break;
 
@@ -230,7 +241,7 @@ export function makeRoute( { kind, size, world, place }, random, check = null ) 
 
 }
 
-function layOut( kind, world, place, shape, random ) {
+function layOut( kind, world, place, shape, random, turn ) {
 
 	const between = ( [ low, high ] ) => low + ( high - low ) * random();
 	const known = Number.isFinite( place.heading );
@@ -275,7 +286,7 @@ function layOut( kind, world, place, shape, random ) {
 
 	// A landmark's drive: from a few kilometres back along the place's road (or, not knowing it, any
 	// way), facing the place.
-	const back = known ? place.heading + 180 + ( random() * 2 - 1 ) * shape.spread : random() * 360;
+	const back = known ? place.heading + 180 + ( random() * 2 - 1 ) * shape.spread : ( turn ?? random() ) * 360;
 	const [ lat, lon ] = destination( world, place.lat, place.lon, back, between( shape.distance ) );
 	return { start: start( lat, lon, bearingTo( world, lat, lon, place.lat, place.lon ) ), points: [ at( place.lat, place.lon ) ], radius: shape.radius, goal: place.name };
 
@@ -391,6 +402,13 @@ export function formatTime( ms ) {
 
 }
 
+// A place on a board as the page shows it: past RANK_MOST rows ahead, "1000+".
+export function rankText( rank ) {
+
+	return rank > RANK_MOST ? `${ RANK_MOST }+` : String( rank );
+
+}
+
 // How long is left (ms) as the list says it: "2 d 5 h left", "5 h 12 m left", "12 m 30 s left",
 // "45 s left".
 export function timeLeft( ms ) {
@@ -404,7 +422,7 @@ export function timeLeft( ms ) {
 
 }
 
-// What a challenge is, in a few words: "6 gates · 1.5 km", "8 stars · 260 m round", "To Tycho
+// What a challenge is, in a few words: "6 gates · 1.5 km", "6 stars · 260 m round", "To Tycho
 // crater · 2.1 km".
 export function describe( { world, kind, route } ) {
 

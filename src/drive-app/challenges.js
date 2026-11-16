@@ -4,7 +4,7 @@ import {
 	LinearFilter, TorusGeometry, Vector3,
 } from 'three';
 import { send } from './api.js';
-import { KIND_NAMES, PERIOD_NAMES, TALL, checkPasses, describe, formatTime, timeLeft } from './challenge-rules.js';
+import { GRACE, KIND_NAMES, PERIOD_NAMES, TALL, checkPasses, describe, formatTime, rankText, timeLeft } from './challenge-rules.js';
 import { LEVEL_MAX, levelLine } from './levels.js';
 import { MOON } from './moon-places.js';
 
@@ -12,10 +12,11 @@ import { MOON } from './moon-places.js';
 // they're opened (main.js), so nothing of it is in the page's first load. The list of the six live
 // ones (the current world's three first), each with the time it has left (ticking), its board's top
 // three and your best; its board; starting one (a drop-in at its start, on its world); the run: a
-// countdown, the gates or items on the ground the game has (their heights found as it loads: a ray
-// down on the Earth's tiles, the Moon's own heights), the next one marked on the HUD with an arrow
-// and how far, the timer, and the finish card with your time, your place and the board's top, Retry
-// and Back; and posting the time (worker/drive/challenges.js).
+// countdown, the gates or items on the ground the game has (their heights found as it loads: rays
+// down on the Earth's tiles, a few a frame, the Moon's own heights), the next one marked on the HUD
+// with an arrow and how far, the timer, and the finish card with your time, your place and the
+// board's top, Retry and Back, the car brought to a stop under it; and posting the time
+// (worker/drive/challenges.js), kept to be posted when the connection's back if it can't be.
 //
 // A run's time is the game's own clock: the steps the frames drive the car by (main.js gives this
 // the same dt), from GO to the last pass. A pause ends the run (pausing, the page out of sight on
@@ -38,11 +39,20 @@ const ITEM_UP = 3;
 const SPIN = 1.6;
 // The middle of a gate's zone is this far (m) over its ground.
 const ZONE_UP = 2;
-// On the Earth a gate's ground is looked for again (one gate each PROBE_EVERY s), so it moves onto
-// sharper tiles as they load: rays down at its middle and at eight points round it, PROBE_OUT of
-// its radius out (the lowest is its ground, the highest its top: probe).
+// On the Earth a gate's ground is found by rays down at its middle and at eight points round it,
+// PROBE_OUT of its radius out (the lowest is its ground, the highest its top: probe), only for the
+// gates within PROBE_NEAR m of the car (a far one's tiles are coarse, so what a ray finds there is
+// rough anyway, and its beam's height hides that), and a few a frame: one gate at a time, and no
+// more rays in a frame once they've taken PROBE_MS (ms) in it. A tile's first ray builds its
+// bounding volume hierarchy (src/raycast.js), milliseconds of the main thread on a phone, and the
+// gates' rays reach tiles the car's never do: all of a monthly's in one frame as it arrived could
+// have held it up for a second (as the sea's look does with OPEN_MS, main.js). A gate not looked at
+// yet is looked at first, the nearest first; then one gate each PROBE_EVERY s, so they move onto
+// sharper tiles as those load.
 const PROBE_EVERY = 0.2;
 const PROBE_OUT = 0.6;
+const PROBE_NEAR = 800;
+const PROBE_MS = 4;
 const PROBES = [ [ 0, 0 ], ...Array.from( { length: 8 }, ( _, i ) => [ Math.sin( i * Math.PI / 4 ) * PROBE_OUT, Math.cos( i * Math.PI / 4 ) * PROBE_OUT ] ) ];
 // Colours: the next to pass, the others, the last (a sprint's finish, the landmark), and items.
 const NEXT = new Color( 0xffd23f );
@@ -50,10 +60,18 @@ const LATER = new Color( 0x3ec1ff ).multiplyScalar( 0.75 );
 const GOAL = new Color( 0x5dff8a );
 const STAR = new Color( 0xffc531 );
 // A post that didn't get through is tried again after RETRY ms, TRIES times in all (a 429 asking
-// for longer than WAIT_MOST s isn't waited for: it's the day's times used up).
+// for longer than WAIT_MOST s isn't waited for: it's the day's times used up). One that still
+// hasn't (no connection, the Worker failing) is kept here and posted again when the browser says
+// it's back online, when the list is opened and at the next finish, while its challenge would
+// still take it (till its end and GRACE).
 const RETRY = 4000;
 const TRIES = 3;
 const WAIT_MOST = 60;
+// At the finish the car is brought to a stop in STOPPING s (from its speed then, and at least
+// STOP_LEAST m/s each second), as the countdown holds it at the start: the finish card is over the
+// road, and on a phone over the buttons.
+const STOPPING = 1;
+const STOP_LEAST = 12;
 // A new list is asked for as a listed challenge ends; if that fails (or still has it ended) it's
 // asked again after RELOAD ms, then twice that and so on up to RELOAD_MOST, RELOADS times at most
 // (or after the Retry-After the Worker gives), and then not till the list is opened again.
@@ -101,6 +119,11 @@ export function setUpChallenges( app ) {
 	let run = null;
 	let probeIn = 0;
 	let probeNext = 0;
+	// The gate whose rays down are being cast, a few a frame: { gate, ray (the next of PROBES), low,
+	// high }, or null.
+	let probing = null;
+	// The boards asked for (showBoard), so only the last one's answer is shown.
+	let boards = 0;
 	// A new list asked for as one ends: whether it's on its way, the ended ones it's for (their ids),
 	// how many times it's been asked for them, and when (Date.now()) it may be asked again.
 	let reloading = false;
@@ -110,17 +133,24 @@ export function setUpChallenges( app ) {
 	// The result the name form is up for (the time to post once a name is picked).
 	let naming = null;
 	// Each challenge's best known here ({ [ id ]: ms }), from the list and from posts: a run is only
-	// posted when it beats it.
+	// posted when it beats it. And the results that couldn't be posted, by challenge (its best).
 	const bests = {};
+	const unsent = new Map();
+	window.addEventListener( 'online', flush );
 
 	// --- the list ---
 
-	function open() {
+	// The list, with `note` over it if there's something to say first (a Retry of one that's over).
+	function open( note = '' ) {
 
 		if ( ! dialog.open ) dialog.showModal();
 		showList();
+		const said = dialog.querySelector( '.ch-note' );
+		said.textContent = note;
+		said.hidden = ! note;
 		app.stats.add( 'challenge', 'open' );
 		[ reloadFor, reloads, reloadAt ] = [ '', 0, 0 ];
+		flush();
 		load();
 		clearInterval( ticker );
 		ticker = setInterval( tick, 1000 );
@@ -195,7 +225,7 @@ export function setUpChallenges( app ) {
 		list.append( ...challenge.top.map( row => rowItem( row ) ) );
 		if ( ! challenge.top.length ) list.append( el( 'li', 'ch-none', 'No times yet: be the first!' ) );
 		const best = bests[ challenge.id ];
-		const you = el( 'p', 'ch-you', best === undefined ? 'You haven\'t a time on it yet' : `Your best ${ formatTime( best ) }${ challenge.me?.rank ? ` · #${ challenge.me.rank } of ${ Math.max( challenge.total, challenge.me.rank ) }` : '' }` );
+		const you = el( 'p', 'ch-you', best === undefined ? 'You haven\'t a time on it yet' : `Your best ${ formatTime( best ) }${ challenge.me?.rank ? ` · #${ rankText( challenge.me.rank ) } of ${ Math.max( challenge.total, challenge.me.rank ) }` : '' }` );
 		if ( challenge.me?.owner ) you.textContent = `Your best ${ formatTime( challenge.me.ms ) } (yours as the owner, kept off the board)`;
 		const buttons = el( 'div', 'ch-buttons' );
 		const earthShut = challenge.world !== MOON && !! app.moonOnly;
@@ -258,6 +288,7 @@ export function setUpChallenges( app ) {
 
 	async function showBoard( challenge ) {
 
+		const asking = ++ boards;
 		const board = dialog.querySelector( '.ch-board' );
 		dialog.querySelector( '.ch-list' ).hidden = true;
 		board.hidden = false;
@@ -269,7 +300,8 @@ export function setUpChallenges( app ) {
 		mine.textContent = 'Loading...';
 		const player = app.player();
 		const answer = await send( 'GET', `/api/challenges/board?challenge=${ challenge.id }${ player ? `&id=${ encodeURIComponent( player.id ) }` : '' }` );
-		if ( board.hidden ) return;
+		// (Back to the list meanwhile, or another board asked for: not this one's rows under its title.)
+		if ( board.hidden || asking !== boards ) return;
 		if ( ! answer.ok ) {
 
 			mine.textContent = 'The board isn\'t answering. Try again soon.';
@@ -280,8 +312,8 @@ export function setUpChallenges( app ) {
 		const { rows: top, total, me } = answer.body;
 		rows.replaceChildren( ...top.map( row => rowItem( row, !! me && ! me.owner && row.rank === me.rank ) ) );
 		if ( ! top.length ) rows.append( el( 'li', 'ch-none', 'No times yet: be the first!' ) );
-		if ( me?.owner ) mine.textContent = `Your best ${ formatTime( me.ms ) } would be #${ me.rank } (yours as the owner, kept off the board)`;
-		else if ( me ) mine.textContent = `You're #${ me.rank } of ${ Math.max( total, me.rank ) }, with ${ formatTime( me.ms ) }`;
+		if ( me?.owner ) mine.textContent = `Your best ${ formatTime( me.ms ) } would be #${ rankText( me.rank ) } (yours as the owner, kept off the board)`;
+		else if ( me ) mine.textContent = `You're #${ rankText( me.rank ) } of ${ Math.max( total, me.rank ) }, with ${ formatTime( me.ms ) }`;
 		else mine.textContent = `${ total } driver${ total === 1 ? '' : 's' } on this board`;
 
 	}
@@ -314,28 +346,41 @@ export function setUpChallenges( app ) {
 		if ( Number.isInteger( row.level ) && row.level >= 1 && row.level <= LEVEL_MAX ) who.append( el( 'span', 'lvl', levelLine( row.level, row.title ) ) );
 		const ride = app.vehicles.find( v => v.id === row.vehicle )?.name;
 		if ( ride ) who.append( el( 'span', 'ride', ride ) );
-		li.append( el( 'span', 'rank', String( row.rank ) ), who, el( 'span', 'time', formatTime( row.ms ) ) );
+		li.append( el( 'span', 'rank', rankText( row.rank ) ), who, el( 'span', 'time', formatTime( row.ms ) ) );
 		return li;
 
 	}
 
 	// --- starting one ---
 
-	// Start `challenge`: a drop-in at its start (on its world), and its run once the car's down.
+	// Start `challenge`: a drop-in at its start (on its world), and its run once the car's down. One
+	// that's over (its Start pressed as it ended) isn't: a run of it wouldn't be taken.
 	function begin( challenge ) {
 
+		if ( ended( challenge ) ) return open( 'That challenge has ended, so a run of it wouldn\'t count. Here are the new ones.' );
 		dialog.close();
 		finish.hidden = true;
 		// Back to the globe first, from a drive or its pause (a run going is left), then the drop-in.
 		if ( app.mode() !== 'globe' ) app.toGlobe();
 		const { start } = challenge.route;
 		pending = challenge;
+		// A landmark's start is a pin kilometres from it, not the landmark: named by its coordinates
+		// where places are named (a stunt score's board, others in the room), "On the way to" it on the
+		// top bar, and not one of the recent places.
+		const named = challenge.kind === 'landmark' ? { name: 'Dropped pin', region: '', near: `On the way to ${ challenge.place }`, recent: false } : { name: challenge.place, region: challenge.region };
 		app.startAt( {
-			name: challenge.place, region: challenge.region, lat: start.lat, lon: start.lon,
+			...named, lat: start.lat, lon: start.lon,
 			...( Number.isFinite( start.heading ) ? { heading: start.heading } : {} ),
 			...( challenge.world === MOON ? { world: MOON } : {} ),
 			challenge: challenge.id,
 		} );
+
+	}
+
+	// Whether `challenge` is over (its period ended, by the Worker's clock): no run of it is taken.
+	function ended( challenge ) {
+
+		return challenge.endsAt <= Date.now() + offset;
 
 	}
 
@@ -367,12 +412,14 @@ export function setUpChallenges( app ) {
 		meshes.show( run );
 		showHud();
 		probeIn = 0;
+		probing = null;
 		return true;
 
 	}
 
 	// Each point's place in the scene: on the Moon on its own heights (exact, before any ground is
-	// built); on the Earth at the start's height until the tiles' ground there is found (probe).
+	// built); on the Earth at the start's height until the tiles' ground there is found (probe, a few
+	// rays a frame from the next frame on: nothing more in the one the car arrives in).
 	function placeGates( challenge ) {
 
 		const { globe, moon } = app;
@@ -384,7 +431,7 @@ export function setUpChallenges( app ) {
 			const height = moonly ? moon.heightAt( lat, lon ) ?? base : base;
 			const local = sceneOf( globe, lat, lon, height ).clone();
 			const ground = moonly ? local.y : null;
-			return { index, lat, lon, x: local.x, z: local.z, ground, top: ground, guess: local.y, passed: false, facing: 0 };
+			return { index, lat, lon, x: local.x, z: local.z, ground, top: ground, guess: local.y, passed: false, facing: 0, probed: moonly };
 
 		} );
 		// A ring faces along the way to it: from the start, or the gate before.
@@ -395,7 +442,6 @@ export function setUpChallenges( app ) {
 			gate.facing = Math.atan2( gate.x - from.x, gate.z - from.z );
 
 		} );
-		if ( ! moonly ) for ( const gate of gates ) probe( gate, challenge.route.radius );
 		return gates;
 
 	}
@@ -405,24 +451,51 @@ export function setUpChallenges( app ) {
 	// PROBE_OUT of its radius. The lowest is its ground, what it's drawn on and its zone's middle is
 	// over: the street beside a tower rather than the tower's roof, where the first thing a ray down
 	// meets at its middle may be. The highest is its top (that roof, a bridge's deck), which the zone
-	// reaches up to as well. False while nothing has loaded there, or nothing has changed.
-	function probe( gate, radius ) {
+	// reaches up to as well. Cast a few a frame (see PROBE_NEAR): the gate being looked at goes on
+	// from where the last frame's rays stopped; else the nearest not looked at yet within PROBE_NEAR,
+	// or, each PROBE_EVERY s, the next of those within it. Its ground and top are set once all its
+	// rays are in, and the meshes moved if they've changed.
+	function probeFrame( dt, d ) {
 
-		let low = Infinity;
-		let high = - Infinity;
-		for ( const [ x, z ] of PROBES ) {
+		probeIn -= dt;
+		if ( ! probing ) {
 
-			const y = app.ground.heightAt( gate.x + x * radius, gate.z + z * radius );
-			if ( y === null ) continue;
-			low = Math.min( low, y );
-			high = Math.max( high, y );
+			const near = run.gates.filter( gate => ! gate.passed && Math.hypot( - gate.x - d.east, gate.z - d.north ) <= PROBE_NEAR );
+			let gate = near.filter( gate => ! gate.probed ).sort( ( a, b ) => Math.hypot( - a.x - d.east, a.z - d.north ) - Math.hypot( - b.x - d.east, b.z - d.north ) )[ 0 ];
+			if ( ! gate && probeIn <= 0 && near.length ) gate = near[ probeNext ++ % near.length ];
+			if ( ! gate ) return;
+			if ( gate.probed ) probeIn = PROBE_EVERY;
+			probing = { gate, ray: 0, low: Infinity, high: - Infinity };
 
 		}
 
-		if ( low === Infinity || ( low === gate.ground && high === gate.top ) ) return false;
+		const { gate } = probing;
+		const radius = run.challenge.route.radius;
+		const until = performance.now() + PROBE_MS;
+		while ( probing.ray < PROBES.length ) {
+
+			const [ x, z ] = PROBES[ probing.ray ++ ];
+			const y = app.ground.heightAt( gate.x + x * radius, gate.z + z * radius );
+			if ( y !== null ) {
+
+				probing.low = Math.min( probing.low, y );
+				probing.high = Math.max( probing.high, y );
+
+			}
+
+			// At least one ray a frame, and none more once they've taken PROBE_MS (the one that did may
+			// have been a tile's first, building its hierarchy): the rest the next frame.
+			if ( probing.ray < PROBES.length && performance.now() > until ) return;
+
+		}
+
+		const { low, high } = probing;
+		probing = null;
+		gate.probed = true;
+		if ( low === Infinity || ( low === gate.ground && high === gate.top ) ) return;
 		gate.ground = low;
 		gate.top = high;
-		return true;
+		meshes.place( run );
 
 	}
 
@@ -455,20 +528,16 @@ export function setUpChallenges( app ) {
 			run.clock += dt;
 			passGates( d );
 
-		}
+		} else if ( run.phase === 'done' && driving && ! finish.hidden ) {
 
-		if ( run && run.challenge.world !== MOON && run.phase !== 'stopped' ) {
-
-			probeIn -= dt;
-			if ( probeIn <= 0 ) {
-
-				probeIn = PROBE_EVERY;
-				const gate = run.gates[ probeNext ++ % run.gates.length ];
-				if ( ! gate.passed && probe( gate, run.challenge.route.radius ) ) meshes.place( run );
-
-			}
+			// The finish card is up, over the road (and on a phone the buttons): the car brought to a
+			// stop, the gas held down or not, till it's put away (Retry, Back, Keep driving here).
+			const slower = Math.max( run.stopping, STOP_LEAST ) * dt;
+			d.speed = Math.sign( d.speed ) * Math.max( 0, Math.abs( d.speed ) - slower );
 
 		}
+
+		if ( run && run.challenge.world !== MOON && run.phase !== 'stopped' ) probeFrame( dt, d );
 
 		if ( run ) {
 
@@ -517,12 +586,14 @@ export function setUpChallenges( app ) {
 	function finished() {
 
 		run.phase = 'done';
+		// Slowing to a stop in STOPPING s from here (frame).
+		run.stopping = Math.abs( app.driver.speed ) / STOPPING;
 		// The time is the last pass's (to the millisecond, as the passes are). What's posted is a
-		// copy as it finished: a Retry starts a new run, and a post being tried again still has this
-		// one's time and passes.
+		// copy as it finished, the ride it was driven in too: a Retry starts a new run, another ride
+		// can be picked in a pause, and a post being tried again still has this one's.
 		const ms = run.passes.at( - 1 )[ 1 ];
 		run.ms = ms;
-		run.result = { challenge: run.challenge, id: run.id, ms, passes: run.passes.map( pass => [ ...pass ] ) };
+		run.result = { challenge: run.challenge, id: run.id, ms, passes: run.passes.map( pass => [ ...pass ] ), vehicle: app.vehicle()?.id ?? 'go-kart' };
 		app.stats.add( 'challenge', 'finish' );
 		app.driver.hud.flash( 'Finished!' );
 		showFinish( run.result );
@@ -566,17 +637,29 @@ export function setUpChallenges( app ) {
 	}
 
 	// Back at the start for another go, as a new run: the car put down where the run began, the gates
-	// back, the countdown again.
+	// back, the countdown again. Not once the challenge is over (its period ended while it was
+	// driven, or the card waited): a run of it wouldn't be taken, so the list instead, with the new
+	// one and a word on why.
 	function retry() {
 
 		if ( ! run ) return;
 		const { challenge, start, gates } = run;
+		if ( ended( challenge ) ) {
+
+			const from = app.mode();
+			end();
+			if ( from === 'driving' ) app.toGlobe();
+			return open( 'That challenge has ended, so a run of it wouldn\'t count. Here are the new ones.' );
+
+		}
+
 		finish.hidden = true;
 		stopped.hidden = true;
 		naming = null;
 		if ( ! app.placeCar( start ) ) return;
 		for ( const gate of gates ) gate.passed = false;
 		run = { challenge, gates, start, phase: 'countdown', left: COUNTDOWN, clock: 0, passes: [], id: runId() };
+		probing = null;
 		meshes.show( run );
 		showHud();
 
@@ -678,9 +761,14 @@ export function setUpChallenges( app ) {
 		finish.querySelector( '.ch-f-rows' ).replaceChildren();
 		finish.querySelector( '.ch-f-form' ).hidden = true;
 		finish.hidden = false;
-		const best = bests[ challenge.id ];
-		const better = best === undefined || ms < best;
-		finishSay( better ? ( best === undefined ? 'Finished! Your first time on it.' : `New best! Your last was ${ formatTime( best ) }.` ) : `Your best is ${ formatTime( best ) }.` );
+		// Your best: the board's, or one kept here that couldn't be posted yet (beaten now, it's
+		// dropped: only a best is kept; else it's posted now, with any others kept).
+		const held = unsent.get( challenge.id )?.ms;
+		if ( held !== undefined && ms < held ) unsent.delete( challenge.id );
+		flush();
+		const best = Math.min( bests[ challenge.id ] ?? Infinity, held ?? Infinity );
+		const better = ms < best;
+		finishSay( better ? ( best === Infinity ? 'Finished! Your first time on it.' : `New best! Your last was ${ formatTime( best ) }.` ) : `Your best is ${ formatTime( best ) }.` );
 		finish.querySelector( '.ch-f-badge' ).hidden = ! better;
 		if ( ! checkPasses( challenge, ms, result.passes ) ) return finishSay( 'That run didn\'t count: it went quicker than anything can drive. Try again.' );
 		if ( ! app.visit() ) return finishSay( `${ finish.querySelector( '.ch-f-note' ).textContent } Times go on the board from a drive on the real map.` );
@@ -715,17 +803,18 @@ export function setUpChallenges( app ) {
 	}
 
 	// A finished run's `result` to the Worker: its place on the board and the board's top. Tried again
-	// (the same result, the same run id, so the Worker knows it if the first got there and only its
-	// answer was lost) if it didn't get through, whatever happens to the card meanwhile: a Retry or a
-	// pause doesn't lose a time. The card only shows the answer while it's still up for this result.
+	// (the same result, the same run id and ride, so the Worker knows it if the first got there and
+	// only its answer was lost) if it didn't get through, whatever happens to the card meanwhile: a
+	// Retry, a pause or another ride doesn't lose a time; and kept to post later (keep) if it still
+	// hasn't. The card only shows the answer while it's still up for this result. `tries` is how
+	// many it's had (TRIES: no more).
 	async function post( result, tries = 0 ) {
 
 		const player = app.player();
 		const { challenge } = result;
-		const vehicle = app.vehicle()?.id ?? 'go-kart';
 		if ( showing( result ) ) finishSay( 'Posting your time...' );
 		const answer = await send( 'POST', '/api/challenges/time', {
-			id: player.id, secret: player.secret, visit: app.visit(), challenge: challenge.id, run: result.id, ms: result.ms, passes: result.passes, vehicle,
+			id: player.id, secret: player.secret, visit: app.visit(), challenge: challenge.id, run: result.id, ms: result.ms, passes: result.passes, vehicle: result.vehicle,
 		} );
 		const shown = showing( result );
 		if ( answer.ok ) {
@@ -742,7 +831,7 @@ export function setUpChallenges( app ) {
 
 			if ( ! shown ) return;
 			finish.querySelector( '.ch-f-badge' ).hidden = ! isNewBest;
-			finishSay( owner ? `Your best ${ formatTime( ms ) } would be #${ rank }: yours as the owner are kept off the board.` : `#${ rank } of ${ Math.max( total, rank ) } on the board${ isNewBest ? '' : `, with your best ${ formatTime( ms ) }` }` );
+			finishSay( owner ? `Your best ${ formatTime( ms ) } would be #${ rankText( rank ) }: yours as the owner are kept off the board.` : `#${ rankText( rank ) } of ${ Math.max( total, rank ) } on the board${ isNewBest ? '' : `, with your best ${ formatTime( ms ) }` }` );
 			showRows( top, owner ? null : rank );
 			return;
 
@@ -750,10 +839,19 @@ export function setUpChallenges( app ) {
 
 		const reason = answer.body?.reason;
 		const waits = answer.status === 429 && reason !== 'daily' && answer.retryAfter <= WAIT_MOST;
-		if ( tries < TRIES && ( waits || answer.status === 0 || answer.status >= 500 ) ) {
+		const unreached = answer.status === 0 || answer.status >= 500;
+		if ( tries < TRIES && ( waits || unreached ) ) {
 
 			if ( shown ) finishSay( answer.status === 429 ? 'A moment...' : 'Couldn\'t reach World Drive. Trying again...' );
 			setTimeout( () => post( result, tries + 1 ), Math.max( RETRY, answer.retryAfter * 1000 ) );
+			return;
+
+		}
+
+		// Still not reached (a phone in a tunnel, a lift): kept, to go up when the connection's back.
+		if ( unreached && keep( result ) ) {
+
+			if ( showing( result ) ) finishSay( 'No connection just now: your time is kept here, and goes up when you\'re back online.' );
 			return;
 
 		}
@@ -769,6 +867,30 @@ export function setUpChallenges( app ) {
 
 	}
 
+	// `result` kept to post again (flush), as its challenge's best kept: true, or false if it's too
+	// late for it (its challenge over), or a better one is kept already.
+	function keep( result ) {
+
+		const kept = unsent.get( result.challenge.id );
+		if ( result.challenge.endsAt + GRACE <= Date.now() + offset || ( kept && kept !== result && kept.ms <= result.ms ) ) return false;
+		unsent.set( result.challenge.id, result );
+		return true;
+
+	}
+
+	// The results kept (keep) posted again, once each (kept again if they still don't get through),
+	// those whose challenge is over and past GRACE dropped: the Worker wouldn't take them.
+	function flush() {
+
+		for ( const [ id, result ] of unsent ) {
+
+			unsent.delete( id );
+			if ( result.challenge.endsAt + GRACE > Date.now() + offset && app.visit() && app.player() ) post( result, TRIES );
+
+		}
+
+	}
+
 	// A run that's no better than your best: the board's top as it is, and where you are on it.
 	async function showTop( challenge ) {
 
@@ -777,7 +899,7 @@ export function setUpChallenges( app ) {
 		const answer = await send( 'GET', `/api/challenges/board?challenge=${ challenge.id }${ player ? `&id=${ encodeURIComponent( player.id ) }` : '' }` );
 		if ( ! showing( result ) || ! answer.ok ) return;
 		const { rows, total, me } = answer.body;
-		if ( me && ! me.owner ) finishSay( `Your best ${ formatTime( me.ms ) } is #${ me.rank } of ${ Math.max( total, me.rank ) }.` );
+		if ( me && ! me.owner ) finishSay( `Your best ${ formatTime( me.ms ) } is #${ rankText( me.rank ) } of ${ Math.max( total, me.rank ) }.` );
 		showRows( rows.slice( 0, 5 ), me && ! me.owner ? me.rank : null );
 
 	}
@@ -799,6 +921,7 @@ export function setUpChallenges( app ) {
 		root.innerHTML = `
 			<header class="ch-head"><h2 id="ch-title">${ FLAG } Challenges</h2><button type="button" class="close" aria-label="Close">&times;</button></header>
 			<p class="ch-intro">A daily, a weekly and a monthly one on the Earth and on the Moon, each with its own board. Your best time counts.</p>
+			<p class="ch-note" role="status" hidden></p>
 			<p class="ch-status" role="status" hidden></p>
 			<div class="ch-list"></div>
 			<section class="ch-board" hidden>

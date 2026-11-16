@@ -1,7 +1,7 @@
 import { HttpError, isObject, json, readJson } from '../http.js';
-import { cellMiddle, cellOf, checkCell } from '../../src/drive-app/dropin-cells.js';
+import { cellMiddle, cellOf, checkCell, metresOn } from '../../src/drive-app/dropin-cells.js';
 import {
-	KINDS, PERIOD_KINDS, WORLDS, checkPasses, destination, kindFor, makeRoute, nextPeriod, parsePeriod, periodIndex, periodOf, periodsAt, randomFrom,
+	GRACE, KINDS, PERIOD_KINDS, RANK_MOST, WORLDS, bearingTo, checkPasses, destination, kindFor, makeRoute, nextPeriod, parsePeriod, periodIndex, periodOf, periodsAt, randomFrom,
 } from '../../src/drive-app/challenge-rules.js';
 import { hasHeights, heightAt as moonHeightAt, setHeights } from '../../src/drive-app/moon-height.js';
 import { MOON_PLACES } from '../../src/drive-app/moon-places.js';
@@ -28,9 +28,11 @@ import { readVisit } from './visits.js';
 // ranking can be pushed by anyone with many addresses, so nothing it ranks goes in without the
 // owner's say). The order and each period's kind and route come from HMACs of the period's key with
 // a key derived from the Worker's secret, so every Worker instance agrees and nobody can work out
-// next week's from the code. The owner can choose any period's challenge on either world by hand
-// (the admin page, ADMIN_EMAILS only), and approve or unapprove busy places. A period's challenge is
-// fixed in D1 the first time it's asked for, so nothing changing later (this code, the places, the
+// next week's from the code; and a period's place keeps clear of the places fixed in D1 for the
+// periods live beside it and the one before (rotationPick), so that holds whatever changed since
+// those were fixed. The owner can choose any period's challenge on either world by hand (the admin
+// page, ADMIN_EMAILS only), and approve or unapprove busy places. A period's challenge is fixed in
+// D1 the first time it's asked for, so nothing changing later (this code, the places, the
 // approvals) changes a live one; the owner changing a live one starts a new board, the old one kept
 // apart, after a warning (it changes what the times mean).
 //
@@ -42,21 +44,25 @@ import { readVisit } from './visits.js';
 // CHALLENGE_TIMES_PER_VISITOR_DAILY a day from a visitor (DriveLimits, by the day's salt; a player
 // whose visitor has had the day's is then held till midnight by their own gap, so their tries
 // after it write nothing and ask DriveLimits nothing). Only each player's best is kept. The owner's
-// runs (an 'o' visit) are taken and answered, but kept off the boards: the owner sees every route
-// before it's live.
+// runs (an 'o' visit) are taken and answered, but kept off the boards: the owner knows each place
+// and kind before it's live, and chooses them.
 //
 // Settings, none of which need setting: CHALLENGE_TIMES_PER_VISITOR_DAILY (TIMES_DAILY);
-// CHALLENGE_LOOKS, the rate limiter binding for the lists and boards, by address; ADMIN_LOOKS the
-// admin page's (admin.js).
+// CHALLENGE_LOOKS, the rate limiter binding for the lists, the boards and the times posted, by a
+// keyed hash of the address that changes each day (looks); ADMIN_LOOKS the admin page's (admin.js).
 
 // One time every TIME_GAP ms from a player; a visitor's times a day.
 export const TIME_GAP = 10 * 1000;
 const TIMES_DAILY = 300;
-// How much longer (s) a run may say it lasted than its visit has (for clocks and frames), and how
-// long after a challenge's period ends (ms) a run finished in it is still taken (a run that started
-// before the end, posted a moment after).
+// How much longer (s) a run may say it lasted than its visit has (for clocks and frames). (And
+// GRACE, challenge-rules.js's: how long after a challenge's period ends a run finished in it is
+// still taken.)
 const SLACK = 30;
-export const GRACE = 60 * 1000;
+// The same run posted again within REPOST ms of its being taken is answered as it was (its answer
+// was lost on the way: the page tries again a few times, seconds apart), from Cloudflare's cache
+// where that answer is kept; later, it's a post like any other (the gap, the visitor's day), so a
+// script can't have the same board read over and over for nothing.
+export const REPOST = 5 * 60 * 1000;
 // The boards: the top TOP, the list's top LIST_TOP for each challenge, and the finish screen's
 // FINISH_TOP. Kept in Cloudflare's cache as the leaderboard's are, BOARD_CACHE s, a finished
 // challenge's too: its times can't change, but its names can (a rename, or the owner removing a
@@ -76,11 +82,21 @@ const AHEAD = 400;
 const APPROVED = 100;
 // The Moon's routes are checked on its own heights (moon-height.js, from the site's
 // /moon/height.bin): each point (and a landmark's start) on ground sloping under MOON_SLOPE degrees
-// across ±SLOPE_REACH m, so no gate is on a crater's wall. Craters smaller than MOON_DETAIL m are
-// left out of the check (the car drives over them), which keeps a check to a millisecond or so.
+// across ±SLOPE_REACH m, so no gate is on a crater's wall; and each leg in its order (a sprint's,
+// from the start through its gates; a landmark's, from the start to it), its heights every LEG_STEP
+// m along the straight line, each stretch of LEG_REACH m rising or falling MOON_SLOPE degrees or more
+// a fault, a point's counting POINT_FAULTS (a gate on a wall is worse than a wall on the way to it,
+// which can be driven round or flown over). Craters smaller than MOON_DETAIL m are left out of the
+// check (the car drives over them), which keeps a route's check to a few milliseconds.
 const MOON_SLOPE = 20;
 const SLOPE_REACH = 15;
 const MOON_DETAIL = 30;
+const LEG_STEP = 25;
+const LEG_REACH = 100;
+const POINT_FAULTS = 10;
+// Places within NEAR m of each other (or with the same name) are one place to the rotation's rules:
+// an owner's pick or an approved place there counts as the featured one.
+const NEAR = 1000;
 const SEED_LABEL = 'world-drive challenges v1';
 const SITE = 'https://worlddrive.app';
 const RUN_ID = /^[A-Za-z0-9_-]{16,32}$/;
@@ -116,9 +132,9 @@ const orders = new Map();
 // endsAt }. The first ask in a period fixes its challenges in D1.
 export async function listChallenges( context ) {
 
-	const { env, request, url } = context;
+	const { env, url } = context;
 	const id = askedPlayer( url );
-	await looks( env, request );
+	await looks( context );
 	const db = database( env );
 	const rows = await liveChallenges( context );
 	const ids = rows.map( row => row.id );
@@ -149,14 +165,14 @@ export async function listChallenges( context ) {
 // GET /api/challenges/board?challenge=&id=: a challenge's board, live or past (a finished one's is
 // kept as it ended): { challenge: CHALLENGE + { replacedAt, finalAt }, total, rows: [ the TOP best ],
 // me } (me with a player's id: their { rank, name, ms, ... }, or null; the owner's own row says
-// owner: true and the rank it would have).
+// owner: true and the rank it would have). A rank past RANK_MOST is RANK_MOST + 1 (rankOf).
 export async function challengeBoard( context ) {
 
-	const { env, request, url } = context;
+	const { env, url } = context;
 	const challenge = Number( url.searchParams.get( 'challenge' ) );
 	if ( ! Number.isSafeInteger( challenge ) || challenge < 1 ) throw bad();
 	const id = askedPlayer( url );
-	await looks( env, request );
+	await looks( context );
 	const db = database( env );
 	const key = boardKey( url, challenge );
 	const cached = await caches.default.match( key );
@@ -185,7 +201,7 @@ export async function challengeBoard( context ) {
 		headers[ 'X-Player-Cache' ] = kept ? 'hit' : 'miss';
 		if ( kept ) return json( { ...answer, me: ( await kept.json() ).me }, 200, headers );
 		const row = await db.prepare( `SELECT p.name, t.ms, t.vehicle, t.owner, t.created_at, ${ hasPass( 'p.account_id', '?3' ) } AS supporter, ${ xpOf( 'p' ) } AS xp, p.title,
-			( SELECT COUNT(*) FROM challenge_times o WHERE ${ ahead( 'o', 't' ) } ) + 1 AS rank
+			${ rankOf( 't' ) } AS rank
 			FROM challenge_times t JOIN players p ON p.id = t.player_id WHERE t.challenge_id = ?1 AND t.player_id = ?2` ).bind( challenge, id, supporterEmails( env ) ).first();
 		answer.me = row ? { ...entryOf( row ), ...( row.owner ? { owner: true } : {} ) } : null;
 		await caches.default.put( mine, json( { me: answer.me }, 200, { 'Cache-Control': `public, max-age=${ BOARD_CACHE }` } ) );
@@ -202,12 +218,16 @@ export async function challengeBoard( context ) {
 // (rank among the players on the board; for the owner's runs, kept off it, the rank it would have,
 // with owner: true). 400 for a run the game couldn't have driven, 403 for a visit, a player or a
 // challenge that won't do, 429 too often (reason: 'daily' once the visitor's day is used up). The
-// same run posted again (its answer lost on the way, so the page tries again) is answered as it was
-// taken, nothing more written or counted.
+// same run posted again within REPOST of its being taken (its answer lost on the way, so the page
+// tries again) is answered as it was taken, nothing more written or counted; a run's id that's
+// another player's on the board is a 400 (reason: 'run'), so a run's id names one time.
 export async function postTime( context ) {
 
-	const { request, env, limits, now } = context;
+	const { request, env, limits, now, url } = context;
 	const db = database( env );
+	// A burst of posts from one address (a script), turned away before anything's read, as a burst of
+	// looks is.
+	await looks( context );
 	const body = await readJson( request, 2048 );
 	if ( ! isObject( body ) ) throw bad();
 	const { id, secret } = credentials( body );
@@ -237,14 +257,21 @@ export async function postTime( context ) {
 		db.prepare( 'SELECT player_id FROM visits WHERE id = ?' ).bind( visit.id ),
 	] );
 	if ( bound.results[ 0 ]?.player_id !== id ) throw new HttpError( 403, 'Forbidden', { reason: 'visit' } );
-	const was = await db.prepare( 'SELECT ms, owner, run_id FROM challenge_times WHERE challenge_id = ? AND player_id = ?' ).bind( challengeId, id ).first();
-	// The run that's already the best, posted again: its answer was lost on the way (a phone losing
-	// its signal) and the page has tried again. Answered as it was taken, without the gap (it's
-	// been taken) but held to CHALLENGE_LOOKS as a board's look is, since it's one.
-	if ( was?.run_id === run && was.ms === ms ) {
+	const was = await db.prepare( 'SELECT ms, owner, run_id, created_at FROM challenge_times WHERE challenge_id = ? AND player_id = ?' ).bind( challengeId, id ).first();
+	// The run that's already the best, posted again soon after: its answer was lost on the way (a
+	// phone losing its signal) and the page has tried again. Answered as it was taken, without the
+	// gap (it's been taken; CHALLENGE_LOOKS holds a burst of them, above), from Cloudflare's cache,
+	// where that answer was put as it was taken (or, in another of its places, the first time it's
+	// asked for there), so posting it over and over reads nothing of the board. Later than REPOST
+	// it's a post like any other, below (the gap and the visitor's day), and not a new best.
+	if ( was?.run_id === run && was.ms === ms && now - was.created_at < REPOST ) {
 
-		await looks( env, request );
-		return answerTime( db, env, challengeId, id, true );
+		const key = answerKey( url, challengeId, id, run );
+		const kept = await caches.default.match( key );
+		if ( kept ) return json( await kept.json(), 200, { 'X-Time-Cache': 'hit' } );
+		const answer = await answerTime( db, env, challengeId, id, true );
+		await keepAnswer( key, answer, was.created_at + REPOST - now );
+		return json( answer, 200, { 'X-Time-Cache': 'miss' } );
 
 	}
 
@@ -284,14 +311,28 @@ export async function postTime( context ) {
 		// finished or replaced, checked in the same writes: it was open when its row was read above,
 		// but its final places may have been written since (a post in the minute after its end, as
 		// finishEnded runs), and a time written after them would be one its places don't count.
-		const [ written ] = await db.batch( [
-			db.prepare( `INSERT INTO challenge_times ( challenge_id, player_id, ms, passes, vehicle, run_id, visit, owner, created_at, first_at ) SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9
-				WHERE EXISTS ( SELECT 1 FROM challenges WHERE id = ?1 AND final_at IS NULL AND replaced_at IS NULL )
-				ON CONFLICT ( challenge_id, player_id ) DO UPDATE SET ms = excluded.ms, passes = excluded.passes, vehicle = excluded.vehicle, run_id = excluded.run_id,
-				visit = excluded.visit, owner = MAX( challenge_times.owner, excluded.owner ), created_at = excluded.created_at WHERE excluded.ms < challenge_times.ms` )
-				.bind( challengeId, id, ms, JSON.stringify( passes ), vehicle, run, visit.id, owner, now ),
-			...was || owner ? [] : [ db.prepare( 'UPDATE challenges SET drivers = drivers + 1 WHERE id = ? AND final_at IS NULL AND replaced_at IS NULL' ).bind( challengeId ) ],
-		] );
+		let written;
+		try {
+
+			[ written ] = await db.batch( [
+				db.prepare( `INSERT INTO challenge_times ( challenge_id, player_id, ms, passes, vehicle, run_id, visit, owner, created_at, first_at ) SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9
+					WHERE EXISTS ( SELECT 1 FROM challenges WHERE id = ?1 AND final_at IS NULL AND replaced_at IS NULL )
+					ON CONFLICT ( challenge_id, player_id ) DO UPDATE SET ms = excluded.ms, passes = excluded.passes, vehicle = excluded.vehicle, run_id = excluded.run_id,
+					visit = excluded.visit, owner = MAX( challenge_times.owner, excluded.owner ), created_at = excluded.created_at WHERE excluded.ms < challenge_times.ms` )
+					.bind( challengeId, id, ms, JSON.stringify( passes ), vehicle, run, visit.id, owner, now ),
+				...was || owner ? [] : [ db.prepare( 'UPDATE challenges SET drivers = drivers + 1 WHERE id = ? AND final_at IS NULL AND replaced_at IS NULL' ).bind( challengeId ) ],
+			] );
+
+		} catch ( err ) {
+
+			// Another player's run's id (challenge_times_run): the page makes each from 12 random bytes,
+			// so it's been copied, perhaps from a link to that run. The batch is one transaction, so
+			// nothing of it was written.
+			if ( /UNIQUE constraint failed: challenge_times\.challenge_id, challenge_times\.run_id/.test( err?.message ) ) throw new HttpError( 400, 'Bad request', { reason: 'run' } );
+			throw err;
+
+		}
+
 		if ( ! written.meta.changes ) throw new HttpError( 403, 'That challenge is over', { reason: 'challenge' } );
 		// So the player, and anyone asking here, sees it straight away (in this one of Cloudflare's
 		// places; elsewhere within BOARD_CACHE s). Nothing going wrong in it turns the best that's now
@@ -300,7 +341,10 @@ export async function postTime( context ) {
 
 	}
 
-	return answerTime( db, env, challengeId, id, isNewBest );
+	const answer = await answerTime( db, env, challengeId, id, isNewBest );
+	// A new best's answer kept for the same run posted again (above).
+	if ( isNewBest ) await keepAnswer( answerKey( url, challengeId, id, run ), answer, REPOST );
+	return json( answer );
 
 }
 
@@ -309,15 +353,24 @@ export async function postTime( context ) {
 async function answerTime( db, env, id, player, isNewBest ) {
 
 	const [ standing, top ] = await db.batch( [
-		db.prepare( `SELECT t.ms, t.owner, ( SELECT COUNT(*) FROM challenge_times o WHERE ${ ahead( 'o', 't' ) } ) + 1 AS rank, c.drivers
+		db.prepare( `SELECT t.ms, t.owner, ${ rankOf( 't' ) } AS rank, c.drivers
 			FROM challenge_times t JOIN challenges c ON c.id = t.challenge_id WHERE t.challenge_id = ? AND t.player_id = ?` ).bind( id, player ),
 		topQuery( db, env, id, FINISH_TOP ),
 	] );
 	const mine = standing.results[ 0 ];
-	return json( {
+	return {
 		ms: mine.ms, rank: mine.rank, total: mine.drivers, isNewBest, top: top.results.map( entryOf ),
 		...( mine.owner ? { owner: true } : {} ),
-	} );
+	};
+
+}
+
+// A time's `answer` kept in Cloudflare's cache under `key` (answerKey) for `ms` more, for the same
+// run posted again; nothing going wrong in it turns the time's answer into an error.
+async function keepAnswer( key, answer, ms ) {
+
+	const seconds = Math.ceil( ms / 1000 );
+	if ( seconds > 0 ) await caches.default.put( key, json( answer, 200, { 'Cache-Control': `public, max-age=${ seconds }` } ) ).catch( err => console.error( 'Challenge caches', err?.name, err?.message ) );
 
 }
 
@@ -352,10 +405,12 @@ function later( ctx, work, what ) {
 
 // GET /api/admin/challenges, to an account in ADMIN_EMAILS (adminAccount: 401, 403, 429 past
 // ADMIN_LOOKS): { now, current: [ CHALLENGE + { source, total, top } ], upcoming: [ { period, key,
-// world, kind, place, region, lat, lon, source, startsAt } ], picks: [ the owner's picks from now on ],
-// approved: [ { world, cell, name, region, lat, lon } ], featured: { earth: [ PLACE ], moon: [ PLACE ] },
-// busy: { earth: [ part 1's top places that aren't featured ], moon: [...] } }, upcoming the next
-// period of each kind on each world as it would be fixed (the owner's pick, or the rotation's).
+// world, kind, place, region, lat, lon, source, startsAt } ], picks: [ the owner's picks for the
+// live periods and every one after, however far ahead, soonest first: { period, world, kind, place,
+// region, lat, lon, heading, startsAt } ], approved: [ { world, cell, name, region, lat, lon } ],
+// featured: { earth: [ PLACE ], moon: [ PLACE ] }, busy: { earth: [ part 1's top places that aren't
+// featured ], moon: [...] } }, upcoming the next period of each kind on each world as it would be
+// fixed (the owner's pick, or the rotation's, clear of what's fixed now).
 export async function adminChallenges( context ) {
 
 	await adminAccount( context );
@@ -371,8 +426,11 @@ async function adminAnswer( context ) {
 	const rows = await liveChallenges( context );
 	const ids = rows.map( row => row.id );
 	const current = periodsAt( now );
+	// The picks from each kind's live period on (keys of a kind sort as their periods do, and each
+	// kind's are below 'day:9', 'week:9' and 'month:9'): ranges of challenge_picks' key.
 	const [ picks, places, counts, ...tops ] = await db.batch( [
-		db.prepare( 'SELECT * FROM challenge_picks WHERE period IN ( SELECT value FROM json_each( ? ) ) ORDER BY period, world' ).bind( JSON.stringify( nextPeriods( now, 40 ) ) ),
+		db.prepare( `SELECT * FROM challenge_picks WHERE ( period >= ?1 AND period < 'day:9' ) OR ( period >= ?2 AND period < 'week:9' ) OR ( period >= ?3 AND period < 'month:9' ) LIMIT 2000` )
+			.bind( ...current.map( period => period.key ) ),
 		db.prepare( 'SELECT * FROM challenge_places ORDER BY world, created_at' ),
 		db.prepare( `SELECT id, drivers FROM challenges WHERE id IN ( ${ ids.map( () => '?' ).join( ', ' ) } )` ).bind( ...ids ),
 		...ids.map( challenge => topQuery( db, env, challenge, LIST_TOP ) ),
@@ -385,7 +443,7 @@ async function adminAnswer( context ) {
 		for ( const world of WORLDS ) {
 
 			const pick = picks.results.find( p => p.period === period.key && p.world === world );
-			const chosen = pick ? pickedPlace( pick ) : await rotationPick( env, period, world, approved );
+			const chosen = pick ? pickedPlace( pick ) : await rotationPick( env, period, world, approved, rows );
 			upcoming.push( { period: period.kind, key: period.key, world, kind: chosen.kind, place: chosen.place.name, region: chosen.place.region, lat: chosen.place.lat, lon: chosen.place.lon, source: chosen.source, startsAt: period.starts } );
 
 		}
@@ -396,7 +454,8 @@ async function adminAnswer( context ) {
 		now,
 		current: rows.map( ( row, i ) => ( { ...challengeOf( row ), source: row.source, total: drivers.get( row.id ) ?? 0, top: tops[ i ].results.map( entryOf ) } ) ),
 		upcoming,
-		picks: picks.results.map( pick => ( { period: pick.period, world: pick.world, kind: pick.kind, place: pick.place, region: pick.region, lat: pick.lat, lon: pick.lon, heading: pick.heading } ) ),
+		picks: picks.results.map( pick => ( { pick, starts: parsePeriod( pick.period )?.starts ?? 0 } ) ).sort( ( a, b ) => a.starts - b.starts || PERIOD_KINDS.indexOf( periodKind( a.pick.period ) ) - PERIOD_KINDS.indexOf( periodKind( b.pick.period ) ) || WORLDS.indexOf( a.pick.world ) - WORLDS.indexOf( b.pick.world ) )
+			.map( ( { pick, starts } ) => ( { period: pick.period, world: pick.world, kind: pick.kind, place: pick.place, region: pick.region, lat: pick.lat, lon: pick.lon, heading: pick.heading, startsAt: starts } ) ),
 		approved: approved.map( place => ( { world: place.world, cell: `${ place.world }:${ place.cell_row }:${ place.cell_column }`, name: place.name, region: place.region, lat: place.lat, lon: place.lon } ) ),
 		featured: Object.fromEntries( WORLDS.map( world => [ world, FEATURED[ world ].map( ( { id, name, region, lat, lon } ) => ( { id, name, region, lat, lon } ) ) ] ) ),
 		busy: await busyPlaces( context, db ),
@@ -411,7 +470,10 @@ async function adminAnswer( context ) {
 //     month's, or one ahead, up to AHEAD days), a featured place, an approved or busy drop-in place
 //     (its cell) or coordinates and a name. The live one, once anyone has a time on it, only with
 //     live: true (else 409 { reason: 'live', drivers }): it's replaced, its board kept apart.
-//   { action: 'unpick', period, world, live }: back to the rotation's (the live one, as for pick).
+//   { action: 'unpick', period, world, live }: back to the rotation's. A live one the rotation chose
+//     stays as it is (it's the rotation's already, whatever the rotation would choose now that the
+//     places or the code have changed); a live one of the owner's is replaced by the rotation's
+//     choice, as for pick.
 //   { action: 'approve', world, cell } and { action: 'unapprove', world, cell }: a busy drop-in
 //     place in the rotation, or out of it.
 // Answers as GET does, with what changed.
@@ -451,23 +513,38 @@ export async function adminChange( context ) {
 	if ( ! period || period.ends <= now || period.starts > now + AHEAD * DAY ) throw bad();
 	const pick = action === 'pick' ? await checkPick( context, db, body ) : null;
 	const isLive = period.starts <= now;
-	const fixed = isLive ? await db.prepare( 'SELECT * FROM challenges WHERE period = ? AND world = ? AND replaced_at IS NULL' ).bind( period.key, world ).first() : null;
+	// The live one, and those live beside it and the one before (for the rotation's choice, clear of
+	// them, if it's back to the rotation).
+	const before = periodOf( period.kind, period.starts - 1 );
+	const around = isLive ? ( await db.prepare( 'SELECT * FROM challenges WHERE period IN ( ?, ?, ?, ? ) AND world = ? AND replaced_at IS NULL' ).bind( ...periodsAt( now ).map( p => p.key ), before.key, world ).all() ).results : [];
+	const fixed = around.find( row => row.period === period.key ) ?? null;
 	const writes = pick
 		? [ db.prepare( `INSERT INTO challenge_picks ( period, world, kind, place, region, lat, lon, heading, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )
 			ON CONFLICT ( period, world ) DO UPDATE SET kind = excluded.kind, place = excluded.place, region = excluded.region, lat = excluded.lat, lon = excluded.lon,
 			heading = excluded.heading, created_at = excluded.created_at` ).bind( period.key, world, pick.kind, pick.name, pick.region, pick.lat, pick.lon, pick.heading ?? null, now ) ]
 		: [ db.prepare( 'DELETE FROM challenge_picks WHERE period = ? AND world = ?' ).bind( period.key, world ) ];
+	if ( fixed && ! pick && fixed.source === 'rotation' ) {
+
+		// Back to the rotation on a live one the rotation chose: it's the rotation's already, so it
+		// stays as it is, its board going on, whatever the rotation would choose now (an approval since
+		// reshuffles its order). Only a pick for it, if there was one, goes.
+		await db.batch( writes );
+		return adminAnswer( context );
+
+	}
+
 	if ( fixed ) {
 
-		// What it would be now: the pick, or the rotation's.
+		// What it would be now: the pick, or the rotation's (clear of the others live and the one
+		// before, as they're fixed).
 		const approved = ( await db.prepare( 'SELECT * FROM challenge_places' ).all() ).results;
-		const chosen = pick ? { place: pick, kind: pick.kind, source: 'owner' } : await rotationPick( env, period, world, approved );
+		const chosen = pick ? { place: pick, kind: pick.kind, source: 'owner' } : await rotationPick( env, period, world, approved, around );
 		const made = await challengeFor( env, period, world, chosen, now );
 		if ( made.kind === fixed.kind && made.place === fixed.place && made.region === fixed.region && made.route === fixed.route ) {
 
-			// The same challenge as the live one (back to the rotation on one the rotation chose, or a
-			// pick of the place and kind it already is): nothing to replace, so its board goes on, with
-			// no warning; only whose it's said to be changes.
+			// The same challenge as the live one (a pick of the place and kind it already is, or back to
+			// the rotation on one of the owner's that the rotation would choose as it is): nothing to
+			// replace, so its board goes on, with no warning; only whose it's said to be changes.
 			await db.batch( [ ...writes, db.prepare( 'UPDATE challenges SET source = ? WHERE id = ?' ).bind( made.source, fixed.id ) ] );
 			live = null;
 			return adminAnswer( context );
@@ -500,9 +577,13 @@ export async function adminChange( context ) {
 
 // The six live challenges' rows (the day's, the week's and the month's on the Earth, then the
 // Moon), fixed in D1 the first time each is asked for in its period (from the owner's pick, or the
-// rotation's), kept LIVE_KEPT ms in this Worker instance. Challenges whose period ended at least
-// GRACE ago are given their final places as this goes (finishEnded), in the background: it's no
-// part of the answer, so it can neither slow one nor turn one into an error.
+// rotation's), kept LIVE_KEPT ms in this Worker instance. Those to fix are fixed the longest first
+// (the month, the week, then the day), each of the rotation's clear of those fixed already, those
+// fixed here included, and of the periods before (read with the owner's picks): so whatever chose
+// them, and whatever has changed since (the approved places, this code), the three live on a world
+// are three places and none is the one before's. Challenges whose period ended at least GRACE ago
+// are given their final places as this goes (finishEnded), in the background: it's no part of the
+// answer, so it can neither slow one nor turn one into an error.
 export async function liveChallenges( context ) {
 
 	const { env, now } = context;
@@ -516,16 +597,23 @@ export async function liveChallenges( context ) {
 	const missing = periods.flatMap( period => WORLDS.map( world => ( { period, world } ) ) ).filter( ( { period, world } ) => ! rows.some( row => row.period === period.key && row.world === world ) );
 	if ( missing.length ) {
 
-		const [ picks, places ] = await db.batch( [
+		const [ picks, places, before ] = await db.batch( [
 			db.prepare( 'SELECT * FROM challenge_picks WHERE period IN ( ?, ?, ? )' ).bind( ...periods.map( period => period.key ) ),
 			db.prepare( 'SELECT * FROM challenge_places' ),
+			db.prepare( 'SELECT * FROM challenges WHERE period IN ( ?, ?, ? ) AND replaced_at IS NULL' ).bind( ...periods.map( period => periodOf( period.kind, period.starts - 1 ).key ) ),
 		] );
-		const made = await Promise.all( missing.map( async ( { period, world } ) => {
+		const fixed = [ ...rows, ...before.results ];
+		const made = [];
+		missing.sort( ( a, b ) => PERIOD_KINDS.indexOf( b.period.kind ) - PERIOD_KINDS.indexOf( a.period.kind ) );
+		for ( const { period, world } of missing ) {
 
 			const pick = picks.results.find( p => p.period === period.key && p.world === world );
-			return challengeFor( env, period, world, pick ? pickedPlace( pick ) : await rotationPick( env, period, world, places.results ), now );
+			const challenge = await challengeFor( env, period, world, pick ? pickedPlace( pick ) : await rotationPick( env, period, world, places.results, fixed ), now );
+			made.push( challenge );
+			fixed.push( { period: challenge.period, world, kind: challenge.kind, place: challenge.place, route: challenge.route, starts_at: challenge.startsAt, ends_at: challenge.endsAt } );
 
-		} ) );
+		}
+
 		// (Two instances fixing the same period at once: the first one's row stays, and both read it.)
 		await db.batch( made.map( challenge => insertQuery( db, challenge ) ) );
 		rows = ( await select() ).results;
@@ -570,20 +658,27 @@ function insertQuery( db, c ) {
 // each time round, by HMACs of the round and each place with the Worker's derived key, one a period
 // (its own place, the next in the order): so every instance agrees, and each place comes about once
 // a round. Two rules on top. The three live on a world are three places: a period never takes the
-// rotation's pick for a longer period it's in (a day its week's or its month's; a week the month it
-// starts in or the one it ends in). And no place comes twice in a row: a period never takes the
-// period before's pick. One whose own place is ruled out steps aside to the place half a round on
-// in the order, or the first free one after that, never the next or the last in the order (the
-// periods either side's own places).
-export async function rotationPick( env, period, world, approved ) {
+// place of a longer period it's in (a day its week's or its month's; a week the month it starts in
+// or the one it ends in), nor of a period of another kind fixed live beside it. And no place comes
+// twice in a row: a period never takes the period before's place. One whose own place is ruled out
+// steps aside to the place half a round on in the order, or the first free one after that, never
+// the next or the last in the order (the periods either side's own places).
+//
+// Those periods' places are as `fixed` has them (challenges' rows: what D1 has fixed, by whoever
+// chose them and whatever the places were then), and as the rotation would choose them where it
+// hasn't one (a period not yet fixed, or without `fixed`, as the rules' tests and its own working
+// back ask). Every instance reads the same rows, so it still agrees. Without `fixed` it's kept in
+// this instance, as working back asks for the same periods again and again.
+export async function rotationPick( env, period, world, approved, fixed = null ) {
 
 	const places = candidates( world, approved );
+	if ( fixed ) return rotate( env, period, world, approved, places, fixed );
 	// (Kept for this instance: a day's asks for its week's and month's, and the admin page for six.)
 	const key = `${ env.TURNSTILE_SECRET }:${ period.key }:${ world }:${ places.map( place => place.id ).join( ',' ) }`;
 	if ( ! picked.has( key ) ) {
 
 		if ( picked.size >= 256 ) picked.clear();
-		picked.set( key, rotate( env, period, world, approved, places ).catch( err => {
+		picked.set( key, rotate( env, period, world, approved, places, [] ).catch( err => {
 
 			picked.delete( key );
 			throw err;
@@ -603,25 +698,33 @@ export async function rotationPick( env, period, world, approved ) {
 // start a round or step aside, and as a round's own places are all different, only a few of a
 // round's periods can step aside (those whose own place is one of the few the longer periods over
 // them took): it always ends within a round, a few periods back at most.
-async function rotate( env, period, world, approved, places ) {
+//
+// With `fixed`, the places fixed live beside it and the one before are always kept clear of: they
+// may be anything (an owner's pick, a place since unapproved, a pick from a list since changed).
+async function rotate( env, period, world, approved, places, fixed ) {
 
-	const avoid = new Set();
+	const before = periodOf( period.kind, period.starts - 1 );
+	const near = fixed.filter( row => row.world === world && row.period !== period.key && ( row.period === before.key
+		|| ( periodKind( row.period ) !== period.kind && row.starts_at < period.ends && row.ends_at > period.starts ) ) );
+	const shunned = near.map( pinOf );
+	const known = new Set( near.map( row => row.period ) );
 	const longer = period.kind === 'day' ? [ periodOf( 'week', period.starts ), periodOf( 'month', period.starts ) ]
 		: period.kind === 'week' ? [ periodOf( 'month', period.starts ), periodOf( 'month', period.ends - 1 ) ] : [];
-	for ( const over of longer ) avoid.add( ( await rotationPick( env, over, world, approved ) ).place.id );
+	for ( const over of longer ) if ( ! known.has( over.key ) ) shunned.push( ( await rotationPick( env, over, world, approved ) ).place );
+	const avoided = place => shunned.some( other => samePlace( world, place, other ) );
 	const count = places.length;
 	const index = periodIndex( period );
 	const round = Math.floor( index / count );
 	const order = await orderOf( env, period.kind, world, round, places );
 	let at = index % count;
-	if ( index > 0 && ( at === 0 || avoid.has( order[ at ].id ) ) ) avoid.add( ( await rotationPick( env, periodOf( period.kind, period.starts - 1 ), world, approved ) ).place.id );
-	if ( avoid.has( order[ at ].id ) ) {
+	if ( index > 0 && ! known.has( before.key ) && ( at === 0 || avoided( order[ at ] ) ) ) shunned.push( ( await rotationPick( env, before, world, approved ) ).place );
+	if ( avoided( order[ at ] ) ) {
 
 		const half = Math.floor( count / 2 );
 		for ( let k = 0; k < count; k ++ ) {
 
 			const next = ( at + half + k ) % count;
-			if ( ! avoid.has( order[ next ].id ) && Math.abs( next - at ) > 1 ) {
+			if ( ! avoided( order[ next ] ) && Math.abs( next - at ) > 1 ) {
 
 				at = next;
 				break;
@@ -656,6 +759,25 @@ function orderOf( env, kind, world, round, places ) {
 	}
 
 	return orders.get( key );
+
+}
+
+// Whether places `a` and `b` ({ id?, name, lat, lon }) on `world` are one to the rotation's rules:
+// by their ids, where both are the rotation's own; else by their names, or pins within NEAR m.
+function samePlace( world, a, b ) {
+
+	if ( a.id !== undefined && b.id !== undefined ) return a.id === b.id;
+	return a.name === b.name || metresOn( world, a.lat, a.lon, b.lat, b.lon ) < NEAR;
+
+}
+
+// A fixed challenge's place ({ name, lat, lon }): its name, and its pin, where a sprint and
+// collectibles start and where a landmark's drive ends.
+function pinOf( row ) {
+
+	const route = JSON.parse( row.route );
+	const [ lat, lon ] = row.kind === 'landmark' ? route.points[ 0 ] : [ route.start.lat, route.start.lon ];
+	return { name: row.place, lat, lon };
 
 }
 
@@ -730,20 +852,6 @@ function finishQueries( db, id, now ) {
 
 }
 
-// The next `count` periods' keys of every kind from now (the day's, the week's and the month's
-// included): which of the owner's picks the admin page is shown.
-function nextPeriods( now, count ) {
-
-	return periodsAt( now ).flatMap( period => {
-
-		const keys = [];
-		for ( let p = period, i = 0; i < count; i ++, p = nextPeriod( p ) ) keys.push( p.key );
-		return keys;
-
-	} );
-
-}
-
 // --- boards ---
 
 // The top `most` on challenge `id`'s board (the owner's runs left out), fastest first, with what a
@@ -762,7 +870,7 @@ async function myStanding( db, url, ids, player ) {
 	const key = mineKey( url, ids, player );
 	const kept = await caches.default.match( key );
 	if ( kept ) return kept.json();
-	const rows = ( await db.prepare( `SELECT t.challenge_id, t.ms, t.owner, ( SELECT COUNT(*) FROM challenge_times o WHERE ${ ahead( 'o', 't' ) } ) + 1 AS rank
+	const rows = ( await db.prepare( `SELECT t.challenge_id, t.ms, t.owner, ${ rankOf( 't' ) } AS rank
 		FROM challenge_times t WHERE t.player_id = ? AND t.challenge_id IN ( ${ ids.map( () => '?' ).join( ', ' ) } )` ).bind( player, ...ids ).all() ).results;
 	const mine = Object.fromEntries( rows.map( row => [ row.challenge_id, { ms: row.ms, rank: row.rank, ...( row.owner ? { owner: true } : {} ) } ] ) );
 	await caches.default.put( key, json( mine, 200, { 'Cache-Control': `public, max-age=${ BOARD_CACHE }` } ) );
@@ -770,11 +878,22 @@ async function myStanding( db, url, ids, player ) {
 
 }
 
+// SQL for row `t`'s rank on its board: one more than the rows ahead of it (ahead), counted to
+// RANK_MOST at most, so it's at most RANK_MOST + 1 (the page says "1000+"). With ahead's range on
+// the time, SQLite reads only the rows ahead from the board's index (challenge_times_board), so a
+// rank costs that many rows read, and no rank more than RANK_MOST.
+function rankOf( t ) {
+
+	return `( SELECT COUNT(*) FROM ( SELECT 1 FROM challenge_times o WHERE ${ ahead( 'o', t ) } LIMIT ${ RANK_MOST } ) ) + 1`;
+
+}
+
 // SQL for "row `o` is ahead of row `t` on t's board": a quicker time, or the same set earlier, and
-// not the owner's.
+// not the owner's. (The time's range first, on its own, so SQLite seeks the index to it rather than
+// reading the whole board.)
 function ahead( o, t ) {
 
-	return `${ o }.challenge_id = ${ t }.challenge_id AND ${ o }.owner = 0 AND ( ${ o }.ms < ${ t }.ms OR ( ${ o }.ms = ${ t }.ms
+	return `${ o }.challenge_id = ${ t }.challenge_id AND ${ o }.owner = 0 AND ${ o }.ms <= ${ t }.ms AND ( ${ o }.ms < ${ t }.ms OR ( ${ o }.ms = ${ t }.ms
 		AND ( ${ o }.created_at < ${ t }.created_at OR ( ${ o }.created_at = ${ t }.created_at AND ${ o }.player_id < ${ t }.player_id ) ) ) )`;
 
 }
@@ -826,6 +945,13 @@ function boardKey( url, challenge, player = '' ) {
 
 }
 
+// Where a time's answer is kept for the same run posted again (postTime).
+function answerKey( url, challenge, player, run ) {
+
+	return new Request( `${ url.origin }/api/challenges/time?challenge=${ challenge }&player=${ player }&run=${ run }` );
+
+}
+
 // The player asked about (?id=), or null; a 400 if it isn't one.
 function askedPlayer( url ) {
 
@@ -835,15 +961,26 @@ function askedPlayer( url ) {
 
 }
 
-// CHALLENGE_LOOKS (Cloudflare's rate limiter, by address: no Durable Object request) for the lists
-// and boards: a burst of them (a script) is turned away before it reads anything.
-async function looks( env, request ) {
+// CHALLENGE_LOOKS (Cloudflare's rate limiter: no Durable Object request) for the lists, the boards
+// and the times posted: a burst of them (a script) is turned away before it reads anything. Each
+// address (an IPv6 one by its /64) is counted by lookKey, never as itself.
+async function looks( { env, request, now } ) {
 
-	if ( env.CHALLENGE_LOOKS && ! ( await env.CHALLENGE_LOOKS.limit( { key: addressOf( request ) } ) ).success ) {
+	if ( env.CHALLENGE_LOOKS && ! ( await env.CHALLENGE_LOOKS.limit( { key: await lookKey( env, request, now ) } ) ).success ) {
 
 		throw new HttpError( 429, 'Too many. Try again in a minute', { retryAfter: 60 }, { 'Retry-After': '60' } );
 
 	}
+
+}
+
+// The key CHALLENGE_LOOKS counts an address by: an HMAC of the day and the address with the
+// challenges' derived key (seed), so no address is handed to the rate limiter as it is, and
+// tomorrow's key for it is another (as DriveLimits counts by a hash with the day's salt, without
+// asking it for the salt: that would be a Durable Object request a look).
+export async function lookKey( env, request, now ) {
+
+	return hex( await seed( env, `look:${ dateOf( now ) }:${ addressOf( request ) }` ) ).slice( 0, 32 );
 
 }
 
@@ -903,12 +1040,47 @@ async function moonCheck( env ) {
 
 }
 
-// How many of a route's points (and its start) are on ground sloping MOON_SLOPE degrees or more. (The
-// place itself, a sprint's or collectibles' start and a landmark's goal, is where it is: it counts
-// the same in every one laid out.)
-export function moonFaults( route ) {
+// A route of `kind`'s faults on the Moon: POINT_FAULTS for each of its points (and its start) on
+// ground sloping MOON_SLOPE degrees or more, and one for each steep stretch along its legs in their
+// order (legFaults: a sprint's from the start through its gates, a landmark's from the start to it;
+// collectibles are taken in any order, so theirs aren't known). (The place itself, a sprint's or
+// collectibles' start and a landmark's goal, is where it is: it counts the same in every one laid
+// out.)
+export function moonFaults( route, kind ) {
 
-	return [ [ route.start.lat, route.start.lon ], ...route.points ].filter( ( [ lat, lon ] ) => moonSteep( lat, lon ) ).length;
+	const points = [ [ route.start.lat, route.start.lon ], ...route.points ];
+	const steep = points.filter( ( [ lat, lon ] ) => moonSteep( lat, lon ) ).length * POINT_FAULTS;
+	if ( kind === 'collect' ) return steep;
+	let stretches = 0;
+	for ( let i = 1; i < points.length; i ++ ) stretches += legFaults( ...points[ i - 1 ], ...points[ i ] );
+	return steep + stretches;
+
+}
+
+// How many stretches of LEG_REACH m along the straight line from ( lat, lon ) to ( toLat, toLon ) on
+// the Moon rise or fall MOON_SLOPE degrees or more (a crater's wall, or a mountain's side, on the
+// way): heights every LEG_STEP m, craters under MOON_DETAIL m left out, each steep stretch counted
+// once (the next looked at from its end).
+export function legFaults( lat, lon, toLat, toLon ) {
+
+	const length = metresOn( 'moon', lat, lon, toLat, toLon );
+	const steps = Math.ceil( length / LEG_STEP );
+	if ( steps < 1 ) return 0;
+	const bearing = bearingTo( 'moon', lat, lon, toLat, toLon );
+	const step = length / steps;
+	const heights = Array.from( { length: steps + 1 }, ( _, i ) => moonHeightAt( ...destination( 'moon', lat, lon, bearing, i * step ), MOON_DETAIL ) );
+	const across = Math.max( 1, Math.round( LEG_REACH / step ) );
+	const most = Math.tan( MOON_SLOPE * Math.PI / 180 ) * across * step;
+	let faults = 0;
+	for ( let i = 0; i + across <= steps; i ++ ) {
+
+		if ( Math.abs( heights[ i + across ] - heights[ i ] ) < most ) continue;
+		faults ++;
+		i += across - 1;
+
+	}
+
+	return faults;
 
 }
 

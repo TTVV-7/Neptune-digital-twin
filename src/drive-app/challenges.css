@@ -68,6 +68,17 @@ dialog.ch-dialog::backdrop {
 	color: var( --muted );
 }
 
+/* A word over the list on why it's there (a Retry of one that's over). */
+.ch-note {
+	margin: 12px 0 0;
+	padding: 8px 12px;
+	border: 1px solid rgba( 255, 210, 63, 0.45 );
+	border-radius: 12px;
+	background: rgba( 255, 210, 63, 0.1 );
+	font-size: 14px;
+	font-weight: 700;
+}
+
 .ch-world {
 	margin: 16px 0 8px;
 	font-size: 12px;
@@ -285,6 +296,128 @@ dialog.ch-dialog::backdrop {
 	margin: 10px 0 0;
 	text-align: center;
 	font-weight: 700;
+}
+
+/* A phone on its side (390 px or so high): the cards short, so the first whole one and its Start
+   are on the screen as it opens, and side by side where there's room (two whole ones). No intro or
+   footnote; each card the place and what it is beside Start and Board, the board's best, and yours. */
+@media ( orientation: landscape ) and ( max-height: 520px ) {
+
+	dialog.ch-dialog {
+		width: min( 820px, calc( 100% - 24px ) );
+		padding: 10px 14px;
+	}
+
+	.ch-head h2 {
+		font-size: 19px;
+	}
+
+	.ch-head .close {
+		width: 32px;
+		height: 32px;
+	}
+
+	.ch-intro,
+	.ch-foot {
+		display: none;
+	}
+
+	.ch-world {
+		margin: 8px 0 6px;
+	}
+
+	.ch-card {
+		display: grid;
+		grid-template-columns: minmax( 0, 1fr ) auto;
+		grid-template-areas: 'top buttons' 'place buttons' 'what buttons' 'board board' 'you you';
+		column-gap: 10px;
+		margin: 0;
+		padding: 8px 12px;
+	}
+
+	.ch-card .ch-top {
+		grid-area: top;
+	}
+
+	.ch-card .ch-place {
+		grid-area: place;
+		margin: 4px 0 0;
+		overflow: hidden;
+		white-space: nowrap;
+		text-overflow: ellipsis;
+		font-size: 15px;
+	}
+
+	.ch-card .ch-what {
+		grid-area: what;
+		overflow: hidden;
+		white-space: nowrap;
+		text-overflow: ellipsis;
+		font-size: 12px;
+	}
+
+	.ch-card .ch-top3 {
+		grid-area: board;
+		margin-top: 4px;
+	}
+
+	/* The board's best alone (its Board has the rest). */
+	.ch-card .ch-top3 li:nth-child( n + 2 ) {
+		display: none;
+	}
+
+	.ch-card .ch-top3 li {
+		padding: 2px 8px;
+		font-size: 13px;
+	}
+
+	.ch-card .ch-you {
+		grid-area: you;
+		margin-top: 4px;
+		font-size: 12px;
+	}
+
+	.ch-card .ch-buttons {
+		grid-area: buttons;
+		flex-direction: column;
+		align-self: center;
+		gap: 6px;
+		margin: 0;
+	}
+
+	.ch-card .ch-buttons button {
+		padding: 7px 14px;
+	}
+
+	.ch-card .ch-buttons .primary {
+		padding: 8px 18px;
+	}
+
+	.ch-board-title {
+		margin-top: 6px;
+		font-size: 16px;
+	}
+
+	.ch-rows li {
+		padding: 4px 10px;
+	}
+
+}
+
+@media ( orientation: landscape ) and ( max-height: 520px ) and ( min-width: 640px ) {
+
+	.ch-list {
+		display: grid;
+		grid-template-columns: repeat( 2, minmax( 0, 1fr ) );
+		gap: 8px;
+	}
+
+	.ch-list .ch-world,
+	.ch-list .ch-status {
+		grid-column: 1 / -1;
+		margin-bottom: 0;
+	}
+
 }
 
 /* --- the run ----------------------------------------------------------------------------- */

@@ -44,8 +44,9 @@ CREATE TABLE challenge_times (
 	ms INTEGER NOT NULL,
 	passes TEXT NOT NULL,
 	vehicle TEXT NOT NULL,
-	-- The page's own id for the run, so a recording of it (a ghost) can be tied to this time, and the
-	-- visit it came with (the id in its token).
+	-- The page's own id for the run (12 random bytes), so a recording of it (a ghost) can be tied to
+	-- this time, one row on a challenge's board (challenge_times_run: another player's post with it is
+	-- turned away), and the visit it came with (the id in its token).
 	run_id TEXT NOT NULL,
 	visit TEXT NOT NULL,
 	-- 1 when a run of the owner's visits (ADMIN_EMAILS) set it: kept off the boards.
@@ -61,6 +62,8 @@ CREATE TABLE challenge_times (
 
 CREATE INDEX challenge_times_board ON challenge_times ( challenge_id, owner, ms, created_at );
 CREATE INDEX challenge_times_by_player ON challenge_times ( player_id, created_at );
+-- A run's id names one time on a challenge (what a link to a run, part 2b's, can rely on).
+CREATE UNIQUE INDEX challenge_times_run ON challenge_times ( challenge_id, run_id );
 
 -- The owner's choice of a period's challenge on a world, made ahead of it or for the live one:
 -- the place (a featured place's id, an approved drop-in place's cell, or coordinates and a name)

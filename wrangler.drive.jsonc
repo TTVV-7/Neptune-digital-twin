@@ -90,9 +90,11 @@
 		// The owner's admin page's asks (worker/drive/admin.js), by account: each reads a period's rows
 		// from D1, so at most 30 a minute (the page asks once or twice a change of period).
 		{ "name": "ADMIN_LOOKS", "namespace_id": "4804", "simple": { "limit": 30, "period": 60 } },
-		// The challenges' lists and boards (worker/drive/challenges.js), by address: each is kept in
-		// Cloudflare's cache for half a minute, so a page asks a few times a minute at most (the list
-		// as it opens, a board or two); a script asking over and over is turned away before it reads D1.
+		// The challenges' lists, boards and times posted (worker/drive/challenges.js), by address, each
+		// counted by an HMAC of it and the day (lookKey), never as it is: each list and board is kept
+		// in Cloudflare's cache for half a minute, so a page asks a few times a minute at most (the list
+		// as it opens, a board or two, a time); a script asking over and over is turned away before it
+		// reads D1.
 		{ "name": "CHALLENGE_LOOKS", "namespace_id": "4805", "simple": { "limit": 60, "period": 60 } }
 	],
 	"migrations": [

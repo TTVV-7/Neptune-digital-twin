@@ -1002,7 +1002,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		const gone = () => drop.cancelled || state.drop !== drop;
 		let { lat, lon } = place;
 		state.place = place;
-		rememberPlace( place );
+		// (Not a place picked, as a landmark challenge's start isn't: recent: false.)
+		if ( place.recent !== false ) rememberPlace( place );
 		panel.refreshRecent();
 		pinAt( null );
 		pads.clear();
@@ -1086,14 +1087,15 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		const gone = () => drop.cancelled || state.drop !== drop;
 		const { lat, lon } = place;
 		state.place = place;
-		rememberPlace( place );
+		if ( place.recent !== false ) rememberPlace( place );
 		panel.refreshRecent();
 		pinAt( null );
 		pads.clear();
 		sea.clear();
 		setMode( 'dropping' );
-		$( 'drive-ui' ).querySelector( '.place' ).textContent = place.name;
-		screens.loading( `Dropping in: ${ place.name }` );
+		const shown = place.near || place.name;
+		$( 'drive-ui' ).querySelector( '.place' ).textContent = shown;
+		screens.loading( `Dropping in: ${ shown }` );
 		const height = moon.heightAt( lat, lon ) ?? 0;
 		recentre( { lat, lon, height } );
 		state.place = { ...place, height };
