@@ -9,7 +9,9 @@ import { makeVisit } from './visits.js';
 import { currentAccount, getMe, linkPlayer, signIn, signOut } from './accounts.js';
 import { isSupporter, stripeWebhook } from './supporter.js';
 import { live, liveToday, online } from './live.js';
-import { adminStats, countVisit, isAdmin, postStats } from './stats.js';
+import { adminStats, countVisit, postStats } from './stats.js';
+import { isAdmin } from './admin.js';
+import { adminDropins } from './dropins.js';
 import { BUDGET_SPENT } from '../../src/drive-app/live-protocol.js';
 
 export { DriveLimits } from './limits.js';
@@ -25,7 +27,8 @@ export { DriveRoom } from './live.js';
 // player's XP and level (progress.js). And the Supporter Pass (accounts.js, supporter.js): Google sign-in, the pass bought through Stripe, and
 // for supporters more drives a day and a ⭐ on the leaderboard. Driving with others (live.js) is a
 // WebSocket to a room, one Durable Object a party or area, that tells everyone where the others are;
-// /api/online says where people are driving now, for the globe's dots.
+// /api/online says where people are driving now, for the globe's dots. And the owner's play stats
+// (stats.js) with where people drop in (dropins.js), for the admin page.
 //
 // Settings (wrangler.drive.jsonc vars, or secrets):
 //   GOOGLE_MAPS_API_KEY   secret: the Maps key for World Drive's own Google Cloud project (a
@@ -47,8 +50,13 @@ export { DriveRoom } from './live.js';
 //   LIVE_VISIT_CONNECTS   the most connections to rooms a visit makes in a day (200 if unset)
 //   ROOMS                 the Durable Object binding for the rooms (DriveRoom, live.js)
 //   ADMIN_EMAILS          secret or var, comma-separated: the Google accounts that may see the play
-//                         stats (GET /api/admin/stats, the page at /admin.html; see stats.js)
+//                         stats (GET /api/admin/stats and /api/admin/dropins, the page at
+//                         /admin.html; see admin.js, stats.js and dropins.js)
+//   ADMIN_LOOKS           the rate limiter binding for the admin page's asks, by account (admin.js)
 //   STATS_POSTS           the rate limiter binding for each visit's posts of play stats (stats.js)
+//   DROPIN_PLACES_DAILY, DROPIN_PLACES_PER_VISITOR, DROPIN_PLACES_PER_VISIT   the most drop-in
+//                         places counted a day for everyone (5000 if unset), each visitor (60) and
+//                         each visit (30) (dropins.js)
 //   LIVE_CONNECTS         the rate limiter binding for each visit's connections to rooms (live.js)
 //   PROGRESS_POSTS        the rate limiter binding for each player's reports of what they drove
 //                         (progress.js)
@@ -78,6 +86,7 @@ const ROUTES = [
 	{ method: 'GET', path: '/api/online', handler: online },
 	{ method: 'POST', path: '/api/stats', handler: postStats },
 	{ method: 'GET', path: '/api/admin/stats', handler: adminStats },
+	{ method: 'GET', path: '/api/admin/dropins', handler: adminDropins },
 	{ method: 'POST', path: '/api/stripe/webhook', handler: stripeWebhook, sameOrigin: false },
 ];
 

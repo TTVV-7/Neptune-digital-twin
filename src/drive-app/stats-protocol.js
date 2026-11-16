@@ -7,9 +7,11 @@ import { SPOTS } from './places.js';
 //
 // Only counts, never who: no cookie, nothing kept in the browser for it, no id of the visitor or
 // their player, no address. A drop-in at somewhere other than a start spot is 'other' (or 'moon' on
-// the Moon), never where (a search can be someone's own street), a search is only which kind it was,
-// never what was typed, a device only whether it's a phone, a tablet or a computer, and a referring
-// site is only its host name.
+// the Moon) here; where it was goes beside the counts only as its cell of a grid about a kilometre
+// each way (dropin-cells.js), counted apart from everything else and never with who, so a street
+// searched for isn't told from its neighbours. A search is only which kind it was, never what was
+// typed, a device only whether it's a phone, a tablet or a computer, and a referring site is only
+// its host name.
 
 const ALL = key => key === 'all' ? key : null;
 const SPOT_IDS = new Set( SPOTS.map( spot => spot.id ) );

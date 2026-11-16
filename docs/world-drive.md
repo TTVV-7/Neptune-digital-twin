@@ -3258,6 +3258,8 @@ page says which have no ▲ or ▼, and why. The facts from the Worker's own tab
 - As before: visits by hour of the day (counted in UTC hours, shown in the viewer's time), where
   people come from, play time by ride, the rides and places dropped in with and at, the Garage's
   changes by part, and load time.
+- **Where people drop in**: a heat map of the Earth and of the Moon, and the top places, for today,
+  the week, the month or longer ([its own section](#where-people-drop-in)), under all of the above.
 - **Download CSV**: the period's rows, `day,metric,key,n`, counts and the Worker's facts alike.
 
 Referrers, countries, browsers and page speed in more detail are Cloudflare Web Analytics', in
@@ -3296,14 +3298,16 @@ name, email or id leaves those tables for it.
 
 **No cookie, so no consent banner.** Only counts a day are kept: no id of the visitor, their
 player or their browser, no address, nothing stored in the browser for it, and nothing that follows
-anyone from one visit to the next. Never counted: where anyone is or searched for (a drop-in
-somewhere other than a start spot is "other", since a search can be someone's own street), what was
-typed (a search is only its kind), a device's make, model or screen size (only phone, tablet or
-computer), or a referring page's address (only its site's host name). The About dialog
-(`drive/index.html`) tells visitors what's counted.
+anyone from one visit to the next. Never counted: where anyone is or searched for any finer than a
+cell about a kilometre each way (a drop-in somewhere other than a start spot is "other" here, and
+[where people drop in](#where-people-drop-in) has only its cell, counted apart, since a search can
+be someone's own street), what was typed (a search is only its kind), a device's make, model or
+screen size (only phone, tablet or computer), or a referring page's address (only its site's host
+name). The About dialog (`drive/index.html`) tells visitors what's counted.
 
 **How it works.** The page (`src/drive-app/stats.js`) adds up what it counts and posts it to `POST
-/api/stats` with the visit's token, every 3 minutes and as the page goes out of sight or closes
+/api/stats` with the visit's token (and the places of the drop-ins it counts: [where people drop
+in](#where-people-drop-in)), every 3 minutes and as the page goes out of sight or closes
 (`keepalive`), keeping the fractions of a second for the next post and a post that didn't go for
 the next try; a 403 (the visit run out) stops it for the visit. What's once a visit (the funnel's
 steps, the device, the map problems) is remembered in the page's memory for the visit, and nowhere
@@ -3320,7 +3324,7 @@ a visit, so a script can't add more than a few visits' worth; then one upsert a 
 it takes.
 
 `GET /api/admin/stats?days=30` answers, to an account in `ADMIN_EMAILS` (401 signed out, 403 anyone
-else), those days' rows and the facts in the same `[ day, metric, key, n ]` shape; the as many days
+else, 429 past `ADMIN_LOOKS`' 30 asks a minute for the account: `worker/drive/admin.js`), those days' rows and the facts in the same `[ day, metric, key, n ]` shape; the as many days
 before, added up by metric and key in D1 (what the page compares with: a year's comparison is a few
 hundred rows, not tens of thousands), with the first day in them with visits and with the funnel
 counted (`previous.first`, each null if none); the totals; and how far back the counts and the scores log go.
@@ -3343,6 +3347,221 @@ wrangler.drive.jsonc`), sign in on worlddrive.app, and open `/admin.html`. Count
 deploy: there's nothing from before it, and the page says on which day they start. The funnel,
 devices, worlds, searches, drop-in times, problems and the leaderboard's and the pass's counts start
 from the deploy that brought them; the Worker's facts go back as far as its tables do.
+
+## Where people drop in
+
+The [play stats](#play-stats) say how far a visit gets: most visits drop in and drive, and most of
+those leave after about a minute. To see *where* they go (which places draw people, which start
+spots nobody uses, where the next featured spot or challenge should be), each drop-in's place is
+counted too, rounded to about a kilometre, and the owner's admin page draws it as a heat map of the
+Earth and of the Moon with a table of the top places. What's kept is counts of places a day, never
+who: no player, account, visit or address goes with a place, and no place is finer than its cell.
+
+### What the owner sees
+
+On **`/admin.html`**, under the play stats, **Where people drop in**:
+
+- **Today**, **Week**, **Month**, **90 days** and **Year**: the last 1, 7, 30, 90 or 365 UTC days,
+  each ending with today so far, as the rest of the page's are. It starts at the page's own period
+  and follows it when that changes.
+- **Earth** and **Moon**, each with its drop-ins in the period.
+- **The heat map**: the world as a flat map (longitude across, latitude up), the Earth's land and sea
+  from the game's own Natural Earth map (`/sea/mask.bin`, as `src/drive-app/sea.js` reads it), the
+  Moon from its own picture (`/moon/colour.webp`), each fetched only when its map is first shown, in
+  the page's light or dark. Each place is a soft spot, darker as it has more drop-ins (on a log
+  scale, so one drop-in still shows beside a hundred), the spots adding up where they're close, and
+  coloured from yellow to deep red, with a legend saying which way it runs and the most at one
+  place. The top ten places have their table numbers beside them. Drag to move it, double-click or
+  use the wheel (once the map's been clicked, or with Ctrl, as a trackpad's pinch is) to zoom, or
+  **+**, **−** and **⤢** (the whole map); on a phone, pinch, drag sideways (up and down scrolls the
+  page) or the buttons. Zoomed in on the Earth, the towns are named (more of them the further in, at
+  most 80, none over another: Natural Earth's towns, below), and a scale bar says how far is how
+  far. Resting the mouse on a place, or tapping it, says what it is and how many dropped in there.
+  The map has the period's 2,000 places with the most drop-ins; the rest (single drop-ins scattered
+  about) are only in its totals, and the page says so.
+- **Top places**: the 25 with the most drop-ins, each with its name and region, its drop-ins, their
+  share of the world's, on how many of the period's days it had any, and **Drive ↗**, which opens
+  the game there in a new tab. A start spot's or a place page's is the game's own link to it
+  (`/?spot=golden-gate`, or the page's `/?at=...`), marked **in the game**; any other place's pins
+  the cell's middle by name (`/?at=45.83862,4.95052&name=12 km NE of Lyon&region=...`, with
+  `world=moon` on the Moon), and the drop-in finds the street, or the sea's surface, there as for
+  any pin. A place's name shows it on the map, zoomed in on it (a region some tens of kilometres
+  across), saying what it is.
+
+How a place is named, by the Worker (`nameCell` in `worker/drive/dropins.js`), at no cost per look:
+
+1. A featured place within 1.5 km of the cell's middle (5 km on the Moon) is it: a start spot
+   (`places.js`), a place's page with its own pin (`drive/site/places.js`: the Eiffel Tower, the
+   Colosseum...) or one of the Moon's places (`moon-places.js`, its spots and the places its search
+   finds).
+2. Else the nearest town or featured place within 50 km (300 km on the Moon, which has only its
+   featured places): its name within 2 km ("Lyon"), else how far and which way, of the compass's
+   eight ("12 km NE of Lyon", "91 km N of Copernicus crater"), with the town's region on the Earth
+   ("Rhône-Alpes, France"; a Moon place's words, "93 km across", aren't said of a place beside it).
+3. Else its coordinates, to two decimals ("0.00° N, 150.00° W").
+
+The towns are Natural Earth's populated places at 1:10 million (public domain): 7,342 towns and
+cities, every country's capital and its regions' among them, kept in `drive/public/places/towns.tsv`
+(262 KB, 116 KB compressed; `node scripts/make-towns.mjs` makes it, and says how it's kept) with
+each one's region and rank. The Worker reads it through its `ASSETS` binding, the site's own files, once per Worker
+instance (about 2.5 ms of CPU to read; naming 50 places is under half a millisecond), so a look asks
+nothing of anyone. The admin page fetches it only once the Earth's map is zoomed in. The game never
+loads it. Natural Earth is sparse in places (France's towns at that scale are its cities), so "35 km
+E of Geneva" can be a village's own name in a fuller atlas.
+
+### How a place is rounded
+
+Each world is cut into a grid of cells about a kilometre each way (`src/drive-app/dropin-cells.js`,
+which the page, the Worker and the tests share): rows 1 km tall from the south pole to the north, on
+a sphere of the world's radius (6,371 km for the Earth, 1,737.4 km for the Moon), a whole number of
+them from pole to pole (20,015 on the Earth, 5,458 on the Moon), and each row cut into as many
+cells as fit 1 km wide round its middle (40,030 round the Earth's equator, 10,916 round the Moon's,
+fewer towards the poles, three in the rows round each pole). So a cell is a kilometre across at
+every latitude on both worlds (within a metre; the three cells round each pole are a few per cent
+off), never a sliver a few metres wide by a pole as rounded degrees would be, and anywhere in a cell
+is within 0.7 km of its middle. A cell is written `earth:14212:5052` (the world, the row from the south pole,
+the column eastward from 180° W): Golden Gate's. The page works out its cell and sends only that;
+the precise place never leaves the browser.
+
+### What's sent, and what's counted
+
+- **When.** A drop-in's place is taken as it arrives, the moment the vehicle is down and driving
+  (`arrive` in `main.js`): where it starts, after the street or the sea's surface has been found. A
+  drop-in given up on the way down, or with no ground there, has none. Joining a party or going
+  beside someone is a drop-in like any other.
+- **How.** It rides along with the play stats' next post (`POST /api/stats`, every 3 minutes and as
+  the page goes out of sight), as `places: [ "earth:14212:5052" ]` beside that drop-in's own
+  `dropin:...` count: no request of its own. The page sends a cell once a visit, at most 6 a post
+  (`PLACES_PER_POST`; one more waits for nothing, its drop-in still counted), and a post that didn't
+  get through keeps its places for the next with their drop-ins. Without a visit's token (the test
+  pad, the dev server alone) nothing is counted, as for the rest of the stats.
+- **What the Worker takes** (`checkPlaces`, then `recordPlaces` in `worker/drive/dropins.js`): a
+  list of at most 6, or the whole post is a 400; each a cell of the grid (anything else, coordinates
+  among them, is left out); and no more on a world than the drop-ins the same post counts there
+  (`dropin:moon` on the Moon, the others on the Earth), so a place can't come without its drop-in.
+  Then **DriveLimits** says which to count (`places` in `worker/drive/limits.js`), all in one go:
+  - a cell counts **once a day for each visitor** (an address, hashed with the day's salt, as the
+    visit caps count them; an IPv6 address by its /64), whichever of their visits posts it: a count
+    is how many visitors dropped in there that day;
+  - **no faster than one each 10 s of the visit** (a drop-in takes that long at least: the flight
+    down, the ground loading), so a script with a fresh visit can't post a visit's worth at once;
+  - at most **30 a visit**, **60 a visitor** and **5,000 a day for everyone**
+    (`DROPIN_PLACES_PER_VISIT`, `DROPIN_PLACES_PER_VISITOR`, `DROPIN_PLACES_DAILY`). Once the day's
+    are counted, each Worker instance stops asking DriveLimits till midnight UTC.
+  Those it takes are upserted into D1's `dropins_daily`, one row a day, world and cell. The post's
+  answer is the play stats' 204 whatever was counted, and a place that can't be counted (DriveLimits
+  or D1 not answering) is only logged: never in the stats' way.
+
+**Making it hard to poison.** Every place needs a visit that passed Turnstile (the visit's token),
+a drop-in counted with it, and time: one place each 10 s of the visit, 30 a visit. A cell counts once
+a day for each address however many visits it makes, and an address counts 60 places a day at most,
+so pushing one place up the table takes many addresses, each passing the robot check, every day.
+`days` in the answer (on how many days a place had drop-ins) tells a place busy one day from one
+busy every day. What it can't stop is many addresses at once (a botnet), as for the leaderboard;
+the owner chooses what to do with the map, and challenges picked from it should prefer places busy
+on several days.
+
+### What's kept
+
+- **D1**, `dropins_daily` (migration `0005_dropins.sql`): `day`, `world`, `cell_row`, `cell_column`
+  and `n`, the visitors counted there that day; nothing else. It's kept as long as `stats_daily`'s
+  rows are, 730 days, and older rows go as the admin page asks (as the play stats' do).
+- **DriveLimits**, for today only: `places_seen`, a SHA-256 of the day's salt, the visitor's hash and
+  the cell for each place counted (so whether a visitor was counted at a cell can be checked, but
+  nothing there says which cell or who), and `place_counts`, today's places for everyone, each visit
+  (by its random id) and each visitor (by their hash). Both are deleted, with the day's salt, when
+  the next UTC day starts.
+- Nothing in the browser, and no cookie.
+
+The About dialog says it: "roughly where else they drop in (to about a kilometre, counted once a day
+for each visitor at each place)". A cell can hold someone's home, and a place counted once on a day
+says someone dropped in near there; but not who, nor which visit, and only the owner sees it. (The
+globe's dots of who's driving now, which everyone sees, are already to about a kilometre.)
+
+### The admin page's answer
+
+`GET /api/admin/dropins?days=30` (1 to 365, 30 if it isn't a number), to an account in
+`ADMIN_EMAILS` (401 signed out, 403 anyone else, 429 past `ADMIN_LOOKS`' 30 asks a minute for the
+account, as `/api/admin/stats` is: `worker/drive/admin.js`):
+
+```
+{ from, to, first, cell: 1000, kept: 730,
+  worlds: { earth: WORLD, moon: WORLD } }
+WORLD: { dropins, places, heat: [ [ lat, lon, n ] ], top: [ { lat, lon, n, days, name, region, link, featured } ] }
+```
+
+`first` is the first day any place was counted (the page says "counted from" when the period starts
+before it). `heat` is the period's 2,000 places with the most drop-ins (each cell's middle, the
+most first), `top` its first 25, named. One batch of four queries: the totals and each world's
+places, each bounded by the days asked for (`dropins_daily`'s key starts with the day), and the
+first day (the key's first row).
+
+### For challenges: the most dropped-in places
+
+`topCells( db, { world, from, to, most } )` in `worker/drive/dropins.js` is the query for picking
+challenges from where people go: `world`'s most dropped-in cells from the UTC day `from` to `to`
+(both included, `'2026-11-16'`), at most `most` (up to 2,000), as
+`[ { world, row, column, lat, lon, n, days } ]`, the most first, then those on the most days.
+`nameCell( world, lat, lon, towns )` names one (with `readTowns` of the towns file, or null for the
+featured places alone), with the game's link there.
+
+### What it costs
+
+- **The game**: no request of its own (places ride on the play stats' posts), and 0.8 KB more
+  minified code in `main.js`'s chunk, 0.33 KB compressed (measured: 1,117.12 to 1,117.93 kB, and
+  343.29 to 343.62 kB gzipped; the grid's arithmetic, `dropin-cells.js`, and the stats' few lines),
+  nothing in the page's first script, which is unchanged. The towns, the maps and the admin page's code are never loaded by it.
+- **Durable Objects**: one DriveLimits request for each stats post that carries places, which is at
+  most one a drop-in (fewer when several fall in one post's 3 minutes). At about 300 Earth visits a
+  day and the Moon's besides, with a drop-in or two each, that's a few hundred a day of the Free
+  plan's 100,000 (which the visits and driving with others share), and none once the day's 5,000
+  places are counted.
+- **D1**: one row written for each place counted (at most `DROPIN_PLACES_DAILY`, 5,000 a day; a few
+  hundred at today's traffic) of the Free plan's 100,000 a day. An admin look reads the period's
+  rows about three times over (the totals and each world's places): with a few hundred places a day,
+  a month is about 20,000 rows read and a year about 250,000, of the 5 million a day. Kept for two
+  years at a few hundred a day, the table is a few hundred thousand rows of about 40 bytes: well
+  under 50 MB of the 5 GB free. At the day's cap every day (someone posting all they can) a year's
+  look would read about 5.5 million rows, past a Free day's reads: the cap is a setting for that.
+- **Workers Paid**: all of that is well within what the plan includes (50 million D1 rows written
+  and 25 billion read a month, a million Durable Object requests a month).
+- **The admin page**: the Earth's map (250 KB) and the Moon's picture (675 KB) when each is first
+  shown, the towns (262 KB, 116 KB compressed) once zoomed in: the site's own files, from
+  Cloudflare's cache, at no cost. Drawing the map with 2,000 places takes about 23 ms for the whole
+  world, 11 ms zoomed in a little and 2 to 3 ms on a region (measured in headless Chromium on the
+  development machine, a desktop's window and a phone's alike; the canvas is drawn at no more than
+  twice the screen's pixels), once a frame at most while it's dragged.
+
+### How it's tested
+
+- `npm run test:drive-worker`: the grid (a kilometre each way at every latitude on both worlds,
+  within a few per cent at the poles, anything in a cell within 0.7 km of its middle, both sides of the 180th
+  meridian one cell); only the grid's cells taken, each with its drop-in, at most 6 a post; naming
+  from the game's places, the towns and coordinates, across the 180th meridian; and against the
+  Worker under wrangler: a place counted once a day for each visitor (another visit from the same
+  address too), none without its drop-in or on the wrong world, a post with too many or not a list
+  turned away whole, no visit or one run out a 403; one each 10 s of a visit, its 30 (here 4), a
+  visitor's 60 (here 6) and the day's 5,000 (here 12), the stats counted all the same, and the next
+  day afresh; D1's table holding only day, world, cell and count, and no cell or address anywhere
+  in the Worker's stored files; the admin page's answer for a day, a week, a month and a year
+  (totals, the most first, names, regions, links, on how many days), 401 and 403, `ADMIN_LOOKS`
+  (429 with Retry-After), and rows older than two years deleted. A post with 6 of the longest cells
+  still fits in a post with all of the stats' counts, well under the Worker's 8 KB.
+- `npm run test:drive-ui`: a drop-in at Golden Gate posts its cell with its drop-in (and no
+  coordinates), once a visit, and one given up on the way down none; and the admin page with its
+  answers made in the test: the heat over the land and sea (seen in the map's own pixels: warm at
+  the places, the base map's colours in the Sahara and the South Pacific), the top places and their
+  links, today, the week and the month (and the page's period), a place shown from the table with
+  what it is, the towns named zoomed in, dragging, the wheel and the buttons, the Moon on its
+  picture, a phone in the dark with no sideways scrolling and a tap saying what's there, and nothing
+  for someone signed out. Pictures of it are saved (`admin-places-*.png`).
+- `npm run test:drive-moon-ui`: a drop-in at Tranquility Base posts its cell of the Moon's grid with
+  `dropin:moon`.
+
+**The owner's steps.** Deploy (`npm run deploy:drive` applies `0005_dropins.sql` first, and the new
+`ADMIN_LOOKS` rate limiter comes with `wrangler.drive.jsonc`). Places are counted from that deploy;
+the page says from which day. Nothing else to set: `DROPIN_PLACES_DAILY`, `DROPIN_PLACES_PER_VISITOR`
+and `DROPIN_PLACES_PER_VISIT` can be added in the dashboard to change the limits.
 
 ## Settings
 
@@ -3369,7 +3588,7 @@ Settings → Variables and Secrets, or `npx wrangler secret put NAME -c wrangler
 | `TURNSTILE_SECRET` | The Turnstile widget's secret key |
 | `STRIPE_WEBHOOK_SECRET` | The Supporter Pass webhook's signing secret, `whsec_...`; buying stays off without it |
 | `SUPPORTER_EMAILS` | Optional, comma-separated: people with the pass without paying |
-| `ADMIN_EMAILS` | Comma-separated: the Google accounts that may see [the play stats](#play-stats) at `/admin.html` |
+| `ADMIN_EMAILS` | Comma-separated: the Google accounts that may see [the play stats](#play-stats) and [where people drop in](#where-people-drop-in) at `/admin.html` |
 
 `keep_vars` is on, so anything set in the dashboard that isn't in `vars` survives a deploy. A few
 more aren't in `vars` and needn't be set; add them in the dashboard (plain text) to change them:
@@ -3380,16 +3599,21 @@ more aren't in `vars` and needn't be set; add them in the dashboard (plain text)
 | `NAMES_PER_VISITOR_DAILY` | 20 | New names and renames a visitor may make a day |
 | `SUPPORTER_PAYMENT_LINK_ID` | none | The Payment Link's `plink_...` id: only its checkouts are a Supporter Pass |
 | `LIVE_PARTY_MAX`, `LIVE_NEARBY_MAX` | 8, 20 | The most in a party, and in each of an area's rooms |
+| `DROPIN_PLACES_DAILY` | 5000 | [Drop-in places](#where-people-drop-in) counted a day for everyone together |
+| `DROPIN_PLACES_PER_VISITOR`, `DROPIN_PLACES_PER_VISIT` | 60, 30 | Drop-in places counted a day for each visitor, and for each visit |
 
-Three rate limiters are `ratelimits` in `wrangler.drive.jsonc` (Cloudflare's, which cost no Durable
+Four rate limiters are `ratelimits` in `wrangler.drive.jsonc` (Cloudflare's, which cost no Durable
 Object request): `LIVE_CONNECTS` (each visit's connections to rooms, 20 a minute),
-`PROGRESS_POSTS` (each player's [level](#levels) reports and title changes, 10 a minute) and
-`STATS_POSTS` (each visit's posts of [play stats](#play-stats), 6 a minute).
+`PROGRESS_POSTS` (each player's [level](#levels) reports and title changes, 10 a minute),
+`STATS_POSTS` (each visit's posts of [play stats](#play-stats), 6 a minute) and `ADMIN_LOOKS` (each
+admin account's asks for the admin page's stats and [drop-in places](#where-people-drop-in), 30 a
+minute).
 
 The leaderboard's, levels' and the Supporter Pass's database is the `DB` binding in
 `wrangler.drive.jsonc` (D1 **world-drive**, already made); its tables are `worker/drive/migrations`
 (`0003_levels.sql` levels': XP and the rest on `players`, and `discoveries`; `0004_stats.sql` the
-[play stats'](#play-stats) `stats_daily`).
+[play stats'](#play-stats) `stats_daily`; `0005_dropins.sql` [where people drop
+in](#where-people-drop-in)'s `dropins_daily`).
 
 ## Deploying
 
@@ -3916,13 +4140,20 @@ src/drive-app/friends.js     the chip and list, Drive with friends, the party's 
 src/drive-app/online.js      who's driving now on the globe: /api/online, the dots, Driving now
 src/drive-app/screens.js     start screen, notices, loading card, pause, keys, messages
 src/drive-app/test-globe.js  the Earth without Google's tiles, for working without a key
+src/drive-app/stats.js       the play stats in the page: counting, posting with the visit's token;
+                             stats-protocol.js what may be counted (the page and the Worker share
+                             it); dropin-cells.js the grid drop-in places are counted by
+drive/public/admin.html      the owner's page: the play stats and where people drop in (its maps
+                             drawn from /sea/mask.bin and /moon/colour.webp)
 vite.drive.config.js         the build: no key, only the offered vehicles copied from public/, and
                              drive/public/ (the cars) as its own public folder; in dev, /api passed
                              on to DRIVE_API, WebSockets too
 drive/public/cars/           the cars' models, pictures, cars.json and CREDITS.md
 scripts/add-drive-car.mjs    imports a car from Sketchfab into it; drive-car-thumbs.mjs draws the pictures
 drive/public/                also robots.txt, site.webmanifest, the icons and og/ (the link cards,
-                             which scripts/drive-site-images.mjs draws with the icons)
+                             which scripts/drive-site-images.mjs draws with the icons), and
+                             places/towns.tsv (Natural Earth's towns, which scripts/make-towns.mjs
+                             makes) that drop-in places are named by
 worker/drive/                the Worker: index.js (routes), limits.js (caps, the search queue and
                              the leaderboard's turns), turnstile.js, search.js; the leaderboard:
                              players.js, scores.js, boards.js, names.js (rules and the filter),
@@ -3930,7 +4161,9 @@ worker/drive/                the Worker: index.js (routes), limits.js (caps, the
                              sessions, /api/me), supporter.js (the webhook, who has it); driving
                              with others: live.js (/api/live and the rooms, DriveRoom, and
                              /api/online, who's driving now); levels: progress.js
-                             (/api/progress, titles); migrations/ (its D1 tables)
+                             (/api/progress, titles); the owner's page: stats.js (the play stats),
+                             dropins.js (where people drop in), admin.js (who may see them, how
+                             often); migrations/ (its D1 tables)
 worker/google.js, sessions.js, stripe.js   shared with the construction app: Google's ID tokens,
                              the session cookie, Stripe's webhook signatures
 wrangler.drive.jsonc         the Worker's settings, domains, Durable Objects (the visit counts and
@@ -4172,6 +4405,14 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   and if it listed more new places than its time allowed, the extra ones aren't sent again. A
   nickname removed by the owner takes its XP with it. A level's car is locked only in the page, as
   the pass's are: a run in one is taken on the leaderboard at any level.
+- [Where people drop in](#where-people-drop-in): a place is the page's word, so a script with many
+  addresses, each passing the robot check each day, can still push a place up the table (one count
+  a day for each address); `days` shows a place busy on one day only. Everyone behind one address
+  (a home, a school, a phone network sharing addresses) counts once a day at a place, so a busy start
+  spot's count there is low beside its `dropin` count in the play stats. The owner's own drop-ins are
+  counted like anyone's. Natural Earth's towns are sparse in places, so a place is named by the
+  nearest of them, which isn't always the nearest town. The map has a period's 2,000 busiest places;
+  a year at the day's cap every day would read more of D1 in one look than a Free day allows.
 - [The cars](#world-drives-cars): the importer turns a car's wheels, not what steers them, so the
   tuk-tuk's handlebars and the golf cart's and the lawn tractor's steering wheels stay still while
   their front wheels steer. The tuk-tuk's green panels are small, so the Garage's stripes and number
@@ -4197,7 +4438,8 @@ Orbiter's laser altimeter (LOLA) and wide-angle camera (LROC), as NASA's Scienti
 Studio's CGI Moon Kit has them (https://svs.gsfc.nasa.gov/4720/), credited under **About World Drive**
 and in the corner while you're there. The open sea's height is NGA's EGM96 geoid (public domain), from PROJ's copy of it, and
 where the sea and the big lakes are is Natural Earth's ocean and lakes at 1:10 million (public
-domain, naturalearthdata.com), from its GitHub copy. Place search © OpenStreetMap contributors. The
+domain, naturalearthdata.com), from its GitHub copy, as are the towns the owner's map of where
+people drop in names places by (its populated places). Place search © OpenStreetMap contributors. The
 trucks and the cars are models from Sketchfab under CC BY 4.0, credited under **About World Drive**
 and on the ride picker (and the cars in `drive/public/cars/CREDITS.md`): the muscle car by Lexyc16,
 the golf cart by pixelsquare, the tuk-tuk by aminzafar, the ice-cream van by Sidra, the lawn tractor

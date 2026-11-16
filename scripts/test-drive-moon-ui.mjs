@@ -3,7 +3,8 @@
 // the real Moon here, not a stand-in: the globe turned to it (its files fetched only then), its
 // spots, its own search and its recent places kept apart; a drop-in on its ground, with its gravity,
 // its sky and no water; a hop as high as on the Earth that stays up two and a half times as long and
-// isn't scored as big air; an underglow lying on its ground under the kart, as on the Earth; the
+// isn't scored as big air; the drop-in's place counted for the play stats as its cell of the Moon's
+// grid, about a kilometre each way; an underglow lying on its ground under the kart, as on the Earth; the
 // ground made sharp round the vehicle; M back to its globe, and back to
 // the Earth; a link to a Moon spot; and a phone. Every request that isn't to the local server is
 // blocked.
@@ -22,6 +23,7 @@ import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { MOON_SPOTS } from '../src/drive-app/moon-places.js';
 import { SPOTS } from '../src/drive-app/places.js';
+import { cellOf } from '../src/drive-app/dropin-cells.js';
 import { startVite } from './worker-harness.mjs';
 
 const require = createRequire( import.meta.url );
@@ -115,6 +117,20 @@ describe( 'World Drive on the Moon', () => {
 	before( async () => {
 
 		page = await newPage();
+		// The play stats counted (with a visit made up for them, as test-drive-ui.mjs's are), their
+		// posts kept in page.posts.
+		page.posts = [];
+		await page.addInitScript( () => {
+
+			window.worldDriveStatsTest = { visit: 'v1.moon-stats-test' };
+
+		} );
+		await page.route( `${ BASE }/api/stats`, route => {
+
+			page.posts.push( JSON.parse( route.request().postData() ) );
+			route.fulfill( { status: 204 } );
+
+		} );
 
 	} );
 
@@ -216,6 +232,13 @@ describe( 'World Drive on the Moon', () => {
 		assert.equal( await page.locator( '#attribution' ).isVisible(), false );
 		assert.equal( await page.locator( '#moon-credit' ).isVisible(), true );
 		assert.equal( await page.locator( '#drive-ui .place' ).textContent(), 'Tranquility Base' );
+		// Where, for the owner's map of where people drop in: posted with the drop-in as its cell of the
+		// Moon's grid, never where in it.
+		await page.evaluate( () => window.drive.stats.post() );
+		const posted = page.posts.find( post => post.places );
+		assert.deepEqual( posted?.places, [ cellOf( 'moon', TRANQUILITY.lat, TRANQUILITY.lon ) ], JSON.stringify( page.posts ) );
+		assert.equal( posted.counts[ 'dropin:moon' ], 1 );
+		assert.doesNotMatch( JSON.stringify( page.posts ), /0\.674|23\.47/ );
 
 		await page.keyboard.down( 'KeyW' );
 		await page.waitForFunction( () => window.drive.driver.speed > 4, null, { timeout: 120000 } );

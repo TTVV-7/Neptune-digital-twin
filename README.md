@@ -838,6 +838,14 @@ the spot pinned), a sitemap, robots.txt, structured data and link cards (`npm ru
 draws them, and `npm run drive-site-images -- moon` the Moon's, from the game itself); see
 [Search engines](docs/world-drive.md#search-engines).
 
+For the owner, `/admin.html` (signed in with a Google account in `ADMIN_EMAILS`) shows the **play
+stats**, counts a day with nothing of who (no cookie): visits, play time, how far visits get, devices,
+the Moon, searches by kind, problems and the rest; and **where people drop in**, a heat map of the
+Earth and of the Moon with the top places named and a link into the game at each, for today, the
+week or the month. Each drop-in's place is only its cell of a grid about a kilometre each way, sent
+with the play stats and counted once a day for each visitor (`src/drive-app/dropin-cells.js`,
+`worker/drive/dropins.js`; see [Where people drop in](docs/world-drive.md#where-people-drop-in)).
+
 How to play, the leaderboard (how cheating is limited, and looking after it in the D1 console), the
 settings and limits, deploying (`npm run deploy:drive` applies the database's migrations first), and
 the owner's Google Cloud steps (a separate project and key, restricted to worlddrive.app and the Map
@@ -932,12 +940,13 @@ public/library/     downloaded models and our own, library.json catalog, thumbs/
 scripts/add-drive-car.mjs, drive-car-thumbs.mjs   import a car for World Drive into drive/public/cars
                     (its own cars.json, thumbs/ and CREDITS.md; World Drive's build only)
 scripts/make-moon.mjs   World Drive's Moon (drive/public/moon/): NASA's heights and picture of it
+scripts/make-towns.mjs  the towns World Drive's admin page names drop-in places by (Natural Earth's)
 src/geo.js          lat/lon <-> local metres
 public/models/      put your .glb files here
 drive/index.html    World Drive's page; its code is src/drive-app/ (docs/world-drive.md)
 worker/drive/       World Drive's Worker: the Maps key per visit, caps, Turnstile, search, the leaderboard,
                     levels' XP, the Supporter Pass (Google sign-in, Stripe's webhook), driving with
-                    others' rooms
+                    others' rooms, the owner's play stats and where people drop in
 vite.drive.config.js, wrangler.drive.jsonc   World Drive's build and Worker settings
 ```
 

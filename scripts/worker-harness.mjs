@@ -82,14 +82,21 @@ export async function serveKeys( keys ) {
 // `wrangler dev` on this machine with a fresh database (migrations applied) and the given vars,
 // which replace any in wrangler.jsonc or .dev.vars. Resolves once it answers. With `config`
 // (World Drive's wrangler.drive.jsonc) it runs that Worker instead, with its own database and
-// only the vars given here: no .dev.vars file is read.
-export async function startWorker( { port, vars, config = null } ) {
+// only the vars given here: no .dev.vars file is read. The site's files are a test page, and
+// `assets` ({ path: contents }) besides, for a Worker that reads its own (ASSETS).
+export async function startWorker( { port, vars, config = null, assets: files = {} } ) {
 
 	const dir = mkdtempSync( join( tmpdir(), 'twin-worker-' ) );
 	const state = join( dir, 'state' );
 	const assets = join( dir, 'assets' );
 	mkdirSync( assets );
 	writeFileSync( join( assets, 'index.html' ), '<!doctype html><title>test site</title>' );
+	for ( const [ path, contents ] of Object.entries( files ) ) {
+
+		mkdirSync( dirname( join( assets, path ) ), { recursive: true } );
+		writeFileSync( join( assets, path ), contents );
+
+	}
 	const env = { ...process.env, WRANGLER_SEND_METRICS: 'false', CI: 'true' };
 
 	const migrate = spawnSync( process.execPath, [ wrangler, 'd1', 'migrations', 'apply', 'DB', '--local', '--persist-to', state, ...( config ? [ '-c', config ] : [] ) ], { cwd: ROOT, env, encoding: 'utf8' } );
