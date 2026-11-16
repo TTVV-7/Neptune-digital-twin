@@ -49,6 +49,10 @@ export const GRACE = 60 * 1000;
 // this many, so reading it costs no more than this, however long the board): further down, it's
 // "1000+".
 export const RANK_MOST = 1000;
+// The path a "challenge a friend" link is shared at (/c?challenge=<id>&vs=<handle>): the one page
+// the Worker runs for, giving it a preview card of its own for chat apps, while the home page and
+// the rest are files it never sees (wrangler.drive.jsonc).
+export const LINK_PATH = '/c';
 // A pass counts within a gate's radius across the ground, and up and down from its ground to its
 // top (on the Earth the lowest and the highest of what rays down across its zone meet: the street
 // beside a tower and the tower's roof, or the water under a bridge and its deck; on the Moon both

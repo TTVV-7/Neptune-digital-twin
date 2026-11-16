@@ -820,15 +820,18 @@ driven 40 s is told of today's challenge on its world, with a button to them (se
 is and which way it faces, ten times a second, packed to about 4 KB a minute) and posted with its
 time; the Worker takes the time only if its ghost agrees with it (through each gate at its pass
 time, as long as the time, never faster between two samples than the game goes) and keeps the
-best's ghost. A run races a ghost car in its ride and Garage look: your own best by default, a
-friend's from their link, or the board's leader's, with splits at each gate ("-1.2 s") and on the
-finish card, and a button to hide it. **Challenge a friend** (the finish card, your own row of a
-board) shares `/?challenge=<id>&vs=<handle>`, the handle an HMAC the Worker makes (never the
+best's ghost (16 MB of them a challenge at most). A run races a ghost car in its ride and Garage
+look, its model made light (the pickup's 219,000 triangles to 22,000), its wheels turning: your own
+best by default (with none yet, the board's leader's), a friend's from their link, or the leader's
+from the board, with splits at each gate ("-1.2 s") and on the finish card, and a button to hide
+it. **Challenge a friend** (the finish card, your own row of a board) shares
+`/c?challenge=<id>&vs=<handle>`, the handle an HMAC the Worker makes once and keeps (never the
 player's id), through the browser's share sheet or copied; the page opens on it with "Ann's time
 to beat: 0:21.40 on the daily checkpoint sprint at Furka Pass, 5 h left" and races their ghost (a
 Moon challenge's in the Moon-only mode, spending no Earth drive), and the Worker gives the link a
-preview card of its own for chat apps (`src/drive-app/ghost-rules.js`, `challenge-ghost.js`,
-migration `0007_challenge_ghosts.sql`; see
+preview card of its own for chat apps at `/c`, the one page it runs for, so the home page stays a
+file served free (`src/drive-app/ghost-rules.js`, `challenge-ghost.js`, migration
+`0007_challenge_ghosts.sql`; see
 [Ghosts and challenge a friend](docs/world-drive.md#ghosts-and-challenge-a-friend)).
 
 **The Moon**: **Moon** at the top of the globe's panel turns the globe to the Moon, made in the page

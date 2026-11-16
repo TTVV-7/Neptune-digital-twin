@@ -33,16 +33,21 @@ export const GHOST_TEXT = Math.ceil( GHOST_BYTES / 3 ) * 4;
 // Angles in 1/TURN of a turn (0.35°).
 export const TURN = 1024;
 // What a ghost is let off: a sample this far (m) past what FASTEST covers in its time (its
-// rounding to the centimetre, the line between two frames' places); a pass this far past its
-// point's radius (the model's middle, which the ghost follows, is off the point the pass is told by
-// in the air); and the jumps the game makes: R puts the car RESPAWN m on (and a little more by its
-// model's tilt), or back where it drove a moment ago, as falling off the edge of the world does
-// (back within BACK of the path it drove). At most JUMPS of them, and one more each JUMP_EVERY ms
-// of the run, up to JUMPS_MOST: a driver pressing R now and then.
+// rounding to the centimetre, the line between two frames' places), across the ground and up or down
+// alike (nothing in the game climbs or falls faster than it drives: a fall is stopped at 200 m, by
+// then about 63 m/s); a pass this far past its point's radius (the model's middle, which the ghost
+// follows, is off the point the pass is told by in the air); and the jumps the game makes: R puts
+// the car RESPAWN m on (and a little more by its model's tilt), or back where it drove a moment
+// ago, as falling off the edge of the world does (back within BACK of the path it drove in the
+// BACK_WITHIN ms before: R goes back to where the car last drove freely, half a second to a second
+// before on the ground, longer only after a long flight), up or down as far as that is. At most
+// JUMPS of them, and one more each JUMP_EVERY ms of the run, up to JUMPS_MOST: a driver pressing R
+// now and then.
 export const SAMPLE_SLACK = 0.3;
 export const PASS_SLACK = 3;
 const RESPAWN = 5.5;
 const BACK = 4;
+export const BACK_WITHIN = 60000;
 const JUMPS = 4;
 const JUMP_EVERY = 15000;
 const JUMPS_MOST = 32;
@@ -189,12 +194,76 @@ export function ghostText( bytes, length = bytes.length ) {
 // can be, a number too big for any sample, too few bytes or any left over.
 export function readGhost( text ) {
 
-	if ( typeof text !== 'string' || ! text.length || text.length > GHOST_TEXT || ! /^[A-Za-z0-9_-]+$/.test( text ) ) return null;
-	let bytes;
+	if ( typeof text !== 'string' || ! text.length || text.length > GHOST_TEXT ) return null;
+	const bytes = fromText( text );
+	if ( ! bytes || bytes[ 0 ] !== GHOST_VERSION ) return null;
+	// Its numbers, each a zigzag varint of at most four bytes (28 bits: more than any sample needs),
+	// read in one pass into one array; then as many as a ghost of its count has, no more, no fewer.
+	const numbers = new Int32Array( bytes.length );
+	let n = 0;
+	let value = 0;
+	let shift = 0;
+	for ( let i = 1; i < bytes.length; i ++ ) {
+
+		const byte = bytes[ i ];
+		value |= ( byte & 127 ) << shift;
+		if ( byte & 128 ) {
+
+			shift += 7;
+			if ( shift >= 28 ) return null;
+			continue;
+
+		}
+
+		numbers[ n ++ ] = ( value >>> 1 ) ^ - ( value & 1 );
+		value = 0;
+		shift = 0;
+
+	}
+
+	const every = numbers[ 0 ];
+	const count = numbers[ 1 ];
+	if ( shift || n < 2 || every < GHOST_EVERY || count < 2 || count > GHOST_SAMPLES + 1 || n !== 2 + count * 6 ) return null;
+	const ghost = { every, count, east: new Int32Array( count ), north: new Int32Array( count ), up: new Int32Array( count ), yaw: new Int32Array( count ), pitch: new Int32Array( count ), roll: new Int32Array( count ) };
+	const { east, north, up, yaw, pitch, roll } = ghost;
+	const reach = REACH * 100;
+	const height = HEIGHT * 100;
+	let [ x, y, z, dx, dy, dz, a, b, c ] = [ 0, 0, 0, 0, 0, 0, 0, 0, 0 ];
+	for ( let i = 0, at = 2; i < count; i ++, at += 6 ) {
+
+		dx += numbers[ at ];
+		dy += numbers[ at + 1 ];
+		dz += numbers[ at + 2 ];
+		x += dx;
+		y += dy;
+		z += dz;
+		if ( x > reach || x < - reach || y > reach || y < - reach || z > height || z < - height ) return null;
+		east[ i ] = x;
+		north[ i ] = y;
+		up[ i ] = z;
+		a = ( ( a + numbers[ at + 3 ] ) % TURN + TURN ) % TURN;
+		b = ( ( b + numbers[ at + 4 ] ) % TURN + TURN ) % TURN;
+		c = ( ( c + numbers[ at + 5 ] ) % TURN + TURN ) % TURN;
+		yaw[ i ] = a;
+		pitch[ i ] = b;
+		roll[ i ] = c;
+
+	}
+
+	return ghost;
+
+}
+
+// base64url `text`'s bytes, or null if it isn't base64url: through atob (the platform's own), then
+// a character at a time into one array, with no function called for each (the Worker does this for
+// every time posted, before anything else is checked).
+function fromText( text ) {
+
+	if ( text.length % 4 === 1 || ! /^[A-Za-z0-9_-]+$/.test( text ) ) return null;
+	let raw;
 	try {
 
-		const raw = atob( text.replace( /-/g, '+' ).replace( /_/g, '/' ) + '='.repeat( ( 4 - text.length % 4 ) % 4 ) );
-		bytes = Uint8Array.from( raw, c => c.charCodeAt( 0 ) );
+		raw = atob( text.replace( /-/g, '+' ).replace( /_/g, '/' ) + '='.repeat( ( 4 - text.length % 4 ) % 4 ) );
 
 	} catch {
 
@@ -202,58 +271,9 @@ export function readGhost( text ) {
 
 	}
 
-	let at = 0;
-	let bad = false;
-	// At most four bytes a number (28 bits: more than any sample needs).
-	const get = () => {
-
-		let n = 0;
-		for ( let k = 0; k < 4; k ++ ) {
-
-			if ( at >= bytes.length ) break;
-			const byte = bytes[ at ++ ];
-			n += ( byte & 127 ) * 128 ** k;
-			if ( ! ( byte & 128 ) ) return n % 2 ? - ( n + 1 ) / 2 : n / 2;
-
-		}
-
-		bad = true;
-		return 0;
-
-	};
-	if ( bytes[ at ++ ] !== GHOST_VERSION ) return null;
-	const every = get();
-	const count = get();
-	if ( bad || ! Number.isInteger( every ) || every < GHOST_EVERY || count < 2 || count > GHOST_SAMPLES + 1 ) return null;
-	const ghost = { every, count, east: new Int32Array( count ), north: new Int32Array( count ), up: new Int32Array( count ), yaw: new Int32Array( count ), pitch: new Int32Array( count ), roll: new Int32Array( count ) };
-	const places = [ ghost.east, ghost.north, ghost.up ];
-	const angles = [ ghost.yaw, ghost.pitch, ghost.roll ];
-	const step = [ 0, 0, 0 ];
-	const last = [ 0, 0, 0 ];
-	const turned = [ 0, 0, 0 ];
-	for ( let i = 0; i < count; i ++ ) {
-
-		for ( let k = 0; k < 3; k ++ ) {
-
-			step[ k ] += get();
-			last[ k ] += step[ k ];
-			if ( Math.abs( last[ k ] ) > ( k === 2 ? HEIGHT : REACH ) * 100 ) return null;
-			places[ k ][ i ] = last[ k ];
-
-		}
-
-		for ( let k = 0; k < 3; k ++ ) {
-
-			turned[ k ] = ( ( turned[ k ] + get() ) % TURN + TURN ) % TURN;
-			angles[ k ][ i ] = turned[ k ];
-
-		}
-
-		if ( bad ) return null;
-
-	}
-
-	return at === bytes.length ? ghost : null;
+	const bytes = new Uint8Array( raw.length );
+	for ( let i = 0; i < raw.length; i ++ ) bytes[ i ] = raw.charCodeAt( i );
+	return bytes;
 
 }
 
@@ -271,28 +291,35 @@ function wrap( steps ) {
 //   'form': not a ghost (readGhost's null), or sampled at another interval than everyFor( ms ).
 //   'time': not as long as the run (its count isn't countFor( ms )).
 //   'start': its first sample (the car at GO) further from the start than START_SLACK.
-//   'speed': further between two samples than FASTEST goes in the time between them (and
-//     SAMPLE_SLACK), other than the game's own jumps (R's few metres on, or back onto the path it
-//     drove), and no more of those than a run of its length is let have.
+//   'speed': further between two samples, across the ground or up or down, than FASTEST goes in
+//     the time between them (and SAMPLE_SLACK), other than the game's own jumps (R's few metres on,
+//     or back onto the path it drove), and no more of those than a run of its length is let have.
 //   'pass': a point not within its radius (and PASS_SLACK) at its pass time, nor at a sample either
 //     side of it.
-// Passes and the time are checkPasses' already (the Worker asks that first).
+// Passes and the time are checkPasses' already (the Worker asks that first). In centimetres and
+// their squares, a sample at a time, with nothing made on the way: it's the Worker's to do for
+// every time posted, within the Free plan's 10 ms of CPU.
 export function ghostFault( { world, route }, ms, passes, text ) {
 
 	const ghost = readGhost( text );
 	if ( ! ghost || ghost.every !== everyFor( ms ) ) return 'form';
 	if ( ghost.count !== countFor( ms ) ) return 'time';
 	const { every, count, east, north, up } = ghost;
-	if ( Math.hypot( east[ 0 ], north[ 0 ] ) / 100 > START_SLACK ) return 'start';
+	if ( east[ 0 ] * east[ 0 ] + north[ 0 ] * north[ 0 ] > ( START_SLACK * 100 ) ** 2 ) return 'start';
 	let jumps = 0;
 	const allowed = Math.min( JUMPS_MOST, JUMPS + Math.floor( ms / JUMP_EVERY ) );
 	for ( let i = 1; i < count; i ++ ) {
 
-		const metres = Math.hypot( east[ i ] - east[ i - 1 ], north[ i ] - north[ i - 1 ] ) / 100;
-		const most = FASTEST * ( sampleTime( i, count, every, ms ) - sampleTime( i - 1, count, every, ms ) ) / 1000 + SAMPLE_SLACK;
-		if ( metres <= most ) continue;
+		const dx = east[ i ] - east[ i - 1 ];
+		const dy = north[ i ] - north[ i - 1 ];
+		const dz = up[ i ] - up[ i - 1 ];
+		// (Centimetres, as the samples are.)
+		const most = ( FASTEST * ( sampleTime( i, count, every, ms ) - sampleTime( i - 1, count, every, ms ) ) / 1000 + SAMPLE_SLACK ) * 100;
+		const across = dx * dx + dy * dy;
+		if ( across <= most * most && dz * dz <= most * most ) continue;
 		if ( ++ jumps > allowed ) return 'speed';
-		if ( metres > most + RESPAWN && ! onPath( ghost, i ) ) return 'speed';
+		const on = most + RESPAWN * 100;
+		if ( across > on * on && ! onPath( ghost, i, ms ) ) return 'speed';
 
 	}
 
@@ -326,19 +353,27 @@ export function ghostFault( { world, route }, ms, passes, text ) {
 
 }
 
-// Whether sample `i` of `ghost` is back on the path it drove before the sample ahead of it (within
-// BACK of a line between two samples there): where R puts the car when there's no way on, and
-// falling off the edge of the world does.
-function onPath( { east, north }, i ) {
+// Whether sample `i` of `ghost` (a run of `ms`) is back on the path it drove before the sample
+// ahead of it, in the BACK_WITHIN ms before (within BACK of a line between two samples there):
+// where R puts the car when there's no way on, and falling off the edge of the world does. Looked
+// for from the most recent back, where it nearly always is (a second or so), and never further back
+// than BACK_WITHIN, so a ghost's jumps cost the Worker that many samples' look at most each.
+function onPath( { east, north, every, count }, i, ms ) {
 
-	const [ x, y ] = [ east[ i ] / 100, north[ i ] / 100 ];
-	for ( let k = 1; k < i - 1; k ++ ) {
+	const [ x, y ] = [ east[ i ], north[ i ] ];
+	const reach = BACK * 100;
+	const from = sampleTime( i, count, every, ms ) - BACK_WITHIN;
+	for ( let k = i - 2; k >= 1 && sampleTime( k, count, every, ms ) >= from; k -- ) {
 
-		const [ ax, ay, bx, by ] = [ east[ k - 1 ] / 100, north[ k - 1 ] / 100, east[ k ] / 100, north[ k ] / 100 ];
-		const [ dx, dy ] = [ bx - ax, by - ay ];
+		const ax = east[ k - 1 ];
+		const ay = north[ k - 1 ];
+		const dx = east[ k ] - ax;
+		const dy = north[ k ] - ay;
 		const length = dx * dx + dy * dy;
 		const u = length ? Math.max( 0, Math.min( 1, ( ( x - ax ) * dx + ( y - ay ) * dy ) / length ) ) : 0;
-		if ( Math.hypot( ax + dx * u - x, ay + dy * u - y ) <= BACK ) return true;
+		const ex = ax + dx * u - x;
+		const ey = ay + dy * u - y;
+		if ( ex * ex + ey * ey <= reach * reach ) return true;
 
 	}
 

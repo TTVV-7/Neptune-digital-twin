@@ -1,4 +1,4 @@
-import { Euler, Group, MathUtils, Matrix4, Quaternion, Vector3 } from 'three';
+import { BufferAttribute, BufferGeometry, Euler, Group, MathUtils, Matrix4, Mesh, Quaternion, SkinnedMesh, Vector2, Vector3 } from 'three';
 import { OBJECT_FRAME } from '3d-tiles-renderer';
 import { GHOST_BYTES, GHOST_EVERY, GHOST_SAMPLES, TURN, countFor, ghostText, packGhost, readGhost, sampleTime } from './ghost-rules.js';
 import { cleanLook } from './paint.js';
@@ -15,16 +15,27 @@ import { cleanLook } from './paint.js';
 // to fill GHOST_SAMPLES drops every other sample and goes on half as often, so it never takes more.
 //
 // A ghost raced is one model, drawn as the others' ghosts are (ghosts.js's ghostModels: the ride
-// and its Garage look, see-through near your car or the camera, nothing in it to hit), in a group
-// of its own that nothing casts rays at; replayed on the run's own clock from GO, between its
-// samples, which are put into this scene once as the run starts. Each frame it's moved and turned,
-// and its name placed over it: no new draws but its own.
+// and its Garage look, see-through near your car or the camera, nothing in it to hit, its wheels
+// turning and steering), in a group of its own that nothing casts rays at; replayed on the run's
+// own clock from GO, between its samples, which are put into this scene once as the run starts.
+// Each frame it's moved and turned, and its name placed over it: no new draws but its own. And its
+// own are few: the model is made light once for each ride (lighten), its still parts merged into
+// one mesh for each of their materials and their vertices into cells of a few centimetres, so the
+// pickup, 219,000 triangles in 79 meshes as you drive it, races as a few thousand in a few draws.
 
 // Within this of your car or the camera (m), it's see-through (as ghosts.js's are), and its name
 // shows within TAG_RANGE.
 const FADE_NEAR = 8;
 const TAG_RANGE = 400;
 const DEG = MathUtils.DEG2RAD;
+// A ghost's model made light (lighten): its still parts' vertices merged within cells of its longest
+// side over CELLS (the pickup's 5.4 m: 10 cm), those with their pictures' places within 1/UV_STEPS
+// of each other (so a picture's seams stay where they are).
+const CELLS = 56;
+const UV_STEPS = 64;
+// The light parts made, by the ride and which of its meshes went into each (the same ride in the same
+// look: the same), kept for the page's life (a few rides' worth).
+const lightened = new Map();
 
 const _p = new Vector3();
 const _q = new Quaternion();
@@ -37,6 +48,9 @@ const _cam = new Vector3();
 const _own = new Vector3();
 const _tag = new Vector3();
 const _quat = [ 0, 0, 0, 0 ];
+const _inverse = new Matrix4();
+const _uv = new Vector2();
+const _forward = new Vector3();
 
 // The matrix from this scene to the ghost's frame on `world`: the route's `start` on the globe's
 // ellipsoid at height 0 (3d-tiles-renderer's object frame, as main.js centres the scene at a place:
@@ -183,16 +197,6 @@ export function createRecorder() {
 			return length < 0 ? null : ghostText( bytes, length );
 
 		},
-		get count() {
-
-			return count;
-
-		},
-		get every() {
-
-			return every;
-
-		},
 	};
 
 }
@@ -219,6 +223,10 @@ export function createRaceGhost( { scene, models, tags, name } ) {
 	// Its samples in this scene: positions and turns.
 	let places = null;
 	let turns = null;
+	// The run's clock at the frame before (ms), the way it faced then (rad) and its wheels' steer.
+	let lastMs = null;
+	let lastYaw = null;
+	let steer = 0;
 
 	return {
 		// Unpacked, and its model built (a promise of whether it's ready to race).
@@ -237,6 +245,7 @@ export function createRaceGhost( { scene, models, tags, name } ) {
 			}
 
 			model = built;
+			lighten( model );
 			model.pivot.visible = false;
 			group.add( model.pivot );
 			return true;
@@ -288,6 +297,7 @@ export function createRaceGhost( { scene, models, tags, name } ) {
 			);
 			Quaternion.slerpFlat( _quat, 0, turns, i * 4, turns, i * 4 + 4, u );
 			pivot.quaternion.fromArray( _quat );
+			turnWheels( i, t0, t1, ms );
 			camera.getWorldPosition( _cam );
 			const distance = pivot.position.distanceTo( _cam );
 			const reach = faded ? FADE_NEAR + 2 : FADE_NEAR;
@@ -302,10 +312,21 @@ export function createRaceGhost( { scene, models, tags, name } ) {
 			placeTag( distance < TAG_RANGE, camera, model.size.height );
 
 		},
-		// For the tests: where it's drawn, whether it is, and see-through.
+		// For the tests: where it's drawn, whether it is, and see-through; and its triangles as drawn.
 		get pivot() {
 
 			return model?.pivot ?? null;
+
+		},
+		get triangles() {
+
+			let n = 0;
+			model?.pivot.traverse( o => {
+
+				if ( o.isMesh && o.geometry ) n += ( o.geometry.index ?? o.geometry.attributes.position ).count / 3;
+
+			} );
+			return n;
 
 		},
 		get faded() {
@@ -328,6 +349,27 @@ export function createRaceGhost( { scene, models, tags, name } ) {
 
 		},
 	};
+
+	// Its wheels turned and steered by its ride's own animation (as ghosts.js's are): its speed along
+	// the way it faces, from samples `i` and `i + 1` (at t0 and t1 ms), and its steer from how fast
+	// it's turning, at the run's clock `ms`.
+	function turnWheels( i, t0, t1, ms ) {
+
+		const dt = lastMs === null ? 0 : ( ms - lastMs ) / 1000;
+		lastMs = ms;
+		const { pivot, animators } = model;
+		_forward.set( 0, 0, - 1 ).applyQuaternion( pivot.quaternion );
+		const yaw = Math.atan2( - _forward.x, _forward.z );
+		const rate = lastYaw === null ? 0 : MathUtils.euclideanModulo( yaw - lastYaw + Math.PI, Math.PI * 2 ) - Math.PI;
+		lastYaw = yaw;
+		if ( ! animators.length || dt <= 0 ) return;
+		const moving = ms > 0 && ms < ghost.ms && t1 > t0;
+		const speed = moving ? ( ( places[ i * 3 + 3 ] - places[ i * 3 ] ) * _forward.x + ( places[ i * 3 + 4 ] - places[ i * 3 + 1 ] ) * _forward.y + ( places[ i * 3 + 5 ] - places[ i * 3 + 2 ] ) * _forward.z ) / ( ( t1 - t0 ) / 1000 ) : 0;
+		const aim = MathUtils.clamp( rate / dt * 2 / Math.max( 2, Math.abs( speed ) ), - 1, 1 ) * Math.sign( speed || 1 );
+		steer += ( aim - steer ) * Math.min( 1, dt * 8 );
+		for ( const animate of animators ) animate( { steer, speed, dt, airborne: false, vy: 0, throttle: speed > 1 } );
+
+	}
 
 	// Its name over it, on the screen, or hidden (too far, behind the camera, off the edge).
 	function placeTag( near, camera, height ) {
@@ -352,5 +394,207 @@ export function createRaceGhost( { scene, models, tags, name } ) {
 		if ( on ) tag.style.transform = `translate( ${ ( ( _tag.x + 1 ) / 2 * window.innerWidth ).toFixed( 1 ) }px, ${ ( ( 1 - _tag.y ) / 2 * window.innerHeight ).toFixed( 1 ) }px )`;
 
 	}
+
+}
+
+// A ghost's `model` (ghostModels' build) made light to draw, in place: its meshes merged into one
+// for each material and painted part on whatever carries them (the model itself, or a part the
+// ride's own animation moves, such as a wheel, found by running it once), their vertices merged
+// within cells (CELLS) and the triangles left between three cells kept. Decals, the underglow, glass
+// and a part moved by itself stay as they were; a skinned mesh is merged as its bones hold it (a
+// ride's file's are never moved). Made once for each ride and grouping (lightened), shared by
+// every ghost of it after.
+function lighten( model ) {
+
+	const { pivot, animators, vehicle } = model;
+	pivot.updateMatrixWorld( true );
+	const moving = movingParts( pivot, animators );
+	const orders = new Map();
+	const groups = new Map();
+	pivot.traverse( o => {
+
+		orders.set( o, orders.size );
+		if ( moving.has( o ) || ! still( o, pivot ) ) return;
+		let carrier = o.parent;
+		while ( carrier !== pivot && ! moving.has( carrier ) ) carrier = carrier.parent;
+		const uv = !! o.geometry.attributes.uv;
+		const key = `${ orders.get( carrier ) }|${ o.material.uuid }|${ o.userData.paint ?? '' }|${ uv }`;
+		if ( ! groups.has( key ) ) groups.set( key, { carrier, material: o.material, paint: o.userData.paint, uv, meshes: [] } );
+		groups.get( key ).meshes.push( o );
+
+	} );
+	const size = Math.max( model.size.width, model.size.height, model.size.length );
+	for ( const { carrier, material, paint, uv, meshes } of groups.values() ) {
+
+		const key = `${ vehicle.id ?? vehicle.name }|${ orders.get( carrier ) }|${ meshes.map( mesh => orders.get( mesh ) ).join( ',' ) }`;
+		let geometry = lightened.get( key );
+		if ( ! geometry ) {
+
+			_inverse.copy( carrier.matrixWorld ).invert();
+			geometry = merged( meshes, uv, size / CELLS / carrier.getWorldScale( _p ).x );
+			geometry.userData.shared = true;
+			lightened.set( key, geometry );
+
+		}
+
+		for ( const mesh of meshes ) {
+
+			mesh.removeFromParent();
+			if ( ! mesh.geometry.userData.shared && ! mesh.geometry.userData.template ) mesh.geometry.dispose();
+			mesh.skeleton?.dispose();
+
+		}
+
+		const part = new Mesh( geometry, material );
+		part.name = 'ghost part';
+		part.raycast = () => {};
+		if ( paint ) part.userData.paint = paint;
+		carrier.add( part );
+
+	}
+
+	pivot.updateMatrixWorld( true );
+
+}
+
+// The parts of `pivot` its `animators` move (a ride's wheels, a monster truck's body on its
+// springs): run once, driving and steering, with what moved put back as it was.
+function movingParts( pivot, animators ) {
+
+	const before = new Map();
+	pivot.traverse( o => before.set( o, [ o.position.clone(), o.quaternion.clone(), o.scale.clone(), o.visible ] ) );
+	for ( const animate of animators ) animate( { steer: 0.6, speed: 12, dt: 0.1, airborne: false, vy: 0, throttle: true } );
+	const moving = new Set();
+	for ( const [ o, [ position, quaternion, scale, visible ] ] of before ) {
+
+		if ( o === pivot || ( o.position.equals( position ) && o.quaternion.equals( quaternion ) && o.scale.equals( scale ) && o.visible === visible ) ) continue;
+		moving.add( o );
+		o.position.copy( position );
+		o.quaternion.copy( quaternion );
+		o.scale.copy( scale );
+		o.visible = visible;
+
+	}
+
+	pivot.updateMatrixWorld( true );
+	return moving;
+
+}
+
+// Whether `o` is a mesh lighten can merge: a plain or skinned mesh of one opaque material, not a
+// decal (in `pivot`'s decals) nor the underglow.
+function still( o, pivot ) {
+
+	if ( ( o.constructor !== Mesh && o.constructor !== SkinnedMesh ) || Array.isArray( o.material ) || ! o.material || o.material.transparent || o.name === 'underglow' ) return false;
+	if ( ! o.geometry?.attributes.position || o.geometry.morphAttributes.position ) return false;
+	for ( let up = o; up && up !== pivot; up = up.parent ) if ( up.name === 'decals' ) return false;
+	return true;
+
+}
+
+// `meshes` as one geometry in the frame of what carries them (_inverse), their vertices merged
+// within cells `cell` across (to the cell's middle, as many as fall in it) and, with `uv`, within
+// 1/UV_STEPS of each other in their pictures; a triangle whose corners fall in fewer than three cells
+// is left out. Its normals made afresh.
+function merged( meshes, uv, cell ) {
+
+	const cells = new Map();
+	const sums = [];
+	const placed = meshes.map( mesh => {
+
+		_m.multiplyMatrices( _inverse, mesh.matrixWorld );
+		const position = mesh.geometry.attributes.position;
+		const at = new Float64Array( position.count * 3 );
+		const into = new Int32Array( position.count );
+		const skinned = mesh.isSkinnedMesh && mesh.geometry.attributes.skinIndex ? mesh : null;
+		for ( let i = 0; i < position.count; i ++ ) {
+
+			_p.fromBufferAttribute( position, i );
+			skinned?.applyBoneTransform( i, _p );
+			_p.applyMatrix4( _m ).toArray( at, i * 3 );
+			const key = ( ( Math.floor( _p.x / cell ) + 1024 ) * 2048 + Math.floor( _p.y / cell ) + 1024 ) * 2048 + Math.floor( _p.z / cell ) + 1024;
+			let slot = cells.get( key );
+			if ( slot === undefined ) {
+
+				slot = sums.length / 4;
+				cells.set( key, slot );
+				sums.push( 0, 0, 0, 0 );
+
+			}
+
+			sums[ slot * 4 ] += _p.x;
+			sums[ slot * 4 + 1 ] += _p.y;
+			sums[ slot * 4 + 2 ] += _p.z;
+			sums[ slot * 4 + 3 ] ++;
+			into[ i ] = slot;
+
+		}
+
+		return { mesh, into };
+
+	} );
+	const vertices = new Map();
+	const positions = [];
+	const uvs = [];
+	const index = [];
+	const corner = [ 0, 0, 0 ];
+	for ( const { mesh, into } of placed ) {
+
+		const { attributes, index: drawn } = mesh.geometry;
+		const pictured = attributes.uv;
+		const ids = new Int32Array( into.length );
+		for ( let i = 0; i < into.length; i ++ ) {
+
+			const slot = into[ i ];
+			let key = slot;
+			if ( uv ) {
+
+				_uv.fromBufferAttribute( pictured, i );
+				const u = MathUtils.euclideanModulo( Math.floor( _uv.x * UV_STEPS ), UV_STEPS );
+				const v = MathUtils.euclideanModulo( Math.floor( _uv.y * UV_STEPS ), UV_STEPS );
+				key = slot * UV_STEPS * UV_STEPS + u * UV_STEPS + v;
+
+			}
+
+			let id = vertices.get( key );
+			if ( id === undefined ) {
+
+				id = positions.length / 3;
+				vertices.set( key, id );
+				const n = sums[ slot * 4 + 3 ];
+				positions.push( sums[ slot * 4 ] / n, sums[ slot * 4 + 1 ] / n, sums[ slot * 4 + 2 ] / n );
+				if ( uv ) uvs.push( _uv.x, _uv.y );
+
+			}
+
+			ids[ i ] = id;
+
+		}
+
+		const triangles = ( drawn ? drawn.count : into.length ) / 3;
+		for ( let t = 0; t < triangles; t ++ ) {
+
+			for ( let k = 0; k < 3; k ++ ) corner[ k ] = ids[ drawn ? drawn.getX( t * 3 + k ) : t * 3 + k ];
+			if ( into[ vertexOf( drawn, t, 0 ) ] === into[ vertexOf( drawn, t, 1 ) ] || into[ vertexOf( drawn, t, 1 ) ] === into[ vertexOf( drawn, t, 2 ) ] || into[ vertexOf( drawn, t, 0 ) ] === into[ vertexOf( drawn, t, 2 ) ] ) continue;
+			index.push( corner[ 0 ], corner[ 1 ], corner[ 2 ] );
+
+		}
+
+	}
+
+	const geometry = new BufferGeometry();
+	geometry.setAttribute( 'position', new BufferAttribute( new Float32Array( positions ), 3 ) );
+	if ( uv ) geometry.setAttribute( 'uv', new BufferAttribute( new Float32Array( uvs ), 2 ) );
+	geometry.setIndex( new BufferAttribute( positions.length / 3 > 65535 ? new Uint32Array( index ) : new Uint16Array( index ), 1 ) );
+	geometry.computeVertexNormals();
+	geometry.computeBoundingSphere();
+	return geometry;
+
+}
+
+// Triangle `t`'s `k`th corner's vertex in a geometry drawn by `index` (or none: in order).
+function vertexOf( index, t, k ) {
+
+	return index ? index.getX( t * 3 + k ) : t * 3 + k;
 
 }

@@ -600,10 +600,12 @@ describe( 'World Drive challenges on the Moon', () => {
 				json( route, { ms: body.ms, rank: 1, total: 2, isNewBest: true, run: body.run, handle: 'MoonHandle000022', top: [ { rank: 1, name: PLAYER.name, ms: body.ms, vehicle: 'go-kart', date: '2026-11-16', level: 1, title: 'rookie' } ] } );
 
 			} );
-			await page.goto( `${ BASE }/?challenge=22&vs=MoonHandle000099` );
+			// (At the link's own path, as "challenge a friend" shares it.)
+			await page.goto( `${ BASE }/c?challenge=22&vs=MoonHandle000099` );
 			const card = page.locator( '#challenges .ch-link' );
 			await card.waitFor( { timeout: 120000 } );
 			assert.equal( await page.evaluate( () => window.drive.world ), 'moon' );
+			assert.equal( new URL( page.url() ).pathname + new URL( page.url() ).search, '/' );
 			// None of the Earth's drives asked for, and no used-up screen.
 			assert.deepEqual( asked, [ 'moon' ] );
 			assert.equal( await page.locator( '#notice' ).isVisible(), false );

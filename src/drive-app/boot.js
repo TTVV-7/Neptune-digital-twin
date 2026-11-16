@@ -14,8 +14,9 @@ const DEV_KEY = __DEV_MAPS_KEY__;
 // What a failed download of the game's code says, in Chromium, Firefox and Safari, and Vite's own
 // when a chunk's styles don't come: a connection's fault, unlike an error in the code itself.
 const NOT_LOADED = /dynamically imported module|Importing a module script failed|Unable to preload|Failed to fetch/i;
-// How long (ms) the visit waits, after the robot check, for a challenge link's answer (it's asked
-// for beside the check, so it's nearly always there by then).
+// How long (ms) the visit waits, after the robot check, for a challenge link's answer, to know its
+// world (it's asked for beside the check, so it's nearly always there by then); one slower than that
+// opens its card when it comes, on the world the visit took (the Earth, for want of knowing).
 const LINK_WAIT = 4000;
 
 const $ = id => document.getElementById( id );
@@ -35,16 +36,16 @@ async function boot() {
 	// The Vite dev server on its own: a key from the environment, or the test globe.
 	if ( ! config ) return start( { key: DEV_KEY || null, worker: false } );
 	// (Maps off: the test pad, a challenge link's card over it all the same.)
-	if ( ! config.mapsOn ) return screens.notice( 'resting', { onTestPad: async () => start( { key: null, googleClientId: config.googleClientId, live: !! config.live, liveReason: config.liveReason, challengeLink: await linkWithin() } ) } );
+	if ( ! config.mapsOn ) return screens.notice( 'resting', { onTestPad: () => start( { key: null, googleClientId: config.googleClientId, live: !! config.live, liveReason: config.liveReason, challengeLink: challengeLink() } ) } );
 	visit( config );
 
 }
 
-// A "challenge a friend" link (/?challenge=<id>&vs=<handle>): what the Worker says of it, asked for
-// once, as the page starts, beside the robot check: { link: { challenge, vs } as the address has
-// them, answer: send's (its body { challenge, vs })  }, or null for no link. Its world is the
-// visit's (a Moon challenge's spends none of the day's Earth drives, as a link to the Moon doesn't),
-// and the game opens it (main.js, challenges.js).
+// A "challenge a friend" link (/c?challenge=<id>&vs=<handle>, or the same at /): what the Worker
+// says of it, asked for once, as the page starts, beside the robot check: a promise of { link:
+// { challenge, vs } as the address has them, answer: send's (its body { challenge, vs }) }, or of
+// null for no link. Its world is the visit's (a Moon challenge's spends none of the day's Earth
+// drives, as a link to the Moon doesn't), and the game opens it (main.js, challenges.js).
 let linkAsked = null;
 function challengeLink() {
 
@@ -130,12 +131,13 @@ async function visit( config ) {
 	const challenge = await linkWithin();
 	const moonLink = opensOnMoon( location.search ) || challenge?.answer.body?.challenge?.world === 'moon';
 	const outcome = await postVisit( token, { world: moonLink ? 'moon' : 'earth' } );
-	const settings = { googleClientId: config.googleClientId, live: !! config.live, liveReason: config.liveReason, challengeLink: challenge };
+	// (The link's answer as it comes, if it hadn't within LINK_WAIT.)
+	const settings = { googleClientId: config.googleClientId, live: !! config.live, liveReason: config.liveReason, challengeLink: challengeLink() };
 	if ( outcome.key ) return run( main, { key: outcome.key, left: outcome.left, visit: outcome.visit, ...settings } );
 	// A link to the Moon (a Moon challenge's too): on the Moon, with none of the day's Earth drives
 	// spent. The Earth is a reload away (without the link, so that one does ask for a drive).
 	if ( outcome.moon ) return run( main, { key: null, visit: outcome.visit, ...settings, moonOnly: { onEarth: toEarth } } );
-	if ( outcome.usedUp ) return usedUp( config, outcome, main, challenge );
+	if ( outcome.usedUp ) return usedUp( config, outcome, main, challengeLink() );
 	if ( outcome.robot ) return screens.notice( 'robot', { onRetry: () => visit( config ) } );
 	screens.notice( 'error', { message: outcome.error, onRetry: () => visit( config ) } );
 
@@ -154,11 +156,12 @@ function opensOnMoon( search ) {
 
 }
 
-// From a page opened on the Moon by a link, to the Earth: the same page without the link, which
-// asks for one of the day's drives as it loads (a ?party= stays).
+// From a page opened on the Moon by a link, to the Earth: the same page without the link (at /, a
+// challenge link's /c too), which asks for one of the day's drives as it loads (a ?party= stays).
 function toEarth() {
 
 	const url = new URL( location.href );
+	url.pathname = '/';
 	for ( const name of [ 'spot', 'at', 'name', 'region', 'heading', 'world', 'challenge', 'vs' ] ) url.searchParams.delete( name );
 	location.assign( url );
 
@@ -173,7 +176,7 @@ function toEarth() {
 // the visit is asked for again: once, so a supporter who has had their 30 sees this screen rather
 // than asking round and round (a reload, if the game's already going on the Moon).
 // (supporter.js comes with the game's code, so it's waited for here.)
-async function usedUp( config, outcome, main, challengeLink = null ) {
+async function usedUp( config, outcome, main, link = null ) {
 
 	const { retryAfter, reason } = outcome;
 	const toMoon = () => {
@@ -181,7 +184,7 @@ async function usedUp( config, outcome, main, challengeLink = null ) {
 		if ( onMoonOnly ) return;
 		onMoonOnly = true;
 		run( main, {
-			key: null, visit: outcome.visit, googleClientId: config.googleClientId, live: !! config.live, liveReason: config.liveReason, challengeLink,
+			key: null, visit: outcome.visit, googleClientId: config.googleClientId, live: !! config.live, liveReason: config.liveReason, challengeLink: link,
 			moonOnly: { onEarth: () => usedUp( config, outcome, main ) },
 		} );
 

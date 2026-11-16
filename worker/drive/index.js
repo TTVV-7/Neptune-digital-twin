@@ -12,6 +12,7 @@ import { live, liveToday, online } from './live.js';
 import { adminStats, countVisit, postStats } from './stats.js';
 import { isAdmin } from './admin.js';
 import { adminDropins } from './dropins.js';
+import { LINK_PATH } from '../../src/drive-app/challenge-rules.js';
 import { adminChallenges, adminChange, challengeBoard, challengeGhost, challengeLink, linkPage, listChallenges, postTime } from './challenges.js';
 import { BUDGET_SPENT } from '../../src/drive-app/live-protocol.js';
 
@@ -126,10 +127,14 @@ export default {
 
 		if ( ! url.pathname.startsWith( '/api/' ) ) {
 
-			// A "challenge a friend" link (/?challenge=&vs=): the page with its own preview for chat apps
-			// (challenges.js), and if anything goes wrong in that, the page as it is. Anything else, as
-			// it is.
-			if ( url.pathname !== '/' || ! url.searchParams.has( 'challenge' ) || request.method !== 'GET' ) return env.ASSETS.fetch( request );
+			// A "challenge a friend" link (/c?challenge=&vs=, LINK_PATH): the page with its own preview for
+			// chat apps (challenges.js), and if anything goes wrong in that, the page as it is. The Worker
+			// runs for nothing else but /api/* (run_worker_first in wrangler.drive.jsonc: the home page
+			// and the rest are files, served free and never turned away), so anything else here is
+			// passed on as it is.
+			if ( url.pathname !== LINK_PATH ) return env.ASSETS.fetch( request );
+			const plain = () => env.ASSETS.fetch( new Request( new URL( '/', url ).href, { method: request.method === 'HEAD' ? 'HEAD' : 'GET', headers: request.headers } ) );
+			if ( request.method !== 'GET' ) return plain();
 			try {
 
 				return await linkPage( { request, env, url, ctx, now: clock( request, env ) } );
@@ -137,7 +142,7 @@ export default {
 			} catch ( err ) {
 
 				console.error( 'Challenge link page', err?.name, err?.message );
-				return env.ASSETS.fetch( request );
+				return plain();
 
 			}
 

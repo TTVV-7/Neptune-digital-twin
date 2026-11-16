@@ -356,8 +356,8 @@ const _sun = new Vector3();
 // not when it's off for the rest of the day; moonOnly: { onEarth } when there's no Earth this visit
 // (today's Earth drives are used up, or the page opened on a link to the Moon, boot.js): the
 // globe opens on the Moon, which is never limited, and picking the Earth calls onEarth instead;
-// challengeLink: a "challenge a friend" link's ({ link: { challenge, vs }, answer }, boot.js), opened
-// once the globe is up (challenges.js).
+// challengeLink: a "challenge a friend" link's ({ link: { challenge, vs }, answer }, boot.js), or a
+// promise of it (or of null: no link), opened once the globe is up and it's here (challenges.js).
 export async function start( { key, left = null, visit: token = null, worker = true, googleClientId = '', live: liveOn = false, liveReason = '', moonOnly = null, challengeLink = null } ) {
 
 	const visit = token ?? VISIT_TEST?.visit ?? null;
@@ -643,14 +643,21 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	}
 
-	// A page opened on a "challenge a friend" link (boot.js's challengeLink): out of the address (so a
-	// reload doesn't open it again), and its card over the list once the globe is up.
-	async function openChallengeLink( { link, answer } ) {
+	// A page opened on a "challenge a friend" link (boot.js's challengeLink, which may still be on its
+	// way: a slow answer opens its card when it comes, over whatever's going on, the drive paused as
+	// Challenges does): out of the address, back to the home page's (/c is the link's own path, for
+	// its preview card), so a reload doesn't open it again; and its card over the list.
+	async function openChallengeLink( opening ) {
 
+		const opened = await opening;
+		if ( ! opened ) return;
+		const { link, answer } = opened;
 		const url = new URL( location.href );
+		url.pathname = '/';
 		for ( const name of [ 'challenge', 'vs' ] ) url.searchParams.delete( name );
 		history.replaceState( history.state, '', url );
 		if ( ! await loadChallenges() ) return;
+		pauseDrive();
 		challenges.openLink( answer, { named: !! link.vs } );
 
 	}

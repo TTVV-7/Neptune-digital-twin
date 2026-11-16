@@ -6917,21 +6917,23 @@ describe( 'World Drive challenges', () => {
 	// times posted, page.asked the paths asked for (page.ghostsAsked the ghosts' addresses).
 	// answerTime( body ) makes the time's answer; changed: what's different of the listed challenges
 	// (changed[ id ]); path: where the page is opened (a friend's link); link( url ): the link's answer
-	// ({ status, body }); ghosts: the ghosts kept, by run ({ run, ms, passes, vehicle, look, ghost }).
-	async function challengePage( { viewport, touch = false, player = PLAYER, answerTime = null, changed = {}, path = '', link = null, ghosts = {} } = {} ) {
+	// ({ status, body }); ghosts: the ghosts kept, by run ({ run, ms, passes, vehicle, look, ghost });
+	// storage: what the browser has kept from a visit before (localStorage's, by key).
+	async function challengePage( { viewport, touch = false, player = PLAYER, answerTime = null, changed = {}, path = '', link = null, ghosts = {}, storage = {} } = {} ) {
 
 		const page = await newPage( { viewport, touch, api: { config: { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: false } } } );
 		page.posted = [];
 		page.asked = [];
 		page.ghostsAsked = [];
 		page.on( 'request', request => page.asked.push( new URL( request.url() ).pathname ) );
-		await page.addInitScript( ( { visit, player } ) => {
+		await page.addInitScript( ( { visit, player, storage } ) => {
 
 			window.worldDriveVisitTest = { visit };
 			localStorage.setItem( 'world-drive.pads', 'off' );
 			if ( player ) localStorage.setItem( 'world-drive.player', JSON.stringify( player ) );
+			for ( const [ key, value ] of Object.entries( storage ) ) localStorage.setItem( key, value );
 
-		}, { visit: VISIT, player } );
+		}, { visit: VISIT, player, storage } );
 		const json = ( route, body, status = 200 ) => route.fulfill( { status, contentType: 'application/json', body: JSON.stringify( body ) } );
 		await page.route( `${ BASE }/api/challenges?*`, route => json( route, { now: Date.now(), challenges: listed( changed ) } ) );
 		await page.route( `${ BASE }/api/challenges`, route => json( route, { now: Date.now(), challenges: listed( changed ) } ) );
@@ -7195,7 +7197,44 @@ describe( 'World Drive challenges', () => {
 		assert.ok( Math.abs( Math.atan2( arrow.b, arrow.a ) ) < 0.3, JSON.stringify( arrow ) );
 		assert.match( await page.locator( '#drive-ui .ch-hud .ch-dist' ).textContent(), /^\d+ m$/ );
 		await shot( page, 'challenges-4-racing' );
-		const ms = await chase( page );
+		// Driven through; and from the line on, with the card up and the car still going (40 m/s),
+		// the booster fired again every frame, as Shift pressed under the card would: put out every
+		// frame (never still lit once the game's frame is done), the car only slowing from the line.
+		const { ms, line, fastest, lit, frames } = await page.evaluate( () => new Promise( resolve => {
+
+			const d = window.drive.driver;
+			let line = null;
+			let fastest = 0;
+			let lit = 0;
+			let frames = 0;
+			const step = () => {
+
+				const { run } = window.drive.challenges;
+				if ( run.phase === 'racing' ) {
+
+					const next = run.gates.find( gate => ! gate.passed );
+					const heading = Math.atan2( - next.x - d.east, next.z - d.north ) * 180 / Math.PI;
+					Object.assign( d, { heading, course: heading, view: heading, speed: 40 } );
+
+				} else if ( run.phase === 'done' ) {
+
+					line ??= { speed: Math.abs( d.speed ), clock: d.clock };
+					frames ++;
+					if ( d.firing ) lit ++;
+					fastest = Math.max( fastest, Math.abs( d.speed ) );
+					if ( d.clock - line.clock > 1.5 ) return resolve( { ms: run.ms, line: line.speed, fastest, lit, frames } );
+					d.fireBooster();
+
+				}
+
+				requestAnimationFrame( step );
+
+			};
+			step();
+
+		} ) );
+		assert.ok( line > 30 && frames > 2, JSON.stringify( { line, frames } ) );
+		assert.ok( lit === 0 && fastest <= line, JSON.stringify( { line, fastest, lit, frames } ) );
 		await page.locator( '.ch-finish' ).waitFor();
 		// What went up: the run's time and passes, each a leg the game could drive, this visit's, with
 		// the leaderboard's player.
@@ -7731,7 +7770,8 @@ describe( 'World Drive challenges', () => {
 		await page.locator( '.ch-card' ).first().waitFor();
 		await start( page, 11 );
 		// No ghost to race the first time (no best yet): no button for one.
-		assert.equal( await page.evaluate( () => window.drive.challenges.race ), null );
+		// (Asked as a yes or no: a race there would bring its model's whole scene back to be compared.)
+		assert.equal( await page.evaluate( () => window.drive.challenges.race === null ), true, 'a ghost to race' );
 		assert.equal( await page.locator( '#drive-ui .ch-ghost-toggle' ).isVisible(), false );
 		await page.waitForFunction( () => window.drive.challenges.run?.phase === 'racing', null, { timeout: 60000 } );
 		const first = await chase( page, 30 );
@@ -7811,10 +7851,51 @@ describe( 'World Drive challenges', () => {
 
 		}
 
+		// Its model made light: the kart's 132 meshes and 17,224 triangles (as you drive it) merged into a
+		// few dozen, each material's still parts one, with well under half the triangles.
+		const light = await page.evaluate( () => {
+
+			let meshes = 0;
+			window.drive.challenges.race.pivot.traverse( o => o.isMesh && meshes ++ );
+			let own = 0;
+			window.drive.entry.pivot.traverse( o => o.isMesh && ( own += ( o.geometry.index ?? o.geometry.attributes.position ).count / 3 ) );
+			return { meshes, triangles: window.drive.challenges.race.triangles, own };
+
+		} );
+		t.diagnostic( `the ghost's model: ${ JSON.stringify( light ) }` );
+		assert.ok( light.meshes < 60 && light.triangles < light.own / 2, JSON.stringify( light ) );
+
 		await page.waitForFunction( () => window.drive.challenges.run?.phase === 'racing', null, { timeout: 60000 } );
 		// Raced quicker: ahead at each gate ("-0.8 s"), and on the card.
 		const second = await chase( page, 45 );
 		assert.ok( second < first, `${ second } ${ first }` );
+		// Its wheels turn as it goes on to its own finish, as the others' ghosts' do (its ride's own
+		// animation): some part of it turned between two moments of that.
+		const turned = await page.evaluate( first => new Promise( resolve => {
+
+			const parts = () => {
+
+				const turns = [];
+				window.drive.challenges.race.pivot.traverse( o => turns.push( o.quaternion.toArray().join( ',' ) ) );
+				return turns;
+
+			};
+			let before = null;
+			const step = () => {
+
+				const { run } = window.drive.challenges;
+				const at = run.ms + run.after * 1000;
+				if ( at >= first ) return resolve( - 1 );
+				if ( run.after < 0.1 ) return requestAnimationFrame( step );
+				before ??= { at, turns: parts() };
+				if ( at - before.at < 300 ) return requestAnimationFrame( step );
+				resolve( parts().slice( 1 ).filter( ( turn, i ) => turn !== before.turns[ i + 1 ] ).length );
+
+			};
+			step();
+
+		} ), first );
+		assert.ok( turned > 0, `its wheels never turned (${ turned })` );
 		const splits = await page.evaluate( () => window.drive.challenges.run.splits );
 		assert.equal( splits.length, 3 );
 		assert.ok( splits.every( split => split < 0 ), JSON.stringify( splits ) );
@@ -7851,17 +7932,20 @@ describe( 'World Drive challenges', () => {
 		assert.deepEqual( page.errors, [] );
 		await page.context().close();
 
-		// Another page (another visit): your best's ghost from the Worker, by the run the list says is
-		// your best's.
+		// Another page (another visit, the ghost left hidden in the one before): your best's ghost from
+		// the Worker, by the run the list says is your best's, hidden from the start, its button saying so.
 		const kept = { run: posted.run, ms: posted.ms, passes: posted.passes, vehicle: posted.vehicle, look: posted.look, ghost: posted.ghost };
-		const other = await challengePage( { changed: { 11: { me: { ms: posted.ms, rank: 2, run: posted.run, handle: 'OwnHandle0000011' } } }, ghosts: { [ posted.run ]: kept } } );
+		const other = await challengePage( { changed: { 11: { me: { ms: posted.ms, rank: 2, run: posted.run, handle: 'OwnHandle0000011' } } }, ghosts: { [ posted.run ]: kept }, storage: { 'world-drive.ghost': 'off' } } );
 		await other.locator( '#globe-ui .challenges-open' ).click();
 		await other.locator( '.ch-card' ).first().waitFor();
 		await start( other, 11 );
-		await other.waitForFunction( () => window.drive.challenges.race?.ready, null, { timeout: 30000 } );
+		await other.waitForFunction( () => window.drive.challenges.race?.ready && window.drive.challenges.run, null, { timeout: 30000 } );
 		race = await other.evaluate( () => ( { name: window.drive.challenges.race.name, ms: window.drive.challenges.race.ms } ) );
 		assert.deepEqual( race, { name: 'Your best', ms: posted.ms } );
 		assert.deepEqual( other.ghostsAsked, [ `?challenge=11&run=${ posted.run }` ] );
+		await other.evaluate( () => new Promise( resolve => requestAnimationFrame( () => requestAnimationFrame( resolve ) ) ) );
+		assert.deepEqual( await other.evaluate( () => [ window.drive.challenges.race.shown, window.drive.challenges.race.pivot.visible ] ), [ false, false ] );
+		assert.equal( await other.locator( '#drive-ui .ch-ghost-toggle' ).getAttribute( 'aria-pressed' ), 'false' );
 		assert.deepEqual( other.errors, [] );
 		await other.context().close();
 
@@ -7891,7 +7975,7 @@ describe( 'World Drive challenges', () => {
 		await button.click();
 		await page.waitForFunction( () => window.shared.length === 1 );
 		const words = `Beat my ${ formatTime( ms ) } on today's Furka Pass sprint in World Drive`;
-		assert.deepEqual( await page.evaluate( () => window.shared[ 0 ] ), { title: 'World Drive challenge', text: words, url: `${ BASE }/?challenge=11&vs=FinishHandle0011` } );
+		assert.deepEqual( await page.evaluate( () => window.shared[ 0 ] ), { title: 'World Drive challenge', text: words, url: `${ BASE }/c?challenge=11&vs=FinishHandle0011` } );
 		assert.equal( await button.textContent(), 'Shared!' );
 		// Closed without sharing: nothing more said.
 		await page.evaluate( () => Object.defineProperty( navigator, 'share', { configurable: true, value: async () => {
@@ -7907,7 +7991,7 @@ describe( 'World Drive challenges', () => {
 		await page.evaluate( () => Object.defineProperty( navigator, 'share', { configurable: true, value: undefined } ) );
 		await button.click();
 		await page.waitForFunction( () => window.copied.length === 1 );
-		assert.equal( await page.evaluate( () => window.copied[ 0 ] ), `${ words } ${ BASE }/?challenge=11&vs=FinishHandle0011` );
+		assert.equal( await page.evaluate( () => window.copied[ 0 ] ), `${ words } ${ BASE }/c?challenge=11&vs=FinishHandle0011` );
 		assert.equal( await button.textContent(), 'Link copied!' );
 		// Neither: the link to copy by hand, picked out.
 		await page.evaluate( () => Object.defineProperty( navigator, 'clipboard', { configurable: true, value: { writeText: async () => {
@@ -7918,7 +8002,7 @@ describe( 'World Drive challenges', () => {
 		await button.click();
 		const field = page.locator( '.ch-finish .ch-share-field' );
 		await field.waitFor();
-		assert.equal( await field.inputValue(), `${ words } ${ BASE }/?challenge=11&vs=FinishHandle0011` );
+		assert.equal( await field.inputValue(), `${ words } ${ BASE }/c?challenge=11&vs=FinishHandle0011` );
 		assert.equal( await page.evaluate( () => document.activeElement.className ), 'ch-share-field' );
 		await shot( page, 'challenges-share-2-by-hand' );
 		// Your own row on a board: the week's (#3 of 41), its words this week's star hunt.
@@ -7928,7 +8012,7 @@ describe( 'World Drive challenges', () => {
 		await dialog.locator( '.ch-card[data-id="13"] .ch-board-open' ).click();
 		await dialog.locator( '.ch-rows li.me .ch-share' ).click();
 		await page.waitForFunction( () => window.shared.length === 2 );
-		assert.deepEqual( await page.evaluate( () => window.shared[ 1 ] ), { title: 'World Drive challenge', text: 'Beat my 0:48.20 on this week\'s Furka Pass star hunt in World Drive', url: `${ BASE }/?challenge=13&vs=OwnHandle1300000` } );
+		assert.deepEqual( await page.evaluate( () => window.shared[ 1 ] ), { title: 'World Drive challenge', text: 'Beat my 0:48.20 on this week\'s Furka Pass star hunt in World Drive', url: `${ BASE }/c?challenge=13&vs=OwnHandle1300000` } );
 		// The leader's row (not yours): race their ghost, by its run.
 		const leader = friendRun( CHALLENGES[ 0 ], 25, 'leaderRun1100000' );
 		await page.route( `${ BASE }/api/challenges/board?challenge=11*`, route => route.fulfill( { contentType: 'application/json', body: JSON.stringify( { challenge: listed()[ 0 ], total: 5, rows: [ row( 1, 'Driver 1', leader.ms, { run: leader.run } ), row( 2, 'Ann Racer', 23900 ) ], me: null } ) } ) );
@@ -7943,13 +8027,136 @@ describe( 'World Drive challenges', () => {
 
 	} );
 
+	test( 'challenge a friend after a run that isn\'t your best: the finish card has your best\'s link, by the handle the list said with your best, or by the board\'s own row if the list didn\'t', async () => {
+
+		for ( const listSays of [ true, false ] ) {
+
+			// Your best (from a visit before) can't be beaten here; its ghost isn't kept any more.
+			const me = { ms: 3000, rank: 1, run: 'ownRunNotKept001', ...( listSays ? { handle: 'ListHandle000011' } : {} ) };
+			const page = await challengePage( { changed: { 11: { me } } } );
+			// (With the list's handle, the board not answering: the link is the list's.)
+			if ( listSays ) await page.route( `${ BASE }/api/challenges/board?*`, route => route.fulfill( { status: 503, contentType: 'application/json', body: '{"error":"Not now"}' } ) );
+			await page.evaluate( () => {
+
+				window.shared = [];
+				Object.defineProperty( navigator, 'share', { configurable: true, value: async data => window.shared.push( data ) } );
+
+			} );
+			await page.locator( '#globe-ui .challenges-open' ).click();
+			await page.locator( '.ch-card' ).first().waitFor();
+			await start( page, 11 );
+			await page.waitForFunction( () => window.drive.challenges.run?.phase === 'racing', null, { timeout: 60000 } );
+			const ms = await chase( page, 40 );
+			assert.ok( ms > 3000, String( ms ) );
+			const button = page.locator( '.ch-finish .ch-f-share .ch-share' );
+			await button.waitFor( { timeout: 15000 } );
+			assert.equal( await page.locator( '.ch-f-note' ).textContent(), listSays ? 'Your best is 0:03.00.' : 'Your best 0:03.00 is #1 of 5.' );
+			assert.equal( await page.locator( '.ch-finish .ch-share' ).count(), 1 );
+			await button.click();
+			await page.waitForFunction( () => window.shared.length === 1 );
+			assert.deepEqual( await page.evaluate( () => window.shared[ 0 ] ), {
+				title: 'World Drive challenge', text: 'Beat my 0:03.00 on today\'s Furka Pass sprint in World Drive', url: `${ BASE }/c?challenge=11&vs=${ listSays ? 'ListHandle000011' : 'OwnHandle1100000' }`,
+			} );
+			// Not a best: nothing posted.
+			assert.equal( page.posted.length, 0 );
+			if ( ! listSays ) await shot( page, 'challenges-share-3-not-a-best' );
+			assert.deepEqual( page.errors, [] );
+			await page.context().close();
+
+		}
+
+	} );
+
+	test( 'a run that doesn\'t count (quicker than anything can drive, its passes or its ghost) is no best: no badge, nothing posted, and no ghost to race from Retry', async () => {
+
+		const page = await challengePage();
+		await page.locator( '#globe-ui .challenges-open' ).click();
+		await page.locator( '.ch-card' ).first().waitFor();
+		await start( page, 11 );
+		await page.waitForFunction( () => window.drive.challenges.run?.phase === 'racing', null, { timeout: 60000 } );
+		// 200 m/s from gate to gate: half again what the fastest ride boosted goes (its passes may be
+		// slow enough, the gates' radii and the start's slack taken off; its ghost isn't).
+		await chase( page, 200 );
+		await page.locator( '.ch-finish' ).waitFor();
+		assert.match( await page.locator( '.ch-f-note' ).textContent(), /^That run didn't count: it (went quicker than anything can drive|couldn't be recorded as it was driven)\. Try again\.$/ );
+		assert.equal( await page.locator( '.ch-f-badge' ).isVisible(), false );
+		assert.equal( page.posted.length, 0 );
+		await page.locator( '.ch-finish .ch-retry' ).click();
+		await page.waitForFunction( () => window.drive.challenges.run?.phase === 'countdown', null, { timeout: 30000 } );
+		await page.waitForTimeout( 500 );
+		// (Asked as a yes or no: a race there would bring its model's whole scene back to be compared.)
+		assert.equal( await page.evaluate( () => window.drive.challenges.race === null ), true, 'a ghost to race' );
+		assert.equal( await page.locator( '#drive-ui .ch-ghost-toggle' ).isVisible(), false );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'a first run (no best yet) races the board\'s leader\'s ghost, to follow round; a ghost asked for that can\'t be had (a friend\'s, bettered since) is said as the run starts, and the run goes on without it', async () => {
+
+		const leader = friendRun( CHALLENGES[ 0 ], 25, 'leaderRun1100000' );
+		let page = await challengePage( { changed: { 11: { top: [ row( 1, 'Speedy', leader.ms, { run: leader.run } ), row( 2, 'Ann Racer', 23900 ) ] } }, ghosts: { [ leader.run ]: padGhost( 25, leader.run ) } } );
+		await page.locator( '#globe-ui .challenges-open' ).click();
+		await page.locator( '.ch-card' ).first().waitFor();
+		await start( page, 11 );
+		await page.waitForFunction( () => window.drive.challenges.race?.ready && window.drive.challenges.run, null, { timeout: 90000 } );
+		assert.deepEqual( await page.evaluate( () => [ window.drive.challenges.race.name, window.drive.challenges.race.kind, window.drive.challenges.race.ms ] ), [ 'Speedy', 'leader', leader.ms ] );
+		assert.deepEqual( page.ghostsAsked, [ '?challenge=11&run=leaderRun1100000' ] );
+		assert.equal( await page.locator( '#drive-ui .ch-ghost-tag' ).textContent(), 'Speedy' );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+		// A friend's link to a time whose ghost isn't kept any more (404).
+		const link = () => ( { status: 200, body: { challenge: { ...listed()[ 0 ], replacedAt: null, finalAt: null }, vs: { name: 'Ann Racer', ms: 23900, vehicle: 'go-kart', run: 'goneRun000000001', ghost: true, date: '2026-11-16', level: 4, title: 'rookie' } } } );
+		page = await challengePage( { path: '/c?challenge=11&vs=FriendHandle0001', link } );
+		const card = page.locator( '#challenges .ch-link' );
+		await card.waitFor();
+		await card.locator( '.ch-start' ).click();
+		await page.waitForFunction( () => window.drive.challenges.run, null, { timeout: 90000 } );
+		await page.waitForFunction( () => /^Ann Racer's ghost couldn't be loaded, so this run is without it\.$/.test( document.querySelector( '.dhud-flash' )?.textContent ?? '' ), null, { timeout: 30000 } );
+		// (Asked as a yes or no: a race there would bring its model's whole scene back to be compared.)
+		assert.equal( await page.evaluate( () => window.drive.challenges.race === null ), true, 'a ghost to race' );
+		assert.ok( page.ghostsAsked.length >= 1 && page.ghostsAsked.every( asked => asked === '?challenge=11&run=goneRun000000001' ), page.ghostsAsked.join( ' ' ) );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'a friend\'s link answered slowly (after the page has opened on the test pad): its card opens when it comes', async () => {
+
+		const link = () => ( { status: 200, body: { challenge: { ...listed()[ 0 ], replacedAt: null, finalAt: null }, vs: { name: 'Ann Racer', ms: 23900, vehicle: 'go-kart', run: 'friendRun0000001', ghost: true, date: '2026-11-16', level: 4, title: 'rookie' } } } );
+		const page = await newPage( { api: { config: { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: false } } } );
+		const json = ( route, body ) => route.fulfill( { contentType: 'application/json', body: JSON.stringify( body ) } );
+		await page.route( `${ BASE }/api/challenges?*`, route => json( route, { now: Date.now(), challenges: listed() } ) );
+		await page.route( `${ BASE }/api/challenges`, route => json( route, { now: Date.now(), challenges: listed() } ) );
+		let asked = 0;
+		await page.route( `${ BASE }/api/challenges/link?*`, async route => {
+
+			asked = Date.now();
+			await new Promise( resolve => setTimeout( resolve, 6000 ) );
+			json( route, link().body );
+
+		} );
+		await page.goto( `${ BASE }/c?challenge=11&vs=FriendHandle0001` );
+		await page.locator( '#notice button', { hasText: 'Drive the test pad' } ).click();
+		await page.waitForFunction( () => window.drive?.mode === 'globe', null, { timeout: 30000 } );
+		const card = page.locator( '#challenges .ch-link' );
+		await card.waitFor( { timeout: 30000 } );
+		assert.ok( Date.now() - asked >= 5500 );
+		assert.match( await card.locator( '.ch-link-head' ).textContent(), /^Ann Racer's time to beat: 0:23\.90/ );
+		// The address back to the home page's, without the link.
+		assert.equal( new URL( page.url() ).pathname + new URL( page.url() ).search, '/' );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
 	test( 'a friend\'s link (on the test pad, maps off): the page opens on its card over the list (the time to beat, the place, the period, the time left), the address tidied; Start races their ghost (fetched by its run), ahead or behind at each gate and on the finish card', async () => {
 
 		const friend = friendRun( CHALLENGES[ 0 ], 25 );
 		const link = url => url.searchParams.get( 'challenge' ) === '11' && url.searchParams.get( 'vs' ) === 'FriendHandle0001'
 			? { status: 200, body: { challenge: { ...listed()[ 0 ], replacedAt: null, finalAt: null }, vs: { name: 'Ann Racer', ms: friend.ms, vehicle: 'go-kart', run: friend.run, ghost: true, date: '2026-11-16', level: 4, title: 'rookie' } } }
 			: null;
-		const page = await challengePage( { path: '/?challenge=11&vs=FriendHandle0001&ref=chat', link, ghosts: { [ friend.run ]: padGhost( 25 ) } } );
+		const page = await challengePage( { path: '/c?challenge=11&vs=FriendHandle0001&ref=chat', link, ghosts: { [ friend.run ]: padGhost( 25 ) } } );
 		const card = page.locator( '#challenges .ch-link' );
 		await card.waitFor();
 		assert.ok( page.asked.includes( '/api/challenges/link' ) );
@@ -7957,8 +8164,9 @@ describe( 'World Drive challenges', () => {
 		assert.equal( await card.locator( '.ch-start' ).textContent(), 'Start: race their ghost' );
 		// The list under it, as ever; the address without the link (a reload doesn't open it again).
 		assert.equal( await page.locator( '#challenges .ch-card' ).count(), 6 );
+		// (The link's own path, /c, back to the home page's, / : its preview card is the link's alone.)
 		const url = new URL( page.url() );
-		assert.deepEqual( [ url.searchParams.get( 'challenge' ), url.searchParams.get( 'vs' ), url.searchParams.get( 'ref' ) ], [ null, null, 'chat' ] );
+		assert.deepEqual( [ url.pathname, url.searchParams.get( 'challenge' ), url.searchParams.get( 'vs' ), url.searchParams.get( 'ref' ) ], [ '/', null, null, 'chat' ] );
 		await shot( page, 'challenges-link-1-card' );
 		await card.locator( '.ch-start' ).click();
 		await page.waitForFunction( () => window.drive.challenges.race?.ready && window.drive.challenges.run, null, { timeout: 90000 } );
@@ -8019,7 +8227,8 @@ describe( 'World Drive challenges', () => {
 		await shot( page, 'challenges-link-4-nobody' );
 		await card.locator( '.ch-start' ).click();
 		await page.waitForFunction( () => window.drive.challenges.run, null, { timeout: 90000 } );
-		assert.equal( await page.evaluate( () => window.drive.challenges.race ), null );
+		// (Asked as a yes or no: a race there would bring its model's whole scene back to be compared.)
+		assert.equal( await page.evaluate( () => window.drive.challenges.race === null ), true, 'a ghost to race' );
 		assert.deepEqual( page.ghostsAsked, [] );
 		await page.context().close();
 		// Over: their time and place on its final board, the board, and today's.

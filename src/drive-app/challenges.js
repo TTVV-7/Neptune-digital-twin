@@ -5,7 +5,7 @@ import {
 } from 'three';
 import { send } from './api.js';
 import { createRaceGhost, createRecorder } from './challenge-ghost.js';
-import { GRACE, KIND_NAMES, PERIOD_NAMES, TALL, checkPasses, describe, formatTime, rankText, timeLeft } from './challenge-rules.js';
+import { GRACE, KIND_NAMES, LINK_PATH, PERIOD_NAMES, TALL, checkPasses, describe, formatTime, rankText, timeLeft } from './challenge-rules.js';
 import { ghostFault } from './ghost-rules.js';
 import { LEVEL_MAX, levelLine } from './levels.js';
 import { MOON } from './moon-places.js';
@@ -29,11 +29,12 @@ import { MOON } from './moon-places.js';
 //
 // Ghosts (challenge-ghost.js): every run is recorded as it's driven and posted with its time, and a
 // run races a ghost: your own best's by default (this page's, from the run just posted, or the
-// Worker's), the one a friend's link names, or the board's leader's (its row's Race). Splits against
-// it at each gate and on the finish card; a button on the HUD hides it (kept for the visit's next
-// runs, and the next visit's). "Challenge a friend" (the finish card, your own row of a board)
-// shares a link to your best, /?challenge=&vs=<its handle>; a page opened on one shows its card
-// (openLink) and races their ghost.
+// Worker's), or with no best yet the board's leader's (to follow round, and to race), the one a
+// friend's link names, or the leader's (its row's Race). Splits against it at each gate and on the
+// finish card; a button on the HUD hides it (kept for the visit's next runs, and the next visit's).
+// "Challenge a friend" (the finish card, your own row of a board) shares a link to your best,
+// /c?challenge=&vs=<its handle> (LINK_PATH); a page opened on one shows its card (openLink) and
+// races their ghost.
 
 // The countdown (s), and what's held at the start meanwhile; READING (s) the visit's first, on a
 // computer, with the keys card over it ("Get ready" till the 3), put away at GO.
@@ -175,6 +176,8 @@ export function setUpChallenges( app ) {
 	let pendingGhost = null;
 	let race = null;
 	let ghostShown = true;
+	// A ghost asked for that couldn't be had ({ challenge, text }), to say as its run starts.
+	let missed = null;
 	try {
 
 		ghostShown = localStorage.getItem( GHOST_SHOWN ) !== 'off';
@@ -241,7 +244,13 @@ export function setUpChallenges( app ) {
 
 		listed = answer.body;
 		offset = listed.now - Date.now();
-		for ( const challenge of listed.challenges ) if ( challenge.me && ! challenge.me.owner ) bests[ challenge.id ] = Math.min( bests[ challenge.id ] ?? Infinity, challenge.me.ms );
+		for ( const challenge of listed.challenges ) {
+
+			if ( challenge.me && ! challenge.me.owner ) bests[ challenge.id ] = Math.min( bests[ challenge.id ] ?? Infinity, challenge.me.ms );
+			// Its handle (the Worker's, kept with your best), for a link to it from the finish card.
+			if ( typeof challenge.me?.handle === 'string' ) handles[ challenge.id ] = challenge.me.handle;
+
+		}
 		say( '' );
 		render();
 		return answer;
@@ -428,12 +437,13 @@ export function setUpChallenges( app ) {
 
 	}
 
-	// A link to your best (/?challenge=&vs=<handle>) shared: the browser's own sheet where it has one
-	// (a phone's: messages, chats), else copied, with its words; if neither can be, it's shown to copy
-	// by hand. Said beside `button` (as its own word for a moment, and the field under it if need be).
+	// A link to your best (/c?challenge=&vs=<handle>: LINK_PATH, the page the Worker gives a preview
+	// card of its own) shared: the browser's own sheet where it has one (a phone's: messages, chats),
+	// else copied, with its words; if neither can be, it's shown to copy by hand. Said beside `button`
+	// (as its own word for a moment, and the field under it if need be).
 	async function share( challenge, ms, handle, button ) {
 
-		const url = `${ location.origin }/?challenge=${ challenge.id }&vs=${ handle }`;
+		const url = `${ location.origin }${ LINK_PATH }?challenge=${ challenge.id }&vs=${ handle }`;
 		const text = shareText( challenge, ms );
 		const said = button.querySelector( 'span' ) ?? button;
 		const was = said.textContent;
@@ -484,7 +494,7 @@ export function setUpChallenges( app ) {
 
 	// --- a link to a challenge ---
 
-	// A page opened on a friend's link (main.js, from boot.js: /?challenge=&vs=): the Worker's
+	// A page opened on a friend's link (main.js, from boot.js: /c?challenge=&vs=): the Worker's
 	// `answer` for it (send's, of /api/challenges/link). The list opens with the link's card over it:
 	// their time to beat on the challenge, the time it has left, and Start (racing their ghost); one
 	// with a handle that names nobody, the challenge with no ghost, said gently; one that's over, its
@@ -668,17 +678,32 @@ export function setUpChallenges( app ) {
 	// --- its ghost ---
 
 	// The ghost `challenge`'s next run races, as `spec` says (begin's), got ready: its data (what the
-	// Worker keeps of it, or this page's own best's) and its model. Any other is let go.
+	// Worker keeps of it, or this page's own best's) and its model. Any other is let go. One asked for
+	// (a friend's link's, the leader's from their row) that can't be had (the Worker not answering,
+	// or a better time of theirs has replaced it) is said, as the run starts: it goes on without.
 	function prepareRace( challenge, spec ) {
 
 		dropRace();
+		missed = null;
 		if ( spec?.kind === 'none' ) return;
-		const entry = race = { challenge: challenge.id, spec, name: null, data: null, ghost: null, ready: false };
+		const entry = race = { challenge: challenge.id, spec, kind: null, name: null, data: null, ghost: null, ready: false };
 		ghostData( challenge, spec ).then( async found => {
 
 			if ( race !== entry ) return;
 			// (None to race: no best yet, or its ghost not to be had.)
-			if ( ! found ) return dropRace();
+			if ( ! found ) {
+
+				if ( spec?.kind === 'link' || spec?.kind === 'leader' ) {
+
+					missed = { challenge: challenge.id, text: `${ spec.name }'s ghost couldn't be loaded, so this run is without it.` };
+					sayMissed();
+
+				}
+
+				return dropRace();
+
+			}
+
 			Object.assign( entry, found );
 			const vehicle = app.vehicles.find( v => v.id === found.data.vehicle ) ?? app.vehicles.find( v => v.id === 'go-kart' ) ?? app.vehicles[ 0 ];
 			entry.ghost = createRaceGhost( { scene: app.scene, models: app.ghostModels, tags: app.driveUi, name: found.name } );
@@ -697,26 +722,31 @@ export function setUpChallenges( app ) {
 
 	}
 
-	// The ghost for `spec` on `challenge`: { name, data } (data: { run, ms, passes, vehicle, look,
-	// ghost }), or null when there's none to race. Your own best's: this page's (the run it posted),
-	// else the Worker's by its run (the list's me.run); a link's or the leader's, the Worker's by its
-	// run, taken only if it's as long as the time it's said to be (a run's ghost is kept by its run).
+	// The ghost for `spec` on `challenge`: { kind, name, data } (data: { run, ms, passes, vehicle,
+	// look, ghost }), or null when there's none to race. Your own best's: this page's (the run it
+	// posted), else the Worker's by its run (the list's me.run); with no best of yours yet, the board's
+	// leader's (the list's top row's run: a first run has the way round to follow, and a time to race);
+	// a link's or the leader's, the Worker's by its run, taken only if it's as long as the time it's
+	// said to be (a run's ghost is kept by its run).
 	async function ghostData( challenge, spec ) {
 
 		let asked = spec;
 		if ( ! asked || asked.kind === 'own' ) {
 
 			const mine = ownGhosts.get( challenge.id );
-			const me = listed?.challenges.find( c => c.id === challenge.id )?.me;
-			if ( mine && ( ! me || mine.ms <= me.ms ) ) return { name: 'Your best', data: mine };
-			if ( ! me?.run ) return null;
-			asked = { kind: 'own', name: 'Your best', ms: me.ms, run: me.run };
+			const listedOne = listed?.challenges.find( c => c.id === challenge.id );
+			const me = listedOne?.me;
+			const leader = listedOne?.top?.[ 0 ];
+			if ( mine && ( ! me || mine.ms <= me.ms ) ) return { kind: 'own', name: 'Your best', data: mine };
+			if ( me?.run ) asked = { kind: 'own', name: 'Your best', ms: me.ms, run: me.run };
+			else if ( ! me && ! mine && ! Number.isFinite( bests[ challenge.id ] ) && leader?.run ) asked = { kind: 'leader', name: leader.name, ms: leader.ms, run: leader.run };
+			else return null;
 
 		}
 
 		const answer = await send( 'GET', `/api/challenges/ghost?challenge=${ challenge.id }&run=${ encodeURIComponent( asked.run ) }` );
 		if ( ! answer.ok || answer.body.ms !== asked.ms ) return null;
-		return { name: asked.kind === 'own' ? 'Your best' : asked.name, data: answer.body };
+		return { kind: asked.kind, name: asked.kind === 'own' ? 'Your best' : asked.name, data: answer.body };
 
 	}
 
@@ -724,9 +754,19 @@ export function setUpChallenges( app ) {
 	// into this scene, at its start till GO. The split and the button to hide it on the HUD.
 	function startRace() {
 
+		sayMissed();
 		if ( ! run || ! race?.ready || race.challenge !== run.challenge.id ) return showGhostToggle();
 		race.ghost.start( app.globe, run.challenge.route.start );
 		showGhostToggle();
+
+	}
+
+	// A ghost asked for that couldn't be had, said on the HUD once its run is on (prepareRace).
+	function sayMissed() {
+
+		if ( ! missed || ! run || run.challenge.id !== missed.challenge ) return;
+		app.driver.hud.flash( missed.text );
+		missed = null;
 
 	}
 
@@ -1193,9 +1233,15 @@ export function setUpChallenges( app ) {
 		}
 
 		finish.hidden = false;
+		// A run that doesn't count (as the Worker would check it: its passes, then its ghost, a run that
+		// jumped about more than R does) isn't a best, nor a ghost to race.
+		const badge = finish.querySelector( '.ch-f-badge' );
+		badge.hidden = true;
+		if ( ! checkPasses( challenge, ms, result.passes ) ) return finishSay( 'That run didn\'t count: it went quicker than anything can drive. Try again.' );
+		if ( ! result.ghost || ghostFault( challenge, ms, result.passes, result.ghost ) ) return finishSay( 'That run didn\'t count: it couldn\'t be recorded as it was driven. Try again.' );
 		// This page's own best's ghost, to race next (from Retry), posted or not: on the test pad too.
 		const own = ownGhosts.get( challenge.id );
-		if ( result.ghost && ( ! own || ms < own.ms ) && ms <= ( bests[ challenge.id ] ?? Infinity ) ) ownGhosts.set( challenge.id, { run: result.id, ms, passes: result.passes, vehicle: result.vehicle, look: result.look, ghost: result.ghost } );
+		if ( ( ! own || ms < own.ms ) && ms <= ( bests[ challenge.id ] ?? Infinity ) ) ownGhosts.set( challenge.id, { run: result.id, ms, passes: result.passes, vehicle: result.vehicle, look: result.look, ghost: result.ghost } );
 		// Your best: the board's, or one kept here that couldn't be posted yet (beaten now, it's
 		// dropped: only a best is kept; else it's posted now, with any others kept).
 		const held = unsent.get( challenge.id )?.ms;
@@ -1204,10 +1250,7 @@ export function setUpChallenges( app ) {
 		const best = Math.min( bests[ challenge.id ] ?? Infinity, held ?? Infinity );
 		const better = ms < best;
 		finishSay( better ? ( best === Infinity ? 'Finished! Your first time on it.' : `New best! Your last was ${ formatTime( best ) }.` ) : `Your best is ${ formatTime( best ) }.` );
-		finish.querySelector( '.ch-f-badge' ).hidden = ! better;
-		if ( ! checkPasses( challenge, ms, result.passes ) ) return finishSay( 'That run didn\'t count: it went quicker than anything can drive. Try again.' );
-		// Its ghost, as the Worker will check it (a run that jumped about more than R does).
-		if ( ! result.ghost || ghostFault( challenge, ms, result.passes, result.ghost ) ) return finishSay( 'That run didn\'t count: it couldn\'t be recorded as it was driven. Try again.' );
+		badge.hidden = ! better;
 		if ( ! app.visit() ) return finishSay( `${ finish.querySelector( '.ch-f-note' ).textContent } Times go on the board from a drive on the real map.` );
 		if ( ! better ) {
 
@@ -1270,7 +1313,7 @@ export function setUpChallenges( app ) {
 			if ( listed ) {
 
 				const listedOne = listed.challenges.find( c => c.id === challenge.id );
-				if ( listedOne ) Object.assign( listedOne, { me: { ms, rank, ...( owner ? { owner } : {} ) }, total, top: top.slice( 0, 3 ) } );
+				if ( listedOne ) Object.assign( listedOne, { me: { ms, rank, run: answer.body.run, ...( typeof handle === 'string' ? { handle } : {} ), ...( owner ? { owner } : {} ) }, total, top: top.slice( 0, 3 ) } );
 
 			}
 
@@ -1339,7 +1382,8 @@ export function setUpChallenges( app ) {
 
 	}
 
-	// A run that's no better than your best: the board's top as it is, and where you are on it.
+	// A run that's no better than your best: the board's top as it is, and where you are on it; and
+	// your best's link to share (from the board's own row, if the list hadn't said its handle).
 	async function showTop( challenge ) {
 
 		const player = app.player();
@@ -1349,6 +1393,10 @@ export function setUpChallenges( app ) {
 		const { rows, total, me } = answer.body;
 		if ( me && ! me.owner ) finishSay( `Your best ${ formatTime( me.ms ) } is #${ rankText( me.rank ) } of ${ Math.max( total, me.rank ) }.` );
 		showRows( rows.slice( 0, 5 ), me && ! me.owner ? me.rank : null );
+		if ( typeof me?.handle !== 'string' ) return;
+		handles[ challenge.id ] = me.handle;
+		const share = finish.querySelector( '.ch-f-share' );
+		if ( ! share.querySelector( '.ch-share' ) ) share.append( shareButton( challenge, me.ms, me.handle ) );
 
 	}
 
@@ -1497,13 +1545,15 @@ export function setUpChallenges( app ) {
 
 		},
 		// For the tests: the ghost raced ({ name, kind, ready, ms, passes, pivot (its model's, as drawn),
-		// faded, shown }), or null; and the run being recorded ({ count, every }).
+		// faded, shown, triangles (its model's, as drawn) }), or null.
 		get race() {
 
-			return race && { name: race.name, kind: race.spec?.kind ?? 'own', ready: race.ready, ms: race.data?.ms ?? null, passes: race.data?.passes ?? null, pivot: race.ghost?.pivot ?? null, faded: race.ghost?.faded ?? false, shown: ghostShown };
+			return race && {
+				name: race.name, kind: race.kind ?? race.spec?.kind ?? 'own', ready: race.ready, ms: race.data?.ms ?? null, passes: race.data?.passes ?? null, pivot: race.ghost?.pivot ?? null,
+				faded: race.ghost?.faded ?? false, shown: ghostShown, triangles: race.ghost?.triangles ?? 0,
+			};
 
 		},
-		recorder,
 		meshes,
 	};
 
