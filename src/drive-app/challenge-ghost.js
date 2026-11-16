@@ -445,7 +445,9 @@ async function lighten( model ) {
 		if ( ! geometry ) {
 
 			_inverse.copy( carrier.matrixWorld ).invert();
-			geometry = merged( meshes, uv, simplify );
+			// (Its pictures' places weighed only where it has a picture: a shape made in code has them
+			// whether or not anything is drawn with them.)
+			geometry = merged( meshes, uv, simplify, !! ( material.map || material.normalMap ) );
 			geometry.userData.shared = true;
 			lightened.set( key, geometry );
 
@@ -527,8 +529,9 @@ function still( o, pivot ) {
 // `meshes` as one geometry in the frame of what carries them (_inverse): their places, normals and
 // (with `uv`) pictures' places as they were, their triangles as drawn (a mirrored mesh's turned the
 // right way round, as three.js draws it), simplified with `simplify` (meshoptimizer's, or null for
-// none) to about KEEP of them, and only the vertices still used kept.
-function merged( meshes, uv, simplify ) {
+// none) toward KEEP of them (their pictures' places weighed only if they're `textured`), and only
+// the vertices still used kept.
+function merged( meshes, uv, simplify, textured ) {
 
 	let count = 0;
 	let corners = 0;
@@ -589,7 +592,7 @@ function merged( meshes, uv, simplify ) {
 	let kept = index;
 	if ( simplify && corners >= SIMPLE_FROM * 3 ) {
 
-		const weights = [ NORMAL_WEIGHT, NORMAL_WEIGHT, NORMAL_WEIGHT, ...uv ? [ UV_WEIGHT, UV_WEIGHT ] : [] ];
+		const weights = [ NORMAL_WEIGHT, NORMAL_WEIGHT, NORMAL_WEIGHT, ...uv ? [ textured ? UV_WEIGHT : 0, textured ? UV_WEIGHT : 0 ] : [] ];
 		[ kept ] = simplify.simplifyWithAttributes( index, positions, 3, attributes, stride, normaled ? weights : weights.map( () => 0 ), null, Math.floor( corners * KEEP / 3 ) * 3, ERROR );
 
 	}

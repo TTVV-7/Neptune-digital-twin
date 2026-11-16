@@ -4278,13 +4278,15 @@ the challenges' chunk): it only takes triangles away, so every vertex left is on
 (its place, its normal and its place in its picture as the file has them), and it opens no holes.
 It stops at a tenth of a part's triangles, or sooner where a place would move more than 0.4 % of the
 part's size (the pickup's body: 2 cm, under which a panel's layers stay in their order) or a normal
-or a picture's place would change much (a tyre's tread, finer than the triangles left, isn't
-stretched). Glass, decals and the underglow are left as they are, a ride's file's skinned meshes
+or, on a part with a picture, a picture's place would change much (a tyre's tread, finer than the
+triangles left, isn't stretched). Glass, decals and the underglow are left as they are, a ride's file's skinned meshes
 merged as their bones hold them; where WebAssembly can't run, the parts are only merged. Measured
 (Chromium, SwiftShader): the pickup, the default ride, from 39 meshes and 219,049 triangles (its 79
 draws as you drive it, with its glass drawn both sides) to 25 and 89,552, ready about 9 s after
 Start in SwiftShader on a loaded machine (its file loaded and simplified, while its drop-in loads);
-close up from behind it looks as the whole model does (`challenges-ghost-pickup-close.png`). Its
+close up from behind it looks as the whole model does (`challenges-ghost-pickup-close.png`); the
+go-kart, already light at 17,224 triangles in 132 meshes, to 34 meshes and 15,574 (its round
+parts' normals and edges kept). Its
 first light model merged vertices into cells of 10 cm instead (22,387 triangles), which smeared its
 pictures, opened holes in its tailgate and bent its shading across creases: the triangles a ghost
 saves aren't worth a broken-looking car, the one most races are against. A ghost of the pickup
@@ -4487,7 +4489,7 @@ IPv6 one by its /48), never the address.
 
 **What it costs.**
 
-- **The page**: the challenges' chunk from 23.40 kB (9.39 kB gzipped) to 44.59 kB (17.67 kB
+- **The page**: the challenges' chunk from 23.40 kB (9.39 kB gzipped) to 44.62 kB (17.69 kB
   gzipped; 5 kB of it making a ghost's model light), and meshoptimizer's simplifier 53.61 kB (19.30
   kB gzipped) in a chunk of its own, fetched with the first ghost raced, its stylesheet from 9.17 kB (2.41) to 11.39 kB
   (2.85), fetched when they're first opened (or a link's page opens them); the page's first script
@@ -4581,8 +4583,9 @@ was at its time (between the frames either side of it, to 5 cm: a recorder takin
 place is metres off, 3.9 m in the test); racing your own best (from Retry:
 at the start till GO beside you, see-through, nothing in it to hit, its name over it, its wheels
 turning; splits ahead at each gate and on the card; it drives on to its finish and waits there;
-its draws its own light model's and no more, by turns shown and hidden, under half your own kart's
-triangles; the button hiding it, kept: another page, the next visit, racing it from the Worker's by
+its draws its own light model's and no more, by turns shown and hidden, fewer than your own
+kart's triangles in a few dozen meshes (the kart, 17,224 triangles, keeps 15,574: its round parts'
+normals and edges kept); the button hiding it, kept: another page, the next visit, racing it from the Worker's by
 the list's run, hidden from the start); a run that doesn't count (no badge, nothing posted, no
 ghost of it raced from Retry); a first run racing the ghost of the list's one row with a run (a
 made-up leader above it without one); the pickup's ghost close up (89,552 triangles in 25 draws, its

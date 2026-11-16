@@ -7876,8 +7876,11 @@ describe( 'World Drive challenges', () => {
 
 		}
 
-		// Its model made light: the kart's 132 meshes and 17,224 triangles (as you drive it) merged into a
-		// few dozen, each material's still parts one, with well under half the triangles.
+		// Its model made light: the kart's 132 meshes (as you drive it) merged into a few dozen, each
+		// material's still parts one, and simplified only as far as its look allows: its 17,224
+		// triangles are already few, its round parts' normals and its edges kept (the pickup's test
+		// below has the triangles a model with many loses: 219,000 to about 90,000). Merging vertices
+		// into 10 cm cells, as it was first made light, took it under half, and broke the pickup's look.
 		const light = await page.evaluate( () => {
 
 			let meshes = 0;
@@ -7888,7 +7891,7 @@ describe( 'World Drive challenges', () => {
 
 		} );
 		t.diagnostic( `the ghost's model: ${ JSON.stringify( light ) }` );
-		assert.ok( light.meshes < 60 && light.triangles < light.own / 2, JSON.stringify( light ) );
+		assert.ok( light.meshes < 60 && light.triangles < light.own, JSON.stringify( light ) );
 
 		await page.waitForFunction( () => window.drive.challenges.run?.phase === 'racing', null, { timeout: 60000 } );
 		// Raced quicker: ahead at each gate ("-0.8 s"), and on the card.
