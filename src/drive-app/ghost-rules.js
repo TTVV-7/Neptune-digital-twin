@@ -37,17 +37,16 @@ export const TURN = 1024;
 // alike (nothing in the game climbs or falls faster than it drives: a fall is stopped at 200 m, by
 // then about 63 m/s); a pass this far past its point's radius (the model's middle, which the ghost
 // follows, is off the point the pass is told by in the air); and the jumps the game makes: R puts
-// the car RESPAWN m on (and a little more by its model's tilt), or back where it drove a moment
-// ago, as falling off the edge of the world does (back within BACK of the path it drove in the
-// BACK_WITHIN ms before: R goes back to where the car last drove freely, half a second to a second
-// before on the ground, longer only after a long flight), up or down as far as that is. At most
-// JUMPS of them, and one more each JUMP_EVERY ms of the run, up to JUMPS_MOST: a driver pressing R
-// now and then.
+// the car RESPAWN m on (and a little more by its model's tilt), or back where it drove before, as
+// falling off the edge of the world does (back within BACK of the path it drove, however long ago:
+// R goes back to where the car last drove freely on the ground, half a second to a second before
+// mostly, but after a flight to where it took off, which can be minutes back), up or down as far
+// as that is. At most JUMPS of them, and one more each JUMP_EVERY ms of the run, up to JUMPS_MOST:
+// a driver pressing R now and then.
 export const SAMPLE_SLACK = 0.3;
 export const PASS_SLACK = 3;
 const RESPAWN = 5.5;
 const BACK = 4;
-export const BACK_WITHIN = 60000;
 const JUMPS = 4;
 const JUMP_EVERY = 15000;
 const JUMPS_MOST = 32;
@@ -319,7 +318,7 @@ export function ghostFault( { world, route }, ms, passes, text ) {
 		if ( across <= most * most && dz * dz <= most * most ) continue;
 		if ( ++ jumps > allowed ) return 'speed';
 		const on = most + RESPAWN * 100;
-		if ( across > on * on && ! onPath( ghost, i, ms ) ) return 'speed';
+		if ( across > on * on && ! onPath( ghost, i ) ) return 'speed';
 
 	}
 
@@ -353,17 +352,18 @@ export function ghostFault( { world, route }, ms, passes, text ) {
 
 }
 
-// Whether sample `i` of `ghost` (a run of `ms`) is back on the path it drove before the sample
-// ahead of it, in the BACK_WITHIN ms before (within BACK of a line between two samples there):
-// where R puts the car when there's no way on, and falling off the edge of the world does. Looked
-// for from the most recent back, where it nearly always is (a second or so), and never further back
-// than BACK_WITHIN, so a ghost's jumps cost the Worker that many samples' look at most each.
-function onPath( { east, north, every, count }, i, ms ) {
+// Whether sample `i` of `ghost` is back on the path it drove before the sample ahead of it (within
+// BACK of a line between two samples there): where R puts the car when there's no way on, and
+// falling off the edge of the world does. Looked for from the most recent back, where it nearly
+// always is (a second or so), as far back as the start: after a flight, R puts the car back where
+// it took off, however long it flew (drive.js's checkStuck keeps the last place it drove freely
+// only on the ground). At most JUMPS_MOST looks of a ghost's samples each (GHOST_SAMPLES), about
+// 130,000 lines measured against: well under a millisecond of the Worker's.
+function onPath( { east, north }, i ) {
 
 	const [ x, y ] = [ east[ i ], north[ i ] ];
 	const reach = BACK * 100;
-	const from = sampleTime( i, count, every, ms ) - BACK_WITHIN;
-	for ( let k = i - 2; k >= 1 && sampleTime( k, count, every, ms ) >= from; k -- ) {
+	for ( let k = i - 2; k >= 1; k -- ) {
 
 		const ax = east[ k - 1 ];
 		const ay = north[ k - 1 ];

@@ -399,6 +399,26 @@ export function legMinimum( world, from, fromRadius, to, toRadius ) {
 
 }
 
+// The least time (ms) a run with `passes` (checkPasses' kind, in the order passed) could take on
+// `challenge`'s route ({ world, route }): each leg's legMinimum, added up. A time near it was driven
+// as straight as the crow flies at the game's top speed, boosted all the way.
+export function leastTime( { world, route }, passes ) {
+
+	let from = [ route.start.lat, route.start.lon ];
+	let fromRadius = START_SLACK;
+	let least = 0;
+	for ( const [ index ] of passes ) {
+
+		least += legMinimum( world, from, fromRadius, route.points[ index ], route.radius );
+		from = route.points[ index ];
+		fromRadius = route.radius;
+
+	}
+
+	return Math.floor( least );
+
+}
+
 // Whether a run of `ms` with `passes` ([ [ index, ms ] ]: each point's index in route.points and the
 // run's time when it was passed, in the order passed) could have been driven on `challenge`'s route
 // ({ world, kind, route }): every point once (a sprint's gates and a landmark's goal in their order,

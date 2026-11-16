@@ -29,8 +29,9 @@ import { MOON } from './moon-places.js';
 //
 // Ghosts (challenge-ghost.js): every run is recorded as it's driven and posted with its time, and a
 // run races a ghost: your own best's by default (this page's, from the run just posted, or the
-// Worker's), or with no best yet the board's leader's (to follow round, and to race), the one a
-// friend's link names, or the leader's (its row's Race). Splits against it at each gate and on the
+// Worker's), or with no best yet the board's quickest one to race (the Worker hands out the run of
+// one row alone: the quickest with its ghost kept and a time the game could plausibly be driven in,
+// to follow round, and to race), the one a friend's link names, or that row's (its Race). Splits against it at each gate and on the
 // finish card; a button on the HUD hides it (kept for the visit's next runs, and the next visit's).
 // "Challenge a friend" (the finish card, your own row of a board) shares a link to your best,
 // /c?challenge=&vs=<its handle> (LINK_PATH); a page opened on one shows its card (openLink) and
@@ -391,9 +392,10 @@ export function setUpChallenges( app ) {
 		rows.replaceChildren( ...top.map( row => {
 
 			const li = rowItem( row, own( row ) );
-			// Your own row: a link to your time, to share. The leader's (not yours): race their ghost.
+			// Your own row: a link to your time, to share. The one to race (the row the Worker hands out
+			// a run on, not yours): race their ghost.
 			if ( own( row ) && me.handle ) li.querySelector( '.who' ).append( shareButton( challenge, me.ms, me.handle ) );
-			else if ( row.rank === 1 && row.run && open ) {
+			else if ( row.run && ! own( row ) && open ) {
 
 				const button = el( 'button', 'link ch-race', 'Race their ghost' );
 				button.type = 'button';
@@ -725,7 +727,8 @@ export function setUpChallenges( app ) {
 	// The ghost for `spec` on `challenge`: { kind, name, data } (data: { run, ms, passes, vehicle,
 	// look, ghost }), or null when there's none to race. Your own best's: this page's (the run it
 	// posted), else the Worker's by its run (the list's me.run); with no best of yours yet, the board's
-	// leader's (the list's top row's run: a first run has the way round to follow, and a time to race);
+	// one to race (the list's top rows' one with a run: a first run has the way round to follow, and a
+	// time to race; none when none of them is plausible);
 	// a link's or the leader's, the Worker's by its run, taken only if it's as long as the time it's
 	// said to be (a run's ghost is kept by its run).
 	async function ghostData( challenge, spec ) {
@@ -736,7 +739,7 @@ export function setUpChallenges( app ) {
 			const mine = ownGhosts.get( challenge.id );
 			const listedOne = listed?.challenges.find( c => c.id === challenge.id );
 			const me = listedOne?.me;
-			const leader = listedOne?.top?.[ 0 ];
+			const leader = listedOne?.top?.find( row => row.run );
 			if ( mine && ( ! me || mine.ms <= me.ms ) ) return { kind: 'own', name: 'Your best', data: mine };
 			if ( me?.run ) asked = { kind: 'own', name: 'Your best', ms: me.ms, run: me.run };
 			else if ( ! me && ! mine && ! Number.isFinite( bests[ challenge.id ] ) && leader?.run ) asked = { kind: 'leader', name: leader.name, ms: leader.ms, run: leader.run };

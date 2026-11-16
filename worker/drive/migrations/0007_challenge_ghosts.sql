@@ -12,7 +12,10 @@ CREATE UNIQUE INDEX challenge_times_handle ON challenge_times ( challenge_id, ha
 
 -- The best's ghost on each challenge for each player: its run (the time's run_id), its time and
 -- passes (the splits a run against it is compared with), the ride and its Garage look, and the
--- path itself (ghost-rules.js's packing, as base64url text: a few kilobytes a minute, 48 KB at most).
+-- path itself (ghost-rules.js's packing, as base64url text: about 4.8 KB a minute, 64 KB at most)
+-- with its length (bytes: what it takes of the challenge's ghost_bytes, read without reading the
+-- text) and the least time the route allows along its passes (least_ms: leastTime, the crow's way
+-- at the game's top speed, boosted; a time near it isn't handed out as the one newcomers race).
 -- Replaced with the best, and gone with it (a cheat's time deleted takes its ghost), and gone for
 -- all once the challenge is finished (its final places written): nothing races a finished one.
 CREATE TABLE challenge_ghosts (
@@ -24,6 +27,8 @@ CREATE TABLE challenge_ghosts (
 	vehicle TEXT NOT NULL,
 	look TEXT NOT NULL DEFAULT '{}',
 	ghost TEXT NOT NULL,
+	bytes INTEGER NOT NULL,
+	least_ms INTEGER NOT NULL,
 	created_at INTEGER NOT NULL,
 	PRIMARY KEY ( challenge_id, player_id ),
 	FOREIGN KEY ( challenge_id, player_id ) REFERENCES challenge_times ( challenge_id, player_id ) ON DELETE CASCADE
@@ -33,8 +38,13 @@ CREATE TABLE challenge_ghosts (
 -- it): one row on its challenge.
 CREATE UNIQUE INDEX challenge_ghosts_run ON challenge_ghosts ( challenge_id, run_id );
 
+-- The slowest kept on a challenge, found when its ghosts are at CHALLENGE_GHOST_BUDGET and a new
+-- best's would go past it: they're let go, slowest first, to make room for a quicker one's.
+CREATE INDEX challenge_ghosts_ms ON challenge_ghosts ( challenge_id, ms );
+
 -- How much of its ghosts' text each challenge keeps (characters), added to as one is written and
--- taken off as one is let go (replaced by a better one's, or all as the challenge finishes): a new
--- best's ghost is kept only while this is under the Worker's CHALLENGE_GHOST_BUDGET, so however many
--- are posted, the ghosts can't fill the database.
+-- taken off as one is let go (replaced by a better one's, let go for a quicker one's, or all as the
+-- challenge finishes): a new best's ghost is kept only while this is under the Worker's
+-- CHALLENGE_GHOST_BUDGET, slower ones let go to make room for it, so however many are posted, the
+-- ghosts can't fill the database, and the quickest are the ones kept.
 ALTER TABLE challenges ADD COLUMN ghost_bytes INTEGER NOT NULL DEFAULT 0;

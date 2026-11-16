@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, Euler, Group, MathUtils, Matrix4, Mesh, Quaternion, SkinnedMesh, Vector2, Vector3 } from 'three';
+import { BufferAttribute, BufferGeometry, Euler, Group, MathUtils, Matrix3, Matrix4, Mesh, Quaternion, SkinnedMesh, Vector3 } from 'three';
 import { OBJECT_FRAME } from '3d-tiles-renderer';
 import { GHOST_BYTES, GHOST_EVERY, GHOST_SAMPLES, TURN, countFor, ghostText, packGhost, readGhost, sampleTime } from './ghost-rules.js';
 import { cleanLook } from './paint.js';
@@ -20,19 +20,29 @@ import { cleanLook } from './paint.js';
 // own clock from GO, between its samples, which are put into this scene once as the run starts.
 // Each frame it's moved and turned, and its name placed over it: no new draws but its own. And its
 // own are few: the model is made light once for each ride (lighten), its still parts merged into
-// one mesh for each of their materials and their vertices into cells of a few centimetres, so the
-// pickup, 219,000 triangles in 79 meshes as you drive it, races as a few thousand in a few draws.
+// one mesh for each of their materials and simplified (meshoptimizer's simplifier, loaded with the
+// first ghost raced: its own chunk, on neither the first load nor the challenges'), which keeps
+// each vertex it keeps as it was (its place, its normal, its place in its picture) and opens no
+// holes, so the pickup, 219,000 triangles in 79 meshes as you drive it, races as about 90,000 in 25
+// draws, and looks as it does close up. (Merging its vertices into cells of 10 cm instead, as this did
+// first, made it 22,000 triangles but smeared its pictures, opened holes and bent its shading.)
 
 // Within this of your car or the camera (m), it's see-through (as ghosts.js's are), and its name
 // shows within TAG_RANGE.
 const FADE_NEAR = 8;
 const TAG_RANGE = 400;
 const DEG = MathUtils.DEG2RAD;
-// A ghost's model made light (lighten): its still parts' vertices merged within cells of its longest
-// side over CELLS (the pickup's 5.4 m: 10 cm), those with their pictures' places within 1/UV_STEPS
-// of each other (so a picture's seams stay where they are).
-const CELLS = 56;
-const UV_STEPS = 64;
+// A ghost's model made light (lighten): each merged part simplified toward KEEP of its triangles,
+// stopping where a place would move more than ERROR of the part's size (the pickup's body, 5.4 m: 2
+// cm, under which a panel's layers stay in their order) or its normals or pictures' places would
+// change more than NORMAL_WEIGHT and UV_WEIGHT weigh them (a tyre's tread, finer than the triangles
+// left, isn't stretched); so a part with fine detail keeps more. Parts under SIMPLE_FROM triangles
+// are only merged.
+const KEEP = 0.1;
+const ERROR = 0.004;
+const NORMAL_WEIGHT = 1;
+const UV_WEIGHT = 16;
+const SIMPLE_FROM = 300;
 // The light parts made, by the ride and which of its meshes went into each (the same ride in the same
 // look: the same), kept for the page's life (a few rides' worth).
 const lightened = new Map();
@@ -49,8 +59,11 @@ const _own = new Vector3();
 const _tag = new Vector3();
 const _quat = [ 0, 0, 0, 0 ];
 const _inverse = new Matrix4();
-const _uv = new Vector2();
+const _normals = new Matrix3();
+const _n = new Vector3();
 const _forward = new Vector3();
+// meshoptimizer's simplifier, once asked for (a promise of it, or of null where it can't run).
+let simplifier = null;
 
 // The matrix from this scene to the ghost's frame on `world`: the route's `start` on the globe's
 // ellipsoid at height 0 (3d-tiles-renderer's object frame, as main.js centres the scene at a place:
@@ -245,7 +258,9 @@ export function createRaceGhost( { scene, models, tags, name } ) {
 			}
 
 			model = built;
-			lighten( model );
+			await lighten( model );
+			// (Done with while it was made light: dispose() has let it go.)
+			if ( gone ) return false;
 			model.pivot.visible = false;
 			group.add( model.pivot );
 			return true;
@@ -399,14 +414,14 @@ export function createRaceGhost( { scene, models, tags, name } ) {
 
 // A ghost's `model` (ghostModels' build) made light to draw, in place: its meshes merged into one
 // for each material and painted part on whatever carries them (the model itself, or a part the
-// ride's own animation moves, such as a wheel, found by running it once), their vertices merged
-// within cells (CELLS) and the triangles left between three cells kept. Decals, the underglow, glass
-// and a part moved by itself stay as they were; a skinned mesh is merged as its bones hold it (a
-// ride's file's are never moved). Made once for each ride and grouping (lightened), shared by
-// every ghost of it after.
-function lighten( model ) {
+// ride's own animation moves, such as a wheel, found by running it once), each simplified (merged).
+// Decals, the underglow, glass and a part moved by itself stay as they were; a skinned mesh is
+// merged as its bones hold it (a ride's file's are never moved). Made once for each ride and
+// grouping (lightened), shared by every ghost of it after.
+async function lighten( model ) {
 
 	const { pivot, animators, vehicle } = model;
+	const simplify = await loadSimplifier();
 	pivot.updateMatrixWorld( true );
 	const moving = movingParts( pivot, animators );
 	const orders = new Map();
@@ -423,7 +438,6 @@ function lighten( model ) {
 		groups.get( key ).meshes.push( o );
 
 	} );
-	const size = Math.max( model.size.width, model.size.height, model.size.length );
 	for ( const { carrier, material, paint, uv, meshes } of groups.values() ) {
 
 		const key = `${ vehicle.id ?? vehicle.name }|${ orders.get( carrier ) }|${ meshes.map( mesh => orders.get( mesh ) ).join( ',' ) }`;
@@ -431,7 +445,7 @@ function lighten( model ) {
 		if ( ! geometry ) {
 
 			_inverse.copy( carrier.matrixWorld ).invert();
-			geometry = merged( meshes, uv, size / CELLS / carrier.getWorldScale( _p ).x );
+			geometry = merged( meshes, uv, simplify );
 			geometry.userData.shared = true;
 			lightened.set( key, geometry );
 
@@ -454,6 +468,24 @@ function lighten( model ) {
 	}
 
 	pivot.updateMatrixWorld( true );
+
+}
+
+// meshoptimizer's simplifier, loaded once (a chunk of its own, about 20 KB gzipped with its
+// WebAssembly), or null where it can't be (no WebAssembly, the chunk not loading): then a ghost's
+// parts are only merged.
+function loadSimplifier() {
+
+	simplifier ??= import( 'meshoptimizer/simplifier' )
+		.then( async ( { MeshoptSimplifier } ) => {
+
+			if ( ! MeshoptSimplifier.supported ) return null;
+			await MeshoptSimplifier.ready;
+			return MeshoptSimplifier;
+
+		} )
+		.catch( () => null );
+	return simplifier;
 
 }
 
@@ -492,109 +524,102 @@ function still( o, pivot ) {
 
 }
 
-// `meshes` as one geometry in the frame of what carries them (_inverse), their vertices merged
-// within cells `cell` across (to the cell's middle, as many as fall in it) and, with `uv`, within
-// 1/UV_STEPS of each other in their pictures; a triangle whose corners fall in fewer than three cells
-// is left out. Its normals made afresh.
-function merged( meshes, uv, cell ) {
+// `meshes` as one geometry in the frame of what carries them (_inverse): their places, normals and
+// (with `uv`) pictures' places as they were, their triangles as drawn (a mirrored mesh's turned the
+// right way round, as three.js draws it), simplified with `simplify` (meshoptimizer's, or null for
+// none) to about KEEP of them, and only the vertices still used kept.
+function merged( meshes, uv, simplify ) {
 
-	const cells = new Map();
-	const sums = [];
-	const placed = meshes.map( mesh => {
+	let count = 0;
+	let corners = 0;
+	for ( const { geometry } of meshes ) {
+
+		count += geometry.attributes.position.count;
+		corners += ( geometry.index ?? geometry.attributes.position ).count;
+
+	}
+
+	const normaled = meshes.every( mesh => mesh.geometry.attributes.normal );
+	const positions = new Float32Array( count * 3 );
+	// Each vertex's normal and picture's place, together: what the simplifier weighs besides places.
+	const stride = uv ? 5 : 3;
+	const attributes = new Float32Array( count * stride );
+	const index = new Uint32Array( corners );
+	let first = 0;
+	let at = 0;
+	for ( const mesh of meshes ) {
 
 		_m.multiplyMatrices( _inverse, mesh.matrixWorld );
-		const position = mesh.geometry.attributes.position;
-		const at = new Float64Array( position.count * 3 );
-		const into = new Int32Array( position.count );
+		_normals.getNormalMatrix( _m );
+		const { position, normal, uv: pictured } = mesh.geometry.attributes;
 		const skinned = mesh.isSkinnedMesh && mesh.geometry.attributes.skinIndex ? mesh : null;
 		for ( let i = 0; i < position.count; i ++ ) {
 
+			const v = first + i;
 			_p.fromBufferAttribute( position, i );
 			skinned?.applyBoneTransform( i, _p );
-			_p.applyMatrix4( _m ).toArray( at, i * 3 );
-			const key = ( ( Math.floor( _p.x / cell ) + 1024 ) * 2048 + Math.floor( _p.y / cell ) + 1024 ) * 2048 + Math.floor( _p.z / cell ) + 1024;
-			let slot = cells.get( key );
-			if ( slot === undefined ) {
-
-				slot = sums.length / 4;
-				cells.set( key, slot );
-				sums.push( 0, 0, 0, 0 );
-
-			}
-
-			sums[ slot * 4 ] += _p.x;
-			sums[ slot * 4 + 1 ] += _p.y;
-			sums[ slot * 4 + 2 ] += _p.z;
-			sums[ slot * 4 + 3 ] ++;
-			into[ i ] = slot;
-
-		}
-
-		return { mesh, into };
-
-	} );
-	const vertices = new Map();
-	const positions = [];
-	const uvs = [];
-	const index = [];
-	const corner = [ 0, 0, 0 ];
-	for ( const { mesh, into } of placed ) {
-
-		const { attributes, index: drawn } = mesh.geometry;
-		const pictured = attributes.uv;
-		const ids = new Int32Array( into.length );
-		for ( let i = 0; i < into.length; i ++ ) {
-
-			const slot = into[ i ];
-			let key = slot;
+			_p.applyMatrix4( _m ).toArray( positions, v * 3 );
+			if ( normaled ) _n.fromBufferAttribute( normal, i ).applyMatrix3( _normals ).normalize().toArray( attributes, v * stride );
 			if ( uv ) {
 
-				_uv.fromBufferAttribute( pictured, i );
-				const u = MathUtils.euclideanModulo( Math.floor( _uv.x * UV_STEPS ), UV_STEPS );
-				const v = MathUtils.euclideanModulo( Math.floor( _uv.y * UV_STEPS ), UV_STEPS );
-				key = slot * UV_STEPS * UV_STEPS + u * UV_STEPS + v;
+				attributes[ v * stride + 3 ] = pictured.getX( i );
+				attributes[ v * stride + 4 ] = pictured.getY( i );
 
 			}
 
-			let id = vertices.get( key );
-			if ( id === undefined ) {
+		}
 
-				id = positions.length / 3;
-				vertices.set( key, id );
-				const n = sums[ slot * 4 + 3 ];
-				positions.push( sums[ slot * 4 ] / n, sums[ slot * 4 + 1 ] / n, sums[ slot * 4 + 2 ] / n );
-				if ( uv ) uvs.push( _uv.x, _uv.y );
+		const drawn = mesh.geometry.index;
+		const n = ( drawn ?? position ).count;
+		// (A mirrored mesh's second and third corners swapped, so its faces face out as three.js draws
+		// them.)
+		const mirrored = _m.determinant() < 0;
+		for ( let k = 0; k < n; k ++ ) {
 
-			}
-
-			ids[ i ] = id;
+			const corner = mirrored && k % 3 ? ( k % 3 === 1 ? k + 1 : k - 1 ) : k;
+			index[ at + k ] = first + ( drawn ? drawn.getX( corner ) : corner );
 
 		}
 
-		const triangles = ( drawn ? drawn.count : into.length ) / 3;
-		for ( let t = 0; t < triangles; t ++ ) {
+		first += position.count;
+		at += n;
 
-			for ( let k = 0; k < 3; k ++ ) corner[ k ] = ids[ drawn ? drawn.getX( t * 3 + k ) : t * 3 + k ];
-			if ( into[ vertexOf( drawn, t, 0 ) ] === into[ vertexOf( drawn, t, 1 ) ] || into[ vertexOf( drawn, t, 1 ) ] === into[ vertexOf( drawn, t, 2 ) ] || into[ vertexOf( drawn, t, 0 ) ] === into[ vertexOf( drawn, t, 2 ) ] ) continue;
-			index.push( corner[ 0 ], corner[ 1 ], corner[ 2 ] );
+	}
 
-		}
+	let kept = index;
+	if ( simplify && corners >= SIMPLE_FROM * 3 ) {
+
+		const weights = [ NORMAL_WEIGHT, NORMAL_WEIGHT, NORMAL_WEIGHT, ...uv ? [ UV_WEIGHT, UV_WEIGHT ] : [] ];
+		[ kept ] = simplify.simplifyWithAttributes( index, positions, 3, attributes, stride, normaled ? weights : weights.map( () => 0 ), null, Math.floor( corners * KEEP / 3 ) * 3, ERROR );
+
+	}
+
+	// Only the vertices still used, in the order they're first used.
+	const remap = new Int32Array( count ).fill( - 1 );
+	let used = 0;
+	for ( let k = 0; k < kept.length; k ++ ) if ( remap[ kept[ k ] ] < 0 ) remap[ kept[ k ] ] = used ++;
+	const place = new Float32Array( used * 3 );
+	const facing = new Float32Array( used * 3 );
+	const picture = uv ? new Float32Array( used * 2 ) : null;
+	for ( let v = 0; v < count; v ++ ) {
+
+		const to = remap[ v ];
+		if ( to < 0 ) continue;
+		place.set( positions.subarray( v * 3, v * 3 + 3 ), to * 3 );
+		facing.set( attributes.subarray( v * stride, v * stride + 3 ), to * 3 );
+		if ( picture ) picture.set( attributes.subarray( v * stride + 3, v * stride + 5 ), to * 2 );
 
 	}
 
 	const geometry = new BufferGeometry();
-	geometry.setAttribute( 'position', new BufferAttribute( new Float32Array( positions ), 3 ) );
-	if ( uv ) geometry.setAttribute( 'uv', new BufferAttribute( new Float32Array( uvs ), 2 ) );
-	geometry.setIndex( new BufferAttribute( positions.length / 3 > 65535 ? new Uint32Array( index ) : new Uint16Array( index ), 1 ) );
-	geometry.computeVertexNormals();
+	geometry.setAttribute( 'position', new BufferAttribute( place, 3 ) );
+	if ( normaled ) geometry.setAttribute( 'normal', new BufferAttribute( facing, 3 ) );
+	if ( picture ) geometry.setAttribute( 'uv', new BufferAttribute( picture, 2 ) );
+	const drawn = used > 65535 ? new Uint32Array( kept.length ) : new Uint16Array( kept.length );
+	for ( let k = 0; k < kept.length; k ++ ) drawn[ k ] = remap[ kept[ k ] ];
+	geometry.setIndex( new BufferAttribute( drawn, 1 ) );
+	if ( ! normaled ) geometry.computeVertexNormals();
 	geometry.computeBoundingSphere();
 	return geometry;
-
-}
-
-// Triangle `t`'s `k`th corner's vertex in a geometry drawn by `index` (or none: in order).
-function vertexOf( index, t, k ) {
-
-	return index ? index.getX( t * 3 + k ) : t * 3 + k;
 
 }

@@ -817,13 +817,15 @@ driven 40 s is told of today's challenge on its world, with a button to them (se
 [Challenges](docs/world-drive.md#challenges)).
 
 **Ghosts and "challenge a friend"**: every challenge run is recorded as it's driven (where the car
-is and which way it faces, ten times a second, packed to about 4 KB a minute) and posted with its
+is and which way it faces, ten times a second, packed to about 3.6 KB a minute, 4.8 KB as posted
+text) and posted with its
 time; the Worker takes the time only if its ghost agrees with it (through each gate at its pass
 time, as long as the time, never faster between two samples than the game goes) and keeps the
-best's ghost (16 MB of them a challenge at most). A run races a ghost car in its ride and Garage
-look, its model made light (the pickup's 219,000 triangles to 22,000), its wheels turning: your own
-best by default (with none yet, the board's leader's), a friend's from their link, or the leader's
-from the board, with splits at each gate ("-1.2 s") and on the finish card, and a button to hide
+best's ghost (16 MB of them a challenge at most, the slowest let go first to make room). A run races
+a ghost car in its ride and Garage look, its model made light (the pickup's 219,000 triangles to
+90,000 in 25 draws, simplified as it looks), its wheels turning: your own best by default (with none
+yet, the board's quickest time the game could plausibly be driven in), a friend's from their link,
+or that one from the board, with splits at each gate ("-1.2 s") and on the finish card, and a button to hide
 it. **Challenge a friend** (the finish card, your own row of a board) shares
 `/c?challenge=<id>&vs=<handle>`, the handle an HMAC the Worker makes once and keeps (never the
 player's id), through the browser's share sheet or copied; the page opens on it with "Ann's time

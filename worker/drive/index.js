@@ -20,9 +20,9 @@ export { DriveLimits } from './limits.js';
 export { DriveRoom } from './live.js';
 
 // The Cloudflare Worker behind World Drive (worlddrive.app, docs/world-drive.md). It only runs
-// for /api/* and the home page itself (/, for a "challenge a friend" link's preview in chat apps:
-// any other is the page as it is); the rest of the site (npm run build:drive, dist-drive/) is served
-// straight from Cloudflare's assets. Its job is to keep Google's bill in check: every page that loads Google's
+// for /api/* and /c (LINK_PATH: a "challenge a friend" link's page, the home page with a preview
+// card of its own for chat apps); the rest of the site (npm run build:drive, dist-drive/), the home
+// page included, is served straight from Cloudflare's assets. Its job is to keep Google's bill in check: every page that loads Google's
 // 3D tiles starts a billed Maps session, so the Maps key is handed out once per visit, only to a
 // browser that passed Turnstile, and only while today's visits are under the caps. It also keeps
 // the leaderboard (players.js, scores.js) in a D1 database: nicknames and each player's best stunt
@@ -73,7 +73,8 @@ export { DriveRoom } from './live.js';
 //                         same key;
 //                         CHALLENGE_TIMES_PER_VISITOR_DAILY the times a visitor may post a day (300
 //                         if unset), CHALLENGE_TIMES_PER_VISIT the times a visit may post (100 if
-//                         unset) (challenges.js)
+//                         unset), CHALLENGE_GHOST_BUDGET the most of its ghosts' text a challenge
+//                         keeps (16,777,216 characters if unset) (challenges.js)
 //   TURNSTILE_VERIFY_URL, SEARCH_UPSTREAM, TEST_CLOCK, GOOGLE_JWKS_URL   tests only (see
 //                         scripts/test-drive-worker.mjs)
 

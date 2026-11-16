@@ -89,7 +89,7 @@
 // TEST_SCREENSHOTS=<folder> saves pictures.
 
 import assert from 'node:assert/strict';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -7200,18 +7200,24 @@ describe( 'World Drive challenges', () => {
 		// Driven through; and from the line on, with the card up and the car still going (40 m/s),
 		// the booster fired again every frame, as Shift pressed under the card would: put out every
 		// frame (never still lit once the game's frame is done), the car only slowing from the line.
-		const { ms, line, fastest, lit, frames } = await page.evaluate( () => new Promise( resolve => {
+		// (And where the car's model was each frame, on the run's clock: what its recording is checked
+		// against below.)
+		const { ms, line, fastest, lit, frames, track } = await page.evaluate( () => new Promise( resolve => {
 
 			const d = window.drive.driver;
 			let line = null;
 			let fastest = 0;
 			let lit = 0;
 			let frames = 0;
+			const track = [];
 			const step = () => {
 
 				const { run } = window.drive.challenges;
 				if ( run.phase === 'racing' ) {
 
+					const pivot = window.drive.entry.pivot;
+					const at = pivot.getWorldPosition( pivot.position.clone() );
+					track.push( [ run.clock * 1000, - at.x, at.z ] );
 					const next = run.gates.find( gate => ! gate.passed );
 					const heading = Math.atan2( - next.x - d.east, next.z - d.north ) * 180 / Math.PI;
 					Object.assign( d, { heading, course: heading, view: heading, speed: 40 } );
@@ -7222,7 +7228,7 @@ describe( 'World Drive challenges', () => {
 					frames ++;
 					if ( d.firing ) lit ++;
 					fastest = Math.max( fastest, Math.abs( d.speed ) );
-					if ( d.clock - line.clock > 1.5 ) return resolve( { ms: run.ms, line: line.speed, fastest, lit, frames } );
+					if ( d.clock - line.clock > 1.5 ) return resolve( { ms: run.ms, line: line.speed, fastest, lit, frames, track } );
 					d.fireBooster();
 
 				}
@@ -7251,6 +7257,25 @@ describe( 'World Drive challenges', () => {
 		assert.equal( ghostFault( CHALLENGES[ 0 ], posted.ms, posted.passes, posted.ghost ), '' );
 		const recorded = readGhost( posted.ghost );
 		assert.deepEqual( [ recorded.every, recorded.count ], [ 100, Math.floor( ms / 100 ) + 2 ] );
+		// Each sample where the car was at its time on the run's clock: between the frames either side of
+		// it (where the car's model was at each, the scene's frame here the route's start's: east -x,
+		// north z), found as far between them as its time is, to a few centimetres. (Not the frame's own
+		// place: at 40 m/s a frame of 16 to 100 ms is metres on.)
+		let compared = 0;
+		let worst = 0;
+		for ( let i = 1; i < recorded.count - 1; i ++ ) {
+
+			const t = sampleTime( i, recorded.count, recorded.every, ms );
+			const after = track.findIndex( ( [ at ] ) => at >= t );
+			if ( after < 1 || track[ after ][ 0 ] === track[ after - 1 ][ 0 ] ) continue;
+			const [ [ t0, e0, n0 ], [ t1, e1, n1 ] ] = [ track[ after - 1 ], track[ after ] ];
+			const u = ( t - t0 ) / ( t1 - t0 );
+			worst = Math.max( worst, Math.hypot( recorded.east[ i ] / 100 - ( e0 + ( e1 - e0 ) * u ), recorded.north[ i ] / 100 - ( n0 + ( n1 - n0 ) * u ) ) );
+			compared ++;
+
+		}
+
+		assert.ok( compared > recorded.count / 2 && worst < 0.05, JSON.stringify( { compared, count: recorded.count, worst } ) );
 		assert.equal( typeof posted.look, 'object' );
 		// About 330 m at 40 m/s, less the gates' radii.
 		assert.ok( ms > 5000 && ms < 12000, String( ms ) );
@@ -8013,12 +8038,16 @@ describe( 'World Drive challenges', () => {
 		await dialog.locator( '.ch-rows li.me .ch-share' ).click();
 		await page.waitForFunction( () => window.shared.length === 2 );
 		assert.deepEqual( await page.evaluate( () => window.shared[ 1 ] ), { title: 'World Drive challenge', text: 'Beat my 0:48.20 on this week\'s Furka Pass star hunt in World Drive', url: `${ BASE }/c?challenge=13&vs=OwnHandle1300000` } );
-		// The leader's row (not yours): race their ghost, by its run.
+		// The row the Worker hands out a run on (not yours): race their ghost, by its run. Here not the
+		// first: the time on top is too quick to be plausible, so it has none (worker/drive/challenges.js,
+		// PLAUSIBLE), and no button.
 		const leader = friendRun( CHALLENGES[ 0 ], 25, 'leaderRun1100000' );
-		await page.route( `${ BASE }/api/challenges/board?challenge=11*`, route => route.fulfill( { contentType: 'application/json', body: JSON.stringify( { challenge: listed()[ 0 ], total: 5, rows: [ row( 1, 'Driver 1', leader.ms, { run: leader.run } ), row( 2, 'Ann Racer', 23900 ) ], me: null } ) } ) );
+		await page.route( `${ BASE }/api/challenges/board?challenge=11*`, route => route.fulfill( { contentType: 'application/json', body: JSON.stringify( { challenge: listed()[ 0 ], total: 5, rows: [ row( 1, 'Too Quick', 6000 ), row( 2, 'Driver 1', leader.ms, { run: leader.run } ), row( 3, 'Ann Racer', 23900 ) ], me: null } ) } ) );
 		await dialog.locator( '.ch-back' ).click();
 		await dialog.locator( '.ch-card[data-id="11"] .ch-board-open' ).click();
-		await dialog.locator( '.ch-rows li' ).first().locator( '.ch-race' ).click();
+		await dialog.locator( '.ch-rows li' ).nth( 2 ).waitFor();
+		assert.deepEqual( await dialog.locator( '.ch-rows li' ).evaluateAll( items => items.map( li => !! li.querySelector( '.ch-race' ) ) ), [ false, true, false ] );
+		await dialog.locator( '.ch-rows li' ).nth( 1 ).locator( '.ch-race' ).click();
 		await page.waitForFunction( () => window.drive.challenges.race?.ready, null, { timeout: 60000 } );
 		assert.deepEqual( await page.evaluate( () => [ window.drive.challenges.race.name, window.drive.challenges.race.kind ] ), [ 'Driver 1', 'leader' ] );
 		assert.ok( page.ghostsAsked.includes( '?challenge=11&run=leaderRun1100000' ), page.ghostsAsked.join( ' ' ) );
@@ -8092,10 +8121,10 @@ describe( 'World Drive challenges', () => {
 
 	} );
 
-	test( 'a first run (no best yet) races the board\'s leader\'s ghost, to follow round; a ghost asked for that can\'t be had (a friend\'s, bettered since) is said as the run starts, and the run goes on without it', async () => {
+	test( 'a first run (no best yet) races the ghost of the board\'s row the Worker hands a run out on (its quickest plausible one, not a made-up leader\'s), to follow round; a ghost asked for that can\'t be had (a friend\'s, bettered since) is said as the run starts, and the run goes on without it', async () => {
 
 		const leader = friendRun( CHALLENGES[ 0 ], 25, 'leaderRun1100000' );
-		let page = await challengePage( { changed: { 11: { top: [ row( 1, 'Speedy', leader.ms, { run: leader.run } ), row( 2, 'Ann Racer', 23900 ) ] } }, ghosts: { [ leader.run ]: padGhost( 25, leader.run ) } } );
+		let page = await challengePage( { changed: { 11: { top: [ row( 1, 'Too Quick', 6000 ), row( 2, 'Speedy', leader.ms, { run: leader.run } ), row( 3, 'Ann Racer', 23900 ) ] } }, ghosts: { [ leader.run ]: padGhost( 25, leader.run ) } } );
 		await page.locator( '#globe-ui .challenges-open' ).click();
 		await page.locator( '.ch-card' ).first().waitFor();
 		await start( page, 11 );
@@ -8206,6 +8235,98 @@ describe( 'World Drive challenges', () => {
 		await page.locator( '.ch-finish' ).waitFor();
 		assert.equal( await page.locator( '.ch-f-vs' ).textContent(), `${ ( ( friend.ms - ms ) / 1000 ).toFixed( 2 ) } s quicker than Ann Racer's ${ formatTime( friend.ms ) }` );
 		await shot( page, 'challenges-link-3-finish' );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'the pickup\'s ghost (the default ride, so the one most races are against), made light: well under half its triangles in a few draws, its normals as the file has them, and close up as it looks (a picture to look at, TEST_SCREENSHOTS\'s challenges-ghost-pickup-close)', async t => {
+
+		const friend = friendRun( CHALLENGES[ 0 ], 25 );
+		const link = url => url.searchParams.get( 'challenge' ) === '11' ? { status: 200, body: { challenge: { ...listed()[ 0 ], replacedAt: null, finalAt: null }, vs: { name: 'Ann Racer', ms: friend.ms, vehicle: 'pickup-truck', run: friend.run, ghost: true, date: '2026-11-16', level: 4, title: 'rookie' } } } : null;
+		const pickup = async page => ( { ...await padGhost( 25 )( page ), vehicle: 'pickup-truck', look: {} } );
+		const page = await challengePage( { path: '/c?challenge=11&vs=FriendHandle0001', link, ghosts: { [ friend.run ]: pickup } } );
+		const card = page.locator( '#challenges .ch-link' );
+		await card.waitFor();
+		const began = Date.now();
+		await card.locator( '.ch-start' ).click();
+		await page.waitForFunction( () => window.drive.challenges.race?.ready && window.drive.challenges.run, null, { timeout: 120000 } );
+		t.diagnostic( `the pickup's ghost ready ${ Date.now() - began } ms after Start (its model loaded and made light, in SwiftShader on a shared machine)` );
+		// Its parts: well under half the 219,000 triangles you drive (about 90,000), in a few draws, with
+		// its normals (unit length, as the file has them).
+		const light = await page.evaluate( () => {
+
+			const parts = [];
+			window.drive.challenges.race.pivot.traverse( o => o.isMesh && parts.push( o ) );
+			let unit = 0;
+			let normals = 0;
+			for ( const { geometry } of parts ) {
+
+				const normal = geometry.attributes.normal;
+				for ( let i = 0; i < normal.count; i ++, normals ++ ) if ( Math.abs( Math.hypot( normal.getX( i ), normal.getY( i ), normal.getZ( i ) ) - 1 ) < 1e-3 ) unit ++;
+
+			}
+
+			return { meshes: parts.length, triangles: window.drive.challenges.race.triangles, unit: unit / normals };
+
+		} );
+		t.diagnostic( `the pickup's ghost: ${ JSON.stringify( light ) }` );
+		await page.waitForFunction( () => window.drive.challenges.run?.phase === 'racing', null, { timeout: 60000 } );
+		// Close up from behind, as a driver chasing it sees it: the camera narrowed onto it, 11 m ahead.
+		const picture = await page.evaluate( () => new Promise( resolve => {
+
+			const step = () => {
+
+				const { run, race } = window.drive.challenges;
+				if ( run.clock * 1000 < 450 ) return requestAnimationFrame( step );
+				const { camera, renderer, scene } = window.drive;
+				const fov = camera.fov;
+				camera.fov = 7;
+				camera.updateProjectionMatrix();
+				camera.lookAt( race.pivot.position.clone().add( { x: 0, y: 0.8, z: 0 } ) );
+				camera.updateMatrixWorld();
+				renderer.render( scene, camera );
+				const url = renderer.domElement.toDataURL( 'image/png' );
+				camera.fov = fov;
+				camera.updateProjectionMatrix();
+				resolve( { url, faded: race.faded, visible: race.pivot.visible } );
+
+			};
+			step();
+
+		} ) );
+		assert.ok( picture.visible && ! picture.faded, JSON.stringify( { ...picture, url: undefined } ) );
+		if ( SHOTS ) writeFileSync( join( SHOTS, 'challenges-ghost-pickup-close.png' ), Buffer.from( picture.url.split( ',' )[ 1 ], 'base64' ) );
+		assert.ok( light.meshes < 40 && light.triangles > 20000 && light.triangles < 110000 && light.unit > 0.99, JSON.stringify( light ) );
+		// What it costs a frame (the median of seven, shown and hidden by its button: noisy here).
+		const cost = await page.evaluate( async () => {
+
+			const frame = () => new Promise( resolve => requestAnimationFrame( resolve ) );
+			const toggle = document.querySelector( '#drive-ui .ch-ghost-toggle' );
+			const median = async () => {
+
+				await frame();
+				const times = [];
+				let last = performance.now();
+				for ( let i = 0; i < 7; i ++ ) {
+
+					await frame();
+					times.push( performance.now() - last );
+					last = performance.now();
+
+				}
+
+				return times.sort( ( a, b ) => a - b )[ 3 ];
+
+			};
+			const shown = await median();
+			toggle.click();
+			const hidden = await median();
+			toggle.click();
+			return { shown, hidden };
+
+		} );
+		t.diagnostic( `a frame with the pickup's ghost drawn and not (median ms, SwiftShader): ${ JSON.stringify( cost ) }` );
 		assert.deepEqual( page.errors, [] );
 		await page.context().close();
 
