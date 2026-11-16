@@ -520,6 +520,9 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace, on
 			return dialog.open;
 
 		},
+		// A new player, or a new name for this one, as the panel's form picks it (true if it worked;
+		// say( text ) tells how it went): a challenge's finish card asks for a name with it.
+		pickName,
 		get player() {
 
 			return player;

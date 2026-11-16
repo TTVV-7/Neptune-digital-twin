@@ -18,6 +18,9 @@
 	and a table of the top places, for today, the week, the month or longer. The maps are the game's
 	own files: Natural Earth's land and sea (/sea/mask.bin, as src/drive-app/sea.js reads it) and the
 	Moon's picture (/moon/colour.webp), fetched only when that map is first shown.
+	And challenges (docs/world-drive.md, "Challenges"): GET /api/admin/challenges, the six live and
+	the six next up, and POST to choose any period's challenge by hand, put one back to the rotation,
+	and approve busy drop-in places for the rotation (worker/drive/challenges.js).
 -->
 <style>
 	:root {
@@ -108,6 +111,35 @@
 	.top-places .tag { font-size: 11px; color: var(--accent); border: 1px solid var(--accent); border-radius: 4px; padding: 0 4px; margin-left: 4px; white-space: nowrap; }
 	.top-more { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 6px; }
 	@media (max-width: 520px) { .top-places .wide-only { display: none; } }
+	/* Challenges: the live ones and the next, a form to choose one, and the busy places to approve. */
+	.challenges { margin-top: 12px; }
+	.ch-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+	.ch-table th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 4px 8px 4px 0; border-bottom: 1px solid var(--line); }
+	.ch-table td { padding: 6px 8px 6px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+	.ch-table td:first-child { white-space: nowrap; }
+	.ch-table tr:last-child td { border-bottom: 0; }
+	.ch-table .act { width: 1%; white-space: nowrap; text-align: right; padding-right: 0; }
+	.ch-table .act button { padding: 4px 9px; font-size: 13px; }
+	.ch-tag { font-size: 11px; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; margin-left: 4px; white-space: nowrap; color: var(--muted); }
+	.ch-tag.owner { color: var(--accent); border-color: var(--accent); }
+	.ch-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 10px 14px; margin-top: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; }
+	.ch-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); min-width: 0; }
+	.ch-form input, .ch-form select { font: inherit; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); min-width: 0; max-width: 100%; }
+	.ch-form .full { grid-column: 1 / -1; }
+	.ch-form .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+	.ch-form .row label { flex: 1 1 160px; }
+	.ch-form .row label.narrow { flex: 0 1 90px; }
+	.ch-form .row label.day { flex-basis: 120px; }
+	.ch-form [hidden] { display: none; }
+	.ch-warn { border: 1px solid var(--down); border-radius: 8px; padding: 8px 10px; color: var(--text); }
+	.ch-warn p { margin: 0 0 8px; }
+	.ch-warn b { color: var(--down); }
+	@media (max-width: 520px) {
+		.ch-table .wide-only, .ch-table .key { display: none; }
+		/* Two buttons a row: one over the other. */
+		.ch-table .act.two { white-space: normal; }
+		.ch-table .act.two button { display: block; width: 100%; margin: 0 0 4px; }
+	}
 </style>
 </head>
 <body>
@@ -150,6 +182,36 @@
 		<div id="places-top"></div>
 		<p class="note">Each drop-in's place to about a kilometre: the cell of a grid 1 km each way that it was in, never where in it, counted a day with nothing of who. A visitor counts once a day in each cell, so these are fewer than the drop-ins above, and not people: one visitor at three places in a day counts three. A place's count over one day is its visitors; over longer, its visitor-days. A start spot's cells are one place in the table. Your own visits (this page's accounts) aren't counted. Drag to move the map; click it, then scroll to zoom (or Ctrl and scroll), or use + and −; on a phone, pinch, drag, or the buttons. The map is about 5 km squares zoomed in: a place's name in the table shows it on the map, and Drive opens the game there, street by street.</p>
 	</section>
+	<section class="card challenges" id="challenges" aria-labelledby="challenges-title" hidden>
+		<h2 id="challenges-title">Challenges</h2>
+		<p class="muted small" id="ch-now"></p>
+		<h3>Live now</h3>
+		<div id="ch-live"></div>
+		<h3>Next up</h3>
+		<div id="ch-next"></div>
+		<h3>Your picks ahead</h3>
+		<div id="ch-picks"></div>
+		<h3>Choose one</h3>
+		<form class="ch-form" id="ch-form">
+			<label>Period <select name="period" id="ch-period"></select></label>
+			<div class="row"><label class="day">Or another day <input type="date" name="date" id="ch-date"></label><label class="narrow">Its <select name="dateKind" id="ch-date-kind"><option value="day">Day</option><option value="week">Week</option><option value="month">Month</option></select></label></div>
+			<label>World <select name="world" id="ch-world"><option value="earth">Earth</option><option value="moon">Moon</option></select></label>
+			<label>Kind <select name="kind" id="ch-kind"><option value="sprint">Checkpoint sprint</option><option value="collect">Collect them all</option><option value="landmark">Drive to a landmark</option></select></label>
+			<label class="full">Place <select name="place" id="ch-place"></select></label>
+			<div class="full row" id="ch-custom" hidden>
+				<label>Name <input name="name" maxlength="60" placeholder="Lombard Street"></label>
+				<label>Region <input name="region" maxlength="60" placeholder="San Francisco, USA"></label>
+				<label>Latitude <input name="lat" inputmode="decimal" placeholder="37.8021"></label>
+				<label>Longitude <input name="lon" inputmode="decimal" placeholder="-122.4187"></label>
+				<label>Heading (optional, ° from north along its road) <input name="heading" inputmode="decimal" placeholder="90"></label>
+			</div>
+			<div class="full row"><button type="submit">Save</button><button type="button" id="ch-rotate">Back to the rotation</button><span class="muted small ch-say" id="ch-say" role="status"></span></div>
+			<div class="full ch-warn" id="ch-warn" hidden></div>
+		</form>
+		<h3>Busy drop-in places for the rotation</h3>
+		<div id="ch-busy"></div>
+		<p class="note">The rotation goes round the game's own places (the start spots, the places' pages and the Moon's places) and the busy drop-in places approved here, a new order each time round, one a period; a period's challenge is fixed the first time anyone asks for it, so nothing changed here changes a live one, unless you change that one, which starts a new board (the old one is kept apart). Busy places are where people drop in that aren't the game's own: anyone with many addresses can push one up the list, so none goes into the rotation without your approval. Your own runs (this page's accounts) are taken but kept off the boards, as you know each place and kind before it's live, and choose them. Back to the rotation on a live one the rotation chose leaves it as it is (it's the rotation's already).</p>
+	</section>
 	<div id="more"></div>
 	<p class="muted" style="margin-top:24px;font-size:13px">Counts only, nothing of who. Days are UTC, and each period ends with today so far. ▲ and ▼ compare with the as many days just before it. Referrers, countries and page speed in more detail are in Cloudflare's dashboard (Web Analytics).</p>
 </main>
@@ -179,6 +241,7 @@
 		dropin: 'Drop-ins by place', ride: 'Drop-ins by ride', play: 'Play time by ride (s)', play_with_others: 'Play with others (s)', play_world: 'Play time by world (s)',
 		garage_open: 'Garage opened', garage_edit: 'Garage changes', party: 'Parties', funnel: 'Funnel steps', device: 'Devices', world: 'Turns to the Moon',
 		search: 'Searches', dropin_time: 'Drop-in time (buckets)', problem: 'Problems', board: 'Leaderboard', pass: 'Supporter Pass', level_up: 'Level-ups',
+		challenge: 'Challenges (opened, started, finished, posted; the word while driving said, and its button pressed)',
 		players: 'New players (nicknames)', scores: 'New bests (scores log)', accounts: 'New Google accounts', purchases: 'Passes by status', revenue: 'Revenue (smallest unit)',
 	};
 
@@ -1521,6 +1584,369 @@
 	function rgb( [ r, g, b ] ) {
 
 		return `rgb( ${ r }, ${ g }, ${ b } )`;
+
+	}
+
+} )();
+</script>
+<script>
+( () => {
+
+	// --- Challenges ---------------------------------------------------------------------------
+	//
+	// GET /api/admin/challenges: the six live (the day's, the week's and the month's on each world) and
+	// the six next up, as they'd be fixed now (the owner's pick or the rotation's), the owner's picks
+	// from the live periods on (however far ahead: each with Change and Back to the rotation), the
+	// approved busy places and the featured and busy places to choose from. POST to choose a
+	// period's challenge (a featured place, a busy place by its cell, or coordinates and a name), back
+	// to the rotation, or approve or unapprove a busy place. A live one changes only after a warning
+	// (with times on it, its board starts again; without, anyone driving it is turned away).
+
+	const DAY = 86400000;
+	const esc = text => String( text ).replace( /[&<>"']/g, c => ( { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' } )[ c ] );
+	const KINDS = { sprint: 'Checkpoint sprint', collect: 'Collect them all', landmark: 'Drive to a landmark' };
+	const PERIODS = { day: 'Daily', week: 'Weekly', month: 'Monthly' };
+	const WORLDS = { earth: 'Earth', moon: 'Moon' };
+	const $ = id => document.getElementById( id );
+	const section = $( 'challenges' );
+	const form = $( 'ch-form' );
+	let data = null;
+	// A live change waiting for "Change it anyway": the body to send again with live: true.
+	let waiting = null;
+
+	load();
+
+	async function load() {
+
+		let res;
+		try {
+
+			res = await fetch( '/api/admin/challenges', { credentials: 'same-origin' } );
+
+		} catch {
+
+			return;
+
+		}
+
+		// Signed out, or not an admin: the page's notice above says so. (Not the Worker answering, as on
+		// the dev server alone: nothing.)
+		if ( res.status === 401 || res.status === 403 || ! /json/.test( res.headers.get( 'Content-Type' ) ?? '' ) ) return;
+		const answer = await res.json().catch( () => null );
+		if ( ! answer ) return;
+		section.hidden = false;
+		if ( ! res.ok ) {
+
+			$( 'ch-live' ).innerHTML = `<p class="muted">${ res.status === 429 ? 'Asked too often just now: try again in a minute.' : `Something went wrong (${ res.status }).` }</p>`;
+			return;
+
+		}
+
+		show( answer );
+
+	}
+
+	function show( answer ) {
+
+		data = answer;
+		window.worldDriveAdmin = { ...window.worldDriveAdmin, challenges: answer };
+		$( 'ch-now' ).textContent = `Periods are UTC days, weeks from Monday and calendar months. Now: ${ new Date( answer.now ).toISOString().slice( 0, 16 ).replace( 'T', ' ' ) } UTC.`;
+		$( 'ch-live' ).innerHTML = table( answer.current.map( c => ( {
+			world: c.world, period: c.period, key: c.key, kind: c.kind, place: c.place, region: c.region, source: c.source,
+			extra: `${ c.total } driver${ c.total === 1 ? '' : 's' }${ c.top[ 0 ] ? ` · best ${ time( c.top[ 0 ].ms ) } (${ esc( c.top[ 0 ].name ) })` : '' } · ${ left( c.endsAt - answer.now ) }`,
+		} ) ), true );
+		$( 'ch-next' ).innerHTML = table( answer.upcoming.map( c => ( { ...c, extra: `from ${ new Date( c.startsAt ).toISOString().slice( 0, 10 ) }` } ) ), false );
+		$( 'ch-picks' ).innerHTML = picksTable();
+		fillPeriods();
+		fillPlaces();
+		$( 'ch-busy' ).innerHTML = busyTable();
+
+	}
+
+	// The live or next challenges as a table, each with Change.
+	function table( rows, live ) {
+
+		return `<table class="ch-table"><thead><tr><th>World</th><th>Period</th><th>Challenge</th><th class="wide-only">${ live ? 'Board' : 'Starts' }</th><th class="act"></th></tr></thead><tbody>${ rows.map( row => '<tr>'
+			+ `<td>${ WORLDS[ row.world ] }</td><td>${ PERIODS[ row.period ] }<div class="muted small key">${ esc( row.key ) }</div></td>`
+			+ `<td><b>${ esc( row.place ) }</b><span class="ch-tag ${ row.source === 'owner' ? 'owner' : '' }">${ row.source === 'owner' ? 'yours' : 'rotation' }</span><div class="muted small">${ esc( KINDS[ row.kind ] ) }${ row.region ? ` · ${ esc( row.region ) }` : '' }</div></td>`
+			+ `<td class="wide-only small">${ row.extra }</td>`
+			+ `<td class="act"><button type="button" data-change="${ esc( row.key ) }" data-world="${ row.world }" data-kind="${ row.kind }">Change</button></td></tr>` ).join( '' ) }</tbody></table>`;
+
+	}
+
+	// The owner's picks from the live periods on, soonest first: each with Change (the form set to it)
+	// and Back to the rotation.
+	function picksTable() {
+
+		if ( ! data.picks.length ) return '<p class="muted">None: every period ahead is the rotation\'s.</p>';
+		return `<table class="ch-table"><thead><tr><th>World</th><th>Period</th><th>Challenge</th><th class="act"></th></tr></thead><tbody>${ data.picks.map( pick => '<tr>'
+			+ `<td>${ WORLDS[ pick.world ] }</td><td>${ PERIODS[ pick.period.slice( 0, pick.period.indexOf( ':' ) ) ] }<div class="muted small">${ esc( pick.period ) }${ liveOne( pick.period, pick.world ) ? ' · live now' : '' }</div></td>`
+			+ `<td><b>${ esc( pick.place ) }</b><div class="muted small">${ esc( KINDS[ pick.kind ] ) }${ pick.region ? ` · ${ esc( pick.region ) }` : '' }</div></td>`
+			+ `<td class="act two"><button type="button" data-change="${ esc( pick.period ) }" data-world="${ pick.world }" data-kind="${ pick.kind }">Change</button> <button type="button" data-unpick="${ esc( pick.period ) }" data-world="${ pick.world }">Back to the rotation</button></td></tr>` ).join( '' ) }</tbody></table>`;
+
+	}
+
+	// The form set to the period `key`: picked in the list if it's there (live or next), else as the
+	// day it starts on and its kind beside it.
+	function setPeriod( key ) {
+
+		const select = $( 'ch-period' );
+		if ( [ ...select.options ].some( option => option.value === key ) ) {
+
+			select.value = key;
+			$( 'ch-date' ).value = '';
+			return;
+
+		}
+
+		const [ kind, date ] = key.split( ':' );
+		select.value = 'date';
+		$( 'ch-date' ).value = kind === 'month' ? `${ date }-01` : date;
+		$( 'ch-date-kind' ).value = kind;
+
+	}
+
+	// Back to the rotation for `period` on `world`: a live one of yours asked about first (one the
+	// rotation chose stays as it is).
+	function unpick( period, world ) {
+
+		const body = { action: 'unpick', period, world };
+		const now = liveOne( period, world );
+		if ( now?.source === 'owner' ) return warnLive( body, now.total );
+		send( body );
+
+	}
+
+	// The periods to choose from: today's, this week's and this month's, and the next of each; or a day
+	// picked beside it.
+	function fillPeriods() {
+
+		const select = $( 'ch-period' );
+		const was = select.value;
+		const keys = [ ...data.current.filter( c => c.world === 'earth' ).map( c => [ c.key, `${ PERIODS[ c.period ] }, live now (${ c.key })` ] ),
+			...data.upcoming.filter( c => c.world === 'earth' ).map( c => [ c.key, `${ PERIODS[ c.period ] }, next (${ c.key })` ] ) ];
+		select.innerHTML = keys.map( ( [ key, label ] ) => `<option value="${ esc( key ) }">${ esc( label ) }</option>` ).join( '' ) + '<option value="date">The day picked beside it</option>';
+		if ( [ ...select.options ].some( o => o.value === was ) ) select.value = was;
+
+	}
+
+	// The places for the world picked: the game's own, the approved busy ones, the busy ones, or
+	// coordinates.
+	function fillPlaces() {
+
+		const world = $( 'ch-world' ).value;
+		const select = $( 'ch-place' );
+		const option = ( value, label ) => `<option value="${ esc( value ) }">${ esc( label ) }</option>`;
+		const approved = data.approved.filter( p => p.world === world );
+		const busy = data.busy[ world ].filter( p => p.cell && ! approved.some( a => a.cell === p.cell ) );
+		select.innerHTML = `<optgroup label="The game's places">${ data.featured[ world ].map( p => option( `featured:${ p.id }`, `${ p.name }${ p.region ? `, ${ p.region }` : '' }` ) ).join( '' ) }</optgroup>`
+			+ ( approved.length ? `<optgroup label="Busy places you've approved">${ approved.map( p => option( `cell:${ p.cell }`, p.name ) ).join( '' ) }</optgroup>` : '' )
+			+ ( busy.length ? `<optgroup label="Busy drop-in places (the last 30 days)">${ busy.map( p => option( `cell:${ p.cell }`, `${ p.name } (${ p.n })` ) ).join( '' ) }</optgroup>` : '' )
+			+ `<optgroup label="Anywhere">${ option( 'custom', 'Coordinates and a name...' ) }</optgroup>`;
+		$( 'ch-custom' ).hidden = select.value !== 'custom';
+
+	}
+
+	// The busy places that aren't the game's own: approved ones first (Unapprove), then the rest
+	// (Approve).
+	function busyTable() {
+
+		const rows = [];
+		for ( const world of Object.keys( WORLDS ) ) {
+
+			for ( const p of data.approved.filter( p => p.world === world ) ) rows.push( `<tr><td>${ WORLDS[ world ] }</td><td><b>${ esc( p.name ) }</b><span class="ch-tag owner">approved</span><div class="muted small">${ esc( p.region ) }</div></td><td class="num wide-only"></td><td class="act"><button type="button" data-unapprove="${ esc( p.cell ) }" data-world="${ world }">Unapprove</button></td></tr>` );
+			for ( const p of data.busy[ world ].filter( p => p.cell && ! data.approved.some( a => a.cell === p.cell ) ) ) rows.push( `<tr><td>${ WORLDS[ world ] }</td><td><b>${ esc( p.name ) }</b><div class="muted small">${ esc( p.region ) }</div></td><td class="num wide-only">${ p.n } in ${ p.days } day${ p.days === 1 ? '' : 's' }</td><td class="act"><button type="button" data-approve="${ esc( p.cell ) }" data-world="${ world }">Approve</button></td></tr>` );
+
+		}
+
+		return rows.length ? `<table class="ch-table"><thead><tr><th>World</th><th>Place</th><th class="num wide-only">Visitor-days</th><th class="act"></th></tr></thead><tbody>${ rows.join( '' ) }</tbody></table>`
+			: '<p class="muted">No busy places yet but the game\'s own.</p>';
+
+	}
+
+	// The period key of `kind` ('day', 'week' or 'month') a date input's 'YYYY-MM-DD' is in, as the
+	// Worker's periods are (UTC; weeks from Monday).
+	function periodFor( kind, date ) {
+
+		const t = Date.parse( `${ date }T00:00:00Z` );
+		if ( kind === 'day' ) return `day:${ date }`;
+		if ( kind === 'week' ) return `week:${ new Date( t - ( ( new Date( t ).getUTCDay() + 6 ) % 7 ) * DAY ).toISOString().slice( 0, 10 ) }`;
+		return `month:${ date.slice( 0, 7 ) }`;
+
+	}
+
+	// The period the form names: the one picked in the list, or the day, the week or the month (as
+	// picked beside it) the day typed is in; or a word on what's missing.
+	function chosenPeriod() {
+
+		const period = $( 'ch-period' ).value;
+		if ( period !== 'date' ) return period;
+		const date = $( 'ch-date' ).value;
+		return date ? periodFor( $( 'ch-date-kind' ).value, date ) : 'Pick a day beside the period.';
+
+	}
+
+	// What the form says: { period, world, kind, place }, or a word on what's missing.
+	function picked() {
+
+		const world = $( 'ch-world' ).value;
+		const period = chosenPeriod();
+		if ( ! period.includes( ':' ) ) return period;
+		const value = $( 'ch-place' ).value;
+		let place;
+		if ( value.startsWith( 'featured:' ) ) place = { featured: value.slice( 9 ) };
+		else if ( value.startsWith( 'cell:' ) ) place = { cell: value.slice( 5 ) };
+		else {
+
+			const [ lat, lon ] = [ Number( form.elements.lat.value ), Number( form.elements.lon.value ) ];
+			const heading = form.elements.heading.value.trim();
+			if ( ! form.elements.name.value.trim() || ! form.elements.lat.value.trim() || ! form.elements.lon.value.trim() || ! Number.isFinite( lat ) || ! Number.isFinite( lon ) ) return 'Give the place a name, a latitude and a longitude.';
+			place = { name: form.elements.name.value.trim(), region: form.elements.region.value.trim(), lat, lon, ...( heading ? { heading: Number( heading ) } : {} ) };
+
+		}
+
+		return { period, world, kind: $( 'ch-kind' ).value, place };
+
+	}
+
+	// A change to a live challenge (`body`), asked about before it's sent (with live: true): with
+	// `drivers` times on it, changing it starts a new board; with none, it still turns away anyone
+	// driving it now.
+	function warnLive( body, drivers ) {
+
+		waiting = { ...body, live: true };
+		const warn = $( 'ch-warn' );
+		const what = drivers
+			? `<b>This challenge is live</b>, and ${ drivers } driver${ drivers === 1 ? ' has a time' : 's have times' } on it. Changing it now changes what the times mean, so it starts a new board; the old one is kept apart, with its places.`
+			: '<b>This challenge is live</b>, though nobody has a time on it yet. Changing it now turns away anyone driving it (their runs won\'t count), and it starts on a board of its own.';
+		warn.innerHTML = `<p>${ what } (${ esc( body.period ) }, the ${ WORLDS[ body.world ] }.)</p><div class="row"><button type="button" id="ch-anyway">Change it anyway</button><button type="button" id="ch-keep">Keep it</button></div>`;
+		warn.hidden = false;
+		say( '' );
+
+	}
+
+	// The live challenge on `world` for `period` (a key), or null for a period ahead.
+	function liveOne( period, world ) {
+
+		return data?.current.find( c => c.key === period && c.world === world ) ?? null;
+
+	}
+
+	async function send( body ) {
+
+		say( 'Saving...' );
+		$( 'ch-warn' ).hidden = true;
+		let res;
+		try {
+
+			res = await fetch( '/api/admin/challenges', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( body ) } );
+
+		} catch {
+
+			return say( 'Couldn\'t reach the server. Try again in a moment.' );
+
+		}
+
+		const answer = await res.json().catch( () => ( {} ) );
+		// Live with times on it since this page last looked: changing it starts a new board.
+		if ( res.status === 409 && answer.reason === 'live' ) return warnLive( body, answer.drivers );
+		if ( ! res.ok ) return say( res.status === 429 ? 'Asked too often just now: try again in a minute.' : res.status === 400 ? 'That isn\'t one the Worker takes: check the period (today\'s or later) and the place.' : res.status === 409 ? answer.error ?? 'That can\'t be done.' : `Something went wrong (${ res.status }).` );
+		// Which period it was, said: the form can name one by a day typed in.
+		say( body.action === 'pick' ? `Saved for ${ body.period }, the ${ WORLDS[ body.world ] }.` : body.action === 'unpick' ? `Back to the rotation for ${ body.period }, the ${ WORLDS[ body.world ] }.` : 'Saved.' );
+		show( answer );
+
+	}
+
+	function say( text ) {
+
+		$( 'ch-say' ).textContent = text;
+
+	}
+
+	form.addEventListener( 'submit', event => {
+
+		event.preventDefault();
+		const body = picked();
+		if ( typeof body === 'string' ) return say( body );
+		// A live one, asked about first, whether or not anyone has a time on it yet.
+		const now = liveOne( body.period, body.world );
+		if ( now ) return warnLive( { action: 'pick', ...body }, now.total );
+		send( { action: 'pick', ...body } );
+
+	} );
+	$( 'ch-rotate' ).addEventListener( 'click', () => {
+
+		const period = chosenPeriod();
+		if ( ! period.includes( ':' ) ) return say( period );
+		unpick( period, $( 'ch-world' ).value );
+
+	} );
+	$( 'ch-world' ).addEventListener( 'change', fillPlaces );
+	$( 'ch-place' ).addEventListener( 'change', () => $( 'ch-custom' ).hidden = $( 'ch-place' ).value !== 'custom' );
+	// A day typed in is the period picked; another period picked, the day typed is cleared, so the form
+	// never says one thing and saves another.
+	$( 'ch-period' ).addEventListener( 'change', () => {
+
+		if ( $( 'ch-period' ).value !== 'date' ) $( 'ch-date' ).value = '';
+
+	} );
+	$( 'ch-date' ).addEventListener( 'input', () => {
+
+		if ( $( 'ch-date' ).value ) $( 'ch-period' ).value = 'date';
+
+	} );
+	section.addEventListener( 'click', event => {
+
+		const change = event.target.closest( 'button[data-change]' );
+		if ( change ) {
+
+			// The form set to that one, to change it.
+			setPeriod( change.dataset.change );
+			$( 'ch-world' ).value = change.dataset.world;
+			$( 'ch-kind' ).value = change.dataset.kind;
+			fillPlaces();
+			form.scrollIntoView( { block: 'nearest', behavior: 'smooth' } );
+			$( 'ch-place' ).focus();
+
+		}
+
+		const back = event.target.closest( 'button[data-unpick]' );
+		if ( back ) unpick( back.dataset.unpick, back.dataset.world );
+		const approve = event.target.closest( 'button[data-approve]' );
+		if ( approve ) send( { action: 'approve', world: approve.dataset.world, cell: approve.dataset.approve } );
+		const unapprove = event.target.closest( 'button[data-unapprove]' );
+		if ( unapprove ) send( { action: 'unapprove', world: unapprove.dataset.world, cell: unapprove.dataset.unapprove } );
+		if ( event.target.id === 'ch-anyway' && waiting ) {
+
+			const body = waiting;
+			waiting = null;
+			send( body );
+
+		}
+
+		if ( event.target.id === 'ch-keep' ) {
+
+			waiting = null;
+			$( 'ch-warn' ).hidden = true;
+
+		}
+
+	} );
+
+	// A time as the boards show it ("0:42.37"), and how long is left ("5 h 12 m left").
+	function time( ms ) {
+
+		const hundredths = Math.floor( ms / 10 );
+		const seconds = Math.floor( hundredths / 100 );
+		return `${ Math.floor( seconds / 60 ) }:${ String( seconds % 60 ).padStart( 2, '0' ) }.${ String( hundredths % 100 ).padStart( 2, '0' ) }`;
+
+	}
+
+	function left( ms ) {
+
+		const minutes = Math.max( 0, Math.floor( ms / 60000 ) );
+		const [ days, hours ] = [ Math.floor( minutes / 1440 ), Math.floor( minutes / 60 ) % 24 ];
+		return days ? `${ days } d ${ hours } h left` : `${ hours } h ${ minutes % 60 } m left`;
 
 	}
 

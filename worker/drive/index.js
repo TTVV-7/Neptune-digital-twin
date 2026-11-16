@@ -12,6 +12,7 @@ import { live, liveToday, online } from './live.js';
 import { adminStats, countVisit, postStats } from './stats.js';
 import { isAdmin } from './admin.js';
 import { adminDropins } from './dropins.js';
+import { adminChallenges, adminChange, challengeBoard, listChallenges, postTime } from './challenges.js';
 import { BUDGET_SPENT } from '../../src/drive-app/live-protocol.js';
 
 export { DriveLimits } from './limits.js';
@@ -28,7 +29,9 @@ export { DriveRoom } from './live.js';
 // for supporters more drives a day and a ⭐ on the leaderboard. Driving with others (live.js) is a
 // WebSocket to a room, one Durable Object a party or area, that tells everyone where the others are;
 // /api/online says where people are driving now, for the globe's dots. And the owner's play stats
-// (stats.js) with where people drop in (dropins.js), for the admin page.
+// (stats.js) with where people drop in (dropins.js), for the admin page. And challenges
+// (challenges.js): a daily, a weekly and a monthly one on each world, each with its own board of
+// the best times, picked by themselves or by the owner on the admin page.
 //
 // Settings (wrangler.drive.jsonc vars, or secrets):
 //   GOOGLE_MAPS_API_KEY   secret: the Maps key for World Drive's own Google Cloud project (a
@@ -61,6 +64,13 @@ export { DriveRoom } from './live.js';
 //   LIVE_CONNECTS         the rate limiter binding for each visit's connections to rooms (live.js)
 //   PROGRESS_POSTS        the rate limiter binding for each player's reports of what they drove
 //                         (progress.js)
+//   CHALLENGE_LOOKS       the rate limiter binding for the challenges' lists, boards and times, by
+//                         a keyed hash of the address (an IPv6 one by its /48) and the day (never
+//                         the address itself); CHALLENGE_MISSES the one for those of the lists and
+//                         boards that miss the cache and read D1, by the same key;
+//                         CHALLENGE_TIMES_PER_VISITOR_DAILY the times a visitor may post a day (300
+//                         if unset), CHALLENGE_TIMES_PER_VISIT the times a visit may post (100 if
+//                         unset) (challenges.js)
 //   TURNSTILE_VERIFY_URL, SEARCH_UPSTREAM, TEST_CLOCK, GOOGLE_JWKS_URL   tests only (see
 //                         scripts/test-drive-worker.mjs)
 
@@ -88,6 +98,11 @@ const ROUTES = [
 	{ method: 'POST', path: '/api/stats', handler: postStats },
 	{ method: 'GET', path: '/api/admin/stats', handler: adminStats },
 	{ method: 'GET', path: '/api/admin/dropins', handler: adminDropins },
+	{ method: 'GET', path: '/api/challenges', handler: listChallenges },
+	{ method: 'GET', path: '/api/challenges/board', handler: challengeBoard },
+	{ method: 'POST', path: '/api/challenges/time', handler: postTime },
+	{ method: 'GET', path: '/api/admin/challenges', handler: adminChallenges },
+	{ method: 'POST', path: '/api/admin/challenges', handler: adminChange },
 	{ method: 'POST', path: '/api/stripe/webhook', handler: stripeWebhook, sameOrigin: false },
 ];
 

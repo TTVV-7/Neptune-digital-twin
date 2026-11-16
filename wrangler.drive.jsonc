@@ -89,7 +89,18 @@
 		{ "name": "STATS_POSTS", "namespace_id": "4803", "simple": { "limit": 6, "period": 60 } },
 		// The owner's admin page's asks (worker/drive/admin.js), by account: each reads a period's rows
 		// from D1, so at most 30 a minute (the page asks once or twice a change of period).
-		{ "name": "ADMIN_LOOKS", "namespace_id": "4804", "simple": { "limit": 30, "period": 60 } }
+		{ "name": "ADMIN_LOOKS", "namespace_id": "4804", "simple": { "limit": 30, "period": 60 } },
+		// The challenges' lists, boards and times posted (worker/drive/challenges.js), by address (an
+		// IPv6 one by its /48), each counted by an HMAC of it and the day (lookKey), never as it is: a
+		// page asks a few times a minute at most (the list as it opens, a board or two, a time); a
+		// script asking over and over is turned away before it reads D1.
+		{ "name": "CHALLENGE_LOOKS", "namespace_id": "4805", "simple": { "limit": 60, "period": 60 } },
+		// Those of the lists and boards that miss Cloudflare's cache and read D1 (a board's rows, the
+		// list's tops, a player's own rows, a board's order), by the same key: 10 a minute, room for a
+		// page's list and all six boards, while one address asking for past boards or players in turn
+		// costs a few hundred thousand rows read a day at most (docs/world-drive.md, "What challenges
+		// cost").
+		{ "name": "CHALLENGE_MISSES", "namespace_id": "4806", "simple": { "limit": 10, "period": 60 } }
 	],
 	"migrations": [
 		{ "tag": "v1", "new_sqlite_classes": [ "DriveLimits" ] },

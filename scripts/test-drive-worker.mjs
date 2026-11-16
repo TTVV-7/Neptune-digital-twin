@@ -33,12 +33,28 @@
 // without a request; the page keeping its places when a post doesn't get through; and the cells'
 // grid itself. Visit tokens stay as the Worker before them read them, so a rollback keeps visits. And the look a car travels with to
 // the others in its room (live-protocol.js's checkLook, which the rooms use): every part a page
-// sends, the underglow and the horn too, kept, anything else left out, a bad one turned away.
-// TEST_DRIVE_WORKER_PORT=8796 moves the five wrangler servers (that port and the next four).
+// sends, the underglow and the horn too, kept, anything else left out, a bad one turned away. And
+// challenges: the fastest the game goes worked out from its own numbers; periods turning over at
+// midnight UTC, on Monday and at a month's end; routes laid out as their shapes say, the Moon's off
+// its steep ground; the rotation round the places, never twice in a row nor a day's place its
+// week's or month's (nor a week's either month it's in), over years and with several keys, the same
+// in every instance and another with another key; a time written only while its challenge is open,
+// checked in the write; six live, fixed in D1 as they're first asked for, and staying so; times
+// taken from a player with a visit of the right kind (an Earth challenge's an Earth visit), only
+// bests kept, the boards with names and levels, each way of cheating turned away (too fast, out of
+// order, missing points, longer than the visit, another period's, bad tokens, the wrong secret), too
+// often (a player's 10 s, a visitor's day, then held till midnight writing nothing), the same run
+// posted again answered as taken, the owner's runs off the boards, the cache and CHALLENGE_LOOKS;
+// past boards kept with each player's final place, cached no longer than live ones, and a run
+// finished just before midnight taken in the minute after; and the admin page's routes (ADMIN_EMAILS
+// only): picks ahead fixing their period, back to the rotation, a live one changed only after a
+// warning and then a new board, the old kept apart, nothing replaced where nothing changes, and busy
+// places approved and unapproved.
+// TEST_DRIVE_WORKER_PORT=8796 moves the six wrangler servers (that port and the next five).
 
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
-import { copyFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { register } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -58,6 +74,13 @@ import { SPOTS } from '../src/drive-app/places.js';
 import { CELL, PLACES_PER_POST, cellMiddle, cellOf, checkCell, checkPlaces, metresOn } from '../src/drive-app/dropin-cells.js';
 import { VISITOR_PREFIX, nameCell, readTowns, topCells, topPlaces, townsFor } from '../worker/drive/dropins.js';
 import { createStats } from '../src/drive-app/stats.js';
+import {
+	BOOSTED, FASTEST, GRACE, KINDS, LEG_SLACK, MAX_RUN, RANK_MOST, SHAPES, START_SLACK, TOP_SPEED,
+	bearingTo, checkPasses, destination, legMinimum, makeRoute, nextPeriod, parsePeriod, periodOf, periodsAt, randomFrom, rankText,
+} from '../src/drive-app/challenge-rules.js';
+import { REPOST, TIME_GAP, challengeBoard, challengeFor, legFaults, listChallenges, lookKey, moonFaults, moonSteep, postTime, rankIn, rotationPick } from '../worker/drive/challenges.js';
+import { setHeights } from '../src/drive-app/moon-height.js';
+import { MOON_PLACES } from '../src/drive-app/moon-places.js';
 
 const PORT = Number( process.env.TEST_DRIVE_WORKER_PORT ) || 8796;
 const MAPS_KEY = 'test-maps-key-not-real';
@@ -202,7 +225,22 @@ async function call( server, path, { method = 'GET', body, headers = {}, ip, tim
 	const sent = { ...headers };
 	if ( ip ) sent[ 'CF-Connecting-IP' ] = ip;
 	if ( time ) sent[ 'X-Test-Time' ] = String( time );
-	const res = await fetch( server.base + path, { method, headers: sent, body, redirect: 'manual' } );
+	let res;
+	try {
+
+		res = await fetch( server.base + path, { method, headers: sent, body, redirect: 'manual' } );
+
+	} catch ( err ) {
+
+		// wrangler dev can drop the first connection after its database was read from outside (server.d1,
+		// as the challenges' tests look at what the Worker wrote): a GET, which changes nothing it can't
+		// do again, is tried once more.
+		if ( method !== 'GET' || err?.message !== 'fetch failed' ) throw err;
+		await new Promise( resolve => setTimeout( resolve, 250 ) );
+		res = await fetch( server.base + path, { method, headers: sent, body, redirect: 'manual' } );
+
+	}
+
 	const text = await res.text();
 	answers.push( { path, status: res.status, text } );
 	let json = null;
@@ -1049,6 +1087,16 @@ describe( 'World Drive leaderboard', () => {
 		assert.equal( over.status, 429 );
 		assert.equal( over.json.error, 'That\'s all for today. Try again tomorrow' );
 		assert.ok( over.json.retryAfter > 11 * 3600, over.text );
+		// Held till midnight UTC from then on by her own gap: her next try is turned away before it
+		// writes anything or asks DriveLimits (what a script past the day's cap would cost otherwise,
+		// one every 10 s all day), with the same word and how long till midnight.
+		const midnight = ( Math.floor( ( fay.visitedAt + ( SCORES_DAILY + 1 ) * 11 * SECOND ) / DAY ) + 1 ) * DAY;
+		const held = server.d1( `SELECT last_score_at, last_seen_at FROM players WHERE id = '${ fay.id }'` )[ 0 ];
+		assert.equal( held.last_score_at, midnight - 10 * SECOND );
+		const again = await score( fay, { score: 9990 }, { after: ( SCORES_DAILY + 3 ) * 11 * SECOND } );
+		assert.deepEqual( [ again.status, again.json.error ], [ 429, 'That\'s all for today. Try again tomorrow' ] );
+		assert.equal( Number( again.headers.get( 'Retry-After' ) ), Math.ceil( ( midnight - fay.visitedAt - ( SCORES_DAILY + 3 ) * 11 * SECOND ) / 1000 ) );
+		assert.deepEqual( server.d1( `SELECT last_score_at, last_seen_at FROM players WHERE id = '${ fay.id }'` )[ 0 ], held );
 
 	} );
 
@@ -2863,6 +2911,7 @@ describe( 'Play stats\' counts', () => {
 			dropin: [ ...SPOTS.map( spot => spot.id ), 'other', 'moon' ], ride: rides, play: rides, play_with_others: [ 'all' ], garage_open: [ 'all' ], garage_edit: LOOK_PARTS,
 			party: [ 'made', 'joined' ], funnel: FUNNEL, device: DEVICES, world: [ 'moon' ], play_world: [ 'earth', 'moon' ], search: SEARCHES,
 			dropin_time: [ 'under 5 s', '5-10 s', '10-20 s', '20-40 s', 'over 40 s' ], problem: PROBLEMS, board: [ 'open', 'named' ], pass: [ 'open', 'buy' ], level_up: [ 'all' ],
+			challenge: [ 'open', 'start', 'finish', 'posted', 'nudge', 'nudge_open' ],
 		};
 		assert.deepEqual( Object.keys( keysOf ).sort(), Object.keys( METRICS ).sort(), 'every metric' );
 		const names = Object.entries( keysOf ).flatMap( ( [ metric, keys ] ) => keys.map( key => {
@@ -3181,6 +3230,1875 @@ describe( 'The look that travels', () => {
 		// don't know it draw their own default), as long as it's an id.
 		assert.deepEqual( checkLook( { glow: 'aurora', horn: 'kazoo', sparkles: 'yes', toString: 'x' } ), { glow: 'aurora', horn: 'kazoo' } );
 		for ( const bad of [ { glow: 7 }, { horn: 'Air Horn!' }, { glow: 'x'.repeat( 25 ) }, { horn: '' }, { glow: [ 'pink' ] }, null, [ 'glow' ], 'pink' ] ) assert.equal( checkLook( bad ), null, JSON.stringify( bad ) );
+
+	} );
+
+} );
+
+// --- challenges --------------------------------------------------------------------------
+
+// Monday 16 November 2026, 15:00 UTC: a day, a week and a month under way. The month ends on Monday
+// 30 November's night, a week after the next week starts.
+const CHALLENGE_DAY = Date.UTC( 2026, 10, 16, 15, 0, 0 );
+const MOON_HEIGHTS = new URL( '../drive/public/moon/height.bin', import.meta.url );
+
+// A Moon route's points on steep ground that could have been elsewhere: all but the place's own pin
+// (a sprint's or collectibles' start, a landmark's goal), which is where it is.
+function movableFaults( route ) {
+
+	const [ lat, lon ] = route.goal ? route.points[ 0 ] : [ route.start.lat, route.start.lon ];
+	return [ [ route.start.lat, route.start.lon ], ...route.points ].filter( point => moonSteep( ...point ) ).length - ( moonSteep( lat, lon ) ? 1 : 0 );
+
+}
+
+// D1's shape over node:sqlite, the migrations applied: { db, DB, sql, pending } (sql: every statement
+// run, as written; pending: the work left to finish after an answer, ctx.waitUntil's). `between(
+// statements )` runs as a batch of writes comes, as another request's could land between one's reads
+// and its writes.
+function sqliteD1() {
+
+	const db = new DatabaseSync( ':memory:' );
+	const migrations = new URL( '../worker/drive/migrations/', import.meta.url );
+	for ( const file of readdirSync( migrations ).sort() ) db.exec( readFileSync( new URL( file, migrations ), 'utf8' ) );
+	const d1 = { db, between: () => {}, sql: [], pending: [] };
+	const row = values => values && { ...values };
+	const statement = ( sql, values = [] ) => ( {
+		sql, values,
+		bind: ( ...bound ) => statement( sql, bound ),
+		first: async () => ( d1.sql.push( sql ), row( db.prepare( sql ).get( ...values ) ) ?? null ),
+		all: async () => ( d1.sql.push( sql ), { results: db.prepare( sql ).all( ...values ).map( row ) } ),
+		run: async () => ( d1.sql.push( sql ), { results: [], meta: { changes: Number( db.prepare( sql ).run( ...values ).changes ) } } ),
+	} );
+	d1.DB = {
+		prepare: sql => statement( sql ),
+		batch: async statements => {
+
+			d1.between( statements );
+			// (One transaction, as D1's batch is: all of it or none.)
+			db.exec( 'SAVEPOINT batch' );
+			try {
+
+				const results = [];
+				for ( const s of statements ) results.push( await ( /^\s*SELECT/i.test( s.sql ) ? s.all() : s.run() ) );
+				db.exec( 'RELEASE batch' );
+				return results;
+
+			} catch ( err ) {
+
+				db.exec( 'ROLLBACK TO batch' );
+				db.exec( 'RELEASE batch' );
+				throw err;
+
+			}
+
+		},
+	};
+	return d1;
+
+}
+
+// A period's kind from a challenge's row: 'day', 'week' or 'month'.
+function periodKindOf( row ) {
+
+	return row.period.slice( 0, row.period.indexOf( ':' ) );
+
+}
+
+// A run's post to postTime over `d1` (sqliteD1's) at `now`, as the page sends it.
+function postOver( d1, body, now, ip = '198.51.100.7' ) {
+
+	const request = new Request( 'https://worlddrive.app/api/challenges/time', { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip }, body: JSON.stringify( body ) } );
+	return postTime( { request, url: new URL( request.url ), now, env: { DB: d1.DB, TURNSTILE_SECRET: PASS_SECRET }, limits: { take: async () => ( { ok: true } ) }, ctx: { waitUntil: work => d1.pending.push( work ) } } );
+
+}
+
+// A player in `d1` (sqliteD1's): their id and secret.
+function sqlitePlayer( d1, name ) {
+
+	const id = `${ name.replace( /\W/g, '' ) }Player00000000`.slice( 0, 16 );
+	const secret = name.toLowerCase().replace( /\W/g, '' ).padEnd( 32, 'x' ).slice( 0, 32 );
+	d1.db.prepare( 'INSERT INTO players ( id, name, name_key, secret_hash, created_at, last_seen_at ) VALUES ( ?, ?, ?, ?, 0, 0 )' ).run( id, name, name.toLowerCase(), createHash( 'sha256' ).update( secret ).digest( 'hex' ) );
+	return { id, secret };
+
+}
+
+// Valid passes for a challenge's route ({ world, kind, route }): each leg `extra` ms slower than the
+// fastest the game goes allows, the points in their order: { ms, passes }.
+function fairRun( challenge, extra = 3000, order = null ) {
+
+	const { world, route } = challenge;
+	let from = [ route.start.lat, route.start.lon ];
+	let fromRadius = START_SLACK;
+	let at = 0;
+	const passes = ( order ?? route.points.map( ( _, i ) => i ) ).map( index => {
+
+		at += Math.ceil( legMinimum( world, from, fromRadius, route.points[ index ], route.radius ) ) + extra;
+		from = route.points[ index ];
+		fromRadius = route.radius;
+		return [ index, at ];
+
+	} );
+	return { ms: at, passes };
+
+}
+
+describe( 'World Drive challenges: the rules', () => {
+
+	test( 'the fastest the game goes is worked out from its own numbers: the fastest ride, boosted', () => {
+
+		// The constants in src/drive.js, as written there: the booster's push (a share of the top speed),
+		// a drift's mini-turbos and a landed trick's burst, and the top speed of a ride with no tuning
+		// of its own (the pickup's).
+		const drive = readFileSync( new URL( '../src/drive.js', import.meta.url ), 'utf8' );
+		const constant = name => new Function( `return ( ${ drive.match( new RegExp( `^const ${ name } = (.+);$`, 'm' ) )[ 1 ] } );` )();
+		assert.equal( constant( 'BOOST_SPEED' ), BOOSTED, 'src/drive.js boosts to a different share of the top speed now: change BOOSTED in challenge-rules.js' );
+		for ( const boost of constant( 'DRIFT_BOOSTS' ) ) assert.ok( boost.speed <= BOOSTED, 'a drift boost faster than the booster' );
+		assert.ok( constant( 'TRICK_BOOST' ).speed <= BOOSTED, 'a trick\'s burst faster than the booster' );
+		// Holding Shift without the booster raises the top speed by a share of its own: under it too.
+		assert.ok( new Function( `return ( ${ drive.match( /spec\.topSpeed \* \( boost \? ([\d. /]+) : 1 \)/ )[ 1 ] } );` )() <= BOOSTED, 'Shift\'s boost faster than the booster' );
+		// Every top speed (km/h) written anywhere a ride is tuned: drive.js's tuning by name (SPECS,
+		// its default among them), the kart (vehicles.js), the cars (cars.js) and every file of the
+		// pass's rides (rides/, whatever is added there). So a faster ride anywhere fails this.
+		const read = path => readFileSync( new URL( path, import.meta.url ), 'utf8' );
+		const speedsIn = text => [ ...text.matchAll( /topSpeed: (\d+(?:\.\d+)?)/g ) ].map( m => Number( m[ 1 ] ) );
+		const rides = readdirSync( new URL( '../src/drive-app/rides/', import.meta.url ) ).filter( name => name.endsWith( '.js' ) ).map( name => read( `../src/drive-app/rides/${ name }` ) );
+		const specs = drive.match( /^const SPECS = \{\n([\s\S]*?)^\};$/m )[ 1 ];
+		const written = [ specs, read( '../src/drive-app/vehicles.js' ), read( '../src/drive-app/cars.js' ), ...rides ].flatMap( speedsIn );
+		assert.ok( written.length >= 4 + DRIVE_CARS.length + PASS_RIDES.length, String( written ) );
+		// And every ride the game offers (the Worker takes a run of: the kart, the cars, the pass's rides
+		// and the library's), its own top speed found as the game tunes it (specFor in drive.js: its
+		// own, else drive.js's by name, else the default): so a ride that's tuned somewhere this can't
+		// see fails here rather than going unchecked.
+		const byName = Object.fromEntries( [ ...specs.matchAll( /^\t'?([\w-]+)'?: \{ topSpeed: (\d+(?:\.\d+)?),/gm ) ].map( m => [ m[ 1 ], Number( m[ 2 ] ) ] ) );
+		const library = JSON.parse( read( '../public/library/library.json' ) );
+		const own = {};
+		// The cars: each entry's id, then its drive's top speed before the next id.
+		for ( const [ , id, rest ] of read( '../src/drive-app/cars.js' ).matchAll( /id: '([\w-]+)'([\s\S]*?)(?=id: '|$)/g ) ) {
+
+			const speed = rest.match( /topSpeed: (\d+(?:\.\d+)?)/ );
+			if ( speed ) own[ id ] = Number( speed[ 1 ] );
+
+		}
+
+		// The pass's rides: rides/index.js's id and the tuning it names, as one of rides/'s files sets it.
+		const tunings = Object.fromEntries( rides.flatMap( text => [ ...text.matchAll( /export const (\w+) = \{\n\ttopSpeed: (\d+(?:\.\d+)?),/g ) ].map( m => [ m[ 1 ], Number( m[ 2 ] ) ] ) ) );
+		for ( const [ , id, tuning ] of read( '../src/drive-app/rides/index.js' ).matchAll( /id: '([\w-]+)'[^\n]*drive: (\w+)/g ) ) own[ id ] = tunings[ tuning ];
+		own[ 'go-kart' ] = Number( read( '../src/drive-app/vehicles.js' ).match( /id: 'go-kart',[\s\S]*?topSpeed: (\d+(?:\.\d+)?)/ )[ 1 ] );
+		for ( const id of LIBRARY_VEHICLES ) own[ id ] = library.find( entry => entry.id === id )?.drive?.topSpeed ?? byName[ id ] ?? byName.default;
+		const offered = [ 'go-kart', ...DRIVE_CARS, ...PASS_RIDES, ...LIBRARY_VEHICLES ];
+		for ( const id of offered ) assert.ok( Number.isFinite( own[ id ] ) && own[ id ] > 0, `no top speed found for ${ id }` );
+		assert.equal( Math.max( ...offered.map( id => own[ id ] ) ), TOP_SPEED, 'a ride is faster now: change TOP_SPEED in challenge-rules.js' );
+		assert.equal( Math.max( ...written ), TOP_SPEED, 'a top speed somewhere is faster now: change TOP_SPEED in challenge-rules.js' );
+		// 215 km/h twice over: 430 km/h, 119.4 m/s.
+		assert.equal( Math.round( FASTEST * 10 ) / 10, 119.4 );
+
+	} );
+
+	test( 'periods: UTC days, weeks from Monday and calendar months, each ending where the next begins', () => {
+
+		const keys = time => periodsAt( time ).map( period => period.key );
+		assert.deepEqual( keys( CHALLENGE_DAY ), [ 'day:2026-11-16', 'week:2026-11-16', 'month:2026-11' ] );
+		// Sunday night, Monday morning: a new day and week, the same month.
+		assert.deepEqual( keys( Date.UTC( 2026, 10, 29, 23, 59, 59, 999 ) ), [ 'day:2026-11-29', 'week:2026-11-23', 'month:2026-11' ] );
+		assert.deepEqual( keys( Date.UTC( 2026, 10, 30 ) ), [ 'day:2026-11-30', 'week:2026-11-30', 'month:2026-11' ] );
+		// The month's last moment and the next's first, in the middle of a week.
+		assert.deepEqual( keys( Date.UTC( 2026, 10, 30, 23, 59, 59, 999 ) ), [ 'day:2026-11-30', 'week:2026-11-30', 'month:2026-11' ] );
+		assert.deepEqual( keys( Date.UTC( 2026, 11, 1 ) ), [ 'day:2026-12-01', 'week:2026-11-30', 'month:2026-12' ] );
+		// A leap year's February, and a year's turn.
+		assert.equal( periodOf( 'month', Date.UTC( 2028, 1, 29, 12 ) ).ends, Date.UTC( 2028, 2, 1 ) );
+		assert.deepEqual( keys( Date.UTC( 2027, 0, 1 ) ), [ 'day:2027-01-01', 'week:2026-12-28', 'month:2027-01' ] );
+		for ( const period of periodsAt( CHALLENGE_DAY ) ) {
+
+			assert.ok( period.starts <= CHALLENGE_DAY && CHALLENGE_DAY < period.ends );
+			assert.equal( nextPeriod( period ).starts, period.ends );
+			assert.deepEqual( parsePeriod( period.key ), period );
+
+		}
+
+		// The leaderboard's week is the same week.
+		assert.equal( periodOf( 'week', CHALLENGE_DAY ).key, `week:${ dayOf( CHALLENGE_DAY ) }` );
+		for ( const key of [ 'week:2026-11-17', 'day:2026-02-30', 'month:2026-13', 'day:2026-11-16x', 'year:2026', '', null, 42 ] ) assert.equal( parsePeriod( key ), null, String( key ) );
+
+	} );
+
+	test( 'a route is laid out as its shape says, the same from the same numbers, its points on the world', async () => {
+
+		const bytes = seq => Uint8Array.from( { length: 32 }, ( _, i ) => ( i * 29 + seq * 7 ) & 255 );
+		const golden = { name: 'Golden Gate Bridge', lat: 37.8199, lon: - 122.4783, heading: 352 };
+		for ( const world of [ 'earth', 'moon' ] ) {
+
+			for ( const size of [ 'day', 'week', 'month' ] ) {
+
+				for ( const kind of [ 'sprint', 'collect', 'landmark' ] ) {
+
+					const shape = SHAPES[ world ][ size ][ kind ];
+					const route = makeRoute( { kind, size, world, place: golden }, randomFrom( bytes( 1 ) ) );
+					assert.deepEqual( makeRoute( { kind, size, world, place: golden }, randomFrom( bytes( 1 ) ) ), route, 'not the same from the same numbers' );
+					assert.notDeepEqual( makeRoute( { kind, size, world, place: golden }, randomFrom( bytes( 2 ) ) ), route );
+					assert.equal( route.radius, shape.radius );
+					const metres = ( [ a, b ], [ c, d ] ) => metresOn( world, a, b, c, d );
+					const start = [ route.start.lat, route.start.lon ];
+					if ( kind === 'sprint' ) {
+
+						assert.equal( route.points.length, shape.gates );
+						// The first gate along the place's road, and each the shape's spacing from the last.
+						assert.ok( Math.abs( ( bearingTo( world, ...start, ...route.points[ 0 ] ) - golden.heading + 540 ) % 360 - 180 ) < 0.5 );
+						route.points.forEach( ( point, i ) => {
+
+							const gap = metres( i ? route.points[ i - 1 ] : start, point );
+							assert.ok( gap >= shape.spacing[ 0 ] - 1 && gap <= shape.spacing[ 1 ] + 1, `${ world } ${ size } gap ${ gap }` );
+
+						} );
+
+					} else if ( kind === 'collect' ) {
+
+						assert.equal( route.points.length, shape.items );
+						for ( const point of route.points ) {
+
+							assert.ok( metres( start, point ) <= shape.within + 1 && metres( start, point ) >= 59 );
+							assert.ok( route.points.every( other => other === point || metres( other, point ) >= shape.apart * 0.5 ) );
+
+						}
+
+					} else {
+
+						// From a few kilometres off, to the place itself, named.
+						assert.deepEqual( route.points, [ [ golden.lat, golden.lon ] ] );
+						assert.equal( route.goal, golden.name );
+						const far = metres( start, route.points[ 0 ] );
+						assert.ok( far >= shape.distance[ 0 ] - 1 && far <= shape.distance[ 1 ] + 1, String( far ) );
+
+					}
+
+				}
+
+			}
+
+		}
+
+	} );
+
+	test( 'a time is checked against the route: every point once, in order where it must be, no leg quicker than the game can go', () => {
+
+		const route = makeRoute( { kind: 'sprint', size: 'day', world: 'earth', place: { name: 'Arc', lat: 48.8738, lon: 2.2962, heading: 0 } }, randomFrom( new Uint8Array( 32 ).fill( 7 ) ) );
+		const sprint = { world: 'earth', kind: 'sprint', route };
+		const { ms, passes } = fairRun( sprint, 0 );
+		assert.ok( checkPasses( sprint, ms, passes ), 'as fast as the game goes' );
+		// A frame's slack, and not more.
+		const quicker = passes.map( ( [ i, at ], k ) => [ i, at - ( k + 1 ) * LEG_SLACK ] );
+		assert.ok( checkPasses( sprint, quicker.at( - 1 )[ 1 ], quicker ) );
+		const tooQuick = passes.map( ( [ i, at ], k ) => [ i, at - ( k + 1 ) * ( LEG_SLACK + 50 ) ] );
+		assert.ok( ! checkPasses( sprint, tooQuick.at( - 1 )[ 1 ], tooQuick ) );
+		// Out of order, a gate missed or twice, times going back, a time that isn't the last pass's,
+		// not whole milliseconds, not a list.
+		const swapped = passes.map( ( pass, i ) => i === 1 ? [ 2, pass[ 1 ] ] : i === 2 ? [ 1, pass[ 1 ] ] : pass );
+		const fair = fairRun( sprint, 9000 );
+		assert.ok( checkPasses( sprint, fair.ms, fair.passes ) );
+		for ( const [ name, bad, total ] of [
+			[ 'swapped', swapped, ms ], [ 'missing one', passes.slice( 0, - 1 ), passes.at( - 2 )[ 1 ] ], [ 'one twice', [ ...passes.slice( 0, - 1 ), passes.at( - 2 ) ], ms ],
+			[ 'going back', fair.passes.map( ( [ i, at ], k ) => [ i, k === 3 ? at - 99999 : at ] ), fair.ms ], [ 'not the last', fair.passes, fair.ms + 1 ],
+			[ 'fractions', fair.passes.map( ( [ i, at ] ) => [ i, at + 0.5 ] ), fair.ms + 0.5 ], [ 'strings', fair.passes.map( ( [ i, at ] ) => [ String( i ), at ] ), fair.ms ],
+			[ 'too many', [ ...fair.passes, [ 6, fair.ms ] ], fair.ms ], [ 'not a list', 'fast', fair.ms ], [ 'nothing', [], 0 ],
+		] ) assert.ok( ! checkPasses( sprint, total, bad ), name );
+		// Collectibles in any order, each once; a landmark's one goal, from within START_SLACK of its start.
+		const items = { world: 'moon', kind: 'collect', route: makeRoute( { kind: 'collect', size: 'day', world: 'moon', place: { name: 'Tycho', lat: - 43.31, lon: - 11.36 } }, randomFrom( new Uint8Array( 32 ).fill( 3 ) ) ) };
+		const backwards = fairRun( items, 2000, items.route.points.map( ( _, i ) => items.route.points.length - 1 - i ) );
+		assert.ok( checkPasses( items, backwards.ms, backwards.passes ) );
+		const twice = backwards.passes.map( ( pass, i ) => i === 1 ? [ backwards.passes[ 0 ][ 0 ], pass[ 1 ] ] : pass );
+		assert.ok( ! checkPasses( items, backwards.ms, twice ) );
+		const landmark = { world: 'earth', kind: 'landmark', route: makeRoute( { kind: 'landmark', size: 'day', world: 'earth', place: { name: 'Eiffel Tower', lat: 48.86, lon: 2.2945, heading: 236 } }, randomFrom( new Uint8Array( 32 ).fill( 9 ) ) ) };
+		const straight = fairRun( landmark, 0 );
+		assert.equal( straight.ms, Math.ceil( ( metresOn( 'earth', landmark.route.start.lat, landmark.route.start.lon, 48.86, 2.2945 ) - START_SLACK - landmark.route.radius ) / FASTEST * 1000 ) );
+		assert.ok( checkPasses( landmark, straight.ms, straight.passes ) );
+		assert.ok( ! checkPasses( landmark, straight.ms - 200, [ [ 0, straight.ms - 200 ] ] ) );
+		// Two hours at most.
+		assert.ok( ! checkPasses( landmark, MAX_RUN + 1, [ [ 0, MAX_RUN + 1 ] ] ) );
+
+	} );
+
+	test( 'the rotation goes round the places, each once a round, the day never its week\'s or month\'s, and every instance picks the same', async () => {
+
+		const env = { TURNSTILE_SECRET: PASS_SECRET };
+		const other = { TURNSTILE_SECRET: '2x0000000000000000000000000000000AA' };
+		for ( const world of [ 'earth', 'moon' ] ) {
+
+			// A round of days: as many as there are places, each one once.
+			const first = periodOf( 'day', CHALLENGE_DAY );
+			const day = i => periodOf( 'day', first.starts + i * DAY );
+			const picks = [];
+			for ( let i = 0; i < 60; i ++ ) {
+
+				const period = day( i );
+				const pick = await rotationPick( env, period, world, [] );
+				picks.push( pick );
+				const week = await rotationPick( env, periodOf( 'week', period.starts ), world, [] );
+				const month = await rotationPick( env, periodOf( 'month', period.starts ), world, [] );
+				assert.notEqual( pick.place.id, week.place.id, `${ period.key } is its week's` );
+				assert.notEqual( pick.place.id, month.place.id, `${ period.key } is its month's` );
+				assert.notEqual( week.place.id, month.place.id );
+				assert.ok( KINDS.includes( pick.kind ) && pick.source === 'rotation' );
+				assert.deepEqual( await rotationPick( env, period, world, [] ), pick );
+
+			}
+
+			// Another key (another secret) another order: so the code alone doesn't say what's next.
+			const elsewhere = await Promise.all( Array.from( { length: 10 }, ( _, i ) => rotationPick( other, day( i ), world, [] ) ) );
+			assert.notDeepEqual( elsewhere.map( p => p.place.id ), picks.slice( 0, 10 ).map( p => p.place.id ) );
+			// The places that come in 30 days: most of them, and none twice in a row.
+			const ids = picks.map( p => p.place.id );
+			for ( let i = 1; i < ids.length; i ++ ) assert.notEqual( ids[ i ], ids[ i - 1 ], `${ world } twice in a row` );
+			assert.ok( new Set( ids.slice( 0, 30 ) ).size >= ( world === 'earth' ? 14 : 20 ), `${ new Set( ids ).size } places` );
+			// Every kind comes up.
+			assert.deepEqual( [ ...new Set( picks.map( p => p.kind ) ) ].sort(), [ ...KINDS ].sort() );
+
+		}
+
+		// An approved place joins the rotation's places.
+		const approved = [ { world: 'earth', cell_row: 14212, cell_column: 5052, name: 'Lombard Street', region: 'San Francisco', lat: 37.8021, lon: - 122.4187 } ];
+		const seen = new Set();
+		for ( let i = 0; i < 40; i ++ ) seen.add( ( await rotationPick( env, periodOf( 'day', CHALLENGE_DAY + i * DAY ), 'earth', approved ) ).place.id );
+		assert.ok( seen.has( 'cell:earth:14212:5052' ) );
+
+	} );
+
+	test( 'the rotation\'s rules hold over years, with any key: never a place twice in a row, and the three live on a world always three places (a week that ends in the next month too)', async () => {
+
+		// Three years of days, ten of weeks and thirty of months on each world, with four keys: the rare
+		// ways a step aside could clash (a round's first after the last round's step aside, two periods
+		// in a row stepping aside, a week across a month's end) all come up in that many.
+		const secrets = [ PASS_SECRET, '2x0000000000000000000000000000000AA', 'another-secret-for-the-rotation-x', 'third-secret-zzz-9876' ];
+		const from = Date.UTC( 2026, 10, 16 );
+		let weeksAcross = 0;
+		for ( const secret of secrets ) {
+
+			const env = { TURNSTILE_SECRET: secret };
+			const pick = async ( kind, time, world ) => ( await rotationPick( env, periodOf( kind, time ), world, [] ) ).place.id;
+			for ( const world of [ 'earth', 'moon' ] ) {
+
+				let last = null;
+				for ( let i = 0; i < 3 * 366; i ++ ) {
+
+					const time = from + i * DAY;
+					const day = await pick( 'day', time, world );
+					assert.notEqual( day, last, `${ secret } ${ world } ${ periodOf( 'day', time ).key }: twice in a row` );
+					assert.notEqual( day, await pick( 'week', time, world ), `${ secret } ${ world } ${ periodOf( 'day', time ).key }: its week's` );
+					assert.notEqual( day, await pick( 'month', time, world ), `${ secret } ${ world } ${ periodOf( 'day', time ).key }: its month's` );
+					last = day;
+
+				}
+
+				last = null;
+				for ( let week = periodOf( 'week', from ), i = 0; i < 10 * 53; i ++, week = nextPeriod( week ) ) {
+
+					const id = await pick( 'week', week.starts, world );
+					assert.notEqual( id, last, `${ secret } ${ world } ${ week.key }: twice in a row` );
+					// The month it starts in and the one it ends in: both live beside it on some days.
+					assert.notEqual( id, await pick( 'month', week.starts, world ), `${ secret } ${ world } ${ week.key }: its first month's` );
+					assert.notEqual( id, await pick( 'month', week.ends - 1, world ), `${ secret } ${ world } ${ week.key }: its last month's` );
+					if ( periodOf( 'month', week.starts ).key !== periodOf( 'month', week.ends - 1 ).key ) weeksAcross ++;
+					last = id;
+
+				}
+
+				last = null;
+				for ( let month = periodOf( 'month', from ), i = 0; i < 30 * 12; i ++, month = nextPeriod( month ) ) {
+
+					const id = await pick( 'month', month.starts, world );
+					assert.notEqual( id, last, `${ secret } ${ world } ${ month.key }: twice in a row` );
+					last = id;
+
+				}
+
+			}
+
+		}
+
+		assert.ok( weeksAcross > 500, String( weeksAcross ) );
+
+	} );
+
+	test( 'a time is written only while its challenge is open, checked in the write itself: one finished between the check and the write is turned away, nothing of it kept', async () => {
+
+		// The Worker's postTime on D1's shape over node:sqlite; `between` runs as a batch of writes
+		// comes, as another request's (finishEnded writing the final places, a minute after the
+		// period's end) could land between this one's reads and its writes.
+		const d1 = sqliteD1();
+		const { db } = d1;
+		// Yesterday's sprint, over 30 s ago; two players, each with a run begun before midnight.
+		const ends = Date.UTC( 2026, 10, 17 );
+		const now = ends + 30 * SECOND;
+		const route = makeRoute( { kind: 'sprint', size: 'day', world: 'earth', place: { name: 'Arc', lat: 48.8738, lon: 2.2962, heading: 0 } }, randomFrom( new Uint8Array( 32 ).fill( 5 ) ) );
+		const { lastInsertRowid: id } = db.prepare( 'INSERT INTO challenges ( period, world, kind, place, region, route, source, starts_at, ends_at, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )' )
+			.run( 'day:2026-11-16', 'earth', 'sprint', 'Arc', '', JSON.stringify( route ), 'rotation', ends - DAY, ends, ends - DAY );
+		const run = fairRun( { world: 'earth', kind: 'sprint', route }, 9000 );
+		assert.ok( now - run.ms < ends );
+		const posted = async ( name, runId ) => {
+
+			const { id: player, secret } = sqlitePlayer( d1, name );
+			const visit = await makeVisit( { TURNSTILE_SECRET: PASS_SECRET }, ends - HOUR, 'earth' );
+			return postOver( d1, { id: player, secret, visit, challenge: Number( id ), run: runId, ms: run.ms, passes: run.passes, vehicle: 'go-kart' }, now );
+
+		};
+		// (The caches aren't Node's: a stand-in for the cleared rows.)
+		const had = globalThis.caches;
+		globalThis.caches = { default: { delete: async () => true, match: async () => undefined, put: async () => {} } };
+		try {
+
+			// Still open: taken, as the setup is right.
+			const taken = await posted( 'Ann', 'r'.repeat( 16 ) );
+			assert.equal( taken.status, 200 );
+			assert.equal( ( await taken.json() ).rank, 1 );
+			// Finished between this post's check and its write: turned away, as a post after its final places
+			// would be, and nothing kept (no row, no driver counted).
+			d1.between = statements => {
+
+				if ( statements.some( s => /INSERT INTO challenge_times/.test( s.sql ) ) ) db.prepare( 'UPDATE challenges SET final_at = ? WHERE id = ?' ).run( now, id );
+
+			};
+			await assert.rejects( posted( 'Bea', 's'.repeat( 16 ) ), err => err.status === 403 && err.extra.reason === 'challenge' );
+			assert.deepEqual( db.prepare( 'SELECT player_id FROM challenge_times' ).all().map( r => r.player_id ), [ 'AnnPlayer0000000' ] );
+			assert.equal( db.prepare( 'SELECT drivers FROM challenges WHERE id = ?' ).get( id ).drivers, 1 );
+
+		} finally {
+
+			await Promise.all( d1.pending );
+			globalThis.caches = had;
+
+		}
+
+	} );
+
+	test( 'a rank is found in the board\'s order, read from its index alone and no more than RANK_MOST rows of it (no count of the rows ahead): a long board\'s last place is "1000+"', async () => {
+
+		const d1 = sqliteD1();
+		const { db } = d1;
+		const now = CHALLENGE_DAY;
+		const route = makeRoute( { kind: 'sprint', size: 'day', world: 'earth', place: { name: 'Arc', lat: 48.8738, lon: 2.2962, heading: 0 } }, randomFrom( new Uint8Array( 32 ).fill( 7 ) ) );
+		const { lastInsertRowid: id } = db.prepare( 'INSERT INTO challenges ( period, world, kind, place, region, route, source, starts_at, ends_at, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )' )
+			.run( 'day:2026-11-16', 'earth', 'sprint', 'Arc', '', JSON.stringify( route ), 'rotation', now - HOUR, now + HOUR, now - HOUR );
+		// A board of RANK_MOST + 200 times, all quicker than the run posted below.
+		const run = fairRun( { world: 'earth', kind: 'sprint', route }, 9000 );
+		const many = RANK_MOST + 200;
+		db.exec( `INSERT INTO players ( id, name, name_key, secret_hash, created_at, last_seen_at ) SELECT printf( 'board%011d', value ), printf( 'Driver %d', value ), printf( 'driver %d', value ), 'x', 0, 0 FROM json_each( '[${ Array.from( { length: many }, ( _, i ) => i ).join( ',' ) }]' )` );
+		db.exec( `INSERT INTO challenge_times ( challenge_id, player_id, ms, passes, vehicle, run_id, visit, owner, created_at, first_at ) SELECT ${ id }, printf( 'board%011d', value ), ${ run.ms - 1 } - value, '[]', 'go-kart', printf( 'boardrun%011d', value ), 'v', 0, 0, 0 FROM json_each( '[${ Array.from( { length: many }, ( _, i ) => i ).join( ',' ) }]' )` );
+		db.prepare( 'UPDATE challenges SET drivers = ? WHERE id = ?' ).run( many, id );
+		const had = globalThis.caches;
+		globalThis.caches = { default: { delete: async () => true, match: async () => undefined, put: async () => {} } };
+		try {
+
+			const { id: player, secret } = sqlitePlayer( d1, 'Last One' );
+			const visit = await makeVisit( { TURNSTILE_SECRET: PASS_SECRET }, now - HOUR, 'earth' );
+			d1.sql.length = 0;
+			const res = await postOver( d1, { id: player, secret, visit, challenge: Number( id ), run: 'l'.repeat( 16 ), ms: run.ms, passes: run.passes, vehicle: 'go-kart' }, now );
+			const answer = await res.json();
+			// Last of RANK_MOST + 201: past the order's RANK_MOST, the page's "1000+".
+			assert.deepEqual( [ answer.rank, answer.total, rankText( answer.rank ) ], [ RANK_MOST + 1, many + 1, `${ RANK_MOST }+` ] );
+			assert.equal( rankText( RANK_MOST ), String( RANK_MOST ) );
+			// The order: the board's index alone (it covers the query, in the order asked), RANK_MOST rows
+			// at most; and no count of the rows ahead anywhere.
+			const ordered = d1.sql.filter( sql => /FROM challenge_times WHERE challenge_id = \? AND owner = 0 ORDER BY/.test( sql ) );
+			assert.equal( ordered.length, 1 );
+			const plan = db.prepare( `EXPLAIN QUERY PLAN ${ ordered[ 0 ] }` ).all( id ).map( row => row.detail ).join( ' | ' );
+			assert.match( plan, /^SEARCH challenge_times USING COVERING INDEX challenge_times_board \(challenge_id=\? AND owner=\?\)$/, plan );
+			assert.match( ordered[ 0 ], new RegExp( `LIMIT ${ RANK_MOST }$` ) );
+			assert.equal( db.prepare( ordered[ 0 ] ).all( id ).length, RANK_MOST );
+			assert.ok( ! d1.sql.some( sql => /COUNT\(/.test( sql ) && /challenge_times/.test( sql ) ), d1.sql.join( '\n' ) );
+			// And a quick one's: counted exactly.
+			const { id: quick, secret: quickSecret } = sqlitePlayer( d1, 'Quick One' );
+			const fast = fairRun( { world: 'earth', kind: 'sprint', route }, 9000 - Math.ceil( 210 / route.points.length ) );
+			const rows = db.prepare( 'SELECT COUNT(*) AS n FROM challenge_times WHERE challenge_id = ? AND ms <= ? AND player_id != ?' ).get( id, fast.ms, quick ).n;
+			const second = await ( await postOver( d1, { id: quick, secret: quickSecret, visit: await makeVisit( { TURNSTILE_SECRET: PASS_SECRET }, now - HOUR, 'earth' ), challenge: Number( id ), run: 'q'.repeat( 16 ), ms: fast.ms, passes: fast.passes, vehicle: 'go-kart' }, now, '198.51.100.8' ) ).json();
+			assert.equal( second.rank, rows + 1 );
+			assert.ok( second.rank < RANK_MOST, String( second.rank ) );
+
+		} finally {
+
+			await Promise.all( d1.pending );
+			globalThis.caches = had;
+
+		}
+
+	} );
+
+	test( 'a rank in a board\'s order: the times ahead counted by halving (the same time, who set it first; the same moment, the player\'s id), the player\'s own left out, the owner\'s the rank it would have, past RANK_MOST "1000+"', () => {
+
+		const order = [ [ 1000, 5, 'a' ], [ 1000, 7, 'c' ], [ 1000, 7, 'e' ], [ 1200, 1, 'b' ], [ 1500, 2, 'mine' ], [ 1800, 3, 'd' ] ];
+		assert.equal( rankIn( order, { ms: 900, created_at: 9 }, 'x' ), 1 );
+		assert.equal( rankIn( order, { ms: 1000, created_at: 5 }, 'a' ), 1 );
+		assert.equal( rankIn( order, { ms: 1000, created_at: 7 }, 'd' ), 3, 'the same moment: by the id' );
+		assert.equal( rankIn( order, { ms: 1000, created_at: 7 }, 'e' ), 3 );
+		assert.equal( rankIn( order, { ms: 1000, created_at: 8 }, 'x' ), 4 );
+		// The player's own best as the order had it, beaten since: not counted ahead of the new one.
+		assert.equal( rankIn( order, { ms: 1100, created_at: 9 }, 'mine' ), 4 );
+		assert.equal( rankIn( order, { ms: 1500, created_at: 2 }, 'mine' ), 5 );
+		assert.equal( rankIn( order, { ms: 9000, created_at: 9 }, 'mine' ), 6, 'last, its own old time left out' );
+		assert.equal( rankIn( [], { ms: 1, created_at: 1 }, 'x' ), 1 );
+		const full = Array.from( { length: RANK_MOST }, ( _, i ) => [ i, 0, `p${ i }` ] );
+		assert.equal( rankIn( full, { ms: RANK_MOST + 5, created_at: 0 }, 'x' ), RANK_MOST + 1 );
+		assert.equal( rankIn( full, { ms: RANK_MOST - 1.5, created_at: 0 }, 'x' ), RANK_MOST );
+
+	} );
+
+	test( 'what a look reads, by D1\'s own count of rows read: a player\'s rank costs a few rows however far down a board of 1,200 and however many players are asked as in turn; a finished board\'s, its final place; nothing counts the rows ahead', async () => {
+
+		// workerd's own D1 (wrangler's getPlatformProxy, the database alone), with the migrations, and
+		// the routes run here over it, every statement's meta.rows_read added up; Cloudflare's cache a
+		// Map here (each put's Cache-Control kept, to look at).
+		const { getPlatformProxy } = await import( 'wrangler' );
+		const dir = mkdtempSync( join( tmpdir(), 'challenge-rows-' ) );
+		writeFileSync( join( dir, 'wrangler.jsonc' ), JSON.stringify( { name: 'challenge-rows', compatibility_date: '2025-01-01', d1_databases: [ { binding: 'DB', database_name: 'rows', database_id: 'rows' } ] } ) );
+		const proxy = await getPlatformProxy( { configPath: join( dir, 'wrangler.jsonc' ), persist: { path: join( dir, 'state' ) } } );
+		const had = globalThis.caches;
+		try {
+
+			const raw = proxy.env.DB;
+			const migrations = new URL( '../worker/drive/migrations/', import.meta.url );
+			for ( const file of readdirSync( migrations ).sort() ) {
+
+				const statements = readFileSync( new URL( file, migrations ), 'utf8' ).replace( /^\s*--.*$/gm, '' ).split( /;\s*$/m ).map( text => text.trim() ).filter( Boolean );
+				await raw.batch( statements.map( text => raw.prepare( text ) ) );
+
+			}
+
+			let read = 0;
+			const counted = result => ( read += result.meta.rows_read, result );
+			const wrap = statement => ( {
+				statement,
+				bind: ( ...values ) => wrap( statement.bind( ...values ) ),
+				first: async () => counted( await statement.all() ).results[ 0 ] ?? null,
+				all: async () => counted( await statement.all() ),
+				run: async () => counted( await statement.run() ),
+			} );
+			const DB = { prepare: text => wrap( raw.prepare( text ) ), batch: async statements => ( await raw.batch( statements.map( s => s.statement ) ) ).map( counted ) };
+			const kept = new Map();
+			globalThis.caches = { default: {
+				match: async request => kept.has( request.url ) ? new Response( kept.get( request.url ).body ) : undefined,
+				put: async ( request, response ) => void kept.set( request.url, { body: await response.text(), control: response.headers.get( 'Cache-Control' ) } ),
+				delete: async request => kept.delete( request.url ),
+			} };
+			// A day no other test asks for the six on (this process keeps the six it has fixed a minute).
+			const now = Date.UTC( 2027, 2, 10, 12 );
+			const env = { DB, TURNSTILE_SECRET: PASS_SECRET };
+			const ask = async ( handler, path ) => {
+
+				const request = new Request( `https://worlddrive.app${ path }`, { headers: { 'CF-Connecting-IP': '198.51.100.70' } } );
+				read = 0;
+				const res = await handler( { request, url: new URL( request.url ), env, now, ctx: { waitUntil: () => {} } } );
+				return { body: await res.json(), read };
+
+			};
+			const ids = ( await ask( listChallenges, '/api/challenges' ) ).body.challenges.map( c => c.id );
+			assert.equal( ids.length, 6 );
+			// Each of the six a board of 1,240: 1,200 quicker times, then 40 players at the bottom of all six
+			// (a script's own, asked as in turn); and a finished board of yesterday's, the same.
+			const { meta: { last_row_id: past } } = await raw.prepare( 'INSERT INTO challenges ( period, world, kind, place, region, route, source, starts_at, ends_at, created_at, final_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )' )
+				.bind( 'day:2027-03-09', 'earth', 'sprint', 'Old', '', '{"start":{"lat":0,"lon":0},"points":[[0,0.01]],"radius":30}', 'rotation', now - 36 * HOUR, now - 12 * HOUR, now - 36 * HOUR, now - 11 * HOUR ).run();
+			const many = 1200;
+			const bottom = 40;
+			const numbers = JSON.stringify( Array.from( { length: many + bottom }, ( _, i ) => i ) );
+			await raw.prepare( 'INSERT INTO players ( id, name, name_key, secret_hash, created_at, last_seen_at ) SELECT printf( \'rows%012d\', value ), printf( \'Rows %d\', value ), printf( \'rows %d\', value ), \'x\', 0, 0 FROM json_each( ? )' ).bind( numbers ).run();
+			for ( const id of [ ...ids, past ] ) {
+
+				await raw.prepare( 'INSERT INTO challenge_times ( challenge_id, player_id, ms, passes, vehicle, run_id, visit, owner, created_at, first_at ) SELECT ?1, printf( \'rows%012d\', value ), 60000 + value * 10, \'[]\', \'go-kart\', printf( \'rowsrun%012d\', value ), \'v\', 0, ?2, ?2 FROM json_each( ?3 )' ).bind( id, now - HOUR, numbers ).run();
+				await raw.prepare( 'UPDATE challenges SET drivers = ? WHERE id = ?' ).bind( many + bottom, id ).run();
+
+			}
+
+			await raw.prepare( 'UPDATE challenge_times SET final_rank = ranked.place FROM ( SELECT player_id, ROW_NUMBER() OVER ( ORDER BY ms, created_at, player_id ) AS place FROM challenge_times WHERE challenge_id = ?1 ) AS ranked WHERE challenge_times.challenge_id = ?1 AND challenge_times.player_id = ranked.player_id' ).bind( past ).run();
+			kept.clear();
+			const player = i => `rows${ String( many + i ).padStart( 12, '0' ) }`;
+			// The first look reads each board's order once (RANK_MOST rows of each, from the index) and the
+			// list's tops.
+			const first = await ask( listChallenges, `/api/challenges?id=${ player( 0 ) }` );
+			assert.ok( first.body.challenges.every( c => c.me.rank === RANK_MOST + 1 ) );
+			assert.ok( first.read <= 6 * ( RANK_MOST + 40 ), String( first.read ) );
+			// Then a script's 40 players in turn, each missing the cache for its own rows: a few rows each,
+			// not six counts of the 1,000 ahead.
+			for ( let i = 1; i < bottom; i ++ ) {
+
+				const look = await ask( listChallenges, `/api/challenges?id=${ player( i ) }` );
+				assert.ok( look.body.challenges.every( c => c.me.rank === RANK_MOST + 1 ), JSON.stringify( look.body.challenges.map( c => c.me ) ) );
+				assert.ok( look.read <= 24, `list ${ i }: ${ look.read } rows read` );
+
+			}
+
+			// A board's own row, the same: a row or two.
+			for ( let i = 0; i < bottom; i ++ ) {
+
+				const look = await ask( challengeBoard, `/api/challenges/board?challenge=${ ids[ 0 ] }&id=${ player( i ) }` );
+				assert.equal( look.body.me.rank, RANK_MOST + 1 );
+				assert.ok( look.read <= ( i ? 6 : 6 + 50 ), `board ${ i }: ${ look.read } rows read` );
+
+			}
+
+			// One well up the board: its rank exact, found in the same order.
+			const up = await ask( challengeBoard, `/api/challenges/board?challenge=${ ids[ 0 ] }&id=${ player( - 700 ) }` );
+			assert.equal( up.body.me.rank, many - 700 + 1 );
+			assert.ok( up.read <= 6, String( up.read ) );
+			// A finished board: kept a day, and each player's rank there their final place (no order read).
+			const ended = await ask( challengeBoard, `/api/challenges/board?challenge=${ past }&id=${ player( 0 ) }` );
+			assert.equal( ended.body.me.rank, many + 1 );
+			assert.equal( kept.get( `https://worlddrive.app/api/challenges/board?challenge=${ past }` ).control, 'public, max-age=86400' );
+			assert.equal( kept.get( `https://worlddrive.app/api/challenges/board?challenge=${ ids[ 0 ] }` ).control, 'public, max-age=60' );
+			assert.ok( ! kept.has( `https://worlddrive.app/api/challenges/order?challenge=${ past }` ) );
+			for ( let i = 1; i < bottom; i ++ ) {
+
+				const look = await ask( challengeBoard, `/api/challenges/board?challenge=${ past }&id=${ player( i ) }` );
+				assert.equal( look.body.me.rank, many + i + 1 );
+				assert.ok( look.read <= 6, `finished board ${ i }: ${ look.read } rows read` );
+
+			}
+
+		} finally {
+
+			globalThis.caches = had;
+			await proxy.dispose();
+			rmSync( dir, { recursive: true, force: true } );
+
+		}
+
+	} );
+
+	test( 'a visit posts CHALLENGE_TIMES_PER_VISIT times at most, from whatever addresses (one robot check buys that many); the visitor\'s day is counted by the /48; a try the visitor\'s day turns away gives the visit its count back', async () => {
+
+		const d1 = sqliteD1();
+		const { db } = d1;
+		const now = CHALLENGE_DAY;
+		const route = makeRoute( { kind: 'sprint', size: 'day', world: 'earth', place: { name: 'Arc', lat: 48.8738, lon: 2.2962, heading: 0 } }, randomFrom( new Uint8Array( 32 ).fill( 11 ) ) );
+		const { lastInsertRowid: id } = db.prepare( 'INSERT INTO challenges ( period, world, kind, place, region, route, source, starts_at, ends_at, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )' )
+			.run( 'day:2026-11-16', 'earth', 'sprint', 'Arc', '', JSON.stringify( route ), 'rotation', now - HOUR, now + HOUR, now - HOUR );
+		// DriveLimits as a stand-in: the addresses each turn is asked for, and a day that can be used up.
+		const asked = [];
+		let dayUsed = false;
+		const limits = { take: async ( kind, ip ) => ( asked.push( [ kind, ip ] ), { ok: ! dayUsed, retryAfter: 100 } ) };
+		const posting = ( body, at, ip ) => {
+
+			const request = new Request( 'https://worlddrive.app/api/challenges/time', { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip }, body: JSON.stringify( body ) } );
+			return postTime( { request, url: new URL( request.url ), now: at, env: { DB: d1.DB, TURNSTILE_SECRET: PASS_SECRET, CHALLENGE_TIMES_PER_VISIT: '3' }, limits, ctx: { waitUntil: work => d1.pending.push( work ) } } );
+
+		};
+		const had = globalThis.caches;
+		globalThis.caches = { default: { delete: async () => true, match: async () => undefined, put: async () => {} } };
+		try {
+
+			const racer = sqlitePlayer( d1, 'Visit Racer' );
+			const visit = await makeVisit( { TURNSTILE_SECRET: PASS_SECRET }, now - HOUR, 'earth' );
+			const visitId = visit.split( '.' )[ 1 ];
+			const better = k => fairRun( { world: 'earth', kind: 'sprint', route }, 9000 - k * 100 );
+			// Three, each a better best, every 10 s, each from another /64 of one /48: taken, and the
+			// visitor's day asked by the /48 each time (one visitor, not three).
+			for ( let k = 0; k < 3; k ++ ) {
+
+				const run = better( k );
+				const res = await posting( { ...racer, visit, challenge: Number( id ), run: `visitrun${ k }`.padEnd( 16, 'x' ), ms: run.ms, passes: run.passes, vehicle: 'go-kart' }, now + k * TIME_GAP, `2001:db8:5:${ k + 1 }::7` );
+				assert.equal( res.status, 200 );
+
+			}
+
+			assert.deepEqual( asked, [ [ 'time', '2001:db8:5::/48' ], [ 'time', '2001:db8:5::/48' ], [ 'time', '2001:db8:5::/48' ] ] );
+			assert.equal( db.prepare( 'SELECT times FROM visits WHERE id = ?' ).get( visitId ).times, 3 );
+			// A fourth with the same visit, from anywhere: a 429 (reason 'visit'), nothing written, DriveLimits
+			// not asked.
+			const kept = () => [ db.prepare( 'SELECT ms, run_id FROM challenge_times WHERE player_id = ?' ).get( racer.id ), db.prepare( 'SELECT last_time_at FROM players WHERE id = ?' ).get( racer.id ).last_time_at, db.prepare( 'SELECT times FROM visits WHERE id = ?' ).get( visitId ).times ];
+			const was = kept();
+			for ( const ip of [ '203.0.113.9', '2001:db8:99::1' ] ) {
+
+				const run = better( 5 );
+				await assert.rejects( posting( { ...racer, visit, challenge: Number( id ), run: 'visitrun9'.padEnd( 16, 'x' ), ms: run.ms, passes: run.passes, vehicle: 'go-kart' }, now + 5 * TIME_GAP, ip ),
+					err => err.status === 429 && err.extra.reason === 'visit' && err.extra.retryAfter > 60 * 60 );
+				assert.deepEqual( kept(), was );
+
+			}
+
+			assert.equal( asked.length, 3 );
+			// A new visit (another robot check) posts again.
+			const next = await makeVisit( { TURNSTILE_SECRET: PASS_SECRET }, now, 'earth' );
+			let run = better( 6 );
+			assert.equal( ( await posting( { ...racer, visit: next, challenge: Number( id ), run: 'visitrun6'.padEnd( 16, 'x' ), ms: run.ms, passes: run.passes, vehicle: 'go-kart' }, now + 7 * TIME_GAP, '203.0.113.9' ) ).status, 200 );
+			// The visitor's day used up: turned away (daily), held till midnight, and the visit's count as
+			// it was (the try it took given back).
+			dayUsed = true;
+			run = better( 7 );
+			await assert.rejects( posting( { ...racer, visit: next, challenge: Number( id ), run: 'visitrun7'.padEnd( 16, 'x' ), ms: run.ms, passes: run.passes, vehicle: 'go-kart' }, now + 9 * TIME_GAP, '203.0.113.9' ), err => err.status === 429 );
+			assert.equal( db.prepare( 'SELECT times FROM visits WHERE id = ?' ).get( next.split( '.' )[ 1 ] ).times, 1 );
+			assert.equal( db.prepare( 'SELECT last_time_at FROM players WHERE id = ?' ).get( racer.id ).last_time_at, Date.UTC( 2026, 10, 17 ) - TIME_GAP );
+
+		} finally {
+
+			await Promise.all( d1.pending );
+			globalThis.caches = had;
+
+		}
+
+	} );
+
+	test( 'a run\'s id names one time on a challenge: another player\'s post with it is turned away (400), nothing of it written', async () => {
+
+		const d1 = sqliteD1();
+		const { db } = d1;
+		const now = CHALLENGE_DAY;
+		const route = makeRoute( { kind: 'sprint', size: 'day', world: 'earth', place: { name: 'Arc', lat: 48.8738, lon: 2.2962, heading: 0 } }, randomFrom( new Uint8Array( 32 ).fill( 9 ) ) );
+		const { lastInsertRowid: id } = db.prepare( 'INSERT INTO challenges ( period, world, kind, place, region, route, source, starts_at, ends_at, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )' )
+			.run( 'day:2026-11-16', 'earth', 'sprint', 'Arc', '', JSON.stringify( route ), 'rotation', now - HOUR, now + HOUR, now - HOUR );
+		const had = globalThis.caches;
+		globalThis.caches = { default: { delete: async () => true, match: async () => undefined, put: async () => {} } };
+		try {
+
+			const visit = await makeVisit( { TURNSTILE_SECRET: PASS_SECRET }, now - HOUR, 'earth' );
+			const victim = sqlitePlayer( d1, 'Victim Racer' );
+			const slow = fairRun( { world: 'earth', kind: 'sprint', route }, 9000 );
+			assert.equal( ( await postOver( d1, { ...victim, visit, challenge: Number( id ), run: 'VictimRun_abc123', ms: slow.ms, passes: slow.passes, vehicle: 'go-kart' }, now ) ).status, 200 );
+			// Copy Cat, quicker, with Victim's run's id (from a link to it): turned away, as a new row and as
+			// a better best of their own alike.
+			const copy = sqlitePlayer( d1, 'Copy Cat' );
+			const quick = fairRun( { world: 'earth', kind: 'sprint', route }, 5000 );
+			const copied = { ...copy, visit: await makeVisit( { TURNSTILE_SECRET: PASS_SECRET }, now - HOUR, 'earth' ), challenge: Number( id ), run: 'VictimRun_abc123', ms: quick.ms, passes: quick.passes, vehicle: 'go-kart' };
+			await assert.rejects( postOver( d1, copied, now, '198.51.100.9' ), err => err.status === 400 && err.extra.reason === 'run' );
+			const own = fairRun( { world: 'earth', kind: 'sprint', route }, 9500 );
+			assert.equal( ( await postOver( d1, { ...copied, run: 'CopyCatOwnRun_01', ms: own.ms, passes: own.passes }, now + 20 * SECOND, '198.51.100.9' ) ).status, 200 );
+			await assert.rejects( postOver( d1, { ...copied, ms: quick.ms }, now + 40 * SECOND, '198.51.100.9' ), err => err.status === 400 && err.extra.reason === 'run' );
+			assert.deepEqual( db.prepare( 'SELECT player_id, run_id FROM challenge_times ORDER BY ms' ).all().map( r => [ r.player_id, r.run_id ] ), [ [ victim.id, 'VictimRun_abc123' ], [ copy.id, 'CopyCatOwnRun_01' ] ] );
+			assert.equal( db.prepare( 'SELECT drivers FROM challenges WHERE id = ?' ).get( id ).drivers, 2 );
+
+		} finally {
+
+			await Promise.all( d1.pending );
+			globalThis.caches = had;
+
+		}
+
+	} );
+
+	test( 'on the Moon, no gate on a crater\'s wall: each point on ground sloping under 20°, on its own heights', async () => {
+
+		const bytes = readFileSync( MOON_HEIGHTS );
+		setHeights( new Int16Array( bytes.buffer, bytes.byteOffset, bytes.byteLength / 2 ) );
+		let checked = 0;
+		let faults = 0;
+		for ( const place of MOON_PLACES.slice( 0, 24 ) ) {
+
+			for ( const kind of KINDS ) {
+
+				const bytes = Uint8Array.from( { length: 16 }, ( _, i ) => place.id.charCodeAt( i % place.id.length ) * ( i + 1 ) );
+				const route = makeRoute( { kind, size: 'week', world: 'moon', place }, randomFrom( bytes ), moonFaults );
+				faults += movableFaults( route );
+				checked += route.points.length;
+
+			}
+
+		}
+
+		// Laid out again where one was: few left (on the roughest ground, the fewest of the tries).
+		assert.ok( faults <= checked * 0.02, `${ faults } of ${ checked }` );
+
+	} );
+
+	test( 'on the Moon, the legs too: a route\'s way from gate to gate (and to a landmark) kept off crater walls and mountainsides where any of its tries is', async () => {
+
+		const bytes = readFileSync( MOON_HEIGHTS );
+		setHeights( new Int16Array( bytes.buffer, bytes.byteOffset, bytes.byteLength / 2 ) );
+		// A leg is counted by its steep stretches (100 m rising or falling 20° or more): across
+		// Shackleton's wall, from inside the crater, a dozen; along its rim, or from out on the plain to
+		// its north, none.
+		const rim = MOON_PLACES.find( p => p.name === 'Shackleton crater rim' );
+		const from = bearing => legFaults( ...destination( 'moon', rim.lat, rim.lon, bearing, 1600 ), rim.lat, rim.lon );
+		assert.ok( from( 90 ) >= 8, String( from( 90 ) ) );
+		assert.equal( from( 0 ), 0 );
+		const tycho = MOON_PLACES.find( p => p.id === 'moon-apollo-11' );
+		assert.equal( legFaults( tycho.lat, tycho.lon, ...destination( 'moon', tycho.lat, tycho.lon, 45, 2000 ) ), 0, 'the Sea of Tranquillity is flat' );
+		// Every Moon place's sprints and landmarks of each length, laid out as the Worker does (with its
+		// check) and with their points alone checked: each leg's steep stretches.
+		const lay = check => {
+
+			let legs = 0;
+			let steep = 0;
+			let worst = 0;
+			for ( const place of MOON_PLACES ) {
+
+				for ( const size of [ 'day', 'week', 'month' ] ) {
+
+					for ( const kind of [ 'sprint', 'landmark' ] ) {
+
+						const seed = Uint8Array.from( { length: 16 }, ( _, i ) => ( place.id.charCodeAt( i % place.id.length ) * ( i + 7 ) + size.length * 31 + kind.length ) & 255 );
+						const route = makeRoute( { kind, size, world: 'moon', place }, randomFrom( seed ), check );
+						const points = [ [ route.start.lat, route.start.lon ], ...route.points ];
+						for ( let i = 1; i < points.length; i ++ ) {
+
+							const faults = legFaults( ...points[ i - 1 ], ...points[ i ] );
+							legs ++;
+							if ( faults ) steep ++;
+							worst = Math.max( worst, faults );
+
+						}
+
+					}
+
+				}
+
+			}
+
+			return { legs, steep, worst };
+
+		};
+		const checked = lay( moonFaults );
+		const pointsAlone = lay( route => [ [ route.start.lat, route.start.lon ], ...route.points ].filter( point => moonSteep( ...point ) ).length );
+		// No leg with more than 6 (the few left are sprints' on Shackleton's rim and Mons Hadley, where
+		// none of a sprint's tries was clear; a landmark's drive is the clearest way in, below), and few
+		// with any; far fewer than with the points alone checked.
+		assert.ok( checked.worst <= 6, JSON.stringify( checked ) );
+		assert.ok( checked.steep <= checked.legs * 0.03, JSON.stringify( checked ) );
+		assert.ok( pointsAlone.worst > 10 && pointsAlone.steep > checked.steep * 1.4, JSON.stringify( { checked, pointsAlone } ) );
+
+	} );
+
+	test( 'on the Moon, a landmark\'s drive comes in the clearest way there is: laid out as the Worker lays them, every place over many periods, none crosses a steep stretch where a way in from another bearing at its distance wouldn\'t', async () => {
+
+		const bytes = readFileSync( MOON_HEIGHTS );
+		setHeights( new Int16Array( bytes.buffer, bytes.byteOffset, bytes.byteLength / 2 ) );
+		const env = { TURNSTILE_SECRET: PASS_SECRET };
+		// 20 days, 8 weeks and 4 months from today's, each place a landmark in each, with the Worker's own
+		// random numbers for it (challengeFor: an HMAC of the period, the world, the kind and the place).
+		const periods = [
+			...Array.from( { length: 20 }, ( _, i ) => periodOf( 'day', CHALLENGE_DAY + i * DAY ) ),
+			...Array.from( { length: 8 }, ( _, i ) => periodOf( 'week', CHALLENGE_DAY + i * 7 * DAY ) ),
+			...Array.from( { length: 4 }, ( _, i ) => periodOf( 'month', Date.UTC( 2026, 10 + i, 2 ) ) ),
+		];
+		let legs = 0;
+		let crossing = 0;
+		let worst = 0;
+		for ( const place of MOON_PLACES ) {
+
+			for ( const period of periods ) {
+
+				const route = JSON.parse( ( await challengeFor( env, period, 'moon', { place, kind: 'landmark', source: 'rotation' }, CHALLENGE_DAY ) ).route );
+				const faults = moonFaults( route, 'landmark' );
+				const stretches = legFaults( route.start.lat, route.start.lon, place.lat, place.lon );
+				legs ++;
+				worst = Math.max( worst, stretches );
+				if ( stretches ) crossing ++;
+				if ( ! faults ) continue;
+				// Every other way in at its distance, every 5 degrees round from its own: none clearer. (Its
+				// bearing and distance are whole degrees and metres, so they're told again from its start.)
+				const distance = Math.round( metresOn( 'moon', place.lat, place.lon, route.start.lat, route.start.lon ) );
+				const back = Math.round( bearingTo( 'moon', place.lat, place.lon, route.start.lat, route.start.lon ) );
+				const [ lat0, lon0 ] = destination( 'moon', place.lat, place.lon, back, distance ).map( degrees => Math.round( degrees * 1e6 ) / 1e6 );
+				assert.deepEqual( [ lat0, lon0 ], [ route.start.lat, route.start.lon ] );
+				for ( let turn = 5; turn < 360; turn += 5 ) {
+
+					const [ lat, lon ] = destination( 'moon', place.lat, place.lon, back + turn, distance ).map( degrees => Math.round( degrees * 1e6 ) / 1e6 );
+					const other = moonFaults( { start: { lat, lon }, points: route.points }, 'landmark' );
+					assert.ok( other >= faults, `${ place.name } ${ period.key }: ${ faults } faults coming in from ${ Math.round( back ) }°, ${ other } from ${ Math.round( back + turn ) }°` );
+
+				}
+
+			}
+
+		}
+
+		// Few cross anything at all (10 of the 1,664 here: Shackleton's rim and Mons Hadley on days whose
+		// distance has no clear way in, from any bearing). Tried from 8 bearings spread round, as before,
+		// 17 crossed, 13 of them where another bearing was clear, one 10 stretches up and down
+		// Shackleton's wall.
+		assert.ok( crossing <= legs * 0.01, `${ crossing } of ${ legs }` );
+		assert.ok( worst <= 8, String( worst ) );
+
+	} );
+
+	test( 'the rotation keeps clear of what D1 has fixed: a year of days fixed as the Worker fixes them, with the owner\'s picks for weeks and months and places approved and unapproved on the way, never a place twice in a row nor two of the three live alike', async () => {
+
+		// As liveChallenges fixes them: each day the periods not yet fixed, the longest first, each from
+		// the owner's pick for it or the rotation's, clear of what's fixed (the live ones and the one
+		// before). The owner picks every third week the place the rotation alone would give one of its
+		// days, and every other month the place it would give its first week; a busy place is approved
+		// on day 40 and another on day 200, and the first unapproved on day 300 (each reshuffling the
+		// rotation's order, so what it would choose now isn't what was fixed). The rules' own test
+		// (above) is the rotation alone, its list unchanged.
+		const busy = [
+			{ world: 'earth', cell_row: 14212, cell_column: 5052, name: 'Lombard Street', region: 'San Francisco', lat: 37.8021, lon: - 122.4187 },
+			{ world: 'earth', cell_row: 15000, cell_column: 4000, name: 'Somewhere busy', region: '', lat: 41.2, lon: 12.1 },
+			{ world: 'moon', cell_row: 300, cell_column: 400, name: 'A busy crater', region: '', lat: 12.5, lon: 30.25 },
+		];
+		for ( const secret of [ PASS_SECRET, 'another-secret-for-the-rotation-x' ] ) {
+
+			const env = { TURNSTILE_SECRET: secret };
+			for ( const world of [ 'earth', 'moon' ] ) {
+
+				const rows = new Map();
+				let approved = [];
+				let clashes = 0;
+				let fixings = 0;
+				const pinned = ( period, chosen ) => {
+
+					const { lat, lon } = chosen.place;
+					const route = chosen.kind === 'landmark' ? { start: { lat: lat + 0.02, lon }, points: [ [ lat, lon ] ] } : { start: { lat, lon }, points: [] };
+					return { period: period.key, world, kind: chosen.kind, place: chosen.place.name, route: JSON.stringify( route ), source: chosen.source, starts_at: period.starts, ends_at: period.ends, order: fixings ++ };
+
+				};
+				const placeOf = row => row && JSON.parse( row.route ).points[ 0 ] ? [ row.place, ...JSON.parse( row.route ).points[ 0 ] ] : row && [ row.place, JSON.parse( row.route ).start.lat, JSON.parse( row.route ).start.lon ];
+				const same = ( a, b ) => a && b && ( a[ 0 ] === b[ 0 ] || metresOn( world, a[ 1 ], a[ 2 ], b[ 1 ], b[ 2 ] ) < 1000 );
+				const from = Date.UTC( 2026, 10, 16 );
+				for ( let i = 0; i < 365; i ++ ) {
+
+					const now = from + i * DAY + 10 * HOUR;
+					if ( i === 40 ) approved = busy.slice( 0, 1 ).concat( busy.slice( 2 ) );
+					if ( i === 200 ) approved = busy;
+					if ( i === 300 ) approved = busy.slice( 1 );
+					const periods = periodsAt( now );
+					const fixed = [ ...periods, ...periods.map( p => periodOf( p.kind, p.starts - 1 ) ) ].map( p => rows.get( p.key ) ).filter( Boolean );
+					for ( const period of [ ...periods ].reverse() ) {
+
+						if ( rows.has( period.key ) ) continue;
+						const index = Math.round( period.starts / DAY );
+						let chosen = null;
+						// The owner's picks: the place the rotation alone would give a day in it.
+						if ( period.kind === 'week' && index % 3 === 0 ) chosen = { ...await rotationPick( env, periodOf( 'day', period.starts + 2 * DAY ), world, approved ), source: 'owner' };
+						if ( period.kind === 'month' && new Date( period.starts ).getUTCMonth() % 2 === 0 ) chosen = { ...await rotationPick( env, periodOf( 'day', period.starts + DAY ), world, approved ), source: 'owner' };
+						chosen ??= await rotationPick( env, period, world, approved, fixed );
+						const row = pinned( period, chosen );
+						rows.set( period.key, row );
+						fixed.push( row );
+
+					}
+
+					// Today's three: three places, and none the one before's of its kind. Each rule binds the
+					// rotation's choice made after the other was fixed (the owner may choose what they like).
+					const [ day, week, month ] = periods.map( p => rows.get( p.key ) );
+					const label = `${ secret } ${ world } ${ day.period }`;
+					const apart = ( a, b, what ) => {
+
+						const later = a.order > b.order ? a : b;
+						if ( later.source === 'rotation' ) assert.ok( ! same( placeOf( a ), placeOf( b ) ), `${ label }: ${ what }` );
+
+					};
+					apart( day, week, 'the day its week\'s' );
+					apart( day, month, 'the day its month\'s' );
+					apart( week, month, 'the week its month\'s' );
+					for ( const row of [ day, week, month ] ) {
+
+						const before = rows.get( periodOf( periodKindOf( row ), row.starts_at - 1 ).key );
+						if ( before ) apart( row, before, `${ row.period } the one before's again` );
+
+					}
+					// (How often the rotation alone would have clashed, to know this has tested something.)
+					const alone = await rotationPick( env, periodOf( 'day', now ), world, approved );
+					if ( [ rows.get( periodOf( 'day', now - DAY ).key ), week, month ].some( row => same( [ alone.place.name, alone.place.lat, alone.place.lon ], placeOf( row ) ) ) ) clashes ++;
+
+				}
+
+				assert.ok( clashes >= 20, `${ secret } ${ world }: only ${ clashes } days the rotation alone would have clashed` );
+
+			}
+
+		}
+
+	} );
+
+	test( 'CHALLENGE_LOOKS and CHALLENGE_MISSES count an address by a keyed hash of it and the day, never the address itself (an IPv6 one by its /48, as the drop-in places count a visitor)', async () => {
+
+		const env = { TURNSTILE_SECRET: PASS_SECRET };
+		const from = ip => new Request( 'https://worlddrive.app/api/challenges', { headers: { 'CF-Connecting-IP': ip } } );
+		const key = await lookKey( env, from( '198.51.100.7' ), CHALLENGE_DAY );
+		assert.match( key, /^[0-9a-f]{32}$/ );
+		assert.equal( await lookKey( env, from( '198.51.100.7' ), CHALLENGE_DAY + 8 * HOUR ), key, 'the same address the same day' );
+		assert.notEqual( await lookKey( env, from( '198.51.100.7' ), CHALLENGE_DAY + DAY ), key, 'the next day' );
+		assert.notEqual( await lookKey( env, from( '198.51.100.8' ), CHALLENGE_DAY ), key, 'another address' );
+		assert.notEqual( await lookKey( { TURNSTILE_SECRET: 'another-secret-for-the-rotation-x' }, from( '198.51.100.7' ), CHALLENGE_DAY ), key, 'another secret' );
+		// One /48 (65,536 /64s, which a free tunnel broker hands out) is one address to it; the next /48
+		// another.
+		const six = await lookKey( env, from( '2001:db8:1:2:aaaa::1' ), CHALLENGE_DAY );
+		assert.equal( await lookKey( env, from( '2001:db8:1:2:bbbb:cccc:dddd:9' ), CHALLENGE_DAY ), six );
+		assert.equal( await lookKey( env, from( '2001:db8:1:3::1' ), CHALLENGE_DAY ), six, 'another /64 of the /48' );
+		assert.equal( await lookKey( env, from( '2001:db8:1:ffff:1::1' ), CHALLENGE_DAY ), six, 'another /64 of the /48' );
+		assert.notEqual( await lookKey( env, from( '2001:db8:2:3::1' ), CHALLENGE_DAY ), six, 'another /48' );
+		assert.equal( VISITOR_PREFIX, 48 );
+
+	} );
+
+} );
+
+describe( 'World Drive challenges', () => {
+
+	let server;
+	let keys;
+	let googleKey;
+	const addresses = [];
+	const nextIp = () => {
+
+		const ip = `198.20.${ Math.floor( addresses.length / 200 ) }.${ addresses.length % 200 + 1 }`;
+		addresses.push( ip );
+		return ip;
+
+	};
+
+	before( async () => {
+
+		googleKey = await makeKey( 'drive-test-key-challenges' );
+		keys = await serveKeys( [ googleKey.jwk ] );
+		server = await startWorker( {
+			port: PORT + 5,
+			config: 'wrangler.drive.jsonc',
+			vars: {
+				GOOGLE_MAPS_API_KEY: MAPS_KEY,
+				TURNSTILE_SECRET: PASS_SECRET,
+				TURNSTILE_SITE_KEY: '1x00000000000000000000AA',
+				TURNSTILE_VERIFY_URL: `${ upstreamBase }/siteverify`,
+				TEST_CLOCK: 'header',
+				DAILY_VISITS: '1000',
+				PER_VISITOR_DAILY: '100',
+				GOOGLE_CLIENT_ID: CLIENT_ID,
+				GOOGLE_JWKS_URL: keys.url,
+				// The owner's accounts: each test of the admin page's routes signs in as one of its own, as
+				// ADMIN_LOOKS counts each account's asks.
+				ADMIN_EMAILS: 'boss@example.com, chief@example.com, head@example.com, lead@example.com',
+				// A visitor's times a day, held to fewer than challenges.js's 300 to see it reached.
+				CHALLENGE_TIMES_PER_VISITOR_DAILY: '4',
+			},
+			// The towns busy places are named by, and the Moon's heights its routes are checked on, as
+			// the site has them.
+			assets: {
+				'places/towns.tsv': readFileSync( new URL( '../drive/public/places/towns.tsv', import.meta.url ) ),
+				'moon/height.bin': readFileSync( MOON_HEIGHTS ),
+			},
+		} );
+
+	} );
+
+	after( () => {
+
+		server?.stop();
+		keys?.close();
+
+	} );
+
+	// A request as the page makes it: JSON, from the site itself.
+	const send = ( method, path, body, { cookie, ip = nextIp(), time = CHALLENGE_DAY, headers = {} } = {} ) => call( server, path, {
+		method,
+		headers: { Origin: server.base, 'Content-Type': 'application/json', ...( cookie ? { Cookie: cookie } : {} ), ...headers },
+		body: body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify( body ),
+		ip,
+		time,
+	} );
+	const list = ( { time = CHALLENGE_DAY, id, ip = nextIp() } = {} ) => call( server, `/api/challenges${ id ? `?id=${ id }` : '' }`, { ip, time } );
+	const board = ( challenge, { time = CHALLENGE_DAY, id, ip = nextIp() } = {} ) => call( server, `/api/challenges/board?challenge=${ challenge }${ id ? `&id=${ id }` : '' }`, { ip, time } );
+
+	// A player with an address and a visit (`kind`: 'earth', 'moon' or 'owner') of their own, from
+	// `time`: { id, secret, name, ip, visit, at, run } (run: an id for their runs, their own: a run's id
+	// names one time on a board).
+	async function player( name, { time = CHALLENGE_DAY, kind = 'earth' } = {} ) {
+
+		const ip = nextIp();
+		const visit = await makeVisit( { TURNSTILE_SECRET: PASS_SECRET }, time, kind );
+		const made = await send( 'POST', '/api/player', { name, visit }, { ip, time } );
+		assert.equal( made.status, 201, made.text );
+		return { ...made.json, ip, visit, at: time, run: `run${ String( addresses.length ).padStart( 13, '0' ) }` };
+
+	}
+
+	// `who`'s run of `challenge` ({ ms, passes }, fairRun's unless given), posted `after` ms into their
+	// visit, from `ip` (theirs unless given).
+	function post( who, challenge, { run = fairRun( challenge ), after = 10 * MINUTE, visit = who.visit, vehicle = 'go-kart', body = {}, ip = who.ip } = {} ) {
+
+		return send( 'POST', '/api/challenges/time', { id: who.id, secret: who.secret, visit, challenge: challenge.id, run: who.run, ms: run.ms, passes: run.passes, vehicle, ...body }, { ip, time: who.at + after } );
+
+	}
+
+	async function signIn( email ) {
+
+		const res = await send( 'POST', '/api/session', { credential: await makeToken( googleKey, { email, sub: `sub-${ email }` } ) } );
+		assert.equal( res.status, 200, res.text );
+		return `__Host-wd_session=${ /^__Host-wd_session=([\w-]{43});/.exec( res.headers.get( 'Set-Cookie' ) )[ 1 ] }`;
+
+	}
+
+	let live;
+	const earthDay = () => live.find( c => c.world === 'earth' && c.period === 'day' );
+	const moonDay = () => live.find( c => c.world === 'moon' && c.period === 'day' );
+
+	test( 'the migration: the challenges\' tables, keyed as their asks read them, with nothing of an address', () => {
+
+		const columns = table => server.d1( `PRAGMA table_info( ${ table } )` ).map( c => c.name );
+		assert.deepEqual( columns( 'challenges' ), [ 'id', 'period', 'world', 'kind', 'place', 'region', 'route', 'source', 'starts_at', 'ends_at', 'drivers', 'created_at', 'replaced_at', 'final_at' ] );
+		assert.deepEqual( columns( 'challenge_times' ), [ 'challenge_id', 'player_id', 'ms', 'passes', 'vehicle', 'run_id', 'visit', 'owner', 'created_at', 'first_at', 'final_rank' ] );
+		assert.deepEqual( columns( 'challenge_picks' ), [ 'period', 'world', 'kind', 'place', 'region', 'lat', 'lon', 'heading', 'created_at' ] );
+		assert.deepEqual( columns( 'challenge_places' ), [ 'world', 'cell_row', 'cell_column', 'name', 'region', 'lat', 'lon', 'created_at' ] );
+		assert.ok( columns( 'players' ).includes( 'last_time_at' ) );
+		// Each visit's times taken (CHALLENGE_TIMES_PER_VISIT).
+		assert.ok( columns( 'visits' ).includes( 'times' ) );
+		const indexes = server.d1( 'SELECT name, sql FROM sqlite_master WHERE type = \'index\' AND tbl_name LIKE \'challenge%\'' );
+		assert.match( indexes.find( i => i.name === 'challenges_live' ).sql, /UNIQUE INDEX challenges_live ON challenges \( period, world \) WHERE replaced_at IS NULL/ );
+		assert.ok( indexes.some( i => i.name === 'challenge_times_board' ) );
+		// A run's id names one time on a challenge (what part 2b's link to a run relies on).
+		assert.match( indexes.find( i => i.name === 'challenge_times_run' ).sql, /UNIQUE INDEX challenge_times_run ON challenge_times \( challenge_id, run_id \)/ );
+		for ( const table of [ 'challenges', 'challenge_times', 'challenge_picks', 'challenge_places' ] ) assert.ok( ! columns( table ).some( name => /ip|address|email|account/.test( name ) ), table );
+
+	} );
+
+	test( 'six live: the day\'s, the week\'s and the month\'s on each world, fixed in D1 as they\'re first asked for, the same on every ask and as another instance works them out', async () => {
+
+		assert.equal( server.d1( 'SELECT COUNT(*) AS n FROM challenges' )[ 0 ].n, 0 );
+		const res = await list();
+		assert.equal( res.status, 200, res.text );
+		assert.equal( res.headers.get( 'Cache-Control' ), 'no-store' );
+		live = res.json.challenges;
+		assert.equal( res.json.now, CHALLENGE_DAY );
+		assert.deepEqual( live.map( c => `${ c.world } ${ c.key }` ), [ 'earth day:2026-11-16', 'earth week:2026-11-16', 'earth month:2026-11', 'moon day:2026-11-16', 'moon week:2026-11-16', 'moon month:2026-11' ] );
+		const rows = server.d1( 'SELECT id, period, world, kind, place, route, source, starts_at, ends_at FROM challenges ORDER BY id' );
+		assert.equal( rows.length, 6 );
+		const featured = { earth: [ ...SPOTS.map( s => s.name ), 'Eiffel Tower', 'Colosseum', 'Piccadilly Circus', 'Hollywood Boulevard', 'Copacabana' ], moon: MOON_PLACES.map( p => p.name ) };
+		for ( const c of live ) {
+
+			const row = rows.find( r => r.id === c.id );
+			assert.deepEqual( JSON.parse( row.route ), c.route );
+			assert.equal( row.source, 'rotation' );
+			assert.ok( featured[ c.world ].includes( c.place ), c.place );
+			assert.ok( KINDS.includes( c.kind ) );
+			const period = parsePeriod( c.key );
+			assert.equal( c.startsAt, period.starts );
+			assert.equal( c.endsAt, period.ends );
+			assert.equal( c.route.points.length, { sprint: SHAPES[ c.world ][ c.period ].sprint.gates, collect: SHAPES[ c.world ][ c.period ].collect.items, landmark: 1 }[ c.kind ] );
+			assert.deepEqual( [ c.total, c.top, c.me ], [ 0, [], null ] );
+			// As this process, another instance with the same secret, works it out: the place, the kind and
+			// the route, the Moon's checked on its heights too.
+			const env = { TURNSTILE_SECRET: PASS_SECRET, ASSETS: { fetch: async () => new Response( readFileSync( MOON_HEIGHTS ) ) } };
+			const pick = await rotationPick( env, period, c.world, [] );
+			assert.equal( pick.place.name, c.place );
+			assert.equal( pick.kind, c.kind );
+			const made = await challengeFor( env, period, c.world, pick, CHALLENGE_DAY );
+			assert.deepEqual( JSON.parse( made.route ), c.route );
+			if ( c.world === 'moon' ) assert.equal( movableFaults( c.route ), 0, c.place );
+
+		}
+
+		// The three on a world are three places.
+		for ( const world of [ 'earth', 'moon' ] ) assert.equal( new Set( live.filter( c => c.world === world ).map( c => c.place ) ).size, 3 );
+		// Asked again, later in the period, from anywhere: the same, nothing more fixed.
+		const again = await list( { time: CHALLENGE_DAY + 8 * HOUR } );
+		assert.deepEqual( again.json.challenges.map( c => [ c.id, c.place, c.kind ] ), live.map( c => [ c.id, c.place, c.kind ] ) );
+		assert.equal( server.d1( 'SELECT COUNT(*) AS n FROM challenges' )[ 0 ].n, 6 );
+
+	} );
+
+	test( 'a live challenge stays as it was fixed, whatever the rotation would pick now', async () => {
+
+		// What the rotation would now say is changed in D1 by hand (as a later version of the rotation, or
+		// of the places, would): the live one is the one fixed.
+		server.d1( `UPDATE challenges SET place = 'Fixed Place' WHERE id = ${ earthDay().id }` );
+		const res = await list( { time: CHALLENGE_DAY + 2 * HOUR } );
+		assert.equal( res.json.challenges.find( c => c.id === earthDay().id ).place, 'Fixed Place' );
+		server.d1( `UPDATE challenges SET place = '${ earthDay().place.replace( /'/g, '\'\'' ) }' WHERE id = ${ earthDay().id }` );
+
+	} );
+
+	test( 'a time: taken with the visit\'s token from the leaderboard\'s player, on the board with their name and level; only a better one replaces it', async () => {
+
+		const ann = await player( 'Ann Racer' );
+		const slow = fairRun( earthDay(), 20000 );
+		let res = await post( ann, earthDay(), { run: slow } );
+		assert.equal( res.status, 200, res.text );
+		assert.deepEqual( { ...res.json, top: res.json.top.map( r => [ r.rank, r.name, r.ms ] ) }, { ms: slow.ms, rank: 1, total: 1, isNewBest: true, top: [ [ 1, 'Ann Racer', slow.ms ] ] } );
+		assert.equal( res.json.top !== undefined, true );
+		// A slower one: nothing changes.
+		res = await post( ann, earthDay(), { run: fairRun( earthDay(), 30000 ), after: 20 * MINUTE } );
+		assert.equal( res.status, 200, res.text );
+		assert.deepEqual( [ res.json.ms, res.json.isNewBest, res.json.total ], [ slow.ms, false, 1 ] );
+		// A quicker one: the best.
+		const quick = fairRun( earthDay(), 5000 );
+		res = await post( ann, earthDay(), { run: quick, after: 30 * MINUTE } );
+		assert.deepEqual( [ res.json.ms, res.json.isNewBest, res.json.total ], [ quick.ms, true, 1 ] );
+		const rows = server.d1( `SELECT * FROM challenge_times WHERE challenge_id = ${ earthDay().id }` );
+		assert.equal( rows.length, 1 );
+		assert.deepEqual( [ rows[ 0 ].ms, JSON.parse( rows[ 0 ].passes ), rows[ 0 ].vehicle, rows[ 0 ].run_id, rows[ 0 ].owner, rows[ 0 ].final_rank ], [ quick.ms, quick.passes, 'go-kart', ann.run, 0, null ] );
+		assert.equal( rows[ 0 ].first_at, CHALLENGE_DAY + 10 * MINUTE );
+		assert.equal( rows[ 0 ].created_at, CHALLENGE_DAY + 30 * MINUTE );
+		assert.equal( rows[ 0 ].visit, ann.visit.split( '.' )[ 1 ] );
+		// Others: the board in order, each with the leaderboard's level and title, and their own row.
+		const bea = await player( 'Bea Fast' );
+		res = await post( bea, earthDay(), { run: fairRun( earthDay(), 1000 ), vehicle: 'hypercar' } );
+		assert.deepEqual( [ res.json.rank, res.json.total ], [ 1, 2 ] );
+		const cy = await player( 'Cy Slow' );
+		res = await post( cy, earthDay(), { run: fairRun( earthDay(), 40000 ) } );
+		assert.deepEqual( [ res.json.rank, res.json.total, res.json.isNewBest ], [ 3, 3, true ] );
+		const shown = await board( earthDay().id, { id: cy.id, time: CHALLENGE_DAY + HOUR } );
+		assert.equal( shown.status, 200, shown.text );
+		assert.deepEqual( shown.json.rows.map( r => [ r.rank, r.name, r.vehicle, r.level, r.title, r.date ] ), [
+			[ 1, 'Bea Fast', 'hypercar', 1, 'rookie', '2026-11-16' ], [ 2, 'Ann Racer', 'go-kart', 1, 'rookie', '2026-11-16' ], [ 3, 'Cy Slow', 'go-kart', 1, 'rookie', '2026-11-16' ],
+		] );
+		assert.deepEqual( [ shown.json.total, shown.json.me.rank, shown.json.me.name ], [ 3, 3, 'Cy Slow' ] );
+		assert.equal( shown.json.challenge.id, earthDay().id );
+		// The list has the top three and your own.
+		const listed = await list( { id: ann.id, time: CHALLENGE_DAY + HOUR } );
+		const mine = listed.json.challenges.find( c => c.id === earthDay().id );
+		assert.deepEqual( mine.top.map( r => r.name ), [ 'Bea Fast', 'Ann Racer', 'Cy Slow' ] );
+		assert.deepEqual( [ mine.total, mine.me ], [ 3, { ms: quick.ms, rank: 2 } ] );
+		// A Moon challenge's time with the same Earth visit: taken too.
+		res = await post( ann, moonDay(), { run: fairRun( moonDay(), 2000 ), after: 40 * MINUTE } );
+		assert.equal( res.status, 200, res.text );
+
+	} );
+
+	test( 'turned away: a run quicker than the game goes, points out of order or missing, longer than the visit, or bad (400)', async () => {
+
+		const dan = await player( 'Dan Cheat' );
+		const c = earthDay();
+		const fair = fairRun( c, 0 );
+		const tooFast = fair.passes.map( ( [ i, at ], k ) => [ i, at - ( k + 1 ) * 500 ] );
+		const swapped = fairRun( c, 9000 ).passes.map( ( pass, i, all ) => i === 0 ? [ 1, pass[ 1 ] ] : i === 1 ? [ 0, all[ 1 ][ 1 ] ] : pass );
+		const okay = fairRun( c, 9000 );
+		const bad = {
+			'too fast': { run: { ms: tooFast.at( - 1 )[ 1 ], passes: tooFast } },
+			'out of order': { run: { ms: okay.ms, passes: swapped } },
+			'a gate missed': { run: { ms: okay.passes.at( - 2 )[ 1 ], passes: okay.passes.slice( 0, - 1 ) } },
+			'not the last pass': { run: { ms: okay.ms + 5, passes: okay.passes } },
+			// The visit began 1 minute before; the run says 10.
+			'longer than the visit': { run: fairRun( c, 100000 ), after: MINUTE },
+			'no passes': { body: { passes: undefined } },
+			'a ride the game hasn\'t': { vehicle: 'tank' },
+			'no run id': { body: { run: 'short' } },
+			'not a challenge': { body: { challenge: 'one' } },
+			'a fraction of a ms': { body: { ms: okay.ms + 0.5 } },
+		};
+		for ( const [ name, options ] of Object.entries( bad ) ) {
+
+			const res = await post( dan, c, { run: okay, ...options } );
+			assert.equal( res.status, 400, `${ name }: ${ res.text }` );
+
+		}
+
+		assert.equal( ( await send( 'POST', '/api/challenges/time', '{nope' ) ).status, 400 );
+		assert.equal( ( await send( 'POST', '/api/challenges/time', [ 1 ] ) ).status, 400 );
+		assert.equal( ( await send( 'POST', '/api/challenges/time', { id: dan.id, secret: dan.secret, passes: 'x'.repeat( 3000 ) } ) ).status, 413 );
+		// Nothing of it kept, and none of it counted as a turn.
+		assert.equal( server.d1( `SELECT COUNT(*) AS n FROM challenge_times WHERE player_id = '${ dan.id }'` )[ 0 ].n, 0 );
+		assert.equal( ( await post( dan, c, { run: okay } ) ).status, 200 );
+
+	} );
+
+	test( 'turned away: no visit, one forged, run out or someone else\'s, the wrong secret, an Earth challenge with a Moon visit (403); not from the site (403, 415)', async () => {
+
+		const eve = await player( 'Eve Moon', { kind: 'moon' } );
+		const c = earthDay();
+		const run = fairRun( c, 9000 );
+		// The Earth's needs an Earth visit; the Moon's takes the Moon visit.
+		let res = await post( eve, c, { run } );
+		assert.deepEqual( [ res.status, res.json.reason ], [ 403, 'world' ] );
+		assert.equal( ( await post( eve, moonDay(), { run: fairRun( moonDay(), 9000 ) } ) ).status, 200 );
+		const fay = await player( 'Fay Token' );
+		const gus = await player( 'Gus Other' );
+		const [ , id, expires, signature ] = fay.visit.split( '.' );
+		const forged = `v1.${ id }.${ expires }.${ signature.slice( 0, 10 ) }${ signature[ 10 ] === 'A' ? 'B' : 'A' }${ signature.slice( 11 ) }`;
+		for ( const [ name, visit ] of [ [ 'none', null ], [ 'forged', forged ], [ 'someone else\'s', gus.visit ], [ 'another kind', `v1.${ id.slice( 0, - 1 ) }o.${ expires }.${ signature }` ] ] ) {
+
+			res = await post( fay, c, { run, visit } );
+			assert.deepEqual( [ res.status, res.json?.reason ], [ 403, 'visit' ], name );
+
+		}
+
+		// Run out: posted seven hours into the visit.
+		res = await post( fay, c, { run, after: 7 * HOUR } );
+		assert.deepEqual( [ res.status, res.json.reason ], [ 403, 'visit' ] );
+		res = await post( { ...fay, secret: 'x'.repeat( 32 ) }, c, { run } );
+		assert.deepEqual( [ res.status, res.json.reason ], [ 403, 'player' ] );
+		const body = JSON.stringify( { id: fay.id, secret: fay.secret, visit: fay.visit, challenge: c.id, run: fay.run, ms: run.ms, passes: run.passes, vehicle: 'go-kart' } );
+		const json = { 'Content-Type': 'application/json' };
+		assert.equal( ( await call( server, '/api/challenges/time', { method: 'POST', headers: json, body, time: CHALLENGE_DAY + MINUTE } ) ).status, 403, 'no Origin' );
+		assert.equal( ( await call( server, '/api/challenges/time', { method: 'POST', headers: { ...json, Origin: 'https://evil.example' }, body } ) ).status, 403, 'another site' );
+		assert.equal( ( await call( server, '/api/challenges/time', { method: 'POST', headers: { Origin: server.base, 'Content-Type': 'text/plain' }, body } ) ).status, 415, 'a form' );
+		assert.equal( ( await call( server, '/api/challenges/time' ) ).status, 405 );
+		assert.equal( ( await post( fay, c, { run } ) ).status, 200 );
+
+	} );
+
+	test( 'turned away: a challenge that isn\'t live (another period\'s, none at all), too often from a player, and past a visitor\'s day (429)', async () => {
+
+		const gil = await player( 'Gil Often' );
+		const c = earthDay();
+		// Tomorrow's isn't fixed yet; the id after the six is no challenge.
+		let res = await post( gil, { ...c, id: 999 }, { run: fairRun( c, 9000 ) } );
+		assert.deepEqual( [ res.status, res.json.reason ], [ 403, 'challenge' ] );
+		// One every 10 s from a player.
+		res = await post( gil, c, { run: fairRun( c, 30000 ) } );
+		assert.equal( res.status, 200 );
+		res = await post( gil, c, { run: fairRun( c, 20000 ), after: 10 * MINUTE + 3 * SECOND } );
+		assert.equal( res.status, 429 );
+		assert.equal( res.headers.get( 'Retry-After' ), '10' );
+		// A visitor's day: 4 here (CHALLENGE_TIMES_PER_VISITOR_DAILY); Gil has had 1.
+		for ( let i = 1; i <= 3; i ++ ) assert.equal( ( await post( gil, c, { run: fairRun( c, 20000 - i * 1000 ), after: 10 * MINUTE + i * 20 * SECOND } ) ).status, 200 );
+		res = await post( gil, c, { run: fairRun( c, 9000 ), after: 10 * MINUTE + 100 * SECOND } );
+		assert.equal( res.status, 429 );
+		assert.equal( Number( res.headers.get( 'Retry-After' ) ), Math.ceil( ( Date.UTC( 2026, 10, 17 ) - CHALLENGE_DAY - 10 * MINUTE - 100 * SECOND ) / 1000 ) );
+		// Held till midnight from then on by his own gap: his next tries are turned away before they
+		// write anything or ask DriveLimits (a script past the day's cap would otherwise cost a write
+		// and a Durable Object request every 10 s all day), with the reason and how long till midnight.
+		const held = server.d1( `SELECT last_time_at, last_seen_at FROM players WHERE id = '${ gil.id }'` )[ 0 ];
+		assert.equal( held.last_time_at, Date.UTC( 2026, 10, 17 ) - 10 * SECOND );
+		for ( const after of [ 10 * MINUTE + 115 * SECOND, 10 * MINUTE + 300 * SECOND ] ) {
+
+			res = await post( gil, c, { run: fairRun( c, 8000 ), after } );
+			assert.deepEqual( [ res.status, res.json.reason, res.json.error ], [ 429, 'daily', 'That\'s all for today. Try again tomorrow' ] );
+			assert.equal( Number( res.headers.get( 'Retry-After' ) ), Math.ceil( ( Date.UTC( 2026, 10, 17 ) - CHALLENGE_DAY - after ) / 1000 ) );
+			assert.deepEqual( server.d1( `SELECT last_time_at, last_seen_at FROM players WHERE id = '${ gil.id }'` )[ 0 ], held );
+
+		}
+
+		// The best kept is the best taken.
+		assert.equal( server.d1( `SELECT ms FROM challenge_times WHERE player_id = '${ gil.id }'` )[ 0 ].ms, fairRun( c, 17000 ).ms );
+
+	} );
+
+	test( 'the same run posted again (its answer lost on the way, the page trying again): answered as it was taken, from the cache, a new best still, nothing written or read again, from any address; another run inside the gap is still turned away, and the same run later is a post like any other', async () => {
+
+		const lia = await player( 'Lia Again' );
+		const c = moonDay();
+		const run = fairRun( c, 6000 );
+		const first = await post( lia, c, { run } );
+		assert.equal( first.status, 200, first.text );
+		assert.equal( first.json.isNewBest, true );
+		const kept = () => [ server.d1( `SELECT last_time_at, last_seen_at FROM players WHERE id = '${ lia.id }'` )[ 0 ], server.d1( `SELECT drivers FROM challenges WHERE id = ${ c.id }` )[ 0 ].drivers ];
+		const was = kept();
+		// Two seconds on, inside the 10 s gap: the same answer, kept in Cloudflare's cache as it was taken
+		// (so nothing of the board is read again).
+		const again = await post( lia, c, { run, after: 10 * MINUTE + 2 * SECOND } );
+		assert.equal( again.status, 200, again.text );
+		assert.deepEqual( again.json, first.json );
+		assert.equal( again.headers.get( 'X-Time-Cache' ), 'hit' );
+		assert.deepEqual( kept(), was );
+		// From other addresses too (the token and the player work from anywhere): the cache's answer
+		// each time, nothing written.
+		for ( let i = 0; i < 5; i ++ ) {
+
+			const elsewhere = await post( lia, c, { run, after: 10 * MINUTE + 2 * SECOND, ip: nextIp() } );
+			assert.deepEqual( [ elsewhere.status, elsewhere.headers.get( 'X-Time-Cache' ) ], [ 200, 'hit' ], elsewhere.text );
+
+		}
+
+		assert.deepEqual( kept(), was );
+		// A burst of it from one address: CHALLENGE_LOOKS' 429, as for a burst of boards.
+		const burst = nextIp();
+		let limited = null;
+		for ( let i = 0; i < 70 && ! limited; i ++ ) {
+
+			const res = await post( lia, c, { run, after: 10 * MINUTE + 5 * SECOND, ip: burst } );
+			if ( res.status === 429 ) limited = res;
+			else assert.deepEqual( [ res.status, res.headers.get( 'X-Time-Cache' ) ], [ 200, 'hit' ] );
+
+		}
+
+		assert.ok( limited, 'never limited' );
+		assert.equal( limited.json.retryAfter, 60 );
+		// Another run (another id, or the same id with another time) inside the gap: a 429 as before.
+		assert.equal( ( await post( lia, c, { run, after: 10 * MINUTE + 3 * SECOND, body: { run: 's'.repeat( 16 ) } } ) ).status, 429 );
+		assert.equal( ( await post( lia, c, { run: fairRun( c, 5000 ), after: 10 * MINUTE + 4 * SECOND } ) ).status, 429 );
+		assert.deepEqual( kept(), was );
+		// Later than REPOST: a post like any other, the gap claimed (and so the next inside it turned
+		// away) and the visitor's day counted, and not a new best.
+		const later = await post( lia, c, { run, after: 10 * MINUTE + REPOST + SECOND } );
+		assert.equal( later.status, 200, later.text );
+		assert.deepEqual( [ later.json.isNewBest, later.json.ms, later.headers.get( 'X-Time-Cache' ) ], [ false, run.ms, null ] );
+		assert.equal( kept()[ 0 ].last_time_at, lia.at + 10 * MINUTE + REPOST + SECOND );
+		assert.equal( ( await post( lia, c, { run, after: 10 * MINUTE + REPOST + 3 * SECOND } ) ).status, 429 );
+
+	} );
+
+	test( 'the owner\'s runs are taken and answered with the place they\'d have, but kept off the boards', async () => {
+
+		const boss = await player( 'Boss Tries', { kind: 'owner' } );
+		const res = await post( boss, earthDay(), { run: fairRun( earthDay(), 0 ) } );
+		assert.equal( res.status, 200, res.text );
+		assert.deepEqual( [ res.json.rank, res.json.owner, res.json.isNewBest ], [ 1, true, true ] );
+		assert.ok( ! res.json.top.some( r => r.name === 'Boss Tries' ) );
+		const shown = await board( earthDay().id, { id: boss.id, time: CHALLENGE_DAY + 2 * HOUR } );
+		assert.ok( ! shown.json.rows.some( r => r.name === 'Boss Tries' ) );
+		assert.deepEqual( [ shown.json.me.owner, shown.json.me.rank ], [ true, 1 ] );
+		// Not counted among its drivers either.
+		assert.equal( server.d1( `SELECT drivers FROM challenges WHERE id = ${ earthDay().id }` )[ 0 ].drivers, shown.json.total );
+		assert.ok( shown.json.rows.every( r => r.rank <= shown.json.total ) );
+
+	} );
+
+	test( 'lists and boards are kept in Cloudflare\'s cache, a new best clearing them; a burst from one address is a 429', async () => {
+
+		const ip = nextIp();
+		const first = await board( moonDay().id, { ip } );
+		const second = await board( moonDay().id, { ip } );
+		assert.equal( second.headers.get( 'X-Board-Cache' ), 'hit' );
+		assert.equal( first.json.total, second.json.total );
+		const hal = await player( 'Hal New' );
+		// A player's own row kept too: none yet, twice.
+		assert.deepEqual( [ ( await board( moonDay().id, { ip, id: hal.id } ) ).headers.get( 'X-Player-Cache' ), ( await board( moonDay().id, { ip, id: hal.id } ) ).json.me ], [ 'miss', null ] );
+		assert.equal( ( await board( moonDay().id, { ip, id: hal.id } ) ).headers.get( 'X-Player-Cache' ), 'hit' );
+		assert.equal( ( await post( hal, moonDay(), { run: fairRun( moonDay(), 9000 ) } ) ).status, 200 );
+		const third = await board( moonDay().id, { ip, id: hal.id } );
+		assert.deepEqual( [ third.headers.get( 'X-Board-Cache' ), third.headers.get( 'X-Player-Cache' ) ], [ 'miss', 'miss' ] );
+		assert.equal( third.json.total, first.json.total + 1 );
+		assert.equal( third.json.me.name, 'Hal New' );
+		// CHALLENGE_LOOKS: 60 a minute from an address.
+		const burst = nextIp();
+		let limited = null;
+		for ( let i = 0; i < 70 && ! limited; i ++ ) {
+
+			const res = await list( { ip: burst } );
+			if ( res.status === 429 ) limited = res;
+			else assert.equal( res.status, 200 );
+
+		}
+
+		assert.ok( limited, 'never limited' );
+		assert.equal( limited.headers.get( 'Retry-After' ), '60' );
+		assert.equal( ( await list() ).status, 200, 'another address' );
+		for ( const path of [ '/api/challenges?id=bad', '/api/challenges/board?challenge=x', '/api/challenges/board?challenge=0', '/api/challenges/board?challenge=1&id=nope' ] ) assert.equal( ( await call( server, path, { ip: nextIp(), time: CHALLENGE_DAY } ) ).status, 400, path );
+		assert.equal( ( await call( server, '/api/challenges/board?challenge=999', { ip: nextIp(), time: CHALLENGE_DAY } ) ).status, 404 );
+
+	} );
+
+	test( 'admin: ADMIN_EMAILS only, the six live and the six next, and the places to choose from', async () => {
+
+		assert.equal( ( await call( server, '/api/admin/challenges', { time: CHALLENGE_DAY } ) ).status, 401 );
+		const someone = await signIn( 'someone@example.com' );
+		assert.equal( ( await call( server, '/api/admin/challenges', { headers: { Cookie: someone }, time: CHALLENGE_DAY } ) ).status, 403 );
+		assert.equal( ( await send( 'POST', '/api/admin/challenges', { action: 'approve', world: 'earth', cell: 'earth:1:1' }, { cookie: someone } ) ).status, 403 );
+		const boss = await signIn( 'Boss@Example.com' );
+		const res = await call( server, '/api/admin/challenges', { headers: { Cookie: boss }, time: CHALLENGE_DAY } );
+		assert.equal( res.status, 200, res.text );
+		assert.deepEqual( res.json.current.map( c => c.id ), live.map( c => c.id ) );
+		assert.ok( res.json.current.every( c => c.source === 'rotation' ) );
+		assert.equal( res.json.current.find( c => c.id === earthDay().id ).top[ 0 ].name, 'Bea Fast' );
+		assert.deepEqual( res.json.upcoming.map( u => `${ u.world } ${ u.key } ${ u.source }` ).sort(), [
+			'earth day:2026-11-17 rotation', 'earth month:2026-12 rotation', 'earth week:2026-11-23 rotation',
+			'moon day:2026-11-17 rotation', 'moon month:2026-12 rotation', 'moon week:2026-11-23 rotation',
+		] );
+		assert.equal( res.json.featured.earth.length, 17 );
+		assert.equal( res.json.featured.moon.length, MOON_PLACES.length );
+		assert.deepEqual( res.json.approved, [] );
+		assert.deepEqual( Object.keys( res.json.busy ), [ 'earth', 'moon' ] );
+
+	} );
+
+	test( 'admin: a pick ahead is next up, and fixes its period when it comes; back to the rotation; bad picks turned away', async () => {
+
+		const boss = await signIn( 'boss@example.com' );
+		const admin = ( body, time = CHALLENGE_DAY ) => send( 'POST', '/api/admin/challenges', body, { cookie: boss, time } );
+		// Tomorrow on the Earth: Lombard Street, by coordinates, a collect.
+		let res = await admin( { action: 'pick', period: 'day:2026-11-17', world: 'earth', kind: 'collect', place: { name: 'Lombard Street', region: 'San Francisco, USA', lat: 37.8021, lon: - 122.4187, heading: 90 } } );
+		assert.equal( res.status, 200, res.text );
+		const next = res.json.upcoming.find( u => u.world === 'earth' && u.period === 'day' );
+		assert.deepEqual( [ next.place, next.kind, next.source ], [ 'Lombard Street', 'collect', 'owner' ] );
+		assert.deepEqual( res.json.picks.map( p => [ p.period, p.world, p.place ] ), [ [ 'day:2026-11-17', 'earth', 'Lombard Street' ] ] );
+		// Next week on the Moon, a featured place; then back to the rotation.
+		res = await admin( { action: 'pick', period: 'week:2026-11-23', world: 'moon', kind: 'landmark', place: { featured: 'moon-tycho' } } );
+		assert.equal( res.json.upcoming.find( u => u.world === 'moon' && u.period === 'week' ).place, 'Tycho crater' );
+		res = await admin( { action: 'unpick', period: 'week:2026-11-23', world: 'moon' } );
+		assert.equal( res.json.upcoming.find( u => u.world === 'moon' && u.period === 'week' ).source, 'rotation' );
+		// A month ahead, the date's own month.
+		res = await admin( { action: 'pick', period: 'month:2027-01', world: 'moon', kind: 'sprint', place: { featured: 'moon-plato' } } );
+		assert.equal( res.status, 200 );
+		assert.ok( res.json.picks.some( p => p.period === 'month:2027-01' ) );
+		// Bad ones: a period over, too far ahead, not one, the wrong world's place, a kind the game
+		// hasn't, no place, coordinates off the world, a rude name, an unknown action.
+		for ( const [ name, body ] of [
+			[ 'yesterday', { action: 'pick', period: 'day:2026-11-15', world: 'earth', kind: 'sprint', place: { featured: 'spot:monaco' } } ],
+			[ 'next year and more', { action: 'pick', period: 'month:2028-02', world: 'earth', kind: 'sprint', place: { featured: 'spot:monaco' } } ],
+			[ 'a Tuesday week', { action: 'pick', period: 'week:2026-11-24', world: 'earth', kind: 'sprint', place: { featured: 'spot:monaco' } } ],
+			[ 'the Moon\'s place on the Earth', { action: 'pick', period: 'day:2026-11-18', world: 'earth', kind: 'sprint', place: { featured: 'moon-tycho' } } ],
+			[ 'a kind', { action: 'pick', period: 'day:2026-11-18', world: 'earth', kind: 'drag', place: { featured: 'spot:monaco' } } ],
+			[ 'no place', { action: 'pick', period: 'day:2026-11-18', world: 'earth', kind: 'sprint' } ],
+			[ 'off the world', { action: 'pick', period: 'day:2026-11-18', world: 'earth', kind: 'sprint', place: { name: 'Nowhere', lat: 95, lon: 0 } } ],
+			[ 'a rude name', { action: 'pick', period: 'day:2026-11-18', world: 'earth', kind: 'sprint', place: { name: 'shit road', lat: 1, lon: 1 } } ],
+			[ 'a heading', { action: 'pick', period: 'day:2026-11-18', world: 'earth', kind: 'sprint', place: { name: 'Road', lat: 1, lon: 1, heading: 400 } } ],
+			[ 'a world', { action: 'pick', period: 'day:2026-11-18', world: 'mars', kind: 'sprint', place: { featured: 'spot:monaco' } } ],
+			[ 'an action', { action: 'delete', period: 'day:2026-11-18', world: 'earth' } ],
+		] ) assert.equal( ( await admin( body ) ).status, 400, name );
+
+	} );
+
+	test( 'yesterday\'s board is kept as it ended, each player\'s final place written; a time for it is turned away, but one finished just before midnight is taken in the minute after', async () => {
+
+		const yesterday = earthDay();
+		const before = server.d1( `SELECT player_id, ms, final_rank FROM challenge_times WHERE challenge_id = ${ yesterday.id } ORDER BY ms` );
+		// A run finished at 23:59:50 and posted at 00:00:20 is taken; one begun after midnight isn't.
+		const ivy = await player( 'Ivy Late', { time: Date.UTC( 2026, 10, 16, 23, 30 ) } );
+		const late = fairRun( yesterday, 2000 );
+		let res = await post( ivy, yesterday, { run: late, after: 30 * MINUTE + 20 * SECOND } );
+		assert.equal( res.status, 200, res.text );
+		const jay = await player( 'Jay Later', { time: Date.UTC( 2026, 10, 16, 23, 30 ) } );
+		res = await post( jay, yesterday, { run: { ms: 5000, passes: [] }, after: 30 * MINUTE + 30 * SECOND } );
+		assert.deepEqual( [ res.status, res.json.reason ], [ 403, 'challenge' ] );
+		res = await post( jay, yesterday, { run: late, after: 32 * MINUTE } );
+		assert.deepEqual( [ res.status, res.json.reason ], [ 403, 'challenge' ] );
+		// The next ask after the minute gives yesterday's its final places: the fastest 1, the owner's none.
+		// (After its answer has gone: it's no part of the list, so it waits for nothing, and nothing
+		// going wrong in it can turn the list into an error.)
+		const tomorrow = await list( { time: Date.UTC( 2026, 10, 17, 0, 5 ) } );
+		for ( let tries = 0; ! server.d1( `SELECT final_at FROM challenges WHERE id = ${ yesterday.id }` )[ 0 ].final_at && tries < 50; tries ++ ) await new Promise( resolve => setTimeout( resolve, 100 ) );
+		const after = server.d1( `SELECT p.name, t.ms, t.final_rank, t.owner FROM challenge_times t JOIN players p ON p.id = t.player_id WHERE challenge_id = ${ yesterday.id } ORDER BY t.ms, t.created_at` );
+		assert.equal( after.length, before.length + 1 );
+		let place = 0;
+		for ( const row of after ) assert.equal( row.final_rank, row.owner ? null : ++ place, row.name );
+		assert.ok( server.d1( `SELECT final_at FROM challenges WHERE id = ${ yesterday.id }` )[ 0 ].final_at >= Date.UTC( 2026, 10, 17, 0, 1 ) );
+		// The week's and the month's go on.
+		assert.deepEqual( server.d1( 'SELECT period FROM challenges WHERE final_at IS NOT NULL ORDER BY id' ).map( r => r.period ), [ 'day:2026-11-16', 'day:2026-11-16' ] );
+		// Its board as it ended, a while later.
+		const shown = await board( yesterday.id, { time: Date.UTC( 2026, 10, 18 ) } );
+		assert.equal( shown.status, 200 );
+		assert.equal( shown.json.rows[ 0 ].name, 'Bea Fast' );
+		assert.ok( shown.json.challenge.finalAt );
+		// And the new day's Earth challenge is the owner's pick for it, laid out as a collect round
+		// Lombard Street; the week's and the month's as they were.
+		const fixed = tomorrow.json.challenges.find( c => c.world === 'earth' && c.period === 'day' );
+		assert.deepEqual( [ fixed.key, fixed.place, fixed.region, fixed.kind ], [ 'day:2026-11-17', 'Lombard Street', 'San Francisco, USA', 'collect' ] );
+		assert.deepEqual( [ fixed.route.start.lat, fixed.route.start.lon ], [ 37.8021, - 122.4187 ] );
+		assert.equal( server.d1( `SELECT source FROM challenges WHERE id = ${ fixed.id }` )[ 0 ].source, 'owner' );
+		assert.deepEqual( tomorrow.json.challenges.filter( c => c.period !== 'day' ).map( c => c.id ), live.filter( c => c.period !== 'day' ).map( c => c.id ) );
+
+	} );
+
+	test( 'admin: changing a live challenge with times on it warns first, then starts a new board, the old one kept apart and finished', async () => {
+
+		const boss = await signIn( 'chief@example.com' );
+		const time = Date.UTC( 2026, 10, 18, 10 );
+		const now = ( await list( { time } ) ).json.challenges;
+		const week = now.find( c => c.world === 'earth' && c.period === 'week' );
+		const kim = await player( 'Kim Week', { time } );
+		assert.equal( ( await post( kim, week, { run: fairRun( week, 5000 ) } ) ).status, 200 );
+		const body = { action: 'pick', period: week.key, world: 'earth', kind: 'sprint', place: { featured: 'spot:furka' } };
+		let res = await send( 'POST', '/api/admin/challenges', body, { cookie: boss, time: time + HOUR } );
+		assert.deepEqual( [ res.status, res.json.reason, res.json.drivers ], [ 409, 'live', 1 ] );
+		assert.equal( ( await list( { time: time + HOUR } ) ).json.challenges.find( c => c.id === week.id ).place, week.place );
+		res = await send( 'POST', '/api/admin/challenges', { ...body, live: true }, { cookie: boss, time: time + HOUR } );
+		assert.equal( res.status, 200, res.text );
+		const replaced = res.json.current.find( c => c.world === 'earth' && c.period === 'week' );
+		assert.notEqual( replaced.id, week.id );
+		assert.deepEqual( [ replaced.place, replaced.kind, replaced.source, replaced.total ], [ 'Furka Pass', 'sprint', 'owner', 0 ] );
+		// The old one: replaced, finished, its board kept; a time for it now turned away.
+		const old = server.d1( `SELECT replaced_at, final_at FROM challenges WHERE id = ${ week.id }` )[ 0 ];
+		assert.deepEqual( [ old.replaced_at, old.final_at ], [ time + HOUR, time + HOUR ] );
+		assert.equal( server.d1( `SELECT final_rank FROM challenge_times WHERE challenge_id = ${ week.id } AND player_id = '${ kim.id }'` )[ 0 ].final_rank, 1 );
+		res = await post( kim, week, { run: fairRun( week, 3000 ), after: HOUR + MINUTE } );
+		assert.deepEqual( [ res.status, res.json.reason ], [ 403, 'challenge' ] );
+		assert.equal( ( await board( week.id, { time: time + 2 * HOUR } ) ).json.rows[ 0 ].name, 'Kim Week' );
+		// One with no times on it changes without a word.
+		const moonWeek = res = await send( 'POST', '/api/admin/challenges', { action: 'pick', period: now.find( c => c.world === 'moon' && c.period === 'week' ).key, world: 'moon', kind: 'collect', place: { featured: 'moon-apollo-11' } }, { cookie: boss, time: time + HOUR } );
+		assert.equal( moonWeek.status, 200 );
+		assert.equal( res.json.current.find( c => c.world === 'moon' && c.period === 'week' ).place, 'Tranquility Base' );
+
+	} );
+
+	test( 'admin: back to the rotation on a live one the rotation chose, or a pick of the place and kind it already is, changes nothing: no warning, the same challenge, its board going on', async () => {
+
+		const boss = await signIn( 'lead@example.com' );
+		const time = Date.UTC( 2026, 10, 18, 11 );
+		const day = ( await list( { time } ) ).json.challenges.find( c => c.world === 'moon' && c.period === 'day' );
+		const mo = await player( 'Mo Stays', { time } );
+		assert.equal( ( await post( mo, day, { run: fairRun( day, 5000 ) } ) ).status, 200 );
+		const admin = ( body, at ) => send( 'POST', '/api/admin/challenges', body, { cookie: boss, time: at } );
+		const now = answer => answer.json.current.find( c => c.world === 'moon' && c.period === 'day' );
+		let res = await admin( { action: 'unpick', period: day.key, world: 'moon' }, time + 11 * MINUTE );
+		assert.equal( res.status, 200, res.text );
+		assert.deepEqual( [ now( res ).id, now( res ).total, now( res ).source ], [ day.id, 1, 'rotation' ] );
+		// A pick of what it already is: the same one, its board too, now said to be yours; and back.
+		res = await admin( { action: 'pick', period: day.key, world: 'moon', kind: day.kind, place: { featured: MOON_PLACES.find( p => p.name === day.place ).id } }, time + 12 * MINUTE );
+		assert.equal( res.status, 200, res.text );
+		assert.deepEqual( [ now( res ).id, now( res ).total, now( res ).source ], [ day.id, 1, 'owner' ] );
+		res = await admin( { action: 'unpick', period: day.key, world: 'moon' }, time + 13 * MINUTE );
+		assert.deepEqual( [ res.status, now( res ).id, now( res ).source ], [ 200, day.id, 'rotation' ] );
+		assert.deepEqual( server.d1( `SELECT replaced_at, final_at FROM challenges WHERE id = ${ day.id }` )[ 0 ], { replaced_at: null, final_at: null } );
+		assert.equal( server.d1( `SELECT COUNT(*) AS n FROM challenges WHERE period = '${ day.key }' AND world = 'moon'` )[ 0 ].n, 1 );
+		// Another kind there is a change, warned about as any is.
+		res = await admin( { action: 'pick', period: day.key, world: 'moon', kind: KINDS.find( kind => kind !== day.kind ), place: { featured: MOON_PLACES.find( p => p.name === day.place ).id } }, time + 14 * MINUTE );
+		assert.deepEqual( [ res.status, res.json.reason, res.json.drivers ], [ 409, 'live', 1 ] );
+
+	} );
+
+	test( 'CHALLENGE_MISSES: the lists and boards that miss the cache and read D1, ten a minute from an address (all of a /48\'s /64s one), so past boards and players asked for in turn are turned away past it; what the cache has is still answered, and other addresses too', async () => {
+
+		// (The rate limiter's minutes are the wall clock's: started early in one, so the ten are counted in
+		// it.)
+		const into = Date.now() % MINUTE;
+		if ( into > 40 * SECOND ) await new Promise( resolve => setTimeout( resolve, MINUTE - into + 200 ) );
+		let n = 0;
+		const from = () => `2001:db8:4d:${ ( ++ n ).toString( 16 ) }::5`;
+		// The list as a page has it, cached (asked once from elsewhere first).
+		assert.equal( ( await list() ).status, 200 );
+		assert.equal( ( await list( { ip: from() } ) ).headers.get( 'X-Board-Cache' ), 'hit' );
+		// Boards that aren't (or past ones: each read from D1 the first time it's asked for in a place) and
+		// lists for players who aren't, in turn, each from another /64 of the /48: each a miss.
+		const answers = [];
+		for ( let k = 0; k < 15; k ++ ) {
+
+			answers.push( await board( 5000 + k, { ip: from() } ) );
+			answers.push( await list( { id: `script${ String( k ).padStart( 10, '0' ) }`, ip: from() } ) );
+
+		}
+
+		const statuses = answers.map( answer => answer.status );
+		const first = statuses.indexOf( 429 );
+		assert.equal( first, 10, statuses.join( ' ' ) );
+		assert.ok( statuses.slice( 0, 10 ).every( status => status === 404 || status === 200 ), statuses.join( ' ' ) );
+		assert.ok( statuses.slice( 10 ).every( status => status === 429 ), statuses.join( ' ' ) );
+		assert.deepEqual( [ answers[ first ].json.retryAfter, answers[ first ].headers.get( 'Retry-After' ) ], [ 60, '60' ] );
+		// What the cache has costs nothing, and is still answered; another /48 is another address.
+		assert.equal( ( await list( { ip: from() } ) ).status, 200 );
+		assert.equal( ( await list( { id: 'scriptelsewhere0', ip: '2001:db8:4e::5' } ) ).status, 200 );
+
+	} );
+
+	test( 'a visitor\'s day of times is counted by the /48: a player posting from another /64 of it each time is turned away past CHALLENGE_TIMES_PER_VISITOR_DAILY all the same', async () => {
+
+		const pia = await player( 'Pia Tunnel', { kind: 'moon' } );
+		const c = live.find( c => c.world === 'moon' && c.period === 'month' );
+		for ( let k = 0; k < 4; k ++ ) {
+
+			const res = await post( pia, c, { run: fairRun( c, 9000 - k * 500 ), after: 10 * MINUTE + k * 20 * SECOND, ip: `2001:db8:4f:${ k + 1 }::9` } );
+			assert.equal( res.status, 200, res.text );
+
+		}
+
+		// The fifth, from yet another /64: the visitor's day used up (till midnight UTC), and Pia held
+		// till then.
+		let res = await post( pia, c, { run: fairRun( c, 6000 ), after: 10 * MINUTE + 100 * SECOND, ip: '2001:db8:4f:aa::9' } );
+		assert.deepEqual( [ res.status, res.json.error ], [ 429, 'That\'s all for today. Try again tomorrow' ] );
+		res = await post( pia, c, { run: fairRun( c, 5000 ), after: 10 * MINUTE + 120 * SECOND, ip: '2001:db8:4f:bb::9' } );
+		assert.deepEqual( [ res.status, res.json.reason ], [ 429, 'daily' ] );
+
+	} );
+
+	test( 'admin: busy drop-in places approved for the rotation, and unapproved, by their cell; at most a hundred a world', async () => {
+
+		const boss = await signIn( 'head@example.com' );
+		const admin = body => send( 'POST', '/api/admin/challenges', body, { cookie: boss } );
+		const cell = cellOf( 'earth', 45.83862, 4.95052 );
+		let res = await admin( { action: 'approve', world: 'earth', cell } );
+		assert.equal( res.status, 200, res.text );
+		assert.deepEqual( res.json.approved.map( p => [ p.cell, p.name ] ), [ [ cell, '12 km NE of Lyon' ] ] );
+		// Once only; and the cell can then be picked by it.
+		res = await admin( { action: 'approve', world: 'earth', cell } );
+		assert.equal( res.json.approved.length, 1 );
+		res = await admin( { action: 'pick', period: 'day:2026-11-19', world: 'earth', kind: 'sprint', place: { cell } } );
+		assert.equal( res.status, 200, res.text );
+		assert.equal( res.json.picks.find( p => p.period === 'day:2026-11-19' ).place, '12 km NE of Lyon' );
+		for ( const [ name, body ] of [ [ 'not a cell', { action: 'approve', world: 'earth', cell: 'earth:99999:1' } ], [ 'the other world\'s', { action: 'approve', world: 'moon', cell } ], [ 'coordinates', { action: 'approve', world: 'earth', cell: '45.8, 4.9' } ] ] ) {
+
+			assert.equal( ( await admin( body ) ).status, 400, name );
+
+		}
+
+		res = await admin( { action: 'unapprove', world: 'earth', cell } );
+		assert.deepEqual( res.json.approved, [] );
+		// A hundred at most.
+		server.d1( `INSERT INTO challenge_places ( world, cell_row, cell_column, name, region, lat, lon, created_at ) SELECT 'moon', value, 1, 'Somewhere', '', 0, 0, 0 FROM json_each( '[${ Array.from( { length: 100 }, ( _, i ) => i + 2000 ).join( ',' ) }]' )` );
+		res = await admin( { action: 'approve', world: 'moon', cell: cellOf( 'moon', 1, 1 ) } );
+		assert.deepEqual( [ res.status, res.json.reason ], [ 409, 'full' ] );
+		server.d1( 'DELETE FROM challenge_places' );
+
+	} );
+
+	// The challenges D1 has given their final places by `time`: asked for the list then (and again a
+	// minute on and so on, as each instance finishes at most a dozen at a time, in the background),
+	// till `done()` says so.
+	async function finishing( time, done ) {
+
+		let i = 0;
+		for ( ; i < 6 && ! done(); i ++ ) {
+
+			assert.equal( ( await list( { time: time + i * 61 * SECOND } ) ).status, 200 );
+			for ( let tries = 0; tries < 20 && ! done(); tries ++ ) await new Promise( resolve => setTimeout( resolve, 100 ) );
+
+		}
+
+		assert.ok( done(), 'never finished' );
+		// The Worker's background work settled (its finishing written) before the next test asks it
+		// anything, after the database was read from outside.
+		assert.equal( ( await list( { time: time + i * 61 * SECOND } ) ).status, 200 );
+
+	}
+
+	test( 'admin: the owner\'s picks from the live periods on, however far ahead, soonest first; each back to the rotation from the list', async () => {
+
+		const boss = await signIn( 'boss@example.com' );
+		const time = Date.UTC( 2026, 10, 20, 9 );
+		const admin = body => send( 'POST', '/api/admin/challenges', body, { cookie: boss, time } );
+		for ( const [ period, world, place ] of [ [ 'day:2027-06-01', 'earth', 'spot:monaco' ], [ 'month:2027-09', 'moon', 'moon-tycho' ], [ 'week:2027-03-01', 'earth', 'spot:furka' ] ] ) {
+
+			assert.equal( ( await admin( { action: 'pick', period, world, kind: 'sprint', place: { featured: place } } ) ).status, 200 );
+
+		}
+
+		const res = await call( server, '/api/admin/challenges', { headers: { Cookie: boss }, time } );
+		assert.equal( res.status, 200, res.text );
+		const picks = res.json.picks;
+		// All three, past the next 40 days of each kind; none of a period that's over (the 17th's, the
+		// 19th's, made earlier); in the order they start.
+		for ( const key of [ 'day:2027-06-01', 'month:2027-09', 'week:2027-03-01', 'month:2027-01' ] ) assert.ok( picks.some( p => p.period === key ), key );
+		assert.ok( picks.every( p => parsePeriod( p.period ).ends > time ), JSON.stringify( picks ) );
+		assert.deepEqual( picks.map( p => p.startsAt ), [ ...picks.map( p => p.startsAt ) ].sort( ( a, b ) => a - b ) );
+		assert.deepEqual( picks.find( p => p.period === 'week:2027-03-01' ), { period: 'week:2027-03-01', world: 'earth', kind: 'sprint', place: 'Furka Pass', region: SPOTS.find( s => s.id === 'furka' ).region, lat: SPOTS.find( s => s.id === 'furka' ).lat, lon: SPOTS.find( s => s.id === 'furka' ).lon, heading: SPOTS.find( s => s.id === 'furka' ).heading ?? null, startsAt: Date.UTC( 2027, 2, 1 ) } );
+		// Back to the rotation, each.
+		for ( const [ period, world ] of [ [ 'day:2027-06-01', 'earth' ], [ 'month:2027-09', 'moon' ], [ 'week:2027-03-01', 'earth' ] ] ) {
+
+			const back = await admin( { action: 'unpick', period, world } );
+			assert.ok( ! back.json.picks.some( p => p.period === period ), period );
+
+		}
+
+	} );
+
+	test( 'admin: back to the rotation on a live one the rotation chose leaves it as it is, its board going on, after a place is approved (which reshuffles the rotation) as before', async () => {
+
+		const boss = await signIn( 'chief@example.com' );
+		const time = Date.UTC( 2026, 10, 20, 10 );
+		const day = ( await list( { time } ) ).json.challenges.find( c => c.world === 'moon' && c.period === 'day' );
+		const pat = await player( 'Pat Stays', { time } );
+		assert.equal( ( await post( pat, day, { run: fairRun( day, 5000 ) } ) ).status, 200 );
+		const admin = body => send( 'POST', '/api/admin/challenges', body, { cookie: boss, time: time + 20 * MINUTE } );
+		// A place approved: the rotation's order now isn't the one this day was fixed from.
+		const cell = cellOf( 'moon', 12.5, 30.25 );
+		assert.equal( ( await admin( { action: 'approve', world: 'moon', cell } ) ).status, 200 );
+		try {
+
+			const res = await admin( { action: 'unpick', period: day.key, world: 'moon' } );
+			assert.equal( res.status, 200, res.text );
+			const now = res.json.current.find( c => c.world === 'moon' && c.period === 'day' );
+			assert.deepEqual( [ now.id, now.place, now.total, now.source ], [ day.id, day.place, 1, 'rotation' ] );
+			assert.deepEqual( server.d1( `SELECT replaced_at, final_at FROM challenges WHERE id = ${ day.id }` )[ 0 ], { replaced_at: null, final_at: null } );
+
+		} finally {
+
+			await admin( { action: 'unapprove', world: 'moon', cell } );
+
+		}
+
+	} );
+
+	test( 'a new week at Monday midnight UTC, the month going on: a weekly run finished on Sunday night taken in the minute after, none later; the new week fixed, the old one given its final places, the month not', async () => {
+
+		const sunday = Date.UTC( 2026, 10, 29, 23 );
+		const monday = Date.UTC( 2026, 10, 30 );
+		const before = ( await list( { time: sunday } ) ).json.challenges;
+		const week = before.find( c => c.world === 'earth' && c.period === 'week' );
+		const month = before.find( c => c.world === 'earth' && c.period === 'month' );
+		assert.deepEqual( [ week.key, month.key ], [ 'week:2026-11-23', 'month:2026-11' ] );
+		// Finished at 23:59:50 or so, posted at 00:00:20: taken.
+		const nia = await player( 'Nia Sunday', { time: sunday + 30 * MINUTE } );
+		const run = fairRun( week, 10000 );
+		assert.ok( run.ms > 25 * SECOND && run.ms < 10 * MINUTE, String( run.ms ) );
+		let res = await post( nia, week, { run, after: 30 * MINUTE + 20 * SECOND } );
+		assert.equal( res.status, 200, res.text );
+		// After the minute: turned away, a quicker run or not.
+		res = await post( nia, week, { run: fairRun( week, 9000 ), after: 31 * MINUTE + 30 * SECOND } );
+		assert.deepEqual( [ res.status, res.json.reason ], [ 403, 'challenge' ] );
+		// Monday's list: a new week (and day) fixed, the month the same one.
+		const after = ( await list( { time: monday + 30 * SECOND } ) ).json.challenges;
+		const newWeek = after.find( c => c.world === 'earth' && c.period === 'week' );
+		assert.deepEqual( [ newWeek.key, after.find( c => c.world === 'earth' && c.period === 'day' ).key ], [ 'week:2026-11-30', 'day:2026-11-30' ] );
+		assert.notEqual( newWeek.id, week.id );
+		assert.equal( after.find( c => c.world === 'earth' && c.period === 'month' ).id, month.id );
+		// The old week given its final places (after GRACE), Nia's among them; the month not.
+		const finished = id => server.d1( `SELECT final_at FROM challenges WHERE id = ${ id }` )[ 0 ].final_at !== null;
+		await finishing( monday + GRACE + MINUTE, () => finished( week.id ) );
+		assert.ok( server.d1( `SELECT final_rank FROM challenge_times WHERE challenge_id = ${ week.id } AND player_id = '${ nia.id }'` )[ 0 ].final_rank >= 1 );
+		assert.ok( ! finished( month.id ) && ! finished( newWeek.id ) );
+
+	} );
+
+	test( 'a new month at its first midnight UTC, the week going on: a monthly run finished on the last night taken in the minute after, none later; the new month fixed, the old one given its final places, the week not', async () => {
+
+		const last = Date.UTC( 2026, 10, 30, 23 );
+		const first = Date.UTC( 2026, 11, 1 );
+		const before = ( await list( { time: last } ) ).json.challenges;
+		const week = before.find( c => c.world === 'moon' && c.period === 'week' );
+		const month = before.find( c => c.world === 'moon' && c.period === 'month' );
+		assert.deepEqual( [ week.key, month.key ], [ 'week:2026-11-30', 'month:2026-11' ] );
+		const oz = await player( 'Oz Lastnight', { time: last + 30 * MINUTE, kind: 'moon' } );
+		const run = fairRun( month, 10000 );
+		assert.ok( run.ms > 25 * SECOND && run.ms < 10 * MINUTE, String( run.ms ) );
+		let res = await post( oz, month, { run, after: 30 * MINUTE + 20 * SECOND } );
+		assert.equal( res.status, 200, res.text );
+		res = await post( oz, month, { run: fairRun( month, 9000 ), after: 31 * MINUTE + 30 * SECOND } );
+		assert.deepEqual( [ res.status, res.json.reason ], [ 403, 'challenge' ] );
+		const after = ( await list( { time: first + 30 * SECOND } ) ).json.challenges;
+		const newMonth = after.find( c => c.world === 'moon' && c.period === 'month' );
+		assert.equal( newMonth.key, 'month:2026-12' );
+		assert.notEqual( newMonth.id, month.id );
+		assert.equal( after.find( c => c.world === 'moon' && c.period === 'week' ).id, week.id );
+		// The three live on the Moon still three places, the new month clear of the week going on.
+		assert.equal( new Set( after.filter( c => c.world === 'moon' ).map( c => c.place ) ).size, 3 );
+		const finished = id => server.d1( `SELECT final_at FROM challenges WHERE id = ${ id }` )[ 0 ].final_at !== null;
+		await finishing( first + GRACE + MINUTE, () => finished( month.id ) );
+		assert.ok( server.d1( `SELECT final_rank FROM challenge_times WHERE challenge_id = ${ month.id } AND player_id = '${ oz.id }'` )[ 0 ].final_rank >= 1 );
+		assert.ok( ! finished( week.id ) && ! finished( newMonth.id ) );
+
+	} );
+
+	test( 'the rotation keeps clear of what\'s fixed, whoever chose it: with a place approved and the owner\'s picks for today and this week, tomorrow\'s and the day after\'s are neither the day before\'s nor the week\'s', async () => {
+
+		const boss = await signIn( 'head@example.com' );
+		const tuesday = Date.UTC( 2026, 11, 8, 10 );
+		const admin = ( body, time = tuesday ) => send( 'POST', '/api/admin/challenges', body, { cookie: boss, time } );
+		const today = ( await list( { time: tuesday } ) ).json.challenges.filter( c => c.world === 'earth' );
+		assert.deepEqual( today.map( c => c.key ), [ 'day:2026-12-08', 'week:2026-12-07', 'month:2026-12' ] );
+		// A busy place approved: the rotation's order reshuffled.
+		const cell = cellOf( 'earth', 37.8021, - 122.4187 );
+		assert.equal( ( await admin( { action: 'approve', world: 'earth', cell } ) ).status, 200 );
+		try {
+
+			// What the rotation alone (as it now is) would choose for Wednesday and Thursday: the owner
+			// picks them for today and for the week.
+			const approved = server.d1( 'SELECT * FROM challenge_places' );
+			const env = { TURNSTILE_SECRET: PASS_SECRET };
+			const wednesday = await rotationPick( env, periodOf( 'day', Date.UTC( 2026, 11, 9 ) ), 'earth', approved );
+			const thursday = await rotationPick( env, periodOf( 'day', Date.UTC( 2026, 11, 10 ) ), 'earth', approved );
+			const placeOf = pick => pick.place.id.startsWith( 'cell:' ) ? { cell: pick.place.id.slice( 5 ) } : { featured: pick.place.id };
+			assert.equal( ( await admin( { action: 'pick', period: 'day:2026-12-08', world: 'earth', kind: 'sprint', place: placeOf( wednesday ), live: true } ) ).status, 200 );
+			assert.equal( ( await admin( { action: 'pick', period: 'week:2026-12-07', world: 'earth', kind: 'collect', place: placeOf( thursday ), live: true } ) ).status, 200 );
+			const named = periods => periods.map( c => c.place );
+			// Wednesday: not Tuesday's (the owner's, the rotation's own choice for Wednesday) nor the week's.
+			const wed = ( await list( { time: Date.UTC( 2026, 11, 9, 0, 10 ) } ) ).json.challenges.filter( c => c.world === 'earth' );
+			assert.deepEqual( named( wed.slice( 1 ) ), [ thursday.place.name, today[ 2 ].place ] );
+			assert.equal( wed[ 0 ].key, 'day:2026-12-09' );
+			assert.ok( ! [ wednesday.place.name, thursday.place.name, today[ 2 ].place ].includes( wed[ 0 ].place ), JSON.stringify( named( wed ) ) );
+			// Thursday: not Wednesday's, nor the week's (the rotation's own choice for Thursday).
+			const thu = ( await list( { time: Date.UTC( 2026, 11, 10, 0, 10 ) } ) ).json.challenges.filter( c => c.world === 'earth' );
+			assert.ok( ! [ wed[ 0 ].place, thursday.place.name, today[ 2 ].place ].includes( thu[ 0 ].place ), JSON.stringify( named( thu ) ) );
+
+		} finally {
+
+			await admin( { action: 'unapprove', world: 'earth', cell } );
+
+		}
+
+	} );
+
+	test( 'a new week and its Monday fixed by the same ask: the week first, so the day keeps clear of it, the owner\'s pick for the week included; and the admin page\'s next day said so the evening before', async () => {
+
+		const boss = await signIn( 'boss@example.com' );
+		const sunday = Date.UTC( 2026, 11, 13, 12 );
+		const monday = Date.UTC( 2026, 11, 14 );
+		// Sunday's fixed (the day before Monday's), then what the rotation would give Monday's day on the
+		// Earth if it were fixed before its week: as the Worker works it out, clear of what D1 has fixed
+		// (Sunday, the month, the week before).
+		assert.equal( ( await list( { time: sunday } ) ).status, 200 );
+		const periods = [ 'day:2026-12-13', 'week:2026-12-07', 'month:2026-11', 'month:2026-12' ];
+		const fixed = server.d1( `SELECT * FROM challenges WHERE period IN ( ${ periods.map( p => `'${ p }'` ).join( ', ' ) } ) AND replaced_at IS NULL` );
+		const approved = server.d1( 'SELECT * FROM challenge_places' );
+		const env = { TURNSTILE_SECRET: PASS_SECRET };
+		const alone = await rotationPick( env, periodOf( 'day', monday ), 'earth', approved, fixed );
+		// The owner picks that place for the new week.
+		const place = alone.place.id.startsWith( 'cell:' ) ? { cell: alone.place.id.slice( 5 ) } : { featured: alone.place.id };
+		const res = await send( 'POST', '/api/admin/challenges', { action: 'pick', period: 'week:2026-12-14', world: 'earth', kind: 'sprint', place }, { cookie: boss, time: sunday } );
+		assert.equal( res.status, 200, res.text );
+		// The admin page's next up, the evening before: the week the owner's pick, Monday clear of it.
+		const next = ( await send( 'GET', '/api/admin/challenges', undefined, { cookie: boss, time: sunday + HOUR } ) ).json.upcoming.filter( u => u.world === 'earth' );
+		const nextWeek = next.find( u => u.period === 'week' );
+		const nextDay = next.find( u => u.period === 'day' );
+		assert.deepEqual( [ nextWeek.key, nextWeek.place, nextWeek.source ], [ 'week:2026-12-14', alone.place.name, 'owner' ] );
+		assert.equal( nextDay.key, 'day:2026-12-14' );
+		assert.notEqual( nextDay.place, alone.place.name, 'the next day shown as the week\'s place' );
+		// Monday's first ask fixes both: the week from the pick, then the day, clear of it, as next up said.
+		const today = ( await list( { time: monday + 30 * SECOND } ) ).json.challenges.filter( c => c.world === 'earth' );
+		assert.deepEqual( today.map( c => c.key ), [ 'day:2026-12-14', 'week:2026-12-14', 'month:2026-12' ] );
+		assert.equal( today[ 1 ].place, alone.place.name );
+		assert.notEqual( today[ 0 ].place, alone.place.name, 'the day fixed as its week\'s place' );
+		assert.equal( today[ 0 ].place, nextDay.place );
+		assert.equal( new Set( today.map( c => c.place ) ).size, 3 );
 
 	} );
 
