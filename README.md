@@ -816,6 +816,21 @@ chunk of their own when they're opened, so nothing of them is in its first load;
 driven 40 s is told of today's challenge on its world, with a button to them (see
 [Challenges](docs/world-drive.md#challenges)).
 
+**Ghosts and "challenge a friend"**: every challenge run is recorded as it's driven (where the car
+is and which way it faces, ten times a second, packed to about 4 KB a minute) and posted with its
+time; the Worker takes the time only if its ghost agrees with it (through each gate at its pass
+time, as long as the time, never faster between two samples than the game goes) and keeps the
+best's ghost. A run races a ghost car in its ride and Garage look: your own best by default, a
+friend's from their link, or the board's leader's, with splits at each gate ("-1.2 s") and on the
+finish card, and a button to hide it. **Challenge a friend** (the finish card, your own row of a
+board) shares `/?challenge=<id>&vs=<handle>`, the handle an HMAC the Worker makes (never the
+player's id), through the browser's share sheet or copied; the page opens on it with "Ann's time
+to beat: 0:21.40 on the daily checkpoint sprint at Furka Pass, 5 h left" and races their ghost (a
+Moon challenge's in the Moon-only mode, spending no Earth drive), and the Worker gives the link a
+preview card of its own for chat apps (`src/drive-app/ghost-rules.js`, `challenge-ghost.js`,
+migration `0007_challenge_ghosts.sql`; see
+[Ghosts and challenge a friend](docs/world-drive.md#ghosts-and-challenge-a-friend)).
+
 **The Moon**: **Moon** at the top of the globe's panel turns the globe to the Moon, made in the page
 rather than streamed (`src/drive-app/moon.js`): its shapes are NASA's (LRO's laser altimeter, every
 quarter degree, `drive/public/moon/height.bin`), its colours LRO's camera's mosaic
@@ -968,6 +983,7 @@ drive/index.html    World Drive's page; its code is src/drive-app/ (docs/world-d
 worker/drive/       World Drive's Worker: the Maps key per visit, caps, Turnstile, search, the leaderboard,
                     levels' XP, the Supporter Pass (Google sign-in, Stripe's webhook), driving with
                     others' rooms, the owner's play stats, where people drop in and challenges
+                    (with their ghosts, and a friend's link's page and preview card)
 vite.drive.config.js, wrangler.drive.jsonc   World Drive's build and Worker settings
 ```
 

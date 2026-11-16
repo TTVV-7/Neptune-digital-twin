@@ -398,6 +398,19 @@ dialog.ch-dialog::backdrop {
 		font-size: 16px;
 	}
 
+	.ch-link {
+		margin-top: 6px;
+		padding: 8px 12px;
+	}
+
+	.ch-link-head {
+		font-size: 14px;
+	}
+
+	.ch-link .ch-buttons {
+		margin-top: 6px;
+	}
+
 	.ch-rows li {
 		padding: 4px 10px;
 	}
@@ -478,13 +491,71 @@ dialog.ch-dialog::backdrop {
 	color: var( --accent );
 }
 
+/* Racing a ghost: the split at each pass ("-1.2 s" ahead in green, "+0.8 s" behind in red) and the
+   button that hides it (the HUD's one thing to press, so it alone takes a press). */
+#drive-ui .ch-hud {
+	grid-template-columns: auto auto auto;
+	grid-template-areas: 'arrow clock split' 'dist gates ghost';
+}
+
+#drive-ui .ch-hud .ch-split {
+	grid-area: split;
+	font: 900 italic 18px/1 var( --font );
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+	color: #ff6b6b;
+}
+
+#drive-ui .ch-hud .ch-split.ahead {
+	color: #5dff8a;
+}
+
+#drive-ui .ch-hud .ch-ghost-toggle {
+	grid-area: ghost;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 3px 8px;
+	border: 1px solid var( --line );
+	border-radius: 9px;
+	background: rgba( 255, 255, 255, 0.08 );
+	color: var( --ink );
+	font-size: 11px;
+	font-weight: 800;
+	pointer-events: auto;
+}
+
+#drive-ui .ch-hud .ch-ghost-toggle.off {
+	opacity: 0.55;
+	text-decoration: line-through;
+}
+
+/* A ghost's name over it, as the others' are (style.css's .live-tag), in the drive's own layer (the
+   others' are off on the Moon). */
+#drive-ui .ch-ghost-tag {
+	position: fixed;
+	top: 0;
+	left: 0;
+	z-index: 3;
+	padding: 2px 8px;
+	border-radius: 8px;
+	background: rgba( 9, 15, 27, 0.6 );
+	color: #d8f4ff;
+	font-size: 12px;
+	font-weight: 800;
+	font-style: italic;
+	white-space: nowrap;
+	translate: -50% -100%;
+	pointer-events: none;
+}
+
 /* A phone held upright: the top left still, narrow (the timer over the arrow and how far), beside
    the speed in the middle (150 px wide at least: its left edge is 75 px left of the middle). */
 @media ( orientation: portrait ) {
 
 	body.touch #drive-ui .ch-hud {
 		grid-template-columns: auto auto;
-		grid-template-areas: 'clock clock' 'arrow dist' 'gates gates';
+		grid-template-areas: 'clock clock' 'arrow dist' 'gates gates' 'split ghost';
 		justify-items: start;
 		gap: 2px 6px;
 		max-width: calc( 50vw - 75px - 18px );
@@ -497,6 +568,15 @@ dialog.ch-dialog::backdrop {
 
 	body.touch #drive-ui .ch-hud .ch-gates {
 		max-width: 100%;
+	}
+
+	body.touch #drive-ui .ch-hud .ch-split {
+		font-size: 15px;
+	}
+
+	/* The ghost's button, its icon alone. */
+	body.touch #drive-ui .ch-hud .ch-ghost-toggle span {
+		display: none;
 	}
 
 }
@@ -610,6 +690,96 @@ body.touch.ch-running #drive-ui .xp-pops {
 .ch-f-note {
 	margin: 10px 0 0;
 	font-weight: 700;
+}
+
+/* Against the ghost raced. */
+.ch-f-vs {
+	margin: 8px 0 0;
+	font-weight: 900;
+	color: #ff8a8a;
+}
+
+.ch-f-vs.ahead {
+	color: #5dff8a;
+}
+
+.ch-f-share:empty {
+	display: none;
+}
+
+.ch-f-share {
+	margin-top: 10px;
+}
+
+/* --- challenge a friend ------------------------------------------------------------------- */
+
+button.ch-share,
+button.ch-race {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	margin-top: 2px;
+	font-size: 13px;
+	font-weight: 800;
+}
+
+.ch-rows button.ch-share,
+.ch-rows button.ch-race {
+	align-self: flex-start;
+	font-size: 12px;
+}
+
+.ch-f-share button.ch-share {
+	padding: 8px 16px;
+	border: 1px solid var( --sky );
+	border-radius: 12px;
+	text-decoration: none;
+}
+
+/* The link to copy by hand, where it can be neither shared nor copied. */
+.ch-share-field {
+	display: block;
+	width: 100%;
+	margin-top: 6px;
+	padding: 7px 10px;
+	border: 1px solid var( --line );
+	border-radius: 9px;
+	background: rgba( 255, 255, 255, 0.08 );
+	font: inherit;
+	font-size: 12px;
+	color: var( --ink );
+}
+
+/* A friend's link: its card over the list. */
+.ch-link {
+	margin: 12px 0 4px;
+	padding: 12px 14px;
+	border: 1px solid rgba( 255, 210, 63, 0.6 );
+	border-radius: 14px;
+	background: linear-gradient( 160deg, rgba( 255, 210, 63, 0.16 ), var( --chip ) );
+}
+
+.ch-link[data-world='moon'] {
+	background: linear-gradient( 160deg, rgba( 160, 170, 200, 0.2 ), var( --chip ) );
+}
+
+.ch-link-kicker {
+	margin: 0;
+	font-size: 11px;
+	font-weight: 900;
+	letter-spacing: 1px;
+	text-transform: uppercase;
+	color: var( --accent );
+}
+
+.ch-link-head {
+	margin: 6px 0 0;
+	font-size: 16px;
+	line-height: 1.35;
+}
+
+.ch-link-time {
+	font-variant-numeric: tabular-nums;
 }
 
 .ch-f-form {

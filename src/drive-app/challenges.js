@@ -4,7 +4,9 @@ import {
 	LinearFilter, TorusGeometry, Vector3,
 } from 'three';
 import { send } from './api.js';
+import { createRaceGhost, createRecorder } from './challenge-ghost.js';
 import { GRACE, KIND_NAMES, PERIOD_NAMES, TALL, checkPasses, describe, formatTime, rankText, timeLeft } from './challenge-rules.js';
+import { ghostFault } from './ghost-rules.js';
 import { LEVEL_MAX, levelLine } from './levels.js';
 import { MOON } from './moon-places.js';
 
@@ -24,6 +26,14 @@ import { MOON } from './moon-places.js';
 // another ride or place, Go to someone. R (back on the road) is fine: it stops the car. A pause on
 // the finish card puts the finished run away (its time still goes up), and driving on after a
 // pause that stopped a run is the end of it.
+//
+// Ghosts (challenge-ghost.js): every run is recorded as it's driven and posted with its time, and a
+// run races a ghost: your own best's by default (this page's, from the run just posted, or the
+// Worker's), the one a friend's link names, or the board's leader's (its row's Race). Splits against
+// it at each gate and on the finish card; a button on the HUD hides it (kept for the visit's next
+// runs, and the next visit's). "Challenge a friend" (the finish card, your own row of a board)
+// shares a link to your best, /?challenge=&vs=<its handle>; a page opened on one shows its card
+// (openLink) and races their ghost.
 
 // The countdown (s), and what's held at the start meanwhile; READING (s) the visit's first, on a
 // computer, with the keys card over it ("Get ready" till the 3), put away at GO.
@@ -82,6 +92,16 @@ const RELOAD = 5000;
 const RELOAD_MOST = 60000;
 const RELOADS = 4;
 const NAME = /^[\p{L}\p{M}\p{N} _-]{3,16}$/u;
+// A split against the ghost shows this long (ms) after each pass.
+const SPLIT_SHOW = 3000;
+// Whether ghosts are shown, kept in the browser (off: 'off').
+const GHOST_SHOWN = 'world-drive.ghost';
+const GHOST_ICON = '<svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M10 2.5c-3.6 0-6 2.7-6 6.3v8.7l2-1.6 2 1.6 2-1.6 2 1.6 2-1.6 2 1.6V8.8c0-3.6-2.4-6.3-6-6.3z" fill="currentColor"/><circle cx="7.6" cy="8.6" r="1.3" fill="#0b1220"/><circle cx="12.4" cy="8.6" r="1.3" fill="#0b1220"/></svg>';
+const SHARE_ICON = '<svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M10 2.5v10M6.2 6.2 10 2.5l3.8 3.7M4 10.5v6h12v-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+// How a challenge's kind is said in a share's words, and its period.
+const SHARE_KINDS = { sprint: 'sprint', collect: 'star hunt', landmark: 'drive' };
+const SHARE_PERIODS = { day: 'today\'s', week: 'this week\'s', month: 'this month\'s' };
+const LINK_PERIODS = { day: 'daily', week: 'weekly', month: 'monthly' };
 const FLAG = '<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M4 2.5v15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M5 3h11.5v8.5H5z" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5 3h2.9v2.8H5zM10.8 3h2.9v2.8h-2.9zM7.9 5.8h2.9v2.9H7.9zM13.7 5.8h2.8v2.9h-2.8zM5 8.7h2.9v2.8H5zM10.8 8.7h2.9v2.8h-2.9z" fill="currentColor"/></svg>';
 const WORLD_NAMES = { earth: 'On the Earth', moon: 'On the Moon' };
 
@@ -96,13 +116,17 @@ const _up = new Vector3( 0, 1, 0 );
 // camera, scene, globe, moon and vehicles, stats, startAt( place ), placeCar( pose ), toGlobe(),
 // keys() (the keys card shown over a run's countdown, the visit's first time on a computer: true
 // if it is), go() (a run's GO: the keys card put away, so nothing covers the road while the clock
-// runs), and the drive's and the pause menu's elements.
+// runs), pivot() (your car's, as drawn), look() (your ride's Garage look), ghostModels (ghosts.js's,
+// what a ghost is drawn with), and the drive's and the pause menu's elements.
 export function setUpChallenges( app ) {
 
 	const dialog = makeDialog();
 	const hud = makeHud( app.driveUi );
 	// The HUD's parts, and what's written in each (updateHud).
-	const hudParts = { clock: hud.querySelector( '.ch-clock' ), gates: hud.querySelector( '.ch-gates' ), dist: hud.querySelector( '.ch-dist' ), arrow: hud.querySelector( '.ch-arrow' ) };
+	const hudParts = {
+		clock: hud.querySelector( '.ch-clock' ), gates: hud.querySelector( '.ch-gates' ), dist: hud.querySelector( '.ch-dist' ), arrow: hud.querySelector( '.ch-arrow' ),
+		split: hud.querySelector( '.ch-split' ), ghost: hud.querySelector( '.ch-ghost-toggle' ),
+	};
 	const written = {};
 	const count = Object.assign( document.createElement( 'div' ), { className: 'ch-count', hidden: true } );
 	count.setAttribute( 'aria-live', 'assertive' );
@@ -141,6 +165,42 @@ export function setUpChallenges( app ) {
 	const bests = {};
 	const unsent = new Map();
 	window.addEventListener( 'online', flush );
+	// The run being recorded; each challenge's best's ghost from this page ({ [ id ]: { run, ms, passes,
+	// vehicle, look, ghost } }), and its handle (for a link to it) as the Worker last said.
+	const recorder = createRecorder();
+	const ownGhosts = new Map();
+	const handles = {};
+	// The ghost a run starting is to race ({ kind: 'own' | 'link' | 'leader' | 'none', name, ms, run }),
+	// and the one being got ready or raced: { challenge (its id), spec, name, data, ghost, ready }.
+	let pendingGhost = null;
+	let race = null;
+	let ghostShown = true;
+	try {
+
+		ghostShown = localStorage.getItem( GHOST_SHOWN ) !== 'off';
+
+	} catch {
+
+		// No storage: shown.
+
+	}
+
+	hudParts.ghost.addEventListener( 'click', () => {
+
+		ghostShown = ! ghostShown;
+		try {
+
+			localStorage.setItem( GHOST_SHOWN, ghostShown ? 'on' : 'off' );
+
+		} catch {
+
+			// Not kept, then.
+
+		}
+
+		showGhostToggle();
+
+	} );
 
 	// --- the list ---
 
@@ -149,6 +209,8 @@ export function setUpChallenges( app ) {
 
 		if ( ! dialog.open ) dialog.showModal();
 		showList();
+		// (A link's card only over the list a link opened: openLink.)
+		dialog.querySelector( '.ch-link' ).hidden = true;
 		const said = dialog.querySelector( '.ch-note' );
 		said.textContent = note;
 		said.hidden = ! note;
@@ -314,11 +376,183 @@ export function setUpChallenges( app ) {
 		}
 
 		const { rows: top, total, me } = answer.body;
-		rows.replaceChildren( ...top.map( row => rowItem( row, !! me && ! me.owner && row.rank === me.rank && row.name === me.name ) ) );
+		const own = row => !! me && ! me.owner && row.rank === me.rank && row.name === me.name;
+		const open = ! ended( challenge ) && answer.body.challenge?.finalAt == null;
+		if ( me?.handle ) handles[ challenge.id ] = me.handle;
+		rows.replaceChildren( ...top.map( row => {
+
+			const li = rowItem( row, own( row ) );
+			// Your own row: a link to your time, to share. The leader's (not yours): race their ghost.
+			if ( own( row ) && me.handle ) li.querySelector( '.who' ).append( shareButton( challenge, me.ms, me.handle ) );
+			else if ( row.rank === 1 && row.run && open ) {
+
+				const button = el( 'button', 'link ch-race', 'Race their ghost' );
+				button.type = 'button';
+				button.addEventListener( 'click', () => begin( challenge, { ghost: { kind: 'leader', name: row.name, ms: row.ms, run: row.run } } ) );
+				li.querySelector( '.who' ).append( button );
+
+			}
+
+			return li;
+
+		} ) );
 		if ( ! top.length ) rows.append( el( 'li', 'ch-none', 'No times yet: be the first!' ) );
 		if ( me?.owner ) mine.textContent = `Your best ${ formatTime( me.ms ) } would be #${ rankText( me.rank ) } (yours as the owner, kept off the board)`;
 		else if ( me ) mine.textContent = `You're #${ rankText( me.rank ) } of ${ Math.max( total, me.rank ) }, with ${ formatTime( me.ms ) }`;
 		else mine.textContent = `${ total } driver${ total === 1 ? '' : 's' } on this board`;
+		// Your row further down than those shown (or the owner's, off the board): its link here.
+		if ( me?.handle && ! top.some( own ) ) mine.append( ' ', shareButton( challenge, me.ms, me.handle ) );
+
+	}
+
+	// --- challenge a friend ---
+
+	// A button sharing a link to your best on `challenge` (`ms`, named by `handle`).
+	function shareButton( challenge, ms, handle ) {
+
+		const button = el( 'button', 'link ch-share' );
+		button.type = 'button';
+		button.innerHTML = `${ SHARE_ICON }<span>Challenge a friend</span>`;
+		button.addEventListener( 'click', () => share( challenge, ms, handle, button ) );
+		return button;
+
+	}
+
+	// The words a link to your best goes with: "Beat my 0:21.40 on today's Furka Pass sprint in World
+	// Drive" ("...on this week's drive to Eiffel Tower...", "...on today's Tycho crater star hunt on
+	// the Moon...").
+	function shareText( challenge, ms ) {
+
+		const what = challenge.kind === 'landmark' ? `drive to ${ challenge.route.goal ?? challenge.place }` : `${ challenge.place } ${ SHARE_KINDS[ challenge.kind ] }`;
+		return `Beat my ${ formatTime( ms ) } on ${ SHARE_PERIODS[ challenge.period ] } ${ what }${ challenge.world === MOON ? ' on the Moon' : '' } in World Drive`;
+
+	}
+
+	// A link to your best (/?challenge=&vs=<handle>) shared: the browser's own sheet where it has one
+	// (a phone's: messages, chats), else copied, with its words; if neither can be, it's shown to copy
+	// by hand. Said beside `button` (as its own word for a moment, and the field under it if need be).
+	async function share( challenge, ms, handle, button ) {
+
+		const url = `${ location.origin }/?challenge=${ challenge.id }&vs=${ handle }`;
+		const text = shareText( challenge, ms );
+		const said = button.querySelector( 'span' ) ?? button;
+		const was = said.textContent;
+		const word = text => {
+
+			said.textContent = text;
+			clearTimeout( button.timer );
+			button.timer = setTimeout( () => said.textContent = was, 2500 );
+
+		};
+		if ( typeof navigator.share === 'function' ) {
+
+			try {
+
+				await navigator.share( { title: 'World Drive challenge', text, url } );
+				app.stats.add( 'challenge', 'share' );
+				return word( 'Shared!' );
+
+			} catch ( err ) {
+
+				// Closed without sharing: nothing more.
+				if ( err?.name === 'AbortError' ) return;
+
+			}
+
+		}
+
+		try {
+
+			await navigator.clipboard.writeText( `${ text } ${ url }` );
+			app.stats.add( 'challenge', 'share' );
+			word( 'Link copied!' );
+
+		} catch {
+
+			// Neither: the link to copy by hand, picked out.
+			word( 'Copy it from here:' );
+			const field = Object.assign( document.createElement( 'input' ), { className: 'ch-share-field', value: `${ text } ${ url }`, readOnly: true } );
+			field.setAttribute( 'aria-label', 'Your challenge link' );
+			button.nextElementSibling?.classList.contains( 'ch-share-field' ) ? button.nextElementSibling.replaceWith( field ) : button.after( field );
+			field.addEventListener( 'keydown', e => e.stopPropagation() );
+			field.focus();
+			field.select();
+
+		}
+
+	}
+
+	// --- a link to a challenge ---
+
+	// A page opened on a friend's link (main.js, from boot.js: /?challenge=&vs=): the Worker's
+	// `answer` for it (send's, of /api/challenges/link). The list opens with the link's card over it:
+	// their time to beat on the challenge, the time it has left, and Start (racing their ghost); one
+	// with a handle that names nobody, the challenge with no ghost, said gently; one that's over, its
+	// final board, their place on it, and today's challenges instead. One that won't open (no such
+	// challenge, the Worker not answering) is said, over the list. `named`: whether the link named a
+	// time at all (a link to the challenge alone has no ghost to miss).
+	async function openLink( answer, { named = true } = {} ) {
+
+		app.stats.add( 'challenge', 'link' );
+		open();
+		const card = dialog.querySelector( '.ch-link' );
+		if ( ! answer?.ok ) {
+
+			card.hidden = true;
+			const said = dialog.querySelector( '.ch-note' );
+			said.textContent = answer?.status === 404 ? 'That challenge link didn\'t open: there\'s no such challenge. Here are today\'s.' : 'That challenge link didn\'t open just now. Here are today\'s challenges.';
+			said.hidden = false;
+			return;
+
+		}
+
+		const { challenge, vs } = answer.body;
+		card.hidden = false;
+		card.dataset.world = challenge.world;
+		card.replaceChildren();
+		const what = `the ${ LINK_PERIODS[ challenge.period ] } ${ KIND_NAMES[ challenge.kind ].toLowerCase() } at ${ challenge.place }${ challenge.world === MOON ? ' on the Moon' : '' }`;
+		const over = challenge.finalAt != null || challenge.replacedAt != null || ended( challenge );
+		const head = el( 'p', 'ch-link-head' );
+		const buttons = el( 'div', 'ch-buttons' );
+		if ( over ) {
+
+			head.append( el( 'b', '', 'This challenge is over.' ), vs ? ` ${ vs.name } finished ${ what } in ${ formatTime( vs.ms ) }${ vs.rank ? `, #${ rankText( vs.rank ) } on its board` : '' }.` : ` It was ${ what }.` );
+			const rows = el( 'ol', 'ch-rows ch-link-rows' );
+			card.append( el( 'p', 'ch-link-kicker', 'A friend\'s challenge' ), head, rows );
+			const today = el( 'button', 'primary', 'Today\'s challenges' );
+			today.type = 'button';
+			today.addEventListener( 'click', () => {
+
+				card.hidden = true;
+				dialog.querySelector( '.ch-list' ).scrollIntoView?.( { block: 'start' } );
+
+			} );
+			buttons.append( today );
+			card.append( buttons );
+			// Its final board (kept as it ended).
+			const board = await send( 'GET', `/api/challenges/board?challenge=${ challenge.id }` );
+			if ( board.ok ) rows.replaceChildren( ...board.body.rows.slice( 0, 5 ).map( row => rowItem( row, !! vs && row.name === vs.name && row.ms === vs.ms ) ) );
+			return;
+
+		}
+
+		const left = timeLeft( challenge.endsAt - ( Date.now() + offset ) ).replace( / left$/, '' );
+		if ( vs ) head.append( el( 'b', 'ch-link-name', vs.name ), `'s time to beat: `, el( 'b', 'ch-link-time', formatTime( vs.ms ) ), ` on ${ what }, ${ left } left.` );
+		else if ( named ) head.append( `That link's time wasn't found (the address may have been cut short), so there's no ghost to race. Here's the challenge: ${ what }, ${ left } left.` );
+		else head.append( `Here's the challenge: ${ what }, ${ left } left.` );
+		card.append( el( 'p', 'ch-link-kicker', vs ? 'A friend\'s challenge' : 'A challenge' ), head );
+		const earthShut = challenge.world !== MOON && !! app.moonOnly;
+		const start = el( 'button', earthShut ? 'ch-start' : 'primary ch-start', earthShut ? 'Needs an Earth drive' : vs?.ghost ? 'Start: race their ghost' : 'Start' );
+		start.type = 'button';
+		start.addEventListener( 'click', () => {
+
+			if ( earthShut ) return toEarth();
+			app.stats.add( 'challenge', 'link_start' );
+			begin( challenge, { ghost: vs?.ghost ? { kind: 'link', name: vs.name, ms: vs.ms, run: vs.run } : { kind: 'none' } } );
+
+		} );
+		buttons.append( start );
+		card.append( buttons );
 
 	}
 
@@ -357,9 +591,11 @@ export function setUpChallenges( app ) {
 
 	// --- starting one ---
 
-	// Start `challenge`: a drop-in at its start (on its world), and its run once the car's down. One
-	// that's over (its Start pressed as it ended) isn't: a run of it wouldn't be taken.
-	function begin( challenge ) {
+	// Start `challenge`: a drop-in at its start (on its world), and its run once the car's down,
+	// racing `ghost` (a spec: { kind: 'link' | 'leader', name, ms, run }, { kind: 'none' }, or your own
+	// best's, the default), fetched meanwhile. One that's over (its Start pressed as it ended) isn't:
+	// a run of it wouldn't be taken.
+	function begin( challenge, { ghost = null } = {} ) {
 
 		if ( ended( challenge ) ) return open( 'That challenge has ended, so a run of it wouldn\'t count. Here are the new ones.' );
 		dialog.close();
@@ -368,6 +604,8 @@ export function setUpChallenges( app ) {
 		if ( app.mode() !== 'globe' ) app.toGlobe();
 		const { start } = challenge.route;
 		pending = challenge;
+		pendingGhost = ghost;
+		prepareRace( challenge, ghost );
 		// A landmark's start is a pin kilometres from it, not the landmark: named by its coordinates
 		// where places are named (a stunt score's board, others in the room), "On the way to" it on the
 		// top bar, and not one of the recent places.
@@ -394,7 +632,8 @@ export function setUpChallenges( app ) {
 
 		if ( pending && place?.challenge === pending.id ) {
 
-			end();
+			// (Its ghost, being got ready for it, kept.)
+			end( true );
 			return;
 
 		}
@@ -414,12 +653,120 @@ export function setUpChallenges( app ) {
 		pending = null;
 		const d = app.driver;
 		const reading = app.keys?.() ?? false;
-		run = { challenge, gates: placeGates( challenge ), start: { east: d.east, north: d.north, heading: d.heading, up: d.y }, phase: 'countdown', left: reading ? READING : COUNTDOWN, clock: 0, passes: [], id: runId() };
+		run = { challenge, gates: placeGates( challenge ), start: { east: d.east, north: d.north, heading: d.heading, up: d.y }, phase: 'countdown', left: reading ? READING : COUNTDOWN, clock: 0, after: 0, passes: [], id: runId() };
 		meshes.show( run );
 		showHud();
 		probeIn = 0;
 		probing = null;
+		// Its ghost (asked for as it was started), if one's ready; else as soon as it is.
+		if ( race?.challenge !== challenge.id ) prepareRace( challenge, pendingGhost );
+		startRace();
 		return true;
+
+	}
+
+	// --- its ghost ---
+
+	// The ghost `challenge`'s next run races, as `spec` says (begin's), got ready: its data (what the
+	// Worker keeps of it, or this page's own best's) and its model. Any other is let go.
+	function prepareRace( challenge, spec ) {
+
+		dropRace();
+		if ( spec?.kind === 'none' ) return;
+		const entry = race = { challenge: challenge.id, spec, name: null, data: null, ghost: null, ready: false };
+		ghostData( challenge, spec ).then( async found => {
+
+			if ( race !== entry ) return;
+			// (None to race: no best yet, or its ghost not to be had.)
+			if ( ! found ) return dropRace();
+			Object.assign( entry, found );
+			const vehicle = app.vehicles.find( v => v.id === found.data.vehicle ) ?? app.vehicles.find( v => v.id === 'go-kart' ) ?? app.vehicles[ 0 ];
+			entry.ghost = createRaceGhost( { scene: app.scene, models: app.ghostModels, tags: app.driveUi, name: found.name } );
+			const loaded = await entry.ghost.load( found.data, vehicle ).catch( err => {
+
+				console.warn( 'World Drive: a challenge\'s ghost didn\'t load.', err );
+				return false;
+
+			} );
+			if ( race !== entry ) return;
+			if ( ! loaded ) return dropRace();
+			entry.ready = true;
+			startRace();
+
+		} );
+
+	}
+
+	// The ghost for `spec` on `challenge`: { name, data } (data: { run, ms, passes, vehicle, look,
+	// ghost }), or null when there's none to race. Your own best's: this page's (the run it posted),
+	// else the Worker's by its run (the list's me.run); a link's or the leader's, the Worker's by its
+	// run, taken only if it's as long as the time it's said to be (a run's ghost is kept by its run).
+	async function ghostData( challenge, spec ) {
+
+		let asked = spec;
+		if ( ! asked || asked.kind === 'own' ) {
+
+			const mine = ownGhosts.get( challenge.id );
+			const me = listed?.challenges.find( c => c.id === challenge.id )?.me;
+			if ( mine && ( ! me || mine.ms <= me.ms ) ) return { name: 'Your best', data: mine };
+			if ( ! me?.run ) return null;
+			asked = { kind: 'own', name: 'Your best', ms: me.ms, run: me.run };
+
+		}
+
+		const answer = await send( 'GET', `/api/challenges/ghost?challenge=${ challenge.id }&run=${ encodeURIComponent( asked.run ) }` );
+		if ( ! answer.ok || answer.body.ms !== asked.ms ) return null;
+		return { name: asked.kind === 'own' ? 'Your best' : asked.name, data: answer.body };
+
+	}
+
+	// The ghost raced from this run's start, if it's ready and of this run's challenge: its samples
+	// into this scene, at its start till GO. The split and the button to hide it on the HUD.
+	function startRace() {
+
+		if ( ! run || ! race?.ready || race.challenge !== run.challenge.id ) return showGhostToggle();
+		race.ghost.start( app.globe, run.challenge.route.start );
+		showGhostToggle();
+
+	}
+
+	function dropRace() {
+
+		race?.ghost?.dispose();
+		race = null;
+		showGhostToggle();
+
+	}
+
+	// The HUD's button to hide the ghost (or show it), only while there's one to race.
+	function showGhostToggle() {
+
+		const there = !! run && !! race?.ready && race.challenge === run.challenge.id;
+		hudParts.ghost.hidden = ! there;
+		hudParts.ghost.classList.toggle( 'off', ! ghostShown );
+		hudParts.ghost.setAttribute( 'aria-pressed', String( ghostShown ) );
+		hudParts.ghost.title = ghostShown ? `Hide the ghost (${ race?.name ?? '' })` : `Show the ghost (${ race?.name ?? '' })`;
+
+	}
+
+	// The split at a pass: how far ahead (less than 0) or behind the ghost this run is (ms), at the
+	// point `index` passed `done`th (a sprint's gate by its index, a hunt's stars by how many), or null.
+	function splitAt( index, done ) {
+
+		const passes = race?.ready && race.challenge === run.challenge.id ? race.data.passes : null;
+		const theirs = ! passes ? null : run.challenge.kind === 'collect' ? passes[ done - 1 ]?.[ 1 ] : passes.find( pass => pass[ 0 ] === index )?.[ 1 ];
+		return Number.isFinite( theirs ) ? run.passes.at( - 1 )[ 1 ] - theirs : null;
+
+	}
+
+	function showSplit( split ) {
+
+		const shown = hudParts.split;
+		shown.textContent = `${ split <= 0 ? '-' : '+' }${ ( Math.abs( split ) / 1000 ).toFixed( 1 ) } s`;
+		shown.classList.toggle( 'ahead', split <= 0 );
+		shown.hidden = false;
+		clearTimeout( shown.timer );
+		shown.timer = setTimeout( () => shown.hidden = true, SPLIT_SHOW );
 
 	}
 
@@ -526,12 +873,18 @@ export function setUpChallenges( app ) {
 				showCount( 'GO!', true );
 				app.stats.add( 'challenge', 'start' );
 				app.go?.();
+				// Its recording from here, the car as it is at GO.
+				const pivot = app.pivot?.();
+				if ( pivot ) recorder.start( pivot );
 
 			} else if ( count.hidden || ( now !== before && now <= COUNTDOWN ) ) showCount( now > COUNTDOWN ? 'Get ready' : String( now ), false, now > COUNTDOWN );
 
 		} else if ( run.phase === 'racing' && driving ) {
 
 			run.clock += dt;
+			// (Recorded before the passes: the last of them finishes it, this frame.)
+			const pivot = app.pivot?.();
+			if ( pivot ) recorder.frame( run.clock * 1000, pivot );
 			passGates( d );
 
 		} else if ( run.phase === 'done' && driving && ! finish.hidden ) {
@@ -560,6 +913,15 @@ export function setUpChallenges( app ) {
 
 			meshes.update( run, dt );
 			updateHud( d );
+			// The ghost on the run's clock: at its start till GO, and once you're over the line on to its
+			// own finish (the clock going on past yours), so a slower one is seen coming in.
+			if ( run.phase === 'done' && driving ) run.after += dt;
+			if ( race?.ready && race.challenge === run.challenge.id ) {
+
+				const ms = run.phase === 'done' ? run.ms + run.after * 1000 : run.clock * 1000;
+				race.ghost.update( ms, ghostShown && run.phase !== 'stopped' && app.mode() !== 'globe', app.camera, app.pivot?.() ?? null );
+
+			}
 
 		}
 
@@ -590,6 +952,14 @@ export function setUpChallenges( app ) {
 				const done = run.passes.length;
 				const total = run.gates.length;
 				if ( done < total ) d.hud.flash( ordered ? `Gate ${ done } / ${ total }` : `${ done } / ${ total } stars` );
+				// Ahead of the ghost here, or behind ("-1.2 s", "+0.8 s").
+				const split = splitAt( gate.index, done );
+				if ( split !== null ) {
+
+					run.splits = [ ...run.splits ?? [], split ];
+					showSplit( split );
+
+				}
 
 			} else if ( ordered ) break;
 
@@ -611,7 +981,12 @@ export function setUpChallenges( app ) {
 		// can be picked in a pause, and a post being tried again still has this one's.
 		const ms = run.passes.at( - 1 )[ 1 ];
 		run.ms = ms;
-		run.result = { challenge: run.challenge, id: run.id, ms, passes: run.passes.map( pass => [ ...pass ] ), vehicle: app.vehicle()?.id ?? 'go-kart' };
+		// Its ghost, recorded to the line and packed in the frame of the route's start; with the ride's
+		// look, to draw it in.
+		const pivot = app.pivot?.();
+		if ( pivot ) recorder.finish( ms, pivot );
+		const ghost = pivot ? recorder.pack( app.globe, run.challenge.route.start ) : null;
+		run.result = { challenge: run.challenge, id: run.id, ms, passes: run.passes.map( pass => [ ...pass ] ), vehicle: app.vehicle()?.id ?? 'go-kart', look: app.look?.() ?? {}, ghost };
 		app.stats.add( 'challenge', 'finish' );
 		app.driver.hud.flash( 'Finished!' );
 		showFinish( run.result );
@@ -632,8 +1007,9 @@ export function setUpChallenges( app ) {
 
 	}
 
-	// Out of the run, its gates and HUD gone.
-	function end() {
+	// Out of the run, its gates and HUD gone, and its ghost (unless `keepGhost`: a drop-in at its own
+	// start, which the ghost was got ready for).
+	function end( keepGhost = false ) {
 
 		run = null;
 		naming = null;
@@ -642,6 +1018,8 @@ export function setUpChallenges( app ) {
 		count.hidden = true;
 		finish.hidden = true;
 		stopped.hidden = true;
+		if ( ! keepGhost ) dropRace();
+		race?.ghost?.update( 0, false );
 
 	}
 
@@ -690,10 +1068,15 @@ export function setUpChallenges( app ) {
 		naming = null;
 		if ( ! app.placeCar( start ) ) return;
 		for ( const gate of gates ) gate.passed = false;
-		run = { challenge, gates, start, phase: 'countdown', left: COUNTDOWN, clock: 0, passes: [], id: runId() };
+		run = { challenge, gates, start, phase: 'countdown', left: COUNTDOWN, clock: 0, after: 0, passes: [], id: runId() };
 		probing = null;
 		meshes.show( run );
 		showHud();
+		// Racing your own best: the new one, if this page has just set it (the ghost of the run you
+		// just drove). Anyone else's, raced again.
+		const mine = ownGhosts.get( challenge.id );
+		if ( ( ! race || race.spec?.kind === 'own' || ! race.spec ) && mine && race?.data !== mine ) prepareRace( challenge, null );
+		else startRace();
 
 	}
 
@@ -703,6 +1086,8 @@ export function setUpChallenges( app ) {
 
 		showingHud( true );
 		hud.dataset.kind = run.challenge.kind;
+		hudParts.split.hidden = true;
+		showGhostToggle();
 		updateHud( app.driver );
 
 	}
@@ -793,7 +1178,24 @@ export function setUpChallenges( app ) {
 		finish.querySelector( '.ch-f-time' ).textContent = formatTime( ms );
 		finish.querySelector( '.ch-f-rows' ).replaceChildren();
 		finish.querySelector( '.ch-f-form' ).hidden = true;
+		finish.querySelector( '.ch-f-share' ).replaceChildren();
+		// Against the ghost raced: "1.24 s quicker than your best", "0.80 s behind Ann Racer's 0:21.40".
+		const against = finish.querySelector( '.ch-f-vs' );
+		const theirs = race?.ready && race.challenge === challenge.id ? race.data.ms : null;
+		against.hidden = theirs === null;
+		if ( theirs !== null ) {
+
+			const gap = ms - theirs;
+			const whose = race.name === 'Your best' ? 'your best' : `${ race.name }'s ${ formatTime( theirs ) }`;
+			against.textContent = gap === 0 ? `Level with ${ whose }` : `${ ( Math.abs( gap ) / 1000 ).toFixed( 2 ) } s ${ gap < 0 ? 'quicker than' : 'behind' } ${ whose }`;
+			against.classList.toggle( 'ahead', gap <= 0 );
+
+		}
+
 		finish.hidden = false;
+		// This page's own best's ghost, to race next (from Retry), posted or not: on the test pad too.
+		const own = ownGhosts.get( challenge.id );
+		if ( result.ghost && ( ! own || ms < own.ms ) && ms <= ( bests[ challenge.id ] ?? Infinity ) ) ownGhosts.set( challenge.id, { run: result.id, ms, passes: result.passes, vehicle: result.vehicle, look: result.look, ghost: result.ghost } );
 		// Your best: the board's, or one kept here that couldn't be posted yet (beaten now, it's
 		// dropped: only a best is kept; else it's posted now, with any others kept).
 		const held = unsent.get( challenge.id )?.ms;
@@ -804,8 +1206,16 @@ export function setUpChallenges( app ) {
 		finishSay( better ? ( best === Infinity ? 'Finished! Your first time on it.' : `New best! Your last was ${ formatTime( best ) }.` ) : `Your best is ${ formatTime( best ) }.` );
 		finish.querySelector( '.ch-f-badge' ).hidden = ! better;
 		if ( ! checkPasses( challenge, ms, result.passes ) ) return finishSay( 'That run didn\'t count: it went quicker than anything can drive. Try again.' );
+		// Its ghost, as the Worker will check it (a run that jumped about more than R does).
+		if ( ! result.ghost || ghostFault( challenge, ms, result.passes, result.ghost ) ) return finishSay( 'That run didn\'t count: it couldn\'t be recorded as it was driven. Try again.' );
 		if ( ! app.visit() ) return finishSay( `${ finish.querySelector( '.ch-f-note' ).textContent } Times go on the board from a drive on the real map.` );
-		if ( ! better ) return showTop( challenge );
+		if ( ! better ) {
+
+			// Your best's link to share, if the Worker's said what it is.
+			if ( handles[ challenge.id ] && Number.isFinite( best ) ) finish.querySelector( '.ch-f-share' ).append( shareButton( challenge, best, handles[ challenge.id ] ) );
+			return showTop( challenge );
+
+		}
 		if ( ! app.player() ) return askName( result );
 		post( result );
 
@@ -848,12 +1258,14 @@ export function setUpChallenges( app ) {
 		if ( showing( result ) ) finishSay( 'Posting your time...' );
 		const answer = await send( 'POST', '/api/challenges/time', {
 			id: player.id, secret: player.secret, visit: app.visit(), challenge: challenge.id, run: result.id, ms: result.ms, passes: result.passes, vehicle: result.vehicle,
+			look: result.look, ghost: result.ghost,
 		} );
 		const shown = showing( result );
 		if ( answer.ok ) {
 
-			const { ms, rank, total, isNewBest, top, owner } = answer.body;
+			const { ms, rank, total, isNewBest, top, owner, handle } = answer.body;
 			bests[ challenge.id ] = ms;
+			if ( typeof handle === 'string' ) handles[ challenge.id ] = handle;
 			app.stats.add( 'challenge', 'posted' );
 			if ( listed ) {
 
@@ -866,6 +1278,8 @@ export function setUpChallenges( app ) {
 			finish.querySelector( '.ch-f-badge' ).hidden = ! isNewBest;
 			finishSay( owner ? `Your best ${ formatTime( ms ) } would be #${ rankText( rank ) }: yours as the owner are kept off the board.` : `#${ rankText( rank ) } of ${ Math.max( total, rank ) } on the board${ isNewBest ? '' : `, with your best ${ formatTime( ms ) }` }` );
 			showRows( top, owner ? null : rank );
+			// A link to it, to send a friend.
+			if ( typeof handle === 'string' ) finish.querySelector( '.ch-f-share' ).replaceChildren( shareButton( challenge, ms, handle ) );
 			return;
 
 		}
@@ -957,6 +1371,7 @@ export function setUpChallenges( app ) {
 			<p class="ch-intro">A daily, a weekly and a monthly one on the Earth and on the Moon, each with its own board. Your best time counts.</p>
 			<p class="ch-note" role="status" hidden></p>
 			<p class="ch-status" role="status" hidden></p>
+			<section class="ch-link" aria-label="A friend's challenge" hidden></section>
 			<div class="ch-list"></div>
 			<section class="ch-board" hidden>
 				<button type="button" class="link ch-back">&lsaquo; All challenges</button>
@@ -992,7 +1407,9 @@ export function setUpChallenges( app ) {
 			<p class="ch-f-title" id="ch-f-title"></p>
 			<p class="ch-f-time"></p>
 			<p class="ch-f-badge" hidden>New best!</p>
+			<p class="ch-f-vs" hidden></p>
 			<p class="ch-f-note" role="status"></p>
+			<div class="ch-f-share"></div>
 			<form class="ch-f-form" hidden>
 				<p class="ch-f-hint"></p>
 				<div class="ch-f-name"><input name="name" maxlength="16" autocomplete="nickname" enterkeyhint="done" aria-label="Your name on the board" /><button type="submit" class="primary">Post</button></div>
@@ -1055,6 +1472,7 @@ export function setUpChallenges( app ) {
 
 	return {
 		open,
+		openLink,
 		dropping,
 		arrived,
 		paused,
@@ -1078,6 +1496,14 @@ export function setUpChallenges( app ) {
 			return run;
 
 		},
+		// For the tests: the ghost raced ({ name, kind, ready, ms, passes, pivot (its model's, as drawn),
+		// faded, shown }), or null; and the run being recorded ({ count, every }).
+		get race() {
+
+			return race && { name: race.name, kind: race.spec?.kind ?? 'own', ready: race.ready, ms: race.data?.ms ?? null, passes: race.data?.passes ?? null, pivot: race.ghost?.pivot ?? null, faded: race.ghost?.faded ?? false, shown: ghostShown };
+
+		},
+		recorder,
 		meshes,
 	};
 
@@ -1203,7 +1629,7 @@ function makeHud( parent ) {
 	const root = document.createElement( 'div' );
 	root.className = 'ch-hud';
 	root.hidden = true;
-	root.innerHTML = '<span class="ch-arrow" aria-hidden="true"><svg viewBox="0 0 20 20" width="22" height="22"><path d="M10 2 17 16 10 12.5 3 16z" fill="currentColor"/></svg></span><span class="ch-dist"></span><span class="ch-clock">0:00.00</span><span class="ch-gates"></span>';
+	root.innerHTML = `<span class="ch-arrow" aria-hidden="true"><svg viewBox="0 0 20 20" width="22" height="22"><path d="M10 2 17 16 10 12.5 3 16z" fill="currentColor"/></svg></span><span class="ch-dist"></span><span class="ch-clock">0:00.00</span><span class="ch-gates"></span><span class="ch-split" role="status" hidden></span><button type="button" class="ch-ghost-toggle" aria-pressed="true" hidden>${ GHOST_ICON }<span>Ghost</span></button>`;
 	root.setAttribute( 'aria-label', 'Challenge' );
 	parent.append( root );
 	return root;

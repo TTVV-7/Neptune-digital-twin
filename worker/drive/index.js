@@ -12,15 +12,16 @@ import { live, liveToday, online } from './live.js';
 import { adminStats, countVisit, postStats } from './stats.js';
 import { isAdmin } from './admin.js';
 import { adminDropins } from './dropins.js';
-import { adminChallenges, adminChange, challengeBoard, listChallenges, postTime } from './challenges.js';
+import { adminChallenges, adminChange, challengeBoard, challengeGhost, challengeLink, linkPage, listChallenges, postTime } from './challenges.js';
 import { BUDGET_SPENT } from '../../src/drive-app/live-protocol.js';
 
 export { DriveLimits } from './limits.js';
 export { DriveRoom } from './live.js';
 
 // The Cloudflare Worker behind World Drive (worlddrive.app, docs/world-drive.md). It only runs
-// for /api/*; the site itself (npm run build:drive, dist-drive/) is served straight from
-// Cloudflare's assets. Its job is to keep Google's bill in check: every page that loads Google's
+// for /api/* and the home page itself (/, for a "challenge a friend" link's preview in chat apps:
+// any other is the page as it is); the rest of the site (npm run build:drive, dist-drive/) is served
+// straight from Cloudflare's assets. Its job is to keep Google's bill in check: every page that loads Google's
 // 3D tiles starts a billed Maps session, so the Maps key is handed out once per visit, only to a
 // browser that passed Turnstile, and only while today's visits are under the caps. It also keeps
 // the leaderboard (players.js, scores.js) in a D1 database: nicknames and each player's best stunt
@@ -64,10 +65,11 @@ export { DriveRoom } from './live.js';
 //   LIVE_CONNECTS         the rate limiter binding for each visit's connections to rooms (live.js)
 //   PROGRESS_POSTS        the rate limiter binding for each player's reports of what they drove
 //                         (progress.js)
-//   CHALLENGE_LOOKS       the rate limiter binding for the challenges' lists, boards and times, by
-//                         a keyed hash of the address (an IPv6 one by its /48) and the day (never
-//                         the address itself); CHALLENGE_MISSES the one for those of the lists and
-//                         boards that miss the cache and read D1, by the same key;
+//   CHALLENGE_LOOKS       the rate limiter binding for the challenges' lists, boards, links, ghosts
+//                         and times, by a keyed hash of the address (an IPv6 one by its /48) and the
+//                         day (never the address itself); CHALLENGE_MISSES the one for those of the
+//                         lists, boards, links and ghosts that miss the cache and read D1, by the
+//                         same key;
 //                         CHALLENGE_TIMES_PER_VISITOR_DAILY the times a visitor may post a day (300
 //                         if unset), CHALLENGE_TIMES_PER_VISIT the times a visit may post (100 if
 //                         unset) (challenges.js)
@@ -101,6 +103,8 @@ const ROUTES = [
 	{ method: 'GET', path: '/api/challenges', handler: listChallenges },
 	{ method: 'GET', path: '/api/challenges/board', handler: challengeBoard },
 	{ method: 'POST', path: '/api/challenges/time', handler: postTime },
+	{ method: 'GET', path: '/api/challenges/link', handler: challengeLink },
+	{ method: 'GET', path: '/api/challenges/ghost', handler: challengeGhost },
 	{ method: 'GET', path: '/api/admin/challenges', handler: adminChallenges },
 	{ method: 'POST', path: '/api/admin/challenges', handler: adminChange },
 	{ method: 'POST', path: '/api/stripe/webhook', handler: stripeWebhook, sameOrigin: false },
@@ -120,7 +124,24 @@ export default {
 
 		}
 
-		if ( ! url.pathname.startsWith( '/api/' ) ) return env.ASSETS.fetch( request );
+		if ( ! url.pathname.startsWith( '/api/' ) ) {
+
+			// A "challenge a friend" link (/?challenge=&vs=): the page with its own preview for chat apps
+			// (challenges.js), and if anything goes wrong in that, the page as it is. Anything else, as
+			// it is.
+			if ( url.pathname !== '/' || ! url.searchParams.has( 'challenge' ) || request.method !== 'GET' ) return env.ASSETS.fetch( request );
+			try {
+
+				return await linkPage( { request, env, url, ctx, now: clock( request, env ) } );
+
+			} catch ( err ) {
+
+				console.error( 'Challenge link page', err?.name, err?.message );
+				return env.ASSETS.fetch( request );
+
+			}
+
+		}
 
 		try {
 

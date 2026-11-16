@@ -6,12 +6,15 @@
 	"name": "world-drive",
 	"main": "worker/drive/index.js",
 	"compatibility_date": "2026-10-01",
-	// The built site (npm run build:drive). The Worker only runs for /api/*; everything else is
-	// served straight from these files, which costs nothing however many people visit.
+	// The built site (npm run build:drive). The Worker only runs for /api/* and the home page (/,
+	// where a "challenge a friend" link, /?challenge=..., gets its own preview card for chat apps;
+	// any other visit to it is passed straight to these files, one Worker request a page view);
+	// everything else is served straight from these files, which costs nothing however many people
+	// visit.
 	"assets": {
 		"directory": "./dist-drive",
 		"binding": "ASSETS",
-		"run_worker_first": [ "/api/*" ]
+		"run_worker_first": [ "/api/*", "/" ]
 	},
 	// Both addresses are the Worker's custom domains (Cloudflare makes their DNS records and
 	// certificates). www sends you on to worlddrive.app (worker/drive/index.js and the page itself).

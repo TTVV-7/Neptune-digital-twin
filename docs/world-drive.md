@@ -4167,30 +4167,265 @@ SELECT c.period, c.world, c.kind, c.place, t.ms, t.final_rank, c.final_at IS NOT
 FROM challenge_times t JOIN challenges c ON c.id = t.challenge_id WHERE t.player_id = 'PLAYER_ID' ORDER BY t.first_at;
 ```
 
-**For recorded ghosts and "challenge a friend" (part 2b).** A run already has what a ghost needs to
-hang on: the page gives each run an id of its own (16 letters, `run`, from 12 random bytes), posted
-with the time and kept as the best's `run_id`. A ghost (the car's path, sampled) can go in a table
-of its own keyed by `challenge_id, player_id` (or in R2 by that key, if it's big), uploaded after
-the time with the same `run`, and taken only while it's the best's `run_id` (so a ghost is always of
-the time on the board, and is replaced with it); `passes` are the splits to compare with at each
-gate. A share link names the challenge and **an opaque handle for the time, never the player's id**:
-the leaderboard's player id is never shown to other players (board rows leave it out, and a room's
-id isn't it, live-protocol.js), it's half of the player's credentials, and in a link it would let
-anyone look that player up on every board (`?id=`) and follow them. **The handle should be the
-Worker's own**: an HMAC of `challenge_id:player_id` under a key derived from the Worker's secret (as
-the rotation's and `CHALLENGE_LOOKS`' keys are), handed back with the time's answer and looked up by
-recomputing it for the board's rows (or kept in a column with a unique index), so nobody but the
-Worker can make one, the same link always shows that player's best on the challenge, and it says
-nothing of who. The run's own id is a weaker handle: the page chooses it (12 random bytes from the
-page's own `crypto.getRandomValues`, but a script posting its own times can choose a short or
-guessable one, and the Worker can only check its form), and it's only good till a better run
-replaces it. It is at least unique on its challenge (`challenge_times_run`, in this part's
-migration, so 2b can rely on it): a lookup by `challenge_id, run_id` finds one row, and nobody can
-post their own time under a run's id they've seen in a link, as the Worker turns another player's
-use of it away (400, `run`) whether it'd be a new row or their new best.
-`/?challenge=<id>&vs=<handle>` would open the list on it, fetch the board's row and the ghost by the
-handle, and start the run with the ghost driving; one for a challenge that's over can still show its
-board, which is kept.
+**Ghosts and links** (migration `0007_challenge_ghosts.sql`, [below](#ghosts-and-challenge-a-friend)):
+`challenge_times.handle`, each time's handle (unique on its challenge), and `challenge_ghosts`, the
+best's ghost on each challenge for each player, kept while the challenge is live.
+
+### Ghosts and challenge a friend
+
+Most visits end after a minute. A ghost to beat gives a run a rival that's always there, and a
+friend's link brings someone new in with a reason to play past the first minute and a time to
+beat. Every challenge run is **recorded** as it's driven and posted with its time; the Worker takes
+the time only if the recording (its **ghost**) agrees with it, keeps the best's, and hands it to
+anyone racing it; and **"Challenge a friend"** shares a link to your best that opens the game on
+it, racing your ghost. The code is the challenges' own chunk's (`src/drive-app/challenges.js`,
+`challenge-ghost.js`, and `ghost-rules.js`, which the Worker shares): nothing of it is in the
+page's first load but the few lines `boot.js` needs to ask what a link is (below).
+
+**What players see.**
+
+- **A ghost car to beat.** A run races your own best's ghost by default (the run this page just
+  posted, or the Worker's, by the list's `me.run`), the one a friend's link names, or the board's
+  leader's (**Race their ghost** on the top row of a board, not yours). It's drawn as the others'
+  cars are when driving with others ([ghosts.js](#what-you-see-and-do)'s `ghostModels`, shared, so
+  a ride's file is read once for both): its ride in its Garage look, its name over it ("Your best",
+  "Ann Racer"), see-through within 8 m of your car or the camera, and nothing in it to hit (its
+  meshes' rays go nowhere, and nothing the car, the camera or the ground casts at is near it).
+  It waits at the start through the countdown and goes at GO, on the run's own clock (the same steps
+  the car is driven by), between its samples, so a run that's level with it is beside it; after
+  you finish it drives on to its own finish and waits there (a slower one is seen coming in).
+- **Splits**: at each gate passed (a sprint's by its number, a hunt's stars by how many are taken),
+  how far ahead or behind the ghost you are there, on the HUD beside the clock for 3 s ("-1.2 s" in
+  green, "+0.8 s" in red), and on the finish card ("1.24 s quicker than your best", "0.80 s behind
+  Ann Racer's 0:21.40").
+- **Ghost** on the HUD (its one button, so it alone takes a press; on a phone held upright its icon
+  alone) hides it, or shows it again; kept in the browser (`world-drive.ghost`) for the visit's next
+  runs and the next visit's. Splits go on with it hidden.
+- **Challenge a friend**, on the finish card once the time's gone up (and for a run that isn't
+  your best, your best's link if the Worker has said its handle), on your own row of a board, or
+  beside "You're #42 of 130" when your row is further down. It shares a link to your best,
+  `https://worlddrive.app/?challenge=<id>&vs=<handle>`, with its words ("Beat my 0:21.40 on today's
+  Furka Pass sprint in World Drive", "...on this week's drive to Eiffel Tower...", "...on today's
+  Tycho crater star hunt on the Moon...") through the browser's own share sheet where it has one (a
+  phone's: messages, chats), else copies them ("Link copied!"), else shows them in a field picked
+  out to copy by hand. Closing the sheet without sharing does nothing more. Shared or copied is
+  counted for the [play stats](#play-stats) (`challenge: share`).
+- **A friend's link.** The page asks the Worker what it is (`/api/challenges/link`) as it starts,
+  beside the robot check, so it costs no wait; the challenge's world is the visit's: **an Earth
+  challenge spends an Earth drive** as any page load on the Earth does, **a Moon challenge none**,
+  the game opening in the Moon-only mode (`moonOnly`, as a [link to the Moon](#going-there) does).
+  With today's Earth drives used up an Earth challenge's link shows the used-up screen, and **Drive
+  on the Moon** opens the Moon with the link's card, its Start saying **Needs an Earth drive**. The
+  globe comes up as for a link to a place, then the challenges' list with the link's card over it:
+  "Ann Racer's time to beat: 0:21.40 on the daily checkpoint sprint at Furka Pass, 5 h 12 m left."
+  and **Start: race their ghost** (a drop-in at its start, racing their ghost). The link leaves the
+  address once it's opened (a reload doesn't open it again; a `?ref=` stays). A handle that names
+  nobody (cut short in a message, or that player removed) opens the challenge without a ghost and
+  says so ("That link's time wasn't found..."); a link to a challenge that's over shows its final
+  board, their time and place on it ("This challenge is over. Ann Racer finished ... #2 on its
+  board.") and **Today's challenges**; one to no challenge says so over today's. A link's page and
+  a run started from it are counted (`challenge: link`, `link_start`), so the owner can see whether
+  links bring people. On the test pad (maps off) a link's card shows too, its run raced, its time
+  not posted (as any time there).
+
+**Recording.** Each frame of a run (after the car's own step, before the passes), the car's model
+(its pivot, as drawn: continuous through a jump's take-off and landing, where the Driver's own
+`east`/`north` move to and from the middle of its box) is read for where it is and which way it
+faces, and every sample due since the frame before is found between the two, at 0, 100, 200... ms
+of the run's clock (`GHOST_EVERY`), and at the finish the last pass's time itself. Into arrays made
+once when the chunk loads (positions and turns for 4,097 samples, the packed numbers and a 48 KB
+buffer: about 250 KB), so a frame allocates nothing. A run longer than 4,096 samples (6 min 49 s)
+drops every other one and goes on every 200 ms, and so on (`everyFor`): a two-hour run, the longest
+a time can be, is sampled every 3.2 s. At the finish it's put into the **ghost's frame**, the
+route's start on the world's ellipsoid at height 0 (east, north, up; as the scene's own frame is at
+a place, through the globe's own matrices), and packed (`packGhost`): a version, the interval, the
+count, then each sample's position as its second difference in centimetres (the change in its step:
+along a road a few centimetres) and its yaw, pitch and roll as their change in 1/1024 of a turn,
+each a zigzag varint. Measured: a run of 73 s driven on the test pad by a bot pressing the game's
+own keys (the physics' turns, braking and body roll), 4,416 bytes (5,888 characters as posted);
+a run of 4 min 44 s (twice round a loop of eight gates up and down the pad), 17,076 bytes (22,768
+characters); and on a path of a road's turns, a bump now and then, a minute 3.6 KB, five
+minutes 18 KB, two hours 21.8 KB (every 3.2 s), against `GHOST_BYTES`' 48 KB at most. The posted
+text is base64url: 33 % more.
+
+**Racing one.** Its numbers are unpacked once and put into this scene once as its run starts (a
+drop-in elsewhere near the same start is another scene: from the start's frame through the globe's
+matrices, so it's where it was, to the millimetre), then each frame it's placed between two samples
+and turned between their turns, and its name tag moved: a few dozen numbers. **Its cost** is its
+model's own draws and no more: the go-kart, built in code of 132 meshes, is 132 draws (the test
+counts them as three.js draws them: 137 a frame on the test pad hidden, 269 shown, the same as your
+own kart costs), a ride from a file a handful; drawing time in Chromium's software renderer on a
+loaded machine was within its noise either way (the median frame, shown and hidden by turns, 54 to
+99 ms alone, 96 to 209 ms with other suites beside it, neither way the quicker).
+
+**What the Worker checks** (`ghostFault` in ghost-rules.js, after `checkPasses`, before anything is
+read of the player or written; a 400 with `reason: 'ghost'` and the fault):
+
+- `form`: a ghost (base64url, 48 KB at most packed, this version, no byte too many or too few, no
+  sample further than 60 km from the start or 20 km up or down) sampled at the interval its time
+  should be (`everyFor( ms )`: one sampled more coarsely, where a corner could be cut between
+  samples, is refused).
+- `time`: as long as the time (`countFor( ms )` samples, the last at the time itself).
+- `start`: its first sample (the car at GO) within `START_SLACK` (100 m) of the start, as the first
+  leg's check has it.
+- `speed`: between any two samples no further across the ground than `FASTEST` (430 km/h, the
+  fastest the game goes: [above](#how-cheating-is-limited)) covers in the time between them, and
+  0.3 m for the rounding to the centimetre and the line between two frames. Past that, only the
+  game's own jumps: **R** puts the car 4 m on (`RESPAWN_AHEAD`; 5.5 m let off, for its model
+  levelling as it does), and R with no way on, or falling off the edge of the world, puts it back
+  where it drove a moment ago (onto the path it drove, within 4 m of a line between two samples
+  before). At most 4 such a run, and one more for each 15 s of it, 32 at most.
+- `pass`: each point within its radius (and 3 m: the model's middle is a little off the point a
+  pass is told by, in the air) at its pass time, between the samples either side of it, or at a
+  sample within one interval of it.
+
+A **new best's run id must be new** (400, `run`, for the best's own id with a better time): a run's
+ghost is kept, and cached, by its id, so it never changes.
+
+**What it can't stop.** A script can still make up a run that fits: a path at 430 km/h straight
+from gate to gate, its samples as the rules want them. It has to make a whole path now (not only
+the passes), one the board's other drivers will see driving through buildings at three or four
+times a good driver's speed if they race it; the jumps let off add at most 5.5 m each, 4 to 32 of
+them, and the 0.3 m a sample 3 m/s. The owner can look at a suspect time's ghost while its
+challenge is live (the SQL below), and take the time off the board (its ghost goes with it).
+
+```sql
+-- The ghost of a board's fastest times (while the challenge is live: they're gone with its final
+-- places), with who and the ride: race it in the game from the board's Race their ghost, or decode it
+-- with src/drive-app/ghost-rules.js's readGhost.
+SELECT p.name, g.ms, g.vehicle, g.look, length( g.ghost ) AS characters, g.run_id
+FROM challenge_ghosts g JOIN players p ON p.id = g.player_id WHERE g.challenge_id = 42 ORDER BY g.ms LIMIT 10;
+```
+
+**The handle** a link names a time by is the Worker's own: the first 12 bytes of an HMAC-SHA256 of
+`handle:<challenge id>:<player id>` under the challenges' key derived from the Worker's secret (as
+the rotation's and `CHALLENGE_LOOKS`' are), base64url (16 letters). Nobody without the secret can
+make one (so no link to a time that isn't), the same player's on the same challenge is always the
+same (a link shared before a better run shows the better one), and it says nothing of who: the
+player's id is half of their credentials, and in a link would let anyone look them up on every
+board and follow them. It's handed back with each time posted and with your own rows (the list's
+and a board's `me.handle`, worked out, not read), and kept in `challenge_times.handle` with a unique
+index on the challenge, so a link finds its time in one indexed look. A link shows nothing of the
+sender but the name and time the board shows (and their run's id, 12 random bytes the page chose,
+which its ghost is fetched by and which the boards' rows now show too: it says nothing of anyone).
+
+**The link's preview card.** Chat apps show a link's title and description from the page's Open
+Graph tags, which a crawler reads without running the page. So the Worker runs for the home page,
+`/`, too (`run_worker_first` in `wrangler.drive.jsonc`): any visit to it without `?challenge=` is
+handed straight to the assets as before; one with it is the page with its `og:title`,
+`og:description`, `twitter:title`, `twitter:description` and `og:url` replaced through the
+HTMLRewriter (each tag written whole, its words escaped by `escapeHtml`: the HTMLRewriter's
+`setAttribute` escapes a quote but not an ampersand), from the link's own answer (`linkData`: in
+Cloudflare's cache, so a crawler costs a look at the cache, and a D1 read at most once a minute in
+a place): "Beat Ann Racer's 0:21.40 on today's Furka Pass sprint" and "A daily checkpoint sprint at
+Furka Pass (Swiss Alps) in World Drive, 5 h 12 m left. Drive it in your browser and race Ann
+Racer's ghost."; one that's over, "Ann Racer finished in 0:21.40 at Furka Pass" and that it has
+ended, with their place. It's sent `no-store` (its time left is this moment's). Anything that won't
+do (no such challenge, a look too many, D1 not answering, the Worker failing) is the page as it is:
+the page always opens. The cost: one Worker request each time the home page is opened (a few
+hundred a day now, against the Free plan's 100,000), held to `CHALLENGE_LOOKS` only for a link.
+
+**What's kept, and for how long.**
+
+- `challenge_times.handle`: each time's handle, kept with the time (forever, as the boards are).
+- `challenge_ghosts`: the best's ghost on each challenge for each player (`challenge_id`,
+  `player_id`, `run_id`, `ms`, `passes`, `vehicle`, `look`: the ride's Garage look as a room takes
+  it, `checkLook`'s parts alone, and `ghost`: the text as posted), written with the time in the same
+  batch, only where the time is now this run's, so it's always the best's, **replaced with it**. A
+  foreign key to the time with `ON DELETE CASCADE`: a cheat's time taken off the board, or a player
+  removed, takes the ghost. **Deleted for a whole challenge as its final places are written**
+  (`finishQueries`: a minute or two after its period ends, or as the owner replaces it): nothing
+  races a finished challenge, and a link to one shows its board instead. Nothing of an address, an
+  account or an email in either.
+- In Cloudflare's cache: a run's ghost by its run, 30 days (`GHOST_KEPT`: it never changes); a
+  link's answer as a board is (a live challenge's a minute, its player's new best clearing it in
+  that place; a finished one's a day).
+
+**The Worker's routes** (with those [below](#the-workers-routes)):
+
+- `POST /api/challenges/time` takes `look` and `ghost` too (the body 69 KB at most: 2 KB, the
+  ghost's 65,536 characters and 1 KB of look), and answers `run` (the best's) and `handle`.
+- `GET /api/challenges/link?challenge=<id>&vs=<handle>`: `{ challenge: CHALLENGE + { replacedAt,
+  finalAt }, vs: { name, ms, vehicle, run, ghost, date, level, title, supporter?, owner?, rank? } |
+  null }` (`ghost`: whether it has one kept; `rank`: their final place, once it's over; `vs` null
+  for a handle that names nobody, or isn't one). 404 for no such challenge, 400 for a challenge that
+  isn't a number.
+- `GET /api/challenges/ghost?challenge=<id>&run=<run>`: `{ run, ms, passes, vehicle, look, ghost }`,
+  404 when that run isn't a best with a ghost kept (bettered, or the challenge finished; not kept in
+  the cache, so asked again it's asked of D1, which `CHALLENGE_MISSES` holds), 400 for one that
+  isn't a run's id.
+- The list's and the board's `me` have `run` and `handle`; a board's and the list's rows have `run`.
+
+Both new routes are held as the boards are: `CHALLENGE_LOOKS` (60 a minute) first, then those that
+miss the cache and read D1 `CHALLENGE_MISSES` (10 a minute), by the keyed hash of the address (an
+IPv6 one by its /48), never the address.
+
+**What it costs.**
+
+- **The page**: the challenges' chunk from 23.40 kB (9.39 kB gzipped) to 39.41 kB (15.50 kB
+  gzipped), its stylesheet from 9.17 kB (2.41) to 11.39 kB (2.85), fetched when they're first
+  opened (or a link's page opens them); the page's first script 12.84 to 13.41 kB (5.00 to 5.21
+  gzipped: asking what a link is, as it starts); the game's chunk 1,120.47 to 1,121.08 kB (344.64 to
+  345.08 gzipped: the ghosts' models shared, the hooks, three play stats' words). Nothing of the
+  ghosts, the splits, the sharing or the link's card is in the first load (the build's test checks).
+- **A run**: recording, a few numbers a frame; racing, one model's draws (above) and a few dozen
+  numbers.
+- **D1, per time posted**: a new best writes its ghost's row with the time (the time's row and its
+  four indexes, the ghost's row and its two: about ten rows written, the same each time), a time
+  that isn't one nothing more than before. Storage: a ghost is about 5.5 KB of text a minute of run;
+  only the live challenges' bests are kept (at a few hundred bests a day, a few megabytes at most,
+  deleted as each challenge finishes). Reads: a ghost once in 30 days a place per run (one row), a
+  link's answer once a minute a place (the challenge, the time by its handle, its player: about four
+  rows). What one address can cost is still bounded by `CHALLENGE_MISSES`' 10 misses a minute: a
+  miss of either new route reads at most four rows, less than a board's.
+- **The Worker's CPU**: checking a ghost of 289 s (23,139 characters) takes 2.5 ms in Node, about
+  0.5 ms for a daily's minute (within the Free plan's 10 ms a request); unpacking is a pass over its
+  bytes.
+- **Workers Paid**: all of it within what's included, as the rest of the challenges are.
+
+**How it's tested.** `npm run test:drive-worker`: the ghost's frame where 3d-tiles-renderer's object
+frame puts a point, to the millimetre, on the Earth's ellipsoid and the Moon's sphere; packed and
+unpacked as it was (angles the short way round), the interval doubling past 4,096 samples, and
+everything that isn't a ghost refused (not base64url, too long, another version, cut short, a byte
+too many, a count past the most, a number too big, a place 60 km off); `ghostFault`'s every fault
+(a ghost of another interval, a sample short or a time longer, its first sample 150 m off, a
+gate passed nowhere near, a dash at twice the speed with fair passes, a jump of 20 m) and what it
+lets off (R's 4 m on, four in a run of 10 s, a fifth refused; back onto the path; both together);
+bytes for a minute, five and two hours, and the time to check five minutes' (under 10 ms); and
+against the Worker under wrangler: the migration on top of 0001-0006 (the handle and its unique
+index, the ghosts' table, its foreign key cascading from the time, nothing of an address), a time
+with its ghost and look (only the Garage's parts kept), its ghost fetched by its run and then from
+the cache, a slower run changing nothing, a new best under the best's own run id refused, a new
+best's ghost replacing it and the old run's gone; every bad ghost refused with its fault and nothing
+written or counted (not one, too big, missing, too fast, not through a gate, not as long as the
+time); the handle (the same as this process works out with the secret, another with another secret
+or challenge, nothing of the player in it or in the link's answer), the link's answer from the
+cache after, a new best clearing it, the list's and the board's own `run` and `handle`, a handle that
+names nobody (or isn't one) none, the leader's ghost by its row's run; the link's page (its card's
+title and description with the time, place and period, escaped, a place with markup in it text in
+its tags, the link its address, the rest of the page as it is; no challenge, one that isn't, a
+place's link: the page as it is) and its answer from the cache; the two routes held to
+`CHALLENGE_MISSES` from one /48 (ten answered, the rest 429, the cache's still answered, another
+/48 too); and yesterday's challenge's link (over, their final place, the ghosts gone, its page's card
+saying so). `npm run test:drive-ui`: a run posted with its ghost (as the Worker checks it); racing
+your own best (from Retry: at the start till GO beside you, see-through, nothing in it to hit, its
+name over it; splits ahead at each gate and on the card; it drives on to its finish and waits
+there; its draws its own model's and no more, by turns shown and hidden; the button hiding it, kept;
+another page racing it from the Worker's by the list's run); challenge a friend (the card's
+button through a share sheet stubbed, with its words and the Worker's handle; a sheet closed, nothing;
+copied where there's none; a field to copy where neither; your own row of a board; the leader's
+row racing their ghost); a friend's link on the test pad (its card, the address tidied, their ghost
+fetched by its run and drawn where their run was, on the ground and in sight, the splits and the
+card); a handle naming nobody, a challenge that's over, none at all; an Earth challenge's link
+asking for an Earth drive, and with them used up the Moon opening with its card needing one; and a
+phone upright and on its side and a computer (the card, the HUD with its split and button clear of
+the driving buttons, the finish card with its link, all on the screen). `npm run
+test:drive-moon-ui`: a Moon challenge's link with today's Earth drives used up (the visit the
+Moon's, no Earth drive asked for, no used-up screen; their ghost raced on the Moon, the split, the
+time posted with the Moon visit and a ghost the Worker would take). `npm run test:drive-seo`: none
+of it in the first load. Pictures with `TEST_SCREENSHOTS` (`challenges-ghost-*.png`,
+`challenges-share-*.png`, `challenges-link-*.png`, `challenges-moon-4-link.png`,
+`challenges-moon-5-link-finish.png`).
 
 ### The Worker's routes
 
@@ -4201,16 +4436,19 @@ board, which is kept.
   challenges. A rank is at most 1,001: past the board's first thousand (the page's "#1000+").
 - `GET /api/challenges/board?challenge=<id>&id=<player>`: `{ challenge, total, rows, me }`, the top 20
   of any challenge, live or past (`challenge` with its `replacedAt` and `finalAt`); 404 for none.
-- `POST /api/challenges/time { id, secret, visit, challenge, run, ms, passes, vehicle }`: `{ ms, rank,
-  total, isNewBest, top }`, `ms` the player's best, `top` the board's five (with `owner: true`, and
-  the rank it would have, for the owner's). The same run posted again within 5 minutes of its being
+- `POST /api/challenges/time { id, secret, visit, challenge, run, ms, passes, vehicle, look, ghost }`:
+  `{ ms, rank, total, isNewBest, top, run, handle }`, `ms` the player's best, `top` the board's five
+  (with `owner: true`, and the rank it would have, for the owner's), `run` and `handle` the best's
+  run and what a link to it names it by ([ghosts](#ghosts-and-challenge-a-friend): the time is taken
+  only with a ghost that agrees with it, 400 `{ reason: 'ghost', fault }` otherwise). The same run posted again within 5 minutes of its being
   taken (`REPOST`: the same `run` and `ms` as the best kept; its answer was lost and the page tried
   again) is answered as it was taken (`X-Time-Cache: hit`), from Cloudflare's cache, where the answer
   was put as the time was taken for those 5 minutes (in another of its places, the first one asked
   there is worked out and put there): nothing written, counted or read again of the board, however
   often and from wherever it's posted. Later than that it's a post like any other (the gap, the
   visitor's day) and not a new best, so the same run can't be had answered over and over for
-  nothing. 400 `{ reason: 'run' }` for a run's id that's another player's on the board. 429 `{
+  nothing. 400 `{ reason: 'run' }` for a run's id that's another player's on the board, or a new
+  best under the best's own. 429 `{
   retryAfter }` for one inside a player's 10 s, `{ retryAfter, reason: 'daily' }` once the
   visitor's day is used up (till midnight UTC), and `{ retryAfter, reason: 'visit' }` once the
   visit's 100 are (till it runs out: "That's all the times one visit can post. Reload the page to
@@ -4219,10 +4457,12 @@ board, which is kept.
   | 'unapprove', ... }`, ADMIN_EMAILS only (401 signed out, 403 anyone else, 429 past
   `ADMIN_LOOKS`' 30 a minute), as above; GET's `picks` are the owner's from the live periods on,
   however far ahead, each with its `startsAt`, soonest first.
+- `GET /api/challenges/link` and `GET /api/challenges/ghost`, a link's answer and a run's ghost:
+  [below](#ghosts-and-challenge-a-friend).
 
 Every one is checked as the others are: same-origin and JSON for a change (index.js), sizes (a time's
-body 2 KB at most, an admin's 2 KB), types and values (400), and held to a rate: the lists, the
-boards and the times to **`CHALLENGE_LOOKS`** first, before anything's read (Cloudflare's rate
+body 69 KB at most with its ghost, an admin's 2 KB), types and values (400), and held to a rate: the lists, the
+boards, the links, the ghosts and the times to **`CHALLENGE_LOOKS`** first, before anything's read (Cloudflare's rate
 limiter, 60 a minute by address: no Durable Object request, and a page asks a few times a minute at
 most); and those of the lists and boards that find something missing from Cloudflare's cache and
 are to read D1 (a board's rows, the list's tops, a player's own rows, a board's order) to
@@ -4290,14 +4530,20 @@ worker/drive/challenges.js):
 - **Only bests are kept**, one per player per challenge: a slower time changes nothing (and the page
   doesn't post one: it shows the board instead).
 - **A run's id is one time's**: another player's post with a run id that's on the board already is
-  turned away (400, `run`), so a link to a run (part 2b) can't be made to show someone else's.
+  turned away (400, `run`), so a link to a run can't be made to show someone else's; and a new best
+  is a new run (its ghost is kept by its id).
+- **The run itself agreeing with its time**: its [ghost](#ghosts-and-challenge-a-friend), posted
+  with it, through each point at its pass time, as long as the time, from the start, and never
+  faster between two of its samples than the fastest the game goes (R's few metres and its putting
+  the car back where it drove let off, a few a run).
 - **The same run posted again** is answered as taken only within 5 minutes, from the cache; after
   that it's a post like any other, so it can't be used to have a board read over and over without
   the 10 s gap or the visitor's day.
 
 **What this can't stop.** Someone who reads the code can post a made-up run that fits the rules: a
 straight line between the gates at 430 km/h is three or four times what a good driver manages on a
-city's streets, so the rules let through far faster times than anyone drives. The checks keep the
+city's streets, so the rules let through far faster times than anyone drives (and its ghost, made
+up to fit as well, is a whole path now, one anyone racing it sees: [ghosts](#ghosts-and-challenge-a-friend)). The checks keep the
 impossible out; what's merely unlikely is the owner's to look at. A day's run at the top of a board
 by a wide margin, with legs all at about the same speed, is the sign: the SQL below works out each
 leg's speed from the route and the passes kept.
@@ -4541,9 +4787,12 @@ Pictures of each are saved with `TEST_SCREENSHOTS` (`challenges-*.png`).
 
 ### The owner's steps
 
-Deploy (`npm run deploy:drive` applies `0006_challenges.sql` first; the `CHALLENGE_LOOKS` and
-`CHALLENGE_MISSES` rate limiters come with `wrangler.drive.jsonc`). Nothing else to set: the first
-ask fixes the day's six, from the rotation. To choose one, the admin page.
+Deploy (`npm run deploy:drive` applies `0006_challenges.sql` and `0007_challenge_ghosts.sql`
+first; the `CHALLENGE_LOOKS` and `CHALLENGE_MISSES` rate limiters, and the Worker running for the
+home page too, come with `wrangler.drive.jsonc`). Nothing else to set: the first ask fixes the
+day's six, from the rotation. To choose one, the admin page. A link's preview card can be checked
+after a deploy with a chat app's link inspector (or `curl -s 'https://worlddrive.app/?challenge=<id>'
+| grep og:`).
 `CHALLENGE_TIMES_PER_VISITOR_DAILY` and `CHALLENGE_TIMES_PER_VISIT` can be added in the dashboard
 to change a visitor's times a day (300) and a visit's (100).
 
@@ -4614,9 +4863,12 @@ migrations apply DB --remote -c wrangler.drive.jsonc`; ones already applied are 
 `0003_levels.sql` adds levels' columns and table before the Worker that needs them goes out), builds the
 site into `dist-drive/` and deploys the `world-drive` Worker with it (`vite build --config
 vite.drive.config.js && wrangler deploy -c wrangler.drive.jsonc`; `0006_challenges.sql` adds the
-challenges' tables, `players.last_time_at` and `visits.times` before the Worker that needs them).
-The Worker only runs for
-`/api/*`; every other file is served straight from Cloudflare's assets. The Durable Objects'
+challenges' tables, `players.last_time_at` and `visits.times` before the Worker that needs them;
+`0007_challenge_ghosts.sql` the times' handles and the ghosts' table). The Worker only runs for
+`/api/*` and the home page itself, `/` (`run_worker_first` in `wrangler.drive.jsonc`: a
+["challenge a friend" link](#ghosts-and-challenge-a-friend) gets its own preview card there, and
+any other visit to it is handed straight to the assets); every other file is served straight from
+Cloudflare's assets. The Durable Objects'
 classes are `migrations` in `wrangler.drive.jsonc`, which `wrangler deploy` applies itself: `v1`
 the visit counts' `DriveLimits`, `v2` the rooms' `DriveRoom` (both on SQLite storage, which the
 Free plan needs).
@@ -5132,7 +5384,10 @@ src/drive-app/challenges.js  challenges in the page, a chunk of its own loaded w
                              (challenges.css its look): the list and boards, a run (its gates and
                              items, countdown, timer and arrow), the finish card and posting the
                              time; challenge-rules.js what the page and the Worker share: the
-                             periods, laying a route out, checking a time
+                             periods, laying a route out, checking a time; challenge-ghost.js
+                             recording a run and racing a ghost; ghost-rules.js what the page and
+                             the Worker share of ghosts: packing, the ghost's frame, its checks;
+                             with sharing a link and a friend's link's card (challenges.js)
 src/drive-app/levels.js      levels' rules, which the page and the Worker share: XP, the curve, the
                              caps and the unlock track (looks, cars, titles, badges); what a ride needs
 src/drive-app/progress.js    levels in the page: counting what's driven, reporting it (or keeping it
@@ -5172,8 +5427,9 @@ worker/drive/                the Worker: index.js (routes), limits.js (caps, the
                              /api/online, who's driving now); levels: progress.js
                              (/api/progress, titles); the owner's page: stats.js (the play stats),
                              dropins.js (where people drop in), admin.js (who may see them, how
-                             often); challenges.js (picking and fixing them, their boards, times,
-                             the owner's choices); migrations/ (its D1 tables)
+                             often); challenges.js (picking and fixing them, their boards, times
+                             and ghosts, a friend's link and its page's preview card, the owner's
+                             choices); migrations/ (its D1 tables)
 worker/google.js, sessions.js, stripe.js   shared with the construction app: Google's ID tokens,
                              the session cookie, Stripe's webhook signatures
 wrangler.drive.jsonc         the Worker's settings, domains, Durable Objects (the visit counts and

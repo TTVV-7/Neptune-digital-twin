@@ -1,5 +1,5 @@
 import './style.css';
-import { getConfig, postVisit, robotCheck } from './api.js';
+import { getConfig, postVisit, robotCheck, send } from './api.js';
 import * as screens from './screens.js';
 
 // World Drive's first script (docs/world-drive.md): the splash, the Worker's settings and the robot
@@ -14,6 +14,9 @@ const DEV_KEY = __DEV_MAPS_KEY__;
 // What a failed download of the game's code says, in Chromium, Firefox and Safari, and Vite's own
 // when a chunk's styles don't come: a connection's fault, unlike an error in the code itself.
 const NOT_LOADED = /dynamically imported module|Importing a module script failed|Unable to preload|Failed to fetch/i;
+// How long (ms) the visit waits, after the robot check, for a challenge link's answer (it's asked
+// for beside the check, so it's nearly always there by then).
+const LINK_WAIT = 4000;
 
 const $ = id => document.getElementById( id );
 // Without WebGL 2 (which three.js needs) there's no game to load, nor a visit to spend on it.
@@ -31,8 +34,34 @@ async function boot() {
 	const config = await getConfig();
 	// The Vite dev server on its own: a key from the environment, or the test globe.
 	if ( ! config ) return start( { key: DEV_KEY || null, worker: false } );
-	if ( ! config.mapsOn ) return screens.notice( 'resting', { onTestPad: () => start( { key: null, googleClientId: config.googleClientId, live: !! config.live, liveReason: config.liveReason } ) } );
+	// (Maps off: the test pad, a challenge link's card over it all the same.)
+	if ( ! config.mapsOn ) return screens.notice( 'resting', { onTestPad: async () => start( { key: null, googleClientId: config.googleClientId, live: !! config.live, liveReason: config.liveReason, challengeLink: await linkWithin() } ) } );
 	visit( config );
+
+}
+
+// A "challenge a friend" link (/?challenge=<id>&vs=<handle>): what the Worker says of it, asked for
+// once, as the page starts, beside the robot check: { link: { challenge, vs } as the address has
+// them, answer: send's (its body { challenge, vs })  }, or null for no link. Its world is the
+// visit's (a Moon challenge's spends none of the day's Earth drives, as a link to the Moon doesn't),
+// and the game opens it (main.js, challenges.js).
+let linkAsked = null;
+function challengeLink() {
+
+	if ( linkAsked ) return linkAsked;
+	const params = new URLSearchParams( location.search );
+	const id = Number( params.get( 'challenge' ) );
+	if ( ! Number.isSafeInteger( id ) || id < 1 ) return linkAsked = Promise.resolve( null );
+	const vs = params.get( 'vs' );
+	linkAsked = send( 'GET', `/api/challenges/link?challenge=${ id }${ vs ? `&vs=${ encodeURIComponent( vs ) }` : '' }` ).then( answer => ( { link: { challenge: id, vs }, answer } ) );
+	return linkAsked;
+
+}
+
+// The link's answer (challengeLink's), or null if it hasn't come within LINK_WAIT (the Earth, then).
+function linkWithin() {
+
+	return Promise.race( [ challengeLink(), new Promise( resolve => setTimeout( () => resolve( null ), LINK_WAIT ) ) ] );
 
 }
 
@@ -88,6 +117,7 @@ function loadFailed( err ) {
 async function visit( config ) {
 
 	screens.splash( 'Checking the road is clear...' );
+	challengeLink();
 	const checked = robotCheck( config.turnstileSiteKey, $( 'robot-check' ) ).then( token => ( { token } ), () => ( { robot: true } ) );
 	const loaded = game.then( main => ( { main } ), err => ( { err } ) );
 	const first = await Promise.race( [ checked, loaded ] );
@@ -97,14 +127,15 @@ async function visit( config ) {
 	if ( robot ) return screens.notice( 'robot', { onRetry: () => visit( config ) } );
 	if ( err ) return loadFailed( err );
 
-	const moonLink = opensOnMoon( location.search );
+	const challenge = await linkWithin();
+	const moonLink = opensOnMoon( location.search ) || challenge?.answer.body?.challenge?.world === 'moon';
 	const outcome = await postVisit( token, { world: moonLink ? 'moon' : 'earth' } );
-	const settings = { googleClientId: config.googleClientId, live: !! config.live, liveReason: config.liveReason };
+	const settings = { googleClientId: config.googleClientId, live: !! config.live, liveReason: config.liveReason, challengeLink: challenge };
 	if ( outcome.key ) return run( main, { key: outcome.key, left: outcome.left, visit: outcome.visit, ...settings } );
-	// A link to the Moon: on the Moon, with none of the day's Earth drives spent. The Earth is a
-	// reload away (without the link, so that one does ask for a drive).
+	// A link to the Moon (a Moon challenge's too): on the Moon, with none of the day's Earth drives
+	// spent. The Earth is a reload away (without the link, so that one does ask for a drive).
 	if ( outcome.moon ) return run( main, { key: null, visit: outcome.visit, ...settings, moonOnly: { onEarth: toEarth } } );
-	if ( outcome.usedUp ) return usedUp( config, outcome, main );
+	if ( outcome.usedUp ) return usedUp( config, outcome, main, challenge );
 	if ( outcome.robot ) return screens.notice( 'robot', { onRetry: () => visit( config ) } );
 	screens.notice( 'error', { message: outcome.error, onRetry: () => visit( config ) } );
 
@@ -128,7 +159,7 @@ function opensOnMoon( search ) {
 function toEarth() {
 
 	const url = new URL( location.href );
-	for ( const name of [ 'spot', 'at', 'name', 'region', 'heading', 'world' ] ) url.searchParams.delete( name );
+	for ( const name of [ 'spot', 'at', 'name', 'region', 'heading', 'world', 'challenge', 'vs' ] ) url.searchParams.delete( name );
 	location.assign( url );
 
 }
@@ -142,7 +173,7 @@ function toEarth() {
 // the visit is asked for again: once, so a supporter who has had their 30 sees this screen rather
 // than asking round and round (a reload, if the game's already going on the Moon).
 // (supporter.js comes with the game's code, so it's waited for here.)
-async function usedUp( config, outcome, main ) {
+async function usedUp( config, outcome, main, challengeLink = null ) {
 
 	const { retryAfter, reason } = outcome;
 	const toMoon = () => {
@@ -150,7 +181,7 @@ async function usedUp( config, outcome, main ) {
 		if ( onMoonOnly ) return;
 		onMoonOnly = true;
 		run( main, {
-			key: null, visit: outcome.visit, googleClientId: config.googleClientId, live: !! config.live, liveReason: config.liveReason,
+			key: null, visit: outcome.visit, googleClientId: config.googleClientId, live: !! config.live, liveReason: config.liveReason, challengeLink,
 			moonOnly: { onEarth: () => usedUp( config, outcome, main ) },
 		} );
 

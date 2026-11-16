@@ -1,8 +1,11 @@
-import { HttpError, isObject, json, readJson } from '../http.js';
+import { HttpError, base64url, isObject, json, jsonText, readJson } from '../http.js';
 import { cellMiddle, cellOf, checkCell, metresOn } from '../../src/drive-app/dropin-cells.js';
 import {
-	GRACE, KINDS, PERIOD_KINDS, RANK_MOST, WORLDS, bearingTo, checkPasses, destination, kindFor, makeRoute, nextPeriod, parsePeriod, periodIndex, periodOf, periodsAt, randomFrom,
+	GRACE, KINDS, KIND_NAMES, PERIOD_KINDS, RANK_MOST, WORLDS, bearingTo, checkPasses, destination, formatTime, kindFor, makeRoute, nextPeriod, parsePeriod, periodIndex, periodOf, periodsAt,
+	randomFrom, rankText, timeLeft,
 } from '../../src/drive-app/challenge-rules.js';
+import { GHOST_TEXT, ghostFault } from '../../src/drive-app/ghost-rules.js';
+import { checkLook } from '../../src/drive-app/live-protocol.js';
 import { hasHeights, heightAt as moonHeightAt, setHeights } from '../../src/drive-app/moon-height.js';
 import { MOON_PLACES } from '../../src/drive-app/moon-places.js';
 import { SPOTS } from '../../src/drive-app/places.js';
@@ -54,6 +57,16 @@ import { readVisit } from './visits.js';
 // player's own rows cost a few rows read however many players a script asks as; a finished board,
 // which can't change, is kept a day; and the looks that miss the cache and read D1 are held to
 // CHALLENGE_MISSES a minute from an address.
+//
+// Ghosts and links (part 2b): each time is posted with its run's ghost (src/drive-app/ghost-rules.js:
+// the car's path from GO to the finish, sampled and packed small), checked with it (the ghost must
+// go through each point at its pass time, take as long as the time, and never go faster between two
+// samples than the game can) and kept with the best, replaced with it, in challenge_ghosts, till
+// the challenge is finished; so the next run can race it. Each time has a handle, an HMAC of the
+// challenge and the player under the derived key (handleOf): what a "challenge a friend" link names
+// it by, never the player's id. The link's own card (challengeLink, and linkPage: the page itself,
+// with a preview for chat apps) and a ghost by its run (challengeGhost) are kept in Cloudflare's
+// cache as the boards are, and held to the same looks.
 //
 // Settings, none of which need setting: CHALLENGE_TIMES_PER_VISITOR_DAILY (TIMES_DAILY),
 // CHALLENGE_TIMES_PER_VISIT (TIMES_PER_VISIT); CHALLENGE_LOOKS, the rate limiter binding for the
@@ -118,6 +131,13 @@ const NEAR = 1000;
 const SEED_LABEL = 'world-drive challenges v1';
 const SITE = 'https://worlddrive.app';
 const RUN_ID = /^[A-Za-z0-9_-]{16,32}$/;
+// A time's handle (handleOf): 12 bytes of an HMAC, as base64url.
+export const HANDLE = /^[A-Za-z0-9_-]{16}$/;
+// A time's body (bytes): its numbers and passes, the ghost's text and the ride's look.
+const TIME_BODY = 2048 + GHOST_TEXT + 1024;
+// A ghost, fetched by its run, is kept in Cloudflare's cache this long (s): a run's ghost never
+// changes (a new best is a new run), and it's gone from D1 once its challenge is finished.
+const GHOST_KEPT = 30 * 24 * 60 * 60;
 const DAY = 24 * 60 * 60 * 1000;
 const encoder = new TextEncoder();
 
@@ -226,7 +246,7 @@ export async function challengeBoard( context ) {
 		headers[ 'X-Player-Cache' ] = kept ? 'hit' : 'miss';
 		if ( kept ) return json( { ...answer, me: ( await kept.json() ).me }, 200, headers );
 		await miss();
-		const row = await db.prepare( `SELECT p.name, t.ms, t.vehicle, t.owner, t.created_at, t.final_rank, ${ hasPass( 'p.account_id', '?3' ) } AS supporter, ${ xpOf( 'p' ) } AS xp, p.title
+		const row = await db.prepare( `SELECT p.name, t.ms, t.vehicle, t.owner, t.created_at, t.final_rank, t.run_id, ${ hasPass( 'p.account_id', '?3' ) } AS supporter, ${ xpOf( 'p' ) } AS xp, p.title
 			FROM challenge_times t JOIN players p ON p.id = t.player_id WHERE t.challenge_id = ?1 AND t.player_id = ?2` ).bind( challenge, id, supporterEmails( env ) ).first();
 		let rank = null;
 		if ( row ) {
@@ -238,7 +258,8 @@ export async function challengeBoard( context ) {
 
 		}
 
-		answer.me = row ? { ...entryOf( { ...row, rank } ), ...( row.owner ? { owner: true } : {} ) } : null;
+		// (Its handle, for a link to it from your own row.)
+		answer.me = row ? { ...entryOf( { ...row, rank } ), handle: await handleOf( env, challenge, id ), ...( row.owner ? { owner: true } : {} ) } : null;
 		await caches.default.put( mine, json( { me: answer.me }, 200, { 'Cache-Control': `public, max-age=${ CHALLENGE_CACHE }` } ) );
 
 	}
@@ -247,16 +268,185 @@ export async function challengeBoard( context ) {
 
 }
 
-// POST /api/challenges/time { id, secret, visit, challenge, run, ms, passes, vehicle }: a run of a
-// live challenge finished, ms its time and passes when each point was passed ([ [ index, ms ] ], in
-// the order passed). { ms: the player's best, rank, total, isNewBest, top: [ the FINISH_TOP best ] }
-// (rank among the players on the board; for the owner's runs, kept off it, the rank it would have,
-// with owner: true). 400 for a run the game couldn't have driven, 403 for a visit, a player or a
-// challenge that won't do, 429 too often (reason: 'daily' once the visitor's day is used up,
-// 'visit' once the visit's CHALLENGE_TIMES_PER_VISIT are). The
-// same run posted again within REPOST of its being taken (its answer lost on the way, so the page
-// tries again) is answered as it was taken, nothing more written or counted; a run's id that's
-// another player's on the board is a 400 (reason: 'run'), so a run's id names one time.
+// GET /api/challenges/link?challenge=&vs=: what a "challenge a friend" link shows ({ challenge:
+// CHALLENGE + { replacedAt, finalAt }, vs }): the challenge, live or past, and the time its handle
+// names (vs: { name, ms, vehicle, run, ghost (whether its ghost is kept), date, level, title,
+// supporter?, owner?, rank? (its final place, once the challenge is over) }), or vs: null for a
+// handle that names none (mistyped, or that player removed), so the page opens the challenge
+// without a ghost. 404 for no such challenge. Nothing of who but the name and the time the board
+// shows. Kept as a board is (linkData).
+export async function challengeLink( context ) {
+
+	const { url } = context;
+	const { challenge, vs } = linkAsked( url );
+	if ( ! challenge ) throw bad();
+	const miss = await looks( context );
+	const { data, cached } = await linkData( context, challenge, vs, miss );
+	return json( data, 200, { 'X-Board-Cache': cached ? 'hit' : 'miss' } );
+
+}
+
+// GET /api/challenges/ghost?challenge=&run=: the ghost of a best on a challenge, by its run (a link's
+// vs.run, a board row's run, your own me.run): { run, ms, passes, vehicle, look, ghost } (ghost:
+// ghost-rules.js's text). 404 when that run isn't a best with a ghost kept (a better one has replaced
+// it, or the challenge is finished). A run's ghost never changes (a new best is a new run), so it's
+// kept in Cloudflare's cache by the run for GHOST_KEPT, whoever asks; one read of D1 (its one row)
+// when it isn't, held to CHALLENGE_MISSES as the boards are.
+export async function challengeGhost( context ) {
+
+	const { env, url } = context;
+	const challenge = Number( url.searchParams.get( 'challenge' ) );
+	const run = url.searchParams.get( 'run' ) ?? '';
+	if ( ! Number.isSafeInteger( challenge ) || challenge < 1 || ! RUN_ID.test( run ) ) throw bad();
+	const miss = await looks( context );
+	const key = ghostKey( url, challenge, run );
+	const kept = await caches.default.match( key );
+	if ( kept ) return jsonText( await kept.text(), 200, { 'X-Board-Cache': 'hit' } );
+	await miss();
+	const row = await database( env ).prepare( 'SELECT run_id, ms, passes, vehicle, look, ghost FROM challenge_ghosts WHERE challenge_id = ? AND run_id = ?' ).bind( challenge, run ).first();
+	if ( ! row ) throw new HttpError( 404, 'No such ghost' );
+	const text = JSON.stringify( { run: row.run_id, ms: row.ms, passes: JSON.parse( row.passes ), vehicle: row.vehicle, look: JSON.parse( row.look ), ghost: row.ghost } );
+	await caches.default.put( key, jsonText( text, 200, { 'Cache-Control': `public, max-age=${ GHOST_KEPT }` } ) ).catch( err => console.error( 'Challenge caches', err?.name, err?.message ) );
+	return jsonText( text, 200, { 'X-Board-Cache': 'miss' } );
+
+}
+
+// What a link asks for: { challenge: its id, or 0 if it isn't one; vs: a handle, or null }. A handle
+// that can't be one (not HANDLE's form) is no handle: the link opens the challenge without a ghost.
+function linkAsked( url ) {
+
+	const challenge = Number( url.searchParams.get( 'challenge' ) );
+	const vs = url.searchParams.get( 'vs' );
+	return { challenge: Number.isSafeInteger( challenge ) && challenge > 0 ? challenge : 0, vs: vs !== null && HANDLE.test( vs ) ? vs : null };
+
+}
+
+// A link's answer (challengeLink's) for `challenge` and the handle `vs` (or null): { data, cached }.
+// Kept in Cloudflare's cache as the board is (a live challenge's a minute, its player's new best
+// clearing it there; a finished one's a day), so a link posted in a busy chat, its preview fetched by
+// each app and its page opened by everyone in it, reads D1 once a minute at most in a place: the
+// challenge's row and the time by its handle (one indexed look) with its player. `miss` (looks') is
+// asked before D1 is.
+export async function linkData( context, challenge, vs, miss ) {
+
+	const { env, url } = context;
+	const key = linkKey( url, challenge, vs );
+	const kept = await caches.default.match( key );
+	if ( kept ) return { data: await kept.json(), cached: true };
+	await miss();
+	const db = database( env );
+	const [ found, time ] = await db.batch( [
+		db.prepare( 'SELECT * FROM challenges WHERE id = ?' ).bind( challenge ),
+		db.prepare( `SELECT p.name, t.ms, t.vehicle, t.run_id, t.owner, t.created_at, t.final_rank, ${ hasPass( 'p.account_id', '?3' ) } AS supporter, ${ xpOf( 'p' ) } AS xp, p.title,
+			EXISTS ( SELECT 1 FROM challenge_ghosts g WHERE g.challenge_id = t.challenge_id AND g.player_id = t.player_id ) AS ghost
+			FROM challenge_times t JOIN players p ON p.id = t.player_id WHERE t.challenge_id = ?1 AND t.handle = ?2` ).bind( challenge, vs ?? '', supporterEmails( env ) ),
+	] );
+	const row = found.results[ 0 ];
+	if ( ! row ) throw new HttpError( 404, 'No such challenge' );
+	const them = vs ? time.results[ 0 ] : null;
+	const final = row.final_at !== null;
+	const data = {
+		challenge: { ...challengeOf( row ), replacedAt: row.replaced_at, finalAt: row.final_at },
+		vs: them ? {
+			...entryOf( { ...them, rank: final && ! them.owner ? them.final_rank : null } ), ghost: !! them.ghost,
+			...( them.owner ? { owner: true } : {} ),
+		} : null,
+	};
+	await caches.default.put( key, json( data, 200, { 'Cache-Control': `public, max-age=${ final ? FINISHED_CACHE : CHALLENGE_CACHE }` } ) ).catch( err => console.error( 'Challenge caches', err?.name, err?.message ) );
+	return { data, cached: false };
+
+}
+
+// The page itself for a link to a challenge (/?challenge=&vs=: index.js runs the Worker for the
+// page at /), with its own preview for chat apps: the link card's title and description (og: and
+// twitter:) say whose time it is, where and which period, from the link's answer as the page gets
+// it (linkData: kept in Cloudflare's cache, so a crawler costs no more than a look at it), set as
+// attributes by the HTMLRewriter, which escapes them. Anything that won't do (no such challenge, a
+// look too many, D1 not answering, a link that isn't one) is the page as it is, with the game's own
+// card: the page always opens.
+export async function linkPage( context ) {
+
+	const { request, env, url, now } = context;
+	// (Asked afresh, not as a browser's copy of it: the card is this link's.)
+	const page = await env.ASSETS.fetch( new Request( url.href, { method: 'GET', headers: { Accept: request.headers.get( 'Accept' ) ?? 'text/html' } } ) );
+	const { challenge, vs } = linkAsked( url );
+	if ( ! challenge || ! page.ok || ! /text\/html/.test( page.headers.get( 'Content-Type' ) ?? '' ) ) return page;
+	let words;
+	try {
+
+		words = linkWords( ( await linkData( context, challenge, vs, await looks( context ) ) ).data, now );
+
+	} catch ( err ) {
+
+		if ( ! ( err instanceof HttpError ) ) console.error( 'Challenge link page', err?.name, err?.message );
+		return page;
+
+	}
+
+	// Each tag written whole, its words escaped here (the HTMLRewriter's setAttribute escapes a
+	// quote, not an ampersand).
+	const set = ( attribute, name, value ) => ( { element: element => element.replace( `<meta ${ attribute }="${ name }" content="${ escapeHtml( value ) }" />`, { html: true } ) } );
+	const shown = new HTMLRewriter()
+		.on( 'meta[property="og:title"]', set( 'property', 'og:title', words.title ) )
+		.on( 'meta[name="twitter:title"]', set( 'name', 'twitter:title', words.title ) )
+		.on( 'meta[property="og:description"]', set( 'property', 'og:description', words.description ) )
+		.on( 'meta[name="twitter:description"]', set( 'name', 'twitter:description', words.description ) )
+		.on( 'meta[property="og:url"]', set( 'property', 'og:url', `${ SITE }/?challenge=${ challenge }${ vs ? `&vs=${ vs }` : '' }` ) )
+		.transform( page );
+	const headers = new Headers( shown.headers );
+	for ( const name of [ 'ETag', 'Last-Modified', 'Content-Length' ] ) headers.delete( name );
+	// (Its card is this moment's: the time to beat, the time left.)
+	headers.set( 'Cache-Control', 'no-store' );
+	return new Response( shown.body, { status: 200, headers } );
+
+}
+
+// A link's card for chat apps, from its answer (linkData's) at `now`: { title, description }, plain
+// text (the HTMLRewriter escapes it as it sets it). "Beat Ann Racer's 0:21.40 on today's Furka Pass
+// sprint" and "A daily checkpoint sprint at Furka Pass (Swiss Alps) in World Drive, 5 h 12 m left.
+// Drive it in your browser and race Ann Racer's ghost."; one that's over says so, with their time
+// and place on its final board.
+export function linkWords( { challenge, vs }, now ) {
+
+	const { period, kind, place, region, world, route, endsAt, finalAt, replacedAt } = challenge;
+	const where = `${ place }${ world === 'moon' ? ' on the Moon' : '' }`;
+	const what = { sprint: 'sprint', collect: 'star hunt', landmark: `drive to ${ route.goal ?? place }` }[ kind ];
+	const which = { day: 'today\'s', week: 'this week\'s', month: 'this month\'s' }[ period ];
+	const named = { day: 'daily', week: 'weekly', month: 'monthly' }[ period ];
+	const full = `${ KIND_NAMES[ kind ].toLowerCase() } at ${ place }${ region ? ` (${ region })` : '' }${ world === 'moon' ? ' on the Moon' : '' }`;
+	const over = finalAt !== null || replacedAt !== null || endsAt <= now;
+	if ( over ) {
+
+		return {
+			title: vs ? `${ vs.name } finished in ${ formatTime( vs.ms ) } at ${ where }` : `The ${ named } challenge at ${ where } is over`,
+			description: `The ${ named } ${ full } in World Drive has ended${ vs?.rank ? `, with ${ vs.name } #${ rankText( vs.rank ) } on its board` : '' }. Try today's challenges, free in your browser.`,
+		};
+
+	}
+
+	const left = timeLeft( endsAt - now );
+	if ( ! vs ) return { title: `World Drive: ${ which } challenge at ${ where }`, description: `A ${ named } ${ full } in World Drive, ${ left }. Drive it in your browser, free.` };
+	return {
+		title: `Beat ${ vs.name }'s ${ formatTime( vs.ms ) } on ${ which } ${ kind === 'landmark' ? what : `${ where } ${ what }` }`,
+		description: `A ${ named } ${ full } in World Drive, ${ left }. Drive it in your browser and race ${ vs.name }'s ghost.`,
+	};
+
+}
+
+// POST /api/challenges/time { id, secret, visit, challenge, run, ms, passes, vehicle, look, ghost }:
+// a run of a live challenge finished, ms its time and passes when each point was passed ([ [ index,
+// ms ] ], in the order passed), look the ride's Garage look (checkLook's parts) and ghost the run
+// itself (ghost-rules.js's text). { ms: the player's best, rank, total, isNewBest, top: [ the
+// FINISH_TOP best ], run: the best's run, handle: what a link to it names it by } (rank among the
+// players on the board; for the owner's runs, kept off it, the rank it would have, with owner:
+// true). 400 for a run the game couldn't have driven (reason: 'ghost', with the fault, for a ghost
+// that doesn't agree with it), 403 for a visit, a player or a challenge that won't do, 429 too
+// often (reason: 'daily' once the visitor's day is used up, 'visit' once the visit's
+// CHALLENGE_TIMES_PER_VISIT are). The same run posted again within REPOST of its being taken (its
+// answer lost on the way, so the page tries again) is answered as it was taken, nothing more
+// written or counted; a run's id that's another player's on the board, or a new best with the
+// best's own run id (a run's ghost is kept by its id, and never changes), is a 400 (reason: 'run'),
+// so a run's id names one time.
 export async function postTime( context ) {
 
 	const { request, env, limits, now, url } = context;
@@ -265,13 +455,16 @@ export async function postTime( context ) {
 	// looks is. (Not CHALLENGE_MISSES: what a time reads is held by the gap, the visit's times and the
 	// visitor's day, below.)
 	await looks( context );
-	const body = await readJson( request, 2048 );
+	const body = await readJson( request, TIME_BODY );
 	if ( ! isObject( body ) ) throw bad();
 	const { id, secret } = credentials( body );
-	const { challenge: challengeId, run, ms, passes, vehicle } = body;
+	const { challenge: challengeId, run, ms, passes, vehicle, ghost } = body;
 	if ( ! Number.isSafeInteger( challengeId ) || challengeId < 1 || typeof run !== 'string' || ! RUN_ID.test( run ) ) throw bad();
 	if ( typeof vehicle !== 'string' || ! VEHICLES.has( vehicle ) || ! Number.isSafeInteger( ms ) || ms <= 0 ) throw bad();
-	if ( ! Array.isArray( passes ) || passes.length > 32 ) throw bad();
+	if ( ! Array.isArray( passes ) || passes.length > 32 || typeof ghost !== 'string' || ghost.length > GHOST_TEXT ) throw bad();
+	// The ride's look, as a room takes it (only the Garage's parts, each an id): drawn with its ghost.
+	const look = body.look === undefined ? {} : checkLook( body.look );
+	if ( ! look ) throw bad();
 
 	const visit = await readVisit( env, body.visit, now );
 	if ( ! visit ) throw new HttpError( 403, 'Forbidden', { reason: 'visit' } );
@@ -286,6 +479,11 @@ export async function postTime( context ) {
 	const challenge = challengeOf( row );
 	// No longer than the visit has lasted, and possible on the route.
 	if ( ms / 1000 > ( now - visit.issuedAt ) / 1000 + SLACK || ! checkPasses( challenge, ms, passes ) ) throw bad();
+	// And the run itself, its ghost, agreeing with that: through each point at its pass time, as long
+	// as the time, and never faster between two of its samples than the game goes (ghost-rules.js).
+	// What it can't stop is in the docs ("How cheating is limited").
+	const fault = ghostFault( challenge, ms, passes, ghost );
+	if ( fault ) throw new HttpError( 400, 'Bad request', { reason: 'ghost', fault } );
 
 	const player = await authenticate( db, id, secret );
 	// One visit, one player, as for scores.
@@ -311,6 +509,9 @@ export async function postTime( context ) {
 		return json( answer, 200, { 'X-Time-Cache': 'miss' } );
 
 	}
+
+	// A new best is a new run: its ghost is kept, and cached, by its run's id, which never changes.
+	if ( was?.run_id === run && ms < was.ms ) throw new HttpError( 400, 'Bad request', { reason: 'run' } );
 
 	// One time every TIME_GAP from a player, and CHALLENGE_TIMES_PER_VISIT from a visit (whatever
 	// addresses its token is sent from: each visit is a robot check, so that's all one buys), claimed
@@ -368,6 +569,7 @@ export async function postTime( context ) {
 
 	const owner = visit.owner ? 1 : 0;
 	const isNewBest = ! was || ms < was.ms;
+	const handle = await handleOf( env, challengeId, id );
 	if ( isNewBest ) {
 
 		// Only a better time replaces the best; the owner's mark stays once it's there. A new player
@@ -378,12 +580,19 @@ export async function postTime( context ) {
 		let written;
 		try {
 
+			// With its ghost, written only where the time was (the best now has this run), so the ghost
+			// kept is always the best's, replaced with it.
 			[ written ] = await db.batch( [
-				db.prepare( `INSERT INTO challenge_times ( challenge_id, player_id, ms, passes, vehicle, run_id, visit, owner, created_at, first_at ) SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9
+				db.prepare( `INSERT INTO challenge_times ( challenge_id, player_id, ms, passes, vehicle, run_id, visit, owner, created_at, first_at, handle ) SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9, ?10
 					WHERE EXISTS ( SELECT 1 FROM challenges WHERE id = ?1 AND final_at IS NULL AND replaced_at IS NULL )
 					ON CONFLICT ( challenge_id, player_id ) DO UPDATE SET ms = excluded.ms, passes = excluded.passes, vehicle = excluded.vehicle, run_id = excluded.run_id,
-					visit = excluded.visit, owner = MAX( challenge_times.owner, excluded.owner ), created_at = excluded.created_at WHERE excluded.ms < challenge_times.ms` )
-					.bind( challengeId, id, ms, JSON.stringify( passes ), vehicle, run, visit.id, owner, now ),
+					visit = excluded.visit, owner = MAX( challenge_times.owner, excluded.owner ), created_at = excluded.created_at, handle = excluded.handle WHERE excluded.ms < challenge_times.ms` )
+					.bind( challengeId, id, ms, JSON.stringify( passes ), vehicle, run, visit.id, owner, now, handle ),
+				db.prepare( `INSERT INTO challenge_ghosts ( challenge_id, player_id, run_id, ms, passes, vehicle, look, ghost, created_at ) SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9
+					WHERE EXISTS ( SELECT 1 FROM challenge_times WHERE challenge_id = ?1 AND player_id = ?2 AND run_id = ?3 )
+					ON CONFLICT ( challenge_id, player_id ) DO UPDATE SET run_id = excluded.run_id, ms = excluded.ms, passes = excluded.passes, vehicle = excluded.vehicle, look = excluded.look,
+					ghost = excluded.ghost, created_at = excluded.created_at` )
+					.bind( challengeId, id, run, ms, JSON.stringify( passes ), vehicle, JSON.stringify( look ), ghost, now ),
 				...was || owner ? [] : [ db.prepare( 'UPDATE challenges SET drivers = drivers + 1 WHERE id = ? AND final_at IS NULL AND replaced_at IS NULL' ).bind( challengeId ) ],
 			] );
 
@@ -401,7 +610,7 @@ export async function postTime( context ) {
 		// So the player, and anyone asking here, sees it straight away (in this one of Cloudflare's
 		// places; elsewhere within CHALLENGE_CACHE s). Nothing going wrong in it turns the best that's
 		// now kept into an error.
-		await forgetTime( context, challengeId, id ).catch( err => console.error( 'Challenge caches', err?.name, err?.message ) );
+		await forgetTime( context, challengeId, id, handle ).catch( err => console.error( 'Challenge caches', err?.name, err?.message ) );
 
 	}
 
@@ -420,7 +629,7 @@ export async function postTime( context ) {
 async function answerTime( context, db, id, player, isNewBest ) {
 
 	const [ standing, top, read ] = await db.batch( [
-		db.prepare( 'SELECT t.ms, t.owner, t.created_at, c.drivers FROM challenge_times t JOIN challenges c ON c.id = t.challenge_id WHERE t.challenge_id = ? AND t.player_id = ?' ).bind( id, player ),
+		db.prepare( 'SELECT t.ms, t.owner, t.created_at, t.run_id, c.drivers FROM challenge_times t JOIN challenges c ON c.id = t.challenge_id WHERE t.challenge_id = ? AND t.player_id = ?' ).bind( id, player ),
 		topQuery( db, context.env, id, FINISH_TOP ),
 		...isNewBest ? [ orderQuery( db, id ) ] : [],
 	] );
@@ -434,6 +643,7 @@ async function answerTime( context, db, id, player, isNewBest ) {
 	const mine = standing.results[ 0 ];
 	return {
 		ms: mine.ms, rank: rankIn( order, mine, player ), total: mine.drivers, isNewBest, top: top.results.map( entryOf ),
+		run: mine.run_id, handle: await handleOf( context.env, id, player ),
 		...( mine.owner ? { owner: true } : {} ),
 	};
 
@@ -448,11 +658,13 @@ async function keepAnswer( key, answer, ms ) {
 
 }
 
-// The cached rows a new best on challenge `id` by `player` changes: its board, its order and the
-// player's own row there, at once; and the list's tops and the player's rows on the six, with the
-// six's ids this instance knows (or, if it doesn't just now, in the background: finding them may
-// mean fixing a new period's six, which is no part of a time's answer).
-async function forgetTime( context, id, player ) {
+// The cached rows a new best on challenge `id` by `player` changes: its board, its order, the
+// player's own row there and a link to their time (by its `handle`), at once; and the list's tops
+// and the player's rows on the six, with the six's ids this instance knows (or, if it doesn't just
+// now, in the background: finding them may mean fixing a new period's six, which is no part of a
+// time's answer). (The ghost of the run it replaces stays in the cache by that run as it was: no
+// link or board names it now.)
+async function forgetTime( context, id, player, handle ) {
 
 	const { url, ctx } = context;
 	const lists = rows => {
@@ -462,7 +674,7 @@ async function forgetTime( context, id, player ) {
 
 	};
 	const known = liveKnown( context.now );
-	await Promise.all( [ boardKey( url, id ), boardKey( url, id, player ), orderKey( url, id ), ...known ? lists( known ) : [] ].map( key => caches.default.delete( key ) ) );
+	await Promise.all( [ boardKey( url, id ), boardKey( url, id, player ), orderKey( url, id ), linkKey( url, id, handle ), ...known ? lists( known ) : [] ].map( key => caches.default.delete( key ) ) );
 	if ( ! known ) await later( ctx, liveChallenges( context ).then( rows => Promise.all( lists( rows ).map( key => caches.default.delete( key ) ) ) ), 'Challenge caches' );
 
 }
@@ -932,6 +1144,8 @@ function finishQueries( db, id, now ) {
 			SELECT player_id, ROW_NUMBER() OVER ( ORDER BY ms, created_at, player_id ) AS place FROM challenge_times WHERE challenge_id = ?1 AND owner = 0
 		) AS ranked WHERE challenge_times.challenge_id = ?1 AND challenge_times.player_id = ranked.player_id` ).bind( id ),
 		db.prepare( 'UPDATE challenges SET final_at = ? WHERE id = ? AND final_at IS NULL' ).bind( now, id ),
+		// Its ghosts: nothing races a finished challenge (a link to one shows its board instead).
+		db.prepare( 'DELETE FROM challenge_ghosts WHERE challenge_id = ?' ).bind( id ),
 	];
 
 }
@@ -942,7 +1156,7 @@ function finishQueries( db, id, now ) {
 // row shows.
 function topQuery( db, env, id, most ) {
 
-	return db.prepare( `SELECT p.name, t.ms, t.vehicle, t.created_at, ${ hasPass( 'p.account_id', '?3' ) } AS supporter, ${ xpOf( 'p' ) } AS xp, p.title
+	return db.prepare( `SELECT p.name, t.ms, t.vehicle, t.created_at, t.run_id, ${ hasPass( 'p.account_id', '?3' ) } AS supporter, ${ xpOf( 'p' ) } AS xp, p.title
 		FROM challenge_times t JOIN players p ON p.id = t.player_id WHERE t.challenge_id = ?1 AND t.owner = 0 ORDER BY t.ms, t.created_at, t.player_id LIMIT ?2` ).bind( id, most, supporterEmails( env ) );
 
 }
@@ -957,10 +1171,14 @@ async function myStanding( context, db, ids, player, miss ) {
 	const kept = await caches.default.match( key );
 	if ( kept ) return kept.json();
 	await miss();
-	const rows = ( await db.prepare( `SELECT challenge_id, ms, owner, created_at FROM challenge_times WHERE player_id = ? AND challenge_id IN ( ${ ids.map( () => '?' ).join( ', ' ) } )` )
+	const rows = ( await db.prepare( `SELECT challenge_id, ms, owner, created_at, run_id FROM challenge_times WHERE player_id = ? AND challenge_id IN ( ${ ids.map( () => '?' ).join( ', ' ) } )` )
 		.bind( player, ...ids ).all() ).results;
 	const orders = await boardOrders( context, db, rows.map( row => row.challenge_id ), miss );
-	const mine = Object.fromEntries( rows.map( row => [ row.challenge_id, { ms: row.ms, rank: rankIn( orders.get( row.challenge_id ), row, player ), ...( row.owner ? { owner: true } : {} ) } ] ) );
+	// With the best's run (its ghost, to race) and its handle (a link to it, to share).
+	const handles = await Promise.all( rows.map( row => handleOf( context.env, row.challenge_id, player ) ) );
+	const mine = Object.fromEntries( rows.map( ( row, i ) => [ row.challenge_id, {
+		ms: row.ms, rank: rankIn( orders.get( row.challenge_id ), row, player ), run: row.run_id, handle: handles[ i ], ...( row.owner ? { owner: true } : {} ),
+	} ] ) );
 	await caches.default.put( key, json( mine, 200, { 'Cache-Control': `public, max-age=${ CHALLENGE_CACHE }` } ) );
 	return mine;
 
@@ -1040,10 +1258,12 @@ export function rankIn( order, { ms, created_at: at }, player ) {
 }
 
 // A board's row as the page shows it: the name, the time, the ride, the day it was set, the player's
-// level and title as they are now, supporter only for a supporter.
+// level and title as they are now, supporter only for a supporter; and the run's id, where it's
+// asked for, which its ghost is fetched by (to race the board's leader): 12 random bytes the page
+// chose, which say nothing of who.
 function entryOf( row, i ) {
 
-	const shown = { name: row.name, ms: row.ms, vehicle: row.vehicle, date: dateOf( row.created_at ), ...standingOf( row.xp, row.title ) };
+	const shown = { name: row.name, ms: row.ms, vehicle: row.vehicle, date: dateOf( row.created_at ), ...standingOf( row.xp, row.title ), ...( row.run_id ? { run: row.run_id } : {} ) };
 	if ( Number.isInteger( i ) ) shown.rank = i + 1;
 	else if ( row.rank ) shown.rank = row.rank;
 	return row.supporter ? { ...shown, supporter: true } : shown;
@@ -1090,6 +1310,30 @@ function boardKey( url, challenge, player = '' ) {
 function orderKey( url, challenge ) {
 
 	return new Request( `${ url.origin }/api/challenges/order?challenge=${ challenge }` );
+
+}
+
+// Where a link's answer (linkData) and a run's ghost (challengeGhost) are kept.
+function linkKey( url, challenge, vs ) {
+
+	return new Request( `${ url.origin }/api/challenges/link?challenge=${ challenge }${ vs ? `&vs=${ vs }` : '' }` );
+
+}
+
+function ghostKey( url, challenge, run ) {
+
+	return new Request( `${ url.origin }/api/challenges/ghost?challenge=${ challenge }&run=${ run }` );
+
+}
+
+// The handle of `player`'s time on `challenge`: the first 12 bytes of an HMAC of both with the
+// challenges' derived key (seed), as base64url. What a link names a time by: the same for that
+// player's best on that challenge however often it's bettered, unmade by anyone without the
+// Worker's secret, and nothing of who (the player's id is half of their credentials, and in a link
+// would let anyone look them up on every board).
+export async function handleOf( env, challenge, player ) {
+
+	return base64url( ( await seed( env, `handle:${ challenge }:${ player }` ) ).slice( 0, 12 ) );
 
 }
 
@@ -1291,6 +1535,13 @@ async function seed( env, text ) {
 function hex( bytes ) {
 
 	return [ ...bytes ].map( b => b.toString( 16 ).padStart( 2, '0' ) ).join( '' );
+
+}
+
+// `text` as it can go in HTML, in an attribute's quotes or between tags.
+export function escapeHtml( text ) {
+
+	return String( text ).replace( /[&<>"']/g, c => ( { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' } )[ c ] );
 
 }
 
