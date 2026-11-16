@@ -6876,10 +6876,12 @@ describe( 'World Drive\'s admin page: where people drop in', () => {
 // an Earth challenge started on the test pad (its start, the countdown holding the car, the gates on
 // the pad's ground, two draws for all of them, the HUD's timer, count and arrow, the gates driven
 // through by moving the car, the finish card with the time posted and the board's top); Retry, a
-// pause ending the run and its Retry, and leaving it for the globe; a time with no name yet, the
-// name picked on the finish card; a phone upright and on its side (the HUD clear of the speed and
-// the buttons); and the admin page's part (the live and next six, choosing one, a live one warned
-// about, busy places approved). Pictures of each (challenges-*.png).
+// pause ending the run and its Retry, Keep driving ending it for good, and leaving it for the
+// globe; a time with no name yet, the name picked on the finish card; Retry while a post waits to
+// be tried again; Esc on the finish card; a gate beside a tower; a period ending with the list open
+// and the Worker failing; the word while driving; a phone upright and on its side (the HUD clear of
+// the speed and the buttons); and the admin page's part (the live and next six, choosing one, a day
+// typed in, a live one warned about, busy places approved). Pictures of each (challenges-*.png).
 describe( 'World Drive challenges', () => {
 
 	// The test pad's place (Furka Pass), its land to the north. Each challenge's startsAt and endsAt are
@@ -7089,6 +7091,9 @@ describe( 'World Drive challenges', () => {
 		} );
 		assert.equal( draws, 2 );
 		await page.waitForFunction( () => window.drive.challenges.run?.phase === 'racing', null, { timeout: 60000 } );
+		// The keys card at GO: the visit's first drive started as a challenge, so not over the countdown
+		// but not missed either.
+		assert.ok( await page.locator( '#drive-ui .keys' ).isVisible(), 'no keys card at GO on the visit\'s first drive' );
 		assert.ok( await page.locator( '#drive-ui .ch-hud' ).isVisible() );
 		assert.equal( await page.locator( '#drive-ui .ch-hud .ch-gates' ).textContent(), '0 / 3' );
 		// The arrow: the gate ahead, straight up.
@@ -7151,15 +7156,27 @@ describe( 'World Drive challenges', () => {
 		assert.ok( await page.locator( '#pause .ch-stopped' ).isVisible() );
 		assert.equal( await page.locator( '#drive-ui .ch-hud' ).isVisible(), false );
 		assert.equal( await page.evaluate( () => !! window.drive.scene.getObjectByName( 'challenge-beams' ) ), false );
+		// The menu's word has room under it before Keep driving.
+		const gap = await page.evaluate( () => document.querySelector( '#pause .resume' ).getBoundingClientRect().top - document.querySelector( '#pause .ch-stopped' ).getBoundingClientRect().bottom );
+		assert.ok( gap >= 10, `${ gap } px between the note and the button under it` );
 		await shot( page, 'challenges-6-paused' );
 		await page.locator( '#pause .ch-stopped button' ).click();
 		await page.waitForFunction( () => window.drive.mode === 'driving' && window.drive.challenges.run?.phase === 'countdown' );
 		assert.equal( await page.locator( '#pause' ).isVisible(), false );
-		// Keep driving (without retrying) after a pause: no run, the menu's word gone next time.
+		// Keep driving (without retrying) after a pause: the run's over, and the menu's word gone the
+		// next time it's paused.
+		await page.waitForFunction( () => window.drive.challenges.run?.phase === 'racing', null, { timeout: 60000 } );
 		await page.locator( '#drive-ui .pause-open' ).click();
+		await page.waitForFunction( () => window.drive.mode === 'paused' );
+		assert.ok( await page.locator( '#pause .ch-stopped' ).isVisible() );
 		await page.locator( '#pause .resume' ).click();
 		await page.waitForFunction( () => window.drive.mode === 'driving' );
-		assert.equal( await page.evaluate( () => window.drive.challenges.run.phase ), 'stopped' );
+		assert.equal( await page.evaluate( () => window.drive.challenges.run ), null );
+		await page.locator( '#drive-ui .pause-open' ).click();
+		await page.waitForFunction( () => window.drive.mode === 'paused' );
+		assert.equal( await page.locator( '#pause .ch-stopped' ).isVisible(), false );
+		await page.locator( '#pause .resume' ).click();
+		await page.waitForFunction( () => window.drive.mode === 'driving' );
 		// The globe: the run, its gates and its HUD gone.
 		await page.keyboard.press( 'KeyM' );
 		await page.waitForFunction( () => window.drive.mode === 'globe' );
@@ -7207,6 +7224,214 @@ describe( 'World Drive challenges', () => {
 		assert.deepEqual( page.posted[ 0 ].passes.map( ( [ i ] ) => i ), [ 0 ] );
 		assert.equal( await page.evaluate( () => window.drive.leaderboard.player.name ), 'New Racer' );
 		assert.equal( await form.isVisible(), false );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'Retry while a time that didn\'t get through waits to be tried again: that time still goes up, with its own run\'s passes, and the new run is its own', async () => {
+
+		const page = await challengePage();
+		// The first post lost on the way (a phone losing its signal); the rest answered as usual.
+		const tried = [];
+		await page.route( `${ BASE }/api/challenges/time`, route => {
+
+			tried.push( JSON.parse( route.request().postData() ) );
+			return tried.length === 1 ? route.abort( 'internetdisconnected' ) : route.fallback();
+
+		} );
+		await page.locator( '#globe-ui .challenges-open' ).click();
+		await page.locator( '.ch-card' ).first().waitFor();
+		await start( page, 11 );
+		await page.waitForFunction( () => window.drive.challenges.run?.phase === 'racing', null, { timeout: 60000 } );
+		const ms = await chase( page );
+		await page.waitForFunction( () => /Trying again/.test( document.querySelector( '.ch-f-note' ).textContent ), null, { timeout: 15000 } );
+		const [ first ] = tried;
+		assert.equal( first.ms, ms );
+		// Retry at once, before the time's tried again.
+		await page.locator( '.ch-finish .ch-retry' ).click();
+		await page.waitForFunction( () => window.drive.challenges.run?.phase === 'countdown' );
+		for ( let i = 0; i < 200 && tried.length < 2; i ++ ) await page.waitForTimeout( 100 );
+		// Tried again as it finished: the same run's id, time and passes (each leg one the game could
+		// drive), and taken.
+		assert.equal( tried.length, 2 );
+		assert.deepEqual( tried[ 1 ], first );
+		assert.ok( checkPasses( CHALLENGES[ 0 ], tried[ 1 ].ms, tried[ 1 ].passes ), JSON.stringify( tried[ 1 ] ) );
+		assert.deepEqual( page.posted, [ first ] );
+		// The new run: its own id, nothing passed yet, and no finish card over it.
+		const now = await page.evaluate( () => ( { id: window.drive.challenges.run.id, passes: window.drive.challenges.run.passes.length } ) );
+		assert.notEqual( now.id, first.run );
+		assert.equal( now.passes, 0 );
+		assert.equal( await page.locator( '.ch-finish' ).isVisible(), false );
+		// And it's the best now, so the new run's card compares with it.
+		await page.waitForFunction( () => window.drive.challenges.run?.phase === 'racing', null, { timeout: 60000 } );
+		await chase( page, 25 );
+		await page.locator( '.ch-finish' ).waitFor();
+		assert.match( await page.locator( '.ch-f-note' ).textContent(), new RegExp( `^(Your best is ${ formatTime( ms ).replace( '.', '\\.' ) }|#\\d)` ) );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'Esc on the finish card: the pause menu, with the card and the run put away (its time still posted)', async () => {
+
+		const page = await challengePage();
+		await page.locator( '#globe-ui .challenges-open' ).click();
+		await page.locator( '.ch-card' ).first().waitFor();
+		await start( page, 15 );
+		await page.waitForFunction( () => window.drive.challenges.run?.phase === 'racing', null, { timeout: 60000 } );
+		await chase( page, 50 );
+		await page.locator( '.ch-finish' ).waitFor();
+		await page.waitForFunction( () => /^#\d/.test( document.querySelector( '.ch-f-note' ).textContent ), null, { timeout: 15000 } );
+		await page.keyboard.press( 'Escape' );
+		await page.waitForFunction( () => window.drive.mode === 'paused' );
+		assert.equal( await page.locator( '.ch-finish' ).isVisible(), false );
+		assert.equal( await page.locator( '#drive-ui .ch-hud' ).isVisible(), false );
+		assert.equal( await page.evaluate( () => window.drive.challenges.run ), null );
+		// The pause menu is what's there, its own word on a stopped run not shown (this one finished).
+		const top = await page.evaluate( () => {
+
+			const box = document.querySelector( '#pause .resume' ).getBoundingClientRect();
+			return document.elementFromPoint( box.left + box.width / 2, box.top + box.height / 2 )?.closest( '#pause' ) !== null;
+
+		} );
+		assert.ok( top, 'something over the pause menu' );
+		assert.equal( await page.locator( '#pause .ch-stopped' ).isVisible(), false );
+		assert.equal( page.posted.length, 1 );
+		await shot( page, 'challenges-7-esc' );
+		await page.locator( '#pause .resume' ).click();
+		await page.waitForFunction( () => window.drive.mode === 'driving' );
+		assert.equal( await page.locator( '.ch-finish' ).isVisible(), false );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'a gate beside a tower: on the street beside it, not on its roof, and passed driving by on the street', async () => {
+
+		const page = await challengePage();
+		await page.locator( '#globe-ui .challenges-open' ).click();
+		await page.locator( '.ch-card' ).first().waitFor();
+		await start( page, 11 );
+		// A tower 120 m tall and 24 m square on the pad, round the last gate (as one of the Strip's
+		// hotels, or Shibuya's towers, may stand where a gate is laid out), its roof and four walls.
+		await page.evaluate( () => {
+
+			const { ground, challenges } = window.drive;
+			const gate = challenges.run.gates[ 2 ];
+			const pad = ground.getColliders()[ 0 ];
+			const land = pad.children.find( child => child.isMesh );
+			const part = ( width, height, x, y, z, turned ) => {
+
+				const mesh = land.clone();
+				mesh.material = land.material.clone();
+				mesh.material.side = 2;
+				if ( turned !== null ) mesh.rotation.set( 0, turned, 0 );
+				mesh.scale.set( width / 4000, height / 2000, 1 );
+				mesh.position.set( x, y, z );
+				mesh.name = 'tower';
+				pad.add( mesh );
+				mesh.updateMatrixWorld();
+
+			};
+			part( 24, 24, gate.x, 120, gate.z, null );
+			for ( const [ dx, dz, turned ] of [ [ 0, - 12, 0 ], [ 0, 12, 0 ], [ - 12, 0, Math.PI / 2 ], [ 12, 0, Math.PI / 2 ] ] ) part( 24, 120, gate.x + dx, 60, gate.z + dz, turned );
+
+		} );
+		// Its ground found again as the tower's there: the street beside it, the roof its top.
+		await page.waitForFunction( () => {
+
+			const gate = window.drive.challenges.run.gates[ 2 ];
+			return gate.top > 100;
+
+		}, null, { timeout: 60000 } );
+		const gate = await page.evaluate( () => {
+
+			const { challenges, ground } = window.drive;
+			const g = challenges.run.gates[ 2 ];
+			// Where its ring is drawn (up from its ground by the ring's own size).
+			const m = challenges.meshes.rings.matrix.clone();
+			challenges.meshes.rings.getMatrixAt( 2, m );
+			return { ground: g.ground, top: g.top, middle: ground.heightAt( g.x, g.z ), ring: m.elements[ 13 ] };
+
+		} );
+		assert.ok( Math.abs( gate.ground ) < 0.05 && Math.abs( gate.top - 120 ) < 0.05 && Math.abs( gate.middle - 120 ) < 0.05, JSON.stringify( gate ) );
+		assert.ok( gate.ring > 0 && gate.ring < 20, JSON.stringify( gate ) );
+		await page.waitForFunction( () => window.drive.challenges.run?.phase === 'racing', null, { timeout: 60000 } );
+		// Driven through on the street: finished, as the zone reaches the street from the roof.
+		const ms = await Promise.race( [ chase( page ), new Promise( resolve => setTimeout( () => resolve( 'not passed' ), 90000 ) ) ] );
+		assert.equal( typeof ms, 'number', String( ms ) );
+		const passed = await page.evaluate( () => ( { y: window.drive.driver.y, passes: window.drive.challenges.run.passes.map( ( [ i ] ) => i ) } ) );
+		assert.deepEqual( passed.passes, [ 0, 1, 2 ] );
+		assert.ok( passed.y < 5, JSON.stringify( passed ) );
+		await shot( page, 'challenges-8-tower' );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'a period ending with the list open: one new list asked for, and if the Worker isn\'t answering, again only after a while (its Retry-After), the ended card over and its Start off', async () => {
+
+		const page = await challengePage();
+		// The first list has the day's ending in 2 s; then the Worker fails (503), then is busy (429,
+		// Retry-After 60).
+		const asked = [];
+		await page.route( `${ BASE }/api/challenges?*`, route => {
+
+			asked.push( Date.now() );
+			if ( asked.length === 1 ) return route.fulfill( { contentType: 'application/json', body: JSON.stringify( { now: Date.now(), challenges: listed().map( c => c.id === 11 ? { ...c, endsAt: Date.now() + 2000 } : c ) } ) } );
+			if ( asked.length === 2 ) return route.fulfill( { status: 503, contentType: 'application/json', body: '{"error":"Not now"}' } );
+			route.fulfill( { status: 429, headers: { 'Retry-After': '60' }, contentType: 'application/json', body: '{"error":"Too many. Try again in a minute","retryAfter":60}' } );
+
+		} );
+		await page.locator( '#globe-ui .challenges-open' ).click();
+		const day = page.locator( '#challenges .ch-card[data-id="11"]' );
+		await day.waitFor();
+		const opened = Date.now();
+		// Over: said so, its Start off; the others as they were.
+		await page.waitForFunction( () => document.querySelector( '.ch-card[data-id="11"]' ).classList.contains( 'over' ), null, { timeout: 10000 } );
+		assert.equal( await day.locator( '.ch-left' ).textContent(), 'Over: the next one is on its way' );
+		assert.ok( await day.locator( '.ch-start' ).isDisabled() );
+		assert.ok( ! await page.locator( '#challenges .ch-card[data-id="13"] .ch-start' ).isDisabled() );
+		await page.waitForTimeout( Math.max( 0, 16000 - ( Date.now() - opened ) ) );
+		// In 16 s: the first, the one as it ended, one more 5 s after the 503, and then nothing for the
+		// 429's minute (not one a second).
+		assert.equal( asked.length, 3, asked.map( at => at - opened ).join( ' ' ) );
+		assert.ok( asked[ 2 ] - asked[ 1 ] >= 4500, asked.map( at => at - opened ).join( ' ' ) );
+		assert.match( await page.locator( '#challenges .ch-status' ).textContent(), /Asked too often just now/ );
+		await shot( page, 'challenges-9-ended' );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'a visit driving a while is told of today\'s challenge on that world, with a button to the challenges (counted for the play stats)', async () => {
+
+		const page = await challengePage();
+		await page.addInitScript( () => {
+
+			window.worldDriveNudgeTest = { after: 2 };
+			window.worldDriveStatsTest = { visit: 'v1.stats-test' };
+
+		} );
+		await page.route( `${ BASE }/api/stats`, route => route.fulfill( { status: 204 } ) );
+		await page.reload();
+		await page.locator( '#notice button', { hasText: 'Drive the test pad' } ).click();
+		await page.waitForFunction( () => window.drive?.mode === 'globe', null, { timeout: 30000 } );
+		await page.evaluate( () => window.drive.dropIn( { name: 'Furka Pass', lat: 46.5725, lon: 8.4153 } ) );
+		await page.waitForFunction( () => window.drive.mode === 'driving', null, { timeout: 90000 } );
+		const toast = page.locator( '#toast' );
+		await toast.locator( 'button', { hasText: 'Challenges' } ).waitFor( { timeout: 60000 } );
+		assert.match( await toast.textContent(), /^Today's challenge on the Earth: Furka Pass\. A timed run with its own board\./ );
+		// Nothing of the challenges' own code loaded till it's pressed.
+		assert.ok( ! page.asked.some( path => path.endsWith( '/src/drive-app/challenges.js' ) ) );
+		await shot( page, 'challenges-10-nudge' );
+		await toast.locator( 'button' ).click();
+		await page.locator( '#challenges .ch-card' ).first().waitFor();
+		const counts = await page.evaluate( () => window.drive.stats.counts );
+		assert.deepEqual( [ counts[ 'challenge:nudge' ], counts[ 'challenge:nudge_open' ], counts[ 'challenge:open' ] ], [ 1, 1, 1 ] );
+		// Once a visit.
+		await page.locator( '#challenges .close' ).click();
 		assert.deepEqual( page.errors, [] );
 		await page.context().close();
 
@@ -7288,7 +7513,7 @@ describe( 'World Drive challenges', () => {
 			if ( route.request().method() === 'GET' ) return route.fulfill( { contentType: 'application/json', body: JSON.stringify( answer ) } );
 			const body = JSON.parse( route.request().postData() );
 			sent.push( body );
-			if ( body.action === 'pick' && body.period === 'day:2026-11-16' && ! body.live ) return route.fulfill( { status: 409, contentType: 'application/json', body: JSON.stringify( { error: 'That challenge is live', reason: 'live', drivers: 5 } ) } );
+			if ( body.period === 'day:2026-11-16' && ! body.live ) return route.fulfill( { status: 409, contentType: 'application/json', body: JSON.stringify( { error: 'That challenge is live', reason: 'live', drivers: 5 } ) } );
 			if ( body.action === 'approve' ) answer.approved = [ { world: 'earth', cell: body.cell, name: '12 km NE of Lyon', region: 'Rhône-Alpes, France', lat: 45.83862, lon: 4.95052 } ];
 			route.fulfill( { contentType: 'application/json', body: JSON.stringify( answer ) } );
 
@@ -7305,37 +7530,68 @@ describe( 'World Drive challenges', () => {
 		await section.locator( '#ch-kind' ).selectOption( 'collect' );
 		await section.locator( '#ch-place' ).selectOption( 'featured:spot:monaco' );
 		await section.locator( '#ch-form button[type="submit"]' ).click();
-		await section.locator( '#ch-say', { hasText: 'Saved.' } ).waitFor();
+		await section.locator( '#ch-say', { hasText: 'Saved for day:2026-11-17, the Earth.' } ).waitFor();
 		assert.deepEqual( sent.at( - 1 ), { action: 'pick', period: 'day:2026-11-17', world: 'earth', kind: 'collect', place: { featured: 'spot:monaco' } } );
-		// By coordinates, on the Moon, a month ahead (a day picked in it).
+		// A day typed in with today's still picked in the list: that day's challenge, not today's (the
+		// day typed is the period), and the page says which it saved.
+		await section.locator( '#ch-period' ).selectOption( 'day:2026-11-16' );
+		await section.locator( '#ch-place' ).selectOption( 'featured:spot:monaco' );
+		await section.locator( '#ch-date' ).fill( '2026-12-25' );
+		assert.equal( await section.locator( '#ch-period' ).inputValue(), 'date' );
+		await section.locator( '#ch-form button[type="submit"]' ).click();
+		await section.locator( '#ch-say', { hasText: 'Saved for day:2026-12-25, the Earth.' } ).waitFor();
+		assert.deepEqual( sent.at( - 1 ), { action: 'pick', period: 'day:2026-12-25', world: 'earth', kind: 'collect', place: { featured: 'spot:monaco' } } );
+		// Another period picked in the list: the day typed is cleared.
+		await section.locator( '#ch-period' ).selectOption( 'week:2026-11-23' );
+		assert.equal( await section.locator( '#ch-date' ).inputValue(), '' );
+		// By coordinates, on the Moon, a month ahead (a day typed in it, and Month picked beside it).
 		await section.locator( '#ch-world' ).selectOption( 'moon' );
-		await section.locator( '#ch-period' ).selectOption( 'month:2026-12' );
-		await section.locator( '#ch-period' ).selectOption( 'date' );
 		await section.locator( '#ch-date' ).fill( '2027-01-20' );
+		await section.locator( '#ch-date-kind' ).selectOption( 'month' );
 		await section.locator( '#ch-place' ).selectOption( 'custom' );
 		const form = section.locator( '#ch-form' );
 		await form.locator( 'input[name="name"]' ).fill( 'Rima Hadley' );
 		await form.locator( 'input[name="lat"]' ).fill( '25.5' );
 		await form.locator( 'input[name="lon"]' ).fill( '3.2' );
 		await form.locator( 'button[type="submit"]' ).click();
-		await section.locator( '#ch-say', { hasText: 'Saved.' } ).waitFor();
+		await section.locator( '#ch-say', { hasText: 'Saved for month:2027-01, the Moon.' } ).waitFor();
 		assert.deepEqual( sent.at( - 1 ), { action: 'pick', period: 'month:2027-01', world: 'moon', kind: 'collect', place: { name: 'Rima Hadley', region: '', lat: 25.5, lon: 3.2 } } );
-		// Today's on the Earth, which is live with five on its board: a warning first, then changed.
+		// Today's on the Earth, which is live with five on its board: a warning first (before anything's
+		// sent), then changed.
 		await section.locator( '#ch-live button[data-change="day:2026-11-16"][data-world="earth"]' ).click();
 		assert.equal( await section.locator( '#ch-period' ).inputValue(), 'day:2026-11-16' );
+		assert.equal( await section.locator( '#ch-date' ).inputValue(), '' );
 		assert.equal( await section.locator( '#ch-world' ).inputValue(), 'earth' );
 		await section.locator( '#ch-place' ).selectOption( 'featured:spot:vegas' );
+		const before = sent.length;
 		await section.locator( '#ch-form button[type="submit"]' ).click();
 		await section.locator( '#ch-warn' ).waitFor();
 		assert.match( await section.locator( '#ch-warn' ).textContent(), /This challenge is live, and 5 drivers have times on it\. .*starts a new board; the old one is kept apart/ );
+		assert.equal( sent.length, before );
 		await shot( page, 'challenges-admin-1-warning' );
-		const before = sent.length;
 		await section.locator( '#ch-keep' ).click();
 		assert.equal( sent.length, before );
 		await section.locator( '#ch-form button[type="submit"]' ).click();
 		await section.locator( '#ch-anyway' ).click();
-		await section.locator( '#ch-say', { hasText: 'Saved.' } ).waitFor();
+		await section.locator( '#ch-say', { hasText: 'Saved for day:2026-11-16, the Earth.' } ).waitFor();
 		assert.deepEqual( sent.at( - 1 ), { action: 'pick', period: 'day:2026-11-16', world: 'earth', kind: 'sprint', place: { featured: 'spot:vegas' }, live: true } );
+		// This month's on the Earth, live with nobody on its board yet: asked about all the same (anyone
+		// driving it would be turned away).
+		await section.locator( '#ch-live button[data-change="month:2026-11"][data-world="earth"]' ).click();
+		await section.locator( '#ch-form button[type="submit"]' ).click();
+		await section.locator( '#ch-warn' ).waitFor();
+		assert.match( await section.locator( '#ch-warn' ).textContent(), /This challenge is live, though nobody has a time on it yet\. .*turns away anyone driving it/ );
+		await section.locator( '#ch-anyway' ).click();
+		await section.locator( '#ch-say', { hasText: 'Saved for month:2026-11, the Earth.' } ).waitFor();
+		assert.equal( sent.at( - 1 ).live, true );
+		// Back to the rotation on today's, the rotation's: sent as it is (nothing to replace, unless the
+		// rotation would now choose another, which the Worker's warning says, as here).
+		await section.locator( '#ch-live button[data-change="day:2026-11-16"][data-world="earth"]' ).click();
+		await section.locator( '#ch-rotate' ).click();
+		await section.locator( '#ch-warn' ).waitFor();
+		assert.deepEqual( sent.at( - 1 ), { action: 'unpick', period: 'day:2026-11-16', world: 'earth' } );
+		assert.match( await section.locator( '#ch-warn' ).textContent(), /5 drivers have times on it/ );
+		await section.locator( '#ch-keep' ).click();
 		// A busy place approved for the rotation, and offered among the places to choose.
 		await section.locator( '#ch-busy button[data-approve]' ).click();
 		await section.locator( '#ch-busy button[data-unapprove]' ).waitFor();

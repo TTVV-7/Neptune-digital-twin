@@ -34,6 +34,7 @@ import { createGhosts } from './ghosts.js';
 import { BUDGET_TOAST, setUpFriends } from './friends.js';
 import { createOnline } from './online.js';
 import { BUDGET_SPENT, cleanPartyCode, FLAGS } from './live-protocol.js';
+import { send } from './api.js';
 import * as screens from './screens.js';
 
 // World Drive (worlddrive.app, docs/world-drive.md): pick anywhere on Earth from a globe of
@@ -308,6 +309,12 @@ const VISIT_TEST = import.meta.env.DEV ? window.worldDriveVisitTest ?? null : nu
 // And a visit's token for the play stats alone, { visit } (scripts/test-drive-ui.mjs, which answers
 // their posts itself), so what the page counts can be seen on the test pad.
 const STATS_TEST = import.meta.env.DEV ? window.worldDriveStatsTest ?? null : null;
+// The challenges' word to a visit that's driving (challengeNudge): after this many seconds of a
+// visit's driving (a minute is when most visits end), today's challenge on that world, with a button
+// to the challenges. On the dev server only when a test asks for it, { after } (s), as
+// scripts/test-drive-ui.mjs does: the other tests drive longer than that, and look at what the toast
+// says.
+const NUDGE_AFTER = import.meta.env.DEV ? window.worldDriveNudgeTest?.after ?? null : 40;
 
 const $ = id => document.getElementById( id );
 const frame = () => new Promise( resolve => requestAnimationFrame( resolve ) );
@@ -582,20 +589,24 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	// Challenges (challenges.js, its own chunk, loaded the first time they're opened: nothing of them
 	// is in the page until then): a daily, a weekly and a monthly one on each world, from the globe's
-	// panel and the pause menu. Once loaded, it's told of each drop-in, arrival, pause and leaving,
-	// and its frame runs after the car's.
+	// panel and the pause menu. Once loaded, it's told of each drop-in, arrival, pause, resumption and
+	// leaving, and its frame runs after the car's.
 	let challenges = null;
 	let challengesLoading = null;
+	// Whether the keys card has been shown this visit: a challenge's drop-in shows it at GO instead of
+	// over the countdown, the visit's first time only (a first drive may well start as a challenge).
+	let keysShown = false;
 	async function openChallenges() {
 
 		if ( ! challenges ) {
 
 			challengesLoading ??= import( './challenges.js' ).then( module => module.setUpChallenges( {
-				worker, visit: () => visit, player: () => board.player, pickName: board.pickName,
+				visit: () => visit, player: () => board.player, pickName: board.pickName,
 				world: () => world, moonOnly, mode: () => state.mode, place: () => state.place, vehicle: () => state.vehicle,
 				driver, ground, camera, scene, globe, moon, vehicles, stats,
-				startAt: place => startChallenge( place ), placeCar, toGlobe, resume, pauseDrive,
-				toast: screens.toast, driveUi: $( 'drive-ui' ), pauseCard: $( 'pause' ),
+				startAt: place => startChallenge( place ), placeCar, toGlobe,
+				go: () => keysShown || showKeys(),
+				driveUi: $( 'drive-ui' ), pauseCard: $( 'pause' ),
 			} ) );
 			try {
 
@@ -629,6 +640,47 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 		if ( state.mode !== 'globe' ) toGlobe();
 		await dropIn( place );
+
+	}
+
+	// The keys card, on a keyboard (a touch screen has its labelled buttons instead).
+	function showKeys() {
+
+		if ( document.body.classList.contains( 'touch' ) ) return;
+		keysShown = true;
+		screens.showKeys();
+
+	}
+
+	// The challenges' word while driving (NUDGE_AFTER): the seconds of driving left before it, or null
+	// once it's had its say (or isn't to have one: no Worker, or the challenges opened already, a run
+	// among them). Not over another toast (a few seconds more, then); then today's challenge on the
+	// world being driven, from the Worker's list (its place), with a button to the challenges. Both
+	// counted for the play stats (challenge: nudge, nudge_open), so the owner can see whether it
+	// keeps people longer.
+	let nudgeLeft = worker ? NUDGE_AFTER : null;
+	function challengeNudge( dt ) {
+
+		if ( nudgeLeft === null || state.mode !== 'driving' ) return;
+		if ( challenges ) return nudgeLeft = null;
+		nudgeLeft -= dt;
+		if ( nudgeLeft > 0 ) return;
+		if ( ! $( 'toast' ).hidden ) return nudgeLeft = 3;
+		nudgeLeft = null;
+		const here = onMoon() ? MOON : 'earth';
+		send( 'GET', '/api/challenges' ).then( answer => {
+
+			const today = answer.ok && answer.body.challenges?.find?.( c => c.world === here && c.period === 'day' );
+			if ( ! today || challenges || state.mode !== 'driving' || ! $( 'toast' ).hidden ) return;
+			stats.add( 'challenge', 'nudge' );
+			screens.toast( `Today's challenge on the ${ here === MOON ? 'Moon' : 'Earth' }: ${ today.place }. A timed run with its own board.`, 10000, { label: 'Challenges', onClick: () => {
+
+				stats.add( 'challenge', 'nudge_open' );
+				openChallenges();
+
+			} } );
+
+		} );
 
 	}
 
@@ -1143,10 +1195,11 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		// On the Moon nobody's told where you are: you're on the globe as far as they know.
 		if ( onMoon() ) live?.setAway();
 		else live?.setPlace( { name: placeLabel( state.place ), lat: state.place.lat, lon: state.place.lon, height: state.place.height } );
-		// A challenge's start: its gates or items and its countdown (challenges.js).
+		// A challenge's start: its gates or items and its countdown (challenges.js), which shows the keys
+		// at GO if they haven't been this visit.
 		const started = challenges?.arrived( state.place ) ?? false;
 		// The keys, on a keyboard; a touch screen has its labelled buttons instead.
-		if ( ! started && ! document.body.classList.contains( 'touch' ) ) screens.showKeys();
+		if ( ! started ) showKeys();
 
 	}
 
@@ -1585,6 +1638,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	function resume() {
 
 		if ( state.mode !== 'paused' || ! state.entry ) return;
+		// (Driving on: a challenge's run the pause stopped is over for good.)
+		challenges?.resumed();
 		screens.pause( false );
 		drive();
 
@@ -1977,8 +2032,10 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		timer.update( time );
 		const dt = Math.min( timer.getDelta(), 0.1 );
 		if ( driver.active ) driver.update( dt );
-		// A challenge's run: its clock (the same steps the car was driven by), its gates and its HUD.
+		// A challenge's run: its clock (the same steps the car was driven by), its gates and its HUD; and
+		// the challenges' word to a visit driving a while.
 		challenges?.frame( dt );
+		challengeNudge( dt );
 		// The underglow fades as the ground falls away (a jump, flying) and comes back on it.
 		if ( state.entry ) liftGlow( state.entry.pivot, flagsOf( driver, state.mode === 'paused' ), dt );
 		screenFx.update( dt, state.mode === 'driving' || state.mode === 'paused' );

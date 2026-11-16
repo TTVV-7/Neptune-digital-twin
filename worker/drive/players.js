@@ -84,11 +84,11 @@ export function credentials( body ) {
 
 }
 
-// The player with this id and secret ({ id, name, last_score_at }), or a 403: the same for an
-// unknown id as for the wrong secret.
+// The player with this id and secret ({ id, name, last_score_at, last_time_at }), or a 403: the
+// same for an unknown id as for the wrong secret.
 export async function authenticate( db, id, secret ) {
 
-	const player = await db.prepare( 'SELECT id, name, last_score_at FROM players WHERE id = ? AND secret_hash = ?' ).bind( id, await sha256Hex( secret ) ).first();
+	const player = await db.prepare( 'SELECT id, name, last_score_at, last_time_at FROM players WHERE id = ? AND secret_hash = ?' ).bind( id, await sha256Hex( secret ) ).first();
 	if ( ! player ) throw new HttpError( 403, 'Forbidden', { reason: 'player' } );
 	return player;
 

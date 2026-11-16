@@ -59,6 +59,8 @@ const SLACK = 30;
 export const SCORE_GAP = 10 * 1000;
 // Scores a visitor may post in a day (SCORES_PER_VISITOR_DAILY): one every 10 s for four hours.
 const SCORES_DAILY = 1500;
+// A UTC day (ms): DriveLimits' days end at its midnights.
+const DAY = 24 * 60 * 60 * 1000;
 export const VEHICLES = new Set( [ 'go-kart', ...LIBRARY_VEHICLES, ...DRIVE_CARS, ...PASS_RIDES ] );
 // The tricks of a run's best jump, as drive.js names them (tricksOf), joined with " + ".
 const TRICK = /^(?:(\d{3,5}) Spin!|(?:Back|Front)flip(?:!| ×\d{1,3})|Barrel roll(?:!| ×\d{1,3})|Wall bounce(?: ×\d{1,3})?|Big air \d{1,3}\.\d s)$/;
@@ -92,16 +94,30 @@ export async function postScore( { request, env, url, limits, now } ) {
 	] );
 	if ( bound.results[ 0 ]?.player_id !== id ) throw new HttpError( 403, 'Forbidden', { reason: 'visit' } );
 
-	// One score every SCORE_GAP, claimed in one statement so two at once can't both get in.
+	// One score every SCORE_GAP, claimed in one statement so two at once can't both get in. A player
+	// held till midnight (their visitor's day used up, below) is turned away here.
 	const gap = await db.prepare( 'UPDATE players SET last_score_at = ?1, last_seen_at = ?1 WHERE id = ?2 AND last_score_at <= ?3' ).bind( now, id, now - SCORE_GAP ).run();
 	if ( ! gap.meta.changes ) {
 
 		const retryAfter = Math.max( 1, Math.ceil( ( player.last_score_at + SCORE_GAP - now ) / 1000 ) );
+		if ( retryAfter > SCORE_GAP / 1000 ) throw new HttpError( 429, 'That\'s all for today. Try again tomorrow', { retryAfter }, { 'Retry-After': String( retryAfter ) } );
 		throw new HttpError( 429, 'Too many scores. Try again in a moment', { retryAfter }, { 'Retry-After': String( retryAfter ) } );
 
 	}
 
-	await takeTurn( limits, request, 'score', now, setting( env.SCORES_PER_VISITOR_DAILY, SCORES_DAILY ) );
+	try {
+
+		await takeTurn( limits, request, 'score', now, setting( env.SCORES_PER_VISITOR_DAILY, SCORES_DAILY ) );
+
+	} catch ( err ) {
+
+		// The visitor's day used up: this player's gap is set to run out at midnight UTC (when the
+		// visitor's day starts again), so until then their tries stop at the gap above, before they
+		// write anything or ask DriveLimits again.
+		if ( err.status === 429 ) await db.prepare( 'UPDATE players SET last_score_at = ? WHERE id = ?' ).bind( ( Math.floor( now / DAY ) + 1 ) * DAY - SCORE_GAP, id ).run();
+		throw err;
+
+	}
 
 	// The player's best on each board it's on: this period and place, and anywhere.
 	const boards = Object.values( PERIODS ).flatMap( period => [ [ period( now ), '' ], [ period( now ), run.placeKey ] ] );

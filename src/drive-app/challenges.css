@@ -121,6 +121,16 @@ dialog.ch-dialog::backdrop {
 	color: var( --muted );
 }
 
+/* Over, the next on its way: dimmed, its Start off. */
+.ch-card.over {
+	opacity: 0.6;
+}
+
+.ch-card .ch-start:disabled {
+	cursor: default;
+	opacity: 0.5;
+}
+
 .ch-place {
 	margin: 8px 0 2px;
 	font-size: 17px;
@@ -564,7 +574,7 @@ body.touch.ch-running #drive-ui .xp-pops {
 /* --- the pause menu ---------------------------------------------------------------------- */
 
 #pause .ch-stopped {
-	margin: 12px 0 0;
+	margin: 12px 0 14px;
 	padding: 10px 12px;
 	border: 1px solid rgba( 255, 210, 63, 0.45 );
 	border-radius: 12px;

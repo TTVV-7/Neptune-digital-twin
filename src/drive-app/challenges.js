@@ -20,7 +20,9 @@ import { MOON } from './moon-places.js';
 // A run's time is the game's own clock: the steps the frames drive the car by (main.js gives this
 // the same dt), from GO to the last pass. A pause ends the run (pausing, the page out of sight on
 // the way: none of it counts, and nothing can be had from it), and so does leaving it: the globe,
-// another ride or place, Go to someone. R (back on the road) is fine: it stops the car.
+// another ride or place, Go to someone. R (back on the road) is fine: it stops the car. A pause on
+// the finish card puts the finished run away (its time still goes up), and driving on after a
+// pause that stopped a run is the end of it.
 
 // The countdown (s), and what's held at the start meanwhile.
 const COUNTDOWN = 3;
@@ -37,16 +39,27 @@ const SPIN = 1.6;
 // The middle of a gate's zone is this far (m) over its ground.
 const ZONE_UP = 2;
 // On the Earth a gate's ground is looked for again (one gate each PROBE_EVERY s), so it moves onto
-// sharper tiles as they load.
+// sharper tiles as they load: rays down at its middle and at eight points round it, PROBE_OUT of
+// its radius out (the lowest is its ground, the highest its top: probe).
 const PROBE_EVERY = 0.2;
+const PROBE_OUT = 0.6;
+const PROBES = [ [ 0, 0 ], ...Array.from( { length: 8 }, ( _, i ) => [ Math.sin( i * Math.PI / 4 ) * PROBE_OUT, Math.cos( i * Math.PI / 4 ) * PROBE_OUT ] ) ];
 // Colours: the next to pass, the others, the last (a sprint's finish, the landmark), and items.
 const NEXT = new Color( 0xffd23f );
 const LATER = new Color( 0x3ec1ff ).multiplyScalar( 0.75 );
 const GOAL = new Color( 0x5dff8a );
 const STAR = new Color( 0xffc531 );
-// A post that didn't get through is tried again after RETRY ms, TRIES times in all.
+// A post that didn't get through is tried again after RETRY ms, TRIES times in all (a 429 asking
+// for longer than WAIT_MOST s isn't waited for: it's the day's times used up).
 const RETRY = 4000;
 const TRIES = 3;
+const WAIT_MOST = 60;
+// A new list is asked for as a listed challenge ends; if that fails (or still has it ended) it's
+// asked again after RELOAD ms, then twice that and so on up to RELOAD_MOST, RELOADS times at most
+// (or after the Retry-After the Worker gives), and then not till the list is opened again.
+const RELOAD = 5000;
+const RELOAD_MOST = 60000;
+const RELOADS = 4;
 const NAME = /^[\p{L}\p{M}\p{N} _-]{3,16}$/u;
 const FLAG = '<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M4 2.5v15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M5 3h11.5v8.5H5z" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5 3h2.9v2.8H5zM10.8 3h2.9v2.8h-2.9zM7.9 5.8h2.9v2.9H7.9zM13.7 5.8h2.8v2.9h-2.8zM5 8.7h2.9v2.8H5zM10.8 8.7h2.9v2.8h-2.9z" fill="currentColor"/></svg>';
 const WORLD_NAMES = { earth: 'On the Earth', moon: 'On the Moon' };
@@ -57,14 +70,18 @@ const _s = new Vector3();
 const _m = new Matrix4();
 const _up = new Vector3( 0, 1, 0 );
 
-// app: what main.js hands over: worker, visit(), player(), pickName( name, say ), world(), moonOnly
+// app: what main.js hands over: visit(), player(), pickName( name, say ), world(), moonOnly
 // ({ onEarth } when there's no Earth this visit), mode(), place(), vehicle(), the driver, ground,
 // camera, scene, globe, moon and vehicles, stats, startAt( place ), placeCar( pose ), toGlobe(),
-// resume(), pauseDrive(), toast( text ), and the drive's and the pause menu's elements.
+// go() (a run's GO: the keys card, the visit's first time), and the drive's and the pause menu's
+// elements.
 export function setUpChallenges( app ) {
 
 	const dialog = makeDialog();
 	const hud = makeHud( app.driveUi );
+	// The HUD's parts, and what's written in each (updateHud).
+	const hudParts = { clock: hud.querySelector( '.ch-clock' ), gates: hud.querySelector( '.ch-gates' ), dist: hud.querySelector( '.ch-dist' ), arrow: hud.querySelector( '.ch-arrow' ) };
+	const written = {};
 	const count = Object.assign( document.createElement( 'div' ), { className: 'ch-count', hidden: true } );
 	count.setAttribute( 'aria-live', 'assertive' );
 	app.driveUi.append( count );
@@ -74,7 +91,8 @@ export function setUpChallenges( app ) {
 
 	// The list's last answer, and how far the Worker's clock is from this one (ms); the challenge being
 	// dropped in at; the run: { challenge, gates, phase ('countdown', 'racing', 'done' or 'stopped'),
-	// left (s of the countdown), clock (s), passes, start (where the car was put down), id }.
+	// left (s of the countdown), clock (s), passes, start (where the car was put down), id, and once
+	// it's done ms and result (what's posted) }. Each Retry is a new run.
 	let listed = null;
 	let offset = 0;
 	let loads = 0;
@@ -83,7 +101,14 @@ export function setUpChallenges( app ) {
 	let run = null;
 	let probeIn = 0;
 	let probeNext = 0;
+	// A new list asked for as one ends: whether it's on its way, the ended ones it's for (their ids),
+	// how many times it's been asked for them, and when (Date.now()) it may be asked again.
 	let reloading = false;
+	let reloadFor = '';
+	let reloads = 0;
+	let reloadAt = 0;
+	// The result the name form is up for (the time to post once a name is picked).
+	let naming = null;
 	// Each challenge's best known here ({ [ id ]: ms }), from the list and from posts: a run is only
 	// posted when it beats it.
 	const bests = {};
@@ -95,24 +120,26 @@ export function setUpChallenges( app ) {
 		if ( ! dialog.open ) dialog.showModal();
 		showList();
 		app.stats.add( 'challenge', 'open' );
+		[ reloadFor, reloads, reloadAt ] = [ '', 0, 0 ];
 		load();
 		clearInterval( ticker );
 		ticker = setInterval( tick, 1000 );
 
 	}
 
+	// The list from the Worker: its answer ({ ok, status, retryAfter }), shown if it came.
 	async function load() {
 
 		const asking = ++ loads;
 		say( listed ? '' : 'Loading...' );
 		const player = app.player();
 		const answer = await send( 'GET', `/api/challenges${ player ? `?id=${ encodeURIComponent( player.id ) }` : '' }` );
-		if ( asking !== loads ) return;
+		if ( asking !== loads ) return answer;
 		if ( ! answer.ok ) {
 
 			if ( ! listed ) dialog.querySelector( '.ch-list' ).replaceChildren();
 			say( answer.status === 429 ? 'Asked too often just now. Try again in a minute.' : 'The challenges aren\'t answering. Try again soon.' );
-			return;
+			return answer;
 
 		}
 
@@ -121,6 +148,7 @@ export function setUpChallenges( app ) {
 		for ( const challenge of listed.challenges ) if ( challenge.me && ! challenge.me.owner ) bests[ challenge.id ] = Math.min( bests[ challenge.id ] ?? Infinity, challenge.me.ms );
 		say( '' );
 		render();
+		return answer;
 
 	}
 
@@ -183,24 +211,39 @@ export function setUpChallenges( app ) {
 
 	}
 
-	// The time each has left, ticking; and a new list once one is over.
+	// The time each has left, ticking; and a new list once one is over. An ended one says so, its
+	// Start off (a run of it wouldn't be taken), till the new list comes. That's asked for once as it
+	// ends, and if it doesn't come (the Worker not answering, or busy at the turn of a period) again
+	// after a while, longer each time, and then no more: never every second, which would keep an
+	// address at CHALLENGE_LOOKS' limit for everyone behind it.
 	function tick() {
 
 		if ( ! listed ) return;
 		const now = Date.now() + offset;
-		for ( const left of dialog.querySelectorAll( '.ch-card .ch-left' ) ) {
+		for ( const card of dialog.querySelectorAll( '.ch-card' ) ) {
 
-			const challenge = listed.challenges.find( c => String( c.id ) === left.closest( '.ch-card' ).dataset.id );
-			if ( challenge ) left.textContent = timeLeft( challenge.endsAt - now );
-
-		}
-
-		if ( dialog.open && listed.challenges.some( c => c.endsAt <= now ) && ! reloading ) {
-
-			reloading = true;
-			load().finally( () => reloading = false );
+			const challenge = listed.challenges.find( c => String( c.id ) === card.dataset.id );
+			if ( ! challenge ) continue;
+			const over = challenge.endsAt <= now;
+			card.classList.toggle( 'over', over );
+			card.querySelector( '.ch-left' ).textContent = over ? 'Over: the next one is on its way' : timeLeft( challenge.endsAt - now );
+			const start = card.querySelector( '.ch-start' );
+			if ( start.disabled !== over ) start.disabled = over;
 
 		}
+
+		const ended = listed.challenges.filter( c => c.endsAt <= now ).map( c => c.id ).join( ',' );
+		if ( ended !== reloadFor ) [ reloadFor, reloads, reloadAt ] = [ ended, 0, 0 ];
+		if ( ! dialog.open || ! ended || reloading || reloads >= RELOADS || Date.now() < reloadAt ) return;
+		reloading = true;
+		reloads ++;
+		load().then( answer => {
+
+			// Asked again later only if it's still the same ones ended (tick sees to that): after the
+			// Worker's Retry-After, or RELOAD doubling each time.
+			reloadAt = Date.now() + ( answer.retryAfter ? answer.retryAfter * 1000 : Math.min( RELOAD_MOST, RELOAD * 2 ** ( reloads - 1 ) ) );
+
+		} ).finally( () => reloading = false );
 
 	}
 
@@ -329,7 +372,7 @@ export function setUpChallenges( app ) {
 	}
 
 	// Each point's place in the scene: on the Moon on its own heights (exact, before any ground is
-	// built); on the Earth at the start's height until the tiles' ground under it is found (probe).
+	// built); on the Earth at the start's height until the tiles' ground there is found (probe).
 	function placeGates( challenge ) {
 
 		const { globe, moon } = app;
@@ -340,7 +383,8 @@ export function setUpChallenges( app ) {
 
 			const height = moonly ? moon.heightAt( lat, lon ) ?? base : base;
 			const local = sceneOf( globe, lat, lon, height ).clone();
-			return { index, lat, lon, x: local.x, z: local.z, ground: moonly ? local.y : null, guess: local.y, passed: false, facing: 0 };
+			const ground = moonly ? local.y : null;
+			return { index, lat, lon, x: local.x, z: local.z, ground, top: ground, guess: local.y, passed: false, facing: 0 };
 
 		} );
 		// A ring faces along the way to it: from the start, or the gate before.
@@ -351,18 +395,33 @@ export function setUpChallenges( app ) {
 			gate.facing = Math.atan2( gate.x - from.x, gate.z - from.z );
 
 		} );
-		if ( ! moonly ) for ( const gate of gates ) probe( gate );
+		if ( ! moonly ) for ( const gate of gates ) probe( gate, challenge.route.radius );
 		return gates;
 
 	}
 
-	// A gate's ground on the Earth: the first thing a ray straight down meets there (the tiles or the
-	// test pad, or the sea's surface where it's laid), or null while nothing has loaded there.
-	function probe( gate ) {
+	// A gate's ground on the Earth: where rays straight down meet whatever has loaded there (the
+	// tiles or the test pad, or the sea's surface where it's laid), at its middle and round it at
+	// PROBE_OUT of its radius. The lowest is its ground, what it's drawn on and its zone's middle is
+	// over: the street beside a tower rather than the tower's roof, where the first thing a ray down
+	// meets at its middle may be. The highest is its top (that roof, a bridge's deck), which the zone
+	// reaches up to as well. False while nothing has loaded there, or nothing has changed.
+	function probe( gate, radius ) {
 
-		const y = app.ground.heightAt( gate.x, gate.z );
-		if ( y === null || y === gate.ground ) return false;
-		gate.ground = y;
+		let low = Infinity;
+		let high = - Infinity;
+		for ( const [ x, z ] of PROBES ) {
+
+			const y = app.ground.heightAt( gate.x + x * radius, gate.z + z * radius );
+			if ( y === null ) continue;
+			low = Math.min( low, y );
+			high = Math.max( high, y );
+
+		}
+
+		if ( low === Infinity || ( low === gate.ground && high === gate.top ) ) return false;
+		gate.ground = low;
+		gate.top = high;
 		return true;
 
 	}
@@ -387,6 +446,7 @@ export function setUpChallenges( app ) {
 				run.clock = 0;
 				showCount( 'GO!', true );
 				app.stats.add( 'challenge', 'start' );
+				app.go?.();
 
 			} else if ( now !== before || count.hidden ) showCount( String( now ) );
 
@@ -404,7 +464,7 @@ export function setUpChallenges( app ) {
 
 				probeIn = PROBE_EVERY;
 				const gate = run.gates[ probeNext ++ % run.gates.length ];
-				if ( ! gate.passed && probe( gate ) ) meshes.place( run );
+				if ( ! gate.passed && probe( gate, run.challenge.route.radius ) ) meshes.place( run );
 
 			}
 
@@ -420,7 +480,8 @@ export function setUpChallenges( app ) {
 	}
 
 	// The car's passes this frame: the next gate (in order), or any item not taken yet; the last one
-	// finishes the run.
+	// finishes the run. A gate's zone: within its radius across the ground, and up and down from its
+	// ground to its top (each ZONE_UP over), and TALL times its radius past them.
 	function passGates( d ) {
 
 		const ordered = run.challenge.kind !== 'collect';
@@ -432,7 +493,9 @@ export function setUpChallenges( app ) {
 			if ( gate.passed ) continue;
 			const dx = at.x - gate.x;
 			const dz = at.z - gate.z;
-			const dy = gate.ground === null ? 0 : ( at.y - gate.ground - ZONE_UP ) / TALL;
+			const below = gate.ground === null ? 0 : at.y - gate.ground - ZONE_UP;
+			const above = gate.top === null ? 0 : at.y - gate.top - ZONE_UP;
+			const dy = ( below < 0 ? below : above > 0 ? above : 0 ) / TALL;
 			if ( dx * dx + dz * dz + dy * dy <= radius * radius ) {
 
 				gate.passed = true;
@@ -454,12 +517,15 @@ export function setUpChallenges( app ) {
 	function finished() {
 
 		run.phase = 'done';
-		// The time is the last pass's (to the millisecond, as the passes are).
+		// The time is the last pass's (to the millisecond, as the passes are). What's posted is a
+		// copy as it finished: a Retry starts a new run, and a post being tried again still has this
+		// one's time and passes.
 		const ms = run.passes.at( - 1 )[ 1 ];
 		run.ms = ms;
+		run.result = { challenge: run.challenge, id: run.id, ms, passes: run.passes.map( pass => [ ...pass ] ) };
 		app.stats.add( 'challenge', 'finish' );
 		app.driver.hud.flash( 'Finished!' );
-		showFinish( ms );
+		showFinish( run.result );
 
 	}
 
@@ -467,6 +533,7 @@ export function setUpChallenges( app ) {
 	function end() {
 
 		run = null;
+		naming = null;
 		meshes.hide();
 		showingHud( false );
 		count.hidden = true;
@@ -476,9 +543,11 @@ export function setUpChallenges( app ) {
 	}
 
 	// main.js: paused. A run (or its countdown) is over: none of a pause counts, and nothing can be
-	// had from one. The pause menu says so, with Retry.
+	// had from one. The pause menu says so, with Retry. A finished run is put away, its card with it
+	// (a time on its way to the board still goes), so the card isn't left over the pause menu.
 	function paused() {
 
+		if ( run?.phase === 'done' ) return end();
 		if ( ! run || ( run.phase !== 'countdown' && run.phase !== 'racing' ) ) return;
 		run.phase = 'stopped';
 		meshes.hide();
@@ -488,17 +557,26 @@ export function setUpChallenges( app ) {
 
 	}
 
-	// Back at the start for another go: the car put down where the run began, the gates back, the
-	// countdown again.
+	// main.js: driving on from the pause menu. A run the pause stopped is over for good (Retry was
+	// the way back to it), its word in the menu gone with it.
+	function resumed() {
+
+		if ( run?.phase === 'stopped' ) end();
+
+	}
+
+	// Back at the start for another go, as a new run: the car put down where the run began, the gates
+	// back, the countdown again.
 	function retry() {
 
 		if ( ! run ) return;
-		const { challenge, start } = run;
+		const { challenge, start, gates } = run;
 		finish.hidden = true;
 		stopped.hidden = true;
+		naming = null;
 		if ( ! app.placeCar( start ) ) return;
-		for ( const gate of run.gates ) gate.passed = false;
-		Object.assign( run, { phase: 'countdown', left: COUNTDOWN, clock: 0, passes: [], id: runId(), challenge } );
+		for ( const gate of gates ) gate.passed = false;
+		run = { challenge, gates, start, phase: 'countdown', left: COUNTDOWN, clock: 0, passes: [], id: runId() };
 		meshes.show( run );
 		showHud();
 
@@ -519,6 +597,7 @@ export function setUpChallenges( app ) {
 
 		hud.hidden = ! shown;
 		document.body.classList.toggle( 'ch-running', shown );
+		for ( const key of Object.keys( written ) ) delete written[ key ];
 
 	}
 
@@ -537,26 +616,36 @@ export function setUpChallenges( app ) {
 	}
 
 	// The timer, how many are passed, and an arrow to the next (the nearest item not taken), turned
-	// as it lies from where the camera looks, with how far it is.
+	// as it lies from where the camera looks (to the degree), with how far it is (to the metre). Each
+	// written into the page only when it changes (as drive-hud.js does: on a phone every write is
+	// style and layout work), and once a run's done, nothing but its time.
 	function updateHud( d ) {
 
 		if ( hud.hidden ) return;
-		hud.querySelector( '.ch-clock' ).textContent = formatTime( run.phase === 'done' ? run.ms : run.clock * 1000 );
-		const total = run.gates.length;
-		hud.querySelector( '.ch-gates' ).textContent = run.challenge.kind === 'landmark' ? run.challenge.route.goal : `${ run.passes.length } / ${ total }${ run.challenge.kind === 'collect' ? ' ★' : '' }`;
-		const target = nextGate( d );
-		const arrow = hud.querySelector( '.ch-arrow' );
-		const distance = hud.querySelector( '.ch-dist' );
-		arrow.hidden = distance.hidden = ! target;
+		const done = run.phase === 'done';
+		write( 'clock', formatTime( done ? run.ms : run.clock * 1000 ) );
+		write( 'gates', run.challenge.kind === 'landmark' ? run.challenge.route.goal : `${ run.passes.length } / ${ run.gates.length }${ run.challenge.kind === 'collect' ? ' ★' : '' }` );
+		const target = done ? null : nextGate( d );
+		write( 'aim', target ? '' : 'none', () => hudParts.arrow.hidden = hudParts.dist.hidden = ! target );
 		if ( ! target ) return;
 		const east = - target.x - d.east;
 		const north = target.z - d.north;
 		app.camera.getWorldDirection( _v );
 		const facing = Math.atan2( - _v.x, _v.z );
-		const turn = Math.atan2( east, north ) - facing;
-		arrow.style.transform = `rotate( ${ turn.toFixed( 3 ) }rad )`;
+		const degrees = Math.round( ( Math.atan2( east, north ) - facing ) * MathUtils.RAD2DEG );
+		write( 'turn', degrees, () => hudParts.arrow.style.transform = `rotate( ${ degrees }deg )` );
 		const metres = Math.hypot( east, north );
-		distance.textContent = metres >= 1000 ? `${ ( metres / 1000 ).toFixed( 1 ) } km` : `${ Math.round( metres ) } m`;
+		write( 'dist', metres >= 1000 ? `${ ( metres / 1000 ).toFixed( 1 ) } km` : `${ Math.round( metres ) } m` );
+
+	}
+
+	// The HUD's `key` set to `value` if it isn't already: its text, or `apply()` instead.
+	function write( key, value, apply = null ) {
+
+		if ( written[ key ] === value ) return;
+		written[ key ] = value;
+		if ( apply ) apply();
+		else hudParts[ key ].textContent = value;
 
 	}
 
@@ -579,9 +668,11 @@ export function setUpChallenges( app ) {
 
 	// --- finishing ---
 
-	function showFinish( ms ) {
+	// The finish card for `result` (finished's): the time, and whether it's a best; then posted (or a
+	// name asked for first), or, if it's not a best, the board as it is.
+	function showFinish( result ) {
 
-		const { challenge } = run;
+		const { challenge, ms } = result;
 		finish.querySelector( '.ch-f-title' ).textContent = `${ PERIOD_NAMES[ challenge.period ] }: ${ challenge.place }`;
 		finish.querySelector( '.ch-f-time' ).textContent = formatTime( ms );
 		finish.querySelector( '.ch-f-rows' ).replaceChildren();
@@ -591,11 +682,11 @@ export function setUpChallenges( app ) {
 		const better = best === undefined || ms < best;
 		finishSay( better ? ( best === undefined ? 'Finished! Your first time on it.' : `New best! Your last was ${ formatTime( best ) }.` ) : `Your best is ${ formatTime( best ) }.` );
 		finish.querySelector( '.ch-f-badge' ).hidden = ! better;
-		if ( ! checkPasses( challenge, ms, run.passes ) ) return finishSay( 'That run didn\'t count: it went quicker than anything can drive. Try again.' );
+		if ( ! checkPasses( challenge, ms, result.passes ) ) return finishSay( 'That run didn\'t count: it went quicker than anything can drive. Try again.' );
 		if ( ! app.visit() ) return finishSay( `${ finish.querySelector( '.ch-f-note' ).textContent } Times go on the board from a drive on the real map.` );
 		if ( ! better ) return showTop( challenge );
-		if ( ! app.player() ) return askName();
-		post( run );
+		if ( ! app.player() ) return askName( result );
+		post( result );
 
 	}
 
@@ -605,9 +696,17 @@ export function setUpChallenges( app ) {
 
 	}
 
-	// No nickname yet: one picked here (the leaderboard's), then the time goes up.
-	function askName() {
+	// Whether the finish card is up for `result` still (not put away, nor a Retry's new run).
+	function showing( result ) {
 
+		return run?.result === result && ! finish.hidden;
+
+	}
+
+	// No nickname yet: one picked here (the leaderboard's), then `result` goes up.
+	function askName( result ) {
+
+		naming = result;
 		const form = finish.querySelector( '.ch-f-form' );
 		form.hidden = false;
 		finish.querySelector( '.ch-f-hint' ).textContent = 'Pick a name to put your time on the board: 3 to 16 letters, numbers, spaces, _ or -.';
@@ -615,25 +714,25 @@ export function setUpChallenges( app ) {
 
 	}
 
-	// The run's time to the Worker: its place on the board and the board's top.
-	async function post( done, tries = 0 ) {
+	// A finished run's `result` to the Worker: its place on the board and the board's top. Tried again
+	// (the same result, the same run id, so the Worker knows it if the first got there and only its
+	// answer was lost) if it didn't get through, whatever happens to the card meanwhile: a Retry or a
+	// pause doesn't lose a time. The card only shows the answer while it's still up for this result.
+	async function post( result, tries = 0 ) {
 
 		const player = app.player();
-		const { challenge } = done;
+		const { challenge } = result;
 		const vehicle = app.vehicle()?.id ?? 'go-kart';
-		finishSay( 'Posting your time...' );
+		if ( showing( result ) ) finishSay( 'Posting your time...' );
 		const answer = await send( 'POST', '/api/challenges/time', {
-			id: player.id, secret: player.secret, visit: app.visit(), challenge: challenge.id, run: done.id, ms: done.ms, passes: done.passes, vehicle,
+			id: player.id, secret: player.secret, visit: app.visit(), challenge: challenge.id, run: result.id, ms: result.ms, passes: result.passes, vehicle,
 		} );
-		if ( run !== done ) return;
+		const shown = showing( result );
 		if ( answer.ok ) {
 
 			const { ms, rank, total, isNewBest, top, owner } = answer.body;
 			bests[ challenge.id ] = ms;
 			app.stats.add( 'challenge', 'posted' );
-			finish.querySelector( '.ch-f-badge' ).hidden = ! isNewBest;
-			finishSay( owner ? `Your best ${ formatTime( ms ) } would be #${ rank }: yours as the owner are kept off the board.` : `#${ rank } of ${ Math.max( total, rank ) } on the board${ isNewBest ? '' : `, with your best ${ formatTime( ms ) }` }` );
-			showRows( top, owner ? null : rank );
 			if ( listed ) {
 
 				const listedOne = listed.challenges.find( c => c.id === challenge.id );
@@ -641,33 +740,31 @@ export function setUpChallenges( app ) {
 
 			}
 
+			if ( ! shown ) return;
+			finish.querySelector( '.ch-f-badge' ).hidden = ! isNewBest;
+			finishSay( owner ? `Your best ${ formatTime( ms ) } would be #${ rank }: yours as the owner are kept off the board.` : `#${ rank } of ${ Math.max( total, rank ) } on the board${ isNewBest ? '' : `, with your best ${ formatTime( ms ) }` }` );
+			showRows( top, owner ? null : rank );
 			return;
 
 		}
 
 		const reason = answer.body?.reason;
-		if ( answer.status === 429 && tries < TRIES ) {
+		const waits = answer.status === 429 && reason !== 'daily' && answer.retryAfter <= WAIT_MOST;
+		if ( tries < TRIES && ( waits || answer.status === 0 || answer.status >= 500 ) ) {
 
-			finishSay( 'A moment...' );
-			setTimeout( () => post( done, tries + 1 ), Math.max( RETRY, answer.retryAfter * 1000 ) );
+			if ( shown ) finishSay( answer.status === 429 ? 'A moment...' : 'Couldn\'t reach World Drive. Trying again...' );
+			setTimeout( () => post( result, tries + 1 ), Math.max( RETRY, answer.retryAfter * 1000 ) );
 			return;
 
 		}
 
+		if ( ! shown ) return;
 		if ( answer.status === 403 && reason === 'challenge' ) return finishSay( 'This challenge is over (or the owner has changed it). Open Challenges for the new one.' );
 		if ( answer.status === 403 && reason === 'world' ) return finishSay( 'Earth challenges go on the board from a drive on the Earth.' );
 		if ( answer.status === 403 && reason === 'visit' ) return finishSay( 'This visit has run out. Reload the page to post times again.' );
 		if ( answer.status === 403 && reason === 'player' ) return finishSay( 'This browser\'s name was removed. Pick a new one on the leaderboard.' );
 		if ( answer.status === 400 ) return finishSay( 'That run didn\'t count. Try again.' );
 		if ( answer.status === 429 ) return finishSay( 'That\'s all the times for today. Try again tomorrow.' );
-		if ( tries < TRIES ) {
-
-			finishSay( 'Couldn\'t reach World Drive. Trying again...' );
-			setTimeout( () => post( done, tries + 1 ), RETRY );
-			return;
-
-		}
-
 		finishSay( 'Couldn\'t reach World Drive, so your time wasn\'t posted.' );
 
 	}
@@ -676,8 +773,9 @@ export function setUpChallenges( app ) {
 	async function showTop( challenge ) {
 
 		const player = app.player();
+		const result = run?.result;
 		const answer = await send( 'GET', `/api/challenges/board?challenge=${ challenge.id }${ player ? `&id=${ encodeURIComponent( player.id ) }` : '' }` );
-		if ( ! run || run.challenge !== challenge || ! answer.ok ) return;
+		if ( ! showing( result ) || ! answer.ok ) return;
 		const { rows, total, me } = answer.body;
 		if ( me && ! me.owner ) finishSay( `Your best ${ formatTime( me.ms ) } is #${ me.rank } of ${ Math.max( total, me.rank ) }.` );
 		showRows( rows.slice( 0, 5 ), me && ! me.owner ? me.rank : null );
@@ -771,10 +869,12 @@ export function setUpChallenges( app ) {
 
 			}
 
-			if ( ! await app.pickName( value, text => status.textContent = text ) || ! run || run.phase !== 'done' ) return;
+			if ( ! await app.pickName( value, text => status.textContent = text ) || ! naming ) return;
+			const result = naming;
+			naming = null;
 			form.hidden = true;
 			form.elements.name.blur();
-			post( run );
+			post( result );
 
 		} );
 		// Typing a name, the keys mustn't drive.
@@ -801,6 +901,7 @@ export function setUpChallenges( app ) {
 		dropping,
 		arrived,
 		paused,
+		resumed,
 		left: () => {
 
 			pending = null;
@@ -813,15 +914,11 @@ export function setUpChallenges( app ) {
 			return dialog.open;
 
 		},
-		// For the tests: the run as it is ({ challenge, gates, phase, clock, passes, ms }), or null.
+		// For the tests: the run as it is ({ challenge, gates, phase, clock, passes, ms, result }), or
+		// null.
 		get run() {
 
 			return run;
-
-		},
-		get pending() {
-
-			return pending;
 
 		},
 		meshes,
@@ -878,8 +975,9 @@ export function setUpChallenges( app ) {
 				if ( added() ) app.scene.remove( beams, rings, items );
 
 			},
-			// Where each is: at its ground (or its guess), a passed one shrunk to nothing.
-			place( shown ) {
+			// Where each is: at its ground (or its guess), a passed one shrunk to nothing. With
+			// `itemsOnly`, the items alone (as they turn: the beams haven't moved).
+			place( shown, itemsOnly = false ) {
 
 				const moonly = shown.challenge.world === MOON;
 				const radius = shown.challenge.route.radius;
@@ -889,20 +987,18 @@ export function setUpChallenges( app ) {
 
 					const y = gate.ground ?? gate.guess;
 					const gone = gate.passed ? 0 : 1;
+					if ( ! ringed ) items.setMatrixAt( i, _m.compose( _v.set( gate.x, y + ITEM_UP, gate.z ), _q.setFromAxisAngle( _up, spin + i ), _s.set( ITEM * gone, ITEM * 1.4 * gone, ITEM * gone ) ) );
+					if ( itemsOnly ) return;
 					const wide = ( moonly ? 1.6 : 1 ) * BEAM * ( ringed ? 1 : 0.7 );
 					beams.setMatrixAt( i, _m.compose( _v.set( gate.x, y, gate.z ), _q.identity(), _s.set( wide * gone, ( moonly ? 2 : 1 ) * BEAM_HIGH * gone, wide * gone ) ) );
-					if ( ringed ) {
-
-						// Standing up, facing along the way to it.
-						_q.setFromAxisAngle( _up, gate.facing );
-						rings.setMatrixAt( i, _m.compose( _v.set( gate.x, y + ring + 0.6, gate.z ), _q, _s.setScalar( ring * gone ) ) );
-
-					} else items.setMatrixAt( i, _m.compose( _v.set( gate.x, y + ITEM_UP, gate.z ), _q.setFromAxisAngle( _up, spin + i ), _s.set( ITEM * gone, ITEM * 1.4 * gone, ITEM * gone ) ) );
+					// Standing up, facing along the way to it.
+					if ( ringed ) rings.setMatrixAt( i, _m.compose( _v.set( gate.x, y + ring + 0.6, gate.z ), _q.setFromAxisAngle( _up, gate.facing ), _s.setScalar( ring * gone ) ) );
 
 				} );
+				items.instanceMatrix.needsUpdate = true;
+				if ( itemsOnly ) return;
 				beams.instanceMatrix.needsUpdate = true;
 				rings.instanceMatrix.needsUpdate = true;
-				items.instanceMatrix.needsUpdate = true;
 
 			},
 			// The next to pass in the accent, the last (the finish) green, items gold.
@@ -926,7 +1022,7 @@ export function setUpChallenges( app ) {
 
 				if ( shown.challenge.kind !== 'collect' || ! added() ) return;
 				spin = ( spin + dt * SPIN ) % ( Math.PI * 2 );
-				this.place( shown );
+				this.place( shown, true );
 
 			},
 		};

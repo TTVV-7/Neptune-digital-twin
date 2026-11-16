@@ -41,9 +41,12 @@ export const LEG_SLACK = 100;
 export const START_SLACK = 100;
 // The longest run that's taken (ms): a monthly's route is a few minutes at most.
 export const MAX_RUN = 2 * 60 * 60 * 1000;
-// A pass counts within a gate's radius across the ground and this many times it up or down (an
-// ellipsoid round the gate's middle), so a gate whose ground is a roof or a bridge's deck is still
-// passed on the street under it, and one whose ground hasn't loaded yet across the ground alone.
+// A pass counts within a gate's radius across the ground, and up and down from its ground to its
+// top (on the Earth the lowest and the highest of what rays down across its zone meet: the street
+// beside a tower and the tower's roof, or the water under a bridge and its deck; on the Moon both
+// its one height) and this many times its radius beyond them: so a gate is passed on the street,
+// on the roof or deck over it, or flying low over it, and one whose ground hasn't loaded yet across
+// the ground alone. (challenges.js.)
 export const TALL = 2;
 
 const DAY = 24 * 60 * 60 * 1000;

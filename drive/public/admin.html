@@ -128,6 +128,8 @@
 	.ch-form .full { grid-column: 1 / -1; }
 	.ch-form .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 	.ch-form .row label { flex: 1 1 160px; }
+	.ch-form .row label.narrow { flex: 0 1 90px; }
+	.ch-form .row label.day { flex-basis: 120px; }
 	.ch-form [hidden] { display: none; }
 	.ch-warn { border: 1px solid var(--down); border-radius: 8px; padding: 8px 10px; color: var(--text); }
 	.ch-warn p { margin: 0 0 8px; }
@@ -185,7 +187,7 @@
 		<h3>Choose one</h3>
 		<form class="ch-form" id="ch-form">
 			<label>Period <select name="period" id="ch-period"></select></label>
-			<label>Or another day (its day, week or month) <input type="date" name="date" id="ch-date"></label>
+			<div class="row"><label class="day">Or another day <input type="date" name="date" id="ch-date"></label><label class="narrow">Its <select name="dateKind" id="ch-date-kind"><option value="day">Day</option><option value="week">Week</option><option value="month">Month</option></select></label></div>
 			<label>World <select name="world" id="ch-world"><option value="earth">Earth</option><option value="moon">Moon</option></select></label>
 			<label>Kind <select name="kind" id="ch-kind"><option value="sprint">Checkpoint sprint</option><option value="collect">Collect them all</option><option value="landmark">Drive to a landmark</option></select></label>
 			<label class="full">Place <select name="place" id="ch-place"></select></label>
@@ -232,7 +234,7 @@
 		dropin: 'Drop-ins by place', ride: 'Drop-ins by ride', play: 'Play time by ride (s)', play_with_others: 'Play with others (s)', play_world: 'Play time by world (s)',
 		garage_open: 'Garage opened', garage_edit: 'Garage changes', party: 'Parties', funnel: 'Funnel steps', device: 'Devices', world: 'Turns to the Moon',
 		search: 'Searches', dropin_time: 'Drop-in time (buckets)', problem: 'Problems', board: 'Leaderboard', pass: 'Supporter Pass', level_up: 'Level-ups',
-		challenge: 'Challenges (opened, started, finished, posted)',
+		challenge: 'Challenges (opened, started, finished, posted; the word while driving said, and its button pressed)',
 		players: 'New players (nicknames)', scores: 'New bests (scores log)', accounts: 'New Google accounts', purchases: 'Passes by status', revenue: 'Revenue (smallest unit)',
 	};
 
@@ -1589,8 +1591,8 @@
 	// the six next up, as they'd be fixed now (the owner's pick or the rotation's), the owner's picks
 	// ahead, the approved busy places and the featured and busy places to choose from. POST to choose a
 	// period's challenge (a featured place, a busy place by its cell, or coordinates and a name), back
-	// to the rotation, or approve or unapprove a busy place. A live one with times on it changes only
-	// after a warning, as its board starts again.
+	// to the rotation, or approve or unapprove a busy place. A live one changes only after a warning
+	// (with times on it, its board starts again; without, anyone driving it is turned away).
 
 	const DAY = 86400000;
 	const esc = text => String( text ).replace( /[&<>"']/g, c => ( { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' } )[ c ] );
@@ -1721,20 +1723,23 @@
 
 	}
 
+	// The period the form names: the one picked in the list, or the day, the week or the month (as
+	// picked beside it) the day typed is in; or a word on what's missing.
+	function chosenPeriod() {
+
+		const period = $( 'ch-period' ).value;
+		if ( period !== 'date' ) return period;
+		const date = $( 'ch-date' ).value;
+		return date ? periodFor( $( 'ch-date-kind' ).value, date ) : 'Pick a day beside the period.';
+
+	}
+
 	// What the form says: { period, world, kind, place }, or a word on what's missing.
 	function picked() {
 
 		const world = $( 'ch-world' ).value;
-		let period = $( 'ch-period' ).value;
-		if ( period === 'date' ) {
-
-			const date = $( 'ch-date' ).value;
-			if ( ! date ) return 'Pick a day beside the period.';
-			// Of the kind the period list last had picked (a day's, unless a week's or a month's was).
-			period = periodFor( form.dataset.periodKind || 'day', date );
-
-		}
-
+		const period = chosenPeriod();
+		if ( ! period.includes( ':' ) ) return period;
 		const value = $( 'ch-place' ).value;
 		let place;
 		if ( value.startsWith( 'featured:' ) ) place = { featured: value.slice( 9 ) };
@@ -1749,6 +1754,29 @@
 		}
 
 		return { period, world, kind: $( 'ch-kind' ).value, place };
+
+	}
+
+	// A change to a live challenge (`body`), asked about before it's sent (with live: true): with
+	// `drivers` times on it, changing it starts a new board; with none, it still turns away anyone
+	// driving it now.
+	function warnLive( body, drivers ) {
+
+		waiting = { ...body, live: true };
+		const warn = $( 'ch-warn' );
+		const what = drivers
+			? `<b>This challenge is live</b>, and ${ drivers } driver${ drivers === 1 ? ' has a time' : 's have times' } on it. Changing it now changes what the times mean, so it starts a new board; the old one is kept apart, with its places.`
+			: '<b>This challenge is live</b>, though nobody has a time on it yet. Changing it now turns away anyone driving it (their runs won\'t count), and it starts on a board of its own.';
+		warn.innerHTML = `<p>${ what } (${ esc( body.period ) }, the ${ WORLDS[ body.world ] }.)</p><div class="row"><button type="button" id="ch-anyway">Change it anyway</button><button type="button" id="ch-keep">Keep it</button></div>`;
+		warn.hidden = false;
+		say( '' );
+
+	}
+
+	// The live challenge on `world` for `period` (a key), or null for a period ahead.
+	function liveOne( period, world ) {
+
+		return data?.current.find( c => c.key === period && c.world === world ) ?? null;
 
 	}
 
@@ -1768,20 +1796,11 @@
 		}
 
 		const answer = await res.json().catch( () => ( {} ) );
-		if ( res.status === 409 && answer.reason === 'live' ) {
-
-			// Live with times on it: changing it starts a new board.
-			waiting = { ...body, live: true };
-			const warn = $( 'ch-warn' );
-			warn.innerHTML = `<p><b>This challenge is live</b>, and ${ answer.drivers } driver${ answer.drivers === 1 ? ' has a time' : 's have times' } on it. Changing it now changes what the times mean, so it starts a new board; the old one is kept apart, with its places.</p><div class="row"><button type="button" id="ch-anyway">Change it anyway</button><button type="button" id="ch-keep">Keep it</button></div>`;
-			warn.hidden = false;
-			say( '' );
-			return;
-
-		}
-
+		// Live with times on it since this page last looked: changing it starts a new board.
+		if ( res.status === 409 && answer.reason === 'live' ) return warnLive( body, answer.drivers );
 		if ( ! res.ok ) return say( res.status === 429 ? 'Asked too often just now: try again in a minute.' : res.status === 400 ? 'That isn\'t one the Worker takes: check the period (today\'s or later) and the place.' : res.status === 409 ? answer.error ?? 'That can\'t be done.' : `Something went wrong (${ res.status }).` );
-		say( 'Saved.' );
+		// Which period it was, said: the form can name one by a day typed in.
+		say( body.action === 'pick' ? `Saved for ${ body.period }, the ${ WORLDS[ body.world ] }.` : body.action === 'unpick' ? `Back to the rotation for ${ body.period }, the ${ WORLDS[ body.world ] }.` : 'Saved.' );
 		show( answer );
 
 	}
@@ -1797,28 +1816,35 @@
 		event.preventDefault();
 		const body = picked();
 		if ( typeof body === 'string' ) return say( body );
+		// A live one, asked about first, whether or not anyone has a time on it yet.
+		const now = liveOne( body.period, body.world );
+		if ( now ) return warnLive( { action: 'pick', ...body }, now.total );
 		send( { action: 'pick', ...body } );
 
 	} );
 	$( 'ch-rotate' ).addEventListener( 'click', () => {
 
-		let period = $( 'ch-period' ).value;
-		if ( period === 'date' ) {
-
-			if ( ! $( 'ch-date' ).value ) return say( 'Pick a day beside the period.' );
-			period = periodFor( form.dataset.periodKind || 'day', $( 'ch-date' ).value );
-
-		}
-
-		send( { action: 'unpick', period, world: $( 'ch-world' ).value } );
+		const period = chosenPeriod();
+		if ( ! period.includes( ':' ) ) return say( period );
+		const body = { action: 'unpick', period, world: $( 'ch-world' ).value };
+		// A live one of yours, asked about first (one the rotation chose stays as it is).
+		const now = liveOne( period, body.world );
+		if ( now?.source === 'owner' ) return warnLive( body, now.total );
+		send( body );
 
 	} );
 	$( 'ch-world' ).addEventListener( 'change', fillPlaces );
 	$( 'ch-place' ).addEventListener( 'change', () => $( 'ch-custom' ).hidden = $( 'ch-place' ).value !== 'custom' );
+	// A day typed in is the period picked; another period picked, the day typed is cleared, so the form
+	// never says one thing and saves another.
 	$( 'ch-period' ).addEventListener( 'change', () => {
 
-		const key = $( 'ch-period' ).value;
-		if ( key !== 'date' ) form.dataset.periodKind = key.slice( 0, key.indexOf( ':' ) );
+		if ( $( 'ch-period' ).value !== 'date' ) $( 'ch-date' ).value = '';
+
+	} );
+	$( 'ch-date' ).addEventListener( 'input', () => {
+
+		if ( $( 'ch-date' ).value ) $( 'ch-period' ).value = 'date';
 
 	} );
 	section.addEventListener( 'click', event => {
@@ -1828,7 +1854,7 @@
 
 			// The form set to that one, to change it.
 			$( 'ch-period' ).value = change.dataset.change;
-			form.dataset.periodKind = change.dataset.change.slice( 0, change.dataset.change.indexOf( ':' ) );
+			$( 'ch-date' ).value = '';
 			$( 'ch-world' ).value = change.dataset.world;
 			$( 'ch-kind' ).value = change.dataset.kind;
 			fillPlaces();

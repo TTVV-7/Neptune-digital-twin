@@ -809,7 +809,8 @@ code; each period's is fixed in D1 as it's first asked for, and the owner can ch
 by hand on the admin page. Times are posted with the visit's token and checked against the route
 (each leg no quicker than the fastest the game goes) and the visit (`worker/drive/challenges.js`,
 sharing its rules with the page in `src/drive-app/challenge-rules.js`). The page loads them as a
-chunk of their own when they're opened, so nothing of them is in its first load (see
+chunk of their own when they're opened, so nothing of them is in its first load; a visit that has
+driven 40 s is told of today's challenge on its world, with a button to them (see
 [Challenges](docs/world-drive.md#challenges)).
 
 **The Moon**: **Moon** at the top of the globe's panel turns the globe to the Moon, made in the page
