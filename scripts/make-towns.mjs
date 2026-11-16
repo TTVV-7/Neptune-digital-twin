@@ -8,7 +8,10 @@
 // 7,342 towns and cities, every country's capital and its regions' among them, from its GeoJSON copy
 // (fetched unless a copy is given). Each is kept as its name, its region (its state or province and
 // its country, "Rhône-Alpes, France") and where it is, to 2 decimals of a degree (about a
-// kilometre, near enough to say which town is nearest).
+// kilometre, near enough to say which town is nearest). Natural Earth lost some letters of 38 towns'
+// states, Vietnam's and Azerbaijan's ("H? Chí Minh city", "G?nc?"), which no other field of it has
+// right: their regions are their country alone ("Vietnam"), and a region with a "?" left is an error.
+// (The towns' own names have none.)
 //
 // The file is text: the regions, one a line, then an empty line, then the towns, one a line, as
 // name, the region's line number (from 0), latitude, longitude and Natural Earth's rank (its
@@ -26,12 +29,14 @@ const places = JSON.parse( process.argv[ 2 ] ? readFileSync( process.argv[ 2 ], 
 const clean = text => String( text ?? '' ).replace( /[\t\r\n]+/g, ' ' ).trim();
 const towns = places.features.map( ( { properties: p } ) => ( {
 	name: clean( p.name ),
-	region: [ clean( p.adm1name ), clean( p.adm0name ) ].filter( Boolean ).filter( ( part, i, all ) => i === 0 || part !== all[ 0 ] ).join( ', ' ),
+	region: [ clean( p.adm1name ).includes( '?' ) ? '' : clean( p.adm1name ), clean( p.adm0name ) ].filter( Boolean ).filter( ( part, i, all ) => i === 0 || part !== all[ 0 ] ).join( ', ' ),
 	lat: Number( p.latitude ),
 	lon: Number( p.longitude ),
 	rank: Math.min( 10, Math.max( 0, Math.round( Number( p.scalerank ) ) || 0 ) ),
 } ) ).filter( town => town.name && Number.isFinite( town.lat ) && Number.isFinite( town.lon ) && Math.abs( town.lat ) <= 90 && Math.abs( town.lon ) <= 180 );
 if ( towns.length < 7000 ) throw new Error( `Only ${ towns.length } towns: not the file this expects` );
+const garbled = towns.filter( town => /\?/.test( town.name + town.region ) );
+if ( garbled.length ) throw new Error( `Letters lost in ${ garbled.map( town => `${ town.name }, ${ town.region }` ).join( '; ' ) }` );
 
 const regions = [ ...new Set( towns.map( town => town.region ) ) ].sort();
 const line = new Map( regions.map( ( region, i ) => [ region, i ] ) );

@@ -165,7 +165,9 @@ async function getConfig( { env, limits, now } ) {
 // - Over a cap: 429 with retryAfter (the seconds until midnight UTC, when the counts start again)
 //   and a visit all the same, so the page can still open on the Moon.
 // Those two visits' tokens say so (visits.js: the Moon's), so they post no Earth drop-in places
-// (dropins.js); a visit the Earth's caps let through, or the owner's, says it's the Earth's.
+// (dropins.js); a visit the Earth's caps let through says it's the Earth's, and the owner's, on
+// either world, says it's theirs (so it posts no places at all: the admin page's Drive links
+// mustn't add to the places it shows).
 // A supporter signed in here is counted by their account, with a cap of their own; the owner's
 // accounts (ADMIN_EMAILS) aren't counted at all; everyone else is counted by their address.
 async function visit( { request, env, url, ctx, limits, now } ) {
@@ -185,7 +187,8 @@ async function visit( { request, env, url, ctx, limits, now } ) {
 	if ( moon ) {
 
 		ctx?.waitUntil?.( countVisit( env, now ) );
-		return json( { moon: true, visit: await makeVisit( env, now, 'moon' ) } );
+		const { admin } = await whoIsVisiting( { request, env, url, now }, { supporter: false } );
+		return json( { moon: true, visit: await makeVisit( env, now, admin ? 'owner' : 'moon' ) } );
 
 	}
 
@@ -197,7 +200,7 @@ async function visit( { request, env, url, ctx, limits, now } ) {
 	if ( admin ) {
 
 		ctx?.waitUntil?.( countVisit( env, now ) );
-		return json( { mapsKey: key, left: null, visit: await makeVisit( env, now ) } );
+		return json( { mapsKey: key, left: null, visit: await makeVisit( env, now, 'owner' ) } );
 
 	}
 
@@ -219,17 +222,18 @@ async function visit( { request, env, url, ctx, limits, now } ) {
 
 }
 
-// Who's asking for a visit: { supporter } the signed-in account if it has the Supporter Pass, and
-// { admin } whether it's one of the owner's (ADMIN_EMAILS). If the database can't say just now, the
-// visit goes ahead as anyone's rather than not at all.
-async function whoIsVisiting( context ) {
+// Who's asking for a visit: { supporter } the signed-in account if it has the Supporter Pass (not
+// asked with supporter: false, for a Moon visit, which no pass changes), and { admin } whether it's
+// one of the owner's (ADMIN_EMAILS). Signed out, that's no request to the database. If the database
+// can't say just now, the visit goes ahead as anyone's rather than not at all.
+async function whoIsVisiting( context, { supporter = true } = {} ) {
 
 	try {
 
 		const account = await currentAccount( context );
 		if ( ! account ) return { supporter: null, admin: false };
 		if ( isAdmin( context.env, account ) ) return { supporter: null, admin: true };
-		return { supporter: await isSupporter( context.env, account ) ? account : null, admin: false };
+		return { supporter: supporter && await isSupporter( context.env, account ) ? account : null, admin: false };
 
 	} catch ( err ) {
 

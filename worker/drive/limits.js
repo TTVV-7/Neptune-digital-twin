@@ -112,7 +112,8 @@ export class DriveLimits extends DurableObject {
 	}
 
 	// Which of `cells` (drop-in places, "<world>:<row>:<column>": worker/drive/dropins.js) a post from
-	// `ip` for `visit` (its id, and `since` when it began, ms) at `now` adds to today's counts, in
+	// `ip` (an address, an IPv6 one by its /48: dropins.js's VISITOR_PREFIX) for `visit` (its id, and
+	// `since` when it began, ms) at `now` adds to today's counts, in
 	// order: { cells, full, done }, full: { earth, moon } whether each world's places today have
 	// reached `daily`, and done whether this visit can add no more today (the Worker then asks no
 	// more for it). A cell counts once a day for each visitor, whichever of their visits posts it, and

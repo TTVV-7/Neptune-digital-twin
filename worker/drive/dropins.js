@@ -13,14 +13,16 @@ import { KEEP_DAYS, adminAccount, askedDays } from './admin.js';
 // dropins_daily for the owner's admin page: a heat map of each world and its top places. The page
 // posts a drop-in's cell with the drop-in's own count in its play stats (stats.js's POST
 // /api/stats), so it costs no request of its own; DriveLimits (limits.js) says which to count: a
-// cell once a day for each visitor and once for each visit, and no more than a world's day's, a
-// visitor's and a visit's worth. An Earth place only from a visit the Earth's caps let through (its
-// token says so: visits.js). Only counts of cells: nothing of who, which visit or from where, and
-// no finer than the cell.
+// cell once a day for each visitor (an address; an IPv6 one by its /48) and once for each visit, and
+// no more than a world's day's, a visitor's and a visit's worth. An Earth place only from a visit
+// the Earth's caps let through, and none from the owner's (its token says so: visits.js). Only
+// counts of cells: nothing of who, which visit or from where, and no finer than the cell.
 //
 // For what comes next (challenges picked from where people go), topPlaces is the query: a world's
 // most dropped-in places over a period, named, a featured place's cells together; and topCells the
-// cells themselves.
+// cells themselves. Their ranking can be pushed by anyone with many addresses passing the robot
+// check (a Moon place most cheaply: Moon visits aren't capped), so it's a list to offer the owner,
+// not one to pick from blindly: see topPlaces.
 //
 // Settings, none of which need setting: DROPIN_PLACES_DAILY, DROPIN_PLACES_PER_VISITOR and
 // DROPIN_PLACES_PER_VISIT, the most places counted a day on each world for everyone (DAILY), for
@@ -32,11 +34,14 @@ import { KEEP_DAYS, adminAccount, askedDays } from './admin.js';
 // are counted no faster than one each GAP ms of it. Real visits drop in a handful of times, at a
 // handful of places; a long one at a party more, often at the same places again. A day's places on
 // each world: about 300 Earth visits a day (the visit caps) with a place or two each, and room to
-// grow; it bounds what one admin look reads (see adminDropins).
+// grow; it bounds what one admin look reads (see adminDropins). A visitor, for the places, is an
+// address, an IPv6 one by its /48 (settings.js's addressOf): a /64 each would let one free tunnel
+// broker's /48 add 65,536 visitors to a cell.
 export const DAILY = 1500;
 export const PER_VISITOR = 30;
 export const PER_VISIT = 10;
 export const GAP = 10000;
+export const VISITOR_PREFIX = 48;
 // A visit is heard by DriveLimits at most ASKS times its places a day (each ask is a Durable Object
 // request: an honest page asks once a post with new places, a few times a visit); then, or once it
 // can add no more places, this Worker instance stops asking for it (doneVisits).
@@ -45,6 +50,14 @@ const ASKS = 2;
 // the heat map (the rest, single drop-ins scattered about, are only counted in its totals).
 const TOP = 25;
 const HEAT = 2000;
+// An admin look's answer is kept KEPT ms in this Worker instance (KEPT_LONG for a period longer than
+// LONG days), for each period and day, so the page's buttons clicked again and again don't read each
+// world's rows for the period again: a year's look reads up to 547,500 rows a world at the day's
+// caps. At most ANSWERS of them (the page's five periods, and a few more asked by hand).
+const KEPT = 10 * 60 * 1000;
+const KEPT_LONG = 60 * 60 * 1000;
+const LONG = 30;
+const ANSWERS = 8;
 // How a cell is named: a featured place (a start spot, a place's page, a Moon place) whose pin is
 // within FEATURED_REACH m of the cell (in it, or so near its edge that a drop-in there, which starts
 // within 60 m of the pin on the street or a bridge's deck found nearest it, or a search of it pinned
@@ -56,6 +69,7 @@ const FEATURED_REACH = 250;
 const TOWN = 2000;
 const NEAR = { earth: 50000, moon: 300000 };
 const TOWNS = '/places/towns.tsv';
+const SITE = 'https://worlddrive.app';
 const COMPASS = [ 'N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW' ];
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -79,6 +93,9 @@ const fullDay = { earth: null, moon: null };
 const doneVisits = new Map();
 // The towns, read from the site's files once per Worker instance (readTowns), or null till then.
 let towns = null;
+// The admin page's answers kept (KEPT), by "<days>:<today>": { at, body }, the answer and when it
+// was worked out (by the request's clock).
+const answers = new Map();
 // Each world's featured places' cells (featuredAt), worked out once per Worker instance.
 let featured = null;
 
@@ -89,14 +106,16 @@ export async function recordPlaces( { request, env, limits, now }, visit, places
 
 	const day = dayOf( now );
 	// An Earth place only from a visit the Earth's caps let through (a Moon visit's token, which costs
-	// nothing but the robot check, posts the Moon's alone), and none on a world whose places today
-	// are all counted, nor from a visit that can add no more.
+	// nothing but the robot check, posts the Moon's alone), none from the owner's (who opens the game
+	// at the admin page's places to look at them), and none on a world whose places today are all
+	// counted, nor from a visit that can add no more.
+	if ( visit.owner ) return 0;
 	const asking = places.filter( cell => ( visit.earth || cell.world === 'moon' ) && fullDay[ cell.world ] !== day );
 	if ( ! asking.length || ! env.DB || doneVisits.get( visit.id ) > now ) return 0;
 	try {
 
 		const perVisit = setting( env.DROPIN_PLACES_PER_VISIT, PER_VISIT );
-		const { cells, full, done } = await limits.places( addressOf( request ), {
+		const { cells, full, done } = await limits.places( addressOf( request, VISITOR_PREFIX ), {
 			now, visit: visit.id, since: visit.issuedAt, cells: asking.map( cell => cell.key ),
 			daily: setting( env.DROPIN_PLACES_DAILY, DAILY ),
 			perVisitor: setting( env.DROPIN_PLACES_PER_VISITOR, PER_VISITOR ),
@@ -139,11 +158,21 @@ export async function topCells( db, { world, from, to, most = TOP } ) {
 // The most dropped-in places of `world` from `from` to `to` (as topCells), at most `most` (TOP if
 // not given; made from the period's HEAT busiest cells), as the admin page's top places are
 // (placesOf): each featured place's cells as one place, named (with `named`, townsFor's or
-// readTowns' towns, or null for the featured places alone) and with the game's link there. What
-// challenges picked from where people go start from.
-export async function topPlaces( db, { world, from, to, most = TOP }, named = null ) {
+// readTowns' towns, or null for the featured places alone) and with the game's link there; with
+// `featuredOnly`, the featured places alone (the game's own start spots and places), busiest first.
+// What challenges picked from where people go start from.
+//
+// Its ranking isn't proof against many addresses: each visitor is an address passing the robot
+// check, and Moon visits aren't capped, so someone with a few hundred addresses (or /48s) and robot
+// checks can put a cell of their choosing (a private address, say) at the top of the Moon's, and of
+// the Earth's at the cost of the day's drives. So a challenge picked by itself should be one of the
+// featured places (featuredOnly), or a cell the owner has approved; the busy cells that aren't
+// featured are for offering the owner to choose from. And it reads the period's rows each time it's
+// called (up to DAILY a day of them), so a caller keeps what it picked (the challenge itself) rather
+// than asking again for each request.
+export async function topPlaces( db, { world, from, to, most = TOP, featuredOnly = false }, named = null ) {
 
-	return placesOf( world, await topCells( db, { world, from, to, most: HEAT } ), named, Math.max( 1, Math.floor( most ) || 1 ) );
+	return placesOf( world, await topCells( db, { world, from, to, most: HEAT } ), named, Math.max( 1, Math.floor( most ) || 1 ), featuredOnly );
 
 }
 
@@ -170,17 +199,18 @@ function cellsOf( world, results ) {
 // `world`'s `cells` (cellsOf's, the most first) as places, the most first (then those on the most
 // days, then in the cells' order), at most `most`: each featured place's cells as one (featuredAt:
 // its pin's cell and any it's at the edge of, which its drop-ins can start in), each other cell by
-// itself; named by nameCell with `named` (readTowns', or null). [ { lat, lon, n, days, cells, name,
-// region, link, featured } ]: a featured place at its own pin, with n all its cells' drop-ins
-// together and days the most of any one cell's (the place had drop-ins on at least that many);
-// cells the middles of the cells in it, [ [ lat, lon ] ].
-function placesOf( world, cells, named, most ) {
+// itself (left out with `featuredOnly`); named by nameCell with `named` (readTowns', or null).
+// [ { lat, lon, n, days, cells, name, region, link, featured } ]: a featured place at its own pin,
+// with n all its cells' drop-ins together and days the most of any one cell's (the place had
+// drop-ins on at least that many); cells the middles of the cells in it, [ [ lat, lon ] ].
+function placesOf( world, cells, named, most, featuredOnly = false ) {
 
 	const merged = new Map();
 	const all = [];
 	for ( const cell of cells ) {
 
 		const place = featuredAt( world, cell.row, cell.column );
+		if ( featuredOnly && ! place ) continue;
 		const into = place && merged.get( place );
 		if ( into ) {
 
@@ -211,18 +241,44 @@ function placesOf( world, cells, named, most ) {
 //   { from, to, first, cell, kept, worlds: { earth: WORLD, moon: WORLD } }
 // WORLD: { dropins, places, heat: [ [ lat, lon, n ] ], top: [ { lat, lon, n, days, cells, name, region, link, featured } ] }
 // first: the first day any place was counted (null for none yet); cell: the cells' size (m); kept:
-// how many days rows are kept. dropins and places: the period's drop-ins and the cells they were in;
-// heat: its HEAT most dropped-in cells' middles, the most first; top: its TOP places (placesOf: a
-// featured place's cells together), named with the game's link there. Rows older than KEEP_DAYS go
-// as it's asked, as stats_daily's do. Three queries in one batch: each world's cells, which reads
-// that world's rows for the period once (and no more than DAILY a day of them), and the first day.
+// how many days rows are kept. dropins and places: the period's drop-ins counted (each visitor once
+// a day in each cell) and the cells they were in; heat: its HEAT most dropped-in cells' middles, the
+// most first; top: its TOP places (placesOf: a featured place's cells together), named with the
+// game's link there. Rows older than KEEP_DAYS go as it's asked, as stats_daily's do. Three queries
+// in one batch: each world's cells, which reads that world's rows for the period once (and no more
+// than DAILY a day of them), and the first day. The answer is kept in this Worker instance KEPT ms
+// (KEPT_LONG past LONG days) for that period and day (X-Dropins-Cache says hit or miss), after the
+// account and ADMIN_LOOKS are checked: the same look again reads nothing.
 export async function adminDropins( context ) {
 
-	const { env, url, now } = context;
+	const { url, now } = context;
 	await adminAccount( context );
-	const db = database( env );
 	const days = askedDays( url );
 	const to = dayOf( now );
+	const key = `${ days }:${ to }`;
+	const kept = answers.get( key );
+	if ( kept && now >= kept.at && now - kept.at < ( days > LONG ? KEPT_LONG : KEPT ) ) return answerOf( kept.body, 'hit' );
+	const body = await dropinsAnswer( context, days, to );
+	// (Only today's are worth keeping, the latest last, ANSWERS at most.)
+	for ( const old of answers.keys() ) if ( old === key || ! old.endsWith( `:${ to }` ) ) answers.delete( old );
+	answers.set( key, { at: now, body } );
+	if ( answers.size > ANSWERS ) answers.delete( answers.keys().next().value );
+	return answerOf( body, 'miss' );
+
+}
+
+// The admin page's answer as JSON, saying whether it was kept (adminDropins).
+function answerOf( body, cache ) {
+
+	return json( body, 200, { 'X-Dropins-Cache': cache } );
+
+}
+
+// adminDropins' answer for the last `days` UTC days to `to` (today), worked out.
+async function dropinsAnswer( context, days, to ) {
+
+	const { env, url, now } = context;
+	const db = database( env );
 	const from = dayOf( now - ( days - 1 ) * DAY );
 	context.ctx?.waitUntil?.( db.prepare( `DELETE FROM dropins_daily WHERE world IN ( ${ WORLDS.map( () => '?' ).join( ', ' ) } ) AND day < ?` )
 		.bind( ...WORLDS, dayOf( now - KEEP_DAYS * DAY ) ).run().catch( () => {} ) );
@@ -246,7 +302,7 @@ export async function adminDropins( context ) {
 
 	} );
 
-	return json( { from, to, first: first.results[ 0 ]?.day ?? null, cell: CELL, kept: KEEP_DAYS, worlds } );
+	return { from, to, first: first.results[ 0 ]?.day ?? null, cell: CELL, kept: KEEP_DAYS, worlds };
 
 }
 
@@ -382,15 +438,16 @@ function bearing( fromLat, fromLon, lat, lon ) {
 }
 
 // The towns (readTowns'), read once per Worker instance from the site's own files through the
-// ASSETS binding (costing nothing per look; `url` is the request's, for the site's address), or
-// null if they can't be had just now: then cells are named by the featured places alone, and asked
-// for again next time.
-export async function townsFor( env, url ) {
+// ASSETS binding (costing nothing per look), or null if they can't be had just now: then cells are
+// named by the featured places alone, and asked for again next time. `url` is the request's if
+// there is one; without (a scheduled handler has no request) the site's own address stands in, as
+// the ASSETS binding goes by the path alone.
+export async function townsFor( env, url = null ) {
 
 	if ( towns ) return towns;
 	try {
 
-		const res = await env.ASSETS?.fetch( new Request( new URL( TOWNS, url ) ) );
+		const res = await env.ASSETS?.fetch( new Request( new URL( TOWNS, url ?? SITE ) ) );
 		if ( ! res?.ok ) return null;
 		towns = readTowns( await res.text() );
 

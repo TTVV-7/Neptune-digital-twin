@@ -84,7 +84,9 @@
 	.seg button[aria-pressed="true"] { background: var(--accent); color: var(--bg); font-weight: 600; }
 	.seg button span { font-variant-numeric: tabular-nums; opacity: .85; font-size: 13px; }
 	.map { position: relative; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: var(--bar-bg); }
-	.map canvas { display: block; width: 100%; height: clamp(220px, 50vw, 540px); touch-action: pan-y; cursor: grab; }
+	/* Never more than about two thirds of the screen's height, so on a phone on its side there's always
+	   page beside it to scroll by (svh: the screen with the browser's bars shown, where it's known). */
+	.map canvas { display: block; width: 100%; height: clamp(220px, min(50vw, 65vh), 540px); height: clamp(220px, min(50vw, 65svh), 540px); touch-action: pan-y; cursor: grab; }
 	/* Zoomed in, a finger moves the map every way (on the whole map, up and down scrolls the page). */
 	.map canvas.zoomed { touch-action: none; }
 	.map canvas.dragging { cursor: grabbing; }
@@ -104,6 +106,7 @@
 	.top-places button.place { all: unset; cursor: pointer; color: var(--text); font-weight: 600; overflow-wrap: anywhere; }
 	.top-places button.place:hover, .top-places button.place:focus-visible { color: var(--accent); text-decoration: underline; }
 	.top-places .tag { font-size: 11px; color: var(--accent); border: 1px solid var(--accent); border-radius: 4px; padding: 0 4px; margin-left: 4px; white-space: nowrap; }
+	.top-more { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 6px; }
 	@media (max-width: 520px) { .top-places .wide-only { display: none; } }
 </style>
 </head>
@@ -145,7 +148,7 @@
 		<div class="heat-legend"><span>Fewer</span><i></i><span>More</span><span id="places-most"></span></div>
 		<h3>Top places</h3>
 		<div id="places-top"></div>
-		<p class="note">Each drop-in's place to about a kilometre: the cell of a grid 1 km each way that it was in, never where in it, counted a day with nothing of who. A visitor counts once a day at each place, so these are visitors, fewer than the drop-ins above (which count every one). A start spot's cells are one place. Drag to move the map; click it, then scroll to zoom (or Ctrl and scroll), or use + and −; on a phone, pinch, drag, or the buttons. The map is about 5 km squares zoomed in: a place's name in the table shows it on the map, and Drive opens the game there, street by street.</p>
+		<p class="note">Each drop-in's place to about a kilometre: the cell of a grid 1 km each way that it was in, never where in it, counted a day with nothing of who. A visitor counts once a day in each cell, so these are fewer than the drop-ins above, and not people: one visitor at three places in a day counts three. A place's count over one day is its visitors; over longer, its visitor-days. A start spot's cells are one place in the table. Your own visits (this page's accounts) aren't counted. Drag to move the map; click it, then scroll to zoom (or Ctrl and scroll), or use + and −; on a phone, pinch, drag, or the buttons. The map is about 5 km squares zoomed in: a place's name in the table shows it on the map, and Drive opens the game there, street by street.</p>
 	</section>
 	<div id="more"></div>
 	<p class="muted" style="margin-top:24px;font-size:13px">Counts only, nothing of who. Days are UTC, and each period ends with today so far. ▲ and ▼ compare with the as many days just before it. Referrers, countries and page speed in more detail are in Cloudflare's dashboard (Web Analytics).</p>
@@ -604,6 +607,13 @@
 	// A scale bar's lengths (km): the one nearest SCALE_PX across.
 	const SCALE_KM = [ 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000 ];
 	const SCALE_PX = 100;
+	// How long an answer is kept for its period (ms): the Worker keeps its own as long.
+	const KEPT = 10 * 60 * 1000;
+	// The top places listed at first: those with more than one, and at least TOP_FIRST, at most
+	// TOP_LISTED; the rest (on a period of any length, mostly single visitors named by their
+	// coordinates) behind "Show all".
+	const TOP_FIRST = 3;
+	const TOP_LISTED = 10;
 	const places = {
 		section: document.getElementById( 'places' ),
 		days: document.getElementById( 'places-days' ),
@@ -618,11 +628,14 @@
 	// days and world: what's shown; data: the Worker's answer; views: each world's { lon, lat, zoom }
 	// (the view's middle, and how many times the whole map's scale); bases: each world's map once
 	// it's loaded (null if it didn't), and loading its fetch while it comes; asked: the latest ask, so
-	// an older answer arriving after it is left; towns: the towns once they're loaded (null if they
-	// didn't); paintedWith: what the map was last drawn with and how long it took (for the tests).
+	// an older answer arriving after it is left, and waiting whether it's still to come; answers: the
+	// answers had, by period, each with when (kept KEPT ms, as the Worker keeps them, so a period
+	// clicked again isn't asked again); allPlaces whether the whole table is shown; towns: the towns
+	// once they're loaded (null if they didn't); paintedWith: what the map was last drawn with and how
+	// long it took (for the tests).
 	const placesState = {
 		days: PLACES_DAYS.includes( Number( select.value ) ) ? Number( select.value ) : 30, world: 'earth', data: null,
-		views: {}, bases: {}, loading: {}, towns: undefined, asked: 0, paintedWith: null,
+		views: {}, bases: {}, loading: {}, towns: undefined, asked: 0, waiting: false, answers: new Map(), allPlaces: false, paintedWith: null,
 	};
 	const darkScheme = matchMedia( '(prefers-color-scheme: dark)' );
 	const heatCanvas = document.createElement( 'canvas' );
@@ -646,6 +659,9 @@
 		placesState.world = button.dataset.world;
 		hideTip();
 		pressed( places.world, 'world', placesState.world );
+		// While another period's answer is still to come, the one shown is the last period's: it goes,
+		// and the line keeps saying "Loading...".
+		if ( placesState.waiting ) clearPlaces();
 		if ( placesState.data ) showPlaces();
 		else drawMap();
 
@@ -664,6 +680,12 @@
 
 		const button = event.target.closest( 'button[data-place]' );
 		if ( button ) showPlace( Number( button.dataset.place ) );
+		if ( event.target.closest( 'button[data-all]' ) ) {
+
+			placesState.allPlaces = ! placesState.allPlaces;
+			places.top.innerHTML = topTable( placesState.data.worlds[ placesState.world ] );
+
+		}
 
 	} );
 	// The page's period changes the map's too.
@@ -759,12 +781,24 @@
 	async function loadPlaces() {
 
 		const asked = ++ placesState.asked;
-		pressed( places.days, 'days', String( placesState.days ) );
+		const days = placesState.days;
+		pressed( places.days, 'days', String( days ) );
+		const kept = placesState.answers.get( days );
+		if ( kept && Date.now() - kept.at < KEPT ) {
+
+			placesState.waiting = false;
+			placesState.data = kept.data;
+			showPlaces();
+			return;
+
+		}
+
+		placesState.waiting = true;
 		places.range.textContent = 'Loading...';
 		let res;
 		try {
 
-			res = await fetch( `/api/admin/dropins?days=${ placesState.days }`, { credentials: 'same-origin' } );
+			res = await fetch( `/api/admin/dropins?days=${ days }`, { credentials: 'same-origin' } );
 
 		} catch {
 
@@ -777,6 +811,7 @@
 		// Signed out, or not an admin: the stats above say so.
 		if ( res.status === 401 || res.status === 403 ) {
 
+			placesState.waiting = false;
 			places.section.hidden = true;
 			places.range.textContent = '';
 			return;
@@ -788,19 +823,43 @@
 		if ( ! res.ok ) return placesNotice( `Something went wrong (${ res.status }).` );
 		const data = await res.json();
 		if ( asked !== placesState.asked ) return;
+		placesState.waiting = false;
+		placesState.answers.set( days, { data, at: Date.now() } );
 		placesState.data = data;
 		showPlaces();
 
 	}
 
+	// Something went wrong: `text` says what, over the map as well as on the line (so an empty map
+	// doesn't pass for a period with nobody in it), and nothing of what was shown before is left.
 	function placesNotice( text ) {
 
 		places.section.hidden = false;
-		placesState.data = null;
+		placesState.waiting = false;
+		clearPlaces();
 		places.range.textContent = text;
+		places.empty.textContent = text;
+		places.empty.hidden = false;
+		drawMap();
+
+	}
+
+	// Nothing of an answer shown: no counts on the worlds' buttons, no table, no legend's numbers, no
+	// heat on the map.
+	function clearPlaces() {
+
+		placesState.data = null;
+		for ( const button of places.world.querySelectorAll( 'button' ) ) {
+
+			button.querySelector( 'span' ).textContent = '';
+			button.removeAttribute( 'title' );
+
+		}
+
 		places.top.innerHTML = '';
 		places.most.textContent = '';
 		places.empty.hidden = true;
+		hideTip();
 		drawMap();
 
 	}
@@ -808,12 +867,22 @@
 	function showPlaces() {
 
 		const { from, to, first, worlds } = placesState.data;
-		for ( const button of places.world.querySelectorAll( 'button' ) ) button.querySelector( 'span' ).textContent = num( worlds[ button.dataset.world ]?.dropins ?? 0 );
+		for ( const button of places.world.querySelectorAll( 'button' ) ) {
+
+			const dropins = worlds[ button.dataset.world ]?.dropins ?? 0;
+			button.querySelector( 'span' ).textContent = num( dropins );
+			button.title = `${ count( dropins, 'drop-in' ) } counted (each visitor once a day in each cell)`;
+
+		}
+
 		pressed( places.world, 'world', placesState.world );
 		const shown = worlds[ placesState.world ];
 		const since = first === null ? ' · none counted yet' : first > from ? ` · counted from ${ first }` : '';
-		places.range.textContent = `${ from === to ? `${ to } so far` : `${ from } to ${ to } (today so far)` }, UTC · ${ count( shown.dropins, 'visitor' ) } at ${ count( shown.places, 'place' ) }${ since }`;
-		places.most.textContent = shown.heat.length ? `the most at one place: ${ num( shown.heat[ 0 ][ 2 ] ) }${ shown.heat.length < shown.places ? ` · the map has the ${ num( shown.heat.length ) } with the most` : '' }` : '';
+		// The drop-ins counted (each visitor once a day in each cell, so not people: one visitor at three
+		// places is three), and how many 1 km cells they were in (a start spot's cells are one place in
+		// the table, but each a cell here).
+		places.range.textContent = `${ from === to ? `${ to } so far` : `${ from } to ${ to } (today so far)` }, UTC · ${ count( shown.dropins, 'drop-in' ) } counted in ${ count( shown.places, 'cell' ) } (1 km)${ since }`;
+		places.most.textContent = shown.heat.length ? `the most in one 1 km cell: ${ num( shown.heat[ 0 ][ 2 ] ) }${ shown.heat.length < shown.places ? ` · the map has the ${ num( shown.heat.length ) } cells with the most` : '' }` : '';
 		places.empty.textContent = `No drop-ins on the ${ placesState.world === 'moon' ? 'Moon' : 'Earth' } in this period.`;
 		places.empty.hidden = shown.heat.length > 0;
 		places.top.innerHTML = topTable( shown );
@@ -825,6 +894,15 @@
 	function count( n, thing ) {
 
 		return `${ num( n ) } ${ thing }${ n === 1 ? '' : 's' }`;
+
+	}
+
+	// What one place's count is: its visitors over one day (each counted once there), its
+	// visitor-days over longer (each visitor once a day, added up).
+	function perPlace() {
+
+		const { from, to } = placesState.data;
+		return from === to ? 'visitor' : 'visitor-day';
 
 	}
 
@@ -842,13 +920,19 @@
 
 	}
 
-	// The top places as a table: where, how many visitors (each counted once a day at a place), their
-	// share of the world's, on how many days, and a link that opens the game there (only the Worker's
-	// own kind: /?spot= or /?at=).
+	// The top places as a table: where, how many visitors (over one day) or visitor-days (over more),
+	// their share of the world's, on how many days, and a link that opens the game there (only the
+	// Worker's own kind: /?spot= or /?at=). Those with more than one (and TOP_FIRST at least) are
+	// listed, TOP_LISTED at most, and the rest are behind "Show all".
 	function topTable( { top, dropins } ) {
 
 		if ( ! top.length ) return '<p class="muted">Nothing yet.</p>';
-		const rows = top.map( ( place, i ) => {
+		// (The most first, so those with more than one are the first.)
+		const first = Math.min( TOP_LISTED, Math.max( TOP_FIRST, top.filter( place => place.n > 1 ).length ) );
+		const listed = placesState.allPlaces ? top.length : first;
+		const ones = top.slice( first ).filter( place => place.n === 1 ).length;
+		const unit = perPlace();
+		const rows = top.slice( 0, listed ).map( ( place, i ) => {
 
 			const link = /^\/\?(spot|at)=/.test( place.link ) ? place.link : '/';
 			return `<tr><td class="rank">${ i + 1 }</td>`
@@ -858,7 +942,11 @@
 				+ `<td class="go"><a href="${ esc( link ) }" target="_blank" rel="noopener">Drive ↗</a></td></tr>`;
 
 		} );
-		return `<table class="top-places"><thead><tr><th class="rank">#</th><th>Place</th><th class="num" title="Each visitor counted once a day at a place">Visitors</th><th class="num wide-only">Share</th><th class="num wide-only">Days</th><th class="go"><span hidden>Drive</span></th></tr></thead><tbody>${ rows.join( '' ) }</tbody></table>`;
+		const heading = unit === 'visitor' ? '<th class="num" title="Each visitor counted once at a place">Visitors</th>' : '<th class="num" title="Each visitor counted once a day at a place, added up over the days">Visitor-days</th>';
+		const left = top.length - first;
+		const more = left <= 0 ? '' : placesState.allPlaces ? '<div class="top-more"><button type="button" data-all>Show fewer</button></div>'
+			: `<div class="top-more"><button type="button" data-all>Show all ${ num( top.length ) }</button><span class="muted small">${ num( left ) } more${ ones ? `, ${ ones === left ? 'each' : num( ones ) } with one ${ unit }` : '' }</span></div>`;
+		return `<table class="top-places"><thead><tr><th class="rank">#</th><th>Place</th>${ heading }<th class="num wide-only">Share</th><th class="num wide-only">Days</th><th class="go"><span hidden>Drive</span></th></tr></thead><tbody>${ rows.join( '' ) }</tbody></table>${ more }`;
 
 	}
 
@@ -941,7 +1029,10 @@
 		if ( ! place ) return;
 		placesState.views[ placesState.world ] = { lon: place.lon, lat: place.lat, zoom: 360 * DEGREE[ placesState.world ] / SHOW_ACROSS };
 		clampView( view(), canvas.clientWidth, canvas.clientHeight );
-		canvas.scrollIntoView( { block: 'nearest', behavior: 'smooth' } );
+		// The whole map in view, its buttons too (its top, should it be taller than the screen).
+		const map = canvas.parentElement;
+		const box = map.getBoundingClientRect();
+		if ( box.top < 0 || box.bottom > innerHeight ) map.scrollIntoView( { block: box.height > innerHeight ? 'start' : 'nearest', behavior: 'smooth' } );
 		paint();
 		const at = screenOf( place.lat, place.lon, view(), canvas.clientWidth, canvas.clientHeight );
 		showTip( at.x, at.y );
@@ -978,7 +1069,7 @@
 		const tip = places.tip;
 		// A place of several cells (a start spot's) says this cell's and all of its own.
 		const all = named && named.n !== n ? ` here, ${ num( named.n ) } at the place` : '';
-		tip.innerHTML = `<strong>${ esc( named?.name ?? coordinates( lat, lon ) ) }</strong>${ named?.region ? `<div class="muted small">${ esc( named.region ) }</div>` : '' }<div>${ esc( count( n, 'visitor' ) + all ) }</div>`;
+		tip.innerHTML = `<strong>${ esc( named?.name ?? coordinates( lat, lon ) ) }</strong>${ named?.region ? `<div class="muted small">${ esc( named.region ) }</div>` : '' }<div>${ esc( count( n, perPlace() ) + all ) }</div>`;
 		tip.hidden = false;
 		tip.style.left = `${ Math.max( 4, Math.min( x + 12, width - tip.offsetWidth - 4 ) ) }px`;
 		tip.style.top = `${ y + 12 + tip.offsetHeight > height ? Math.max( 4, y - 12 - tip.offsetHeight ) : y + 12 }px`;
@@ -1039,9 +1130,9 @@
 		const shown = placesState.data?.worlds[ world ];
 		if ( shown ) paintHeat( ctx, W, H, v, scale, shown.heat, DEGREE[ world ] / ( placesState.data.cell || 1000 ) );
 		const towns = world === 'earth' ? paintTowns( ctx, v, width, height, dpr, colours ) : [];
-		if ( shown ) paintRanks( ctx, v, width, height, dpr, shown.top, colours );
+		const ranks = shown ? paintRanks( ctx, v, width, height, dpr, shown.top, colours ) : [];
 		paintScale( ctx, v, width, height, dpr, world, colours );
-		placesState.paintedWith = { world, base: base ? 'map' : 'plain', cells: shown?.heat.length ?? 0, towns: towns.length, townNames: towns, ms: performance.now() - began };
+		placesState.paintedWith = { world, base: base ? 'map' : 'plain', cells: shown?.heat.length ?? 0, towns: towns.length, townNames: towns, ranks, ms: performance.now() - began };
 
 	}
 
@@ -1279,16 +1370,19 @@
 	}
 
 	// The top ten places' numbers on the map, as the table has them, each up and to the right of its
-	// place (so the heat there is still seen): 1 on top, and none where it would cover a higher one.
+	// place (so the heat there is still seen): 1 on top, and none where it would cover a higher one;
+	// none for a place with one visitor (a number on every single drop-in would say nothing). The
+	// numbers drawn.
 	function paintRanks( ctx, v, width, height, dpr, top, colours ) {
 
 		const placed = [];
 		top.slice( 0, 10 ).forEach( ( place, i ) => {
 
+			if ( place.n < 2 ) return;
 			const spot = screenOf( place.lat, place.lon, v, width, height );
 			const [ x, y ] = [ spot.x + 11, spot.y - 11 ];
 			if ( spot.x < 0 || spot.x > width || spot.y < 0 || spot.y > height || placed.some( p => Math.hypot( p.x - x, p.y - y ) < 17 ) ) return;
-			placed.push( { x, y } );
+			placed.push( { x, y, rank: i + 1 } );
 			ctx.beginPath();
 			ctx.moveTo( ( spot.x + 3 ) * dpr, ( spot.y - 3 ) * dpr );
 			ctx.lineTo( ( x - 5 ) * dpr, ( y + 5 ) * dpr );
@@ -1309,6 +1403,7 @@
 			ctx.fillText( String( i + 1 ), x * dpr, ( y + 0.5 ) * dpr );
 
 		} );
+		return placed.map( p => p.rank );
 
 	}
 

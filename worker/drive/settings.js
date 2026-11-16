@@ -28,7 +28,10 @@ export function clock( request, env ) {
 // The visitor's address, as Cloudflare gives it: only ever hashed (see limits.js). An IPv6 address
 // counts by its first half, its /64: that's the block a home or a phone is given, and every one of
 // the billions of addresses in it would otherwise be a visitor of its own, with caps of its own.
-export function addressOf( request ) {
+// With `prefix` 48, by its /48 instead: the block a site, or a free tunnel broker's customer, is
+// given, which holds 65,536 /64s. The drop-in places count a visitor so (dropins.js), as a cell
+// counted once for each of those /64s could be pushed up the top places from one /48 for nothing.
+export function addressOf( request, prefix = 64 ) {
 
 	const ip = request.headers.get( 'CF-Connecting-IP' ) || 'unknown';
 	if ( ! ip.includes( ':' ) || ip.includes( '.' ) ) return ip;
@@ -37,6 +40,7 @@ export function addressOf( request ) {
 	const right = tail ? tail.split( ':' ) : [];
 	const groups = tail === undefined ? left : [ ...left, ...Array( Math.max( 0, 8 - left.length - right.length ) ).fill( '0' ), ...right ];
 	if ( groups.length !== 8 ) return ip;
-	return `${ groups.slice( 0, 4 ).map( group => group.replace( /^0+(?=.)/, '' ) ).join( ':' ) }::/64`;
+	const kept = prefix === 48 ? 3 : 4;
+	return `${ groups.slice( 0, kept ).map( group => group.replace( /^0+(?=.)/, '' ) ).join( ':' ) }::/${ kept * 16 }`;
 
 }
