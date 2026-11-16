@@ -85,6 +85,8 @@
 	.seg button span { font-variant-numeric: tabular-nums; opacity: .85; font-size: 13px; }
 	.map { position: relative; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: var(--bar-bg); }
 	.map canvas { display: block; width: 100%; height: clamp(220px, 50vw, 540px); touch-action: pan-y; cursor: grab; }
+	/* Zoomed in, a finger moves the map every way (on the whole map, up and down scrolls the page). */
+	.map canvas.zoomed { touch-action: none; }
 	.map canvas.dragging { cursor: grabbing; }
 	.map-tools { position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; }
 	.map-tools button { min-width: 36px; min-height: 36px; padding: 4px 9px; background: var(--card); line-height: 1; }
@@ -143,14 +145,16 @@
 		<div class="heat-legend"><span>Fewer</span><i></i><span>More</span><span id="places-most"></span></div>
 		<h3>Top places</h3>
 		<div id="places-top"></div>
-		<p class="note">Each drop-in's place to about a kilometre: the cell of a grid 1 km each way that it was in, never where in it, counted a day with nothing of who. A visitor counts once a day at each place. Drag or scroll the map to move and zoom it (on a phone, pinch or the buttons); a place's name in the table shows it on the map, and Drive opens the game there.</p>
+		<p class="note">Each drop-in's place to about a kilometre: the cell of a grid 1 km each way that it was in, never where in it, counted a day with nothing of who. A visitor counts once a day at each place, so these are visitors, fewer than the drop-ins above (which count every one). A start spot's cells are one place. Drag to move the map; click it, then scroll to zoom (or Ctrl and scroll), or use + and −; on a phone, pinch, drag, or the buttons. The map is about 5 km squares zoomed in: a place's name in the table shows it on the map, and Drive opens the game there, street by street.</p>
 	</section>
+	<div id="more"></div>
 	<p class="muted" style="margin-top:24px;font-size:13px">Counts only, nothing of who. Days are UTC, and each period ends with today so far. ▲ and ▼ compare with the as many days just before it. Referrers, countries and page speed in more detail are in Cloudflare's dashboard (Web Analytics).</p>
 </main>
 <script>
 ( () => {
 
 	const out = document.getElementById( 'out' );
+	const more = document.getElementById( 'more' );
 	const select = document.getElementById( 'days' );
 	const csvButton = document.getElementById( 'csv' );
 	const DAY = 86400000;
@@ -183,6 +187,7 @@
 	async function load() {
 
 		out.innerHTML = '<p class="muted">Loading...</p>';
+		more.innerHTML = '';
 		csvButton.disabled = true;
 		shown = null;
 		let res;
@@ -198,6 +203,8 @@
 
 		if ( res.status === 401 ) return notice( 'Sign in first: open <a href="/">World Drive</a>, sign in with Google on the globe\'s panel, then come back here.' );
 		if ( res.status === 403 ) return notice( 'This Google account isn\'t an admin. The accounts that are go in the Worker\'s ADMIN_EMAILS setting.' );
+		// (ADMIN_LOOKS: the page asks once or twice each change of period, so only a burst of them.)
+		if ( res.status === 429 ) return notice( 'Asked too often just now: try again in a minute.' );
 		if ( ! res.ok ) return notice( `Something went wrong (${ res.status }).` );
 		shown = await res.json();
 		show( shown );
@@ -208,6 +215,7 @@
 	function notice( html ) {
 
 		out.innerHTML = `<div class="notice">${ html }</div>`;
+		more.innerHTML = '';
 
 	}
 
@@ -303,7 +311,9 @@
 				<h2>Each day</h2>
 				<div class="legend"><span><i style="background:var(--accent)"></i>Visits</span><span><i style="background:var(--accent-2)"></i>Play time (hours, its own scale)</span></div>
 				<div class="scroll">${ dayChart( days, daily( 'visit' ), daily( 'play' ).map( s => s / 3600 ) ) }</div>
-			</div>
+			</div>`;
+		// The rest under where people drop in.
+		more.innerHTML = `
 			<div class="grid">
 				<div class="card wide"><h2>How far visits get</h2>${ bars( new Map( funnelRows.map( ( [ name, n ] ) => [ name, n ] ) ), num, 8, false, new Map( funnelRows.map( ( [ name, , note ] ) => [ name, note ] ) ) ) }<p class="note">Each step's share of the visits, then of the step before. Each is counted once a visit, as it's reached, and the minutes are the visit's driving, not paused. A party's Join can drop in without a pin, so a step can be more than the one before.</p></div>
 				<div class="card"><h2>Devices</h2>${ bars( named( 'device', DEVICES ), num, 3, false, shares( named( 'device', DEVICES ) ) ) }<p class="note">A fine pointer (a mouse, a trackpad) is a computer; a touch screen is a tablet when its shorter side is 600 px or more, else a phone.</p></div>
@@ -342,7 +352,7 @@
 				<div class="card"><h2>Where they come from</h2>${ bars( keys( 'load' ), num, 10 ) }</div>
 				<div class="card"><h2>Play time by ride</h2>${ bars( renamed( 'play' ), hours, 12 ) }</div>
 				<div class="card"><h2>Rides dropped in with</h2>${ bars( renamed( 'ride' ), num, 12 ) }</div>
-				<div class="card"><h2>Where they drop in</h2>${ bars( new Map( [ ...keys( 'dropin' ) ].map( ( [ k, v ] ) => [ k === 'other' ? 'Elsewhere (search or pin)' : k === 'moon' ? 'The Moon' : pretty( k ), v ] ) ), num, 12 ) }</div>
+				<div class="card"><h2>Start spots dropped in at</h2>${ bars( new Map( [ ...keys( 'dropin' ) ].map( ( [ k, v ] ) => [ k === 'other' ? 'Elsewhere (search or pin)' : k === 'moon' ? 'The Moon' : pretty( k ), v ] ) ), num, 12 ) }</div>
 				<div class="card"><h2>Garage changes by part <span class="muted">(${ num( garageOpens ) } opens)</span></h2>${ bars( renamed( 'garage_edit' ), num, 10 ) }</div>
 				<div class="card"><h2>Load time</h2>${ bars( new Map( LOAD_ORDER.map( k => [ k, total( 'load_time', k ) ] ) ), num, 5, false ) }</div>
 				<div class="card wide" id="any">
@@ -571,10 +581,12 @@
 	// Metres to a degree of latitude on each world (its radius as src/drive-app/dropin-cells.js has
 	// it), for how big a cell is on the map.
 	const DEGREE = { earth: 6371008.8 * Math.PI / 180, moon: 1737400 * Math.PI / 180 };
-	// The most a view zooms in from the whole map: on the Earth, a view about 40 km across.
-	const MOST_ZOOM = 1024;
-	// How far across a place shown from the table is (m).
-	const SHOW_ACROSS = 80000;
+	// How far across a view is zoomed in at the most, and a place shown from the table (m): the
+	// Earth's map is squares of about 5 km (24 to a degree), and a view much narrower than this would
+	// be a few dozen of them, as the Moon's picture is pixels of about 2.7 km. The map is to see where
+	// people go; Drive is how to see the streets there.
+	const MOST_ACROSS = 150000;
+	const SHOW_ACROSS = 300000;
 	// The heat's colours, few to many: a scale of heat, yellow to deep red, which stands out on the
 	// pale or dark land and sea and on the Moon's greys alike (the legend under the map says which way
 	// it runs). And the base maps' own colours, in the page's light and dark.
@@ -605,12 +617,12 @@
 	};
 	// days and world: what's shown; data: the Worker's answer; views: each world's { lon, lat, zoom }
 	// (the view's middle, and how many times the whole map's scale); bases: each world's map once
-	// it's loaded (null if it didn't); asked: the latest ask, so an older answer arriving after it is
-	// left; towns: the towns once they're loaded (null if they didn't); painted: how many times the
-	// map has been drawn, and with what and how long it took (for the tests).
+	// it's loaded (null if it didn't), and loading its fetch while it comes; asked: the latest ask, so
+	// an older answer arriving after it is left; towns: the towns once they're loaded (null if they
+	// didn't); paintedWith: what the map was last drawn with and how long it took (for the tests).
 	const placesState = {
 		days: PLACES_DAYS.includes( Number( select.value ) ) ? Number( select.value ) : 30, world: 'earth', data: null,
-		views: {}, bases: {}, loading: {}, towns: undefined, asked: 0, painted: 0, paintedWith: null,
+		views: {}, bases: {}, loading: {}, towns: undefined, asked: 0, paintedWith: null,
 	};
 	const darkScheme = matchMedia( '(prefers-color-scheme: dark)' );
 	const heatCanvas = document.createElement( 'canvas' );
@@ -633,7 +645,9 @@
 		if ( ! button || button.dataset.world === placesState.world ) return;
 		placesState.world = button.dataset.world;
 		hideTip();
+		pressed( places.world, 'world', placesState.world );
 		if ( placesState.data ) showPlaces();
+		else drawMap();
 
 	} );
 	places.section.querySelector( '.map-tools' ).addEventListener( 'click', event => {
@@ -663,10 +677,11 @@
 	darkScheme.addEventListener( 'change', drawMap );
 	addEventListener( 'resize', drawMap );
 
-	// Moving and zooming the map: dragged with a mouse (or a finger sideways: up and down a finger
-	// scrolls the page), pinched with two fingers, the wheel once the map's been clicked (or with
-	// Ctrl, as a trackpad's pinch is), double-clicked, or the buttons. A tap or a click without moving
-	// says what's there; so does the mouse resting over a place.
+	// Moving and zooming the map: dragged with a mouse or a finger (on the whole map, a finger
+	// sideways: up and down scrolls the page; zoomed in, every way), pinched and moved with two
+	// fingers, the wheel once the map's been clicked (or with Ctrl, as a trackpad's pinch is),
+	// double-clicked, or the buttons. A tap or a click without moving says what's there; so does the
+	// mouse resting over a place.
 	const canvas = places.canvas;
 	canvas.addEventListener( 'pointerdown', event => {
 
@@ -691,8 +706,10 @@
 		if ( pointers.size === 1 ) pan( at.x - was.x, at.y - was.y );
 		else {
 
+			// The map moves with the fingers' middle, and zooms about it as they spread or close.
 			const other = [ ...pointers ].find( ( [ id ] ) => id !== event.pointerId )[ 1 ];
 			const before = Math.hypot( was.x - other.x, was.y - other.y );
+			pan( ( at.x - was.x ) / 2, ( at.y - was.y ) / 2 );
 			if ( before > 0 ) zoomAt( ( at.x + other.x ) / 2, ( at.y + other.y ) / 2, Math.hypot( at.x - other.x, at.y - other.y ) / before );
 
 		}
@@ -795,12 +812,26 @@
 		pressed( places.world, 'world', placesState.world );
 		const shown = worlds[ placesState.world ];
 		const since = first === null ? ' · none counted yet' : first > from ? ` · counted from ${ first }` : '';
-		places.range.textContent = `${ from === to ? `${ to } so far` : `${ from } to ${ to } (today so far)` }, UTC · ${ num( shown.dropins ) } drop-ins at ${ num( shown.places ) } places${ since }`;
+		places.range.textContent = `${ from === to ? `${ to } so far` : `${ from } to ${ to } (today so far)` }, UTC · ${ count( shown.dropins, 'visitor' ) } at ${ count( shown.places, 'place' ) }${ since }`;
 		places.most.textContent = shown.heat.length ? `the most at one place: ${ num( shown.heat[ 0 ][ 2 ] ) }${ shown.heat.length < shown.places ? ` · the map has the ${ num( shown.heat.length ) } with the most` : '' }` : '';
 		places.empty.textContent = `No drop-ins on the ${ placesState.world === 'moon' ? 'Moon' : 'Earth' } in this period.`;
 		places.empty.hidden = shown.heat.length > 0;
 		places.top.innerHTML = topTable( shown );
 		drawMap();
+
+	}
+
+	// `n` of `thing`: "1 visitor", "356 visitors".
+	function count( n, thing ) {
+
+		return `${ num( n ) } ${ thing }${ n === 1 ? '' : 's' }`;
+
+	}
+
+	// A part's share of the whole, in per cent, and one under 1% as such rather than 0%.
+	function shareOf( part, whole ) {
+
+		return part > 0 && whole && 100 * part / whole < 0.5 ? '<1%' : percent( part, whole );
 
 	}
 
@@ -811,8 +842,9 @@
 
 	}
 
-	// The top places as a table: where, how many drop-ins, their share of the world's, on how many
-	// days, and a link that opens the game there (only the Worker's own kind: /?spot= or /?at=).
+	// The top places as a table: where, how many visitors (each counted once a day at a place), their
+	// share of the world's, on how many days, and a link that opens the game there (only the Worker's
+	// own kind: /?spot= or /?at=).
 	function topTable( { top, dropins } ) {
 
 		if ( ! top.length ) return '<p class="muted">Nothing yet.</p>';
@@ -822,11 +854,11 @@
 			return `<tr><td class="rank">${ i + 1 }</td>`
 				+ `<td><button type="button" class="place" data-place="${ i }" title="Show it on the map">${ esc( place.name ) }</button>${ place.featured ? '<span class="tag">in the game</span>' : '' }`
 				+ `${ place.region ? `<div class="muted small">${ esc( place.region ) }</div>` : '' }</td>`
-				+ `<td class="num">${ esc( num( place.n ) ) }</td><td class="num wide-only">${ esc( percent( place.n, dropins ) ) }</td><td class="num wide-only">${ esc( num( place.days ) ) }</td>`
+				+ `<td class="num">${ esc( num( place.n ) ) }</td><td class="num wide-only">${ esc( shareOf( place.n, dropins ) ) }</td><td class="num wide-only">${ esc( num( place.days ) ) }</td>`
 				+ `<td class="go"><a href="${ esc( link ) }" target="_blank" rel="noopener">Drive ↗</a></td></tr>`;
 
 		} );
-		return `<table class="top-places"><thead><tr><th class="rank">#</th><th>Place</th><th class="num">Drop-ins</th><th class="num wide-only">Share</th><th class="num wide-only">Days</th><th class="go"><span hidden>Drive</span></th></tr></thead><tbody>${ rows.join( '' ) }</tbody></table>`;
+		return `<table class="top-places"><thead><tr><th class="rank">#</th><th>Place</th><th class="num" title="Each visitor counted once a day at a place">Visitors</th><th class="num wide-only">Share</th><th class="num wide-only">Days</th><th class="go"><span hidden>Drive</span></th></tr></thead><tbody>${ rows.join( '' ) }</tbody></table>`;
 
 	}
 
@@ -844,11 +876,11 @@
 
 	}
 
-	// Zoomed between the whole map and MOST_ZOOM, never past a pole, and the middle's longitude kept
-	// between 180° W and E (the map goes round).
+	// Zoomed between the whole map and MOST_ACROSS across, never past a pole, and the middle's
+	// longitude kept between 180° W and E (the map goes round).
 	function clampView( v, width, height ) {
 
-		v.zoom = Math.min( MOST_ZOOM, Math.max( 1, v.zoom ) );
+		v.zoom = Math.min( mostZoom( placesState.world ), Math.max( 1, v.zoom ) );
 		const reach = Math.max( 0, 90 - height / 2 / scaleOf( v, width ) );
 		v.lat = Math.min( reach, Math.max( - reach, v.lat ) );
 		v.lon = ( ( v.lon + 180 ) % 360 + 360 ) % 360 - 180;
@@ -864,6 +896,13 @@
 		let x = ( lon - v.lon ) * scale + width / 2;
 		x -= Math.round( ( x - width / 2 ) / round ) * round;
 		return { x, y: ( v.lat - lat ) * scale + height / 2 };
+
+	}
+
+	// The most `world`'s map zooms in: MOST_ACROSS across.
+	function mostZoom( world ) {
+
+		return 360 * DEGREE[ world ] / MOST_ACROSS;
 
 	}
 
@@ -935,9 +974,11 @@
 
 		if ( ! best ) return hideTip();
 		const [ lat, lon, n ] = best;
-		const named = shown.top.find( place => place.lat === lat && place.lon === lon );
+		const named = shown.top.find( place => ( place.cells ?? [ [ place.lat, place.lon ] ] ).some( ( [ a, b ] ) => a === lat && b === lon ) );
 		const tip = places.tip;
-		tip.innerHTML = `<strong>${ esc( named?.name ?? coordinates( lat, lon ) ) }</strong>${ named?.region ? `<div class="muted small">${ esc( named.region ) }</div>` : '' }<div>${ esc( num( n ) ) } drop-in${ n === 1 ? '' : 's' }</div>`;
+		// A place of several cells (a start spot's) says this cell's and all of its own.
+		const all = named && named.n !== n ? ` here, ${ num( named.n ) } at the place` : '';
+		tip.innerHTML = `<strong>${ esc( named?.name ?? coordinates( lat, lon ) ) }</strong>${ named?.region ? `<div class="muted small">${ esc( named.region ) }</div>` : '' }<div>${ esc( count( n, 'visitor' ) + all ) }</div>`;
 		tip.hidden = false;
 		tip.style.left = `${ Math.max( 4, Math.min( x + 12, width - tip.offsetWidth - 4 ) ) }px`;
 		tip.style.top = `${ y + 12 + tip.offsetHeight > height ? Math.max( 4, y - 12 - tip.offsetHeight ) : y + 12 }px`;
@@ -982,6 +1023,7 @@
 		const colours = BASE[ darkScheme.matches ? 'dark' : 'light' ];
 		const v = view();
 		clampView( v, width, height );
+		canvas.classList.toggle( 'zoomed', v.zoom > 1 );
 		const scale = scaleOf( v, width ) * dpr;
 		if ( ! ( world in placesState.bases ) ) loadBase( world );
 		const base = placesState.bases[ world ];
@@ -996,11 +1038,10 @@
 
 		const shown = placesState.data?.worlds[ world ];
 		if ( shown ) paintHeat( ctx, W, H, v, scale, shown.heat, DEGREE[ world ] / ( placesState.data.cell || 1000 ) );
-		const towns = world === 'earth' ? paintTowns( ctx, v, width, height, dpr, colours ) : 0;
+		const towns = world === 'earth' ? paintTowns( ctx, v, width, height, dpr, colours ) : [];
 		if ( shown ) paintRanks( ctx, v, width, height, dpr, shown.top, colours );
 		paintScale( ctx, v, width, height, dpr, world, colours );
-		placesState.painted ++;
-		placesState.paintedWith = { world, base: base ? 'map' : 'plain', cells: shown?.heat.length ?? 0, towns, ms: performance.now() - began };
+		placesState.paintedWith = { world, base: base ? 'map' : 'plain', cells: shown?.heat.length ?? 0, towns: towns.length, townNames: towns, ms: performance.now() - began };
 
 	}
 
@@ -1272,11 +1313,11 @@
 	}
 
 	// The towns on the Earth's map zoomed in (TOWN_RANKS), the greater first, each a dot and its name,
-	// none over another, at most TOWN_LABELS: how many. They're fetched the first time they're wanted.
+	// none over another, at most TOWN_LABELS: their names. They're fetched the first time they're wanted.
 	function paintTowns( ctx, v, width, height, dpr, colours ) {
 
 		const most = TOWN_RANKS.find( ( [ zoom ] ) => v.zoom >= zoom )?.[ 1 ];
-		if ( most === undefined ) return 0;
+		if ( most === undefined ) return [];
 		if ( placesState.towns === undefined ) {
 
 			placesState.towns = null;
@@ -1289,7 +1330,7 @@
 
 		}
 
-		if ( ! placesState.towns ) return 0;
+		if ( ! placesState.towns ) return [];
 		const scale = scaleOf( v, width );
 		const north = v.lat + height / 2 / scale;
 		const south = v.lat - height / 2 / scale;
@@ -1306,7 +1347,7 @@
 			if ( x < 0 || x > width ) continue;
 			const box = { left: x - 3, right: x + 6 + ctx.measureText( town.name ).width / dpr, top: y - 7, bottom: y + 7 };
 			if ( taken.some( b => b.left < box.right && box.left < b.right && b.top < box.bottom && box.top < b.bottom ) ) continue;
-			taken.push( box );
+			taken.push( { ...box, name: town.name } );
 			ctx.beginPath();
 			ctx.arc( x * dpr, y * dpr, 2 * dpr, 0, 2 * Math.PI );
 			ctx.fillStyle = colours.text;
@@ -1318,7 +1359,7 @@
 
 		}
 
-		return taken.length;
+		return taken.map( box => box.name );
 
 	}
 

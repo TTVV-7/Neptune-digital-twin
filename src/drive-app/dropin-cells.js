@@ -67,6 +67,18 @@ export function cellMiddle( world, row, column ) {
 
 }
 
+// The edges of `world`'s cell at `row`, `column`: { south, north, west, east } in degrees, west and
+// east from 180° W to 180° E.
+export function cellBounds( world, row, column ) {
+
+	const count = columns( world, row );
+	return {
+		south: - 90 + row * 180 / ROWS[ world ], north: - 90 + ( row + 1 ) * 180 / ROWS[ world ],
+		west: - 180 + column * 360 / count, east: - 180 + ( column + 1 ) * 360 / count,
+	};
+
+}
+
 // How far apart (m) two places on `world` are along its ground, on a sphere of its radius.
 export function metresOn( world, latA, lonA, latB, lonB ) {
 

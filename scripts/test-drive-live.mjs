@@ -500,12 +500,13 @@ describe( 'Driving with others', () => {
 		assert.equal( ( await connect( server, room, { protocols: [ 'worlddrive-live.v0', token ] } ) ).status, 400, 'another protocol' );
 		assert.equal( ( await connect( server, room, { protocols: [ token, PROTOCOL ] } ) ).status, 400, 'the token first' );
 		assert.equal( ( await connect( server, room, { protocols: [ PROTOCOL ] } ) ).status, 401, 'no token' );
-		const [ v, id, expires, signature ] = token.split( '.' );
+		const [ v, id, expires, world, signature ] = token.split( '.' );
 		const turnedAway = {
 			'not one': 'nope',
 			'signed with another secret': await visitToken( Date.now(), FAIL_SECRET ),
-			'its expiry changed': [ v, id, String( Number( expires ) + 3600 ), signature ].join( '.' ),
-			'its id changed': [ v, `${ id.slice( 0, - 1 ) }${ id.endsWith( 'A' ) ? 'B' : 'A' }`, expires, signature ].join( '.' ),
+			'its expiry changed': [ v, id, String( Number( expires ) + 3600 ), world, signature ].join( '.' ),
+			'its id changed': [ v, `${ id.slice( 0, - 1 ) }${ id.endsWith( 'A' ) ? 'B' : 'A' }`, expires, world, signature ].join( '.' ),
+			'its world changed': [ v, id, expires, world === 'e' ? 'm' : 'e', signature ].join( '.' ),
 			'one from seven hours ago': await visitToken( Date.now() - 7 * HOUR ),
 		};
 		for ( const [ what, bad ] of Object.entries( turnedAway ) ) assert.equal( ( await connect( server, room, { token: bad } ) ).status, 401, what );

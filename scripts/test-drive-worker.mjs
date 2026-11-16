@@ -23,20 +23,25 @@
 // leaderboard's and the pass's tables say of each day (refunds left out), the as many days before
 // added up, the totals now, and rows older than two years gone. And where people drop in: each
 // drop-in's cell (about a kilometre each way) posted with its drop-in in the play stats, counted a
-// day once for each visitor, held to a post's, a visit's (and no faster than a drop-in takes), a
-// visitor's and the day's worth, kept as counts of cells with nothing of who, and the admin page's
-// map and top places (named from the game's places and Natural Earth's towns) for a day, a week or a
-// month, ADMIN_EMAILS only and ADMIN_LOOKS a minute; and the cells' grid itself. And the look a car travels with to
+// day once for each visitor and each visit (an Earth place only from a visit the Earth's caps let
+// through), held to a post's, a visit's (and no faster than a drop-in takes), a visitor's and each
+// world's day's worth, a visit heard so many times, kept as counts of cells with nothing of who
+// (DriveLimits' own storage read to see it), and the admin page's map and top places (named from the
+// game's places and Natural Earth's towns, a start spot's cells one place) for a day, a week or a
+// month, ADMIN_EMAILS only and ADMIN_LOOKS a minute; topCells and topPlaces; the page keeping its
+// places when a post doesn't get through; and the cells' grid itself. And the look a car travels with to
 // the others in its room (live-protocol.js's checkLook, which the rooms use): every part a page
 // sends, the underglow and the horn too, kept, anything else left out, a bad one turned away.
 // TEST_DRIVE_WORKER_PORT=8796 moves the five wrangler servers (that port and the next four).
 
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { createHash, randomBytes } from 'node:crypto';
+import { copyFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { register } from 'node:module';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { after, before, describe, test } from 'node:test';
 import { CLIENT_ID, makeKey, makeToken, serveKeys, startWorker, stripeSignature } from './worker-harness.mjs';
 import { sessionCookies } from '../worker/sessions.js';
@@ -49,7 +54,8 @@ import { DEVICES, FUNNEL, MAX_COUNTS, METRICS, PROBLEMS, SEARCHES, checkCounts, 
 import { LOOK_PARTS, checkLook } from '../src/drive-app/live-protocol.js';
 import { SPOTS } from '../src/drive-app/places.js';
 import { CELL, PLACES_PER_POST, cellMiddle, cellOf, checkCell, checkPlaces, metresOn } from '../src/drive-app/dropin-cells.js';
-import { nameCell, readTowns } from '../worker/drive/dropins.js';
+import { nameCell, readTowns, topCells, topPlaces } from '../worker/drive/dropins.js';
+import { createStats } from '../src/drive-app/stats.js';
 
 const PORT = Number( process.env.TEST_DRIVE_WORKER_PORT ) || 8796;
 const MAPS_KEY = 'test-maps-key-not-real';
@@ -59,6 +65,50 @@ const FAIL_SECRET = '2x0000000000000000000000000000000AA';
 const TOKEN = 'XXXX.DUMMY.TOKEN.XXXX';
 const DAILY = 5;
 const PER_VISITOR = 2;
+// A visit's token (visits.js): the Earth's, for a visit the Earth's caps let through; the Moon's for
+// any other.
+const EARTH_TOKEN = /^v2\.[\w-]{22}\.\d{10}\.e\.[\w-]{43}$/;
+const MOON_TOKEN = /^v2\.[\w-]{22}\.\d{10}\.m\.[\w-]{43}$/;
+// base64url's letters, in order.
+const BASE64URL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+// DriveLimits' tables of today's drop-in places (limits.js).
+const PLACE_TABLES = [ 'place_seen', 'place_totals', 'place_visitors', 'place_visits' ];
+const encoder = new TextEncoder();
+
+// The UTC date of `time` (ms), e.g. 2026-10-30.
+function dayOf( time ) {
+
+	return new Date( time ).toISOString().slice( 0, 10 );
+
+}
+
+// An HMAC-SHA256 key derived from `secret` as the Worker derives its own (HKDF, with `label`).
+async function derivedKey( secret, label ) {
+
+	const base = await crypto.subtle.importKey( 'raw', encoder.encode( secret ), 'HKDF', false, [ 'deriveKey' ] );
+	return crypto.subtle.deriveKey( { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array( 0 ), info: encoder.encode( label ) }, base, { name: 'HMAC', hash: 'SHA-256', length: 256 }, false, [ 'sign' ] );
+
+}
+
+// A visit's token as /api/visit made them before they said which world ("v1.<id>.<expiry>.<signature>",
+// visits.js), from `time`, signed with this suite's secret.
+async function oldVisit( time ) {
+
+	const id = randomBytes( 16 ).toString( 'base64url' );
+	const expires = Math.floor( ( time + VISIT_HOURS * 60 * 60 * 1000 ) / 1000 );
+	const signature = await crypto.subtle.sign( 'HMAC', await derivedKey( PASS_SECRET, 'world-drive visit token v1' ), encoder.encode( `${ id }.${ expires }` ) );
+	return `v1.${ id }.${ expires }.${ Buffer.from( signature ).toString( 'base64url' ) }`;
+
+}
+
+// What DriveLimits keeps for `text` on a day with `salt` (limits.js's places): an HMAC with its key,
+// which only the Worker's secret makes (this suite's), in hex.
+async function placesTag( salt, text ) {
+
+	const signature = await crypto.subtle.sign( 'HMAC', await derivedKey( PASS_SECRET, 'world-drive drop-in places v1' ), encoder.encode( `${ salt }:${ text }` ) );
+	return Buffer.from( signature ).toString( 'hex' );
+
+}
 // 30 October 2026, 22:00 UTC: two hours before the counts start again.
 const EVENING = Date.UTC( 2026, 9, 30, 22, 0, 0 );
 const NEXT_DAY = Date.UTC( 2026, 9, 31, 0, 0, 5 );
@@ -228,8 +278,9 @@ describe( 'World Drive Worker', () => {
 		assert.equal( status, 200 );
 		const { visit: token, ...rest } = json;
 		assert.deepEqual( rest, { mapsKey: MAPS_KEY, left: PER_VISITOR - 1 } );
-		// The visit's token, for posting scores (see the leaderboard's tests).
-		assert.match( token, /^v1\./ );
+		// The visit's token, for posting scores (see the leaderboard's tests): the Earth's, the caps
+		// checked.
+		assert.match( token, EARTH_TOKEN );
 		assert.equal( headers.get( 'Cache-Control' ), 'no-store' );
 		assert.deepEqual( verifications.at( - 1 ), { secret: PASS_SECRET, response: TOKEN, remoteip: '203.0.113.7' } );
 
@@ -554,11 +605,13 @@ describe( 'World Drive leaderboard', () => {
 	test( 'a visit that passes comes with a token for posting scores, good for six hours', async () => {
 
 		const { json } = await visit( server, { ip: nextIp() } );
-		const [ version, id, expires, signature, ...rest ] = json.visit.split( '.' );
+		const [ version, id, expires, world, signature, ...rest ] = json.visit.split( '.' );
 		assert.deepEqual( rest, [] );
-		assert.equal( version, 'v1' );
+		assert.equal( version, 'v2' );
 		assert.match( id, /^[\w-]{22}$/ );
 		assert.equal( Number( expires ), ( EVENING + 6 * HOUR ) / SECOND );
+		// The Earth's: a visit the caps let through (a Moon visit's says 'm': the Supporter Pass's tests).
+		assert.equal( world, 'e' );
 		assert.match( signature, /^[\w-]{43}$/ );
 		const other = await visit( server, { ip: nextIp() } );
 		assert.notEqual( other.json.visit.split( '.' )[ 1 ], id, 'two visits with one id' );
@@ -615,12 +668,12 @@ describe( 'World Drive leaderboard', () => {
 		// No visit, or a forged or expired one: nothing made, and nothing counted against the address.
 		const ip = nextIp();
 		const { visit: token } = await named( 'Visitor One', { ip } );
-		const [ , id, expires, signature ] = token.split( '.' );
+		const [ , id, expires, world, signature ] = token.split( '.' );
 		const forged = signature.slice( 0, 10 ) + ( signature[ 10 ] === 'A' ? 'B' : 'A' ) + signature.slice( 11 );
 		const bad = {
 			'no visit': undefined,
 			'not a visit': 'hello',
-			'a forged signature': `v1.${ id }.${ expires }.${ forged }`,
+			'a forged signature': `v2.${ id }.${ expires }.${ world }.${ forged }`,
 			'signed with another secret': await makeVisit( { TURNSTILE_SECRET: FAIL_SECRET }, NOON ),
 			'one from seven hours ago': await makeVisit( { TURNSTILE_SECRET: PASS_SECRET }, NOON - 7 * HOUR ),
 		};
@@ -762,14 +815,18 @@ describe( 'World Drive leaderboard', () => {
 	test( 'cheating: no token, or a forged, changed, expired or someone else\'s', async () => {
 
 		const bob = await player( 'Bob' );
-		const [ , id, expires, signature ] = bob.visit.split( '.' );
+		const [ , id, expires, world, signature ] = bob.visit.split( '.' );
 		const changed = signature.slice( 0, 10 ) + ( signature[ 10 ] === 'A' ? 'B' : 'A' ) + signature.slice( 11 );
 		const tokens = {
 			'no token': null,
 			'not a token': 'hello',
-			'a forged signature': `v1.${ id }.${ expires }.${ changed }`,
-			'a later expiry': `v1.${ id }.${ Number( expires ) + 3600 }.${ signature }`,
-			'another visit\'s id': `v1.${ 'A'.repeat( 22 ) }.${ expires }.${ signature }`,
+			'a forged signature': `v2.${ id }.${ expires }.${ world }.${ changed }`,
+			'a later expiry': `v2.${ id }.${ Number( expires ) + 3600 }.${ world }.${ signature }`,
+			'another visit\'s id': `v2.${ 'A'.repeat( 22 ) }.${ expires }.${ world }.${ signature }`,
+			'another world': `v2.${ id }.${ expires }.${ world === 'e' ? 'm' : 'e' }.${ signature }`,
+			'its signature as an old token\'s': `v1.${ id }.${ expires }.${ signature }`,
+			// (The same signature's bytes: its last letter's two spare bits changed.)
+			'its signature written another way': `v2.${ id }.${ expires }.${ world }.${ signature.slice( 0, - 1 ) }${ BASE64URL[ BASE64URL.indexOf( signature.at( - 1 ) ) ^ 1 ] }`,
 			'signed with another secret': await makeVisit( { TURNSTILE_SECRET: FAIL_SECRET }, bob.visitedAt ),
 			'one from seven hours ago': await makeVisit( { TURNSTILE_SECRET: PASS_SECRET }, bob.visitedAt - 7 * HOUR ),
 		};
@@ -1157,6 +1214,7 @@ describe( 'World Drive Supporter Pass', () => {
 				DROPIN_PLACES_PER_VISIT: '4',
 				DROPIN_PLACES_PER_VISITOR: '6',
 				DROPIN_PLACES_DAILY: '12',
+				DROPIN_ASKS_PER_VISIT: '5',
 				// PER_VISITOR_DAILY (8), PER_VISITOR_DAILY_SUPPORTER (30) and SUPPORTER_PRICE ("CA$4.99")
 				// are wrangler.drive.jsonc's, and SUPPORTER_PAYMENT_LINK_ID isn't set: the account is
 				// World Drive's own, so any paid checkout on it counts.
@@ -1475,7 +1533,7 @@ describe( 'World Drive Supporter Pass', () => {
 			const res = await drive( { world: 'moon' } );
 			assert.equal( res.status, 200, res.text );
 			assert.equal( res.json.moon, true );
-			assert.match( res.json.visit, /^v1\./ );
+			assert.match( res.json.visit, MOON_TOKEN );
 			assert.ok( ! res.text.includes( MAPS_KEY ) );
 
 		}
@@ -1486,7 +1544,7 @@ describe( 'World Drive Supporter Pass', () => {
 		const over = await drive();
 		assert.equal( over.status, 429 );
 		assert.equal( over.json.reason, 'visitor' );
-		assert.match( over.json.visit, /^v1\./ );
+		assert.match( over.json.visit, MOON_TOKEN );
 		assert.ok( ! over.text.includes( MAPS_KEY ) );
 		// The Moon's still open.
 		assert.equal( ( await drive( { world: 'moon' } ) ).json.moon, true );
@@ -1499,6 +1557,7 @@ describe( 'World Drive Supporter Pass', () => {
 			assert.equal( res.status, 200, `drive ${ i + 1 }: ${ res.text }` );
 			assert.equal( res.json.mapsKey, MAPS_KEY );
 			assert.equal( res.json.left, null );
+			assert.match( res.json.visit, EARTH_TOKEN );
 
 		}
 
@@ -1790,6 +1849,39 @@ describe( 'World Drive Supporter Pass', () => {
 
 	}
 
+	// What DriveLimits keeps (limits.js), read from a copy of its Durable Object's SQLite file as
+	// wrangler stores it: `read( db )` with the copy open (node:sqlite), and what it gives.
+	function limitsStorage( read ) {
+
+		for ( const file of listFiles( server.state ).filter( path => path.endsWith( '.sqlite' ) ) ) {
+
+			const dir = mkdtempSync( join( tmpdir(), 'drive-limits-' ) );
+			try {
+
+				for ( const end of [ '', '-wal', '-shm' ] ) if ( existsSync( file + end ) ) copyFileSync( file + end, join( dir, `copy.sqlite${ end }` ) );
+				const db = new DatabaseSync( join( dir, 'copy.sqlite' ) );
+				try {
+
+					if ( db.prepare( 'SELECT name FROM sqlite_master WHERE name = \'place_seen\'' ).get() ) return read( db );
+
+				} finally {
+
+					db.close();
+
+				}
+
+			} finally {
+
+				rmSync( dir, { recursive: true, force: true } );
+
+			}
+
+		}
+
+		throw new Error( 'No DriveLimits storage' );
+
+	}
+
 	test( 'where people drop in: a drop-in\'s cell, posted with its drop-in, is counted a day, once for each visitor; one without its drop-in, or not a cell, isn\'t; and never more than a post carries', async () => {
 
 		const ann = await placesVisit();
@@ -1835,7 +1927,7 @@ describe( 'World Drive Supporter Pass', () => {
 
 	test( 'where people drop in: a visit\'s places come no faster than one each 10 s of it, and no more than a visit\'s, a visitor\'s and the day\'s worth (DROPIN_PLACES_*), each starting again at midnight UTC', async () => {
 
-		// (This suite's settings: 4 a visit, 6 a visitor, 12 a day.)
+		// (This suite's settings: 4 a visit, 6 a visitor, 12 a day on each world.)
 		const day = PLACES_DAY + DAY;
 		const cells = Array.from( { length: 40 }, ( _, i ) => cellOf( 'earth', 20 + i * 0.1, 30 ) );
 		const earth = n => ( { 'dropin:other': n } );
@@ -1868,6 +1960,13 @@ describe( 'World Drive Supporter Pass', () => {
 		assert.equal( total(), 12 );
 		// Their play stats still counted all the same.
 		assert.equal( statsRows( new Date( day ).toISOString().slice( 0, 10 ) )[ 'dropin:other' ], 3 + 3 + 3 + 4 + 4 + 4 + 1 );
+		// The Moon's day is its own (so Moon visits, which cost nothing but the robot check, can't
+		// crowd out the Earth's places, nor the Earth's the Moon's): its places are still counted.
+		const ivy = await placesVisit( { time: day } );
+		const moonCells = Array.from( { length: 4 }, ( _, i ) => cellOf( 'moon', 10 + i * 0.2, 30 ) );
+		assert.equal( ( await ivy.post( { 'dropin:moon': 4 }, moonCells, HOUR ) ).status, 204 );
+		assert.equal( total(), 16 );
+		assert.ok( moonCells.every( cell => placeRows( day )[ cell ] === 1 ) );
 
 		// The next day it all starts again.
 		const next = day + DAY;
@@ -1877,26 +1976,184 @@ describe( 'World Drive Supporter Pass', () => {
 
 	} );
 
+	test( 'where people drop in: one visit\'s token sent from many addresses adds a cell once, and a visit\'s worth in all; a Moon visit\'s token, one over the caps or one from before tokens said which, posts the Moon\'s places alone', async () => {
+
+		const day = PLACES_DAY + 10 * DAY;
+		const post = ( token, counts, places, after, ip = nextIp() ) => send( 'POST', '/api/stats', { visit: token, counts, places }, { ip, time: day + after } );
+		const EIFFEL = cellOf( 'earth', 48.8584, 2.2945 );
+		const others = Array.from( { length: 4 }, ( _, i ) => cellOf( 'earth', 30 + i * 0.1, 40 ) );
+		// One visit's token from four addresses, five minutes in: the Eiffel Tower once.
+		const replayed = await placesVisit( { time: day } );
+		for ( let i = 0; i < 4; i ++ ) assert.equal( ( await post( replayed.token, { 'dropin:other': 1 }, [ EIFFEL ], 5 * MINUTE + i * SECOND ) ).status, 204 );
+		assert.deepEqual( placeRows( day ), { [ EIFFEL ]: 1 } );
+		// New cells from a fifth and a sixth: the visit's 4 (this suite's) in all, wherever from.
+		assert.equal( ( await post( replayed.token, { 'dropin:other': 4 }, others, 6 * MINUTE ) ).status, 204 );
+		assert.equal( ( await post( replayed.token, { 'dropin:other': 1 }, [ cellOf( 'earth', 31, 41 ) ], 7 * MINUTE ) ).status, 204 );
+		assert.deepEqual( placeRows( day ), { [ EIFFEL ]: 1, ...Object.fromEntries( others.slice( 0, 3 ).map( cell => [ cell, 1 ] ) ) } );
+
+		// A Moon visit (no Earth caps checked, nothing spent but the robot check): the Moon's places,
+		// never the Earth's, though its stats are counted as ever.
+		const visitFor = ( ip, world ) => call( server, '/api/visit', { method: 'POST', headers: { Origin: server.base, 'Content-Type': 'application/json' }, body: JSON.stringify( world ? { token: TOKEN, world } : { token: TOKEN } ), ip, time: day } );
+		const moon = await visitFor( nextIp(), 'moon' );
+		assert.match( moon.json.visit, MOON_TOKEN );
+		const CHAMPS = cellOf( 'earth', 48.87, 2.31 );
+		const COPERNICUS = cellOf( 'moon', 9.62, - 20.08 );
+		const dropins = () => statsRows( dayOf( day ) )[ 'dropin:other' ];
+		const before = dropins();
+		assert.equal( ( await post( moon.json.visit, { 'dropin:other': 1, 'dropin:moon': 1 }, [ CHAMPS, COPERNICUS ], HOUR ) ).status, 204 );
+		assert.deepEqual( [ placeRows( day )[ CHAMPS ], placeRows( day )[ COPERNICUS ] ], [ undefined, 1 ] );
+		assert.equal( dropins(), before + 1 );
+		// A visit turned away by the caps (the address's 8 drives used): the Moon's too.
+		const ip = nextIp();
+		let over = null;
+		for ( let i = 0; i < 9; i ++ ) over = await visitFor( ip );
+		assert.equal( over.status, 429 );
+		assert.match( over.json.visit, MOON_TOKEN );
+		assert.equal( ( await post( over.json.visit, { 'dropin:other': 1 }, [ CHAMPS ], HOUR, ip ) ).status, 204 );
+		assert.equal( placeRows( day )[ CHAMPS ], undefined );
+		// A token from before they said which world (v1), taken until it runs out (a page open over the
+		// deploy): its stats, and the Moon's places alone, as it doesn't say.
+		const old = await oldVisit( day );
+		const TYCHO_RIM = cellOf( 'moon', - 42.9, - 11.2 );
+		assert.equal( ( await post( old, { 'dropin:other': 1, 'dropin:moon': 1 }, [ CHAMPS, TYCHO_RIM ], HOUR ) ).status, 204 );
+		assert.deepEqual( [ placeRows( day )[ CHAMPS ], placeRows( day )[ TYCHO_RIM ] ], [ undefined, 1 ] );
+		assert.equal( dropins(), before + 3 );
+
+	} );
+
+	test( 'where people drop in: DriveLimits hears a visit\'s places DROPIN_ASKS_PER_VISIT times a day at most, and once a visit can add no more, the Worker stops asking', async () => {
+
+		const day = PLACES_DAY + 11 * DAY;
+		// How many places DriveLimits has counted for `token`'s visit today, and how many times it has
+		// heard it, from its storage (by the visit's HMAC, as it keeps it).
+		const heard = async token => {
+
+			const salt = limitsStorage( db => db.prepare( 'SELECT salt FROM days WHERE day = ?' ).get( dayOf( day ) ).salt );
+			const tag = await placesTag( salt, `visit:${ token.split( '.' )[ 1 ] }` );
+			return limitsStorage( db => ( { ...db.prepare( 'SELECT count, asks FROM place_visits WHERE day = ? AND visit = ?' ).get( dayOf( day ), tag ) } ) );
+
+		};
+		// A visit posting the same place again and again (this suite's 5 asks a visit): heard five
+		// times, then never again, so a new place after that isn't counted.
+		const X = cellOf( 'earth', 33, 44 );
+		const jo = await placesVisit( { time: day } );
+		for ( let i = 0; i < 5; i ++ ) assert.equal( ( await jo.post( { 'dropin:other': 1 }, [ X ], HOUR + i * SECOND ) ).status, 204 );
+		assert.deepEqual( await heard( jo.token ), { count: 1, asks: 5 } );
+		assert.equal( ( await jo.post( { 'dropin:other': 1 }, [ cellOf( 'earth', 33.2, 44 ) ], 2 * HOUR ) ).status, 204 );
+		assert.deepEqual( placeRows( day ), { [ X ]: 1 } );
+		assert.deepEqual( await heard( jo.token ), { count: 1, asks: 5 } );
+		// A visit whose places are all counted (this suite's 4): not asked about again.
+		const kim = await placesVisit( { time: day } );
+		const four = Array.from( { length: 4 }, ( _, i ) => cellOf( 'earth', 34 + i * 0.1, 44 ) );
+		assert.equal( ( await kim.post( { 'dropin:other': 4 }, four, HOUR ) ).status, 204 );
+		assert.equal( ( await kim.post( { 'dropin:other': 1 }, [ cellOf( 'earth', 35, 44 ) ], 2 * HOUR ) ).status, 204 );
+		assert.deepEqual( await heard( kim.token ), { count: 4, asks: 1 } );
+		assert.equal( Object.keys( placeRows( day ) ).length, 5 );
+
+	} );
+
 	test( 'where people drop in: kept only as counts of cells a day, with nothing of who, which visit or from where, and no finer than the cell', async () => {
 
 		// The table: a day, a world, a cell and how many; nothing else.
 		const [ { sql } ] = server.d1( 'SELECT sql FROM sqlite_master WHERE name = \'dropins_daily\'' );
 		assert.deepEqual( server.d1( 'SELECT name FROM pragma_table_info( \'dropins_daily\' ) ORDER BY cid' ).map( r => r.name ), [ 'day', 'world', 'cell_row', 'cell_column', 'n' ] );
-		assert.match( sql, /PRIMARY KEY \( day, world, cell_row, cell_column \)/ );
+		assert.match( sql, /PRIMARY KEY \( world, day, cell_row, cell_column \)/ );
 		// What DriveLimits keeps of today's: hashes and counts, never a cell or an address. (The
 		// addresses this suite's visitors came from are 198.19.x.y.)
 		const visitor = await placesVisit();
 		const somewhere = cellOf( 'earth', - 12.3456, 130.8765 );
 		assert.equal( ( await visitor.post( { 'dropin:other': 1 }, [ somewhere ] ) ).status, 204 );
 		assert.equal( placeRows( PLACES_DAY )[ somewhere ], 1 );
+		const id = visitor.token.split( '.' )[ 1 ];
 		const files = listFiles( server.state );
 		assert.ok( files.some( file => /\.sqlite$/.test( file ) ), `no storage in ${ files.join( ', ' ) }` );
 		for ( const file of files ) {
 
+			// (The rate limiters count the visit's posts by its id, as for all the play stats: on
+			// Cloudflare in memory, here in wrangler's files.)
 			const bytes = readFileSync( file ).toString( 'latin1' );
-			for ( const text of [ somewhere, GOLDEN, TYCHO, visitor.ip ] ) assert.ok( ! bytes.includes( text ), `${ text } is in ${ file }` );
+			for ( const text of [ somewhere, GOLDEN, TYCHO, visitor.ip, ...( file.includes( 'ratelimit' ) ? [] : [ id ] ) ] ) assert.ok( ! bytes.includes( text ), `${ text } is in ${ file }` );
 
 		}
+
+		// Nor anything a copy of DriveLimits' storage can rebuild who dropped in where from. The day's
+		// salt is there (the visit caps need it), so a hash of it with an address (as the visit caps
+		// keep a visitor), a visit's id or a cell could be tried against every address, visit and cell:
+		// none is there. Its places' tables keep only HMACs made with a key from the Worker's secret,
+		// which isn't in it, and have no rowids to pair a visit's row with its visitor's by the order
+		// they went in.
+		const today = dayOf( PLACES_DAY );
+		const stored = limitsStorage( db => ( {
+			salt: db.prepare( 'SELECT salt FROM days WHERE day = ?' ).get( today ).salt,
+			tables: Object.fromEntries( db.prepare( 'SELECT name, sql FROM sqlite_master WHERE type = \'table\' AND name LIKE \'place%\'' ).all().map( row => [ row.name, row.sql ] ) ),
+			values: PLACE_TABLES.flatMap( table => db.prepare( `SELECT * FROM ${ table }` ).all().flatMap( row => Object.values( row ).map( String ) ) ),
+			seen: db.prepare( 'SELECT seen FROM place_seen WHERE day = ?' ).all( today ).map( row => row.seen ),
+		} ) );
+		assert.deepEqual( Object.keys( stored.tables ).sort(), PLACE_TABLES );
+		for ( const sql of Object.values( stored.tables ) ) assert.match( sql, /\) WITHOUT ROWID$/ );
+		const sha256 = text => createHash( 'sha256' ).update( text ).digest( 'hex' );
+		const visitorHash = sha256( `${ stored.salt }:${ visitor.ip }` );
+		const tries = [ visitorHash, id, somewhere, ...[
+			visitor.ip, id, `visitor:${ visitor.ip }`, `visit:${ id }`, `visitor:${ visitorHash }`, `${ visitorHash }:${ somewhere }`, `${ visitor.ip }:${ somewhere }`,
+			`${ id }:${ somewhere }`, `visitor:${ visitor.ip }:${ somewhere }`, `visit:${ id }:${ somewhere }`, `visitor:${ visitorHash }:${ somewhere }`,
+		].map( text => sha256( `${ stored.salt }:${ text }` ) ) ];
+		for ( const text of tries ) assert.ok( ! stored.values.includes( text ), `${ text } is in DriveLimits' places` );
+		// (What is there: the HMACs, made with the key only the Worker can make.)
+		assert.ok( stored.seen.includes( await placesTag( stored.salt, `visitor:${ visitor.ip }:${ somewhere }` ) ) );
+		assert.ok( stored.seen.includes( await placesTag( stored.salt, `visit:${ id }:${ somewhere }` ) ) );
+
+		// When a new UTC day starts (any call to DriveLimits: here a visit), the days before go with
+		// their salt: no place of theirs is kept.
+		const later = PLACES_DAY + 20 * DAY;
+		assert.ok( limitsStorage( db => PLACE_TABLES.some( table => db.prepare( `SELECT COUNT(*) AS n FROM ${ table } WHERE day < ?` ).get( dayOf( later ) ).n > 0 ) ) );
+		await placesVisit( { time: later } );
+		assert.deepEqual( limitsStorage( db => PLACE_TABLES.map( table => db.prepare( `SELECT COUNT(*) AS n FROM ${ table } WHERE day < ?` ).get( dayOf( later ) ).n ) ), [ 0, 0, 0, 0 ] );
+		assert.deepEqual( limitsStorage( db => db.prepare( 'SELECT day FROM days' ).all().map( row => row.day ) ), [ dayOf( later ) ] );
+
+	} );
+
+	test( 'where people drop in: a start spot\'s cells are one place in the top places, at its pin with its drop-ins added up; a cell further off is named by how far from it', async () => {
+
+		const MERGE_DAY = PASS_DAY + 170 * DAY;
+		const row = ( time, key, n ) => {
+
+			const { world, row: cellRow, column } = checkCell( key );
+			return `( '${ dayOf( time ) }', '${ world }', ${ cellRow }, ${ column }, ${ n } )`;
+
+		};
+		const middle = key => {
+
+			const { world, row: cellRow, column } = checkCell( key );
+			const { lat, lon } = cellMiddle( world, cellRow, column );
+			return [ lat, lon ];
+
+		};
+		// The Arc de Triomphe's pin is 5 m from its cell's north edge: 11 m north of it is the next
+		// row's cell, where its drop-ins start as often. A kilometre south-west is somewhere else.
+		const ARC = cellOf( 'earth', 48.8738, 2.2962 );
+		const ARC_NORTH = cellOf( 'earth', 48.8739, 2.2962 );
+		const SOUTH_WEST = 'earth:15441:13332';
+		assert.notEqual( ARC, ARC_NORTH );
+		server.d1( `INSERT INTO dropins_daily ( day, world, cell_row, cell_column, n ) VALUES
+			${ row( MERGE_DAY, ARC, 3 ) }, ${ row( MERGE_DAY, ARC_NORTH, 2 ) }, ${ row( MERGE_DAY, GOLDEN, 4 ) }, ${ row( MERGE_DAY, SOUTH_WEST, 1 ) },
+			${ row( MERGE_DAY - DAY, ARC_NORTH, 6 ) }` );
+		const owner = await signIn( { sub: '1095', email: 'nobody@example.com', name: 'Owner' }, { time: MERGE_DAY } );
+		const ask = async days => ( await call( server, `/api/admin/dropins?days=${ days }`, { headers: { Cookie: owner.cookie }, time: MERGE_DAY } ) ).json;
+
+		const today = await ask( 1 );
+		// The map has each cell; the table each place once.
+		assert.deepEqual( today.worlds.earth.heat, [ [ ...middle( GOLDEN ), 4 ], [ ...middle( ARC ), 3 ], [ ...middle( ARC_NORTH ), 2 ], [ ...middle( SOUTH_WEST ), 1 ] ] );
+		assert.deepEqual( [ today.worlds.earth.dropins, today.worlds.earth.places ], [ 10, 4 ] );
+		const arc = SPOTS.find( spot => spot.id === 'arc' );
+		const [ first, second, third, ...rest ] = today.worlds.earth.top;
+		assert.deepEqual( first, { lat: arc.lat, lon: arc.lon, n: 5, days: 1, cells: [ middle( ARC ), middle( ARC_NORTH ) ], name: 'Arc de Triomphe', region: arc.region, link: '/?spot=arc', featured: true } );
+		assert.deepEqual( [ second.name, second.n, second.cells ], [ 'Golden Gate Bridge', 4, [ middle( GOLDEN ) ] ] );
+		assert.deepEqual( [ third.name, third.n, third.featured, third.cells ], [ '1 km SW of Arc de Triomphe', 1, false, [ middle( SOUTH_WEST ) ] ] );
+		assert.equal( new URLSearchParams( third.link.slice( 2 ) ).get( 'at' ), middle( SOUTH_WEST ).join( ',' ) );
+		assert.deepEqual( rest, [] );
+		// The week: the Arc's north cell's busy day too; on at least as many days as its busiest cell.
+		const week = await ask( 7 );
+		assert.deepEqual( week.worlds.earth.top.map( place => [ place.name, place.n, place.days ] ), [ [ 'Arc de Triomphe', 11, 2 ], [ 'Golden Gate Bridge', 4, 1 ], [ '1 km SW of Arc de Triomphe', 1, 1 ] ] );
 
 	} );
 
@@ -1945,7 +2202,9 @@ describe( 'World Drive Supporter Pass', () => {
 		assert.deepEqual( worlds.earth.heat, [ [ ...middle( GOLDEN ), 5 ], [ ...middle( LYON ), 3 ], ...[ PACIFIC, NEAR_LYON ].map( key => [ ...middle( key ), 1 ] ) ] );
 		assert.deepEqual( [ worlds.earth.dropins, worlds.earth.places, worlds.moon.dropins, worlds.moon.places ], [ 10, 4, 3, 2 ] );
 		const [ golden, lyon, ...rest ] = worlds.earth.top;
-		assert.deepEqual( golden, { lat: middle( GOLDEN )[ 0 ], lon: middle( GOLDEN )[ 1 ], n: 5, days: 1, name: 'Golden Gate Bridge', region: 'San Francisco, USA', link: '/?spot=golden-gate', featured: true } );
+		// A start spot at its own pin, with its cells (here one).
+		const spot = SPOTS.find( one => one.id === 'golden-gate' );
+		assert.deepEqual( golden, { lat: spot.lat, lon: spot.lon, n: 5, days: 1, cells: [ middle( GOLDEN ) ], name: 'Golden Gate Bridge', region: 'San Francisco, USA', link: '/?spot=golden-gate', featured: true } );
 		assert.deepEqual( [ lyon.name, lyon.region, lyon.featured ], [ 'Lyon', 'Rhône-Alpes, France', false ] );
 		assert.equal( new URLSearchParams( lyon.link.slice( 2 ) ).get( 'name' ), 'Lyon' );
 		assert.deepEqual( new URLSearchParams( lyon.link.slice( 2 ) ).get( 'at' ), middle( LYON ).join( ',' ) );
@@ -2146,6 +2405,38 @@ describe( 'World Drive Worker addresses', () => {
 
 } );
 
+// DriveLimits by itself (limits.js), its SQLite storage stood in for by node:sqlite's: what can't be
+// seen through one Worker instance, which stops asking for a visit once it's told it's done.
+describe( 'DriveLimits\' drop-in places by itself', () => {
+
+	test( 'a visit is heard DROPIN_ASKS_PER_VISIT times a day: past that, nothing more of it is counted, whichever Worker instance asks', async () => {
+
+		await loadWorker();
+		const { DriveLimits } = await import( '../worker/drive/limits.js' );
+		const db = new DatabaseSync( ':memory:' );
+		const sql = { exec: ( query, ...values ) => {
+
+			const rows = db.prepare( query ).all( ...values ).map( row => ( { ...row } ) );
+			return { toArray: () => rows, one: () => rows[ 0 ] };
+
+		} };
+		const limits = new DriveLimits( { storage: { sql, transactionSync: run => run() } }, { TURNSTILE_SECRET: PASS_SECRET } );
+		const now = Date.UTC( 2026, 10, 16, 12 );
+		const ask = cells => limits.places( '198.51.100.77', { now, visit: 'A'.repeat( 22 ), since: now - HOUR, cells, daily: 100, perVisitor: 100, perVisit: 10, gap: 10000, asks: 3 } );
+		const X = cellOf( 'earth', 33, 44 );
+		const Y = cellOf( 'earth', 34, 44 );
+		assert.deepEqual( await ask( [ X ] ), { cells: [ X ], full: { earth: false, moon: false }, done: false } );
+		assert.deepEqual( await ask( [ X ] ), { cells: [], full: { earth: false, moon: false }, done: false } );
+		// Its third: done, though it has places to spare.
+		assert.deepEqual( await ask( [ X ] ), { cells: [], full: { earth: false, moon: false }, done: true } );
+		// Asked again (by another Worker instance, which hasn't heard): a new place isn't counted.
+		assert.deepEqual( await ask( [ Y ] ), { cells: [], full: { earth: false, moon: false }, done: true } );
+		assert.deepEqual( db.prepare( 'SELECT count, asks FROM place_visits' ).all().map( row => ( { ...row } ) ), [ { count: 1, asks: 4 } ] );
+
+	} );
+
+} );
+
 describe( 'World Drive Worker with the key set as Google_maps_api', () => {
 
 	test( 'takes the key under that name in any case, still only after Turnstile and the caps', async () => {
@@ -2179,7 +2470,7 @@ describe( 'World Drive Worker with the key set as Google_maps_api', () => {
 			assert.equal( passed.status, 200, name );
 			const { visit: token, ...rest } = await passed.json();
 			assert.deepEqual( rest, { mapsKey: MAPS_KEY, left: 3 }, name );
-			assert.match( token, /^v1\./ );
+			assert.match( token, EARTH_TOKEN );
 
 		}
 
@@ -2466,7 +2757,7 @@ describe( 'Play stats\' counts', () => {
 		// last cells).
 		const places = Array.from( { length: PLACES_PER_POST }, ( _, i ) => cellOf( 'earth', 0.004, 179.99 - i * 0.01 ) );
 		assert.ok( places.every( place => place.length === 'earth:10007:40029'.length ), places.join( ' ' ) );
-		const body = JSON.stringify( { visit: `v1.${ 'x'.repeat( 22 ) }.1800000000.${ 'y'.repeat( 43 ) }`, counts: Object.fromEntries( longest.map( name => [ name, 120000 ] ) ), places } );
+		const body = JSON.stringify( { visit: `v2.${ 'x'.repeat( 22 ) }.1800000000.e.${ 'y'.repeat( 43 ) }`, counts: Object.fromEntries( longest.map( name => [ name, 120000 ] ) ), places } );
 		assert.ok( new TextEncoder().encode( body ).length < 8192 * 0.8, `${ body.length } bytes` );
 
 	} );
@@ -2547,6 +2838,12 @@ describe( 'Where people drop in: the cells', () => {
 		assert.equal( named( 'earth', 45.8386, 4.9505 ).name, '12 km NE of Lyon' );
 		assert.equal( named( 'earth', 45.8386, 4.9505, null ).name, '45.84° N, 4.95° E' );
 		assert.deepEqual( named( 'earth', - 0.5, - 150 ), { name: '0.50° S, 150.00° W', region: '', link: '/?at=-0.5%2C-150', featured: false } );
+		// A cell beside a start spot's own, and not at the edge of its pin, is named by how far from it
+		// (with a link to the cell, not the spot); one its pin is at the edge of is the spot's.
+		const golden = checkCell( cellOf( 'earth', 37.8199, - 122.4783 ) );
+		const west = cellMiddle( 'earth', golden.row, golden.column - 1 );
+		assert.deepEqual( named( 'earth', west.lat, west.lon ), { name: '1 km W of Golden Gate Bridge', region: 'San Francisco, USA', link: `/?at=${ west.lat }%2C${ west.lon }&name=1+km+W+of+Golden+Gate+Bridge&region=San+Francisco%2C+USA`, featured: false } );
+		assert.equal( named( 'earth', 48.8739, 2.2962 ).link, '/?spot=arc' );
 		// The Moon's places: one by itself, one some way off it (with no region: a crater's words
 		// aren't true of a place beside it), across the 180th meridian from Daedalus.
 		assert.equal( named( 'moon', 26.13, 3.63 ).link, '/?spot=moon-apollo-15' );
@@ -2556,6 +2853,148 @@ describe( 'Where people drop in: the cells', () => {
 		// What a page would get from the link: the place pinned, by name.
 		const link = new URLSearchParams( named( 'earth', 45.8386, 4.9505 ).link.slice( 2 ) );
 		assert.deepEqual( Object.fromEntries( link ), { at: '45.8386,4.9505', name: '12 km NE of Lyon', region: 'Rhône-Alpes, France' } );
+
+	} );
+
+	test( 'topCells and topPlaces (for challenges): a world\'s most dropped-in cells and places over a period, the most first, then those on the most days', async () => {
+
+		// D1's shape (prepare( sql ).bind( ...values ).all() giving { results }) over node:sqlite, with
+		// the table as its migration makes it.
+		const db = new DatabaseSync( ':memory:' );
+		db.exec( readFileSync( new URL( '../worker/drive/migrations/0005_dropins.sql', import.meta.url ), 'utf8' ) );
+		const asked = [];
+		const d1 = { prepare: sql => ( { bind: ( ...values ) => ( { all: async () => {
+
+			asked.push( { sql, values } );
+			return { results: db.prepare( sql ).all( ...values ).map( row => ( { ...row } ) ) };
+
+		} } ) } ) };
+		const add = ( day, key, n ) => {
+
+			const { world, row, column } = checkCell( key );
+			db.prepare( 'INSERT INTO dropins_daily ( day, world, cell_row, cell_column, n ) VALUES ( ?, ?, ?, ?, ? )' ).run( day, world, row, column, n );
+
+		};
+		const A = cellOf( 'earth', 10, 10 );
+		const B = cellOf( 'earth', 20, 20 );
+		const C = cellOf( 'earth', 30, 30 );
+		const MOON = cellOf( 'moon', 10, 10 );
+		// A: 6 on one day; B: 6 over three days, so before A; C: 2. And C busy outside the period, and
+		// the Moon's own.
+		add( '2026-11-10', A, 6 );
+		for ( const day of [ '2026-11-10', '2026-11-11', '2026-11-12' ] ) add( day, B, 2 );
+		add( '2026-11-12', C, 2 );
+		add( '2026-11-09', C, 50 );
+		add( '2026-11-13', C, 50 );
+		add( '2026-11-11', MOON, 9 );
+		const period = { from: '2026-11-10', to: '2026-11-12' };
+		const keys = cells => cells.map( cell => [ `${ cell.world }:${ cell.row }:${ cell.column }`, cell.n, cell.days ] );
+		const earth = await topCells( d1, { world: 'earth', ...period } );
+		assert.deepEqual( keys( earth ), [ [ B, 6, 3 ], [ A, 6, 1 ], [ C, 2, 1 ] ] );
+		// One query, reading that world's rows for those days by the table's key and no others.
+		const [ { sql, values } ] = asked;
+		const plan = db.prepare( `EXPLAIN QUERY PLAN ${ sql }` ).all( ...values ).map( row => row.detail );
+		assert.ok( plan.includes( 'SEARCH dropins_daily USING PRIMARY KEY (world=? AND day>? AND day<?)' ), plan.join( '; ' ) );
+		assert.ok( ! plan.some( detail => /^SCAN dropins_daily/.test( detail ) ), plan.join( '; ' ) );
+		const { row, column } = checkCell( B );
+		assert.deepEqual( [ earth[ 0 ].lat, earth[ 0 ].lon ], Object.values( cellMiddle( 'earth', row, column ) ) );
+		// Each end of the period counted, nothing past it; one day by itself.
+		assert.deepEqual( keys( await topCells( d1, { world: 'earth', from: '2026-11-12', to: '2026-11-13' } ) ), [ [ C, 52, 2 ], [ B, 2, 1 ] ] );
+		assert.deepEqual( keys( await topCells( d1, { world: 'earth', from: '2026-11-10', to: '2026-11-10' } ) ), [ [ A, 6, 1 ], [ B, 2, 1 ] ] );
+		// The Moon's own; a world that isn't one is an error.
+		assert.deepEqual( keys( await topCells( d1, { world: 'moon', ...period } ) ), [ [ MOON, 9, 1 ] ] );
+		await assert.rejects( topCells( d1, { world: 'mars', ...period } ), /No world mars/ );
+		// At least one, and at most 2,000.
+		for ( const most of [ 1, 0, - 3, 'x' ] ) assert.deepEqual( keys( await topCells( d1, { world: 'earth', ...period, most } ) ), [ [ B, 6, 3 ] ], String( most ) );
+		for ( let i = 0; i < 2100; i ++ ) add( '2026-11-20', cellOf( 'earth', - 60 + i * 0.01, 100 ), 1 );
+		assert.equal( ( await topCells( d1, { world: 'earth', from: '2026-11-20', to: '2026-11-20', most: 5000 } ) ).length, 2000 );
+		assert.equal( ( await topCells( d1, { world: 'earth', from: '2026-11-20', to: '2026-11-20' } ) ).length, 25 );
+
+		// topPlaces: a start spot's cells one place (the Arc de Triomphe's, its pin 5 m from its cell's
+		// edge), named, with the game's link; the rest named by the towns given, or coordinates.
+		const ARC = cellOf( 'earth', 48.8738, 2.2962 );
+		const ARC_NORTH = cellOf( 'earth', 48.8739, 2.2962 );
+		add( '2026-11-21', ARC, 2 );
+		add( '2026-11-21', ARC_NORTH, 2 );
+		add( '2026-11-21', cellOf( 'earth', 0, - 150 ), 3 );
+		add( '2026-11-21', cellOf( 'earth', 45.7577, 4.8337 ), 1 );
+		const towns = readTowns( readFileSync( new URL( '../drive/public/places/towns.tsv', import.meta.url ), 'utf8' ) );
+		const day = { world: 'earth', from: '2026-11-21', to: '2026-11-21' };
+		const places = await topPlaces( d1, day, towns );
+		assert.deepEqual( places.map( place => [ place.name, place.n, place.cells.length, place.featured ] ), [ [ 'Arc de Triomphe', 4, 2, true ], [ '0.00° N, 150.00° W', 3, 1, false ], [ 'Lyon', 1, 1, false ] ] );
+		assert.equal( places[ 0 ].link, '/?spot=arc' );
+		assert.deepEqual( ( await topPlaces( d1, { ...day, most: 1 } ) ).map( place => place.name ), [ 'Arc de Triomphe' ] );
+		assert.match( ( await topPlaces( d1, day ) )[ 2 ].name, /^45\.76° N, 4\.83° E$/ );
+
+	} );
+
+} );
+
+describe( 'Where people drop in: the page\'s posts', () => {
+
+	test( 'a post that doesn\'t get through keeps its places for the next with their drop-ins, as many as a post carries; one that does, never again this visit', async () => {
+
+		// The page's stats with a stand-in for fetch, its timer and the page's events standing still.
+		const answers = [ 429, 204, 503 ];
+		const posts = [];
+		const send = async ( url, init ) => {
+
+			posts.push( JSON.parse( init.body ) );
+			return { status: answers.shift() ?? 204 };
+
+		};
+		const globals = [ 'setInterval', 'document', 'addEventListener' ];
+		const saved = Object.fromEntries( globals.map( name => [ name, Object.getOwnPropertyDescriptor( globalThis, name ) ] ) );
+		Object.assign( globalThis, { setInterval: () => 0, document: { addEventListener() {} }, addEventListener() {} } );
+		let stats;
+		try {
+
+			stats = createStats( { visit: 'v2.page-test', fetch: send } );
+
+		} finally {
+
+			for ( const name of globals ) {
+
+				if ( saved[ name ] ) Object.defineProperty( globalThis, name, saved[ name ] );
+				else delete globalThis[ name ];
+
+			}
+
+		}
+
+		const EIFFEL = cellOf( 'earth', 48.8584, 2.2945 );
+		const TIMES_SQUARE = cellOf( 'earth', 40.758, - 73.9855 );
+		stats.add( 'dropin', 'other' );
+		stats.dropped( 'earth', 48.8584, 2.2945 );
+		await stats.post();
+		assert.deepEqual( posts[ 0 ], { visit: 'v2.page-test', counts: { 'dropin:other': 1 }, places: [ EIFFEL ] } );
+		// Turned away just now (429): kept, in front of the next drop-in's, with the drop-ins.
+		assert.deepEqual( stats.places, [ EIFFEL ] );
+		stats.add( 'dropin', 'manhattan' );
+		stats.dropped( 'earth', 40.758, - 73.9855 );
+		await stats.post();
+		assert.deepEqual( posts[ 1 ], { visit: 'v2.page-test', counts: { 'dropin:other': 1, 'dropin:manhattan': 1 }, places: [ EIFFEL, TIMES_SQUARE ] } );
+		// Through: never sent again this visit, however often dropped in at.
+		stats.add( 'dropin', 'other' );
+		stats.dropped( 'earth', 48.8584, 2.2945 );
+		assert.deepEqual( stats.places, [] );
+		// After a failed post (503 here) with more than a post carries waiting, no more than that.
+		for ( let i = 0; i < PLACES_PER_POST; i ++ ) {
+
+			stats.add( 'dropin', 'other' );
+			stats.dropped( 'earth', 10 + i * 0.1, 20 );
+
+		}
+
+		await stats.post();
+		const failed = posts[ 2 ].places;
+		assert.equal( failed.length, PLACES_PER_POST );
+		stats.add( 'dropin', 'other' );
+		stats.dropped( 'earth', 12, 20 );
+		assert.deepEqual( stats.places, failed );
+		await stats.post();
+		assert.deepEqual( posts[ 3 ].places, failed );
+		assert.equal( posts[ 3 ].counts[ 'dropin:other' ], 2 + PLACES_PER_POST );
 
 	} );
 

@@ -572,12 +572,12 @@ describe( 'Levels: the Worker', () => {
 
 		const eve = await player();
 		const other = await player();
-		const [ v, id, expires, signature ] = eve.visit.split( '.' );
+		const [ v, id, expires, world, signature ] = eve.visit.split( '.' );
 		const visits = {
 			none: null,
 			'not a token': 'hello',
-			forged: `${ v }.${ id }.${ expires }.${ 'A'.repeat( 43 ) }`,
-			changed: `${ v }.${ id }.${ Number( expires ) + 3600 }.${ signature }`,
+			forged: `${ v }.${ id }.${ expires }.${ world }.${ 'A'.repeat( 43 ) }`,
+			changed: `${ v }.${ id }.${ Number( expires ) + 3600 }.${ world }.${ signature }`,
 			expired: await visitAt( NOON - 7 * HOUR ),
 			'another player\'s': other.visit,
 		};

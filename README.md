@@ -843,8 +843,9 @@ stats**, counts a day with nothing of who (no cookie): visits, play time, how fa
 the Moon, searches by kind, problems and the rest; and **where people drop in**, a heat map of the
 Earth and of the Moon with the top places named and a link into the game at each, for today, the
 week or the month. Each drop-in's place is only its cell of a grid about a kilometre each way, sent
-with the play stats and counted once a day for each visitor (`src/drive-app/dropin-cells.js`,
-`worker/drive/dropins.js`; see [Where people drop in](docs/world-drive.md#where-people-drop-in)).
+with the play stats and counted once a day for each visitor and each visit, an Earth place only from
+a visit the Earth's caps let through (`src/drive-app/dropin-cells.js`, `worker/drive/dropins.js`;
+see [Where people drop in](docs/world-drive.md#where-people-drop-in)).
 
 How to play, the leaderboard (how cheating is limited, and looking after it in the D1 console), the
 settings and limits, deploying (`npm run deploy:drive` applies the database's migrations first), and

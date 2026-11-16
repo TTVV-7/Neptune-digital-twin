@@ -55,8 +55,9 @@ export { DriveRoom } from './live.js';
 //   ADMIN_LOOKS           the rate limiter binding for the admin page's asks, by account (admin.js)
 //   STATS_POSTS           the rate limiter binding for each visit's posts of play stats (stats.js)
 //   DROPIN_PLACES_DAILY, DROPIN_PLACES_PER_VISITOR, DROPIN_PLACES_PER_VISIT   the most drop-in
-//                         places counted a day for everyone (5000 if unset), each visitor (60) and
-//                         each visit (30) (dropins.js)
+//                         places counted a day on each world for everyone (1500 if unset), each
+//                         visitor (30) and each visit (10); DROPIN_ASKS_PER_VISIT the most times a
+//                         day a visit's places are asked about (twice its places) (dropins.js)
 //   LIVE_CONNECTS         the rate limiter binding for each visit's connections to rooms (live.js)
 //   PROGRESS_POSTS        the rate limiter binding for each player's reports of what they drove
 //                         (progress.js)
@@ -163,6 +164,8 @@ async function getConfig( { env, limits, now } ) {
 //   visit }. Going to the Earth from there reloads the page, which asks again without it.
 // - Over a cap: 429 with retryAfter (the seconds until midnight UTC, when the counts start again)
 //   and a visit all the same, so the page can still open on the Moon.
+// Those two visits' tokens say so (visits.js: the Moon's), so they post no Earth drop-in places
+// (dropins.js); a visit the Earth's caps let through, or the owner's, says it's the Earth's.
 // A supporter signed in here is counted by their account, with a cap of their own; the owner's
 // accounts (ADMIN_EMAILS) aren't counted at all; everyone else is counted by their address.
 async function visit( { request, env, url, ctx, limits, now } ) {
@@ -182,7 +185,7 @@ async function visit( { request, env, url, ctx, limits, now } ) {
 	if ( moon ) {
 
 		ctx?.waitUntil?.( countVisit( env, now ) );
-		return json( { moon: true, visit: await makeVisit( env, now ) } );
+		return json( { moon: true, visit: await makeVisit( env, now, 'moon' ) } );
 
 	}
 
@@ -207,7 +210,7 @@ async function visit( { request, env, url, ctx, limits, now } ) {
 
 		const { reason, retryAfter } = outcome;
 		const message = reason === 'daily' ? 'Today\'s free drives are used up' : 'You\'ve had today\'s free drives';
-		throw new HttpError( 429, message, { reason, retryAfter, visit: await makeVisit( env, now ) }, { 'Retry-After': String( retryAfter ) } );
+		throw new HttpError( 429, message, { reason, retryAfter, visit: await makeVisit( env, now, 'moon' ) }, { 'Retry-After': String( retryAfter ) } );
 
 	}
 

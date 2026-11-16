@@ -6376,12 +6376,17 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 
 // The owner's admin page (drive/public/admin.html): where people drop in, its answers made here
 // (GET /api/admin/dropins, and the play stats' GET /api/admin/stats with nothing in them). The heat
-// map over the game's own land and sea and the Moon's picture, the top places, the day, week and
-// month filters (and the page's own period), moving and zooming, a place shown from the table, and
-// a phone in the dark; the section isn't there for someone signed out.
+// map over the game's own land and sea and the Moon's picture, the top places (a start spot's cells
+// one place), the day, week and month filters (and the page's own period), moving and zooming (no
+// closer than the map reads), a place shown from the table, where it sits on the page, asked too
+// often, and a phone in the dark, two fingers moving it; the section isn't there for someone signed
+// out.
 describe( 'World Drive\'s admin page: where people drop in', () => {
 
 	const TODAY = '2026-11-16';
+	// Metres to a degree of latitude on the Earth, and the most the map zooms in on it: 150 km across.
+	const DEGREE = 6371008.8 * Math.PI / 180;
+	const MOST_ZOOM = 360 * DEGREE / 150000;
 	const dayBefore = days => new Date( Date.parse( `${ TODAY }T12:00:00Z` ) - days * 86400000 ).toISOString().slice( 0, 10 );
 	// A cell's middle near ( lat, lon ), as the Worker gives them.
 	const middle = ( world, lat, lon ) => {
@@ -6390,10 +6395,19 @@ describe( 'World Drive\'s admin page: where people drop in', () => {
 		return cellMiddle( world, row, column );
 
 	};
-	const place = ( world, lat, lon, n, days, name, region, link, featured = false ) => ( { ...middle( world, lat, lon ), n, days, name, region, link, featured } );
+	// The Moon's cell north of Tranquility Base's.
+	const TRANQUILITY_NORTH = ( () => {
+
+		const { row, column } = checkCell( cellOf( 'moon', 0.6741, 23.4730 ) );
+		const north = cellMiddle( 'moon', row + 1, 0 );
+		return middle( 'moon', north.lat, cellMiddle( 'moon', row, column ).lon );
+
+	} )();
+	const place = ( world, lat, lon, n, days, name, region, link, featured = false ) => ( { ...middle( world, lat, lon ), n, days, cells: [ Object.values( middle( world, lat, lon ) ) ], name, region, link, featured } );
 	// The Worker's answer for `days`: Golden Gate the busiest this week, Lyon over the month and
-	// Times Square today, with drop-ins scattered about Europe and one out in the Pacific; Tycho and a
-	// place by Copernicus on the Moon.
+	// Times Square today, with drop-ins scattered about Europe and one out in the Pacific; Tycho,
+	// Tranquility Base (its own cell and the one north of it, as the Worker puts a start spot's cells
+	// together) and a place by Copernicus on the Moon, but today one visitor at one place.
 	function answer( days ) {
 
 		const month = days >= 30;
@@ -6411,14 +6425,18 @@ describe( 'World Drive\'s admin page: where people drop in', () => {
 			return [ at.lat, at.lon, 1 + i % 3 ];
 
 		} );
-		const moonTop = [
+		const tranquility = place( 'moon', 0.6741, 23.4730, 3, 2, 'Tranquility Base', 'Apollo 11, 1969 · Sea of Tranquillity', '/?spot=moon-apollo-11', true );
+		tranquility.split = [ [ ...tranquility.cells[ 0 ], 2 ], [ ...Object.values( TRANQUILITY_NORTH ), 1 ] ];
+		tranquility.cells = tranquility.split.map( ( [ lat, lon ] ) => [ lat, lon ] );
+		const moonTop = days === 1 ? [ place( 'moon', 12.6, - 20.08, 1, 1, '91 km N of Copernicus crater', '', '/?at=12.61451%2C-20.07322&name=91+km+N+of+Copernicus+crater&world=moon' ) ] : [
 			place( 'moon', - 43.31, - 11.36, 6, 3, 'Tycho crater', '85 km across, bright rays', '/?spot=moon-tycho', true ),
+			tranquility,
 			place( 'moon', 12.6, - 20.08, 2, 1, '91 km N of Copernicus crater', '', '/?at=12.61451%2C-20.07322&name=91+km+N+of+Copernicus+crater&world=moon' ),
 		];
 		const world = ( top, more ) => {
 
-			const heat = [ ...top.map( p => [ p.lat, p.lon, p.n ] ), ...more ].sort( ( a, b ) => b[ 2 ] - a[ 2 ] );
-			return { dropins: heat.reduce( ( all, [ , , n ] ) => all + n, 0 ), places: heat.length, heat, top };
+			const heat = [ ...top.flatMap( p => p.split ?? [ [ p.lat, p.lon, p.n ] ] ), ...more ].sort( ( a, b ) => b[ 2 ] - a[ 2 ] );
+			return { dropins: heat.reduce( ( all, [ , , n ] ) => all + n, 0 ), places: heat.length, heat, top: top.map( ( { split, ...rest } ) => rest ) };
 
 		};
 		return { from: dayBefore( days - 1 ), to: TODAY, first: dayBefore( 40 ), cell: 1000, kept: 730, worlds: { earth: world( earthTop, scattered ), moon: world( moonTop, [] ) } };
@@ -6426,8 +6444,9 @@ describe( 'World Drive\'s admin page: where people drop in', () => {
 	}
 
 	// The admin page, with its answers made here: page.asked keeps the days each ask was for;
-	// signedIn false answers 401 to both.
-	async function adminPage( { viewport = { width: 1280, height: 900 }, colorScheme = 'light', touch = false, signedIn = true } = {} ) {
+	// signedIn false answers 401 to both; refuse: { stats, dropins } statuses to answer their first
+	// asks with instead (429, say).
+	async function adminPage( { viewport = { width: 1280, height: 900 }, colorScheme = 'light', touch = false, signedIn = true, refuse = {} } = {} ) {
 
 		const context = await browser.newContext( { viewport, colorScheme, hasTouch: touch, isMobile: touch } );
 		const page = await context.newPage();
@@ -6435,9 +6454,12 @@ describe( 'World Drive\'s admin page: where people drop in', () => {
 		page.errors = [];
 		page.on( 'pageerror', err => page.errors.push( err.message ) );
 		await page.route( /^https?:\/\/(?!127\.0\.0\.1)/, route => route.abort() );
+		const refused = { stats: [ ...refuse.stats ?? [] ], dropins: [ ...refuse.dropins ?? [] ] };
+		const refusal = status => ( { status, contentType: 'application/json', headers: { 'Retry-After': '60' }, body: JSON.stringify( { error: 'Too many. Try again in a minute', retryAfter: 60 } ) } );
 		await page.route( `${ BASE }/api/admin/stats?*`, route => {
 
 			if ( ! signedIn ) return route.fulfill( { status: 401, contentType: 'application/json', body: '{"error":"Sign in first"}' } );
+			if ( refused.stats.length ) return route.fulfill( refusal( refused.stats.shift() ) );
 			const days = Number( new URL( route.request().url() ).searchParams.get( 'days' ) );
 			route.fulfill( { contentType: 'application/json', body: JSON.stringify( { from: dayBefore( days - 1 ), to: TODAY, rows: [], previous: { from: '', to: '', first: { visit: null, funnel: null }, rows: [] }, totals: {}, kept: { stats: 730, scores: 35 } } ) } );
 
@@ -6447,6 +6469,7 @@ describe( 'World Drive\'s admin page: where people drop in', () => {
 			const days = Number( new URL( route.request().url() ).searchParams.get( 'days' ) );
 			page.asked.push( days );
 			if ( ! signedIn ) return route.fulfill( { status: 401, contentType: 'application/json', body: '{"error":"Sign in first"}' } );
+			if ( refused.dropins.length ) return route.fulfill( refusal( refused.dropins.shift() ) );
 			route.fulfill( { contentType: 'application/json', body: JSON.stringify( answer( days ) ) } );
 
 		} );
@@ -6486,7 +6509,7 @@ describe( 'World Drive\'s admin page: where people drop in', () => {
 			assert.deepEqual( page.asked, [ 30 ] );
 			assert.equal( await page.locator( '#places-days [aria-pressed="true"]' ).textContent(), 'Month' );
 			assert.equal( await page.locator( '#places-world [aria-pressed="true"]' ).getAttribute( 'data-world' ), 'earth' );
-			assert.match( await page.locator( '#places-range' ).textContent(), new RegExp( `^${ dayBefore( 29 ) } to ${ TODAY } \\(today so far\\), UTC · 3[0-9]{2} drop-ins at 86 places$` ) );
+			assert.match( await page.locator( '#places-range' ).textContent(), new RegExp( `^${ dayBefore( 29 ) } to ${ TODAY } \\(today so far\\), UTC · 3[0-9]{2} visitors at 86 places$` ) );
 			assert.deepEqual( ( await tableNames( page ) ).slice( 0, 3 ), [ 'Lyon', 'Golden Gate Bridge', 'Times Square' ] );
 			// Heat where people drop in, the land and sea as they are elsewhere: the middle of the Sahara
 			// and of the South Pacific are the base map's land and sea.
@@ -6518,14 +6541,15 @@ describe( 'World Drive\'s admin page: where people drop in', () => {
 			// A place's name in the table shows it on the map, zoomed in, saying what it is.
 			await page.locator( '#places-top button.place', { hasText: '12 km NE of Lyon' } ).click();
 			await page.locator( '#places-tip' ).waitFor();
-			assert.match( await page.locator( '#places-tip' ).textContent(), /12 km NE of Lyon.*3 drop-ins/ );
+			assert.match( await page.locator( '#places-tip' ).textContent(), /12 km NE of Lyon.*3 visitors/ );
+			// A region 300 km across: the Earth's map is squares of about 5 km, so no closer than that.
 			const zoomed = await page.evaluate( () => ( { ...window.worldDriveAdmin.places.views.earth } ) );
-			assert.ok( zoomed.zoom > 400 && Math.abs( zoomed.lat - 45.84 ) < 0.01, JSON.stringify( zoomed ) );
+			assert.ok( Math.abs( zoomed.zoom - 360 * DEGREE / 300000 ) < 0.01 && Math.abs( zoomed.lat - 45.84 ) < 0.01, JSON.stringify( zoomed ) );
 			await drawn( page, 'earth', 86 );
 			assert.ok( warm( await colourAt( page, 45.75768, 4.83369 ) ) );
-			// Zoomed in, the towns round it are named (Natural Earth's, the site's own file: here only
-			// Lyon), as they aren't on the whole map.
-			await page.waitForFunction( () => window.worldDriveAdmin.places.paintedWith.towns === 1 );
+			// Zoomed in, the towns round it are named (Natural Earth's, the site's own file: Lyon among
+			// them), as they aren't on the whole map.
+			await page.waitForFunction( () => window.worldDriveAdmin.places.paintedWith.townNames.includes( 'Lyon' ) );
 			await page.locator( '#places .map' ).screenshot( { path: join( ADMIN_SHOTS, 'admin-places-lyon.png' ) } );
 
 			// Dragged, it moves; the wheel (once the map's been clicked) and the buttons zoom.
@@ -6545,10 +6569,19 @@ describe( 'World Drive\'s admin page: where people drop in', () => {
 
 			// The Moon: on its own picture, with its places.
 			await page.locator( '#places-world button[data-world="moon"]' ).click();
-			await drawn( page, 'moon', 2 );
-			assert.deepEqual( await tableNames( page ), [ 'Tycho crater', '91 km N of Copernicus crater' ] );
-			assert.equal( await page.locator( '#places-world button[data-world="moon"] span' ).textContent(), '8' );
+			await drawn( page, 'moon', 4 );
+			assert.deepEqual( await tableNames( page ), [ 'Tycho crater', 'Tranquility Base', '91 km N of Copernicus crater' ] );
+			assert.equal( await page.locator( '#places-world button[data-world="moon"] span' ).textContent(), '11' );
 			assert.ok( warm( await colourAt( page, - 43.31807, - 11.35482 ) ) );
+			// A start spot's cells are its: the one north of Tranquility Base's says so, and how many at
+			// the place.
+			await page.locator( '#places-top button.place', { hasText: 'Tranquility Base' } ).click();
+			await page.locator( '#places-tip' ).waitFor();
+			const north = await page.evaluate( ( [ lat, lon ] ) => window.worldDriveAdmin.at( lat, lon ), [ TRANQUILITY_NORTH.lat, TRANQUILITY_NORTH.lon ] );
+			const mapBox = await page.locator( '#places-map' ).boundingBox();
+			await page.mouse.move( mapBox.x + north.x, mapBox.y + north.y );
+			await page.locator( '#places-tip', { hasText: '1 visitor here, 3 at the place' } ).waitFor();
+			assert.match( await page.locator( '#places-tip' ).textContent(), /^Tranquility Base/ );
 			assert.equal( await page.locator( '#places-top tbody tr', { hasText: 'Copernicus' } ).locator( 'a' ).getAttribute( 'href' ), '/?at=12.61451%2C-20.07322&name=91+km+N+of+Copernicus+crater&world=moon' );
 			await page.locator( '#places' ).screenshot( { path: join( ADMIN_SHOTS, 'admin-places-moon.png' ) } );
 
@@ -6566,7 +6599,68 @@ describe( 'World Drive\'s admin page: where people drop in', () => {
 
 	} );
 
-	test( 'on a phone, in the dark: the map and the table fit the screen, a tap says what\'s there; signed out, there\'s no map at all', async () => {
+	test( 'the drop-ins come after the tiles and each day, before the rest; asked too often, each part says so; after an error the world still switches; one visitor at one place; a small share is under 1%; zoomed no further than the map reads', async () => {
+
+		const page = await adminPage( { refuse: { stats: [ 429 ], dropins: [ 429 ] } } );
+		try {
+
+			// ADMIN_LOOKS: both parts say the same, neither as if the server were broken.
+			await page.locator( '#out .notice', { hasText: 'Asked too often just now: try again in a minute.' } ).waitFor();
+			await page.locator( '#places-range', { hasText: 'Asked too often just now: try again in a minute.' } ).waitFor();
+			assert.equal( await page.locator( 'text=Something went wrong' ).count(), 0 );
+			// The world still switches with nothing to show, and stays switched when the answer comes.
+			await page.locator( '#places-world button[data-world="moon"]' ).click();
+			assert.equal( await page.locator( '#places-world [aria-pressed="true"]' ).getAttribute( 'data-world' ), 'moon' );
+			await page.waitForFunction( () => window.worldDriveAdmin.places.paintedWith?.world === 'moon' );
+			await page.locator( '#places-days button', { hasText: 'Today' } ).click();
+			await drawn( page, 'moon', 1 );
+			assert.equal( await page.locator( '#places-world [aria-pressed="true"]' ).getAttribute( 'data-world' ), 'moon' );
+			assert.match( await page.locator( '#places-range' ).textContent(), / · 1 visitor at 1 place$/ );
+
+			// Asked again, the stats come; where people drop in is between the day chart and the rest, and
+			// the start spots' card isn't called the same.
+			await page.selectOption( '#days', '7' );
+			await page.locator( '.tiles' ).waitFor();
+			await drawn( page, 'moon', 4 );
+			const tops = await page.evaluate( () => {
+
+				const top = element => element.getBoundingClientRect().top + scrollY;
+				const card = title => top( [ ...document.querySelectorAll( '.card h2' ) ].find( h => h.textContent.startsWith( title ) ) );
+				return [ top( document.querySelector( '.tiles' ) ), card( 'Each day' ), top( document.getElementById( 'places' ) ), card( 'How far visits get' ), card( 'Start spots dropped in at' ) ];
+
+			} );
+			assert.ok( tops.every( ( y, i ) => i === 0 || y > tops[ i - 1 ] ), tops.join( ' ' ) );
+			assert.equal( await page.locator( 'h2', { hasText: 'Where they drop in' } ).count(), 0 );
+
+			// The Earth: a visitor of the week's two hundred and more is under 1%, not 0%; the column
+			// says what it counts.
+			await page.locator( '#places-world button[data-world="earth"]' ).click();
+			await drawn( page, 'earth', 86 );
+			assert.equal( await page.locator( '#places-top thead th.num' ).first().textContent(), 'Visitors' );
+			const pacific = page.locator( '#places-top tbody tr', { hasText: '150.00° W' } );
+			assert.deepEqual( await pacific.locator( 'td.num' ).allTextContents(), [ '1', '<1%', '1' ] );
+			const lyon = page.locator( '#places-top tbody tr', { hasText: 'Lyon' } ).first();
+			assert.match( ( await lyon.locator( 'td.num' ).allTextContents() )[ 1 ], /^[1-9][0-9]?%$/ );
+
+			// Zoomed in, never closer than 150 km across (the map's squares are about 5 km).
+			for ( let i = 0; i < 10; i ++ ) await page.locator( '#places .map-tools [data-zoom="in"]' ).click();
+			const most = await page.evaluate( () => window.worldDriveAdmin.places.views.earth.zoom );
+			assert.ok( Math.abs( most - MOST_ZOOM ) < 0.01, `${ most } against ${ MOST_ZOOM }` );
+			await page.mouse.move( 10, 10 );
+			const box = await page.locator( '#places-map' ).boundingBox();
+			await page.mouse.dblclick( box.x + box.width / 2, box.y + box.height / 2 );
+			assert.ok( Math.abs( await page.evaluate( () => window.worldDriveAdmin.places.views.earth.zoom ) - MOST_ZOOM ) < 0.01 );
+			assert.deepEqual( page.errors, [] );
+
+		} finally {
+
+			await page.context().close();
+
+		}
+
+	} );
+
+	test( 'on a phone, in the dark: the map and the table fit the screen, a tap says what\'s there, two fingers move it zoomed in; signed out, there\'s no map at all', async () => {
 
 		const page = await adminPage( { viewport: { width: 390, height: 844 }, colorScheme: 'dark', touch: true } );
 		try {
@@ -6584,6 +6678,33 @@ describe( 'World Drive\'s admin page: where people drop in', () => {
 			const at = await page.evaluate( () => window.worldDriveAdmin.at( 35.65826, 139.70546 ) );
 			await page.locator( '#places-map' ).tap( { position: at } );
 			await page.locator( '#places-tip', { hasText: 'Shibuya Crossing' } ).waitFor();
+			// Zoomed in, two fingers move the map (north here, dragged down), and the page doesn't scroll
+			// under them; so does one finger, up and down too.
+			await page.locator( '#places .map-tools [data-zoom="in"]' ).tap();
+			await page.locator( '#places .map-tools [data-zoom="in"]' ).tap();
+			const box = await page.locator( '#places-map' ).boundingBox();
+			const cdp = await page.context().newCDPSession( page );
+			const touch = async ( from, by ) => {
+
+				const at = step => from.map( ( [ x, y ], id ) => ( { x: box.x + x + by[ 0 ] * step, y: box.y + y + by[ 1 ] * step, id } ) );
+				await cdp.send( 'Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: at( 0 ) } );
+				for ( let step = 1; step <= 6; step ++ ) await cdp.send( 'Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: at( step / 6 ) } );
+				await cdp.send( 'Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] } );
+
+			};
+			const viewNow = () => page.evaluate( () => ( { ...window.worldDriveAdmin.places.views.earth, scrolled: scrollY } ) );
+			const before = await viewNow();
+			assert.equal( before.zoom, 4 );
+			await touch( [ [ box.width * 0.35, box.height * 0.4 ], [ box.width * 0.65, box.height * 0.4 ] ], [ 0, 90 ] );
+			const moved = await viewNow();
+			const degrees = 90 / ( box.width / 360 * 4 );
+			assert.ok( Math.abs( moved.lat - before.lat - degrees ) < degrees * 0.25 && Math.abs( moved.lon - before.lon ) < 0.5, JSON.stringify( { before, moved, degrees } ) );
+			assert.ok( Math.abs( moved.zoom - 4 ) < 0.01 );
+			assert.equal( moved.scrolled, before.scrolled );
+			await touch( [ [ box.width / 2, box.height / 2 ] ], [ 0, - 60 ] );
+			const back = await viewNow();
+			assert.ok( back.lat < moved.lat - degrees / 3, JSON.stringify( { moved, back } ) );
+			assert.equal( back.scrolled, before.scrolled );
 			assert.deepEqual( page.errors, [] );
 
 		} finally {
