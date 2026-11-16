@@ -85,6 +85,9 @@ export const METRICS = {
 	board: { key: oneOf( [ 'open', 'named' ] ), most: 20 },
 	pass: { key: oneOf( [ 'open', 'buy' ] ), most: 20 },
 	level_up: { key: ALL, most: 10 },
+	// Challenges (challenges.js): the list opened, a run started (at GO), finished, and its time
+	// posted to a board.
+	challenge: { key: oneOf( [ 'open', 'start', 'finish', 'posted' ] ), most: 40 },
 };
 
 // The page posts at most this many counts at once (and keeps no more between posts). What a visit

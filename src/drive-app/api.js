@@ -277,7 +277,9 @@ export function linkPlayer( { id, secret } ) {
 
 }
 
-async function send( method, path, body, { keepalive = false } = {} ) {
+// A request to the Worker that never throws: { ok, status, body, retryAfter }, status 0 when it
+// couldn't be reached (the challenges' chunk, challenges.js, asks with it too).
+export async function send( method, path, body, { keepalive = false } = {} ) {
 
 	try {
 

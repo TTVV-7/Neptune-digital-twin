@@ -797,6 +797,21 @@ you pick one, which claims it. The Worker caps each report by the time since the
 (`worker/drive/progress.js`, sharing its rules with the page in `src/drive-app/levels.js`), on a
 rate limiter rather than a Durable Object (see [Levels](docs/world-drive.md#levels)).
 
+**Challenges**: a daily, a weekly and a monthly challenge on the Earth and on the Moon, six live at
+once, each a place and a route the same for everyone and with its own board of the best times (the
+leaderboard's nicknames and levels): a checkpoint sprint through gates in order, a hunt for stars
+round a place in any order, or a drive to a landmark a few kilometres off, against the clock. Big
+rings, stars and beams of light mark them, on the ground the game has (the Earth's tiles as they
+load, the Moon's own heights), with an arrow to the next on the HUD, a countdown, the timer and a
+finish card with your place on the board. The rotation goes round the game's own places (and busy
+drop-in places the owner approves) by the Worker's secret, so nobody can read next week's from the
+code; each period's is fixed in D1 as it's first asked for, and the owner can choose any period's
+by hand on the admin page. Times are posted with the visit's token and checked against the route
+(each leg no quicker than the fastest the game goes) and the visit (`worker/drive/challenges.js`,
+sharing its rules with the page in `src/drive-app/challenge-rules.js`). The page loads them as a
+chunk of their own when they're opened, so nothing of them is in its first load (see
+[Challenges](docs/world-drive.md#challenges)).
+
 **The Moon**: **Moon** at the top of the globe's panel turns the globe to the Moon, made in the page
 rather than streamed (`src/drive-app/moon.js`): its shapes are NASA's (LRO's laser altimeter, every
 quarter degree, `drive/public/moon/height.bin`), its colours LRO's camera's mosaic
@@ -842,7 +857,8 @@ For the owner, `/admin.html` (signed in with a Google account in `ADMIN_EMAILS`)
 stats**, counts a day with nothing of who (no cookie): visits, play time, how far visits get, devices,
 the Moon, searches by kind, problems and the rest; and **where people drop in**, a heat map of the
 Earth and of the Moon with the top places named and a link into the game at each, for today, the
-week or the month. Each drop-in's place is only its cell of a grid about a kilometre each way, sent
+week or the month; and the **challenges**: the six live and the six next, any period's chosen by
+hand, and busy places approved for the rotation. Each drop-in's place is only its cell of a grid about a kilometre each way, sent
 with the play stats and counted once a day for each visitor and each visit, an Earth place only from
 a visit the Earth's caps let through, and none from the owner's (`src/drive-app/dropin-cells.js`,
 `worker/drive/dropins.js`; see [Where people drop in](docs/world-drive.md#where-people-drop-in)).
@@ -947,7 +963,7 @@ public/models/      put your .glb files here
 drive/index.html    World Drive's page; its code is src/drive-app/ (docs/world-drive.md)
 worker/drive/       World Drive's Worker: the Maps key per visit, caps, Turnstile, search, the leaderboard,
                     levels' XP, the Supporter Pass (Google sign-in, Stripe's webhook), driving with
-                    others' rooms, the owner's play stats and where people drop in
+                    others' rooms, the owner's play stats, where people drop in and challenges
 vite.drive.config.js, wrangler.drive.jsonc   World Drive's build and Worker settings
 ```
 

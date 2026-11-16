@@ -1,0 +1,582 @@
+/* Challenges (challenges.js, its own chunk with this): the list and a board, the run's HUD and
+   countdown, the finish card, and the pause menu's word that a pause ended a run. In the look of the
+   leaderboard's dialog and the best card (style.css). */
+
+/* --- the list ---------------------------------------------------------------------------- */
+
+dialog.ch-dialog {
+	width: min( 560px, calc( 100% - 24px ) );
+	max-height: calc( 100% - 24px );
+	padding: 20px;
+	border: 1px solid var( --line );
+	border-radius: 20px;
+	background: var( --panel-solid );
+	color: var( --ink );
+}
+
+dialog.ch-dialog::backdrop {
+	background: rgba( 4, 8, 16, 0.6 );
+}
+
+.ch-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.ch-head h2 {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0;
+	font: 900 italic 24px/1 var( --font );
+	text-transform: uppercase;
+}
+
+.ch-head h2 svg {
+	width: 24px;
+	height: 24px;
+	color: var( --accent );
+}
+
+.ch-head .close {
+	width: 36px;
+	height: 36px;
+	border: 1px solid var( --line );
+	border-radius: 10px;
+	background: var( --chip );
+	font-size: 22px;
+	line-height: 1;
+}
+
+.ch-intro,
+.ch-foot {
+	margin: 10px 0 0;
+	font-size: 13px;
+	color: var( --muted );
+}
+
+.ch-foot {
+	margin-top: 14px;
+	font-size: 12px;
+}
+
+.ch-status {
+	margin: 18px 0;
+	text-align: center;
+	color: var( --muted );
+}
+
+.ch-world {
+	margin: 16px 0 8px;
+	font-size: 12px;
+	letter-spacing: 1.2px;
+	text-transform: uppercase;
+	color: var( --muted );
+}
+
+.ch-card {
+	margin: 0 0 10px;
+	padding: 12px 14px;
+	border: 1px solid var( --line );
+	border-radius: 14px;
+	background: var( --chip );
+}
+
+.ch-card[data-world='moon'] {
+	background: linear-gradient( 160deg, rgba( 160, 170, 200, 0.12 ), var( --chip ) );
+}
+
+.ch-top {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	font-size: 12px;
+	font-weight: 800;
+}
+
+.ch-period {
+	padding: 2px 8px;
+	border-radius: 7px;
+	background: var( --accent );
+	color: var( --accent-ink );
+	font-style: italic;
+	text-transform: uppercase;
+}
+
+.ch-card[data-period='week'] .ch-period {
+	background: var( --sky );
+	color: #04121d;
+}
+
+.ch-card[data-period='month'] .ch-period {
+	background: #ff7ad9;
+	color: #2a0420;
+}
+
+.ch-left {
+	font-variant-numeric: tabular-nums;
+	color: var( --muted );
+}
+
+.ch-place {
+	margin: 8px 0 2px;
+	font-size: 17px;
+	font-weight: 900;
+}
+
+.ch-region {
+	margin-left: 8px;
+	font-size: 12px;
+	font-weight: 600;
+	color: var( --muted );
+}
+
+.ch-what {
+	margin: 0;
+	font-size: 13px;
+	color: var( --muted );
+}
+
+.ch-kind {
+	color: var( --ink );
+}
+
+.ch-top3,
+.ch-rows,
+.ch-f-rows {
+	margin: 8px 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.ch-top3 li,
+.ch-rows li,
+.ch-f-rows li {
+	display: grid;
+	grid-template-columns: 1.8em minmax( 0, 1fr ) auto;
+	align-items: center;
+	gap: 8px;
+	padding: 5px 8px;
+	border-radius: 9px;
+	font-size: 14px;
+}
+
+.ch-rows li {
+	padding: 8px 10px;
+}
+
+.ch-top3 li:nth-child( odd ),
+.ch-rows li:nth-child( odd ),
+.ch-f-rows li:nth-child( odd ) {
+	background: rgba( 255, 255, 255, 0.04 );
+}
+
+:is( .ch-top3, .ch-rows, .ch-f-rows ) li.me {
+	background: rgba( 255, 210, 63, 0.16 );
+	box-shadow: inset 0 0 0 1px rgba( 255, 210, 63, 0.5 );
+}
+
+:is( .ch-top3, .ch-rows, .ch-f-rows ) li.ch-none {
+	display: block;
+	text-align: center;
+	color: var( --muted );
+	background: none;
+}
+
+:is( .ch-top3, .ch-rows, .ch-f-rows ) .rank {
+	font-weight: 900;
+	font-style: italic;
+	text-align: right;
+	color: var( --accent );
+}
+
+:is( .ch-top3, .ch-rows, .ch-f-rows ) .who {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+:is( .ch-top3, .ch-rows, .ch-f-rows ) .who b {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+:is( .ch-top3, .ch-rows, .ch-f-rows ) .lvl {
+	color: var( --accent );
+	font-size: 11px;
+	font-weight: 800;
+}
+
+:is( .ch-top3, .ch-rows, .ch-f-rows ) .ride {
+	font-size: 11px;
+	color: var( --muted );
+}
+
+/* In the list each row on one line: the name, its level beside it, no ride. */
+.ch-top3 .who {
+	flex-direction: row;
+	align-items: baseline;
+	gap: 6px;
+}
+
+.ch-top3 .ride {
+	display: none;
+}
+
+:is( .ch-top3, .ch-rows, .ch-f-rows ) .time {
+	font-weight: 900;
+	font-variant-numeric: tabular-nums;
+}
+
+.ch-you {
+	margin: 8px 0 0;
+	font-size: 13px;
+	font-weight: 700;
+}
+
+.ch-buttons {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 10px;
+}
+
+.ch-buttons .primary {
+	padding: 9px 20px;
+	font-size: 14px;
+}
+
+.ch-buttons button:not( .primary ),
+.ch-f-buttons button:not( .primary, .link ) {
+	padding: 9px 16px;
+	border: 1px solid var( --line );
+	border-radius: 12px;
+	background: var( --chip );
+	font-weight: 700;
+}
+
+.ch-board-title {
+	margin: 12px 0 2px;
+	font-size: 18px;
+	font-weight: 900;
+}
+
+.ch-board-sub {
+	margin: 0;
+	font-size: 13px;
+	color: var( --muted );
+}
+
+.ch-mine {
+	margin: 10px 0 0;
+	text-align: center;
+	font-weight: 700;
+}
+
+/* --- the run ----------------------------------------------------------------------------- */
+
+/* The timer, how many are passed and an arrow to the next with how far: top left under the
+   Globe button, clear of the speed (bottom right on a computer, one low row in the middle on a phone
+   on its side) and the level bar in the middle. */
+#drive-ui .ch-hud {
+	position: fixed;
+	top: calc( 62px + env( safe-area-inset-top, 0px ) );
+	left: 12px;
+	z-index: 15;
+	display: grid;
+	grid-template-columns: auto auto;
+	grid-template-areas: 'arrow clock' 'dist gates';
+	align-items: center;
+	gap: 2px 10px;
+	padding: 8px 12px;
+	border: 1px solid rgba( 255, 210, 63, 0.4 );
+	border-radius: 14px;
+	background: rgba( 9, 15, 27, 0.72 );
+	backdrop-filter: blur( 8px );
+	-webkit-backdrop-filter: blur( 8px );
+	pointer-events: none;
+}
+
+#drive-ui .ch-hud .ch-arrow {
+	grid-area: arrow;
+	display: flex;
+	justify-content: center;
+	color: var( --accent );
+	filter: drop-shadow( 0 1px 3px rgba( 0, 0, 0, 0.6 ) );
+}
+
+#drive-ui .ch-hud .ch-dist {
+	grid-area: dist;
+	font-size: 11px;
+	font-weight: 800;
+	text-align: center;
+	font-variant-numeric: tabular-nums;
+	color: var( --muted );
+}
+
+#drive-ui .ch-hud .ch-clock {
+	grid-area: clock;
+	font: 900 italic 26px/1 var( --font );
+	font-variant-numeric: tabular-nums;
+}
+
+#drive-ui .ch-hud .ch-gates {
+	grid-area: gates;
+	max-width: 160px;
+	overflow: hidden;
+	font-size: 12px;
+	font-weight: 800;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	color: var( --accent );
+}
+
+/* A phone held upright: the top left still, narrow (the timer over the arrow and how far), beside
+   the speed in the middle (150 px wide at least: its left edge is 75 px left of the middle). */
+@media ( orientation: portrait ) {
+
+	body.touch #drive-ui .ch-hud {
+		grid-template-columns: auto auto;
+		grid-template-areas: 'clock clock' 'arrow dist' 'gates gates';
+		justify-items: start;
+		gap: 2px 6px;
+		max-width: calc( 50vw - 75px - 18px );
+		padding: 5px 8px;
+	}
+
+	body.touch #drive-ui .ch-hud .ch-clock {
+		font-size: 18px;
+	}
+
+	body.touch #drive-ui .ch-hud .ch-gates {
+		max-width: 100%;
+	}
+
+}
+
+/* A phone on its side: the top left, small, out of the steering's way at the bottom. */
+@media ( orientation: landscape ) and ( max-height: 520px ) {
+
+	body.touch #drive-ui .ch-hud {
+		top: calc( 58px + env( safe-area-inset-top, 0px ) );
+		left: calc( 12px + env( safe-area-inset-left, 0px ) );
+		padding: 4px 10px;
+	}
+
+	body.touch #drive-ui .ch-hud .ch-clock {
+		font-size: 20px;
+	}
+
+}
+
+/* On a touch screen the XP pop-ups are at the top left too (levels.css): under the HUD while it
+   shows. */
+body.touch.ch-running #drive-ui .xp-pops {
+	top: calc( 142px + env( safe-area-inset-top, 0px ) );
+}
+
+/* 3, 2, 1, GO! in the middle of the screen. */
+#drive-ui .ch-count {
+	position: fixed;
+	top: 34%;
+	left: 50%;
+	z-index: 16;
+	font: 900 italic 96px/1 var( --font );
+	color: var( --ink );
+	text-shadow: 0 4px 18px rgba( 0, 0, 0, 0.6 );
+	transform: translate( -50%, -50% );
+	pointer-events: none;
+	animation: ch-count 0.9s ease-out forwards;
+}
+
+#drive-ui .ch-count.go {
+	color: var( --accent );
+}
+
+@keyframes ch-count {
+	0% {
+		opacity: 0;
+		transform: translate( -50%, -50% ) scale( 1.6 );
+	}
+	20% {
+		opacity: 1;
+		transform: translate( -50%, -50% ) scale( 1 );
+	}
+	100% {
+		opacity: 0.85;
+		transform: translate( -50%, -50% ) scale( 0.9 );
+	}
+}
+
+/* --- the finish card ---------------------------------------------------------------------- */
+
+.ch-finish {
+	position: fixed;
+	top: 50%;
+	left: 50%;
+	z-index: 1005;
+	width: min( 400px, calc( 100% - 24px ) );
+	max-height: calc( 100% - 24px );
+	overflow: auto;
+	padding: 18px 20px;
+	border: 1px solid var( --line );
+	border-radius: 20px;
+	background: var( --panel-solid );
+	box-shadow: 0 12px 40px rgba( 0, 0, 0, 0.45 );
+	text-align: center;
+	transform: translate( -50%, -50% );
+}
+
+.ch-f-title {
+	margin: 0;
+	font-size: 13px;
+	font-weight: 800;
+	letter-spacing: 0.8px;
+	text-transform: uppercase;
+	color: var( --muted );
+}
+
+.ch-f-time {
+	margin: 6px 0 0;
+	font: 900 italic 52px/1 var( --font );
+	font-variant-numeric: tabular-nums;
+}
+
+.ch-f-badge {
+	display: inline-block;
+	margin: 8px 0 0;
+	padding: 2px 10px;
+	border-radius: 8px;
+	background: var( --accent );
+	color: var( --accent-ink );
+	font-weight: 900;
+	font-style: italic;
+	text-transform: uppercase;
+}
+
+.ch-f-note {
+	margin: 10px 0 0;
+	font-weight: 700;
+}
+
+.ch-f-form {
+	margin: 10px 0 0;
+	text-align: left;
+}
+
+.ch-f-hint,
+.ch-f-status {
+	margin: 0 0 6px;
+	font-size: 13px;
+	color: var( --muted );
+}
+
+.ch-f-status:empty {
+	display: none;
+}
+
+.ch-f-name {
+	display: flex;
+	gap: 8px;
+}
+
+.ch-f-name input {
+	flex: 1;
+	min-width: 0;
+	padding: 9px 12px;
+	border: 1px solid var( --line );
+	border-radius: 10px;
+	background: rgba( 255, 255, 255, 0.08 );
+	font: inherit;
+	color: var( --ink );
+}
+
+.ch-f-name .primary {
+	padding: 9px 16px;
+	font-size: 14px;
+}
+
+.ch-f-rows {
+	text-align: left;
+}
+
+.ch-f-buttons {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+	margin-top: 14px;
+}
+
+/* A phone on its side: the card is short, the time smaller, beside the rest. */
+@media ( orientation: landscape ) and ( max-height: 520px ) {
+
+	.ch-finish {
+		width: min( 560px, calc( 100% - 24px ) );
+		padding: 12px 16px;
+	}
+
+	.ch-f-title {
+		font-size: 11px;
+	}
+
+	.ch-f-time {
+		font-size: 30px;
+	}
+
+	.ch-f-badge,
+	.ch-f-note,
+	.ch-f-rows {
+		margin-top: 4px;
+	}
+
+	.ch-f-rows li {
+		padding: 2px 8px;
+		font-size: 13px;
+	}
+
+	/* Each row on one line: the name with its level, no ride. */
+	.ch-f-rows .who {
+		flex-direction: row;
+		align-items: baseline;
+		gap: 6px;
+	}
+
+	.ch-f-rows .ride {
+		display: none;
+	}
+
+	.ch-f-buttons {
+		margin-top: 8px;
+	}
+
+	.ch-f-buttons .primary {
+		padding: 8px 18px;
+	}
+
+}
+
+/* --- the pause menu ---------------------------------------------------------------------- */
+
+#pause .ch-stopped {
+	margin: 12px 0 0;
+	padding: 10px 12px;
+	border: 1px solid rgba( 255, 210, 63, 0.45 );
+	border-radius: 12px;
+	background: rgba( 255, 210, 63, 0.1 );
+	font-size: 14px;
+}
+
+#pause .ch-stopped p {
+	margin: 0 0 8px;
+}
+
+#pause .ch-stopped .primary {
+	padding: 9px 18px;
+	font-size: 14px;
+}

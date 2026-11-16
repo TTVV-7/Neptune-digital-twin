@@ -59,7 +59,7 @@ const SLACK = 30;
 export const SCORE_GAP = 10 * 1000;
 // Scores a visitor may post in a day (SCORES_PER_VISITOR_DAILY): one every 10 s for four hours.
 const SCORES_DAILY = 1500;
-const VEHICLES = new Set( [ 'go-kart', ...LIBRARY_VEHICLES, ...DRIVE_CARS, ...PASS_RIDES ] );
+export const VEHICLES = new Set( [ 'go-kart', ...LIBRARY_VEHICLES, ...DRIVE_CARS, ...PASS_RIDES ] );
 // The tricks of a run's best jump, as drive.js names them (tricksOf), joined with " + ".
 const TRICK = /^(?:(\d{3,5}) Spin!|(?:Back|Front)flip(?:!| ×\d{1,3})|Barrel roll(?:!| ×\d{1,3})|Wall bounce(?: ×\d{1,3})?|Big air \d{1,3}\.\d s)$/;
 const MAX_TRICKS = 120;
