@@ -58,6 +58,11 @@ export class DriveLimits extends DurableObject {
 		this.sql.exec( 'CREATE TABLE IF NOT EXISTS place_totals ( day TEXT NOT NULL, world TEXT NOT NULL, count INTEGER NOT NULL, PRIMARY KEY ( day, world ) ) WITHOUT ROWID' );
 		this.sql.exec( 'CREATE TABLE IF NOT EXISTS place_visitors ( day TEXT NOT NULL, visitor TEXT NOT NULL, count INTEGER NOT NULL, PRIMARY KEY ( day, visitor ) ) WITHOUT ROWID' );
 		this.sql.exec( 'CREATE TABLE IF NOT EXISTS place_visits ( day TEXT NOT NULL, visit TEXT NOT NULL, count INTEGER NOT NULL, asks INTEGER NOT NULL, PRIMARY KEY ( day, visit ) ) WITHOUT ROWID' );
+		// Tries with a password today that didn't get in (see passwordCheck): for each visitor (an
+		// address, an IPv6 one by its /48), for each username and for each visitor and username together,
+		// each as a hash of the day's salt and it, so neither an address nor a username is kept, nor can
+		// be linked from one day to the next. last_at: when its latest try was (ms).
+		this.sql.exec( 'CREATE TABLE IF NOT EXISTS password_fails ( day TEXT NOT NULL, key TEXT NOT NULL, count INTEGER NOT NULL, last_at INTEGER NOT NULL, PRIMARY KEY ( day, key ) ) WITHOUT ROWID' );
 		// The key for those HMACs, once it's made (placesKey).
 		this.placeKey = null;
 		// When the next search may go out (ms). Only in memory: if this object is put to sleep,
@@ -102,9 +107,98 @@ export class DriveLimits extends DurableObject {
 		const visitor = await sha256Hex( `${ salt }:${ ip }` );
 		return this.ctx.storage.transactionSync( () => {
 
-			const count = this.sql.exec( 'SELECT count FROM turns WHERE day = ? AND kind = ? AND visitor = ?', day, kind, visitor ).toArray()[ 0 ]?.count ?? 0;
-			if ( count >= limit ) return { ok: false, retryAfter: untilMidnight( now ) };
+			if ( turnsTaken( this.sql, day, kind, visitor ) >= limit ) return { ok: false, retryAfter: untilMidnight( now ) };
 			this.sql.exec( 'INSERT INTO turns ( day, kind, visitor, count ) VALUES ( ?, ?, ?, 1 ) ON CONFLICT ( day, kind, visitor ) DO UPDATE SET count = count + 1', day, kind, visitor );
+			return { ok: true };
+
+		} );
+
+	}
+
+	// Whether a sign-in with a password (or anything else that proves one: a password change, linking
+	// Google, taking the password off) for the username `user` (its key, logins.js) from `ip` (an
+	// address, an IPv6 one by its /48) may be tried at `now` (ms): { ok: true }, with the try counted
+	// already, or { ok: false, reason, retryAfter? } with nothing counted:
+	// - 'address': this visitor has tried `hardFails` times today without getting in (whatever the
+	//   usernames), so it tries no more until midnight UTC (retryAfter): a script on one address
+	//   can't guess for long.
+	// - 'robot': the username has had `freeFails` such tries today (from anywhere), or this visitor
+	//   `addressFails`, and this try has no robot check passed (`robot`): from then on each try needs
+	//   one (Turnstile), so a script can't guess from many addresses, nor long from one, while the
+	//   owner, with a click, still signs in (one stranger on a shared address, a school's or a phone
+	//   carrier's, doesn't keep everyone else there out for the day).
+	// - 'wait': past those, a try within `gap` ms of this visitor's last try at this username,
+	//   retryAfter the seconds left. That slows one address's guessing; it's keyed by the visitor
+	//   and the username together, so tries from other addresses never make the owner wait, and
+	//   nothing ever locks a username.
+	// - 'turns': for a sign-in (`turn`, { kind, limit }: one of take's kinds, 'sign-in'), the visitor
+	//   has had `limit` of today's turns at it already, so even the right password wouldn't sign in
+	//   till midnight UTC (retryAfter): the Worker says so before any hashing, and remembers it.
+	// The try is counted here, in the same go as the check (a Durable Object answers one call at a
+	// time and nothing here waits between reading and writing), so requests sent all at once can't
+	// all pass before any is counted; passwordSucceeded gives a try that got in back (and
+	// passwordSignedIn, for a sign-in, takes its turn in the same go). Hashed with the day's salt, as
+	// visits.
+	async passwordCheck( ip, user, { now, robot = false, addressFails, hardFails, freeFails, gap, turn = null } ) {
+
+		const day = dayOf( now );
+		const salt = this.saltFor( day );
+		const [ visitor, name, pair ] = await passwordKeys( salt, ip, user );
+		// The visitor as take counts its turns.
+		const taker = turn ? await sha256Hex( `${ salt }:${ ip }` ) : null;
+		return this.ctx.storage.transactionSync( () => {
+
+			if ( turn && turnsTaken( this.sql, day, turn.kind, taker ) >= turn.limit ) return { ok: false, reason: 'turns', retryAfter: untilMidnight( now ) };
+			const count = key => this.sql.exec( 'SELECT count, last_at FROM password_fails WHERE day = ? AND key = ?', day, key ).toArray()[ 0 ];
+			const mine = count( visitor )?.count ?? 0;
+			if ( mine >= hardFails ) return { ok: false, reason: 'address', retryAfter: untilMidnight( now ) };
+			if ( mine >= addressFails || ( count( name )?.count ?? 0 ) >= freeFails ) {
+
+				// visitor: whether it's this visitor's tries that ask for it (so every try from it will,
+				// till midnight), not only this username's.
+				if ( ! robot ) return { ok: false, reason: 'robot', visitor: mine >= addressFails };
+				const wait = ( count( pair )?.last_at ?? - Infinity ) + gap - now;
+				if ( wait > 0 ) return { ok: false, reason: 'wait', retryAfter: Math.max( 1, Math.ceil( wait / 1000 ) ) };
+
+			}
+
+			for ( const key of [ visitor, name, pair ] ) this.sql.exec( 'INSERT INTO password_fails ( day, key, count, last_at ) VALUES ( ?, ?, 1, ? ) ON CONFLICT ( day, key ) DO UPDATE SET count = count + 1, last_at = excluded.last_at', day, key, now );
+			return { ok: true };
+
+		} );
+
+	}
+
+	// A try passwordCheck counted that got in (the right password for `user` from `ip`, on the day of
+	// `now`), given back: the owner signing in a few times a day never comes near the robot check.
+	async passwordSucceeded( ip, user, { now } ) {
+
+		const day = dayOf( now );
+		const salt = this.saltFor( day );
+		const keys = await passwordKeys( salt, ip, user );
+		this.ctx.storage.transactionSync( () => {
+
+			for ( const key of keys ) this.sql.exec( 'UPDATE password_fails SET count = MAX( 0, count - 1 ) WHERE day = ? AND key = ?', day, key );
+
+		} );
+
+	}
+
+	// passwordSucceeded and take together, in one call (one Durable Object request, not two), for a
+	// sign-in that got in: the try given back, and one of the visitor's `limit` turns at `kind` taken,
+	// as take answers ({ ok: true }, or { ok: false, retryAfter } when another sign-in took the last
+	// since passwordCheck said there was one left).
+	async passwordSignedIn( ip, user, { now, kind, limit } ) {
+
+		const day = dayOf( now );
+		const salt = this.saltFor( day );
+		const keys = await passwordKeys( salt, ip, user );
+		const taker = await sha256Hex( `${ salt }:${ ip }` );
+		return this.ctx.storage.transactionSync( () => {
+
+			for ( const key of keys ) this.sql.exec( 'UPDATE password_fails SET count = MAX( 0, count - 1 ) WHERE day = ? AND key = ?', day, key );
+			if ( turnsTaken( this.sql, day, kind, taker ) >= limit ) return { ok: false, retryAfter: untilMidnight( now ) };
+			this.sql.exec( 'INSERT INTO turns ( day, kind, visitor, count ) VALUES ( ?, ?, ?, 1 ) ON CONFLICT ( day, kind, visitor ) DO UPDATE SET count = count + 1', day, kind, taker );
 			return { ok: true };
 
 		} );
@@ -313,7 +407,7 @@ export class DriveLimits extends DurableObject {
 			this.sql.exec( 'DELETE FROM turns WHERE day < ?', day );
 			this.sql.exec( 'DELETE FROM live WHERE day < ?', day );
 			this.sql.exec( 'DELETE FROM live_visits WHERE day < ?', day );
-			for ( const table of [ 'place_seen', 'place_totals', 'place_visitors', 'place_visits' ] ) this.sql.exec( `DELETE FROM ${ table } WHERE day < ?`, day );
+			for ( const table of [ 'place_seen', 'place_totals', 'place_visitors', 'place_visits', 'password_fails' ] ) this.sql.exec( `DELETE FROM ${ table } WHERE day < ?`, day );
 			this.sql.exec( 'DELETE FROM days WHERE day < ?', day );
 			this.sql.exec( 'INSERT OR IGNORE INTO days ( day, salt ) VALUES ( ?, ? )', day, salt );
 
@@ -331,6 +425,21 @@ function addLive( sql, day, amount, budget ) {
 	sql.exec( 'INSERT INTO live ( day, spent ) VALUES ( ?, ? ) ON CONFLICT ( day ) DO UPDATE SET spent = spent + excluded.spent', day, amount );
 	const spent = sql.exec( 'SELECT spent FROM live WHERE day = ?', day ).one().spent;
 	return { open: spent < budget, spent };
+
+}
+
+// The turns at `kind` the visitor (as take hashes it) has had on `day`.
+function turnsTaken( sql, day, kind, visitor ) {
+
+	return sql.exec( 'SELECT count FROM turns WHERE day = ? AND kind = ? AND visitor = ?', day, kind, visitor ).toArray()[ 0 ]?.count ?? 0;
+
+}
+
+// The keys passwordCheck counts a try under, hashed with the day's `salt`: the visitor (`ip`), the
+// username (`user`) and the two together.
+function passwordKeys( salt, ip, user ) {
+
+	return Promise.all( [ sha256Hex( `${ salt }:password:${ ip }` ), sha256Hex( `${ salt }:username:${ user }` ), sha256Hex( `${ salt }:pair:${ ip }:${ user }` ) ] );
 
 }
 

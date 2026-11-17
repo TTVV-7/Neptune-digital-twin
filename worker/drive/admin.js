@@ -12,11 +12,14 @@ import { currentAccount } from './accounts.js';
 export const MOST_DAYS = 365;
 export const KEEP_DAYS = 2 * MOST_DAYS;
 
-// Whether `account` ({ email }) may see the stats: its email in ADMIN_EMAILS (any case).
+// Whether `account` ({ email, username }) may see the stats: its email in ADMIN_EMAILS (any case),
+// and no username and password on it, so the admin page is only ever reached by Google's sign-in
+// (logins.js never adds a password to such an account; this holds even if ADMIN_EMAILS later names
+// one that has one).
 export function isAdmin( env, account ) {
 
 	const email = typeof account?.email === 'string' ? account.email.toLowerCase() : '';
-	return !! email && list( env.ADMIN_EMAILS ).includes( email );
+	return !! email && ! account.username && list( env.ADMIN_EMAILS ).includes( email );
 
 }
 

@@ -5,7 +5,7 @@
 
 import { spawn, spawnSync } from 'node:child_process';
 import { createHmac } from 'node:crypto';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -83,8 +83,27 @@ export async function serveKeys( keys ) {
 // which replace any in wrangler.jsonc or .dev.vars. Resolves once it answers. With `config`
 // (World Drive's wrangler.drive.jsonc) it runs that Worker instead, with its own database and
 // only the vars given here: no .dev.vars file is read. The site's files are a test page, and
-// `assets` ({ path: contents }) besides, for a Worker that reads its own (ASSETS).
-export async function startWorker( { port, vars, config = null, assets: files = {} } ) {
+// `assets` ({ path: contents }) besides, for a Worker that reads its own (ASSETS). `without` names
+// rate limiter bindings (`ratelimits`) left out of `config` for this run, for a suite that sends
+// more from one address than a limiter lets through to test what's behind it: a copy of the config
+// beside it (so its paths still hold), gone when the Worker's stopped.
+export async function startWorker( { port, vars, config = null, assets: files = {}, without = [] } ) {
+
+	if ( without.length ) {
+
+		let text = readFileSync( join( ROOT, config ), 'utf8' );
+		for ( const name of without ) {
+
+			const line = new RegExp( `^\\s*\\{ "name": "${ name }",.*\\n`, 'm' );
+			if ( ! line.test( text ) ) throw new Error( `${ name } isn't one of ${ config }'s rate limiters` );
+			text = text.replace( line, '' );
+
+		}
+
+		config = `.wrangler-test-${ port }.jsonc`;
+		writeFileSync( join( ROOT, config ), text );
+
+	}
 
 	const dir = mkdtempSync( join( tmpdir(), 'twin-worker-' ) );
 	const state = join( dir, 'state' );
@@ -126,6 +145,7 @@ export async function startWorker( { port, vars, config = null, assets: files = 
 		}
 
 		rmSync( dir, { recursive: true, force: true } );
+		if ( without.length ) rmSync( join( ROOT, config ), { force: true } );
 
 	};
 
@@ -221,12 +241,15 @@ export function rewritten( origin, path, init = {} ) {
 // window.testCredential.
 export const GOOGLE_STUB = `window.google = { accounts: { id: {
 	initialize( options ) { this.options = options; },
-	renderButton( parent ) {
+	renderButton( parent, options ) {
 		const button = document.createElement( 'button' );
 		button.type = 'button';
 		button.className = 'stub-google';
 		button.textContent = 'Sign in with Google';
-		button.onclick = () => this.options.callback( { credential: window.testCredential, select_by: 'btn' } );
+		button.onclick = () => {
+			options?.click_listener?.();
+			this.options.callback( { credential: window.testCredential, select_by: 'btn' } );
+		};
 		parent.append( button );
 	},
 	prompt() {}, disableAutoSelect() {}, cancel() {},

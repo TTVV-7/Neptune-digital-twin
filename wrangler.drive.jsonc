@@ -93,6 +93,11 @@
 		// The owner's admin page's asks (worker/drive/admin.js), by account: each reads a period's rows
 		// from D1, so at most 30 a minute (the page asks once or twice a change of period).
 		{ "name": "ADMIN_LOOKS", "namespace_id": "4804", "simple": { "limit": 30, "period": 60 } },
+		// A visitor's sign-ins with a password, checks of one and changes to an account
+		// (worker/drive/logins.js), by the challenges' keyed hash of the address (an IPv6 one by its
+		// /48) and the day: at most 10 a minute, room for a few mistyped passwords and a change, while
+		// a script trying over and over is turned away before each try costs a Durable Object request.
+		{ "name": "PASSWORD_TRIES", "namespace_id": "4807", "simple": { "limit": 10, "period": 60 } },
 		// The challenges' lists, boards and times posted (worker/drive/challenges.js), by address (an
 		// IPv6 one by its /48), each counted by an HMAC of it and the day (lookKey), never as it is: a
 		// page asks a few times a minute at most (the list as it opens, a board or two, a time); a

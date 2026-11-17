@@ -50,7 +50,18 @@
 // only): picks ahead fixing their period, back to the rotation, a live one changed only after a
 // warning and then a new board, the old kept apart, nothing replaced where nothing changes, and busy
 // places approved and unapproved.
-// TEST_DRIVE_WORKER_PORT=8796 moves the six wrangler servers (that port and the next five).
+// And username and password accounts: the rules for both, PBKDF2-SHA-256 (RFC 7914's vector) at
+// 100,000 iterations, DriveLimits' tries per address and per username (counted as they're checked,
+// so a burst sent at once gets no more; a robot check and a short wait, never a lock) kept only as
+// salted hashes, every refusal costing 100,000 iterations however PASSWORD_ITERATIONS is set,
+// migration 0008 on top of the others, signing up and in (a wrong password and a stranger alike, in
+// answer and in time), taken and look-alike usernames, the name filter, changing the password (other
+// sessions signed out), hashing again at a raised count, linking both ways and refusing a Google
+// account with its own progress or pass, fresh proof (Google's token, the password) for every
+// change to how an account signs in, the owner's accounts Google only, unlinking keeping a way in
+// (two at once too), the pass and the player the same either way, signing out everywhere, and the
+// admin page's counts by kind.
+// TEST_DRIVE_WORKER_PORT=8796 moves the seven wrangler servers (that port and the next six).
 
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
@@ -308,8 +319,27 @@ describe( 'World Drive Worker', () => {
 
 		const { status, json, text } = await call( server, '/api/config' );
 		assert.equal( status, 200 );
-		assert.deepEqual( json, { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true, googleClientId: '', live: true } );
+		assert.deepEqual( json, { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true, googleClientId: '', passwords: true, live: true } );
 		assert.ok( ! text.includes( MAPS_KEY ) );
+
+	} );
+
+	test( 'tries with a password from one address are 10 a minute (PASSWORD_TRIES, from wrangler.drive.jsonc) before anything else is asked', async () => {
+
+		let n = 0;
+		// Each for another username, so none of them asks for a robot check.
+		const tryFrom = ip => call( server, '/api/account/sign-in', { method: 'POST', headers: { Origin: server.base, 'Content-Type': 'application/json' }, body: JSON.stringify( { username: `Nobody_${ ++ n }`, password: 'not a password at all' } ), ip } );
+		// (The rate limiter's minutes are the wall clock's: started early in one, so the twelve are counted
+		// in it.)
+		const into = Date.now() % MINUTE;
+		if ( into > 40 * SECOND ) await new Promise( resolve => setTimeout( resolve, MINUTE - into + 200 ) );
+		const answers = [];
+		// Two /64s of one /48 are one visitor.
+		for ( let i = 0; i < 12; i ++ ) answers.push( await tryFrom( `2001:db8:4a:${ i % 2 }::1` ) );
+		assert.deepEqual( answers.map( res => res.status ), [ ...Array( 10 ).fill( 401 ), 429, 429 ] );
+		assert.deepEqual( answers[ 10 ].json, { error: 'Too many tries. Wait a minute and try again', reason: 'busy', retryAfter: 60 } );
+		assert.equal( answers[ 10 ].headers.get( 'Retry-After' ), '60' );
+		assert.equal( ( await tryFrom( '2001:db8:4b::1' ) ).status, 401 );
 
 	} );
 
@@ -544,7 +574,7 @@ describe( 'World Drive Worker, Turnstile failing and maps off', () => {
 	test( 'config says maps are off, with the site key from wrangler.drive.jsonc', async () => {
 
 		const { json } = await call( server, '/api/config' );
-		assert.deepEqual( json, { turnstileSiteKey: '0x4AAAAAAFs3k5sgUIQHSuGC', mapsOn: false, googleClientId: '', live: true } );
+		assert.deepEqual( json, { turnstileSiteKey: '0x4AAAAAAFs3k5sgUIQHSuGC', mapsOn: false, googleClientId: '', passwords: true, live: true } );
 
 	} );
 
@@ -1366,7 +1396,7 @@ describe( 'World Drive Supporter Pass', () => {
 		// the whole site, never from http or another site).
 		assert.equal( alice.headers.get( 'Set-Cookie' ), `__Host-wd_session=${ alice.token }; Max-Age=2592000; Path=/; HttpOnly; SameSite=Lax; Secure` );
 		const [ account ] = server.d1( 'SELECT id, google_sub, email, name FROM accounts WHERE google_sub = \'1001\'' );
-		assert.deepEqual( alice.json, { signedIn: true, name: 'Alice Example', email: 'alice@example.com', supporter: false, purchase: { enabled: true, link: PASS_LINK, price: 'CA$4.99', clientReferenceId: String( account.id ) } } );
+		assert.deepEqual( alice.json, { signedIn: true, name: 'Alice Example', email: 'alice@example.com', google: true, username: null, supporter: false, purchase: { enabled: true, link: PASS_LINK, price: 'CA$4.99', clientReferenceId: String( account.id ) } } );
 		alice.id = account.id;
 		assert.deepEqual( ( await me( alice.cookie ) ).json, alice.json );
 		// Only the token's SHA-256 is kept.
@@ -1898,7 +1928,10 @@ describe( 'World Drive Supporter Pass', () => {
 		} );
 		// Now: three more players and accounts, three more with the pass (Nia's and Pia's bought, Oto's
 		// given), and one bought by an email nobody has signed in with.
-		assert.deepEqual( totals, { players: was.players + 3, accounts: was.accounts + 3, supporters: was.supporters + 3, unclaimed: was.unclaimed + 1 } );
+		// (All three with Google alone, so the kinds of account say so.)
+		assert.deepEqual( totals, {
+			players: was.players + 3, accounts: was.accounts + 3, kinds: { ...was.kinds, google: was.kinds.google + 3 }, supporters: was.supporters + 3, unclaimed: was.unclaimed + 1,
+		} );
 		assert.deepEqual( kept, { stats: 730, scores: 35 } );
 
 		// A year at most, compared with the year before it; rows older than two years go as it's asked.
@@ -2472,6 +2505,1261 @@ describe( 'World Drive Supporter Pass, with a link id and no sign-in', () => {
 
 } );
 
+// --- username and password accounts ----------------------------------------------------------
+
+// Wednesday 11 November 2026 at noon UTC: the accounts' Worker's day, unless a test says otherwise.
+const ACCOUNT_DAY = Date.UTC( 2026, 10, 11, 12, 0, 0 );
+// RFC 7914's PBKDF2-HMAC-SHA-256 test vector (section 11): "passwd", salt "salt", 1 iteration.
+const PBKDF2_VECTOR = '55ac046e56e3089fec1691c22544b605f94185216dde0465e68b9d57c20dacbc49ca9cccf179b645991664b39d77ef317c71b845b1e30bd509112041d3a19783';
+
+// The PBKDF2-SHA-256 of `password` with `salt` (bytes) as the Worker makes it, base64url.
+async function pbkdf2( password, salt, iterations ) {
+
+	const key = await crypto.subtle.importKey( 'raw', encoder.encode( password ), 'PBKDF2', false, [ 'deriveBits' ] );
+	return Buffer.from( await crypto.subtle.deriveBits( { name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, key, 256 ) ).toString( 'base64url' );
+
+}
+
+// DriveLimits on node:sqlite in memory, as the drop-in places' own test has it: the object, and the
+// database to look into.
+async function memoryLimits() {
+
+	await loadWorker();
+	const { DriveLimits } = await import( '../worker/drive/limits.js' );
+	const db = new DatabaseSync( ':memory:' );
+	const sql = { exec: ( query, ...values ) => {
+
+		const rows = db.prepare( query ).all( ...values ).map( row => ( { ...row } ) );
+		return { toArray: () => rows, one: () => rows[ 0 ] };
+
+	} };
+	return { limits: new DriveLimits( { storage: { sql, transactionSync: run => run() } }, { TURNSTILE_SECRET: PASS_SECRET } ), db };
+
+}
+
+describe( 'Username and password rules', () => {
+
+	test( 'usernames: 3 to 20 Latin letters, digits, _ or -, after NFKC, one whatever their case', async () => {
+
+		const { cleanUsername, usernameKey } = await import( '../src/drive-app/password-rules.js' );
+		for ( const good of [ 'abc', 'Racer_1', 'speed-demon', 'A'.repeat( 20 ), ' padded ' ] ) assert.ok( cleanUsername( good ), good );
+		for ( const bad of [ 'ab', 'A'.repeat( 21 ), 'two words', 'émile', 'Rаcer', 'dot.ted', 'at@me', '', 42, null, 'x'.repeat( 65 ) ] ) assert.equal( cleanUsername( bad ), null, String( bad ) );
+		// A full-width Ｒ is an R once normalised (NFKC), so it can't make a second "Racer_1".
+		assert.equal( cleanUsername( 'Ｒacer＿1' ), 'Racer_1' );
+		assert.equal( usernameKey( cleanUsername( 'Ｒacer＿1' ) ), usernameKey( 'RACER_1' ) );
+
+	} );
+
+	test( 'passwords: at least 8 characters, at most 128 bytes, not the commonest nor the username', async () => {
+
+		const { passwordProblem, passwordText } = await import( '../src/drive-app/password-rules.js' );
+		assert.equal( passwordProblem( 'correct horse battery staple' ), '' );
+		assert.equal( passwordProblem( 'x9!kq2Lm' ), '' );
+		assert.equal( passwordProblem( 'ünïcødé😀ok' ), '' );
+		assert.match( passwordProblem( 'short1!' ), /at least 8/ );
+		for ( const common of [ 'password', 'Password1', '12345678', 'qwertyuiop', 'iloveyou', 'WorldDrive', 'aaaaaaaaaaaa' ] ) assert.match( passwordProblem( common ), /commonest/, common );
+		assert.match( passwordProblem( 'Racer_123', 'racer_123' ), /can't be your username/ );
+		// 128 bytes is fine (a long passphrase); 129 isn't, and nor are 43 three-byte letters (129 bytes).
+		assert.equal( passwordProblem( 'a'.repeat( 127 ) + 'b' ), '' );
+		assert.match( passwordProblem( 'a'.repeat( 128 ) + 'b' ), /at most 128 bytes/ );
+		assert.match( passwordProblem( '€'.repeat( 43 ) ), /at most 128 bytes/ );
+		assert.equal( passwordProblem( 42 ), passwordProblem( null ) );
+		// The same passphrase typed with a full-width letter is the same password.
+		assert.equal( passwordText( 'Ｐassphrase one' ), 'Passphrase one' );
+
+	} );
+
+	test( 'hashing is PBKDF2-SHA-256 at the runtime\'s most, 100,000, unless set lower; on only with D1 and Turnstile', async () => {
+
+		await loadWorker();
+		const { ITERATIONS, hashPassword, iterationsFor, passwordsOn } = await import( '../worker/drive/logins.js' );
+		assert.equal( ITERATIONS, 100000 );
+		const vector = await hashPassword( 'passwd', encoder.encode( 'salt' ), 1 );
+		assert.equal( Buffer.from( vector ).toString( 'hex' ), PBKDF2_VECTOR.slice( 0, 64 ) );
+		assert.equal( iterationsFor( {} ), 100000 );
+		assert.equal( iterationsFor( { PASSWORD_ITERATIONS: '20000' } ), 20000 );
+		for ( const out of [ '100001', '600000', '9999', 'lots', '' ] ) assert.equal( iterationsFor( { PASSWORD_ITERATIONS: out } ), 100000, out );
+		assert.equal( passwordsOn( { DB: {}, TURNSTILE_SECRET: 'x' } ), true );
+		assert.equal( passwordsOn( { DB: {}, TURNSTILE_SECRET: 'x', PASSWORD_ACCOUNTS: 'off' } ), false );
+		assert.equal( passwordsOn( { TURNSTILE_SECRET: 'x' } ), false );
+		assert.equal( passwordsOn( { DB: {} } ), false );
+		// What a hash costs here (the Worker's is measured against wrangler below): a guide only.
+		const started = performance.now();
+		await hashPassword( 'correct horse battery staple', new Uint8Array( 16 ), ITERATIONS );
+		console.log( `# PBKDF2-SHA-256 x ${ ITERATIONS } in Node: ${ ( performance.now() - started ).toFixed( 1 ) } ms` );
+
+	} );
+
+	test( 'DriveLimits: tries counted as they\'re checked, then a robot check and a gap, a hard cap, kept only as salted hashes', async () => {
+
+		const { limits, db } = await memoryLimits();
+		const now = Date.UTC( 2026, 10, 12, 9 );
+		const rules = { addressFails: 3, hardFails: 6, freeFails: 2, gap: 5000 };
+		const check = ( ip, user, at = now, robot = false ) => limits.passwordCheck( ip, user, { now: at, robot, ...rules } );
+		// Each try is counted as it's let through, with nothing to call after it: two for alice, from
+		// two addresses, and the third, from a third, needs a robot check.
+		assert.deepEqual( await check( '203.0.113.1', 'alice' ), { ok: true } );
+		assert.deepEqual( await check( '203.0.113.2', 'alice', now + 1000 ), { ok: true } );
+		assert.deepEqual( await check( '203.0.113.9', 'alice', now + 10000 ), { ok: false, reason: 'robot', visitor: false } );
+		assert.deepEqual( await check( '203.0.113.9', 'alice', now + 10000, true ), { ok: true } );
+		// Within the gap of this visitor's last try at alice, a few seconds' wait...
+		assert.deepEqual( await check( '203.0.113.9', 'alice', now + 13000, true ), { ok: false, reason: 'wait', retryAfter: 2 } );
+		// ...but never for a try from another address: a stranger's tries can't make the owner wait.
+		assert.deepEqual( await check( '203.0.113.7', 'alice', now + 13000, true ), { ok: true } );
+		// A try that got in is given back: the owner signing in again and again stays clear of it.
+		for ( let i = 0; i < 5; i ++ ) {
+
+			assert.deepEqual( await check( '198.51.100.1', 'bob', now + i ), { ok: true }, `bob ${ i }` );
+			await limits.passwordSucceeded( '198.51.100.1', 'bob', { now: now + i } );
+
+		}
+
+		// A visitor's third try, whatever the usernames: from then on a robot check for each...
+		await check( '203.0.113.1', 'bob' );
+		await check( '203.0.113.1', 'carol' );
+		// (This time it's the visitor's own tries that ask for it, so every try from it will till midnight.)
+		assert.deepEqual( await check( '203.0.113.1', 'dave', now + 1000 ), { ok: false, reason: 'robot', visitor: true } );
+		assert.deepEqual( await check( '203.0.113.1', 'dave', now + 1000, true ), { ok: true } );
+		assert.deepEqual( await check( '203.0.113.1', 'erin', now + 1000, true ), { ok: true } );
+		assert.deepEqual( await check( '203.0.113.1', 'fay', now + 1000, true ), { ok: true } );
+		// ...and past the hard cap no more from it today, robot check or not; then tomorrow again.
+		const out = await check( '203.0.113.1', 'gus', now + 1000, true );
+		assert.equal( out.reason, 'address' );
+		assert.equal( out.retryAfter, 15 * 3600 - 1 );
+		assert.deepEqual( await check( '203.0.113.1', 'alice', now + 15 * HOUR ), { ok: true } );
+		// Neither an address nor a username in what it keeps (and yesterday's gone).
+		const kept = JSON.stringify( db.prepare( 'SELECT * FROM password_fails' ).all() );
+		for ( const plain of [ '203.0.113', '198.51.100', 'alice', 'bob', 'carol' ] ) assert.ok( ! kept.includes( plain ), plain );
+		assert.deepEqual( db.prepare( 'SELECT DISTINCT day FROM password_fails' ).all().map( row => row.day ), [ dayOf( now + 15 * HOUR ) ] );
+
+	} );
+
+	test( 'a refusal always costs the stand-in\'s 100,000 iterations, with PASSWORD_ITERATIONS lowered too, so its time never says a username is someone\'s', async () => {
+
+		const { ITERATIONS, hashPassword, passwordSignIn } = await import( '../worker/drive/logins.js' );
+		const salt = new Uint8Array( 16 ).fill( 7 );
+		const hashed = async iterations => ( { account_id: 1, username: 'Real_One', password_hash: Buffer.from( await hashPassword( 'the real passphrase', salt, iterations ) ).toString( 'base64url' ), salt: Buffer.from( salt ).toString( 'base64url' ), iterations } );
+		// The iterations every hash in one sign-in adds up to, and how long it took: PBKDF2 costs in
+		// proportion to its iterations, so equal sums take equal time.
+		const subtle = crypto.subtle;
+		const deriveBits = subtle.deriveBits;
+		let spent = 0;
+		subtle.deriveBits = function ( params, ...rest ) {
+
+			spent += params.iterations;
+			return deriveBits.call( this, params, ...rest );
+
+		};
+		const updates = [];
+		const attempt = async ( { row, username, password, iterations } ) => {
+
+			const db = {
+				prepare: sql => ( {
+					bind: ( ...values ) => ( {
+						first: async () => /FROM logins WHERE username_key/.test( sql ) && values[ 0 ] === 'real_one' ? row : null,
+						run: async () => ( /UPDATE logins/.test( sql ) && updates.push( values ), { meta: { changes: 1 } } ),
+					} ),
+				} ),
+				batch: async list => list.map( () => ( { meta: { changes: 1 }, results: [] } ) ),
+			};
+			const env = { DB: db, TURNSTILE_SECRET: 'x', ...( iterations ? { PASSWORD_ITERATIONS: String( iterations ) } : {} ) };
+			const limits = { passwordCheck: async () => ( { ok: true } ), passwordSucceeded: async () => {}, passwordSignedIn: async () => ( { ok: true } ), take: async () => ( { ok: true } ) };
+			const request = new Request( 'https://worlddrive.app/api/account/sign-in', { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '203.0.113.1' }, body: JSON.stringify( { username, password } ) } );
+			spent = 0;
+			const started = performance.now();
+			let status = 200;
+			try {
+
+				await passwordSignIn( { request, env, limits, url: new URL( request.url ), now: Date.UTC( 2026, 10, 12 ) } );
+
+			} catch ( err ) {
+
+				status = err.status;
+
+			}
+
+			return { status, spent, ms: performance.now() - started };
+
+		};
+
+		try {
+
+			const atMost = await hashed( ITERATIONS );
+			const lowered = await hashed( 10000 );
+			const tries = {
+				wrong: await attempt( { row: atMost, username: 'Real_One', password: 'not the passphrase' } ),
+				stranger: await attempt( { row: atMost, username: 'Nobody_Here', password: 'not the passphrase' } ),
+				// PASSWORD_ITERATIONS lowered to spare CPU: an account hashed before at 100,000, one hashed
+				// since at 10,000, and a username nobody has all cost the same to refuse.
+				'lowered, old hash': await attempt( { row: atMost, username: 'Real_One', password: 'not the passphrase', iterations: 10000 } ),
+				'lowered, new hash': await attempt( { row: lowered, username: 'Real_One', password: 'not the passphrase', iterations: 10000 } ),
+				'lowered, stranger': await attempt( { row: lowered, username: 'Nobody_Here', password: 'not the passphrase', iterations: 10000 } ),
+			};
+			for ( const [ kind, { status, spent } ] of Object.entries( tries ) ) assert.deepEqual( { status, spent }, { status: 401, spent: ITERATIONS }, kind );
+			console.log( `# refusals in Node: ${ Object.entries( tries ).map( ( [ kind, { ms } ] ) => `${ kind } ${ ms.toFixed( 1 ) } ms` ).join( ', ' ) }` );
+			// The right password, lowered, costs only its own hash, and is hashed again at the lower count.
+			const right = await attempt( { row: atMost, username: 'Real_One', password: 'the real passphrase', iterations: 10000 } );
+			assert.equal( right.status, 200 );
+			assert.equal( right.spent, ITERATIONS + 10000 );
+			assert.equal( updates.at( - 1 )[ 2 ], 10000 );
+
+		} finally {
+
+			subtle.deriveBits = deriveBits;
+
+		}
+
+	} );
+
+	test( 'PASSWORD_TRIES turns a burst away before DriveLimits is asked, and what DriveLimits said of a visitor for the day is never asked again here', async () => {
+
+		const { passwordSignIn } = await import( '../worker/drive/logins.js' );
+		const db = { prepare: () => ( { bind: () => ( { first: async () => null, run: async () => ( { meta: { changes: 1 } } ) } ) } ), batch: async list => list.map( () => ( { meta: { changes: 1 }, results: [] } ) ) };
+		// Cloudflare's rate limiter, 10 a minute for each key, and DriveLimits saying what `answer` does.
+		const keys = new Map();
+		const tries = { limit: async ( { key } ) => ( keys.set( key, ( keys.get( key ) ?? 0 ) + 1 ), { success: keys.get( key ) <= 10 } ) };
+		let answer = { ok: true };
+		let checks = 0;
+		const limits = { passwordCheck: async () => ( checks ++, answer ), passwordSucceeded: async () => {}, passwordSignedIn: async () => ( { ok: true } ), take: async () => ( { ok: true } ) };
+		const attempt = async ( ip, { env = {}, now = Date.UTC( 2026, 10, 13, 9 ), username = 'Somebody' } = {} ) => {
+
+			const request = new Request( 'https://worlddrive.app/api/account/sign-in', { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip }, body: JSON.stringify( { username, password: 'a wrong passphrase' } ) } );
+			try {
+
+				await passwordSignIn( { request, env: { DB: db, TURNSTILE_SECRET: PASS_SECRET, PASSWORD_TRIES: tries, ...env }, limits, url: new URL( request.url ), now } );
+				return { status: 200 };
+
+			} catch ( err ) {
+
+				return { status: err.status, reason: err.extra?.reason, retryAfter: err.headers?.[ 'Retry-After' ] };
+
+			}
+
+		};
+
+		// Twelve at once from one /48 (two of its /64s): ten asked of DriveLimits, two turned away first.
+		const burst = await Promise.all( Array.from( { length: 12 }, ( _, i ) => attempt( `2001:db8:5a:${ i % 2 }::1` ) ) );
+		assert.deepEqual( burst.map( res => res.status ).sort(), [ ...Array( 10 ).fill( 401 ), 429, 429 ] );
+		assert.deepEqual( burst.filter( res => res.status === 429 ).map( res => [ res.reason, res.retryAfter ] ), [ [ 'busy', '60' ], [ 'busy', '60' ] ] );
+		assert.equal( checks, 10 );
+		// The rate limiter's key is neither address nor /48 as it is, and another address has its own.
+		assert.ok( [ ...keys.keys() ].every( key => /^[0-9a-f]{32}$/.test( key ) ) );
+		assert.equal( ( await attempt( '2001:db8:5b::1' ) ).status, 401 );
+		assert.equal( checks, 11 );
+
+		// Past its free failures, DriveLimits asks this visitor for robot checks: said once, and from
+		// then on its tries without one are turned away here, for this visitor alone...
+		answer = { ok: false, reason: 'robot', visitor: true };
+		assert.deepEqual( await attempt( '203.0.113.120' ), { status: 403, reason: 'robot', retryAfter: undefined } );
+		for ( let i = 0; i < 5; i ++ ) assert.equal( ( await attempt( '203.0.113.120' ) ).reason, 'robot' );
+		assert.equal( checks, 12 );
+		// A username's robot check (not the visitor's) is remembered for this visitor and that username
+		// alone: asked once, then its tries without one are turned away here...
+		answer = { ok: false, reason: 'robot', visitor: false };
+		for ( let i = 0; i < 5; i ++ ) assert.equal( ( await attempt( '203.0.113.121' ) ).reason, 'robot' );
+		assert.equal( checks, 13 );
+		// ...while another username from it, or the same from another visitor, is asked about afresh.
+		answer = { ok: true };
+		assert.equal( ( await attempt( '203.0.113.121', { username: 'Somebody_Else' } ) ).status, 401 );
+		assert.equal( ( await attempt( '203.0.113.125' ) ).status, 401 );
+		assert.equal( checks, 15 );
+		// Past HARD_FAILS: a 429 till midnight from DriveLimits once, then from here.
+		answer = { ok: false, reason: 'address', retryAfter: 3600 };
+		assert.deepEqual( await attempt( '203.0.113.122' ), { status: 429, reason: 'address', retryAfter: '3600' } );
+		assert.deepEqual( await attempt( '203.0.113.122', { now: Date.UTC( 2026, 10, 13, 9 ) + 1000 } ), { status: 429, reason: 'address', retryAfter: '3599' } );
+		assert.equal( checks, 16 );
+		// The next day it's a new visitor to the counts, and asked about again.
+		answer = { ok: true };
+		assert.equal( ( await attempt( '203.0.113.122', { now: Date.UTC( 2026, 10, 14, 9 ) } ) ).status, 401 );
+		assert.equal( checks, 17 );
+
+	} );
+
+	test( 'signing in again and again with the right password: two DriveLimits requests and a hash each, then none at all past the day\'s 50', async () => {
+
+		const { ITERATIONS, hashPassword, passwordSignIn, signOutEverywhere } = await import( '../worker/drive/logins.js' );
+		// The real DriveLimits (in memory), each call to it counted.
+		const real = ( await memoryLimits() ).limits;
+		const calls = [];
+		const limits = new Proxy( real, { get: ( target, name ) => typeof target[ name ] === 'function' ? ( ...args ) => ( calls.push( name ), target[ name ]( ...args ) ) : target[ name ] } );
+		const salt = new Uint8Array( 16 ).fill( 3 );
+		const row = { account_id: 5, username: 'Loop_Er', password_hash: Buffer.from( await hashPassword( 'my own passphrase', salt, ITERATIONS ) ).toString( 'base64url' ), salt: Buffer.from( salt ).toString( 'base64url' ), iterations: ITERATIONS };
+		const account = { id: 5, google_sub: 'none:x', email: '', name: '', google: 0, username: 'Loop_Er' };
+		const db = {
+			prepare: sql => ( {
+				bind: ( ...values ) => ( {
+					first: async () => /FROM logins WHERE username_key/.test( sql ) ? ( values[ 0 ] === 'loop_er' ? row : null ) : /JOIN sessions/.test( sql ) ? account : null,
+					run: async () => ( { meta: { changes: 1 } } ),
+				} ),
+			} ),
+			batch: async list => list.map( () => ( { meta: { changes: 1 }, results: [] } ) ),
+		};
+		const env = { DB: db, TURNSTILE_SECRET: PASS_SECRET };
+		const subtle = crypto.subtle;
+		const deriveBits = subtle.deriveBits;
+		let hashes = 0;
+		subtle.deriveBits = function ( ...args ) {
+
+			hashes ++;
+			return deriveBits.apply( this, args );
+
+		};
+		const now = Date.UTC( 2026, 10, 15, 10 );
+		const post = ( path, body, extra = {} ) => new Request( `https://worlddrive.app${ path }`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '203.0.113.140', ...extra }, body: JSON.stringify( body ) } );
+		const outcome = async ( route, request, at ) => {
+
+			try {
+
+				return ( await route( { request, env, limits, url: new URL( request.url ), now: at } ) ).status;
+
+			} catch ( err ) {
+
+				return err.status;
+
+			}
+
+		};
+
+		try {
+
+			const statuses = [];
+			const asked = [];
+			const hashed = [];
+			for ( let i = 0; i < 100; i ++ ) {
+
+				const before = [ calls.length, hashes ];
+				statuses.push( await outcome( passwordSignIn, post( '/api/account/sign-in', { username: 'Loop_Er', password: 'my own passphrase' } ), now + i * 6000 ) );
+				asked.push( calls.length - before[ 0 ] );
+				hashed.push( hashes - before[ 1 ] );
+
+			}
+
+			assert.deepEqual( statuses, [ ...Array( 50 ).fill( 200 ), ...Array( 50 ).fill( 429 ) ] );
+			// Each sign-in: the check, then the try given back and the day's turn taken in one request.
+			assert.deepEqual( calls.slice( 0, 4 ), [ 'passwordCheck', 'passwordSignedIn', 'passwordCheck', 'passwordSignedIn' ] );
+			assert.deepEqual( asked.slice( 0, 50 ), Array( 50 ).fill( 2 ) );
+			assert.deepEqual( hashed.slice( 0, 50 ), Array( 50 ).fill( 1 ) );
+			// The 51st: DriveLimits says the day's sign-ins are used up, before any hashing...
+			assert.equal( asked[ 50 ], 1 );
+			assert.equal( hashed[ 50 ], 0 );
+			// ...and from then on, nothing asked and nothing hashed, all day.
+			assert.deepEqual( asked.slice( 51 ), Array( 49 ).fill( 0 ) );
+			assert.deepEqual( hashed.slice( 51 ), Array( 49 ).fill( 0 ) );
+			assert.equal( calls.length, 101 );
+
+			// Changes alike: past the day's 30 (here signing out everywhere), DriveLimits says so once.
+			const cookie = { Cookie: `__Host-wd_session=${ 'k'.repeat( 43 ) }` };
+			const changed = [];
+			const before = calls.length;
+			for ( let i = 0; i < 40; i ++ ) changed.push( await outcome( signOutEverywhere, post( '/api/account/sign-out-everywhere', {}, cookie ), now + i * 6000 ) );
+			assert.deepEqual( changed, [ ...Array( 30 ).fill( 204 ), ...Array( 10 ).fill( 429 ) ] );
+			assert.equal( calls.length - before, 31 );
+
+		} finally {
+
+			subtle.deriveBits = deriveBits;
+
+		}
+
+	} );
+
+	test( 'a username made by two at once: the batch that loses takes its account back with it', async () => {
+
+		await loadWorker();
+		const { newAccount } = await import( '../worker/drive/logins.js' );
+		const sqlite = new DatabaseSync( ':memory:' );
+		sqlite.exec( 'PRAGMA foreign_keys = ON' );
+		const migrations = new URL( '../worker/drive/migrations/', import.meta.url );
+		for ( const file of readdirSync( migrations ).sort() ) sqlite.exec( readFileSync( new URL( file, migrations ), 'utf8' ) );
+		// D1's prepare, bind and batch (one transaction) on node:sqlite.
+		const db = {
+			prepare: sql => ( { bind: ( ...values ) => ( { sql, values } ) } ),
+			batch: async list => {
+
+				sqlite.exec( 'BEGIN' );
+				try {
+
+					const out = list.map( ( { sql, values } ) => {
+
+						const statement = sqlite.prepare( sql );
+						return /RETURNING|^\s*SELECT/i.test( sql ) ? { results: statement.all( ...values ) } : { meta: { changes: statement.run( ...values ).changes } };
+
+					} );
+					sqlite.exec( 'COMMIT' );
+					return out;
+
+				} catch ( err ) {
+
+					sqlite.exec( 'ROLLBACK' );
+					throw err;
+
+				}
+
+			},
+		};
+		const hash = { password_hash: 'h', salt: 's', iterations: 100000 };
+		const first = await newAccount( db, { username: 'Twice_Made', key: 'twice_made', hash, now: 1 } );
+		assert.ok( first );
+		// The other got past the check for a taken username before the first was made: its insert
+		// does nothing, and the account made for it is gone again in the same batch.
+		assert.equal( await newAccount( db, { username: 'TWICE_MADE', key: 'twice_made', hash, now: 2 } ), null );
+		assert.deepEqual( sqlite.prepare( 'SELECT id, google_sub LIKE \'none:%\' AS none FROM accounts' ).all().map( row => ( { ...row } ) ), [ { id: first, none: 1 } ] );
+		assert.deepEqual( sqlite.prepare( 'SELECT account_id, username FROM logins' ).all().map( row => ( { ...row } ) ), [ { account_id: first, username: 'Twice_Made' } ] );
+
+	} );
+
+	test( 'migration 0008 goes on top of 0001 to 0007 with every account, session, purchase and player kept', () => {
+
+		const db = new DatabaseSync( ':memory:' );
+		db.exec( 'PRAGMA foreign_keys = ON' );
+		const migrations = new URL( '../worker/drive/migrations/', import.meta.url );
+		const files = readdirSync( migrations ).sort();
+		assert.deepEqual( files.slice( - 2 ), [ '0007_challenge_ghosts.sql', '0008_password_logins.sql' ] );
+		for ( const file of files.slice( 0, - 1 ) ) db.exec( readFileSync( new URL( file, migrations ), 'utf8' ) );
+		db.exec( `INSERT INTO accounts ( id, google_sub, email, name, created_at, last_login_at ) VALUES ( 7, '1001', 'alice@example.com', 'Alice', 1, 1 );
+			INSERT INTO sessions ( token_hash, account_id, created_at, expires_at ) VALUES ( 'h', 7, 1, 2 );
+			INSERT INTO purchases ( checkout_session, account_id, email, status, created_at ) VALUES ( 'cs_1', 7, 'alice@example.com', 'paid', 1 );
+			INSERT INTO players ( id, name, name_key, secret_hash, created_at, last_seen_at, account_id ) VALUES ( 'p', 'Alice', 'aiice', 's', 1, 1, 7 );` );
+		db.exec( readFileSync( new URL( files.at( - 1 ), migrations ), 'utf8' ) );
+		assert.equal( db.prepare( 'SELECT COUNT(*) AS n FROM sessions' ).get().n, 1 );
+		assert.equal( db.prepare( 'SELECT account_id FROM purchases' ).get().account_id, 7 );
+		assert.equal( db.prepare( 'SELECT account_id FROM players' ).get().account_id, 7 );
+		db.exec( `INSERT INTO logins ( account_id, username, username_key, password_hash, salt, iterations, created_at, changed_at ) VALUES ( 7, 'Alice', 'alice', 'h', 's', 100000, 1, 1 )` );
+		assert.throws( () => db.exec( `INSERT INTO logins ( account_id, username, username_key, password_hash, salt, iterations, created_at, changed_at ) VALUES ( 7, 'ALICE', 'alice', 'h', 's', 1, 1, 1 )` ) );
+		// Only what's needed to sign in: no email, no address.
+		assert.deepEqual( db.prepare( 'SELECT name FROM pragma_table_info( \'logins\' ) ORDER BY cid' ).all().map( row => row.name ),
+			[ 'account_id', 'username', 'username_key', 'password_hash', 'salt', 'iterations', 'created_at', 'changed_at' ] );
+		// An account deleted takes its login with it.
+		db.exec( 'DELETE FROM accounts WHERE id = 7' );
+		assert.equal( db.prepare( 'SELECT COUNT(*) AS n FROM logins' ).get().n, 0 );
+
+	} );
+
+} );
+
+describe( 'World Drive username and password accounts', () => {
+
+	let server;
+	let keys;
+	let googleKey;
+	let addresses = 0;
+	// A fresh address for each request that doesn't say: the per-visitor counts stay out of the way.
+	const nextIp = () => `198.18.${ Math.floor( addresses / 250 ) }.${ ( addresses ++ ) % 250 + 1 }`;
+
+	before( async () => {
+
+		googleKey = await makeKey( 'drive-accounts-key-1' );
+		keys = await serveKeys( [ googleKey.jwk ] );
+		// Without PASSWORD_TRIES' 10 a minute from an address, so the tests can send hundreds of tries
+		// from one to see what DriveLimits does with them (the World Drive Worker suite has it).
+		server = await startWorker( {
+			port: PORT + 6,
+			config: 'wrangler.drive.jsonc',
+			without: [ 'PASSWORD_TRIES' ],
+			vars: {
+				GOOGLE_MAPS_API_KEY: MAPS_KEY,
+				TURNSTILE_SECRET: PASS_SECRET,
+				TURNSTILE_SITE_KEY: '1x00000000000000000000AA',
+				TURNSTILE_VERIFY_URL: `${ upstreamBase }/siteverify`,
+				TEST_CLOCK: 'header',
+				DAILY_VISITS: '1000',
+				GOOGLE_CLIENT_ID: CLIENT_ID,
+				GOOGLE_JWKS_URL: keys.url,
+				SUPPORTER_PAYMENT_LINK: PASS_LINK,
+				STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET,
+				ADMIN_EMAILS: 'boss@example.com',
+			},
+		} );
+
+	} );
+
+	after( () => {
+
+		server?.stop();
+		keys?.close();
+
+	} );
+
+	const send = ( method, path, body, { cookie, ip = nextIp(), time = ACCOUNT_DAY, headers = {} } = {} ) => call( server, path, {
+		method,
+		headers: { Origin: server.base, 'Content-Type': 'application/json', ...( cookie ? { Cookie: cookie } : {} ), ...headers },
+		body: body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify( body ),
+		ip,
+		time,
+	} );
+	const me = ( cookie, time = ACCOUNT_DAY ) => call( server, '/api/me', { headers: cookie ? { Cookie: cookie } : {}, time } );
+	const cookieOf = res => {
+
+		const token = /^__Host-wd_session=([\w-]{43});/.exec( res.headers.get( 'Set-Cookie' ) ?? '' )?.[ 1 ];
+		return token ? `__Host-wd_session=${ token }` : null;
+
+	};
+	const signUp = async ( username, password, options = {} ) => {
+
+		const res = await send( 'POST', '/api/account/sign-up', { username, password, token: TOKEN }, options );
+		return { ...res, cookie: cookieOf( res ) };
+
+	};
+	const signIn = async ( username, password, { token, ...options } = {} ) => {
+
+		const res = await send( 'POST', '/api/account/sign-in', { username, password, ...( token ? { token } : {} ) }, options );
+		return { ...res, cookie: cookieOf( res ) };
+
+	};
+	const google = async ( claims, options = {} ) => {
+
+		const res = await send( 'POST', '/api/session', { credential: await makeToken( googleKey, claims ) }, options );
+		return { ...res, cookie: cookieOf( res ) };
+
+	};
+	const login = username => server.d1( `SELECT l.*, a.google_sub, a.email, a.name FROM logins l JOIN accounts a ON a.id = l.account_id WHERE l.username_key = '${ username.toLowerCase() }'` )[ 0 ];
+
+	test( '/api/config says usernames and passwords are on', async () => {
+
+		assert.equal( ( await call( server, '/api/config' ) ).json.passwords, true );
+
+	} );
+
+	test( 'every route is JSON from the site itself, of a sensible size and shape', async () => {
+
+		const routes = [ [ 'POST', '/api/account/sign-up' ], [ 'POST', '/api/account/sign-in' ], [ 'POST', '/api/account/password' ], [ 'DELETE', '/api/account/password' ],
+			[ 'POST', '/api/account/google' ], [ 'DELETE', '/api/account/google' ], [ 'POST', '/api/account/sign-out-everywhere' ] ];
+		const body = JSON.stringify( { username: 'Someone', password: 'a long passphrase' } );
+		for ( const [ method, path ] of routes ) {
+
+			assert.equal( ( await call( server, path, { method, headers: { 'Content-Type': 'application/json' }, body } ) ).status, 403, `${ path }: no Origin` );
+			assert.equal( ( await call( server, path, { method, headers: { 'Content-Type': 'application/json', Origin: 'https://evil.example' }, body } ) ).status, 403, `${ path }: another site` );
+			assert.equal( ( await call( server, path, { method, headers: { 'Content-Type': 'text/plain', Origin: server.base }, body } ) ).status, 415, `${ path }: not JSON` );
+			assert.equal( ( await send( method, path, body, { headers: { 'Sec-Fetch-Site': 'cross-site' } } ) ).status, 403, `${ path }: cross-site` );
+
+		}
+
+		for ( const path of [ '/api/account/sign-up', '/api/account/sign-in' ] ) {
+
+			assert.equal( ( await send( 'POST', path, { username: 'Someone', password: 'x'.repeat( 4100 ) } ) ).status, 413, `${ path }: too large` );
+			assert.equal( ( await send( 'POST', path, '{nope' ) ).status, 400, `${ path }: bad JSON` );
+			assert.equal( ( await send( 'POST', path, [ 'Someone', 'a long passphrase' ] ) ).status, 400, `${ path }: not an object` );
+
+		}
+
+		assert.equal( ( await send( 'POST', '/api/account/sign-in', { username: 42, password: 'a long passphrase' } ) ).status, 400 );
+		assert.equal( ( await send( 'POST', '/api/account/sign-in', { username: 'Someone' } ) ).status, 400 );
+		assert.equal( ( await send( 'POST', '/api/account/sign-in', { username: 'Someone', password: 'a long passphrase', token: 7 } ) ).status, 400 );
+		assert.equal( ( await call( server, '/api/account/sign-in' ) ).status, 405 );
+		// Those that carry Google's ID token take 16 kB, as /api/session does.
+		for ( const [ method, path ] of [ [ 'POST', '/api/account/password' ], [ 'DELETE', '/api/account/password' ], [ 'POST', '/api/account/google' ], [ 'DELETE', '/api/account/google' ] ] ) {
+
+			assert.equal( ( await send( method, path, { credential: 'x'.repeat( 16400 ) } ) ).status, 413, `${ path }: too large` );
+
+		}
+
+		// Signed out, the signed-in routes are 401.
+		for ( const [ method, path ] of routes.slice( 2 ) ) assert.equal( ( await send( method, path, {} ) ).status, 401, path );
+
+	} );
+
+	test( 'signing up: a username and password checked, a robot check, then the account and a session', async () => {
+
+		for ( const [ username, why ] of [ [ 'ab', 'short' ], [ 'way_too_long_for_a_name', 'long' ], [ 'two words', 'a space' ], [ 'Rаcer', 'a Cyrillic а' ], [ 7, 'a number' ] ] ) {
+
+			const res = await signUp( username, 'a long passphrase' );
+			assert.equal( res.status, 400, why );
+			assert.match( res.json.error, /^Usernames are 3 to 20/, why );
+
+		}
+
+		// The nickname's filter: slurs, and names that pass for World Drive.
+		for ( const username of [ 'admin', 'WorldDrive', 'support', 'the_admin_1', 'fuck_it' ] ) {
+
+			const res = await signUp( username, 'a long passphrase' );
+			assert.equal( res.status, 400, username );
+			assert.equal( res.json.error, 'That username isn\'t allowed. Pick another', username );
+
+		}
+
+		for ( const [ password, pattern ] of [ [ 'short', /at least 8/ ], [ 'password1', /commonest/ ], [ 'Newbie_99', /username/ ], [ 'x'.repeat( 129 ), /at most 128/ ], [ null, /at most 128/ ] ] ) {
+
+			const res = await signUp( 'Newbie_99', password );
+			assert.equal( res.status, 400, String( password ) );
+			assert.match( res.json.error, pattern );
+
+		}
+
+		const noRobot = await send( 'POST', '/api/account/sign-up', { username: 'Newbie_99', password: 'a long passphrase' } );
+		assert.equal( noRobot.status, 403 );
+		assert.equal( noRobot.json.reason, 'robot' );
+		assert.equal( server.d1( 'SELECT COUNT(*) AS n FROM logins' )[ 0 ].n, 0, 'an account was made without everything right' );
+
+		const made = await signUp( 'Racer_1', 'correct horse battery staple' );
+		assert.equal( made.status, 200, made.text );
+		assert.equal( made.headers.get( 'Set-Cookie' ), `${ made.cookie }; Max-Age=2592000; Path=/; HttpOnly; SameSite=Lax; Secure` );
+		const signedIn = { signedIn: true, name: '', email: '', google: false, username: 'Racer_1', supporter: false };
+		assert.deepEqual( { ...made.json, purchase: undefined }, { ...signedIn, purchase: undefined } );
+		assert.equal( made.json.purchase.clientReferenceId, String( login( 'racer_1' ).account_id ) );
+		assert.deepEqual( { ...( await me( made.cookie ) ).json, purchase: undefined }, { ...signedIn, purchase: undefined } );
+		// What's kept: the username, a 16-byte salt and a 32-byte hash at 100,000 iterations, which is
+		// the password's; never the password, an email or anything else.
+		const row = login( 'racer_1' );
+		assert.equal( row.username, 'Racer_1' );
+		assert.equal( row.iterations, 100000 );
+		assert.equal( Buffer.from( row.salt, 'base64url' ).length, 16 );
+		assert.equal( Buffer.from( row.password_hash, 'base64url' ).length, 32 );
+		assert.equal( row.password_hash, await pbkdf2( 'correct horse battery staple', Buffer.from( row.salt, 'base64url' ), 100000 ) );
+		assert.match( row.google_sub, /^none:[\w-]{22}$/ );
+		assert.equal( row.email, '' );
+		assert.equal( row.created_at, ACCOUNT_DAY );
+		assert.ok( ! JSON.stringify( server.d1( 'SELECT * FROM logins' ) ).includes( 'horse' ) );
+		assert.ok( ! server.log().includes( 'horse' ), 'the password was logged' );
+
+	} );
+
+	test( 'usernames are one whatever their case or width: taken is taken', async () => {
+
+		for ( const twin of [ 'racer_1', 'RACER_1', 'Ｒacer＿1' ] ) {
+
+			const res = await signUp( twin, 'another long passphrase' );
+			assert.equal( res.status, 409, twin );
+			assert.equal( res.json.error, 'That username is taken' );
+
+		}
+
+		assert.equal( server.d1( 'SELECT COUNT(*) AS n FROM accounts WHERE google_sub LIKE \'none:%\'' )[ 0 ].n, 1, 'an account was left behind' );
+
+	} );
+
+	test( 'signing in: the right password, in any case of the username; a wrong one and a stranger alike', async () => {
+
+		const right = await signIn( 'RACER_1', 'correct horse battery staple' );
+		assert.equal( right.status, 200, right.text );
+		assert.ok( right.cookie );
+		assert.equal( right.json.username, 'Racer_1' );
+		assert.equal( ( await me( right.cookie ) ).json.signedIn, true );
+		// Wrong, unknown and impossible usernames: the same answer, and no cookie.
+		const answers = [];
+		for ( const [ username, password ] of [ [ 'Racer_1', 'correct horse battery stapler' ], [ 'Nobody_here', 'correct horse battery staple' ], [ 'no such user!', 'whatever it is' ] ] ) {
+
+			const res = await signIn( username, password );
+			assert.equal( res.status, 401, username );
+			assert.equal( res.headers.get( 'Set-Cookie' ), null );
+			answers.push( res.text );
+
+		}
+
+		assert.equal( new Set( answers ).size, 1 );
+		assert.deepEqual( JSON.parse( answers[ 0 ] ), { error: 'Wrong username or password' } );
+		// Last sign-in time kept on the account (the time, nothing of where from).
+		await signIn( 'racer_1', 'correct horse battery staple', { time: ACCOUNT_DAY + HOUR } );
+		assert.equal( server.d1( `SELECT last_login_at FROM accounts WHERE id = ${ login( 'racer_1' ).account_id }` )[ 0 ].last_login_at, ACCOUNT_DAY + HOUR );
+
+	} );
+
+	test( 'a stranger\'s username takes as long to be refused as a wrong password: both are hashed', async () => {
+
+		assert.equal( ( await signUp( 'Timed_1', 'a passphrase to time' ) ).status, 200 );
+		// Turns about, each a few times: the median of each.
+		const times = { wrong: [], stranger: [] };
+		for ( let i = 0; i < 4; i ++ ) {
+
+			for ( const [ kind, username ] of [ [ 'wrong', 'Timed_1' ], [ 'stranger', `Stranger_${ i }` ] ] ) {
+
+				const started = performance.now();
+				// The next day each round, so the robot check never comes in.
+				const res = await signIn( username, 'not the passphrase', { time: ACCOUNT_DAY + ( 10 + i ) * DAY } );
+				times[ kind ].push( performance.now() - started );
+				assert.equal( res.status, 401 );
+
+			}
+
+		}
+
+		const median = list => list.sort( ( a, b ) => a - b )[ list.length >> 1 ];
+		const [ wrong, stranger ] = [ median( times.wrong ), median( times.stranger ) ];
+		console.log( `# a wrong password ${ wrong.toFixed( 1 ) } ms, a username nobody has ${ stranger.toFixed( 1 ) } ms (whole requests to wrangler dev)` );
+		assert.ok( stranger > wrong * 0.5 && stranger < wrong * 2, `wrong ${ wrong } ms, stranger ${ stranger } ms` );
+
+	} );
+
+	test( 'a username\'s failures from many addresses ask for a robot check and a short wait, but never lock its owner out', async () => {
+
+		const day = ACCOUNT_DAY + 2 * DAY;
+		assert.equal( ( await signUp( 'Keeper_7', 'the owner\'s passphrase', { time: day } ) ).status, 200 );
+		// A stranger guessing from five addresses.
+		for ( let i = 0; i < 5; i ++ ) assert.equal( ( await signIn( 'keeper_7', `guess number ${ i }`, { time: day + i * SECOND } ) ).status, 401, `guess ${ i }` );
+		// The sixth try needs a robot check, even with the right password...
+		const asked = await signIn( 'Keeper_7', 'the owner\'s passphrase', { time: day + 10 * SECOND } );
+		assert.equal( asked.status, 403 );
+		assert.equal( asked.json.reason, 'robot' );
+		assert.equal( asked.cookie, null );
+		// ...and with one, the owner's in.
+		const owner = await signIn( 'Keeper_7', 'the owner\'s passphrase', { token: TOKEN, time: day + 10 * SECOND } );
+		assert.equal( owner.status, 200, owner.text );
+		// The stranger, with robot checks of their own, is slowed to a try every 5 s from an address.
+		const stranger = '203.0.113.71';
+		assert.equal( ( await signIn( 'keeper_7', 'guess six', { token: TOKEN, ip: stranger, time: day + 20 * SECOND } ) ).status, 401 );
+		const soon = await signIn( 'keeper_7', 'guess seven', { token: TOKEN, ip: stranger, time: day + 22 * SECOND } );
+		assert.equal( soon.status, 429 );
+		assert.equal( soon.json.reason, 'wait' );
+		assert.equal( soon.headers.get( 'Retry-After' ), '3' );
+		// The owner, on an address of their own, isn't kept waiting by it.
+		assert.equal( ( await signIn( 'Keeper_7', 'the owner\'s passphrase', { token: TOKEN, time: day + 22 * SECOND } ) ).status, 200 );
+		// The next day the username starts afresh.
+		assert.equal( ( await signIn( 'Keeper_7', 'the owner\'s passphrase', { time: day + DAY } ) ).status, 200 );
+
+	} );
+
+	test( 'one address fails 20 times a day freely, then each try needs a robot check, and 200 at most; others, and tomorrow, are fine', async () => {
+
+		const day = ACCOUNT_DAY + 3 * DAY;
+		const ip = '2001:db8:77:1::1';
+		for ( let i = 0; i < 20; i ++ ) assert.equal( ( await signIn( `Guess_${ i }`, 'a wrong password', { ip, time: day } ) ).status, 401, `try ${ i }` );
+		// Another /64 of the same /48 is the same visitor: a robot check now, even with the right password...
+		const asked = await signIn( 'Racer_1', 'correct horse battery staple', { ip: '2001:db8:77:2::9', time: day } );
+		assert.equal( asked.status, 403 );
+		assert.equal( asked.json.reason, 'robot' );
+		assert.equal( ( await signIn( 'Guess_20', 'a wrong password', { ip, time: day } ) ).status, 403 );
+		// ...and with one, someone else on that address (a school's, a phone carrier's) still gets in.
+		assert.equal( ( await signIn( 'Racer_1', 'correct horse battery staple', { ip: '2001:db8:77:2::9', token: TOKEN, time: day } ) ).status, 200 );
+		// Robot checks and all, the address is through after 200 tries that didn't get in.
+		for ( let i = 20; i < 200; i ++ ) assert.equal( ( await signIn( `Guess_${ i }`, 'a wrong password', { ip, token: TOKEN, time: day } ) ).status, 401, `try ${ i }` );
+		const out = await signIn( 'Racer_1', 'correct horse battery staple', { ip: '2001:db8:77:2::9', token: TOKEN, time: day } );
+		assert.equal( out.status, 429 );
+		assert.equal( out.json.reason, 'address' );
+		assert.ok( Number( out.headers.get( 'Retry-After' ) ) > 0 );
+		assert.equal( ( await signIn( 'Racer_1', 'correct horse battery staple', { ip: '2001:db8:78::1', time: day } ) ).status, 200 );
+		assert.equal( ( await signIn( 'Racer_1', 'correct horse battery staple', { ip, time: day + DAY } ) ).status, 200 );
+
+	} );
+
+	test( 'tries sent all at once are counted as they come: 20 from an address, 5 for a username, no more without a robot check', async () => {
+
+		const day = ACCOUNT_DAY + 7 * DAY;
+		assert.equal( ( await signUp( 'Rushed_1', 'the rushed passphrase', { time: day } ) ).status, 200 );
+		const tally = list => list.reduce( ( counts, res ) => ( counts[ res.status ] = ( counts[ res.status ] ?? 0 ) + 1, counts ), {} );
+		// Forty wrong passwords from one address at once, for forty usernames.
+		const fromOne = tally( await Promise.all( Array.from( { length: 40 }, ( _, i ) => signIn( `Burst_${ i }`, 'a wrong password', { ip: '203.0.113.80', time: day } ) ) ) );
+		assert.deepEqual( fromOne, { 401: 20, 403: 20 }, JSON.stringify( fromOne ) );
+		// Forty for one username from forty addresses at once: five, and the rest asked for a robot check.
+		const atOne = tally( await Promise.all( Array.from( { length: 40 }, ( _, i ) => signIn( 'Rushed_1', `guess ${ i }`, { time: day } ) ) ) );
+		assert.deepEqual( atOne, { 401: 5, 403: 35 }, JSON.stringify( atOne ) );
+		// And a burst of solved robot checks from one address waits out the gap between each.
+		const solved = tally( await Promise.all( Array.from( { length: 10 }, ( _, i ) => signIn( 'Rushed_1', `solved ${ i }`, { ip: '203.0.113.81', token: TOKEN, time: day } ) ) ) );
+		assert.deepEqual( solved, { 401: 1, 429: 9 }, JSON.stringify( solved ) );
+
+	} );
+
+	test( 'a stranger failing every 5 s from a new address can\'t keep the owner waiting', async () => {
+
+		const day = ACCOUNT_DAY + 8 * DAY;
+		assert.equal( ( await signUp( 'Kept_Out', 'the owner\'s passphrase', { time: day } ) ).status, 200 );
+		for ( let i = 0; i < 5; i ++ ) assert.equal( ( await signIn( 'kept_out', `guess ${ i }`, { time: day } ) ).status, 401 );
+		const owner = '203.0.113.90';
+		for ( let i = 0; i < 6; i ++ ) {
+
+			const at = day + 5 * i * SECOND;
+			assert.equal( ( await signIn( 'kept_out', `robot guess ${ i }`, { token: TOKEN, time: at } ) ).status, 401, `stranger ${ i }` );
+			const res = await signIn( 'Kept_Out', 'the owner\'s passphrase', { token: TOKEN, ip: owner, time: at + 2500 } );
+			assert.equal( res.status, 200, `owner ${ i }: ${ res.text }` );
+
+		}
+
+	} );
+
+	test( 'one address makes 10 accounts a day at most', async () => {
+
+		const day = ACCOUNT_DAY + 4 * DAY;
+		const ip = '203.0.113.50';
+		for ( let i = 0; i < 10; i ++ ) assert.equal( ( await signUp( `Maker_${ i }`, 'a long passphrase', { ip, time: day } ) ).status, 200, `account ${ i }` );
+		const over = await signUp( 'Maker_10', 'a long passphrase', { ip, time: day } );
+		assert.equal( over.status, 429 );
+		assert.equal( ( await signUp( 'Maker_10', 'a long passphrase', { ip, time: day + DAY } ) ).status, 200 );
+
+	} );
+
+	test( 'one address signs in 50 times a day at most, with Google\'s sign-ins counted alike: each is a session kept a month', async () => {
+
+		const day = ACCOUNT_DAY + 5 * DAY;
+		const ip = '203.0.113.60';
+		assert.equal( ( await google( { sub: '3501', email: 'often@example.com', name: 'Often' }, { ip, time: day } ) ).status, 200 );
+		for ( let i = 0; i < 49; i ++ ) assert.equal( ( await signIn( 'Racer_1', 'correct horse battery staple', { ip, time: day } ) ).status, 200, `sign-in ${ i }` );
+		const over = await signIn( 'Racer_1', 'correct horse battery staple', { ip, time: day } );
+		assert.equal( over.status, 429 );
+		assert.equal( over.cookie, null );
+		assert.equal( ( await signIn( 'Racer_1', 'correct horse battery staple', { ip, time: day + DAY } ) ).status, 200 );
+
+	} );
+
+	test( 'an IPv6 visitor\'s 50 sign-ins are its /48\'s, not each /64\'s, with Google\'s counted alike', async () => {
+
+		const day = ACCOUNT_DAY + 6 * DAY;
+		for ( let i = 1; i <= 50; i ++ ) assert.equal( ( await signIn( 'Racer_1', 'correct horse battery staple', { ip: `2001:db8:7a:${ i.toString( 16 ) }::1`, time: day } ) ).status, 200, `sign-in ${ i }` );
+		const over = await signIn( 'Racer_1', 'correct horse battery staple', { ip: '2001:db8:7a:ff::1', time: day } );
+		assert.equal( over.status, 429 );
+		assert.equal( over.cookie, null );
+		assert.equal( ( await google( { sub: '3502', email: 'sixty@example.com', name: 'Sixty' }, { ip: '2001:db8:7a:fe::1', time: day } ) ).status, 429 );
+		// Another /48 is another visitor.
+		assert.equal( ( await signIn( 'Racer_1', 'correct horse battery staple', { ip: '2001:db8:7b::1', time: day } ) ).status, 200 );
+
+	} );
+
+	test( 'an IPv6 visitor\'s 20 players linked a day are its /48\'s, not each /64\'s', async () => {
+
+		const u = await signUp( 'Link_Lots', 'a linking passphrase' );
+		assert.equal( u.status, 200, u.text );
+		const ip = nextIp();
+		const visited = await send( 'POST', '/api/visit', { token: TOKEN }, { ip } );
+		const player = await send( 'POST', '/api/player', { name: 'Lots Linked', visit: visited.json.visit }, { ip } );
+		assert.equal( player.status, 201, player.text );
+		const link = from => send( 'POST', '/api/player/link', { id: player.json.id, secret: player.json.secret }, { cookie: u.cookie, ip: from } );
+		// Linked again, it's the same player each time, and each is one of the day's 20.
+		for ( let i = 1; i <= 20; i ++ ) assert.equal( ( await link( `2001:db8:4c:${ i.toString( 16 ) }::1` ) ).status, 200, `link ${ i }` );
+		assert.equal( ( await link( '2001:db8:4c:15::1' ) ).status, 429 );
+		// Another of the /48's 65,536 /64s is the same visitor...
+		assert.equal( ( await link( '2001:db8:4c:ffff::1' ) ).status, 429 );
+		// ...and another /48 another.
+		assert.equal( ( await link( '2001:db8:3c::1' ) ).status, 200 );
+
+	} );
+
+	test( 'linking Google with a robot check fits a long Google token and a long robot check\'s token', async () => {
+
+		const day = ACCOUNT_DAY + 9 * DAY;
+		const u = await signUp( 'Long_Link', 'the long link passphrase', { time: day } );
+		// A stranger's five tries make the username ask for robot checks for the rest of the day.
+		for ( let i = 0; i < 5; i ++ ) assert.equal( ( await signIn( 'long_link', `guess ${ i }`, { time: day } ) ).status, 401 );
+		const claims = { sub: '3012', email: 'long.name.indeed@example.com', name: 'Long Name', picture: `https://lh3.googleusercontent.com/a/${ 'A'.repeat( 900 ) }=s96-c` };
+		const credential = await makeToken( googleKey, claims );
+		assert.ok( credential.length >= 1400, `${ credential.length }` );
+		const password = 'the long link passphrase';
+		const asked = await send( 'POST', '/api/account/google', { credential, password }, { cookie: u.cookie, time: day } );
+		assert.equal( asked.status, 403 );
+		assert.equal( asked.json.reason, 'robot' );
+		const linked = await send( 'POST', '/api/account/google', { credential, password, token: 'T'.repeat( 2000 ) }, { cookie: u.cookie, time: day } );
+		assert.equal( linked.status, 200, linked.text );
+		assert.equal( linked.json.email, 'long.name.indeed@example.com' );
+		// And a 128-byte password with a robot check's longest token, to take the password off.
+		const longest = 'a long passphrase, said over and over: '.repeat( 4 ).slice( 0, 128 );
+		const g = await google( { sub: '3013', email: 'lp@example.com', name: 'LP' }, { time: day } );
+		assert.equal( ( await send( 'POST', '/api/account/password', { username: 'Longest_P', password: longest, credential: await makeToken( googleKey, { sub: '3013', email: 'lp@example.com' } ) }, { cookie: g.cookie, time: day } ) ).status, 200 );
+		for ( let i = 0; i < 5; i ++ ) await signIn( 'longest_p', `guess ${ i }`, { time: day } );
+		const removed = await send( 'DELETE', '/api/account/password', { password: longest, token: 'T'.repeat( 2048 ) }, { cookie: g.cookie, time: day } );
+		assert.equal( removed.status, 200, removed.text );
+
+	} );
+
+	test( 'DriveLimits keeps no username and no address', () => {
+
+		const kept = JSON.stringify( limitsRows( server ) );
+		for ( const plain of [ 'racer_1', 'keeper_7', '2001:db8', '203.0.113', '198.18.' ] ) assert.ok( ! kept.toLowerCase().includes( plain ), plain );
+
+	} );
+
+	test( 'changing the password needs the current one, and signs the account\'s other sessions out', async () => {
+
+		const made = await signUp( 'Changer', 'first passphrase here' );
+		const phone = await signIn( 'Changer', 'first passphrase here' );
+		const wrong = await send( 'POST', '/api/account/password', { current: 'not it at all', password: 'second passphrase here' }, { cookie: made.cookie } );
+		assert.equal( wrong.status, 401 );
+		assert.equal( wrong.json.error, 'That isn\'t your current password' );
+		const weak = await send( 'POST', '/api/account/password', { current: 'first passphrase here', password: 'password' }, { cookie: made.cookie } );
+		assert.equal( weak.status, 400 );
+		assert.equal( ( await send( 'POST', '/api/account/password', { password: 'second passphrase here' }, { cookie: made.cookie } ) ).status, 400 );
+		const changed = await send( 'POST', '/api/account/password', { current: 'first passphrase here', password: 'second passphrase here' }, { cookie: made.cookie } );
+		assert.equal( changed.status, 200, changed.text );
+		assert.equal( changed.json.username, 'Changer' );
+		assert.equal( ( await me( made.cookie ) ).json.signedIn, true, 'this browser was signed out' );
+		assert.equal( ( await me( phone.cookie ) ).json.signedIn, false, 'the other session stayed signed in' );
+		assert.equal( ( await signIn( 'Changer', 'first passphrase here' ) ).status, 401 );
+		assert.equal( ( await signIn( 'Changer', 'second passphrase here' ) ).status, 200 );
+
+	} );
+
+	test( 'a password hashed with fewer iterations is hashed again at its next sign-in', async () => {
+
+		assert.equal( ( await signUp( 'Old_Hash', 'an older passphrase' ) ).status, 200 );
+		const salt = randomBytes( 16 );
+		server.d1( `UPDATE logins SET password_hash = '${ await pbkdf2( 'an older passphrase', salt, 10000 ) }', salt = '${ salt.toString( 'base64url' ) }', iterations = 10000 WHERE username_key = 'old_hash'` );
+		assert.equal( ( await signIn( 'Old_Hash', 'not the passphrase' ) ).status, 401 );
+		assert.equal( login( 'old_hash' ).iterations, 10000, 'hashed again on a wrong password' );
+		assert.equal( ( await signIn( 'old_hash', 'an older passphrase', { time: ACCOUNT_DAY + MINUTE } ) ).status, 200 );
+		const row = login( 'old_hash' );
+		assert.equal( row.iterations, 100000 );
+		assert.notEqual( row.salt, salt.toString( 'base64url' ) );
+		assert.equal( row.changed_at, ACCOUNT_DAY + MINUTE );
+		assert.equal( row.password_hash, await pbkdf2( 'an older passphrase', Buffer.from( row.salt, 'base64url' ), 100000 ) );
+		assert.equal( ( await signIn( 'old_hash', 'an older passphrase' ) ).status, 200 );
+
+	} );
+
+	test( 'a Google account adds a username and password, and signs in either way to the one account', async () => {
+
+		const g = await google( { sub: '3001', email: 'gina@example.com', name: 'Gina' } );
+		assert.equal( g.status, 200 );
+		assert.deepEqual( [ g.json.google, g.json.username ], [ true, null ] );
+		const credential = await makeToken( googleKey, { sub: '3001', email: 'gina@example.com', name: 'Gina' } );
+		// The name filter and the rules hold here too, and a username someone has is taken.
+		assert.equal( ( await send( 'POST', '/api/account/password', { username: 'admin', password: 'gina\'s passphrase', credential }, { cookie: g.cookie } ) ).status, 400 );
+		assert.equal( ( await send( 'POST', '/api/account/password', { username: 'Gina_G', password: '12345678', credential }, { cookie: g.cookie } ) ).status, 400 );
+		assert.equal( ( await send( 'POST', '/api/account/password', { username: 'racer_1', password: 'gina\'s passphrase', credential }, { cookie: g.cookie } ) ).status, 409 );
+		// The session alone isn't enough: Google's ID token for this account, as fresh proof.
+		assert.equal( ( await send( 'POST', '/api/account/password', { username: 'Gina_G', password: 'gina\'s passphrase' }, { cookie: g.cookie } ) ).status, 401 );
+		const someoneElse = await send( 'POST', '/api/account/password', { username: 'Gina_G', password: 'gina\'s passphrase', credential: await makeToken( googleKey, { sub: '3091', email: 'thief@example.com' } ) }, { cookie: g.cookie } );
+		assert.equal( someoneElse.status, 403 );
+		assert.equal( login( 'gina_g' ), undefined );
+		const added = await send( 'POST', '/api/account/password', { username: 'Gina_G', password: 'gina\'s passphrase', credential }, { cookie: g.cookie } );
+		assert.equal( added.status, 200, added.text );
+		assert.deepEqual( [ added.json.google, added.json.username, added.json.email ], [ true, 'Gina_G', 'gina@example.com' ] );
+		const byPassword = await signIn( 'gina_g', 'gina\'s passphrase' );
+		assert.equal( byPassword.status, 200 );
+		assert.equal( byPassword.json.email, 'gina@example.com' );
+		assert.equal( byPassword.json.purchase.clientReferenceId, g.json.purchase.clientReferenceId );
+
+	} );
+
+	test( 'a username\'s account links Google, and signs in either way to the one account', async () => {
+
+		const u = await signUp( 'Linker', 'the linker\'s passphrase' );
+		const credential = await makeToken( googleKey, { sub: '3002', email: 'lin@example.com', name: 'Lin' } );
+		const password = 'the linker\'s passphrase';
+		assert.equal( ( await send( 'POST', '/api/account/google', { credential: 'not a token', password }, { cookie: u.cookie } ) ).status, 401 );
+		// The session alone isn't enough: the password too, as fresh proof.
+		assert.equal( ( await send( 'POST', '/api/account/google', { credential }, { cookie: u.cookie } ) ).status, 400 );
+		const wrong = await send( 'POST', '/api/account/google', { credential, password: 'not the passphrase' }, { cookie: u.cookie } );
+		assert.equal( wrong.status, 401 );
+		assert.equal( wrong.json.error, 'That isn\'t your current password' );
+		assert.equal( ( await me( u.cookie ) ).json.google, false );
+		const linked = await send( 'POST', '/api/account/google', { credential, password }, { cookie: u.cookie } );
+		assert.equal( linked.status, 200, linked.text );
+		assert.deepEqual( [ linked.json.google, linked.json.username, linked.json.email ], [ true, 'Linker', 'lin@example.com' ] );
+		const byGoogle = await google( { sub: '3002', email: 'lin@example.com', name: 'Lin' } );
+		assert.equal( byGoogle.json.username, 'Linker' );
+		assert.equal( byGoogle.json.purchase.clientReferenceId, u.json.purchase.clientReferenceId );
+		// Linking it again changes nothing; another Google account is refused until this one's unlinked.
+		assert.equal( ( await send( 'POST', '/api/account/google', { credential, password }, { cookie: u.cookie } ) ).status, 200 );
+		const another = await send( 'POST', '/api/account/google', { credential: await makeToken( googleKey, { sub: '3009', email: 'x@example.com' } ), password }, { cookie: u.cookie } );
+		assert.equal( another.status, 409 );
+		assert.match( another.json.error, /Unlink it first/ );
+
+	} );
+
+	test( 'a Google account with progress or a pass of its own is never linked over; an empty one is taken in', async () => {
+
+		const u = await signUp( 'Careful', 'a careful passphrase' );
+		const accountId = Number( u.json.purchase.clientReferenceId );
+		// One with a leaderboard player of its own.
+		const withPlayer = await google( { sub: '3003', email: 'pat@example.com', name: 'Pat' } );
+		const ip = nextIp();
+		const visited = await send( 'POST', '/api/visit', { token: TOKEN }, { ip } );
+		const player = await send( 'POST', '/api/player', { name: 'Pat Plays', visit: visited.json.visit }, { ip } );
+		assert.equal( ( await send( 'POST', '/api/player/link', { id: player.json.id, secret: player.json.secret }, { cookie: withPlayer.cookie } ) ).status, 200 );
+		// One with a pass bought.
+		const withPass = await google( { sub: '3004', email: 'bea@example.com', name: 'Bea' } );
+		assert.equal( ( await webhook( server, checkout( 'bea', { reference: withPass.json.purchase.clientReferenceId, email: 'bea@example.com' } ) ) ).status, 200 );
+		// One with a username.
+		const withLogin = await google( { sub: '3005', email: 'una@example.com', name: 'Una' } );
+		await send( 'POST', '/api/account/password', { username: 'Una_U', password: 'una\'s passphrase', credential: await makeToken( googleKey, { sub: '3005', email: 'una@example.com' } ) }, { cookie: withLogin.cookie } );
+		assert.equal( login( 'una_u' ).email, 'una@example.com' );
+		for ( const [ sub, email ] of [ [ '3003', 'pat@example.com' ], [ '3004', 'bea@example.com' ], [ '3005', 'una@example.com' ] ] ) {
+
+			const res = await send( 'POST', '/api/account/google', { credential: await makeToken( googleKey, { sub, email } ), password: 'a careful passphrase' }, { cookie: u.cookie } );
+			assert.equal( res.status, 409, sub );
+			assert.match( res.json.error, /has its own World Drive account/ );
+
+		}
+
+		assert.equal( ( await me( u.cookie ) ).json.google, false );
+		assert.equal( server.d1( 'SELECT COUNT(*) AS n FROM accounts WHERE google_sub IN ( \'3003\', \'3004\', \'3005\' )' )[ 0 ].n, 3 );
+		assert.equal( ( await me( withPass.cookie ) ).json.supporter, true );
+		// An empty one (signed in once, nothing since) is linked, and its leftover account goes.
+		const empty = await google( { sub: '3006', email: 'em@example.com', name: 'Em' } );
+		const linked = await send( 'POST', '/api/account/google', { credential: await makeToken( googleKey, { sub: '3006', email: 'em@example.com', name: 'Em' } ), password: 'a careful passphrase' }, { cookie: u.cookie } );
+		assert.equal( linked.status, 200, linked.text );
+		assert.deepEqual( server.d1( 'SELECT id FROM accounts WHERE google_sub = \'3006\'' ), [ { id: accountId } ] );
+		assert.equal( ( await me( empty.cookie ) ).json.signedIn, false, 'the empty account\'s session outlived it' );
+
+	} );
+
+	test( 'unlinking keeps at least one way in; a pass bought with the Google email stays', async () => {
+
+		const solo = await signUp( 'Solo_One', 'solo\'s passphrase' );
+		const noWay = await send( 'DELETE', '/api/account/password', { password: 'solo\'s passphrase' }, { cookie: solo.cookie } );
+		assert.equal( noWay.status, 409 );
+		const ollyToken = await makeToken( googleKey, { sub: '3007', email: 'olly@example.com', name: 'Olly' } );
+		const gOnly = await google( { sub: '3007', email: 'olly@example.com', name: 'Olly' } );
+		const stuck = await send( 'DELETE', '/api/account/google', { credential: ollyToken }, { cookie: gOnly.cookie } );
+		assert.equal( stuck.status, 409 );
+		assert.equal( ( await me( gOnly.cookie ) ).json.google, true );
+		// Both: a pass paid with the Google email before signing in (nobody's), then Google unlinked.
+		await send( 'POST', '/api/account/password', { username: 'Olly_O', password: 'olly\'s passphrase', credential: ollyToken }, { cookie: gOnly.cookie } );
+		assert.equal( ( await webhook( server, checkout( 'olly', { email: 'olly@example.com' } ) ) ).status, 200 );
+		assert.equal( ( await me( gOnly.cookie ) ).json.supporter, true );
+		// Unlinking needs Google's ID token for it, not only the session (nor the password).
+		assert.equal( ( await send( 'DELETE', '/api/account/google', {}, { cookie: gOnly.cookie } ) ).status, 401 );
+		assert.equal( ( await send( 'DELETE', '/api/account/google', { password: 'olly\'s passphrase' }, { cookie: gOnly.cookie } ) ).status, 401 );
+		assert.equal( ( await send( 'DELETE', '/api/account/google', { credential: await makeToken( googleKey, { sub: '3092', email: 'thief@example.com' } ) }, { cookie: gOnly.cookie } ) ).status, 403 );
+		assert.equal( ( await me( gOnly.cookie ) ).json.google, true );
+		const ollyPhone = await signIn( 'Olly_O', 'olly\'s passphrase' );
+		const unlinked = await send( 'DELETE', '/api/account/google', { credential: ollyToken }, { cookie: gOnly.cookie } );
+		assert.equal( unlinked.status, 200, unlinked.text );
+		assert.deepEqual( [ unlinked.json.google, unlinked.json.email, unlinked.json.name, unlinked.json.username, unlinked.json.supporter ], [ false, '', '', 'Olly_O', true ] );
+		assert.equal( ( await me( gOnly.cookie ) ).json.signedIn, true, 'this browser was signed out' );
+		assert.equal( ( await me( ollyPhone.cookie ) ).json.signedIn, false, 'the other session stayed signed in' );
+		assert.equal( ( await signIn( 'Olly_O', 'olly\'s passphrase' ) ).json.supporter, true );
+		// Google signs in to an account of its own again now.
+		const fresh = await google( { sub: '3007', email: 'olly@example.com', name: 'Olly' } );
+		assert.deepEqual( [ fresh.json.username, fresh.json.supporter ], [ null, false ] );
+		// And with Google linked, the username and password can go.
+		const both = await google( { sub: '3001', email: 'gina@example.com', name: 'Gina' } );
+		// It needs the password, or Google's ID token for the account, not only the session.
+		assert.equal( ( await send( 'DELETE', '/api/account/password', {}, { cookie: both.cookie } ) ).status, 400 );
+		assert.equal( ( await send( 'DELETE', '/api/account/password', { password: 'not gina\'s passphrase' }, { cookie: both.cookie } ) ).status, 401 );
+		assert.equal( ( await send( 'DELETE', '/api/account/password', { credential: await makeToken( googleKey, { sub: '3093', email: 'thief@example.com' } ) }, { cookie: both.cookie } ) ).status, 403 );
+		assert.equal( ( await me( both.cookie ) ).json.username, 'Gina_G' );
+		const ginaPhone = await signIn( 'Gina_G', 'gina\'s passphrase' );
+		assert.equal( ( await me( ginaPhone.cookie ) ).json.signedIn, true );
+		const removed = await send( 'DELETE', '/api/account/password', { password: 'gina\'s passphrase' }, { cookie: both.cookie } );
+		assert.equal( removed.status, 200 );
+		assert.equal( removed.json.username, null );
+		assert.equal( ( await signIn( 'Gina_G', 'gina\'s passphrase' ) ).status, 401 );
+		assert.equal( ( await me( both.cookie ) ).json.signedIn, true, 'this browser was signed out' );
+		assert.equal( ( await me( ginaPhone.cookie ) ).json.signedIn, false, 'the other session stayed signed in' );
+		// Taken off with Google's ID token instead of the password: the other sessions end the same.
+		const remyClaims = { sub: '3011', email: 'remy@example.com', name: 'Remy' };
+		const remy = await google( remyClaims );
+		assert.equal( ( await send( 'POST', '/api/account/password', { username: 'Remy_R', password: 'remy\'s passphrase', credential: await makeToken( googleKey, remyClaims ) }, { cookie: remy.cookie } ) ).status, 200 );
+		const remyPhone = await signIn( 'Remy_R', 'remy\'s passphrase' );
+		const remyTablet = await google( remyClaims );
+		const byGoogle = await send( 'DELETE', '/api/account/password', { credential: await makeToken( googleKey, remyClaims ) }, { cookie: remy.cookie } );
+		assert.equal( byGoogle.status, 200, byGoogle.text );
+		assert.equal( byGoogle.json.username, null );
+		assert.equal( ( await me( remy.cookie ) ).json.signedIn, true, 'this browser was signed out' );
+		assert.equal( ( await me( remyPhone.cookie ) ).json.signedIn, false, 'the password\'s session stayed signed in' );
+		assert.equal( ( await me( remyTablet.cookie ) ).json.signedIn, false, 'another Google session stayed signed in' );
+
+	} );
+
+	test( 'the pass, the player and its level are the same whichever way you sign in', async () => {
+
+		const u = await signUp( 'Same_Me', 'same me passphrase' );
+		assert.equal( ( await send( 'POST', '/api/account/google', { credential: await makeToken( googleKey, { sub: '3010', email: 'same@example.com', name: 'Same' } ), password: 'same me passphrase' }, { cookie: u.cookie } ) ).status, 200 );
+		// A player linked while signed in with the username.
+		const ip = nextIp();
+		const visited = await send( 'POST', '/api/visit', { token: TOKEN }, { ip } );
+		const player = await send( 'POST', '/api/player', { name: 'Same Me', visit: visited.json.visit }, { ip } );
+		assert.equal( ( await send( 'POST', '/api/player/link', { id: player.json.id, secret: player.json.secret }, { cookie: u.cookie } ) ).status, 200 );
+		// The pass bought while signed in with Google.
+		const g = await google( { sub: '3010', email: 'same@example.com', name: 'Same' } );
+		assert.equal( ( await webhook( server, checkout( 'same', { reference: g.json.purchase.clientReferenceId, email: 'other@example.com' } ) ) ).status, 200 );
+		const byName = await signIn( 'same_me', 'same me passphrase' );
+		assert.deepEqual( [ byName.json.supporter, ( await me( g.cookie ) ).json.supporter ], [ true, true ] );
+		const [ row ] = server.d1( `SELECT account_id FROM players WHERE id = '${ player.json.id }'` );
+		assert.equal( row.account_id, Number( byName.json.purchase.clientReferenceId ) );
+		// The player's ⭐ on the board, by the account's pass.
+		const run = { id: player.json.id, secret: player.json.secret, score: 1000, tricks: 'Backflip!', place: 'Furka Pass', vehicle: 'go-kart', airTime: 1.2, runSeconds: 60, visit: visited.json.visit };
+		const posted = await send( 'POST', '/api/score', run, { ip, time: ACCOUNT_DAY + MINUTE } );
+		assert.equal( posted.status, 200, posted.text );
+		const board = await call( server, '/api/leaderboard?period=all', { time: ACCOUNT_DAY + 2 * MINUTE } );
+		assert.equal( board.json.rows.find( r => r.name === 'Same Me' ).supporter, true );
+
+	} );
+
+	test( 'a purchase Stripe sent without an email makes no username\'s account a supporter', async () => {
+
+		assert.equal( ( await webhook( server, checkout( 'noemail', { email: null } ) ) ).status, 200 );
+		assert.deepEqual( server.d1( 'SELECT account_id, email FROM purchases WHERE checkout_session = \'cs_test_noemail\'' ), [ { account_id: null, email: '' } ] );
+		const u = await signUp( 'No_Email', 'no email passphrase' );
+		assert.equal( u.json.supporter, false );
+		assert.equal( ( await me( u.cookie ) ).json.supporter, false );
+
+	} );
+
+	test( 'signing out everywhere ends every session of the account', async () => {
+
+		const one = await signUp( 'Leaver', 'the leaver\'s passphrase' );
+		const two = await signIn( 'Leaver', 'the leaver\'s passphrase' );
+		const out = await send( 'POST', '/api/account/sign-out-everywhere', {}, { cookie: one.cookie } );
+		assert.equal( out.status, 204 );
+		assert.match( out.headers.get( 'Set-Cookie' ), /^__Host-wd_session=; Max-Age=0;/ );
+		assert.equal( ( await me( one.cookie ) ).json.signedIn, false );
+		assert.equal( ( await me( two.cookie ) ).json.signedIn, false );
+		assert.equal( ( await signIn( 'Leaver', 'the leaver\'s passphrase' ) ).status, 200 );
+
+	} );
+
+	test( 'a session alone can\'t take an account over: adding a password and unlinking Google each need Google\'s fresh proof', async () => {
+
+		// A Google account with a pass, its session in a browser someone else gets hold of.
+		const victim = await google( { sub: '3020', email: 'vic@example.com', name: 'Vic' } );
+		assert.equal( ( await webhook( server, checkout( 'vic', { reference: victim.json.purchase.clientReferenceId, email: 'vic@example.com' } ) ) ).status, 200 );
+		const thief = await send( 'POST', '/api/account/password', { username: 'Thief_X', password: 'the thief\'s passphrase' }, { cookie: victim.cookie } );
+		assert.equal( thief.status, 401 );
+		assert.equal( ( await send( 'DELETE', '/api/account/google', {}, { cookie: victim.cookie } ) ).status, 409 );
+		assert.equal( ( await signIn( 'Thief_X', 'the thief\'s passphrase' ) ).status, 401 );
+		const back = await google( { sub: '3020', email: 'vic@example.com', name: 'Vic' } );
+		assert.deepEqual( [ back.json.username, back.json.supporter, back.json.purchase.clientReferenceId ], [ null, true, victim.json.purchase.clientReferenceId ] );
+		// And a username's session can't link the holder's own Google account without the password.
+		const named = await signUp( 'Named_Vic', 'named vic\'s passphrase' );
+		const linked = await send( 'POST', '/api/account/google', { credential: await makeToken( googleKey, { sub: '3021', email: 'thief@example.com' } ), password: 'a guess at it' }, { cookie: named.cookie } );
+		assert.equal( linked.status, 401 );
+		assert.equal( ( await me( named.cookie ) ).json.google, false );
+
+	} );
+
+	test( 'taking the password off and unlinking Google at once always leaves a way in', async () => {
+
+		const outcomes = [];
+		for ( let i = 0; i < 6; i ++ ) {
+
+			const username = `Both_${ i }`;
+			const password = `both ${ i } passphrase`;
+			const sub = String( 3030 + i );
+			const credential = await makeToken( googleKey, { sub, email: `both${ i }@example.com`, name: `Both ${ i }` } );
+			const u = await signUp( username, password );
+			assert.equal( ( await send( 'POST', '/api/account/google', { credential, password }, { cookie: u.cookie } ) ).status, 200 );
+			const [ removed, unlinked ] = await Promise.all( [
+				send( 'DELETE', '/api/account/password', { password }, { cookie: u.cookie } ),
+				send( 'DELETE', '/api/account/google', { credential }, { cookie: u.cookie } ),
+			] );
+			const [ row ] = server.d1( `SELECT google_sub NOT LIKE 'none:%' AS google, EXISTS ( SELECT 1 FROM logins WHERE account_id = accounts.id ) AS login FROM accounts WHERE id = ${ Number( u.json.purchase.clientReferenceId ) }` );
+			assert.ok( row.google || row.login, `${ username } has no way in (${ removed.status }, ${ unlinked.status })` );
+			assert.ok( [ removed.status, unlinked.status ].includes( 200 ) );
+			outcomes.push( `${ removed.status }/${ unlinked.status }` );
+
+		}
+
+		console.log( `# password off / Google unlinked at once: ${ outcomes.join( ', ' ) }` );
+
+	} );
+
+	test( 'the owner\'s Google account (ADMIN_EMAILS) never gets a password, and an account with one never reaches the admin page', async () => {
+
+		const credential = await makeToken( googleKey, { sub: '3998', email: 'BOSS@example.com', name: 'Boss' } );
+		const boss = await google( { sub: '3998', email: 'BOSS@example.com', name: 'Boss' } );
+		assert.equal( ( await call( server, '/api/admin/stats?days=1', { headers: { Cookie: boss.cookie }, time: ACCOUNT_DAY + HOUR } ) ).status, 200 );
+		const added = await send( 'POST', '/api/account/password', { username: 'Boss_Pw', password: 'the boss\'s passphrase', credential }, { cookie: boss.cookie } );
+		assert.equal( added.status, 403 );
+		assert.match( added.json.error, /sign in with Google only/ );
+		// Nor is it linked to a username's account.
+		const u = await signUp( 'Would_Be_Boss', 'would be boss passphrase' );
+		const linked = await send( 'POST', '/api/account/google', { credential, password: 'would be boss passphrase' }, { cookie: u.cookie } );
+		assert.equal( linked.status, 403 );
+		assert.equal( ( await me( u.cookie ) ).json.google, false );
+		// And should ADMIN_EMAILS ever name an account with a username, signing in with it reaches nothing.
+		const withLogin = await google( { sub: '3997', email: 'boss@example.com', name: 'Boss' } );
+		server.d1( `UPDATE accounts SET email = 'boss@example.com' WHERE id = ${ Number( u.json.purchase.clientReferenceId ) }` );
+		assert.equal( ( await call( server, '/api/admin/stats?days=1', { headers: { Cookie: u.cookie }, time: ACCOUNT_DAY + HOUR } ) ).status, 403 );
+		assert.equal( ( await call( server, '/api/admin/stats?days=1', { headers: { Cookie: withLogin.cookie }, time: ACCOUNT_DAY + HOUR } ) ).status, 200 );
+		server.d1( `UPDATE accounts SET email = '' WHERE id = ${ Number( u.json.purchase.clientReferenceId ) }` );
+
+	} );
+
+	test( 'adding a username to a Google account is counted as making an account is, so taken usernames can\'t be tried freely', async () => {
+
+		const day = ACCOUNT_DAY + 9 * DAY;
+		const ip = '203.0.113.95';
+		const g = await google( { sub: '3040', email: 'prober@example.com', name: 'Prober' }, { ip, time: day } );
+		const credential = await makeToken( googleKey, { sub: '3040', email: 'prober@example.com', name: 'Prober' } );
+		for ( let i = 0; i < 10; i ++ ) assert.equal( ( await send( 'POST', '/api/account/password', { username: i ? 'racer_1' : 'linker', password: 'the prober\'s passphrase', credential }, { cookie: g.cookie, ip, time: day } ) ).status, 409, `try ${ i }` );
+		const over = await send( 'POST', '/api/account/password', { username: 'Unused_Name', password: 'the prober\'s passphrase', credential }, { cookie: g.cookie, ip, time: day } );
+		assert.equal( over.status, 429 );
+		assert.equal( ( await signUp( 'Unused_Name', 'a long passphrase', { ip, time: day } ) ).status, 429 );
+
+	} );
+
+	test( 'an empty Google account taken in while it gains a player: the player is never cut loose', async () => {
+
+		for ( let i = 0; i < 4; i ++ ) {
+
+			const sub = String( 3050 + i );
+			const claims = { sub, email: `race${ i }@example.com`, name: `Race ${ i }` };
+			const u = await signUp( `Racing_${ i }`, `racing ${ i } passphrase` );
+			const empty = await google( claims );
+			const ip = nextIp();
+			const visited = await send( 'POST', '/api/visit', { token: TOKEN }, { ip } );
+			const player = await send( 'POST', '/api/player', { name: `Racer Number ${ i }`, visit: visited.json.visit }, { ip } );
+			const [ playerLink, googleLink ] = await Promise.all( [
+				send( 'POST', '/api/player/link', { id: player.json.id, secret: player.json.secret }, { cookie: empty.cookie } ),
+				send( 'POST', '/api/account/google', { credential: await makeToken( googleKey, claims ), password: `racing ${ i } passphrase` }, { cookie: u.cookie } ),
+			] );
+			const [ row ] = server.d1( `SELECT account_id FROM players WHERE id = '${ player.json.id }'` );
+			if ( playerLink.status === 200 ) assert.notEqual( row.account_id, null, `round ${ i }: the player linked was cut loose (link ${ googleLink.status })` );
+			if ( googleLink.status === 200 ) assert.deepEqual( server.d1( `SELECT id FROM accounts WHERE google_sub = '${ sub }'` ), [ { id: Number( u.json.purchase.clientReferenceId ) } ] );
+
+		}
+
+	} );
+
+	test( 'a username made by two at once is one account, and nothing is left of the other', async () => {
+
+		const answers = await Promise.all( Array.from( { length: 6 }, () => signUp( 'Twice_Made', 'the twice made passphrase' ) ) );
+		assert.deepEqual( answers.map( res => res.status ).sort(), [ 200, 409, 409, 409, 409, 409 ] );
+		assert.equal( server.d1( 'SELECT COUNT(*) AS n FROM accounts a WHERE google_sub LIKE \'none:%\' AND NOT EXISTS ( SELECT 1 FROM logins WHERE account_id = a.id )' )[ 0 ].n, 0 );
+
+	} );
+
+	test( 'the admin page counts accounts by how they sign in, and nothing else of them', async () => {
+
+		const boss = await google( { sub: '3999', email: 'boss@example.com', name: 'Boss' } );
+		const stats = await call( server, '/api/admin/stats?days=1', { headers: { Cookie: boss.cookie }, time: ACCOUNT_DAY + HOUR } );
+		assert.equal( stats.status, 200, stats.text );
+		const count = sql => server.d1( sql )[ 0 ].n;
+		const kinds = {
+			google: count( 'SELECT COUNT(*) AS n FROM accounts a WHERE google_sub NOT LIKE \'none:%\' AND NOT EXISTS ( SELECT 1 FROM logins WHERE account_id = a.id )' ),
+			password: count( 'SELECT COUNT(*) AS n FROM accounts a JOIN logins l ON l.account_id = a.id WHERE google_sub LIKE \'none:%\'' ),
+			both: count( 'SELECT COUNT(*) AS n FROM accounts a JOIN logins l ON l.account_id = a.id WHERE google_sub NOT LIKE \'none:%\'' ),
+		};
+		assert.deepEqual( stats.json.totals.kinds, kinds );
+		assert.ok( kinds.google > 0 && kinds.password > 0 && kinds.both > 0, JSON.stringify( kinds ) );
+		assert.equal( stats.json.totals.accounts, kinds.google + kinds.password + kinds.both );
+		assert.ok( ! /racer_1|linker/i.test( stats.text ), 'a username on the admin page' );
+
+	} );
+
+	test( 'a username never shows on the boards: the nickname does', async () => {
+
+		const board = await call( server, '/api/leaderboard?period=all', { time: ACCOUNT_DAY + 3 * MINUTE } );
+		assert.equal( board.status, 200 );
+		assert.ok( ! /Same_Me/.test( board.text ) );
+		assert.ok( board.text.includes( 'Same Me' ) );
+
+	} );
+
+} );
+
+// What DriveLimits keeps on `server` (limits.js), every table's rows, read from a copy of its
+// Durable Object's SQLite file as wrangler stores it.
+function limitsRows( server ) {
+
+	for ( const file of listFiles( server.state ).filter( path => path.endsWith( '.sqlite' ) ) ) {
+
+		const dir = mkdtempSync( join( tmpdir(), 'drive-limits-' ) );
+		try {
+
+			for ( const end of [ '', '-wal', '-shm' ] ) if ( existsSync( file + end ) ) copyFileSync( file + end, join( dir, `copy.sqlite${ end }` ) );
+			const db = new DatabaseSync( join( dir, 'copy.sqlite' ) );
+			try {
+
+				if ( ! db.prepare( 'SELECT name FROM sqlite_master WHERE name = \'password_fails\'' ).get() ) continue;
+				const tables = db.prepare( 'SELECT name FROM sqlite_master WHERE type = \'table\' AND name NOT LIKE \'\\_%\' ESCAPE \'\\\' AND name NOT LIKE \'sqlite%\'' ).all();
+				return Object.fromEntries( tables.map( ( { name } ) => [ name, db.prepare( `SELECT * FROM "${ name }"` ).all() ] ) );
+
+			} finally {
+
+				db.close();
+
+			}
+
+		} finally {
+
+			rmSync( dir, { recursive: true, force: true } );
+
+		}
+
+	}
+
+	throw new Error( 'No DriveLimits storage' );
+
+}
+
 describe( 'The Supporter Pass\'s settings', () => {
 
 	const full = { GOOGLE_CLIENT_ID: CLIENT_ID, SUPPORTER_PAYMENT_LINK: PASS_LINK, STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET, SUPPORTER_PRICE: ' CA$4.99 ' };
@@ -2627,7 +3915,8 @@ describe( 'World Drive Worker with the key set as Google_maps_api', () => {
 				LIMITS: { idFromName: id => id, get: () => limits },
 			};
 			const config = await worker.fetch( new Request( 'https://worlddrive.app/api/config' ), env, {} );
-			assert.deepEqual( await config.json(), { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true, googleClientId: '', live: true }, name );
+			// (No database here, so no usernames and passwords.)
+			assert.deepEqual( await config.json(), { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true, googleClientId: '', passwords: false, live: true }, name );
 
 			const failed = await ask( { ...env, TURNSTILE_SECRET: FAIL_SECRET }, '198.51.100.30' );
 			assert.equal( failed.status, 403, name );

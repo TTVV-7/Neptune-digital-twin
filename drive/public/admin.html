@@ -242,7 +242,7 @@
 		garage_open: 'Garage opened', garage_edit: 'Garage changes', party: 'Parties', funnel: 'Funnel steps', device: 'Devices', world: 'Turns to the Moon',
 		search: 'Searches', dropin_time: 'Drop-in time (buckets)', problem: 'Problems', board: 'Leaderboard', pass: 'Supporter Pass', level_up: 'Level-ups',
 		challenge: 'Challenges (opened, started, finished, posted; the word while driving said, and its button pressed; a friend\'s link shared, opened, and a run started from it)',
-		players: 'New players (nicknames)', scores: 'New bests (scores log)', accounts: 'New Google accounts', purchases: 'Passes by status', revenue: 'Revenue (smallest unit)',
+		players: 'New players (nicknames)', scores: 'New bests (scores log)', accounts: 'New accounts (Google or username)', purchases: 'Passes by status', revenue: 'Revenue (smallest unit)',
 	};
 
 	let shown = null;
@@ -403,13 +403,13 @@
 				<div class="card"><h2>From the leaderboard and the pass</h2>${ facts( [
 					[ 'New players (nicknames)', num( total( 'players' ) ), changeText( [ total( 'players' ), earlier( 'players' ) ] ) ],
 					[ 'New bests on the boards', num( total( 'scores' ) ), scoresNote ],
-					[ 'New Google accounts', num( total( 'accounts' ) ), changeText( [ total( 'accounts' ), earlier( 'accounts' ) ] ) ],
+					[ 'New accounts', num( total( 'accounts' ) ), changeText( [ total( 'accounts' ), earlier( 'accounts' ) ] ) ],
 					...[ ...keys( 'purchases' ) ].map( ( [ status, n ] ) => [ `Passes ${ status === 'paid' ? 'bought' : status }`, num( n ), changeText( [ n, earlier( 'purchases', status ) ] ) ] ),
 					[ 'Revenue', moneyNow.text, `${ money( before.get( 'revenue' ) ?? new Map() ).text } before` ],
 				] ) }
 				<h3>Now</h3>${ facts( [
 					[ 'Players', num( totals.players ?? 0 ), '' ],
-					[ 'Google accounts', num( totals.accounts ?? 0 ), '' ],
+					[ 'Accounts', num( totals.accounts ?? 0 ), totals.kinds ? `Google ${ num( totals.kinds.google ?? 0 ) } · password ${ num( totals.kinds.password ?? 0 ) } · both ${ num( totals.kinds.both ?? 0 ) }` : '' ],
 					[ 'Accounts with the pass', num( totals.supporters ?? 0 ), '' ],
 					[ 'Passes nobody has signed in for yet', num( totals.unclaimed ?? 0 ), '' ],
 				] ) }

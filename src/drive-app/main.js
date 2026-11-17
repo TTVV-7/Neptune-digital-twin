@@ -351,14 +351,16 @@ const _sun = new Vector3();
 
 // key: the Maps key (none: the test globe and pad); left: free drives left today; visit: the
 // visit's token, for posting scores; worker: whether there's a Worker (not on the dev server alone);
-// googleClientId: the sign-in button's, for the Supporter Pass ('' when there's no signing in);
+// googleClientId: the sign-in button's, for the Supporter Pass ('' when there's no signing in with
+// Google); passwords: whether there are usernames and passwords, turnstileSiteKey their robot
+// checks' (supporter.js, account.js);
 // live: whether the Worker has driving with others on (its /api/config says), and liveReason why
 // not when it's off for the rest of the day; moonOnly: { onEarth } when there's no Earth this visit
 // (today's Earth drives are used up, or the page opened on a link to the Moon, boot.js): the
 // globe opens on the Moon, which is never limited, and picking the Earth calls onEarth instead;
 // challengeLink: a "challenge a friend" link's ({ link: { challenge, vs }, answer }, boot.js), or a
 // promise of it (or of null: no link), opened once the globe is up and it's here (challenges.js).
-export async function start( { key, left = null, visit: token = null, worker = true, googleClientId = '', live: liveOn = false, liveReason = '', moonOnly = null, challengeLink = null } ) {
+export async function start( { key, left = null, visit: token = null, worker = true, googleClientId = '', passwords = false, turnstileSiteKey = '', live: liveOn = false, liveReason = '', moonOnly = null, challengeLink = null } ) {
 
 	const visit = token ?? VISIT_TEST?.visit ?? null;
 	// Play stats for the owner's admin page (stats.js): only a real visit's, counts with nothing of who.
@@ -724,7 +726,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// Buying the Supporter Pass in its sheet, and signing in for it there and in the pause menu
 	// (supporter.js). Without sign-in set up the sheet just says "Coming soon". Its sheet opened, and
 	// Buy followed to Stripe, are counted for the play stats.
-	const supporter = setUpSupporter( { worker, googleClientId, player: () => board.player, onBuy: () => stats.add( 'pass', 'buy' ) } );
+	const supporter = setUpSupporter( { worker, googleClientId, passwords, turnstileSiteKey, player: () => board.player, onBuy: () => stats.add( 'pass', 'buy' ) } );
 	onPassOpen( () => stats.add( 'pass', 'open' ) );
 	if ( supporter.on ) {
 

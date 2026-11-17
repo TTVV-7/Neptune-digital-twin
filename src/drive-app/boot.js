@@ -36,7 +36,7 @@ async function boot() {
 	// The Vite dev server on its own: a key from the environment, or the test globe.
 	if ( ! config ) return start( { key: DEV_KEY || null, worker: false } );
 	// (Maps off: the test pad, a challenge link's card over it all the same.)
-	if ( ! config.mapsOn ) return screens.notice( 'resting', { onTestPad: () => start( { key: null, googleClientId: config.googleClientId, live: !! config.live, liveReason: config.liveReason, challengeLink: challengeLink() } ) } );
+	if ( ! config.mapsOn ) return screens.notice( 'resting', { onTestPad: () => start( { key: null, googleClientId: config.googleClientId, passwords: config.passwords === true, turnstileSiteKey: config.turnstileSiteKey, live: !! config.live, liveReason: config.liveReason, challengeLink: challengeLink() } ) } );
 	visit( config );
 
 }
@@ -132,7 +132,7 @@ async function visit( config ) {
 	const moonLink = opensOnMoon( location.search ) || challenge?.answer.body?.challenge?.world === 'moon';
 	const outcome = await postVisit( token, { world: moonLink ? 'moon' : 'earth' } );
 	// (The link's answer as it comes, if it hadn't within LINK_WAIT.)
-	const settings = { googleClientId: config.googleClientId, live: !! config.live, liveReason: config.liveReason, challengeLink: challengeLink() };
+	const settings = { googleClientId: config.googleClientId, passwords: config.passwords === true, turnstileSiteKey: config.turnstileSiteKey, live: !! config.live, liveReason: config.liveReason, challengeLink: challengeLink() };
 	if ( outcome.key ) return run( main, { key: outcome.key, left: outcome.left, visit: outcome.visit, ...settings } );
 	// A link to the Moon (a Moon challenge's too): on the Moon, with none of the day's Earth drives
 	// spent. The Earth is a reload away (without the link, so that one does ask for a drive).
@@ -184,13 +184,13 @@ async function usedUp( config, outcome, main, link = null ) {
 		if ( onMoonOnly ) return;
 		onMoonOnly = true;
 		run( main, {
-			key: null, visit: outcome.visit, googleClientId: config.googleClientId, live: !! config.live, liveReason: config.liveReason, challengeLink: link,
+			key: null, visit: outcome.visit, googleClientId: config.googleClientId, passwords: config.passwords === true, turnstileSiteKey: config.turnstileSiteKey, live: !! config.live, liveReason: config.liveReason, challengeLink: link,
 			moonOnly: { onEarth: () => usedUp( config, outcome, main ) },
 		} );
 
 	};
 	screens.notice( 'used-up', { retryAfter, onMoon: toMoon } );
-	if ( reason !== 'visitor' || ! config.googleClientId ) return;
+	if ( reason !== 'visitor' || ! ( config.googleClientId || config.passwords === true ) ) return;
 	let supporter;
 	try {
 
@@ -212,7 +212,7 @@ async function usedUp( config, outcome, main, link = null ) {
 		visit( config );
 
 	};
-	supporter.setUpSupporter( { worker: true, googleClientId: config.googleClientId, onPass: askedAsSupporter ? null : again } );
+	supporter.setUpSupporter( { worker: true, googleClientId: config.googleClientId, passwords: config.passwords === true, turnstileSiteKey: config.turnstileSiteKey, onPass: askedAsSupporter ? null : again } );
 	supporter.fillAccountArea( $( 'notice' ).querySelector( '.account' ) );
 
 }

@@ -36,7 +36,7 @@ const FACTS = [
 	// Scores that made a new best on a board: the scores log has only those, and only for KEEP_SCORES.
 	[ 'scores', `SELECT date( created_at / 1000, 'unixepoch' ) AS day, 'new_best' AS key, COUNT(*) AS n FROM scores
 		WHERE created_at >= ?1 AND created_at < ?2 GROUP BY day` ],
-	// Google accounts signed in for the first time.
+	// Accounts made: Google accounts signed in for the first time, and accounts made with a username.
 	[ 'accounts', `SELECT date( created_at / 1000, 'unixepoch' ) AS day, 'new' AS key, COUNT(*) AS n FROM accounts
 		WHERE created_at >= ?1 AND created_at < ?2 GROUP BY day` ],
 	// Passes recorded and not taken back, by status ('paid', or 'granted' by hand), and their money by
@@ -47,13 +47,18 @@ const FACTS = [
 		WHERE refunded_at IS NULL AND amount IS NOT NULL AND currency IS NOT NULL AND created_at >= ?1 AND created_at < ?2 GROUP BY day, currency` ],
 ];
 
-// How many there are now: players, Google accounts, the accounts with the pass (hasPass: bought and
-// not refunded, or in SUPPORTER_EMAILS), and passes not taken back that nobody has signed in for yet
-// (bought before signing in, or given by hand, to an email no account has).
+// How many there are now: players, accounts (all of them, and by how they sign in: with Google only,
+// with a username and password only, or both: logins.js), the accounts with the pass (hasPass:
+// bought and not refunded, or in SUPPORTER_EMAILS), and passes not taken back that nobody has
+// signed in for yet (bought before signing in, or given by hand, to an email no account has; an
+// account with no Google account has no email, '', which claims nothing). Counts only.
 const TOTALS = `SELECT ( SELECT COUNT(*) FROM players ) AS players, ( SELECT COUNT(*) FROM accounts ) AS accounts,
+	( SELECT COUNT(*) FROM accounts a WHERE a.google_sub NOT LIKE 'none:%' AND NOT EXISTS ( SELECT 1 FROM logins WHERE account_id = a.id ) ) AS google_only,
+	( SELECT COUNT(*) FROM accounts a JOIN logins l ON l.account_id = a.id WHERE a.google_sub LIKE 'none:%' ) AS password_only,
+	( SELECT COUNT(*) FROM accounts a JOIN logins l ON l.account_id = a.id WHERE a.google_sub NOT LIKE 'none:%' ) AS both_ways,
 	( SELECT COUNT(*) FROM accounts x WHERE ${ hasPass( 'x.id', '?1' ) } ) AS supporters,
 	( SELECT COUNT(*) FROM purchases p WHERE p.refunded_at IS NULL AND p.account_id IS NULL
-		AND NOT EXISTS ( SELECT 1 FROM accounts WHERE email = p.email ) ) AS unclaimed`;
+		AND NOT EXISTS ( SELECT 1 FROM accounts WHERE email = p.email AND email <> '' ) ) AS unclaimed`;
 
 // Adds [ [ metric, key, n ] ] to `day`'s counts: one upsert a row, in one go.
 async function add( db, day, counts ) {
@@ -114,7 +119,8 @@ export async function countVisit( env, now ) {
 // unset, at most a year: admin.js's askedDays):
 //   { from, to, rows: [ [ day, metric, key, n ] ],
 //     previous: { from, to, rows: [ [ metric, key, n ] ] },
-//     totals: { players, accounts, supporters, unclaimed }, kept: { stats, scores } }
+//     totals: { players, accounts, kinds: { google, password, both }, supporters, unclaimed },
+//     kept: { stats, scores } }
 // rows: the page's and the visits' counts a day (stats_daily) and FACTS's, alike. previous: the same
 // for the as many days before those, added up over them (what the page compares with: summed here,
 // so a year's comparison is a few hundred rows, not tens of thousands). totals: TOTALS's, now. kept:
@@ -165,7 +171,7 @@ export async function adminStats( context ) {
 
 	} );
 	rows.sort( ( a, b ) => a[ 0 ] < b[ 0 ] ? - 1 : a[ 0 ] > b[ 0 ] ? 1 : 0 );
-	const { players, accounts, supporters, unclaimed } = totals.results[ 0 ];
+	const { players, accounts, google_only: google, password_only: password, both_ways: both, supporters, unclaimed } = totals.results[ 0 ];
 	// The first day of the period before with each kind of count: the visits (and the counts begun
 	// with them) and the funnel (and the counts begun with it). A figure is only fairly compared when
 	// its counts cover that period from its first day.
@@ -174,7 +180,7 @@ export async function adminStats( context ) {
 	return json( {
 		from, to, rows,
 		previous: { ...before, first, rows: [ ...previous.values() ] },
-		totals: { players, accounts, supporters, unclaimed },
+		totals: { players, accounts, kinds: { google, password, both }, supporters, unclaimed },
 		kept: { stats: KEEP_DAYS, scores: KEEP_SCORES / DAY },
 	} );
 
