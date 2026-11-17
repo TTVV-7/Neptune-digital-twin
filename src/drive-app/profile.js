@@ -3,12 +3,15 @@ import { BOOSTS } from './boosts.js';
 import { LEVEL_MAX, LEVEL_XP, REWARDS, TITLES, badgeOf, nextReward, rewardsAt } from './levels.js';
 import { DECALS, FINISHES, FLAMES, GLOWS, HORNS, RIMS, SWATCHES, TRAILS } from './paint.js';
 import { isPro, onProChange } from './pro.js';
+import { ACHIEVEMENTS } from './achievement-rules.js';
+import { getFeats, onFeatsChange } from './feats.js';
 
 // What players see of levels (levels.js, progress.js): while driving, a slim XP bar with the
 // level under the place's name and small "+46 XP · 1.4 km" pop-ups by it; a level-up's burst,
 // "Level 7! Unlocked: Plasma boost", whose look (or ride) opens the Garage; on the globe's panel a
 // card with the nickname, the level badge, the bar to the next level, the next reward, the title
-// picker and "All rewards", which opens the whole track. A supporter's pass has the track's pass
+// picker and "All rewards", which opens the whole track, and "Achievements", which opens their grid
+// (achievements.js, onAchievements). A supporter's pass has the track's pass
 // looks and rides already, so for them those aren't news: a level-up says they're theirs already,
 // and "Next" is the next reward that's new to them. All World Drive's own: drive-hud.js (which the
 // construction app shares) is left as it is.
@@ -37,7 +40,7 @@ const ICONS = {
 // whether a nickname can be picked now (a Worker and a visit). onGarage( reward ): open the
 // Garage (on a ride reward's ride); onNickname(): show where a nickname is picked; onTitle(): a new
 // title was picked. mode(): main.js's mode ('driving', 'globe'...).
-export function setUpProfile( { progress, player, canName = () => false, onGarage = () => {}, onNickname = () => {}, onTitle = () => {}, mode = () => 'globe' } ) {
+export function setUpProfile( { progress, player, canName = () => false, onGarage = () => {}, onNickname = () => {}, onTitle = () => {}, onAchievements = () => {}, mode = () => 'globe' } ) {
 
 	// --- driving: the bar and the pop-ups ---
 
@@ -192,9 +195,11 @@ export function setUpProfile( { progress, player, canName = () => false, onGarag
 		<p class="xp-line small"><span class="count"></span><span class="next"></span></p>
 		<label class="title-pick small" hidden>Title <select></select></label>
 		<p class="title-status small" role="status" hidden></p>
-		<p class="save-note small" hidden>Your progress is kept in this browser. <button type="button" class="link">Pick a nickname</button> to save it.</p>`;
+		<p class="save-note small" hidden>Your progress is kept in this browser. <button type="button" class="link">Pick a nickname</button> to save it.</p>
+		<button type="button" class="achievements-open"><span aria-hidden="true">🏅</span> Achievements <span class="feat-count small"></span></button>`;
 	panel.querySelector( '.osm' ).after( profile );
 	profile.querySelector( '.track-open' ).addEventListener( 'click', () => openTrack() );
+	profile.querySelector( '.achievements-open' ).addEventListener( 'click', () => onAchievements() );
 	profile.querySelector( '.save-note button' ).addEventListener( 'click', () => onNickname() );
 	const select = profile.querySelector( 'select' );
 	const titleStatus = profile.querySelector( '.title-status' );
@@ -282,7 +287,8 @@ export function setUpProfile( { progress, player, canName = () => false, onGarag
 		const title = progress.title;
 		const me = player();
 		const pro = isPro();
-		const key = [ level, xp, title?.id, me?.name, progress.chosenTitle, progress.local, canName(), pro ].join( '|' );
+		const feats = getFeats().size;
+		const key = [ level, xp, title?.id, me?.name, progress.chosenTitle, progress.local, canName(), pro, feats ].join( '|' );
 		if ( key === last ) return;
 		last = key;
 		const count = next === null ? `${ xp.toLocaleString( 'en-CA' ) } XP` : `${ into.toLocaleString( 'en-CA' ) } / ${ span.toLocaleString( 'en-CA' ) } XP`;
@@ -300,6 +306,7 @@ export function setUpProfile( { progress, player, canName = () => false, onGarag
 		const coming = nextReward( level, { pro } );
 		profile.querySelector( '.next' ).textContent = coming ? `Next: ${ coming.name } at Lv ${ coming.level }` : 'Every reward is yours';
 		profile.querySelector( '.save-note' ).hidden = ! progress.local || ! canName();
+		profile.querySelector( '.feat-count' ).textContent = `${ feats } / ${ ACHIEVEMENTS.length }`;
 
 		// The titles there are to pick: the newest by default, or any one unlocked.
 		const picker = profile.querySelector( '.title-pick' );
@@ -316,8 +323,9 @@ export function setUpProfile( { progress, player, canName = () => false, onGarag
 	}
 
 	render();
-	// The pass coming or going changes what's next.
+	// The pass coming or going changes what's next; achievements earned, their count.
 	onProChange( () => render() );
+	onFeatsChange( () => render() );
 
 	return {
 		render,

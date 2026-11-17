@@ -16,6 +16,7 @@ import { adminDropins } from './dropins.js';
 import { LINK_PATH } from '../../src/drive-app/challenge-rules.js';
 import { adminChallenges, adminChange, challengeBoard, challengeGhost, challengeLink, linkPage, listChallenges, postTime } from './challenges.js';
 import { BUDGET_SPENT } from '../../src/drive-app/live-protocol.js';
+import { adminAchievements, postAchievements } from './achievements.js';
 
 export { DriveLimits } from './limits.js';
 export { DriveRoom } from './live.js';
@@ -34,7 +35,8 @@ export { DriveRoom } from './live.js';
 // with others (live.js) is a WebSocket to a room, one Durable Object a party or area, that tells
 // everyone where the others are; /api/online says where people are driving now, for the globe's
 // dots. And the owner's play stats (stats.js) with where people drop in (dropins.js), for the admin
-// page. And challenges (challenges.js): a daily, a weekly and a monthly one on each world, each
+// page. And achievements (achievements.js): badges for what a player has done, and the
+// construction rides they unlock. And challenges (challenges.js): a daily, a weekly and a monthly one on each world, each
 // with its own board of the best times, picked by themselves or by the owner on the admin page.
 //
 // Settings (wrangler.drive.jsonc vars, or secrets):
@@ -79,6 +81,9 @@ export { DriveRoom } from './live.js';
 //                         if unset), CHALLENGE_TIMES_PER_VISIT the times a visit may post (100 if
 //                         unset), CHALLENGE_GHOST_BUDGET the most of its ghosts' text a challenge
 //                         keeps (16,777,216 characters if unset) (challenges.js)
+//   ACHIEVEMENT_LOOKS     the rate limiter binding for a visitor's asks for their achievements, by
+//                         the same key as CHALLENGE_LOOKS; ACHIEVEMENT_LOOKS_PER_VISITOR_DAILY the
+//                         asks a visitor (by their /48) may make a day (200 if unset) (achievements.js)
 //   PASSWORD_TRIES        the rate limiter binding for a visitor's password sign-ins, checks and
 //                         account changes, by the same key as CHALLENGE_LOOKS (logins.js)
 //   TURNSTILE_VERIFY_URL, SEARCH_UPSTREAM, TEST_CLOCK, GOOGLE_JWKS_URL   tests only (see
@@ -97,6 +102,7 @@ const ROUTES = [
 	{ method: 'POST', path: '/api/player/rename', handler: renamePlayer },
 	{ method: 'POST', path: '/api/player/link', handler: linkPlayer },
 	{ method: 'POST', path: '/api/player/title', handler: setTitle },
+	{ method: 'POST', path: '/api/achievements', handler: postAchievements },
 	{ method: 'POST', path: '/api/score', handler: postScore },
 	{ method: 'POST', path: '/api/progress', handler: postProgress },
 	{ method: 'GET', path: '/api/leaderboard', handler: leaderboard },
@@ -115,6 +121,7 @@ const ROUTES = [
 	{ method: 'POST', path: '/api/stats', handler: postStats },
 	{ method: 'GET', path: '/api/admin/stats', handler: adminStats },
 	{ method: 'GET', path: '/api/admin/dropins', handler: adminDropins },
+	{ method: 'GET', path: '/api/admin/achievements', handler: adminAchievements },
 	{ method: 'GET', path: '/api/challenges', handler: listChallenges },
 	{ method: 'GET', path: '/api/challenges/board', handler: challengeBoard },
 	{ method: 'POST', path: '/api/challenges/time', handler: postTime },

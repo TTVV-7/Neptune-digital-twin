@@ -99,6 +99,7 @@ import { cellMiddle, cellOf, checkCell } from '../src/drive-app/dropin-cells.js'
 import { checkPasses, destination, formatTime } from '../src/drive-app/challenge-rules.js';
 import { GHOST_BYTES, TURN, countFor, everyFor, ghostFault, ghostText, localOf, packGhost, readGhost, sampleTime } from '../src/drive-app/ghost-rules.js';
 import { SPOTS } from '../src/drive-app/places.js';
+import { ACHIEVEMENTS } from '../src/drive-app/achievement-rules.js';
 
 const require = createRequire( import.meta.url );
 const PORT = Number( process.env.TEST_VITE_PORT ) || 5521;
@@ -241,10 +242,11 @@ describe( 'World Drive, desktop', () => {
 		assert.ok( await panel.isVisible() );
 		assert.match( await panel.locator( '.logo' ).textContent(), /World\s*Drive/ );
 		assert.equal( await panel.locator( '.spots button' ).count(), 12 );
-		// Then the cars (the muscle car free, then levels' and the Supporter Pass's, locked) and the
-		// pass's rides (see test-drive-pro-ui.mjs).
+		// Then the construction rides, each locked until its achievement (test-drive-levels-ui.mjs), the
+		// cars (the muscle car free, then levels' and the Supporter Pass's, locked) and the pass's rides
+		// (see test-drive-pro-ui.mjs).
 		assert.deepEqual( await panel.locator( '.vehicle b' ).allTextContents(), [
-			'Go-kart', 'Pickup', 'Muscle car', 'Golf cart', 'Tuk-tuk', 'Ice-cream van', 'Lawn tractor', 'Retro wedge', 'Formula racer',
+			'Go-kart', 'Pickup', 'Skid steer', 'Telehandler', 'Concrete mixer', 'Road roller', 'Wheel loader', 'Dump truck', 'Bulldozer', 'Vac truck', 'Muscle car', 'Golf cart', 'Tuk-tuk', 'Ice-cream van', 'Lawn tractor', 'Retro wedge', 'Formula racer',
 			'Neon racer', 'Night cruiser', 'Dune buggy', 'Farm truck', 'Police cruiser', 'Hypercar', 'Cyber muscle',
 			'Sports coupe', 'Monster truck', 'City bus', 'Hovercraft',
 		] );
@@ -6994,7 +6996,7 @@ describe( 'World Drive\'s admin page: where people drop in', () => {
 	// asks with instead (429, say; 'abort' for no answer at all, as when the server can't be
 	// reached); page.slow: { days: ms } how long the drop-ins' answer for those days takes; totals:
 	// the play stats' totals now.
-	async function adminPage( { viewport = { width: 1280, height: 900 }, colorScheme = 'light', touch = false, signedIn = true, refuse = {}, totals = {} } = {} ) {
+	async function adminPage( { viewport = { width: 1280, height: 900 }, colorScheme = 'light', touch = false, signedIn = true, refuse = {}, totals = {}, achievements = null } = {} ) {
 
 		const context = await browser.newContext( { viewport, colorScheme, hasTouch: touch, isMobile: touch } );
 		const page = await context.newPage();
@@ -7025,10 +7027,55 @@ describe( 'World Drive\'s admin page: where people drop in', () => {
 			route.fulfill( { contentType: 'application/json', body: JSON.stringify( answer( days ) ) } );
 
 		} );
+		// GET /api/admin/achievements: how many players have each (as achievements.js answers), or none
+		// signed out.
+		await page.route( `${ BASE }/api/admin/achievements`, route => route.fulfill( signedIn && achievements
+			? { contentType: 'application/json', body: JSON.stringify( achievements ) }
+			: { status: 401, contentType: 'application/json', body: '{"error":"Sign in first"}' } ) );
 		await page.goto( `${ BASE }/admin.html` );
 		return page;
 
 	}
+
+	test( 'the achievements: how many players have each, its share, checked or trusted and the ride it unlocks; nothing signed out', async () => {
+
+		const achievements = ACHIEVEMENTS.map( ( a, i ) => ( { id: a.id, name: a.name, goal: a.goal, checked: a.count !== 'km', ride: a.id === 'weekly-podium' ? 'Vac truck' : null, players: Math.max( 0, 120 - i * 9 ) } ) );
+		const page = await adminPage( { achievements: { players: 400, earners: 130, achievements } } );
+		try {
+
+			const section = page.locator( '#achievements' );
+			await section.waitFor();
+			assert.equal( await page.locator( '#ach-total' ).textContent(), '130 of 400 players have at least one.' );
+			const rows = section.locator( 'table.bars tr' );
+			assert.equal( await rows.count(), ACHIEVEMENTS.length );
+			assert.equal( await rows.nth( 0 ).locator( '.num' ).textContent(), '120' );
+			assert.equal( await rows.nth( 0 ).locator( '.share' ).textContent(), '30%' );
+			assert.match( await rows.nth( 0 ).locator( '.name' ).textContent(), /^First drive · Drive your first 250 m · trusted$/ );
+			const podium = rows.nth( ACHIEVEMENTS.findIndex( a => a.id === 'weekly-podium' ) );
+			assert.match( await podium.locator( '.name' ).textContent(), /unlocks the vac truck · checked$/ );
+			await section.scrollIntoViewIfNeeded();
+			await shot( page, 'admin-achievements' );
+			assert.deepEqual( page.errors, [] );
+
+		} finally {
+
+			await page.context().close();
+
+		}
+
+		const out = await adminPage( { signedIn: false } );
+		try {
+
+			await out.waitForTimeout( 500 );
+			assert.equal( await out.locator( '#achievements' ).isHidden(), true );
+
+		} finally {
+
+			await out.context().close();
+
+		}
+
+	} );
 
 	// Waits for the map drawn on `world`'s own map with `cells` places.
 	const drawn = ( page, world, cells ) => page.waitForFunction( ( [ world, cells ] ) => {

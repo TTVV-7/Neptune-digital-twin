@@ -11,6 +11,9 @@ import { setting } from './settings.js';
 import { hasPass, supporterEmails } from './supporter.js';
 import { readVisit } from './visits.js';
 import { standingOf, xpOf } from './progress.js';
+import { creditParty, featList, featsOf } from './achievements.js';
+import { rideAllowed } from '../../src/drive-app/achievement-rules.js';
+import { DEFAULT_RIDE } from '../../src/drive-app/catalog.js';
 
 // Driving with others (docs/world-drive.md): the rooms. src/drive-app/live-protocol.js says what a
 // room is (a party, or the drivers in one area) and what's said in one; this is the Worker's half.
@@ -509,14 +512,18 @@ export class DriveRoom extends DurableObject {
 		driver.pending = true;
 		driver.queue = [];
 		this.save( ws, driver );
-		const { name, star, level, title } = await this.nameOf( m.player, driver.visit );
+		const { name, star, level, title, player, feats } = await this.nameOf( m.player, driver.visit );
 		// Gone while it was looked up.
 		if ( this.drivers.get( ws ) !== driver || driver.left || ws.readyState !== WebSocket.OPEN ) return;
+		// The player (for a party's count) and their achievements, for the rides they unlock: a
+		// construction ride without its achievement (a page that's been changed) is shown to the others
+		// as the default ride.
+		Object.assign( driver, { player, feats } );
 
 		const taken = new Set( this.sockets().map( other => this.driver( other ).pid ) );
 		let pid = randomToken( 6 );
 		while ( taken.has( pid ) ) pid = randomToken( 6 );
-		Object.assign( driver, { pid, name, star, level, title, vehicle, look, place, away: m.away === true, s: null, pending: false } );
+		Object.assign( driver, { pid, name, star, level, title, vehicle: rideFor( vehicle, feats ), look, place, away: m.away === true, s: null, pending: false } );
 		const others = this.helloed().filter( other => other !== ws ).map( other => playerOf( this.driver( other ) ) );
 		send( ws, { t: 'welcome', you: pid, name, star, room: driver.room, max: this.max( parseRoom( driver.room ) ), players: others } );
 		driver.sent = this.moves;
@@ -530,12 +537,34 @@ export class DriveRoom extends DurableObject {
 
 		}
 
+		this.partied( Date.now() );
 		this.save( ws, driver );
 		this.flush( Date.now() );
 
 	}
 
-	// { name, star, level, title } for hello's player: { id, secret } as the leaderboard has them, or
+	// In a party with someone else (two visits or more said hello): each player there not yet counted
+	// for it has the party counted (achievements.js's creditParty: once a party, written after the
+	// answer), so both whoever made it and whoever joined it get it. Nothing for an area's room.
+	partied( now ) {
+
+		const room = parseRoom( this.name );
+		if ( room?.kind !== 'party' ) return;
+		const here = this.helloed().map( ws => [ ws, this.driver( ws ) ] );
+		if ( new Set( here.map( ( [ , d ] ) => d.visit ) ).size < 2 ) return;
+		for ( const [ ws, d ] of here ) {
+
+			if ( ! d.player || d.partied ) continue;
+			d.partied = true;
+			this.save( ws, d );
+			const counting = creditParty( this.env, d.player, room.code, now ).catch( err => console.error( 'Party count', err?.name, err?.message ) );
+			this.ctx.waitUntil?.( counting );
+
+		}
+
+	}
+
+	// { name, star, level, title, player, feats } for hello's player: { id, secret } as the leaderboard has them, or
 	// anything else from `visit`, a guest with no level (null). A guest's four figures are its
 	// visit's, so they stay the same each time it connects (Hide, by name, holds; a friend coming
 	// back is the same guest).
@@ -546,9 +575,9 @@ export class DriveRoom extends DurableObject {
 			if ( isObject( player ) ) {
 
 				const { id, secret } = credentials( player );
-				const row = await database( this.env ).prepare( `SELECT p.name, ${ hasPass( 'p.account_id', '?3' ) } AS star, ${ xpOf( 'p' ) } AS xp, p.title
+				const row = await database( this.env ).prepare( `SELECT p.name, ${ hasPass( 'p.account_id', '?3' ) } AS star, ${ xpOf( 'p' ) } AS xp, p.title, ${ featsOf( 'p' ) } AS feats
 					FROM players p WHERE p.id = ?1 AND p.secret_hash = ?2` ).bind( id, await sha256Hex( secret ), supporterEmails( this.env ) ).first();
-				if ( row ) return { name: row.name, star: !! row.star, ...standingOf( row.xp, row.title ) };
+				if ( row ) return { name: row.name, star: !! row.star, ...standingOf( row.xp, row.title ), player: id, feats: featList( row.feats ) };
 
 			}
 
@@ -560,7 +589,7 @@ export class DriveRoom extends DurableObject {
 		}
 
 		const number = parseInt( ( await sha256Hex( `guest ${ visit }` ) ).slice( 0, 8 ), 16 ) % 10000;
-		return { name: `Guest ${ String( number ).padStart( 4, '0' ) }`, star: false, level: null, title: null };
+		return { name: `Guest ${ String( number ).padStart( 4, '0' ) }`, star: false, level: null, title: null, player: null, feats: [] };
 
 	}
 
@@ -597,8 +626,8 @@ export class DriveRoom extends DurableObject {
 				const vehicle = checkVehicle( m.vehicle );
 				const look = checkLook( m.look );
 				if ( ! vehicle || ! look ) return false;
-				Object.assign( driver, { vehicle, look } );
-				this.broadcast( { t: 'look', pid, vehicle, look }, ws );
+				Object.assign( driver, { vehicle: rideFor( vehicle, driver.feats ), look } );
+				this.broadcast( { t: 'look', pid, vehicle: driver.vehicle, look }, ws );
 				return true;
 
 			}
@@ -1134,6 +1163,14 @@ function spotIn( place, cell ) {
 }
 
 // A PLAYER, as the others are told of one.
+// The ride the others see a driver in: theirs, or the default ride for a construction ride whose
+// achievement they don't have (achievement-rules.js's rideAllowed).
+function rideFor( vehicle, feats ) {
+
+	return rideAllowed( vehicle, feats ?? [] ) ? vehicle : DEFAULT_RIDE;
+
+}
+
 function playerOf( { pid, name, star, level = null, title = null, vehicle, look, place, away, s } ) {
 
 	return { pid, name, star, level, title, vehicle, look, place, away, s };

@@ -801,3 +801,35 @@ dialog#leaderboard .lvl {
 #garage .ride-tab .level-chip[hidden] {
 	display: none;
 }
+
+/* The profile card's way to the achievements' grid (achievements.js, its own chunk). */
+#globe-ui .profile .achievements-open {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	margin-top: 8px;
+	padding: 6px 10px;
+	border: 1px solid var( --line );
+	border-radius: 10px;
+	background: var( --chip );
+	color: var( --ink );
+	font: 700 13px/1.3 var( --font );
+	cursor: pointer;
+}
+
+#globe-ui .profile .achievements-open:hover {
+	background: var( --chip-hover );
+}
+
+#globe-ui .profile .achievements-open .feat-count {
+	margin-left: auto;
+	color: var( --muted );
+}
+
+/* A construction ride's lock: the achievement it needs, not the pass. */
+.feat-chip {
+	background: rgba( 255, 210, 63, 0.14 );
+	color: var( --accent );
+	white-space: nowrap;
+}

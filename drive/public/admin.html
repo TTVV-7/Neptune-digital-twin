@@ -21,6 +21,9 @@
 	And challenges (docs/world-drive.md, "Challenges"): GET /api/admin/challenges, the six live and
 	the six next up, and POST to choose any period's challenge by hand, put one back to the rotation,
 	and approve busy drop-in places for the rotation (worker/drive/challenges.js).
+	And achievements (docs/world-drive.md, "Achievements and rewards"): GET /api/admin/achievements,
+	how many players have each achievement, and of how many (worker/drive/achievements.js). Counts
+	only, nothing of who.
 -->
 <style>
 	:root {
@@ -211,6 +214,12 @@
 		<h3>Busy drop-in places for the rotation</h3>
 		<div id="ch-busy"></div>
 		<p class="note">The rotation goes round the game's own places (the start spots, the places' pages and the Moon's places) and the busy drop-in places approved here, a new order each time round, one a period; a period's challenge is fixed the first time anyone asks for it, so nothing changed here changes a live one, unless you change that one, which starts a new board (the old one is kept apart). Busy places are where people drop in that aren't the game's own: anyone with many addresses can push one up the list, so none goes into the rotation without your approval. Your own runs (this page's accounts) are taken but kept off the boards, as you know each place and kind before it's live, and choose them. Back to the rotation on a live one the rotation chose leaves it as it is (it's the rotation's already).</p>
+	</section>
+	<section class="card achievements" id="achievements" aria-labelledby="achievements-title" hidden>
+		<h2 id="achievements-title">Achievements</h2>
+		<p class="muted small" id="ach-total"></p>
+		<div id="ach-list"></div>
+		<p class="note">How many players (nicknames) have each achievement, of all of them; nothing of who. Checked: the game counts it itself (challenge times and final places, parties, days in a row). Trusted: the page says it (km, Moon drives, Garage changes, rides tried), each held to a day's worth. A construction ride comes with the achievement beside it.</p>
 	</section>
 	<div id="more"></div>
 	<p class="muted" style="margin-top:24px;font-size:13px">Counts only, nothing of who. Days are UTC, and each period ends with today so far. ▲ and ▼ compare with the as many days just before it. Referrers, countries and page speed in more detail are in Cloudflare's dashboard (Web Analytics).</p>
@@ -1947,6 +1956,53 @@
 		const minutes = Math.max( 0, Math.floor( ms / 60000 ) );
 		const [ days, hours ] = [ Math.floor( minutes / 1440 ), Math.floor( minutes / 60 ) % 24 ];
 		return days ? `${ days } d ${ hours } h left` : `${ hours } h ${ minutes % 60 } m left`;
+
+	}
+
+} )();
+</script>
+<script>
+( () => {
+
+	// --- Achievements -------------------------------------------------------------------------
+	//
+	// GET /api/admin/achievements: { players, earners, achievements: [ { id, name, goal, checked,
+	// ride, players } ] }, how many players have each, in the game's order.
+
+	const esc = text => String( text ).replace( /[&<>"']/g, c => ( { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' } )[ c ] );
+	const $ = id => document.getElementById( id );
+	load();
+
+	async function load() {
+
+		let res;
+		try {
+
+			res = await fetch( '/api/admin/achievements', { credentials: 'same-origin' } );
+
+		} catch {
+
+			return;
+
+		}
+
+		// Signed out, not an admin, or no Worker (the dev server alone): the page's notice says so.
+		if ( res.status === 401 || res.status === 403 || ! /json/.test( res.headers.get( 'Content-Type' ) ?? '' ) ) return;
+		const answer = await res.json().catch( () => null );
+		if ( ! answer ) return;
+		$( 'achievements' ).hidden = false;
+		if ( ! res.ok ) {
+
+			$( 'ach-list' ).innerHTML = `<p class="muted">${ res.status === 429 ? 'Asked too often just now: try again in a minute.' : `Something went wrong (${ res.status }).` }</p>`;
+			return;
+
+		}
+
+		window.worldDriveAdmin = { ...window.worldDriveAdmin, achievements: answer };
+		const { players, earners, achievements } = answer;
+		$( 'ach-total' ).textContent = `${ earners.toLocaleString() } of ${ players.toLocaleString() } players have at least one.`;
+		const top = Math.max( 1, ...achievements.map( a => a.players ) );
+		$( 'ach-list' ).innerHTML = `<table class="bars">${ achievements.map( a => `<tr><td class="name">${ esc( a.name ) }<span class="muted small"> · ${ esc( a.goal ) }${ a.ride ? ` · unlocks the ${ esc( a.ride.toLowerCase() ) }` : '' } · ${ a.checked ? 'checked' : 'trusted' }</span></td><td><div class="bar"><span style="width:${ ( 100 * a.players / top ).toFixed( 1 ) }%"></span></div></td><td class="num">${ a.players.toLocaleString() }</td><td class="share">${ players ? Math.round( 100 * a.players / players ) : 0 }%</td></tr>` ).join( '' ) }</table>`;
 
 	}
 

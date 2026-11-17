@@ -17,6 +17,7 @@ import { cleanPlace } from './names.js';
 import { PLAYER_ID, authenticate, credentials, database, takeTurn } from './players.js';
 import { standingOf, xpOf } from './progress.js';
 import { VEHICLES } from './scores.js';
+import { checkRide, finishedQuery, placingQuery } from './achievements.js';
 import { addressOf, setting } from './settings.js';
 import { hasPass, supporterEmails } from './supporter.js';
 import { readVisit } from './visits.js';
@@ -540,6 +541,9 @@ export async function postTime( context ) {
 	if ( fault ) throw new HttpError( 400, 'Bad request', { reason: 'ghost', fault } );
 
 	const player = await authenticate( db, id, secret );
+	// A construction ride only with the achievement that unlocks it (achievements.js): its ghost and
+	// its row on the board show it to everyone. (Nothing read for any other ride.)
+	await checkRide( db, id, vehicle );
 	// One visit, one player, as for scores.
 	const [ , bound ] = await db.batch( [
 		db.prepare( 'INSERT INTO visits ( id, player_id, expires_at ) VALUES ( ?, ?, ? ) ON CONFLICT ( id ) DO NOTHING' ).bind( visit.id, id, visit.expiresAt ),
@@ -704,6 +708,9 @@ export async function postTime( context ) {
 		}
 
 		if ( ! written.meta.changes ) throw new HttpError( 403, 'That challenge is over', { reason: 'challenge' } );
+		// A player's first time on a challenge: the challenges-finished achievements their times have
+		// reached now (achievements.js). Nothing going wrong in it turns the time's answer into an error.
+		if ( ! was ) await finishedQuery( db, id, now ).run().catch( err => console.error( 'Achievements', err?.name, err?.message ) );
 		// So the player, and anyone asking here, sees it straight away (in this one of Cloudflare's
 		// places; elsewhere within CHALLENGE_CACHE s). Nothing going wrong in it turns the best that's
 		// now kept into an error.
@@ -1270,6 +1277,8 @@ function finishQueries( db, id, now ) {
 		db.prepare( `UPDATE challenge_times SET final_rank = ranked.place, ghost = 0 FROM (
 			SELECT player_id, ROW_NUMBER() OVER ( ORDER BY ms, created_at, player_id ) AS place FROM challenge_times WHERE challenge_id = ?1 AND owner = 0
 		) AS ranked WHERE challenge_times.challenge_id = ?1 AND challenge_times.player_id = ranked.player_id` ).bind( id ),
+		// The placings those final places reach (achievements.js), from them alone.
+		placingQuery( db, id, now ),
 		db.prepare( 'UPDATE challenges SET final_at = ? WHERE id = ? AND final_at IS NULL' ).bind( now, id ),
 		// Its ghosts: nothing races a finished challenge (a link to one shows its board instead).
 		db.prepare( 'DELETE FROM challenge_ghosts WHERE challenge_id = ?' ).bind( id ),

@@ -1,5 +1,6 @@
 import { HttpError, isObject, json, readJson } from '../http.js';
-import { DRIVE_CARS, LIBRARY_VEHICLES, PASS_RIDES } from '../../src/drive-app/catalog.js';
+import { DRIVE_CARS, LIBRARY_VEHICLES, PASS_RIDES, WORKS_RIDES } from '../../src/drive-app/catalog.js';
+import { checkRide } from './achievements.js';
 import { BOARD_CACHE, PERIODS, boardKey, dateOf, forgetBoards } from './boards.js';
 import { cleanPlace, placeKey } from './names.js';
 import { PLAYER_ID, authenticate, credentials, database, takeTurn } from './players.js';
@@ -21,7 +22,8 @@ import { standingOf, xpOf } from './progress.js';
 // - the run can't be longer than the visit has lasted, and its score can't be more than RATE
 //   points a second of it, three times the most the game can give (see maxRate below), nor more
 //   than MAX_SCORE; the game's scores are always whole tens, its tricks always read as it writes
-//   them, and the vehicle is one it offers;
+//   them, and the vehicle is one it offers (a construction ride only with the achievement that
+//   unlocks it, achievements.js);
 // - one score every 10 s per player (SCORE_GAP), and SCORES_PER_VISITOR_DAILY a day per visitor.
 // What gets through anyway, the owner deletes (docs/world-drive.md).
 
@@ -61,7 +63,7 @@ export const SCORE_GAP = 10 * 1000;
 const SCORES_DAILY = 1500;
 // A UTC day (ms): DriveLimits' days end at its midnights.
 const DAY = 24 * 60 * 60 * 1000;
-export const VEHICLES = new Set( [ 'go-kart', ...LIBRARY_VEHICLES, ...DRIVE_CARS, ...PASS_RIDES ] );
+export const VEHICLES = new Set( [ 'go-kart', ...LIBRARY_VEHICLES, ...WORKS_RIDES, ...DRIVE_CARS, ...PASS_RIDES ] );
 // The tricks of a run's best jump, as drive.js names them (tricksOf), joined with " + ".
 const TRICK = /^(?:(\d{3,5}) Spin!|(?:Back|Front)flip(?:!| ×\d{1,3})|Barrel roll(?:!| ×\d{1,3})|Wall bounce(?: ×\d{1,3})?|Big air \d{1,3}\.\d s)$/;
 const MAX_TRICKS = 120;
@@ -87,6 +89,9 @@ export async function postScore( { request, env, url, limits, now } ) {
 	if ( run.runSeconds > ( now - visit.issuedAt ) / 1000 + SLACK || run.score > RATE * run.runSeconds ) throw bad();
 
 	const player = await authenticate( db, id, secret );
+	// A construction ride only with the achievement that unlocks it: the boards show each run's ride
+	// (achievements.js; nothing read for any other ride).
+	await checkRide( db, id, run.vehicle );
 	// One visit, one player: the first to post with it has it.
 	const [ , bound ] = await db.batch( [
 		db.prepare( 'INSERT INTO visits ( id, player_id, expires_at ) VALUES ( ?, ?, ? ) ON CONFLICT ( id ) DO NOTHING' ).bind( visit.id, id, visit.expiresAt ),

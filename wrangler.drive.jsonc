@@ -109,7 +109,11 @@
 		// boards and a time, while one address asking for past boards or players, or posting, in turn
 		// costs a few hundred thousand rows read a day at most (docs/world-drive.md, "What challenges
 		// cost").
-		{ "name": "CHALLENGE_MISSES", "namespace_id": "4806", "simple": { "limit": 10, "period": 60 } }
+		{ "name": "CHALLENGE_MISSES", "namespace_id": "4806", "simple": { "limit": 10, "period": 60 } },
+		// A visitor's asks for their achievements (worker/drive/achievements.js), by the same key: each
+		// reads a few dozen rows, and a page asks as its Achievements grid opens, so 6 a minute (and
+		// ACHIEVEMENT_LOOKS_PER_VISITOR_DAILY, 200, a day by DriveLimits).
+		{ "name": "ACHIEVEMENT_LOOKS", "namespace_id": "4808", "simple": { "limit": 6, "period": 60 } }
 	],
 	"migrations": [
 		{ "tag": "v1", "new_sqlite_classes": [ "DriveLimits" ] },

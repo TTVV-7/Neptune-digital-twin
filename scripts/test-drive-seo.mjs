@@ -28,6 +28,7 @@ import { fileURLToPath } from 'node:url';
 import { after, before, describe, test } from 'node:test';
 import { measureLoad, serveDist } from './drive-static.mjs';
 import { startVite } from './worker-harness.mjs';
+import { WORKS_RIDES } from '../src/drive-app/catalog.js';
 import { MOON_PAGES } from '../drive/site/moon.js';
 import { PLACES } from '../drive/site/places.js';
 import { sitePages } from '../drive/site/build.js';
@@ -859,6 +860,41 @@ describe( 'the dev server and the load', () => {
 		assert.match( read( chunk ), /Needs an Earth drive/ );
 		// (Its ghosts and links with it: the share, the link's card, the ghost's button.)
 		for ( const word of [ 'Challenge a friend', 'time to beat', 'world-drive.ghost' ] ) assert.ok( read( chunk ).includes( word ), word );
+
+	} );
+
+	test( 'the achievements\' grid is a chunk of its own, script and styles, and the construction rides\' models and pictures nothing the page loads first', () => {
+
+		const assets = readdirSync( join( DIST, 'assets' ) );
+		const chunk = assets.find( name => /^achievements-[\w-]+\.js$/.test( name ) );
+		const styles = assets.find( name => /^achievements-[\w-]+\.css$/.test( name ) );
+		assert.ok( chunk && styles, assets.join( ' ' ) );
+		const html = readFileSync( join( DIST, 'index.html' ), 'utf8' );
+		assert.ok( ! /assets\/achievements-/.test( html ), 'the page itself asks for them' );
+		const read = name => readFileSync( join( DIST, 'assets', name ), 'utf8' );
+		const game = assets.filter( name => /^(main|index)-[\w-]+\.(js|css)$/.test( name ) );
+		for ( const name of game ) {
+
+			const text = read( name );
+			for ( const word of [ 'Earned ', 'Unlocks the ', 'Pick a nickname to earn them', '#achievements' ] ) assert.ok( ! text.includes( word ), `${ name } has "${ word }"` );
+
+		}
+
+		assert.ok( game.some( name => name.endsWith( '.js' ) && read( name ).includes( chunk ) ), 'the game never imports the chunk' );
+		assert.match( read( chunk ), /Unlocks the / );
+		// The rides' models and pictures are published, and named only in library.json and the game's
+		// list of them: no page asks for one before it's picked.
+		const library = JSON.parse( readFileSync( join( DIST, 'library', 'library.json' ), 'utf8' ) );
+		for ( const id of WORKS_RIDES ) {
+
+			const item = library.find( entry => entry.id === id );
+			assert.ok( item && existsSync( join( DIST, 'library', item.file ) ) && existsSync( join( DIST, 'works', `${ id }.webp` ) ), id );
+			assert.ok( ! html.includes( item.file ), `${ id }'s model in the page` );
+
+		}
+
+		// library.json is fetched as the page starts: only what the page reads of each.
+		assert.ok( library.every( item => ! ( 'triangles' in item ) && ! ( 'category' in item ) && ! ( 'own' in item ) ) );
 
 	} );
 

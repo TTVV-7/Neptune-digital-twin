@@ -75,7 +75,8 @@ import { after, before, describe, test } from 'node:test';
 import { CLIENT_ID, makeKey, makeToken, serveKeys, startWorker, stripeSignature } from './worker-harness.mjs';
 import { sessionCookies } from '../worker/sessions.js';
 import { MAX_SCORE, RATE, SCORING, maxRate } from '../worker/drive/scores.js';
-import { DRIVE_CARS, LIBRARY_VEHICLES, PASS_RIDES } from '../src/drive-app/catalog.js';
+import { DRIVE_CARS, LIBRARY_VEHICLES, PASS_RIDES, WORKS_RIDES } from '../src/drive-app/catalog.js';
+import { PLACINGS } from '../src/drive-app/achievement-rules.js';
 import { addressOf } from '../worker/drive/settings.js';
 import { purchaseFor, purchaseSettings } from '../worker/drive/supporter.js';
 import { VISIT_HOURS, makeVisit } from '../worker/drive/visits.js';
@@ -2913,7 +2914,8 @@ describe( 'Username and password rules', () => {
 		const db = new DatabaseSync( ':memory:' );
 		db.exec( 'PRAGMA foreign_keys = ON' );
 		const migrations = new URL( '../worker/drive/migrations/', import.meta.url );
-		const files = readdirSync( migrations ).sort();
+		const all = readdirSync( migrations ).sort();
+		const files = all.slice( 0, all.indexOf( '0008_password_logins.sql' ) + 1 );
 		assert.deepEqual( files.slice( - 2 ), [ '0007_challenge_ghosts.sql', '0008_password_logins.sql' ] );
 		for ( const file of files.slice( 0, - 1 ) ) db.exec( readFileSync( new URL( file, migrations ), 'utf8' ) );
 		db.exec( `INSERT INTO accounts ( id, google_sub, email, name, created_at, last_login_at ) VALUES ( 7, '1001', 'alice@example.com', 'Alice', 1, 1 );
@@ -2932,6 +2934,26 @@ describe( 'Username and password rules', () => {
 		// An account deleted takes its login with it.
 		db.exec( 'DELETE FROM accounts WHERE id = 7' );
 		assert.equal( db.prepare( 'SELECT COUNT(*) AS n FROM logins' ).get().n, 0 );
+
+	} );
+
+	test( 'migration 0009 (achievements) goes on top of 0001 to 0008 with every player kept, their counts none yet, and a player removed taking their achievements with them', () => {
+
+		const db = new DatabaseSync( ':memory:' );
+		db.exec( 'PRAGMA foreign_keys = ON' );
+		const migrations = new URL( '../worker/drive/migrations/', import.meta.url );
+		const files = readdirSync( migrations ).sort();
+		assert.equal( files.at( - 1 ), '0009_achievements.sql' );
+		for ( const file of files.slice( 0, - 1 ) ) db.exec( readFileSync( new URL( file, migrations ), 'utf8' ) );
+		db.exec( `INSERT INTO players ( id, name, name_key, secret_hash, created_at, last_seen_at, xp, streak ) VALUES ( 'p', 'Alice', 'aiice', 's', 1, 1, 500, 4 )` );
+		db.exec( readFileSync( new URL( files.at( - 1 ), migrations ), 'utf8' ) );
+		assert.deepEqual( { ...db.prepare( 'SELECT xp, streak, tallies, parties, last_party FROM players' ).get() }, { xp: 500, streak: 4, tallies: '{}', parties: 0, last_party: '' } );
+		db.exec( `INSERT INTO achievements ( player_id, achievement, earned_at ) VALUES ( 'p', 'km-10', 1 )` );
+		// One row an achievement a player, and nothing of an address or a name.
+		assert.throws( () => db.exec( `INSERT INTO achievements ( player_id, achievement, earned_at ) VALUES ( 'p', 'km-10', 2 )` ) );
+		assert.deepEqual( db.prepare( 'SELECT name FROM pragma_table_info( \'achievements\' ) ORDER BY cid' ).all().map( row => row.name ), [ 'player_id', 'achievement', 'earned_at' ] );
+		db.exec( `DELETE FROM players WHERE id = 'p'` );
+		assert.equal( db.prepare( 'SELECT COUNT(*) AS n FROM achievements' ).get().n, 0 );
 
 	} );
 
@@ -4198,7 +4220,7 @@ describe( 'Play stats\' counts', () => {
 	test( 'every count a page can make fits in a post: MAX_COUNTS of the longest, and PLACES_PER_POST drop-in places, well under the Worker\'s 8 KB', () => {
 
 		// Every key of every metric, as the page names them, and a referring site as long as one can be.
-		const rides = [ 'go-kart', ...LIBRARY_VEHICLES, ...DRIVE_CARS, ...PASS_RIDES ];
+		const rides = [ 'go-kart', ...LIBRARY_VEHICLES, ...WORKS_RIDES, ...DRIVE_CARS, ...PASS_RIDES ];
 		const keysOf = {
 			load: [ 'a'.repeat( 30 ) + '.' + 'b'.repeat( 33 ) ], load_time: [ 'under 2 s', '2-5 s', '5-10 s', '10-20 s', 'over 20 s' ], load_ms: [ 'total' ],
 			dropin: [ ...SPOTS.map( spot => spot.id ), 'other', 'moon' ], ride: rides, play: rides, play_with_others: [ 'all' ], garage_open: [ 'all' ], garage_edit: LOOK_PARTS,
@@ -4710,7 +4732,7 @@ describe( 'World Drive challenges: the rules', () => {
 		const speedsIn = text => [ ...text.matchAll( /topSpeed: (\d+(?:\.\d+)?)/g ) ].map( m => Number( m[ 1 ] ) );
 		const rides = readdirSync( new URL( '../src/drive-app/rides/', import.meta.url ) ).filter( name => name.endsWith( '.js' ) ).map( name => read( `../src/drive-app/rides/${ name }` ) );
 		const specs = drive.match( /^const SPECS = \{\n([\s\S]*?)^\};$/m )[ 1 ];
-		const written = [ specs, read( '../src/drive-app/vehicles.js' ), read( '../src/drive-app/cars.js' ), ...rides ].flatMap( speedsIn );
+		const written = [ specs, read( '../src/drive-app/vehicles.js' ), read( '../src/drive-app/cars.js' ), read( '../src/drive-app/works.js' ), ...rides ].flatMap( speedsIn );
 		assert.ok( written.length >= 4 + DRIVE_CARS.length + PASS_RIDES.length, String( written ) );
 		// And every ride the game offers (the Worker takes a run of: the kart, the cars, the pass's rides
 		// and the library's), its own top speed found as the game tunes it (specFor in drive.js: its
@@ -4719,8 +4741,8 @@ describe( 'World Drive challenges: the rules', () => {
 		const byName = Object.fromEntries( [ ...specs.matchAll( /^\t'?([\w-]+)'?: \{ topSpeed: (\d+(?:\.\d+)?),/gm ) ].map( m => [ m[ 1 ], Number( m[ 2 ] ) ] ) );
 		const library = JSON.parse( read( '../public/library/library.json' ) );
 		const own = {};
-		// The cars: each entry's id, then its drive's top speed before the next id.
-		for ( const [ , id, rest ] of read( '../src/drive-app/cars.js' ).matchAll( /id: '([\w-]+)'([\s\S]*?)(?=id: '|$)/g ) ) {
+		// The cars and the construction rides: each entry's id, then its drive's top speed before the next id.
+		for ( const [ , id, rest ] of [ read( '../src/drive-app/cars.js' ), read( '../src/drive-app/works.js' ) ].join( '\n' ).matchAll( /id: '([\w-]+)'([\s\S]*?)(?=id: '|$)/g ) ) {
 
 			const speed = rest.match( /topSpeed: (\d+(?:\.\d+)?)/ );
 			if ( speed ) own[ id ] = Number( speed[ 1 ] );
@@ -4732,7 +4754,7 @@ describe( 'World Drive challenges: the rules', () => {
 		for ( const [ , id, tuning ] of read( '../src/drive-app/rides/index.js' ).matchAll( /id: '([\w-]+)'[^\n]*drive: (\w+)/g ) ) own[ id ] = tunings[ tuning ];
 		own[ 'go-kart' ] = Number( read( '../src/drive-app/vehicles.js' ).match( /id: 'go-kart',[\s\S]*?topSpeed: (\d+(?:\.\d+)?)/ )[ 1 ] );
 		for ( const id of LIBRARY_VEHICLES ) own[ id ] = library.find( entry => entry.id === id )?.drive?.topSpeed ?? byName[ id ] ?? byName.default;
-		const offered = [ 'go-kart', ...DRIVE_CARS, ...PASS_RIDES, ...LIBRARY_VEHICLES ];
+		const offered = [ 'go-kart', ...DRIVE_CARS, ...PASS_RIDES, ...LIBRARY_VEHICLES, ...WORKS_RIDES ];
 		for ( const id of offered ) assert.ok( Number.isFinite( own[ id ] ) && own[ id ] > 0, `no top speed found for ${ id }` );
 		assert.equal( Math.max( ...offered.map( id => own[ id ] ) ), TOP_SPEED, 'a ride is faster now: change TOP_SPEED in challenge-rules.js' );
 		assert.equal( Math.max( ...written ), TOP_SPEED, 'a top speed somewhere is faster now: change TOP_SPEED in challenge-rules.js' );
@@ -5270,8 +5292,11 @@ describe( 'World Drive challenges: the rules', () => {
 					id: 'writesPlayer0000', secret, visit, challenge: challenge.id, run, ms: timed.ms, passes: timed.passes, vehicle: 'go-kart', ghost: fairGhost( challenge, timed.ms, timed.passes ),
 				} ) } );
 				[ read, written ] = [ 0, 0 ];
-				const res = await postTime( { request, url: new URL( request.url ), env: { ...env, ...settings }, now: at, limits: { take: async () => ( { ok: true } ) }, ctx: { waitUntil: () => {} } } )
+				// (What it leaves to finish after its answer counted with it, not with the next post.)
+				const after = [];
+				const res = await postTime( { request, url: new URL( request.url ), env: { ...env, ...settings }, now: at, limits: { take: async () => ( { ok: true } ) }, ctx: { waitUntil: work => after.push( work ) } } )
 					.catch( err => new Response( JSON.stringify( err.extra ?? {} ), { status: err.status ?? 500 } ) );
+				await Promise.all( after );
 				assert.equal( res.status, status, await res.clone().text() );
 				return { written, read, body: await res.json() };
 
@@ -5282,8 +5307,10 @@ describe( 'World Drive challenges: the rules', () => {
 			t.diagnostic( `rows written by a time posted: a first ${ firstTime.written }, a new best ${ better.written }, one that isn't ${ slower.written }; read ${ firstTime.read }, ${ better.read }, ${ slower.read }` );
 			assert.deepEqual( [ firstTime.body.isNewBest, better.body.isNewBest, slower.body.isNewBest ], [ true, true, false ] );
 			// (A ghost's row has three index entries: its key, its run and its time, the last to find the
-			// slowest to let go when a challenge's ghosts are full.)
-			assert.ok( firstTime.written <= 16 && better.written <= 14 && slower.written <= 2, JSON.stringify( [ firstTime.written, better.written, slower.written ] ) );
+			// slowest to let go when a challenge's ghosts are full. A player's first time on any challenge
+			// writes one row more: their first challenge finished, achievements.js.)
+			assert.ok( firstTime.written <= 17 && better.written <= 14 && slower.written <= 2, JSON.stringify( [ firstTime.written, better.written, slower.written ] ) );
+			assert.equal( ( await raw.prepare( 'SELECT COUNT(*) AS n FROM achievements WHERE player_id = ? AND achievement = \'challenges-1\'' ).bind( 'writesPlayer0000' ).first() ).n, 1 );
 			// And what it reads, on a challenge keeping 1,240 slower ghosts: each ghost found by its key
 			// (none of the slower ones looked at), the rank in the board's order kept in the cache (the
 			// new best put into it, not the board's thousand read again).
@@ -6391,6 +6418,14 @@ describe( 'World Drive challenges', () => {
 		assert.equal( rows[ 0 ].first_at, CHALLENGE_DAY + 10 * MINUTE );
 		assert.equal( rows[ 0 ].created_at, CHALLENGE_DAY + 30 * MINUTE );
 		assert.equal( rows[ 0 ].visit, ann.visit.split( '.' )[ 1 ] );
+		// Her first time on a challenge is her first challenge finished (achievements.js), written as the
+		// time is, and only once however many times she posts.
+		assert.deepEqual( server.d1( `SELECT achievement FROM achievements WHERE player_id = '${ ann.id }'` ).map( r => r.achievement ), [ 'challenges-1' ] );
+		// A construction ride she hasn't earned is turned away (its ghost and its row would show it); the
+		// time she has stays as it was.
+		res = await post( ann, earthDay(), { run: fairRun( earthDay(), 4000 ), after: 31 * MINUTE, vehicle: 'hydrovac-truck' } );
+		assert.deepEqual( [ res.status, res.json.reason ], [ 403, 'ride' ] );
+		assert.equal( server.d1( `SELECT ms FROM challenge_times WHERE challenge_id = ${ earthDay().id }` )[ 0 ].ms, quick.ms );
 		// Others: the board in order, each with the leaderboard's level and title, and their own row.
 		const bea = await player( 'Bea Fast' );
 		res = await post( bea, earthDay(), { run: fairRun( earthDay(), 1000 ), vehicle: 'hypercar' } );
@@ -7028,6 +7063,21 @@ describe( 'World Drive challenges', () => {
 		assert.equal( after.length, before.length + 1 );
 		let place = 0;
 		for ( const row of after ) assert.equal( row.final_rank, row.owner ? null : ++ place, row.name );
+		// The placings those final places reach, written with them (achievements.js's placingQuery), from
+		// final_rank alone: each player's are what their final places on every finished board make, the
+		// owner's (no final_rank) none of them.
+		const placed = server.d1( `SELECT t.player_id AS id, p.name, ( SELECT group_concat( a.achievement ) FROM ( SELECT achievement FROM achievements WHERE player_id = t.player_id AND achievement IN ( ${ PLACINGS.map( a => `'${ a.id }'` ).join( ', ' ) } ) ORDER BY achievement ) a ) AS feats,
+			( SELECT json_group_array( json_array( r.final_rank, c.period ) ) FROM challenge_times r JOIN challenges c ON c.id = r.challenge_id WHERE r.player_id = t.player_id AND r.final_rank IS NOT NULL ) AS ranks
+			FROM challenge_times t JOIN players p ON p.id = t.player_id WHERE t.challenge_id = ${ yesterday.id }` );
+		assert.ok( placed.some( row => row.feats?.includes( 'daily-winner' ) ) );
+		for ( const row of placed ) {
+
+			const ranks = JSON.parse( row.ranks );
+			const want = PLACINGS.filter( a => ranks.some( ( [ rank, period ] ) => rank <= a.target && ( ! a.period || period.startsWith( `${ a.period }:` ) ) ) ).map( a => a.id ).sort().join( ',' );
+			assert.equal( row.feats ?? '', want, row.name );
+
+		}
+
 		assert.ok( server.d1( `SELECT final_at FROM challenges WHERE id = ${ yesterday.id }` )[ 0 ].final_at >= Date.UTC( 2026, 10, 17, 0, 1 ) );
 		// The week's and the month's go on.
 		assert.deepEqual( server.d1( 'SELECT period FROM challenges WHERE final_at IS NOT NULL ORDER BY id' ).map( r => r.period ), [ 'day:2026-11-16', 'day:2026-11-16' ] );
@@ -7101,6 +7151,8 @@ describe( 'World Drive challenges', () => {
 		const old = server.d1( `SELECT replaced_at, final_at FROM challenges WHERE id = ${ week.id }` )[ 0 ];
 		assert.deepEqual( [ old.replaced_at, old.final_at ], [ time + HOUR, time + HOUR ] );
 		assert.equal( server.d1( `SELECT final_rank FROM challenge_times WHERE challenge_id = ${ week.id } AND player_id = '${ kim.id }'` )[ 0 ].final_rank, 1 );
+		// First on a finished weekly board: the weekly podium, and with it the vac truck.
+		assert.ok( server.d1( `SELECT achievement FROM achievements WHERE player_id = '${ kim.id }'` ).some( r => r.achievement === 'weekly-podium' ) );
 		res = await post( kim, week, { run: fairRun( week, 3000 ), after: HOUR + MINUTE } );
 		assert.deepEqual( [ res.status, res.json.reason ], [ 403, 'challenge' ] );
 		assert.equal( ( await board( week.id, { time: time + 2 * HOUR } ) ).json.rows[ 0 ].name, 'Kim Week' );

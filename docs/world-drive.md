@@ -2255,16 +2255,19 @@ level-only colours.
 `POST /api/progress { id, secret, visit, report }` (`worker/drive/progress.js`), with the visit's
 token as scores are posted (`visits.js`'s `readVisit`) and the player's secret. The report is what
 was driven since the last: `{ id, km, air, drifts, pads, together, tricks, areas: [ cellOf names ],
-spots: [ SPOTS ids ], daily, days? }`: id the page's own for the report (8 to 40 letters, digits,
+spots: [ SPOTS ids ], daily, days?, feats? }`: id the page's own for the report (8 to 40 letters, digits,
 `_` or `-`), tricks the landed runs' XP, and only in a claim, days `{ xp, streak, day }`, the days'
-bonuses counted in the browser before the nickname. Anything the page couldn't send (a negative or
+bonuses counted in the browser before the nickname; feats `{ moon, looks, rides }`, when there's
+anything in it, the [achievements'](#achievements-and-rewards) counts only the page can tell. Anything the page couldn't send (a negative or
 non-number amount, a count that isn't whole, an area that isn't one, a spot that isn't one, over 200
 of either, an id or days that aren't) is a 400; a forged, changed, expired or another player's
 visit a 403 (`reason: 'visit'`), the wrong secret a 403 (`reason: 'player'`). The answer: `{ xp,
 own, level, gained, unlocked: [ rewards ], supporter, title, chosen, streakDay, streak, accepted: {
 areas, spots }, daily?: { streak, xp }, repeated? }`: xp and level the account's best (or the
 player's), own the player's own XP, title the one shown and chosen the one picked (`''` for the
-newest), streakDay and streak the last daily bonus's day and its days in a row. A report with
+newest), streakDay and streak the last daily bonus's day and its days in a row; earned the
+achievements the report reached, and to a report with nothing in it (or one sent again) feats, all
+the player's and their account's ([achievements](#achievements-and-rewards)). A report with
 nothing in it changes nothing, and is how the page asks where it stands as it starts.
 
 The page says what it drove, so the Worker can't know it's true. What it does is keep each report to
@@ -5478,6 +5481,320 @@ checked after a deploy with a chat app's link inspector (or `curl -s
 to change a visitor's times a day (300) and a visit's (100), and `CHALLENGE_GHOST_BUDGET` a
 challenge's ghosts (16,777,216 characters).
 
+## Achievements and rewards
+
+Badges for what a player has done, and eight construction rides to drive for some of them: a
+reason to come back after the first minute (a skid steer after 10 km, a telehandler for three days
+in a row, a concrete mixer for a first challenge), and something to show for a challenge placed in
+(the vac truck for a weekly podium). The list and its rules are `src/drive-app/achievement-rules.js`,
+which the page and the Worker both import (as `challenge-rules.js` and `levels.js` are), so the page
+shows what the Worker counts. The Worker keeps what's earned (`worker/drive/achievements.js`,
+migration `0009_achievements.sql`), and checks a construction ride wherever it shows to others.
+
+### What players see
+
+- **The grid.** **🏅 Achievements** on the profile card (the globe's panel, under the level, with
+  "3 / 25"), and **Achievements** in a locked construction ride's note, open it: a dialog of badges,
+  three across on a computer, one on a phone held upright, each with its name, its one line ("Drive
+  100 km"), a bar and how far toward it ("10.5 / 100 km", "1 / 10 drives", "0 / 1 finished"; for a
+  place on a board, "On a weekly board"), and once earned "Earned 17 Nov 2026" in gold. One that
+  unlocks a construction ride shows it, with its picture: "Unlocks the vac truck", or once earned
+  **Drive the skid steer**, which opens the Garage on it. Its own chunk (`achievements.js` and
+  `achievements.css`, 3.7 kB and 2.8 kB), loaded the first time it's opened: nothing of it is in the
+  first load. What it shows is the Worker's (below) plus what this browser has driven since its last
+  report; before a nickname, this browser's own counts, nothing earned, and "Pick a nickname to earn
+  them: what you've driven counts when you do."
+- **Toasts.** As one is earned, "Achievement: 100 km driven"; for one that unlocks a ride, then
+  "Unlocked: Skid steer" with **Garage** (pausing the drive, the Garage on that ride, as a level-up's
+  ride does). One after another, about four seconds each (one with a button its whole seven, for
+  the tap), and never over a challenge's countdown or run: they wait for its end (`showNotices` in `main.js`). Earned on another device, or before this
+  browser knew the player, they're not told again here; those earned meanwhile (a challenge's places,
+  written as its board ended) are told at the next visit. Before a nickname, what this browser's
+  counts reach is told once ("Achievement: First drive · pick a nickname to keep it", with **Pick
+  one**), and isn't told again when the nickname's claim earns it.
+- **Locked rides.** In the ride pickers each wears its achievement's chip ("🔒 10 km", "🔒 Weekly
+  top 3") where a level's car wears "Lv 8 · or Pass"; picked, it says "Finish a weekly challenge in
+  its top 3 to unlock the vac truck. See your Achievements." under the rides, and the ride doesn't
+  change. The Garage's tab has the chip, its banner "🔒 Finish a weekly challenge in its top 3 to
+  unlock" (no word on the pass, which doesn't give them), and a look picked on it says the same. A
+  ride saved before is the default ride until it's unlocked, as a level's car is. They come after
+  the pickup in the pickers, so the first minute shows what there is to earn.
+
+### The list
+
+25 achievements, in the grid's order. **Checked**: the Worker counts it from its own records.
+**Trusted**: only the page can say it (as it says what it drove for XP), so the Worker takes it within
+its caps.
+
+| Achievement | Goal | Counted from | | Unlocks |
+| --- | --- | --- | --- | --- |
+| First drive | Drive your first 250 m | km in progress reports | trusted | |
+| 10 km driven | Drive 10 km | km in progress reports | trusted | **Skid steer** |
+| 100 km driven | Drive 100 km | km in progress reports | trusted | **Wheel loader** |
+| 1,000 km driven | Drive 1,000 km | km in progress reports | trusted | |
+| One small step, Moon regular, Lunar legend | Drive on the Moon (1, 10, 50 times) | Moon drives (a drop-in there and 250 m driven) in reports | trusted | |
+| First challenge, 10 challenges, 50 challenges | Finish a challenge (1, 10, 50) | `challenge_times`: a time on the board | checked | **Concrete mixer** (1), **Dump truck** (10) |
+| Top 10, Podium, Winner | Finish a challenge in its top 10, top 3, first | `final_rank` on a finished board, any period | checked | **Bulldozer** (top 10) |
+| Daily winner | First on a daily | `final_rank` on a finished daily | checked | |
+| Weekly podium | Top 3 on a weekly | `final_rank` on a finished weekly | checked | **Vac truck** |
+| Monthly top 10 | Top 10 on a monthly | `final_rank` on a finished monthly | checked | |
+| Party time, Party regular | Drive in a party with someone else (1, 10 parties) | the party's room (`live.js`) | checked | **Road roller** (1) |
+| New look, Stylist | Change a look in the Garage (1, 25) | Garage choices, in reports | trusted | |
+| Test driver, Collector | Drive 3, 8 different rides (250 m in each) | ride ids, in reports | trusted | |
+| 3 days in a row, A week in a row, 30 days in a row | Drive on 3, 7, 30 UTC days in a row | the daily bonus's streak, by the Worker's clock | checked (the days); the 250 m driven each day is the page's word | **Telehandler** (3) |
+
+The rides were mapped so that the first comes in a first or second session (10 km is about ten
+minutes), the next for coming back (three days running, a first challenge, a party), and the last
+for the challenges' boards. **The Supporter Pass gives none of them**: as with levels' titles, badges
+and level-only colours, which the pass doesn't give either, they come only by earning them, so
+supporters and everyone else earn them alike (`rideUnlock` in `vehicles.js` says `pass: false`).
+
+### Where each count comes from, and how it's bounded
+
+- **Trusted counts ride on the progress reports** (`POST /api/progress`, [levels](#reports-and-how-cheating-is-limited)):
+  the report's own km (already capped by the time since the last report, 450 km/h of it), and a new
+  `feats: { moon, looks, rides }` (Moon drives, Garage changes, the ids of rides tried, each since
+  the last report; `checkTallies`: whole numbers, ride ids the game offers, a 400 otherwise). The
+  Worker adds them to the player's `players.tallies` (JSON: `{ km, moon, looks, rides: [ ids ],
+  streak, day, today }`), each held to a day's worth (`TALLY_DAY`): 500 km, 10 Moon drives, 10 Garage
+  changes and 4 new rides a UTC day, whatever the reports say. So 1,000 km takes at least two days of
+  a script (and more than two hours of reports at the time cap), 25 looks three days, 50 Moon drives
+  five. The claim (a new nickname's first report, carrying what was driven before it) is held to the
+  same: an hour's km at most, and a day's worth of each. Reading and writing them costs nothing more:
+  they're in the player's row, read and written by the report's own statements.
+- **Days in a row** are the daily bonus's streak (the Worker gives the bonus once a UTC day by its
+  own clock); the best streak is kept in the tallies, so an achievement stays when the streak breaks.
+  A player's streak from before achievements counts at their next report.
+- **Challenges finished** are counted where a player's first time on a challenge is written
+  (`postTime`, `finishedQuery`): whether their 1st, 10th or 50th time exists, found by the player's key,
+  never counting the rows. Times from before achievements are written the first time the player's grid
+  asks (`POST /api/achievements`).
+- **Placings** are written where a challenge's final places are (`finishQueries`, as its period ends
+  or the owner replaces it): `placingQuery` turns each final_rank (1 the fastest; the owner's runs,
+  kept off the boards, have none) into the placings it reaches, on any board or on that period's. The
+  page has no way to name a place: nothing it sends is read for them. Boards finished before
+  achievements have no placings (their final ranks are there; the console below can write them).
+- **Parties** are counted by the party's room: once two visits have said hello in a party, each
+  player there (not guests) has the party counted once (`creditParty`, after the answer), both the one
+  who made it and those who joined, and the same party isn't counted again as a page reconnects
+  (`players.last_party`). An area's room counts nothing.
+- **Earned** as each count passes its target (`crossed`): written in the report's own batch, only
+  if the report's update was the one taken (the player's time is the report's), one row an
+  achievement a player (`achievements`, `ON CONFLICT DO NOTHING`).
+
+### Following the player
+
+As levels show an account's best player, achievements are the account's: a player linked to an
+account (Google or a username and password, `accounts.js`, `logins.js`) has every achievement any of
+the account's players has earned, and the grid's counts are the most any of them has of each. So
+signing in on a second device and picking a nickname there brings the first device's achievements
+and rides, and what's earned on the second shows on the first, both ways. Each row stays the player's
+own (the owner's counts are players'), and each player's caps are its own. Before a nickname, nothing
+is kept but this browser's counts; the nickname's claim carries them.
+
+### The construction rides
+
+From the construction app's library (`public/library/`), driven as the pickup is (library items,
+`works.js` for World Drive's names, words and tuning): `models.js` stands each with its lowest point
+on the ground at its real size (the library's), and `drive.js` drives it. They're published with the
+World Drive site beside the pickup (`vite.drive.config.js`, `WORKS_RIDES` in `catalog.js`), loaded
+only when one is driven or looked at in the Garage (or driven by someone in your room), and their
+pictures were drawn once for World Drive the way the cars' are (`node scripts/drive-car-thumbs.mjs
+--works`, into `drive/public/works/`, committed), rather than the library's own (some on grey, some
+on nothing, each from its own angle).
+
+| Ride | Model (`public/library/`) | Source | Size | Download | Triangles | Top speed | Handling |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Skid steer | `skid-steer-loader-cad.glb` | our own CAD model | 3.1 × 1.8 m, 2.0 m tall | 218 kB | 32,900 | 30 km/h | Tiny and quick to turn; skid-steered, so it spins on the spot (110°/s standing) |
+| Telehandler | `telehandler-10k-stowed.glb` (boom stowed) | our own | 8.7 × 2.6 m, 2.6 m tall | 81 kB | 11,800 | 40 km/h | Long and steady, wide turns |
+| Concrete mixer | `concrete-mixer-truck.glb` | "Concrete Mixer Truck" by doty_aecom, CC BY 4.0 | 8.5 × 2.6 m, 3.8 m tall | 422 kB | 44,300 | 90 km/h | A road truck: slow away (2.2 m/s²), rolls on, wallows and shakes when it hits something |
+| Road roller | `roller-single-drum-84in.glb` | our own | 6.0 × 2.3 m, 3.1 m tall | 461 kB | 62,200 | 22 km/h | The slowest of all, barely thrown up by anything |
+| Wheel loader | `wheel-loader.glb` | "Wheel Loader" by doty_aecom, CC BY 4.0 | 8.3 × 2.8 m, 3.5 m tall | 371 kB | 31,500 | 45 km/h | Bends in the middle, so it turns tighter than its length (lock 42°) |
+| Dump truck | `articulated-dump-truck.glb` | "Articulated Dumptruck" by doty_aecom, CC BY 4.0 | 10.8 × 3.5 m, 4.1 m tall | 422 kB | 41,800 | 55 km/h | Six wheels and articulated: heavy, wide, shaking the most when it hits something |
+| Bulldozer | `crawler-dozer-20t.glb` | our own | 6.6 × 3.4 m, 3.3 m tall | 597 kB | 84,000 | 20 km/h | Tracks: grips hardest, turns on the spot (45°/s standing), slowest away (1.6 m/s²) |
+| Vac truck | `hydrovac-truck.glb` | our own | 11.1 × 3.8 m, 3.8 m tall | 456 kB | 55,200 | 95 km/h | Big, red and long: turns widest of them (85°/s at walking pace) |
+
+**How they were chosen**: the smaller file of each kind, nothing named after a maker, and each
+reading clearly as itself from the chase camera. The project's own CAD models (no licence to honour)
+where there's one, and three of doty_aecom's (CC BY 4.0, credited in `public/library/CREDITS.md`, the
+About box and under the picker, as the pickup is) for a wheel loader, an articulated dump truck and
+a concrete mixer. Left out: the motor grader (2.8 MB, and its credit names a real maker's model), the
+off-highway haul truck (1.9 MB, a real maker's machine by name, which `catalog.js` already keeps out),
+the Sketchfab skid steer (1.2 MB, against the CAD one's 218 kB), the CAD wheel loader (610 kB against
+371 kB), the telehandler with its boom (2.1 MB against the stowed one's 81 kB), the backhoe loaders
+(687 kB and 1.8 MB, their arms out behind) and the tandem rollers (1.2 and 2.3 MB). None needed
+simplifying or compressing again: the library's are already meshopt-compressed with WebP textures,
+the biggest 612 kB, all under the cars' 2 MB limit and a quarter of the pickup's 2.8 MB.
+
+**Handling** (`works.js`): all slower and heavier than the pickup (160 km/h): low top speeds, slow
+away, wide turns, barely thrown up by a hit (`launch` 0.5 to 0.85), squashing and shaking more when
+they hit something. The bulldozer's tracks and the skid steer's skid-steered wheels turn it on the
+spot: a new `pivot` in `drive.js`'s handling (°/s at a standstill, easing out by 3 m/s, where the
+wheels' own steering takes over; 0 for everything else, so nothing else changes). Their wheels don't
+turn (the CAD models' tyres are one mesh each side), as the pickup's don't. Their paint is the
+model's (the Garage says so): underglow, boost, trail and horn as any ride.
+
+**Checked where it shows to others.** A construction ride is driven by the page alone once it's
+unlocked there, but wherever it would show to others the Worker checks the achievement itself (one
+look by the player's key, only for a construction ride; nothing read for any other): a score posted
+in one (`POST /api/score`: the boards' vehicle field), a challenge time (`POST /api/challenges/time`:
+its board's row and its ghost) are turned away without it (403, `reason: 'ride'`, with the unlock's
+words), and a room (`live.js`) shows anyone without it in the default ride (the pickup), at hello and
+at each change of ride, from the achievements it read with the player's name. For testing, `?feats=all`
+on this computer (localhost or 127.0.0.1, `feats.js`, as `?pro=1`) unlocks them in the page alone.
+
+### The Worker's routes
+
+- `POST /api/progress` (levels') answers with `earned: [ ids ]`, the achievements that report reached,
+  and to an empty report (the page asking where it stands, as it starts and once linked to an
+  account) or one sent again, `feats: [ ids ]`, every one the player and their account have.
+- `POST /api/achievements { id, secret }`: `{ achievements: [ { id, at } ], counts: { km, moon, looks,
+  rides, streak, parties, challenges }, rides: [ unlocked construction rides ] }`, the player's and
+  their account's. JSON from the site itself (`checkSameOrigin`, 1 kB at most), a 400 for anything
+  but a player's id and secret, a 403 for the wrong secret; held to `ACHIEVEMENT_LOOKS` (Cloudflare's
+  rate limiter, 6 a minute by the challenges' keyed hash of the address's /48 and the day, before
+  anything's read) and `ACHIEVEMENT_LOOKS_PER_VISITOR_DAILY` (200 a day by `DriveLimits`, by the
+  /48), a 429 past either. Never cached anywhere shared (`no-store`): it's the player's own; the page
+  keeps an answer a minute.
+- `GET /api/admin/achievements` (the owner's, as `/api/admin/stats`: `ADMIN_EMAILS`, `ADMIN_LOOKS`):
+  `{ players, earners, achievements: [ { id, name, goal, checked, ride, players } ] }`, how many
+  players there are, how many have any, and how many have each. The admin page shows them as bars
+  with each one's share of the players, whether it's checked or trusted, and the ride it unlocks.
+
+### What's kept, and what isn't
+
+`achievements`: a player's id, an achievement's id and when, 25 rows a player at most, removed with
+the player. `players.tallies` (a few numbers, the ids of up to 31 rides and the day's counts),
+`players.parties` and `players.last_party` (a party's 7-letter code, so it isn't counted twice).
+Nothing of an address, a device or where anyone drove; the owner sees counts of players only.
+
+### What it costs
+
+The free plan (D1, 1 November 2026: 5 million rows read and 100,000 written a day; Workers 100,000
+requests; Durable Objects 100,000 requests) and the paid one (25 billion read and 50 million written
+a month included):
+
+| | Rows read | Rows written | Other |
+| --- | --- | --- | --- |
+| A report with something in it | none more (the tallies are in the player's row) | none more, and 1 an achievement earned (25 a player, ever) | |
+| An empty report (the page starting, or linking) | the account's achievements (a few to 25 a player) | none | |
+| A challenge time, a player's first on that challenge | up to 50 (their nth time, by key), usually 1 to 10 | 1 an achievement earned | |
+| A challenge's final places | its board's rows, once more (as its final ranks are written) | 1 a placing | |
+| A party joined with someone else | 1 or 2 | 1 to 3 (the count, its code, an achievement) | after the answer, from the room |
+| A score or a time in a construction ride | 1 to a few (the account's players' rows for that achievement) | none | nothing for any other ride |
+| The grid (`POST /api/achievements`) | about 30 to 100 (the account's players, their achievements, their times to 50) | none (or a few, once) | 1 Durable Object request (the day's count) |
+| The admin counts | every achievement row (the owner, rarely) | none | |
+
+At the day's 300 visits, about 300 grid views and 600 empty reports are some 40,000 rows read (under
+1 % of the free plan's) and 300 Durable Object requests (0.3 %); the achievements earned are a few
+hundred rows written. **One address** can ask for the grid 6 times a minute and 200 times a day: at
+the most rows an ask can read (20 of an account's players, 200 achievements, 50 times, about 270),
+54,000 rows a day, about 1 % of the free plan's reads, and no writes; its reports, times and parties
+were bounded already (levels' 30 s gap and `PROGRESS_POSTS`, the challenges' `CHALLENGE_MISSES` and
+daily caps, `LIVE_CONNECTS`), and achievements add at most 25 rows written a player, ever, and 3 a
+party joined. So one address stays well under a tenth of the free plan's daily reads and writes.
+Storage: about 40 bytes an achievement row and 300 a player's tallies.
+
+**The page's first load**: the shared rules (`achievement-rules.js`, needed there for the locks, the
+reports' counts and the toasts' words) and the construction rides' names and tuning (`works.js`)
+add 7.1 kB to the game's chunk (1,121.22 to 1,128.33 kB minified, 345.15 to 347.82 kB gzipped:
++2.7 kB) and a shared chunk of 5.0 kB (1.7 kB gzipped) it imports; the first stylesheet 11.22 to
+11.71 kB (the profile card's button and the locks' chips), the page's first script 13.70 to 13.83 kB
+(a name `catalog.js` exports). `library/library.json`, fetched as the page starts, lists the eight
+rides too but only what the page reads of each: 660 bytes to 3.3 kB. The rides' pictures (8 to 12 kB
+each, 84 kB in all) come with the ride picker's (`loading="lazy"`); their models (3.1 MB together)
+only when one is picked. The grid (3.7 kB of script, 1.9 kB gzipped, and 2.8 kB of styles) comes
+the first time it's opened; the build's test checks none of it is in the page or the game's chunk.
+
+### Measured
+
+On a 375 × 740 phone screen in Chromium's software renderer (SwiftShader, no GPU, on a machine
+shared with other test runs, so the times are rough), each ride picked from the pause menu on the
+test pad (`test-drive-levels-ui.mjs`, three runs, the machine busier for some than others):
+
+| Ride | Download | Triangles | Frame (middle of 60) | Its lowest point over the ground | 2 s of gas from a standstill | 1 s of steering, standing |
+| --- | --- | --- | --- | --- | --- | --- |
+| Skid steer | 223 kB | 32,884 | 39 to 65 ms | 0 | 6.4 m, 21 km/h | 101° |
+| Telehandler | 83 kB | 11,756 | 38 to 55 ms | 0 | 5.1 m, 17 km/h | 0 |
+| Concrete mixer | 432 kB | 44,310 | 65 to 109 ms | 0 | 4.4 m, 16 km/h | 0 |
+| Road roller | 472 kB | 62,160 | 69 to 99 ms | 0 | 3.4 m, 12 km/h | 0 |
+| Wheel loader | 379 kB | 31,506 | 57 to 91 ms | 1 cm | 4.7 m, 16 km/h | 0 |
+| Dump truck | 432 kB | 41,799 | 65 to 100 ms | 0 | 4.0 m, 14 km/h | 0 |
+| Bulldozer | 612 kB | 84,044 | 84 to 119 ms | 0 | 3.1 m, 10 km/h | 41° |
+| Vac truck | 467 kB | 55,162 | 64 to 93 ms | 0 | 4.6 m, 16 km/h | 0 |
+| *Go-kart* (for comparison) | built in code | 17,224 | 33 to 57 ms | 0 | 17.2 m, 58 km/h | 0 |
+| *Pickup* (the default ride) | 2,846 kB | 219,049 | 853 to 858 ms | -1 cm | 12 m, 42 km/h | 0 |
+
+So each draws within about twice the kart's time and a seventh to a twentieth of the pickup's (whose
+219,000 triangles in many draws are the software renderer's worst case), and downloads a fifth of it
+or less: none needed simplifying. A phone's GPU draws all of them in well under a frame.
+
+### How it's tested
+
+- `npm run test:drive-levels` (`scripts/test-drive-levels.mjs`): the rules as written (25, each
+  count known, every construction ride unlocked by one, the pass none; `checkTallies` turning away a
+  ride that isn't one, a count that isn't whole or is negative; a day's worth taken by `addTallies`
+  and again the next day; what `crossed` reaches; the grid's lines), then the Worker under `wrangler
+  dev`: the migration's columns and table; trusted counts with reports (the claim's hour of km and a
+  day's 10 Moon drives, 10 looks and 4 rides, five minutes' km more the same day at the time cap,
+  only what's left of the day's 500 km, the next UTC day's worth, earned once, 400s for what the page can't send, an
+  empty report's every one); three days in a row by the Worker's clock (earned on the third, kept
+  through a day off); challenges finished from the times as the grid asks, and placings from final
+  ranks alone (top 10, podium, winner, daily, weekly: the vac truck's), the rides refused (a 403
+  with `reason: 'ride'` and the unlock's words) on the leaderboard until earned and let through
+  after; following sign-in both ways (two players linked to one account each having the other's,
+  the grid's counts the account's best, the rows each player's own); the grid's route (its player,
+  `no-store`, 400s, 413, 405, another site's page, the day's cap from one address, the rate
+  limiter before anything's read); the owner's counts (every achievement, its players, nothing of
+  who, 401 and 403).
+- `npm run test:drive-worker`: migration 0009 on top of 0001 to 0008 with a player kept and their
+  counts none yet, one row an achievement, removed with the player; in the challenges' story a
+  player's first time writing their first challenge finished (and the rows a time writes, one more
+  for that), a construction ride's time turned away, yesterday's board's final places writing each
+  player's placings (the owner's none), and the replaced weekly's winner having the weekly podium;
+  the top speeds and the play stats' keys including the construction rides.
+- `npm run test:drive-live`: in a party, a construction ride shown as it is with its achievement,
+  as the pickup without it (or for a guest), at hello and at a change of ride; the party counted once
+  for each player in it (and its achievement written), not again as a page joins the same party
+  again, and not alone in one.
+- `npm run test:drive-levels-ui`: a locked construction ride's chip, picture and words in the picker
+  ("Finish a weekly challenge in its top 3 to unlock the vac truck. See your Achievements.", the ride
+  picked staying the same) and the Garage (its tab, its banner, a look on it); the grid from the
+  profile card (each earned one's date, how far toward the rest, the bars, the rides they unlock);
+  a report that earns two showing "Achievement: 10 km driven", "Unlocked: Skid steer" (whose
+  **Garage** opens the Garage on it, unlocked) and "Achievement: New look", in that order, nothing
+  told of what was earned before, and the ride driven from the pause menu; each construction ride
+  (with `?feats=all`) loading only when picked, on the ground, driving, the tracked ones turning on
+  the spot and the others not, with its download and frame time (the table above); and a phone
+  held upright and on its side and a computer (the chips inside their cards, the grid inside the
+  screen with no sideways scrolling), with pictures of each (`TEST_SCREENSHOTS`).
+- `npm run test:drive-ui`: the admin page's achievements (each one's players and share, checked or
+  trusted, the ride it unlocks; nothing signed out). `npm run test:drive-seo`: the grid a chunk of
+  its own, script and styles, none of its words in the page or the game's chunk; the rides' models
+  and pictures in the build, and `library.json` only what the page reads.
+
+What isn't tested in a browser: the toasts waiting out a challenge's run (`showNotices` asks the
+challenges' chunk for its run's phase; the run itself is tested in `test-drive-ui.mjs`).
+
+### Looking after it
+
+In the D1 console (as for [levels](#looking-after-levels)):
+
+```sql
+-- Who has the most (by player id), and a player's own.
+SELECT player_id, COUNT(*) AS n FROM achievements GROUP BY player_id ORDER BY n DESC LIMIT 20;
+SELECT achievement, datetime( earned_at / 1000, 'unixepoch' ) FROM achievements WHERE player_id = 'PLAYER_ID';
+
+-- Take a cheat's back (and their counts), so they're earned again.
+DELETE FROM achievements WHERE player_id = 'PLAYER_ID';
+UPDATE players SET tallies = '{}', parties = 0 WHERE id = 'PLAYER_ID';
+
+-- Write the placings of boards finished before achievements, from their final ranks.
+INSERT INTO achievements ( player_id, achievement, earned_at )
+SELECT t.player_id, 'top-10', c.final_at FROM challenge_times t JOIN challenges c ON c.id = t.challenge_id
+WHERE t.final_rank <= 10 ON CONFLICT DO NOTHING;
+```
+
 ## Settings
 
 In `wrangler.drive.jsonc` (`vars`, set on every deploy; change them there, not in the dashboard):
@@ -5504,7 +5821,7 @@ Settings → Variables and Secrets, or `npx wrangler secret put NAME -c wrangler
 | `TURNSTILE_SECRET` | The Turnstile widget's secret key |
 | `STRIPE_WEBHOOK_SECRET` | The Supporter Pass webhook's signing secret, `whsec_...`; buying stays off without it |
 | `SUPPORTER_EMAILS` | Optional, comma-separated: people with the pass without paying |
-| `ADMIN_EMAILS` | Comma-separated: the Google accounts that may see [the play stats](#play-stats) and [where people drop in](#where-people-drop-in), and choose [challenges](#the-owners-controls), at `/admin.html` |
+| `ADMIN_EMAILS` | Comma-separated: the Google accounts that may see [the play stats](#play-stats) and [where people drop in](#where-people-drop-in), choose [challenges](#the-owners-controls) and see how many players have each [achievement](#achievements-and-rewards), at `/admin.html` |
 
 `keep_vars` is on, so anything set in the dashboard that isn't in `vars` survives a deploy. A few
 more aren't in `vars` and needn't be set; add them in the dashboard (plain text) to change them:
@@ -5521,18 +5838,20 @@ more aren't in `vars` and needn't be set; add them in the dashboard (plain text)
 | `DROPIN_ASKS_PER_VISIT` | twice `DROPIN_PLACES_PER_VISIT` (20) | How many times a day DriveLimits is asked about a visit's drop-in places at most |
 | `CHALLENGE_TIMES_PER_VISITOR_DAILY` | 300 | [Challenge](#challenges) times a visitor may post a day (an IPv6 visitor by its /48) |
 | `CHALLENGE_TIMES_PER_VISIT` | 100 | [Challenge](#challenges) times a visit may post (what one robot check buys) |
+| `ACHIEVEMENT_LOOKS_PER_VISITOR_DAILY` | 200 | Asks a visitor (by the /48) may make a day for their [achievements' grid](#achievements-and-rewards) |
 | `CHALLENGE_GHOST_BUDGET` | 16,777,216 (16 MB) | The most of its [ghosts](#challenges)' text a challenge keeps (characters, which are bytes); past it a new best lets the slowest kept ghosts go to make room, or is kept without its own |
 
-Seven rate limiters are `ratelimits` in `wrangler.drive.jsonc` (Cloudflare's, which cost no Durable
+Eight rate limiters are `ratelimits` in `wrangler.drive.jsonc` (Cloudflare's, which cost no Durable
 Object request): `LIVE_CONNECTS` (each visit's connections to rooms, 20 a minute),
 `PROGRESS_POSTS` (each player's [level](#levels) reports and title changes, 10 a minute),
 `STATS_POSTS` (each visit's posts of [play stats](#play-stats), 6 a minute), `ADMIN_LOOKS` (each
 admin account's asks for the admin page's stats, [drop-in places](#where-people-drop-in) and
 challenges, 30 a minute), `CHALLENGE_LOOKS` (each address's asks for [challenges'](#challenges)
 lists and boards and its times posted, 60 a minute), `CHALLENGE_MISSES` (those of its lists and
-boards that miss the cache and read D1, 10 a minute) and `PASSWORD_TRIES` (each address's
+boards that miss the cache and read D1, 10 a minute), `PASSWORD_TRIES` (each address's
 [sign-ins with a password, checks of one and account changes](#guessing-and-how-its-slowed), 10 a
-minute), each address (an IPv6 one by its /48) counted by a keyed hash of it and the day, never as
+minute) and `ACHIEVEMENT_LOOKS` (each address's asks for its [achievements](#achievements-and-rewards),
+6 a minute), each address (an IPv6 one by its /48) counted by a keyed hash of it and the day, never as
 it is.
 
 The leaderboard's, levels' and the Supporter Pass's database is the `DB` binding in
@@ -6088,6 +6407,13 @@ src/drive-app/progress.js    levels in the page: counting what's driven, reporti
                              here before a nickname), the level the Garage's locks follow
 src/drive-app/profile.js     what levels show: the XP bar and pop-ups, a level-up, the profile card,
                              the whole track (levels.css)
+src/drive-app/achievement-rules.js  achievements' rules, which the page and the Worker share: the
+                             list, the counts and their day's caps, the construction rides each
+                             unlocks; feats.js the achievements this visitor has (the rides' locks)
+src/drive-app/achievements.js  the Achievements grid, a chunk of its own loaded when it's opened
+                             (achievements.css its look)
+src/drive-app/works.js       the construction rides: names, words and tuning (their models the
+                             library's, catalog.js's WORKS_RIDES; pictures in drive/public/works/)
 src/drive-app/live-protocol.js  driving with others: the rooms, messages, limits and checks the page
                              and the Worker share, and who's driving now's dots (where, how many)
 src/drive-app/live.js        the page's connection to its room: which room, sending the car, what
@@ -6102,12 +6428,14 @@ src/drive-app/stats.js       the play stats in the page: counting, posting with 
                              stats-protocol.js what may be counted (the page and the Worker share
                              it); dropin-cells.js the grid drop-in places are counted by
 drive/public/admin.html      the owner's page: the play stats, where people drop in (its maps
-                             drawn from /sea/mask.bin and /moon/colour.webp) and the challenges
+                             drawn from /sea/mask.bin and /moon/colour.webp), the challenges and
+                             how many players have each achievement
 vite.drive.config.js         the build: no key, only the offered vehicles copied from public/, and
                              drive/public/ (the cars) as its own public folder; in dev, /api passed
                              on to DRIVE_API, WebSockets too
 drive/public/cars/           the cars' models, pictures, cars.json and CREDITS.md
 scripts/add-drive-car.mjs    imports a car from Sketchfab into it; drive-car-thumbs.mjs draws the pictures
+                             (--works: the construction rides', into drive/public/works/)
 drive/public/                also robots.txt, site.webmanifest, the icons and og/ (the link cards,
                              which scripts/drive-site-images.mjs draws with the icons), and
                              places/towns.tsv (Natural Earth's towns, which scripts/make-towns.mjs
@@ -6120,7 +6448,9 @@ worker/drive/                the Worker: index.js (routes), limits.js (caps, the
                              Google), supporter.js (the webhook, who has it); driving
                              with others: live.js (/api/live and the rooms, DriveRoom, and
                              /api/online, who's driving now); levels: progress.js
-                             (/api/progress, titles); the owner's page: stats.js (the play stats),
+                             (/api/progress, titles); achievements: achievements.js
+                             (/api/achievements, what's earned and where, a construction ride's
+                             check); the owner's page: stats.js (the play stats),
                              dropins.js (where people drop in), admin.js (who may see them, how
                              often); challenges.js (picking and fixing them, their boards, times
                              and ghosts, a friend's link and its page's preview card, the owner's
@@ -6143,6 +6473,13 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
 
 ## Known limits
 
+- [Achievements](#achievements-and-rewards) the page counts (km, Moon drives, Garage changes,
+  rides tried) are its word, held to a day's worth each: a script reporting the most the caps allow
+  earns the 1,000 km and its wheel loader in two days, not a moment. A construction ride can be
+  driven alone by a page changed to unlock it (as the pass's can): only where it would show to
+  others is it checked. Boards finished before achievements have no placings until the owner writes
+  them ([Looking after it](#achievements-and-rewards)). The toasts' wait for a challenge's run isn't
+  tested in a browser.
 - Challenges on the Earth are laid out without seeing its streets (Google's tiles have none in
   them): a gate can be among buildings with no street to it, or a sprint lead off the road it began
   on; its zone is wide and every ride can fly, but such a route is slower by the streets than by the

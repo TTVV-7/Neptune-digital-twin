@@ -613,6 +613,59 @@ describe( 'Driving with others', () => {
 
 	} );
 
+	test( 'a construction ride shows only with the achievement that unlocks it (the others see the pickup), and a party with someone else is counted once for each player in it', async () => {
+
+		// A player and the visit they were made with, 10 km driven (the skid steer's achievement).
+		const made = async name => {
+
+			const visit = await visitToken();
+			const res = await post( '/api/player', { name, visit }, { 'CF-Connecting-IP': `198.51.100.${ ++ addresses }` } );
+			assert.equal( res.status, 201, JSON.stringify( res.json ) );
+			return { ...res.json, visit };
+
+		};
+
+		const digger = await made( 'Digger Dee' );
+		const plain = await made( 'Plain Pat' );
+		const driven = await post( '/api/progress', { id: digger.id, secret: digger.secret, visit: digger.visit, report: { km: 10 } } );
+		assert.deepEqual( driven.json.earned, [ 'first-drive', 'km-10' ] );
+		const room = partyRoom();
+		const watcher = await join( server, room );
+		const credentials = who => ( { id: who.id, secret: who.secret } );
+		// Earned: shown as it is. Not earned, or a guest: the default ride, whatever the page says.
+		const dee = await join( server, room, { player: credentials( digger ), vehicle: 'skid-steer-loader-cad' } );
+		assert.equal( ( await watcher.take( 'join' ) ).player.vehicle, 'skid-steer-loader-cad' );
+		const pat = await join( server, room, { player: credentials( plain ), vehicle: 'hydrovac-truck' } );
+		assert.equal( ( await watcher.take( 'join' ) ).player.vehicle, 'pickup-truck' );
+		const guest = await join( server, room, { vehicle: 'wheel-loader' } );
+		assert.equal( ( await watcher.take( 'join' ) ).player.vehicle, 'pickup-truck' );
+		// And a ride changed later (look) the same.
+		pat.send( { t: 'look', vehicle: 'crawler-dozer-20t', look: HELLO.look } );
+		assert.equal( ( await watcher.take( 'look' ) ).vehicle, 'pickup-truck' );
+		dee.send( { t: 'look', vehicle: 'go-kart', look: HELLO.look } );
+		assert.equal( ( await watcher.take( 'look' ) ).vehicle, 'go-kart' );
+		// The party had others in it: each player counted once (in the background, after the answers),
+		// and the party achievement theirs; the guest has nothing to count.
+		const counted = () => server.d1( `SELECT id, parties FROM players WHERE id IN ( '${ digger.id }', '${ plain.id }' ) ORDER BY id` );
+		for ( let tries = 0; counted().some( row => row.parties < 1 ) && tries < 50; tries ++ ) await new Promise( resolve => setTimeout( resolve, 100 ) );
+		assert.deepEqual( counted().map( row => row.parties ), [ 1, 1 ] );
+		assert.equal( server.d1( `SELECT COUNT(*) AS n FROM achievements WHERE achievement = 'party-1' AND player_id IN ( '${ digger.id }', '${ plain.id }' )` )[ 0 ].n, 2 );
+		// Joining the same party again (a reconnect) doesn't count it again.
+		await pat.close();
+		await watcher.take( 'leave' );
+		const again = await join( server, room, { player: credentials( plain ) } );
+		await watcher.take( 'join' );
+		await new Promise( resolve => setTimeout( resolve, 500 ) );
+		assert.equal( server.d1( `SELECT parties FROM players WHERE id = '${ plain.id }'` )[ 0 ].parties, 1 );
+		// Alone in a party, or in an area's room, nothing is counted.
+		const lone = await made( 'Lone Lou' );
+		const alone = await join( server, partyRoom(), { player: credentials( lone ) } );
+		await new Promise( resolve => setTimeout( resolve, 500 ) );
+		assert.equal( server.d1( `SELECT parties FROM players WHERE id = '${ lone.id }'` )[ 0 ].parties, 0 );
+		await Promise.all( [ watcher.close(), dee.close(), guest.close(), again.close(), alone.close() ] );
+
+	} );
+
 	test( 'a supporter\'s player has a ⭐ by its name', async () => {
 
 		const room = partyRoom();

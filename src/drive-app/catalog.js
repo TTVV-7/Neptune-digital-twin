@@ -5,6 +5,19 @@
 // in a public game. Nor the haul truck (haul-truck-hd465): it's a real maker's machine, named in
 // its credit.
 export const LIBRARY_VEHICLES = [ 'pickup-truck' ];
+// The ride a new visitor starts in (panel.js), and the one a room shows for a ride its driver can't
+// show (worker/drive/live.js).
+export const DEFAULT_RIDE = 'pickup-truck';
+
+// The construction rides (works.js), also library vehicles, each unlocked by an achievement
+// (achievement-rules.js's RIDE_FEATS): published with the World Drive site as the pickup is, and
+// loaded only when one is driven or looked at in the Garage. The project's own CAD models and three
+// of doty_aecom's (CC BY, credited in public/library/CREDITS.md and under the picker), the smaller
+// of each kind: none named after a maker.
+export const WORKS_RIDES = [
+	'skid-steer-loader-cad', 'telehandler-10k-stowed', 'concrete-mixer-truck', 'roller-single-drum-84in',
+	'wheel-loader', 'articulated-dump-truck', 'crawler-dozer-20t', 'hydrovac-truck',
+];
 
 // The Supporter Pass rides (src/drive-app/rides/), by id. Here too so the Worker can accept their
 // runs on the leaderboard without importing the models.

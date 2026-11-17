@@ -30,6 +30,9 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { LEVEL_XP, RIDES, XP, areaOf, levelOf, nextReward, rewardsAt, rewardsBetween } from '../src/drive-app/levels.js';
+import { ACHIEVEMENTS } from '../src/drive-app/achievement-rules.js';
+import { WORKS_RIDES } from '../src/drive-app/catalog.js';
+import { WORKS } from '../src/drive-app/works.js';
 import { makeVisit } from '../worker/drive/visits.js';
 import { startVite, startWorker } from './worker-harness.mjs';
 
@@ -780,8 +783,9 @@ describe( 'World Drive levels: the cars they bring', () => {
 		const pass = await at( 0, '?pro=1' );
 		try {
 
-			assert.equal( await pass.locator( '#globe-ui .vehicle.locked' ).count(), 0 );
-			assert.equal( await pass.locator( '#globe-ui .vehicle .level-chip:visible' ).count(), 0 );
+			// (All but the construction rides, which only achievements unlock.)
+			assert.deepEqual( await pass.locator( '#globe-ui .vehicle.locked' ).evaluateAll( cards => cards.map( card => card.dataset.id ) ), WORKS_RIDES );
+			assert.equal( await pass.locator( '#globe-ui .vehicle .level-chip:not(.feat-chip):visible' ).count(), 0 );
 			await card( pass, 'Formula racer' ).click();
 			assert.equal( await pass.locator( '#globe-ui .vehicle.picked b' ).textContent(), 'Formula racer' );
 			// A level-up that brings a car a supporter has: said to be theirs already.
@@ -908,6 +912,324 @@ describe( 'World Drive levels on a phone, and with no Worker', () => {
 		} finally {
 
 			await page.context().close();
+
+		}
+
+	} );
+
+} );
+
+// --- achievements and the construction rides (achievement-rules.js, achievements.js, works.js) ---
+
+describe( 'World Drive achievements in the page', () => {
+
+	// Each run's own names (the Worker's database may be a run before's).
+	const RUN = String( Date.now() % 10000 ).padStart( 4, '0' );
+
+	// A report for `who` straight to the Worker, as a page sends one.
+	const reportFor = ( who, report ) => fetch( `${ worker.base }/api/progress`, {
+		method: 'POST', headers: { Origin: worker.base, 'Content-Type': 'application/json', 'CF-Connecting-IP': '198.51.100.250' },
+		body: JSON.stringify( { id: who.id, secret: who.secret, visit: who.visit, report } ),
+	} ).then( res => res.json() );
+	// Every toast's words, however briefly it showed.
+	const watchToasts = page => page.evaluate( () => {
+
+		window.toastTexts = [];
+		const toast = document.getElementById( 'toast' );
+		new MutationObserver( () => ! toast.hidden && window.toastTexts.push( toast.firstChild?.textContent ?? toast.textContent ) ).observe( toast, { childList: true, attributes: true, attributeFilter: [ 'hidden' ] } );
+
+	} );
+
+	test( 'a locked construction ride says what unlocks it, in the picker and the Garage; the grid shows each achievement, how far toward it and when it was earned', async () => {
+
+		const ann = await makePlayer( `Feat Ann ${ RUN }` );
+		const claim = await reportFor( ann, { km: 10.5, feats: { moon: 1 } } );
+		assert.deepEqual( claim.earned, [ 'first-drive', 'km-10', 'moon-1' ] );
+		const page = await levelsPage( { visit: await visitToken(), player: ann } );
+		try {
+
+			await watchToasts( page );
+			await page.waitForFunction( n => document.querySelector( '#globe-ui .profile .feat-count' )?.textContent.startsWith( `${ n } /` ), 3, { timeout: 20000 } );
+			// Earned on another page before: nothing told here.
+			assert.deepEqual( await page.evaluate( () => window.toastTexts ), [] );
+			// The picker: the skid steer (10 km) theirs, the vac truck locked with its chip.
+			const skid = page.locator( '#globe-ui .vehicles .vehicle[data-id="skid-steer-loader-cad"]' );
+			const vac = page.locator( '#globe-ui .vehicles .vehicle[data-id="hydrovac-truck"]' );
+			assert.equal( await skid.evaluate( b => b.classList.contains( 'locked' ) ), false );
+			assert.equal( await vac.evaluate( b => b.classList.contains( 'locked' ) ), true );
+			assert.equal( await vac.locator( '.feat-chip' ).textContent(), '🔒 Weekly top 3' );
+			assert.match( await vac.locator( 'img' ).getAttribute( 'src' ), /\/works\/hydrovac-truck\.webp$/ );
+			await vac.scrollIntoViewIfNeeded();
+			await vac.click();
+			const note = page.locator( '#globe-ui .ride-note' ).first();
+			assert.equal( await note.textContent(), 'Finish a weekly challenge in its top 3 to unlock the vac truck. See your Achievements.' );
+			// The ride picked stays the one it was.
+			assert.equal( await page.evaluate( () => window.drive.panel.vehicle.id ), 'go-kart' );
+			await shot( page, 'feats-0-picker-locked' );
+			// The Garage: its tab's chip and banner say the same; picking a look on it says so too.
+			await page.locator( '#globe-ui .garage-open' ).click();
+			const garage = page.locator( '#garage' );
+			await garage.waitFor();
+			await garage.locator( '.ride-tab[data-id="hydrovac-truck"]' ).click();
+			assert.equal( await garage.locator( '.ride-tab[data-id="hydrovac-truck"] .level-chip' ).textContent(), '🔒 Weekly top 3' );
+			assert.equal( await garage.locator( '.locked-banner span' ).textContent(), '🔒 Finish a weekly challenge in its top 3 to unlock' );
+			assert.equal( await garage.locator( '.locked-banner button' ).isVisible(), false );
+			await garage.locator( '[data-part="glow"] .choice' ).nth( 1 ).click();
+			assert.equal( await garage.locator( '.level-note' ).textContent(), 'Finish a weekly challenge in its top 3 to unlock the vac truck.' );
+			assert.equal( await page.locator( '#pass-sheet[open], dialog.pass[open]' ).count(), 0 );
+			await page.waitForTimeout( 800 );
+			await shot( page, 'feats-1-garage-locked' );
+			await garage.locator( '.done' ).click();
+			// The grid, from the profile card: three earned with their date, the rest with how far.
+			assert.equal( await page.locator( '#globe-ui .profile .achievements-open .feat-count' ).textContent(), `3 / ${ ACHIEVEMENTS.length }` );
+			await page.locator( '#globe-ui .profile .achievements-open' ).click();
+			const grid = page.locator( '#achievements' );
+			await grid.waitFor();
+			await page.waitForFunction( () => document.querySelector( '#achievements .feat[data-id="km-10"] .state' )?.textContent.startsWith( 'Earned ' ), null, { timeout: 10000 } );
+			const date = new Date().toLocaleDateString( 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' } );
+			for ( const id of [ 'first-drive', 'km-10', 'moon-1' ] ) assert.equal( await grid.locator( `.feat[data-id="${ id }"] .state` ).textContent(), `Earned ${ date }`, id );
+			assert.deepEqual( await grid.locator( '.feat.earned' ).evaluateAll( items => items.map( item => item.dataset.id ) ), [ 'first-drive', 'km-10', 'moon-1' ] );
+			assert.equal( await grid.locator( '.feat[data-id="km-100"] .state' ).textContent(), '10.5 / 100 km' );
+			assert.equal( await grid.locator( '.feat[data-id="moon-10"] .state' ).textContent(), '1 / 10 drives' );
+			assert.equal( await grid.locator( '.feat[data-id="weekly-podium"] .state' ).textContent(), 'On a weekly board' );
+			assert.equal( await grid.locator( '.feat[data-id="weekly-podium"] .reward' ).textContent(), 'Unlocks the vac truck' );
+			assert.equal( await grid.locator( '.feat[data-id="km-10"] button.reward' ).textContent(), 'Drive the skid steer' );
+			assert.equal( await grid.locator( '.feat' ).count(), ACHIEVEMENTS.length );
+			assert.equal( await grid.locator( '.feat[data-id="km-100"] .bar i' ).evaluate( i => parseFloat( i.style.width ) ), 10.5 );
+			await shot( page, 'feats-2-grid' );
+			await grid.locator( '.close' ).click();
+			assert.deepEqual( page.errors, [] );
+
+		} finally {
+
+			await page.context().close();
+
+		}
+
+	} );
+
+	test( 'an achievement earned says so in a toast, and one that unlocks a ride says that with the Garage a tap away; the ride is unlocked at once', async () => {
+
+		const bo = await makePlayer( `Feat Bo ${ RUN }` );
+		assert.deepEqual( ( await reportFor( bo, { km: 9.9 } ) ).earned, [ 'first-drive' ] );
+		const page = await levelsPage( { visit: await visitToken(), player: bo } );
+		try {
+
+			await watchToasts( page );
+			await page.waitForFunction( n => document.querySelector( '#globe-ui .profile .feat-count' )?.textContent.startsWith( `${ n } /` ), 1, { timeout: 20000 } );
+			await dropIn( page );
+			// Past 10 km and a Garage change (as driving and the Garage count them), reported half a
+			// minute after the last (the Worker's gap).
+			await page.evaluate( () => {
+
+				window.drive.progress.unsent.km += 0.2;
+				window.drive.progress.look();
+
+			} );
+			for ( let tries = 0; tries < 40 && ! page.reports.some( r => r.body?.earned?.length ); tries ++ ) {
+
+				await page.evaluate( () => window.drive.progress.report() );
+				await page.waitForTimeout( 2000 );
+
+			}
+
+			assert.deepEqual( page.reports.find( r => r.body?.earned?.length )?.body.earned, [ 'km-10', 'look-1' ], JSON.stringify( page.reports.map( r => [ r.status, r.body?.earned ] ) ) );
+
+			// The unlock's toast, with the Garage a tap away: on the skid steer, unlocked.
+			await page.waitForFunction( () => document.getElementById( 'toast' ).textContent.startsWith( 'Unlocked: Skid steer' ), null, { timeout: 30000 } ).catch( async err => {
+
+				throw new Error( `${ err.message }: ${ JSON.stringify( await page.evaluate( () => window.toastTexts ) ) }` );
+
+			} );
+			assert.equal( await page.locator( '#toast .toast-action' ).textContent(), 'Garage' );
+			await page.locator( '#toast .toast-action' ).click();
+			const garage = page.locator( '#garage' );
+			await garage.waitFor();
+			assert.equal( await page.evaluate( () => window.drive.mode ), 'paused' );
+			assert.equal( await garage.locator( '.ride-tab[aria-pressed="true"]' ).getAttribute( 'data-id' ), 'skid-steer-loader-cad' );
+			assert.equal( await garage.locator( '.locked-banner' ).isVisible(), false );
+			await garage.locator( '.done' ).click();
+			await page.waitForFunction( () => window.toastTexts.includes( 'Achievement: New look' ), null, { timeout: 30000 } );
+			await shot( page, 'feats-3-toast' );
+			assert.deepEqual( await page.evaluate( () => window.toastTexts ), [ 'Achievement: 10 km driven', 'Unlocked: Skid steer', 'Achievement: New look' ] );
+			assert.equal( await page.locator( '#globe-ui .profile .feat-count' ).textContent(), `3 / ${ ACHIEVEMENTS.length }` );
+			assert.deepEqual( await page.evaluate( () => window.drive.notices ), [] );
+			// In the pause menu, the skid steer is no longer locked: driven from there.
+			await page.locator( '#pause' ).waitFor();
+			const skid = page.locator( '#pause .vehicle[data-id="skid-steer-loader-cad"]' );
+			assert.equal( await skid.evaluate( b => b.classList.contains( 'locked' ) ), false );
+			await skid.click();
+			await page.waitForFunction( () => window.drive.mode === 'driving' && window.drive.driver.entry.state.name === 'Skid steer', null, { timeout: 60000 } );
+			assert.deepEqual( page.errors, [] );
+
+		} finally {
+
+			await page.context().close();
+
+		}
+
+	} );
+
+	test( 'each construction ride, unlocked: loads only when picked, stands on the ground, drives, the tracked ones turning on the spot; what each downloads and costs a frame', async () => {
+
+		// Every achievement, on this computer only (feats.js's ?feats=all): the page's locks alone.
+		const page = await levelsPage( { query: '?feats=all', viewport: PHONE, touch: true } );
+		try {
+
+			const fetched = new Map();
+			page.on( 'response', async res => {
+
+				const path = new URL( res.url() ).pathname;
+				if ( /^\/library\/.+\.glb$/.test( path ) ) fetched.set( path, ( await res.body().catch( () => Buffer.alloc( 0 ) ) ).length );
+
+			} );
+			// On the globe nothing of them is loaded: no model (their pictures load as the picker shows them).
+			assert.deepEqual( [ ...fetched.keys() ], [] );
+			await dropIn( page );
+			const results = {};
+			// And the pickup and the kart after them, to set their frame times beside.
+			const REFERENCE = { 'pickup-truck': 'Pickup', 'go-kart': 'Go-kart' };
+			for ( const id of [ ...WORKS_RIDES, ...Object.keys( REFERENCE ) ] ) {
+
+				await page.keyboard.press( 'Escape' );
+				await page.locator( '#pause' ).waitFor();
+				const card = page.locator( `#pause .vehicle[data-id="${ id }"]` );
+				assert.equal( await card.evaluate( b => b.classList.contains( 'locked' ) ), false, id );
+				await card.scrollIntoViewIfNeeded();
+				await card.click();
+				const name = REFERENCE[ id ] ?? WORKS.find( w => w.id === id ).name;
+				await page.waitForFunction( ride => window.drive.mode === 'driving' && window.drive.driver.entry.state.name === ride, name, { timeout: 60000 } );
+				results[ id ] = await page.evaluate( async () => {
+
+					const { driver: d } = window.drive;
+					const { pivot } = d.entry;
+					const frame = () => new Promise( resolve => requestAnimationFrame( resolve ) );
+					// Settled on the test pad's flat ground: its lowest point there.
+					for ( const code of [ ...d.keys ] ) d.release( code );
+					for ( let i = 0; i < 20; i ++ ) await frame();
+					pivot.updateMatrixWorld( true );
+					let low = Infinity;
+					pivot.traverse( o => {
+
+						if ( ! o.isMesh ) return;
+						const position = o.geometry.attributes.position;
+						const v = { x: 0, y: 0, z: 0 };
+						const e = o.matrixWorld.elements;
+						for ( let i = 0; i < position.count; i += 7 ) {
+
+							v.x = position.getX( i ); v.y = position.getY( i ); v.z = position.getZ( i );
+							low = Math.min( low, e[ 1 ] * v.x + e[ 5 ] * v.y + e[ 9 ] * v.z + e[ 13 ] );
+
+						}
+
+					} );
+					const ground = d.y;
+					// Its frame time, the middle of 60 frames.
+					const times = [];
+					let last = performance.now();
+					for ( let i = 0; i < 61; i ++ ) {
+
+						await frame();
+						const now = performance.now();
+						if ( i ) times.push( now - last );
+						last = now;
+
+					}
+
+					times.sort( ( a, b ) => a - b );
+					// Driving: the gas for two seconds of the game's time.
+					const start = { east: d.east, north: d.north };
+					d.press( 'KeyW' );
+					for ( let i = 0; i < 120; i ++ ) d.update( 1 / 60 );
+					d.release( 'KeyW' );
+					const moved = Math.hypot( d.east - start.east, d.north - start.north );
+					const speed = Math.abs( d.speed ) * 3.6;
+					// Stopped, then steering alone: how far it turns in a second where it stands.
+					Object.assign( d, { speed: 0, steer: 0 } );
+					const heading = d.heading;
+					d.press( 'KeyD' );
+					for ( let i = 0; i < 60; i ++ ) {
+
+						d.update( 1 / 60 );
+						d.speed = 0;
+
+					}
+
+					d.release( 'KeyD' );
+					const turned = Math.abs( ( ( d.heading - heading ) % 360 + 540 ) % 360 - 180 );
+					let triangles = 0;
+					pivot.traverse( o => o.isMesh && ( triangles += ( o.geometry.index?.count ?? o.geometry.attributes.position.count ) / 3 ) );
+					return { gap: Math.round( ( low - ground ) * 100 ) / 100, frame: Math.round( times[ 30 ] * 10 ) / 10, moved: Math.round( moved * 10 ) / 10, speed: Math.round( speed ), turned: Math.round( turned ), triangles, length: Math.round( d.length * 10 ) / 10, grounded: d.grounded };
+
+				} );
+				results[ id ].bytes = [ ...fetched ].find( ( [ path ] ) => path.includes( id ) )?.[ 1 ] ?? null;
+				if ( id === 'hydrovac-truck' || id === 'crawler-dozer-20t' ) await shot( page, `feats-4-driving-${ id }` );
+
+			}
+
+			console.log( 'construction rides on a 375 × 740 phone (software rendering; gap: lowest point over the ground, m; frame: middle of 60, ms; moved: m in 2 s from a standstill; turned: ° in 1 s standing):' );
+			for ( const [ id, r ] of Object.entries( results ) ) console.log( `  ${ id }: ${ JSON.stringify( r ) }` );
+			for ( const [ id, r ] of Object.entries( results ) ) {
+
+				const work = WORKS.find( w => w.id === id );
+				if ( ! work ) continue;
+				// On the ground: its lowest point within 5 cm of it.
+				assert.ok( Math.abs( r.gap ) <= 0.05 && r.grounded, `${ id } isn't on the ground: ${ JSON.stringify( r ) }` );
+				// It drives: away from a standstill, no faster than its top speed, slower than the pickup's.
+				assert.ok( r.moved > 1 && r.speed <= work.drive.topSpeed + 1 && work.drive.topSpeed < 160, `${ id }: ${ JSON.stringify( r ) }` );
+				// Loaded when picked, once, and no bigger than a car may be.
+				assert.ok( r.bytes > 50000 && r.bytes < 1000000, `${ id }: ${ r.bytes } bytes` );
+				// Tracks or skid-steering turn it on the spot; wheels don't.
+				if ( work.drive.handling.pivot ) assert.ok( r.turned > 20, `${ id } turned ${ r.turned }°` );
+				else assert.ok( r.turned < 2, `${ id } turned ${ r.turned }° standing` );
+
+			}
+
+			assert.equal( [ ...fetched.keys() ].filter( path => WORKS_RIDES.some( id => path.includes( id ) ) ).length, WORKS_RIDES.length );
+			assert.deepEqual( page.errors, [] );
+
+		} finally {
+
+			await page.context().close();
+
+		}
+
+	} );
+
+	test( 'a phone, held upright and on its side, and a computer: the locked rides\' chips, the grid and its badges fit', async () => {
+
+		const cy = await makePlayer( `Feat Cy ${ RUN }` );
+		await reportFor( cy, { km: 12, feats: { looks: 1 } } );
+		for ( const [ name, viewport, touch ] of [ [ 'portrait', PHONE, true ], [ 'landscape', { width: 740, height: 375 }, true ], [ 'desktop', DESK, false ] ] ) {
+
+			const page = await levelsPage( { visit: await visitToken(), player: cy, viewport, touch } );
+			try {
+
+				await page.waitForFunction( n => document.querySelector( '#globe-ui .profile .feat-count' )?.textContent.startsWith( `${ n } /` ), 3, { timeout: 20000 } );
+				const vac = page.locator( '#globe-ui .vehicles .vehicle[data-id="hydrovac-truck"]' );
+				await vac.scrollIntoViewIfNeeded();
+				// The chip inside its card.
+				const [ chip, card ] = await Promise.all( [ vac.locator( '.feat-chip' ).boundingBox(), vac.boundingBox() ] );
+				assert.ok( chip.x >= card.x - 1 && chip.x + chip.width <= card.x + card.width + 1, `${ name }: ${ JSON.stringify( [ chip, card ] ) }` );
+				await shot( page, `feats-5-${ name }-picker` );
+				await page.locator( '#globe-ui .profile .achievements-open' ).scrollIntoViewIfNeeded();
+				await page.locator( '#globe-ui .profile .achievements-open' ).click();
+				const grid = page.locator( '#achievements' );
+				await grid.waitFor();
+				await page.waitForFunction( () => document.querySelector( '#achievements .feat[data-id="look-1"] .state' )?.textContent.startsWith( 'Earned' ), null, { timeout: 10000 } );
+				// Inside the screen, no sideways scrolling, every badge's words in it.
+				const box = await grid.boundingBox();
+				assert.ok( box.x >= 0 && box.x + box.width <= viewport.width && box.height <= viewport.height, `${ name }: ${ JSON.stringify( box ) }` );
+				const over = await grid.locator( '.scroll' ).evaluate( el => el.scrollWidth - el.clientWidth );
+				assert.ok( over <= 0, `${ name }: ${ over } px sideways` );
+				await shot( page, `feats-6-${ name }-grid` );
+				assert.deepEqual( page.errors, [] );
+
+			} finally {
+
+				await page.context().close();
+
+			}
 
 		}
 

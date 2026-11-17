@@ -1334,6 +1334,8 @@ export function setUpChallenges( app ) {
 			bests[ challenge.id ] = ms;
 			if ( typeof handle === 'string' ) handles[ challenge.id ] = handle;
 			app.stats.add( 'challenge', 'posted' );
+			// A first time on a challenge may have earned an achievement (finished, worker/drive/achievements.js).
+			app.onPosted?.();
 			if ( listed ) {
 
 				const listedOne = listed.challenges.find( c => c.id === challenge.id );
