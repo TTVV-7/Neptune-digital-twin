@@ -75,12 +75,16 @@ import { CELL, PLACES_PER_POST, cellMiddle, cellOf, checkCell, checkPlaces, metr
 import { VISITOR_PREFIX, nameCell, readTowns, topCells, topPlaces, townsFor } from '../worker/drive/dropins.js';
 import { createStats } from '../src/drive-app/stats.js';
 import {
-	BOOSTED, FASTEST, GRACE, KINDS, LEG_SLACK, MAX_RUN, RANK_MOST, SHAPES, START_SLACK, TOP_SPEED,
-	bearingTo, checkPasses, destination, legMinimum, makeRoute, nextPeriod, parsePeriod, periodOf, periodsAt, randomFrom, rankText,
+	BOOSTED, FASTEST, GRACE, KINDS, LEG_SLACK, LINK_PATH, MAX_RUN, RANK_MOST, SHAPES, START_SLACK, TOP_SPEED,
+	bearingTo, checkPasses, destination, leastTime, legMinimum, makeRoute, nextPeriod, parsePeriod, periodOf, periodsAt, randomFrom, rankText, formatTime,
 } from '../src/drive-app/challenge-rules.js';
-import { REPOST, TIME_GAP, challengeBoard, challengeFor, legFaults, listChallenges, lookKey, moonFaults, moonSteep, postTime, rankIn, rotationPick } from '../worker/drive/challenges.js';
+import { REPOST, TIME_GAP, challengeBoard, challengeFor, challengeGhost, challengeLink, legFaults, listChallenges, lookKey, moonFaults, moonSteep, placeIn, postTime, rankIn, rotationPick } from '../worker/drive/challenges.js';
 import { setHeights } from '../src/drive-app/moon-height.js';
 import { MOON_PLACES } from '../src/drive-app/moon-places.js';
+import {
+	GHOST_BYTES, GHOST_DENSITY, GHOST_EVERY, GHOST_SAMPLES, GHOST_TEXT, PASS_SLACK, SAMPLE_SLACK, TURN, countFor, everyFor, ghostFault, ghostText, localOf, packGhost, readGhost, sampleTime,
+} from '../src/drive-app/ghost-rules.js';
+import { HANDLE, escapeHtml, handleOf, linkWords } from '../worker/drive/challenges.js';
 
 const PORT = Number( process.env.TEST_DRIVE_WORKER_PORT ) || 8796;
 const MAPS_KEY = 'test-maps-key-not-real';
@@ -2911,7 +2915,7 @@ describe( 'Play stats\' counts', () => {
 			dropin: [ ...SPOTS.map( spot => spot.id ), 'other', 'moon' ], ride: rides, play: rides, play_with_others: [ 'all' ], garage_open: [ 'all' ], garage_edit: LOOK_PARTS,
 			party: [ 'made', 'joined' ], funnel: FUNNEL, device: DEVICES, world: [ 'moon' ], play_world: [ 'earth', 'moon' ], search: SEARCHES,
 			dropin_time: [ 'under 5 s', '5-10 s', '10-20 s', '20-40 s', 'over 40 s' ], problem: PROBLEMS, board: [ 'open', 'named' ], pass: [ 'open', 'buy' ], level_up: [ 'all' ],
-			challenge: [ 'open', 'start', 'finish', 'posted', 'nudge', 'nudge_open' ],
+			challenge: [ 'open', 'start', 'finish', 'posted', 'nudge', 'nudge_open', 'share', 'link', 'link_start' ],
 		};
 		assert.deepEqual( Object.keys( keysOf ).sort(), Object.keys( METRICS ).sort(), 'every metric' );
 		const names = Object.entries( keysOf ).flatMap( ( [ metric, keys ] ) => keys.map( key => {
@@ -3305,10 +3309,13 @@ function periodKindOf( row ) {
 }
 
 // A run's post to postTime over `d1` (sqliteD1's) at `now`, as the page sends it.
-function postOver( d1, body, now, ip = '198.51.100.7' ) {
+function postOver( d1, body, now, ip = '198.51.100.7', settings = {} ) {
 
+	// (With its run's ghost, as the page posts it, if it hasn't one.)
+	const row = d1.db.prepare( 'SELECT world, kind, route FROM challenges WHERE id = ?' ).get( body.challenge );
+	if ( row && body.ghost === undefined ) body = { ...body, ghost: fairGhost( { world: row.world, kind: row.kind, route: JSON.parse( row.route ) }, body.ms, body.passes ) };
 	const request = new Request( 'https://worlddrive.app/api/challenges/time', { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip }, body: JSON.stringify( body ) } );
-	return postTime( { request, url: new URL( request.url ), now, env: { DB: d1.DB, TURNSTILE_SECRET: PASS_SECRET }, limits: { take: async () => ( { ok: true } ) }, ctx: { waitUntil: work => d1.pending.push( work ) } } );
+	return postTime( { request, url: new URL( request.url ), now, env: { DB: d1.DB, TURNSTILE_SECRET: PASS_SECRET, ...settings }, limits: { take: async () => ( { ok: true } ) }, ctx: { waitUntil: work => d1.pending.push( work ) } } );
 
 }
 
@@ -3339,6 +3346,57 @@ function fairRun( challenge, extra = 3000, order = null ) {
 
 	} );
 	return { ms: at, passes };
+
+}
+
+// A ghost (ghost-rules.js's text) for a run of `ms` with `passes` on a challenge's route ({ world,
+// kind, route }), as a car would drive it: from 99 m along toward its first point from the start
+// (within START_SLACK), straight to each point as it's passed, at each to the point of its zone
+// nearest where it came from (`inside` of its radius in), at a steady speed between, facing the way
+// it goes. `alter( ghost )` changes the samples before they're packed (to make one that cheats).
+// Any fair run's (fairRun's, each leg a second or more slower than the fastest allows) passes the
+// Worker's checks.
+function fairGhost( { world, route }, ms, passes, { inside = 0.95, alter = null } = {} ) {
+
+	const every = everyFor( ms );
+	const count = countFor( ms );
+	const flat = ( lat, lon ) => localOf( world, route.start, lat, lon ).slice( 0, 2 );
+	const toward = ( [ x, y ], [ tx, ty ], metres ) => {
+
+		const d = Math.hypot( tx - x, ty - y );
+		return d <= metres ? [ tx, ty ] : [ x + ( tx - x ) * metres / d, y + ( ty - y ) * metres / d ];
+
+	};
+	const valid = Array.isArray( passes ) ? passes.filter( pass => Array.isArray( pass ) && route.points[ pass[ 0 ] ] && Number.isFinite( pass[ 1 ] ) ) : [];
+	const first = valid.length ? flat( ...route.points[ valid[ 0 ][ 0 ] ] ) : [ 0, 1 ];
+	const marks = [ { at: 0, p: toward( [ 0, 0 ], first, START_SLACK - 1 ) } ];
+	for ( const [ index, at ] of valid ) {
+
+		const point = flat( ...route.points[ index ] );
+		marks.push( { at, p: toward( point, marks.at( - 1 ).p, route.radius * inside ) } );
+
+	}
+
+	if ( marks.at( - 1 ).at < ms ) marks.push( { at: ms, p: marks.at( - 1 ).p } );
+	const ghost = { every, count, east: new Int32Array( count ), north: new Int32Array( count ), up: new Int32Array( count ), yaw: new Int32Array( count ), pitch: new Int32Array( count ), roll: new Int32Array( count ) };
+	for ( let i = 0; i < count; i ++ ) {
+
+		const t = sampleTime( i, count, every, ms );
+		let k = 1;
+		while ( k < marks.length - 1 && marks[ k ].at < t ) k ++;
+		const [ a, b ] = [ marks[ k - 1 ], marks[ k ] ];
+		const u = b.at > a.at ? Math.min( 1, Math.max( 0, ( t - a.at ) / ( b.at - a.at ) ) ) : 1;
+		ghost.east[ i ] = Math.round( ( a.p[ 0 ] + ( b.p[ 0 ] - a.p[ 0 ] ) * u ) * 100 );
+		ghost.north[ i ] = Math.round( ( a.p[ 1 ] + ( b.p[ 1 ] - a.p[ 1 ] ) * u ) * 100 );
+		ghost.up[ i ] = 150;
+		ghost.yaw[ i ] = ( ( Math.round( Math.atan2( b.p[ 0 ] - a.p[ 0 ], - ( b.p[ 1 ] - a.p[ 1 ] ) ) / ( Math.PI * 2 ) * TURN ) % TURN ) + TURN ) % TURN;
+
+	}
+
+	alter?.( ghost );
+	const bytes = new Uint8Array( GHOST_BYTES * 2 );
+	const length = packGhost( ghost, bytes );
+	return ghostText( bytes, length );
 
 }
 
@@ -3668,6 +3726,26 @@ describe( 'World Drive challenges: the rules', () => {
 
 	} );
 
+	test( 'a new best is put into the board\'s order kept (placeIn), as reading it afresh would have it: the old one out, the new one in its place, RANK_MOST at most, one past them left out', () => {
+
+		const order = Array.from( { length: 5 }, ( _, i ) => [ 1000 * ( i + 1 ), 10, `p${ i }` ] );
+		// p3 bettering to second, at the same time as p1 but set later: after p1.
+		assert.deepEqual( placeIn( order, { ms: 2000, created_at: 20 }, 'p3' ).map( entry => entry[ 2 ] ), [ 'p0', 'p1', 'p3', 'p2', 'p4' ] );
+		// A newcomer first; the order given isn't changed; the same again changes nothing.
+		const placed = placeIn( order, { ms: 500, created_at: 30 }, 'new' );
+		assert.deepEqual( placed.map( entry => entry[ 2 ] ), [ 'new', 'p0', 'p1', 'p2', 'p3', 'p4' ] );
+		assert.equal( order.length, 5 );
+		assert.deepEqual( placeIn( placed, { ms: 500, created_at: 30 }, 'new' ), placed );
+		assert.equal( rankIn( placed, { ms: 500, created_at: 30 }, 'new' ), 1 );
+		// A full order: one coming in pushes the last out; one past the last stays out.
+		const full = Array.from( { length: RANK_MOST }, ( _, i ) => [ 1000 + i, 10, `f${ String( i ).padStart( 4, '0' ) }` ] );
+		const pushed = placeIn( full, { ms: 1, created_at: 10 }, 'quick' );
+		assert.deepEqual( [ pushed.length, pushed[ 0 ][ 2 ], pushed.at( - 1 )[ 2 ] ], [ RANK_MOST, 'quick', `f${ String( RANK_MOST - 2 ).padStart( 4, '0' ) }` ] );
+		assert.deepEqual( placeIn( full, { ms: 999999, created_at: 10 }, 'slow' ), full );
+		assert.equal( rankIn( full, { ms: 999999, created_at: 10 }, 'slow' ), RANK_MOST + 1 );
+
+	} );
+
 	test( 'a rank is found in the board\'s order, read from its index alone and no more than RANK_MOST rows of it (no count of the rows ahead): a long board\'s last place is "1000+"', async () => {
 
 		const d1 = sqliteD1();
@@ -3739,7 +3817,7 @@ describe( 'World Drive challenges: the rules', () => {
 
 	} );
 
-	test( 'what a look reads, by D1\'s own count of rows read: a player\'s rank costs a few rows however far down a board of 1,200 and however many players are asked as in turn; a finished board\'s, its final place; nothing counts the rows ahead', async () => {
+	test( 'what a look reads, by D1\'s own count of rows read: a player\'s rank costs a few rows however far down a board of 1,200 and however many players are asked as in turn; a finished board\'s, its final place; nothing counts the rows ahead; how long each is kept in Cloudflare\'s cache (a board\'s order 10 minutes, a finished board and a link to it a day, a ghost 30 days); and what a time posted writes', async t => {
 
 		// workerd's own D1 (wrangler's getPlatformProxy, the database alone), with the migrations, and
 		// the routes run here over it, every statement's meta.rows_read added up; Cloudflare's cache a
@@ -3761,7 +3839,8 @@ describe( 'World Drive challenges: the rules', () => {
 			}
 
 			let read = 0;
-			const counted = result => ( read += result.meta.rows_read, result );
+			let written = 0;
+			const counted = result => ( read += result.meta.rows_read, written += result.meta.rows_written ?? 0, result );
 			const wrap = statement => ( {
 				statement,
 				bind: ( ...values ) => wrap( statement.bind( ...values ) ),
@@ -3840,6 +3919,9 @@ describe( 'World Drive challenges: the rules', () => {
 			assert.equal( ended.body.me.rank, many + 1 );
 			assert.equal( kept.get( `https://worlddrive.app/api/challenges/board?challenge=${ past }` ).control, 'public, max-age=86400' );
 			assert.equal( kept.get( `https://worlddrive.app/api/challenges/board?challenge=${ ids[ 0 ] }` ).control, 'public, max-age=60' );
+			// A live board's order kept 10 minutes (ORDER_KEPT: a rank is found in it, so the board is read
+			// whole once in 10 minutes in a place, whoever asks), and none for a finished one.
+			assert.equal( kept.get( `https://worlddrive.app/api/challenges/order?challenge=${ ids[ 0 ] }` ).control, 'public, max-age=600' );
 			assert.ok( ! kept.has( `https://worlddrive.app/api/challenges/order?challenge=${ past }` ) );
 			for ( let i = 1; i < bottom; i ++ ) {
 
@@ -3848,6 +3930,95 @@ describe( 'World Drive challenges: the rules', () => {
 				assert.ok( look.read <= 6, `finished board ${ i }: ${ look.read } rows read` );
 
 			}
+
+			// A link's answer, kept as its board is: a live one's a minute, a finished one's a day (it can't
+			// change); and a ghost by its run 30 days (a run's ghost never changes).
+			await raw.prepare( 'UPDATE challenge_times SET handle = ? WHERE challenge_id = ? AND player_id = ?' ).bind( 'LiveHandle000001', ids[ 0 ], player( - 1200 ) ).run();
+			await raw.prepare( 'UPDATE challenge_times SET handle = ? WHERE challenge_id = ? AND player_id = ?' ).bind( 'PastHandle000001', past, player( - 1200 ) ).run();
+			assert.equal( ( await ask( challengeLink, `/api/challenges/link?challenge=${ ids[ 0 ] }&vs=LiveHandle000001` ) ).body.vs.name, 'Rows 0' );
+			assert.equal( ( await ask( challengeLink, `/api/challenges/link?challenge=${ past }&vs=PastHandle000001` ) ).body.vs.rank, 1 );
+			assert.equal( kept.get( `https://worlddrive.app/api/challenges/link?challenge=${ ids[ 0 ] }&vs=LiveHandle000001` ).control, 'public, max-age=60' );
+			assert.equal( kept.get( `https://worlddrive.app/api/challenges/link?challenge=${ past }&vs=PastHandle000001` ).control, 'public, max-age=86400' );
+			await raw.prepare( 'INSERT INTO challenge_ghosts ( challenge_id, player_id, run_id, ms, passes, vehicle, look, ghost, bytes, least_ms, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )' )
+				.bind( ids[ 0 ], player( - 1200 ), 'rowsrun000000000000', 60000, '[]', 'go-kart', '{}', 'AQ', 2, 10000, now ).run();
+			assert.equal( ( await ask( challengeGhost, `/api/challenges/ghost?challenge=${ ids[ 0 ] }&run=rowsrun000000000000` ) ).body.run, 'rowsrun000000000000' );
+			assert.equal( kept.get( `https://worlddrive.app/api/challenges/ghost?challenge=${ ids[ 0 ] }&run=rowsrun000000000000` ).control, 'public, max-age=2592000' );
+
+			// What a time posted writes, by D1's own count of rows written (each row and each of its indexes'
+			// entries): a player's first on a challenge, a better one, and one that isn't, each with its ghost.
+			const challenge = ( await ask( listChallenges, '/api/challenges' ) ).body.challenges.find( c => c.world === 'earth' && c.period === 'day' );
+			// Its board's 1,240 with their ghosts kept, as a big monthly's might be (each 1,000 characters,
+			// as its count has it): the first ten's not plausible (their times' rows say ghost 1), the
+			// rest's to race (2).
+			const seeded = JSON.stringify( Array.from( { length: many + bottom }, ( _, i ) => i ) );
+			await raw.prepare( 'INSERT OR IGNORE INTO challenge_ghosts ( challenge_id, player_id, run_id, ms, passes, vehicle, look, ghost, bytes, least_ms, created_at ) SELECT ?1, printf( \'rows%012d\', value ), printf( \'rowsrun%012d\', value ), 60000 + value * 10, \'[]\', \'go-kart\', \'{}\', \'AQ\', 1000, CASE WHEN value < 10 THEN 60000 ELSE 1000 END, ?2 FROM json_each( ?3 )' )
+				.bind( challenge.id, now - HOUR, seeded ).run();
+			await raw.prepare( 'UPDATE challenge_times SET ghost = CASE WHEN ( SELECT least_ms FROM challenge_ghosts g WHERE g.challenge_id = challenge_times.challenge_id AND g.player_id = challenge_times.player_id ) = 1000 THEN 2 ELSE 1 END WHERE challenge_id = ?' ).bind( challenge.id ).run();
+			await raw.prepare( 'UPDATE challenges SET ghost_bytes = ( SELECT SUM( bytes ) FROM challenge_ghosts WHERE challenge_id = ?1 ) WHERE id = ?1' ).bind( challenge.id ).run();
+			// A board's miss with every row's ghost kept reads its rows and their players, as one without
+			// ghosts does (each row says whether it's one to race: no ghost's row read for it).
+			kept.delete( `https://worlddrive.app/api/challenges/board?challenge=${ challenge.id }` );
+			const ghosted = await ask( challengeBoard, `/api/challenges/board?challenge=${ challenge.id }` );
+			assert.ok( ghosted.read <= 41, `a board's miss with its ghosts kept: ${ ghosted.read } rows read` );
+			assert.deepEqual( ghosted.body.rows.filter( row => row.run ).map( row => row.name ), [ 'Rows 10' ] );
+			// The list's miss: each challenge's top three and its one to race (the quickest with a ghost
+			// to race, wherever it is: row 11 here, under ten not plausible), one row of its own index.
+			kept.delete( `https://worlddrive.app/api/challenges/list?ids=${ ids.join( ',' ) }` );
+			const listing = await ask( listChallenges, '/api/challenges' );
+			const posted = listing.body.challenges.find( c => c.id === challenge.id );
+			t.diagnostic( `a board's miss with its ghosts kept read ${ ghosted.read } rows, the list's ${ listing.read }` );
+			assert.ok( listing.read <= 52, `the list's miss: ${ listing.read } rows read` );
+			assert.ok( posted.top.every( row => ! row.run ) );
+			assert.deepEqual( [ posted.race.name, posted.race.run, posted.race.ms ], [ 'Rows 10', 'rowsrun000000000010', 60100 ] );
+			assert.ok( listing.body.challenges.filter( c => c.id !== challenge.id ).every( c => c.race === null ) );
+			const secret = 'w'.repeat( 32 );
+			await raw.prepare( 'INSERT INTO players ( id, name, name_key, secret_hash, created_at, last_seen_at ) VALUES ( ?, ?, ?, ?, 0, 0 )' ).bind( 'writesPlayer0000', 'Writes', 'writes', createHash( 'sha256' ).update( secret ).digest( 'hex' ) ).run();
+			const visit = await makeVisit( { TURNSTILE_SECRET: PASS_SECRET }, now - HOUR, 'earth' );
+			const posting = async ( extra, at, run, settings = {}, status = 200 ) => {
+
+				const timed = fairRun( challenge, extra );
+				const request = new Request( 'https://worlddrive.app/api/challenges/time', { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '198.51.100.71' }, body: JSON.stringify( {
+					id: 'writesPlayer0000', secret, visit, challenge: challenge.id, run, ms: timed.ms, passes: timed.passes, vehicle: 'go-kart', ghost: fairGhost( challenge, timed.ms, timed.passes ),
+				} ) } );
+				[ read, written ] = [ 0, 0 ];
+				const res = await postTime( { request, url: new URL( request.url ), env: { ...env, ...settings }, now: at, limits: { take: async () => ( { ok: true } ) }, ctx: { waitUntil: () => {} } } )
+					.catch( err => new Response( JSON.stringify( err.extra ?? {} ), { status: err.status ?? 500 } ) );
+				assert.equal( res.status, status, await res.clone().text() );
+				return { written, read, body: await res.json() };
+
+			};
+			const firstTime = await posting( 9000, now, 'writesRun0000001' );
+			const better = await posting( 7000, now + MINUTE, 'writesRun0000002' );
+			const slower = await posting( 8000, now + 2 * MINUTE, 'writesRun0000003' );
+			t.diagnostic( `rows written by a time posted: a first ${ firstTime.written }, a new best ${ better.written }, one that isn't ${ slower.written }; read ${ firstTime.read }, ${ better.read }, ${ slower.read }` );
+			assert.deepEqual( [ firstTime.body.isNewBest, better.body.isNewBest, slower.body.isNewBest ], [ true, true, false ] );
+			// (A ghost's row has three index entries: its key, its run and its time, the last to find the
+			// slowest to let go when a challenge's ghosts are full.)
+			assert.ok( firstTime.written <= 16 && better.written <= 14 && slower.written <= 2, JSON.stringify( [ firstTime.written, better.written, slower.written ] ) );
+			// And what it reads, on a challenge keeping 1,240 slower ghosts: each ghost found by its key
+			// (none of the slower ones looked at), the rank in the board's order kept in the cache (the
+			// new best put into it, not the board's thousand read again).
+			assert.ok( firstTime.read <= 40 && better.read <= 60 && slower.read <= 30, JSON.stringify( [ firstTime.read, better.read, slower.read ] ) );
+			assert.equal( better.body.rank, 1 );
+			assert.equal( JSON.parse( kept.get( `https://worlddrive.app/api/challenges/order?challenge=${ challenge.id }` ).body ).order[ 0 ][ 2 ], 'writesPlayer0000' );
+			// One the gap turns away reads a few rows.
+			const refused = await posting( 6500, now + 2 * MINUTE + SECOND, 'writesRun0000004', {}, 429 );
+			assert.ok( refused.read <= 12 && refused.written === 0, JSON.stringify( [ refused.read, refused.written ] ) );
+			// A new best while the challenge's ghosts are full: the slowest kept let go by its key (makeRoom
+			// reads at most 64 by the index on their times), its time saying it has none now, the room
+			// counted, and this one's kept. (makeRoom's look, 64 rows of the index and their rows, D1
+			// counting both; the rest a few rows each, by their keys.)
+			const full = ( await raw.prepare( 'SELECT ghost_bytes FROM challenges WHERE id = ?' ).bind( challenge.id ).first() ).ghost_bytes;
+			const room = await posting( 6000, now + 3 * MINUTE, 'writesRun0000005', { CHALLENGE_GHOST_BUDGET: String( full - 500 ) } );
+			t.diagnostic( `a new best letting a slower ghost go read ${ room.read } rows and wrote ${ room.written }` );
+			assert.ok( room.read <= better.read + 2 * 64 + 25, String( room.read ) );
+			const slowest = player( bottom - 1 );
+			assert.equal( ( await raw.prepare( 'SELECT COUNT(*) AS n FROM challenge_ghosts WHERE challenge_id = ? AND player_id = ?' ).bind( challenge.id, slowest ).first() ).n, 0 );
+			assert.equal( ( await raw.prepare( 'SELECT ghost FROM challenge_times WHERE challenge_id = ? AND player_id = ?' ).bind( challenge.id, slowest ).first() ).ghost, 0 );
+			assert.equal( ( await raw.prepare( 'SELECT ghost FROM challenge_times WHERE challenge_id = ? AND player_id = ?' ).bind( challenge.id, 'writesPlayer0000' ).first() ).ghost, 2 );
+			const after = await raw.prepare( 'SELECT ghost_bytes AS n, ( SELECT SUM( bytes ) FROM challenge_ghosts WHERE challenge_id = ?1 ) AS sum FROM challenges WHERE id = ?1' ).bind( challenge.id ).first();
+			assert.equal( after.n, after.sum );
+			assert.ok( after.n <= full - 500 );
 
 		} finally {
 
@@ -3873,7 +4044,8 @@ describe( 'World Drive challenges: the rules', () => {
 		const limits = { take: async ( kind, ip ) => ( asked.push( [ kind, ip ] ), { ok: ! dayUsed, retryAfter: 100 } ) };
 		const posting = ( body, at, ip ) => {
 
-			const request = new Request( 'https://worlddrive.app/api/challenges/time', { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip }, body: JSON.stringify( body ) } );
+			const ghost = fairGhost( { world: 'earth', kind: 'sprint', route }, body.ms, body.passes );
+			const request = new Request( 'https://worlddrive.app/api/challenges/time', { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip }, body: JSON.stringify( { ghost, ...body } ) } );
 			return postTime( { request, url: new URL( request.url ), now: at, env: { DB: d1.DB, TURNSTILE_SECRET: PASS_SECRET, CHALLENGE_TIMES_PER_VISIT: '3' }, limits, ctx: { waitUntil: work => d1.pending.push( work ) } } );
 
 		};
@@ -3922,6 +4094,124 @@ describe( 'World Drive challenges: the rules', () => {
 			await assert.rejects( posting( { ...racer, visit: next, challenge: Number( id ), run: 'visitrun7'.padEnd( 16, 'x' ), ms: run.ms, passes: run.passes, vehicle: 'go-kart' }, now + 9 * TIME_GAP, '203.0.113.9' ), err => err.status === 429 );
 			assert.equal( db.prepare( 'SELECT times FROM visits WHERE id = ?' ).get( next.split( '.' )[ 1 ] ).times, 1 );
 			assert.equal( db.prepare( 'SELECT last_time_at FROM players WHERE id = ?' ).get( racer.id ).last_time_at, Date.UTC( 2026, 10, 17 ) - TIME_GAP );
+
+		} finally {
+
+			await Promise.all( d1.pending );
+			globalThis.caches = had;
+
+		}
+
+	} );
+
+	test( 'a time posted is one of its address\'s CHALLENGE_MISSES (it reads D1 before the gap, the visit\'s times or the visitor\'s day can turn it away): past them a 429 before anything is read; each post asks once', async () => {
+
+		const d1 = sqliteD1();
+		const { db } = d1;
+		const now = CHALLENGE_DAY;
+		const route = makeRoute( { kind: 'sprint', size: 'day', world: 'earth', place: { name: 'Arc', lat: 48.8738, lon: 2.2962, heading: 0 } }, randomFrom( new Uint8Array( 32 ).fill( 5 ) ) );
+		const { lastInsertRowid: id } = db.prepare( 'INSERT INTO challenges ( period, world, kind, place, region, route, source, starts_at, ends_at, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )' )
+			.run( 'day:2026-11-16', 'earth', 'sprint', 'Arc', '', JSON.stringify( route ), 'rotation', now - 2 * HOUR, now + HOUR, now - 2 * HOUR );
+		const had = globalThis.caches;
+		globalThis.caches = { default: { delete: async () => true, match: async () => undefined, put: async () => {} } };
+		try {
+
+			const who = sqlitePlayer( d1, 'Miss Post' );
+			const visit = await makeVisit( { TURNSTILE_SECRET: PASS_SECRET }, now - HOUR, 'earth' );
+			const run = fairRun( { world: 'earth', kind: 'sprint', route }, 4000 );
+			const body = { ...who, visit, challenge: Number( id ), run: 'missRun'.padEnd( 16, '_' ), ms: run.ms, passes: run.passes, vehicle: 'go-kart' };
+			const looks = { limit: async () => ( { success: true } ) };
+			// The address's misses used up: turned away, and D1 never asked.
+			const untouched = { prepare: () => assert.fail( 'D1 read' ), batch: () => assert.fail( 'D1 read' ) };
+			const ghost = fairGhost( { world: 'earth', kind: 'sprint', route }, run.ms, run.passes );
+			const request = new Request( 'https://worlddrive.app/api/challenges/time', { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '198.51.100.44' }, body: JSON.stringify( { ...body, ghost } ) } );
+			await assert.rejects( postTime( { request, url: new URL( request.url ), now, env: { DB: untouched, TURNSTILE_SECRET: PASS_SECRET, CHALLENGE_LOOKS: looks, CHALLENGE_MISSES: { limit: async () => ( { success: false } ) } }, limits: { take: async () => ( { ok: true } ) }, ctx: { waitUntil: () => {} } } ),
+				err => err.status === 429 && err.extra?.retryAfter === 60 );
+			// With misses to spare: one asked for the post, and it's taken.
+			let asked = 0;
+			const res = await postOver( d1, body, now, '198.51.100.44', { CHALLENGE_LOOKS: looks, CHALLENGE_MISSES: { limit: async () => ( asked ++, { success: true } ) } } );
+			assert.equal( res.status, 200 );
+			assert.equal( asked, 1 );
+
+		} finally {
+
+			await Promise.all( d1.pending );
+			globalThis.caches = had;
+
+		}
+
+	} );
+
+	test( 'a challenge\'s ghosts full (CHALLENGE_GHOST_BUDGET): a quicker best\'s lets the slowest kept go, slowest first, and is kept (slow runs posted to fill it keep no leader\'s out); one slower than every kept one goes without; the count stays what\'s kept; and a board hands out the quickest plausible row\'s run, not a made-up leader\'s', async () => {
+
+		const d1 = sqliteD1();
+		const { db } = d1;
+		const now = CHALLENGE_DAY;
+		const route = makeRoute( { kind: 'sprint', size: 'day', world: 'earth', place: { name: 'Arc', lat: 48.8738, lon: 2.2962, heading: 0 } }, randomFrom( new Uint8Array( 32 ).fill( 7 ) ) );
+		const challenge = { world: 'earth', kind: 'sprint', route };
+		const { lastInsertRowid: id } = db.prepare( 'INSERT INTO challenges ( period, world, kind, place, region, route, source, starts_at, ends_at, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )' )
+			.run( 'day:2026-11-16', 'earth', 'sprint', 'Arc', '', JSON.stringify( route ), 'rotation', now - 2 * HOUR, now + HOUR, now - 2 * HOUR );
+		const had = globalThis.caches;
+		globalThis.caches = { default: { delete: async () => true, match: async () => undefined, put: async () => {} } };
+		try {
+
+			// Three slow runs at the bottom (as a script posting the largest ghosts to fill it would), the
+			// budget just room for them.
+			const runs = { slow1: fairRun( challenge, 40000 ), slow2: fairRun( challenge, 45000 ), slow3: fairRun( challenge, 50000 ), quick: fairRun( challenge, 5000 ), slowest: fairRun( challenge, 60000 ), fake: fairRun( challenge, 1000 ) };
+			const bytes = Object.fromEntries( Object.entries( runs ).map( ( [ name, run ] ) => [ name, fairGhost( challenge, run.ms, run.passes ).length ] ) );
+			const settings = { CHALLENGE_GHOST_BUDGET: String( bytes.slow1 + bytes.slow2 + bytes.slow3 + 10 ) };
+			let at = now;
+			let ip = 20;
+			const post = async name => {
+
+				const who = sqlitePlayer( d1, `Racer ${ name }` );
+				const visit = await makeVisit( { TURNSTILE_SECRET: PASS_SECRET }, now - HOUR, 'earth' );
+				at += 20 * SECOND;
+				const res = await postOver( d1, { ...who, visit, challenge: Number( id ), run: `${ name }Run`.padEnd( 16, '_' ), ms: runs[ name ].ms, passes: runs[ name ].passes, vehicle: 'go-kart' }, at, `198.51.100.${ ip ++ }`, settings )
+					.catch( err => assert.fail( `${ name }: ${ err.status } ${ JSON.stringify( err.extra ) }` ) );
+				assert.equal( res.status, 200, name );
+				return who;
+
+			};
+			const kept = () => db.prepare( 'SELECT run_id FROM challenge_ghosts WHERE challenge_id = ? ORDER BY ms' ).all( id ).map( row => row.run_id.replace( /Run_*$/, '' ) );
+			const counted = () => {
+
+				const { n, sum } = db.prepare( 'SELECT ghost_bytes AS n, ( SELECT COALESCE( SUM( bytes ), 0 ) FROM challenge_ghosts WHERE challenge_id = ?1 ) AS sum FROM challenges WHERE id = ?1' ).get( id );
+				assert.equal( n, sum );
+				assert.equal( db.prepare( 'SELECT COUNT(*) AS n FROM challenge_ghosts WHERE challenge_id = ? AND bytes != length( ghost )' ).get( id ).n, 0 );
+				// Each time's row says whether its ghost is kept (its ghost 1 or 2), and only those are.
+				assert.equal( db.prepare( 'SELECT COUNT(*) AS n FROM challenge_times t WHERE t.challenge_id = ? AND ( t.ghost > 0 ) != EXISTS ( SELECT 1 FROM challenge_ghosts g WHERE g.challenge_id = t.challenge_id AND g.player_id = t.player_id )' ).get( id ).n, 0 );
+				return n;
+
+			};
+			for ( const name of [ 'slow1', 'slow2', 'slow3' ] ) await post( name );
+			assert.deepEqual( kept(), [ 'slow1', 'slow2', 'slow3' ] );
+			assert.equal( counted(), bytes.slow1 + bytes.slow2 + bytes.slow3 );
+			// A quicker one, past the budget: the slowest let go, its room given back, the quick one kept.
+			await post( 'quick' );
+			assert.deepEqual( kept(), [ 'quick', 'slow1', 'slow2' ] );
+			assert.equal( counted(), bytes.quick + bytes.slow1 + bytes.slow2 );
+			// One slower than every kept one: on the board, without its ghost; nothing let go for it.
+			await post( 'slowest' );
+			assert.deepEqual( kept(), [ 'quick', 'slow1', 'slow2' ] );
+			assert.equal( db.prepare( 'SELECT COUNT(*) AS n FROM challenge_times WHERE challenge_id = ?' ).get( id ).n, 5 );
+			// A made-up leader, a straight line from gate to gate at the game's top speed: taken, and kept
+			// (it's the quickest), with the least its route allows along its passes.
+			await post( 'fake' );
+			assert.equal( kept()[ 0 ], 'fake' );
+			counted();
+			const least = leastTime( challenge, runs.fake.passes );
+			assert.deepEqual( { ...db.prepare( 'SELECT ms, least_ms FROM challenge_ghosts WHERE run_id = ?' ).get( 'fakeRun'.padEnd( 16, '_' ) ) }, { ms: runs.fake.ms, least_ms: least } );
+			assert.ok( runs.fake.ms < 2 * least && runs.quick.ms >= 2 * leastTime( challenge, runs.quick.passes ) );
+			// (Its row says its ghost is kept but not one to race; quick's, one to race.)
+			assert.deepEqual( db.prepare( 'SELECT run_id, ghost FROM challenge_times WHERE challenge_id = ? AND ghost > 0 ORDER BY ms' ).all( id ).map( row => [ row.run_id.replace( /Run_*$/, '' ), row.ghost ] ), [ [ 'fake', 1 ], [ 'quick', 2 ], [ 'slow1', 2 ], [ 'slow2', 2 ] ] );
+			// The board hands out one run: the quickest row whose time could plausibly be driven and whose
+			// ghost is kept (quick's), not the made-up leader's (on top, without its run), nor a slower one's.
+			const request = new Request( `https://worlddrive.app/api/challenges/board?challenge=${ id }`, { headers: { 'CF-Connecting-IP': '198.51.100.90' } } );
+			const shown = await ( await challengeBoard( { request, url: new URL( request.url ), env: { DB: d1.DB }, now: at, ctx: { waitUntil: () => {} } } ) ).json();
+			assert.deepEqual( shown.rows.map( row => [ row.name, row.run ?? null ] ), [
+				[ 'Racer fake', null ], [ 'Racer quick', 'quickRun'.padEnd( 16, '_' ) ], [ 'Racer slow1', null ], [ 'Racer slow2', null ], [ 'Racer slow3', null ], [ 'Racer slowest', null ],
+			] );
 
 		} finally {
 
@@ -4216,6 +4506,382 @@ describe( 'World Drive challenges: the rules', () => {
 
 } );
 
+describe( 'World Drive challenge ghosts: the rules', () => {
+
+	// A sprint at the Arc de Triomphe, and a hunt for stars on the Moon, laid out as the Worker does.
+	const sprint = { world: 'earth', kind: 'sprint', route: makeRoute( { kind: 'sprint', size: 'day', world: 'earth', place: { name: 'Arc', lat: 48.8738, lon: 2.2962, heading: 0 } }, randomFrom( new Uint8Array( 32 ).fill( 21 ) ) ) };
+	const hunt = { world: 'moon', kind: 'collect', route: makeRoute( { kind: 'collect', size: 'week', world: 'moon', place: { name: 'Tycho', lat: - 43.31, lon: - 11.36 } }, randomFrom( new Uint8Array( 32 ).fill( 22 ) ) ) };
+
+	test( 'a ghost\'s frame is the scene\'s at the route\'s start: where a point is from it (localOf) is where 3d-tiles-renderer\'s object frame there puts it, to the millimetre, on the Earth\'s ellipsoid and the Moon\'s sphere', async () => {
+
+		const { Matrix4, Vector3 } = await import( 'three' );
+		const { Ellipsoid, OBJECT_FRAME, WGS84_ELLIPSOID } = await import( '3d-tiles-renderer' );
+		const moon = new Ellipsoid( 1737400, 1737400, 1737400 );
+		const rad = Math.PI / 180;
+		for ( const [ world, ellipsoid, lat, lon ] of [ [ 'earth', WGS84_ELLIPSOID, 46.5725, 8.4153 ], [ 'earth', WGS84_ELLIPSOID, - 33.86, 151.21 ], [ 'earth', WGS84_ELLIPSOID, 64.1, - 21.9 ], [ 'moon', moon, - 43.31, - 11.36 ], [ 'moon', moon, 0.67, 23.47 ] ] ) {
+
+			const frame = new Matrix4();
+			ellipsoid.getObjectFrame( lat * rad, lon * rad, 0, 0, 0, 0, frame, OBJECT_FRAME );
+			frame.invert();
+			for ( const [ dLat, dLon, height ] of [ [ 0.01, 0.02, 0 ], [ - 0.05, 0.03, 2500 ], [ 0.07, - 0.06, - 300 ] ] ) {
+
+				const point = ellipsoid.getCartographicToPosition( ( lat + dLat ) * rad, ( lon + dLon ) * rad, height, new Vector3() ).applyMatrix4( frame );
+				const [ east, north, up ] = localOf( world, { lat, lon }, lat + dLat, lon + dLon, height );
+				// (The scene's x is west, y up and z north.)
+				assert.ok( Math.abs( - point.x - east ) < 0.001 && Math.abs( point.z - north ) < 0.001 && Math.abs( point.y - up ) < 0.001, `${ world } ${ lat },${ lon }: ${ point.toArray() } ${ [ east, north, up ] }` );
+
+			}
+
+		}
+
+	} );
+
+	test( 'packed and unpacked as it was, a sample every GHOST_EVERY ms, half as often (and so on) past GHOST_SAMPLES; anything that isn\'t one refused', () => {
+
+		assert.deepEqual( [ everyFor( 60000 ), countFor( 60000 ) ], [ 100, 602 ] );
+		assert.deepEqual( [ everyFor( 5 * 60000 ), countFor( 5 * 60000 ) ], [ 100, 3002 ] );
+		// Past GHOST_SAMPLES samples at 10 a second: every 200 ms, then 400.
+		assert.equal( everyFor( ( GHOST_SAMPLES - 1 ) * GHOST_EVERY ), GHOST_EVERY );
+		assert.equal( everyFor( GHOST_SAMPLES * GHOST_EVERY ), 2 * GHOST_EVERY );
+		assert.deepEqual( [ everyFor( MAX_RUN ), countFor( MAX_RUN ) ], [ 3200, 2252 ] );
+		for ( const ms of [ 500, 60000, GHOST_SAMPLES * GHOST_EVERY + 1234, MAX_RUN ] ) assert.ok( countFor( ms ) <= GHOST_SAMPLES + 1 && Math.floor( ms / everyFor( ms ) / 2 ) + 1 <= GHOST_SAMPLES, String( ms ) );
+		const run = fairRun( sprint, 9000 );
+		const text = fairGhost( sprint, run.ms, run.passes );
+		const ghost = readGhost( text );
+		assert.deepEqual( [ ghost.every, ghost.count ], [ 100, countFor( run.ms ) ] );
+		// Every number back as it was, the angles too (packed as changes, the short way round).
+		const bytes = new Uint8Array( GHOST_BYTES );
+		const again = readGhost( ghostText( bytes, packGhost( ghost, bytes ) ) );
+		for ( const key of [ 'east', 'north', 'up', 'yaw', 'pitch', 'roll' ] ) assert.deepEqual( [ ...again[ key ] ], [ ...ghost[ key ] ], key );
+		const turned = { ...ghost, yaw: ghost.yaw.map( ( _, i ) => ( i * 300 ) % TURN ), roll: ghost.roll.map( ( _, i ) => i % 2 ? TURN - 1 : 0 ) };
+		const back = readGhost( ghostText( bytes, packGhost( turned, bytes ) ) );
+		assert.deepEqual( [ ...back.yaw ], [ ...turned.yaw ] );
+		assert.deepEqual( [ ...back.roll ], [ ...turned.roll ] );
+		// Too little room: not packed.
+		assert.equal( packGhost( ghost, new Uint8Array( 100 ) ), - 1 );
+		// Not one: not base64url, too long, another version, cut short, a byte too many, a count past
+		// the most, a number too big for any sample, a place 60 km off or 20 km up. Each of the last
+		// four whole and well made but for that one thing (as packGhost packs it: the interval 100,
+		// two samples), so it's that the check is for that turns it away, and nothing before it: the
+		// count is what keeps a post from having the Worker make arrays of hundreds of millions.
+		const raw = Buffer.from( text, 'base64url' );
+		const as = buffer => Buffer.from( buffer ).toString( 'base64url' );
+		const still = ( count, set = () => {} ) => {
+
+			const ghost = { every: GHOST_EVERY, count, east: new Int32Array( count ), north: new Int32Array( count ), up: new Int32Array( count ), yaw: new Int32Array( count ), pitch: new Int32Array( count ), roll: new Int32Array( count ) };
+			set( ghost );
+			const bytes = new Uint8Array( GHOST_BYTES );
+			return Buffer.from( bytes.subarray( 0, packGhost( ghost, bytes ) ) );
+
+		};
+		assert.ok( readGhost( as( still( 2 ) ) ) && readGhost( as( still( GHOST_SAMPLES + 1 ) ) ) && readGhost( as( still( 2, g => g.east[ 0 ] = 60000 * 100 ) ) ) && readGhost( as( still( 2, g => g.up[ 1 ] = - 20000 * 100 ) ) ) );
+		// (Sample 0's east as five bytes, a number four would hold: 0 written long.)
+		const long = still( 2 );
+		assert.deepEqual( [ ...long.subarray( 0, 4 ) ], [ 1, 0xc8, 0x01, 4 ] );
+		for ( const [ name, bad ] of Object.entries( {
+			'not base64url': `${ text.slice( 0, - 1 ) }+`, 'too long': 'A'.repeat( GHOST_TEXT + 4 ), empty: '', 'not text': 42,
+			'another version': as( Buffer.concat( [ Buffer.from( [ 2 ] ), raw.subarray( 1 ) ] ) ),
+			'cut short': as( raw.subarray( 0, raw.length - 3 ) ),
+			'a byte too many': as( Buffer.concat( [ raw, Buffer.from( [ 0 ] ) ] ) ),
+			'a count past the most': as( still( GHOST_SAMPLES + 2 ) ),
+			'a number too big': as( Buffer.concat( [ long.subarray( 0, 4 ), Buffer.from( [ 0x80, 0x80, 0x80, 0x80, 0x00 ] ), long.subarray( 5 ) ] ) ),
+			'a place 60 km off': as( still( 2, g => g.east[ 0 ] = 60000 * 100 + 1 ) ),
+			'a place 20 km down': as( still( 2, g => g.up[ 1 ] = - 20000 * 100 - 1 ) ),
+		} ) ) assert.equal( readGhost( bad ), null, name );
+
+	} );
+
+	test( 'what a ghost must agree with for its time to be taken (ghostFault): from the start, through each point at its pass time, as long as the time, never faster between two samples than the game goes, R\'s jumps and no more', () => {
+
+		const run = fairRun( sprint, 2000 );
+		const fault = ( text, ms = run.ms, passes = run.passes, challenge = sprint ) => ghostFault( challenge, ms, passes, text );
+		assert.equal( fault( fairGhost( sprint, run.ms, run.passes ) ), '' );
+		const stars = fairRun( hunt, 3000, [ 3, 1, 0, 5, 2, 4, 9, 8, 7, 6 ] );
+		assert.equal( fault( fairGhost( hunt, stars.ms, stars.passes ), stars.ms, stars.passes, hunt ), '' );
+		// Not one, or sampled at another interval.
+		assert.equal( fault( 'nonsense!' ), 'form' );
+		assert.equal( fault( fairGhost( sprint, run.ms, run.passes, { alter: ghost => ghost.every = 200 } ) ), 'form' );
+		// Packed denser than driving makes (GHOST_DENSITY bytes a sample on average): every sample
+		// jittering half a metre each way and turning anywhere, within the speed rule and through every
+		// gate, as a made-up run packed to take the most room of a challenge's ghosts would; a fair one
+		// takes about six.
+		const fair = fairGhost( sprint, run.ms, run.passes );
+		const perSample = text => Math.floor( text.length * 3 / 4 ) / countFor( run.ms );
+		const dense = fairGhost( sprint, run.ms, run.passes, { alter: ghost => {
+
+			for ( let i = 1; i < ghost.count - 1; i ++ ) {
+
+				const way = i % 2 ? 50 : - 50;
+				ghost.east[ i ] += way;
+				ghost.north[ i ] -= way;
+				ghost.up[ i ] += way;
+				ghost.yaw[ i ] = ( i * 397 ) % TURN;
+				ghost.pitch[ i ] = ( i * 211 ) % TURN;
+				ghost.roll[ i ] = ( i * 307 ) % TURN;
+
+			}
+
+		} } );
+		assert.ok( perSample( fair ) < 7 && perSample( dense ) > GHOST_DENSITY, JSON.stringify( [ perSample( fair ), perSample( dense ) ] ) );
+		assert.equal( fault( dense ), 'form' );
+		// Not as long as the time: a sample short, or the time a second more than it.
+		assert.equal( fault( fairGhost( sprint, run.ms, run.passes, { alter: ghost => {
+
+			ghost.count --;
+			for ( const key of [ 'east', 'north', 'up', 'yaw', 'pitch', 'roll' ] ) ghost[ key ] = ghost[ key ].subarray( 1 );
+
+		} } ) ), 'time' );
+		const longer = run.passes.map( ( [ i, at ], k ) => [ i, k === run.passes.length - 1 ? at + 1000 : at ] );
+		assert.equal( fault( fairGhost( sprint, run.ms, run.passes ), run.ms + 1000, longer ), 'time' );
+		// Its first sample (the car at GO) 150 m from the start.
+		assert.equal( fault( fairGhost( sprint, run.ms, run.passes, { alter: ghost => ghost.north[ 0 ] = - 15000 } ) ), 'start' );
+		// A point not passed at its pass time: the ghost 2 radii off to the side of the third gate there
+		// (and either side of it); at a sample beside it, within PASS_SLACK past its radius, it's passed.
+		const at = run.passes[ 2 ][ 1 ];
+		const near = ( ghost, metres, from = - 1, to = 1 ) => {
+
+			for ( let i = Math.floor( at / ghost.every ) + from; i <= Math.ceil( at / ghost.every ) + to; i ++ ) ghost.east[ i ] += metres * 100;
+
+		};
+		assert.equal( fault( fairGhost( sprint, run.ms, run.passes, { alter: ghost => near( ghost, sprint.route.radius * 2, - 6, 6 ) } ) ), 'speed' );
+		const shifted = fairGhost( sprint, run.ms, run.passes, { alter: ghost => {
+
+			// Moved over gradually, so it's no faster than the game: never near the gate.
+			for ( let i = 0; i < ghost.count; i ++ ) ghost.east[ i ] += Math.round( Math.max( 0, 1 - Math.abs( sampleTime( i, ghost.count, ghost.every, run.ms ) - at ) / 3000 ) * sprint.route.radius * 2 * 100 );
+
+		} } );
+		assert.equal( fault( shifted ), 'pass' );
+		assert.equal( fault( fairGhost( sprint, run.ms, run.passes, { inside: 1 + ( PASS_SLACK - 0.5 ) / sprint.route.radius } ) ), '' );
+		// Faster between two samples than the game goes: standing at each gate for half of each leg and
+		// covering it in the other half (its passes as fair as before)...
+		const dash = fairGhost( sprint, run.ms, run.passes, { alter: ghost => {
+
+			const east = Int32Array.from( ghost.east );
+			const north = Int32Array.from( ghost.north );
+			const marks = [ 0, ...run.passes.map( pass => pass[ 1 ] ) ];
+			for ( let i = 0; i < ghost.count; i ++ ) {
+
+				const t = sampleTime( i, ghost.count, ghost.every, run.ms );
+				const k = Math.max( 1, marks.findIndex( m => m >= t ) );
+				const [ a, b ] = [ marks[ k - 1 ], marks[ k ] ];
+				const u = Math.max( 0, ( t - a ) / ( b - a ) * 2 - 1 );
+				const from = Math.round( a / ghost.every );
+				const to = b === run.ms ? ghost.count - 1 : Math.round( b / ghost.every );
+				ghost.east[ i ] = Math.round( east[ from ] + ( east[ to ] - east[ from ] ) * u );
+				ghost.north[ i ] = Math.round( north[ from ] + ( north[ to ] - north[ from ] ) * u );
+
+			}
+
+		} } );
+		assert.equal( fault( dash ), 'speed' );
+		// The game's own jumps, on a drive to a landmark 1 km straight north at 110 m/s (11 m a sample,
+		// FASTEST's 11.9 in reach): R's few metres on (`hops`, at those seconds), each let off, four in a
+		// run this long; R with no way on, or off the edge of the world, put back where it drove (`back`
+		// s, at `at` s); and a jump forward of 20 m, which nothing in the game makes.
+		const straight = ( { hops = [], hop = 4, back = 0, at = 3 } = {} ) => {
+
+			const start = { lat: 48.8738, lon: 2.2962 };
+			const goal = destination( 'earth', start.lat, start.lon, 0, 1000 );
+			const challenge = { world: 'earth', kind: 'landmark', route: { start, points: [ goal.map( d => Math.round( d * 1e6 ) / 1e6 ) ], radius: 45, goal: 'Arc' } };
+			const reach = localOf( 'earth', start, ...challenge.route.points[ 0 ] )[ 1 ];
+			const v = 110;
+			const ms = Math.ceil( ( ( reach - hops.length * hop ) / v + back ) * 1000 );
+			const where = t => v * ( t - ( back && t >= at ? back : 0 ) ) + hops.filter( h => h <= t ).length * hop;
+			const count = countFor( ms );
+			const ghost = { every: everyFor( ms ), count, east: new Int32Array( count ), north: new Int32Array( count ), up: new Int32Array( count ), yaw: new Int32Array( count ), pitch: new Int32Array( count ), roll: new Int32Array( count ) };
+			for ( let i = 0; i < count; i ++ ) ghost.north[ i ] = Math.round( where( sampleTime( i, count, ghost.every, ms ) / 1000 ) * 100 );
+			const bytes = new Uint8Array( GHOST_BYTES );
+			return ghostFault( challenge, ms, [ [ 0, ms ] ], ghostText( bytes, packGhost( ghost, bytes ) ) );
+
+		};
+		assert.equal( straight(), '' );
+		assert.equal( straight( { hops: [ 2.05 ] } ), '' );
+		assert.equal( straight( { hops: [ 1.05, 2.05, 3.05, 4.05 ] } ), '' );
+		assert.equal( straight( { hops: [ 1.05, 2.05, 3.05, 4.05, 5.05 ] } ), 'speed' );
+		assert.equal( straight( { hops: [ 2.05 ], hop: 20 } ), 'speed' );
+		assert.equal( straight( { back: 1.5 } ), '' );
+		assert.equal( straight( { back: 1.5, hops: [ 1.05, 2.05, 5.05 ] } ), '' );
+		assert.equal( straight( { back: 1.5, hops: [ 1.05, 2.05, 5.05, 6.05 ] } ), 'speed' );
+
+	} );
+
+	test( 'a pass is checked at its pass time, give or take a sample, and within its radius and PASS_SLACK: a ghost that goes through a gate a second before it says it did, or passes PASS_SLACK and half a metre wide of it, is turned away', () => {
+
+		// A sprint of one gate 500 m north of the start and a finish 1 km north, the car going straight
+		// at 110 m/s, `wide` m east of the gate's middle (the finish's line), passing the gate when it's
+		// level with it, said to at `late` ms after that.
+		const start = { lat: 48.8738, lon: 2.2962 };
+		const round = point => point.map( d => Math.round( d * 1e6 ) / 1e6 );
+		const gate = round( destination( 'earth', start.lat, start.lon, 0, 500 ) );
+		const goal = round( destination( 'earth', start.lat, start.lon, 0, 1000 ) );
+		const challenge = { world: 'earth', kind: 'sprint', route: { start, points: [ gate, goal ], radius: 30 } };
+		const [ gateEast, gateNorth ] = localOf( 'earth', start, ...gate );
+		const [ goalEast, goalNorth ] = localOf( 'earth', start, ...goal );
+		const v = 110;
+		const by = ( { wide = 0, late = 0 } ) => {
+
+			const x = gateEast + wide;
+			const ms = Math.ceil( Math.hypot( goalNorth, goalEast - x ) / v * 1000 ) + 200;
+			const count = countFor( ms );
+			const ghost = { every: everyFor( ms ), count, east: new Int32Array( count ), north: new Int32Array( count ), up: new Int32Array( count ), yaw: new Int32Array( count ), pitch: new Int32Array( count ), roll: new Int32Array( count ) };
+			for ( let i = 0; i < count; i ++ ) {
+
+				// Up the line at x till 100 m past the gate, then over to the finish's middle, and waiting there.
+				const along = Math.min( v * sampleTime( i, count, ghost.every, ms ) / 1000, goalNorth );
+				ghost.east[ i ] = Math.round( ( x + ( goalEast - x ) * Math.max( 0, along - gateNorth - 100 ) / ( goalNorth - gateNorth - 100 ) ) * 100 );
+				ghost.north[ i ] = Math.round( along * 100 );
+
+			}
+
+			const bytes = new Uint8Array( GHOST_BYTES );
+			const level = Math.round( gateNorth / v * 1000 );
+			return ghostFault( challenge, ms, [ [ 0, level + late ], [ 1, ms ] ], ghostText( bytes, packGhost( ghost, bytes ) ) );
+
+		};
+		assert.equal( by( {} ), '' );
+		// Its pass said half a sample after it was level with the gate (55 m on): taken, by the sample
+		// beside it; a second after (110 m on), or a second before, turned away: the ghost went
+		// through the gate, but not when its pass says.
+		assert.equal( by( { late: 50 } ), '' );
+		assert.equal( by( { late: 1000 } ), 'pass' );
+		assert.equal( by( { late: - 1000 } ), 'pass' );
+		// Wide of the gate's middle: its radius and PASS_SLACK (3 m), less half a metre, taken; half a
+		// metre more than that, not.
+		assert.equal( PASS_SLACK, 3 );
+		assert.equal( by( { wide: 30 + 3 - 0.5 } ), '' );
+		assert.equal( by( { wide: 30 + 3 + 0.5 } ), 'pass' );
+
+	} );
+
+	test( 'up and down as across: no faster between two samples than the game goes but for its jumps (a fall stopped and put back, R onto ground metres higher); a jump back onto the path is to where it drove however long before (R after a flight of minutes puts the car back where it took off), never to where it didn\'t drive', () => {
+
+		// A drive to a landmark `metres` straight north at `v` m/s, its height as `rise( t )` says, and
+		// put back `back` s at `at` s (a fall stopped, R with no way on).
+		const north = ( { metres = 1000, v = 110, rise = () => 0, back = 0, at = 0 } = {} ) => {
+
+			const start = { lat: 48.8738, lon: 2.2962 };
+			const goal = destination( 'earth', start.lat, start.lon, 0, metres );
+			const challenge = { world: 'earth', kind: 'landmark', route: { start, points: [ goal.map( d => Math.round( d * 1e6 ) / 1e6 ) ], radius: 45, goal: 'Arc' } };
+			const reach = localOf( 'earth', start, ...challenge.route.points[ 0 ] )[ 1 ];
+			const ms = Math.ceil( ( reach / v + back ) * 1000 );
+			const count = countFor( ms );
+			const ghost = { every: everyFor( ms ), count, east: new Int32Array( count ), north: new Int32Array( count ), up: new Int32Array( count ), yaw: new Int32Array( count ), pitch: new Int32Array( count ), roll: new Int32Array( count ) };
+			for ( let i = 0; i < count; i ++ ) {
+
+				const t = sampleTime( i, count, ghost.every, ms ) / 1000;
+				ghost.north[ i ] = Math.round( v * ( t - ( back && t >= at ? back : 0 ) ) * 100 );
+				ghost.up[ i ] = Math.round( rise( t, i ) * 100 );
+
+			}
+
+			const bytes = new Uint8Array( GHOST_BYTES );
+			return ghostFault( challenge, ms, [ [ 0, ms ] ], ghostText( bytes, packGhost( ghost, bytes ) ) );
+
+		};
+		assert.equal( north(), '' );
+		// Falling as the Earth's gravity has it to 60 m/s (a fall from 200 m is about 63 at its end), and
+		// on at that: taken.
+		assert.equal( north( { rise: t => 300 - 4.905 * Math.min( t, 6.1 ) ** 2 - 60 * Math.max( 0, t - 6.1 ) } ), '' );
+		// Falling 200 m (63 m/s at the end), stopped and put back up where it was: one of the jumps it's
+		// let.
+		assert.equal( north( { v: 50, rise: t => t < 2 || t > 8.39 ? 0 : - 4.905 * ( t - 2 ) ** 2 } ), '' );
+		// Up and down 20 m from one sample to the next (nothing in the game does), every sample: not.
+		assert.equal( north( { rise: ( t, i ) => i % 2 ? 20 : 0 } ), 'speed' );
+		// A crawl of 1 km at 10 m/s, put back 30 s (to where it was half a minute before): taken; put
+		// back 65 s and 90 s, as R does after a flight that long (it puts the car back where it last
+		// drove on the ground, where it took off), taken too.
+		assert.equal( north( { v: 10, back: 30, at: 50 } ), '' );
+		assert.equal( north( { v: 10, back: 65, at: 80 } ), '' );
+		assert.equal( north( { v: 10, back: 90, at: 95 } ), '' );
+
+	} );
+
+	test( 'R in the air after a flight of over a minute puts the car back where it took off, minutes back along its path: taken; a jump as far to where it never drove, refused', () => {
+
+		// A landmark 8 km north (the longest a landmark's drive is): the car drives 300 m north at 30 m/s,
+		// takes off and flies `flight` s north and up at 30 m/s, then R takes it back to where it took
+		// off; it drives on to the goal. `aside` m east puts it back off its path instead.
+		const fly = ( flight, aside = 0 ) => {
+
+			const start = { lat: 46.5772, lon: 8.4152 };
+			const goal = destination( 'earth', start.lat, start.lon, 0, 8000 ).map( d => Math.round( d * 1e6 ) / 1e6 );
+			const challenge = { world: 'earth', kind: 'landmark', route: { start, points: [ goal ], radius: 45, goal: 'Furka' } };
+			const reach = localOf( 'earth', start, ...goal )[ 1 ];
+			const v = 30;
+			const off = 10;
+			const landed = off + flight;
+			const ms = Math.ceil( ( landed + ( reach - off * v ) / v ) * 1000 );
+			const count = countFor( ms );
+			const ghost = { every: everyFor( ms ), count, east: new Int32Array( count ), north: new Int32Array( count ), up: new Int32Array( count ), yaw: new Int32Array( count ), pitch: new Int32Array( count ), roll: new Int32Array( count ) };
+			for ( let i = 0; i < count; i ++ ) {
+
+				const t = sampleTime( i, count, ghost.every, ms ) / 1000;
+				const flying = t > off && t < landed;
+				ghost.north[ i ] = Math.round( ( t <= off ? v * t : flying ? v * t : off * v + v * ( t - landed ) ) * 100 );
+				ghost.east[ i ] = t >= landed ? aside * 100 : 0;
+				ghost.up[ i ] = flying ? Math.round( Math.min( 120, ( t - off ) * 5 ) * 100 ) : 0;
+
+			}
+
+			const bytes = new Uint8Array( GHOST_BYTES );
+			return ghostFault( challenge, ms, [ [ 0, ms ] ], ghostText( bytes, packGhost( ghost, bytes ) ) );
+
+		};
+		for ( const flight of [ 40, 59, 61, 66, 90, 200 ] ) assert.equal( fly( flight ), '', `${ flight } s` );
+		assert.equal( fly( 66, 60 ), 'speed' );
+
+	} );
+
+	test( 'a ghost\'s bytes: a minute of a road\'s turns about 4 KB, five minutes about 20, a run of two hours (the longest taken) under GHOST_BYTES', t => {
+
+		// A path along streets: 30 m/s with turns and braking, a bump now and then, the model bobbing.
+		const drive = ms => {
+
+			const count = countFor( ms );
+			const every = everyFor( ms );
+			const ghost = { every, count, east: new Int32Array( count ), north: new Int32Array( count ), up: new Int32Array( count ), yaw: new Int32Array( count ), pitch: new Int32Array( count ), roll: new Int32Array( count ) };
+			let [ x, y, heading, speed ] = [ 0, 0, 0, 0 ];
+			const random = randomFrom( new Uint8Array( 32 ).fill( 9 ) );
+			for ( let i = 0; i < count; i ++ ) {
+
+				const dt = ( sampleTime( i, count, every, ms ) - sampleTime( Math.max( 0, i - 1 ), count, every, ms ) ) / 1000;
+				speed = Math.min( 40, Math.max( 5, speed + ( random() - 0.4 ) * 8 * dt ) );
+				heading += Math.sin( i / 37 ) * 0.6 * dt + ( random() - 0.5 ) * 0.05;
+				x += Math.sin( heading ) * speed * dt;
+				y += Math.cos( heading ) * speed * dt;
+				ghost.east[ i ] = Math.round( x * 100 );
+				ghost.north[ i ] = Math.round( y * 100 );
+				ghost.up[ i ] = Math.round( ( 2 + Math.sin( i / 11 ) * 3 + random() * 0.05 ) * 100 );
+				ghost.yaw[ i ] = ( ( Math.round( heading / ( Math.PI * 2 ) * TURN ) % TURN ) + TURN ) % TURN;
+				ghost.pitch[ i ] = ( Math.round( Math.sin( i / 11 ) * 4 ) + TURN ) % TURN;
+				ghost.roll[ i ] = ( Math.round( ( random() - 0.5 ) * 3 ) + TURN ) % TURN;
+
+			}
+
+			const bytes = new Uint8Array( GHOST_BYTES );
+			return packGhost( ghost, bytes );
+
+		};
+		const [ minute, five, longest ] = [ drive( 60000 ), drive( 5 * 60000 ), drive( MAX_RUN ) ];
+		t.diagnostic( `a ghost's bytes: a minute ${ minute }, five minutes ${ five }, two hours ${ longest }` );
+		// What checking one costs the Worker: a monthly sprint's 14 gates over about five minutes.
+		const month = { world: 'earth', kind: 'sprint', route: makeRoute( { kind: 'sprint', size: 'month', world: 'earth', place: { name: 'Arc', lat: 48.8738, lon: 2.2962, heading: 0 } }, randomFrom( new Uint8Array( 32 ).fill( 23 ) ) ) };
+		const run = fairRun( month, 18000 );
+		const text = fairGhost( month, run.ms, run.passes );
+		ghostFault( month, run.ms, run.passes, text );
+		const from = performance.now();
+		for ( let i = 0; i < 20; i ++ ) assert.equal( ghostFault( month, run.ms, run.passes, text ), '' );
+		const each = ( performance.now() - from ) / 20;
+		t.diagnostic( `checking a ${ Math.round( run.ms / 1000 ) } s ghost (${ text.length } characters): ${ each.toFixed( 2 ) } ms` );
+		assert.ok( each < 10, String( each ) );
+		assert.ok( minute > 2000 && minute < 6000, String( minute ) );
+		assert.ok( five > 10000 && five < 30000, String( five ) );
+		assert.ok( longest > 0 && longest < GHOST_BYTES, String( longest ) );
+
+	} );
+
+} );
+
 describe( 'World Drive challenges', () => {
 
 	let server;
@@ -4258,6 +4924,8 @@ describe( 'World Drive challenges', () => {
 			assets: {
 				'places/towns.tsv': readFileSync( new URL( '../drive/public/places/towns.tsv', import.meta.url ) ),
 				'moon/height.bin': readFileSync( MOON_HEIGHTS ),
+				// The page itself, its link card's tags as the site has them (a link's page rewrites them).
+				'index.html': readFileSync( new URL( '../drive/index.html', import.meta.url ) ),
 			},
 		} );
 
@@ -4295,12 +4963,19 @@ describe( 'World Drive challenges', () => {
 	}
 
 	// `who`'s run of `challenge` ({ ms, passes }, fairRun's unless given), posted `after` ms into their
-	// visit, from `ip` (theirs unless given).
+	// visit, from `ip` (theirs unless given), with its ghost (fairGhost's) and its id (the player's and
+	// its time: the same run posted again has the same, another run another).
 	function post( who, challenge, { run = fairRun( challenge ), after = 10 * MINUTE, visit = who.visit, vehicle = 'go-kart', body = {}, ip = who.ip } = {} ) {
 
-		return send( 'POST', '/api/challenges/time', { id: who.id, secret: who.secret, visit, challenge: challenge.id, run: who.run, ms: run.ms, passes: run.passes, vehicle, ...body }, { ip, time: who.at + after } );
+		return send( 'POST', '/api/challenges/time', {
+			id: who.id, secret: who.secret, visit, challenge: challenge.id, run: runOf( who, run ), ms: run.ms, passes: run.passes, vehicle,
+			ghost: Array.isArray( run.passes ) ? fairGhost( challenge, run.ms, run.passes ) : 'x', ...body,
+		}, { ip, time: who.at + after } );
 
 	}
+
+	// A run's id for `who`'s run of `ms`.
+	const runOf = ( who, { ms } ) => `${ who.run }${ Number.isSafeInteger( ms ) ? ms : 0 }`;
 
 	async function signIn( email ) {
 
@@ -4317,8 +4992,7 @@ describe( 'World Drive challenges', () => {
 	test( 'the migration: the challenges\' tables, keyed as their asks read them, with nothing of an address', () => {
 
 		const columns = table => server.d1( `PRAGMA table_info( ${ table } )` ).map( c => c.name );
-		assert.deepEqual( columns( 'challenges' ), [ 'id', 'period', 'world', 'kind', 'place', 'region', 'route', 'source', 'starts_at', 'ends_at', 'drivers', 'created_at', 'replaced_at', 'final_at' ] );
-		assert.deepEqual( columns( 'challenge_times' ), [ 'challenge_id', 'player_id', 'ms', 'passes', 'vehicle', 'run_id', 'visit', 'owner', 'created_at', 'first_at', 'final_rank' ] );
+		assert.deepEqual( columns( 'challenges' ), [ 'id', 'period', 'world', 'kind', 'place', 'region', 'route', 'source', 'starts_at', 'ends_at', 'drivers', 'created_at', 'replaced_at', 'final_at', 'ghost_bytes' ] );
 		assert.deepEqual( columns( 'challenge_picks' ), [ 'period', 'world', 'kind', 'place', 'region', 'lat', 'lon', 'heading', 'created_at' ] );
 		assert.deepEqual( columns( 'challenge_places' ), [ 'world', 'cell_row', 'cell_column', 'name', 'region', 'lat', 'lon', 'created_at' ] );
 		assert.ok( columns( 'players' ).includes( 'last_time_at' ) );
@@ -4329,7 +5003,21 @@ describe( 'World Drive challenges', () => {
 		assert.ok( indexes.some( i => i.name === 'challenge_times_board' ) );
 		// A run's id names one time on a challenge (what part 2b's link to a run relies on).
 		assert.match( indexes.find( i => i.name === 'challenge_times_run' ).sql, /UNIQUE INDEX challenge_times_run ON challenge_times \( challenge_id, run_id \)/ );
-		for ( const table of [ 'challenges', 'challenge_times', 'challenge_picks', 'challenge_places' ] ) assert.ok( ! columns( table ).some( name => /ip|address|email|account/.test( name ) ), table );
+		// 0007 on top: each time's handle (unique on its challenge: a link finds one row), each best's
+		// ghost, keyed by its time (gone with it) and found by its run, and each challenge's count of its
+		// ghosts' characters (challenges.ghost_bytes, above: 0 to start).
+		assert.deepEqual( columns( 'challenge_times' ), [ 'challenge_id', 'player_id', 'ms', 'passes', 'vehicle', 'run_id', 'visit', 'owner', 'created_at', 'first_at', 'final_rank', 'handle', 'ghost' ] );
+		assert.match( indexes.find( i => i.name === 'challenge_times_handle' ).sql, /UNIQUE INDEX challenge_times_handle ON challenge_times \( challenge_id, handle \)/ );
+		// Each time's ghost (0 none kept, 1 kept, 2 kept and one to race), and the times with one to
+		// race in an index of their own (the list's race: one row, however far down the board).
+		assert.match( indexes.find( i => i.name === 'challenge_times_raced' ).sql, /INDEX challenge_times_raced ON challenge_times \( challenge_id, ms, created_at, player_id \) WHERE ghost = 2 AND owner = 0/ );
+		assert.deepEqual( columns( 'challenge_ghosts' ), [ 'challenge_id', 'player_id', 'run_id', 'ms', 'passes', 'vehicle', 'look', 'ghost', 'bytes', 'least_ms', 'created_at' ] );
+		assert.match( indexes.find( i => i.name === 'challenge_ghosts_run' ).sql, /UNIQUE INDEX challenge_ghosts_run ON challenge_ghosts \( challenge_id, run_id \)/ );
+		// (And by their times, the slowest found to let go when a challenge's are full.)
+		assert.match( indexes.find( i => i.name === 'challenge_ghosts_ms' ).sql, /INDEX challenge_ghosts_ms ON challenge_ghosts \( challenge_id, ms \)/ );
+		const keys = server.d1( 'PRAGMA foreign_key_list( challenge_ghosts )' );
+		assert.deepEqual( keys.map( k => [ k.table, k.from, k.to, k.on_delete ] ), [ [ 'challenge_times', 'challenge_id', 'challenge_id', 'CASCADE' ], [ 'challenge_times', 'player_id', 'player_id', 'CASCADE' ] ] );
+		for ( const table of [ 'challenges', 'challenge_times', 'challenge_picks', 'challenge_places', 'challenge_ghosts' ] ) assert.ok( ! columns( table ).some( name => /ip|address|email|account/.test( name ) ), table );
 
 	} );
 
@@ -4395,7 +5083,10 @@ describe( 'World Drive challenges', () => {
 		const slow = fairRun( earthDay(), 20000 );
 		let res = await post( ann, earthDay(), { run: slow } );
 		assert.equal( res.status, 200, res.text );
-		assert.deepEqual( { ...res.json, top: res.json.top.map( r => [ r.rank, r.name, r.ms ] ) }, { ms: slow.ms, rank: 1, total: 1, isNewBest: true, top: [ [ 1, 'Ann Racer', slow.ms ] ] } );
+		// (With the best's run and its handle: what a link to it names it by, worked out here as the Worker
+		// does with its secret.)
+		const handle = await handleOf( { TURNSTILE_SECRET: PASS_SECRET }, earthDay().id, ann.id );
+		assert.deepEqual( { ...res.json, top: res.json.top.map( r => [ r.rank, r.name, r.ms ] ) }, { ms: slow.ms, rank: 1, total: 1, isNewBest: true, top: [ [ 1, 'Ann Racer', slow.ms ] ], run: runOf( ann, slow ), handle } );
 		assert.equal( res.json.top !== undefined, true );
 		// A slower one: nothing changes.
 		res = await post( ann, earthDay(), { run: fairRun( earthDay(), 30000 ), after: 20 * MINUTE } );
@@ -4407,7 +5098,7 @@ describe( 'World Drive challenges', () => {
 		assert.deepEqual( [ res.json.ms, res.json.isNewBest, res.json.total ], [ quick.ms, true, 1 ] );
 		const rows = server.d1( `SELECT * FROM challenge_times WHERE challenge_id = ${ earthDay().id }` );
 		assert.equal( rows.length, 1 );
-		assert.deepEqual( [ rows[ 0 ].ms, JSON.parse( rows[ 0 ].passes ), rows[ 0 ].vehicle, rows[ 0 ].run_id, rows[ 0 ].owner, rows[ 0 ].final_rank ], [ quick.ms, quick.passes, 'go-kart', ann.run, 0, null ] );
+		assert.deepEqual( [ rows[ 0 ].ms, JSON.parse( rows[ 0 ].passes ), rows[ 0 ].vehicle, rows[ 0 ].run_id, rows[ 0 ].owner, rows[ 0 ].final_rank ], [ quick.ms, quick.passes, 'go-kart', runOf( ann, quick ), 0, null ] );
 		assert.equal( rows[ 0 ].first_at, CHALLENGE_DAY + 10 * MINUTE );
 		assert.equal( rows[ 0 ].created_at, CHALLENGE_DAY + 30 * MINUTE );
 		assert.equal( rows[ 0 ].visit, ann.visit.split( '.' )[ 1 ] );
@@ -4429,10 +5120,317 @@ describe( 'World Drive challenges', () => {
 		const listed = await list( { id: ann.id, time: CHALLENGE_DAY + HOUR } );
 		const mine = listed.json.challenges.find( c => c.id === earthDay().id );
 		assert.deepEqual( mine.top.map( r => r.name ), [ 'Bea Fast', 'Ann Racer', 'Cy Slow' ] );
-		assert.deepEqual( [ mine.total, mine.me ], [ 3, { ms: quick.ms, rank: 2 } ] );
+		assert.deepEqual( [ mine.total, mine.me ], [ 3, { ms: quick.ms, rank: 2, run: runOf( ann, quick ), handle: await handleOf( { TURNSTILE_SECRET: PASS_SECRET }, earthDay().id, ann.id ) } ] );
 		// A Moon challenge's time with the same Earth visit: taken too.
 		res = await post( ann, moonDay(), { run: fairRun( moonDay(), 2000 ), after: 40 * MINUTE } );
 		assert.equal( res.status, 200, res.text );
+
+	} );
+
+	test( 'a time comes with its run\'s ghost, checked with it and kept with the best (its look as a room takes it): fetched by its run, then from the cache; a slower run changes nothing; a new best with the best\'s own run id is refused; a new best\'s replaces it, the old run\'s gone', async () => {
+
+		const c = moonDay();
+		const nia = await player( 'Nia Ghost' );
+		const slow = fairRun( c, 20000 );
+		let res = await post( nia, c, { run: slow, body: { look: { colour: 'lava', glow: 'aqua', made: 'up' } } } );
+		assert.equal( res.status, 200, res.text );
+		const handle = await handleOf( { TURNSTILE_SECRET: PASS_SECRET }, c.id, nia.id );
+		assert.deepEqual( [ res.json.run, res.json.handle ], [ runOf( nia, slow ), handle ] );
+		const kept = () => server.d1( `SELECT run_id, ms, passes, vehicle, look, ghost, created_at FROM challenge_ghosts WHERE challenge_id = ${ c.id } AND player_id = '${ nia.id }'` );
+		let [ ghost ] = kept();
+		assert.deepEqual( { ...ghost, passes: JSON.parse( ghost.passes ), look: JSON.parse( ghost.look ) }, {
+			run_id: runOf( nia, slow ), ms: slow.ms, passes: slow.passes, vehicle: 'go-kart', look: { colour: 'lava', glow: 'aqua' }, ghost: fairGhost( c, slow.ms, slow.passes ), created_at: nia.at + 10 * MINUTE,
+		} );
+		assert.equal( server.d1( `SELECT handle FROM challenge_times WHERE challenge_id = ${ c.id } AND player_id = '${ nia.id }'` )[ 0 ].handle, handle );
+		// A slower one: nothing changes.
+		res = await post( nia, c, { run: fairRun( c, 30000 ), after: 20 * MINUTE } );
+		assert.deepEqual( [ res.status, res.json.isNewBest, res.json.run ], [ 200, false, runOf( nia, slow ) ] );
+		assert.deepEqual( kept(), [ ghost ] );
+		// A new best under the best's own run id: refused, nothing written (a run's ghost is kept by its
+		// id, and never changes).
+		const quick = fairRun( c, 10000 );
+		res = await post( nia, c, { run: quick, after: 30 * MINUTE, body: { run: runOf( nia, slow ) } } );
+		assert.deepEqual( [ res.status, res.json.reason ], [ 400, 'run' ] );
+		assert.deepEqual( kept(), [ ghost ] );
+		// A new best: its ghost in the old one's place, one row; the old run's ghost gone.
+		res = await post( nia, c, { run: quick, after: 40 * MINUTE, body: { look: { colour: 'lava', glow: 'aqua' } } } );
+		assert.deepEqual( [ res.status, res.json.isNewBest, res.json.run, res.json.handle ], [ 200, true, runOf( nia, quick ), handle ] );
+		[ ghost ] = kept();
+		assert.equal( kept().length, 1 );
+		assert.deepEqual( [ ghost.run_id, ghost.ms, ghost.ghost ], [ runOf( nia, quick ), quick.ms, fairGhost( c, quick.ms, quick.passes ) ] );
+		const ghostOf = ( run, ip = nextIp() ) => call( server, `/api/challenges/ghost?challenge=${ c.id }&run=${ run }`, { ip, time: CHALLENGE_DAY + HOUR } );
+		res = await ghostOf( runOf( nia, slow ) );
+		assert.equal( res.status, 404, res.text );
+		// Fetched by its run: as posted, with what it's drawn with and compared with; from the cache the
+		// next time, from anywhere.
+		res = await ghostOf( runOf( nia, quick ) );
+		assert.equal( res.status, 200, res.text );
+		assert.deepEqual( res.json, { run: runOf( nia, quick ), ms: quick.ms, passes: quick.passes, vehicle: 'go-kart', look: { colour: 'lava', glow: 'aqua' }, ghost: ghost.ghost } );
+		assert.equal( res.headers.get( 'X-Board-Cache' ), 'miss' );
+		const again = await ghostOf( runOf( nia, quick ) );
+		assert.deepEqual( [ again.headers.get( 'X-Board-Cache' ), again.text ], [ 'hit', res.text ] );
+		assert.equal( ( await call( server, `/api/challenges/ghost?challenge=${ c.id }&run=short`, { time: CHALLENGE_DAY + HOUR } ) ).status, 400 );
+		assert.equal( ( await call( server, `/api/challenges/ghost?challenge=x&run=${ runOf( nia, quick ) }`, { time: CHALLENGE_DAY + HOUR } ) ).status, 400 );
+
+	} );
+
+	test( 'a time whose ghost doesn\'t agree with it is refused (400, the fault said), nothing of it written or counted: not one, too big, missing, faster between two samples than the game goes, not through a gate at its pass time, not as long as the time', async () => {
+
+		const oli = await player( 'Oli Fake' );
+		const c = earthDay();
+		const run = fairRun( c, 9000 );
+		const at = run.passes[ 1 ][ 1 ];
+		const middle = Math.floor( at / 100 ) - 5;
+		const cases = {
+			'not one': { ghost: 'not a ghost!', fault: 'form' },
+			'too big': { ghost: 'A'.repeat( GHOST_TEXT + 4 ) },
+			'missing': { ghost: undefined },
+			'faster between two samples than the game goes': { ghost: fairGhost( c, run.ms, run.passes, { alter: ghost => {
+
+				for ( let i = middle; i < ghost.count; i ++ ) ghost.north[ i ] += 5000;
+
+			} } ), fault: 'speed' },
+			'not through a gate at its pass time': { ghost: fairGhost( c, run.ms, run.passes, { alter: ghost => {
+
+				for ( let i = 0; i < ghost.count; i ++ ) ghost.east[ i ] += Math.round( Math.max( 0, 1 - Math.abs( sampleTime( i, ghost.count, ghost.every, run.ms ) - at ) / 3000 ) * c.route.radius * 2 * 100 );
+
+			} } ), fault: 'pass' },
+			'not as long as the time': { ghost: fairGhost( c, run.ms + 2000, run.passes ), fault: 'time' },
+		};
+		for ( const [ name, { ghost, fault } ] of Object.entries( cases ) ) {
+
+			const res = await post( oli, c, { run, body: { ghost } } );
+			assert.equal( res.status, 400, `${ name }: ${ res.text }` );
+			if ( fault ) assert.deepEqual( [ res.json.reason, res.json.fault ], [ 'ghost', fault ], name );
+
+		}
+
+		assert.equal( server.d1( `SELECT COUNT(*) AS n FROM challenge_times WHERE player_id = '${ oli.id }'` )[ 0 ].n, 0 );
+		assert.equal( server.d1( `SELECT COUNT(*) AS n FROM challenge_ghosts WHERE player_id = '${ oli.id }'` )[ 0 ].n, 0 );
+		assert.equal( server.d1( `SELECT last_time_at FROM players WHERE id = '${ oli.id }'` )[ 0 ].last_time_at, 0 );
+		assert.deepEqual( server.d1( `SELECT times FROM visits WHERE player_id = '${ oli.id }'` ).map( v => v.times ), [ 0 ] );
+		// Its ghost as driven: taken.
+		assert.equal( ( await post( oli, c, { run } ) ).status, 200 );
+
+	} );
+
+	test( 'a challenge keeps CHALLENGE_GHOST_BUDGET of ghosts at most (16 MB, counted as each is written and let go): past it a new best is taken without its ghost; a better one\'s replacing it gives its room back; finished, none and nothing counted', async () => {
+
+		const c = moonDay();
+		const budget = 16 * 1024 * 1024;
+		const counted = () => server.d1( `SELECT ghost_bytes AS n, ( SELECT COALESCE( SUM( length( ghost ) ), 0 ) FROM challenge_ghosts WHERE challenge_id = ${ c.id } ) AS kept FROM challenges WHERE id = ${ c.id }` )[ 0 ];
+		// Counted as kept so far (the other tests' ghosts on it).
+		let was = counted();
+		assert.equal( was.n, was.kept );
+		const zed = await player( 'Zed Budget' );
+		const slow = fairRun( c, 25000 );
+		let res = await post( zed, c, { run: slow } );
+		assert.equal( res.status, 200, res.text );
+		const text = fairGhost( c, slow.ms, slow.passes );
+		assert.deepEqual( counted(), { n: was.n + text.length, kept: was.kept + text.length } );
+		// The count so near the budget (as a script posting the largest ghosts all day would leave it) that
+		// even the room the old one's ghost gives back isn't enough: a new best goes on the board, its
+		// ghost not kept, the old one's let go and its room given back.
+		was = counted();
+		server.d1( `UPDATE challenges SET ghost_bytes = ${ budget - 100 + text.length } WHERE id = ${ c.id }` );
+		const quicker = fairRun( c, 22000 );
+		res = await post( zed, c, { run: quicker, after: 20 * MINUTE } );
+		assert.deepEqual( [ res.status, res.json.isNewBest, res.json.ms, res.json.run ], [ 200, true, quicker.ms, runOf( zed, quicker ) ] );
+		assert.equal( server.d1( `SELECT COUNT(*) AS n FROM challenge_ghosts WHERE challenge_id = ${ c.id } AND player_id = '${ zed.id }'` )[ 0 ].n, 0 );
+		assert.equal( counted().n, budget - 100 );
+		assert.equal( ( await call( server, `/api/challenges/ghost?challenge=${ c.id }&run=${ runOf( zed, quicker ) }`, { ip: nextIp(), time: CHALLENGE_DAY + HOUR } ) ).status, 404 );
+		// Room again: the next new best's ghost kept, and counted.
+		server.d1( `UPDATE challenges SET ghost_bytes = ${ was.n - text.length } WHERE id = ${ c.id }` );
+		const quickest = fairRun( c, 19000 );
+		res = await post( zed, c, { run: quickest, after: 30 * MINUTE } );
+		assert.equal( res.status, 200, res.text );
+		const kept = fairGhost( c, quickest.ms, quickest.passes );
+		assert.equal( server.d1( `SELECT ghost FROM challenge_ghosts WHERE challenge_id = ${ c.id } AND player_id = '${ zed.id }'` )[ 0 ].ghost, kept );
+		assert.deepEqual( counted(), { n: was.n - text.length + kept.length, kept: was.kept - text.length + kept.length } );
+
+	} );
+
+	test( 'a time\'s handle is made as its first is written and kept with it: what the list, the board and a post hand out is the one kept (a link shared once still names it after the Worker\'s secret is changed), a new best keeps it; a board hands out its leader\'s run alone', async () => {
+
+		const c = earthDay();
+		const una = await player( 'Una Handle' );
+		const first = fairRun( c, 12000 );
+		let res = await post( una, c, { run: first } );
+		assert.equal( res.status, 200, res.text );
+		assert.equal( res.json.handle, await handleOf( { TURNSTILE_SECRET: PASS_SECRET }, c.id, una.id ) );
+		// As if made under the secret the Worker had before: kept, and handed out as it is.
+		server.d1( `UPDATE challenge_times SET handle = 'MadeBeforeSecret' WHERE challenge_id = ${ c.id } AND player_id = '${ una.id }'` );
+		const mine = ( await list( { id: una.id, time: CHALLENGE_DAY + 30 * MINUTE } ) ).json.challenges.find( x => x.id === c.id ).me;
+		assert.equal( mine.handle, 'MadeBeforeSecret' );
+		assert.equal( ( await board( c.id, { id: una.id, time: CHALLENGE_DAY + 30 * MINUTE } ) ).json.me.handle, 'MadeBeforeSecret' );
+		const better = fairRun( c, 11000 );
+		res = await post( una, c, { run: better, after: 20 * MINUTE } );
+		assert.deepEqual( [ res.status, res.json.isNewBest, res.json.handle ], [ 200, true, 'MadeBeforeSecret' ] );
+		assert.equal( server.d1( `SELECT handle FROM challenge_times WHERE challenge_id = ${ c.id } AND player_id = '${ una.id }'` )[ 0 ].handle, 'MadeBeforeSecret' );
+		// The link shared before still names the best, now the better one.
+		res = await call( server, `/api/challenges/link?challenge=${ c.id }&vs=MadeBeforeSecret`, { ip: nextIp(), time: CHALLENGE_DAY + HOUR } );
+		assert.deepEqual( [ res.status, res.json.vs.name, res.json.vs.ms, res.json.vs.run ], [ 200, 'Una Handle', better.ms, runOf( una, better ) ] );
+		// A board's rows (and the list's tops) say one run, raced from its row, and no other's: the
+		// quickest row with its ghost kept and a time no quicker than twice the least its route allows
+		// (Bea Fast's on top, a second a gate slower than the crow's way at the game's top speed,
+		// boosted, isn't; the next is).
+		const shown = await board( c.id, { time: CHALLENGE_DAY + 2 * HOUR } );
+		assert.ok( shown.json.rows.length >= 3, shown.text );
+		const raced = server.d1( `SELECT t.run_id FROM challenge_times t JOIN challenge_ghosts g ON g.challenge_id = t.challenge_id AND g.player_id = t.player_id
+			WHERE t.challenge_id = ${ c.id } AND t.owner = 0 AND g.ms >= 2 * g.least_ms ORDER BY t.ms, t.created_at, t.player_id LIMIT 1` )[ 0 ].run_id;
+		assert.equal( shown.json.rows[ 0 ].name, 'Bea Fast' );
+		assert.ok( shown.json.rows[ 1 ].run, shown.text );
+		assert.deepEqual( shown.json.rows.map( row => row.run ).filter( Boolean ), [ raced ] );
+		const tops = ( await list( { time: CHALLENGE_DAY + 2 * HOUR } ) ).json.challenges.find( x => x.id === c.id ).top;
+		assert.deepEqual( tops.map( row => row.run ).filter( Boolean ), [ raced ], JSON.stringify( tops ) );
+
+	} );
+
+	test( 'a "challenge a friend" link names a time by its handle, the Worker\'s own (the same however often it\'s bettered, another for another challenge or secret, nothing of who): the link\'s answer has the name, time and run, from the cache after, a new best clearing it; the list and the board say your own; a handle naming nobody is none; the board\'s rows their runs, the leader\'s ghost to race', async () => {
+
+		const c = earthDay();
+		const pip = await player( 'Pip Link' );
+		const first = fairRun( c, 7000 );
+		let res = await post( pip, c, { run: first } );
+		assert.equal( res.status, 200, res.text );
+		const { handle } = res.json;
+		assert.match( handle, HANDLE );
+		assert.equal( handle, await handleOf( { TURNSTILE_SECRET: PASS_SECRET }, c.id, pip.id ) );
+		assert.notEqual( handle, await handleOf( { TURNSTILE_SECRET: FAIL_SECRET }, c.id, pip.id ) );
+		assert.notEqual( handle, await handleOf( { TURNSTILE_SECRET: PASS_SECRET }, moonDay().id, pip.id ) );
+		assert.ok( ! handle.includes( pip.id.slice( 0, 6 ) ) );
+		const link = ( vs, ip = nextIp(), time = CHALLENGE_DAY + HOUR ) => call( server, `/api/challenges/link?challenge=${ c.id }${ vs === null ? '' : `&vs=${ encodeURIComponent( vs ) }` }`, { ip, time } );
+		res = await link( handle );
+		assert.equal( res.status, 200, res.text );
+		assert.deepEqual( [ res.json.challenge.id, res.json.challenge.place, res.json.challenge.finalAt, res.json.challenge.route ], [ c.id, c.place, null, c.route ] );
+		assert.deepEqual( { ...res.json.vs, level: undefined, title: undefined }, { name: 'Pip Link', ms: first.ms, vehicle: 'go-kart', date: '2026-11-16', run: runOf( pip, first ), ghost: true, level: undefined, title: undefined } );
+		assert.equal( res.json.vs.level, 1 );
+		// Nothing of who but the name and time the board shows: not the player's id, nor their secret.
+		assert.ok( ! res.text.includes( pip.id ) && ! res.text.includes( pip.secret ), res.text );
+		assert.equal( res.headers.get( 'X-Board-Cache' ), 'miss' );
+		assert.equal( ( await link( handle ) ).headers.get( 'X-Board-Cache' ), 'hit' );
+		// Bettered: the same handle, its answer the new best at once (here: the cache cleared).
+		const second = fairRun( c, 6000 );
+		res = await post( pip, c, { run: second, after: 20 * MINUTE } );
+		assert.deepEqual( [ res.status, res.json.handle ], [ 200, handle ] );
+		res = await link( handle );
+		assert.deepEqual( [ res.json.vs.ms, res.json.vs.run, res.headers.get( 'X-Board-Cache' ) ], [ second.ms, runOf( pip, second ), 'miss' ] );
+		// Your own: the list's and the board's, with the run (its ghost to race) and the handle (to share).
+		const mine = ( await list( { id: pip.id, time: CHALLENGE_DAY + 2 * HOUR } ) ).json.challenges.find( x => x.id === c.id ).me;
+		assert.deepEqual( [ mine.ms, mine.run, mine.handle ], [ second.ms, runOf( pip, second ), handle ] );
+		const shown = await board( c.id, { id: pip.id, time: CHALLENGE_DAY + 2 * HOUR } );
+		assert.deepEqual( [ shown.json.me.handle, shown.json.me.run ], [ handle, runOf( pip, second ) ] );
+		// A handle naming nobody (mistyped, or that player removed), or none, or one that can't be one:
+		// the challenge, with no time.
+		for ( const vs of [ 'AAAAAAAAAAAAAAAA', null, 'x<y>', 'A'.repeat( 40 ) ] ) {
+
+			res = await link( vs );
+			assert.deepEqual( [ res.status, res.json.challenge.id, res.json.vs ], [ 200, c.id, null ], String( vs ) );
+
+		}
+
+		assert.equal( ( await call( server, `/api/challenges/link?challenge=99999&vs=${ handle }`, { ip: nextIp(), time: CHALLENGE_DAY + HOUR } ) ).status, 404 );
+		assert.equal( ( await call( server, `/api/challenges/link?challenge=one&vs=${ handle }`, { ip: nextIp(), time: CHALLENGE_DAY + HOUR } ) ).status, 400 );
+		// The board's one row with its run: its ghost, to race.
+		const leader = shown.json.rows.find( row => row.run );
+		assert.match( leader.run, /^[\w-]{16,32}$/ );
+		res = await call( server, `/api/challenges/ghost?challenge=${ c.id }&run=${ leader.run }`, { ip: nextIp(), time: CHALLENGE_DAY + 2 * HOUR } );
+		assert.deepEqual( [ res.status, res.json.ms ], [ 200, leader.ms ] );
+		assert.equal( readGhost( res.json.ghost ).count, countFor( leader.ms ) );
+
+	} );
+
+	test( 'a link\'s page, /c, has a preview card of its own for chat apps: the time to beat, the place and the period in its title and description (escaped), the link its address; the page as it is for anything else; its answer the link\'s, from the cache; and the Worker runs for no other page (the home page is a file, served free and never turned away)', async () => {
+
+		const c = earthDay();
+		const page = ( query, ip = nextIp(), path = '/c' ) => call( server, `${ path }${ query }`, { ip, time: CHALLENGE_DAY + 3 * HOUR, headers: { Accept: 'text/html' } } );
+		const tag = ( html, attribute, name ) => html.match( new RegExp( `<meta ${ attribute }="${ name }" content="([^"]*)"` ) )?.[ 1 ] ?? null;
+		const pip = server.d1( `SELECT p.id, t.ms FROM challenge_times t JOIN players p ON p.id = t.player_id WHERE p.name = 'Pip Link' AND t.challenge_id = ${ c.id }` )[ 0 ];
+		const handle = await handleOf( { TURNSTILE_SECRET: PASS_SECRET }, c.id, pip.id );
+		let res = await page( `?challenge=${ c.id }&vs=${ handle }` );
+		assert.equal( res.status, 200 );
+		assert.match( res.headers.get( 'Content-Type' ), /text\/html/ );
+		assert.equal( res.headers.get( 'Cache-Control' ), 'no-store' );
+		const title = `Beat Pip Link&#39;s ${ formatTime( pip.ms ) } on today&#39;s ${ escapeHtml( c.kind === 'landmark' ? `drive to ${ c.route.goal }` : `${ c.place } ${ { sprint: 'sprint', collect: 'star hunt' }[ c.kind ] }` ) }`;
+		assert.equal( tag( res.text, 'property', 'og:title' ), title );
+		assert.equal( tag( res.text, 'name', 'twitter:title' ), title );
+		const description = tag( res.text, 'property', 'og:description' );
+		// (When it ends, not how long is left: a chat app shows a link's card as it first fetched it.)
+		assert.match( description, /^A daily .+ in World Drive, on till the end of Monday 16 November \(UTC\)\. Drive it in your browser and race Pip Link&#39;s ghost\.$/ );
+		assert.equal( tag( res.text, 'name', 'twitter:description' ), description );
+		assert.equal( tag( res.text, 'property', 'og:url' ), `https://worlddrive.app/c?challenge=${ c.id }&amp;vs=${ handle }` );
+		// The rest of the page as it is (its picture, its script).
+		assert.equal( tag( res.text, 'property', 'og:image' ), 'https://worlddrive.app/og/world-drive.png' );
+		assert.match( res.text, /<script type="module"/ );
+		// Its answer is the link's, from the cache: a crawler costs a look at it.
+		assert.equal( ( await call( server, `/api/challenges/link?challenge=${ c.id }&vs=${ handle }`, { ip: nextIp(), time: CHALLENGE_DAY + 3 * HOUR } ) ).headers.get( 'X-Board-Cache' ), 'hit' );
+		// Escaped: a place named with markup (as the owner might type one) is text in its tags.
+		const place = c.place.replace( /'/g, '\'\'' );
+		server.d1( `UPDATE challenges SET place = 'Fish <b>"&amp;"</b> ''Chips''' WHERE id = ${ c.id }` );
+		try {
+
+			// (A handle naming nobody: the challenge's own card, asked for afresh.)
+			res = await page( `?challenge=${ c.id }&vs=CCCCCCCCCCCCCCCC` );
+			assert.equal( tag( res.text, 'property', 'og:title' ), 'World Drive: today&#39;s challenge at Fish &lt;b&gt;&quot;&amp;amp;&quot;&lt;/b&gt; &#39;Chips&#39;' );
+			assert.ok( ! res.text.includes( '<b>"' ), 'markup in the page' );
+
+		} finally {
+
+			server.d1( `UPDATE challenges SET place = '${ place }' WHERE id = ${ c.id }` );
+
+		}
+
+		// Anything else is the page as it is: no challenge asked, one that isn't, or another place's link.
+		const plain = tag( readFileSync( new URL( '../drive/index.html', import.meta.url ), 'utf8' ), 'property', 'og:title' );
+		for ( const query of [ '', '?challenge=99999&vs=AAAAAAAAAAAAAAAA', '?challenge=nope', '?spot=furka' ] ) {
+
+			res = await page( query );
+			assert.equal( res.status, 200, query );
+			assert.equal( tag( res.text, 'property', 'og:title' ), plain, query );
+
+		}
+
+		// The home page with the same link is the file as it is, the Worker not asked (it runs for /api/*
+		// and /c alone, so on the Free plan a day's requests used up never turns the home page away).
+		res = await page( `?challenge=${ c.id }&vs=${ handle }`, nextIp(), '/' );
+		assert.equal( res.status, 200 );
+		assert.equal( tag( res.text, 'property', 'og:title' ), plain );
+		assert.notEqual( res.headers.get( 'Cache-Control' ), 'no-store' );
+		const config = JSON.parse( readFileSync( new URL( '../wrangler.drive.jsonc', import.meta.url ), 'utf8' ).replace( /^\s*\/\/.*$/gm, '' ) );
+		assert.deepEqual( config.assets.run_worker_first, [ '/api/*', LINK_PATH ] );
+		assert.equal( LINK_PATH, '/c' );
+
+	} );
+
+	test( 'a ghost and a link are held to the looks as the boards are: those that miss the cache and read D1 ten a minute from an address (all of a /48 one); what the cache has still answered, and other addresses too', async () => {
+
+		// (The rate limiter's minutes are the wall clock's: started early in one, so the ten are counted in
+		// it.)
+		const into = Date.now() % MINUTE;
+		if ( into > 40 * SECOND ) await new Promise( resolve => setTimeout( resolve, MINUTE - into + 200 ) );
+		let n = 0;
+		const from = () => `2001:db8:6a:${ ( ++ n ).toString( 16 ) }::5`;
+		const c = moonDay();
+		const time = CHALLENGE_DAY + 4 * HOUR;
+		const nia = server.d1( `SELECT run_id FROM challenge_ghosts WHERE challenge_id = ${ c.id } LIMIT 1` )[ 0 ].run_id;
+		// One in the cache (asked once from elsewhere first).
+		assert.equal( ( await call( server, `/api/challenges/ghost?challenge=${ c.id }&run=${ nia }`, { ip: nextIp(), time } ) ).status, 200 );
+		// Runs and handles that aren't, in turn, each from another /64 of the /48: each a miss.
+		const answers = [];
+		for ( let k = 0; k < 8; k ++ ) {
+
+			answers.push( await call( server, `/api/challenges/ghost?challenge=${ c.id }&run=nothing${ String( k ).padStart( 9, '0' ) }`, { ip: from(), time } ) );
+			answers.push( await call( server, `/api/challenges/link?challenge=${ c.id }&vs=${ String( k ).padStart( 16, 'B' ) }`, { ip: from(), time } ) );
+
+		}
+
+		const statuses = answers.map( answer => answer.status );
+		assert.equal( statuses.indexOf( 429 ), 10, statuses.join( ' ' ) );
+		assert.ok( statuses.slice( 0, 10 ).every( status => status === 404 || status === 200 ), statuses.join( ' ' ) );
+		assert.ok( statuses.slice( 10 ).every( status => status === 429 ), statuses.join( ' ' ) );
+		const cached = await call( server, `/api/challenges/ghost?challenge=${ c.id }&run=${ nia }`, { ip: from(), time } );
+		assert.deepEqual( [ cached.status, cached.headers.get( 'X-Board-Cache' ) ], [ 200, 'hit' ] );
+		assert.equal( ( await call( server, `/api/challenges/ghost?challenge=${ c.id }&run=nothingelsewhere`, { ip: '2001:db8:6b::5', time } ) ).status, 404 );
 
 	} );
 
@@ -4459,14 +5457,17 @@ describe( 'World Drive challenges', () => {
 		};
 		for ( const [ name, options ] of Object.entries( bad ) ) {
 
-			const res = await post( dan, c, { run: okay, ...options } );
+			// (Each from an address of its own: those checked against the challenge read it from D1, so
+			// each is one of its address's CHALLENGE_MISSES, ten a minute.)
+			const res = await post( dan, c, { run: okay, ip: nextIp(), ...options } );
 			assert.equal( res.status, 400, `${ name }: ${ res.text }` );
 
 		}
 
 		assert.equal( ( await send( 'POST', '/api/challenges/time', '{nope' ) ).status, 400 );
 		assert.equal( ( await send( 'POST', '/api/challenges/time', [ 1 ] ) ).status, 400 );
-		assert.equal( ( await send( 'POST', '/api/challenges/time', { id: dan.id, secret: dan.secret, passes: 'x'.repeat( 3000 ) } ) ).status, 413 );
+		// A body bigger than a time with the biggest ghost and look can be: refused before it's read.
+		assert.equal( ( await send( 'POST', '/api/challenges/time', { id: dan.id, secret: dan.secret, passes: 'x'.repeat( 3000 ), ghost: 'A'.repeat( GHOST_TEXT + 1024 ) } ) ).status, 413 );
 		// Nothing of it kept, and none of it counted as a turn.
 		assert.equal( server.d1( `SELECT COUNT(*) AS n FROM challenge_times WHERE player_id = '${ dan.id }'` )[ 0 ].n, 0 );
 		assert.equal( ( await post( dan, c, { run: okay } ) ).status, 200 );
@@ -4602,13 +5603,18 @@ describe( 'World Drive challenges', () => {
 	test( 'the owner\'s runs are taken and answered with the place they\'d have, but kept off the boards', async () => {
 
 		const boss = await player( 'Boss Tries', { kind: 'owner' } );
-		const res = await post( boss, earthDay(), { run: fairRun( earthDay(), 0 ) } );
+		const res = await post( boss, earthDay(), { run: fairRun( earthDay(), 600 ) } );
 		assert.equal( res.status, 200, res.text );
 		assert.deepEqual( [ res.json.rank, res.json.owner, res.json.isNewBest ], [ 1, true, true ] );
 		assert.ok( ! res.json.top.some( r => r.name === 'Boss Tries' ) );
 		const shown = await board( earthDay().id, { id: boss.id, time: CHALLENGE_DAY + 2 * HOUR } );
 		assert.ok( ! shown.json.rows.some( r => r.name === 'Boss Tries' ) );
 		assert.deepEqual( [ shown.json.me.owner, shown.json.me.rank ], [ true, 1 ] );
+		// A link to it (the owner's own, to share) says the name and the time, and nothing of whose they
+		// are: not that they're the owner's.
+		const linked = await call( server, `/api/challenges/link?challenge=${ earthDay().id }&vs=${ res.json.handle }`, { ip: nextIp(), time: CHALLENGE_DAY + 2 * HOUR } );
+		assert.deepEqual( [ linked.status, linked.json.vs.name, linked.json.vs.ms ], [ 200, 'Boss Tries', res.json.ms ] );
+		assert.ok( ! ( 'owner' in linked.json.vs ) && ! /owner/.test( linked.text ), linked.text );
 		// Not counted among its drivers either.
 		assert.equal( server.d1( `SELECT drivers FROM challenges WHERE id = ${ earthDay().id }` )[ 0 ].drivers, shown.json.total );
 		assert.ok( shown.json.rows.every( r => r.rank <= shown.json.total ) );
@@ -4748,6 +5754,40 @@ describe( 'World Drive challenges', () => {
 		assert.deepEqual( [ fixed.route.start.lat, fixed.route.start.lon ], [ 37.8021, - 122.4187 ] );
 		assert.equal( server.d1( `SELECT source FROM challenges WHERE id = ${ fixed.id }` )[ 0 ].source, 'owner' );
 		assert.deepEqual( tomorrow.json.challenges.filter( c => c.period !== 'day' ).map( c => c.id ), live.filter( c => c.period !== 'day' ).map( c => c.id ) );
+
+	} );
+
+	test( 'a link to yesterday\'s challenge: over, its time with its final place (kept a day), the page\'s card saying so; its ghosts gone with its final places, nothing to race', async () => {
+
+		const yesterday = earthDay();
+		const time = Date.UTC( 2026, 10, 17, 9 );
+		assert.ok( server.d1( `SELECT final_at FROM challenges WHERE id = ${ yesterday.id }` )[ 0 ].final_at );
+		// Gone with its final places, and none counted: nothing races a finished challenge.
+		assert.equal( server.d1( `SELECT COUNT(*) AS n FROM challenge_ghosts WHERE challenge_id = ${ yesterday.id }` )[ 0 ].n, 0 );
+		assert.equal( server.d1( `SELECT ghost_bytes FROM challenges WHERE id = ${ yesterday.id }` )[ 0 ].ghost_bytes, 0 );
+		const cy = server.d1( `SELECT p.id, t.ms, t.final_rank, t.run_id FROM challenge_times t JOIN players p ON p.id = t.player_id WHERE p.name = 'Cy Slow' AND t.challenge_id = ${ yesterday.id }` )[ 0 ];
+		const handle = await handleOf( { TURNSTILE_SECRET: PASS_SECRET }, yesterday.id, cy.id );
+		const res = await call( server, `/api/challenges/link?challenge=${ yesterday.id }&vs=${ handle }`, { ip: nextIp(), time } );
+		assert.equal( res.status, 200, res.text );
+		assert.ok( res.json.challenge.finalAt );
+		assert.deepEqual( [ res.json.vs.name, res.json.vs.ms, res.json.vs.rank, res.json.vs.ghost ], [ 'Cy Slow', cy.ms, cy.final_rank, false ] );
+		assert.equal( ( await call( server, `/api/challenges/ghost?challenge=${ yesterday.id }&run=${ cy.run_id }`, { ip: nextIp(), time } ) ).status, 404 );
+		// Its page's card: over, with their time and place.
+		const page = await call( server, `/c?challenge=${ yesterday.id }&vs=${ handle }`, { ip: nextIp(), time, headers: { Accept: 'text/html' } } );
+		const title = page.text.match( /<meta property="og:title" content="([^"]*)"/ )[ 1 ];
+		assert.equal( title, `Cy Slow finished in ${ formatTime( cy.ms ) } at ${ escapeHtml( yesterday.place ) }` );
+		assert.match( page.text, new RegExp( `<meta property="og:description" content="The daily [^"]+ has ended, with Cy Slow #${ cy.final_rank } on its board\\. Try today&#39;s challenges, free in your browser\\."` ) );
+		// The card's words, worked out alone: a live one with no time named, and one replaced.
+		const live = { ...yesterday, startsAt: 0, endsAt: time + 2 * HOUR, finalAt: null, replacedAt: null };
+		assert.match( linkWords( { challenge: live, vs: null }, time ).description, /, on till the end of [A-Z][a-z]+day \d+ [A-Z][a-z]+ \(UTC\)\. Drive it in your browser, free\.$/ );
+		// A weekly's last day, and a monthly's; a time whose ghost isn't kept (CHALLENGE_GHOST_BUDGET):
+		// beat it, no ghost promised.
+		const week = { ...live, period: 'week', endsAt: Date.UTC( 2026, 10, 23 ) };
+		const vs = { name: 'Ann Racer', ms: 21400, ghost: true };
+		assert.match( linkWords( { challenge: week, vs }, time ).description, /^A weekly .+, on till the end of Sunday 22 November \(UTC\)\. Drive it in your browser and race Ann Racer's ghost\.$/ );
+		assert.match( linkWords( { challenge: { ...live, period: 'month', endsAt: Date.UTC( 2026, 11, 1 ) }, vs: { ...vs, ghost: false } }, time ).description, /^A monthly .+, on till the end of Monday 30 November \(UTC\)\. Drive it in your browser and beat it\.$/ );
+		assert.doesNotMatch( JSON.stringify( linkWords( { challenge: week, vs }, time ) ), / left/ );
+		assert.match( linkWords( { challenge: { ...live, replacedAt: time }, vs: null }, time ).title, /is over$/ );
 
 	} );
 

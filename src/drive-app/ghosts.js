@@ -68,9 +68,10 @@ const noRay = () => {};
 
 // scene: where the ghosts go; earth: the tiles' (or test globe's) group, whose matrixWorld takes
 // Earth-centred positions into the scene as it is now; vehicles: loadVehicles()'; loader: the
-// ModelManager's glTF loader; live: live.js's; tags: the element their names go in; own(): your
-// car's pivot, or null; effects: what drive-fx.js is asked for (the Driver's: fewer on a phone).
-export function createGhosts( { scene, earth, camera, vehicles, loader, live, tags, own, effects = undefined } ) {
+// ModelManager's glTF loader (or models: ghostModels' own, shared with a challenge's ghost); live:
+// live.js's; tags: the element their names go in; own(): your car's pivot, or null; effects: what
+// drive-fx.js is asked for (the Driver's: fewer on a phone).
+export function createGhosts( { scene, earth, camera, vehicles, loader, models = ghostModels( loader ), live, tags, own, effects = undefined } ) {
 
 	const group = new Group();
 	group.name = 'ghosts';
@@ -83,8 +84,7 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 	// which is when a message took least time to arrive.
 	let offset = null;
 	let offsetAt = 0;
-	// Models read from a file, by address: { gltf, users }.
-	const templates = new Map();
+	const { build } = models;
 	const self = makeTag( { name: '', star: false } );
 	self.root.classList.add( 'self' );
 
@@ -345,147 +345,6 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 
 	}
 
-	// A ride's model for a ghost, as models.js would load it to drive: turned to face -Z and stood in
-	// the middle of its footprint, then painted. { pivot, materials, templates, animators, size, wheels }.
-	async function build( vehicle, look ) {
-
-		const used = [];
-		// (SkeletonUtils' clone: a skinned mesh copied as Object3D.clone copies it keeps the file's
-		// skeleton, whose bones aren't in the copy, and so is drawn where those are, not with it.)
-		const copyOf = async url => {
-
-			used.push( url );
-			return cloneModel( ( await template( url ) ).scene );
-
-		};
-		let content;
-		try {
-
-			if ( vehicle.build ) content = vehicle.build();
-			else if ( vehicle.load ) content = await vehicle.load( { loadAsync: async url => ( { scene: await copyOf( url ) } ) } );
-			else content = await copyOf( new URL( `library/${ vehicle.item.file }`, document.baseURI ).href );
-
-		} catch ( err ) {
-
-			for ( const url of used ) release( url );
-			throw err;
-
-		}
-
-		const fromFile = ! vehicle.build && ! vehicle.load;
-		content.rotation.y = fromFile ? frontToYaw( vehicle.item.front ) : 0;
-		content.updateMatrixWorld( true );
-		_box.setFromObject( content ).getCenter( _centre );
-		content.position.set( - _centre.x, - _box.min.y, - _centre.z );
-		const pivot = new Group();
-		pivot.name = `ghost ${ vehicle.name }`;
-		pivot.add( content );
-		pivot.scale.setScalar( fromFile ? vehicle.item.scale ?? 1 : 1 );
-		applyLook( pivot, look, vehicle );
-
-		// Materials of its own, made from those it was built or painted with, and nothing to hit.
-		const materials = new Map();
-		const animators = [];
-		const own = material => {
-
-			if ( ! materials.has( material ) ) {
-
-				const copy = material.clone();
-				copy.userData = { opacity: copy.opacity, transparent: copy.transparent, depthWrite: copy.depthWrite };
-				materials.set( material, copy );
-				// One made just for this copy of a ride (not shared between copies, nor the file's) is
-				// done with.
-				if ( ! material.userData.shared && ! material.userData.template ) material.dispose();
-
-			}
-
-			return materials.get( material );
-
-		};
-		pivot.traverse( o => {
-
-			o.raycast = noRay;
-			if ( o.userData.onDrive ) animators.push( o.userData.onDrive );
-			if ( o.material ) o.material = Array.isArray( o.material ) ? o.material.map( own ) : own( o.material );
-
-		} );
-
-		// Its size as drive.js measures it, for its effects: standing at the origin, unturned.
-		pivot.updateMatrixWorld( true );
-		_box.setFromObject( pivot ).getSize( _size );
-		const size = { width: _size.x, height: _size.y, length: _size.z, rear: _box.max.z, scale: pivot.scale.x };
-		const wheel = ( size.rear - size.length * 0.2 ) / size.scale;
-		const track = size.width * 0.4 / size.scale;
-		return {
-			vehicle, pivot, materials: [ ...materials.values() ], templates: used, animators, size,
-			wheels: [ new Vector3( - track, 0.05, wheel ), new Vector3( track, 0.05, wheel ) ],
-			floats: !! specFor( vehicle.item ).floats,
-		};
-
-	}
-
-	// A model from a file, read once for every ghost in it, until TEMPLATE_KEEP after the last of them
-	// goes (a ride changed back to, or a reconnect, reads nothing again).
-	function template( url ) {
-
-		let entry = templates.get( url );
-		clearTimeout( entry?.timer );
-		if ( ! entry ) {
-
-			entry = {
-				users: 0,
-				gltf: loader.loadAsync( url ).then( gltf => {
-
-					gltf.scene.traverse( o => {
-
-						if ( o.geometry ) o.geometry.userData.template = true;
-						for ( const material of [ o.material ?? [] ].flat() ) material.userData.template = true;
-
-					} );
-					return gltf;
-
-				} ),
-			};
-			templates.set( url, entry );
-			entry.gltf.catch( () => templates.get( url ) === entry && templates.delete( url ) );
-
-		}
-
-		entry.users ++;
-		return entry.gltf;
-
-	}
-
-	function release( url ) {
-
-		const entry = templates.get( url );
-		if ( ! entry || -- entry.users > 0 ) return;
-		entry.timer = setTimeout( () => {
-
-			if ( entry.users > 0 || templates.get( url ) !== entry ) return;
-			templates.delete( url );
-			free( entry );
-
-		}, TEMPLATE_KEEP );
-
-	}
-
-	function free( entry ) {
-
-		entry.gltf.then( gltf => gltf.scene.traverse( o => {
-
-			o.geometry?.dispose();
-			for ( const material of [ o.material ?? [] ].flat() ) {
-
-				for ( const value of Object.values( material ) ) if ( value?.isTexture ) value.dispose();
-				material.dispose();
-
-			}
-
-		} ) ).catch( () => {} );
-
-	}
-
 	// What a ghost owns goes: its effects, its model's own geometry (a ride's built parts, decals),
 	// materials and skeletons, and its hold on the file the model was read from.
 	function unload( ghost ) {
@@ -500,15 +359,7 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 	function dispose( model ) {
 
 		group.remove( model.pivot );
-		model.pivot.traverse( o => {
-
-			if ( o.geometry && ! o.geometry.userData.shared && ! o.geometry.userData.template ) o.geometry.dispose();
-			// Its own (see build), with the bones' texture each has on the GPU.
-			o.skeleton?.dispose();
-
-		} );
-		for ( const material of model.materials ) material.dispose();
-		for ( const url of model.templates ) release( url );
+		models.dispose( model );
 
 	}
 
@@ -602,15 +453,7 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 
 		if ( near === ghost.faded ) return;
 		ghost.faded = near;
-		for ( const material of ghost.model.materials ) {
-
-			const { opacity, transparent, depthWrite } = material.userData;
-			material.transparent = near || transparent;
-			material.opacity = near ? opacity * FADE_OPACITY : opacity;
-			material.depthWrite = near ? false : depthWrite;
-			material.needsUpdate = true;
-
-		}
+		models.fade( ghost.model, near );
 
 	}
 
@@ -765,7 +608,7 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 		// How many models read from a file are kept, for the tests.
 		get templates() {
 
-			return templates.size;
+			return models.templates;
 
 		},
 		// How far (m) a driver's ghost is from your car (or the camera, without one), or null if it
@@ -794,6 +637,203 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, live, ta
 		get size() {
 
 			return ghosts.size;
+
+		},
+	};
+
+}
+
+// The models ghosts are drawn with (the others' cars here, and a challenge's ghost: challenges.js),
+// made with the ModelManager's glTF `loader`: { build( vehicle, look ), dispose( model ), fade( model,
+// near ), templates } (templates: how many models read from a file are kept). A ride built in code is
+// built for each, and a model from a file read once and copied for each (with skeletons of its own,
+// for a skinned one), sharing its geometry and pictures until TEMPLATE_KEEP after the last goes. Each
+// has materials of its own, so it can turn see-through on its own, and nothing in it can be hit.
+export function ghostModels( loader ) {
+
+	// Models read from a file, by address: { gltf, users }.
+	const templates = new Map();
+
+	// A ride's model for a ghost, as models.js would load it to drive: turned to face -Z and stood in
+	// the middle of its footprint, then painted. { pivot, materials, templates, animators, size, wheels }.
+	async function build( vehicle, look ) {
+
+		const used = [];
+		// (SkeletonUtils' clone: a skinned mesh copied as Object3D.clone copies it keeps the file's
+		// skeleton, whose bones aren't in the copy, and so is drawn where those are, not with it.)
+		const copyOf = async url => {
+
+			used.push( url );
+			return cloneModel( ( await template( url ) ).scene );
+
+		};
+		let content;
+		try {
+
+			if ( vehicle.build ) content = vehicle.build();
+			else if ( vehicle.load ) content = await vehicle.load( { loadAsync: async url => ( { scene: await copyOf( url ) } ) } );
+			else content = await copyOf( new URL( `library/${ vehicle.item.file }`, document.baseURI ).href );
+
+		} catch ( err ) {
+
+			for ( const url of used ) release( url );
+			throw err;
+
+		}
+
+		const fromFile = ! vehicle.build && ! vehicle.load;
+		content.rotation.y = fromFile ? frontToYaw( vehicle.item.front ) : 0;
+		content.updateMatrixWorld( true );
+		_box.setFromObject( content ).getCenter( _centre );
+		content.position.set( - _centre.x, - _box.min.y, - _centre.z );
+		const pivot = new Group();
+		pivot.name = `ghost ${ vehicle.name }`;
+		pivot.add( content );
+		pivot.scale.setScalar( fromFile ? vehicle.item.scale ?? 1 : 1 );
+		applyLook( pivot, look, vehicle );
+
+		// Materials of its own, made from those it was built or painted with, and nothing to hit.
+		const materials = new Map();
+		const animators = [];
+		const own = material => {
+
+			if ( ! materials.has( material ) ) {
+
+				const copy = material.clone();
+				copy.userData = { opacity: copy.opacity, transparent: copy.transparent, depthWrite: copy.depthWrite };
+				materials.set( material, copy );
+				// One made just for this copy of a ride (not shared between copies, nor the file's) is
+				// done with.
+				if ( ! material.userData.shared && ! material.userData.template ) material.dispose();
+
+			}
+
+			return materials.get( material );
+
+		};
+		pivot.traverse( o => {
+
+			o.raycast = noRay;
+			if ( o.userData.onDrive ) animators.push( o.userData.onDrive );
+			if ( o.material ) o.material = Array.isArray( o.material ) ? o.material.map( own ) : own( o.material );
+
+		} );
+
+		// Its size as drive.js measures it, for its effects: standing at the origin, unturned.
+		pivot.updateMatrixWorld( true );
+		_box.setFromObject( pivot ).getSize( _size );
+		const size = { width: _size.x, height: _size.y, length: _size.z, rear: _box.max.z, scale: pivot.scale.x };
+		const wheel = ( size.rear - size.length * 0.2 ) / size.scale;
+		const track = size.width * 0.4 / size.scale;
+		return {
+			vehicle, pivot, materials: [ ...materials.values() ], templates: used, animators, size,
+			wheels: [ new Vector3( - track, 0.05, wheel ), new Vector3( track, 0.05, wheel ) ],
+			floats: !! specFor( vehicle.item ).floats,
+		};
+
+	}
+
+	// A model from a file, read once for every ghost in it, until TEMPLATE_KEEP after the last of them
+	// goes (a ride changed back to, or a reconnect, reads nothing again).
+	function template( url ) {
+
+		let entry = templates.get( url );
+		clearTimeout( entry?.timer );
+		if ( ! entry ) {
+
+			entry = {
+				users: 0,
+				gltf: loader.loadAsync( url ).then( gltf => {
+
+					gltf.scene.traverse( o => {
+
+						if ( o.geometry ) o.geometry.userData.template = true;
+						for ( const material of [ o.material ?? [] ].flat() ) material.userData.template = true;
+
+					} );
+					return gltf;
+
+				} ),
+			};
+			templates.set( url, entry );
+			entry.gltf.catch( () => templates.get( url ) === entry && templates.delete( url ) );
+
+		}
+
+		entry.users ++;
+		return entry.gltf;
+
+	}
+
+	function release( url ) {
+
+		const entry = templates.get( url );
+		if ( ! entry || -- entry.users > 0 ) return;
+		entry.timer = setTimeout( () => {
+
+			if ( entry.users > 0 || templates.get( url ) !== entry ) return;
+			templates.delete( url );
+			free( entry );
+
+		}, TEMPLATE_KEEP );
+
+	}
+
+	function free( entry ) {
+
+		entry.gltf.then( gltf => gltf.scene.traverse( o => {
+
+			o.geometry?.dispose();
+			for ( const material of [ o.material ?? [] ].flat() ) {
+
+				for ( const value of Object.values( material ) ) if ( value?.isTexture ) value.dispose();
+				material.dispose();
+
+			}
+
+		} ) ).catch( () => {} );
+
+	}
+
+	// What a model owns goes: its own geometry (a ride's built parts, decals), materials and
+	// skeletons, and its hold on the file it was read from. (Taken out of what it was in first.)
+	function dispose( model ) {
+
+		model.pivot.removeFromParent();
+		model.pivot.traverse( o => {
+
+			if ( o.geometry && ! o.geometry.userData.shared && ! o.geometry.userData.template ) o.geometry.dispose();
+			// Its own (see build), with the bones' texture each has on the GPU.
+			o.skeleton?.dispose();
+
+		} );
+		for ( const material of model.materials ) material.dispose();
+		for ( const url of model.templates ) release( url );
+
+	}
+
+	// See-through (`near` your car or the camera) or not: its own materials, so it's only this one.
+	function fade( model, near ) {
+
+		for ( const material of model.materials ) {
+
+			const { opacity, transparent, depthWrite } = material.userData;
+			material.transparent = near || transparent;
+			material.opacity = near ? opacity * FADE_OPACITY : opacity;
+			material.depthWrite = near ? false : depthWrite;
+			material.needsUpdate = true;
+
+		}
+
+	}
+
+	return {
+		build,
+		dispose,
+		fade,
+		get templates() {
+
+			return templates.size;
 
 		},
 	};

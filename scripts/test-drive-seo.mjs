@@ -851,12 +851,14 @@ describe( 'the dev server and the load', () => {
 		for ( const name of game ) {
 
 			const text = read( name );
-			for ( const word of [ 'Needs an Earth drive', 'Pausing ends a run', 'ch-finish', 'ch-hud', 'Checkpoint sprint' ] ) assert.ok( ! text.includes( word ), `${ name } has "${ word }"` );
+			for ( const word of [ 'Needs an Earth drive', 'Pausing ends a run', 'ch-finish', 'ch-hud', 'Checkpoint sprint', 'Challenge a friend', 'time to beat', 'ch-ghost', 'Race their ghost', 'world-drive.ghost' ] ) assert.ok( ! text.includes( word ), `${ name } has "${ word }"` );
 
 		}
 
 		assert.ok( game.some( name => name.endsWith( '.js' ) && read( name ).includes( chunk ) ), 'the game never imports the chunk' );
 		assert.match( read( chunk ), /Needs an Earth drive/ );
+		// (Its ghosts and links with it: the share, the link's card, the ghost's button.)
+		for ( const word of [ 'Challenge a friend', 'time to beat', 'world-drive.ghost' ] ) assert.ok( read( chunk ).includes( word ), word );
 
 	} );
 

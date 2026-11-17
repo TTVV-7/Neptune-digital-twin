@@ -6,12 +6,15 @@
 	"name": "world-drive",
 	"main": "worker/drive/index.js",
 	"compatibility_date": "2026-10-01",
-	// The built site (npm run build:drive). The Worker only runs for /api/*; everything else is
-	// served straight from these files, which costs nothing however many people visit.
+	// The built site (npm run build:drive). The Worker only runs for /api/* and /c, the path a
+	// "challenge a friend" link is shared at (/c?challenge=...: the page with its own preview card for
+	// chat apps); everything else, the home page included, is served straight from these files, which
+	// costs nothing however many people visit, and goes on being served on the Free plan when the
+	// day's 100,000 Worker requests are used up (a path the Worker runs first for gets a 429 then).
 	"assets": {
 		"directory": "./dist-drive",
 		"binding": "ASSETS",
-		"run_worker_first": [ "/api/*" ]
+		"run_worker_first": [ "/api/*", "/c" ]
 	},
 	// Both addresses are the Worker's custom domains (Cloudflare makes their DNS records and
 	// certificates). www sends you on to worlddrive.app (worker/drive/index.js and the page itself).
@@ -96,8 +99,9 @@
 		// script asking over and over is turned away before it reads D1.
 		{ "name": "CHALLENGE_LOOKS", "namespace_id": "4805", "simple": { "limit": 60, "period": 60 } },
 		// Those of the lists and boards that miss Cloudflare's cache and read D1 (a board's rows, the
-		// list's tops, a player's own rows, a board's order), by the same key: 10 a minute, room for a
-		// page's list and all six boards, while one address asking for past boards or players in turn
+		// list's tops, a player's own rows, a board's order), and the times posted (each reads D1 before
+		// the gap can turn it away), by the same key: 10 a minute, room for a page's list, all six
+		// boards and a time, while one address asking for past boards or players, or posting, in turn
 		// costs a few hundred thousand rows read a day at most (docs/world-drive.md, "What challenges
 		// cost").
 		{ "name": "CHALLENGE_MISSES", "namespace_id": "4806", "simple": { "limit": 10, "period": 60 } }

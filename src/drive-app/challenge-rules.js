@@ -49,6 +49,10 @@ export const GRACE = 60 * 1000;
 // this many, so reading it costs no more than this, however long the board): further down, it's
 // "1000+".
 export const RANK_MOST = 1000;
+// The path a "challenge a friend" link is shared at (/c?challenge=<id>&vs=<handle>): the one page
+// the Worker runs for, giving it a preview card of its own for chat apps, while the home page and
+// the rest are files it never sees (wrangler.drive.jsonc).
+export const LINK_PATH = '/c';
 // A pass counts within a gate's radius across the ground, and up and down from its ground to its
 // top (on the Earth the lowest and the highest of what rays down across its zone meet: the street
 // beside a tower and the tower's roof, or the water under a bridge and its deck; on the Moon both
@@ -392,6 +396,26 @@ export function routeLength( world, route ) {
 export function legMinimum( world, from, fromRadius, to, toRadius ) {
 
 	return Math.max( 0, metresOn( world, from[ 0 ], from[ 1 ], to[ 0 ], to[ 1 ] ) - fromRadius - toRadius ) / FASTEST * 1000;
+
+}
+
+// The least time (ms) a run with `passes` (checkPasses' kind, in the order passed) could take on
+// `challenge`'s route ({ world, route }): each leg's legMinimum, added up. A time near it was driven
+// as straight as the crow flies at the game's top speed, boosted all the way.
+export function leastTime( { world, route }, passes ) {
+
+	let from = [ route.start.lat, route.start.lon ];
+	let fromRadius = START_SLACK;
+	let least = 0;
+	for ( const [ index ] of passes ) {
+
+		least += legMinimum( world, from, fromRadius, route.points[ index ], route.radius );
+		from = route.points[ index ];
+		fromRadius = route.radius;
+
+	}
+
+	return Math.floor( least );
 
 }
 

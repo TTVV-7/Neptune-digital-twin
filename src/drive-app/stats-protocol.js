@@ -87,8 +87,9 @@ export const METRICS = {
 	level_up: { key: ALL, most: 10 },
 	// Challenges (challenges.js): the list opened, a run started (at GO), finished, and its time
 	// posted to a board; and the word to a visit driving a while (main.js) said, and its button
-	// pressed.
-	challenge: { key: oneOf( [ 'open', 'start', 'finish', 'posted', 'nudge', 'nudge_open' ] ), most: 40 },
+	// pressed; a "challenge a friend" link shared (or copied), a page opened on one, and a run
+	// started from it.
+	challenge: { key: oneOf( [ 'open', 'start', 'finish', 'posted', 'nudge', 'nudge_open', 'share', 'link', 'link_start' ] ), most: 40 },
 };
 
 // The page posts at most this many counts at once (and keeps no more between posts). What a visit

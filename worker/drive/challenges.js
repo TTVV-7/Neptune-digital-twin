@@ -1,8 +1,11 @@
-import { HttpError, isObject, json, readJson } from '../http.js';
+import { HttpError, base64url, isObject, json, jsonText, readJson } from '../http.js';
 import { cellMiddle, cellOf, checkCell, metresOn } from '../../src/drive-app/dropin-cells.js';
 import {
-	GRACE, KINDS, PERIOD_KINDS, RANK_MOST, WORLDS, bearingTo, checkPasses, destination, kindFor, makeRoute, nextPeriod, parsePeriod, periodIndex, periodOf, periodsAt, randomFrom,
+	GRACE, KINDS, KIND_NAMES, LINK_PATH, PERIOD_KINDS, RANK_MOST, WORLDS, bearingTo, checkPasses, destination, formatTime, kindFor, leastTime, makeRoute, nextPeriod, parsePeriod, periodIndex, periodOf,
+	periodsAt, randomFrom, rankText,
 } from '../../src/drive-app/challenge-rules.js';
+import { GHOST_TEXT, ghostFault } from '../../src/drive-app/ghost-rules.js';
+import { checkLook } from '../../src/drive-app/live-protocol.js';
 import { hasHeights, heightAt as moonHeightAt, setHeights } from '../../src/drive-app/moon-height.js';
 import { MOON_PLACES } from '../../src/drive-app/moon-places.js';
 import { SPOTS } from '../../src/drive-app/places.js';
@@ -52,14 +55,29 @@ import { readVisit } from './visits.js';
 // What a look costs is bounded whoever asks (docs/world-drive.md, "What challenges cost"): a rank is
 // found in its board's order kept in Cloudflare's cache (boardOrders), never counted row by row, so a
 // player's own rows cost a few rows read however many players a script asks as; a finished board,
-// which can't change, is kept a day; and the looks that miss the cache and read D1 are held to
-// CHALLENGE_MISSES a minute from an address.
+// which can't change, is kept a day; and the looks that miss the cache and read D1, and the times
+// posted (each reads D1 before the gap can turn it away), are held to CHALLENGE_MISSES a minute from
+// an address. A new best is put into its board's order kept (placeIn), not read afresh.
+//
+// Ghosts and links (part 2b): each time is posted with its run's ghost (src/drive-app/ghost-rules.js:
+// the car's path from GO to the finish, sampled and packed small), checked with it (the ghost must
+// go through each point at its pass time, take as long as the time, and never go faster between two
+// samples than the game can) and kept with the best, replaced with it, in challenge_ghosts, till
+// the challenge is finished, so the next run can race it; each challenge's ghosts held to
+// CHALLENGE_GHOST_BUDGET characters in all (challenges.ghost_bytes), past which the slowest kept are
+// let go to make room for a quicker new best's (or, none slower, it's kept without its ghost), so no
+// script can fill D1 with them, nor keep a quicker driver's out. Each time has a handle, an HMAC of the
+// challenge and the player under the derived key (handleOf), made as its first time is written and
+// kept with it: what a "challenge a friend" link names it by, never the player's id. The link's own
+// card (challengeLink, and linkPage: the page itself at /c, with a preview for chat apps) and a
+// ghost by its run (challengeGhost) are kept in Cloudflare's cache as the boards are, and held to
+// the same looks.
 //
 // Settings, none of which need setting: CHALLENGE_TIMES_PER_VISITOR_DAILY (TIMES_DAILY),
 // CHALLENGE_TIMES_PER_VISIT (TIMES_PER_VISIT); CHALLENGE_LOOKS, the rate limiter binding for the
-// lists, the boards and the times posted, and CHALLENGE_MISSES for the lists and boards that read
-// D1, both by a keyed hash of the address (an IPv6 one by its /48) that changes each day (looks);
-// ADMIN_LOOKS the admin page's (admin.js).
+// lists, the boards and the times posted, and CHALLENGE_MISSES for the lists, boards and times
+// posted that read D1, both by a keyed hash of the address (an IPv6 one by its /48) that changes each day (looks);
+// ADMIN_LOOKS the admin page's (admin.js); CHALLENGE_GHOST_BUDGET (GHOST_BUDGET).
 
 // One time every TIME_GAP ms from a player; a visitor's times a day; a visit's times.
 export const TIME_GAP = 10 * 1000;
@@ -118,6 +136,31 @@ const NEAR = 1000;
 const SEED_LABEL = 'world-drive challenges v1';
 const SITE = 'https://worlddrive.app';
 const RUN_ID = /^[A-Za-z0-9_-]{16,32}$/;
+// A time's handle (handleOf): 12 bytes of an HMAC, as base64url.
+export const HANDLE = /^[A-Za-z0-9_-]{16}$/;
+// A time's body (bytes): its numbers and passes, the ghost's text and the ride's look.
+const TIME_BODY = 2048 + GHOST_TEXT + 1024;
+// A ghost, fetched by its run, is kept in Cloudflare's cache this long (s): a run's ghost never
+// changes (a new best is a new run), and it's gone from D1 once its challenge is finished.
+const GHOST_KEPT = 30 * 24 * 60 * 60;
+// The most of its ghosts' text a challenge keeps (characters, which are bytes: base64url), counted
+// in challenges.ghost_bytes as each is written and let go. A new best's that would go past it lets
+// the slowest kept go, slowest first, till it fits (EVICT_LOOK of them looked at, at most): those
+// are the longest and the least raced. Only when it would be the slowest kept is a new best kept
+// without its ghost (nobody can race it, nor a link to it). So slow runs posted to fill it (a script
+// posting the largest ghosts the rules take, about 64 KB a run of 6 min 49 s, 260 of them) are let
+// go for each quicker best after them, and keep no quicker driver's ghost out. The six live at once
+// keep 96 MB at most of D1's 500 MB (the Free plan's for a database), whatever's posted: a fair
+// ghost is about 4.8 KB of text a minute of run, so that's thousands of a daily's or hundreds of a
+// monthly's few minutes. The owner can raise it on Workers Paid (10 GB a database).
+const GHOST_BUDGET = 16 * 1024 * 1024;
+const EVICT_LOOK = 64;
+// A time is raced by newcomers by default (a board's row handing out its run) only if its ghost is
+// kept and it's at least PLAUSIBLE times the least its route allows along its passes (leastTime: the
+// crow's way at the game's top speed, boosted): one averaging more than half of that, made up (a
+// straight line through buildings at 430 km/h) or flown that way, is on the board but not raced by
+// default (docs/world-drive.md, "What it can't stop").
+const PLAUSIBLE = 2;
 const DAY = 24 * 60 * 60 * 1000;
 const encoder = new TextEncoder();
 
@@ -144,9 +187,10 @@ const orders = new Map();
 // --- the routes ---
 
 // GET /api/challenges?id=: the six live challenges (the page puts the current world's first):
-// { now, challenges: [ CHALLENGE + { total, top, me } ] }, top the LIST_TOP best ({ rank, name, ms,
-// vehicle, level, title, supporter? }) and me, with a player's id, their best and rank there
-// ({ ms, rank } or null). CHALLENGE: { id, period, key, world, kind, place, region, route, startsAt,
+// { now, challenges: [ CHALLENGE + { total, top, race, me } ] }, top the LIST_TOP best ({ rank,
+// name, ms, vehicle, level, title, supporter? }), race the quickest time with a ghost to race (as a
+// row, with its run: what a newcomer races; raceQuery) or null, and me, with a player's id, their
+// best and rank there ({ ms, rank } or null). CHALLENGE: { id, period, key, world, kind, place, region, route, startsAt,
 // endsAt }. The first ask in a period fixes its challenges in D1.
 export async function listChallenges( context ) {
 
@@ -165,10 +209,14 @@ export async function listChallenges( context ) {
 		await miss();
 		const results = await db.batch( [
 			...ids.map( challenge => topQuery( db, env, challenge, LIST_TOP ) ),
+			...ids.map( challenge => raceQuery( db, env, challenge ) ),
 			db.prepare( `SELECT id, drivers FROM challenges WHERE id IN ( ${ ids.map( () => '?' ).join( ', ' ) } )` ).bind( ...ids ),
 		] );
 		const drivers = new Map( results.at( - 1 ).results.map( row => [ row.id, row.drivers ] ) );
-		tops = Object.fromEntries( ids.map( ( challenge, i ) => [ challenge, { total: drivers.get( challenge ) ?? 0, top: results[ i ].results.map( entryOf ) } ] ) );
+		const race = i => results[ ids.length + i ].results[ 0 ];
+		tops = Object.fromEntries( ids.map( ( challenge, i ) => [ challenge, {
+			total: drivers.get( challenge ) ?? 0, top: rowsOf( results[ i ].results ), race: race( i ) ? entryOf( race( i ) ) : null,
+		} ] ) );
 		await caches.default.put( listed, json( tops, 200, { 'Cache-Control': `public, max-age=${ CHALLENGE_CACHE }` } ) );
 
 	}
@@ -206,7 +254,7 @@ export async function challengeBoard( context ) {
 		] );
 		const row = found.results[ 0 ];
 		if ( ! row ) throw new HttpError( 404, 'No such challenge' );
-		board = { challenge: { ...challengeOf( row ), replacedAt: row.replaced_at, finalAt: row.final_at }, total: row.drivers, rows: top.results.map( entryOf ) };
+		board = { challenge: { ...challengeOf( row ), replacedAt: row.replaced_at, finalAt: row.final_at }, total: row.drivers, rows: rowsOf( top.results ) };
 		// A finished one's times can't change: kept a day, so asking for past boards in turn reads each
 		// once a day in a place, not once a minute.
 		await caches.default.put( key, json( board, 200, { 'Cache-Control': `public, max-age=${ row.final_at === null ? CHALLENGE_CACHE : FINISHED_CACHE }` } ) );
@@ -226,7 +274,7 @@ export async function challengeBoard( context ) {
 		headers[ 'X-Player-Cache' ] = kept ? 'hit' : 'miss';
 		if ( kept ) return json( { ...answer, me: ( await kept.json() ).me }, 200, headers );
 		await miss();
-		const row = await db.prepare( `SELECT p.name, t.ms, t.vehicle, t.owner, t.created_at, t.final_rank, ${ hasPass( 'p.account_id', '?3' ) } AS supporter, ${ xpOf( 'p' ) } AS xp, p.title
+		const row = await db.prepare( `SELECT p.name, t.ms, t.vehicle, t.owner, t.created_at, t.final_rank, t.run_id, t.handle, ${ hasPass( 'p.account_id', '?3' ) } AS supporter, ${ xpOf( 'p' ) } AS xp, p.title
 			FROM challenge_times t JOIN players p ON p.id = t.player_id WHERE t.challenge_id = ?1 AND t.player_id = ?2` ).bind( challenge, id, supporterEmails( env ) ).first();
 		let rank = null;
 		if ( row ) {
@@ -234,11 +282,12 @@ export async function challengeBoard( context ) {
 			const final = board.challenge.finalAt !== null;
 			rank = ( row.owner ? null : board.rows.find( shown => shown.name === row.name && shown.ms === row.ms )?.rank )
 				?? ( final && ! row.owner ? row.final_rank : null )
-				?? rankIn( ( await boardOrders( context, db, [ challenge ], miss, final ? FINISHED_CACHE : ORDER_KEPT ) ).get( challenge ), row, id );
+				?? rankIn( ( await boardOrders( context, db, [ challenge ], miss, final ? FINISHED_CACHE : ORDER_KEPT ) ).get( challenge ).order, row, id );
 
 		}
 
-		answer.me = row ? { ...entryOf( { ...row, rank } ), ...( row.owner ? { owner: true } : {} ) } : null;
+		// (Its handle as kept with it, for a link to it from your own row.)
+		answer.me = row ? { ...entryOf( { ...row, rank } ), handle: row.handle ?? null, ...( row.owner ? { owner: true } : {} ) } : null;
 		await caches.default.put( mine, json( { me: answer.me }, 200, { 'Cache-Control': `public, max-age=${ CHALLENGE_CACHE }` } ) );
 
 	}
@@ -247,34 +296,232 @@ export async function challengeBoard( context ) {
 
 }
 
-// POST /api/challenges/time { id, secret, visit, challenge, run, ms, passes, vehicle }: a run of a
-// live challenge finished, ms its time and passes when each point was passed ([ [ index, ms ] ], in
-// the order passed). { ms: the player's best, rank, total, isNewBest, top: [ the FINISH_TOP best ] }
-// (rank among the players on the board; for the owner's runs, kept off it, the rank it would have,
-// with owner: true). 400 for a run the game couldn't have driven, 403 for a visit, a player or a
-// challenge that won't do, 429 too often (reason: 'daily' once the visitor's day is used up,
-// 'visit' once the visit's CHALLENGE_TIMES_PER_VISIT are). The
-// same run posted again within REPOST of its being taken (its answer lost on the way, so the page
-// tries again) is answered as it was taken, nothing more written or counted; a run's id that's
-// another player's on the board is a 400 (reason: 'run'), so a run's id names one time.
+// GET /api/challenges/link?challenge=&vs=: what a "challenge a friend" link shows ({ challenge:
+// CHALLENGE + { replacedAt, finalAt }, vs }): the challenge, live or past, and the time its handle
+// names (vs: { name, ms, vehicle, run, ghost (whether its ghost is kept), date, level, title,
+// supporter?, rank? (its final place, once the challenge is over) }), or vs: null for a
+// handle that names none (mistyped, or that player removed), so the page opens the challenge
+// without a ghost. 404 for no such challenge. Nothing of who but the name and the time the board
+// shows. Kept as a board is (linkData).
+export async function challengeLink( context ) {
+
+	const { url } = context;
+	const { challenge, vs } = linkAsked( url );
+	if ( ! challenge ) throw bad();
+	const miss = await looks( context );
+	const { data, cached } = await linkData( context, challenge, vs, miss );
+	return json( data, 200, { 'X-Board-Cache': cached ? 'hit' : 'miss' } );
+
+}
+
+// GET /api/challenges/ghost?challenge=&run=: the ghost of a best on a challenge, by its run (a link's
+// vs.run, the board's leader's run, your own me.run): { run, ms, passes, vehicle, look, ghost }
+// (ghost: ghost-rules.js's text). 404 when that run isn't a best with a ghost kept (a better one has
+// replaced it, the challenge is finished, or its ghosts were past CHALLENGE_GHOST_BUDGET). A run's ghost never changes (a new best is a new run), so it's
+// kept in Cloudflare's cache by the run for GHOST_KEPT, whoever asks; one read of D1 (its one row)
+// when it isn't, held to CHALLENGE_MISSES as the boards are.
+export async function challengeGhost( context ) {
+
+	const { env, url } = context;
+	const challenge = Number( url.searchParams.get( 'challenge' ) );
+	const run = url.searchParams.get( 'run' ) ?? '';
+	if ( ! Number.isSafeInteger( challenge ) || challenge < 1 || ! RUN_ID.test( run ) ) throw bad();
+	const miss = await looks( context );
+	const key = ghostKey( url, challenge, run );
+	const kept = await caches.default.match( key );
+	if ( kept ) return jsonText( await kept.text(), 200, { 'X-Board-Cache': 'hit' } );
+	await miss();
+	const row = await database( env ).prepare( 'SELECT run_id, ms, passes, vehicle, look, ghost FROM challenge_ghosts WHERE challenge_id = ? AND run_id = ?' ).bind( challenge, run ).first();
+	if ( ! row ) throw new HttpError( 404, 'No such ghost' );
+	const text = JSON.stringify( { run: row.run_id, ms: row.ms, passes: JSON.parse( row.passes ), vehicle: row.vehicle, look: JSON.parse( row.look ), ghost: row.ghost } );
+	await caches.default.put( key, jsonText( text, 200, { 'Cache-Control': `public, max-age=${ GHOST_KEPT }` } ) ).catch( err => console.error( 'Challenge caches', err?.name, err?.message ) );
+	return jsonText( text, 200, { 'X-Board-Cache': 'miss' } );
+
+}
+
+// What a link asks for: { challenge: its id, or 0 if it isn't one; vs: a handle, or null }. A handle
+// that can't be one (not HANDLE's form) is no handle: the link opens the challenge without a ghost.
+function linkAsked( url ) {
+
+	const challenge = Number( url.searchParams.get( 'challenge' ) );
+	const vs = url.searchParams.get( 'vs' );
+	return { challenge: Number.isSafeInteger( challenge ) && challenge > 0 ? challenge : 0, vs: vs !== null && HANDLE.test( vs ) ? vs : null };
+
+}
+
+// A link's answer (challengeLink's) for `challenge` and the handle `vs` (or null): { data, cached }.
+// Kept in Cloudflare's cache as the board is (a live challenge's a minute, its player's new best
+// clearing it there; a finished one's a day), so a link posted in a busy chat, its preview fetched by
+// each app and its page opened by everyone in it, reads D1 once a minute at most in a place: the
+// challenge's row and the time by its handle (one indexed look) with its player. `miss` (looks') is
+// asked before D1 is.
+async function linkData( context, challenge, vs, miss ) {
+
+	const { env, url } = context;
+	const key = linkKey( url, challenge, vs );
+	const kept = await caches.default.match( key );
+	if ( kept ) return { data: await kept.json(), cached: true };
+	await miss();
+	const db = database( env );
+	const [ found, time ] = await db.batch( [
+		db.prepare( 'SELECT * FROM challenges WHERE id = ?' ).bind( challenge ),
+		db.prepare( `SELECT p.name, t.ms, t.vehicle, t.run_id, t.owner, t.created_at, t.final_rank, ${ hasPass( 'p.account_id', '?3' ) } AS supporter, ${ xpOf( 'p' ) } AS xp, p.title,
+			t.ghost
+			FROM challenge_times t JOIN players p ON p.id = t.player_id WHERE t.challenge_id = ?1 AND t.handle = ?2` ).bind( challenge, vs ?? '', supporterEmails( env ) ),
+	] );
+	const row = found.results[ 0 ];
+	if ( ! row ) throw new HttpError( 404, 'No such challenge' );
+	const them = vs ? time.results[ 0 ] : null;
+	const final = row.final_at !== null;
+	const data = {
+		challenge: { ...challengeOf( row ), replacedAt: row.replaced_at, finalAt: row.final_at },
+		// (Not whether it's the owner's: nothing of who but the name and the time.)
+		vs: them ? { ...entryOf( { ...them, rank: final && ! them.owner ? them.final_rank : null } ), ghost: ! final && them.ghost > 0 } : null,
+	};
+	await caches.default.put( key, json( data, 200, { 'Cache-Control': `public, max-age=${ final ? FINISHED_CACHE : CHALLENGE_CACHE }` } ) ).catch( err => console.error( 'Challenge caches', err?.name, err?.message ) );
+	return { data, cached: false };
+
+}
+
+// The page itself for a link to a challenge (/c?challenge=&vs=: the path "challenge a friend" shares,
+// and the only page the Worker runs for, run_worker_first in wrangler.drive.jsonc, so the home page
+// and the rest stay files served free and without limit), with its own preview for chat apps: the
+// link card's title and description (og: and twitter:) say whose time it is, where and which
+// period, from the link's answer as the page gets it (linkData: kept in Cloudflare's cache, so a
+// crawler costs no more than a look at it), each tag written whole with its words escaped here
+// (escapeHtml). The page is index.html as it is at / (it reads the link from the address, and
+// puts the address back to / once it's opened it). Anything that won't do (no such challenge, a
+// look too many, D1 not answering, a link that isn't one) is the page as it is, with the game's own
+// card: the page always opens.
+export async function linkPage( context ) {
+
+	const { request, env, url, now } = context;
+	// The site's page, asked afresh (not as a browser's copy of it: the card is this link's).
+	const page = await env.ASSETS.fetch( new Request( new URL( '/', url ).href, { method: 'GET', headers: { Accept: request.headers.get( 'Accept' ) ?? 'text/html' } } ) );
+	const { challenge, vs } = linkAsked( url );
+	if ( ! challenge || ! page.ok || ! /text\/html/.test( page.headers.get( 'Content-Type' ) ?? '' ) ) return page;
+	let words;
+	try {
+
+		words = linkWords( ( await linkData( context, challenge, vs, await looks( context ) ) ).data, now );
+
+	} catch ( err ) {
+
+		if ( ! ( err instanceof HttpError ) ) console.error( 'Challenge link page', err?.name, err?.message );
+		return page;
+
+	}
+
+	// Each tag written whole, its words escaped here (the HTMLRewriter's setAttribute escapes a
+	// quote, not an ampersand).
+	const set = ( attribute, name, value ) => ( { element: element => element.replace( `<meta ${ attribute }="${ name }" content="${ escapeHtml( value ) }" />`, { html: true } ) } );
+	const shown = new HTMLRewriter()
+		.on( 'meta[property="og:title"]', set( 'property', 'og:title', words.title ) )
+		.on( 'meta[name="twitter:title"]', set( 'name', 'twitter:title', words.title ) )
+		.on( 'meta[property="og:description"]', set( 'property', 'og:description', words.description ) )
+		.on( 'meta[name="twitter:description"]', set( 'name', 'twitter:description', words.description ) )
+		.on( 'meta[property="og:url"]', set( 'property', 'og:url', linkUrl( challenge, vs ) ) )
+		.transform( page );
+	const headers = new Headers( shown.headers );
+	for ( const name of [ 'ETag', 'Last-Modified', 'Content-Length' ] ) headers.delete( name );
+	// (Its card is this moment's: the time to beat, the time left.)
+	headers.set( 'Cache-Control', 'no-store' );
+	return new Response( shown.body, { status: 200, headers } );
+
+}
+
+// A link to `challenge` naming the time `vs` (or none), as "challenge a friend" shares it.
+export function linkUrl( challenge, vs ) {
+
+	return `${ SITE }${ LINK_PATH }?challenge=${ challenge }${ vs ? `&vs=${ vs }` : '' }`;
+
+}
+
+// A link's card for chat apps, from its answer (linkData's) at `now`: { title, description }, plain
+// text (linkPage escapes it as it writes it into the page). "Beat Ann Racer's 0:21.40 on today's
+// Furka Pass sprint" and "A daily checkpoint sprint at Furka Pass (Swiss Alps) in World Drive, on
+// till the end of Monday 16 November (UTC). Drive it in your browser and race Ann Racer's ghost."
+// (or "and beat it." when their ghost isn't kept); one that's over says so, with their time and
+// place on its final board. When it ends, not how long is left: a chat app keeps a link's card as it
+// first fetched it, and shows it as long as the chat is there (the page's own card counts down).
+export function linkWords( { challenge, vs }, now ) {
+
+	const { period, kind, place, region, world, route, endsAt, finalAt, replacedAt } = challenge;
+	const where = `${ place }${ world === 'moon' ? ' on the Moon' : '' }`;
+	const what = { sprint: 'sprint', collect: 'star hunt', landmark: `drive to ${ route.goal ?? place }` }[ kind ];
+	const which = { day: 'today\'s', week: 'this week\'s', month: 'this month\'s' }[ period ];
+	const named = { day: 'daily', week: 'weekly', month: 'monthly' }[ period ];
+	const full = `${ KIND_NAMES[ kind ].toLowerCase() } at ${ place }${ region ? ` (${ region })` : '' }${ world === 'moon' ? ' on the Moon' : '' }`;
+	const over = finalAt !== null || replacedAt !== null || endsAt <= now;
+	if ( over ) {
+
+		return {
+			title: vs ? `${ vs.name } finished in ${ formatTime( vs.ms ) } at ${ where }` : `The ${ named } challenge at ${ where } is over`,
+			description: `The ${ named } ${ full } in World Drive has ended${ vs?.rank ? `, with ${ vs.name } #${ rankText( vs.rank ) } on its board` : '' }. Try today's challenges, free in your browser.`,
+		};
+
+	}
+
+	const until = `on till the end of ${ lastDay( endsAt ) } (UTC)`;
+	if ( ! vs ) return { title: `World Drive: ${ which } challenge at ${ where }`, description: `A ${ named } ${ full } in World Drive, ${ until }. Drive it in your browser, free.` };
+	return {
+		title: `Beat ${ vs.name }'s ${ formatTime( vs.ms ) } on ${ which } ${ kind === 'landmark' ? what : `${ where } ${ what }` }`,
+		description: `A ${ named } ${ full } in World Drive, ${ until }. Drive it in your browser and ${ vs.ghost ? `race ${ vs.name }'s ghost` : 'beat it' }.`,
+	};
+
+}
+
+// The last day (UTC) of a challenge ending at `endsAt` (its period's end, a midnight UTC): "Monday 16
+// November".
+function lastDay( endsAt ) {
+
+	const day = new Date( endsAt - 1 );
+	return `${ [ 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday' ][ day.getUTCDay() ] } ${ day.getUTCDate() } ${ day.toLocaleString( 'en', { month: 'long', timeZone: 'UTC' } ) }`;
+
+}
+
+// POST /api/challenges/time { id, secret, visit, challenge, run, ms, passes, vehicle, look, ghost }:
+// a run of a live challenge finished, ms its time and passes when each point was passed ([ [ index,
+// ms ] ], in the order passed), look the ride's Garage look (checkLook's parts) and ghost the run
+// itself (ghost-rules.js's text). { ms: the player's best, rank, total, isNewBest, top: [ the
+// FINISH_TOP best ], run: the best's run, handle: what a link to it names it by } (rank among the
+// players on the board; for the owner's runs, kept off it, the rank it would have, with owner:
+// true). 400 for a run the game couldn't have driven (reason: 'ghost', with the fault, for a ghost
+// that doesn't agree with it), 403 for a visit, a player or a challenge that won't do, 429 too
+// often (reason: 'daily' once the visitor's day is used up, 'visit' once the visit's
+// CHALLENGE_TIMES_PER_VISIT are). The same run posted again within REPOST of its being taken (its
+// answer lost on the way, so the page tries again) is answered as it was taken, nothing more
+// written or counted; a run's id that's another player's on the board, or a new best with the
+// best's own run id (a run's ghost is kept by its id, and never changes), is a 400 (reason: 'run'),
+// so a run's id names one time.
 export async function postTime( context ) {
 
 	const { request, env, limits, now, url } = context;
 	const db = database( env );
 	// A burst of posts from one address (a script), turned away before anything's read, as a burst of
-	// looks is. (Not CHALLENGE_MISSES: what a time reads is held by the gap, the visit's times and the
-	// visitor's day, below.)
-	await looks( context );
-	const body = await readJson( request, 2048 );
+	// looks is (CHALLENGE_LOOKS); and those that get as far as reading D1 (below) are held as the
+	// looks that read it are.
+	const miss = await looks( context );
+	const body = await readJson( request, TIME_BODY );
 	if ( ! isObject( body ) ) throw bad();
 	const { id, secret } = credentials( body );
-	const { challenge: challengeId, run, ms, passes, vehicle } = body;
+	const { challenge: challengeId, run, ms, passes, vehicle, ghost } = body;
 	if ( ! Number.isSafeInteger( challengeId ) || challengeId < 1 || typeof run !== 'string' || ! RUN_ID.test( run ) ) throw bad();
 	if ( typeof vehicle !== 'string' || ! VEHICLES.has( vehicle ) || ! Number.isSafeInteger( ms ) || ms <= 0 ) throw bad();
-	if ( ! Array.isArray( passes ) || passes.length > 32 ) throw bad();
+	if ( ! Array.isArray( passes ) || passes.length > 32 || typeof ghost !== 'string' || ghost.length > GHOST_TEXT ) throw bad();
+	// The ride's look, as a room takes it (only the Garage's parts, each an id): drawn with its ghost.
+	const look = body.look === undefined ? {} : checkLook( body.look );
+	if ( ! look ) throw bad();
 
 	const visit = await readVisit( env, body.visit, now );
 	if ( ! visit ) throw new HttpError( 403, 'Forbidden', { reason: 'visit' } );
+	// Every post that gets this far reads D1 (the challenge, the player, the visit, the best, the gap)
+	// before the gap, the visit's times or the visitor's day can turn it away, so it's one of the
+	// address's CHALLENGE_MISSES (10 a minute, shared with its lists and boards that miss the cache),
+	// asked before D1 is. A page posts once a run (and again only if its answer's lost), so it's
+	// never near that; a script resending a good body over and over reads about ten rows each of ten
+	// a minute.
+	await miss();
 	// The challenge itself, from D1 (one the owner has replaced in the last minute may still be in
 	// some instance's list): live, or over a moment ago with the run begun before its end.
 	const row = await db.prepare( 'SELECT * FROM challenges WHERE id = ?' ).bind( challengeId ).first();
@@ -286,6 +533,11 @@ export async function postTime( context ) {
 	const challenge = challengeOf( row );
 	// No longer than the visit has lasted, and possible on the route.
 	if ( ms / 1000 > ( now - visit.issuedAt ) / 1000 + SLACK || ! checkPasses( challenge, ms, passes ) ) throw bad();
+	// And the run itself, its ghost, agreeing with that: through each point at its pass time, as long
+	// as the time, and never faster between two of its samples than the game goes (ghost-rules.js).
+	// What it can't stop is in the docs ("How cheating is limited").
+	const fault = ghostFault( challenge, ms, passes, ghost );
+	if ( fault ) throw new HttpError( 400, 'Bad request', { reason: 'ghost', fault } );
 
 	const player = await authenticate( db, id, secret );
 	// One visit, one player, as for scores.
@@ -294,7 +546,9 @@ export async function postTime( context ) {
 		db.prepare( 'SELECT player_id, times FROM visits WHERE id = ?' ).bind( visit.id ),
 	] );
 	if ( bound.results[ 0 ]?.player_id !== id ) throw new HttpError( 403, 'Forbidden', { reason: 'visit' } );
-	const was = await db.prepare( 'SELECT ms, owner, run_id, created_at FROM challenge_times WHERE challenge_id = ? AND player_id = ?' ).bind( challengeId, id ).first();
+	// (With its ghost's size, which a new best's ghost takes the place of.)
+	const was = await db.prepare( `SELECT t.ms, t.owner, t.run_id, t.created_at, t.handle, ( SELECT g.bytes FROM challenge_ghosts g WHERE g.challenge_id = t.challenge_id AND g.player_id = t.player_id ) AS ghost_bytes
+		FROM challenge_times t WHERE t.challenge_id = ? AND t.player_id = ?` ).bind( challengeId, id ).first();
 	// The run that's already the best, posted again soon after: its answer was lost on the way (a
 	// phone losing its signal) and the page has tried again. Answered as it was taken, without the
 	// gap (it's been taken; CHALLENGE_LOOKS holds a burst of them, above), from Cloudflare's cache,
@@ -306,11 +560,14 @@ export async function postTime( context ) {
 		const key = answerKey( url, challengeId, id, run );
 		const kept = await caches.default.match( key );
 		if ( kept ) return json( await kept.json(), 200, { 'X-Time-Cache': 'hit' } );
-		const answer = await answerTime( context, db, challengeId, id, true );
+		const answer = await answerTime( context, db, challengeId, id, true, miss );
 		await keepAnswer( key, answer, was.created_at + REPOST - now );
 		return json( answer, 200, { 'X-Time-Cache': 'miss' } );
 
 	}
+
+	// A new best is a new run: its ghost is kept, and cached, by its run's id, which never changes.
+	if ( was?.run_id === run && ms < was.ms ) throw new HttpError( 400, 'Bad request', { reason: 'run' } );
 
 	// One time every TIME_GAP from a player, and CHALLENGE_TIMES_PER_VISIT from a visit (whatever
 	// addresses its token is sent from: each visit is a robot check, so that's all one buys), claimed
@@ -368,6 +625,9 @@ export async function postTime( context ) {
 
 	const owner = visit.owner ? 1 : 0;
 	const isNewBest = ! was || ms < was.ms;
+	// The time's handle: made as its first is written, and kept with it from then on (a better time
+	// keeps it), so a link shared once goes on naming it whatever changes since (the Worker's secret).
+	const handle = was?.handle ?? await handleOf( env, challengeId, id );
 	if ( isNewBest ) {
 
 		// Only a better time replaces the best; the owner's mark stays once it's there. A new player
@@ -376,15 +636,61 @@ export async function postTime( context ) {
 		// but its final places may have been written since (a post in the minute after its end, as
 		// finishEnded runs), and a time written after them would be one its places don't count.
 		let written;
+		const budget = setting( env.CHALLENGE_GHOST_BUDGET, GHOST_BUDGET );
+		const gone = await makeRoom( db, row, id, ms, ghost.length - ( was?.ghost_bytes ?? 0 ), budget );
+		const least = leastTime( challenge, passes );
 		try {
 
+			// With its ghost, written only where the time was (the best now has this run), so the ghost
+			// kept is always the best's, replaced with it: the best it replaced has its ghost let go, and
+			// the slower ones makeRoom chose (if the challenge's ghosts are full), their room given back,
+			// then this one's is written if the challenge's ghosts have room for it then
+			// (CHALLENGE_GHOST_BUDGET) and counted. Past that the time is kept without one. One
+			// transaction: all of it or none.
+			//
+			// Whether there's room is worked out once, as the time is written, into the time's own row
+			// (its ghost: 0 none, 1 kept, 2 kept and PLAUSIBLE, one to race), and everything after it
+			// goes by that, so the ghost is written exactly when the time says it's kept (the old best's
+			// deleted first, so nothing's in its way). Every ghost
+			// row is found by its key, the challenge and the player, so a post reads a row or two of
+			// them however many a challenge keeps: the old best's by the player, and those let go (only
+			// when makeRoom chose some, only while the challenge's ghosts are full) by theirs, each only
+			// if still slower than this time (`+ms`: by its key, never by the index on the times, which
+			// would read every slower ghost to find them).
+			const mine = 'challenge_id = ?1 AND player_id = ?2';
+			const taken = `EXISTS ( SELECT 1 FROM challenge_times WHERE ${ mine } AND run_id = ?3 )`;
+			const keeps = `EXISTS ( SELECT 1 FROM challenge_times WHERE ${ mine } AND run_id = ?3 AND ghost > 0 )`;
+			const others = 'challenge_id = ?1 AND player_id IN ( SELECT value FROM json_each( ?4 ) ) AND +ms > ?5';
+			const room = `MAX( 0, c.ghost_bytes - COALESCE( ( SELECT bytes FROM challenge_ghosts WHERE challenge_id = ?1 AND player_id = ?2 ), 0 )
+				- COALESCE( ( SELECT SUM( bytes ) FROM challenge_ghosts WHERE challenge_id = ?1 AND player_id IN ( SELECT value FROM json_each( ?13 ) ) AND +ms > ?3 ), 0 ) ) + ?11 <= ?12`;
+			const evicted = JSON.stringify( gone );
 			[ written ] = await db.batch( [
-				db.prepare( `INSERT INTO challenge_times ( challenge_id, player_id, ms, passes, vehicle, run_id, visit, owner, created_at, first_at ) SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9
-					WHERE EXISTS ( SELECT 1 FROM challenges WHERE id = ?1 AND final_at IS NULL AND replaced_at IS NULL )
+				db.prepare( `INSERT INTO challenge_times ( challenge_id, player_id, ms, passes, vehicle, run_id, visit, owner, created_at, first_at, handle, ghost )
+					SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9, ?10, CASE WHEN ${ room } THEN 1 + ?14 ELSE 0 END
+					FROM challenges c WHERE c.id = ?1 AND c.final_at IS NULL AND c.replaced_at IS NULL
 					ON CONFLICT ( challenge_id, player_id ) DO UPDATE SET ms = excluded.ms, passes = excluded.passes, vehicle = excluded.vehicle, run_id = excluded.run_id,
-					visit = excluded.visit, owner = MAX( challenge_times.owner, excluded.owner ), created_at = excluded.created_at WHERE excluded.ms < challenge_times.ms` )
-					.bind( challengeId, id, ms, JSON.stringify( passes ), vehicle, run, visit.id, owner, now ),
-				...was || owner ? [] : [ db.prepare( 'UPDATE challenges SET drivers = drivers + 1 WHERE id = ? AND final_at IS NULL AND replaced_at IS NULL' ).bind( challengeId ) ],
+					visit = excluded.visit, owner = MAX( challenge_times.owner, excluded.owner ), created_at = excluded.created_at, handle = COALESCE( challenge_times.handle, excluded.handle ),
+					ghost = excluded.ghost
+					WHERE excluded.ms < challenge_times.ms` )
+					.bind( challengeId, id, ms, JSON.stringify( passes ), vehicle, run, visit.id, owner, now, handle, ghost.length, budget, evicted, ms >= PLAUSIBLE * least ? 1 : 0 ),
+				// The slower ones let go to make room for it (only when makeRoom chose some, and it's kept):
+				// their times say they've none now.
+				...gone.length ? [ db.prepare( `UPDATE challenge_times SET ghost = 0 WHERE challenge_id = ?1 AND player_id IN ( SELECT player_id FROM challenge_ghosts WHERE ${ others } ) AND ${ keeps }` )
+					.bind( challengeId, id, run, evicted, ms ) ] : [],
+				// The challenge's count of drivers (a new player on the board, not the owner) and of its
+				// ghosts' room, in one write: the old best's ghost's room given back, and those let go, and
+				// this one's taken if it's kept.
+				db.prepare( `UPDATE challenges SET drivers = drivers + ?6, ghost_bytes = MAX( 0, ghost_bytes - COALESCE( ( SELECT bytes FROM challenge_ghosts WHERE ${ mine } ), 0 )
+					- CASE WHEN ${ keeps } THEN COALESCE( ( SELECT SUM( bytes ) FROM challenge_ghosts WHERE ${ others } ), 0 ) ELSE 0 END ) + CASE WHEN ${ keeps } THEN ?7 ELSE 0 END
+					WHERE id = ?1 AND ${ taken } AND ( ?6 > 0 OR ${ keeps } OR EXISTS ( SELECT 1 FROM challenge_ghosts WHERE ${ mine } ) )` )
+					.bind( challengeId, id, run, evicted, ms, was || owner ? 0 : 1, ghost.length ),
+				// Then the old best's ghost, and those let go, deleted, and this one's written.
+				db.prepare( `DELETE FROM challenge_ghosts WHERE ${ mine } AND ${ taken }` ).bind( challengeId, id, run ),
+				...gone.length ? [ db.prepare( `DELETE FROM challenge_ghosts WHERE ${ others } AND ${ keeps }` ).bind( challengeId, id, run, evicted, ms ) ] : [],
+				db.prepare( `INSERT INTO challenge_ghosts ( challenge_id, player_id, run_id, ms, passes, vehicle, look, ghost, bytes, least_ms, created_at ) SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11
+					WHERE ${ keeps }
+					ON CONFLICT ( challenge_id, player_id ) DO NOTHING` )
+					.bind( challengeId, id, run, ms, JSON.stringify( passes ), vehicle, JSON.stringify( look ), ghost, ghost.length, least, now ),
 			] );
 
 		} catch ( err ) {
@@ -401,39 +707,69 @@ export async function postTime( context ) {
 		// So the player, and anyone asking here, sees it straight away (in this one of Cloudflare's
 		// places; elsewhere within CHALLENGE_CACHE s). Nothing going wrong in it turns the best that's
 		// now kept into an error.
-		await forgetTime( context, challengeId, id ).catch( err => console.error( 'Challenge caches', err?.name, err?.message ) );
+		await forgetTime( context, challengeId, id, handle ).catch( err => console.error( 'Challenge caches', err?.name, err?.message ) );
 
 	}
 
-	const answer = await answerTime( context, db, challengeId, id, isNewBest );
+	const answer = await answerTime( context, db, challengeId, id, isNewBest, miss );
 	// A new best's answer kept for the same run posted again (above).
 	if ( isNewBest ) await keepAnswer( answerKey( url, challengeId, id, run ), answer, REPOST );
 	return json( answer );
 
 }
 
+// The players whose ghosts are let go on challenge `row` (its row, as read) to make room for a new
+// best of `ms` by `player` whose ghost takes `more` characters more than their old one's: none while
+// there's room; else the slowest kept, slower than `ms`, slowest first, till there would be (at
+// most EVICT_LOOK of them, a read of as many rows, only while the challenge's ghosts are full). If
+// even all those wouldn't make room, none: the new best is the one kept without its ghost. (Its
+// count is as read; the writes check it again, so a post between can only mean this one's ghost
+// isn't kept.)
+async function makeRoom( db, row, player, ms, more, budget ) {
+
+	let over = ( row.ghost_bytes ?? 0 ) + more - budget;
+	if ( over <= 0 ) return [];
+	const { results } = await db.prepare( `SELECT player_id, bytes FROM challenge_ghosts WHERE challenge_id = ? AND ms > ? AND player_id != ? ORDER BY ms DESC, created_at DESC LIMIT ${ EVICT_LOOK }` )
+		.bind( row.id, ms, player ).all();
+	const gone = [];
+	for ( const kept of results ) {
+
+		if ( over <= 0 ) break;
+		gone.push( kept.player_id );
+		over -= kept.bytes;
+
+	}
+
+	return over <= 0 ? gone : [];
+
+}
+
 // postTime's answer, for `player` on challenge `id`: their best, its rank, the board's count and
-// top, and whether `isNewBest`. A new best changes the board's order, so it's read afresh with the
-// rest (at most RANK_MOST rows: one read for each new best, which the gap, the visit's times and
-// the visitor's day hold) and kept for the looks after it here; a time that isn't one finds its
-// rank in the order kept.
-async function answerTime( context, db, id, player, isNewBest ) {
+// top, and whether `isNewBest`. The rank is found in the board's order kept in Cloudflare's cache
+// (boardOrders: read from D1 only when this place has none, which `miss` holds); a new best is put
+// into it there (placeIn) and it's kept again for the rest of the time it was first kept for, so a
+// new best reads its own row and the top five, not the board's thousand again, and the order kept
+// is never more than ORDER_KEPT behind D1 (the bests posted in Cloudflare's other places).
+async function answerTime( context, db, id, player, isNewBest, miss ) {
 
-	const [ standing, top, read ] = await db.batch( [
-		db.prepare( 'SELECT t.ms, t.owner, t.created_at, c.drivers FROM challenge_times t JOIN challenges c ON c.id = t.challenge_id WHERE t.challenge_id = ? AND t.player_id = ?' ).bind( id, player ),
+	const [ standing, top ] = await db.batch( [
+		db.prepare( 'SELECT t.ms, t.owner, t.created_at, t.run_id, t.handle, c.drivers FROM challenge_times t JOIN challenges c ON c.id = t.challenge_id WHERE t.challenge_id = ? AND t.player_id = ?' ).bind( id, player ),
 		topQuery( db, context.env, id, FINISH_TOP ),
-		...isNewBest ? [ orderQuery( db, id ) ] : [],
 	] );
-	let order;
-	if ( read ) {
-
-		order = orderFrom( read.results );
-		await keepOrder( context.url, id, order, ORDER_KEPT );
-
-	} else order = ( await boardOrders( context, db, [ id ], () => {} ) ).get( id );
 	const mine = standing.results[ 0 ];
+	const kept = ( await boardOrders( context, db, [ id ], miss ) ).get( id );
+	let { order } = kept;
+	if ( isNewBest && ! mine.owner ) {
+
+		order = placeIn( order, mine, player );
+		const left = ORDER_KEPT - Math.ceil( ( context.now - kept.at ) / 1000 );
+		if ( left > 0 ) await keepOrder( context.url, id, order, left, kept.at );
+
+	}
+
 	return {
-		ms: mine.ms, rank: rankIn( order, mine, player ), total: mine.drivers, isNewBest, top: top.results.map( entryOf ),
+		ms: mine.ms, rank: rankIn( order, mine, player ), total: mine.drivers, isNewBest, top: rowsOf( top.results ),
+		run: mine.run_id, handle: mine.handle,
 		...( mine.owner ? { owner: true } : {} ),
 	};
 
@@ -448,11 +784,14 @@ async function keepAnswer( key, answer, ms ) {
 
 }
 
-// The cached rows a new best on challenge `id` by `player` changes: its board, its order and the
-// player's own row there, at once; and the list's tops and the player's rows on the six, with the
-// six's ids this instance knows (or, if it doesn't just now, in the background: finding them may
-// mean fixing a new period's six, which is no part of a time's answer).
-async function forgetTime( context, id, player ) {
+// The cached rows a new best on challenge `id` by `player` changes: its board, the player's own row
+// there and a link to their time (by its `handle`), at once (its order is kept, the new best put
+// into it: answerTime); and the list's tops
+// and the player's rows on the six, with the six's ids this instance knows (or, if it doesn't just
+// now, in the background: finding them may mean fixing a new period's six, which is no part of a
+// time's answer). (The ghost of the run it replaces stays in the cache by that run as it was: no
+// link or board names it now.)
+async function forgetTime( context, id, player, handle ) {
 
 	const { url, ctx } = context;
 	const lists = rows => {
@@ -462,7 +801,7 @@ async function forgetTime( context, id, player ) {
 
 	};
 	const known = liveKnown( context.now );
-	await Promise.all( [ boardKey( url, id ), boardKey( url, id, player ), orderKey( url, id ), ...known ? lists( known ) : [] ].map( key => caches.default.delete( key ) ) );
+	await Promise.all( [ boardKey( url, id ), boardKey( url, id, player ), linkKey( url, id, handle ), ...known ? lists( known ) : [] ].map( key => caches.default.delete( key ) ) );
 	if ( ! known ) await later( ctx, liveChallenges( context ).then( rows => Promise.all( lists( rows ).map( key => caches.default.delete( key ) ) ) ), 'Challenge caches' );
 
 }
@@ -534,7 +873,7 @@ async function adminAnswer( context ) {
 
 	return json( {
 		now,
-		current: rows.map( ( row, i ) => ( { ...challengeOf( row ), source: row.source, total: drivers.get( row.id ) ?? 0, top: tops[ i ].results.map( entryOf ) } ) ),
+		current: rows.map( ( row, i ) => ( { ...challengeOf( row ), source: row.source, total: drivers.get( row.id ) ?? 0, top: rowsOf( tops[ i ].results ) } ) ),
 		upcoming,
 		picks: picks.results.map( pick => ( { pick, starts: parsePeriod( pick.period )?.starts ?? 0 } ) ).sort( ( a, b ) => a.starts - b.starts || PERIOD_KINDS.indexOf( periodKind( a.pick.period ) ) - PERIOD_KINDS.indexOf( periodKind( b.pick.period ) ) || WORLDS.indexOf( a.pick.world ) - WORLDS.indexOf( b.pick.world ) )
 			.map( ( { pick, starts } ) => ( { period: pick.period, world: pick.world, kind: pick.kind, place: pick.place, region: pick.region, lat: pick.lat, lon: pick.lon, heading: pick.heading, startsAt: starts } ) ),
@@ -928,10 +1267,13 @@ async function finishEnded( db, now ) {
 function finishQueries( db, id, now ) {
 
 	return [
-		db.prepare( `UPDATE challenge_times SET final_rank = ranked.place FROM (
+		db.prepare( `UPDATE challenge_times SET final_rank = ranked.place, ghost = 0 FROM (
 			SELECT player_id, ROW_NUMBER() OVER ( ORDER BY ms, created_at, player_id ) AS place FROM challenge_times WHERE challenge_id = ?1 AND owner = 0
 		) AS ranked WHERE challenge_times.challenge_id = ?1 AND challenge_times.player_id = ranked.player_id` ).bind( id ),
 		db.prepare( 'UPDATE challenges SET final_at = ? WHERE id = ? AND final_at IS NULL' ).bind( now, id ),
+		// Its ghosts: nothing races a finished challenge (a link to one shows its board instead).
+		db.prepare( 'DELETE FROM challenge_ghosts WHERE challenge_id = ?' ).bind( id ),
+		db.prepare( 'UPDATE challenges SET ghost_bytes = 0 WHERE id = ?' ).bind( id ),
 	];
 
 }
@@ -939,11 +1281,38 @@ function finishQueries( db, id, now ) {
 // --- boards ---
 
 // The top `most` on challenge `id`'s board (the owner's runs left out), fastest first, with what a
-// row shows.
+// row shows, and whether it's one to race (raced: its ghost kept, its time PLAUSIBLE, as the time's
+// own row says: rowsOf), so no ghost's row is read for it.
 function topQuery( db, env, id, most ) {
 
-	return db.prepare( `SELECT p.name, t.ms, t.vehicle, t.created_at, ${ hasPass( 'p.account_id', '?3' ) } AS supporter, ${ xpOf( 'p' ) } AS xp, p.title
-		FROM challenge_times t JOIN players p ON p.id = t.player_id WHERE t.challenge_id = ?1 AND t.owner = 0 ORDER BY t.ms, t.created_at, t.player_id LIMIT ?2` ).bind( id, most, supporterEmails( env ) );
+	return db.prepare( `SELECT p.name, t.ms, t.vehicle, t.created_at, t.run_id, ${ hasPass( 'p.account_id', '?3' ) } AS supporter, ${ xpOf( 'p' ) } AS xp, p.title, t.ghost = 2 AS raced
+		FROM challenge_times t JOIN players p ON p.id = t.player_id
+		WHERE t.challenge_id = ?1 AND t.owner = 0 ORDER BY t.ms, t.created_at, t.player_id LIMIT ?2` ).bind( id, most, supporterEmails( env ) );
+
+}
+
+// The quickest time on challenge `id` with a ghost to race (its ghost kept, its time PLAUSIBLE; the
+// owner's left out), as a board's row shows it with its run: what a newcomer races by default (the
+// list's race), however many quicker times have no ghost kept or are made up. One row of the index
+// that holds only those (challenge_times_raced), and its player's.
+function raceQuery( db, env, id ) {
+
+	return db.prepare( `SELECT p.name, t.ms, t.vehicle, t.created_at, t.run_id, ${ hasPass( 'p.account_id', '?2' ) } AS supporter, ${ xpOf( 'p' ) } AS xp, p.title
+		FROM challenge_times t INDEXED BY challenge_times_raced JOIN players p ON p.id = t.player_id
+		WHERE t.challenge_id = ?1 AND t.ghost = 2 AND t.owner = 0 ORDER BY t.ms, t.created_at, t.player_id LIMIT 1` ).bind( id, supporterEmails( env ) );
+
+}
+
+// A board's rows (topQuery's) as the page shows them (entryOf), the run handed out on the first
+// one to race alone (raced: its ghost kept, its time no quicker than PLAUSIBLE allows): the ghost a
+// newcomer races by default, and its row's Race. Every ghost handed out is a path someone could post
+// again a little quicker (docs/world-drive.md, "What it can't stop"), so a board doesn't hand out
+// twenty of them; and a time quicker than the game could plausibly be driven (a made-up one at the
+// top) isn't the one every newcomer races.
+function rowsOf( rows ) {
+
+	const raced = rows.findIndex( row => row.raced );
+	return rows.map( ( row, i ) => entryOf( { ...row, run_id: i === raced ? row.run_id : null }, i ) );
 
 }
 
@@ -957,24 +1326,28 @@ async function myStanding( context, db, ids, player, miss ) {
 	const kept = await caches.default.match( key );
 	if ( kept ) return kept.json();
 	await miss();
-	const rows = ( await db.prepare( `SELECT challenge_id, ms, owner, created_at FROM challenge_times WHERE player_id = ? AND challenge_id IN ( ${ ids.map( () => '?' ).join( ', ' ) } )` )
+	const rows = ( await db.prepare( `SELECT challenge_id, ms, owner, created_at, run_id, handle FROM challenge_times WHERE player_id = ? AND challenge_id IN ( ${ ids.map( () => '?' ).join( ', ' ) } )` )
 		.bind( player, ...ids ).all() ).results;
 	const orders = await boardOrders( context, db, rows.map( row => row.challenge_id ), miss );
-	const mine = Object.fromEntries( rows.map( row => [ row.challenge_id, { ms: row.ms, rank: rankIn( orders.get( row.challenge_id ), row, player ), ...( row.owner ? { owner: true } : {} ) } ] ) );
+	// With the best's run (its ghost, to race) and its handle as kept with it (a link to it, to share).
+	const mine = Object.fromEntries( rows.map( row => [ row.challenge_id, {
+		ms: row.ms, rank: rankIn( orders.get( row.challenge_id ).order, row, player ), run: row.run_id, handle: row.handle ?? null, ...( row.owner ? { owner: true } : {} ),
+	} ] ) );
 	await caches.default.put( key, json( mine, 200, { 'Cache-Control': `public, max-age=${ CHALLENGE_CACHE }` } ) );
 	return mine;
 
 }
 
 // The order of each of the boards `ids`: its first RANK_MOST times as [ ms, created_at, player ],
-// quickest first (the same time: who set it first), the owner's left out, as a Map by id. From
-// Cloudflare's cache; those it hasn't, read from the board's index in one batch (as many rows as the
-// board has, RANK_MOST at most: orderQuery) and kept `seconds`. So a board is read whole at most once
-// each ORDER_KEPT in a place (and again after a new best there: answerTime reads it afresh), whoever
-// asks, rather than a count of the rows ahead for each player looked at.
+// quickest first (the same time: who set it first), the owner's left out, as a Map by id of { order,
+// at } (at: when it was read from D1). From Cloudflare's cache; those it hasn't, read from the
+// board's index in one batch (as many rows as the board has, RANK_MOST at most: orderQuery) and kept
+// `seconds`. So a board is read whole at most once each ORDER_KEPT in a place, whoever asks (a new
+// best there is put into the order kept: answerTime), rather than a count of the rows ahead for each
+// player looked at.
 async function boardOrders( context, db, ids, miss, seconds = ORDER_KEPT ) {
 
-	const { url } = context;
+	const { url, now } = context;
 	const orders = new Map();
 	const kept = await Promise.all( ids.map( id => caches.default.match( orderKey( url, id ) ) ) );
 	for ( const [ i, res ] of kept.entries() ) if ( res ) orders.set( ids[ i ], await res.json() );
@@ -985,8 +1358,8 @@ async function boardOrders( context, db, ids, miss, seconds = ORDER_KEPT ) {
 	await Promise.all( missing.map( ( id, i ) => {
 
 		const order = orderFrom( read[ i ].results );
-		orders.set( id, order );
-		return keepOrder( url, id, order, seconds );
+		orders.set( id, { order, at: now } );
+		return keepOrder( url, id, order, seconds, now );
 
 	} ) );
 	return orders;
@@ -1007,21 +1380,30 @@ function orderFrom( rows ) {
 
 }
 
-// Board `id`'s `order` kept in Cloudflare's cache for `seconds`; nothing going wrong in it turns an
-// answer into an error.
-function keepOrder( url, id, order, seconds ) {
+// Board `id`'s `order`, read from D1 `at`, kept in Cloudflare's cache for `seconds`; nothing going
+// wrong in it turns an answer into an error.
+function keepOrder( url, id, order, seconds, at ) {
 
-	return caches.default.put( orderKey( url, id ), json( order, 200, { 'Cache-Control': `public, max-age=${ seconds }` } ) ).catch( err => console.error( 'Challenge caches', err?.name, err?.message ) );
+	return caches.default.put( orderKey( url, id ), json( { order, at }, 200, { 'Cache-Control': `public, max-age=${ seconds }` } ) ).catch( err => console.error( 'Challenge caches', err?.name, err?.message ) );
 
 }
 
-// The rank of `player`'s time ({ ms, created_at }) in a board's `order`: one more than the times
-// ahead of it (quicker, or the same set earlier, or at the same moment by a player whose id sorts
-// first), found by halving. Their own time in the order (as it was when it was read: only a better
-// one has replaced it since, which is never ahead of it) isn't counted. An order of RANK_MOST times
-// all ahead says RANK_MOST + 1 (the page's "1000+"). The owner's time (kept out of the order) gets
-// the rank it would have.
-export function rankIn( order, { ms, created_at: at }, player ) {
+// A board's `order` with `player`'s new best ({ ms, created_at }) in its place: their old one
+// taken out, the new one put where it goes, and the RANK_MOST first kept (one past them stays out,
+// as it would read from D1). A new order; the same if it's already there.
+export function placeIn( order, { ms, created_at: at }, player ) {
+
+	const rest = order.filter( entry => entry[ 2 ] !== player );
+	const place = ahead( rest, ms, at, player );
+	if ( place >= RANK_MOST ) return rest;
+	rest.splice( place, 0, [ ms, at, player ] );
+	return rest.slice( 0, RANK_MOST );
+
+}
+
+// How many times in a board's `order` are ahead of `player`'s time of `ms` set `at`: quicker, or
+// the same set earlier, or at the same moment by a player whose id sorts first; found by halving.
+function ahead( order, ms, at, player ) {
 
 	let low = 0;
 	let high = order.length;
@@ -1034,16 +1416,32 @@ export function rankIn( order, { ms, created_at: at }, player ) {
 
 	}
 
+	return low;
+
+}
+
+// The rank of `player`'s time ({ ms, created_at }) in a board's `order`: one more than the times
+// ahead of it (quicker, or the same set earlier, or at the same moment by a player whose id sorts
+// first), found by halving. Their own time in the order (as it was when it was read: only a better
+// one has replaced it since, which is never ahead of it) isn't counted. An order of RANK_MOST times
+// all ahead says RANK_MOST + 1 (the page's "1000+"). The owner's time (kept out of the order) gets
+// the rank it would have.
+export function rankIn( order, { ms, created_at: at }, player ) {
+
+	const low = ahead( order, ms, at, player );
 	const own = order.findIndex( entry => entry[ 2 ] === player );
 	return Math.min( own >= 0 && own < low ? low - 1 : low, RANK_MOST ) + 1;
 
 }
 
-// A board's row as the page shows it: the name, the time, the ride, the day it was set, the player's
-// level and title as they are now, supporter only for a supporter.
+// A board's row (the `i`th of one) or a time as the page shows it: the name, the time, the ride,
+// the day it was set, the player's level and title as they are now, supporter only for a supporter;
+// and the run's id, which its ghost is fetched by (12 random bytes the page chose, which say
+// nothing of who), only where it's raced: a board's one to race (rowsOf leaves the others' out), a
+// player's own and a link's.
 function entryOf( row, i ) {
 
-	const shown = { name: row.name, ms: row.ms, vehicle: row.vehicle, date: dateOf( row.created_at ), ...standingOf( row.xp, row.title ) };
+	const shown = { name: row.name, ms: row.ms, vehicle: row.vehicle, date: dateOf( row.created_at ), ...standingOf( row.xp, row.title ), ...( row.run_id ? { run: row.run_id } : {} ) };
 	if ( Number.isInteger( i ) ) shown.rank = i + 1;
 	else if ( row.rank ) shown.rank = row.rank;
 	return row.supporter ? { ...shown, supporter: true } : shown;
@@ -1090,6 +1488,30 @@ function boardKey( url, challenge, player = '' ) {
 function orderKey( url, challenge ) {
 
 	return new Request( `${ url.origin }/api/challenges/order?challenge=${ challenge }` );
+
+}
+
+// Where a link's answer (linkData) and a run's ghost (challengeGhost) are kept.
+function linkKey( url, challenge, vs ) {
+
+	return new Request( `${ url.origin }/api/challenges/link?challenge=${ challenge }${ vs ? `&vs=${ vs }` : '' }` );
+
+}
+
+function ghostKey( url, challenge, run ) {
+
+	return new Request( `${ url.origin }/api/challenges/ghost?challenge=${ challenge }&run=${ run }` );
+
+}
+
+// The handle of `player`'s time on `challenge`: the first 12 bytes of an HMAC of both with the
+// challenges' derived key (seed), as base64url. What a link names a time by: the same for that
+// player's best on that challenge however often it's bettered, unmade by anyone without the
+// Worker's secret, and nothing of who (the player's id is half of their credentials, and in a link
+// would let anyone look them up on every board).
+export async function handleOf( env, challenge, player ) {
+
+	return base64url( ( await seed( env, `handle:${ challenge }:${ player }` ) ).slice( 0, 12 ) );
 
 }
 
@@ -1291,6 +1713,13 @@ async function seed( env, text ) {
 function hex( bytes ) {
 
 	return [ ...bytes ].map( b => b.toString( 16 ).padStart( 2, '0' ) ).join( '' );
+
+}
+
+// `text` as it can go in HTML, in an attribute's quotes or between tags.
+export function escapeHtml( text ) {
+
+	return String( text ).replace( /[&<>"']/g, c => ( { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' } )[ c ] );
 
 }
 

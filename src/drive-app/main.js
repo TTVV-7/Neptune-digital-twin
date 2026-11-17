@@ -30,7 +30,7 @@ import { formatLatLon, LINK_PARAMS, linkedPlace, rememberPlace, worldOf } from '
 import { createLive, flagsOf, velocityOf } from './live.js';
 import { createStats } from './stats.js';
 import { METRICS, dropinBucket } from './stats-protocol.js';
-import { createGhosts } from './ghosts.js';
+import { createGhosts, ghostModels } from './ghosts.js';
 import { BUDGET_TOAST, setUpFriends } from './friends.js';
 import { createOnline } from './online.js';
 import { BUDGET_SPENT, cleanPartyCode, FLAGS } from './live-protocol.js';
@@ -355,8 +355,10 @@ const _sun = new Vector3();
 // live: whether the Worker has driving with others on (its /api/config says), and liveReason why
 // not when it's off for the rest of the day; moonOnly: { onEarth } when there's no Earth this visit
 // (today's Earth drives are used up, or the page opened on a link to the Moon, boot.js): the
-// globe opens on the Moon, which is never limited, and picking the Earth calls onEarth instead.
-export async function start( { key, left = null, visit: token = null, worker = true, googleClientId = '', live: liveOn = false, liveReason = '', moonOnly = null } ) {
+// globe opens on the Moon, which is never limited, and picking the Earth calls onEarth instead;
+// challengeLink: a "challenge a friend" link's ({ link: { challenge, vs }, answer }, boot.js), or a
+// promise of it (or of null: no link), opened once the globe is up and it's here (challenges.js).
+export async function start( { key, left = null, visit: token = null, worker = true, googleClientId = '', live: liveOn = false, liveReason = '', moonOnly = null, challengeLink = null } ) {
 
 	const visit = token ?? VISIT_TEST?.visit ?? null;
 	// Play stats for the owner's admin page (stats.js): only a real visit's, counts with nothing of who.
@@ -598,36 +600,65 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// well start as a challenge), and it's put away at GO, so nothing covers the road while the clock
 	// runs.
 	let keysShown = false;
-	async function openChallenges() {
+	// What ghosts are drawn with (ghosts.js): the others' cars, and a challenge's ghost, sharing the
+	// models read from a file.
+	const ghostShapes = ghostModels( models.loader );
+	// The challenges' chunk, loaded and set up the first time: whether it's here.
+	async function loadChallenges() {
 
-		if ( ! challenges ) {
+		if ( challenges ) return true;
+		challengesLoading ??= import( './challenges.js' ).then( module => module.setUpChallenges( {
+			visit: () => visit, player: () => board.player, pickName: board.pickName,
+			world: () => world, moonOnly, mode: () => state.mode, place: () => state.place, vehicle: () => state.vehicle,
+			driver, ground, camera, scene, globe, moon, vehicles, stats,
+			startAt: place => startChallenge( place ), placeCar, toGlobe,
+			// (Gone by itself after 10 s too, for a run left before its GO.)
+			keys: () => ! keysShown && showKeys( 10000 ),
+			go: () => screens.hideKeys(),
+			// Your car as drawn (a run's ghost is recorded from it), your ride's look (drawn with it), and
+			// what a ghost to race is drawn with.
+			pivot: () => state.entry?.pivot ?? null, look: () => lookOf( state.vehicle ), ghostModels: ghostShapes,
+			driveUi: $( 'drive-ui' ), pauseCard: $( 'pause' ),
+		} ) );
+		try {
 
-			challengesLoading ??= import( './challenges.js' ).then( module => module.setUpChallenges( {
-				visit: () => visit, player: () => board.player, pickName: board.pickName,
-				world: () => world, moonOnly, mode: () => state.mode, place: () => state.place, vehicle: () => state.vehicle,
-				driver, ground, camera, scene, globe, moon, vehicles, stats,
-				startAt: place => startChallenge( place ), placeCar, toGlobe,
-				// (Gone by itself after 10 s too, for a run left before its GO.)
-				keys: () => ! keysShown && showKeys( 10000 ),
-				go: () => screens.hideKeys(),
-				driveUi: $( 'drive-ui' ), pauseCard: $( 'pause' ),
-			} ) );
-			try {
+			challenges = await challengesLoading;
+			return true;
 
-				challenges = await challengesLoading;
+		} catch ( err ) {
 
-			} catch ( err ) {
-
-				challengesLoading = null;
-				screens.toast( `The challenges didn't load (${ err.message }). Try again in a moment.`, 6000 );
-				return;
-
-			}
+			challengesLoading = null;
+			screens.toast( `The challenges didn't load (${ err.message }). Try again in a moment.`, 6000 );
+			return false;
 
 		}
 
+	}
+
+	async function openChallenges() {
+
+		if ( ! await loadChallenges() ) return;
 		pauseDrive();
 		challenges.open();
+
+	}
+
+	// A page opened on a "challenge a friend" link (boot.js's challengeLink, which may still be on its
+	// way: a slow answer opens its card when it comes, over whatever's going on, the drive paused as
+	// Challenges does): out of the address, back to the home page's (/c is the link's own path, for
+	// its preview card), so a reload doesn't open it again; and its card over the list.
+	async function openChallengeLink( opening ) {
+
+		const opened = await opening;
+		if ( ! opened ) return;
+		const { link, answer } = opened;
+		const url = new URL( location.href );
+		url.pathname = '/';
+		for ( const name of [ 'challenge', 'vs' ] ) url.searchParams.delete( name );
+		history.replaceState( history.state, '', url );
+		if ( ! await loadChallenges() ) return;
+		pauseDrive();
+		challenges.openLink( answer, { named: !! link.vs } );
 
 	}
 
@@ -738,7 +769,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	const live = ( liveOn || liveReason === 'unknown' ) && typeof liveVisit === 'string' && liveVisit
 		? createLive( { earth, ellipsoid, visit: liveVisit, player: () => board.player, ride: { vehicle: panel.vehicle.id, look: lookOf( panel.vehicle ) } } )
 		: null;
-	const ghosts = live && createGhosts( { scene, earth, camera, vehicles, loader: models.loader, live, tags: $( 'live-tags' ), own: () => state.entry?.pivot ?? null, effects: driver.effects } );
+	const ghosts = live && createGhosts( { scene, earth, camera, vehicles, models: ghostShapes, live, tags: $( 'live-tags' ), own: () => state.entry?.pivot ?? null, effects: driver.effects } );
 	// (On the Moon, they're told it's the Moon's: nothing of who's driving is for there.)
 	const liveMode = () => onMoon() ? MOON : state.mode;
 	const friends = live && setUpFriends( { live, ghosts, vehicles, mode: liveMode, goTo, onInvite: () => stats.add( 'party', 'made' ) } );
@@ -885,6 +916,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	}
 
 	if ( moonOnly && worldOf( linked ) !== MOON ) setWorld( MOON );
+	// A "challenge a friend" link: its card, over the challenges' list.
+	if ( challengeLink ) openChallengeLink( challengeLink );
 
 	// --- moving the scene to a new place, without loading anything again ---
 
