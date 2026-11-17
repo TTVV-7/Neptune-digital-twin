@@ -6091,7 +6091,8 @@ async function supporterPage( { me = SIGNED_OUT, signedInAs = ALICE, clientId = 
 
 }
 
-const locked = page => page.locator( '#globe-ui .vehicle.locked' ).count();
+// (Not the construction rides: only achievements unlock those, never the pass.)
+const locked = page => page.locator( '#globe-ui .vehicle.locked:not( :has( .feat-chip ) )' ).count();
 // What the pass unlocks in the picker, at level 1: thirteen cars (six of them levels' too) and four
 // rides.
 const LOCKED = 17;
@@ -6186,7 +6187,7 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		for ( let load = 0; load < 2; load ++ ) {
 
 			await testPad( page );
-			await page.waitForFunction( () => document.querySelectorAll( '#globe-ui .vehicle.locked' ).length === 0, null, { timeout: 10000 } );
+			await page.waitForFunction( () => document.querySelectorAll( '#globe-ui .vehicle.locked:not( :has( .feat-chip ) )' ).length === 0, null, { timeout: 10000 } );
 			assert.doesNotMatch( await page.locator( '#toast' ).textContent(), /Supporter|Thanks/ );
 
 		}
@@ -6220,14 +6221,14 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		await page.evaluate( () => window.testCredential = 'good-token' );
 		await account.locator( '.stub-google' ).click();
 		await account.locator( '.supporter-line', { hasText: 'Signed in as Alice Example · ⭐ Supporter Pass · Sign out' } ).waitFor();
-		assert.equal( await page.locator( '#pause .vehicle.locked' ).count(), 0 );
+		assert.equal( await page.locator( '#pause .vehicle.locked:not( :has( .feat-chip ) )' ).count(), 0 );
 		await page.locator( '#toast', { hasText: 'Signed in: Supporter Pass unlocked' } ).waitFor();
 		await shot( page, 'pass-5-pause-signed-in' );
 		// Still paused, and the drive goes on as ever.
 		assert.equal( await mode( page ), 'paused' );
 		await account.locator( 'button', { hasText: 'Sign out' } ).click();
 		await account.locator( '.stub-google' ).waitFor();
-		assert.equal( await page.locator( '#pause .vehicle.locked' ).count(), LOCKED );
+		assert.equal( await page.locator( '#pause .vehicle.locked:not( :has( .feat-chip ) )' ).count(), LOCKED );
 		await page.locator( '#pause .resume' ).click();
 		await page.waitForFunction( () => window.drive.mode === 'driving' );
 		assert.deepEqual( page.errors, [] );

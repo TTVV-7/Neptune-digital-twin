@@ -42,7 +42,9 @@ import { after, before, describe, test } from 'node:test';
 import { startVite } from './worker-harness.mjs';
 import { BOOSTS } from '../src/drive-app/boosts.js';
 import { CARS as CAR_SPECS } from '../src/drive-app/cars.js';
-import { DRIVE_CARS } from '../src/drive-app/catalog.js';
+import { DRIVE_CARS, WORKS_RIDES } from '../src/drive-app/catalog.js';
+import { RIDE_FEATS } from '../src/drive-app/achievement-rules.js';
+import { WORKS } from '../src/drive-app/works.js';
 import { RIDES as LEVEL_RIDES, unlockLevel } from '../src/drive-app/levels.js';
 import { FLAMES, SWATCHES, TRAILS } from '../src/drive-app/paint.js';
 
@@ -62,6 +64,9 @@ const LEVEL_CARS = CARS.slice( 1, 7 );
 const PASS_CARS = CARS.slice( 7 );
 const PASS_ONLY = [ ...PASS_CARS, ...RIDES ];
 const LOCKED = [ ...LEVEL_CARS, ...PASS_ONLY ];
+// The construction rides (works.js), after the pickup: each locked until its achievement, which the
+// pass doesn't give (test-drive-levels-ui.mjs drives them).
+const WORKS_NAMES = WORKS_RIDES.map( id => WORKS.find( work => work.id === id ).name );
 // The cars World Drive had first, whose characters are measured against each other as before.
 const FIRST = [ 'Muscle car', 'Neon racer', 'Night cruiser', 'Dune buggy', 'Farm truck', 'Police cruiser' ];
 
@@ -370,11 +375,13 @@ describe( 'Supporter Pass, without it', () => {
 
 		await openGlobe( page );
 		const panel = page.locator( '#globe-ui .panel' );
-		assert.deepEqual( await panel.locator( '.vehicle b' ).allTextContents(), [ 'Go-kart', 'Pickup', ...CARS, ...RIDES ] );
-		assert.deepEqual( await panel.locator( '.vehicle.locked b' ).allTextContents(), LOCKED );
-		// The pass's alone wear its badge; the levels' cars their level, and that the pass has them.
+		assert.deepEqual( await panel.locator( '.vehicle b' ).allTextContents(), [ 'Go-kart', 'Pickup', ...WORKS_NAMES, ...CARS, ...RIDES ] );
+		assert.deepEqual( await panel.locator( '.vehicle.locked b' ).allTextContents(), [ ...WORKS_NAMES, ...LOCKED ] );
+		// The pass's alone wear its badge; the levels' cars their level, and that the pass has them; the
+		// construction rides their achievement.
 		assert.deepEqual( await panel.locator( '.vehicle .pro-badge:not( .level-chip )' ).allTextContents(), PASS_ONLY.map( () => '⭐ Supporter Pass' ) );
-		assert.deepEqual( await panel.locator( '.vehicle .level-chip' ).allTextContents(), LEVEL_RIDES.map( reward => `Lv ${ reward.level } · or Pass` ) );
+		assert.deepEqual( await panel.locator( '.vehicle .level-chip:not( .feat-chip )' ).allTextContents(), LEVEL_RIDES.map( reward => `Lv ${ reward.level } · or Pass` ) );
+		assert.deepEqual( await panel.locator( '.vehicle .feat-chip' ).allTextContents(), WORKS_RIDES.map( id => `🔒 ${ RIDE_FEATS[ id ].chip }` ) );
 		assert.equal( await page.evaluate( async () => ( await import( '/src/drive-app/pro.js' ) ).isPro() ), false );
 
 		await panel.locator( '.vehicle', { hasText: 'Monster truck' } ).click();
@@ -756,7 +763,8 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 
 		await openGlobe( page, '?pro=1' );
 		assert.equal( await page.evaluate( async () => ( await import( '/src/drive-app/pro.js' ) ).isPro() ), true );
-		assert.equal( await page.locator( '#globe-ui .vehicle.locked' ).count(), 0 );
+		// (All but the construction rides, which only achievements unlock.)
+		assert.deepEqual( await page.locator( '#globe-ui .vehicle.locked' ).evaluateAll( cards => cards.map( card => card.dataset.id ) ), WORKS_RIDES );
 		await dropIn( page );
 		handling.kart = await page.evaluate( measure );
 		for ( const name of RIDES ) {
@@ -1943,12 +1951,12 @@ describe( 'The Garage on a phone', () => {
 			return box.width > 20 && box.height > 8 && getComputedStyle( badge ).display !== 'none';
 
 		} ) );
-		assert.deepEqual( await badges( '#globe-ui' ), LOCKED.map( () => true ) );
+		assert.deepEqual( await badges( '#globe-ui' ), [ ...WORKS_NAMES, ...LOCKED ].map( () => true ) );
 		await shot( page, 'pro-phone-globe-locked' );
 		await dropIn( page );
 		await page.evaluate( () => window.drive.driver.stop() );
 		await page.locator( '#pause' ).waitFor();
-		assert.deepEqual( await badges( '#pause' ), LOCKED.map( () => true ) );
+		assert.deepEqual( await badges( '#pause' ), [ ...WORKS_NAMES, ...LOCKED ].map( () => true ) );
 		await shot( page, 'pro-phone-pause-locked' );
 		assert.deepEqual( page.errors, [] );
 		await page.context().close();

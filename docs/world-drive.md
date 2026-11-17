@@ -5697,7 +5697,7 @@ Storage: about 40 bytes an achievement row and 300 a player's tallies.
 
 **The page's first load**: the shared rules (`achievement-rules.js`, needed there for the locks, the
 reports' counts and the toasts' words) and the construction rides' names and tuning (`works.js`)
-add 7.1 kB to the game's chunk (1,121.22 to 1,128.33 kB minified, 345.15 to 347.82 kB gzipped:
+add 7.1 kB to the game's chunk (1,121.22 to 1,128.38 kB minified, 345.15 to 347.84 kB gzipped:
 +2.7 kB) and a shared chunk of 5.0 kB (1.7 kB gzipped) it imports; the first stylesheet 11.22 to
 11.71 kB (the profile card's button and the locks' chips), the page's first script 13.70 to 13.83 kB
 (a name `catalog.js` exports). `library/library.json`, fetched as the page starts, lists the eight
