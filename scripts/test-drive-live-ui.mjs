@@ -2120,12 +2120,12 @@ describe( 'World Drive, driving with others switched off on the Worker', () => {
 
 describe( 'World Drive, the day\'s budget for driving with others spent', () => {
 
-	test( 'turned away for the budget: a toast once that it\'s back after midnight UTC, none of it shows, and driving goes on; a party\'s link on a new page says why', async () => {
+	test( 'turned away for the Earth\'s budget: a toast once that it\'s back after midnight UTC (and still on on the Moon), none of it shows on the Earth, and driving goes on; a party\'s link on a new page says why', async () => {
 
-		// The Worker again (LIVE on) with a budget of 40 Durable Object requests a day, which this test
-		// then spends by connecting to rooms, as drivers do (page loads ask DriveLimits only every 30
-		// s, so they spend little).
-		const toast = 'Lots of drivers today: driving with others is back after midnight UTC.';
+		// The Worker again (LIVE on) with a budget of 40 Durable Object requests a day on the Earth,
+		// which this test then spends by connecting to rooms, as drivers do (page loads ask DriveLimits
+		// only every 30 s, so they spend little). The Moon's is its own, and isn't spent.
+		const toast = 'Lots of drivers on the Earth today: driving with others there is back after midnight UTC. It\'s still on on the Moon.';
 		await restartWorker( { LIVE_DAILY_BUDGET: '40' } );
 		const page = await livePage( { token: await visitToken() } );
 		assert.ok( await page.locator( '#globe-ui .friends' ).isVisible() );
@@ -2140,9 +2140,11 @@ describe( 'World Drive, the day\'s budget for driving with others spent', () => 
 		}
 
 		assert.ok( opened > 0 && opened < 40, `${ opened } connections got in` );
-		// Dropping in, the page connects to the area's room and is turned away: it asks why, and stops.
+		// Dropping in, the page connects to the area's room and is turned away: it asks why, and stops
+		// on the Earth (closed there, not over: the Moon's is open).
 		await dropIn( page );
-		await page.waitForFunction( () => window.drive.live.ended === 'budget', null, { timeout: 30000 } );
+		await page.waitForFunction( () => window.drive.live.closedHere && window.drive.live.status === 'closed', null, { timeout: 30000 } );
+		assert.equal( await page.evaluate( () => window.drive.live.ended ), null );
 		await page.locator( '#toast', { hasText: toast } ).waitFor();
 		assert.equal( await page.locator( '#drive-ui .live-chip' ).isHidden(), true );
 		assert.equal( await page.locator( '#drive-ui .live-key' ).isHidden(), true );
@@ -2164,9 +2166,10 @@ describe( 'World Drive, the day\'s budget for driving with others spent', () => 
 		assert.deepEqual( page.errors, [] );
 		await page.context().close();
 
-		// A friend opening a party's link now: told why nothing comes of it, and drives alone.
+		// A friend opening a party's link now: told why nothing comes of it on the Earth, and drives
+		// alone there.
 		const friend = await livePage( { token: await visitToken(), path: '/?party=ABCDEFG' } );
-		assert.equal( await friend.evaluate( () => window.drive.live ), null );
+		assert.deepEqual( await friend.evaluate( () => [ window.drive.live.closedHere, window.drive.live.party ] ), [ true, 'ABCDEFG' ] );
 		await friend.locator( '#toast', { hasText: toast } ).waitFor();
 		assert.equal( await friend.locator( '#globe-ui .friends' ).isHidden(), true );
 		assert.equal( await friend.locator( '#globe-ui .party-banner' ).isHidden(), true );

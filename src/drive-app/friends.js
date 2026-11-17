@@ -19,6 +19,13 @@ const WORLD_BUDGET_TOAST = {
 	earth: 'Lots of drivers on the Earth today: driving with others there is back after midnight UTC. It\'s still on on the Moon.',
 	moon: 'Lots of drivers on the Moon today: driving with others there is back after midnight UTC. It\'s still on on the Earth.',
 };
+
+// What's said when `world`'s budget for the day is spent and the other's isn't.
+export function budgetToast( world ) {
+
+	return WORLD_BUDGET_TOAST[ world ] ?? BUDGET_TOAST;
+
+}
 // Other cars' horns are heard this near (m).
 const HEAR_RANGE = 150;
 // In an area, a toast for someone new at most this often (ms).
@@ -76,7 +83,7 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 
 	const inParty = () => !! live.party;
 	for ( const type of [ 'status', 'party', 'nearby', 'welcome', 'clear', 'look', 'away', 'closed' ] ) live.on( type, refresh );
-	live.on( 'closed', world => toast( WORLD_BUDGET_TOAST[ world ] ?? BUDGET_TOAST, 10000 ) );
+	live.on( 'closed', world => toast( budgetToast( world ), 10000 ) );
 	live.on( 'party', code => {
 
 		// The party stays in the address while you're in it, so a reload (or the link copied from the
@@ -291,7 +298,7 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 	// Made again only when what it says changes: it's a live region, read out each time it is.
 	function showBanner() {
 
-		const show = inParty() && mode() === 'globe' && ! live.ended;
+		const show = inParty() && mode() === 'globe' && ! live.ended && ! live.closedHere;
 		banner.hidden = ! show;
 		const driving = show ? [ ...live.players.values() ].find( p => ! p.away && ( p.s || p.place ) ) : null;
 		bannerPid = driving?.pid ?? null;

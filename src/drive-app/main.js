@@ -33,7 +33,7 @@ import { createLive, flagsOf, velocityOf } from './live.js';
 import { createStats } from './stats.js';
 import { METRICS, dropinBucket } from './stats-protocol.js';
 import { createGhosts, ghostModels } from './ghosts.js';
-import { BUDGET_TOAST, setUpFriends } from './friends.js';
+import { BUDGET_TOAST, budgetToast, setUpFriends } from './friends.js';
 import { createOnline } from './online.js';
 import { BUDGET_SPENT, cleanPartyCode, FLAGS } from './live-protocol.js';
 import { send } from './api.js';
@@ -918,6 +918,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 		friends.joinParty( partyCode );
 		stats.add( 'party', 'joined' );
+		// (Its room for this world's spent today: why nothing comes of it here; on the other, it does.)
+		if ( live.closedHere ) screens.toast( budgetToast( world ), 10000 );
 
 	}
 	else if ( partyCode && ( liveReason === BUDGET_SPENT || liveMoon === false ) ) screens.toast( BUDGET_TOAST, 10000 );

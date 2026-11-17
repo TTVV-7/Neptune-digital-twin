@@ -2085,6 +2085,12 @@ body:not( .touch ) #drive-ui .horn {
 		right: auto;
 	}
 
+	/* With a party's banner over the Moon's globe, the credit goes just under it rather than under
+	   the banner (on a phone on its side they'd meet). */
+	body[data-mode='globe']:has( #globe-ui .party-banner:not( [hidden] ) ) #moon-credit {
+		top: calc( 54% - 84px + 6px );
+	}
+
 	#drive-ui .topbar .to-globe kbd {
 		display: none;
 	}

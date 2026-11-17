@@ -1545,9 +1545,9 @@ The default 20,000 a day is about 20 driver-hours with others on the Moon. Nothi
 page's first load (it's all in the game's own code, which loads with the globe), and alone on the
 Moon a page sends nothing but its keepalive, as on the Earth, and draws no ghost: each frame only
 works out where its car is (a few matrix sums), so the frame is what it was. With five others' cars
-drawn on a phone on its side (760 × 390) in Chromium's software renderer, a frame took 1,217 ms,
-the same as alone, 1,217 ms (the middle of 12; the Moon's ground is nearly all of it there; measured
-in `test-drive-live-ui.mjs`). The game's code (loaded with the globe, after the robot check, as
+drawn on a phone on its side (760 × 390) in Chromium's software renderer, a frame took 1,183 to
+1,233 ms, against 1,217 to 1,283 ms alone, in three runs (the middle of 12 frames each; the Moon's
+ground is nearly all of it there, and the machine was shared; measured in `test-drive-live-ui.mjs`). The game's code (loaded with the globe, after the robot check, as
 before) is 3.7 kB bigger, 1.5 kB gzipped; the page's first script 0.1 kB.
 
 **How it's tested:** `npm run test:drive-live` has the protocol's Moon (an area as big as the
@@ -1995,7 +1995,11 @@ searches. What follows is the Earth's; the Moon's is the same:
   `/api/live` turns new connections away (503 with
   `reason: 'budget'`) and `/api/config` says `live: false` with `liveReason: 'budget'`, so new page
   loads show none of it. A page turned off this way toasts once, "Lots of drivers today: driving
-  with others is back after midnight UTC.", hides it all and drives on alone. At 00:00 UTC it's a
+  with others is back after midnight UTC.", hides it all and drives on alone. With only one world's
+  spent (the Earth's, say), it says so ("Lots of drivers on the Earth today: driving with others
+  there is back after midnight UTC. It's still on on the Moon."), hides it all on that world (the
+  chip, the list, **Drive with friends**, the banner, **Driving now** and its dots) and has it on the
+  other; a party's link opened then says the same. At 00:00 UTC it's a
   fresh day: pages loaded after that have it again. Once a Worker instance has heard the day is
   spent it stops asking until the next day.
 - **If `DriveLimits` can't say**, a room carries on as if it's open (and adds what it couldn't
@@ -2153,8 +2157,9 @@ only the page's own origin through the proxy; and the Worker restarted with `LIV
 page stopping without a word and a new one showing none of it, both driving as ever. A page alone
 in its room sends no states (as Playwright sees its frames go) and a second driver joining sees it
 within 1.5 s; the following is measured at 5 a second, and that A sent at that rate. And the Worker
-with a budget of 40, spent by connecting: a page turned away toasting once and showing none of it,
-a party's link on a new page saying why, both driving as ever. Who's driving now: a driver dropping
+with an Earth budget of 40, spent by connecting: a page turned away toasting once that it's spent on
+the Earth (and still on on the Moon) and showing none of it there, a party's link on a new page
+saying why, both driving as ever. Who's driving now: a driver dropping
 in at Golden Gate Park in `/api/online` within 70 s (her room's first report), and on a
 second page's globe, its **Driving now** saying "11 driving now." with the 5 busiest named after
 their start spots (the test's own drivers parked at Times Square, Shibuya, the Arc de Triomphe and

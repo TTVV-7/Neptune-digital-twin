@@ -463,6 +463,14 @@ export function createOnline( {
 
 			}
 
+			// This world's budget for the day spent (live.js was told, as it was turned away): off here too.
+			if ( live.closedHere && ! offWorlds.has( which ) ) {
+
+				offWorlds.add( which );
+				show( [], 0, which );
+
+			}
+
 			if ( offHere() && areas.length ) show( [], 0, which );
 			if ( offHere() || now !== 'globe' ) return;
 			const at = performance.now();
