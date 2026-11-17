@@ -52,6 +52,7 @@ import {
 } from '../src/drive-app/live-protocol.js';
 import { makeVisit } from '../worker/drive/visits.js';
 import { partyMark } from '../worker/drive/achievements.js';
+import { RIDE_FEATS } from '../src/drive-app/achievement-rules.js';
 
 const WebSocket = createRequire( import.meta.url )( 'ws' );
 const PORT = Number( process.env.TEST_DRIVE_LIVE_PORT ) || 8950;
@@ -1943,6 +1944,61 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 		assert.equal( bob.closedWith, null );
 		await wait( room, ctx, IDLE_MS );
 		assert.deepEqual( bob.closedWith, { code: CLOSE.off, reason: 'off' } );
+
+	} );
+
+	test( 'a connection\'s construction rides are asked of D1 once, together: a burst of looks while it answers waits on that one ask and tells the others once, and every ride after asks nothing', async () => {
+
+		// D1 as the room reaches it: a player's name for its hello, and any ask of their achievements
+		// (achievements.js's unlockedRides), counted and held until the test lets it answer, as D1
+		// far from a room does. They have the skid steer's (km-10) and no other.
+		let release;
+		const db = { asked: 0, held: new Promise( resolve => release = resolve ) };
+		const achievements = async ( sql, args ) => {
+
+			db.asked ++;
+			await db.held;
+			return [ 'km-10' ].filter( feat => args.includes( feat ) || sql.includes( `'${ feat }'` ) ).map( achievement => ( { achievement, ok: 1 } ) );
+
+		};
+		db.prepare = sql => ( {
+			bind: ( ...args ) => ( {
+				first: async () => ( /FROM players p WHERE p\.id/.test( sql ) ? { name: 'Rider', star: 0, xp: 0, title: null, account_id: null } : ( await achievements( sql, args ) )[ 0 ] ?? null ),
+				all: async () => ( { results: await achievements( sql, args ) } ),
+			} ),
+		} );
+		// (A party's count, written after the answer: nothing to see here.)
+		db.batch = async () => [];
+		const ctx = runtime();
+		const room = new DriveRoom( ctx, { LIMITS: limitsStub().binding, DB: db } );
+		const watcher = await hello( room, ctx );
+		// Hello in the go-kart: nothing asked.
+		const rider = await hello( room, ctx, {}, { player: { id: 'rider-xxxxxxxxxx', secret: 'x'.repeat( 32 ) } } );
+		assert.equal( watcher.said().find( m => m.t === 'join' ).player.vehicle, 'go-kart' );
+		assert.equal( db.asked, 0 );
+		// As many looks as the rate lets through at once, all in locked rides before D1 has answered,
+		// the last of them the skid steer (theirs): one ask, and the others told once, of the last.
+		const works = Object.keys( RIDE_FEATS );
+		for ( let i = 0; i < BURST - 2; i ++ ) await say( room, rider, { t: 'look', vehicle: works[ i % works.length ] === 'skid-steer-loader-cad' ? 'wheel-loader' : works[ i % works.length ], look: HELLO.look } );
+		await say( room, rider, { t: 'look', vehicle: 'skid-steer-loader-cad', look: { colour: 'teal' } } );
+		assert.equal( rider.closedWith, null );
+		assert.equal( db.asked, 1 );
+		assert.deepEqual( watcher.said(), [] );
+		release();
+		for ( let i = 0; i < 5; i ++ ) await new Promise( resolve => setImmediate( resolve ) );
+		assert.equal( db.asked, 1 );
+		assert.deepEqual( watcher.said(), [ { t: 'look', pid: rider.pid, vehicle: 'skid-steer-loader-cad', look: { colour: 'teal' } } ] );
+		// Every construction ride in turn after: known already, nothing more asked; only the one
+		// unlocked shows.
+		clock += 10 * SECOND;
+		for ( const vehicle of works ) {
+
+			await say( room, rider, { t: 'look', vehicle, look: HELLO.look } );
+			assert.equal( watcher.said()[ 0 ].vehicle, vehicle === 'skid-steer-loader-cad' ? vehicle : 'pickup-truck', vehicle );
+
+		}
+
+		assert.equal( db.asked, 1 );
 
 	} );
 

@@ -32,10 +32,10 @@ import { BOOSTS } from '../src/drive-app/boosts.js';
 import { DECALS, FINISHES, FLAMES, GLOWS, HORNS, RIMS, SMOKES, SWATCHES, TRAILS, isLocked, lookFor, saveLook, unlockOf } from '../src/drive-app/paint.js';
 import { SPOTS } from '../src/drive-app/places.js';
 import { makeVisit } from '../worker/drive/visits.js';
-import { featList, featRows, featsOf, playersOf } from '../worker/drive/achievements.js';
+import { featList, featRows, featsOf, playersOf, ridesSql } from '../worker/drive/achievements.js';
 import {
 	ACHIEVEMENTS, CLAIM_TALLY, COUNTS, PLACINGS, RIDE_FEATS, TALLY_DAY,
-	addTallies, checkTallies, claimTallies, crossed, countsOf, progressLine, readTallies, rideAllowed,
+	addTallies, checkTallies, claimTallies, crossed, countsOf, progressLine, readTallies, rideFeat,
 } from '../src/drive-app/achievement-rules.js';
 import { LIBRARY_VEHICLES, WORKS_RIDES } from '../src/drive-app/catalog.js';
 
@@ -1073,6 +1073,8 @@ describe( 'Levels: the Worker', () => {
 			feats: `SELECT ${ featsOf( 'p' ) } AS feats FROM players p WHERE p.id = '${ id }'`,
 			grid: `SELECT achievement, MIN( earned_at ) AS at FROM ( ${ featRows( `'${ id }'` ) } ) GROUP BY achievement`,
 			ride: `SELECT 1 AS ok FROM achievements a WHERE a.achievement = 'winner' AND a.player_id IN ( ${ playersOf( `'${ id }'` ) } ) LIMIT 1`,
+			// (And a room's, once a connection for every construction ride: unlockedRides.)
+			rides: ridesSql( `'${ id }'` ),
 		} );
 		const measure = async id => {
 
@@ -1094,10 +1096,15 @@ describe( 'Levels: the Worker', () => {
 		// row a player.
 		for ( const ask of [ 'feats', 'grid' ] ) assert.ok( reads.lead[ ask ] <= 500, `${ ask }: ${ JSON.stringify( reads ) }` );
 		assert.ok( reads.lead.ride <= 70, JSON.stringify( reads ) );
-		for ( const ask of [ 'feats', 'grid', 'ride' ] ) assert.ok( reads.alone[ ask ] <= 40, `${ ask } alone: ${ JSON.stringify( reads ) }` );
+		// A room's ask for all eight construction rides at once: a look by key for each of them for each
+		// of the account's players (281 measured), so a connection costs no more than its first
+		// construction ride's look did for five of them.
+		assert.ok( reads.lead.rides <= 300, JSON.stringify( reads ) );
+		for ( const ask of [ 'feats', 'grid', 'ride', 'rides' ] ) assert.ok( reads.alone[ ask ] <= 40, `${ ask } alone: ${ JSON.stringify( reads ) }` );
 		// And the answers are still right: the lead has the account's (all 8, theirs included).
 		assert.deepEqual( featList( server.d1( asks( lead.id ).feats )[ 0 ].feats ), ACHIEVEMENTS.slice( 0, 8 ).map( a => a.id ).sort() );
 		assert.equal( server.d1( asks( lead.id ).grid ).length, 8 );
+		assert.deepEqual( server.d1( asks( lead.id ).rides ).map( r => r.achievement ).sort(), [ 'challenges-1', 'km-10', 'km-100' ] );
 
 	} );
 
@@ -1182,9 +1189,10 @@ describe( 'Achievements: the rules', () => {
 		assert.equal( RIDE_FEATS[ 'hydrovac-truck' ].feat, 'weekly-podium' );
 		// The rides levels or the pass give aren't these, nor the pickup.
 		for ( const id of WORKS_RIDES ) assert.ok( ! RIDES.some( r => r.id === id ) && ! LIBRARY_VEHICLES.includes( id ), id );
-		assert.equal( rideAllowed( 'hydrovac-truck', [ 'km-10' ] ), false );
-		assert.equal( rideAllowed( 'hydrovac-truck', new Set( [ 'weekly-podium' ] ) ), true );
-		assert.equal( rideAllowed( 'go-kart', [] ), true );
+		// (What the Worker asks of a ride: its achievement, or none for any other ride.)
+		assert.equal( rideFeat( 'hydrovac-truck' ), 'weekly-podium' );
+		assert.equal( rideFeat( 'go-kart' ), null );
+		assert.equal( rideFeat( 'pickup-truck' ), null );
 
 	} );
 

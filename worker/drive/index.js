@@ -36,8 +36,9 @@ export { DriveRoom } from './live.js';
 // everyone where the others are; /api/online says where people are driving now, for the globe's
 // dots. And the owner's play stats (stats.js) with where people drop in (dropins.js), for the admin
 // page. And achievements (achievements.js): badges for what a player has done, and the
-// construction rides they unlock. And challenges (challenges.js): a daily, a weekly and a monthly one on each world, each
-// with its own board of the best times, picked by themselves or by the owner on the admin page.
+// construction rides they unlock. And challenges (challenges.js): a daily, a weekly and a monthly
+// one on each world, each with its own board of the best times, picked by themselves or by the
+// owner on the admin page.
 //
 // Settings (wrangler.drive.jsonc vars, or secrets):
 //   GOOGLE_MAPS_API_KEY   secret: the Maps key for World Drive's own Google Cloud project (a

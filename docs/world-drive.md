@@ -5685,13 +5685,17 @@ look by the player's key, only for a construction ride; nothing read for any oth
 in one (`POST /api/score`: the boards' vehicle field), a challenge time (`POST /api/challenges/time`:
 its board's row and its ghost) are turned away without it (403, `reason: 'ride'`, with the unlock's
 words), and a room (`live.js`) shows anyone without it in the default ride (the pickup), at hello and
-at each change of ride. The room asks only when a construction ride is picked (`rideOf`, the same
-look as `hasRide`'s, for that one achievement), and once a connection for each: the answer is kept
-with the driver, so a page going back and forth between two rides doesn't ask again, and a hello or
-change in any other ride reads nothing of achievements (a ride unlocked since shows from the page's
-next hello, which the page says as one unlocks). A score is checked after its gap and the visitor's
-day (`SCORE_GAP`, `SCORES_PER_VISITOR_DAILY`) and a time after `CHALLENGE_MISSES`, so one refused for
-its ride costs what any other post does, never a loop of lookups. For testing, `?feats=all`
+at each change of ride. The room asks only when a construction ride is picked (`rideOf`), and then
+once a connection for all of them together (`unlockedRides`: one look by key for each construction
+ride's achievement, for the player and their account's): the answer is kept with the driver, so a
+page going back and forth between rides, or trying each in turn, doesn't ask again, and while it's
+being asked the ask itself is kept, so a burst of looks (or a hello and a look at once) waits on
+that one ask, and the others are told once, of the ride picked last. A hello or change in any other
+ride reads nothing of achievements (a ride unlocked since shows from the page's next hello, which
+the page says as one unlocks). A score is checked after its gap and the visitor's day
+(`SCORE_GAP`, `SCORES_PER_VISITOR_DAILY`) and a time after its gap, the visit's count and the
+visitor's day (`TIME_GAP`, `CHALLENGE_TIMES_PER_VISIT`, `CHALLENGE_TIMES_PER_VISITOR_DAILY`), so one
+refused for its ride costs what any other post does, never a loop of lookups. For testing, `?feats=all`
 on this computer (localhost or 127.0.0.1, `feats.js`, as `?pro=1`) unlocks them in the page alone.
 
 ### The Worker's routes
@@ -5743,9 +5747,9 @@ a month included):
 | The page's ask for the whole list (an empty report with `feats: true`, once a visit) | the account's achievements: a few dozen, about 250 at most whatever the account (its first 20 players, 200 rows of the others', each counted again as they're grouped) | 1 (`visits.listed`) | |
 | A challenge time, a player's first on that challenge | up to 50 (their nth time, by key), usually 1 to 10 | 1 an achievement earned | |
 | A challenge's final places | its board's rows, once more (as its final ranks are written) | 1 a placing | |
-| A room's hello or change of ride (a player) | as before; and in a construction ride, its achievement's row (`hasRide`: a few rows alone, about 60 at most for an account), once a connection for each ride | none | nothing for any other ride, nor for a guest |
+| A room's hello or change of ride (a player) | as before; and in a construction ride, every construction ride's achievement at once (`unlockedRides`: a look by key for each of the eight, for each of the account's players: 14 rows measured alone, 281 for an account of 20 players or more), once a connection whatever rides it picks and however many looks it sends at once | none | nothing for any other ride, nor for a guest |
 | A party joined with someone else | 1 or 2 | 1 or 2 (the count and its mark, an achievement) | after the answer, from the room |
-| A score or a time in a construction ride | that achievement's row (`hasRide`): 3 alone, 61 measured for an account of 20 players or more | none | nothing for any other ride; asked after the score's gap and the visitor's day (a time's after `CHALLENGE_MISSES`), so a refused one costs what any post does |
+| A score or a time in a construction ride | that achievement's row (`hasRide`): 3 alone, 61 measured for an account of 20 players or more | none | nothing for any other ride; asked after the post's gap and the visitor's day (a time's after its visit's count too), so a refused one costs what any post does |
 | The grid (`POST /api/achievements`) | about 30 alone; about 410 at most whatever the account (21 players' rows, their achievements as the list's, their times to 50) | none (or a few, once) | 1 Durable Object request (the day's count) |
 | The admin counts | every achievement row (the owner, rarely) | none | |
 
@@ -5762,11 +5766,17 @@ most. Its reports, times and parties were bounded already (levels' 30 s gap and 
 the challenges' `CHALLENGE_MISSES` and daily caps, `LIVE_CONNECTS`), and achievements add at most 25
 rows written a player, ever, 2 a party joined and 1 a visit's list. A score in a locked construction
 ride is refused only after the score's gap (one every 10 s a player) and the visitor's day (1,500 an
-address), as any score is: at most 1,500 lookups of about 60 rows, 90,000 rows a day. A room reads
-nothing of achievements at a hello or a change of ride except for a construction ride, and then one
-look of a few rows (about 60 at most for an account) once a connection for each ride: a visit's 200
-connections a day (`LIVE_VISIT_CONNECTS`) in construction rides are about 12,000 rows, as much as a
-hello's own look up of the player's name and level. (Round 1 read the account's whole list, about
+address), as any score is: at most 1,500 lookups of about 60 rows, 90,000 rows a day. A time in
+one likewise only after the time's gap (one every 10 s a player), its visit's count and the
+visitor's day (300 an address): at most 300 lookups, 18,000 rows a day. A room reads nothing of
+achievements at a hello or a change of ride except for a construction ride, and then one ask once
+a connection for all eight of them, however many looks it sends and whichever rides (14 rows
+measured for a player alone, 281 for an account of 20 players or more, the most `playersOf` reads):
+a visit's 200 connections a day (`LIVE_VISIT_CONNECTS`) in construction rides are about 2,800 rows
+for most players and 56,000 at most, and an address's 8 Earth visits 450,000 at most, under a tenth
+of the free plan's reads (a Moon visit, as for everything a visit buys, takes a robot check each).
+(Round 2 asked once for each ride, about 60 rows each for a big account, and again for each look
+sent while D1 was answering: forty looks at once were forty asks, some 580,000 rows a visit.) (Round 1 read the account's whole list, about
 250 rows, at every hello, whatever the ride: 10 visits' worth of reconnects from one address came to
 500,000 rows, a tenth of the free plan's reads, and the day's 40,000 connects to twice its reads.)
 So one address stays well under a tenth of the free plan's daily reads and writes. Storage: about 40
@@ -5834,7 +5844,8 @@ which phones already draw.)
   ranks alone (top 10, podium, winner, daily, weekly: the vac truck's), the rides refused (a 403
   with `reason: 'ride'` and the unlock's words) on the leaderboard until earned and let through
   after, and checked only after the score's gap (forty at once in a locked ride: one 403, then 429s,
-  as in the go-kart); the docs' console SQL writing every placing of a board finished before
+  as in the go-kart); the rows a room's ask for every construction ride reads (`ridesSql`: 14 alone,
+  281 for the big account, the same for 80 players as for 160); the docs' console SQL writing every placing of a board finished before
   achievements (a weekly's first and third: top 10, podium, the weekly podium, the first a winner;
   the eleventh none; nothing more run again); following sign-in both ways (two players linked to one
   account each having the other's, the grid's counts the account's best and `own` each player's
@@ -5845,7 +5856,8 @@ which phones already draw.)
 - `npm run test:drive-worker`: migration 0009 on top of 0001 to 0008 with a player kept and their
   counts none yet, one row an achievement, removed with the player; in the challenges' story a
   player's first time writing their first challenge finished (and the rows a time writes, one more
-  for that), a construction ride's time turned away, yesterday's board's final places writing each
+  for that), a construction ride's time turned away (twelve at once in one: one 403, then 429s, the
+  ride checked after the time's gap and the visitor's day), yesterday's board's final places writing each
   player's placings (the owner's none), and the replaced weekly's winner having the weekly podium;
   the top speeds and the play stats' keys including the construction rides.
 - `npm run test:drive-live`: in a party, a construction ride shown as it is with its achievement,
@@ -5858,7 +5870,10 @@ which phones already draw.)
   not another player's, not another secret's, not the plain hash); a construction ride looked up
   only when one is picked (an achievement written after a hello in the go-kart shows as the ride is
   changed to its ride) and once a connection (taken away at the console, it still shows going back
-  and forth; another not yet asked about shows as the pickup).
+  and forth; another without its achievement shows as the pickup); and, on the stand-in room, a
+  connection's construction rides asked of D1 once for all of them: a burst of looks (as many as the
+  rate lets through) while D1 holds its answer one ask and one message to the others, of the ride
+  picked last, and every construction ride in turn after asking nothing more.
 - `npm run test:drive-levels-ui`: a locked construction ride's chip, picture and words in the picker
   ("Finish a weekly challenge in its top 3 to unlock the vac truck. See your Achievements.", the ride
   picked staying the same) and the Garage (its tab, its banner, a look on it); the grid from the
@@ -5903,11 +5918,12 @@ UPDATE players SET tallies = '{}', parties = 0, party_marks = '[]' WHERE id = 'P
 
 -- Write the placings of boards finished before achievements, from their final ranks: every one
 -- (top 10, podium, winner, and the daily, weekly and monthly ones by the board's period), as
--- placingQuery writes them.
+-- placingQuery writes them. (The placings are a VALUES list, not SELECTs joined with UNION ALL: D1
+-- allows at most five terms in a compound SELECT, and there are six.)
 INSERT INTO achievements ( player_id, achievement, earned_at )
 SELECT t.player_id, p.id, c.final_at FROM challenge_times t JOIN challenges c ON c.id = t.challenge_id,
-	( SELECT 'top-10' AS id, 10 AS rank, NULL AS period UNION ALL SELECT 'podium', 3, NULL UNION ALL SELECT 'winner', 1, NULL
-	UNION ALL SELECT 'daily-winner', 1, 'day' UNION ALL SELECT 'weekly-podium', 3, 'week' UNION ALL SELECT 'monthly-top-10', 10, 'month' ) p
+	( SELECT column1 AS id, column2 AS rank, column3 AS period FROM ( VALUES ( 'top-10', 10, NULL ), ( 'podium', 3, NULL ), ( 'winner', 1, NULL ),
+	( 'daily-winner', 1, 'day' ), ( 'weekly-podium', 3, 'week' ), ( 'monthly-top-10', 10, 'month' ) ) ) p
 WHERE c.final_at IS NOT NULL AND t.final_rank IS NOT NULL AND t.final_rank <= p.rank AND ( p.period IS NULL OR c.period LIKE p.period || ':%' )
 ON CONFLICT DO NOTHING;
 ```

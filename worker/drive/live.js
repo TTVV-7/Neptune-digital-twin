@@ -11,7 +11,7 @@ import { setting } from './settings.js';
 import { hasPass, supporterEmails } from './supporter.js';
 import { readVisit } from './visits.js';
 import { standingOf, xpOf } from './progress.js';
-import { creditParty, hasRide } from './achievements.js';
+import { creditParty, unlockedRides } from './achievements.js';
 import { lookKey } from './challenges.js';
 import { rideFeat } from '../../src/drive-app/achievement-rules.js';
 import { DEFAULT_RIDE } from '../../src/drive-app/catalog.js';
@@ -88,7 +88,7 @@ const FROM = 'X-Live-From';
 // The parts of a driver only kept in memory, not in its attachment: when its car last moved and
 // when it was last sent the others' (counts of the room's own, which start again when it wakes),
 // when its state came in, and a hello being looked up with the messages that came in behind it.
-const MEMORY = [ 'moved', 'sent', 'sAt', 'held', 'pending', 'queue' ];
+const MEMORY = [ 'moved', 'sent', 'sAt', 'held', 'pending', 'queue', 'wantsLook' ];
 const encoder = new TextEncoder();
 // What a room counts of its spend, in billed Durable Object requests (see the costs above):
 // connecting, each incoming message, each alarm, each report to DriveLimits.
@@ -372,6 +372,10 @@ export class DriveRoom extends DurableObject {
 
 		super( ctx, env );
 		this.drivers = new Map();
+		// Each connection's ask for its construction rides while D1 is answering it, and the
+		// connections with a change of ride waiting on it (rideOf, lookLater): in memory only.
+		this.asking = new Map();
+		this.looking = new Set();
 		// States taken (moves), and how many of them and when the last batch went out; whether the next
 		// batch is to go now (a car's first state).
 		this.moves = 0;
@@ -525,7 +529,7 @@ export class DriveRoom extends DurableObject {
 		// have the achievement that unlocks it (rideOf): without it (a page that's been changed) the
 		// others see the default ride. (A ride unlocked later comes with the page's next hello.)
 		Object.assign( driver, { player, account, wants: vehicle } );
-		const shown = await this.rideOf( driver, vehicle );
+		const shown = await this.rideOf( ws, driver, vehicle );
 		if ( this.drivers.get( ws ) !== driver || driver.left || ws.readyState !== WebSocket.OPEN ) return;
 
 		const taken = new Set( this.sockets().map( other => this.driver( other ).pid ) );
@@ -576,23 +580,36 @@ export class DriveRoom extends DurableObject {
 
 	}
 
-	// The ride the others see driver `driver` in when they pick `vehicle`: theirs, or the default ride
-	// for a construction ride whose achievement they don't have (a guest never has one). Only a
-	// construction ride asks D1 (achievements.js's hasRide: one look by the player's key and their
-	// account's, a few rows), and once a connection for each: the answer is kept with the driver, so
-	// a page going back and forth between two rides doesn't ask again. Nothing is read for any other
-	// ride, so a hello costs what it did before achievements.
-	async rideOf( driver, vehicle ) {
+	// The ride the others see driver `driver` (on `ws`) in when they pick `vehicle`: theirs, or the
+	// default ride for a construction ride whose achievement they don't have (a guest never has one).
+	// Only a construction ride asks D1, and then once a connection for all of them (achievements.js's
+	// unlockedRides: one look by key for every construction ride's achievement, for the player and
+	// their account's players, 14 rows alone, about 280 at most for an account). The answer is
+	// kept with the driver (in its attachment), so a page going back and forth between rides, or
+	// trying each in turn, doesn't ask again; and while it's being asked, the ask itself is kept
+	// (this.asking, in memory only), so a burst of looks or a hello and a look at once wait on that
+	// one ask rather than each starting its own. Nothing is read for any other ride, so a hello
+	// costs what it did before achievements.
+	async rideOf( ws, driver, vehicle ) {
 
 		const feat = rideFeat( vehicle );
 		if ( ! feat ) return vehicle;
 		if ( ! driver.player ) return DEFAULT_RIDE;
-		driver.rides ??= {};
-		if ( ! ( feat in driver.rides ) ) {
+		if ( ! driver.rides ) {
+
+			let asking = this.asking.get( ws );
+			if ( ! asking ) {
+
+				asking = unlockedRides( database( this.env ), driver.player );
+				this.asking.set( ws, asking );
+				// Settled: kept with the driver if it answered, and asked again next time if it didn't.
+				asking.then( rides => driver.rides = rides, () => {} ).finally( () => this.asking.delete( ws ) );
+
+			}
 
 			try {
 
-				driver.rides[ feat ] = await hasRide( database( this.env ), driver.player, vehicle );
+				await asking;
 
 			} catch ( err ) {
 
@@ -604,16 +621,40 @@ export class DriveRoom extends DurableObject {
 
 		}
 
-		return driver.rides[ feat ] ? vehicle : DEFAULT_RIDE;
+		return this.shownRide( driver, vehicle );
 
 	}
 
-	// A ride changed (look) to a construction ride not yet asked about this connection: told to the
-	// others once D1 has said (rideOf), unless the page has changed ride again meanwhile.
-	async lookLater( ws, driver, vehicle, look ) {
+	// The ride the others see for `vehicle` from what's known of the driver's rides now (rideOf):
+	// a construction ride not known to be unlocked is the default ride.
+	shownRide( driver, vehicle ) {
 
-		const shown = await this.rideOf( driver, vehicle );
-		if ( this.drivers.get( ws ) !== driver || driver.left || ws.readyState !== WebSocket.OPEN || driver.wants !== vehicle ) return;
+		const feat = rideFeat( vehicle );
+		return ! feat || ( driver.player && driver.rides?.[ feat ] ) ? vehicle : DEFAULT_RIDE;
+
+	}
+
+	// A ride changed (look) to a construction ride before this connection's rides are known: told to
+	// the others once D1 has said (rideOf), in whatever ride and look the page has picked by then
+	// (driver.wants, wantsLook). One at a time a connection: looks sent meanwhile only change what it
+	// tells, so a burst of them is one ask and one message to the others.
+	async lookLater( ws, driver ) {
+
+		this.looking.add( ws );
+		try {
+
+			await this.rideOf( ws, driver, driver.wants );
+
+		} finally {
+
+			this.looking.delete( ws );
+
+		}
+
+		if ( this.drivers.get( ws ) !== driver || driver.left || ws.readyState !== WebSocket.OPEN ) return;
+		const look = driver.wantsLook ?? driver.look;
+		const shown = this.shownRide( driver, driver.wants );
+		delete driver.wantsLook;
 		Object.assign( driver, { vehicle: shown, look } );
 		this.broadcast( { t: 'look', pid: driver.pid, vehicle: shown, look }, ws );
 		this.save( ws, driver );
@@ -683,17 +724,20 @@ export class DriveRoom extends DurableObject {
 				const look = checkLook( m.look );
 				if ( ! vehicle || ! look ) return false;
 				driver.wants = vehicle;
-				// A construction ride not yet asked about: the others hear once D1 says (lookLater).
+				// A construction ride before this connection's rides are known: the others hear once D1
+				// says (lookLater), and while one is waiting, a look meanwhile only changes what it tells.
 				const feat = rideFeat( vehicle );
-				if ( feat && driver.player && ! ( feat in ( driver.rides ?? {} ) ) ) {
+				if ( this.looking.has( ws ) || ( feat && driver.player && ! driver.rides ) ) {
 
-					const asking = this.lookLater( ws, driver, vehicle, look ).catch( err => console.error( 'Live look', err?.name, err?.message ) );
+					driver.wantsLook = look;
+					if ( this.looking.has( ws ) ) return true;
+					const asking = this.lookLater( ws, driver ).catch( err => console.error( 'Live look', err?.name, err?.message ) );
 					this.ctx.waitUntil?.( asking );
 					return true;
 
 				}
 
-				const shown = ! feat ? vehicle : driver.player && driver.rides?.[ feat ] ? vehicle : DEFAULT_RIDE;
+				const shown = this.shownRide( driver, vehicle );
 				Object.assign( driver, { vehicle: shown, look } );
 				this.broadcast( { t: 'look', pid, vehicle: shown, look }, ws );
 				return true;

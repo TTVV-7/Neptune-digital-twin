@@ -106,16 +106,6 @@ export function rideFeat( id ) {
 
 }
 
-// Whether a ride can be driven where others see it by someone with these achievements (a Set or an
-// array of ids): any ride no achievement locks, or one whose achievement they have.
-export function rideAllowed( id, feats ) {
-
-	const feat = rideFeat( id );
-	if ( ! feat ) return true;
-	return Array.isArray( feats ) ? feats.includes( feat ) : !! feats?.has?.( feat );
-
-}
-
 // The rides an achievement unlocks (usually one, or none).
 export function ridesOf( feat ) {
 

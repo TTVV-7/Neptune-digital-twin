@@ -541,9 +541,6 @@ export async function postTime( context ) {
 	if ( fault ) throw new HttpError( 400, 'Bad request', { reason: 'ghost', fault } );
 
 	const player = await authenticate( db, id, secret );
-	// A construction ride only with the achievement that unlocks it (achievements.js): its ghost and
-	// its row on the board show it to everyone. (Nothing read for any other ride.)
-	await checkRide( db, id, vehicle );
 	// One visit, one player, as for scores.
 	const [ , bound ] = await db.batch( [
 		db.prepare( 'INSERT INTO visits ( id, player_id, expires_at ) VALUES ( ?, ?, ? ) ON CONFLICT ( id ) DO NOTHING' ).bind( visit.id, id, visit.expiresAt ),
@@ -626,6 +623,13 @@ export async function postTime( context ) {
 		throw err;
 
 	}
+
+	// A construction ride only with the achievement that unlocks it (achievements.js): its ghost and
+	// its row on the board show it to everyone. (Nothing read for any other ride.) Asked after the
+	// gap and the visit's and visitor's counts, as a score's is, so a time refused for its ride costs
+	// what any other does: one every TIME_GAP a player, CHALLENGE_TIMES_PER_VISITOR_DAILY an address,
+	// not a loop of lookups as fast as CHALLENGE_MISSES lets a script post.
+	await checkRide( db, id, vehicle );
 
 	const owner = visit.owner ? 1 : 0;
 	const isNewBest = ! was || ms < was.ms;

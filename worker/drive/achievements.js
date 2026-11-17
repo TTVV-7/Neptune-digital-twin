@@ -156,6 +156,30 @@ export async function hasRide( db, id, vehicle ) {
 
 }
 
+// Every construction ride's achievement player `id` (or their account) has, as { feat: true or
+// false } for each of RIDE_FEATS': one look by key for all of them at once, for a room (live.js),
+// which asks once a connection whichever rides the page picks after.
+export async function unlockedRides( db, id ) {
+
+	const { results } = await db.prepare( ridesSql( '?1' ) ).bind( id ).all();
+	const have = new Set( results.map( row => row.achievement ) );
+	return Object.fromEntries( RIDE_FEAT_IDS.map( feat => [ feat, have.has( feat ) ] ) );
+
+}
+
+// The construction rides' achievements, each once.
+const RIDE_FEAT_IDS = [ ...new Set( Object.values( RIDE_FEATS ).map( ride => ride.feat ) ) ];
+
+// SQL for which of RIDE_FEAT_IDS the player whose id is `id` (a parameter, '?1') or their account
+// has (unlockedRides): a look by key for each, for each of playersOf's players (14 rows read alone,
+// 281 measured for an account of 20 players or more).
+export function ridesSql( id ) {
+
+	return `SELECT DISTINCT a.achievement FROM achievements a
+		WHERE a.achievement IN ( ${ RIDE_FEAT_IDS.map( feat => `'${ feat }'` ).join( ', ' ) } ) AND a.player_id IN ( ${ playersOf( id ) } )`;
+
+}
+
 // hasRide, as a 403 (reason: 'ride', with what unlocks it) if not.
 export async function checkRide( db, id, vehicle ) {
 

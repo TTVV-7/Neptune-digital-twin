@@ -6445,9 +6445,32 @@ describe( 'World Drive challenges', () => {
 		const mine = listed.json.challenges.find( c => c.id === earthDay().id );
 		assert.deepEqual( mine.top.map( r => r.name ), [ 'Bea Fast', 'Ann Racer', 'Cy Slow' ] );
 		assert.deepEqual( [ mine.total, mine.me ], [ 3, { ms: quick.ms, rank: 2, run: runOf( ann, quick ), handle: await handleOf( { TURNSTILE_SECRET: PASS_SECRET }, earthDay().id, ann.id ) } ] );
-		// A Moon challenge's time with the same Earth visit: taken too.
-		res = await post( ann, moonDay(), { run: fairRun( moonDay(), 2000 ), after: 40 * MINUTE } );
+		// A Moon challenge's time with the same Earth visit: taken too. (Bea's: Ann's day, 4 times here,
+		// is used up, the time refused for its ride above taking one as any time does.)
+		res = await post( bea, moonDay(), { run: fairRun( moonDay(), 2000 ), after: 40 * MINUTE } );
 		assert.equal( res.status, 200, res.text );
+		res = await post( ann, moonDay(), { run: fairRun( moonDay(), 2000 ), after: 41 * MINUTE } );
+		assert.deepEqual( [ res.status, res.json.error ], [ 429, 'That\'s all for today. Try again tomorrow' ] );
+
+	} );
+
+	test( 'a time refused for its ride costs what any other does: after the time gap and the visitor\'s day, never a loop of lookups', async () => {
+
+		const dot = await player( 'Dot Locked' );
+		// Twelve at once in a locked construction ride: the first is looked at (and refused for its
+		// ride), the rest turned away at the gap (and then CHALLENGE_MISSES) before anything more is
+		// read, as twelve in the go-kart would be.
+		const answers = [];
+		for ( let i = 0; i < 12; i ++ ) answers.push( await post( dot, earthDay(), { run: fairRun( earthDay(), 4000 ), after: 10 * MINUTE + i * 100, vehicle: 'hydrovac-truck' } ) );
+		assert.deepEqual( answers.map( res => res.status ), [ 403, ...Array( 11 ).fill( 429 ) ] );
+		assert.equal( answers[ 0 ].json.reason, 'ride' );
+		assert.ok( answers.slice( 1 ).every( res => res.json.reason !== 'ride' ) );
+		assert.deepEqual( server.d1( `SELECT ms FROM challenge_times WHERE player_id = '${ dot.id }'` ), [] );
+		// The ride is checked after the gap and the visitor's daily turn (challenges.js's postTime).
+		const source = readFileSync( new URL( '../worker/drive/challenges.js', import.meta.url ), 'utf8' );
+		const postTime = source.slice( source.indexOf( 'export async function postTime' ) );
+		const ride = postTime.indexOf( 'checkRide(' );
+		assert.ok( ride > postTime.indexOf( 'last_time_at <= ?3' ) && ride > postTime.indexOf( 'takeTurn(' ) );
 
 	} );
 
