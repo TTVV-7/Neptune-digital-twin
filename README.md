@@ -894,6 +894,11 @@ way you signed in (see [Username and password accounts](docs/world-drive.md#user
 stays off ("Coming soon") until `GOOGLE_CLIENT_ID` and the webhook's secret are set (see
 [Supporter Pass (buying it)](docs/world-drive.md#supporter-pass-buying-it) for the owner's steps).
 
+**Ads**: one Google AdSense banner on the globe only (never while driving, paused or on the places'
+pages), off until `ADSENSE_CLIENT` is set, never shown (nor Google's script loaded) for a supporter,
+loaded lazily once the globe is up, with `/ads.txt` from the Worker; consent is Google's own CMP (see
+[Ads](docs/world-drive.md#ads)).
+
 For search engines and links, the site has a page for each start spot and a few more famous places
 (`/drive/<place>/`, built from `drive/site/`, each with a **Drive here** that opens the game with the
 place pinned), a page about driving on the Moon (`/moon/`) and one for each of the Moon's start spots

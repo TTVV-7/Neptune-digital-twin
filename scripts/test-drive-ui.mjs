@@ -6420,6 +6420,274 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 
 } );
 
+// --- Google's ad on the globe --------------------------------------------------------------------
+
+// Made up, in AdSense's formats.
+const ADSENSE = { client: 'ca-pub-1234567890123456', slot: '1234567890' };
+const ADS_SCRIPT = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1234567890123456';
+// Stands in for Google's adsbygoogle.js: each push fills the page's empty ad slots with a block of
+// colour, or, with window.stubAd 'unfilled', says there's no ad, as Google's does (data-ad-status).
+const ADS_STUB = `( () => {
+	const fill = () => document.querySelectorAll( 'ins.adsbygoogle:not( [data-adsbygoogle-status] )' ).forEach( ins => {
+		ins.setAttribute( 'data-adsbygoogle-status', 'done' );
+		const status = window.stubAd || 'filled';
+		if ( status === 'filled' ) ins.append( Object.assign( document.createElement( 'div' ), { className: 'stub-ad', textContent: 'A stand-in ad', style: 'width:100%;height:100%;background:#2d7a46;color:#fff;font:700 14px sans-serif;display:flex;align-items:center;justify-content:center' } ) );
+		ins.setAttribute( 'data-ad-status', status );
+	} );
+	const queued = window.adsbygoogle || [];
+	window.adsbygoogle = { loaded: true, push() { fill(); } };
+	if ( queued.length ) fill();
+} )();`;
+// The ad's pictures, saved even without TEST_SCREENSHOTS (as the admin page's are).
+const AD_SHOTS = SHOTS || tmpdir();
+
+// The test pad with ads on (/api/config's adsense, none with adsense: null) and sign-in set up, the
+// Worker's side answered as supporterPage does (me: /api/me's). Google's script: stood in for
+// (script 'stub'), or blocked as an ad blocker would ('blocked'); the stand-in's ad filled, or
+// stubAd 'unfilled'. page.adAsked has every request to Google's ad servers, page.adModule every one
+// for ads.js's code and styles (the dev server serves each module apart).
+async function adsPage( { adsense = ADSENSE, script = 'stub', stubAd = 'filled', me = SIGNED_OUT, ...options } = {} ) {
+
+	const page = await supporterPage( { me, config: { ...RESTING, ...( adsense ? { adsense } : {} ) }, ...options } );
+	page.adAsked = [];
+	page.adModule = [];
+	page.on( 'request', request => {
+
+		const url = request.url();
+		if ( url.includes( 'googlesyndication' ) ) page.adAsked.push( url );
+		if ( /\/src\/drive-app\/ads\.(js|css)/.test( url ) ) page.adModule.push( url );
+
+	} );
+	await page.addInitScript( stubAd => window.stubAd = stubAd, stubAd );
+	await page.route( 'https://pagead2.googlesyndication.com/**', route => {
+
+		if ( script === 'stub' && route.request().url() === ADS_SCRIPT ) return route.fulfill( { contentType: 'text/javascript', body: ADS_STUB } );
+		route.abort( 'blockedbyclient' );
+
+	} );
+	return page;
+
+}
+
+// The ad on screen, filled: its frame's box.
+async function adShown( page ) {
+
+	await page.locator( '#globe-ui .ad-slot ins[data-ad-status="filled"]' ).waitFor( { timeout: 20000 } );
+	return page.locator( '#globe-ui .ad-frame' ).boundingBox();
+
+}
+
+// Whether two boxes ({ x, y, width, height }) overlap.
+const overlap = ( a, b ) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+
+// The ad clear of everything on the globe that shows: the panel (the sheet on a phone), its title,
+// the trophy, the pin's card, the party banner, the map's credits, and in the screen.
+async function adClear( page, why ) {
+
+	const ad = await page.locator( '#globe-ui .ad-frame' ).boundingBox();
+	const viewport = page.viewportSize();
+	assert.ok( ad.x >= 0 && ad.y >= 0 && ad.x + ad.width <= viewport.width && ad.y + ad.height <= viewport.height, `${ why }: off the screen ${ JSON.stringify( ad ) }` );
+	for ( const selector of [ '#globe-ui .panel', '#globe-ui .intro', '#globe-ui .board-open', '#globe-ui .pin-card', '#globe-ui .party-banner', '#attribution', '#moon-credit' ] ) {
+
+		const other = page.locator( selector );
+		if ( ! await other.isVisible() ) continue;
+		const box = await other.boundingBox();
+		assert.ok( ! overlap( ad, box ), `${ why }: the ad ${ JSON.stringify( ad ) } is over ${ selector } ${ JSON.stringify( box ) }` );
+
+	}
+
+}
+
+describe( 'World Drive\'s ad on the globe (AdSense)', () => {
+
+	test( 'with ads off (no adsense in /api/config) nothing of them is asked for, shown or said', async () => {
+
+		const page = await adsPage( { adsense: null } );
+		await testPad( page );
+		await page.waitForFunction( () => window.drive.supporter.me );
+		// Past the idle wait's longest (5 s).
+		await page.waitForTimeout( 6500 );
+		assert.equal( await page.locator( '.ad-slot, ins.adsbygoogle' ).count(), 0 );
+		assert.equal( await page.evaluate( () => document.body.classList.contains( 'ad-on' ) ), false );
+		assert.equal( await page.locator( '#about .ads-note' ).count(), 0 );
+		assert.deepEqual( page.adAsked, [] );
+		assert.deepEqual( page.adModule, [] );
+		assert.equal( await page.evaluate( () => 'adsbygoogle' in window ), false );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'on: once the globe is up and the browser idle, a banner beside the panel on a computer, gone while dropping in, driving and paused, back on M; Google\'s script asked for as AdSense says', async () => {
+
+		const page = await adsPage();
+		await testPad( page );
+		const ad = await adShown( page );
+		assert.equal( await page.locator( '#globe-ui .ad-label' ).textContent(), 'Ad' );
+		assert.equal( await page.locator( '#globe-ui .ad-slot' ).getAttribute( 'aria-label' ), 'Advertisement' );
+		// 728 × 90 beside the panel on a computer this wide.
+		assert.deepEqual( [ Math.round( ad.width ), Math.round( await page.locator( '#globe-ui .ad-slot ins' ).evaluate( ins => ins.getBoundingClientRect().height ) ) ], [ 728, 90 ] );
+		const ins = await page.locator( '#globe-ui .ad-slot ins' ).evaluate( ins => ( { client: ins.dataset.adClient, slot: ins.dataset.adSlot, format: ins.dataset.adFormat ?? null } ) );
+		assert.deepEqual( ins, { client: ADSENSE.client, slot: ADSENSE.slot, format: null } );
+		const script = await page.locator( 'script[src*="adsbygoogle"]' ).evaluate( s => ( { src: s.src, async: s.async, crossOrigin: s.crossOrigin } ) );
+		assert.deepEqual( script, { src: ADS_SCRIPT, async: true, crossOrigin: 'anonymous' } );
+		assert.deepEqual( page.adAsked, [ ADS_SCRIPT ] );
+		// About World Drive says so.
+		assert.match( await page.locator( '#about .ads-note' ).textContent(), /Google AdSense.*cookies.*EEA, the UK and Switzerland/s );
+		await adClear( page, 'computer' );
+
+		// A pin's card goes up out of its way.
+		await page.locator( '.spots button', { hasText: 'Golden Gate Bridge' } ).click();
+		await page.locator( '.pin-card' ).waitFor();
+		await flown( page );
+		await adClear( page, 'computer, pinned' );
+		await page.screenshot( { path: join( AD_SHOTS, 'drive-ad-desktop.png' ) } );
+
+		// Dropping in, and driving: no ad, and no room kept for it.
+		await page.locator( '.pin-card .go' ).click();
+		assert.equal( await page.locator( '#globe-ui .ad-slot' ).isVisible(), false, 'the ad shows while dropping in' );
+		await page.waitForFunction( () => window.drive.mode === 'driving', null, { timeout: 60000 } );
+		assert.equal( await page.locator( '#globe-ui .ad-slot' ).isVisible(), false, 'the ad shows while driving' );
+		assert.equal( await page.locator( '#globe-ui .ad-slot' ).boundingBox(), null );
+		await page.keyboard.press( 'Escape' );
+		await page.waitForFunction( () => window.drive.mode === 'paused' );
+		assert.equal( await page.locator( '#globe-ui .ad-slot' ).isVisible(), false, 'the ad shows in the pause menu' );
+		await page.locator( '#pause .resume' ).click();
+		await page.waitForFunction( () => window.drive.mode === 'driving' );
+
+		// M: back on the globe, the same ad (one script, one ad asked for).
+		await page.keyboard.press( 'KeyM' );
+		await page.waitForFunction( () => window.drive.mode === 'globe' );
+		assert.ok( await page.locator( '#globe-ui .ad-slot' ).isVisible(), 'no ad back on the globe' );
+		assert.equal( await page.locator( '#globe-ui .ad-slot ins[data-ad-status="filled"]' ).count(), 1 );
+		assert.deepEqual( page.adAsked, [ ADS_SCRIPT ] );
+		await adClear( page, 'computer, back' );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'dropped in before it loads: Google\'s script waits for the globe', async () => {
+
+		const page = await adsPage();
+		// The Worker's word on the pass held back until the drive's started (the ad waits for it).
+		let answer;
+		const held = new Promise( resolve => answer = resolve );
+		await page.route( `${ BASE }/api/me`, async route => {
+
+			await held;
+			route.fulfill( { contentType: 'application/json', body: JSON.stringify( SIGNED_OUT ) } );
+
+		} );
+		await testPad( page );
+		await page.locator( '.spots button', { hasText: 'Times Square' } ).click();
+		await flown( page );
+		await driveHere( page );
+		assert.deepEqual( page.adModule, [] );
+		answer();
+		await page.waitForFunction( () => document.querySelector( '.ad-slot' ), null, { timeout: 20000 } );
+		await page.waitForTimeout( 1000 );
+		assert.deepEqual( page.adAsked, [], 'Google\'s script was asked for while driving' );
+		await page.keyboard.press( 'KeyM' );
+		await page.waitForFunction( () => window.drive.mode === 'globe' );
+		await adShown( page );
+		assert.deepEqual( page.adAsked, [ ADS_SCRIPT ] );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'never for a supporter: neither ads.js nor Google\'s script is asked for; and the pass arriving mid-visit takes the ad away', async () => {
+
+		const supporter = { ...ALICE, supporter: true };
+		const page = await adsPage( { me: supporter } );
+		await testPad( page );
+		await page.waitForFunction( () => window.drive.supporter.me?.supporter );
+		await page.waitForTimeout( 6500 );
+		assert.equal( await page.locator( '.ad-slot' ).count(), 0 );
+		assert.deepEqual( page.adAsked, [] );
+		assert.deepEqual( page.adModule, [] );
+		assert.equal( await page.locator( '#about .ads-note' ).count(), 0 );
+		await page.context().close();
+
+		// Signed out, the ad; then the pass comes (bought, or signed in), and it's gone with its room.
+		const later = await adsPage();
+		await testPad( later );
+		await adShown( later );
+		later.state.me = supporter;
+		await later.evaluate( () => window.drive.supporter.refresh() );
+		await later.waitForFunction( () => ! document.querySelector( '.ad-slot' ) && ! document.body.classList.contains( 'ad-on' ) );
+		assert.equal( await later.locator( '.ad-slot' ).count(), 0 );
+		assert.deepEqual( later.errors, [] );
+		await later.context().close();
+
+	} );
+
+	test( 'blocked (an ad blocker) or with no ad to show, it goes quietly: no room kept, no errors', async () => {
+
+		for ( const [ why, options ] of [ [ 'blocked', { script: 'blocked' } ], [ 'unfilled', { stubAd: 'unfilled' } ] ] ) {
+
+			const page = await adsPage( options );
+			const logged = [];
+			page.on( 'console', message => message.type() === 'error' && ! /net::ERR_BLOCKED_BY_CLIENT|Failed to load resource/.test( message.text() ) && logged.push( message.text() ) );
+			await testPad( page );
+			// Put up (ads.js's code asked for, then Google's script), then gone.
+			await page.waitForFunction( () => document.querySelector( 'script[src*="adsbygoogle"]' ), null, { timeout: 20000 } );
+			await page.waitForFunction( () => ! document.querySelector( '.ad-slot' ) && ! document.body.classList.contains( 'ad-on' ), null, { timeout: 20000 } );
+			assert.deepEqual( page.adAsked, [ ADS_SCRIPT ], why );
+			assert.ok( page.adModule.length > 0, why );
+			// The pin's card where it always is.
+			await page.locator( '.spots button', { hasText: 'Golden Gate Bridge' } ).click();
+			await page.locator( '.pin-card' ).waitFor();
+			// (Once it's risen into place.)
+			await page.waitForTimeout( 500 );
+			const card = await page.locator( '.pin-card' ).boundingBox();
+			assert.ok( Math.abs( 800 - card.y - card.height - 28 ) < 2, `${ why }: ${ JSON.stringify( card ) }` );
+			assert.deepEqual( page.errors, [], why );
+			assert.deepEqual( logged, [], why );
+			await page.context().close();
+
+		}
+
+	} );
+
+	test( 'on a phone, upright and on its side: clear of the sheet, the title, the trophy and the pin\'s card', async () => {
+
+		for ( const [ name, viewport ] of [ [ 'phone', { width: 390, height: 844 } ], [ 'phone-landscape', { width: 844, height: 390 } ] ] ) {
+
+			const page = await adsPage( { viewport, touch: true } );
+			await testPad( page );
+			const ad = await adShown( page );
+			assert.equal( Math.round( ad.width ), 320, name );
+			await adClear( page, name );
+			await page.locator( '.spots button', { hasText: 'Times Square' } ).tap();
+			await page.locator( '.pin-card' ).waitFor();
+			await flown( page );
+			await adClear( page, `${ name }, pinned` );
+			if ( name === 'phone' ) {
+
+				// The pin still shows between the title and its card.
+				const marker = await page.locator( '#pin span' ).boundingBox();
+				const card = await page.locator( '.pin-card' ).boundingBox();
+				const title = await page.locator( '#globe-ui .intro' ).boundingBox();
+				assert.ok( marker && marker.y + marker.height <= card.y && marker.y >= title.y + title.height, `pin at ${ JSON.stringify( marker ) }` );
+
+			}
+
+			await page.waitForTimeout( 500 );
+			await page.screenshot( { path: join( AD_SHOTS, `drive-ad-${ name }.png` ) } );
+			await page.locator( '.pin-card .go' ).tap();
+			await page.waitForFunction( () => window.drive.mode === 'driving', null, { timeout: 60000 } );
+			assert.equal( await page.locator( '#globe-ui .ad-slot' ).isVisible(), false, name );
+			assert.deepEqual( page.errors, [], name );
+			await page.context().close();
+
+		}
+
+	} );
+
+} );
+
 // --- username and password accounts ------------------------------------------------------------
 
 const RACER = { signedIn: true, name: '', email: '', google: false, username: 'Racer_1', supporter: false, purchase: { ...SIGNED_OUT.purchase, clientReferenceId: '77' } };

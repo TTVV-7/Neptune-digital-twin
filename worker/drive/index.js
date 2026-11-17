@@ -4,7 +4,7 @@ import { search } from './search.js';
 import { createPlayer, renamePlayer } from './players.js';
 import { leaderboard, postScore } from './scores.js';
 import { postProgress, setTitle } from './progress.js';
-import { addressOf, clock, googleClientId, setting } from './settings.js';
+import { addressOf, adsense, clock, googleClientId, setting } from './settings.js';
 import { makeVisit } from './visits.js';
 import { currentAccount, getMe, linkPlayer, signIn, signOut } from './accounts.js';
 import { linkGoogle, passwordSignIn, passwordsOn, removePassword, setPassword, signOutEverywhere, signUp, unlinkGoogle } from './logins.js';
@@ -22,10 +22,11 @@ export { DriveLimits } from './limits.js';
 export { DriveRoom } from './live.js';
 
 // The Cloudflare Worker behind World Drive (worlddrive.app, docs/world-drive.md). It only runs for
-// /api/* and /c (LINK_PATH: a "challenge a friend" link's page, the home page with a preview card
-// of its own for chat apps); the rest of the site (npm run build:drive, dist-drive/), the home page
-// included, is served straight from Cloudflare's assets. Its job is to keep Google's bill in check:
-// every page that loads Google's 3D tiles starts a billed Maps session, so the Maps key is handed
+// /api/*, /c (LINK_PATH: a "challenge a friend" link's page, the home page with a preview card
+// of its own for chat apps) and /ads.txt (AdSense's, made from ADSENSE_CLIENT); the rest of the
+// site (npm run build:drive, dist-drive/), the home page included, is served straight from
+// Cloudflare's assets. Its job is to keep Google's bill in check: every page that loads Google's 3D
+// tiles starts a billed Maps session, so the Maps key is handed
 // out once per visit, only to a browser that passed Turnstile, and only while today's visits are
 // under the caps. It also keeps the leaderboard (players.js, scores.js) in a D1 database: nicknames
 // and each player's best stunt scores, posted with the visit's token so they come from visits that
@@ -87,11 +88,20 @@ export { DriveRoom } from './live.js';
 //                         asks a visitor (by their /48) may make a day (200 if unset) (achievements.js)
 //   PASSWORD_TRIES        the rate limiter binding for a visitor's password sign-ins, checks and
 //                         account changes, by the same key as CHALLENGE_LOOKS (logins.js)
+//   ADSENSE_CLIENT, ADSENSE_SLOT   Google AdSense on the globe (settings.js's adsense): the publisher
+//                         id (ca-pub-...) and, if wanted, a display unit's slot id; empty (or not
+//                         one), no ads and /ads.txt is a 404
 //   TURNSTILE_VERIFY_URL, SEARCH_UPSTREAM, TEST_CLOCK, GOOGLE_JWKS_URL   tests only (see
 //                         scripts/test-drive-worker.mjs)
 
 // Other names the Maps key may be set under (see mapsKey).
 const KEY_NAMES = /^google_maps_api(_key)?$/i;
+
+// Where AdSense's crawler looks for who may sell ads on the site (run_worker_first in
+// wrangler.drive.jsonc, so it's the Worker's, not a file's).
+const ADS_TXT = '/ads.txt';
+// Google's certification authority id, the same in every AdSense publisher's ads.txt line.
+const GOOGLE_TAG = 'f08c47fec0942fa0';
 
 // sameOrigin: false skips the checks that a request comes from this site's own pages, for Stripe's
 // webhook only: it comes from Stripe's servers, not a page, and is signed instead (supporter.js).
@@ -146,6 +156,9 @@ export default {
 			return Response.redirect( url.href, 301 );
 
 		}
+
+		// AdSense's ads.txt, saying who may sell ads here: only with a publisher id set (adsTxt).
+		if ( url.pathname === ADS_TXT ) return adsTxt( request, env );
 
 		if ( ! url.pathname.startsWith( '/api/' ) ) {
 
@@ -203,18 +216,34 @@ export default {
 
 };
 
+// /ads.txt (the IAB's ads.txt: who may sell ads on the site): AdSense's one line, with the publisher
+// id from ADSENSE_CLIENT (pub-..., without its ca-), while ads are on; a 404 while they're off, as
+// any missing file is.
+function adsTxt( request, env ) {
+
+	const ads = adsense( env );
+	if ( request.method !== 'GET' && request.method !== 'HEAD' ) return new Response( 'Method not allowed', { status: 405, headers: { Allow: 'GET, HEAD', 'Content-Type': 'text/plain; charset=utf-8' } } );
+	if ( ! ads ) return new Response( 'Not found', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } } );
+	const body = `google.com, ${ ads.client.slice( 3 ) }, DIRECT, ${ GOOGLE_TAG }\n`;
+	return new Response( request.method === 'HEAD' ? null : body, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600' } } );
+
+}
+
 // What the page needs before it starts: the Turnstile site key, whether there are maps today
 // (without a key it shows a "back soon" screen instead of the globe), the sign-in button's client
 // id ('' when there's no signing in with Google, see accounts.js), whether there are usernames and
-// passwords (passwords, logins.js), and whether driving with others is on, with
+// passwords (passwords, logins.js), adsense: { client, slot } only while Google's ads are on
+// (settings.js's adsense; nothing about ads otherwise), and whether driving with others is on, with
 // liveReason: BUDGET_SPENT when it's off for the rest of the day (its budget, see live.js). If
 // DriveLimits can't say, it's off, with liveReason 'unknown': a page already driving with others
 // that was turned away tries again rather than stopping.
 async function getConfig( { env, limits, now } ) {
 
 	const today = await liveToday( { env, limits, now } );
+	const ads = adsense( env );
 	return json( {
 		turnstileSiteKey: env.TURNSTILE_SITE_KEY ?? '', mapsOn: !! mapsKey( env ), googleClientId: googleClientId( env ), passwords: passwordsOn( env ), live: today.open,
+		...( ads ? { adsense: ads } : {} ),
 		...( today.reason === BUDGET_SPENT || today.reason === 'unknown' ? { liveReason: today.reason } : {} ),
 	} );
 

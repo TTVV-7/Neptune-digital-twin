@@ -3707,6 +3707,7 @@ share), a day, as `metric:key`:
 | `garage_open`, `garage_edit` | `all`; a part (colour, finish, decal, rim, glow, boost, flame, trail, smoke, horn) | The Garage opened, and each change made in it |
 | `party` | `made`, `joined` | Parties made (Invite friends) and joined (a party's link) |
 | `board`, `pass`, `level_up` | `open`, `named`; `open`, `buy`; `all` | The leaderboard opened and a nickname picked (a new player); the Supporter Pass's sheet opened (from anywhere) and its Buy followed to Stripe; a level reached |
+| `ad` | `shown`, `blocked` | [Google's ad on the globe](#ads), once a visit each: an ad filled it; its script, or its ad, didn't come (an ad blocker, mostly). On the admin page beside the pass's, once there are any |
 | `challenge` | `open`, `start`, `finish`, `posted`, `nudge`, `nudge_open`, `share`, `link`, `link_start` | [Challenges](#challenges): the list opened, a run started (at GO), finished, and its time posted to a board (a new best); the word to a visit driving 40 s (today's challenge) said, and its **Challenges** button pressed; a "challenge a friend" link shared or copied, a page opened on one, and a run started from its card ([ghosts](#ghosts-and-challenge-a-friend)). On the admin page's **any count by day** |
 
 The Worker adds, as the admin page asks (nothing more is kept for it), what its own tables say of
@@ -4829,7 +4830,7 @@ key. A link shows nothing of the sender but the name and time the board shows (a
 
 **The link's preview card.** Chat apps show a link's title and description from the page's Open
 Graph tags, which a crawler reads without running the page. So a link has a path of its own, `/c`
-(`LINK_PATH`), and the Worker runs for it and `/api/*` alone (`run_worker_first` in
+(`LINK_PATH`), and the Worker runs for it, `/api/*` and `/ads.txt` alone (`run_worker_first` in
 `wrangler.drive.jsonc`): the home page and every other page stay files served straight from the
 assets. (Running the Worker for `/` instead would make every page view a Worker request, and on the
 Free plan, once the day's 100,000 are used up, a path the Worker runs first for is answered with a
@@ -5039,7 +5040,7 @@ place and period, escaped, when it ends and not how long is left: a daily's, a w
 monthly's last day, "beat it" for a time whose ghost isn't kept, a place with
 markup in it text in its tags, the link its address, the rest of the page as it is; no challenge,
 one that isn't, a place's link: the page as it is), the home page with the same link the file as it
-is (the Worker not run for it: `run_worker_first` is `/api/*` and `/c`), and its answer from the
+is (the Worker not run for it: `run_worker_first` is `/api/*`, `/c` and `/ads.txt`), and its answer from the
 cache; the two routes held to `CHALLENGE_MISSES` from one /48 (ten answered, the rest 429, the
 cache's still answered, another /48 too); a time posted one of them (past them a 429 before D1 is
 touched, one asked a post); what a post reads by D1's own count on a challenge keeping 1,240
@@ -5928,6 +5929,131 @@ WHERE c.final_at IS NOT NULL AND t.final_rank IS NOT NULL AND t.final_rank <= p.
 ON CONFLICT DO NOTHING;
 ```
 
+## Ads
+
+World Drive can show one Google AdSense display ad, and only on the globe: off until the owner sets
+a publisher id, and never for anyone with the [Supporter Pass](#supporter-pass-buying-it).
+
+### What people see
+
+- **On the globe only.** A small banner with "Ad" over it: on a computer along the bottom beside the
+  panel (728 × 90 where the screen is at least 1116 px wide and 600 high, else 320 × 50); on a phone
+  upright, 320 × 50 just above the sheet along the bottom; on a phone on its side, 320 × 50 at the
+  bottom beside the panel. The pin's card, a party's banner and the map's credits move up out of its
+  way while it's there, so it covers none of the panel, the search, the trophy or the buttons.
+- **Never anywhere else.** It's in the globe's own section (`#globe-ui`), so it's gone, and takes no
+  room, while dropping in, driving, paused, on the loading, robot-check, used-up and other screens,
+  and back when the globe is (**M**). It's the one ad a visit asks for, so there's nothing between
+  drops either. The places' pages and the Moon's (`/drive/`, `/moon/`) have none: they have no script
+  at all.
+- **Supporters never see one**, and Google's script isn't even loaded for them: the page waits for
+  the Worker's word on the pass (`/api/me`, which `supporter.js` asks anyway) before asking for the
+  ad's code. A pass that comes mid-visit (bought, or signed in) takes the ad away at once, with its
+  room.
+- **Blocked, or no ad to show**, it goes quietly: Google's script not loading (an ad blocker), an ad
+  Google says is `unfilled`, or none saying anything 20 s after the script came, and the space goes
+  as if it had never been there. No error, nothing in the way.
+- **About World Drive** then has a paragraph on the ads and Google's cookies (put there by `ads.js`,
+  so it's only there while there are ads, and not for a supporter).
+
+### How it works
+
+- `GET /api/config` has `adsense: { client, slot }` only while ads are on (`adsense()` in
+  `worker/drive/settings.js`): `ADSENSE_CLIENT` is `ca-pub-` and 16 digits, and `ADSENSE_SLOT` is
+  empty or 6 to 12 digits. Anything else (a typo, the id without its `ca-`, a slot that isn't one)
+  is off, rather than half on. Off, the answer is exactly what it was before ads, and nothing about
+  them is loaded or shown.
+- **Nothing in the first load.** The ad is `src/drive-app/ads.js` (and `ads.css`), a chunk of its
+  own (under 2 kB compressed) that `main.js` imports only once the globe is showing, the Worker has
+  said whether the pass is here, the visitor hasn't it, and the browser is idle
+  (`requestIdleCallback`, at most 5 s; 3 s on a browser without it). Google's script,
+  `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=<ADSENSE_CLIENT>` (`async`,
+  `crossorigin="anonymous"`), is only asked for while the globe shows (dropped in before then, it
+  waits for the globe), as an ad slot with no width is one Google can't fill.
+- The slot is an `<ins class="adsbygoogle">` with `data-ad-client`, `data-ad-slot` when there is
+  one and `data-full-width-responsive="false"`, sized by `ads.css` (Google's way to give a
+  responsive unit an exact size: no `data-ad-format`), so the ad can't grow over the sheet. Its
+  room (`body.ad-on`) is only kept from when `ads.js` puts it up until it goes, so nothing moves
+  before.
+- **`/ads.txt`**: the Worker answers it (it's in `run_worker_first` in `wrangler.drive.jsonc`, next
+  to `/api/*` and `/c`, so it's never a file), with AdSense's one line, `google.com,
+  pub-XXXXXXXXXXXXXXXX, DIRECT, f08c47fec0942fa0` (the publisher id without its `ca-`; the last part
+  is Google's own and the same for everyone), while ads are on, and a 404 while they're off. It's one
+  Worker request each time a crawler asks, a few a day.
+- **No Content-Security-Policy** is set anywhere for World Drive (not by the Worker, nor a `_headers`
+  file, nor a `<meta>`), so AdSense's hosts need nothing allowed. If one is ever added, it must allow
+  `pagead2.googlesyndication.com`, `*.googlesyndication.com`, `*.doubleclick.net`,
+  `*.google.com`, `*.gstatic.com` and `*.adtrafficquality.google` for scripts, frames, images and
+  connections (Google's list for AdSense with a CSP).
+- **Play stats**: `ad:shown` (an ad filled the slot) and `ad:blocked` (its script, or its ad, didn't
+  come), each once a visit, only counts like the rest; the admin page shows them beside the pass's
+  when there are any.
+
+### Consent and privacy
+
+There's no consent banner of World Drive's own. Google's consent message is a Google-certified CMP
+(IAB TCF) that AdSense serves itself, with the ad script, to visitors in the EEA, the UK and
+Switzerland (and, set up for them, in US states with their own laws), and it must be turned on before
+ads go live there: see the owner's steps. Without it, Google serves those visitors only limited ads,
+or none. The About box's ads paragraph says what Google does with cookies and links to
+[Google's page on it](https://policies.google.com/technologies/partner-sites).
+
+### The ads' settings
+
+| Setting | Where | What it is |
+| --- | --- | --- |
+| `ADSENSE_CLIENT` | `vars` | The AdSense publisher id, `ca-pub-` and 16 digits (public). Empty (as it ships): no ads, and `/ads.txt` is a 404 |
+| `ADSENSE_SLOT` | `vars` | Optional: a display ad unit's id, 6 to 12 digits. Empty: the slot has no unit id |
+
+Both are in `wrangler.drive.jsonc`'s `vars`, which every deploy sets: change them there (a value put
+in the dashboard instead is replaced by the file's at the next deploy). A slot id is recommended: an
+`<ins>` without one only gets an ad if Google has one for it, else it's `unfilled` and the space
+goes. Keep **Auto ads** off for worlddrive.app in AdSense (Ads → By site): once Google's script is
+on a page, Auto ads would place ads of its own wherever it likes, while driving too.
+
+### The owner's steps
+
+1. **Apply.** At [adsense.google.com](https://adsense.google.com), sign up with the Google account
+   that should be paid, and add the site `worlddrive.app`. Copy the publisher id (`ca-pub-` and 16
+   digits: Account → Settings → Account information).
+2. **Turn it on.** Put the id in `wrangler.drive.jsonc` as `ADSENSE_CLIENT` (leave `ADSENSE_SLOT`
+   empty for now), commit and push: Workers Builds deploys it. Google's script is then on the globe
+   for everyone but supporters, and `https://worlddrive.app/ads.txt` has the line AdSense asks for.
+3. **Connect the site** in AdSense (Sites → worlddrive.app): verify it with **AdSense code snippet**
+   (it's on the page) or **Ads.txt snippet** (it's served), then **Request review**. The review
+   takes days to a few weeks; until then Google fills nothing, so the slot goes again each visit,
+   quietly.
+4. **Consent.** AdSense → **Privacy & messaging** → **European regulations**: create a message for
+   worlddrive.app (Google's certified CMP for the EEA, the UK and Switzerland) and publish it; then
+   **US state regulations** the same, if wanted. Do it before approval brings real ads.
+5. **An ad unit** (once approved, recommended): Ads → **By ad unit** → **Display ads**, horizontal,
+   **Responsive**; copy its `data-ad-slot` number into `ADSENSE_SLOT`, commit and push. Keep
+   **Auto ads** off for the site (Ads → By site).
+6. **Check it.** Open worlddrive.app in a private window (not signed in, no ad blocker): a few
+   seconds after the globe comes up the banner shows, goes when you drop in and is back on M.
+   Signed in with the pass: none, and no request to `googlesyndication.com` in the browser's Network
+   tab. Sites → worlddrive.app says whether ads.txt was found (a day or so after it first is).
+
+To switch ads off again, empty `ADSENSE_CLIENT` and deploy (and `/ads.txt` goes with it).
+
+### How ads are tested
+
+`npm run test:drive-worker`: `/api/config`'s `adsense` only for ids in their formats (spaces round
+them taken off, every kind of wrong one off, and nothing about ads in the answer then), `/ads.txt`'s
+line and its 404, HEAD and 405, `www` sent on; and under `wrangler dev` with `wrangler.drive.jsonc`,
+`/ads.txt` reaching the Worker, even with a stale file of that name among the assets, and off as the
+file ships. `npm run test:drive-ui` ("World Drive's ad on the globe"), with Google's script stood in
+for (Playwright answers its request, so nothing goes out): with ads off nothing of them asked for or
+shown; on, the banner on a computer (728 × 90 beside the panel, the script asked for as AdSense
+says, About's paragraph), clear of everything on the globe, pinned too, gone while dropping in,
+driving and paused and back on M, and its script waiting for the globe when the drive started first;
+never for a supporter (neither `ads.js` nor Google's script asked for) and gone with its room when the
+pass comes mid-visit; blocked and unfilled, gone quietly with the pin's card where it always is; and
+on a phone upright and on its side, clear of the sheet, the title, the trophy and the pin's card
+(with the pin still between the title and its card), with a picture of each (`drive-ad-desktop.png`,
+`drive-ad-phone.png`, `drive-ad-phone-landscape.png`, in `TEST_SCREENSHOTS` or the system's temporary
+folder).
+
 ## Settings
 
 In `wrangler.drive.jsonc` (`vars`, set on every deploy; change them there, not in the dashboard):
@@ -5944,6 +6070,7 @@ In `wrangler.drive.jsonc` (`vars`, set on every deploy; change them there, not i
 | `SUPPORTER_PRICE` | `CA$4.99` | Its price, as the page shows it |
 | `LIVE` | `on` | [Driving with others](#switching-it-off); `off` switches it off |
 | `LIVE_DAILY_BUDGET` | 40000 | [The Durable Object requests a day](#the-days-budget) driving with others may use; 0 is off |
+| `ADSENSE_CLIENT`, `ADSENSE_SLOT` | empty | [Google's ad on the globe](#ads): the AdSense publisher id (empty: no ads) and, if wanted, a display unit's id |
 
 Secrets, set by the owner and never in a file (Cloudflare dashboard: Workers & Pages → world-drive →
 Settings → Variables and Secrets, or `npx wrangler secret put NAME -c wrangler.drive.jsonc`):
@@ -6005,8 +6132,9 @@ site into `dist-drive/` and deploys the `world-drive` Worker with it (`vite buil
 vite.drive.config.js && wrangler deploy -c wrangler.drive.jsonc`; `0006_challenges.sql` adds the
 challenges' tables, `players.last_time_at` and `visits.times` before the Worker that needs them;
 `0007_challenge_ghosts.sql` the times' handles and the ghosts' table). The Worker only runs for
-`/api/*` and `/c`, the path a ["challenge a friend" link](#ghosts-and-challenge-a-friend) is shared
-at, which gets its own preview card there (`run_worker_first` in `wrangler.drive.jsonc`); every
+`/api/*`, `/c`, the path a ["challenge a friend" link](#ghosts-and-challenge-a-friend) is shared
+at, which gets its own preview card there, and `/ads.txt` ([ads](#ads)) (`run_worker_first` in
+`wrangler.drive.jsonc`); every
 other file, the home page included, is served straight from Cloudflare's assets, free and never
 turned away (on the Free plan, once the day's Worker requests are used up, a path the Worker runs
 first for is answered 429 instead of its file). The Durable Objects'
@@ -6496,6 +6624,9 @@ src/drive-app/pro.js         whether this visitor has the Supporter Pass (off un
 src/drive-app/pass.js        the Supporter Pass sheet and its badge
 src/drive-app/supporter.js   buying it: Google sign-in, the Payment Link, unlocking, the pause menu's
                              account line
+src/drive-app/ads.js         Google's ad on the globe (AdSense), a chunk of its own (ads.css its
+                             look) loaded only when /api/config has a publisher id, for someone
+                             without the pass, once the globe is up and the browser idle
 src/drive-app/account.js     the account panel, a chunk of its own loaded when it's opened
                              (account.css its look): signing in or up with a username and password,
                              changing it, linking Google; password-rules.js the rules for usernames
@@ -6576,7 +6707,8 @@ drive/public/                also robots.txt, site.webmanifest, the icons and og
 worker/drive/                the Worker: index.js (routes), limits.js (caps, the search queue and
                              the leaderboard's turns), turnstile.js, search.js; the leaderboard:
                              players.js, scores.js, boards.js, names.js (rules and the filter),
-                             visits.js (visit tokens); the Supporter Pass: accounts.js (sign-in,
+                             visits.js (visit tokens), settings.js (settings, AdSense's ids
+                             checked; index.js answers /ads.txt); the Supporter Pass: accounts.js (sign-in,
                              sessions, /api/me), logins.js (usernames and passwords, linking
                              Google), supporter.js (the webhook, who has it); driving
                              with others: live.js (/api/live and the rooms, DriveRoom, and
