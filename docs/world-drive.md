@@ -2065,6 +2065,14 @@ connection through hibernation (its count of what it has spent included) is unde
 16,384 bytes allowed, and a Durable Object holds up to 32,768 hibernating WebSockets, far more than
 a room lets in.
 
+**On the Moon** everything above costs the same, counted against the Moon's own budget,
+`LIVE_MOON_DAILY_BUDGET` (20,000 a day: about 20 driver-hours with others, or about 215 hours of
+drivers each alone in their area's room), so the Earth's and the Moon's together are at most 60,000
+of the Free plan's 100,000 a day, 40,000 left for the rest of the site. On Workers Paid both are at
+most 1.8 million a month, 0.8 million past the included million: $0.12 a month at most; each 100,000
+a day more on either is $0.45 a month. A Moon dot's ask (`/api/online?world=moon`) is kept 30 s
+apart from the Earth's, so a page on the Moon's globe is the same ask a minute.
+
 ### How it's tested
 
 `npm run test:drive-live` (the rooms, `scripts/test-drive-live.mjs`): under `wrangler dev`, with

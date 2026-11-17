@@ -1496,8 +1496,10 @@ describe( 'World Drive, who\'s driving now on the globe', () => {
 			[ 'Near Times Square', '4 drivers' ], [ 'Near Shibuya Crossing', '3 drivers' ], [ 'Near Arc de Triomphe', '2 drivers' ],
 			[ 'Near Las Vegas Strip', '1 driver' ], [ 'Near Golden Gate Bridge', '1 driver' ],
 		] );
-		// No names, nothing anyone typed, no pids: the Worker says only where and how many.
-		assert.deepEqual( Object.keys( now ).sort(), [ 'areas', 'on', 'total' ] );
+		// No names, nothing anyone typed, no pids: the Worker says only where and how many (and how
+		// many on the Moon).
+		assert.deepEqual( Object.keys( now ).sort(), [ 'areas', 'moon', 'on', 'total' ] );
+		assert.equal( now.moon, 0 );
 		assert.ok( now.areas.every( area => Object.keys( area ).sort().join() === 'count,height,lat,lon' ), JSON.stringify( now ) );
 		await shot( b, 'online-0-panel' );
 		assert.deepEqual( [ a.errors, b.errors, c.errors, d.errors ], [ [], [], [], [] ] );
