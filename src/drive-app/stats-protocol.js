@@ -85,6 +85,9 @@ export const METRICS = {
 	board: { key: oneOf( [ 'open', 'named' ] ), most: 20 },
 	pass: { key: oneOf( [ 'open', 'buy' ] ), most: 20 },
 	level_up: { key: ALL, most: 10 },
+	// Google's ad on the globe (ads.js), once a visit each: shown (an ad filled it), or blocked (its
+	// script, or its ad, didn't come: an ad blocker, mostly).
+	ad: { key: oneOf( [ 'shown', 'blocked' ] ), most: 2 },
 	// Challenges (challenges.js): the list opened, a run started (at GO), finished, and its time
 	// posted to a board; and the word to a visit driving a while (main.js) said, and its button
 	// pressed; a "challenge a friend" link shared (or copied), a page opened on one, and a run
