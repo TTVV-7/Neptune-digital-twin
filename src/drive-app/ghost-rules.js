@@ -30,6 +30,14 @@ export const GHOST_SAMPLES = 4096;
 // most each can take in practice (a turn's sharp change, a jump), well over what a run makes.
 export const GHOST_BYTES = 48 * 1024;
 export const GHOST_TEXT = Math.ceil( GHOST_BYTES / 3 ) * 4;
+// The most bytes a ghost may take a sample on average (and HEADER for its version, interval and
+// count): a run as it's driven packs into about six (its second differences a few centimetres, its
+// turns a step or two), a crash or a jump more for a moment; one at the most each sample's numbers
+// can be, about 12, is a run made up, packed as densely as the speed rule lets it be (metres of
+// jitter a sample), which would take twice a real run's room of a challenge's ghosts
+// (CHALLENGE_GHOST_BUDGET) and keep slower honest ghosts out with half as many.
+export const GHOST_DENSITY = 10;
+const HEADER = 8;
 // Angles in 1/TURN of a turn (0.35°).
 export const TURN = 1024;
 // What a ghost is let off: a sample this far (m) past what FASTEST covers in its time (its
@@ -287,7 +295,8 @@ function wrap( steps ) {
 
 // What's wrong with the ghost `text` (ghostText's) of a run of `ms` with `passes` on `challenge`'s
 // route ({ world, kind, route }), as the Worker checks it before a time is taken: '' for nothing.
-//   'form': not a ghost (readGhost's null), or sampled at another interval than everyFor( ms ).
+//   'form': not a ghost (readGhost's null), sampled at another interval than everyFor( ms ), or
+//     more than GHOST_DENSITY bytes a sample on average.
 //   'time': not as long as the run (its count isn't countFor( ms )).
 //   'start': its first sample (the car at GO) further from the start than START_SLACK.
 //   'speed': further between two samples, across the ground or up or down, than FASTEST goes in
@@ -303,6 +312,8 @@ export function ghostFault( { world, route }, ms, passes, text ) {
 	const ghost = readGhost( text );
 	if ( ! ghost || ghost.every !== everyFor( ms ) ) return 'form';
 	if ( ghost.count !== countFor( ms ) ) return 'time';
+	// (Its bytes, from its text's length: base64url, 3 bytes in 4 characters.)
+	if ( Math.floor( text.length * 3 / 4 ) > HEADER + GHOST_DENSITY * ghost.count ) return 'form';
 	const { every, count, east, north, up } = ghost;
 	if ( east[ 0 ] * east[ 0 ] + north[ 0 ] * north[ 0 ] > ( START_SLACK * 100 ) ** 2 ) return 'start';
 	let jumps = 0;

@@ -8153,6 +8153,56 @@ describe( 'World Drive challenges', () => {
 
 	} );
 
+	test( 'a first run races the list\'s race (the quickest time with a ghost to race, however far down the board: three made-up quick times at the top without one don\'t switch it off); a ghost whose data comes after GO isn\'t made or shown mid-race, and is raced from Retry', async () => {
+
+		const steady = friendRun( CHALLENGES[ 0 ], 25, 'steadyRun1100000' );
+		let page = await challengePage( {
+			changed: { 11: { top: [ row( 1, 'Too Quick', 6000 ), row( 2, 'Quick Two', 6500 ), row( 3, 'Quick Three', 7000 ) ], race: row( 7, 'Steady', steady.ms, { run: steady.run } ) } },
+			ghosts: { [ steady.run ]: padGhost( 25, steady.run ) },
+		} );
+		await page.locator( '#globe-ui .challenges-open' ).click();
+		await page.locator( '.ch-card' ).first().waitFor();
+		await start( page, 11 );
+		await page.waitForFunction( () => window.drive.challenges.race?.ready && window.drive.challenges.run, null, { timeout: 90000 } );
+		assert.deepEqual( await page.evaluate( () => [ window.drive.challenges.race.name, window.drive.challenges.race.kind, window.drive.challenges.race.ms ] ), [ 'Steady', 'leader', steady.ms ] );
+		assert.deepEqual( page.ghostsAsked, [ '?challenge=11&run=steadyRun1100000' ] );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+		// A friend's ghost answered only once the run's racing (a slow network): not made while it races
+		// (nothing appears, the page isn't held up mid-race), made once it's done, and raced from Retry.
+		const friend = friendRun( CHALLENGES[ 0 ], 25 );
+		const link = () => ( { status: 200, body: { challenge: { ...listed()[ 0 ], replacedAt: null, finalAt: null }, vs: { name: 'Ann Racer', ms: friend.ms, vehicle: 'go-kart', run: friend.run, ghost: true, date: '2026-11-16', level: 4, title: 'rookie' } } } );
+		const late = async late => {
+
+			await late.waitForFunction( () => window.drive.challenges.run?.phase === 'racing', null, { timeout: 120000 } );
+			return padGhost( 25 )( late );
+
+		};
+		page = await challengePage( { path: '/c?challenge=11&vs=FriendHandle0001', link, ghosts: { [ friend.run ]: late } } );
+		const card = page.locator( '#challenges .ch-link' );
+		await card.waitFor();
+		await card.locator( '.ch-start' ).click();
+		await page.waitForFunction( () => window.drive.challenges.run?.phase === 'racing', null, { timeout: 90000 } );
+		await page.waitForFunction( () => window.drive.challenges.race?.ms, null, { timeout: 30000 } );
+		await page.waitForTimeout( 2000 );
+		assert.deepEqual( await page.evaluate( () => {
+
+			const { race, run } = window.drive.challenges;
+			return { phase: run.phase, ready: race.ready, racing: race.racing, pivot: !! race.pivot, toggle: document.querySelector( '#drive-ui .ch-ghost-toggle' ).hidden };
+
+		} ), { phase: 'racing', ready: false, racing: false, pivot: false, toggle: true } );
+		await chase( page, 40 );
+		await page.locator( '.ch-finish' ).waitFor();
+		await page.waitForFunction( () => window.drive.challenges.race?.ready, null, { timeout: 60000 } );
+		await page.locator( '.ch-finish .ch-retry' ).click();
+		await page.waitForFunction( () => window.drive.challenges.race?.racing && window.drive.challenges.run?.phase === 'countdown', null, { timeout: 30000 } );
+		assert.deepEqual( await page.evaluate( () => [ window.drive.challenges.race.name, window.drive.challenges.race.kind ] ), [ 'Ann Racer', 'link' ] );
+		assert.equal( await page.locator( '#drive-ui .ch-ghost-toggle' ).isVisible(), true );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
 	test( 'a friend\'s link answered slowly (after the page has opened on the test pad): its card opens when it comes', async () => {
 
 		const link = () => ( { status: 200, body: { challenge: { ...listed()[ 0 ], replacedAt: null, finalAt: null }, vs: { name: 'Ann Racer', ms: 23900, vehicle: 'go-kart', run: 'friendRun0000001', ghost: true, date: '2026-11-16', level: 4, title: 'rookie' } } } );
@@ -8251,10 +8301,49 @@ describe( 'World Drive challenges', () => {
 		const page = await challengePage( { path: '/c?challenge=11&vs=FriendHandle0001', link, ghosts: { [ friend.run ]: pickup } } );
 		const card = page.locator( '#challenges .ch-link' );
 		await card.waitFor();
+		// The page's long tasks from Start on (PerformanceObserver's 'longtask': any task over 50 ms),
+		// each with what the run and its ghost were as it ended; and a beat as often as the page's thread
+		// lets a timer run (its longest gap the longest it was held).
+		await page.evaluate( () => {
+
+			window.beats = [];
+			const beat = () => {
+
+				window.beats.push( performance.now() );
+				if ( window.beats.length < 20000 ) setTimeout( beat, 0 );
+
+			};
+			beat();
+			window.longTasks = [];
+			new PerformanceObserver( list => {
+
+				const { run, race } = window.drive.challenges;
+				for ( const entry of list.getEntries() ) window.longTasks.push( { start: Math.round( entry.startTime ), ms: Math.round( entry.duration ), phase: run?.phase ?? null, ready: !! race?.ready } );
+
+			} ).observe( { type: 'longtask' } );
+
+		} );
 		const began = Date.now();
 		await card.locator( '.ch-start' ).click();
 		await page.waitForFunction( () => window.drive.challenges.race?.ready && window.drive.challenges.run, null, { timeout: 120000 } );
 		t.diagnostic( `the pickup's ghost ready ${ Date.now() - began } ms after Start (its model loaded and made light, in SwiftShader on a shared machine)` );
+		// Made light without holding the page up: the simplifying in its worker, the page's own share a
+		// slice at a time, so the page's thread is never held long while it's made light (measured 180
+		// ms at most here, a frame drawn in SwiftShader among it; made in one task, as it was, the
+		// pickup's held it 1,037 ms, as the countdown ran: 400 tells them apart on a loaded machine).
+		// (The observer hears of a task a moment after it: a few frames later.)
+		await page.evaluate( () => new Promise( resolve => setTimeout( resolve, 1000 ) ) );
+		const { tasks, timing, held } = await page.evaluate( () => {
+
+			const { timing } = window.drive.challenges.race;
+			let held = 0;
+			for ( let i = 1; i < window.beats.length; i ++ ) if ( window.beats[ i ] > timing.built && window.beats[ i - 1 ] < timing.light ) held = Math.max( held, window.beats[ i ] - window.beats[ i - 1 ] );
+			return { tasks: window.longTasks, timing, held: Math.round( held ) };
+
+		} );
+		t.diagnostic( `long tasks from Start till it's ready: ${ JSON.stringify( tasks ) }; built at ${ Math.round( timing.built ) }, made light at ${ Math.round( timing.light ) }, the page's thread held ${ held } ms at most meanwhile` );
+		const lightening = tasks.filter( task => task.start + task.ms > timing.built && task.start < timing.light );
+		assert.ok( timing.light > timing.built && held < 400 && lightening.every( task => task.ms < 400 ), JSON.stringify( { held, lightening } ) );
 		// Its parts: well under half the 219,000 triangles you drive (about 90,000), in a few draws, with
 		// its normals (unit length, as the file has them).
 		const light = await page.evaluate( () => {

@@ -48,3 +48,15 @@ CREATE INDEX challenge_ghosts_ms ON challenge_ghosts ( challenge_id, ms );
 -- CHALLENGE_GHOST_BUDGET, slower ones let go to make room for it, so however many are posted, the
 -- ghosts can't fill the database, and the quickest are the ones kept.
 ALTER TABLE challenges ADD COLUMN ghost_bytes INTEGER NOT NULL DEFAULT 0;
+
+-- Whether each time's ghost is kept, and whether it's one to race (0: none kept; 1: kept; 2: kept,
+-- and its time at least the Worker's PLAUSIBLE times the least its route allows, so it's one a
+-- board or the list may hand out to race). Set as the time and its ghost are written, in the same
+-- statement as the time (no row more), and cleared as its ghost is let go: so a board's rows say
+-- which to race without reading a ghost's row for each, and the list's one to race for newcomers is
+-- one read by the index below, however many quicker times have no ghost kept.
+ALTER TABLE challenge_times ADD COLUMN ghost INTEGER NOT NULL DEFAULT 0;
+
+-- The quickest time on a challenge with a ghost to race (the list's race): only those times are in
+-- it, so it's the first of them, one row, whatever's ahead of it on the board.
+CREATE INDEX challenge_times_raced ON challenge_times ( challenge_id, ms, created_at, player_id ) WHERE ghost = 2 AND owner = 0;

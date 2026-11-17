@@ -177,8 +177,10 @@ export function setUpChallenges( app ) {
 	let pendingGhost = null;
 	let race = null;
 	let ghostShown = true;
-	// A ghost asked for that couldn't be had ({ challenge, text }), to say as its run starts.
+	// A ghost asked for that couldn't be had ({ challenge, text }), to say as its run starts; and the
+	// go-ahead for one whose data came while a run was racing, given once it isn't (frame).
 	let missed = null;
+	let afterRace = null;
 	try {
 
 		ghostShown = localStorage.getItem( GHOST_SHOWN ) !== 'off';
@@ -707,6 +709,11 @@ export function setUpChallenges( app ) {
 			}
 
 			Object.assign( entry, found );
+			// Not while a run is racing: building a ride's model takes the page's thread for a moment (a
+			// big file read, half a second on a computer), so it waits till that run's done (frame), and
+			// the ghost is raced from the next (startRace: only before GO).
+			if ( run?.phase === 'racing' ) await new Promise( resolve => afterRace = resolve );
+			if ( race !== entry ) return;
 			const vehicle = app.vehicles.find( v => v.id === found.data.vehicle ) ?? app.vehicles.find( v => v.id === 'go-kart' ) ?? app.vehicles[ 0 ];
 			entry.ghost = createRaceGhost( { scene: app.scene, models: app.ghostModels, tags: app.driveUi, name: found.name } );
 			const loaded = await entry.ghost.load( found.data, vehicle ).catch( err => {
@@ -727,8 +734,8 @@ export function setUpChallenges( app ) {
 	// The ghost for `spec` on `challenge`: { kind, name, data } (data: { run, ms, passes, vehicle,
 	// look, ghost }), or null when there's none to race. Your own best's: this page's (the run it
 	// posted), else the Worker's by its run (the list's me.run); with no best of yours yet, the board's
-	// one to race (the list's top rows' one with a run: a first run has the way round to follow, and a
-	// time to race; none when none of them is plausible);
+	// one to race (the list's race: the quickest time with its ghost kept and plausible, however far
+	// down; a first run has the way round to follow, and a time to race; none when there's none);
 	// a link's or the leader's, the Worker's by its run, taken only if it's as long as the time it's
 	// said to be (a run's ghost is kept by its run).
 	async function ghostData( challenge, spec ) {
@@ -739,7 +746,8 @@ export function setUpChallenges( app ) {
 			const mine = ownGhosts.get( challenge.id );
 			const listedOne = listed?.challenges.find( c => c.id === challenge.id );
 			const me = listedOne?.me;
-			const leader = listedOne?.top?.find( row => row.run );
+			// (The list's race: the quickest with a ghost to race, wherever it is on the board.)
+			const leader = listedOne?.race ?? listedOne?.top?.find( row => row.run );
 			if ( mine && ( ! me || mine.ms <= me.ms ) ) return { kind: 'own', name: 'Your best', data: mine };
 			if ( me?.run ) asked = { kind: 'own', name: 'Your best', ms: me.ms, run: me.run };
 			else if ( ! me && ! mine && ! Number.isFinite( bests[ challenge.id ] ) && leader?.run ) asked = { kind: 'leader', name: leader.name, ms: leader.ms, run: leader.run };
@@ -754,12 +762,16 @@ export function setUpChallenges( app ) {
 	}
 
 	// The ghost raced from this run's start, if it's ready and of this run's challenge: its samples
-	// into this scene, at its start till GO. The split and the button to hide it on the HUD.
+	// into this scene, at its start till GO. The split and the button to hide it on the HUD. Only
+	// before GO (run.raced: the ghost this run races): one ready after it (its ride's model slow to
+	// load or be made light, on a slow phone or network) waits for the next run, Retry, rather than
+	// appearing, and being drawn for the first time, mid-race.
 	function startRace() {
 
 		sayMissed();
-		if ( ! run || ! race?.ready || race.challenge !== run.challenge.id ) return showGhostToggle();
+		if ( ! run || run.phase !== 'countdown' || ! race?.ready || race.challenge !== run.challenge.id ) return showGhostToggle();
 		race.ghost.start( app.globe, run.challenge.route.start );
+		run.raced = race;
 		showGhostToggle();
 
 	}
@@ -784,7 +796,7 @@ export function setUpChallenges( app ) {
 	// The HUD's button to hide the ghost (or show it), only while there's one to race.
 	function showGhostToggle() {
 
-		const there = !! run && !! race?.ready && race.challenge === run.challenge.id;
+		const there = !! run && !! race && run.raced === race;
 		hudParts.ghost.hidden = ! there;
 		hudParts.ghost.classList.toggle( 'off', ! ghostShown );
 		hudParts.ghost.setAttribute( 'aria-pressed', String( ghostShown ) );
@@ -796,7 +808,7 @@ export function setUpChallenges( app ) {
 	// point `index` passed `done`th (a sprint's gate by its index, a hunt's stars by how many), or null.
 	function splitAt( index, done ) {
 
-		const passes = race?.ready && race.challenge === run.challenge.id ? race.data.passes : null;
+		const passes = race && run.raced === race ? race.data.passes : null;
 		const theirs = ! passes ? null : run.challenge.kind === 'collect' ? passes[ done - 1 ]?.[ 1 ] : passes.find( pass => pass[ 0 ] === index )?.[ 1 ];
 		return Number.isFinite( theirs ) ? run.passes.at( - 1 )[ 1 ] - theirs : null;
 
@@ -899,6 +911,15 @@ export function setUpChallenges( app ) {
 
 	function frame( dt ) {
 
+		// A ghost held back while a run raced (prepareRace), got ready now.
+		if ( afterRace && run?.phase !== 'racing' ) {
+
+			const go = afterRace;
+			afterRace = null;
+			go();
+
+		}
+
 		if ( ! run ) return;
 		const d = app.driver;
 		const driving = d.active && app.mode() === 'driving';
@@ -959,7 +980,7 @@ export function setUpChallenges( app ) {
 			// The ghost on the run's clock: at its start till GO, and once you're over the line on to its
 			// own finish (the clock going on past yours), so a slower one is seen coming in.
 			if ( run.phase === 'done' && driving ) run.after += dt;
-			if ( race?.ready && race.challenge === run.challenge.id ) {
+			if ( race && run.raced === race ) {
 
 				const ms = run.phase === 'done' ? run.ms + run.after * 1000 : run.clock * 1000;
 				race.ghost.update( ms, ghostShown && run.phase !== 'stopped' && app.mode() !== 'globe', app.camera, app.pivot?.() ?? null );
@@ -1547,13 +1568,14 @@ export function setUpChallenges( app ) {
 			return run;
 
 		},
-		// For the tests: the ghost raced ({ name, kind, ready, ms, passes, pivot (its model's, as drawn),
-		// faded, shown, triangles (its model's, as drawn) }), or null.
+		// For the tests: the ghost raced ({ name, kind, ready, racing (this run races it: it was ready
+		// by GO), ms, passes, pivot (its model's, as drawn), faded, shown, triangles (its model's, as
+		// drawn) }), or null.
 		get race() {
 
 			return race && {
-				name: race.name, kind: race.kind ?? race.spec?.kind ?? 'own', ready: race.ready, ms: race.data?.ms ?? null, passes: race.data?.passes ?? null, pivot: race.ghost?.pivot ?? null,
-				faded: race.ghost?.faded ?? false, shown: ghostShown, triangles: race.ghost?.triangles ?? 0,
+				name: race.name, kind: race.kind ?? race.spec?.kind ?? 'own', ready: race.ready, racing: !! run && run.raced === race, ms: race.data?.ms ?? null, passes: race.data?.passes ?? null, pivot: race.ghost?.pivot ?? null,
+				faded: race.ghost?.faded ?? false, shown: ghostShown, triangles: race.ghost?.triangles ?? 0, timing: race.ghost?.timing ?? null,
 			};
 
 		},

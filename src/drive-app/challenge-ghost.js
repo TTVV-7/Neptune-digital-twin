@@ -1,6 +1,7 @@
 import { BufferAttribute, BufferGeometry, Euler, Group, MathUtils, Matrix3, Matrix4, Mesh, Quaternion, SkinnedMesh, Vector3 } from 'three';
 import { OBJECT_FRAME } from '3d-tiles-renderer';
 import { GHOST_BYTES, GHOST_EVERY, GHOST_SAMPLES, TURN, countFor, ghostText, packGhost, readGhost, sampleTime } from './ghost-rules.js';
+import { lightPart } from './ghost-light.js';
 import { cleanLook } from './paint.js';
 
 // A challenge run's ghost in the page (docs/world-drive.md, "Challenges", "Ghosts"), in the
@@ -20,8 +21,9 @@ import { cleanLook } from './paint.js';
 // own clock from GO, between its samples, which are put into this scene once as the run starts.
 // Each frame it's moved and turned, and its name placed over it: no new draws but its own. And its
 // own are few: the model is made light once for each ride (lighten), its still parts merged into
-// one mesh for each of their materials and simplified (meshoptimizer's simplifier, loaded with the
-// first ghost raced: its own chunk, on neither the first load nor the challenges'), which keeps
+// one mesh for each of their materials and simplified (meshoptimizer's simplifier, in a worker of
+// its own, ghost-light-worker.js, started with the first ghost raced: on neither the first load nor
+// the challenges' chunk, and never holding up the page's thread), which keeps
 // each vertex it keeps as it was (its place, its normal, its place in its picture) and opens no
 // holes, so the pickup, 219,000 triangles in 79 meshes as you drive it, races as about 90,000 in 25
 // draws, and looks as it does close up. (Merging its vertices into cells of 10 cm instead, as this did
@@ -32,19 +34,12 @@ import { cleanLook } from './paint.js';
 const FADE_NEAR = 8;
 const TAG_RANGE = 400;
 const DEG = MathUtils.DEG2RAD;
-// A ghost's model made light (lighten): each merged part simplified toward KEEP of its triangles,
-// stopping where a place would move more than ERROR of the part's size (the pickup's body, 5.4 m: 2
-// cm, under which a panel's layers stay in their order) or its normals or pictures' places would
-// change more than NORMAL_WEIGHT and UV_WEIGHT weigh them (a tyre's tread, finer than the triangles
-// left, isn't stretched); so a part with fine detail keeps more. Parts under SIMPLE_FROM triangles
-// are only merged.
-const KEEP = 0.1;
-const ERROR = 0.004;
-const NORMAL_WEIGHT = 1;
-const UV_WEIGHT = 16;
-const SIMPLE_FROM = 300;
-// The light parts made, by the ride and which of its meshes went into each (the same ride in the same
-// look: the same), kept for the page's life (a few rides' worth).
+// A ghost's model made light (lighten; how much, ghost-light.js): the page's own share of the work
+// (reading each part's vertices into one) done SLICE ms at a time, the page's thread let go between
+// (a frame drawn), so no task of it is much longer than that.
+const SLICE = 8;
+// The light parts made (promises of their geometries), by the ride and which of its meshes went
+// into each (the same ride in the same look: the same), kept for the page's life (a few rides' worth).
 const lightened = new Map();
 
 const _p = new Vector3();
@@ -58,12 +53,10 @@ const _cam = new Vector3();
 const _own = new Vector3();
 const _tag = new Vector3();
 const _quat = [ 0, 0, 0, 0 ];
-const _inverse = new Matrix4();
-const _normals = new Matrix3();
-const _n = new Vector3();
 const _forward = new Vector3();
-// meshoptimizer's simplifier, once asked for (a promise of it, or of null where it can't run).
-let simplifier = null;
+// The worker making ghosts' parts light, once started ({ worker, waiting: the parts asked for by
+// their ids, next }), or false where it can't be (then parts are only merged, here).
+let lighter = null;
 
 // The matrix from this scene to the ghost's frame on `world`: the route's `start` on the globe's
 // ellipsoid at height 0 (3d-tiles-renderer's object frame, as main.js centres the scene at a place:
@@ -240,6 +233,8 @@ export function createRaceGhost( { scene, models, tags, name } ) {
 	let lastMs = null;
 	let lastYaw = null;
 	let steer = 0;
+	// When (performance.now()) its model was built and then made light, for the tests.
+	const timing = { built: null, light: null };
 
 	return {
 		// Unpacked, and its model built (a promise of whether it's ready to race).
@@ -258,7 +253,9 @@ export function createRaceGhost( { scene, models, tags, name } ) {
 			}
 
 			model = built;
+			timing.built = performance.now();
 			await lighten( model );
+			timing.light = performance.now();
 			// (Done with while it was made light: dispose() has let it go.)
 			if ( gone ) return false;
 			model.pivot.visible = false;
@@ -349,6 +346,11 @@ export function createRaceGhost( { scene, models, tags, name } ) {
 			return faded;
 
 		},
+		get timing() {
+
+			return timing;
+
+		},
 		get ready() {
 
 			return !! model && !! places;
@@ -417,11 +419,12 @@ export function createRaceGhost( { scene, models, tags, name } ) {
 // ride's own animation moves, such as a wheel, found by running it once), each simplified (merged).
 // Decals, the underglow, glass and a part moved by itself stay as they were; a skinned mesh is
 // merged as its bones hold it (a ride's file's are never moved). Made once for each ride and
-// grouping (lightened), shared by every ghost of it after.
+// grouping (lightened), shared by every ghost of it after. The page's thread reads the parts' vertices
+// a slice at a time (SLICE), letting a frame be drawn between; the simplifying, the long part, is
+// the worker's (lightOff), so a ghost being made ready never stalls a countdown or a run.
 async function lighten( model ) {
 
 	const { pivot, animators, vehicle } = model;
-	const simplify = await loadSimplifier();
 	pivot.updateMatrixWorld( true );
 	const moving = movingParts( pivot, animators );
 	const orders = new Map();
@@ -438,20 +441,26 @@ async function lighten( model ) {
 		groups.get( key ).meshes.push( o );
 
 	} );
-	for ( const { carrier, material, paint, uv, meshes } of groups.values() ) {
+	const slice = { since: performance.now() };
+	const made = [];
+	for ( const group of groups.values() ) {
 
+		const { carrier, material, meshes, uv } = group;
 		const key = `${ vehicle.id ?? vehicle.name }|${ orders.get( carrier ) }|${ meshes.map( mesh => orders.get( mesh ) ).join( ',' ) }`;
-		let geometry = lightened.get( key );
-		if ( ! geometry ) {
+		if ( ! lightened.has( key ) ) {
 
-			_inverse.copy( carrier.matrixWorld ).invert();
 			// (Its pictures' places weighed only where it has a picture: a shape made in code has them
 			// whether or not anything is drawn with them.)
-			geometry = merged( meshes, uv, simplify, !! ( material.map || material.normalMap ) );
-			geometry.userData.shared = true;
-			lightened.set( key, geometry );
+			const part = await gathered( meshes, carrier, uv, !! ( material.map || material.normalMap ), slice );
+			lightened.set( key, lightOff( part ).then( light => geometryOf( light, part.normaled ) ) );
 
 		}
+
+		made.push( lightened.get( key ).then( geometry => ( { ...group, geometry } ) ) );
+
+	}
+
+	for ( const { carrier, material, paint, meshes, geometry } of await Promise.all( made ) ) {
 
 		for ( const mesh of meshes ) {
 
@@ -473,21 +482,79 @@ async function lighten( model ) {
 
 }
 
-// meshoptimizer's simplifier, loaded once (a chunk of its own, about 20 KB gzipped with its
-// WebAssembly), or null where it can't be (no WebAssembly, the chunk not loading): then a ghost's
-// parts are only merged.
-function loadSimplifier() {
+// The page's thread let go if this `slice` of work ({ since }) has had its SLICE ms: a task (a frame
+// drawn, a key pressed) runs before it goes on.
+async function yielded( slice ) {
 
-	simplifier ??= import( 'meshoptimizer/simplifier' )
-		.then( async ( { MeshoptSimplifier } ) => {
+	if ( performance.now() - slice.since < SLICE ) return;
+	await new Promise( resolve => setTimeout( resolve, 0 ) );
+	slice.since = performance.now();
 
-			if ( ! MeshoptSimplifier.supported ) return null;
-			await MeshoptSimplifier.ready;
-			return MeshoptSimplifier;
+}
 
-		} )
-		.catch( () => null );
-	return simplifier;
+// `part` (gathered's) made light by the worker (ghost-light-worker.js, started the first time), or
+// here with no simplifier where there's no worker (it couldn't start, or failed): a promise of
+// ghost-light.js's lightPart's arrays. The part is copied to it, so it's still here if it fails.
+function lightOff( part ) {
+
+	if ( lighter === null ) {
+
+		try {
+
+			const worker = new Worker( new URL( './ghost-light-worker.js', import.meta.url ), { type: 'module' } );
+			lighter = { worker, waiting: new Map(), next: 0 };
+			worker.onmessage = ( { data: { id, light, failed } } ) => {
+
+				const asked = lighter.waiting.get( id );
+				if ( ! asked ) return;
+				lighter.waiting.delete( id );
+				if ( failed ) console.warn( 'World Drive: a ghost\'s part couldn\'t be made light.', failed );
+				asked.resolve( light ?? lightPart( null, asked.part ) );
+
+			};
+			// (It didn't load: these parts, and every one after, merged here.)
+			worker.onerror = event => {
+
+				event.preventDefault?.();
+				const { waiting } = lighter;
+				lighter = false;
+				worker.terminate();
+				for ( const asked of waiting.values() ) asked.resolve( lightPart( null, asked.part ) );
+
+			};
+
+		} catch {
+
+			lighter = false;
+
+		}
+
+	}
+
+	if ( ! lighter ) return Promise.resolve( lightPart( null, part ) );
+	const id = ++ lighter.next;
+	return new Promise( resolve => {
+
+		lighter.waiting.set( id, { part, resolve } );
+		lighter.worker.postMessage( { id, part } );
+
+	} );
+
+}
+
+// A light part's arrays (lightPart's) as a geometry, shared by every ghost of its ride: its normals
+// as they were if all its meshes had them (`normaled`), else made.
+function geometryOf( { place, facing, picture, drawn }, normaled ) {
+
+	const geometry = new BufferGeometry();
+	geometry.setAttribute( 'position', new BufferAttribute( place, 3 ) );
+	if ( normaled ) geometry.setAttribute( 'normal', new BufferAttribute( facing, 3 ) );
+	if ( picture ) geometry.setAttribute( 'uv', new BufferAttribute( picture, 2 ) );
+	geometry.setIndex( new BufferAttribute( drawn, 1 ) );
+	if ( ! normaled ) geometry.computeVertexNormals();
+	geometry.computeBoundingSphere();
+	geometry.userData.shared = true;
+	return geometry;
 
 }
 
@@ -526,12 +593,12 @@ function still( o, pivot ) {
 
 }
 
-// `meshes` as one geometry in the frame of what carries them (_inverse): their places, normals and
-// (with `uv`) pictures' places as they were, their triangles as drawn (a mirrored mesh's turned the
-// right way round, as three.js draws it), simplified with `simplify` (meshoptimizer's, or null for
-// none) toward KEEP of them (their pictures' places weighed only if they're `textured`), and only
-// the vertices still used kept.
-function merged( meshes, uv, simplify, textured ) {
+// `meshes` as one part in the frame of their `carrier`, for lightPart (ghost-light.js): their places,
+// normals and (with `uv`) pictures' places as they were, their triangles as drawn (a mirrored mesh's
+// turned the right way round, as three.js draws it), with whether it's `textured` (its pictures'
+// places weighed only then). Read a slice of the page's time at a time (yielded), with matrices of
+// its own (a frame drawn between uses the module's).
+async function gathered( meshes, carrier, uv, textured, slice ) {
 
 	let count = 0;
 	let corners = 0;
@@ -548,21 +615,27 @@ function merged( meshes, uv, simplify, textured ) {
 	const stride = uv ? 5 : 3;
 	const attributes = new Float32Array( count * stride );
 	const index = new Uint32Array( corners );
+	const inverse = new Matrix4().copy( carrier.matrixWorld ).invert();
+	const matrix = new Matrix4();
+	const normals = new Matrix3();
+	const p = new Vector3();
+	const n = new Vector3();
 	let first = 0;
 	let at = 0;
 	for ( const mesh of meshes ) {
 
-		_m.multiplyMatrices( _inverse, mesh.matrixWorld );
-		_normals.getNormalMatrix( _m );
+		matrix.multiplyMatrices( inverse, mesh.matrixWorld );
+		normals.getNormalMatrix( matrix );
 		const { position, normal, uv: pictured } = mesh.geometry.attributes;
 		const skinned = mesh.isSkinnedMesh && mesh.geometry.attributes.skinIndex ? mesh : null;
 		for ( let i = 0; i < position.count; i ++ ) {
 
+			if ( ! ( i & 2047 ) ) await yielded( slice );
 			const v = first + i;
-			_p.fromBufferAttribute( position, i );
-			skinned?.applyBoneTransform( i, _p );
-			_p.applyMatrix4( _m ).toArray( positions, v * 3 );
-			if ( normaled ) _n.fromBufferAttribute( normal, i ).applyMatrix3( _normals ).normalize().toArray( attributes, v * stride );
+			p.fromBufferAttribute( position, i );
+			skinned?.applyBoneTransform( i, p );
+			p.applyMatrix4( matrix ).toArray( positions, v * 3 );
+			if ( normaled ) n.fromBufferAttribute( normal, i ).applyMatrix3( normals ).normalize().toArray( attributes, v * stride );
 			if ( uv ) {
 
 				attributes[ v * stride + 3 ] = pictured.getX( i );
@@ -573,56 +646,23 @@ function merged( meshes, uv, simplify, textured ) {
 		}
 
 		const drawn = mesh.geometry.index;
-		const n = ( drawn ?? position ).count;
+		const corner = ( drawn ?? position ).count;
 		// (A mirrored mesh's second and third corners swapped, so its faces face out as three.js draws
 		// them.)
-		const mirrored = _m.determinant() < 0;
-		for ( let k = 0; k < n; k ++ ) {
+		const mirrored = matrix.determinant() < 0;
+		for ( let k = 0; k < corner; k ++ ) {
 
-			const corner = mirrored && k % 3 ? ( k % 3 === 1 ? k + 1 : k - 1 ) : k;
-			index[ at + k ] = first + ( drawn ? drawn.getX( corner ) : corner );
+			const c = mirrored && k % 3 ? ( k % 3 === 1 ? k + 1 : k - 1 ) : k;
+			index[ at + k ] = first + ( drawn ? drawn.getX( c ) : c );
 
 		}
 
 		first += position.count;
-		at += n;
+		at += corner;
+		await yielded( slice );
 
 	}
 
-	let kept = index;
-	if ( simplify && corners >= SIMPLE_FROM * 3 ) {
-
-		const weights = [ NORMAL_WEIGHT, NORMAL_WEIGHT, NORMAL_WEIGHT, ...uv ? [ textured ? UV_WEIGHT : 0, textured ? UV_WEIGHT : 0 ] : [] ];
-		[ kept ] = simplify.simplifyWithAttributes( index, positions, 3, attributes, stride, normaled ? weights : weights.map( () => 0 ), null, Math.floor( corners * KEEP / 3 ) * 3, ERROR );
-
-	}
-
-	// Only the vertices still used, in the order they're first used.
-	const remap = new Int32Array( count ).fill( - 1 );
-	let used = 0;
-	for ( let k = 0; k < kept.length; k ++ ) if ( remap[ kept[ k ] ] < 0 ) remap[ kept[ k ] ] = used ++;
-	const place = new Float32Array( used * 3 );
-	const facing = new Float32Array( used * 3 );
-	const picture = uv ? new Float32Array( used * 2 ) : null;
-	for ( let v = 0; v < count; v ++ ) {
-
-		const to = remap[ v ];
-		if ( to < 0 ) continue;
-		place.set( positions.subarray( v * 3, v * 3 + 3 ), to * 3 );
-		facing.set( attributes.subarray( v * stride, v * stride + 3 ), to * 3 );
-		if ( picture ) picture.set( attributes.subarray( v * stride + 3, v * stride + 5 ), to * 2 );
-
-	}
-
-	const geometry = new BufferGeometry();
-	geometry.setAttribute( 'position', new BufferAttribute( place, 3 ) );
-	if ( normaled ) geometry.setAttribute( 'normal', new BufferAttribute( facing, 3 ) );
-	if ( picture ) geometry.setAttribute( 'uv', new BufferAttribute( picture, 2 ) );
-	const drawn = used > 65535 ? new Uint32Array( kept.length ) : new Uint16Array( kept.length );
-	for ( let k = 0; k < kept.length; k ++ ) drawn[ k ] = remap[ kept[ k ] ];
-	geometry.setIndex( new BufferAttribute( drawn, 1 ) );
-	if ( ! normaled ) geometry.computeVertexNormals();
-	geometry.computeBoundingSphere();
-	return geometry;
+	return { positions, attributes, index, count, uv, normaled, textured };
 
 }

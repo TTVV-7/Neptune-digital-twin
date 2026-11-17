@@ -55,8 +55,9 @@ import { readVisit } from './visits.js';
 // What a look costs is bounded whoever asks (docs/world-drive.md, "What challenges cost"): a rank is
 // found in its board's order kept in Cloudflare's cache (boardOrders), never counted row by row, so a
 // player's own rows cost a few rows read however many players a script asks as; a finished board,
-// which can't change, is kept a day; and the looks that miss the cache and read D1 are held to
-// CHALLENGE_MISSES a minute from an address.
+// which can't change, is kept a day; and the looks that miss the cache and read D1, and the times
+// posted (each reads D1 before the gap can turn it away), are held to CHALLENGE_MISSES a minute from
+// an address. A new best is put into its board's order kept (placeIn), not read afresh.
 //
 // Ghosts and links (part 2b): each time is posted with its run's ghost (src/drive-app/ghost-rules.js:
 // the car's path from GO to the finish, sampled and packed small), checked with it (the ghost must
@@ -74,8 +75,8 @@ import { readVisit } from './visits.js';
 //
 // Settings, none of which need setting: CHALLENGE_TIMES_PER_VISITOR_DAILY (TIMES_DAILY),
 // CHALLENGE_TIMES_PER_VISIT (TIMES_PER_VISIT); CHALLENGE_LOOKS, the rate limiter binding for the
-// lists, the boards and the times posted, and CHALLENGE_MISSES for the lists and boards that read
-// D1, both by a keyed hash of the address (an IPv6 one by its /48) that changes each day (looks);
+// lists, the boards and the times posted, and CHALLENGE_MISSES for the lists, boards and times
+// posted that read D1, both by a keyed hash of the address (an IPv6 one by its /48) that changes each day (looks);
 // ADMIN_LOOKS the admin page's (admin.js); CHALLENGE_GHOST_BUDGET (GHOST_BUDGET).
 
 // One time every TIME_GAP ms from a player; a visitor's times a day; a visit's times.
@@ -186,9 +187,10 @@ const orders = new Map();
 // --- the routes ---
 
 // GET /api/challenges?id=: the six live challenges (the page puts the current world's first):
-// { now, challenges: [ CHALLENGE + { total, top, me } ] }, top the LIST_TOP best ({ rank, name, ms,
-// vehicle, level, title, supporter? }) and me, with a player's id, their best and rank there
-// ({ ms, rank } or null). CHALLENGE: { id, period, key, world, kind, place, region, route, startsAt,
+// { now, challenges: [ CHALLENGE + { total, top, race, me } ] }, top the LIST_TOP best ({ rank,
+// name, ms, vehicle, level, title, supporter? }), race the quickest time with a ghost to race (as a
+// row, with its run: what a newcomer races; raceQuery) or null, and me, with a player's id, their
+// best and rank there ({ ms, rank } or null). CHALLENGE: { id, period, key, world, kind, place, region, route, startsAt,
 // endsAt }. The first ask in a period fixes its challenges in D1.
 export async function listChallenges( context ) {
 
@@ -207,10 +209,14 @@ export async function listChallenges( context ) {
 		await miss();
 		const results = await db.batch( [
 			...ids.map( challenge => topQuery( db, env, challenge, LIST_TOP ) ),
+			...ids.map( challenge => raceQuery( db, env, challenge ) ),
 			db.prepare( `SELECT id, drivers FROM challenges WHERE id IN ( ${ ids.map( () => '?' ).join( ', ' ) } )` ).bind( ...ids ),
 		] );
 		const drivers = new Map( results.at( - 1 ).results.map( row => [ row.id, row.drivers ] ) );
-		tops = Object.fromEntries( ids.map( ( challenge, i ) => [ challenge, { total: drivers.get( challenge ) ?? 0, top: rowsOf( results[ i ].results ) } ] ) );
+		const race = i => results[ ids.length + i ].results[ 0 ];
+		tops = Object.fromEntries( ids.map( ( challenge, i ) => [ challenge, {
+			total: drivers.get( challenge ) ?? 0, top: rowsOf( results[ i ].results ), race: race( i ) ? entryOf( race( i ) ) : null,
+		} ] ) );
 		await caches.default.put( listed, json( tops, 200, { 'Cache-Control': `public, max-age=${ CHALLENGE_CACHE }` } ) );
 
 	}
@@ -276,7 +282,7 @@ export async function challengeBoard( context ) {
 			const final = board.challenge.finalAt !== null;
 			rank = ( row.owner ? null : board.rows.find( shown => shown.name === row.name && shown.ms === row.ms )?.rank )
 				?? ( final && ! row.owner ? row.final_rank : null )
-				?? rankIn( ( await boardOrders( context, db, [ challenge ], miss, final ? FINISHED_CACHE : ORDER_KEPT ) ).get( challenge ), row, id );
+				?? rankIn( ( await boardOrders( context, db, [ challenge ], miss, final ? FINISHED_CACHE : ORDER_KEPT ) ).get( challenge ).order, row, id );
 
 		}
 
@@ -360,7 +366,7 @@ async function linkData( context, challenge, vs, miss ) {
 	const [ found, time ] = await db.batch( [
 		db.prepare( 'SELECT * FROM challenges WHERE id = ?' ).bind( challenge ),
 		db.prepare( `SELECT p.name, t.ms, t.vehicle, t.run_id, t.owner, t.created_at, t.final_rank, ${ hasPass( 'p.account_id', '?3' ) } AS supporter, ${ xpOf( 'p' ) } AS xp, p.title,
-			EXISTS ( SELECT 1 FROM challenge_ghosts g WHERE g.challenge_id = t.challenge_id AND g.player_id = t.player_id ) AS ghost
+			t.ghost
 			FROM challenge_times t JOIN players p ON p.id = t.player_id WHERE t.challenge_id = ?1 AND t.handle = ?2` ).bind( challenge, vs ?? '', supporterEmails( env ) ),
 	] );
 	const row = found.results[ 0 ];
@@ -370,7 +376,7 @@ async function linkData( context, challenge, vs, miss ) {
 	const data = {
 		challenge: { ...challengeOf( row ), replacedAt: row.replaced_at, finalAt: row.final_at },
 		// (Not whether it's the owner's: nothing of who but the name and the time.)
-		vs: them ? { ...entryOf( { ...them, rank: final && ! them.owner ? them.final_rank : null } ), ghost: !! them.ghost } : null,
+		vs: them ? { ...entryOf( { ...them, rank: final && ! them.owner ? them.final_rank : null } ), ghost: ! final && them.ghost > 0 } : null,
 	};
 	await caches.default.put( key, json( data, 200, { 'Cache-Control': `public, max-age=${ final ? FINISHED_CACHE : CHALLENGE_CACHE }` } ) ).catch( err => console.error( 'Challenge caches', err?.name, err?.message ) );
 	return { data, cached: false };
@@ -493,9 +499,9 @@ export async function postTime( context ) {
 	const { request, env, limits, now, url } = context;
 	const db = database( env );
 	// A burst of posts from one address (a script), turned away before anything's read, as a burst of
-	// looks is. (Not CHALLENGE_MISSES: what a time reads is held by the gap, the visit's times and the
-	// visitor's day, below.)
-	await looks( context );
+	// looks is (CHALLENGE_LOOKS); and those that get as far as reading D1 (below) are held as the
+	// looks that read it are.
+	const miss = await looks( context );
 	const body = await readJson( request, TIME_BODY );
 	if ( ! isObject( body ) ) throw bad();
 	const { id, secret } = credentials( body );
@@ -509,6 +515,13 @@ export async function postTime( context ) {
 
 	const visit = await readVisit( env, body.visit, now );
 	if ( ! visit ) throw new HttpError( 403, 'Forbidden', { reason: 'visit' } );
+	// Every post that gets this far reads D1 (the challenge, the player, the visit, the best, the gap)
+	// before the gap, the visit's times or the visitor's day can turn it away, so it's one of the
+	// address's CHALLENGE_MISSES (10 a minute, shared with its lists and boards that miss the cache),
+	// asked before D1 is. A page posts once a run (and again only if its answer's lost), so it's
+	// never near that; a script resending a good body over and over reads about ten rows each of ten
+	// a minute.
+	await miss();
 	// The challenge itself, from D1 (one the owner has replaced in the last minute may still be in
 	// some instance's list): live, or over a moment ago with the run begun before its end.
 	const row = await db.prepare( 'SELECT * FROM challenges WHERE id = ?' ).bind( challengeId ).first();
@@ -547,7 +560,7 @@ export async function postTime( context ) {
 		const key = answerKey( url, challengeId, id, run );
 		const kept = await caches.default.match( key );
 		if ( kept ) return json( await kept.json(), 200, { 'X-Time-Cache': 'hit' } );
-		const answer = await answerTime( context, db, challengeId, id, true );
+		const answer = await answerTime( context, db, challengeId, id, true, miss );
 		await keepAnswer( key, answer, was.created_at + REPOST - now );
 		return json( answer, 200, { 'X-Time-Cache': 'miss' } );
 
@@ -625,35 +638,59 @@ export async function postTime( context ) {
 		let written;
 		const budget = setting( env.CHALLENGE_GHOST_BUDGET, GHOST_BUDGET );
 		const gone = await makeRoom( db, row, id, ms, ghost.length - ( was?.ghost_bytes ?? 0 ), budget );
+		const least = leastTime( challenge, passes );
 		try {
 
 			// With its ghost, written only where the time was (the best now has this run), so the ghost
 			// kept is always the best's, replaced with it: the best it replaced has its ghost let go, and
 			// the slower ones makeRoom chose (if the challenge's ghosts are full), their room given back,
-			// then this one's is written while the challenge's ghosts have room for it
+			// then this one's is written if the challenge's ghosts have room for it then
 			// (CHALLENGE_GHOST_BUDGET) and counted. Past that the time is kept without one. One
 			// transaction: all of it or none.
+			//
+			// Whether there's room is worked out once, as the time is written, into the time's own row
+			// (its ghost: 0 none, 1 kept, 2 kept and PLAUSIBLE, one to race), and everything after it
+			// goes by that, so the ghost is written exactly when the time says it's kept (the old best's
+			// deleted first, so nothing's in its way). Every ghost
+			// row is found by its key, the challenge and the player, so a post reads a row or two of
+			// them however many a challenge keeps: the old best's by the player, and those let go (only
+			// when makeRoom chose some, only while the challenge's ghosts are full) by theirs, each only
+			// if still slower than this time (`+ms`: by its key, never by the index on the times, which
+			// would read every slower ghost to find them).
 			const mine = 'challenge_id = ?1 AND player_id = ?2';
 			const taken = `EXISTS ( SELECT 1 FROM challenge_times WHERE ${ mine } AND run_id = ?3 )`;
-			const letGo = `( ( ${ mine } AND run_id != ?3 ) OR ( challenge_id = ?1 AND player_id IN ( SELECT value FROM json_each( ?4 ) ) AND ms > ?5 ) )`;
+			const keeps = `EXISTS ( SELECT 1 FROM challenge_times WHERE ${ mine } AND run_id = ?3 AND ghost > 0 )`;
+			const others = 'challenge_id = ?1 AND player_id IN ( SELECT value FROM json_each( ?4 ) ) AND +ms > ?5';
+			const room = `MAX( 0, c.ghost_bytes - COALESCE( ( SELECT bytes FROM challenge_ghosts WHERE challenge_id = ?1 AND player_id = ?2 ), 0 )
+				- COALESCE( ( SELECT SUM( bytes ) FROM challenge_ghosts WHERE challenge_id = ?1 AND player_id IN ( SELECT value FROM json_each( ?13 ) ) AND +ms > ?3 ), 0 ) ) + ?11 <= ?12`;
+			const evicted = JSON.stringify( gone );
 			[ written ] = await db.batch( [
-				db.prepare( `INSERT INTO challenge_times ( challenge_id, player_id, ms, passes, vehicle, run_id, visit, owner, created_at, first_at, handle ) SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9, ?10
-					WHERE EXISTS ( SELECT 1 FROM challenges WHERE id = ?1 AND final_at IS NULL AND replaced_at IS NULL )
+				db.prepare( `INSERT INTO challenge_times ( challenge_id, player_id, ms, passes, vehicle, run_id, visit, owner, created_at, first_at, handle, ghost )
+					SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9, ?10, CASE WHEN ${ room } THEN 1 + ?14 ELSE 0 END
+					FROM challenges c WHERE c.id = ?1 AND c.final_at IS NULL AND c.replaced_at IS NULL
 					ON CONFLICT ( challenge_id, player_id ) DO UPDATE SET ms = excluded.ms, passes = excluded.passes, vehicle = excluded.vehicle, run_id = excluded.run_id,
-					visit = excluded.visit, owner = MAX( challenge_times.owner, excluded.owner ), created_at = excluded.created_at, handle = COALESCE( challenge_times.handle, excluded.handle )
+					visit = excluded.visit, owner = MAX( challenge_times.owner, excluded.owner ), created_at = excluded.created_at, handle = COALESCE( challenge_times.handle, excluded.handle ),
+					ghost = excluded.ghost
 					WHERE excluded.ms < challenge_times.ms` )
-					.bind( challengeId, id, ms, JSON.stringify( passes ), vehicle, run, visit.id, owner, now, handle ),
-				db.prepare( `UPDATE challenges SET ghost_bytes = MAX( 0, ghost_bytes - ( SELECT COALESCE( SUM( bytes ), 0 ) FROM challenge_ghosts WHERE ${ letGo } ) )
-					WHERE id = ?1 AND ${ taken } AND EXISTS ( SELECT 1 FROM challenge_ghosts WHERE ${ letGo } )` )
-					.bind( challengeId, id, run, JSON.stringify( gone ), ms ),
-				db.prepare( `DELETE FROM challenge_ghosts WHERE ${ letGo } AND ${ taken }` ).bind( challengeId, id, run, JSON.stringify( gone ), ms ),
+					.bind( challengeId, id, ms, JSON.stringify( passes ), vehicle, run, visit.id, owner, now, handle, ghost.length, budget, evicted, ms >= PLAUSIBLE * least ? 1 : 0 ),
+				// The slower ones let go to make room for it (only when makeRoom chose some, and it's kept):
+				// their times say they've none now.
+				...gone.length ? [ db.prepare( `UPDATE challenge_times SET ghost = 0 WHERE challenge_id = ?1 AND player_id IN ( SELECT player_id FROM challenge_ghosts WHERE ${ others } ) AND ${ keeps }` )
+					.bind( challengeId, id, run, evicted, ms ) ] : [],
+				// The challenge's count of drivers (a new player on the board, not the owner) and of its
+				// ghosts' room, in one write: the old best's ghost's room given back, and those let go, and
+				// this one's taken if it's kept.
+				db.prepare( `UPDATE challenges SET drivers = drivers + ?6, ghost_bytes = MAX( 0, ghost_bytes - COALESCE( ( SELECT bytes FROM challenge_ghosts WHERE ${ mine } ), 0 )
+					- CASE WHEN ${ keeps } THEN COALESCE( ( SELECT SUM( bytes ) FROM challenge_ghosts WHERE ${ others } ), 0 ) ELSE 0 END ) + CASE WHEN ${ keeps } THEN ?7 ELSE 0 END
+					WHERE id = ?1 AND ${ taken } AND ( ?6 > 0 OR ${ keeps } OR EXISTS ( SELECT 1 FROM challenge_ghosts WHERE ${ mine } ) )` )
+					.bind( challengeId, id, run, evicted, ms, was || owner ? 0 : 1, ghost.length ),
+				// Then the old best's ghost, and those let go, deleted, and this one's written.
+				db.prepare( `DELETE FROM challenge_ghosts WHERE ${ mine } AND ${ taken }` ).bind( challengeId, id, run ),
+				...gone.length ? [ db.prepare( `DELETE FROM challenge_ghosts WHERE ${ others } AND ${ keeps }` ).bind( challengeId, id, run, evicted, ms ) ] : [],
 				db.prepare( `INSERT INTO challenge_ghosts ( challenge_id, player_id, run_id, ms, passes, vehicle, look, ghost, bytes, least_ms, created_at ) SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11
-					WHERE ${ taken } AND ( SELECT ghost_bytes FROM challenges WHERE id = ?1 ) + ?9 <= ?12
+					WHERE ${ keeps }
 					ON CONFLICT ( challenge_id, player_id ) DO NOTHING` )
-					.bind( challengeId, id, run, ms, JSON.stringify( passes ), vehicle, JSON.stringify( look ), ghost, ghost.length, leastTime( challenge, passes ), now, budget ),
-				db.prepare( `UPDATE challenges SET ghost_bytes = ghost_bytes + ?4 WHERE id = ?1 AND EXISTS ( SELECT 1 FROM challenge_ghosts WHERE ${ mine } AND run_id = ?3 AND created_at = ?5 )` )
-					.bind( challengeId, id, run, ghost.length, now ),
-				...was || owner ? [] : [ db.prepare( 'UPDATE challenges SET drivers = drivers + 1 WHERE id = ? AND final_at IS NULL AND replaced_at IS NULL' ).bind( challengeId ) ],
+					.bind( challengeId, id, run, ms, JSON.stringify( passes ), vehicle, JSON.stringify( look ), ghost, ghost.length, least, now ),
 			] );
 
 		} catch ( err ) {
@@ -674,7 +711,7 @@ export async function postTime( context ) {
 
 	}
 
-	const answer = await answerTime( context, db, challengeId, id, isNewBest );
+	const answer = await answerTime( context, db, challengeId, id, isNewBest, miss );
 	// A new best's answer kept for the same run posted again (above).
 	if ( isNewBest ) await keepAnswer( answerKey( url, challengeId, id, run ), answer, REPOST );
 	return json( answer );
@@ -708,25 +745,28 @@ async function makeRoom( db, row, player, ms, more, budget ) {
 }
 
 // postTime's answer, for `player` on challenge `id`: their best, its rank, the board's count and
-// top, and whether `isNewBest`. A new best changes the board's order, so it's read afresh with the
-// rest (at most RANK_MOST rows: one read for each new best, which the gap, the visit's times and
-// the visitor's day hold) and kept for the looks after it here; a time that isn't one finds its
-// rank in the order kept.
-async function answerTime( context, db, id, player, isNewBest ) {
+// top, and whether `isNewBest`. The rank is found in the board's order kept in Cloudflare's cache
+// (boardOrders: read from D1 only when this place has none, which `miss` holds); a new best is put
+// into it there (placeIn) and it's kept again for the rest of the time it was first kept for, so a
+// new best reads its own row and the top five, not the board's thousand again, and the order kept
+// is never more than ORDER_KEPT behind D1 (the bests posted in Cloudflare's other places).
+async function answerTime( context, db, id, player, isNewBest, miss ) {
 
-	const [ standing, top, read ] = await db.batch( [
+	const [ standing, top ] = await db.batch( [
 		db.prepare( 'SELECT t.ms, t.owner, t.created_at, t.run_id, t.handle, c.drivers FROM challenge_times t JOIN challenges c ON c.id = t.challenge_id WHERE t.challenge_id = ? AND t.player_id = ?' ).bind( id, player ),
 		topQuery( db, context.env, id, FINISH_TOP ),
-		...isNewBest ? [ orderQuery( db, id ) ] : [],
 	] );
-	let order;
-	if ( read ) {
-
-		order = orderFrom( read.results );
-		await keepOrder( context.url, id, order, ORDER_KEPT );
-
-	} else order = ( await boardOrders( context, db, [ id ], () => {} ) ).get( id );
 	const mine = standing.results[ 0 ];
+	const kept = ( await boardOrders( context, db, [ id ], miss ) ).get( id );
+	let { order } = kept;
+	if ( isNewBest && ! mine.owner ) {
+
+		order = placeIn( order, mine, player );
+		const left = ORDER_KEPT - Math.ceil( ( context.now - kept.at ) / 1000 );
+		if ( left > 0 ) await keepOrder( context.url, id, order, left, kept.at );
+
+	}
+
 	return {
 		ms: mine.ms, rank: rankIn( order, mine, player ), total: mine.drivers, isNewBest, top: rowsOf( top.results ),
 		run: mine.run_id, handle: mine.handle,
@@ -744,8 +784,9 @@ async function keepAnswer( key, answer, ms ) {
 
 }
 
-// The cached rows a new best on challenge `id` by `player` changes: its board, its order, the
-// player's own row there and a link to their time (by its `handle`), at once; and the list's tops
+// The cached rows a new best on challenge `id` by `player` changes: its board, the player's own row
+// there and a link to their time (by its `handle`), at once (its order is kept, the new best put
+// into it: answerTime); and the list's tops
 // and the player's rows on the six, with the six's ids this instance knows (or, if it doesn't just
 // now, in the background: finding them may mean fixing a new period's six, which is no part of a
 // time's answer). (The ghost of the run it replaces stays in the cache by that run as it was: no
@@ -760,7 +801,7 @@ async function forgetTime( context, id, player, handle ) {
 
 	};
 	const known = liveKnown( context.now );
-	await Promise.all( [ boardKey( url, id ), boardKey( url, id, player ), orderKey( url, id ), linkKey( url, id, handle ), ...known ? lists( known ) : [] ].map( key => caches.default.delete( key ) ) );
+	await Promise.all( [ boardKey( url, id ), boardKey( url, id, player ), linkKey( url, id, handle ), ...known ? lists( known ) : [] ].map( key => caches.default.delete( key ) ) );
 	if ( ! known ) await later( ctx, liveChallenges( context ).then( rows => Promise.all( lists( rows ).map( key => caches.default.delete( key ) ) ) ), 'Challenge caches' );
 
 }
@@ -1226,7 +1267,7 @@ async function finishEnded( db, now ) {
 function finishQueries( db, id, now ) {
 
 	return [
-		db.prepare( `UPDATE challenge_times SET final_rank = ranked.place FROM (
+		db.prepare( `UPDATE challenge_times SET final_rank = ranked.place, ghost = 0 FROM (
 			SELECT player_id, ROW_NUMBER() OVER ( ORDER BY ms, created_at, player_id ) AS place FROM challenge_times WHERE challenge_id = ?1 AND owner = 0
 		) AS ranked WHERE challenge_times.challenge_id = ?1 AND challenge_times.player_id = ranked.player_id` ).bind( id ),
 		db.prepare( 'UPDATE challenges SET final_at = ? WHERE id = ? AND final_at IS NULL' ).bind( now, id ),
@@ -1240,13 +1281,25 @@ function finishQueries( db, id, now ) {
 // --- boards ---
 
 // The top `most` on challenge `id`'s board (the owner's runs left out), fastest first, with what a
-// row shows, and whether it's one to race (raced: its ghost kept, its time PLAUSIBLE: rowsOf).
+// row shows, and whether it's one to race (raced: its ghost kept, its time PLAUSIBLE, as the time's
+// own row says: rowsOf), so no ghost's row is read for it.
 function topQuery( db, env, id, most ) {
 
-	return db.prepare( `SELECT p.name, t.ms, t.vehicle, t.created_at, t.run_id, ${ hasPass( 'p.account_id', '?3' ) } AS supporter, ${ xpOf( 'p' ) } AS xp, p.title,
-		COALESCE( g.ms >= ${ PLAUSIBLE } * g.least_ms, 0 ) AS raced
-		FROM challenge_times t JOIN players p ON p.id = t.player_id LEFT JOIN challenge_ghosts g ON g.challenge_id = t.challenge_id AND g.player_id = t.player_id
+	return db.prepare( `SELECT p.name, t.ms, t.vehicle, t.created_at, t.run_id, ${ hasPass( 'p.account_id', '?3' ) } AS supporter, ${ xpOf( 'p' ) } AS xp, p.title, t.ghost = 2 AS raced
+		FROM challenge_times t JOIN players p ON p.id = t.player_id
 		WHERE t.challenge_id = ?1 AND t.owner = 0 ORDER BY t.ms, t.created_at, t.player_id LIMIT ?2` ).bind( id, most, supporterEmails( env ) );
+
+}
+
+// The quickest time on challenge `id` with a ghost to race (its ghost kept, its time PLAUSIBLE; the
+// owner's left out), as a board's row shows it with its run: what a newcomer races by default (the
+// list's race), however many quicker times have no ghost kept or are made up. One row of the index
+// that holds only those (challenge_times_raced), and its player's.
+function raceQuery( db, env, id ) {
+
+	return db.prepare( `SELECT p.name, t.ms, t.vehicle, t.created_at, t.run_id, ${ hasPass( 'p.account_id', '?2' ) } AS supporter, ${ xpOf( 'p' ) } AS xp, p.title
+		FROM challenge_times t INDEXED BY challenge_times_raced JOIN players p ON p.id = t.player_id
+		WHERE t.challenge_id = ?1 AND t.ghost = 2 AND t.owner = 0 ORDER BY t.ms, t.created_at, t.player_id LIMIT 1` ).bind( id, supporterEmails( env ) );
 
 }
 
@@ -1278,7 +1331,7 @@ async function myStanding( context, db, ids, player, miss ) {
 	const orders = await boardOrders( context, db, rows.map( row => row.challenge_id ), miss );
 	// With the best's run (its ghost, to race) and its handle as kept with it (a link to it, to share).
 	const mine = Object.fromEntries( rows.map( row => [ row.challenge_id, {
-		ms: row.ms, rank: rankIn( orders.get( row.challenge_id ), row, player ), run: row.run_id, handle: row.handle ?? null, ...( row.owner ? { owner: true } : {} ),
+		ms: row.ms, rank: rankIn( orders.get( row.challenge_id ).order, row, player ), run: row.run_id, handle: row.handle ?? null, ...( row.owner ? { owner: true } : {} ),
 	} ] ) );
 	await caches.default.put( key, json( mine, 200, { 'Cache-Control': `public, max-age=${ CHALLENGE_CACHE }` } ) );
 	return mine;
@@ -1286,14 +1339,15 @@ async function myStanding( context, db, ids, player, miss ) {
 }
 
 // The order of each of the boards `ids`: its first RANK_MOST times as [ ms, created_at, player ],
-// quickest first (the same time: who set it first), the owner's left out, as a Map by id. From
-// Cloudflare's cache; those it hasn't, read from the board's index in one batch (as many rows as the
-// board has, RANK_MOST at most: orderQuery) and kept `seconds`. So a board is read whole at most once
-// each ORDER_KEPT in a place (and again after a new best there: answerTime reads it afresh), whoever
-// asks, rather than a count of the rows ahead for each player looked at.
+// quickest first (the same time: who set it first), the owner's left out, as a Map by id of { order,
+// at } (at: when it was read from D1). From Cloudflare's cache; those it hasn't, read from the
+// board's index in one batch (as many rows as the board has, RANK_MOST at most: orderQuery) and kept
+// `seconds`. So a board is read whole at most once each ORDER_KEPT in a place, whoever asks (a new
+// best there is put into the order kept: answerTime), rather than a count of the rows ahead for each
+// player looked at.
 async function boardOrders( context, db, ids, miss, seconds = ORDER_KEPT ) {
 
-	const { url } = context;
+	const { url, now } = context;
 	const orders = new Map();
 	const kept = await Promise.all( ids.map( id => caches.default.match( orderKey( url, id ) ) ) );
 	for ( const [ i, res ] of kept.entries() ) if ( res ) orders.set( ids[ i ], await res.json() );
@@ -1304,8 +1358,8 @@ async function boardOrders( context, db, ids, miss, seconds = ORDER_KEPT ) {
 	await Promise.all( missing.map( ( id, i ) => {
 
 		const order = orderFrom( read[ i ].results );
-		orders.set( id, order );
-		return keepOrder( url, id, order, seconds );
+		orders.set( id, { order, at: now } );
+		return keepOrder( url, id, order, seconds, now );
 
 	} ) );
 	return orders;
@@ -1326,21 +1380,30 @@ function orderFrom( rows ) {
 
 }
 
-// Board `id`'s `order` kept in Cloudflare's cache for `seconds`; nothing going wrong in it turns an
-// answer into an error.
-function keepOrder( url, id, order, seconds ) {
+// Board `id`'s `order`, read from D1 `at`, kept in Cloudflare's cache for `seconds`; nothing going
+// wrong in it turns an answer into an error.
+function keepOrder( url, id, order, seconds, at ) {
 
-	return caches.default.put( orderKey( url, id ), json( order, 200, { 'Cache-Control': `public, max-age=${ seconds }` } ) ).catch( err => console.error( 'Challenge caches', err?.name, err?.message ) );
+	return caches.default.put( orderKey( url, id ), json( { order, at }, 200, { 'Cache-Control': `public, max-age=${ seconds }` } ) ).catch( err => console.error( 'Challenge caches', err?.name, err?.message ) );
 
 }
 
-// The rank of `player`'s time ({ ms, created_at }) in a board's `order`: one more than the times
-// ahead of it (quicker, or the same set earlier, or at the same moment by a player whose id sorts
-// first), found by halving. Their own time in the order (as it was when it was read: only a better
-// one has replaced it since, which is never ahead of it) isn't counted. An order of RANK_MOST times
-// all ahead says RANK_MOST + 1 (the page's "1000+"). The owner's time (kept out of the order) gets
-// the rank it would have.
-export function rankIn( order, { ms, created_at: at }, player ) {
+// A board's `order` with `player`'s new best ({ ms, created_at }) in its place: their old one
+// taken out, the new one put where it goes, and the RANK_MOST first kept (one past them stays out,
+// as it would read from D1). A new order; the same if it's already there.
+export function placeIn( order, { ms, created_at: at }, player ) {
+
+	const rest = order.filter( entry => entry[ 2 ] !== player );
+	const place = ahead( rest, ms, at, player );
+	if ( place >= RANK_MOST ) return rest;
+	rest.splice( place, 0, [ ms, at, player ] );
+	return rest.slice( 0, RANK_MOST );
+
+}
+
+// How many times in a board's `order` are ahead of `player`'s time of `ms` set `at`: quicker, or
+// the same set earlier, or at the same moment by a player whose id sorts first; found by halving.
+function ahead( order, ms, at, player ) {
 
 	let low = 0;
 	let high = order.length;
@@ -1353,6 +1416,19 @@ export function rankIn( order, { ms, created_at: at }, player ) {
 
 	}
 
+	return low;
+
+}
+
+// The rank of `player`'s time ({ ms, created_at }) in a board's `order`: one more than the times
+// ahead of it (quicker, or the same set earlier, or at the same moment by a player whose id sorts
+// first), found by halving. Their own time in the order (as it was when it was read: only a better
+// one has replaced it since, which is never ahead of it) isn't counted. An order of RANK_MOST times
+// all ahead says RANK_MOST + 1 (the page's "1000+"). The owner's time (kept out of the order) gets
+// the rank it would have.
+export function rankIn( order, { ms, created_at: at }, player ) {
+
+	const low = ahead( order, ms, at, player );
 	const own = order.findIndex( entry => entry[ 2 ] === player );
 	return Math.min( own >= 0 && own < low ? low - 1 : low, RANK_MOST ) + 1;
 

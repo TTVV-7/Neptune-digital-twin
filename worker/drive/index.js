@@ -69,8 +69,8 @@ export { DriveRoom } from './live.js';
 //   CHALLENGE_LOOKS       the rate limiter binding for the challenges' lists, boards, links, ghosts
 //                         and times, by a keyed hash of the address (an IPv6 one by its /48) and the
 //                         day (never the address itself); CHALLENGE_MISSES the one for those of the
-//                         lists, boards, links and ghosts that miss the cache and read D1, by the
-//                         same key;
+//                         lists, boards, links and ghosts that miss the cache and read D1, and the
+//                         times posted that read it, by the same key;
 //                         CHALLENGE_TIMES_PER_VISITOR_DAILY the times a visitor may post a day (300
 //                         if unset), CHALLENGE_TIMES_PER_VISIT the times a visit may post (100 if
 //                         unset), CHALLENGE_GHOST_BUDGET the most of its ghosts' text a challenge

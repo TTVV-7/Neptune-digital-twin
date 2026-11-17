@@ -78,11 +78,11 @@ import {
 	BOOSTED, FASTEST, GRACE, KINDS, LEG_SLACK, LINK_PATH, MAX_RUN, RANK_MOST, SHAPES, START_SLACK, TOP_SPEED,
 	bearingTo, checkPasses, destination, leastTime, legMinimum, makeRoute, nextPeriod, parsePeriod, periodOf, periodsAt, randomFrom, rankText, formatTime,
 } from '../src/drive-app/challenge-rules.js';
-import { REPOST, TIME_GAP, challengeBoard, challengeFor, challengeGhost, challengeLink, legFaults, listChallenges, lookKey, moonFaults, moonSteep, postTime, rankIn, rotationPick } from '../worker/drive/challenges.js';
+import { REPOST, TIME_GAP, challengeBoard, challengeFor, challengeGhost, challengeLink, legFaults, listChallenges, lookKey, moonFaults, moonSteep, placeIn, postTime, rankIn, rotationPick } from '../worker/drive/challenges.js';
 import { setHeights } from '../src/drive-app/moon-height.js';
 import { MOON_PLACES } from '../src/drive-app/moon-places.js';
 import {
-	GHOST_BYTES, GHOST_EVERY, GHOST_SAMPLES, GHOST_TEXT, PASS_SLACK, SAMPLE_SLACK, TURN, countFor, everyFor, ghostFault, ghostText, localOf, packGhost, readGhost, sampleTime,
+	GHOST_BYTES, GHOST_DENSITY, GHOST_EVERY, GHOST_SAMPLES, GHOST_TEXT, PASS_SLACK, SAMPLE_SLACK, TURN, countFor, everyFor, ghostFault, ghostText, localOf, packGhost, readGhost, sampleTime,
 } from '../src/drive-app/ghost-rules.js';
 import { HANDLE, escapeHtml, handleOf, linkWords } from '../worker/drive/challenges.js';
 
@@ -3726,6 +3726,26 @@ describe( 'World Drive challenges: the rules', () => {
 
 	} );
 
+	test( 'a new best is put into the board\'s order kept (placeIn), as reading it afresh would have it: the old one out, the new one in its place, RANK_MOST at most, one past them left out', () => {
+
+		const order = Array.from( { length: 5 }, ( _, i ) => [ 1000 * ( i + 1 ), 10, `p${ i }` ] );
+		// p3 bettering to second, at the same time as p1 but set later: after p1.
+		assert.deepEqual( placeIn( order, { ms: 2000, created_at: 20 }, 'p3' ).map( entry => entry[ 2 ] ), [ 'p0', 'p1', 'p3', 'p2', 'p4' ] );
+		// A newcomer first; the order given isn't changed; the same again changes nothing.
+		const placed = placeIn( order, { ms: 500, created_at: 30 }, 'new' );
+		assert.deepEqual( placed.map( entry => entry[ 2 ] ), [ 'new', 'p0', 'p1', 'p2', 'p3', 'p4' ] );
+		assert.equal( order.length, 5 );
+		assert.deepEqual( placeIn( placed, { ms: 500, created_at: 30 }, 'new' ), placed );
+		assert.equal( rankIn( placed, { ms: 500, created_at: 30 }, 'new' ), 1 );
+		// A full order: one coming in pushes the last out; one past the last stays out.
+		const full = Array.from( { length: RANK_MOST }, ( _, i ) => [ 1000 + i, 10, `f${ String( i ).padStart( 4, '0' ) }` ] );
+		const pushed = placeIn( full, { ms: 1, created_at: 10 }, 'quick' );
+		assert.deepEqual( [ pushed.length, pushed[ 0 ][ 2 ], pushed.at( - 1 )[ 2 ] ], [ RANK_MOST, 'quick', `f${ String( RANK_MOST - 2 ).padStart( 4, '0' ) }` ] );
+		assert.deepEqual( placeIn( full, { ms: 999999, created_at: 10 }, 'slow' ), full );
+		assert.equal( rankIn( full, { ms: 999999, created_at: 10 }, 'slow' ), RANK_MOST + 1 );
+
+	} );
+
 	test( 'a rank is found in the board\'s order, read from its index alone and no more than RANK_MOST rows of it (no count of the rows ahead): a long board\'s last place is "1000+"', async () => {
 
 		const d1 = sqliteD1();
@@ -3927,18 +3947,43 @@ describe( 'World Drive challenges: the rules', () => {
 			// What a time posted writes, by D1's own count of rows written (each row and each of its indexes'
 			// entries): a player's first on a challenge, a better one, and one that isn't, each with its ghost.
 			const challenge = ( await ask( listChallenges, '/api/challenges' ) ).body.challenges.find( c => c.world === 'earth' && c.period === 'day' );
+			// Its board's 1,240 with their ghosts kept, as a big monthly's might be (each 1,000 characters,
+			// as its count has it): the first ten's not plausible (their times' rows say ghost 1), the
+			// rest's to race (2).
+			const seeded = JSON.stringify( Array.from( { length: many + bottom }, ( _, i ) => i ) );
+			await raw.prepare( 'INSERT OR IGNORE INTO challenge_ghosts ( challenge_id, player_id, run_id, ms, passes, vehicle, look, ghost, bytes, least_ms, created_at ) SELECT ?1, printf( \'rows%012d\', value ), printf( \'rowsrun%012d\', value ), 60000 + value * 10, \'[]\', \'go-kart\', \'{}\', \'AQ\', 1000, CASE WHEN value < 10 THEN 60000 ELSE 1000 END, ?2 FROM json_each( ?3 )' )
+				.bind( challenge.id, now - HOUR, seeded ).run();
+			await raw.prepare( 'UPDATE challenge_times SET ghost = CASE WHEN ( SELECT least_ms FROM challenge_ghosts g WHERE g.challenge_id = challenge_times.challenge_id AND g.player_id = challenge_times.player_id ) = 1000 THEN 2 ELSE 1 END WHERE challenge_id = ?' ).bind( challenge.id ).run();
+			await raw.prepare( 'UPDATE challenges SET ghost_bytes = ( SELECT SUM( bytes ) FROM challenge_ghosts WHERE challenge_id = ?1 ) WHERE id = ?1' ).bind( challenge.id ).run();
+			// A board's miss with every row's ghost kept reads its rows and their players, as one without
+			// ghosts does (each row says whether it's one to race: no ghost's row read for it).
+			kept.delete( `https://worlddrive.app/api/challenges/board?challenge=${ challenge.id }` );
+			const ghosted = await ask( challengeBoard, `/api/challenges/board?challenge=${ challenge.id }` );
+			assert.ok( ghosted.read <= 41, `a board's miss with its ghosts kept: ${ ghosted.read } rows read` );
+			assert.deepEqual( ghosted.body.rows.filter( row => row.run ).map( row => row.name ), [ 'Rows 10' ] );
+			// The list's miss: each challenge's top three and its one to race (the quickest with a ghost
+			// to race, wherever it is: row 11 here, under ten not plausible), one row of its own index.
+			kept.delete( `https://worlddrive.app/api/challenges/list?ids=${ ids.join( ',' ) }` );
+			const listing = await ask( listChallenges, '/api/challenges' );
+			const posted = listing.body.challenges.find( c => c.id === challenge.id );
+			t.diagnostic( `a board's miss with its ghosts kept read ${ ghosted.read } rows, the list's ${ listing.read }` );
+			assert.ok( listing.read <= 52, `the list's miss: ${ listing.read } rows read` );
+			assert.ok( posted.top.every( row => ! row.run ) );
+			assert.deepEqual( [ posted.race.name, posted.race.run, posted.race.ms ], [ 'Rows 10', 'rowsrun000000000010', 60100 ] );
+			assert.ok( listing.body.challenges.filter( c => c.id !== challenge.id ).every( c => c.race === null ) );
 			const secret = 'w'.repeat( 32 );
 			await raw.prepare( 'INSERT INTO players ( id, name, name_key, secret_hash, created_at, last_seen_at ) VALUES ( ?, ?, ?, ?, 0, 0 )' ).bind( 'writesPlayer0000', 'Writes', 'writes', createHash( 'sha256' ).update( secret ).digest( 'hex' ) ).run();
 			const visit = await makeVisit( { TURNSTILE_SECRET: PASS_SECRET }, now - HOUR, 'earth' );
-			const posting = async ( extra, at, run ) => {
+			const posting = async ( extra, at, run, settings = {}, status = 200 ) => {
 
 				const timed = fairRun( challenge, extra );
 				const request = new Request( 'https://worlddrive.app/api/challenges/time', { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '198.51.100.71' }, body: JSON.stringify( {
 					id: 'writesPlayer0000', secret, visit, challenge: challenge.id, run, ms: timed.ms, passes: timed.passes, vehicle: 'go-kart', ghost: fairGhost( challenge, timed.ms, timed.passes ),
 				} ) } );
 				[ read, written ] = [ 0, 0 ];
-				const res = await postTime( { request, url: new URL( request.url ), env, now: at, limits: { take: async () => ( { ok: true } ) }, ctx: { waitUntil: () => {} } } );
-				assert.equal( res.status, 200, await res.clone().text() );
+				const res = await postTime( { request, url: new URL( request.url ), env: { ...env, ...settings }, now: at, limits: { take: async () => ( { ok: true } ) }, ctx: { waitUntil: () => {} } } )
+					.catch( err => new Response( JSON.stringify( err.extra ?? {} ), { status: err.status ?? 500 } ) );
+				assert.equal( res.status, status, await res.clone().text() );
 				return { written, read, body: await res.json() };
 
 			};
@@ -3950,6 +3995,30 @@ describe( 'World Drive challenges: the rules', () => {
 			// (A ghost's row has three index entries: its key, its run and its time, the last to find the
 			// slowest to let go when a challenge's ghosts are full.)
 			assert.ok( firstTime.written <= 16 && better.written <= 14 && slower.written <= 2, JSON.stringify( [ firstTime.written, better.written, slower.written ] ) );
+			// And what it reads, on a challenge keeping 1,240 slower ghosts: each ghost found by its key
+			// (none of the slower ones looked at), the rank in the board's order kept in the cache (the
+			// new best put into it, not the board's thousand read again).
+			assert.ok( firstTime.read <= 40 && better.read <= 60 && slower.read <= 30, JSON.stringify( [ firstTime.read, better.read, slower.read ] ) );
+			assert.equal( better.body.rank, 1 );
+			assert.equal( JSON.parse( kept.get( `https://worlddrive.app/api/challenges/order?challenge=${ challenge.id }` ).body ).order[ 0 ][ 2 ], 'writesPlayer0000' );
+			// One the gap turns away reads a few rows.
+			const refused = await posting( 6500, now + 2 * MINUTE + SECOND, 'writesRun0000004', {}, 429 );
+			assert.ok( refused.read <= 12 && refused.written === 0, JSON.stringify( [ refused.read, refused.written ] ) );
+			// A new best while the challenge's ghosts are full: the slowest kept let go by its key (makeRoom
+			// reads at most 64 by the index on their times), its time saying it has none now, the room
+			// counted, and this one's kept. (makeRoom's look, 64 rows of the index and their rows, D1
+			// counting both; the rest a few rows each, by their keys.)
+			const full = ( await raw.prepare( 'SELECT ghost_bytes FROM challenges WHERE id = ?' ).bind( challenge.id ).first() ).ghost_bytes;
+			const room = await posting( 6000, now + 3 * MINUTE, 'writesRun0000005', { CHALLENGE_GHOST_BUDGET: String( full - 500 ) } );
+			t.diagnostic( `a new best letting a slower ghost go read ${ room.read } rows and wrote ${ room.written }` );
+			assert.ok( room.read <= better.read + 2 * 64 + 25, String( room.read ) );
+			const slowest = player( bottom - 1 );
+			assert.equal( ( await raw.prepare( 'SELECT COUNT(*) AS n FROM challenge_ghosts WHERE challenge_id = ? AND player_id = ?' ).bind( challenge.id, slowest ).first() ).n, 0 );
+			assert.equal( ( await raw.prepare( 'SELECT ghost FROM challenge_times WHERE challenge_id = ? AND player_id = ?' ).bind( challenge.id, slowest ).first() ).ghost, 0 );
+			assert.equal( ( await raw.prepare( 'SELECT ghost FROM challenge_times WHERE challenge_id = ? AND player_id = ?' ).bind( challenge.id, 'writesPlayer0000' ).first() ).ghost, 2 );
+			const after = await raw.prepare( 'SELECT ghost_bytes AS n, ( SELECT SUM( bytes ) FROM challenge_ghosts WHERE challenge_id = ?1 ) AS sum FROM challenges WHERE id = ?1' ).bind( challenge.id ).first();
+			assert.equal( after.n, after.sum );
+			assert.ok( after.n <= full - 500 );
 
 		} finally {
 
@@ -4035,6 +4104,44 @@ describe( 'World Drive challenges: the rules', () => {
 
 	} );
 
+	test( 'a time posted is one of its address\'s CHALLENGE_MISSES (it reads D1 before the gap, the visit\'s times or the visitor\'s day can turn it away): past them a 429 before anything is read; each post asks once', async () => {
+
+		const d1 = sqliteD1();
+		const { db } = d1;
+		const now = CHALLENGE_DAY;
+		const route = makeRoute( { kind: 'sprint', size: 'day', world: 'earth', place: { name: 'Arc', lat: 48.8738, lon: 2.2962, heading: 0 } }, randomFrom( new Uint8Array( 32 ).fill( 5 ) ) );
+		const { lastInsertRowid: id } = db.prepare( 'INSERT INTO challenges ( period, world, kind, place, region, route, source, starts_at, ends_at, created_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )' )
+			.run( 'day:2026-11-16', 'earth', 'sprint', 'Arc', '', JSON.stringify( route ), 'rotation', now - 2 * HOUR, now + HOUR, now - 2 * HOUR );
+		const had = globalThis.caches;
+		globalThis.caches = { default: { delete: async () => true, match: async () => undefined, put: async () => {} } };
+		try {
+
+			const who = sqlitePlayer( d1, 'Miss Post' );
+			const visit = await makeVisit( { TURNSTILE_SECRET: PASS_SECRET }, now - HOUR, 'earth' );
+			const run = fairRun( { world: 'earth', kind: 'sprint', route }, 4000 );
+			const body = { ...who, visit, challenge: Number( id ), run: 'missRun'.padEnd( 16, '_' ), ms: run.ms, passes: run.passes, vehicle: 'go-kart' };
+			const looks = { limit: async () => ( { success: true } ) };
+			// The address's misses used up: turned away, and D1 never asked.
+			const untouched = { prepare: () => assert.fail( 'D1 read' ), batch: () => assert.fail( 'D1 read' ) };
+			const ghost = fairGhost( { world: 'earth', kind: 'sprint', route }, run.ms, run.passes );
+			const request = new Request( 'https://worlddrive.app/api/challenges/time', { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '198.51.100.44' }, body: JSON.stringify( { ...body, ghost } ) } );
+			await assert.rejects( postTime( { request, url: new URL( request.url ), now, env: { DB: untouched, TURNSTILE_SECRET: PASS_SECRET, CHALLENGE_LOOKS: looks, CHALLENGE_MISSES: { limit: async () => ( { success: false } ) } }, limits: { take: async () => ( { ok: true } ) }, ctx: { waitUntil: () => {} } } ),
+				err => err.status === 429 && err.extra?.retryAfter === 60 );
+			// With misses to spare: one asked for the post, and it's taken.
+			let asked = 0;
+			const res = await postOver( d1, body, now, '198.51.100.44', { CHALLENGE_LOOKS: looks, CHALLENGE_MISSES: { limit: async () => ( asked ++, { success: true } ) } } );
+			assert.equal( res.status, 200 );
+			assert.equal( asked, 1 );
+
+		} finally {
+
+			await Promise.all( d1.pending );
+			globalThis.caches = had;
+
+		}
+
+	} );
+
 	test( 'a challenge\'s ghosts full (CHALLENGE_GHOST_BUDGET): a quicker best\'s lets the slowest kept go, slowest first, and is kept (slow runs posted to fill it keep no leader\'s out); one slower than every kept one goes without; the count stays what\'s kept; and a board hands out the quickest plausible row\'s run, not a made-up leader\'s', async () => {
 
 		const d1 = sqliteD1();
@@ -4072,6 +4179,8 @@ describe( 'World Drive challenges: the rules', () => {
 				const { n, sum } = db.prepare( 'SELECT ghost_bytes AS n, ( SELECT COALESCE( SUM( bytes ), 0 ) FROM challenge_ghosts WHERE challenge_id = ?1 ) AS sum FROM challenges WHERE id = ?1' ).get( id );
 				assert.equal( n, sum );
 				assert.equal( db.prepare( 'SELECT COUNT(*) AS n FROM challenge_ghosts WHERE challenge_id = ? AND bytes != length( ghost )' ).get( id ).n, 0 );
+				// Each time's row says whether its ghost is kept (its ghost 1 or 2), and only those are.
+				assert.equal( db.prepare( 'SELECT COUNT(*) AS n FROM challenge_times t WHERE t.challenge_id = ? AND ( t.ghost > 0 ) != EXISTS ( SELECT 1 FROM challenge_ghosts g WHERE g.challenge_id = t.challenge_id AND g.player_id = t.player_id )' ).get( id ).n, 0 );
 				return n;
 
 			};
@@ -4094,6 +4203,8 @@ describe( 'World Drive challenges: the rules', () => {
 			const least = leastTime( challenge, runs.fake.passes );
 			assert.deepEqual( { ...db.prepare( 'SELECT ms, least_ms FROM challenge_ghosts WHERE run_id = ?' ).get( 'fakeRun'.padEnd( 16, '_' ) ) }, { ms: runs.fake.ms, least_ms: least } );
 			assert.ok( runs.fake.ms < 2 * least && runs.quick.ms >= 2 * leastTime( challenge, runs.quick.passes ) );
+			// (Its row says its ghost is kept but not one to race; quick's, one to race.)
+			assert.deepEqual( db.prepare( 'SELECT run_id, ghost FROM challenge_times WHERE challenge_id = ? AND ghost > 0 ORDER BY ms' ).all( id ).map( row => [ row.run_id.replace( /Run_*$/, '' ), row.ghost ] ), [ [ 'fake', 1 ], [ 'quick', 2 ], [ 'slow1', 2 ], [ 'slow2', 2 ] ] );
 			// The board hands out one run: the quickest row whose time could plausibly be driven and whose
 			// ghost is kept (quick's), not the made-up leader's (on top, without its run), nor a slower one's.
 			const request = new Request( `https://worlddrive.app/api/challenges/board?challenge=${ id }`, { headers: { 'CF-Connecting-IP': '198.51.100.90' } } );
@@ -4490,6 +4601,29 @@ describe( 'World Drive challenge ghosts: the rules', () => {
 		// Not one, or sampled at another interval.
 		assert.equal( fault( 'nonsense!' ), 'form' );
 		assert.equal( fault( fairGhost( sprint, run.ms, run.passes, { alter: ghost => ghost.every = 200 } ) ), 'form' );
+		// Packed denser than driving makes (GHOST_DENSITY bytes a sample on average): every sample
+		// jittering half a metre each way and turning anywhere, within the speed rule and through every
+		// gate, as a made-up run packed to take the most room of a challenge's ghosts would; a fair one
+		// takes about six.
+		const fair = fairGhost( sprint, run.ms, run.passes );
+		const perSample = text => Math.floor( text.length * 3 / 4 ) / countFor( run.ms );
+		const dense = fairGhost( sprint, run.ms, run.passes, { alter: ghost => {
+
+			for ( let i = 1; i < ghost.count - 1; i ++ ) {
+
+				const way = i % 2 ? 50 : - 50;
+				ghost.east[ i ] += way;
+				ghost.north[ i ] -= way;
+				ghost.up[ i ] += way;
+				ghost.yaw[ i ] = ( i * 397 ) % TURN;
+				ghost.pitch[ i ] = ( i * 211 ) % TURN;
+				ghost.roll[ i ] = ( i * 307 ) % TURN;
+
+			}
+
+		} } );
+		assert.ok( perSample( fair ) < 7 && perSample( dense ) > GHOST_DENSITY, JSON.stringify( [ perSample( fair ), perSample( dense ) ] ) );
+		assert.equal( fault( dense ), 'form' );
 		// Not as long as the time: a sample short, or the time a second more than it.
 		assert.equal( fault( fairGhost( sprint, run.ms, run.passes, { alter: ghost => {
 
@@ -4872,8 +5006,11 @@ describe( 'World Drive challenges', () => {
 		// 0007 on top: each time's handle (unique on its challenge: a link finds one row), each best's
 		// ghost, keyed by its time (gone with it) and found by its run, and each challenge's count of its
 		// ghosts' characters (challenges.ghost_bytes, above: 0 to start).
-		assert.deepEqual( columns( 'challenge_times' ), [ 'challenge_id', 'player_id', 'ms', 'passes', 'vehicle', 'run_id', 'visit', 'owner', 'created_at', 'first_at', 'final_rank', 'handle' ] );
+		assert.deepEqual( columns( 'challenge_times' ), [ 'challenge_id', 'player_id', 'ms', 'passes', 'vehicle', 'run_id', 'visit', 'owner', 'created_at', 'first_at', 'final_rank', 'handle', 'ghost' ] );
 		assert.match( indexes.find( i => i.name === 'challenge_times_handle' ).sql, /UNIQUE INDEX challenge_times_handle ON challenge_times \( challenge_id, handle \)/ );
+		// Each time's ghost (0 none kept, 1 kept, 2 kept and one to race), and the times with one to
+		// race in an index of their own (the list's race: one row, however far down the board).
+		assert.match( indexes.find( i => i.name === 'challenge_times_raced' ).sql, /INDEX challenge_times_raced ON challenge_times \( challenge_id, ms, created_at, player_id \) WHERE ghost = 2 AND owner = 0/ );
 		assert.deepEqual( columns( 'challenge_ghosts' ), [ 'challenge_id', 'player_id', 'run_id', 'ms', 'passes', 'vehicle', 'look', 'ghost', 'bytes', 'least_ms', 'created_at' ] );
 		assert.match( indexes.find( i => i.name === 'challenge_ghosts_run' ).sql, /UNIQUE INDEX challenge_ghosts_run ON challenge_ghosts \( challenge_id, run_id \)/ );
 		// (And by their times, the slowest found to let go when a challenge's are full.)
@@ -5320,7 +5457,9 @@ describe( 'World Drive challenges', () => {
 		};
 		for ( const [ name, options ] of Object.entries( bad ) ) {
 
-			const res = await post( dan, c, { run: okay, ...options } );
+			// (Each from an address of its own: those checked against the challenge read it from D1, so
+			// each is one of its address's CHALLENGE_MISSES, ten a minute.)
+			const res = await post( dan, c, { run: okay, ip: nextIp(), ...options } );
 			assert.equal( res.status, 400, `${ name }: ${ res.text }` );
 
 		}

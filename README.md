@@ -823,8 +823,10 @@ time; the Worker takes the time only if its ghost agrees with it (through each g
 time, as long as the time, never faster between two samples than the game goes) and keeps the
 best's ghost (16 MB of them a challenge at most, the slowest let go first to make room). A run races
 a ghost car in its ride and Garage look, its model made light (the pickup's 219,000 triangles to
-90,000 in 25 draws, simplified as it looks), its wheels turning: your own best by default (with none
-yet, the board's quickest time the game could plausibly be driven in), a friend's from their link,
+90,000 in 25 draws, simplified as it looks, in a worker of its own so the page never stalls, and
+raced from a run's start only if it's ready by GO), its wheels turning: your own best by default
+(with none yet, the board's quickest time with a ghost the game could plausibly be driven in,
+however far down), a friend's from their link,
 or that one from the board, with splits at each gate ("-1.2 s") and on the finish card, and a button to hide
 it. **Challenge a friend** (the finish card, your own row of a board) shares
 `/c?challenge=<id>&vs=<handle>`, the handle an HMAC the Worker makes once and keeps (never the
