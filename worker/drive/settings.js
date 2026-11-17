@@ -16,6 +16,19 @@ export function googleClientId( env ) {
 
 }
 
+// Google AdSense on the globe (docs/world-drive.md, "Ads"): { client, slot } when ADSENSE_CLIENT is a
+// publisher id (ca-pub- and 16 digits) and ADSENSE_SLOT is empty (the unit without a slot id) or an
+// ad unit's id (6 to 12 digits), else null: ads off, as they are with ADSENSE_CLIENT empty. Anything
+// else (a typo, the id pasted without its ca-, a slot that isn't one) is off too, rather than half on.
+export function adsense( env ) {
+
+	const text = value => typeof value === 'string' ? value.trim() : '';
+	const client = text( env.ADSENSE_CLIENT );
+	const slot = text( env.ADSENSE_SLOT );
+	return /^ca-pub-\d{16}$/.test( client ) && /^(\d{6,12})?$/.test( slot ) ? { client, slot } : null;
+
+}
+
 // The time (ms) visits and scores are counted at. The tests (TEST_CLOCK=header, never set live)
 // send it in X-Test-Time to check what happens at midnight UTC, a week on or hours later.
 export function clock( request, env ) {

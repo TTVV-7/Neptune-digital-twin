@@ -63,6 +63,8 @@ let unlockedHere = false;
 let google = null;
 // The question to /api/me on its way, if there is one.
 let asking = null;
+// Settles once /api/me's first answer has come (or couldn't): at once without signing in here.
+let known = Promise.resolve();
 // Called once the account signed in here has the pass (see setUpSupporter), or null.
 let onPass = null;
 // Called as Buy opens the Payment Link (for the play stats).
@@ -104,7 +106,9 @@ export function setUpSupporter( { worker, googleClientId, passwords: passwordsOn
 	const thanks = takeThanks();
 	if ( accountsOn() ) {
 
-		refresh().then( () => thanks && welcomeBack() );
+		const first = refresh();
+		known = first.then( () => {}, () => {} );
+		first.then( () => thanks && welcomeBack() );
 		window.addEventListener( 'focus', recheck );
 		document.addEventListener( 'visibilitychange', () => document.visibilityState === 'visible' && recheck() );
 
@@ -113,6 +117,9 @@ export function setUpSupporter( { worker, googleClientId, passwords: passwordsOn
 	handle = {
 		// Whether there's signing in (and so perhaps buying) here at all.
 		on: accountsOn(),
+		// Settles once the Worker's first word on this browser's account has come (or couldn't), so
+		// isPro() then says whether a supporter is here (the ads wait for it, main.js).
+		known,
 		get me() {
 
 			return me;

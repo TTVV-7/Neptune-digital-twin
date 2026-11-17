@@ -21,7 +21,7 @@ import { createSea, lakeShore, lakesNear, seaLevel, seaLevelNow, waterAt, waterA
 import { setUpLeaderboard } from './leaderboard.js';
 import { buyArea, onPassOpen } from './pass.js';
 import { fillAccountArea, fillBuyArea, linkPlayer, onLinked, setUpSupporter } from './supporter.js';
-import { onProChange } from './pro.js';
+import { isPro, onProChange } from './pro.js';
 import { applyLook } from './paint.js';
 import { liftGlow } from './underglow.js';
 import { createProgress, onLevelChange } from './progress.js';
@@ -361,8 +361,9 @@ const _sun = new Vector3();
 // (today's Earth drives are used up, or the page opened on a link to the Moon, boot.js): the
 // globe opens on the Moon, which is never limited, and picking the Earth calls onEarth instead;
 // challengeLink: a "challenge a friend" link's ({ link: { challenge, vs }, answer }, boot.js), or a
-// promise of it (or of null: no link), opened once the globe is up and it's here (challenges.js).
-export async function start( { key, left = null, visit: token = null, worker = true, googleClientId = '', passwords = false, turnstileSiteKey = '', live: liveOn = false, liveReason = '', moonOnly = null, challengeLink = null } ) {
+// promise of it (or of null: no link), opened once the globe is up and it's here (challenges.js);
+// adsense: /api/config's { client, slot } while Google's ads are on (ads.js), else null.
+export async function start( { key, left = null, visit: token = null, worker = true, googleClientId = '', passwords = false, turnstileSiteKey = '', live: liveOn = false, liveReason = '', moonOnly = null, challengeLink = null, adsense = null } ) {
 
 	const visit = token ?? VISIT_TEST?.visit ?? null;
 	// Play stats for the owner's admin page (stats.js): only a real visit's, counts with nothing of who.
@@ -925,7 +926,9 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		const height = window.innerHeight;
 		if ( sheet.top < height * 0.3 ) return 0;
 		const top = $( 'globe-ui' ).querySelector( '.intro' ).getBoundingClientRect().bottom;
-		const middle = ( top + sheet.top - PIN_CARD ) / 2;
+		// (An ad over the sheet (ads.js) is part of it here: the pin's card is above that.)
+		const ad = $( 'globe-ui' ).querySelector( '.ad-slot' )?.getBoundingClientRect();
+		const middle = ( top + Math.min( sheet.top, ad?.height ? ad.top : Infinity ) - PIN_CARD ) / 2;
 		return MathUtils.clamp( 1 - 2 * middle / height, 0, 0.8 );
 
 	}
@@ -999,6 +1002,19 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	setMode( 'globe' );
 	// How long from asking for the page to the globe, from where, and on what (the funnel's first step).
 	stats.loaded( performance.now() );
+
+	// Google's ad on the globe (ads.js, docs/world-drive.md "Ads"), only with an AdSense publisher id
+	// in /api/config, and never for a supporter: its code, and Google's script, are only asked for
+	// once the Worker has said whether the pass is here, and then when the browser is next idle, so
+	// nothing of them is in the way of the globe coming up. Shown and blocked are counted once a visit.
+	if ( adsense ) {
+
+		const later = fn => window.requestIdleCallback ? requestIdleCallback( fn, { timeout: 5000 } ) : setTimeout( fn, 3000 );
+		supporter.known.then( () => later( () => isPro() || import( './ads.js' ).then( ads => ads.showAds( {
+			...adsense, root: $( 'globe-ui' ), onShown: () => stats.once( 'ad', 'shown' ), onBlocked: () => stats.once( 'ad', 'blocked' ),
+		} ), err => console.warn( 'Ads didn\'t load', err?.message ) ) ) );
+
+	}
 
 	// A place's link (?spot= or ?at=, its "Drive here" on the places' pages, drive/site/): the
 	// globe flies there and pins it, so Drive here is one more tap; it never drops in by itself.

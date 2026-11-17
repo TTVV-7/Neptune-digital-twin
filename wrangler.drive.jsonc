@@ -6,15 +6,16 @@
 	"name": "world-drive",
 	"main": "worker/drive/index.js",
 	"compatibility_date": "2026-10-01",
-	// The built site (npm run build:drive). The Worker only runs for /api/* and /c, the path a
+	// The built site (npm run build:drive). The Worker only runs for /api/*, /c, the path a
 	// "challenge a friend" link is shared at (/c?challenge=...: the page with its own preview card for
-	// chat apps); everything else, the home page included, is served straight from these files, which
+	// chat apps), and /ads.txt (AdSense's, made from ADSENSE_CLIENT below; a 404 while that's empty);
+	// everything else, the home page included, is served straight from these files, which
 	// costs nothing however many people visit, and goes on being served on the Free plan when the
 	// day's 100,000 Worker requests are used up (a path the Worker runs first for gets a 429 then).
 	"assets": {
 		"directory": "./dist-drive",
 		"binding": "ASSETS",
-		"run_worker_first": [ "/api/*", "/c" ]
+		"run_worker_first": [ "/api/*", "/c", "/ads.txt" ]
 	},
 	// Both addresses are the Worker's custom domains (Cloudflare makes their DNS records and
 	// certificates). www sends you on to worlddrive.app (worker/drive/index.js and the page itself).
@@ -58,7 +59,14 @@
 		// rest for those, with room for the minute the rooms' counts can run behind. On Workers Paid,
 		// past the million a month included, requests are $0.15 a million: each 100,000 a day more is
 		// 3 million a month, $0.45 (docs/world-drive.md, "What it costs"). 0 is off.
-		"LIVE_DAILY_BUDGET": "40000"
+		"LIVE_DAILY_BUDGET": "40000",
+		// Google AdSense (docs/world-drive.md, "Ads"): one banner on the globe, never while driving and
+		// never for a supporter. ADSENSE_CLIENT is the publisher id, "ca-pub-" and 16 digits (public);
+		// empty, no ads at all: nothing about them is loaded or shown, and /ads.txt is a 404.
+		// ADSENSE_SLOT is a display ad unit's id (6 to 12 digits), or empty for a responsive unit with
+		// none. Either one not in its format switches ads off.
+		"ADSENSE_CLIENT": "ca-pub-7954356723512335",
+		"ADSENSE_SLOT": ""
 	},
 	// Secrets, set by the owner and never in a file (the dashboard, or
 	// npx wrangler secret put GOOGLE_MAPS_API_KEY -c wrangler.drive.jsonc): GOOGLE_MAPS_API_KEY (a

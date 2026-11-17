@@ -4021,6 +4021,111 @@ describe( 'World Drive Worker with the key set as Google_maps_api', () => {
 
 } );
 
+// --- Google AdSense: /api/config's adsense and /ads.txt ---------------------------------------
+
+// Made up, in AdSense's formats.
+const AD_CLIENT = 'ca-pub-1234567890123456';
+const AD_SLOT = '9876543210';
+
+describe( 'World Drive Worker with AdSense set', () => {
+
+	test( '/api/config has adsense only for a publisher id (and an ad unit\'s slot, or none) in their formats, and /ads.txt says the id, else is a 404', async () => {
+
+		const worker = await loadWorker();
+		const limits = { liveOpen: async () => ( { open: true, spent: 1 } ) };
+		const base = { TURNSTILE_SITE_KEY: '1x00000000000000000000AA', LIMITS: { idFromName: id => id, get: () => limits } };
+		const ask = async ( vars, path = '/api/config', init = {} ) => worker.fetch( new Request( `https://worlddrive.app${ path }`, init ), { ...base, ...vars }, {} );
+		const configOf = async vars => ( await ( await ask( vars ) ).json() ).adsense;
+		const LINE = 'google.com, pub-1234567890123456, DIRECT, f08c47fec0942fa0\n';
+
+		// On: the id, and the slot or ''; spaces round them don't count.
+		for ( const [ vars, adsense ] of [
+			[ { ADSENSE_CLIENT: AD_CLIENT }, { client: AD_CLIENT, slot: '' } ],
+			[ { ADSENSE_CLIENT: AD_CLIENT, ADSENSE_SLOT: '' }, { client: AD_CLIENT, slot: '' } ],
+			[ { ADSENSE_CLIENT: ` ${ AD_CLIENT } `, ADSENSE_SLOT: ` ${ AD_SLOT } ` }, { client: AD_CLIENT, slot: AD_SLOT } ],
+			[ { ADSENSE_CLIENT: AD_CLIENT, ADSENSE_SLOT: '123456' }, { client: AD_CLIENT, slot: '123456' } ],
+			[ { ADSENSE_CLIENT: AD_CLIENT, ADSENSE_SLOT: '123456789012' }, { client: AD_CLIENT, slot: '123456789012' } ],
+		] ) {
+
+			assert.deepEqual( await configOf( vars ), adsense, JSON.stringify( vars ) );
+			const res = await ask( vars, '/ads.txt' );
+			assert.equal( res.status, 200, JSON.stringify( vars ) );
+			assert.equal( res.headers.get( 'Content-Type' ), 'text/plain; charset=utf-8' );
+			assert.equal( await res.text(), LINE );
+			const head = await ask( vars, '/ads.txt', { method: 'HEAD' } );
+			assert.equal( head.status, 200 );
+			assert.equal( await head.text(), '' );
+
+		}
+
+		// Off: unset, empty, or either one not in its format. Nothing about ads in the config at all.
+		for ( const vars of [
+			{}, { ADSENSE_CLIENT: '' }, { ADSENSE_CLIENT: '   ', ADSENSE_SLOT: AD_SLOT },
+			{ ADSENSE_CLIENT: 'pub-1234567890123456' }, { ADSENSE_CLIENT: 'ca-pub-123456789012345' }, { ADSENSE_CLIENT: 'ca-pub-12345678901234567' },
+			{ ADSENSE_CLIENT: 'ca-pub-12345678901234ab' }, { ADSENSE_CLIENT: 'CA-PUB-1234567890123456' }, { ADSENSE_CLIENT: `${ AD_CLIENT }\nbad` },
+			{ ADSENSE_CLIENT: `<script>${ AD_CLIENT }` }, { ADSENSE_CLIENT: AD_CLIENT, ADSENSE_SLOT: '12345' }, { ADSENSE_CLIENT: AD_CLIENT, ADSENSE_SLOT: '1234567890123' },
+			{ ADSENSE_CLIENT: AD_CLIENT, ADSENSE_SLOT: 'slot-1234' }, { ADSENSE_CLIENT: AD_CLIENT, ADSENSE_SLOT: '1234 5678' }, { ADSENSE_CLIENT: 1234567890123456 },
+		] ) {
+
+			const json = await ( await ask( vars ) ).json();
+			assert.ok( ! ( 'adsense' in json ), JSON.stringify( vars ) );
+			assert.deepEqual( Object.keys( json ).sort(), [ 'googleClientId', 'live', 'mapsOn', 'passwords', 'turnstileSiteKey' ], JSON.stringify( vars ) );
+			const res = await ask( vars, '/ads.txt' );
+			assert.equal( res.status, 404, JSON.stringify( vars ) );
+			assert.ok( ! ( await res.text() ).includes( 'google.com' ) );
+
+		}
+
+		// Nothing but reading it; and on www, sent to worlddrive.app as everything is.
+		assert.equal( ( await ask( { ADSENSE_CLIENT: AD_CLIENT }, '/ads.txt', { method: 'POST' } ) ).status, 405 );
+		const www = await worker.fetch( new Request( 'https://www.worlddrive.app/ads.txt' ), { ADSENSE_CLIENT: AD_CLIENT }, {} );
+		assert.equal( www.status, 301 );
+		assert.equal( www.headers.get( 'Location' ), 'https://worlddrive.app/ads.txt' );
+
+	} );
+
+	test( 'under wrangler dev with wrangler.drive.jsonc (its run_worker_first): /ads.txt reaches the Worker, even with a file of that name in the assets; off as the file has it, a 404', async () => {
+
+		const vars = { GOOGLE_CLIENT_ID: '', TURNSTILE_SITE_KEY: '1x00000000000000000000AA', TURNSTILE_SECRET: PASS_SECRET };
+		// A stale ads.txt among the built files never answers for the Worker.
+		const assets = { 'ads.txt': 'google.com, pub-0000000000000000, DIRECT, f08c47fec0942fa0\n' };
+		let server = await startWorker( { port: PORT, config: 'wrangler.drive.jsonc', vars: { ...vars, ADSENSE_CLIENT: AD_CLIENT, ADSENSE_SLOT: AD_SLOT }, assets } );
+		try {
+
+			const config = await call( server, '/api/config' );
+			assert.deepEqual( config.json.adsense, { client: AD_CLIENT, slot: AD_SLOT } );
+			const txt = await call( server, '/ads.txt' );
+			assert.equal( txt.status, 200 );
+			assert.equal( txt.text, 'google.com, pub-1234567890123456, DIRECT, f08c47fec0942fa0\n' );
+			assert.match( txt.headers.get( 'Content-Type' ), /^text\/plain/ );
+
+		} finally {
+
+			server.stop();
+
+		}
+
+		// With ADSENSE_CLIENT empty (the harness's default, whatever wrangler.drive.jsonc has): off.
+		server = await startWorker( { port: PORT, config: 'wrangler.drive.jsonc', vars, assets } );
+		try {
+
+			const config = await call( server, '/api/config' );
+			assert.equal( config.status, 200 );
+			assert.ok( ! ( 'adsense' in config.json ), config.text );
+			const txt = await call( server, '/ads.txt' );
+			assert.equal( txt.status, 404 );
+			assert.equal( txt.text, 'Not found' );
+
+		} finally {
+
+			server.stop();
+
+		}
+
+	} );
+
+} );
+
 describe( 'World Drive Worker asking whether driving with others is open today', () => {
 
 	test( '/api/config: live while the budget lasts, asked at most every 30 s; spent, liveReason says so and it isn\'t asked again that day; DriveLimits failing, off with liveReason \'unknown\'; a budget of 0 or LIVE off: off', async () => {
@@ -4281,7 +4386,7 @@ describe( 'Play stats\' counts', () => {
 			load: [ 'a'.repeat( 30 ) + '.' + 'b'.repeat( 33 ) ], load_time: [ 'under 2 s', '2-5 s', '5-10 s', '10-20 s', 'over 20 s' ], load_ms: [ 'total' ],
 			dropin: [ ...SPOTS.map( spot => spot.id ), 'other', 'moon' ], ride: rides, play: rides, play_with_others: [ 'all' ], garage_open: [ 'all' ], garage_edit: LOOK_PARTS,
 			party: [ 'made', 'joined' ], funnel: FUNNEL, device: DEVICES, world: [ 'moon' ], play_world: [ 'earth', 'moon' ], search: SEARCHES,
-			dropin_time: [ 'under 5 s', '5-10 s', '10-20 s', '20-40 s', 'over 40 s' ], problem: PROBLEMS, board: [ 'open', 'named' ], pass: [ 'open', 'buy' ], level_up: [ 'all' ],
+			dropin_time: [ 'under 5 s', '5-10 s', '10-20 s', '20-40 s', 'over 40 s' ], problem: PROBLEMS, board: [ 'open', 'named' ], pass: [ 'open', 'buy' ], level_up: [ 'all' ], ad: [ 'shown', 'blocked' ],
 			challenge: [ 'open', 'start', 'finish', 'posted', 'nudge', 'nudge_open', 'share', 'link', 'link_start' ],
 		};
 		assert.deepEqual( Object.keys( keysOf ).sort(), Object.keys( METRICS ).sort(), 'every metric' );
@@ -6793,14 +6898,14 @@ describe( 'World Drive challenges', () => {
 
 		}
 
-		// The home page with the same link is the file as it is, the Worker not asked (it runs for /api/*
-		// and /c alone, so on the Free plan a day's requests used up never turns the home page away).
+		// The home page with the same link is the file as it is, the Worker not asked (it runs for /api/*,
+		// /c and /ads.txt alone, so on the Free plan a day's requests used up never turns the home page away).
 		res = await page( `?challenge=${ c.id }&vs=${ handle }`, nextIp(), '/' );
 		assert.equal( res.status, 200 );
 		assert.equal( tag( res.text, 'property', 'og:title' ), plain );
 		assert.notEqual( res.headers.get( 'Cache-Control' ), 'no-store' );
 		const config = JSON.parse( readFileSync( new URL( '../wrangler.drive.jsonc', import.meta.url ), 'utf8' ).replace( /^\s*\/\/.*$/gm, '' ) );
-		assert.deepEqual( config.assets.run_worker_first, [ '/api/*', LINK_PATH ] );
+		assert.deepEqual( config.assets.run_worker_first, [ '/api/*', LINK_PATH, '/ads.txt' ] );
 		assert.equal( LINK_PATH, '/c' );
 
 	} );
