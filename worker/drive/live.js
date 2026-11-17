@@ -1,9 +1,9 @@
 import { DurableObject } from 'cloudflare:workers';
 import { HttpError, isObject, json, randomToken, sha256Hex } from '../http.js';
 import {
-	BUDGET_SPENT, BURST, CLOSE, FLUSH_MS, HELLO_MS, HONK_GAP, IDLE_MS, MAX_HELLO, MAX_MESSAGE, NEARBY_MAX, ONLINE_AREAS, PARTY_MAX, PING, PONG, PROTOCOL,
-	RATE, VIEW_RANGE,
-	boundsOf, cellOf, checkLook, checkPlace, checkState, checkTrick, checkVehicle, dotsOf, parseRoom, shardOf, toEcef,
+	BUDGET_SPENT, BURST, CLOSE, EARTH, FLUSH_MS, HELLO_MS, HONK_GAP, IDLE_MS, MAX_HELLO, MAX_MESSAGE, MOON_WORLD, NEARBY_MAX, ONLINE_AREAS, PARTY_MAX, PING, PONG,
+	PROTOCOL, PROTOCOL_WORLDS, RATE, VIEW_RANGE,
+	boundsOf, cellOf, checkLook, checkPlace, checkState, checkTrick, checkVehicle, dotsOf, parseRoom, placeWorld, shardOf, toFrame,
 } from '../../src/drive-app/live-protocol.js';
 import { dayOf } from './limits.js';
 import { credentials, database } from './players.js';
@@ -17,7 +17,8 @@ import { rideFeat } from '../../src/drive-app/achievement-rules.js';
 import { DEFAULT_RIDE } from '../../src/drive-app/catalog.js';
 
 // Driving with others (docs/world-drive.md): the rooms. src/drive-app/live-protocol.js says what a
-// room is (a party, or the drivers in one area) and what's said in one; this is the Worker's half.
+// room is (a party, or the drivers in one area of the Earth or of the Moon) and what's said in one;
+// this is the Worker's half.
 // /api/live checks a connection (live) and hands it to its room, one Durable Object a room
 // (DriveRoom), which tells everyone in it where the others are. An area's room also says where its
 // drivers are in its reports to DriveLimits (see report), for the globe's dots of who's driving now,
@@ -69,6 +70,20 @@ import { DEFAULT_RIDE } from '../../src/drive-app/catalog.js';
 // - On the Free plan, past any of those limits Durable Objects fail with an error until midnight
 //   UTC. LIVE=off (wrangler.drive.jsonc) switches driving with others off without touching the
 //   rest; the budget does it for the day by itself.
+// - The Moon: the Moon is never limited (it costs nothing to stream), so its rooms are never shut
+//   by the Earth's visit caps nor by the Earth's budget. But the budget is the Durable Objects bill
+//   itself (on the Free plan, the line past which DriveLimits fails for everyone, the Moon's
+//   visits too), so the Moon's rooms keep a day's budget of their own, LIVE_MOON_DAILY_BUDGET
+//   (MOON_DAILY_BUDGET if unset), counted the same way and apart: spending either world's switches
+//   off only that world's rooms (and in a party, only those driving on it). Both together are
+//   still well under the Free plan's 100,000, leaving the rest for visits and scores. A room's
+//   connections each count against the world they're on (in a party, where their page last said
+//   it was), and the room's own alarms and reports against its world (a party's against the
+//   Earth's, unless everyone in it is on the Moon). And as anyone may have as many of the Moon's
+//   visits as robot checks they pass (they aren't counted against the Earth's caps), those visits
+//   are held to LIVE_ADDRESS_VISITS (ADDRESS_VISITS if unset) a day from one address (an IPv6 one by
+//   its /48), as the Earth's are to its 8: each with the same connections a minute and a day as any
+//   visit.
 // - Limits: a connection's attachment (what it keeps through hibernation) at most 16,384 bytes,
 //   ours well under 2 KB; 32,768 WebSockets a Durable Object, far more than a room lets in.
 
@@ -77,6 +92,10 @@ import { DEFAULT_RIDE } from '../../src/drive-app/catalog.js';
 const VISIT = 'X-Live-Visit';
 const EXPIRES = 'X-Live-Expires';
 const ROOM = 'X-Live-Room';
+// The protocol's version the page speaks (1 or 2, see live-protocol.js), and the world the
+// connection is on: an area's own, or for a party the one its page says it's on.
+const VERSION = 'X-Live-Version';
+const WORLD = 'X-Live-World';
 // The connection's number among its visit's today (DriveLimits' liveOpen), and, alone, the visit a
 // room is to let go of because it has connected to another room (with that connection's number).
 const SEQ = 'X-Live-Seq';
@@ -113,13 +132,15 @@ const ONLINE_MS = 30000;
 const ONLINE_FAILED_MS = 10000;
 const ONLINE_TTL = 12 * 60000;
 const DAY_MS = 24 * 60 * 60000;
-// The day's budget (billed requests) when LIVE_DAILY_BUDGET is unset.
+// The day's budget (billed requests) when LIVE_DAILY_BUDGET is unset, and the Moon's when
+// LIVE_MOON_DAILY_BUDGET is.
 const DAILY_BUDGET = 40000;
-// The day (and budget) DriveLimits said was spent, so this Worker instance doesn't ask again that
-// day: an ask is a Durable Object request too. And when it last said that day was open, which
-// /api/config takes for OPEN_MS: every page load asks, and anyone can ask without a visit, so each
-// asking DriveLimits would let a loop of requests spend the day's budget by itself.
-let spentDay = null;
+const MOON_DAILY_BUDGET = 20000;
+// The day (and budget) DriveLimits said was spent on each world, so this Worker instance doesn't ask
+// again that day: an ask is a Durable Object request too. And when it last said the day was open,
+// which /api/config takes for OPEN_MS: every page load asks, and anyone can ask without a visit, so
+// each asking DriveLimits would let a loop of requests spend the day's budget by itself.
+const spentDays = { [ EARTH ]: null, [ MOON_WORLD ]: null };
 let openDay = null;
 const OPEN_MS = 30000;
 // Requests arriving together as what's kept runs out would each ask DriveLimits (Cloudflare's cache
@@ -127,12 +148,12 @@ const OPEN_MS = 30000;
 // itself. So while this Worker instance has one ask out for /api/config (openAsking) or for
 // /api/online (onlineAsking: { key, at }), the others are answered with what it last heard, a
 // little old, rather than asking too. An ask is given up on after ASKING_MS, in case its request
-// was cancelled before it came back. What it last heard for /api/online, onlineHeard, is kept as
-// plain values ({ key, answer, keep, at, date }), as a Response or a call's promise belongs to the
-// request it was made in.
+// was cancelled before it came back. What it last heard for /api/online, onlineHeard, is kept for
+// each world's address as plain values ({ key, answer, keep, at, date }), as a Response or a call's
+// promise belongs to the request it was made in.
 let openAsking = null;
 let onlineAsking = null;
-let onlineHeard = null;
+const onlineHeard = new Map();
 const ASKING_MS = 5000;
 // The most connections a visit makes in a day, unless LIVE_VISIT_CONNECTS says otherwise (a page
 // makes one each time it changes room, or comes back after a dropped connection: a few dozen in six
@@ -140,6 +161,9 @@ const ASKING_MS = 5000;
 // instance remembers the visit until it runs out, rather than asking again.
 const VISIT_CONNECTS = 200;
 const refusedVisits = new Map();
+// The most visits not counted against the Earth's caps (the Moon's) that connect to rooms from one
+// address in a day, unless LIVE_ADDRESS_VISITS says otherwise (see DriveLimits' liveOpen).
+const ADDRESS_VISITS = 20;
 
 // GET /api/live?room=<room>: a WebSocket to the room. Everything is checked here, before the room
 // is asked: a connection turned away costs a Worker request and nothing in a Durable Object.
@@ -153,10 +177,21 @@ export async function live( { request, env, url, limits, now } ) {
 	if ( liveOff( env ) ) throw new HttpError( 503, 'Driving with others is off just now' );
 	const room = parseRoom( url.searchParams.get( 'room' ) );
 	if ( ! room ) throw new HttpError( 400, 'Bad request' );
-	// The visit's token comes as the second subprotocol: a browser can't set headers on a WebSocket,
-	// and in the address it would end up in logs.
-	const [ protocol, token ] = ( request.headers.get( 'Sec-WebSocket-Protocol' ) ?? '' ).split( ',' ).map( part => part.trim() );
-	if ( protocol !== PROTOCOL ) throw new HttpError( 400, 'Bad request' );
+	// The visit's token comes as the last subprotocol, after the protocol's version (v1's alone, or
+	// v2's and then v1's, see live-protocol.js): a browser can't set headers on a WebSocket, and in
+	// the address it would end up in logs.
+	const offered = ( request.headers.get( 'Sec-WebSocket-Protocol' ) ?? '' ).split( ',' ).map( part => part.trim() );
+	const version = offered[ 0 ] === PROTOCOL ? 1 : offered[ 0 ] === PROTOCOL_WORLDS && offered[ 1 ] === PROTOCOL ? 2 : 0;
+	if ( ! version ) throw new HttpError( 400, 'Bad request' );
+	const token = offered[ version ];
+	// Which world the connection is on: an area's own; for a party, the one the page says (?world=,
+	// v2 only: a v1 page is always on the Earth). A v1 page is never let into the Moon's areas: it
+	// would take their cars for the Earth's.
+	const asked = url.searchParams.get( 'world' );
+	if ( asked !== null && asked !== EARTH && asked !== MOON_WORLD ) throw new HttpError( 400, 'Bad request' );
+	const world = room.kind === 'near' ? room.world : version >= 2 && asked === MOON_WORLD ? MOON_WORLD : EARTH;
+	if ( world === MOON_WORLD && version < 2 ) throw new HttpError( 400, 'Bad request' );
+	if ( worldOff( env, world ) ) throw new HttpError( 503, 'Driving with others is off just now' );
 	const visit = await readVisit( env, token, now );
 	if ( ! visit ) throw new HttpError( 401, 'Unauthorized' );
 	// A visit connecting over and over (a loop): at most LIVE_CONNECTS' limit a minute (20) get as
@@ -164,23 +199,30 @@ export async function live( { request, env, url, limits, now } ) {
 	// once DriveLimits has turned it away for the day. A page connects far less often than that.
 	if ( refusedVisits.has( visit.id ) ) throw new HttpError( 429, 'Too many connections' );
 	if ( env.LIVE_CONNECTS && ! ( await env.LIVE_CONNECTS.limit( { key: visit.id } ) ).success ) throw new HttpError( 429, 'Too many connections' );
-	// Only then the day's budget: a request turned away above costs no Durable Object request.
+	// Only then the day's budget (the world's): a request turned away above costs no Durable Object
+	// request. A visit not counted against the Earth's caps (the Moon's) says where it connects from,
+	// so DriveLimits can hold each address to its day's such visits (the owner's aren't).
 	const name = roomName( room );
 	const connects = setting( env.LIVE_VISIT_CONNECTS, VISIT_CONNECTS );
-	const today = await liveToday( { env, limits, now, connection: { visit: visit.id, room: name, connects } } );
+	const from = await lookKey( env, request, now );
+	const counted = visit.earth || visit.owner ? {} : { address: from, addressVisits: setting( env.LIVE_ADDRESS_VISITS, ADDRESS_VISITS ) };
+	const today = await liveToday( { env, limits, now, world, connection: { visit: visit.id, room: name, connects, ...counted } } );
 	if ( today.reason === BUDGET_SPENT ) throw new HttpError( 503, 'Lots of drivers today: driving with others is back after midnight UTC', { reason: BUDGET_SPENT } );
 	if ( ! today.open ) throw new HttpError( 503, 'Driving with others is off just now' );
 	if ( today.refused ) {
 
 		refuse( visit, now );
-		throw new HttpError( 429, 'Too many connections' );
+		throw new HttpError( 429, today.reason === 'address' ? 'Too many drivers from here today' : 'Too many connections' );
 
 	}
 
 	// A visit is in one room at a time: the one it was in lets go of it first (a page moving on has
 	// hung up there already; a page in many rooms at once, or another tab, hasn't).
 	if ( today.was ) await leaveRoom( env, today.was, visit.id, today.seq );
-	const headers = { Upgrade: 'websocket', [ VISIT ]: visit.id, [ EXPIRES ]: String( visit.expiresAt ), [ ROOM ]: name, [ SEQ ]: String( today.seq ), [ FROM ]: await lookKey( env, request, now ) };
+	const headers = {
+		Upgrade: 'websocket', [ VISIT ]: visit.id, [ EXPIRES ]: String( visit.expiresAt ), [ ROOM ]: name, [ SEQ ]: String( today.seq ), [ FROM ]: from,
+		[ VERSION ]: String( version ), [ WORLD ]: world,
+	};
 	return env.ROOMS.get( env.ROOMS.idFromName( name ) ).fetch( new Request( 'https://room.internal/', { headers } ) );
 
 }
@@ -211,44 +253,81 @@ async function leaveRoom( env, name, visit, seq ) {
 
 }
 
-// Whether driving with others is open at `now`, for /api/live and /api/config: { open: true }, or
-// { open: false, reason } with 'off' (LIVE, or a budget of 0), BUDGET_SPENT (today's is) or
-// 'unknown' (DriveLimits couldn't say just now: closed, to be safe, and a page turned away asks
-// /api/config again, and tries again, rather than giving up). Each ask is counted with the day's
-// spend. For a connection to a room (/api/live, `connection`: { visit, room, connects }) it always
-// asks, and an open answer also has DriveLimits' refused, seq and was (see liveOpen); /api/config
-// takes an open answer heard here in the last OPEN_MS.
-export async function liveToday( { env, limits, now, connection = null } ) {
+// Whether driving with others is open at `now`, for /api/live and /api/config.
+// For a connection to a room on `world` (/api/live, `connection`: { visit, room, connects, address?,
+// addressVisits? }): { open: true, refused, reason, seq, was } (see DriveLimits' liveOpen), or
+// { open: false, reason } with 'off' (LIVE, or that world's budget of 0), BUDGET_SPENT (that world's
+// is, today) or 'unknown' (DriveLimits couldn't say just now: closed, to be safe, and a page turned
+// away asks /api/config again, and tries again, rather than giving up). It always asks.
+// For /api/config: both worlds at once, { open, reason, moon: { open, reason } }, taking an open
+// answer heard here in the last OPEN_MS. Each ask is counted with the day's spend.
+export async function liveToday( { env, limits, now, world = EARTH, connection = null } ) {
 
-	const budget = dailyBudget( env );
-	if ( liveOff( env ) ) return { open: false, reason: 'off' };
-	const day = `${ dayOf( now ) } ${ budget }`;
-	if ( spentDay === day ) return { open: false, reason: BUDGET_SPENT };
-	if ( ! connection && openDay?.day === day && now >= openDay.at && now < openDay.at + OPEN_MS ) return { open: true };
-	// Another page load here is asking just now: open, as it last heard today.
-	if ( ! connection && openDay?.day === day && asking( openAsking, now ) ) return { open: true };
-	const mine = connection ? null : ( openAsking = { at: now } );
-	try {
+	const budgets = { [ EARTH ]: dailyBudget( env, EARTH ), [ MOON_WORLD ]: dailyBudget( env, MOON_WORLD ) };
+	const dayOn = w => `${ dayOf( now ) } ${ budgets[ w ] }`;
+	// What's known here of a world without asking: off, or spent today; null if it has to be asked.
+	const known = w => env.LIVE === 'off' || budgets[ w ] === 0 ? { open: false, reason: 'off' }
+		: spentDays[ w ] === dayOn( w ) ? { open: false, reason: BUDGET_SPENT } : null;
+	const ask = { now, budget: budgets[ EARTH ], moonBudget: budgets[ MOON_WORLD ] };
 
-		const answer = await limits.liveOpen( { now, budget, ...connection } );
-		if ( answer.open ) {
+	if ( connection ) {
 
-			openDay = { day, at: now };
-			return connection ? { open: true, refused: !! answer.refused, seq: answer.seq ?? 0, was: answer.was ?? null } : { open: true };
+		const before = known( world );
+		if ( before ) return before;
+		try {
+
+			const answer = await limits.liveOpen( { ...ask, world, ...connection } );
+			if ( answer.open ) {
+
+				// (An Earth room's open answer is an open day for /api/config too, as it always was.)
+				if ( world === EARTH ) openDay = { day: `${ dayOn( EARTH ) } ${ budgets[ MOON_WORLD ] }`, at: now };
+				return { open: true, refused: !! answer.refused, reason: answer.reason ?? null, seq: answer.seq ?? 0, was: answer.was ?? null };
+
+			}
+
+			spentDays[ world ] = dayOn( world );
+			return { open: false, reason: BUDGET_SPENT };
+
+		} catch ( err ) {
+
+			console.error( 'Live budget check', err?.name, err?.message );
+			return { open: false, reason: 'unknown' };
 
 		}
 
-		spentDay = day;
-		return { open: false, reason: BUDGET_SPENT };
+	}
+
+	const both = () => {
+
+		const earth = known( EARTH ) ?? { open: true };
+		return { ...earth, moon: known( MOON_WORLD ) ?? { open: true } };
+
+	};
+	if ( known( EARTH ) && known( MOON_WORLD ) ) return both();
+	const day = `${ dayOn( EARTH ) } ${ budgets[ MOON_WORLD ] }`;
+	if ( openDay?.day === day && now >= openDay.at && now < openDay.at + OPEN_MS ) return both();
+	// Another page load here is asking just now: open, as it last heard today.
+	if ( openDay?.day === day && asking( openAsking, now ) ) return both();
+	const mine = openAsking = { at: now };
+	try {
+
+		const answer = await limits.liveOpen( ask );
+		// (A DriveLimits from before the Moon had rooms says one for both.)
+		const lunar = answer.moon ?? answer;
+		if ( ! answer.open ) spentDays[ EARTH ] = dayOn( EARTH );
+		if ( ! lunar.open ) spentDays[ MOON_WORLD ] = dayOn( MOON_WORLD );
+		openDay = { day, at: now };
+		return both();
 
 	} catch ( err ) {
 
 		console.error( 'Live budget check', err?.name, err?.message );
-		return { open: false, reason: 'unknown' };
+		const unknown = { open: false, reason: 'unknown' };
+		return { ...unknown, moon: unknown };
 
 	} finally {
 
-		if ( mine && openAsking === mine ) openAsking = null;
+		if ( openAsking === mine ) openAsking = null;
 
 	}
 
@@ -262,29 +341,34 @@ function asking( ask, now ) {
 
 }
 
-// GET /api/online: where people are driving now, for the globe's dots: { on, total, areas } (see
-// live-protocol.js). Kept ONLINE_MS in Cloudflare's cache (each of its locations has its own), under
-// the address without its query, so a query can't get round it, and by browsers for what's left of
-// that (its Date says when it was made), and by this Worker instance as well (onlineHeard). Only a
-// request that finds none kept asks DriveLimits, which counts that against the day's budget; while
-// one is asking, the others here are answered with what was last heard, a little old (see
-// onlineAsking). Off (LIVE, a budget of 0, or the day's spent, as this Worker instance remembers
-// once it's heard), it's on: false, asking nothing. If DriveLimits can't say just now, it's nobody
-// (on: true), kept ONLINE_FAILED_MS: never an error page. The tests (TEST_CLOCK) keep one for each
-// time they say it is (X-Test-Time), so each of their times is asked afresh.
+// GET /api/online: where people are driving now on the Earth, for the globe's dots, and with
+// ?world=moon on the Moon: { on, total, areas } (see live-protocol.js) and how many are driving on the
+// other world (moon, or earth). Kept ONLINE_MS in Cloudflare's cache (each of its locations has its
+// own), under the address without its query but for which world it is, so a query can't get round
+// it, and by browsers for what's left of that (its Date says when it was made), and by this Worker
+// instance as well (onlineHeard). Only a request that finds none kept asks DriveLimits, which counts
+// that against that world's budget for the day; while one is asking, the others here are answered
+// with what was last heard, a little old (see onlineAsking). Off (LIVE, a budget of 0, or the day's
+// spent on that world, as this Worker instance remembers once it's heard), it's on: false, asking
+// nothing. If DriveLimits can't say just now, it's nobody (on: true), kept ONLINE_FAILED_MS: never an
+// error page. The tests (TEST_CLOCK) keep one for each time they say it is (X-Test-Time), so each of
+// their times is asked afresh.
 export async function online( { request, env, url, limits, now } ) {
 
-	const budget = dailyBudget( env );
+	const world = url.searchParams.get( 'world' ) === MOON_WORLD ? MOON_WORLD : EARTH;
+	const other = world === MOON_WORLD ? EARTH : MOON_WORLD;
+	const budget = dailyBudget( env, world );
 	const day = `${ dayOf( now ) } ${ budget }`;
 	// Off for the rest of the day: kept no later than midnight UTC, when it's on again (a page that's
-	// told it's off shows none of it for the rest of its visit).
+	// told it's off shows none of it for the rest of its visit on that world).
 	const offToday = Math.min( ONLINE_MS, ( Math.floor( now / DAY_MS ) + 1 ) * DAY_MS - now );
-	if ( liveOff( env ) ) return onlineAnswer( { on: false, total: 0, areas: [] }, ONLINE_MS );
-	if ( spentDay === day ) return onlineAnswer( { on: false, total: 0, areas: [] }, offToday );
+	if ( worldOff( env, world ) ) return onlineAnswer( { on: false, total: 0, areas: [] }, ONLINE_MS );
+	if ( spentDays[ world ] === day ) return onlineAnswer( { on: false, total: 0, areas: [] }, offToday );
 	const tested = env.TEST_CLOCK === 'header' && request.headers.has( 'X-Test-Time' );
-	const key = new Request( `${ url.origin }${ url.pathname }${ tested ? `?at=${ now }` : '' }` );
+	const query = [ ...( world === MOON_WORLD ? [ `world=${ MOON_WORLD }` ] : [] ), ...( tested ? [ `at=${ now }` ] : [] ) ];
+	const key = new Request( `${ url.origin }${ url.pathname }${ query.length ? `?${ query.join( '&' ) }` : '' }` );
 	// Heard here lately: as Cloudflare's cache would answer, the same Date and all.
-	const heard = onlineHeard?.key === key.url ? onlineHeard : null;
+	const heard = onlineHeard.get( key.url ) ?? null;
 	if ( heard && now >= heard.at && now < heard.at + heard.keep ) return onlineAnswer( heard.answer, heard.keep, heard.date );
 	const cache = globalThis.caches?.default;
 	const kept = await cache?.match( key ).catch( () => null );
@@ -297,11 +381,11 @@ export async function online( { request, env, url, limits, now } ) {
 	let keep = ONLINE_MS;
 	try {
 
-		const found = await limits.liveOnline( { now, budget, ttl: ONLINE_TTL, most: ONLINE_AREAS } );
-		if ( found.open ) answer = { on: true, total: found.total, areas: found.areas };
+		const found = await limits.liveOnline( { now, budget: dailyBudget( env, EARTH ), moonBudget: dailyBudget( env, MOON_WORLD ), world, ttl: ONLINE_TTL, most: ONLINE_AREAS } );
+		if ( found.open ) answer = { on: true, total: found.total, areas: found.areas, [ other ]: Number.isInteger( found.elsewhere ) ? found.elsewhere : 0 };
 		else {
 
-			spentDay = day;
+			spentDays[ world ] = day;
 			answer = { on: false, total: 0, areas: [] };
 			keep = offToday;
 
@@ -310,13 +394,15 @@ export async function online( { request, env, url, limits, now } ) {
 	} catch ( err ) {
 
 		console.error( 'Live online', err?.name, err?.message );
-		answer = { on: true, total: 0, areas: [] };
+		answer = { on: true, total: 0, areas: [], [ other ]: 0 };
 		keep = ONLINE_FAILED_MS;
 
 	}
 
 	const response = onlineAnswer( answer, keep );
-	onlineHeard = { key: key.url, answer, keep, at: now, date: response.headers.get( 'Date' ) };
+	// (Only a few addresses are ever asked for, but the tests' each time is one of its own.)
+	if ( onlineHeard.size >= 8 ) onlineHeard.clear();
+	onlineHeard.set( key.url, { key: key.url, answer, keep, at: now, date: response.headers.get( 'Date' ) } );
 	if ( onlineAsking === mine ) onlineAsking = null;
 	if ( keep >= 1000 ) await cache?.put( key, response.clone() ).catch( err => console.error( 'Live online cache', err?.name, err?.message ) );
 	return response;
@@ -331,22 +417,31 @@ function onlineAnswer( answer, keep, date = new Date().toUTCString() ) {
 
 }
 
-// The day's budget for driving with others, in billed Durable Object requests: LIVE_DAILY_BUDGET,
-// or DAILY_BUDGET when it's unset.
-function dailyBudget( env ) {
+// The day's budget for driving with others on `world`, in billed Durable Object requests: the
+// Earth's LIVE_DAILY_BUDGET, or DAILY_BUDGET when it's unset; the Moon's LIVE_MOON_DAILY_BUDGET, or
+// MOON_DAILY_BUDGET.
+function dailyBudget( env, world = EARTH ) {
 
-	return setting( env.LIVE_DAILY_BUDGET, DAILY_BUDGET );
+	return world === MOON_WORLD ? setting( env.LIVE_MOON_DAILY_BUDGET, MOON_DAILY_BUDGET ) : setting( env.LIVE_DAILY_BUDGET, DAILY_BUDGET );
 
 }
 
-// Switched off: LIVE=off, or a budget of 0.
+// Switched off: LIVE=off, or a budget of 0 on both worlds.
 function liveOff( env ) {
 
-	return env.LIVE === 'off' || dailyBudget( env ) === 0;
+	return env.LIVE === 'off' || ( dailyBudget( env, EARTH ) === 0 && dailyBudget( env, MOON_WORLD ) === 0 );
 
 }
 
-// A room's one name, whichever way it was written ('near:1277.01088#0' is 'near:1277.1088').
+// Switched off on `world`: LIVE=off, or that world's budget is 0.
+function worldOff( env, world ) {
+
+	return env.LIVE === 'off' || dailyBudget( env, world ) === 0;
+
+}
+
+// A room's one name, whichever way it was written ('near:1277.01088#0' is 'near:1277.1088'; the
+// Moon's 'moon:...' the same way).
 function roomName( room ) {
 
 	if ( room.kind === 'party' ) return `party:${ room.code }`;
@@ -364,8 +459,10 @@ function roomName( room ) {
 // from (where it connects from, FROM), room, at (connected), heard (last message, a keepalive included), tokens, filled (the rate's
 // bucket and when it was counted), honk (the last), left (closed by the room), spent (billed
 // requests the room hasn't reported yet), reported (when the room last reported), shown (the dots
-// of who's driving now it reported then, see dots), and once it has said hello pid, name, star,
-// level, title, vehicle, look, place, away, s }.
+// of who's driving now it reported then, see dots), version (the protocol's its page speaks: 1, or 2
+// since the Moon had drivers), world (the one it's on: an area's own, or in a party where its page
+// last said it was: see worldOf), and once it has said hello pid, name, star, level, title, vehicle,
+// look, place, away, s }.
 export class DriveRoom extends DurableObject {
 
 	constructor( ctx, env ) {
@@ -412,6 +509,8 @@ export class DriveRoom extends DurableObject {
 		const expires = Number( request.headers.get( EXPIRES ) );
 		const seq = Number( request.headers.get( SEQ ) ) || 0;
 		const from = request.headers.get( FROM ) ?? '';
+		const version = request.headers.get( VERSION ) === '2' ? 2 : 1;
+		const world = room?.kind === 'near' ? room.world : request.headers.get( WORLD ) === MOON_WORLD && version >= 2 ? MOON_WORLD : EARTH;
 		if ( request.headers.get( 'Upgrade' ) !== 'websocket' || ! room || ! visit || ! Number.isFinite( expires ) ) return new Response( 'Bad request', { status: 400 } );
 
 		const name = roomName( room );
@@ -442,7 +541,7 @@ export class DriveRoom extends DurableObject {
 			// Kept before the connection it replaces goes, so that one's unreported spend has this to go
 			// with, and the room's last report is still known from it.
 			const driver = {
-				visit, seq, expires, from, room: name, at: now, heard: now, tokens: BURST, filled: now, honk: 0, pid: null,
+				visit, seq, expires, from, room: name, version, world, at: now, heard: now, tokens: BURST, filled: now, honk: 0, pid: null,
 				spent: COST.connect, reported: this.reportedAt( server ) ?? now, shown: this.shownKey(), moved: 0, sent: 0,
 			};
 			this.drivers.set( server, driver );
@@ -452,7 +551,7 @@ export class DriveRoom extends DurableObject {
 
 		}
 
-		return new Response( null, { status: 101, webSocket: client, headers: { 'Sec-WebSocket-Protocol': PROTOCOL } } );
+		return new Response( null, { status: 101, webSocket: client, headers: { 'Sec-WebSocket-Protocol': version >= 2 ? PROTOCOL_WORLDS : PROTOCOL } } );
 
 	}
 
@@ -463,7 +562,7 @@ export class DriveRoom extends DurableObject {
 		const now = Date.now();
 		// Every message in is billed, whatever becomes of it (each way on from here saves it).
 		driver.spent = ( driver.spent ?? 0 ) + COST.message;
-		if ( liveOff( this.env ) ) return this.shut( ws, CLOSE.off, 'off' );
+		if ( worldOff( this.env, this.worldOf( driver ) ) ) return this.shut( ws, CLOSE.off, 'off' );
 		if ( now >= driver.expires ) return this.shut( ws, CLOSE.expired, 'expired' );
 		if ( typeof message !== 'string' ) return this.shut( ws, CLOSE.protocol, 'text only' );
 		// The keepalive, answered here, before hello too: held to the rate as anything else is.
@@ -516,8 +615,16 @@ export class DriveRoom extends DurableObject {
 		const look = checkLook( m.look );
 		// No place: on the globe, not dropped in anywhere yet.
 		const somewhere = m.place !== null && m.place !== undefined;
-		const place = somewhere ? checkPlace( m.place ) : null;
+		let place = somewhere ? placeOf( m.place, driver ) : null;
 		if ( ! vehicle || ! look || ( somewhere && ! place ) ) return this.shut( ws, CLOSE.protocol, 'bad hello' );
+		// Which world it's on: where it dropped in, or on the globe the one it says (v2). An area's
+		// room is on its own world whatever's said: a place on the other is no place here.
+		const room = parseRoom( driver.room );
+		if ( room?.kind === 'near' ) {
+
+			if ( place && placeWorld( place ) !== room.world ) place = null;
+
+		} else if ( driver.version >= 2 ) driver.world = place ? placeWorld( place ) : m.world === MOON_WORLD ? MOON_WORLD : m.world === EARTH ? EARTH : driver.world;
 
 		driver.pending = true;
 		driver.queue = [];
@@ -535,11 +642,11 @@ export class DriveRoom extends DurableObject {
 		const taken = new Set( this.sockets().map( other => this.driver( other ).pid ) );
 		let pid = randomToken( 6 );
 		while ( taken.has( pid ) ) pid = randomToken( 6 );
-		Object.assign( driver, { pid, name, star, level, title, vehicle: shown, look, place, away: m.away === true, s: null, pending: false } );
-		const others = this.helloed().filter( other => other !== ws ).map( other => playerOf( this.driver( other ) ) );
+		Object.assign( driver, { pid, name, star, level, title, vehicle: shown, look, place, away: m.away === true || ( somewhere && ! place ), s: null, pending: false } );
+		const others = this.helloed().filter( other => other !== ws ).map( other => playerFor( this.driver( other ), driver ) );
 		send( ws, { t: 'welcome', you: pid, name, star, room: driver.room, max: this.max( parseRoom( driver.room ) ), players: others } );
 		driver.sent = this.moves;
-		this.broadcast( { t: 'join', player: playerOf( driver ) }, ws );
+		this.broadcast( to => ( { t: 'join', player: playerFor( driver, to ) } ), ws );
 
 		const queue = driver.queue;
 		driver.queue = null;
@@ -700,7 +807,9 @@ export class DriveRoom extends DurableObject {
 
 			case 's': {
 
-				const s = checkState( m.s );
+				// (On its own world: the Earth's frame and the Moon's are far apart, so one in the
+				// other's is no car's.)
+				const s = checkState( m.s, this.worldOf( driver ) );
 				// Alone in the room a page sends none (live-protocol.js): one that does anyway, or one
 				// on its way as the last of the others left, is dropped, so whoever comes next isn't
 				// shown where the car was a while ago. Its page sends it again as it hears them join.
@@ -746,17 +855,28 @@ export class DriveRoom extends DurableObject {
 
 			case 'place': {
 
-				const place = checkPlace( m.place );
+				const place = placeOf( m.place, driver );
 				if ( ! place ) return false;
+				// A place on the other world in an area's room isn't for it (the page moves on to that
+				// world's room as it drops in): nothing changes here. In a party it's where the driver
+				// is now, its world and all: a page from before the Moon had drivers hears only that
+				// they're on the globe (seenBy).
+				const room = parseRoom( this.name );
+				if ( room?.kind === 'near' && placeWorld( place ) !== room.world ) return true;
+				if ( room?.kind !== 'near' && driver.version >= 2 ) driver.world = placeWorld( place );
+				// (A car's last state on the world it's left is no state on this one.)
 				Object.assign( driver, { place, away: false } );
-				this.broadcast( { t: 'place', pid, place }, ws );
+				if ( driver.s && ! checkState( driver.s, this.worldOf( driver ) ) ) Object.assign( driver, { s: null, held: null } );
+				this.broadcast( to => seenBy( to, driver ) ? { t: 'place', pid, place } : { t: 'away', pid }, ws );
 				return true;
 
 			}
 
 			case 'away':
-				// Back on the globe: no car where it last was, for anyone joining meanwhile.
+				// Back on the globe: no car where it last was, for anyone joining meanwhile. On which
+				// world's globe, if it says (v2, in a party: its budget is that world's).
 				Object.assign( driver, { away: true, s: null } );
+				if ( parseRoom( this.name )?.kind !== 'near' && driver.version >= 2 && ( m.world === EARTH || m.world === MOON_WORLD ) ) driver.world = m.world;
 				this.broadcast( { t: 'away', pid }, ws );
 				return true;
 
@@ -764,7 +884,7 @@ export class DriveRoom extends DurableObject {
 
 				const score = checkTrick( m.score );
 				if ( ! score ) return false;
-				this.broadcast( { t: 'trick', pid, score }, ws );
+				this.broadcast( to => seenBy( to, driver ) ? { t: 'trick', pid, score } : null, ws );
 				return true;
 
 			}
@@ -773,7 +893,7 @@ export class DriveRoom extends DurableObject {
 				// (Queued behind a hello, it wasn't spaced as it came in: now is when it did.)
 				if ( now - driver.honk < HONK_GAP ) return true;
 				driver.honk = now;
-				this.broadcast( { t: 'honk', pid }, ws );
+				this.broadcast( to => seenBy( to, driver ) ? { t: 'honk', pid } : null, ws );
 				return true;
 
 			default:
@@ -796,13 +916,14 @@ export class DriveRoom extends DurableObject {
 
 		if ( this.flushed === this.moves || ( now - this.flushedAt < FLUSH_MS && ! this.urgent ) ) return;
 		const drivers = this.helloed().map( ws => [ ws, this.driver( ws ) ] );
+		const area = parseRoom( this.name )?.kind === 'near';
 		for ( const [ ws, to ] of drivers ) {
 
-			const near = to.room.startsWith( 'near:' ) && to.s;
+			const near = area && to.s;
 			const s = [];
 			for ( const [ other, from ] of drivers ) {
 
-				if ( other === ws || ! from.s || from.moved <= to.sent ) continue;
+				if ( other === ws || ! from.s || from.moved <= to.sent || ! seenBy( to, from ) ) continue;
 				if ( near && Math.hypot( from.s[ 0 ] - to.s[ 0 ], from.s[ 1 ] - to.s[ 1 ], from.s[ 2 ] - to.s[ 2 ] ) > VIEW_RANGE ) continue;
 				if ( from.held && from.held.moved > to.sent ) s.push( [ from.pid, ...from.held.s, now - from.held.at ] );
 				s.push( [ from.pid, ...from.s, now - ( from.sAt ?? now ) ] );
@@ -836,7 +957,7 @@ export class DriveRoom extends DurableObject {
 
 			const driver = this.driver( ws );
 			const hello = driver.pid || driver.pending ? Infinity : driver.at + HELLO_MS;
-			if ( liveOff( this.env ) ) this.shut( ws, CLOSE.off, 'off' );
+			if ( worldOff( this.env, this.worldOf( driver ) ) ) this.shut( ws, CLOSE.off, 'off' );
 			else if ( now >= driver.expires ) this.shut( ws, CLOSE.expired, 'expired' );
 			else if ( now >= hello ) this.shut( ws, CLOSE.hello, 'no hello' );
 			else if ( now >= driver.heard + IDLE_MS ) this.shut( ws, CLOSE.idle, 'idle' );
@@ -886,7 +1007,7 @@ export class DriveRoom extends DurableObject {
 		if ( room?.kind !== 'near' ) return null;
 		const drivers = this.helloed().map( ws => this.driver( ws ) ).filter( driver => ! driver.away && ( driver.s || driver.place ) );
 		drivers.sort( ( a, b ) => a.at - b.at || ( a.pid < b.pid ? - 1 : 1 ) );
-		return dotsOf( drivers.map( ( { s, place } ) => s ? { x: s[ 0 ], y: s[ 1 ], z: s[ 2 ] } : spotIn( place, room.cell ) ), room.cell );
+		return dotsOf( drivers.map( ( { s, place } ) => s ? { x: s[ 0 ], y: s[ 1 ], z: s[ 2 ] } : spotIn( place, room.cell, room.world ) ), room.cell );
 
 	}
 
@@ -946,38 +1067,68 @@ export class DriveRoom extends DurableObject {
 	async report( now, extra ) {
 
 		const dots = this.dots();
-		let amount = this.leftover + extra + COST.report;
+		// Each world's share: each connection's on the world it's on, the room's own on its (worldOf).
+		const amounts = { [ EARTH ]: 0, [ MOON_WORLD ]: 0 };
+		amounts[ this.worldOf() ] += this.leftover + extra + COST.report;
 		this.leftover = 0;
 		for ( const ws of this.sockets() ) {
 
 			const driver = this.driver( ws );
-			amount += driver.spent ?? 0;
+			amounts[ this.worldOf( driver ) ] += driver.spent ?? 0;
 			Object.assign( driver, { spent: 0, reported: now } );
 			this.save( ws, driver );
 
 		}
 
-		let open = true;
+		const open = { [ EARTH ]: true, [ MOON_WORLD ]: true };
 		try {
 
 			const limits = this.env.LIMITS.get( this.env.LIMITS.idFromName( 'global' ) );
-			( { open } = await limits.liveSpent( amount, { now, budget: dailyBudget( this.env ), ...( dots ? { online: { room: this.name, dots } } : {} ) } ) );
+			const answer = await limits.liveSpent( amounts[ EARTH ], {
+				now, budget: dailyBudget( this.env, EARTH ), moon: amounts[ MOON_WORLD ], moonBudget: dailyBudget( this.env, MOON_WORLD ),
+				...( dots ? { online: { room: this.name, dots } } : {} ),
+			} );
+			open[ EARTH ] = answer.open;
+			// (A DriveLimits from before the Moon had rooms says one for both.)
+			open[ MOON_WORLD ] = answer.moon?.open ?? answer.open;
 
 		} catch ( err ) {
 
 			console.error( 'Live budget report', err?.name, err?.message );
-			this.charge( amount );
+			this.charge( amounts[ EARTH ] + amounts[ MOON_WORLD ] );
 			if ( dots ) this.shownAs( null );
 			return;
 
 		}
 
 		// (With the day's spent, DriveLimits has let go of them too.)
-		if ( dots ) this.shownAs( open ? keyOf( dots ) : '' );
-		if ( open ) return;
-		for ( const ws of this.sockets() ) this.shut( ws, CLOSE.off, BUDGET_SPENT );
-		// The day's spent: what they had spent since is let go, rather than asking again to add it.
-		this.leftover = 0;
+		if ( dots ) this.shownAs( open[ this.worldOf() ] ? keyOf( dots ) : '' );
+		// Those on a world whose day's budget is spent are closed (in a party, only them: the others
+		// drive on), and what they had spent since is let go, rather than asking again to add it.
+		for ( const ws of this.sockets() ) {
+
+			const driver = this.driver( ws );
+			if ( open[ this.worldOf( driver ) ] ) continue;
+			driver.spent = 0;
+			this.shut( ws, CLOSE.off, BUDGET_SPENT );
+
+		}
+
+		if ( ! this.sockets().length ) this.leftover = 0;
+
+	}
+
+	// The world a connection's driver is on: an area's own; in a party where its page last said, the
+	// Earth for a page from before the Moon had drivers. With no driver, the room's own: an area's
+	// world, and a party's the Earth's, unless everyone in it is on the Moon (for its alarms and
+	// reports, see report).
+	worldOf( driver = null ) {
+
+		const room = parseRoom( this.name );
+		if ( room?.kind === 'near' ) return room.world;
+		if ( driver ) return driver.world === MOON_WORLD ? MOON_WORLD : EARTH;
+		const here = this.sockets();
+		return here.length && here.every( ws => this.driver( ws ).world === MOON_WORLD ) ? MOON_WORLD : EARTH;
 
 	}
 
@@ -1243,13 +1394,20 @@ export class DriveRoom extends DurableObject {
 
 	}
 
-	// To everyone else who has said hello.
+	// To everyone else who has said hello: `message`, or for one that depends on who's told (whether
+	// they hear of the Moon, see seenBy), a function from their driver to it (null for nothing), each
+	// different one made into text once.
 	broadcast( message, except ) {
 
-		const text = JSON.stringify( message );
+		const texts = new Map();
 		for ( const ws of this.helloed() ) {
 
-			if ( ws !== except ) send( ws, text );
+			if ( ws === except ) continue;
+			const made = typeof message === 'function' ? message( this.driver( ws ) ) : message;
+			if ( ! made ) continue;
+			const key = typeof message === 'function' ? JSON.stringify( made ) : '';
+			if ( ! texts.has( key ) ) texts.set( key, JSON.stringify( made ) );
+			send( ws, texts.get( key ) );
 
 		}
 
@@ -1264,13 +1422,44 @@ function keyOf( dots ) {
 
 }
 
-// Where a driver whose car the room has no word of is, Earth-centred: where they dropped in, if
-// that's in the area `cell`, else the middle of it.
-function spotIn( place, cell ) {
+// Where a driver whose car the room has no word of is, in `world`'s frame (Earth-centred, or the
+// Moon's): where they dropped in, if that's in the area `cell`, else the middle of it.
+function spotIn( place, cell, world = EARTH ) {
 
-	if ( cellOf( place.lat, place.lon ) === cell ) return toEcef( place.lat, place.lon, place.height );
+	if ( cellOf( place.lat, place.lon, world ) === cell ) return toFrame( place.lat, place.lon, place.height, world );
 	const { south, north, west, east } = boundsOf( cell );
-	return toEcef( ( south + north ) / 2, ( west + east ) / 2, place.height );
+	return toFrame( ( south + north ) / 2, ( west + east ) / 2, place.height, world );
+
+}
+
+// A PLACE as `driver`'s page sends it, checked (checkPlace), or null: a page from before the Moon had
+// drivers (v1) is always on the Earth, whatever its place says.
+function placeOf( place, driver ) {
+
+	const checked = checkPlace( place );
+	if ( ! checked || ( driver.version ?? 1 ) >= 2 || ! checked.world ) return checked;
+	// (Checked again as the Earth's: its heights are the Earth's.)
+	const { world, ...earthly } = checked;
+	return checkPlace( earthly );
+
+}
+
+// Whether driver `to` hears where driver `from` is: always for a page that knows of the Moon (v2);
+// for one from before (v1), only of a driver on the Earth, as it would take a Moon car or place for
+// the Earth's. To it, a driver on the Moon is on the globe, with nothing more (playerFor).
+function seenBy( to, from ) {
+
+	return ( to.version ?? 1 ) >= 2 || from.world !== MOON_WORLD;
+
+}
+
+// The PLAYER driver `to` is told of for `from`: with its world for a v2 page when it's the Moon's,
+// and for a v1 page a Moon driver as one on the globe.
+function playerFor( from, to ) {
+
+	const player = playerOf( from );
+	if ( ! seenBy( to, from ) ) return { ...player, place: null, away: true, s: null };
+	return from.world === MOON_WORLD && ( to.version ?? 1 ) >= 2 ? { ...player, world: MOON_WORLD } : player;
 
 }
 

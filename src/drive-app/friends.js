@@ -1,5 +1,5 @@
 import { hornAudio, hornsOn, playHorn, setHornsOn } from './horns.js';
-import { FLAGS, cellOf } from './live-protocol.js';
+import { FLAGS, MOON_WORLD, cellOf, placeWorld } from './live-protocol.js';
 import { hideKeys, toast } from './screens.js';
 
 // Driving with others on screen (live.js has the connection, ghosts.js the cars): the chip by the
@@ -8,10 +8,17 @@ import { hideKeys, toast } from './screens.js';
 // (inviting friends with a link, the party's members, leaving it, and the switches); the banner
 // on the globe while in a party; the toasts as people come, go and drop in somewhere; and the horn
 // (H, or its button on a touch screen), heard for yours and those near, each in its driver's horn
-// from the Garage (horns.js), which travels with their look.
+// from the Garage (horns.js), which travels with their look. All of it on the Earth and the Moon
+// alike: a friend on the other world is "on the Moon" (or "on the Earth"), and Go to or Join takes
+// you there.
 
-// Driving with others off for the rest of the day, its budget spent (worker/drive/live.js).
+// Driving with others off for the rest of the day, its budget spent (worker/drive/live.js): on both
+// worlds, or on one (each has its own), with the other's still on.
 export const BUDGET_TOAST = 'Lots of drivers today: driving with others is back after midnight UTC.';
+const WORLD_BUDGET_TOAST = {
+	earth: 'Lots of drivers on the Earth today: driving with others there is back after midnight UTC. It\'s still on on the Moon.',
+	moon: 'Lots of drivers on the Moon today: driving with others there is back after midnight UTC. It\'s still on on the Earth.',
+};
 // Other cars' horns are heard this near (m).
 const HEAR_RANGE = 150;
 // In an area, a toast for someone new at most this often (ms).
@@ -68,7 +75,8 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 	// --- what the room says ---
 
 	const inParty = () => !! live.party;
-	for ( const type of [ 'status', 'party', 'nearby', 'welcome', 'clear', 'look', 'away' ] ) live.on( type, refresh );
+	for ( const type of [ 'status', 'party', 'nearby', 'welcome', 'clear', 'look', 'away', 'closed' ] ) live.on( type, refresh );
+	live.on( 'closed', world => toast( WORLD_BUDGET_TOAST[ world ] ?? BUDGET_TOAST, 10000 ) );
 	live.on( 'party', code => {
 
 		// The party stays in the address while you're in it, so a reload (or the link copied from the
@@ -103,8 +111,9 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 		const p = live.players.get( pid );
 		if ( ! inParty() || ! p ) return;
 		// A friend dropping in where you're driving (as Join does, beside you) needs no Join; on the
-		// globe, the banner says it already if it's them.
-		const here = ! live.away && live.place && cellOf( place.lat, place.lon ) === cellOf( live.place.lat, live.place.lon );
+		// globe, the banner says it already if it's them. (Their area on their world: the Moon's are
+		// their own.)
+		const here = ! live.away && live.place && cellOf( place.lat, place.lon, placeWorld( place ) ) === cellOf( live.place.lat, live.place.lon, placeWorld( live.place ) );
 		if ( here ) toast( `${ p.name } dropped in near you.`, 4000 );
 		else if ( mode() !== 'globe' || bannerPid !== pid ) toast( `${ p.name } went to ${ place.name || 'a new place' }.`, 8000, { label: 'Join', onClick: () => goTo( pid ) } );
 
@@ -139,9 +148,10 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 	function refresh() {
 
 		lastMode = mode();
-		// Over for this visit, whatever ended it (the toast said why): none of it shows. Nor the horn
-		// with nearby off and no party, as there's nobody to hear it.
-		const off = !! live.ended;
+		// Over for this visit, whatever ended it (the toast said why), or for today on this world (its
+		// budget spent): none of it shows. Nor the horn with nearby off and no party, as there's nobody
+		// to hear it.
+		const off = !! live.ended || !! live.closedHere;
 		for ( const area of areas ) area.refresh( off );
 		hornKey.hidden = horn.hidden = off || live.status === 'off';
 		showChip();
@@ -155,7 +165,7 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 	function showChip() {
 
 		const { status } = live;
-		chip.hidden = !! live.ended || status === 'off';
+		chip.hidden = !! live.ended || !! live.closedHere || status === 'off' || status === 'closed';
 		if ( chip.hidden ) {
 
 			openList( false );
@@ -263,7 +273,7 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 				if ( p.name !== name ) who.firstChild.replaceWith( nameOf( p ) );
 				name = p.name;
 				const paused = p.s && p.s[ 10 ] & FLAGS.paused;
-				const where = p.away ? 'on the globe' : paused ? 'paused' : distance !== null ? far( distance ) : p.place?.name ? `at ${ p.place.name }` : 'driving';
+				const where = p.away ? 'on the globe' : elsewhere( p ) ?? ( paused ? 'paused' : distance !== null ? far( distance ) : p.place?.name ? `at ${ p.place.name }` : 'driving' );
 				what.textContent = `${ rides.get( p.vehicle ) ?? 'Go-kart' } · ${ where }`;
 				go.disabled = p.away || ( ! p.s && ! p.place );
 				const hiddenHere = ghosts.isHidden( name );
@@ -346,13 +356,23 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 				members.replaceChildren( you, ...[ ...live.players.values() ].map( p => {
 
 					const li = document.createElement( 'li' );
-					li.append( nameOf( p ), ` · ${ p.away ? 'on the globe' : p.place?.name ? `at ${ p.place.name }` : 'driving' }` );
+					li.append( nameOf( p ), ` · ${ p.away ? 'on the globe' : elsewhere( p ) ?? ( p.place?.name ? `at ${ p.place.name }` : 'driving' ) }` );
 					return li;
 
 				} ) );
 
 			},
 		};
+
+	}
+
+	// Where a driver on the other world is, from this one: "on the Moon" (or "on the Earth"); null for
+	// one on this world.
+	function elsewhere( p ) {
+
+		const theirs = p.world ?? 'earth';
+		if ( theirs === ( live.world ?? 'earth' ) ) return null;
+		return theirs === MOON_WORLD ? 'on the Moon' : 'on the Earth';
 
 	}
 

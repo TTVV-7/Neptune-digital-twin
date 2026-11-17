@@ -236,12 +236,9 @@ button.primary:active,
 	color: var( --muted );
 }
 
-/* On the Moon there's no map search (its own places are searched), nobody else driving, and no
-   party to drive with: you drive it on your own (main.js). */
-body[data-world='moon'] #globe-ui :is( .osm, .online, .online-dots, .friends, .party-banner ),
-body[data-world='moon'] #pause .friends,
-body[data-world='moon'] #drive-ui :is( .live-chip, .players, .horn, .live-key ),
-body[data-world='moon'] #live-tags {
+/* On the Moon there's no map search (its own places are searched). Driving with others is there as
+   on the Earth (its rooms are the Moon's own: live.js). */
+body[data-world='moon'] #globe-ui .osm {
 	display: none !important;
 }
 

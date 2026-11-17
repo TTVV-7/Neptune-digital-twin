@@ -50,8 +50,8 @@ import * as screens from './screens.js';
 //
 // Worlds: the Earth (Google's tiles) and the Moon (moon.js), picked on the globe's panel. On the Moon
 // the globe is the Moon's, what's driven on is its ground, gravity is the Moon's and there's no water;
-// and you drive on your own: nothing is sent to the room of who's driving (it's as if you were on the
-// globe), and the others' ghosts aren't drawn.
+// driving with others is there as on the Earth, in the Moon's own rooms and frame (live.js), and a
+// friend on the other world is a Go to or a Join away (goBeside turns the globe there first).
 
 const SKY = new Color( 0x9fcbee );
 const SPACE = new Color( 0x070c16 );
@@ -357,13 +357,15 @@ const _sun = new Vector3();
 // Google); passwords: whether there are usernames and passwords, turnstileSiteKey their robot
 // checks' (supporter.js, account.js);
 // live: whether the Worker has driving with others on (its /api/config says), and liveReason why
-// not when it's off for the rest of the day; moonOnly: { onEarth } when there's no Earth this visit
-// (today's Earth drives are used up, or the page opened on a link to the Moon, boot.js): the
-// globe opens on the Moon, which is never limited, and picking the Earth calls onEarth instead;
+// not when it's off for the rest of the day; liveMoon: whether it's on on the Moon (its rooms have a
+// budget of their own: null when the Worker doesn't say); moonOnly: { onEarth } when there's no
+// Earth this visit (today's Earth drives are used up, or the page opened on a link to the Moon,
+// boot.js): the globe opens on the Moon, which is never limited, and picking the Earth calls onEarth
+// instead;
 // challengeLink: a "challenge a friend" link's ({ link: { challenge, vs }, answer }, boot.js), or a
 // promise of it (or of null: no link), opened once the globe is up and it's here (challenges.js);
 // adsense: /api/config's { client, slot } while Google's ads are on (ads.js), else null.
-export async function start( { key, left = null, visit: token = null, worker = true, googleClientId = '', passwords = false, turnstileSiteKey = '', live: liveOn = false, liveReason = '', moonOnly = null, challengeLink = null, adsense = null } ) {
+export async function start( { key, left = null, visit: token = null, worker = true, googleClientId = '', passwords = false, turnstileSiteKey = '', live: liveOn = false, liveReason = '', liveMoon = null, moonOnly = null, challengeLink = null, adsense = null } ) {
 
 	const visit = token ?? VISIT_TEST?.visit ?? null;
 	// Play stats for the owner's admin page (stats.js): only a real visit's, counts with nothing of who.
@@ -874,24 +876,33 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	} );
 	if ( left !== null && left <= 2 ) screens.toast( left === 0 ? 'This is your last free drive today.' : `${ left } more free drive${ left === 1 ? '' : 's' } today after this one.` );
 
-	// Driving with others (live.js, ghosts.js, friends.js): only when the Worker has it on and this
-	// visit has a token to show the room. Without it, nothing of it is made. When the Worker couldn't
-	// say ('unknown': DriveLimits didn't answer, as for a few minutes after a deploy while it still
-	// runs its old code) it's made anyway: turned away at the door, it tries again as a dropped
-	// connection does, so the visit isn't left without it for hours over a moment's hiccup.
+	// Driving with others (live.js, ghosts.js, friends.js): only when the Worker has it on (on either
+	// world) and this visit has a token to show the room. Without it, nothing of it is made. When the
+	// Worker couldn't say ('unknown': DriveLimits didn't answer, as for a few minutes after a deploy
+	// while it still runs its old code) it's made anyway: turned away at the door, it tries again as a
+	// dropped connection does, so the visit isn't left without it for hours over a moment's hiccup.
+	// A world whose budget for the day is spent starts closed: alone there, with others on the other.
 	const liveVisit = LIVE_TEST?.visit ?? visit;
-	const live = ( liveOn || liveReason === 'unknown' ) && typeof liveVisit === 'string' && liveVisit
-		? createLive( { earth, ellipsoid, visit: liveVisit, player: () => board.player, ride: { vehicle: panel.vehicle.id, look: lookOf( panel.vehicle ) } } )
+	const closedWorlds = [ ...( ! liveOn && liveReason !== 'unknown' ? [ 'earth' ] : [] ), ...( liveMoon === false && liveReason !== 'unknown' ? [ MOON ] : [] ) ];
+	const live = ( liveOn || liveMoon === true || liveReason === 'unknown' ) && typeof liveVisit === 'string' && liveVisit
+		? createLive( {
+			earth, ellipsoid, moon: { group: moon.group, ellipsoid: MOON_ELLIPSOID }, world: () => world, closed: closedWorlds,
+			visit: liveVisit, player: () => board.player, ride: { vehicle: panel.vehicle.id, look: lookOf( panel.vehicle ) },
+		} )
 		: null;
-	const ghosts = live && createGhosts( { scene, earth, camera, vehicles, models: ghostShapes, live, tags: $( 'live-tags' ), own: () => state.entry?.pivot ?? null, effects: driver.effects } );
-	// (On the Moon, they're told it's the Moon's: nothing of who's driving is for there.)
-	const liveMode = () => onMoon() ? MOON : state.mode;
+	// The others' cars, through the frame of the world this page is on: the Earth's, or the Moon's.
+	const ghosts = live && createGhosts( {
+		scene, earth, frame: () => onMoon() ? moon.group : earth, camera, vehicles, models: ghostShapes, live, tags: $( 'live-tags' ), own: () => state.entry?.pivot ?? null,
+		effects: driver.effects,
+	} );
+	const liveMode = () => state.mode;
 	const friends = live && setUpFriends( { live, ghosts, vehicles, mode: liveMode, goTo, onInvite: () => stats.add( 'party', 'made' ) } );
 	// Where people are driving now, on the globe (online.js): with driving with others, and nothing
-	// of it without.
+	// of it without; on the Moon's globe, the Moon's.
 	const globeUi = $( 'globe-ui' );
 	const online = live && createOnline( {
-		camera, earth, ellipsoid, canvas, live, panel, mode: liveMode, onPick: flyToPlace, onZoom: zoomTo,
+		camera, earth, ellipsoid, moon: { group: moon.group, ellipsoid: MOON_ELLIPSOID }, world: () => world, onWorld: next => setWorld( next ),
+		canvas, live, panel, mode: liveMode, onPick: flyToPlace, onZoom: zoomTo,
 		// The Garage covers the globe (the whole screen on a phone): nothing's asked while it's open.
 		paused: () => garage.isOpen,
 		layer: globeUi.querySelector( '.online-dots' ),
@@ -909,7 +920,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		stats.add( 'party', 'joined' );
 
 	}
-	else if ( partyCode && liveReason === BUDGET_SPENT ) screens.toast( BUDGET_TOAST, 10000 );
+	else if ( partyCode && ( liveReason === BUDGET_SPENT || liveMoon === false ) ) screens.toast( BUDGET_TOAST, 10000 );
 	// Levels show from here on (a level-up says hello again in the room, so after that's made).
 	progress.start();
 	// The points of each landed jump: the run's score less what it was at the last, in this ride at
@@ -979,7 +990,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		const moonly = worldOf( place ) === MOON;
 		const pin = place.name === 'Dropped pin';
 		let name = pin ? formatLatLon( place.lat, place.lon ).replace( /(\.\d\d)\d+/g, '$1' ) : place.name;
-		if ( moonly ) name = pin ? `Moon, ${ name }` : `${ name } (Moon)`;
+		// (A name that says so already, as one beside a friend there is theirs, isn't said twice.)
+		if ( moonly && ! /^Moon, |\(Moon\)$/.test( name ) ) name = pin ? `Moon, ${ name }` : `${ name } (Moon)`;
 		const clean = text => [ ...String( text ).replace( /[–—]/g, '-' ).replace( PLACE_TEXT, ' ' ).replace( /\s+/g, ' ' ).trim() ].slice( 0, PLACE_LENGTH ).join( '' ).trim();
 		return clean( name ) || clean( `${ moonly ? 'Moon, ' : '' }${ formatLatLon( place.lat, place.lon ) }` );
 
@@ -1129,6 +1141,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		pinAt( null );
 		globe.setBody( moonly ? moonBody : earthBody );
 		panel.setWorld( world );
+		// A party is told which world's globe this is; an area's room of the other world goes.
+		live?.worldChanged();
 		const look = at ?? lastLook[ world ] ?? ( moonly ? MOON_FIRST : home );
 		// The Moon's frame on the place looked at, as the Earth's is on the last place driven.
 		if ( moonly ) placeEarth( moon.group, MOON_ELLIPSOID, { lat: look.lat, lon: look.lon, height: 0 } );
@@ -1362,9 +1376,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		stats.add( 'dropin_time', dropinBucket( performance.now() - drop.began ) );
 		stats.once( 'funnel', 'driving' );
 		live?.setRide( vehicle.id, lookOf( vehicle ) );
-		// On the Moon nobody's told where you are: you're on the globe as far as they know.
-		if ( onMoon() ) live?.setAway();
-		else live?.setPlace( { name: placeLabel( state.place ), lat: state.place.lat, lon: state.place.lon, height: state.place.height } );
+		// Where you dropped in, on its world: the Moon's has its own rooms, and its place says so.
+		live?.setPlace( { name: placeLabel( state.place ), lat: state.place.lat, lon: state.place.lon, height: state.place.height, ...( onMoon() ? { world: MOON } : {} ) } );
 		// A challenge's start: its gates or items and its countdown (challenges.js), which shows the keys
 		// over it if they haven't been this visit.
 		const started = challenges?.arrived( state.place ) ?? false;
@@ -1883,14 +1896,23 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	// --- driving with others ---
 
-	// Where the car is ({ lat, lon }), or null without one.
+	// Where the car is ({ lat, lon }, on the world it's on), or null without one.
 	function carSpot() {
 
-		if ( ! state.entry || onMoon() ) return null;
-		earth.updateWorldMatrix( true, false );
-		state.entry.pivot.getWorldPosition( _p ).applyMatrix4( _inverse.copy( earth.matrixWorld ).invert() );
-		const spot = ellipsoid.getPositionToCartographic( _p, {} );
+		if ( ! state.entry ) return null;
+		const { group, shape } = frameOf( world );
+		group.updateWorldMatrix( true, false );
+		state.entry.pivot.getWorldPosition( _p ).applyMatrix4( _inverse.copy( group.matrixWorld ).invert() );
+		const spot = shape.getPositionToCartographic( _p, {} );
 		return { lat: spot.lat * MathUtils.RAD2DEG, lon: spot.lon * MathUtils.RAD2DEG };
+
+	}
+
+	// A world's frame: its group, whose matrixWorld takes positions in it (Earth-centred, or the
+	// Moon's) into the scene, and its shape.
+	function frameOf( which ) {
+
+		return which === MOON ? { group: moon.group, shape: MOON_ELLIPSOID } : { group: earth, shape: ellipsoid };
 
 	}
 
@@ -1906,7 +1928,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 		const gained = run.score - runScore;
 		runScore = run.score;
-		if ( gained >= 1 && ! onMoon() ) live?.trick( gained );
+		if ( gained >= 1 ) live?.trick( gained );
 
 	}
 
@@ -1918,8 +1940,9 @@ export async function start( { key, left = null, visit: token = null, worker = t
 			speed: velocityOf( d, _velocity ).length(),
 			air: ! d.grounded && ! d.flying,
 			boost: d.boost,
-			// (On the Moon, nobody's driving with you, and it's none of the Earth's areas or spots.)
-			together: ! onMoon() && !! live && [ ...live.players.values() ].some( p => ! p.away ),
+			// (With others driving on this world, the Moon's too; the Moon's ground is none of the Earth's
+			// areas or spots.)
+			together: !! live && [ ...live.players.values() ].some( p => ! p.away && p.world === live.world ),
 			where: onMoon() ? nowhere : carWhere,
 			vehicle: state.vehicle?.id ?? null,
 		};
@@ -1947,7 +1970,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// The car, for live.js to send: where it is, how fast it's going and what it's doing.
 	function car() {
 
-		if ( ( state.mode !== 'driving' && state.mode !== 'paused' ) || ! state.entry || onMoon() ) return null;
+		if ( ( state.mode !== 'driving' && state.mode !== 'paused' ) || ! state.entry ) return null;
 		return { pivot: state.entry.pivot, velocity: velocityOf( driver, _velocity ), flags: flagsOf( driver, state.mode === 'paused' ) };
 
 	}
@@ -1972,10 +1995,15 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 		const spot = besideOf( other );
 		if ( ! spot ) return;
-		const laid = sea.active && ( sea.lake !== null || sea.reaches( - spot.local.x, spot.local.z ) ) ? { lake: sea.lake } : null;
-		const beside = { name: other.place?.name || 'Dropped pin', lat: spot.lat, lon: spot.lon, height: spot.height, heading: spot.heading, beside: true, laid, riding: spot.riding };
-		// From the Moon, they're on the Earth: back there, and a drop-in beside them.
-		if ( onMoon() ) {
+		const theirs = other.world === MOON ? MOON : 'earth';
+		const laid = theirs === world && sea.active && ( sea.lake !== null || sea.reaches( - spot.local.x, spot.local.z ) ) ? { lake: sea.lake } : null;
+		const beside = {
+			name: other.place?.name || 'Dropped pin', lat: spot.lat, lon: spot.lon, height: spot.height, heading: spot.heading, beside: true, laid, riding: spot.riding,
+			...( theirs === MOON ? { world: MOON } : {} ),
+		};
+		// On the other world: there (the globe turned to it, loading the Moon the first time, or from
+		// a page with no Earth this visit the way boot.js has to it), and a drop-in beside them.
+		if ( theirs !== world ) {
 
 			if ( state.mode !== 'globe' ) toGlobe();
 			dropIn( beside );
@@ -1984,7 +2012,20 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		}
 
 		const here = () => ( state.mode === 'driving' || state.mode === 'paused' ) && !! state.entry;
-		if ( here() && spot.local.length() < GO_NEAR ) {
+		// On the Moon, near enough: straight there, on the Moon's ground under them (no water there).
+		if ( onMoon() && here() && spot.local.length() < GO_NEAR ) {
+
+			const y = ground.heightAt( spot.local.x, spot.local.z, spot.local.y + 3, 6 );
+			if ( y !== null ) {
+
+				challenges?.left();
+				if ( placeCar( { east: - spot.local.x, north: spot.local.z, heading: spot.heading, up: y } ) ) return;
+
+			}
+
+		}
+
+		if ( ! onMoon() && here() && spot.local.length() < GO_NEAR ) {
 
 			// (Whether they're out on the water, or over it however high, needs the sea's height and
 			// the map, where the ground under them, under any of the sea laid here, is low enough to be
@@ -2006,13 +2047,15 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// grounded; where they dropped in, they started on it), else null.
 	function besideOf( other ) {
 
-		earth.updateWorldMatrix( true, false );
+		// (In their world's frame: the Moon's for a driver there. `local` is only of use on that world.)
+		const { group, shape: ellipsoid } = frameOf( other.world === MOON ? MOON : 'earth' );
+		group.updateWorldMatrix( true, false );
 		if ( ! other.s ) {
 
 			const { lat, lon, height } = other.place ?? {};
 			if ( ! Number.isFinite( lat ) ) return null;
 			ellipsoid.getCartographicToPosition( lat * MathUtils.DEG2RAD, lon * MathUtils.DEG2RAD, height, _p );
-			return { lat, lon, height, heading: 0, local: _p.clone().applyMatrix4( earth.matrixWorld ), riding: [ 0, 0 ] };
+			return { lat, lon, height, heading: 0, local: _p.clone().applyMatrix4( group.matrixWorld ), riding: [ 0, 0 ] };
 
 		}
 
@@ -2040,7 +2083,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		const lat = carto.lat * MathUtils.RAD2DEG;
 		const lon = carto.lon * MathUtils.RAD2DEG;
 		// (Their car is as far back the other way: right and ahead are that step east and north.)
-		return { lat, lon, height: carto.height, heading, local: _p.clone().applyMatrix4( earth.matrixWorld ), riding: flags & FLAGS.grounded ? [ - right, - ahead ] : null };
+		return { lat, lon, height: carto.height, heading, local: _p.clone().applyMatrix4( group.matrixWorld ), riding: flags & FLAGS.grounded ? [ - right, - ahead ] : null };
 
 	}
 
@@ -2218,7 +2261,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 			progress.drive( dt, driven() );
 			// Play time by ride and world, with others or not, and the funnel's minutes driven.
-			stats.drove( state.vehicle.id, world, dt, !! live?.players.size && ! onMoon() );
+			stats.drove( state.vehicle.id, world, dt, !! live?.players.size );
 
 		}
 
@@ -2272,7 +2315,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 		} else tiles?.update();
 		models.update( dt );
-		ghosts?.update( dt, ! onMoon() && ( state.mode === 'driving' || state.mode === 'paused' ) );
+		ghosts?.update( dt, state.mode === 'driving' || state.mode === 'paused' );
 		online?.update();
 		// Not while the Garage is open: its turntable draws instead, and on a phone it covers the
 		// screen, so drawing the world behind it as well would only halve the frame rate.

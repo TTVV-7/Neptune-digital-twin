@@ -1402,9 +1402,10 @@ key, so it's the real Moon under `npm run dev:drive` too.
   globe to the Moon and pins the place, as an Earth spot's link does. Each spot has a page of its
   own, `/moon/<slug>/`, whose **Drive here** is that link, and the home page's words list them (a
   tap there turns the globe to the Moon too): see [The Moon's pages](#the-moons-pages).
-- On the Moon the panel says "Pick anywhere on the Moon", has no search credit (it's not
-  OpenStreetMap's), and none of [driving with others](#on-the-moon-you-drive-on-your-own); NASA's
-  credit is in the corner where Google's would be.
+- On the Moon the panel says "Pick anywhere on the Moon" and has no search credit (it's not
+  OpenStreetMap's); [driving with others](#driving-with-others-on-the-moon) is the Moon's own there,
+  its **Driving now** and dots the Moon's drivers. NASA's credit is in the corner where Google's
+  would be.
 
 ### Driving there
 
@@ -1446,18 +1447,131 @@ key, so it's the real Moon under `npm run dev:drive` too.
   ground in its long jumps. The Earth's rules keep pads off roofs and banks, and the Moon has none.
 - **M** goes back to the Moon's globe, **Earth** on the panel to the Earth's.
 
-### On the Moon you drive on your own
+### Driving with others on the Moon
 
-Driving with others is the Earth's: its rooms are areas of the Earth, its cars are placed on the
-Earth. On the Moon nothing is sent to a room (it's as if you were on the globe, away: the others see
-you "on the globe"), the others' ghosts aren't drawn, the panel's "Driving now" and its dots, the
-party banner, the pause menu's friends and the horn aren't shown, and no trick's points go to the
-room. **Join** on a party's word that someone went somewhere ("Sam went to Monaco"), from the Moon,
-goes back to the Earth and drops in beside them. Levels count driving, air, drifts, pads and tricks there as anywhere, but not areas or
-start spots (those are the Earth's) nor driving with others. A drop-in there is counted in the
-[play stats](#play-stats) as the Moon's (`dropin:moon`, which never says where), with its cell, to
-about a kilometre, in [where people drop in](#where-people-drop-in); its driving as the Moon's play
-time, and each turn of the globe to the Moon (and the Moon not loading) is counted too.
+[Driving with others](#driving-with-others) is on the Moon as on the Earth: the Moon is never
+limited (its ground is our own and costs nothing to stream), and a minute's drive alone on a grey
+plain is where most visits ended, so it's where company helps most. Everything the Earth has, the
+Moon has, in rooms of its own:
+
+- **Nearby, in the Moon's own areas.** Its areas are rooms of their own, `moon:BAND.COL` (and
+  `moon:BAND.COL#1` to `#3` for their shards), so a Moon driver only ever shares an area's room
+  with Moon drivers. They're the Earth's size: bands 0.36° of latitude tall (10.9 km on the Moon's
+  1,737.4 km sphere, as 0.1° is 11.1 km of the Earth), cut into columns about as wide, the same
+  grid sums as the Earth's (`cellOf( lat, lon, 'moon' )` in `live-protocol.js`). Drive into the next
+  area and stay 5 s, and the room follows, as on the Earth.
+- **Their cars on the Moon's ground.** Positions and turns are sent Moon-centred, in the Moon's own
+  frame (moon.js's: Z through its north pole, X through 0° N 0° E), and each page draws them through
+  the Moon's group's matrix as it is now, as an Earth car is drawn through the tiles'. A car is
+  where its own page has it, on the ground it drives (moon-height.js's ground, the same on every
+  page), so it sits on the ground on everyone's screen (in the tests, within 3 m of where it is and
+  1.5 m of the ground under it, a car having just stopped); with their ride, Garage look and name
+  tag, a construction ride shown only with the achievement that unlocks it, as on the Earth. A state is checked against the Moon's ground (from
+  12 km under its sphere to 30 km over: the deepest crater to well over the highest summit, flying)
+  and a place's height to ±12 km; one in the other world's frame is no car and is dropped.
+- **The globe.** On the Moon's globe, the panel's **Driving now** is the Moon's ("3 driving on the
+  Moon now"), its areas named after the Moon's start spots ("Near Tranquility Base"), and the dots
+  are over the Moon (`/api/online?world=moon`): tap one, **Drive here**, and you're in their room. On
+  the Earth's globe the list ends with a line **On the Moon** with how many drive there, and the
+  Moon's with **On the Earth**: a tap turns the globe to the other world.
+- **Parties span both worlds.** A party's room has its members wherever they are: one on the other
+  world is "on the Moon" (or "on the Earth") in the list and the party's members, and their place's
+  name says it too ("Ana is driving at Tranquility Base (Moon)"). **Go to**, **Join** on the banner
+  and **Join** on a toast ("Sam went to Tycho crater (Moon).") go to them across worlds: the globe
+  turns to the other world (the Moon's files loaded the first time, as the **Moon** button does),
+  then a drop-in beside them, 5 m to their right, facing their way. On the Moon, within 10 km, **Go
+  to** puts you there straight away, on the ground under them. From a page opened with no Earth
+  this visit (a link to the Moon, or today's Earth drives used up), a friend on the Earth is the way
+  the **Earth** button is: a reload without the link, or the used-up screen. The party's banner
+  shows on the Moon's globe, the pause menu has **Drive with friends**, the horn and tricks' points
+  go to the room, and a party counts for its achievements (**Party time**, **Party regular**) there
+  the same way.
+- **What a page does with friends on the other world.** Its car is no use to them to see, so it
+  goes once every 2 s (for their **Join**, as with friends on the globe), and 5 times a second only
+  for those on its own world; they're not drawn, nor heard.
+- **Levels** count minutes driving with others there too (with others on the Moon); still not the
+  Earth's areas or start spots, which are the Earth's.
+
+**Why the Moon's budget is its own.** The day's budget is the Durable Objects bill itself (see
+[The day's budget](#the-days-budget)): on the Free plan, past 100,000 requests a day every Durable
+Object fails, `DriveLimits` too, and then nobody could start a drive, the Moon's visits included.
+So the Moon's rooms can't go unbounded; but they mustn't be shut by the Earth's being spent either.
+They keep a day's budget of their own, `LIVE_MOON_DAILY_BUDGET` (**20,000**), counted the same way
+in a table of its own in `DriveLimits` (`live_moon`): spending the Earth's switches off only the
+Earth's rooms (and in a party, only those on the Earth: the others drive on), and the Moon's only
+the Moon's. The two together leave 40,000 of the Free plan's 100,000 for visits, names and scores.
+A connection counts against the world it's on (an area's own; in a party, where its page last said
+it was), and a room's own alarms and reports against its world (a party's against the Earth's
+unless everyone in it is on the Moon). `/api/config` says both: `live` (and `liveReason`) for the
+Earth, `liveMoon` for the Moon, its ask counted against the Earth's while that's open and else the
+Moon's. A page whose world's budget is spent is alone there ("Lots of drivers on the Earth today:
+driving with others there is back after midnight UTC. It's still on on the Moon."), and with others
+on the other world; with both spent, it's over for the visit as before. On Workers Paid either can
+be raised.
+
+**Bounded per address, as the Earth's are.** The Earth's visits are capped at 8 a day for each
+address, and so are their connections (each visit's 20 a minute and 200 a day, one room at a time).
+The Moon's visits aren't capped (anyone gets one for each robot check they pass), so a visit not
+counted against the Earth's caps (a Moon visit; never the owner's) connects to rooms from one address
+(an IPv6 one by its /48) with at most `LIVE_ADDRESS_VISITS` (**20**) others a day: the next is
+turned away (429, "Too many drivers from here today") before any room is touched, and remembered by
+that Worker instance. Each such visit has every visit's own limits too. `DriveLimits` keeps only a
+hash of the day's salt with the address's keyed hash (the challenges' `lookKey`, an HMAC of its /48
+and the day with a key from the Worker's secret) and one of the salt with the visit's id
+(`live_addresses`, deleted with the day): neither an address nor a visit can be read from it, nor
+linked to the next day. So one address can hold at most 28 visits' connections at once (8 Earth, 20
+Moon), each sending at most 20 messages a second, and the Moon's budget bounds the whole of it.
+
+**Old pages.** The page speaks a new version of the protocol, `worlddrive-live.v2` (PLACE and
+PLAYER with a `world`, an away with the world of its globe, the Moon's areas and frame), and offers
+`[ 'worlddrive-live.v2', 'worlddrive-live.v1', <token> ]`, so a room still running the old code for
+a few minutes after a deploy answers v1, and the page then stays on the globe as far as that room
+knows while it's on the Moon (as a page from before did). A page from before (v1) gets on as ever:
+it's never let into a Moon area (400), and in a party a Moon driver is on the globe to it, with no
+place, car, trick or honk (the room's `seenBy`); a place it sends is always the Earth's.
+
+**What's kept:** nothing more than on the Earth: a room keeps nothing once it empties, a Moon
+area's dots go to `live_online` like the Earth's (positions to about a kilometre and counts), and the
+budget and address counts are deleted with the day. A drop-in on the Moon is counted in the [play
+stats](#play-stats) as the Moon's (`dropin:moon`, which never says where), with its cell, to about a
+kilometre, in [where people drop in](#where-people-drop-in); its driving as the Moon's play time
+(with others or not), and each turn of the globe to the Moon (and the Moon not loading) is counted
+too.
+
+**What it costs:** a Moon driver is billed as an Earth one (900 requests an hour with others, about
+93 alone, [What it costs](#what-it-costs)), and the globe's Moon dots are the same asks as the
+Earth's, counted against the Moon's budget, kept 30 s apart from the Earth's (their own cache key).
+The default 20,000 a day is about 20 driver-hours with others on the Moon. Nothing is added to the
+page's first load (it's all in the game's own code, which loads with the globe), and alone on the
+Moon a page sends nothing but its keepalive, as on the Earth, and draws no ghost: each frame only
+works out where its car is (a few matrix sums), so the frame is what it was. With five others' cars
+drawn on a phone on its side (760 × 390) in Chromium's software renderer, a frame took 1,217 ms,
+the same as alone, 1,217 ms (the middle of 12; the Moon's ground is nearly all of it there; measured
+in `test-drive-live-ui.mjs`). The game's code (loaded with the globe, after the robot check, as
+before) is 3.7 kB bigger, 1.5 kB gzipped; the page's first script 0.1 kB.
+
+**How it's tested:** `npm run test:drive-live` has the protocol's Moon (an area as big as the
+Earth's, Moon-centred metres and back, a dot on its sphere, states and places checked against its
+ground), the rooms under `wrangler dev` (a Moon area's drivers seeing each other's cars and never the
+Earth's area at the same numbers, a v1 page turned away, states in the Earth's frame dropped; a
+party on the Moon counted for its players' achievement, a friend going to the Moon heard of with
+its world; the Earth's budget spent and a Moon area and a Moon party let in, an Earth party not,
+`/api/config` saying `liveMoon: true`; a Moon visit's address held to 2 visits, an IPv6 /48 as one,
+the Earth's and the owner's visits not), the room on a stand-in runtime (a Moon area's frame, a party
+across worlds as v2 and v1 pages hear it, each world's spend to its own budget and a spent world
+closing only its own drivers, a Moon area's dots, a Moon budget of 0), `DriveLimits` on SQLite (the
+Moon's dots apart, each world's budget, the address table as hashes only, a new day) and
+`/api/online?world=moon` on stand-ins, and the page's `live.js` on stand-ins (the subprotocols, the
+Moon's area, a party told it's on the Moon, an old room on the Moon, friends on the other world, a
+world closed and then both). `npm run test:drive-worker` has `/api/config`'s `liveMoon`. And `npm run
+test:drive-live-ui`: two pages at Tranquility Base seeing each other's car on the Moon's ground
+within 3 m of where it is and 1.5 m of the ground; a page on the Earth's globe with **On the Moon · 2
+drivers**, turned to the Moon by it, its dot and **Driving now** there, and **Drive here** into
+their room; a party made on the Moon whose link opened on a phone on the Earth shows the banner, and
+**Join** drops in beside her on the Moon; the banner on the Moon's globe; a friend gone to the Earth
+told of with **Join** and "on the Earth" in the list, one gone to the Moon told of on the Earth,
+**Join** across worlds, and **Go to** on the Moon; a phone on its side with five others' cars drawn,
+its frame time measured. Screenshots `moon-live-*`.
 
 ### How it's made
 
@@ -1537,14 +1651,19 @@ others:
 - **Nearby** (the default). After you drop in, you're in the room for the area you're in (about
   11 km across) and see everyone else driving there, so a popular spot is busy.
 - **A party.** **Invite friends** makes a link (`https://worlddrive.app/?party=CODE`); whoever
-  opens it is in your party wherever on Earth each of you is, and can join you where you are.
+  opens it is in your party wherever each of you is, on the Earth or the Moon, and can join you
+  where you are.
+
+On the Moon it's the same, in the Moon's own rooms (see [Driving with others on the
+Moon](#driving-with-others-on-the-moon)).
 
 And on the globe, **who's driving now**: a glowing dot wherever people are driving in an area's
 room, with how many (see [On the globe: who's driving now](#on-the-globe-whos-driving-now)).
 
-It's only on when the Worker says so (`live: true` in `/api/config`: the `LIVE` setting below, and
-[the day's budget](#the-days-budget) not spent) and the visit has a token, which only visits on
-Google's map get. When it's off, nothing of it appears: no chip, no **Drive with friends**, no H in
+It's only on when the Worker says so (`live: true` in `/api/config`, or for the Moon `liveMoon:
+true`: the `LIVE` setting below, and [the day's budget](#the-days-budget) of that world not spent)
+and the visit has a token, which every visit has (the Earth's, the Moon's and the owner's; the test
+pad has none). When it's off, nothing of it appears: no chip, no **Drive with friends**, no H in
 the keys card, no horn button, no dots or **Driving now** on the globe, and driving alone is as it
 always was.
 
@@ -1765,26 +1884,31 @@ answers any ask within 30 s of the last itself.
 ### The rooms
 
 Each room is one Durable Object (`DriveRoom`, `worker/drive/live.js`) on the WebSocket Hibernation
-API: `party:CODE`, or `near:BAND.COL` for an area (bands 0.1° of latitude tall, cut into columns
-about as wide) and `near:BAND.COL#1` to `#3` for its other shards. What's said is
-`src/drive-app/live-protocol.js`, which the page and the Worker both import:
+API: `party:CODE`, or `near:BAND.COL` for an area of the Earth (bands 0.1° of latitude tall, cut
+into columns about as wide) and `near:BAND.COL#1` to `#3` for its other shards, and `moon:BAND.COL`
+(0.36° bands) for the Moon's. What's said is `src/drive-app/live-protocol.js`, which the page and
+the Worker both import:
 
-- The page opens `GET /api/live?room=<room>` with the subprotocols `[ 'worlddrive-live.v1', <visit
-  token> ]` (a browser can't set headers on a WebSocket, and a token in the address would end up in
-  logs). Before the room is touched the Worker turns away anything that isn't a WebSocket (426), from
+- The page opens `GET /api/live?room=<room>` (with `&world=moon` for a party from the Moon) with the
+  subprotocols `[ 'worlddrive-live.v2', 'worlddrive-live.v1', <visit token> ]` (a page from before
+  the Moon had drivers, `[ 'worlddrive-live.v1', <visit token> ]`; see [Old
+  pages](#driving-with-others-on-the-moon)), as a browser can't set headers on a WebSocket, and a
+  token in the address would end up in logs. Before the room is touched the Worker turns away anything that isn't a WebSocket (426), from
   another site (403: the Origin must be worlddrive.app's own, as WebSockets have no CORS), while
   `LIVE` is off (503), to a room that isn't one (400), without the protocol (400), without a good
   visit token (401: forged, changed or run out), from a visit connecting more than 20 times a
   minute (429, on Cloudflare's rate limiter, `LIVE_CONNECTS`, which costs no Durable Object
   request) or more than 200 times a day (429, `LIVE_VISIT_CONNECTS`) or once the day's budget is
   spent (503 with `reason: 'budget'`, asked of `DriveLimits` only after everything else checks
-  out). The room gets only what was checked. A visit is in one room at a time: `DriveLimits` keeps
+  out; a Moon visit's address is held to its day's visits then too, 429). A v1 page asking for a
+  Moon area, or a `world` that isn't one, is 400. The room gets only what was checked. A visit is in
+  one room at a time: `DriveLimits` keeps
   each visit's room today (a `live_visits` table, deleted with the day), and when it connects to
   another the Worker has the room it was in let go of it first (4002, as another tab in the same
   room would be; one of its connections still on its way in there is turned away too), so one
   visit can't be in a hundred rooms at once.
 - Positions are Earth-centred (ECEF metres) and turns a quaternion in that frame, so two pages
-  centred on different places agree on where a car is. A page sends its car 5 times a second while
+  centred on different places agree on where a car is; on the Moon, Moon-centred in its own frame. A page sends its car 5 times a second while
   it moves, once every 2 s while it's still (and once more at 5 a second as it stops, so where it
   stopped isn't what waits), and at once when what it's doing changes (at most 14 messages a second
   on average and 24 at once, under the room's limit). **Alone in its room it sends none**: they'd
@@ -1834,7 +1958,9 @@ of each day once it has spent that day's budget (below).
 | Setting | Default | What it is |
 | --- | --- | --- |
 | `LIVE` | `on` (in `vars`) | `off` switches driving with others off |
-| `LIVE_DAILY_BUDGET` | 40000 (in `vars`) | The Durable Object requests a day it may use; 0 is off |
+| `LIVE_DAILY_BUDGET` | 40000 (in `vars`) | The Durable Object requests a day it may use on the Earth; 0 is off there |
+| `LIVE_MOON_DAILY_BUDGET` | 20000 (in `vars`) | The Moon's, apart; 0 is off on the Moon |
+| `LIVE_ADDRESS_VISITS` | 20 (unset) | The most Moon visits (not counted by the Earth's caps) connecting from one address a day |
 | `LIVE_PARTY_MAX` | 8 (unset) | The most in a party |
 | `LIVE_NEARBY_MAX` | 20 (unset) | The most in each of an area's rooms |
 | `LIVE_VISIT_CONNECTS` | 200 (unset) | The most connections to rooms a visit makes in a day |
@@ -1846,7 +1972,10 @@ On the Free plan, once all of an account's Durable Objects together have made 10
 a day, every one of them fails until 00:00 UTC, `DriveLimits` included: `/api/visit` would fail
 and nobody could start a drive. It isn't known which plan the account is on, so driving with others
 keeps to a budget of its own, `LIVE_DAILY_BUDGET` billed requests a day (**40,000** in
-`wrangler.drive.jsonc`), and leaves the rest for visits, names, scores and searches:
+`wrangler.drive.jsonc`), and the Moon's rooms to theirs, `LIVE_MOON_DAILY_BUDGET` (**20,000**,
+counted the same way and apart, so neither world's shuts the other's: see [Driving with others on
+the Moon](#driving-with-others-on-the-moon)), and leaves the rest for visits, names, scores and
+searches. What follows is the Earth's; the Moon's is the same:
 
 - **What's counted**, in billed requests as Cloudflare counts them (below): each connection (1),
   each message a room is sent (1/20 each, keepalives included, and those a closed connection goes
@@ -1875,8 +2004,8 @@ keeps to a budget of its own, `LIVE_DAILY_BUDGET` billed requests a day (**40,00
   others that's turned away keeps trying, asking `/api/config` the first time and then every 5
   minutes (each time while the Worker can't be reached at all).
 - The count runs a minute behind (up to 10 for quiet rooms, with less than 5 each to add), which is
-  why the budget isn't all of what's left: 60,000 of the Free plan's requests are left for the rest
-  of the site, and for the last minutes' driving.
+  why the budget isn't all of what's left: 40,000 of the Free plan's requests are left for the rest
+  of the site (with the Moon's 20,000), and for the last minutes' driving.
   On Workers Paid, going over costs money rather than switching everything off, so it can be
   raised there (see what that costs below).
 
@@ -1990,6 +2119,9 @@ spent. `npm run test:drive-worker`
 checks `/api/config` asking (at most every 30 s, one at a time for 20 at once, and not again once
 the day's spent, or when it's off; `liveReason: 'unknown'` when `DriveLimits` fails) on a stand-in
 `DriveLimits`.
+
+What's tested of the Moon's rooms, budget and pages is in [Driving with others on the
+Moon](#driving-with-others-on-the-moon).
 
 `npm run test:drive-live-ui` (`scripts/test-drive-live-ui.mjs`): two to four pages in Chromium on
 the test pad, against the real Worker under `wrangler dev` behind Vite's proxy (the test pad has no
@@ -6069,7 +6201,8 @@ In `wrangler.drive.jsonc` (`vars`, set on every deploy; change them there, not i
 | `SUPPORTER_PAYMENT_LINK` | the live link | The Supporter Pass's Stripe Payment Link (public) |
 | `SUPPORTER_PRICE` | `CA$4.99` | Its price, as the page shows it |
 | `LIVE` | `on` | [Driving with others](#switching-it-off); `off` switches it off |
-| `LIVE_DAILY_BUDGET` | 40000 | [The Durable Object requests a day](#the-days-budget) driving with others may use; 0 is off |
+| `LIVE_DAILY_BUDGET` | 40000 | [The Durable Object requests a day](#the-days-budget) driving with others may use on the Earth; 0 is off there |
+| `LIVE_MOON_DAILY_BUDGET` | 20000 | [The Moon's own](#driving-with-others-on-the-moon), apart; 0 is off on the Moon |
 | `ADSENSE_CLIENT`, `ADSENSE_SLOT` | empty | [Google's ad on the globe](#ads): the AdSense publisher id (empty: no ads) and, if wanted, a display unit's id |
 
 Secrets, set by the owner and never in a file (Cloudflare dashboard: Workers & Pages → world-drive →
@@ -6756,7 +6889,8 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   air. The time check is on straight lines at 430 km/h, three or four times a good driver's speed in
   a city, so a made-up time that fits it gets through: the owner looks after the boards
   ([Looking after them](#looking-after-them)).
-- On the Moon you drive on your own (see [there](#on-the-moon-you-drive-on-your-own)). Its shapes
+- On the Moon, driving with others has a budget of its own (see [there](#driving-with-others-on-the-moon)),
+  so the Free plan's 100,000 a day are shared three ways: the Earth's rooms, the Moon's and the rest. Its shapes
   are the real Moon's only down to a few kilometres; every crater smaller than about 20 km across
   that you drive in is made up. Nothing casts a shadow there: a crater's far wall is darker for
   facing away from the sun, but its floor isn't in its rim's shade. As on the Earth the scene isn't

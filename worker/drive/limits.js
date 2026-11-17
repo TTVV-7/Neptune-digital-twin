@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import { sha256Hex } from '../http.js';
-import { busiest, checkDot, parseRoom, ROOM_DOTS } from '../../src/drive-app/live-protocol.js';
+import { busiest, checkDot, EARTH, MOON_WORLD, parseRoom, ROOM_DOTS, worldOfRoom } from '../../src/drive-app/live-protocol.js';
 
 // One of these for everyone (named "global", see index.js): it counts the day's visits, in all and
 // per visitor, the leaderboard's new names and scores per visitor, and what driving with others has
@@ -38,6 +38,15 @@ export class DriveLimits extends DurableObject {
 		// Driving with others' spend each day, in billed Durable Object requests (worker/drive/live.js
 		// counts them): a fraction, as incoming WebSocket messages are billed 20 to a request.
 		this.sql.exec( 'CREATE TABLE IF NOT EXISTS live ( day TEXT PRIMARY KEY, spent REAL NOT NULL )' );
+		// And the Moon's, apart (its rooms have a budget of their own: spending the Earth's never shuts
+		// them, see worker/drive/live.js), the same way.
+		this.sql.exec( 'CREATE TABLE IF NOT EXISTS live_moon ( day TEXT PRIMARY KEY, spent REAL NOT NULL )' );
+		// The visits connecting to rooms today that weren't counted against the Earth's caps (the
+		// Moon's, never limited: anyone can have as many of those as robot checks they pass), by the
+		// address they connect from (see liveOpen): each only as a hash of the day's salt and it (the
+		// address being already the challenges' keyed hash of its /48 and the day), so neither an
+		// address nor a visit's id is kept, nor can be linked from one day to the next.
+		this.sql.exec( 'CREATE TABLE IF NOT EXISTS live_addresses ( day TEXT NOT NULL, address TEXT NOT NULL, visit TEXT NOT NULL, PRIMARY KEY ( day, address, visit ) ) WITHOUT ROWID' );
 		// And each visit's connections to its rooms today (see liveOpen): the room it's in now, and how
 		// many it has made. A visit's id is a random one of its own (visits.js), never its address.
 		this.sql.exec( 'CREATE TABLE IF NOT EXISTS live_visits ( day TEXT NOT NULL, visit TEXT NOT NULL, room TEXT NOT NULL, connects INTEGER NOT NULL, PRIMARY KEY ( day, visit ) )' );
@@ -295,50 +304,92 @@ export class DriveLimits extends DurableObject {
 
 	}
 
-	// Driving with others, asked at `now` whether it's open today: { open, spent }, open while what
-	// it has spent today (billed requests) is under `budget`. The Worker asks on each connection to
-	// a room and for /api/config; each ask is a Durable Object request itself, so it counts as one.
-	// A connection's ask (/api/live) also says its `visit` and the `room` it's for, which is then the
-	// visit's room: { open, spent, seq, was } with seq its number among the visit's connections
-	// today, and was the room it was in before if that's another (the Worker has that room let go of
-	// it, so a visit is in one room at a time: a request, counted here too), else null. Past
-	// `connects` connections today it's { open, spent, refused: true }, and nothing is kept of it.
-	liveOpen( { now, budget, visit = null, room = null, connects = Infinity } ) {
+	// Driving with others, asked at `now` whether it's open today on each world: the Earth while what
+	// it has spent today (billed requests) is under `budget`, the Moon while its own is under
+	// `moonBudget` (the Earth's when a caller doesn't say, as one from before the Moon had rooms
+	// doesn't). The Worker asks on each connection to a room and for /api/config; each ask is a
+	// Durable Object request itself, so it counts as one.
+	// /api/config's ask (no `visit`) answers { open, spent, moon: { open, spent } } for both, counted
+	// against the Earth's while that's open and else the Moon's.
+	// A connection's ask (/api/live) is for a room on `world` ('earth' or 'moon': the room's, or for a
+	// party the world its page is on), counted against that world's: { open, spent }. It also says
+	// its `visit` and the `room` it's for, which is then the visit's room: { open, spent, seq, was }
+	// with seq its number among the visit's connections today, and was the room it was in before if
+	// that's another (the Worker has that room let go of it, so a visit is in one room at a time: a
+	// request, counted here too), else null. Past `connects` connections today it's { open, spent,
+	// refused: true }, and nothing is kept of it. A visit that wasn't counted against the Earth's caps
+	// comes with the `address` it connects from (the challenges' lookKey: a keyed hash of its /48 and
+	// the day): at most `addressVisits` such visits from one address connect today (it's { open,
+	// spent, refused: true, reason: 'address' } for the next, with nothing kept), as at most the
+	// Earth's 8 a day come from one: a script passing robot checks on one address can't open rooms
+	// without end.
+	async liveOpen( { now, budget, moonBudget = budget, world = EARTH, visit = null, room = null, connects = Infinity, address = null, addressVisits = Infinity } ) {
 
 		const day = dayOf( now );
-		this.saltFor( day );
+		const salt = this.saltFor( day );
+		const [ addressKey, visitKey ] = address !== null && visit !== null
+			? await Promise.all( [ sha256Hex( `${ salt }:live-address:${ address }` ), sha256Hex( `${ salt }:live-visit:${ visit }` ) ] )
+			: [ null, null ];
+		const moon = world === MOON_WORLD;
 		return this.ctx.storage.transactionSync( () => {
 
-			const today = addLive( this.sql, day, 1, budget );
-			if ( ! today.open || visit === null ) return today;
+			if ( visit === null ) {
+
+				const earth = peekLive( this.sql, day, budget, EARTH );
+				if ( earth.open ) return { ...addLive( this.sql, day, 1, budget, EARTH ), moon: peekLive( this.sql, day, moonBudget, MOON_WORLD ) };
+				return { ...earth, moon: addLive( this.sql, day, 1, moonBudget, MOON_WORLD ) };
+
+			}
+
+			const own = moon ? moonBudget : budget;
+			const today = addLive( this.sql, day, 1, own, world );
+			if ( ! today.open ) return today;
 			const row = this.sql.exec( 'SELECT room, connects FROM live_visits WHERE day = ? AND visit = ?', day, visit ).toArray()[ 0 ];
 			const seq = ( row?.connects ?? 0 ) + 1;
 			if ( seq > connects ) return { ...today, refused: true };
+			if ( addressKey ) {
+
+				const known = this.sql.exec( 'SELECT 1 AS known FROM live_addresses WHERE day = ? AND address = ? AND visit = ?', day, addressKey, visitKey ).toArray()[ 0 ];
+				if ( ! known ) {
+
+					const count = this.sql.exec( 'SELECT COUNT( * ) AS count FROM live_addresses WHERE day = ? AND address = ?', day, addressKey ).one().count;
+					if ( count >= addressVisits ) return { ...today, refused: true, reason: 'address' };
+					this.sql.exec( 'INSERT INTO live_addresses ( day, address, visit ) VALUES ( ?, ?, ? )', day, addressKey, visitKey );
+
+				}
+
+			}
+
 			this.sql.exec( 'INSERT INTO live_visits ( day, visit, room, connects ) VALUES ( ?, ?, ?, ? ) ON CONFLICT ( day, visit ) DO UPDATE SET room = excluded.room, connects = excluded.connects', day, visit, room, seq );
 			if ( ! row || row.room === room ) return { ...today, seq, was: null };
-			return { ...addLive( this.sql, day, 1, budget ), seq, was: row.room };
+			return { ...addLive( this.sql, day, 1, own, world ), seq, was: row.room };
 
 		} );
 
 	}
 
-	// A room adding the `amount` (billed requests) it has spent since it last said, at `now`:
-	// { open, spent } with today's spend after it. Not open, the room closes everyone in it. An area's
-	// room says where its drivers are too, `online`: { room, dots }, kept for the globe (liveOnline)
-	// with the time, or let go of with no dots (and with the day's budget spent, as the room is about
-	// to close everyone).
-	liveSpent( amount, { now, budget, online = null } ) {
+	// A room adding what it has spent since it last said (billed requests), at `now`: `amount` on the
+	// Earth's budget and `moon` on the Moon's (a room from before the Moon had rooms says only
+	// amount, and no moonBudget: the Earth's). { open, spent, moon: { open, spent } } with today's
+	// spends after it. A world not open, the room closes everyone in it on that world. An area's room
+	// says where its drivers are too, `online`: { room, dots }, kept for the globe (liveOnline) with
+	// the time, or let go of with no dots (and with its world's budget for the day spent, as the room
+	// is about to close everyone).
+	liveSpent( amount, { now, budget, moon = 0, moonBudget = null, online = null } ) {
 
 		const day = dayOf( now );
 		this.saltFor( day );
-		const add = Number.isFinite( amount ) && amount > 0 ? amount : 0;
+		const add = value => Number.isFinite( value ) && value > 0 ? value : 0;
 		return this.ctx.storage.transactionSync( () => {
 
-			const today = addLive( this.sql, day, add, budget );
+			const earth = addLive( this.sql, day, add( amount ), budget, EARTH );
+			const lunar = moonBudget === null ? earth : addLive( this.sql, day, add( moon ), moonBudget, MOON_WORLD );
+			const today = { ...earth, moon: { open: lunar.open, spent: lunar.spent } };
 			const room = typeof online?.room === 'string' ? parseRoom( online.room ) : null;
 			if ( room?.kind !== 'near' ) return today;
+			const open = room.world === MOON_WORLD ? lunar.open : earth.open;
 			const dots = ( Array.isArray( online.dots ) ? online.dots.slice( 0, ROOM_DOTS ) : [] ).map( checkDot ).filter( Boolean );
-			if ( today.open && dots.length ) this.sql.exec( 'INSERT INTO live_online ( room, dots, at ) VALUES ( ?, ?, ? ) ON CONFLICT ( room ) DO UPDATE SET dots = excluded.dots, at = excluded.at', online.room, JSON.stringify( dots ), now );
+			if ( open && dots.length ) this.sql.exec( 'INSERT INTO live_online ( room, dots, at ) VALUES ( ?, ?, ? ) ON CONFLICT ( room ) DO UPDATE SET dots = excluded.dots, at = excluded.at', online.room, JSON.stringify( dots ), now );
 			else this.sql.exec( 'DELETE FROM live_online WHERE room = ?', online.room );
 			return today;
 
@@ -346,26 +397,39 @@ export class DriveLimits extends DurableObject {
 
 	}
 
-	// Where people are driving now, for /api/online at `now`: the rooms' dots no older than `ttl` (ms),
-	// those at the same spot as one, busiest first, at most `most` of them: { open: true, total, areas },
-	// total counting them all. This ask is a Durable Object request, so it's counted against the day's
-	// budget as liveOpen's are, in the same go; once that's spent it's { open: false } and nothing more.
-	liveOnline( { now, budget, ttl, most } ) {
+	// Where people are driving now on `world` (the Earth unless it's 'moon'), for /api/online at
+	// `now`: its rooms' dots no older than `ttl` (ms), those at the same spot as one, busiest first, at
+	// most `most` of them: { open: true, total, areas, elsewhere }, total counting them all and
+	// elsewhere how many are driving on the other world. This ask is a Durable Object request, so
+	// it's counted against that world's budget for the day (`budget` the Earth's, `moonBudget` the
+	// Moon's) as liveOpen's are, in the same go; once that's spent it's { open: false } and nothing
+	// more.
+	liveOnline( { now, budget, moonBudget = budget, world = EARTH, ttl, most } ) {
 
 		const day = dayOf( now );
 		this.saltFor( day );
+		const moon = world === MOON_WORLD;
 		return this.ctx.storage.transactionSync( () => {
 
-			if ( ! addLive( this.sql, day, 1, budget ).open ) return { open: false };
-			const rows = this.sql.exec( 'SELECT dots, at FROM live_online' ).toArray();
+			if ( ! addLive( this.sql, day, 1, moon ? moonBudget : budget, moon ? MOON_WORLD : EARTH ).open ) return { open: false };
+			const rows = this.sql.exec( 'SELECT room, dots, at FROM live_online' ).toArray();
 			const stale = now - ttl;
 			if ( rows.some( row => row.at < stale ) ) this.sql.exec( 'DELETE FROM live_online WHERE at < ?', stale );
 			const areas = new Map();
 			let total = 0;
+			let elsewhere = 0;
 			for ( const row of rows ) {
 
 				if ( row.at < stale ) continue;
+				const here = ( worldOfRoom( row.room ) === MOON_WORLD ) === moon;
 				for ( const dot of JSON.parse( row.dots ) ) {
+
+					if ( ! here ) {
+
+						elsewhere += dot.count;
+						continue;
+
+					}
 
 					total += dot.count;
 					const key = `${ dot.lat },${ dot.lon }`;
@@ -377,7 +441,7 @@ export class DriveLimits extends DurableObject {
 
 			}
 
-			return { open: true, total, areas: [ ...areas.values() ].sort( busiest ).slice( 0, most ) };
+			return { open: true, total, areas: [ ...areas.values() ].sort( busiest ).slice( 0, most ), elsewhere };
 
 		} );
 
@@ -405,8 +469,7 @@ export class DriveLimits extends DurableObject {
 
 			this.sql.exec( 'DELETE FROM visitors WHERE day < ?', day );
 			this.sql.exec( 'DELETE FROM turns WHERE day < ?', day );
-			this.sql.exec( 'DELETE FROM live WHERE day < ?', day );
-			this.sql.exec( 'DELETE FROM live_visits WHERE day < ?', day );
+			for ( const table of [ 'live', 'live_moon', 'live_visits', 'live_addresses' ] ) this.sql.exec( `DELETE FROM ${ table } WHERE day < ?`, day );
 			for ( const table of [ 'place_seen', 'place_totals', 'place_visitors', 'place_visits', 'password_fails' ] ) this.sql.exec( `DELETE FROM ${ table } WHERE day < ?`, day );
 			this.sql.exec( 'DELETE FROM days WHERE day < ?', day );
 			this.sql.exec( 'INSERT OR IGNORE INTO days ( day, salt ) VALUES ( ?, ? )', day, salt );
@@ -418,12 +481,22 @@ export class DriveLimits extends DurableObject {
 
 }
 
-// `amount` (billed requests) added to driving with others' spend on `day`: { open, spent } with
-// the day's spend after it, open while that's under `budget`.
-function addLive( sql, day, amount, budget ) {
+// `amount` (billed requests) added to driving with others' spend on `day` on `world` (the Earth's
+// table, live, or the Moon's, live_moon): { open, spent } with the day's spend there after it, open
+// while that's under `budget`.
+function addLive( sql, day, amount, budget, world = EARTH ) {
 
-	sql.exec( 'INSERT INTO live ( day, spent ) VALUES ( ?, ? ) ON CONFLICT ( day ) DO UPDATE SET spent = spent + excluded.spent', day, amount );
-	const spent = sql.exec( 'SELECT spent FROM live WHERE day = ?', day ).one().spent;
+	const table = world === MOON_WORLD ? 'live_moon' : 'live';
+	sql.exec( `INSERT INTO ${ table } ( day, spent ) VALUES ( ?, ? ) ON CONFLICT ( day ) DO UPDATE SET spent = spent + excluded.spent`, day, amount );
+	const spent = sql.exec( `SELECT spent FROM ${ table } WHERE day = ?`, day ).one().spent;
+	return { open: spent < budget, spent };
+
+}
+
+// What addLive would answer, adding nothing and writing nothing.
+function peekLive( sql, day, budget, world = EARTH ) {
+
+	const spent = sql.exec( `SELECT spent FROM ${ world === MOON_WORLD ? 'live_moon' : 'live' } WHERE day = ?`, day ).toArray()[ 0 ]?.spent ?? 0;
 	return { open: spent < budget, spent };
 
 }
