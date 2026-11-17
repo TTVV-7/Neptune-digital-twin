@@ -9,3 +9,4 @@ dist-drive/
 .dev.vars.*
 !.dev.vars.example
 !.dev.vars.drive.example
+.wrangler-test-*.jsonc

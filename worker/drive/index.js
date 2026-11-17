@@ -79,6 +79,8 @@ export { DriveRoom } from './live.js';
 //                         if unset), CHALLENGE_TIMES_PER_VISIT the times a visit may post (100 if
 //                         unset), CHALLENGE_GHOST_BUDGET the most of its ghosts' text a challenge
 //                         keeps (16,777,216 characters if unset) (challenges.js)
+//   PASSWORD_TRIES        the rate limiter binding for a visitor's password sign-ins, checks and
+//                         account changes, by the same key as CHALLENGE_LOOKS (logins.js)
 //   TURNSTILE_VERIFY_URL, SEARCH_UPSTREAM, TEST_CLOCK, GOOGLE_JWKS_URL   tests only (see
 //                         scripts/test-drive-worker.mjs)
 

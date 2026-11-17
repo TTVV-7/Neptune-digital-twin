@@ -20,8 +20,9 @@ import { googleClientId } from './settings.js';
 const cookies = sessionCookies( 'wd_session' );
 // Sign-ins, and players linked, a visitor may make in a day (counted as the leaderboard's names are,
 // limits.js). A Google token can be sent again for the hour it's good for, and each sign-in is a new
-// session kept for 30 days, so this keeps a script from filling the database with them. Sessions
-// last a month, so nobody signing in for themselves comes near it (a whole school on one address
+// session kept for 30 days, so this keeps a script from filling the database with them. An IPv6
+// visitor is counted by its /48, not its /64: a /48 (which a free tunnel broker hands out) holds
+// 65,536 /64s, each of which would otherwise have 50 of its own. Sessions last a month, so nobody signing in for themselves comes near it (a whole school on one address
 // included).
 export const SIGN_INS_DAILY = 50;
 const LINKS_DAILY = 20;
@@ -37,7 +38,7 @@ export async function signIn( { request, env, url, limits, now } ) {
 
 	const claims = await verifyIdToken( body.credential, { clientId, certsUrl: testCertsUrl( env ) } );
 	// Only a good token is counted.
-	await takeTurn( limits, request, 'sign-in', now, SIGN_INS_DAILY );
+	await takeTurn( limits, request, 'sign-in', now, SIGN_INS_DAILY, 48 );
 	const { sub, email, name } = profileFrom( claims );
 	const { id } = await db.prepare( `INSERT INTO accounts ( google_sub, email, name, created_at, last_login_at ) VALUES ( ?1, ?2, ?3, ?4, ?4 )
 		ON CONFLICT ( google_sub ) DO UPDATE SET email = excluded.email, name = excluded.name, last_login_at = excluded.last_login_at
@@ -146,7 +147,7 @@ export async function linkPlayer( context ) {
 	if ( ! isObject( body ) ) throw new HttpError( 400, 'Bad request' );
 	const { id, secret } = credentials( body );
 	const player = await authenticate( db, id, secret );
-	await takeTurn( limits, request, 'link', now, LINKS_DAILY );
+	await takeTurn( limits, request, 'link', now, LINKS_DAILY, 48 );
 	await db.prepare( 'UPDATE players SET account_id = ? WHERE id = ?' ).bind( account.id, id ).run();
 	// The ⭐ on today's, this week's and the all-time boards straight away (the boards of one place
 	// catch up within half a minute).

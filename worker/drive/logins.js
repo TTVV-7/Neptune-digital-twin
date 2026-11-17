@@ -4,6 +4,7 @@ import { profileFrom, testCertsUrl } from '../sessions.js';
 import { cleanUsername, passwordProblem, passwordText, usernameKey } from '../../src/drive-app/password-rules.js';
 import { SIGN_INS_DAILY, accountById, currentAccount, meFor, sessionHash, signedIn, signedOutCookie } from './accounts.js';
 import { isAdmin } from './admin.js';
+import { lookKey } from './challenges.js';
 import { nameAllowed } from './names.js';
 import { database, takeTurn } from './players.js';
 import { addressOf, googleClientId, setting } from './settings.js';
@@ -34,6 +35,15 @@ import { MAX_TOKEN, verifyTurnstile } from './turnstile.js';
 // keep the owner out. Making an account always needs a robot check, and a visitor makes
 // SIGN_UPS_DAILY a day at most.
 //
+// Each of those checks is a Durable Object request, and the Free plan's 100,000 a day are shared
+// with every visit, Earth drive and room, so before any of them a visitor's sign-ins, checks of a
+// password and changes are held to PASSWORD_TRIES' 10 a minute (Cloudflare's rate limiter: no
+// Durable Object request), counted by challenges.js's lookKey (an HMAC of the day and the address,
+// an IPv6 one by its /48, never the address itself). And what DriveLimits has said of a visitor for
+// the rest of the day (every try needs a robot check now, or no more tries today) is remembered in
+// this Worker instance (refused), so a script trying on without robot checks, or past HARD_FAILS,
+// is turned away here, not by another Durable Object request each time.
+//
 // What changes how an account signs in needs fresh proof, not only the session, so a borrowed
 // browser or a copied cookie can't take an account over: adding a username and password to a Google
 // account needs Google's ID token for it, linking Google to a username's account needs the password,
@@ -43,7 +53,8 @@ import { MAX_TOKEN, verifyTurnstile } from './turnstile.js';
 // Settings: PASSWORD_ACCOUNTS 'off' switches it off (anything else, or unset, is on, given the
 // database and Turnstile's secret); PASSWORD_ITERATIONS (tests only, or to lower the count on the
 // Free plan if sign-ins were ever cut off for CPU) the iterations new hashes are made with, from
-// MIN_ITERATIONS to ITERATIONS.
+// MIN_ITERATIONS to ITERATIONS. PASSWORD_TRIES: the rate limiter binding for a visitor's password
+// checks, sign-ins and changes (wrangler.drive.jsonc).
 
 export const ITERATIONS = 100000;
 const MIN_ITERATIONS = 10000;
@@ -63,7 +74,15 @@ export const FAIL_GAP = 5000;
 const SIGN_UPS_DAILY = 10;
 const CHANGES_DAILY = 30;
 const WRONG = 'Wrong username or password';
-const BODY = 2048;
+// The most a post's body may be (bytes): a robot check's token (up to MAX_TOKEN, 2,048 characters),
+// a password (128 bytes, up to 768 as JSON escapes it), a username and the keys fit in BODY; one
+// that carries Google's ID token as well (adding a password, linking or unlinking Google, taking
+// the password off) in CREDENTIAL_BODY, as /api/session takes a token in (accounts.js).
+const BODY = 4096;
+const CREDENTIAL_BODY = 16 * 1024;
+// The most visitors this Worker instance remembers DriveLimits' word for (refused) before it
+// forgets them all and starts again.
+const REMEMBERED = 10000;
 const encoder = new TextEncoder();
 
 // A salt and a hash that stand in for an account's when the username has none, so a sign-in for a
@@ -72,6 +91,11 @@ const encoder = new TextEncoder();
 // instance, and costing nothing to make: no hashing, so even the first stranger's try takes one
 // hash's time, as everyone's does). Always at ITERATIONS, the most any stored hash can have.
 let standIn = null;
+// What DriveLimits has said of a visitor today, by its lookKey (which is the day's): 'robot' (every
+// try from it needs a robot check now) or { until } (no more tries till then, ms). Forgotten the
+// moment a try from it gets in. Only a shortcut: another instance asks DriveLimits, and is told the
+// same.
+const refused = new Map();
 
 // Whether usernames and passwords are on: the database, Turnstile's secret (making an account needs
 // a robot check) and not switched off. /api/config tells the page.
@@ -135,10 +159,10 @@ function standInRow() {
 
 }
 
-// The request's body as an object of at most BODY bytes, or a 400.
-async function body( request ) {
+// The request's body as an object of at most `most` bytes (a 413 past it), or a 400.
+async function body( request, most = BODY ) {
 
-	const value = await readJson( request, BODY );
+	const value = await readJson( request, most );
 	if ( ! isObject( value ) ) throw new HttpError( 400, 'Bad request' );
 	return value;
 
@@ -148,6 +172,38 @@ function checkOn( env ) {
 
 	if ( ! passwordsOn( env ) ) throw new HttpError( 503, 'Not set up yet' );
 	return database( env );
+
+}
+
+// One of the visitor's PASSWORD_TRIES a minute, taken once a request (whatever it goes on to check)
+// and before anything costs a Durable Object request: a 429 past them. The visitor's lookKey.
+function tryGate( context ) {
+
+	return context.tried ??= ( async () => {
+
+		const { env, request, now } = context;
+		const key = await lookKey( env, request, now );
+		if ( env.PASSWORD_TRIES && ! ( await env.PASSWORD_TRIES.limit( { key } ) ).success ) {
+
+			throw new HttpError( 429, 'Too many tries. Wait a minute and try again', { reason: 'busy', retryAfter: 60 }, { 'Retry-After': '60' } );
+
+		}
+
+		return key;
+
+	} )();
+
+}
+
+function addressRefusal( retryAfter ) {
+
+	return new HttpError( 429, 'Too many wrong passwords from here today. Try again tomorrow', { reason: 'address', retryAfter }, { 'Retry-After': String( retryAfter ) } );
+
+}
+
+function robotRefusal() {
+
+	return new HttpError( 403, 'Show you\'re not a robot first', { reason: 'robot' } );
 
 }
 
@@ -186,21 +242,33 @@ function newPassword( value, username ) {
 
 // Whether `password` is right for the login of `key` (a username's key): through DriveLimits'
 // check first (a 429, or a 403 asking for a robot check), which counts the try, given back if it
-// gets in. A username nobody has is hashed against the stand-in, so it takes as long and says the
-// same as a wrong password; and a wrong password for a hash made with fewer iterations than the
+// gets in; before that the visitor's PASSWORD_TRIES (tryGate), and what DriveLimits has said of it
+// today (refused), so a refusal it would give again costs no Durable Object request. A username
+// nobody has is hashed against the stand-in, so it takes as long and says the same as a wrong
+// password; and a wrong password for a hash made with fewer iterations than the
 // stand-in's (PASSWORD_ITERATIONS lowered) is made up to the stand-in's with more hashing, so a
 // refusal always costs ITERATIONS and its time never says whether the username is someone's.
 // The login's row ({ account_id, username, password_hash, salt, iterations }), or null.
-async function checkPassword( { request, env, limits, now }, key, password, robot ) {
+async function checkPassword( context, key, password, robot ) {
 
+	const { request, env, limits, now } = context;
 	const db = database( env );
 	const ip = addressOf( request, 48 );
+	const visitor = await tryGate( context );
+	const known = refused.get( visitor );
+	if ( known?.until > now ) throw addressRefusal( Math.ceil( ( known.until - now ) / 1000 ) );
+	if ( known === 'robot' && ! robot ) throw robotRefusal();
 	const gate = await limits.passwordCheck( ip, key, { now, robot, addressFails: ADDRESS_FAILS, hardFails: HARD_FAILS, freeFails: FREE_FAILS, gap: FAIL_GAP } );
 	if ( ! gate.ok ) {
 
-		if ( gate.reason === 'robot' ) throw new HttpError( 403, 'Show you\'re not a robot first', { reason: 'robot' } );
-		const message = gate.reason === 'address' ? 'Too many wrong passwords from here today. Try again tomorrow' : 'Wait a few seconds and try again';
-		throw new HttpError( 429, message, { reason: gate.reason, retryAfter: gate.retryAfter }, { 'Retry-After': String( gate.retryAfter ) } );
+		// Remembered only when it's the visitor's own (not a username's, whose next try from here may
+		// be another username's), for the rest of the day.
+		if ( refused.size >= REMEMBERED ) refused.clear();
+		if ( gate.reason === 'address' ) refused.set( visitor, { until: now + gate.retryAfter * 1000 } );
+		if ( gate.reason === 'robot' && gate.visitor ) refused.set( visitor, 'robot' );
+		if ( gate.reason === 'robot' ) throw robotRefusal();
+		if ( gate.reason === 'address' ) throw addressRefusal( gate.retryAfter );
+		throw new HttpError( 429, 'Wait a few seconds and try again', { reason: gate.reason, retryAfter: gate.retryAfter }, { 'Retry-After': String( gate.retryAfter ) } );
 
 	}
 
@@ -209,6 +277,7 @@ async function checkPassword( { request, env, limits, now }, key, password, robo
 	const good = await passwordMatches( password ?? '', row ?? standing ) && !! row && password !== null;
 	if ( good ) {
 
+		refused.delete( visitor );
 		await limits.passwordSucceeded( ip, key, { now } );
 		return row;
 
@@ -247,10 +316,18 @@ export async function signUp( context ) {
 	await takeTurn( limits, request, 'sign-up', now, SIGN_UPS_DAILY, 48 );
 	const key = usernameKey( username );
 	if ( await db.prepare( 'SELECT 1 AS taken FROM logins WHERE username_key = ?' ).bind( key ).first() ) throw new HttpError( 409, 'That username is taken' );
-	const hash = await newHash( env, password );
-	// The account and its login in one batch (one transaction: if it fails, neither is kept), found by
-	// its new random Google id; the login's UNIQUE key decides between two at the same time, and the
-	// account made for the one that lost is taken back in the same go.
+	const id = await newAccount( db, { username, key, hash: await newHash( env, password ), now } );
+	if ( ! id ) throw new HttpError( 409, 'That username is taken' );
+	return signedIn( context, id );
+
+}
+
+// A new account with a login for `username` (its `key`, `hash` as newHash makes it): its id, or null
+// when the username was taken first. The account and its login in one batch (one transaction: if it
+// fails, neither is kept), found by its new random Google id; the login's UNIQUE key decides between
+// two at the same time, and the account made for the one that lost is taken back in the same go.
+export async function newAccount( db, { username, key, hash, now } ) {
+
 	const sub = NO_GOOGLE + randomToken( 16 );
 	const [ , added ] = await db.batch( [
 		db.prepare( 'INSERT INTO accounts ( google_sub, email, name, created_at, last_login_at ) VALUES ( ?, \'\', \'\', ?, ? )' ).bind( sub, now, now ),
@@ -259,9 +336,7 @@ export async function signUp( context ) {
 			.bind( username, key, hash.password_hash, hash.salt, hash.iterations, now, now, sub ),
 		db.prepare( 'DELETE FROM accounts WHERE google_sub = ? AND NOT EXISTS ( SELECT 1 FROM logins WHERE account_id = accounts.id )' ).bind( sub ),
 	] );
-	const id = added.results?.[ 0 ]?.account_id;
-	if ( ! id ) throw new HttpError( 409, 'That username is taken' );
-	return signedIn( context, id );
+	return added.results?.[ 0 ]?.account_id ?? null;
 
 }
 
@@ -269,13 +344,14 @@ export async function signUp( context ) {
 // signUp answers). A wrong password and a username nobody has are the same 401, as alike in time as
 // hashing makes them. DriveLimits may answer first: 429 (too many failures from this visitor today,
 // or a username's try too soon after its last failure) or 403 with reason 'robot' (send a robot
-// check's token with the next try).
+// check's token with the next try); and before it PASSWORD_TRIES, a 429 with reason 'busy'.
 export async function passwordSignIn( context ) {
 
 	const { request, env, now } = context;
 	const db = checkOn( env );
 	const sent = await body( request );
 	if ( typeof sent.username !== 'string' || typeof sent.password !== 'string' ) throw new HttpError( 400, 'Bad request' );
+	await tryGate( context );
 	const robot = await robotPassed( env, request, sent.token );
 	const username = cleanUsername( sent.username );
 	// A username that can't be one is tried, and counted, as one nobody has (under its lower case, so
@@ -285,9 +361,9 @@ export async function passwordSignIn( context ) {
 	const row = await checkPassword( context, key, password, robot );
 	if ( ! row ) throw new HttpError( 401, WRONG );
 	// Each sign-in is a new session kept for 30 days, so a visitor's are counted, with Google's
-	// (accounts.js's SIGN_INS_DAILY): someone who knows a password still can't fill the database with
-	// sessions.
-	await takeTurn( context.limits, request, 'sign-in', now, SIGN_INS_DAILY );
+	// (accounts.js's SIGN_INS_DAILY), an IPv6 one by its /48 (as its tries are: a /48 holds 65,536
+	// /64s): someone who knows a password still can't fill the database with sessions.
+	await takeTurn( context.limits, request, 'sign-in', now, SIGN_INS_DAILY, 48 );
 	await rehashIfOld( env, row, password, now );
 	await db.prepare( 'UPDATE accounts SET last_login_at = ? WHERE id = ?' ).bind( now, row.account_id ).run();
 	return signedIn( context, row.account_id );
@@ -303,10 +379,13 @@ async function signedInAccount( context ) {
 
 }
 
-// One of the visitor's CHANGES_DAILY (a 429 past them), taken once a change has been checked.
-function aChange( { limits, request, now } ) {
+// One of the visitor's CHANGES_DAILY (a 429 past them), taken once a change has been checked, after
+// one of its PASSWORD_TRIES (tryGate).
+async function aChange( context ) {
 
-	return takeTurn( limits, request, 'account', now, CHANGES_DAILY, 48 );
+	const { limits, request, now } = context;
+	await tryGate( context );
+	await takeTurn( limits, request, 'account', now, CHANGES_DAILY, 48 );
 
 }
 
@@ -372,7 +451,7 @@ export async function setPassword( context ) {
 
 	const { request, env, url, limits, now } = context;
 	const db = checkOn( env );
-	const sent = await body( request );
+	const sent = await body( request, CREDENTIAL_BODY );
 	const account = await signedInAccount( context );
 	if ( ! account.username ) {
 
@@ -415,7 +494,7 @@ export async function removePassword( context ) {
 
 	const { request, env, url } = context;
 	const db = checkOn( env );
-	const sent = await body( request );
+	const sent = await body( request, CREDENTIAL_BODY );
 	const account = await changing( context );
 	if ( ! account.username ) return json( await meFor( env, account ) );
 	if ( ! account.google ) throw new HttpError( 409, 'Link Google first: it\'s your only way to sign in' );
@@ -445,7 +524,7 @@ export async function linkGoogle( context ) {
 
 	const { request, env, now } = context;
 	const db = checkOn( env );
-	const sent = await body( request );
+	const sent = await body( request, CREDENTIAL_BODY );
 	const { sub, email, name } = await googleClaims( env, sent.credential );
 	const account = await changing( context );
 	const KEEPS = `EXISTS ( SELECT 1 FROM logins WHERE account_id = accounts.id ) OR EXISTS ( SELECT 1 FROM players WHERE account_id = accounts.id )
@@ -479,7 +558,7 @@ export async function unlinkGoogle( context ) {
 
 	const { request, env, url } = context;
 	const db = checkOn( env );
-	const sent = await body( request );
+	const sent = await body( request, CREDENTIAL_BODY );
 	const account = await changing( context );
 	if ( ! account.google ) return json( await meFor( env, account ) );
 	if ( ! account.username ) throw new HttpError( 409, 'Add a username and password first: Google is your only way to sign in' );

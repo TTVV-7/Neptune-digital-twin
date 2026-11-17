@@ -148,7 +148,9 @@ export class DriveLimits extends DurableObject {
 			if ( mine >= hardFails ) return { ok: false, reason: 'address', retryAfter: untilMidnight( now ) };
 			if ( mine >= addressFails || ( count( name )?.count ?? 0 ) >= freeFails ) {
 
-				if ( ! robot ) return { ok: false, reason: 'robot' };
+				// visitor: whether it's this visitor's tries that ask for it (so every try from it will,
+				// till midnight), not only this username's.
+				if ( ! robot ) return { ok: false, reason: 'robot', visitor: mine >= addressFails };
 				const wait = ( count( pair )?.last_at ?? - Infinity ) + gap - now;
 				if ( wait > 0 ) return { ok: false, reason: 'wait', retryAfter: Math.max( 1, Math.ceil( wait / 1000 ) ) };
 

@@ -183,10 +183,58 @@ dialog#account .account-pass {
 	font-weight: 700;
 }
 
+/* Each rarer change, folded under its heading: a row with a chevron that turns as it opens. */
 dialog#account .account-section {
+	margin-top: 0;
+	border-bottom: 1px solid var( --line );
+}
+
+dialog#account .account-out + .account-section {
 	margin-top: 16px;
-	padding-top: 12px;
 	border-top: 1px solid var( --line );
+}
+
+dialog#account .account-section > summary {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	min-height: 44px;
+	padding: 4px 2px;
+	font-size: 15px;
+	font-weight: 700;
+	list-style: none;
+	cursor: pointer;
+}
+
+dialog#account .account-section > summary::-webkit-details-marker {
+	display: none;
+}
+
+dialog#account .account-section > summary::after {
+	content: '›';
+	font-size: 22px;
+	line-height: 1;
+	color: var( --muted );
+	transition: transform 0.15s;
+}
+
+dialog#account .account-section[open] > summary::after {
+	transform: rotate( 90deg );
+}
+
+dialog#account .account-section > summary:focus-visible {
+	outline: 2px solid var( --sky );
+	outline-offset: 1px;
+	border-radius: 6px;
+}
+
+dialog#account .account-section[open] {
+	padding-bottom: 14px;
+}
+
+dialog#account .account-section > p:first-of-type {
+	margin-top: 0;
 }
 
 dialog#account .account-section > div > button,
@@ -210,5 +258,9 @@ dialog#account .account-out {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 8px;
-	margin-top: 18px;
+	margin-top: 14px;
+}
+
+dialog#account .account-section > form + p {
+	margin-top: 12px;
 }

@@ -6,9 +6,10 @@ import { toast } from './screens.js';
 // The account panel (docs/world-drive.md, "Username and password accounts"): its own chunk, loaded
 // the first time it's opened (supporter.js's openAccount), so nothing of it is on the first load.
 // Signed out: "Sign in with Google" (with its sign-in set up) and a username and password form, to
-// sign in or create an account. Signed in: what the account signs in with, changing the password
-// (or adding a username and password to a Google account), linking or unlinking Google, and signing
-// out here or everywhere. What changes how the account signs in asks for fresh proof, as the Worker
+// sign in or create an account. Signed in: what the account signs in with and signing out here or
+// everywhere, first, then each rarer change folded away under its own heading (opened one at a
+// time, so a phone sees about a screen): changing the password (or adding a username and password
+// to a Google account), linking or unlinking Google, taking the password off. What changes how the account signs in asks for fresh proof, as the Worker
 // does: Google's button to add a password to a Google account or unlink Google, the password to link
 // Google or take the password off (or Google's button for that too). The forms are real forms with
 // labels and autocomplete (username, current-password, new-password), so password managers fill
@@ -49,6 +50,14 @@ export function openAccount( from ) {
 		// drive behind it, and a letter on a focused button steer): Esc still closes the panel, as the
 		// pass's sheet and the Garage do.
 		dialog.addEventListener( 'keydown', event => event.stopPropagation() );
+		// And while it's open, keys whose focus has fallen out of it (to the page, as a field or button
+		// that had it is disabled or drawn anew) aren't the game's either: the panel is modal. Esc still
+		// closes it (the browser's own, which this doesn't stop).
+		window.addEventListener( 'keydown', event => {
+
+			if ( dialog.open && ! dialog.contains( event.target ) ) event.stopPropagation();
+
+		}, true );
 		document.body.append( dialog );
 		hooks.onChange( () => dialog.open && draw() );
 
@@ -80,8 +89,17 @@ function draw( always = false ) {
 	// same button or field drawn anew, or the close button, never left on the page behind, where
 	// the game would hear the next key.
 	const focused = dialog.contains( document.activeElement ) ? focusKey( document.activeElement ) : null;
+	// The folded section that was open stays open, if it's still there.
+	const opened = dialog.querySelector( 'details[open] > summary' )?.textContent;
 	dialog.replaceChildren( header, ...( me?.signedIn ? signedIn( me ) : signedOut() ) );
-	if ( focused !== null && dialog.open ) ( [ ...dialog.querySelectorAll( 'button, input' ) ].find( el => focusKey( el ) === focused ) ?? close ).focus();
+	if ( opened ) for ( const summary of dialog.querySelectorAll( 'details > summary' ) ) if ( summary.textContent === opened ) summary.parentElement.open = true;
+	if ( focused !== null && dialog.open ) {
+
+		( [ ...dialog.querySelectorAll( 'button, input, summary' ) ].find( el => focusKey( el ) === focused ) ?? close ).focus();
+		// (One in a folded section can't take it.)
+		if ( ! dialog.contains( document.activeElement ) ) close.focus();
+
+	}
 
 }
 
@@ -188,6 +206,8 @@ function signedInNow( body ) {
 
 // --- signed in ---
 
+// What the account signs in with and signing out, at the top where they're seen at once, then each
+// rarer change folded away under its heading (section).
 function signedIn( me ) {
 
 	const parts = [];
@@ -199,9 +219,6 @@ function signedIn( me ) {
 	);
 	parts.push( Object.assign( paragraph( 'You sign in with:' ), { className: 'account-label' } ), list );
 	if ( me.supporter ) parts.push( Object.assign( paragraph( '⭐ Supporter Pass' ), { className: 'account-pass' } ) );
-	parts.push( me.username ? changeForm( me ) : addForm() );
-	parts.push( googlePart( me ) );
-	if ( me.username && me.google ) parts.push( removeForm( me ) );
 
 	const out = document.createElement( 'div' );
 	out.className = 'account-out';
@@ -210,6 +227,9 @@ function signedIn( me ) {
 		button( 'Sign out everywhere', async () => await hooks.signOut( { everywhere: true } ) && dialog.close() ),
 	);
 	parts.push( out );
+	parts.push( me.username ? changeForm( me ) : addForm() );
+	parts.push( googlePart( me ) );
+	if ( me.username && me.google ) parts.push( removeForm( me ) );
 	return parts;
 
 }
@@ -292,7 +312,7 @@ function googlePart( me ) {
 
 	if ( me.google ) {
 
-		if ( ! me.username ) return section( 'Google', paragraph( 'Add a username and password first: Google is your only way to sign in.' ) );
+		if ( ! me.username ) return Object.assign( paragraph( 'To unlink Google, add a username and password first: it\'s your only way to sign in.' ), { className: 'account-hint' } );
 		const status = statusLine();
 		return section( 'Unlink Google', paragraph( 'You can sign in with your username and password instead. Confirm with Google to unlink it; this signs you out on your other devices.' ),
 			googleConfirm( status, async credential => {
@@ -373,12 +393,12 @@ function removeForm( me ) {
 }
 
 // Google's button, its credential going to onCredential (not signing in), or words saying it
-// isn't here.
+// isn't here. Drawn when its section is first opened (section), not while it's folded away.
 function googleConfirm( status, onCredential ) {
 
 	if ( ! hooks.google ) return paragraph( 'Google sign-in isn\'t available here right now.' );
 	const slot = Object.assign( document.createElement( 'div' ), { className: 'account-google' } );
-	hooks.drawGoogle( slot, onCredential );
+	slot.draw = () => hooks.drawGoogle( slot, onCredential );
 	return slot;
 
 }
@@ -501,12 +521,29 @@ function field( form, words, { name, type = 'text', autocomplete, minLength, max
 
 }
 
+// A change folded away under its heading, opened with a tap on it; opening one folds the others
+// (the details' shared name). Its forms are in the page all along, so password managers still find
+// them; Google's buttons in it are drawn the first time it opens.
 function section( heading, ...content ) {
 
-	const s = document.createElement( 'section' );
-	s.className = 'account-section';
-	s.append( Object.assign( document.createElement( 'h3' ), { textContent: heading } ), ...content );
-	return s;
+	const details = document.createElement( 'details' );
+	details.className = 'account-section';
+	details.setAttribute( 'name', 'account-change' );
+	details.append( Object.assign( document.createElement( 'summary' ), { textContent: heading } ), ...content );
+	details.addEventListener( 'toggle', () => {
+
+		if ( ! details.open ) return;
+		// Opened, the others fold (for a browser without the shared name too).
+		for ( const other of dialog.querySelectorAll( 'details[open]' ) ) if ( other !== details ) other.open = false;
+		for ( const slot of details.querySelectorAll( '.account-google' ) ) {
+
+			if ( slot.draw ) slot.draw();
+			slot.draw = null;
+
+		}
+
+	} );
+	return details;
 
 }
 
@@ -538,9 +575,15 @@ function say( status, text ) {
 
 }
 
+// The form's fields and buttons disabled while it's sent, and back after. Disabling the field or
+// button with the focus drops it to the page, where the next key would be the game's, so it's put
+// back where it was once the form's done.
 function busy( form, on ) {
 
+	if ( on ) form.focused = form.contains( document.activeElement ) ? document.activeElement : null;
 	for ( const el of form.querySelectorAll( 'button, input' ) ) el.disabled = on;
+	if ( ! on && form.focused?.isConnected ) form.focused.focus();
+	if ( ! on ) form.focused = null;
 
 }
 

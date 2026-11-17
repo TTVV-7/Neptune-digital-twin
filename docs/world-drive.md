@@ -3108,9 +3108,19 @@ either signs in to the one account. Driving and the leaderboard still never need
   address within 5 s of its last at that username says "Wait 5 seconds and try again."
 - The panel's title says what it's for: "Sign in", "Create account" (with that tab chosen) or
   "Your account". Keys pressed in it are its own (Esc closes it, and never resumes a paused drive
-  behind it), and only a tap outside it closes it, not one on its padding beside a field.
+  behind it), and only a tap outside it closes it, not one on its padding beside a field. While a
+  form is sent its fields are disabled, which drops the focus to the page behind; it's put back in
+  the field or button that had it once the answer's in, so typing again after "Wrong username or
+  password." goes to the field. And while the panel is open, a key whose focus has fallen out of
+  it anyway never reaches the game (M would otherwise leave a paused drive for the globe).
 - **Signed in**, the panel ("Your account") lists what the account signs in with (Google: its
-  email, or "not linked"; Username: it, or "none"), then:
+  email, or "not linked"; Username: it, or "none"), then **Sign out** and **Sign out everywhere**
+  (every device's session), the commonest things done here, in sight at once on a phone held
+  either way. Below them each rarer change is folded under its heading, a row with a chevron (a
+  `<details>`), and opening one folds the others, so the panel is about a screen on a phone (before,
+  with every form open, a phone held upright scrolled 1,084 px in an 818 px panel to reach Sign
+  out). The forms are in the page all along, folded or not, so password managers still find them;
+  Google's buttons in a section are drawn the first time it's opened.
   - **Change password** (current, new: "This signs you out on your other devices."), or for a
     Google account with no username yet, **Add a username and password** ("Then you can sign in
     either way."): the username and password, then "Then confirm it's you with Google:" and
@@ -3119,16 +3129,15 @@ either signs in to the one account. Driving and the leaderboard still never need
     password", then Google's own button ("Continue with Google"), which links the Google account
     chosen. With it linked, **Unlink Google**, confirmed with Google's button ("this signs you out
     on your other devices"), only while there's a username to sign in with instead (else the panel
-    says to add one first).
+    says "To unlink Google, add a username and password first: it's your only way to sign in.").
   - With both, **Remove username and password**: "Your password" and the button, or "Or confirm
     with Google:" and Google's button.
-  - **Sign out** and **Sign out everywhere** (every device's session).
 - The forms are real `<form>`s with `<label>`s and `autocomplete` (`username`, `current-password`,
   `new-password`; the change form carries the username hidden), so password managers fill them and
   offer to save; the username field doesn't capitalise or autocorrect. On a phone held upright the
-  panel fills the width and scrolls.
+  panel fills the width, and scrolls only once a change is opened.
 - **The panel is its own chunk** (`account.js` and `account.css`), loaded the first time it's
-  opened: 12.8 kB of script (4.4 kB gzipped) and 3.1 kB of CSS (0.9 kB), none of it on the first
+  opened: 13.6 kB of script (4.7 kB gzipped) and 3.9 kB of CSS (1.1 kB), none of it on the first
   load. The links and the account line are a few lines in `supporter.js`, which was already loaded.
 
 ### The rules
@@ -3168,13 +3177,17 @@ either signs in to the one account. Driving and the leaderboard still never need
   (30 s a request) it's nothing. A password change hashes twice (the current one, then the new),
   and a sign-in with an older count twice; everything else once.
 - If sign-ins were ever cut off for CPU on the Free plan (Error 1102 on `/api/account/*` in the
-  Worker's metrics), `PASSWORD_ITERATIONS` (a dashboard text variable, 10,000 to 100,000) lowers
-  the count for new hashes at once, without a deploy. Whenever a password's count isn't the one new
-  hashes are made with (lowered, raised again later, or if Workers ever allows more: `ITERATIONS`
-  in `logins.js`), it **is hashed again at its next right sign-in** with a new salt (`changed_at`
-  says when), since each row keeps its own count. Lowered, a right password costs only its own
-  count, but a refusal still costs 100,000 (below), so sign-ups and sign-ins get cheaper while
-  wrong passwords, which the limits hold to a few, don't.
+  Worker's metrics), **the remedy is Workers Paid** (30 s of CPU a request, so a hash is nothing).
+  `PASSWORD_ITERATIONS` (a dashboard text variable, 10,000 to 100,000) lowers the count for new
+  hashes at once, without a deploy, but it helps far less than it sounds: it makes **sign-ups,
+  password changes and the sign-ins after each password's rehash** cheaper, and nothing else.
+  **Refusals stay at 100,000** (a wrong password or a username nobody has always costs the
+  stand-in's count, below: that's the trade chosen, so a refusal's time never says whether a
+  username is someone's), and **the first right sign-in of each password made before costs more**,
+  not less: its own 100,000 to check it, then a hash at the lowered count to keep it (150,000 at
+  50,000). Whenever a password's count isn't the one new hashes are made with (lowered, raised again
+  later, or if Workers ever allows more: `ITERATIONS` in `logins.js`), it **is hashed again at its
+  next right sign-in** with a new salt (`changed_at` says when), since each row keeps its own count.
 - Compared in **constant time** (`crypto.subtle.timingSafeEqual`, or an XOR of every byte without
   it), so the time doesn't say how much matched.
 - **A username nobody has** is hashed against a stand-in (a random salt and random "hash", made once
@@ -3184,7 +3197,9 @@ either signs in to the one account. Driving and the leaderboard still never need
   on to make up the difference, so **every refusal costs 100,000 iterations**, lowered or not, and
   its time never says whether the username is someone's (a Node test adds up every hash's
   iterations for each case, and times them: 17.6 to 20.3 ms each). Measured as whole requests to `wrangler
-  dev`: 32 ms for a wrong password, 30 ms for a username nobody has. (The day's failure counts in
+  dev` (the median of four each, November 2026): 29.7 ms for a wrong password and 28.4 ms for a
+  username nobody has on the quietest run, 32.5 and 31.5 ms, and 38.9 and 38.0 ms with other suites
+  running beside it; the two always within a few percent of each other. (The day's failure counts in
   `DriveLimits` don't tell them apart either: a username that can't be one is counted under its
   lower case, as a real one would be.)
 - A password is **never logged, kept or sent anywhere** but the sign-in, sign-up and password posts
@@ -3208,7 +3223,8 @@ either signs in to the one account. Driving and the leaderboard still never need
 - **Per address**: after a visitor (an address, an IPv6 one by its /48, as challenges count) has had
   **20 such tries in the day** (`ADDRESS_FAILS`), whatever the usernames, each further try from it
   needs a robot check too; and past **200** (`HARD_FAILS`) it tries no more until midnight UTC, a
-  429 before any hashing. Not a lock at 20: many phones share a carrier's address, and a school one,
+  429 before any hashing (and, once this Worker instance has heard it, before any Durable Object
+  request: below). Not a lock at 20: many phones share a carrier's address, and a school one,
   so one person failing there doesn't keep everyone else there out for the day; they click the
   robot check.
 - **A gap**: past either, a visitor's tries at one username come at least **5 s apart** (`FAIL_GAP`;
@@ -3223,9 +3239,26 @@ either signs in to the one account. Driving and the leaderboard still never need
   username and each visitor and username together with tries, each kept as a SHA-256 of the day's
   salt and it (never the address or the username, and not linkable from one day to the next),
   deleted with the day's other counts.
+- **Before any of that, `PASSWORD_TRIES`**: every `DriveLimits` check above is a Durable Object
+  request, and the Free plan's 100,000 a day are shared with every visit, Earth drive and room. So
+  each sign-in with a password, each check of one (a password change, linking Google, taking the
+  password off) and each change to an account is first one of the visitor's **10 a minute** on
+  Cloudflare's rate limiter (no Durable Object request; counted by the challenges' keyed hash of the
+  address, an IPv6 one by its /48, and the day), a 429 with `reason: 'busy'` past it ("Too many
+  tries. Wait a minute and try again."), once a request however much it checks. And what
+  `DriveLimits` has said of a visitor for the rest of the day (every try from it needs a robot check
+  now, or, past 200, none at all till midnight UTC) is remembered in the Worker instance that heard
+  it (`refused`, forgotten the moment a try from that visitor gets in), so a script trying on
+  without robot checks, or past the cap, is turned away there without asking again. Without these
+  a script on one address sending a try every second or so (nothing but same-origin JSON: no visit,
+  robot check or session needed) used up the day's 100,000; now one address reaches `DriveLimits`
+  at most 14,400 times a day (10 a minute), and only until it's past 20 failures in each instance it
+  lands on.
 - **Signing in** (successes) shares Google's **50 a day** from one visitor (`SIGN_INS_DAILY`, counted
-  as the leaderboard's names are): each is a session kept for 30 days, so knowing a password still
-  can't fill the database with sessions.
+  as the leaderboard's names are, an IPv6 one by its /48 for Google's and passwords' alike, as
+  players linked are too): each is a session kept for 30 days, so knowing a password still can't
+  fill the database with sessions, not even from each of a /48's 65,536 /64s in turn (counted by its
+  /64, one account signed in 70 times from one /48).
 - **Signing up** always needs a robot check, and a visitor (by /48) makes **10 accounts a day** at
   most; adding a username to a Google account is counted among those 10 too (it can say a username
   is taken). **Changes** (a username and password added, the password changed, Google linked or
@@ -3233,9 +3266,13 @@ either signs in to the one account. Driving and the leaderboard still never need
   that proves a password (a password change, linking Google, taking the password off) goes through
   the same check and counts as a sign-in would.
 - Every route is JSON (`application/json`) from the site itself (the same-origin checks every post
-  has: `Origin`, and `Sec-Fetch-Site` when sent), with a body of at most 2 kB (a 413 past it), an
-  object of strings of the right shape (a 400 otherwise), and a robot check's token, when sent, a
-  string of Turnstile's size.
+  has: `Origin`, and `Sec-Fetch-Site` when sent), with a body of at most 4 kB (a robot check's token
+  of up to 2,048 characters and a 128-byte password, escaped), or 16 kB for the routes that carry
+  Google's ID token too (as `/api/session` takes one), a 413 past it; an object of strings of the
+  right shape (a 400 otherwise), and a robot check's token, when sent, a string of Turnstile's size.
+  (At 2 kB for all, Google's token of 1,100 to 1,400 characters and a robot check's long token
+  together didn't fit, so once a stranger's five tries had made the username ask for robot checks,
+  **Link Google** couldn't be done for the rest of the day.)
 
 ### The Worker's routes
 
@@ -3245,7 +3282,7 @@ cookie, as Google's `POST /api/session` does):
 | Route | Does |
 | --- | --- |
 | `POST /api/account/sign-up { username, password, token }` | A new account and its login, signed in. 400 (which rule), 403 `robot`, 429 (10 a day), 409 "That username is taken" |
-| `POST /api/account/sign-in { username, password, token? }` | Signed in. 401 "Wrong username or password", 403 `robot`, 429 `address` or `wait` |
+| `POST /api/account/sign-in { username, password, token? }` | Signed in. 401 "Wrong username or password", 403 `robot`, 429 `address`, `wait` or `busy` (`PASSWORD_TRIES`) |
 | `POST /api/account/password { current, password, token? }` | Signed in with a username: the password changed, the account's **other sessions deleted** (this browser stays in). 401 "That isn't your current password" |
 | `POST /api/account/password { username, password, credential }` | Signed in with Google and no username yet: a username and password added, with Google's ID token for the account's own Google account (401 without, 403 another's; 403 for an owner's account; counted as a sign-up) |
 | `DELETE /api/account/password { password, token? }` or `{ credential }` | The username and password taken off, with the password or Google's ID token for the account; only while Google is linked (else 409); other sessions deleted |
@@ -3322,11 +3359,18 @@ up too; the session is then a username's alone.
 
 - **Sign-up**: a robot check (Turnstile's siteverify), one `DriveLimits` request (the day's turn),
   one hash, and in D1 a read and three writes (the account, the login, the session). **Sign-in**:
-  one `DriveLimits` request for a refusal (the check, counting the try), three for a success (the
-  try given back, and the day's turn), one hash, a read and two writes. A few a day at today's
-  traffic: nothing next to the [Free plan's](#what-a-visit-costs-and-how-its-capped) 100,000 Durable
-  Object requests or D1's rows, and a stranger's guessing is held to 20 tries a day an address
-  without a robot check, 200 with. The CPU is the cost that matters on the Free plan (above).
+  one of `PASSWORD_TRIES` (free), then one `DriveLimits` request for a refusal (the check, counting
+  the try), three for a success (the try given back, and the day's turn), one hash, a read and two
+  writes. A change: one of `PASSWORD_TRIES`, then one `DriveLimits` request (the day's turn), and
+  for one that proves the password one more. A few a day at today's traffic: nothing next to the
+  [Free plan's](#what-a-visit-costs-and-how-its-capped) 100,000 Durable Object requests or D1's
+  rows. A stranger's guessing is held to 20 tries a day an address without a robot check, 200 with;
+  a refusal `DriveLimits` would give again (a robot check wanted, or past 200) costs no Durable
+  Object request once the Worker instance has heard it; and whatever is sent, one address reaches
+  `DriveLimits` at most 10 times a minute (`PASSWORD_TRIES`), so even if no instance remembered a
+  thing it would take seven or more addresses (or /48s) sending all day to use up the day's
+  100,000, against one before.
+  The CPU is the cost that matters on the Free plan (above).
 - **Storage**: a login row is about 150 bytes.
 
 ### What it can't protect against
@@ -3359,9 +3403,15 @@ per username (counted as they're checked, given back on getting in, the robot ch
 username's 5 or an address's 20, the gap only for one address at one username, the hard cap of 200)
 kept only as salted hashes, every refusal adding up to 100,000 iterations with
 `PASSWORD_ITERATIONS` lowered or not (and a right password hashed again at the lowered count),
+`PASSWORD_TRIES` turning a burst from one /48 away before `DriveLimits` is asked (a stand-in
+counting its calls) and what `DriveLimits` said of a visitor (a robot check wanted, or past the cap)
+not asked again that day, but a username's robot check asked every time, the batch that loses a
+username made by two at once taking its account back (on node:sqlite with 0001 to 0008),
 migration 0008 on top of 0001 to 0007 with every account,
-session, purchase and player kept; then against `wrangler dev` with D1: every route's same-origin,
-JSON, size and shape checks and 401 signed out; signing up (each rule, the name filter, the robot
+session, purchase and player kept; then against `wrangler dev` with D1 (with `PASSWORD_TRIES`
+left out, so a test can send hundreds of tries from one address; the World Drive Worker suite,
+with it, sees the eleventh try in a minute from a /48 turned away): every route's same-origin,
+JSON, size (4 kB, and 16 kB with Google's token) and shape checks and 401 signed out; signing up (each rule, the name filter, the robot
 check, the cookie, what's kept and that the password isn't in D1 or the Worker's log); taken and
 look-alike usernames; signing in in any case, a wrong password and unknown and impossible usernames
 alike in answer and in time; a stranger failing from many addresses (a robot check, then 5 s apart
@@ -3369,13 +3419,15 @@ from one address) while the owner still signs in; 40 tries sent at once from one
 through) and for one username from 40 (5 through), and a burst of solved robot checks (1 through);
 a stranger failing every 5 s from a new address while the owner signs in every time between; an
 address's 20 tries (then a robot check, which lets someone else there in) and 200 (then nothing), its
-10 accounts and its 50 sign-ins (with Google's); `DriveLimits` keeping no username or address;
+10 accounts and its 50 sign-ins (with Google's), from one /48's many /64s too; linking Google with a
+robot check needed, a 1,400-character Google token and a 2,000-character robot check's token, and
+taking off a 128-byte password with a 2,048-character one; `DriveLimits` keeping no username or address;
 changing the password (the current one needed, other sessions signed out); hashing again at a
 raised count; linking both ways (Google's token and the password, neither alone), refusing a Google
 account with a player, a pass or a username of its own and taking in an empty one, and one gaining a
 player as it's linked never cutting it loose; unlinking keeping a way in and a bought pass, needing
 Google's token (not the session or the password) and signing out other sessions; taking the password
-off needing it or Google's token; a session alone unable to add a password to a Google account or
+off needing it or Google's token, and signing out the other sessions either way; a session alone unable to add a password to a Google account or
 unlink it; taking the password off and unlinking Google at once always leaving a way in; the
 owner's Google account never given a password nor linked, and an account with a username never an
 admin; adding a username counted as a sign-up; a username made by two at once leaving no account
@@ -3389,9 +3441,12 @@ username (changing the password, linking Google with the password, unlinking it 
 button, signing out everywhere); signed in with Google (adding a username and password confirmed
 with Google's button; Google not unlinkable before; taking the password off with it); each form's
 labels and `autocomplete`; the panel opened from the pause menu, where Esc closes it and keys never
-reach the game; a tap on its padding keeping what's typed, and one outside closing it; its title
+reach the game, after a wrong password too (the focus back in the field, and kept from the game
+with it fallen to the page); signed in with both on a phone held either way, Sign out in sight
+without scrolling, the changes folded, Google's buttons drawn only once opened and one open at a
+time; a tap on its padding keeping what's typed, and one outside closing it; its title
 following the tab; the panel on a phone held upright and without Google's sign-in; and the admin page's
-accounts by kind. Pictures: `account-1-create-desktop` to `account-6-signed-in-phone` with
+accounts by kind. Pictures: `account-1-create-desktop` to `account-10-remove-phone` with
 `TEST_SCREENSHOTS`.
 
 ## What a visit costs, and how it's capped
@@ -5446,15 +5501,17 @@ more aren't in `vars` and needn't be set; add them in the dashboard (plain text)
 | `CHALLENGE_TIMES_PER_VISIT` | 100 | [Challenge](#challenges) times a visit may post (what one robot check buys) |
 | `CHALLENGE_GHOST_BUDGET` | 16,777,216 (16 MB) | The most of its [ghosts](#challenges)' text a challenge keeps (characters, which are bytes); past it a new best lets the slowest kept ghosts go to make room, or is kept without its own |
 
-Six rate limiters are `ratelimits` in `wrangler.drive.jsonc` (Cloudflare's, which cost no Durable
+Seven rate limiters are `ratelimits` in `wrangler.drive.jsonc` (Cloudflare's, which cost no Durable
 Object request): `LIVE_CONNECTS` (each visit's connections to rooms, 20 a minute),
 `PROGRESS_POSTS` (each player's [level](#levels) reports and title changes, 10 a minute),
 `STATS_POSTS` (each visit's posts of [play stats](#play-stats), 6 a minute), `ADMIN_LOOKS` (each
 admin account's asks for the admin page's stats, [drop-in places](#where-people-drop-in) and
 challenges, 30 a minute), `CHALLENGE_LOOKS` (each address's asks for [challenges'](#challenges)
-lists and boards and its times posted, 60 a minute) and `CHALLENGE_MISSES` (those of its lists and
-boards that miss the cache and read D1, 10 a minute), each address (an IPv6 one by its /48)
-counted by a keyed hash of it and the day, never as it is.
+lists and boards and its times posted, 60 a minute), `CHALLENGE_MISSES` (those of its lists and
+boards that miss the cache and read D1, 10 a minute) and `PASSWORD_TRIES` (each address's
+[sign-ins with a password, checks of one and account changes](#guessing-and-how-its-slowed), 10 a
+minute), each address (an IPv6 one by its /48) counted by a keyed hash of it and the day, never as
+it is.
 
 The leaderboard's, levels' and the Supporter Pass's database is the `DB` binding in
 `wrangler.drive.jsonc` (D1 **world-drive**, already made); its tables are `worker/drive/migrations`

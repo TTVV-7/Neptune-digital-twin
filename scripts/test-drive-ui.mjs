@@ -6480,6 +6480,16 @@ async function accountPage( { me = SIGNED_OUT, clientId = CLIENT, ...options } =
 
 const panel = page => page.locator( 'dialog#account' );
 
+// One of the signed-in panel's folded changes opened (a tap on its heading): the section.
+async function unfold( account, heading ) {
+
+	const section = account.locator( 'details.account-section', { has: account.page().locator( 'summary', { hasText: heading } ) } );
+	await section.locator( 'summary' ).click();
+	await section.and( account.page().locator( '[open]' ) ).waitFor();
+	return section;
+
+}
+
 // The pass's sheet's link to the account panel (the sheet opened first, if it isn't), followed: the
 // panel, open.
 async function openAccountPanel( page, words ) {
@@ -6593,7 +6603,11 @@ describe( 'World Drive accounts: usernames and passwords', () => {
 		// The username rides along hidden, so a password manager knows whose password it is.
 		assert.deepEqual( await fields( change ), [ [ 'username', 'text', 'username', '(hidden)' ], [ 'current', 'password', 'current-password', 'Current password' ], [ 'password', 'password', 'new-password', 'New password' ] ] );
 		assert.equal( await change.locator( 'input[name="username"]' ).inputValue(), 'Racer_1' );
+		// Signing out is at the top; the changes are folded away until one is opened.
+		assert.equal( await account.locator( 'details.account-section[open]' ).count(), 0 );
+		assert.equal( await change.isVisible(), false );
 		await shot( page, 'account-3-signed-in-desktop' );
+		await unfold( account, 'Change password' );
 		await change.locator( 'input[name="current"]' ).fill( 'a wrong one' );
 		await change.locator( 'input[name="password"]' ).fill( 'a brand new passphrase' );
 		await change.locator( 'button[type="submit"]' ).click();
@@ -6608,6 +6622,9 @@ describe( 'World Drive accounts: usernames and passwords', () => {
 		await page.evaluate( () => window.testCredential = 'good-token' );
 		const link = account.locator( 'form.account-link' );
 		assert.deepEqual( await fields( link ), [ [ 'username', 'text', 'username', '(hidden)' ], [ 'password', 'password', 'current-password', 'Your password' ] ] );
+		// Opening it folds the password's away: one open at a time.
+		await unfold( account, 'Link Google' );
+		assert.equal( await change.isVisible(), false );
 		const asked = page.asked.account.length;
 		await link.locator( '.stub-google' ).click();
 		await link.locator( '.account-status', { hasText: 'Type your password first.' } ).waitFor();
@@ -6620,7 +6637,7 @@ describe( 'World Drive accounts: usernames and passwords', () => {
 		await page.locator( '#toast', { hasText: 'Google linked' } ).waitFor();
 		await shot( page, 'account-4-linked-desktop' );
 		// Unlinking it again (a username is a way in), confirmed with Google's button, then out everywhere.
-		await account.locator( '.account-section', { hasText: 'Unlink Google' } ).locator( '.stub-google' ).click();
+		await ( await unfold( account, 'Unlink Google' ) ).locator( '.stub-google' ).click();
 		await account.locator( '.account-ways', { hasText: 'not linked' } ).waitFor();
 		assert.deepEqual( page.asked.account.at( - 1 ), { method: 'DELETE', path: 'google', body: { credential: 'good-token' }, type: 'application/json' } );
 		await account.locator( 'button', { hasText: 'Sign out everywhere' } ).click();
@@ -6641,7 +6658,8 @@ describe( 'World Drive accounts: usernames and passwords', () => {
 		const account = await openAccountPanel( page, 'Account' );
 		// Nothing to unlink Google with yet: no button for it.
 		assert.equal( await account.locator( '.account-section', { hasText: 'Unlink Google' } ).count(), 0 );
-		assert.match( await account.textContent(), /Add a username and password first: Google is your only way to sign in\./ );
+		assert.match( await account.textContent(), /To unlink Google, add a username and password first: it's your only way to sign in\./ );
+		await unfold( account, 'Add a username and password' );
 		const add = account.locator( 'form.account-add' );
 		assert.deepEqual( await fields( add ), [ [ 'username', 'text', 'username', 'Username' ], [ 'password', 'password', 'new-password', 'Password' ] ] );
 		await add.locator( 'input[name="username"]' ).fill( 'Gina_G' );
@@ -6656,8 +6674,9 @@ describe( 'World Drive accounts: usernames and passwords', () => {
 		await add.locator( '.stub-google' ).click();
 		await account.locator( '.account-ways', { hasText: 'Gina_G' } ).waitFor();
 		assert.deepEqual( page.asked.account.at( - 1 ), { method: 'POST', path: 'password', body: { username: 'Gina_G', password: 'gina\'s own passphrase', credential: 'good-token' }, type: 'application/json' } );
-		await account.locator( '.account-section', { hasText: 'Unlink Google' } ).locator( '.stub-google' ).waitFor();
+		await ( await unfold( account, 'Unlink Google' ) ).locator( '.stub-google' ).waitFor();
 		// Taking the password off again needs it (or Google's button).
+		await unfold( account, 'Remove username and password' );
 		const remove = account.locator( 'form.account-remove' );
 		assert.deepEqual( await fields( remove ), [ [ 'username', 'text', 'username', '(hidden)' ], [ 'password', 'password', 'current-password', 'Your password' ] ] );
 		await shot( page, 'account-7-both-desktop' );
@@ -6666,7 +6685,7 @@ describe( 'World Drive accounts: usernames and passwords', () => {
 		await remove.locator( '.account-status', { hasText: 'That isn\'t your current password.' } ).waitFor();
 		await remove.locator( 'input[name="password"]' ).fill( 'gina\'s own passphrase' );
 		await remove.locator( 'button[type="submit"]' ).click();
-		await account.locator( 'form.account-add' ).waitFor();
+		await account.locator( 'form.account-add' ).waitFor( { state: 'attached' } );
 		assert.deepEqual( page.asked.account.at( - 1 ), { method: 'DELETE', path: 'password', body: { password: 'gina\'s own passphrase' }, type: 'application/json' } );
 		await page.locator( '#toast', { hasText: 'Username and password removed' } ).waitFor();
 		assert.deepEqual( page.errors, [] );
@@ -6701,6 +6720,84 @@ describe( 'World Drive accounts: usernames and passwords', () => {
 		await page.locator( '#pause' ).waitFor();
 		assert.deepEqual( page.errors, [] );
 		await page.context().close();
+
+	} );
+
+	test( 'after a wrong password the focus is back in the field, and keys still never reach the paused drive behind', async () => {
+
+		const page = await accountPage();
+		await testPad( page );
+		await page.locator( '.spots button', { hasText: 'Times Square' } ).click();
+		await flown( page );
+		await driveHere( page );
+		await page.keyboard.press( 'Escape' );
+		await page.locator( '#pause' ).waitFor();
+		await page.locator( '#pause button', { hasText: 'Or use a username and password' } ).click();
+		const account = panel( page );
+		const form = account.locator( 'form.account-sign-in' );
+		await form.locator( 'input[name="username"]' ).fill( 'racer_1' );
+		await form.locator( 'input[name="password"]' ).fill( 'not my password' );
+		await form.locator( 'input[name="password"]' ).press( 'Enter' );
+		await form.locator( '.account-status', { hasText: 'Wrong username or password.' } ).waitFor();
+		// The field was disabled while it was sent, which drops the focus to the page; it's put back.
+		assert.equal( await page.evaluate( () => document.activeElement?.name ), 'password' );
+		// Typing again goes to the field, not the game (M would leave for the globe).
+		await page.keyboard.press( 'KeyM' );
+		assert.equal( await mode( page ), 'paused' );
+		assert.equal( await form.locator( 'input[name="password"]' ).inputValue(), 'not my passwordm' );
+		// Even with the focus fallen to the page behind, the open panel keeps the game's keys from it.
+		await page.evaluate( () => document.activeElement.blur() );
+		assert.equal( await page.evaluate( () => document.activeElement === document.body ), true );
+		await page.keyboard.press( 'KeyM' );
+		assert.equal( await mode( page ), 'paused' );
+		assert.equal( await account.isVisible(), true );
+		// Esc closes the panel, and only the panel.
+		await page.keyboard.press( 'Escape' );
+		await account.waitFor( { state: 'hidden' } );
+		assert.equal( await mode( page ), 'paused' );
+		await page.locator( '#pause' ).waitFor();
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'signed in with both, a phone sees what it signs in with and signing out first, the changes folded one at a time', async () => {
+
+		const BOTH = { ...RACER, google: true, name: 'Racer Google', email: 'racer@example.com' };
+		for ( const [ width, height, name ] of [ [ 390, 844, 'account-8-both-phone' ], [ 844, 390, 'account-9-both-phone-landscape' ] ] ) {
+
+			const page = await accountPage( { me: BOTH, viewport: { width, height }, touch: true } );
+			await testPad( page );
+			await page.waitForFunction( () => window.drive.supporter.me );
+			const account = await openAccountPanel( page, 'Account' );
+			await account.locator( '#account-title', { hasText: 'Your account' } ).waitFor();
+			// Sign out and Sign out everywhere in sight without scrolling the panel.
+			const box = await account.boundingBox();
+			for ( const words of [ /^Sign out$/, /^Sign out everywhere$/ ] ) {
+
+				const out = await account.locator( '.account-out button', { hasText: words } ).boundingBox();
+				assert.ok( out.y >= box.y && out.y + out.height <= box.y + box.height && out.y + out.height <= height, `${ width }x${ height } ${ words }: ${ JSON.stringify( { out, box } ) }` );
+
+			}
+
+			assert.deepEqual( await account.locator( 'details.account-section > summary' ).allTextContents(), [ 'Change password', 'Unlink Google', 'Remove username and password' ] );
+			assert.equal( await account.locator( 'details.account-section[open]' ).count(), 0 );
+			assert.equal( await account.locator( 'input:visible' ).count(), 0, 'a password field shown before it was asked for' );
+			assert.equal( await account.locator( '.stub-google' ).count(), 0, 'Google\'s buttons drawn while folded away' );
+			if ( width < height ) assert.ok( await account.evaluate( el => el.scrollHeight <= el.clientHeight ), 'the folded panel scrolls on a phone held upright' );
+			await shot( page, name );
+			// One opened, then another: the first folds.
+			await unfold( account, 'Change password' );
+			const remove = await unfold( account, 'Remove username and password' );
+			assert.equal( await account.locator( 'details.account-section[open]' ).count(), 1 );
+			assert.equal( await account.locator( 'form.account-password' ).isVisible(), false );
+			await remove.locator( '.stub-google' ).waitFor();
+			assert.ok( await account.evaluate( el => el.scrollWidth <= el.clientWidth ) );
+			if ( width < height ) await shot( page, 'account-10-remove-phone' );
+			assert.deepEqual( page.errors, [] );
+			await page.context().close();
+
+		}
 
 	} );
 
