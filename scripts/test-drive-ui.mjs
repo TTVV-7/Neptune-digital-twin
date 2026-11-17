@@ -6386,8 +6386,10 @@ const GINA = { signedIn: true, name: 'Gina', email: 'gina@example.com', google: 
 
 // supporterPage with usernames and passwords on (/api/config's passwords, and the Turnstile site
 // key their robot checks use), and the Worker's account routes answered here as it would: a
-// username 'taken' is taken, the password is page.state.password, and with page.state.robot set a
-// sign-in needs a robot check's token. page.asked.account has every post, with its content type.
+// username 'taken' is taken, the password is page.state.password, with page.state.robot set a
+// sign-in needs a robot check's token, and Google's ID token 'good-token' is the account's own
+// (adding a password, unlinking or taking the password off need it; linking Google, the password).
+// page.asked.account has every post, with its content type.
 async function accountPage( { me = SIGNED_OUT, clientId = CLIENT, ...options } = {} ) {
 
 	const page = await supporterPage( { me, clientId, config: { ...RESTING, passwords: true }, ...options } );
@@ -6428,6 +6430,7 @@ async function accountPage( { me = SIGNED_OUT, clientId = CLIENT, ...options } =
 
 			if ( body.username ) {
 
+				if ( body.credential !== 'good-token' ) return json( route, { error: 'Sign-in failed' }, 401 );
 				state.password = body.password;
 				state.me = { ...me, username: body.username };
 				return json( route, state.me );
@@ -6440,15 +6443,27 @@ async function accountPage( { me = SIGNED_OUT, clientId = CLIENT, ...options } =
 
 		}
 
-		if ( path === 'password' ) return json( route, state.me = { ...me, username: null } );
+		if ( path === 'password' ) {
+
+			if ( body.credential !== 'good-token' && body.password !== state.password ) return json( route, { error: 'That isn\'t your current password' }, 401 );
+			return json( route, state.me = { ...me, username: null } );
+
+		}
+
 		if ( path === 'google' && request.method() === 'POST' ) {
 
 			if ( body.credential !== 'good-token' ) return json( route, { error: 'Sign-in failed' }, 401 );
+			if ( body.password !== state.password ) return json( route, { error: 'That isn\'t your current password' }, 401 );
 			return json( route, state.me = { ...me, google: true, name: 'Racer Google', email: 'racer@example.com' } );
 
 		}
 
-		if ( path === 'google' ) return json( route, state.me = { ...me, google: false, name: '', email: '' } );
+		if ( path === 'google' ) {
+
+			if ( body.credential !== 'good-token' ) return json( route, { error: 'Sign-in failed' }, 401 );
+			return json( route, state.me = { ...me, google: false, name: '', email: '' } );
+
+		}
 		if ( path === 'sign-out-everywhere' ) {
 
 			state.me = SIGNED_OUT;
@@ -6588,17 +6603,26 @@ describe( 'World Drive accounts: usernames and passwords', () => {
 		await change.locator( '.account-status', { hasText: 'Password changed. Your other devices are signed out.' } ).waitFor();
 		assert.equal( page.state.password, 'a brand new passphrase' );
 		assert.equal( await change.locator( 'input[name="current"]' ).inputValue(), '' );
-		// Linking Google: its button's credential goes to the link, not to signing in.
+		// Linking Google: the password first (fresh proof it's the owner), then its button, whose
+		// credential goes to the link, not to signing in.
 		await page.evaluate( () => window.testCredential = 'good-token' );
-		await account.locator( '.account-section', { hasText: 'Link Google' } ).locator( '.stub-google' ).click();
+		const link = account.locator( 'form.account-link' );
+		assert.deepEqual( await fields( link ), [ [ 'username', 'text', 'username', '(hidden)' ], [ 'password', 'password', 'current-password', 'Your password' ] ] );
+		const asked = page.asked.account.length;
+		await link.locator( '.stub-google' ).click();
+		await link.locator( '.account-status', { hasText: 'Type your password first.' } ).waitFor();
+		assert.equal( page.asked.account.length, asked, 'linked without the password' );
+		await link.locator( 'input[name="password"]' ).fill( 'a brand new passphrase' );
+		await link.locator( '.stub-google' ).click();
 		await account.locator( '.account-ways', { hasText: 'racer@example.com' } ).waitFor();
 		assert.deepEqual( page.asked.sessions, [], 'linking signed in instead' );
-		assert.deepEqual( page.asked.account.at( - 1 ), { method: 'POST', path: 'google', body: { credential: 'good-token' }, type: 'application/json' } );
+		assert.deepEqual( page.asked.account.at( - 1 ), { method: 'POST', path: 'google', body: { credential: 'good-token', password: 'a brand new passphrase' }, type: 'application/json' } );
 		await page.locator( '#toast', { hasText: 'Google linked' } ).waitFor();
 		await shot( page, 'account-4-linked-desktop' );
-		// Unlinking it again (a username is a way in), then out everywhere.
-		await account.locator( 'button', { hasText: 'Unlink Google' } ).click();
+		// Unlinking it again (a username is a way in), confirmed with Google's button, then out everywhere.
+		await account.locator( '.account-section', { hasText: 'Unlink Google' } ).locator( '.stub-google' ).click();
 		await account.locator( '.account-ways', { hasText: 'not linked' } ).waitFor();
+		assert.deepEqual( page.asked.account.at( - 1 ), { method: 'DELETE', path: 'google', body: { credential: 'good-token' }, type: 'application/json' } );
 		await account.locator( 'button', { hasText: 'Sign out everywhere' } ).click();
 		await page.locator( '#toast', { hasText: 'Signed out everywhere' } ).waitFor();
 		assert.equal( page.asked.account.at( - 1 ).path, 'sign-out-everywhere' );
@@ -6613,17 +6637,94 @@ describe( 'World Drive accounts: usernames and passwords', () => {
 		const page = await accountPage( { me: GINA } );
 		await testPad( page );
 		await page.waitForFunction( () => window.drive.supporter.me );
+		await page.evaluate( () => window.testCredential = 'good-token' );
 		const account = await openAccountPanel( page, 'Account' );
-		assert.equal( await account.locator( 'button', { hasText: 'Unlink Google' } ).isDisabled(), true );
+		// Nothing to unlink Google with yet: no button for it.
+		assert.equal( await account.locator( '.account-section', { hasText: 'Unlink Google' } ).count(), 0 );
 		assert.match( await account.textContent(), /Add a username and password first: Google is your only way to sign in\./ );
 		const add = account.locator( 'form.account-add' );
 		assert.deepEqual( await fields( add ), [ [ 'username', 'text', 'username', 'Username' ], [ 'password', 'password', 'new-password', 'Password' ] ] );
 		await add.locator( 'input[name="username"]' ).fill( 'Gina_G' );
+		await add.locator( 'input[name="password"]' ).fill( 'password' );
+		await add.locator( '.stub-google' ).click();
+		await add.locator( '.account-status', { hasText: 'That password is one of the commonest. Pick another.' } ).waitFor();
+		assert.deepEqual( page.asked.account, [] );
 		await add.locator( 'input[name="password"]' ).fill( 'gina\'s own passphrase' );
-		await add.locator( 'button[type="submit"]' ).click();
+		// Enter only says what's next: Google's button sends it, as fresh proof it's Gina's own.
+		await add.locator( 'input[name="password"]' ).press( 'Enter' );
+		assert.deepEqual( page.asked.account, [] );
+		await add.locator( '.stub-google' ).click();
 		await account.locator( '.account-ways', { hasText: 'Gina_G' } ).waitFor();
-		assert.equal( await account.locator( 'button', { hasText: 'Unlink Google' } ).isDisabled(), false );
-		await account.locator( 'button', { hasText: 'Remove username and password' } ).waitFor();
+		assert.deepEqual( page.asked.account.at( - 1 ), { method: 'POST', path: 'password', body: { username: 'Gina_G', password: 'gina\'s own passphrase', credential: 'good-token' }, type: 'application/json' } );
+		await account.locator( '.account-section', { hasText: 'Unlink Google' } ).locator( '.stub-google' ).waitFor();
+		// Taking the password off again needs it (or Google's button).
+		const remove = account.locator( 'form.account-remove' );
+		assert.deepEqual( await fields( remove ), [ [ 'username', 'text', 'username', '(hidden)' ], [ 'password', 'password', 'current-password', 'Your password' ] ] );
+		await shot( page, 'account-7-both-desktop' );
+		await remove.locator( 'input[name="password"]' ).fill( 'not it' );
+		await remove.locator( 'button[type="submit"]' ).click();
+		await remove.locator( '.account-status', { hasText: 'That isn\'t your current password.' } ).waitFor();
+		await remove.locator( 'input[name="password"]' ).fill( 'gina\'s own passphrase' );
+		await remove.locator( 'button[type="submit"]' ).click();
+		await account.locator( 'form.account-add' ).waitFor();
+		assert.deepEqual( page.asked.account.at( - 1 ), { method: 'DELETE', path: 'password', body: { password: 'gina\'s own passphrase' }, type: 'application/json' } );
+		await page.locator( '#toast', { hasText: 'Username and password removed' } ).waitFor();
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'opened from the pause menu, its keys are its own: Esc closes it and the drive stays paused', async () => {
+
+		const page = await accountPage();
+		await testPad( page );
+		await page.locator( '.spots button', { hasText: 'Times Square' } ).click();
+		await flown( page );
+		await driveHere( page );
+		await page.keyboard.press( 'Escape' );
+		await page.locator( '#pause' ).waitFor();
+		await page.locator( '#pause button', { hasText: 'Or use a username and password' } ).click();
+		const account = panel( page );
+		await account.locator( 'form.account-sign-in' ).waitFor();
+		// Enter on a focused button (the Create account tab) is the button's, not the game's resume.
+		await account.locator( '.account-tabs button', { hasText: 'Create account' } ).focus();
+		await page.keyboard.press( 'Enter' );
+		await account.locator( 'form.account-sign-up' ).waitFor();
+		assert.equal( await mode( page ), 'paused' );
+		// Nor do the game's letters reach it (M would leave for the globe).
+		await page.keyboard.press( 'KeyM' );
+		assert.equal( await mode( page ), 'paused' );
+		// Esc closes the panel, and only the panel.
+		await page.keyboard.press( 'Escape' );
+		await account.waitFor( { state: 'hidden' } );
+		assert.equal( await mode( page ), 'paused' );
+		await page.locator( '#pause' ).waitFor();
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'a tap on the panel\'s padding keeps what\'s typed; one outside it closes it; its title follows the tab', async () => {
+
+		const page = await accountPage( { clientId: '', viewport: { width: 390, height: 844 }, touch: true } );
+		await testPad( page );
+		await page.waitForFunction( () => window.drive.supporter.me );
+		const account = await openAccountPanel( page, 'Sign in or create an account' );
+		assert.equal( await account.locator( '#account-title' ).textContent(), 'Sign in' );
+		await account.locator( '.account-tabs button', { hasText: 'Create account' } ).tap();
+		assert.equal( await account.locator( '#account-title' ).textContent(), 'Create account' );
+		const username = account.locator( 'input[name="username"]' );
+		await username.fill( 'Racer_1' );
+		// 8 px in from the panel's left edge, level with the field: the panel's own padding.
+		const box = await account.boundingBox();
+		const field = await username.boundingBox();
+		await page.touchscreen.tap( box.x + 8, field.y + field.height / 2 );
+		assert.equal( await account.isVisible(), true, 'a tap on the padding closed the panel' );
+		assert.equal( await username.inputValue(), 'Racer_1' );
+		// Just outside it, on the backdrop beside it (the panel leaves 12 px each side), it closes.
+		assert.ok( box.x >= 8, JSON.stringify( box ) );
+		await page.touchscreen.tap( box.x - 6, field.y + field.height / 2 );
+		await account.waitFor( { state: 'hidden' } );
 		assert.deepEqual( page.errors, [] );
 		await page.context().close();
 

@@ -871,7 +871,7 @@ signing in, so it's yours in any browser; Stripe's signed webhook records it. Si
 Google or with a **username and password** (PBKDF2-SHA-256 at the Workers runtime's most, 100,000
 iterations, with a salt of its own; guessing slowed per address and per username without ever
 locking the owner out; no email, so a password can't be recovered unless Google is linked too), and
-either can be linked to the other: one account, with its pass, level, times and Garage, whichever
+either can be linked to the other, with fresh proof of each, never the session alone: one account, with its pass, level, times and Garage, whichever
 way you signed in (see [Username and password accounts](docs/world-drive.md#username-and-password-accounts)). Buying
 stays off ("Coming soon") until `GOOGLE_CLIENT_ID` and the webhook's secret are set (see
 [Supporter Pass (buying it)](docs/world-drive.md#supporter-pass-buying-it) for the owner's steps).

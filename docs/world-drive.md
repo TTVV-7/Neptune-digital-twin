@@ -3103,25 +3103,32 @@ either signs in to the one account. Driving and the leaderboard still never need
   before anything is sent (the same code as the Worker's, `password-rules.js`), then the robot
   check (Turnstile, usually without a click), then the account is made and signed in.
 - **Signing in**: a wrong password and a username nobody has both say "Wrong username or password."
-  After a username's fifth failure of the day the next try asks for the robot check first (the
-  panel does it and tries again), and a try within 5 s of its last failure says "Wait 5 seconds and
-  try again."
+  After a username's fifth try of the day that didn't get in (or an address's twentieth) the next
+  asks for the robot check first (the panel does it and tries again), and a try from the same
+  address within 5 s of its last at that username says "Wait 5 seconds and try again."
+- The panel's title says what it's for: "Sign in", "Create account" (with that tab chosen) or
+  "Your account". Keys pressed in it are its own (Esc closes it, and never resumes a paused drive
+  behind it), and only a tap outside it closes it, not one on its padding beside a field.
 - **Signed in**, the panel ("Your account") lists what the account signs in with (Google: its
   email, or "not linked"; Username: it, or "none"), then:
   - **Change password** (current, new: "This signs you out on your other devices."), or for a
     Google account with no username yet, **Add a username and password** ("Then you can sign in
-    either way.").
-  - **Link Google** (Google's own button, "Continue with Google": "Sign in with Google too, and get
-    back in if you forget your password"), or with it linked, **Unlink Google**, which is only
-    there to press while there's a username to sign in with instead.
-  - With both, **Remove username and password**.
+    either way."): the username and password, then "Then confirm it's you with Google:" and
+    Google's button, which sends them.
+  - **Link Google** ("Sign in with Google too, and get back in if you forget your password"): "Your
+    password", then Google's own button ("Continue with Google"), which links the Google account
+    chosen. With it linked, **Unlink Google**, confirmed with Google's button ("this signs you out
+    on your other devices"), only while there's a username to sign in with instead (else the panel
+    says to add one first).
+  - With both, **Remove username and password**: "Your password" and the button, or "Or confirm
+    with Google:" and Google's button.
   - **Sign out** and **Sign out everywhere** (every device's session).
 - The forms are real `<form>`s with `<label>`s and `autocomplete` (`username`, `current-password`,
   `new-password`; the change form carries the username hidden), so password managers fill them and
   offer to save; the username field doesn't capitalise or autocorrect. On a phone held upright the
   panel fills the width and scrolls.
 - **The panel is its own chunk** (`account.js` and `account.css`), loaded the first time it's
-  opened: 11.1 kB of script (4.0 kB gzipped) and 3.1 kB of CSS (0.9 kB), none of it on the first
+  opened: 12.8 kB of script (4.4 kB gzipped) and 3.1 kB of CSS (0.9 kB), none of it on the first
   load. The links and the account line are a few lines in `supporter.js`, which was already loaded.
 
 ### The rules
@@ -3162,14 +3169,21 @@ either signs in to the one account. Driving and the leaderboard still never need
   and a sign-in with an older count twice; everything else once.
 - If sign-ins were ever cut off for CPU on the Free plan (Error 1102 on `/api/account/*` in the
   Worker's metrics), `PASSWORD_ITERATIONS` (a dashboard text variable, 10,000 to 100,000) lowers
-  the count for new hashes at once, without a deploy. Raising it again later, or if Workers ever
-  allows more (`ITERATIONS` in `logins.js`), each password **is hashed again at its next right
-  sign-in** with a new salt (`changed_at` says when), since each row keeps its own count.
+  the count for new hashes at once, without a deploy. Whenever a password's count isn't the one new
+  hashes are made with (lowered, raised again later, or if Workers ever allows more: `ITERATIONS`
+  in `logins.js`), it **is hashed again at its next right sign-in** with a new salt (`changed_at`
+  says when), since each row keeps its own count. Lowered, a right password costs only its own
+  count, but a refusal still costs 100,000 (below), so sign-ups and sign-ins get cheaper while
+  wrong passwords, which the limits hold to a few, don't.
 - Compared in **constant time** (`crypto.subtle.timingSafeEqual`, or an XOR of every byte without
   it), so the time doesn't say how much matched.
 - **A username nobody has** is hashed against a stand-in (a random salt and random "hash", made once
-  per Worker instance, which nothing can match), so it takes one hash's time, as a wrong password
-  does, and gets the same 401 "Wrong username or password". Measured as whole requests to `wrangler
+  per Worker instance, which nothing can match) at 100,000, the most any stored hash can have, so it
+  takes one hash's time, as a wrong password does, and gets the same 401 "Wrong username or
+  password". A wrong password for a hash made with fewer (`PASSWORD_ITERATIONS` lowered) is hashed
+  on to make up the difference, so **every refusal costs 100,000 iterations**, lowered or not, and
+  its time never says whether the username is someone's (a Node test adds up every hash's
+  iterations for each case, and times them: 17.6 to 20.3 ms each). Measured as whole requests to `wrangler
   dev`: 32 ms for a wrong password, 30 ms for a username nobody has. (The day's failure counts in
   `DriveLimits` don't tell them apart either: a username that can't be one is counted under its
   lower case, as a real one would be.)
@@ -3180,28 +3194,44 @@ either signs in to the one account. Driving and the leaderboard still never need
 
 ### Guessing, and how it's slowed
 
-- **Per address**: a visitor (an address, an IPv6 one by its /48, as challenges count) may fail
-  **20 times a day** (`ADDRESS_FAILS`), whatever the usernames; then every try from it is a 429
-  until midnight UTC, before any hashing. One address can't guess for long.
-- **Per username**: after a username has failed **5 times in the day** (`FREE_FAILS`, from
-  anywhere), each further try for it needs a **robot check** (Turnstile; a 403 with
-  `reason: 'robot'` without one, which the panel answers by running the check and trying again),
-  and comes at least **5 s after its last failure** (`FAIL_GAP`; a 429 with `reason: 'wait'` and
-  `Retry-After`). So a script guessing one account from many addresses needs a solved robot check
-  for every guess and gets one every 5 s at most, while **nothing ever locks a username**: whatever
-  a stranger does, the owner signs in with a click on the robot check and a wait of 5 s at most. The
-  next day the count starts afresh.
-- These are `DriveLimits`' `passwordCheck` (asked before hashing) and `passwordFailed` (counting a
-  failure), in its table `password_fails`: a row a day for each visitor and each username with
-  failures, each kept as a SHA-256 of the day's salt and it (never the address or the username, and
-  not linkable from one day to the next), deleted with the day's other counts.
+- **Each try is counted as it's checked** (`DriveLimits`' `passwordCheck`, asked before hashing,
+  counts it in the same go, as a Durable Object answers one call at a time), and given back once it
+  gets in (`passwordSucceeded`). So tries sent all at once are counted one after another: a test
+  sends 40 wrong passwords from one address at once and gets 20 refusals and 20 robot checks, and
+  40 for one username from 40 addresses, 5 and 35 (counting only after the hash, as at first, let
+  38 of 60 through).
+- **Per username**: after a username has had **5 tries in the day** that didn't get in
+  (`FREE_FAILS`, from anywhere), each further try for it needs a **robot check** (Turnstile; a 403
+  with `reason: 'robot'` without one, which the panel answers by running the check and trying
+  again). So a script guessing one account from many addresses needs a solved robot check for every
+  guess.
+- **Per address**: after a visitor (an address, an IPv6 one by its /48, as challenges count) has had
+  **20 such tries in the day** (`ADDRESS_FAILS`), whatever the usernames, each further try from it
+  needs a robot check too; and past **200** (`HARD_FAILS`) it tries no more until midnight UTC, a
+  429 before any hashing. Not a lock at 20: many phones share a carrier's address, and a school one,
+  so one person failing there doesn't keep everyone else there out for the day; they click the
+  robot check.
+- **A gap**: past either, a visitor's tries at one username come at least **5 s apart** (`FAIL_GAP`;
+  a 429 with `reason: 'wait'` and `Retry-After`), so a burst of solved robot checks from one address
+  gets one guess in. The gap is the visitor's and the username's together, so **tries from other
+  addresses never make the owner wait**, and **nothing ever locks a username**: whatever a stranger
+  does from elsewhere, the owner signs in with a click on the robot check at most (a test has a
+  stranger fail every 5 s from a new address while the owner, between, signs in every time). Only
+  someone on the owner's own address, past 200 tries, can keep them out until midnight UTC. The next
+  day the counts start afresh.
+- These are kept in `DriveLimits`' table `password_fails`: a row a day for each visitor, each
+  username and each visitor and username together with tries, each kept as a SHA-256 of the day's
+  salt and it (never the address or the username, and not linkable from one day to the next),
+  deleted with the day's other counts.
 - **Signing in** (successes) shares Google's **50 a day** from one visitor (`SIGN_INS_DAILY`, counted
   as the leaderboard's names are): each is a session kept for 30 days, so knowing a password still
   can't fill the database with sessions.
 - **Signing up** always needs a robot check, and a visitor (by /48) makes **10 accounts a day** at
-  most. **Changes** (a username and password added, the password changed, Google linked or unlinked,
-  the password removed, signing out everywhere) are 30 a day for a visitor. A password change proves
-  the current password through the same check and counts as a sign-in would.
+  most; adding a username to a Google account is counted among those 10 too (it can say a username
+  is taken). **Changes** (a username and password added, the password changed, Google linked or
+  unlinked, the password removed, signing out everywhere) are 30 a day for a visitor. Everything
+  that proves a password (a password change, linking Google, taking the password off) goes through
+  the same check and counts as a sign-in would.
 - Every route is JSON (`application/json`) from the site itself (the same-origin checks every post
   has: `Origin`, and `Sec-Fetch-Site` when sent), with a body of at most 2 kB (a 413 past it), an
   object of strings of the right shape (a 400 otherwise), and a robot check's token, when sent, a
@@ -3217,10 +3247,10 @@ cookie, as Google's `POST /api/session` does):
 | `POST /api/account/sign-up { username, password, token }` | A new account and its login, signed in. 400 (which rule), 403 `robot`, 429 (10 a day), 409 "That username is taken" |
 | `POST /api/account/sign-in { username, password, token? }` | Signed in. 401 "Wrong username or password", 403 `robot`, 429 `address` or `wait` |
 | `POST /api/account/password { current, password, token? }` | Signed in with a username: the password changed, the account's **other sessions deleted** (this browser stays in). 401 "That isn't your current password" |
-| `POST /api/account/password { username, password }` | Signed in with Google and no username yet: a username and password added |
-| `DELETE /api/account/password` | The username and password taken off, only while Google is linked (else 409) |
-| `POST /api/account/google { credential }` | Google's ID token (checked as a sign-in's is) linked to this account |
-| `DELETE /api/account/google` | Google unlinked, only while there's a username (else 409) |
+| `POST /api/account/password { username, password, credential }` | Signed in with Google and no username yet: a username and password added, with Google's ID token for the account's own Google account (401 without, 403 another's; 403 for an owner's account; counted as a sign-up) |
+| `DELETE /api/account/password { password, token? }` or `{ credential }` | The username and password taken off, with the password or Google's ID token for the account; only while Google is linked (else 409); other sessions deleted |
+| `POST /api/account/google { credential, password, token? }` | Google's ID token (checked as a sign-in's is) linked to this account, with its password (401 wrong); 403 for an owner's Google account |
+| `DELETE /api/account/google { credential }` | Google unlinked, with Google's ID token for it; only while there's a username (else 409); other sessions deleted |
 | `POST /api/account/sign-out-everywhere` | Every session of the account deleted, this one's too (204, the cookie cleared) |
 
 `/api/config` says `passwords: true` while they're on: with the database, Turnstile's secret (signing
@@ -3229,21 +3259,38 @@ up too; the session is then a username's alone.
 
 ### Linking, and what's never merged
 
-- **Proof of both**: linking needs the signed-in session and proof of the other way in: Google's ID
-  token, from its button in the panel, for linking Google; the new password itself for adding a
-  username to a Google account.
+- **Fresh proof, not only the session**: a session cookie can be copied, and a signed-in browser
+  borrowed for a moment. With the session alone, someone could add their own password to a Google
+  account and unlink its Google, keeping the account and its pass and leaving its owner a new, empty
+  one. So whatever changes how an account signs in asks for proof again: **adding a username and
+  password** to a Google account needs Google's ID token for that same Google account (its button
+  in the panel); **linking Google** to a username's account needs the new Google account's ID token
+  and the account's password; **unlinking Google** needs Google's ID token for it (the password
+  isn't enough: someone who guessed it mustn't take Google away); **taking the password off**
+  needs the password, or Google's ID token for the account (so its owner can always take off a
+  password they've forgotten, or didn't set). Unlinking and taking the password off also sign out
+  the account's other sessions.
+- **The owner's accounts** (`ADMIN_EMAILS`) sign in with Google only: no username and password is
+  added to one (403 "The owner's accounts sign in with Google only"), nor is one's Google account
+  linked to a username's; and an account with a username never passes as an admin
+  (`admin.js`'s `isAdmin`), even if `ADMIN_EMAILS` later named it. So the admin page can't be
+  reached by guessing a password.
 - **A Google account that already has its own World Drive account** is linked only if that account
   has nothing to lose: no username, no player linked to it and no purchase of its own (someone who
   once signed in with Google and did nothing since). Then that empty account is deleted (its
   sessions with it) and the Google account becomes this one's way in. Otherwise it's a 409: "That
   Google account has its own World Drive account, with its own progress or pass. Sign in with
-  Google to use that one." **Nothing is ever merged**: two accounts' players, levels, times and
+  Google to use that one." The delete itself checks that again, in one batch with the link, so a
+  player linked or a pass bought in between makes it a 409 rather than cutting them loose.
+  **Nothing is ever merged**: two accounts' players, levels, times and
   passes put together would double or drop something (whose level, whose best time, which pass),
   and doing it safely isn't simple, so it isn't done. Signing in with Google, then adding a username
   and password there, gets the same result for anyone starting from Google.
 - An account with a Google account linked already can't link another (409 "Unlink it first").
 - **Unlinking keeps a way in**: Google only while there's a username and password; the username and
-  password only while Google is linked. Unlinked, the Google account's email and name go from the
+  password only while Google is linked. The update and the delete check that themselves, so taking
+  the password off and unlinking Google at once (two tabs, a double tap) can't leave an account
+  with neither: one of them is a 409. Unlinked, the Google account's email and name go from the
   account; a pass bought with that email before signing in (a purchase that was nobody's yet) is
   made the account's first, so unlinking never loses a bought pass. A pass given by
   `SUPPORTER_EMAILS` goes with the email. Signing in with that Google account afterwards makes a new,
@@ -3251,7 +3298,7 @@ up too; the session is then a username's alone.
 - An account made with a username has no email: a pass bought from it is the account's by
   `client_reference_id`, as a Google account's is. A purchase Stripe sends with no email (`''`)
   never matches an account with no email (the pass's SQL, `hasPass`, only matches an email when
-  there is one), and `ADMIN_EMAILS` can only ever be a Google account.
+  there is one).
 
 ### What's kept
 
@@ -3263,8 +3310,10 @@ up too; the session is then a username's alone.
   table again, and in D1 dropping it would run its `ON DELETE` actions (every session, purchase and
   player let go of). Sessions are the same `sessions` rows as Google's (only the SHA-256 of the
   cookie's token).
-- `DriveLimits`' `password_fails`: today's failure counts by salted hashes (above), gone at the end of
-  the day.
+- `DriveLimits`' `password_fails`: today's counts of tries by salted hashes (above), gone at the end
+  of the day.
+- Signing up makes the account and its login in one D1 batch, so a failure part way leaves neither
+  (no account nobody can sign in to, and the admin page's kinds always add up to its accounts).
 - **The admin page** shows the accounts now by kind: "Accounts 9 · Google 5 · password 3 · both 1"
   (counts only; never a username), and "New accounts" counts both kinds.
 - The privacy words in the page's About say what a username's account keeps.
@@ -3273,10 +3322,11 @@ up too; the session is then a username's alone.
 
 - **Sign-up**: a robot check (Turnstile's siteverify), one `DriveLimits` request (the day's turn),
   one hash, and in D1 a read and three writes (the account, the login, the session). **Sign-in**:
-  one or two `DriveLimits` requests (the check, and the day's turn or the failure), one hash, a read
-  and two writes. A few a day at today's traffic: nothing next to the [Free plan's](#what-a-visit-costs-and-how-its-capped)
-  100,000 Durable Object requests or D1's rows, and a stranger's guessing is held to 20 failures a
-  day an address. The CPU is the cost that matters on the Free plan (above).
+  one `DriveLimits` request for a refusal (the check, counting the try), three for a success (the
+  try given back, and the day's turn), one hash, a read and two writes. A few a day at today's
+  traffic: nothing next to the [Free plan's](#what-a-visit-costs-and-how-its-capped) 100,000 Durable
+  Object requests or D1's rows, and a stranger's guessing is held to 20 tries a day an address
+  without a robot check, 200 with. The CPU is the cost that matters on the Free plan (above).
 - **Storage**: a login row is about 150 bytes.
 
 ### What it can't protect against
@@ -3286,41 +3336,61 @@ up too; the session is then a username's alone.
 - **A reused password** that leaked elsewhere, **phishing**, or someone with the owner's unlocked
   device; there's no second factor.
 - **A stolen session cookie** (it's `HttpOnly`, `Secure` and `SameSite=Lax`) works until it
-  expires, the password is changed or **Sign out everywhere** is pressed; with it alone someone
-  could add a username and password to a Google account that had none.
+  expires, the password is changed or **Sign out everywhere** is pressed; but with it alone nobody
+  can change how the account signs in (above), so the owner keeps their way in and can end it.
 - **A leaked database**: 100,000 rounds of PBKDF2 slows guessing each password offline but doesn't
   stop it for weak ones.
 - **Someone with many addresses and robot checks solved by people or services** can keep guessing
-  one username at one try every 5 s (and each address 20 a day); a password that isn't among the
-  commonest holds out against that.
-- **Usernames can be found taken**: signing up says "That username is taken", as it must; that's a
-  robot check and one of the visitor's 10 a day each. Signing in never says.
+  one username, a solved check a guess, one every 5 s from each address and 200 a day from each; a
+  password that isn't among the commonest holds out against that.
+- **Someone on the owner's own address** (the same carrier's or school's) who fails 200 times keeps
+  everyone there from signing in with a password until midnight UTC (Google's sign-in still works).
+- **Usernames can be found taken**: signing up says "That username is taken", as it must, and so
+  does adding a username to a Google account; that's one of the visitor's 10 sign-ups a day each
+  (and for signing up a robot check, for adding a Google account's fresh ID token). Signing in
+  never says.
 
 ### How usernames and passwords are tested
 
 `npm run test:drive-worker`: the rules (usernames' shape, NFKC, look-alikes and case; passwords'
 length in characters and bytes, the commonest, the username), PBKDF2 against RFC 7914's test vector
 and the count (and `PASSWORD_ITERATIONS` only lowering it), `DriveLimits`' failures per address and
-per username kept only as salted hashes, migration 0008 on top of 0001 to 0007 with every account,
+per username (counted as they're checked, given back on getting in, the robot check from a
+username's 5 or an address's 20, the gap only for one address at one username, the hard cap of 200)
+kept only as salted hashes, every refusal adding up to 100,000 iterations with
+`PASSWORD_ITERATIONS` lowered or not (and a right password hashed again at the lowered count),
+migration 0008 on top of 0001 to 0007 with every account,
 session, purchase and player kept; then against `wrangler dev` with D1: every route's same-origin,
 JSON, size and shape checks and 401 signed out; signing up (each rule, the name filter, the robot
 check, the cookie, what's kept and that the password isn't in D1 or the Worker's log); taken and
 look-alike usernames; signing in in any case, a wrong password and unknown and impossible usernames
-alike in answer and in time; a stranger failing from many addresses (a robot check, then 5 s apart)
-while the owner still signs in; an address's 20 failures, its 10 accounts and its 50 sign-ins (with
-Google's); `DriveLimits` keeping no username or address; changing the password (the current one
-needed, other sessions signed out); hashing again at a raised count; linking both ways, refusing a
-Google account with a player, a pass or a username of its own and taking in an empty one; unlinking
-keeping a way in and a bought pass; the pass, the player and its ⭐ the same either way; a purchase
-without an email no username's; signing out everywhere; the admin page's counts by kind; and no
-username on the boards.
+alike in answer and in time; a stranger failing from many addresses (a robot check, then 5 s apart
+from one address) while the owner still signs in; 40 tries sent at once from one address (20
+through) and for one username from 40 (5 through), and a burst of solved robot checks (1 through);
+a stranger failing every 5 s from a new address while the owner signs in every time between; an
+address's 20 tries (then a robot check, which lets someone else there in) and 200 (then nothing), its
+10 accounts and its 50 sign-ins (with Google's); `DriveLimits` keeping no username or address;
+changing the password (the current one needed, other sessions signed out); hashing again at a
+raised count; linking both ways (Google's token and the password, neither alone), refusing a Google
+account with a player, a pass or a username of its own and taking in an empty one, and one gaining a
+player as it's linked never cutting it loose; unlinking keeping a way in and a bought pass, needing
+Google's token (not the session or the password) and signing out other sessions; taking the password
+off needing it or Google's token; a session alone unable to add a password to a Google account or
+unlink it; taking the password off and unlinking Google at once always leaving a way in; the
+owner's Google account never given a password nor linked, and an account with a username never an
+admin; adding a username counted as a sign-up; a username made by two at once leaving no account
+behind; the pass, the player and its ⭐ the same either way; a purchase without an email no
+username's; signing out everywhere; the admin page's counts by kind; and no username on the boards.
 
 `npm run test:drive-ui`: the panel not loaded until opened; creating an account (the rules said in
 the page, a taken username, the robot check, signed in, the password sent nowhere else);
 signing in (a wrong password said so, a robot check when asked for, signing out); signed in with a
-username (changing the password, linking and unlinking Google, signing out everywhere); signed in
-with Google (adding a username and password; Google not unlinkable before); each form's labels and
-`autocomplete`; the panel on a phone held upright and without Google's sign-in; and the admin page's
+username (changing the password, linking Google with the password, unlinking it with Google's
+button, signing out everywhere); signed in with Google (adding a username and password confirmed
+with Google's button; Google not unlinkable before; taking the password off with it); each form's
+labels and `autocomplete`; the panel opened from the pause menu, where Esc closes it and keys never
+reach the game; a tap on its padding keeping what's typed, and one outside closing it; its title
+following the tab; the panel on a phone held upright and without Google's sign-in; and the admin page's
 accounts by kind. Pictures: `account-1-create-desktop` to `account-6-signed-in-phone` with
 `TEST_SCREENSHOTS`.
 
@@ -3524,7 +3594,7 @@ page says which have no ▲ or ▼, and why. The facts from the Worker's own tab
   nicknames picked, the pass's sheet opened and its Buy followed to Stripe, levels reached, parties
   made and joined.
 - **From the leaderboard and the pass** (the Worker's own tables, below): new players, new bests, new
-  Google accounts, passes by status and the revenue; and now, the players, the accounts, the accounts
+  accounts (Google and username), passes by status and the revenue; and now, the players, the accounts, the accounts
   with the pass and the passes nobody has signed in for yet.
 - As before: visits by hour of the day (counted in UTC hours, shown in the viewer's time), where
   people come from, play time by ride, the rides dropped in with and the start spots dropped in at,
@@ -3562,8 +3632,8 @@ The Worker adds, as the admin page asks (nothing more is kept for it), what its 
 each day, by the UTC day of `created_at`: `players:new` (nicknames made; not those the owner has
 removed since), `scores:new_best` (runs that beat a player's best on a board: the `scores` log has
 only those, and only for 35 days, so for a longer period the page says the count is partial, and
-compares it only for the last 7 days), `accounts:new` (Google accounts signed in for the first
-time), `purchases:<status>` (`paid`, or `granted` by hand) and `revenue:<currency>` (in the
+compares it only for the last 7 days), `accounts:new` (accounts made: Google accounts signed in
+for the first time and accounts made with a username), `purchases:<status>` (`paid`, or `granted` by hand) and `revenue:<currency>` (in the
 currency's smallest unit, cents, shown as money), both leaving out purchases refunded or charged
 back; and totals now: players, accounts, the accounts with the pass (bought and not taken back, or in
 `SUPPORTER_EMAILS`), and passes not taken back that nobody has signed in for yet. Only counts: no

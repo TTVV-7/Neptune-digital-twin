@@ -8,9 +8,11 @@ import { toast } from './screens.js';
 // Signed out: "Sign in with Google" (with its sign-in set up) and a username and password form, to
 // sign in or create an account. Signed in: what the account signs in with, changing the password
 // (or adding a username and password to a Google account), linking or unlinking Google, and signing
-// out here or everywhere. The forms are real forms with labels and autocomplete (username,
-// current-password, new-password), so password managers fill them and offer to save. A password is
-// only ever sent to the Worker's sign-in, sign-up and password posts.
+// out here or everywhere. What changes how the account signs in asks for fresh proof, as the Worker
+// does: Google's button to add a password to a Google account or unlink Google, the password to link
+// Google or take the password off (or Google's button for that too). The forms are real forms with
+// labels and autocomplete (username, current-password, new-password), so password managers fill
+// them and offer to save. A password is only ever sent to the Worker's account routes.
 
 const UNREACHABLE = 'Couldn\'t reach World Drive. Check your connection and try again.';
 const NO_RECOVERY = 'There\'s no email here, so a forgotten password can\'t be recovered, unless you also link Google. Keep it in a password manager.';
@@ -33,7 +35,20 @@ export function openAccount( from ) {
 		dialog = document.createElement( 'dialog' );
 		dialog.id = 'account';
 		dialog.setAttribute( 'aria-labelledby', 'account-title' );
-		dialog.addEventListener( 'click', event => event.target === dialog && dialog.close() );
+		// A click on the backdrop closes it (the backdrop's clicks are the dialog's own, outside its
+		// box); one on its padding or between its sections, also the dialog's own, doesn't, so a tap
+		// just beside a field never loses what was typed.
+		dialog.addEventListener( 'click', event => {
+
+			const box = dialog.getBoundingClientRect();
+			const outside = event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom;
+			if ( event.target === dialog && outside ) dialog.close();
+
+		} );
+		// Keys pressed here are the panel's, never the game's (Esc would otherwise resume a paused
+		// drive behind it, and a letter on a focused button steer): Esc still closes the panel, as the
+		// pass's sheet and the Garage do.
+		dialog.addEventListener( 'keydown', event => event.stopPropagation() );
 		document.body.append( dialog );
 		hooks.onChange( () => dialog.open && draw() );
 
@@ -58,10 +73,22 @@ function draw( always = false ) {
 	drawnFor = state;
 	const close = Object.assign( button( '×', () => dialog.close() ), { className: 'close' } );
 	close.setAttribute( 'aria-label', 'Close' );
-	const title = Object.assign( document.createElement( 'h2' ), { id: 'account-title', textContent: me?.signedIn ? 'Your account' : 'Sign in' } );
+	const title = Object.assign( document.createElement( 'h2' ), { id: 'account-title', textContent: me?.signedIn ? 'Your account' : mode === 'sign-up' ? 'Create account' : 'Sign in' } );
 	const header = document.createElement( 'header' );
 	header.append( title, close );
+	// Drawn again with the focus in it (a tab pressed, a form sent), the focus stays in it: on the
+	// same button or field drawn anew, or the close button, never left on the page behind, where
+	// the game would hear the next key.
+	const focused = dialog.contains( document.activeElement ) ? focusKey( document.activeElement ) : null;
 	dialog.replaceChildren( header, ...( me?.signedIn ? signedIn( me ) : signedOut() ) );
+	if ( focused !== null && dialog.open ) ( [ ...dialog.querySelectorAll( 'button, input' ) ].find( el => focusKey( el ) === focused ) ?? close ).focus();
+
+}
+
+// What tells a button or field apart from the others, to find it again once drawn anew.
+function focusKey( el ) {
+
+	return `${ el.tagName }:${ el.name || el.textContent }`;
 
 }
 
@@ -174,12 +201,7 @@ function signedIn( me ) {
 	if ( me.supporter ) parts.push( Object.assign( paragraph( '⭐ Supporter Pass' ), { className: 'account-pass' } ) );
 	parts.push( me.username ? changeForm( me ) : addForm() );
 	parts.push( googlePart( me ) );
-	if ( me.username && me.google ) {
-
-		parts.push( section( 'Username and password', paragraph( 'You can sign in with Google instead, and take the username and password off.' ),
-			actionButton( 'Remove username and password', 'Removing...', () => send( 'DELETE', '/api/account/password', {} ), 'Username and password removed' ) ) );
-
-	}
+	if ( me.username && me.google ) parts.push( removeForm( me ) );
 
 	const out = document.createElement( 'div' );
 	out.className = 'account-out';
@@ -196,8 +218,7 @@ function signedIn( me ) {
 function changeForm( me ) {
 
 	const { form, status, submit } = makeForm( 'account-password', 'Change password' );
-	const name = Object.assign( document.createElement( 'input' ), { type: 'text', name: 'username', autocomplete: 'username', value: me.username, hidden: true, readOnly: true } );
-	form.append( name );
+	form.append( hiddenUsername( me ) );
 	const current = field( form, 'Current password', { name: 'current', type: 'password', autocomplete: 'current-password' } );
 	const next = field( form, 'New password', { name: 'password', type: 'password', autocomplete: 'new-password', minLength: PASSWORD_MIN, hint: 'This signs you out on your other devices.' } );
 	form.append( submit, status );
@@ -223,79 +244,149 @@ function changeForm( me ) {
 
 }
 
-// A Google account adding a username and password, to sign in either way.
+// A Google account adding a username and password, to sign in either way: confirmed with Google's
+// button (the Worker wants fresh proof it's the account's own Google, not only this browser's
+// session).
 function addForm() {
 
-	const { form, status, submit } = makeForm( 'account-add', 'Add username and password' );
+	const { form, status } = makeForm( 'account-add', '' );
 	const username = field( form, 'Username', { name: 'username', autocomplete: 'username', minLength: 3, maxLength: 20, hint: '3 to 20 letters, digits, _ or -. Only you see it.' } );
 	const password = field( form, 'Password', { name: 'password', type: 'password', autocomplete: 'new-password', minLength: PASSWORD_MIN, hint: `At least ${ PASSWORD_MIN } characters.` } );
-	form.append( submit, status );
-	form.addEventListener( 'submit', async event => {
+	// What's typed, checked as the Worker will: the username, or null (said in status).
+	const checked = () => {
 
-		event.preventDefault();
 		const name = cleanUsername( username.value );
-		if ( ! name ) return say( status, 'Usernames are 3 to 20 letters (a to z), digits, _ or -.' );
+		if ( ! name ) return say( status, 'Usernames are 3 to 20 letters (a to z), digits, _ or -.' ), null;
 		const wrong = passwordProblem( password.value, name );
-		if ( wrong ) return say( status, `${ wrong }.` );
+		if ( wrong ) return say( status, `${ wrong }.` ), null;
+		return name;
+
+	};
+
+	form.append( paragraph( 'Then confirm it\'s you with Google:' ), googleConfirm( status, async credential => {
+
+		const name = checked();
+		if ( ! name ) return;
 		busy( form, true );
 		say( status, 'Adding it...' );
-		const answer = await send( 'POST', '/api/account/password', { username: name, password: password.value } );
+		const answer = await send( 'POST', '/api/account/password', { username: name, password: password.value, credential } );
 		busy( form, false );
 		if ( ! answer.ok ) return say( status, problem( answer ) );
 		toast( 'You can sign in with your username now too' );
 		hooks.update( answer.body );
+
+	} ), status );
+	form.addEventListener( 'submit', event => {
+
+		event.preventDefault();
+		if ( checked() ) say( status, 'Now confirm it\'s you with Google, just above.' );
 
 	} );
 	return section( 'Add a username and password', paragraph( 'Then you can sign in either way.' ), form );
 
 }
 
-// Linking Google (its button, its credential sent here), or unlinking it.
+// Linking Google (its button, its credential sent here with the account's password, as proof it's
+// the account's owner), or unlinking it (Google's button again, for the Google account linked).
 function googlePart( me ) {
 
 	if ( me.google ) {
 
-		const why = me.username ? 'You can sign in with your username and password instead.' : 'Add a username and password first: Google is your only way to sign in.';
-		const unlink = actionButton( 'Unlink Google', 'Unlinking...', () => send( 'DELETE', '/api/account/google', {} ), 'Google unlinked' );
-		unlink.querySelector( 'button' ).disabled = ! me.username;
-		return section( 'Google', paragraph( why ), unlink );
+		if ( ! me.username ) return section( 'Google', paragraph( 'Add a username and password first: Google is your only way to sign in.' ) );
+		const status = statusLine();
+		return section( 'Unlink Google', paragraph( 'You can sign in with your username and password instead. Confirm with Google to unlink it; this signs you out on your other devices.' ),
+			googleConfirm( status, async credential => {
+
+				say( status, 'Unlinking...' );
+				const answer = await send( 'DELETE', '/api/account/google', { credential } );
+				if ( ! answer.ok ) return say( status, problem( answer ) );
+				toast( 'Google unlinked' );
+				hooks.update( answer.body );
+
+			} ), status );
 
 	}
 
 	if ( ! hooks.google ) return document.createDocumentFragment();
-	const status = statusLine();
-	const slot = Object.assign( document.createElement( 'div' ), { className: 'account-google' } );
-	hooks.drawGoogle( slot, async credential => {
+	const { form, status } = makeForm( 'account-link', '' );
+	form.append( hiddenUsername( me ) );
+	const password = field( form, 'Your password', { name: 'password', type: 'password', autocomplete: 'current-password' } );
+	form.append( paragraph( 'Then choose your Google account:' ), googleConfirm( status, async credential => {
 
+		if ( ! password.value ) return say( status, 'Type your password first.' );
+		busy( form, true );
 		say( status, 'Linking...' );
-		const answer = await send( 'POST', '/api/account/google', { credential } );
+		const answer = await withRobot( form, status, token => send( 'POST', '/api/account/google', { credential, password: password.value, ...( token ? { token } : {} ) } ) );
+		busy( form, false );
+		if ( ! answer ) return;
 		if ( ! answer.ok ) return say( status, problem( answer ) );
+		password.value = '';
 		toast( 'Google linked: you can sign in with it too' );
 		hooks.update( answer.body );
 
+	} ), status );
+	form.addEventListener( 'submit', event => {
+
+		event.preventDefault();
+		say( status, password.value ? 'Now choose your Google account, just above.' : 'Type your password first.' );
+
 	} );
-	return section( 'Link Google', paragraph( 'Sign in with Google too, and get back in if you forget your password.' ), slot, status );
+	return section( 'Link Google', paragraph( 'Sign in with Google too, and get back in if you forget your password.' ), form );
 
 }
 
-// A button doing `run` (a request answering /api/me's body), saying `doing` meanwhile and `done` after.
-function actionButton( words, doing, run, done ) {
+// Taking the username and password off (Google is linked to sign in with): confirmed with the
+// password, or with Google's button.
+function removeForm( me ) {
 
-	const wrap = document.createElement( 'div' );
-	const status = statusLine();
-	const b = button( words, async () => {
+	const { form, status, submit } = makeForm( 'account-remove', 'Remove username and password' );
+	form.append( hiddenUsername( me ) );
+	const password = field( form, 'Your password', { name: 'password', type: 'password', autocomplete: 'current-password' } );
+	const done = answer => {
 
-		b.disabled = true;
-		say( status, doing );
-		const answer = await run();
-		b.disabled = false;
 		if ( ! answer.ok ) return say( status, problem( answer ) );
-		toast( done );
+		toast( 'Username and password removed' );
 		hooks.update( answer.body );
 
+	};
+
+	form.append( submit, status );
+	form.addEventListener( 'submit', async event => {
+
+		event.preventDefault();
+		if ( ! password.value ) return say( status, 'Type your password, or confirm with Google below.' );
+		busy( form, true );
+		say( status, 'Removing...' );
+		const answer = await withRobot( form, status, token => send( 'DELETE', '/api/account/password', { password: password.value, ...( token ? { token } : {} ) } ) );
+		busy( form, false );
+		if ( answer ) done( answer );
+
 	} );
-	wrap.append( b, status );
-	return wrap;
+	const google = hooks.google ? [ paragraph( 'Or confirm with Google:' ), googleConfirm( status, async credential => {
+
+		say( status, 'Removing...' );
+		done( await send( 'DELETE', '/api/account/password', { credential } ) );
+
+	} ) ] : [];
+	return section( 'Remove username and password', paragraph( 'You can sign in with Google instead. This signs you out on your other devices.' ), form, ...google );
+
+}
+
+// Google's button, its credential going to onCredential (not signing in), or words saying it
+// isn't here.
+function googleConfirm( status, onCredential ) {
+
+	if ( ! hooks.google ) return paragraph( 'Google sign-in isn\'t available here right now.' );
+	const slot = Object.assign( document.createElement( 'div' ), { className: 'account-google' } );
+	hooks.drawGoogle( slot, onCredential );
+	return slot;
+
+}
+
+// The account's username in a form, out of sight, so a password manager knows whose password it is.
+function hiddenUsername( me ) {
+
+	return Object.assign( document.createElement( 'input' ), { type: 'text', name: 'username', autocomplete: 'username', value: me.username, hidden: true, readOnly: true } );
 
 }
 
@@ -315,7 +406,9 @@ async function robot( form, status ) {
 	if ( ! slot ) {
 
 		slot = robotSlot();
-		form.querySelector( 'button[type="submit"]' ).before( slot );
+		const submit = form.querySelector( 'button[type="submit"]' );
+		if ( submit ) submit.before( slot );
+		else form.append( slot );
 
 	}
 
@@ -372,7 +465,8 @@ function makeForm( className, words ) {
 	form.method = 'post';
 	form.action = '#';
 	form.noValidate = true;
-	const submit = Object.assign( document.createElement( 'button' ), { type: 'submit', className: 'primary', textContent: words } );
+	// (A form confirmed with Google's button alone has no words for one, and no submit button.)
+	const submit = words ? Object.assign( document.createElement( 'button' ), { type: 'submit', className: 'primary', textContent: words } ) : null;
 	return { form, status: statusLine(), submit };
 
 }

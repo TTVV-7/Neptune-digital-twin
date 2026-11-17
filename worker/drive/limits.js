@@ -58,10 +58,10 @@ export class DriveLimits extends DurableObject {
 		this.sql.exec( 'CREATE TABLE IF NOT EXISTS place_totals ( day TEXT NOT NULL, world TEXT NOT NULL, count INTEGER NOT NULL, PRIMARY KEY ( day, world ) ) WITHOUT ROWID' );
 		this.sql.exec( 'CREATE TABLE IF NOT EXISTS place_visitors ( day TEXT NOT NULL, visitor TEXT NOT NULL, count INTEGER NOT NULL, PRIMARY KEY ( day, visitor ) ) WITHOUT ROWID' );
 		this.sql.exec( 'CREATE TABLE IF NOT EXISTS place_visits ( day TEXT NOT NULL, visit TEXT NOT NULL, count INTEGER NOT NULL, asks INTEGER NOT NULL, PRIMARY KEY ( day, visit ) ) WITHOUT ROWID' );
-		// Failed sign-ins with a password today (see passwordCheck): for each visitor (an address, an
-		// IPv6 one by its /48) and for each username, each as a hash of the day's salt and it, so neither
-		// an address nor a username is kept, nor can be linked from one day to the next. last_at: when
-		// its latest failure was (ms).
+		// Tries with a password today that didn't get in (see passwordCheck): for each visitor (an
+		// address, an IPv6 one by its /48), for each username and for each visitor and username together,
+		// each as a hash of the day's salt and it, so neither an address nor a username is kept, nor can
+		// be linked from one day to the next. last_at: when its latest try was (ms).
 		this.sql.exec( 'CREATE TABLE IF NOT EXISTS password_fails ( day TEXT NOT NULL, key TEXT NOT NULL, count INTEGER NOT NULL, last_at INTEGER NOT NULL, PRIMARY KEY ( day, key ) ) WITHOUT ROWID' );
 		// The key for those HMACs, once it's made (placesKey).
 		this.placeKey = null;
@@ -116,44 +116,61 @@ export class DriveLimits extends DurableObject {
 
 	}
 
-	// Whether a sign-in with a password (or a password change, which proves the current one) for the
-	// username `user` (its key, logins.js) from `ip` (an address, an IPv6 one by its /48) may be tried
-	// at `now` (ms): { ok: true }, or { ok: false, reason, retryAfter? }:
-	// - 'address': this visitor has failed `addressFails` times today (whatever the usernames), so it
-	//   tries no more until midnight UTC (retryAfter): one address can't guess for long.
-	// - 'robot': the username has failed `freeFails` times today (from anywhere) and this try has no
-	//   robot check passed (`robot`): from then on each try needs one (Turnstile), so a script can't
-	//   guess from many addresses, while its owner, with a click at most, still can sign in.
-	// - 'wait': past those, a try within `gap` ms of the username's last failure, retryAfter the
-	//   seconds left. That only slows guessing: nothing a stranger does keeps the owner out for longer
-	//   than `gap` and a robot check, as nothing ever locks a username.
-	// Nothing is counted here; passwordFailed counts a failure. Hashed with the day's salt, as visits.
-	async passwordCheck( ip, user, { now, robot = false, addressFails, freeFails, gap } ) {
+	// Whether a sign-in with a password (or anything else that proves one: a password change, linking
+	// Google, taking the password off) for the username `user` (its key, logins.js) from `ip` (an
+	// address, an IPv6 one by its /48) may be tried at `now` (ms): { ok: true }, with the try counted
+	// already, or { ok: false, reason, retryAfter? } with nothing counted:
+	// - 'address': this visitor has tried `hardFails` times today without getting in (whatever the
+	//   usernames), so it tries no more until midnight UTC (retryAfter): a script on one address
+	//   can't guess for long.
+	// - 'robot': the username has had `freeFails` such tries today (from anywhere), or this visitor
+	//   `addressFails`, and this try has no robot check passed (`robot`): from then on each try needs
+	//   one (Turnstile), so a script can't guess from many addresses, nor long from one, while the
+	//   owner, with a click, still signs in (one stranger on a shared address, a school's or a phone
+	//   carrier's, doesn't keep everyone else there out for the day).
+	// - 'wait': past those, a try within `gap` ms of this visitor's last try at this username,
+	//   retryAfter the seconds left. That slows one address's guessing; it's keyed by the visitor
+	//   and the username together, so tries from other addresses never make the owner wait, and
+	//   nothing ever locks a username.
+	// The try is counted here, in the same go as the check (a Durable Object answers one call at a
+	// time and nothing here waits between reading and writing), so requests sent all at once can't
+	// all pass before any is counted; passwordSucceeded gives a try that got in back. Hashed with
+	// the day's salt, as visits.
+	async passwordCheck( ip, user, { now, robot = false, addressFails, hardFails, freeFails, gap } ) {
 
 		const day = dayOf( now );
 		const salt = this.saltFor( day );
-		const [ visitor, name ] = await Promise.all( [ sha256Hex( `${ salt }:password:${ ip }` ), sha256Hex( `${ salt }:username:${ user }` ) ] );
-		const row = key => this.sql.exec( 'SELECT count, last_at FROM password_fails WHERE day = ? AND key = ?', day, key ).toArray()[ 0 ];
-		if ( ( row( visitor )?.count ?? 0 ) >= addressFails ) return { ok: false, reason: 'address', retryAfter: untilMidnight( now ) };
-		const fails = row( name );
-		if ( ( fails?.count ?? 0 ) < freeFails ) return { ok: true };
-		if ( ! robot ) return { ok: false, reason: 'robot' };
-		const wait = fails.last_at + gap - now;
-		if ( wait > 0 ) return { ok: false, reason: 'wait', retryAfter: Math.max( 1, Math.ceil( wait / 1000 ) ) };
-		return { ok: true };
+		const [ visitor, name, pair ] = await passwordKeys( salt, ip, user );
+		return this.ctx.storage.transactionSync( () => {
+
+			const count = key => this.sql.exec( 'SELECT count, last_at FROM password_fails WHERE day = ? AND key = ?', day, key ).toArray()[ 0 ];
+			const mine = count( visitor )?.count ?? 0;
+			if ( mine >= hardFails ) return { ok: false, reason: 'address', retryAfter: untilMidnight( now ) };
+			if ( mine >= addressFails || ( count( name )?.count ?? 0 ) >= freeFails ) {
+
+				if ( ! robot ) return { ok: false, reason: 'robot' };
+				const wait = ( count( pair )?.last_at ?? - Infinity ) + gap - now;
+				if ( wait > 0 ) return { ok: false, reason: 'wait', retryAfter: Math.max( 1, Math.ceil( wait / 1000 ) ) };
+
+			}
+
+			for ( const key of [ visitor, name, pair ] ) this.sql.exec( 'INSERT INTO password_fails ( day, key, count, last_at ) VALUES ( ?, ?, 1, ? ) ON CONFLICT ( day, key ) DO UPDATE SET count = count + 1, last_at = excluded.last_at', day, key, now );
+			return { ok: true };
+
+		} );
 
 	}
 
-	// A failed sign-in (or password change) for `user` from `ip` at `now` (ms), counted for both (see
-	// passwordCheck).
-	async passwordFailed( ip, user, { now } ) {
+	// A try passwordCheck counted that got in (the right password for `user` from `ip`, on the day of
+	// `now`), given back: the owner signing in a few times a day never comes near the robot check.
+	async passwordSucceeded( ip, user, { now } ) {
 
 		const day = dayOf( now );
 		const salt = this.saltFor( day );
-		const keys = await Promise.all( [ sha256Hex( `${ salt }:password:${ ip }` ), sha256Hex( `${ salt }:username:${ user }` ) ] );
+		const keys = await passwordKeys( salt, ip, user );
 		this.ctx.storage.transactionSync( () => {
 
-			for ( const key of keys ) this.sql.exec( 'INSERT INTO password_fails ( day, key, count, last_at ) VALUES ( ?, ?, 1, ? ) ON CONFLICT ( day, key ) DO UPDATE SET count = count + 1, last_at = excluded.last_at', day, key, now );
+			for ( const key of keys ) this.sql.exec( 'UPDATE password_fails SET count = MAX( 0, count - 1 ) WHERE day = ? AND key = ?', day, key );
 
 		} );
 
@@ -379,6 +396,14 @@ function addLive( sql, day, amount, budget ) {
 	sql.exec( 'INSERT INTO live ( day, spent ) VALUES ( ?, ? ) ON CONFLICT ( day ) DO UPDATE SET spent = spent + excluded.spent', day, amount );
 	const spent = sql.exec( 'SELECT spent FROM live WHERE day = ?', day ).one().spent;
 	return { open: spent < budget, spent };
+
+}
+
+// The keys passwordCheck counts a try under, hashed with the day's `salt`: the visitor (`ip`), the
+// username (`user`) and the two together.
+function passwordKeys( salt, ip, user ) {
+
+	return Promise.all( [ sha256Hex( `${ salt }:password:${ ip }` ), sha256Hex( `${ salt }:username:${ user }` ), sha256Hex( `${ salt }:pair:${ ip }:${ user }` ) ] );
 
 }
 

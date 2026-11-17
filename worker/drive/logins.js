@@ -3,6 +3,7 @@ import { HttpError, base64url, fromBase64url, isObject, json, noContent, randomT
 import { profileFrom, testCertsUrl } from '../sessions.js';
 import { cleanUsername, passwordProblem, passwordText, usernameKey } from '../../src/drive-app/password-rules.js';
 import { SIGN_INS_DAILY, accountById, currentAccount, meFor, sessionHash, signedIn, signedOutCookie } from './accounts.js';
+import { isAdmin } from './admin.js';
 import { nameAllowed } from './names.js';
 import { database, takeTurn } from './players.js';
 import { addressOf, googleClientId, setting } from './settings.js';
@@ -24,11 +25,20 @@ import { MAX_TOKEN, verifyTurnstile } from './turnstile.js';
 // The rules for usernames and passwords are password-rules.js's, shared with the page. Nothing here
 // ever logs, keeps or sends a password anywhere: only its hash is kept.
 //
-// Guessing is held back by DriveLimits (limits.js's passwordCheck): a visitor (an address, an IPv6
-// one by its /48) may fail ADDRESS_FAILS times a day, and once a username has failed FREE_FAILS
-// times in a day each further try for it needs a robot check (Turnstile) and waits FAIL_GAP after
-// the last failure. Nothing locks a username, so a stranger can't keep its owner out. Making an
-// account always needs a robot check, and a visitor makes SIGN_UPS_DAILY a day at most.
+// Guessing is held back by DriveLimits (limits.js's passwordCheck), which counts each try as it's
+// checked (so tries sent all at once are counted as one after another) and gives back the ones that
+// got in: once a username has had FREE_FAILS tries in a day, or a visitor (an address, an IPv6 one
+// by its /48) ADDRESS_FAILS, each further try needs a robot check (Turnstile) and waits FAIL_GAP
+// after the visitor's last try at that username; past HARD_FAILS a visitor tries no more that day.
+// Nothing locks a username, and tries from elsewhere never make its owner wait, so a stranger can't
+// keep the owner out. Making an account always needs a robot check, and a visitor makes
+// SIGN_UPS_DAILY a day at most.
+//
+// What changes how an account signs in needs fresh proof, not only the session, so a borrowed
+// browser or a copied cookie can't take an account over: adding a username and password to a Google
+// account needs Google's ID token for it, linking Google to a username's account needs the password,
+// unlinking Google needs Google's ID token and taking the password off needs it or Google's. The
+// owner's accounts (ADMIN_EMAILS) sign in with Google only: no password is ever added to one.
 //
 // Settings: PASSWORD_ACCOUNTS 'off' switches it off (anything else, or unset, is on, given the
 // database and Turnstile's secret); PASSWORD_ITERATIONS (tests only, or to lower the count on the
@@ -41,9 +51,11 @@ const SALT_BYTES = 16;
 const HASH_BITS = 256;
 // A Google id for an account with no Google account linked (see migration 0008).
 export const NO_GOOGLE = 'none:';
-// Sign-ins failed by one visitor in a day, a username's failures before each try needs a robot check,
-// and then the least time between them (ms).
+// Tries that didn't get in from one visitor in a day before each needs a robot check, and before it
+// tries no more that day; a username's before each try needs a robot check; and then the least time
+// between one visitor's tries at a username (ms).
 export const ADDRESS_FAILS = 20;
+export const HARD_FAILS = 200;
 export const FREE_FAILS = 5;
 export const FAIL_GAP = 5000;
 // Accounts a visitor may make in a day; and changes (a password set or changed, Google linked or
@@ -58,7 +70,7 @@ const encoder = new TextEncoder();
 // username nobody has is hashed just as one with the wrong password is, and takes as long. Both are
 // random bytes, never a hash of anything, so no password can match them (made once per Worker
 // instance, and costing nothing to make: no hashing, so even the first stranger's try takes one
-// hash's time, as everyone's does).
+// hash's time, as everyone's does). Always at ITERATIONS, the most any stored hash can have.
 let standIn = null;
 
 // Whether usernames and passwords are on: the database, Turnstile's secret (making an account needs
@@ -114,17 +126,11 @@ function sameBytes( a, b ) {
 
 }
 
-// The stand-in's row, with the count new hashes are made with, as a real one would have.
-function standInFor( env ) {
+// The stand-in's row.
+function standInRow() {
 
-	const iterations = iterationsFor( env );
-	if ( standIn?.iterations !== iterations ) {
-
-		const random = bytes => base64url( crypto.getRandomValues( new Uint8Array( bytes ) ) );
-		standIn = { salt: random( SALT_BYTES ), iterations, password_hash: random( HASH_BITS / 8 ) };
-
-	}
-
+	const random = bytes => base64url( crypto.getRandomValues( new Uint8Array( bytes ) ) );
+	standIn ??= { salt: random( SALT_BYTES ), iterations: ITERATIONS, password_hash: random( HASH_BITS / 8 ) };
 	return standIn;
 
 }
@@ -179,14 +185,17 @@ function newPassword( value, username ) {
 }
 
 // Whether `password` is right for the login of `key` (a username's key): through DriveLimits'
-// check first (a 429, or a 403 asking for a robot check), and a failure counted there. A username
-// nobody has is hashed against the stand-in, so it takes as long and says the same as a wrong
-// password. The login's row ({ account_id, username, password_hash, salt, iterations }), or null.
+// check first (a 429, or a 403 asking for a robot check), which counts the try, given back if it
+// gets in. A username nobody has is hashed against the stand-in, so it takes as long and says the
+// same as a wrong password; and a wrong password for a hash made with fewer iterations than the
+// stand-in's (PASSWORD_ITERATIONS lowered) is made up to the stand-in's with more hashing, so a
+// refusal always costs ITERATIONS and its time never says whether the username is someone's.
+// The login's row ({ account_id, username, password_hash, salt, iterations }), or null.
 async function checkPassword( { request, env, limits, now }, key, password, robot ) {
 
 	const db = database( env );
 	const ip = addressOf( request, 48 );
-	const gate = await limits.passwordCheck( ip, key, { now, robot, addressFails: ADDRESS_FAILS, freeFails: FREE_FAILS, gap: FAIL_GAP } );
+	const gate = await limits.passwordCheck( ip, key, { now, robot, addressFails: ADDRESS_FAILS, hardFails: HARD_FAILS, freeFails: FREE_FAILS, gap: FAIL_GAP } );
 	if ( ! gate.ok ) {
 
 		if ( gate.reason === 'robot' ) throw new HttpError( 403, 'Show you\'re not a robot first', { reason: 'robot' } );
@@ -196,20 +205,28 @@ async function checkPassword( { request, env, limits, now }, key, password, robo
 	}
 
 	const row = key ? await db.prepare( 'SELECT account_id, username, password_hash, salt, iterations FROM logins WHERE username_key = ?' ).bind( key ).first() : null;
-	const good = await passwordMatches( password ?? '', row ?? standInFor( env ) ) && !! row && password !== null;
-	if ( good ) return row;
-	await limits.passwordFailed( ip, key, { now } );
+	const standing = standInRow();
+	const good = await passwordMatches( password ?? '', row ?? standing ) && !! row && password !== null;
+	if ( good ) {
+
+		await limits.passwordSucceeded( ip, key, { now } );
+		return row;
+
+	}
+
+	if ( row && row.iterations < standing.iterations ) await hashPassword( password ?? '', fromBase64url( standing.salt ), standing.iterations - row.iterations );
 	return null;
 
 }
 
-// The password hashed again with the count new hashes are made with, when its own is lower.
+// The password hashed again with the count new hashes are made with, when its own is another (lower
+// when that's been raised, higher when PASSWORD_ITERATIONS has lowered it to spare CPU).
 async function rehashIfOld( env, row, password, now ) {
 
 	const iterations = iterationsFor( env );
-	if ( row.iterations >= iterations ) return;
+	if ( row.iterations === iterations ) return;
 	const hash = await newHash( env, password );
-	await database( env ).prepare( 'UPDATE logins SET password_hash = ?, salt = ?, iterations = ?, changed_at = ? WHERE account_id = ? AND iterations < ?' )
+	await database( env ).prepare( 'UPDATE logins SET password_hash = ?, salt = ?, iterations = ?, changed_at = ? WHERE account_id = ? AND iterations <> ?' )
 		.bind( hash.password_hash, hash.salt, hash.iterations, now, row.account_id, iterations ).run();
 
 }
@@ -231,16 +248,19 @@ export async function signUp( context ) {
 	const key = usernameKey( username );
 	if ( await db.prepare( 'SELECT 1 AS taken FROM logins WHERE username_key = ?' ).bind( key ).first() ) throw new HttpError( 409, 'That username is taken' );
 	const hash = await newHash( env, password );
-	// The account and its login at once; the login's UNIQUE key decides between two at the same time,
-	// and the account made for the one that lost is taken back.
-	const { id } = await db.prepare( 'INSERT INTO accounts ( google_sub, email, name, created_at, last_login_at ) VALUES ( ?, \'\', \'\', ?, ? ) RETURNING id' )
-		.bind( NO_GOOGLE + randomToken( 16 ), now, now ).first();
-	const [ added ] = await db.batch( [
+	// The account and its login in one batch (one transaction: if it fails, neither is kept), found by
+	// its new random Google id; the login's UNIQUE key decides between two at the same time, and the
+	// account made for the one that lost is taken back in the same go.
+	const sub = NO_GOOGLE + randomToken( 16 );
+	const [ , added ] = await db.batch( [
+		db.prepare( 'INSERT INTO accounts ( google_sub, email, name, created_at, last_login_at ) VALUES ( ?, \'\', \'\', ?, ? )' ).bind( sub, now, now ),
 		db.prepare( `INSERT INTO logins ( account_id, username, username_key, password_hash, salt, iterations, created_at, changed_at )
-			VALUES ( ?, ?, ?, ?, ?, ?, ?, ? ) ON CONFLICT ( username_key ) DO NOTHING` ).bind( id, username, key, hash.password_hash, hash.salt, hash.iterations, now, now ),
-		db.prepare( 'DELETE FROM accounts WHERE id = ?1 AND NOT EXISTS ( SELECT 1 FROM logins WHERE account_id = ?1 )' ).bind( id ),
+			SELECT id, ?, ?, ?, ?, ?, ?, ? FROM accounts WHERE google_sub = ? ON CONFLICT ( username_key ) DO NOTHING RETURNING account_id` )
+			.bind( username, key, hash.password_hash, hash.salt, hash.iterations, now, now, sub ),
+		db.prepare( 'DELETE FROM accounts WHERE google_sub = ? AND NOT EXISTS ( SELECT 1 FROM logins WHERE account_id = accounts.id )' ).bind( sub ),
 	] );
-	if ( ! added.meta.changes ) throw new HttpError( 409, 'That username is taken' );
+	const id = added.results?.[ 0 ]?.account_id;
+	if ( ! id ) throw new HttpError( 409, 'That username is taken' );
 	return signedIn( context, id );
 
 }
@@ -299,22 +319,69 @@ async function changing( context ) {
 
 }
 
+// The Google account the ID token `credential` is for (from Google's button, checked as a
+// sign-in's is): { sub, email, name }, or a 401 for a token that doesn't pass.
+async function googleClaims( env, credential ) {
+
+	const clientId = googleClientId( env );
+	if ( ! clientId ) throw new HttpError( 503, 'Sign-in isn\'t set up' );
+	return profileFrom( await verifyIdToken( credential, { clientId, certsUrl: testCertsUrl( env ) } ) );
+
+}
+
+// Fresh proof that whoever's asking has the Google account linked to `account`: its ID token, or a
+// 401 (a token that doesn't pass) or 403 (another Google account's). The Google id ({ sub }).
+async function googleProof( env, account, credential ) {
+
+	const { sub } = await googleClaims( env, credential );
+	const row = await database( env ).prepare( 'SELECT 1 AS linked FROM accounts WHERE id = ? AND google_sub = ?' ).bind( account.id, sub ).first();
+	if ( ! row ) throw new HttpError( 403, 'That\'s another Google account. Use the one linked here' );
+	return { sub };
+
+}
+
+// Fresh proof that whoever's asking knows `account`'s password (`sent.password`, with a robot
+// check's `sent.token` when DriveLimits asks for one), checked and counted as a sign-in is: a 401
+// for a wrong one.
+async function passwordProof( context, account, sent ) {
+
+	if ( typeof sent.password !== 'string' ) throw new HttpError( 400, 'Bad request' );
+	const robot = await robotPassed( context.env, context.request, sent.token );
+	const row = await checkPassword( context, usernameKey( account.username ), passwordText( sent.password ), robot );
+	if ( ! row || row.account_id !== account.id ) throw new HttpError( 401, 'That isn\'t your current password' );
+
+}
+
+// The owner's accounts (admin.js's ADMIN_EMAILS) sign in with Google only, so the admin page never
+// rests on a password: none is added to one, nor is one's Google account linked to a username's.
+function notTheOwners( env, email ) {
+
+	if ( isAdmin( env, { email } ) ) throw new HttpError( 403, 'The owner\'s accounts sign in with Google only' );
+
+}
+
 // POST /api/account/password { current, password, token? }, signed in: the account's password
 // changed, which needs the current one (checked and counted as a sign-in is), and every other
 // session of the account signed out (this browser stays signed in). Signed in with Google and no
-// username yet: { username, password }, a username and password added (no current one to give).
+// username yet: { username, password, credential }, a username and password added, with Google's
+// ID token for the account's own Google account as fresh proof (the session alone isn't enough:
+// a borrowed browser could otherwise add a way in for someone else). Adding one is counted as one
+// of the visitor's SIGN_UPS_DAILY, as making an account is, since a taken username says so.
 // Answers /api/me's body.
 export async function setPassword( context ) {
 
-	const { request, env, url, now } = context;
+	const { request, env, url, limits, now } = context;
 	const db = checkOn( env );
 	const sent = await body( request );
 	const account = await signedInAccount( context );
 	if ( ! account.username ) {
 
+		notTheOwners( env, account.email );
 		const username = newUsername( sent.username );
 		const password = newPassword( sent.password, username );
 		await aChange( context );
+		await googleProof( env, account, sent.credential );
+		await takeTurn( limits, request, 'sign-up', now, SIGN_UPS_DAILY, 48 );
 		const hash = await newHash( env, password );
 		const { meta } = await db.prepare( `INSERT INTO logins ( account_id, username, username_key, password_hash, salt, iterations, created_at, changed_at )
 			VALUES ( ?, ?, ?, ?, ?, ?, ?, ? ) ON CONFLICT DO NOTHING` ).bind( account.id, username, usernameKey( username ), hash.password_hash, hash.salt, hash.iterations, now, now ).run();
@@ -338,66 +405,93 @@ export async function setPassword( context ) {
 
 }
 
-// DELETE /api/account/password, signed in: the username and password taken off the account, only
-// while a Google account is linked to sign in with instead (else a 409). Answers /api/me's body.
+// DELETE /api/account/password { password, token? } or { credential }, signed in: the username and
+// password taken off the account, with fresh proof: the password itself (checked and counted as a
+// sign-in is), or Google's ID token for the account's Google account (so its owner can always take
+// off a password they've forgotten, or didn't set). Only while a Google account is linked to sign
+// in with instead (else a 409), which the delete itself checks, so two changes at once can't leave
+// the account with no way in. The account's other sessions are signed out. Answers /api/me's body.
 export async function removePassword( context ) {
 
-	const { env } = context;
+	const { request, env, url } = context;
 	const db = checkOn( env );
+	const sent = await body( request );
 	const account = await changing( context );
+	if ( ! account.username ) return json( await meFor( env, account ) );
 	if ( ! account.google ) throw new HttpError( 409, 'Link Google first: it\'s your only way to sign in' );
-	await db.prepare( 'DELETE FROM logins WHERE account_id = ?' ).bind( account.id ).run();
+	if ( sent.credential !== undefined ) await googleProof( env, account, sent.credential );
+	else await passwordProof( context, account, sent );
+	const [ removed ] = await db.batch( [
+		db.prepare( 'DELETE FROM logins WHERE account_id = ?1 AND EXISTS ( SELECT 1 FROM accounts WHERE id = ?1 AND google_sub NOT LIKE \'none:%\' )' ).bind( account.id ),
+		db.prepare( 'DELETE FROM sessions WHERE account_id = ?1 AND token_hash <> ?2 AND NOT EXISTS ( SELECT 1 FROM logins WHERE account_id = ?1 )' ).bind( account.id, await sessionHash( request, url ) ?? '' ),
+	] );
+	if ( ! removed.meta.changes ) throw new HttpError( 409, 'Link Google first: it\'s your only way to sign in' );
 	return json( await meFor( env, await accountById( db, account.id ) ) );
 
 }
 
-// POST /api/account/google { credential }, signed in: the Google account the ID token is for (from
-// Google's button, checked as a sign-in's is) linked to this account, so either signs in. A Google
-// account already with an account of its own here is only taken over when that account has nothing
-// to lose (no username, no player linked to it and no purchase of its own): then it's deleted, and
-// its sessions with it. Otherwise it's a 409 saying so, and nothing changes: nothing is merged, so
-// no pass, level or time is ever dropped or doubled (docs/world-drive.md). An account with another
-// Google account linked already is a 409 too. Answers /api/me's body.
+// POST /api/account/google { credential, password, token? }, signed in with a username: the Google
+// account the ID token is for (from Google's button, checked as a sign-in's is) linked to this
+// account, so either signs in. It needs the account's password too (checked and counted as a
+// sign-in is), so a borrowed browser can't link someone else's Google account. A Google account
+// already with an account of its own here is only taken over when that account has nothing to lose
+// (no username, no player linked to it and no purchase of its own): then it's deleted, and its
+// sessions with it, in the same go as the link, by a delete that checks that again, so a player
+// linked or a pass bought in between is never cut loose. Otherwise it's a 409 saying so, and nothing
+// changes: nothing is merged, so no pass, level or time is ever dropped or doubled
+// (docs/world-drive.md). An account with another Google account linked already is a 409 too, and
+// an owner's Google account (ADMIN_EMAILS) a 403. Answers /api/me's body.
 export async function linkGoogle( context ) {
 
 	const { request, env, now } = context;
 	const db = checkOn( env );
-	const clientId = googleClientId( env );
-	if ( ! clientId ) throw new HttpError( 503, 'Sign-in isn\'t set up' );
 	const sent = await body( request );
-	const claims = await verifyIdToken( sent.credential, { clientId, certsUrl: testCertsUrl( env ) } );
+	const { sub, email, name } = await googleClaims( env, sent.credential );
 	const account = await changing( context );
-	const { sub, email, name } = profileFrom( claims );
-	const other = await db.prepare( `SELECT a.id,
-		EXISTS ( SELECT 1 FROM logins WHERE account_id = a.id ) OR EXISTS ( SELECT 1 FROM players WHERE account_id = a.id )
-			OR EXISTS ( SELECT 1 FROM purchases WHERE account_id = a.id ) AS keeps FROM accounts a WHERE a.google_sub = ?` ).bind( sub ).first();
+	const KEEPS = `EXISTS ( SELECT 1 FROM logins WHERE account_id = accounts.id ) OR EXISTS ( SELECT 1 FROM players WHERE account_id = accounts.id )
+		OR EXISTS ( SELECT 1 FROM purchases WHERE account_id = accounts.id )`;
+	const other = await db.prepare( `SELECT id, ${ KEEPS } AS keeps FROM accounts WHERE google_sub = ?` ).bind( sub ).first();
 	if ( other?.id === account.id ) return json( await meFor( env, account ) );
 	if ( account.google ) throw new HttpError( 409, 'This account has a Google account linked already. Unlink it first' );
-	if ( other?.keeps ) throw new HttpError( 409, 'That Google account has its own World Drive account, with its own progress or pass. Sign in with Google to use that one' );
-	await db.batch( [
-		...( other ? [ db.prepare( 'DELETE FROM accounts WHERE id = ? AND google_sub = ?' ).bind( other.id, sub ) ] : [] ),
-		db.prepare( 'UPDATE accounts SET google_sub = ?, email = ?, name = ?, last_login_at = ? WHERE id = ?' ).bind( sub, email, name, now, account.id ),
+	notTheOwners( env, email );
+	await passwordProof( context, account, sent );
+	const KEPT = 'That Google account has its own World Drive account, with its own progress or pass. Sign in with Google to use that one';
+	if ( other?.keeps ) throw new HttpError( 409, KEPT );
+	const [ , linked ] = await db.batch( [
+		db.prepare( `DELETE FROM accounts WHERE google_sub = ? AND id <> ? AND NOT ( ${ KEEPS } )` ).bind( sub, account.id ),
+		db.prepare( `UPDATE accounts SET google_sub = ?1, email = ?2, name = ?3, last_login_at = ?4 WHERE id = ?5 AND google_sub LIKE 'none:%'
+			AND NOT EXISTS ( SELECT 1 FROM accounts WHERE google_sub = ?1 )` ).bind( sub, email, name, now, account.id ),
 	] );
+	if ( ! linked.meta.changes ) throw new HttpError( 409, KEPT );
 	return json( await meFor( env, await accountById( db, account.id ) ) );
 
 }
 
-// DELETE /api/account/google, signed in: the Google account unlinked, only while the account has a
-// username and password to sign in with instead (else a 409). Its email and name go with it; a pass
-// bought with that email before signing in (a purchase that's nobody's yet) becomes the account's
-// first, so unlinking never loses a pass. One given by SUPPORTER_EMAILS goes with the email.
-// Answers /api/me's body.
+// DELETE /api/account/google { credential }, signed in: the Google account unlinked, with Google's
+// ID token for it as fresh proof (the session alone isn't enough: a borrowed browser could
+// otherwise add a password and unlink the owner's Google, taking the account and its pass). Only
+// while the account has a username and password to sign in with instead (else a 409), which the
+// update itself checks, so two changes at once can't leave it with no way in. Its email and name go
+// with it; a pass bought with that email before signing in (a purchase that's nobody's yet) becomes
+// the account's first, so unlinking never loses a pass. One given by SUPPORTER_EMAILS goes with the
+// email. The account's other sessions are signed out. Answers /api/me's body.
 export async function unlinkGoogle( context ) {
 
-	const { env } = context;
+	const { request, env, url } = context;
 	const db = checkOn( env );
+	const sent = await body( request );
 	const account = await changing( context );
 	if ( ! account.google ) return json( await meFor( env, account ) );
 	if ( ! account.username ) throw new HttpError( 409, 'Add a username and password first: Google is your only way to sign in' );
-	await db.batch( [
-		db.prepare( 'UPDATE purchases SET account_id = ?1 WHERE account_id IS NULL AND email = ?2 AND ?2 <> \'\'' ).bind( account.id, account.email ),
-		db.prepare( 'UPDATE accounts SET google_sub = ?, email = \'\', name = \'\' WHERE id = ?' ).bind( NO_GOOGLE + randomToken( 16 ), account.id ),
+	const { sub } = await googleProof( env, account, sent.credential );
+	const none = NO_GOOGLE + randomToken( 16 );
+	const unlinked = 'EXISTS ( SELECT 1 FROM accounts WHERE id = ?1 AND google_sub = ?2 )';
+	const [ changed ] = await db.batch( [
+		db.prepare( 'UPDATE accounts SET google_sub = ?1, email = \'\', name = \'\' WHERE id = ?2 AND google_sub = ?3 AND EXISTS ( SELECT 1 FROM logins WHERE account_id = ?2 )' ).bind( none, account.id, sub ),
+		db.prepare( `UPDATE purchases SET account_id = ?1 WHERE account_id IS NULL AND email = ?3 AND ?3 <> '' AND ${ unlinked }` ).bind( account.id, none, account.email ),
+		db.prepare( `DELETE FROM sessions WHERE account_id = ?1 AND token_hash <> ?3 AND ${ unlinked }` ).bind( account.id, none, await sessionHash( request, url ) ?? '' ),
 	] );
+	if ( ! changed.meta.changes ) throw new HttpError( 409, 'Add a username and password first: Google is your only way to sign in' );
 	return json( await meFor( env, await accountById( db, account.id ) ) );
 
 }
