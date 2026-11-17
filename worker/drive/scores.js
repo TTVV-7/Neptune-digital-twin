@@ -1,5 +1,6 @@
 import { HttpError, isObject, json, readJson } from '../http.js';
-import { DRIVE_CARS, LIBRARY_VEHICLES, PASS_RIDES } from '../../src/drive-app/catalog.js';
+import { DRIVE_CARS, LIBRARY_VEHICLES, PASS_RIDES, WORKS_RIDES } from '../../src/drive-app/catalog.js';
+import { checkRide } from './achievements.js';
 import { BOARD_CACHE, PERIODS, boardKey, dateOf, forgetBoards } from './boards.js';
 import { cleanPlace, placeKey } from './names.js';
 import { PLAYER_ID, authenticate, credentials, database, takeTurn } from './players.js';
@@ -21,7 +22,8 @@ import { standingOf, xpOf } from './progress.js';
 // - the run can't be longer than the visit has lasted, and its score can't be more than RATE
 //   points a second of it, three times the most the game can give (see maxRate below), nor more
 //   than MAX_SCORE; the game's scores are always whole tens, its tricks always read as it writes
-//   them, and the vehicle is one it offers;
+//   them, and the vehicle is one it offers (a construction ride only with the achievement that
+//   unlocks it, achievements.js);
 // - one score every 10 s per player (SCORE_GAP), and SCORES_PER_VISITOR_DAILY a day per visitor.
 // What gets through anyway, the owner deletes (docs/world-drive.md).
 
@@ -59,7 +61,9 @@ const SLACK = 30;
 export const SCORE_GAP = 10 * 1000;
 // Scores a visitor may post in a day (SCORES_PER_VISITOR_DAILY): one every 10 s for four hours.
 const SCORES_DAILY = 1500;
-const VEHICLES = new Set( [ 'go-kart', ...LIBRARY_VEHICLES, ...DRIVE_CARS, ...PASS_RIDES ] );
+// A UTC day (ms): DriveLimits' days end at its midnights.
+const DAY = 24 * 60 * 60 * 1000;
+export const VEHICLES = new Set( [ 'go-kart', ...LIBRARY_VEHICLES, ...WORKS_RIDES, ...DRIVE_CARS, ...PASS_RIDES ] );
 // The tricks of a run's best jump, as drive.js names them (tricksOf), joined with " + ".
 const TRICK = /^(?:(\d{3,5}) Spin!|(?:Back|Front)flip(?:!| ×\d{1,3})|Barrel roll(?:!| ×\d{1,3})|Wall bounce(?: ×\d{1,3})?|Big air \d{1,3}\.\d s)$/;
 const MAX_TRICKS = 120;
@@ -92,16 +96,36 @@ export async function postScore( { request, env, url, limits, now } ) {
 	] );
 	if ( bound.results[ 0 ]?.player_id !== id ) throw new HttpError( 403, 'Forbidden', { reason: 'visit' } );
 
-	// One score every SCORE_GAP, claimed in one statement so two at once can't both get in.
+	// One score every SCORE_GAP, claimed in one statement so two at once can't both get in. A player
+	// held till midnight (their visitor's day used up, below) is turned away here.
 	const gap = await db.prepare( 'UPDATE players SET last_score_at = ?1, last_seen_at = ?1 WHERE id = ?2 AND last_score_at <= ?3' ).bind( now, id, now - SCORE_GAP ).run();
 	if ( ! gap.meta.changes ) {
 
 		const retryAfter = Math.max( 1, Math.ceil( ( player.last_score_at + SCORE_GAP - now ) / 1000 ) );
+		if ( retryAfter > SCORE_GAP / 1000 ) throw new HttpError( 429, 'That\'s all for today. Try again tomorrow', { retryAfter }, { 'Retry-After': String( retryAfter ) } );
 		throw new HttpError( 429, 'Too many scores. Try again in a moment', { retryAfter }, { 'Retry-After': String( retryAfter ) } );
 
 	}
 
-	await takeTurn( limits, request, 'score', now, setting( env.SCORES_PER_VISITOR_DAILY, SCORES_DAILY ) );
+	try {
+
+		await takeTurn( limits, request, 'score', now, setting( env.SCORES_PER_VISITOR_DAILY, SCORES_DAILY ) );
+
+	} catch ( err ) {
+
+		// The visitor's day used up: this player's gap is set to run out at midnight UTC (when the
+		// visitor's day starts again), so until then their tries stop at the gap above, before they
+		// write anything or ask DriveLimits again.
+		if ( err.status === 429 ) await db.prepare( 'UPDATE players SET last_score_at = ? WHERE id = ?' ).bind( ( Math.floor( now / DAY ) + 1 ) * DAY - SCORE_GAP, id ).run();
+		throw err;
+
+	}
+
+	// A construction ride only with the achievement that unlocks it: the boards show each run's ride
+	// (achievements.js; nothing read for any other ride). Asked after the gap and the visitor's day,
+	// so a score refused for its ride costs what any other does: one every SCORE_GAP a player, and
+	// SCORES_PER_VISITOR_DAILY an address, not a loop of lookups as fast as a script can post.
+	await checkRide( db, id, run.vehicle );
 
 	// The player's best on each board it's on: this period and place, and anywhere.
 	const boards = Object.values( PERIODS ).flatMap( period => [ [ period( now ), '' ], [ period( now ), run.placeKey ] ] );

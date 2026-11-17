@@ -1,5 +1,5 @@
 import './style.css';
-import { getConfig, postVisit, robotCheck } from './api.js';
+import { getConfig, postVisit, robotCheck, send } from './api.js';
 import * as screens from './screens.js';
 
 // World Drive's first script (docs/world-drive.md): the splash, the Worker's settings and the robot
@@ -14,6 +14,10 @@ const DEV_KEY = __DEV_MAPS_KEY__;
 // What a failed download of the game's code says, in Chromium, Firefox and Safari, and Vite's own
 // when a chunk's styles don't come: a connection's fault, unlike an error in the code itself.
 const NOT_LOADED = /dynamically imported module|Importing a module script failed|Unable to preload|Failed to fetch/i;
+// How long (ms) the visit waits, after the robot check, for a challenge link's answer, to know its
+// world (it's asked for beside the check, so it's nearly always there by then); one slower than that
+// opens its card when it comes, on the world the visit took (the Earth, for want of knowing).
+const LINK_WAIT = 4000;
 
 const $ = id => document.getElementById( id );
 // Without WebGL 2 (which three.js needs) there's no game to load, nor a visit to spend on it.
@@ -31,8 +35,34 @@ async function boot() {
 	const config = await getConfig();
 	// The Vite dev server on its own: a key from the environment, or the test globe.
 	if ( ! config ) return start( { key: DEV_KEY || null, worker: false } );
-	if ( ! config.mapsOn ) return screens.notice( 'resting', { onTestPad: () => start( { key: null, googleClientId: config.googleClientId, live: !! config.live, liveReason: config.liveReason } ) } );
+	// (Maps off: the test pad, a challenge link's card over it all the same.)
+	if ( ! config.mapsOn ) return screens.notice( 'resting', { onTestPad: () => start( { key: null, googleClientId: config.googleClientId, passwords: config.passwords === true, turnstileSiteKey: config.turnstileSiteKey, live: !! config.live, liveReason: config.liveReason, adsense: config.adsense ?? null, challengeLink: challengeLink() } ) } );
 	visit( config );
+
+}
+
+// A "challenge a friend" link (/c?challenge=<id>&vs=<handle>, or the same at /): what the Worker
+// says of it, asked for once, as the page starts, beside the robot check: a promise of { link:
+// { challenge, vs } as the address has them, answer: send's (its body { challenge, vs }) }, or of
+// null for no link. Its world is the visit's (a Moon challenge's spends none of the day's Earth
+// drives, as a link to the Moon doesn't), and the game opens it (main.js, challenges.js).
+let linkAsked = null;
+function challengeLink() {
+
+	if ( linkAsked ) return linkAsked;
+	const params = new URLSearchParams( location.search );
+	const id = Number( params.get( 'challenge' ) );
+	if ( ! Number.isSafeInteger( id ) || id < 1 ) return linkAsked = Promise.resolve( null );
+	const vs = params.get( 'vs' );
+	linkAsked = send( 'GET', `/api/challenges/link?challenge=${ id }${ vs ? `&vs=${ encodeURIComponent( vs ) }` : '' }` ).then( answer => ( { link: { challenge: id, vs }, answer } ) );
+	return linkAsked;
+
+}
+
+// The link's answer (challengeLink's), or null if it hasn't come within LINK_WAIT (the Earth, then).
+function linkWithin() {
+
+	return Promise.race( [ challengeLink(), new Promise( resolve => setTimeout( () => resolve( null ), LINK_WAIT ) ) ] );
 
 }
 
@@ -88,6 +118,7 @@ function loadFailed( err ) {
 async function visit( config ) {
 
 	screens.splash( 'Checking the road is clear...' );
+	challengeLink();
 	const checked = robotCheck( config.turnstileSiteKey, $( 'robot-check' ) ).then( token => ( { token } ), () => ( { robot: true } ) );
 	const loaded = game.then( main => ( { main } ), err => ( { err } ) );
 	const first = await Promise.race( [ checked, loaded ] );
@@ -97,9 +128,16 @@ async function visit( config ) {
 	if ( robot ) return screens.notice( 'robot', { onRetry: () => visit( config ) } );
 	if ( err ) return loadFailed( err );
 
-	const outcome = await postVisit( token );
-	if ( outcome.key ) return run( main, { key: outcome.key, left: outcome.left, visit: outcome.visit, googleClientId: config.googleClientId, live: !! config.live, liveReason: config.liveReason } );
-	if ( outcome.usedUp ) return usedUp( config, outcome );
+	const challenge = await linkWithin();
+	const moonLink = opensOnMoon( location.search ) || challenge?.answer.body?.challenge?.world === 'moon';
+	const outcome = await postVisit( token, { world: moonLink ? 'moon' : 'earth' } );
+	// (The link's answer as it comes, if it hadn't within LINK_WAIT.)
+	const settings = { googleClientId: config.googleClientId, passwords: config.passwords === true, turnstileSiteKey: config.turnstileSiteKey, live: !! config.live, liveReason: config.liveReason, adsense: config.adsense ?? null, challengeLink: challengeLink() };
+	if ( outcome.key ) return run( main, { key: outcome.key, left: outcome.left, visit: outcome.visit, ...settings } );
+	// A link to the Moon (a Moon challenge's too): on the Moon, with none of the day's Earth drives
+	// spent. The Earth is a reload away (without the link, so that one does ask for a drive).
+	if ( outcome.moon ) return run( main, { key: null, visit: outcome.visit, ...settings, moonOnly: { onEarth: toEarth } } );
+	if ( outcome.usedUp ) return usedUp( config, outcome, main, challengeLink() );
 	if ( outcome.robot ) return screens.notice( 'robot', { onRetry: () => visit( config ) } );
 	screens.notice( 'error', { message: outcome.error, onRetry: () => visit( config ) } );
 
@@ -107,17 +145,52 @@ async function visit( config ) {
 
 // Whether the visit has been asked for again as a supporter's (see usedUp).
 let askedAsSupporter = false;
+// Whether the game has started on the Moon from the used-up notice (see usedUp).
+let onMoonOnly = false;
 
-// Today's drives are used up. A supporter's are counted by their account, not this address (30 a
-// day), so with signing in set up the screen has a sign-in too: a supporter on a new browser, or
-// back from paying before Stripe's word arrived (?supporter=thanks, supporter.js), would otherwise be
-// stuck here until tomorrow. Once the account here has the pass, the visit is asked for again: once,
-// so a supporter who has had their 30 sees this screen rather than asking round and round.
+// A link to the Moon (a Moon spot's ?spot=moon-..., or ?at= with world=moon; places.js's linkedPlace).
+function opensOnMoon( search ) {
+
+	const params = new URLSearchParams( search );
+	return ( params.get( 'spot' ) ?? '' ).startsWith( 'moon-' ) || ( params.has( 'at' ) && params.get( 'world' ) === 'moon' );
+
+}
+
+// From a page opened on the Moon by a link, to the Earth: the same page without the link (at /, a
+// challenge link's /c too), which asks for one of the day's drives as it loads (a ?party= stays).
+function toEarth() {
+
+	const url = new URL( location.href );
+	url.pathname = '/';
+	for ( const name of [ 'spot', 'at', 'name', 'region', 'heading', 'world', 'challenge', 'vs' ] ) url.searchParams.delete( name );
+	location.assign( url );
+
+}
+
+// Today's Earth drives are used up. The Moon is ours to stream and costs nothing, so it's never
+// limited: the notice offers it, and the game starts there with the Earth closed (main.js's
+// moonOnly); picking the Earth shows this notice again. A supporter's drives are counted by their
+// account, not this address (30 a day), so with signing in set up the screen has a sign-in too: a
+// supporter on a new browser, or back from paying before Stripe's word arrived (?supporter=thanks,
+// supporter.js), would otherwise be stuck here until tomorrow. Once the account here has the pass,
+// the visit is asked for again: once, so a supporter who has had their 30 sees this screen rather
+// than asking round and round (a reload, if the game's already going on the Moon).
 // (supporter.js comes with the game's code, so it's waited for here.)
-async function usedUp( config, { retryAfter, reason } ) {
+async function usedUp( config, outcome, main, link = null ) {
 
-	screens.notice( 'used-up', { retryAfter } );
-	if ( reason !== 'visitor' || ! config.googleClientId ) return;
+	const { retryAfter, reason } = outcome;
+	const toMoon = () => {
+
+		if ( onMoonOnly ) return;
+		onMoonOnly = true;
+		run( main, {
+			key: null, visit: outcome.visit, googleClientId: config.googleClientId, passwords: config.passwords === true, turnstileSiteKey: config.turnstileSiteKey, live: !! config.live, liveReason: config.liveReason, adsense: config.adsense ?? null, challengeLink: link,
+			moonOnly: { onEarth: () => usedUp( config, outcome, main ) },
+		} );
+
+	};
+	screens.notice( 'used-up', { retryAfter, onMoon: toMoon } );
+	if ( reason !== 'visitor' || ! ( config.googleClientId || config.passwords === true ) ) return;
 	let supporter;
 	try {
 
@@ -134,11 +207,12 @@ async function usedUp( config, { retryAfter, reason } ) {
 	const again = () => {
 
 		askedAsSupporter = true;
+		if ( onMoonOnly ) return location.reload();
 		$( 'notice' ).hidden = true;
 		visit( config );
 
 	};
-	supporter.setUpSupporter( { worker: true, googleClientId: config.googleClientId, onPass: askedAsSupporter ? null : again } );
+	supporter.setUpSupporter( { worker: true, googleClientId: config.googleClientId, passwords: config.passwords === true, turnstileSiteKey: config.turnstileSiteKey, onPass: askedAsSupporter ? null : again } );
 	supporter.fillAccountArea( $( 'notice' ).querySelector( '.account' ) );
 
 }

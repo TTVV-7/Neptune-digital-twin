@@ -84,21 +84,21 @@ export function credentials( body ) {
 
 }
 
-// The player with this id and secret ({ id, name, last_score_at }), or a 403: the same for an
-// unknown id as for the wrong secret.
+// The player with this id and secret ({ id, name, last_score_at, last_time_at }), or a 403: the
+// same for an unknown id as for the wrong secret.
 export async function authenticate( db, id, secret ) {
 
-	const player = await db.prepare( 'SELECT id, name, last_score_at FROM players WHERE id = ? AND secret_hash = ?' ).bind( id, await sha256Hex( secret ) ).first();
+	const player = await db.prepare( 'SELECT id, name, last_score_at, last_time_at FROM players WHERE id = ? AND secret_hash = ?' ).bind( id, await sha256Hex( secret ) ).first();
 	if ( ! player ) throw new HttpError( 403, 'Forbidden', { reason: 'player' } );
 	return player;
 
 }
 
 // One of today's `limit` turns at `kind` for this visitor (see DriveLimits.take), or a 429 until
-// midnight UTC.
-export async function takeTurn( limits, request, kind, now, limit ) {
+// midnight UTC. An IPv6 visitor by its /64, or with `prefix` 48 by its /48 (settings.js's addressOf).
+export async function takeTurn( limits, request, kind, now, limit, prefix = 64 ) {
 
-	const turn = await limits.take( kind, addressOf( request ), { now, limit } );
+	const turn = await limits.take( kind, addressOf( request, prefix ), { now, limit } );
 	if ( turn.ok ) return;
 	throw new HttpError( 429, 'That\'s all for today. Try again tomorrow', { retryAfter: turn.retryAfter }, { 'Retry-After': String( turn.retryAfter ) } );
 

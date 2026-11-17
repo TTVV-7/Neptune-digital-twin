@@ -22,13 +22,16 @@ export function hideSplash() {
 }
 
 // A full-screen notice instead of the globe: kind is 'used-up', 'robot', 'resting' or 'error'.
-// options: retryAfter (s, for used-up), message (for error), onRetry, onTestPad.
-export function notice( kind, { retryAfter = 0, message = '', onRetry, onTestPad } = {} ) {
+// options: retryAfter (s, for used-up), message (for error), onRetry, onTestPad, onMoon (used-up:
+// the Moon, which is never limited, instead).
+export function notice( kind, { retryAfter = 0, message = '', onRetry, onTestPad, onMoon } = {} ) {
 
 	hideSplash();
 	const root = $( 'notice' );
 	const texts = {
-		'used-up': [ 'Today\'s free drives are used up', 'World Drive streams the real 3D world, and each drive costs us a little, so there\'s a daily limit. Come back tomorrow for a fresh set of drives.' ],
+		'used-up': onMoon
+			? [ 'Today\'s free Earth drives are used up', 'World Drive streams the real 3D Earth, and each drive costs us a little, so there\'s a daily limit. The Moon is free and unlimited: drive there as much as you like, and come back tomorrow for a fresh set of Earth drives.' ]
+			: [ 'Today\'s free drives are used up', 'World Drive streams the real 3D world, and each drive costs us a little, so there\'s a daily limit. Come back tomorrow for a fresh set of drives.' ],
 		robot: [ 'We couldn\'t check you\'re a person', 'The quick robot check didn\'t go through. It can help to turn off a blocker for this site, or try another browser.' ],
 		resting: [ 'World Drive is getting ready', 'The 3D world is switched off for now. Check back soon.' ],
 		error: [ 'Something went wrong', message || 'World Drive couldn\'t start. Try again in a moment.' ],
@@ -53,6 +56,12 @@ export function notice( kind, { retryAfter = 0, message = '', onRetry, onTestPad
 		onRetry();
 
 	} );
+	if ( onMoon ) button( 'Drive on the Moon', () => {
+
+		root.hidden = true;
+		onMoon();
+
+	} );
 	if ( onTestPad ) button( 'Drive the test pad', () => {
 
 		root.hidden = true;
@@ -71,7 +80,7 @@ export function notice( kind, { retryAfter = 0, message = '', onRetry, onTestPad
 			const left = Math.max( 0, until - Date.now() );
 			const hours = Math.floor( left / 3600000 );
 			const minutes = Math.ceil( ( left % 3600000 ) / 60000 );
-			countdown.textContent = left > 0 ? `Fresh drives in ${ hours ? `${ hours } h ` : '' }${ minutes } min` : 'Fresh drives are ready: reload the page.';
+			countdown.textContent = left > 0 ? `Fresh ${ onMoon ? 'Earth ' : '' }drives in ${ hours ? `${ hours } h ` : '' }${ minutes } min` : `Fresh ${ onMoon ? 'Earth ' : '' }drives are ready: reload the page.`;
 
 		};
 

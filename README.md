@@ -756,7 +756,8 @@ It shares `src/` with this app but has its own page (`drive/index.html`, `src/dr
 (`worker/drive/`, `wrangler.drive.jsonc`, `npm run deploy:drive`). Each page load is one billed Google
 Maps session, so the built site holds no key: the Worker hands it out once per visit, after a
 Cloudflare Turnstile check, and only while the day's visits are under a cap for everyone (300) and
-for each visitor (8); over a cap the page says today's free drives are used up. Teleporting moves the
+for each visitor (8); over a cap the page says today's free Earth drives are used up and offers the
+Moon, which is never limited (its ground is our own, so it costs nothing to stream). Teleporting moves the
 loaded world rather than loading a new one, so it costs nothing extra. Place search goes through the
 Worker to OpenStreetMap's Nominatim, cached and at most once a second. A leaderboard keeps each
 player's best stunt run today, this week and all time (a nickname, no sign-up) in a D1 database,
@@ -796,6 +797,65 @@ you pick one, which claims it. The Worker caps each report by the time since the
 (`worker/drive/progress.js`, sharing its rules with the page in `src/drive-app/levels.js`), on a
 rate limiter rather than a Durable Object (see [Levels](docs/world-drive.md#levels)).
 
+**Challenges**: a daily, a weekly and a monthly challenge on the Earth and on the Moon, six live at
+once, each a place and a route the same for everyone and with its own board of the best times (the
+leaderboard's nicknames and levels): a checkpoint sprint through gates in order, a hunt for stars
+round a place in any order, or a drive to a landmark a few kilometres off, against the clock. Big
+rings, stars and beams of light mark them, on the ground the game has (the Earth's tiles as they
+load, a few rays a frame, the Moon's own heights, its routes kept off crater walls), with an arrow
+to the next on the HUD, a countdown, the timer and a finish card with your place on the board (a
+time that can't be posted for want of a signal is kept and posted when it's back). The rotation
+goes round the game's own places (and busy drop-in places the owner approves) by the Worker's
+secret, so nobody can read next week's from the code, each period's clear of the places fixed for
+the others live and the one before; each period's is fixed in D1 as it's first asked for, and the
+owner can choose any period's by hand on the admin page. Times are posted with the visit's token
+and checked against the route (each leg no quicker than the fastest the game goes) and the visit
+(`worker/drive/challenges.js`, sharing its rules with the page in
+`src/drive-app/challenge-rules.js`). The page loads them as a
+chunk of their own when they're opened, so nothing of them is in its first load; a visit that has
+driven 40 s is told of today's challenge on its world, with a button to them (see
+[Challenges](docs/world-drive.md#challenges)).
+
+**Ghosts and "challenge a friend"**: every challenge run is recorded as it's driven (where the car
+is and which way it faces, ten times a second, packed to about 3.6 KB a minute, 4.8 KB as posted
+text) and posted with its
+time; the Worker takes the time only if its ghost agrees with it (through each gate at its pass
+time, as long as the time, never faster between two samples than the game goes) and keeps the
+best's ghost (16 MB of them a challenge at most, the slowest let go first to make room). A run races
+a ghost car in its ride and Garage look, its model made light (the pickup's 219,000 triangles to
+90,000 in 25 draws, simplified as it looks, in a worker of its own so the page never stalls, and
+raced from a run's start only if it's ready by GO), its wheels turning: your own best by default
+(with none yet, the board's quickest time with a ghost the game could plausibly be driven in,
+however far down), a friend's from their link,
+or that one from the board, with splits at each gate ("-1.2 s") and on the finish card, and a button to hide
+it. **Challenge a friend** (the finish card, your own row of a board) shares
+`/c?challenge=<id>&vs=<handle>`, the handle an HMAC the Worker makes once and keeps (never the
+player's id), through the browser's share sheet or copied; the page opens on it with "Ann's time
+to beat: 0:21.40 on the daily checkpoint sprint at Furka Pass, 5 h left" and races their ghost (a
+Moon challenge's in the Moon-only mode, spending no Earth drive), and the Worker gives the link a
+preview card of its own for chat apps at `/c`, the one page it runs for, so the home page stays a
+file served free (`src/drive-app/ghost-rules.js`, `challenge-ghost.js`, migration
+`0007_challenge_ghosts.sql`; see
+[Ghosts and challenge a friend](docs/world-drive.md#ghosts-and-challenge-a-friend)).
+
+**Achievements and construction rides**: 25 badges (first drive; 10, 100 and 1,000 km; drives on the
+Moon; challenges finished and placed in, top 10, top 3 and first, on any board and on a daily,
+weekly or monthly one; parties with others; Garage looks changed and rides tried; 3, 7 and 30 days in
+a row), in a grid from the profile card with how far toward each ("34 / 100 km") and when it was
+earned, a toast as one comes ("Achievement: 100 km driven"), never during a challenge's run. Eight
+construction rides from the library come with them, driven at their real size and slow and heavy
+(the bulldozer and the skid steer turning on the spot): a skid steer for 10 km, a telehandler for
+three days in a row, a concrete mixer for a first challenge, a road roller for a party, a wheel loader
+for 100 km, a dump truck for ten challenges, a bulldozer for a top 10 and the vac truck for a weekly
+podium ("Unlocked: Vac truck", with the Garage a tap away), locked in the pickers and the Garage
+until then with what unlocks them. The Worker counts challenge results, placings (from the boards'
+final ranks), parties and days in a row itself; how far you drive, Moon drives, looks and rides
+tried come with the progress reports, a day's worth each at most; it keeps what's earned with the
+nickname (an account has what any of its nicknames earned) and checks a construction ride wherever
+it shows to others (boards, challenge times and ghosts, rooms). The owner's page counts how many
+players have each (`src/drive-app/achievement-rules.js`, `worker/drive/achievements.js`, migration
+`0009_achievements.sql`; see [Achievements and rewards](docs/world-drive.md#achievements-and-rewards)).
+
 **The Moon**: **Moon** at the top of the globe's panel turns the globe to the Moon, made in the page
 rather than streamed (`src/drive-app/moon.js`): its shapes are NASA's (LRO's laser altimeter, every
 quarter degree, `drive/public/moon/height.bin`), its colours LRO's camera's mosaic
@@ -825,9 +885,19 @@ its own way; every look in the Garage at once (paint, finishes from satin to chr
 decals, rims, a neon underglow in eight colours and a rainbow, horns, seventeen more boost styles,
 flame colours and trails, some of which levels unlock over time), +50% XP, a ⭐ on the leaderboard and
 30 drives a day. It's bought with a Stripe Payment Link after
-signing in with Google, so it's yours in any browser; Stripe's signed webhook records it. Buying
+signing in, so it's yours in any browser; Stripe's signed webhook records it. Signing in is with
+Google or with a **username and password** (PBKDF2-SHA-256 at the Workers runtime's most, 100,000
+iterations, with a salt of its own; guessing slowed per address and per username without letting
+a stranger elsewhere lock the owner out (Google's sign-in always works); no email, so a password can't be recovered unless Google is linked too), and
+either can be linked to the other, with fresh proof of each, never the session alone: one account, with its pass, level, times and Garage, whichever
+way you signed in (see [Username and password accounts](docs/world-drive.md#username-and-password-accounts)). Buying
 stays off ("Coming soon") until `GOOGLE_CLIENT_ID` and the webhook's secret are set (see
 [Supporter Pass (buying it)](docs/world-drive.md#supporter-pass-buying-it) for the owner's steps).
+
+**Ads**: one Google AdSense banner on the globe only (never while driving, paused or on the places'
+pages), off until `ADSENSE_CLIENT` is set, never shown (nor Google's script loaded) for a supporter,
+loaded lazily once the globe is up, with `/ads.txt` from the Worker; consent is Google's own CMP (see
+[Ads](docs/world-drive.md#ads)).
 
 For search engines and links, the site has a page for each start spot and a few more famous places
 (`/drive/<place>/`, built from `drive/site/`, each with a **Drive here** that opens the game with the
@@ -836,6 +906,16 @@ place pinned), a page about driving on the Moon (`/moon/`) and one for each of t
 the spot pinned), a sitemap, robots.txt, structured data and link cards (`npm run drive-site-images`
 draws them, and `npm run drive-site-images -- moon` the Moon's, from the game itself); see
 [Search engines](docs/world-drive.md#search-engines).
+
+For the owner, `/admin.html` (signed in with a Google account in `ADMIN_EMAILS`) shows the **play
+stats**, counts a day with nothing of who (no cookie): visits, play time, how far visits get, devices,
+the Moon, searches by kind, problems and the rest; and **where people drop in**, a heat map of the
+Earth and of the Moon with the top places named and a link into the game at each, for today, the
+week or the month; and the **challenges**: the six live and the six next, your picks however far
+ahead, any period's chosen by hand, and busy places approved for the rotation. Each drop-in's place is only its cell of a grid about a kilometre each way, sent
+with the play stats and counted once a day for each visitor and each visit, an Earth place only from
+a visit the Earth's caps let through, and none from the owner's (`src/drive-app/dropin-cells.js`,
+`worker/drive/dropins.js`; see [Where people drop in](docs/world-drive.md#where-people-drop-in)).
 
 How to play, the leaderboard (how cheating is limited, and looking after it in the D1 console), the
 settings and limits, deploying (`npm run deploy:drive` applies the database's migrations first), and
@@ -931,12 +1011,14 @@ public/library/     downloaded models and our own, library.json catalog, thumbs/
 scripts/add-drive-car.mjs, drive-car-thumbs.mjs   import a car for World Drive into drive/public/cars
                     (its own cars.json, thumbs/ and CREDITS.md; World Drive's build only)
 scripts/make-moon.mjs   World Drive's Moon (drive/public/moon/): NASA's heights and picture of it
+scripts/make-towns.mjs  the towns World Drive's admin page names drop-in places by (Natural Earth's)
 src/geo.js          lat/lon <-> local metres
 public/models/      put your .glb files here
 drive/index.html    World Drive's page; its code is src/drive-app/ (docs/world-drive.md)
 worker/drive/       World Drive's Worker: the Maps key per visit, caps, Turnstile, search, the leaderboard,
-                    levels' XP, the Supporter Pass (Google sign-in, Stripe's webhook), driving with
-                    others' rooms
+                    levels' XP, the Supporter Pass (Google's or a username's sign-in, Stripe's webhook), driving with
+                    others' rooms, the owner's play stats, where people drop in and challenges
+                    (with their ghosts, and a friend's link's page and preview card)
 vite.drive.config.js, wrangler.drive.jsonc   World Drive's build and Worker settings
 ```
 

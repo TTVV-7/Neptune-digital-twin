@@ -21,19 +21,22 @@ import { createSea, lakeShore, lakesNear, seaLevel, seaLevelNow, waterAt, waterA
 import { setUpLeaderboard } from './leaderboard.js';
 import { buyArea, onPassOpen } from './pass.js';
 import { fillAccountArea, fillBuyArea, linkPlayer, onLinked, setUpSupporter } from './supporter.js';
-import { onProChange } from './pro.js';
+import { isPro, onProChange } from './pro.js';
 import { applyLook } from './paint.js';
 import { liftGlow } from './underglow.js';
 import { createProgress, onLevelChange } from './progress.js';
+import { ACHIEVEMENTS, ridesOf } from './achievement-rules.js';
+import { onFeatsChange } from './feats.js';
 import { setUpProfile } from './profile.js';
 import { formatLatLon, LINK_PARAMS, linkedPlace, rememberPlace, worldOf } from './places.js';
 import { createLive, flagsOf, velocityOf } from './live.js';
 import { createStats } from './stats.js';
 import { METRICS, dropinBucket } from './stats-protocol.js';
-import { createGhosts } from './ghosts.js';
+import { createGhosts, ghostModels } from './ghosts.js';
 import { BUDGET_TOAST, setUpFriends } from './friends.js';
 import { createOnline } from './online.js';
 import { BUDGET_SPENT, cleanPartyCode, FLAGS } from './live-protocol.js';
+import { send } from './api.js';
 import * as screens from './screens.js';
 
 // World Drive (worlddrive.app, docs/world-drive.md): pick anywhere on Earth from a globe of
@@ -308,6 +311,12 @@ const VISIT_TEST = import.meta.env.DEV ? window.worldDriveVisitTest ?? null : nu
 // And a visit's token for the play stats alone, { visit } (scripts/test-drive-ui.mjs, which answers
 // their posts itself), so what the page counts can be seen on the test pad.
 const STATS_TEST = import.meta.env.DEV ? window.worldDriveStatsTest ?? null : null;
+// The challenges' word to a visit that's driving (challengeNudge): after this many seconds of a
+// visit's driving (a minute is when most visits end), today's challenge on that world, with a button
+// to the challenges. On the dev server only when a test asks for it, { after } (s), as
+// scripts/test-drive-ui.mjs does: the other tests drive longer than that, and look at what the toast
+// says.
+const NUDGE_AFTER = import.meta.env.DEV ? window.worldDriveNudgeTest?.after ?? null : 40;
 
 const $ = id => document.getElementById( id );
 const frame = () => new Promise( resolve => requestAnimationFrame( resolve ) );
@@ -344,10 +353,17 @@ const _sun = new Vector3();
 
 // key: the Maps key (none: the test globe and pad); left: free drives left today; visit: the
 // visit's token, for posting scores; worker: whether there's a Worker (not on the dev server alone);
-// googleClientId: the sign-in button's, for the Supporter Pass ('' when there's no signing in);
+// googleClientId: the sign-in button's, for the Supporter Pass ('' when there's no signing in with
+// Google); passwords: whether there are usernames and passwords, turnstileSiteKey their robot
+// checks' (supporter.js, account.js);
 // live: whether the Worker has driving with others on (its /api/config says), and liveReason why
-// not when it's off for the rest of the day.
-export async function start( { key, left = null, visit: token = null, worker = true, googleClientId = '', live: liveOn = false, liveReason = '' } ) {
+// not when it's off for the rest of the day; moonOnly: { onEarth } when there's no Earth this visit
+// (today's Earth drives are used up, or the page opened on a link to the Moon, boot.js): the
+// globe opens on the Moon, which is never limited, and picking the Earth calls onEarth instead;
+// challengeLink: a "challenge a friend" link's ({ link: { challenge, vs }, answer }, boot.js), or a
+// promise of it (or of null: no link), opened once the globe is up and it's here (challenges.js);
+// adsense: /api/config's { client, slot } while Google's ads are on (ads.js), else null.
+export async function start( { key, left = null, visit: token = null, worker = true, googleClientId = '', passwords = false, turnstileSiteKey = '', live: liveOn = false, liveReason = '', moonOnly = null, challengeLink = null, adsense = null } ) {
 
 	const visit = token ?? VISIT_TEST?.visit ?? null;
 	// Play stats for the owner's admin page (stats.js): only a real visit's, counts with nothing of who.
@@ -392,9 +408,11 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		pad = createPlaceholderGround();
 		pad.visible = false;
 		scene.add( pad );
+		// Only on the Moon this visit: the test globe stays out of sight.
+		if ( moonOnly ) earth.visible = false;
 		// On worlddrive.app there's always a Worker, so none answering means its settings didn't
 		// come (or a crawler kept off /api/ by robots.txt): a word for a visitor, not the developer's.
-		screens.toast( ! worker && location.hostname === 'worlddrive.app'
+		else screens.toast( ! worker && location.hostname === 'worlddrive.app'
 			? 'Couldn\'t reach World Drive\'s server, so this is only a preview globe. Reload the page to drive on the 3D map.'
 			: 'No Google 3D tiles here: a test globe, and a flat test pad wherever you drop in.', 6000 );
 
@@ -475,6 +493,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		onWorld: world => setWorld( world ),
 		// (Its kind only, for the play stats: never what was typed.)
 		onSearch: kind => stats.add( 'search', kind ),
+		onAchievements: () => openAchievements(),
 	} );
 	panel.vehiclePicker( $( 'pause' ).querySelector( '.vehicles' ), vehicle => swapVehicle( vehicle ) );
 	globe.onPick = place => {
@@ -489,7 +508,13 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		vehicles, panel, models, current: () => state.entry && { entry: state.entry, vehicle: state.vehicle },
 		onLook: () => live?.setRide( state.vehicle.id, lookOf( state.vehicle ) ),
 		onOpen: () => stats.add( 'garage_open', 'all' ),
-		onEdit: part => stats.add( 'garage_edit', part ),
+		onEdit: ( part, changed ) => {
+
+			stats.add( 'garage_edit', part );
+			// A look changed (not the same choice picked again), for the achievements (progress.js).
+			if ( changed ) progress.look();
+
+		},
 		// Its ▶ Boost as driving's: no flare for a visitor asking for less motion, fewer sparks on a phone.
 		effects: driver.effects,
 	} );
@@ -535,6 +560,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 			profile?.levelUp( event );
 
 		},
+		onAchievement: event => notifyAchievements( event ),
 	} );
 	profile = setUpProfile( {
 		progress,
@@ -555,6 +581,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 		},
 		onTitle: () => live?.rehello(),
+		onAchievements: () => openAchievements(),
 	} );
 	// The look on the ride being driven, with what's unlocked now (a level can lock nothing, but a
 	// look chosen on a test page waits for its level).
@@ -565,6 +592,104 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		live?.setRide( state.vehicle.id, lookOf( state.vehicle ) );
 
 	} );
+	// A construction ride just unlocked: the room hears it at a fresh hello (it looks the player's
+	// achievements up then, and shows a ride they don't have as the default one), as for a new title.
+	onFeatsChange( ( _, added ) => {
+
+		if ( added.some( id => ridesOf( id ).length ) ) live?.rehello();
+
+	} );
+	// Achievements (achievement-rules.js; the grid is achievements.js, its own chunk, loaded the first
+	// time it's opened): a toast as one is earned ("Achievement: 100 km driven"), and for one that
+	// unlocks a construction ride, "Unlocked: Vac truck" with the Garage a tap away, as a level-up's
+	// ride is. Never over a challenge's countdown or run: they wait for its end, one after another.
+	const notices = [];
+	let noticeUntil = 0;
+	function notifyAchievements( { ids, local } ) {
+
+		for ( const id of ids ) {
+
+			const feat = ACHIEVEMENTS.find( a => a.id === id );
+			if ( ! feat ) continue;
+			notices.push( { text: `Achievement: ${ feat.name }${ local ? ' · pick a nickname to keep it' : '' }`, ms: 4500, action: local && worker && visit ? { label: 'Pick one', onClick: () => {
+
+				pauseDrive();
+				board.open();
+
+			} } : null } );
+			if ( local ) continue;
+			for ( const ride of ridesOf( id ) ) {
+
+				const vehicle = vehicles.find( v => v.id === ride );
+				if ( vehicle ) notices.push( { text: `Unlocked: ${ vehicle.name }`, ms: 7000, action: { label: 'Garage', onClick: () => {
+
+					pauseDrive();
+					garage.open( vehicle );
+
+				} } } );
+
+			}
+
+		}
+
+		showNotices();
+
+	}
+
+	let noticeShown = null;
+	function showNotices() {
+
+		const run = challenges?.run;
+		const busy = !! run && ( run.phase === 'countdown' || run.phase === 'racing' );
+		if ( ! notices.length || performance.now() < noticeUntil ) return;
+		if ( busy ) return void setTimeout( showNotices, 1000 );
+		// Another toast up (the challenge nudge, a level-up's, a problem): after it, not over it, as the
+		// nudge waits for others.
+		const toast = $( 'toast' );
+		if ( ! toast.hidden && toast.textContent !== noticeShown ) return void setTimeout( showNotices, 1000 );
+		// (One with a button stays its whole time, for the tap; the others four seconds before the next.)
+		const { text, ms, action } = notices.shift();
+		screens.toast( text, ms, action );
+		noticeShown = toast.textContent;
+		const hold = action ? ms : Math.min( ms, 4000 );
+		noticeUntil = performance.now() + hold;
+		setTimeout( showNotices, hold + 50 );
+
+	}
+
+	// The grid of achievements (achievements.js): its chunk the first time it's opened.
+	let achievementsLoading = null;
+	async function openAchievements() {
+
+		achievementsLoading ??= import( './achievements.js' );
+		try {
+
+			const module = await achievementsLoading;
+			module.openAchievements( {
+				progress, vehicles, worker: !! worker, player: () => board.player,
+				onRide: vehicle => {
+
+					pauseDrive();
+					garage.open( vehicle );
+
+				},
+				onNickname: () => {
+
+					pauseDrive();
+					board.open();
+
+				},
+			} );
+
+		} catch ( err ) {
+
+			achievementsLoading = null;
+			screens.toast( `The achievements didn't load (${ err.message }). Try again in a moment.`, 6000 );
+
+		}
+
+	}
+
 	// Linked to an account (whose players' XP counts together), or the pass bought (+50% XP): where
 	// the player stands now.
 	onLinked( () => progress.refresh() );
@@ -576,10 +701,144 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	}
 
+	// Challenges (challenges.js, its own chunk, loaded the first time they're opened: nothing of them
+	// is in the page until then): a daily, a weekly and a monthly one on each world, from the globe's
+	// panel and the pause menu. Once loaded, it's told of each drop-in, arrival, pause, resumption and
+	// leaving, and its frame runs after the car's.
+	let challenges = null;
+	let challengesLoading = null;
+	// Whether the keys card has been shown this visit: a challenge's drop-in shows it over its
+	// countdown instead (a longer one, to read it by), the visit's first time only (a first drive may
+	// well start as a challenge), and it's put away at GO, so nothing covers the road while the clock
+	// runs.
+	let keysShown = false;
+	// What ghosts are drawn with (ghosts.js): the others' cars, and a challenge's ghost, sharing the
+	// models read from a file.
+	const ghostShapes = ghostModels( models.loader );
+	// The challenges' chunk, loaded and set up the first time: whether it's here.
+	async function loadChallenges() {
+
+		if ( challenges ) return true;
+		challengesLoading ??= import( './challenges.js' ).then( module => module.setUpChallenges( {
+			visit: () => visit, player: () => board.player, pickName: board.pickName,
+			world: () => world, moonOnly, mode: () => state.mode, place: () => state.place, vehicle: () => state.vehicle,
+			driver, ground, camera, scene, globe, moon, vehicles, stats,
+			startAt: place => startChallenge( place ), placeCar, toGlobe,
+			// (Gone by itself after 10 s too, for a run left before its GO.)
+			keys: () => ! keysShown && showKeys( 10000 ),
+			go: () => screens.hideKeys(),
+			// Your car as drawn (a run's ghost is recorded from it), your ride's look (drawn with it), and
+			// what a ghost to race is drawn with.
+			pivot: () => state.entry?.pivot ?? null, look: () => lookOf( state.vehicle ), ghostModels: ghostShapes,
+			driveUi: $( 'drive-ui' ), pauseCard: $( 'pause' ),
+			// A time posted: where the player stands (a first finish may be an achievement).
+			onPosted: () => progress.refresh(),
+		} ) );
+		try {
+
+			challenges = await challengesLoading;
+			return true;
+
+		} catch ( err ) {
+
+			challengesLoading = null;
+			screens.toast( `The challenges didn't load (${ err.message }). Try again in a moment.`, 6000 );
+			return false;
+
+		}
+
+	}
+
+	async function openChallenges() {
+
+		if ( ! await loadChallenges() ) return;
+		pauseDrive();
+		challenges.open();
+
+	}
+
+	// A page opened on a "challenge a friend" link (boot.js's challengeLink, which may still be on its
+	// way: a slow answer opens its card when it comes, over whatever's going on, the drive paused as
+	// Challenges does): out of the address, back to the home page's (/c is the link's own path, for
+	// its preview card), so a reload doesn't open it again; and its card over the list.
+	async function openChallengeLink( opening ) {
+
+		const opened = await opening;
+		if ( ! opened ) return;
+		const { link, answer } = opened;
+		const url = new URL( location.href );
+		url.pathname = '/';
+		for ( const name of [ 'challenge', 'vs' ] ) url.searchParams.delete( name );
+		history.replaceState( history.state, '', url );
+		if ( ! await loadChallenges() ) return;
+		pauseDrive();
+		challenges.openLink( answer, { named: !! link.vs } );
+
+	}
+
+	for ( const button of document.querySelectorAll( '.challenges-open' ) ) {
+
+		button.hidden = ! worker;
+		button.addEventListener( 'click', openChallenges );
+
+	}
+
+	// A challenge's start, from wherever the page is: back to the globe (a run going is left), on to
+	// the challenge's world, and a drop-in at its start (challenges.js knows it by place.challenge).
+	async function startChallenge( place ) {
+
+		if ( state.mode !== 'globe' ) toGlobe();
+		await dropIn( place );
+
+	}
+
+	// The keys card, on a keyboard (a touch screen has its labelled buttons instead), for `ms` (7 s
+	// unless said): whether it's shown.
+	function showKeys( ms ) {
+
+		if ( document.body.classList.contains( 'touch' ) ) return false;
+		keysShown = true;
+		screens.showKeys( ms );
+		return true;
+
+	}
+
+	// The challenges' word while driving (NUDGE_AFTER): the seconds of driving left before it, or null
+	// once it's had its say (or isn't to have one: no Worker, or the challenges opened already, a run
+	// among them). Not over another toast (a few seconds more, then); then today's challenge on the
+	// world being driven, from the Worker's list (its place), with a button to the challenges. Both
+	// counted for the play stats (challenge: nudge, nudge_open), so the owner can see whether it
+	// keeps people longer.
+	let nudgeLeft = worker ? NUDGE_AFTER : null;
+	function challengeNudge( dt ) {
+
+		if ( nudgeLeft === null || state.mode !== 'driving' ) return;
+		if ( challenges ) return nudgeLeft = null;
+		nudgeLeft -= dt;
+		if ( nudgeLeft > 0 ) return;
+		if ( ! $( 'toast' ).hidden ) return nudgeLeft = 3;
+		nudgeLeft = null;
+		const here = onMoon() ? MOON : 'earth';
+		send( 'GET', '/api/challenges' ).then( answer => {
+
+			const today = answer.ok && answer.body.challenges?.find?.( c => c.world === here && c.period === 'day' );
+			if ( ! today || challenges || state.mode !== 'driving' || ! $( 'toast' ).hidden ) return;
+			stats.add( 'challenge', 'nudge' );
+			screens.toast( `Today's challenge on the ${ here === MOON ? 'Moon' : 'Earth' }: ${ today.place }. A timed run with its own board.`, 10000, { label: 'Challenges', onClick: () => {
+
+				stats.add( 'challenge', 'nudge_open' );
+				openChallenges();
+
+			} } );
+
+		} );
+
+	}
+
 	// Buying the Supporter Pass in its sheet, and signing in for it there and in the pause menu
 	// (supporter.js). Without sign-in set up the sheet just says "Coming soon". Its sheet opened, and
 	// Buy followed to Stripe, are counted for the play stats.
-	const supporter = setUpSupporter( { worker, googleClientId, player: () => board.player, onBuy: () => stats.add( 'pass', 'buy' ) } );
+	const supporter = setUpSupporter( { worker, googleClientId, passwords, turnstileSiteKey, player: () => board.player, onBuy: () => stats.add( 'pass', 'buy' ) } );
 	onPassOpen( () => stats.add( 'pass', 'open' ) );
 	if ( supporter.on ) {
 
@@ -624,7 +883,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	const live = ( liveOn || liveReason === 'unknown' ) && typeof liveVisit === 'string' && liveVisit
 		? createLive( { earth, ellipsoid, visit: liveVisit, player: () => board.player, ride: { vehicle: panel.vehicle.id, look: lookOf( panel.vehicle ) } } )
 		: null;
-	const ghosts = live && createGhosts( { scene, earth, camera, vehicles, loader: models.loader, live, tags: $( 'live-tags' ), own: () => state.entry?.pivot ?? null, effects: driver.effects } );
+	const ghosts = live && createGhosts( { scene, earth, camera, vehicles, models: ghostShapes, live, tags: $( 'live-tags' ), own: () => state.entry?.pivot ?? null, effects: driver.effects } );
 	// (On the Moon, they're told it's the Moon's: nothing of who's driving is for there.)
 	const liveMode = () => onMoon() ? MOON : state.mode;
 	const friends = live && setUpFriends( { live, ghosts, vehicles, mode: liveMode, goTo, onInvite: () => stats.add( 'party', 'made' ) } );
@@ -667,7 +926,9 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		const height = window.innerHeight;
 		if ( sheet.top < height * 0.3 ) return 0;
 		const top = $( 'globe-ui' ).querySelector( '.intro' ).getBoundingClientRect().bottom;
-		const middle = ( top + sheet.top - PIN_CARD ) / 2;
+		// (An ad over the sheet (ads.js) is part of it here: the pin's card is above that.)
+		const ad = $( 'globe-ui' ).querySelector( '.ad-slot' )?.getBoundingClientRect();
+		const middle = ( top + Math.min( sheet.top, ad?.height ? ad.top : Infinity ) - PIN_CARD ) / 2;
 		return MathUtils.clamp( 1 - 2 * middle / height, 0, 0.8 );
 
 	}
@@ -742,14 +1003,28 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// How long from asking for the page to the globe, from where, and on what (the funnel's first step).
 	stats.loaded( performance.now() );
 
+	// Google's ad on the globe (ads.js, docs/world-drive.md "Ads"), only with an AdSense publisher id
+	// in /api/config, and never for a supporter: its code, and Google's script, are only asked for
+	// once the Worker has said whether the pass is here, and then when the browser is next idle, so
+	// nothing of them is in the way of the globe coming up. Shown and blocked are counted once a visit.
+	if ( adsense ) {
+
+		const later = fn => window.requestIdleCallback ? requestIdleCallback( fn, { timeout: 5000 } ) : setTimeout( fn, 3000 );
+		supporter.known.then( () => later( () => isPro() || import( './ads.js' ).then( ads => ads.showAds( {
+			...adsense, root: $( 'globe-ui' ), onShown: () => stats.once( 'ad', 'shown' ), onBlocked: () => stats.once( 'ad', 'blocked' ),
+		} ), err => console.warn( 'Ads didn\'t load', err?.message ) ) ) );
+
+	}
+
 	// A place's link (?spot= or ?at=, its "Drive here" on the places' pages, drive/site/): the
 	// globe flies there and pins it, so Drive here is one more tap; it never drops in by itself.
 	// Only once the panel shows (the pin is lifted clear of it), and on Google's tiles once their
 	// root has arrived, as that moves the Earth under the camera. Then it's out of the address (a
 	// ?party= stays), so a reload doesn't fly there again; not before, so the reload the root's
 	// error screen asks for still goes there.
+	// (Only on the Moon this visit, a link to the Earth's left in the address for later.)
 	const linked = linkedPlace( location.search );
-	if ( linked ) {
+	if ( linked && ! ( moonOnly && worldOf( linked ) !== MOON ) ) {
 
 		let flown = false;
 		const flyToLinked = () => {
@@ -768,6 +1043,10 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		else flyToLinked();
 
 	}
+
+	if ( moonOnly && worldOf( linked ) !== MOON ) setWorld( MOON );
+	// A "challenge a friend" link: its card, over the challenges' list.
+	if ( challengeLink ) openChallengeLink( challengeLink );
 
 	// --- moving the scene to a new place, without loading anything again ---
 
@@ -789,6 +1068,15 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	async function setWorld( next, { at = null } = {} ) {
 
 		if ( state.mode !== 'globe' ) return false;
+		// No Earth this visit (moonOnly): boot.js says why, and how to get there.
+		if ( moonOnly && next !== MOON ) {
+
+			panel.setWorld( world );
+			moonOnly.onEarth();
+			return false;
+
+		}
+
 		if ( next === world ) {
 
 			switching = null;
@@ -875,12 +1163,15 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		if ( worldOf( place ) !== world && ! await setWorld( worldOf( place ) ) ) return;
 		stayPut();
 		stats.once( 'funnel', 'dropin' );
+		// (A drop-in anywhere but a challenge's start ends a run that's going, if there's one.)
+		challenges?.dropping( place );
 		if ( onMoon() ) return dropInMoon( place, began );
 		const drop = state.drop = { cancelled: false, began };
 		const gone = () => drop.cancelled || state.drop !== drop;
 		let { lat, lon } = place;
 		state.place = place;
-		rememberPlace( place );
+		// (Not a place picked, as a landmark challenge's start isn't: recent: false.)
+		if ( place.recent !== false ) rememberPlace( place );
 		panel.refreshRecent();
 		pinAt( null );
 		pads.clear();
@@ -964,14 +1255,15 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		const gone = () => drop.cancelled || state.drop !== drop;
 		const { lat, lon } = place;
 		state.place = place;
-		rememberPlace( place );
+		if ( place.recent !== false ) rememberPlace( place );
 		panel.refreshRecent();
 		pinAt( null );
 		pads.clear();
 		sea.clear();
 		setMode( 'dropping' );
-		$( 'drive-ui' ).querySelector( '.place' ).textContent = place.name;
-		screens.loading( `Dropping in: ${ place.name }` );
+		const shown = place.near || place.name;
+		$( 'drive-ui' ).querySelector( '.place' ).textContent = shown;
+		screens.loading( `Dropping in: ${ shown }` );
 		const height = moon.heightAt( lat, lon ) ?? 0;
 		recentre( { lat, lon, height } );
 		state.place = { ...place, height };
@@ -1060,9 +1352,12 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		// (The go-kart, if the ride picked didn't load: the pickers show what's driven.)
 		panel.setDriven( vehicle );
 		screens.hideLoading();
-		progress.dropped();
+		progress.dropped( { moon: onMoon() } );
 		drive();
 		stats.add( 'dropin', onMoon() ? MOON : METRICS.dropin.key( state.place?.id ) ?? 'other' );
+		// And where, to about a kilometre (the cell it's in, never where in it), for the owner's map
+		// of where people drop in.
+		stats.dropped( onMoon() ? MOON : 'earth', state.place.lat, state.place.lon );
 		stats.add( 'ride', vehicle.id );
 		stats.add( 'dropin_time', dropinBucket( performance.now() - drop.began ) );
 		stats.once( 'funnel', 'driving' );
@@ -1070,8 +1365,11 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		// On the Moon nobody's told where you are: you're on the globe as far as they know.
 		if ( onMoon() ) live?.setAway();
 		else live?.setPlace( { name: placeLabel( state.place ), lat: state.place.lat, lon: state.place.lon, height: state.place.height } );
+		// A challenge's start: its gates or items and its countdown (challenges.js), which shows the keys
+		// over it if they haven't been this visit.
+		const started = challenges?.arrived( state.place ) ?? false;
 		// The keys, on a keyboard; a touch screen has its labelled buttons instead.
-		if ( ! document.body.classList.contains( 'touch' ) ) screens.showKeys();
+		if ( ! started ) showKeys();
 
 	}
 
@@ -1492,6 +1790,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		// What was driven goes to the Worker as the drive pauses (or ends: toGlobe).
 		progress.report();
 		if ( state.leaving ) return;
+		// A pause ends a challenge's run (challenges.js: none of it counts, and nothing can be had by it).
+		challenges?.paused();
 		setMode( 'paused' );
 		screens.pause( true );
 		// The rides scroll sideways there: the one being driven in view.
@@ -1508,6 +1808,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	function resume() {
 
 		if ( state.mode !== 'paused' || ! state.entry ) return;
+		// (Driving on: a challenge's run the pause stopped is over for good.)
+		challenges?.resumed();
 		screens.pause( false );
 		drive();
 
@@ -1517,6 +1819,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 		const old = state.entry;
 		if ( ! old || state.mode !== 'paused' ) return;
+		// (Another ride: a challenge's run is left.)
+		challenges?.left();
 		const { east, north, heading } = old.state;
 		try {
 
@@ -1554,6 +1858,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		if ( state.mode === 'dropping' && state.drop ) stats.add( 'problem', 'drop_abandoned' );
 		// What was driven goes to the Worker (or, before a nickname, is kept here).
 		progress.report();
+		challenges?.left();
 		if ( state.drop ) state.drop.cancelled = true;
 		state.drop = null;
 		moon.rush = false;
@@ -1616,6 +1921,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 			// (On the Moon, nobody's driving with you, and it's none of the Earth's areas or spots.)
 			together: ! onMoon() && !! live && [ ...live.players.values() ].some( p => ! p.away ),
 			where: onMoon() ? nowhere : carWhere,
+			vehicle: state.vehicle?.id ?? null,
 		};
 
 	}
@@ -1769,11 +2075,23 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		}
 
 		if ( y === null ) return false;
+		// (Put somewhere else: a challenge's run is left.)
+		challenges?.left();
+		return placeCar( { east: - local.x, north: local.z, heading, up: y } );
+
+	}
+
+	// Your car put at `east`, `north` (m in this scene), `up` its height there, facing `heading`, at a
+	// standstill, and driving on: Go to beside someone (moveCar), and a challenge's Retry back at its
+	// start (challenges.js).
+	function placeCar( { east, north, heading, up } ) {
+
 		const { entry } = state;
+		if ( ! entry ) return false;
 		state.leaving = true;
 		if ( driver.active ) driver.stop();
 		state.leaving = false;
-		Object.assign( entry.state, { east: - local.x, north: local.z, heading, up: y } );
+		Object.assign( entry.state, { east, north, heading, up } );
 		entry.parked = null;
 		// At that height: not snapped as a placed model is, from high above onto the first thing in
 		// the way, which under a roof is the roof. (While it's driven, nothing snaps it.)
@@ -1798,8 +2116,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	window.addEventListener( 'keydown', e => {
 
-		// The leaderboard over everything: its own keys (Esc closes it).
-		if ( board.isOpen || isTyping( e ) || e.ctrlKey || e.metaKey || e.altKey || e.repeat ) return;
+		// The leaderboard (or the challenges) over everything: its own keys (Esc closes it).
+		if ( board.isOpen || challenges?.isOpen || isTyping( e ) || e.ctrlKey || e.metaKey || e.altKey || e.repeat ) return;
 		if ( e.code === 'KeyM' && state.mode !== 'globe' ) toGlobe();
 		else if ( e.code === 'KeyH' && state.mode === 'driving' && friends ) friends.honk();
 		else if ( state.mode === 'paused' && ( e.code === 'Escape' || e.code === 'Enter' ) ) {
@@ -1888,6 +2206,10 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		timer.update( time );
 		const dt = Math.min( timer.getDelta(), 0.1 );
 		if ( driver.active ) driver.update( dt );
+		// A challenge's run: its clock (the same steps the car was driven by), its gates and its HUD; and
+		// the challenges' word to a visit driving a while.
+		challenges?.frame( dt );
+		challengeNudge( dt );
 		// The underglow fades as the ground falls away (a jump, flying) and comes back on it.
 		if ( state.entry ) liftGlow( state.entry.pivot, flagsOf( driver, state.mode === 'paused' ), dt );
 		screenFx.update( dt, state.mode === 'driving' || state.mode === 'paused' );
@@ -2095,6 +2417,18 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		get world() {
 
 			return world;
+
+		},
+		get challenges() {
+
+			return challenges;
+
+		},
+		openChallenges, openAchievements,
+		// The achievements' notices waiting to be shown (a challenge's run holds them).
+		get notices() {
+
+			return notices.map( notice => notice.text );
 
 		},
 		moon, setWorld,

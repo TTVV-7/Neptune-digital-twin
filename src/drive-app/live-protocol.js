@@ -17,7 +17,7 @@
 // two pages centred on different places (each recentres the scene where it dropped in) agree on
 // where a car is: each turns them into its own scene with the tiles' (or test globe's) matrixWorld.
 
-import { DRIVE_CARS, LIBRARY_VEHICLES, PASS_RIDES } from './catalog.js';
+import { DRIVE_CARS, LIBRARY_VEHICLES, PASS_RIDES, WORKS_RIDES } from './catalog.js';
 
 export const PROTOCOL = 'worlddrive-live.v1';
 
@@ -266,7 +266,7 @@ export function checkState( s ) {
 }
 
 // The rides anyone may be seen in (the same list the leaderboard takes).
-const VEHICLES = new Set( [ 'go-kart', ...LIBRARY_VEHICLES, ...DRIVE_CARS, ...PASS_RIDES ] );
+const VEHICLES = new Set( [ 'go-kart', ...LIBRARY_VEHICLES, ...WORKS_RIDES, ...DRIVE_CARS, ...PASS_RIDES ] );
 
 export function checkVehicle( id ) {
 

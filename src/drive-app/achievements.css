@@ -1,0 +1,197 @@
+/* The Achievements grid (achievements.js): loaded with its chunk, the first time it's opened. */
+
+dialog#achievements {
+	width: min( 760px, calc( 100vw - 24px ) );
+	max-height: min( 88vh, 920px );
+	padding: 0;
+	overflow: hidden;
+	border: 1px solid var( --line );
+	border-radius: var( --radius );
+	background: var( --panel-solid );
+	color: var( --ink );
+	box-shadow: 0 20px 60px rgba( 0, 0, 0, 0.6 );
+}
+
+dialog#achievements::backdrop {
+	background: rgba( 3, 6, 12, 0.6 );
+}
+
+/* The header stays; the badges scroll under it. */
+dialog#achievements[open] {
+	display: flex;
+	flex-direction: column;
+}
+
+dialog#achievements header {
+	flex: none;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 14px 18px 10px;
+}
+
+dialog#achievements h2 {
+	margin: 0;
+	font-size: 20px;
+	font-style: italic;
+	font-weight: 900;
+	text-transform: uppercase;
+}
+
+dialog#achievements h2 .count {
+	margin-left: 6px;
+	color: var( --muted );
+	font-style: normal;
+	font-weight: 700;
+}
+
+dialog#achievements .close {
+	width: 34px;
+	height: 34px;
+	border: 0;
+	border-radius: 10px;
+	background: var( --chip );
+	color: var( --ink );
+	font-size: 22px;
+	line-height: 1;
+}
+
+dialog#achievements .scroll {
+	overflow-y: auto;
+	min-height: 0;
+	padding-bottom: 16px;
+}
+
+dialog#achievements .lead,
+dialog#achievements .save,
+dialog#achievements .status {
+	margin: 0 18px 10px;
+	color: var( --muted );
+}
+
+dialog#achievements .save {
+	color: var( --accent );
+}
+
+/* Two or three across on a wide screen, one on a phone held upright. */
+dialog#achievements .feats {
+	display: grid;
+	grid-template-columns: repeat( auto-fill, minmax( 220px, 1fr ) );
+	gap: 8px;
+	margin: 0;
+	padding: 0 14px;
+	list-style: none;
+}
+
+dialog#achievements .feat {
+	display: flex;
+	gap: 10px;
+	align-items: flex-start;
+	padding: 10px;
+	border: 1px solid var( --line );
+	border-radius: 12px;
+	background: var( --chip );
+}
+
+dialog#achievements .feat.earned {
+	border-color: rgba( 255, 210, 63, 0.5 );
+	background: rgba( 255, 210, 63, 0.09 );
+}
+
+dialog#achievements .icon {
+	flex: none;
+	display: grid;
+	place-items: center;
+	width: 38px;
+	height: 38px;
+	border-radius: 50%;
+	background: rgba( 255, 255, 255, 0.08 );
+	font-size: 20px;
+}
+
+dialog#achievements .feat.locked .icon {
+	filter: grayscale( 1 );
+	opacity: 0.55;
+}
+
+dialog#achievements .feat.earned .icon {
+	background: var( --accent );
+	box-shadow: 0 0 0 2px rgba( 255, 210, 63, 0.35 );
+}
+
+dialog#achievements .body {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	min-width: 0;
+	flex: 1;
+}
+
+dialog#achievements .name {
+	font-size: 14px;
+	font-weight: 800;
+}
+
+dialog#achievements .goal,
+dialog#achievements .state {
+	color: var( --muted );
+}
+
+dialog#achievements .feat.earned .state {
+	color: var( --accent );
+	font-weight: 700;
+}
+
+dialog#achievements .bar {
+	display: block;
+	height: 5px;
+	margin-top: 2px;
+	overflow: hidden;
+	border-radius: 3px;
+	background: rgba( 255, 255, 255, 0.1 );
+}
+
+dialog#achievements .bar i {
+	display: block;
+	height: 100%;
+	border-radius: 3px;
+	background: var( --sky );
+}
+
+dialog#achievements .feat.earned .bar i {
+	background: var( --accent );
+}
+
+/* The construction ride it unlocks, with its picture. */
+dialog#achievements .reward {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-top: 4px;
+	padding: 3px 8px 3px 3px;
+	border: 1px solid var( --line );
+	border-radius: 8px;
+	background: rgba( 0, 0, 0, 0.2 );
+	color: var( --ink );
+	font: 700 12px/1.3 var( --font );
+	text-align: left;
+}
+
+dialog#achievements button.reward {
+	cursor: pointer;
+	border-color: rgba( 255, 210, 63, 0.6 );
+}
+
+dialog#achievements .reward img {
+	width: 46px;
+	height: 32px;
+	object-fit: contain;
+}
+
+@media ( max-width: 520px ) {
+
+	dialog#achievements .feats {
+		grid-template-columns: 1fr;
+	}
+
+}

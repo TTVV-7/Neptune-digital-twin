@@ -6,12 +6,16 @@
 	"name": "world-drive",
 	"main": "worker/drive/index.js",
 	"compatibility_date": "2026-10-01",
-	// The built site (npm run build:drive). The Worker only runs for /api/*; everything else is
-	// served straight from these files, which costs nothing however many people visit.
+	// The built site (npm run build:drive). The Worker only runs for /api/*, /c, the path a
+	// "challenge a friend" link is shared at (/c?challenge=...: the page with its own preview card for
+	// chat apps), and /ads.txt (AdSense's, made from ADSENSE_CLIENT below; a 404 while that's empty);
+	// everything else, the home page included, is served straight from these files, which
+	// costs nothing however many people visit, and goes on being served on the Free plan when the
+	// day's 100,000 Worker requests are used up (a path the Worker runs first for gets a 429 then).
 	"assets": {
 		"directory": "./dist-drive",
 		"binding": "ASSETS",
-		"run_worker_first": [ "/api/*" ]
+		"run_worker_first": [ "/api/*", "/c", "/ads.txt" ]
 	},
 	// Both addresses are the Worker's custom domains (Cloudflare makes their DNS records and
 	// certificates). www sends you on to worlddrive.app (worker/drive/index.js and the page itself).
@@ -55,7 +59,14 @@
 		// rest for those, with room for the minute the rooms' counts can run behind. On Workers Paid,
 		// past the million a month included, requests are $0.15 a million: each 100,000 a day more is
 		// 3 million a month, $0.45 (docs/world-drive.md, "What it costs"). 0 is off.
-		"LIVE_DAILY_BUDGET": "40000"
+		"LIVE_DAILY_BUDGET": "40000",
+		// Google AdSense (docs/world-drive.md, "Ads"): one banner on the globe, never while driving and
+		// never for a supporter. ADSENSE_CLIENT is the publisher id, "ca-pub-" and 16 digits (public);
+		// empty, no ads at all: nothing about them is loaded or shown, and /ads.txt is a 404.
+		// ADSENSE_SLOT is a display ad unit's id (6 to 12 digits), or empty for a responsive unit with
+		// none. Either one not in its format switches ads off.
+		"ADSENSE_CLIENT": "ca-pub-7954356723512335",
+		"ADSENSE_SLOT": ""
 	},
 	// Secrets, set by the owner and never in a file (the dashboard, or
 	// npx wrangler secret put GOOGLE_MAPS_API_KEY -c wrangler.drive.jsonc): GOOGLE_MAPS_API_KEY (a
@@ -86,7 +97,32 @@
 		// changes: at most 10 a minute (a page reports every couple of minutes). On the rate limiter
 		// rather than DriveLimits, so levels cost no Durable Object request at all.
 		{ "name": "PROGRESS_POSTS", "namespace_id": "4802", "simple": { "limit": 10, "period": 60 } },
-		{ "name": "STATS_POSTS", "namespace_id": "4803", "simple": { "limit": 6, "period": 60 } }
+		{ "name": "STATS_POSTS", "namespace_id": "4803", "simple": { "limit": 6, "period": 60 } },
+		// The owner's admin page's asks (worker/drive/admin.js), by account: each reads a period's rows
+		// from D1, so at most 30 a minute (the page asks once or twice a change of period).
+		{ "name": "ADMIN_LOOKS", "namespace_id": "4804", "simple": { "limit": 30, "period": 60 } },
+		// A visitor's sign-ins with a password, checks of one and changes to an account
+		// (worker/drive/logins.js), by the challenges' keyed hash of the address (an IPv6 one by its
+		// /48) and the day: at most 10 a minute, room for a few mistyped passwords and a change, while
+		// a script trying over and over is turned away before each try costs a Durable Object request.
+		{ "name": "PASSWORD_TRIES", "namespace_id": "4807", "simple": { "limit": 10, "period": 60 } },
+		// The challenges' lists, boards and times posted (worker/drive/challenges.js), by address (an
+		// IPv6 one by its /48), each counted by an HMAC of it and the day (lookKey), never as it is: a
+		// page asks a few times a minute at most (the list as it opens, a board or two, a time); a
+		// script asking over and over is turned away before it reads D1.
+		{ "name": "CHALLENGE_LOOKS", "namespace_id": "4805", "simple": { "limit": 60, "period": 60 } },
+		// Those of the lists and boards that miss Cloudflare's cache and read D1 (a board's rows, the
+		// list's tops, a player's own rows, a board's order), and the times posted (each reads D1 before
+		// the gap can turn it away), by the same key: 10 a minute, room for a page's list, all six
+		// boards and a time, while one address asking for past boards or players, or posting, in turn
+		// costs a few hundred thousand rows read a day at most (docs/world-drive.md, "What challenges
+		// cost").
+		{ "name": "CHALLENGE_MISSES", "namespace_id": "4806", "simple": { "limit": 10, "period": 60 } },
+		// A visitor's asks for their achievements (worker/drive/achievements.js), by the same key: each
+		// reads about 30 rows for most players and about 410 at most for a big account
+		// (docs/world-drive.md, "What it costs"), and a page asks as its Achievements grid opens, so 6
+		// a minute (and ACHIEVEMENT_LOOKS_PER_VISITOR_DAILY, 200, a day by DriveLimits).
+		{ "name": "ACHIEVEMENT_LOOKS", "namespace_id": "4808", "simple": { "limit": 6, "period": 60 } }
 	],
 	"migrations": [
 		{ "tag": "v1", "new_sqlite_classes": [ "DriveLimits" ] },

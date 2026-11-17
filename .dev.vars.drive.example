@@ -28,3 +28,9 @@ GOOGLE_CLIENT_ID=
 SUPPORTER_PAYMENT_LINK=
 STRIPE_WEBHOOK_SECRET=
 SUPPORTER_EMAILS=
+
+# Google AdSense on the globe (docs/world-drive.md, "Ads"): blank, no ads. Best left blank here: the
+# real id asks Google for real ads on localhost, and clicking your own breaks AdSense's rules.
+# scripts/test-drive-ui.mjs tries the banner with Google's script stood in for.
+ADSENSE_CLIENT=
+ADSENSE_SLOT=

@@ -1,0 +1,95 @@
+/* Google's ad on the globe (ads.js, docs/world-drive.md "Ads"): loaded with it, so nothing here is
+   in the first load. Its room is only kept (body.ad-on) while it's there; then the pin's card, the
+   party banner and the map's credits move up out of its way. A 320 × 50 banner, or 728 × 90 where
+   there's room for one beside the panel; the "Ad" over it. */
+
+body.ad-on {
+	--ad-w: 320px;
+	--ad-h: 50px;
+	/* The banner, its label and a gap: what goes above it moves up by this much. */
+	--ad-space: calc( var( --ad-h ) + 22px );
+}
+
+@media ( min-width: 1116px ) and ( min-height: 600px ) {
+
+	body.ad-on {
+		--ad-w: 728px;
+		--ad-h: 90px;
+	}
+
+}
+
+/* Along the bottom, beside the panel (which is 340 px wide, 16 px in), in the middle of what's left. */
+#globe-ui .ad-slot {
+	position: fixed;
+	left: 372px;
+	right: 16px;
+	bottom: calc( 8px + var( --safe-bottom ) );
+	z-index: 9;
+	display: flex;
+	justify-content: center;
+	pointer-events: none;
+}
+
+#globe-ui .ad-frame {
+	display: flex;
+	flex-direction: column;
+	width: min( var( --ad-w ), 100% );
+	pointer-events: auto;
+}
+
+#globe-ui .ad-label {
+	align-self: flex-start;
+	padding: 0 6px;
+	border-radius: 6px 6px 0 0;
+	background: var( --panel );
+	font-size: 10px;
+	font-weight: 700;
+	line-height: 14px;
+	letter-spacing: 0.06em;
+	color: var( --muted );
+	text-transform: uppercase;
+}
+
+#globe-ui .ad-slot ins.adsbygoogle {
+	display: block;
+	width: 100%;
+	height: var( --ad-h );
+	overflow: hidden;
+	border-radius: 0 6px 6px 6px;
+	background: var( --panel );
+}
+
+body.ad-on #globe-ui .pin-card {
+	bottom: calc( 28px + var( --safe-bottom ) + var( --ad-space ) );
+}
+
+body.ad-on[data-mode='globe'] #attribution,
+body.ad-on[data-mode='globe'] #moon-credit {
+	bottom: calc( 8px + var( --safe-bottom ) + var( --ad-space ) );
+}
+
+/* On a phone, over the sheet along the bottom (46 % of the screen, style.css), in the middle. */
+@media ( max-width: 760px ) {
+
+	#globe-ui .ad-slot {
+		left: 0;
+		right: 0;
+		bottom: calc( 46% + 8px );
+	}
+
+	body.ad-on #globe-ui .pin-card {
+		bottom: calc( 46% + 12px + var( --ad-space ) );
+	}
+
+	body.ad-on #globe-ui .party-banner {
+		bottom: calc( 46% + 84px + var( --ad-space ) );
+	}
+
+	/* The map's credits are at the top on a phone (style.css): where they were. */
+	body.ad-on[data-mode='globe'] #attribution,
+	body.ad-on[data-mode='globe'] #moon-credit {
+		bottom: auto;
+	}
+
+}

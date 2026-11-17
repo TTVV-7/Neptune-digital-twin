@@ -23,16 +23,18 @@ export async function getConfig() {
 
 }
 
-// Trades the robot check's token for the Maps key: one of the day's drives. Answers { key, left,
-// visit } (visit: the token scores are posted with, see postScore), or { usedUp: true, retryAfter }
-// over a daily cap, { robot: true } when the check failed, or { error } for anything else.
-export async function postVisit( token ) {
+// Trades the robot check's token for the Maps key: one of the day's drives on the Earth. Answers
+// { key, left, visit } (visit: the token scores are posted with, see postScore), or { usedUp: true,
+// retryAfter, reason, visit } over a daily cap (the Moon's still open: visit, if it came, is for
+// that), { robot: true } when the check failed, or { error } for anything else. With world 'moon'
+// (the page opened on a link to the Moon) no drive is spent and there's no key: { moon: true, visit }.
+export async function postVisit( token, { world = 'earth' } = {} ) {
 
 	let res;
 	let body = {};
 	try {
 
-		res = await fetch( '/api/visit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( { token } ) } );
+		res = await fetch( '/api/visit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( world === 'moon' ? { token, world } : { token } ) } );
 		body = await res.json().catch( () => ( {} ) );
 
 	} catch {
@@ -41,8 +43,10 @@ export async function postVisit( token ) {
 
 	}
 
-	if ( res.ok && typeof body.mapsKey === 'string' && body.mapsKey ) return { key: body.mapsKey, left: body.left, visit: typeof body.visit === 'string' ? body.visit : null };
-	if ( res.status === 429 ) return { usedUp: true, retryAfter: Number( body.retryAfter ) || 0, reason: body.reason };
+	const visit = typeof body.visit === 'string' ? body.visit : null;
+	if ( res.ok && typeof body.mapsKey === 'string' && body.mapsKey ) return { key: body.mapsKey, left: body.left, visit };
+	if ( res.ok && body.moon === true ) return { moon: true, visit };
+	if ( res.status === 429 ) return { usedUp: true, retryAfter: Number( body.retryAfter ) || 0, reason: body.reason, visit };
 	if ( res.status === 403 ) return { robot: true };
 	return { error: body.error ?? `World Drive answered ${ res.status }.` };
 
@@ -226,11 +230,12 @@ export function getBoard( { period, place = null, id = null } ) {
 // As the leaderboard's: none of these throw.
 
 // What was driven since the last report (levels.js's REPORT), with this visit's token: body { xp,
-// level, gained, unlocked, supporter, title, accepted: { areas, spots }, daily? }. keepalive: as
-// the page goes away (pagehide), so the browser sends it all the same.
-export function postProgress( { id, secret }, visit, report, { keepalive = false } = {} ) {
+// level, gained, unlocked, supporter, title, accepted: { areas, spots }, daily?, earned, feats? }. keepalive: as
+// the page goes away (pagehide), so the browser sends it all the same. feats: with an empty report,
+// ask for every achievement the player has (the answer's feats, if the Worker has a turn for it).
+export function postProgress( { id, secret }, visit, report, { keepalive = false, feats = false } = {} ) {
 
-	return send( 'POST', '/api/progress', { id, secret, visit, report }, { keepalive } );
+	return send( 'POST', '/api/progress', { id, secret, visit, report, ...feats ? { feats: true } : {} }, { keepalive } );
 
 }
 
@@ -239,6 +244,17 @@ export function postProgress( { id, secret }, visit, report, { keepalive = false
 export function postTitle( { id, secret }, title ) {
 
 	return send( 'POST', '/api/player/title', { id, secret, title } );
+
+}
+
+// --- achievements (worker/drive/achievements.js) ---
+// As the leaderboard's: none of these throw.
+
+// This player's achievements, with their account's: body { achievements: [ { id, at } ], counts:
+// { km, moon, looks, rides, streak, parties, challenges }, rides: [ construction rides unlocked ] }.
+export function postAchievements( { id, secret } ) {
+
+	return send( 'POST', '/api/achievements', { id, secret } );
 
 }
 
@@ -273,7 +289,9 @@ export function linkPlayer( { id, secret } ) {
 
 }
 
-async function send( method, path, body, { keepalive = false } = {} ) {
+// A request to the Worker that never throws: { ok, status, body, retryAfter }, status 0 when it
+// couldn't be reached (the challenges' chunk, challenges.js, asks with it too).
+export async function send( method, path, body, { keepalive = false } = {} ) {
 
 	try {
 

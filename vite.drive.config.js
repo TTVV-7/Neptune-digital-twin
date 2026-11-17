@@ -3,7 +3,7 @@ import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, loadEnv } from 'vite';
 import { GOOGLE_KEY_NAMES } from './vite.config.js';
-import { LIBRARY_VEHICLES } from './src/drive-app/catalog.js';
+import { LIBRARY_VEHICLES, WORKS_RIDES } from './src/drive-app/catalog.js';
 import { driveSite } from './drive/site/build.js';
 
 // World Drive (worlddrive.app, docs/world-drive.md): its own page, drive/index.html with
@@ -59,18 +59,22 @@ export default defineConfig( ( { command, mode } ) => {
 } );
 
 // The files the World Drive page loads from public/: the Google Maps logo, and the offered
-// vehicles' models and pictures with a library.json listing just them. The dev server serves
-// them from public/; the build copies them into dist-drive/.
+// vehicles' models and pictures with a library.json listing just them: the pickup, and the
+// construction rides (whose pictures are drawn for World Drive, into drive/public/works/, so the
+// library's own aren't published). library.json keeps only what the page reads of each, as it's
+// fetched as the page starts. The dev server serves them from public/; the build copies them into
+// dist-drive/.
 function publishFromLibrary() {
 
 	function files() {
 
 		const library = JSON.parse( readFileSync( join( PUBLIC, 'library', 'library.json' ), 'utf8' ) );
-		const items = LIBRARY_VEHICLES.map( id => {
+		const items = [ ...LIBRARY_VEHICLES, ...WORKS_RIDES ].map( id => {
 
 			const item = library.find( entry => entry.id === id );
 			if ( ! item ) throw new Error( `World Drive: ${ id } isn't in public/library/library.json` );
-			return item;
+			const { name, file, thumb, front, scale, dimensions, source, drive } = item;
+			return { id, name, file, ...WORKS_RIDES.includes( id ) ? {} : { thumb }, front, scale, dimensions, ...source ? { source } : {}, ...drive ? { drive } : {} };
 
 		} );
 		const published = new Map( [ [ 'google-maps-logo.svg', null ], [ 'library/library.json', JSON.stringify( items ) ] ] );

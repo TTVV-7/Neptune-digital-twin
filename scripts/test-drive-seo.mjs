@@ -13,7 +13,8 @@
 // refused), and a drop-in from it; a Moon page's opening the game on the Moon with its spot pinned;
 // the dev server making the same pages and passing the Moon's files on; and the load on a phone's
 // connection: what World Drive is shows at once, before the game's code, and counts as the page's
-// largest paint. Every request off this machine is blocked.
+// largest paint; and the challenges a chunk of their own, none of them in the first load. Every
+// request off this machine is blocked.
 //
 // Needs Playwright with Chromium, as test-drive-ui.mjs does. TEST_VITE_PORT picks the ports (it and
 // the next one); TEST_SCREENSHOTS=<folder> saves pictures.
@@ -27,6 +28,7 @@ import { fileURLToPath } from 'node:url';
 import { after, before, describe, test } from 'node:test';
 import { measureLoad, serveDist } from './drive-static.mjs';
 import { startVite } from './worker-harness.mjs';
+import { WORKS_RIDES } from '../src/drive-app/catalog.js';
 import { MOON_PAGES } from '../drive/site/moon.js';
 import { PLACES } from '../drive/site/places.js';
 import { sitePages } from '../drive/site/build.js';
@@ -831,6 +833,68 @@ describe( 'the dev server and the load', () => {
 		t.diagnostic( `a place's page: ${ JSON.stringify( place ) }` );
 		assert.equal( place.js, 0, 'a place\'s page loads a script' );
 		assert.ok( place.lcp.time < 1500, `largest contentful paint ${ place.lcp.time } ms` );
+
+	} );
+
+	test( 'the challenges are a chunk of their own, script and styles: nothing of them in the page\'s first load, only fetched when they\'re opened', () => {
+
+		const assets = readdirSync( join( DIST, 'assets' ) );
+		const chunk = assets.find( name => /^challenges-[\w-]+\.js$/.test( name ) );
+		const styles = assets.find( name => /^challenges-[\w-]+\.css$/.test( name ) );
+		assert.ok( chunk && styles, assets.join( ' ' ) );
+		const html = readFileSync( join( DIST, 'index.html' ), 'utf8' );
+		assert.ok( ! html.includes( chunk ) && ! html.includes( styles ) && ! /assets\/challenges-/.test( html ), 'the page itself asks for them' );
+		// The page's first script and the game's own: the chunk only named (imported when opened), none
+		// of its words or its styles in them.
+		const read = name => readFileSync( join( DIST, 'assets', name ), 'utf8' );
+		const game = assets.filter( name => /^(main|index)-[\w-]+\.(js|css)$/.test( name ) );
+		assert.ok( game.length >= 3, game.join( ' ' ) );
+		for ( const name of game ) {
+
+			const text = read( name );
+			for ( const word of [ 'Needs an Earth drive', 'Pausing ends a run', 'ch-finish', 'ch-hud', 'Checkpoint sprint', 'Challenge a friend', 'time to beat', 'ch-ghost', 'Race their ghost', 'world-drive.ghost' ] ) assert.ok( ! text.includes( word ), `${ name } has "${ word }"` );
+
+		}
+
+		assert.ok( game.some( name => name.endsWith( '.js' ) && read( name ).includes( chunk ) ), 'the game never imports the chunk' );
+		assert.match( read( chunk ), /Needs an Earth drive/ );
+		// (Its ghosts and links with it: the share, the link's card, the ghost's button.)
+		for ( const word of [ 'Challenge a friend', 'time to beat', 'world-drive.ghost' ] ) assert.ok( read( chunk ).includes( word ), word );
+
+	} );
+
+	test( 'the achievements\' grid is a chunk of its own, script and styles, and the construction rides\' models and pictures nothing the page loads first', () => {
+
+		const assets = readdirSync( join( DIST, 'assets' ) );
+		const chunk = assets.find( name => /^achievements-[\w-]+\.js$/.test( name ) );
+		const styles = assets.find( name => /^achievements-[\w-]+\.css$/.test( name ) );
+		assert.ok( chunk && styles, assets.join( ' ' ) );
+		const html = readFileSync( join( DIST, 'index.html' ), 'utf8' );
+		assert.ok( ! /assets\/achievements-/.test( html ), 'the page itself asks for them' );
+		const read = name => readFileSync( join( DIST, 'assets', name ), 'utf8' );
+		const game = assets.filter( name => /^(main|index)-[\w-]+\.(js|css)$/.test( name ) );
+		for ( const name of game ) {
+
+			const text = read( name );
+			for ( const word of [ 'Earned ', 'Unlocks the ', 'Pick a nickname to earn them', '#achievements' ] ) assert.ok( ! text.includes( word ), `${ name } has "${ word }"` );
+
+		}
+
+		assert.ok( game.some( name => name.endsWith( '.js' ) && read( name ).includes( chunk ) ), 'the game never imports the chunk' );
+		assert.match( read( chunk ), /Unlocks the / );
+		// The rides' models and pictures are published, and named only in library.json and the game's
+		// list of them: no page asks for one before it's picked.
+		const library = JSON.parse( readFileSync( join( DIST, 'library', 'library.json' ), 'utf8' ) );
+		for ( const id of WORKS_RIDES ) {
+
+			const item = library.find( entry => entry.id === id );
+			assert.ok( item && existsSync( join( DIST, 'library', item.file ) ) && existsSync( join( DIST, 'works', `${ id }.webp` ) ), id );
+			assert.ok( ! html.includes( item.file ), `${ id }'s model in the page` );
+
+		}
+
+		// library.json is fetched as the page starts: only what the page reads of each.
+		assert.ok( library.every( item => ! ( 'triangles' in item ) && ! ( 'category' in item ) && ! ( 'own' in item ) ) );
 
 	} );
 

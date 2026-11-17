@@ -16,6 +16,19 @@ export function googleClientId( env ) {
 
 }
 
+// Google AdSense on the globe (docs/world-drive.md, "Ads"): { client, slot } when ADSENSE_CLIENT is a
+// publisher id (ca-pub- and 16 digits) and ADSENSE_SLOT is empty (the unit without a slot id) or an
+// ad unit's id (6 to 12 digits), else null: ads off, as they are with ADSENSE_CLIENT empty. Anything
+// else (a typo, the id pasted without its ca-, a slot that isn't one) is off too, rather than half on.
+export function adsense( env ) {
+
+	const text = value => typeof value === 'string' ? value.trim() : '';
+	const client = text( env.ADSENSE_CLIENT );
+	const slot = text( env.ADSENSE_SLOT );
+	return /^ca-pub-\d{16}$/.test( client ) && /^(\d{6,12})?$/.test( slot ) ? { client, slot } : null;
+
+}
+
 // The time (ms) visits and scores are counted at. The tests (TEST_CLOCK=header, never set live)
 // send it in X-Test-Time to check what happens at midnight UTC, a week on or hours later.
 export function clock( request, env ) {
@@ -28,7 +41,10 @@ export function clock( request, env ) {
 // The visitor's address, as Cloudflare gives it: only ever hashed (see limits.js). An IPv6 address
 // counts by its first half, its /64: that's the block a home or a phone is given, and every one of
 // the billions of addresses in it would otherwise be a visitor of its own, with caps of its own.
-export function addressOf( request ) {
+// With `prefix` 48, by its /48 instead: the block a site, or a free tunnel broker's customer, is
+// given, which holds 65,536 /64s. The drop-in places count a visitor so (dropins.js), as a cell
+// counted once for each of those /64s could be pushed up the top places from one /48 for nothing.
+export function addressOf( request, prefix = 64 ) {
 
 	const ip = request.headers.get( 'CF-Connecting-IP' ) || 'unknown';
 	if ( ! ip.includes( ':' ) || ip.includes( '.' ) ) return ip;
@@ -37,6 +53,7 @@ export function addressOf( request ) {
 	const right = tail ? tail.split( ':' ) : [];
 	const groups = tail === undefined ? left : [ ...left, ...Array( Math.max( 0, 8 - left.length - right.length ) ).fill( '0' ), ...right ];
 	if ( groups.length !== 8 ) return ip;
-	return `${ groups.slice( 0, 4 ).map( group => group.replace( /^0+(?=.)/, '' ) ).join( ':' ) }::/64`;
+	const kept = prefix === 48 ? 3 : 4;
+	return `${ groups.slice( 0, kept ).map( group => group.replace( /^0+(?=.)/, '' ) ).join( ':' ) }::/${ kept * 16 }`;
 
 }

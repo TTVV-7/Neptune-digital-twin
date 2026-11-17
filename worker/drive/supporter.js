@@ -9,8 +9,8 @@ import { googleClientId } from './settings.js';
 // drives a day (index.js) and puts a ⭐ by their names on the leaderboard (scores.js). Stripe tells
 // us about each payment, refund and chargeback through a webhook, signed (checked in ../stripe.js,
 // which the construction app's premium.js shares), and the page asks /api/me (accounts.js) whether
-// you have it. A pass is an account's (Google sign-in, accounts.js), so it goes with you to any
-// browser.
+// you have it. A pass is an account's (Google's sign-in or a username's, accounts.js and
+// logins.js), so it goes with you to any browser.
 //
 // Settings (wrangler.drive.jsonc vars, or the dashboard; secrets in the dashboard only):
 //   GOOGLE_CLIENT_ID             the sign-in button's OAuth client id (public)
@@ -90,12 +90,14 @@ export async function isSupporter( env, account ) {
 // SQL that's true when the account with the id `account` (SQL: a parameter or a column) has the
 // pass: bought by it and not refunded, or bought with its email by someone not signed in (Google has
 // checked the email is theirs), or its email is in SUPPORTER_EMAILS, bound at `emails` as a JSON
-// list (supporterEmails). NULL, a player of no account's, is never a supporter. The leaderboard asks
-// this of each row it shows, so it's one look in each of the indexes it uses.
+// list (supporterEmails). NULL, a player of no account's, is never a supporter. An account with no
+// Google account linked has no email (''), and a purchase Stripe sent without one has '' too: the
+// email only counts when there is one, or every username's account would have that purchase. The
+// leaderboard asks this of each row it shows, so it's one look in each of the indexes it uses.
 export function hasPass( account, emails ) {
 
 	return `EXISTS ( SELECT 1 FROM accounts a WHERE a.id = ${ account } AND ( a.email IN ( SELECT value FROM json_each( ${ emails } ) )
-		OR EXISTS ( SELECT 1 FROM purchases u WHERE u.refunded_at IS NULL AND ( u.account_id = a.id OR ( u.account_id IS NULL AND u.email = a.email ) ) ) ) )`;
+		OR EXISTS ( SELECT 1 FROM purchases u WHERE u.refunded_at IS NULL AND ( u.account_id = a.id OR ( u.account_id IS NULL AND u.email = a.email AND a.email <> '' ) ) ) ) )`;
 
 }
 

@@ -11,6 +11,10 @@ import { setting } from './settings.js';
 import { hasPass, supporterEmails } from './supporter.js';
 import { readVisit } from './visits.js';
 import { standingOf, xpOf } from './progress.js';
+import { creditParty, unlockedRides } from './achievements.js';
+import { lookKey } from './challenges.js';
+import { rideFeat } from '../../src/drive-app/achievement-rules.js';
+import { DEFAULT_RIDE } from '../../src/drive-app/catalog.js';
 
 // Driving with others (docs/world-drive.md): the rooms. src/drive-app/live-protocol.js says what a
 // room is (a party, or the drivers in one area) and what's said in one; this is the Worker's half.
@@ -77,10 +81,14 @@ const ROOM = 'X-Live-Room';
 // room is to let go of because it has connected to another room (with that connection's number).
 const SEQ = 'X-Live-Seq';
 const LEAVE = 'X-Live-Leave';
+// Where the connection comes from, as the challenges' keyed hash of the address's /48 and the day
+// (lookKey): only so a party knows whether two of its drivers are on one address (partied), never
+// the address itself.
+const FROM = 'X-Live-From';
 // The parts of a driver only kept in memory, not in its attachment: when its car last moved and
 // when it was last sent the others' (counts of the room's own, which start again when it wakes),
 // when its state came in, and a hello being looked up with the messages that came in behind it.
-const MEMORY = [ 'moved', 'sent', 'sAt', 'held', 'pending', 'queue' ];
+const MEMORY = [ 'moved', 'sent', 'sAt', 'held', 'pending', 'queue', 'wantsLook' ];
 const encoder = new TextEncoder();
 // What a room counts of its spend, in billed Durable Object requests (see the costs above):
 // connecting, each incoming message, each alarm, each report to DriveLimits.
@@ -172,7 +180,7 @@ export async function live( { request, env, url, limits, now } ) {
 	// A visit is in one room at a time: the one it was in lets go of it first (a page moving on has
 	// hung up there already; a page in many rooms at once, or another tab, hasn't).
 	if ( today.was ) await leaveRoom( env, today.was, visit.id, today.seq );
-	const headers = { Upgrade: 'websocket', [ VISIT ]: visit.id, [ EXPIRES ]: String( visit.expiresAt ), [ ROOM ]: name, [ SEQ ]: String( today.seq ) };
+	const headers = { Upgrade: 'websocket', [ VISIT ]: visit.id, [ EXPIRES ]: String( visit.expiresAt ), [ ROOM ]: name, [ SEQ ]: String( today.seq ), [ FROM ]: await lookKey( env, request, now ) };
 	return env.ROOMS.get( env.ROOMS.idFromName( name ) ).fetch( new Request( 'https://room.internal/', { headers } ) );
 
 }
@@ -353,7 +361,7 @@ function roomName( room ) {
 // lose: everyone's latest state goes again with their next message.
 //
 // An attachment, a driver: { visit, seq (its number among the visit's connections today), expires,
-// room, at (connected), heard (last message, a keepalive included), tokens, filled (the rate's
+// from (where it connects from, FROM), room, at (connected), heard (last message, a keepalive included), tokens, filled (the rate's
 // bucket and when it was counted), honk (the last), left (closed by the room), spent (billed
 // requests the room hasn't reported yet), reported (when the room last reported), shown (the dots
 // of who's driving now it reported then, see dots), and once it has said hello pid, name, star,
@@ -364,6 +372,10 @@ export class DriveRoom extends DurableObject {
 
 		super( ctx, env );
 		this.drivers = new Map();
+		// Each connection's ask for its construction rides while D1 is answering it, and the
+		// connections with a change of ride waiting on it (rideOf, lookLater): in memory only.
+		this.asking = new Map();
+		this.looking = new Set();
 		// States taken (moves), and how many of them and when the last batch went out; whether the next
 		// batch is to go now (a car's first state).
 		this.moves = 0;
@@ -399,6 +411,7 @@ export class DriveRoom extends DurableObject {
 		const visit = request.headers.get( VISIT );
 		const expires = Number( request.headers.get( EXPIRES ) );
 		const seq = Number( request.headers.get( SEQ ) ) || 0;
+		const from = request.headers.get( FROM ) ?? '';
 		if ( request.headers.get( 'Upgrade' ) !== 'websocket' || ! room || ! visit || ! Number.isFinite( expires ) ) return new Response( 'Bad request', { status: 400 } );
 
 		const name = roomName( room );
@@ -429,7 +442,7 @@ export class DriveRoom extends DurableObject {
 			// Kept before the connection it replaces goes, so that one's unreported spend has this to go
 			// with, and the room's last report is still known from it.
 			const driver = {
-				visit, seq, expires, room: name, at: now, heard: now, tokens: BURST, filled: now, honk: 0, pid: null,
+				visit, seq, expires, from, room: name, at: now, heard: now, tokens: BURST, filled: now, honk: 0, pid: null,
 				spent: COST.connect, reported: this.reportedAt( server ) ?? now, shown: this.shownKey(), moved: 0, sent: 0,
 			};
 			this.drivers.set( server, driver );
@@ -509,14 +522,20 @@ export class DriveRoom extends DurableObject {
 		driver.pending = true;
 		driver.queue = [];
 		this.save( ws, driver );
-		const { name, star, level, title } = await this.nameOf( m.player, driver.visit );
+		const { name, star, level, title, player, account } = await this.nameOf( m.player, driver.visit );
 		// Gone while it was looked up.
+		if ( this.drivers.get( ws ) !== driver || driver.left || ws.readyState !== WebSocket.OPEN ) return;
+		// The player and their account (for a party's count), and for a construction ride whether they
+		// have the achievement that unlocks it (rideOf): without it (a page that's been changed) the
+		// others see the default ride. (A ride unlocked later comes with the page's next hello.)
+		Object.assign( driver, { player, account, wants: vehicle } );
+		const shown = await this.rideOf( ws, driver, vehicle );
 		if ( this.drivers.get( ws ) !== driver || driver.left || ws.readyState !== WebSocket.OPEN ) return;
 
 		const taken = new Set( this.sockets().map( other => this.driver( other ).pid ) );
 		let pid = randomToken( 6 );
 		while ( taken.has( pid ) ) pid = randomToken( 6 );
-		Object.assign( driver, { pid, name, star, level, title, vehicle, look, place, away: m.away === true, s: null, pending: false } );
+		Object.assign( driver, { pid, name, star, level, title, vehicle: shown, look, place, away: m.away === true, s: null, pending: false } );
 		const others = this.helloed().filter( other => other !== ws ).map( other => playerOf( this.driver( other ) ) );
 		send( ws, { t: 'welcome', you: pid, name, star, room: driver.room, max: this.max( parseRoom( driver.room ) ), players: others } );
 		driver.sent = this.moves;
@@ -530,15 +549,122 @@ export class DriveRoom extends DurableObject {
 
 		}
 
+		this.partied( Date.now() );
 		this.save( ws, driver );
 		this.flush( Date.now() );
 
 	}
 
-	// { name, star, level, title } for hello's player: { id, secret } as the leaderboard has them, or
-	// anything else from `visit`, a guest with no level (null). A guest's four figures are its
-	// visit's, so they stay the same each time it connects (Hide, by name, holds; a friend coming
-	// back is the same guest).
+	// In a party with someone else: each player there not yet counted for it who has another player
+	// with them (not one of their own account's), or anyone connecting from another address, has the
+	// party counted (achievements.js's creditParty: once a party, written after the answer), so both
+	// whoever made it and whoever joined it get it. One person in two tabs (two visits, one player or
+	// none, one address) is no one else. Nothing for an area's room.
+	partied( now ) {
+
+		const room = parseRoom( this.name );
+		if ( room?.kind !== 'party' ) return;
+		const here = this.helloed().map( ws => [ ws, this.driver( ws ) ] );
+		for ( const [ ws, d ] of here ) {
+
+			if ( ! d.player || d.partied ) continue;
+			// Where the player is connected from here (all their tabs and devices in the party).
+			const own = new Set( here.filter( ( [ , o ] ) => o.player && ( o.player === d.player || ( o.account && o.account === d.account ) ) ).map( ( [ , o ] ) => o.from ) );
+			if ( ! here.some( ( [ , other ] ) => companion( d, other, own ) ) ) continue;
+			d.partied = true;
+			this.save( ws, d );
+			const counting = creditParty( this.env, d.player, room.code, now ).catch( err => console.error( 'Party count', err?.name, err?.message ) );
+			this.ctx.waitUntil?.( counting );
+
+		}
+
+	}
+
+	// The ride the others see driver `driver` (on `ws`) in when they pick `vehicle`: theirs, or the
+	// default ride for a construction ride whose achievement they don't have (a guest never has one).
+	// Only a construction ride asks D1, and then once a connection for all of them (achievements.js's
+	// unlockedRides: one look by key for every construction ride's achievement, for the player and
+	// their account's players, 14 rows alone, about 280 at most for an account). The answer is
+	// kept with the driver (in its attachment), so a page going back and forth between rides, or
+	// trying each in turn, doesn't ask again; and while it's being asked, the ask itself is kept
+	// (this.asking, in memory only), so a burst of looks or a hello and a look at once wait on that
+	// one ask rather than each starting its own. Nothing is read for any other ride, so a hello
+	// costs what it did before achievements.
+	async rideOf( ws, driver, vehicle ) {
+
+		const feat = rideFeat( vehicle );
+		if ( ! feat ) return vehicle;
+		if ( ! driver.player ) return DEFAULT_RIDE;
+		if ( ! driver.rides ) {
+
+			let asking = this.asking.get( ws );
+			if ( ! asking ) {
+
+				asking = unlockedRides( database( this.env ), driver.player );
+				this.asking.set( ws, asking );
+				// Settled: kept with the driver if it answered, and asked again next time if it didn't.
+				asking.then( rides => driver.rides = rides, () => {} ).finally( () => this.asking.delete( ws ) );
+
+			}
+
+			try {
+
+				await asking;
+
+			} catch ( err ) {
+
+				// No database just now: the default ride, and asked again next time.
+				console.error( 'Live ride', err?.name, err?.message );
+				return DEFAULT_RIDE;
+
+			}
+
+		}
+
+		return this.shownRide( driver, vehicle );
+
+	}
+
+	// The ride the others see for `vehicle` from what's known of the driver's rides now (rideOf):
+	// a construction ride not known to be unlocked is the default ride.
+	shownRide( driver, vehicle ) {
+
+		const feat = rideFeat( vehicle );
+		return ! feat || ( driver.player && driver.rides?.[ feat ] ) ? vehicle : DEFAULT_RIDE;
+
+	}
+
+	// A ride changed (look) to a construction ride before this connection's rides are known: told to
+	// the others once D1 has said (rideOf), in whatever ride and look the page has picked by then
+	// (driver.wants, wantsLook). One at a time a connection: looks sent meanwhile only change what it
+	// tells, so a burst of them is one ask and one message to the others.
+	async lookLater( ws, driver ) {
+
+		this.looking.add( ws );
+		try {
+
+			await this.rideOf( ws, driver, driver.wants );
+
+		} finally {
+
+			this.looking.delete( ws );
+
+		}
+
+		if ( this.drivers.get( ws ) !== driver || driver.left || ws.readyState !== WebSocket.OPEN ) return;
+		const look = driver.wantsLook ?? driver.look;
+		const shown = this.shownRide( driver, driver.wants );
+		delete driver.wantsLook;
+		Object.assign( driver, { vehicle: shown, look } );
+		this.broadcast( { t: 'look', pid: driver.pid, vehicle: shown, look }, ws );
+		this.save( ws, driver );
+
+	}
+
+	// { name, star, level, title, player, account } for hello's player: { id, secret } as the
+	// leaderboard has them, or anything else from `visit`, a guest with no level (null). A guest's
+	// four figures are its visit's, so they stay the same each time it connects (Hide, by name,
+	// holds; a friend coming back is the same guest).
 	async nameOf( player, visit ) {
 
 		try {
@@ -546,9 +672,9 @@ export class DriveRoom extends DurableObject {
 			if ( isObject( player ) ) {
 
 				const { id, secret } = credentials( player );
-				const row = await database( this.env ).prepare( `SELECT p.name, ${ hasPass( 'p.account_id', '?3' ) } AS star, ${ xpOf( 'p' ) } AS xp, p.title
+				const row = await database( this.env ).prepare( `SELECT p.name, ${ hasPass( 'p.account_id', '?3' ) } AS star, ${ xpOf( 'p' ) } AS xp, p.title, p.account_id
 					FROM players p WHERE p.id = ?1 AND p.secret_hash = ?2` ).bind( id, await sha256Hex( secret ), supporterEmails( this.env ) ).first();
-				if ( row ) return { name: row.name, star: !! row.star, ...standingOf( row.xp, row.title ) };
+				if ( row ) return { name: row.name, star: !! row.star, ...standingOf( row.xp, row.title ), player: id, account: row.account_id ?? null };
 
 			}
 
@@ -560,7 +686,7 @@ export class DriveRoom extends DurableObject {
 		}
 
 		const number = parseInt( ( await sha256Hex( `guest ${ visit }` ) ).slice( 0, 8 ), 16 ) % 10000;
-		return { name: `Guest ${ String( number ).padStart( 4, '0' ) }`, star: false, level: null, title: null };
+		return { name: `Guest ${ String( number ).padStart( 4, '0' ) }`, star: false, level: null, title: null, player: null, account: null };
 
 	}
 
@@ -597,8 +723,23 @@ export class DriveRoom extends DurableObject {
 				const vehicle = checkVehicle( m.vehicle );
 				const look = checkLook( m.look );
 				if ( ! vehicle || ! look ) return false;
-				Object.assign( driver, { vehicle, look } );
-				this.broadcast( { t: 'look', pid, vehicle, look }, ws );
+				driver.wants = vehicle;
+				// A construction ride before this connection's rides are known: the others hear once D1
+				// says (lookLater), and while one is waiting, a look meanwhile only changes what it tells.
+				const feat = rideFeat( vehicle );
+				if ( this.looking.has( ws ) || ( feat && driver.player && ! driver.rides ) ) {
+
+					driver.wantsLook = look;
+					if ( this.looking.has( ws ) ) return true;
+					const asking = this.lookLater( ws, driver ).catch( err => console.error( 'Live look', err?.name, err?.message ) );
+					this.ctx.waitUntil?.( asking );
+					return true;
+
+				}
+
+				const shown = this.shownRide( driver, vehicle );
+				Object.assign( driver, { vehicle: shown, look } );
+				this.broadcast( { t: 'look', pid, vehicle: shown, look }, ws );
 				return true;
 
 			}
@@ -1130,6 +1271,18 @@ function spotIn( place, cell ) {
 	if ( cellOf( place.lat, place.lon ) === cell ) return toEcef( place.lat, place.lon, place.height );
 	const { south, north, west, east } = boundsOf( cell );
 	return toEcef( ( south + north ) / 2, ( west + east ) / 2, place.height );
+
+}
+
+// Whether `other`, in a party with driver `d`, is someone else for its count (partied): another
+// player, not of d's account, or a guest connecting from an address none of d's own connections
+// there (`own`, the addresses of the player's and their account's) comes from. (The same player, or
+// their account, on another device is still them, and so is a tab of theirs with no nickname.)
+function companion( d, other, own ) {
+
+	if ( other === d ) return false;
+	if ( other.player ) return other.player !== d.player && ! ( other.account && other.account === d.account );
+	return !! other.from && ! own.has( other.from );
 
 }
 

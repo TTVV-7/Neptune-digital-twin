@@ -224,8 +224,11 @@ const AIR_HINT = 'In the air: A/D spin · W/S flip · Q/E roll';
 // drag, gravity of gravity in the air, launch of how hard (and how hard at most) a hit throws it
 // up, air of how fast the keys turn it in the air (at most a kart's rate), kick of how hard a hit
 // sets it spinning, squash and shake of a hit's squash and the camera's shake, and rebound of a
-// hard landing's speed that it bounces back up with.
-const HANDLING = { grip: GRIP, slip: DRIFT_SLIP, driftYaw: DRIFT_YAW, turn: KART_YAW, lock: 35, landTilt: LAND_TILT, bumpers: null, drag: 1, gravity: 1, launch: 1, air: 1, kick: 1, squash: 1, shake: 1, rebound: 0 };
+// hard landing's speed that it bounces back up with. pivot (°/s) turns it on the spot, as tracks or
+// a skid steer's wheels do: at a standstill it turns that fast with the steering, easing out by
+// PIVOT_FADE m/s, where its wheels' own steering has taken over (0, none, for anything on wheels).
+const HANDLING = { grip: GRIP, slip: DRIFT_SLIP, driftYaw: DRIFT_YAW, turn: KART_YAW, lock: 35, landTilt: LAND_TILT, bumpers: null, drag: 1, gravity: 1, launch: 1, air: 1, kick: 1, squash: 1, shake: 1, rebound: 0, pivot: 0 };
+const PIVOT_FADE = 3;
 
 // Tuning per vehicle; others use the default. Speeds in km/h, acceleration in m/s².
 const SPECS = {
@@ -936,6 +939,8 @@ export class Driver {
 			const lock = speed / this.wheelbase * Math.tan( handling.lock * MathUtils.DEG2RAD ) * MathUtils.RAD2DEG;
 			const cap = MathUtils.lerp( ...handling.turn, MathUtils.clamp( speed / ( this.spec.topSpeed / KMH ), 0, 1 ) );
 			yawRate = Math.sign( this.speed ) * this.steer * Math.min( lock, cap );
+			// Tracks: turning on the spot, the way it would as it moves off (backing, as it backs).
+			if ( handling.pivot ) yawRate += ( this.speed < 0 ? - 1 : 1 ) * this.steer * handling.pivot * MathUtils.clamp( 1 - speed / PIVOT_FADE, 0, 1 );
 
 		}
 

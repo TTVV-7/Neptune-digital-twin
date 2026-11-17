@@ -24,6 +24,7 @@ import { applyLook, DECALS, defaultLook, FINISHES, FLAMES, fxOf, GLOWS, HORNS, i
 import { openPass, proBadge } from './pass.js';
 import { onProChange } from './pro.js';
 import { getLevel, onLevelChange } from './progress.js';
+import { onFeatsChange } from './feats.js';
 import { access, rideLocked, rideUnlock, unlockChip } from './vehicles.js';
 
 // The Garage: each ride's paint, decals, rims, underglow, boost style, trail and horn (paint.js),
@@ -72,7 +73,8 @@ const GROUPS = [
 // vehicles: from loadVehicles(). panel: the globe's panel (for the ride picked there). models: the
 // world's ModelManager, whose loader loads the trucks for the turntable. current(): the ride being
 // driven, { entry, vehicle }, or null. onLook(): the ride being driven has a new look on. onOpen(),
-// onEdit( part ): opened, and a part of a look changed (for the play stats).
+// onEdit( part, changed ): opened, and a part of a look picked (for the play stats), changed if it
+// wasn't what the look had already (for the achievements' Garage changes).
 // effects: the driving's effects ({ detail, calm }, which screen-fx.js keeps up to date), so the
 // turntable's bursts are as calm and as many as driving's.
 export function setUpGarage( { vehicles, panel, models, current, onLook = () => {}, onOpen = () => {}, onEdit = () => {}, effects } ) {
@@ -117,7 +119,7 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 		tab.dataset.id = v.id;
 		tab.textContent = v.name;
 		if ( v.pro ) tab.append( Object.assign( document.createElement( 'i' ), { className: 'star', textContent: '⭐', title: 'Supporter Pass' } ) );
-		else if ( rideUnlock( v ) ) tab.append( Object.assign( document.createElement( 'i' ), { className: 'level-chip', textContent: unlockChip( rideUnlock( v ), true ), title: `Comes at level ${ rideUnlock( v ).level }, or with the Supporter Pass` } ) );
+		else if ( rideUnlock( v ) ) tab.append( Object.assign( document.createElement( 'i' ), { className: `level-chip${ v.feat ? ' feat-chip' : '' }`, textContent: unlockChip( rideUnlock( v ), true ), title: unlockTitle( v ) } ) );
 		tab.addEventListener( 'click', () => show( v ) );
 		return tab;
 
@@ -391,6 +393,15 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 
 		if ( locked( part, id ) ) {
 
+			// A construction ride not earned yet: what earns it (the pass doesn't).
+			if ( vehicle.feat && rideLocked( vehicle ) ) {
+
+				levelNote.textContent = `${ rideUnlock( vehicle ).unlock } the ${ vehicle.name.toLowerCase() }.`;
+				levelNote.hidden = false;
+				return;
+
+			}
+
 			// Only a level gives it: which one (the pass's sheet would only disappoint).
 			const unlock = unlockOf( vehicle, part, id );
 			if ( unlock && ! unlock.pass && ! rideLocked( vehicle ) ) {
@@ -407,12 +418,13 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 
 		}
 
+		const was = JSON.stringify( look );
 		look[ part ] = id;
 		// Smoke's colour only shows with the smoke trail, and the flame's with the classic flame.
 		if ( part === 'smoke' ) look.trail = 'smoke';
 		if ( part === 'flame' ) look.boost = 'classic';
 		changed( part );
-		onEdit( part );
+		onEdit( part, JSON.stringify( look ) !== was );
 
 	}
 
@@ -476,7 +488,7 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 				const shut = locked( part, button.dataset.id );
 				const unlock = shut ? unlockOf( vehicle, part, button.dataset.id ) : null;
 				// A locked ride's choices are all the pass's, whatever a level would unlock on the others.
-				const pass = !! unlock?.pass || ( shut && rideShut );
+				const pass = !! unlock?.pass || ( shut && rideShut && ! vehicle.feat );
 				anyLocked ||= pass && ! section.hidden;
 				button.classList.toggle( 'on', on );
 				button.setAttribute( 'aria-pressed', String( on ) );
@@ -506,7 +518,9 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 		dialog.querySelector( '.paint-note' ).hidden = paintable;
 		const banner = dialog.querySelector( '.locked-banner' );
 		banner.hidden = ! rideShut;
-		banner.querySelector( 'span' ).textContent = vehicle.pro ? '⭐ A Supporter Pass ride' : `Comes at level ${ rideUnlock( vehicle )?.level }, or with the ⭐ Supporter Pass`;
+		banner.querySelector( 'span' ).textContent = vehicle.pro ? '⭐ A Supporter Pass ride' : vehicle.feat ? `🔒 ${ rideUnlock( vehicle ).unlock }` : `Comes at level ${ rideUnlock( vehicle )?.level }, or with the ⭐ Supporter Pass`;
+		// A construction ride comes only with its achievement: nothing to buy.
+		banner.querySelector( 'button' ).hidden = !! vehicle.feat;
 		dialog.querySelector( '.ride-name' ).textContent = vehicle.name;
 		// Last, with everything in the list as it now is (the decal's number box and the word on paint
 		// that can't be changed too): where a group is now, and so where a jump on its way goes.
@@ -524,6 +538,13 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 			for ( const shape of document.querySelectorAll( `.vehicle[data-id="${ v.id }"] [data-paint]` ) ) shape.setAttribute( 'fill', `#${ swatch.hex.toString( 16 ).padStart( 6, '0' ) }` );
 
 		}
+
+	}
+
+	// What a locked ride's tab says on hovering: its level, or a construction ride's achievement.
+	function unlockTitle( v ) {
+
+		return v.feat ? rideUnlock( v ).unlock : `Comes at level ${ rideUnlock( v ).level }, or with the Supporter Pass`;
 
 	}
 
@@ -585,6 +606,7 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 	};
 	onProChange( unlocked );
 	onLevelChange( unlocked );
+	onFeatsChange( unlocked );
 	// Once the pickers are drawn.
 	requestAnimationFrame( recolourIcons );
 

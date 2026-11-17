@@ -200,6 +200,42 @@ button.primary:active,
 	cursor: progress;
 }
 
+/* Challenges (challenges.js, loaded once this is pressed): a full-width button under the worlds,
+   the flag in the accent. */
+#globe-ui .challenges-open {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	width: 100%;
+	margin: 0 0 12px;
+	padding: 10px 12px;
+	border: 1px solid rgba( 255, 210, 63, 0.45 );
+	border-radius: 12px;
+	background: linear-gradient( 100deg, rgba( 255, 210, 63, 0.16 ), var( --chip ) );
+	text-align: left;
+	color: var( --ink );
+}
+
+#globe-ui .challenges-open:hover {
+	border-color: var( --accent );
+}
+
+#globe-ui .challenges-open svg {
+	flex: none;
+	color: var( --accent );
+}
+
+#globe-ui .challenges-open span {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+#globe-ui .challenges-open small {
+	font-size: 12px;
+	color: var( --muted );
+}
+
 /* On the Moon there's no map search (its own places are searched), nobody else driving, and no
    party to drive with: you drive it on your own (main.js). */
 body[data-world='moon'] #globe-ui :is( .osm, .online, .online-dots, .friends, .party-banner ),
@@ -629,6 +665,65 @@ body.touch #hud {
 	--drive-hud-bottom: calc( 28px + var( --safe-bottom ) );
 }
 
+/* A phone on its side: the speed, boost and stunt score in one low row at the bottom in the middle,
+   between the steering and the pedals, rather than a big card at the top over the road ahead
+   (players said it covered what they were driving at). Its bar of speed goes (the number says
+   it); DRIFT, FLYING and OVERDRIVE show just above the row while they're on. */
+@media ( orientation: landscape ) and ( max-height: 520px ) {
+
+	body.touch #hud .dhud-cluster {
+		top: auto;
+		bottom: calc( 6px + var( --safe-bottom ) );
+		flex-direction: row;
+		align-items: center;
+		min-width: 0;
+		padding: 5px 12px;
+		gap: 10px;
+		border-radius: 12px;
+		white-space: nowrap;
+	}
+
+	body.touch #hud .dhud-badges {
+		position: absolute;
+		bottom: calc( 100% + 4px );
+		left: 50%;
+		transform: translateX( -50% );
+	}
+
+	body.touch #hud .dhud-number {
+		font-size: 26px;
+	}
+
+	body.touch #hud .dhud-unit {
+		font-size: 10px;
+	}
+
+	body.touch #hud .dhud-speed-bar {
+		display: none;
+	}
+
+	body.touch #hud .dhud-boost {
+		width: 64px;
+		flex-direction: column;
+		align-items: stretch;
+		gap: 3px;
+	}
+
+	body.touch #hud .dhud-boost b {
+		font-size: 9px;
+	}
+
+	body.touch #hud .dhud-boost .dhud-bar {
+		flex: none;
+		height: 6px;
+	}
+
+	body.touch #hud .dhud-badge {
+		font-size: 10px;
+	}
+
+}
+
 #hud .dhud-keys {
 	display: none;
 }
@@ -750,7 +845,8 @@ body.touch #pause kbd {
 }
 
 #pause .to-globe,
-#pause .board-open {
+#pause .board-open,
+#pause .challenges-open {
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
@@ -761,7 +857,8 @@ body.touch #pause kbd {
 	font-weight: 700;
 }
 
-#pause .board-open svg {
+#pause .board-open svg,
+#pause .challenges-open svg {
 	color: var( --accent );
 }
 

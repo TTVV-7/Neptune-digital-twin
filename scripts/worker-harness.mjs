@@ -5,7 +5,7 @@
 
 import { spawn, spawnSync } from 'node:child_process';
 import { createHmac } from 'node:crypto';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -82,14 +82,43 @@ export async function serveKeys( keys ) {
 // `wrangler dev` on this machine with a fresh database (migrations applied) and the given vars,
 // which replace any in wrangler.jsonc or .dev.vars. Resolves once it answers. With `config`
 // (World Drive's wrangler.drive.jsonc) it runs that Worker instead, with its own database and
-// only the vars given here: no .dev.vars file is read.
-export async function startWorker( { port, vars, config = null } ) {
+// only the vars given here: no .dev.vars file is read. The site's files are a test page, and
+// `assets` ({ path: contents }) besides, for a Worker that reads its own (ASSETS). `without` names
+// rate limiter bindings (`ratelimits`) left out of `config` for this run, for a suite that sends
+// more from one address than a limiter lets through to test what's behind it: a copy of the config
+// beside it (so its paths still hold), gone when the Worker's stopped.
+export async function startWorker( { port, vars, config = null, assets: files = {}, without = [] } ) {
+
+	// The owner's AdSense id is in wrangler.drive.jsonc; tests have ads off unless they set it.
+	if ( config && ! ( 'ADSENSE_CLIENT' in vars ) ) vars = { ...vars, ADSENSE_CLIENT: '' };
+
+	if ( without.length ) {
+
+		let text = readFileSync( join( ROOT, config ), 'utf8' );
+		for ( const name of without ) {
+
+			const line = new RegExp( `^\\s*\\{ "name": "${ name }",.*\\n`, 'm' );
+			if ( ! line.test( text ) ) throw new Error( `${ name } isn't one of ${ config }'s rate limiters` );
+			text = text.replace( line, '' );
+
+		}
+
+		config = `.wrangler-test-${ port }.jsonc`;
+		writeFileSync( join( ROOT, config ), text );
+
+	}
 
 	const dir = mkdtempSync( join( tmpdir(), 'twin-worker-' ) );
 	const state = join( dir, 'state' );
 	const assets = join( dir, 'assets' );
 	mkdirSync( assets );
 	writeFileSync( join( assets, 'index.html' ), '<!doctype html><title>test site</title>' );
+	for ( const [ path, contents ] of Object.entries( files ) ) {
+
+		mkdirSync( dirname( join( assets, path ) ), { recursive: true } );
+		writeFileSync( join( assets, path ), contents );
+
+	}
 	const env = { ...process.env, WRANGLER_SEND_METRICS: 'false', CI: 'true' };
 
 	const migrate = spawnSync( process.execPath, [ wrangler, 'd1', 'migrations', 'apply', 'DB', '--local', '--persist-to', state, ...( config ? [ '-c', config ] : [] ) ], { cwd: ROOT, env, encoding: 'utf8' } );
@@ -119,6 +148,7 @@ export async function startWorker( { port, vars, config = null } ) {
 		}
 
 		rmSync( dir, { recursive: true, force: true } );
+		if ( without.length ) rmSync( join( ROOT, config ), { force: true } );
 
 	};
 
@@ -131,8 +161,10 @@ export async function startWorker( { port, vars, config = null } ) {
 
 			const res = await fetch( `${ base }/api/config` );
 			// state: where it keeps its storage, to look at what it stored; d1( sql ): the rows a
-			// statement gives on its database, as the owner would see them in the D1 console.
-			if ( res.ok ) return { base, stop, log: () => log, state, d1: sql => queryD1( state, config, sql ) };
+			// statement gives on its database, as the owner would see them in the D1 console;
+			// d1Read( sqls ): the rows D1 says it read for each statement (what the Free plan's daily 5
+			// million count), a promise.
+			if ( res.ok ) return { base, stop, log: () => log, state, d1: sql => queryD1( state, config, sql ), d1Read: sqls => readD1( state, config, sqls ) };
 
 		} catch {
 
@@ -156,6 +188,27 @@ function queryD1( state, config, sql ) {
 	const run = spawnSync( process.execPath, args, { cwd: ROOT, env: { ...process.env, WRANGLER_SEND_METRICS: 'false', CI: 'true' }, encoding: 'utf8' } );
 	if ( run.status !== 0 ) throw new Error( `d1 execute failed:\n${ run.stdout }\n${ run.stderr }` );
 	return JSON.parse( run.stdout ).flatMap( result => result.results );
+
+}
+
+// The rows D1 reads for each of `sqls` on the local database in `state`: its meta's rows_read, which
+// wrangler d1 execute doesn't say, from the same database opened through wrangler's platform proxy
+// (workerd's D1, as the Worker's own; it keeps its data where wrangler's --persist-to keeps v3).
+async function readD1( state, config, sqls ) {
+
+	const { getPlatformProxy } = await import( 'wrangler' );
+	const proxy = await getPlatformProxy( { ...config ? { configPath: join( ROOT, config ) } : {}, persist: { path: join( state, 'v3' ) } } );
+	try {
+
+		const reads = [];
+		for ( const sql of sqls ) reads.push( ( await proxy.env.DB.prepare( sql ).all() ).meta.rows_read );
+		return reads;
+
+	} finally {
+
+		await proxy.dispose();
+
+	}
 
 }
 
@@ -214,12 +267,15 @@ export function rewritten( origin, path, init = {} ) {
 // window.testCredential.
 export const GOOGLE_STUB = `window.google = { accounts: { id: {
 	initialize( options ) { this.options = options; },
-	renderButton( parent ) {
+	renderButton( parent, options ) {
 		const button = document.createElement( 'button' );
 		button.type = 'button';
 		button.className = 'stub-google';
 		button.textContent = 'Sign in with Google';
-		button.onclick = () => this.options.callback( { credential: window.testCredential, select_by: 'btn' } );
+		button.onclick = () => {
+			options?.click_listener?.();
+			this.options.callback( { credential: window.testCredential, select_by: 'btn' } );
+		};
 		parent.append( button );
 	},
 	prompt() {}, disableAutoSelect() {}, cancel() {},

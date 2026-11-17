@@ -56,6 +56,9 @@ address, and the construction app is unchanged by it.
    says so and goes back to the globe.
 5. **M** (or the **Globe** button) goes back to the globe, from driving or from a drop-in on its way
    down. Pick somewhere else and drop in again: as often as you like, without reloading.
+6. **Challenges** (under **Earth | Moon** on the panel, and in the pause menu): a daily, a weekly
+   and a monthly one on each world, a checkpoint sprint, a hunt for stars or a drive to a landmark
+   against the clock, each with its own board ([Challenges](#challenges)).
 
 ### Keys
 
@@ -85,7 +88,10 @@ On a touch screen the globe's panel is a sheet along the bottom, and driving has
 (the driving HUD's, `src/drive-hud.js`): steering bottom left; **Gas** with **Drift** over it at the
 right-hand edge, and **Brake**, **Boost** and **Fly** beside them; reset (↺) and **Cam** at the top
 right, under the bar with **Globe** and pause. Several can be held at once. In the air ◀ ▶ spin,
-**Gas** and **Brake** flip, and **Drift** held with ◀ ▶ rolls.
+**Gas** and **Brake** flip, and **Drift** held with ◀ ▶ rolls. The speed and boost sit at the top in
+the middle with the phone upright (over the sky); with it on its side they're one low row at the
+bottom in the middle, between the steering and the pedals, so they don't cover the road ahead
+(style.css).
 
 ### Stunts
 
@@ -1449,8 +1455,9 @@ party banner, the pause menu's friends and the horn aren't shown, and no trick's
 room. **Join** on a party's word that someone went somewhere ("Sam went to Monaco"), from the Moon,
 goes back to the Earth and drops in beside them. Levels count driving, air, drifts, pads and tricks there as anywhere, but not areas or
 start spots (those are the Earth's) nor driving with others. A drop-in there is counted in the
-[play stats](#play-stats) as the Moon's, never where, its driving as the Moon's play time, and each
-turn of the globe to the Moon (and the Moon not loading) is counted too.
+[play stats](#play-stats) as the Moon's (`dropin:moon`, which never says where), with its cell, to
+about a kilometre, in [where people drop in](#where-people-drop-in); its driving as the Moon's play
+time, and each turn of the globe to the Moon (and the Moon not loading) is counted too.
 
 ### How it's made
 
@@ -2248,16 +2255,20 @@ level-only colours.
 `POST /api/progress { id, secret, visit, report }` (`worker/drive/progress.js`), with the visit's
 token as scores are posted (`visits.js`'s `readVisit`) and the player's secret. The report is what
 was driven since the last: `{ id, km, air, drifts, pads, together, tricks, areas: [ cellOf names ],
-spots: [ SPOTS ids ], daily, days? }`: id the page's own for the report (8 to 40 letters, digits,
+spots: [ SPOTS ids ], daily, days?, feats? }`: id the page's own for the report (8 to 40 letters, digits,
 `_` or `-`), tricks the landed runs' XP, and only in a claim, days `{ xp, streak, day }`, the days'
-bonuses counted in the browser before the nickname. Anything the page couldn't send (a negative or
+bonuses counted in the browser before the nickname; feats `{ moon, looks, rides }`, when there's
+anything in it, the [achievements'](#achievements-and-rewards) counts only the page can tell. Anything the page couldn't send (a negative or
 non-number amount, a count that isn't whole, an area that isn't one, a spot that isn't one, over 200
 of either, an id or days that aren't) is a 400; a forged, changed, expired or another player's
 visit a 403 (`reason: 'visit'`), the wrong secret a 403 (`reason: 'player'`). The answer: `{ xp,
 own, level, gained, unlocked: [ rewards ], supporter, title, chosen, streakDay, streak, accepted: {
 areas, spots }, daily?: { streak, xp }, repeated? }`: xp and level the account's best (or the
 player's), own the player's own XP, title the one shown and chosen the one picked (`''` for the
-newest), streakDay and streak the last daily bonus's day and its days in a row. A report with
+newest), streakDay and streak the last daily bonus's day and its days in a row; earned the
+achievements the report reached, and to a report with nothing in it whose body asks for them
+(`feats: true`, the page's once as it starts) feats, all the player's and their account's, once a
+visit ([achievements](#achievements-and-rewards)). A report with
 nothing in it changes nothing, and is how the page asks where it stands as it starts.
 
 The page says what it drove, so the Worker can't know it's true. What it does is keep each report to
@@ -2875,8 +2886,9 @@ The pass is one payment of **CA$4.99**, no subscription, through a Stripe Paymen
 Drive's own Stripe account. It comes with what's [above](#supporter-pass-content) (seven cars of its
 own, the six levels bring, the four rides and every Garage look at once), **+50% XP** for
 [levels](#levels), a **⭐ by your name on the leaderboard**, and **30 drives a day** instead of 8.
-A pass is a Google account's, so it's yours in any browser you sign in on: signing in is only ever
-for the pass, and driving and the leaderboard never need it.
+A pass is an account's (Google's sign-in, or a [username and password](#username-and-password-accounts)),
+so it's yours in any browser you sign in on: signing in is only ever for the pass and your level
+and times on every device, and driving and the leaderboard never need it.
 
 ### What people see
 
@@ -2896,11 +2908,15 @@ for the pass, and driving and the leaderboard never need it.
   Google** (in the sheet, or in the pause menu: "Have the Supporter Pass? Sign in to use it here.")
   brings it back: that's "restore purchases". The pause menu also says who's signed in, with
   **Sign out**, which locks the pass again in that browser.
-- **The used-up screen** ("Today's free drives are used up", this address's 8 gone, not everyone's
+- **The used-up screen** ("Today's free Earth drives are used up", this address's 8 gone, not everyone's
   300) has the same sign-in, for a supporter on a new browser or one who cleared the site's data, and
   for a buyer brought back from Stripe before its webhook arrived (that tab starts a visit of its own,
   counted by the address until the pass is known). Once the account there has the pass, the visit
   is asked for again, once: a supporter who has had their 30 sees the screen, saying who's signed in.
+  (Already driving on the Moon from that screen, the page reloads instead.)
+- Wherever Google's button is, **Or use a username and password** opens the account panel, to sign
+  in or create an account without Google ([Username and password
+  accounts](#username-and-password-accounts)); signed in, **Account** in the account line opens it.
 - Signed in, the browser's leaderboard player is linked to the account (once), so a supporter's ⭐
   shows by their name on every board. Signing out forgets that it was linked (the note holds the
   email), so signing in again links it again.
@@ -2921,8 +2937,10 @@ for the pass, and driving and the leaderboard never need it.
   `DELETE /api/session` signs that browser out. Anyone with a Google account can sign in, up to 50
   times a day from one visitor (counted like the leaderboard's names), so a token sent again and
   again for the hour it's good for can't fill the database with sessions.
-- `GET /api/me`: `{ signedIn, name?, email?, supporter, purchase: { enabled, link?, price?,
-  clientReferenceId? } }`.
+- `GET /api/me`: `{ signedIn, name?, email?, google?, username?, supporter, purchase: { enabled,
+  link?, price?, clientReferenceId? } }`: `google` whether a Google account is linked (`name` and
+  `email` are its, `''` without one), `username` the account's own username or `null` (see
+  [Username and password accounts](#username-and-password-accounts)).
 - `POST /api/player/link { id, secret }`, signed in: the leaderboard player (proved by its secret, as
   a rename is) becomes the account's (`players.account_id`); 20 a day from one visitor.
 - **Stripe's webhook**, `POST /api/stripe/webhook` (`worker/drive/supporter.js`): the one route without
@@ -3062,6 +3080,401 @@ UPDATE purchases SET account_id = 12 WHERE checkout_session = 'cs_live_...';
 - No receipts or purchase history in the page: Stripe emails its own receipt if that's on in its
   settings.
 
+## Username and password accounts
+
+Beside **Sign in with Google**, an account can be made with a **username and a password**, for
+people who don't want to use Google, or can't (a school's or a shared computer, no Google account
+at all). It's the same kind of account with the same session: the Supporter Pass (bought or
+restored on it), the player linked to it and so its level and XP, its leaderboard and challenge
+times and ghosts, the nickname and the Garage are the account's, whichever way you signed in. A
+Google account can add a username and password, and a username's account can link Google; then
+either signs in to the one account. Driving and the leaderboard still never need an account.
+
+### What people see
+
+- **Where Google's button is** (the pass's sheet, the pause menu, the used-up screen), a link under
+  it: **Or use a username and password** (or, with Google's sign-in not set up,
+  **Sign in or create an account**). It opens the **account panel**, a dialog of its own: Google's
+  button (when it's set up), "or", and a small form with two tabs, **Sign in** and **Create
+  account**. Signed in, the account line says "Signed in as *Racer_1* · ... · **Account** · Sign
+  out", and **Account** opens the panel again. Where the pass is bought (its sheet, and the toast on
+  signing in) the line names a Google account by its email, since that's whose the purchase is, and
+  the pause menu by its name; an account with no Google account by its username.
+- **Creating an account**: Username ("3 to 20 letters, digits, _ or -. Only you see it: the boards
+  show your nickname.") and Password ("At least 8 characters. A few words together make a good
+  one."), then, in a box: "There's no email here, so a forgotten password can't be recovered,
+  unless you also link Google. Keep it in a password manager." The rules are checked in the page
+  before anything is sent (the same code as the Worker's, `password-rules.js`), then the robot
+  check (Turnstile, usually without a click), then the account is made and signed in.
+- **Signing in**: a wrong password and a username nobody has both say "Wrong username or password."
+  After a username's fifth try of the day that didn't get in (or an address's twentieth) the next
+  asks for the robot check first (the panel does it and tries again), and a try from the same
+  address within 5 s of its last at that username says "Wait 5 seconds and try again."
+- The panel's title says what it's for: "Sign in", "Create account" (with that tab chosen) or
+  "Your account". Keys pressed in it are its own (Esc closes it, and never resumes a paused drive
+  behind it), and only a tap outside it closes it, not one on its padding beside a field. While a
+  form is sent its fields are disabled, which drops the focus to the page behind; it's put back in
+  the field or button that had it once the answer's in, so typing again after "Wrong username or
+  password." goes to the field. And while the panel is open, a key whose focus has fallen out of
+  it anyway never reaches the game (M would otherwise leave a paused drive for the globe).
+- **Signed in**, the panel ("Your account") lists what the account signs in with (Google: its
+  email, or "not linked"; Username: it, or "none"), then **Sign out** and **Sign out everywhere**
+  (every device's session), the commonest things done here, in sight at once on a phone held
+  either way. Below them each rarer change is folded under its heading, a row with a chevron (a
+  `<details>`), and opening one folds the others, so the panel is about a screen on a phone (before,
+  with every form open, a phone held upright scrolled 1,084 px in an 818 px panel to reach Sign
+  out). The forms are in the page all along, folded or not, so password managers still find them;
+  Google's buttons in a section are drawn the first time it's opened.
+  - **Change password** (current, new: "This signs you out on your other devices."), or for a
+    Google account with no username yet, **Add a username and password** ("Then you can sign in
+    either way."): the username and password, then "Then confirm it's you with Google:" and
+    Google's button, which sends them.
+  - **Link Google** ("Sign in with Google too, and get back in if you forget your password"): "Your
+    password", then Google's own button ("Continue with Google"), which links the Google account
+    chosen. With it linked, **Unlink Google**, confirmed with Google's button ("this signs you out
+    on your other devices"), only while there's a username to sign in with instead (else the panel
+    says "To unlink Google, add a username and password first: it's your only way to sign in.").
+  - With both, **Remove username and password**: "Your password" and the button, or "Or confirm
+    with Google:" and Google's button.
+- The forms are real `<form>`s with `<label>`s and `autocomplete` (`username`, `current-password`,
+  `new-password`; the change form carries the username hidden), so password managers fill them and
+  offer to save; the username field doesn't capitalise or autocorrect. On a phone held upright the
+  panel fills the width, and scrolls only once a change is opened.
+- **The panel is its own chunk** (`account.js` and `account.css`), loaded the first time it's
+  opened: 13.6 kB of script (4.7 kB gzipped) and 3.9 kB of CSS (1.1 kB), none of it on the first
+  load. The links and the account line are a few lines in `supporter.js`, which was already loaded.
+
+### The rules
+
+- **Usernames** (`src/drive-app/password-rules.js`, shared by the page and the Worker): normalised
+  with NFKC and trimmed, then 3 to 20 of `A`-`Z`, `a`-`z`, `0`-`9`, `_` and `-`. Only plain Latin
+  letters, so a Cyrillic а can't pass for an a; NFKC makes a full-width Ｒ an R first. Two are the
+  same whatever their case: they're unique by their lower case (`username_key`), so "Racer_1",
+  "RACER_1" and "Ｒacer＿1" are one. And through the nickname's filter (`names.js`'s `nameAllowed`):
+  slurs, and names that pass for World Drive (admin, worlddrive, support, moderator...) are refused.
+  A username is private: it's for signing in, shown only to its owner in the panel, never on a
+  board, a nametag, the admin page or anywhere else. The boards show the nickname, as before.
+- **Passwords**: at least 8 characters and at most 128 bytes (after NFKC, so the same passphrase
+  typed on another keyboard is the same; 128 bytes is a long passphrase, and keeps what's hashed
+  bounded), not one of about a hundred of the very commonest (`password1`, `12345678`, `qwertyuiop`,
+  `iloveyou`, `worlddrive`..., in any case), not one letter over and over, and not the username.
+  No other rules: as NIST's SP 800-63B says, rules about digits and symbols make passwords people
+  can't remember, not ones others can't guess.
+
+### How passwords are kept
+
+- **PBKDF2-SHA-256** through WebCrypto (`crypto.subtle.deriveBits`), with a **random 16-byte salt**
+  for each password, made anew every time one is set, and a 32-byte result. Kept in `logins`
+  (base64url) with the **iteration count it was made with**.
+- **100,000 iterations**, the most the Workers runtime allows: workerd has a cap on PBKDF2's count
+  ("Pbkdf2 failed: iteration counts above ... are not supported"), set to 100,000 on Cloudflare
+  (local `wrangler dev` doesn't apply it: 100,001 ran there). OWASP asks for 600,000 for
+  PBKDF2-SHA-256 today, so this is as strong as Workers can make it, not as strong as wished; a
+  memory-hard hash (scrypt, Argon2) in WebAssembly would be stronger but costs far more CPU than
+  the Free plan's 10 ms.
+- **What it costs**: measured in workerd (`wrangler dev`, a 4-core machine with SHA extensions,
+  while other work ran): 16 to 18 ms of CPU a hash at 100,000 (8 ms at 50,000, 2 ms at 10,000), and
+  Node the same, 17.7 ms. Cloudflare's machines may well be quicker. That's over the **Free plan's
+  10 ms of CPU a request**, which Cloudflare allows "infrequently" ("each isolate has some built-in
+  flexibility"): a sign-in, a sign-up or a password change is rare next to everything else the
+  Worker answers, and the limits below keep a stranger from making them often. On **Workers Paid**
+  (30 s a request) it's nothing. A password change hashes twice (the current one, then the new),
+  and a sign-in with an older count twice; everything else once.
+- If sign-ins were ever cut off for CPU on the Free plan (Error 1102 on `/api/account/*` in the
+  Worker's metrics), **the remedy is Workers Paid** (30 s of CPU a request, so a hash is nothing).
+  `PASSWORD_ITERATIONS` (a dashboard text variable, 10,000 to 100,000) lowers the count for new
+  hashes at once, without a deploy, but it helps far less than it sounds: it makes **sign-ups,
+  password changes and the sign-ins after each password's rehash** cheaper, and nothing else.
+  **Refusals stay at 100,000** (a wrong password or a username nobody has always costs the
+  stand-in's count, below: that's the trade chosen, so a refusal's time never says whether a
+  username is someone's), and **the first right sign-in of each password made before costs more**,
+  not less: its own 100,000 to check it, then a hash at the lowered count to keep it (150,000 at
+  50,000). Whenever a password's count isn't the one new hashes are made with (lowered, raised again
+  later, or if Workers ever allows more: `ITERATIONS` in `logins.js`), it **is hashed again at its
+  next right sign-in** with a new salt (`changed_at` says when), since each row keeps its own count.
+- Compared in **constant time** (`crypto.subtle.timingSafeEqual`, or an XOR of every byte without
+  it), so the time doesn't say how much matched.
+- **A username nobody has** is hashed against a stand-in (a random salt and random "hash", made once
+  per Worker instance, which nothing can match) at 100,000, the most any stored hash can have, so it
+  takes one hash's time, as a wrong password does, and gets the same 401 "Wrong username or
+  password". A wrong password for a hash made with fewer (`PASSWORD_ITERATIONS` lowered) is hashed
+  on to make up the difference, so **every refusal costs 100,000 iterations**, lowered or not, and
+  its time never says whether the username is someone's (a Node test adds up every hash's
+  iterations for each case, and times them: 17.6 to 20.3 ms each). Measured as whole requests to `wrangler
+  dev` (the median of four each, November 2026): 29.7 ms for a wrong password and 28.4 ms for a
+  username nobody has on the quietest run, 32.5 and 31.5 ms, and 38.9 and 38.0 ms with other suites
+  running beside it; the two always within a few percent of each other. (The day's failure counts in
+  `DriveLimits` don't tell them apart either: a username that can't be one is counted under its
+  lower case, as a real one would be.)
+- A password is **never logged, kept or sent anywhere** but the sign-in, sign-up and password posts
+  to the Worker; the page doesn't keep it (the fields are emptied after a change), and the Worker
+  only hashes it. The test suites look for the passwords they used in what the Worker logged and
+  kept, and in every request the page made elsewhere.
+
+### Guessing, and how it's slowed
+
+- **Each try is counted as it's checked** (`DriveLimits`' `passwordCheck`, asked before hashing,
+  counts it in the same go, as a Durable Object answers one call at a time), and given back once it
+  gets in (`passwordSucceeded`). So tries sent all at once are counted one after another: a test
+  sends 40 wrong passwords from one address at once and gets 20 refusals and 20 robot checks, and
+  40 for one username from 40 addresses, 5 and 35 (counting only after the hash, as at first, let
+  38 of 60 through).
+- **Per username**: after a username has had **5 tries in the day** that didn't get in
+  (`FREE_FAILS`, from anywhere), each further try for it needs a **robot check** (Turnstile; a 403
+  with `reason: 'robot'` without one, which the panel answers by running the check and trying
+  again). So a script guessing one account from many addresses needs a solved robot check for every
+  guess.
+- **Per address**: after a visitor (an address, an IPv6 one by its /48, as challenges count) has had
+  **20 such tries in the day** (`ADDRESS_FAILS`), whatever the usernames, each further try from it
+  needs a robot check too; and past **200** (`HARD_FAILS`) it tries no more until midnight UTC, a
+  429 before any hashing (and, once this Worker instance has heard it, before any Durable Object
+  request: below). Not a lock at 20: many phones share a carrier's address, and a school one,
+  so one person failing there doesn't keep everyone else there out for the day; they click the
+  robot check.
+- **A gap**: past either, a visitor's tries at one username come at least **5 s apart** (`FAIL_GAP`;
+  a 429 with `reason: 'wait'` and `Retry-After`), so a burst of solved robot checks from one address
+  gets one guess in. The gap is the visitor's and the username's together, so **tries from other
+  addresses never make the owner wait**, and **nothing ever locks a username**: whatever a stranger
+  does from elsewhere, the owner signs in with a click on the robot check at most (a test has a
+  stranger fail every 5 s from a new address while the owner, between, signs in every time). Only
+  someone on the owner's own address, past 200 tries, can keep them out until midnight UTC. The next
+  day the counts start afresh.
+- These are kept in `DriveLimits`' table `password_fails`: a row a day for each visitor, each
+  username and each visitor and username together with tries, each kept as a SHA-256 of the day's
+  salt and it (never the address or the username, and not linkable from one day to the next),
+  deleted with the day's other counts.
+- **Before any of that, `PASSWORD_TRIES`**: every `DriveLimits` check above is a Durable Object
+  request, and the Free plan's 100,000 a day are shared with every visit, Earth drive and room. So
+  each sign-in with a password, each check of one (a password change, linking Google, taking the
+  password off) and each change to an account is first one of the visitor's **10 a minute** on
+  Cloudflare's rate limiter (no Durable Object request; counted by the challenges' keyed hash of the
+  address, an IPv6 one by its /48, and the day), a 429 with `reason: 'busy'` past it ("Too many
+  tries. Wait a minute and try again."), once a request however much it checks. And what
+  `DriveLimits` has said of a visitor for the rest of the day is remembered in the Worker instance
+  that heard it (`refused`), so a script is turned away there without asking again: every try from
+  the visitor needs a robot check now, or, past 200, none at all till midnight UTC (both forgotten
+  the moment a try from that visitor gets in); one username asks this visitor for a robot check
+  (kept for the visitor and that username together); the visitor's 50 sign-ins or 30 changes of
+  the day are used up (kept till midnight UTC whatever gets in). A sign-in asks `DriveLimits`
+  whether the visitor has a sign-in left with the same request that checks the try, before any
+  hashing, and one that gets in gives the try back and takes the day's sign-in in one more request,
+  so a request costs at most one Durable Object request (a sign-in that gets in two). Without
+  these a script on one address sending a try every second or so (nothing but same-origin JSON: no
+  visit, robot check or session needed) used up the day's 100,000; and until the sign-in's turn was
+  folded into the check, one signing in again and again with its own account's right password
+  cost three Durable Object requests and a 100,000-round hash a try all day, past the 50 sign-ins
+  too (43,200 requests a day from one address). Now one address reaches `DriveLimits` at most about
+  14,450 times a day (10 a minute, and 50 sign-ins at two), whatever it sends, and in practice far
+  fewer: the right password over and over is asked about 101 times (50 sign-ins, then one
+  refusal, then nothing, no hash either; a test counts it), changes 31 times, a wrong password
+  until the visitor needs robot checks (20 failures), each username asking it for one once. Each
+  Worker instance remembers for itself, so a script landing on many is asked about once in each.
+- **Signing in** (successes) shares Google's **50 a day** from one visitor (`SIGN_INS_DAILY`, counted
+  as the leaderboard's names are, an IPv6 one by its /48 for Google's and passwords' alike, as
+  players linked are too): each is a session kept for 30 days, so knowing a password still can't
+  fill the database with sessions, not even from each of a /48's 65,536 /64s in turn (counted by the
+  /64 before, one account was signed in 70 times from one /48; now the 51st from any of its /64s is
+  refused, Google's too).
+- **Signing up** always needs a robot check, and a visitor (by /48) makes **10 accounts a day** at
+  most; adding a username to a Google account is counted among those 10 too (it can say a username
+  is taken). **Changes** (a username and password added, the password changed, Google linked or
+  unlinked, the password removed, signing out everywhere) are 30 a day for a visitor. Everything
+  that proves a password (a password change, linking Google, taking the password off) goes through
+  the same check and counts as a sign-in would.
+- Every route is JSON (`application/json`) from the site itself (the same-origin checks every post
+  has: `Origin`, and `Sec-Fetch-Site` when sent), with a body of at most 4 kB (a robot check's token
+  of up to 2,048 characters and a 128-byte password, escaped), or 16 kB for the routes that carry
+  Google's ID token too (as `/api/session` takes one), a 413 past it; an object of strings of the
+  right shape (a 400 otherwise), and a robot check's token, when sent, a string of Turnstile's size.
+  (At 2 kB for all, Google's token of 1,100 to 1,400 characters and a robot check's long token
+  together didn't fit, so once a stranger's five tries had made the username ask for robot checks,
+  **Link Google** couldn't be done for the rest of the day.)
+
+### The Worker's routes
+
+All in `worker/drive/logins.js`; each answers `/api/me`'s body (sign-up and sign-in with the session
+cookie, as Google's `POST /api/session` does):
+
+| Route | Does |
+| --- | --- |
+| `POST /api/account/sign-up { username, password, token }` | A new account and its login, signed in. 400 (which rule), 403 `robot`, 429 (10 a day), 409 "That username is taken" |
+| `POST /api/account/sign-in { username, password, token? }` | Signed in. 401 "Wrong username or password", 403 `robot`, 429 `address`, `wait` or `busy` (`PASSWORD_TRIES`) |
+| `POST /api/account/password { current, password, token? }` | Signed in with a username: the password changed, the account's **other sessions deleted** (this browser stays in). 401 "That isn't your current password" |
+| `POST /api/account/password { username, password, credential }` | Signed in with Google and no username yet: a username and password added, with Google's ID token for the account's own Google account (401 without, 403 another's; 403 for an owner's account; counted as a sign-up) |
+| `DELETE /api/account/password { password, token? }` or `{ credential }` | The username and password taken off, with the password or Google's ID token for the account; only while Google is linked (else 409); other sessions deleted |
+| `POST /api/account/google { credential, password, token? }` | Google's ID token (checked as a sign-in's is) linked to this account, with its password (401 wrong); 403 for an owner's Google account |
+| `DELETE /api/account/google { credential }` | Google unlinked, with Google's ID token for it; only while there's a username (else 409); other sessions deleted |
+| `POST /api/account/sign-out-everywhere` | Every session of the account deleted, this one's too (204, the cookie cleared) |
+
+`/api/config` says `passwords: true` while they're on: with the database, Turnstile's secret (signing
+up needs a robot check) and `PASSWORD_ACCOUNTS` not `off`. They work without Google's sign-in set
+up too; the session is then a username's alone.
+
+### Linking, and what's never merged
+
+- **Fresh proof, not only the session**: a session cookie can be copied, and a signed-in browser
+  borrowed for a moment. With the session alone, someone could add their own password to a Google
+  account and unlink its Google, keeping the account and its pass and leaving its owner a new, empty
+  one. So whatever changes how an account signs in asks for proof again: **adding a username and
+  password** to a Google account needs Google's ID token for that same Google account (its button
+  in the panel); **linking Google** to a username's account needs the new Google account's ID token
+  and the account's password; **unlinking Google** needs Google's ID token for it (the password
+  isn't enough: someone who guessed it mustn't take Google away); **taking the password off**
+  needs the password, or Google's ID token for the account (so its owner can always take off a
+  password they've forgotten, or didn't set). Unlinking and taking the password off also sign out
+  the account's other sessions.
+- **The owner's accounts** (`ADMIN_EMAILS`) sign in with Google only: no username and password is
+  added to one (403 "The owner's accounts sign in with Google only"), nor is one's Google account
+  linked to a username's; and an account with a username never passes as an admin
+  (`admin.js`'s `isAdmin`), even if `ADMIN_EMAILS` later named it. So the admin page can't be
+  reached by guessing a password.
+- **A Google account that already has its own World Drive account** is linked only if that account
+  has nothing to lose: no username, no player linked to it and no purchase of its own (someone who
+  once signed in with Google and did nothing since). Then that empty account is deleted (its
+  sessions with it) and the Google account becomes this one's way in. Otherwise it's a 409: "That
+  Google account has its own World Drive account, with its own progress or pass. Sign in with
+  Google to use that one." The delete itself checks that again, in one batch with the link, so a
+  player linked or a pass bought in between makes it a 409 rather than cutting them loose.
+  **Nothing is ever merged**: two accounts' players, levels, times and
+  passes put together would double or drop something (whose level, whose best time, which pass),
+  and doing it safely isn't simple, so it isn't done. Signing in with Google, then adding a username
+  and password there, gets the same result for anyone starting from Google.
+- An account with a Google account linked already can't link another (409 "Unlink it first").
+- **Unlinking keeps a way in**: Google only while there's a username and password; the username and
+  password only while Google is linked. The update and the delete check that themselves, so taking
+  the password off and unlinking Google at once (two tabs, a double tap) can't leave an account
+  with neither: one of them is a 409. Unlinked, the Google account's email and name go from the
+  account; a pass bought with that email before signing in (a purchase that was nobody's yet) is
+  made the account's first, so unlinking never loses a bought pass. A pass given by
+  `SUPPORTER_EMAILS` goes with the email. Signing in with that Google account afterwards makes a new,
+  separate account.
+- An account made with a username has no email: a pass bought from it is the account's by
+  `client_reference_id`, as a Google account's is. A purchase Stripe sends with no email (`''`)
+  never matches an account with no email (the pass's SQL, `hasPass`, only matches an email when
+  there is one).
+
+### What's kept
+
+- `logins` (`0008_password_logins.sql`): the account's id, the username as typed (after NFKC) and
+  its lower-case key (unique), the hash, its salt and iterations, when it was made and when the
+  password was last set. **Nothing else about the person**: no email, no address, no device.
+- An account made with a username is an `accounts` row with `email` and `name` empty, and for
+  `google_sub` `none:` and a random token: the column can't be made nullable without building the
+  table again, and in D1 dropping it would run its `ON DELETE` actions (every session, purchase and
+  player let go of). Sessions are the same `sessions` rows as Google's (only the SHA-256 of the
+  cookie's token).
+- `DriveLimits`' `password_fails`: today's counts of tries by salted hashes (above), gone at the end
+  of the day.
+- Signing up makes the account and its login in one D1 batch, so a failure part way leaves neither
+  (no account nobody can sign in to, and the admin page's kinds always add up to its accounts).
+- **The admin page** shows the accounts now by kind: "Accounts 9 · Google 5 · password 3 · both 1"
+  (counts only; never a username), and "New accounts" counts both kinds.
+- The privacy words in the page's About say what a username's account keeps.
+
+### What it costs
+
+- **Sign-up**: a robot check (Turnstile's siteverify), one `DriveLimits` request (the day's turn),
+  one hash, and in D1 a read and three writes (the account, the login, the session). **Sign-in**:
+  one of `PASSWORD_TRIES` (free), then one `DriveLimits` request for a refusal (the check, counting
+  the try, which also says whether the visitor has a sign-in left today), two for a success (the
+  check, then the try given back and the day's sign-in taken in one), one hash, a read and two
+  writes; past the visitor's 50 sign-ins, one request and no hash, then nothing at all once the
+  instance has heard it. A change: one of `PASSWORD_TRIES`, then one `DriveLimits` request (the
+  day's turn; none past the 30 once heard), and for one that proves the password one more. A few a
+  day at today's traffic: nothing next to the [Free plan's](#what-a-visit-costs-and-how-its-capped)
+  100,000 Durable Object requests or D1's rows. A stranger's guessing is held to 20 tries a day an
+  address without a robot check, 200 with; a refusal `DriveLimits` would give again (a robot check
+  wanted, past 200, the day's sign-ins or changes used up) costs no Durable Object request once the
+  Worker instance has heard it; and whatever is sent, a request costs at most one `DriveLimits`
+  request (a sign-in that gets in two, 50 a day), held to 10 a minute (`PASSWORD_TRIES`): about
+  14,450 a day from one address, so even if no instance remembered a thing it would take seven or
+  more addresses (or /48s) sending all day to use up the day's 100,000, against one before.
+  The CPU is the cost that matters on the Free plan (above).
+- **Storage**: a login row is about 150 bytes.
+
+### What it can't protect against
+
+- **A forgotten password** can't be recovered without Google linked: there's no email, on purpose.
+  The owner can only help by hand (the D1 console), and can't tell who the account's owner is.
+- **A reused password** that leaked elsewhere, **phishing**, or someone with the owner's unlocked
+  device; there's no second factor.
+- **A stolen session cookie** (it's `HttpOnly`, `Secure` and `SameSite=Lax`) works until it
+  expires, the password is changed or **Sign out everywhere** is pressed; but with it alone nobody
+  can change how the account signs in (above), so the owner keeps their way in and can end it.
+- **A leaked database**: 100,000 rounds of PBKDF2 slows guessing each password offline but doesn't
+  stop it for weak ones.
+- **Someone with many addresses and robot checks solved by people or services** can keep guessing
+  one username, a solved check a guess, one every 5 s from each address and 200 a day from each; a
+  password that isn't among the commonest holds out against that.
+- **Someone on the owner's own address** (the same carrier's or school's) who fails 200 times keeps
+  everyone there from signing in with a password until midnight UTC (Google's sign-in still works).
+- **Usernames can be found taken**: signing up says "That username is taken", as it must, and so
+  does adding a username to a Google account; that's one of the visitor's 10 sign-ups a day each
+  (and for signing up a robot check, for adding a Google account's fresh ID token). Signing in
+  never says.
+
+### How usernames and passwords are tested
+
+`npm run test:drive-worker`: the rules (usernames' shape, NFKC, look-alikes and case; passwords'
+length in characters and bytes, the commonest, the username), PBKDF2 against RFC 7914's test vector
+and the count (and `PASSWORD_ITERATIONS` only lowering it), `DriveLimits`' failures per address and
+per username (counted as they're checked, given back on getting in, the robot check from a
+username's 5 or an address's 20, the gap only for one address at one username, the hard cap of 200)
+kept only as salted hashes, every refusal adding up to 100,000 iterations with
+`PASSWORD_ITERATIONS` lowered or not (and a right password hashed again at the lowered count),
+`PASSWORD_TRIES` turning a burst from one /48 away before `DriveLimits` is asked (a stand-in
+counting its calls) and what `DriveLimits` said of a visitor (a robot check wanted, or past the cap)
+not asked again that day, a username's robot check asked once for that visitor and username (and
+afresh for another username or visitor), the right password sent 100 times from one address
+against the real `DriveLimits` in memory (two requests and a hash for each of the 50 sign-ins, one
+request and no hash for the 51st, then nothing at all) and 40 changes (31 requests), the batch that loses a
+username made by two at once taking its account back (on node:sqlite with 0001 to 0008),
+migration 0008 on top of 0001 to 0007 with every account,
+session, purchase and player kept; then against `wrangler dev` with D1 (with `PASSWORD_TRIES`
+left out, so a test can send hundreds of tries from one address; the World Drive Worker suite,
+with it, sees the eleventh try in a minute from a /48 turned away): every route's same-origin,
+JSON, size (4 kB, and 16 kB with Google's token) and shape checks and 401 signed out; signing up (each rule, the name filter, the robot
+check, the cookie, what's kept and that the password isn't in D1 or the Worker's log); taken and
+look-alike usernames; signing in in any case, a wrong password and unknown and impossible usernames
+alike in answer and in time; a stranger failing from many addresses (a robot check, then 5 s apart
+from one address) while the owner still signs in; 40 tries sent at once from one address (20
+through) and for one username from 40 (5 through), and a burst of solved robot checks (1 through);
+a stranger failing every 5 s from a new address while the owner signs in every time between; an
+address's 20 tries (then a robot check, which lets someone else there in) and 200 (then nothing), its
+10 accounts and its 50 sign-ins (with Google's), from one /48's many /64s too, and its 20 players
+linked, by its /48 too; linking Google with a
+robot check needed, a 1,400-character Google token and a 2,000-character robot check's token, and
+taking off a 128-byte password with a 2,048-character one; `DriveLimits` keeping no username or address;
+changing the password (the current one needed, other sessions signed out); hashing again at a
+raised count; linking both ways (Google's token and the password, neither alone), refusing a Google
+account with a player, a pass or a username of its own and taking in an empty one, and one gaining a
+player as it's linked never cutting it loose; unlinking keeping a way in and a bought pass, needing
+Google's token (not the session or the password) and signing out other sessions; taking the password
+off needing it or Google's token, and signing out the other sessions either way; a session alone unable to add a password to a Google account or
+unlink it; taking the password off and unlinking Google at once always leaving a way in; the
+owner's Google account never given a password nor linked, and an account with a username never an
+admin; adding a username counted as a sign-up; a username made by two at once leaving no account
+behind; the pass, the player and its ⭐ the same either way; a purchase without an email no
+username's; signing out everywhere; the admin page's counts by kind; and no username on the boards.
+
+`npm run test:drive-ui`: the panel not loaded until opened; creating an account (the rules said in
+the page, a taken username, the robot check, signed in, the password sent nowhere else);
+signing in (a wrong password said so, a robot check when asked for, signing out), and signed out
+again after creating one the panel back on Sign in; signing out from the panel with the Worker
+not reached or saying no (said in the panel, both buttons off while it's sent, one post for two
+taps); signed in with a
+username (changing the password, linking Google with the password, unlinking it with Google's
+button, signing out everywhere); signed in with Google (adding a username and password confirmed
+with Google's button; Google not unlinkable before; taking the password off with it); each form's
+labels and `autocomplete`; the panel opened from the pause menu, where Esc closes it and keys never
+reach the game, after a wrong password too (the focus back in the field, and kept from the game
+with it fallen to the page); signed in with both on a phone held either way, Sign out in sight
+without scrolling, the changes folded, Google's buttons drawn only once opened and one open at a
+time; a tap on its padding keeping what's typed, and one outside closing it; its title
+following the tab; the panel on a phone held upright and without Google's sign-in; and the admin page's
+accounts by kind. Pictures: `account-1-create-desktop` to `account-11-sign-out-failed-phone` with
+`TEST_SCREENSHOTS`.
+
 ## What a visit costs, and how it's capped
 
 Google bills the Map Tiles API by the **3D tiles session**: each page that loads the root tileset
@@ -3080,8 +3493,16 @@ starts one. World Drive is built so that one page load is one session, however m
   day's visits are under two caps: **DAILY_VISITS** for everyone together (300) and
   **PER_VISITOR_DAILY** for each visitor (8; a supporter signed in has
   **PER_VISITOR_DAILY_SUPPORTER**, 30, counted by their account). Both start again at midnight UTC.
-- Over a cap the page shows **Today's free drives are used up**, with how long until fresh drives,
-  and loads nothing from Google. A failed robot check shows **We couldn't check you're a person**
+  The owner's accounts (`ADMIN_EMAILS`, signed in) aren't counted at all.
+- **The Moon is never limited.** Its ground is our own (moon.js), so it costs nothing to stream.
+  A page opened on a link to the Moon (`?spot=moon-...`, or `?at=` with `world=moon`) asks for a
+  visit with `world: 'moon'`: after the robot check it gets `{ moon: true, visit }`, no key, and
+  nothing is counted. It opens on the Moon with the Earth closed (main.js's `moonOnly`): picking the
+  Earth reloads the page without the link, which asks for one of the day's Earth drives as usual.
+- Over a cap the page shows **Today's free Earth drives are used up**, with how long until fresh
+  ones, loads nothing from Google, and offers **Drive on the Moon**: the 429 carries a visit (for
+  scores and stats), and the game starts on the Moon without a key. Picking the Earth there shows
+  the screen again. A failed robot check shows **We couldn't check you're a person**
   with **Try again**. With no key set, it shows **World Drive is getting ready** (with a flat test pad
   to drive, which costs nothing).
 
@@ -3148,13 +3569,23 @@ The game runs in your browser, so the Worker never sees a score being made. What
 cheating cost something and keep the boards believable (`worker/drive/scores.js`):
 
 - **A visit token.** A score is only taken with the token `/api/visit` hands out with the Maps key:
-  "v1.<visit id>.<expiry>.<signature>", an HMAC-SHA256 whose key is derived (HKDF) from
-  `TURNSTILE_SECRET`, so there's no new secret to set, and good for 6 hours. So every score comes
-  from a visit that passed Turnstile and was counted against the day's caps: a script can't post
-  without spending a drive. A new name takes the token too, and one visit makes one player and posts
-  for that player only (the first to use it), so one robot check can't fill the board, or the
-  database, with names: there are never more new names in a day than visits (`DAILY_VISITS`). A
-  token that's forged, changed, expired or someone else's is a 403.
+  "v1.<visit id>.<expiry>.<signature>", an HMAC-SHA256 of the id and the expiry whose key is derived
+  (HKDF) from `TURNSTILE_SECRET`, so there's no new secret to set, and good for 6 hours. The id is
+  21 random letters and one saying the kind of visit: `e` for a visit the Earth's caps let through,
+  `o` for the owner's (`ADMIN_EMAILS`, on either world) and `m` for the Moon's and one turned away
+  by the caps; it says which [drop-in places](#where-people-drop-in) the visit may post (the Earth's
+  and the Moon's, the Moon's alone, or none for the owner). The signature covers the id, so the kind
+  can't be changed. It's in the id, not a field of its own, so a token is written as it always was:
+  the Worker before kinds (20bf893) takes these tokens as its own, so rolling back to it leaves
+  every open page's visit working ([Deploying](#deploying)). A token from before kinds, whose id is
+  16 random bytes, always ends in `A`, `Q`, `g` or `w` (base64url's last letter of 16 bytes has two
+  bits of them and four of nothing), never a kind's letter, so it's taken until it runs out, as a
+  Moon visit's. A signature is taken written one way only (base64url's last letter has two spare
+  bits). So every score comes from a visit that passed Turnstile and was counted against the day's
+  caps: a script can't post without spending a drive. A new name takes the token too, and one visit
+  makes one player and posts for that player only (the first to use it), so one robot check can't
+  fill the board, or the database, with names: there are never more new names in a day than visits
+  (`DAILY_VISITS`). A token that's forged, changed, expired or someone else's is a 403.
 - **What the game can score.** Scores are whole tens; the tricks read exactly as the game names them
   (at most five in a jump); the vehicle is one World Drive offers. A run can't have lasted longer
   than its visit (give or take 30 s), nor scored more than **131,565 points a second** of it: three
@@ -3165,7 +3596,10 @@ cheating cost something and keep the boards believable (`worker/drive/scores.js`
 - **How often.** One score every 10 s from a player (429 with Retry-After); 1,500 scores and 20 new
   names or renames a day from each visitor, counted, like the visits, as a hash of their address
   (an IPv6 address by its /64) with the day's salt (`SCORES_PER_VISITOR_DAILY`,
-  `NAMES_PER_VISITOR_DAILY`).
+  `NAMES_PER_VISITOR_DAILY`). A player whose visitor has had the day's scores is held till midnight
+  UTC by their own 10 s (`last_score_at` set to run out then), so their tries after it are turned
+  away before they write anything or ask DriveLimits again (one every 10 s all day would otherwise
+  cost a write and a Durable Object request each).
 - **Only bests are kept**, one per player on each board, so posting over and over adds nothing.
 - The secret is kept only as its SHA-256, so a copy of the database can't post as anyone; addresses
   aren't kept at all.
@@ -3241,11 +3675,14 @@ page says which have no ▲ or ▼, and why. The facts from the Worker's own tab
   nicknames picked, the pass's sheet opened and its Buy followed to Stripe, levels reached, parties
   made and joined.
 - **From the leaderboard and the pass** (the Worker's own tables, below): new players, new bests, new
-  Google accounts, passes by status and the revenue; and now, the players, the accounts, the accounts
+  accounts (Google and username), passes by status and the revenue; and now, the players, the accounts, the accounts
   with the pass and the passes nobody has signed in for yet.
 - As before: visits by hour of the day (counted in UTC hours, shown in the viewer's time), where
-  people come from, play time by ride, the rides and places dropped in with and at, the Garage's
-  changes by part, and load time.
+  people come from, play time by ride, the rides dropped in with and the start spots dropped in at,
+  the Garage's changes by part, and load time.
+- **Where people drop in**: a heat map of the Earth and of the Moon, and the top places, for today,
+  the week, the month or longer ([its own section](#where-people-drop-in)), between **Each day** and
+  the rest.
 - **Download CSV**: the period's rows, `day,metric,key,n`, counts and the Worker's facts alike.
 
 Referrers, countries, browsers and page speed in more detail are Cloudflare Web Analytics', in
@@ -3261,7 +3698,7 @@ share), a day, as `metric:key`:
 | `load_time`, `load_ms` | a bucket (under 2 s to over 20 s); `total` | From asking for the page to the globe showing, and the milliseconds together for the mean |
 | `funnel` | `globe`, `pin`, `dropin`, `driving`, `drove_1m`, `drove_10m`, `drove_30m` | How far a visit gets, each step once a visit as it's reached: the globe shown, a place first pinned (a spot, a search result, a recent place, a link, a tap, an area of people driving), a drop-in first started, the first drive, and the visit's driving (not paused) passing 1, 10 and 30 minutes. A party's Join drops in without a pin, so a step can be more than the one before |
 | `device` | `phone`, `tablet`, `computer` | What the visit's on (once): a fine main pointer (a mouse, a trackpad) is a computer's, whatever its screen; a coarse one (a finger, `pointer: coarse`) is a tablet's when the screen's shorter side is 600 CSS px or more, else a phone's. A laptop with a touch screen is a computer, and so is a tablet with a trackpad |
-| `dropin`, `ride` | a start spot's id, `other` or `moon`; a ride | Where drop-ins are (never where, off a spot) and in what |
+| `dropin`, `ride` | a start spot's id, `other` or `moon`; a ride | Where drop-ins are and in what: this key never says where off a start spot; the drop-in's cell, to about a kilometre, goes to [where people drop in](#where-people-drop-in) |
 | `dropin_time` | under 5 s, 5-10 s, 10-20 s, 20-40 s, over 40 s | How long each drop-in took, from Drive here to driving |
 | `play`, `play_world`, `play_with_others` | a ride; `earth` or `moon`; `all` | Seconds driven, not paused: by ride, by world, and with others in the room |
 | `world` | `moon` | Each time the globe turns to the Moon |
@@ -3270,13 +3707,15 @@ share), a day, as `metric:key`:
 | `garage_open`, `garage_edit` | `all`; a part (colour, finish, decal, rim, glow, boost, flame, trail, smoke, horn) | The Garage opened, and each change made in it |
 | `party` | `made`, `joined` | Parties made (Invite friends) and joined (a party's link) |
 | `board`, `pass`, `level_up` | `open`, `named`; `open`, `buy`; `all` | The leaderboard opened and a nickname picked (a new player); the Supporter Pass's sheet opened (from anywhere) and its Buy followed to Stripe; a level reached |
+| `ad` | `shown`, `blocked` | [Google's ad on the globe](#ads), once a visit each: an ad filled it; its script, or its ad, didn't come (an ad blocker, mostly). On the admin page beside the pass's, once there are any |
+| `challenge` | `open`, `start`, `finish`, `posted`, `nudge`, `nudge_open`, `share`, `link`, `link_start` | [Challenges](#challenges): the list opened, a run started (at GO), finished, and its time posted to a board (a new best); the word to a visit driving 40 s (today's challenge) said, and its **Challenges** button pressed; a "challenge a friend" link shared or copied, a page opened on one, and a run started from its card ([ghosts](#ghosts-and-challenge-a-friend)). On the admin page's **any count by day** |
 
 The Worker adds, as the admin page asks (nothing more is kept for it), what its own tables say of
 each day, by the UTC day of `created_at`: `players:new` (nicknames made; not those the owner has
 removed since), `scores:new_best` (runs that beat a player's best on a board: the `scores` log has
 only those, and only for 35 days, so for a longer period the page says the count is partial, and
-compares it only for the last 7 days), `accounts:new` (Google accounts signed in for the first
-time), `purchases:<status>` (`paid`, or `granted` by hand) and `revenue:<currency>` (in the
+compares it only for the last 7 days), `accounts:new` (accounts made: Google accounts signed in
+for the first time and accounts made with a username), `purchases:<status>` (`paid`, or `granted` by hand) and `revenue:<currency>` (in the
 currency's smallest unit, cents, shown as money), both leaving out purchases refunded or charged
 back; and totals now: players, accounts, the accounts with the pass (bought and not taken back, or in
 `SUPPORTER_EMAILS`), and passes not taken back that nobody has signed in for yet. Only counts: no
@@ -3284,14 +3723,16 @@ name, email or id leaves those tables for it.
 
 **No cookie, so no consent banner.** Only counts a day are kept: no id of the visitor, their
 player or their browser, no address, nothing stored in the browser for it, and nothing that follows
-anyone from one visit to the next. Never counted: where anyone is or searched for (a drop-in
-somewhere other than a start spot is "other", since a search can be someone's own street), what was
-typed (a search is only its kind), a device's make, model or screen size (only phone, tablet or
-computer), or a referring page's address (only its site's host name). The About dialog
-(`drive/index.html`) tells visitors what's counted.
+anyone from one visit to the next. Never counted: where anyone is or searched for any finer than a
+cell about a kilometre each way (a drop-in somewhere other than a start spot is "other" here, and
+[where people drop in](#where-people-drop-in) has only its cell, counted apart, since a search can
+be someone's own street), what was typed (a search is only its kind), a device's make, model or
+screen size (only phone, tablet or computer), or a referring page's address (only its site's host
+name). The About dialog (`drive/index.html`) tells visitors what's counted.
 
 **How it works.** The page (`src/drive-app/stats.js`) adds up what it counts and posts it to `POST
-/api/stats` with the visit's token, every 3 minutes and as the page goes out of sight or closes
+/api/stats` with the visit's token (and the places of the drop-ins it counts: [where people drop
+in](#where-people-drop-in)), every 3 minutes and as the page goes out of sight or closes
 (`keepalive`), keeping the fractions of a second for the next post and a post that didn't go for
 the next try; a 403 (the visit run out) stops it for the visit. What's once a visit (the funnel's
 steps, the device, the map problems) is remembered in the page's memory for the visit, and nowhere
@@ -3308,7 +3749,7 @@ a visit, so a script can't add more than a few visits' worth; then one upsert a 
 it takes.
 
 `GET /api/admin/stats?days=30` answers, to an account in `ADMIN_EMAILS` (401 signed out, 403 anyone
-else), those days' rows and the facts in the same `[ day, metric, key, n ]` shape; the as many days
+else, 429 past `ADMIN_LOOKS`' 30 asks a minute for the account: `worker/drive/admin.js`), those days' rows and the facts in the same `[ day, metric, key, n ]` shape; the as many days
 before, added up by metric and key in D1 (what the page compares with: a year's comparison is a few
 hundred rows, not tens of thousands), with the first day in them with visits and with the funnel
 counted (`previous.first`, each null if none); the totals; and how far back the counts and the scores log go.
@@ -3332,6 +3773,2287 @@ deploy: there's nothing from before it, and the page says on which day they star
 devices, worlds, searches, drop-in times, problems and the leaderboard's and the pass's counts start
 from the deploy that brought them; the Worker's facts go back as far as its tables do.
 
+## Where people drop in
+
+The [play stats](#play-stats) say how far a visit gets: most visits drop in and drive, and most of
+those leave after about a minute. To see *where* they go (which places draw people, which start
+spots nobody uses, where the next featured spot or challenge should be), each drop-in's place is
+counted too, rounded to about a kilometre, and the owner's admin page draws it as a heat map of the
+Earth and of the Moon with a table of the top places. What's kept is counts of places a day, never
+who: no player, account, visit or address goes with a place, and no place is finer than its cell.
+
+### What the owner sees
+
+On **`/admin.html`**, between the tiles and **Each day** and the rest of the play stats, **Where
+people drop in**:
+
+- **Today**, **Week**, **Month**, **90 days** and **Year**: the last 1, 7, 30, 90 or 365 UTC days,
+  each ending with today so far, as the rest of the page's are. It starts at the page's own period
+  and follows it when that changes.
+- **Earth** and **Moon**, each with its count in the period: the **drop-ins counted**, each visitor
+  once a day in each cell (and once for each visit). That isn't a count of people: one visitor at
+  Golden Gate, Times Square and Lyon on one day is three, and one at the same place every day of a
+  month is thirty. They're fewer than the **Drop-ins** tile above, which counts every drop-in. The
+  line over the map says "356 drop-ins counted in 86 cells (1 km)": cells, not places, as a start
+  spot's cells are one place in the table but each a cell on the map. One place's count is its
+  **visitors** over one day (Today: each counted once there) and its **visitor-days** over longer
+  (each visitor once a day, added up), and the table's column and the map's notes say which.
+- **The heat map**: the world as a flat map (longitude across, latitude up), the Earth's land and
+  sea from the game's own Natural Earth map (`/sea/mask.bin`, as `src/drive-app/sea.js` reads it),
+  the Moon from its own picture (`/moon/colour.webp`), each fetched only when its map is first
+  shown, in the page's light or dark. Each cell is a soft spot, darker as it has more visitors (on a
+  log scale, so one still shows beside a hundred), the spots adding up where they're close, and
+  coloured from yellow to deep red, with a legend saying which way it runs and the most in one 1 km
+  cell. The top ten places with more than one have their table numbers beside them (a number on each
+  single visitor would say nothing). Drag to move it; click it, then scroll to zoom (or Ctrl and
+  scroll, as a trackpad's pinch is), double-click, or **+**, **−** and **⤢** (the whole map). On a
+  phone: pinch, or two fingers moved together, or the buttons; on the whole map one finger drags
+  sideways (up and down scrolls the page), zoomed in it drags every way. It zooms in to a view 150
+  km across at the most, and a place shown from the table is 300 km across: the Earth's map is
+  squares of about 5 km (24 to a degree) and the Moon's picture pixels of about 2.7 km, so closer
+  than that it would be a mosaic of a few dozen; **Drive ↗** is how to see the streets. Zoomed in on
+  the Earth, the towns are named (more of them the further in, at most 80, none over another:
+  Natural Earth's towns, below), and a scale bar says how far is how far. Resting the mouse on a
+  cell, or tapping it, says what it is and how many visitors or visitor-days (for one of a start
+  spot's cells, its own and the spot's in all: "2 visitor-days here, 6 at the place"). The map has
+  the period's 2,000 cells with the most; the rest (single visitors scattered about) are only in its
+  totals, and the page says so. It's never taller than about two thirds of the screen (`65svh`), so
+  on a phone on its side there's page beside it to scroll by, and a place shown from the table
+  scrolls the whole map, its buttons too, into view.
+- **Top places**: the 25 with the most, each with its name and region, its visitors or visitor-days,
+  their share of the world's (one under 1% shows as "<1%"), on how many of the period's days it had
+  any, and **Drive ↗**, which opens the game there in a new tab. Those with more than one are listed
+  (three at least, ten at most); the rest, over a week or a month mostly single visitors named by
+  their coordinates, are behind **Show all 25** ("20 more, each with one visitor-day"), so on a
+  phone the section isn't screens of them between the day chart and the funnel. A start spot's or a
+  place page's is the game's own link to it (`/?spot=golden-gate`, or the page's `/?at=...`), marked
+  **in the game**, and is one row however many of its cells were dropped in at (below); any other
+  place's pins the cell's middle by name (`/?at=45.83862,4.95052&name=12 km NE of Lyon&region=...`,
+  with `world=moon` on the Moon), and the drop-in finds the street, or the sea's surface, there as
+  for any pin. A place's name shows it on the map, zoomed in on it, saying what it is.
+- Asked too often (`ADMIN_LOOKS`, below), the stats and the map each say "Asked too often just now:
+  try again in a minute." Whatever goes wrong (that, the server not reached, an error), the map says
+  it too, over the map, and nothing of the last answer is left (the worlds' counts, the table, the
+  legend), so an empty map doesn't pass for a period with nobody in it. Switching worlds while a
+  period's answer is still coming shows nothing of the last period's, and the line says
+  "Loading..." till it comes.
+- Each period's answer is kept on the page for 10 minutes, so clicking between periods asks the
+  Worker once for each (the Worker keeps its own as long, [below](#the-admin-pages-answer)).
+- The owner's own visits (`ADMIN_EMAILS`) post no places, so the page's own **Drive ↗** links, and
+  whatever the owner tries out, aren't counted in what it shows (nor in [what challenges are picked
+  from](#for-challenges-the-most-dropped-in-places)).
+
+How a place is named, by the Worker (`nameCell` and `placesOf` in `worker/drive/dropins.js`), at no
+cost per look:
+
+1. A featured place is a start spot (`places.js`), a place's page with its own pin
+   (`drive/site/places.js`: the Eiffel Tower, the Colosseum...) or one of the Moon's places
+   (`moon-places.js`, its spots and the places its search finds). Its cells are the one its pin is
+   in and any its pin is within 250 m of: a drop-in there starts within 60 m of the pin (the street
+   or a bridge's deck found nearest it: `spawn.js`), and a search of the same landmark pins a little
+   off, so a pin by its cell's edge has its drop-ins on both sides of it (the Arc de Triomphe's is 5 m
+   from the next row). Those cells are the place, by its name, and one row in the top places: their
+   visitors added up, at the place's own pin, on as many days as its busiest cell (the place had
+   visitors on at least that many), with its cells' middles in `cells`.
+2. Else the nearest town or featured place within 50 km (300 km on the Moon, which has only its
+   featured places): a town's own name within 2 km ("Lyon"), else how far and which way, of the
+   compass's eight ("12 km NE of Lyon", "1 km S of Golden Gate Bridge", "91 km N of Copernicus
+   crater"), with the region on the Earth ("Rhône-Alpes, France"; a Moon place's words, "93 km
+   across", aren't said of a place beside it). A featured place's neighbours are always "1 km ... of"
+   it, so a search a kilometre from a spot isn't counted as the spot.
+3. Else its coordinates, to two decimals ("0.00° N, 150.00° W").
+
+The towns are Natural Earth's populated places at 1:10 million (public domain): 7,342 towns and
+cities, every country's capital and its regions' among them, kept in `drive/public/places/towns.tsv`
+(262 KB, 116 KB compressed; `node scripts/make-towns.mjs` makes it, and says how it's kept) with
+each one's region and rank. Natural Earth lost letters of 38 towns' states (34 of Vietnam's and
+Azerbaijan's, "H? Chí Minh city", "G?nc?"), and no other field of it has them right, so their region
+is their country alone ("Vietnam"); the script stops if a "?" is left in any name or region. The
+Worker reads it through its `ASSETS` binding, the site's own files, once per Worker instance (about
+2.5 ms of CPU to read; naming 25 places is a fraction of a millisecond, and a featured place's cells
+are worked out once per instance), so a look asks nothing of anyone. The admin page fetches it only
+once the Earth's map is zoomed in. The game never loads it. Natural Earth is sparse in places
+(France's towns at that scale are its cities), so "35 km E of Geneva" can be a village's own name in
+a fuller atlas.
+
+### How a place is rounded
+
+Each world is cut into a grid of cells about a kilometre each way (`src/drive-app/dropin-cells.js`,
+which the page, the Worker and the tests share): rows 1 km tall from the south pole to the north, on
+a sphere of the world's radius (6,371 km for the Earth, 1,737.4 km for the Moon), a whole number of
+them from pole to pole (20,015 on the Earth, 5,458 on the Moon), and each row cut into as many
+cells as fit 1 km wide round its middle (40,030 round the Earth's equator, 10,916 round the Moon's,
+fewer towards the poles). So a cell is a kilometre across to within a metre, except within about
+70 km of the poles (73 km on the Earth, 66 km on the Moon), where it's within 5%: the rows nearest
+each pole hold 3, 9, 16, 22, 28... cells, 1,047, 1,047, 982, 1,000, 1,010... m wide. Never a sliver
+a few metres wide by a pole, as rounded degrees would be (the Moon's Shackleton start spot, 20 km
+from its south pole, is in a row of cells 1.5 m off a kilometre), and anywhere in a cell is within
+0.75 km of its middle. A cell is written `earth:14212:5052` (the world, the row from the south pole,
+the column eastward from 180° W): Golden Gate's. The page works out its cell and sends only that;
+the precise place never leaves the browser.
+
+### What's sent, and what's counted
+
+- **When.** A drop-in's place is taken as it arrives, the moment the vehicle is down and driving
+  (`arrive` in `main.js`): where it starts, after the street or the sea's surface has been found. A
+  drop-in given up on the way down, or with no ground there, has none. Joining a party or going
+  beside someone is a drop-in like any other.
+- **How.** It rides along with the play stats' next post (`POST /api/stats`, every 3 minutes and as
+  the page goes out of sight), as `places: [ "earth:14212:5052" ]` beside that drop-in's own
+  `dropin:...` count: no request of its own. The page sends a cell once a visit, at most 6 a post
+  (`PLACES_PER_POST`; one more waits for nothing, its drop-in still counted), and a post that didn't
+  get through (a 429, a network blip) keeps its places for the next, in front of any since, with
+  their drop-ins. Without a visit's token (the test pad, the dev server alone) nothing is counted,
+  as for the rest of the stats.
+- **What the Worker takes** (`checkPlaces`, then `recordPlaces` in `worker/drive/dropins.js`): a
+  list of at most 6, or the whole post is a 400; each a cell of the grid (anything else, coordinates
+  among them, is left out); and no more on a world than the drop-ins the same post counts there
+  (`dropin:moon` on the Moon, the others on the Earth), so a place can't come without its drop-in.
+  An **Earth** place only from a visit whose token says the Earth's caps let it through (`e`: the
+  visit token, [above](#how-cheating-is-limited)); a Moon visit, one turned away by the caps and an
+  old token post the Moon's places alone, and the owner's (`o`) none. Then **DriveLimits** says which
+  to count (`places` in `worker/drive/limits.js`), all in one go:
+  - a cell counts **once a day for each visitor** (an address; an IPv6 address by its **/48**, not
+    the /64 the visit caps count by: one free tunnel broker's /48 holds 65,536 /64s, which would
+    otherwise be as many visitors), whichever of their visits posts it, **and once for each visit**,
+    whichever address posts it (a visit's token sent from many addresses adds a cell once): a count
+    is how many visitors dropped in there that day;
+  - **no faster than one each 10 s of the visit** (a drop-in takes that long at least: the flight
+    down, the ground loading), so a script with a fresh visit can't post a visit's worth at once;
+  - at most **10 a visit**, **30 a visitor** and **1,500 a day on each world**
+    (`DROPIN_PLACES_PER_VISIT`, `DROPIN_PLACES_PER_VISITOR`, `DROPIN_PLACES_DAILY`), the Earth's and
+    the Moon's apart, so neither can crowd out the other's;
+  - a visit is heard **20 times a day** at most (`DROPIN_ASKS_PER_VISIT`, twice its places: an
+    honest page asks once a post with new places).
+  DriveLimits says when a visit can add no more (its places counted, its visitor's, or its asks) and
+  when a world's day is full, and each Worker instance then asks no more for that visit (until its
+  token runs out or the day ends, as `live.js` does with visits it has turned away) or that world
+  (till midnight UTC). Those it takes are upserted into D1's `dropins_daily`, one row a world, day
+  and cell. The post's answer is the play stats' 204 whatever was counted, and a place that can't be
+  counted (DriveLimits or D1 not answering) is only logged: never in the stats' way.
+
+**Making it hard to poison.** Every place needs a visit that passed Turnstile (the visit's token),
+a drop-in counted with it, and time: one place each 10 s of the visit, 10 a visit. A cell counts
+once a day for each address (an IPv6 /48) and once for each visit, so adding one to a cell takes both
+a new visit and a new address: one robot check and its token, replayed from a block of addresses,
+add a cell once, and a /48's 65,536 /64s are one visitor. An Earth place takes an Earth visit, one of
+the day's capped drives (`DAILY_VISITS`, 300, and `PER_VISITOR_DAILY`, 8 an address): pushing an
+Earth place up the table by 50 a day spends 50 of the day's drives from 50 addresses, each passing
+the robot check. Moon visits aren't capped (the Moon costs nothing to stream), so a Moon place can be
+pushed by many robot checks from many addresses (IPv4 addresses or /48s); its day's 1,500 are its
+own, so that can't crowd out the Earth's. `days` in the answer (on how many days a place had
+visitors) tells a place busy one day from one busy every day, but a script run daily is busy every
+day too.
+
+So the ranking **isn't proof against many addresses** (a Sybil attack): someone with a few hundred
+addresses and robot checks a day (solving services sell them for a few dollars a thousand) can put
+a 1 km cell of their choosing, a private address say, at the top of the Moon's places, and of the
+Earth's at the cost of the day's drives. What it can't stop is many addresses passing the robot
+check, as for the leaderboard. The owner reads the map knowing that; and challenges picked by
+themselves from it take only featured places (`topPlaces`' `featuredOnly`, below) or cells the owner
+has approved, with the busy cells that aren't featured offered to the owner to choose from rather
+than picked. The owner's own visits post none, so what the owner looks at isn't pushed up by
+looking.
+
+### What's kept
+
+- **D1**, `dropins_daily` (migration `0005_dropins.sql`): `day`, `world`, `cell_row`, `cell_column`
+  and `n`, the visitors counted there that day; nothing else. Keyed by the world, then the day, so a
+  look at one world's period reads only its rows. It's kept as long as `stats_daily`'s rows are, 730
+  days, and older rows go as the admin page asks (as the play stats' do).
+- **DriveLimits**, for today only, to count each visitor and visit once at a cell and hold them to
+  their limits: `place_seen`, for each place counted, one HMAC of the day's salt, the address (an
+  IPv6 one's /48) and the cell and one of the salt, the visit's id and the cell; `place_visitors`
+  and `place_visits`, an HMAC of the salt and the address, or the visit's id, with how many places
+  it has had counted (and for a visit how many times it has asked); and `place_totals`, each world's
+  count. The HMAC's key is derived (HKDF) from the Worker's `TURNSTILE_SECRET` with a label of its
+  own, and isn't in the storage, so a copy of it (a restore, Cloudflare's 30 days of point-in-time
+  recovery for its SQLite storage, a bug that dumps it) can't test an address, a visit's id or a
+  cell against any of it, nor pair a visit with an address or say which cell any row is; the tables
+  have no rowids, so the order rows went in doesn't pair them either. All four are deleted, with the
+  day's salt, when the next UTC day starts. (The visit caps' own `visitors` table, by a plain hash
+  of the salt and the address, is as it was: it never held a place.)
+
+  Deleted from the live storage, that is: Cloudflare keeps 30 days of point-in-time recovery for a
+  Durable Object's SQLite storage, so for 30 days a day's `place_seen` can be restored, salt and
+  all. Without the Worker's secret that's no use (the HMACs can't be tested). But someone holding
+  `TURNSTILE_SECRET`, or able to deploy code to the Worker (which has it), could restore a past day
+  and test a given address against every cell (about 510 million on the Earth: minutes of HMACs),
+  and so learn which 1 km cells that address dropped in at on any of the last 30 days. Before
+  places were counted, nothing stored paired an address with a place. That's the price of counting
+  each address once a day at a cell, which is what keeps one address from pushing a cell up; the
+  other choice, keeping only a count for each address and each visit's cells, would let one address
+  with many visits add a cell many times. This keeps the per-address count, and says so: only the
+  owner holds the secret, and the About dialog tells players.
+- **In each Worker instance's memory**: the visits that can add no more today, by their random id,
+  till their tokens run out or the day ends; never a place or an address.
+- Nothing in the browser, and no cookie.
+
+The About dialog says it: "roughly where else they drop in (to about a kilometre, counted once a day
+for each visitor at each place)", and that "a keyed hash of their address and the place is kept that
+day and then deleted; Cloudflare's backups of the game's storage can hold it for up to 30 days more,
+and only someone with the game's own secret key could check an address against it". A cell can hold
+someone's home, and a place counted once on a day says someone dropped in near
+there; but not who, nor which visit, and only the owner sees it. (The globe's dots of who's driving
+now, which everyone sees, are already to about a kilometre.)
+
+### The admin page's answer
+
+`GET /api/admin/dropins?days=30` (1 to 365, 30 if it isn't a number), to an account in
+`ADMIN_EMAILS` (401 signed out, 403 anyone else, 429 past `ADMIN_LOOKS`' 30 asks a minute for the
+account, as `/api/admin/stats` is: `worker/drive/admin.js`):
+
+```
+{ from, to, first, cell: 1000, kept: 730,
+  worlds: { earth: WORLD, moon: WORLD } }
+WORLD: { dropins, places, heat: [ [ lat, lon, n ] ],
+  top: [ { lat, lon, n, days, cells: [ [ lat, lon ] ], name, region, link, featured } ] }
+```
+
+`first` is the first day any place was counted (the page says "counted from" when the period starts
+before it). `dropins` is the period's visitors on the world and `places` how many cells they were
+in; `heat` the period's 2,000 cells with the most (each cell's middle, the most first), and `top` its
+25 top places, named, a featured place's cells as one (at its pin, `cells` their middles). One batch
+of three queries: each world's cells, which reads that world's rows for the period once (its totals
+counted over every cell with window functions, before the 2,000 are taken), and the first day (each
+world's key's first row).
+
+The answer is kept in the Worker instance that worked it out, for that period and day: 10 minutes,
+or an hour for a period longer than a month (90 days, the year), at most 8 of them, today's only
+(`X-Dropins-Cache: hit` or `miss` says which). It's given only after the account and `ADMIN_LOOKS`
+are checked, so it's the owner's alone and the asks are counted as ever; the same look again reads
+nothing. So a drop-in shows on the page within 10 minutes (an hour on the long periods).
+
+### For challenges: the most dropped-in places
+
+[Challenges](#challenges) use these: the admin page offers the busy places that aren't featured
+(`topPlaces` over the last 30 days, its featured ones left out) for the owner to approve into the
+rotation, or choose for a period by hand, and nothing from them goes in by itself.
+
+In `worker/drive/dropins.js`, for picking challenges from where people go:
+
+- `topPlaces( db, { world, from, to, most, featuredOnly }, towns )`: `world`'s most dropped-in places
+  from the UTC day `from` to `to` (both included, `'2026-11-16'`), at most `most` (25 if not given),
+  as the admin page's top places are: a featured place's cells as one, named, with the game's link
+  there (`[ { lat, lon, n, days, cells, name, region, link, featured } ]`), the most first, then
+  those on the most days; with `featuredOnly: true`, the featured places alone (the start spots, the
+  places' pages' and the Moon's places), busiest first. `towns` is `townsFor( env, url )`'s (or null,
+  to name by the featured places alone); `townsFor( env )` works without a request too, as in a
+  scheduled handler (the site's own address stands in: the `ASSETS` binding goes by the path).
+- `topCells( db, { world, from, to, most } )`: the cells themselves, at most `most` (up to 2,000), as
+  `[ { world, row, column, lat, lon, n, days } ]`, the most first, then those on the most days.
+- `nameCell( world, lat, lon, towns )` names one cell, with the game's link there.
+
+Two things for whoever picks challenges from these. Their ranking **isn't proof against many
+addresses** ([above](#whats-sent-and-whats-counted)): a challenge rotated in by itself should be a
+featured place (`featuredOnly`), or a cell the owner has approved, and the busy cells that aren't
+featured are a list to offer the owner, not to pick from blindly. And each call reads the period's
+rows (up to 1,500 a day a world), with nothing kept, so a caller keeps what it picked (the challenge
+itself) rather than calling again for each request.
+
+### What it costs
+
+- **The game**: no request of its own (places ride on the play stats' posts), and 0.8 KB more
+  minified code in `main.js`'s chunk, 0.33 KB compressed (measured: 1,117.12 to 1,117.93 kB, and
+  343.29 to 343.62 kB gzipped; the grid's arithmetic, `dropin-cells.js`, and the stats' few lines),
+  nothing in the page's first script, which is unchanged. The towns, the maps and the admin page's
+  code are never loaded by it.
+- **Durable Objects**: one DriveLimits request for each stats post that carries new places (at most
+  one a drop-in, fewer when several fall in one post's 3 minutes): at about 300 Earth visits a day
+  and the Moon's besides, with a drop-in or two each, a few hundred a day of the Free plan's 100,000
+  (which the visits and driving with others share). At worst, a script posting all it can: 20 a
+  visit a day (`DROPIN_ASKS_PER_VISIT`), and once a visit can add no more each Worker instance stops
+  asking (one more for each other instance it reaches); none for an Earth place from a Moon visit,
+  nor for a world whose day is full. So using up the day's requests this way takes about 5,000 robot
+  checks a day.
+- **D1**: one row written for each place counted (at most 1,500 a day on each world; a few hundred
+  at today's traffic) of the Free plan's 100,000 a day, and a Moon visit from someone signed in
+  reads their session (a row or two) to tell whether it's the owner's (signed out, nothing). An
+  admin look reads each world's rows for the period once: with a few hundred places a day, a month
+  is about 10,000 rows read and a year about 110,000, of the 5 million a day. At both worlds' caps
+  every day (someone posting all they can, which on the Earth spends the day's drives, and on the
+  Moon takes a few hundred robot checks a day from 50 addresses or /48s) a month's look reads 90,000
+  rows, 90 days' 270,000 and a year's 1.1 million. A look is kept in the Worker instance for 10
+  minutes (an hour past a month), and the page keeps each period's for 10 minutes, so clicking
+  between periods, or the same one again, reads nothing more; but at those caps, four year-long
+  looks in a day each worked out afresh would be most of a Free day's reads. A monthly roll-up of
+  each month's 2,000 busiest cells would bound a year's look at about 110,000 rows a world whatever
+  is posted, but the period's totals would then no longer be exact (how many cells a year's drop-ins
+  were in can't be added up from months' busiest 2,000, and at a few hundred places a day a month
+  can have more than 2,000 cells), so it's left until the counts come near it: then the daily cap
+  (`DROPIN_PLACES_DAILY`) is the lever. Kept for two years at a few hundred a day, the table is a
+  few hundred thousand rows of about 40 bytes: well under 50 MB of the 5 GB free.
+- **Workers Paid**: all of that is well within what the plan includes (50 million D1 rows written
+  and 25 billion read a month, a million Durable Object requests a month).
+- **The admin page**: the Earth's map (250 KB) and the Moon's picture (675 KB) when each is first
+  shown, the towns (262 KB, 116 KB compressed) once zoomed in: the site's own files, from
+  Cloudflare's cache, at no cost. Drawing the map with 2,000 places takes about 23 ms for the whole
+  world, 11 ms zoomed in a little and 2 to 3 ms on a region (measured in headless Chromium on the
+  development machine, a desktop's window and a phone's alike; the canvas is drawn at no more than
+  twice the screen's pixels), once a frame at most while it's dragged.
+
+### How it's tested
+
+- `npm run test:drive-worker`: the grid (a kilometre each way at every latitude on both worlds,
+  within a few per cent at the poles, anything in a cell within 0.75 km of its middle, both sides of
+  the 180th meridian one cell); only the grid's cells taken, each with its drop-in, at most 6 a post;
+  naming from the game's places (a start spot's own cells, and its neighbours as "1 km W of" it),
+  the towns and coordinates, across the 180th meridian; `topCells` and `topPlaces` on the migration's
+  table (the most first, then on the most days; each end of the period; each world's own, read by
+  the table's key and nothing else, in SQLite's own plan of the query; 1 to 2,000; a start spot's
+  cells as one); DriveLimits by itself (its storage node:sqlite's) hearing a visit its 20 (here 3)
+  times and counting nothing of it after, whichever Worker instance asks; a post that didn't get
+  through keeping its places, with their drop-ins, for the next (the page's own `stats.js`); and
+  against the Worker under wrangler: a place
+  counted once a day for each visitor (another visit from the same address too), none without its
+  drop-in or on the wrong world, a post with too many or not a list turned away whole, no visit or
+  one run out a 403; one each 10 s of a visit, its 10 (here 4), a visitor's 30 (here 6) and each
+  world's day's 1,500 (here 12, the Moon's still counted with the Earth's full), the stats counted
+  all the same, and the next day afresh; one visit's token from six addresses adding a cell once and
+  its 4 in all; a Moon visit's, an over-the-caps visit's and an old token's Earth places refused and
+  their Moon places counted, and the owner's visits' (on either world) none at all; two /64s of one
+  IPv6 /48 adding a cell once and sharing a visitor's places, another /48 another visitor, and the
+  visit caps still each /64's; a visit heard `DROPIN_ASKS_PER_VISIT` times (here 5) and no more, and
+  not asked about again once it's done (read from DriveLimits' storage); D1's table holding only day,
+  world, cell and count; no cell, address or visit's id in the Worker's stored files; a copy of
+  DriveLimits' storage tried for every salted hash of the address, the visit and the cell (none
+  there: only HMACs with the Worker's key, in tables without rowids), and all of a day's places gone
+  when the next day starts; the admin page's answer for a day, a week, a month and a year (totals,
+  the most first, names, regions, links, on how many days; a start spot's two cells, the Arc de
+  Triomphe's, one place at its pin, and the cell a kilometre off it named by how far), 401 and 403,
+  `ADMIN_LOOKS` (429 with Retry-After, the answers kept counted all the same), rows older than two
+  years deleted, and an answer kept 10 minutes (an hour past a month) for its period and day, given
+  only to the owner, then worked out afresh with what's been counted since; `topPlaces`' featured
+  places alone; the towns read without a request (as a scheduled handler would), and none of their
+  regions with a "?" (Ho Chi Minh City's region "Vietnam"); the About dialog saying what's kept of an
+  address with a place, Cloudflare's 30 days of backups too. The visit tokens are written as the
+  Worker before kinds took them (its readVisit's check run on one), and a token with its kind
+  changed, or written as a `v2` one, is a 403. A post with 6 of the longest cells still fits in a
+  post with all of the stats' counts, well under the Worker's 8 KB.
+- `npm run test:drive-ui`: a drop-in at Golden Gate posts its cell with its drop-in (and no
+  coordinates), once a visit, and one given up on the way down none; and the admin page with its
+  answers made in the test: the heat over the land and sea (seen in the map's own pixels: warm at
+  the places, the base map's colours in the Sahara and the South Pacific), the top places and their
+  links, today, the week and the month (and the page's period), a place shown from the table with
+  what it is, 300 km across, the towns named zoomed in, dragging, the wheel and the buttons, no
+  closer than 150 km across, the Moon on its picture with a start spot's second cell saying the
+  spot's count, the section between the day chart and the rest, both parts saying "Asked too often"
+  to a 429, the world switching after an error, "356 drop-ins counted in 86 cells (1 km)" and "1
+  drop-in counted in 1 cell (1 km)", the most in one 1 km cell, visitors over a day and visitor-days
+  over longer, a period clicked again not asked again, the places with more than one listed and the
+  rest behind **Show all 25** (and numbers on the map for none with one), a share under 1%; after
+  the server can't be reached, the worlds' counts, the table and the legend gone and the map saying
+  so, and asked again, the answer; the Moon pressed while today's answer is slow saying "Loading..."
+  with nothing of the week's; a phone in the dark with no sideways scrolling and the section under
+  1,200 px tall, a tap saying what's there and two fingers (and one, zoomed in) moving the map
+  without scrolling the page; a phone on its side with the map no more than 65% of the screen, a
+  place shown from the table with the whole map and its buttons in view, and a finger beside it
+  scrolling the page; and nothing for someone signed out. Pictures of it are saved
+  (`admin-places-*.png`).
+- `npm run test:drive-moon-ui`: a drop-in at Tranquility Base posts its cell of the Moon's grid with
+  `dropin:moon`.
+
+**The owner's steps.** Deploy (`npm run deploy:drive` applies `0005_dropins.sql` first, and the new
+`ADMIN_LOOKS` rate limiter comes with `wrangler.drive.jsonc`). Places are counted from that deploy;
+the page says from which day. Your own visits (signed in with an `ADMIN_EMAILS` account) aren't
+counted, so to see a drop-in counted, drop in signed out (or in a private window). Nothing else to
+set: `DROPIN_PLACES_DAILY`, `DROPIN_PLACES_PER_VISITOR`, `DROPIN_PLACES_PER_VISIT` and
+`DROPIN_ASKS_PER_VISIT` can be added in the dashboard to change the limits (raise the daily one if
+the page's busiest days stop growing at 1,500 places a world).
+
+## Challenges
+
+The [play stats](#play-stats) say most visits drop in and drive, and almost everyone leaves after
+about a minute. Challenges give a reason to stay, and to come back: a **daily**, a **weekly** and a
+**monthly** challenge on the Earth and on the Moon, six live at once, each a place and a route the
+same for everyone in its period, with its own board of each player's best time.
+
+### What players see
+
+- **Challenges**, under **Earth | Moon** at the top of the globe's panel and in the pause menu. Its
+  code is a chunk of its own (`src/drive-app/challenges.js` with `challenges.css`), fetched the first
+  time it's pressed: nothing of it is in the page's first load ([what it costs](#what-challenges-cost)).
+  Without a Worker (the dev server alone) the button isn't there, as the trophy isn't.
+- **The list**: the six, the current world's three first ("On the Earth", "On the Moon"). Each card
+  says **Daily**, **Weekly** or **Monthly** with the time it has left, ticking ("5 h 12 m left", "2
+  d 5 h left", "12 m 30 s left"), the place and its region, the kind and what it is ("Checkpoint
+  sprint · 6 gates · 1.5 km", "Collect them all · 6 stars · 260 m round", "Drive to a landmark · To
+  Tycho crater · 2.1 km"), the board's top three (with the leaderboard's names, a supporter's ⭐ and
+  levels, "Lv 12 · Drifter"), your best and place ("Your best 0:48.20 · #3 of 41"; past a thousand
+  ahead of you, "#1000+": a rank is found among a board's first thousand times), **Start** and
+  **Board**. On a phone on its side (520 px high or less) the cards are short and side by side: no
+  intro or footnote, the place and what it is beside **Start** and **Board**, the board's best
+  alone, and yours, so two whole cards and their **Start** are on the screen as the list opens (the
+  test checks the first card's). A period ending while the list is open brings the new one: the
+  ended card says "Over: the next one is on its way", dimmed with its **Start** off (a run of it
+  wouldn't be taken), and a new list is asked for once. If that doesn't come (the Worker not
+  answering, or busy at the turn of a period), it's asked again after 5 s, then after 10 and 20 more
+  (or after the Worker's `Retry-After`): four asks at most, then not till the list is opened again,
+  never every second, which would hold an address at `CHALLENGE_LOOKS`' limit for everyone behind
+  it. **Board** shows the top 20 with your own row picked out, and below them where you are ("You're
+  #42 of 130, with 1:02.40"). A board slow to answer, left for another's, never shows its rows under
+  the other's title (only the last board asked for is shown); one turned away for being asked too
+  often says so ("Asked too often just now. Try again in a minute.").
+- **Told while driving.** A visit that has driven 40 s (and hasn't opened the challenges) is told of
+  today's challenge on the world it's on, as a toast with a **Challenges** button: "Today's
+  challenge on the Earth: Furka Pass. A timed run with its own board." (main.js's
+  `challengeNudge`; the place is from one ask of the list, then, and the challenges' own code still
+  only loads on the button). Not over another toast (it waits a few seconds more), once a visit.
+  Both are counted for the play stats (`challenge`: `nudge`, `nudge_open`), so the owner can see
+  whether it keeps people longer than the minute most stay. On the dev server it's off unless a
+  test asks for it (`window.worldDriveNudgeTest = { after }`), as the other tests drive longer than
+  that and look at what the toasts say.
+- **Start** goes back to the globe if you're driving (a run going is left), turns the globe to the
+  challenge's world and drops in at its start, as any drop-in there does: an Earth challenge needs
+  an Earth drive, a Moon one none. A sprint's and a hunt's start is the place itself, named so; a
+  landmark's is a pin kilometres from it, so it's a **Dropped pin** to everything that names places
+  (a stunt score's board, others in the room: by its coordinates, as `placeLabel` names a pin), "On
+  the way to Eiffel Tower" on the top bar and the loading screen, and not one of the recent places
+  (`recent: false`: picking it there later would drop you kilometres from the landmark). Pressed as
+  its period ends (the list a moment behind), a challenge that's over doesn't start: the list says
+  why ("That challenge has ended, so a run of it wouldn't count. Here are the new ones."). With
+  today's Earth drives used up (or a page opened on a link to the Moon: main.js's `moonOnly`), the
+  Earth's cards say **Needs an Earth drive**, which shows why (the used-up screen, or for a page
+  opened on the Moon, the reload to the Earth); the Moon's start there as anywhere, from the used-up
+  screen's **Drive on the Moon** too.
+- **The run.** The car comes down at the start and a countdown, **3, 2, 1, GO!**, holds it there:
+  the gas can be held down, ready, and nothing moves till GO. The visit's first time on a computer,
+  the keys card is shown over the countdown, which is longer then (6 s, "Get ready" till the 3), and
+  put away at GO (or after 10 s, for a run left before it): a first drive may well start as a
+  challenge, that card is how a first-timer learns the keys, and nothing covers the road while the
+  clock runs. Then the timer runs on the HUD with
+  how many are passed ("2 / 6", "3 / 6 ★", or a landmark's name) and an arrow to the next one (the
+  nearest star not taken), turned as it lies from where the camera looks, with how far it is. A
+  sprint's gates are rings standing across the way, a landmark's one ring, collectibles spinning
+  stars; each has a beam of light up from the ground, seen from a long way off (twice as tall on the
+  Moon), the next gate's yellow, the last green, the rest blue, stars gold. A gate goes as it's
+  passed, with "Gate 2 / 6" (or "3 / 6 stars") said over the speed. A sprint's gates count in their
+  order only; stars in any.
+- **Passing** one is driving into its zone: within its radius across the ground (30 m for a gate on
+  the Earth, 40 on the Moon; 18 and 22 for a star; 45 and 60 for a landmark), and up and down from
+  2 m over its ground to 2 m over its top, and twice its radius beyond them (a pillar with rounded
+  ends: `TALL` in challenge-rules.js). On the Earth its ground is the lowest and its top the
+  highest of what rays down across its zone meet (below), so a gate beside a tower is on the street
+  and passed there, on the roof too, and one by a bridge on the deck or under it; flying over low
+  passes it. On the Moon both are its one height. One whose ground hasn't loaded yet counts across
+  the ground alone.
+- **The finish card**, as the last is passed: the time ("0:42.37"), **New best!** when it is, your
+  place on the board ("#2 of 5 on the board"), its top five with your row picked out, and
+  **Retry** (back at the start for another countdown), **Back** (to the globe, the list open) and
+  **Keep driving here**. The card is over the road (and on a phone over the boost, fly and brake
+  buttons), so the car is **brought to a stop** under it and **held there**, as the countdown holds
+  it at the start, till the card's put away (any of its buttons, or a pause): the booster and a
+  drift's or a trick's boost are put out at the line (and again if fired under the card), and it
+  slows in a second from its speed at the line (at least 12 m/s each second) plus whatever the gas
+  adds (a ride's acceleration, half as much again with Shift), so it stops whatever's held down,
+  then stays where it stopped. The test holds the gas and Shift (the booster) down after the finish
+  and, in the game's own time (the driver's clock: a slow machine's frames are fewer, not longer),
+  the car's stopped within two seconds and hasn't moved a second later. With no nickname yet it
+  asks for one there (the leaderboard's, with
+  its rules) and posts the time with it. Not your best: it says your best and where it stands, and
+  nothing is posted. On the test pad (no visit) it says times go on the board from a drive on the
+  real map. **Retry** once the challenge has ended (its period over while it was driven, or while
+  the card waited) goes to the list instead, saying why: a run of it wouldn't count. What's posted is
+  a copy of the run as it finished (its id, time, passes and **the ride it was driven in**): a post
+  that didn't get through (no signal, a 5xx, a 429 asking for a minute or less) is tried again with
+  that same copy, up to three times, 4 s apart (or after the 429's `Retry-After`), whatever happens
+  meanwhile, so pressing **Retry** (each Retry is a new run, with its own id), pausing or picking
+  another ride never loses a time or sends one run's time with another's passes or ride; the card
+  only shows the answer while it's still up for that run. If it still hasn't got through (a phone in
+  a tunnel or a lift for longer than those 12 s, the Worker down), it's **kept** in the page, the
+  best for each challenge ("No connection just now: your time is kept here, and goes up when you're
+  back online."), and posted again, once each time, when the browser says it's back online (its
+  `online` event), when the list is opened and at the next finish, while its challenge would still
+  take it (till its end and `GRACE`); a better finish drops it (only bests count). The Worker
+  answers the same run posted again within 5 minutes (its answer lost on the way) as it was taken,
+  so it still says **New best!**. Pausing on the card (Esc, the pause button) puts it away with the
+  run, its time still on its way, and the pause menu is all that's left.
+- **What ends a run, quietly**: going back to the globe (**M**), another ride, another place (a
+  drop-in anywhere but the challenge's start), Go to or Join someone, and **pausing** (Esc, the
+  pause button, or anything else that pauses the drive, as a level-up's Garage does). The pause menu
+  then says "Challenge run stopped. Pausing ends a run, so a pause never counts." with **Retry the
+  challenge**; **Keep driving** instead is the end of that run, the word gone from the menu the next
+  time it's paused. **R** (back on the road) doesn't end it: it puts the car 4 m on at a standstill.
+  Why pausing ends a run rather than stopping the clock: a pause would otherwise be free time to look
+  ahead while Google's tiles load (they do while paused), and a timer that ran on through it would
+  count time nobody drove. So no pause is ever in a time, and none can be had from one.
+- **The time is the game's own clock**: the frames' steps the car was driven by, from GO to the
+  last pass (main.js gives the run the same `dt` it gives the Driver). Each step is 0.1 s at most,
+  so on a phone drawing under 10 frames a second the game runs slow and so does its clock: a slow
+  phone's time isn't made worse by its frame rate, and a time always fits how far the car went. The
+  page out of sight draws no frames, so its clock and the car stop together. Each pass is the clock
+  at the end of the frame that passed it, to the millisecond, and the time is the last pass's.
+- **Where it shows**: the HUD under the **Globe** button at the top left, clear of the speed (bottom
+  right on a computer, and on a phone on its side its low row in the middle at the bottom), the level
+  bar in the middle and the touch buttons in the corners; on a phone held upright it's narrower
+  there, beside the speed card in the middle (the test checks none of them overlap), and a touch
+  screen's XP pop-ups, at the top left too, move down under it while it shows. The countdown is big
+  in the middle; the finish card in the middle, shorter on a phone on its side (its buttons on the
+  screen: the test checks).
+
+### The kinds and their routes
+
+A route is laid out once, by the Worker, the first time its period's challenge is asked for
+(`makeRoute` in `src/drive-app/challenge-rules.js`), from the period's own random numbers, and kept
+in D1 as latitudes and longitudes (to 6 decimals, 10 cm): `{ start: { lat, lon, heading }, points:
+[ [ lat, lon ] ], radius, goal }`. Only the points' heights are the page's to find, on the ground
+it actually has.
+
+| | Earth: day | week | month | Moon: day | week | month |
+| --- | --- | --- | --- | --- | --- | --- |
+| Sprint: gates, m apart, turn | 6, 200-300, ±30° | 9, 250-380, ±35° | 14, 300-450, ±40° | 6, 280-420, ±55° | 9, 350-520, ±60° | 14, 400-600, ±65° |
+| Collect: stars, within m, apart m | 6, 260, 70 | 10, 450, 90 | 15, 700, 110 | 6, 350, 90 | 10, 600, 120 | 15, 900, 150 |
+| Landmark: from m off | 1,200-1,800 | 2,500-3,500 | 4,500-6,500 | 1,600-2,400 | 3,200-4,500 | 6,000-8,500 |
+
+A daily one is about 30 to 90 s for a good driver (a city's streets at 100 km/h or so, with the
+booster now and then: a daily sprint is about 1.5 km), a weekly one longer and a monthly one longer
+still. A daily is a sprint or a hunt for stars four times in five (a landmark's drive is the
+longest of the three), the others any of the three alike.
+
+- **A sprint** starts at the place, its first gate along the place's own road (a start spot's
+  `heading` is the way along its road) and each after turning a little from the way before. **Stars**
+  are anywhere in a disc round the place (as likely anywhere in it), apart from each other and at
+  least 60 m from the start. **A landmark** is the place itself, its goal ring at its pin, the start a
+  few kilometres back along the road it's on (on the Moon, any way), facing it.
+- **On the Earth**, Google's tiles have no roads in them: nobody can see the streets a route crosses
+  in advance. So what makes a route fair and fun there is that it's forgiving: gates follow the
+  start's road first and turn gently, a gate's zone is 30 m wide (a parallel street, a square, a car
+  park beside it passes), every ride can drive over what it meets (the stunts' bounce) or fly over
+  it (**F**), and the check against the fastest the game goes is on straight lines, so a run that
+  flies is no faster than the rules allow. A landmark's start is a pin like any other: the drop-in
+  finds the street (or the deck, or the sea's surface) near it. A gate's ground is found by rays
+  straight down from 9 km up, as the drop-in's is (spawn.js's `heightAt`), on whatever has loaded
+  there: nine of them, at its middle and at eight points round it 0.6 of its radius out (18 m for a
+  sprint's gate). The lowest they meet is its **ground**, where it's drawn and its zone's middle is
+  over: the street beside a tower rather than the tower's roof, which the one ray at its middle
+  would meet first (a start spot like the Strip's or Shibuya's is among towers). The highest is its
+  **top**, and its zone reaches up to that too, so it's passed on the roof as well, or on a bridge's
+  deck over the water it's drawn on. **A few rays a frame**: a tile's first ray builds its bounding
+  volume hierarchy on the main thread (src/raycast.js: 3 to 13 ms on a computer for 10,000 to 40,000
+  triangles, several times that on a phone, [above](#out-from-a-coast)), and a gate's rays reach
+  tiles the car's never do, so they're cast as the sea's look's are (`OPEN_MS`): one gate at a time,
+  and no more rays in a frame once they've taken 4 ms (`PROBE_MS`), the rest the next frame; none in
+  the frame the car arrives in. Only the gates within 800 m of the car are looked at (`PROBE_NEAR`:
+  a far one's tiles are coarse, so what a ray finds there is rough anyway, and its 320 m beam hides
+  that): the nearest not looked at yet first, then one every 0.2 s, so they move onto sharper tiles
+  as those load. One farther off shows at the start's height (its beam seen all the same) and is
+  passed across the ground alone till the car comes within 800 m of it. One over water is at
+  Google's water (or the sea's surface where it's laid). What can't be helped: a gate can be on a
+  building wider than 36 m (every ray meets the roof: it's drawn there, its zone reaching 60 m under
+  it), in a courtyard or among buildings with no street to it (fly), and a sprint can lead off the
+  road it started on.
+- **On the Moon** the ground is open, and its heights are the game's own (moon-height.js): exact
+  before any of its ground is built, the same in the Worker as in the page. So the page puts each
+  point on them at once, and the Worker **checks each route**, at its points and along its legs. No
+  point (and no landmark's start) on ground sloping 20° or more across ±15 m, craters under 30 m
+  left out (the car drives over those), so no gate is on a crater's wall; and each leg in its order
+  (a sprint's from the start through its gates, a landmark's from its start to it; a hunt's stars
+  are taken in any order, so its legs aren't known) looked along the straight line, its heights
+  every 25 m, each stretch of 100 m rising or falling 20° or more a fault (`legFaults`), so the way
+  from gate to gate isn't over a crater's wall or up a mountainside either. A steep point counts as
+  ten stretches (a gate on a wall is worse than a wall on the way, which can be driven round or
+  flown over). The place's own pin (a sprint's start, a landmark's goal) is where it is, the same in
+  every try, so it isn't counted: no faults means nothing could be better. A sprint or a hunt is laid
+  out up to 8 times and the one with fewest faults kept (`moonFaults` in
+  worker/drive/challenges.js; counting stops once a try has as many as the best so far). **A
+  landmark's drive**, with no road to come along, is tried from **every 5°** round it at one
+  distance (drawn from its range, in whole metres), from a bearing chosen at random (in whole
+  degrees), and the first with fewest faults kept: on rough ground the way in that's clear may be a
+  narrow window (at Shackleton's rim, 20° or so either way along the rim), which 8 bearings spread
+  round, as it was first, missed on 13 of the 1,664 drives below (one crossing 10 steep stretches up
+  and down Shackleton's wall where a way along the rim was clear). Each bearing is first only asked
+  whether its leg has any fault, looked for from the landmark's end, where its own crater wall or
+  mountainside is, so a leg that crosses one is told in a few reads; only where none is clear are
+  they counted. The Worker reads the Moon's heights from the site's own `/moon/height.bin` through
+  its `ASSETS` binding once per Worker instance (2 MB, 0.3 ms to read in Node); a point's check is
+  four looks at about 1 µs each, a sprint's 0.7 ms with its tries and legs (a monthly's too), a
+  landmark's 0.2 ms as a rule and 2 ms at most (Shackleton's rim), well within the Free plan's 10 ms
+  of CPU a request. Laid out for 24 of the Moon's places, each kind at a week's size, 9 of their 480
+  points were left on ground that steep (18 unchecked), on the roughest ground, where none of the
+  tries found better; for all 52 places, sprints and landmarks of each length, 20 of their 1,664
+  legs cross a steep stretch, 6 at most, all sprints' on Shackleton's rim and Mons Hadley, where
+  none of their 8 tries was clear (with the points alone checked, 50, up to 31 on one); and of the
+  landmarks the Worker lays out with its own random numbers for every place over 20 days, 8 weeks and
+  4 months (1,664 drives), 10 cross a steep stretch (7 at most), on Shackleton's rim and Mons Hadley
+  on days whose distance has no clear way in from any bearing, and none where another bearing at its
+  distance is clearer. The tests check all three.
+
+### How they're picked
+
+- **Periods** are the UTC day, the week from Monday (as the leaderboard's and the visit caps') and
+  the calendar month: `day:2026-11-16`, `week:2026-11-16`, `month:2026-11`. Each ends where the
+  next begins (midnight UTC, Monday's, the first of the month's).
+- **The rotation** goes round the places on each world: the game's featured places (on the Earth
+  the 12 start spots and the 5 places' pages with a pin of their own, the Eiffel Tower, the
+  Colosseum, Piccadilly Circus, Hollywood Boulevard and Copacabana; on the Moon its 52 places, the
+  spots and those its search finds) and the busy drop-in places the owner has approved. They're
+  shuffled afresh each time round (a round is as many periods as there are places: 17 days for the
+  Earth's dailies), sorted by an HMAC-SHA256 of the round and each place's id, and each period takes
+  the next (its own place): so each place comes about once a round. Two rules on top. **The three
+  live on a world are three places**: a period never takes the rotation's pick for a longer period
+  it's in (a day its week's or its month's; a week the month it starts in or the one it ends in, as
+  a week across a month's end is live beside both). **No place comes twice in a row**: a period
+  never takes the period before's pick. One whose own place is ruled out steps aside to the place
+  half a round on in the order, or the first free one after that, never the next or the last in the
+  order (the periods either side's own places); that place then comes twice that round, and the one
+  stepped from not at all. The period before's pick is only worked out where it could clash (at a
+  round's start, whose first may be the last round's last or its step aside, and where a period
+  steps aside anyway; anywhere else it's the order's last place or a step aside, never this one's
+  own), so working back stops within a few periods: a round's own places are all different, and
+  only the few its longer periods took make one step aside. The tests check both rules over three
+  years of days, ten of weeks and thirty of months on each world with four keys. The kind is an HMAC
+  of the period's key too, and so are the route's random numbers (of the period's key, the world,
+  the kind and the place: sfc32 from its bytes).
+- **The rules against what's fixed.** Worked out alone, the rotation's rules hold only while its
+  places stay as they are: approving or unapproving a place changes how many there are, and with it
+  each period's round, order and place, so what it would choose now for yesterday or this week isn't
+  what was fixed then; and an owner's pick for a week or a month is no rotation pick at all. So when
+  the Worker fixes a period from the rotation it keeps clear of **the places D1 has fixed**: those
+  of the other kinds live beside it (a day's week and month, a week's month, a month's week, by
+  whoever chose them) and the period before's of its kind, read with the owner's picks (one more
+  indexed read, only when a period is fixed); and of what the rotation alone would give a longer
+  period it's in that isn't fixed yet (a week across a month's end, the month it ends in), as
+  before. The periods to fix are fixed the longest first (the month, the week, then the day), each
+  clear of those fixed just before it. Places are the same to these rules by their ids where both
+  are the rotation's own, else by their names or pins within 1 km (an owner's pick of the Eiffel
+  Tower by its coordinates is the Eiffel Tower). Every instance reads the same rows, so they still
+  agree. The admin page's next six are worked out the same way, the longest first, each clear of
+  what's fixed now and of those worked out before it (on a Sunday, Monday's day clear of next week's
+  pick of yours, as it will be when the two are fixed together). A test
+  fixes a year of days as the Worker does, with the owner picking every third week and every other
+  month the place the rotation alone would give one of its days, and places approved and
+  unapproved on the way (the rotation alone would have clashed on 20 days or more of each): never a
+  day the one before's, nor any of the three live alike where the rotation chose the later; and the
+  Worker's own, through its routes, with a place approved and the owner's picks for a Tuesday and its
+  week: the Wednesday and Thursday clear of both; and a Monday whose week and day are fixed by the
+  same ask, the owner having picked for the week the place the rotation would give the day were it
+  fixed first: the day another place, as the admin page's next up said the evening before.
+- **The HMACs' key** is derived (HKDF) from the Worker's `TURNSTILE_SECRET` with a label of its own
+  (`world-drive challenges v1`), as the visit tokens' is: every Worker instance agrees (the tests
+  work them out in another process and get the same place, kind and route), and nobody without the
+  secret can work out next week's from the code.
+- **Only featured or approved places.** [Part 1's ranking](#for-challenges-the-most-dropped-in-places)
+  of where people drop in can be pushed by anyone with many addresses passing the robot check, so
+  nothing it ranks goes into the rotation by itself: the busy places that aren't the game's own are
+  a list the owner approves from.
+- **Fixed in D1 the first time it's asked for.** The first ask in a period (anyone's list, a time,
+  or the admin page) writes the period's challenges into D1, each from the owner's pick for it if
+  there is one, else the rotation's; two Worker instances doing so at once both insert, and the
+  first's row stays (a unique index on the period and world of live rows). From then on it's read,
+  never worked out: a later change to the rotation's code, the places or the approvals never changes
+  a live challenge (only those not yet fixed, which the admin page shows as they'd be fixed now), and
+  the rules keep clear of what it fixed.
+
+### The owner's controls
+
+On **`/admin.html`** (an account in `ADMIN_EMAILS`, as the rest of the page), under where people
+drop in, **Challenges**:
+
+- **Live now**: the six, each with where it came from (**rotation** or **yours**), how many drivers
+  have a time on it, the best and who, the time left, and **Change**. **Next up**: the six of the
+  next day, week and month, as they'd be fixed now (yours, or the rotation's, clear of what's fixed
+  now and of the longer ones next up). You know each place and kind ahead, not its route: that's
+  laid out as the period's first ask fixes it.
+- **Your picks ahead**: every pick of yours from the live periods on, however far ahead (Christmas
+  Day's, chosen in November), soonest first, each with its period ("· live now" for a live one), the
+  place and the kind, **Change** (the form set to it: picked in the list if it's live or next, else
+  as its day typed in with its kind beside it) and **Back to the rotation** (asked about first if
+  it's live, as below). The Worker lists them by ranges of their key from each kind's live period
+  on (2,000 at most, far more than the 400 days ahead a pick can be made for).
+- **Choose one**: a period (today's, this week's or this month's, live now, or the next of each; or
+  **another day** typed in, up to 400 days ahead, with **Its** day, week or month beside it), the
+  world, the kind, and the place: one of the game's places, a busy place you've approved, a busy
+  drop-in place of the last 30 days (part 1's top places that aren't the game's own, with their
+  visitor-days), or coordinates with a name, a region and the heading along its road if you know it.
+  A day typed in is the period (the list says "The day picked beside it"), and picking another in
+  the list clears the day, so the form never shows one period and saves another. **Save** keeps it
+  for that period and says which ("Saved for month:2027-01, the Moon."); **Back to the rotation**
+  drops yours ("Back to the rotation for ..."). For a period ahead that's all: it's fixed from your
+  pick when it comes.
+- **A live one** is asked about before anything's sent: **Save** for any live one, and **Back to the
+  rotation** for a live one of yours (one the rotation chose stays as it is: below). With times on
+  it: "This challenge is live, and 12 drivers have times on it. Changing it now changes what the
+  times mean, so it starts a new board; the old one is kept apart, with its places." With none yet,
+  it still turns away anyone driving it: "This challenge is live, though nobody has a time on it
+  yet. Changing it now turns away anyone driving it (their runs won't count), and it starts on a
+  board of its own." Each says which period and world. **Change it anyway** replaces it: the old one
+  is marked replaced, its board kept and given its final places at once, and a new one fixed from
+  your choice, with a board of its own (from nothing). Players' pages see the new one within a
+  minute (each Worker instance keeps the six that long); a time posted for the old one after that is
+  turned away ("This challenge is over (or the owner has changed it)"). The Worker asks too (409,
+  `live`) if times have come since the page looked, and the page warns then.
+- **Nothing to replace**: **Back to the rotation** on a live one the rotation chose leaves it as it
+  is, its board going on, whatever the rotation would choose now: it's the rotation's already, and
+  what it would choose changes under it (approving or unapproving a place reshuffles its order, as
+  a new version of its code could), which shouldn't turn away anyone driving it. Only a pick for it,
+  if there was one, goes. And a change that gives the live one again (a pick of the place and kind
+  it already is: the same route, as it's laid out from those; or **Back to the rotation** on one of
+  yours that the rotation would choose just as it is) leaves it as it is too, with no warning; only
+  whose it's said to be changes.
+- **Busy drop-in places for the rotation**: part 1's busy places that aren't the game's own, each
+  with **Approve** (into the rotation's places from the next period not yet fixed: it reshuffles the
+  rotation's order from then on), and those approved with **Unapprove**. A place is kept by its 1 km
+  cell, at the cell's middle, named as part 1 names it ("12 km NE of Lyon"); 100 a world at most.
+- Your own runs (with the owner's visits, `o`) are taken and answered with the place they'd have
+  ("would be #3"), but kept off the boards and out of their counts: you know each place and kind
+  before it's live, and choose them.
+
+### The boards, and what's kept
+
+In D1 (migration `0006_challenges.sql`):
+
+- `challenges`: each period's challenge on each world: `period`, `world`, `kind`, `place`,
+  `region`, `route` (the JSON above), `source` (`rotation` or `owner`), `starts_at`, `ends_at`,
+  `drivers` (how many players have a time on it, the owner's not counted), `created_at`,
+  `replaced_at` (the owner changed it while it was live) and `final_at` (when its final places were
+  written). A unique index on `period, world` for the live ones (`replaced_at IS NULL`).
+- `challenge_times`: each player's best on each challenge (`WITHOUT ROWID`, keyed by the challenge
+  and the player): `ms`, `passes` (when each point was passed: `[ [ index, ms ] ]` in the order
+  passed), `vehicle`, `run_id` (the page's own id for the run: 12 random bytes), `visit` (the id in
+  its token, as the scores log keeps), `owner` (1: set by the owner's visit, kept off the board),
+  `created_at` (when the best was set), `first_at` (when they first finished it) and `final_rank`
+  (their place once it's over: 1 the fastest; none for the owner's). Indexed by the board's order
+  (`challenge_id, owner, ms, created_at`), by player, and **uniquely by `challenge_id, run_id`**
+  (`challenge_times_run`): a run's id names one time on a challenge, and another player's post with
+  it (copied from a link to that run, say) is turned away (400, reason `run`), nothing of it
+  written.
+- `challenge_picks`: the owner's choices of a period's challenge (the place, its coordinates and
+  heading, the kind); `challenge_places`: the busy places approved, by cell, with their name.
+- `players.last_time_at`: a player's last time taken (one each 10 s; once their visitor's day is
+  used up, 10 s before the next midnight UTC, which holds them till then), apart from
+  `last_score_at` so a time never holds up a stunt score or the other way round.
+- `visits.times`: how many times each visit (the leaderboard's binding of a visit to its player)
+  has had taken: 100 at most (`CHALLENGE_TIMES_PER_VISIT`), so one robot check buys that many,
+  whatever addresses its token is sent from.
+
+A board is each player's best, quickest first (the same time: who set it first). The top 20, with
+names, the ⭐ and levels looked up as the leaderboard's are (a rename or a refund shows at once), and
+your own row with its rank, are kept in Cloudflare's cache as the leaderboard's boards are: a live
+challenge's board, the list's top threes and each player's own rows on the six **a minute**, so
+each of the six live boards is read from D1 at most once a minute in one of Cloudflare's locations,
+whoever asks; a **finished** challenge's board **a day**, as its times can't change (a name cleaned
+up on it, or a cheat removed, shows within the day where it was looked at, or at once after
+**Purge Everything** in the Cloudflare dashboard, which clears what the Worker keeps there
+everywhere; few look at an old board). A new best clears what it changes in that one of
+Cloudflare's locations; elsewhere they're at most a minute behind.
+
+**A rank** is found, never counted: each board's **order** (its first 1,000 times, quickest first,
+read from the board's index alone, as many rows as it has up to 1,000) is kept in Cloudflare's cache
+for 10 minutes (a finished one's a day), and a player's rank is where their time falls in it,
+found by halving: so their own row is one read by its key however far down they are (on the list,
+their rows on the six, six reads), and a board is read whole at most once in 10 minutes in a
+location, whoever asks, and again after a new best there (the time's answer reads it afresh, to
+give the new rank). Past the order's thousand it's "#1000+". Where your row is among the board's
+top 20 shown, its rank is the row's; on a finished board, your final place (`final_rank`). Ranks
+further down can be up to 10 minutes behind others' new bests made in other locations; your own
+new best is ranked at once (its answer, and the looks after it there).
+
+**Nothing is deleted.** Once a challenge's period has been over for a minute (`GRACE`: a run finished
+a moment before midnight is still taken in that minute, if it began before the end), the next ask
+that reads the six from D1 (each Worker instance does once a minute) writes each player's
+`final_rank` and its `final_at`, after its answer has gone (`ctx.waitUntil`: it's no part of a list
+or a time's answer, so it can't slow one or turn one into an error); a replaced one gets them as
+it's replaced. A time is written only while its challenge isn't finished or replaced, checked in
+the write itself (not just when its row was read, a few round trips before), so none lands after
+its final places. Its board stays, as it ended, at `/api/challenges/board?challenge=<id>`. A row is
+about 150 bytes: at a few hundred times a week it's a few megabytes a year, well under D1's 5 GB.
+
+**What achievements can rely on** (part 4: challenges finished, placed in): a player has finished a
+challenge when `challenge_times` has a row for it (`first_at` when), and placed in it once its
+`challenges.final_at` is set, at `final_rank` (`NULL` for the owner's runs, which aren't on boards).
+A challenge's period and kind are `challenges.period` (`day:` / `week:` / `month:`) and `kind`; one
+the owner replaced has `replaced_at` (its board was cut short: whether its places count is part 4's
+to say). Final ranks never change once written, and no time is written after them (a cheat's row
+deleted later leaves a gap rather than moving everyone up; see the SQL below). `final_at` comes
+within a minute or two of `GRACE` after the period's end (with the first ask after it). A player's
+challenges, finished and placed, are one indexed look (`challenge_times_by_player`):
+
+```sql
+SELECT c.period, c.world, c.kind, c.place, t.ms, t.final_rank, c.final_at IS NOT NULL AS over
+FROM challenge_times t JOIN challenges c ON c.id = t.challenge_id WHERE t.player_id = 'PLAYER_ID' ORDER BY t.first_at;
+```
+
+**Ghosts and links** (migration `0007_challenge_ghosts.sql`, [below](#ghosts-and-challenge-a-friend)):
+`challenge_times.handle`, each time's handle (unique on its challenge), `challenge_times.ghost`,
+whether its ghost is kept and one to race (0 none, 1 kept, 2 kept and plausible: what a board's
+rows and the list's race go by, so no ghost's row is read to rank a board), with the index
+`challenge_times_raced` of the times with one to race (the list's race: one row), `challenge_ghosts`,
+the best's ghost on each challenge for each player, kept while the challenge is live, and
+`challenges.ghost_bytes`, how much of them each challenge keeps (16 MB at most).
+
+### Ghosts and challenge a friend
+
+Most visits end after a minute. A ghost to beat gives a run a rival that's always there, and a
+friend's link brings someone new in with a reason to play past the first minute and a time to
+beat. Every challenge run is **recorded** as it's driven and posted with its time; the Worker takes
+the time only if the recording (its **ghost**) agrees with it, keeps the best's, and hands it to
+anyone racing it; and **"Challenge a friend"** shares a link to your best that opens the game on
+it, racing your ghost. The code is the challenges' own chunk's (`src/drive-app/challenges.js`,
+`challenge-ghost.js`, and `ghost-rules.js`, which the Worker shares): nothing of it is in the
+page's first load but the few lines `boot.js` needs to ask what a link is (below).
+
+**What players see.**
+
+- **A ghost car to beat.** A run races your own best's ghost by default (the run this page just
+  posted, or the Worker's, by the list's `me.run`); with no best of yours yet (a first run, which
+  is most visits' only one), the board's quickest plausible time's, by the list's top rows' one
+  `run` (the way round to follow, and a time to race: the Worker hands out the run of one row
+  alone, the quickest with its ghost kept and a time no quicker than twice the least its route
+  allows, below, so a made-up leader isn't the one every newcomer races); the one a friend's link
+  names; or that row's from the board (**Race their ghost** on it, not on yours). It's drawn as the others' cars are when driving
+  with others ([ghosts.js](#what-you-see-and-do)'s `ghostModels`, shared, so a ride's file is read
+  once for both): its ride in its Garage look, its wheels turning and steering as it goes (its
+  ride's own animation, fed its speed and turning from its samples), its name over it ("Your best",
+  "Ann Racer"), see-through within 8 m of your car or the camera, and nothing in it to hit (its
+  meshes' rays go nowhere, and nothing the car, the camera or the ground casts at is near it). Its
+  model is made light first (below). It waits at the start through the countdown and goes at GO, on
+  the run's own clock (the same steps the car is driven by), between its samples, so a run that's
+  level with it is beside it; after you finish it drives on to its own finish and waits there (a
+  slower one is seen coming in). A ghost asked for that can't be had (a friend's that a better time
+  of theirs has replaced, the Worker not answering) is said on the HUD as the run starts ("Ann
+  Racer's ghost couldn't be loaded, so this run is without it."), and the run goes on.
+- **Splits**: at each gate passed (a sprint's by its number, a hunt's stars by how many are taken),
+  how far ahead or behind the ghost you are there, on the HUD beside the clock for 3 s ("-1.2 s" in
+  green, "+0.8 s" in red), and on the finish card ("1.24 s quicker than your best", "0.80 s behind
+  Ann Racer's 0:21.40").
+- **Ghost** on the HUD (its one button, so it alone takes a press; on a phone held upright its icon
+  alone) hides it, or shows it again; kept in the browser (`world-drive.ghost`) for the visit's next
+  runs and the next visit's. Splits go on with it hidden.
+- **Challenge a friend**, on the finish card once the time's gone up (and for a run that isn't
+  your best, your best's link, by the handle the list said with your best or, if it didn't, the
+  board's own row the card shows), on your own row of a board, or beside "You're #42 of 130" when
+  your row is further down. It shares a link to your best,
+  `https://worlddrive.app/c?challenge=<id>&vs=<handle>` (its own path, `/c`, for its preview card:
+  below), with its words ("Beat my 0:21.40 on today's Furka Pass sprint in World Drive", "...on
+  this week's drive to Eiffel Tower...", "...on today's Tycho crater star hunt on the Moon...")
+  through the browser's own share sheet where it has one (a
+  phone's: messages, chats), else copies them ("Link copied!"), else shows them in a field picked
+  out to copy by hand. Closing the sheet without sharing does nothing more. Shared or copied is
+  counted for the [play stats](#play-stats) (`challenge: share`).
+- **A friend's link.** The page asks the Worker what it is (`/api/challenges/link`) as it starts,
+  beside the robot check, so it costs no wait: the visit waits for its answer at most `LINK_WAIT`
+  (4 s) after the check, to know its world, and one slower than that opens its card when it comes
+  (over whatever's going on, a drive paused as Challenges does), the visit's world the Earth for
+  want of knowing. The challenge's world is the visit's: **an Earth challenge spends an Earth
+  drive** as any page load on the Earth does, **a Moon challenge none**, the game opening in the
+  Moon-only mode (`moonOnly`, as a [link to the Moon](#going-there) does).
+  With today's Earth drives used up an Earth challenge's link shows the used-up screen, and **Drive
+  on the Moon** opens the Moon with the link's card, its Start saying **Needs an Earth drive**. The
+  globe comes up as for a link to a place, then the challenges' list with the link's card over it:
+  "Ann Racer's time to beat: 0:21.40 on the daily checkpoint sprint at Furka Pass, 5 h 12 m left."
+  and **Start: race their ghost** (a drop-in at its start, racing their ghost). The link leaves the
+  address once it's opened, the address back to the home page's `/` (a reload doesn't open it
+  again; a `?ref=` stays). The page reads a link the same at `/` (`/?challenge=<id>&vs=<handle>`),
+  without the preview card. A handle that names nobody (cut short in a message, or that player
+  removed) opens the challenge without a ghost and
+  says so ("That link's time wasn't found..."); a link to a challenge that's over shows its final
+  board, their time and place on it ("This challenge is over. Ann Racer finished ... #2 on its
+  board.") and **Today's challenges**; one to no challenge says so over today's. A link's page and
+  a run started from it are counted (`challenge: link`, `link_start`), so the owner can see whether
+  links bring people. On the test pad (maps off) a link's card shows too, its run raced, its time
+  not posted (as any time there).
+
+**Recording.** Each frame of a run (after the car's own step, before the passes), the car's model
+(its pivot, as drawn: continuous through a jump's take-off and landing, where the Driver's own
+`east`/`north` move to and from the middle of its box) is read for where it is and which way it
+faces, and every sample due since the frame before is found between the two, at 0, 100, 200... ms
+of the run's clock (`GHOST_EVERY`), and at the finish the last pass's time itself. Into arrays made
+once when the chunk loads (positions and turns for 4,097 samples, the packed numbers and a 48 KB
+buffer: 311,360 bytes, about 300 KB), so a frame allocates nothing. A run longer than 4,096 samples (6 min 49 s)
+drops every other one and goes on every 200 ms, and so on (`everyFor`): a two-hour run, the longest
+a time can be, is sampled every 3.2 s. At the finish it's put into the **ghost's frame**, the
+route's start on the world's ellipsoid at height 0 (east, north, up; as the scene's own frame is at
+a place, through the globe's own matrices), and packed (`packGhost`): a version, the interval, the
+count, then each sample's position as its second difference in centimetres (the change in its step:
+along a road a few centimetres) and its yaw, pitch and roll as their change in 1/1024 of a turn,
+each a zigzag varint. Measured: a run of 73 s driven on the test pad by a bot pressing the game's
+own keys (the physics' turns, braking and body roll), 4,416 bytes (5,888 characters as posted);
+a run of 4 min 44 s (twice round a loop of eight gates up and down the pad), 17,076 bytes (22,768
+characters); and on a path of a road's turns, a bump now and then, a minute 3.6 KB, five
+minutes 18 KB, two hours 21.8 KB (every 3.2 s), against `GHOST_BYTES`' 48 KB at most. The posted
+text is base64url: 33 % more.
+
+**Racing one.** Its numbers are unpacked once and put into this scene once as its run starts (a
+drop-in elsewhere near the same start is another scene: from the start's frame through the globe's
+matrices, so it's where it was, to the millimetre), then each frame it's placed between two samples
+and turned between their turns, its wheels turned, and its name tag moved: a few dozen numbers.
+**Its cost** is its model's own draws and triangles and no more, and the model is **made light**
+for it (`lighten` in challenge-ghost.js), once for each ride and look on a page: each material's
+still parts merged into one mesh (on the model, or on a wheel its ride's own animation turns,
+found by running that once; a mirrored part's triangles turned the right way round as it's merged),
+then **simplified** with meshoptimizer's simplifier (`simplifyWithAttributes`, in **a worker of its
+own**, `ghost-light-worker.js`: 54.7 kB, 19.5 kB gzipped with its WebAssembly, started with the
+first ghost raced, on neither the first load nor the challenges' chunk): it only takes triangles away, so every vertex left is one of the ride's own
+(its place, its normal and its place in its picture as the file has them), and it opens no holes.
+It stops at a tenth of a part's triangles, or sooner where a place would move more than 0.4 % of the
+part's size (the pickup's body: 2 cm, under which a panel's layers stay in their order) or a normal
+or, on a part with a picture, a picture's place would change much (a tyre's tread, finer than the
+triangles left, isn't stretched). Glass, decals and the underglow are left as they are, a ride's file's skinned meshes
+merged as their bones hold them; where WebAssembly can't run, or the worker can't start, the parts
+are only merged. **None of it holds the page up**: the page's own share (reading each part's
+vertices into one, in the carrier's frame) is done 8 ms at a time with the page's thread let go
+between (a frame drawn), and the simplifying, the long part (the pickup's body alone is a few
+hundred milliseconds on a computer, seconds on a phone), is the worker's, the arrays copied to it
+and handed back. Made in one task, as it first was, the pickup's held the page's thread for 1,037
+ms in the UI test (a frozen countdown, or, on a phone whose ride's file came late, a frozen run);
+in the worker, 180 ms at most while it's made (a SwiftShader frame drawn among it), the test
+failing past 400. **And never mid-race**: a ghost is raced from a run's start only if it's ready
+before GO; one whose data comes while a run is racing isn't even built (reading a ride's file is
+itself half a second here for the pickup's) till that run's done, and is raced from the next
+(Retry), so nothing appears, or is drawn for the first time, while you race. What's left of its
+cost falls before GO: building it (the pickup's file read, 0.5 s in SwiftShader, once a page) and
+drawing it the first time (0.6 to 0.8 s there, its shaders made; a phone's GPU makes them in a
+fraction of that). Measured
+(Chromium, SwiftShader): the pickup, the default ride, from 39 meshes and 219,049 triangles (its 79
+draws as you drive it, with its glass drawn both sides) to 25 and 89,552, ready about 9 s after
+Start in SwiftShader on a loaded machine (its file loaded and simplified, while its drop-in loads);
+close up from behind it looks as the whole model does (`challenges-ghost-pickup-close.png`); the
+go-kart, already light at 17,224 triangles in 132 meshes, to 34 meshes and 15,574 (its round
+parts' normals and edges kept). Its
+first light model merged vertices into cells of 10 cm instead (22,387 triangles), which smeared its
+pictures, opened holes in its tailgate and bent its shading across creases: the triangles a ghost
+saves aren't worth a broken-looking car, the one most races are against. A ghost of the pickup
+unlightened had doubled the frame's triangles (442,000 to 882,000, 79 draws more) and slowed
+SwiftShader's frame by a third; light, it's two fifths of your own car's in 25 draws. Drawing time
+in Chromium's software renderer on a loaded machine is within its noise either way (the UI tests'
+medians by turns shown and hidden; headless, frames are paced at 16.4 ms either way).
+
+**What the Worker checks** (`ghostFault` in ghost-rules.js, after `checkPasses`, before anything is
+read of the player or written; a 400 with `reason: 'ghost'` and the fault):
+
+- `form`: a ghost (base64url, 48 KB at most packed, this version, no number longer than four bytes,
+  no more samples than 4,097, no byte too many or too few, no sample further than 60 km from the
+  start or 20 km up or down) sampled at the interval its time should be (`everyFor( ms )`: one
+  sampled more coarsely, where a corner could be cut between samples, is refused), and **no more
+  than 10 bytes a sample** on average (`GHOST_DENSITY`, and 8 for its head): driving packs into
+  about six (a fair run in the test under seven, the bot's 73 s run 6.0, a crash or a jump more for
+  a moment), while one packed as densely as the speed rule lets it be (half a metre's jitter each
+  way every sample, its turns anything) takes about twelve, twice a real run's room of a
+  challenge's ghosts. Its count is
+  checked before anything of that size is made, so no post has the Worker make more than 4,097
+  samples' arrays.
+- `time`: as long as the time (`countFor( ms )` samples, the last at the time itself).
+- `start`: its first sample (the car at GO) within `START_SLACK` (100 m) of the start, as the first
+  leg's check has it.
+- `speed`: between any two samples no further across the ground, nor up or down, than `FASTEST`
+  (430 km/h, the fastest the game goes: [below](#how-cheating-is-limited-1)) covers in the time
+  between them, and 0.3 m for the rounding to the centimetre and the line between two frames
+  (nothing climbs or falls faster than it drives: a fall is stopped 200 m down, by then at about
+  63 m/s, and a hit's throw is 13 m/s). Past that, only the game's own jumps: **R** puts the car 4 m
+  on (`RESPAWN_AHEAD`; 5.5 m let off, for its model levelling as it does), and R with no way on, or
+  falling off the edge of the world, puts it back where it drove before (onto the path it drove,
+  however long before: within 4 m of a line between two samples of it; R goes back to where the car
+  last drove freely on the ground, a second or so before mostly, but **after a flight, where it took
+  off**, which can be minutes back: every ride can fly, a landmark's drive is 1.2 to 8.5 km, and
+  drive.js keeps the last free place only on the ground), up or down as far as that is. At most 4
+  such a run, and one more for each 15 s of it, 32 at most. A jump back is looked for from the most
+  recent sample back (where it nearly always is), as far back as the start, so a ghost's jumps cost
+  the check 32 looks at its 4,097 samples at most: about 130,000 lines measured against, under a
+  millisecond. (It looked only a minute back at first, and an honest run with a flight of over a
+  minute and then R was refused as too fast.)
+- `pass`: each point within its radius (and 3 m, `PASS_SLACK`: the model's middle is a little off
+  the point a pass is told by, in the air) at its pass time, between the samples either side of it,
+  or at a sample within one interval of it (a ghost that goes through a gate a second before or
+  after its pass says, or 3.5 m wide of its radius, is refused).
+
+A **new best's run id must be new** (400, `run`, for the best's own id with a better time): a run's
+ghost is kept, and cached, by its id, so it never changes.
+
+**What it can't stop.** A script can still make up a run that fits: a path at 430 km/h straight
+from gate to gate, its samples as the rules want them. It has to make a whole path now (not only
+the passes), one the board's other drivers will see driving through buildings at three or four
+times a good driver's speed if they race it; the jumps let off add at most 5.5 m each, 4 to 32 of
+them, and the 0.3 m a sample 3 m/s. Such a time tops the board. **Newcomers don't race it by
+default**: a first run races the one row the Worker hands out a run on, the quickest whose ghost is
+kept and whose time is at least twice the least its route allows along its passes (`PLAUSIBLE`;
+`least_ms` kept with the ghost, `leastTime`: the crow's way at 430 km/h, boosted all the way), so a
+run averaging more than half the game's top speed in a straight line, made up or flown that way, is
+on the board but not every newcomer's ghost. A made-up time slower than that (a straight line at
+215 km/h, or a path along the roads at a good driver's pace) still is the one newcomers race,
+until the owner takes it off; it's then a path a car could have driven, so what they race is at
+worst a fast drive.
+
+And **a real run can be posted again, a little quicker.** A ghost handed out is a whole run that
+fits the rules, its passes and its ride with it: a script that fetches one, scales its times by
+0.97 and posts it as its own (with its own visit, player and run id) is taken as a time 3 %
+quicker, the same line, ride and paint, and indistinguishable from a skilled run. Handing out fewer
+makes fewer templates: a board's rows (and the list's tops) carry their run's id on one row alone
+(the one raced from a board, above), your own and a link's (a link is its sender's to give). Leaving the passes out, or handing ghosts out coarser, wouldn't stop it: the passes come out
+of the path and the route (both public), and a coarser path filled in between its samples still
+fits. Nor does the Worker turn away a near copy by itself: two honest drivers can make the same
+path (the same ride held flat out along a straight route from the same start is the same line,
+and a time a few milliseconds apart), so a copy can't be told from that by the path alone, and a
+copier only has to move the path a metre to get past such a check. So it's the owner's to look at,
+and to take off the board (its ghost goes with it). The SQL below finds only **a naive copy**: a
+time whose passes are another's all scaled by one factor (two honest runs differ leg by leg). A
+copier who scales each leg differently (between 0.96 and 0.98, say) gets past it. For those, look
+at the suspect's ghost beside the one it may have been copied from while the challenge is live
+(both decoded with `readGhost`, each resampled by distance along its path, and compared point by
+point: a copy keeps the other's line to the centimetre, every bend and wobble; two honest runs of
+the same route are metres apart in places), or race it from the board. A copier who moves the path
+too can get past that as well; what's left is that a copy can only be as good as a real run, a
+little quicker.
+
+```sql
+-- The ghost of a board's fastest times (while the challenge is live: they're gone with its final
+-- places), with who and the ride: race it in the game from the board's Race their ghost, or decode it
+-- with src/drive-app/ghost-rules.js's readGhost.
+SELECT p.name, g.ms, g.vehicle, g.look, length( g.ghost ) AS characters, g.run_id
+FROM challenge_ghosts g JOIN players p ON p.id = g.player_id WHERE g.challenge_id = 42 ORDER BY g.ms LIMIT 10;
+
+-- Naive copies: pairs of the board's top 50 whose every pass is the other's scaled by the same
+-- factor (within 0.2 %), the quicker one's player first. A pair of honest runs differs leg by leg; a
+-- pair at a factor of 1 (the same pass times) may be two runs of a straight route held flat out. A
+-- copy scaled leg by leg differently isn't found by this (compare the two ghosts' paths: above).
+WITH top AS ( SELECT player_id, ms, passes FROM challenge_times WHERE challenge_id = 42 AND owner = 0 ORDER BY ms LIMIT 50 )
+SELECT a.player_id AS quicker, b.player_id AS slower, a.ms, b.ms AS their_ms,
+	MIN( CAST( pa.value ->> 1 AS REAL ) / ( pb.value ->> 1 ) ) AS least, MAX( CAST( pa.value ->> 1 AS REAL ) / ( pb.value ->> 1 ) ) AS most
+FROM top a JOIN top b ON a.ms < b.ms JOIN json_each( a.passes ) pa JOIN json_each( b.passes ) pb ON pa.key = pb.key AND pa.value ->> 0 = pb.value ->> 0
+GROUP BY a.player_id, b.player_id HAVING COUNT(*) = json_array_length( a.passes ) AND most - least < 0.002 * most;
+```
+
+**The handle** a link names a time by is the Worker's own: the first 12 bytes of an HMAC-SHA256 of
+`handle:<challenge id>:<player id>` under the challenges' key derived from the Worker's secret (as
+the rotation's and `CHALLENGE_LOOKS`' are), base64url (16 letters). Nobody without the secret can
+make one (so no link to a time that isn't), and it says nothing of who: the player's id is half of
+their credentials, and in a link would let anyone look them up on every board and follow them. It's
+**made once**, as the player's first time on the challenge is written, and kept with it in
+`challenge_times.handle` (a better time keeps it: `COALESCE` in the write), with a unique index on
+the challenge, so a link finds its time in one indexed look; and what's handed out (with each time
+posted, and your own rows: the list's and a board's `me.handle`) is the one kept, never worked out
+afresh. So the same player's link on the same challenge is always the same (one shared before a
+better run shows the better one), whatever happens to the secret since: changing
+`TURNSTILE_SECRET` (after a leak) reshuffles the rotation and the look keys, as it does, but links
+already shared go on working, and a new player's first time after it gets a handle under the new
+key. A link shows nothing of the sender but the name and time the board shows (and their run's id,
+12 random bytes the page chose, which its ghost is fetched by: it says nothing of anyone).
+
+**The link's preview card.** Chat apps show a link's title and description from the page's Open
+Graph tags, which a crawler reads without running the page. So a link has a path of its own, `/c`
+(`LINK_PATH`), and the Worker runs for it, `/api/*` and `/ads.txt` alone (`run_worker_first` in
+`wrangler.drive.jsonc`): the home page and every other page stay files served straight from the
+assets. (Running the Worker for `/` instead would make every page view a Worker request, and on the
+Free plan, once the day's 100,000 are used up, a path the Worker runs first for is answered with a
+429 rather than its file: the home page would be gone for everyone, Googlebot too, until midnight
+UTC. `/c` going that way leaves a link's page down, not the site.) `/c` is the home page's
+`index.html` (the page reads the link from the address wherever it is, and puts the address back to
+`/` as it opens it) with its `og:title`, `og:description`, `twitter:title`, `twitter:description`
+and `og:url` replaced through the HTMLRewriter (each tag written whole with `element.replace`, its
+words escaped by `escapeHtml` first: the HTMLRewriter's `setAttribute` escapes a quote but not an
+ampersand), from the link's own answer (`linkData`: in
+Cloudflare's cache, so a crawler costs a look at the cache, and a D1 read at most once a minute in
+a place): "Beat Ann Racer's 0:21.40 on today's Furka Pass sprint" and "A daily checkpoint sprint at
+Furka Pass (Swiss Alps) in World Drive, on till the end of Monday 16 November (UTC). Drive it in
+your browser and race Ann Racer's ghost." (or "...and beat it." when their ghost isn't kept, past
+the challenge's budget below, so the card promises no ghost there isn't); one that's over, "Ann
+Racer finished in 0:21.40 at Furka Pass" and that it has ended, with their place. **When it ends,
+not how long is left**: a chat app fetches a link's card once, as it's first posted, and shows it
+as long as the chat is there, so "5 h 12 m left" would still say so the next day; the page's own
+link card counts down. It's sent `no-store` (a time bettered or a challenge over shows at once). Anything that won't
+do (no such challenge, a look too many, D1 not answering, the Worker failing) is the page as it is:
+the page always opens. The cost: one Worker request each time a link is opened or previewed, held
+to `CHALLENGE_LOOKS`; nothing for anything else.
+
+**What's kept, and for how long.**
+
+- `challenge_times.handle`: each time's handle, made with its first and kept with the time
+  (forever, as the boards are).
+- `challenge_ghosts`: the best's ghost on each challenge for each player (`challenge_id`,
+  `player_id`, `run_id`, `ms`, `passes`, `vehicle`, `look`: the ride's Garage look as a room takes
+  it, `checkLook`'s parts alone, `ghost`: the text as posted, `bytes`: its length, and `least_ms`:
+  the least time its route allows along its passes), written with the time in the same
+  batch, only where the time is now this run's, so it's always the best's, **replaced with it**. A
+  foreign key to the time with `ON DELETE CASCADE`: a cheat's time taken off the board, or a player
+  removed, takes the ghost. **Deleted for a whole challenge as its final places are written**
+  (`finishQueries`: a minute or two after its period ends, or as the owner replaces it): nothing
+  races a finished challenge, and a link to one shows its board instead. Nothing of an address, an
+  account or an email in either.
+- **At most 16 MB of ghosts a challenge** (`CHALLENGE_GHOST_BUDGET`, characters, which are bytes:
+  base64url), counted in `challenges.ghost_bytes` in the same batch as each is written (and let go,
+  when a better one replaces it; set to 0 as the challenge finishes). **The quickest are kept**: a
+  new best's ghost that wouldn't fit lets the slowest kept go, slowest first, till it does (only
+  ghosts slower than it; up to 64 looked at, one read of as many rows by the index on `( challenge_id,
+  ms )`, only while the challenge's ghosts are full; their times' `ghost` set to 0, their `bytes`
+  taken off the count and the rows deleted in the same batch as the time and its ghost are written,
+  each found **by its key**, the challenge and the player, and only if it's still slower: a post
+  reads a row or two of the ghosts however many a challenge keeps. (Round 2's let its eviction's
+  clause into the statements every post runs, which SQLite answered by reading every ghost slower
+  than the new time, twice: 3,531 rows for a new best on a challenge keeping 1,240, against 45 now,
+  which the test pins.) Whether there's room is worked out once, as the time is written, into its
+  own row (`ghost`), and the rest goes by that, so the ghost is written exactly when its time says
+  it's kept); only a new best that would be
+  the slowest kept is taken without its ghost (nobody can race it, and its link has no ghost:
+  "Start", not "race their ghost"). The largest ghost the rules take is about 64 KB of text (48 KB
+  packed: a sample's numbers each at the most the speed rule lets them be, its turns anything, for
+  4,097 samples), against about 4.8 KB of text a minute of a real run (3.6 KB packed), so a script
+  posting the most a /48 can (300 a day) of the largest could otherwise have stored 19 MB a day, and
+  from ten /48s filled D1's 500 MB (the Free plan's for a database, after which every write fails:
+  new players, times, sign-ins, passes bought) in under three days. With the budget the six live
+  challenges keep 96 MB of ghosts at most, whoever posts what. What's left: slow runs posted to fill
+  a challenge's budget (about 260 of the largest, 6 min 49 s each: a robot check, a player and a
+  visit each) are let go one by one as quicker bests come, so they keep no leader's or newcomer's
+  ghost out; while it's full, though, a time slower than every kept one has none, until quicker
+  times have pushed the filler out or the challenge ends (a weekly's or monthly's period, not just
+  a day). **Quick made-up ghosts** are another matter: a made-up run a little quicker than most
+  honest ones is kept ahead of them, so about 16 MB of them keeps every slower honest best's ghost
+  out (those players lose their own best's ghost and their link's) until the owner removes them.
+  `GHOST_DENSITY` (above) holds each to about the room of a real run of its length, so on a monthly
+  of runs of a few minutes that's about 400 to 600 made-up runs of 3 to 5 minutes (each a robot
+  check, a visit and a player: 20 to 30 days of one /48's 20 new names a day), rather than half as
+  many packed twice as densely. If it happens: the SQL below takes their players off, and the
+  recount gives the room back. The owner can take a script's players off (the SQL below) and
+  recount. On Workers Paid (10 GB a database) the budget can be raised in the dashboard.
+- In Cloudflare's cache: a run's ghost by its run, 30 days (`GHOST_KEPT`: it never changes); a
+  link's answer as a board is (a live challenge's a minute, its player's new best clearing it in
+  that place; a finished one's a day).
+
+**The Worker's routes** (with those [below](#the-workers-routes)):
+
+- `POST /api/challenges/time` takes `look` and `ghost` too (the body 69 KB at most: 2 KB, the
+  ghost's 65,536 characters and 1 KB of look), and answers `run` (the best's) and `handle`.
+- `GET /api/challenges/link?challenge=<id>&vs=<handle>`: `{ challenge: CHALLENGE + { replacedAt,
+  finalAt }, vs: { name, ms, vehicle, run, ghost, date, level, title, supporter?, rank? } | null }`
+  (nothing of whether it's the owner's time: the name and the time alone) (`ghost`: whether it has one kept; `rank`: their final place, once it's over; `vs` null
+  for a handle that names nobody, or isn't one). 404 for no such challenge, 400 for a challenge that
+  isn't a number.
+- `GET /api/challenges/ghost?challenge=<id>&run=<run>`: `{ run, ms, passes, vehicle, look, ghost }`,
+  404 when that run isn't a best with a ghost kept (bettered, or the challenge finished; not kept in
+  the cache, so asked again it's asked of D1, which `CHALLENGE_MISSES` holds), 400 for one that
+  isn't a run's id.
+- The list's and the board's `me` have `run` and `handle` (the one kept with the time); of a
+  board's and the list's top rows one alone has `run` (its ghost to race): the quickest with its
+  ghost kept and a time at least `PLAUSIBLE` (2) times its `least_ms`, none if none is, as each
+  time's own row says (`challenge_times.ghost` 2, set as its ghost is written and cleared as it's
+  let go), so a board's miss reads its 20 rows and their players, 41 rows, with or without ghosts
+  kept (a `LEFT JOIN` of the ghosts, as round 2 had it, made it 61, which the test now refuses).
+- The list has `race` for each challenge too: **the quickest time with a ghost to race, wherever it
+  is on the board** (as a row, with its `run`), or null; what a newcomer's first run races. One row
+  of `challenge_times_raced`, an index of only the times with one to race, and its player's, cached
+  with the list: so three made-up quick times without a ghost to race at the top (or with ghosts
+  not kept past the budget) don't leave newcomers with nothing to follow, as choosing from the top
+  three alone did.
+
+Both new routes are held as the boards are: `CHALLENGE_LOOKS` (60 a minute) first, then those that
+miss the cache and read D1 `CHALLENGE_MISSES` (10 a minute), by the keyed hash of the address (an
+IPv6 one by its /48), never the address. **So is every time posted** that gets as far as reading D1
+(its body, its visit token and its ghost's form checked first): each is one of its address's
+`CHALLENGE_MISSES`, shared with its lists and boards, asked before the challenge's row is read, as
+a post reads D1 (the challenge, the player, the visit, the best, the gap: about nine rows) before the
+gap, the visit's times or the visitor's day can turn it away. A page posts once a run (again only if
+its answer's lost), never near ten a minute; a script resending a good body, which before read nine
+rows each of `CHALLENGE_LOOKS`' 60 a minute (777,600 rows a day from one address), is held to ten.
+
+**What it costs.**
+
+- **The page**: the challenges' chunk from 23.40 kB (9.39 kB gzipped) to 45.98 kB (18.29 kB
+  gzipped; 6 kB of it making a ghost's model light; 44.62 and 17.69 before its work moved to a
+  worker), and meshoptimizer's simplifier in the ghost-light worker, 54.69 kB (19.50 kB gzipped),
+  fetched with the first ghost raced, its stylesheet from 9.17 kB (2.41) to 11.39 kB
+  (2.85), fetched when they're first opened (or a link's page opens them); the page's first script
+  12.84 to 13.42 kB (5.00 to 5.21 gzipped: asking what a link is, as it starts); the game's chunk
+  1,120.47 to 1,121.13 kB (344.64 to 345.10 gzipped: the ghosts' models shared, the hooks, three
+  play stats' words). Nothing of the ghosts, the splits, the sharing or the link's card is in the
+  first load (the build's test checks).
+- **A run**: recording, a few numbers a frame; racing, one light model's draws and triangles
+  (above) and a few dozen numbers. Making the model light, once a ride a page, as the run is got
+  ready, while its drop-in loads (the pickup's ghost ready about 10 s after Start in SwiftShader on a
+  loaded machine, its file read and simplified), off the page's thread (above).
+- **D1, per time posted**, by workerd's own count (`meta.rows_written`, every row and every index
+  entry, the test measuring it): a player's first time on a challenge 16 rows (the visit's binding,
+  the gap and the visit's count, the time and its five indexes, the ghost and its three, and the
+  challenge's counts, its drivers and its ghosts' room, in one write), a new best 14 (the old ghost
+  let go too), a time that
+  isn't one 2 (the gap and the visit's count, as before ghosts); a new best that lets slower
+  ghosts go (only while the challenge's are full) writes 2 more and deletes those it lets go (16 in
+  the test, letting one go). The challenge's counts (its drivers, its ghosts' room) are one write
+  however they change, and the time's row says whether its ghost is kept (its new index entry is
+  the one more a time to race writes). **Reads**, by `meta.rows_read`, on a challenge keeping 1,240
+  slower ghosts: a first time 28 rows, a new best 45, one that isn't 22, one the gap turns away 9;
+  a new best that lets one go 190 (makeRoom's look, 64 ghosts by their index and their rows, D1
+  counting both). The rank in the answer is found in the board's order kept in Cloudflare's cache,
+  **the new best put into it there** (`placeIn`) and kept again for the rest of its 10 minutes (so
+  never more than that behind the bests posted in Cloudflare's other places): before, every new
+  best read the board's order afresh, up to 1,000 rows (1,045 rows for a new best then). Storage: a ghost is about 4.8 KB of text a minute of run (3.6 KB packed); only the live challenges' bests are kept, 16 MB a challenge
+  at most (above; at a few hundred bests a day, a few megabytes), deleted as each challenge
+  finishes. Reads: a ghost once in 30 days a place per run (one row), a link's answer once a minute
+  a place (the challenge, the time by its handle, its player: about four rows). What one address can
+  cost is still bounded by `CHALLENGE_MISSES`' 10 misses a minute, posts among them: a miss of
+  either new route reads at most four rows, a post nine (45 for one of the few new bests the
+  visitor's day allows), less than a board's ([what one address can cost](#what-challenges-cost)).
+- **The Worker's CPU**: the check is written to be cheap on its first call, as on an isolate just
+  started (the text decoded by `atob` and a plain loop, its numbers in one pass into one array, the
+  speed rule in squared centimetres, a jump back looked for from the most recent sample back).
+  Measured in Node on a loaded machine (4 cores, a load of 4 to 5 from other tests), a fresh process
+  each time: a fair 5 minutes (24,027 characters) 3 to 9 ms the first call and 1.5 to 3 ms after
+  (before: 9 to 42 and 3.4 to 5.7); a ghost made to be slow to check (400 s, 26 jumps each back to
+  where it drove most of a minute before, on ground it hasn't driven since) 8 to 22 ms the first call
+  and 2 to 4 ms after (before: 24 to 44 and 5 to 9); looking for a jump back as far as the start
+  (since round two), a 409 s ghost with 31 jumps each back to its start, found only at the end of
+  each look, 2 to 5 ms the first call and 1 to 2 after, within the same noise as one with none. A
+  daily's minute is well under 1 ms warm. So a
+  fair run's check fits the Free plan's 10 ms of CPU a request; the worst a crafted ghost can do on
+  an isolate's first request is have its own post turned away (error 1102), nobody else's. The test
+  checks a five-minute monthly's under 10 ms.
+- **Workers Paid**: all of it within what's included, as the rest of the challenges are.
+
+**How it's tested.** `npm run test:drive-worker`: the ghost's frame where 3d-tiles-renderer's object
+frame puts a point, to the millimetre, on the Earth's ellipsoid and the Moon's sphere; packed and
+unpacked as it was (angles the short way round), the interval doubling past 4,096 samples, and
+everything that isn't a ghost refused (not base64url, too long, another version, cut short, a byte
+too many; and, each in a ghost whole and well made but for it, so it's that check that turns it
+away, a count past the most, a number written in five bytes, a place 60 km off, 20 km down);
+`ghostFault`'s every fault (a ghost of another interval, a sample short or a time longer, its
+first sample 150 m off, a gate passed nowhere near, a dash at twice the speed with fair passes, a
+jump of 20 m, up and down 20 m a sample) and what it lets off (R's 4 m on, four in a run of 10 s, a
+fifth refused; back onto the path; both together; a fall at the Earth's gravity to 60 m/s, one of
+200 m stopped and put back up); a pass at its pass time give or take a sample (half a sample late
+taken, a second early or late refused, though the path goes through the gate) and within its
+radius and `PASS_SLACK` (3 m: half a metre inside taken, half a metre outside refused); a jump back
+onto the path half a minute, 65 s and 90 s back taken; R in the air after a flight of 40 s to 200
+s (a landmark's drive of 8 km) putting the car back where it took off taken, the same jump back to
+60 m off the path refused; bytes for a minute, five and two
+hours, and the time to check five minutes' (under 10 ms); by workerd's own D1 count (wrangler's
+`getPlatformProxy`), what a time posted writes (a first 16 rows, a new best 14, one that isn't 2)
+and how long the cache keeps each (a board's order 10 minutes, a live link's answer a minute, a
+finished one's a day, a ghost 30 days); and against the Worker under wrangler: the migration on top
+of 0001-0006 (the handle and its unique index, the ghosts' table with its `bytes` and `least_ms`,
+its index by time, its foreign key cascading from the time, the challenges' ghost count, nothing of
+an address), a time with its ghost and look (only the
+Garage's parts kept), its ghost fetched by its run and then from the cache, a slower run changing
+nothing, a new best under the best's own run id refused, a new best's ghost replacing it and the old
+run's gone; every bad ghost refused with its fault and nothing written or counted (not one, too
+big, missing, too fast, not through a gate, not as long as the time); the ghosts' budget (counted
+as each is written and replaced; past it a new best taken without its ghost and the old one's room
+given back; room again, the next kept; and over D1's SQL in Node with the budget room for three:
+three slow runs filling it, a quicker best letting the slowest go and kept, one slower than every
+kept one taken without its ghost and nothing let go for it, the count always the kept ghosts' bytes;
+a made-up leader, a second a gate over the crow's way at top speed, kept and on top, and the board
+handing out the next row's run alone, the quickest plausible one); the handle (the same as this process works out with the
+secret, another with another secret or challenge, nothing of the player in it or in the link's
+answer; the one kept handed out by the list, the board and a post, kept by a new best, and a link
+by it still answering: as after the secret's changed), the link's answer from the cache after, a
+new best clearing it, the list's and the board's own `run` and `handle`, a handle that names nobody
+(or isn't one) none, one row's run (the quickest plausible: not Bea Fast's on top, a second a gate
+over the crow's way) and its ghost by it, no other row's run; the link's answer saying nothing of
+whether it's the owner's; the link's page at `/c` (its card's title and description with the time,
+place and period, escaped, when it ends and not how long is left: a daily's, a weekly's and a
+monthly's last day, "beat it" for a time whose ghost isn't kept, a place with
+markup in it text in its tags, the link its address, the rest of the page as it is; no challenge,
+one that isn't, a place's link: the page as it is), the home page with the same link the file as it
+is (the Worker not run for it: `run_worker_first` is `/api/*`, `/c` and `/ads.txt`), and its answer from the
+cache; the two routes held to `CHALLENGE_MISSES` from one /48 (ten answered, the rest 429, the
+cache's still answered, another /48 too); a time posted one of them (past them a 429 before D1 is
+touched, one asked a post); what a post reads by D1's own count on a challenge keeping 1,240
+slower ghosts (a first 40 rows at most, a new best 60, one that isn't 30, one the gap turns away
+12: no slower ghost looked at, the rank from the order kept with the new best put into it), one
+letting the slowest go (by its key: its time's `ghost` 0, the count what's kept), a board's miss
+with every row's ghost kept 41 rows at most and the list's 52, the list's race the quickest ghost
+to race eleven rows down (the ten above not plausible); each time's `ghost` agreeing with the
+ghosts kept after every post of the budget's test (the made-up leader's 1, kept but not raced);
+`placeIn` (the new best in its place, the old out, 1,000 at most, one past them left out); a ghost
+packed denser than 10 bytes a sample refused (`form`); and yesterday's challenge's link (over, their final
+place, the ghosts gone and none counted, its page's card saying so). `npm run test:drive-ui`: a run
+posted with its ghost (as the Worker checks it), and the booster fired under the finish card every
+frame from the line (put out every frame, the car only slowing), each sample where the car's model
+was at its time (between the frames either side of it, to 5 cm: a recorder taking each frame's own
+place is metres off, 3.9 m in the test); racing your own best (from Retry:
+at the start till GO beside you, see-through, nothing in it to hit, its name over it, its wheels
+turning; splits ahead at each gate and on the card; it drives on to its finish and waits there;
+its draws its own light model's and no more, by turns shown and hidden, fewer than your own
+kart's triangles in a few dozen meshes (the kart, 17,224 triangles, keeps 15,574: its round parts'
+normals and edges kept); the button hiding it, kept: another page, the next visit, racing it from the Worker's by
+the list's run, hidden from the start); a run that doesn't count (no badge, nothing posted, no
+ghost of it raced from Retry); a first run racing the ghost of the list's one row with a run (a
+made-up leader above it without one), and the list's race (three made-up quick times on top
+without one, row 7's raced); a friend's ghost answered only once the run's racing not built or
+shown while it races, then raced from Retry; the pickup's ghost close up (89,552 triangles in 25
+draws, its normals the file's, a picture: `challenges-ghost-pickup-close.png`), made light without
+holding the page's thread more than 400 ms (a timer's beat and the long tasks while it's made:
+180 ms at most here, 1,037 when it was made in one task); a friend's
+ghost that can't be had said on the HUD; challenge a friend (the card's button through a
+share sheet stubbed, with its words and the Worker's handle at `/c`; a sheet closed, nothing; copied
+where there's none; a field to copy where neither; your own row of a board; the row with a run (not
+the first, a made-up leader's without one) racing their ghost; after a run that isn't your best, the link by the list's handle, or the board's); a
+friend's link on the test pad at `/c` (its card, the address back to `/` without the link, their
+ghost fetched by its run and drawn where their run was, on the ground and in sight, the splits and
+the card); one answered 6 s late, its card opening then; a handle naming nobody, a challenge that's
+over, none at all; an Earth challenge's link asking for an Earth drive, and with them used up the
+Moon opening with its card needing one; and a phone upright and on its side and a computer (the
+card, the HUD with its split and button clear of the driving buttons, the finish card with its link,
+all on the screen). `npm run test:drive-moon-ui`: a Moon challenge's link at `/c` with today's Earth
+drives used up (the visit the Moon's, no Earth drive asked for, no used-up screen; their ghost raced
+on the Moon, the split, the time posted with the Moon visit and a ghost the Worker would take).
+`npm run test:drive-seo`: none of it in the first load. Pictures with `TEST_SCREENSHOTS`
+(`challenges-ghost-*.png`, `challenges-share-*.png`, `challenges-link-*.png`,
+`challenges-moon-4-link.png`, `challenges-moon-5-link-finish.png`).
+
+### The Worker's routes
+
+- `GET /api/challenges?id=<player>`: `{ now, challenges: [ { id, period, key, world, kind, place,
+  region, route, startsAt, endsAt, total, top, me } ] }`, `top` the board's best three (`{ rank,
+  name, ms, vehicle, date, level, title, supporter? }`) and `me`, with a player's id, their `{ ms,
+  rank }` (and `owner: true` for the owner's) or null. The first ask in a period fixes its
+  challenges. A rank is at most 1,001: past the board's first thousand (the page's "#1000+").
+- `GET /api/challenges/board?challenge=<id>&id=<player>`: `{ challenge, total, rows, me }`, the top 20
+  of any challenge, live or past (`challenge` with its `replacedAt` and `finalAt`); 404 for none.
+- `POST /api/challenges/time { id, secret, visit, challenge, run, ms, passes, vehicle, look, ghost }`:
+  `{ ms, rank, total, isNewBest, top, run, handle }`, `ms` the player's best, `top` the board's five
+  (with `owner: true`, and the rank it would have, for the owner's), `run` and `handle` the best's
+  run and what a link to it names it by ([ghosts](#ghosts-and-challenge-a-friend): the time is taken
+  only with a ghost that agrees with it, 400 `{ reason: 'ghost', fault }` otherwise). The same run posted again within 5 minutes of its being
+  taken (`REPOST`: the same `run` and `ms` as the best kept; its answer was lost and the page tried
+  again) is answered as it was taken (`X-Time-Cache: hit`), from Cloudflare's cache, where the answer
+  was put as the time was taken for those 5 minutes (in another of its places, the first one asked
+  there is worked out and put there): nothing written, counted or read again of the board, however
+  often and from wherever it's posted. Later than that it's a post like any other (the gap, the
+  visitor's day) and not a new best, so the same run can't be had answered over and over for
+  nothing. 400 `{ reason: 'run' }` for a run's id that's another player's on the board, or a new
+  best under the best's own. 429 `{
+  retryAfter }` for one inside a player's 10 s, `{ retryAfter, reason: 'daily' }` once the
+  visitor's day is used up (till midnight UTC), and `{ retryAfter, reason: 'visit' }` once the
+  visit's 100 are (till it runs out: "That's all the times one visit can post. Reload the page to
+  post more.").
+- `GET /api/admin/challenges` and `POST /api/admin/challenges { action: 'pick' | 'unpick' | 'approve'
+  | 'unapprove', ... }`, ADMIN_EMAILS only (401 signed out, 403 anyone else, 429 past
+  `ADMIN_LOOKS`' 30 a minute), as above; GET's `picks` are the owner's from the live periods on,
+  however far ahead, each with its `startsAt`, soonest first.
+- `GET /api/challenges/link` and `GET /api/challenges/ghost`, a link's answer and a run's ghost:
+  [above](#ghosts-and-challenge-a-friend).
+
+Every one is checked as the others are: same-origin and JSON for a change (index.js), sizes (a time's
+body 69 KB at most with its ghost, an admin's 2 KB), types and values (400), and held to a rate: the lists, the
+boards, the links, the ghosts and the times to **`CHALLENGE_LOOKS`** first, before anything's read (Cloudflare's rate
+limiter, 60 a minute by address: no Durable Object request, and a page asks a few times a minute at
+most); and those of the lists and boards that find something missing from Cloudflare's cache and
+are to read D1 (a board's rows, the list's tops, a player's own rows, a board's order), and every
+time posted that gets as far as reading D1, to
+**`CHALLENGE_MISSES`** too, asked once a request just before that first read: **10 a minute** by
+address, room for a page's list, all six boards, a time and the list again, while what the cache has is
+answered past it all the same (429 `{ retryAfter: 60 }` past either). An address is **an IPv6 one
+by its /48**, as the [drop-in places](#where-people-drop-in) count a visitor: a /48, which a free
+tunnel broker hands out, holds 65,536 /64s, each of which would otherwise have limits of its own.
+Neither is given an address as it is: each is counted by an HMAC of the day and the address under a
+key derived from the Worker's secret (`lookKey`), so its key for an address changes each day and
+says nothing of it, as DriveLimits counts by a hash with the day's salt (without asking DriveLimits
+for the salt, which would be a Durable Object request a look). A time is then held to one each
+10 s from a player, **100 from a visit** (`CHALLENGE_TIMES_PER_VISIT`, `visits.times`: each visit is
+a robot check, so that's what one buys, whatever addresses its token is sent from) and **300 a day
+from a visitor** (`CHALLENGE_TIMES_PER_VISITOR_DAILY`, counted in DriveLimits as the leaderboard's
+scores are, a hash of the address with the day's salt, but an IPv6 one by its /48), the admin
+page's to `ADMIN_LOOKS`. The 10 s and the visit's count are claimed first, together in one
+transaction (a write of `last_time_at` only while the visit has times left, then its count only if
+that write was made), and the visitor's day asked of DriveLimits after, so when DriveLimits says
+the day's used up, the player's `last_time_at` is set so their 10 s runs out at midnight UTC (and
+the visit given back the try it took): until then each of their tries stops at that first claim,
+which writes nothing, and never asks DriveLimits again. (The leaderboard's scores do the same with
+`last_score_at`, and still count a visitor by the /64.)
+
+### How cheating is limited
+
+The run is the page's, so the Worker can't see it driven; as for [scores](#how-cheating-is-limited),
+it makes cheating cost something and keeps the boards believable (`postTime` in
+worker/drive/challenges.js):
+
+- **A visit token of the right kind.** A time is only taken with a token `/api/visit` handed out:
+  for an Earth challenge, an Earth visit (`e`, one the Earth's caps let through) or the owner's
+  (`o`); a Moon visit (`m`, which costs nothing but a robot check, and one turned away by the caps)
+  posts the Moon's alone (403, reason `world`). A token forged, changed, run out (6 hours) or
+  another player's is a 403 (`visit`): one visit posts for one player, as for scores. So every time
+  comes from a visit that passed Turnstile, and an Earth one from one of the day's capped drives.
+- **A player**, by the leaderboard's id and secret (403, `player`).
+- **So many from a visit, a player and a visitor**: 100 times from a visit (each a robot check),
+  one each 10 s from a player, 300 a day from a visitor (an IPv6 one by its /48) (429; above).
+- **A live challenge only**: its row read from D1 (not the minute-old list) and taken only while
+  it's in its period, not replaced and not yet finished, or in the minute after its end for a run
+  that began before it (403, `challenge`).
+- **A run the game could drive** (400 otherwise), checked against the route as it's kept
+  (`checkPasses` in challenge-rules.js, which the page checks too before it posts): every point
+  passed once, a sprint's gates and a landmark's goal in their order, collectibles in any; the
+  times never going back, and the run's time the last pass's; no longer than the visit has lasted
+  (with 30 s to spare for clocks) nor two hours; and **each leg no quicker than the fastest the game
+  goes** allows: from within the last point's radius (the first leg from within 100 m of the start,
+  `START_SLACK`, where the drop-in may have found the street) to within the next's, as the crow flies
+  along the ground, at **430 km/h**, less 100 ms a leg (a frame at its longest, `LEG_SLACK`: a pass
+  is seen at the end of the frame it happened in).
+- **430 km/h, worked out from the game.** The fastest any ride goes is its top speed boosted: the
+  booster pushes up to twice a ride's top speed (`BOOST_SPEED` in src/drive.js), and the fastest
+  ride's is the hypercar's 215 km/h (src/drive-app/cars.js). Nothing else goes faster along the
+  ground: a drift's mini-turbo is at most 1.5 times the top speed and a landed trick's burst 1.25
+  (`DRIFT_BOOSTS`, `TRICK_BOOST`), a boost pad only fills the booster, flying goes at the ride's own
+  speed, a hit keeps 85 % of the speed along the wall, R stops the car 4 m on, and going downhill or
+  falling adds nothing along the ground (drive.js keeps the upward speed apart). So `FASTEST` is
+  215 × 2 / 3.6 = 119.4 m/s (`TOP_SPEED`, `BOOSTED` in challenge-rules.js), and
+  test-drive-worker.mjs reads `BOOST_SPEED`, the drift and trick boosts, Shift's own boost (a third
+  more) and every top speed written where rides are tuned (drive.js's tuning by name, the kart's,
+  the cars', every file in `rides/`, whatever is added there) from the game's own files, and finds
+  each ride the game offers (the kart, `DRIVE_CARS`, `PASS_RIDES` and the library's, as the Worker
+  takes them) its top speed as the game tunes it, failing if any is missing or faster.
+- **Only bests are kept**, one per player per challenge: a slower time changes nothing (and the page
+  doesn't post one: it shows the board instead).
+- **A run's id is one time's**: another player's post with a run id that's on the board already is
+  turned away (400, `run`), so a link to a run can't be made to show someone else's; and a new best
+  is a new run (its ghost is kept by its id).
+- **The run itself agreeing with its time**: its [ghost](#ghosts-and-challenge-a-friend), posted
+  with it, through each point at its pass time, as long as the time, from the start, and never
+  faster between two of its samples, across the ground or up and down, than the fastest the game
+  goes (R's few metres and its putting the car back where it drove in the minute before let off, a
+  few a run).
+- **The same run posted again** is answered as taken only within 5 minutes, from the cache; after
+  that it's a post like any other, so it can't be used to have a board read over and over without
+  the 10 s gap or the visitor's day.
+
+**What this can't stop.** Someone who reads the code can post a made-up run that fits the rules: a
+straight line between the gates at 430 km/h is three or four times what a good driver manages on a
+city's streets, so the rules let through far faster times than anyone drives (and its ghost, made
+up to fit as well, is a whole path now, one anyone racing it sees: [ghosts](#ghosts-and-challenge-a-friend)),
+and someone with a real run's ghost (the leader's, or a link's) can post it again a little quicker
+(the same section: what it can't stop, and SQL that finds such copies). The checks keep the
+impossible out; what's merely unlikely is the owner's to look at. A day's run at the top of a board
+by a wide margin, with legs all at about the same speed, is the sign: the SQL below works out each
+leg's speed from the route and the passes kept.
+
+### Looking after them
+
+In the Cloudflare dashboard → Storage & Databases → D1 → **world-drive** → **Console**, as for
+[the leaderboard](#looking-after-it). Times are milliseconds; live boards are cached for a minute, a
+finished one's for a day (**Purge Everything**, under Caching → Configuration, shows a change to
+an old board at once).
+
+```sql
+-- What's live, and what's been: each challenge, its board's size and whether it's over.
+SELECT id, period, world, kind, place, source, drivers, datetime( ends_at / 1000, 'unixepoch' ) AS ends, replaced_at IS NOT NULL AS replaced, final_at IS NOT NULL AS over
+FROM challenges ORDER BY id DESC LIMIT 20;
+
+-- A board: its fastest, with who and their run's passes.
+SELECT p.name, t.player_id, t.ms, t.vehicle, t.passes, t.owner, t.final_rank, datetime( t.created_at / 1000, 'unixepoch' ) AS at
+FROM challenge_times t JOIN players p ON p.id = t.player_id WHERE t.challenge_id = 42 ORDER BY t.owner, t.ms LIMIT 30;
+
+-- The fastest runs of the last week, with their passes and their route, to work out their legs'
+-- speeds: a good driver on city streets is well under 150 km/h; 430 is the most the rules let through.
+SELECT c.id, c.place, c.kind, p.name, t.ms, t.passes, c.route
+FROM challenge_times t JOIN challenges c ON c.id = t.challenge_id JOIN players p ON p.id = t.player_id
+WHERE t.created_at > ( strftime( '%s', 'now' ) - 7 * 86400 ) * 1000 ORDER BY t.ms LIMIT 50;
+
+-- One player's times everywhere.
+SELECT c.period, c.world, c.place, t.ms, t.final_rank, t.visit, datetime( t.created_at / 1000, 'unixepoch' ) AS at
+FROM challenge_times t JOIN challenges c ON c.id = t.challenge_id WHERE t.player_id = 'PLAYER_ID' ORDER BY t.created_at DESC;
+
+-- Take a cheat's time off a board, and count its drivers again (its final places, if it's over, are
+-- left as they are: a gap where the cheat was).
+DELETE FROM challenge_times WHERE challenge_id = 42 AND player_id = 'PLAYER_ID';
+UPDATE challenges SET drivers = ( SELECT COUNT(*) FROM challenge_times WHERE challenge_id = 42 AND owner = 0 ) WHERE id = 42;
+
+-- Or remove the player and everything of theirs, their times included (players' ON DELETE CASCADE).
+DELETE FROM players WHERE id = 'PLAYER_ID';
+
+-- Then count the live challenges' ghosts again (their times' ghosts went with them, uncounted), so
+-- their room is back for the next bests' ghosts. (After deleting ghosts by hand, without their times,
+-- also set those times' ghost to 0, so no board hands out a run whose ghost is gone:
+-- UPDATE challenge_times SET ghost = 0 WHERE ghost > 0 AND NOT EXISTS ( SELECT 1 FROM challenge_ghosts g
+-- WHERE g.challenge_id = challenge_times.challenge_id AND g.player_id = challenge_times.player_id );)
+UPDATE challenges SET ghost_bytes = ( SELECT COALESCE( SUM( length( ghost ) ), 0 ) FROM challenge_ghosts g WHERE g.challenge_id = challenges.id ) WHERE final_at IS NULL;
+
+-- How full each live challenge's ghosts are, of the 16,777,216 characters each may keep.
+SELECT id, period, world, place, ghost_bytes, ( SELECT COUNT(*) FROM challenge_ghosts g WHERE g.challenge_id = challenges.id ) AS ghosts FROM challenges WHERE final_at IS NULL;
+```
+
+A route's length as the crow flies is what the challenges' list says of it ("6 gates · 1.5 km"); a
+run's average speed is that over its time, and each leg's its distance (the points are in `route`)
+over the time between its passes. Removing a player, or the owner's choices and approvals, needs nothing
+else: the live boards catch up within a minute (ranks further down within 10), a finished one's
+within a day, or at once after a purge of the cache.
+
+### What challenges cost
+
+- **The page.** Nothing new in its first load but the two buttons, the hooks main.js calls and the
+  word while driving: the game's chunk 1,117.93 to 1,120.47 kB minified (343.62 to 344.64 kB
+  gzipped: +1.02 kB), the first stylesheet 27.68 to 28.25 kB (6.33 to 6.41 kB gzipped), the page's
+  first script unchanged but for an export the chunks share (12.77 to 12.84 kB). The challenges' own
+  chunk, 23.4 kB (9.4 kB gzipped) and its stylesheet 9.2 kB (2.4 kB), come only when **Challenges**
+  is first pressed (the build's test checks none of them is in the page or the game's chunk).
+- **Drawing.** Two draws for a route of any length: the beams in one instanced mesh (both sides in
+  one pass) and the rings or stars in another; 456 triangles a gate (a ring of 432 and a beam of
+  24), so a monthly's 14 gates are 6,384 triangles. Measured on the test pad in Chromium's software
+  renderer (SwiftShader, no GPU, on a machine shared with other test runs), at 1280 × 800 and 390 ×
+  844, the gates shown and hidden by turns: drawing 0.4 to 0.9 ms a frame either way, the two within
+  0.1 ms of each other (the noise), and the run's own work each frame (its passes, its HUD, the stars
+  turning) 0.01 ms. The HUD writes into the page only what has changed (the arrow to the degree, the
+  distance to the metre), and nothing but the time once a run's done; turning stars re-place only
+  the stars.
+- **The gates' rays down, on the Earth.** Nine a gate, only for those within 800 m of the car, a
+  gate at a time and no more in a frame once they've taken 4 ms, none as the car arrives (above).
+  On the test pad with the first ray into each 25 m square made 20 ms slower (as a tile's first ray
+  is, building the hierarchy of one of Google's bigger tiles, or a smaller one's on a phone), a
+  monthly hunt's 15 stars up to 700 m round its start took 135 rays, 48 of them slow, over 61
+  frames: never two slow ones in a frame, and no ray in a frame once those before it there had taken
+  4 ms (at most 23 to 26 ms of rays in one: a slow ray's 20 and the few before it), and all 15 on
+  the ground 4 to 6 s after the drop-in ended, in SwiftShader's few frames a second (a phone's 30
+  to 60 would take a second or two); a 16th star 1,300 m off isn't looked at while the car waits at
+  the start, and is once it's within 800 m. (The test checks what the budget bounds, not the
+  milliseconds, which a loaded machine stretches.) Cast as they were before (all of them as the car
+  arrived, then one gate every 0.2 s wherever it was), those 48 slow rays would have been one frame
+  of about a second as the run began, and a gate kilometres off looked at again every few seconds,
+  its tiles' hierarchies built for rays the car's never needed. After the first look, one gate's
+  nine rays every 0.2 s: on tiles already hit, a few thousandths of a millisecond each.
+- **The Worker and D1.** Each Worker instance keeps the six live challenges for a minute, and
+  Cloudflare's cache keeps the list's tops, the live boards and each player's own rows for a
+  minute, a finished board for a day and each board's order for 10 minutes, so a list view reads at
+  most: the six challenges (once a minute an instance), each board's top three, its one to race
+  and its count (50 rows) when the cache has none, and a player's own rows on the six (six reads by
+  their key: 12 rows by D1's count). A board view reads its top 20 and their players (41 rows) and the player's
+  own row (2). **A rank** is found in its board's order, read whole (as many rows as the board has,
+  1,000 at most, from its index alone) at most once in 10 minutes in a location, whoever asks (a new
+  best there is put into the order kept, not read afresh). The test measures it in workerd's own D1 (`meta.rows_read`) on six boards
+  of 1,240: the list for a player at the bottom of all six read 12 rows, a board's own row 2, and
+  the first look, reading the six orders, 6,060 (counting the rows ahead, as at first, a list read
+  6,012 every time, so a script asking as each of its own players in turn read that on every ask).
+  The first ask in a period writes its new challenges (one to six rows) and reads the owner's
+  picks, the approved places and the periods before's six; finishing a challenge writes its board's
+  final places once. A time: the challenge's row, the player, the visit's binding (a write the first
+  time), the best, `last_time_at` and the visit's count (writes), the best again (a write only when
+  it's better), the top five, its rank in the board's order kept (a new best put into it), and one
+  DriveLimits request; the same run posted again within 5 minutes reads those first four and the
+  answer kept in Cloudflare's cache, nothing of the board. At today's 300 visits a day, with every
+  one opening the list a few times and a fifth posting a few times each, on boards of tens, that's a
+  few thousand rows read and a few hundred written a day: a tenth of a percent of the Free plan's 5
+  million reads and 100,000 writes, and a few hundred of its 100,000 Durable Object requests (which
+  the visits and driving with others share). The once-a-visit word while driving asks for the list
+  once (cached as any list is).
+- **What one address can cost, whatever it asks.** Everything that reads D1, the looks and the
+  times posted alike, is one of 10 a minute from an address (`CHALLENGE_MISSES`; an IPv6 address by
+  its /48), and what the looks can make it read is bounded by the cache besides, whoever asks: each
+  live board's rows once a minute in a location, the list's tops once, a finished board once a day,
+  a board's order once in 10 minutes. So asking for boards, past boards, lists for players or
+  players that aren't, or posting times, in turn, costs an address at most about 6 × 41 rows for
+  the live boards, 50 for the list and 3 × 12 for players or posts a minute (a post the gap turns
+  away reads 9), 332 rows, about 478,000 a day; the 300 new bests a /48's visitor may post a day
+  read 45 each instead (about 10,000 more), or 190 while a challenge's ghosts are full and each lets
+  one go (about 53,000 more): about a tenth of the Free plan's 5 million at the very most. (Before,
+  posts weren't counted in `CHALLENGE_MISSES` at all, and each new best read its board's order
+  afresh: resending a good body at `CHALLENGE_LOOKS`' 60 a minute read 777,600 rows a day, each of
+  the 300 new bests about 1,040 more, and each read every slower ghost kept on its challenge twice,
+  well over 1.5 million a day from one /48. Before that, past boards asked for in turn read 41 rows
+  each, and lists as a script's own players 6,000 each, at `CHALLENGE_LOOKS`' 60 a minute from every
+  /64 of a /48: hundreds of millions a day.) A board's order, read whole, is a cost of the board's
+  size, not of who asks: on six boards of 1,000 (thousands of players a day) a location reads at
+  most 6,000 rows each 10 minutes, 864,000 a day; at boards of 100, 86,000. Times written: by D1's
+  own count (every row and index entry), a new best with its ghost writes 14 rows (a player's first
+  on a challenge 16, with the visit's binding; one that lets a slower ghost go 16), one that isn't 2
+  (`last_time_at`, the visit's count), and asks DriveLimits once; any post can be a new best by
+  shaving a millisecond, so a script's are 14 each. A visit posts 100 at most (one robot check buys
+  about 1,400 rows written) and a visitor 300 a day (about 4,200 rows written, 4,800 if each is a new
+  player's first, and 300 DriveLimits requests from a /48 a day); past that each of its players
+  costs one more try (a write and a DriveLimits request, which holds that player till midnight) and
+  then nothing. It would take about 21 to 24 /48s, each with its three robot checks a day, to write
+  the Free plan's 100,000 rows, and over 300 to use its 100,000 Durable Object requests (and so
+  `/api/visit` for everyone). The ghosts those posts store are bounded apart from that: 16 MB a
+  challenge at most ([ghosts](#ghosts-and-challenge-a-friend)), 96 MB for the six live, of D1's 500
+  MB, whoever posts them. Before, with the visitor counted by its /64 and no count a visit, one
+  player with one robot check could post every 10 s from a new /64 all day: 46,000 rows written
+  and 8,640 DriveLimits requests.
+  **What's left**: those bounds are an address's, so a script with many addresses (many /48s, or a
+  pool of IPv4 addresses) gets them many times over, and each of its times still needs a robot
+  check per 100. If it happens, lower `CHALLENGE_MISSES` or `CHALLENGE_LOOKS` in
+  wrangler.drive.jsonc and set `CHALLENGE_TIMES_PER_VISIT` lower, and remove the script's players
+  (the SQL above: their times go with them).
+- **Workers Paid**: all of it is well within what the plan includes (50 million D1 rows written and
+  25 billion read a month, a million Durable Object requests).
+
+### How challenges are tested
+
+- `npm run test:drive-worker`: the fastest the game goes from its own files (`BOOST_SPEED`, the drift
+  and trick boosts, Shift's boost, every top speed written where rides are tuned and each offered
+  ride's own: it fails if one changes, or a ride's can't be found); periods turning over at
+  midnight UTC, on Monday and at a month's end (a leap year's February and a year's end too), and
+  their keys; routes laid out as their shapes say (the gates' spacing and first heading, the stars
+  in their disc and apart, a landmark's distance), the same from the same numbers; a time checked
+  (as fast as the game goes and a frame quicker taken, quicker refused; out of order, a gate missed
+  or twice, times going back, a time not the last pass's, fractions, too long; collectibles any
+  order); the rotation over 60 days on each world (no place twice in a row, never a day's its
+  week's or month's, every kind, another key another order, an approved place joining it) and its
+  rules over three years of days, ten of weeks and thirty of months with four keys (never twice in a
+  row; a day never its week's or month's, a week never either month it's in); and against what's
+  fixed, a year of days fixed as the Worker fixes them with the owner's picks of weeks and months
+  and places approved and unapproved on the way (fails if the rotation works its rules out alone); a
+  time written only while its challenge is open, checked in the write (`postTime` on D1's shape over
+  node:sqlite, the challenge finished between its check and its write: turned away, nothing kept); a
+  rank found in the board's order (read from the board's index alone, by SQLite's plan, 1,000 rows
+  at most, and no count of the rows ahead anywhere: the last of 1,201 "1000+", one further up
+  exact), and by halving (ties, the player's own old time left out, the owner's); **what a look
+  reads**, by workerd's own D1 count (`meta.rows_read`, wrangler's `getPlatformProxy`): six boards of
+  1,240, a list for each of 40 players at the bottom of all six in turn 24 rows at most (12), a
+  board's own row 6 at most (2), a finished board's its final place with no order read, kept a day
+  and a live one a minute (fails if a rank is counted, or the order isn't kept); a visit's times
+  (3 there) from four addresses, the fourth turned away (429, `visit`) writing nothing, a new visit
+  posting again, the visitor's day asked by the /48 and a try it turns away given back to the visit;
+  a run's id another player's turned away (a new row or a new best), nothing of it written;
+  `CHALLENGE_LOOKS`' and `CHALLENGE_MISSES`' key a keyed hash of the address and the day (the same
+  all day, not the next, an IPv6 address by its /48: every /64 of it the same, another /48
+  another); the Moon's routes off steep ground, at their points and along their legs (every Moon
+  place's sprints and landmarks: none with more than 6 steep stretches on a leg, few with any, far
+  fewer than with the points alone checked), and every place's landmarks as the Worker lays them
+  out over 20 days, 8 weeks and 4 months, none crossing more than a way in from any other bearing
+  at its distance would (fails with the 8 bearings tried at first); and against the Worker
+  under wrangler: the migration's tables (and nothing of an address in them, a run's id unique on
+  its challenge); six fixed in D1 at the first ask, the same on every ask and as
+  this process works them out with the same secret (place, kind, route, the Moon's checked on its
+  heights), a live one staying as fixed; times taken (only bests, the board in order with names and
+  levels, the list's tops and your own, a Moon challenge with an Earth visit) and every way of
+  cheating turned away (too fast, out of order, a gate missed, a time not the last pass's, longer
+  than the visit, bad bodies: 400; no visit, forged, another kind, someone else's, run out, the
+  wrong secret, an Earth challenge with a Moon visit, from another site: 403; another period's or
+  none: 403; a player's 10 s and a visitor's day: 429, with nothing kept, and past the day the
+  player held till midnight, the next tries writing nothing); the same run posted again answered as
+  taken from the cache, from any address, writing nothing, a burst of it from one address a 429,
+  another inside the 10 s still a 429, and the same run after 5 minutes a post like any other (the
+  gap claimed, not a new best); the owner's runs off the board and its count; the cache (a new best
+  clearing it) and `CHALLENGE_LOOKS`; yesterday's board kept with each player's final place (the
+  owner's none, written in the background), a run finished just before midnight taken in the minute
+  after and none later; the same at a week's turn (Sunday 23:59:50 to Monday 00:00:20, a new week
+  fixed, the month the same one, the old week finished and the month not) and a month's (30
+  November to 1 December, a new month, the week the same one, the three live on the Moon three
+  places); `CHALLENGE_MISSES` (from a /48's /64s in turn, boards that aren't and lists for players
+  that aren't, a miss each: ten answered, the rest 429; the cache's list still answered, another
+  /48 too); a visitor's day by the /48 (four times from four /64s, the fifth from another turned
+  away, the player held till midnight); the rotation clear of what's fixed through the routes (a
+  place approved and the owner's picks for a Tuesday and its week: the Wednesday and Thursday
+  neither the day before's nor the week's; fails if the rotation works its rules out alone); a
+  Monday's week and day fixed by one ask, the owner's pick for the week the place the day would
+  get were it fixed first: the day another place, as the admin page's next up said on the Sunday
+  (fails if the day is fixed first, or next up ignores the pick); and the admin routes
+  (ADMIN_EMAILS only;
+  picks ahead and back to the rotation, bad ones refused, a pick fixing its day when it comes; the
+  owner's picks listed however far ahead, soonest first; a live one changed only after the warning,
+  then a new board, the old one kept, finished and closed; back to the rotation on the rotation's
+  own, after a place is approved too, or a pick of what it already is, changing nothing; busy places
+  approved and unapproved, a hundred at most). The leaderboard's scores past a visitor's day hold
+  the player till midnight the same way.
+- `npm run test:drive-ui` (the Worker's answers made in the test): the list (loaded only when it's
+  opened, its chunk and routes looked for by what's served, not the checkout's path; this world's
+  first, the time left ticking, the top three and your best, a board; a board slow to answer, left
+  for another's, not shown under the other's title); an Earth challenge on the test pad (its start,
+  the countdown holding the car with the gas held, the keys card over the visit's first countdown
+  ("Get ready") and put away at GO, the gates found on the pad's ground, two draws for them
+  (counted as three.js draws them), the HUD's count and arrow, the gates driven through by steering
+  the car at them, the finish card and what was posted, its legs possible, the car brought to a
+  stop under the card and held there with the gas and the booster held down, in the game's own
+  time); a hunt for stars, **Retry** at the start, a pause
+  ending the run with **Retry** in the pause menu (room under it), **Keep driving** ending it for
+  good, the globe and another ride leaving it; no name yet (asked on the finish card, then posted)
+  on a landmark's drive (its start a pin "On the way to" it on the top bar, nothing of it added to
+  the recent places),
+  and **Retry** once it's ended (the list, saying why); a time that can't be posted for want of a
+  connection (kept, said so, posted when the browser's back online, once, with the ride it was
+  driven in though another's been picked since); **Retry** while a post that didn't get through
+  waits to be tried again (the same run's time and passes go up, the new run its own); Esc on the
+  finish card (the pause menu, the card and the run put away); a gate by a 120 m tower on the pad
+  (drawn on the street beside it, its top the roof, passed driving by on the street); a monthly's 15
+  stars with each first ray into a 25 m square 20 ms slow (never two slow rays in a frame, no ray
+  in a frame once those before it there had taken 4 ms, none as the car arrives, every star on the
+  ground soon after, and a 16th 1,300 m off not looked at till the car's within 800 m of it); a
+  period ending with the list open while
+  the Worker fails (three asks in 16 s, not one a second; the ended card over, its Start off); the
+  word while driving (today's place, its button opening the list, both counted, nothing of the chunk
+  loaded before); a phone upright and on its side (the first card and its Start on the screen as
+  the list opens, unscrolled; the HUD clear of the speed, the buttons and the level bar; the card on
+  the screen); and the admin page's part (choosing one by a featured place, by a day typed in with
+  today's still picked in the list (that day's saved, and said), and by coordinates a month ahead;
+  your picks ahead listed, each's Change setting the form to it, one back to the rotation from there;
+  a live one warned about before anything's sent, kept, then changed, one with nobody on it warned
+  about too; back to the rotation sent as it is and the Worker's warning shown; a busy place
+  approved).
+- `npm run test:drive-moon-ui`: with today's Earth drives used up, from **Drive on the Moon**: the
+  Moon's first, the Earth's needing an Earth drive (the used-up screen again), a Moon challenge's
+  gate on the Moon's own heights (where a ray down meets the ground built there, within a metre),
+  driven through and posted with the Moon visit.
+- `npm run test:drive-seo`: in the build, the challenges a chunk of their own, script and styles,
+  none of them in the page or the game's chunk.
+
+Pictures of each are saved with `TEST_SCREENSHOTS` (`challenges-*.png`).
+
+### The owner's steps
+
+Deploy (`npm run deploy:drive` applies `0006_challenges.sql` and `0007_challenge_ghosts.sql`
+first; the `CHALLENGE_LOOKS` and `CHALLENGE_MISSES` rate limiters, and the Worker running for a
+link's own path, `/c`, come with `wrangler.drive.jsonc`). Nothing else to set: the first ask fixes
+the day's six, from the rotation. To choose one, the admin page. A link's preview card can be
+checked after a deploy with a chat app's link inspector (or `curl -s
+'https://worlddrive.app/c?challenge=<id>' | grep og:`).
+`CHALLENGE_TIMES_PER_VISITOR_DAILY` and `CHALLENGE_TIMES_PER_VISIT` can be added in the dashboard
+to change a visitor's times a day (300) and a visit's (100), and `CHALLENGE_GHOST_BUDGET` a
+challenge's ghosts (16,777,216 characters).
+
+## Achievements and rewards
+
+Badges for what a player has done, and eight construction rides to drive for some of them: a
+reason to come back after the first minute (a skid steer after 10 km, a telehandler for three days
+in a row, a concrete mixer for a first challenge), and something to show for a challenge placed in
+(the vac truck for a weekly podium). The list and its rules are `src/drive-app/achievement-rules.js`,
+which the page and the Worker both import (as `challenge-rules.js` and `levels.js` are), so the page
+shows what the Worker counts. The Worker keeps what's earned (`worker/drive/achievements.js`,
+migration `0009_achievements.sql`), and checks a construction ride wherever it shows to others.
+
+### What players see
+
+- **The grid.** **🏅 Achievements** on the profile card (the globe's panel, under the level, with
+  "3 / 25"), and **Achievements** in a locked construction ride's note, open it: a dialog of badges,
+  three across on a computer, one on a phone held upright, each with its name, its one line ("Drive
+  100 km"), a bar and how far toward it ("10.5 / 100 km", "1 / 10 drives", "0 / 1 finished"; for a
+  place on a board, "On a weekly board"), and once earned "Earned 17 Nov 2026" in gold. One that
+  unlocks a construction ride shows it, with its picture: "Unlocks the vac truck", or once earned
+  **Drive the skid steer**, which opens the Garage on it. Its own chunk (`achievements.js` and
+  `achievements.css`, 3.6 kB and 2.8 kB), loaded the first time it's opened: nothing of it is in the
+  first load. Its one line of lead: "Badges for what you've done; some unlock construction rides."
+  What it shows is the Worker's (below) plus what this browser has driven since its last report:
+  that is added to the player's own count (their reports add to nothing else), no more of it than
+  the Worker will still take today (its answer's `left`), and the account's best is shown where
+  it's more (its answer's `counts` against `own`), so a count never runs ahead and falls back, on a
+  linked account too; before a nickname, this browser's own counts, nothing earned, and "Pick a
+  nickname to earn them: what you've driven counts when you do."
+- **Toasts.** As one is earned, "Achievement: 100 km driven"; for one that unlocks a ride, then
+  "Unlocked: Skid steer" with **Garage** (pausing the drive, the Garage on that ride, as a level-up's
+  ride does). One after another, about four seconds each (one with a button its whole seven, for
+  the tap), never over a challenge's countdown or run (they wait for its end), and never over another
+  toast that's up, such as the day's challenge nudge (they wait for it to go, as the nudge waits for
+  others): `showNotices` in `main.js`. A report goes out as the drive pauses, so they often come with
+  the pause menu open: paused, a toast sits at the foot of the screen, clear of the menu's **Keep
+  driving** (`levels.css`), so a tap meant for it never lands on one. Earned on another device, or
+  before this browser knew the player, they're not told again here; those earned meanwhile (a
+  challenge's places, written as its board ended) are told at the next visit. Before a nickname,
+  what this browser's counts reach of what the nickname's claim will keep (`CLAIM_TALLY`, below: the
+  first drive, 10 km, a first Moon drive, a first look, three rides; never 100 km, ten Moon drives or
+  days in a row, which take driving after the nickname) is told once ("Achievement: First drive ·
+  pick a nickname to keep it", with **Pick one**), and isn't told again when the claim earns it; the
+  rest are told when the Worker earns them, so nothing is promised that the nickname won't keep.
+- **Locked rides.** In the ride pickers each wears its achievement's chip ("🔒 10 km", "🔒 Weekly
+  top 3") where a level's car wears "Lv 8 · or Pass"; picked, it says "Finish a weekly challenge in
+  its top 3 to unlock the vac truck. See your Achievements." under the rides, and the ride doesn't
+  change. The Garage's tab has the chip, its banner "🔒 Finish a weekly challenge in its top 3 to
+  unlock" (no word on the pass, which doesn't give them), and a look picked on it says the same. A
+  ride saved before is the default ride until it's unlocked, as a level's car is. They come after
+  the cars and before the pass's rides in the pickers, so a new player's rows start with what they
+  can drive or earn by a level, and their pictures load only as their cards are scrolled near (a
+  browser's own lazy loading takes in a whole sideways row): none of them in the first load.
+- **Remembered here.** The achievements the Worker has said a player has are kept in this browser
+  (`progress.js`'s `heard.list`, only ever the Worker's word), so an earned ride is unlocked as the
+  page starts, before the Worker answers or if it can't, as a level's car is by the level kept here;
+  the Worker checks it wherever it shows to others all the same. Those told before the nickname are
+  kept apart (`heard.told`), only so they aren't told twice, never as earned: the Worker's whole list
+  settles them. Another player in the browser (a name removed, or
+  another picked) starts with none of them, until the Worker says. A ride unlocked during a party
+  shows to the others at once: the page says hello to its room again (as for a new title).
+- **A refused run.** A score or a challenge time posted in a construction ride the Worker doesn't
+  have as unlocked (a 403 with `reason: 'ride'`) says so with what unlocks it ("Drive 10 km to
+  unlock: scores in it go on the board once it is."); the visit goes on posting the rest.
+
+### The list
+
+25 achievements, in the grid's order. **Checked**: the Worker counts it from its own records.
+**Trusted**: only the page can say it (as it says what it drove for XP), so the Worker takes it within
+its caps.
+
+| Achievement | Goal | Counted from | | Unlocks |
+| --- | --- | --- | --- | --- |
+| First drive | Drive your first 250 m | km in progress reports | trusted | |
+| 10 km driven | Drive 10 km | km in progress reports | trusted | **Skid steer** |
+| 100 km driven | Drive 100 km | km in progress reports | trusted | **Wheel loader** |
+| 1,000 km driven | Drive 1,000 km | km in progress reports | trusted | |
+| One small step, Moon regular, Lunar legend | Drive on the Moon (1, 10, 50 times) | Moon drives (a drop-in there and 250 m driven) in reports | trusted | |
+| First challenge, 10 challenges, 50 challenges | Finish a challenge (1, 10, 50) | `challenge_times`: a time on the board | checked | **Concrete mixer** (1), **Dump truck** (10) |
+| Top 10, Podium, Winner | Finish a challenge in its top 10, top 3, first | `final_rank` on a finished board, any period | checked | **Bulldozer** (top 10) |
+| Daily winner | First on a daily | `final_rank` on a finished daily | checked | |
+| Weekly podium | Top 3 on a weekly | `final_rank` on a finished weekly | checked | **Vac truck** |
+| Monthly top 10 | Top 10 on a monthly | `final_rank` on a finished monthly | checked | |
+| Party time, Party regular | Drive in a party with someone else (1, 10 parties) | the party's room (`live.js`): another player there, or a guest from another address | checked | **Road roller** (1) |
+| New look, Stylist | Change a look in the Garage (1, 25) | Garage choices that change the look (not one picked again), in reports | trusted | |
+| Test driver, Collector | Drive 3, 8 different rides (250 m in each) | ride ids, in reports | trusted | |
+| 3 days in a row, A week in a row, 30 days in a row | Drive on 3, 7, 30 UTC days in a row | the days the Worker gave the daily bonus, by its own clock (never the streak a new nickname's claim brings) | checked (the days); the 250 m driven each day is the page's word | **Telehandler** (3) |
+
+The rides were mapped so that the first comes in a first or second session (10 km is about ten
+minutes), the next for coming back (three days running, a first challenge, a party), and the last
+for the challenges' boards. **The Supporter Pass gives none of them**: as with levels' titles, badges
+and level-only colours, which the pass doesn't give either, they come only by earning them, so
+supporters and everyone else earn them alike (`rideUnlock` in `vehicles.js` says `pass: false`).
+
+### Where each count comes from, and how it's bounded
+
+- **Trusted counts ride on the progress reports** (`POST /api/progress`, [levels](#reports-and-how-cheating-is-limited)):
+  the report's own km (already capped by the time since the last report, 450 km/h of it), and a new
+  `feats: { moon, looks, rides }` (Moon drives, Garage changes, the ids of rides tried, each since
+  the last report; `checkTallies`: whole numbers, ride ids the game offers, a 400 otherwise; a Garage
+  change is counted only when it changes the look, `garage.js`). The Worker adds them to the player's
+  `players.tallies` (JSON: `{ km, moon, looks, rides: [ ids ], streak, run, runDay, day, today }`),
+  each held to a day's worth (`TALLY_DAY`): 500 km, 10 Moon drives, 10 Garage changes and 4 new
+  rides a UTC day, whatever the reports say. So 1,000 km takes at least two days of a script (and
+  more than two hours of reports at the time cap), 25 looks three days, 50 Moon drives five. The
+  claim (a new nickname's first report, carrying what was driven before it) counts for XP as before
+  (an hour's km at most), but toward the achievements only `CLAIM_TALLY`'s 25 km, 2 Moon drives, 5
+  looks and 3 rides: a first hour's 10 km and its skid steer, never the 100 km's wheel loader, which
+  takes driving after the nickname. Reading and writing them costs nothing more: they're in the
+  player's row, read and written by the report's own statements.
+- **Days in a row** are the days the Worker itself gave the daily bonus (once a UTC day, by its own
+  clock): one more in a row after a bonus yesterday, else the first (`run` and `runDay` in the
+  tallies); the best is kept (`streak`), so an achievement stays when the run breaks. The streak a
+  new nickname's claim brings from before it (`days.streak`, the page's word) counts for the daily
+  bonus's XP as before, never for these: a claim saying 10,000 days earns no streak achievement and
+  no telehandler. A player's streak from before achievements (their tallies never written) counts at
+  their next report, but only as far as the Worker could have seen it (`fromBefore` in
+  `progress.js`): no more days than from the player's first (`created_at`) to the streak's last, since
+  the streak in their row may be a claim's (taken for XP, up to 10,000 days, before achievements as
+  now). A player made two days ago has three days in a row at most, with today's; a streak whose last
+  day is past keeps only that capped best, with no run to add to.
+- **Challenges finished** are counted where a player's first time on a challenge is written
+  (`postTime`, `finishedQuery`): whether their 1st, 10th or 50th time exists, found by the player's key,
+  never counting the rows. Times from before achievements are written the first time the player's grid
+  asks (`POST /api/achievements`).
+- **Placings** are written where a challenge's final places are (`finishQueries`, as its period ends
+  or the owner replaces it): `placingQuery` turns each final_rank (1 the fastest; the owner's runs,
+  kept off the boards, have none) into the placings it reaches, on any board or on that period's. The
+  page has no way to name a place: nothing it sends is read for them. Boards finished before
+  achievements have no placings (their final ranks are there; the console below writes every
+  placing from them, the weekly podium's vac truck among them).
+- **Parties** are counted by the party's room, for each player there (not guests) who has someone
+  else with them: another player, not of their own account, or a guest connecting from an address
+  none of the player's own connections there comes from (`partied` and `companion` in `live.js`;
+  `/api/live` hands the room the challenges' keyed hash of the address's /48 and the day, never the
+  address, and nothing of it is kept). So one person in two tabs, with a nickname or without, is no
+  one else. Each party is counted once (`creditParty`, after the answer), both for whoever made it
+  and whoever joined, and not again as a page reconnects or the player goes back to it: the row
+  keeps the last 10 parties counted (`players.party_marks`), each as a short HMAC of the player's id
+  with the party's code under a key derived from the Worker's secret (the challenges' `seed`,
+  `keyedHex`), never the code. Keyed, because party codes are few enough (32^7) that anyone with a
+  copy of the table could otherwise hash every code for each player and find who drove together;
+  without the secret they can't. An area's room counts nothing.
+- **Earned** as each count passes its target (`crossed`): written in the report's own batch, only
+  if the report's update was the one taken (the player's time is the report's), one row an
+  achievement a player (`achievements`, `ON CONFLICT DO NOTHING`).
+
+### Following the player
+
+As levels show an account's best player, achievements are the account's: a player linked to an
+account (Google or a username and password, `accounts.js`, `logins.js`) has every achievement any of
+the account's players has earned, and the grid's counts are the most any of them has of each. So
+signing in on a second device and picking a nickname there brings the first device's achievements
+and rides, and what's earned on the second shows on the first, both ways. Each row stays the player's
+own (the owner's counts are players'), and each player's caps are its own. Before a nickname, nothing
+is kept but this browser's counts; the nickname's claim carries them.
+
+### The construction rides
+
+From the construction app's library (`public/library/`), driven as the pickup is (library items,
+`works.js` for World Drive's names, words and tuning): `models.js` stands each with its lowest point
+on the ground at its real size (the library's), and `drive.js` drives it. They're published with the
+World Drive site beside the pickup (`vite.drive.config.js`, `WORKS_RIDES` in `catalog.js`), loaded
+only when one is driven or looked at in the Garage (or driven by someone in your room), and their
+pictures were drawn once for World Drive the way the cars' are (`node scripts/drive-car-thumbs.mjs
+--works`, into `drive/public/works/`, committed), rather than the library's own (some on grey, some
+on nothing, each from its own angle).
+
+| Ride | Model (`public/library/`) | Source | Size | Download | Triangles | Top speed | Handling |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Skid steer | `skid-steer-loader-cad.glb` | our own CAD model | 3.1 × 1.8 m, 2.0 m tall | 218 kB | 32,900 | 30 km/h | Tiny and quick to turn; skid-steered, so it spins on the spot (110°/s standing) |
+| Telehandler | `telehandler-10k-stowed.glb` (boom stowed) | our own | 8.7 × 2.6 m, 2.6 m tall | 81 kB | 11,800 | 40 km/h | Long and steady, wide turns |
+| Concrete mixer | `concrete-mixer-truck.glb` | "Concrete Mixer Truck" by doty_aecom, CC BY 4.0 | 8.5 × 2.6 m, 3.8 m tall | 422 kB | 44,300 | 90 km/h | A road truck: slow away (2.2 m/s²), rolls on, wallows and shakes when it hits something |
+| Road roller | `roller-single-drum-84in.glb` | our own | 6.0 × 2.3 m, 3.1 m tall | 461 kB | 62,200 | 22 km/h | The slowest of all, barely thrown up by anything |
+| Wheel loader | `wheel-loader.glb` | "Wheel Loader" by doty_aecom, CC BY 4.0 | 8.3 × 2.8 m, 3.5 m tall | 371 kB | 31,500 | 45 km/h | Bends in the middle, so it turns tighter than its length (lock 42°) |
+| Dump truck | `articulated-dump-truck.glb` | "Articulated Dumptruck" by doty_aecom, CC BY 4.0 | 10.8 × 3.5 m, 4.1 m tall | 422 kB | 41,800 | 55 km/h | Six wheels and articulated: heavy, wide, shaking the most when it hits something |
+| Bulldozer | `crawler-dozer-20t.glb` | our own | 6.6 × 3.4 m, 3.3 m tall | 597 kB | 84,000 | 20 km/h | Tracks: grips hardest, turns on the spot (45°/s standing), slowest away (1.6 m/s²) |
+| Vac truck | `hydrovac-truck.glb` | our own | 11.1 × 3.8 m, 3.8 m tall | 456 kB | 55,200 | 95 km/h | Big, red and long: turns widest of them (85°/s at walking pace) |
+
+**How they were chosen**: the smaller file of each kind, nothing named after a maker, and each
+reading clearly as itself from the chase camera. The project's own CAD models (no licence to honour)
+where there's one, and three of doty_aecom's (CC BY 4.0, credited in `public/library/CREDITS.md`, the
+About box and under the picker, as the pickup is) for a wheel loader, an articulated dump truck and
+a concrete mixer. Left out: the motor grader (2.8 MB, and its credit names a real maker's model), the
+off-highway haul truck (1.9 MB, a real maker's machine by name, which `catalog.js` already keeps out),
+the Sketchfab skid steer (1.2 MB, against the CAD one's 218 kB), the CAD wheel loader (610 kB against
+371 kB), the telehandler with its boom (2.1 MB against the stowed one's 81 kB), the backhoe loaders
+(687 kB and 1.8 MB, their arms out behind) and the tandem rollers (1.2 and 2.3 MB). None needed
+simplifying or compressing again: the library's are already meshopt-compressed with WebP textures,
+the biggest 612 kB, all under the cars' 2 MB limit and a quarter of the pickup's 2.8 MB.
+
+**Handling** (`works.js`): all slower and heavier than the pickup (160 km/h): low top speeds, slow
+away, wide turns, barely thrown up by a hit (`launch` 0.5 to 0.85), squashing and shaking more when
+they hit something. The bulldozer's tracks and the skid steer's skid-steered wheels turn it on the
+spot: a new `pivot` in `drive.js`'s handling (°/s at a standstill, easing out by 3 m/s, where the
+wheels' own steering takes over; 0 for everything else, so nothing else changes). Their wheels don't
+turn (the CAD models' tyres are one mesh each side), as the pickup's don't. Their paint is the
+model's (the Garage says so): underglow, boost, trail and horn as any ride.
+
+**Checked where it shows to others.** A construction ride is driven by the page alone once it's
+unlocked there, but wherever it would show to others the Worker checks the achievement itself (one
+look by the player's key, only for a construction ride; nothing read for any other): a score posted
+in one (`POST /api/score`: the boards' vehicle field), a challenge time (`POST /api/challenges/time`:
+its board's row and its ghost) are turned away without it (403, `reason: 'ride'`, with the unlock's
+words), and a room (`live.js`) shows anyone without it in the default ride (the pickup), at hello and
+at each change of ride. The room asks only when a construction ride is picked (`rideOf`), and then
+once a connection for all of them together (`unlockedRides`: one look by key for each construction
+ride's achievement, for the player and their account's): the answer is kept with the driver, so a
+page going back and forth between rides, or trying each in turn, doesn't ask again, and while it's
+being asked the ask itself is kept, so a burst of looks (or a hello and a look at once) waits on
+that one ask, and the others are told once, of the ride picked last. A hello or change in any other
+ride reads nothing of achievements (a ride unlocked since shows from the page's next hello, which
+the page says as one unlocks). A score is checked after its gap and the visitor's day
+(`SCORE_GAP`, `SCORES_PER_VISITOR_DAILY`) and a time after its gap, the visit's count and the
+visitor's day (`TIME_GAP`, `CHALLENGE_TIMES_PER_VISIT`, `CHALLENGE_TIMES_PER_VISITOR_DAILY`), so one
+refused for its ride costs what any other post does, never a loop of lookups. For testing, `?feats=all`
+on this computer (localhost or 127.0.0.1, `feats.js`, as `?pro=1`) unlocks them in the page alone.
+
+### The Worker's routes
+
+- `POST /api/progress` (levels') answers with `earned: [ ids ]`, the achievements that report reached,
+  and to an empty report whose body asks (`feats: true`, as the page does once as it starts),
+  `feats: [ ids ]`, every one the player and their account have, the first time a visit asks
+  (`visits.listed`, written as it's had; after that, and to a report sent again, the answer without
+  it). No Durable Object is asked: a visit takes a robot check, and the Earth's are a few a day an
+  address.
+- `POST /api/achievements { id, secret }`: `{ achievements: [ { id, at } ], counts: { km, moon, looks,
+  rides, streak, parties, challenges }, own: { km, moon, looks, rides }, left: { km, moon, looks,
+  rides }, rides: [ unlocked construction rides ] }`, the player's and their account's (`counts`:
+  the most any of the account's players has of each; `own`: this player's own trusted counts, which
+  their reports add to; `left`: what more of each the Worker will take from this player today).
+  JSON from the site itself (`checkSameOrigin`, 1 kB at most), a 400 for anything but a player's id
+  and secret, a 403 for the wrong secret; held to `ACHIEVEMENT_LOOKS` (Cloudflare's rate limiter, 6
+  a minute by the challenges' keyed hash of the address's /48 and the day, before anything's read)
+  and `ACHIEVEMENT_LOOKS_PER_VISITOR_DAILY` (200 a day by `DriveLimits`, by the /48), a 429 past
+  either. Never cached anywhere shared (`no-store`): it's the player's own; the page
+  keeps an answer a minute.
+- `GET /api/admin/achievements` (the owner's, as `/api/admin/stats`: `ADMIN_EMAILS`, `ADMIN_LOOKS`):
+  `{ players, earners, achievements: [ { id, name, goal, checked, ride, players } ] }`, how many
+  players there are, how many have any, and how many have each. The admin page shows them as bars
+  with each one's share of the players, whether it's checked or trusted, and the ride it unlocks.
+
+### What's kept, and what isn't
+
+`achievements`: a player's id, an achievement's id and when, 25 rows a player at most, removed with
+the player. `players.tallies` (a few numbers, the ids of up to 31 rides, the days in a row and the
+day's counts), `players.parties` and `players.party_marks` (up to 10 short HMACs of the player's id
+with a party's code under a key from the Worker's secret, so a party isn't counted twice; not the
+codes, so no two players' match, nor can anyone with the table and not the secret work them back),
+and `visits.listed` (whether a visit has had its player's list). A party's room holds, while it's
+open, a keyed hash of each connection's /48 and the day, to tell one address from another; it's
+never written anywhere. Nothing of an address, a device or where anyone drove is kept; the owner
+sees counts of players only.
+
+### What it costs
+
+The free plan (D1, 1 November 2026: 5 million rows read and 100,000 written a day; Workers 100,000
+requests; Durable Objects 100,000 requests) and the paid one (25 billion read and 50 million written
+a month included):
+
+| | Rows read | Rows written | Other |
+| --- | --- | --- | --- |
+| A report with something in it | none more (the tallies are in the player's row) | none more, and 1 an achievement earned (25 a player, ever) | |
+| An empty report | the player's row, as before | none | |
+| The page's ask for the whole list (an empty report with `feats: true`, once a visit) | the account's achievements: a few dozen, about 250 at most whatever the account (its first 20 players, 200 rows of the others', each counted again as they're grouped) | 1 (`visits.listed`) | |
+| A challenge time, a player's first on that challenge | up to 50 (their nth time, by key), usually 1 to 10 | 1 an achievement earned | |
+| A challenge's final places | its board's rows, once more (as its final ranks are written) | 1 a placing | |
+| A room's hello or change of ride (a player) | as before; and in a construction ride, every construction ride's achievement at once (`unlockedRides`: a look by key for each of the eight, for each of the account's players: 14 rows measured alone, 281 for an account of 20 players or more), once a connection whatever rides it picks and however many looks it sends at once | none | nothing for any other ride, nor for a guest |
+| A party joined with someone else | 1 or 2 | 1 or 2 (the count and its mark, an achievement) | after the answer, from the room |
+| A score or a time in a construction ride | that achievement's row (`hasRide`): 3 alone, 61 measured for an account of 20 players or more | none | nothing for any other ride; asked after the post's gap and the visitor's day (a time's after its visit's count too), so a refused one costs what any post does |
+| The grid (`POST /api/achievements`) | about 30 alone; about 410 at most whatever the account (21 players' rows, their achievements as the list's, their times to 50) | none (or a few, once) | 1 Durable Object request (the day's count) |
+| The admin counts | every achievement row (the owner, rarely) | none | |
+
+At the day's 300 visits, about 300 grid views and 300 lists as pages start are some 30,000 rows read
+for most players (under 1 % of the free plan's) and 300 Durable Object requests (0.3 %); the
+achievements earned are a few hundred rows written. What one ask reads is bounded whatever the
+account: `playersOf` reads at most 20 of its players and `featRows` the player's own achievements
+and at most 200 of the others' (measured with D1's own `rows_read` in the tests: the same for an
+account of 80 players as of 160). **One address** can ask for the grid 6 times a minute and 200
+times a day: at about 410 rows an ask at most, 82,000 rows a day, under 2 % of the free plan's reads,
+and no writes. An empty report reads only the player's row; the whole list comes once a visit (8 Earth
+visits a day an address, and a robot check each for the Moon's), so about 250 rows a page load at
+most. Its reports, times and parties were bounded already (levels' 30 s gap and `PROGRESS_POSTS`,
+the challenges' `CHALLENGE_MISSES` and daily caps, `LIVE_CONNECTS`), and achievements add at most 25
+rows written a player, ever, 2 a party joined and 1 a visit's list. A score in a locked construction
+ride is refused only after the score's gap (one every 10 s a player) and the visitor's day (1,500 an
+address), as any score is: at most 1,500 lookups of about 60 rows, 90,000 rows a day. A time in
+one likewise only after the time's gap (one every 10 s a player), its visit's count and the
+visitor's day (300 an address): at most 300 lookups, 18,000 rows a day. A room reads nothing of
+achievements at a hello or a change of ride except for a construction ride, and then one ask once
+a connection for all eight of them, however many looks it sends and whichever rides (14 rows
+measured for a player alone, 281 for an account of 20 players or more, the most `playersOf` reads):
+a visit's 200 connections a day (`LIVE_VISIT_CONNECTS`) in construction rides are about 2,800 rows
+for most players and 56,000 at most, and an address's 8 Earth visits 450,000 at most, under a tenth
+of the free plan's reads (a Moon visit, as for everything a visit buys, takes a robot check each).
+(Round 2 asked once for each ride, about 60 rows each for a big account, and again for each look
+sent while D1 was answering: forty looks at once were forty asks, some 580,000 rows a visit.) (Round 1 read the account's whole list, about
+250 rows, at every hello, whatever the ride: 10 visits' worth of reconnects from one address came to
+500,000 rows, a tenth of the free plan's reads, and the day's 40,000 connects to twice its reads.)
+So one address stays well under a tenth of the free plan's daily reads and writes. Storage: about 40
+bytes an achievement row, 300 a player's tallies and 180 their party marks.
+
+**The page's first load**: the shared rules (`achievement-rules.js`, needed there for the locks, the
+reports' counts and the toasts' words) and the construction rides' names and tuning (`works.js`)
+add 8.3 kB to the game's chunk (1,121.22 to 1,129.55 kB minified, 345.15 to 348.28 kB gzipped:
++3.1 kB, the second round's fixes 0.4 kB of it) and a shared chunk of 5.0 kB (1.7 kB gzipped) it
+imports; the first stylesheet 11.22 to 11.77 kB (the profile card's button, the locks' chips and a
+paused toast's place), the page's first script 13.70 to 13.86 kB
+(a name `catalog.js` exports). `library/library.json`, fetched as the page starts, lists the eight
+rides too but only what the page reads of each: 660 bytes to 3.3 kB. The rides' pictures (8 to 12 kB
+each, 84 kB in all) come only as their cards are scrolled near (`panel.js`, an
+`IntersectionObserver` on each row: none of them in the first load, on a phone held either way or a
+computer, as `test-drive-levels-ui.mjs` checks); their models (3.1 MB together) only when one is
+picked. The grid (3.6 kB of script, 1.8 kB gzipped, and 2.8 kB of styles) comes the first time
+it's opened; the build's test checks none of it is in the page or the game's chunk.
+
+### Measured
+
+On a 375 × 740 phone screen in Chromium's software renderer (SwiftShader, no GPU, on a machine
+shared with other test runs, so the times are rough), each ride picked from the pause menu on the
+test pad (`test-drive-levels-ui.mjs`, three runs, the machine busier for some than others):
+
+| Ride | Download | Triangles | Frame (middle of 60) | Its lowest point over the ground | 2 s of gas from a standstill | 1 s of steering, standing |
+| --- | --- | --- | --- | --- | --- | --- |
+| Skid steer | 223 kB | 32,884 | 39 to 65 ms | 0 | 6.4 m, 21 km/h | 101° |
+| Telehandler | 83 kB | 11,756 | 38 to 55 ms | 0 | 5.1 m, 17 km/h | 0 |
+| Concrete mixer | 432 kB | 44,310 | 65 to 109 ms | 0 | 4.4 m, 16 km/h | 0 |
+| Road roller | 472 kB | 62,160 | 69 to 99 ms | 0 | 3.4 m, 12 km/h | 0 |
+| Wheel loader | 379 kB | 31,506 | 57 to 91 ms | 1 cm | 4.7 m, 16 km/h | 0 |
+| Dump truck | 432 kB | 41,799 | 65 to 100 ms | 0 | 4.0 m, 14 km/h | 0 |
+| Bulldozer | 612 kB | 84,044 | 84 to 119 ms | 0 | 3.1 m, 10 km/h | 41° |
+| Vac truck | 467 kB | 55,162 | 64 to 93 ms | 0 | 4.6 m, 16 km/h | 0 |
+| *Go-kart* (for comparison) | built in code | 17,224 | 33 to 57 ms | 0 | 17.2 m, 58 km/h | 0 |
+| *Pickup* (the default ride) | 2,846 kB | 219,049 | 853 to 858 ms | -1 cm | 12 m, 42 km/h | 0 |
+
+So each draws within about twice the kart's time and a seventh to a twentieth of the pickup's (whose
+219,000 triangles in many draws are the software renderer's worst case), and downloads a fifth of it
+or less: none needed simplifying. (These are the software renderer's times; on a phone's GPU they
+weren't measured, but at 12,000 to 84,000 triangles each they're a fraction of the pickup's 219,000,
+which phones already draw.)
+
+### How it's tested
+
+- `npm run test:drive-levels` (`scripts/test-drive-levels.mjs`): the rules as written (25, each
+  count known, every construction ride unlocked by one, the pass none; `checkTallies` turning away a
+  ride that isn't one, a count that isn't whole or is negative; a day's worth taken by `addTallies`
+  and again the next day; what `crossed` reaches; the grid's lines), then the Worker under `wrangler
+  dev`: the migration's columns and table; trusted counts with reports (the claim held to
+  `CLAIM_TALLY`, its 25 km giving the skid steer and not the wheel loader, what's left of a day's 10
+  Moon drives, 10 looks and 4 rides, five minutes' km more the same day at the time cap, only what's
+  left of the day's 500 km, the next UTC day's worth, earned once, 400s for what the page can't send,
+  an empty report's every one only when it asks, and none to one that doesn't); the whole list once a
+  visit (again from a new visit, nothing from another player's); three days in a row by the Worker's
+  clock (earned on the third, kept through a day off); a claim saying 10,000 days in a row earning no
+  streak achievement and leaving the telehandler locked until the Worker has seen three days, and a
+  player from before achievements starting from their streak, but only as far as the Worker could
+  have seen it (10,000 days in the row of a player made two days ago giving three days and the 3
+  days' achievement, never the 7 or 30; an old one only its capped best, the telehandler locked);
+  the rows an ask reads (D1's
+  `rows_read`, through wrangler's platform proxy) the same for an account of 80 players as of 160,
+  and a few hundred at most; challenges finished from the times as the grid asks, and placings from final
+  ranks alone (top 10, podium, winner, daily, weekly: the vac truck's), the rides refused (a 403
+  with `reason: 'ride'` and the unlock's words) on the leaderboard until earned and let through
+  after, and checked only after the score's gap (forty at once in a locked ride: one 403, then 429s,
+  as in the go-kart); the rows a room's ask for every construction ride reads (`ridesSql`: 14 alone,
+  281 for the big account, the same for 80 players as for 160); the docs' console SQL writing every placing of a board finished before
+  achievements (a weekly's first and third: top 10, podium, the weekly podium, the first a winner;
+  the eleventh none; nothing more run again); following sign-in both ways (two players linked to one
+  account each having the other's, the grid's counts the account's best and `own` each player's
+  own, the rows each player's own); the grid's route (its player,
+  `no-store`, 400s, 413, 405, another site's page, the day's cap from one address, the rate
+  limiter before anything's read, today's `left`); the owner's counts (every achievement, its
+  players, nothing of who, 401 and 403).
+- `npm run test:drive-worker`: migration 0009 on top of 0001 to 0008 with a player kept and their
+  counts none yet, one row an achievement, removed with the player; in the challenges' story a
+  player's first time writing their first challenge finished (and the rows a time writes, one more
+  for that), a construction ride's time turned away (twelve at once in one: one 403, then 429s, the
+  ride checked after the time's gap and the visitor's day), yesterday's board's final places writing each
+  player's placings (the owner's none), and the replaced weekly's winner having the weekly podium;
+  the top speeds and the play stats' keys including the construction rides.
+- `npm run test:drive-live`: in a party, a construction ride shown as it is with its achievement,
+  as the pickup without it (or for a guest), at hello and at a change of ride, and once unlocked
+  from the next hello; the party counted once for each player in it (and its achievement written),
+  not again as a page joins the same party again, and not alone in one; one player in two tabs on
+  one address in three parties counting none, nor with a guest on that address or their own
+  nickname from another, a guest from another address counting, and going back and forth between
+  two parties counting each once, their marks keyed hashes (the Worker's secret's: not the codes,
+  not another player's, not another secret's, not the plain hash); a construction ride looked up
+  only when one is picked (an achievement written after a hello in the go-kart shows as the ride is
+  changed to its ride) and once a connection (taken away at the console, it still shows going back
+  and forth; another without its achievement shows as the pickup); and, on the stand-in room, a
+  connection's construction rides asked of D1 once for all of them: a burst of looks (as many as the
+  rate lets through) while D1 holds its answer one ask and one message to the others, of the ride
+  picked last, and every construction ride in turn after asking nothing more.
+- `npm run test:drive-levels-ui`: a locked construction ride's chip, picture and words in the picker
+  ("Finish a weekly challenge in its top 3 to unlock the vac truck. See your Achievements.", the ride
+  picked staying the same) and the Garage (its tab, its banner, a look on it); the grid from the
+  profile card (each earned one's date, how far toward the rest, the bars, the rides they unlock);
+  a report that earns two showing "Achievement: 10 km driven", "Unlocked: Skid steer" (whose
+  **Garage** opens the Garage on it, unlocked) and "Achievement: New look", in that order, nothing
+  told of what was earned before, the toast clear of the pause menu's **Keep driving**, and the ride
+  driven from the pause menu; 120 km driven before a nickname telling only the first drive and 10 km
+  (what the claim keeps, never 100 km), waiting behind another toast that's up, not told again as the
+  claim earns them, the wheel loader locked after the claim and as the page starts again with the
+  Worker out of reach, and "Achievement: 100 km driven" and "Unlocked: Wheel loader" told when the
+  Worker earns it later; each construction ride
+  (with `?feats=all`) loading only when picked, on the ground, driving, the tracked ones turning on
+  the spot and the others not, with its download and frame time (the table above); earned rides
+  unlocked as the page starts from what this browser kept (the Worker's whole list heard once, then
+  the Worker out of reach), none for another player, and taken away when the owner removes the
+  player; a Garage choice picked again not counting again; and a phone held upright and on its side
+  and a computer (no construction ride's picture in the first load, the chips inside their cards,
+  the grid inside the screen with no sideways scrolling), with pictures of each
+  (`TEST_SCREENSHOTS`).
+- `npm run test:drive-ui`: the admin page's achievements (each one's players and share, checked or
+  trusted, the ride it unlocks; nothing signed out); the rides' order in the picker (the
+  construction rides after the cars); achievements earned in a challenge's countdown held through it
+  and the run (no toast, `window.drive.notices` keeping them) and told in turn at its end; a score
+  refused for its ride ("Not posted", the unlock's words, and the next run posted) and a time
+  refused for its ride (the unlock's words, not "Couldn't reach World Drive"). `npm run test:drive-seo`: the grid a chunk of
+  its own, script and styles, none of its words in the page or the game's chunk; the rides' models
+  and pictures in the build, and `library.json` only what the page reads.
+
+### Looking after it
+
+In the D1 console (as for [levels](#looking-after-levels)):
+
+```sql
+-- Who has the most (by player id), and a player's own.
+SELECT player_id, COUNT(*) AS n FROM achievements GROUP BY player_id ORDER BY n DESC LIMIT 20;
+SELECT achievement, datetime( earned_at / 1000, 'unixepoch' ) FROM achievements WHERE player_id = 'PLAYER_ID';
+
+-- Take a cheat's back (and their counts), so they're earned again.
+DELETE FROM achievements WHERE player_id = 'PLAYER_ID';
+UPDATE players SET tallies = '{}', parties = 0, party_marks = '[]' WHERE id = 'PLAYER_ID';
+
+-- Write the placings of boards finished before achievements, from their final ranks: every one
+-- (top 10, podium, winner, and the daily, weekly and monthly ones by the board's period), as
+-- placingQuery writes them. (The placings are a VALUES list, not SELECTs joined with UNION ALL: D1
+-- allows at most five terms in a compound SELECT, and there are six.)
+INSERT INTO achievements ( player_id, achievement, earned_at )
+SELECT t.player_id, p.id, c.final_at FROM challenge_times t JOIN challenges c ON c.id = t.challenge_id,
+	( SELECT column1 AS id, column2 AS rank, column3 AS period FROM ( VALUES ( 'top-10', 10, NULL ), ( 'podium', 3, NULL ), ( 'winner', 1, NULL ),
+	( 'daily-winner', 1, 'day' ), ( 'weekly-podium', 3, 'week' ), ( 'monthly-top-10', 10, 'month' ) ) ) p
+WHERE c.final_at IS NOT NULL AND t.final_rank IS NOT NULL AND t.final_rank <= p.rank AND ( p.period IS NULL OR c.period LIKE p.period || ':%' )
+ON CONFLICT DO NOTHING;
+```
+
+## Ads
+
+World Drive can show one Google AdSense display ad, and only on the globe: off until the owner sets
+a publisher id, and never for anyone with the [Supporter Pass](#supporter-pass-buying-it).
+
+### What people see
+
+- **On the globe only.** A small banner with "Ad" over it: on a computer along the bottom beside the
+  panel (728 × 90 where the screen is at least 1116 px wide and 600 high, else 320 × 50); on a phone
+  upright, 320 × 50 just above the sheet along the bottom; on a phone on its side, 320 × 50 at the
+  bottom beside the panel. The pin's card, a party's banner and the map's credits move up out of its
+  way while it's there, so it covers none of the panel, the search, the trophy or the buttons.
+- **Never anywhere else.** It's in the globe's own section (`#globe-ui`), so it's gone, and takes no
+  room, while dropping in, driving, paused, on the loading, robot-check, used-up and other screens,
+  and back when the globe is (**M**). It's the one ad a visit asks for, so there's nothing between
+  drops either. The places' pages and the Moon's (`/drive/`, `/moon/`) have none: they have no script
+  at all.
+- **Supporters never see one**, and Google's script isn't even loaded for them: the page waits for
+  the Worker's word on the pass (`/api/me`, which `supporter.js` asks anyway) before asking for the
+  ad's code. A pass that comes mid-visit (bought, or signed in) takes the ad away at once, with its
+  room.
+- **Blocked, or no ad to show**, it goes quietly: Google's script not loading (an ad blocker), an ad
+  Google says is `unfilled`, or none saying anything 20 s after the script came, and the space goes
+  as if it had never been there. No error, nothing in the way.
+- **About World Drive** then has a paragraph on the ads and Google's cookies (put there by `ads.js`,
+  so it's only there while there are ads, and not for a supporter).
+
+### How it works
+
+- `GET /api/config` has `adsense: { client, slot }` only while ads are on (`adsense()` in
+  `worker/drive/settings.js`): `ADSENSE_CLIENT` is `ca-pub-` and 16 digits, and `ADSENSE_SLOT` is
+  empty or 6 to 12 digits. Anything else (a typo, the id without its `ca-`, a slot that isn't one)
+  is off, rather than half on. Off, the answer is exactly what it was before ads, and nothing about
+  them is loaded or shown.
+- **Nothing in the first load.** The ad is `src/drive-app/ads.js` (and `ads.css`), a chunk of its
+  own (under 2 kB compressed) that `main.js` imports only once the globe is showing, the Worker has
+  said whether the pass is here, the visitor hasn't it, and the browser is idle
+  (`requestIdleCallback`, at most 5 s; 3 s on a browser without it). Google's script,
+  `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=<ADSENSE_CLIENT>` (`async`,
+  `crossorigin="anonymous"`), is only asked for while the globe shows (dropped in before then, it
+  waits for the globe), as an ad slot with no width is one Google can't fill.
+- The slot is an `<ins class="adsbygoogle">` with `data-ad-client`, `data-ad-slot` when there is
+  one and `data-full-width-responsive="false"`, sized by `ads.css` (Google's way to give a
+  responsive unit an exact size: no `data-ad-format`), so the ad can't grow over the sheet. Its
+  room (`body.ad-on`) is only kept from when `ads.js` puts it up until it goes, so nothing moves
+  before.
+- **`/ads.txt`**: the Worker answers it (it's in `run_worker_first` in `wrangler.drive.jsonc`, next
+  to `/api/*` and `/c`, so it's never a file), with AdSense's one line, `google.com,
+  pub-XXXXXXXXXXXXXXXX, DIRECT, f08c47fec0942fa0` (the publisher id without its `ca-`; the last part
+  is Google's own and the same for everyone), while ads are on, and a 404 while they're off. It's one
+  Worker request each time a crawler asks, a few a day.
+- **No Content-Security-Policy** is set anywhere for World Drive (not by the Worker, nor a `_headers`
+  file, nor a `<meta>`), so AdSense's hosts need nothing allowed. If one is ever added, it must allow
+  `pagead2.googlesyndication.com`, `*.googlesyndication.com`, `*.doubleclick.net`,
+  `*.google.com`, `*.gstatic.com` and `*.adtrafficquality.google` for scripts, frames, images and
+  connections (Google's list for AdSense with a CSP).
+- **Play stats**: `ad:shown` (an ad filled the slot) and `ad:blocked` (its script, or its ad, didn't
+  come), each once a visit, only counts like the rest; the admin page shows them beside the pass's
+  when there are any.
+
+### Consent and privacy
+
+There's no consent banner of World Drive's own. Google's consent message is a Google-certified CMP
+(IAB TCF) that AdSense serves itself, with the ad script, to visitors in the EEA, the UK and
+Switzerland (and, set up for them, in US states with their own laws), and it must be turned on before
+ads go live there: see the owner's steps. Without it, Google serves those visitors only limited ads,
+or none. The About box's ads paragraph says what Google does with cookies and links to
+[Google's page on it](https://policies.google.com/technologies/partner-sites).
+
+### The ads' settings
+
+| Setting | Where | What it is |
+| --- | --- | --- |
+| `ADSENSE_CLIENT` | `vars` | The AdSense publisher id, `ca-pub-` and 16 digits (public). Set to the owner's id; `drive/index.html` also carries it as `<meta name="google-adsense-account">` for AdSense's site check. Empty: no ads, and `/ads.txt` is a 404 |
+| `ADSENSE_SLOT` | `vars` | Optional: a display ad unit's id, 6 to 12 digits. Empty: the slot has no unit id |
+
+Both are in `wrangler.drive.jsonc`'s `vars`, which every deploy sets: change them there (a value put
+in the dashboard instead is replaced by the file's at the next deploy). A slot id is recommended: an
+`<ins>` without one only gets an ad if Google has one for it, else it's `unfilled` and the space
+goes. Keep **Auto ads** off for worlddrive.app in AdSense (Ads → By site): once Google's script is
+on a page, Auto ads would place ads of its own wherever it likes, while driving too.
+
+### The owner's steps
+
+1. **Apply.** At [adsense.google.com](https://adsense.google.com), sign up with the Google account
+   that should be paid, and add the site `worlddrive.app`. Copy the publisher id (`ca-pub-` and 16
+   digits: Account → Settings → Account information).
+2. **Turn it on.** Put the id in `wrangler.drive.jsonc` as `ADSENSE_CLIENT` (leave `ADSENSE_SLOT`
+   empty for now), commit and push: Workers Builds deploys it. Google's script is then on the globe
+   for everyone but supporters, and `https://worlddrive.app/ads.txt` has the line AdSense asks for.
+3. **Connect the site** in AdSense (Sites → worlddrive.app): verify it with **AdSense code snippet**
+   (it's on the page) or **Ads.txt snippet** (it's served), then **Request review**. The review
+   takes days to a few weeks; until then Google fills nothing, so the slot goes again each visit,
+   quietly.
+4. **Consent.** AdSense → **Privacy & messaging** → **European regulations**: create a message for
+   worlddrive.app (Google's certified CMP for the EEA, the UK and Switzerland) and publish it; then
+   **US state regulations** the same, if wanted. Do it before approval brings real ads.
+5. **An ad unit** (once approved, recommended): Ads → **By ad unit** → **Display ads**, horizontal,
+   **Responsive**; copy its `data-ad-slot` number into `ADSENSE_SLOT`, commit and push. Keep
+   **Auto ads** off for the site (Ads → By site).
+6. **Check it.** Open worlddrive.app in a private window (not signed in, no ad blocker): a few
+   seconds after the globe comes up the banner shows, goes when you drop in and is back on M.
+   Signed in with the pass: none, and no request to `googlesyndication.com` in the browser's Network
+   tab. Sites → worlddrive.app says whether ads.txt was found (a day or so after it first is).
+
+To switch ads off again, empty `ADSENSE_CLIENT` and deploy (and `/ads.txt` goes with it).
+
+### How ads are tested
+
+`npm run test:drive-worker`: `/api/config`'s `adsense` only for ids in their formats (spaces round
+them taken off, every kind of wrong one off, and nothing about ads in the answer then), `/ads.txt`'s
+line and its 404, HEAD and 405, `www` sent on; and under `wrangler dev` with `wrangler.drive.jsonc`,
+`/ads.txt` reaching the Worker, even with a stale file of that name among the assets, and off as the
+file ships. `npm run test:drive-ui` ("World Drive's ad on the globe"), with Google's script stood in
+for (Playwright answers its request, so nothing goes out): with ads off nothing of them asked for or
+shown; on, the banner on a computer (728 × 90 beside the panel, the script asked for as AdSense
+says, About's paragraph), clear of everything on the globe, pinned too, gone while dropping in,
+driving and paused and back on M, and its script waiting for the globe when the drive started first;
+never for a supporter (neither `ads.js` nor Google's script asked for) and gone with its room when the
+pass comes mid-visit; blocked and unfilled, gone quietly with the pin's card where it always is; and
+on a phone upright and on its side, clear of the sheet, the title, the trophy and the pin's card
+(with the pin still between the title and its card), with a picture of each (`drive-ad-desktop.png`,
+`drive-ad-phone.png`, `drive-ad-phone-landscape.png`, in `TEST_SCREENSHOTS` or the system's temporary
+folder).
+
 ## Settings
 
 In `wrangler.drive.jsonc` (`vars`, set on every deploy; change them there, not in the dashboard):
@@ -3342,11 +6064,13 @@ In `wrangler.drive.jsonc` (`vars`, set on every deploy; change them there, not i
 | `PER_VISITOR_DAILY` | 8 | Visits a day per visitor |
 | `TURNSTILE_SITE_KEY` | `0x4AAAAAAFs3k5sgUIQHSuGC` | The worlddrive.app Turnstile widget (public) |
 | `PER_VISITOR_DAILY_SUPPORTER` | 30 | Visits a day for a supporter, signed in |
+| `PASSWORD_ACCOUNTS` | unset (on) | [Username and password accounts](#username-and-password-accounts); `off` switches them off |
 | `GOOGLE_CLIENT_ID` | empty | The Supporter Pass's Google sign-in (public); empty, no signing in or buying |
 | `SUPPORTER_PAYMENT_LINK` | the live link | The Supporter Pass's Stripe Payment Link (public) |
 | `SUPPORTER_PRICE` | `CA$4.99` | Its price, as the page shows it |
 | `LIVE` | `on` | [Driving with others](#switching-it-off); `off` switches it off |
 | `LIVE_DAILY_BUDGET` | 40000 | [The Durable Object requests a day](#the-days-budget) driving with others may use; 0 is off |
+| `ADSENSE_CLIENT`, `ADSENSE_SLOT` | empty | [Google's ad on the globe](#ads): the AdSense publisher id (empty: no ads) and, if wanted, a display unit's id |
 
 Secrets, set by the owner and never in a file (Cloudflare dashboard: Workers & Pages → world-drive →
 Settings → Variables and Secrets, or `npx wrangler secret put NAME -c wrangler.drive.jsonc`):
@@ -3357,7 +6081,7 @@ Settings → Variables and Secrets, or `npx wrangler secret put NAME -c wrangler
 | `TURNSTILE_SECRET` | The Turnstile widget's secret key |
 | `STRIPE_WEBHOOK_SECRET` | The Supporter Pass webhook's signing secret, `whsec_...`; buying stays off without it |
 | `SUPPORTER_EMAILS` | Optional, comma-separated: people with the pass without paying |
-| `ADMIN_EMAILS` | Comma-separated: the Google accounts that may see [the play stats](#play-stats) at `/admin.html` |
+| `ADMIN_EMAILS` | Comma-separated: the Google accounts that may see [the play stats](#play-stats) and [where people drop in](#where-people-drop-in), choose [challenges](#the-owners-controls) and see how many players have each [achievement](#achievements-and-rewards), at `/admin.html` |
 
 `keep_vars` is on, so anything set in the dashboard that isn't in `vars` survives a deploy. A few
 more aren't in `vars` and needn't be set; add them in the dashboard (plain text) to change them:
@@ -3367,17 +6091,37 @@ more aren't in `vars` and needn't be set; add them in the dashboard (plain text)
 | `SCORES_PER_VISITOR_DAILY` | 1500 | Scores a visitor may post a day (one every 10 s for four hours) |
 | `NAMES_PER_VISITOR_DAILY` | 20 | New names and renames a visitor may make a day |
 | `SUPPORTER_PAYMENT_LINK_ID` | none | The Payment Link's `plink_...` id: only its checkouts are a Supporter Pass |
+| `PASSWORD_ITERATIONS` | 100,000 | PBKDF2's iterations for [new password hashes](#how-passwords-are-kept), 10,000 to 100,000: only to lower it if sign-ins were ever cut off for CPU on the Free plan |
 | `LIVE_PARTY_MAX`, `LIVE_NEARBY_MAX` | 8, 20 | The most in a party, and in each of an area's rooms |
+| `DROPIN_PLACES_DAILY` | 1500 | [Drop-in places](#where-people-drop-in) counted a day on each world for everyone together |
+| `DROPIN_PLACES_PER_VISITOR`, `DROPIN_PLACES_PER_VISIT` | 30, 10 | Drop-in places counted a day for each visitor, and for each visit |
+| `DROPIN_ASKS_PER_VISIT` | twice `DROPIN_PLACES_PER_VISIT` (20) | How many times a day DriveLimits is asked about a visit's drop-in places at most |
+| `CHALLENGE_TIMES_PER_VISITOR_DAILY` | 300 | [Challenge](#challenges) times a visitor may post a day (an IPv6 visitor by its /48) |
+| `CHALLENGE_TIMES_PER_VISIT` | 100 | [Challenge](#challenges) times a visit may post (what one robot check buys) |
+| `ACHIEVEMENT_LOOKS_PER_VISITOR_DAILY` | 200 | Asks a visitor (by the /48) may make a day for their [achievements' grid](#achievements-and-rewards) |
+| `CHALLENGE_GHOST_BUDGET` | 16,777,216 (16 MB) | The most of its [ghosts](#challenges)' text a challenge keeps (characters, which are bytes); past it a new best lets the slowest kept ghosts go to make room, or is kept without its own |
 
-Three rate limiters are `ratelimits` in `wrangler.drive.jsonc` (Cloudflare's, which cost no Durable
+Eight rate limiters are `ratelimits` in `wrangler.drive.jsonc` (Cloudflare's, which cost no Durable
 Object request): `LIVE_CONNECTS` (each visit's connections to rooms, 20 a minute),
-`PROGRESS_POSTS` (each player's [level](#levels) reports and title changes, 10 a minute) and
-`STATS_POSTS` (each visit's posts of [play stats](#play-stats), 6 a minute).
+`PROGRESS_POSTS` (each player's [level](#levels) reports and title changes, 10 a minute),
+`STATS_POSTS` (each visit's posts of [play stats](#play-stats), 6 a minute), `ADMIN_LOOKS` (each
+admin account's asks for the admin page's stats, [drop-in places](#where-people-drop-in) and
+challenges, 30 a minute), `CHALLENGE_LOOKS` (each address's asks for [challenges'](#challenges)
+lists and boards and its times posted, 60 a minute), `CHALLENGE_MISSES` (those of its lists and
+boards that miss the cache and read D1, 10 a minute), `PASSWORD_TRIES` (each address's
+[sign-ins with a password, checks of one and account changes](#guessing-and-how-its-slowed), 10 a
+minute) and `ACHIEVEMENT_LOOKS` (each address's asks for its [achievements](#achievements-and-rewards),
+6 a minute), each address (an IPv6 one by its /48) counted by a keyed hash of it and the day, never as
+it is.
 
 The leaderboard's, levels' and the Supporter Pass's database is the `DB` binding in
 `wrangler.drive.jsonc` (D1 **world-drive**, already made); its tables are `worker/drive/migrations`
 (`0003_levels.sql` levels': XP and the rest on `players`, and `discoveries`; `0004_stats.sql` the
-[play stats'](#play-stats) `stats_daily`).
+[play stats'](#play-stats) `stats_daily`; `0005_dropins.sql` [where people drop
+in](#where-people-drop-in)'s `dropins_daily`; `0006_challenges.sql` [challenges'](#challenges)
+`challenges`, `challenge_times`, `challenge_picks`, `challenge_places`, `players.last_time_at` and
+`visits.times`; `0007_challenge_ghosts.sql` their ghosts; `0008_password_logins.sql`
+[usernames and passwords'](#username-and-password-accounts) `logins`).
 
 ## Deploying
 
@@ -3385,8 +6129,15 @@ The leaderboard's, levels' and the Supporter Pass's database is the `DB` binding
 migrations apply DB --remote -c wrangler.drive.jsonc`; ones already applied are skipped, and
 `0003_levels.sql` adds levels' columns and table before the Worker that needs them goes out), builds the
 site into `dist-drive/` and deploys the `world-drive` Worker with it (`vite build --config
-vite.drive.config.js && wrangler deploy -c wrangler.drive.jsonc`). The Worker only runs for
-`/api/*`; every other file is served straight from Cloudflare's assets. The Durable Objects'
+vite.drive.config.js && wrangler deploy -c wrangler.drive.jsonc`; `0006_challenges.sql` adds the
+challenges' tables, `players.last_time_at` and `visits.times` before the Worker that needs them;
+`0007_challenge_ghosts.sql` the times' handles and the ghosts' table). The Worker only runs for
+`/api/*`, `/c`, the path a ["challenge a friend" link](#ghosts-and-challenge-a-friend) is shared
+at, which gets its own preview card there, and `/ads.txt` ([ads](#ads)) (`run_worker_first` in
+`wrangler.drive.jsonc`); every
+other file, the home page included, is served straight from Cloudflare's assets, free and never
+turned away (on the Free plan, once the day's Worker requests are used up, a path the Worker runs
+first for is answered 429 instead of its file). The Durable Objects'
 classes are `migrations` in `wrangler.drive.jsonc`, which `wrangler deploy` applies itself: `v1`
 the visit counts' `DriveLimits`, `v2` the rooms' `DriveRoom` (both on SQLite storage, which the
 Free plan needs).
@@ -3401,6 +6152,16 @@ page loaded then makes driving with others anyway and is turned away at the door
 few minutes later at most. `npx wrangler deploy -c wrangler.drive.jsonc
 --durable-objects-code-update-mode immediate` (after `npm run build:drive` and the migrations)
 skips the wait, at the cost of dropping everyone's connection to their room for a moment.
+
+**Rolling back** (a version picked in the dashboard's Deployments, or a gradual deployment sending
+some requests to an older one) past the deploy that brought [where people drop
+in](#where-people-drop-in): visit tokens are written as they always were (`v1`, with the [kind of
+visit](#how-cheating-is-limited) in the id, which the older Worker takes as any id), so open pages'
+scores, XP, stats and driving with others carry on. The older Worker counts no places, and its
+`DriveLimits` doesn't know the `place_*` tables, so that day's HMACs stay in them until the newer
+code runs again and the next day starts (they're no use without the Worker's secret); D1's
+`dropins_daily` stays as it is, with a gap for the days rolled back. Going forward again needs
+nothing.
 
 To deploy from GitHub on every push with Workers Builds (as the construction app is): in the
 Cloudflare dashboard open the **world-drive** Worker → Settings → Build, connect this repository and
@@ -3761,7 +6522,8 @@ signing in and every bad token turned away, the session cookie, `/api/me`, the w
 and five minutes, a payment once, bank debits, buying before signing in, refunds and chargebacks
 (either delivered before its checkout), another link's checkouts, test-mode payments with a live
 link, the same-origin checks only the webhook goes without, `SUPPORTER_EMAILS`, 30 drives a day for a
-supporter, the ⭐, the owner's SQL, and buying off without its settings; and the [play
+supporter, the ⭐, the owner's SQL, and buying off without its settings; [usernames and
+passwords](#how-usernames-and-passwords-are-tested) (all that's listed there); and the [play
 stats](#play-stats): each metric's keys checked and held to a post's most, `MAX_COUNTS`, and the
 admin page's answer with the facts from the leaderboard's and the pass's tables, refunds left out,
 the period before added up, the totals and the tidying after two years), and `npm run test:drive-ui`
@@ -3862,6 +6624,13 @@ src/drive-app/pro.js         whether this visitor has the Supporter Pass (off un
 src/drive-app/pass.js        the Supporter Pass sheet and its badge
 src/drive-app/supporter.js   buying it: Google sign-in, the Payment Link, unlocking, the pause menu's
                              account line
+src/drive-app/ads.js         Google's ad on the globe (AdSense), a chunk of its own (ads.css its
+                             look) loaded only when /api/config has a publisher id, for someone
+                             without the pass, once the globe is up and the browser idle
+src/drive-app/account.js     the account panel, a chunk of its own loaded when it's opened
+                             (account.css its look): signing in or up with a username and password,
+                             changing it, linking Google; password-rules.js the rules for usernames
+                             and passwords the page and the Worker share
 src/drive-app/garage.js      the Garage: choices and the turntable; paint.js the looks and decals;
                              boosts.js the boost styles it offers; underglow.js the glow under a
                              ride; horns.js the horns' sounds and the Horn sounds switch
@@ -3888,12 +6657,27 @@ src/drive-app/moon.js        the Moon: its ground's quadtree of squares, their l
 src/drive-app/api.js         /api/config, the visit with Turnstile, /api/search, the leaderboard's and
                              the Supporter Pass's calls
 src/drive-app/leaderboard.js the leaderboard: the panel, names, posting runs, the new-best card
+src/drive-app/challenges.js  challenges in the page, a chunk of its own loaded when they're opened
+                             (challenges.css its look): the list and boards, a run (its gates and
+                             items, countdown, timer and arrow), the finish card and posting the
+                             time; challenge-rules.js what the page and the Worker share: the
+                             periods, laying a route out, checking a time; challenge-ghost.js
+                             recording a run and racing a ghost; ghost-rules.js what the page and
+                             the Worker share of ghosts: packing, the ghost's frame, its checks;
+                             with sharing a link and a friend's link's card (challenges.js)
 src/drive-app/levels.js      levels' rules, which the page and the Worker share: XP, the curve, the
                              caps and the unlock track (looks, cars, titles, badges); what a ride needs
 src/drive-app/progress.js    levels in the page: counting what's driven, reporting it (or keeping it
                              here before a nickname), the level the Garage's locks follow
 src/drive-app/profile.js     what levels show: the XP bar and pop-ups, a level-up, the profile card,
                              the whole track (levels.css)
+src/drive-app/achievement-rules.js  achievements' rules, which the page and the Worker share: the
+                             list, the counts and their day's caps, the construction rides each
+                             unlocks; feats.js the achievements this visitor has (the rides' locks)
+src/drive-app/achievements.js  the Achievements grid, a chunk of its own loaded when it's opened
+                             (achievements.css its look)
+src/drive-app/works.js       the construction rides: names, words and tuning (their models the
+                             library's, catalog.js's WORKS_RIDES; pictures in drive/public/works/)
 src/drive-app/live-protocol.js  driving with others: the rooms, messages, limits and checks the page
                              and the Worker share, and who's driving now's dots (where, how many)
 src/drive-app/live.js        the page's connection to its room: which room, sending the car, what
@@ -3904,21 +6688,38 @@ src/drive-app/friends.js     the chip and list, Drive with friends, the party's 
 src/drive-app/online.js      who's driving now on the globe: /api/online, the dots, Driving now
 src/drive-app/screens.js     start screen, notices, loading card, pause, keys, messages
 src/drive-app/test-globe.js  the Earth without Google's tiles, for working without a key
+src/drive-app/stats.js       the play stats in the page: counting, posting with the visit's token;
+                             stats-protocol.js what may be counted (the page and the Worker share
+                             it); dropin-cells.js the grid drop-in places are counted by
+drive/public/admin.html      the owner's page: the play stats, where people drop in (its maps
+                             drawn from /sea/mask.bin and /moon/colour.webp), the challenges and
+                             how many players have each achievement
 vite.drive.config.js         the build: no key, only the offered vehicles copied from public/, and
                              drive/public/ (the cars) as its own public folder; in dev, /api passed
                              on to DRIVE_API, WebSockets too
 drive/public/cars/           the cars' models, pictures, cars.json and CREDITS.md
 scripts/add-drive-car.mjs    imports a car from Sketchfab into it; drive-car-thumbs.mjs draws the pictures
+                             (--works: the construction rides', into drive/public/works/)
 drive/public/                also robots.txt, site.webmanifest, the icons and og/ (the link cards,
-                             which scripts/drive-site-images.mjs draws with the icons)
+                             which scripts/drive-site-images.mjs draws with the icons), and
+                             places/towns.tsv (Natural Earth's towns, which scripts/make-towns.mjs
+                             makes) that drop-in places are named by
 worker/drive/                the Worker: index.js (routes), limits.js (caps, the search queue and
                              the leaderboard's turns), turnstile.js, search.js; the leaderboard:
                              players.js, scores.js, boards.js, names.js (rules and the filter),
-                             visits.js (visit tokens); the Supporter Pass: accounts.js (sign-in,
-                             sessions, /api/me), supporter.js (the webhook, who has it); driving
+                             visits.js (visit tokens), settings.js (settings, AdSense's ids
+                             checked; index.js answers /ads.txt); the Supporter Pass: accounts.js (sign-in,
+                             sessions, /api/me), logins.js (usernames and passwords, linking
+                             Google), supporter.js (the webhook, who has it); driving
                              with others: live.js (/api/live and the rooms, DriveRoom, and
                              /api/online, who's driving now); levels: progress.js
-                             (/api/progress, titles); migrations/ (its D1 tables)
+                             (/api/progress, titles); achievements: achievements.js
+                             (/api/achievements, what's earned and where, a construction ride's
+                             check); the owner's page: stats.js (the play stats),
+                             dropins.js (where people drop in), admin.js (who may see them, how
+                             often); challenges.js (picking and fixing them, their boards, times
+                             and ghosts, a friend's link and its page's preview card, the owner's
+                             choices); migrations/ (its D1 tables)
 worker/google.js, sessions.js, stripe.js   shared with the construction app: Google's ID tokens,
                              the session cookie, Stripe's webhook signatures
 wrangler.drive.jsonc         the Worker's settings, domains, Durable Objects (the visit counts and
@@ -3937,6 +6738,24 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
 
 ## Known limits
 
+- [Achievements](#achievements-and-rewards) the page counts (km, Moon drives, Garage changes,
+  rides tried) are its word, held to a day's worth each: a script reporting the most the caps allow
+  earns the 1,000 km in two days and the wheel loader's 100 km on the second report after the claim,
+  not in one go. What a script can have on its first day: the skid steer (10 km, its claim's 25 km
+  can give it), the concrete mixer (a first challenge time, which the challenges' checks of a run's
+  passes make a real drive) and, from a party, the road roller; the telehandler needs three days the
+  Worker sees, the others more driving, more days or places on boards. A party counts another
+  player, so one person with two nicknames in two tabs can still earn the party ones (each a
+  nickname the leaderboard's daily cap allows, and party 10 needs ten parties). A construction ride
+  can be driven alone by a page changed to unlock it (as the pass's can): only where it would show
+  to others is it checked. Boards finished before achievements have no placings until the owner
+  writes them ([Looking after it](#achievements-and-rewards)).
+- Challenges on the Earth are laid out without seeing its streets (Google's tiles have none in
+  them): a gate can be among buildings with no street to it, or a sprint lead off the road it began
+  on; its zone is wide and every ride can fly, but such a route is slower by the streets than by the
+  air. The time check is on straight lines at 430 km/h, three or four times a good driver's speed in
+  a city, so a made-up time that fits it gets through: the owner looks after the boards
+  ([Looking after them](#looking-after-them)).
 - On the Moon you drive on your own (see [there](#on-the-moon-you-drive-on-your-own)). Its shapes
   are the real Moon's only down to a few kilometres; every crater smaller than about 20 km across
   that you drive in is made up. Nothing casts a shadow there: a crater's far wall is darker for
@@ -4160,6 +6979,25 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   and if it listed more new places than its time allowed, the extra ones aren't sent again. A
   nickname removed by the owner takes its XP with it. A level's car is locked only in the page, as
   the pass's are: a run in one is taken on the leaderboard at any level.
+- [Where people drop in](#where-people-drop-in): a place is the page's word, so a script with many
+  addresses, each passing the robot check each day (and on the Earth each spending one of the day's
+  drives), can still push a place up the table (one count a day for each address and visit); `days`
+  shows a place busy on one day only. Everyone behind one address (a home, a school, a phone network
+  sharing addresses) counts once a day at a place, so a busy start spot's count there is low beside
+  its `dropin` count in the play stats. The owner's own drop-ins aren't counted as places at all
+  (their visits' tokens say they're the owner's), so what the owner tries out isn't seen there; their
+  play stats are counted as anyone's. A visit's
+  places past its 10 aren't counted, so a long party's later drop-ins are left out. Natural Earth's
+  towns are sparse in places, so a place is named by the nearest of them, which isn't always the
+  nearest town. The base map is the game's own, squares of about 5 km on the Earth and pixels of
+  about 2.7 km on the Moon, so it's zoomed no closer than 150 km across: Drive is how to see the
+  streets. A start spot's row is on at least as many days as its busiest cell, maybe more. The map
+  has a period's 2,000 busiest cells; with both worlds at their day's cap every day for a year, a
+  year-long look reads 1.1 million D1 rows. An answer is kept for an hour in the Worker instance that
+  worked it out, so looking again costs nothing, but four year-long looks in a day, each worked out
+  afresh (an hour apart, or in different Worker instances), would read most of a Free day's rows;
+  [What it costs](#what-it-costs-1) says why that's left so. Visitors behind one IPv6 /48 (a site's,
+  or many phones of one network's) count once a day at a place, as those behind one IPv4 address do.
 - [The cars](#world-drives-cars): the importer turns a car's wheels, not what steers them, so the
   tuk-tuk's handlebars and the golf cart's and the lawn tractor's steering wheels stay still while
   their front wheels steer. The tuk-tuk's green panels are small, so the Garage's stripes and number
@@ -4185,7 +7023,8 @@ Orbiter's laser altimeter (LOLA) and wide-angle camera (LROC), as NASA's Scienti
 Studio's CGI Moon Kit has them (https://svs.gsfc.nasa.gov/4720/), credited under **About World Drive**
 and in the corner while you're there. The open sea's height is NGA's EGM96 geoid (public domain), from PROJ's copy of it, and
 where the sea and the big lakes are is Natural Earth's ocean and lakes at 1:10 million (public
-domain, naturalearthdata.com), from its GitHub copy. Place search © OpenStreetMap contributors. The
+domain, naturalearthdata.com), from its GitHub copy, as are the towns the owner's map of where
+people drop in names places by (its populated places). Place search © OpenStreetMap contributors. The
 trucks and the cars are models from Sketchfab under CC BY 4.0, credited under **About World Drive**
 and on the ride picker (and the cars in `drive/public/cars/CREDITS.md`): the muscle car by Lexyc16,
 the golf cart by pixelsquare, the tuk-tuk by aminzafar, the ice-cream van by Sidra, the lawn tractor

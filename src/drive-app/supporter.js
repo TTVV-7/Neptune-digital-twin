@@ -1,5 +1,5 @@
 import './supporter.css';
-import { endSession, getMe, linkPlayer as postLink, startSession } from './api.js';
+import { endSession, getMe, linkPlayer as postLink, send, startSession } from './api.js';
 import { PRICE } from './pass.js';
 import { isPro, setPro } from './pro.js';
 import { storage } from './places.js';
@@ -19,6 +19,11 @@ import { toast } from './screens.js';
 // None of it may get in the way of driving: every call to the Worker is allowed to fail, and
 // without a Worker or a sign-in client id (sign-in not set up yet) nothing here shows and the sheet
 // keeps its "Coming soon".
+//
+// Usernames and passwords (worker/drive/logins.js) sign in to the same accounts: where Google's
+// button is, a link opens the account panel (account.js, loaded only then, with its own CSS), which
+// has the username and password form, and signed in, changing the password and linking Google. With
+// usernames on (passwords in /api/config), all of this shows even without Google's sign-in set up.
 
 const GOOGLE_SCRIPT = 'https://accounts.google.com/gsi/client';
 const THANKS_PARAM = 'supporter';
@@ -33,6 +38,9 @@ const LINKED_KEY = 'world-drive.linked';
 const UNREACHABLE = 'Couldn\'t reach World Drive. Check your connection and try again.';
 
 let clientId = '';
+// Whether usernames and passwords are on, and the Turnstile site key their robot checks use.
+let passwords = false;
+let siteKey = '';
 let getPlayer = () => null;
 // /api/me's answer, or null until it's known.
 let me = null;
@@ -47,6 +55,8 @@ let unlockedHere = false;
 let google = null;
 // The question to /api/me on its way, if there is one.
 let asking = null;
+// Settles once /api/me's first answer has come (or couldn't): at once without signing in here.
+let known = Promise.resolve();
 // Called once the account signed in here has the pass (see setUpSupporter), or null.
 let onPass = null;
 // Called as Buy opens the Payment Link (for the play stats).
@@ -57,6 +67,8 @@ const observers = new Set();
 // Called with the player each time one is linked to the account here (levels: a linked player's
 // level is the account's, progress.js).
 const linked = new Set();
+// Called whenever /api/me says something new (the account panel, account.js, keeps up with it).
+const changed = new Set();
 
 // As World Drive starts. worker: whether there's a Worker (not on the Vite dev server alone);
 // googleClientId: /api/config's; player(): this browser's leaderboard player, { id, secret } or null.
@@ -64,7 +76,8 @@ const linked = new Set();
 // here has the pass, to ask for the visit again. Set up again as the drive starts, it only takes the
 // new player(), onPass (none) and onBuy(): Buy opening the Payment Link, for the play stats. The
 // questions already asked, and their answers, carry on.
-export function setUpSupporter( { worker, googleClientId, player, onPass: whenPass = null, onBuy: whenBuy = null } ) {
+// passwords and turnstileSiteKey: /api/config's, for usernames and passwords.
+export function setUpSupporter( { worker, googleClientId, passwords: passwordsOn = false, turnstileSiteKey = '', player, onPass: whenPass = null, onBuy: whenBuy = null } ) {
 
 	getPlayer = player ?? getPlayer;
 	onPass = whenPass;
@@ -77,10 +90,14 @@ export function setUpSupporter( { worker, googleClientId, player, onPass: whenPa
 	}
 
 	clientId = worker && typeof googleClientId === 'string' ? googleClientId : '';
+	passwords = !! worker && passwordsOn === true;
+	siteKey = typeof turnstileSiteKey === 'string' ? turnstileSiteKey : '';
 	const thanks = takeThanks();
-	if ( clientId ) {
+	if ( accountsOn() ) {
 
-		refresh().then( () => thanks && welcomeBack() );
+		const first = refresh();
+		known = first.then( () => {}, () => {} );
+		first.then( () => thanks && welcomeBack() );
 		window.addEventListener( 'focus', recheck );
 		document.addEventListener( 'visibilitychange', () => document.visibilityState === 'visible' && recheck() );
 
@@ -88,7 +105,10 @@ export function setUpSupporter( { worker, googleClientId, player, onPass: whenPa
 
 	handle = {
 		// Whether there's signing in (and so perhaps buying) here at all.
-		on: !! clientId,
+		on: accountsOn(),
+		// Settles once the Worker's first word on this browser's account has come (or couldn't), so
+		// isPro() then says whether a supporter is here (the ads wait for it, main.js).
+		known,
 		get me() {
 
 			return me;
@@ -125,7 +145,7 @@ function addArea( root, kind ) {
 	// Opened while /api/me couldn't be asked (a bad connection as the page started): ask again.
 	new IntersectionObserver( entries => {
 
-		if ( clientId && ! me && entries.some( entry => entry.isIntersecting ) ) refresh();
+		if ( accountsOn() && ! me && entries.some( entry => entry.isIntersecting ) ) refresh();
 
 	} ).observe( root );
 	render();
@@ -154,7 +174,7 @@ export function openSupporterCheckout() {
 // the pass is here.
 export async function restorePurchases() {
 
-	if ( ! clientId ) return false;
+	if ( ! accountsOn() ) return false;
 	if ( me?.signedIn ) {
 
 		say( 'Checking...' );
@@ -167,8 +187,16 @@ export async function restorePurchases() {
 
 	}
 
+	if ( ! clientId ) {
+
+		openAccount();
+		return false;
+
+	}
+
 	try {
 
+		credentialFor = null;
 		( await loadGoogle() ).prompt();
 
 	} catch {
@@ -181,17 +209,27 @@ export async function restorePurchases() {
 
 }
 
-export async function signOut() {
+// Signed out here, or with everywhere, on every device (every session of the account). The
+// Worker's answer (api.js's send): not ok when it couldn't be reached (status 0) or said no (a 429
+// past the day's changes, say), its words in the sheet's status line, and in the account panel's.
+export async function signOut( { everywhere = false } = {} ) {
 
 	say( 'Signing out...' );
-	const answer = await endSession();
-	if ( ! answer.ok ) return say( UNREACHABLE );
+	const answer = everywhere ? await send( 'POST', '/api/account/sign-out-everywhere', {} ) : await endSession();
+	if ( ! answer.ok ) {
+
+		say( answer.status && typeof answer.body?.error === 'string' ? answer.body.error.replace( /([^.!?])$/, '$1.' ) : UNREACHABLE );
+		return answer;
+
+	}
+
 	say( '' );
 	// The email in it stays off a shared computer; signing in again links the player again, once.
 	storage( () => localStorage.removeItem( LINKED_KEY ) );
 	window.google?.accounts?.id?.disableAutoSelect?.();
 	if ( ! await refresh() ) update( { signedIn: false, supporter: false, purchase: { enabled: false } } );
-	toast( 'Signed out' );
+	toast( everywhere ? 'Signed out everywhere' : 'Signed out' );
+	return answer;
 
 }
 
@@ -201,7 +239,7 @@ export async function linkPlayer() {
 
 	const player = getPlayer();
 	if ( ! me?.signedIn || ! player ) return;
-	const key = `${ player.id } ${ me.email }`;
+	const key = `${ player.id } ${ me.email || me.username }`;
 	if ( storage( () => localStorage.getItem( LINKED_KEY ) ) === key ) return;
 	const answer = await postLink( player );
 	if ( ! answer.ok ) return;
@@ -254,6 +292,7 @@ function update( next ) {
 
 	if ( me.supporter ) waitingSince = 0;
 	render();
+	for ( const fn of changed ) fn();
 	if ( me.signedIn ) linkPlayer();
 	if ( me.supporter && onPass ) {
 
@@ -333,12 +372,83 @@ async function signIn( credential ) {
 
 	say( '' );
 	update( answer.body );
-	toast( me.supporter ? 'Signed in: Supporter Pass unlocked' : `Signed in as ${ me.email }` );
+	toast( me.supporter ? 'Signed in: Supporter Pass unlocked' : `Signed in as ${ who( { email: true } ) }` );
 
 }
 
+// Whether there's any signing in here: Google's, or usernames and passwords.
+function accountsOn() {
+
+	return !! clientId || passwords;
+
+}
+
+// Who's signed in, in words: their Google name or email, or their username. Where a pass is bought
+// or restored (the sheet, and the toast on signing in) it's the email first, since that's whose the
+// purchase is; elsewhere (the pause menu) the name.
+function who( { email = false } = {} ) {
+
+	return ( email ? me?.email || me?.name : me?.name || me?.email ) || me?.username || '';
+
+}
+
+// The account panel (account.js, its own chunk, loaded the first time it's opened), with what it
+// needs from here.
+let panel = null;
+export function openAccount() {
+
+	panel ??= import( './account.js' ).catch( err => {
+
+		panel = null;
+		throw err;
+
+	} );
+	panel.then( module => module.openAccount( hooks ) ).catch( () => toast( UNREACHABLE ) );
+
+}
+
+const hooks = {
+	get me() {
+
+		return me;
+
+	},
+	get google() {
+
+		return !! clientId;
+
+	},
+	get siteKey() {
+
+		return siteKey;
+
+	},
+	// /api/me's body as another route answered it (signed in, a password changed, Google linked).
+	update( body ) {
+
+		if ( typeof body?.signedIn === 'boolean' ) update( body );
+
+	},
+	signOut,
+	who,
+	// Google's button drawn into `slot` (in the open panel), for linking: its credential goes to
+	// onCredential rather than signing in.
+	drawGoogle: ( slot, onCredential = null ) => drawGoogle( slot, { onCredential, text: onCredential ? 'continue_with' : 'signin_with' } ),
+	// fn() whenever who's signed in, or how, may have changed.
+	onChange( fn ) {
+
+		changed.add( fn );
+
+	},
+};
+
+// Who the next Google credential is for: a linking button's onCredential (see drawGoogle), or null
+// for signing in.
+let credentialFor = null;
+
 // Google's sign-in (its script makes window.google.accounts.id), loaded once and set up with our
-// client id; the button's callback hands over the ID token.
+// client id; the button's callback hands over the ID token, to sign in, or to the linking button
+// clicked last.
 function loadGoogle() {
 
 	google ??= new Promise( ( resolve, reject ) => {
@@ -350,7 +460,7 @@ function loadGoogle() {
 
 			const id = window.google?.accounts?.id;
 			if ( ! id ) return reject( new Error( 'Google sign-in didn\'t load' ) );
-			id.initialize( { client_id: clientId, callback: ( { credential } ) => signIn( credential ), ux_mode: 'popup', auto_select: false, cancel_on_tap_outside: true } );
+			id.initialize( { client_id: clientId, callback: ( { credential } ) => ( credentialFor ?? signIn )( credential ), ux_mode: 'popup', auto_select: false, cancel_on_tap_outside: true } );
 			resolve( id );
 
 		};
@@ -379,20 +489,28 @@ function googleButton() {
 		if ( ! entries.some( entry => entry.isIntersecting ) ) return;
 		observer.disconnect();
 		observers.delete( observer );
-		loadGoogle().then( id => {
-
-			if ( slot.isConnected ) id.renderButton( slot, { theme: 'filled_black', size: 'large', text: 'signin_with', shape: 'pill', width: 240 } );
-
-		} ).catch( () => {
-
-			slot.replaceChildren( line( 'Google sign-in didn\'t load. Check your connection, or allow accounts.google.com.' ) );
-
-		} );
+		drawGoogle( slot );
 
 	} );
 	observer.observe( slot );
 	observers.add( observer );
 	return slot;
+
+}
+
+// Google's button drawn into `slot` now. With onCredential (the account panel's link button, drawn
+// as the panel opens), a click on it sends the credential there instead of signing in.
+function drawGoogle( slot, { onCredential = null, text = 'signin_with' } = {} ) {
+
+	loadGoogle().then( id => {
+
+		if ( slot.isConnected ) id.renderButton( slot, { theme: 'filled_black', size: 'large', text, shape: 'pill', width: 240, click_listener: () => credentialFor = onCredential } );
+
+	} ).catch( () => {
+
+		slot.replaceChildren( line( 'Google sign-in didn\'t load. Check your connection, or allow accounts.google.com.' ) );
+
+	} );
 
 }
 
@@ -422,18 +540,18 @@ function render() {
 // The pass's sheet: sign in, then buy; or the pass, with thanks.
 function renderBuy( root ) {
 
-	if ( ! clientId || ! me ) return;
+	if ( ! accountsOn() || ! me ) return;
 	const purchase = me.purchase ?? { enabled: false };
 	const parts = [];
 	if ( me.supporter ) parts.push( Object.assign( line( '⭐ You have the Supporter Pass. Thanks for helping keep World Drive on the road!' ), { className: 'supporter-thanks' } ) );
 	else if ( ! purchase.enabled ) {
 
 		parts.push( Object.assign( button( 'Coming soon' ), { className: 'primary buy', disabled: true } ) );
-		if ( ! me.signedIn ) parts.push( line( 'Have the pass already? Sign in to use it here.' ), googleButton() );
+		if ( ! me.signedIn ) parts.push( line( 'Have the pass already? Sign in to use it here.' ), ...signInParts() );
 
 	} else if ( ! me.signedIn ) {
 
-		parts.push( googleButton(), line( 'Sign in to buy, so the pass is yours in any browser. Bought it already? Signing in brings it back.' ) );
+		parts.push( ...signInParts(), line( 'Sign in to buy, so the pass is yours in any browser. Bought it already? Signing in brings it back.' ) );
 
 	} else {
 
@@ -447,7 +565,7 @@ function renderBuy( root ) {
 	if ( me.signedIn ) {
 
 		const restore = me.supporter || ! purchase.enabled || waitingSince ? [] : [ linkButton( 'Restore purchases', () => restorePurchases() ), ' · ' ];
-		parts.push( line( 'Signed in as ', bold( me.email ), ' · ', ...restore, linkButton( 'Sign out', () => signOut() ) ) );
+		parts.push( line( 'Signed in as ', bold( who( { email: true } ) ), ' · ', ...restore, ...accountLink(), linkButton( 'Sign out', () => signOut() ) ) );
 
 	}
 
@@ -461,13 +579,36 @@ function renderBuy( root ) {
 // the pass.
 function renderAccount( root ) {
 
-	root.hidden = ! clientId || ! me;
+	root.hidden = ! accountsOn() || ! me;
 	if ( root.hidden ) return;
 	const parts = me.signedIn
-		? [ line( 'Signed in as ', bold( me.name || me.email ), me.supporter ? ' · ⭐ Supporter Pass' : '', ' · ', linkButton( 'Sign out', () => signOut() ) ) ]
-		: [ line( 'Have the Supporter Pass? Sign in to use it here.' ), googleButton() ];
+		? [ line( 'Signed in as ', bold( who() ), me.supporter ? ' · ⭐ Supporter Pass' : '', ' · ', ...accountLink(), linkButton( 'Sign out', () => signOut() ) ) ]
+		: [ line( 'Have the Supporter Pass? Sign in to use it here.' ), ...signInParts() ];
 	if ( status ) parts.push( statusLine() );
 	root.replaceChildren( ...parts );
+
+}
+
+// Signed out: Google's button (with its sign-in set up), and with usernames on, a link to the account
+// panel's username and password form.
+function signInParts() {
+
+	const parts = clientId ? [ googleButton() ] : [];
+	if ( passwords ) {
+
+		const words = clientId ? 'Or use a username and password' : 'Sign in or create an account';
+		parts.push( Object.assign( line( linkButton( words, () => openAccount() ) ), { className: 'supporter-line supporter-passwords' } ) );
+
+	}
+
+	return parts;
+
+}
+
+// Signed in, with usernames on: "Account", to the account panel (password, what's linked).
+function accountLink() {
+
+	return passwords ? [ linkButton( 'Account', () => openAccount() ), ' · ' ] : [];
 
 }
 

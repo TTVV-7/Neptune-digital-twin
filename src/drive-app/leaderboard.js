@@ -165,6 +165,12 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace, on
 			wait( run );
 			asked = false;
 
+		} else if ( answer.status === 403 && answer.body.reason === 'ride' ) {
+
+			// A construction ride the Worker doesn't have as unlocked (achievements.js): that run isn't
+			// posted, and the visit goes on posting the others.
+			showCard( 'ride', 'Not posted', `${ answer.body.unlock ?? 'That ride isn\'t unlocked yet' }: scores in it go on the board once it is.` );
+
 		} else if ( answer.status === 403 ) {
 
 			visit = null;
@@ -520,6 +526,9 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace, on
 			return dialog.open;
 
 		},
+		// A new player, or a new name for this one, as the panel's form picks it (true if it worked;
+		// say( text ) tells how it went): a challenge's finish card asks for a name with it.
+		pickName,
 		get player() {
 
 			return player;
