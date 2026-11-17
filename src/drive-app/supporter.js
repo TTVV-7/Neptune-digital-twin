@@ -364,7 +364,7 @@ async function signIn( credential ) {
 
 	say( '' );
 	update( answer.body );
-	toast( me.supporter ? 'Signed in: Supporter Pass unlocked' : `Signed in as ${ who() }` );
+	toast( me.supporter ? 'Signed in: Supporter Pass unlocked' : `Signed in as ${ who( { email: true } ) }` );
 
 }
 
@@ -375,10 +375,12 @@ function accountsOn() {
 
 }
 
-// Who's signed in, in words: their Google name or email, or their username.
-function who() {
+// Who's signed in, in words: their Google name or email, or their username. Where a pass is bought
+// or restored (the sheet, and the toast on signing in) it's the email first, since that's whose the
+// purchase is; elsewhere (the pause menu) the name.
+function who( { email = false } = {} ) {
 
-	return me?.name || me?.email || me?.username || '';
+	return ( email ? me?.email || me?.name : me?.name || me?.email ) || me?.username || '';
 
 }
 
@@ -555,7 +557,7 @@ function renderBuy( root ) {
 	if ( me.signedIn ) {
 
 		const restore = me.supporter || ! purchase.enabled || waitingSince ? [] : [ linkButton( 'Restore purchases', () => restorePurchases() ), ' · ' ];
-		parts.push( line( 'Signed in as ', bold( who() ), ' · ', ...restore, ...accountLink(), linkButton( 'Sign out', () => signOut() ) ) );
+		parts.push( line( 'Signed in as ', bold( who( { email: true } ) ), ' · ', ...restore, ...accountLink(), linkButton( 'Sign out', () => signOut() ) ) );
 
 	}
 

@@ -3093,7 +3093,9 @@ either signs in to the one account. Driving and the leaderboard still never need
   **Sign in or create an account**). It opens the **account panel**, a dialog of its own: Google's
   button (when it's set up), "or", and a small form with two tabs, **Sign in** and **Create
   account**. Signed in, the account line says "Signed in as *Racer_1* · ... · **Account** · Sign
-  out", and **Account** opens the panel again.
+  out", and **Account** opens the panel again. Where the pass is bought (its sheet, and the toast on
+  signing in) the line names a Google account by its email, since that's whose the purchase is, and
+  the pause menu by its name; an account with no Google account by its username.
 - **Creating an account**: Username ("3 to 20 letters, digits, _ or -. Only you see it: the boards
   show your nickname.") and Password ("At least 8 characters. A few words together make a good
   one."), then, in a box: "There's no email here, so a forgotten password can't be recovered,
