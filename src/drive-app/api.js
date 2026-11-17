@@ -289,6 +289,17 @@ export function linkPlayer( { id, secret } ) {
 
 }
 
+// The signed-in account's player, the same on every device (worker/drive/accounts.js's
+// accountPlayer): this browser's own leaderboard player ({ id, secret }, or null) is linked to the
+// account as it asks, and `visit` (this page's token, or null) goes on with the account's player.
+// The answer's body: { player: null | { id, name, secret? } } (a secret when it's a player this
+// browser doesn't have yet: its own key for it).
+export function accountPlayer( player, visit ) {
+
+	return send( 'POST', '/api/player/account', { ...player ? { id: player.id, secret: player.secret } : {}, ...visit ? { visit } : {} } );
+
+}
+
 // A request to the Worker that never throws: { ok, status, body, retryAfter }, status 0 when it
 // couldn't be reached (the challenges' chunk, challenges.js, asks with it too).
 export async function send( method, path, body, { keepalive = false } = {} ) {

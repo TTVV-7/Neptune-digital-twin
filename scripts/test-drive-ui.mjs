@@ -6119,10 +6119,16 @@ async function supporterPage( { me = SIGNED_OUT, signedInAs = ALICE, clientId = 
 		json( route, state.me );
 
 	} );
-	await page.route( `${ BASE }/api/player/link`, route => {
+	// The account's player (page.state.accountPlayer: PLAYER unless a test says otherwise; a key of
+	// its own for a browser that sent another player, or none).
+	state.accountPlayer = PLAYER;
+	await page.route( `${ BASE }/api/player/account`, route => {
 
-		asked.links.push( route.request().postDataJSON() );
-		json( route, { id: PLAYER.id, name: PLAYER.name } );
+		const body = route.request().postDataJSON();
+		asked.links.push( body );
+		const theirs = state.accountPlayer;
+		if ( ! theirs ) return json( route, { player: null } );
+		json( route, { player: body.id === theirs.id ? { id: theirs.id, name: theirs.name } : { id: theirs.id, name: theirs.name, secret: 'K'.repeat( 32 ) } } );
 
 	} );
 	return page;
@@ -6274,21 +6280,40 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 
 	} );
 
-	test( 'signed in, this browser\'s leaderboard player is linked to the account, once', async () => {
+	test( 'signed in, every device drives as the account\'s player', async () => {
 
+		// This browser's player is the account's: linked, and kept as it is.
 		const page = await supporterPage( { me: ALICE, player: PLAYER } );
 		await testPad( page );
 		await page.waitForFunction( () => window.drive.supporter.me );
-		await page.waitForFunction( () => localStorage.getItem( 'world-drive.linked' ) );
-		assert.deepEqual( page.asked.links, [ { id: PLAYER.id, secret: PLAYER.secret } ] );
-		await testPad( page );
-		await page.waitForFunction( () => window.drive.supporter.me );
+		await page.waitForFunction( () => window.drive.leaderboard?.player );
 		await page.waitForTimeout( 300 );
-		assert.equal( page.asked.links.length, 1, 'linked again on the next visit' );
-		// Signed out, the email in it goes from this browser.
-		await page.evaluate( () => window.drive.supporter.signOut() );
-		assert.equal( await page.evaluate( () => localStorage.getItem( 'world-drive.linked' ) ), null );
+		assert.equal( page.asked.links.length, 1 );
+		assert.deepEqual( [ page.asked.links[ 0 ].id, page.asked.links[ 0 ].secret ], [ PLAYER.id, PLAYER.secret ] );
+		assert.deepEqual( await page.evaluate( () => JSON.parse( localStorage.getItem( 'world-drive.player' ) ) ), PLAYER );
 		await page.context().close();
+
+		// Another device, with a nickname of its own from before, and one with none: both switch to
+		// the account's player, with the key the Worker gave them.
+		for ( const player of [ { id: 'Other-id_0000000', secret: 'O'.repeat( 32 ), name: 'Laptop Me' }, null ] ) {
+
+			const other = await supporterPage( { me: ALICE, player } );
+			await testPad( other );
+			await other.waitForFunction( id => JSON.parse( localStorage.getItem( 'world-drive.player' ) ?? 'null' )?.id === id, PLAYER.id );
+			assert.deepEqual( await other.evaluate( () => JSON.parse( localStorage.getItem( 'world-drive.player' ) ) ), { id: PLAYER.id, secret: 'K'.repeat( 32 ), name: PLAYER.name } );
+			assert.equal( other.asked.links[ 0 ].id, player?.id );
+			assert.deepEqual( other.errors, [] );
+			await other.context().close();
+
+		}
+
+		// Signed out, nothing is asked.
+		const out = await supporterPage( { player: PLAYER } );
+		await testPad( out );
+		await out.waitForFunction( () => window.drive.supporter.me );
+		await out.waitForTimeout( 300 );
+		assert.equal( out.asked.links.length, 0 );
+		await out.context().close();
 
 	} );
 

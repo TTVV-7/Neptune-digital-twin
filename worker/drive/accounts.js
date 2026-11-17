@@ -5,6 +5,7 @@ import { PERIODS, forgetBoards } from './boards.js';
 import { authenticate, credentials, database, takeTurn } from './players.js';
 import { isSupporter, purchaseFor } from './supporter.js';
 import { googleClientId } from './settings.js';
+import { readVisit } from './visits.js';
 
 // World Drive's accounts (docs/world-drive.md): "Sign in with Google", or a username and a password
 // (logins.js), for the Supporter Pass, so a pass bought once is yours in any browser, and for the
@@ -26,6 +27,9 @@ const cookies = sessionCookies( 'wd_session' );
 // nobody signing in for themselves comes near it (a whole school on one address included).
 export const SIGN_INS_DAILY = 50;
 const LINKS_DAILY = 20;
+// Keys a player may have for the browsers signed in to its account (player_keys): the newest are
+// kept, so a device not used for a long while picks the account's player up again as it next starts.
+export const KEYS_MOST = 20;
 
 // POST /api/session { credential }: what /api/me says (now signed in), with the session cookie.
 export async function signIn( { request, env, url, limits, now } ) {
@@ -153,5 +157,55 @@ export async function linkPlayer( context ) {
 	// catch up within half a minute).
 	await forgetBoards( url, Object.values( PERIODS ).map( period => [ period( now ), '' ] ), id );
 	return json( { id, name: player.name } );
+
+}
+
+// POST /api/player/account { id?, secret?, visit? }, signed in: the account's player, so it's the
+// same on every device, with its level, achievements and scores. The page asks as it starts signed
+// in and as it signs in, with its own leaderboard player if it has one ({ id, secret }, which is
+// linked to the account as linkPlayer links it) and its visit token. The account's player is the
+// one of its players with the most XP. Answers { player: null } when the account has none yet,
+// { player: { id, name } } when it's the one this browser has already, and otherwise
+// { player: { id, name, secret } }: a key of this browser's own for it (player_keys; the player's
+// secret is kept only as its hash), which the page keeps in its place. The visit, if this browser's
+// own player has used it already, goes on with the account's (one visit, one player, as ever:
+// it's the same person's).
+export async function accountPlayer( context ) {
+
+	const { request, env, url, limits, now } = context;
+	const account = await currentAccount( context );
+	if ( ! account ) throw new HttpError( 401, 'Sign in first' );
+	const db = database( env );
+	const body = await readJson( request, 1024 );
+	if ( ! isObject( body ) ) throw new HttpError( 400, 'Bad request' );
+	let here = null;
+	if ( body.id !== undefined || body.secret !== undefined ) {
+
+		const { id, secret } = credentials( body );
+		here = await authenticate( db, id, secret );
+		if ( here.account_id !== account.id ) {
+
+			await takeTurn( limits, request, 'link', now, LINKS_DAILY, 48 );
+			await db.prepare( 'UPDATE players SET account_id = ? WHERE id = ?' ).bind( account.id, id ).run();
+			await forgetBoards( url, Object.values( PERIODS ).map( period => [ period( now ), '' ] ), id );
+
+		}
+
+	}
+
+	const best = await db.prepare( 'SELECT id, name FROM players WHERE account_id = ? ORDER BY xp DESC, created_at ASC, id ASC LIMIT 1' ).bind( account.id ).first();
+	if ( ! best ) return json( { player: null } );
+	if ( best.id === here?.id ) return json( { player: { id: best.id, name: best.name } } );
+
+	await takeTurn( limits, request, 'link', now, LINKS_DAILY, 48 );
+	const secret = randomToken( 24 );
+	const visit = here ? await readVisit( env, body.visit, now ) : null;
+	await db.batch( [
+		db.prepare( 'INSERT INTO player_keys ( secret_hash, player_id, created_at ) VALUES ( ?, ?, ? )' ).bind( await sha256Hex( secret ), best.id, now ),
+		db.prepare( `DELETE FROM player_keys WHERE player_id = ?1 AND secret_hash NOT IN (
+			SELECT secret_hash FROM player_keys WHERE player_id = ?1 ORDER BY created_at DESC LIMIT ${ KEYS_MOST } )` ).bind( best.id ),
+		...visit ? [ db.prepare( 'UPDATE visits SET player_id = ? WHERE id = ? AND player_id = ?' ).bind( best.id, visit.id, here.id ) ] : [],
+	] );
+	return json( { player: { id: best.id, name: best.name, secret } } );
 
 }

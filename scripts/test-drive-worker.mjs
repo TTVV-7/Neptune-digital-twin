@@ -1715,6 +1715,61 @@ describe( 'World Drive Supporter Pass', () => {
 
 	} );
 
+	test( 'one player an account: a signed-in browser is given the account\'s player, with a key of its own', async () => {
+
+		const gus = await signIn( { sub: '1010', email: 'gus@example.com', name: 'Gus' } );
+		const mine = ( body, cookie = gus.cookie, time = PASS_DAY ) => send( 'POST', '/api/player/account', body, { cookie, time } );
+		// Signed out: refused. Signed in with no player anywhere: none.
+		assert.equal( ( await mine( {}, null ) ).status, 401 );
+		assert.deepEqual( ( await mine( {} ) ).json, { player: null } );
+
+		const phone = await player( 'Gus Phone', 100 );
+		const laptop = await player( 'Gus Laptop', 50 );
+		// The wrong secret, or only half of a player: refused, and nothing linked.
+		assert.equal( ( await mine( { id: phone.id, secret: 'W'.repeat( 32 ) } ) ).status, 403 );
+		assert.equal( ( await mine( { id: phone.id } ) ).status, 400 );
+		assert.deepEqual( server.d1( `SELECT account_id FROM players WHERE id = '${ phone.id }'` ), [ { account_id: null } ] );
+
+		// The first browser's player is the account's: linked, and kept as it is (no key).
+		const first = await mine( { id: phone.id, secret: phone.secret } );
+		assert.equal( first.status, 200, first.text );
+		assert.deepEqual( first.json, { player: { id: phone.id, name: 'Gus Phone' } } );
+		server.d1( `UPDATE players SET xp = 500 WHERE id = '${ phone.id }'` );
+
+		// Another device with a player of its own: that one's linked too, and the device is given the
+		// account's (the most XP), with a key that works as its secret does.
+		const second = await mine( { id: laptop.id, secret: laptop.secret } );
+		assert.equal( second.status, 200, second.text );
+		assert.equal( second.json.player.id, phone.id );
+		assert.equal( second.json.player.name, 'Gus Phone' );
+		assert.match( second.json.player.secret, /^[A-Za-z0-9_-]{32}$/ );
+		const [ { id: account } ] = server.d1( 'SELECT id FROM accounts WHERE google_sub = \'1010\'' );
+		assert.deepEqual( server.d1( `SELECT account_id FROM players WHERE id IN ( '${ phone.id }', '${ laptop.id }' )` ), [ { account_id: account }, { account_id: account } ] );
+		const renamed = await send( 'POST', '/api/player/rename', { id: phone.id, secret: second.json.player.secret, name: 'Gus Drives' } );
+		assert.equal( renamed.status, 200, renamed.text );
+		// The key is for that player only, and the player's own secret goes on working.
+		assert.equal( ( await send( 'POST', '/api/player/rename', { id: laptop.id, secret: second.json.player.secret, name: 'Gus Laptop 2' } ) ).status, 403 );
+		assert.equal( ( await send( 'POST', '/api/player/rename', { id: phone.id, secret: phone.secret, name: 'Gus Phone' } ) ).status, 200 );
+		// Asked again with the key: it's the account's player already.
+		assert.deepEqual( ( await mine( { id: phone.id, secret: second.json.player.secret } ) ).json, { player: { id: phone.id, name: 'Gus Phone' } } );
+
+		// A new device with no player yet is given it too. Only the newest KEYS_MOST keys are kept.
+		const keys = [ second.json.player.secret ];
+		for ( let i = 0; i < 20; i ++ ) {
+
+			const fresh = await mine( {}, gus.cookie, PASS_DAY + ( i + 1 ) * SECOND );
+			assert.equal( fresh.status, 200, fresh.text );
+			assert.equal( fresh.json.player.id, phone.id );
+			keys.push( fresh.json.player.secret );
+
+		}
+
+		assert.equal( server.d1( `SELECT COUNT( * ) AS n FROM player_keys WHERE player_id = '${ phone.id }'` )[ 0 ].n, 20 );
+		assert.equal( ( await send( 'POST', '/api/player/rename', { id: phone.id, secret: keys[ 0 ], name: 'Gus Phone' } ) ).status, 403 );
+		assert.equal( ( await send( 'POST', '/api/player/rename', { id: phone.id, secret: keys.at( - 1 ), name: 'Gus Phone' } ) ).status, 200 );
+
+	} );
+
 	test( 'the purchases kept are only what Stripe sent', async () => {
 
 		const sessions = server.d1( 'SELECT checkout_session FROM purchases ORDER BY 1' ).map( row => row.checkout_session );
@@ -2942,7 +2997,8 @@ describe( 'Username and password rules', () => {
 		const db = new DatabaseSync( ':memory:' );
 		db.exec( 'PRAGMA foreign_keys = ON' );
 		const migrations = new URL( '../worker/drive/migrations/', import.meta.url );
-		const files = readdirSync( migrations ).sort();
+		const all = readdirSync( migrations ).sort();
+		const files = all.slice( 0, all.indexOf( '0009_achievements.sql' ) + 1 );
 		assert.equal( files.at( - 1 ), '0009_achievements.sql' );
 		for ( const file of files.slice( 0, - 1 ) ) db.exec( readFileSync( new URL( file, migrations ), 'utf8' ) );
 		db.exec( `INSERT INTO players ( id, name, name_key, secret_hash, created_at, last_seen_at, xp, streak ) VALUES ( 'p', 'Alice', 'aiice', 's', 1, 1, 500, 4 )` );

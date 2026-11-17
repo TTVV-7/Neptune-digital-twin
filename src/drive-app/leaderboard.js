@@ -359,6 +359,22 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace, on
 
 	}
 
+	// The signed-in account's player, from now on this browser's (supporter.js): its scores are posted
+	// as theirs, with nothing of this browser's posted today taken as theirs.
+	function usePlayer( next ) {
+
+		player = { id: next.id, secret: next.secret, name: next.name };
+		storage( () => localStorage.setItem( PLAYER_KEY, JSON.stringify( player ) ) );
+		posted = {};
+		storage( () => localStorage.removeItem( POSTED_KEY ) );
+		ranks = { today: Infinity, all: Infinity };
+		renaming = false;
+		if ( dialog.open ) showYou();
+		onName();
+		if ( waiting.size ) schedule();
+
+	}
+
 	function forgetPlayer() {
 
 		player = null;
@@ -529,6 +545,7 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace, on
 		// A new player, or a new name for this one, as the panel's form picks it (true if it worked;
 		// say( text ) tells how it went): a challenge's finish card asks for a name with it.
 		pickName,
+		usePlayer,
 		get player() {
 
 			return player;

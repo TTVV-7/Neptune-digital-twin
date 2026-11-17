@@ -837,7 +837,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// Buying the Supporter Pass in its sheet, and signing in for it there and in the pause menu
 	// (supporter.js). Without sign-in set up the sheet just says "Coming soon". Its sheet opened, and
 	// Buy followed to Stripe, are counted for the play stats.
-	const supporter = setUpSupporter( { worker, googleClientId, passwords, turnstileSiteKey, player: () => board.player, onBuy: () => stats.add( 'pass', 'buy' ) } );
+	const supporter = setUpSupporter( { worker, googleClientId, passwords, turnstileSiteKey, player: () => board.player, usePlayer: next => board.usePlayer( next ), visit: () => visit, onBuy: () => stats.add( 'pass', 'buy' ) } );
 	onPassOpen( () => stats.add( 'pass', 'open' ) );
 	if ( supporter.on ) {
 

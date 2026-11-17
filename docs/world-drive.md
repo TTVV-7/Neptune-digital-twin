@@ -2226,9 +2226,10 @@ level-only colours.
 ### Saving it, and claiming it
 
 - **With a nickname**, XP is kept with the leaderboard player in D1 (`players.xp`), so it's yours
-  wherever that nickname is. A player linked to a Google account (signing in for the pass links the
-  browser's player, `accounts.js`) shows the level of the account's best player: sign in on another
-  device and pick a nickname there, and it shows the account's level until its own XP passes it.
+  wherever that nickname is. A player linked to an account (signing in links the browser's player,
+  `accounts.js`) shows the level of the account's best player, and signed in, every device drives as
+  that player ([One player on every device](#one-player-on-every-device)), so the level is the same
+  on all of them and grows wherever you drive.
   (Each player's XP is its own, and the caps below are each player's: an account's players added up
   would let several players' caps add up too.) The page reports what it drove every 2 minutes while
   driving, as it pauses, as it goes back to the globe, and as the page goes (`pagehide`, with
@@ -2917,9 +2918,16 @@ and times on every device, and driving and the leaderboard never need it.
 - Wherever Google's button is, **Or use a username and password** opens the account panel, to sign
   in or create an account without Google ([Username and password
   accounts](#username-and-password-accounts)); signed in, **Account** in the account line opens it.
-- Signed in, the browser's leaderboard player is linked to the account (once), so a supporter's ⭐
-  shows by their name on every board. Signing out forgets that it was linked (the note holds the
-  email), so signing in again links it again.
+- <a id="one-player-on-every-device"></a>**One player on every device.** Signed in (as the page
+  starts, and as you sign in), the browser's leaderboard player is linked to the account, so a
+  supporter's ⭐ shows by their name on every board, and the browser then drives as the account's
+  player: the one of its players with the most XP. A device with no nickname yet, or with a
+  nickname of its own from before, is switched to it, so the level, achievements, title and scores
+  are the same wherever you sign in (what a device drove before a nickname is claimed by the
+  account's player as usual). The switched device gets a key of its own for that player
+  (`player_keys`): the player's secret is kept only as its hash, so it can't be handed out. A
+  player switched away from stays linked to the account (its XP no longer shows anywhere: the
+  account's level is still its best player's).
 - With no sign-in set up (`GOOGLE_CLIENT_ID` empty), no Worker (the dev server alone) or the Worker
   not answering, the sheet keeps **Coming soon** and nothing else changes. With sign-in but buying
   off, it's **Coming soon** with a sign-in for those who already have the pass (`SUPPORTER_EMAILS`).
@@ -2943,6 +2951,13 @@ and times on every device, and driving and the leaderboard never need it.
   [Username and password accounts](#username-and-password-accounts)).
 - `POST /api/player/link { id, secret }`, signed in: the leaderboard player (proved by its secret, as
   a rename is) becomes the account's (`players.account_id`); 20 a day from one visitor.
+- `POST /api/player/account { id?, secret?, visit? }`, signed in (what the page uses now): the
+  browser's own player, if it sends one, is linked as above; then the answer is the account's player
+  (its players' most XP): `{ player: null }` when it has none, `{ player: { id, name } }` when it's
+  the one sent, else `{ player: { id, name, secret } }` with a new key for this browser (kept as its
+  SHA-256 in `player_keys`, the newest 20 a player; each works wherever the player's secret does).
+  A visit the browser's own player has used already goes on with the account's player (one visit,
+  one player, as ever). Making a key or linking takes one of the visitor's 20 links a day.
 - **Stripe's webhook**, `POST /api/stripe/webhook` (`worker/drive/supporter.js`): the one route without
   the same-origin and JSON checks (it comes from Stripe's servers, not a page) and without a session.
   It proves itself with its `Stripe-Signature`, checked by the code the construction app's webhook

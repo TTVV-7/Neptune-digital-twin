@@ -1,5 +1,5 @@
 import './supporter.css';
-import { endSession, getMe, linkPlayer as postLink, send, startSession } from './api.js';
+import { accountPlayer, endSession, getMe, send, startSession } from './api.js';
 import { PRICE } from './pass.js';
 import { isPro, setPro } from './pro.js';
 import { storage } from './places.js';
@@ -33,8 +33,8 @@ const RECHECK_DELAY = 3000;
 const RECHECKS = 10;
 // How long after Buy (ms) the window getting focus back asks whether the pass has come.
 const WAIT_FOR = 60 * 60 * 1000;
-// The player last linked to the account, as "<player id> <email>", so it's linked once, not each visit.
-const LINKED_KEY = 'world-drive.linked';
+// What the note of the player linked once was kept as (before one player an account): taken away.
+const OLD_LINKED_KEY = 'world-drive.linked';
 const UNREACHABLE = 'Couldn\'t reach World Drive. Check your connection and try again.';
 
 let clientId = '';
@@ -42,6 +42,14 @@ let clientId = '';
 let passwords = false;
 let siteKey = '';
 let getPlayer = () => null;
+// Switches this browser to the account's player ({ id, secret, name }: the leaderboard's), and this
+// page's visit token, or null: set up as the drive starts (main.js).
+let usePlayer = null;
+let getVisit = () => null;
+// The account's player asked for this page, as "<player id> <account>" (once each), and the ask on
+// its way.
+let askedFor = '';
+let askingPlayer = null;
 // /api/me's answer, or null until it's known.
 let me = null;
 // What's going on, shown in each area ('' for nothing).
@@ -75,9 +83,12 @@ const changed = new Set();
 // new player(), onPass (none) and onBuy(): Buy opening the Payment Link, for the play stats. The
 // questions already asked, and their answers, carry on.
 // passwords and turnstileSiteKey: /api/config's, for usernames and passwords.
-export function setUpSupporter( { worker, googleClientId, passwords: passwordsOn = false, turnstileSiteKey = '', player, onPass: whenPass = null, onBuy: whenBuy = null } ) {
+export function setUpSupporter( { worker, googleClientId, passwords: passwordsOn = false, turnstileSiteKey = '', player, usePlayer: use = null, visit = null, onPass: whenPass = null, onBuy: whenBuy = null } ) {
 
 	getPlayer = player ?? getPlayer;
+	usePlayer = use ?? usePlayer;
+	getVisit = visit ?? getVisit;
+	storage( () => localStorage.removeItem( OLD_LINKED_KEY ) );
 	onPass = whenPass;
 	onBuy = whenBuy ?? onBuy;
 	if ( handle ) {
@@ -217,8 +228,8 @@ export async function signOut( { everywhere = false } = {} ) {
 	}
 
 	say( '' );
-	// The email in it stays off a shared computer; signing in again links the player again, once.
-	storage( () => localStorage.removeItem( LINKED_KEY ) );
+	// Signing in again (as this account or another) asks for its player again.
+	askedFor = '';
 	window.google?.accounts?.id?.disableAutoSelect?.();
 	if ( ! await refresh() ) update( { signedIn: false, supporter: false, purchase: { enabled: false } } );
 	toast( everywhere ? 'Signed out everywhere' : 'Signed out' );
@@ -226,18 +237,50 @@ export async function signOut( { everywhere = false } = {} ) {
 
 }
 
-// This browser's leaderboard player, linked to the signed-in account so a supporter's ⭐ is by its
-// name: once for each player and account. Called again when a player is made (leaderboard.js).
-export async function linkPlayer() {
+// One player an account, on every device: signed in, this browser's leaderboard player is linked to
+// the account (so a supporter's ⭐ is by its name), and the account's player (the one of its players
+// with the most XP) becomes this browser's, so the level, achievements and scores are the same
+// wherever you sign in. Once a page for each player and account; called again when a player is made
+// here (leaderboard.js) and as /api/me says who's signed in. Never throws.
+export function linkPlayer() {
 
+	askingPlayer ??= askForPlayer().finally( () => {
+
+		askingPlayer = null;
+
+	} );
+	return askingPlayer;
+
+}
+
+async function askForPlayer() {
+
+	// Not before the drive has started (the used-up screen has no leaderboard).
+	if ( ! me?.signedIn || ! usePlayer ) return;
 	const player = getPlayer();
-	if ( ! me?.signedIn || ! player ) return;
-	const key = `${ player.id } ${ me.email || me.username }`;
-	if ( storage( () => localStorage.getItem( LINKED_KEY ) ) === key ) return;
-	const answer = await postLink( player );
-	if ( ! answer.ok ) return;
-	storage( () => localStorage.setItem( LINKED_KEY, key ) );
-	for ( const fn of linked ) fn( player );
+	const key = `${ player?.id ?? '' } ${ me.email || me.username }`;
+	if ( askedFor === key ) return;
+	askedFor = key;
+	let answer = await accountPlayer( player, getVisit() );
+	// This browser's player was removed: the account's (if it has one) instead.
+	if ( answer.status === 403 && answer.body?.reason === 'player' ) answer = await accountPlayer( null, null );
+	if ( ! answer.ok ) {
+
+		askedFor = '';
+		return;
+
+	}
+
+	const theirs = answer.body?.player;
+	if ( ! theirs ) return;
+	if ( theirs.id !== player?.id && typeof theirs.secret === 'string' ) {
+
+		usePlayer( { id: theirs.id, secret: theirs.secret, name: theirs.name } );
+		askedFor = `${ theirs.id } ${ me.email || me.username }`;
+
+	}
+
+	for ( const fn of linked ) fn( getPlayer() );
 
 }
 

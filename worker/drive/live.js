@@ -6,7 +6,7 @@ import {
 	boundsOf, cellOf, checkLook, checkPlace, checkState, checkTrick, checkVehicle, dotsOf, parseRoom, shardOf, toEcef,
 } from '../../src/drive-app/live-protocol.js';
 import { dayOf } from './limits.js';
-import { credentials, database } from './players.js';
+import { credentials, database, secretMatches } from './players.js';
 import { setting } from './settings.js';
 import { hasPass, supporterEmails } from './supporter.js';
 import { readVisit } from './visits.js';
@@ -673,7 +673,7 @@ export class DriveRoom extends DurableObject {
 
 				const { id, secret } = credentials( player );
 				const row = await database( this.env ).prepare( `SELECT p.name, ${ hasPass( 'p.account_id', '?3' ) } AS star, ${ xpOf( 'p' ) } AS xp, p.title, p.account_id
-					FROM players p WHERE p.id = ?1 AND p.secret_hash = ?2` ).bind( id, await sha256Hex( secret ), supporterEmails( this.env ) ).first();
+					FROM players p WHERE p.id = ?1 AND ${ secretMatches( 'p', '?2' ) }` ).bind( id, await sha256Hex( secret ), supporterEmails( this.env ) ).first();
 				if ( row ) return { name: row.name, star: !! row.star, ...standingOf( row.xp, row.title ), player: id, account: row.account_id ?? null };
 
 			}
