@@ -58,6 +58,11 @@ export class DriveLimits extends DurableObject {
 		this.sql.exec( 'CREATE TABLE IF NOT EXISTS place_totals ( day TEXT NOT NULL, world TEXT NOT NULL, count INTEGER NOT NULL, PRIMARY KEY ( day, world ) ) WITHOUT ROWID' );
 		this.sql.exec( 'CREATE TABLE IF NOT EXISTS place_visitors ( day TEXT NOT NULL, visitor TEXT NOT NULL, count INTEGER NOT NULL, PRIMARY KEY ( day, visitor ) ) WITHOUT ROWID' );
 		this.sql.exec( 'CREATE TABLE IF NOT EXISTS place_visits ( day TEXT NOT NULL, visit TEXT NOT NULL, count INTEGER NOT NULL, asks INTEGER NOT NULL, PRIMARY KEY ( day, visit ) ) WITHOUT ROWID' );
+		// Failed sign-ins with a password today (see passwordCheck): for each visitor (an address, an
+		// IPv6 one by its /48) and for each username, each as a hash of the day's salt and it, so neither
+		// an address nor a username is kept, nor can be linked from one day to the next. last_at: when
+		// its latest failure was (ms).
+		this.sql.exec( 'CREATE TABLE IF NOT EXISTS password_fails ( day TEXT NOT NULL, key TEXT NOT NULL, count INTEGER NOT NULL, last_at INTEGER NOT NULL, PRIMARY KEY ( day, key ) ) WITHOUT ROWID' );
 		// The key for those HMACs, once it's made (placesKey).
 		this.placeKey = null;
 		// When the next search may go out (ms). Only in memory: if this object is put to sleep,
@@ -106,6 +111,49 @@ export class DriveLimits extends DurableObject {
 			if ( count >= limit ) return { ok: false, retryAfter: untilMidnight( now ) };
 			this.sql.exec( 'INSERT INTO turns ( day, kind, visitor, count ) VALUES ( ?, ?, ?, 1 ) ON CONFLICT ( day, kind, visitor ) DO UPDATE SET count = count + 1', day, kind, visitor );
 			return { ok: true };
+
+		} );
+
+	}
+
+	// Whether a sign-in with a password (or a password change, which proves the current one) for the
+	// username `user` (its key, logins.js) from `ip` (an address, an IPv6 one by its /48) may be tried
+	// at `now` (ms): { ok: true }, or { ok: false, reason, retryAfter? }:
+	// - 'address': this visitor has failed `addressFails` times today (whatever the usernames), so it
+	//   tries no more until midnight UTC (retryAfter): one address can't guess for long.
+	// - 'robot': the username has failed `freeFails` times today (from anywhere) and this try has no
+	//   robot check passed (`robot`): from then on each try needs one (Turnstile), so a script can't
+	//   guess from many addresses, while its owner, with a click at most, still can sign in.
+	// - 'wait': past those, a try within `gap` ms of the username's last failure, retryAfter the
+	//   seconds left. That only slows guessing: nothing a stranger does keeps the owner out for longer
+	//   than `gap` and a robot check, as nothing ever locks a username.
+	// Nothing is counted here; passwordFailed counts a failure. Hashed with the day's salt, as visits.
+	async passwordCheck( ip, user, { now, robot = false, addressFails, freeFails, gap } ) {
+
+		const day = dayOf( now );
+		const salt = this.saltFor( day );
+		const [ visitor, name ] = await Promise.all( [ sha256Hex( `${ salt }:password:${ ip }` ), sha256Hex( `${ salt }:username:${ user }` ) ] );
+		const row = key => this.sql.exec( 'SELECT count, last_at FROM password_fails WHERE day = ? AND key = ?', day, key ).toArray()[ 0 ];
+		if ( ( row( visitor )?.count ?? 0 ) >= addressFails ) return { ok: false, reason: 'address', retryAfter: untilMidnight( now ) };
+		const fails = row( name );
+		if ( ( fails?.count ?? 0 ) < freeFails ) return { ok: true };
+		if ( ! robot ) return { ok: false, reason: 'robot' };
+		const wait = fails.last_at + gap - now;
+		if ( wait > 0 ) return { ok: false, reason: 'wait', retryAfter: Math.max( 1, Math.ceil( wait / 1000 ) ) };
+		return { ok: true };
+
+	}
+
+	// A failed sign-in (or password change) for `user` from `ip` at `now` (ms), counted for both (see
+	// passwordCheck).
+	async passwordFailed( ip, user, { now } ) {
+
+		const day = dayOf( now );
+		const salt = this.saltFor( day );
+		const keys = await Promise.all( [ sha256Hex( `${ salt }:password:${ ip }` ), sha256Hex( `${ salt }:username:${ user }` ) ] );
+		this.ctx.storage.transactionSync( () => {
+
+			for ( const key of keys ) this.sql.exec( 'INSERT INTO password_fails ( day, key, count, last_at ) VALUES ( ?, ?, 1, ? ) ON CONFLICT ( day, key ) DO UPDATE SET count = count + 1, last_at = excluded.last_at', day, key, now );
 
 		} );
 
@@ -313,7 +361,7 @@ export class DriveLimits extends DurableObject {
 			this.sql.exec( 'DELETE FROM turns WHERE day < ?', day );
 			this.sql.exec( 'DELETE FROM live WHERE day < ?', day );
 			this.sql.exec( 'DELETE FROM live_visits WHERE day < ?', day );
-			for ( const table of [ 'place_seen', 'place_totals', 'place_visitors', 'place_visits' ] ) this.sql.exec( `DELETE FROM ${ table } WHERE day < ?`, day );
+			for ( const table of [ 'place_seen', 'place_totals', 'place_visitors', 'place_visits', 'password_fails' ] ) this.sql.exec( `DELETE FROM ${ table } WHERE day < ?`, day );
 			this.sql.exec( 'DELETE FROM days WHERE day < ?', day );
 			this.sql.exec( 'INSERT OR IGNORE INTO days ( day, salt ) VALUES ( ?, ? )', day, salt );
 

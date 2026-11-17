@@ -867,7 +867,12 @@ its own way; every look in the Garage at once (paint, finishes from satin to chr
 decals, rims, a neon underglow in eight colours and a rainbow, horns, seventeen more boost styles,
 flame colours and trails, some of which levels unlock over time), +50% XP, a ⭐ on the leaderboard and
 30 drives a day. It's bought with a Stripe Payment Link after
-signing in with Google, so it's yours in any browser; Stripe's signed webhook records it. Buying
+signing in, so it's yours in any browser; Stripe's signed webhook records it. Signing in is with
+Google or with a **username and password** (PBKDF2-SHA-256 at the Workers runtime's most, 100,000
+iterations, with a salt of its own; guessing slowed per address and per username without ever
+locking the owner out; no email, so a password can't be recovered unless Google is linked too), and
+either can be linked to the other: one account, with its pass, level, times and Garage, whichever
+way you signed in (see [Username and password accounts](docs/world-drive.md#username-and-password-accounts)). Buying
 stays off ("Coming soon") until `GOOGLE_CLIENT_ID` and the webhook's secret are set (see
 [Supporter Pass (buying it)](docs/world-drive.md#supporter-pass-buying-it) for the owner's steps).
 
@@ -988,7 +993,7 @@ src/geo.js          lat/lon <-> local metres
 public/models/      put your .glb files here
 drive/index.html    World Drive's page; its code is src/drive-app/ (docs/world-drive.md)
 worker/drive/       World Drive's Worker: the Maps key per visit, caps, Turnstile, search, the leaderboard,
-                    levels' XP, the Supporter Pass (Google sign-in, Stripe's webhook), driving with
+                    levels' XP, the Supporter Pass (Google's or a username's sign-in, Stripe's webhook), driving with
                     others' rooms, the owner's play stats, where people drop in and challenges
                     (with their ghosts, and a friend's link's page and preview card)
 vite.drive.config.js, wrangler.drive.jsonc   World Drive's build and Worker settings

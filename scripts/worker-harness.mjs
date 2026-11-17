@@ -221,12 +221,15 @@ export function rewritten( origin, path, init = {} ) {
 // window.testCredential.
 export const GOOGLE_STUB = `window.google = { accounts: { id: {
 	initialize( options ) { this.options = options; },
-	renderButton( parent ) {
+	renderButton( parent, options ) {
 		const button = document.createElement( 'button' );
 		button.type = 'button';
 		button.className = 'stub-google';
 		button.textContent = 'Sign in with Google';
-		button.onclick = () => this.options.callback( { credential: window.testCredential, select_by: 'btn' } );
+		button.onclick = () => {
+			options?.click_listener?.();
+			this.options.callback( { credential: window.testCredential, select_by: 'btn' } );
+		};
 		parent.append( button );
 	},
 	prompt() {}, disableAutoSelect() {}, cancel() {},

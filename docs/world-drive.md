@@ -2882,8 +2882,9 @@ The pass is one payment of **CA$4.99**, no subscription, through a Stripe Paymen
 Drive's own Stripe account. It comes with what's [above](#supporter-pass-content) (seven cars of its
 own, the six levels bring, the four rides and every Garage look at once), **+50% XP** for
 [levels](#levels), a **⭐ by your name on the leaderboard**, and **30 drives a day** instead of 8.
-A pass is a Google account's, so it's yours in any browser you sign in on: signing in is only ever
-for the pass, and driving and the leaderboard never need it.
+A pass is an account's (Google's sign-in, or a [username and password](#username-and-password-accounts)),
+so it's yours in any browser you sign in on: signing in is only ever for the pass and your level
+and times on every device, and driving and the leaderboard never need it.
 
 ### What people see
 
@@ -2909,6 +2910,9 @@ for the pass, and driving and the leaderboard never need it.
   counted by the address until the pass is known). Once the account there has the pass, the visit
   is asked for again, once: a supporter who has had their 30 sees the screen, saying who's signed in.
   (Already driving on the Moon from that screen, the page reloads instead.)
+- Wherever Google's button is, **Or use a username and password** opens the account panel, to sign
+  in or create an account without Google ([Username and password
+  accounts](#username-and-password-accounts)); signed in, **Account** in the account line opens it.
 - Signed in, the browser's leaderboard player is linked to the account (once), so a supporter's ⭐
   shows by their name on every board. Signing out forgets that it was linked (the note holds the
   email), so signing in again links it again.
@@ -2929,8 +2933,10 @@ for the pass, and driving and the leaderboard never need it.
   `DELETE /api/session` signs that browser out. Anyone with a Google account can sign in, up to 50
   times a day from one visitor (counted like the leaderboard's names), so a token sent again and
   again for the hour it's good for can't fill the database with sessions.
-- `GET /api/me`: `{ signedIn, name?, email?, supporter, purchase: { enabled, link?, price?,
-  clientReferenceId? } }`.
+- `GET /api/me`: `{ signedIn, name?, email?, google?, username?, supporter, purchase: { enabled,
+  link?, price?, clientReferenceId? } }`: `google` whether a Google account is linked (`name` and
+  `email` are its, `''` without one), `username` the account's own username or `null` (see
+  [Username and password accounts](#username-and-password-accounts)).
 - `POST /api/player/link { id, secret }`, signed in: the leaderboard player (proved by its secret, as
   a rename is) becomes the account's (`players.account_id`); 20 a day from one visitor.
 - **Stripe's webhook**, `POST /api/stripe/webhook` (`worker/drive/supporter.js`): the one route without
@@ -3069,6 +3075,252 @@ UPDATE purchases SET account_id = 12 WHERE checkout_session = 'cs_live_...';
   row may show one of those by a name without a ⭐ or at a lower level. Likewise the cars' models are public files, as the library's are.
 - No receipts or purchase history in the page: Stripe emails its own receipt if that's on in its
   settings.
+
+## Username and password accounts
+
+Beside **Sign in with Google**, an account can be made with a **username and a password**, for
+people who don't want to use Google, or can't (a school's or a shared computer, no Google account
+at all). It's the same kind of account with the same session: the Supporter Pass (bought or
+restored on it), the player linked to it and so its level and XP, its leaderboard and challenge
+times and ghosts, the nickname and the Garage are the account's, whichever way you signed in. A
+Google account can add a username and password, and a username's account can link Google; then
+either signs in to the one account. Driving and the leaderboard still never need an account.
+
+### What people see
+
+- **Where Google's button is** (the pass's sheet, the pause menu, the used-up screen), a link under
+  it: **Or use a username and password** (or, with Google's sign-in not set up,
+  **Sign in or create an account**). It opens the **account panel**, a dialog of its own: Google's
+  button (when it's set up), "or", and a small form with two tabs, **Sign in** and **Create
+  account**. Signed in, the account line says "Signed in as *Racer_1* · ... · **Account** · Sign
+  out", and **Account** opens the panel again.
+- **Creating an account**: Username ("3 to 20 letters, digits, _ or -. Only you see it: the boards
+  show your nickname.") and Password ("At least 8 characters. A few words together make a good
+  one."), then, in a box: "There's no email here, so a forgotten password can't be recovered,
+  unless you also link Google. Keep it in a password manager." The rules are checked in the page
+  before anything is sent (the same code as the Worker's, `password-rules.js`), then the robot
+  check (Turnstile, usually without a click), then the account is made and signed in.
+- **Signing in**: a wrong password and a username nobody has both say "Wrong username or password."
+  After a username's fifth failure of the day the next try asks for the robot check first (the
+  panel does it and tries again), and a try within 5 s of its last failure says "Wait 5 seconds and
+  try again."
+- **Signed in**, the panel ("Your account") lists what the account signs in with (Google: its
+  email, or "not linked"; Username: it, or "none"), then:
+  - **Change password** (current, new: "This signs you out on your other devices."), or for a
+    Google account with no username yet, **Add a username and password** ("Then you can sign in
+    either way.").
+  - **Link Google** (Google's own button, "Continue with Google": "Sign in with Google too, and get
+    back in if you forget your password"), or with it linked, **Unlink Google**, which is only
+    there to press while there's a username to sign in with instead.
+  - With both, **Remove username and password**.
+  - **Sign out** and **Sign out everywhere** (every device's session).
+- The forms are real `<form>`s with `<label>`s and `autocomplete` (`username`, `current-password`,
+  `new-password`; the change form carries the username hidden), so password managers fill them and
+  offer to save; the username field doesn't capitalise or autocorrect. On a phone held upright the
+  panel fills the width and scrolls.
+- **The panel is its own chunk** (`account.js` and `account.css`), loaded the first time it's
+  opened: 11.1 kB of script (4.0 kB gzipped) and 3.1 kB of CSS (0.9 kB), none of it on the first
+  load. The links and the account line are a few lines in `supporter.js`, which was already loaded.
+
+### The rules
+
+- **Usernames** (`src/drive-app/password-rules.js`, shared by the page and the Worker): normalised
+  with NFKC and trimmed, then 3 to 20 of `A`-`Z`, `a`-`z`, `0`-`9`, `_` and `-`. Only plain Latin
+  letters, so a Cyrillic а can't pass for an a; NFKC makes a full-width Ｒ an R first. Two are the
+  same whatever their case: they're unique by their lower case (`username_key`), so "Racer_1",
+  "RACER_1" and "Ｒacer＿1" are one. And through the nickname's filter (`names.js`'s `nameAllowed`):
+  slurs, and names that pass for World Drive (admin, worlddrive, support, moderator...) are refused.
+  A username is private: it's for signing in, shown only to its owner in the panel, never on a
+  board, a nametag, the admin page or anywhere else. The boards show the nickname, as before.
+- **Passwords**: at least 8 characters and at most 128 bytes (after NFKC, so the same passphrase
+  typed on another keyboard is the same; 128 bytes is a long passphrase, and keeps what's hashed
+  bounded), not one of about a hundred of the very commonest (`password1`, `12345678`, `qwertyuiop`,
+  `iloveyou`, `worlddrive`..., in any case), not one letter over and over, and not the username.
+  No other rules: as NIST's SP 800-63B says, rules about digits and symbols make passwords people
+  can't remember, not ones others can't guess.
+
+### How passwords are kept
+
+- **PBKDF2-SHA-256** through WebCrypto (`crypto.subtle.deriveBits`), with a **random 16-byte salt**
+  for each password, made anew every time one is set, and a 32-byte result. Kept in `logins`
+  (base64url) with the **iteration count it was made with**.
+- **100,000 iterations**, the most the Workers runtime allows: workerd has a cap on PBKDF2's count
+  ("Pbkdf2 failed: iteration counts above ... are not supported"), set to 100,000 on Cloudflare
+  (local `wrangler dev` doesn't apply it: 100,001 ran there). OWASP asks for 600,000 for
+  PBKDF2-SHA-256 today, so this is as strong as Workers can make it, not as strong as wished; a
+  memory-hard hash (scrypt, Argon2) in WebAssembly would be stronger but costs far more CPU than
+  the Free plan's 10 ms.
+- **What it costs**: measured in workerd (`wrangler dev`, a 4-core machine with SHA extensions,
+  while other work ran): 16 to 18 ms of CPU a hash at 100,000 (8 ms at 50,000, 2 ms at 10,000), and
+  Node the same, 17.7 ms. Cloudflare's machines may well be quicker. That's over the **Free plan's
+  10 ms of CPU a request**, which Cloudflare allows "infrequently" ("each isolate has some built-in
+  flexibility"): a sign-in, a sign-up or a password change is rare next to everything else the
+  Worker answers, and the limits below keep a stranger from making them often. On **Workers Paid**
+  (30 s a request) it's nothing. A password change hashes twice (the current one, then the new),
+  and a sign-in with an older count twice; everything else once.
+- If sign-ins were ever cut off for CPU on the Free plan (Error 1102 on `/api/account/*` in the
+  Worker's metrics), `PASSWORD_ITERATIONS` (a dashboard text variable, 10,000 to 100,000) lowers
+  the count for new hashes at once, without a deploy. Raising it again later, or if Workers ever
+  allows more (`ITERATIONS` in `logins.js`), each password **is hashed again at its next right
+  sign-in** with a new salt (`changed_at` says when), since each row keeps its own count.
+- Compared in **constant time** (`crypto.subtle.timingSafeEqual`, or an XOR of every byte without
+  it), so the time doesn't say how much matched.
+- **A username nobody has** is hashed against a stand-in (a random salt and random "hash", made once
+  per Worker instance, which nothing can match), so it takes one hash's time, as a wrong password
+  does, and gets the same 401 "Wrong username or password". Measured as whole requests to `wrangler
+  dev`: 32 ms for a wrong password, 30 ms for a username nobody has. (The day's failure counts in
+  `DriveLimits` don't tell them apart either: a username that can't be one is counted under its
+  lower case, as a real one would be.)
+- A password is **never logged, kept or sent anywhere** but the sign-in, sign-up and password posts
+  to the Worker; the page doesn't keep it (the fields are emptied after a change), and the Worker
+  only hashes it. The test suites look for the passwords they used in what the Worker logged and
+  kept, and in every request the page made elsewhere.
+
+### Guessing, and how it's slowed
+
+- **Per address**: a visitor (an address, an IPv6 one by its /48, as challenges count) may fail
+  **20 times a day** (`ADDRESS_FAILS`), whatever the usernames; then every try from it is a 429
+  until midnight UTC, before any hashing. One address can't guess for long.
+- **Per username**: after a username has failed **5 times in the day** (`FREE_FAILS`, from
+  anywhere), each further try for it needs a **robot check** (Turnstile; a 403 with
+  `reason: 'robot'` without one, which the panel answers by running the check and trying again),
+  and comes at least **5 s after its last failure** (`FAIL_GAP`; a 429 with `reason: 'wait'` and
+  `Retry-After`). So a script guessing one account from many addresses needs a solved robot check
+  for every guess and gets one every 5 s at most, while **nothing ever locks a username**: whatever
+  a stranger does, the owner signs in with a click on the robot check and a wait of 5 s at most. The
+  next day the count starts afresh.
+- These are `DriveLimits`' `passwordCheck` (asked before hashing) and `passwordFailed` (counting a
+  failure), in its table `password_fails`: a row a day for each visitor and each username with
+  failures, each kept as a SHA-256 of the day's salt and it (never the address or the username, and
+  not linkable from one day to the next), deleted with the day's other counts.
+- **Signing in** (successes) shares Google's **50 a day** from one visitor (`SIGN_INS_DAILY`, counted
+  as the leaderboard's names are): each is a session kept for 30 days, so knowing a password still
+  can't fill the database with sessions.
+- **Signing up** always needs a robot check, and a visitor (by /48) makes **10 accounts a day** at
+  most. **Changes** (a username and password added, the password changed, Google linked or unlinked,
+  the password removed, signing out everywhere) are 30 a day for a visitor. A password change proves
+  the current password through the same check and counts as a sign-in would.
+- Every route is JSON (`application/json`) from the site itself (the same-origin checks every post
+  has: `Origin`, and `Sec-Fetch-Site` when sent), with a body of at most 2 kB (a 413 past it), an
+  object of strings of the right shape (a 400 otherwise), and a robot check's token, when sent, a
+  string of Turnstile's size.
+
+### The Worker's routes
+
+All in `worker/drive/logins.js`; each answers `/api/me`'s body (sign-up and sign-in with the session
+cookie, as Google's `POST /api/session` does):
+
+| Route | Does |
+| --- | --- |
+| `POST /api/account/sign-up { username, password, token }` | A new account and its login, signed in. 400 (which rule), 403 `robot`, 429 (10 a day), 409 "That username is taken" |
+| `POST /api/account/sign-in { username, password, token? }` | Signed in. 401 "Wrong username or password", 403 `robot`, 429 `address` or `wait` |
+| `POST /api/account/password { current, password, token? }` | Signed in with a username: the password changed, the account's **other sessions deleted** (this browser stays in). 401 "That isn't your current password" |
+| `POST /api/account/password { username, password }` | Signed in with Google and no username yet: a username and password added |
+| `DELETE /api/account/password` | The username and password taken off, only while Google is linked (else 409) |
+| `POST /api/account/google { credential }` | Google's ID token (checked as a sign-in's is) linked to this account |
+| `DELETE /api/account/google` | Google unlinked, only while there's a username (else 409) |
+| `POST /api/account/sign-out-everywhere` | Every session of the account deleted, this one's too (204, the cookie cleared) |
+
+`/api/config` says `passwords: true` while they're on: with the database, Turnstile's secret (signing
+up needs a robot check) and `PASSWORD_ACCOUNTS` not `off`. They work without Google's sign-in set
+up too; the session is then a username's alone.
+
+### Linking, and what's never merged
+
+- **Proof of both**: linking needs the signed-in session and proof of the other way in: Google's ID
+  token, from its button in the panel, for linking Google; the new password itself for adding a
+  username to a Google account.
+- **A Google account that already has its own World Drive account** is linked only if that account
+  has nothing to lose: no username, no player linked to it and no purchase of its own (someone who
+  once signed in with Google and did nothing since). Then that empty account is deleted (its
+  sessions with it) and the Google account becomes this one's way in. Otherwise it's a 409: "That
+  Google account has its own World Drive account, with its own progress or pass. Sign in with
+  Google to use that one." **Nothing is ever merged**: two accounts' players, levels, times and
+  passes put together would double or drop something (whose level, whose best time, which pass),
+  and doing it safely isn't simple, so it isn't done. Signing in with Google, then adding a username
+  and password there, gets the same result for anyone starting from Google.
+- An account with a Google account linked already can't link another (409 "Unlink it first").
+- **Unlinking keeps a way in**: Google only while there's a username and password; the username and
+  password only while Google is linked. Unlinked, the Google account's email and name go from the
+  account; a pass bought with that email before signing in (a purchase that was nobody's yet) is
+  made the account's first, so unlinking never loses a bought pass. A pass given by
+  `SUPPORTER_EMAILS` goes with the email. Signing in with that Google account afterwards makes a new,
+  separate account.
+- An account made with a username has no email: a pass bought from it is the account's by
+  `client_reference_id`, as a Google account's is. A purchase Stripe sends with no email (`''`)
+  never matches an account with no email (the pass's SQL, `hasPass`, only matches an email when
+  there is one), and `ADMIN_EMAILS` can only ever be a Google account.
+
+### What's kept
+
+- `logins` (`0008_password_logins.sql`): the account's id, the username as typed (after NFKC) and
+  its lower-case key (unique), the hash, its salt and iterations, when it was made and when the
+  password was last set. **Nothing else about the person**: no email, no address, no device.
+- An account made with a username is an `accounts` row with `email` and `name` empty, and for
+  `google_sub` `none:` and a random token: the column can't be made nullable without building the
+  table again, and in D1 dropping it would run its `ON DELETE` actions (every session, purchase and
+  player let go of). Sessions are the same `sessions` rows as Google's (only the SHA-256 of the
+  cookie's token).
+- `DriveLimits`' `password_fails`: today's failure counts by salted hashes (above), gone at the end of
+  the day.
+- **The admin page** shows the accounts now by kind: "Accounts 9 · Google 5 · password 3 · both 1"
+  (counts only; never a username), and "New accounts" counts both kinds.
+- The privacy words in the page's About say what a username's account keeps.
+
+### What it costs
+
+- **Sign-up**: a robot check (Turnstile's siteverify), one `DriveLimits` request (the day's turn),
+  one hash, and in D1 a read and three writes (the account, the login, the session). **Sign-in**:
+  one or two `DriveLimits` requests (the check, and the day's turn or the failure), one hash, a read
+  and two writes. A few a day at today's traffic: nothing next to the [Free plan's](#what-a-visit-costs-and-how-its-capped)
+  100,000 Durable Object requests or D1's rows, and a stranger's guessing is held to 20 failures a
+  day an address. The CPU is the cost that matters on the Free plan (above).
+- **Storage**: a login row is about 150 bytes.
+
+### What it can't protect against
+
+- **A forgotten password** can't be recovered without Google linked: there's no email, on purpose.
+  The owner can only help by hand (the D1 console), and can't tell who the account's owner is.
+- **A reused password** that leaked elsewhere, **phishing**, or someone with the owner's unlocked
+  device; there's no second factor.
+- **A stolen session cookie** (it's `HttpOnly`, `Secure` and `SameSite=Lax`) works until it
+  expires, the password is changed or **Sign out everywhere** is pressed; with it alone someone
+  could add a username and password to a Google account that had none.
+- **A leaked database**: 100,000 rounds of PBKDF2 slows guessing each password offline but doesn't
+  stop it for weak ones.
+- **Someone with many addresses and robot checks solved by people or services** can keep guessing
+  one username at one try every 5 s (and each address 20 a day); a password that isn't among the
+  commonest holds out against that.
+- **Usernames can be found taken**: signing up says "That username is taken", as it must; that's a
+  robot check and one of the visitor's 10 a day each. Signing in never says.
+
+### How usernames and passwords are tested
+
+`npm run test:drive-worker`: the rules (usernames' shape, NFKC, look-alikes and case; passwords'
+length in characters and bytes, the commonest, the username), PBKDF2 against RFC 7914's test vector
+and the count (and `PASSWORD_ITERATIONS` only lowering it), `DriveLimits`' failures per address and
+per username kept only as salted hashes, migration 0008 on top of 0001 to 0007 with every account,
+session, purchase and player kept; then against `wrangler dev` with D1: every route's same-origin,
+JSON, size and shape checks and 401 signed out; signing up (each rule, the name filter, the robot
+check, the cookie, what's kept and that the password isn't in D1 or the Worker's log); taken and
+look-alike usernames; signing in in any case, a wrong password and unknown and impossible usernames
+alike in answer and in time; a stranger failing from many addresses (a robot check, then 5 s apart)
+while the owner still signs in; an address's 20 failures, its 10 accounts and its 50 sign-ins (with
+Google's); `DriveLimits` keeping no username or address; changing the password (the current one
+needed, other sessions signed out); hashing again at a raised count; linking both ways, refusing a
+Google account with a player, a pass or a username of its own and taking in an empty one; unlinking
+keeping a way in and a bought pass; the pass, the player and its ⭐ the same either way; a purchase
+without an email no username's; signing out everywhere; the admin page's counts by kind; and no
+username on the boards.
+
+`npm run test:drive-ui`: the panel not loaded until opened; creating an account (the rules said in
+the page, a taken username, the robot check, signed in, the password sent nowhere else);
+signing in (a wrong password said so, a robot check when asked for, signing out); signed in with a
+username (changing the password, linking and unlinking Google, signing out everywhere); signed in
+with Google (adding a username and password; Google not unlinkable before); each form's labels and
+`autocomplete`; the panel on a phone held upright and without Google's sign-in; and the admin page's
+accounts by kind. Pictures: `account-1-create-desktop` to `account-6-signed-in-phone` with
+`TEST_SCREENSHOTS`.
 
 ## What a visit costs, and how it's capped
 
@@ -5087,6 +5339,7 @@ In `wrangler.drive.jsonc` (`vars`, set on every deploy; change them there, not i
 | `PER_VISITOR_DAILY` | 8 | Visits a day per visitor |
 | `TURNSTILE_SITE_KEY` | `0x4AAAAAAFs3k5sgUIQHSuGC` | The worlddrive.app Turnstile widget (public) |
 | `PER_VISITOR_DAILY_SUPPORTER` | 30 | Visits a day for a supporter, signed in |
+| `PASSWORD_ACCOUNTS` | unset (on) | [Username and password accounts](#username-and-password-accounts); `off` switches them off |
 | `GOOGLE_CLIENT_ID` | empty | The Supporter Pass's Google sign-in (public); empty, no signing in or buying |
 | `SUPPORTER_PAYMENT_LINK` | the live link | The Supporter Pass's Stripe Payment Link (public) |
 | `SUPPORTER_PRICE` | `CA$4.99` | Its price, as the page shows it |
@@ -5112,6 +5365,7 @@ more aren't in `vars` and needn't be set; add them in the dashboard (plain text)
 | `SCORES_PER_VISITOR_DAILY` | 1500 | Scores a visitor may post a day (one every 10 s for four hours) |
 | `NAMES_PER_VISITOR_DAILY` | 20 | New names and renames a visitor may make a day |
 | `SUPPORTER_PAYMENT_LINK_ID` | none | The Payment Link's `plink_...` id: only its checkouts are a Supporter Pass |
+| `PASSWORD_ITERATIONS` | 100,000 | PBKDF2's iterations for [new password hashes](#how-passwords-are-kept), 10,000 to 100,000: only to lower it if sign-ins were ever cut off for CPU on the Free plan |
 | `LIVE_PARTY_MAX`, `LIVE_NEARBY_MAX` | 8, 20 | The most in a party, and in each of an area's rooms |
 | `DROPIN_PLACES_DAILY` | 1500 | [Drop-in places](#where-people-drop-in) counted a day on each world for everyone together |
 | `DROPIN_PLACES_PER_VISITOR`, `DROPIN_PLACES_PER_VISIT` | 30, 10 | Drop-in places counted a day for each visitor, and for each visit |
@@ -5136,7 +5390,8 @@ The leaderboard's, levels' and the Supporter Pass's database is the `DB` binding
 [play stats'](#play-stats) `stats_daily`; `0005_dropins.sql` [where people drop
 in](#where-people-drop-in)'s `dropins_daily`; `0006_challenges.sql` [challenges'](#challenges)
 `challenges`, `challenge_times`, `challenge_picks`, `challenge_places`, `players.last_time_at` and
-`visits.times`).
+`visits.times`; `0007_challenge_ghosts.sql` their ghosts; `0008_password_logins.sql`
+[usernames and passwords'](#username-and-password-accounts) `logins`).
 
 ## Deploying
 
@@ -5536,7 +5791,8 @@ signing in and every bad token turned away, the session cookie, `/api/me`, the w
 and five minutes, a payment once, bank debits, buying before signing in, refunds and chargebacks
 (either delivered before its checkout), another link's checkouts, test-mode payments with a live
 link, the same-origin checks only the webhook goes without, `SUPPORTER_EMAILS`, 30 drives a day for a
-supporter, the ⭐, the owner's SQL, and buying off without its settings; and the [play
+supporter, the ⭐, the owner's SQL, and buying off without its settings; [usernames and
+passwords](#how-usernames-and-passwords-are-tested) (all that's listed there); and the [play
 stats](#play-stats): each metric's keys checked and held to a post's most, `MAX_COUNTS`, and the
 admin page's answer with the facts from the leaderboard's and the pass's tables, refunds left out,
 the period before added up, the totals and the tidying after two years), and `npm run test:drive-ui`
@@ -5637,6 +5893,10 @@ src/drive-app/pro.js         whether this visitor has the Supporter Pass (off un
 src/drive-app/pass.js        the Supporter Pass sheet and its badge
 src/drive-app/supporter.js   buying it: Google sign-in, the Payment Link, unlocking, the pause menu's
                              account line
+src/drive-app/account.js     the account panel, a chunk of its own loaded when it's opened
+                             (account.css its look): signing in or up with a username and password,
+                             changing it, linking Google; password-rules.js the rules for usernames
+                             and passwords the page and the Worker share
 src/drive-app/garage.js      the Garage: choices and the turntable; paint.js the looks and decals;
                              boosts.js the boost styles it offers; underglow.js the glow under a
                              ride; horns.js the horns' sounds and the Horn sounds switch
@@ -5705,7 +5965,8 @@ worker/drive/                the Worker: index.js (routes), limits.js (caps, the
                              the leaderboard's turns), turnstile.js, search.js; the leaderboard:
                              players.js, scores.js, boards.js, names.js (rules and the filter),
                              visits.js (visit tokens); the Supporter Pass: accounts.js (sign-in,
-                             sessions, /api/me), supporter.js (the webhook, who has it); driving
+                             sessions, /api/me), logins.js (usernames and passwords, linking
+                             Google), supporter.js (the webhook, who has it); driving
                              with others: live.js (/api/live and the rooms, DriveRoom, and
                              /api/online, who's driving now); levels: progress.js
                              (/api/progress, titles); the owner's page: stats.js (the play stats),

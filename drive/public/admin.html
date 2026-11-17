@@ -403,13 +403,13 @@
 				<div class="card"><h2>From the leaderboard and the pass</h2>${ facts( [
 					[ 'New players (nicknames)', num( total( 'players' ) ), changeText( [ total( 'players' ), earlier( 'players' ) ] ) ],
 					[ 'New bests on the boards', num( total( 'scores' ) ), scoresNote ],
-					[ 'New Google accounts', num( total( 'accounts' ) ), changeText( [ total( 'accounts' ), earlier( 'accounts' ) ] ) ],
+					[ 'New accounts', num( total( 'accounts' ) ), changeText( [ total( 'accounts' ), earlier( 'accounts' ) ] ) ],
 					...[ ...keys( 'purchases' ) ].map( ( [ status, n ] ) => [ `Passes ${ status === 'paid' ? 'bought' : status }`, num( n ), changeText( [ n, earlier( 'purchases', status ) ] ) ] ),
 					[ 'Revenue', moneyNow.text, `${ money( before.get( 'revenue' ) ?? new Map() ).text } before` ],
 				] ) }
 				<h3>Now</h3>${ facts( [
 					[ 'Players', num( totals.players ?? 0 ), '' ],
-					[ 'Google accounts', num( totals.accounts ?? 0 ), '' ],
+					[ 'Accounts', num( totals.accounts ?? 0 ), totals.kinds ? `Google ${ num( totals.kinds.google ?? 0 ) } · password ${ num( totals.kinds.password ?? 0 ) } · both ${ num( totals.kinds.both ?? 0 ) }` : '' ],
 					[ 'Accounts with the pass', num( totals.supporters ?? 0 ), '' ],
 					[ 'Passes nobody has signed in for yet', num( totals.unclaimed ?? 0 ), '' ],
 				] ) }

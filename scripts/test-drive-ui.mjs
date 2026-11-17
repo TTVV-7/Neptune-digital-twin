@@ -6379,6 +6379,287 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 
 } );
 
+// --- username and password accounts ------------------------------------------------------------
+
+const RACER = { signedIn: true, name: '', email: '', google: false, username: 'Racer_1', supporter: false, purchase: { ...SIGNED_OUT.purchase, clientReferenceId: '77' } };
+const GINA = { signedIn: true, name: 'Gina', email: 'gina@example.com', google: true, username: null, supporter: false, purchase: { ...SIGNED_OUT.purchase, clientReferenceId: '78' } };
+
+// supporterPage with usernames and passwords on (/api/config's passwords, and the Turnstile site
+// key their robot checks use), and the Worker's account routes answered here as it would: a
+// username 'taken' is taken, the password is page.state.password, and with page.state.robot set a
+// sign-in needs a robot check's token. page.asked.account has every post, with its content type.
+async function accountPage( { me = SIGNED_OUT, clientId = CLIENT, ...options } = {} ) {
+
+	const page = await supporterPage( { me, clientId, config: { ...RESTING, passwords: true }, ...options } );
+	const { state } = page;
+	state.password = 'correct horse battery staple';
+	state.robot = false;
+	page.asked.account = [];
+	page.chunks = [];
+	page.on( 'request', request => /\/account\.(js|css)/.test( request.url() ) && page.chunks.push( request.url() ) );
+	const json = ( route, body, status = 200 ) => route.fulfill( { status, contentType: 'application/json', body: JSON.stringify( body ) } );
+	await page.route( `${ BASE }/api/account/**`, route => {
+
+		const request = route.request();
+		const path = new URL( request.url() ).pathname.replace( '/api/account/', '' );
+		const body = request.postDataJSON() ?? {};
+		page.asked.account.push( { method: request.method(), path, body, type: request.headers()[ 'content-type' ] } );
+		const me = state.me;
+		if ( path === 'sign-up' ) {
+
+			if ( ! body.token ) return json( route, { error: 'Show you\'re not a robot first', reason: 'robot' }, 403 );
+			if ( body.username.toLowerCase() === 'taken' ) return json( route, { error: 'That username is taken' }, 409 );
+			state.password = body.password;
+			state.me = { ...RACER, username: body.username };
+			return json( route, state.me );
+
+		}
+
+		if ( path === 'sign-in' ) {
+
+			if ( state.robot && ! body.token ) return json( route, { error: 'Show you\'re not a robot first', reason: 'robot' }, 403 );
+			if ( body.username.toLowerCase() !== 'racer_1' || body.password !== state.password ) return json( route, { error: 'Wrong username or password' }, 401 );
+			state.me = RACER;
+			return json( route, state.me );
+
+		}
+
+		if ( path === 'password' && request.method() === 'POST' ) {
+
+			if ( body.username ) {
+
+				state.password = body.password;
+				state.me = { ...me, username: body.username };
+				return json( route, state.me );
+
+			}
+
+			if ( body.current !== state.password ) return json( route, { error: 'That isn\'t your current password' }, 401 );
+			state.password = body.password;
+			return json( route, me );
+
+		}
+
+		if ( path === 'password' ) return json( route, state.me = { ...me, username: null } );
+		if ( path === 'google' && request.method() === 'POST' ) {
+
+			if ( body.credential !== 'good-token' ) return json( route, { error: 'Sign-in failed' }, 401 );
+			return json( route, state.me = { ...me, google: true, name: 'Racer Google', email: 'racer@example.com' } );
+
+		}
+
+		if ( path === 'google' ) return json( route, state.me = { ...me, google: false, name: '', email: '' } );
+		if ( path === 'sign-out-everywhere' ) {
+
+			state.me = SIGNED_OUT;
+			return route.fulfill( { status: 204 } );
+
+		}
+
+		json( route, { error: 'Not found' }, 404 );
+
+	} );
+	return page;
+
+}
+
+const panel = page => page.locator( 'dialog#account' );
+
+// The pass's sheet's link to the account panel (the sheet opened first, if it isn't), followed: the
+// panel, open.
+async function openAccountPanel( page, words ) {
+
+	if ( ! await page.locator( '#pass' ).isVisible() ) await openPass( page );
+	await sheet( page ).locator( 'button', { hasText: words } ).click();
+	await panel( page ).waitFor();
+	return panel( page );
+
+}
+
+// What a form's inputs are, for password managers: [ name, type, autocomplete, label ] each, the
+// label being the text of the <label for> it has.
+const fields = form => form.locator( 'input' ).evaluateAll( inputs => inputs.map( input => [
+	input.name, input.type, input.autocomplete, input.hidden ? '(hidden)' : document.querySelector( `label[for="${ input.id }"]` )?.textContent ?? null,
+] ) );
+
+describe( 'World Drive accounts: usernames and passwords', () => {
+
+	test( 'the panel loads only when opened; creating an account checks the rules, asks for a robot check and signs in', async () => {
+
+		const page = await accountPage();
+		await testPad( page );
+		await page.waitForFunction( () => window.drive.supporter.me );
+		await openPass( page );
+		await sheet( page ).locator( '.supporter-passwords' ).waitFor();
+		assert.deepEqual( page.chunks, [], 'the account panel loaded before it was opened' );
+		const account = await openAccountPanel( page, 'Or use a username and password' );
+		assert.ok( page.chunks.some( url => /account\.js/.test( url ) ) );
+		assert.equal( await account.locator( '#account-title' ).textContent(), 'Sign in' );
+		await account.locator( '.account-google .stub-google' ).waitFor();
+		// Sign in first; create an account is a tap away.
+		assert.deepEqual( await fields( account.locator( 'form' ) ), [ [ 'username', 'text', 'username', 'Username' ], [ 'password', 'password', 'current-password', 'Password' ] ] );
+		await account.locator( '.account-tabs button', { hasText: 'Create account' } ).click();
+		const form = account.locator( 'form.account-sign-up' );
+		assert.deepEqual( await fields( form ), [ [ 'username', 'text', 'username', 'Username' ], [ 'password', 'password', 'new-password', 'Password' ] ] );
+		assert.equal( await form.locator( 'input[name="username"]' ).getAttribute( 'autocapitalize' ), 'none' );
+		assert.match( await form.textContent(), /There's no email here, so a forgotten password can't be recovered, unless you also link Google\./ );
+		await shot( page, 'account-1-create-desktop' );
+		// The rules, before anything is sent.
+		await form.locator( 'input[name="username"]' ).fill( 'Racer 1' );
+		await form.locator( 'input[name="password"]' ).fill( 'correct horse battery staple' );
+		await form.locator( 'button[type="submit"]' ).click();
+		await form.locator( '.account-status', { hasText: 'Usernames are 3 to 20 letters' } ).waitFor();
+		await form.locator( 'input[name="username"]' ).fill( 'Racer_1' );
+		await form.locator( 'input[name="password"]' ).fill( 'password1' );
+		await form.locator( 'input[name="password"]' ).press( 'Enter' );
+		await form.locator( '.account-status', { hasText: 'That password is one of the commonest. Pick another.' } ).waitFor();
+		assert.deepEqual( page.asked.account, [] );
+		// Taken, then made.
+		await form.locator( 'input[name="username"]' ).fill( 'Taken' );
+		await form.locator( 'input[name="password"]' ).fill( 'correct horse battery staple' );
+		await form.locator( 'button[type="submit"]' ).click();
+		await form.locator( '.account-status', { hasText: 'That username is taken.' } ).waitFor();
+		await form.locator( 'input[name="username"]' ).fill( 'Racer_1' );
+		await form.locator( 'button[type="submit"]' ).click();
+		await page.locator( '#toast', { hasText: 'Signed in as Racer_1' } ).waitFor();
+		assert.equal( await account.isVisible(), false, 'the panel stayed open' );
+		const posted = page.asked.account.at( - 1 );
+		assert.deepEqual( posted, { method: 'POST', path: 'sign-up', body: { username: 'Racer_1', password: 'correct horse battery staple', token: TOKEN }, type: 'application/json' } );
+		assert.equal( await page.evaluate( () => window.turnstileOptions.sitekey ), '1x00000000000000000000AA' );
+		await sheet( page ).locator( '.supporter-line', { hasText: 'Signed in as Racer_1 · Restore purchases · Account · Sign out' } ).waitFor();
+		// The password went nowhere but the sign-up post.
+		assert.ok( ! page.outside.some( url => url.includes( 'horse' ) ) );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'signing in: a wrong password said so, a robot check when asked for, then signed in; and out', async () => {
+
+		const page = await accountPage();
+		page.state.robot = true;
+		await testPad( page );
+		await page.waitForFunction( () => window.drive.supporter.me );
+		const account = await openAccountPanel( page, 'Or use a username and password' );
+		const form = account.locator( 'form.account-sign-in' );
+		await form.locator( 'input[name="username"]' ).fill( 'racer_1' );
+		await form.locator( 'input[name="password"]' ).fill( 'not my password' );
+		await form.locator( 'button[type="submit"]' ).click();
+		await form.locator( '.account-status', { hasText: 'Wrong username or password.' } ).waitFor();
+		await shot( page, 'account-2-wrong-password' );
+		const tries = page.asked.account.filter( a => a.path === 'sign-in' );
+		// Asked without a token, refused for want of one, then with one.
+		assert.deepEqual( tries.map( a => !! a.body.token ), [ false, true ] );
+		page.state.robot = false;
+		await form.locator( 'input[name="password"]' ).fill( 'correct horse battery staple' );
+		await form.locator( 'button[type="submit"]' ).click();
+		await page.locator( '#toast', { hasText: 'Signed in as Racer_1' } ).waitFor();
+		await sheet( page ).locator( '.supporter-line', { hasText: 'Signed in as Racer_1' } ).waitFor();
+		// Out, from the panel.
+		await sheet( page ).locator( 'button', { hasText: 'Account' } ).click();
+		await account.locator( '#account-title', { hasText: 'Your account' } ).waitFor();
+		await account.locator( '.account-out button', { hasText: /^Sign out$/ } ).click();
+		await page.locator( '#toast', { hasText: 'Signed out' } ).waitFor();
+		await sheet( page ).locator( '.supporter-passwords' ).waitFor();
+		assert.equal( page.asked.signOuts, 1 );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'signed in with a username: change the password, link and unlink Google, sign out everywhere', async () => {
+
+		const page = await accountPage( { me: RACER } );
+		await testPad( page );
+		await page.waitForFunction( () => window.drive.supporter.me );
+		const account = await openAccountPanel( page, 'Account' );
+		assert.match( await account.locator( '.account-ways' ).textContent(), /Googlenot linked.*UsernameRacer_1/ );
+		const change = account.locator( 'form.account-password' );
+		// The username rides along hidden, so a password manager knows whose password it is.
+		assert.deepEqual( await fields( change ), [ [ 'username', 'text', 'username', '(hidden)' ], [ 'current', 'password', 'current-password', 'Current password' ], [ 'password', 'password', 'new-password', 'New password' ] ] );
+		assert.equal( await change.locator( 'input[name="username"]' ).inputValue(), 'Racer_1' );
+		await shot( page, 'account-3-signed-in-desktop' );
+		await change.locator( 'input[name="current"]' ).fill( 'a wrong one' );
+		await change.locator( 'input[name="password"]' ).fill( 'a brand new passphrase' );
+		await change.locator( 'button[type="submit"]' ).click();
+		await change.locator( '.account-status', { hasText: 'That isn\'t your current password.' } ).waitFor();
+		await change.locator( 'input[name="current"]' ).fill( 'correct horse battery staple' );
+		await change.locator( 'button[type="submit"]' ).click();
+		await change.locator( '.account-status', { hasText: 'Password changed. Your other devices are signed out.' } ).waitFor();
+		assert.equal( page.state.password, 'a brand new passphrase' );
+		assert.equal( await change.locator( 'input[name="current"]' ).inputValue(), '' );
+		// Linking Google: its button's credential goes to the link, not to signing in.
+		await page.evaluate( () => window.testCredential = 'good-token' );
+		await account.locator( '.account-section', { hasText: 'Link Google' } ).locator( '.stub-google' ).click();
+		await account.locator( '.account-ways', { hasText: 'racer@example.com' } ).waitFor();
+		assert.deepEqual( page.asked.sessions, [], 'linking signed in instead' );
+		assert.deepEqual( page.asked.account.at( - 1 ), { method: 'POST', path: 'google', body: { credential: 'good-token' }, type: 'application/json' } );
+		await page.locator( '#toast', { hasText: 'Google linked' } ).waitFor();
+		await shot( page, 'account-4-linked-desktop' );
+		// Unlinking it again (a username is a way in), then out everywhere.
+		await account.locator( 'button', { hasText: 'Unlink Google' } ).click();
+		await account.locator( '.account-ways', { hasText: 'not linked' } ).waitFor();
+		await account.locator( 'button', { hasText: 'Sign out everywhere' } ).click();
+		await page.locator( '#toast', { hasText: 'Signed out everywhere' } ).waitFor();
+		assert.equal( page.asked.account.at( - 1 ).path, 'sign-out-everywhere' );
+		assert.equal( await account.isVisible(), false );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'signed in with Google: add a username and password; Google can\'t be unlinked before', async () => {
+
+		const page = await accountPage( { me: GINA } );
+		await testPad( page );
+		await page.waitForFunction( () => window.drive.supporter.me );
+		const account = await openAccountPanel( page, 'Account' );
+		assert.equal( await account.locator( 'button', { hasText: 'Unlink Google' } ).isDisabled(), true );
+		assert.match( await account.textContent(), /Add a username and password first: Google is your only way to sign in\./ );
+		const add = account.locator( 'form.account-add' );
+		assert.deepEqual( await fields( add ), [ [ 'username', 'text', 'username', 'Username' ], [ 'password', 'password', 'new-password', 'Password' ] ] );
+		await add.locator( 'input[name="username"]' ).fill( 'Gina_G' );
+		await add.locator( 'input[name="password"]' ).fill( 'gina\'s own passphrase' );
+		await add.locator( 'button[type="submit"]' ).click();
+		await account.locator( '.account-ways', { hasText: 'Gina_G' } ).waitFor();
+		assert.equal( await account.locator( 'button', { hasText: 'Unlink Google' } ).isDisabled(), false );
+		await account.locator( 'button', { hasText: 'Remove username and password' } ).waitFor();
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'on a phone held upright the panel fits, and without Google\'s sign-in it\'s usernames alone', async () => {
+
+		const page = await accountPage( { clientId: '', viewport: { width: 390, height: 844 }, touch: true } );
+		await testPad( page );
+		await page.waitForFunction( () => window.drive.supporter.me );
+		const account = await openAccountPanel( page, 'Sign in or create an account' );
+		assert.equal( await account.locator( '.account-google' ).count(), 0 );
+		assert.equal( page.google, 0, 'Google\'s script loaded with no Google sign-in' );
+		await account.locator( '.account-tabs button', { hasText: 'Create account' } ).tap();
+		const box = await account.boundingBox();
+		assert.ok( box.x >= 0 && box.x + box.width <= 390, JSON.stringify( box ) );
+		// Big enough not to zoom in as it's tapped (16 px), and nothing wider than the panel.
+		assert.equal( await account.locator( 'input[name="username"]' ).evaluate( el => getComputedStyle( el ).fontSize ), '16px' );
+		assert.ok( await account.evaluate( el => el.scrollWidth <= el.clientWidth ) );
+		await shot( page, 'account-5-create-phone' );
+		await account.locator( 'input[name="username"]' ).fill( 'Racer_1' );
+		await account.locator( 'input[name="password"]' ).fill( 'correct horse battery staple' );
+		await account.locator( 'button[type="submit"]' ).tap();
+		await page.locator( '#toast', { hasText: 'Signed in as Racer_1' } ).waitFor();
+		await sheet( page ).locator( 'button', { hasText: 'Account' } ).tap();
+		await account.locator( '#account-title', { hasText: 'Your account' } ).waitFor();
+		const signedInBox = await account.boundingBox();
+		assert.ok( signedInBox.x + signedInBox.width <= 390 );
+		await shot( page, 'account-6-signed-in-phone' );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+} );
+
 // The owner's admin page (drive/public/admin.html): where people drop in, its answers made here
 // (GET /api/admin/dropins, and the play stats' GET /api/admin/stats with nothing in them). The heat
 // map over the game's own land and sea and the Moon's picture, the top places (a start spot's cells
@@ -6458,8 +6739,9 @@ describe( 'World Drive\'s admin page: where people drop in', () => {
 	// The admin page, with its answers made here: page.asked keeps the days each ask was for;
 	// signedIn false answers 401 to both; refuse: { stats, dropins } statuses to answer their first
 	// asks with instead (429, say; 'abort' for no answer at all, as when the server can't be
-	// reached); page.slow: { days: ms } how long the drop-ins' answer for those days takes.
-	async function adminPage( { viewport = { width: 1280, height: 900 }, colorScheme = 'light', touch = false, signedIn = true, refuse = {} } = {} ) {
+	// reached); page.slow: { days: ms } how long the drop-ins' answer for those days takes; totals:
+	// the play stats' totals now.
+	async function adminPage( { viewport = { width: 1280, height: 900 }, colorScheme = 'light', touch = false, signedIn = true, refuse = {}, totals = {} } = {} ) {
 
 		const context = await browser.newContext( { viewport, colorScheme, hasTouch: touch, isMobile: touch } );
 		const page = await context.newPage();
@@ -6475,7 +6757,7 @@ describe( 'World Drive\'s admin page: where people drop in', () => {
 			if ( ! signedIn ) return route.fulfill( { status: 401, contentType: 'application/json', body: '{"error":"Sign in first"}' } );
 			if ( refused.stats.length ) return route.fulfill( refusal( refused.stats.shift() ) );
 			const days = Number( new URL( route.request().url() ).searchParams.get( 'days' ) );
-			route.fulfill( { contentType: 'application/json', body: JSON.stringify( { from: dayBefore( days - 1 ), to: TODAY, rows: [], previous: { from: '', to: '', first: { visit: null, funnel: null }, rows: [] }, totals: {}, kept: { stats: 730, scores: 35 } } ) } );
+			route.fulfill( { contentType: 'application/json', body: JSON.stringify( { from: dayBefore( days - 1 ), to: TODAY, rows: [], previous: { from: '', to: '', first: { visit: null, funnel: null }, rows: [] }, totals, kept: { stats: 730, scores: 35 } } ) } );
 
 		} );
 		await page.route( `${ BASE }/api/admin/dropins?*`, async route => {
@@ -6864,6 +7146,24 @@ describe( 'World Drive\'s admin page: where people drop in', () => {
 		} finally {
 
 			await out.context().close();
+
+		}
+
+	} );
+
+	test( 'the accounts now, by how they sign in: Google, a password, or both, counts only', async () => {
+
+		const page = await adminPage( { totals: { players: 40, accounts: 9, kinds: { google: 5, password: 3, both: 1 }, supporters: 2, unclaimed: 0 } } );
+		try {
+
+			const row = page.locator( 'table.facts tr', { has: page.locator( 'td:first-child', { hasText: /^Accounts$/ } ) } );
+			await row.waitFor();
+			assert.deepEqual( await row.locator( 'td' ).allTextContents(), [ 'Accounts', '9', 'Google 5 · password 3 · both 1' ] );
+			assert.equal( await page.locator( 'td', { hasText: /^New accounts$/ } ).count(), 1 );
+
+		} finally {
+
+			await page.context().close();
 
 		}
 
