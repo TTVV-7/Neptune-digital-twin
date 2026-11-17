@@ -18,12 +18,12 @@ import { googleClientId } from './settings.js';
 // linked: one account, one player, whichever way you signed in.
 
 const cookies = sessionCookies( 'wd_session' );
-// Sign-ins, and players linked, a visitor may make in a day (counted as the leaderboard's names are,
-// limits.js). A Google token can be sent again for the hour it's good for, and each sign-in is a new
-// session kept for 30 days, so this keeps a script from filling the database with them. An IPv6
-// visitor is counted by its /48, not its /64: a /48 (which a free tunnel broker hands out) holds
-// 65,536 /64s, each of which would otherwise have 50 of its own. Sessions last a month, so nobody signing in for themselves comes near it (a whole school on one address
-// included).
+// Sign-ins, and players linked, a visitor may make in a day (counted as the leaderboard's names
+// are, limits.js). A Google token can be sent again for the hour it's good for, and each sign-in is
+// a new session kept for 30 days, so this keeps a script from filling the database with them. An
+// IPv6 visitor is counted by its /48, not its /64: a /48 (which a free tunnel broker hands out)
+// holds 65,536 /64s, each of which would otherwise have 50 of its own. Sessions last a month, so
+// nobody signing in for themselves comes near it (a whole school on one address included).
 export const SIGN_INS_DAILY = 50;
 const LINKS_DAILY = 20;
 

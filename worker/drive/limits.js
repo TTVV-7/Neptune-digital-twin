@@ -107,8 +107,7 @@ export class DriveLimits extends DurableObject {
 		const visitor = await sha256Hex( `${ salt }:${ ip }` );
 		return this.ctx.storage.transactionSync( () => {
 
-			const count = this.sql.exec( 'SELECT count FROM turns WHERE day = ? AND kind = ? AND visitor = ?', day, kind, visitor ).toArray()[ 0 ]?.count ?? 0;
-			if ( count >= limit ) return { ok: false, retryAfter: untilMidnight( now ) };
+			if ( turnsTaken( this.sql, day, kind, visitor ) >= limit ) return { ok: false, retryAfter: untilMidnight( now ) };
 			this.sql.exec( 'INSERT INTO turns ( day, kind, visitor, count ) VALUES ( ?, ?, ?, 1 ) ON CONFLICT ( day, kind, visitor ) DO UPDATE SET count = count + 1', day, kind, visitor );
 			return { ok: true };
 
@@ -132,17 +131,24 @@ export class DriveLimits extends DurableObject {
 	//   retryAfter the seconds left. That slows one address's guessing; it's keyed by the visitor
 	//   and the username together, so tries from other addresses never make the owner wait, and
 	//   nothing ever locks a username.
+	// - 'turns': for a sign-in (`turn`, { kind, limit }: one of take's kinds, 'sign-in'), the visitor
+	//   has had `limit` of today's turns at it already, so even the right password wouldn't sign in
+	//   till midnight UTC (retryAfter): the Worker says so before any hashing, and remembers it.
 	// The try is counted here, in the same go as the check (a Durable Object answers one call at a
 	// time and nothing here waits between reading and writing), so requests sent all at once can't
-	// all pass before any is counted; passwordSucceeded gives a try that got in back. Hashed with
-	// the day's salt, as visits.
-	async passwordCheck( ip, user, { now, robot = false, addressFails, hardFails, freeFails, gap } ) {
+	// all pass before any is counted; passwordSucceeded gives a try that got in back (and
+	// passwordSignedIn, for a sign-in, takes its turn in the same go). Hashed with the day's salt, as
+	// visits.
+	async passwordCheck( ip, user, { now, robot = false, addressFails, hardFails, freeFails, gap, turn = null } ) {
 
 		const day = dayOf( now );
 		const salt = this.saltFor( day );
 		const [ visitor, name, pair ] = await passwordKeys( salt, ip, user );
+		// The visitor as take counts its turns.
+		const taker = turn ? await sha256Hex( `${ salt }:${ ip }` ) : null;
 		return this.ctx.storage.transactionSync( () => {
 
+			if ( turn && turnsTaken( this.sql, day, turn.kind, taker ) >= turn.limit ) return { ok: false, reason: 'turns', retryAfter: untilMidnight( now ) };
 			const count = key => this.sql.exec( 'SELECT count, last_at FROM password_fails WHERE day = ? AND key = ?', day, key ).toArray()[ 0 ];
 			const mine = count( visitor )?.count ?? 0;
 			if ( mine >= hardFails ) return { ok: false, reason: 'address', retryAfter: untilMidnight( now ) };
@@ -173,6 +179,27 @@ export class DriveLimits extends DurableObject {
 		this.ctx.storage.transactionSync( () => {
 
 			for ( const key of keys ) this.sql.exec( 'UPDATE password_fails SET count = MAX( 0, count - 1 ) WHERE day = ? AND key = ?', day, key );
+
+		} );
+
+	}
+
+	// passwordSucceeded and take together, in one call (one Durable Object request, not two), for a
+	// sign-in that got in: the try given back, and one of the visitor's `limit` turns at `kind` taken,
+	// as take answers ({ ok: true }, or { ok: false, retryAfter } when another sign-in took the last
+	// since passwordCheck said there was one left).
+	async passwordSignedIn( ip, user, { now, kind, limit } ) {
+
+		const day = dayOf( now );
+		const salt = this.saltFor( day );
+		const keys = await passwordKeys( salt, ip, user );
+		const taker = await sha256Hex( `${ salt }:${ ip }` );
+		return this.ctx.storage.transactionSync( () => {
+
+			for ( const key of keys ) this.sql.exec( 'UPDATE password_fails SET count = MAX( 0, count - 1 ) WHERE day = ? AND key = ?', day, key );
+			if ( turnsTaken( this.sql, day, kind, taker ) >= limit ) return { ok: false, retryAfter: untilMidnight( now ) };
+			this.sql.exec( 'INSERT INTO turns ( day, kind, visitor, count ) VALUES ( ?, ?, ?, 1 ) ON CONFLICT ( day, kind, visitor ) DO UPDATE SET count = count + 1', day, kind, taker );
+			return { ok: true };
 
 		} );
 
@@ -398,6 +425,13 @@ function addLive( sql, day, amount, budget ) {
 	sql.exec( 'INSERT INTO live ( day, spent ) VALUES ( ?, ? ) ON CONFLICT ( day ) DO UPDATE SET spent = spent + excluded.spent', day, amount );
 	const spent = sql.exec( 'SELECT spent FROM live WHERE day = ?', day ).one().spent;
 	return { open: spent < budget, spent };
+
+}
+
+// The turns at `kind` the visitor (as take hashes it) has had on `day`.
+function turnsTaken( sql, day, kind, visitor ) {
+
+	return sql.exec( 'SELECT count FROM turns WHERE day = ? AND kind = ? AND visitor = ?', day, kind, visitor ).toArray()[ 0 ]?.count ?? 0;
 
 }
 

@@ -202,16 +202,17 @@ export async function restorePurchases() {
 
 }
 
-// Signed out here, or with everywhere, on every device (every session of the account). false if
-// the Worker couldn't be reached.
+// Signed out here, or with everywhere, on every device (every session of the account). The
+// Worker's answer (api.js's send): not ok when it couldn't be reached (status 0) or said no (a 429
+// past the day's changes, say), its words in the sheet's status line, and in the account panel's.
 export async function signOut( { everywhere = false } = {} ) {
 
 	say( 'Signing out...' );
 	const answer = everywhere ? await send( 'POST', '/api/account/sign-out-everywhere', {} ) : await endSession();
 	if ( ! answer.ok ) {
 
-		say( UNREACHABLE );
-		return false;
+		say( answer.status && typeof answer.body?.error === 'string' ? answer.body.error.replace( /([^.!?])$/, '$1.' ) : UNREACHABLE );
+		return answer;
 
 	}
 
@@ -221,7 +222,7 @@ export async function signOut( { everywhere = false } = {} ) {
 	window.google?.accounts?.id?.disableAutoSelect?.();
 	if ( ! await refresh() ) update( { signedIn: false, supporter: false, purchase: { enabled: false } } );
 	toast( everywhere ? 'Signed out everywhere' : 'Signed out' );
-	return true;
+	return answer;
 
 }
 

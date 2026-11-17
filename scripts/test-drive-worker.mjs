@@ -2663,7 +2663,7 @@ describe( 'Username and password rules', () => {
 				batch: async list => list.map( () => ( { meta: { changes: 1 }, results: [] } ) ),
 			};
 			const env = { DB: db, TURNSTILE_SECRET: 'x', ...( iterations ? { PASSWORD_ITERATIONS: String( iterations ) } : {} ) };
-			const limits = { passwordCheck: async () => ( { ok: true } ), passwordSucceeded: async () => {}, take: async () => ( { ok: true } ) };
+			const limits = { passwordCheck: async () => ( { ok: true } ), passwordSucceeded: async () => {}, passwordSignedIn: async () => ( { ok: true } ), take: async () => ( { ok: true } ) };
 			const request = new Request( 'https://worlddrive.app/api/account/sign-in', { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '203.0.113.1' }, body: JSON.stringify( { username, password } ) } );
 			spent = 0;
 			const started = performance.now();
@@ -2720,10 +2720,10 @@ describe( 'Username and password rules', () => {
 		const tries = { limit: async ( { key } ) => ( keys.set( key, ( keys.get( key ) ?? 0 ) + 1 ), { success: keys.get( key ) <= 10 } ) };
 		let answer = { ok: true };
 		let checks = 0;
-		const limits = { passwordCheck: async () => ( checks ++, answer ), passwordSucceeded: async () => {}, take: async () => ( { ok: true } ) };
-		const attempt = async ( ip, { env = {}, now = Date.UTC( 2026, 10, 13, 9 ) } = {} ) => {
+		const limits = { passwordCheck: async () => ( checks ++, answer ), passwordSucceeded: async () => {}, passwordSignedIn: async () => ( { ok: true } ), take: async () => ( { ok: true } ) };
+		const attempt = async ( ip, { env = {}, now = Date.UTC( 2026, 10, 13, 9 ), username = 'Somebody' } = {} ) => {
 
-			const request = new Request( 'https://worlddrive.app/api/account/sign-in', { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip }, body: JSON.stringify( { username: 'Somebody', password: 'a wrong passphrase' } ) } );
+			const request = new Request( 'https://worlddrive.app/api/account/sign-in', { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip }, body: JSON.stringify( { username, password: 'a wrong passphrase' } ) } );
 			try {
 
 				await passwordSignIn( { request, env: { DB: db, TURNSTILE_SECRET: PASS_SECRET, PASSWORD_TRIES: tries, ...env }, limits, url: new URL( request.url ), now } );
@@ -2753,20 +2753,113 @@ describe( 'Username and password rules', () => {
 		assert.deepEqual( await attempt( '203.0.113.120' ), { status: 403, reason: 'robot', retryAfter: undefined } );
 		for ( let i = 0; i < 5; i ++ ) assert.equal( ( await attempt( '203.0.113.120' ) ).reason, 'robot' );
 		assert.equal( checks, 12 );
-		// ...while a username's robot check (not the visitor's) is asked about every time.
+		// A username's robot check (not the visitor's) is remembered for this visitor and that username
+		// alone: asked once, then its tries without one are turned away here...
 		answer = { ok: false, reason: 'robot', visitor: false };
-		await attempt( '203.0.113.121' );
-		await attempt( '203.0.113.121' );
-		assert.equal( checks, 14 );
+		for ( let i = 0; i < 5; i ++ ) assert.equal( ( await attempt( '203.0.113.121' ) ).reason, 'robot' );
+		assert.equal( checks, 13 );
+		// ...while another username from it, or the same from another visitor, is asked about afresh.
+		answer = { ok: true };
+		assert.equal( ( await attempt( '203.0.113.121', { username: 'Somebody_Else' } ) ).status, 401 );
+		assert.equal( ( await attempt( '203.0.113.125' ) ).status, 401 );
+		assert.equal( checks, 15 );
 		// Past HARD_FAILS: a 429 till midnight from DriveLimits once, then from here.
 		answer = { ok: false, reason: 'address', retryAfter: 3600 };
 		assert.deepEqual( await attempt( '203.0.113.122' ), { status: 429, reason: 'address', retryAfter: '3600' } );
 		assert.deepEqual( await attempt( '203.0.113.122', { now: Date.UTC( 2026, 10, 13, 9 ) + 1000 } ), { status: 429, reason: 'address', retryAfter: '3599' } );
-		assert.equal( checks, 15 );
+		assert.equal( checks, 16 );
 		// The next day it's a new visitor to the counts, and asked about again.
 		answer = { ok: true };
 		assert.equal( ( await attempt( '203.0.113.122', { now: Date.UTC( 2026, 10, 14, 9 ) } ) ).status, 401 );
-		assert.equal( checks, 16 );
+		assert.equal( checks, 17 );
+
+	} );
+
+	test( 'signing in again and again with the right password: two DriveLimits requests and a hash each, then none at all past the day\'s 50', async () => {
+
+		const { ITERATIONS, hashPassword, passwordSignIn, signOutEverywhere } = await import( '../worker/drive/logins.js' );
+		// The real DriveLimits (in memory), each call to it counted.
+		const real = ( await memoryLimits() ).limits;
+		const calls = [];
+		const limits = new Proxy( real, { get: ( target, name ) => typeof target[ name ] === 'function' ? ( ...args ) => ( calls.push( name ), target[ name ]( ...args ) ) : target[ name ] } );
+		const salt = new Uint8Array( 16 ).fill( 3 );
+		const row = { account_id: 5, username: 'Loop_Er', password_hash: Buffer.from( await hashPassword( 'my own passphrase', salt, ITERATIONS ) ).toString( 'base64url' ), salt: Buffer.from( salt ).toString( 'base64url' ), iterations: ITERATIONS };
+		const account = { id: 5, google_sub: 'none:x', email: '', name: '', google: 0, username: 'Loop_Er' };
+		const db = {
+			prepare: sql => ( {
+				bind: ( ...values ) => ( {
+					first: async () => /FROM logins WHERE username_key/.test( sql ) ? ( values[ 0 ] === 'loop_er' ? row : null ) : /JOIN sessions/.test( sql ) ? account : null,
+					run: async () => ( { meta: { changes: 1 } } ),
+				} ),
+			} ),
+			batch: async list => list.map( () => ( { meta: { changes: 1 }, results: [] } ) ),
+		};
+		const env = { DB: db, TURNSTILE_SECRET: PASS_SECRET };
+		const subtle = crypto.subtle;
+		const deriveBits = subtle.deriveBits;
+		let hashes = 0;
+		subtle.deriveBits = function ( ...args ) {
+
+			hashes ++;
+			return deriveBits.apply( this, args );
+
+		};
+		const now = Date.UTC( 2026, 10, 15, 10 );
+		const post = ( path, body, extra = {} ) => new Request( `https://worlddrive.app${ path }`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '203.0.113.140', ...extra }, body: JSON.stringify( body ) } );
+		const outcome = async ( route, request, at ) => {
+
+			try {
+
+				return ( await route( { request, env, limits, url: new URL( request.url ), now: at } ) ).status;
+
+			} catch ( err ) {
+
+				return err.status;
+
+			}
+
+		};
+
+		try {
+
+			const statuses = [];
+			const asked = [];
+			const hashed = [];
+			for ( let i = 0; i < 100; i ++ ) {
+
+				const before = [ calls.length, hashes ];
+				statuses.push( await outcome( passwordSignIn, post( '/api/account/sign-in', { username: 'Loop_Er', password: 'my own passphrase' } ), now + i * 6000 ) );
+				asked.push( calls.length - before[ 0 ] );
+				hashed.push( hashes - before[ 1 ] );
+
+			}
+
+			assert.deepEqual( statuses, [ ...Array( 50 ).fill( 200 ), ...Array( 50 ).fill( 429 ) ] );
+			// Each sign-in: the check, then the try given back and the day's turn taken in one request.
+			assert.deepEqual( calls.slice( 0, 4 ), [ 'passwordCheck', 'passwordSignedIn', 'passwordCheck', 'passwordSignedIn' ] );
+			assert.deepEqual( asked.slice( 0, 50 ), Array( 50 ).fill( 2 ) );
+			assert.deepEqual( hashed.slice( 0, 50 ), Array( 50 ).fill( 1 ) );
+			// The 51st: DriveLimits says the day's sign-ins are used up, before any hashing...
+			assert.equal( asked[ 50 ], 1 );
+			assert.equal( hashed[ 50 ], 0 );
+			// ...and from then on, nothing asked and nothing hashed, all day.
+			assert.deepEqual( asked.slice( 51 ), Array( 49 ).fill( 0 ) );
+			assert.deepEqual( hashed.slice( 51 ), Array( 49 ).fill( 0 ) );
+			assert.equal( calls.length, 101 );
+
+			// Changes alike: past the day's 30 (here signing out everywhere), DriveLimits says so once.
+			const cookie = { Cookie: `__Host-wd_session=${ 'k'.repeat( 43 ) }` };
+			const changed = [];
+			const before = calls.length;
+			for ( let i = 0; i < 40; i ++ ) changed.push( await outcome( signOutEverywhere, post( '/api/account/sign-out-everywhere', {}, cookie ), now + i * 6000 ) );
+			assert.deepEqual( changed, [ ...Array( 30 ).fill( 204 ), ...Array( 10 ).fill( 429 ) ] );
+			assert.equal( calls.length - before, 31 );
+
+		} finally {
+
+			subtle.deriveBits = deriveBits;
+
+		}
 
 	} );
 
@@ -3205,6 +3298,25 @@ describe( 'World Drive username and password accounts', () => {
 		assert.equal( ( await google( { sub: '3502', email: 'sixty@example.com', name: 'Sixty' }, { ip: '2001:db8:7a:fe::1', time: day } ) ).status, 429 );
 		// Another /48 is another visitor.
 		assert.equal( ( await signIn( 'Racer_1', 'correct horse battery staple', { ip: '2001:db8:7b::1', time: day } ) ).status, 200 );
+
+	} );
+
+	test( 'an IPv6 visitor\'s 20 players linked a day are its /48\'s, not each /64\'s', async () => {
+
+		const u = await signUp( 'Link_Lots', 'a linking passphrase' );
+		assert.equal( u.status, 200, u.text );
+		const ip = nextIp();
+		const visited = await send( 'POST', '/api/visit', { token: TOKEN }, { ip } );
+		const player = await send( 'POST', '/api/player', { name: 'Lots Linked', visit: visited.json.visit }, { ip } );
+		assert.equal( player.status, 201, player.text );
+		const link = from => send( 'POST', '/api/player/link', { id: player.json.id, secret: player.json.secret }, { cookie: u.cookie, ip: from } );
+		// Linked again, it's the same player each time, and each is one of the day's 20.
+		for ( let i = 1; i <= 20; i ++ ) assert.equal( ( await link( `2001:db8:4c:${ i.toString( 16 ) }::1` ) ).status, 200, `link ${ i }` );
+		assert.equal( ( await link( '2001:db8:4c:15::1' ) ).status, 429 );
+		// Another of the /48's 65,536 /64s is the same visitor...
+		assert.equal( ( await link( '2001:db8:4c:ffff::1' ) ).status, 429 );
+		// ...and another /48 another.
+		assert.equal( ( await link( '2001:db8:3c::1' ) ).status, 200 );
 
 	} );
 

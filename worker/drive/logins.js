@@ -40,9 +40,12 @@ import { MAX_TOKEN, verifyTurnstile } from './turnstile.js';
 // password and changes are held to PASSWORD_TRIES' 10 a minute (Cloudflare's rate limiter: no
 // Durable Object request), counted by challenges.js's lookKey (an HMAC of the day and the address,
 // an IPv6 one by its /48, never the address itself). And what DriveLimits has said of a visitor for
-// the rest of the day (every try needs a robot check now, or no more tries today) is remembered in
-// this Worker instance (refused), so a script trying on without robot checks, or past HARD_FAILS,
-// is turned away here, not by another Durable Object request each time.
+// the rest of the day (every try, or every try at one username, needs a robot check now; no more
+// tries today; its sign-ins or changes for the day used up) is remembered in this Worker instance
+// (refused), so a script trying on without robot checks, past HARD_FAILS, or signing in again and
+// again with a password it knows, is turned away here, not by another Durable Object request (and
+// hash) each time. A sign-in costs two Durable Object requests (the check, and the try given back
+// with the day's sign-in taken), a refusal one.
 //
 // What changes how an account signs in needs fresh proof, not only the session, so a borrowed
 // browser or a copied cookie can't take an account over: adding a username and password to a Google
@@ -92,9 +95,15 @@ const encoder = new TextEncoder();
 // hash's time, as everyone's does). Always at ITERATIONS, the most any stored hash can have.
 let standIn = null;
 // What DriveLimits has said of a visitor today, by its lookKey (which is the day's): 'robot' (every
-// try from it needs a robot check now) or { until } (no more tries till then, ms). Forgotten the
-// moment a try from it gets in. Only a shortcut: another instance asks DriveLimits, and is told the
-// same.
+// try from it needs a robot check now) or { until } (no more tries till then, ms), forgotten the
+// moment a try from it gets in. And, under the lookKey with a word after it, what lasts the day
+// whatever gets in: '<lookKey> sign-in' and '<lookKey> account' the time (ms) the visitor's day of
+// sign-ins (SIGN_INS_DAILY) or changes (CHANGES_DAILY) is used up till, so a script signing in
+// again and again with a password it knows costs no hash and no Durable Object request past them;
+// and '<lookKey> <username key>' 'robot', a username asking this visitor for a robot check (from
+// its FREE_FAILS). Only a shortcut: another instance asks DriveLimits, and is told the same; and a
+// 'robot' gone stale (it never does within the day) would only ask for a robot check that then goes
+// on to DriveLimits.
 const refused = new Map();
 
 // Whether usernames and passwords are on: the database, Turnstile's secret (making an account needs
@@ -201,6 +210,31 @@ function addressRefusal( retryAfter ) {
 
 }
 
+// A 429 for a day's turns used up (as players.js's takeTurn says it), `retryAfter` seconds till
+// midnight UTC.
+function allForToday( retryAfter ) {
+
+	return new HttpError( 429, 'That\'s all for today. Try again tomorrow', { retryAfter }, { 'Retry-After': String( retryAfter ) } );
+
+}
+
+// Remembers in refused that the visitor's day of `what` ('sign-in' or 'account') is used up for
+// `retryAfter` seconds from `now`.
+function spent( visitor, what, now, retryAfter ) {
+
+	if ( refused.size >= REMEMBERED ) refused.clear();
+	refused.set( `${ visitor } ${ what }`, now + retryAfter * 1000 );
+
+}
+
+// A 429 if refused remembers the visitor's day of `what` as used up.
+function notSpent( visitor, what, now ) {
+
+	const until = refused.get( `${ visitor } ${ what }` );
+	if ( until > now ) throw allForToday( Math.ceil( ( until - now ) / 1000 ) );
+
+}
+
 function robotRefusal() {
 
 	return new HttpError( 403, 'Show you\'re not a robot first', { reason: 'robot' } );
@@ -248,8 +282,12 @@ function newPassword( value, username ) {
 // password; and a wrong password for a hash made with fewer iterations than the
 // stand-in's (PASSWORD_ITERATIONS lowered) is made up to the stand-in's with more hashing, so a
 // refusal always costs ITERATIONS and its time never says whether the username is someone's.
+// For a sign-in, `turn` ({ kind: 'sign-in', limit: SIGN_INS_DAILY }) has DriveLimits say first
+// whether the visitor has a sign-in left today (a 429 if not, remembered in refused, before any
+// hashing), and a success gives the try back and takes that turn in one request
+// (passwordSignedIn), so a sign-in costs two Durable Object requests and a refusal one.
 // The login's row ({ account_id, username, password_hash, salt, iterations }), or null.
-async function checkPassword( context, key, password, robot ) {
+async function checkPassword( context, key, password, robot, turn = null ) {
 
 	const { request, env, limits, now } = context;
 	const db = database( env );
@@ -257,15 +295,23 @@ async function checkPassword( context, key, password, robot ) {
 	const visitor = await tryGate( context );
 	const known = refused.get( visitor );
 	if ( known?.until > now ) throw addressRefusal( Math.ceil( ( known.until - now ) / 1000 ) );
-	if ( known === 'robot' && ! robot ) throw robotRefusal();
-	const gate = await limits.passwordCheck( ip, key, { now, robot, addressFails: ADDRESS_FAILS, hardFails: HARD_FAILS, freeFails: FREE_FAILS, gap: FAIL_GAP } );
+	if ( ! robot && ( known === 'robot' || refused.get( `${ visitor } ${ key }` ) === 'robot' ) ) throw robotRefusal();
+	const gate = await limits.passwordCheck( ip, key, { now, robot, addressFails: ADDRESS_FAILS, hardFails: HARD_FAILS, freeFails: FREE_FAILS, gap: FAIL_GAP, turn } );
 	if ( ! gate.ok ) {
 
-		// Remembered only when it's the visitor's own (not a username's, whose next try from here may
-		// be another username's), for the rest of the day.
+		// Remembered for the rest of the day: the visitor's own answers under its lookKey, a
+		// username's robot check under the visitor's and that username's together (its next try
+		// from here may be at another username, which is asked about afresh).
 		if ( refused.size >= REMEMBERED ) refused.clear();
+		if ( gate.reason === 'turns' ) {
+
+			spent( visitor, 'sign-in', now, gate.retryAfter );
+			throw allForToday( gate.retryAfter );
+
+		}
+
 		if ( gate.reason === 'address' ) refused.set( visitor, { until: now + gate.retryAfter * 1000 } );
-		if ( gate.reason === 'robot' && gate.visitor ) refused.set( visitor, 'robot' );
+		if ( gate.reason === 'robot' ) refused.set( gate.visitor ? visitor : `${ visitor } ${ key }`, 'robot' );
 		if ( gate.reason === 'robot' ) throw robotRefusal();
 		if ( gate.reason === 'address' ) throw addressRefusal( gate.retryAfter );
 		throw new HttpError( 429, 'Wait a few seconds and try again', { reason: gate.reason, retryAfter: gate.retryAfter }, { 'Retry-After': String( gate.retryAfter ) } );
@@ -278,8 +324,18 @@ async function checkPassword( context, key, password, robot ) {
 	if ( good ) {
 
 		refused.delete( visitor );
-		await limits.passwordSucceeded( ip, key, { now } );
-		return row;
+		refused.delete( `${ visitor } ${ key }` );
+		if ( ! turn ) {
+
+			await limits.passwordSucceeded( ip, key, { now } );
+			return row;
+
+		}
+
+		const signed = await limits.passwordSignedIn( ip, key, { now, ...turn } );
+		if ( signed.ok ) return row;
+		spent( visitor, 'sign-in', now, signed.retryAfter );
+		throw allForToday( signed.retryAfter );
 
 	}
 
@@ -343,27 +399,30 @@ export async function newAccount( db, { username, key, hash, now } ) {
 // POST /api/account/sign-in { username, password, token? }: signed in to the username's account (as
 // signUp answers). A wrong password and a username nobody has are the same 401, as alike in time as
 // hashing makes them. DriveLimits may answer first: 429 (too many failures from this visitor today,
-// or a username's try too soon after its last failure) or 403 with reason 'robot' (send a robot
-// check's token with the next try); and before it PASSWORD_TRIES, a 429 with reason 'busy'.
+// a username's try too soon after its last failure, or the visitor's day of sign-ins used up, even
+// with the right password) or 403 with reason 'robot' (send a robot check's token with the next
+// try); and before it PASSWORD_TRIES, a 429 with reason 'busy'.
 export async function passwordSignIn( context ) {
 
 	const { request, env, now } = context;
 	const db = checkOn( env );
 	const sent = await body( request );
 	if ( typeof sent.username !== 'string' || typeof sent.password !== 'string' ) throw new HttpError( 400, 'Bad request' );
-	await tryGate( context );
+	// A visitor whose sign-ins today are used up (as this instance has heard) is turned away first,
+	// before a robot check, a hash or a Durable Object request.
+	notSpent( await tryGate( context ), 'sign-in', now );
 	const robot = await robotPassed( env, request, sent.token );
 	const username = cleanUsername( sent.username );
 	// A username that can't be one is tried, and counted, as one nobody has (under its lower case, so
 	// its failures still slow it down as a real one's would).
 	const key = username ? usernameKey( username ) : sent.username.slice( 0, 64 ).toLowerCase();
 	const password = passwordText( sent.password );
-	const row = await checkPassword( context, key, password, robot );
-	if ( ! row ) throw new HttpError( 401, WRONG );
 	// Each sign-in is a new session kept for 30 days, so a visitor's are counted, with Google's
 	// (accounts.js's SIGN_INS_DAILY), an IPv6 one by its /48 (as its tries are: a /48 holds 65,536
-	// /64s): someone who knows a password still can't fill the database with sessions.
-	await takeTurn( context.limits, request, 'sign-in', now, SIGN_INS_DAILY, 48 );
+	// /64s): someone who knows a password still can't fill the database with sessions. The turn is
+	// asked about with the check and taken with the success (checkPassword's `turn`).
+	const row = await checkPassword( context, key, password, robot, { kind: 'sign-in', limit: SIGN_INS_DAILY } );
+	if ( ! row ) throw new HttpError( 401, WRONG );
 	await rehashIfOld( env, row, password, now );
 	await db.prepare( 'UPDATE accounts SET last_login_at = ? WHERE id = ?' ).bind( now, row.account_id ).run();
 	return signedIn( context, row.account_id );
@@ -380,12 +439,17 @@ async function signedInAccount( context ) {
 }
 
 // One of the visitor's CHANGES_DAILY (a 429 past them), taken once a change has been checked, after
-// one of its PASSWORD_TRIES (tryGate).
+// one of its PASSWORD_TRIES (tryGate). Once DriveLimits has said they're used up, this instance
+// remembers it till midnight UTC (refused), and asks no more.
 async function aChange( context ) {
 
 	const { limits, request, now } = context;
-	await tryGate( context );
-	await takeTurn( limits, request, 'account', now, CHANGES_DAILY, 48 );
+	const visitor = await tryGate( context );
+	notSpent( visitor, 'account', now );
+	const turn = await limits.take( 'account', addressOf( request, 48 ), { now, limit: CHANGES_DAILY } );
+	if ( turn.ok ) return;
+	spent( visitor, 'account', now, turn.retryAfter );
+	throw allForToday( turn.retryAfter );
 
 }
 

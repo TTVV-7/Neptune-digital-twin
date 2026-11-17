@@ -3246,19 +3246,31 @@ either signs in to the one account. Driving and the leaderboard still never need
   Cloudflare's rate limiter (no Durable Object request; counted by the challenges' keyed hash of the
   address, an IPv6 one by its /48, and the day), a 429 with `reason: 'busy'` past it ("Too many
   tries. Wait a minute and try again."), once a request however much it checks. And what
-  `DriveLimits` has said of a visitor for the rest of the day (every try from it needs a robot check
-  now, or, past 200, none at all till midnight UTC) is remembered in the Worker instance that heard
-  it (`refused`, forgotten the moment a try from that visitor gets in), so a script trying on
-  without robot checks, or past the cap, is turned away there without asking again. Without these
-  a script on one address sending a try every second or so (nothing but same-origin JSON: no visit,
-  robot check or session needed) used up the day's 100,000; now one address reaches `DriveLimits`
-  at most 14,400 times a day (10 a minute), and only until it's past 20 failures in each instance it
-  lands on.
+  `DriveLimits` has said of a visitor for the rest of the day is remembered in the Worker instance
+  that heard it (`refused`), so a script is turned away there without asking again: every try from
+  the visitor needs a robot check now, or, past 200, none at all till midnight UTC (both forgotten
+  the moment a try from that visitor gets in); one username asks this visitor for a robot check
+  (kept for the visitor and that username together); the visitor's 50 sign-ins or 30 changes of
+  the day are used up (kept till midnight UTC whatever gets in). A sign-in asks `DriveLimits`
+  whether the visitor has a sign-in left with the same request that checks the try, before any
+  hashing, and one that gets in gives the try back and takes the day's sign-in in one more request,
+  so a request costs at most one Durable Object request (a sign-in that gets in two). Without
+  these a script on one address sending a try every second or so (nothing but same-origin JSON: no
+  visit, robot check or session needed) used up the day's 100,000; and until the sign-in's turn was
+  folded into the check, one signing in again and again with its own account's right password
+  cost three Durable Object requests and a 100,000-round hash a try all day, past the 50 sign-ins
+  too (43,200 requests a day from one address). Now one address reaches `DriveLimits` at most about
+  14,450 times a day (10 a minute, and 50 sign-ins at two), whatever it sends, and in practice far
+  fewer: the right password over and over is asked about 101 times (50 sign-ins, then one
+  refusal, then nothing, no hash either; a test counts it), changes 31 times, a wrong password
+  until the visitor needs robot checks (20 failures), each username asking it for one once. Each
+  Worker instance remembers for itself, so a script landing on many is asked about once in each.
 - **Signing in** (successes) shares Google's **50 a day** from one visitor (`SIGN_INS_DAILY`, counted
   as the leaderboard's names are, an IPv6 one by its /48 for Google's and passwords' alike, as
   players linked are too): each is a session kept for 30 days, so knowing a password still can't
-  fill the database with sessions, not even from each of a /48's 65,536 /64s in turn (counted by its
-  /64, one account signed in 70 times from one /48).
+  fill the database with sessions, not even from each of a /48's 65,536 /64s in turn (counted by the
+  /64 before, one account was signed in 70 times from one /48; now the 51st from any of its /64s is
+  refused, Google's too).
 - **Signing up** always needs a robot check, and a visitor (by /48) makes **10 accounts a day** at
   most; adding a username to a Google account is counted among those 10 too (it can say a username
   is taken). **Changes** (a username and password added, the password changed, Google linked or
@@ -3360,16 +3372,19 @@ up too; the session is then a username's alone.
 - **Sign-up**: a robot check (Turnstile's siteverify), one `DriveLimits` request (the day's turn),
   one hash, and in D1 a read and three writes (the account, the login, the session). **Sign-in**:
   one of `PASSWORD_TRIES` (free), then one `DriveLimits` request for a refusal (the check, counting
-  the try), three for a success (the try given back, and the day's turn), one hash, a read and two
-  writes. A change: one of `PASSWORD_TRIES`, then one `DriveLimits` request (the day's turn), and
-  for one that proves the password one more. A few a day at today's traffic: nothing next to the
-  [Free plan's](#what-a-visit-costs-and-how-its-capped) 100,000 Durable Object requests or D1's
-  rows. A stranger's guessing is held to 20 tries a day an address without a robot check, 200 with;
-  a refusal `DriveLimits` would give again (a robot check wanted, or past 200) costs no Durable
-  Object request once the Worker instance has heard it; and whatever is sent, one address reaches
-  `DriveLimits` at most 10 times a minute (`PASSWORD_TRIES`), so even if no instance remembered a
-  thing it would take seven or more addresses (or /48s) sending all day to use up the day's
-  100,000, against one before.
+  the try, which also says whether the visitor has a sign-in left today), two for a success (the
+  check, then the try given back and the day's sign-in taken in one), one hash, a read and two
+  writes; past the visitor's 50 sign-ins, one request and no hash, then nothing at all once the
+  instance has heard it. A change: one of `PASSWORD_TRIES`, then one `DriveLimits` request (the
+  day's turn; none past the 30 once heard), and for one that proves the password one more. A few a
+  day at today's traffic: nothing next to the [Free plan's](#what-a-visit-costs-and-how-its-capped)
+  100,000 Durable Object requests or D1's rows. A stranger's guessing is held to 20 tries a day an
+  address without a robot check, 200 with; a refusal `DriveLimits` would give again (a robot check
+  wanted, past 200, the day's sign-ins or changes used up) costs no Durable Object request once the
+  Worker instance has heard it; and whatever is sent, a request costs at most one `DriveLimits`
+  request (a sign-in that gets in two, 50 a day), held to 10 a minute (`PASSWORD_TRIES`): about
+  14,450 a day from one address, so even if no instance remembered a thing it would take seven or
+  more addresses (or /48s) sending all day to use up the day's 100,000, against one before.
   The CPU is the cost that matters on the Free plan (above).
 - **Storage**: a login row is about 150 bytes.
 
@@ -3405,7 +3420,10 @@ kept only as salted hashes, every refusal adding up to 100,000 iterations with
 `PASSWORD_ITERATIONS` lowered or not (and a right password hashed again at the lowered count),
 `PASSWORD_TRIES` turning a burst from one /48 away before `DriveLimits` is asked (a stand-in
 counting its calls) and what `DriveLimits` said of a visitor (a robot check wanted, or past the cap)
-not asked again that day, but a username's robot check asked every time, the batch that loses a
+not asked again that day, a username's robot check asked once for that visitor and username (and
+afresh for another username or visitor), the right password sent 100 times from one address
+against the real `DriveLimits` in memory (two requests and a hash for each of the 50 sign-ins, one
+request and no hash for the 51st, then nothing at all) and 40 changes (31 requests), the batch that loses a
 username made by two at once taking its account back (on node:sqlite with 0001 to 0008),
 migration 0008 on top of 0001 to 0007 with every account,
 session, purchase and player kept; then against `wrangler dev` with D1 (with `PASSWORD_TRIES`
@@ -3419,7 +3437,8 @@ from one address) while the owner still signs in; 40 tries sent at once from one
 through) and for one username from 40 (5 through), and a burst of solved robot checks (1 through);
 a stranger failing every 5 s from a new address while the owner signs in every time between; an
 address's 20 tries (then a robot check, which lets someone else there in) and 200 (then nothing), its
-10 accounts and its 50 sign-ins (with Google's), from one /48's many /64s too; linking Google with a
+10 accounts and its 50 sign-ins (with Google's), from one /48's many /64s too, and its 20 players
+linked, by its /48 too; linking Google with a
 robot check needed, a 1,400-character Google token and a 2,000-character robot check's token, and
 taking off a 128-byte password with a 2,048-character one; `DriveLimits` keeping no username or address;
 changing the password (the current one needed, other sessions signed out); hashing again at a
@@ -3436,7 +3455,10 @@ username's; signing out everywhere; the admin page's counts by kind; and no user
 
 `npm run test:drive-ui`: the panel not loaded until opened; creating an account (the rules said in
 the page, a taken username, the robot check, signed in, the password sent nowhere else);
-signing in (a wrong password said so, a robot check when asked for, signing out); signed in with a
+signing in (a wrong password said so, a robot check when asked for, signing out), and signed out
+again after creating one the panel back on Sign in; signing out from the panel with the Worker
+not reached or saying no (said in the panel, both buttons off while it's sent, one post for two
+taps); signed in with a
 username (changing the password, linking Google with the password, unlinking it with Google's
 button, signing out everywhere); signed in with Google (adding a username and password confirmed
 with Google's button; Google not unlinkable before; taking the password off with it); each form's
@@ -3446,7 +3468,7 @@ with it fallen to the page); signed in with both on a phone held either way, Sig
 without scrolling, the changes folded, Google's buttons drawn only once opened and one open at a
 time; a tap on its padding keeping what's typed, and one outside closing it; its title
 following the tab; the panel on a phone held upright and without Google's sign-in; and the admin page's
-accounts by kind. Pictures: `account-1-create-desktop` to `account-10-remove-phone` with
+accounts by kind. Pictures: `account-1-create-desktop` to `account-11-sign-out-failed-phone` with
 `TEST_SCREENSHOTS`.
 
 ## What a visit costs, and how it's capped

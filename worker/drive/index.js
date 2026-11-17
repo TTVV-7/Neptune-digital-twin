@@ -20,22 +20,22 @@ import { BUDGET_SPENT } from '../../src/drive-app/live-protocol.js';
 export { DriveLimits } from './limits.js';
 export { DriveRoom } from './live.js';
 
-// The Cloudflare Worker behind World Drive (worlddrive.app, docs/world-drive.md). It only runs
-// for /api/* and /c (LINK_PATH: a "challenge a friend" link's page, the home page with a preview
-// card of its own for chat apps); the rest of the site (npm run build:drive, dist-drive/), the home
-// page included, is served straight from Cloudflare's assets. Its job is to keep Google's bill in check: every page that loads Google's
-// 3D tiles starts a billed Maps session, so the Maps key is handed out once per visit, only to a
-// browser that passed Turnstile, and only while today's visits are under the caps. It also keeps
-// the leaderboard (players.js, scores.js) in a D1 database: nicknames and each player's best stunt
-// scores, posted with the visit's token so they come from visits that passed Turnstile, and each
-// player's XP and level (progress.js). And the Supporter Pass (accounts.js, logins.js, supporter.js): Google's sign-in or a username and
-// password's, the pass bought through Stripe, and
-// for supporters more drives a day and a ⭐ on the leaderboard. Driving with others (live.js) is a
-// WebSocket to a room, one Durable Object a party or area, that tells everyone where the others are;
-// /api/online says where people are driving now, for the globe's dots. And the owner's play stats
-// (stats.js) with where people drop in (dropins.js), for the admin page. And challenges
-// (challenges.js): a daily, a weekly and a monthly one on each world, each with its own board of
-// the best times, picked by themselves or by the owner on the admin page.
+// The Cloudflare Worker behind World Drive (worlddrive.app, docs/world-drive.md). It only runs for
+// /api/* and /c (LINK_PATH: a "challenge a friend" link's page, the home page with a preview card
+// of its own for chat apps); the rest of the site (npm run build:drive, dist-drive/), the home page
+// included, is served straight from Cloudflare's assets. Its job is to keep Google's bill in check:
+// every page that loads Google's 3D tiles starts a billed Maps session, so the Maps key is handed
+// out once per visit, only to a browser that passed Turnstile, and only while today's visits are
+// under the caps. It also keeps the leaderboard (players.js, scores.js) in a D1 database: nicknames
+// and each player's best stunt scores, posted with the visit's token so they come from visits that
+// passed Turnstile, and each player's XP and level (progress.js). And the Supporter Pass
+// (accounts.js, logins.js, supporter.js): Google's sign-in or a username and password's, the pass
+// bought through Stripe, and for supporters more drives a day and a ⭐ on the leaderboard. Driving
+// with others (live.js) is a WebSocket to a room, one Durable Object a party or area, that tells
+// everyone where the others are; /api/online says where people are driving now, for the globe's
+// dots. And the owner's play stats (stats.js) with where people drop in (dropins.js), for the admin
+// page. And challenges (challenges.js): a daily, a weekly and a monthly one on each world, each
+// with its own board of the best times, picked by themselves or by the owner on the admin page.
 //
 // Settings (wrangler.drive.jsonc vars, or secrets):
 //   GOOGLE_MAPS_API_KEY   secret: the Maps key for World Drive's own Google Cloud project (a

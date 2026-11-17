@@ -6554,6 +6554,14 @@ describe( 'World Drive accounts: usernames and passwords', () => {
 		await sheet( page ).locator( '.supporter-line', { hasText: 'Signed in as Racer_1 · Restore purchases · Account · Sign out' } ).waitFor();
 		// The password went nowhere but the sign-up post.
 		assert.ok( ! page.outside.some( url => url.includes( 'horse' ) ) );
+		// Signed out and back to the panel, it offers signing in again, not another account (a
+		// returning player's username in the sign-up form would only be "taken").
+		await sheet( page ).locator( '.supporter-line button', { hasText: 'Sign out' } ).click();
+		await page.locator( '#toast', { hasText: 'Signed out' } ).waitFor();
+		await openAccountPanel( page, 'Or use a username and password' );
+		assert.equal( await account.locator( '#account-title' ).textContent(), 'Sign in' );
+		assert.equal( await account.locator( '.account-tabs button', { hasText: 'Sign in' } ).getAttribute( 'aria-pressed' ), 'true' );
+		await account.locator( 'form.account-sign-in' ).waitFor();
 		assert.deepEqual( page.errors, [] );
 		await page.context().close();
 
@@ -6644,6 +6652,53 @@ describe( 'World Drive accounts: usernames and passwords', () => {
 		await page.locator( '#toast', { hasText: 'Signed out everywhere' } ).waitFor();
 		assert.equal( page.asked.account.at( - 1 ).path, 'sign-out-everywhere' );
 		assert.equal( await account.isVisible(), false );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'signing out from the panel: its buttons off while it\'s sent, and what went wrong said in the panel', async () => {
+
+		const page = await accountPage( { me: RACER, viewport: { width: 390, height: 844 }, touch: true } );
+		await testPad( page );
+		await page.waitForFunction( () => window.drive.supporter.me );
+		const account = await openAccountPanel( page, 'Account' );
+		const out = account.locator( '.account-out' );
+		const status = account.locator( '.account-out + .account-status' );
+		// The Worker not reached: said under the buttons, the panel left open and still signed in.
+		let down = true;
+		await page.route( `${ BASE }/api/session`, route => down && route.request().method() === 'DELETE' ? route.abort() : route.fallback() );
+		await out.locator( 'button', { hasText: /^Sign out$/ } ).tap();
+		await status.filter( { hasText: 'Couldn\'t reach World Drive. Check your connection and try again.' } ).waitFor();
+		assert.equal( await account.isVisible(), true );
+		assert.equal( await account.locator( '#account-title' ).textContent(), 'Your account' );
+		await shot( page, 'account-11-sign-out-failed-phone' );
+		// The Worker saying no: its own words, not "Couldn't reach". And while it's out, both buttons
+		// are off, so a second tap doesn't send it again.
+		let answer;
+		const answered = new Promise( resolve => answer = resolve );
+		let sent = 0;
+		await page.route( `${ BASE }/api/account/sign-out-everywhere`, async route => {
+
+			sent ++;
+			await answered;
+			route.fulfill( { status: 429, contentType: 'application/json', headers: { 'Retry-After': '3600' }, body: JSON.stringify( { error: 'That\'s all for today. Try again tomorrow', retryAfter: 3600 } ) } );
+
+		} );
+		await out.locator( 'button', { hasText: 'Sign out everywhere' } ).tap();
+		await status.filter( { hasText: 'Signing out everywhere...' } ).waitFor();
+		assert.deepEqual( await out.locator( 'button' ).evaluateAll( buttons => buttons.map( b => b.disabled ) ), [ true, true ] );
+		await out.locator( 'button', { hasText: 'Sign out everywhere' } ).tap( { force: true } );
+		answer();
+		await status.filter( { hasText: 'That\'s all for today. Try again tomorrow.' } ).waitFor();
+		assert.equal( sent, 1 );
+		assert.deepEqual( await out.locator( 'button' ).evaluateAll( buttons => buttons.map( b => b.disabled ) ), [ false, false ] );
+		assert.equal( await account.isVisible(), true );
+		// Reached again, it signs out and the panel closes.
+		down = false;
+		await out.locator( 'button', { hasText: /^Sign out$/ } ).tap();
+		await page.locator( '#toast', { hasText: 'Signed out' } ).waitFor();
+		await account.waitFor( { state: 'hidden' } );
 		assert.deepEqual( page.errors, [] );
 		await page.context().close();
 

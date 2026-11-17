@@ -189,7 +189,7 @@ dialog#account .account-section {
 	border-bottom: 1px solid var( --line );
 }
 
-dialog#account .account-out + .account-section {
+dialog#account .account-out + .account-status + .account-section {
 	margin-top: 16px;
 	border-top: 1px solid var( --line );
 }

@@ -9,11 +9,12 @@ import { toast } from './screens.js';
 // sign in or create an account. Signed in: what the account signs in with and signing out here or
 // everywhere, first, then each rarer change folded away under its own heading (opened one at a
 // time, so a phone sees about a screen): changing the password (or adding a username and password
-// to a Google account), linking or unlinking Google, taking the password off. What changes how the account signs in asks for fresh proof, as the Worker
-// does: Google's button to add a password to a Google account or unlink Google, the password to link
-// Google or take the password off (or Google's button for that too). The forms are real forms with
-// labels and autocomplete (username, current-password, new-password), so password managers fill
-// them and offer to save. A password is only ever sent to the Worker's account routes.
+// to a Google account), linking or unlinking Google, taking the password off. What changes how the
+// account signs in asks for fresh proof, as the Worker does: Google's button to add a password to a
+// Google account or unlink Google, the password to link Google or take the password off (or
+// Google's button for that too). The forms are real forms with labels and autocomplete (username,
+// current-password, new-password), so password managers fill them and offer to save. A password is
+// only ever sent to the Worker's account routes.
 
 const UNREACHABLE = 'Couldn\'t reach World Drive. Check your connection and try again.';
 const NO_RECOVERY = 'There\'s no email here, so a forgotten password can\'t be recovered, unless you also link Google. Keep it in a password manager.';
@@ -198,6 +199,8 @@ function signUpForm() {
 
 function signedInNow( body ) {
 
+	// Signed out again later, the panel offers signing in, not making another account.
+	mode = 'sign-in';
 	hooks.update( body );
 	toast( body.supporter ? 'Signed in: Supporter Pass unlocked' : `Signed in as ${ hooks.who() }` );
 	dialog.close();
@@ -220,13 +223,25 @@ function signedIn( me ) {
 	parts.push( Object.assign( paragraph( 'You sign in with:' ), { className: 'account-label' } ), list );
 	if ( me.supporter ) parts.push( Object.assign( paragraph( '⭐ Supporter Pass' ), { className: 'account-pass' } ) );
 
+	// Signing out here or everywhere: both buttons off while it's sent (a second tap doesn't send it
+	// again), and what went wrong said just under them (the pass's sheet, which says it too, is
+	// behind the panel).
 	const out = document.createElement( 'div' );
 	out.className = 'account-out';
-	out.append(
-		button( 'Sign out', async () => await hooks.signOut() && dialog.close() ),
-		button( 'Sign out everywhere', async () => await hooks.signOut( { everywhere: true } ) && dialog.close() ),
-	);
-	parts.push( out );
+	const outStatus = statusLine();
+	const signOut = everywhere => async () => {
+
+		busy( out, true );
+		say( outStatus, everywhere ? 'Signing out everywhere...' : 'Signing out...' );
+		const answer = await hooks.signOut( { everywhere } );
+		busy( out, false );
+		if ( ! answer.ok ) return say( outStatus, problem( answer ) );
+		mode = 'sign-in';
+		dialog.close();
+
+	};
+	out.append( button( 'Sign out', signOut( false ) ), button( 'Sign out everywhere', signOut( true ) ) );
+	parts.push( out, outStatus );
 	parts.push( me.username ? changeForm( me ) : addForm() );
 	parts.push( googlePart( me ) );
 	if ( me.username && me.google ) parts.push( removeForm( me ) );

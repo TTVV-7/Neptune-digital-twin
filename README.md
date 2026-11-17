@@ -869,8 +869,8 @@ flame colours and trails, some of which levels unlock over time), +50% XP, a ⭐
 30 drives a day. It's bought with a Stripe Payment Link after
 signing in, so it's yours in any browser; Stripe's signed webhook records it. Signing in is with
 Google or with a **username and password** (PBKDF2-SHA-256 at the Workers runtime's most, 100,000
-iterations, with a salt of its own; guessing slowed per address and per username without ever
-locking the owner out; no email, so a password can't be recovered unless Google is linked too), and
+iterations, with a salt of its own; guessing slowed per address and per username without letting
+a stranger elsewhere lock the owner out (Google's sign-in always works); no email, so a password can't be recovered unless Google is linked too), and
 either can be linked to the other, with fresh proof of each, never the session alone: one account, with its pass, level, times and Garage, whichever
 way you signed in (see [Username and password accounts](docs/world-drive.md#username-and-password-accounts)). Buying
 stays off ("Coming soon") until `GOOGLE_CLIENT_ID` and the webhook's secret are set (see
