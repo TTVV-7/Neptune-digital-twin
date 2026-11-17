@@ -4049,7 +4049,7 @@ describe( 'World Drive Worker with AdSense set', () => {
 
 		}
 
-		// wrangler.drive.jsonc's own (empty) settings: off.
+		// With ADSENSE_CLIENT empty (the harness's default, whatever wrangler.drive.jsonc has): off.
 		server = await startWorker( { port: PORT, config: 'wrangler.drive.jsonc', vars, assets } );
 		try {
 

@@ -89,6 +89,9 @@ export async function serveKeys( keys ) {
 // beside it (so its paths still hold), gone when the Worker's stopped.
 export async function startWorker( { port, vars, config = null, assets: files = {}, without = [] } ) {
 
+	// The owner's AdSense id is in wrangler.drive.jsonc; tests have ads off unless they set it.
+	if ( config && ! ( 'ADSENSE_CLIENT' in vars ) ) vars = { ...vars, ADSENSE_CLIENT: '' };
+
 	if ( without.length ) {
 
 		let text = readFileSync( join( ROOT, config ), 'utf8' );
