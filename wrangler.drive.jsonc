@@ -65,7 +65,7 @@
 		// empty, no ads at all: nothing about them is loaded or shown, and /ads.txt is a 404.
 		// ADSENSE_SLOT is a display ad unit's id (6 to 12 digits), or empty for a responsive unit with
 		// none. Either one not in its format switches ads off.
-		"ADSENSE_CLIENT": "",
+		"ADSENSE_CLIENT": "ca-pub-7954356723512335",
 		"ADSENSE_SLOT": ""
 	},
 	// Secrets, set by the owner and never in a file (the dashboard, or

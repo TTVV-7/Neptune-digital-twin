@@ -6002,7 +6002,7 @@ or none. The About box's ads paragraph says what Google does with cookies and li
 
 | Setting | Where | What it is |
 | --- | --- | --- |
-| `ADSENSE_CLIENT` | `vars` | The AdSense publisher id, `ca-pub-` and 16 digits (public). Empty (as it ships): no ads, and `/ads.txt` is a 404 |
+| `ADSENSE_CLIENT` | `vars` | The AdSense publisher id, `ca-pub-` and 16 digits (public). Set to the owner's id; `drive/index.html` also carries it as `<meta name="google-adsense-account">` for AdSense's site check. Empty: no ads, and `/ads.txt` is a 404 |
 | `ADSENSE_SLOT` | `vars` | Optional: a display ad unit's id, 6 to 12 digits. Empty: the slot has no unit id |
 
 Both are in `wrangler.drive.jsonc`'s `vars`, which every deploy sets: change them there (a value put
