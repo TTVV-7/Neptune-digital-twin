@@ -16,10 +16,10 @@ import { WORKS } from './works.js';
 // as models.js loads anything placed, so drive.js drives them as it does in the construction app,
 // then World Drive's own cars (cars.js: models from Sketchfab whose wheels turn, one free, six with
 // levels or the pass and the rest with the pass), the construction rides, and after them the
-// Supporter Pass's rides (rides/), built in code. What needs the pass (`pro`, see pro.js) or a level (levels.js's ride
-// rewards) is locked without it: rideLocked. And the construction rides (works.js), library models
-// too, each locked until its achievement (achievement-rules.js's RIDE_FEATS, feats.js), which the
-// pass doesn't give. Each wears its look from the Garage (paint.js).
+// Supporter Pass's rides (rides/), built in code. What needs the pass (`pro`, see pro.js) or a level
+// (levels.js's ride rewards) is locked without it: rideLocked. And the construction rides
+// (works.js), library models too, each locked until its achievement (achievement-rules.js's
+// RIDE_FEATS, feats.js), which the pass doesn't give. Each wears its look from the Garage (paint.js).
 
 const KART = {
 	id: 'go-kart',

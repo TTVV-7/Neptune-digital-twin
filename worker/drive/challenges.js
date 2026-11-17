@@ -1719,6 +1719,14 @@ async function seed( env, text ) {
 
 }
 
+// seed's HMAC of `text`, as hex: for keys elsewhere that mustn't be worked out from what's kept
+// without the Worker's secret (achievements.js's party marks).
+export async function keyedHex( env, text ) {
+
+	return hex( await seed( env, text ) );
+
+}
+
 function hex( bytes ) {
 
 	return [ ...bytes ].map( b => b.toString( 16 ).padStart( 2, '0' ) ).join( '' );

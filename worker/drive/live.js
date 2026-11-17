@@ -11,9 +11,9 @@ import { setting } from './settings.js';
 import { hasPass, supporterEmails } from './supporter.js';
 import { readVisit } from './visits.js';
 import { standingOf, xpOf } from './progress.js';
-import { creditParty, featList, featsOf } from './achievements.js';
+import { creditParty, hasRide } from './achievements.js';
 import { lookKey } from './challenges.js';
-import { rideAllowed } from '../../src/drive-app/achievement-rules.js';
+import { rideFeat } from '../../src/drive-app/achievement-rules.js';
 import { DEFAULT_RIDE } from '../../src/drive-app/catalog.js';
 
 // Driving with others (docs/world-drive.md): the rooms. src/drive-app/live-protocol.js says what a
@@ -518,18 +518,20 @@ export class DriveRoom extends DurableObject {
 		driver.pending = true;
 		driver.queue = [];
 		this.save( ws, driver );
-		const { name, star, level, title, player, account, feats } = await this.nameOf( m.player, driver.visit );
+		const { name, star, level, title, player, account } = await this.nameOf( m.player, driver.visit );
 		// Gone while it was looked up.
 		if ( this.drivers.get( ws ) !== driver || driver.left || ws.readyState !== WebSocket.OPEN ) return;
-		// The player and their account (for a party's count) and their achievements, for the rides they
-		// unlock: a construction ride without its achievement (a page that's been changed) is shown to
-		// the others as the default ride. (A ride unlocked later comes with the page's next hello.)
-		Object.assign( driver, { player, account, feats } );
+		// The player and their account (for a party's count), and for a construction ride whether they
+		// have the achievement that unlocks it (rideOf): without it (a page that's been changed) the
+		// others see the default ride. (A ride unlocked later comes with the page's next hello.)
+		Object.assign( driver, { player, account, wants: vehicle } );
+		const shown = await this.rideOf( driver, vehicle );
+		if ( this.drivers.get( ws ) !== driver || driver.left || ws.readyState !== WebSocket.OPEN ) return;
 
 		const taken = new Set( this.sockets().map( other => this.driver( other ).pid ) );
 		let pid = randomToken( 6 );
 		while ( taken.has( pid ) ) pid = randomToken( 6 );
-		Object.assign( driver, { pid, name, star, level, title, vehicle: rideFor( vehicle, feats ), look, place, away: m.away === true, s: null, pending: false } );
+		Object.assign( driver, { pid, name, star, level, title, vehicle: shown, look, place, away: m.away === true, s: null, pending: false } );
 		const others = this.helloed().filter( other => other !== ws ).map( other => playerOf( this.driver( other ) ) );
 		send( ws, { t: 'welcome', you: pid, name, star, room: driver.room, max: this.max( parseRoom( driver.room ) ), players: others } );
 		driver.sent = this.moves;
@@ -574,10 +576,54 @@ export class DriveRoom extends DurableObject {
 
 	}
 
-	// { name, star, level, title, player, account, feats } for hello's player: { id, secret } as the leaderboard has them, or
-	// anything else from `visit`, a guest with no level (null). A guest's four figures are its
-	// visit's, so they stay the same each time it connects (Hide, by name, holds; a friend coming
-	// back is the same guest).
+	// The ride the others see driver `driver` in when they pick `vehicle`: theirs, or the default ride
+	// for a construction ride whose achievement they don't have (a guest never has one). Only a
+	// construction ride asks D1 (achievements.js's hasRide: one look by the player's key and their
+	// account's, a few rows), and once a connection for each: the answer is kept with the driver, so
+	// a page going back and forth between two rides doesn't ask again. Nothing is read for any other
+	// ride, so a hello costs what it did before achievements.
+	async rideOf( driver, vehicle ) {
+
+		const feat = rideFeat( vehicle );
+		if ( ! feat ) return vehicle;
+		if ( ! driver.player ) return DEFAULT_RIDE;
+		driver.rides ??= {};
+		if ( ! ( feat in driver.rides ) ) {
+
+			try {
+
+				driver.rides[ feat ] = await hasRide( database( this.env ), driver.player, vehicle );
+
+			} catch ( err ) {
+
+				// No database just now: the default ride, and asked again next time.
+				console.error( 'Live ride', err?.name, err?.message );
+				return DEFAULT_RIDE;
+
+			}
+
+		}
+
+		return driver.rides[ feat ] ? vehicle : DEFAULT_RIDE;
+
+	}
+
+	// A ride changed (look) to a construction ride not yet asked about this connection: told to the
+	// others once D1 has said (rideOf), unless the page has changed ride again meanwhile.
+	async lookLater( ws, driver, vehicle, look ) {
+
+		const shown = await this.rideOf( driver, vehicle );
+		if ( this.drivers.get( ws ) !== driver || driver.left || ws.readyState !== WebSocket.OPEN || driver.wants !== vehicle ) return;
+		Object.assign( driver, { vehicle: shown, look } );
+		this.broadcast( { t: 'look', pid: driver.pid, vehicle: shown, look }, ws );
+		this.save( ws, driver );
+
+	}
+
+	// { name, star, level, title, player, account } for hello's player: { id, secret } as the
+	// leaderboard has them, or anything else from `visit`, a guest with no level (null). A guest's
+	// four figures are its visit's, so they stay the same each time it connects (Hide, by name,
+	// holds; a friend coming back is the same guest).
 	async nameOf( player, visit ) {
 
 		try {
@@ -585,9 +631,9 @@ export class DriveRoom extends DurableObject {
 			if ( isObject( player ) ) {
 
 				const { id, secret } = credentials( player );
-				const row = await database( this.env ).prepare( `SELECT p.name, ${ hasPass( 'p.account_id', '?3' ) } AS star, ${ xpOf( 'p' ) } AS xp, p.title, p.account_id, ${ featsOf( 'p' ) } AS feats
+				const row = await database( this.env ).prepare( `SELECT p.name, ${ hasPass( 'p.account_id', '?3' ) } AS star, ${ xpOf( 'p' ) } AS xp, p.title, p.account_id
 					FROM players p WHERE p.id = ?1 AND p.secret_hash = ?2` ).bind( id, await sha256Hex( secret ), supporterEmails( this.env ) ).first();
-				if ( row ) return { name: row.name, star: !! row.star, ...standingOf( row.xp, row.title ), player: id, account: row.account_id ?? null, feats: featList( row.feats ) };
+				if ( row ) return { name: row.name, star: !! row.star, ...standingOf( row.xp, row.title ), player: id, account: row.account_id ?? null };
 
 			}
 
@@ -599,7 +645,7 @@ export class DriveRoom extends DurableObject {
 		}
 
 		const number = parseInt( ( await sha256Hex( `guest ${ visit }` ) ).slice( 0, 8 ), 16 ) % 10000;
-		return { name: `Guest ${ String( number ).padStart( 4, '0' ) }`, star: false, level: null, title: null, player: null, account: null, feats: [] };
+		return { name: `Guest ${ String( number ).padStart( 4, '0' ) }`, star: false, level: null, title: null, player: null, account: null };
 
 	}
 
@@ -636,8 +682,20 @@ export class DriveRoom extends DurableObject {
 				const vehicle = checkVehicle( m.vehicle );
 				const look = checkLook( m.look );
 				if ( ! vehicle || ! look ) return false;
-				Object.assign( driver, { vehicle: rideFor( vehicle, driver.feats ), look } );
-				this.broadcast( { t: 'look', pid, vehicle: driver.vehicle, look }, ws );
+				driver.wants = vehicle;
+				// A construction ride not yet asked about: the others hear once D1 says (lookLater).
+				const feat = rideFeat( vehicle );
+				if ( feat && driver.player && ! ( feat in ( driver.rides ?? {} ) ) ) {
+
+					const asking = this.lookLater( ws, driver, vehicle, look ).catch( err => console.error( 'Live look', err?.name, err?.message ) );
+					this.ctx.waitUntil?.( asking );
+					return true;
+
+				}
+
+				const shown = ! feat ? vehicle : driver.player && driver.rides?.[ feat ] ? vehicle : DEFAULT_RIDE;
+				Object.assign( driver, { vehicle: shown, look } );
+				this.broadcast( { t: 'look', pid, vehicle: shown, look }, ws );
 				return true;
 
 			}
@@ -1181,14 +1239,6 @@ function companion( d, other, own ) {
 	if ( other === d ) return false;
 	if ( other.player ) return other.player !== d.player && ! ( other.account && other.account === d.account );
 	return !! other.from && ! own.has( other.from );
-
-}
-
-// The ride the others see a driver in: theirs, or the default ride for a construction ride whose
-// achievement they don't have (achievement-rules.js's rideAllowed).
-function rideFor( vehicle, feats ) {
-
-	return rideAllowed( vehicle, feats ?? [] ) ? vehicle : DEFAULT_RIDE;
 
 }
 

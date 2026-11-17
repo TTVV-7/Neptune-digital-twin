@@ -38,7 +38,7 @@
 // TEST_DRIVE_LIVE_PORT=8950 moves the four wrangler servers (that port and the next three).
 
 import assert from 'node:assert/strict';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { register } from 'node:module';
 import { createRequire } from 'node:module';
 import { createConnection } from 'node:net';
@@ -722,13 +722,19 @@ describe( 'Driving with others', () => {
 		assert.equal( await settle( 2 ), 2 );
 		for ( const room of [ first, second, first ] ) await visitAgain( room );
 		assert.equal( await settle( 2 ), 2 );
-		// What's kept: a short hash a party, never its code, unlike another player's for the same one.
+		// What's kept: a short keyed hash a party (an HMAC with a key from the Worker's secret), never
+		// its code, unlike another player's for the same one; and not the plain hash anyone with the
+		// table could make for every code (32^7 of them) to find who drove together.
 		const marks = JSON.parse( server.d1( `SELECT party_marks FROM players WHERE id = '${ sam.id }'` )[ 0 ].party_marks );
 		assert.equal( marks.length, 2 );
 		for ( const mark of marks ) assert.match( mark, /^[0-9a-f]{16}$/ );
 		assert.ok( ! JSON.stringify( marks ).includes( first.slice( 6 ) ) && ! JSON.stringify( marks ).includes( second.slice( 6 ) ) );
-		assert.ok( ! marks.includes( await partyMark( 'someone-else', first.slice( 6 ) ) ) );
-		assert.ok( marks.includes( await partyMark( sam.id, first.slice( 6 ) ) ) );
+		const env = { TURNSTILE_SECRET: PASS_SECRET };
+		assert.ok( ! marks.includes( await partyMark( env, 'someone-else', first.slice( 6 ) ) ) );
+		assert.ok( marks.includes( await partyMark( env, sam.id, first.slice( 6 ) ) ) );
+		assert.ok( ! marks.includes( await partyMark( { TURNSTILE_SECRET: 'another-secret' }, sam.id, first.slice( 6 ) ) ) );
+		const plain = createHash( 'sha256' ).update( `party:${ sam.id }:${ first.slice( 6 ) }` ).digest( 'hex' ).slice( 0, 16 );
+		assert.ok( ! marks.includes( plain ) );
 
 	} );
 
@@ -748,6 +754,35 @@ describe( 'Driving with others', () => {
 		const after = await join( server, room, { player: lee, vehicle: 'skid-steer-loader-cad' } );
 		assert.equal( ( await watcher.take( 'join' ) ).player.vehicle, 'skid-steer-loader-cad' );
 		await Promise.all( [ watcher.close(), after.close() ] );
+
+	} );
+
+	test( 'a construction ride is looked up only when one is picked, once a connection: a hello in any other ride reads nothing of achievements', async () => {
+
+		const visit = await visitToken();
+		const made = await post( '/api/player', { name: 'Look Lu', visit }, { 'CF-Connecting-IP': `198.51.100.${ ++ addresses }` } );
+		const lu = { id: made.json.id, secret: made.json.secret };
+		const room = partyRoom();
+		const watcher = await join( server, room );
+		// Hello in the go-kart, with no achievement: nothing is asked of them yet.
+		const page = await join( server, room, { player: lu, vehicle: 'go-kart' } );
+		assert.equal( ( await watcher.take( 'join' ) ).player.vehicle, 'go-kart' );
+		// Earned after the hello (the console here, as a report would): the skid steer, picked now, is
+		// looked up as it's picked, so it shows (were it read with the hello, it would be the pickup).
+		server.d1( `INSERT INTO achievements ( player_id, achievement, earned_at ) VALUES ( '${ lu.id }', 'km-10', 1 )` );
+		page.send( { t: 'look', vehicle: 'skid-steer-loader-cad', look: HELLO.look } );
+		assert.equal( ( await watcher.take( 'look' ) ).vehicle, 'skid-steer-loader-cad' );
+		// The answer is kept for the connection: back and forth asks no more (taken away at the console,
+		// it still shows until the page's next hello).
+		server.d1( `DELETE FROM achievements WHERE player_id = '${ lu.id }'` );
+		page.send( { t: 'look', vehicle: 'go-kart', look: HELLO.look } );
+		assert.equal( ( await watcher.take( 'look' ) ).vehicle, 'go-kart' );
+		page.send( { t: 'look', vehicle: 'skid-steer-loader-cad', look: HELLO.look } );
+		assert.equal( ( await watcher.take( 'look' ) ).vehicle, 'skid-steer-loader-cad' );
+		// One not yet asked about, without its achievement: the pickup.
+		page.send( { t: 'look', vehicle: 'wheel-loader', look: HELLO.look } );
+		assert.equal( ( await watcher.take( 'look' ) ).vehicle, 'pickup-truck' );
+		await Promise.all( [ watcher.close(), page.close() ] );
 
 	} );
 

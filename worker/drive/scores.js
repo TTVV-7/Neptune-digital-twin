@@ -89,9 +89,6 @@ export async function postScore( { request, env, url, limits, now } ) {
 	if ( run.runSeconds > ( now - visit.issuedAt ) / 1000 + SLACK || run.score > RATE * run.runSeconds ) throw bad();
 
 	const player = await authenticate( db, id, secret );
-	// A construction ride only with the achievement that unlocks it: the boards show each run's ride
-	// (achievements.js; nothing read for any other ride).
-	await checkRide( db, id, run.vehicle );
 	// One visit, one player: the first to post with it has it.
 	const [ , bound ] = await db.batch( [
 		db.prepare( 'INSERT INTO visits ( id, player_id, expires_at ) VALUES ( ?, ?, ? ) ON CONFLICT ( id ) DO NOTHING' ).bind( visit.id, id, visit.expiresAt ),
@@ -123,6 +120,12 @@ export async function postScore( { request, env, url, limits, now } ) {
 		throw err;
 
 	}
+
+	// A construction ride only with the achievement that unlocks it: the boards show each run's ride
+	// (achievements.js; nothing read for any other ride). Asked after the gap and the visitor's day,
+	// so a score refused for its ride costs what any other does: one every SCORE_GAP a player, and
+	// SCORES_PER_VISITOR_DAILY an address, not a loop of lookups as fast as a script can post.
+	await checkRide( db, id, run.vehicle );
 
 	// The player's best on each board it's on: this period and place, and anywhere.
 	const boards = Object.values( PERIODS ).flatMap( period => [ [ period( now ), '' ], [ period( now ), run.placeKey ] ] );

@@ -635,15 +635,21 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	}
 
+	let noticeShown = null;
 	function showNotices() {
 
 		const run = challenges?.run;
 		const busy = !! run && ( run.phase === 'countdown' || run.phase === 'racing' );
 		if ( ! notices.length || performance.now() < noticeUntil ) return;
 		if ( busy ) return void setTimeout( showNotices, 1000 );
+		// Another toast up (the challenge nudge, a level-up's, a problem): after it, not over it, as the
+		// nudge waits for others.
+		const toast = $( 'toast' );
+		if ( ! toast.hidden && toast.textContent !== noticeShown ) return void setTimeout( showNotices, 1000 );
 		// (One with a button stays its whole time, for the tap; the others four seconds before the next.)
 		const { text, ms, action } = notices.shift();
 		screens.toast( text, ms, action );
+		noticeShown = toast.textContent;
 		const hold = action ? ms : Math.min( ms, 4000 );
 		noticeUntil = performance.now() + hold;
 		setTimeout( showNotices, hold + 50 );

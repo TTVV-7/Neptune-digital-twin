@@ -5503,19 +5503,27 @@ migration `0009_achievements.sql`), and checks a construction ride wherever it s
   **Drive the skid steer**, which opens the Garage on it. Its own chunk (`achievements.js` and
   `achievements.css`, 3.6 kB and 2.8 kB), loaded the first time it's opened: nothing of it is in the
   first load. Its one line of lead: "Badges for what you've done; some unlock construction rides."
-  What it shows is the Worker's (below) plus what this browser has driven since its last report, no
-  more of that than the Worker will still take today (its answer's `left`, so a count never runs
-  ahead and falls back); before a nickname, this browser's own counts, nothing earned, and "Pick a
+  What it shows is the Worker's (below) plus what this browser has driven since its last report:
+  that is added to the player's own count (their reports add to nothing else), no more of it than
+  the Worker will still take today (its answer's `left`), and the account's best is shown where
+  it's more (its answer's `counts` against `own`), so a count never runs ahead and falls back, on a
+  linked account too; before a nickname, this browser's own counts, nothing earned, and "Pick a
   nickname to earn them: what you've driven counts when you do."
 - **Toasts.** As one is earned, "Achievement: 100 km driven"; for one that unlocks a ride, then
   "Unlocked: Skid steer" with **Garage** (pausing the drive, the Garage on that ride, as a level-up's
   ride does). One after another, about four seconds each (one with a button its whole seven, for
-  the tap), and never over a challenge's countdown or run: they wait for its end (`showNotices` in
-  `main.js`). Earned on another device, or before this
-  browser knew the player, they're not told again here; those earned meanwhile (a challenge's places,
-  written as its board ended) are told at the next visit. Before a nickname, what this browser's
-  counts reach is told once ("Achievement: First drive · pick a nickname to keep it", with **Pick
-  one**), and isn't told again when the nickname's claim earns it.
+  the tap), never over a challenge's countdown or run (they wait for its end), and never over another
+  toast that's up, such as the day's challenge nudge (they wait for it to go, as the nudge waits for
+  others): `showNotices` in `main.js`. A report goes out as the drive pauses, so they often come with
+  the pause menu open: paused, a toast sits at the foot of the screen, clear of the menu's **Keep
+  driving** (`levels.css`), so a tap meant for it never lands on one. Earned on another device, or
+  before this browser knew the player, they're not told again here; those earned meanwhile (a
+  challenge's places, written as its board ended) are told at the next visit. Before a nickname,
+  what this browser's counts reach of what the nickname's claim will keep (`CLAIM_TALLY`, below: the
+  first drive, 10 km, a first Moon drive, a first look, three rides; never 100 km, ten Moon drives or
+  days in a row, which take driving after the nickname) is told once ("Achievement: First drive ·
+  pick a nickname to keep it", with **Pick one**), and isn't told again when the claim earns it; the
+  rest are told when the Worker earns them, so nothing is promised that the nickname won't keep.
 - **Locked rides.** In the ride pickers each wears its achievement's chip ("🔒 10 km", "🔒 Weekly
   top 3") where a level's car wears "Lv 8 · or Pass"; picked, it says "Finish a weekly challenge in
   its top 3 to unlock the vac truck. See your Achievements." under the rides, and the ride doesn't
@@ -5525,10 +5533,12 @@ migration `0009_achievements.sql`), and checks a construction ride wherever it s
   the cars and before the pass's rides in the pickers, so a new player's rows start with what they
   can drive or earn by a level, and their pictures load only as their cards are scrolled near (a
   browser's own lazy loading takes in a whole sideways row): none of them in the first load.
-- **Remembered here.** The achievements a player has are kept in this browser with what it's been
-  told (`progress.js`'s `heard`), so an earned ride is unlocked as the page starts, before the
-  Worker answers or if it can't, as a level's car is by the level kept here; the Worker checks it
-  wherever it shows to others all the same. Another player in the browser (a name removed, or
+- **Remembered here.** The achievements the Worker has said a player has are kept in this browser
+  (`progress.js`'s `heard.list`, only ever the Worker's word), so an earned ride is unlocked as the
+  page starts, before the Worker answers or if it can't, as a level's car is by the level kept here;
+  the Worker checks it wherever it shows to others all the same. Those told before the nickname are
+  kept apart (`heard.told`), only so they aren't told twice, never as earned: the Worker's whole list
+  settles them. Another player in the browser (a name removed, or
   another picked) starts with none of them, until the Worker says. A ride unlocked during a party
   shows to the others at once: the page says hello to its room again (as for a new title).
 - **A refused run.** A score or a challenge time posted in a construction ride the Worker doesn't
@@ -5586,7 +5596,11 @@ supporters and everyone else earn them alike (`rideUnlock` in `vehicles.js` says
   new nickname's claim brings from before it (`days.streak`, the page's word) counts for the daily
   bonus's XP as before, never for these: a claim saying 10,000 days earns no streak achievement and
   no telehandler. A player's streak from before achievements (their tallies never written) counts at
-  their next report.
+  their next report, but only as far as the Worker could have seen it (`fromBefore` in
+  `progress.js`): no more days than from the player's first (`created_at`) to the streak's last, since
+  the streak in their row may be a claim's (taken for XP, up to 10,000 days, before achievements as
+  now). A player made two days ago has three days in a row at most, with today's; a streak whose last
+  day is past keeps only that capped best, with no run to add to.
 - **Challenges finished** are counted where a player's first time on a challenge is written
   (`postTime`, `finishedQuery`): whether their 1st, 10th or 50th time exists, found by the player's key,
   never counting the rows. Times from before achievements are written the first time the player's grid
@@ -5595,7 +5609,8 @@ supporters and everyone else earn them alike (`rideUnlock` in `vehicles.js` says
   or the owner replaces it): `placingQuery` turns each final_rank (1 the fastest; the owner's runs,
   kept off the boards, have none) into the placings it reaches, on any board or on that period's. The
   page has no way to name a place: nothing it sends is read for them. Boards finished before
-  achievements have no placings (their final ranks are there; the console below can write them).
+  achievements have no placings (their final ranks are there; the console below writes every
+  placing from them, the weekly podium's vac truck among them).
 - **Parties** are counted by the party's room, for each player there (not guests) who has someone
   else with them: another player, not of their own account, or a guest connecting from an address
   none of the player's own connections there comes from (`partied` and `companion` in `live.js`;
@@ -5603,9 +5618,11 @@ supporters and everyone else earn them alike (`rideUnlock` in `vehicles.js` says
   address, and nothing of it is kept). So one person in two tabs, with a nickname or without, is no
   one else. Each party is counted once (`creditParty`, after the answer), both for whoever made it
   and whoever joined, and not again as a page reconnects or the player goes back to it: the row
-  keeps the last 10 parties counted (`players.party_marks`), each as a short hash of the player's id
-  with the party's code, never the code, so nothing kept says who drove together. An area's room
-  counts nothing.
+  keeps the last 10 parties counted (`players.party_marks`), each as a short HMAC of the player's id
+  with the party's code under a key derived from the Worker's secret (the challenges' `seed`,
+  `keyedHex`), never the code. Keyed, because party codes are few enough (32^7) that anyone with a
+  copy of the table could otherwise hash every code for each player and find who drove together;
+  without the secret they can't. An area's room counts nothing.
 - **Earned** as each count passes its target (`crossed`): written in the report's own batch, only
   if the report's update was the one taken (the player's time is the report's), one row an
   achievement a player (`achievements`, `ON CONFLICT DO NOTHING`).
@@ -5668,8 +5685,13 @@ look by the player's key, only for a construction ride; nothing read for any oth
 in one (`POST /api/score`: the boards' vehicle field), a challenge time (`POST /api/challenges/time`:
 its board's row and its ghost) are turned away without it (403, `reason: 'ride'`, with the unlock's
 words), and a room (`live.js`) shows anyone without it in the default ride (the pickup), at hello and
-at each change of ride, from the achievements it read with the player's name (a ride unlocked since
-shows from the page's next hello, which the page says as one unlocks). For testing, `?feats=all`
+at each change of ride. The room asks only when a construction ride is picked (`rideOf`, the same
+look as `hasRide`'s, for that one achievement), and once a connection for each: the answer is kept
+with the driver, so a page going back and forth between two rides doesn't ask again, and a hello or
+change in any other ride reads nothing of achievements (a ride unlocked since shows from the page's
+next hello, which the page says as one unlocks). A score is checked after its gap and the visitor's
+day (`SCORE_GAP`, `SCORES_PER_VISITOR_DAILY`) and a time after `CHALLENGE_MISSES`, so one refused for
+its ride costs what any other post does, never a loop of lookups. For testing, `?feats=all`
 on this computer (localhost or 127.0.0.1, `feats.js`, as `?pro=1`) unlocks them in the page alone.
 
 ### The Worker's routes
@@ -5681,13 +5703,15 @@ on this computer (localhost or 127.0.0.1, `feats.js`, as `?pro=1`) unlocks them 
   it). No Durable Object is asked: a visit takes a robot check, and the Earth's are a few a day an
   address.
 - `POST /api/achievements { id, secret }`: `{ achievements: [ { id, at } ], counts: { km, moon, looks,
-  rides, streak, parties, challenges }, left: { km, moon, looks, rides }, rides: [ unlocked
-  construction rides ] }`, the player's and their account's (`left`: what more of each trusted count
-  the Worker will take from this player today). JSON from the site itself (`checkSameOrigin`, 1 kB at most), a 400 for anything
-  but a player's id and secret, a 403 for the wrong secret; held to `ACHIEVEMENT_LOOKS` (Cloudflare's
-  rate limiter, 6 a minute by the challenges' keyed hash of the address's /48 and the day, before
-  anything's read) and `ACHIEVEMENT_LOOKS_PER_VISITOR_DAILY` (200 a day by `DriveLimits`, by the
-  /48), a 429 past either. Never cached anywhere shared (`no-store`): it's the player's own; the page
+  rides, streak, parties, challenges }, own: { km, moon, looks, rides }, left: { km, moon, looks,
+  rides }, rides: [ unlocked construction rides ] }`, the player's and their account's (`counts`:
+  the most any of the account's players has of each; `own`: this player's own trusted counts, which
+  their reports add to; `left`: what more of each the Worker will take from this player today).
+  JSON from the site itself (`checkSameOrigin`, 1 kB at most), a 400 for anything but a player's id
+  and secret, a 403 for the wrong secret; held to `ACHIEVEMENT_LOOKS` (Cloudflare's rate limiter, 6
+  a minute by the challenges' keyed hash of the address's /48 and the day, before anything's read)
+  and `ACHIEVEMENT_LOOKS_PER_VISITOR_DAILY` (200 a day by `DriveLimits`, by the /48), a 429 past
+  either. Never cached anywhere shared (`no-store`): it's the player's own; the page
   keeps an answer a minute.
 - `GET /api/admin/achievements` (the owner's, as `/api/admin/stats`: `ADMIN_EMAILS`, `ADMIN_LOOKS`):
   `{ players, earners, achievements: [ { id, name, goal, checked, ride, players } ] }`, how many
@@ -5698,8 +5722,9 @@ on this computer (localhost or 127.0.0.1, `feats.js`, as `?pro=1`) unlocks them 
 
 `achievements`: a player's id, an achievement's id and when, 25 rows a player at most, removed with
 the player. `players.tallies` (a few numbers, the ids of up to 31 rides, the days in a row and the
-day's counts), `players.parties` and `players.party_marks` (up to 10 short hashes of the player's
-id with a party's code, so a party isn't counted twice; not the codes, so no two players' match),
+day's counts), `players.parties` and `players.party_marks` (up to 10 short HMACs of the player's id
+with a party's code under a key from the Worker's secret, so a party isn't counted twice; not the
+codes, so no two players' match, nor can anyone with the table and not the secret work them back),
 and `visits.listed` (whether a visit has had its player's list). A party's room holds, while it's
 open, a keyed hash of each connection's /48 and the day, to tell one address from another; it's
 never written anywhere. Nothing of an address, a device or where anyone drove is kept; the owner
@@ -5718,9 +5743,9 @@ a month included):
 | The page's ask for the whole list (an empty report with `feats: true`, once a visit) | the account's achievements: a few dozen, about 250 at most whatever the account (its first 20 players, 200 rows of the others', each counted again as they're grouped) | 1 (`visits.listed`) | |
 | A challenge time, a player's first on that challenge | up to 50 (their nth time, by key), usually 1 to 10 | 1 an achievement earned | |
 | A challenge's final places | its board's rows, once more (as its final ranks are written) | 1 a placing | |
-| A room's hello (a player) | as before, and the account's achievements (as the list's, about 250 at most) | none | |
+| A room's hello or change of ride (a player) | as before; and in a construction ride, its achievement's row (`hasRide`: a few rows alone, about 60 at most for an account), once a connection for each ride | none | nothing for any other ride, nor for a guest |
 | A party joined with someone else | 1 or 2 | 1 or 2 (the count and its mark, an achievement) | after the answer, from the room |
-| A score or a time in a construction ride | 1 a player of the account, 21 at most (that achievement's row of each) | none | nothing for any other ride |
+| A score or a time in a construction ride | that achievement's row (`hasRide`): 3 alone, 61 measured for an account of 20 players or more | none | nothing for any other ride; asked after the score's gap and the visitor's day (a time's after `CHALLENGE_MISSES`), so a refused one costs what any post does |
 | The grid (`POST /api/achievements`) | about 30 alone; about 410 at most whatever the account (21 players' rows, their achievements as the list's, their times to 50) | none (or a few, once) | 1 Durable Object request (the day's count) |
 | The admin counts | every achievement row (the owner, rarely) | none | |
 
@@ -5735,15 +5760,24 @@ and no writes. An empty report reads only the player's row; the whole list comes
 visits a day an address, and a robot check each for the Moon's), so about 250 rows a page load at
 most. Its reports, times and parties were bounded already (levels' 30 s gap and `PROGRESS_POSTS`,
 the challenges' `CHALLENGE_MISSES` and daily caps, `LIVE_CONNECTS`), and achievements add at most 25
-rows written a player, ever, 2 a party joined and 1 a visit's list. So one address stays well under
-a tenth of the free plan's daily reads and writes. Storage: about 40 bytes an achievement row, 300 a
-player's tallies and 180 their party marks.
+rows written a player, ever, 2 a party joined and 1 a visit's list. A score in a locked construction
+ride is refused only after the score's gap (one every 10 s a player) and the visitor's day (1,500 an
+address), as any score is: at most 1,500 lookups of about 60 rows, 90,000 rows a day. A room reads
+nothing of achievements at a hello or a change of ride except for a construction ride, and then one
+look of a few rows (about 60 at most for an account) once a connection for each ride: a visit's 200
+connections a day (`LIVE_VISIT_CONNECTS`) in construction rides are about 12,000 rows, as much as a
+hello's own look up of the player's name and level. (Round 1 read the account's whole list, about
+250 rows, at every hello, whatever the ride: 10 visits' worth of reconnects from one address came to
+500,000 rows, a tenth of the free plan's reads, and the day's 40,000 connects to twice its reads.)
+So one address stays well under a tenth of the free plan's daily reads and writes. Storage: about 40
+bytes an achievement row, 300 a player's tallies and 180 their party marks.
 
 **The page's first load**: the shared rules (`achievement-rules.js`, needed there for the locks, the
 reports' counts and the toasts' words) and the construction rides' names and tuning (`works.js`)
-add 8.0 kB to the game's chunk (1,121.22 to 1,129.18 kB minified, 345.15 to 348.16 kB gzipped:
-+3.0 kB) and a shared chunk of 5.0 kB (1.7 kB gzipped) it imports; the first stylesheet 11.22 to
-11.71 kB (the profile card's button and the locks' chips), the page's first script 13.70 to 13.86 kB
+add 8.3 kB to the game's chunk (1,121.22 to 1,129.55 kB minified, 345.15 to 348.28 kB gzipped:
++3.1 kB, the second round's fixes 0.4 kB of it) and a shared chunk of 5.0 kB (1.7 kB gzipped) it
+imports; the first stylesheet 11.22 to 11.77 kB (the profile card's button, the locks' chips and a
+paused toast's place), the page's first script 13.70 to 13.86 kB
 (a name `catalog.js` exports). `library/library.json`, fetched as the page starts, lists the eight
 rides too but only what the page reads of each: 660 bytes to 3.3 kB. The rides' pictures (8 to 12 kB
 each, 84 kB in all) come only as their cards are scrolled near (`panel.js`, an
@@ -5791,13 +5825,20 @@ which phones already draw.)
   visit (again from a new visit, nothing from another player's); three days in a row by the Worker's
   clock (earned on the third, kept through a day off); a claim saying 10,000 days in a row earning no
   streak achievement and leaving the telehandler locked until the Worker has seen three days, and a
-  player from before achievements starting from their streak; the rows an ask reads (D1's
+  player from before achievements starting from their streak, but only as far as the Worker could
+  have seen it (10,000 days in the row of a player made two days ago giving three days and the 3
+  days' achievement, never the 7 or 30; an old one only its capped best, the telehandler locked);
+  the rows an ask reads (D1's
   `rows_read`, through wrangler's platform proxy) the same for an account of 80 players as of 160,
   and a few hundred at most; challenges finished from the times as the grid asks, and placings from final
   ranks alone (top 10, podium, winner, daily, weekly: the vac truck's), the rides refused (a 403
   with `reason: 'ride'` and the unlock's words) on the leaderboard until earned and let through
-  after; following sign-in both ways (two players linked to one account each having the other's,
-  the grid's counts the account's best, the rows each player's own); the grid's route (its player,
+  after, and checked only after the score's gap (forty at once in a locked ride: one 403, then 429s,
+  as in the go-kart); the docs' console SQL writing every placing of a board finished before
+  achievements (a weekly's first and third: top 10, podium, the weekly podium, the first a winner;
+  the eleventh none; nothing more run again); following sign-in both ways (two players linked to one
+  account each having the other's, the grid's counts the account's best and `own` each player's
+  own, the rows each player's own); the grid's route (its player,
   `no-store`, 400s, 413, 405, another site's page, the day's cap from one address, the rate
   limiter before anything's read, today's `left`); the owner's counts (every achievement, its
   players, nothing of who, 401 and 403).
@@ -5813,14 +5854,23 @@ which phones already draw.)
   not again as a page joins the same party again, and not alone in one; one player in two tabs on
   one address in three parties counting none, nor with a guest on that address or their own
   nickname from another, a guest from another address counting, and going back and forth between
-  two parties counting each once, their marks hashes and not the codes.
+  two parties counting each once, their marks keyed hashes (the Worker's secret's: not the codes,
+  not another player's, not another secret's, not the plain hash); a construction ride looked up
+  only when one is picked (an achievement written after a hello in the go-kart shows as the ride is
+  changed to its ride) and once a connection (taken away at the console, it still shows going back
+  and forth; another not yet asked about shows as the pickup).
 - `npm run test:drive-levels-ui`: a locked construction ride's chip, picture and words in the picker
   ("Finish a weekly challenge in its top 3 to unlock the vac truck. See your Achievements.", the ride
   picked staying the same) and the Garage (its tab, its banner, a look on it); the grid from the
   profile card (each earned one's date, how far toward the rest, the bars, the rides they unlock);
   a report that earns two showing "Achievement: 10 km driven", "Unlocked: Skid steer" (whose
   **Garage** opens the Garage on it, unlocked) and "Achievement: New look", in that order, nothing
-  told of what was earned before, and the ride driven from the pause menu; each construction ride
+  told of what was earned before, the toast clear of the pause menu's **Keep driving**, and the ride
+  driven from the pause menu; 120 km driven before a nickname telling only the first drive and 10 km
+  (what the claim keeps, never 100 km), waiting behind another toast that's up, not told again as the
+  claim earns them, the wheel loader locked after the claim and as the page starts again with the
+  Worker out of reach, and "Achievement: 100 km driven" and "Unlocked: Wheel loader" told when the
+  Worker earns it later; each construction ride
   (with `?feats=all`) loading only when picked, on the ground, driving, the tracked ones turning on
   the spot and the others not, with its download and frame time (the table above); earned rides
   unlocked as the page starts from what this browser kept (the Worker's whole list heard once, then
@@ -5851,10 +5901,15 @@ SELECT achievement, datetime( earned_at / 1000, 'unixepoch' ) FROM achievements 
 DELETE FROM achievements WHERE player_id = 'PLAYER_ID';
 UPDATE players SET tallies = '{}', parties = 0, party_marks = '[]' WHERE id = 'PLAYER_ID';
 
--- Write the placings of boards finished before achievements, from their final ranks.
+-- Write the placings of boards finished before achievements, from their final ranks: every one
+-- (top 10, podium, winner, and the daily, weekly and monthly ones by the board's period), as
+-- placingQuery writes them.
 INSERT INTO achievements ( player_id, achievement, earned_at )
-SELECT t.player_id, 'top-10', c.final_at FROM challenge_times t JOIN challenges c ON c.id = t.challenge_id
-WHERE t.final_rank <= 10 ON CONFLICT DO NOTHING;
+SELECT t.player_id, p.id, c.final_at FROM challenge_times t JOIN challenges c ON c.id = t.challenge_id,
+	( SELECT 'top-10' AS id, 10 AS rank, NULL AS period UNION ALL SELECT 'podium', 3, NULL UNION ALL SELECT 'winner', 1, NULL
+	UNION ALL SELECT 'daily-winner', 1, 'day' UNION ALL SELECT 'weekly-podium', 3, 'week' UNION ALL SELECT 'monthly-top-10', 10, 'month' ) p
+WHERE c.final_at IS NOT NULL AND t.final_rank IS NOT NULL AND t.final_rank <= p.rank AND ( p.period IS NULL OR c.period LIKE p.period || ':%' )
+ON CONFLICT DO NOTHING;
 ```
 
 ## Settings

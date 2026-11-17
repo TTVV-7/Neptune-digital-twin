@@ -10,6 +10,9 @@ import { credentials, database } from './players.js';
 import { hasPass, supporterEmails } from './supporter.js';
 import { readVisit } from './visits.js';
 
+// A UTC day (ms).
+const DAY = 24 * 60 * 60 * 1000;
+
 // Levels (docs/world-drive.md, "Levels"; the rules are src/drive-app/levels.js, which the page
 // shares): each leaderboard player's XP, kept in D1 with the player, so it goes wherever their
 // nickname does; a player linked to a Google account (accounts.js's linkPlayer) shows the level of
@@ -128,9 +131,9 @@ export async function postProgress( { request, env, now } ) {
 	// gave the day's bonus (the streak a claim brings is for XP alone); those the counts have just
 	// reached are written with the report (a party's or a challenge's are written where they're
 	// counted, so they're left as they were here). A player who reported before achievements starts
-	// from the streak they had then.
+	// from the streak they had then (fromBefore).
 	const kept = readTallies( player.tallies );
-	if ( ! claim && ! kept.day && player.streak_day ) Object.assign( kept, { run: player.streak, runDay: player.streak_day, streak: Math.max( kept.streak, player.streak ) } );
+	if ( ! claim && ! kept.day && player.streak_day ) fromBefore( kept, player, today );
 	const counted = claim ? claimTallies( { km: capped.km, feats: report.feats } ) : { km: capped.km, feats: report.feats };
 	const { tallies } = addTallies( kept, { ...counted, daily: !! daily }, today );
 	const feats = crossed( countsOf( readTallies( player.tallies ), { parties: player.parties } ), countsOf( tallies, { parties: player.parties } ) );
@@ -195,12 +198,30 @@ export async function setTitle( { request, env, url, now } ) {
 
 }
 
+// A player who reported before achievements (their tallies never written): `kept` (readTallies')
+// starts from the streak they had then, but no longer than the Worker could have seen it, the days
+// from the player's first (created_at) to the streak's last. The streak in their row may have come
+// from their nickname's claim (the page's word, up to 10,000 days, taken for XP before achievements
+// as it still is), so only those days are believed: a player made two days ago has three in a row at
+// most, never the 7 or 30 days' achievements. Still going (its last day today or yesterday), it's
+// also the run the next day's bonus adds to; otherwise only the best is kept.
+function fromBefore( kept, player, today ) {
+
+	const number = day => Math.floor( Date.parse( `${ day }T00:00:00Z` ) / DAY );
+	const seen = number( player.streak_day ) - Math.floor( ( player.created_at ?? 0 ) / DAY ) + 1;
+	const best = Math.max( 0, Math.min( player.streak ?? 0, seen ) );
+	kept.streak = Math.max( kept.streak, best );
+	if ( best && ( player.streak_day === today || player.streak_day === dayBefore( today ) ) ) Object.assign( kept, { run: best, runDay: player.streak_day } );
+
+}
+
 // The player with this id and secret, with what levels need: their XP (and their account's best,
-// `total`), title, last report (its time and id), streak, discoveries and whether they're a
-// supporter. A 403 for an unknown id or the wrong secret, as authenticate says.
+// `total`), title, last report (its time and id), streak, discoveries, achievements' tallies and
+// parties, when they were made, and whether they're a supporter. A 403 for an unknown id or the
+// wrong secret, as authenticate says.
 async function playerFor( db, env, id, secret ) {
 
-	const player = await db.prepare( `SELECT p.xp, p.title, p.progress_at, p.progress_id, p.streak_day, p.streak, p.discoveries, p.tallies, p.parties, ${ xpOf( 'p' ) } AS total,
+	const player = await db.prepare( `SELECT p.xp, p.title, p.progress_at, p.progress_id, p.streak_day, p.streak, p.discoveries, p.tallies, p.parties, p.created_at, ${ xpOf( 'p' ) } AS total,
 		${ hasPass( 'p.account_id', '?3' ) } AS supporter FROM players p WHERE p.id = ?1 AND p.secret_hash = ?2` ).bind( id, await sha256Hex( secret ), supporterEmails( env ) ).first();
 	if ( ! player ) throw new HttpError( 403, 'Forbidden', { reason: 'player' } );
 	return player;

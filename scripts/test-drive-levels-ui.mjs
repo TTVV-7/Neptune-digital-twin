@@ -1023,7 +1023,7 @@ describe( 'World Drive achievements in the page', () => {
 			await page.waitForFunction( () => ! document.querySelector( '#globe-ui .vehicles .vehicle[data-id="skid-steer-loader-cad"]' ).classList.contains( 'locked' ), null, { timeout: 20000 } );
 			await until( () => page.reports.some( r => r.body?.feats ) );
 			assert.deepEqual( page.reports.filter( r => r.body?.feats ).map( r => r.body.feats ), [ [ 'first-drive', 'km-10' ] ] );
-			assert.deepEqual( ( await stored( page ) ).heard, { id: cy.id, list: [ 'first-drive', 'km-10' ] } );
+			assert.deepEqual( ( await stored( page ) ).heard, { id: cy.id, list: [ 'first-drive', 'km-10' ], told: [] } );
 			// Picked and kept as the ride.
 			await skid.scrollIntoViewIfNeeded();
 			await skid.click();
@@ -1145,6 +1145,18 @@ describe( 'World Drive achievements in the page', () => {
 			assert.equal( await garage.locator( '.locked-banner' ).isVisible(), false );
 			await garage.locator( '.done' ).click();
 			await page.waitForFunction( () => window.toastTexts.includes( 'Achievement: New look' ), null, { timeout: 30000 } );
+			// Paused, a toast keeps clear of the pause menu's Keep driving: a tap meant for it never
+			// lands on one.
+			await page.locator( '#pause .resume' ).waitFor();
+			const [ toastBox, resumeBox ] = await page.evaluate( () => [ '#toast', '#pause .resume' ].map( selector => {
+
+				const { left, top, right, bottom } = document.querySelector( selector ).getBoundingClientRect();
+				return { left, top, right, bottom };
+
+			} ) );
+			assert.equal( await page.evaluate( () => ! document.getElementById( 'toast' ).hidden && document.body.dataset.mode ), 'paused' );
+			const overlaps = toastBox.left < resumeBox.right && resumeBox.left < toastBox.right && toastBox.top < resumeBox.bottom && resumeBox.top < toastBox.bottom;
+			assert.equal( overlaps, false, JSON.stringify( { toastBox, resumeBox } ) );
 			await shot( page, 'feats-3-toast' );
 			assert.deepEqual( await page.evaluate( () => window.toastTexts ), [ 'Achievement: 10 km driven', 'Unlocked: Skid steer', 'Achievement: New look' ] );
 			assert.equal( await page.locator( '#globe-ui .profile .feat-count' ).textContent(), `3 / ${ ACHIEVEMENTS.length }` );
@@ -1155,6 +1167,91 @@ describe( 'World Drive achievements in the page', () => {
 			assert.equal( await skid.evaluate( b => b.classList.contains( 'locked' ) ), false );
 			await skid.click();
 			await page.waitForFunction( () => window.drive.mode === 'driving' && window.drive.driver.entry.state.name === 'Skid steer', null, { timeout: 60000 } );
+			assert.deepEqual( page.errors, [] );
+
+		} finally {
+
+			await page.context().close();
+
+		}
+
+	} );
+
+	test( 'before a nickname only what the claim keeps is promised; the Worker\'s word alone unlocks rides, and an achievement it earns later is told then', async () => {
+
+		const page = await levelsPage( { visit: await visitToken() } );
+		const wheel = page.locator( '#globe-ui .vehicles .vehicle[data-id="wheel-loader"]' );
+		try {
+
+			await watchToasts( page );
+			// Another toast up (as the day's challenge nudge would be): the achievements wait behind it.
+			await page.evaluate( () => {
+
+				const toast = document.getElementById( 'toast' );
+				toast.textContent = 'Today\'s challenge';
+				toast.hidden = false;
+
+			} );
+			// 120 km driven before a nickname: the claim keeps CLAIM_TALLY's 25 km of it, so the first
+			// drive and 10 km are promised, never 100 km (that takes driving after the nickname).
+			await page.evaluate( () => {
+
+				window.drive.progress.unsent.km += 120;
+				return window.drive.progress.report();
+
+			} );
+			await page.waitForTimeout( 1500 );
+			assert.equal( await page.locator( '#toast' ).textContent(), 'Today\'s challenge' );
+			assert.deepEqual( await page.evaluate( () => window.drive.notices ), [ 'Achievement: First drive · pick a nickname to keep it', 'Achievement: 10 km driven · pick a nickname to keep it' ] );
+			await page.evaluate( () => document.getElementById( 'toast' ).hidden = true );
+			await page.waitForFunction( () => window.toastTexts.includes( 'Achievement: 10 km driven · pick a nickname to keep it' ), null, { timeout: 20000 } );
+			await shot( page, 'feats-5-local-toast' );
+			assert.deepEqual( ( await stored( page ) ).heard.list, [ 'first-drive', 'km-10' ] );
+			// The nickname, and its claim: those two earned, and not told again. (The level-up card the
+			// drive brought put away first.)
+			await page.evaluate( () => window.drive.profile.hideLevelUp() );
+			await page.locator( '#globe-ui .profile .save-note button' ).click();
+			const form = page.locator( '#leaderboard .name-form' );
+			await form.waitFor();
+			await form.locator( 'input' ).fill( `Feat Lu ${ RUN }` );
+			await form.locator( 'button[type=submit]' ).click();
+			await page.locator( '#leaderboard .named .name', { hasText: `Feat Lu ${ RUN }` } ).waitFor();
+			const lu = await page.evaluate( () => window.drive.leaderboard.player );
+			await page.locator( '#leaderboard .close' ).click();
+			const claim = await until( () => page.reports.find( r => r.sent?.km > 0 ) );
+			assert.deepEqual( claim.body.earned, [ 'first-drive', 'km-10' ] );
+			await until( () => page.reports.find( r => Array.isArray( r.body?.feats ) ) );
+			assert.deepEqual( ( await stored( page ) ).heard, { id: lu.id, list: [ 'first-drive', 'km-10' ], told: [] } );
+			assert.equal( await wheel.evaluate( b => b.classList.contains( 'locked' ) ), true );
+			// Again with the Worker out of reach: the wheel loader still locked as the page starts (only
+			// what the Worker said is kept as earned).
+			await page.route( `${ worker.base }/api/progress`, route => route.abort() );
+			await page.route( `${ BASE }/api/progress`, route => route.abort() );
+			await page.reload();
+			await page.locator( '#notice button', { hasText: 'Drive the test pad' } ).click();
+			await page.waitForFunction( () => window.drive?.mode === 'globe', null, { timeout: 30000 } );
+			assert.equal( await wheel.evaluate( b => b.classList.contains( 'locked' ) ), true );
+			await page.unroute( `${ worker.base }/api/progress` );
+			await page.unroute( `${ BASE }/api/progress` );
+			// Driven to 100 km after the nickname (most of it at the console): the Worker earns it, and
+			// this page says so, with the wheel loader it unlocks.
+			await watchToasts( page );
+			worker.d1( `UPDATE players SET tallies = json_set( tallies, '$.km', 99.9 ) WHERE id = '${ lu.id }'` );
+			await page.evaluate( () => window.drive.progress.unsent.km += 0.2 );
+			for ( let tries = 0; tries < 40 && ! page.reports.some( r => r.body?.earned?.includes( 'km-100' ) ); tries ++ ) {
+
+				await page.evaluate( () => window.drive.progress.report() );
+				await page.waitForTimeout( 2000 );
+
+			}
+
+			await page.waitForFunction( () => window.toastTexts.includes( 'Unlocked: Wheel loader' ), null, { timeout: 30000 } ).catch( async err => {
+
+				throw new Error( `${ err.message }: ${ JSON.stringify( await page.evaluate( () => window.toastTexts ) ) }` );
+
+			} );
+			assert.deepEqual( ( await page.evaluate( () => window.toastTexts ) ).slice( 0, 2 ), [ 'Achievement: 100 km driven', 'Unlocked: Wheel loader' ] );
+			assert.equal( await wheel.evaluate( b => b.classList.contains( 'locked' ) ), false );
 			assert.deepEqual( page.errors, [] );
 
 		} finally {

@@ -6,7 +6,7 @@ import {
 import { WORKS } from '../../src/drive-app/works.js';
 import { adminAccount } from './admin.js';
 import { dayOf } from '../../src/drive-app/levels.js';
-import { lookKey } from './challenges.js';
+import { keyedHex, lookKey } from './challenges.js';
 import { VISITOR_PREFIX } from './dropins.js';
 import { credentials, database, takeTurn } from './players.js';
 import { setting } from './settings.js';
@@ -33,8 +33,10 @@ import { setting } from './settings.js';
 const READ_MOST = 200;
 const PLAYERS_MOST = 20;
 // A visitor's asks for their achievements a day (ACHIEVEMENT_LOOKS_PER_VISITOR_DAILY), by the
-// address's /48: the grid's, as it opens, so a few a visit. At about 250 rows an ask at most
-// (featRows), a day's are 50,000 rows: a hundredth of the Free plan's 5 million.
+// address's /48: the grid's, as it opens, so a few a visit. At about 410 rows an ask at most (21
+// players' rows, their achievements as featRows reads them, their challenge times to 50: measured
+// with D1's rows_read in test-drive-levels.mjs), a day's are 82,000 rows: under 2 % of the Free
+// plan's 5 million.
 const LOOKS_DAILY = 200;
 
 // SQL for the ids of the player whose id is `id` (a parameter, '?1') and of their account's other
@@ -113,11 +115,14 @@ export function placingQuery( db, challenge, now ) {
 // The parties a player's row remembers having counted (players.party_marks): the last PARTY_MARKS.
 const PARTY_MARKS = 10;
 
-// A party's mark in a player's row: a short hash of the player's id with the party's code, so the
-// same party is known again for that player, and two players' marks for one party never match.
-export async function partyMark( id, code ) {
+// A party's mark in a player's row: a short HMAC of the player's id with the party's code, under the
+// challenges' key derived from the Worker's secret (challenges.js's keyedHex), so the same party is
+// known again for that player, and two players' marks for one party never match. Keyed, not a plain
+// hash: party codes are few enough (32^7) that anyone with a copy of the table could otherwise try
+// them all for each player and find who drove together; without the secret they can't.
+export async function partyMark( env, id, code ) {
 
-	return ( await sha256Hex( `party:${ id }:${ code }` ) ).slice( 0, 16 );
+	return ( await keyedHex( env, `party:${ id }:${ code }` ) ).slice( 0, 16 );
 
 }
 
@@ -128,7 +133,7 @@ export async function partyMark( id, code ) {
 export async function creditParty( env, id, code, now ) {
 
 	const db = database( env );
-	const mark = await partyMark( id, code );
+	const mark = await partyMark( env, id, code );
 	const tiers = ACHIEVEMENTS.filter( a => a.count === 'parties' ).map( a => ( { id: a.id, n: a.target } ) );
 	await db.batch( [
 		db.prepare( `UPDATE players SET parties = parties + 1, party_marks = (
@@ -141,19 +146,27 @@ export async function creditParty( env, id, code, now ) {
 }
 
 // Whether player `id` (or their account) may drive `vehicle` where others see it: a ride an
-// achievement unlocks only with it. A 403 (reason: 'ride') if not; for any other ride, nothing is read.
-export async function checkRide( db, id, vehicle ) {
+// achievement unlocks only with it, one look by key for that achievement (a few rows alone, about 60
+// at most for an account, measured); for any other ride, true and nothing is read.
+export async function hasRide( db, id, vehicle ) {
 
 	const feat = rideFeat( vehicle );
-	if ( ! feat ) return;
-	const row = await db.prepare( `SELECT 1 AS ok FROM achievements a WHERE a.achievement = ?2 AND a.player_id IN ( ${ playersOf( '?1' ) } ) LIMIT 1` ).bind( id, feat ).first();
-	if ( ! row ) throw new HttpError( 403, 'That ride isn\'t unlocked yet', { reason: 'ride', unlock: RIDE_FEATS[ vehicle ].unlock } );
+	if ( ! feat ) return true;
+	return !! await db.prepare( `SELECT 1 AS ok FROM achievements a WHERE a.achievement = ?2 AND a.player_id IN ( ${ playersOf( '?1' ) } ) LIMIT 1` ).bind( id, feat ).first();
+
+}
+
+// hasRide, as a 403 (reason: 'ride', with what unlocks it) if not.
+export async function checkRide( db, id, vehicle ) {
+
+	if ( ! await hasRide( db, id, vehicle ) ) throw new HttpError( 403, 'That ride isn\'t unlocked yet', { reason: 'ride', unlock: RIDE_FEATS[ vehicle ].unlock } );
 
 }
 
 // POST /api/achievements { id, secret }: the player's achievements and the counts toward them, with
 // their account's (the most any of its players has of each count): { achievements: [ { id, at } ],
-// counts: { km, moon, looks, rides, streak, parties, challenges }, left: { km, moon, looks, rides }
+// counts: { km, moon, looks, rides, streak, parties, challenges }, own: { km, moon, looks, rides }
+// (this player's own trusted counts, which their reports add to), left: { km, moon, looks, rides }
 // (what more of each trusted count today will take from this player), rides: [ the construction
 // rides unlocked ] }. Any challenges-finished achievement the times have reached and that isn't written
 // yet (times from before achievements) is written as it's asked for. Held to ACHIEVEMENT_LOOKS a
@@ -199,8 +212,9 @@ export async function postAchievements( { request, env, limits, now } ) {
 
 	}
 
-	// What's left of today's TALLY_DAY for this player (the grid adds no more of the page's own counts
-	// than the Worker will take).
+	// This player's own trusted counts, and what's left of today's TALLY_DAY for them: the grid adds
+	// to their own no more of the page's counts than the Worker will take, and shows the more of that
+	// and the account's best (so a count on a linked account never runs ahead and falls back).
 	const own = readTallies( players.results.find( row => row.id === id )?.tallies );
 	const taken = own.day === dayOf( now ) ? own.today : {};
 	const left = Object.fromEntries( Object.keys( TALLY_DAY ).map( count => [ count, Math.max( 0, TALLY_DAY[ count ] - ( taken[ count ] ?? 0 ) ) ] ) );
@@ -209,7 +223,8 @@ export async function postAchievements( { request, env, limits, now } ) {
 	achievements.sort( ( a, b ) => order.indexOf( a.id ) - order.indexOf( b.id ) );
 	const mine = new Set( achievements.map( a => a.id ) );
 	counts.km = Math.round( counts.km * 1000 ) / 1000;
-	return json( { achievements, counts, left, rides: Object.keys( RIDE_FEATS ).filter( ride => mine.has( RIDE_FEATS[ ride ].feat ) ) } );
+	const ownCounts = { km: Math.round( own.km * 1000 ) / 1000, moon: own.moon, looks: own.looks, rides: own.rides.length };
+	return json( { achievements, counts, own: ownCounts, left, rides: Object.keys( RIDE_FEATS ).filter( ride => mine.has( RIDE_FEATS[ ride ].feat ) ) } );
 
 }
 

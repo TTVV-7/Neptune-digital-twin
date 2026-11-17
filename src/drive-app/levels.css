@@ -185,10 +185,16 @@
 	}
 }
 
-/* Toasts while driving go under the pop-ups. */
-html body[data-mode='driving'] #toast,
-html body[data-mode='paused'] #toast {
+/* Toasts while driving go under the pop-ups. Paused, the pause menu's card is in the middle with its
+   Keep driving button near its top, right where they'd be: they go to the foot of the screen, clear
+   of it (and a tap meant for it never lands on one). */
+html body[data-mode='driving'] #toast {
 	top: calc( 92px + env( safe-area-inset-top, 0px ) );
+}
+
+html body[data-mode='paused'] #toast {
+	top: auto;
+	bottom: calc( 16px + env( safe-area-inset-bottom, 0px ) );
 }
 
 /* On a phone the speed sits under the top bar: the count goes, and the pop-ups go to the left, under

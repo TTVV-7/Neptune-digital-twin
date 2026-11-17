@@ -3,7 +3,7 @@ import {
 	DAILY_KM, DISCOVERIES_MAX, DISCOVER_KM, REPORT_PLACES, SUPPORTER_XP, XP,
 	areaOf, dailyXp, dayBefore, dayOf, drivingXp, emptyReport, isEmptyReport as isEmpty, levelOf, progressOf, rewardsBetween, spotAt, titleOf, trickXp,
 } from './levels.js';
-import { ACHIEVEMENTS, TALLY_KM, mergeTallies, reached } from './achievement-rules.js';
+import { ACHIEVEMENTS, CLAIM_TALLY, TALLY_KM, mergeTallies, reached } from './achievement-rules.js';
 import { setFeats } from './feats.js';
 import { storage } from './places.js';
 import { isPro } from './pro.js';
@@ -117,8 +117,11 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 	// The level celebrated last, and for whom; whether the nickname has been asked for.
 	let seen = saved.seen;
 	let asked = saved.asked;
-	// The achievements told already, and for whom ({ id ('local' before a nickname), list }); and the
-	// rides this browser has said it tried, for whom ({ id, list }).
+	// The achievements heard of, and for whom: { id, list (the Worker's word for that player, all that
+	// unlocks their rides as the page starts), told (those told before the nickname that the Worker
+	// hasn't said yet: not told again as it does, never counted as earned) }, or before a nickname
+	// { id: 'local', list (those told) }. And the rides this browser has said it tried, for whom
+	// ({ id, list }).
 	let heard = saved.heard;
 	let tried = saved.tried;
 	// Whose achievements feats.js holds ('' for none), and the player whose whole list has been asked
@@ -480,16 +483,21 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 
 		const id = who();
 		const first = heard.id !== id;
-		// (Those told before the nickname, as this browser reached them, aren't told again as the claim
-		// earns them.)
-		const had = new Set( first ? heard.id === 'local' ? heard.list : [] : heard.list );
-		const known = new Set( [ ...had, ...all ?? [], ...fresh ] );
+		// What's kept as earned is only ever the Worker's word: the whole list, or this report's added
+		// to what it said before for this player. Those told before the nickname, as this browser
+		// reached them (`told`), aren't told again as the claim earns them, but they're never taken as
+		// earned until the Worker says so: the whole list settles them (those it hasn't are told when
+		// they're earned).
+		const before = first ? [] : heard.list;
+		const told = new Set( first ? heard.id === 'local' ? heard.list : [] : heard.told ?? [] );
+		const had = new Set( [ ...before, ...told ] );
+		const known = [ ...new Set( [ ...all ?? before, ...fresh ] ) ];
 		// The whole list (an empty report's), or this report's added to what's held for this player; the
 		// first heard of a player replaces another's.
-		setFeats( all ? [ ...new Set( [ ...all, ...fresh ] ) ] : fresh, { add: ! all && featsOf === id } );
+		setFeats( all ? known : fresh, { add: ! all && featsOf === id } );
 		featsOf = id;
-		const news = ( first ? fresh : [ ...known ] ).filter( feat => ! had.has( feat ) && ACHIEVEMENTS.some( a => a.id === feat ) );
-		heard = { id, list: [ ...known ] };
+		const news = ( first ? fresh : known ).filter( feat => ! had.has( feat ) && ACHIEVEMENTS.some( a => a.id === feat ) );
+		heard = { id, list: known, told: all ? [] : [ ...told ].filter( feat => ! known.includes( feat ) ) };
 		if ( news.length ) tell( { ids: order( news ), local: false } );
 
 	}
@@ -507,17 +515,23 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 
 	}
 
-	// Before a nickname: the achievements this browser's counts have reached, told once each (none
-	// is kept until there's a nickname to keep it with), where a nickname could be picked (a Worker
-	// and a visit: not the test pad, nor the dev server alone, where there's nothing to keep them).
+	// Before a nickname: the achievements this browser's counts have reached that a nickname's claim
+	// will earn, told once each with "pick a nickname to keep it" (none is kept until there's a
+	// nickname to keep it with), where a nickname could be picked (a Worker and a visit: not the test
+	// pad, nor the dev server alone, where there's nothing to keep them). Only what the claim carries
+	// (CLAIM_TALLY of each trusted count, and no days in a row: the Worker counts only those it sees),
+	// so nothing is promised that the nickname won't keep; the rest are told as the Worker earns them.
 	function localAchievements() {
 
 		if ( who() || ! worker || ! visit() ) return;
 		const had = heard.id === 'local' ? new Set( heard.list ) : new Set();
-		const now = reached( pending() );
+		const counts = pending();
+		const now = reached( { km: Math.min( counts.km, CLAIM_TALLY.km ), moon: Math.min( counts.moon, CLAIM_TALLY.moon ), looks: Math.min( counts.looks, CLAIM_TALLY.looks ), rides: Math.min( counts.rides, CLAIM_TALLY.rides ), streak: 0 } );
 		const news = now.filter( feat => ! had.has( feat ) );
 		if ( ! news.length ) return;
+		// (Kept at once, so a reload doesn't tell them again.)
 		heard = { id: 'local', list: [ ...had, ...news ] };
+		save();
 		tell( { ids: order( news ), local: true } );
 
 	}
@@ -635,7 +649,7 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 
 				// (Nor are its achievements this page's, or this browser's, any longer.)
 				gone = me.id;
-				heard = { id: '', list: [] };
+				heard = { id: '', list: [], told: [] };
 				featsOf = me.id;
 				setFeats( [] );
 
@@ -881,7 +895,8 @@ function load() {
 		? { ...way, before: report( way.before ), later: Array.isArray( way.later ) ? way.later : [], claim: way.claim === true } : null;
 	if ( flying ) for ( const list of [ 'areas', 'spots' ] ) if ( ! Array.isArray( flying.before[ list ] ) ) flying.before[ list ] = [];
 	const list = value => value && typeof value.id === 'string' && Array.isArray( value.list ) ? { id: value.id, list: value.list.filter( item => typeof item === 'string' ) } : { id: '', list: [] };
-	return { server, local, known, unsent, flying, seen, asked: state.asked === true, heard: list( state.heard ), tried: list( state.tried ) };
+	const told = Array.isArray( state.heard?.told ) ? state.heard.told.filter( item => typeof item === 'string' ) : [];
+	return { server, local, known, unsent, flying, seen, asked: state.asked === true, heard: { ...list( state.heard ), told }, tried: list( state.tried ) };
 
 }
 

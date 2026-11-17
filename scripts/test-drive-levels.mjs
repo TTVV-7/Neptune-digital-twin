@@ -922,21 +922,47 @@ describe( 'Levels: the Worker', () => {
 		assert.ok( ( await mine( cal, { time: cal.at + 2 * DAY + MINUTE } ) ).json.rides.includes( 'telehandler-10k-stowed' ) );
 		// A player who reported before achievements starts from the streak they had then (their tallies
 		// never written): 6 days in a row, and the 7th today.
+		// (Made a week before: the Worker could have seen all six.)
 		const dot = await player();
 		await report( dot, { km: 1 }, { after: 5 * MINUTE } );
-		server.d1( `UPDATE players SET tallies = '{}', streak = 6, streak_day = '${ dayOf( dot.at + DAY - HOUR ) }' WHERE id = '${ dot.id }'` );
+		server.d1( `UPDATE players SET tallies = '{}', streak = 6, streak_day = '${ dayOf( dot.at + DAY - HOUR ) }', created_at = ${ dot.at - 7 * DAY } WHERE id = '${ dot.id }'` );
 		const seventh = await report( dot, { km: 1, daily: true }, { time: dot.at + 2 * DAY - HOUR, visit: await visitAt( dot.at + 2 * DAY - 2 * HOUR ) } );
 		assert.equal( seventh.status, 200, seventh.text );
 		assert.deepEqual( seventh.json.earned.filter( id => id.startsWith( 'streak' ) ), [ 'streak-3', 'streak-7' ] );
+		// But a streak from before achievements is believed only as far as the Worker could have seen
+		// it: one claimed at 10,000 days (as a nickname's claim could, taken for XP before achievements)
+		// by a player made two days ago is three days at most with today's (the telehandler's, which
+		// three real days earn), never the 7 or 30 days' achievements.
+		const eli = await player();
+		await report( eli, { km: 1 }, { after: 5 * MINUTE } );
+		const day = eli.at + 2 * DAY;
+		server.d1( `UPDATE players SET tallies = '{}', streak = 10000, streak_day = '${ dayOf( day - DAY ) }', created_at = ${ eli.at - 10 * MINUTE } WHERE id = '${ eli.id }'` );
+		const next = await report( eli, { km: 1, daily: true }, { time: day, visit: await visitAt( day - MINUTE ) } );
+		assert.equal( next.status, 200, next.text );
+		assert.deepEqual( next.json.earned.filter( id => id.startsWith( 'streak' ) ), [ 'streak-3' ] );
+		assert.deepEqual( [ tallies( eli ).streak, tallies( eli ).run ], [ 3, 3 ] );
+		assert.deepEqual( feats( eli ).filter( id => id.startsWith( 'streak' ) ), [ 'streak-3' ] );
+		// And one whose last day is long gone keeps only that capped best, with no run to add to.
+		const fay = await player();
+		await report( fay, { km: 1 }, { after: 5 * MINUTE } );
+		server.d1( `UPDATE players SET tallies = '{}', streak = 10000, streak_day = '${ dayOf( fay.at + DAY ) }', created_at = ${ fay.at - 10 * MINUTE } WHERE id = '${ fay.id }'` );
+		const later = fay.at + 5 * DAY;
+		const back = await report( fay, { km: 1, daily: true }, { time: later, visit: await visitAt( later - MINUTE ) } );
+		assert.equal( back.status, 200, back.text );
+		assert.deepEqual( back.json.earned.filter( id => id.startsWith( 'streak' ) ), [] );
+		assert.deepEqual( [ tallies( fay ).streak, tallies( fay ).run ], [ 2, 1 ] );
+		const refused = await scoreIn( { ...fay, visit: await visitAt( later ) }, 'telehandler-10k-stowed', later + 2 * MINUTE );
+		assert.deepEqual( [ refused.status, refused.json.reason ], [ 403, 'ride' ] );
 
 	} );
 
 	test( 'achievements: construction rides refused where others see them until earned, then let through', async () => {
 
 		const cy = await player();
-		for ( const vehicle of WORKS_RIDES ) {
+		// (One a SCORE_GAP apart: a score refused for its ride takes the gap as any other.)
+		for ( const [ i, vehicle ] of WORKS_RIDES.entries() ) {
 
-			const res = await scoreIn( cy, vehicle, cy.at + 10 * MINUTE );
+			const res = await scoreIn( cy, vehicle, cy.at + 6 * MINUTE + i * 11 * SECOND );
 			assert.deepEqual( [ res.status, res.json.reason, res.json.unlock ], [ 403, 'ride', RIDE_FEATS[ vehicle ].unlock ], vehicle );
 
 		}
@@ -947,6 +973,25 @@ describe( 'Levels: the Worker', () => {
 		assert.equal( ( await scoreIn( cy, 'wheel-loader', cy.at + 11 * MINUTE ) ).status, 403 );
 		// Any other ride as before.
 		assert.equal( ( await scoreIn( cy, 'go-kart', cy.at + 12 * MINUTE ) ).status, 200 );
+
+	} );
+
+	test( 'achievements: a score refused for its ride costs what any other does: after the score gap and the visitor\'s day, never a loop of lookups', async () => {
+
+		const gus = await player();
+		const at = gus.at + 10 * MINUTE;
+		// Forty at once in a locked ride: the first is looked at (and refused for its ride), the rest
+		// turned away at the gap before anything more is read, as forty in the go-kart would be.
+		const statuses = [];
+		for ( let i = 0; i < 40; i ++ ) statuses.push( ( await scoreIn( gus, 'wheel-loader', at + i * 100 ) ).status );
+		assert.deepEqual( statuses, [ 403, ...Array( 39 ).fill( 429 ) ] );
+		// After the gap, the go-kart's as ever.
+		assert.equal( ( await scoreIn( gus, 'go-kart', at + 11 * SECOND ) ).status, 200 );
+		assert.equal( ( await scoreIn( gus, 'go-kart', at + 12 * SECOND ) ).status, 429 );
+		// The ride is checked after the gap and the visitor's daily turn (scores.js).
+		const source = readFileSync( new URL( '../worker/drive/scores.js', import.meta.url ), 'utf8' );
+		const post = source.slice( source.indexOf( 'export async function postScore' ) );
+		assert.ok( post.indexOf( 'checkRide(' ) > post.indexOf( 'last_score_at <= ?3' ) && post.indexOf( 'checkRide(' ) > post.indexOf( 'takeTurn(' ) );
 
 	} );
 
@@ -964,9 +1009,12 @@ describe( 'Levels: the Worker', () => {
 		assert.deepEqual( ( await report( eve, {}, { after: 6 * MINUTE, ask: true } ) ).json.feats, [ 'first-drive', 'km-10', 'moon-1' ] );
 		assert.deepEqual( ( await mine( dee ) ).json.achievements.map( a => a.id ), [ 'first-drive', 'km-10', 'moon-1' ] );
 		assert.equal( ( await scoreIn( eve, 'skid-steer-loader-cad', eve.at + 11 * MINUTE ) ).status, 200 );
-		// The grid's counts are the account's best of each.
-		const counts = ( await mine( eve ) ).json.counts;
-		assert.deepEqual( [ counts.km, counts.moon ], [ 11, 1 ] );
+		// The grid's counts are the account's best of each, and with them the player's own (which the
+		// page's driving since adds to, so a count doesn't run ahead of the account's and fall back).
+		const grid = ( await mine( eve ) ).json;
+		assert.deepEqual( [ grid.counts.km, grid.counts.moon ], [ 11, 1 ] );
+		assert.deepEqual( grid.own, { km: 0.1, moon: 1, looks: 0, rides: 0 } );
+		assert.deepEqual( ( await mine( dee ) ).json.own, { km: 11, moon: 0, looks: 0, rides: 0 } );
 		// The rows stay each player's own (the owner's counts are players').
 		assert.deepEqual( feats( eve ), [ 'moon-1' ] );
 
@@ -1018,8 +1066,9 @@ describe( 'Levels: the Worker', () => {
 		server.d1( `UPDATE players SET account_id = 880 WHERE id = '${ lead.id }'` );
 		server.d1( `INSERT INTO achievements ( player_id, achievement, earned_at ) SELECT p.id, a.value, 1 FROM players p, json_each( '${ eight }' ) a WHERE p.account_id = 880 OR p.id = '${ alone.id }'` );
 		assert.equal( server.d1( 'SELECT COUNT(*) AS n FROM achievements a JOIN players p ON p.id = a.player_id WHERE p.account_id = 880' )[ 0 ].n, 640 );
-		// What the Worker asks (achievements.js's SQL), for each: a room's hello or an empty report's
-		// list (featsOf), the grid's (featRows), and a ride shown to others (checkRide's).
+		// What the Worker asks (achievements.js's SQL), for each: an empty report's list (featsOf), the
+		// grid's (featRows), and a ride shown to others (hasRide's: scores, times, a room's hello or ride
+		// changed to a construction ride).
 		const asks = id => ( {
 			feats: `SELECT ${ featsOf( 'p' ) } AS feats FROM players p WHERE p.id = '${ id }'`,
 			grid: `SELECT achievement, MIN( earned_at ) AS at FROM ( ${ featRows( `'${ id }'` ) } ) GROUP BY achievement`,
@@ -1049,6 +1098,36 @@ describe( 'Levels: the Worker', () => {
 		// And the answers are still right: the lead has the account's (all 8, theirs included).
 		assert.deepEqual( featList( server.d1( asks( lead.id ).feats )[ 0 ].feats ), ACHIEVEMENTS.slice( 0, 8 ).map( a => a.id ).sort() );
 		assert.equal( server.d1( asks( lead.id ).grid ).length, 8 );
+
+	} );
+
+	test( 'achievements: the docs\' console SQL writes every placing of a board finished before achievements, from its final ranks', async () => {
+
+		// A weekly board finished before achievements (no placings written), its places 1, 3 and 11.
+		const [ first, third, eleventh ] = [ await player(), await player(), await player() ];
+		server.d1( `INSERT INTO challenges ( id, period, world, kind, place, route, source, starts_at, ends_at, created_at, final_at )
+			VALUES ( 9901, 'week:2026-10-05', 'earth', 'sprint', 'Old place', '{}', 'rotation', 0, 1, 0, 2 )` );
+		for ( const [ who, rank ] of [ [ first, 1 ], [ third, 3 ], [ eleventh, 11 ] ] ) {
+
+			server.d1( `INSERT INTO challenge_times ( challenge_id, player_id, ms, passes, vehicle, run_id, visit, created_at, first_at, final_rank )
+				VALUES ( 9901, '${ who.id }', ${ 60000 + rank }, '[]', 'go-kart', 'run-${ rank }-${ who.id }', 'v', 0, 0, ${ rank } )` );
+
+		}
+
+		const docs = readFileSync( new URL( '../docs/world-drive.md', import.meta.url ), 'utf8' );
+		const from = docs.indexOf( '-- Write the placings of boards finished before achievements' );
+		assert.ok( from > 0 );
+		const sql = docs.slice( docs.indexOf( 'INSERT INTO achievements', from ), docs.indexOf( 'ON CONFLICT DO NOTHING;', from ) + 'ON CONFLICT DO NOTHING;'.length );
+		server.d1( sql );
+		// Every placing each reached, as placingQuery would have written them: the weekly podium's vac
+		// truck among them; none for a daily or a monthly board.
+		assert.deepEqual( feats( first ), [ 'podium', 'top-10', 'weekly-podium', 'winner' ] );
+		assert.deepEqual( feats( third ), [ 'podium', 'top-10', 'weekly-podium' ] );
+		assert.deepEqual( feats( eleventh ), [] );
+		assert.deepEqual( server.d1( `SELECT DISTINCT earned_at FROM achievements WHERE player_id = '${ first.id }'` ), [ { earned_at: 2 } ] );
+		// Run again: nothing more.
+		server.d1( sql );
+		assert.equal( feats( first ).length, 4 );
 
 	} );
 

@@ -94,16 +94,17 @@ async function ask() {
 
 }
 
-// The counts shown: the Worker's (for this player) and what's been driven since, no more of it than
-// the Worker will take today (its `left`: so a count doesn't run ahead and then fall back), or this
-// browser's.
+// The counts shown: the Worker's (for this player, with their account's) and what's been driven
+// since, or this browser's. What's been driven since adds to the player's own count (their reports
+// add to nothing else), no more of it than the Worker will take today (its `left`), and the account's
+// best is shown where that's more: so a count doesn't run ahead and then fall back.
 function counts() {
 
 	const pending = app.progress.pending;
 	const kept = answer && askedFor === app.player()?.id ? answer.counts : null;
 	if ( ! kept ) return { ...pending, parties: 0, challenges: 0 };
-	const more = count => Math.min( pending[ count ], answer.left?.[ count ] ?? Infinity );
-	return { ...kept, km: kept.km + more( 'km' ), moon: kept.moon + more( 'moon' ), looks: kept.looks + more( 'looks' ), rides: kept.rides + more( 'rides' ) };
+	const shown = count => Math.max( kept[ count ], ( answer.own?.[ count ] ?? kept[ count ] ) + Math.min( pending[ count ], answer.left?.[ count ] ?? Infinity ) );
+	return { ...kept, km: shown( 'km' ), moon: shown( 'moon' ), looks: shown( 'looks' ), rides: shown( 'rides' ) };
 
 }
 

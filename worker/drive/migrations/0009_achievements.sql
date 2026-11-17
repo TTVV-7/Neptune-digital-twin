@@ -9,9 +9,10 @@
 ALTER TABLE players ADD COLUMN tallies TEXT NOT NULL DEFAULT '{}';
 -- Parties driven in with another player (or someone from another address), as the party's room
 -- counts them (live.js), and the last parties counted (achievements.js's partyMark: a JSON list of
--- PARTY_MARKS short hashes of the player's id with each party's code, never the code itself, so
--- nothing here says which players drove together), so the same party isn't counted again as its
--- page reconnects or the player goes back and forth between two.
+-- PARTY_MARKS short HMACs of the player's id with each party's code under a key from the Worker's
+-- secret, never the code itself, so without the secret nothing here says which players drove
+-- together), so the same party isn't counted again as its page reconnects or the player goes back
+-- and forth between two.
 ALTER TABLE players ADD COLUMN parties INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE players ADD COLUMN party_marks TEXT NOT NULL DEFAULT '[]';
 
