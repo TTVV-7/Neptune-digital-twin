@@ -1,10 +1,11 @@
 import { HttpError, isObject, json, readJson, sha256Hex } from '../http.js';
 import {
-	ACHIEVEMENTS, ACHIEVEMENT_IDS, CHALLENGES_MOST, COUNTS, PLACINGS, RIDE_FEATS,
+	ACHIEVEMENTS, ACHIEVEMENT_IDS, CHALLENGES_MOST, COUNTS, PLACINGS, RIDE_FEATS, TALLY_DAY,
 	countsOf, readTallies, reached, rideFeat,
 } from '../../src/drive-app/achievement-rules.js';
 import { WORKS } from '../../src/drive-app/works.js';
 import { adminAccount } from './admin.js';
+import { dayOf } from '../../src/drive-app/levels.js';
 import { lookKey } from './challenges.js';
 import { VISITOR_PREFIX } from './dropins.js';
 import { credentials, database, takeTurn } from './players.js';
@@ -31,15 +32,30 @@ import { setting } from './settings.js';
 // The most of a player's own rows, and of an account's players, one ask reads.
 const READ_MOST = 200;
 const PLAYERS_MOST = 20;
-// A visitor's asks for their achievements a day (ACHIEVEMENT_LOOKS_PER_VISITOR_DAILY): a page asks
-// as the grid opens, so a few a visit.
+// A visitor's asks for their achievements a day (ACHIEVEMENT_LOOKS_PER_VISITOR_DAILY), by the
+// address's /48: the grid's, as it opens, so a few a visit. At about 250 rows an ask at most
+// (featRows), a day's are 50,000 rows: a hundredth of the Free plan's 5 million.
 const LOOKS_DAILY = 200;
 
-// SQL for the ids of the player whose id is `id` (a parameter, '?1') and of every player of their
-// account: one look by key, and one in players_by_account.
+// SQL for the ids of the player whose id is `id` (a parameter, '?1') and of their account's other
+// players, PLAYERS_MOST at most: one look by key, and one in players_by_account that stops there,
+// so an account with ever more players (links are cheap) costs no more rows to read.
 export function playersOf( id ) {
 
-	return `SELECT ${ id } UNION SELECT q.id FROM players q WHERE q.account_id = ( SELECT r.account_id FROM players r WHERE r.id = ${ id } )`;
+	return `SELECT ${ id } UNION SELECT * FROM ( SELECT q.id FROM players q WHERE q.account_id = ( SELECT r.account_id FROM players r WHERE r.id = ${ id } ) LIMIT ${ PLAYERS_MOST } )`;
+
+}
+
+// SQL for the achievement rows (achievement, earned_at) of the player whose id is `id` and their
+// account's players (playersOf): the player's own first, all of them (ACHIEVEMENTS' length at
+// most), then the others' up to READ_MOST, read in the key's order and stopping there, so an ask
+// reads at most about READ_MOST + 50 rows whatever the account. (An account whose other players
+// have more than READ_MOST rows between them has them all several times over: what's past it is
+// almost always already among them.)
+export function featRows( id ) {
+
+	return `SELECT achievement, earned_at FROM achievements WHERE player_id = ${ id }
+		UNION ALL SELECT * FROM ( SELECT achievement, earned_at FROM achievements WHERE player_id IN ( ${ playersOf( id ) } ) AND player_id <> ${ id } LIMIT ${ READ_MOST } )`;
 
 }
 
@@ -47,7 +63,7 @@ export function playersOf( id ) {
 // with their account's players.
 export function featsOf( p ) {
 
-	return `( SELECT group_concat( DISTINCT a.achievement ) FROM achievements a WHERE a.player_id IN ( ${ playersOf( `${ p }.id` ) } ) )`;
+	return `( SELECT group_concat( DISTINCT achievement ) FROM ( ${ featRows( `${ p }.id` ) } ) )`;
 
 }
 
@@ -94,17 +110,32 @@ export function placingQuery( db, challenge, now ) {
 
 }
 
-// A party's room saw player `id` in party `code` with someone else: counted once a party (a page
-// reconnecting to the same party isn't counted again), with the party achievements that reaches.
+// The parties a player's row remembers having counted (players.party_marks): the last PARTY_MARKS.
+const PARTY_MARKS = 10;
+
+// A party's mark in a player's row: a short hash of the player's id with the party's code, so the
+// same party is known again for that player, and two players' marks for one party never match.
+export async function partyMark( id, code ) {
+
+	return ( await sha256Hex( `party:${ id }:${ code }` ) ).slice( 0, 16 );
+
+}
+
+// A party's room saw player `id` in party `code` with another player, or someone from another
+// address (live.js's partied): counted once a party (a page reconnecting to the same party, or the
+// player going back to one of their last PARTY_MARKS, isn't counted again), with the party
+// achievements that reaches.
 export async function creditParty( env, id, code, now ) {
 
 	const db = database( env );
+	const mark = await partyMark( id, code );
 	const tiers = ACHIEVEMENTS.filter( a => a.count === 'parties' ).map( a => ( { id: a.id, n: a.target } ) );
 	await db.batch( [
-		db.prepare( 'UPDATE players SET parties = parties + 1 WHERE id = ?1 AND last_party <> ?2' ).bind( id, code ),
+		db.prepare( `UPDATE players SET parties = parties + 1, party_marks = (
+				SELECT json_group_array( value ) FROM ( SELECT ?2 AS value UNION ALL SELECT * FROM ( SELECT value FROM json_each( players.party_marks ) LIMIT ${ PARTY_MARKS - 1 } ) )
+			) WHERE id = ?1 AND NOT EXISTS ( SELECT 1 FROM json_each( players.party_marks ) WHERE value = ?2 )` ).bind( id, mark ),
 		db.prepare( `INSERT INTO achievements ( player_id, achievement, earned_at ) SELECT ?1, json_extract( value, '$.id' ), ?2 FROM json_each( ?3 )
 			WHERE changes() = 1 AND json_extract( value, '$.n' ) <= ( SELECT parties FROM players WHERE id = ?1 ) ON CONFLICT DO NOTHING` ).bind( id, now, JSON.stringify( tiers ) ),
-		db.prepare( 'UPDATE players SET last_party = ?2 WHERE id = ?1' ).bind( id, code ),
 	] );
 
 }
@@ -122,8 +153,9 @@ export async function checkRide( db, id, vehicle ) {
 
 // POST /api/achievements { id, secret }: the player's achievements and the counts toward them, with
 // their account's (the most any of its players has of each count): { achievements: [ { id, at } ],
-// counts: { km, moon, looks, rides, streak, parties, challenges }, rides: [ the construction rides
-// unlocked ] }. Any challenges-finished achievement the times have reached and that isn't written
+// counts: { km, moon, looks, rides, streak, parties, challenges }, left: { km, moon, looks, rides }
+// (what more of each trusted count today will take from this player), rides: [ the construction
+// rides unlocked ] }. Any challenges-finished achievement the times have reached and that isn't written
 // yet (times from before achievements) is written as it's asked for. Held to ACHIEVEMENT_LOOKS a
 // minute (Cloudflare's rate limiter, by the challenges' keyed hash of the address and the day) and
 // ACHIEVEMENT_LOOKS_PER_VISITOR_DAILY a day (DriveLimits, by the address's /48).
@@ -142,8 +174,8 @@ export async function postAchievements( { request, env, limits, now } ) {
 	await takeTurn( limits, request, 'achievements', now, setting( env.ACHIEVEMENT_LOOKS_PER_VISITOR_DAILY, LOOKS_DAILY ), VISITOR_PREFIX );
 	const [ me, players, earned, finished ] = await db.batch( [
 		db.prepare( 'SELECT id FROM players WHERE id = ? AND secret_hash = ?' ).bind( id, await sha256Hex( secret ) ),
-		db.prepare( `SELECT tallies, parties, streak FROM players WHERE id IN ( ${ playersOf( '?1' ) } ) LIMIT ${ PLAYERS_MOST }` ).bind( id ),
-		db.prepare( `SELECT achievement, MIN( earned_at ) AS at FROM achievements WHERE player_id IN ( ${ playersOf( '?1' ) } ) GROUP BY achievement LIMIT ${ READ_MOST }` ).bind( id ),
+		db.prepare( `SELECT id, tallies, parties FROM players WHERE id IN ( ${ playersOf( '?1' ) } ) LIMIT ${ PLAYERS_MOST + 1 }` ).bind( id ),
+		db.prepare( `SELECT achievement, MIN( earned_at ) AS at FROM ( ${ featRows( '?1' ) } ) GROUP BY achievement` ).bind( id ),
 		db.prepare( `SELECT COUNT( * ) AS n FROM ( SELECT 1 FROM challenge_times WHERE player_id IN ( ${ playersOf( '?1' ) } ) LIMIT ${ CHALLENGES_MOST } )` ).bind( id ),
 	] );
 	if ( ! me.results.length ) throw new HttpError( 403, 'Forbidden', { reason: 'player' } );
@@ -152,7 +184,7 @@ export async function postAchievements( { request, env, limits, now } ) {
 	const counts = { km: 0, moon: 0, looks: 0, rides: 0, streak: 0, parties: 0, challenges: finished.results[ 0 ]?.n ?? 0 };
 	for ( const row of players.results ) {
 
-		const mine = countsOf( readTallies( row.tallies ), { parties: row.parties, streak: row.streak } );
+		const mine = countsOf( readTallies( row.tallies ), { parties: row.parties } );
 		for ( const count of [ 'km', 'moon', 'looks', 'rides', 'streak', 'parties' ] ) counts[ count ] = Math.max( counts[ count ], mine[ count ] );
 
 	}
@@ -167,11 +199,17 @@ export async function postAchievements( { request, env, limits, now } ) {
 
 	}
 
+	// What's left of today's TALLY_DAY for this player (the grid adds no more of the page's own counts
+	// than the Worker will take).
+	const own = readTallies( players.results.find( row => row.id === id )?.tallies );
+	const taken = own.day === dayOf( now ) ? own.today : {};
+	const left = Object.fromEntries( Object.keys( TALLY_DAY ).map( count => [ count, Math.max( 0, TALLY_DAY[ count ] - ( taken[ count ] ?? 0 ) ) ] ) );
+
 	const order = ACHIEVEMENTS.map( a => a.id );
 	achievements.sort( ( a, b ) => order.indexOf( a.id ) - order.indexOf( b.id ) );
 	const mine = new Set( achievements.map( a => a.id ) );
 	counts.km = Math.round( counts.km * 1000 ) / 1000;
-	return json( { achievements, counts, rides: Object.keys( RIDE_FEATS ).filter( ride => mine.has( RIDE_FEATS[ ride ].feat ) ) } );
+	return json( { achievements, counts, left, rides: Object.keys( RIDE_FEATS ).filter( ride => mine.has( RIDE_FEATS[ ride ].feat ) ) } );
 
 }
 

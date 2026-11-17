@@ -51,6 +51,7 @@ import {
 	boundsOf, cellOf, checkDot, dotsOf, makePartyCode, packState, shardOf, toEcef, toGeodetic,
 } from '../src/drive-app/live-protocol.js';
 import { makeVisit } from '../worker/drive/visits.js';
+import { partyMark } from '../worker/drive/achievements.js';
 
 const WebSocket = createRequire( import.meta.url )( 'ws' );
 const PORT = Number( process.env.TEST_DRIVE_LIVE_PORT ) || 8950;
@@ -663,6 +664,90 @@ describe( 'Driving with others', () => {
 		await new Promise( resolve => setTimeout( resolve, 500 ) );
 		assert.equal( server.d1( `SELECT parties FROM players WHERE id = '${ lone.id }'` )[ 0 ].parties, 0 );
 		await Promise.all( [ watcher.close(), dee.close(), guest.close(), again.close(), alone.close() ] );
+
+	} );
+
+	test( 'a party counts only with someone else: not one player in two tabs, nor a guest on the same address; another address does, once a party', async () => {
+
+		const visitFor = async () => {
+
+			const visit = await visitToken();
+			const res = await post( '/api/player', { name: `Tabs ${ ++ addresses }`, visit }, { 'CF-Connecting-IP': `198.51.100.${ addresses }` } );
+			assert.equal( res.status, 201, JSON.stringify( res.json ) );
+			return { ...res.json, visit };
+
+		};
+		const sam = await visitFor();
+		const who = { id: sam.id, secret: sam.secret };
+		const from = ip => ( { headers: { 'CF-Connecting-IP': ip } } );
+		const parties = () => server.d1( `SELECT parties FROM players WHERE id = '${ sam.id }'` )[ 0 ].parties;
+		const settle = async want => {
+
+			for ( let tries = 0; parties() !== want && tries < 50; tries ++ ) await new Promise( resolve => setTimeout( resolve, 100 ) );
+			await new Promise( resolve => setTimeout( resolve, 300 ) );
+			return parties();
+
+		};
+		// One player in two tabs (two visits, one address), in three parties: no one else.
+		for ( let i = 0; i < 3; i ++ ) {
+
+			const room = partyRoom();
+			const tabs = [ await join( server, room, { player: who }, from( '203.0.113.7' ) ), await join( server, room, { player: who }, from( '203.0.113.7' ) ) ];
+			await tabs[ 0 ].take( 'join' );
+			await Promise.all( tabs.map( tab => tab.close() ) );
+
+		}
+
+		assert.equal( await settle( 0 ), 0 );
+		// Nor with a guest on that address (a second tab with no nickname), nor the player on another.
+		const first = partyRoom();
+		const sams = [ await join( server, first, { player: who }, from( '203.0.113.7' ) ) ];
+		sams.push( await join( server, first, {}, from( '203.0.113.7' ) ) );
+		sams.push( await join( server, first, { player: who }, from( '203.0.113.8' ) ) );
+		assert.equal( await settle( 0 ), 0 );
+		// A guest from another address is someone else: counted, once.
+		const friend = await join( server, first, {}, from( '192.0.2.44' ) );
+		assert.equal( await settle( 1 ), 1 );
+		await Promise.all( [ ...sams, friend ].map( page => page.close() ) );
+		// Another party with someone else, then back to the first and to the second: each once.
+		const second = partyRoom();
+		const visitAgain = async room => {
+
+			const pages = [ await join( server, room, { player: who }, from( '203.0.113.7' ) ), await join( server, room, {}, from( '192.0.2.45' ) ) ];
+			await new Promise( resolve => setTimeout( resolve, 300 ) );
+			await Promise.all( pages.map( page => page.close() ) );
+
+		};
+		await visitAgain( second );
+		assert.equal( await settle( 2 ), 2 );
+		for ( const room of [ first, second, first ] ) await visitAgain( room );
+		assert.equal( await settle( 2 ), 2 );
+		// What's kept: a short hash a party, never its code, unlike another player's for the same one.
+		const marks = JSON.parse( server.d1( `SELECT party_marks FROM players WHERE id = '${ sam.id }'` )[ 0 ].party_marks );
+		assert.equal( marks.length, 2 );
+		for ( const mark of marks ) assert.match( mark, /^[0-9a-f]{16}$/ );
+		assert.ok( ! JSON.stringify( marks ).includes( first.slice( 6 ) ) && ! JSON.stringify( marks ).includes( second.slice( 6 ) ) );
+		assert.ok( ! marks.includes( await partyMark( 'someone-else', first.slice( 6 ) ) ) );
+		assert.ok( marks.includes( await partyMark( sam.id, first.slice( 6 ) ) ) );
+
+	} );
+
+	test( 'a ride unlocked after hello: the room shows it from the page\'s next hello (as the page says hello again when one unlocks)', async () => {
+
+		const visit = await visitToken();
+		const made = await post( '/api/player', { name: 'Late Lee', visit }, { 'CF-Connecting-IP': `198.51.100.${ ++ addresses }` } );
+		const lee = { id: made.json.id, secret: made.json.secret };
+		const room = partyRoom();
+		const watcher = await join( server, room );
+		const before = await join( server, room, { player: lee, vehicle: 'skid-steer-loader-cad' } );
+		assert.equal( ( await watcher.take( 'join' ) ).player.vehicle, 'pickup-truck' );
+		assert.deepEqual( ( await post( '/api/progress', { ...lee, visit, report: { km: 10 } } ) ).json.earned, [ 'first-drive', 'km-10' ] );
+		// The page's rehello: a fresh connection, and hello again.
+		await before.close();
+		await watcher.take( 'leave' );
+		const after = await join( server, room, { player: lee, vehicle: 'skid-steer-loader-cad' } );
+		assert.equal( ( await watcher.take( 'join' ) ).player.vehicle, 'skid-steer-loader-cad' );
+		await Promise.all( [ watcher.close(), after.close() ] );
 
 	} );
 

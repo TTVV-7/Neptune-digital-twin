@@ -1377,6 +1377,7 @@ export function setUpChallenges( app ) {
 		if ( answer.status === 403 && reason === 'world' ) return finishSay( 'Earth challenges go on the board from a drive on the Earth.' );
 		if ( answer.status === 403 && reason === 'visit' ) return finishSay( 'This visit has run out. Reload the page to post times again.' );
 		if ( answer.status === 403 && reason === 'player' ) return finishSay( 'This browser\'s name was removed. Pick a new one on the leaderboard.' );
+		if ( answer.status === 403 && reason === 'ride' ) return finishSay( `${ answer.body.unlock ?? 'That ride isn\'t unlocked yet' }: times in it go on the board once it is.` );
 		if ( answer.status === 400 ) return finishSay( 'That run didn\'t count. Try again.' );
 		if ( answer.status === 429 && reason === 'visit' ) return finishSay( 'That\'s all the times one visit can post. Reload the page to post more.' );
 		if ( answer.status === 429 ) return finishSay( 'That\'s all the times for today. Try again tomorrow.' );

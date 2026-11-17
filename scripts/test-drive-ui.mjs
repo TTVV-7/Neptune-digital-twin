@@ -242,13 +242,13 @@ describe( 'World Drive, desktop', () => {
 		assert.ok( await panel.isVisible() );
 		assert.match( await panel.locator( '.logo' ).textContent(), /World\s*Drive/ );
 		assert.equal( await panel.locator( '.spots button' ).count(), 12 );
-		// Then the construction rides, each locked until its achievement (test-drive-levels-ui.mjs), the
-		// cars (the muscle car free, then levels' and the Supporter Pass's, locked) and the pass's rides
-		// (see test-drive-pro-ui.mjs).
+		// Then the cars (the muscle car free, then levels' and the Supporter Pass's, locked), the
+		// construction rides, each locked until its achievement (test-drive-levels-ui.mjs), after what a
+		// new player can drive or earn by level, and the pass's rides (see test-drive-pro-ui.mjs).
 		assert.deepEqual( await panel.locator( '.vehicle b' ).allTextContents(), [
-			'Go-kart', 'Pickup', 'Skid steer', 'Telehandler', 'Concrete mixer', 'Road roller', 'Wheel loader', 'Dump truck', 'Bulldozer', 'Vac truck', 'Muscle car', 'Golf cart', 'Tuk-tuk', 'Ice-cream van', 'Lawn tractor', 'Retro wedge', 'Formula racer',
+			'Go-kart', 'Pickup', 'Muscle car', 'Golf cart', 'Tuk-tuk', 'Ice-cream van', 'Lawn tractor', 'Retro wedge', 'Formula racer',
 			'Neon racer', 'Night cruiser', 'Dune buggy', 'Farm truck', 'Police cruiser', 'Hypercar', 'Cyber muscle',
-			'Sports coupe', 'Monster truck', 'City bus', 'Hovercraft',
+			'Sports coupe', 'Skid steer', 'Telehandler', 'Concrete mixer', 'Road roller', 'Wheel loader', 'Dump truck', 'Bulldozer', 'Vac truck', 'Monster truck', 'City bus', 'Hovercraft',
 		] );
 		assert.equal( await panel.locator( '.vehicle.picked b' ).textContent(), 'Go-kart' );
 		assert.match( await panel.locator( '.osm' ).textContent(), /Search © OpenStreetMap contributors/ );
@@ -5947,6 +5947,43 @@ describe( 'World Drive leaderboard', () => {
 
 	} );
 
+	test( 'a score in a ride the Worker hasn\'t unlocked (403, reason ride): not posted, with what unlocks it, and the visit goes on posting the others', async () => {
+
+		let refused = 0;
+		const page = await leaderboardPage( { score: route => {
+
+			const sent = route.request().postDataJSON();
+			if ( sent.vehicle === 'skid-steer-loader-cad' ) {
+
+				refused ++;
+				return route.fulfill( { status: 403, contentType: 'application/json', body: JSON.stringify( { error: 'That ride isn\'t unlocked yet', reason: 'ride', unlock: 'Drive 10 km to unlock' } ) } );
+
+			}
+
+			const day = { best: sent.score, rank: 1, isNewBest: true };
+			route.fulfill( { contentType: 'application/json', body: JSON.stringify( { ...day, today: day, week: day } ) } );
+
+		} } );
+		const { asked } = page;
+		await page.addInitScript( () => localStorage.setItem( 'world-drive.player', JSON.stringify( { id: 'P1ayer-id_000000', secret: 'S'.repeat( 32 ), name: 'Speed Demon' } ) ) );
+		await testPad( page );
+		await page.evaluate( () => window.drive.leaderboard.setVisit( 'v1.test-visit-token' ) );
+		const land = ( score, vehicle ) => page.evaluate( run => window.drive.leaderboard.onScore( run ), { score, best: score, newBest: true, tricks: 'Backflip!', runSeconds: 60, airTime: 1.2, place: 'Times Square', vehicle } );
+		await land( 5000, 'skid-steer-loader-cad' );
+		await page.waitForFunction( () => ! document.getElementById( 'best-card' ).hidden && document.querySelector( '#best-card .title' ).textContent === 'Not posted', null, { timeout: 15000 } );
+		assert.equal( await page.locator( '#best-card .message' ).textContent(), 'Drive 10 km to unlock: scores in it go on the board once it is.' );
+		assert.equal( refused, 1 );
+		// Not "this visit has run out": the next run, in another ride, goes up (after the posts' gap).
+		await land( 6000, 'go-kart' );
+		const deadline = Date.now() + 30000;
+		while ( asked.scores.length < 2 && Date.now() < deadline ) await page.waitForTimeout( 250 );
+		assert.deepEqual( asked.scores.map( sent => `${ sent.vehicle } ${ sent.score }` ), [ 'skid-steer-loader-cad 5000', 'go-kart 6000' ] );
+		await page.waitForFunction( () => JSON.parse( localStorage.getItem( 'world-drive.posted' ) )?.best === 6000, null, { timeout: 10000 } );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
 	test( 'on a phone: the trophy, the card and the boards fit, and the pause menu has them, here too', async () => {
 
 		const page = await leaderboardPage( { viewport: { width: 390, height: 844 }, touch: true } );
@@ -8073,6 +8110,73 @@ describe( 'World Drive challenges', () => {
 		await page.evaluate( () => window.dispatchEvent( new Event( 'online' ) ) );
 		await page.waitForTimeout( 500 );
 		assert.equal( page.posted.length, 1 );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'achievements earned during a challenge\'s countdown and run wait for its end: no toast over them, then each in turn', async () => {
+
+		const page = await challengePage();
+		// The Worker's word on progress: where the player stands, and a report earning 10 km (and the
+		// skid steer with it) as it's asked for.
+		let earn = false;
+		const standing = { xp: 500, own: 500, level: 2, gained: 0, unlocked: [], supporter: false, title: 'rookie', chosen: '', streakDay: '', streak: 0, accepted: { areas: [], spots: [] } };
+		await page.route( `${ BASE }/api/progress`, route => {
+
+			const sent = route.request().postDataJSON();
+			const empty = ! sent.report?.km;
+			route.fulfill( { contentType: 'application/json', body: JSON.stringify( { ...standing, earned: earn && ! empty ? [ 'km-10' ] : [], ...empty && sent.feats ? { feats: [] } : {} } ) } );
+
+		} );
+		await page.evaluate( () => {
+
+			window.toastTexts = [];
+			const toast = document.getElementById( 'toast' );
+			new MutationObserver( () => ! toast.hidden && window.toastTexts.push( toast.firstChild?.textContent ?? toast.textContent ) ).observe( toast, { childList: true, attributes: true, attributeFilter: [ 'hidden' ] } );
+
+		} );
+		await page.locator( '#globe-ui .challenges-open' ).click();
+		await page.locator( '.ch-card' ).first().waitFor();
+		await start( page, 11 );
+		await page.waitForFunction( () => window.drive.challenges.run?.phase === 'countdown', null, { timeout: 30000 } );
+		// Earned in the countdown: held, nothing shown.
+		earn = true;
+		await page.evaluate( () => {
+
+			window.drive.progress.unsent.km += 0.1;
+			return window.drive.progress.report();
+
+		} );
+		await page.waitForFunction( () => window.drive.notices.length === 2, null, { timeout: 15000 } );
+		assert.deepEqual( await page.evaluate( () => window.drive.notices ), [ 'Achievement: 10 km driven', 'Unlocked: Skid steer' ] );
+		assert.equal( await page.evaluate( () => window.drive.challenges.run?.phase ), 'countdown' );
+		// And all through the run.
+		await page.waitForFunction( () => window.drive.challenges.run?.phase === 'racing', null, { timeout: 60000 } );
+		await page.waitForTimeout( 1500 );
+		assert.equal( ( await page.evaluate( () => window.drive.notices ) ).length, 2 );
+		assert.deepEqual( await page.evaluate( () => window.toastTexts.filter( text => /^(Achievement|Unlocked):/.test( text ) ) ), [] );
+		// Its end: each in turn.
+		await chase( page );
+		await page.waitForFunction( () => window.toastTexts.includes( 'Unlocked: Skid steer' ), null, { timeout: 30000 } );
+		assert.deepEqual( await page.evaluate( () => window.toastTexts.filter( text => /^(Achievement|Unlocked):/.test( text ) ) ), [ 'Achievement: 10 km driven', 'Unlocked: Skid steer' ] );
+		assert.deepEqual( await page.evaluate( () => window.drive.notices ), [] );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'a time in a ride the Worker hasn\'t unlocked (403, reason ride) says what unlocks it, not that World Drive couldn\'t be reached', async () => {
+
+		const page = await challengePage();
+		await page.route( `${ BASE }/api/challenges/time`, route => route.fulfill( { status: 403, contentType: 'application/json', body: JSON.stringify( { error: 'That ride isn\'t unlocked yet', reason: 'ride', unlock: 'Finish 10 challenges to unlock' } ) } ) );
+		await page.locator( '#globe-ui .challenges-open' ).click();
+		await page.locator( '.ch-card' ).first().waitFor();
+		await start( page, 11 );
+		await page.waitForFunction( () => window.drive.challenges.run?.phase === 'racing', null, { timeout: 60000 } );
+		await chase( page );
+		await page.waitForFunction( () => /unlock/.test( document.querySelector( '.ch-f-note' ).textContent ), null, { timeout: 15000 } );
+		assert.equal( await page.locator( '.ch-f-note' ).textContent(), 'Finish 10 challenges to unlock: times in it go on the board once it is.' );
 		assert.deepEqual( page.errors, [] );
 		await page.context().close();
 

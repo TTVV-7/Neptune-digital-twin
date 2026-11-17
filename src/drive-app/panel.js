@@ -16,9 +16,6 @@ import { drivers } from './online.js';
 // places are the Moon's (moon-places.js), and who's driving now isn't shown.
 
 const VEHICLE_KEY = 'world-drive.vehicle';
-// The ride picked until one is chosen (and while the one chosen is locked) is catalog.js's
-// DEFAULT_RIDE, the pickup, or where the site hasn't got it (its model is the library's,
-// vehicles.js), the first ride, the kart.
 
 // What the panel says on each world: its tagline and the search's hint.
 const WORDS = {
@@ -188,6 +185,9 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorl
 	// --- vehicles ---
 
 	const saved = storage( () => localStorage.getItem( VEHICLE_KEY ) );
+	// The ride picked until one is chosen (and while the one chosen is locked): catalog.js's
+	// DEFAULT_RIDE, the pickup, or where the site hasn't got it (its model is the library's,
+	// vehicles.js), the first ride, the kart.
 	const fallback = vehicles.find( v => v.id === DEFAULT_RIDE ) ?? vehicles[ 0 ];
 	let picked = vehicles.find( v => v.id === saved ) ?? fallback;
 	const pickers = [];
@@ -211,6 +211,20 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorl
 		note.setAttribute( 'role', 'status' );
 		parent.after( note );
 		notes.push( note );
+		// A construction ride's picture only as its card scrolls near (the row scrolls sideways, and a
+		// browser's own lazy loading takes in a whole row): a new player can't drive them yet, so the
+		// first load doesn't fetch them.
+		const nearby = typeof IntersectionObserver === 'function' ? new IntersectionObserver( entries => {
+
+			for ( const { target, isIntersecting } of entries ) {
+
+				if ( ! isIntersecting ) continue;
+				target.src = target.dataset.src;
+				nearby.unobserve( target );
+
+			}
+
+		}, { root: parent, rootMargin: '0px 160px' } ) : null;
 
 		const cards = vehicles.map( vehicle => {
 
@@ -220,8 +234,14 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorl
 			button.setAttribute( 'role', 'radio' );
 			button.dataset.id = vehicle.id;
 			const picture = vehicle.thumb
-				? Object.assign( document.createElement( 'img' ), { src: vehicle.thumb, alt: '', loading: 'lazy' } )
+				? Object.assign( document.createElement( 'img' ), { alt: '', loading: 'lazy' } )
 				: vehicle.icon ? Object.assign( document.createElement( 'span' ), { className: 'ride-icon', innerHTML: vehicle.icon } ) : kartIcon();
+			if ( vehicle.thumb && vehicle.feat && nearby ) {
+
+				picture.dataset.src = vehicle.thumb;
+				nearby.observe( picture );
+
+			} else if ( vehicle.thumb ) picture.src = vehicle.thumb;
 			const name = Object.assign( document.createElement( 'b' ), { textContent: vehicle.name } );
 			const blurb = Object.assign( document.createElement( 'span' ), { textContent: `${ vehicle.blurb } · ${ vehicle.topSpeed } km/h` } );
 			button.append( picture, name, blurb );

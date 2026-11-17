@@ -15,8 +15,8 @@ import { WORKS } from './works.js';
 // What you can drive: the go-kart, built in code (kart.js), a few trucks from the library, loaded
 // as models.js loads anything placed, so drive.js drives them as it does in the construction app,
 // then World Drive's own cars (cars.js: models from Sketchfab whose wheels turn, one free, six with
-// levels or the pass and the rest with the pass), and after them the Supporter Pass's rides
-// (rides/), built in code. What needs the pass (`pro`, see pro.js) or a level (levels.js's ride
+// levels or the pass and the rest with the pass), the construction rides, and after them the
+// Supporter Pass's rides (rides/), built in code. What needs the pass (`pro`, see pro.js) or a level (levels.js's ride
 // rewards) is locked without it: rideLocked. And the construction rides (works.js), library models
 // too, each locked until its achievement (achievement-rules.js's RIDE_FEATS, feats.js), which the
 // pass doesn't give. Each wears its look from the Garage (paint.js).
@@ -76,7 +76,9 @@ export async function loadVehicles() {
 		item: { ...item, drive: work.drive },
 	} ) );
 	const built = ride => ( { ...ride, thumb: null, credit: null, topSpeed: ride.drive.topSpeed, item: ride } );
-	return [ built( KART ), ...trucks, ...works, ...await cars, ...PRO_RIDES.map( built ) ];
+	// (The construction rides after the cars, which a new player can drive or earn by level, so the
+	// pickers start with those and the locked ones' pictures load as they're scrolled to.)
+	return [ built( KART ), ...trucks, ...await cars, ...works, ...PRO_RIDES.map( built ) ];
 
 }
 

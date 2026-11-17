@@ -7,10 +7,17 @@
 -- row, and what of each the UTC day so far has taken (each held to a day's worth, TALLY_DAY). Read
 -- and written with the player's row as each progress report is, so it costs no row of its own.
 ALTER TABLE players ADD COLUMN tallies TEXT NOT NULL DEFAULT '{}';
--- Parties driven in with someone else, as the party's room counts them (live.js), and the last
--- party's code, so the same party isn't counted again as its page reconnects.
+-- Parties driven in with another player (or someone from another address), as the party's room
+-- counts them (live.js), and the last parties counted (achievements.js's partyMark: a JSON list of
+-- PARTY_MARKS short hashes of the player's id with each party's code, never the code itself, so
+-- nothing here says which players drove together), so the same party isn't counted again as its
+-- page reconnects or the player goes back and forth between two.
 ALTER TABLE players ADD COLUMN parties INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE players ADD COLUMN last_party TEXT NOT NULL DEFAULT '';
+ALTER TABLE players ADD COLUMN party_marks TEXT NOT NULL DEFAULT '[]';
+
+-- Whether a visit has had its player's whole list of achievements (with an empty progress report
+-- asking for it, progress.js): once a visit, so those asks cost a page load's worth of rows at most.
+ALTER TABLE visits ADD COLUMN listed INTEGER NOT NULL DEFAULT 0;
 
 -- Each achievement a player has earned (an id in achievement-rules.js's ACHIEVEMENTS), and when:
 -- 25 at most a player. The construction rides follow from these (RIDE_FEATS): this is the record of

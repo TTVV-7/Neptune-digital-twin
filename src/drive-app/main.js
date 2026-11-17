@@ -26,6 +26,7 @@ import { applyLook } from './paint.js';
 import { liftGlow } from './underglow.js';
 import { createProgress, onLevelChange } from './progress.js';
 import { ACHIEVEMENTS, ridesOf } from './achievement-rules.js';
+import { onFeatsChange } from './feats.js';
 import { setUpProfile } from './profile.js';
 import { formatLatLon, LINK_PARAMS, linkedPlace, rememberPlace, worldOf } from './places.js';
 import { createLive, flagsOf, velocityOf } from './live.js';
@@ -506,11 +507,11 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		vehicles, panel, models, current: () => state.entry && { entry: state.entry, vehicle: state.vehicle },
 		onLook: () => live?.setRide( state.vehicle.id, lookOf( state.vehicle ) ),
 		onOpen: () => stats.add( 'garage_open', 'all' ),
-		onEdit: part => {
+		onEdit: ( part, changed ) => {
 
 			stats.add( 'garage_edit', part );
-			// A look changed, for the achievements (progress.js).
-			progress.look();
+			// A look changed (not the same choice picked again), for the achievements (progress.js).
+			if ( changed ) progress.look();
 
 		},
 		// Its ▶ Boost as driving's: no flare for a visitor asking for less motion, fewer sparks on a phone.
@@ -588,6 +589,13 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		if ( ! state.entry ) return;
 		applyLook( state.entry.pivot, lookOf( state.vehicle ), state.vehicle );
 		live?.setRide( state.vehicle.id, lookOf( state.vehicle ) );
+
+	} );
+	// A construction ride just unlocked: the room hears it at a fresh hello (it looks the player's
+	// achievements up then, and shows a ride they don't have as the default one), as for a new title.
+	onFeatsChange( ( _, added ) => {
+
+		if ( added.some( id => ridesOf( id ).length ) ) live?.rehello();
 
 	} );
 	// Achievements (achievement-rules.js; the grid is achievements.js, its own chunk, loaded the first

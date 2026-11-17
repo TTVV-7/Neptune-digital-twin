@@ -64,8 +64,8 @@ const LEVEL_CARS = CARS.slice( 1, 7 );
 const PASS_CARS = CARS.slice( 7 );
 const PASS_ONLY = [ ...PASS_CARS, ...RIDES ];
 const LOCKED = [ ...LEVEL_CARS, ...PASS_ONLY ];
-// The construction rides (works.js), after the pickup: each locked until its achievement, which the
-// pass doesn't give (test-drive-levels-ui.mjs drives them).
+// The construction rides (works.js), after the cars and before the pass's rides: each locked until
+// its achievement, which the pass doesn't give (test-drive-levels-ui.mjs drives them).
 const WORKS_NAMES = WORKS_RIDES.map( id => WORKS.find( work => work.id === id ).name );
 // The cars World Drive had first, whose characters are measured against each other as before.
 const FIRST = [ 'Muscle car', 'Neon racer', 'Night cruiser', 'Dune buggy', 'Farm truck', 'Police cruiser' ];
@@ -375,8 +375,8 @@ describe( 'Supporter Pass, without it', () => {
 
 		await openGlobe( page );
 		const panel = page.locator( '#globe-ui .panel' );
-		assert.deepEqual( await panel.locator( '.vehicle b' ).allTextContents(), [ 'Go-kart', 'Pickup', ...WORKS_NAMES, ...CARS, ...RIDES ] );
-		assert.deepEqual( await panel.locator( '.vehicle.locked b' ).allTextContents(), [ ...WORKS_NAMES, ...LOCKED ] );
+		assert.deepEqual( await panel.locator( '.vehicle b' ).allTextContents(), [ 'Go-kart', 'Pickup', ...CARS, ...WORKS_NAMES, ...RIDES ] );
+		assert.deepEqual( await panel.locator( '.vehicle.locked b' ).allTextContents(), [ ...LEVEL_CARS, ...PASS_CARS, ...WORKS_NAMES, ...RIDES ] );
 		// The pass's alone wear its badge; the levels' cars their level, and that the pass has them; the
 		// construction rides their achievement.
 		assert.deepEqual( await panel.locator( '.vehicle .pro-badge:not( .level-chip )' ).allTextContents(), PASS_ONLY.map( () => '⭐ Supporter Pass' ) );
@@ -1951,12 +1951,12 @@ describe( 'The Garage on a phone', () => {
 			return box.width > 20 && box.height > 8 && getComputedStyle( badge ).display !== 'none';
 
 		} ) );
-		assert.deepEqual( await badges( '#globe-ui' ), [ ...WORKS_NAMES, ...LOCKED ].map( () => true ) );
+		assert.deepEqual( await badges( '#globe-ui' ), [ ...LOCKED, ...WORKS_NAMES ].map( () => true ) );
 		await shot( page, 'pro-phone-globe-locked' );
 		await dropIn( page );
 		await page.evaluate( () => window.drive.driver.stop() );
 		await page.locator( '#pause' ).waitFor();
-		assert.deepEqual( await badges( '#pause' ), [ ...WORKS_NAMES, ...LOCKED ].map( () => true ) );
+		assert.deepEqual( await badges( '#pause' ), [ ...LOCKED, ...WORKS_NAMES ].map( () => true ) );
 		await shot( page, 'pro-phone-pause-locked' );
 		assert.deepEqual( page.errors, [] );
 		await page.context().close();

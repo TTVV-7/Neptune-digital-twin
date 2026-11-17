@@ -73,7 +73,8 @@ const GROUPS = [
 // vehicles: from loadVehicles(). panel: the globe's panel (for the ride picked there). models: the
 // world's ModelManager, whose loader loads the trucks for the turntable. current(): the ride being
 // driven, { entry, vehicle }, or null. onLook(): the ride being driven has a new look on. onOpen(),
-// onEdit( part ): opened, and a part of a look changed (for the play stats).
+// onEdit( part, changed ): opened, and a part of a look picked (for the play stats), changed if it
+// wasn't what the look had already (for the achievements' Garage changes).
 // effects: the driving's effects ({ detail, calm }, which screen-fx.js keeps up to date), so the
 // turntable's bursts are as calm and as many as driving's.
 export function setUpGarage( { vehicles, panel, models, current, onLook = () => {}, onOpen = () => {}, onEdit = () => {}, effects } ) {
@@ -417,12 +418,13 @@ export function setUpGarage( { vehicles, panel, models, current, onLook = () => 
 
 		}
 
+		const was = JSON.stringify( look );
 		look[ part ] = id;
 		// Smoke's colour only shows with the smoke trail, and the flame's with the classic flame.
 		if ( part === 'smoke' ) look.trail = 'smoke';
 		if ( part === 'flame' ) look.boost = 'classic';
 		changed( part );
-		onEdit( part );
+		onEdit( part, JSON.stringify( look ) !== was );
 
 	}
 

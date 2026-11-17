@@ -121,6 +121,10 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 	// rides this browser has said it tried, for whom ({ id, list }).
 	let heard = saved.heard;
 	let tried = saved.tried;
+	// Whose achievements feats.js holds ('' for none), and the player whose whole list has been asked
+	// for this page (once each: refresh).
+	let featsOf = '';
+	let listedFor = '';
 
 	let sending = false;
 	// Where the player stands was asked while a report was on its way: asked again after it.
@@ -225,6 +229,7 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 	// kept (unless `persist` is false: each frame of driving).
 	function changed( { persist = true } = {} ) {
 
+		syncFeats();
 		const now = levelOf( xp() );
 		setLevel( now );
 		const id = who() || 'local';
@@ -479,10 +484,26 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 		// earns them.)
 		const had = new Set( first ? heard.id === 'local' ? heard.list : [] : heard.list );
 		const known = new Set( [ ...had, ...all ?? [], ...fresh ] );
-		setFeats( all ? [ ...new Set( [ ...all, ...fresh ] ) ] : fresh, { add: ! all } );
+		// The whole list (an empty report's), or this report's added to what's held for this player; the
+		// first heard of a player replaces another's.
+		setFeats( all ? [ ...new Set( [ ...all, ...fresh ] ) ] : fresh, { add: ! all && featsOf === id } );
+		featsOf = id;
 		const news = ( first ? fresh : [ ...known ] ).filter( feat => ! had.has( feat ) && ACHIEVEMENTS.some( a => a.id === feat ) );
 		heard = { id, list: [ ...known ] };
 		if ( news.length ) tell( { ids: order( news ), local: false } );
+
+	}
+
+	// feats.js's achievements, the player's: as this browser last heard them (so the rides they've
+	// earned are unlocked as the page starts, before the Worker answers, as a level's car is by the
+	// level kept here; the Worker checks them wherever a ride shows to others), and none for no player
+	// or another one (a name removed, or another picked), until the Worker says.
+	function syncFeats() {
+
+		const id = who();
+		if ( featsOf === id ) return;
+		featsOf = id;
+		setFeats( id && heard.id === id ? heard.list.filter( feat => ACHIEVEMENTS.some( a => a.id === feat ) ) : [] );
 
 	}
 
@@ -522,6 +543,7 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 	async function report( { keepalive = false } = {} ) {
 
 		reportedAt = Date.now();
+		syncFeats();
 		const me = player();
 		if ( ! me ) {
 
@@ -593,7 +615,9 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 			unsent.areas.push( ...areas.filter( place => ! unsent.areas.includes( place ) ) );
 			unsent.spots.push( ...was.sent.spots.filter( id => ! accepted.spots?.includes( id ) && ! unsent.spots.includes( id ) ) );
 			retryAt = 0;
-			if ( askAgain ) {
+			// Asked where they stand while it was on its way, or not yet asked for their whole list of
+			// achievements this page (a report sent as it started, in refresh's place).
+			if ( askAgain || listedFor !== me.id ) {
 
 				askAgain = false;
 				refresh();
@@ -607,7 +631,15 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 			// won't take). A visit run out reports no more; nor does a player that's gone (the owner
 			// removed it: the leaderboard asks for a new name as it next posts).
 			if ( answer.status === 403 && answer.body.reason === 'visit' ) ended = true;
-			else if ( answer.status === 403 ) gone = me.id;
+			else if ( answer.status === 403 ) {
+
+				// (Nor are its achievements this page's, or this browser's, any longer.)
+				gone = me.id;
+				heard = { id: '', list: [] };
+				featsOf = me.id;
+				setFeats( [] );
+
+			}
 			if ( answer.status !== 0 ) {
 
 				flying = null;
@@ -688,14 +720,20 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 
 		}
 
+		syncFeats();
 		if ( hasLocal() || flying ) return report();
-		const answer = await postProgress( me, token, emptyReport() );
+		// The whole list of achievements once a page for each player (the Worker holds such asks to a
+		// day's few); after that, an empty report's answer is enough.
+		const list = listedFor !== me.id;
+		listedFor = me.id;
+		const answer = await postProgress( me, token, emptyReport(), { feats: list } );
 		if ( answer.ok && Number.isFinite( answer.body.xp ) && player()?.id === me.id ) {
 
 			took( answer.body );
 			changed();
 
-		} else if ( answer.status === 403 && answer.body.reason === 'visit' ) ended = true;
+		} else if ( list && ! answer.ok && player()?.id === me.id ) listedFor = '';
+		if ( answer.status === 403 && answer.body.reason === 'visit' ) ended = true;
 
 	}
 
@@ -722,6 +760,7 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 	// The page going away: what's been driven goes with it (fetch with keepalive gets there after
 	// the page has gone; sendBeacon can't say it's JSON), and is kept here as on its way, so it goes
 	// again next time if it didn't get there.
+	syncFeats();
 	window.addEventListener( 'pagehide', () => {
 
 		if ( player() ) report( { keepalive: true } );

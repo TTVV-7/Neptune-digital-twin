@@ -8,11 +8,14 @@ import { DRIVE_CARS, LIBRARY_VEHICLES, PASS_RIDES, WORKS_RIDES } from './catalog
 //
 // Each achievement is a count reaching a target. Some counts the Worker checks itself: the
 // challenges a player has a time on (challenge_times), their places on finished boards (final_rank,
-// written as a challenge ends), the parties they drove in with someone else (the party's room says
-// so, never the page), and their days in a row (the daily bonus, by the Worker's clock). The rest
-// only the page can say (how far it drove, its drives on the Moon, its Garage looks, the rides it
-// tried): those come with its progress reports, each capped as XP is (by the time since the last
-// report) and again by a day's worth (TALLY_DAY), so a script can't earn them all in one go.
+// written as a challenge ends), the parties they drove in with another player or someone from
+// another address (the party's room says so, never the page), and their days in a row (the days
+// the Worker itself saw them take the daily bonus, by its own clock: never the streak a new
+// nickname's claim brings from before it). The rest only the page can say (how far it drove, its
+// drives on the Moon, its Garage looks, the rides it tried): those come with its progress reports,
+// each capped as XP is (by the time since the last report), again by a day's worth (TALLY_DAY),
+// and a new nickname's claim of what was driven before it by CLAIM_TALLY, so a script can't earn
+// them all in one go.
 
 // The counts, and whether the Worker checks each ('checked') or takes the page's word within its
 // caps ('trusted').
@@ -21,8 +24,8 @@ export const COUNTS = {
 	moon: 'trusted', // drives on the Moon (a drop-in there and 250 m driven)
 	looks: 'trusted', // Garage choices changed
 	rides: 'trusted', // different rides driven (250 m in each)
-	streak: 'checked', // the most UTC days in a row driven (the daily bonus's streak)
-	parties: 'checked', // parties driven in with someone else in them
+	streak: 'checked', // the most UTC days in a row the Worker saw the daily bonus taken
+	parties: 'checked', // parties driven in with another player, or a guest from another address
 	challenges: 'checked', // challenges finished (a time on the board)
 	placing: 'checked', // a place on a finished board (its final_rank)
 };
@@ -31,6 +34,12 @@ export const COUNTS = {
 // a long day's driving (500 km is seven hours at 72 km/h), ten Moon drives, ten Garage changes and
 // four new rides. So 1,000 km takes at least two days of a script, and 25 looks three.
 export const TALLY_DAY = { km: 500, moon: 10, looks: 10, rides: 4 };
+
+// The most of each trusted count a new nickname's first report (the claim of what was driven before
+// it) adds, whatever it says: enough for what a first hour's drive earns (the 10 km's skid steer
+// among it), not the 100 km's wheel loader, which takes driving after the nickname (and at least
+// three reports' worth of time between them).
+export const CLAIM_TALLY = { km: 25, moon: 2, looks: 5, rides: 3 };
 
 // The drive that counts for a Moon drive or a ride tried: this far (km) since the drop-in, as the
 // day's bonus needs (levels.js's DAILY_KM).
@@ -170,8 +179,9 @@ export function mergeTallies( a, b ) {
 // --- the player's counts, as the Worker keeps them ---
 
 // A player's kept counts (players.tallies, JSON): { km, moon, looks, rides: [ ids ], streak (the
-// most days in a row), day (the UTC day `today` is for), today: { km, moon, looks, rides } (what
-// of each trusted count that day has taken) }, with anything missing or damaged as none.
+// most days in a row the Worker has seen), run and runDay (the days in a row it's seeing now, and
+// the last of them), day (the UTC day `today` is for), today: { km, moon, looks, rides } (what of
+// each trusted count that day has taken) }, with anything missing or damaged as none.
 export function readTallies( text ) {
 
 	let raw = null;
@@ -192,6 +202,8 @@ export function readTallies( text ) {
 		km: number( kept.km ), moon: number( kept.moon ), looks: number( kept.looks ),
 		rides: Array.isArray( kept.rides ) ? kept.rides.filter( id => RIDE_IDS.has( id ) ) : [],
 		streak: number( kept.streak ),
+		run: number( kept.run ),
+		runDay: typeof kept.runDay === 'string' ? kept.runDay : '',
 		day: typeof kept.day === 'string' ? kept.day : '',
 		today: { km: number( today.km ), moon: number( today.moon ), looks: number( today.looks ), rides: number( today.rides ) },
 	};
@@ -200,9 +212,10 @@ export function readTallies( text ) {
 
 // `tallies` (readTallies') with what a report adds on UTC day `day`: its km (already capped by the
 // time since the last report) and its `feats` (checkTallies'), each held to what's left of the day's
-// TALLY_DAY; `streak`, the days in a row the report leaves the player on (the Worker's own). A new
-// object; the counts taken this report in `taken`.
-export function addTallies( tallies, { km = 0, feats = null, streak = 0 }, day ) {
+// TALLY_DAY; `daily`, whether the Worker gave the day's bonus with it (a day driven, by its own
+// clock: one more in a row after a bonus yesterday, else the first). A new object; the counts taken
+// this report in `taken`.
+export function addTallies( tallies, { km = 0, feats = null, daily = false }, day ) {
 
 	const today = tallies.day === day ? { ...tallies.today } : { km: 0, moon: 0, looks: 0, rides: 0 };
 	const room = field => Math.max( 0, TALLY_DAY[ field ] - today[ field ] );
@@ -214,6 +227,8 @@ export function addTallies( tallies, { km = 0, feats = null, streak = 0 }, day )
 	const fresh = ( feats?.rides ?? [] ).filter( id => ! tallies.rides.includes( id ) ).slice( 0, room( 'rides' ) );
 	for ( const field of [ 'km', 'moon', 'looks' ] ) today[ field ] += taken[ field ];
 	today.rides += fresh.length;
+	let { run, runDay } = tallies;
+	if ( daily && runDay !== day ) [ run, runDay ] = [ runDay === previousDay( day ) ? run + 1 : 1, day ];
 	return {
 		tallies: {
 			// km to the metre, so the kept text stays short.
@@ -221,7 +236,8 @@ export function addTallies( tallies, { km = 0, feats = null, streak = 0 }, day )
 			moon: tallies.moon + taken.moon,
 			looks: tallies.looks + taken.looks,
 			rides: [ ...tallies.rides, ...fresh ],
-			streak: Math.max( tallies.streak, streak ),
+			streak: Math.max( tallies.streak, run ),
+			run, runDay,
 			day,
 			today: { ...today, km: Math.round( today.km * 1000 ) / 1000 },
 		},
@@ -230,13 +246,25 @@ export function addTallies( tallies, { km = 0, feats = null, streak = 0 }, day )
 
 }
 
+// What a new nickname's claim (its first report) counts toward the trusted tallies: its km and
+// `feats` held to CLAIM_TALLY.
+export function claimTallies( { km = 0, feats = null } ) {
+
+	return {
+		km: Math.min( km, CLAIM_TALLY.km ),
+		feats: feats && { moon: Math.min( feats.moon, CLAIM_TALLY.moon ), looks: Math.min( feats.looks, CLAIM_TALLY.looks ), rides: feats.rides.slice( 0, CLAIM_TALLY.rides ) },
+	};
+
+}
+
 // The counts an achievement is earned by, from a player's tallies and the rest: { km, moon, looks,
-// rides, streak, parties, challenges }.
-export function countsOf( tallies, { parties = 0, challenges = 0, streak = 0 } = {} ) {
+// rides, streak, parties, challenges }. The streak is the Worker's own (tallies'), never the one
+// the daily bonus's XP goes by, which a claim can bring.
+export function countsOf( tallies, { parties = 0, challenges = 0 } = {} ) {
 
 	return {
 		km: tallies.km, moon: tallies.moon, looks: tallies.looks, rides: tallies.rides.length,
-		streak: Math.max( tallies.streak, streak ), parties, challenges,
+		streak: tallies.streak, parties, challenges,
 	};
 
 }
@@ -264,13 +292,19 @@ export function progressLine( achievement, counts ) {
 	const have = Math.min( counts?.[ count ] ?? 0, target );
 	if ( count === 'km' ) {
 
-		const shown = target < 1 ? `${ Math.round( have * 1000 ) } / ${ Math.round( target * 1000 ) } m` : `${ formatNumber( Math.floor( have * 10 ) / 10 ) } / ${ formatNumber( target ) } km`;
-		return shown;
+		return target < 1 ? `${ Math.round( have * 1000 ) } / ${ Math.round( target * 1000 ) } m` : `${ formatNumber( Math.floor( have * 10 ) / 10 ) } / ${ formatNumber( target ) } km`;
 
 	}
 
 	const unit = { moon: 'drives', looks: 'changes', rides: 'rides', streak: 'days', parties: 'parties', challenges: 'finished' }[ count ];
 	return `${ formatNumber( Math.floor( have ) ) } / ${ formatNumber( target ) } ${ unit }`;
+
+}
+
+// The UTC day before `day` ('YYYY-MM-DD'), as levels.js's dayBefore (which imports this file).
+function previousDay( day ) {
+
+	return new Date( Date.parse( `${ day }T12:00:00Z` ) - 24 * 60 * 60 * 1000 ).toISOString().slice( 0, 10 );
 
 }
 

@@ -2947,7 +2947,7 @@ describe( 'Username and password rules', () => {
 		for ( const file of files.slice( 0, - 1 ) ) db.exec( readFileSync( new URL( file, migrations ), 'utf8' ) );
 		db.exec( `INSERT INTO players ( id, name, name_key, secret_hash, created_at, last_seen_at, xp, streak ) VALUES ( 'p', 'Alice', 'aiice', 's', 1, 1, 500, 4 )` );
 		db.exec( readFileSync( new URL( files.at( - 1 ), migrations ), 'utf8' ) );
-		assert.deepEqual( { ...db.prepare( 'SELECT xp, streak, tallies, parties, last_party FROM players' ).get() }, { xp: 500, streak: 4, tallies: '{}', parties: 0, last_party: '' } );
+		assert.deepEqual( { ...db.prepare( 'SELECT xp, streak, tallies, parties, party_marks FROM players' ).get() }, { xp: 500, streak: 4, tallies: '{}', parties: 0, party_marks: '[]' } );
 		db.exec( `INSERT INTO achievements ( player_id, achievement, earned_at ) VALUES ( 'p', 'km-10', 1 )` );
 		// One row an achievement a player, and nothing of an address or a name.
 		assert.throws( () => db.exec( `INSERT INTO achievements ( player_id, achievement, earned_at ) VALUES ( 'p', 'km-10', 2 )` ) );

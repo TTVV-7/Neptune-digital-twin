@@ -231,10 +231,11 @@ export function getBoard( { period, place = null, id = null } ) {
 
 // What was driven since the last report (levels.js's REPORT), with this visit's token: body { xp,
 // level, gained, unlocked, supporter, title, accepted: { areas, spots }, daily?, earned, feats? }. keepalive: as
-// the page goes away (pagehide), so the browser sends it all the same.
-export function postProgress( { id, secret }, visit, report, { keepalive = false } = {} ) {
+// the page goes away (pagehide), so the browser sends it all the same. feats: with an empty report,
+// ask for every achievement the player has (the answer's feats, if the Worker has a turn for it).
+export function postProgress( { id, secret }, visit, report, { keepalive = false, feats = false } = {} ) {
 
-	return send( 'POST', '/api/progress', { id, secret, visit, report }, { keepalive } );
+	return send( 'POST', '/api/progress', { id, secret, visit, report, ...feats ? { feats: true } : {} }, { keepalive } );
 
 }
 

@@ -94,16 +94,16 @@ async function ask() {
 
 }
 
-// The counts shown: the Worker's (for this player) and what's been driven since, or this browser's.
+// The counts shown: the Worker's (for this player) and what's been driven since, no more of it than
+// the Worker will take today (its `left`: so a count doesn't run ahead and then fall back), or this
+// browser's.
 function counts() {
 
 	const pending = app.progress.pending;
 	const kept = answer && askedFor === app.player()?.id ? answer.counts : null;
 	if ( ! kept ) return { ...pending, parties: 0, challenges: 0 };
-	return {
-		...kept,
-		km: kept.km + pending.km, moon: kept.moon + pending.moon, looks: kept.looks + pending.looks, rides: kept.rides + pending.rides,
-	};
+	const more = count => Math.min( pending[ count ], answer.left?.[ count ] ?? Infinity );
+	return { ...kept, km: kept.km + more( 'km' ), moon: kept.moon + more( 'moon' ), looks: kept.looks + more( 'looks' ), rides: kept.rides + more( 'rides' ) };
 
 }
 
@@ -114,7 +114,7 @@ function render() {
 	const dates = new Map( ( answer && askedFor === me?.id ? answer.achievements : [] ).map( a => [ a.id, a.at ] ) );
 	const now = counts();
 	dialog.querySelector( '.count' ).textContent = `${ ACHIEVEMENTS.filter( a => have.has( a.id ) ).length } / ${ ACHIEVEMENTS.length }`;
-	dialog.querySelector( '.lead' ).textContent = 'Badges for what you\'ve done, and construction rides to drive for some of them. Challenge places, parties and days in a row are counted by the game itself; how far you drive, Moon drives, Garage changes and rides tried come from your drives, a day\'s worth at a time.';
+	dialog.querySelector( '.lead' ).textContent = 'Badges for what you\'ve done; some unlock construction rides.';
 	dialog.querySelector( '.save' ).hidden = !! me || ! app.worker;
 	dialog.querySelector( '.feats' ).replaceChildren( ...ACHIEVEMENTS.map( feat => {
 

@@ -958,8 +958,10 @@ describe( 'World Drive achievements in the page', () => {
 			assert.equal( await skid.evaluate( b => b.classList.contains( 'locked' ) ), false );
 			assert.equal( await vac.evaluate( b => b.classList.contains( 'locked' ) ), true );
 			assert.equal( await vac.locator( '.feat-chip' ).textContent(), '🔒 Weekly top 3' );
-			assert.match( await vac.locator( 'img' ).getAttribute( 'src' ), /\/works\/hydrovac-truck\.webp$/ );
+			// Its picture only once its card is scrolled near (none in the first load).
+			assert.equal( await vac.locator( 'img' ).getAttribute( 'src' ), null );
 			await vac.scrollIntoViewIfNeeded();
+			await page.waitForFunction( () => /\/works\/hydrovac-truck\.webp$/.test( document.querySelector( '#globe-ui .vehicles .vehicle[data-id="hydrovac-truck"] img' ).getAttribute( 'src' ) ?? '' ), null, { timeout: 10000 } );
 			await vac.click();
 			const note = page.locator( '#globe-ui .ride-note' ).first();
 			assert.equal( await note.textContent(), 'Finish a weekly challenge in its top 3 to unlock the vac truck. See your Achievements.' );
@@ -998,6 +1000,99 @@ describe( 'World Drive achievements in the page', () => {
 			assert.equal( await grid.locator( '.feat[data-id="km-100"] .bar i' ).evaluate( i => parseFloat( i.style.width ) ), 10.5 );
 			await shot( page, 'feats-2-grid' );
 			await grid.locator( '.close' ).click();
+			assert.deepEqual( page.errors, [] );
+
+		} finally {
+
+			await page.context().close();
+
+		}
+
+	} );
+
+	test( 'rides earned stay unlocked as the page starts, before the Worker answers and when it can\'t; another player starts with none of them, and a player removed loses them', async () => {
+
+		const cy = await makePlayer( `Feat Cal ${ RUN }` );
+		assert.deepEqual( ( await reportFor( cy, { km: 10.5 } ) ).earned, [ 'first-drive', 'km-10' ] );
+		const page = await levelsPage( { visit: await visitToken(), player: cy } );
+		const skid = page.locator( '#globe-ui .vehicles .vehicle[data-id="skid-steer-loader-cad"]' );
+		const locked = () => skid.evaluate( b => b.classList.contains( 'locked' ) );
+		try {
+
+			// The first load hears the whole list from the Worker (once a visit), and keeps it here.
+			await page.waitForFunction( () => ! document.querySelector( '#globe-ui .vehicles .vehicle[data-id="skid-steer-loader-cad"]' ).classList.contains( 'locked' ), null, { timeout: 20000 } );
+			await until( () => page.reports.some( r => r.body?.feats ) );
+			assert.deepEqual( page.reports.filter( r => r.body?.feats ).map( r => r.body.feats ), [ [ 'first-drive', 'km-10' ] ] );
+			assert.deepEqual( ( await stored( page ) ).heard, { id: cy.id, list: [ 'first-drive', 'km-10' ] } );
+			// Picked and kept as the ride.
+			await skid.scrollIntoViewIfNeeded();
+			await skid.click();
+			assert.equal( await page.evaluate( () => localStorage.getItem( 'world-drive.vehicle' ) ), 'skid-steer-loader-cad' );
+			// Again with the Worker out of reach: unlocked as the page starts, the skid steer the ride.
+			await page.route( `${ worker.base }/api/progress`, route => route.abort() );
+			await page.route( `${ BASE }/api/progress`, route => route.abort() );
+			await page.reload();
+			await page.locator( '#notice button', { hasText: 'Drive the test pad' } ).click();
+			await page.waitForFunction( () => window.drive?.mode === 'globe', null, { timeout: 30000 } );
+			assert.equal( await locked(), false );
+			assert.equal( await page.evaluate( () => window.drive.panel.vehicle.id ), 'skid-steer-loader-cad' );
+			// Another player in this browser (another name picked): none of Cy's.
+			const dee = await makePlayer( `Feat Dot ${ RUN }` );
+			await page.unroute( `${ worker.base }/api/progress` );
+			await page.unroute( `${ BASE }/api/progress` );
+			await page.evaluate( who => localStorage.setItem( 'world-drive.player', JSON.stringify( who ) ), { id: dee.id, secret: dee.secret, name: dee.name } );
+			await page.reload();
+			await page.locator( '#notice button', { hasText: 'Drive the test pad' } ).click();
+			await page.waitForFunction( () => window.drive?.mode === 'globe', null, { timeout: 30000 } );
+			assert.equal( await locked(), true );
+			// (The ride while the one picked is locked: the default, the pickup.)
+			assert.equal( await page.evaluate( () => window.drive.panel.vehicle.id ), 'pickup-truck' );
+			// Back to Cy, then Cy removed by the owner: the next report's 403 takes the rides away.
+			await page.evaluate( who => localStorage.setItem( 'world-drive.player', JSON.stringify( who ) ), { id: cy.id, secret: cy.secret, name: cy.name } );
+			await page.reload();
+			await page.locator( '#notice button', { hasText: 'Drive the test pad' } ).click();
+			await page.waitForFunction( () => window.drive?.mode === 'globe', null, { timeout: 30000 } );
+			assert.equal( await locked(), false );
+			worker.d1( `DELETE FROM players WHERE id = '${ cy.id }'` );
+			await page.evaluate( () => {
+
+				window.drive.progress.unsent.km += 0.1;
+				return window.drive.progress.report();
+
+			} );
+			await page.waitForFunction( () => document.querySelector( '#globe-ui .vehicles .vehicle[data-id="skid-steer-loader-cad"]' ).classList.contains( 'locked' ), null, { timeout: 15000 } );
+			assert.deepEqual( page.errors, [] );
+
+		} finally {
+
+			await page.context().close();
+
+		}
+
+	} );
+
+	test( 'a Garage choice counts toward the looks once, however many times it\'s picked again', async () => {
+
+		const page = await levelsPage();
+		try {
+
+			await page.locator( '#globe-ui .garage-open' ).click();
+			const garage = page.locator( '#garage' );
+			await garage.waitFor();
+			const looks = () => page.evaluate( () => window.drive.progress.pending.looks );
+			const before = await looks();
+			// A part this ride can change at level 1 (not the horn, which plays), and a choice of it not on.
+			const part = await garage.locator( 'section[data-part]:not([data-part="horn"]):not([hidden])' ).evaluateAll( sections => sections.find( section => section.querySelector( '.choice:not(.on):not(.locked)' ) )?.dataset.part );
+			assert.ok( part );
+			const swatch = garage.locator( `[data-part="${ part }"] .choice:not(.on):not(.locked)` ).first();
+			await swatch.scrollIntoViewIfNeeded();
+			await swatch.click();
+			assert.equal( await looks(), before + 1 );
+			// The same again, and again: nothing more.
+			const on = garage.locator( `[data-part="${ part }"] .choice.on` ).first();
+			await on.click();
+			await on.click();
+			assert.equal( await looks(), before + 1 );
 			assert.deepEqual( page.errors, [] );
 
 		} finally {
@@ -1205,9 +1300,16 @@ describe( 'World Drive achievements in the page', () => {
 			const page = await levelsPage( { visit: await visitToken(), player: cy, viewport, touch } );
 			try {
 
+				const pictures = [];
+				page.on( 'request', request => new URL( request.url() ).pathname.startsWith( '/works/' ) && pictures.push( request.url() ) );
 				await page.waitForFunction( n => document.querySelector( '#globe-ui .profile .feat-count' )?.textContent.startsWith( `${ n } /` ), 3, { timeout: 20000 } );
+				// The construction rides come after the cars, and their pictures only as they're scrolled
+				// near: nothing of them in the first load.
+				await page.waitForTimeout( 1000 );
+				assert.deepEqual( pictures, [], name );
 				const vac = page.locator( '#globe-ui .vehicles .vehicle[data-id="hydrovac-truck"]' );
 				await vac.scrollIntoViewIfNeeded();
+				await page.waitForFunction( () => document.querySelector( '#globe-ui .vehicles .vehicle[data-id="hydrovac-truck"] img' )?.complete && document.querySelector( '#globe-ui .vehicles .vehicle[data-id="hydrovac-truck"] img' ).naturalWidth > 0, null, { timeout: 10000 } );
 				// The chip inside its card.
 				const [ chip, card ] = await Promise.all( [ vac.locator( '.feat-chip' ).boundingBox(), vac.boundingBox() ] );
 				assert.ok( chip.x >= card.x - 1 && chip.x + chip.width <= card.x + card.width + 1, `${ name }: ${ JSON.stringify( [ chip, card ] ) }` );
