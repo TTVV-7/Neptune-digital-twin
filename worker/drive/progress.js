@@ -163,8 +163,8 @@ export async function postProgress( { request, env, now } ) {
 		streakDay: anything ? streakDay : player.streak_day,
 		streak: anything ? streak : player.streak,
 		accepted: { areas: capped.areas, spots: capped.spots },
-		// The achievements this report earned; and asked where they stand (an empty report), all the
-		// player's and their account's.
+		// The achievements this report earned; and asked for with nothing reported, once a visit, all
+		// the player's and their account's.
 		earned: anything ? feats : [],
 		...listed ? { feats: listed } : {},
 	};

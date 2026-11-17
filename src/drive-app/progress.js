@@ -722,8 +722,8 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 
 		syncFeats();
 		if ( hasLocal() || flying ) return report();
-		// The whole list of achievements once a page for each player (the Worker holds such asks to a
-		// day's few); after that, an empty report's answer is enough.
+		// The whole list of achievements once a page for each player (the Worker gives it once a visit);
+		// after that, an empty report's answer is enough.
 		const list = listedFor !== me.id;
 		listedFor = me.id;
 		const answer = await postProgress( me, token, emptyReport(), { feats: list } );

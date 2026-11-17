@@ -5741,8 +5741,8 @@ player's tallies and 180 their party marks.
 
 **The page's first load**: the shared rules (`achievement-rules.js`, needed there for the locks, the
 reports' counts and the toasts' words) and the construction rides' names and tuning (`works.js`)
-add 7.7 kB to the game's chunk (1,121.22 to 1,128.92 kB minified, 345.15 to 348.04 kB gzipped:
-+2.9 kB) and a shared chunk of 5.0 kB (1.7 kB gzipped) it imports; the first stylesheet 11.22 to
+add 8.0 kB to the game's chunk (1,121.22 to 1,129.18 kB minified, 345.15 to 348.16 kB gzipped:
++3.0 kB) and a shared chunk of 5.0 kB (1.7 kB gzipped) it imports; the first stylesheet 11.22 to
 11.71 kB (the profile card's button and the locks' chips), the page's first script 13.70 to 13.86 kB
 (a name `catalog.js` exports). `library/library.json`, fetched as the page starts, lists the eight
 rides too but only what the page reads of each: 660 bytes to 3.3 kB. The rides' pictures (8 to 12 kB

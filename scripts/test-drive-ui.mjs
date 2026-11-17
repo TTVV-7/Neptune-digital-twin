@@ -248,7 +248,8 @@ describe( 'World Drive, desktop', () => {
 		assert.deepEqual( await panel.locator( '.vehicle b' ).allTextContents(), [
 			'Go-kart', 'Pickup', 'Muscle car', 'Golf cart', 'Tuk-tuk', 'Ice-cream van', 'Lawn tractor', 'Retro wedge', 'Formula racer',
 			'Neon racer', 'Night cruiser', 'Dune buggy', 'Farm truck', 'Police cruiser', 'Hypercar', 'Cyber muscle',
-			'Sports coupe', 'Skid steer', 'Telehandler', 'Concrete mixer', 'Road roller', 'Wheel loader', 'Dump truck', 'Bulldozer', 'Vac truck', 'Monster truck', 'City bus', 'Hovercraft',
+			'Skid steer', 'Telehandler', 'Concrete mixer', 'Road roller', 'Wheel loader', 'Dump truck', 'Bulldozer', 'Vac truck',
+			'Sports coupe', 'Monster truck', 'City bus', 'Hovercraft',
 		] );
 		assert.equal( await panel.locator( '.vehicle.picked b' ).textContent(), 'Go-kart' );
 		assert.match( await panel.locator( '.osm' ).textContent(), /Search © OpenStreetMap contributors/ );
