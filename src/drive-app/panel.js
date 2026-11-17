@@ -1,9 +1,11 @@
 import { searchPlaces } from './api.js';
+import { DEFAULT_RIDE } from './catalog.js';
 import { formatLatLon, parseLatLon, recentPlaces, SPOTS, storage } from './places.js';
 import { MOON, MOON_SPOTS, searchMoon } from './moon-places.js';
 import { openPass, proBadge } from './pass.js';
 import { onProChange } from './pro.js';
 import { getLevel, onLevelChange } from './progress.js';
+import { onFeatsChange } from './feats.js';
 import { rideLocked, rideUnlock, unlockChip } from './vehicles.js';
 import { drivers } from './online.js';
 
@@ -14,9 +16,6 @@ import { drivers } from './online.js';
 // places are the Moon's (moon-places.js), and who's driving now isn't shown.
 
 const VEHICLE_KEY = 'world-drive.vehicle';
-// The ride picked until one is chosen (and while the one chosen is locked): the pickup, or where
-// the site hasn't got it (its model is the library's, vehicles.js), the first ride, the kart.
-const DEFAULT_RIDE = 'pickup-truck';
 
 // What the panel says on each world: its tagline and the search's hint.
 const WORDS = {
@@ -29,7 +28,8 @@ const WORDS = {
 // 'moon'); main.js turns the globe and calls setWorld once it's there. onSearch( kind ): a search
 // made, for the play stats: 'earth' (the map asked), 'moon' (the Moon's places), 'coordinates'
 // (typed), and 'nothing' as well for one that found nothing; never what was typed.
-export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorld = () => {}, onSearch = () => {} } ) {
+// onAchievements(): open the Achievements grid (a locked construction ride's note links to it).
+export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorld = () => {}, onSearch = () => {}, onAchievements = () => {} } ) {
 
 	const $ = selector => root.querySelector( selector );
 	const form = $( '.search' );
@@ -185,6 +185,9 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorl
 	// --- vehicles ---
 
 	const saved = storage( () => localStorage.getItem( VEHICLE_KEY ) );
+	// The ride picked until one is chosen (and while the one chosen is locked): catalog.js's
+	// DEFAULT_RIDE, the pickup, or where the site hasn't got it (its model is the library's,
+	// vehicles.js), the first ride, the kart.
 	const fallback = vehicles.find( v => v.id === DEFAULT_RIDE ) ?? vehicles[ 0 ];
 	let picked = vehicles.find( v => v.id === saved ) ?? fallback;
 	const pickers = [];
@@ -198,6 +201,7 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorl
 	const shown = () => driven ?? usable();
 	onProChange( () => mark() );
 	onLevelChange( () => mark() );
+	onFeatsChange( () => mark() );
 
 	// A row of vehicle cards in `parent` (the panel's, and the pause menu's); onPick( vehicle ).
 	// Under it, what a locked level's ride needs, when it's picked.
@@ -207,6 +211,20 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorl
 		note.setAttribute( 'role', 'status' );
 		parent.after( note );
 		notes.push( note );
+		// A construction ride's picture only as its card scrolls near (the row scrolls sideways, and a
+		// browser's own lazy loading takes in a whole row): a new player can't drive them yet, so the
+		// first load doesn't fetch them.
+		const nearby = typeof IntersectionObserver === 'function' ? new IntersectionObserver( entries => {
+
+			for ( const { target, isIntersecting } of entries ) {
+
+				if ( ! isIntersecting ) continue;
+				target.src = target.dataset.src;
+				nearby.unobserve( target );
+
+			}
+
+		}, { root: parent, rootMargin: '0px 160px' } ) : null;
 
 		const cards = vehicles.map( vehicle => {
 
@@ -216,15 +234,21 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorl
 			button.setAttribute( 'role', 'radio' );
 			button.dataset.id = vehicle.id;
 			const picture = vehicle.thumb
-				? Object.assign( document.createElement( 'img' ), { src: vehicle.thumb, alt: '', loading: 'lazy' } )
+				? Object.assign( document.createElement( 'img' ), { alt: '', loading: 'lazy' } )
 				: vehicle.icon ? Object.assign( document.createElement( 'span' ), { className: 'ride-icon', innerHTML: vehicle.icon } ) : kartIcon();
+			if ( vehicle.thumb && vehicle.feat && nearby ) {
+
+				picture.dataset.src = vehicle.thumb;
+				nearby.observe( picture );
+
+			} else if ( vehicle.thumb ) picture.src = vehicle.thumb;
 			const name = Object.assign( document.createElement( 'b' ), { textContent: vehicle.name } );
 			const blurb = Object.assign( document.createElement( 'span' ), { textContent: `${ vehicle.blurb } · ${ vehicle.topSpeed } km/h` } );
 			button.append( picture, name, blurb );
 			// A pass ride wears the pass's badge; a level's, while it's locked, the level (and "or Pass").
 			const unlock = rideUnlock( vehicle );
 			if ( vehicle.pro ) button.append( proBadge() );
-			else if ( unlock ) button.append( Object.assign( document.createElement( 'span' ), { className: 'pro-badge level-chip', textContent: unlockChip( unlock ) } ) );
+			else if ( unlock ) button.append( Object.assign( document.createElement( 'span' ), { className: `pro-badge level-chip${ unlock.feat ? ' feat-chip' : '' }`, textContent: unlockChip( unlock ), title: unlock.unlock ?? '' } ) );
 			button.addEventListener( 'click', () => {
 
 				note.hidden = true;
@@ -232,6 +256,18 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorl
 
 					// Locked: what the pass is, or for a level's ride which level (and that the pass has it).
 					if ( vehicle.pro ) return openPass();
+					// A construction ride: the achievement that unlocks it (the pass doesn't), and the grid.
+					if ( unlock.feat ) {
+
+						const link = Object.assign( document.createElement( 'span' ), { className: 'pass-link' } );
+						link.append( Object.assign( document.createElement( 'button' ), { type: 'button', className: 'link', textContent: 'Achievements', onclick: () => onAchievements() } ), '.' );
+						note.replaceChildren( `${ unlock.unlock } the ${ vehicle.name.toLowerCase() }. See your `, link );
+						note.hidden = false;
+						note.scrollIntoView( { block: 'nearest' } );
+						return;
+
+					}
+
 					// The link and its full stop kept together, so the stop never wraps onto a line of its own.
 					const link = Object.assign( document.createElement( 'span' ), { className: 'pass-link' } );
 					link.append( Object.assign( document.createElement( 'button' ), { type: 'button', className: 'link', textContent: 'Supporter Pass', onclick: () => openPass() } ), '.' );

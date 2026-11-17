@@ -3,10 +3,15 @@ import {
 	CAPS, CLAIM_DAYS, DISCOVERIES_MAX, SUPPORTER_XP, TITLES, XP,
 	capReport, checkReport, dailyXp, dayBefore, dayOf, drivingXp, isEmptyReport, levelOf, rewardsBetween, titleOf, titleUnlocked,
 } from '../../src/drive-app/levels.js';
+import { addTallies, claimTallies, countsOf, crossed, hasTallies, readTallies } from '../../src/drive-app/achievement-rules.js';
+import { earnQuery, featList, featsOf } from './achievements.js';
 import { PERIODS, forgetBoards } from './boards.js';
 import { credentials, database } from './players.js';
 import { hasPass, supporterEmails } from './supporter.js';
 import { readVisit } from './visits.js';
+
+// A UTC day (ms).
+const DAY = 24 * 60 * 60 * 1000;
 
 // Levels (docs/world-drive.md, "Levels"; the rules are src/drive-app/levels.js, which the page
 // shares): each leaderboard player's XP, kept in D1 with the player, so it goes wherever their
@@ -50,6 +55,11 @@ export function standingOf( xp, title ) {
 // what the levels it climbed gave, title the one shown and chosen the one picked ('' for the
 // newest), streakDay and streak their last daily bonus's day and its days in a row, accepted the
 // places it took (new or already known: those over the cap aren't, and are for the next report).
+// earned: the achievements this report's counts reached (achievements.js); and with a report with
+// nothing in it whose body asks for them (feats: true, as the page does once as it starts), feats:
+// every achievement the player and their account have, the first time the visit asks (visits.listed:
+// a visit takes a robot check, and the Earth's are a few a day an address), so empty reports, which
+// only PROGRESS_POSTS holds, otherwise read no more than the player's own row.
 // A report with nothing in it changes nothing: it's how the page asks where it stands. A report
 // with the id of the last one taken is that one sent again (its answer never came): repeated, and
 // counted once.
@@ -67,7 +77,7 @@ export async function postProgress( { request, env, now } ) {
 	const player = await playerFor( db, env, id, secret );
 	if ( report.id && report.id === player.progress_id ) {
 
-		return json( { ...standing( player, player.total, player.xp, 0 ), streakDay: player.streak_day, streak: player.streak, accepted: { areas: [], spots: [] }, repeated: true } );
+		return json( { ...standing( player, player.total, player.xp, 0 ), streakDay: player.streak_day, streak: player.streak, accepted: { areas: [], spots: [] }, earned: [], repeated: true } );
 
 	}
 
@@ -95,6 +105,8 @@ export async function postProgress( { request, env, now } ) {
 		...taken.length ? [ db.prepare( 'SELECT place FROM discoveries WHERE player_id = ? AND place IN ( SELECT value FROM json_each( ? ) )' ).bind( id, JSON.stringify( taken ) ) ] : [],
 	] );
 	if ( bound.results[ 0 ]?.player_id !== id ) throw new HttpError( 403, 'Forbidden', { reason: 'visit' } );
+	// The whole list of achievements, asked for with nothing reported: once a visit.
+	const listed = body.feats === true && isEmptyReport( report ) ? await listOnce( db, visit.id, id ) : null;
 
 	const old = new Set( ( known?.results ?? [] ).map( row => row.place ) );
 	const fresh = taken.filter( place => ! old.has( place ) ).slice( 0, Math.max( 0, DISCOVERIES_MAX - player.discoveries ) );
@@ -114,20 +126,34 @@ export async function postProgress( { request, env, now } ) {
 
 	}
 
+	// Achievements (achievements.js): the report's km and trusted counts added to the player's, a
+	// day's worth of each at most (and the claim's to CLAIM_TALLY), and a day in a row if the Worker
+	// gave the day's bonus (the streak a claim brings is for XP alone); those the counts have just
+	// reached are written with the report (a party's or a challenge's are written where they're
+	// counted, so they're left as they were here). A player who reported before achievements starts
+	// from the streak they had then (fromBefore).
+	const kept = readTallies( player.tallies );
+	if ( ! claim && ! kept.day && player.streak_day ) fromBefore( kept, player, today );
+	const counted = claim ? claimTallies( { km: capped.km, feats: report.feats } ) : { km: capped.km, feats: report.feats };
+	const { tallies } = addTallies( kept, { ...counted, daily: !! daily }, today );
+	const feats = crossed( countsOf( readTallies( player.tallies ), { parties: player.parties } ), countsOf( tallies, { parties: player.parties } ) );
+
 	const multiplier = player.supporter ? SUPPORTER_XP : 1;
 	const earned = drivingXp( capped, seconds ) + ( fresh.length - spots ) * XP.area + spots * XP.spot + ( daily?.xp ?? 0 ) + earlier + capped.tricks;
 	const gained = Math.round( earned * multiplier );
-	const anything = gained > 0 || fresh.length > 0 || streakDay !== player.streak_day || [ 'km', 'air', 'drifts', 'pads', 'together' ].some( field => report[ field ] > 0 );
+	const anything = gained > 0 || fresh.length > 0 || streakDay !== player.streak_day || [ 'km', 'air', 'drifts', 'pads', 'together' ].some( field => report[ field ] > 0 ) || hasTallies( report.feats );
 	if ( anything ) {
 
 		// Claimed in one statement against the last report's time, so two at once can't both count
 		// the same minutes; the places only with it (changes(): that statement's, just before).
 		const [ update ] = await db.batch( [
-			db.prepare( `UPDATE players SET xp = xp + ?1, progress_at = ?2, last_seen_at = ?2, streak_day = ?3, streak = ?4, discoveries = discoveries + ?5, progress_id = ?6
+			db.prepare( `UPDATE players SET xp = xp + ?1, progress_at = ?2, last_seen_at = ?2, streak_day = ?3, streak = ?4, discoveries = discoveries + ?5, progress_id = ?6, tallies = ?9
 				WHERE id = ?7 AND progress_at = ?8` )
-				.bind( gained, now, streakDay, streak, fresh.length, report.id ?? '', id, player.progress_at ),
+				.bind( gained, now, streakDay, streak, fresh.length, report.id ?? '', id, player.progress_at, JSON.stringify( tallies ) ),
 			...fresh.length ? [ db.prepare( `INSERT INTO discoveries ( player_id, place, created_at ) SELECT ?1, value, ?2 FROM json_each( ?3 )
 				WHERE changes() = 1 ON CONFLICT DO NOTHING` ).bind( id, now, JSON.stringify( fresh ) ) ] : [],
+			// (Only with the report's own update: its time is the player's now.)
+			...feats.length ? [ earnQuery( db, id, feats, now, '( SELECT progress_at FROM players WHERE id = ?1 ) = ?2' ) ] : [],
 		] );
 		if ( ! update.meta.changes ) throw new HttpError( 409, 'Another report came in at once. Try again', { retryAfter: 1 }, { 'Retry-After': '1' } );
 
@@ -140,6 +166,10 @@ export async function postProgress( { request, env, now } ) {
 		streakDay: anything ? streakDay : player.streak_day,
 		streak: anything ? streak : player.streak,
 		accepted: { areas: capped.areas, spots: capped.spots },
+		// The achievements this report earned; and asked for with nothing reported, once a visit, all
+		// the player's and their account's.
+		earned: anything ? feats : [],
+		...listed ? { feats: listed } : {},
 	};
 	if ( daily && anything ) answer.daily = { streak: daily.streak, xp: Math.round( daily.xp * multiplier ) };
 	return json( answer );
@@ -168,15 +198,45 @@ export async function setTitle( { request, env, url, now } ) {
 
 }
 
+// A player who reported before achievements (their tallies never written): `kept` (readTallies')
+// starts from the streak they had then, but no longer than the Worker could have seen it, the days
+// from the player's first (created_at) to the streak's last. The streak in their row may have come
+// from their nickname's claim (the page's word, up to 10,000 days, taken for XP before achievements
+// as it still is), so only those days are believed: a player made two days ago has three in a row at
+// most, never the 7 or 30 days' achievements. Still going (its last day today or yesterday), it's
+// also the run the next day's bonus adds to; otherwise only the best is kept.
+function fromBefore( kept, player, today ) {
+
+	const number = day => Math.floor( Date.parse( `${ day }T00:00:00Z` ) / DAY );
+	const seen = number( player.streak_day ) - Math.floor( ( player.created_at ?? 0 ) / DAY ) + 1;
+	const best = Math.max( 0, Math.min( player.streak ?? 0, seen ) );
+	kept.streak = Math.max( kept.streak, best );
+	if ( best && ( player.streak_day === today || player.streak_day === dayBefore( today ) ) ) Object.assign( kept, { run: best, runDay: player.streak_day } );
+
+}
+
 // The player with this id and secret, with what levels need: their XP (and their account's best,
-// `total`), title, last report (its time and id), streak, discoveries and whether they're a
-// supporter. A 403 for an unknown id or the wrong secret, as authenticate says.
+// `total`), title, last report (its time and id), streak, discoveries, achievements' tallies and
+// parties, when they were made, and whether they're a supporter. A 403 for an unknown id or the
+// wrong secret, as authenticate says.
 async function playerFor( db, env, id, secret ) {
 
-	const player = await db.prepare( `SELECT p.xp, p.title, p.progress_at, p.progress_id, p.streak_day, p.streak, p.discoveries, ${ xpOf( 'p' ) } AS total,
+	const player = await db.prepare( `SELECT p.xp, p.title, p.progress_at, p.progress_id, p.streak_day, p.streak, p.discoveries, p.tallies, p.parties, p.created_at, ${ xpOf( 'p' ) } AS total,
 		${ hasPass( 'p.account_id', '?3' ) } AS supporter FROM players p WHERE p.id = ?1 AND p.secret_hash = ?2` ).bind( id, await sha256Hex( secret ), supporterEmails( env ) ).first();
 	if ( ! player ) throw new HttpError( 403, 'Forbidden', { reason: 'player' } );
 	return player;
+
+}
+
+// Every achievement player `id` and their account have (achievements.js's featsOf), as a list, if
+// visit `visit` (theirs) hasn't had it yet; null if it has.
+async function listOnce( db, visit, id ) {
+
+	const [ , row ] = await db.batch( [
+		db.prepare( 'UPDATE visits SET listed = 1 WHERE id = ?1 AND player_id = ?2 AND listed = 0' ).bind( visit, id ),
+		db.prepare( `SELECT ${ featsOf( 'p' ) } AS feats FROM players p WHERE p.id = ?1 AND changes() = 1` ).bind( id ),
+	] );
+	return row.results.length ? featList( row.results[ 0 ].feats ) : null;
 
 }
 

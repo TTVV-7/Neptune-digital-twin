@@ -838,6 +838,24 @@ file served free (`src/drive-app/ghost-rules.js`, `challenge-ghost.js`, migratio
 `0007_challenge_ghosts.sql`; see
 [Ghosts and challenge a friend](docs/world-drive.md#ghosts-and-challenge-a-friend)).
 
+**Achievements and construction rides**: 25 badges (first drive; 10, 100 and 1,000 km; drives on the
+Moon; challenges finished and placed in, top 10, top 3 and first, on any board and on a daily,
+weekly or monthly one; parties with others; Garage looks changed and rides tried; 3, 7 and 30 days in
+a row), in a grid from the profile card with how far toward each ("34 / 100 km") and when it was
+earned, a toast as one comes ("Achievement: 100 km driven"), never during a challenge's run. Eight
+construction rides from the library come with them, driven at their real size and slow and heavy
+(the bulldozer and the skid steer turning on the spot): a skid steer for 10 km, a telehandler for
+three days in a row, a concrete mixer for a first challenge, a road roller for a party, a wheel loader
+for 100 km, a dump truck for ten challenges, a bulldozer for a top 10 and the vac truck for a weekly
+podium ("Unlocked: Vac truck", with the Garage a tap away), locked in the pickers and the Garage
+until then with what unlocks them. The Worker counts challenge results, placings (from the boards'
+final ranks), parties and days in a row itself; how far you drive, Moon drives, looks and rides
+tried come with the progress reports, a day's worth each at most; it keeps what's earned with the
+nickname (an account has what any of its nicknames earned) and checks a construction ride wherever
+it shows to others (boards, challenge times and ghosts, rooms). The owner's page counts how many
+players have each (`src/drive-app/achievement-rules.js`, `worker/drive/achievements.js`, migration
+`0009_achievements.sql`; see [Achievements and rewards](docs/world-drive.md#achievements-and-rewards)).
+
 **The Moon**: **Moon** at the top of the globe's panel turns the globe to the Moon, made in the page
 rather than streamed (`src/drive-app/moon.js`): its shapes are NASA's (LRO's laser altimeter, every
 quarter degree, `drive/public/moon/height.bin`), its colours LRO's camera's mosaic

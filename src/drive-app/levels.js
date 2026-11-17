@@ -17,6 +17,7 @@
 // with levels too, from the golf cart at 5 to the formula racer at 40 (and with the pass at once).
 // The pass's first nine rides and its two showpiece cars are never on it.
 
+import { checkTallies, hasTallies } from './achievement-rules.js';
 import { cellOf, parseRoom } from './live-protocol.js';
 import { SPOTS } from './places.js';
 
@@ -334,7 +335,9 @@ export function badgeOf( level ) {
 // first driven, and whether it's the day's first drive. Two more, that emptyReport leaves out: id,
 // the page's own for the report (REPORT_ID), so one sent again whose answer never came is counted
 // once; and only in a claim, days: { xp, streak, day }, the days' bonuses counted in this browser
-// before the nickname (their XP together, and the streak they made, as of `day`).
+// before the nickname (their XP together, and the streak they made, as of `day`). And feats, when
+// there's anything in it: the achievements' trusted counts since the last report (Moon drives,
+// Garage changes, rides tried: achievement-rules.js's checkTallies).
 export const REPORT_FIELDS = [ 'km', 'air', 'drifts', 'pads', 'together', 'tricks' ];
 export const REPORT_ID = /^[\w-]{8,40}$/;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -398,6 +401,14 @@ export function checkReport( raw ) {
 
 	}
 
+	if ( raw.feats !== undefined ) {
+
+		const feats = checkTallies( raw.feats );
+		if ( ! feats ) return null;
+		if ( hasTallies( feats ) ) report.feats = feats;
+
+	}
+
 	return report;
 
 }
@@ -405,7 +416,7 @@ export function checkReport( raw ) {
 // Whether a report has nothing in it (how the page asks where it stands).
 export function isEmptyReport( report ) {
 
-	return ! report.daily && ! report.areas.length && ! report.spots.length && ! ( report.days?.xp > 0 ) && REPORT_FIELDS.every( field => ! ( report[ field ] > 0 ) );
+	return ! report.daily && ! report.areas.length && ! report.spots.length && ! ( report.days?.xp > 0 ) && ! hasTallies( report.feats ) && REPORT_FIELDS.every( field => ! ( report[ field ] > 0 ) );
 
 }
 

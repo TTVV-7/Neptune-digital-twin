@@ -25,6 +25,8 @@ import { onProChange } from './pro.js';
 import { applyLook } from './paint.js';
 import { liftGlow } from './underglow.js';
 import { createProgress, onLevelChange } from './progress.js';
+import { ACHIEVEMENTS, ridesOf } from './achievement-rules.js';
+import { onFeatsChange } from './feats.js';
 import { setUpProfile } from './profile.js';
 import { formatLatLon, LINK_PARAMS, linkedPlace, rememberPlace, worldOf } from './places.js';
 import { createLive, flagsOf, velocityOf } from './live.js';
@@ -490,6 +492,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		onWorld: world => setWorld( world ),
 		// (Its kind only, for the play stats: never what was typed.)
 		onSearch: kind => stats.add( 'search', kind ),
+		onAchievements: () => openAchievements(),
 	} );
 	panel.vehiclePicker( $( 'pause' ).querySelector( '.vehicles' ), vehicle => swapVehicle( vehicle ) );
 	globe.onPick = place => {
@@ -504,7 +507,13 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		vehicles, panel, models, current: () => state.entry && { entry: state.entry, vehicle: state.vehicle },
 		onLook: () => live?.setRide( state.vehicle.id, lookOf( state.vehicle ) ),
 		onOpen: () => stats.add( 'garage_open', 'all' ),
-		onEdit: part => stats.add( 'garage_edit', part ),
+		onEdit: ( part, changed ) => {
+
+			stats.add( 'garage_edit', part );
+			// A look changed (not the same choice picked again), for the achievements (progress.js).
+			if ( changed ) progress.look();
+
+		},
 		// Its ▶ Boost as driving's: no flare for a visitor asking for less motion, fewer sparks on a phone.
 		effects: driver.effects,
 	} );
@@ -550,6 +559,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 			profile?.levelUp( event );
 
 		},
+		onAchievement: event => notifyAchievements( event ),
 	} );
 	profile = setUpProfile( {
 		progress,
@@ -570,6 +580,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 		},
 		onTitle: () => live?.rehello(),
+		onAchievements: () => openAchievements(),
 	} );
 	// The look on the ride being driven, with what's unlocked now (a level can lock nothing, but a
 	// look chosen on a test page waits for its level).
@@ -580,6 +591,104 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		live?.setRide( state.vehicle.id, lookOf( state.vehicle ) );
 
 	} );
+	// A construction ride just unlocked: the room hears it at a fresh hello (it looks the player's
+	// achievements up then, and shows a ride they don't have as the default one), as for a new title.
+	onFeatsChange( ( _, added ) => {
+
+		if ( added.some( id => ridesOf( id ).length ) ) live?.rehello();
+
+	} );
+	// Achievements (achievement-rules.js; the grid is achievements.js, its own chunk, loaded the first
+	// time it's opened): a toast as one is earned ("Achievement: 100 km driven"), and for one that
+	// unlocks a construction ride, "Unlocked: Vac truck" with the Garage a tap away, as a level-up's
+	// ride is. Never over a challenge's countdown or run: they wait for its end, one after another.
+	const notices = [];
+	let noticeUntil = 0;
+	function notifyAchievements( { ids, local } ) {
+
+		for ( const id of ids ) {
+
+			const feat = ACHIEVEMENTS.find( a => a.id === id );
+			if ( ! feat ) continue;
+			notices.push( { text: `Achievement: ${ feat.name }${ local ? ' · pick a nickname to keep it' : '' }`, ms: 4500, action: local && worker && visit ? { label: 'Pick one', onClick: () => {
+
+				pauseDrive();
+				board.open();
+
+			} } : null } );
+			if ( local ) continue;
+			for ( const ride of ridesOf( id ) ) {
+
+				const vehicle = vehicles.find( v => v.id === ride );
+				if ( vehicle ) notices.push( { text: `Unlocked: ${ vehicle.name }`, ms: 7000, action: { label: 'Garage', onClick: () => {
+
+					pauseDrive();
+					garage.open( vehicle );
+
+				} } } );
+
+			}
+
+		}
+
+		showNotices();
+
+	}
+
+	let noticeShown = null;
+	function showNotices() {
+
+		const run = challenges?.run;
+		const busy = !! run && ( run.phase === 'countdown' || run.phase === 'racing' );
+		if ( ! notices.length || performance.now() < noticeUntil ) return;
+		if ( busy ) return void setTimeout( showNotices, 1000 );
+		// Another toast up (the challenge nudge, a level-up's, a problem): after it, not over it, as the
+		// nudge waits for others.
+		const toast = $( 'toast' );
+		if ( ! toast.hidden && toast.textContent !== noticeShown ) return void setTimeout( showNotices, 1000 );
+		// (One with a button stays its whole time, for the tap; the others four seconds before the next.)
+		const { text, ms, action } = notices.shift();
+		screens.toast( text, ms, action );
+		noticeShown = toast.textContent;
+		const hold = action ? ms : Math.min( ms, 4000 );
+		noticeUntil = performance.now() + hold;
+		setTimeout( showNotices, hold + 50 );
+
+	}
+
+	// The grid of achievements (achievements.js): its chunk the first time it's opened.
+	let achievementsLoading = null;
+	async function openAchievements() {
+
+		achievementsLoading ??= import( './achievements.js' );
+		try {
+
+			const module = await achievementsLoading;
+			module.openAchievements( {
+				progress, vehicles, worker: !! worker, player: () => board.player,
+				onRide: vehicle => {
+
+					pauseDrive();
+					garage.open( vehicle );
+
+				},
+				onNickname: () => {
+
+					pauseDrive();
+					board.open();
+
+				},
+			} );
+
+		} catch ( err ) {
+
+			achievementsLoading = null;
+			screens.toast( `The achievements didn't load (${ err.message }). Try again in a moment.`, 6000 );
+
+		}
+
+	}
+
 	// Linked to an account (whose players' XP counts together), or the pass bought (+50% XP): where
 	// the player stands now.
 	onLinked( () => progress.refresh() );
@@ -621,6 +730,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 			// what a ghost to race is drawn with.
 			pivot: () => state.entry?.pivot ?? null, look: () => lookOf( state.vehicle ), ghostModels: ghostShapes,
 			driveUi: $( 'drive-ui' ), pauseCard: $( 'pause' ),
+			// A time posted: where the player stands (a first finish may be an achievement).
+			onPosted: () => progress.refresh(),
 		} ) );
 		try {
 
@@ -1225,7 +1336,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		// (The go-kart, if the ride picked didn't load: the pickers show what's driven.)
 		panel.setDriven( vehicle );
 		screens.hideLoading();
-		progress.dropped();
+		progress.dropped( { moon: onMoon() } );
 		drive();
 		stats.add( 'dropin', onMoon() ? MOON : METRICS.dropin.key( state.place?.id ) ?? 'other' );
 		// And where, to about a kilometre (the cell it's in, never where in it), for the owner's map
@@ -1794,6 +1905,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 			// (On the Moon, nobody's driving with you, and it's none of the Earth's areas or spots.)
 			together: ! onMoon() && !! live && [ ...live.players.values() ].some( p => ! p.away ),
 			where: onMoon() ? nowhere : carWhere,
+			vehicle: state.vehicle?.id ?? null,
 		};
 
 	}
@@ -2259,7 +2371,13 @@ export async function start( { key, left = null, visit: token = null, worker = t
 			return challenges;
 
 		},
-		openChallenges,
+		openChallenges, openAchievements,
+		// The achievements' notices waiting to be shown (a challenge's run holds them).
+		get notices() {
+
+			return notices.map( notice => notice.text );
+
+		},
 		moon, setWorld,
 		dropIn, toGlobe, resume, recentre, waterOver, watchSea, moveCar, besideOf, goBeside,
 		where: () => formatLatLon( carto.lat * MathUtils.RAD2DEG, carto.lon * MathUtils.RAD2DEG ),

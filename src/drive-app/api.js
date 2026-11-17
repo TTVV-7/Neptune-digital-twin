@@ -230,11 +230,12 @@ export function getBoard( { period, place = null, id = null } ) {
 // As the leaderboard's: none of these throw.
 
 // What was driven since the last report (levels.js's REPORT), with this visit's token: body { xp,
-// level, gained, unlocked, supporter, title, accepted: { areas, spots }, daily? }. keepalive: as
-// the page goes away (pagehide), so the browser sends it all the same.
-export function postProgress( { id, secret }, visit, report, { keepalive = false } = {} ) {
+// level, gained, unlocked, supporter, title, accepted: { areas, spots }, daily?, earned, feats? }. keepalive: as
+// the page goes away (pagehide), so the browser sends it all the same. feats: with an empty report,
+// ask for every achievement the player has (the answer's feats, if the Worker has a turn for it).
+export function postProgress( { id, secret }, visit, report, { keepalive = false, feats = false } = {} ) {
 
-	return send( 'POST', '/api/progress', { id, secret, visit, report }, { keepalive } );
+	return send( 'POST', '/api/progress', { id, secret, visit, report, ...feats ? { feats: true } : {} }, { keepalive } );
 
 }
 
@@ -243,6 +244,17 @@ export function postProgress( { id, secret }, visit, report, { keepalive = false
 export function postTitle( { id, secret }, title ) {
 
 	return send( 'POST', '/api/player/title', { id, secret, title } );
+
+}
+
+// --- achievements (worker/drive/achievements.js) ---
+// As the leaderboard's: none of these throw.
+
+// This player's achievements, with their account's: body { achievements: [ { id, at } ], counts:
+// { km, moon, looks, rides, streak, parties, challenges }, rides: [ construction rides unlocked ] }.
+export function postAchievements( { id, secret } ) {
+
+	return send( 'POST', '/api/achievements', { id, secret } );
 
 }
 

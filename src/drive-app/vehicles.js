@@ -2,19 +2,24 @@ import { itemConfig } from '../library.js';
 import { specFor } from '../drive.js';
 import { makeKart } from '../kart.js';
 import { loadCars } from './cars.js';
-import { LIBRARY_VEHICLES } from './catalog.js';
-import { rideLocked as lockedFor, rideUnlock } from './levels.js';
+import { RIDE_FEATS } from './achievement-rules.js';
+import { LIBRARY_VEHICLES, WORKS_RIDES } from './catalog.js';
+import { hasFeat } from './feats.js';
+import { rideLocked as lockedFor, rideUnlock as levelUnlock } from './levels.js';
 import { applyLook, fxOf, lookFor } from './paint.js';
 import { isPro } from './pro.js';
 import { getLevel } from './progress.js';
 import { PRO_RIDES } from './rides/index.js';
+import { WORKS } from './works.js';
 
 // What you can drive: the go-kart, built in code (kart.js), a few trucks from the library, loaded
 // as models.js loads anything placed, so drive.js drives them as it does in the construction app,
 // then World Drive's own cars (cars.js: models from Sketchfab whose wheels turn, one free, six with
-// levels or the pass and the rest with the pass), and after them the Supporter Pass's rides
-// (rides/), built in code. What needs the pass (`pro`, see pro.js) or a level (levels.js's ride
-// rewards) is locked without it: rideLocked. Each wears its look from the Garage (paint.js).
+// levels or the pass and the rest with the pass), the construction rides, and after them the
+// Supporter Pass's rides (rides/), built in code. What needs the pass (`pro`, see pro.js) or a level
+// (levels.js's ride rewards) is locked without it: rideLocked. And the construction rides
+// (works.js), library models too, each locked until its achievement (achievement-rules.js's
+// RIDE_FEATS, feats.js), which the pass doesn't give. Each wears its look from the Garage (paint.js).
 
 const KART = {
 	id: 'go-kart',
@@ -57,8 +62,23 @@ export async function loadVehicles() {
 		topSpeed: specFor( item ).topSpeed,
 		item,
 	} ) );
+	// The construction rides: from the library, with World Drive's name, word and tuning for each
+	// (works.js), their picture drawn as the cars' are (scripts/drive-car-thumbs.mjs --works), and the
+	// achievement each needs.
+	const works = WORKS_RIDES.map( id => [ WORKS.find( work => work.id === id ), library.find( item => item.id === id ) ] ).filter( ( [ work, item ] ) => work && item ).map( ( [ work, item ] ) => ( {
+		id: work.id,
+		name: work.name,
+		blurb: work.blurb,
+		thumb: new URL( `works/${ work.id }.webp`, document.baseURI ).href,
+		credit: item.source ?? null,
+		topSpeed: work.drive.topSpeed,
+		feat: RIDE_FEATS[ work.id ].feat,
+		item: { ...item, drive: work.drive },
+	} ) );
 	const built = ride => ( { ...ride, thumb: null, credit: null, topSpeed: ride.drive.topSpeed, item: ride } );
-	return [ built( KART ), ...trucks, ...await cars, ...PRO_RIDES.map( built ) ];
+	// (The construction rides after the cars, which a new player can drive or earn by level, so the
+	// pickers start with those and the locked ones' pictures load as they're scrolled to.)
+	return [ built( KART ), ...trucks, ...await cars, ...works, ...PRO_RIDES.map( built ) ];
 
 }
 
@@ -102,16 +122,25 @@ export function access() {
 // otherwise.
 export function rideLocked( vehicle, who = access() ) {
 
+	if ( vehicle?.feat ) return ! hasFeat( vehicle.feat );
 	return lockedFor( vehicle, who );
 
 }
 
-export { rideUnlock };
+// What unlocks a ride (levels.js's rideUnlock), or for a construction ride { feat, chip, unlock,
+// level: null, pass: false }: its achievement, its chip and its sentence ("Drive 10 km to unlock").
+export function rideUnlock( vehicle ) {
+
+	if ( vehicle?.feat ) return { ...RIDE_FEATS[ vehicle.id ], level: null, pass: false };
+	return levelUnlock( vehicle );
+
+}
 
 // What a locked ride's chip says: "Lv 15 · or Pass", or for the pass's alone "Pass" (small: the
-// level alone, "Lv 15").
-export function unlockChip( { level, pass }, small = false ) {
+// level alone, "Lv 15"); a construction ride's, its achievement's ("10 km").
+export function unlockChip( { level, pass, feat, chip }, small = false ) {
 
+	if ( feat ) return `🔒 ${ chip }`;
 	if ( level === null ) return 'Pass';
 	return small || ! pass ? `Lv ${ level }` : `Lv ${ level } · or Pass`;
 

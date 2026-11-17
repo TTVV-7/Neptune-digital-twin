@@ -3,6 +3,8 @@ import {
 	DAILY_KM, DISCOVERIES_MAX, DISCOVER_KM, REPORT_PLACES, SUPPORTER_XP, XP,
 	areaOf, dailyXp, dayBefore, dayOf, drivingXp, emptyReport, isEmptyReport as isEmpty, levelOf, progressOf, rewardsBetween, spotAt, titleOf, trickXp,
 } from './levels.js';
+import { ACHIEVEMENTS, CLAIM_TALLY, TALLY_KM, mergeTallies, reached } from './achievement-rules.js';
+import { setFeats } from './feats.js';
 import { storage } from './places.js';
 import { isPro } from './pro.js';
 
@@ -21,6 +23,14 @@ import { isPro } from './pro.js';
 // Worker's next answer puts it right. Each report has an id and is kept until its answer comes, so
 // one whose answer never came (the page went, or the connection dropped) goes again as it was and
 // the Worker counts it once.
+//
+// Achievements (achievement-rules.js) ride on the same reports: the counts only the page can tell
+// (drives on the Moon, Garage changes, rides tried) go as each report's `feats`, and its km are the
+// report's own. The answers say which the player has earned (feats.js keeps them, for the
+// construction rides' locks), and those that are new are told (onAchievement), once each: the ones
+// a report just earned, and any the player has that this browser hadn't seen yet (a challenge's
+// places, written as its board ended). Before a nickname nothing's earned, but what's been driven
+// counts toward them as it does toward XP, and comes with the claim.
 
 const KEY = 'world-drive.progress';
 // Report every REPORT_EVERY ms while driving (and as the drive pauses, ends or the page goes).
@@ -85,8 +95,9 @@ function setLevel( next ) {
 // pad, or once it has run out); player(): the leaderboard player, { id, secret, name } or null;
 // onChange(): what's shown has changed (XP, level, title); onPop( { text, kind } ): something to
 // say over the drive; onLevelUp( { level, from, rewards, nickname } ): a level reached (nickname:
-// there's no player to keep it with yet, and one could be picked now).
-export function createProgress( { worker, visit = () => null, player = () => null, onChange = () => {}, onPop = () => {}, onLevelUp = () => {} } ) {
+// there's no player to keep it with yet, and one could be picked now); onAchievement( { ids, local } ):
+// achievements earned (local: reached in this browser before a nickname, not yet kept).
+export function createProgress( { worker, visit = () => null, player = () => null, onChange = () => {}, onPop = () => {}, onLevelUp = () => {}, onAchievement = () => {} } ) {
 
 	const saved = load();
 	// What the Worker last said, for the player it's for: { id, xp (the account's best), own (the
@@ -106,6 +117,17 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 	// The level celebrated last, and for whom; whether the nickname has been asked for.
 	let seen = saved.seen;
 	let asked = saved.asked;
+	// The achievements heard of, and for whom: { id, list (the Worker's word for that player, all that
+	// unlocks their rides as the page starts), told (those told before the nickname that the Worker
+	// hasn't said yet: not told again as it does, never counted as earned) }, or before a nickname
+	// { id: 'local', list (those told) }. And the rides this browser has said it tried, for whom
+	// ({ id, list }).
+	let heard = saved.heard;
+	let tried = saved.tried;
+	// Whose achievements feats.js holds ('' for none), and the player whose whole list has been asked
+	// for this page (once each: refresh).
+	let featsOf = '';
+	let listedFor = '';
 
 	let sending = false;
 	// Where the player stands was asked while a report was on its way: asked again after it.
@@ -125,6 +147,12 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 	let popped = 0;
 	let shown = 0;
 	let told = emptyReport();
+	// For achievements: whether this drive is on the Moon and has been counted as a Moon drive, and the
+	// ride being driven and how far it has gone in it.
+	let moonDrive = false;
+	let moonCounted = false;
+	let ride = null;
+	let rideKm = 0;
 	// The trick run going on: its ride (entry), how long it's lasted and the XP it's had.
 	let run = { entry: null, seconds: 0, xp: 0 };
 
@@ -204,6 +232,7 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 	// kept (unless `persist` is false: each frame of driving).
 	function changed( { persist = true } = {} ) {
 
+		syncFeats();
 		const now = levelOf( xp() );
 		setLevel( now );
 		const id = who() || 'local';
@@ -219,6 +248,7 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 		}
 
 		if ( persist ) save();
+		localAchievements();
 		onChange();
 
 	}
@@ -227,13 +257,31 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 
 	// Each frame while driving: dt (s), speed (m/s, as driven, on the ground or flying), air (in
 	// the air off a jump), boost (the drift boost on, drive.js's, or null), together (others are
-	// driving in this room), where(): { lat, lon }, where the car is (degrees), asked once a second.
-	function drive( dt, { speed, air, boost: drifted, together, where } ) {
+	// driving in this room), where(): { lat, lon }, where the car is (degrees), asked once a second;
+	// vehicle: the ride's id (for the rides tried).
+	function drive( dt, { speed, air, boost: drifted, together, where, vehicle = null } ) {
 
 		const km = Math.min( speed, 200 ) * dt / 1000;
 		unsent.km += km;
 		areaKm += km;
 		dropKm += km;
+		if ( vehicle !== ride ) [ ride, rideKm ] = [ vehicle, 0 ];
+		rideKm += km;
+		// A Moon drive, and a ride tried, once it's driven TALLY_KM.
+		if ( moonDrive && ! moonCounted && dropKm >= TALLY_KM ) {
+
+			moonCounted = true;
+			tally().moon ++;
+
+		}
+
+		if ( ride && rideKm >= TALLY_KM && ! hasTried( ride ) ) {
+
+			tally().rides.push( ride );
+			tried = { id: who(), list: [ ...tried.id === who() ? tried.list : [], ride ] };
+
+		}
+
 		if ( day.day !== today() ) day = { day: today(), km: 0 };
 		day.km += km;
 		if ( air ) unsent.air += dt;
@@ -376,13 +424,129 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 
 	}
 
-	// A new drive (a drop-in): its own distance for spots.
-	function dropped() {
+	// A new drive (a drop-in): its own distance for spots, and on the Moon (moon) a Moon drive once
+	// it's driven TALLY_KM.
+	function dropped( { moon = false } = {} ) {
 
+		moonDrive = moon;
+		moonCounted = false;
 		dropKm = 0;
 		area = null;
 		areaKm = 0;
 		boost = null;
+
+	}
+
+	// A Garage choice changed (garage.js's onEdit): one more for the achievements' looks.
+	function look() {
+
+		tally().looks ++;
+		save();
+
+	}
+
+	// The achievements' counts since the last report, made as they're first needed.
+	function tally() {
+
+		unsent.feats ??= { moon: 0, looks: 0, rides: [] };
+		return unsent.feats;
+
+	}
+
+	function hasTried( id ) {
+
+		return ( tried.id === who() && tried.list.includes( id ) ) || unsent.feats?.rides?.includes( id ) || ( flying?.player === who() && flying.sent.feats?.rides?.includes( id ) );
+
+	}
+
+	// --- achievements: what's earned, and what's told ---
+
+	// The counts this browser has toward each achievement beyond what the Worker last said: what's
+	// been driven since, and before a nickname, everything driven here ({ km, moon, looks, rides,
+	// streak }, as achievement-rules.js's countsOf has them).
+	function pending() {
+
+		const parts = [ unsent, ...flying?.player === who() ? [ flying.before ] : [], ...who() ? [] : [ local.totals ] ];
+		const feats = parts.reduce( ( sum, part ) => mergeTallies( sum, part.feats ) ?? sum, undefined );
+		return {
+			km: parts.reduce( ( sum, part ) => sum + ( part.km || 0 ), 0 ),
+			moon: feats?.moon ?? 0, looks: feats?.looks ?? 0, rides: feats?.rides?.length ?? 0,
+			streak: who() ? 0 : local.streak ?? 0,
+		};
+
+	}
+
+	// What the Worker says the player has earned: `all` (an empty report's answer: every one, theirs
+	// and their account's) or `earned` (one a report just earned). Those new to this browser are told,
+	// except the first time it hears of this player (they were earned elsewhere, before).
+	function earned( { all = null, earned: fresh = [] } ) {
+
+		const id = who();
+		const first = heard.id !== id;
+		// What's kept as earned is only ever the Worker's word: the whole list, or this report's added
+		// to what it said before for this player. Those told before the nickname, as this browser
+		// reached them (`told`), aren't told again as the claim earns them, but they're never taken as
+		// earned until the Worker says so: the whole list settles them (those it hasn't are told when
+		// they're earned).
+		const before = first ? [] : heard.list;
+		const told = new Set( first ? heard.id === 'local' ? heard.list : [] : heard.told ?? [] );
+		const had = new Set( [ ...before, ...told ] );
+		const known = [ ...new Set( [ ...all ?? before, ...fresh ] ) ];
+		// The whole list (an empty report's), or this report's added to what's held for this player; the
+		// first heard of a player replaces another's.
+		setFeats( all ? known : fresh, { add: ! all && featsOf === id } );
+		featsOf = id;
+		const news = ( first ? fresh : known ).filter( feat => ! had.has( feat ) && ACHIEVEMENTS.some( a => a.id === feat ) );
+		heard = { id, list: known, told: all ? [] : [ ...told ].filter( feat => ! known.includes( feat ) ) };
+		if ( news.length ) tell( { ids: order( news ), local: false } );
+
+	}
+
+	// feats.js's achievements, the player's: as this browser last heard them (so the rides they've
+	// earned are unlocked as the page starts, before the Worker answers, as a level's car is by the
+	// level kept here; the Worker checks them wherever a ride shows to others), and none for no player
+	// or another one (a name removed, or another picked), until the Worker says.
+	function syncFeats() {
+
+		const id = who();
+		if ( featsOf === id ) return;
+		featsOf = id;
+		setFeats( id && heard.id === id ? heard.list.filter( feat => ACHIEVEMENTS.some( a => a.id === feat ) ) : [] );
+
+	}
+
+	// Before a nickname: the achievements this browser's counts have reached that a nickname's claim
+	// will earn, told once each with "pick a nickname to keep it" (none is kept until there's a
+	// nickname to keep it with), where a nickname could be picked (a Worker and a visit: not the test
+	// pad, nor the dev server alone, where there's nothing to keep them). Only what the claim carries
+	// (CLAIM_TALLY of each trusted count, and no days in a row: the Worker counts only those it sees),
+	// so nothing is promised that the nickname won't keep; the rest are told as the Worker earns them.
+	function localAchievements() {
+
+		if ( who() || ! worker || ! visit() ) return;
+		const had = heard.id === 'local' ? new Set( heard.list ) : new Set();
+		const counts = pending();
+		const now = reached( { km: Math.min( counts.km, CLAIM_TALLY.km ), moon: Math.min( counts.moon, CLAIM_TALLY.moon ), looks: Math.min( counts.looks, CLAIM_TALLY.looks ), rides: Math.min( counts.rides, CLAIM_TALLY.rides ), streak: 0 } );
+		const news = now.filter( feat => ! had.has( feat ) );
+		if ( ! news.length ) return;
+		// (Kept at once, so a reload doesn't tell them again.)
+		heard = { id: 'local', list: [ ...had, ...news ] };
+		save();
+		tell( { ids: order( news ), local: true } );
+
+	}
+
+	function tell( event ) {
+
+		try {
+
+			onAchievement( event );
+
+		} catch ( err ) {
+
+			console.warn( 'Achievements:', err?.message );
+
+		}
 
 	}
 
@@ -393,6 +557,7 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 	async function report( { keepalive = false } = {} ) {
 
 		reportedAt = Date.now();
+		syncFeats();
 		const me = player();
 		if ( ! me ) {
 
@@ -464,7 +629,9 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 			unsent.areas.push( ...areas.filter( place => ! unsent.areas.includes( place ) ) );
 			unsent.spots.push( ...was.sent.spots.filter( id => ! accepted.spots?.includes( id ) && ! unsent.spots.includes( id ) ) );
 			retryAt = 0;
-			if ( askAgain ) {
+			// Asked where they stand while it was on its way, or not yet asked for their whole list of
+			// achievements this page (a report sent as it started, in refresh's place).
+			if ( askAgain || listedFor !== me.id ) {
 
 				askAgain = false;
 				refresh();
@@ -478,7 +645,15 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 			// won't take). A visit run out reports no more; nor does a player that's gone (the owner
 			// removed it: the leaderboard asks for a new name as it next posts).
 			if ( answer.status === 403 && answer.body.reason === 'visit' ) ended = true;
-			else if ( answer.status === 403 ) gone = me.id;
+			else if ( answer.status === 403 ) {
+
+				// (Nor are its achievements this page's, or this browser's, any longer.)
+				gone = me.id;
+				heard = { id: '', list: [], told: [] };
+				featsOf = me.id;
+				setFeats( [] );
+
+			}
 			if ( answer.status !== 0 ) {
 
 				flying = null;
@@ -515,6 +690,7 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 	// The Worker's word on where the player stands.
 	function took( body ) {
 
+		earned( { all: Array.isArray( body.feats ) ? body.feats : null, earned: Array.isArray( body.earned ) ? body.earned : [] } );
 		const me = player();
 		const was = server?.id === me.id ? server : { title: '', streakDay: '', streak: 0 };
 		server = {
@@ -558,14 +734,20 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 
 		}
 
+		syncFeats();
 		if ( hasLocal() || flying ) return report();
-		const answer = await postProgress( me, token, emptyReport() );
+		// The whole list of achievements once a page for each player (the Worker gives it once a visit);
+		// after that, an empty report's answer is enough.
+		const list = listedFor !== me.id;
+		listedFor = me.id;
+		const answer = await postProgress( me, token, emptyReport(), { feats: list } );
 		if ( answer.ok && Number.isFinite( answer.body.xp ) && player()?.id === me.id ) {
 
 			took( answer.body );
 			changed();
 
-		} else if ( answer.status === 403 && answer.body.reason === 'visit' ) ended = true;
+		} else if ( list && ! answer.ok && player()?.id === me.id ) listedFor = '';
+		if ( answer.status === 403 && answer.body.reason === 'visit' ) ended = true;
 
 	}
 
@@ -585,13 +767,14 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 
 	function save() {
 
-		storage( () => localStorage.setItem( KEY, JSON.stringify( { server, local, known, unsent, flying, seen, asked } ) ) );
+		storage( () => localStorage.setItem( KEY, JSON.stringify( { server, local, known, unsent, flying, seen, asked, heard, tried } ) ) );
 
 	}
 
 	// The page going away: what's been driven goes with it (fetch with keepalive gets there after
 	// the page has gone; sendBeacon can't say it's JSON), and is kept here as on its way, so it goes
 	// again next time if it didn't get there.
+	syncFeats();
 	window.addEventListener( 'pagehide', () => {
 
 		if ( player() ) report( { keepalive: true } );
@@ -612,6 +795,7 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 		pad,
 		landed,
 		dropped,
+		look,
 		report,
 		refresh,
 		setTitle,
@@ -659,11 +843,25 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 			return flying;
 
 		},
+		// The achievements' counts not yet the Worker's (pending, above).
+		get pending() {
+
+			return pending();
+
+		},
 	};
 
 }
 
 // --- kept in this browser ----------------------------------------------------------------------
+
+// Achievements' ids in the list's order (achievement-rules.js).
+function order( ids ) {
+
+	const at = id => ACHIEVEMENTS.findIndex( a => a.id === id );
+	return [ ...ids ].sort( ( a, b ) => at( a ) - at( b ) );
+
+}
 
 function freshLocal() {
 
@@ -696,7 +894,9 @@ function load() {
 	const flying = way && typeof way.id === 'string' && typeof way.player === 'string' && way.sent?.id === way.id && Array.isArray( way.sent.areas ) && Array.isArray( way.sent.spots )
 		? { ...way, before: report( way.before ), later: Array.isArray( way.later ) ? way.later : [], claim: way.claim === true } : null;
 	if ( flying ) for ( const list of [ 'areas', 'spots' ] ) if ( ! Array.isArray( flying.before[ list ] ) ) flying.before[ list ] = [];
-	return { server, local, known, unsent, flying, seen, asked: state.asked === true };
+	const list = value => value && typeof value.id === 'string' && Array.isArray( value.list ) ? { id: value.id, list: value.list.filter( item => typeof item === 'string' ) } : { id: '', list: [] };
+	const told = Array.isArray( state.heard?.told ) ? state.heard.told.filter( item => typeof item === 'string' ) : [];
+	return { server, local, known, unsent, flying, seen, asked: state.asked === true, heard: { ...list( state.heard ), told }, tried: list( state.tried ) };
 
 }
 
@@ -708,6 +908,8 @@ function merge( a, b ) {
 	sum.areas = [ ...new Set( [ ...a.areas, ...b.areas ] ) ].slice( 0, DISCOVERIES_MAX );
 	sum.spots = [ ...new Set( [ ...a.spots, ...b.spots ] ) ];
 	sum.daily = a.daily || b.daily;
+	const feats = mergeTallies( a.feats, b.feats );
+	if ( feats ) sum.feats = feats;
 	return sum;
 
 }

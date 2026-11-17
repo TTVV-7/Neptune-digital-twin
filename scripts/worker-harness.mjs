@@ -158,8 +158,10 @@ export async function startWorker( { port, vars, config = null, assets: files = 
 
 			const res = await fetch( `${ base }/api/config` );
 			// state: where it keeps its storage, to look at what it stored; d1( sql ): the rows a
-			// statement gives on its database, as the owner would see them in the D1 console.
-			if ( res.ok ) return { base, stop, log: () => log, state, d1: sql => queryD1( state, config, sql ) };
+			// statement gives on its database, as the owner would see them in the D1 console;
+			// d1Read( sqls ): the rows D1 says it read for each statement (what the Free plan's daily 5
+			// million count), a promise.
+			if ( res.ok ) return { base, stop, log: () => log, state, d1: sql => queryD1( state, config, sql ), d1Read: sqls => readD1( state, config, sqls ) };
 
 		} catch {
 
@@ -183,6 +185,27 @@ function queryD1( state, config, sql ) {
 	const run = spawnSync( process.execPath, args, { cwd: ROOT, env: { ...process.env, WRANGLER_SEND_METRICS: 'false', CI: 'true' }, encoding: 'utf8' } );
 	if ( run.status !== 0 ) throw new Error( `d1 execute failed:\n${ run.stdout }\n${ run.stderr }` );
 	return JSON.parse( run.stdout ).flatMap( result => result.results );
+
+}
+
+// The rows D1 reads for each of `sqls` on the local database in `state`: its meta's rows_read, which
+// wrangler d1 execute doesn't say, from the same database opened through wrangler's platform proxy
+// (workerd's D1, as the Worker's own; it keeps its data where wrangler's --persist-to keeps v3).
+async function readD1( state, config, sqls ) {
+
+	const { getPlatformProxy } = await import( 'wrangler' );
+	const proxy = await getPlatformProxy( { ...config ? { configPath: join( ROOT, config ) } : {}, persist: { path: join( state, 'v3' ) } } );
+	try {
+
+		const reads = [];
+		for ( const sql of sqls ) reads.push( ( await proxy.env.DB.prepare( sql ).all() ).meta.rows_read );
+		return reads;
+
+	} finally {
+
+		await proxy.dispose();
+
+	}
 
 }
 
