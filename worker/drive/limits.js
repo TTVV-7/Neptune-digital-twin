@@ -322,7 +322,9 @@ export class DriveLimits extends DurableObject {
 	// the day): at most `addressVisits` such visits from one address connect today (it's { open,
 	// spent, refused: true, reason: 'address' } for the next, with nothing kept), as at most the
 	// Earth's 8 a day come from one: a script passing robot checks on one address can't open rooms
-	// without end.
+	// without end. And whether the other world's day is spent too (`closed`: [ that world ], else
+	// []), looked at and not counted: a party's room lets nobody move onto a world that's closed (see
+	// DriveRoom's closedTo), so a connection let in on the Moon's budget can't drive on a spent Earth.
 	async liveOpen( { now, budget, moonBudget = budget, world = EARTH, visit = null, room = null, connects = Infinity, address = null, addressVisits = Infinity } ) {
 
 		const day = dayOf( now );
@@ -344,6 +346,8 @@ export class DriveLimits extends DurableObject {
 			const own = moon ? moonBudget : budget;
 			const today = addLive( this.sql, day, 1, own, world );
 			if ( ! today.open ) return today;
+			const other = moon ? EARTH : MOON_WORLD;
+			today.closed = peekLive( this.sql, day, moon ? budget : moonBudget, other ).open ? [] : [ other ];
 			const row = this.sql.exec( 'SELECT room, connects FROM live_visits WHERE day = ? AND visit = ?', day, visit ).toArray()[ 0 ];
 			const seq = ( row?.connects ?? 0 ) + 1;
 			if ( seq > connects ) return { ...today, refused: true };
@@ -362,7 +366,7 @@ export class DriveLimits extends DurableObject {
 
 			this.sql.exec( 'INSERT INTO live_visits ( day, visit, room, connects ) VALUES ( ?, ?, ?, ? ) ON CONFLICT ( day, visit ) DO UPDATE SET room = excluded.room, connects = excluded.connects', day, visit, room, seq );
 			if ( ! row || row.room === room ) return { ...today, seq, was: null };
-			return { ...addLive( this.sql, day, 1, own, world ), seq, was: row.room };
+			return { ...addLive( this.sql, day, 1, own, world ), closed: today.closed, seq, was: row.room };
 
 		} );
 

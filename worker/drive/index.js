@@ -240,9 +240,11 @@ function adsTxt( request, env ) {
 // (settings.js's adsense; nothing about ads otherwise), and whether driving with others is on on the
 // Earth (live), with liveReason: BUDGET_SPENT when it's off for the rest of the day (its budget, see
 // live.js), and on the Moon (liveMoon: its rooms have a budget of their own, so it can be on there
-// with the Earth's spent; a page from before the Moon had drivers doesn't read it). If DriveLimits
-// can't say, both are off, with liveReason 'unknown': a page already driving with others that was
-// turned away tries again rather than stopping.
+// with the Earth's spent; a page from before the Moon had drivers doesn't read it), with
+// liveMoonReason the same way for the Moon's (none when it's only switched off there, so the page
+// says nothing of lots of drivers). If DriveLimits can't say, both are off, with liveReason and
+// liveMoonReason 'unknown': a page already driving with others that was turned away tries again
+// rather than stopping.
 async function getConfig( { env, limits, now } ) {
 
 	const today = await liveToday( { env, limits, now } );
@@ -251,6 +253,7 @@ async function getConfig( { env, limits, now } ) {
 		turnstileSiteKey: env.TURNSTILE_SITE_KEY ?? '', mapsOn: !! mapsKey( env ), googleClientId: googleClientId( env ), passwords: passwordsOn( env ), live: today.open, liveMoon: today.moon.open,
 		...( ads ? { adsense: ads } : {} ),
 		...( today.reason === BUDGET_SPENT || today.reason === 'unknown' ? { liveReason: today.reason } : {} ),
+		...( today.moon.reason === BUDGET_SPENT || today.moon.reason === 'unknown' ? { liveMoonReason: today.moon.reason } : {} ),
 	} );
 
 }

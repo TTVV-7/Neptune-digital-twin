@@ -83,7 +83,10 @@ import { DEFAULT_RIDE } from '../../src/drive-app/catalog.js';
 //   visits as robot checks they pass (they aren't counted against the Earth's caps), those visits
 //   are held to LIVE_ADDRESS_VISITS (ADDRESS_VISITS if unset) a day from one address (an IPv6 one by
 //   its /48), as the Earth's are to its 8: each with the same connections a minute and a day as any
-//   visit.
+//   visit. In a party, where a page says it is would let a connection let in on one world's budget
+//   drive on the other: so a party's room knows which worlds' days are spent (CLOSED, from /api/live,
+//   and its own reports), closes at once a driver who says it's on one (DriveRoom's stopped), and
+//   counts what that connection spent against the world it was let in on (admitted).
 // - Limits: a connection's attachment (what it keeps through hibernation) at most 16,384 bytes,
 //   ours well under 2 KB; 32,768 WebSockets a Durable Object, far more than a room lets in.
 
@@ -104,6 +107,10 @@ const LEAVE = 'X-Live-Leave';
 // (lookKey): only so a party knows whether two of its drivers are on one address (partied), never
 // the address itself.
 const FROM = 'X-Live-From';
+// The worlds whose day's budget is spent (or switched off), as DriveLimits said when the connection
+// was let in ('earth', 'moon', or both, comma-separated; none, empty): a party's room lets nobody
+// move onto one of them (DriveRoom's closedTo).
+const CLOSED = 'X-Live-Closed';
 // The parts of a driver only kept in memory, not in its attachment: when its car last moved and
 // when it was last sent the others' (counts of the room's own, which start again when it wakes),
 // when its state came in, and a hello being looked up with the messages that came in behind it.
@@ -221,7 +228,7 @@ export async function live( { request, env, url, limits, now } ) {
 	if ( today.was ) await leaveRoom( env, today.was, visit.id, today.seq );
 	const headers = {
 		Upgrade: 'websocket', [ VISIT ]: visit.id, [ EXPIRES ]: String( visit.expiresAt ), [ ROOM ]: name, [ SEQ ]: String( today.seq ), [ FROM ]: from,
-		[ VERSION ]: String( version ), [ WORLD ]: world,
+		[ VERSION ]: String( version ), [ WORLD ]: world, [ CLOSED ]: today.closed.join( ',' ),
 	};
 	return env.ROOMS.get( env.ROOMS.idFromName( name ) ).fetch( new Request( 'https://room.internal/', { headers } ) );
 
@@ -255,7 +262,8 @@ async function leaveRoom( env, name, visit, seq ) {
 
 // Whether driving with others is open at `now`, for /api/live and /api/config.
 // For a connection to a room on `world` (/api/live, `connection`: { visit, room, connects, address?,
-// addressVisits? }): { open: true, refused, reason, seq, was } (see DriveLimits' liveOpen), or
+// addressVisits? }): { open: true, refused, reason, seq, was, closed } (see DriveLimits' liveOpen;
+// closed, the other world if its day is spent or it's switched off), or
 // { open: false, reason } with 'off' (LIVE, or that world's budget of 0), BUDGET_SPENT (that world's
 // is, today) or 'unknown' (DriveLimits couldn't say just now: closed, to be safe, and a page turned
 // away asks /api/config again, and tries again, rather than giving up). It always asks.
@@ -281,7 +289,12 @@ export async function liveToday( { env, limits, now, world = EARTH, connection =
 
 				// (An Earth room's open answer is an open day for /api/config too, as it always was.)
 				if ( world === EARTH ) openDay = { day: `${ dayOn( EARTH ) } ${ budgets[ MOON_WORLD ] }`, at: now };
-				return { open: true, refused: !! answer.refused, reason: answer.reason ?? null, seq: answer.seq ?? 0, was: answer.was ?? null };
+				// The other world closed, as DriveLimits says or as this instance knows already.
+				const other = world === MOON_WORLD ? EARTH : MOON_WORLD;
+				const heard = Array.isArray( answer.closed ) && answer.closed.includes( other );
+				if ( heard && budgets[ other ] > 0 ) spentDays[ other ] = dayOn( other );
+				const closed = heard || known( other ) ? [ other ] : [];
+				return { open: true, refused: !! answer.refused, reason: answer.reason ?? null, seq: answer.seq ?? 0, was: answer.was ?? null, closed };
 
 			}
 
@@ -343,7 +356,9 @@ function asking( ask, now ) {
 
 // GET /api/online: where people are driving now on the Earth, for the globe's dots, and with
 // ?world=moon on the Moon: { on, total, areas } (see live-protocol.js) and how many are driving on the
-// other world (moon, or earth). Kept ONLINE_MS in Cloudflare's cache (each of its locations has its
+// other world (moon, or earth). Off on this world but not the other, the answer says how many are
+// driving there all the same (as the other world's own answer says, kept as that is), so the page
+// can still point to them. Kept ONLINE_MS in Cloudflare's cache (each of its locations has its
 // own), under the address without its query but for which world it is, so a query can't get round
 // it, and by browsers for what's left of that (its Date says when it was made), and by this Worker
 // instance as well (onlineHeard). Only a request that finds none kept asks DriveLimits, which counts
@@ -362,8 +377,20 @@ export async function online( { request, env, url, limits, now } ) {
 	// Off for the rest of the day: kept no later than midnight UTC, when it's on again (a page that's
 	// told it's off shows none of it for the rest of its visit on that world).
 	const offToday = Math.min( ONLINE_MS, ( Math.floor( now / DAY_MS ) + 1 ) * DAY_MS - now );
-	if ( worldOff( env, world ) ) return onlineAnswer( { on: false, total: 0, areas: [] }, ONLINE_MS );
-	if ( spentDays[ world ] === day ) return onlineAnswer( { on: false, total: 0, areas: [] }, offToday );
+	// How many are driving on the other world, for an answer that's off here: its own answer's total
+	// (from where that's kept, or asked for as a request to it would be); none while it's off too.
+	const there = async () => {
+
+		if ( worldOff( env, other ) || spentDays[ other ] === `${ dayOf( now ) } ${ dailyBudget( env, other ) }` ) return {};
+		const address = new URL( url );
+		if ( other === MOON_WORLD ) address.searchParams.set( 'world', MOON_WORLD );
+		else address.searchParams.delete( 'world' );
+		const answer = await ( await online( { request, env, url: address, limits, now } ) ).json();
+		return answer.on === true && Number.isInteger( answer.total ) ? { [ other ]: answer.total } : {};
+
+	};
+	if ( worldOff( env, world ) ) return onlineAnswer( { on: false, total: 0, areas: [], ...await there() }, ONLINE_MS );
+	if ( spentDays[ world ] === day ) return onlineAnswer( { on: false, total: 0, areas: [], ...await there() }, offToday );
 	const tested = env.TEST_CLOCK === 'header' && request.headers.has( 'X-Test-Time' );
 	const query = [ ...( world === MOON_WORLD ? [ `world=${ MOON_WORLD }` ] : [] ), ...( tested ? [ `at=${ now }` ] : [] ) ];
 	const key = new Request( `${ url.origin }${ url.pathname }${ query.length ? `?${ query.join( '&' ) }` : '' }` );
@@ -386,7 +413,7 @@ export async function online( { request, env, url, limits, now } ) {
 		else {
 
 			spentDays[ world ] = day;
-			answer = { on: false, total: 0, areas: [] };
+			answer = { on: false, total: 0, areas: [], ...await there() };
 			keep = offToday;
 
 		}
@@ -479,8 +506,9 @@ export class DriveRoom extends DurableObject {
 		this.flushed = 0;
 		this.flushedAt = 0;
 		this.urgent = false;
-		// Spent by connections that went with nobody left to carry it: reported as the room empties.
-		this.leftover = 0;
+		// Spent by connections that went with nobody left to carry it (on each world, see charge):
+		// reported as the room empties.
+		this.leftover = { [ EARTH ]: 0, [ MOON_WORLD ]: 0 };
 		// Messages from each connection the room has closed that its page went on sending (unheeded),
 		// and whether the room is resetting for one.
 		this.unheard = new WeakMap();
@@ -511,6 +539,7 @@ export class DriveRoom extends DurableObject {
 		const from = request.headers.get( FROM ) ?? '';
 		const version = request.headers.get( VERSION ) === '2' ? 2 : 1;
 		const world = room?.kind === 'near' ? room.world : request.headers.get( WORLD ) === MOON_WORLD && version >= 2 ? MOON_WORLD : EARTH;
+		const closed = ( request.headers.get( CLOSED ) ?? '' ).split( ',' ).filter( w => w === EARTH || w === MOON_WORLD );
 		if ( request.headers.get( 'Upgrade' ) !== 'websocket' || ! room || ! visit || ! Number.isFinite( expires ) ) return new Response( 'Bad request', { status: 400 } );
 
 		const name = roomName( room );
@@ -525,7 +554,7 @@ export class DriveRoom extends DurableObject {
 
 			// Its visit is in another room already, from a connection made after this one.
 			server.close( CLOSE.replaced, 'replaced' );
-			this.charge( COST.connect, server );
+			this.charge( COST.connect, server, world );
 
 		} else if ( here.length - before.length >= this.max( room ) ) {
 
@@ -533,20 +562,24 @@ export class DriveRoom extends DurableObject {
 			// request all the same.
 			send( server, { t: 'full', room: name, max: this.max( room ) } );
 			server.close( CLOSE.full, 'full' );
-			this.charge( COST.connect, server );
+			this.charge( COST.connect, server, world );
 
 		} else {
 
 			// Its spend starts with connecting, and the room's reports go on as they were (or start).
 			// Kept before the connection it replaces goes, so that one's unreported spend has this to go
-			// with, and the room's last report is still known from it.
+			// with, and the room's last report is still known from it. The world it was let in on is
+			// kept (admitted), and which worlds were closed then, if any (closed, see closedTo).
 			const driver = {
-				visit, seq, expires, from, room: name, version, world, at: now, heard: now, tokens: BURST, filled: now, honk: 0, pid: null,
+				visit, seq, expires, from, room: name, version, world, admitted: world, at: now, heard: now, tokens: BURST, filled: now, honk: 0, pid: null,
 				spent: COST.connect, reported: this.reportedAt( server ) ?? now, shown: this.shownKey(), moved: 0, sent: 0,
+				...( closed.length ? { closed: { day: dayOf( now ), worlds: closed } } : {} ),
 			};
 			this.drivers.set( server, driver );
 			this.save( server, driver );
 			for ( const ws of before ) this.shut( ws, CLOSE.replaced, 'replaced' );
+			// (The room may have heard since /api/live asked that its world's day is spent.)
+			if ( this.closedTo( world, now ) ) this.shutClosed( server, driver );
 			await this.wake( Math.min( now + HELLO_MS, expires ) );
 
 		}
@@ -625,6 +658,7 @@ export class DriveRoom extends DurableObject {
 			if ( place && placeWorld( place ) !== room.world ) place = null;
 
 		} else if ( driver.version >= 2 ) driver.world = place ? placeWorld( place ) : m.world === MOON_WORLD ? MOON_WORLD : m.world === EARTH ? EARTH : driver.world;
+		if ( this.stopped( ws, driver, Date.now() ) ) return;
 
 		driver.pending = true;
 		driver.queue = [];
@@ -653,6 +687,7 @@ export class DriveRoom extends DurableObject {
 		for ( const [ next, at ] of queue ) {
 
 			if ( ! this.handle( ws, driver, next, at ) ) return this.shut( ws, CLOSE.protocol, 'bad message' );
+			if ( driver.left ) return;
 
 		}
 
@@ -864,6 +899,9 @@ export class DriveRoom extends DurableObject {
 				const room = parseRoom( this.name );
 				if ( room?.kind === 'near' && placeWorld( place ) !== room.world ) return true;
 				if ( room?.kind !== 'near' && driver.version >= 2 ) driver.world = placeWorld( place );
+				// Onto a world whose day is spent: closed there and then, as the room would at its next
+				// report, before anyone hears where.
+				if ( this.stopped( ws, driver, now ) ) return true;
 				// (A car's last state on the world it's left is no state on this one.)
 				Object.assign( driver, { place, away: false } );
 				if ( driver.s && ! checkState( driver.s, this.worldOf( driver ) ) ) Object.assign( driver, { s: null, held: null } );
@@ -877,6 +915,7 @@ export class DriveRoom extends DurableObject {
 				// world's globe, if it says (v2, in a party: its budget is that world's).
 				Object.assign( driver, { away: true, s: null } );
 				if ( parseRoom( this.name )?.kind !== 'near' && driver.version >= 2 && ( m.world === EARTH || m.world === MOON_WORLD ) ) driver.world = m.world;
+				if ( this.stopped( ws, driver, now ) ) return true;
 				this.broadcast( { t: 'away', pid }, ws );
 				return true;
 
@@ -970,7 +1009,7 @@ export class DriveRoom extends DurableObject {
 		// last of them spent, and to take the room's dots off the globe), else counted for the next.
 		if ( ! this.sockets().length ) {
 
-			if ( this.leftover > 0 || this.shownKey() !== '' ) await this.report( now, COST.alarm );
+			if ( this.owing() > 0 || this.shownKey() !== '' ) await this.report( now, COST.alarm );
 
 		} else if ( this.reportDue( now ) ) await this.report( now, COST.alarm );
 		else this.charge( COST.alarm );
@@ -991,7 +1030,7 @@ export class DriveRoom extends DurableObject {
 		const reported = this.reportedAt();
 		if ( reported === null ) return true;
 		if ( now < reported + REPORT_MS - REPORT_EARLY ) return false;
-		const unreported = this.sockets().reduce( ( sum, ws ) => sum + ( this.driver( ws ).spent ?? 0 ), this.leftover );
+		const unreported = this.sockets().reduce( ( sum, ws ) => sum + ( this.driver( ws ).spent ?? 0 ), this.owing() );
 		return unreported >= REPORT_LEAST || now >= reported + REPORT_MOST || this.dotsChanged();
 
 	}
@@ -1068,9 +1107,9 @@ export class DriveRoom extends DurableObject {
 
 		const dots = this.dots();
 		// Each world's share: each connection's on the world it's on, the room's own on its (worldOf).
-		const amounts = { [ EARTH ]: 0, [ MOON_WORLD ]: 0 };
-		amounts[ this.worldOf() ] += this.leftover + extra + COST.report;
-		this.leftover = 0;
+		const amounts = { ...this.leftover };
+		amounts[ this.worldOf() ] += extra + COST.report;
+		this.leftover = { [ EARTH ]: 0, [ MOON_WORLD ]: 0 };
 		for ( const ws of this.sockets() ) {
 
 			const driver = this.driver( ws );
@@ -1095,7 +1134,7 @@ export class DriveRoom extends DurableObject {
 		} catch ( err ) {
 
 			console.error( 'Live budget report', err?.name, err?.message );
-			this.charge( amounts[ EARTH ] + amounts[ MOON_WORLD ] );
+			for ( const w of [ EARTH, MOON_WORLD ] ) this.charge( amounts[ w ], null, w );
 			if ( dots ) this.shownAs( null );
 			return;
 
@@ -1103,18 +1142,28 @@ export class DriveRoom extends DurableObject {
 
 		// (With the day's spent, DriveLimits has let go of them too.)
 		if ( dots ) this.shownAs( open[ this.worldOf() ] ? keyOf( dots ) : '' );
-		// Those on a world whose day's budget is spent are closed (in a party, only them: the others
-		// drive on), and what they had spent since is let go, rather than asking again to add it.
+		// A world whose day's budget is spent is kept as closed in everyone's attachment, so that in a
+		// party nobody moves onto it after (closedTo). Those on it are closed (in a party, only them:
+		// the others drive on), and what they had spent since is let go, rather than asking again to
+		// add it to a spent day; but one let in on the other world, still open, has it counted there
+		// (shutClosed), so that world's budget bounds what its connections cost.
+		const shut = [ EARTH, MOON_WORLD ].filter( w => ! open[ w ] );
+		if ( shut.length ) this.closeWorlds( shut, now );
 		for ( const ws of this.sockets() ) {
 
 			const driver = this.driver( ws );
 			if ( open[ this.worldOf( driver ) ] ) continue;
-			driver.spent = 0;
-			this.shut( ws, CLOSE.off, BUDGET_SPENT );
+			if ( open[ driver.admitted ] ) this.shutClosed( ws, driver );
+			else {
+
+				driver.spent = 0;
+				this.shut( ws, CLOSE.off, BUDGET_SPENT );
+
+			}
 
 		}
 
-		if ( ! this.sockets().length ) this.leftover = 0;
+		if ( ! this.sockets().length ) this.leftover = { [ EARTH ]: 0, [ MOON_WORLD ]: 0 };
 
 	}
 
@@ -1132,14 +1181,18 @@ export class DriveRoom extends DurableObject {
 
 	}
 
-	// `amount` (billed requests) for the next report: on a connection still here (not `except`),
-	// or with nobody, the room's leftover.
-	charge( amount, except = null ) {
+	// `amount` (billed requests) spent on `world` (the room's own, worldOf, unless it says) for the
+	// next report: on a connection still here (not `except`), one on that world if there is one, so
+	// it's counted against that world's budget; or with nobody, the room's leftover on that world.
+	charge( amount, except = null, world = null ) {
 
-		const ws = this.sockets().find( other => other !== except );
+		if ( ! amount ) return;
+		const on = world ?? this.worldOf();
+		const here = this.sockets().filter( other => other !== except );
+		const ws = here.find( other => this.worldOf( this.driver( other ) ) === on ) ?? here[ 0 ];
 		if ( ! ws ) {
 
-			this.leftover += amount;
+			this.leftover[ on ] += amount;
 			return;
 
 		}
@@ -1155,7 +1208,69 @@ export class DriveRoom extends DurableObject {
 
 		const amount = driver.spent ?? 0;
 		driver.spent = 0;
-		this.charge( amount, ws );
+		this.charge( amount, ws, this.worldOf( driver ) );
+
+	}
+
+	// What the room's leftover holds, on both worlds.
+	owing() {
+
+		return this.leftover[ EARTH ] + this.leftover[ MOON_WORLD ];
+
+	}
+
+	// Whether `world`'s day's budget is spent, as the room knows at `now`: as /api/live said when any
+	// of its drivers connected (CLOSED) or a report since has said (each kept in their attachments,
+	// so it outlasts hibernation). Only a party's drivers can move from world to world; an area's
+	// room is on one, which /api/live checked as each came in.
+	closedTo( world, now ) {
+
+		const day = dayOf( now );
+		return this.ctx.getWebSockets().some( ws => {
+
+			const { closed } = this.driver( ws );
+			return closed?.day === day && Array.isArray( closed.worlds ) && closed.worlds.includes( world );
+
+		} );
+
+	}
+
+	// `worlds` closed for the rest of the day (`now`'s), kept in every connection's attachment.
+	closeWorlds( worlds, now ) {
+
+		const day = dayOf( now );
+		for ( const ws of this.sockets() ) {
+
+			const driver = this.driver( ws );
+			const kept = driver.closed?.day === day ? driver.closed.worlds : [];
+			if ( worlds.every( w => kept.includes( w ) ) ) continue;
+			driver.closed = { day, worlds: [ ...new Set( [ ...kept, ...worlds ] ) ] };
+			this.save( ws, driver );
+
+		}
+
+	}
+
+	// Driver `driver` (on `ws`) just said which world it's on: closed if that world is switched off
+	// (CLOSE.off, 'off') or its day is spent (shutClosed), so that nobody in a party drives on a world
+	// that's closed, not even until the room's next report. Whether it was.
+	stopped( ws, driver, now ) {
+
+		const world = this.worldOf( driver );
+		if ( worldOff( this.env, world ) ) this.shut( ws, CLOSE.off, 'off' );
+		else if ( this.closedTo( world, now ) ) this.shutClosed( ws, driver );
+		else return false;
+		return true;
+
+	}
+
+	// A driver on a world that's closed (moved onto it, in a party, or there as its day was spent):
+	// closed with CLOSE.off and BUDGET_SPENT, and what it hadn't reported counted against the world
+	// it was let in on (admitted), whose budget /api/live asked, rather than the closed one's.
+	shutClosed( ws, driver ) {
+
+		if ( driver.admitted === EARTH || driver.admitted === MOON_WORLD ) driver.world = driver.admitted;
+		this.shut( ws, CLOSE.off, BUDGET_SPENT );
 
 	}
 
@@ -1298,7 +1413,7 @@ export class DriveRoom extends DurableObject {
 		this.drivers.delete( ws );
 		if ( ! this.sockets().some( other => other !== ws ) ) {
 
-			if ( this.leftover > 0 || this.shownKey() !== '' ) await this.report( now, 0 );
+			if ( this.owing() > 0 || this.shownKey() !== '' ) await this.report( now, 0 );
 			// (Unless someone came while that was said.)
 			if ( ! this.sockets().some( other => other !== ws ) ) await this.empty();
 

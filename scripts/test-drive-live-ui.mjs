@@ -1954,6 +1954,16 @@ describe( 'World Drive, driving with others on the Moon', () => {
 		assert.match( await row.locator( '.what' ).textContent(), / · on the Moon$/ );
 		await shot( d, 'moon-live-8-phone-list-on-the-moon' );
 		await d.locator( '#drive-ui .live-chip' ).click();
+		// Driving on the Earth with the party's only other driver on the Moon is no driving with
+		// others in the play stats, as it's no driving together for levels.
+		const played = () => d.evaluate( () => [ window.drive.stats.counts[ 'play_world:earth' ] ?? 0, window.drive.stats.counts[ 'play_with_others:all' ] ?? 0 ] );
+		// (Counted on: the Earth's play time moves. A post every 3 minutes takes the whole seconds off
+		// both, so the time with others can only have stayed or gone down.)
+		const [ earthBefore, othersBefore ] = await played();
+		await d.waitForTimeout( 2500 );
+		const [ earthAfter, othersAfter ] = await played();
+		assert.notEqual( earthAfter, earthBefore );
+		assert.ok( othersAfter <= othersBefore, `${ othersBefore } s with others, then ${ othersAfter } s` );
 		// A back to the Moon's globe and in again: D, on the Earth, is told, and Join takes D to the
 		// Moon, beside her.
 		await a.evaluate( () => window.drive.toGlobe() );
@@ -2120,12 +2130,12 @@ describe( 'World Drive, driving with others switched off on the Worker', () => {
 
 describe( 'World Drive, the day\'s budget for driving with others spent', () => {
 
-	test( 'turned away for the Earth\'s budget: a toast once that it\'s back after midnight UTC (and still on on the Moon), none of it shows on the Earth, and driving goes on; a party\'s link on a new page says why', async () => {
+	test( 'turned away for the Earth\'s budget: a toast once that it\'s back after midnight UTC (and that you can still drive with others on the Moon), none of it shows on the Earth, and driving goes on; a party\'s link on a new page says why', async () => {
 
 		// The Worker again (LIVE on) with a budget of 40 Durable Object requests a day on the Earth,
 		// which this test then spends by connecting to rooms, as drivers do (page loads ask DriveLimits
 		// only every 30 s, so they spend little). The Moon's is its own, and isn't spent.
-		const toast = 'Lots of drivers on the Earth today: driving with others there is back after midnight UTC. It\'s still on on the Moon.';
+		const toast = 'Lots of drivers on the Earth today: driving with others there is back after midnight UTC. You can still drive with others on the Moon.';
 		await restartWorker( { LIVE_DAILY_BUDGET: '40' } );
 		const page = await livePage( { token: await visitToken() } );
 		assert.ok( await page.locator( '#globe-ui .friends' ).isVisible() );

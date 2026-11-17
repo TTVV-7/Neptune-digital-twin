@@ -27,7 +27,8 @@ import { storage } from './places.js';
 // 'look' { pid, vehicle, look }, 'place' { pid, place }, 'away' { pid }, 'states' { at, states:
 // [ { pid, s, age } ] }, 'trick' { pid, score }, 'honk' { pid }, 'clear' (everyone's gone: a new
 // room, or the connection dropped), 'full' { max } (a party with its most already), 'closed'
-// (world: that world's budget for the day is spent, the other's isn't) and 'ended' (why: driving
+// { world, quiet } (that world's budget for the day is spent, or it's switched off there, quiet,
+// and the other's isn't) and 'ended' (why: driving
 // with others is over for this visit; 'budget' when it's off till midnight UTC on both worlds,
 // 'refused' when the Worker kept turning it away).
 
@@ -320,9 +321,10 @@ export function createLive( { earth, ellipsoid, moon = null, world = () => EARTH
 	}
 
 	// This page's world's budget for the day is spent (the room said so as it closed it, or the
-	// Worker as it turned it away): it drives alone there, and with others on the other world unless
-	// that's spent too (`both`), or isn't known not to be, and then it's over for the visit.
-	function closeWorld( which, both = false ) {
+	// Worker as it turned it away), or it's switched off there (`quiet`: nothing's said of lots of
+	// drivers): it drives alone there, and with others on the other world unless that's spent too
+	// (`both`), or isn't known not to be, and then it's over for the visit.
+	function closeWorld( which, both = false, quiet = false ) {
 
 		if ( ended ) return;
 		closedWorlds.add( which );
@@ -335,7 +337,7 @@ export function createLive( { earth, ellipsoid, moon = null, world = () => EARTH
 
 		leave();
 		setStatus();
-		emit( 'closed', which );
+		emit( 'closed', { world: which, quiet } );
 
 	}
 
@@ -413,7 +415,7 @@ export function createLive( { earth, ellipsoid, moon = null, world = () => EARTH
 
 			if ( state[ here() ] === 'spent' || state[ here() ] === 'off' ) {
 
-				closeWorld( here(), there === 'spent' || there === 'off' );
+				closeWorld( here(), there === 'spent' || there === 'off', state[ here() ] === 'off' );
 				return;
 
 			}
@@ -1044,15 +1046,16 @@ export function createLive( { earth, ellipsoid, moon = null, world = () => EARTH
 
 // What /api/config says of each world (null: it couldn't be reached): { earth, moon }, each 'open',
 // 'spent' (its budget for the day), 'off' (switched off there: LIVE, or a budget of 0) or 'unknown'
-// (DriveLimits couldn't say). The Moon's is liveMoon; a Worker from before the Moon had rooms doesn't
-// say it, and then the Moon's is the Earth's. (liveReason is the Earth's: none when it's off.)
+// (DriveLimits couldn't say). The Moon's is liveMoon, and why not liveMoonReason, as liveReason is
+// the Earth's (none when it's switched off there); a Worker from before the Moon had rooms doesn't
+// say them, and then the Moon's is the Earth's.
 function worldsOf( config ) {
 
 	const earth = config?.live === true ? 'open' : config?.live !== false ? 'unknown'
 		: config.liveReason === BUDGET_SPENT ? 'spent' : config.liveReason === 'unknown' ? 'unknown' : 'off';
 	if ( typeof config?.liveMoon !== 'boolean' ) return { [ EARTH ]: earth, [ MOON_WORLD ]: earth };
-	// (The Moon off or spent aren't told apart: either way it's closed for the day.)
-	const moon = config.liveMoon ? 'open' : config.liveReason === 'unknown' ? 'unknown' : 'spent';
+	const reason = config.liveMoonReason ?? ( config.liveReason === 'unknown' ? 'unknown' : null );
+	const moon = config.liveMoon ? 'open' : reason === BUDGET_SPENT ? 'spent' : reason === 'unknown' ? 'unknown' : 'off';
 	return { [ EARTH ]: earth, [ MOON_WORLD ]: moon };
 
 }

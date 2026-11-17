@@ -264,5 +264,5 @@ export const MOON_DRIVING = [
 	'<b>A sixth of the gravity.</b> A jump goes as high as on the Earth and lasts two and a half times as long, so there\'s time for more spins and flips (each is worth fewer points, to be fair to the Earth\'s).',
 	'<b>The Earth in the sky.</b> Over the near side it hangs in the black sky, lit by the same sun, so it shows a phase. From the far side it\'s never in sight.',
 	'<b>No water and no roads.</b> Grey dust and rock to the horizon, plains, crater rims and mountainsides.',
-	'<b>On your own.</b> Driving with others is on the Earth: on the Moon you drive alone. Driving, air, drifts and tricks still earn XP, and your best runs go on the leaderboard (the bonuses for new start spots and areas are the Earth\'s).',
+	'<b>With others.</b> See who\'s driving near you on the Moon, or bring friends in a party, wherever each of you is: a friend on the Earth is a tap away. Driving, air, drifts and tricks earn XP, and your best runs go on the leaderboard (the bonuses for new start spots and areas are the Earth\'s).',
 ];

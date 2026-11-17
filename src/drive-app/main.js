@@ -358,14 +358,15 @@ const _sun = new Vector3();
 // checks' (supporter.js, account.js);
 // live: whether the Worker has driving with others on (its /api/config says), and liveReason why
 // not when it's off for the rest of the day; liveMoon: whether it's on on the Moon (its rooms have a
-// budget of their own: null when the Worker doesn't say); moonOnly: { onEarth } when there's no
+// budget of their own: null when the Worker doesn't say), and liveMoonReason why not the same way
+// (none when it's switched off there); moonOnly: { onEarth } when there's no
 // Earth this visit (today's Earth drives are used up, or the page opened on a link to the Moon,
 // boot.js): the globe opens on the Moon, which is never limited, and picking the Earth calls onEarth
 // instead;
 // challengeLink: a "challenge a friend" link's ({ link: { challenge, vs }, answer }, boot.js), or a
 // promise of it (or of null: no link), opened once the globe is up and it's here (challenges.js);
 // adsense: /api/config's { client, slot } while Google's ads are on (ads.js), else null.
-export async function start( { key, left = null, visit: token = null, worker = true, googleClientId = '', passwords = false, turnstileSiteKey = '', live: liveOn = false, liveReason = '', liveMoon = null, moonOnly = null, challengeLink = null, adsense = null } ) {
+export async function start( { key, left = null, visit: token = null, worker = true, googleClientId = '', passwords = false, turnstileSiteKey = '', live: liveOn = false, liveReason = '', liveMoon = null, liveMoonReason = '', moonOnly = null, challengeLink = null, adsense = null } ) {
 
 	const visit = token ?? VISIT_TEST?.visit ?? null;
 	// Play stats for the owner's admin page (stats.js): only a real visit's, counts with nothing of who.
@@ -883,7 +884,10 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// dropped connection does, so the visit isn't left without it for hours over a moment's hiccup.
 	// A world whose budget for the day is spent starts closed: alone there, with others on the other.
 	const liveVisit = LIVE_TEST?.visit ?? visit;
-	const closedWorlds = [ ...( ! liveOn && liveReason !== 'unknown' ? [ 'earth' ] : [] ), ...( liveMoon === false && liveReason !== 'unknown' ? [ MOON ] : [] ) ];
+	const closedWorlds = [ ...( ! liveOn && liveReason !== 'unknown' ? [ 'earth' ] : [] ), ...( liveMoon === false && ( liveMoonReason || liveReason ) !== 'unknown' ? [ MOON ] : [] ) ];
+	// (Of those, the ones whose budget is spent, for the toast below: a world only switched off says
+	// nothing of lots of drivers.)
+	const spentWorlds = [ ...( liveReason === BUDGET_SPENT ? [ 'earth' ] : [] ), ...( liveMoonReason === BUDGET_SPENT ? [ MOON ] : [] ) ];
 	const live = ( liveOn || liveMoon === true || liveReason === 'unknown' ) && typeof liveVisit === 'string' && liveVisit
 		? createLive( {
 			earth, ellipsoid, moon: { group: moon.group, ellipsoid: MOON_ELLIPSOID }, world: () => world, closed: closedWorlds,
@@ -902,7 +906,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	const globeUi = $( 'globe-ui' );
 	const online = live && createOnline( {
 		camera, earth, ellipsoid, moon: { group: moon.group, ellipsoid: MOON_ELLIPSOID }, world: () => world, onWorld: next => setWorld( next ),
-		canvas, live, panel, mode: liveMode, onPick: flyToPlace, onZoom: zoomTo,
+		canvas, live, panel, mode: liveMode, onPick: flyToPlace, onZoom: zoomTo, earthless: !! moonOnly,
 		// The Garage covers the globe (the whole screen on a phone): nothing's asked while it's open.
 		paused: () => garage.isOpen,
 		layer: globeUi.querySelector( '.online-dots' ),
@@ -919,10 +923,10 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		friends.joinParty( partyCode );
 		stats.add( 'party', 'joined' );
 		// (Its room for this world's spent today: why nothing comes of it here; on the other, it does.)
-		if ( live.closedHere ) screens.toast( budgetToast( world ), 10000 );
+		if ( live.closedHere && spentWorlds.includes( world ) ) screens.toast( budgetToast( world ), 10000 );
 
 	}
-	else if ( partyCode && ( liveReason === BUDGET_SPENT || liveMoon === false ) ) screens.toast( BUDGET_TOAST, 10000 );
+	else if ( partyCode && spentWorlds.length ) screens.toast( BUDGET_TOAST, 10000 );
 	// Levels show from here on (a level-up says hello again in the room, so after that's made).
 	progress.start();
 	// The points of each landed jump: the run's score less what it was at the last, in this ride at
@@ -1934,6 +1938,14 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	}
 
+	// Whether others in the room are driving on this page's world (not on the globe, and not a party
+	// friend on the other world): what levels count as together, and the play stats as with others.
+	function withOthers() {
+
+		return !! live && [ ...live.players.values() ].some( p => ! p.away && p.world === live.world );
+
+	}
+
 	// What levels count each frame of driving (progress.js's drive).
 	function driven() {
 
@@ -1944,7 +1956,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 			boost: d.boost,
 			// (With others driving on this world, the Moon's too; the Moon's ground is none of the Earth's
 			// areas or spots.)
-			together: !! live && [ ...live.players.values() ].some( p => ! p.away && p.world === live.world ),
+			together: withOthers(),
 			where: onMoon() ? nowhere : carWhere,
 			vehicle: state.vehicle?.id ?? null,
 		};
@@ -2263,7 +2275,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 			progress.drive( dt, driven() );
 			// Play time by ride and world, with others or not, and the funnel's minutes driven.
-			stats.drove( state.vehicle.id, world, dt, !! live?.players.size );
+			stats.drove( state.vehicle.id, world, dt, withOthers() );
 
 		}
 

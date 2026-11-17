@@ -4155,10 +4155,13 @@ describe( 'World Drive Worker asking whether driving with others is open today',
 			},
 		};
 		const env = { TEST_CLOCK: 'header', LIVE_DAILY_BUDGET: '1235', LIVE_MOON_DAILY_BUDGET: '321', LIMITS: { idFromName: id => id, get: () => limits } };
+		// (And the Moon's reason, liveMoonReason, as the last answer said it.)
+		let moonReason;
 		const config = async ( time, more = {} ) => {
 
 			const res = await worker.fetch( new Request( 'https://worlddrive.app/api/config', { headers: { 'X-Test-Time': String( time ) } } ), { ...env, ...more }, {} );
-			const { live, liveReason, liveMoon } = await res.json();
+			const { live, liveReason, liveMoon, liveMoonReason } = await res.json();
+			moonReason = liveMoonReason;
 			return { live, liveReason, liveMoon };
 
 		};
@@ -4169,15 +4172,19 @@ describe( 'World Drive Worker asking whether driving with others is open today',
 		answer = { open: false, spent: 1235, moon: { open: true, spent: 3 } };
 		assert.deepEqual( await config( day + MINUTE ), { live: false, liveReason: 'budget', liveMoon: true } );
 		assert.deepEqual( await config( day + 2 * MINUTE ), { live: false, liveReason: 'budget', liveMoon: true } );
+		assert.equal( moonReason, undefined );
 		assert.equal( asked.length, 3 );
 		// The Moon's spent too: neither asked about again that day.
 		answer = { open: false, spent: 1235, moon: { open: false, spent: 321 } };
 		assert.deepEqual( await config( day + 3 * MINUTE ), { live: false, liveReason: 'budget', liveMoon: false } );
 		assert.deepEqual( await config( day + HOUR ), { live: false, liveReason: 'budget', liveMoon: false } );
+		assert.equal( moonReason, 'budget' );
 		assert.equal( asked.length, 4 );
 		// The Moon's budget of 0: off there, the Earth's as it is (a new day, asked).
 		answer = { open: true, spent: 1, moon: { open: true, spent: 1 } };
 		assert.deepEqual( await config( day + DAY, { LIVE_MOON_DAILY_BUDGET: '0' } ), { live: true, liveReason: undefined, liveMoon: false } );
+		// (Switched off there, not spent: no reason, so the page says nothing of lots of drivers.)
+		assert.equal( moonReason, undefined );
 		// And the Earth's of 0: on on the Moon.
 		assert.deepEqual( await config( day + DAY + HOUR, { LIVE_DAILY_BUDGET: '0' } ), { live: false, liveReason: undefined, liveMoon: true } );
 

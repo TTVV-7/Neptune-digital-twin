@@ -63,9 +63,9 @@
 		// The Moon's rooms' own budget, the same way: the Moon is never limited by the Earth's caps,
 		// and spending the Earth's budget never shuts its rooms, but on the Free plan the bill is the
 		// same 100,000, so they keep to a day's share of their own (20,000), and the Earth's and the
-		// Moon's together leave 40,000 for the rest. Each visit not counted against the Earth's caps
-		// (the Moon's) connects from one address with at most LIVE_ADDRESS_VISITS (20, unset) others
-		// a day. On Workers Paid each can be raised; 0 is off on the Moon.
+		// Moon's together leave 40,000 for the rest. At most LIVE_ADDRESS_VISITS (20, unset) visits not
+		// counted against the Earth's caps (the Moon's) connect to rooms from one address in a day, in
+		// all. On Workers Paid each can be raised; 0 is off on the Moon.
 		"LIVE_MOON_DAILY_BUDGET": "20000",
 		// Google AdSense (docs/world-drive.md, "Ads"): one banner on the globe, never while driving and
 		// never for a supporter. ADSENSE_CLIENT is the publisher id, "ca-pub-" and 16 digits (public);

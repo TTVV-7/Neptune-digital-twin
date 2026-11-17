@@ -16,8 +16,8 @@ import { hideKeys, toast } from './screens.js';
 // worlds, or on one (each has its own), with the other's still on.
 export const BUDGET_TOAST = 'Lots of drivers today: driving with others is back after midnight UTC.';
 const WORLD_BUDGET_TOAST = {
-	earth: 'Lots of drivers on the Earth today: driving with others there is back after midnight UTC. It\'s still on on the Moon.',
-	moon: 'Lots of drivers on the Moon today: driving with others there is back after midnight UTC. It\'s still on on the Earth.',
+	earth: 'Lots of drivers on the Earth today: driving with others there is back after midnight UTC. You can still drive with others on the Moon.',
+	moon: 'Lots of drivers on the Moon today: driving with others there is back after midnight UTC. You can still drive with others on the Earth.',
 };
 
 // What's said when `world`'s budget for the day is spent and the other's isn't.
@@ -83,7 +83,7 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 
 	const inParty = () => !! live.party;
 	for ( const type of [ 'status', 'party', 'nearby', 'welcome', 'clear', 'look', 'away', 'closed' ] ) live.on( type, refresh );
-	live.on( 'closed', world => toast( budgetToast( world ), 10000 ) );
+	live.on( 'closed', ( { world, quiet } ) => quiet || toast( budgetToast( world ), 10000 ) );
 	live.on( 'party', code => {
 
 		// The party stays in the address while you're in it, so a reload (or the link copied from the

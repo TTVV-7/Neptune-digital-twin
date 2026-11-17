@@ -400,12 +400,15 @@ export function checkTrick( score ) {
 // already makes to DriveLimits (worker/drive/live.js), as dots: positions and counts, never who. A
 // party is private and never says; those on the globe aren't counted (paused drivers are: they're
 // parked in the game), nor anyone with "Show me to drivers nearby" off, who isn't in an area's room.
-// GET /api/online hands out the Earth's, and GET /api/online?world=moon the Moon's:
-//   { on, total, areas: [ DOT... ], world, elsewhere }
-// on: false while driving with others is off (LIVE, or that world's budget for the day spent);
-// total: how many are driving in all on that world; areas: at most ONLINE_AREAS dots, busiest
-// first; world: which world they're on; elsewhere: how many are driving on the other world (as its
-// rooms last said; a page from before the Moon had drivers reads none of these two).
+// GET /api/online hands out the Earth's, and GET /api/online?world=moon the Moon's (kept under an
+// address of its own):
+//   { on, total, areas: [ DOT... ], moon }      the Earth's
+//   { on, total, areas: [ DOT... ], earth }     the Moon's
+// on: false while driving with others is off on that world (LIVE, its budget of 0, or its budget for
+// the day spent), with total 0 and no areas; total: how many are driving in all on that world;
+// areas: at most ONLINE_AREAS dots, busiest first; moon (or earth): how many are driving on the
+// other world, as its rooms last said (on an answer that's off, too, unless the other world is off
+// as well: then it's left out). A page from before the Moon had drivers reads none of it.
 // DOT: { lat, lon, height, count }: where (degrees, to DOT_PLACES decimals: about a kilometre; and
 //   metres above the ellipsoid, to DOT_HEIGHT), and how many are driving there.
 

@@ -2085,12 +2085,6 @@ body:not( .touch ) #drive-ui .horn {
 		right: auto;
 	}
 
-	/* With a party's banner over the Moon's globe, the credit goes just under it rather than under
-	   the banner (on a phone on its side they'd meet). */
-	body[data-mode='globe']:has( #globe-ui .party-banner:not( [hidden] ) ) #moon-credit {
-		top: calc( 54% - 84px + 6px );
-	}
-
 	#drive-ui .topbar .to-globe kbd {
 		display: none;
 	}
@@ -2104,13 +2098,30 @@ body:not( .touch ) #drive-ui .horn {
 		min-width: 0;
 	}
 
+	/* How far the party's banner sits from the bottom of the screen on a phone: above the pin's card,
+	   over the sheet. */
+	body {
+		--party-banner-bottom: calc( 46% + 84px );
+	}
+
 	/* Above the pin's card, over the sheet. */
 	#globe-ui .party-banner {
 		top: auto;
 		left: 12px;
 		right: 12px;
-		bottom: calc( 46% + 84px );
+		bottom: var( --party-banner-bottom );
 		max-width: none;
+	}
+
+}
+
+/* On a phone on its side with a party's banner over the globe, the map's credit (Google's on the
+   Earth, NASA's on the Moon) goes just below the banner rather than behind it, where they'd meet.
+   It follows the banner's own offset from the bottom, --party-banner-bottom (above). */
+@media ( max-width: 760px ) and ( orientation: landscape ) {
+
+	body[data-mode='globe']:has( #globe-ui .party-banner:not( [hidden] ) ) :is( #moon-credit, #attribution ) {
+		top: calc( 100% - var( --party-banner-bottom ) + 6px );
 	}
 
 }
