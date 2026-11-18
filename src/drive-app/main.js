@@ -2398,5 +2398,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		dropIn, toGlobe, resume, recentre, waterOver, watchSea, moveCar, besideOf, goBeside,
 		where: () => formatLatLon( carto.lat * MathUtils.RAD2DEG, carto.lon * MathUtils.RAD2DEG ),
 	};
+	// The same, for boot.js (which world the globe is on, once it's up).
+	return window.drive;
 
 }

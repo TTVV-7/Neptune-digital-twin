@@ -2416,7 +2416,7 @@ under one line saying what the stars mean), and picking one opens the pass's she
 instead (`src/drive-app/pass.js`): what the pass is and what comes with it (seventeen more rides,
 thirteen cars, six of which levels bring too, and four built in code, each with its picture in two
 rows; every Garage look at once, which levels otherwise unlock some of over time; +50% XP; a ⭐ by
-your name on the leaderboard, 30 drives a day instead of 8) and its buy
+your name on the leaderboard, 30 Earth drives a day instead of 1) and its buy
 area (`buyArea()`), which says **Coming soon** until the payments code fills it. The sheet also opens from **⭐ Supporter
 Pass** under the rides on the globe and in the pause menu. A ride or a look saved while the pass was
 on falls back to the pickup, or to the free choices, without it (a level's car, until its level).
@@ -2882,10 +2882,12 @@ others keep their paint, with only an underglow, boost, trail and horn to pick.
 
 ## Supporter Pass (buying it)
 
-The pass is one payment of **CA$4.99**, no subscription, through a Stripe Payment Link in World
-Drive's own Stripe account. It comes with what's [above](#supporter-pass-content) (seven cars of its
+The pass is a **subscription** (`SUPPORTER_PRICE`, CA$4.99/month as set), through a Stripe Payment
+Link in World Drive's own Stripe account, and lasts while the subscription is active. Passes bought
+before it was a subscription (one payment each, no subscription id) are **legacy passes, kept for
+good**. It comes with what's [above](#supporter-pass-content) (seven cars of its
 own, the six levels bring, the four rides and every Garage look at once), **+50% XP** for
-[levels](#levels), a **⭐ by your name on the leaderboard**, and **30 drives a day** instead of 8.
+[levels](#levels), a **⭐ by your name on the leaderboard**, and **30 Earth drives a day** instead of 1.
 A pass is an account's (Google's sign-in, or a [username and password](#username-and-password-accounts)),
 so it's yours in any browser you sign in on: signing in is only ever for the pass and your level
 and times on every device, and driving and the leaderboard never need it.
@@ -2967,8 +2969,17 @@ and times on every device, and driving and the leaderboard never need it.
     to three days, so a refund or chargeback can arrive before its checkout. Each is also kept by its
     PaymentIntent (`reversals`), and a checkout arriving after it comes in already taken back.
   - Anything else properly signed is answered 200 and left alone, so Stripe doesn't send it again.
-- **Who has the pass** (`hasPass`): an account with a purchase that isn't refunded, its own or one paid
-  with its email by someone not signed in, or whose email is in `SUPPORTER_EMAILS`. It's looked up
+- **Subscriptions** (`0010_supporter_subscriptions.sql`): a checkout through a subscription link
+  (`mode: 'subscription'`) keeps its subscription's id on the purchase. `customer.subscription.created`,
+  `.updated` and `.deleted` keep each subscription's status (`subscriptions`), an older event never
+  overwriting a newer one. `active`, `trialing` and `past_due` (Stripe still retrying the card) keep
+  the pass; anything else (`canceled`, `unpaid`, `incomplete_expired`, `paused`) takes it away until
+  it's active again. A subscription's renewals are charged on its invoices, not its checkout, so to
+  refund a subscriber, cancel the subscription in Stripe (that takes the pass away), then refund.
+- **Who has the pass** (`hasPass`): an account with a purchase that isn't refunded (and, for a
+  subscription, still active), its own or one paid with its email by someone not signed in, or whose
+  email is in `SUPPORTER_EMAILS`. `/api/me` also says `subscribed: true` when it's a running
+  subscription's, and the sheet then links to `SUPPORTER_MANAGE_LINK` (**Manage your subscription**). It's looked up
   each time, never copied, so a refund or a change to `SUPPORTER_EMAILS` counts straight away.
 - **30 drives a day**: `/api/visit` with a supporter's session counts the visit against the account
   (hashed with the day's salt, like an address) with `PER_VISITOR_DAILY_SUPPORTER` (30), not against
@@ -2987,8 +2998,9 @@ and times on every device, and driving and the leaderboard never need it.
 | --- | --- | --- |
 | `GOOGLE_CLIENT_ID` | `vars` | The OAuth web client's id (public). Empty: no signing in, no buying, and the sheet says "Coming soon" |
 | `SUPPORTER_PAYMENT_LINK` | `vars` | The Payment Link, `https://buy.stripe.com/9B6bJ0fSYaMf3nc0cCfrW00` (live, public) |
-| `SUPPORTER_PRICE` | `vars` | The price as the page shows it: `CA$4.99` |
-| `PER_VISITOR_DAILY_SUPPORTER` | `vars` | A supporter's drives a day (30) |
+| `SUPPORTER_PRICE` | `vars` | The price as the page shows it: `CA$4.99/month` |
+| `SUPPORTER_MANAGE_LINK` | `vars` or dashboard text, optional | Stripe's customer portal login link, `https://billing.stripe.com/p/login/...`: where subscribers cancel or change their card |
+| `PER_VISITOR_DAILY_SUPPORTER` | `vars` | A supporter's Earth drives a day (30) |
 | `STRIPE_WEBHOOK_SECRET` | secret | The webhook endpoint's signing secret, `whsec_...`: the live endpoint's while the link is live |
 | `SUPPORTER_EMAILS` | secret, optional | Comma-separated: people who have the pass without paying (you, testers) |
 | `SUPPORTER_PAYMENT_LINK_ID` | dashboard text, optional (recommended) | The link's `plink_...` id: only its checkouts count |
@@ -3019,7 +3031,10 @@ offers buying just then.
    - Endpoint URL: `https://worlddrive.app/api/stripe/webhook` (not `www.`: Stripe doesn't follow the
      redirect)
    - Events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`,
-     `charge.refunded`, `charge.dispute.funds_withdrawn` and `charge.dispute.funds_reinstated`
+     `charge.refunded`, `charge.dispute.funds_withdrawn`, `charge.dispute.funds_reinstated`,
+     `customer.subscription.created`, `customer.subscription.updated` and
+     `customer.subscription.deleted` (an endpoint made before the pass was a subscription needs the
+     last three added: **Edit** → **Select events**)
    - Any API version: only fields every version has are read.
 
    Create it and reveal its **Signing secret** (`whsec_...`).
@@ -3039,6 +3054,23 @@ offers buying just then.
    answer (200). Then refund it in full (Stripe Dashboard → **Payments** → the payment → **Refund**):
    the pass locks again at your next visit. Stripe keeps its fee on a refunded payment, so the test
    costs that much.
+
+### Switching the pass to a subscription
+
+1. **Stripe** (live, World Drive's account): **Product catalog** → the pass → **Add another price**:
+   **Recurring**, monthly (or whatever you choose), e.g. CA$4.99. Then **Payment Links → New**, with
+   that price, the same **After payment** redirect (`https://worlddrive.app/?supporter=thanks`) and
+   quantity locked.
+2. **Deactivate the old one-time link** (Payment Links → the old link → **Deactivate**), so nobody
+   can buy a lifetime pass any more. Passes already bought through it stay (legacy).
+3. **The webhook**: add `customer.subscription.created`, `customer.subscription.updated` and
+   `customer.subscription.deleted` to the endpoint's events. The signing secret doesn't change.
+4. **Optional: the customer portal**, so subscribers can cancel themselves: Settings → Billing →
+   **Customer portal** → activate it and copy its **login link** into `SUPPORTER_MANAGE_LINK`.
+5. **`wrangler.drive.jsonc`**: the new link in `SUPPORTER_PAYMENT_LINK`, the price as it should read
+   in `SUPPORTER_PRICE` (`CA$4.99/month`), and if `SUPPORTER_PAYMENT_LINK_ID` is set in the
+   dashboard, the new link's `plink_...` there. Commit and push: the deploy applies
+   `0010_supporter_subscriptions.sql` first.
 
 ### Giving and taking away a pass by hand
 
@@ -3491,7 +3523,7 @@ starts one. World Drive is built so that one page load is one session, however m
   (`POST /api/visit`), after an invisible Cloudflare Turnstile check and once the game's code has
   arrived (so a download that fails spends no drive: [the load](#the-load)), and only while the
   day's visits are under two caps: **DAILY_VISITS** for everyone together (300) and
-  **PER_VISITOR_DAILY** for each visitor (8; a supporter signed in has
+  **PER_VISITOR_DAILY** for each visitor (1: one free Earth drive a day; a supporter signed in has
   **PER_VISITOR_DAILY_SUPPORTER**, 30, counted by their account). Both start again at midnight UTC.
   The owner's accounts (`ADMIN_EMAILS`, signed in) aren't counted at all.
 - **The Moon is never limited.** Its ground is our own (moon.js), so it costs nothing to stream.
@@ -3499,10 +3531,19 @@ starts one. World Drive is built so that one page load is one session, however m
   visit with `world: 'moon'`: after the robot check it gets `{ moon: true, visit }`, no key, and
   nothing is counted. It opens on the Moon with the Earth closed (main.js's `moonOnly`): picking the
   Earth reloads the page without the link, which asks for one of the day's Earth drives as usual.
-- Over a cap the page shows **Today's free Earth drives are used up**, with how long until fresh
-  ones, loads nothing from Google, and offers **Drive on the Moon**: the 429 carries a visit (for
-  scores and stats), and the game starts on the Moon without a key. Picking the Earth there shows
-  the screen again. A failed robot check shows **We couldn't check you're a person**
+- **Over a cap the page opens on the Moon by itself**: the 429 carries a visit (for scores and
+  stats), the game starts on the Moon's globe without a key, loading nothing from Google, and a
+  toast says why (*You've had today's free Earth drive, so you're on the Moon...*, or *Today's free
+  Earth drives are all taken...* when it's the cap for everyone). Picking the Earth there shows
+  **You've had today's free Earth drive** (or **Today's free Earth drives are used up**), with how
+  long until fresh ones and **Drive on the Moon** to go back; over the visitor's own cap it also has
+  a sign-in, so a supporter on a new browser, or back from paying before Stripe's webhook, signs in
+  and the page reloads once to ask for an Earth drive as theirs.
+- **Every visit is counted for the admin page**, those over a cap too: `visit` for all of them, and
+  `visit_kind` by where it went (`earth`, `earth_supporter`, `owner`, `moon_link`, and
+  `moon_daily_cap` or `moon_visitor_cap` for one sent to the Moon). The admin page shows **Earth
+  drives** and **Over a cap, sent to the Moon** beside **Visits**. (Before this, a visit turned away
+  wasn't counted at all, so the visits seemed to stop at `DAILY_VISITS`.) A failed robot check shows **We couldn't check you're a person**
   with **Try again**. With no key set, it shows **World Drive is getting ready** (with a flat test pad
   to drive, which costs nothing).
 
@@ -3937,7 +3978,7 @@ a drop-in counted with it, and time: one place each 10 s of the visit, 10 a visi
 once a day for each address (an IPv6 /48) and once for each visit, so adding one to a cell takes both
 a new visit and a new address: one robot check and its token, replayed from a block of addresses,
 add a cell once, and a /48's 65,536 /64s are one visitor. An Earth place takes an Earth visit, one of
-the day's capped drives (`DAILY_VISITS`, 300, and `PER_VISITOR_DAILY`, 8 an address): pushing an
+the day's capped drives (`DAILY_VISITS`, 300, and `PER_VISITOR_DAILY`, 1 an address): pushing an
 Earth place up the table by 50 a day spends 50 of the day's drives from 50 addresses, each passing
 the robot check. Moon visits aren't capped (the Moon costs nothing to stream), so a Moon place can be
 pushed by many robot checks from many addresses (IPv4 addresses or /48s); its day's 1,500 are its

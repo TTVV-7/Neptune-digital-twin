@@ -207,10 +207,11 @@ async function usedUp( config, outcome, main, link = null ) {
 		key: null, visit: outcome.visit, googleClientId: config.googleClientId, passwords: config.passwords === true, turnstileSiteKey: config.turnstileSiteKey, live: !! config.live, liveReason: config.liveReason, adsense: config.adsense ?? null, challengeLink: link,
 		moonOnly: { onEarth: earthClosed },
 	} );
-	// Once the globe is up (its own start would hide a toast shown over the splash).
-	started.then( game => game && screens.toast( reason === 'daily'
+	// Once the globe has turned to the Moon (it loads after the game starts), so it's read with the
+	// Moon in view rather than running out over the splash.
+	started.then( game => game && onceOnMoon( game, () => screens.toast( reason === 'daily'
 		? 'Today\'s free Earth drives are all taken, so you\'re on the Moon: free and unlimited. The Earth opens again tomorrow.'
-		: 'You\'ve had today\'s free Earth drive, so you\'re on the Moon: free and unlimited. The Earth opens again tomorrow.', 8000 ) );
+		: 'You\'ve had today\'s free Earth drive, so you\'re on the Moon: free and unlimited. The Earth opens again tomorrow.', 10000 ) ) );
 	if ( ! accounts ) return;
 	try {
 
@@ -227,6 +228,21 @@ async function usedUp( config, outcome, main, link = null ) {
 	// After the game has set up the pass's sign-in itself (which clears onPass), so a supporter whose
 	// account here has the pass (or gets it: back from paying) is sent back to the Earth.
 	if ( await started ) watchForPass();
+
+}
+
+// fn() once the game's globe is on the Moon (looked at a few times a second, for up to two minutes:
+// a Moon that doesn't load says so itself).
+function onceOnMoon( game, fn ) {
+
+	const since = Date.now();
+	const look = () => {
+
+		if ( game.world === 'moon' ) return fn();
+		if ( Date.now() - since < 120000 ) setTimeout( look, 250 );
+
+	};
+	look();
 
 }
 
