@@ -5521,7 +5521,7 @@ describe( 'World Drive with its Worker', () => {
 		await page.waitForFunction( () => window.drive?.tiles, null, { timeout: 30000 } );
 		assert.equal( visits.length, 2 );
 		for ( const visit of visits ) assert.deepEqual( visit, { body: { token: TOKEN }, type: 'application/json' } );
-		assert.match( await page.locator( '#toast' ).textContent(), /1 more free drive today/ );
+		assert.match( await page.locator( '#toast' ).textContent(), /1 more Earth drive today/ );
 		const roots = () => page.outside.filter( url => url.includes( '/v1/3dtiles/root.json' ) );
 		await page.waitForFunction( () => window.drive.tiles.rootLoadingState !== undefined, null, { timeout: 5000 } ).catch( () => {} );
 		await page.waitForTimeout( 1500 );
