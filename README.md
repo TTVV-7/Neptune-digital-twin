@@ -73,6 +73,7 @@ things and switches between before and after (see [Showing and hiding](#showing-
 | W A S D / arrows | Move |
 | Shift | Run (walk) / faster (fly) |
 | F | Switch between walking and flying |
+| C | Walking: third person (behind the worker you walk as) or first person (through his eyes) |
 | Space | Jump (walk) / up (fly) |
 | E / Q | Up / down (fly); C also goes down |
 | Wheel | Zoom toward the point under the cursor, or away from it; Shift for bigger steps. A trackpad's pinch zooms too |
@@ -162,6 +163,34 @@ mouse during the turn takes the view back. **T** stops the turning (`autoTurn` i
 [src/config.js](src/config.js) sets it for good, with `flyRadius` for the clearance and `bounce` for
 how hard you bounce), and **G** (ghost) lets you through walls on purpose, e.g. to look inside a
 building; the status top left says when it's on.
+
+### Walking as a construction worker
+
+Walking (**F**), you're a construction worker in a hard hat and hi-vis vest (hi3D models): **K**
+changes who, between the *Foreman* (jeans, arms at his sides) and the *Labourer* (hoodie, cargo
+pants, forearms held out in front), remembered in your browser. In
+**third person** the camera follows behind him and over his right shoulder: he turns to face the way
+he walks, his legs and arms swing in step (further when running with Shift), his knees come up when
+he jumps, and the camera comes in closer when a wall or the ground is behind him, so it works down
+C32 and the gallery. **C** switches to **first person**, from his eyes: look down and you see your
+boots. The choice is remembered in your browser; flying and driving are as before.
+
+The model is one mesh with no skeleton: `src/player.js` gives it one as it loads (hips, spine,
+chest, head, thighs, shins, upper arms and forearms), weighting each part of the body to its bones
+by where it is, and walks it. To add another person (standing, facing +z), make the model and
+add a line to `CHARACTERS` at the top of `src/player.js`:
+
+```bash
+node scripts/add-player-model.mjs path/to/person.glb --height 1.88 --out public/models/player-worker-3.glb
+```
+
+A character holding its forearms out in front (as the Labourer does) says so with `forward` there,
+and one whose body stands back of its feet with `z`.
+
+That makes it about 40,000 triangles with 2048 px WebP textures (the hi3D export was 2 million and
+48 MB; this is 1 MB), stands it on its feet at the height given, and writes
+`public/models/player-worker.glb` (or `--out`), centred between its feet. If its joints aren't where a typical person's are, `JOINTS` at
+the top of `src/player.js` moves them (shares of the height).
 
 ## Adding your own model
 
@@ -281,6 +310,11 @@ models** off in the Show panel), then:
 - **← → ↑ ↓** nudge it as you see it (1 cm to 1 m a press), **⟲ ⟳** turn it in its face (1° to 90°);
 - **Move to another surface…**, then click the wall, floor or soffit it belongs on: it goes there,
   its middle where you clicked, facing you;
+- resize it, as an excavation: its **Size** (width × height in metres, as it lies on its face)
+  can be typed in, growing or shrinking it about its middle, or drag the yellow squares on its
+  corners and sides (the other side stays put, to the centimetre). Its m² goes with it: a drawing's
+  measured m² by as much as the outline grew. A shape that isn't a rectangle is stretched by the
+  box round it;
 - give it its **Panel no.**, which then floats on the panel for everyone (a **Panel numbers** row in
   the Show panel hides them);
 - move it on to the next stage with **Status**, each with its own look and rim colour, and the day
@@ -325,7 +359,9 @@ there for everyone, so the days are worth keeping right as the work goes on.
 face, level on a wall), or click its corners one by one and click the first again, double-click
 or press Enter to finish (Backspace takes a corner back, Esc stops). It takes the status
 and defect last set (chipped today, by default) and is named from where it is: zone, face, grid and
-m². With nothing picked, the panel counts the areas and m² at each stage.
+m². With nothing picked, the panel counts the areas and m² at each stage. While editing, every area
+carries a tag with its size, *1.20 × 0.80 m* over its m² (under its panel number); the **Panel
+sizes** row in the Show panel hides them.
 
 Areas are rebuilt as you go with the build's own code (`src/repair-geometry.js`): the recess, rebar
 and coloured rim go with them, and the concrete is cut again. Right-drag looks round and WASD
@@ -367,7 +403,7 @@ while you're under it there ([Models under the ground](#models-under-the-ground)
 filled polygons coloured by date as its legend says) is read straight into the model's areas:
 
 ```bash
-node scripts/b2d2-progress.mjs "2026.11.10 - Progress.pdf"
+node scripts/b2d2-progress.mjs "2026.11.17 - Progress.pdf" --match 2.5
 node scripts/b2d2-repair-model.mjs
 ```
 
@@ -376,9 +412,14 @@ places each polygon on the wall, floor or soffit of the model it's drawn on, kee
 that are still there (within 0.6 m of where they were, closest pairs first; `--match 1.2` after the
 structure has been moved, `--match 2.5` when outlines were moved on the drawing, as two C32 floor
 panels were on 10 November), and lists what's new, what's gone and anything it couldn't place
-(`--dry-run` only lists). Areas take the drawing's measured m². Each chipped area gets a rim in its
-date's colour, the legend's for 2 to 10 November (blue 9 November, yellow 10 November). A callout
-whose text is a panel number (the curb walls' CW0001 to CW0046) gives the area its leader ends on
+(`--dry-run` only lists). Only an area chipped the same day keeps an old one's id (a day's colour
+doesn't change from drawing to drawing), so `--match 2.5` can't hand an old panel's id to a new
+day's beside it. Areas take the drawing's measured m². Each chipped area gets a rim in its date's
+colour, the legend's for 2 to 17 November (blue 9 November, yellow 10 November, dark green 11,
+purple 12, brown 13 (night), maroon 14, navy 15, pink 16 and black 17 November); a new day on the
+legend goes in `COLOURS` at the top of the script. A callout
+whose text is a panel number (C32's walls' AW0001 to AW0024, the gallery's east wall's BW0001 to
+BW0017, the curb walls' CW0001 to CW0046) gives the area its leader ends on
 that number, which the twin shows on the panel; numbers are written four digits wide (the drawing's
 CW00010 is CW0010). A number changed in the twin wins over the drawing's.
 
@@ -782,7 +823,19 @@ Object on the WebSocket Hibernation API (`worker/drive/live.js`, speaking
 `src/drive-app/live-protocol.js`). It switches itself off for the rest of the UTC day once it has
 used its daily budget of Durable Object requests (`LIVE_DAILY_BUDGET`), so it can't use up what the
 visits need, and `LIVE` in `wrangler.drive.jsonc` switches it all off (see
-[Driving with others](docs/world-drive.md#driving-with-others), with what it costs).
+[Driving with others](docs/world-drive.md#driving-with-others), with what it costs). On the Moon it's
+the same in the Moon's own rooms (its areas the Earth's size, cars sent in the Moon's frame and drawn
+on its ground), with its own **Driving now** and dots on the Moon's globe, and parties span both
+worlds: **Go to** and **Join** turn the globe to the friend's world and drop in beside them. The
+Moon's rooms keep a budget of their own (`LIVE_MOON_DAILY_BUDGET`), so the Earth's being spent never
+shuts them (nor can a party's driver let in on the Moon drive on with an Earth that's spent: it's
+closed as it says it's there), and its visits (never limited) are held to 20 a day connecting from
+one address. And on either world, each address's connections (any but the owner's) may spend only
+an eighth of that world's day (`LIVE_ADDRESS_SHARE`: 5,000 requests on the Earth, 2,500 on the
+Moon, hours of driving with others), past which they're closed and turned away there until midnight
+UTC (see
+[Driving with others on the Moon](docs/world-drive.md#driving-with-others-on-the-moon), "Bounded per
+address").
 
 **Levels**: driving earns XP (each km, air off jumps, drift boosts, boost pads, landed tricks, the
 first drive in each area and at each start spot, minutes with others, and the day's first drive,
@@ -861,8 +914,10 @@ rewards](docs/world-drive.md#achievements-and-rewards)).
 made in the page rather than streamed, the same way (`src/drive-app/body.js`, its heights and made-up ground in
 `body-height.js`), and what each is (its size, gravity, files, credit and made-up ground) is one
 list, `src/drive-app/worlds.js`, which the page, the Worker, the site and the tests share; each is
-free and never limited, and you drive it on your own: driving with others is the Earth's (see
-[Worlds](docs/world-drive.md#worlds), with how to add one).
+free and never limited. Driving with others is on the Earth and the Moon, the Moon's in rooms of its
+own (see [Driving with others on the Moon](docs/world-drive.md#driving-with-others-on-the-moon));
+on Mars, Vesta and Ceres you drive on your own (see [Worlds](docs/world-drive.md#worlds), with how
+to add one).
 
 The Moon's shapes are NASA's (LRO's laser altimeter, every quarter degree,
 `drive/public/moon/height.bin`), its colours LRO's camera's mosaic (`drive/public/moon/colour.webp`;
@@ -871,8 +926,9 @@ kilometres are made up, the same on every visit, down to 3 m. Its ground is a qu
 a cube blown up into a sphere, a point every 1.3 m by the vehicle. It has a dozen start spots (the
 Apollo sites, Tycho, Copernicus, a pole, the far side) and its own search; you drive it in a sixth of
 the Earth's gravity (jumps as high, two and a half times as long, scored as on the Earth), under
-black sky with the Earth hanging in it, with no water. It needs no Google tiles, so `npm run
-dev:drive` has the real Moon without a key (see [The Moon](docs/world-drive.md#the-moon)).
+black sky with the Earth hanging in it, with no water; and driving with others is there too, in the
+Moon's own rooms. It needs no Google tiles, so `npm run dev:drive` has the real Moon without a key
+(see [The Moon](docs/world-drive.md#the-moon)).
 
 Mars's shapes are NASA's too (Mars Global Surveyor's laser altimeter, MOLA, every eighth of a degree
 over the areoid, `drive/public/mars/height.bin`, 8.3 MB), its colours the Viking orbiters' mosaic as
@@ -988,6 +1044,7 @@ src/placements.js   models' positions saved on the live site for everyone (Save 
                     and the admin passcode for anything saved for everyone
 src/shared-items.js items the admin saved for everyone: loaded for everyone, Save / Remove for everyone
 src/legend.js       the Controls panel: the keys for what you're doing now
+src/player.js       the construction workers you walk as (K): their bones, their walk, third and first person (C)
 src/layers.js       the Show panel: layers, hidden items and Before / After (B)
 src/drive-prompt.js V: what it drives, the "Press V to drive" prompt and twin.startDriving()
 src/models.js       loads and places your glTF models

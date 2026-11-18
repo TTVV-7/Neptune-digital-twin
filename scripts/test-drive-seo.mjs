@@ -59,7 +59,7 @@ const WORLD_CHECKS = {
 		coordinates: 'selenographic latitude and longitude',
 		honest: /no landers, flags or rover tracks/,
 		credit: 'https://svs.gsfc.nasa.gov/4720/',
-		phrases: [ 'LOLA', 'LROC', 'public domain', 'made up', 'a sixth of the gravity', 'two and a half times as long', 'The Earth in the sky', 'No water', 'On your own' ],
+		phrases: [ 'LOLA', 'LROC', 'public domain', 'made up', 'a sixth of the gravity', 'two and a half times as long', 'The Earth in the sky', 'No water', 'With others', 'bring friends in a party' ],
 		files: { '/moon/height.bin': 2073600, '/moon/colour.webp': 674590 },
 	},
 	mars: {

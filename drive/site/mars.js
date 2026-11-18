@@ -263,7 +263,7 @@ export const MARS_DRIVING = [
 	'<b>38% of the gravity.</b> A jump goes as high as on the Earth and lasts about 1.6 times as long, so there\'s time for more spins and flips (each is worth fewer points, to be fair to the Earth\'s).',
 	'<b>A butterscotch sky.</b> A dusty yellow-brown, hazy far off, with a paler glow round the sun, which is always from the south-west, about 34° up, wherever you are. Phobos, one of Mars\'s two moons, hangs in it to the north-east, lit by the same sun: where it is in the sky is made up, and past 69° north or south it\'s never in sight.',
 	'<b>No water and no roads.</b> Dust and rock to the horizon: plains, crater rims, canyon walls and the slopes of volcanoes.',
-	'<b>On your own.</b> Driving with others is on the Earth: on Mars you drive alone. Driving, air, drifts and tricks still earn XP, and your best runs go on the leaderboard (the bonuses for new start spots and areas are the Earth\'s).',
+	'<b>On your own.</b> Driving with others is on the Earth and the Moon: on Mars you drive alone. Driving, air, drifts and tricks still earn XP, and your best runs go on the leaderboard (the bonuses for new start spots and areas are the Earth\'s).',
 ];
 
 // The rest of what Mars's pages say (build.js): its page's title, description and words, the line

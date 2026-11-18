@@ -50,7 +50,7 @@ const EXCAVATOR = [
 // controls, driver, models: the walk controller, race mode and what's placed. getSidebar: the
 // library sidebar, once loaded. getDriving: what V does (drive-prompt.js), once loaded.
 // getLayers: the Show panel, once loaded. toggleHelp: shows or hides the full help.
-export function createLegend( { controls, driver, models, getSidebar, getDriving, getLayers, getUnderground, toggleHelp } ) {
+export function createLegend( { controls, driver, player, models, getSidebar, getDriving, getLayers, getUnderground, toggleHelp } ) {
 
 	const root = document.getElementById( 'legend' );
 	const openButton = root.querySelector( '.legend-open' );
@@ -153,6 +153,8 @@ export function createLegend( { controls, driver, models, getSidebar, getDriving
 		return { title: 'Walking', rows: [
 			[ [ 'W', 'A', 'S', 'D' ], 'Move · Shift runs' ],
 			[ [ 'Space' ], 'Jump' ],
+			[ [ 'C' ], player?.thirdPerson ? 'Camera: first person' : 'Camera: third person' ],
+			[ [ 'K' ], `Character: ${ player?.character?.name ?? '' }` ],
 			[ [ 'F' ], 'Fly' ],
 			...look(),
 			...zoom,

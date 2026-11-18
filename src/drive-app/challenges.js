@@ -66,9 +66,9 @@ const PULSE_RATE = 4;
 // COURSE_MOVE m driven; a wave of light runs along them toward the gate, WAVE m long, every
 // WAVE_TIME s. COURSE_MOST at most.
 const CHEVRON_GAP = 18;
-const CHEVRON = 2.2;
-const CHEVRON_UP = 0.3;
-const CHEVRON_LEAN = 0.9;
+const CHEVRON = 1.7;
+const CHEVRON_UP = 0.15;
+const CHEVRON_LEAN = 0.35;
 const COURSE_REACH = 720;
 const PREVIEW_REACH = 260;
 const COURSE_MOVE = 12;
@@ -1919,7 +1919,7 @@ export function setUpChallenges( app ) {
 
 					// A crest running toward the gate: brightest where (distance / WAVE + time) is whole.
 					const phase = ( chevron.to / WAVE + wave ) % 1;
-					const light = 0.55 + 0.45 * Math.max( 0, Math.cos( phase * Math.PI * 2 ) ) ** 3;
+					const light = 0.4 + 0.5 * Math.max( 0, Math.cos( phase * Math.PI * 2 ) ) ** 3;
 					_colour.copy( chevron.dim ? LATER : chevron.goal ? GOAL : NEXT ).multiplyScalar( chevron.dim ? 0.5 : light );
 					chevrons.setColorAt( i, _colour );
 

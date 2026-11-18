@@ -190,28 +190,39 @@ test( 'an area follows its face where the structure was moved, and onto the side
 
 } );
 
-test( 'the 10 November progress drawing: its dates, and the curb walls\' panel numbers CW0001 to CW0046 on the areas they point at', () => {
+test( 'the 17 November progress drawing: its dates, and the panel numbers on the areas they point at', () => {
 
 	const days = new Set( data.markups.map( m => m.f.chipped ) );
-	for ( const day of [ '2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05/08', '2026-11-09', '2026-11-10' ] ) assert.ok( days.has( day ), day );
+	for ( const day of [ '2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05/08', '2026-11-09', '2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13', '2026-11-14', '2026-11-15', '2026-11-16' ] ) assert.ok( days.has( day ), day );
 	assert.equal( data.markups.filter( m => m.f.chipped === '2026-11-09' ).length, 13 );
 	assert.equal( data.markups.filter( m => m.f.chipped === '2026-11-10' ).length, 2 );
-	// Each number once, on a pony wall at grade: 1 to 20 along the east wall from the north end,
-	// 21 to 46 along the west wall from the pit.
+	assert.equal( data.markups.filter( m => m.f.chipped === '2026-11-16' ).length, 14 );
 	const numbered = data.markups.filter( m => m.no );
-	assert.deepEqual( numbered.map( m => m.no ).sort(), Array.from( { length: 46 }, ( _, i ) => `CW${ String( i + 1 ).padStart( 4, '0' ) }` ) );
+	const series = prefix => numbered.filter( m => m.no.startsWith( prefix ) );
+	// C32's walls: AW0001 to AW0024, each once.
+	assert.deepEqual( series( 'AW' ).map( m => m.no ).sort(), Array.from( { length: 24 }, ( _, i ) => `AW${ String( i + 1 ).padStart( 4, '0' ) }` ) );
+	assert.ok( series( 'AW' ).every( m => m.face === 'north wall' || m.face === 'south wall' ) );
+	// The gallery's east wall: BW0001 to BW0017, each once, but BW0010 (its leader ends on no area).
+	assert.deepEqual( series( 'BW' ).map( m => m.no ).sort(), Array.from( { length: 17 }, ( _, i ) => `BW${ String( i + 1 ).padStart( 4, '0' ) }` ).filter( no => no !== 'BW0010' ) );
+	assert.ok( series( 'BW' ).every( m => m.face === 'east wall (AA side)' ) );
+	// The curb walls: each number once, on a pony wall at grade (the drawing also has a CW0018 on
+	// the gallery's east wall), 2 to 20 along the east wall from the north end, 21 to 46 along the
+	// west wall from the pit.
+	const curb = series( 'CW' ).filter( m => m.face.includes( 'pony wall' ) );
+	assert.equal( new Set( curb.map( m => m.no ) ).size, curb.length );
+	assert.ok( curb.length >= 35, `${ curb.length } curb wall numbers` );
 	const along = ( face, from, to ) => {
 
-		const list = numbered.filter( m => m.face === face ).sort( ( a, b ) => a.no.localeCompare( b.no ) );
+		const list = curb.filter( m => m.face === face ).sort( ( a, b ) => a.no.localeCompare( b.no ) );
 		assert.equal( list[ 0 ].no, from );
 		assert.equal( list.at( - 1 ).no, to );
 		const x = m => m.pts.reduce( ( s, p ) => s + p[ 0 ] / m.pts.length, 0 );
 		// The labels take turns above and below the wall, so neighbours can be a little out of order.
-		for ( let i = 1; i < list.length; i ++ ) assert.ok( ( x( list[ i ] ) - x( list[ i - 1 ] ) ) * ( from === 'CW0001' ? - 1 : 1 ) > - 2, `${ list[ i ].no } after ${ list[ i - 1 ].no }` );
+		for ( let i = 1; i < list.length; i ++ ) assert.ok( ( x( list[ i ] ) - x( list[ i - 1 ] ) ) * ( from === 'CW0002' ? - 1 : 1 ) > - 2, `${ list[ i ].no } after ${ list[ i - 1 ].no }` );
 		return list.map( x );
 
 	};
-	const east = along( 'east pony wall at grade (AA side)', 'CW0001', 'CW0020' );
+	const east = along( 'east pony wall at grade (AA side)', 'CW0002', 'CW0020' );
 	const west = along( 'west pony wall at grade (AJ side)', 'CW0021', 'CW0046' );
 	assert.ok( east[ 0 ] > 55 && east.at( - 1 ) < 20, `east: ${ east[ 0 ] } to ${ east.at( - 1 ) }` );
 	assert.ok( west[ 0 ] < 12 && west.at( - 1 ) > 58, `west: ${ west[ 0 ] } to ${ west.at( - 1 ) }` );
@@ -301,8 +312,8 @@ test( 'looking back: an area is at the stage it had reached by the end of a day,
 	const by = day => data.markups.filter( m => stageAt( m, day ) ).length;
 	assert.equal( by( '2026-11-01' ), 0 );
 	assert.ok( by( '2026-11-02' ) > 0 && by( '2026-11-02' ) < by( '2026-11-04' ) );
-	assert.equal( by( '2026-11-10' ), data.markups.length );
-	assert.ok( by( '2026-11-08' ) < by( '2026-11-10' ) );
+	assert.equal( by( '2026-11-16' ), data.markups.length );
+	assert.ok( by( '2026-11-08' ) < by( '2026-11-10' ) && by( '2026-11-10' ) < by( '2026-11-16' ) );
 
 } );
 

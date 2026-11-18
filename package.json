@@ -15,6 +15,7 @@
     "preview": "vite preview",
     "add-asset": "node scripts/add-asset.mjs",
     "add-own-asset": "node scripts/add-own-asset.mjs",
+    "add-player-model": "node scripts/add-player-model.mjs",
     "add-drive-car": "node scripts/add-drive-car.mjs",
     "drive-car-thumbs": "node scripts/drive-car-thumbs.mjs",
     "drive-site-images": "node scripts/drive-site-images.mjs",

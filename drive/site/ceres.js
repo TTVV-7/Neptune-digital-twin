@@ -229,7 +229,7 @@ export const CERES_DRIVING = [
 	'<b>A black sky full of stars.</b> No air, so the stars are out day and night, with the sun low in the south-west wherever you drive. Ceres has no moons.',
 	'<b>A dark world.</b> Ceres is a very dark body: its ground is a dark grey, but for the bright spots in Occator and round Dantu.',
 	'<b>No water and no roads.</b> Dust and rock to the horizon, a little over a kilometre off on level ground: crater floors, rims and the slopes of mountains.',
-	'<b>On your own.</b> Driving with others is on the Earth: on Ceres you drive alone. Driving, air, drifts and tricks still earn XP, and your best runs go on the leaderboard (the bonuses for new start spots and areas are the Earth\'s).',
+	'<b>On your own.</b> Driving with others is on the Earth and the Moon: on Ceres you drive alone. Driving, air, drifts and tricks still earn XP, and your best runs go on the leaderboard (the bonuses for new start spots and areas are the Earth\'s).',
 ];
 
 // The rest of what Ceres's pages say (build.js): its page's title, description and words, the line
