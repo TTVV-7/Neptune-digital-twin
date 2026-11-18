@@ -58,14 +58,16 @@ const NEXT_PULSE = 0.08;
 const PULSE_RATE = 4;
 // The course on the Moon's ground (its heights are known everywhere, so it can be laid on them):
 // glowing chevrons CHEVRON_GAP m apart, CHEVRON across and CHEVRON_UP over the ground, pointing the
-// way. Bright on the way to the next gate (from the gate before, or the start), from the car up to
+// way, leaned up CHEVRON_LEAN rad from lying flat (flat, they're lines a few metres off from a
+// driver's low view). Bright on the way to the next gate (from the gate before, or the start), from the car up to
 // COURSE_REACH m ahead; dim on the way on from it (the turn coming), PREVIEW_REACH m of it. For a
 // star hunt, from the car to the nearest star. Laid again as the next one changes and each
 // COURSE_MOVE m driven; a wave of light runs along them toward the gate, WAVE m long, every
 // WAVE_TIME s. COURSE_MOST at most.
-const CHEVRON_GAP = 16;
-const CHEVRON = 3.4;
-const CHEVRON_UP = 0.9;
+const CHEVRON_GAP = 18;
+const CHEVRON = 2.2;
+const CHEVRON_UP = 0.3;
+const CHEVRON_LEAN = 0.9;
 const COURSE_REACH = 720;
 const PREVIEW_REACH = 260;
 const COURSE_MOVE = 12;
@@ -1680,9 +1682,9 @@ export function setUpChallenges( app ) {
 		const beams = new InstancedMesh( beamGeometry, new MeshBasicMaterial( { transparent: true, opacity: 0.6, alphaMap: alpha, depthWrite: false, side: DoubleSide, forceSinglePass: true, toneMapped: false } ), most );
 		const rings = new InstancedMesh( new TorusGeometry( 1, RING_TUBE, 6, 36 ), new MeshBasicMaterial( { toneMapped: false } ), most );
 		const items = new InstancedMesh( new OctahedronGeometry( 1 ), new MeshBasicMaterial( { toneMapped: false } ), most );
-		// The course's chevrons: a flat V pointing along +z, lying on the ground.
+		// The course's chevrons: a V pointing along +z, standing on the ground leaned forward.
 		const vee = new Shape( [ [ 0, 0.6 ], [ 1, - 0.4 ], [ 1, - 0.9 ], [ 0, 0.1 ], [ - 1, - 0.9 ], [ - 1, - 0.4 ] ].map( ( [ x, y ] ) => new Vector2( x, y ) ) );
-		const chevrons = new InstancedMesh( new ShapeGeometry( vee ).rotateX( Math.PI / 2 ), new MeshBasicMaterial( { transparent: true, opacity: 0.9, depthWrite: false, side: DoubleSide, toneMapped: false } ), COURSE_MOST );
+		const chevrons = new InstancedMesh( new ShapeGeometry( vee ).translate( 0, 0.9, 0 ).rotateX( Math.PI / 2 - CHEVRON_LEAN ), new MeshBasicMaterial( { transparent: true, opacity: 0.9, depthWrite: false, side: DoubleSide, toneMapped: false } ), COURSE_MOST );
 		chevrons.setColorAt( 0, NEXT );
 		for ( const mesh of [ beams, rings, items, chevrons ] ) {
 
@@ -1828,7 +1830,7 @@ export function setUpChallenges( app ) {
 
 					// A crest running toward the gate: brightest where (distance / WAVE + time) is whole.
 					const phase = ( chevron.to / WAVE + wave ) % 1;
-					const light = 0.35 + 0.65 * Math.max( 0, Math.cos( phase * Math.PI * 2 ) ) ** 3;
+					const light = 0.55 + 0.45 * Math.max( 0, Math.cos( phase * Math.PI * 2 ) ) ** 3;
 					_colour.copy( chevron.dim ? LATER : chevron.goal ? GOAL : NEXT ).multiplyScalar( chevron.dim ? 0.5 : light );
 					chevrons.setColorAt( i, _colour );
 

@@ -4272,7 +4272,7 @@ same for everyone in its period, with its own board of each player's best time.
   wider and its ring breathes, and a marker sits over it on the screen (a diamond with how far it
   is), held at the screen's edge with an arrow pointing the way when it's off the screen or behind
   you. On the Moon, whose heights are known everywhere, the course is laid on the ground too: glowing
-  chevrons every 16 m on the line to the next gate (from the car up to 720 m ahead, a wave of light
+  chevrons leaned up off the ground every 18 m on the line to the next gate (from the car up to 720 m ahead, a wave of light
   running along them toward it) and dim ones on the first 260 m of the leg after it, so the turn
   coming shows; for a star hunt, from the car to the nearest star. A gate goes as it's
   passed, with "Gate 2 / 6" (or "3 / 6 stars") said over the speed. A sprint's gates count in their
