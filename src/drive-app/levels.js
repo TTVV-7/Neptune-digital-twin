@@ -336,8 +336,8 @@ export function badgeOf( level ) {
 // the page's own for the report (REPORT_ID), so one sent again whose answer never came is counted
 // once; and only in a claim, days: { xp, streak, day }, the days' bonuses counted in this browser
 // before the nickname (their XP together, and the streak they made, as of `day`). And feats, when
-// there's anything in it: the achievements' trusted counts since the last report (Moon drives,
-// Garage changes, rides tried: achievement-rules.js's checkTallies).
+// there's anything in it: the achievements' trusted counts since the last report (the Moon's drives
+// and Mars's, Garage changes, rides tried: achievement-rules.js's checkTallies).
 export const REPORT_FIELDS = [ 'km', 'air', 'drifts', 'pads', 'together', 'tricks' ];
 export const REPORT_ID = /^[\w-]{8,40}$/;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
