@@ -141,8 +141,8 @@ describe( 'World Drive on Mars', () => {
 
 		await openGlobe( page );
 		assert.deepEqual( page.worlds, [], 'nothing of the other worlds\' is fetched on the Earth' );
-		assert.equal( await page.locator( '#globe-ui .worlds button' ).count(), 3 );
-		assert.deepEqual( await page.locator( '#globe-ui .worlds button' ).evaluateAll( buttons => buttons.map( b => b.dataset.world ) ), [ 'earth', 'moon', 'mars' ] );
+		assert.equal( await page.locator( '#globe-ui .worlds button' ).count(), 5 );
+		assert.deepEqual( await page.locator( '#globe-ui .worlds button' ).evaluateAll( buttons => buttons.map( b => b.dataset.world ) ), [ 'earth', 'moon', 'mars', 'vesta', 'ceres' ] );
 
 		await toMars( page );
 		assert.deepEqual( page.worlds.sort(), [ '/mars/colour.webp', '/mars/height.bin' ], 'Mars\'s files, and none of the Moon\'s' );
@@ -155,6 +155,7 @@ describe( 'World Drive on Mars', () => {
 		assert.equal( await page.locator( '#globe-ui .osm' ).isVisible(), false );
 		await page.locator( '#mars-credit' ).waitFor();
 		assert.equal( await page.locator( '#moon-credit' ).isVisible(), false );
+		for ( const other of [ 'vesta', 'ceres' ] ) assert.equal( await page.locator( `#${ other }-credit` ).isVisible(), false, other );
 		const globe = await page.evaluate( () => {
 
 			const { globe, bodies: { mars, moon }, scene } = window.drive;
@@ -387,13 +388,25 @@ describe( 'World Drive\'s Mars, by a link and from the keyboard', () => {
 
 			await openGlobe( page );
 			const tabs = () => page.locator( '#globe-ui .worlds button' ).evaluateAll( buttons => buttons.map( b => b.tabIndex ) );
-			assert.deepEqual( await tabs(), [ 0, - 1, - 1 ] );
+			assert.deepEqual( await tabs(), [ 0, - 1, - 1, - 1, - 1 ] );
 			await page.locator( '#globe-ui .worlds [data-world="earth"]' ).focus();
-			// Left from the Earth, round to Mars.
+			// Left from the Earth, round to the last of the five (Ceres); right from there, back to the
+			// Earth; and left twice from it, Vesta then Mars.
+			await page.keyboard.press( 'ArrowLeft' );
+			await page.waitForFunction( () => window.drive.world === 'ceres', null, { timeout: 90000 } );
+			assert.equal( await page.evaluate( () => document.activeElement.dataset.world ), 'ceres' );
+			assert.deepEqual( await tabs(), [ - 1, - 1, - 1, - 1, 0 ] );
+			await page.keyboard.press( 'ArrowRight' );
+			await page.waitForFunction( () => window.drive.world === 'earth', null, { timeout: 90000 } );
+			assert.deepEqual( await tabs(), [ 0, - 1, - 1, - 1, - 1 ] );
+			await page.keyboard.press( 'ArrowLeft' );
+			await page.waitForFunction( () => window.drive.world === 'ceres', null, { timeout: 90000 } );
+			await page.keyboard.press( 'ArrowLeft' );
+			await page.waitForFunction( () => window.drive.world === 'vesta', null, { timeout: 90000 } );
 			await page.keyboard.press( 'ArrowLeft' );
 			await page.waitForFunction( () => window.drive.world === 'mars', null, { timeout: 90000 } );
 			assert.equal( await page.evaluate( () => document.activeElement.dataset.world ), 'mars' );
-			assert.deepEqual( await tabs(), [ - 1, - 1, 0 ] );
+			assert.deepEqual( await tabs(), [ - 1, - 1, 0, - 1, - 1 ] );
 			assert.deepEqual( page.errors, [] );
 
 		} finally {
@@ -404,7 +417,7 @@ describe( 'World Drive\'s Mars, by a link and from the keyboard', () => {
 
 	} );
 
-	test( 'on a phone the three worlds fit across the top of the sheet', async () => {
+	test( 'on a phone the five worlds fit across the top of the sheet', async () => {
 
 		const page = await newPage( { viewport: { width: 360, height: 740 }, touch: true } );
 		try {

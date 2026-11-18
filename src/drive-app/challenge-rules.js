@@ -1,5 +1,5 @@
 import { metresOn, RADIUS } from './dropin-cells.js';
-import { WORLD_IDS } from './worlds.js';
+import { WORLD_IDS, WORLDS as WORLD_DATA } from './worlds.js';
 
 // Challenges (docs/world-drive.md, "Challenges"): a daily, a weekly and a monthly challenge on each
 // world (worlds.js: the Earth, the Moon, Mars, Vesta and Ceres, fifteen at once), each with its own
@@ -406,11 +406,24 @@ export function routeLength( world, route ) {
 
 // --- checking a time ---
 
+// A world whose ground lies deeper under its sphere than this share of its radius (worlds.js's
+// `lowest`) has its legs measured on the sphere of that lowest ground (legMinimum): on Vesta (52 km
+// under 263) and Ceres (29 under 470) a leg along a deep basin's floor or by a pole is a tenth or a
+// twentieth shorter than metresOn's, more than LEG_SLACK on a sprint's leg. The Moon's and Mars's
+// (under 1 %) are measured on their spheres as ever.
+const DEEP = 0.01;
+const LEG_SCALE = Object.fromEntries( WORLD_IDS.map( id => {
+
+	const share = - ( WORLD_DATA[ id ].lowest ?? 0 ) / WORLD_DATA[ id ].radius;
+	return [ id, share > DEEP ? 1 - share : 1 ];
+
+} ) );
+
 // The least time (ms) a leg can take: from within `fromRadius` of `from` ([ lat, lon ]) to within
-// `toRadius` of `to`, along the ground at FASTEST.
+// `toRadius` of `to`, along the ground at FASTEST (on the deepest ground the world has: LEG_SCALE).
 export function legMinimum( world, from, fromRadius, to, toRadius ) {
 
-	return Math.max( 0, metresOn( world, from[ 0 ], from[ 1 ], to[ 0 ], to[ 1 ] ) - fromRadius - toRadius ) / FASTEST * 1000;
+	return Math.max( 0, metresOn( world, from[ 0 ], from[ 1 ], to[ 0 ], to[ 1 ] ) * ( LEG_SCALE[ world ] ?? 1 ) - fromRadius - toRadius ) / FASTEST * 1000;
 
 }
 

@@ -246,7 +246,7 @@ export const CERES_SITE = {
 	lede: 'World Drive\'s globe turns to Ceres, a dwarf planet and the biggest body in the asteroid belt, about 940 km across: pick anywhere on it, drop in and drive, in 2.9% of the Earth\'s gravity under a black sky full of stars. Its craters, bright spots and mountains are where the real ones are, from NASA\'s Dawn mission.',
 	// Said of the first of its places, which its Drive on Ceres pins.
 	first: 'whose bright spots are salts left by brine',
-	data: 'It\'s the whole of Ceres, from pole to pole, its heights from about 7 km under its level to about 9.4 km over it on Yamor Mons, near its north pole, made in your browser from about 9.5 MB of data, so it needs no map service: the globe\'s search knows every place on Ceres the IAU has named, its craters, bright spots, mountains and hills.',
+	data: 'It\'s the whole of Ceres, from pole to pole, its heights from about 7 km under its level to about 9.4 km over it on Yamor Mons, near its north pole, made in your browser from a little over 9 MB of data, so it needs no map service: the globe\'s search knows every place on Ceres the IAU has named, its craters, bright spots, mountains and hills.',
 	elsewhere: {
 		heading: 'And the Earth, the Moon, Mars and Vesta',
 		html: 'On the Earth, World Drive drops you into Google\'s photorealistic 3D map of the real world, anywhere: your own street, or <a href="/drive/">famous roads, bridges and cities</a> like the Golden Gate Bridge, Times Square and Monaco. And the globe turns to <a href="/moon/">the Moon</a>, <a href="/mars/">Mars</a> and <a href="/vesta/">Vesta</a> too, the asteroid Dawn visited before Ceres.',

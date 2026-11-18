@@ -70,7 +70,26 @@ const WORLD_CHECKS = {
 		phrases: [ 'MOLA', 'Mars Global Surveyor', 'Viking', 'USGS', 'areoid', 'public domain', 'made up', '38% of the gravity', 'about 1.6 times as long', 'butterscotch sky', 'Phobos', 'No water', 'On your own' ],
 		files: { '/mars/height.bin': 8294400, '/mars/colour.webp': 1050320 },
 	},
+	vesta: {
+		title: 'Drive on the Asteroid Vesta in 3D, Free in Your Browser – World Drive',
+		coordinates: 'planetocentric latitude and longitude',
+		honest: /Dawn never landed, and there's no spacecraft in it/,
+		credit: 'https://planetarymaps.usgs.gov/mosaic/',
+		phrases: [ 'Dawn', 'DLR', 'framing camera', 'made up', '2.5% of the gravity', 'about six times as long', 'black sky full of stars', 'No water', 'On your own' ],
+		files: { '/vesta/height.bin': 8294400, '/vesta/colour.webp': 444068 },
+	},
+	ceres: {
+		title: 'Drive on the Dwarf Planet Ceres in 3D, Free in Your Browser – World Drive',
+		coordinates: 'planetocentric latitude and longitude',
+		honest: /Dawn never landed, and there's no spacecraft in it/,
+		credit: 'https://planetarymaps.usgs.gov/mosaic/',
+		phrases: [ 'Dawn', 'DLR', 'framing camera', 'made up', '2.9% of the gravity', 'nearly six times as long', 'black sky full of stars', 'No water', 'On your own' ],
+		files: { '/ceres/height.bin': 8294400, '/ceres/colour.webp': 781442 },
+	},
 };
+// The worlds whose link cards are drawn (npm run drive:site-images): the Moon's and Mars's always;
+// Vesta's and Ceres's once drawn, until then their pages have World Drive's own card.
+const DRAWN = new Set( [ 'moon', 'mars' ] );
 const WORLD_FILES = Object.assign( {}, ...OFF_EARTH.map( id => WORLD_CHECKS[ id ].files ) );
 // "43.31° S, 11.36° W": where a place on another world is, as its page says it.
 const latLon = ( { lat, lon } ) => `${ Math.abs( lat ).toFixed( 2 ) }° ${ lat < 0 ? 'S' : 'N' }, ${ Math.abs( lon ).toFixed( 2 ) }° ${ lon < 0 ? 'W' : 'E' }`;
@@ -186,14 +205,14 @@ function builtFile( path ) {
 
 describe( 'what search engines read', () => {
 
-	test( 'the pages: the home page, the list of places, one page for each place, and the Moon\'s and Mars\'s, each at a clean address', () => {
+	test( 'the pages: the home page, the list of places, one page for each place, and the other worlds\', each at a clean address', () => {
 
-		assert.deepEqual( OFF_EARTH, [ 'moon', 'mars' ] );
+		assert.deepEqual( OFF_EARTH, [ 'moon', 'mars', 'vesta', 'ceres' ] );
 		const paths = pages.map( page => page.path ).sort();
 		const expected = [ '/', '/drive/', ...PLACES.map( place => `/drive/${ place.slug }/` ), ...OFF_EARTH.flatMap( id => [ `/${ id }/`, ...WORLD_SITES[ id ].pages.map( place => `/${ id }/${ place.slug }/` ) ] ) ].sort();
 		assert.deepEqual( paths, expected );
-		assert.ok( paths.includes( '/mars/olympus-mons/' ) && paths.includes( '/moon/tycho/' ) );
-		for ( const place of [ ...PLACES, ...MOON_PAGES, ...MARS_PAGES ] ) assert.match( place.slug, /^[a-z0-9]+(-[a-z0-9]+)*$/, `${ place.slug } isn't a clean address` );
+		assert.ok( paths.includes( '/mars/olympus-mons/' ) && paths.includes( '/moon/tycho/' ) && paths.includes( '/vesta/' ) && paths.includes( '/ceres/' ) );
+		for ( const place of [ ...PLACES, ...OFF_EARTH.flatMap( id => WORLD_SITES[ id ].pages ) ] ) assert.match( place.slug, /^[a-z0-9]+(-[a-z0-9]+)*$/, `${ place.slug } isn't a clean address` );
 		// One for each start spot, the Earth's, the Moon's and Mars's, and those exist (each page a spot
 		// of its own world's, none twice).
 		for ( const spot of SPOTS ) assert.ok( PLACES.some( place => place.spot === spot.id ), `no page for the start spot ${ spot.id }` );
@@ -208,6 +227,7 @@ describe( 'what search engines read', () => {
 		}
 
 		assert.equal( MARS_PAGES.length, 12 );
+		assert.deepEqual( [ WORLD_SITES.vesta.pages.length, WORLD_SITES.ceres.pages.length ], [ 11, 11 ] );
 
 	} );
 
@@ -266,16 +286,17 @@ describe( 'what search engines read', () => {
 		assert.equal( metaOf( golden, 'og:image' ), `${ SITE }/og/golden-gate-bridge.png` );
 		assert.equal( titleOf( golden ), 'Drive the Golden Gate Bridge in 3D – World Drive' );
 		// The Moon's page and Mars's, and each of their places, have their own, drawn from World Drive's
-		// Moon and Mars.
+		// Moon and Mars; Vesta's and Ceres's theirs once drawn, World Drive's own card until then.
+		const cardOf = ( id, name ) => DRAWN.has( id ) || existsSync( join( ROOT, 'drive', 'public', 'og', `${ name }.png` ) ) ? `${ SITE }/og/${ name }.png` : `${ SITE }/og/world-drive.png`;
 		for ( const id of OFF_EARTH ) {
 
 			const own = pages.find( page => page.path === `/${ id }/` ).html;
-			assert.equal( metaOf( own, 'og:image' ), `${ SITE }/og/${ id }.png` );
+			assert.equal( metaOf( own, 'og:image' ), cardOf( id, id ) );
 			assert.equal( titleOf( own ), WORLD_CHECKS[ id ].title );
 			for ( const place of WORLD_SITES[ id ].pages ) {
 
 				const { html } = pages.find( page => page.path === `/${ id }/${ place.slug }/` );
-				assert.equal( metaOf( html, 'og:image' ), `${ SITE }/og/${ id }-${ place.slug }.png`, place.slug );
+				assert.equal( metaOf( html, 'og:image' ), cardOf( id, `${ id }-${ place.slug }` ), place.slug );
 				assert.equal( titleOf( html ), `${ place.title } – World Drive` );
 				assert.equal( metaOf( html, 'description' ), place.description );
 
@@ -340,15 +361,17 @@ describe( 'what search engines read', () => {
 			const world = OFF_EARTH.find( id => path.startsWith( `/${ id }/` ) );
 			if ( world ) {
 
-				// Another world's: World Drive › The Moon or Mars (› the place), and no coordinates of
+				// Another world's: World Drive › The Moon, Mars, Vesta or Ceres (› the place), and no coordinates of
 				// schema.org's, which are the Earth's (the page says where it is on that world in its words).
 				assert.deepEqual( crumbs.itemListElement.slice( 0, 2 ).map( crumb => [ crumb.name, crumb.item ] ), [ [ 'World Drive', `${ SITE }/` ], [ TheWorld( world ), `${ SITE }/${ world }/` ] ], path );
-				assert.doesNotMatch( text, /GeoCoordinates|"geo"|latitude|longitude/, `${ path }: the Earth's coordinates on ${ TheWorld( world ) }` );
+				assert.doesNotMatch( text, /GeoCoordinates|"geo"|"latitude"|"longitude"/, `${ path }: the Earth's coordinates on ${ TheWorld( world ) }` );
 
 			}
 
 			if ( path === '/moon/' ) assert.equal( crumbs.itemListElement[ 1 ].name, 'The Moon' );
 			if ( path === '/mars/' ) assert.equal( crumbs.itemListElement[ 1 ].name, 'Mars' );
+			if ( path === '/vesta/' ) assert.equal( crumbs.itemListElement[ 1 ].name, 'Vesta' );
+			if ( path === '/ceres/' ) assert.equal( crumbs.itemListElement[ 1 ].name, 'Ceres' );
 			const place = PLACES.find( p => `/drive/${ p.slug }/` === path );
 			const worldPlace = world && WORLD_SITES[ world ].pages.find( p => `/${ world }/${ p.slug }/` === path );
 			if ( ! place && ! worldPlace ) continue;
@@ -358,7 +381,7 @@ describe( 'what search engines read', () => {
 			if ( worldPlace ) {
 
 				assert.equal( page.about.name, worldPlace.name );
-				assert.equal( page.about.containedInPlace.name, { moon: 'The Moon', mars: 'Mars' }[ world ] );
+				assert.equal( page.about.containedInPlace.name, { moon: 'The Moon', mars: 'Mars', vesta: 'Vesta', ceres: 'Ceres' }[ world ] );
 				continue;
 
 			}
@@ -393,23 +416,21 @@ describe( 'what search engines read', () => {
 			const links = linksOf( html );
 			for ( const other of PLACES ) if ( other !== place ) assert.ok( links.includes( `/drive/${ other.slug }/` ), `${ place.slug } doesn't link to ${ other.slug }` );
 			assert.ok( links.includes( '/' ) && links.includes( '/drive/' ) );
-			// And to the Moon and Mars, among the other places.
-			assert.match( html, /<ul class="places">[\s\S]*<li><a href="\/moon\/">The Moon<span>/, `${ place.slug }: no Moon among the other places` );
-			assert.match( html, /<ul class="places">[\s\S]*<li><a href="\/mars\/">Mars<span>/, `${ place.slug }: no Mars among the other places` );
+			// And to the other worlds, among the other places.
+			for ( const id of OFF_EARTH ) assert.ok( new RegExp( `<ul class="places">[\\s\\S]*<li><a href="/${ id }/">${ TheWorld( id ) }<span>` ).test( html ), `${ place.slug }: no ${ TheWorld( id ) } among the other places` );
 
 		}
 
-		// The list of them all says the Moon and Mars are there too.
+		// The list of them all says the other worlds are there too.
 		const hub = pages.find( page => page.path === '/drive/' ).html;
-		assert.ok( linksOf( hub ).includes( '/moon/' ), '/drive/ doesn\'t link to the Moon' );
-		assert.ok( linksOf( hub ).includes( '/mars/' ), '/drive/ doesn\'t link to Mars' );
-		assert.match( hub, /<h2>And the Moon and Mars<\/h2>/ );
+		for ( const id of OFF_EARTH ) assert.ok( linksOf( hub ).includes( `/${ id }/` ), `/drive/ doesn't link to ${ TheWorld( id ) }` );
+		assert.match( hub, /<h2>And the Moon, Mars, Vesta and Ceres<\/h2>/ );
 		// And every page's footer links to each world's.
-		for ( const { path, html } of pages.filter( page => page.path !== '/' ) ) assert.match( html, /<footer>[\s\S]*<a href="\/moon\/">Drive on the Moon<\/a> · <a href="\/mars\/">Drive on Mars<\/a>/, path );
+		for ( const { path, html } of pages.filter( page => page.path !== '/' ) ) assert.match( html, /<footer>[\s\S]*<a href="\/moon\/">Drive on the Moon<\/a> · <a href="\/mars\/">Drive on Mars<\/a> · <a href="\/vesta\/">Drive on Vesta<\/a> · <a href="\/ceres\/">Drive on Ceres<\/a>/, path );
 
 	} );
 
-	test( 'the Moon\'s and Mars\'s pages: one heading, their own words, where on that world, a Drive here to its spot there, and links to the others', () => {
+	test( 'the other worlds\' pages (the Moon\'s, Mars\'s, Vesta\'s and Ceres\'s): one heading, their own words, where on that world, a Drive here to its spot there, and links to the others', () => {
 
 		// Nothing shared with another place's page, the Earth's included, nor the Moon's with Mars's.
 		const texts = new Set( PLACES.flatMap( place => place.about ) );
@@ -507,10 +528,10 @@ describe( 'what search engines read', () => {
 		}
 
 		assert.ok( checked.size > 30, `only ${ checked.size } links` );
-		// Off the site, only the credits: OpenStreetMap's copyright page, NASA's for the Moon and the
-		// USGS's colour mosaic for Mars.
+		// Off the site, only the credits: OpenStreetMap's copyright page, NASA's for the Moon, the
+		// USGS's colour mosaic for Mars and its planetary maps for Vesta and Ceres.
 		const outside = new Set( pages.flatMap( ( { html } ) => linksOf( html ) ).filter( href => /^https?:/.test( href ) && ! href.startsWith( SITE ) ) );
-		assert.deepEqual( [ ...outside ].sort(), [ 'https://astrogeology.usgs.gov/search/map/mars_viking_colorized_global_mosaic_232m', 'https://svs.gsfc.nasa.gov/4720/', 'https://www.openstreetmap.org/copyright' ] );
+		assert.deepEqual( [ ...outside ].sort(), [ 'https://astrogeology.usgs.gov/search/map/mars_viking_colorized_global_mosaic_232m', 'https://planetarymaps.usgs.gov/mosaic/', 'https://svs.gsfc.nasa.gov/4720/', 'https://www.openstreetmap.org/copyright' ] );
 
 		// Each world's pages are beside the files the game fetches from /moon/ and /mars/, which are
 		// still there, whole.
@@ -603,14 +624,15 @@ describe( 'what search engines read', () => {
 		const words = wordsOf( html );
 		assert.ok( words.length >= HOME_WORDS, `only ${ words.length } words` );
 		const text = words.join( ' ' );
-		for ( const phrase of [ 'Drive anywhere on Earth', 'photorealistic 3D', 'free arcade driving game', 'nothing to download', 'Stunts', 'Boost', 'drift', 'Fly', 'party', 'levels', 'Can I drive on the Moon?', 'Can I drive on Mars?', 'NASA\'s maps' ] ) assert.ok( text.includes( phrase ), `no "${ phrase }"` );
+		for ( const phrase of [ 'Drive anywhere on Earth', 'photorealistic 3D', 'free arcade driving game', 'nothing to download', 'Stunts', 'Boost', 'drift', 'Fly', 'party', 'levels', 'Can I drive on the Moon?', 'Can I drive on Mars?', 'Can I drive on Vesta?', 'Can I drive on Ceres?', 'NASA\'s maps' ] ) assert.ok( text.includes( phrase ), `no "${ phrase }"` );
 		const links = linksOf( html );
 		for ( const place of PLACES ) assert.ok( links.includes( `/drive/${ place.slug }/` ), `the home page doesn't link to ${ place.slug }` );
 		for ( const place of MOON_PAGES ) assert.ok( links.includes( `/moon/${ place.slug }/` ), `the home page doesn't link to the Moon's ${ place.slug }` );
-		assert.ok( links.includes( '/drive/' ) && links.includes( '/moon/' ) && links.includes( '/mars/' ) );
-		// Mars's list: each of its places linked, its data-play the spot's own link (as its page's Drive here).
-		for ( const place of MARS_PAGES ) assert.ok( html.includes( `<li><a href="/mars/${ place.slug }/" data-play="/?spot=${ place.spot }">${ place.name }</a></li>` ), `the home page's Mars list has no ${ place.slug }` );
-		assert.doesNotMatch( html, /<!-- (moon|mars) places -->/ );
+		assert.ok( links.includes( '/drive/' ) && OFF_EARTH.every( id => links.includes( `/${ id }/` ) ) );
+		// Mars's, Vesta's and Ceres's lists: each of their places linked, its data-play the spot's own
+		// link (as its page's Drive here).
+		for ( const id of [ 'mars', 'vesta', 'ceres' ] ) for ( const place of WORLD_SITES[ id ].pages ) assert.ok( html.includes( `<li><a href="/${ id }/${ place.slug }/" data-play="/?spot=${ place.spot }">${ place.name }</a></li>` ), `the home page's ${ TheWorld( id ) } list has no ${ place.slug }` );
+		assert.doesNotMatch( html, /<!-- (moon|mars|vesta|ceres) places -->/ );
 
 		// In the page: the words are on the panel, not tucked away, and the pitch is on the splash.
 		const page = await browser.newPage( { viewport: { width: 1280, height: 800 } } );

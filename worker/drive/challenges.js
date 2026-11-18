@@ -1082,8 +1082,10 @@ export async function liveChallenges( context ) {
 
 			// (Once past the most, every checked one after is past it too: none of a world's is fixed
 			// out of its order. The rotation keeps clear of its own world's alone, so the others' going
-			// ahead changes nothing of it.)
-			if ( await groundCheck( env, world ) && ++ checked > CHECKED_MOST ) continue;
+			// ahead changes nothing of it. Past the most, a world with ground isn't even looked at: its
+			// heights aren't loaded for routes this ask won't lay out, as setting them is no free work.)
+			if ( GROUNDS[ world ] && checked >= CHECKED_MOST ) continue;
+			if ( await groundCheck( env, world ) ) checked ++;
 			const pick = picks.results.find( p => p.period === period.key && p.world === world );
 			const challenge = await challengeFor( env, period, world, pick ? pickedPlace( pick ) : await rotationPick( env, period, world, places.results, fixed ), now );
 			made.push( challenge );

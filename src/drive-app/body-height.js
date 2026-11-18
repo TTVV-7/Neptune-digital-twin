@@ -39,17 +39,20 @@ export function createGround( world ) {
 	// The cubes' turns: a rotation for each size, the same on every visit.
 	const TURNS = CELLS.map( ( _, i ) => rotation( i + 1 + SEED * 100 ) );
 
+	// The heights' unit (m): 1, or world.heights.step (Vesta's 2, whose 81 km of heights 16 bits of
+	// metres can't hold). The table is kept as it comes, and read times STEP (`at`): copying 4 million
+	// values to metres would take the Worker hundreds of milliseconds, far past a request's 10.
+	const STEP = world.heights.step ?? 1;
 	let heights = null;
 	let northMean = 0;
 	let southMean = 0;
 
 	// Hand over the heights (an Int16Array of COLUMNS × ROWS, as height.bin has them: metres, or steps
-	// of world.heights.step metres, Vesta's 2, whose 81 km of heights 16 bits of metres can't hold).
+	// of STEP metres).
 	function setHeights( table ) {
 
 		if ( table.length !== COLUMNS * ROWS ) throw new Error( `${ world.name }'s heights should be ${ COLUMNS * ROWS } values, not ${ table.length }` );
-		const step = world.heights.step ?? 1;
-		heights = step === 1 ? table : Float32Array.from( table, units => units * step );
+		heights = table;
 		let north = 0;
 		let south = 0;
 		for ( let c = 0; c < COLUMNS; c ++ ) {
@@ -59,8 +62,9 @@ export function createGround( world ) {
 
 		}
 
-		northMean = north / COLUMNS;
-		southMean = south / COLUMNS;
+		// In metres, as grid() reads them.
+		northMean = north * STEP / COLUMNS;
+		southMean = south * STEP / COLUMNS;
 
 	}
 
@@ -224,7 +228,7 @@ export function createGround( world ) {
 
 		column %= COLUMNS;
 		if ( column < 0 ) column += COLUMNS;
-		return heights[ row * COLUMNS + column ];
+		return heights[ row * COLUMNS + column ] * STEP;
 
 	}
 

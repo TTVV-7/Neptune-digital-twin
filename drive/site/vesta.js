@@ -250,7 +250,7 @@ export const VESTA_SITE = {
 	lede: 'World Drive\'s globe turns to Vesta, an asteroid 525 km across and far from round: pick anywhere on it, drop in and drive, in 2.5% of the Earth\'s gravity under a black sky full of stars. Its basins, troughs and craters are where the real ones are, from NASA\'s Dawn mission.',
 	// Said of the first of its places, which its Drive on Vesta pins.
 	first: 'which rises some 20 km over the floor of Vesta\'s biggest basin',
-	data: 'It\'s the whole of Vesta (the little round its north pole that Dawn couldn\'t map is filled in on its map), its heights from about 22 km under its level on Rheasilvia\'s floor to about 19.5 km over it on the basin\'s rim, made in your browser from a little over 9 MB of data, so it needs no map service: the globe\'s search knows every place on Vesta the IAU has named, its craters, troughs, scarps and hills.',
+	data: 'It\'s the whole of Vesta (the little round its north pole that Dawn couldn\'t map is filled in on its map), its heights from about 22 km under its level on Rheasilvia\'s floor to about 19.5 km over it on the basin\'s rim, made in your browser from about 8.7 MB of data, so it needs no map service: the globe\'s search knows every place on Vesta the IAU has named, its craters, troughs, scarps and hills.',
 	elsewhere: {
 		heading: 'And the Earth, the Moon, Mars and Ceres',
 		html: 'On the Earth, World Drive drops you into Google\'s photorealistic 3D map of the real world, anywhere: your own street, or <a href="/drive/">famous roads, bridges and cities</a> like the Golden Gate Bridge, Times Square and Monaco. And the globe turns to <a href="/moon/">the Moon</a>, <a href="/mars/">Mars</a> and <a href="/ceres/">Ceres</a> too, the dwarf planet Dawn visited after Vesta.',

@@ -889,6 +889,23 @@ describe( 'Levels: the Worker', () => {
 
 	} );
 
+	test( 'achievements on Vesta and Ceres: their drives come with reports as Mars\'s do, each held to a day\'s worth and a claim\'s, and earned as they\'re reached', async () => {
+
+		const vc = await player();
+		const first = await report( vc, { km: 1, feats: { vesta: 50, ceres: 50 } }, { after: 5 * MINUTE } );
+		assert.equal( first.status, 200, first.text );
+		assert.deepEqual( first.json.earned, [ 'first-drive', 'vesta-1', 'ceres-1' ] );
+		assert.deepEqual( [ tallies( vc ).vesta, tallies( vc ).ceres, tallies( vc ).mars ], [ CLAIM_TALLY.vesta, CLAIM_TALLY.ceres, 0 ] );
+		const more = await report( vc, { feats: { vesta: 50 } }, { after: 30 * MINUTE } );
+		assert.deepEqual( more.json.earned, [ 'vesta-10' ] );
+		assert.deepEqual( [ tallies( vc ).vesta, tallies( vc ).today.vesta, tallies( vc ).ceres ], [ TALLY_DAY.vesta, TALLY_DAY.vesta, CLAIM_TALLY.ceres ] );
+		const grid = ( await mine( vc, { time: vc.at + 45 * MINUTE } ) ).json;
+		assert.deepEqual( [ grid.counts.vesta, grid.own.vesta, grid.left.vesta, grid.counts.ceres, grid.left.ceres ], [ TALLY_DAY.vesta, TALLY_DAY.vesta, 0, CLAIM_TALLY.ceres, TALLY_DAY.ceres - CLAIM_TALLY.ceres ] );
+		assert.deepEqual( grid.achievements.map( a => a.id ), [ 'first-drive', 'vesta-1', 'vesta-10', 'ceres-1' ] );
+		for ( const bad of [ { vesta: 1.5 }, { ceres: - 1 }, { vesta: '3' } ] ) assert.equal( ( await report( vc, { feats: bad }, { after: 50 * MINUTE } ) ).status, 400, JSON.stringify( bad ) );
+
+	} );
+
 	test( 'achievements: an empty report has the whole list once a visit (the page\'s ask as it starts), and is answered all the same after', async () => {
 
 		const ash = await player();
@@ -1047,8 +1064,8 @@ describe( 'Levels: the Worker', () => {
 		// page's driving since adds to, so a count doesn't run ahead of the account's and fall back).
 		const grid = ( await mine( eve ) ).json;
 		assert.deepEqual( [ grid.counts.km, grid.counts.moon ], [ 11, 1 ] );
-		assert.deepEqual( grid.own, { km: 0.1, moon: 1, mars: 0, looks: 0, rides: 0 } );
-		assert.deepEqual( ( await mine( dee ) ).json.own, { km: 11, moon: 0, mars: 0, looks: 0, rides: 0 } );
+		assert.deepEqual( grid.own, { km: 0.1, moon: 1, mars: 0, vesta: 0, ceres: 0, looks: 0, rides: 0 } );
+		assert.deepEqual( ( await mine( dee ) ).json.own, { km: 11, moon: 0, mars: 0, vesta: 0, ceres: 0, looks: 0, rides: 0 } );
 		// The rows stay each player's own (the owner's counts are players').
 		assert.deepEqual( feats( eve ), [ 'moon-1' ] );
 
@@ -1063,9 +1080,9 @@ describe( 'Levels: the Worker', () => {
 		assert.equal( ok.headers.get( 'Cache-Control' ), 'no-store' );
 		assert.deepEqual( ok.json.achievements.map( a => a.id ), [ 'first-drive' ] );
 		assert.equal( ok.json.achievements[ 0 ].at, fay.at + 3 * MINUTE );
-		assert.deepEqual( ok.json.counts, { km: 0.5, moon: 0, mars: 0, looks: 0, rides: 0, streak: 0, parties: 0, challenges: 0 } );
+		assert.deepEqual( ok.json.counts, { km: 0.5, moon: 0, mars: 0, vesta: 0, ceres: 0, looks: 0, rides: 0, streak: 0, parties: 0, challenges: 0 } );
 		// What more of the trusted counts today takes from this player (the grid adds no more).
-		assert.deepEqual( ok.json.left, { km: TALLY_DAY.km - 0.5, moon: TALLY_DAY.moon, mars: TALLY_DAY.mars, looks: TALLY_DAY.looks, rides: TALLY_DAY.rides } );
+		assert.deepEqual( ok.json.left, { km: TALLY_DAY.km - 0.5, moon: TALLY_DAY.moon, mars: TALLY_DAY.mars, vesta: TALLY_DAY.vesta, ceres: TALLY_DAY.ceres, looks: TALLY_DAY.looks, rides: TALLY_DAY.rides } );
 		assert.deepEqual( ok.json.rides, [] );
 		assert.equal( ( await mine( fay, { secret: 'W'.repeat( 32 ) } ) ).status, 403 );
 		for ( const body of [ '[]', '{}', '{"id":"short","secret":"x"}', 'not json' ] ) assert.equal( ( await call( '/api/achievements', { method: 'POST', body } ) ).status, 400, body );
@@ -1217,12 +1234,17 @@ describe( 'Achievements: the rules', () => {
 		assert.ok( ACHIEVEMENTS.length >= 20 );
 		assert.equal( new Set( ACHIEVEMENTS.map( a => a.id ) ).size, ACHIEVEMENTS.length );
 		for ( const a of ACHIEVEMENTS ) assert.ok( a.count in COUNTS && a.target > 0 && a.name && a.goal, a.id );
-		for ( const kind of [ 'km', 'moon', 'mars', 'challenges', 'placing', 'parties', 'looks', 'rides', 'streak' ] ) assert.ok( ACHIEVEMENTS.some( a => a.count === kind ), kind );
+		for ( const kind of [ 'km', 'moon', 'mars', 'vesta', 'ceres', 'challenges', 'placing', 'parties', 'looks', 'rides', 'streak' ] ) assert.ok( ACHIEVEMENTS.some( a => a.count === kind ), kind );
 		// Mars's three, as the Moon's, after them.
 		const ids = ACHIEVEMENTS.map( a => a.id );
 		assert.deepEqual( ids.slice( ids.indexOf( 'moon-1' ), ids.indexOf( 'moon-1' ) + 6 ), [ 'moon-1', 'moon-10', 'moon-50', 'mars-1', 'mars-10', 'mars-50' ] );
 		assert.deepEqual( ACHIEVEMENTS.filter( a => a.count === 'mars' ).map( a => [ a.name, a.goal, a.target ] ), [ [ 'Touchdown', 'Drive on Mars', 1 ], [ 'Red regular', 'Drive on Mars 10 times', 10 ], [ 'Martian', 'Drive on Mars 50 times', 50 ] ] );
 		assert.deepEqual( [ COUNTS.mars, TALLY_DAY.mars, CLAIM_TALLY.mars ], [ 'trusted', TALLY_DAY.moon, CLAIM_TALLY.moon ] );
+		// Vesta's three and Ceres's, as Mars's, after them.
+		assert.deepEqual( ids.slice( ids.indexOf( 'mars-50' ) + 1, ids.indexOf( 'mars-50' ) + 7 ), [ 'vesta-1', 'vesta-10', 'vesta-50', 'ceres-1', 'ceres-10', 'ceres-50' ] );
+		assert.deepEqual( ACHIEVEMENTS.filter( a => a.count === 'vesta' ).map( a => [ a.goal, a.target ] ), [ [ 'Drive on Vesta', 1 ], [ 'Drive on Vesta 10 times', 10 ], [ 'Drive on Vesta 50 times', 50 ] ] );
+		assert.deepEqual( ACHIEVEMENTS.filter( a => a.count === 'ceres' ).map( a => [ a.goal, a.target ] ), [ [ 'Drive on Ceres', 1 ], [ 'Drive on Ceres 10 times', 10 ], [ 'Drive on Ceres 50 times', 50 ] ] );
+		for ( const world of [ 'vesta', 'ceres' ] ) assert.deepEqual( [ COUNTS[ world ], TALLY_DAY[ world ], CLAIM_TALLY[ world ] ], [ 'trusted', TALLY_DAY.moon, CLAIM_TALLY.moon ], world );
 		assert.deepEqual( ACHIEVEMENTS.filter( a => a.count === 'streak' ).map( a => a.target ), [ 3, 7, 30 ] );
 		assert.deepEqual( PLACINGS.map( a => [ a.target, a.period ?? 'any' ] ), [ [ 10, 'any' ], [ 3, 'any' ], [ 1, 'any' ], [ 1, 'day' ], [ 3, 'week' ], [ 10, 'month' ] ] );
 		assert.deepEqual( Object.keys( RIDE_FEATS ).sort(), [ ...WORKS_RIDES ].sort() );
@@ -1239,15 +1261,16 @@ describe( 'Achievements: the rules', () => {
 
 	test( 'tallies: what a report may carry, a day\'s worth taken, and what\'s reached', () => {
 
-		assert.deepEqual( checkTallies( {} ), { moon: 0, mars: 0, looks: 0, rides: [] } );
+		assert.deepEqual( checkTallies( {} ), { moon: 0, mars: 0, vesta: 0, ceres: 0, looks: 0, rides: [] } );
 		assert.deepEqual( checkTallies( { rides: [ 'go-kart', 'go-kart' ] } ).rides, [ 'go-kart' ] );
-		for ( const bad of [ null, [], { moon: 1.5 }, { looks: - 1 }, { rides: [ 'tank' ] }, { rides: 'go-kart' }, { moon: 1e9 }, { mars: 1.5 }, { mars: 1e9 } ] ) assert.equal( checkTallies( bad ), null, JSON.stringify( bad ) );
-		assert.deepEqual( checkReport( { feats: { moon: 2 } } ).feats, { moon: 2, mars: 0, looks: 0, rides: [] } );
-		assert.deepEqual( checkReport( { feats: { mars: 3 } } ).feats, { moon: 0, mars: 3, looks: 0, rides: [] } );
+		for ( const bad of [ null, [], { moon: 1.5 }, { looks: - 1 }, { rides: [ 'tank' ] }, { rides: 'go-kart' }, { moon: 1e9 }, { mars: 1.5 }, { mars: 1e9 }, { vesta: 1.5 }, { ceres: - 1 }, { vesta: '3' }, { ceres: 1e9 } ] ) assert.equal( checkTallies( bad ), null, JSON.stringify( bad ) );
+		assert.deepEqual( checkReport( { feats: { moon: 2 } } ).feats, { moon: 2, mars: 0, vesta: 0, ceres: 0, looks: 0, rides: [] } );
+		assert.deepEqual( checkReport( { feats: { mars: 3 } } ).feats, { moon: 0, mars: 3, vesta: 0, ceres: 0, looks: 0, rides: [] } );
+		assert.deepEqual( checkReport( { feats: { vesta: 2, ceres: 5 } } ).feats, { moon: 0, mars: 0, vesta: 2, ceres: 5, looks: 0, rides: [] } );
 		assert.equal( 'feats' in checkReport( { feats: {} } ), false );
 		assert.equal( checkReport( { feats: { moon: - 2 } } ), null );
 		const none = readTallies( 'not json' );
-		assert.deepEqual( none, { km: 0, moon: 0, mars: 0, looks: 0, rides: [], streak: 0, run: 0, runDay: '', day: '', today: { km: 0, moon: 0, mars: 0, looks: 0, rides: 0 } } );
+		assert.deepEqual( none, { km: 0, moon: 0, mars: 0, vesta: 0, ceres: 0, looks: 0, rides: [], streak: 0, run: 0, runDay: '', day: '', today: { km: 0, moon: 0, mars: 0, vesta: 0, ceres: 0, looks: 0, rides: 0 } } );
 		const { tallies, taken } = addTallies( none, { km: 900, feats: { moon: 12, looks: 2, rides: [ 'go-kart', 'golf-cart', 'tuk-tuk', 'hypercar', 'city-bus' ] }, daily: true }, '2026-11-01' );
 		assert.deepEqual( [ taken.km, taken.moon, taken.looks, taken.rides.length ], [ TALLY_DAY.km, TALLY_DAY.moon, 2, TALLY_DAY.rides ] );
 		assert.deepEqual( [ tallies.km, tallies.streak, tallies.run, tallies.runDay, tallies.day ], [ TALLY_DAY.km, 1, 1, '2026-11-01', '2026-11-01' ] );
@@ -1260,7 +1283,7 @@ describe( 'Achievements: the rules', () => {
 		assert.deepEqual( addTallies( none, { daily: true }, '2026-03-01' ).tallies.runDay, '2026-03-01' );
 		assert.equal( addTallies( { ...none, run: 4, runDay: '2026-02-28' }, { daily: true }, '2026-03-01' ).tallies.run, 5 );
 		// A claim's: CLAIM_TALLY at most of each.
-		assert.deepEqual( claimTallies( { km: 400, feats: { moon: 9, looks: 9, rides: [ 'go-kart', 'golf-cart', 'tuk-tuk', 'hypercar' ] } } ), { km: CLAIM_TALLY.km, feats: { moon: CLAIM_TALLY.moon, mars: 0, looks: CLAIM_TALLY.looks, rides: [ 'go-kart', 'golf-cart', 'tuk-tuk' ] } } );
+		assert.deepEqual( claimTallies( { km: 400, feats: { moon: 9, looks: 9, rides: [ 'go-kart', 'golf-cart', 'tuk-tuk', 'hypercar' ] } } ), { km: CLAIM_TALLY.km, feats: { moon: CLAIM_TALLY.moon, mars: 0, vesta: 0, ceres: 0, looks: CLAIM_TALLY.looks, rides: [ 'go-kart', 'golf-cart', 'tuk-tuk' ] } } );
 		assert.deepEqual( claimTallies( { km: 0, feats: { moon: 0, mars: 9, looks: 0, rides: [] } } ).feats.mars, CLAIM_TALLY.mars );
 		assert.ok( CLAIM_TALLY.km < ACHIEVEMENTS.find( a => a.id === 'km-100' ).target );
 		// The same day: nothing more; the next: a day's worth again.
@@ -1278,8 +1301,28 @@ describe( 'Achievements: the rules', () => {
 		assert.deepEqual( crossed( countsOf( tallies ), countsOf( mars.tallies ) ), [ 'mars-1', 'mars-10' ] );
 		assert.equal( progressLine( ACHIEVEMENTS.find( a => a.id === 'mars-50' ), { mars: 12 } ), '12 / 50 drives' );
 		assert.ok( hasTallies( { mars: 1 } ) && ! hasTallies( { mars: 0, moon: 0, looks: 0, rides: [] } ) );
-		assert.deepEqual( mergeTallies( { moon: 1, looks: 0, rides: [] }, { mars: 2, moon: 0, looks: 0, rides: [ 'go-kart' ] } ), { moon: 1, mars: 2, looks: 0, rides: [ 'go-kart' ] } );
+		assert.deepEqual( mergeTallies( { moon: 1, looks: 0, rides: [] }, { mars: 2, moon: 0, looks: 0, rides: [ 'go-kart' ] } ), { moon: 1, mars: 2, vesta: 0, ceres: 0, looks: 0, rides: [ 'go-kart' ] } );
 		assert.deepEqual( mergeTallies( { mars: 0, moon: 0, looks: 0, rides: [] }, undefined ), undefined );
+		// Vesta's and Ceres's drives, as Mars's: each its own day's worth and claim, reached and said.
+		for ( const world of [ 'vesta', 'ceres' ] ) {
+
+			const on = addTallies( tallies, { feats: { [ world ]: 12 } }, '2026-11-01' );
+			assert.deepEqual( [ on.taken[ world ], on.tallies[ world ], on.tallies.today[ world ], on.tallies.mars, on.tallies.moon ], [ TALLY_DAY[ world ], TALLY_DAY[ world ], TALLY_DAY[ world ], 0, TALLY_DAY.moon ], world );
+			assert.equal( addTallies( on.tallies, { feats: { [ world ]: 1 } }, '2026-11-01' ).taken[ world ], 0 );
+			assert.equal( addTallies( on.tallies, { feats: { [ world ]: 1 } }, '2026-11-02' ).taken[ world ], 1 );
+			assert.deepEqual( crossed( countsOf( tallies ), countsOf( on.tallies ) ), [ `${ world }-1`, `${ world }-10` ] );
+			assert.equal( progressLine( ACHIEVEMENTS.find( a => a.id === `${ world }-50` ), { [ world ]: 12 } ), '12 / 50 drives' );
+			assert.equal( claimTallies( { km: 0, feats: { ...checkTallies( {} ), [ world ]: 9 } } ).feats[ world ], CLAIM_TALLY[ world ] );
+			assert.ok( hasTallies( { [ world ]: 1 } ) );
+			assert.equal( mergeTallies( { [ world ]: 1, rides: [] }, { [ world ]: 2, rides: [] } )[ world ], 3 );
+			// Kept before Vesta and Ceres (none of theirs, today's neither): none there, added from none.
+			const old = readTallies( JSON.stringify( { km: 12, moon: 3, mars: 2, looks: 1, rides: [], day: '2026-11-01', today: { km: 2, moon: 1, mars: 1, looks: 1, rides: 0 } } ) );
+			assert.deepEqual( [ old[ world ], old.today[ world ], countsOf( old )[ world ] ], [ 0, 0, 0 ] );
+			const taken = addTallies( old, { feats: { [ world ]: 4 } }, '2026-11-01' ).tallies;
+			assert.deepEqual( [ taken[ world ], taken.today[ world ], taken.mars, taken.today.mars ], [ 4, 4, 2, 1 ] );
+
+		}
+
 		// Tallies kept before Mars (a player's row from then, today's too): none on Mars, and its drives
 		// added from none; a report from a page before Mars (no mars) still taken.
 		const before = readTallies( JSON.stringify( { km: 12, moon: 3, looks: 1, rides: [ 'go-kart' ], streak: 2, run: 2, runDay: '2026-11-01', day: '2026-11-01', today: { km: 2, moon: 1, looks: 1, rides: 1 } } ) );

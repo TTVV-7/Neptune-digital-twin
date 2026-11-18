@@ -652,7 +652,6 @@ export class Driver {
 		// A point in the scene's east, north and up, carried.
 		const carry = ( east, north, up ) => localToEnu( enuToLocal( east, north, up, _c ).applyMatrix4( matrix ) );
 		const stunt = !! this.air && ! this.air.flight;
-		const was = this.heading;
 		// Its velocity as it was, before its heading and course are turned.
 		const rad = this.course * MathUtils.DEG2RAD;
 		_velocity.set( - Math.sin( rad ) * this.speed, this.vy, Math.cos( rad ) * this.speed ).applyQuaternion( _turn );
@@ -678,12 +677,21 @@ export class Driver {
 
 		}
 
-		// Every other heading turned as much, so a drift's slip and the chase camera's lag stay as they
-		// were; its speed what of its velocity is along its course, and vy the rest, up.
-		const turned = ( ( this.heading - was ) % 360 + 540 ) % 360 - 180;
-		this.course += turned;
-		this.view += turned;
-		if ( this.body ) this.body.lastCourse += turned;
+		// Every other heading turned as the ground's ways are, so a drift's slip and the chase camera's
+		// lag stay as they were: each a way along the ground, carried by the frame's turn and laid flat
+		// again. (Not by how much its own yaw changed: nose up or down mid-flip, the yaw of a tilt of a
+		// fifth of a degree can swing by tens of degrees, and its course with it.) Its speed what of
+		// its velocity is along its course, and vy the rest, up.
+		const turn = heading => {
+
+			const r = heading * MathUtils.DEG2RAD;
+			_axis.set( - Math.sin( r ), 0, Math.cos( r ) ).applyQuaternion( _turn );
+			return heading + ( ( Math.atan2( - _axis.x, _axis.z ) * MathUtils.RAD2DEG - heading ) % 360 + 540 ) % 360 - 180;
+
+		};
+		this.course = turn( this.course );
+		this.view = turn( this.view );
+		if ( this.body ) this.body.lastCourse = turn( this.body.lastCourse );
 		const course = this.course * MathUtils.DEG2RAD;
 		this.speed = - Math.sin( course ) * _velocity.x + Math.cos( course ) * _velocity.z;
 		this.vy = _velocity.y;
@@ -718,7 +726,7 @@ export class Driver {
 
 			air.righting.from.premultiply( _turn );
 			air.righting.to.premultiply( _turn );
-			air.righting.heading += turned;
+			air.righting.heading = turn( air.righting.heading );
 
 		}
 
