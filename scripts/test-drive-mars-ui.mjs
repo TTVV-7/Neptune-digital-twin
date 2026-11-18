@@ -3,7 +3,7 @@
 // real Mars here, as the Moon is in test-drive-moon-ui.mjs: the globe turned to it (its files fetched
 // only then, its thin glow from space), its spots, its own search and its recent places kept apart;
 // a drop-in at Curiosity's landing in Gale crater, on its ground, with its gravity, its dusty sky
-// and Phobos in it, and no water; a hop as high as on the Earth that stays up about one and a half
+// and Phobos in it, and no water; a hop as high as on the Earth that stays up about 1.6
 // times as long and isn't scored as big air; the drop-in's place counted for the play stats as its
 // cell of Mars's grid; M back to its globe (its ground let go of but the coarsest when it's left),
 // and back to the Earth; the switch's arrow keys; links to a Mars spot and to a pin on Mars; and a
@@ -265,7 +265,7 @@ describe( 'World Drive on Mars', () => {
 
 	} );
 
-	test( 'a hop goes as high as on the Earth and stays up about one and a half times as long, and isn\'t big air', async () => {
+	test( 'a hop goes as high as on the Earth and stays up about 1.6 times as long, and isn\'t big air', async () => {
 
 		const hop = await page.evaluate( () => {
 

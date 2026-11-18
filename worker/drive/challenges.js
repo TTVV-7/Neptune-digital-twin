@@ -117,10 +117,12 @@ const LIVE_KEPT = 60 * 1000;
 // one request; the rest are left for the next. Each is about a millisecond or two of the Worker's
 // CPU, but the first in a Worker instance just started is 5 to 10 (its code not yet compiled), and
 // the Free plan gives a request 10: three is as many as the Moon alone ever needed at once (its
-// month's, week's and day's starting together), and a new month starting on a Monday needs six on
-// the two worlds (measured in Node: six together 1.3 ms on average in a warm instance, 3 at the
-// 99th percentile, but 8 to 20 in a cold one). So such a day's first ask gets the challenges fixed
-// so far, and the next fixes the rest; nothing is kept as live till they're all there.
+// month's, week's and day's starting together), while a new week or month needs four on the two
+// worlds, and a month starting on a Monday six (measured in Node: six together 1.3 ms on average in
+// a warm instance, 3 at the 99th percentile, but 8 to 20 in a cold one). So such a day's first ask
+// gets the challenges fixed so far (the Earth's always all three: its routes aren't checked, and
+// cost next to nothing), and the next fixes the rest; nothing is kept as live till they're all
+// there. (A new day alone needs two: one ask.)
 const CHECKED_MOST = 3;
 // The admin page's busy places (dropins.js's topPlaces over the last BUSY_DAYS), kept BUSY_KEPT ms.
 const BUSY_DAYS = 30;
@@ -550,8 +552,9 @@ export async function postTime( context ) {
 	const open = row && row.replaced_at === null && row.final_at === null && now >= row.starts_at && ( now < row.ends_at || ( now < row.ends_at + GRACE && now - ms < row.ends_at ) );
 	if ( ! open ) throw new HttpError( 403, 'That challenge is over', { reason: 'challenge' } );
 	// An Earth challenge needs an Earth visit (one the Earth's caps let through, or the owner's): a
-	// free world's visit costs nothing but a robot check. Every other world's takes any.
-	if ( row.world === 'earth' && ! visit.earth && ! visit.owner ) throw new HttpError( 403, 'Forbidden', { reason: 'world' } );
+	// free world's visit costs nothing but a robot check. A free world's (worlds.js: the Moon's,
+	// Mars's) takes any; any other's (the Earth's, or a world that isn't one now) an Earth visit.
+	if ( ! WORLD_DATA[ row.world ]?.free && ! visit.earth && ! visit.owner ) throw new HttpError( 403, 'Forbidden', { reason: 'world' } );
 	const challenge = challengeOf( row );
 	// No longer than the visit has lasted, and possible on the route.
 	if ( ms / 1000 > ( now - visit.issuedAt ) / 1000 + SLACK || ! checkPasses( challenge, ms, passes ) ) throw bad();
@@ -1037,8 +1040,10 @@ export async function adminChange( context ) {
 // (read with the owner's picks): so whatever chose them, and whatever has changed since (the
 // approved places, this code), the three live on a world are three places and none is the one
 // before's. No more than CHECKED_MOST of them checked on their ground a request: past those, the
-// rest (in the same order) are left for the next ask, which fixes them as this one would have, and
-// this one answers with those fixed so far (kept as live only once they're all there). Challenges
+// rest of those checked (each world's in the same order, so its day's is never fixed before its
+// week's) are left for the next ask, which fixes them as this one would have, while those that
+// aren't checked (the Earth's) are fixed as ever; and this one answers with those fixed so far
+// (kept as live only once every world's three are there). Challenges
 // whose period ended at least GRACE ago are given their final places as this goes (finishEnded), in
 // the background: it's no part of the answer, so it can neither slow one nor turn one into an
 // error.
@@ -1066,7 +1071,10 @@ export async function liveChallenges( context ) {
 		missing.sort( ( a, b ) => PERIOD_KINDS.indexOf( b.period.kind ) - PERIOD_KINDS.indexOf( a.period.kind ) );
 		for ( const { period, world } of missing ) {
 
-			if ( await groundCheck( env, world ) && ++ checked > CHECKED_MOST ) break;
+			// (Once past the most, every checked one after is past it too: none of a world's is fixed
+			// out of its order. The rotation keeps clear of its own world's alone, so the others' going
+			// ahead changes nothing of it.)
+			if ( await groundCheck( env, world ) && ++ checked > CHECKED_MOST ) continue;
 			const pick = picks.results.find( p => p.period === period.key && p.world === world );
 			const challenge = await challengeFor( env, period, world, pick ? pickedPlace( pick ) : await rotationPick( env, period, world, places.results, fixed ), now );
 			made.push( challenge );
@@ -1075,14 +1083,16 @@ export async function liveChallenges( context ) {
 		}
 
 		// (Two instances fixing the same period at once: the first one's row stays, and both read it.)
-		await db.batch( made.map( challenge => insertQuery( db, challenge ) ) );
+		if ( made.length ) await db.batch( made.map( challenge => insertQuery( db, challenge ) ) );
 		rows = ( await select() ).results;
 
 	}
 
 	await later( context.ctx, finishEnded( db, now ), 'Finishing challenges' );
 	rows.sort( ( a, b ) => WORLDS.indexOf( a.world ) - WORLDS.indexOf( b.world ) || PERIOD_KINDS.indexOf( periodKind( a.period ) ) - PERIOD_KINDS.indexOf( periodKind( b.period ) ) );
-	if ( rows.length >= periods.length * WORLDS.length ) live = { keys, at: now, rows };
+	// (Every world's three, by period and world: not a count, which a row of a world no longer in
+	// WORLDS would make up.)
+	if ( periods.every( period => WORLDS.every( world => rows.some( row => row.period === period.key && row.world === world ) ) ) ) live = { keys, at: now, rows };
 	return rows;
 
 }

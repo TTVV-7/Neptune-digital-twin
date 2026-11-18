@@ -13,7 +13,8 @@ const mars = ( id, name, region, lat, lon, extra = {} ) => ( { id: `mars-${ id }
 // The panel's dozen: the great volcano, the great canyon, the rovers' and landers' sites, the
 // deepest basin, a maze of canyons, another volcano's caldera and a crater full of ice. Olympus Mons
 // starts on its summit caldera's floor (the volcano's middle, by the Gazetteer, is down its western
-// flank), Valles Marineris on Coprates Chasma's floor, both walls in reach.
+// flank), Valles Marineris on Coprates Chasma's floor, both walls in reach, and Arsia Mons in the
+// middle of its caldera (the Gazetteer's middle of the volcano is at the caldera's northern edge).
 export const MARS_SPOTS = [
 	mars( 'olympus-mons', 'Olympus Mons', 'The summit caldera · 18 km up', 18.3, - 133.0, { also: [ 'Nix Olympica' ] } ),
 	mars( 'valles-marineris', 'Valles Marineris', 'Coprates Chasma · the great canyon', - 13.37, - 60.74, { also: [ 'Coprates Chasma', 'Mariner Valley' ] } ),
@@ -21,11 +22,11 @@ export const MARS_SPOTS = [
 	mars( 'mount-sharp', 'Mount Sharp', 'Aeolis Mons · 5 km high, in Gale crater', - 5.08, 137.85, { also: [ 'Aeolis Mons' ] } ),
 	mars( 'perseverance', 'Jezero crater', 'Perseverance, 2021 · an old lake', 18.4447, 77.4508, { also: [ 'Perseverance', 'Octavia E. Butler Landing', 'Ingenuity', 'Mars 2020' ] } ),
 	mars( 'hellas', 'Hellas Planitia', 'The deepest basin, 2,300 km across', - 42.43, 70.5, { also: [ 'Hellas basin' ] } ),
-	mars( 'viking-1', 'Chryse Planitia', 'Viking 1, 1976 · the first landing', 22.273, - 47.946, { also: [ 'Viking 1', 'Thomas Mutch Memorial Station' ] } ),
+	mars( 'viking-1', 'Chryse Planitia', 'Viking 1, 1976', 22.273, - 47.946, { also: [ 'Viking 1', 'Thomas Mutch Memorial Station' ] } ),
 	mars( 'opportunity', 'Meridiani Planum', 'Opportunity, 2004', - 1.9462, - 5.5266, { also: [ 'Opportunity', 'Eagle crater', 'Challenger Memorial Station' ] } ),
 	mars( 'spirit', 'Gusev crater', 'Spirit, 2004', - 14.5692, 175.4729, { also: [ 'Spirit', 'Columbia Memorial Station' ] } ),
 	mars( 'noctis-labyrinthus', 'Noctis Labyrinthus', 'The labyrinth of the night', - 6.36, - 101.19, { also: [ 'Labyrinth of the Night' ] } ),
-	mars( 'arsia-mons', 'Arsia Mons', 'A Tharsis volcano\'s caldera', - 8.26, - 120.09 ),
+	mars( 'arsia-mons', 'Arsia Mons', 'A Tharsis volcano\'s caldera', - 9.1, - 120.6 ),
 	mars( 'korolev', 'Korolev crater', '82 km across, filled with ice', 72.77, 164.58 ),
 ];
 

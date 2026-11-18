@@ -1,5 +1,6 @@
-// node scripts/drive-site-images.mjs [icons] [cards] [moon [<slug>...] [hub]]: draws World Drive's
-// icons and the pictures its links unfurl with into drive/public/ (icons and cards, with none named):
+// node scripts/drive-site-images.mjs [icons] [cards] [<world> [<slug>...] [hub]]...: draws World
+// Drive's icons and the pictures its links unfurl with into drive/public/ (icons and cards, with none
+// named):
 //
 // - icons: favicon.svg (the globe with its road, as the page always had it), favicon.ico (16, 32
 //   and 48 px), apple-touch-icon.png (180 px), and the web app manifest's icons/icon-192.png,
@@ -8,15 +9,16 @@
 //   (og:image), and og/<slug>.png for each place's page (drive/site/places.js). The name, the line
 //   under it and the Earth are drawn in HTML and CSS; the car is the muscle car as World Drive
 //   draws it, on nothing. No picture of Google's tiles: the cards are World Drive's own drawing.
-// - moon: og/moon.png for the Moon's page (/moon/), the Moon from space as World Drive's globe shows
-//   it, and og/moon-<slug>.png for each of its places' pages (drive/site/moon.js): World Drive
-//   itself, dropped in at the place's start spot in a ride, the camera set by it, looking toward the
-//   Earth where it's low enough in the sky to share the picture with the ground (so it's where it
-//   really is), else across the sun, with the words over it as the other cards have them. The Moon
-//   is NASA's (public domain) and drawn by the game, so these are pictures of it, not of Google's
-//   tiles. Slow: a drop-in in Chromium's software renderer takes 15 to
-//   30 s and a frame a second or two, so they're only drawn when asked for by name; `moon tycho
-//   plato` draws just those places' cards, `moon hub` just the Moon's own.
+// - moon, mars (a world made in the page, worlds.js's OFF_EARTH): og/<world>.png for its page
+//   (/moon/, /mars/), the world from space as World Drive's globe shows it, and og/<world>-<slug>.png
+//   for each of its places' pages (drive/site/moon.js, mars.js): World Drive itself, dropped in at
+//   the place's start spot in a ride, the camera set by it, looking across the sun (on the Moon,
+//   toward the Earth where it's low enough in the sky to share the picture with the ground, so it's
+//   where it really is), with the words over it as the other cards have them. The Moon and Mars are
+//   NASA's (public domain) and drawn by the game, so these are pictures of them, not of Google's
+//   tiles. Slow: a drop-in in Chromium's software renderer takes 15 to 30 s and a frame a second or
+//   two, so they're only drawn when asked for by name; `moon tycho plato` draws just those places'
+//   cards, `mars hub` just Mars's own, and `moon hub mars korolev` some of each.
 //
 // Run it after changing the places (a new page gets its card) or the look. Needs Playwright with
 // Chromium for the cards, as the tests do; it starts World Drive's dev server (with no Maps key) on
@@ -25,8 +27,9 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import sharp from 'sharp';
-import { MOON_PAGES } from '../drive/site/moon.js';
+import { WORLD_SITES } from '../drive/site/build.js';
 import { PLACES } from '../drive/site/places.js';
+import { OFF_EARTH, onWorld, WORLDS } from '../src/drive-app/worlds.js';
 import { startVite } from './worker-harness.mjs';
 
 const require = createRequire( import.meta.url );
@@ -39,7 +42,7 @@ const CAR = 'muscle-car';
 const VIEW = [ 1, 0.32, - 0.95 ];
 
 const asked = process.argv.slice( 2 );
-const wanted = what => asked.length === 0 ? what !== 'moon' : asked.includes( what );
+const wanted = what => asked.length === 0 ? ! OFF_EARTH.includes( what ) : asked.includes( what );
 
 // The globe with a road over it, as the page's favicon has been since the start: a 64-unit square.
 const GLOBE = `<circle cx="32" cy="32" r="30" fill="#155a9c"/><path d="M10 40c8-4 14-4 22 0s14 4 22 0" stroke="#ffd23f" stroke-width="7" fill="none" stroke-linecap="round"/>`;
@@ -64,7 +67,7 @@ const WORDS_CSS = `
 		.chips span { padding: 10px 18px; border: 1px solid rgba( 255, 255, 255, 0.18 ); border-radius: 14px; background: rgba( 9, 15, 27, 0.7 ); font-size: 22px; font-weight: 800; }
 		.url { position: absolute; left: 64px; bottom: 36px; font-size: 26px; font-weight: 800; color: #070c16; background: #ffd23f; padding: 8px 18px; border-radius: 12px; font-style: italic; }`;
 
-// How each Moon place's card is framed (see frameMoon): the ride (vehicle), and where the camera
+// How each Moon place's card is framed (see frameWorld): the ride (vehicle), and where the camera
 // looks: toward the Earth where it's in the sky ('earth'), on the near side where it's no higher than
 // a picture with the ground in it can show (MOON_EARTH_HIGHEST); else along a heading (degrees from
 // north) across the sun, which is from the south-west, so the ground shows its light and shade.
@@ -82,28 +85,74 @@ const MOON_SHOTS = {
 	tsiolkovskiy: { vehicle: 'muscle-car', look: 135 },
 	'von-karman': { vehicle: 'go-kart', look: 315 },
 };
+// Mars's: headings only (there's no Earth in its sky), across the sun, which is from the
+// south-west there too, toward what's highest round the spot where that's across it (a canyon's
+// wall, Mount Sharp, a crater's rim) or down into it (Noctis Labyrinthus's canyons, Korolev's moat).
+const MARS_SHOTS = {
+	'olympus-mons': { vehicle: 'muscle-car', look: 135 },
+	'valles-marineris': { vehicle: 'go-kart', look: 135 },
+	'bradbury-landing': { vehicle: 'muscle-car', look: 135 },
+	'mount-sharp': { vehicle: 'go-kart', look: 315 },
+	jezero: { vehicle: 'muscle-car', look: 315 },
+	'hellas-planitia': { vehicle: 'go-kart', look: 315 },
+	'chryse-planitia': { vehicle: 'muscle-car', look: 135 },
+	'meridiani-planum': { vehicle: 'go-kart', look: 135 },
+	gusev: { vehicle: 'muscle-car', look: 315 },
+	'noctis-labyrinthus': { vehicle: 'go-kart', look: 315 },
+	'arsia-mons': { vehicle: 'muscle-car', look: 315 },
+	korolev: { vehicle: 'go-kart', look: 135 },
+};
 // And what every one has, unless its own says otherwise: the field of view (°, driving's own); where
 // on the card the ride and the Earth are (rideAt, earthAt: across and up, -1 to 1, both on the
 // right, the words' side clear); how far the ride's turned from facing away from the camera (°);
 // and, with no Earth to look at, how far up the camera looks (°).
-const MOON_FRAME = { fov: 70, rideAt: [ 0.4, - 0.45 ], earthAt: [ 0.45, 0.75 ], turn: 145, pitch: - 5 };
+const FRAME = { fov: 70, rideAt: [ 0.4, - 0.45 ], earthAt: [ 0.45, 0.75 ], turn: 145, pitch: - 5 };
 // Higher in the sky than this (°), the Earth and the ground can't both be in the picture.
 const MOON_EARTH_HIGHEST = 56;
+// Each world's cards: the chips on them (what it's made from, and on its own page's its gravity),
+// how its places' are framed, and where its globe looks on its own page's (lat, lon: the middle of
+// the view; nearer: a share of the globe's own distance): the Moon's near side; Mars's Tharsis
+// volcanoes and Valles Marineris.
+const WORLD_CARDS = {
+	moon: { real: 'The real Moon, from NASA', gravity: 'A sixth of the gravity', shots: MOON_SHOTS, globe: { lat: 10, lon: 8, nearer: 0.9 } },
+	mars: { real: 'The real Mars, from NASA', gravity: '38% of the gravity', shots: MARS_SHOTS, globe: { lat: - 2, lon: - 88, nearer: 0.9 } },
+};
 // The cards are photographs, which a PNG keeps large: under this many bytes each, fewer colours
 // as needed.
-const MOON_CARD_BYTES = 200000;
+const WORLD_CARD_BYTES = 200000;
+
+// The worlds named, each with the places named after it (and "hub" for its own page), or all of
+// its pages: checked before anything's drawn.
+const worldsAsked = new Map();
+let naming = null;
+for ( const word of asked ) {
+
+	if ( OFF_EARTH.includes( word ) ) {
+
+		naming = word;
+		if ( ! worldsAsked.has( word ) ) worldsAsked.set( word, [] );
+
+	} else if ( word === 'icons' || word === 'cards' ) {
+
+		naming = null;
+
+	} else if ( ! naming ) {
+
+		throw new Error( `${ word } isn't icons, cards or a world (${ OFF_EARTH.join( ', ' ) }): name the world before its places` );
+
+	} else {
+
+		const { pages } = WORLD_SITES[ naming ];
+		if ( word !== 'hub' && ! pages.some( place => place.slug === word ) ) throw new Error( `No ${ WORLDS[ naming ].name } page called ${ word }: they're ${ pages.map( place => place.slug ).join( ', ' ) }` );
+		worldsAsked.get( naming ).push( word );
+
+	}
+
+}
 
 if ( wanted( 'icons' ) ) await drawIcons();
 if ( wanted( 'cards' ) ) await drawCards();
-if ( wanted( 'moon' ) ) {
-
-	// The Moon's places named after "moon" (and "hub" for its own page), or all of them.
-	const named = asked.filter( word => word === 'hub' || MOON_PAGES.some( place => place.slug === word ) );
-	const unknown = asked.filter( word => ! [ 'icons', 'cards', 'moon', 'hub' ].includes( word ) && ! MOON_PAGES.some( place => place.slug === word ) );
-	if ( unknown.length ) throw new Error( `No Moon page called ${ unknown.join( ', ' ) }: they're ${ MOON_PAGES.map( place => place.slug ).join( ', ' ) }` );
-	await drawMoon( named.length ? named : [ 'hub', ...MOON_PAGES.map( place => place.slug ) ] );
-
-}
+for ( const [ world, named ] of worldsAsked ) await drawWorld( world, named.length ? named : [ 'hub', ...WORLD_SITES[ world ].pages.map( place => place.slug ) ] );
 
 async function drawIcons() {
 
@@ -233,9 +282,9 @@ async function drawCar( { id, size, view } ) {
 
 }
 
-// The Moon's cards: for each of `which` (a Moon page's slug, or 'hub' for /moon/), World Drive on
-// the Moon in a page of the card's size, its picture with the words over it.
-async function drawMoon( which ) {
+// A world's cards: for each of `which` (one of its pages' slugs, or 'hub' for its own page), World
+// Drive on that world in a page of the card's size, its picture with the words over it.
+async function drawWorld( world, which ) {
 
 	const { chromium } = require( 'playwright' );
 	mkdirSync( new URL( 'og/', PUBLIC ), { recursive: true } );
@@ -248,8 +297,8 @@ async function drawMoon( which ) {
 		await card.route( /^https?:\/\//, route => route.abort() );
 		for ( const slug of which ) {
 
-			const place = MOON_PAGES.find( p => p.slug === slug ) ?? null;
-			const shot = place ? { ...MOON_FRAME, ...MOON_SHOTS[ slug ] } : null;
+			const place = WORLD_SITES[ world ].pages.find( p => p.slug === slug ) ?? null;
+			const shot = place ? { ...FRAME, ...WORLD_CARDS[ world ].shots[ slug ] } : null;
 			// A fresh page each time, with the ride picked and the boost pads off (they'd be in the picture).
 			const context = await browser.newContext( { viewport: { width: CARD[ 0 ], height: CARD[ 1 ] } } );
 			await context.addInitScript( ride => {
@@ -263,7 +312,7 @@ async function drawMoon( which ) {
 			let photo;
 			try {
 
-				photo = place ? await moonGround( page, base, place, shot ) : await moonGlobe( page, base );
+				photo = place ? await worldGround( page, base, world, place, shot ) : await worldGlobe( page, base, world );
 
 			} finally {
 
@@ -271,9 +320,9 @@ async function drawMoon( which ) {
 
 			}
 
-			await card.setContent( moonCardHtml( { photo, place } ) );
+			await card.setContent( worldCardHtml( { world, photo, place } ) );
 			await card.evaluate( () => document.fonts.ready );
-			const file = `og/${ place ? `moon-${ slug }` : 'moon' }.png`;
+			const file = `og/${ place ? `${ world }-${ slug }` : world }.png`;
 			const png = await smallPng( await card.screenshot( { type: 'png' } ) );
 			writeFileSync( new URL( file, PUBLIC ), png );
 			console.log( `Drew ${ file } (${ Math.round( png.length / 1000 ) } kB)` );
@@ -290,60 +339,60 @@ async function drawMoon( which ) {
 }
 
 // Dropped in at the place's start spot (its link pins it, as its page's Drive here does), framed
-// (frameMoon), the ground sharpened round the camera and the ride, and the picture with nothing
+// (frameWorld), the ground sharpened round the camera and the ride, and the picture with nothing
 // over it: a PNG's data URL.
-async function moonGround( page, base, place, shot ) {
+async function worldGround( page, base, world, place, shot ) {
 
 	await page.goto( `${ base }/?spot=${ place.spot }` );
-	await page.waitForFunction( id => window.drive?.world === 'moon' && window.drive.panel.pinned?.id === id && ! window.drive.globe.flight, place.spot, { timeout: 120000 } );
+	await page.waitForFunction( ( [ id, world ] ) => window.drive?.world === world && window.drive.panel.pinned?.id === id && ! window.drive.globe.flight, [ place.spot, world ], { timeout: 120000 } );
 	await page.evaluate( () => {
 
 		window.drive.dropIn( window.drive.panel.pinned );
 
 	} );
 	await page.waitForFunction( () => window.drive.mode === 'driving', null, { timeout: 300000 } );
-	const framed = await page.evaluate( frameMoon, { ...shot, highest: MOON_EARTH_HIGHEST } );
-	console.log( `${ place.slug }: ${ JSON.stringify( framed ) }` );
-	return snapshot( page );
+	const framed = await page.evaluate( frameWorld, { ...shot, world, highest: MOON_EARTH_HIGHEST } );
+	console.log( `${ world } ${ place.slug }: ${ JSON.stringify( framed ) }` );
+	return snapshot( page, world );
 
 }
 
-// The Moon from space, as the globe shows it once turned there, on the right of the card.
-async function moonGlobe( page, base ) {
+// The world from space, as the globe shows it once turned there, on the right of the card.
+async function worldGlobe( page, base, world ) {
 
 	await page.goto( base );
 	await page.waitForFunction( () => window.drive?.mode === 'globe', null, { timeout: 120000 } );
-	await page.evaluate( () => window.drive.setWorld( 'moon' ) );
-	await page.waitForFunction( () => window.drive.world === 'moon' && ! window.drive.globe.flight, null, { timeout: 120000 } );
-	await page.evaluate( ( [ width, height ] ) => {
+	await page.evaluate( id => window.drive.setWorld( id ), world );
+	await page.waitForFunction( id => window.drive.world === id && ! window.drive.globe.flight, world, { timeout: 120000 } );
+	await page.evaluate( ( [ width, height, { lat, lon, nearer } ] ) => {
 
 		const { globe, camera } = window.drive;
-		const orbit = globe.orbit( 10, 8 );
-		globe.place( { ...orbit, distance: orbit.distance * 0.9 } );
+		const orbit = globe.orbit( lat, lon );
+		globe.place( { ...orbit, distance: orbit.distance * nearer } );
 		// Moved right of the middle, the words' side left to the stars.
 		camera.setViewOffset( width, height, - width * 0.2, 0, width, height );
 
-	}, CARD );
-	return snapshot( page );
+	}, [ ...CARD, WORLD_CARDS[ world ].globe ] );
+	return snapshot( page, world );
 
 }
 
-// Once the Moon's ground has nothing more to build for a few frames (built faster meanwhile, as
+// Once the world's ground has nothing more to build for a few frames (built faster meanwhile, as
 // while the loading screen is up), the page's picture with everything over the 3D view hidden.
-async function snapshot( page ) {
+async function snapshot( page, world ) {
 
-	await page.evaluate( () => {
+	await page.evaluate( id => {
 
-		window.drive.moon.rush = true;
+		window.drive.bodies[ id ].rush = true;
 		window.__quiet = 0;
 
-	} );
-	await page.waitForFunction( () => {
+	}, world );
+	await page.waitForFunction( id => {
 
-		window.__quiet = window.drive.moon.pending === 0 ? window.__quiet + 1 : 0;
+		window.__quiet = window.drive.bodies[ id ].pending === 0 ? window.__quiet + 1 : 0;
 		return window.__quiet >= 4;
 
-	}, null, { polling: 'raf', timeout: 300000 } );
+	}, world, { polling: 'raf', timeout: 300000 } );
 	await page.addStyleTag( { content: 'body > :not( #app ) { display: none !important; }' } );
 	await page.evaluate( () => new Promise( resolve => requestAnimationFrame( () => requestAnimationFrame( resolve ) ) ) );
 	const png = await page.screenshot( { type: 'png', timeout: 120000 } );
@@ -351,16 +400,17 @@ async function snapshot( page ) {
 
 }
 
-// In the page, once dropped in: the camera looking toward the Earth so it's at `earthAt` on the
-// card, or along the heading `look` with the camera `pitch`° up; the ride turned `turn`° from facing
-// straight away from it (and let settle on the ground that way for a few frames, so it sits on a
-// slope as it would), then it and the camera held still (the driver's update and the field of view
-// taken over), the ride at `rideAt` on the card, a little over its length away. Where that would put
-// the camera under the ground (a high Earth, looked up at), the ride and the camera go up together,
-// as in a jump. Says where the Earth was and what was done.
-async function frameMoon( { look, fov, rideAt: [ rideX, rideY ], earthAt: [ earthX, earthY ], turn, pitch: level, highest } ) {
+// In the page, once dropped in on `world`: the camera looking toward the Earth so it's at `earthAt`
+// on the card (the Moon's, look: 'earth'), or along the heading `look` with the camera `pitch`° up
+// (every world's); the ride turned `turn`° from facing straight away from it (and let settle on the
+// ground that way for a few frames, so it sits on a slope as it would), then it and the camera held
+// still (the driver's update and the field of view taken over), the ride at `rideAt` on the card, a
+// little over its length away. Where that would put the camera under the ground (a high Earth,
+// looked up at, or a slope behind), the ride and the camera go up together, as in a jump. Says
+// where the Earth was (looking for it) and what was done.
+async function frameWorld( { world, look, fov, rideAt: [ rideX, rideY ], earthAt: [ earthX, earthY ], turn, pitch: level, highest } ) {
 
-	const { driver, camera, moon, entry, ground } = window.drive;
+	const { driver, camera, bodies, entry, ground } = window.drive;
 	const Vector = camera.position.constructor;
 	const DEG = Math.PI / 180;
 	// (The loop eases the field of view toward driving's and sets it each frame: this one stays.)
@@ -368,12 +418,14 @@ async function frameMoon( { look, fov, rideAt: [ rideX, rideY ], earthAt: [ eart
 	camera.updateProjectionMatrix();
 	const tan = Math.tan( fov * DEG / 2 );
 	const { aspect } = camera;
-	// The Earth, over the middle of the near side: its heading and height in the sky here.
-	moon.group.updateMatrixWorld();
-	const toEarth = new Vector( 1, 0, 0 ).transformDirection( moon.group.matrixWorld );
+	// The Moon's Earth, over the middle of its near side: its heading and height in the sky here (the
+	// body's frame's X: only the Moon's always faces the Earth).
+	const { group } = bodies[ world ];
+	group.updateMatrixWorld();
+	const toEarth = new Vector( 1, 0, 0 ).transformDirection( group.matrixWorld );
 	const earthUp = Math.asin( toEarth.y ) / DEG;
 	const earthHeading = Math.atan2( - toEarth.x, toEarth.z ) / DEG;
-	const seen = look === 'earth' && earthUp > 2 && earthUp <= highest;
+	const seen = world === 'moon' && look === 'earth' && earthUp > 2 && earthUp <= highest;
 	const heading = seen ? earthHeading - Math.atan( earthX * tan * aspect ) / DEG : ( typeof look === 'number' ? look : 135 );
 	const pitch = seen ? earthUp - Math.atan( earthY * tan ) / DEG : level;
 	// (The scene's frame: x west, y up, z north.)
@@ -403,21 +455,22 @@ async function frameMoon( { look, fov, rideAt: [ rideX, rideY ], earthAt: [ eart
 	const round = value => Math.round( value * 100 ) / 100;
 	const onCard = point => point.project( camera ).toArray().slice( 0, 2 ).map( round );
 	return {
-		earthUp: round( earthUp ), earthHeading: round( earthHeading ), heading: round( heading ), pitch: round( pitch ), lift: round( lift ), under: under === null ? null : round( under ),
+		...look === 'earth' ? { earthUp: round( earthUp ), earthHeading: round( earthHeading ) } : {},
+		heading: round( heading ), pitch: round( pitch ), lift: round( lift ), under: under === null ? null : round( under ),
 		earth: seen ? onCard( camera.position.clone().addScaledVector( toEarth, 1000 ) ) : null,
 		ride: onCard( pivot.getWorldPosition( new Vector() ).add( new Vector( 0, driver.height / 2, 0 ) ) ),
 	};
 
 }
 
-// A card as a palette PNG under MOON_CARD_BYTES: fewer colours until it fits.
+// A card as a palette PNG under WORLD_CARD_BYTES: fewer colours until it fits.
 async function smallPng( shot ) {
 
 	let png;
 	for ( const colours of [ 256, 192, 128, 96, 64 ] ) {
 
 		png = await sharp( shot ).png( { palette: true, colours, quality: 90, dither: 0.8, compressionLevel: 9, effort: 10 } ).toBuffer();
-		if ( png.length < MOON_CARD_BYTES ) break;
+		if ( png.length < WORLD_CARD_BYTES ) break;
 
 	}
 
@@ -425,17 +478,19 @@ async function smallPng( shot ) {
 
 }
 
-// A Moon card: World Drive's picture of it, shaded on the left under the words, as the others have them.
-function moonCardHtml( { photo, place = null } ) {
+// A world's card: World Drive's picture of it, shaded on the left under the words, as the others
+// have them.
+function worldCardHtml( { world, photo, place = null } ) {
 
+	const { real, gravity } = WORLD_CARDS[ world ];
 	const words = place
 		? `<p class="small-logo">World <b>Drive</b></p>
 			<h1 class="place${ place.title.length > 40 ? ' long' : '' }">${ esc( place.title ) }</h1>
 			<p class="region">${ esc( place.region ) }</p>
-			<p class="chips"><span>The real Moon, from NASA</span><span>Free in your browser</span></p>`
+			<p class="chips"><span>${ esc( real ) }</span><span>Free in your browser</span></p>`
 		: `<h1 class="logo">World <b>Drive</b></h1>
-			<p class="tagline">Drive on the Moon.</p>
-			<p class="chips"><span>The real Moon, from NASA</span><span>A sixth of the gravity</span><span>Free in your browser</span></p>`;
+			<p class="tagline">Drive ${ esc( onWorld( world ) ) }.</p>
+			<p class="chips"><span>${ esc( real ) }</span><span>${ esc( gravity ) }</span><span>Free in your browser</span></p>`;
 	return `<!doctype html><html><head><meta charset="utf-8"><style>
 		* { box-sizing: border-box; }
 		html, body { margin: 0; width: ${ CARD[ 0 ] }px; height: ${ CARD[ 1 ] }px; overflow: hidden; }

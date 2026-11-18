@@ -8,8 +8,8 @@ import { driveSite } from './drive/site/build.js';
 
 // World Drive (worlddrive.app, docs/world-drive.md): its own page, drive/index.html with
 // src/drive-app/boot.js (which loads main.js), sharing src/ with the construction app, and its
-// places' pages (drive/site/). `npm run build:drive` builds it into dist-drive/ for its own Worker
-// (wrangler.drive.jsonc, worker/drive/).
+// places' pages and each other world's (drive/site/). `npm run build:drive` builds it into
+// dist-drive/ for its own Worker (wrangler.drive.jsonc, worker/drive/).
 //
 // The built site never holds a Maps key. On worlddrive.app the Worker hands the key out once per
 // visit, after a Turnstile check and within the daily caps, so a key in the site would get round
@@ -52,7 +52,9 @@ export default defineConfig( ( { command, mode } ) => {
 		define: {
 			__DEV_MAPS_KEY__: JSON.stringify( command === 'serve' ? envKey : '' ),
 		},
-		// driveSite: the places' pages, /drive/ and /sitemap.xml, for search engines (drive/site/).
+		// driveSite: the places' pages, /drive/, the Moon's and Mars's pages (/moon/, /mars/: each world
+		// in worlds.js's OFF_EARTH, beside its files from drive/public/<world>/) and /sitemap.xml, for
+		// search engines (drive/site/).
 		plugins: [ publishFromLibrary(), driveSite(), keyStaysOut( envKey ) ],
 	};
 

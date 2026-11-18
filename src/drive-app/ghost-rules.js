@@ -61,8 +61,8 @@ const JUMPS = 4;
 const JUMP_EVERY = 15000;
 const JUMPS_MOST = 32;
 // How far (m) a ghost's samples may be from the start across the ground and up and down: no route
-// is anywhere near this long, nor ground this high or low (Olympus Mons's top is 21.2 km over Mars's
-// "sea level", its sphere, so a run on it is that high in its frame).
+// is anywhere near this long, nor ground this high or low (Olympus Mons's top is 21.2 km over the
+// sphere Mars's heights are on, so a run up there is that high in its frame).
 const REACH = 60000;
 const HEIGHT = 30000;
 // The Earth's ellipsoid (WGS84, as Google's tiles are on); every other world is a sphere (body.js).

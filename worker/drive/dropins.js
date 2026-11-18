@@ -3,7 +3,7 @@ import { CELL, RADIUS, WORLDS, cellBounds, cellMiddle, cellOf, checkCell, metres
 import { dayOf } from '../../src/drive-app/levels.js';
 import { SPOTS } from '../../src/drive-app/places.js';
 import { PLACES_ON } from '../../src/drive-app/world-places.js';
-import { EARTH, OFF_EARTH } from '../../src/drive-app/worlds.js';
+import { EARTH, OFF_EARTH, WORLDS as WORLD_DATA } from '../../src/drive-app/worlds.js';
 import { PLACES } from '../../drive/site/places.js';
 import { database } from './players.js';
 import { addressOf, setting } from './settings.js';
@@ -108,11 +108,12 @@ export async function recordPlaces( { request, env, limits, now }, visit, places
 
 	const day = dayOf( now );
 	// An Earth place only from a visit the Earth's caps let through (a free world's visit's token,
-	// which costs nothing but the robot check, posts the Moon's and Mars's alone), none from the
-	// owner's (who opens the game at the admin page's places to look at them), and none on a world
-	// whose places today are all counted, nor from a visit that can add no more.
+	// which costs nothing but the robot check, posts the free worlds' alone: worlds.js, the Moon's
+	// and Mars's), none from the owner's (who opens the game at the admin page's places to look at
+	// them), and none on a world whose places today are all counted, nor from a visit that can add
+	// no more.
 	if ( visit.owner ) return 0;
-	const asking = places.filter( cell => ( visit.earth || cell.world !== EARTH ) && fullDay[ cell.world ] !== day );
+	const asking = places.filter( cell => ( visit.earth || WORLD_DATA[ cell.world ].free ) && fullDay[ cell.world ] !== day );
 	if ( ! asking.length || ! env.DB || doneVisits.get( visit.id ) > now ) return 0;
 	try {
 
