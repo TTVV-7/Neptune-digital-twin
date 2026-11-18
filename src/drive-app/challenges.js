@@ -1854,6 +1854,8 @@ export function setUpChallenges( app ) {
 			},
 			lay( shown, target, car ) {
 
+				// The world's own ground (body.js), whose heights the chevrons lie on.
+				const ground = app.bodies[ shown.challenge.world ];
 				const ordered = shown.challenge.kind !== 'collect';
 				const { start } = shown.challenge.route;
 				const index = shown.gates.indexOf( target );

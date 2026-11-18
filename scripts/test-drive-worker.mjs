@@ -90,9 +90,11 @@ import {
 	BOOSTED, FASTEST, GRACE, KINDS, LEG_SLACK, LINK_PATH, MAX_RUN, RANK_MOST, SHAPES, START_SLACK, TOP_SPEED,
 	bearingTo, checkPasses, destination, leastTime, legMinimum, makeRoute, nextPeriod, parsePeriod, periodOf, periodsAt, randomFrom, rankText, formatTime,
 } from '../src/drive-app/challenge-rules.js';
-import { REPOST, TIME_GAP, challengeBoard, challengeFor, challengeGhost, challengeLink, legFaults, listChallenges, lookKey, moonFaults, moonSteep, placeIn, postTime, rankIn, rotationPick } from '../worker/drive/challenges.js';
+import { GROUNDS, REPOST, TIME_GAP, challengeBoard, challengeFor, challengeGhost, challengeLink, legFaults, legFaultsOn, listChallenges, lookKey, moonFaults, moonSteep, placeIn, postTime, rankIn, rotationPick, routeFaults, steepOn } from '../worker/drive/challenges.js';
 import { setHeights } from '../src/drive-app/moon-height.js';
 import { MOON_PLACES } from '../src/drive-app/moon-places.js';
+import { MARS_PLACES } from '../src/drive-app/mars-places.js';
+import { OFF_EARTH, WORLD_IDS } from '../src/drive-app/worlds.js';
 import {
 	GHOST_BYTES, GHOST_DENSITY, GHOST_EVERY, GHOST_SAMPLES, GHOST_TEXT, PASS_SLACK, SAMPLE_SLACK, TURN, countFor, everyFor, ghostFault, ghostText, localOf, packGhost, readGhost, sampleTime,
 } from '../src/drive-app/ghost-rules.js';
@@ -107,7 +109,8 @@ const TOKEN = 'XXXX.DUMMY.TOKEN.XXXX';
 const DAILY = 5;
 const PER_VISITOR = 2;
 // A visit's token (visits.js), its id's last letter saying which kind: the Earth's, for a visit the
-// Earth's caps let through; the owner's (ADMIN_EMAILS); the Moon's for any other.
+// Earth's caps let through; the owner's (ADMIN_EMAILS); a free world's (the Moon's, Mars's) for any
+// other.
 const EARTH_TOKEN = /^v1\.[\w-]{21}e\.\d{10}\.[\w-]{43}$/;
 const OWNER_TOKEN = /^v1\.[\w-]{21}o\.\d{10}\.[\w-]{43}$/;
 const MOON_TOKEN = /^v1\.[\w-]{21}m\.\d{10}\.[\w-]{43}$/;
@@ -585,10 +588,14 @@ describe( 'World Drive Worker, Turnstile failing and maps off', () => {
 		assert.equal( res.status, 403 );
 		assert.equal( res.json.error, 'The robot check didn\'t pass' );
 		assert.equal( verifications.at( - 1 ).secret, FAIL_SECRET );
-		// The Moon too: never limited, but still behind the robot check.
-		const moon = await call( server, '/api/visit', { method: 'POST', headers: { Origin: server.base, 'Content-Type': 'application/json' }, body: JSON.stringify( { token: TOKEN, world: 'moon' } ), ip: '198.51.100.9' } );
-		assert.equal( moon.status, 403 );
-		assert.equal( moon.json.visit, undefined );
+		// The Moon and Mars too: never limited, but still behind the robot check.
+		for ( const world of OFF_EARTH ) {
+
+			const free = await call( server, '/api/visit', { method: 'POST', headers: { Origin: server.base, 'Content-Type': 'application/json' }, body: JSON.stringify( { token: TOKEN, world } ), ip: '198.51.100.9' } );
+			assert.equal( free.status, 403, world );
+			assert.equal( free.json.visit, undefined );
+
+		}
 
 	} );
 
@@ -1660,7 +1667,7 @@ describe( 'World Drive Supporter Pass', () => {
 
 	} );
 
-	test( 'every visit is counted for the admin page, those over a cap (sent to the Moon) too, by where it went', async () => {
+	test( 'every visit is counted for the admin page, those over a cap (sent to the Moon) too, by where it went (a link to the Moon or to Mars each its own)', async () => {
 
 		// On the suite's own day (others' visits that day are counted too: what these add is compared).
 		const day = PASS_DAY;
@@ -1673,14 +1680,15 @@ describe( 'World Drive Supporter Pass', () => {
 		assert.equal( ( await drive() ).status, 429 );
 		assert.equal( ( await drive() ).status, 429 );
 		assert.equal( ( await drive( { world: 'moon' } ) ).status, 200 );
+		assert.equal( ( await drive( { world: 'mars' } ) ).status, 200 );
 		const added = () => {
 
 			const now = counts();
 			return Object.fromEntries( Object.entries( now ).map( ( [ name, n ] ) => [ name, n - ( before[ name ] ?? 0 ) ] ).filter( ( [ , n ] ) => n ) );
 
 		};
-		for ( let tries = 0; tries < 30 && added()[ 'visit:all' ] !== 11; tries ++ ) await new Promise( resolve => setTimeout( resolve, 100 ) );
-		assert.deepEqual( added(), { 'visit:all': 11, 'visit_kind:earth': 8, 'visit_kind:moon_visitor_cap': 2, 'visit_kind:moon_link': 1 } );
+		for ( let tries = 0; tries < 30 && added()[ 'visit:all' ] !== 12; tries ++ ) await new Promise( resolve => setTimeout( resolve, 100 ) );
+		assert.deepEqual( added(), { 'visit:all': 12, 'visit_kind:earth': 8, 'visit_kind:moon_visitor_cap': 2, 'visit_kind:moon_link': 1, 'visit_kind:mars_link': 1 } );
 
 	} );
 
@@ -1714,34 +1722,48 @@ describe( 'World Drive Supporter Pass', () => {
 
 	} );
 
-	test( 'the Moon is never limited: a link to it spends no drive, and over the cap there\'s a visit for it; the owner is never limited', async () => {
+	test( 'the Moon and Mars are never limited: a link to either spends no drive, and over the cap there\'s a visit for the Moon; a world that isn\'t one is the Earth; the owner is never limited', async () => {
 
 		const ip = nextIp();
 		const drive = ( { cookie, world, time = PASS_DAY } = {} ) => call( server, '/api/visit', {
 			method: 'POST', headers: { Origin: server.base, 'Content-Type': 'application/json', ...( cookie ? { Cookie: cookie } : {} ) },
 			body: JSON.stringify( world ? { token: TOKEN, world } : { token: TOKEN } ), ip, time,
 		} );
-		// To the Moon: no key and nothing counted, however many times.
+		// To the Moon or Mars: no key and nothing counted, however many times. The answer says which
+		// world, that it's free, and moon: true as a page from before Mars (still in a browser's cache)
+		// knows a free visit by.
 		for ( let i = 0; i < 12; i ++ ) {
 
-			const res = await drive( { world: 'moon' } );
-			assert.equal( res.status, 200, res.text );
-			assert.equal( res.json.moon, true );
-			assert.match( res.json.visit, MOON_TOKEN );
-			assert.ok( ! res.text.includes( MAPS_KEY ) );
+			for ( const world of OFF_EARTH ) {
+
+				const res = await drive( { world } );
+				assert.equal( res.status, 200, res.text );
+				assert.deepEqual( Object.keys( res.json ).sort(), [ 'free', 'moon', 'visit', 'world' ] );
+				assert.deepEqual( [ res.json.moon, res.json.free, res.json.world ], [ true, true, world ] );
+				assert.match( res.json.visit, MOON_TOKEN );
+				assert.ok( ! res.text.includes( MAPS_KEY ) );
+
+			}
 
 		}
 
-		// So the address's 8 Earth drives are all still there.
-		for ( let i = 7; i >= 0; i -- ) assert.equal( ( await drive() ).json.left, i );
+		// A world that isn't one (or the Earth by name) is an Earth visit: the key, and one of the
+		// address's drives.
+		const pluto = await drive( { world: 'pluto' } );
+		assert.deepEqual( [ pluto.status, pluto.json.mapsKey, pluto.json.left, pluto.json.moon ], [ 200, MAPS_KEY, 7, undefined ] );
+		assert.match( pluto.json.visit, EARTH_TOKEN );
+		assert.equal( ( await drive( { world: 'earth' } ) ).json.left, 6 );
+		// So the rest of the address's 8 Earth drives are all still there.
+		for ( let i = 5; i >= 0; i -- ) assert.equal( ( await drive() ).json.left, i );
 		// Over the cap: no key, but a visit for the Moon (scores, stats).
 		const over = await drive();
 		assert.equal( over.status, 429 );
 		assert.equal( over.json.reason, 'visitor' );
 		assert.match( over.json.visit, MOON_TOKEN );
 		assert.ok( ! over.text.includes( MAPS_KEY ) );
-		// The Moon's still open.
+		// The Moon's and Mars's still open.
 		assert.equal( ( await drive( { world: 'moon' } ) ).json.moon, true );
+		assert.equal( ( await drive( { world: 'mars' } ) ).json.world, 'mars' );
 
 		// The owner (ADMIN_EMAILS, any case), from the same used-up address: never limited, and their
 		// visits say they're the owner's (on the Moon too), so they post no drop-in places.
@@ -1757,6 +1779,7 @@ describe( 'World Drive Supporter Pass', () => {
 		}
 
 		assert.match( ( await drive( { cookie: boss.cookie, world: 'moon' } ) ).json.visit, OWNER_TOKEN );
+		assert.match( ( await drive( { cookie: boss.cookie, world: 'mars' } ) ).json.visit, OWNER_TOKEN );
 
 		// And anyone else there still isn't.
 		assert.equal( ( await drive() ).status, 429 );
@@ -1899,8 +1922,8 @@ describe( 'World Drive Supporter Pass', () => {
 		// and no other funnel step, device, world, search, bucket, problem or button, nor anything typed.
 		assert.equal( ( await post( {
 			'play:go-kart': 60, 'nope:x': 5, 'play:not-a-ride': 9, 'dropin:my-street': 1, 'garage_edit:engine': 2, 'garage_open:all': 0, 'party:made': - 3, 'load:<b>': 1,
-			'funnel:drove_5m': 1, 'funnel:': 1, 'device:watch': 1, 'device:Phone': 1, 'world:earth': 1, 'world:mars': 1, 'play_world:mars': 5, 'search:my street': 1,
-			'search:51.5, -0.1': 1, 'dropin_time:3 s': 1, 'problem:boom': 1, 'board:close': 1, 'pass:steal': 1, 'level_up:9': 1,
+			'funnel:drove_5m': 1, 'funnel:': 1, 'device:watch': 1, 'device:Phone': 1, 'world:earth': 1, 'world:pluto': 1, 'play_world:pluto': 5, 'search:my street': 1,
+			'search:51.5, -0.1': 1, 'dropin_time:3 s': 1, 'problem:boom': 1, 'board:close': 1, 'pass:steal': 1, 'level_up:9': 1, 'dropin:pluto': 1, 'search:pluto': 1, 'problem:pluto_failed': 1,
 		} ) ).status, 204 );
 		// No more than a post may add: 600 s of play, one load, the funnel's seven steps together, one device.
 		assert.equal( ( await post( { 'play:go-kart': 1e9, 'load:direct': 5, 'funnel:globe': 50, 'device:computer': 3, 'device:tablet': 1 } ) ).status, 204 );
@@ -1910,6 +1933,8 @@ describe( 'World Drive Supporter Pass', () => {
 			'funnel:pin': 1, 'funnel:dropin': 1, 'funnel:driving': 1, 'funnel:drove_1m': 1, 'device:phone': 1,
 			'world:moon': 2, 'play_world:earth': 90.5, 'play_world:moon': 30, 'search:earth': 2, 'search:moon': 1, 'search:coordinates': 1, 'search:nothing': 1,
 			'dropin_time:10-20 s': 1, 'problem:no_ground': 1, 'problem:drop_abandoned': 1, 'board:open': 1, 'board:named': 1, 'pass:open': 2, 'pass:buy': 1, 'level_up:all': 1,
+			// And Mars's, as the Moon's.
+			'dropin:mars': 1, 'world:mars': 1, 'play_world:mars': 12, 'search:mars': 3, 'problem:mars_failed': 1,
 		} ) ).status, 204 );
 		const day = new Date( STATS_DAY ).toISOString().slice( 0, 10 );
 		assert.deepEqual( statsRows( day ), {
@@ -1919,6 +1944,7 @@ describe( 'World Drive Supporter Pass', () => {
 			'funnel:globe': FUNNEL.length, 'funnel:pin': 1, 'funnel:dropin': 1, 'funnel:driving': 1, 'funnel:drove_1m': 1, 'device:phone': 1, 'device:computer': 1,
 			'world:moon': 2, 'play_world:earth': 90, 'play_world:moon': 30, 'search:earth': 2, 'search:moon': 1, 'search:coordinates': 1, 'search:nothing': 1,
 			'dropin_time:10-20 s': 1, 'problem:no_ground': 1, 'problem:drop_abandoned': 1, 'board:open': 1, 'board:named': 1, 'pass:open': 2, 'pass:buy': 1, 'level_up:all': 1,
+			'dropin:mars': 1, 'world:mars': 1, 'play_world:mars': 12, 'search:mars': 3, 'problem:mars_failed': 1,
 		} );
 
 		// Only with the visit's token, as JSON from the site itself.
@@ -2115,7 +2141,7 @@ describe( 'World Drive Supporter Pass', () => {
 		assert.equal( ( await cy.post( { 'dropin:other': 1 }, { 0: PARIS } ) ).status, 400 );
 		// What isn't a cell of the grid is left out: past its last row or a row's last column, another
 		// world, negative, a number, coordinates themselves.
-		assert.equal( ( await cy.post( { 'dropin:other': 6, 'dropin:moon': 1 }, [ 'earth:20015:0', 'earth:20014:3', 'mars:1:1', 'earth:-1:0', 5, '48.87,2.30' ] ) ).status, 204 );
+		assert.equal( ( await cy.post( { 'dropin:other': 6, 'dropin:moon': 1 }, [ 'earth:20015:0', 'earth:20014:3', 'pluto:1:1', 'earth:-1:0', 5, '48.87,2.30' ] ) ).status, 204 );
 		assert.equal( ( await cy.post( { 'dropin:moon': 1 }, [ 'moon:5458:0' ], 2 * MINUTE ) ).status, 204 );
 		assert.deepEqual( placeRows( PLACES_DAY ), { [ GOLDEN ]: 2, [ TYCHO ]: 1, [ LYON ]: 1 } );
 		// And only with a visit's token, as the stats are.
@@ -2231,6 +2257,37 @@ describe( 'World Drive Supporter Pass', () => {
 		assert.equal( ( await post( ownersMoon, { 'dropin:moon': 1 }, [ PLATO ], HOUR ) ).status, 204 );
 		assert.deepEqual( [ placeRows( day )[ ARC ], placeRows( day )[ PLATO ] ], [ undefined, undefined ] );
 		assert.equal( dropins(), before + 4 );
+
+	} );
+
+	test( 'where people drop in on Mars: a visit there (free, as the Moon\'s) posts its cells, counted under mars as its drop-ins are under dropin:mars; a Mars cell needs a Mars drop-in in the same post, whatever else the post counts', async () => {
+
+		const day = PLACES_DAY + 13 * DAY;
+		const ip = nextIp();
+		const mars = await call( server, '/api/visit', { method: 'POST', headers: { Origin: server.base, 'Content-Type': 'application/json' }, body: JSON.stringify( { token: TOKEN, world: 'mars' } ), ip, time: day } );
+		assert.deepEqual( [ mars.status, mars.json.world, mars.json.free, mars.json.mapsKey ], [ 200, 'mars', true, undefined ] );
+		assert.match( mars.json.visit, MOON_TOKEN );
+		const post = ( counts, places, after ) => send( 'POST', '/api/stats', { visit: mars.json.visit, counts, places }, { ip, time: day + after } );
+		// Curiosity's landing in Gale crater, and Olympus Mons's top, each a cell of Mars's grid (on its
+		// 3,389.5 km sphere: 10,648 rows).
+		const GALE = cellOf( 'mars', - 4.5895, 137.4417 );
+		const OLYMPUS = cellOf( 'mars', 18.65, - 133.8 );
+		assert.equal( GALE, 'mars:5052:18719' );
+		assert.deepEqual( checkCell( OLYMPUS ), { world: 'mars', row: 6427, column: 2589, key: OLYMPUS } );
+		assert.equal( ( await post( { 'dropin:mars': 1 }, [ GALE ], 10 * MINUTE ) ).status, 204 );
+		assert.deepEqual( placeRows( day ), { [ GALE ]: 1 } );
+		assert.equal( statsRows( dayOf( day ) )[ 'dropin:mars' ], 1 );
+		// A Mars cell with only the Moon's and the Earth's drop-ins counted beside it, or one that isn't a
+		// world's: left out (its counts still counted). And an Earth cell from a Mars visit, as from the
+		// Moon's: never.
+		const CHAMPS = cellOf( 'earth', 48.87, 2.31 );
+		assert.equal( ( await post( { 'dropin:moon': 1, 'dropin:other': 1 }, [ OLYMPUS ], 20 * MINUTE ) ).status, 204 );
+		assert.equal( ( await post( { 'dropin:pluto': 1, 'dropin:other': 1 }, [ OLYMPUS, 'pluto:1:1' ], 30 * MINUTE ) ).status, 204 );
+		assert.equal( ( await post( { 'dropin:other': 1 }, [ CHAMPS ], 40 * MINUTE ) ).status, 204 );
+		assert.deepEqual( placeRows( day ), { [ GALE ]: 1 } );
+		// With its own drop-in, it's counted.
+		assert.equal( ( await post( { 'dropin:mars': 1 }, [ OLYMPUS ], 50 * MINUTE ) ).status, 204 );
+		assert.deepEqual( placeRows( day ), { [ GALE ]: 1, [ OLYMPUS ]: 1 } );
 
 	} );
 
@@ -4384,6 +4441,12 @@ describe( 'Play stats\' counts', () => {
 		assert.deepEqual( checkCounts( Object.fromEntries( [ ...SEARCHES, 'Furka Pass', '46.57, 8.41' ].map( kind => [ `search:${ kind }`, 30 ] ) ) ), [ [ 'search', 'earth', 30 ], [ 'search', 'moon', 10 ] ] );
 		assert.deepEqual( checkCounts( Object.fromEntries( [ ...PROBLEMS, 'other' ].map( problem => [ `problem:${ problem }`, 1 ] ) ) ), PROBLEMS.map( problem => [ 'problem', problem, 1 ] ) );
 		assert.deepEqual( checkCounts( { 'world:moon': 25, 'world:earth': 1, 'play_world:moon': 700, 'play_world:earth': 9, 'level_up:all': 11 } ), [ [ 'world', 'moon', 20 ], [ 'play_world', 'moon', 600 ], [ 'level_up', 'all', 10 ] ] );
+		// Mars's, as the Moon's: its drop-ins, the globe turned to it, its driving, its places searched
+		// and its files not loading; a world that isn't one, none of them.
+		assert.deepEqual( SEARCHES, [ 'earth', 'moon', 'mars', 'coordinates', 'nothing' ] );
+		assert.deepEqual( PROBLEMS, [ 'no_ground', 'ride_failed', 'moon_failed', 'mars_failed', 'map_failed', 'map_session_ended', 'drop_abandoned' ] );
+		assert.deepEqual( checkCounts( { 'dropin:mars': 2, 'world:mars': 1, 'play_world:mars': 30, 'search:mars': 4, 'problem:mars_failed': 1, 'dropin:pluto': 1, 'world:pluto': 1, 'play_world:pluto': 1, 'search:pluto': 1, 'problem:pluto_failed': 1 } ),
+			[ [ 'dropin', 'mars', 2 ], [ 'world', 'mars', 1 ], [ 'play_world', 'mars', 30 ], [ 'search', 'mars', 4 ], [ 'problem', 'mars_failed', 1 ] ] );
 		assert.deepEqual( checkCounts( { 'board:open': 1, 'board:named': 1, 'board:x': 1, 'pass:open': 1, 'pass:buy': 1, 'pass:refund': 1 } ), [ [ 'board', 'open', 1 ], [ 'board', 'named', 1 ], [ 'pass', 'open', 1 ], [ 'pass', 'buy', 1 ] ] );
 		assert.deepEqual( [ 0, 4999, 5000, 19999, 20000, 39999, 40000, 1e6 ].map( dropinBucket ), [ 'under 5 s', 'under 5 s', '5-10 s', '10-20 s', '20-40 s', '20-40 s', 'over 40 s', 'over 40 s' ] );
 		assert.deepEqual( checkCounts( Object.fromEntries( [ 'under 5 s', '5-10 s', '10-20 s', '20-40 s', 'over 40 s', '1 s' ].map( bucket => [ `dropin_time:${ bucket }`, 1 ] ) ) ).length, 5 );
@@ -4414,8 +4477,8 @@ describe( 'Play stats\' counts', () => {
 		const rides = [ 'go-kart', ...LIBRARY_VEHICLES, ...WORKS_RIDES, ...DRIVE_CARS, ...PASS_RIDES ];
 		const keysOf = {
 			load: [ 'a'.repeat( 30 ) + '.' + 'b'.repeat( 33 ) ], load_time: [ 'under 2 s', '2-5 s', '5-10 s', '10-20 s', 'over 20 s' ], load_ms: [ 'total' ],
-			dropin: [ ...SPOTS.map( spot => spot.id ), 'other', 'moon' ], ride: rides, play: rides, play_with_others: [ 'all' ], garage_open: [ 'all' ], garage_edit: LOOK_PARTS,
-			party: [ 'made', 'joined' ], funnel: FUNNEL, device: DEVICES, world: [ 'moon' ], play_world: [ 'earth', 'moon' ], search: SEARCHES,
+			dropin: [ ...SPOTS.map( spot => spot.id ), 'other', ...OFF_EARTH ], ride: rides, play: rides, play_with_others: [ 'all' ], garage_open: [ 'all' ], garage_edit: LOOK_PARTS,
+			party: [ 'made', 'joined' ], funnel: FUNNEL, device: DEVICES, world: OFF_EARTH, play_world: WORLD_IDS, search: SEARCHES,
 			dropin_time: [ 'under 5 s', '5-10 s', '10-20 s', '20-40 s', 'over 40 s' ], problem: PROBLEMS, board: [ 'open', 'named' ], pass: [ 'open', 'buy' ], level_up: [ 'all' ], ad: [ 'shown', 'blocked' ],
 			challenge: [ 'open', 'start', 'finish', 'posted', 'nudge', 'nudge_open', 'share', 'link', 'link_start' ],
 		};
@@ -4441,9 +4504,10 @@ describe( 'Play stats\' counts', () => {
 
 describe( 'Where people drop in: the cells', () => {
 
-	test( 'a cell is about a kilometre each way at every latitude on both worlds, and holds what\'s in it', () => {
+	test( 'a cell is about a kilometre each way at every latitude on every world, and holds what\'s in it', () => {
 
-		for ( const world of [ 'earth', 'moon' ] ) {
+		assert.deepEqual( WORLD_IDS, [ 'earth', 'moon', 'mars' ] );
+		for ( const world of WORLD_IDS ) {
 
 			for ( let lat = - 89.95; lat < 90; lat += 7.3 ) {
 
@@ -4473,19 +4537,22 @@ describe( 'Where people drop in: the cells', () => {
 		assert.equal( cellOf( 'earth', 90, 0 ), cellOf( 'earth', 89.9999, 0 ) );
 		assert.equal( cellOf( 'earth', 37.8199, - 122.4783 ), 'earth:14212:5052' );
 		assert.equal( cellOf( 'moon', - 43.31, - 11.36 ), 'moon:1415:3720' );
+		// (Mars's grid on its 3,389.5 km sphere, as the Moon's on its: neither ever changes, or every cell
+		// counted would move.)
+		assert.equal( cellOf( 'mars', - 4.5895, 137.4417 ), 'mars:5052:18719' );
 
 	} );
 
 	test( 'only the grid\'s cells are taken, each with a drop-in in the same post, at most PLACES_PER_POST', () => {
 
-		for ( const bad of [ null, 5, '', 'earth:1:1:1', 'earth:-1:0', 'earth:20015:0', 'earth:20014:3', 'moon:5458:0', 'moon:0:4', 'mars:1:1', 'Earth:1:1', 'earth:1.5:1', 'earth: 1:1', 'earth:123456:1', '48.87,2.30' ] ) {
+		for ( const bad of [ null, 5, '', 'earth:1:1:1', 'earth:-1:0', 'earth:20015:0', 'earth:20014:3', 'moon:5458:0', 'moon:0:4', 'mars:10648:0', 'mars:0:4', 'pluto:1:1', 'Earth:1:1', 'Mars:1:1', 'earth:1.5:1', 'earth: 1:1', 'earth:123456:1', '48.87,2.30' ] ) {
 
 			assert.equal( checkCell( bad ), null, String( bad ) );
 
 		}
 
 		assert.deepEqual( checkCell( 'earth:007:1' ), { world: 'earth', row: 7, column: 1, key: 'earth:7:1' } );
-		assert.equal( cellOf( 'mars', 1, 1 ), null );
+		assert.equal( cellOf( 'pluto', 1, 1 ), null );
 		assert.equal( cellOf( 'earth', 91, 1 ), null );
 		assert.equal( cellOf( 'earth', Number.NaN, 1 ), null );
 
