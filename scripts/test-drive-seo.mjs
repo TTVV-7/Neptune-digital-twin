@@ -431,7 +431,7 @@ describe( 'what search engines read', () => {
 		assert.ok( checked.size > 30, `only ${ checked.size } links` );
 		// Off the site, only the credits: OpenStreetMap's copyright page, and NASA's for the Moon.
 		const outside = new Set( pages.flatMap( ( { html } ) => linksOf( html ) ).filter( href => /^https?:/.test( href ) && ! href.startsWith( SITE ) ) );
-		assert.deepEqual( [ ...outside ].sort(), [ 'https://svs.gsfc.nasa.gov/4720/', 'https://www.openstreetmap.org/copyright' ] );
+		assert.deepEqual( [ ...outside ].sort(), [ 'https://svs.gsfc.nasa.gov/4720/', 'https://www.instagram.com/printyours.ca/', 'https://www.openstreetmap.org/copyright' ] );
 
 		// The Moon's pages are beside the files the game fetches from /moon/, which are still there.
 		for ( const [ path, size ] of Object.entries( MOON_FILES ) ) {
@@ -549,6 +549,12 @@ describe( 'what search engines read', () => {
 		// About still opens from it.
 		await page.locator( '#globe-ui .site-info .about-open' ).click();
 		assert.ok( await page.locator( 'dialog#about' ).isVisible() );
+		// Who made it, with a plain link (no embed) that opens in a tab of its own.
+		assert.match( await page.locator( 'dialog#about' ).textContent(), /Made by Thomas in Vancouver, Canada/ );
+		const insta = page.locator( 'dialog#about a[href="https://www.instagram.com/printyours.ca/"]' );
+		assert.equal( await insta.count(), 1 );
+		assert.equal( await insta.getAttribute( 'target' ), '_blank' );
+		assert.match( await insta.getAttribute( 'rel' ), /noopener/ );
 		await page.locator( 'dialog#about button', { hasText: 'Close' } ).click();
 
 		// A tap on a place there flies the globe to it, as a start spot does, rather than leaving the
