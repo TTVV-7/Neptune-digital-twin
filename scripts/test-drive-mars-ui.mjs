@@ -538,4 +538,47 @@ describe( 'World Drive challenges on Mars', () => {
 
 	} );
 
+	test( 'a friend\'s link to a Mars challenge: a free visit for Mars, the game on Mars at once (none of the Moon\'s files asked for), Mars\'s challenges first, the link\'s card in Mars\'s words', async () => {
+
+		const page = await newPage();
+		try {
+
+			const asked = [];
+			const json = ( route, body, status = 200 ) => route.fulfill( { status, contentType: 'application/json', body: JSON.stringify( body ) } );
+			await page.addInitScript( player => localStorage.setItem( 'world-drive.player', JSON.stringify( player ) ), PLAYER );
+			await page.route( 'https://challenges.cloudflare.com/turnstile/**', route => route.fulfill( { contentType: 'text/javascript', body: `window.turnstile = { render( el, options ) { setTimeout( () => options.callback( '${ TOKEN }' ), 50 ); return 'w1'; }, remove() {}, reset() {} };` } ) );
+			await page.route( `${ BASE }/api/config`, route => json( route, { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true } ) );
+			await page.route( `${ BASE }/api/visit`, route => {
+
+				const world = JSON.parse( route.request().postData() ).world ?? 'earth';
+				asked.push( world );
+				if ( world === 'mars' ) return json( route, { moon: true, free: true, world: 'mars', visit: MARS_VISIT } );
+				json( route, { error: 'Today\'s free drives are used up', reason: 'daily', retryAfter: 3600, visit: MARS_VISIT }, 429 );
+
+			} );
+			await page.route( `${ BASE }/api/challenges?*`, route => json( route, { now: Date.now(), challenges: listed() } ) );
+			await page.route( `${ BASE }/api/challenges/link?*`, route => json( route, { challenge: { ...listed()[ 1 ], replacedAt: null, finalAt: null }, vs: { name: 'Rover', ms: 9000, vehicle: 'go-kart', run: 'marsFriendRun001', ghost: false, date: '2026-11-18', level: 3, title: 'rookie' } } ) );
+			// (At the link's own path, as "challenge a friend" shares it: no place of its own in the
+			// address, so the visit's world is what opens.)
+			await page.goto( `${ BASE }/c?challenge=33&vs=MarsHandle000099` );
+			const card = page.locator( '#challenges .ch-link' );
+			await card.waitFor( { timeout: 120000 } );
+			await page.waitForFunction( () => window.drive.world === 'mars', null, { timeout: 90000 } );
+			assert.deepEqual( asked, [ 'mars' ] );
+			assert.equal( await page.locator( '#notice' ).isVisible(), false );
+			assert.deepEqual( page.worlds.filter( path => path.startsWith( '/moon/' ) ), [], 'nothing of the Moon\'s fetched' );
+			assert.equal( await card.getAttribute( 'data-world' ), 'mars' );
+			assert.match( await card.locator( '.ch-link-head' ).textContent(), /^Rover's time to beat: 0:09\.00 on the daily checkpoint sprint at Bradbury Landing on Mars, \d+ m \d+ s left\.$/ );
+			assert.equal( await page.locator( '#challenges .ch-world' ).first().textContent(), 'On Mars' );
+			await shot( page, 'challenges-mars-3-link' );
+			assert.deepEqual( page.errors, [] );
+
+		} finally {
+
+			await page.context().close();
+
+		}
+
+	} );
+
 } );

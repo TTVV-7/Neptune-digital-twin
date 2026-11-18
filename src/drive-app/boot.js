@@ -1,7 +1,7 @@
 import './style.css';
 import { getConfig, postVisit, robotCheck, send } from './api.js';
 import * as screens from './screens.js';
-import { EARTH, OFF_EARTH, spotWorld } from './worlds.js';
+import { EARTH, FALLBACK, OFF_EARTH, onWorld, spotWorld, WORLDS } from './worlds.js';
 
 // World Drive's first script (docs/world-drive.md): the splash, the Worker's settings and the robot
 // check, while the game itself (main.js: three.js, the tiles, the driving, nearly all of the page's
@@ -137,7 +137,7 @@ async function visit( config ) {
 	if ( outcome.key ) return run( main, { key: outcome.key, left: outcome.left, visit: outcome.visit, ...settings } );
 	// A link to another world (a challenge's there too): on that world, with none of the day's Earth
 	// drives spent. The Earth is a reload away (without the link, so that one does ask for a drive).
-	if ( outcome.free ) return run( main, { key: null, visit: outcome.visit, ...settings, earthClosed: { onEarth: toEarth } } );
+	if ( outcome.free ) return run( main, { key: null, visit: outcome.visit, ...settings, earthClosed: { onEarth: toEarth, world: linkedWorld } } );
 	if ( outcome.usedUp ) return usedUp( config, outcome, main, challengeLink() );
 	if ( outcome.robot ) return screens.notice( 'robot', { onRetry: () => visit( config ) } );
 	screens.notice( 'error', { message: outcome.error, onRetry: () => visit( config ) } );
@@ -206,9 +206,11 @@ async function usedUp( config, outcome, main, link = null ) {
 		if ( handle?.me?.supporter ) again();
 
 	};
+	// (The game, once it has started: which world it's on names the notice's way back there.)
+	let game = null;
 	const earthClosed = () => {
 
-		screens.notice( 'used-up', { retryAfter, reason, onMoon: () => {} } );
+		screens.notice( 'used-up', { retryAfter, reason, world: game?.world ?? FALLBACK, onMoon: () => {} } );
 		if ( ! supporter ) return;
 		watchForPass();
 		supporter.fillAccountArea( $( 'notice' ).querySelector( '.account' ) );
@@ -219,10 +221,22 @@ async function usedUp( config, outcome, main, link = null ) {
 		earthClosed: { onEarth: earthClosed },
 	} );
 	// Once the globe has turned to the Moon (it loads after the game starts), so it's read with the
-	// Moon in view rather than running out over the splash.
-	started.then( game => game && onceOffEarth( game, () => screens.toast( reason === 'daily'
-		? 'Today\'s free Earth drives are all taken, so you\'re on the Moon: free and unlimited, as Mars is. The Earth opens again tomorrow.'
-		: 'You\'ve had today\'s free Earth drive, so you\'re on the Moon: free and unlimited, as Mars is. The Earth opens again tomorrow.', 10000 ) ) );
+	// Moon in view rather than running out over the splash; named by the world it's on by then (Mars,
+	// picked before the Moon had loaded).
+	started.then( started => {
+
+		game = started;
+		if ( ! game ) return;
+		onceOffEarth( game, () => {
+
+			const here = game.world;
+			const also = OFF_EARTH.filter( id => id !== here ).map( id => WORLDS[ id ].the ).join( ' and ' );
+			const free = `so you're ${ onWorld( here ) }: free and unlimited, as ${ also } is. The Earth opens again tomorrow.`;
+			screens.toast( reason === 'daily' ? `Today's free Earth drives are all taken, ${ free }` : `You've had today's free Earth drive, ${ free }`, 10000 );
+
+		} );
+
+	} );
 	if ( ! accounts ) return;
 	try {
 

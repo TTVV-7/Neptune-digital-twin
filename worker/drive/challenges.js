@@ -1035,7 +1035,8 @@ export async function adminChange( context ) {
 // The live challenges' rows (the day's, the week's and the month's on the Earth, then the Moon,
 // then Mars: WORLDS' order), fixed in D1 the first time each is asked for in its period (from the
 // owner's pick, or the rotation's), kept LIVE_KEPT ms in this Worker instance. Those to fix are
-// fixed the longest first (the month, the week, then the day; each world in turn), each of the
+// fixed a world at a time (WORLDS' order), each world's the longest first (the month, the week,
+// then the day), each of the
 // rotation's clear of those fixed already, those fixed here included, and of the periods before
 // (read with the owner's picks): so whatever chose them, and whatever has changed since (the
 // approved places, this code), the three live on a world are three places and none is the one
@@ -1043,7 +1044,9 @@ export async function adminChange( context ) {
 // rest of those checked (each world's in the same order, so its day's is never fixed before its
 // week's) are left for the next ask, which fixes them as this one would have, while those that
 // aren't checked (the Earth's) are fixed as ever; and this one answers with those fixed so far
-// (kept as live only once every world's three are there). Challenges
+// (kept as live only once every world's three are there; the page asks again for the rest,
+// challenges.js). A world at a time, so a world's three come together: the Moon's are all fixed in
+// a period's first ask, as they always were, and Mars's in the next at worst. Challenges
 // whose period ended at least GRACE ago are given their final places as this goes (finishEnded), in
 // the background: it's no part of the answer, so it can neither slow one nor turn one into an
 // error.
@@ -1068,7 +1071,7 @@ export async function liveChallenges( context ) {
 		const fixed = [ ...rows, ...before.results ];
 		const made = [];
 		let checked = 0;
-		missing.sort( ( a, b ) => PERIOD_KINDS.indexOf( b.period.kind ) - PERIOD_KINDS.indexOf( a.period.kind ) );
+		missing.sort( ( a, b ) => WORLDS.indexOf( a.world ) - WORLDS.indexOf( b.world ) || PERIOD_KINDS.indexOf( b.period.kind ) - PERIOD_KINDS.indexOf( a.period.kind ) );
 		for ( const { period, world } of missing ) {
 
 			// (Once past the most, every checked one after is past it too: none of a world's is fixed

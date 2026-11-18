@@ -30,8 +30,8 @@ const WORLD_TALLIES = OFF_EARTH;
 // the Worker counts it once.
 //
 // Achievements (achievement-rules.js) ride on the same reports: the counts only the page can tell
-// (drives on the Moon, Garage changes, rides tried) go as each report's `feats`, and its km are the
-// report's own. The answers say which the player has earned (feats.js keeps them, for the
+// (drives on the Moon and on Mars, Garage changes, rides tried) go as each report's `feats`, and its
+// km are the report's own. The answers say which the player has earned (feats.js keeps them, for the
 // construction rides' locks), and those that are new are told (onAchievement), once each: the ones
 // a report just earned, and any the player has that this browser hadn't seen yet (a challenge's
 // places, written as its board ended). Before a nickname nothing's earned, but what's been driven

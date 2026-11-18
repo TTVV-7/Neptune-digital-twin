@@ -5,7 +5,7 @@ import {
 } from 'three';
 import { send } from './api.js';
 import { createRaceGhost, createRecorder } from './challenge-ghost.js';
-import { GRACE, KIND_NAMES, LINK_PATH, PERIOD_NAMES, TALL, checkPasses, describe, formatTime, rankText, timeLeft } from './challenge-rules.js';
+import { GRACE, KIND_NAMES, LINK_PATH, PERIOD_KINDS, PERIOD_NAMES, TALL, checkPasses, describe, formatTime, rankText, timeLeft } from './challenge-rules.js';
 import { ghostFault } from './ghost-rules.js';
 import { LEVEL_MAX, levelLine } from './levels.js';
 import { EARTH, onWorld, OnWorld, WORLD_IDS } from './worlds.js';
@@ -114,9 +114,11 @@ const WAIT_MOST = 60;
 // and on a phone over the buttons.
 const STOPPING = 1;
 const STOP_LEAST = 12;
-// A new list is asked for as a listed challenge ends; if that fails (or still has it ended) it's
-// asked again after RELOAD ms, then twice that and so on up to RELOAD_MOST, RELOADS times at most
-// (or after the Retry-After the Worker gives), and then not till the list is opened again.
+// A new list is asked for as a listed challenge ends, or while a world's day, week or month is
+// missing from it (a period's first ask can be short: the Worker's CHECKED_MOST); if that fails (or
+// still has it ended, or short) it's asked again after RELOAD ms, then twice that and so on up to
+// RELOAD_MOST, RELOADS times at most (or after the Retry-After the Worker gives), and then not till
+// the list is opened again.
 const RELOAD = 5000;
 const RELOAD_MOST = 60000;
 const RELOADS = 4;
@@ -373,15 +375,20 @@ export function setUpChallenges( app ) {
 
 		}
 
+		// Asked again while any listed has ended, or while a world's day, week or month isn't there yet
+		// (a period's first ask lays out only so many on their ground: the Worker's CHECKED_MOST, the
+		// next the rest).
 		const ended = listed.challenges.filter( c => c.endsAt <= now ).map( c => c.id ).join( ',' );
-		if ( ended !== reloadFor ) [ reloadFor, reloads, reloadAt ] = [ ended, 0, 0 ];
-		if ( ! dialog.open || ! ended || reloading || reloads >= RELOADS || Date.now() < reloadAt ) return;
+		const short = WORLD_IDS.some( world => PERIOD_KINDS.some( kind => ! listed.challenges.some( c => c.world === world && c.period === kind ) ) );
+		const due = ended || ( short ? 'short' : '' );
+		if ( due !== reloadFor ) [ reloadFor, reloads, reloadAt ] = [ due, 0, 0 ];
+		if ( ! dialog.open || ! due || reloading || reloads >= RELOADS || Date.now() < reloadAt ) return;
 		reloading = true;
 		reloads ++;
 		load().then( answer => {
 
-			// Asked again later only if it's still the same ones ended (tick sees to that): after the
-			// Worker's Retry-After, or RELOAD doubling each time.
+			// Asked again later only if it's still the same ones ended, or still short (tick sees to
+			// that): after the Worker's Retry-After, or RELOAD doubling each time.
 			reloadAt = Date.now() + ( answer.retryAfter ? answer.retryAfter * 1000 : Math.min( RELOAD_MOST, RELOAD * 2 ** ( reloads - 1 ) ) );
 
 		} ).finally( () => reloading = false );

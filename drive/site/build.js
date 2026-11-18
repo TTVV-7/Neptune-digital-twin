@@ -41,10 +41,11 @@ const CARD_SIZE = [ 1200, 630 ];
 export const WORLD_SITES = { moon: MOON_SITE, mars: MARS_SITE };
 for ( const id of OFF_EARTH ) if ( ! WORLD_SITES[ id ] ) throw new Error( `World Drive's site has no pages for ${ id }: drive/site/${ id }.js` );
 // The files each page is made from, for its date in the sitemap (see lastChanged): a world's pages
-// from its words, its places and the look.
+// from its words, its places and the look; the Earth's places' pages from the other worlds' words
+// too (each lists them, with their lines).
 const SOURCES = {
 	home: [ 'drive/index.html', 'drive/site/places.js', ...OFF_EARTH.map( id => `drive/site/${ id }.js` ) ],
-	places: [ 'drive/site/places.js', 'drive/site/build.js', 'drive/site/site.css' ],
+	places: [ 'drive/site/places.js', 'drive/site/build.js', 'drive/site/site.css', ...OFF_EARTH.map( id => `drive/site/${ id }.js` ) ],
 	world: id => [ `drive/site/${ id }.js`, 'drive/site/build.js', 'drive/site/site.css', `src/drive-app/${ id }-places.js` ],
 };
 // The footer's credit for the Earth's map and search (each other world's is its own: its `credit`).

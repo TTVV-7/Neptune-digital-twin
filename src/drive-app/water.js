@@ -233,8 +233,9 @@ export function createWater( ground ) {
 
 		look,
 
-		// A world with no water at all (World Drive's Moon, main.js): everywhere is surely dry. Its
-		// grey dust, flat and even on a mare's floor, would otherwise look like water to look().
+		// A world with no water at all (every world but the Earth: the Moon, Mars; main.js): everywhere
+		// is surely dry. Its grey or red dust, flat and even on a mare's floor or a plain, would
+		// otherwise look like water to look().
 		get none() {
 
 			return none;

@@ -353,10 +353,10 @@ const _sun = new Vector3();
 // Google); passwords: whether there are usernames and passwords, turnstileSiteKey their robot
 // checks' (supporter.js, account.js);
 // live: whether the Worker has driving with others on (its /api/config says), and liveReason why
-// not when it's off for the rest of the day; earthClosed: { onEarth } when there's no Earth this visit
-// (today's Earth drives are used up, or the page opened on a link to another world, boot.js): the
-// globe opens on that world, or the Moon (FALLBACK), which are never limited, and picking the Earth
-// calls onEarth instead;
+// not when it's off for the rest of the day; earthClosed: { onEarth, world } when there's no Earth
+// this visit (today's Earth drives are used up, or the page opened on a link to another world:
+// `world`, its id, boot.js): the globe opens on that world (a place's link flies there itself), or
+// else the Moon (FALLBACK), which are never limited, and picking the Earth calls onEarth instead;
 // challengeLink: a "challenge a friend" link's ({ link: { challenge, vs }, answer }, boot.js), or a
 // promise of it (or of null: no link), opened once the globe is up and it's here (challenges.js);
 // adsense: /api/config's { client, slot } while Google's ads are on (ads.js), else null.
@@ -1070,7 +1070,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	}
 
-	if ( earthClosed && worldOf( linked ) === EARTH ) setWorld( FALLBACK );
+	if ( earthClosed && worldOf( linked ) === EARTH ) setWorld( earthClosed.world ?? FALLBACK );
 	// A "challenge a friend" link: its card, over the challenges' list.
 	if ( challengeLink ) openChallengeLink( challengeLink );
 

@@ -2,6 +2,8 @@
 // full-screen notices (today's drives used up, the robot check, maps off, errors), the drop-in's
 // loading card, the pause menu, the keys card and short messages.
 
+import { MOON, onWorld } from './worlds.js';
+
 const $ = id => document.getElementById( id );
 
 let toastTimer;
@@ -24,8 +26,9 @@ export function hideSplash() {
 // A full-screen notice instead of the globe: kind is 'used-up', 'robot', 'resting' or 'error'.
 // options: retryAfter (s, for used-up), reason (used-up: 'visitor' for this visitor's own free
 // drive, else everyone's for the day), message (for error), onRetry, onTestPad, onMoon (used-up:
-// the Moon instead, never limited, as Mars never is either).
-export function notice( kind, { retryAfter = 0, reason = '', message = '', onRetry, onTestPad, onMoon } = {} ) {
+// another world instead, `world` (the Moon unless it's said: the one the game is on), never limited,
+// as none but the Earth is).
+export function notice( kind, { retryAfter = 0, reason = '', message = '', onRetry, onTestPad, onMoon, world = MOON } = {} ) {
 
 	hideSplash();
 	const root = $( 'notice' );
@@ -59,7 +62,7 @@ export function notice( kind, { retryAfter = 0, reason = '', message = '', onRet
 		onRetry();
 
 	} );
-	if ( onMoon ) button( 'Drive on the Moon', () => {
+	if ( onMoon ) button( `Drive ${ onWorld( world ) }`, () => {
 
 		root.hidden = true;
 		onMoon();

@@ -6808,15 +6808,15 @@ describe( 'World Drive challenges', () => {
 	test( 'nine live: the day\'s, the week\'s and the month\'s on each world, fixed in D1 as they\'re first asked for (no more than three checked on their ground an ask, the rest by the next), the same on every ask and as another instance works them out', async () => {
 
 		assert.equal( server.d1( 'SELECT COUNT(*) AS n FROM challenges' )[ 0 ].n, 0 );
-		// The first ask: the longest first, each world in turn, three checked on their ground at most
-		// (the Moon's month and week and Mars's month; Mars's week the fourth, and so it and every
+		// The first ask: a world at a time, each world's the longest first, three checked on their
+		// ground at most (the Moon's month, week and day; Mars's month the fourth, and so it and every
 		// checked one after it left), the Earth's all three (not checked: they cost next to nothing):
-		// those fixed so far, and nothing kept as live.
+		// those fixed so far, the Moon's three together, and nothing kept as live.
 		const first = await call( server, '/api/challenges', { ip: nextIp(), time: CHALLENGE_DAY } );
 		assert.equal( first.status, 200, first.text );
-		assert.deepEqual( first.json.challenges.map( c => `${ c.world } ${ c.key }` ), [ 'earth day:2026-11-16', 'earth week:2026-11-16', 'earth month:2026-11', 'moon week:2026-11-16', 'moon month:2026-11', 'mars month:2026-11' ] );
+		assert.deepEqual( first.json.challenges.map( c => `${ c.world } ${ c.key }` ), [ 'earth day:2026-11-16', 'earth week:2026-11-16', 'earth month:2026-11', 'moon day:2026-11-16', 'moon week:2026-11-16', 'moon month:2026-11' ] );
 		assert.equal( server.d1( 'SELECT COUNT(*) AS n FROM challenges' )[ 0 ].n, 6 );
-		// The next fixes the rest (Mars's week, then the Moon's and Mars's days: three checked again).
+		// The next fixes the rest (Mars's month, week and day: three checked again).
 		const res = await call( server, '/api/challenges', { ip: nextIp(), time: CHALLENGE_DAY + MINUTE } );
 		assert.equal( res.status, 200, res.text );
 		assert.equal( res.headers.get( 'Cache-Control' ), 'no-store' );
