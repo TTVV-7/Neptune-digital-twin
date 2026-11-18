@@ -68,11 +68,14 @@ const FLY_YAW = 75;
 // Booster: held down, it burns a full gauge in BOOST_TIME s; let go and it stops, and the gauge
 // refills in BOOST_RECHARGE s. Firing pushes at BOOST_ACCEL m/s² up to BOOST_SPEED times the top
 // speed. It needs BOOST_MIN of the gauge to light (but, once lit, burns down to empty if held).
+// Off the ground it pushes the way the nose points (see pushAlongNose): nose up it climbs, at most
+// BOOST_CLIMB m/s, and nose down or back it dives or slows; along the ground never past BOOST_SPEED.
 const BOOST_TIME = 2.5;
 const BOOST_RECHARGE = 8;
 const BOOST_ACCEL = 28;
 const BOOST_SPEED = 2;
 const BOOST_MIN = 0.15;
+const BOOST_CLIMB = 20;
 // Supersonic: boosting at `near` or more of the booster's top speed for `after` s goes supersonic,
 // with a sonic boom and streaks of air past it (drive-fx.js), a shake, and the view a little wider
 // (`warp`, eased in and out at `ease` 1/s, which an app adds to its field of view). It lasts,
@@ -266,6 +269,7 @@ const _axis = new Vector3();
 const _q = new Quaternion();
 const _euler = new Euler();
 const _attitude = new Quaternion();
+const _nose = new Vector3();
 const DOWN = new Vector3( 0, - 1, 0 );
 const UP = new Vector3( 0, 1, 0 );
 const LEVEL = new Quaternion();
@@ -1183,7 +1187,8 @@ export class Driver {
 				this.fx?.cool();
 
 			}
-			if ( this.speed < base * BOOST_SPEED ) this.speed = Math.min( this.speed + BOOST_ACCEL * dt, base * BOOST_SPEED );
+			if ( ! this.grounded ) this.pushAlongNose( BOOST_ACCEL * dt, base * BOOST_SPEED );
+			else if ( this.speed < base * BOOST_SPEED ) this.speed = Math.min( this.speed + BOOST_ACCEL * dt, base * BOOST_SPEED );
 
 		} else {
 
@@ -1202,6 +1207,45 @@ export class Driver {
 			this.speed = Math.max( top, this.speed - ( this.speed - top ) * Math.min( 1, dt * 1.2 ) - dt );
 
 		}
+
+	}
+
+	// The booster off the ground: `dv` (m/s) more the way the nose points, as it's turned (a jump's
+	// spin or flip, flying's climb or a trick). Along the ground it may only bring the speed up to
+	// `cap` (BOOST_SPEED times the top speed, as on the road: the most a challenge's legs allow), or
+	// keep what's over that, and slow it pointing back; upward it adds up to BOOST_CLIMB m/s.
+	// Flying (F) goes the way it heads, so only the push along that counts there.
+	pushAlongNose( dv, cap ) {
+
+		const nose = _nose.set( 0, 0, - 1 ).applyQuaternion( this.attitude( _attitude ) );
+		// (The scene's -x is east and +z north: see move.)
+		const east = - nose.x, north = nose.z;
+		if ( this.flying ) {
+
+			const rad = this.heading * MathUtils.DEG2RAD;
+			const speed = this.speed + dv * ( east * Math.sin( rad ) + north * Math.cos( rad ) );
+			this.speed = Math.abs( speed ) > cap && Math.abs( speed ) > Math.abs( this.speed ) ? Math.sign( speed ) * Math.max( cap, Math.abs( this.speed ) ) : speed;
+
+		} else {
+
+			const rad = this.course * MathUtils.DEG2RAD;
+			let ve = Math.sin( rad ) * this.speed + east * dv;
+			let vn = Math.cos( rad ) * this.speed + north * dv;
+			const was = Math.abs( this.speed );
+			const now = Math.hypot( ve, vn );
+			if ( now > cap && now > was ) {
+
+				ve *= Math.max( cap, was ) / now;
+				vn *= Math.max( cap, was ) / now;
+
+			}
+
+			this.speed = Math.hypot( ve, vn );
+			if ( this.speed > 1e-6 ) this.course = Math.atan2( ve, vn ) * MathUtils.RAD2DEG;
+
+		}
+
+		if ( nose.y < 0 || this.vy < BOOST_CLIMB ) this.vy = Math.min( this.vy + nose.y * dv, Math.max( this.vy, BOOST_CLIMB ) );
 
 	}
 

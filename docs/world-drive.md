@@ -191,6 +191,13 @@ coupe, bus, monster truck, hovercraft) get the wings but keep their wheels as th
   each), and so do boost pads (once they're switched on). What it leaves behind is the ride's **boost style** from the
   [Garage](#the-garage): the classic flame, bubbles, confetti, music notes or cherry blossom, or
   with the pass (or, for some, a level) one of seventeen more.
+- **In the air it pushes the way the nose points.** On the road it pushes you forward. Off the
+  ground (a jump, a launch, flying on **F**) it pushes along the car as it's turned: nose up and it
+  climbs (adding up to 20 m/s upward, `BOOST_CLIMB`), nose down and it dives, pointing back mid-spin
+  and it slows you and then sends you backwards. Along the ground it still never takes you past
+  twice the top speed, so challenge times are checked the same way. Flying on **F**, only the part
+  along the way you're heading counts, since flying follows your heading. (`pushAlongNose` in
+  `src/drive.js`.)
 - **Overdrive.** Boost at 85 % or more of that doubled top speed for three quarters of a second and
   you hit overdrive (the code calls it supersonic): a sonic boom (shock rings blown out round you, a flash and a jolt, the edges of the view flashing white), streaks of
   air streaming back past you, the view 9° wider and **OVERDRIVE** by the speed. It lasts, boosting
