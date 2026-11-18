@@ -73,6 +73,7 @@ things and switches between before and after (see [Showing and hiding](#showing-
 | W A S D / arrows | Move |
 | Shift | Run (walk) / faster (fly) |
 | F | Switch between walking and flying |
+| C | Walking: third person (behind the worker you walk as) or first person (through his eyes) |
 | Space | Jump (walk) / up (fly) |
 | E / Q | Up / down (fly); C also goes down |
 | Wheel | Zoom toward the point under the cursor, or away from it; Shift for bigger steps. A trackpad's pinch zooms too |
@@ -162,6 +163,28 @@ mouse during the turn takes the view back. **T** stops the turning (`autoTurn` i
 [src/config.js](src/config.js) sets it for good, with `flyRadius` for the clearance and `bounce` for
 how hard you bounce), and **G** (ghost) lets you through walls on purpose, e.g. to look inside a
 building; the status top left says when it's on.
+
+### Walking as a construction worker
+
+Walking (**F**), you're a construction worker in a hard hat and hi-vis vest (a hi3D model). In
+**third person** the camera follows behind him and over his right shoulder: he turns to face the way
+he walks, his legs and arms swing in step (further when running with Shift), his knees come up when
+he jumps, and the camera comes in closer when a wall or the ground is behind him, so it works down
+C32 and the gallery. **C** switches to **first person**, from his eyes: look down and you see your
+boots. The choice is remembered in your browser; flying and driving are as before.
+
+The model is one mesh with no skeleton: `src/player.js` gives it one as it loads (hips, spine,
+chest, head, thighs, shins, upper arms and forearms), weighting each part of the body to its bones
+by where it is, and walks it. To use another person (standing with arms down, facing +z):
+
+```bash
+node scripts/add-player-model.mjs path/to/person.glb --height 1.88
+```
+
+That makes it about 40,000 triangles with 2048 px WebP textures (the hi3D export was 2 million and
+48 MB; this is 1 MB), stands it on its feet at the height given, and writes
+`public/models/player-worker.glb`. If its joints aren't where a typical person's are, `JOINTS` at
+the top of `src/player.js` moves them (shares of the height).
 
 ## Adding your own model
 
@@ -979,6 +1002,7 @@ src/placements.js   models' positions saved on the live site for everyone (Save 
                     and the admin passcode for anything saved for everyone
 src/shared-items.js items the admin saved for everyone: loaded for everyone, Save / Remove for everyone
 src/legend.js       the Controls panel: the keys for what you're doing now
+src/player.js       the construction worker you walk as: his bones, his walk, third and first person (C)
 src/layers.js       the Show panel: layers, hidden items and Before / After (B)
 src/drive-prompt.js V: what it drives, the "Press V to drive" prompt and twin.startDriving()
 src/models.js       loads and places your glTF models
