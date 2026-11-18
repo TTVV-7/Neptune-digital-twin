@@ -242,20 +242,24 @@ async function restartWorker( vars ) {
 // now asking and going idle as `online` says ({ poll, idle }, ms), if it says. rooms: the room of
 // each connection it opens to one, in order; sent: what it has sent the rooms, { at, t } (t a
 // message's type, or a keepalive's text), as Playwright saw each frame go.
-async function livePage( { token, player = null, path = '/', touch = false, viewport = touch ? { width: 390, height: 760 } : { width: 900, height: 560 }, online = null } ) {
+async function livePage( { token, player = null, path = '/', touch = false, viewport = touch ? { width: 390, height: 760 } : { width: 900, height: 560 }, online = null, stats = false } ) {
 
 	const context = await browser.newContext( { viewport, hasTouch: touch, isMobile: touch } );
-	await context.addInitScript( ( { visit, player, online } ) => {
+	await context.addInitScript( ( { visit, player, online, stats } ) => {
 
 		window.worldDriveLiveTest = { visit, ...( online ? { online } : {} ) };
+		// The play stats count only for a visit, which the dev server doesn't have: a test one, as
+		// test-drive-ui.mjs's play stats are handed (their posts are answered here, below).
+		if ( stats ) window.worldDriveStatsTest = { visit: 'v1.live-stats-test' };
 		localStorage.setItem( 'world-drive.pads', 'off' );
 		// The go-kart, as before the pickup (219,000 triangles, slow in the software renderer) was the
 		// default, unless a ride is picked already.
 		if ( ! localStorage.getItem( 'world-drive.vehicle' ) ) localStorage.setItem( 'world-drive.vehicle', 'go-kart' );
 		if ( player ) localStorage.setItem( 'world-drive.player', JSON.stringify( player ) );
 
-	}, { visit: token, player, online } );
+	}, { visit: token, player, online, stats } );
 	const page = await context.newPage();
+	if ( stats ) await page.route( '**/api/stats', route => route.fulfill( { status: 204 } ) );
 	page.token = token;
 	page.errors = [];
 	page.rooms = [];
@@ -1900,7 +1904,7 @@ describe( 'World Drive, driving with others on the Moon', () => {
 		assert.ok( a.rooms.includes( `party:${ code }` ) );
 		await a.keyboard.press( 'Escape' );
 		// A phone, upright, on the Earth's globe with the link.
-		d = await livePage( { token: await visitToken(), path: `/?party=${ code }`, touch: true } );
+		d = await livePage( { token: await visitToken(), path: `/?party=${ code }`, touch: true, stats: true } );
 		await waitLive( d, `party:${ code }` );
 		const banner = d.locator( '#globe-ui .party-banner' );
 		await banner.locator( '.join' ).waitFor( { timeout: 30000 } );
@@ -1957,12 +1961,13 @@ describe( 'World Drive, driving with others on the Moon', () => {
 		// Driving on the Earth with the party's only other driver on the Moon is no driving with
 		// others in the play stats, as it's no driving together for levels.
 		const played = () => d.evaluate( () => [ window.drive.stats.counts[ 'play_world:earth' ] ?? 0, window.drive.stats.counts[ 'play_with_others:all' ] ?? 0 ] );
-		// (Counted on: the Earth's play time moves. A post every 3 minutes takes the whole seconds off
-		// both, so the time with others can only have stayed or gone down.)
+		// (Counted on: the Earth's play time moves, by at least three frames' worth, which in SwiftShader
+		// on a loaded machine can take many seconds, as a frame counts at most 0.1 s. A post every 3
+		// minutes takes the whole seconds off both, so the Earth's moves either way, and the time with
+		// others can only have stayed or gone down.)
 		const [ earthBefore, othersBefore ] = await played();
-		await d.waitForTimeout( 2500 );
-		const [ earthAfter, othersAfter ] = await played();
-		assert.notEqual( earthAfter, earthBefore );
+		await d.waitForFunction( before => Math.abs( ( window.drive.stats.counts[ 'play_world:earth' ] ?? 0 ) - before ) >= 0.3, earthBefore, { timeout: 120000 } );
+		const [ , othersAfter ] = await played();
 		assert.ok( othersAfter <= othersBefore, `${ othersBefore } s with others, then ${ othersAfter } s` );
 		// A back to the Moon's globe and in again: D, on the Earth, is told, and Join takes D to the
 		// Moon, beside her.
