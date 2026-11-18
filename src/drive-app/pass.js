@@ -92,7 +92,7 @@ function build() {
 				<li><b>The whole Garage, now</b><span>Every look at once: 20 colours, finishes up to chrome, eight decals, rims, underglow, horns, ${ count( PASS_BOOSTS ).toLowerCase() } more boost styles (a galaxy, dragon fire...), flame colours and trails. Levels unlock some as you drive; the pass doesn't wait.</span></li>
 				<li><b>+50% XP</b><span>Every level sooner, with its titles and level-only colours.</span></li>
 				<li><b>A ⭐ on the leaderboard</b><span>By your name, for everyone to see.</span></li>
-				<li><b>30 Earth drives a day</b><span>Instead of 1. The Moon's free for everyone.</span></li>
+				<li><b>30 Earth drives a day</b><span>Instead of 1. The Moon and Mars are free for everyone.</span></li>
 			</ul>
 			<div class="buy-area">
 				<button type="button" class="primary buy" disabled>Coming soon</button>

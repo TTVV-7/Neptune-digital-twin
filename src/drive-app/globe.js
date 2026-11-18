@@ -23,9 +23,9 @@ import { CAMERA_FRAME, GlobeControls } from '3d-tiles-renderer';
 // frame, centred on the Earth with Z through the North Pole, is `earth`'s world matrix: the tiles'
 // group, or the test globe. Poses are kept in that frame, so a recentre never moves the view.
 //
-// It's the Moon's globe too (moon.js): setBody swaps the Earth for another body, its frame, what's
-// tapped, its ellipsoid and size, and whether it has air to glow round it. Everything below goes
-// by the body's: "the Earth" in what follows is whichever it is.
+// It's the Moon's and Mars's globe too (body.js): setBody swaps the Earth for another body, its
+// frame, what's tapped, its ellipsoid and size, and whether it has air to glow round it, and in what
+// colour. Everything below goes by the body's: "the Earth" in what follows is whichever it is.
 
 const DEG = MathUtils.DEG2RAD;
 // The globe turns this fast (degrees a second) when it's left alone this long (s).
@@ -34,9 +34,12 @@ const SPIN_AFTER = 25;
 // A tap is a press and release this close together, in pixels and milliseconds.
 const TAP_MOVE = 8;
 const TAP_TIME = 450;
-// The atmosphere's glow, as a share of the Earth's radius, shown from this high up (m).
-const AIR = 1.025;
+// The atmosphere's glow: how far it reaches (a share of the Earth's radius past it), its colour, and
+// from how high up (m) it shows, coming in over the next AIR_OVER m (a body's own air scaled to its
+// size: setBody).
+const AIR = { reach: 0.025, colour: [ 0.32, 0.62, 1.0 ] };
 const AIR_FROM = 300000;
+const AIR_OVER = 2e6;
 const EARTH_RADIUS = 6371000;
 // Heights (m above the ellipsoid) the ground can really be at. From far off only Google's coarsest
 // tiles have loaded, whose big flat triangles cut kilometres under the curve of the Earth: a
@@ -44,7 +47,7 @@ const EARTH_RADIUS = 6371000;
 const LOWEST = - 500;
 const HIGHEST = 9000;
 // The body's size and those heights, as GlobeView starts: the Earth's.
-const EARTH = { radius: EARTH_RADIUS, air: true, lowest: LOWEST, highest: HIGHEST };
+const EARTH = { radius: EARTH_RADIUS, air: AIR, lowest: LOWEST, highest: HIGHEST };
 // How often (s) the ground's height under a pin, or where a flight is headed, is looked at again
 // as sharper tiles load.
 const RECHECK = 0.25;
@@ -132,10 +135,12 @@ export class GlobeView {
 	}
 
 	// Turn to another body: `earth` its frame (the object whose world matrix is it), `surface` what's
-	// tapped and looked at, its ellipsoid, and { radius (m), air (whether it glows), lowest and
-	// highest (m, the heights its ground can be at), heightAt( lat, lon ) (m, its ground's height
-	// worked out, for a body that can: the Moon's; else it's looked for on what has loaded) }. Any
-	// flight is dropped, and the pin; the camera is where it was in the scene, so put it somewhere.
+	// tapped and looked at, its ellipsoid, and { radius (m), air (true for the Earth's glow, false
+	// for none, or { reach, colour } for a body's own: how far it reaches as a share of its radius,
+	// and [ r, g, b ]), lowest and highest (m, the heights its ground can be at), heightAt( lat, lon )
+	// (m, its ground's height worked out, for a body that can: the Moon's and Mars's; else it's looked
+	// for on what has loaded) }. Any flight is dropped, and the pin; the camera is where it was in the
+	// scene, so put it somewhere.
 	setBody( { earth, surface, ellipsoid, radius = EARTH_RADIUS, air = true, lowest = LOWEST, highest = HIGHEST, heightAt = null } ) {
 
 		this.cancelFlight();
@@ -143,7 +148,8 @@ export class GlobeView {
 		this.earth = earth;
 		this.surface = surface;
 		this.ellipsoid = ellipsoid;
-		this.body = { radius, air, lowest, highest, heightAt };
+		this.body = { radius, air: air === true ? AIR : air || null, lowest, highest, heightAt };
+		if ( this.body.air ) this.air.material.uniforms.colour.value.set( ...this.body.air.colour );
 		this.controls.setEllipsoid( ellipsoid, earth );
 		this.controls.setScene( surface );
 		// Whatever it was doing (a drag, the inertia of a spin) was on the other body.
@@ -468,18 +474,22 @@ export class GlobeView {
 
 	}
 
-	// The glow round the Earth from space, fading out on the way down.
+	// The glow round the Earth from space, fading out on the way down (the heights it shows from, the
+	// Earth's, scaled to the body's size).
 	updateAir() {
 
 		const { air, camera } = this;
+		const { radius: size, air: glow } = this.body;
 		_centre.setFromMatrixPosition( this.earth.matrixWorld );
-		const altitude = camera.position.distanceTo( _centre ) - EARTH_RADIUS;
-		air.visible = this.body.air && this.enabled && altitude > AIR_FROM;
+		const altitude = camera.position.distanceTo( _centre ) - size;
+		const scale = size / EARTH_RADIUS;
+		air.visible = !! glow && this.enabled && altitude > AIR_FROM * scale;
 		if ( ! air.visible ) return;
 		const radius = this.ellipsoid.radius;
-		air.matrix.makeScale( radius.x * AIR, radius.y * AIR, radius.z * AIR ).premultiply( this.earth.matrixWorld );
+		const reach = 1 + glow.reach;
+		air.matrix.makeScale( radius.x * reach, radius.y * reach, radius.z * reach ).premultiply( this.earth.matrixWorld );
 		air.matrixWorldNeedsUpdate = true;
-		air.material.uniforms.strength.value = MathUtils.clamp( ( altitude - AIR_FROM ) / 2e6, 0, 1 );
+		air.material.uniforms.strength.value = MathUtils.clamp( ( altitude - AIR_FROM * scale ) / ( AIR_OVER * scale ), 0, 1 );
 
 	}
 
@@ -488,7 +498,7 @@ export class GlobeView {
 function makeAtmosphere() {
 
 	const material = new ShaderMaterial( {
-		uniforms: { strength: { value: 1 } },
+		uniforms: { strength: { value: 1 }, colour: { value: new Vector3( ...AIR.colour ) } },
 		vertexShader: /* glsl */`
 			#include <common>
 			#include <logdepthbuf_pars_vertex>
@@ -504,13 +514,14 @@ function makeAtmosphere() {
 		fragmentShader: /* glsl */`
 			#include <logdepthbuf_pars_fragment>
 			uniform float strength;
+			uniform vec3 colour;
 			varying vec3 vNormal;
 			varying vec3 vView;
 			void main() {
 				#include <logdepthbuf_fragment>
 				// Seen from inside its far side, the shell is brightest just off the Earth's edge.
 				float glow = pow( clamp( abs( dot( vNormal, vView ) ) / 0.24, 0.0, 1.0 ), 1.6 );
-				gl_FragColor = vec4( vec3( 0.32, 0.62, 1.0 ) * glow * strength, 1.0 );
+				gl_FragColor = vec4( colour * glow * strength, 1.0 );
 			}`,
 		side: BackSide,
 		blending: AdditiveBlending,

@@ -1,6 +1,7 @@
 import './style.css';
 import { getConfig, postVisit, robotCheck, send } from './api.js';
 import * as screens from './screens.js';
+import { EARTH, OFF_EARTH, spotWorld } from './worlds.js';
 
 // World Drive's first script (docs/world-drive.md): the splash, the Worker's settings and the robot
 // check, while the game itself (main.js: three.js, the tiles, the driving, nearly all of the page's
@@ -129,29 +130,38 @@ async function visit( config ) {
 	if ( err ) return loadFailed( err );
 
 	const challenge = await linkWithin();
-	const moonLink = opensOnMoon( location.search ) || challenge?.answer.body?.challenge?.world === 'moon';
-	const outcome = await postVisit( token, { world: moonLink ? 'moon' : 'earth' } );
+	const linkedWorld = opensOffEarth( location.search ) ?? offEarth( challenge?.answer.body?.challenge?.world );
+	const outcome = await postVisit( token, { world: linkedWorld ?? EARTH } );
 	// (The link's answer as it comes, if it hadn't within LINK_WAIT.)
 	const settings = { googleClientId: config.googleClientId, passwords: config.passwords === true, turnstileSiteKey: config.turnstileSiteKey, live: !! config.live, liveReason: config.liveReason, adsense: config.adsense ?? null, challengeLink: challengeLink() };
 	if ( outcome.key ) return run( main, { key: outcome.key, left: outcome.left, visit: outcome.visit, ...settings } );
-	// A link to the Moon (a Moon challenge's too): on the Moon, with none of the day's Earth drives
-	// spent. The Earth is a reload away (without the link, so that one does ask for a drive).
-	if ( outcome.moon ) return run( main, { key: null, visit: outcome.visit, ...settings, moonOnly: { onEarth: toEarth } } );
+	// A link to another world (a challenge's there too): on that world, with none of the day's Earth
+	// drives spent. The Earth is a reload away (without the link, so that one does ask for a drive).
+	if ( outcome.free ) return run( main, { key: null, visit: outcome.visit, ...settings, earthClosed: { onEarth: toEarth } } );
 	if ( outcome.usedUp ) return usedUp( config, outcome, main, challengeLink() );
 	if ( outcome.robot ) return screens.notice( 'robot', { onRetry: () => visit( config ) } );
 	screens.notice( 'error', { message: outcome.error, onRetry: () => visit( config ) } );
 
 }
 
-// A link to the Moon (a Moon spot's ?spot=moon-..., or ?at= with world=moon; places.js's linkedPlace).
-function opensOnMoon( search ) {
+// The world a link opens on, if it's one of the worlds made in the page (worlds.js): a spot's
+// ?spot=moon-... or ?spot=mars-..., or ?at= with world=moon or world=mars (places.js's linkedPlace);
+// else null.
+function opensOffEarth( search ) {
 
 	const params = new URLSearchParams( search );
-	return ( params.get( 'spot' ) ?? '' ).startsWith( 'moon-' ) || ( params.has( 'at' ) && params.get( 'world' ) === 'moon' );
+	return spotWorld( params.get( 'spot' ) ) ?? ( params.has( 'at' ) ? offEarth( params.get( 'world' ) ) : null );
 
 }
 
-// From a page opened on the Moon by a link, to the Earth: the same page without the link (at /, a
+// `id` if it's one of the worlds made in the page, else null.
+function offEarth( id ) {
+
+	return OFF_EARTH.includes( id ) ? id : null;
+
+}
+
+// From a page opened on another world by a link, to the Earth: the same page without the link (at /, a
 // challenge link's /c too), which asks for one of the day's drives as it loads (a ?party= stays).
 function toEarth() {
 
@@ -162,9 +172,10 @@ function toEarth() {
 
 }
 
-// Today's Earth drives are used up (this visitor's free one, or everyone's for the day). The Moon is
-// ours to stream and costs nothing, so it's never limited: the game starts there at once, on the
-// Moon's globe with the Earth closed (main.js's moonOnly), and a toast says why. Picking the Earth
+// Today's Earth drives are used up (this visitor's free one, or everyone's for the day). The Moon and
+// Mars are ours to stream and cost nothing, so they're never limited: the game starts on the Moon at
+// once, on the Moon's globe with the Earth closed (main.js's earthClosed; Mars is a tap away), and a
+// toast says why. Picking the Earth
 // shows the used-up notice, with its countdown and a way back to the Moon. A supporter's drives are
 // counted by their account, not this address (30 a day), so with signing in set up that notice has
 // a sign-in too: a supporter on a new browser, or back from paying before Stripe's word arrived
@@ -205,13 +216,13 @@ async function usedUp( config, outcome, main, link = null ) {
 	};
 	const started = run( main, {
 		key: null, visit: outcome.visit, googleClientId: config.googleClientId, passwords: config.passwords === true, turnstileSiteKey: config.turnstileSiteKey, live: !! config.live, liveReason: config.liveReason, adsense: config.adsense ?? null, challengeLink: link,
-		moonOnly: { onEarth: earthClosed },
+		earthClosed: { onEarth: earthClosed },
 	} );
 	// Once the globe has turned to the Moon (it loads after the game starts), so it's read with the
 	// Moon in view rather than running out over the splash.
-	started.then( game => game && onceOnMoon( game, () => screens.toast( reason === 'daily'
-		? 'Today\'s free Earth drives are all taken, so you\'re on the Moon: free and unlimited. The Earth opens again tomorrow.'
-		: 'You\'ve had today\'s free Earth drive, so you\'re on the Moon: free and unlimited. The Earth opens again tomorrow.', 10000 ) ) );
+	started.then( game => game && onceOffEarth( game, () => screens.toast( reason === 'daily'
+		? 'Today\'s free Earth drives are all taken, so you\'re on the Moon: free and unlimited, as Mars is. The Earth opens again tomorrow.'
+		: 'You\'ve had today\'s free Earth drive, so you\'re on the Moon: free and unlimited, as Mars is. The Earth opens again tomorrow.', 10000 ) ) );
 	if ( ! accounts ) return;
 	try {
 
@@ -231,14 +242,14 @@ async function usedUp( config, outcome, main, link = null ) {
 
 }
 
-// fn() once the game's globe is on the Moon (looked at a few times a second, for up to two minutes:
-// a Moon that doesn't load says so itself).
-function onceOnMoon( game, fn ) {
+// fn() once the game's globe is on another world (looked at a few times a second, for up to two
+// minutes: a world that doesn't load says so itself).
+function onceOffEarth( game, fn ) {
 
 	const since = Date.now();
 	const look = () => {
 
-		if ( game.world === 'moon' ) return fn();
+		if ( game.world !== EARTH ) return fn();
 		if ( Date.now() - since < 120000 ) setTimeout( look, 250 );
 
 	};

@@ -6,9 +6,11 @@ import {
 } from '../../src/drive-app/challenge-rules.js';
 import { GHOST_TEXT, ghostFault } from '../../src/drive-app/ghost-rules.js';
 import { checkLook } from '../../src/drive-app/live-protocol.js';
-import { hasHeights, heightAt as moonHeightAt, setHeights } from '../../src/drive-app/moon-height.js';
-import { MOON_PLACES } from '../../src/drive-app/moon-places.js';
+import { createGround } from '../../src/drive-app/body-height.js';
+import { moonGround } from '../../src/drive-app/moon-height.js';
 import { SPOTS } from '../../src/drive-app/places.js';
+import { PLACES_ON } from '../../src/drive-app/world-places.js';
+import { EARTH, MOON, OFF_EARTH, WORLDS as WORLD_DATA, isWorld, onWorld } from '../../src/drive-app/worlds.js';
 import { PLACES } from '../../drive/site/places.js';
 import { adminAccount } from './admin.js';
 import { dateOf } from './boards.js';
@@ -23,34 +25,34 @@ import { hasPass, supporterEmails } from './supporter.js';
 import { readVisit } from './visits.js';
 
 // Challenges (docs/world-drive.md, "Challenges"): each UTC day, week (from Monday, as the
-// leaderboard's) and calendar month, one challenge on the Earth and one on the Moon, six live at
-// once, each a place and a route the same for everyone (src/drive-app/challenge-rules.js lays it
-// out), each with its own board of each player's best time.
+// leaderboard's) and calendar month, one challenge on each world (src/drive-app/worlds.js: the
+// Earth, the Moon and Mars), nine live at once, each a place and a route the same for everyone
+// (src/drive-app/challenge-rules.js lays it out), each with its own board of each player's best time.
 //
-// Picking them: by themselves, in a rotation round the featured places (the start spots, the places'
-// pages, the Moon's places) and the busy drop-in places the owner has approved (dropins.js: part 1's
-// ranking can be pushed by anyone with many addresses, so nothing it ranks goes in without the
-// owner's say). The order and each period's kind and route come from HMACs of the period's key with
-// a key derived from the Worker's secret, so every Worker instance agrees and nobody can work out
-// next week's from the code; and a period's place keeps clear of the places fixed in D1 for the
-// periods live beside it and the one before (rotationPick), so that holds whatever changed since
-// those were fixed. The owner can choose any period's challenge on either world by hand (the admin
-// page, ADMIN_EMAILS only), and approve or unapprove busy places. A period's challenge is fixed in
-// D1 the first time it's asked for, so nothing changing later (this code, the places, the
-// approvals) changes a live one; the owner changing a live one starts a new board, the old one kept
-// apart, after a warning (it changes what the times mean).
+// Picking them: by themselves, in a rotation round the featured places (the start spots, the
+// places' pages, the Moon's and Mars's places) and the busy drop-in places the owner has approved
+// (dropins.js: part 1's ranking can be pushed by anyone with many addresses, so nothing it ranks
+// goes in without the owner's say). The order and each period's kind and route come from HMACs of
+// the period's key with a key derived from the Worker's secret, so every Worker instance agrees and
+// nobody can work out next week's from the code; and a period's place keeps clear of the places
+// fixed in D1 for the periods live beside it and the one before (rotationPick), so that holds
+// whatever changed since those were fixed. The owner can choose any period's challenge on any world
+// by hand (the admin page, ADMIN_EMAILS only), and approve or unapprove busy places. A period's
+// challenge is fixed in D1 the first time it's asked for, so nothing changing later (this code, the
+// places, the approvals) changes a live one; the owner changing a live one starts a new board, the
+// old one kept apart, after a warning (it changes what the times mean).
 //
 // Times: posted by the page as a run finishes, checked as scores are (scores.js): with a visit's
-// token of the right kind (an Earth challenge needs an Earth visit; the Moon's takes any), from a
-// player of the leaderboard's (id and secret), for a live challenge only, no longer than the visit
-// has lasted, every point passed in order (collectibles in any) and no leg quicker than the fastest
-// the game goes allows (challenge-rules.js's checkPasses), one every TIME_GAP from a player,
-// CHALLENGE_TIMES_PER_VISIT from a visit (what one robot check buys, from whatever addresses its
-// token is sent from) and CHALLENGE_TIMES_PER_VISITOR_DAILY a day from a visitor (DriveLimits, by
-// the day's salt, an IPv6 visitor by its /48; a player whose visitor has had the day's is then held
-// till midnight by their own gap, so their tries after it write nothing and ask DriveLimits
-// nothing). Only each player's best is kept. The owner's runs (an 'o' visit) are taken and
-// answered, but kept off the boards: the owner knows each place and kind before it's live, and
+// token of the right kind (an Earth challenge needs an Earth visit; every other world's takes any),
+// from a player of the leaderboard's (id and secret), for a live challenge only, no longer than the
+// visit has lasted, every point passed in order (collectibles in any) and no leg quicker than the
+// fastest the game goes allows (challenge-rules.js's checkPasses), one every TIME_GAP from a
+// player, CHALLENGE_TIMES_PER_VISIT from a visit (what one robot check buys, from whatever
+// addresses its token is sent from) and CHALLENGE_TIMES_PER_VISITOR_DAILY a day from a visitor
+// (DriveLimits, by the day's salt, an IPv6 visitor by its /48; a player whose visitor has had the
+// day's is then held till midnight by their own gap, so their tries after it write nothing and ask
+// DriveLimits nothing). Only each player's best is kept. The owner's runs (an 'o' visit) are taken
+// and answered, but kept off the boards: the owner knows each place and kind before it's live, and
 // chooses them.
 //
 // What a look costs is bounded whoever asks (docs/world-drive.md, "What challenges cost"): a rank is
@@ -96,7 +98,7 @@ export const REPOST = 5 * 60 * 1000;
 // The boards: the top TOP, the list's top LIST_TOP for each challenge, and the finish screen's
 // FINISH_TOP. Kept in Cloudflare's cache as the leaderboard's are: a live challenge's board, the
 // list's tops and each player's own rows CHALLENGE_CACHE s (a new best clears them in the one of
-// Cloudflare's places it's posted in; elsewhere they're at most that behind), so the six live boards
+// Cloudflare's places it's posted in; elsewhere they're at most that behind), so the nine live boards
 // are read from D1 at most once a minute each in a place, whoever asks; a finished challenge's board
 // FINISHED_CACHE s, as its times can't change (a name cleaned up on it shows within a day, or at
 // once after a purge of the cache: the docs); and each board's order (boardOrders: the first
@@ -107,27 +109,37 @@ const FINISH_TOP = 5;
 const CHALLENGE_CACHE = 60;
 const FINISHED_CACHE = 24 * 60 * 60;
 const ORDER_KEPT = 10 * 60;
-// The six live challenges are kept in each Worker instance's memory this long (ms), so a list asks
+// The live challenges are kept in each Worker instance's memory this long (ms), so a list asks
 // D1 for them at most once a minute; a challenge the owner replaces is seen everywhere within it (a
 // time posted for the old one is checked against D1 itself).
 const LIVE_KEPT = 60 * 1000;
+// At most this many routes laid out and checked on their ground (the Moon's and Mars's: below) in
+// one request; the rest are left for the next. Each is about a millisecond or two of the Worker's
+// CPU, but the first in a Worker instance just started is 5 to 10 (its code not yet compiled), and
+// the Free plan gives a request 10: three is as many as the Moon alone ever needed at once (its
+// month's, week's and day's starting together), and a new month starting on a Monday needs six on
+// the two worlds (measured in Node: six together 1.3 ms on average in a warm instance, 3 at the
+// 99th percentile, but 8 to 20 in a cold one). So such a day's first ask gets the challenges fixed
+// so far, and the next fixes the rest; nothing is kept as live till they're all there.
+const CHECKED_MOST = 3;
 // The admin page's busy places (dropins.js's topPlaces over the last BUSY_DAYS), kept BUSY_KEPT ms.
 const BUSY_DAYS = 30;
 const BUSY_KEPT = 10 * 60 * 1000;
 // A pick can be made for a period up to AHEAD days ahead; at most APPROVED places a world.
 const AHEAD = 400;
 const APPROVED = 100;
-// The Moon's routes are checked on its own heights (moon-height.js, from the site's
-// /moon/height.bin): each point (and a landmark's start) on ground sloping under MOON_SLOPE degrees
-// across ±SLOPE_REACH m, so no gate is on a crater's wall; and each leg in its order (a sprint's,
-// from the start through its gates; a landmark's, from the start to it), its heights every LEG_STEP
-// m along the straight line, each stretch of LEG_REACH m rising or falling MOON_SLOPE degrees or more
-// a fault, a point's counting POINT_FAULTS (a gate on a wall is worse than a wall on the way to it,
-// which can be driven round or flown over). Craters smaller than MOON_DETAIL m are left out of the
-// check (the car drives over them), which keeps a route's check to a few milliseconds.
-const MOON_SLOPE = 20;
+// The routes on a world made in the page (the Moon's, Mars's) are checked on its own heights (body-
+// height.js's ground, as the page's, from the site's /<world>/height.bin): each point (and a
+// landmark's start) on ground sloping under SLOPE degrees across ±SLOPE_REACH m, so no gate is on a
+// crater's wall; and each leg in its order (a sprint's, from the start through its gates; a
+// landmark's, from the start to it), its heights every LEG_STEP m along the straight line, each
+// stretch of LEG_REACH m rising or falling SLOPE degrees or more a fault, a point's counting
+// POINT_FAULTS (a gate on a wall is worse than a wall on the way to it, which can be driven round or
+// flown over). Craters smaller than DETAIL m are left out of the check (the car drives over them),
+// which keeps a route's check to a few milliseconds.
+const SLOPE = 20;
 const SLOPE_REACH = 15;
-const MOON_DETAIL = 30;
+const DETAIL = 30;
 const LEG_STEP = 25;
 const LEG_REACH = 100;
 const POINT_FAULTS = 10;
@@ -150,8 +162,8 @@ const GHOST_KEPT = 30 * 24 * 60 * 60;
 // are the longest and the least raced. Only when it would be the slowest kept is a new best kept
 // without its ghost (nobody can race it, nor a link to it). So slow runs posted to fill it (a script
 // posting the largest ghosts the rules take, about 64 KB a run of 6 min 49 s, 260 of them) are let
-// go for each quicker best after them, and keep no quicker driver's ghost out. The six live at once
-// keep 96 MB at most of D1's 500 MB (the Free plan's for a database), whatever's posted: a fair
+// go for each quicker best after them, and keep no quicker driver's ghost out. The nine live at once
+// keep 144 MB at most of D1's 500 MB (the Free plan's for a database), whatever's posted: a fair
 // ghost is about 4.8 KB of text a minute of run, so that's thousands of a daily's or hundreds of a
 // monthly's few minutes. The owner can raise it on Workers Paid (10 GB a database).
 const GHOST_BUDGET = 16 * 1024 * 1024;
@@ -165,21 +177,28 @@ const PLAUSIBLE = 2;
 const DAY = 24 * 60 * 60 * 1000;
 const encoder = new TextEncoder();
 
-// The places the rotation goes round: the game's own featured places, by an id of their own.
+// The places the rotation goes round: the game's own featured places, by an id of their own (each
+// other world's places by theirs, world-places.js: "moon-tycho", "mars-gale"), with no heading off
+// the Earth (no road to follow: a route there goes any way).
 const FEATURED = {
 	earth: [
 		...SPOTS.map( spot => ( { id: `spot:${ spot.id }`, name: spot.name, region: spot.region, lat: spot.lat, lon: spot.lon, heading: spot.heading } ) ),
 		...PLACES.filter( place => place.at ).map( place => ( { id: `page:${ place.slug }`, name: place.name, region: place.region, lat: place.at.lat, lon: place.at.lon, heading: place.at.heading } ) ),
 	],
-	moon: MOON_PLACES.map( place => ( { id: place.id, name: place.name, region: place.region, lat: place.lat, lon: place.lon } ) ),
+	...Object.fromEntries( OFF_EARTH.map( world => [ world, ( PLACES_ON[ world ] ?? [] ).map( place => ( { id: place.id, name: place.name, region: place.region, lat: place.lat, lon: place.lon } ) ) ] ) ),
 };
+// Each world made in the page with heights (worlds.js: the Moon, Mars): its ground, as the page has
+// it (body-height.js), handed its heights once per Worker instance (groundCheck); the Moon's is
+// moon-height.js's own, the one Moon the Worker has.
+export const GROUNDS = Object.fromEntries( OFF_EARTH.filter( world => WORLD_DATA[ world ].heights ).map( world => [ world, world === MOON ? moonGround : createGround( WORLD_DATA[ world ] ) ] ) );
 
 // The derived key, made once per Worker instance; the live challenges ({ keys, at, rows }); the
-// admin page's busy places ({ at, earth, moon }); the Moon's heights being fetched.
+// admin page's busy places ({ at, places: { earth, moon, mars } }); each world's heights being
+// fetched, by world.
 let seeding = null;
 let live = null;
 let busy = null;
-let moonLoading = null;
+const loading = {};
 // The rotation's choices worked out in this instance (rotationPick), by period, world and places,
 // and its rounds' orders (orderOf), by round.
 const picked = new Map();
@@ -187,7 +206,7 @@ const orders = new Map();
 
 // --- the routes ---
 
-// GET /api/challenges?id=: the six live challenges (the page puts the current world's first):
+// GET /api/challenges?id=: the nine live challenges (the page puts the current world's first):
 // { now, challenges: [ CHALLENGE + { total, top, race, me } ] }, top the LIST_TOP best ({ rank,
 // name, ms, vehicle, level, title, supporter? }), race the quickest time with a ghost to race (as a
 // row, with its run: what a newcomer races; raceQuery) or null, and me, with a player's id, their
@@ -448,11 +467,13 @@ export function linkUrl( challenge, vs ) {
 export function linkWords( { challenge, vs }, now ) {
 
 	const { period, kind, place, region, world, route, endsAt, finalAt, replacedAt } = challenge;
-	const where = `${ place }${ world === 'moon' ? ' on the Moon' : '' }`;
+	// ("on the Moon", "on Mars": worlds.js's words for each.)
+	const on = world !== EARTH && isWorld( world ) ? ` ${ onWorld( world ) }` : '';
+	const where = `${ place }${ on }`;
 	const what = { sprint: 'sprint', collect: 'star hunt', landmark: `drive to ${ route.goal ?? place }` }[ kind ];
 	const which = { day: 'today\'s', week: 'this week\'s', month: 'this month\'s' }[ period ];
 	const named = { day: 'daily', week: 'weekly', month: 'monthly' }[ period ];
-	const full = `${ KIND_NAMES[ kind ].toLowerCase() } at ${ place }${ region ? ` (${ region })` : '' }${ world === 'moon' ? ' on the Moon' : '' }`;
+	const full = `${ KIND_NAMES[ kind ].toLowerCase() } at ${ place }${ region ? ` (${ region })` : '' }${ on }`;
 	const over = finalAt !== null || replacedAt !== null || endsAt <= now;
 	if ( over ) {
 
@@ -529,7 +550,7 @@ export async function postTime( context ) {
 	const open = row && row.replaced_at === null && row.final_at === null && now >= row.starts_at && ( now < row.ends_at || ( now < row.ends_at + GRACE && now - ms < row.ends_at ) );
 	if ( ! open ) throw new HttpError( 403, 'That challenge is over', { reason: 'challenge' } );
 	// An Earth challenge needs an Earth visit (one the Earth's caps let through, or the owner's): a
-	// Moon visit costs nothing but a robot check. The Moon's takes any.
+	// free world's visit costs nothing but a robot check. Every other world's takes any.
 	if ( row.world === 'earth' && ! visit.earth && ! visit.owner ) throw new HttpError( 403, 'Forbidden', { reason: 'world' } );
 	const challenge = challengeOf( row );
 	// No longer than the visit has lasted, and possible on the route.
@@ -798,8 +819,8 @@ async function keepAnswer( key, answer, ms ) {
 // The cached rows a new best on challenge `id` by `player` changes: its board, the player's own row
 // there and a link to their time (by its `handle`), at once (its order is kept, the new best put
 // into it: answerTime); and the list's tops
-// and the player's rows on the six, with the six's ids this instance knows (or, if it doesn't just
-// now, in the background: finding them may mean fixing a new period's six, which is no part of a
+// and the player's rows on the live ones, with their ids this instance knows (or, if it doesn't just
+// now, in the background: finding them may mean fixing a new period's, which is no part of a
 // time's answer). (The ghost of the run it replaces stays in the cache by that run as it was: no
 // link or board names it now.)
 async function forgetTime( context, id, player, handle ) {
@@ -832,9 +853,10 @@ function later( ctx, work, what ) {
 // world, kind, place, region, lat, lon, source, startsAt } ], picks: [ the owner's picks for the
 // live periods and every one after, however far ahead, soonest first: { period, world, kind, place,
 // region, lat, lon, heading, startsAt } ], approved: [ { world, cell, name, region, lat, lon } ],
-// featured: { earth: [ PLACE ], moon: [ PLACE ] }, busy: { earth: [ part 1's top places that aren't
-// featured ], moon: [...] } }, upcoming the next period of each kind on each world as it would be
-// fixed (the owner's pick, or the rotation's, clear of what's fixed now).
+// featured: { earth: [ PLACE ], moon: [ PLACE ], mars: [ PLACE ] }, busy: { earth: [ part 1's top
+// places that aren't featured ], moon: [...], mars: [...] } }, upcoming the next period of each
+// kind on each world as it would be fixed (the owner's pick, or the rotation's, clear of what's
+// fixed now).
 export async function adminChallenges( context ) {
 
 	await adminAccount( context );
@@ -1007,15 +1029,19 @@ export async function adminChange( context ) {
 
 // --- the live challenges ---
 
-// The six live challenges' rows (the day's, the week's and the month's on the Earth, then the
-// Moon), fixed in D1 the first time each is asked for in its period (from the owner's pick, or the
-// rotation's), kept LIVE_KEPT ms in this Worker instance. Those to fix are fixed the longest first
-// (the month, the week, then the day), each of the rotation's clear of those fixed already, those
-// fixed here included, and of the periods before (read with the owner's picks): so whatever chose
-// them, and whatever has changed since (the approved places, this code), the three live on a world
-// are three places and none is the one before's. Challenges whose period ended at least GRACE ago
-// are given their final places as this goes (finishEnded), in the background: it's no part of the
-// answer, so it can neither slow one nor turn one into an error.
+// The live challenges' rows (the day's, the week's and the month's on the Earth, then the Moon,
+// then Mars: WORLDS' order), fixed in D1 the first time each is asked for in its period (from the
+// owner's pick, or the rotation's), kept LIVE_KEPT ms in this Worker instance. Those to fix are
+// fixed the longest first (the month, the week, then the day; each world in turn), each of the
+// rotation's clear of those fixed already, those fixed here included, and of the periods before
+// (read with the owner's picks): so whatever chose them, and whatever has changed since (the
+// approved places, this code), the three live on a world are three places and none is the one
+// before's. No more than CHECKED_MOST of them checked on their ground a request: past those, the
+// rest (in the same order) are left for the next ask, which fixes them as this one would have, and
+// this one answers with those fixed so far (kept as live only once they're all there). Challenges
+// whose period ended at least GRACE ago are given their final places as this goes (finishEnded), in
+// the background: it's no part of the answer, so it can neither slow one nor turn one into an
+// error.
 export async function liveChallenges( context ) {
 
 	const { env, now } = context;
@@ -1036,9 +1062,11 @@ export async function liveChallenges( context ) {
 		] );
 		const fixed = [ ...rows, ...before.results ];
 		const made = [];
+		let checked = 0;
 		missing.sort( ( a, b ) => PERIOD_KINDS.indexOf( b.period.kind ) - PERIOD_KINDS.indexOf( a.period.kind ) );
 		for ( const { period, world } of missing ) {
 
+			if ( await groundCheck( env, world ) && ++ checked > CHECKED_MOST ) break;
 			const pick = picks.results.find( p => p.period === period.key && p.world === world );
 			const challenge = await challengeFor( env, period, world, pick ? pickedPlace( pick ) : await rotationPick( env, period, world, places.results, fixed ), now );
 			made.push( challenge );
@@ -1054,12 +1082,12 @@ export async function liveChallenges( context ) {
 
 	await later( context.ctx, finishEnded( db, now ), 'Finishing challenges' );
 	rows.sort( ( a, b ) => WORLDS.indexOf( a.world ) - WORLDS.indexOf( b.world ) || PERIOD_KINDS.indexOf( periodKind( a.period ) ) - PERIOD_KINDS.indexOf( periodKind( b.period ) ) );
-	live = { keys, at: now, rows };
+	if ( rows.length >= periods.length * WORLDS.length ) live = { keys, at: now, rows };
 	return rows;
 
 }
 
-// The six live challenges' rows as this instance has them for `now`, or null when it hasn't (none
+// The live challenges' rows as this instance has them for `now`, or null when it hasn't (none
 // yet, from another period, or older than LIVE_KEPT).
 function liveKnown( now ) {
 
@@ -1073,7 +1101,7 @@ function liveKnown( now ) {
 export async function challengeFor( env, period, world, { place, kind, source }, now ) {
 
 	const random = randomFrom( await seed( env, `route:${ period.key }:${ world }:${ kind }:${ place.lat },${ place.lon }` ) );
-	const route = makeRoute( { kind, size: period.kind, world, place }, random, world === 'moon' ? await moonCheck( env ) : null );
+	const route = makeRoute( { kind, size: period.kind, world, place }, random, await groundCheck( env, world ) );
 	return { period: period.key, world, kind, place: place.name, region: place.region ?? '', route: JSON.stringify( route ), source, startsAt: period.starts, endsAt: period.ends, createdAt: now };
 
 }
@@ -1105,7 +1133,7 @@ export async function rotationPick( env, period, world, approved, fixed = null )
 
 	const places = candidates( world, approved );
 	if ( fixed ) return rotate( env, period, world, approved, places, fixed );
-	// (Kept for this instance: a day's asks for its week's and month's, and the admin page for six.)
+	// (Kept for this instance: a day's asks for its week's and month's, and the admin page for nine.)
 	const key = `${ env.TURNSTILE_SECRET }:${ period.key }:${ world }:${ places.map( place => place.id ).join( ',' ) }`;
 	if ( ! picked.has( key ) ) {
 
@@ -1330,7 +1358,7 @@ function rowsOf( rows ) {
 }
 
 // The player's best and rank on each of the challenges `ids` ({ [ id ]: { ms, rank, owner? } }),
-// kept as the boards are: their rows by their keys (six at most), each rank found in its board's
+// kept as the boards are: their rows by their keys (nine at most), each rank found in its board's
 // order (boardOrders), so a look costs the same few rows read however far down the boards they are,
 // and however many players are asked as in turn.
 async function myStanding( context, db, ids, player, miss ) {
@@ -1606,75 +1634,78 @@ async function busyPlaces( context, db ) {
 
 }
 
-// --- the Moon's ground ---
+// --- the ground of the worlds made in the page ---
 
-// A check of a Moon route's faults for makeRoute, on the Moon's own heights (fetched from the site's
-// files once per Worker instance), or null if they can't be had just now (the route is laid out
-// unchecked, as the Earth's are).
-async function moonCheck( env ) {
+// A check of a route's faults on `world` for makeRoute, on its own heights (GROUNDS', fetched from
+// the site's files once per Worker instance), or null for a world without them (the Earth) or if
+// they can't be had just now (the route is laid out unchecked, as the Earth's are).
+async function groundCheck( env, world ) {
 
-	if ( ! hasHeights() ) {
+	const ground = GROUNDS[ world ];
+	if ( ! ground ) return null;
+	if ( ! ground.hasHeights() ) {
 
-		moonLoading ??= ( async () => {
+		loading[ world ] ??= ( async () => {
 
 			try {
 
-				const res = await env.ASSETS?.fetch( new Request( `${ SITE }/moon/height.bin` ) );
-				if ( res?.ok ) setHeights( new Int16Array( await res.arrayBuffer() ) );
+				const res = await env.ASSETS?.fetch( new Request( `${ SITE }${ WORLD_DATA[ world ].heights.url }` ) );
+				if ( res?.ok ) ground.setHeights( new Int16Array( await res.arrayBuffer() ) );
 
 			} catch ( err ) {
 
-				console.error( 'Moon heights', err?.name, err?.message );
+				console.error( `${ WORLD_DATA[ world ].name } heights`, err?.name, err?.message );
 
 			}
 
 		} )();
-		await moonLoading;
-		moonLoading = null;
+		await loading[ world ];
+		loading[ world ] = null;
 
 	}
 
-	return hasHeights() ? moonFaults : null;
+	return ground.hasHeights() ? ( route, kind, enough ) => routeFaults( world, route, kind, enough ) : null;
 
 }
 
-// A route of `kind`'s faults on the Moon: POINT_FAULTS for each of its points (and its start) on
-// ground sloping MOON_SLOPE degrees or more, and one for each steep stretch along its legs in their
-// order (legFaults: a sprint's from the start through its gates, a landmark's from the start to it;
-// collectibles are taken in any order, so theirs aren't known). The place itself (a sprint's or
-// collectibles' start, a landmark's goal) is where it is, the same in every one laid out, so it isn't
-// counted: no faults means nothing that could be better, and makeRoute stops there. Counting stops
-// once it reaches `enough` (makeRoute's best so far: a route with as many is no better), so a try
-// that's no better costs only as much of its legs as it takes to tell.
-export function moonFaults( route, kind, enough = Infinity ) {
+// A route of `kind`'s faults on `world` (one of GROUNDS'): POINT_FAULTS for each of its points (and
+// its start) on ground sloping SLOPE degrees or more, and one for each steep stretch along its legs
+// in their order (legFaultsOn: a sprint's from the start through its gates, a landmark's from the
+// start to it; collectibles are taken in any order, so theirs aren't known). The place itself (a
+// sprint's or collectibles' start, a landmark's goal) is where it is, the same in every one laid
+// out, so it isn't counted: no faults means nothing that could be better, and makeRoute stops
+// there. Counting stops once it reaches `enough` (makeRoute's best so far: a route with as many is
+// no better), so a try that's no better costs only as much of its legs as it takes to tell.
+export function routeFaults( world, route, kind, enough = Infinity ) {
 
 	const points = [ [ route.start.lat, route.start.lon ], ...route.points ];
 	const own = kind === 'landmark' ? 1 : 0;
-	let faults = points.filter( ( point, i ) => i !== own && moonSteep( ...point ) ).length * POINT_FAULTS;
+	let faults = points.filter( ( point, i ) => i !== own && steepOn( world, ...point ) ).length * POINT_FAULTS;
 	if ( kind === 'collect' ) return faults;
-	for ( let i = 1; i < points.length && faults < enough; i ++ ) faults += legFaults( ...points[ i - 1 ], ...points[ i ], enough - faults );
+	for ( let i = 1; i < points.length && faults < enough; i ++ ) faults += legFaultsOn( world, ...points[ i - 1 ], ...points[ i ], enough - faults );
 	return faults;
 
 }
 
 // How many stretches of LEG_REACH m along the straight line from ( lat, lon ) to ( toLat, toLon ) on
-// the Moon rise or fall MOON_SLOPE degrees or more (a crater's wall, or a mountain's side, on the
-// way): heights every LEG_STEP m, craters under MOON_DETAIL m left out, each steep stretch counted
-// once (the next looked at from its end). Counted from the start, up to `enough` at most (the
-// heights past where it got to aren't read). With `enough` 1 it's only whether there's any, which
-// is the same looked for from either end: from the far one, where a landmark's own crater wall or
-// mountainside is, so a leg that crosses one is told in a few reads.
-export function legFaults( lat, lon, toLat, toLon, enough = Infinity ) {
+// `world` rise or fall SLOPE degrees or more (a crater's wall, or a mountain's side, on the way):
+// heights every LEG_STEP m, craters under DETAIL m left out, each steep stretch counted once (the
+// next looked at from its end). Counted from the start, up to `enough` at most (the heights past
+// where it got to aren't read). With `enough` 1 it's only whether there's any, which is the same
+// looked for from either end: from the far one, where a landmark's own crater wall or mountainside
+// is, so a leg that crosses one is told in a few reads.
+export function legFaultsOn( world, lat, lon, toLat, toLon, enough = Infinity ) {
 
-	const length = metresOn( 'moon', lat, lon, toLat, toLon );
+	const length = metresOn( world, lat, lon, toLat, toLon );
 	const steps = Math.ceil( length / LEG_STEP );
 	if ( steps < 1 || enough < 1 ) return 0;
-	const bearing = bearingTo( 'moon', lat, lon, toLat, toLon );
+	const bearing = bearingTo( world, lat, lon, toLat, toLon );
 	const step = length / steps;
 	const heights = [];
-	const height = i => heights[ i ] ??= moonHeightAt( ...destination( 'moon', lat, lon, bearing, i * step ), MOON_DETAIL );
+	const { heightAt } = GROUNDS[ world ];
+	const height = i => heights[ i ] ??= heightAt( ...destination( world, lat, lon, bearing, i * step ), DETAIL );
 	const across = Math.max( 1, Math.round( LEG_REACH / step ) );
-	const most = Math.tan( MOON_SLOPE * Math.PI / 180 ) * across * step;
+	const most = Math.tan( SLOPE * Math.PI / 180 ) * across * step;
 	if ( enough === 1 ) {
 
 		for ( let i = steps - across; i >= 0; i -- ) if ( Math.abs( height( i + across ) - height( i ) ) >= most ) return 1;
@@ -1695,12 +1726,32 @@ export function legFaults( lat, lon, toLat, toLon, enough = Infinity ) {
 
 }
 
-// Whether the Moon's ground at ( lat, lon ) slopes MOON_SLOPE degrees or more across ±SLOPE_REACH m
-// (craters under MOON_DETAIL m left out).
+// Whether `world`'s ground at ( lat, lon ) slopes SLOPE degrees or more across ±SLOPE_REACH m
+// (craters under DETAIL m left out).
+export function steepOn( world, lat, lon ) {
+
+	const { heightAt } = GROUNDS[ world ];
+	const [ n, e, s, w ] = [ 0, 90, 180, 270 ].map( bearing => heightAt( ...destination( world, lat, lon, bearing, SLOPE_REACH ), DETAIL ) );
+	return Math.hypot( n - s, e - w ) / ( 2 * SLOPE_REACH ) >= Math.tan( SLOPE * Math.PI / 180 );
+
+}
+
+// The Moon's, as they were before Mars (the tests check the Moon's routes with them).
+export function moonFaults( route, kind, enough = Infinity ) {
+
+	return routeFaults( MOON, route, kind, enough );
+
+}
+
+export function legFaults( lat, lon, toLat, toLon, enough = Infinity ) {
+
+	return legFaultsOn( MOON, lat, lon, toLat, toLon, enough );
+
+}
+
 export function moonSteep( lat, lon ) {
 
-	const [ n, e, s, w ] = [ 0, 90, 180, 270 ].map( bearing => moonHeightAt( ...destination( 'moon', lat, lon, bearing, SLOPE_REACH ), MOON_DETAIL ) );
-	return Math.hypot( n - s, e - w ) / ( 2 * SLOPE_REACH ) >= Math.tan( MOON_SLOPE * Math.PI / 180 );
+	return steepOn( MOON, lat, lon );
 
 }
 

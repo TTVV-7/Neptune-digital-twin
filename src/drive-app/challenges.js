@@ -8,14 +8,14 @@ import { createRaceGhost, createRecorder } from './challenge-ghost.js';
 import { GRACE, KIND_NAMES, LINK_PATH, PERIOD_NAMES, TALL, checkPasses, describe, formatTime, rankText, timeLeft } from './challenge-rules.js';
 import { ghostFault } from './ghost-rules.js';
 import { LEVEL_MAX, levelLine } from './levels.js';
-import { MOON } from './moon-places.js';
+import { EARTH, onWorld, OnWorld, WORLD_IDS } from './worlds.js';
 
 // Challenges in the page (docs/world-drive.md, "Challenges"): its own chunk, loaded the first time
-// they're opened (main.js), so nothing of it is in the page's first load. The list of the six live
-// ones (the current world's three first), each with the time it has left (ticking), its board's top
+// they're opened (main.js), so nothing of it is in the page's first load. The list of the nine live
+// ones (three a world, the current world's first), each with the time it has left (ticking), its board's top
 // three and your best; its board; starting one (a drop-in at its start, on its world); the run: a
 // countdown, the gates or items on the ground the game has (their heights found as it loads: rays
-// down on the Earth's tiles, a few a frame, the Moon's own heights), the next one marked on the HUD
+// down on the Earth's tiles, a few a frame, another world's own heights), the next one marked on the HUD
 // with an arrow and how far, the timer, and the finish card with your time, your place and the
 // board's top, Retry and Back, the car brought to a stop under it; and posting the time
 // (worker/drive/challenges.js), kept to be posted when the connection's back if it can't be.
@@ -42,8 +42,8 @@ import { MOON } from './moon-places.js';
 const COUNTDOWN = 3;
 const READING = 6;
 // Gates and items as drawn (m): a sprint's ring at most RING round (its zone is the route's radius,
-// wider), a beam BEAM round and BEAM_HIGH up from the ground (twice that on the Moon, where it's
-// seen from further), an item ITEM across, ITEM_UP over the ground, turning at SPIN rad/s.
+// wider), a beam BEAM round and BEAM_HIGH up from the ground (twice that on another world, where
+// it's seen from further), an item ITEM across, ITEM_UP over the ground, turning at SPIN rad/s.
 const RING = 10;
 const RING_TUBE = 0.06;
 const BEAM = 3;
@@ -56,7 +56,7 @@ const SPIN = 1.6;
 const NEXT_WIDE = 1.8;
 const NEXT_PULSE = 0.08;
 const PULSE_RATE = 4;
-// The course on the Moon's ground (its heights are known everywhere, so it can be laid on them):
+// The course on another world's ground (its heights are known everywhere, so it can be laid on them):
 // glowing chevrons CHEVRON_GAP m apart, CHEVRON across and CHEVRON_UP over the ground, pointing the
 // way, leaned up CHEVRON_LEAN rad from lying flat (flat, they're lines a few metres off from a
 // driver's low view). Bright on the way to the next gate (from the gate before, or the start), from the car up to
@@ -132,7 +132,6 @@ const SHARE_KINDS = { sprint: 'sprint', collect: 'star hunt', landmark: 'drive' 
 const SHARE_PERIODS = { day: 'today\'s', week: 'this week\'s', month: 'this month\'s' };
 const LINK_PERIODS = { day: 'daily', week: 'weekly', month: 'monthly' };
 const FLAG = '<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M4 2.5v15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M5 3h11.5v8.5H5z" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5 3h2.9v2.8H5zM10.8 3h2.9v2.8h-2.9zM7.9 5.8h2.9v2.9H7.9zM13.7 5.8h2.8v2.9h-2.8zM5 8.7h2.9v2.8H5zM10.8 8.7h2.9v2.8h-2.9z" fill="currentColor"/></svg>';
-const WORLD_NAMES = { earth: 'On the Earth', moon: 'On the Moon' };
 
 const _v = new Vector3();
 const _q = new Quaternion();
@@ -144,9 +143,10 @@ const _up = new Vector3( 0, 1, 0 );
 const _inverse = new Matrix4();
 const _carto = { lat: 0, lon: 0, height: 0 };
 
-// app: what main.js hands over: visit(), player(), pickName( name, say ), world(), moonOnly
+// app: what main.js hands over: visit(), player(), pickName( name, say ), world(), earthClosed
 // ({ onEarth } when there's no Earth this visit), mode(), place(), vehicle(), the driver, ground,
-// camera, scene, globe, moon and vehicles, stats, startAt( place ), placeCar( pose ), toGlobe(),
+// camera, scene, globe, bodies (the other worlds' grounds, body.js, by id) and vehicles, stats,
+// startAt( place ), placeCar( pose ), toGlobe(),
 // keys() (the keys card shown over a run's countdown, the visit's first time on a computer: true
 // if it is), go() (a run's GO: the keys card put away, so nothing covers the road while the clock
 // runs), pivot() (your car's, as drawn), look() (your ride's Garage look), ghostModels (ghosts.js's,
@@ -304,11 +304,12 @@ export function setUpChallenges( app ) {
 	function render() {
 
 		const here = app.world();
-		const worlds = here === MOON ? [ 'moon', 'earth' ] : [ 'earth', 'moon' ];
+		const worlds = [ here, ...WORLD_IDS.filter( world => world !== here ) ];
 		const parts = [];
 		for ( const world of worlds ) {
 
-			const heading = Object.assign( document.createElement( 'h3' ), { className: 'ch-world', textContent: WORLD_NAMES[ world ] } );
+			if ( ! listed.challenges.some( c => c.world === world ) ) continue;
+			const heading = Object.assign( document.createElement( 'h3' ), { className: 'ch-world', textContent: OnWorld( world ) } );
 			parts.push( heading, ...listed.challenges.filter( c => c.world === world ).map( card ) );
 
 		}
@@ -338,7 +339,7 @@ export function setUpChallenges( app ) {
 		const you = el( 'p', 'ch-you', best === undefined ? 'You haven\'t a time on it yet' : `Your best ${ formatTime( best ) }${ challenge.me?.rank ? ` · #${ rankText( challenge.me.rank ) } of ${ Math.max( challenge.total, challenge.me.rank ) }` : '' }` );
 		if ( challenge.me?.owner ) you.textContent = `Your best ${ formatTime( challenge.me.ms ) } (yours as the owner, kept off the board)`;
 		const buttons = el( 'div', 'ch-buttons' );
-		const earthShut = challenge.world !== MOON && !! app.moonOnly;
+		const earthShut = challenge.world === EARTH && !! app.earthClosed;
 		const start = el( 'button', earthShut ? 'ch-start' : 'primary ch-start', earthShut ? 'Needs an Earth drive' : 'Start' );
 		start.type = 'button';
 		start.addEventListener( 'click', () => earthShut ? toEarth() : begin( challenge ) );
@@ -387,12 +388,12 @@ export function setUpChallenges( app ) {
 
 	}
 
-	// No Earth this visit (today's Earth drives used up, or a page opened on the Moon): its own word
+	// No Earth this visit (today's Earth drives used up, or a page opened on another world): its own word
 	// on how to get there.
 	function toEarth() {
 
 		dialog.close();
-		app.moonOnly?.onEarth();
+		app.earthClosed?.onEarth();
 
 	}
 
@@ -403,7 +404,7 @@ export function setUpChallenges( app ) {
 		dialog.querySelector( '.ch-list' ).hidden = true;
 		board.hidden = false;
 		board.querySelector( '.ch-board-title' ).textContent = `${ PERIOD_NAMES[ challenge.period ] }: ${ challenge.place }`;
-		board.querySelector( '.ch-board-sub' ).textContent = `${ KIND_NAMES[ challenge.kind ] } · ${ describe( challenge ) }${ challenge.world === MOON ? ' · on the Moon' : '' }`;
+		board.querySelector( '.ch-board-sub' ).textContent = `${ KIND_NAMES[ challenge.kind ] } · ${ describe( challenge ) }${ challenge.world === EARTH ? '' : ` · ${ onWorld( challenge.world ) }` }`;
 		const rows = board.querySelector( '.ch-rows' );
 		const mine = board.querySelector( '.ch-mine' );
 		rows.replaceChildren();
@@ -469,7 +470,7 @@ export function setUpChallenges( app ) {
 	function shareText( challenge, ms ) {
 
 		const what = challenge.kind === 'landmark' ? `drive to ${ challenge.route.goal ?? challenge.place }` : `${ challenge.place } ${ SHARE_KINDS[ challenge.kind ] }`;
-		return `Beat my ${ formatTime( ms ) } on ${ SHARE_PERIODS[ challenge.period ] } ${ what }${ challenge.world === MOON ? ' on the Moon' : '' } in World Drive`;
+		return `Beat my ${ formatTime( ms ) } on ${ SHARE_PERIODS[ challenge.period ] } ${ what }${ challenge.world === EARTH ? '' : ` ${ onWorld( challenge.world ) }` } in World Drive`;
 
 	}
 
@@ -556,7 +557,7 @@ export function setUpChallenges( app ) {
 		card.hidden = false;
 		card.dataset.world = challenge.world;
 		card.replaceChildren();
-		const what = `the ${ LINK_PERIODS[ challenge.period ] } ${ KIND_NAMES[ challenge.kind ].toLowerCase() } at ${ challenge.place }${ challenge.world === MOON ? ' on the Moon' : '' }`;
+		const what = `the ${ LINK_PERIODS[ challenge.period ] } ${ KIND_NAMES[ challenge.kind ].toLowerCase() } at ${ challenge.place }${ challenge.world === EARTH ? '' : ` ${ onWorld( challenge.world ) }` }`;
 		const over = challenge.finalAt != null || challenge.replacedAt != null || ended( challenge );
 		const head = el( 'p', 'ch-link-head' );
 		const buttons = el( 'div', 'ch-buttons' );
@@ -587,7 +588,7 @@ export function setUpChallenges( app ) {
 		else if ( named ) head.append( `That link's time wasn't found (the address may have been cut short), so there's no ghost to race. Here's the challenge: ${ what }, ${ left } left.` );
 		else head.append( `Here's the challenge: ${ what }, ${ left } left.` );
 		card.append( el( 'p', 'ch-link-kicker', vs ? 'A friend\'s challenge' : 'A challenge' ), head );
-		const earthShut = challenge.world !== MOON && !! app.moonOnly;
+		const earthShut = challenge.world === EARTH && !! app.earthClosed;
 		const start = el( 'button', earthShut ? 'ch-start' : 'primary ch-start', earthShut ? 'Needs an Earth drive' : vs?.ghost ? 'Start: race their ghost' : 'Start' );
 		start.type = 'button';
 		start.addEventListener( 'click', () => {
@@ -659,7 +660,7 @@ export function setUpChallenges( app ) {
 		app.startAt( {
 			...named, lat: start.lat, lon: start.lon,
 			...( Number.isFinite( start.heading ) ? { heading: start.heading } : {} ),
-			...( challenge.world === MOON ? { world: MOON } : {} ),
+			...( challenge.world === EARTH ? {} : { world: challenge.world } ),
 			challenge: challenge.id,
 		} );
 
@@ -857,18 +858,20 @@ export function setUpChallenges( app ) {
 
 	}
 
-	// Each point's place in the scene: on the Moon on its own heights (exact, before any ground is
+	// Each point's place in the scene: on another world on its own heights (exact, before any ground is
 	// built); on the Earth at the start's height until the tiles' ground there is found (probe, a few
 	// rays a frame from the next frame on: nothing more in the one the car arrives in).
 	function placeGates( challenge ) {
 
-		const { globe, moon } = app;
-		const moonly = challenge.world === MOON;
+		const { globe } = app;
+		// On another world its heights are known everywhere (body.js): each point at its own.
+		const heights = challenge.world === EARTH ? null : app.bodies?.[ challenge.world ] ?? null;
+		const moonly = !! heights;
 		const base = app.place()?.height ?? 0;
 		const ordered = challenge.kind !== 'collect';
 		const gates = challenge.route.points.map( ( [ lat, lon ], index ) => {
 
-			const height = moonly ? moon.heightAt( lat, lon ) ?? base : base;
+			const height = moonly ? heights.heightAt( lat, lon ) ?? base : base;
 			const local = sceneOf( globe, lat, lon, height ).clone();
 			const ground = moonly ? local.y : null;
 			return { index, lat, lon, x: local.x, z: local.z, ground, top: ground, guess: local.y, passed: false, facing: 0, probed: moonly };
@@ -1003,7 +1006,7 @@ export function setUpChallenges( app ) {
 
 		}
 
-		if ( run && run.challenge.world !== MOON && run.phase !== 'stopped' ) probeFrame( dt, d );
+		if ( run && run.challenge.world === EARTH && run.phase !== 'stopped' ) probeFrame( dt, d );
 
 		if ( run ) {
 
@@ -1527,7 +1530,7 @@ export function setUpChallenges( app ) {
 		root.setAttribute( 'aria-labelledby', 'ch-title' );
 		root.innerHTML = `
 			<header class="ch-head"><h2 id="ch-title">${ FLAG } Challenges</h2><button type="button" class="close" aria-label="Close">&times;</button></header>
-			<p class="ch-intro">A daily, a weekly and a monthly one on the Earth and on the Moon, each with its own board. Your best time counts.</p>
+			<p class="ch-intro">A daily, a weekly and a monthly one on the Earth, on the Moon and on Mars, each with its own board. Your best time counts.</p>
 			<p class="ch-note" role="status" hidden></p>
 			<p class="ch-status" role="status" hidden></p>
 			<section class="ch-link" aria-label="A friend's challenge" hidden></section>
@@ -1743,7 +1746,7 @@ export function setUpChallenges( app ) {
 			// `itemsOnly`, the items alone (as they turn: the beams haven't moved).
 			place( shown, itemsOnly = false ) {
 
-				const moonly = shown.challenge.world === MOON;
+				const moonly = shown.challenge.world !== EARTH;
 				const radius = shown.challenge.route.radius;
 				const ringed = shown.challenge.kind !== 'collect';
 				const ring = Math.min( RING, radius * 0.5 );
@@ -1812,12 +1815,14 @@ export function setUpChallenges( app ) {
 				this.course( shown, dt );
 
 			},
-			// The course on the Moon's ground to the next gate (see CHEVRON_GAP), laid again when the
-			// next one changes or the car's moved COURSE_MOVE m, its wave of light moved on each frame.
+			// The course on another world's ground to the next gate (see CHEVRON_GAP), laid again when
+			// the next one changes or the car's moved COURSE_MOVE m, its wave of light moved on each
+			// frame.
 			course( shown, dt ) {
 
-				const target = shown.phase === 'done' || shown.phase === 'stopped' || shown.challenge.world !== MOON ? null : nextGate( app.driver );
-				if ( ! target || ! app.moon?.heightAt ) {
+				const ground = app.bodies?.[ shown.challenge.world ];
+				const target = shown.phase === 'done' || shown.phase === 'stopped' || shown.challenge.world === EARTH ? null : nextGate( app.driver );
+				if ( ! target || ! ground?.heightAt ) {
 
 					chevrons.count = 0;
 					laidFor = null;
@@ -1873,9 +1878,10 @@ export function setUpChallenges( app ) {
 						if ( laid.length >= COURSE_MOST ) break;
 						if ( leg.dim ? length - to > PREVIEW_REACH : to > carTo || carTo - to > COURSE_REACH ) continue;
 						const t = 1 - to / length;
+						// (Across the 180th meridian the short way round, not the long way back.)
 						const lat = leg.from.lat + ( leg.to.lat - leg.from.lat ) * t;
-						const lon = leg.from.lon + ( leg.to.lon - leg.from.lon ) * t;
-						const at = sceneOf( app.globe, lat, lon, ( app.moon.heightAt( lat, lon ) ?? 0 ) + CHEVRON_UP );
+						const lon = leg.from.lon + ( ( leg.to.lon - leg.from.lon + 540 ) % 360 - 180 ) * t;
+						const at = sceneOf( app.globe, lat, lon, ( ground.heightAt( lat, lon ) ?? 0 ) + CHEVRON_UP );
 						chevrons.setMatrixAt( laid.length, _m.compose( at, _q.setFromAxisAngle( _up, angle ), _s.setScalar( CHEVRON ) ) );
 						laid.push( { to, dim: leg.dim, goal: leg.goal } );
 

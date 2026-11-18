@@ -1,5 +1,6 @@
 import { FASTEST, START_SLACK } from './challenge-rules.js';
 import { RADIUS } from './dropin-cells.js';
+import { EARTH, isWorld } from './worlds.js';
 
 // A challenge run's ghost (docs/world-drive.md, "Challenges", "Ghosts"): the car's path from GO to
 // the finish, sampled every GHOST_EVERY ms of the run's own clock and packed small, posted with the
@@ -8,17 +9,18 @@ import { RADIUS } from './dropin-cells.js';
 // them) share: the packing, where a route's points are in a ghost's frame, and the checks a ghost
 // must pass for its time to be taken. Plain data and small functions, no three.js.
 //
-// A ghost's frame is the route's start (its pin) on the world's ellipsoid, at height 0: east,
-// north and up in metres, as the scene's own frame is at a place (x west, y up, z north: the object
-// frame 3d-tiles-renderer gives, which main.js recentres the scene on). Each sample is where the
-// car's model was then (its pivot, as drawn) and which way it faced (yaw, pitch and roll), in that
-// frame: centimetres and 1/TURN of a turn. Samples come at 0, every, 2 × every... ms and the last
-// at the run's time itself (the finish), so a ghost of `count` samples is a run of a time it
-// agrees with. Packed as a version byte, the interval and the count, then each sample's position as
-// its second difference (the change in its step, which along a road is a few centimetres) and its
-// angles as their change, each a zigzag varint: about six bytes a sample, so a minute is about 4
-// KB. A run longer than GHOST_SAMPLES samples is sampled half as often (and so on), so no ghost is
-// longer than that, whatever the run, and its bytes stay under GHOST_BYTES.
+// A ghost's frame is the route's start (its pin) on the world's ellipsoid, at height 0 (the Earth's
+// WGS84; every other world's a sphere of its radius, worlds.js): east, north and up in metres, as
+// the scene's own frame is at a place (x west, y up, z north: the object frame 3d-tiles-renderer
+// gives, which main.js recentres the scene on). Each sample is where the car's model was then (its
+// pivot, as drawn) and which way it faced (yaw, pitch and roll), in that frame: centimetres and
+// 1/TURN of a turn. Samples come at 0, every, 2 × every... ms and the last at the run's time itself
+// (the finish), so a ghost of `count` samples is a run of a time it agrees with. Packed as a version
+// byte, the interval and the count, then each sample's position as its second difference (the
+// change in its step, which along a road is a few centimetres) and its angles as their change, each
+// a zigzag varint: about six bytes a sample, so a minute is about 4 KB. A run longer than
+// GHOST_SAMPLES samples is sampled half as often (and so on), so no ghost is longer than that,
+// whatever the run, and its bytes stay under GHOST_BYTES.
 
 export const GHOST_VERSION = 1;
 // A sample every this many ms of the run's clock, at first.
@@ -59,10 +61,11 @@ const JUMPS = 4;
 const JUMP_EVERY = 15000;
 const JUMPS_MOST = 32;
 // How far (m) a ghost's samples may be from the start across the ground and up and down: no route
-// is anywhere near this long, nor ground this high or low.
+// is anywhere near this long, nor ground this high or low (Olympus Mons's top is 21.2 km over Mars's
+// "sea level", its sphere, so a run on it is that high in its frame).
 const REACH = 60000;
-const HEIGHT = 20000;
-// The Earth's ellipsoid (WGS84, as Google's tiles are on); the Moon is a sphere (moon.js).
+const HEIGHT = 30000;
+// The Earth's ellipsoid (WGS84, as Google's tiles are on); every other world is a sphere (body.js).
 const WGS84_A = 6378137;
 const WGS84_B = 6356752.314245179;
 const E2 = 1 - WGS84_B * WGS84_B / ( WGS84_A * WGS84_A );
@@ -97,9 +100,10 @@ export function sampleTime( i, count, every, ms ) {
 
 // Where ( lat, lon, height ) on `world` is from `origin` ({ lat, lon }, on its ellipsoid at height
 // 0): [ east, north, up ] (m), as the scene's frame there has it (main.js, 3d-tiles-renderer's object
-// frame: up along the ellipsoid's normal there).
+// frame: up along the ellipsoid's normal there). null on a world that isn't one (worlds.js).
 export function localOf( world, origin, lat, lon, height = 0 ) {
 
+	if ( ! isWorld( world ) ) return null;
 	const [ ox, oy, oz ] = centred( world, origin.lat, origin.lon, 0 );
 	const [ x, y, z ] = centred( world, lat, lon, height );
 	const [ dx, dy, dz ] = [ x - ox, y - oy, z - oz ];
@@ -113,13 +117,14 @@ export function localOf( world, origin, lat, lon, height = 0 ) {
 
 }
 
-// ( lat, lon, height ) on `world` as a point from its middle (m).
+// ( lat, lon, height ) on `world` (one of worlds.js's) as a point from its middle (m): on the
+// Earth's ellipsoid, or on the sphere of another world's radius, as its globe has it (body.js).
 function centred( world, lat, lon, height ) {
 
 	const [ phi, lambda ] = [ lat * RAD, lon * RAD ];
-	if ( world === 'moon' ) {
+	if ( world !== EARTH ) {
 
-		const r = RADIUS.moon + height;
+		const r = RADIUS[ world ] + height;
 		return [ r * Math.cos( phi ) * Math.cos( lambda ), r * Math.cos( phi ) * Math.sin( lambda ), r * Math.sin( phi ) ];
 
 	}
@@ -295,6 +300,8 @@ function wrap( steps ) {
 
 // What's wrong with the ghost `text` (ghostText's) of a run of `ms` with `passes` on `challenge`'s
 // route ({ world, kind, route }), as the Worker checks it before a time is taken: '' for nothing.
+//   'world': the challenge isn't on one of the worlds (worlds.js), so where its points are in the
+//     ghost's frame can't be told, and nothing on it is taken.
 //   'form': not a ghost (readGhost's null), sampled at another interval than everyFor( ms ), or
 //     more than GHOST_DENSITY bytes a sample on average.
 //   'time': not as long as the run (its count isn't countFor( ms )).
@@ -309,6 +316,7 @@ function wrap( steps ) {
 // every time posted, within the Free plan's 10 ms of CPU.
 export function ghostFault( { world, route }, ms, passes, text ) {
 
+	if ( ! isWorld( world ) ) return 'world';
 	const ghost = readGhost( text );
 	if ( ! ghost || ghost.every !== everyFor( ms ) ) return 'form';
 	if ( ghost.count !== countFor( ms ) ) return 'time';

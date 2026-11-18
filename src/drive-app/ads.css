@@ -65,7 +65,7 @@ body.ad-on #globe-ui .pin-card {
 }
 
 body.ad-on[data-mode='globe'] #attribution,
-body.ad-on[data-mode='globe'] #moon-credit {
+body.ad-on[data-mode='globe'] .world-credit {
 	bottom: calc( 8px + var( --safe-bottom ) + var( --ad-space ) );
 }
 
@@ -88,7 +88,7 @@ body.ad-on[data-mode='globe'] #moon-credit {
 
 	/* The map's credits are at the top on a phone (style.css): where they were. */
 	body.ad-on[data-mode='globe'] #attribution,
-	body.ad-on[data-mode='globe'] #moon-credit {
+	body.ad-on[data-mode='globe'] .world-credit {
 		bottom: auto;
 	}
 

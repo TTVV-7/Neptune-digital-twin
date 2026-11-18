@@ -14,7 +14,7 @@ import { getFeats, onFeatsChange, setFeats } from './feats.js';
 
 // How long (ms) an answer is shown again rather than asked for anew.
 const KEEP = 60 * 1000;
-const ICONS = { km: '🛣️', moon: '🌙', looks: '🎨', rides: '🚗', streak: '📅', parties: '🎉', challenges: '🏁', placing: '🏆' };
+const ICONS = { km: '🛣️', moon: '🌙', mars: '🔴', looks: '🎨', rides: '🚗', streak: '📅', parties: '🎉', challenges: '🏁', placing: '🏆' };
 
 let dialog = null;
 let app = null;
@@ -104,7 +104,7 @@ function counts() {
 	const kept = answer && askedFor === app.player()?.id ? answer.counts : null;
 	if ( ! kept ) return { ...pending, parties: 0, challenges: 0 };
 	const shown = count => Math.max( kept[ count ], ( answer.own?.[ count ] ?? kept[ count ] ) + Math.min( pending[ count ], answer.left?.[ count ] ?? Infinity ) );
-	return { ...kept, km: shown( 'km' ), moon: shown( 'moon' ), looks: shown( 'looks' ), rides: shown( 'rides' ) };
+	return { ...kept, km: shown( 'km' ), moon: shown( 'moon' ), mars: shown( 'mars' ), looks: shown( 'looks' ), rides: shown( 'rides' ) };
 
 }
 

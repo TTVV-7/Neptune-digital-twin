@@ -1,10 +1,12 @@
 import { metresOn, RADIUS } from './dropin-cells.js';
+import { WORLD_IDS } from './worlds.js';
 
-// Challenges (docs/world-drive.md, "Challenges"): a daily, a weekly and a monthly challenge on the
-// Earth and on the Moon, six at once, each with its own board of the best times. What the page (the
-// challenges' own chunk, challenges.js), the Worker (worker/drive/challenges.js) and the tests share:
-// the periods, the kinds, how a route is laid out from a period's random numbers, and the rules a
-// time is checked against. Plain data and small functions, no three.js.
+// Challenges (docs/world-drive.md, "Challenges"): a daily, a weekly and a monthly challenge on each
+// world (worlds.js: the Earth, the Moon and Mars, nine at once), each with its own board of the best
+// times. What the page (the challenges' own chunk, challenges.js), the Worker (worker/drive/
+// challenges.js) and the tests share: the periods, the kinds, how a route is laid out from a
+// period's random numbers, and the rules a time is checked against. Plain data and small functions,
+// no three.js.
 //
 // A challenge is a place and a route, the same for everyone in its period: a checkpoint sprint
 // (gates in order, timed from the start to the last), collectibles (every item round the place, in
@@ -13,7 +15,9 @@ import { metresOn, RADIUS } from './dropin-cells.js';
 // in D1, so nothing here changing later changes a live challenge: its points are latitudes and
 // longitudes, and only their heights are found by the page, on the ground it actually has.
 
-export const WORLDS = [ 'earth', 'moon' ];
+// The worlds with challenges: every one (worlds.js). Each needs its SHAPES below, its places (the
+// Worker's FEATURED) and its radius (dropin-cells.js's RADIUS), or no route can be laid out on it.
+export const WORLDS = WORLD_IDS;
 export const PERIOD_KINDS = [ 'day', 'week', 'month' ];
 export const KINDS = [ 'sprint', 'collect', 'landmark' ];
 export const PERIOD_NAMES = { day: 'Daily', week: 'Weekly', month: 'Monthly' };
@@ -55,8 +59,8 @@ export const RANK_MOST = 1000;
 export const LINK_PATH = '/c';
 // A pass counts within a gate's radius across the ground, and up and down from its ground to its
 // top (on the Earth the lowest and the highest of what rays down across its zone meet: the street
-// beside a tower and the tower's roof, or the water under a bridge and its deck; on the Moon both
-// its one height) and this many times its radius beyond them: so a gate is passed on the street,
+// beside a tower and the tower's roof, or the water under a bridge and its deck; on the Moon or Mars
+// both its one height) and this many times its radius beyond them: so a gate is passed on the street,
 // on the roof or deck over it, or flying low over it, and one whose ground hasn't loaded yet across
 // the ground alone. (challenges.js.)
 export const TALL = 2;
@@ -74,7 +78,8 @@ const PERIOD_TEXT = /^(day|week):(\d{4}-\d{2}-\d{2})$|^month:(\d{4}-\d{2})$/;
 // (or flying) over whatever is in the way, passes it as well. Items are scattered in a disc round
 // the place, apart from each other, 18 m round. A landmark's start is a few kilometres back along the
 // road the place is on, so it's reached the way people drive to it. The Moon is open ground: longer
-// legs, sharper turns, bigger radii.
+// legs, sharper turns, bigger radii; and Mars is too, cratered, dusty and roadless, laid out as the
+// Moon's.
 //   sprint: { gates, spacing: [ m, m ], turn: ° either way, radius }
 //   collect: { items, within: m, apart: m, radius }
 //   landmark: { distance: [ m, m ], spread: ° either way, radius }
@@ -90,6 +95,7 @@ export const SHAPES = {
 		month: { sprint: { gates: 14, spacing: [ 400, 600 ], turn: 65, radius: 40 }, collect: { items: 15, within: 900, apart: 150, radius: 22 }, landmark: { distance: [ 6000, 8500 ], spread: 180, radius: 60 } },
 	},
 };
+SHAPES.mars = SHAPES.moon;
 // The kinds a period's challenge is picked from, with how likely each is: a daily one is mostly a
 // sprint or a hunt for items (a landmark's drive is the longest of the three), the others any.
 export const KIND_ODDS = {
@@ -98,7 +104,8 @@ export const KIND_ODDS = {
 	month: [ [ 'sprint', 1 / 3 ], [ 'collect', 1 / 3 ], [ 'landmark', 1 / 3 ] ],
 };
 // Items are kept at least this far (m) from where the run starts, and a route laid out at most TRIES
-// times when a check (the Moon's ground, below) finds it wanting: the one with fewest faults is kept.
+// times when a check (the ground of a world made in the page, below) finds it wanting: the one with
+// fewest faults is kept.
 // A checked landmark's drive with no road to come along is tried from every BEARING_STEP degrees
 // round it instead.
 const CLEAR_START = 60;
@@ -225,10 +232,10 @@ export function kindFor( periodKind, u ) {
 // with `random` (randomFrom's): { start: { lat, lon, heading }, points: [ [ lat, lon ] ], radius,
 // goal } (goal: the landmark's name, for a drive to one). Sprints and collectibles start at the place
 // itself; a landmark's drive starts a few kilometres off and ends at the place. `check( route, kind,
-// enough )`, if given, says how many faults a route has (the Moon's ground too steep at its points or
-// along its legs: worker/drive/challenges.js), or that it has `enough` at least (the fewest so far: it
-// may stop counting there); then up to TRIES are laid out and the one with fewest kept.
-// Positions are to 6 decimals (10 cm).
+// enough )`, if given, says how many faults a route has (the Moon's or Mars's ground too steep at
+// its points or along its legs: worker/drive/challenges.js), or that it has `enough` at least (the
+// fewest so far: it may stop counting there); then up to TRIES are laid out and the one with fewest
+// kept. Positions are to 6 decimals (10 cm).
 export function makeRoute( { kind, size, world, place }, random, check = null ) {
 
 	const shape = SHAPES[ world ]?.[ size ]?.[ kind ];

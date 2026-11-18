@@ -6,7 +6,10 @@
 // none is ever taken for one of the Earth's spots (the leaderboard, levels and play stats know
 // those by id).
 
-export const MOON = 'moon';
+import { MOON } from './worlds.js';
+import { searchIn } from './place-search.js';
+
+export { MOON };
 
 const moon = ( id, name, region, lat, lon, extra = {} ) => ( { id: `moon-${ id }`, name, region, lat, lon, world: MOON, ...extra } );
 
@@ -72,30 +75,11 @@ export const MOON_PLACES = [
 	moon( 'south-pole', 'South pole', 'Between Shackleton and de Gerlache', - 89.9, 0 ),
 ];
 
-// The places whose name (or other name) has every word of `text` in it, best first: the name
-// starting with it, then a word of it starting with it, then anywhere. At most `most`.
+// The Moon's places whose name (or other name) has every word of `text` in it, best first
+// (place-search.js). At most `most`.
 export function searchMoon( text, most = 8 ) {
 
-	const words = fold( text ).split( /\s+/ ).filter( Boolean );
-	if ( words.length === 0 ) return [];
-	const found = [];
-	for ( const place of MOON_PLACES ) {
-
-		let best = Infinity;
-		for ( const name of [ place.name, ...place.also ?? [] ] ) {
-
-			const folded = fold( name );
-			if ( ! words.every( word => folded.includes( word ) ) ) continue;
-			const rank = folded.startsWith( words[ 0 ] ) ? 0 : folded.split( /[\s'-]+/ ).some( part => part.startsWith( words[ 0 ] ) ) ? 1 : 2;
-			best = Math.min( best, rank );
-
-		}
-
-		if ( best < Infinity ) found.push( { place, rank: best } );
-
-	}
-
-	return found.sort( ( a, b ) => a.rank - b.rank ).slice( 0, most ).map( ( { place } ) => place );
+	return searchIn( MOON_PLACES, text, most );
 
 }
 
@@ -103,12 +87,5 @@ export function searchMoon( text, most = 8 ) {
 export function moonSpot( id ) {
 
 	return MOON_PLACES.find( place => place.id === id ) ?? null;
-
-}
-
-// Lower case, without accents or apostrophes: "Schröteri" and "schroteri", "Chang'e" and "change".
-function fold( text ) {
-
-	return String( text ).normalize( 'NFD' ).replace( /\p{M}/gu, '' ).replace( /['’]/g, '' ).toLowerCase().trim();
 
 }

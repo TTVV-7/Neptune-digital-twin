@@ -24,7 +24,7 @@ export function hideSplash() {
 // A full-screen notice instead of the globe: kind is 'used-up', 'robot', 'resting' or 'error'.
 // options: retryAfter (s, for used-up), reason (used-up: 'visitor' for this visitor's own free
 // drive, else everyone's for the day), message (for error), onRetry, onTestPad, onMoon (used-up:
-// the Moon, which is never limited, instead).
+// the Moon instead, never limited, as Mars never is either).
 export function notice( kind, { retryAfter = 0, reason = '', message = '', onRetry, onTestPad, onMoon } = {} ) {
 
 	hideSplash();
@@ -32,8 +32,8 @@ export function notice( kind, { retryAfter = 0, reason = '', message = '', onRet
 	const texts = {
 		'used-up': onMoon
 			? ( reason === 'visitor'
-				? [ 'You\'ve had today\'s free Earth drive', 'World Drive streams the real 3D Earth, and each drive costs us a little, so everyone gets one free Earth drive a day. The Moon is free and unlimited: drive there as much as you like, and come back tomorrow for another Earth drive. Supporters get 30 Earth drives a day.' ]
-				: [ 'Today\'s free Earth drives are used up', 'World Drive streams the real 3D Earth, and each drive costs us a little, so there\'s a daily limit for everyone together. The Moon is free and unlimited: drive there as much as you like, and come back tomorrow for a fresh set of Earth drives.' ] )
+				? [ 'You\'ve had today\'s free Earth drive', 'World Drive streams the real 3D Earth, and each drive costs us a little, so everyone gets one free Earth drive a day. The Moon and Mars are free and unlimited: drive there as much as you like, and come back tomorrow for another Earth drive. Supporters get 30 Earth drives a day.' ]
+				: [ 'Today\'s free Earth drives are used up', 'World Drive streams the real 3D Earth, and each drive costs us a little, so there\'s a daily limit for everyone together. The Moon and Mars are free and unlimited: drive there as much as you like, and come back tomorrow for a fresh set of Earth drives.' ] )
 			: [ 'Today\'s free drives are used up', 'World Drive streams the real 3D world, and each drive costs us a little, so there\'s a daily limit. Come back tomorrow for a fresh set of drives.' ],
 		robot: [ 'We couldn\'t check you\'re a person', 'The quick robot check didn\'t go through. It can help to turn off a blocker for this site, or try another browser.' ],
 		resting: [ 'World Drive is getting ready', 'The 3D world is switched off for now. Check back soon.' ],

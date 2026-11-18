@@ -26,15 +26,16 @@ export async function getConfig() {
 // Trades the robot check's token for the Maps key: one of the day's drives on the Earth. Answers
 // { key, left, visit } (visit: the token scores are posted with, see postScore), or { usedUp: true,
 // retryAfter, reason, visit } over a daily cap (the Moon's still open: visit, if it came, is for
-// that), { robot: true } when the check failed, or { error } for anything else. With world 'moon'
-// (the page opened on a link to the Moon) no drive is spent and there's no key: { moon: true, visit }.
+// that), { robot: true } when the check failed, or { error } for anything else. With another world's
+// id ('moon', 'mars': the page opened on a link there) no drive is spent and there's no key: { free:
+// true, world, visit } (the Worker says moon: true, as it always has, for every free world).
 export async function postVisit( token, { world = 'earth' } = {} ) {
 
 	let res;
 	let body = {};
 	try {
 
-		res = await fetch( '/api/visit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( world === 'moon' ? { token, world } : { token } ) } );
+		res = await fetch( '/api/visit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( world !== 'earth' ? { token, world } : { token } ) } );
 		body = await res.json().catch( () => ( {} ) );
 
 	} catch {
@@ -45,7 +46,7 @@ export async function postVisit( token, { world = 'earth' } = {} ) {
 
 	const visit = typeof body.visit === 'string' ? body.visit : null;
 	if ( res.ok && typeof body.mapsKey === 'string' && body.mapsKey ) return { key: body.mapsKey, left: body.left, visit };
-	if ( res.ok && body.moon === true ) return { moon: true, visit };
+	if ( res.ok && ( body.free === true || body.moon === true ) ) return { free: true, world: typeof body.world === 'string' ? body.world : world, visit };
 	if ( res.status === 429 ) return { usedUp: true, retryAfter: Number( body.retryAfter ) || 0, reason: body.reason, visit };
 	if ( res.status === 403 ) return { robot: true };
 	return { error: body.error ?? `World Drive answered ${ res.status }.` };

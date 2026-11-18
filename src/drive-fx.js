@@ -297,9 +297,15 @@ function foam( at, wide, flecks ) {
 // kind: 'smoke', 'sparkle', 'ribbon', 'fire', 'stars' or 'neon', colour (smoke's) } }. water: whether there's water to
 // splash in (its pools are only made then). effects: as EFFECTS, read as they're needed, so an app
 // can change `calm` while it drives.
-export function createDriveFx( world, { boost = 'classic', flame: flameName = 'orange', trail = null } = {}, { water = false, effects = EFFECTS, gravity = 1 } = {} ) {
+// The colour of the dust a landing throws up: the Earth's and the Moon's grey-beige (another world's
+// its own, as main.js hands it to the Driver: body.js's LOOKS, Mars's red-brown).
+const DUST = 0xcfc8bc;
+
+export function createDriveFx( world, { boost = 'classic', flame: flameName = 'orange', trail = null } = {}, { water = false, effects = EFFECTS, gravity = 1, dust: dustColour = DUST } = {} ) {
 
 	const { soft, glow, star: twinkle, shooting } = getTextures();
+	// On a world of coloured dust (Mars's), the tyres throw that up rather than white smoke.
+	const tyres = dustColour === DUST ? null : dustColour;
 	const root = new Group();
 	root.name = 'drive-fx';
 	world.add( root );
@@ -811,7 +817,7 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 
 						pivot.localToWorld( _p.copy( wheel ) ).y += 0.15;
 						_v.set( ( Math.random() - 0.5 ) * 1.2, 0.3 + Math.random() * 0.4, ( Math.random() - 0.5 ) * 1.2 ).addScaledVector( frame.back, 0.8 ).addScaledVector( velocity, 0.5 );
-						emit( smoke, _p, _v, SMOKE_LIFE, 0.3 + 0.2 * burnout, 1.3, 0xe8e8e8 );
+						emit( smoke, _p, _v, SMOKE_LIFE, 0.3 + 0.2 * burnout, 1.3, tyres ?? 0xe8e8e8 );
 
 					}
 
@@ -832,7 +838,7 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 						// A little over the tyre, so the ground doesn't cut the puff off flat.
 						pivot.localToWorld( _p.copy( wheel ) ).y += 0.25;
 						_v.set( ( Math.random() - 0.5 ) * 0.8, 0.5 + Math.random() * 0.5, ( Math.random() - 0.5 ) * 0.8 ).addScaledVector( velocity, 0.6 );
-						emit( smoke, _p, _v, SMOKE_LIFE, 0.5, 1.8, 0xf2f2f2 );
+						emit( smoke, _p, _v, SMOKE_LIFE, 0.5, 1.8, tyres ?? 0xf2f2f2 );
 
 					}
 
@@ -981,7 +987,7 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 				const angle = i / count * Math.PI * 2;
 				_p.set( Math.cos( angle ) * width * 0.6, 0.35 + power * 0.25, Math.sin( angle ) * width * 0.6 ).add( at );
 				_v.set( Math.cos( angle ) * ( 1.5 + 2 * power ), 0.8 + Math.random() * 0.8, Math.sin( angle ) * ( 1.5 + 2 * power ) );
-				emit( smoke, _p, _v, SMOKE_LIFE, 0.5 + power * 0.4, 1.1 + power * 1.1, 0xcfc8bc );
+				emit( smoke, _p, _v, SMOKE_LIFE, 0.5 + power * 0.4, 1.1 + power * 1.1, dustColour );
 
 			}
 

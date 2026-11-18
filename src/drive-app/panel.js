@@ -1,7 +1,8 @@
 import { searchPlaces } from './api.js';
 import { DEFAULT_RIDE } from './catalog.js';
 import { formatLatLon, parseLatLon, recentPlaces, SPOTS, storage } from './places.js';
-import { MOON, MOON_SPOTS, searchMoon } from './moon-places.js';
+import { searchWorld, SPOTS_ON } from './world-places.js';
+import { EARTH, TheWorld, WORLDS } from './worlds.js';
 import { openPass, proBadge } from './pass.js';
 import { onProChange } from './pro.js';
 import { getLevel, onLevelChange } from './progress.js';
@@ -9,11 +10,11 @@ import { onFeatsChange } from './feats.js';
 import { rideLocked, rideUnlock, unlockChip } from './vehicles.js';
 import { drivers } from './online.js';
 
-// The globe's panel: the Earth or the Moon, search, the starting spots, recent places, the vehicle
-// picker and who's driving now (online.js), and the card under the pin with "Drive here". Choosing
-// a spot, a search result or an area where people are driving flies the globe there and pins it; a
-// tap on the globe pins the spot tapped. On the Moon (main.js, moon.js) the search, spots and recent
-// places are the Moon's (moon-places.js), and who's driving now isn't shown.
+// The globe's panel: the Earth, the Moon or Mars, search, the starting spots, recent places, the
+// vehicle picker and who's driving now (online.js), and the card under the pin with "Drive here".
+// Choosing a spot, a search result or an area where people are driving flies the globe there and
+// pins it; a tap on the globe pins the spot tapped. On another world (main.js, body.js) the search,
+// spots and recent places are its own (world-places.js), and who's driving now isn't shown.
 
 const VEHICLE_KEY = 'world-drive.vehicle';
 
@@ -21,13 +22,15 @@ const VEHICLE_KEY = 'world-drive.vehicle';
 const WORDS = {
 	earth: { tagline: 'Pick anywhere on Earth. Drop in. Drive.', placeholder: 'A place, an address, or lat, lon', label: 'Search for a place', none: 'Try a city, a landmark or an address.' },
 	moon: { tagline: 'Pick anywhere on the Moon. Drop in. Drive.', placeholder: 'A crater, a sea, or lat, lon', label: 'Search the Moon', none: 'Try a crater, a sea or a landing site (Tycho, Apollo 11), or lat, lon.' },
+	mars: { tagline: 'Pick anywhere on Mars. Drop in. Drive.', placeholder: 'A volcano, a crater, or lat, lon', label: 'Search Mars', none: 'Try a volcano, a canyon or a rover\'s landing site (Olympus Mons, Curiosity), or lat, lon.' },
 };
 
 // root: #globe-ui. vehicles: from loadVehicles(). flyTo( place ): fly the globe there and pin it.
-// onDrive( place ): drop in at the pin. onWorld( world ): the Earth or the Moon picked ('earth' or
-// 'moon'); main.js turns the globe and calls setWorld once it's there. onSearch( kind ): a search
-// made, for the play stats: 'earth' (the map asked), 'moon' (the Moon's places), 'coordinates'
-// (typed), and 'nothing' as well for one that found nothing; never what was typed.
+// onDrive( place ): drop in at the pin. onWorld( world ): a world picked (worlds.js's id: 'earth',
+// 'moon' or 'mars'); main.js turns the globe and calls setWorld once it's there. onSearch( kind ): a
+// search made, for the play stats: 'earth' (the map asked), a world's id (its places: 'moon',
+// 'mars'), 'coordinates' (typed), and 'nothing' as well for one that found nothing; never what was
+// typed.
 // onAchievements(): open the Achievements grid (a locked construction ride's note links to it).
 export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorld = () => {}, onSearch = () => {}, onAchievements = () => {} } ) {
 
@@ -39,23 +42,40 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorl
 	const card = $( '.pin-card' );
 	let pinned = null;
 	let searching = 0;
-	let world = 'earth';
+	let world = EARTH;
 	// The other world while it's loading (main.js's setWorld), so a click on this one stays here.
 	let busy = null;
 
-	// --- the Earth or the Moon ---
+	// --- the Earth, the Moon or Mars ---
 
+	// The switch: a row of radio buttons, one a world. A click picks one; the arrow keys move along
+	// them (and pick), as a group of radio buttons does.
 	const worlds = [ ...root.querySelectorAll( '.worlds button' ) ];
-	for ( const button of worlds ) button.addEventListener( 'click', () => ( button.dataset.world !== world || busy ) && onWorld( button.dataset.world ) );
+	for ( const button of worlds ) {
 
-	// The panel for `which` world: its switch, words, spots and recent places. While `busy` (the
-	// Moon loading), its button says so.
+		button.addEventListener( 'click', () => ( button.dataset.world !== world || busy ) && onWorld( button.dataset.world ) );
+		button.addEventListener( 'keydown', event => {
+
+			const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: - 1, ArrowUp: - 1 }[ event.key ];
+			if ( ! step ) return;
+			event.preventDefault();
+			const next = worlds[ ( worlds.indexOf( button ) + step + worlds.length ) % worlds.length ];
+			next.focus();
+			next.click();
+
+		} );
+
+	}
+
+	// The panel for `which` world: its switch, words, spots and recent places. While `busy` (another
+	// world loading), its button says so. Only the picked world's button is in the tab order.
 	function setWorld( which, { busy: loading = null } = {} ) {
 
 		busy = loading;
 		for ( const button of worlds ) {
 
 			button.setAttribute( 'aria-checked', String( button.dataset.world === which ) );
+			button.tabIndex = button.dataset.world === which ? 0 : - 1;
 			if ( button.dataset.world === busy ) button.setAttribute( 'aria-busy', 'true' );
 			else button.removeAttribute( 'aria-busy' );
 
@@ -92,21 +112,21 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorl
 			onSearch( 'coordinates' );
 			showResults( [] );
 			say( '' );
-			flyTo( world === MOON
-				? { name: formatLatLon( typed.lat, typed.lon ), region: 'Moon coordinates', ...typed, world: MOON }
-				: { name: formatLatLon( typed.lat, typed.lon ), region: 'Coordinates', ...typed } );
+			flyTo( world === EARTH
+				? { name: formatLatLon( typed.lat, typed.lon ), region: 'Coordinates', ...typed }
+				: { name: formatLatLon( typed.lat, typed.lon ), region: `${ WORLDS[ world ].name } coordinates`, ...typed, world } );
 			return;
 
 		}
 
-		// The Moon's places are all here (moon-places.js): no asking anyone.
-		if ( world === MOON ) {
+		// Another world's places are all here (world-places.js): no asking anyone.
+		if ( world !== EARTH ) {
 
 			searching ++;
-			const found = searchMoon( text );
-			onSearch( MOON );
+			const found = searchWorld( world, text );
+			onSearch( world );
 			if ( ! found.length ) onSearch( 'nothing' );
-			say( found.length ? '' : `Nothing found for "${ text }". ${ WORDS.moon.none }` );
+			say( found.length ? '' : `Nothing found for "${ text }". ${ WORDS[ world ].none }` );
 			results.replaceChildren( ...found.map( place => item( place.name, place.region, () => {
 
 				showResults( [] );
@@ -167,7 +187,7 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorl
 
 	function showSpots() {
 
-		$( '.spots' ).replaceChildren( ...( world === MOON ? MOON_SPOTS : SPOTS ).map( spot => item( spot.name, spot.region, () => flyTo( spot ) ) ) );
+		$( '.spots' ).replaceChildren( ...( SPOTS_ON[ world ] ?? SPOTS ).map( spot => item( spot.name, spot.region, () => flyTo( spot ) ) ) );
 
 	}
 
@@ -377,7 +397,7 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorl
 		}
 
 		card.querySelector( '.name' ).textContent = place.near || place.name || 'Dropped pin';
-		const region = place.region || ( place.world === MOON ? 'The Moon' : '' );
+		const region = place.region || ( WORLDS[ place.world ] && place.world !== EARTH ? TheWorld( place.world ) : '' );
 		card.querySelector( '.coords' ).textContent = region ? `${ region } · ${ where }` : where;
 
 	}

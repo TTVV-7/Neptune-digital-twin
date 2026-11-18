@@ -290,6 +290,9 @@ export class Driver {
 		this.launch = crash === 'launch';
 		this.water = water;
 		this.gravity = gravity;
+		// The colour of the dust a landing throws up (drive-fx.js), or null for the usual grey-beige:
+		// another world's own (main.js sets it for each drive).
+		this.dust = null;
 		// World Drive's feel (see BODY), with any of those on; and whether the camera may move for
 		// effect (hits' shakes and the jolts), which an app turns off for those who'd rather it didn't.
 		this.lively = booster || drift || this.launch;
@@ -563,7 +566,7 @@ export class Driver {
 		this.lastBase = null;
 		// Its effects, with water's (drive-fx.js's pools of droplets, spray and foam) only for a ride
 		// that floats, the only one that throws any up: every other drives on water as on the ground.
-		this.fx = this.booster || this.drift || this.launch ? createDriveFx( this.models.group.parent ?? this.models.group, spec.fx, { water: !! this.water && this.floats, gravity: this.gravity, ...this.effects ? { effects: this.effects } : {} } ) : null;
+		this.fx = this.booster || this.drift || this.launch ? createDriveFx( this.models.group.parent ?? this.models.group, spec.fx, { water: !! this.water && this.floats, gravity: this.gravity, ...this.effects ? { effects: this.effects } : {}, ...this.dust ? { dust: this.dust } : {} } ) : null;
 
 		this.keys.clear();
 		this.controls.keys?.clear();

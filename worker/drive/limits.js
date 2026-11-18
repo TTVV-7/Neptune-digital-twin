@@ -1,6 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { sha256Hex } from '../http.js';
 import { busiest, checkDot, parseRoom, ROOM_DOTS } from '../../src/drive-app/live-protocol.js';
+import { WORLD_IDS } from '../../src/drive-app/worlds.js';
 
 // One of these for everyone (named "global", see index.js): it counts the day's visits, in all and
 // per visitor, the leaderboard's new names and scores per visitor, and what driving with others has
@@ -208,7 +209,7 @@ export class DriveLimits extends DurableObject {
 	// Which of `cells` (drop-in places, "<world>:<row>:<column>": worker/drive/dropins.js) a post from
 	// `ip` (an address, an IPv6 one by its /48: dropins.js's VISITOR_PREFIX) for `visit` (its id, and
 	// `since` when it began, ms) at `now` adds to today's counts, in
-	// order: { cells, full, done }, full: { earth, moon } whether each world's places today have
+	// order: { cells, full, done }, full: { earth, moon, mars } whether each world's places today have
 	// reached `daily`, and done whether this visit can add no more today (the Worker then asks no
 	// more for it). A cell counts once a day for each visitor, whichever of their visits posts it, and
 	// once for each visit, whichever address it posts from (one visit's token sent from many
@@ -231,8 +232,7 @@ export class DriveLimits extends DurableObject {
 		return this.ctx.storage.transactionSync( () => {
 
 			const one = ( sql, ...values ) => this.sql.exec( sql, ...values ).toArray()[ 0 ];
-			const totals = { earth: 0, moon: 0 };
-			for ( const world of Object.keys( totals ) ) totals[ world ] = one( 'SELECT count FROM place_totals WHERE day = ? AND world = ?', day, world )?.count ?? 0;
+			const totals = Object.fromEntries( WORLD_IDS.map( world => [ world, one( 'SELECT count FROM place_totals WHERE day = ? AND world = ?', day, world )?.count ?? 0 ] ) );
 			let mine = one( 'SELECT count FROM place_visitors WHERE day = ? AND visitor = ?', day, visitor )?.count ?? 0;
 			const row = one( 'SELECT count, asks FROM place_visits WHERE day = ? AND visit = ?', day, visitTag );
 			let theirs = row?.count ?? 0;
@@ -266,7 +266,7 @@ export class DriveLimits extends DurableObject {
 
 			return {
 				cells: taken,
-				full: { earth: totals.earth >= daily, moon: totals.moon >= daily },
+				full: Object.fromEntries( WORLD_IDS.map( world => [ world, totals[ world ] >= daily ] ) ),
 				done: theirs >= perVisit || mine >= perVisitor || asked >= asks,
 			};
 

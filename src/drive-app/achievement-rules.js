@@ -12,16 +12,17 @@ import { DRIVE_CARS, LIBRARY_VEHICLES, PASS_RIDES, WORKS_RIDES } from './catalog
 // another address (the party's room says so, never the page), and their days in a row (the days
 // the Worker itself saw them take the daily bonus, by its own clock: never the streak a new
 // nickname's claim brings from before it). The rest only the page can say (how far it drove, its
-// drives on the Moon, its Garage looks, the rides it tried): those come with its progress reports,
-// each capped as XP is (by the time since the last report), again by a day's worth (TALLY_DAY),
-// and a new nickname's claim of what was driven before it by CLAIM_TALLY, so a script can't earn
-// them all in one go.
+// drives on the Moon and on Mars, its Garage looks, the rides it tried): those come with its
+// progress reports, each capped as XP is (by the time since the last report), again by a day's
+// worth (TALLY_DAY), and a new nickname's claim of what was driven before it by CLAIM_TALLY, so a
+// script can't earn them all in one go.
 
 // The counts, and whether the Worker checks each ('checked') or takes the page's word within its
 // caps ('trusted').
 export const COUNTS = {
-	km: 'trusted', // km driven, on either world
+	km: 'trusted', // km driven, on any world
 	moon: 'trusted', // drives on the Moon (a drop-in there and 250 m driven)
+	mars: 'trusted', // drives on Mars (a drop-in there and 250 m driven)
 	looks: 'trusted', // Garage choices changed
 	rides: 'trusted', // different rides driven (250 m in each)
 	streak: 'checked', // the most UTC days in a row the Worker saw the daily bonus taken
@@ -31,18 +32,19 @@ export const COUNTS = {
 };
 
 // The most of each trusted count the Worker takes in one UTC day, whatever the reports say: about
-// a long day's driving (500 km is seven hours at 72 km/h), ten Moon drives, ten Garage changes and
-// four new rides. So 1,000 km takes at least two days of a script, and 25 looks three.
-export const TALLY_DAY = { km: 500, moon: 10, looks: 10, rides: 4 };
+// a long day's driving (500 km is seven hours at 72 km/h), ten Moon drives and ten on Mars, ten
+// Garage changes and four new rides. So 1,000 km takes at least two days of a script, and 25 looks
+// three.
+export const TALLY_DAY = { km: 500, moon: 10, mars: 10, looks: 10, rides: 4 };
 
 // The most of each trusted count a new nickname's first report (the claim of what was driven before
 // it) adds, whatever it says: enough for what a first hour's drive earns (the 10 km's skid steer
 // among it), not the 100 km's wheel loader, which takes driving after the nickname (and at least
 // three reports' worth of time between them).
-export const CLAIM_TALLY = { km: 25, moon: 2, looks: 5, rides: 3 };
+export const CLAIM_TALLY = { km: 25, moon: 2, mars: 2, looks: 5, rides: 3 };
 
-// The drive that counts for a Moon drive or a ride tried: this far (km) since the drop-in, as the
-// day's bonus needs (levels.js's DAILY_KM).
+// The drive that counts for a Moon or Mars drive or a ride tried: this far (km) since the drop-in,
+// as the day's bonus needs (levels.js's DAILY_KM).
 export const TALLY_KM = 0.25;
 
 // The rides a report may name as tried: every ride the game offers.
@@ -59,6 +61,9 @@ export const ACHIEVEMENTS = [
 	{ id: 'moon-1', name: 'One small step', goal: 'Drive on the Moon', count: 'moon', target: 1 },
 	{ id: 'moon-10', name: 'Moon regular', goal: 'Drive on the Moon 10 times', count: 'moon', target: 10 },
 	{ id: 'moon-50', name: 'Lunar legend', goal: 'Drive on the Moon 50 times', count: 'moon', target: 50 },
+	{ id: 'mars-1', name: 'Touchdown', goal: 'Drive on Mars', count: 'mars', target: 1 },
+	{ id: 'mars-10', name: 'Red regular', goal: 'Drive on Mars 10 times', count: 'mars', target: 10 },
+	{ id: 'mars-50', name: 'Martian', goal: 'Drive on Mars 50 times', count: 'mars', target: 50 },
 	{ id: 'challenges-1', name: 'First challenge', goal: 'Finish a challenge', count: 'challenges', target: 1 },
 	{ id: 'challenges-10', name: '10 challenges', goal: 'Finish 10 challenges', count: 'challenges', target: 10 },
 	{ id: 'challenges-50', name: '50 challenges', goal: 'Finish 50 challenges', count: 'challenges', target: 50 },
@@ -121,17 +126,20 @@ export function achievementOf( id ) {
 
 // --- what a report carries ---
 
-// The trusted counts a progress report (levels.js's REPORT) carries, as its `feats`: { moon, looks,
-// rides }, each since the last report: Moon drives, Garage changes (whole numbers, at most
-// TALLY_MOST each), and the rides tried (ids, at most RIDE_IDS' size). Its km are the report's own.
-// null if it isn't one the page could send.
+// The trusted counts a progress report (levels.js's REPORT) carries, as its `feats`: { moon, mars,
+// looks, rides }, each since the last report: Moon drives, Mars drives, Garage changes (whole
+// numbers, at most TALLY_MOST each; one a page from before Mars doesn't send is none), and the rides
+// tried (ids, at most RIDE_IDS' size). Its km are the report's own. null if it isn't one the page
+// could send.
 const TALLY_MOST = 10000;
+// The trusted counts that are whole numbers added up (rides are ids).
+const NUMBERS = [ 'moon', 'mars', 'looks' ];
 
 export function checkTallies( raw ) {
 
 	if ( ! raw || typeof raw !== 'object' || Array.isArray( raw ) ) return null;
-	const tallies = { moon: 0, looks: 0, rides: [] };
-	for ( const field of [ 'moon', 'looks' ] ) {
+	const tallies = { moon: 0, mars: 0, looks: 0, rides: [] };
+	for ( const field of NUMBERS ) {
 
 		const value = raw[ field ] ?? 0;
 		if ( ! Number.isInteger( value ) || value < 0 || value > TALLY_MOST ) return null;
@@ -150,7 +158,7 @@ export function checkTallies( raw ) {
 // Whether a report's tallies have anything in them.
 export function hasTallies( tallies ) {
 
-	return !! tallies && ( tallies.moon > 0 || tallies.looks > 0 || tallies.rides?.length > 0 );
+	return !! tallies && ( NUMBERS.some( field => tallies[ field ] > 0 ) || tallies.rides?.length > 0 );
 
 }
 
@@ -160,6 +168,7 @@ export function mergeTallies( a, b ) {
 	if ( ! hasTallies( a ) && ! hasTallies( b ) ) return undefined;
 	return {
 		moon: ( a?.moon ?? 0 ) + ( b?.moon ?? 0 ),
+		mars: ( a?.mars ?? 0 ) + ( b?.mars ?? 0 ),
 		looks: ( a?.looks ?? 0 ) + ( b?.looks ?? 0 ),
 		rides: [ ...new Set( [ ...a?.rides ?? [], ...b?.rides ?? [] ] ) ],
 	};
@@ -168,10 +177,11 @@ export function mergeTallies( a, b ) {
 
 // --- the player's counts, as the Worker keeps them ---
 
-// A player's kept counts (players.tallies, JSON): { km, moon, looks, rides: [ ids ], streak (the
-// most days in a row the Worker has seen), run and runDay (the days in a row it's seeing now, and
-// the last of them), day (the UTC day `today` is for), today: { km, moon, looks, rides } (what of
-// each trusted count that day has taken) }, with anything missing or damaged as none.
+// A player's kept counts (players.tallies, JSON): { km, moon, mars, looks, rides: [ ids ], streak
+// (the most days in a row the Worker has seen), run and runDay (the days in a row it's seeing now,
+// and the last of them), day (the UTC day `today` is for), today: { km, moon, mars, looks, rides }
+// (what of each trusted count that day has taken) }, with anything missing or damaged as none (so
+// counts kept before Mars read with none on it).
 export function readTallies( text ) {
 
 	let raw = null;
@@ -189,13 +199,13 @@ export function readTallies( text ) {
 	const kept = raw && typeof raw === 'object' ? raw : {};
 	const today = kept.today && typeof kept.today === 'object' ? kept.today : {};
 	return {
-		km: number( kept.km ), moon: number( kept.moon ), looks: number( kept.looks ),
+		km: number( kept.km ), moon: number( kept.moon ), mars: number( kept.mars ), looks: number( kept.looks ),
 		rides: Array.isArray( kept.rides ) ? kept.rides.filter( id => RIDE_IDS.has( id ) ) : [],
 		streak: number( kept.streak ),
 		run: number( kept.run ),
 		runDay: typeof kept.runDay === 'string' ? kept.runDay : '',
 		day: typeof kept.day === 'string' ? kept.day : '',
-		today: { km: number( today.km ), moon: number( today.moon ), looks: number( today.looks ), rides: number( today.rides ) },
+		today: { km: number( today.km ), moon: number( today.moon ), mars: number( today.mars ), looks: number( today.looks ), rides: number( today.rides ) },
 	};
 
 }
@@ -207,15 +217,16 @@ export function readTallies( text ) {
 // this report in `taken`.
 export function addTallies( tallies, { km = 0, feats = null, daily = false }, day ) {
 
-	const today = tallies.day === day ? { ...tallies.today } : { km: 0, moon: 0, looks: 0, rides: 0 };
+	const today = tallies.day === day ? { mars: 0, ...tallies.today } : { km: 0, moon: 0, mars: 0, looks: 0, rides: 0 };
 	const room = field => Math.max( 0, TALLY_DAY[ field ] - today[ field ] );
 	const taken = {
 		km: Math.min( Math.max( 0, km ), room( 'km' ) ),
 		moon: Math.min( feats?.moon ?? 0, room( 'moon' ) ),
+		mars: Math.min( feats?.mars ?? 0, room( 'mars' ) ),
 		looks: Math.min( feats?.looks ?? 0, room( 'looks' ) ),
 	};
 	const fresh = ( feats?.rides ?? [] ).filter( id => ! tallies.rides.includes( id ) ).slice( 0, room( 'rides' ) );
-	for ( const field of [ 'km', 'moon', 'looks' ] ) today[ field ] += taken[ field ];
+	for ( const field of [ 'km', ...NUMBERS ] ) today[ field ] += taken[ field ];
 	today.rides += fresh.length;
 	let { run, runDay } = tallies;
 	if ( daily && runDay !== day ) [ run, runDay ] = [ runDay === previousDay( day ) ? run + 1 : 1, day ];
@@ -224,6 +235,7 @@ export function addTallies( tallies, { km = 0, feats = null, daily = false }, da
 			// km to the metre, so the kept text stays short.
 			km: Math.round( ( tallies.km + taken.km ) * 1000 ) / 1000,
 			moon: tallies.moon + taken.moon,
+			mars: ( tallies.mars ?? 0 ) + taken.mars,
 			looks: tallies.looks + taken.looks,
 			rides: [ ...tallies.rides, ...fresh ],
 			streak: Math.max( tallies.streak, run ),
@@ -242,18 +254,18 @@ export function claimTallies( { km = 0, feats = null } ) {
 
 	return {
 		km: Math.min( km, CLAIM_TALLY.km ),
-		feats: feats && { moon: Math.min( feats.moon, CLAIM_TALLY.moon ), looks: Math.min( feats.looks, CLAIM_TALLY.looks ), rides: feats.rides.slice( 0, CLAIM_TALLY.rides ) },
+		feats: feats && { moon: Math.min( feats.moon, CLAIM_TALLY.moon ), mars: Math.min( feats.mars ?? 0, CLAIM_TALLY.mars ), looks: Math.min( feats.looks, CLAIM_TALLY.looks ), rides: feats.rides.slice( 0, CLAIM_TALLY.rides ) },
 	};
 
 }
 
-// The counts an achievement is earned by, from a player's tallies and the rest: { km, moon, looks,
-// rides, streak, parties, challenges }. The streak is the Worker's own (tallies'), never the one
-// the daily bonus's XP goes by, which a claim can bring.
+// The counts an achievement is earned by, from a player's tallies and the rest: { km, moon, mars,
+// looks, rides, streak, parties, challenges }. The streak is the Worker's own (tallies'), never the
+// one the daily bonus's XP goes by, which a claim can bring.
 export function countsOf( tallies, { parties = 0, challenges = 0 } = {} ) {
 
 	return {
-		km: tallies.km, moon: tallies.moon, looks: tallies.looks, rides: tallies.rides.length,
+		km: tallies.km, moon: tallies.moon, mars: tallies.mars ?? 0, looks: tallies.looks, rides: tallies.rides.length,
 		streak: tallies.streak, parties, challenges,
 	};
 
@@ -286,7 +298,7 @@ export function progressLine( achievement, counts ) {
 
 	}
 
-	const unit = { moon: 'drives', looks: 'changes', rides: 'rides', streak: 'days', parties: 'parties', challenges: 'finished' }[ count ];
+	const unit = { moon: 'drives', mars: 'drives', looks: 'changes', rides: 'rides', streak: 'days', parties: 'parties', challenges: 'finished' }[ count ];
 	return `${ formatNumber( Math.floor( have ) ) } / ${ formatNumber( target ) } ${ unit }`;
 
 }
