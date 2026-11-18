@@ -83,10 +83,17 @@ import { DEFAULT_RIDE } from '../../src/drive-app/catalog.js';
 //   visits as robot checks they pass (they aren't counted against the Earth's caps), those visits
 //   are held to LIVE_ADDRESS_VISITS (ADDRESS_VISITS if unset) a day from one address (an IPv6 one by
 //   its /48), as the Earth's are to its 8: each with the same connections a minute and a day as any
-//   visit. In a party, where a page says it is would let a connection let in on one world's budget
-//   drive on the other: so a party's room knows which worlds' days are spent (CLOSED, from /api/live,
-//   and its own reports), closes at once a driver who says it's on one (DriveRoom's stopped), and
-//   counts what that connection spent against the world it was let in on (admitted).
+//   visit. But a visit count doesn't bound what each connection spends (up to 20 messages a second,
+//   about 3,700 requests an hour, even alone), so each address's connections, on either world and
+//   from any visit but the owner's, may spend only that world's budget over LIVE_ADDRESS_SHARE
+//   (ADDRESS_SHARE, 8, if unset) in a day: rooms report what each address's connections spent
+//   themselves (by `from`), DriveLimits adds it up, the room closes that address's connections on
+//   that world once it's past (CLOSE.rate) and /api/live turns it away there for the rest of the day.
+//   One address alone can't spend either world's day: it takes eight. In a party, where a page says
+//   it is would let a connection let in on one world's budget drive on the other: so a party's room
+//   knows which worlds' days are spent (CLOSED, from /api/live, and its own reports), closes at once
+//   a driver who says it's on one (DriveRoom's stopped), and counts what that connection spent
+//   against the world it was let in on (admitted).
 // - Limits: a connection's attachment (what it keeps through hibernation) at most 16,384 bytes,
 //   ours well under 2 KB; 32,768 WebSockets a Durable Object, far more than a room lets in.
 
@@ -111,6 +118,8 @@ const FROM = 'X-Live-From';
 // was let in ('earth', 'moon', or both, comma-separated; none, empty): a party's room lets nobody
 // move onto one of them (DriveRoom's closedTo).
 const CLOSED = 'X-Live-Closed';
+// Present ('1') for the owner's visits, whose spend isn't held to an address's share (see report).
+const UNCOUNTED = 'X-Live-Uncounted';
 // The parts of a driver only kept in memory, not in its attachment: when its car last moved and
 // when it was last sent the others' (counts of the room's own, which start again when it wakes),
 // when its state came in, and a hello being looked up with the messages that came in behind it.
@@ -129,6 +138,8 @@ const REPORT_MS = 60000;
 const REPORT_EARLY = 10000;
 const REPORT_LEAST = 5;
 const REPORT_MOST = 10 * 60000;
+// The most addresses a report says what they spent (a room has at most a few dozen connections).
+const ADDRESSES_MOST = 64;
 // How long (ms) a room remembers a visit gone to another room (DriveRoom's moveOn).
 const ELSEWHERE_MS = 60000;
 // /api/online's answer is kept this long (ms), by Cloudflare's cache and by browsers; when
@@ -171,6 +182,14 @@ const refusedVisits = new Map();
 // The most visits not counted against the Earth's caps (the Moon's) that connect to rooms from one
 // address in a day, unless LIVE_ADDRESS_VISITS says otherwise (see DriveLimits' liveOpen).
 const ADDRESS_VISITS = 20;
+// And what one address's connections may spend in a day on each world: that world's budget over
+// ADDRESS_SHARE (LIVE_ADDRESS_SHARE if set, and not 0), so it takes at least that many addresses to
+// spend a day's budget, however their connections are used (see DriveLimits' liveSpent). An address
+// turned away (by its keyed hash, `from`), past its share on a world or its visits, is remembered by
+// this Worker instance until midnight UTC (refuseFrom), and turned away before DriveLimits is asked
+// again: each ask is a Durable Object request.
+const ADDRESS_SHARE = 8;
+const refusedFrom = new Map();
 
 // GET /api/live?room=<room>: a WebSocket to the room. Everything is checked here, before the room
 // is asked: a connection turned away costs a Worker request and nothing in a Durable Object.
@@ -201,25 +220,36 @@ export async function live( { request, env, url, limits, now } ) {
 	if ( worldOff( env, world ) ) throw new HttpError( 503, 'Driving with others is off just now' );
 	const visit = await readVisit( env, token, now );
 	if ( ! visit ) throw new HttpError( 401, 'Unauthorized' );
+	// Where it comes from (the challenges' keyed hash of the address's /48 and the day): an address
+	// already past its share of the world's day, or (for a visit not counted against the Earth's
+	// caps) its day's such visits, is turned away here as a visit is. Never the owner's.
+	const from = await lookKey( env, request, now );
+	const fromKeys = visit.owner ? [] : [ `${ from } ${ world }`, ...( visit.earth ? [] : [ `${ from } visits` ] ) ];
+	if ( fromKeys.some( key => ( refusedFrom.get( key ) ?? 0 ) > now ) ) throw new HttpError( 429, 'Too many drivers from here today' );
 	// A visit connecting over and over (a loop): at most LIVE_CONNECTS' limit a minute (20) get as
 	// far as DriveLimits, on Cloudflare's rate limiter, which is no Durable Object request; and none
 	// once DriveLimits has turned it away for the day. A page connects far less often than that.
 	if ( refusedVisits.has( visit.id ) ) throw new HttpError( 429, 'Too many connections' );
 	if ( env.LIVE_CONNECTS && ! ( await env.LIVE_CONNECTS.limit( { key: visit.id } ) ).success ) throw new HttpError( 429, 'Too many connections' );
 	// Only then the day's budget (the world's): a request turned away above costs no Durable Object
-	// request. A visit not counted against the Earth's caps (the Moon's) says where it connects from,
-	// so DriveLimits can hold each address to its day's such visits (the owner's aren't).
+	// request. Every visit but the owner's says where it connects from, so DriveLimits can hold each
+	// address to its share of the world's day (spend), and a visit not counted against the Earth's
+	// caps (the Moon's) to its day's such visits too.
 	const name = roomName( room );
 	const connects = setting( env.LIVE_VISIT_CONNECTS, VISIT_CONNECTS );
-	const from = await lookKey( env, request, now );
-	const counted = visit.earth || visit.owner ? {} : { address: from, addressVisits: setting( env.LIVE_ADDRESS_VISITS, ADDRESS_VISITS ) };
+	const counted = visit.owner ? {} : {
+		address: from, share: addressShare( env ),
+		...( visit.earth ? {} : { addressVisits: setting( env.LIVE_ADDRESS_VISITS, ADDRESS_VISITS ) } ),
+	};
 	const today = await liveToday( { env, limits, now, world, connection: { visit: visit.id, room: name, connects, ...counted } } );
 	if ( today.reason === BUDGET_SPENT ) throw new HttpError( 503, 'Lots of drivers today: driving with others is back after midnight UTC', { reason: BUDGET_SPENT } );
 	if ( ! today.open ) throw new HttpError( 503, 'Driving with others is off just now' );
 	if ( today.refused ) {
 
 		refuse( visit, now );
-		throw new HttpError( 429, today.reason === 'address' ? 'Too many drivers from here today' : 'Too many connections' );
+		if ( today.reason === 'share' ) refuseFrom( `${ from } ${ world }`, now );
+		if ( today.reason === 'address' ) refuseFrom( `${ from } visits`, now );
+		throw new HttpError( 429, today.reason === 'address' || today.reason === 'share' ? 'Too many drivers from here today' : 'Too many connections' );
 
 	}
 
@@ -228,7 +258,7 @@ export async function live( { request, env, url, limits, now } ) {
 	if ( today.was ) await leaveRoom( env, today.was, visit.id, today.seq );
 	const headers = {
 		Upgrade: 'websocket', [ VISIT ]: visit.id, [ EXPIRES ]: String( visit.expiresAt ), [ ROOM ]: name, [ SEQ ]: String( today.seq ), [ FROM ]: from,
-		[ VERSION ]: String( version ), [ WORLD ]: world, [ CLOSED ]: today.closed.join( ',' ),
+		[ VERSION ]: String( version ), [ WORLD ]: world, [ CLOSED ]: today.closed.join( ',' ), ...( visit.owner ? { [ UNCOUNTED ]: '1' } : {} ),
 	};
 	return env.ROOMS.get( env.ROOMS.idFromName( name ) ).fetch( new Request( 'https://room.internal/', { headers } ) );
 
@@ -240,6 +270,17 @@ function refuse( visit, now ) {
 
 	if ( refusedVisits.size >= 1000 ) for ( const [ id, until ] of refusedVisits ) if ( until <= now ) refusedVisits.delete( id );
 	refusedVisits.set( visit.id, visit.expiresAt );
+
+}
+
+// An address DriveLimits has turned away for the day, as `key`: its keyed hash (`from`) and the
+// world whose share it has spent, or 'visits' for its day's visits not counted against the Earth's
+// caps. Remembered until midnight UTC, when its keyed hash changes anyway (and those gone let go of,
+// so the list stays short).
+function refuseFrom( key, now ) {
+
+	if ( refusedFrom.size >= 1000 ) for ( const [ old, until ] of refusedFrom ) if ( until <= now ) refusedFrom.delete( old );
+	refusedFrom.set( key, ( Math.floor( now / DAY_MS ) + 1 ) * DAY_MS );
 
 }
 
@@ -453,6 +494,13 @@ function dailyBudget( env, world = EARTH ) {
 
 }
 
+// How many shares of each world's day there are, one address being let spend one (ADDRESS_SHARE).
+function addressShare( env ) {
+
+	return setting( env.LIVE_ADDRESS_SHARE, ADDRESS_SHARE ) || ADDRESS_SHARE;
+
+}
+
 // Switched off: LIVE=off, or a budget of 0 on both worlds.
 function liveOff( env ) {
 
@@ -509,6 +557,10 @@ export class DriveRoom extends DurableObject {
 		// Spent by connections that went with nobody left to carry it (on each world, see charge):
 		// reported as the room empties.
 		this.leftover = { [ EARTH ]: 0, [ MOON_WORLD ]: 0 };
+		// What connections that went had spent themselves since the last report, by where they came
+		// from (`from`) and world, for the next report (see own): in memory only, so what one leaves
+		// just before the room hibernates isn't held to its address's share, only to the budget.
+		this.fromLeft = new Map();
 		// Messages from each connection the room has closed that its page went on sending (unheeded),
 		// and whether the room is resetting for one.
 		this.unheard = new WeakMap();
@@ -540,6 +592,7 @@ export class DriveRoom extends DurableObject {
 		const version = request.headers.get( VERSION ) === '2' ? 2 : 1;
 		const world = room?.kind === 'near' ? room.world : request.headers.get( WORLD ) === MOON_WORLD && version >= 2 ? MOON_WORLD : EARTH;
 		const closed = ( request.headers.get( CLOSED ) ?? '' ).split( ',' ).filter( w => w === EARTH || w === MOON_WORLD );
+		const uncounted = request.headers.get( UNCOUNTED ) === '1';
 		if ( request.headers.get( 'Upgrade' ) !== 'websocket' || ! room || ! visit || ! Number.isFinite( expires ) ) return new Response( 'Bad request', { status: 400 } );
 
 		const name = roomName( room );
@@ -555,6 +608,7 @@ export class DriveRoom extends DurableObject {
 			// Its visit is in another room already, from a connection made after this one.
 			server.close( CLOSE.replaced, 'replaced' );
 			this.charge( COST.connect, server, world );
+			if ( ! uncounted ) this.keepFrom( from, world, COST.connect );
 
 		} else if ( here.length - before.length >= this.max( room ) ) {
 
@@ -563,17 +617,20 @@ export class DriveRoom extends DurableObject {
 			send( server, { t: 'full', room: name, max: this.max( room ) } );
 			server.close( CLOSE.full, 'full' );
 			this.charge( COST.connect, server, world );
+			if ( ! uncounted ) this.keepFrom( from, world, COST.connect );
 
 		} else {
 
 			// Its spend starts with connecting, and the room's reports go on as they were (or start).
 			// Kept before the connection it replaces goes, so that one's unreported spend has this to go
 			// with, and the room's last report is still known from it. The world it was let in on is
-			// kept (admitted), and which worlds were closed then, if any (closed, see closedTo).
+			// kept (admitted), and which worlds were closed then, if any (closed, see closedTo). What it
+			// spends itself (own), apart from what it carries for others, is held to its address's share
+			// of the day (see report), unless it's the owner's (uncounted).
 			const driver = {
 				visit, seq, expires, from, room: name, version, world, admitted: world, at: now, heard: now, tokens: BURST, filled: now, honk: 0, pid: null,
-				spent: COST.connect, reported: this.reportedAt( server ) ?? now, shown: this.shownKey(), moved: 0, sent: 0,
-				...( closed.length ? { closed: { day: dayOf( now ), worlds: closed } } : {} ),
+				spent: COST.connect, own: COST.connect, reported: this.reportedAt( server ) ?? now, shown: this.shownKey(), moved: 0, sent: 0,
+				...( closed.length ? { closed: { day: dayOf( now ), worlds: closed } } : {} ), ...( uncounted ? { uncounted } : {} ),
 			};
 			this.drivers.set( server, driver );
 			this.save( server, driver );
@@ -595,6 +652,7 @@ export class DriveRoom extends DurableObject {
 		const now = Date.now();
 		// Every message in is billed, whatever becomes of it (each way on from here saves it).
 		driver.spent = ( driver.spent ?? 0 ) + COST.message;
+		driver.own = ( driver.own ?? 0 ) + COST.message;
 		if ( worldOff( this.env, this.worldOf( driver ) ) ) return this.shut( ws, CLOSE.off, 'off' );
 		if ( now >= driver.expires ) return this.shut( ws, CLOSE.expired, 'expired' );
 		if ( typeof message !== 'string' ) return this.shut( ws, CLOSE.protocol, 'text only' );
@@ -1102,39 +1160,53 @@ export class DriveRoom extends DurableObject {
 	// budget spent, everyone is closed with CLOSE.off and BUDGET_SPENT. It's all taken as it's sent,
 	// so what comes in meanwhile is counted for the next. If DriveLimits can't be asked, the room
 	// carries on as if it's open, and all of it goes with the next report, a minute on. An area's room
-	// says where its drivers are too (dots), none once it's empty.
+	// says where its drivers are too (dots), none once it's empty; and what each address's
+	// connections spent themselves (addresses), those of an address past its share of a world's day
+	// being closed there.
 	async report( now, extra ) {
 
 		const dots = this.dots();
-		// Each world's share: each connection's on the world it's on, the room's own on its (worldOf).
+		// Each world's share: each connection's on the world it's on, and what it carries for the other
+		// (charge), the room's own on its (worldOf).
 		const amounts = { ...this.leftover };
 		amounts[ this.worldOf() ] += extra + COST.report;
 		this.leftover = { [ EARTH ]: 0, [ MOON_WORLD ]: 0 };
+		// And what each address's connections spent themselves, on each world (own, added to fromLeft
+		// for those gone), so DriveLimits can hold each address to its share of each world's day.
 		for ( const ws of this.sockets() ) {
 
 			const driver = this.driver( ws );
 			amounts[ this.worldOf( driver ) ] += driver.spent ?? 0;
-			Object.assign( driver, { spent: 0, reported: now } );
+			for ( const [ w, carried ] of Object.entries( this.takeCarry( driver ) ) ) amounts[ w ] += carried;
+			if ( ! driver.uncounted ) this.keepFrom( driver.from, this.worldOf( driver ), driver.own ?? 0 );
+			Object.assign( driver, { spent: 0, own: 0, reported: now } );
 			this.save( ws, driver );
 
 		}
 
+		const spentFrom = this.fromLeft;
+		this.fromLeft = new Map();
+		const addresses = [ ...spentFrom ].slice( 0, ADDRESSES_MOST ).map( ( [ from, spent ] ) => ( { from, ...spent } ) );
+
 		const open = { [ EARTH ]: true, [ MOON_WORLD ]: true };
+		let over = null;
 		try {
 
 			const limits = this.env.LIMITS.get( this.env.LIMITS.idFromName( 'global' ) );
 			const answer = await limits.liveSpent( amounts[ EARTH ], {
 				now, budget: dailyBudget( this.env, EARTH ), moon: amounts[ MOON_WORLD ], moonBudget: dailyBudget( this.env, MOON_WORLD ),
-				...( dots ? { online: { room: this.name, dots } } : {} ),
+				...( dots ? { online: { room: this.name, dots } } : {} ), ...( addresses.length ? { addresses, share: addressShare( this.env ) } : {} ),
 			} );
 			open[ EARTH ] = answer.open;
 			// (A DriveLimits from before the Moon had rooms says one for both.)
 			open[ MOON_WORLD ] = answer.moon?.open ?? answer.open;
+			over = answer.over ?? null;
 
 		} catch ( err ) {
 
 			console.error( 'Live budget report', err?.name, err?.message );
 			for ( const w of [ EARTH, MOON_WORLD ] ) this.charge( amounts[ w ], null, w );
+			for ( const [ from, spent ] of spentFrom ) for ( const w of [ EARTH, MOON_WORLD ] ) this.keepFrom( from, w, spent[ w ] );
 			if ( dots ) this.shownAs( null );
 			return;
 
@@ -1163,7 +1235,23 @@ export class DriveRoom extends DurableObject {
 
 		}
 
-		if ( ! this.sockets().length ) this.leftover = { [ EARTH ]: 0, [ MOON_WORLD ]: 0 };
+		// The connections from an address past its share of their world's day (DriveLimits' over: {
+		// earth: [ from ], moon: [ from ] }) are closed as too many messages are (CLOSE.rate), as any
+		// page takes that: it tries again, and /api/live turns it away for the day.
+		for ( const ws of over ? this.sockets() : [] ) {
+
+			const driver = this.driver( ws );
+			const past = over[ this.worldOf( driver ) ];
+			if ( ! driver.uncounted && Array.isArray( past ) && past.includes( driver.from ) ) this.shut( ws, CLOSE.rate, 'too much from here today' );
+
+		}
+
+		if ( ! this.sockets().length ) {
+
+			this.leftover = { [ EARTH ]: 0, [ MOON_WORLD ]: 0 };
+			this.fromLeft = new Map();
+
+		}
 
 	}
 
@@ -1182,14 +1270,18 @@ export class DriveRoom extends DurableObject {
 	}
 
 	// `amount` (billed requests) spent on `world` (the room's own, worldOf, unless it says) for the
-	// next report: on a connection still here (not `except`), one on that world if there is one, so
-	// it's counted against that world's budget; or with nobody, the room's leftover on that world.
+	// next report, always counted against that world's budget: on a connection still here (not
+	// `except`) on that world, as its own spent; with none on that world but someone on the other (a
+	// party), kept apart in that one's attachment as carried for `world` (carry), so it outlasts
+	// hibernation without being counted against the other world's; or with nobody, the room's
+	// leftover on that world.
 	charge( amount, except = null, world = null ) {
 
 		if ( ! amount ) return;
 		const on = world ?? this.worldOf();
 		const here = this.sockets().filter( other => other !== except );
-		const ws = here.find( other => this.worldOf( this.driver( other ) ) === on ) ?? here[ 0 ];
+		const same = here.find( other => this.worldOf( this.driver( other ) ) === on );
+		const ws = same ?? here[ 0 ];
 		if ( ! ws ) {
 
 			this.leftover[ on ] += amount;
@@ -1198,24 +1290,64 @@ export class DriveRoom extends DurableObject {
 		}
 
 		const driver = this.driver( ws );
-		driver.spent = ( driver.spent ?? 0 ) + amount;
+		if ( same ) driver.spent = ( driver.spent ?? 0 ) + amount;
+		else driver.carry = { ...driver.carry, [ on ]: ( driver.carry?.[ on ] ?? 0 ) + amount };
 		this.save( ws, driver );
 
 	}
 
-	// A connection going: what it spent that the room hasn't reported, carried by another (charge).
-	settle( ws, driver ) {
+	// What a connection carries for each world (charge), taken off it: { world: amount }.
+	takeCarry( driver ) {
 
-		const amount = driver.spent ?? 0;
-		driver.spent = 0;
-		this.charge( amount, ws, this.worldOf( driver ) );
+		const carry = {};
+		for ( const w of [ EARTH, MOON_WORLD ] ) {
+
+			const amount = driver.carry?.[ w ];
+			if ( Number.isFinite( amount ) && amount > 0 ) carry[ w ] = amount;
+
+		}
+
+		delete driver.carry;
+		return carry;
 
 	}
 
-	// What the room's leftover holds, on both worlds.
+	// `amount` that a connection from `from` (its address's keyed hash) spent itself on `world`, kept
+	// for the next report (fromLeft: { earth, moon } by from).
+	keepFrom( from, world, amount ) {
+
+		if ( typeof from !== 'string' || ! from || ! ( amount > 0 ) ) return;
+		const spent = this.fromLeft.get( from ) ?? { [ EARTH ]: 0, [ MOON_WORLD ]: 0 };
+		spent[ world === MOON_WORLD ? MOON_WORLD : EARTH ] += amount;
+		this.fromLeft.set( from, spent );
+
+	}
+
+	// A connection going: what it spent that the room hasn't reported, and what it carried for
+	// another world, carried by another (charge), each on the world it was spent on; and what it
+	// spent itself kept by its address for the next report (keepFrom).
+	settle( ws, driver ) {
+
+		if ( ! driver.uncounted ) this.keepFrom( driver.from, this.worldOf( driver ), driver.own ?? 0 );
+		driver.own = 0;
+		const amount = driver.spent ?? 0;
+		driver.spent = 0;
+		this.charge( amount, ws, this.worldOf( driver ) );
+		for ( const [ w, carried ] of Object.entries( this.takeCarry( driver ) ) ) this.charge( carried, ws, w );
+
+	}
+
+	// What the room's leftover holds, on both worlds, and what its connections carry for a world
+	// they aren't on (charge).
 	owing() {
 
-		return this.leftover[ EARTH ] + this.leftover[ MOON_WORLD ];
+		const carried = this.sockets().reduce( ( sum, ws ) => {
+
+			const carry = this.driver( ws ).carry;
+			return sum + ( carry?.[ EARTH ] ?? 0 ) + ( carry?.[ MOON_WORLD ] ?? 0 );
+
+		}, 0 );
+		return this.leftover[ EARTH ] + this.leftover[ MOON_WORLD ] + carried;
 
 	}
 
@@ -1282,7 +1414,9 @@ export class DriveRoom extends DurableObject {
 	// themselves; the one that wouldn't stop has to connect again (a request) to go on.
 	async unheeded( ws ) {
 
-		this.charge( COST.message, ws );
+		const driver = this.driver( ws );
+		this.charge( COST.message, ws, this.worldOf( driver ) );
+		if ( ! driver.uncounted ) this.keepFrom( driver.from, this.worldOf( driver ), COST.message );
 		const count = ( this.unheard.get( ws ) ?? 0 ) + 1;
 		this.unheard.set( ws, count );
 		if ( count <= BURST || this.aborting ) return;

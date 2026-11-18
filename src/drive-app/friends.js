@@ -280,7 +280,7 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 				if ( p.name !== name ) who.firstChild.replaceWith( nameOf( p ) );
 				name = p.name;
 				const paused = p.s && p.s[ 10 ] & FLAGS.paused;
-				const where = p.away ? 'on the globe' : elsewhere( p ) ?? ( paused ? 'paused' : distance !== null ? far( distance ) : p.place?.name ? `at ${ p.place.name }` : 'driving' );
+				const where = p.away ? onGlobe( p ) : elsewhere( p ) ?? ( paused ? 'paused' : distance !== null ? far( distance ) : p.place?.name ? `at ${ p.place.name }` : 'driving' );
 				what.textContent = `${ rides.get( p.vehicle ) ?? 'Go-kart' } · ${ where }`;
 				go.disabled = p.away || ( ! p.s && ! p.place );
 				const hiddenHere = ghosts.isHidden( name );
@@ -363,7 +363,7 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 				members.replaceChildren( you, ...[ ...live.players.values() ].map( p => {
 
 					const li = document.createElement( 'li' );
-					li.append( nameOf( p ), ` · ${ p.away ? 'on the globe' : elsewhere( p ) ?? ( p.place?.name ? `at ${ p.place.name }` : 'driving' ) }` );
+					li.append( nameOf( p ), ` · ${ p.away ? onGlobe( p ) : elsewhere( p ) ?? ( p.place?.name ? `at ${ p.place.name }` : 'driving' ) }` );
 					return li;
 
 				} ) );
@@ -380,6 +380,15 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 		const theirs = p.world ?? 'earth';
 		if ( theirs === ( live.world ?? 'earth' ) ) return null;
 		return theirs === MOON_WORLD ? 'on the Moon' : 'on the Earth';
+
+	}
+
+	// A friend on the globe: on the other world's, named ("on the Moon's globe"), as they aren't
+	// where this page would see them.
+	function onGlobe( p ) {
+
+		if ( ! elsewhere( p ) ) return 'on the globe';
+		return p.world === MOON_WORLD ? 'on the Moon\'s globe' : 'on the Earth\'s globe';
 
 	}
 

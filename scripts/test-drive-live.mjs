@@ -23,7 +23,10 @@
 // alone, held states; a visit gone to another room; a closed connection talking on; and what it
 // spends: every billed request counted once, reported once a minute while there's enough to and
 // every ten minutes otherwise (a lone driver), and as it empties, a replaced driver's spend kept,
-// closing everyone when the day's is spent, and carrying on when DriveLimits fails. And the page's
+// closing everyone when the day's is spent, and carrying on when DriveLimits fails; in a party across
+// worlds, each world's spend counted against its own budget even with nobody left on it; each
+// address's share (what its connections spent themselves, its connections closed past it, and
+// /api/live remembering an address turned away). And the page's
 // side (src/drive-app/live.js) on stand-ins for the browser: turned away at the door, a connection
 // gone quiet, a busy area tried again, and quiet with only those on the globe to see it. Then who's
 // driving now, on the globe: Earth-centred metres to latitude, longitude and height and back (known
@@ -1507,6 +1510,9 @@ describe( 'Driving with others\' daily budget', () => {
 			vars: {
 				GOOGLE_CLIENT_ID: '', GOOGLE_MAPS_API_KEY: 'test-maps-key-not-real', TURNSTILE_SECRET: PASS_SECRET, TEST_CLOCK: 'header', LIVE_DAILY_BUDGET: String( BUDGET ),
 				LIVE_MOON_DAILY_BUDGET: String( MOON_BUDGET ), LIVE_VISIT_CONNECTS: '3', LIVE_ADDRESS_VISITS: '2',
+				// (Each address's share the whole of a budget, as every connection here is from one: its
+				// share is tested on its own, with the room and DriveLimits here.)
+				LIVE_ADDRESS_SHARE: '1',
 			},
 		} );
 		const room = partyRoom();
@@ -1728,6 +1734,7 @@ class FakeSocket {
 describe( 'A room, here on a stand-in for the runtime', () => {
 
 	let DriveRoom;
+	let live;
 	let clock = Date.UTC( 2026, 10, 1, 12 );
 	const realNow = Date.now;
 	const RealResponse = globalThis.Response;
@@ -1738,7 +1745,7 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 	before( async () => {
 
 		standInForCloudflare();
-		( { DriveRoom } = await import( '../worker/drive/live.js' ) );
+		( { DriveRoom, live } = await import( '../worker/drive/live.js' ) );
 		globalThis.WebSocketPair = class {
 
 			constructor() {
@@ -1828,11 +1835,12 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 	let visits = 0;
 	// A connection as /api/live hands it to `room` (checked there), numbered `seq` among its visit's:
 	// the room's end of it.
-	async function arrive( room, ctx, { visit = `visit-${ ++ visits }`, expires = clock + 6 * HOUR, name = 'party:ABCDEFG', seq = 1, version = null, world = null, closed = null } = {} ) {
+	async function arrive( room, ctx, { visit = `visit-${ ++ visits }`, expires = clock + 6 * HOUR, name = 'party:ABCDEFG', seq = 1, version = null, world = null, closed = null, from = null, uncounted = false } = {} ) {
 
 		const headers = new Headers( {
 			Upgrade: 'websocket', 'X-Live-Visit': visit, 'X-Live-Expires': String( expires ), 'X-Live-Room': name, 'X-Live-Seq': String( seq ),
 			...( version ? { 'X-Live-Version': String( version ) } : {} ), ...( world ? { 'X-Live-World': world } : {} ), ...( closed ? { 'X-Live-Closed': closed } : {} ),
+			...( from ? { 'X-Live-From': from } : {} ), ...( uncounted ? { 'X-Live-Uncounted': '1' } : {} ),
 		} );
 		// Node's Response doesn't take a 101.
 		globalThis.Response = class {
@@ -1928,15 +1936,15 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 	// dots, online), kept; open, or not, or failing, as the test says.
 	function limitsStub() {
 
-		const stub = { reports: [], open: true, moonOpen: true, fail: false };
+		const stub = { reports: [], open: true, moonOpen: true, fail: false, over: null };
 		stub.binding = {
 			idFromName: name => name,
 			get: () => ( {
-				liveSpent: async ( amount, { now, budget, moon = 0, moonBudget, online } ) => {
+				liveSpent: async ( amount, { now, budget, moon = 0, moonBudget, online, addresses, share } ) => {
 
 					if ( stub.fail ) throw new Error( 'DriveLimits is down' );
-					stub.reports.push( { amount, now, budget, moon, moonBudget, ...( online ? { online: structuredClone( online ) } : {} ) } );
-					return { open: stub.open, spent: 0, moon: { open: stub.moonOpen, spent: 0 } };
+					stub.reports.push( { amount, now, budget, moon, moonBudget, ...( online ? { online: structuredClone( online ) } : {} ), ...( addresses ? { addresses: structuredClone( addresses ), share } : {} ) } );
+					return { open: stub.open, spent: 0, moon: { open: stub.moonOpen, spent: 0 }, ...( stub.over ? { over: stub.over } : {} ) };
 
 				},
 			} ),
@@ -2970,6 +2978,176 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 
 	} );
 
+	test( 'each address\'s share: what each connection spent itself goes with the report by its address (from) and world, never what it carries for another nor the owner\'s; an address past its share on a world has its connections there closed (CLOSE.rate), the owner\'s and the others\' drive on', async () => {
+
+		const limits = limitsStub();
+		const ctx = runtime();
+		const room = new DriveRoom( ctx, { LIMITS: limits.binding } );
+		// Ana and the owner from one address, Ben from another on the Moon, and Cal, who sends a few
+		// keepalives and goes: what Cal spent is carried by another for the budget, but is Cal's own.
+		const ana = await hello( room, ctx, { version: 2, from: 'from-ana' } );
+		const owner = await hello( room, ctx, { version: 2, from: 'from-ana', uncounted: true } );
+		const ben = await hello( room, ctx, { version: 2, world: 'moon', from: 'from-ben' }, MOON_HELLO );
+		const cal = await hello( room, ctx, { version: 2, from: 'from-cal' } );
+		for ( let i = 0; i < 10; i ++ ) await ping( room, ana );
+		for ( let i = 0; i < 20; i ++ ) await ping( room, owner );
+		for ( let i = 0; i < 4; i ++ ) await ping( room, ben );
+		for ( let i = 0; i < 6; i ++ ) await ping( room, cal );
+		await leave( room, cal );
+		await wait( room, ctx, REPORT_MS );
+		assert.ok( limits.reports.length >= 1 );
+		// Added up over the reports so far: each address's own, on its world.
+		const byFrom = {};
+		for ( const report of limits.reports ) for ( const { from, earth, moon } of report.addresses ?? [] ) {
+
+			byFrom[ from ] ??= { earth: 0, moon: 0 };
+			byFrom[ from ].earth += earth;
+			byFrom[ from ].moon += moon;
+			assert.equal( report.share, 8 );
+
+		}
+
+		const close = ( a, b ) => Math.abs( a - b ) < 1e-9;
+		assert.deepEqual( Object.keys( byFrom ).sort(), [ 'from-ana', 'from-ben', 'from-cal' ] );
+		assert.ok( close( byFrom[ 'from-ana' ].earth, COST.connect + 11 * COST.message ) && byFrom[ 'from-ana' ].moon === 0, JSON.stringify( byFrom ) );
+		assert.ok( close( byFrom[ 'from-ben' ].moon, COST.connect + 5 * COST.message ) && byFrom[ 'from-ben' ].earth === 0, JSON.stringify( byFrom ) );
+		assert.ok( close( byFrom[ 'from-cal' ].earth, COST.connect + 7 * COST.message ), JSON.stringify( byFrom ) );
+
+		// Ana's address past its share on the Earth: Ana is closed at the next report, the owner (on the
+		// same address) isn't, nor Ben; and an address past its share on the Moon closes nobody on the Earth.
+		limits.over = { earth: [ 'from-ana' ], moon: [ 'from-cal', 'from-ana' ] };
+		for ( const page of [ ana, owner, ben ] ) await ping( room, page );
+		await drive( room, ctx, ben, REPORT_MS + 5 * SECOND, [ ana, owner ], step => moonCarAt( TYCHO.lat, TYCHO.lon, { north: step, speed: 10 } ) );
+		assert.deepEqual( ana.closedWith, { code: CLOSE.rate, reason: 'too much from here today' } );
+		assert.equal( owner.closedWith, null );
+		assert.equal( ben.closedWith, null );
+		limits.over = { earth: [], moon: [ 'from-ben' ] };
+		await drive( room, ctx, ben, REPORT_MS + 5 * SECOND, [ owner ], step => moonCarAt( TYCHO.lat, TYCHO.lon, { north: step, speed: 10 } ) );
+		assert.deepEqual( ben.closedWith, { code: CLOSE.rate, reason: 'too much from here today' } );
+		assert.equal( owner.closedWith, null );
+
+	} );
+
+	test( '/api/live: an address DriveLimits turned away for the day (past its share of a world, or its visits) is remembered by the Worker instance and turned away without asking again, only on that world (or only its Moon visits) and until midnight UTC; every visit but the owner\'s says its address and share, only the Moon\'s its visits', async () => {
+
+		const asked = [];
+		let answer = { open: true, spent: 0, refused: true, reason: 'share' };
+		const limits = { liveOpen: async options => {
+
+			asked.push( options );
+			return answer;
+
+		} };
+		const env = { TURNSTILE_SECRET: PASS_SECRET, LIVE_DAILY_BUDGET: '7781', LIVE_MOON_DAILY_BUDGET: '7782' };
+		const now = clock;
+		const open = async ( kind, room, ip, { world = null, at = now } = {} ) => {
+
+			const token = await makeVisit( { TURNSTILE_SECRET: PASS_SECRET }, at, kind );
+			const url = new URL( `https://worlddrive.app/api/live?room=${ encodeURIComponent( room ) }${ world ? `&world=${ world }` : '' }` );
+			const headers = new Headers( { Upgrade: 'websocket', Origin: url.origin, 'Sec-WebSocket-Protocol': `${ PROTOCOL_WORLDS }, ${ PROTOCOL }, ${ token }`, 'CF-Connecting-IP': ip } );
+			try {
+
+				await live( { request: { headers }, env, url, limits, now: at } );
+				return { status: 101 };
+
+			} catch ( err ) {
+
+				return { status: err.status, error: err.message };
+
+			}
+
+		};
+		// Past its share on the Moon: turned away, and then without asking, whichever visit.
+		assert.deepEqual( await open( 'moon', TYCHO_AREA, '203.0.113.7' ), { status: 429, error: 'Too many drivers from here today' } );
+		assert.equal( asked.length, 1 );
+		assert.equal( asked[ 0 ].share, 8 );
+		assert.equal( typeof asked[ 0 ].address, 'string' );
+		assert.equal( asked[ 0 ].addressVisits, 20 );
+		assert.deepEqual( await open( 'moon', TYCHO_AREA, '203.0.113.7' ), { status: 429, error: 'Too many drivers from here today' } );
+		assert.deepEqual( await open( 'earth', 'party:ABCDEFG', '203.0.113.7', { world: 'moon' } ), { status: 429, error: 'Too many drivers from here today' } );
+		assert.equal( asked.length, 1 );
+		// On the Earth it's asked (its share there is its own), with its address and share and no
+		// count of visits (an Earth visit's are its caps).
+		answer = { open: true, spent: 0, refused: true };
+		assert.deepEqual( await open( 'earth', FURKA_AREA, '203.0.113.7' ), { status: 429, error: 'Too many connections' } );
+		assert.equal( asked.length, 2 );
+		assert.deepEqual( [ asked[ 1 ].world, asked[ 1 ].share, asked[ 1 ].address, asked[ 1 ].addressVisits ], [ 'earth', 8, asked[ 0 ].address, undefined ] );
+		// The owner's isn't held to it, nor says its address; another address is asked.
+		assert.equal( ( await open( 'owner', TYCHO_AREA, '203.0.113.7' ) ).status, 429 );
+		assert.equal( asked.length, 3 );
+		assert.deepEqual( [ asked[ 2 ].address, asked[ 2 ].share ], [ undefined, undefined ] );
+		await open( 'moon', TYCHO_AREA, '203.0.113.8' );
+		assert.equal( asked.length, 4 );
+		// Past its Moon visits: its Moon visits are turned away without asking, on both worlds, its
+		// Earth visits asked.
+		answer = { open: true, spent: 0, refused: true, reason: 'address' };
+		assert.equal( ( await open( 'moon', FURKA_AREA, '203.0.113.9' ) ).status, 429 );
+		assert.equal( ( await open( 'moon', 'party:ABCDEFG', '203.0.113.9', { world: 'moon' } ) ).status, 429 );
+		assert.equal( asked.length, 5 );
+		await open( 'earth', FURKA_AREA, '203.0.113.9' );
+		assert.equal( asked.length, 6 );
+		// The next day, asked again.
+		answer = { open: true, spent: 0, refused: true, reason: 'share' };
+		await open( 'moon', TYCHO_AREA, '203.0.113.7', { at: now + DAY } );
+		assert.equal( asked.length, 7 );
+
+	} );
+
+	test( 'in a party across worlds, what a driver spent is counted against the world it was on, even when nobody is left on that world to carry it (and through hibernation)', async () => {
+
+		const limits = limitsStub();
+		const ctx = runtime();
+		const env = { LIMITS: limits.binding };
+		const room = new DriveRoom( ctx, env );
+		// Una on the Moon, and three on the Earth who each send thirty keepalives (within the burst)
+		// and go, leaving only Una, on the Moon, to carry what they spent.
+		const una = await hello( room, ctx, { version: 2, world: 'moon' }, MOON_HELLO );
+		const earthly = [];
+		for ( let i = 0; i < 3; i ++ ) earthly.push( await hello( room, ctx, { version: 2 } ) );
+		for ( const ann of earthly ) for ( let i = 0; i < 30; i ++ ) await ping( room, ann );
+		for ( const ann of earthly ) await leave( room, ann );
+		// The room hibernates before it reports: what they left is kept in Una's attachment, apart.
+		const woken = new DriveRoom( ctx, env );
+		await wait( woken, ctx, REPORT_MS );
+		const [ report ] = limits.reports;
+		// Their connecting, hello and keepalives are the Earth's, and none of it the Moon's, whose share
+		// is only Una's and the room's own alarms and report (the room's own world being the Moon's now
+		// that only Una is in it).
+		const theirs = 3 * ( COST.connect + 31 * COST.message );
+		assert.ok( report.amount >= theirs - 1e-9, `${ report.amount } for the Earth's` );
+		assert.ok( report.amount <= theirs + 1e-9, `${ report.amount } for the Earth's` );
+		assert.ok( report.moon <= COST.connect + COST.message + 3 * COST.alarm + COST.report + 1e-9, `${ report.moon } for the Moon's` );
+		assert.equal( una.closedWith, null );
+
+		// Those let in on the Moon as the Earth's day was spent, moving onto the Earth (closed there and
+		// then, shutClosed), with only Ben, who came in before, on the Earth: what they spent is the
+		// Moon's, carried by Ben apart from his own, not the Earth's.
+		const later = runtime();
+		const closing = new DriveRoom( later, env );
+		limits.reports.length = 0;
+		const ben = await hello( closing, later, { version: 2 } );
+		limits.open = false;
+		const slys = [];
+		for ( let i = 0; i < 3; i ++ ) slys.push( await hello( closing, later, { version: 2, world: 'moon', closed: 'earth' }, MOON_HELLO ) );
+		for ( const sly of slys ) {
+
+			for ( let i = 0; i < 30; i ++ ) await ping( closing, sly );
+			await say( closing, sly, { t: 'away', world: 'earth' } );
+			assert.deepEqual( sly.closedWith, { code: CLOSE.off, reason: BUDGET_SPENT } );
+
+		}
+
+		assert.equal( ben.closedWith, null );
+		limits.open = true;
+		await wait( closing, later, REPORT_MS );
+		const [ second ] = limits.reports;
+		const moons = 3 * ( COST.connect + 32 * COST.message );
+		assert.ok( second.moon >= moons - 1e-9, `${ second.moon } for the Moon's` );
+		assert.ok( second.moon <= moons + 1e-9, `${ second.moon } for the Moon's` );
+		assert.ok( second.amount <= COST.connect + COST.message + 3 * COST.alarm + COST.report + 1e-9, `${ second.amount } for the Earth's` );
+
+	} );
+
 	test( 'a Moon area\'s room: all its spend is the Moon\'s, its dots are where its drivers are on the Moon, and LIVE_MOON_DAILY_BUDGET=0 switches off only the Moon\'s', async () => {
 
 		const limits = limitsStub();
@@ -3823,53 +4001,53 @@ describe( 'DriveLimits keeping who\'s driving now, here on SQLite', () => {
 	const report = ( limits, room, dots, { at = now, budget = 1000, amount = 1 } = {} ) => limits.liveSpent( amount, { now: at, budget, online: { room, dots } } );
 	const TIMES_AREA = cellOf( TIMES.lat, TIMES.lon );
 
-	test( 'each area\'s room\'s dots as it last reported them, one row a room, those at one spot one area; none lets go of them; a party\'s, or what isn\'t a dot, kept nowhere', () => {
+	test( 'each area\'s room\'s dots as it last reported them, one row a room, those at one spot one area; none lets go of them; a party\'s, or what isn\'t a dot, kept nowhere', async () => {
 
 		const limits = fresh();
 		assert.deepEqual( ask( limits ), { open: true, total: 0, areas: [], elsewhere: 0 } );
 		// The area's first room and its second shard, at the same spot: one area of three.
-		report( limits, FURKA_AREA, [ FURKA_DOT ] );
-		report( limits, shardOf( FURKA_AREA, 1 ), [ { ...FURKA_DOT, count: 2 } ] );
-		report( limits, TIMES_AREA, [ TIMES_DOT ] );
+		await report( limits, FURKA_AREA, [ FURKA_DOT ] );
+		await report( limits, shardOf( FURKA_AREA, 1 ), [ { ...FURKA_DOT, count: 2 } ] );
+		await report( limits, TIMES_AREA, [ TIMES_DOT ] );
 		assert.deepEqual( ask( limits ), { open: true, total: 4, areas: [ { ...FURKA_DOT, count: 3 }, TIMES_DOT ], elsewhere: 0 } );
 		// A room's next report is all of what it says: Times Square's room now has two dots.
 		const uptown = { lat: 40.78, lon: - 73.97, height: 30, count: 2 };
-		report( limits, TIMES_AREA, [ uptown, TIMES_DOT ] );
+		await report( limits, TIMES_AREA, [ uptown, TIMES_DOT ] );
 		assert.deepEqual( ask( limits ), { open: true, total: 6, areas: [ { ...FURKA_DOT, count: 3 }, uptown, TIMES_DOT ], elsewhere: 0 } );
 		// None: its row goes.
-		report( limits, shardOf( FURKA_AREA, 1 ), [] );
+		await report( limits, shardOf( FURKA_AREA, 1 ), [] );
 		assert.deepEqual( ask( limits ).total, 4 );
 		assert.deepEqual( limits.rows().map( row => row.room ), [ FURKA_AREA, TIMES_AREA ].sort() );
 		// A party's, a name that's no room, and dots that aren't (or more than ROOM_DOTS): nothing, or
 		// only what checks out.
-		report( limits, 'party:ABCDEFG', [ FURKA_DOT ] );
-		report( limits, 'near:999999.1', [ FURKA_DOT ] );
-		report( limits, cellOf( MONACO.lat, MONACO.lon ), [ { ...MONACO_DOT, count: 0 }, { lat: 'here' }, null ] );
+		await report( limits, 'party:ABCDEFG', [ FURKA_DOT ] );
+		await report( limits, 'near:999999.1', [ FURKA_DOT ] );
+		await report( limits, cellOf( MONACO.lat, MONACO.lon ), [ { ...MONACO_DOT, count: 0 }, { lat: 'here' }, null ] );
 		assert.deepEqual( limits.rows().map( row => row.room ), [ FURKA_AREA, TIMES_AREA ].sort() );
-		report( limits, cellOf( MONACO.lat, MONACO.lon ), [ { ...MONACO_DOT, name: 'Ana\'s house' }, MONACO_DOT, MONACO_DOT, MONACO_DOT ] );
+		await report( limits, cellOf( MONACO.lat, MONACO.lon ), [ { ...MONACO_DOT, name: 'Ana\'s house' }, MONACO_DOT, MONACO_DOT, MONACO_DOT ] );
 		assert.deepEqual( JSON.parse( limits.rows().find( row => row.room === cellOf( MONACO.lat, MONACO.lon ) ).dots ), [ MONACO_DOT, MONACO_DOT, MONACO_DOT ] );
 		// A report without online (a party's room, or before) changes nothing of it.
-		limits.liveSpent( 3, { now, budget: 1000 } );
+		await limits.liveSpent( 3, { now, budget: 1000 } );
 		assert.equal( ask( limits ).total, 7 );
 
 	} );
 
-	test( 'a room\'s dots older than the TTL are left out, and deleted; a room still there says them again within it', () => {
+	test( 'a room\'s dots older than the TTL are left out, and deleted; a room still there says them again within it', async () => {
 
 		const limits = fresh();
-		report( limits, FURKA_AREA, [ FURKA_DOT ], { at: now } );
-		report( limits, TIMES_AREA, [ TIMES_DOT ], { at: now + 5 * MINUTE } );
+		await report( limits, FURKA_AREA, [ FURKA_DOT ], { at: now } );
+		await report( limits, TIMES_AREA, [ TIMES_DOT ], { at: now + 5 * MINUTE } );
 		assert.equal( ask( limits, now + TTL ).total, 2 );
 		// Furka's room hasn't said for longer than the TTL (it went without a word): left out, and gone.
 		assert.deepEqual( ask( limits, now + TTL + 1 ), { open: true, total: 1, areas: [ TIMES_DOT ], elsewhere: 0 } );
 		assert.deepEqual( limits.rows().map( row => row.room ), [ TIMES_AREA ] );
 		// Saying them again, it's back.
-		report( limits, FURKA_AREA, [ FURKA_DOT ], { at: now + TTL + 2 } );
+		await report( limits, FURKA_AREA, [ FURKA_DOT ], { at: now + TTL + 2 } );
 		assert.equal( ask( limits, now + TTL + 3 ).total, 2 );
 
 	} );
 
-	test( 'at most ONLINE_AREAS (200) areas, the busiest, busiest first, with the total of them all', () => {
+	test( 'at most ONLINE_AREAS (200) areas, the busiest, busiest first, with the total of them all', async () => {
 
 		const limits = fresh();
 		const all = [];
@@ -3880,7 +4058,7 @@ describe( 'DriveLimits keeping who\'s driving now, here on SQLite', () => {
 			const room = cellOf( lat, lon );
 			const [ dot ] = dotsOf( [ toEcef( lat, lon, i ) ], room );
 			dot.count = 1 + ( i * 7 ) % 5;
-			report( limits, room, [ dot ] );
+			await report( limits, room, [ dot ] );
 			all.push( dot );
 
 		}
@@ -3893,38 +4071,38 @@ describe( 'DriveLimits keeping who\'s driving now, here on SQLite', () => {
 
 	} );
 
-	test( 'each ask is counted against the day\'s budget for driving with others, in the same go: once it\'s spent, { open: false } and nothing more; a report that spends it lets go of its room\'s dots', () => {
+	test( 'each ask is counted against the day\'s budget for driving with others, in the same go: once it\'s spent, { open: false } and nothing more; a report that spends it lets go of its room\'s dots', async () => {
 
 		const limits = fresh();
-		report( limits, FURKA_AREA, [ FURKA_DOT ], { budget: 10, amount: 5 } );
-		const spentNow = () => limits.liveSpent( 0, { now, budget: 10 } ).spent;
-		assert.equal( spentNow(), 5 );
+		await report( limits, FURKA_AREA, [ FURKA_DOT ], { budget: 10, amount: 5 } );
+		const spentNow = async () => ( await limits.liveSpent( 0, { now, budget: 10 } ) ).spent;
+		assert.equal( await spentNow(), 5 );
 		for ( let i = 1; i <= 4; i ++ ) {
 
 			assert.equal( ask( limits, now, 10 ).open, true );
-			assert.equal( spentNow(), 5 + i );
+			assert.equal( await spentNow(), 5 + i );
 
 		}
 
 		// The tenth request: spent, and it says nothing.
 		assert.deepEqual( ask( limits, now, 10 ), { open: false } );
-		assert.equal( spentNow(), 10 );
+		assert.equal( await spentNow(), 10 );
 		// A room reporting then (it closes everyone): its dots go with it.
-		report( limits, TIMES_AREA, [ TIMES_DOT ], { budget: 10, amount: 0 } );
-		report( limits, FURKA_AREA, [ FURKA_DOT ], { budget: 10, amount: 2 } );
+		await report( limits, TIMES_AREA, [ TIMES_DOT ], { budget: 10, amount: 0 } );
+		await report( limits, FURKA_AREA, [ FURKA_DOT ], { budget: 10, amount: 2 } );
 		assert.deepEqual( limits.rows(), [] );
 		// The next day, a fresh budget: asked, open.
 		assert.deepEqual( ask( limits, now + DAY, 10 ), { open: true, total: 0, areas: [], elsewhere: 0 } );
 
 	} );
 
-	test( 'the Moon\'s areas\' dots are the Moon\'s: asked for the Moon, its own, with how many drive on the Earth; asked for the Earth, as before, with how many on the Moon', () => {
+	test( 'the Moon\'s areas\' dots are the Moon\'s: asked for the Moon, its own, with how many drive on the Earth; asked for the Earth, as before, with how many on the Moon', async () => {
 
 		const limits = fresh();
 		const tycho = { lat: - 43.31, lon: - 11.36, height: - 1200, count: 2 };
-		report( limits, FURKA_AREA, [ FURKA_DOT ] );
-		report( limits, TYCHO_AREA, [ tycho ] );
-		report( limits, shardOf( TYCHO_AREA, 1 ), [ { ...tycho, count: 1 } ] );
+		await report( limits, FURKA_AREA, [ FURKA_DOT ] );
+		await report( limits, TYCHO_AREA, [ tycho ] );
+		await report( limits, shardOf( TYCHO_AREA, 1 ), [ { ...tycho, count: 1 } ] );
 		assert.deepEqual( ask( limits ), { open: true, total: 1, areas: [ FURKA_DOT ], elsewhere: 3 } );
 		assert.deepEqual( limits.liveOnline( { now, budget: 1000, moonBudget: 1000, world: 'moon', ttl: TTL, most: ONLINE_AREAS } ), { open: true, total: 3, areas: [ { ...tycho, count: 3 } ], elsewhere: 1 } );
 
@@ -3934,43 +4112,43 @@ describe( 'DriveLimits keeping who\'s driving now, here on SQLite', () => {
 
 		const limits = fresh();
 		const budgets = { budget: 10, moonBudget: 20 };
-		const spent = () => {
+		const spent = async () => {
 
-			const { spent: earth, moon } = limits.liveSpent( 0, { now, ...budgets, moon: 0 } );
+			const { spent: earth, moon } = await limits.liveSpent( 0, { now, ...budgets, moon: 0 } );
 			return [ earth, moon.spent ];
 
 		};
 		// A Moon area's room reporting 5, and a party's report of 3 on the Earth and 4 on the Moon.
-		limits.liveSpent( 0, { now, ...budgets, moon: 5, online: { room: TYCHO_AREA, dots: [] } } );
-		const both = limits.liveSpent( 3, { now, ...budgets, moon: 4 } );
+		await limits.liveSpent( 0, { now, ...budgets, moon: 5, online: { room: TYCHO_AREA, dots: [] } } );
+		const both = await limits.liveSpent( 3, { now, ...budgets, moon: 4 } );
 		assert.deepEqual( [ both.open, both.moon.open ], [ true, true ] );
-		assert.deepEqual( spent(), [ 3, 9 ] );
+		assert.deepEqual( await spent(), [ 3, 9 ] );
 		// A connection to a room on the Moon, and an ask for the Moon's dots: the Moon's.
 		assert.deepEqual( ( ( { open, closed } ) => ( { open, closed } ) )( await limits.liveOpen( { now, ...budgets, world: 'moon', visit: 'moon-visit', room: TYCHO_AREA } ) ), { open: true, closed: [] } );
 		limits.liveOnline( { now, ...budgets, world: 'moon', ttl: TTL, most: ONLINE_AREAS } );
-		assert.deepEqual( spent(), [ 3, 11 ] );
+		assert.deepEqual( await spent(), [ 3, 11 ] );
 		// /api/config's ask: the Earth's, and both said.
 		assert.deepEqual( await limits.liveOpen( { now, ...budgets } ), { open: true, spent: 4, moon: { open: true, spent: 11 } } );
 		// The Earth's spent: the Moon still open; the ask then the Moon's.
-		const earthDone = limits.liveSpent( 6, { now, ...budgets } );
+		const earthDone = await limits.liveSpent( 6, { now, ...budgets } );
 		assert.deepEqual( [ earthDone.open, earthDone.moon.open ], [ false, true ] );
 		assert.deepEqual( await limits.liveOpen( { now, ...budgets } ), { open: false, spent: 10, moon: { open: true, spent: 12 } } );
 		assert.equal( ( await limits.liveOpen( { now, ...budgets, visit: 'earth-visit', room: FURKA_AREA } ) ).open, false );
 		// A connection let in on the Moon hears that the Earth's is spent (its room lets it drive
 		// nowhere else), and that look at the Earth's counts nothing; one moving room says so too.
-		const [ earthBefore, moonBefore ] = spent();
+		const [ earthBefore, moonBefore ] = await spent();
 		const lunar = await limits.liveOpen( { now, ...budgets, world: 'moon', visit: 'moon-visit-2', room: TYCHO_AREA } );
 		assert.deepEqual( [ lunar.open, lunar.closed ], [ true, [ 'earth' ] ] );
 		const moved = await limits.liveOpen( { now, ...budgets, world: 'moon', visit: 'moon-visit-2', room: 'party:ABCDEFG' } );
 		assert.deepEqual( [ moved.open, moved.closed, moved.was ], [ true, [ 'earth' ], TYCHO_AREA ] );
-		assert.deepEqual( spent(), [ earthBefore, moonBefore + 3 ] );
+		assert.deepEqual( await spent(), [ earthBefore, moonBefore + 3 ] );
 		// A Moon room's dots are kept while the Moon's open, whatever the Earth's.
-		limits.liveSpent( 0, { now, ...budgets, moon: 1, online: { room: TYCHO_AREA, dots: [ { lat: - 43.31, lon: - 11.36, height: - 1200, count: 1 } ] } } );
+		await limits.liveSpent( 0, { now, ...budgets, moon: 1, online: { room: TYCHO_AREA, dots: [ { lat: - 43.31, lon: - 11.36, height: - 1200, count: 1 } ] } } );
 		assert.deepEqual( limits.rows().map( row => row.room ), [ TYCHO_AREA ] );
 		// A caller that says nothing of the Moon (a room from before): all of it the Earth's.
 		const old = fresh();
-		old.liveSpent( 4, { now, budget: 10 } );
-		assert.deepEqual( ( ( { spent: e, moon } ) => [ e, moon.spent ] )( old.liveSpent( 0, { now, budget: 10 } ) ), [ 4, 4 ] );
+		await old.liveSpent( 4, { now, budget: 10 } );
+		assert.deepEqual( ( ( { spent: e, moon } ) => [ e, moon.spent ] )( await old.liveSpent( 0, { now, budget: 10 } ) ), [ 4, 4 ] );
 
 	} );
 
@@ -3989,6 +4167,46 @@ describe( 'DriveLimits keeping who\'s driving now, here on SQLite', () => {
 		// The next day, fresh (and the day before's rows gone).
 		assert.equal( ( await open( 'visit-four-AAAAAAAAAAAm', 'address-key-1', now + DAY ) ).refused, undefined );
 		assert.equal( limits.sql.exec( 'SELECT * FROM live_addresses' ).toArray().length, 1 );
+
+	} );
+
+	test( 'each address may spend only its share of each world\'s day (its budget over `share`): what its connections spent as rooms report it, past that on a world, is in over and turns it away there (\'share\'), not on the other world, nor another address, nor the owner (no address); malformed entries left out; kept only as hashes, gone with the day', async () => {
+
+		const limits = fresh();
+		const budgets = { budget: 80, moonBudget: 40 };
+		const share = 4;
+		let visits = 0;
+		const open = ( world, address, at = now ) => limits.liveOpen( { now: at, ...budgets, world, visit: `visit-${ ++ visits }-AAAAAAAAAAm`, room: world === 'moon' ? TYCHO_AREA : FURKA_AREA, ...( address ? { address, share } : {} ) } );
+		const refusal = async ( ...args ) => ( await open( ...args ) ).reason ?? null;
+		// The Moon's share is 10 and the Earth's 20: address-key-1 at 6 on the Moon, address-key-2 at 3.
+		const first = await limits.liveSpent( 0, { now, ...budgets, moon: 9, addresses: [ { from: 'address-key-1', earth: 0, moon: 6 }, { from: 'address-key-2', moon: 3 } ], share } );
+		assert.equal( first.over, undefined );
+		assert.equal( await refusal( 'moon', 'address-key-1' ), null );
+		// Then 4 more on the Moon (10, its share) and 2 on the Earth: over on the Moon only.
+		const second = await limits.liveSpent( 2, { now, ...budgets, moon: 5, addresses: [ { from: 'address-key-1', moon: 4, earth: 2 }, { from: 'address-key-2', moon: 1 } ], share } );
+		assert.deepEqual( second.over, { earth: [], moon: [ 'address-key-1' ] } );
+		assert.equal( await refusal( 'moon', 'address-key-1' ), 'share' );
+		assert.equal( await refusal( 'earth', 'address-key-1' ), null );
+		assert.equal( await refusal( 'moon', 'address-key-2' ), null );
+		assert.equal( await refusal( 'moon', null ), null );
+		// What's malformed is left out: not an object, no from or not text, a from too long, past the
+		// 64th, a negative or not a number.
+		const junk = [ null, 7, { moon: 50 }, { from: 9, moon: 50 }, { from: 'x'.repeat( 129 ), moon: 50 }, { from: 'address-key-3', moon: - 50, earth: 'lots' } ];
+		const many = Array.from( { length: 64 }, ( _, i ) => ( { from: `filler-${ i }`, moon: 0.1 } ) );
+		const third = await limits.liveSpent( 0, { now, ...budgets, addresses: [ ...junk, ...many.slice( 0, 58 ), { from: 'address-key-4', moon: 50 } ], share } );
+		assert.equal( third.over, undefined );
+		assert.equal( await refusal( 'moon', 'address-key-3' ), null );
+		assert.equal( await refusal( 'moon', 'address-key-4' ), null );
+		// Without a share (a room from before), nothing is counted by address.
+		assert.equal( ( await limits.liveSpent( 0, { now, ...budgets, addresses: [ { from: 'address-key-2', moon: 50 } ] } ) ).over, undefined );
+		assert.equal( await refusal( 'moon', 'address-key-2' ), null );
+		// What's kept: hashes of the day's salt and each, never the address's key.
+		const rows = JSON.stringify( limits.sql.exec( 'SELECT * FROM live_address_spent' ).toArray() );
+		assert.ok( JSON.parse( rows ).length >= 3 );
+		for ( const secret of [ 'address-key', 'filler' ] ) assert.ok( ! rows.includes( secret ), secret );
+		// The next day, fresh (and the day before's rows gone).
+		assert.equal( await refusal( 'moon', 'address-key-1', now + DAY ), null );
+		assert.equal( limits.sql.exec( 'SELECT * FROM live_address_spent' ).toArray().length, 0 );
 
 	} );
 

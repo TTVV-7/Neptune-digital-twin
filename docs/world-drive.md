@@ -1533,7 +1533,10 @@ there and then (`CLOSE.off`, `budget`), before anyone hears where; on a world sw
 room keeps it, `admitted`), as does what a connection still on a spent world's ground had spent
 when the room closes it, if it was let in on the other, still open: the Moon's budget bounds what
 connections let in on the Moon cost. And a connection's spend, as it goes, is carried by one on the
-same world if there is one, so it's counted against the world it was spent on.
+same world if there is one; with nobody left on that world (a party with only the other world's
+drivers in it), one on the other carries it apart from its own, in its attachment (so it outlasts
+hibernation), as that world's: either way it's counted against the world it was spent on, never the
+other's.
 
 **Bounded per address, as the Earth's are.** The Earth's visits are capped at 8 a day for each
 address (30 a day for a supporter, counted by account; the owner's not at all), and so are their
@@ -1547,8 +1550,31 @@ hash of the day's salt with the address's keyed hash (the challenges' `lookKey`,
 and the day with a key from the Worker's secret) and one of the salt with the visit's id
 (`live_addresses`, deleted with the day): neither an address nor a visit can be read from it, nor
 linked to the next day. So one address has at most 8 Earth visits a day (30 for a supporter, by
-account) and 20 Moon visits, each with one room at a time, each sending at most 20 messages a
-second, and the Moon's budget bounds what the Moon's cost.
+account) and 20 Moon visits, each with one room at a time.
+
+But a count of visits doesn't bound what each connection spends: one may send 20 messages a second,
+each a twentieth of a request whatever it is (even keepalives, even alone in its room), about
+3,700 requests an hour. Twenty Moon visits from one address would spend the Moon's 20,000 in about
+16 minutes, and its 8 Earth visits the Earth's 40,000 in about 80, closing that world for everyone
+until midnight UTC. So **each address may spend only its share of each world's day**: the budget
+over `LIVE_ADDRESS_SHARE` (**8**), 5,000 requests on the Earth and 2,500 on the Moon (about five
+and a half hours of driving with others on the Earth, nearly three on the Moon, and many more alone).
+Every visit but the owner's counts, Earth and Moon visits alike, on whichever world it's driving. A
+room's reports say what each address's connections spent themselves (by the same keyed hash,
+`from`: never what one carries for another as it goes), `DriveLimits` adds each up for the day under
+a hash of the day's salt with it (`live_address_spent`, deleted with the day, as `live_addresses`)
+and says which are past their share on a world; the room closes those addresses' connections on that
+world (`CLOSE.rate`, which any page, old or new, takes as a dropped connection), and `/api/live`
+turns that address away there for the rest of the day (429, "Too many drivers from here today"),
+remembered by the Worker instance until midnight UTC, so the next visit from it isn't another ask of
+`DriveLimits` (the same for an address past its Moon visits). An address is closed within about a
+minute of passing its share (its rooms report once a minute while they've that much to say), so it
+can go past it by what its connections send in that minute (up to about 1,200 requests with all 20
+Moon visits flat out), and it takes about eight addresses (or /48s), however fast, to spend either
+world's day.
+What a connection leaves in a room just before it hibernates, and what a report says beyond 64
+addresses (a room has far fewer), is counted against the world's budget but not its address's:
+little, as a room only hibernates while nobody's sending.
 
 **Old pages.** The page speaks a new version of the protocol, `worlddrive-live.v2` (PLACE and
 PLAYER with a `world`, an away with the world of its globe, the Moon's areas and frame), and offers
@@ -1578,11 +1604,12 @@ times, a shared machine), 0.6 to 1.2 µs a frame, against 0.1 µs with no car, s
 microsecond more, a hundred-thousandth of a 60 fps frame even on a phone several times slower. The
 others' cars (`ghosts.update`) and the dots (`online.update`, nothing while driving) loop over
 nothing when alone, as before. Frame time in Chromium's software renderer can't show that: on a
-phone on its side (760 × 390), with five others' cars drawn a frame took about 1.15 to 1.25 s and
-alone 1.15 to 1.28 s (the middle of 12 frames each, in four runs of the builder's and one of a
-reviewer's, on a shared machine; the Moon's ground is nearly all of it there; measured in
-`test-drive-live-ui.mjs`): five cars cost nothing that shows, and that comparison was only made on
-the new code. The game's code (loaded with the globe, after the robot check, as
+phone on its side (760 × 390), a frame with five others' cars drawn took 0.94 to 1.0 times as long
+as alone, in each of eight runs (the middle of 12 frames each, measured in `test-drive-live-ui.mjs`,
+the Moon's ground being nearly all of it there). What a frame takes in itself depends on how loaded
+the shared machine was: from about 0.6 s to 1.3 s alone across those runs (1,033 ms both alone and
+with five in the last). Five cars cost nothing that shows, and that comparison was only
+made on the new code. The game's code (loaded with the globe, after the robot check, as
 before) is 3.7 kB bigger, 1.5 kB gzipped; the page's first script 0.1 kB.
 
 **How it's tested:** `npm run test:drive-live` has the protocol's Moon (an area as big as the
@@ -2011,6 +2038,7 @@ of each day once it has spent that day's budget (below).
 | `LIVE_DAILY_BUDGET` | 40000 (in `vars`) | The Durable Object requests a day it may use on the Earth; 0 is off there |
 | `LIVE_MOON_DAILY_BUDGET` | 20000 (in `vars`) | The Moon's, apart; 0 is off on the Moon |
 | `LIVE_ADDRESS_VISITS` | 20 (unset) | The most Moon visits (not counted by the Earth's caps) connecting from one address a day |
+| `LIVE_ADDRESS_SHARE` | 8 (unset) | One address's connections may spend each world's budget over this in a day (5,000 on the Earth, 2,500 on the Moon); the owner's aren't counted |
 | `LIVE_PARTY_MAX` | 8 (unset) | The most in a party |
 | `LIVE_NEARBY_MAX` | 20 (unset) | The most in each of an area's rooms |
 | `LIVE_VISIT_CONNECTS` | 200 (unset) | The most connections to rooms a visit makes in a day |
@@ -2092,7 +2120,7 @@ Worked through:
 | A driver with others, an hour on the move (5 a second) | 18,000 | 900 |
 | With others, parked, an hour (once every 2 s); or on the move with only those on the globe | 1,800 | 90 |
 | The keepalives of a page with nothing else to say (alone, or on the globe in a party), an hour | 144 | about 7 |
-| A room with drivers moving in it, an hour (an alarm and a report to `DriveLimits` each minute) | | 120, and 120 rows written |
+| A room with drivers moving in it, an hour (an alarm and a report to `DriveLimits` each minute) | | 120, and 120 rows written (and one more a report for each address its drivers come from, its share's count) |
 | A driver alone in a room, an hour, all told (its keepalives, the room's alarm about every 50 s, a report every 5 minutes or so) | 144 | about 93 (110 for a tab in the background, keepalives once a minute) |
 | Connecting to a room (the Worker's ask, the connection, and an alarm 10 s later for its hello) | | 3 (and 2 rows written), 1 more on a change of room |
 | A page load (`/api/config`'s ask, at most one every 30 s in each Worker instance) | | 0 or 1 |
@@ -2245,7 +2273,7 @@ the Worker both import, so the page shows what the Worker counts.
 | Each second in the air off a jump (not flying) | 3 |
 | Each drift boost paid out | 8 |
 | Each boost pad driven over | 4 |
-| Each minute driving with others in your room (someone else there and not on the globe) | 6 |
+| Each minute driving with others in your room (someone else there, driving on the same world: not on the globe, nor a party friend on the other world) | 6 |
 | The first drive in an area (live-protocol.js's `cellOf`, about 11 km across), once you've driven a km in it | 100 |
 | Each start spot, the first time (driving within 300 m of it, 100 m into the drive) | 250 |
 | The day's first drive (UTC days), once you've driven 250 m | 100, and 25 more for each day in a row before it, up to 200 from the fifth |
@@ -3897,7 +3925,7 @@ share), a day, as `metric:key`:
 | `device` | `phone`, `tablet`, `computer` | What the visit's on (once): a fine main pointer (a mouse, a trackpad) is a computer's, whatever its screen; a coarse one (a finger, `pointer: coarse`) is a tablet's when the screen's shorter side is 600 CSS px or more, else a phone's. A laptop with a touch screen is a computer, and so is a tablet with a trackpad |
 | `dropin`, `ride` | a start spot's id, `other` or `moon`; a ride | Where drop-ins are and in what: this key never says where off a start spot; the drop-in's cell, to about a kilometre, goes to [where people drop in](#where-people-drop-in) |
 | `dropin_time` | under 5 s, 5-10 s, 10-20 s, 20-40 s, over 40 s | How long each drop-in took, from Drive here to driving |
-| `play`, `play_world`, `play_with_others` | a ride; `earth` or `moon`; `all` | Seconds driven, not paused: by ride, by world, and with others driving on the same world (as levels count together: not those on the globe, nor a party friend on the other world) |
+| `play`, `play_world`, `play_with_others` | a ride; `earth` or `moon`; `all` | Seconds driven, not paused: by ride, by world, and with others driving on the same world (as levels count together: not those on the globe, nor a party friend on the other world). From the release that brought driving with others to the Moon (November 2026), `play_with_others` means that: before, it counted any time with anyone else in the room (a party friend on the globe too) and never the Moon, so the admin page's **With others** row against the period before it compares two meanings, not a trend |
 | `world` | `moon` | Each time the globe turns to the Moon |
 | `search` | `earth`, `moon`, `coordinates`, `nothing` | Searches made: of the map, of the Moon's places, coordinates typed; and, as well, each map or Moon search that found nothing. Never what was typed |
 | `problem` | `no_ground`, `ride_failed`, `moon_failed`, `map_failed`, `map_session_ended`, `drop_abandoned` | What went wrong: no ground at a drop-in (no 3D map there, or the Moon's ground not loading), a ride's model not loading (whether the go-kart was driven instead or not), the Moon not loading, Google's map not loading at all, Google refusing the visit's tiles (its map session over), and a drop-in left for the globe before it was driving. The two map ones once a visit; the others each time |

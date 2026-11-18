@@ -1,12 +1,12 @@
 import { DurableObject } from 'cloudflare:workers';
-import { sha256Hex } from '../http.js';
+import { isObject, sha256Hex } from '../http.js';
 import { busiest, checkDot, EARTH, MOON_WORLD, parseRoom, ROOM_DOTS, worldOfRoom } from '../../src/drive-app/live-protocol.js';
 
 // One of these for everyone (named "global", see index.js): it counts the day's visits, in all and
 // per visitor, the leaderboard's new names and scores per visitor, and what driving with others has
-// spent of its budget and which room each visit is in (liveOpen, liveSpent), where people are driving
-// now for the globe (liveSpent, liveOnline), which drop-in places may be counted (places), and
-// spaces out the searches sent on to OpenStreetMap.
+// spent of its budget (and each address's share of it) and which room each visit is in (liveOpen,
+// liveSpent), where people are driving now for the globe (liveSpent, liveOnline), which drop-in
+// places may be counted (places), and spaces out the searches sent on to OpenStreetMap.
 // A Durable Object handles one call at a time, and each check-and-count below runs in one go with
 // nothing in between, so two visits arriving together can't both take the last drive of the day.
 // Counts are kept in its SQLite storage (on every plan, the free one too), so a restart doesn't
@@ -20,6 +20,8 @@ const SEARCH_GAP = 1000;
 const SEARCH_QUEUE = 3000;
 // The drop-in places' HMAC key's label (placesKey), so it's a key of its own, not the visit tokens'.
 const PLACES_LABEL = 'world-drive drop-in places v1';
+// The most addresses a room's report may say what they spent (see liveSpent).
+const ADDRESSES_MOST = 64;
 const encoder = new TextEncoder();
 
 export class DriveLimits extends DurableObject {
@@ -47,6 +49,10 @@ export class DriveLimits extends DurableObject {
 		// address being already the challenges' keyed hash of its /48 and the day), so neither an
 		// address nor a visit's id is kept, nor can be linked from one day to the next.
 		this.sql.exec( 'CREATE TABLE IF NOT EXISTS live_addresses ( day TEXT NOT NULL, address TEXT NOT NULL, visit TEXT NOT NULL, PRIMARY KEY ( day, address, visit ) ) WITHOUT ROWID' );
+		// What each address's connections have spent themselves today on each world (billed requests,
+		// as the rooms report them, see liveSpent), by the same salted hash of the address: each address
+		// may spend only its share of a world's day (liveOpen, liveSpent).
+		this.sql.exec( 'CREATE TABLE IF NOT EXISTS live_address_spent ( day TEXT NOT NULL, address TEXT NOT NULL, world TEXT NOT NULL, spent REAL NOT NULL, PRIMARY KEY ( day, address, world ) ) WITHOUT ROWID' );
 		// And each visit's connections to its rooms today (see liveOpen): the room it's in now, and how
 		// many it has made. A visit's id is a random one of its own (visits.js), never its address.
 		this.sql.exec( 'CREATE TABLE IF NOT EXISTS live_visits ( day TEXT NOT NULL, visit TEXT NOT NULL, room TEXT NOT NULL, connects INTEGER NOT NULL, PRIMARY KEY ( day, visit ) )' );
@@ -325,12 +331,15 @@ export class DriveLimits extends DurableObject {
 	// without end. And whether the other world's day is spent too (`closed`: [ that world ], else
 	// []), looked at and not counted: a party's room lets nobody move onto a world that's closed (see
 	// DriveRoom's closedTo), so a connection let in on the Moon's budget can't drive on a spent Earth.
-	async liveOpen( { now, budget, moonBudget = budget, world = EARTH, visit = null, room = null, connects = Infinity, address = null, addressVisits = Infinity } ) {
+	// Any visit but the owner's comes with its `address` and `share`: an address whose connections
+	// have spent a world's budget over `share` today (see liveSpent) is turned away on that world, {
+	// open, spent, refused: true, reason: 'share' }, whatever its visits.
+	async liveOpen( { now, budget, moonBudget = budget, world = EARTH, visit = null, room = null, connects = Infinity, address = null, addressVisits = null, share = null } ) {
 
 		const day = dayOf( now );
 		const salt = this.saltFor( day );
 		const [ addressKey, visitKey ] = address !== null && visit !== null
-			? await Promise.all( [ sha256Hex( `${ salt }:live-address:${ address }` ), sha256Hex( `${ salt }:live-visit:${ visit }` ) ] )
+			? await Promise.all( [ addressHash( salt, address ), sha256Hex( `${ salt }:live-visit:${ visit }` ) ] )
 			: [ null, null ];
 		const moon = world === MOON_WORLD;
 		return this.ctx.storage.transactionSync( () => {
@@ -351,7 +360,8 @@ export class DriveLimits extends DurableObject {
 			const row = this.sql.exec( 'SELECT room, connects FROM live_visits WHERE day = ? AND visit = ?', day, visit ).toArray()[ 0 ];
 			const seq = ( row?.connects ?? 0 ) + 1;
 			if ( seq > connects ) return { ...today, refused: true };
-			if ( addressKey ) {
+			if ( addressKey && share > 0 && addressSpent( this.sql, day, addressKey, world ) >= own / share ) return { ...today, refused: true, reason: 'share' };
+			if ( addressKey && Number.isFinite( addressVisits ) ) {
 
 				const known = this.sql.exec( 'SELECT 1 AS known FROM live_addresses WHERE day = ? AND address = ? AND visit = ?', day, addressKey, visitKey ).toArray()[ 0 ];
 				if ( ! known ) {
@@ -379,16 +389,45 @@ export class DriveLimits extends DurableObject {
 	// says where its drivers are too, `online`: { room, dots }, kept for the globe (liveOnline) with
 	// the time, or let go of with no dots (and with its world's budget for the day spent, as the room
 	// is about to close everyone).
-	liveSpent( amount, { now, budget, moon = 0, moonBudget = null, online = null } ) {
+	// It says too what each address's connections spent themselves, `addresses`: [ { from, earth,
+	// moon } ] with from the challenges' lookKey (kept only as a hash of the day's salt and it, as in
+	// liveOpen), each added to that address's today; those whose spend on a world comes to its budget
+	// over `share` or more are in the answer's over: { earth: [ from ], moon: [ from ] }, and the room
+	// closes their connections there (and liveOpen turns them away for the rest of the day).
+	async liveSpent( amount, { now, budget, moon = 0, moonBudget = null, online = null, addresses = null, share = null } ) {
 
 		const day = dayOf( now );
-		this.saltFor( day );
+		const salt = this.saltFor( day );
 		const add = value => Number.isFinite( value ) && value > 0 ? value : 0;
+		const spenders = Array.isArray( addresses ) && share > 0
+			? addresses.slice( 0, ADDRESSES_MOST ).filter( a => isObject( a ) && typeof a.from === 'string' && a.from.length > 0 && a.from.length <= 128 )
+			: [];
+		const keys = await Promise.all( spenders.map( a => addressHash( salt, a.from ) ) );
 		return this.ctx.storage.transactionSync( () => {
 
 			const earth = addLive( this.sql, day, add( amount ), budget, EARTH );
 			const lunar = moonBudget === null ? earth : addLive( this.sql, day, add( moon ), moonBudget, MOON_WORLD );
 			const today = { ...earth, moon: { open: lunar.open, spent: lunar.spent } };
+			if ( spenders.length ) {
+
+				const over = { [ EARTH ]: [], [ MOON_WORLD ]: [] };
+				const shares = { [ EARTH ]: budget / share, [ MOON_WORLD ]: ( moonBudget ?? budget ) / share };
+				spenders.forEach( ( a, i ) => {
+
+					for ( const w of [ EARTH, MOON_WORLD ] ) {
+
+						const amount = add( a[ w ] );
+						if ( ! amount ) continue;
+						this.sql.exec( 'INSERT INTO live_address_spent ( day, address, world, spent ) VALUES ( ?, ?, ?, ? ) ON CONFLICT ( day, address, world ) DO UPDATE SET spent = spent + excluded.spent', day, keys[ i ], w, amount );
+						if ( addressSpent( this.sql, day, keys[ i ], w ) >= shares[ w ] ) over[ w ].push( a.from );
+
+					}
+
+				} );
+				if ( over[ EARTH ].length || over[ MOON_WORLD ].length ) today.over = over;
+
+			}
+
 			const room = typeof online?.room === 'string' ? parseRoom( online.room ) : null;
 			if ( room?.kind !== 'near' ) return today;
 			const open = room.world === MOON_WORLD ? lunar.open : earth.open;
@@ -473,7 +512,7 @@ export class DriveLimits extends DurableObject {
 
 			this.sql.exec( 'DELETE FROM visitors WHERE day < ?', day );
 			this.sql.exec( 'DELETE FROM turns WHERE day < ?', day );
-			for ( const table of [ 'live', 'live_moon', 'live_visits', 'live_addresses' ] ) this.sql.exec( `DELETE FROM ${ table } WHERE day < ?`, day );
+			for ( const table of [ 'live', 'live_moon', 'live_visits', 'live_addresses', 'live_address_spent' ] ) this.sql.exec( `DELETE FROM ${ table } WHERE day < ?`, day );
 			for ( const table of [ 'place_seen', 'place_totals', 'place_visitors', 'place_visits', 'password_fails' ] ) this.sql.exec( `DELETE FROM ${ table } WHERE day < ?`, day );
 			this.sql.exec( 'DELETE FROM days WHERE day < ?', day );
 			this.sql.exec( 'INSERT OR IGNORE INTO days ( day, salt ) VALUES ( ?, ? )', day, salt );
@@ -494,6 +533,21 @@ function addLive( sql, day, amount, budget, world = EARTH ) {
 	sql.exec( `INSERT INTO ${ table } ( day, spent ) VALUES ( ?, ? ) ON CONFLICT ( day ) DO UPDATE SET spent = spent + excluded.spent`, day, amount );
 	const spent = sql.exec( `SELECT spent FROM ${ table } WHERE day = ?`, day ).one().spent;
 	return { open: spent < budget, spent };
+
+}
+
+// An address (the challenges' lookKey) as DriveLimits keeps it for driving with others: a hash of
+// the day's `salt` and it.
+function addressHash( salt, address ) {
+
+	return sha256Hex( `${ salt }:live-address:${ address }` );
+
+}
+
+// What the address kept as `key` (addressHash) has spent itself today (`day`) on `world`.
+function addressSpent( sql, day, key, world ) {
+
+	return sql.exec( 'SELECT spent FROM live_address_spent WHERE day = ? AND address = ? AND world = ?', day, key, world ).toArray()[ 0 ]?.spent ?? 0;
 
 }
 

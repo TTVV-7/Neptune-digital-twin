@@ -872,8 +872,9 @@ craters smaller than a few kilometres are made up, the same on every visit, down
 ground is a quadtree of squares on a cube blown up into a sphere, a point every 1.3 m by the
 vehicle. It has a dozen start spots (the Apollo sites, Tycho, Copernicus, a pole, the far side) and
 its own search; you drive it in a sixth of the Earth's gravity (jumps as high, two and a half times
-as long, scored as on the Earth), under black sky with the Earth hanging in it, with no water, and on
-your own: driving with others is the Earth's. It needs no Google tiles, so `npm run dev:drive` has the
+as long, scored as on the Earth), under black sky with the Earth hanging in it, with no water; and
+driving with others is there too, in the Moon's own rooms (see [Driving with others on the
+Moon](docs/world-drive.md#driving-with-others-on-the-moon)). It needs no Google tiles, so `npm run dev:drive` has the
 real Moon without a key (see [The Moon](docs/world-drive.md#the-moon)).
 
 World Drive's fourteen cars are models from Sketchfab (CC BY, credited in its About box and ride

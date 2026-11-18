@@ -1820,7 +1820,7 @@ describe( 'World Drive, driving with others on the Moon', () => {
 
 		[ a, b ] = await Promise.all( [
 			livePage( { token: await visitToken(), player: ana, viewport: { width: 640, height: 400 } } ),
-			livePage( { token: await visitToken(), viewport: { width: 640, height: 400 } } ),
+			livePage( { token: await visitToken(), viewport: { width: 640, height: 400 }, stats: true } ),
 		] );
 
 	} );
@@ -1857,6 +1857,28 @@ describe( 'World Drive, driving with others on the Moon', () => {
 		await shot( b, 'moon-live-1-two-drivers' );
 		// The chip says it's the two of them, nearby.
 		await b.locator( '#drive-ui .live-chip', { hasText: 'Nearby · 2' } ).waitFor();
+		// Driving together on the Moon is driving with others, as on the Earth: in the play stats
+		// (play_with_others, which only ever moves while it's counted: a post takes whole seconds off
+		// it, from nothing if it never was) and for levels (their together, in minutes, here or on its
+		// way to the Worker or kept for a guest).
+		const together = () => b.evaluate( () => {
+
+			const progress = window.drive.progress;
+			const kept = JSON.parse( localStorage.getItem( 'world-drive.progress' ) ?? '{}' );
+			const minutes = ( progress.unsent?.together || 0 ) + ( progress.flying?.sent?.together || 0 ) + ( kept.local?.totals?.together || 0 );
+			return [ window.drive.stats.counts[ 'play_with_others:all' ] ?? 0, minutes ];
+
+		} );
+		const [ othersBefore, minutesBefore ] = await together();
+		await b.waitForFunction( before => Math.abs( ( window.drive.stats.counts[ 'play_with_others:all' ] ?? 0 ) - before ) >= 0.3, othersBefore, { timeout: 120000 } );
+		await b.waitForFunction( before => {
+
+			const progress = window.drive.progress;
+			const kept = JSON.parse( localStorage.getItem( 'world-drive.progress' ) ?? '{}' );
+			return ( progress.unsent?.together || 0 ) + ( progress.flying?.sent?.together || 0 ) + ( kept.local?.totals?.together || 0 ) - before >= 0.3 / 60;
+
+		}, minutesBefore, { timeout: 120000 } );
+		assert.ok( ( await together() )[ 1 ] > minutesBefore );
 
 	} );
 
@@ -1969,9 +1991,19 @@ describe( 'World Drive, driving with others on the Moon', () => {
 		await d.waitForFunction( before => Math.abs( ( window.drive.stats.counts[ 'play_world:earth' ] ?? 0 ) - before ) >= 0.3, earthBefore, { timeout: 120000 } );
 		const [ , othersAfter ] = await played();
 		assert.ok( othersAfter <= othersBefore, `${ othersBefore } s with others, then ${ othersAfter } s` );
-		// A back to the Moon's globe and in again: D, on the Earth, is told, and Join takes D to the
-		// Moon, beside her.
+		// A back to the Moon's globe: D, on the Earth, has her "on the Moon's globe" (not only "on the
+		// globe", as one on its own would be), in its list and its pause menu's party; then in again:
+		// D is told, and Join takes D to the Moon, beside her.
 		await a.evaluate( () => window.drive.toGlobe() );
+		await d.waitForFunction( () => [ ...window.drive.live.players.values() ].some( p => p.away && p.world === 'moon' ), null, { timeout: 30000 } );
+		await d.locator( '#drive-ui .live-chip' ).click();
+		await d.waitForFunction( () => / · on the Moon's globe$/.test( document.querySelector( '#drive-ui .players li .what' )?.textContent ?? '' ), null, { timeout: 30000 } );
+		await shot( d, 'moon-live-8b-phone-list-on-the-moons-globe' );
+		await d.locator( '#drive-ui .live-chip' ).click();
+		await d.keyboard.press( 'Escape' );
+		await d.locator( '#pause .friends .members', { hasText: 'on the Moon\'s globe' } ).waitFor( { timeout: 10000 } );
+		await d.keyboard.press( 'Escape' );
+		await d.locator( '#pause' ).waitFor( { state: 'hidden', timeout: 10000 } );
 		await dropInMoon( a );
 		const went = d.locator( '#toast', { hasText: 'went to Tranquility Base (Moon).' } );
 		await went.waitFor( { timeout: 30000 } );
@@ -2139,9 +2171,11 @@ describe( 'World Drive, the day\'s budget for driving with others spent', () => 
 
 		// The Worker again (LIVE on) with a budget of 40 Durable Object requests a day on the Earth,
 		// which this test then spends by connecting to rooms, as drivers do (page loads ask DriveLimits
-		// only every 30 s, so they spend little). The Moon's is its own, and isn't spent.
+		// only every 30 s, so they spend little). The Moon's is its own, and isn't spent. (Every
+		// connection here is from one address, so its share is the whole budget: one address's share
+		// of a small one would turn it away first, as too many from here.)
 		const toast = 'Lots of drivers on the Earth today: driving with others there is back after midnight UTC. You can still drive with others on the Moon.';
-		await restartWorker( { LIVE_DAILY_BUDGET: '40' } );
+		await restartWorker( { LIVE_DAILY_BUDGET: '40', LIVE_ADDRESS_SHARE: '1' } );
 		const page = await livePage( { token: await visitToken() } );
 		assert.ok( await page.locator( '#globe-ui .friends' ).isVisible() );
 		let opened = 0;

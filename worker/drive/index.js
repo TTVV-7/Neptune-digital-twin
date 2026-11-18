@@ -63,6 +63,8 @@ export { DriveRoom } from './live.js';
 //                         Moon's rooms, nor the Moon's the Earth's; 0 is off on the Moon
 //   LIVE_ADDRESS_VISITS   the most visits not counted against the Earth's caps (the Moon's) that
 //                         connect to rooms from one address (an IPv6 one by its /48) in a day (20)
+//   LIVE_ADDRESS_SHARE    each world's budget over this (8 if unset) is what one address's
+//                         connections may spend there in a day (the owner's aren't counted)
 //   LIVE_PARTY_MAX, LIVE_NEARBY_MAX   the most in a party (8 if unset) and in an area's room (20)
 //   LIVE_VISIT_CONNECTS   the most connections to rooms a visit makes in a day (200 if unset)
 //   ROOMS                 the Durable Object binding for the rooms (DriveRoom, live.js)

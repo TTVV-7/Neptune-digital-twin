@@ -899,14 +899,13 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		scene, earth, frame: () => onMoon() ? moon.group : earth, camera, vehicles, models: ghostShapes, live, tags: $( 'live-tags' ), own: () => state.entry?.pivot ?? null,
 		effects: driver.effects,
 	} );
-	const liveMode = () => state.mode;
-	const friends = live && setUpFriends( { live, ghosts, vehicles, mode: liveMode, goTo, onInvite: () => stats.add( 'party', 'made' ) } );
+	const friends = live && setUpFriends( { live, ghosts, vehicles, mode: () => state.mode, goTo, onInvite: () => stats.add( 'party', 'made' ) } );
 	// Where people are driving now, on the globe (online.js): with driving with others, and nothing
 	// of it without; on the Moon's globe, the Moon's.
 	const globeUi = $( 'globe-ui' );
 	const online = live && createOnline( {
 		camera, earth, ellipsoid, moon: { group: moon.group, ellipsoid: MOON_ELLIPSOID }, world: () => world, onWorld: next => setWorld( next ),
-		canvas, live, panel, mode: liveMode, onPick: flyToPlace, onZoom: zoomTo, earthless: !! moonOnly,
+		canvas, live, panel, mode: () => state.mode, onPick: flyToPlace, onZoom: zoomTo, earthless: !! moonOnly,
 		// The Garage covers the globe (the whole screen on a phone): nothing's asked while it's open.
 		paused: () => garage.isOpen,
 		layer: globeUi.querySelector( '.online-dots' ),
