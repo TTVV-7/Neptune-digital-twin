@@ -229,10 +229,10 @@ test( 'the 17 November progress drawing: its dates, and the panel numbers on the
 
 } );
 
-test( 'C31\'s downstands: along each wall under the slab, and the ground floor plan\'s areas along the walls on their undersides', () => {
+test( 'C31\'s downstands: along each wall under the slab, their undersides at EL +1.22', () => {
 
-	// Up from the gallery's floor beside each wall: the downstand's underside at EL +1.22; in the
-	// middle, up past it to the cross beam or the slab.
+	// Up from the gallery's floor beside each wall: the downstand's underside; in the middle, up past
+	// it to the cross beam or the slab.
 	for ( const x of [ 10, 30, 50, 60 ] ) {
 
 		near( cast( [ x, 0, 3.1 ], [ 0, 1, 0 ] ), 1.22, `east downstand at grid ${ x }` );
@@ -241,20 +241,11 @@ test( 'C31\'s downstands: along each wall under the slab, and the ground floor p
 
 	}
 
-	const under = data.markups.filter( m => /downstand/.test( m.face ) );
-	assert.equal( under.length, 33 );
-	for ( const m of under ) {
-
-		assert.ok( m.n[ 1 ] < - 0.99, `${ m.id } faces down` );
-		assert.ok( m.pts.every( p => Math.abs( p[ 1 ] - 1.22 ) < 0.01 ), `${ m.id } on the downstand's underside` );
-		const l = m.pts.map( p => - p[ 2 ] );
-		const east = /east/.test( m.face );
-		assert.ok( l.every( v => east ? v > 2.83 && v < 3.5 : v > 6.5 && v < 7.18 ), `${ m.id } within the downstand` );
-
-	}
-
-	// What's left on the slab's top: just the one drawn over the west pony wall.
-	assert.equal( data.markups.filter( m => m.face === 'ground floor slab' ).length, 1 );
+	// The ground floor plan's areas stay on the slab's top at grade.
+	const top = data.markups.filter( m => m.face === 'ground floor slab' );
+	assert.equal( top.length, 34 );
+	assert.ok( top.every( m => m.n[ 1 ] > 0.99 ) );
+	assert.equal( data.markups.filter( m => /downstand/.test( m.face ) ).length, 0 );
 
 } );
 
