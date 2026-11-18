@@ -4,13 +4,14 @@ import { ModelManager } from '../models.js';
 import { Driver } from '../drive.js';
 import { isTyping } from '../walk.js';
 import { useFastRaycast } from '../raycast.js';
-import { enuToLocal, localToLatLon } from '../geo.js';
+import { enuToLocal, localToEnu, localToLatLon, yawToHeading } from '../geo.js';
 import { createDriveHud } from '../drive-hud.js';
 import { GlobeView } from './globe.js';
 import { Ground } from './spawn.js';
-import { createTestGlobe, placeEarth } from './test-globe.js';
+import { createTestGlobe, placeBody, placeEarth } from './test-globe.js';
+import { levelled } from './level.js';
 import { createBody, LOOKS } from './body.js';
-import { EARTH, FALLBACK, MOON, OFF_EARTH, onWorld, TheWorld, WORLDS } from './worlds.js';
+import { EARTH, FALLBACK, MOON, OFF_EARTH, listOf, onWorld, TheWorld, WORLDS } from './worlds.js';
 import { loadVehicle, loadVehicles, lookOf, specOf } from './vehicles.js';
 import { setUpPanel } from './panel.js';
 import { setUpGarage } from './garage.js';
@@ -49,10 +50,12 @@ import * as screens from './screens.js';
 // 'driving' and 'paused'. M goes back to the globe from any of the others.
 //
 // Worlds (worlds.js): the Earth (Google's tiles), and the worlds made in the page from NASA's maps,
-// the Moon and Mars (body.js), picked on the globe's panel. On another world the globe is its own,
-// what's driven on is its ground, gravity is its own and there's no water; and you drive on your
-// own: nothing is sent to the room of who's driving (it's as if you were on the globe), and the
-// others' ghosts aren't drawn.
+// the Moon, Mars, Vesta and Ceres (body.js), picked on the globe's panel. On another world the globe
+// is its own, what's driven on is its ground, gravity is its own and there's no water; and you drive
+// on your own: nothing is sent to the room of who's driving (it's as if you were on the globe), and
+// the others' ghosts aren't drawn. On a small world (Vesta, Ceres: WORLDS' `recentre`), whose ground
+// curves away a few metres in a kilometre, the scene's frame is moved to the car as it drives
+// (follow), so the flat frame it drives in is always level where it is.
 
 const SKY = new Color( 0x9fcbee );
 const SPACE = new Color( 0x070c16 );
@@ -288,8 +291,10 @@ const GO_BESIDE = 5;
 // Moon's 1.62 m/s², Mars's 3.71), where its globe first shows it, the heights its ground can be at
 // (m over its sphere, made-up craters in), and its sun while driving, fixed in the scene, low enough
 // that every crater rim and rock has its light and shade (the Moon's from the south-west, 20° up).
-// On its globe the sun is over the viewer's left shoulder instead, so the side in view is lit. The
-// sunlight and the light from its sky on the vehicles are its look's.
+// On a small world whose scene's frame follows the car (follow), that's fixed to the frame: as high
+// over the ground wherever it's driven, and never jumping as the frame moves, while the stars turn
+// with the world. On its globe the sun is over the viewer's left shoulder instead, so the side in
+// view is lit. The sunlight and the light from its sky on the vehicles are its look's.
 const SUNS = Object.fromEntries( OFF_EARTH.map( id => [ id, enuToLocal( ...LOOKS[ id ].sun ).normalize() ] ) );
 // The longest air (s) a run may post: the Worker's limit (worker/drive/scores.js, MAX_AIR), which
 // the Moon's slow jumps could pass.
@@ -346,6 +351,7 @@ const _skim = new Vector3();
 const _skimFrom = new Vector3();
 const _focus = new Vector3();
 const _sun = new Vector3();
+const _before = new Matrix4();
 
 // key: the Maps key (none: the test globe and pad); left: free drives left today; visit: the
 // visit's token, for posting scores; worker: whether there's a Worker (not on the dev server alone);
@@ -423,7 +429,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	const seaWatch = { in: 0, asked: false, ready: false, spot: null };
 	// And the other worlds (body.js), each shown when it's picked: its ground, what hangs in its sky
 	// and its own sky (Mars's). Nothing of their files is fetched until then. Which world it is:
-	// worlds.js's id, 'earth', 'moon' or 'mars'.
+	// worlds.js's id, 'earth', 'moon', 'mars', 'vesta' or 'ceres'.
 	const bodies = Object.fromEntries( OFF_EARTH.map( id => [ id, createBody( id ) ] ) );
 	for ( const body of Object.values( bodies ) ) {
 
@@ -448,14 +454,14 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	const globe = new GlobeView( { camera, canvas, earth, surface: earth, ellipsoid, pin: $( 'pin' ) } );
 	scene.add( globe.air );
 	// The globe as each world has it (GlobeView.setBody): the Earth's, and each other world's, its
-	// size, its air (the Moon none, Mars a thin dusty glow), the heights its ground can be at and its
-	// heights worked out.
+	// size, its air (the Moon none, Mars a thin dusty glow), the heights its ground can be at, its
+	// heights worked out and, for a small world far from round, its level (level.js).
 	const earthBody = { earth, surface: earth, ellipsoid };
 	const globeBodies = Object.fromEntries( OFF_EARTH.map( id => {
 
 		const { group, terrain, ellipsoid: shape, radius } = bodies[ id ];
 		const { lowest, highest } = WORLDS[ id ];
-		return [ id, { earth: group, surface: terrain, ellipsoid: shape, radius, air: LOOKS[ id ].air ?? false, lowest, highest, heightAt: ( lat, lon ) => bodies[ id ].heightAt( lat, lon ) } ];
+		return [ id, { earth: group, surface: terrain, ellipsoid: shape, radius, air: LOOKS[ id ].air ?? false, lowest, highest, heightAt: ( lat, lon ) => bodies[ id ].heightAt( lat, lon ), level: levelled( id ) ? id : null } ];
 
 	} ) );
 	globe.place( globe.orbit( home.lat, home.lon ) );
@@ -494,6 +500,12 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	const screenFx = createScreenFx( { scene, driver, toggle: $( 'pause' ).querySelector( '.camera-toggle' ), touch: () => document.body.classList.contains( 'touch' ) } );
 
 	const state = { mode: 'globe', place: null, entry: null, vehicle: null, drop: null, leaving: false };
+	// Where the scene's frame is now ({ lat, lon, height }: degrees, and m over the world's ellipsoid
+	// or sphere), which on a small world moves with the car (follow), as `state.place` (where you
+	// dropped in, the leaderboard's place and the challenges') doesn't; and how many times it has
+	// moved with it (for the tests).
+	let origin = null;
+	let recentres = 0;
 	// Boost pads on the ground as you drive (pads.js), never on water, with their switch in the
 	// pause menu.
 	const pads = createBoostPads( { scene, driver, ground, water, toggle: $( 'pause' ).querySelector( '.pads-toggle' ), onPad: () => progress.pad() } );
@@ -738,6 +750,15 @@ export async function start( { key, left = null, visit: token = null, worker = t
 			world: () => world, earthClosed, mode: () => state.mode, place: () => state.place, vehicle: () => state.vehicle,
 			driver, ground, camera, scene, globe, bodies, vehicles, stats,
 			startAt: place => startChallenge( place ), placeCar, toGlobe,
+			// On a small world, how far (m) the car goes before the scene's frame follows it (null on
+			// the others), and the frame moved to a place as it does (shiftTo: a Retry back at a run's
+			// start, before the car's put there); either way, the challenges are told (recentred).
+			get recentring() {
+
+				return recentring();
+
+			},
+			shiftTo,
 			// (Gone by itself after 10 s too, for a run left before its GO.)
 			keys: () => ! keysShown && showKeys( 10000 ),
 			go: () => screens.hideKeys(),
@@ -886,7 +907,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		if ( state.mode === 'globe' ) flyToPlace( place );
 
 	} );
-	if ( left !== null && left <= 2 ) screens.toast( left === 0 ? 'This is today\'s free Earth drive: drop in anywhere as often as you like while this page stays open. Reload and it\'s the Moon and Mars until tomorrow.' : `${ left } more Earth drive${ left === 1 ? '' : 's' } today after this one.`, left === 0 ? 8000 : 5000 );
+	// (The free worlds by name: "the Moon, Mars, Vesta and Ceres".)
+	if ( left !== null && left <= 2 ) screens.toast( left === 0 ? `This is today's free Earth drive: drop in anywhere as often as you like while this page stays open. Reload and it's ${ listOf( OFF_EARTH ) } until tomorrow.` : `${ left } more Earth drive${ left === 1 ? '' : 's' } today after this one.`, left === 0 ? 8000 : 5000 );
 
 	// Driving with others (live.js, ghosts.js, friends.js): only when the Worker has it on and this
 	// visit has a token to show the room. Without it, nothing of it is made. When the Worker couldn't
@@ -1078,15 +1100,95 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	function recentre( place ) {
 
+		frameOn( place );
+		origin = { lat: place.lat, lon: place.lon, height: place.height ?? 0 };
+
+	}
+
+	// The scene's frame on `place`, the camera staying where it is on the world: on a small world far
+	// from round, level with its level there (placeBody), else as the sphere or the Earth has it.
+	function frameOn( place ) {
+
 		globe.capture();
-		if ( offEarth() ) placeEarth( body().group, body().ellipsoid, place );
+		if ( offEarth() ) placeFrame( place );
 		else if ( tiles ) recentreTiles( tiles, place );
 		else placeEarth( earth, ellipsoid, place );
 		globe.restore();
 
 	}
 
-	// --- the Earth, the Moon or Mars ---
+	function placeFrame( place ) {
+
+		if ( levelled( world ) ) placeBody( body().group, world, place );
+		else placeEarth( body().group, body().ellipsoid, place );
+
+	}
+
+	// On a small world (WORLDS' `recentre`), how far (m) the car goes from the scene's middle before
+	// the frame follows it; null on the others, whose frame stays where it was dropped in.
+	function recentring() {
+
+		return offEarth() ? WORLDS[ world ].recentre ?? null : null;
+
+	}
+
+	// While driving on a small world, the car farther than `recentring` from the scene's middle
+	// (along the ground): the frame moved to it (shiftTo), so its flat frame is level where it is.
+	// Before its update, so the whole frame (the car, the challenges, the camera, the ground made
+	// sharp round it) is in the new one. The ground's curve under the flat frame stays within a
+	// third of a degree (Vesta's 1 km over its level's sharpest curve, 184 km across).
+	function follow() {
+
+		const most = recentring();
+		if ( ! most || state.mode !== 'driving' || ! driver.active || Math.hypot( driver.east, driver.north ) <= most ) return;
+		// Where the car stands (its pivot), on the world's sphere; the frame's middle on the ground
+		// there, as for a drop-in.
+		state.entry.pivot.getWorldPosition( _p ).applyMatrix4( _inverse.copy( body().group.matrixWorld ).invert() );
+		const at = body().ellipsoid.getPositionToCartographic( _p, {} );
+		const [ lat, lon ] = [ at.lat * MathUtils.RAD2DEG, at.lon * MathUtils.RAD2DEG ];
+		shiftTo( { lat, lon, height: body().heightAt( lat, lon ) ?? at.height } );
+
+	}
+
+	// The scene's frame moved to `place` ({ lat, lon, height }) on a small world, everything in it
+	// carried: the car (and its effects), the pads, a parked car, a challenge's run (challenges.js's
+	// recentred) and the camera, by the frame's move M (a Matrix4: the scene before to the scene
+	// after), so nothing is seen to jump. M, or null where the frame doesn't move (the Earth, the
+	// Moon, Mars).
+	function shiftTo( place ) {
+
+		if ( ! recentring() ) return null;
+		const { group } = body();
+		_before.copy( group.matrixWorld );
+		frameOn( place );
+		const move = new Matrix4().multiplyMatrices( group.matrixWorld, _before.invert() );
+		driver.transform( move );
+		pads.transform( move );
+		if ( ! driver.active && state.entry ) carryParked( state.entry, move );
+		challenges?.recentred?.( move );
+		origin = { lat: place.lat, lon: place.lon, height: place.height ?? 0 };
+		recentres ++;
+		return move;
+
+	}
+
+	// A parked car (paused) carried by `move`: where it stands and how it's turned, as models.apply
+	// puts it (its saved state and how it was parked kept in step, so it stays parked as it was).
+	function carryParked( entry, move ) {
+
+		const { pivot, state: saved, parked } = entry;
+		pivot.updateMatrix();
+		pivot.matrix.premultiply( move ).decompose( pivot.position, pivot.quaternion, _p );
+		pivot.rotation.setFromQuaternion( pivot.quaternion, 'YXZ' );
+		pivot.updateMatrixWorld( true );
+		const { east, north, up } = localToEnu( pivot.position );
+		const heading = yawToHeading( pivot.rotation.y );
+		Object.assign( saved, { east, north, up, heading } );
+		if ( parked ) Object.assign( parked, { east, north, up, heading, pitch: pivot.rotation.x * MathUtils.RAD2DEG, roll: pivot.rotation.z * MathUtils.RAD2DEG } );
+
+	}
+
+	// --- the Earth or another world ---
 
 	// Turn the globe to another world (only from the globe), the first time to one made in the page
 	// once it has loaded. `at`: a place to look at there (else where it was looking when it left).
@@ -1159,7 +1261,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		panel.setWorld( world );
 		const look = at ?? lastLook[ world ] ?? WORLDS[ world ].first ?? home;
 		// The world's frame on the place looked at, as the Earth's is on the last place driven.
-		if ( offEarth() ) placeEarth( body().group, body().ellipsoid, { lat: look.lat, lon: look.lon, height: 0 } );
+		if ( offEarth() ) placeFrame( { lat: look.lat, lon: look.lon, height: 0 } );
 		// In from further out, as if arriving (and the light by where the camera now is).
 		const orbit = globe.orbit( look.lat, look.lon );
 		globe.place( { ...orbit, distance: orbit.distance * 2.4 } );
@@ -1910,7 +2012,9 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		setMode( 'globe' );
 		live?.setAway();
 		if ( was ) online?.left( was );
-		const { lat, lon } = state.place ?? globe.pose();
+		// (Over where the scene's frame last followed the car to, on a small world: the car may have
+		// driven a long way from where it dropped in.)
+		const { lat, lon } = ( recentring() && origin ) || state.place || globe.pose();
 		globe.flyTo( globe.orbit( lat, lon ) );
 
 	}
@@ -2236,6 +2340,9 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 		timer.update( time );
 		const dt = Math.min( timer.getDelta(), 0.1 );
+		// On a small world, the scene's frame to the car first, if it's driven far enough from its
+		// middle (follow).
+		follow();
 		if ( driver.active ) driver.update( dt );
 		// A challenge's run: its clock (the same steps the car was driven by), its gates and its HUD; and
 		// the challenges' word to a visit driving a while.
@@ -2262,11 +2369,15 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 		// How high the camera is (over the world it's on) decides the sky, the field of view and, while
 		// driving, clipping. The other worlds' stars are turned with them; the Moon has no sky over
-		// them, and Mars its own, fading out on the way up (bodySky).
+		// them, and Mars its own, fading out on the way up (bodySky). Over the place dropped in at; on a
+		// small world, whose ground goes tens of kilometres up and down from one place to the next, over
+		// the ground under the camera (else, driven 20 km up a Vesta scarp, the near plane would be 20 m
+		// out, cutting the car off).
 		camera.updateMatrixWorld();
 		_p.copy( camera.position ).applyMatrix4( _inverse.copy( globe.earth.matrixWorld ).invert() );
 		globe.ellipsoid.getPositionToCartographic( _p, carto );
-		const altitude = carto.height - ( state.place?.height ?? 0 );
+		const under = recentring() ? body().heightAt( carto.lat * MathUtils.RAD2DEG, carto.lon * MathUtils.RAD2DEG ) : null;
+		const altitude = carto.height - ( under ?? state.place?.height ?? 0 );
 		if ( offEarth() ) {
 
 			scene.background = body().stars;
@@ -2435,6 +2546,23 @@ export async function start( { key, left = null, visit: token = null, worker = t
 			return state.place;
 
 		},
+		// Where the scene's frame is now (see origin), how many times it has followed the car on a small
+		// world, and how far the car goes there before it does (see shiftTo).
+		get origin() {
+
+			return origin;
+
+		},
+		get recentres() {
+
+			return recentres;
+
+		},
+		get recentring() {
+
+			return recentring();
+
+		},
 		get entry() {
 
 			return state.entry;
@@ -2464,7 +2592,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 			return body();
 
 		},
-		dropIn, toGlobe, resume, recentre, waterOver, watchSea, moveCar, besideOf, goBeside,
+		dropIn, toGlobe, resume, recentre, shiftTo, waterOver, watchSea, moveCar, besideOf, goBeside,
 		where: () => formatLatLon( carto.lat * MathUtils.RAD2DEG, carto.lon * MathUtils.RAD2DEG ),
 	};
 	// The same, for boot.js (which world the globe is on, once it's up).

@@ -1,7 +1,7 @@
 import './style.css';
 import { getConfig, postVisit, robotCheck, send } from './api.js';
 import * as screens from './screens.js';
-import { EARTH, FALLBACK, OFF_EARTH, onWorld, spotWorld, WORLDS } from './worlds.js';
+import { EARTH, FALLBACK, listOf, OFF_EARTH, onWorld, spotWorld } from './worlds.js';
 
 // World Drive's first script (docs/world-drive.md): the splash, the Worker's settings and the robot
 // check, while the game itself (main.js: three.js, the tiles, the driving, nearly all of the page's
@@ -145,8 +145,8 @@ async function visit( config ) {
 }
 
 // The world a link opens on, if it's one of the worlds made in the page (worlds.js): a spot's
-// ?spot=moon-... or ?spot=mars-..., or ?at= with world=moon or world=mars (places.js's linkedPlace);
-// else null.
+// ?spot=moon-..., ?spot=vesta-... and so on, or ?at= with world=moon, world=vesta and so on
+// (places.js's linkedPlace); else null.
 function opensOffEarth( search ) {
 
 	const params = new URLSearchParams( search );
@@ -172,13 +172,12 @@ function toEarth() {
 
 }
 
-// Today's Earth drives are used up (this visitor's free one, or everyone's for the day). The Moon and
-// Mars are ours to stream and cost nothing, so they're never limited: the game starts on the Moon at
-// once, on the Moon's globe with the Earth closed (main.js's earthClosed; Mars is a tap away), and a
-// toast says why. Picking the Earth
-// shows the used-up notice, with its countdown and a way back to the Moon. A supporter's drives are
-// counted by their account, not this address (30 a day), so with signing in set up that notice has
-// a sign-in too: a supporter on a new browser, or back from paying before Stripe's word arrived
+// Today's Earth drives are used up (this visitor's free one, or everyone's for the day). The other
+// worlds (the Moon, Mars, Vesta and Ceres) are ours to stream and cost nothing, so they're never
+// limited: the game starts on the Moon at once, on the Moon's globe with the Earth closed (main.js's
+// earthClosed; the others are a tap away), and a toast says why. Picking the Earth shows the used-up
+// notice, with its countdown and a way back to the Moon. A supporter's drives are counted by their
+// account, not this address (30 a day), so with signing in set up that notice has a sign-in too: a supporter on a new browser, or back from paying before Stripe's word arrived
 // (?supporter=thanks, supporter.js), would otherwise be stuck on the Moon until tomorrow. Once the
 // account here has the pass (signing in there, or the page's own first word on it), the page
 // reloads to ask for the visit again: once, so a supporter who has had their 30 stays on the Moon
@@ -222,7 +221,7 @@ async function usedUp( config, outcome, main, link = null ) {
 	} );
 	// Once the globe has turned to the Moon (it loads after the game starts), so it's read with the
 	// Moon in view rather than running out over the splash; named by the world it's on by then (Mars,
-	// picked before the Moon had loaded).
+	// say, picked before the Moon had loaded), and the others listed as free too.
 	started.then( started => {
 
 		game = started;
@@ -230,8 +229,8 @@ async function usedUp( config, outcome, main, link = null ) {
 		onceOffEarth( game, () => {
 
 			const here = game.world;
-			const also = OFF_EARTH.filter( id => id !== here ).map( id => WORLDS[ id ].the ).join( ' and ' );
-			const free = `so you're ${ onWorld( here ) }: free and unlimited, as ${ also } is. The Earth opens again tomorrow.`;
+			const others = OFF_EARTH.filter( id => id !== here );
+			const free = `so you're ${ onWorld( here ) }: free and unlimited, as ${ listOf( others ) } ${ others.length > 1 ? 'are' : 'is' }. The Earth opens again tomorrow.`;
 			screens.toast( reason === 'daily' ? `Today's free Earth drives are all taken, ${ free }` : `You've had today's free Earth drive, ${ free }`, 10000 );
 
 		} );

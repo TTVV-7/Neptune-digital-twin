@@ -27,8 +27,9 @@ export async function getConfig() {
 // { key, left, visit } (visit: the token scores are posted with, see postScore), or { usedUp: true,
 // retryAfter, reason, visit } over a daily cap (the Moon's still open: visit, if it came, is for
 // that), { robot: true } when the check failed, or { error } for anything else. With another world's
-// id ('moon', 'mars': the page opened on a link there) no drive is spent and there's no key: { free:
-// true, world, visit } (the Worker says moon: true, as it always has, for every free world).
+// id ('moon', 'mars', 'vesta', 'ceres': the page opened on a link there) no drive is spent and
+// there's no key: { free: true, world, visit } (the Worker says moon: true, as it always has, for
+// every free world).
 export async function postVisit( token, { world = 'earth' } = {} ) {
 
 	let res;
@@ -252,7 +253,9 @@ export function postTitle( { id, secret }, title ) {
 // As the leaderboard's: none of these throw.
 
 // This player's achievements, with their account's: body { achievements: [ { id, at } ], counts:
-// { km, moon, looks, rides, streak, parties, challenges }, rides: [ construction rides unlocked ] }.
+// { km, moon, mars, vesta, ceres, looks, rides, streak, parties, challenges }, own and left (the
+// player's own trusted counts, and what more of each today will take), rides: [ construction rides
+// unlocked ] }.
 export function postAchievements( { id, secret } ) {
 
 	return send( 'POST', '/api/achievements', { id, secret } );

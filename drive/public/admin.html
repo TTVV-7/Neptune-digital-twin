@@ -14,13 +14,14 @@
 	days before the period shown, which the Worker sends added up. Charts drawn as plain SVG here, with
 	nothing loaded from anywhere else.
 	And where people drop in (docs/world-drive.md, "Where people drop in"): GET /api/admin/dropins,
-	the cells about a kilometre each way that drop-ins were at, as a heat map of the Earth, the Moon or
-	Mars and a table of the top places, for today, the week, the month or longer. The maps are the
-	game's own files: Natural Earth's land and sea (/sea/mask.bin, as src/drive-app/sea.js reads it)
-	and the Moon's and Mars's pictures (/moon/colour.webp, /mars/colour.webp), each fetched only when
-	its map is first shown.
-	And challenges (docs/world-drive.md, "Challenges"): GET /api/admin/challenges, the nine live
-	(three on each world) and the nine next up, and POST to choose any period's challenge by hand, put
+	the cells about a kilometre each way that drop-ins were at, as a heat map of the Earth, the Moon,
+	Mars, Vesta or Ceres and a table of the top places, for today, the week, the month or longer. The
+	maps are the game's own files: Natural Earth's land and sea (/sea/mask.bin, as
+	src/drive-app/sea.js reads it) and the other worlds' pictures (/moon/colour.webp,
+	/mars/colour.webp, /vesta/colour.webp, /ceres/colour.webp), each fetched only when its map is
+	first shown.
+	And challenges (docs/world-drive.md, "Challenges"): GET /api/admin/challenges, the fifteen live
+	(three on each world) and the fifteen next up, and POST to choose any period's challenge by hand, put
 	one back to the rotation, and approve busy drop-in places for the rotation
 	(worker/drive/challenges.js).
 	And achievements (docs/world-drive.md, "Achievements and rewards"): GET /api/admin/achievements,
@@ -173,7 +174,7 @@
 			<div class="seg" id="places-days" role="group" aria-label="Period of the map"><button type="button" data-days="1">Today</button><button type="button" data-days="7">Week</button><button type="button" data-days="30">Month</button><button type="button" data-days="90">90 days</button><button type="button" data-days="365">Year</button></div>
 		</div>
 		<div class="places-bar">
-			<div class="seg" id="places-world" role="group" aria-label="World"><button type="button" data-world="earth">Earth <span></span></button><button type="button" data-world="moon">Moon <span></span></button><button type="button" data-world="mars">Mars <span></span></button></div>
+			<div class="seg" id="places-world" role="group" aria-label="World"><button type="button" data-world="earth">Earth <span></span></button><button type="button" data-world="moon">Moon <span></span></button><button type="button" data-world="mars">Mars <span></span></button><button type="button" data-world="vesta">Vesta <span></span></button><button type="button" data-world="ceres">Ceres <span></span></button></div>
 			<span class="muted small" id="places-range"></span>
 		</div>
 		<div class="map">
@@ -200,7 +201,7 @@
 		<form class="ch-form" id="ch-form">
 			<label>Period <select name="period" id="ch-period"></select></label>
 			<div class="row"><label class="day">Or another day <input type="date" name="date" id="ch-date"></label><label class="narrow">Its <select name="dateKind" id="ch-date-kind"><option value="day">Day</option><option value="week">Week</option><option value="month">Month</option></select></label></div>
-			<label>World <select name="world" id="ch-world"><option value="earth">Earth</option><option value="moon">Moon</option><option value="mars">Mars</option></select></label>
+			<label>World <select name="world" id="ch-world"><option value="earth">Earth</option><option value="moon">Moon</option><option value="mars">Mars</option><option value="vesta">Vesta</option><option value="ceres">Ceres</option></select></label>
 			<label>Kind <select name="kind" id="ch-kind"><option value="sprint">Checkpoint sprint</option><option value="collect">Collect them all</option><option value="landmark">Drive to a landmark</option></select></label>
 			<label class="full">Place <select name="place" id="ch-place"></select></label>
 			<div class="full row" id="ch-custom" hidden>
@@ -215,13 +216,13 @@
 		</form>
 		<h3>Busy drop-in places for the rotation</h3>
 		<div id="ch-busy"></div>
-		<p class="note">The rotation goes round the game's own places (the start spots, the places' pages and the Moon's and Mars's places) and the busy drop-in places approved here, a new order each time round, one a period; a period's challenge is fixed the first time anyone asks for it, so nothing changed here changes a live one, unless you change that one, which starts a new board (the old one is kept apart). Busy places are where people drop in that aren't the game's own: anyone with many addresses can push one up the list, so none goes into the rotation without your approval. Your own runs (this page's accounts) are taken but kept off the boards, as you know each place and kind before it's live, and choose them. Back to the rotation on a live one the rotation chose leaves it as it is (it's the rotation's already).</p>
+		<p class="note">The rotation goes round the game's own places (the start spots, the places' pages and the other worlds' places) and the busy drop-in places approved here, a new order each time round, one a period; a period's challenge is fixed the first time anyone asks for it, so nothing changed here changes a live one, unless you change that one, which starts a new board (the old one is kept apart). Busy places are where people drop in that aren't the game's own: anyone with many addresses can push one up the list, so none goes into the rotation without your approval. Your own runs (this page's accounts) are taken but kept off the boards, as you know each place and kind before it's live, and choose them. Back to the rotation on a live one the rotation chose leaves it as it is (it's the rotation's already).</p>
 	</section>
 	<section class="card achievements" id="achievements" aria-labelledby="achievements-title" hidden>
 		<h2 id="achievements-title">Achievements</h2>
 		<p class="muted small" id="ach-total"></p>
 		<div id="ach-list"></div>
-		<p class="note">How many players (nicknames) have each achievement, of all of them; nothing of who. Checked: the game counts it itself (challenge times and final places, parties, days in a row). Trusted: the page says it (km, Moon and Mars drives, Garage changes, rides tried), each held to a day's worth. A construction ride comes with the achievement beside it.</p>
+		<p class="note">How many players (nicknames) have each achievement, of all of them; nothing of who. Checked: the game counts it itself (challenge times and final places, parties, days in a row). Trusted: the page says it (km, drives on the Moon, Mars, Vesta and Ceres, Garage changes, rides tried), each held to a day's worth. A construction ride comes with the achievement beside it.</p>
 	</section>
 	<div id="more"></div>
 	<p class="muted" style="margin-top:24px;font-size:13px">Counts only, nothing of who. Days are UTC, and each period ends with today so far. ▲ and ▼ compare with the as many days just before it. Referrers, countries and page speed in more detail are in Cloudflare's dashboard (Web Analytics).</p>
@@ -253,6 +254,8 @@
 		earth: { name: 'Earth', the: 'the Earth', radius: 6371008.8 },
 		moon: { name: 'Moon', the: 'the Moon', radius: 1737400, picture: '/moon/colour.webp' },
 		mars: { name: 'Mars', the: 'Mars', radius: 3389500, picture: '/mars/colour.webp' },
+		vesta: { name: 'Vesta', the: 'Vesta', radius: 262700, picture: '/vesta/colour.webp' },
+		ceres: { name: 'Ceres', the: 'Ceres', radius: 470000, picture: '/ceres/colour.webp' },
 	};
 	const OFF_EARTH = Object.keys( WORLDS ).filter( world => world !== 'earth' );
 	const worldOf = id => WORLDS[ id ] ?? { name: pretty( String( id ) ), the: pretty( String( id ) ), radius: WORLDS.earth.radius };
@@ -262,9 +265,9 @@
 	const PROBLEMS = [ [ 'no_ground', 'No ground at a drop-in' ], [ 'ride_failed', 'A ride didn\'t load' ], ...OFF_EARTH.map( world => [ `${ world }_failed`, `${ capital( WORLDS[ world ].the ) } didn't load` ] ), [ 'map_failed', 'Google\'s map didn\'t load' ], [ 'map_session_ended', 'Map session ended' ], [ 'drop_abandoned', 'Drop-in left for the globe' ] ];
 	// What each metric is, for the chart of any metric by day.
 	const NAMES = {
-		visit: 'Visits', visit_kind: 'Visits by where they went (Earth, a link to the Moon or Mars, or the Moon over a cap)', visit_hour: 'Visits by UTC hour', load: 'Loads by referring site', load_time: 'Load time (buckets)', load_ms: 'Load time (ms, all together)',
+		visit: 'Visits', visit_kind: 'Visits by where they went (Earth, a link to another world, or the Moon over a cap)', visit_hour: 'Visits by UTC hour', load: 'Loads by referring site', load_time: 'Load time (buckets)', load_ms: 'Load time (ms, all together)',
 		dropin: 'Drop-ins by place', ride: 'Drop-ins by ride', play: 'Play time by ride (s)', play_with_others: 'Play with others (s)', play_world: 'Play time by world (s)',
-		garage_open: 'Garage opened', garage_edit: 'Garage changes', party: 'Parties', funnel: 'Funnel steps', device: 'Devices', world: 'Turns to the Moon or Mars',
+		garage_open: 'Garage opened', garage_edit: 'Garage changes', party: 'Parties', funnel: 'Funnel steps', device: 'Devices', world: 'Turns to the other worlds',
 		search: 'Searches', dropin_time: 'Drop-in time (buckets)', problem: 'Problems', board: 'Leaderboard', pass: 'Supporter Pass', level_up: 'Level-ups', ad: 'Ad on the globe (visits it showed in, and blocked in)',
 		challenge: 'Challenges (opened, started, finished, posted; the word while driving said, and its button pressed; a friend\'s link shared, opened, and a run started from it)',
 		players: 'New players (nicknames)', scores: 'New bests (scores log)', accounts: 'New accounts (Google or username)', purchases: 'Passes by status', revenue: 'Revenue (smallest unit)',
@@ -686,8 +689,8 @@
 	const MOST_ACROSS = 150000;
 	const SHOW_ACROSS = 300000;
 	// The heat's colours, few to many: a scale of heat, yellow to deep red, which stands out on the
-	// pale or dark land and sea and on the Moon's greys and Mars's rust alike (the legend under the
-	// map says which way it runs). And the base maps' own colours, in the page's light and dark.
+	// pale or dark land and sea and on the Moon's, Vesta's and Ceres's greys and Mars's rust alike (the
+	// legend under the map says which way it runs). And the base maps' own colours, in the page's light and dark.
 	const HEAT_STOPS = [ [ 0, [ 242, 176, 53 ] ], [ 0.4, [ 239, 138, 42 ] ], [ 0.72, [ 215, 48, 31 ] ], [ 1, [ 140, 29, 24 ] ] ];
 	const BASE = {
 		light: { sea: [ 214, 224, 234 ], land: [ 244, 241, 233 ], coast: [ 228, 231, 232 ], space: [ 236, 239, 242 ], tint: 'rgba( 255, 255, 255, 0.3 )', ink: '#16191d', ring: '#ffffff', text: '#4a525b', halo: 'rgba( 255, 255, 255, 0.85 )' },
@@ -1383,8 +1386,9 @@
 
 	}
 
-	// A world's picture in view (the Moon's, Mars's: its columns from 180° W, rows from 90° N), a copy
-	// of it for each time the view goes round, softened a little towards the page's light or dark.
+	// A world's picture in view (the Moon's, Mars's, Vesta's, Ceres's: its columns from 180° W, rows
+	// from 90° N), a copy of it for each time the view goes round, softened a little towards the
+	// page's light or dark.
 	function paintPicture( ctx, W, H, v, scale, picture, colours ) {
 
 		ctx.fillStyle = rgb( colours.space );
@@ -1628,12 +1632,12 @@
 
 	// --- Challenges ---------------------------------------------------------------------------
 	//
-	// GET /api/admin/challenges: the nine live (the day's, the week's and the month's on each world)
-	// and the nine next up, as they'd be fixed now (the owner's pick or the rotation's), the owner's picks
-	// from the live periods on (however far ahead: each with Change and Back to the rotation), the
-	// approved busy places and the featured and busy places to choose from. POST to choose a
-	// period's challenge (a featured place, a busy place by its cell, or coordinates and a name), back
-	// to the rotation, or approve or unapprove a busy place. A live one changes only after a warning
+	// GET /api/admin/challenges: the fifteen live (the day's, the week's and the month's on each
+	// world) and the fifteen next up, as they'd be fixed now (the owner's pick or the rotation's), the
+	// owner's picks from the live periods on (however far ahead: each with Change and Back to the
+	// rotation), the approved busy places and the featured and busy places to choose from. POST to
+	// choose a period's challenge (a featured place, a busy place by its cell, or coordinates and a
+	// name), back to the rotation, or approve or unapprove a busy place. A live one changes only after a warning
 	// (with times on it, its board starts again; without, anyone driving it is turned away).
 
 	const DAY = 86400000;
@@ -1642,7 +1646,10 @@
 	const PERIODS = { day: 'Daily', week: 'Weekly', month: 'Monthly' };
 	// Each world's name as the tables show it, and in a sentence ("the Moon", but "Mars"), as the
 	// page above has them; one the Worker names that isn't here (a newer Worker's) by its id.
-	const WORLDS = { earth: { name: 'Earth', the: 'the Earth' }, moon: { name: 'Moon', the: 'the Moon' }, mars: { name: 'Mars', the: 'Mars' } };
+	const WORLDS = {
+		earth: { name: 'Earth', the: 'the Earth' }, moon: { name: 'Moon', the: 'the Moon' }, mars: { name: 'Mars', the: 'Mars' },
+		vesta: { name: 'Vesta', the: 'Vesta' }, ceres: { name: 'Ceres', the: 'Ceres' },
+	};
 	const nameOf = world => esc( WORLDS[ world ]?.name ?? world );
 	const theWorld = world => esc( WORLDS[ world ]?.the ?? world );
 	const $ = id => document.getElementById( id );

@@ -10,7 +10,7 @@ import { base64url, fromBase64url, randomToken } from '../http.js';
 //
 // The id is 21 random letters and then one saying what kind of visit it is (KINDS): 'e' for one
 // that had the Earth's caps checked (the Maps key handed out), 'm' for one that didn't (a free
-// world's, the Moon's or Mars's, never limited, and one turned away by the Earth's caps: 'm' as it
+// world's, any but the Earth's, never limited, and one turned away by the Earth's caps: 'm' as it
 // was when the Moon was the only one) and 'o' for the owner's (ADMIN_EMAILS). The signature covers
 // the id, so the kind can't be changed either. It says which drop-in places a visit may post
 // (dropins.js): a free world's visit, which costs nothing but the robot check, posts the free

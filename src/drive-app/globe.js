@@ -13,6 +13,7 @@ import {
 	Vector3,
 } from 'three';
 import { CAMERA_FRAME, GlobeControls } from '3d-tiles-renderer';
+import { levelFrame } from './level.js';
 
 // The globe: Google's tiles (or the test globe) seen from space, turned with GlobeControls (drag
 // to spin, wheel or pinch to zoom, right-drag or two fingers to tilt), slowly turning by itself
@@ -26,6 +27,12 @@ import { CAMERA_FRAME, GlobeControls } from '3d-tiles-renderer';
 // It's the Moon's and Mars's globe too (body.js): setBody swaps the Earth for another body, its
 // frame, what's tapped, its ellipsoid and size, and whether it has air to glow round it, and in what
 // colour. Everything below goes by the body's: "the Earth" in what follows is whichever it is.
+//
+// A small world far from round (Vesta, Ceres: level.js) has a `level`: its ground is level along a
+// spheroid's surface, up to 12° off the sphere its places are on, and the scene's frame while
+// dropping in and driving is turned to that (main.js). Seen from afar the globe is the sphere's, as
+// any other; coming down to the ground, the view turns to the level's up (LEVEL_NEAR), so the last
+// of a drop-in hands the camera to the car level with the scene, its horizon not rolled.
 
 const DEG = MathUtils.DEG2RAD;
 // The globe turns this fast (degrees a second) when it's left alone this long (s).
@@ -51,6 +58,10 @@ const EARTH = { radius: EARTH_RADIUS, air: AIR, lowest: LOWEST, highest: HIGHEST
 // How often (s) the ground's height under a pin, or where a flight is headed, is looked at again
 // as sharper tiles load.
 const RECHECK = 0.25;
+// On a world with a level: from this far (m) from the point looked at, the view's up is the sphere's,
+// and from this near the level's, turned smoothly between (by the distance's logarithm). A drop-in
+// comes down to 320 m before its last flight to the car (main.js), so that flight makes the turn.
+const LEVEL_NEAR = [ 40, 320 ];
 
 const _m = new Matrix4();
 const _inverse = new Matrix4();
@@ -67,6 +78,8 @@ const _scale = new Vector3();
 const _axis = new Vector3();
 const _centre = new Vector3();
 const _q = new Quaternion();
+const _level = new Quaternion();
+const _turn = new Matrix4();
 const _ray = new Ray();
 const _ndc = new Vector2();
 const _carto = {};
@@ -139,18 +152,23 @@ export class GlobeView {
 	// for none, or { reach, colour } for a body's own: how far it reaches as a share of its radius,
 	// and [ r, g, b ]), lowest and highest (m, the heights its ground can be at), heightAt( lat, lon )
 	// (m, its ground's height worked out, for a body that can: the Moon's and Mars's; else it's looked
-	// for on what has loaded) }. Any flight is dropped, and the pin; the camera is where it was in the
-	// scene, so put it somewhere.
-	setBody( { earth, surface, ellipsoid, radius = EARTH_RADIUS, air = true, lowest = LOWEST, highest = HIGHEST, heightAt = null } ) {
+	// for on what has loaded), level (the world's id if it has a level, level.js: see LEVEL_NEAR; else
+	// null) }. Any flight is dropped, and the pin; the camera is where it was in the scene, so put it
+	// somewhere.
+	setBody( { earth, surface, ellipsoid, radius = EARTH_RADIUS, air = true, lowest = LOWEST, highest = HIGHEST, heightAt = null, level = null } ) {
 
 		this.cancelFlight();
 		this.setPin( null );
 		this.earth = earth;
 		this.surface = surface;
 		this.ellipsoid = ellipsoid;
-		this.body = { radius, air: air === true ? AIR : air || null, lowest, highest, heightAt };
+		this.body = { radius, air: air === true ? AIR : air || null, lowest, highest, heightAt, level };
 		if ( this.body.air ) this.air.material.uniforms.colour.value.set( ...this.body.air.colour );
 		this.controls.setEllipsoid( ellipsoid, earth );
+		// GlobeControls' far plane is at the sphere's horizon: on a small lumpy world its peaks, tens of
+		// kilometres over the sphere, show from further than that (as far again as the horizon from
+		// the highest of them, half Vesta's radius).
+		this.controls.farMargin = level ? Math.sqrt( highest * ( 2 * radius + highest ) ) / radius : 0;
 		this.controls.setScene( surface );
 		// Whatever it was doing (a drag, the inertia of a spin) was on the other body.
 		this.controls.setCamera( this.camera );
@@ -245,6 +263,9 @@ export class GlobeView {
 		else if ( ! ellipsoid.intersectRay( _ray, _focus ) ) ellipsoid.closestPointToRayEstimate( _ray, _focus );
 		ellipsoid.getPositionToCartographic( _focus, _carto );
 		ellipsoid.getEastNorthUpAxes( _carto.lat, _carto.lon, _east, _north, _normal );
+		// Close to a world's ground with a level, the heading and pitch are against its level, as
+		// place() turns them.
+		if ( this.levelTurn( _carto.lat / DEG, _carto.lon / DEG, _pos.distanceTo( _focus ), _level ) ) for ( const axis of [ _east, _north, _normal ] ) axis.applyQuaternion( _level );
 		const pitch = Math.asin( MathUtils.clamp( _forward.dot( _normal ), - 1, 1 ) );
 		// Looking nearly straight down, which way is up the screen says the heading.
 		const level = Math.abs( pitch ) > 80 * DEG ? _up : _forward;
@@ -271,12 +292,37 @@ export class GlobeView {
 	place( { lat, lon, height = 0, distance, heading = 0, pitch = - 90 } ) {
 
 		this.ellipsoid.getObjectFrame( lat * DEG, lon * DEG, height, heading * DEG, pitch * DEG, 0, _m, CAMERA_FRAME );
+		// Close to a world's ground with a level, turned from the sphere's up to the level's about the
+		// point looked at.
+		if ( this.levelTurn( lat, lon, distance, _level ) ) {
+
+			_pos.setFromMatrixPosition( _m );
+			_m.setPosition( 0, 0, 0 ).premultiply( _turn.makeRotationFromQuaternion( _level ) ).setPosition( _pos );
+
+		}
+
 		_forward.set( 0, 0, - 1 ).transformDirection( _m );
 		_pos.setFromMatrixPosition( _m ).addScaledVector( _forward, - distance );
 		_m.setPosition( _pos ).premultiply( this.earth.matrixWorld );
 		_m.decompose( this.camera.position, this.camera.quaternion, _scale );
 		this.camera.updateMatrixWorld();
 		this.clip( height + distance * Math.max( 0, - Math.sin( pitch * DEG ) ) );
+
+	}
+
+	// On a world with a level, `distance` m from ( lat, lon ) (degrees): the turn (into `target`) from
+	// the sphere's up there toward the level's, by as much of it as LEVEL_NEAR has at that distance.
+	// False with no turn: another world, or far enough off.
+	levelTurn( lat, lon, distance, target ) {
+
+		const { level } = this.body;
+		if ( ! level ) return false;
+		const share = MathUtils.smoothstep( Math.log( LEVEL_NEAR[ 1 ] / Math.max( 1e-3, distance ) ) / Math.log( LEVEL_NEAR[ 1 ] / LEVEL_NEAR[ 0 ] ), 0, 1 );
+		if ( share <= 0 ) return false;
+		this.ellipsoid.getCartographicToNormal( lat * DEG, lon * DEG, _a );
+		_q.setFromUnitVectors( _a, _b.fromArray( levelFrame( level, lat, lon ).up ) );
+		target.identity().slerp( _q, share );
+		return true;
 
 	}
 
@@ -395,12 +441,16 @@ export class GlobeView {
 	}
 
 	// Near and far clipping for a camera this high (m): GlobeControls sets them while it drives the
-	// camera; flights and drives call this.
+	// camera; flights and drives call this. Out to the horizon and 200 km past it; on a world with a
+	// level, past it as far as the horizon from its highest ground over its lowest (Vesta's peaks 84
+	// km over Rheasilvia's floor are seen from 226 km off).
 	clip( altitude ) {
 
 		const h = Math.max( 2, altitude );
+		const { radius, level, lowest, highest } = this.body;
+		const relief = highest - lowest;
 		this.camera.near = MathUtils.clamp( h / 1000, 0.1, 5000 );
-		this.camera.far = Math.sqrt( h * ( 2 * this.body.radius + h ) ) + 2e5;
+		this.camera.far = Math.sqrt( h * ( 2 * radius + h ) ) + ( level ? Math.sqrt( relief * ( 2 * radius + relief ) ) : 2e5 );
 		this.camera.updateProjectionMatrix();
 
 	}

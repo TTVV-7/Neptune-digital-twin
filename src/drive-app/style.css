@@ -161,12 +161,15 @@ button.primary:active,
 	color: var( --muted );
 }
 
-/* The Earth, the Moon or Mars: a pill cut into one part a world, the one picked in the accent, as
-   the leaderboard's tabs are. */
+/* The Earth, the Moon, Mars, Vesta and Ceres: a pill cut into one part a world, the one picked in
+   the accent, as the leaderboard's tabs are. Five across leave each part under 50 px inside on the
+   panel and on a 320 px phone, too narrow for an icon beside a name, so each has its icon over a
+   small name; and a part never grows past its share (minmax( 0, 1fr ): a plain 1fr would let a long
+   name push the row wider than the panel). */
 .worlds {
 	display: grid;
 	grid-auto-flow: column;
-	grid-auto-columns: 1fr;
+	grid-auto-columns: minmax( 0, 1fr );
 	gap: 4px;
 	margin: 0 0 12px;
 	padding: 4px;
@@ -176,14 +179,19 @@ button.primary:active,
 
 .worlds button {
 	display: flex;
+	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	gap: 6px;
-	padding: 8px 4px;
+	gap: 3px;
+	min-width: 0;
+	padding: 7px 2px 6px;
 	border: 0;
 	border-radius: 9px;
 	background: none;
+	font-size: 12px;
 	font-weight: 800;
+	line-height: 1.1;
+	white-space: nowrap;
 	color: var( --muted );
 }
 
@@ -237,8 +245,8 @@ button.primary:active,
 	color: var( --muted );
 }
 
-/* On another world (the Moon, Mars) there's no map search (its own places are searched), nobody
-   else driving, and no party to drive with: you drive it on your own (main.js). */
+/* On another world (the Moon, Mars, Vesta, Ceres) there's no map search (its own places are
+   searched), nobody else driving, and no party to drive with: you drive it on your own (main.js). */
 body[data-world]:not( [data-world='earth'] ) #globe-ui :is( .osm, .online, .online-dots, .friends, .party-banner ),
 body[data-world]:not( [data-world='earth'] ) #pause .friends,
 body[data-world]:not( [data-world='earth'] ) #drive-ui :is( .live-chip, .players, .horn, .live-key ),

@@ -1,16 +1,18 @@
 // The places of the worlds made in the page (worlds.js), each world's own (moon-places.js,
-// mars-places.js): its start spots on the globe's panel, and the places its search finds, all in
-// the page, since no map service knows them. Plain data and small functions: the Worker names drop-
-// ins and picks challenges' places from these too.
+// mars-places.js, vesta-places.js, ceres-places.js): its start spots on the globe's panel, and the
+// places its search finds, all in the page, since no map service knows them. Plain data and small
+// functions: the Worker names drop-ins and picks challenges' places from these too.
 
+import { CERES_PLACES, CERES_SPOTS } from './ceres-places.js';
 import { MARS_PLACES, MARS_SPOTS } from './mars-places.js';
 import { MOON_PLACES, MOON_SPOTS } from './moon-places.js';
+import { VESTA_PLACES, VESTA_SPOTS } from './vesta-places.js';
 import { searchIn } from './place-search.js';
 import { spotWorld } from './worlds.js';
 
 // Each world's start spots, and everything its search finds (the spots among them).
-export const SPOTS_ON = { moon: MOON_SPOTS, mars: MARS_SPOTS };
-export const PLACES_ON = { moon: MOON_PLACES, mars: MARS_PLACES };
+export const SPOTS_ON = { moon: MOON_SPOTS, mars: MARS_SPOTS, vesta: VESTA_SPOTS, ceres: CERES_SPOTS };
+export const PLACES_ON = { moon: MOON_PLACES, mars: MARS_PLACES, vesta: VESTA_PLACES, ceres: CERES_PLACES };
 
 // The places on `world` whose name (or other name) has every word of `text` in it, best first
 // (place-search.js). At most `most`.

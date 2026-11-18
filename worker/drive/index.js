@@ -253,11 +253,12 @@ async function getConfig( { env, limits, now } ) {
 // POST /api/visit { token, world }: the page asks for the Maps key once as it starts. Turnstile
 // first, then the caps (both counted at once), and only then the key, with the visit's token for
 // posting scores (visits.js). The caps are the Earth's: Google's tiles cost a little each visit, and
-// the worlds made in the page (worlds.js's free ones, the Moon and Mars: body.js, our own ground)
-// cost nothing to stream, so they're never limited:
-// - world: one of those, 'moon' or 'mars' (the page opened on a link to it): no key and nothing
-//   counted against the caps, { moon: true, free: true, world, visit } (moon: true as the answer
-//   always was for the Moon, which a page from before Mars, still in a browser's cache, goes by).
+// the worlds made in the page (worlds.js's free ones, every one but the Earth: body.js, our own
+// ground) cost nothing to stream, so they're never limited:
+// - world: one of those, 'moon', 'mars', 'vesta' or 'ceres' (the page opened on a link to it): no
+//   key and nothing counted against the caps, { moon: true, free: true, world, visit } (moon: true
+//   as the answer always was for the Moon, which a page from before Mars, still in a browser's
+//   cache, goes by).
 //   Going to the Earth from there reloads the page, which asks again without it. Any other world
 //   (one that isn't one, or 'earth') is the Earth's visit.
 // - Over a cap: 429 with retryAfter (the seconds until midnight UTC, when the counts start again)

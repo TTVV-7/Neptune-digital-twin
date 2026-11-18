@@ -27,9 +27,13 @@ const GRAVITY = 9.81;
 const JUMP_SPEED = 7;
 // The ground is looked for this far (m) under the wheels; fallen this far (m) under where it last
 // stood, with none found, it's put back there. Both further in low gravity (by 1 / gravity), where
-// a jump goes higher over the ground falling away beneath it.
+// a jump goes higher over the ground falling away beneath it; but never put back from further down
+// than FALL_MOST (the Moon's 1.2 km and Mars's 0.5 km are under it): on Vesta, at a fortieth of
+// the Earth's gravity, 200 m by that would be 8 km, over four minutes of falling with nothing
+// under it.
 const REACH_DOWN = 400;
 const FALL_RESET = 200;
+const FALL_MOST = 1500;
 // Ground this much below the wheels means the vehicle has left it (off a ramp or a crest).
 const LEAVE_GROUND = 0.35;
 // Hitting a wall faster than this (m/s) into it says "Crash!".
@@ -263,6 +267,8 @@ const _attitude = new Quaternion();
 const DOWN = new Vector3( 0, - 1, 0 );
 const UP = new Vector3( 0, 1, 0 );
 const LEVEL = new Quaternion();
+const _turn = new Quaternion();
+const _velocity = new Vector3();
 
 export class Driver {
 
@@ -630,6 +636,99 @@ export class Driver {
 
 	}
 
+	// The scene's frame moved under it while it drives (World Drive's recentre on a small world,
+	// main.js): `matrix` (a Matrix4, turning and moving only) carries whatever was in the scene to
+	// where it is now. Everything of its own kept in the scene goes with it, so it drives on as it
+	// was, mid-air or mid-drift, its effects and its chase camera too (the camera itself is carried by
+	// whoever moved the frame: main.js's globe.capture and restore). Where it is, how it's turned,
+	// its velocity, where R and a fall put it back, the way its camera looks and its lean's last
+	// course (both headings: left as they were, the camera would swing round by the frame's turn and
+	// the body would roll as if it had turned that much in a frame). Not driving, nothing: a parked
+	// vehicle is its app's to move.
+	transform( matrix ) {
+
+		if ( ! this.active ) return;
+		_turn.setFromRotationMatrix( matrix );
+		// A point in the scene's east, north and up, carried.
+		const carry = ( east, north, up ) => localToEnu( enuToLocal( east, north, up, _c ).applyMatrix4( matrix ) );
+		const stunt = !! this.air && ! this.air.flight;
+		const was = this.heading;
+		// Its velocity as it was, before its heading and course are turned.
+		const rad = this.course * MathUtils.DEG2RAD;
+		_velocity.set( - Math.sin( rad ) * this.speed, this.vy, Math.cos( rad ) * this.speed ).applyQuaternion( _turn );
+		// Turning any way in the air, the middle of its box is where it is, and its attitude its own;
+		// otherwise its wheels, turned by its heading, pitch and roll.
+		const at = carry( this.east, this.north, this.y + ( stunt ? this.centre.y : 0 ) );
+		this.east = at.east;
+		this.north = at.north;
+		this.y = at.up - ( stunt ? this.centre.y : 0 );
+		if ( stunt ) {
+
+			this.air.q.premultiply( _turn );
+			_euler.setFromQuaternion( this.air.q, 'YXZ' );
+			this.heading = yawToHeading( _euler.y );
+
+		} else {
+
+			_q.setFromEuler( _euler.set( this.pitch, headingToYaw( this.heading ), this.roll, 'YXZ' ) ).premultiply( _turn );
+			_euler.setFromQuaternion( _q, 'YXZ' );
+			this.pitch = _euler.x;
+			this.roll = _euler.z;
+			this.heading = yawToHeading( _euler.y );
+
+		}
+
+		// Every other heading turned as much, so a drift's slip and the chase camera's lag stay as they
+		// were; its speed what of its velocity is along its course, and vy the rest, up.
+		const turned = ( ( this.heading - was ) % 360 + 540 ) % 360 - 180;
+		this.course += turned;
+		this.view += turned;
+		if ( this.body ) this.body.lastCourse += turned;
+		const course = this.course * MathUtils.DEG2RAD;
+		this.speed = - Math.sin( course ) * _velocity.x + Math.cos( course ) * _velocity.z;
+		this.vy = _velocity.y;
+		// Where it's put back: as it last stood, and spots it drove through freely (the same spot, just
+		// after R).
+		const spot = ( { east, north, y } ) => {
+
+			const { east: e, north: n, up } = carry( east, north, y );
+			return { east: e, north: n, y: up };
+
+		};
+		const good = this.lastGood;
+		this.lastSafe = spot( this.lastSafe );
+		this.lastGood = spot( good );
+		this.recentGood = this.recentGood === good ? this.lastGood : spot( this.recentGood );
+
+		this.scrapeAt.at.applyMatrix4( matrix );
+		this.scrapeAt.normal.applyQuaternion( _turn );
+		this.lastBase?.applyMatrix4( matrix );
+		const { air } = this;
+		if ( air?.wall ) {
+
+			// Which way the wall it bounced off faces, along the ground.
+			const facing = localToEnu( enuToLocal( air.wall.east, air.wall.north, 0, _c ).applyQuaternion( _turn ) );
+			const length = Math.hypot( facing.east, facing.north ) || 1;
+			air.wall.east = facing.east / length;
+			air.wall.north = facing.north / length;
+
+		}
+
+		if ( air?.righting ) {
+
+			air.righting.from.premultiply( _turn );
+			air.righting.to.premultiply( _turn );
+			air.righting.heading += turned;
+
+		}
+
+		this.fx?.transform( matrix );
+		// Drawn where it is now this frame, as it would be after its next update.
+		this.pose();
+		this.entry.pivot.updateMatrixWorld( true );
+
+	}
+
 	update( dt ) {
 
 		if ( ! this.active ) return;
@@ -747,7 +846,7 @@ export class Driver {
 		} else if ( heights.length === 0 ) {
 
 			// Off the edge of the world: put it back where it last stood.
-			if ( this.y < this.lastSafe.y - FALL_RESET / this.gravity ) Object.assign( this, this.lastSafe, { speed: 0, vy: 0 } );
+			if ( this.y < this.lastSafe.y - this.fallReset ) Object.assign( this, this.lastSafe, { speed: 0, vy: 0 } );
 			this.vy -= this.fall * dt;
 			this.y += this.vy * dt;
 
@@ -764,8 +863,11 @@ export class Driver {
 				// a steep lump in Google's mesh (a building's skirt) taken at 90 km/h climbs at 24 m/s,
 				// which threw the kart 25 m into the sky.
 				this.grounded = false;
-				// (In low gravity the climb it carries off is multiplied by leap too, as a hop is.)
-				if ( this.launch ) this.vy = Math.min( this.vy * this.leap, LAUNCH.max * this.handling.launch * this.leap );
+				// (In low gravity the climb it carries off is multiplied by leap too, as a hop is; going
+				// down it keeps its speed down the slope, which leap would have slowed, sailing it off
+				// any slope steep enough to leave: on Vesta a 20° one at 119 m/s, falling at 6.8 m/s
+				// rather than 43, came down two and a half minutes later.)
+				if ( this.launch && this.vy > 0 ) this.vy = Math.min( this.vy * this.leap, LAUNCH.max * this.handling.launch * this.leap );
 				if ( this.launch && ! this.driftHop && ! this.drifting ) this.enterAir();
 
 			}
@@ -1837,7 +1939,7 @@ export class Driver {
 		if ( ground === null ) {
 
 			// Off the edge of the world: put it back where it last stood.
-			if ( this.y < this.lastSafe.y - FALL_RESET / this.gravity ) {
+			if ( this.y < this.lastSafe.y - this.fallReset ) {
 
 				Object.assign( this, this.lastSafe, { speed: 0, vy: 0, pitch: 0, roll: 0, grounded: true, airTime: 0 } );
 				this.air = null;
@@ -2373,6 +2475,14 @@ export class Driver {
 		_toCamera.divideScalar( distance );
 		const hit = this.cast( from, _toCamera, distance + CAMERA_CLEARANCE );
 		if ( hit ) point.copy( from ).addScaledVector( _toCamera, Math.max( 0, hit.distance - CAMERA_CLEARANCE ) );
+
+	}
+
+	// How far (m) under where it last stood it's put back there, with no ground found under it (see
+	// FALL_RESET).
+	get fallReset() {
+
+		return Math.min( FALL_RESET / this.gravity, FALL_MOST );
 
 	}
 

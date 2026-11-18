@@ -1,16 +1,16 @@
 import { EARTH, OFF_EARTH, WORLDS as WORLD_DATA, WORLD_IDS } from './worlds.js';
 
 // Where people drop in (docs/world-drive.md, "Where people drop in"): each drop-in's place, on any
-// of the worlds (worlds.js: the Earth, the Moon, Mars), rounded to a cell about a kilometre each way
+// of the worlds (worlds.js: the Earth, the Moon, Mars, Vesta, Ceres), rounded to a cell about a kilometre each way
 // before it leaves the page, and counted a day by the Worker (worker/drive/dropins.js) for the
 // owner's admin page's heat map and top places. Plain data and small functions, so the page, the
 // Worker and the tests share them.
 //
 // The grid. Each world is cut into rows CELL metres tall from the south pole to the north (on a
 // sphere of the world's radius, so a row is a whole number of them from pole to pole: 20,015 on the
-// Earth, 5,458 on the Moon, 10,648 on Mars), and each row into as many cells as fit CELL metres wide
-// round it at its middle (40,030 at the Earth's equator, fewer towards the poles, three in the rows
-// round each pole). So a cell is about a kilometre on the ground each way at every latitude on every
+// Earth, 5,458 on the Moon, 10,648 on Mars, 825 on Vesta, 1,477 on Ceres), and each row into as
+// many cells as fit CELL metres wide round it at its middle (40,030 at the Earth's equator, fewer
+// towards the poles, three in the rows round each pole). So a cell is about a kilometre on the ground each way at every latitude on every
 // world: never a strip a few metres wide by a pole, as whole degrees' fractions would be. A cell is
 // "<world>:<row>:<column>", the row from the south pole (0) and the column eastward from 180° W (0).
 // The page sends only that, never where in it.
@@ -95,7 +95,7 @@ export function metresOn( world, latA, lonA, latB, lonB ) {
 // The places a post carries (`places`: [ "<world>:<row>:<column>" ]), cleaned against the drop-ins it
 // counts (`counts`, checkCounts' [ [ metric, key, n ] ]): each a cell of the grid, once, and no
 // more on a world than the drop-ins counted there in the same post (dropin:moon on the Moon,
-// dropin:mars on Mars, the others on the Earth), since the page posts each drop-in's place with the
+// dropin:mars on Mars, and so on for each world, the others on the Earth), since the page posts each drop-in's place with the
 // drop-in itself. A world with no room counted is none: a cell of it is left out. [] for none; null
 // when it isn't a list of at most PLACES_PER_POST.
 export function checkPlaces( places, counts ) {

@@ -100,7 +100,7 @@ export async function postStats( context ) {
 
 // The kinds of visit countVisit counts (metric 'visit_kind'): on the Earth ('earth', a supporter's
 // 'earth_supporter'), the owner's, on a free world opened on a link to it ('moon_link',
-// 'mars_link'), and on the Moon over the day's cap for everyone or the visitor's own (the page opens
+// 'mars_link', 'vesta_link', 'ceres_link'), and on the Moon over the day's cap for everyone or the visitor's own (the page opens
 // on the Moon instead).
 const VISIT_KINDS = new Set( [ 'earth', 'earth_supporter', 'owner', ...OFF_EARTH.map( world => `${ world }_link` ), 'moon_daily_cap', 'moon_visitor_cap' ] );
 

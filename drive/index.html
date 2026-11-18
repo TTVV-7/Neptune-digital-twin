@@ -4,7 +4,7 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 		<title>World Drive – Drive Anywhere on Earth in 3D | Free Browser Driving Game</title>
-		<meta name="description" content="Drive anywhere on Earth in photorealistic 3D, or on the Moon and Mars: real cities, bridges and mountain roads, stunts, boosts and friends. Free in your browser." />
+		<meta name="description" content="Drive anywhere on Earth in photorealistic 3D, or on the Moon, Mars, Vesta and Ceres: real cities and mountain roads, stunts, boosts and friends. Free in your browser." />
 		<meta name="google-adsense-account" content="ca-pub-7954356723512335" />
 		<!-- One address for the game, whatever's after the ? (a party's code, a place's pin): see
 		     docs/world-drive.md, "Search engines". -->
@@ -15,7 +15,7 @@
 		<meta property="og:site_name" content="World Drive" />
 		<meta property="og:type" content="website" />
 		<meta property="og:title" content="World Drive – Drive Anywhere on Earth in 3D" />
-		<meta property="og:description" content="Pick anywhere on Earth, drop in and drive it in photorealistic 3D, or drive the Moon and Mars in low gravity: stunts, boosts, drifts, flying and friends. Free in your browser." />
+		<meta property="og:description" content="Pick anywhere on Earth, drop in and drive it in photorealistic 3D, or drive the Moon, Mars, Vesta and Ceres in low gravity: stunts, boosts, drifts, flying and friends. Free in your browser." />
 		<meta property="og:url" content="https://worlddrive.app/" />
 		<meta property="og:image" content="https://worlddrive.app/og/world-drive.png" />
 		<meta property="og:image:type" content="image/png" />
@@ -24,7 +24,7 @@
 		<meta property="og:image:alt" content="World Drive: pick anywhere on Earth, drop in and drive it in 3D, free in your browser" />
 		<meta name="twitter:card" content="summary_large_image" />
 		<meta name="twitter:title" content="World Drive – Drive Anywhere on Earth in 3D" />
-		<meta name="twitter:description" content="Pick anywhere on Earth, drop in and drive it in photorealistic 3D, or drive the Moon and Mars in low gravity: stunts, boosts, drifts, flying and friends. Free in your browser." />
+		<meta name="twitter:description" content="Pick anywhere on Earth, drop in and drive it in photorealistic 3D, or drive the Moon, Mars, Vesta and Ceres in low gravity: stunts, boosts, drifts, flying and friends. Free in your browser." />
 		<meta name="twitter:image" content="https://worlddrive.app/og/world-drive.png" />
 		<meta name="twitter:image:alt" content="World Drive: pick anywhere on Earth, drop in and drive it in 3D, free in your browser" />
 		<link rel="icon" href="/favicon.ico" sizes="48x48" />
@@ -48,7 +48,7 @@
 				"@type": [ "VideoGame", "WebApplication" ],
 				"name": "World Drive",
 				"url": "https://worlddrive.app/",
-				"description": "A free arcade driving game in the browser: pick anywhere on Earth from a globe and drive it in photorealistic 3D, built from Google's 3D map of the real world, or turn the globe to the Moon or Mars and drive that, made from NASA's maps, in low gravity; with stunts, boosts, drifting, flying, levels and other drivers as ghost cars.",
+				"description": "A free arcade driving game in the browser: pick anywhere on Earth from a globe and drive it in photorealistic 3D, built from Google's 3D map of the real world, or turn the globe to the Moon, Mars or the asteroids Vesta and Ceres and drive that, made from NASA's maps, in low gravity; with stunts, boosts, drifting, flying, levels and other drivers as ghost cars.",
 				"image": "https://worlddrive.app/og/world-drive.png",
 				"genre": [ "Racing", "Driving", "Arcade", "Open world" ],
 				"gamePlatform": "Web browser",
@@ -112,12 +112,15 @@
 					<h1 class="logo">World <b>Drive</b></h1>
 					<p class="tagline">Pick anywhere on Earth. Drop in. Drive.</p>
 				</header>
-				<!-- The Earth, from Google's 3D map, or the Moon or Mars, made in the page (body.js): one button
-				     a world (worlds.js's ids), the arrow keys moving along them (panel.js). -->
+				<!-- The Earth, from Google's 3D map, or the Moon, Mars, Vesta or Ceres, made in the page
+				     (body.js): one button a world (worlds.js's ids), the arrow keys moving along them
+				     (panel.js). -->
 				<div class="worlds" role="radiogroup" aria-label="Where to drive">
 					<button type="button" role="radio" data-world="earth" aria-checked="true" tabindex="0"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M2 10h16M10 2c3 3 3 13 0 16M10 2c-3 3-3 13 0 16" fill="none" stroke="currentColor" stroke-width="1.5"/></svg> Earth</button>
 					<button type="button" role="radio" data-world="moon" aria-checked="false" tabindex="-1"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M13.5 3.2A7.5 7.5 0 1 0 16.8 14 6 6 0 0 1 13.5 3.2z" fill="currentColor"/></svg> Moon</button>
 					<button type="button" role="radio" data-world="mars" aria-checked="false" tabindex="-1"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><circle cx="10" cy="10" r="7.6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4.2 11.4c2.2-1.3 4.6-.4 6.6-1.3 1.6-.7 3-1.9 5-1.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="7" cy="6.6" r="1.3" fill="currentColor"/></svg> Mars</button>
+					<button type="button" role="radio" data-world="vesta" aria-checked="false" tabindex="-1"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M4.6 5.6C6.4 3.2 10.6 2.5 13.7 3.5c2.8.9 4.1 3.4 3.6 6.3-.5 2.9-2.3 5.9-5.6 6.5-3.6.7-7.6-.7-8.6-3.8-.7-2.1-.1-4.6 1.5-6.9z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M6.8 13c1.8 1.4 4.6 1.5 6.4.1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8.4" cy="7.4" r="1.2" fill="currentColor"/></svg> Vesta</button>
+					<button type="button" role="radio" data-world="ceres" aria-checked="false" tabindex="-1"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><circle cx="10" cy="10" r="7.6" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12.4" cy="7.6" r="1.6" fill="currentColor"/><circle cx="14.6" cy="9.8" r=".8" fill="currentColor"/><path d="M5.2 11.8a3.4 3.4 0 0 0 4.4 1.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg> Ceres</button>
 				</div>
 				<!-- A daily, a weekly and a monthly challenge on each world (challenges.js, loaded when opened). -->
 				<button type="button" class="challenges-open" hidden><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M4 2.5v15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M5 3h11.5v8.5H5z" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5 3h2.9v2.8H5zM10.8 3h2.9v2.8h-2.9zM7.9 5.8h2.9v2.9H7.9zM13.7 5.8h2.8v2.9h-2.8zM5 8.7h2.9v2.8H5zM10.8 8.7h2.9v2.8h-2.9z" fill="currentColor"/></svg> <span><b>Challenges</b> <small>Daily · weekly · monthly, each with its own board</small></span></button>
@@ -157,9 +160,11 @@
 						<li><b>Fly.</b> Lift off over the rooftops and glide back down.</li>
 						<li><b>Drive on the Moon.</b> Switch the globe to the Moon and drive its craters, seas and the Apollo landing sites, in low gravity, with the Earth in the sky.</li>
 						<li><b>Drive on Mars.</b> Switch the globe to Mars and drive Olympus Mons, the canyons of Valles Marineris and where the rovers landed, in 38% of the Earth's gravity, under a dusty butterscotch sky.</li>
+						<li><b>Drive on Vesta.</b> Switch the globe to the asteroid Vesta and drive the giant Rheasilvia basin and its central peak, the Snowman's craters and the troughs round its middle, in 2.5% of the Earth's gravity, so a hop lasts about six times as long.</li>
+						<li><b>Drive on Ceres.</b> Switch the globe to the dwarf planet Ceres and drive Occator and its bright salt spots, the lone ice volcano Ahuna Mons and the great basin Kerwan, in 2.9% of the Earth's gravity.</li>
 						<li><b>Drive with others.</b> See who's driving nearby as ghost cars, or invite friends to a party with a link, wherever each of you is.</li>
 						<li><b>Levels and the leaderboard.</b> Driving earns XP for 50 levels of cars, paint, boost trails and titles, and your best runs go on the leaderboard.</li>
-						<li><b>Challenges.</b> A daily, a weekly and a monthly challenge on the Earth, on the Moon and on Mars: race through checkpoints, collect stars or drive to a landmark against the clock, each with its own board of the best times.</li>
+						<li><b>Challenges.</b> A daily, a weekly and a monthly challenge on each world, the Earth, the Moon, Mars, Vesta and Ceres: race through checkpoints, collect stars or drive to a landmark against the clock, each with its own board of the best times.</li>
 						<li><b>Your ride.</b> A pickup, a go-kart or a muscle car to start, and six more cars as you level up, from a golf cart and a tuk-tuk to a formula racer, all painted in the Garage; the optional Supporter Pass adds more.</li>
 					</ul>
 					<h3>How to play</h3>
@@ -173,10 +178,16 @@
 					<h3>Places to drive on Mars</h3>
 					<ul class="site-places"><!-- mars places --></ul>
 					<p><a href="/mars/" target="_blank" rel="noopener">Driving on Mars, and what's at each place</a></p>
+					<h3>Places to drive on Vesta</h3>
+					<ul class="site-places"><!-- vesta places --></ul>
+					<p><a href="/vesta/" target="_blank" rel="noopener">Driving on Vesta, and what's at each place</a></p>
+					<h3>Places to drive on Ceres</h3>
+					<ul class="site-places"><!-- ceres places --></ul>
+					<p><a href="/ceres/" target="_blank" rel="noopener">Driving on Ceres, and what's at each place</a></p>
 					<h3>Questions</h3>
 					<dl>
 						<dt>Is it free?</dt>
-						<dd>Yes. The 3D map costs World Drive a little for every visit, so everyone gets one free Earth drive a day (and there's a limit for everyone together); after that the page opens on the Moon, and the Moon and Mars are free and unlimited. The Supporter Pass, a subscription, adds rides and looks and more Earth drives a day; you never need it to play.</dd>
+						<dd>Yes. The 3D map costs World Drive a little for every visit, so everyone gets one free Earth drive a day (and there's a limit for everyone together); after that the page opens on the Moon, and the Moon, Mars, Vesta and Ceres are free and unlimited. The Supporter Pass, a subscription, adds rides and looks and more Earth drives a day; you never need it to play.</dd>
 						<dt>Does it work on a phone?</dt>
 						<dd>Yes, in the browser on a phone, a tablet or a computer with 3D graphics (WebGL). Touch screens get driving buttons.</dd>
 						<dt>Can I drive my own street?</dt>
@@ -185,6 +196,10 @@
 						<dd>Yes: switch the globe to the Moon at the top of this panel, or pick one of its places above. Its mountains, craters and seas are the real Moon's, from NASA's maps, and its gravity is a sixth of the Earth's, so a jump lasts two and a half times as long. On the Moon you drive on your own.</dd>
 						<dt>Can I drive on Mars?</dt>
 						<dd>Yes: switch the globe to Mars at the top of this panel, or pick one of its places above. Its volcanoes, canyons and craters are the real Mars's, from NASA's maps, and its gravity is 38% of the Earth's, so a jump lasts about 1.6 times as long. On Mars you drive on your own too.</dd>
+						<dt>Can I drive on Vesta?</dt>
+						<dd>Yes: switch the globe to Vesta at the top of this panel, or pick one of its places above. Vesta is an asteroid 525 km across, far from round, and its basins, troughs and craters are the real Vesta's, from NASA's Dawn mission: Rheasilvia's central peak rises about 20 km over its basin floor. Its gravity is 2.5% of the Earth's, so a hop stays up about 6 times as long. On Vesta, too, you drive on your own.</dd>
+						<dt>Can I drive on Ceres?</dt>
+						<dd>Yes: switch the globe to Ceres at the top of this panel, or pick one of its places above. Ceres, a dwarf planet and the biggest body in the asteroid belt, is the real Ceres from NASA's Dawn mission: Occator crater and its bright salt spots, and Ahuna Mons, a 4 km ice volcano. Its gravity is 2.9% of the Earth's, so a hop stays up about 6 times as long. On Ceres, too, you drive on your own.</dd>
 						<dt>Can I play with friends?</dt>
 						<dd>Yes. Invite friends gives you a link; whoever opens it joins your party and can drive beside you. Cars are ghosts that pass through each other, and there's no chat.</dd>
 						<dt>What does World Drive keep about me?</dt>
@@ -303,22 +318,26 @@
 			<img src="/google-maps-logo.svg" alt="Google Maps" />
 			<span class="credits"></span>
 		</div>
-		<!-- On the Moon and Mars (body.js), whose pictures and heights are NASA's (worlds.js's credits). -->
+		<!-- On the worlds made in the page (body.js), whose pictures and heights are NASA's (worlds.js's
+		     credits, the same words): one a world, #<id>-credit (main.js shows the one it's on). -->
 		<div id="moon-credit" class="world-credit" hidden>Moon: NASA LRO (LROC, LOLA)</div>
 		<div id="mars-credit" class="world-credit" hidden>Mars: NASA MGS MOLA, Viking (USGS)</div>
+		<div id="vesta-credit" class="world-credit" hidden>Vesta: NASA Dawn (DLR, USGS)</div>
+		<div id="ceres-credit" class="world-credit" hidden>Ceres: NASA Dawn (DLR, USGS)</div>
 
 		<dialog id="about" aria-labelledby="about-title">
 			<h2 id="about-title">World Drive</h2>
-			<p>Pick a spot anywhere on Earth, drop in and drive the real world in 3D: city streets, mountain passes, bridges, wherever you like. Or switch to the Moon or Mars and drive that.</p>
-			<p>The 3D world is Google's photorealistic map, streamed as you go. Every visit costs a little, so everyone gets one free Earth drive a day, with a limit for everyone together; past either, the page opens on the Moon; the Moon and Mars are free and unlimited. A visit lasts as long as you keep the page open: fly off and drop in somewhere else as often as you like.</p>
+			<p>Pick a spot anywhere on Earth, drop in and drive the real world in 3D: city streets, mountain passes, bridges, wherever you like. Or switch to the Moon, Mars, Vesta or Ceres and drive that.</p>
+			<p>The 3D world is Google's photorealistic map, streamed as you go. Every visit costs a little, so everyone gets one free Earth drive a day, with a limit for everyone together; past either, the page opens on the Moon; the Moon, Mars, Vesta and Ceres are free and unlimited. A visit lasts as long as you keep the page open: fly off and drop in somewhere else as often as you like.</p>
 			<p>The leaderboard keeps the nickname you pick and your best scores, with where you set them and in what, your best time on each challenge you finish (with when you passed each gate and in what), and your XP and level, with the areas and start spots you've driven (until you pick a nickname, that's kept in this browser); nothing else about you.</p>
 			<p>While <b>Show me to drivers nearby</b> is on (it is unless you switch it off in the pause menu), or while you're in a party, the others driving there see your leaderboard nickname (or a guest name) with your level and title, your ride and where your car is in the game, including the spot you dropped in and its name. Nothing else about you, and never where you really are.</p>
 			<p>With it on, you're also counted on the globe's map of who's driving now, which everyone sees: a dot, to about a kilometre, where your car is in the game (or, while nobody else is driving in your area, where you dropped in, which can be a place you searched for), with how many are driving there. No name, no place name and nothing else about you. In a party, on the globe, or with it off, you're not counted.</p>
-			<p>To see how the game is played, World Drive counts, for each day, things like how long people drive, on the Earth, the Moon or Mars and in which rides, which start spots they drop in at and how long that took, roughly where else they drop in (to about a kilometre, counted once a day for each visitor at each place), how far into the game a visit gets, whether it's on a phone, a tablet or a computer, how many searches are made (never what was typed), what they change in the Garage, what went wrong (a place with no 3D map, a ride that didn't load), which site they came from and how long the page took to load. Only totals are kept, with nothing about who: no cookies, and nothing kept that tells one visitor from another (to count a visitor once a day at a place, a keyed hash of their address and the place is kept that day and then deleted; Cloudflare's backups of the game's storage can hold it for up to 30 days more, and only someone with the game's own secret key could check an address against it).</p>
+			<p>To see how the game is played, World Drive counts, for each day, things like how long people drive, on the Earth, the Moon, Mars, Vesta or Ceres and in which rides, which start spots they drop in at and how long that took, roughly where else they drop in (to about a kilometre, counted once a day for each visitor at each place), how far into the game a visit gets, whether it's on a phone, a tablet or a computer, how many searches are made (never what was typed), what they change in the Garage, what went wrong (a place with no 3D map, a ride that didn't load), which site they came from and how long the page took to load. Only totals are kept, with nothing about who: no cookies, and nothing kept that tells one visitor from another (to count a visitor once a day at a place, a keyed hash of their address and the place is kept that day and then deleted; Cloudflare's backups of the game's storage can hold it for up to 30 days more, and only someone with the game's own secret key could check an address against it).</p>
 			<p>Signing in, with Google or with a username and password, is only for the Supporter Pass and to keep your level and times on every device. With Google it keeps your Google account's name and email address; with a username, the username and a salted hash of your password (never the password itself), and no email. Either way it keeps whether you have the pass and which nickname is yours, so the pass and its ⭐ follow you to any browser. Your username is only for signing in: the boards show your nickname. Payments are made with Stripe: World Drive never sees your card.</p>
 			<p>Map data &copy; Google and its data providers. Place search &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>.</p>
 			<p>The Moon: its pictures and heights are NASA's, from the Lunar Reconnaissance Orbiter's cameras (LROC) and laser altimeter (LOLA), as NASA's Scientific Visualization Studio's <a href="https://svs.gsfc.nasa.gov/4720/" target="_blank" rel="noopener">CGI Moon Kit</a> has them; the small craters and the rocks close by are made up. While you're on the Moon you drive on your own: nobody sees your car, and you don't see theirs.</p>
 			<p>Mars: its heights are NASA's, from Mars Global Surveyor's laser altimeter (MOLA), as NASA's Planetary Data System has them, and its colours the Viking orbiters' photographs of all of Mars, as the <a href="https://astrogeology.usgs.gov/search/map/mars_viking_colorized_global_mosaic_232m" target="_blank" rel="noopener">USGS's colour mosaic</a> has them; the small craters, the rocks close by and Phobos's place in the sky are made up. On Mars, too, you drive on your own.</p>
+			<p>Vesta and Ceres: their heights and pictures are from NASA's Dawn mission (NASA/JPL-Caltech/UCLA/MPS/DLR/IDA), its framing camera's photographs and the DLR's models of their shapes made from them, as the <a href="https://planetarymaps.usgs.gov/mosaic/" target="_blank" rel="noopener">USGS's planetary maps</a> have them; the small craters and the rocks close by are made up. On Vesta and Ceres, too, you drive on your own.</p>
 			<h3>Vehicle models</h3>
 			<ul class="credits small"></ul>
 			<p class="small">World Drive is checked by Cloudflare Turnstile so the free drives go to people rather than robots.</p>

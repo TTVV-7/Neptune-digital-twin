@@ -14,7 +14,7 @@ import { getFeats, onFeatsChange, setFeats } from './feats.js';
 
 // How long (ms) an answer is shown again rather than asked for anew.
 const KEEP = 60 * 1000;
-const ICONS = { km: '🛣️', moon: '🌙', mars: '🔴', looks: '🎨', rides: '🚗', streak: '📅', parties: '🎉', challenges: '🏁', placing: '🏆' };
+const ICONS = { km: '🛣️', moon: '🌙', mars: '🔴', vesta: '🪨', ceres: '🌑', looks: '🎨', rides: '🚗', streak: '📅', parties: '🎉', challenges: '🏁', placing: '🏆' };
 
 let dialog = null;
 let app = null;
@@ -97,14 +97,17 @@ async function ask() {
 // The counts shown: the Worker's (for this player, with their account's) and what's been driven
 // since, or this browser's. What's been driven since adds to the player's own count (their reports
 // add to nothing else), no more of it than the Worker will take today (its `left`), and the account's
-// best is shown where that's more: so a count doesn't run ahead and then fall back.
+// best is shown where that's more: so a count doesn't run ahead and then fall back. Each trusted
+// count is one the page adds to (COUNTS); one the Worker's answer lacks (a Worker from before a world
+// was added) reads as none.
 function counts() {
 
 	const pending = app.progress.pending;
 	const kept = answer && askedFor === app.player()?.id ? answer.counts : null;
 	if ( ! kept ) return { ...pending, parties: 0, challenges: 0 };
-	const shown = count => Math.max( kept[ count ], ( answer.own?.[ count ] ?? kept[ count ] ) + Math.min( pending[ count ], answer.left?.[ count ] ?? Infinity ) );
-	return { ...kept, km: shown( 'km' ), moon: shown( 'moon' ), mars: shown( 'mars' ), looks: shown( 'looks' ), rides: shown( 'rides' ) };
+	const shown = count => Math.max( kept[ count ] ?? 0, ( answer.own?.[ count ] ?? kept[ count ] ?? 0 ) + Math.min( pending[ count ] ?? 0, answer.left?.[ count ] ?? Infinity ) );
+	const trusted = Object.keys( COUNTS ).filter( count => COUNTS[ count ] === 'trusted' );
+	return { ...kept, ...Object.fromEntries( trusted.map( count => [ count, shown( count ) ] ) ) };
 
 }
 

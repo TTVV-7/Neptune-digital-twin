@@ -235,3 +235,13 @@ export function TheWorld( id ) {
 	return words[ 0 ].toUpperCase() + words.slice( 1 );
 
 }
+
+// The worlds `ids` in a sentence: "the Moon", "the Moon and Mars", "the Moon, Mars, Vesta and Ceres"
+// (or `joiner` "or": "the Moon, Mars, Vesta or Ceres"), so every list of the free worlds keeps up
+// as worlds are added.
+export function listOf( ids, joiner = 'and' ) {
+
+	const words = ids.map( id => WORLDS[ id ].the );
+	return words.length < 2 ? words.join( '' ) : `${ words.slice( 0, - 1 ).join( ', ' ) } ${ joiner } ${ words.at( - 1 ) }`;
+
+}

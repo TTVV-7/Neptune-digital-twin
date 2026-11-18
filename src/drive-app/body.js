@@ -32,11 +32,11 @@ import { createGround } from './body-height.js';
 import { moonGround } from './moon-height.js';
 import { MOON, WORLDS } from './worlds.js';
 
-// A world made in the page (docs/world-drive.md, "The Moon" and "Mars"): a whole world to see from
-// space, pick a spot on and drive, made here rather than streamed. Its shapes are NASA's (body-
-// height.js: the real heights at a grid of points, and made-up craters and rolling ground below
-// that), its colours a mosaic of photographs of the whole world (drive/public/<world>/colour.webp,
-// scripts/make-moon.mjs, make-mars.mjs), and what's close by is shaded with fine grit so the ground
+// A world made in the page (docs/world-drive.md, "The Moon", "Mars", "Vesta" and "Ceres"): a whole
+// world to see from space, pick a spot on and drive, made here rather than streamed. Its shapes are
+// NASA's (body-height.js: the real heights at a grid of points, and made-up craters and rolling
+// ground below that), its colours a mosaic of photographs of the whole world (drive/public/<world>/
+// colour.webp, scripts/make-moon.mjs, make-mars.mjs, make-asteroids.mjs), and what's close by is shaded with fine grit so the ground
 // is seen to move under you. What the world is (its size, files and made-up ground) is worlds.js's;
 // how it looks (its light, its sky, what hangs in it) is LOOKS's, below.
 //
@@ -56,10 +56,12 @@ import { MOON, WORLDS } from './worlds.js';
 // - horizon: how much lower (m) than under the camera ground may be all the way to a square for
 //   the square to count as surely over the horizon (more for a world with deep canyons).
 // - shade: the ground's light: the sun's, the light from all round where the sun doesn't reach (from
-//   the Earth on the Moon, from the dusty sky on Mars) as [ r, g, b ], and the share of Lommel-
-//   Seeliger's light (how bare dust scatters it: a full Moon's edge as bright as its middle); and
-//   `tint`, [ r, g, b ] times the picture's colours (the Viking mosaic's Mars is pinker and bluer than
-//   the butterscotch ground the rovers see).
+//   the Earth on the Moon, from the dusty sky on Mars, a little starlight and light off the hills on
+//   Vesta and Ceres) as [ r, g, b ], and the share of Lommel-Seeliger's light (how bare dust scatters
+//   it: a full Moon's edge as bright as its middle); and `tint`, [ r, g, b ] times the picture's
+//   colours (the Viking mosaic's Mars is pinker and bluer than the butterscotch ground the rovers
+//   see; Dawn's pictures of Vesta and Ceres are grey and stretched alike, so the tint is what makes
+//   Vesta's bright rock brighter than the Moon's and Ceres's dark ground darker).
 // - haze: on a world with air, how far off (m) its dust hides half of what's there, and its colour,
 //   seen from the ground (none from high up); null for none.
 // - sky: on a world with air, its sky's colours, overhead and at the horizon, round the sun, and the
@@ -95,6 +97,33 @@ export const LOOKS = {
 		air: { colour: [ 0.86, 0.6, 0.42 ], reach: 0.012 },
 		dust: 0xb87a55,
 		inSky: 'phobos',
+	},
+	// The asteroids: no air, so the stars day and night, and a sun smaller and dimmer than ours (2.4
+	// and 2.8 times as far off), kept near the Moon's here so the ground can be seen. Their
+	// horizons are close and their relief huge for their size (Vesta's ground is 50 km under its
+	// sphere in Rheasilvia and 30 km over it), so a square is only surely over the horizon if it's
+	// kilometres lower than the ground under the camera all the way.
+	vesta: {
+		horizon: 3000,
+		shade: { sun: 2.2, ambient: [ 0.03, 0.03, 0.03 ], lommel: 0.15, tint: [ 1.3, 1.26, 1.18 ] },
+		haze: null,
+		sky: null,
+		sun: [ - 0.62, - 0.66, 0.42 ],
+		lights: { sun: 2.6, sky: 0.2, colours: null },
+		air: null,
+		dust: 0xb4ab9c,
+		inSky: null,
+	},
+	ceres: {
+		horizon: 2000,
+		shade: { sun: 2.2, ambient: [ 0.025, 0.025, 0.025 ], lommel: 0.12, tint: [ 0.84, 0.84, 0.86 ] },
+		haze: null,
+		sky: null,
+		sun: [ - 0.72, - 0.55, 0.42 ],
+		lights: { sun: 2.6, sky: 0.2, colours: null },
+		air: null,
+		dust: 0x5f5d59,
+		inSky: null,
 	},
 };
 
@@ -150,10 +179,18 @@ export function createBody( id ) {
 	const ground = id === MOON ? moonGround : createGround( world );
 	const { radius: RADIUS } = world;
 	// A face of the cube spans this far (m) along the surface; squares are split this deep at most,
-	// for a point every FINEST m or so (the Moon's 16 splits, 41.6 m squares; Mars's 17).
+	// for a point every FINEST m or so (the Moon's 16 splits, 41.6 m squares; Mars's 17). A world far
+	// from round (one with a `level`) has ground well out past its sphere (Vesta's equator is 22 km
+	// out), where its squares are that much bigger: it's split until its points are no more than a
+	// quarter more than FINEST apart even there (Vesta's 14 splits, a point every 0.85 m at its
+	// equator: 13 would be every 1.7 m; Ceres's 14, every 1.44 m).
 	const FACE = RADIUS * Math.PI / 2;
-	const DEEPEST = Math.round( Math.log2( FACE / SEGMENTS / FINEST ) );
-	const space = { id, radius: RADIUS, face: FACE, ground, top: RADIUS + world.highest, look };
+	const DEEPEST = world.level
+		? Math.ceil( Math.log2( world.level[ 0 ] * Math.PI / 2 / SEGMENTS / ( FINEST * 1.25 ) ) )
+		: Math.round( Math.log2( FACE / SEGMENTS / FINEST ) );
+	// (lumpy: its relief is a good share of its radius, so a square's bounds are measured once it's
+	// built, see squareOf.)
+	const space = { id, radius: RADIUS, face: FACE, ground, top: RADIUS + world.highest, look, lumpy: !! world.level };
 
 	const group = new Group();
 	group.name = id;
@@ -453,7 +490,7 @@ export function createBody( id ) {
 // from ( a, b ) across `size` in the face's own coordinates (-1 to 1 each way).
 class Node {
 
-	// `space`: its world's { radius, face, ground, top }, as createBody has them.
+	// `space`: its world's { radius, face, ground, top, lumpy }, as createBody has them.
 	constructor( space, face, level, a, b, size ) {
 
 		this.space = space;
@@ -470,8 +507,9 @@ class Node {
 		const { radius, face: across, ground } = space;
 		const middle = direction( face, a + size / 2, b + size / 2, new Vector3() );
 		this.centre = middle.clone().multiplyScalar( radius + ( ground.hasHeights() ? ground.heightAt( lat( middle ), lon( middle ), across / 2 ** level / SEGMENTS ) : 0 ) );
-		// Half the diagonal, and how far from the world's middle its highest ground is: the whole
-		// world's highest until it's built (then exactly, its squares' no higher than it).
+		// Half the diagonal (on a lumpy world, how far its furthest point is from its middle once it's
+		// built), and how far from the world's middle its highest ground is: the whole world's highest
+		// until it's built (then exactly, its squares' no higher than it).
 		const corner = direction( face, a, b, new Vector3() ).multiplyScalar( radius );
 		this.radius = corner.distanceTo( middle.multiplyScalar( radius ) );
 		this.top = space.top;
@@ -598,6 +636,17 @@ function squareOf( node ) {
 	let top = 0;
 	for ( let k = 0; k < RING * RING; k ++ ) top = Math.max( top, Math.hypot( _grid[ k * 3 ], _grid[ k * 3 + 1 ], _grid[ k * 3 + 2 ] ) );
 	node.top = top;
+	// On a lumpy world a coarse square's ground can be tens of kilometres higher or lower than its
+	// middle (Rheasilvia's wall), which the half diagonal on the sphere doesn't reach: its bounds are
+	// how far its furthest point really is (never less), so it's never taken for over the horizon
+	// while some of it can still be seen. (The Moon's and Mars's stay the half diagonal.)
+	if ( space.lumpy ) {
+
+		let reach = node.radius;
+		for ( let k = 0; k < RING * RING; k ++ ) reach = Math.max( reach, Math.hypot( _grid[ k * 3 ] - centre.x, _grid[ k * 3 + 1 ] - centre.y, _grid[ k * 3 + 2 ] - centre.z ) );
+		node.radius = reach;
+
+	}
 	const ox = Math.round( centre.x / REPEAT ) * REPEAT;
 	const oy = Math.round( centre.y / REPEAT ) * REPEAT;
 	const oz = Math.round( centre.z / REPEAT ) * REPEAT;

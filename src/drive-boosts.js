@@ -11,6 +11,7 @@ import {
 	MathUtils,
 	Mesh,
 	NormalBlending,
+	Quaternion,
 	ShaderMaterial,
 	SRGBColorSpace,
 	Vector3,
@@ -48,6 +49,7 @@ const _p = new Vector3();
 const _v = new Vector3();
 const _a = new Vector3();
 const _b = new Vector3();
+const _turn = new Quaternion();
 // A batch's update() with nothing of a style's own.
 const NO_HOOKS = {};
 
@@ -679,6 +681,12 @@ export class Batch {
 		this.next = 0;
 		this.capacity = particles + quads;
 		this.count = 0;
+		// The world's gravity, as a share of the Earth's, that what falls (a positive `fall`) falls by
+		// (drive-fx.js sets it): what rises (smoke, flame, a negative `fall`) rises as it always has, on
+		// any world. And what a style keeps of its own in the scene besides its particles, carried with
+		// them when the scene's frame moves (see transform): onTransform( matrix, turn ), or null.
+		this.gravity = 1;
+		this.onTransform = null;
 		// What a style's look() may change about how a particle shows this frame (see update).
 		this.view = { position: new Vector3(), sx: 1, sy: 1, turn: 0, alpha: 1, frame: 0 };
 
@@ -823,7 +831,7 @@ export class Batch {
 
 				}
 
-				p.velocity.y -= 9.81 * p.fall * dt;
+				p.velocity.y -= 9.81 * ( p.fall > 0 ? this.gravity : 1 ) * p.fall * dt;
 				if ( p.drag ) p.velocity.multiplyScalar( Math.max( 0, 1 - p.drag * dt ) );
 				step?.( p, dt );
 				p.position.addScaledVector( p.velocity, dt ).addScaledVector( p.carry, dt );
@@ -854,6 +862,25 @@ export class Batch {
 			attribute.needsUpdate = true;
 
 		}
+
+	}
+
+	// The scene's frame moved (drive-fx.js's transform): each live particle carried by `matrix`
+	// (turning and moving only), where it is and the ways it moves and lies turned with it.
+	transform( matrix ) {
+
+		_turn.setFromRotationMatrix( matrix );
+		for ( const p of this.items ) {
+
+			if ( p.age >= p.life ) continue;
+			p.position.applyMatrix4( matrix );
+			p.velocity.applyQuaternion( _turn );
+			p.carry.applyQuaternion( _turn );
+			p.axis.applyQuaternion( _turn );
+
+		}
+
+		this.onTransform?.( matrix, _turn );
 
 	}
 
@@ -1806,6 +1833,17 @@ const STYLES = {
 			const batch = new Batch( root, { particles: 60, quads: TAIL + 1, blending: AdditiveBlending } );
 			const dust = emitter();
 			const tail = Array.from( { length: TAIL }, () => ( { at: new Vector3(), velocity: new Vector3(), born: - Infinity, width: 0 } ) );
+			// The tail's points are in the scene too.
+			batch.onTransform = ( matrix, turn ) => {
+
+				for ( const point of tail ) {
+
+					point.at.applyMatrix4( matrix );
+					point.velocity.applyQuaternion( turn );
+
+				}
+
+			};
 			const white = new Color( 0xeaffff );
 			const blue = new Color( 0x4a6dff );
 			const colour = new Color();

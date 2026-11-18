@@ -16,9 +16,9 @@ import { setting } from './settings.js';
 // (`achievements`, one row an achievement a player, with when), and the construction rides those
 // unlock, checked wherever a ride shows to others. Each is earned where its count changes:
 //
-// - the trusted counts (km, Moon and Mars drives, Garage changes, rides tried) and the days in a row
-//   with the player's progress reports (progress.js), kept in players.tallies, a day's worth at most
-//   each;
+// - the trusted counts (km, drives on the Moon, Mars, Vesta and Ceres, Garage changes, rides tried)
+//   and the days in a row with the player's progress reports (progress.js), kept in
+//   players.tallies, a day's worth at most each;
 // - challenges finished as a player's first time on a challenge is written (finishedQuery, from
 //   challenges.js's postTime), and places on a board as its final places are (placingQuery, with
 //   challenges.js's finishQueries), from the Worker's own times and final_rank, never the page's word;
@@ -190,9 +190,10 @@ export async function checkRide( db, id, vehicle ) {
 
 // POST /api/achievements { id, secret }: the player's achievements and the counts toward them, with
 // their account's (the most any of its players has of each count): { achievements: [ { id, at } ],
-// counts: { km, moon, mars, looks, rides, streak, parties, challenges }, own: { km, moon, mars,
-// looks, rides } (this player's own trusted counts, which their reports add to), left: { km, moon,
-// mars, looks, rides } (what more of each trusted count today will take from this player), rides:
+// counts: { km, moon, mars, vesta, ceres, looks, rides, streak, parties, challenges }, own: { km,
+// moon, mars, vesta, ceres, looks, rides } (this player's own trusted counts, which their reports
+// add to), left: { km, moon, mars, vesta, ceres, looks, rides } (what more of each trusted count
+// today will take from this player), rides:
 // [ the construction rides unlocked ] }. Any challenges-finished achievement the times have reached
 // and that isn't written yet (times from before achievements) is written as it's asked for. Held to
 // ACHIEVEMENT_LOOKS a minute (Cloudflare's rate limiter, by the challenges' keyed hash of the
@@ -220,11 +221,11 @@ export async function postAchievements( { request, env, limits, now } ) {
 	if ( ! me.results.length ) throw new HttpError( 403, 'Forbidden', { reason: 'player' } );
 
 	// The account's best of each count.
-	const counts = { km: 0, moon: 0, mars: 0, looks: 0, rides: 0, streak: 0, parties: 0, challenges: finished.results[ 0 ]?.n ?? 0 };
+	const counts = { km: 0, moon: 0, mars: 0, vesta: 0, ceres: 0, looks: 0, rides: 0, streak: 0, parties: 0, challenges: finished.results[ 0 ]?.n ?? 0 };
 	for ( const row of players.results ) {
 
 		const mine = countsOf( readTallies( row.tallies ), { parties: row.parties } );
-		for ( const count of [ 'km', 'moon', 'mars', 'looks', 'rides', 'streak', 'parties' ] ) counts[ count ] = Math.max( counts[ count ], mine[ count ] );
+		for ( const count of [ 'km', 'moon', 'mars', 'vesta', 'ceres', 'looks', 'rides', 'streak', 'parties' ] ) counts[ count ] = Math.max( counts[ count ], mine[ count ] );
 
 	}
 
@@ -249,7 +250,7 @@ export async function postAchievements( { request, env, limits, now } ) {
 	achievements.sort( ( a, b ) => order.indexOf( a.id ) - order.indexOf( b.id ) );
 	const mine = new Set( achievements.map( a => a.id ) );
 	counts.km = Math.round( counts.km * 1000 ) / 1000;
-	const ownCounts = { km: Math.round( own.km * 1000 ) / 1000, moon: own.moon, mars: own.mars, looks: own.looks, rides: own.rides.length };
+	const ownCounts = { km: Math.round( own.km * 1000 ) / 1000, moon: own.moon, mars: own.mars, vesta: own.vesta, ceres: own.ceres, looks: own.looks, rides: own.rides.length };
 	return json( { achievements, counts, own: ownCounts, left, rides: Object.keys( RIDE_FEATS ).filter( ride => mine.has( RIDE_FEATS[ ride ].feat ) ) } );
 
 }

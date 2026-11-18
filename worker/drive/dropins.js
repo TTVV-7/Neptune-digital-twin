@@ -22,8 +22,8 @@ import { KEEP_DAYS, adminAccount, askedDays } from './admin.js';
 // For what comes next (challenges picked from where people go), topPlaces is the query: a world's
 // most dropped-in places over a period, named, a featured place's cells together; and topCells the
 // cells themselves. Their ranking can be pushed by anyone with many addresses passing the robot
-// check (a place on the Moon or Mars most cheaply: their visits aren't capped), so it's a list to
-// offer the owner, not one to pick from blindly: see topPlaces.
+// check (a place on a world but the Earth most cheaply: their visits aren't capped), so it's a list
+// to offer the owner, not one to pick from blindly: see topPlaces.
 //
 // Settings, none of which need setting: DROPIN_PLACES_DAILY, DROPIN_PLACES_PER_VISITOR and
 // DROPIN_PLACES_PER_VISIT, the most places counted a day on each world for everyone (DAILY), for
@@ -59,25 +59,27 @@ const KEPT = 10 * 60 * 1000;
 const KEPT_LONG = 60 * 60 * 1000;
 const LONG = 30;
 const ANSWERS = 8;
-// How a cell is named: a featured place (a start spot, a place's page, a Moon or Mars place) whose
+// How a cell is named: a featured place (a start spot, a place's page, another world's place) whose
 // pin is within FEATURED_REACH m of the cell (in it, or so near its edge that a drop-in there, which
 // starts within 60 m of the pin on the street or a bridge's deck found nearest it, or a search of it
 // pinned a little off, can be in it) is its name, and its cells are one place; else the nearest town
 // (drive/public/places/towns.tsv) or featured place within NEAR m: a town's own name within TOWN m,
 // else how far it is and which way ("12 km NE of Lyon", "1 km S of Golden Gate Bridge"); else its
-// coordinates. The Moon's and Mars's places are few and far apart, so they name cells further off:
-// 300 km on the Moon, 500 km on Mars (about twice the Moon's size).
+// coordinates. The other worlds' places are few and far apart, so they name cells further off, more
+// or less in step with the world's size: 300 km on the Moon, 500 km on Mars (about twice the
+// Moon's size), 70 km on Vesta (263 km across its sphere, with about 120 named features) and 100 km
+// on Ceres (470 km, about 130).
 const FEATURED_REACH = 250;
 const TOWN = 2000;
-const NEAR = { earth: 50000, moon: 300000, mars: 500000 };
+const NEAR = { earth: 50000, moon: 300000, mars: 500000, vesta: 70000, ceres: 100000 };
 const TOWNS = '/places/towns.tsv';
 const SITE = 'https://worlddrive.app';
 const COMPASS = [ 'N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW' ];
 const DAY = 24 * 60 * 60 * 1000;
 
 // The game's own places, with the link that opens it there: the start spots and each other world's
-// places (world-places.js: the Moon's, Mars's) by id, and the places' pages' others by where their
-// Drive here pins them (drive/site/build.js's playLink).
+// places (world-places.js: the Moon's, Mars's, Vesta's, Ceres's) by id, and the places' pages'
+// others by where their Drive here pins them (drive/site/build.js's playLink).
 const FEATURED_PLACES = {
 	earth: [
 		...SPOTS.map( spot => ( { name: spot.name, region: spot.region, lat: spot.lat, lon: spot.lon, link: `/?spot=${ spot.id }` } ) ),
@@ -108,8 +110,8 @@ export async function recordPlaces( { request, env, limits, now }, visit, places
 
 	const day = dayOf( now );
 	// An Earth place only from a visit the Earth's caps let through (a free world's visit's token,
-	// which costs nothing but the robot check, posts the free worlds' alone: worlds.js, the Moon's
-	// and Mars's), none from the owner's (who opens the game at the admin page's places to look at
+	// which costs nothing but the robot check, posts the free worlds' alone: worlds.js, every one but
+	// the Earth), none from the owner's (who opens the game at the admin page's places to look at
 	// them), and none on a world whose places today are all counted, nor from a visit that can add
 	// no more.
 	if ( visit.owner ) return 0;
@@ -166,7 +168,7 @@ export async function topCells( db, { world, from, to, most = TOP } ) {
 // What challenges picked from where people go start from.
 //
 // Its ranking isn't proof against many addresses: each visitor is an address passing the robot
-// check, and visits to the Moon and Mars aren't capped, so someone with a few hundred addresses (or
+// check, and visits to the free worlds aren't capped, so someone with a few hundred addresses (or
 // /48s) and robot checks can put a cell of their choosing (a private address, say) at the top of
 // theirs, and of the Earth's at the cost of the day's drives. So a challenge picked by itself should
 // be one of the featured places (featuredOnly), or a cell the owner has approved; the busy cells
@@ -241,7 +243,7 @@ function placesOf( world, cells, named, most, featuredOnly = false ) {
 // GET /api/admin/dropins?days=30, for the last `days` UTC days, today's (so far) included (30 if
 // unset, at most a year: admin.js's askedDays), to an account in ADMIN_EMAILS (adminAccount: 401
 // signed out, 403 anyone else, 429 past ADMIN_LOOKS a minute):
-//   { from, to, first, cell, kept, worlds: { earth: WORLD, moon: WORLD, mars: WORLD } }
+//   { from, to, first, cell, kept, worlds: { earth: WORLD, moon: WORLD, mars: WORLD, ... } } (each world's)
 // WORLD: { dropins, places, heat: [ [ lat, lon, n ] ], top: [ { lat, lon, n, days, cells, name, region, link, featured } ] }
 // first: the first day any place was counted (null for none yet); cell: the cells' size (m); kept:
 // how many days rows are kept. dropins and places: the period's drop-ins counted (each visitor once
@@ -407,7 +409,7 @@ export function nameCell( world, lat, lon, towns = null ) {
 
 	}
 
-	// (A Moon or Mars place's region says what it is, "85 km across, bright rays", which isn't true
+	// (Another world's place's region says what it is, "85 km across, bright rays", which isn't true
 	// of a place some way off it.)
 	const { place, metres, town } = nearest;
 	const name = town && metres <= TOWN ? place.name : `${ Math.max( 1, Math.round( metres / 1000 ) ) } km ${ bearing( place.lat, place.lon, lat, lon ) } of ${ place.name }`;

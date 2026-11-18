@@ -5,20 +5,23 @@ import { fileURLToPath } from 'node:url';
 import { SPOTS } from '../../src/drive-app/places.js';
 import { SPOTS_ON } from '../../src/drive-app/world-places.js';
 import { OFF_EARTH, onWorld, OnWorld, TheWorld, WORLDS } from '../../src/drive-app/worlds.js';
+import { CERES_SITE } from './ceres.js';
 import { MARS_SITE } from './mars.js';
 import { MOON_SITE } from './moon.js';
 import { PLACES } from './places.js';
+import { VESTA_SITE } from './vesta.js';
 
 // World Drive's pages for search engines and links (docs/world-drive.md, "Search engines"): a page
 // for each place in places.js at /drive/<slug>/, a page listing them at /drive/, and for each world
-// made in the page (worlds.js's OFF_EARTH: the Moon, Mars) its own page at /<world>/ with one for
-// each of its start spots at /<world>/<slug>/ (its words in drive/site/<world>.js: moon.js,
-// mars.js); the lists on the home page (drive/index.html's <!-- places --> and <!-- <world> places
-// -->, <!-- moon places --> and <!-- mars places -->, become them) and /sitemap.xml. They're plain
-// HTML, made when the site is built (and by the dev server as they're asked for), with their styles
-// (site.css) in the page and no script, so they show at once and read the same to a crawler as to a
-// person. Each "Drive here" opens the game with the place pinned on the globe: /?spot=<id> for a
-// start spot (another world's spot's id, "moon-<name>" or "mars-<name>", turns the globe to that
+// made in the page (worlds.js's OFF_EARTH: the Moon, Mars, Vesta and Ceres) its own page at
+// /<world>/ with one for each of its start spots at /<world>/<slug>/ (its words in
+// drive/site/<world>.js: moon.js, mars.js, vesta.js, ceres.js); the lists on the home page
+// (drive/index.html's <!-- places --> and <!-- <world> places -->, <!-- moon places --> to
+// <!-- ceres places -->, become them) and /sitemap.xml. They're plain HTML, made when the site is
+// built (and by the dev server as they're asked for), with their styles (site.css) in the page and
+// no script, so they show at once and read the same to a crawler as to a person. Each "Drive here"
+// opens the game with the place pinned on the globe: /?spot=<id> for a start spot (another world's
+// spot's id, "moon-<name>", "mars-<name>", "vesta-<name>" or "ceres-<name>", turns the globe to that
 // world), /?at=<lat>,<lon>&name=... for the others (places.js's linkedPlace reads them).
 //
 // A world's pages live beside the files the game fetches from /<world>/ (height.bin and
@@ -38,7 +41,7 @@ const CARD_SIZE = [ 1200, 630 ];
 // Each world made in the page's words (drive/site/<world>.js): its places' pages (each with its
 // start spot, by `spot`), what they share about how it's made and driving there, its own page's
 // words, and its credit.
-export const WORLD_SITES = { moon: MOON_SITE, mars: MARS_SITE };
+export const WORLD_SITES = { moon: MOON_SITE, mars: MARS_SITE, vesta: VESTA_SITE, ceres: CERES_SITE };
 for ( const id of OFF_EARTH ) if ( ! WORLD_SITES[ id ] ) throw new Error( `World Drive's site has no pages for ${ id }: drive/site/${ id }.js` );
 // The files each page is made from, for its date in the sitemap (see lastChanged): a world's pages
 // from its words, its places and the look; the Earth's places' pages from the other worlds' words
@@ -145,7 +148,7 @@ export function worldPlacesList( id ) {
 
 }
 
-// The addresses the site's pages are at: /drive/... and each other world's, /moon/..., /mars/...
+// The addresses the site's pages are at: /drive/... and each other world's, /moon/... to /ceres/...
 const PAGES_AT = new RegExp( `^/(${ [ 'drive', ...OFF_EARTH ].join( '|' ) })(/|$)` );
 
 // A Vite plugin (vite.drive.config.js): the places' pages, /drive/, each other world's pages and
@@ -166,12 +169,12 @@ export function driveSite() {
 			server.middlewares.use( ( req, res, next ) => {
 
 				const url = new URL( req.url ?? '/', 'http://localhost' );
-				// (Every world's, or Vite's fallback would answer /mars/ with the game's own page.)
+				// (Every world's, or Vite's fallback would answer /vesta/ with the game's own page.)
 				if ( url.pathname !== '/sitemap.xml' && ! PAGES_AT.test( url.pathname ) ) return next();
-				// A file (a world's height.bin and colour.webp, which the game fetches from /moon/ and
-				// /mars/) is never a page: it's passed on, to be served from drive/public/ as before.
+				// A file (a world's height.bin and colour.webp, which the game fetches from /moon/ to
+				// /ceres/) is never a page: it's passed on, to be served from drive/public/ as before.
 				if ( /\.[a-z0-9]+$/i.test( url.pathname ) && url.pathname !== '/sitemap.xml' ) return next();
-				// Made afresh each time, so an edit to places.js, moon.js or mars.js shows on a reload.
+				// Made afresh each time, so an edit to places.js or a world's words shows on a reload.
 				const { pages, sitemap } = sitePages( { when: () => today() } );
 				if ( url.pathname === '/sitemap.xml' ) return send( res, 'application/xml; charset=utf-8', sitemap );
 				const page = pages.find( p => p.path === url.pathname );
@@ -337,7 +340,7 @@ function hubPage( places ) {
 
 }
 
-// A place's page on another world: as an Earth place's, under that world (The Moon, Mars), with
+// A place's page on another world: as an Earth place's, under that world (The Moon, Vesta), with
 // where it is on it in its words (schema.org's GeoCoordinates are the Earth's, so its structured
 // data has none), what World Drive's world is and isn't, and links to its other places.
 function worldPage( id, place, places ) {
@@ -422,7 +425,8 @@ function worldHubPage( id, places ) {
 	const on = onWorld( id );
 	const { title, description } = site;
 	const card = existsSync( join( PUBLIC, 'og', `${ id }.png` ) ) ? `/og/${ id }.png` : CARD;
-	// Its Drive on <world> pins the first of them (the Moon's Tranquility Base, Mars's Olympus Mons).
+	// Its Drive on <world> pins the first of them (the Moon's Tranquility Base, Mars's Olympus Mons,
+	// Vesta's Rheasilvia's central peak, Ceres's Occator).
 	const first = places[ 0 ];
 	const data = [
 		breadcrumbs( [ [ NAME, '/' ], [ world, `/${ id }/` ] ] ),

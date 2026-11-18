@@ -114,11 +114,12 @@
 		{ "name": "CHALLENGE_LOOKS", "namespace_id": "4805", "simple": { "limit": 60, "period": 60 } },
 		// Those of the lists and boards that miss Cloudflare's cache and read D1 (a board's rows, the
 		// list's tops, a player's own rows, a board's order), and the times posted (each reads D1 before
-		// the gap can turn it away), by the same key: 15 a minute, room for a page's list, all nine
-		// boards (three worlds' day, week and month) and a time, while one address asking for past
-		// boards or players, or posting, in turn costs a few hundred thousand rows read a day at most
-		// (docs/world-drive.md, "What challenges cost").
-		{ "name": "CHALLENGE_MISSES", "namespace_id": "4806", "simple": { "limit": 15, "period": 60 } },
+		// the gap can turn it away), by the same key: 24 a minute, room for a page's list and its four
+		// asks again as a new period's routes are checked, all fifteen boards (five worlds' day, week
+		// and month) and a time, 21 in all, while one address asking for past boards or players, or
+		// posting, in turn costs a few hundred thousand rows read a day at most (docs/world-drive.md,
+		// "What challenges cost").
+		{ "name": "CHALLENGE_MISSES", "namespace_id": "4806", "simple": { "limit": 24, "period": 60 } },
 		// A visitor's asks for their achievements (worker/drive/achievements.js), by the same key: each
 		// reads about 30 rows for most players and about 410 at most for a big account
 		// (docs/world-drive.md, "What it costs"), and a page asks as its Achievements grid opens, so 6

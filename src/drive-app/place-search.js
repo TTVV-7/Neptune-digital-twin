@@ -1,5 +1,5 @@
-// Searching a list of places by name, all in the page (the Moon's and Mars's, world-places.js):
-// no map service knows them.
+// Searching a list of places by name, all in the page (each world's but the Earth's, world-
+// places.js): no map service knows them.
 
 // The places in `places` whose name (or other name, `also`) has every word of `text` in it, best
 // first: the name starting with it, then a word of it starting with it, then anywhere. At most

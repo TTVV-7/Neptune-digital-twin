@@ -5,13 +5,14 @@ import {
 } from 'three';
 import { send } from './api.js';
 import { createRaceGhost, createRecorder } from './challenge-ghost.js';
-import { GRACE, KIND_NAMES, LINK_PATH, PERIOD_NAMES, TALL, checkPasses, describe, formatTime, rankText, timeLeft } from './challenge-rules.js';
+import { GRACE, KIND_NAMES, LINK_PATH, PERIOD_NAMES, TALL, ZONE_UP, checkPasses, describe, formatTime, rankText, timeLeft } from './challenge-rules.js';
 import { ghostFault } from './ghost-rules.js';
 import { LEVEL_MAX, levelLine } from './levels.js';
-import { EARTH, onWorld, OnWorld, WORLD_IDS } from './worlds.js';
+import { EARTH, WORLDS, onWorld, OnWorld, WORLD_IDS } from './worlds.js';
+import { enuToLocal, headingToYaw, localToEnu, yawToHeading } from '../geo.js';
 
 // Challenges in the page (docs/world-drive.md, "Challenges"): its own chunk, loaded the first time
-// they're opened (main.js), so nothing of it is in the page's first load. The list of the nine live
+// they're opened (main.js), so nothing of it is in the page's first load. The list of the fifteen live
 // ones (three a world, the current world's first), each with the time it has left (ticking), its board's top
 // three and your best; its board; starting one (a drop-in at its start, on its world); the run: a
 // countdown, the gates or items on the ground the game has (their heights found as it loads: rays
@@ -78,8 +79,6 @@ const COURSE_MOST = 64;
 // from the screen's sides when the gate's off the screen or behind.
 const MARKER_UP = 4;
 const EDGE = 44;
-// The middle of a gate's zone is this far (m) over its ground.
-const ZONE_UP = 2;
 // On the Earth a gate's ground is found by rays down at its middle and at eight points round it,
 // PROBE_OUT of its radius out (the lowest is its ground, the highest its top: probe), only for the
 // gates within PROBE_NEAR m of the car (a far one's tiles are coarse, so what a ray finds there is
@@ -148,7 +147,9 @@ const _carto = { lat: 0, lon: 0, height: 0 };
 // app: what main.js hands over: visit(), player(), pickName( name, say ), world(), earthClosed
 // ({ onEarth } when there's no Earth this visit), mode(), place(), vehicle(), the driver, ground,
 // camera, scene, globe, bodies (the other worlds' grounds, body.js, by id) and vehicles, stats,
-// startAt( place ), placeCar( pose ), toGlobe(),
+// startAt( place ), placeCar( pose ), toGlobe(), recentring (on a world whose scene follows the car,
+// how far it goes before the scene's moved to it; else null) and shiftTo( { lat, lon, height } ) (the
+// scene moved there as that does, recentred called with it),
 // keys() (the keys card shown over a run's countdown, the visit's first time on a computer: true
 // if it is), go() (a run's GO: the keys card put away, so nothing covers the road while the clock
 // runs), pivot() (your car's, as drawn), look() (your ride's Garage look), ghostModels (ghosts.js's,
@@ -302,7 +303,7 @@ export function setUpChallenges( app ) {
 
 	}
 
-	// The nine, the current world's three first, a heading for each world.
+	// The fifteen, the current world's three first, a heading for each world.
 	function render() {
 
 		const here = app.world();
@@ -376,8 +377,8 @@ export function setUpChallenges( app ) {
 		}
 
 		// Asked again while any listed has ended, or while the Worker says there are more to come (a
-		// period's first ask lays out only so many on their ground: its CHECKED_MOST, the next the
-		// rest).
+		// period's first ask lays out only so many on their ground: its CHECKED_MOST, the next ones
+		// the rest, up to three more on a month's first day that's a Monday).
 		const ended = listed.challenges.filter( c => c.endsAt <= now ).map( c => c.id ).join( ',' );
 		const due = ended || ( listed.more ? 'more' : '' );
 		if ( due !== reloadFor ) [ reloadFor, reloads, reloadAt ] = [ due, 0, 0 ];
@@ -809,7 +810,7 @@ export function setUpChallenges( app ) {
 
 		sayMissed();
 		if ( ! run || run.phase !== 'countdown' || ! race?.ready || race.challenge !== run.challenge.id ) return showGhostToggle();
-		race.ghost.start( app.globe, run.challenge.route.start );
+		race.ghost.start( app.globe, run.challenge.route.start, run.challenge.world );
 		run.raced = race;
 		showGhostToggle();
 
@@ -880,18 +881,63 @@ export function setUpChallenges( app ) {
 			const height = moonly ? heights.heightAt( lat, lon ) ?? base : base;
 			const local = sceneOf( globe, lat, lon, height ).clone();
 			const ground = moonly ? local.y : null;
-			return { index, lat, lon, x: local.x, z: local.z, ground, top: ground, guess: local.y, passed: false, facing: 0, probed: moonly };
+			return { index, lat, lon, height, x: local.x, z: local.z, ground, top: ground, guess: local.y, passed: false, facing: 0, probed: moonly };
 
 		} );
-		// A ring faces along the way to it: from the start, or the gate before.
 		const d = app.driver;
+		face( gates, ordered, { x: - d.east, z: d.north } );
+		return gates;
+
+	}
+
+	// A ring faces along the way to it: from the start (`from`, in the scene), or the gate before.
+	function face( gates, ordered, from ) {
+
 		gates.forEach( ( gate, i ) => {
 
-			const from = ordered && i ? gates[ i - 1 ] : { x: - d.east, z: d.north };
-			gate.facing = Math.atan2( gate.x - from.x, gate.z - from.z );
+			const before = ordered && i ? gates[ i - 1 ] : from;
+			gate.facing = Math.atan2( gate.x - before.x, gate.z - before.z );
 
 		} );
-		return gates;
+
+	}
+
+	// main.js: the scene's been moved by `matrix` (a Matrix4, a turn and a shift: its recentre, as the
+	// car drives on a world whose scene follows it, Vesta's or Ceres's, or app.shiftTo's on a Retry),
+	// and the driver, the camera and the rest with it. What's here in the scene is moved too: the
+	// run's recording so far; its gates placed again from where they are on the world (at the heights
+	// they were placed at, passed or not as they were: only another world's scene is ever moved, whose
+	// gates' heights are its own); where it started moved as a place and a way to face, and where the
+	// finish card held the car let go (it's held again where it is, at a standstill); the meshes put
+	// where the gates are and the course laid again; and the ghost raced put into the scene again.
+	function recentred( matrix ) {
+
+		recorder.transform( matrix );
+		if ( ! run ) return;
+		const { start } = run;
+		matrix.decompose( _w, _q, _s );
+		const { east, north, up } = localToEnu( enuToLocal( start.east, start.north, start.up, _v ).applyMatrix4( matrix ) );
+		// (The way it faced, turned as the scene was and laid flat again: a yaw's forward is -z turned
+		// by it.)
+		const yaw = headingToYaw( start.heading );
+		_v.set( - Math.sin( yaw ), 0, - Math.cos( yaw ) ).applyQuaternion( _q );
+		run.start = { east, north, heading: yawToHeading( Math.atan2( - _v.x, - _v.z ) ), up };
+		run.stopAt = null;
+		if ( run.challenge.world !== EARTH ) {
+
+			for ( const gate of run.gates ) {
+
+				const local = sceneOf( app.globe, gate.lat, gate.lon, gate.height );
+				Object.assign( gate, { x: local.x, z: local.z, ground: local.y, top: local.y, guess: local.y } );
+
+			}
+
+			face( run.gates, run.challenge.kind !== 'collect', { x: - run.start.east, z: run.start.north } );
+
+		}
+
+		meshes.moved( run );
+		if ( race?.ready && run.raced === race ) race.ghost.start( app.globe, run.challenge.route.start, run.challenge.world );
 
 	}
 
@@ -1090,7 +1136,7 @@ export function setUpChallenges( app ) {
 		// look, to draw it in.
 		const pivot = app.pivot?.();
 		if ( pivot ) recorder.finish( ms, pivot );
-		const ghost = pivot ? recorder.pack( app.globe, run.challenge.route.start ) : null;
+		const ghost = pivot ? recorder.pack( app.globe, run.challenge.route.start, run.challenge.world ) : null;
 		run.result = { challenge: run.challenge, id: run.id, ms, passes: run.passes.map( pass => [ ...pass ] ), vehicle: app.vehicle()?.id ?? 'go-kart', look: app.look?.() ?? {}, ghost };
 		app.stats.add( 'challenge', 'finish' );
 		app.driver.hud.flash( 'Finished!' );
@@ -1160,7 +1206,7 @@ export function setUpChallenges( app ) {
 	function retry() {
 
 		if ( ! run ) return;
-		const { challenge, start, gates } = run;
+		const { challenge } = run;
 		if ( ended( challenge ) ) {
 
 			const from = app.mode();
@@ -1173,6 +1219,18 @@ export function setUpChallenges( app ) {
 		finish.hidden = true;
 		stopped.hidden = true;
 		naming = null;
+		// On a world whose scene follows the car (main.js's recentre), the start can be kilometres
+		// behind, several moves of the scene ago: the scene's moved back to the route's start first
+		// (app.shiftTo, which moves this run's start and gates with it, recentred), so the car's put
+		// down by the scene's middle.
+		if ( app.recentring ) {
+
+			const { lat, lon } = challenge.route.start;
+			app.shiftTo( { lat, lon, height: app.bodies?.[ challenge.world ]?.heightAt( lat, lon ) ?? 0 } );
+
+		}
+
+		const { start, gates } = run;
 		if ( ! app.placeCar( start ) ) return;
 		for ( const gate of gates ) gate.passed = false;
 		run = { challenge, gates, start, phase: 'countdown', left: COUNTDOWN, clock: 0, after: 0, passes: [], id: runId() };
@@ -1536,7 +1594,7 @@ export function setUpChallenges( app ) {
 		root.setAttribute( 'aria-labelledby', 'ch-title' );
 		root.innerHTML = `
 			<header class="ch-head"><h2 id="ch-title">${ FLAG } Challenges</h2><button type="button" class="close" aria-label="Close">&times;</button></header>
-			<p class="ch-intro">A daily, a weekly and a monthly one on the Earth, on the Moon and on Mars, each with its own board. Your best time counts.</p>
+			<p class="ch-intro">A daily, a weekly and a monthly one on ${ worldList() }, each with its own board. Your best time counts.</p>
 			<p class="ch-note" role="status" hidden></p>
 			<p class="ch-status" role="status" hidden></p>
 			<section class="ch-link" aria-label="A friend's challenge" hidden></section>
@@ -1645,6 +1703,7 @@ export function setUpChallenges( app ) {
 		arrived,
 		paused,
 		resumed,
+		recentred,
 		left: () => {
 
 			pending = null;
@@ -1746,6 +1805,16 @@ export function setUpChallenges( app ) {
 			hide() {
 
 				if ( added() ) app.scene.remove( beams, rings, items, chevrons );
+
+			},
+			// The scene's been moved (recentred): each where its gate now is, the course laid again
+			// (what it was laid for, the car's place, was in the scene as it was), and their bounds
+			// made again.
+			moved( shown ) {
+
+				laidFor = null;
+				this.place( shown );
+				beams.boundingSphere = rings.boundingSphere = items.boundingSphere = chevrons.boundingSphere = null;
 
 			},
 			// Where each is: at its ground (or its guess), a passed one shrunk to nothing. With
@@ -1872,8 +1941,11 @@ export function setUpChallenges( app ) {
 				if ( ordered && index + 1 < shown.gates.length ) legs.push( { from: target, to: shown.gates[ index + 1 ], dim: true, goal: false } );
 				for ( const leg of legs ) {
 
-					const a = sceneOf( app.globe, leg.from.lat, leg.from.lon, 0 ).clone();
-					const b = sceneOf( app.globe, leg.to.lat, leg.to.lon, 0 );
+					// Its ends on the ground, as the gates are: from points at height 0 a leg deep in a
+					// basin would point elsewhere, the more so under a level up leaning from the
+					// sphere's (Vesta's, level.js).
+					const a = sceneOf( app.globe, leg.from.lat, leg.from.lon, ground.heightAt( leg.from.lat, leg.from.lon ) ?? 0 ).clone();
+					const b = sceneOf( app.globe, leg.to.lat, leg.to.lon, ground.heightAt( leg.to.lat, leg.to.lon ) ?? 0 );
 					const length = Math.hypot( b.x - a.x, b.z - a.z );
 					if ( length < 1 ) continue;
 					const angle = Math.atan2( b.x - a.x, b.z - a.z );
@@ -1905,6 +1977,14 @@ export function setUpChallenges( app ) {
 		};
 
 	}
+
+}
+
+// Every world, in a sentence: "the Earth, the Moon, Mars, Vesta and Ceres".
+function worldList() {
+
+	const names = WORLD_IDS.map( world => WORLDS[ world ].the );
+	return `${ names.slice( 0, - 1 ).join( ', ' ) } and ${ names.at( - 1 ) }`;
 
 }
 

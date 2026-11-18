@@ -7,6 +7,7 @@ import {
 import { GHOST_TEXT, ghostFault } from '../../src/drive-app/ghost-rules.js';
 import { checkLook } from '../../src/drive-app/live-protocol.js';
 import { createGround } from '../../src/drive-app/body-height.js';
+import { inFrame, levelFrame, levelled, pointOn } from '../../src/drive-app/level.js';
 import { moonGround } from '../../src/drive-app/moon-height.js';
 import { SPOTS } from '../../src/drive-app/places.js';
 import { PLACES_ON } from '../../src/drive-app/world-places.js';
@@ -26,11 +27,11 @@ import { readVisit } from './visits.js';
 
 // Challenges (docs/world-drive.md, "Challenges"): each UTC day, week (from Monday, as the
 // leaderboard's) and calendar month, one challenge on each world (src/drive-app/worlds.js: the
-// Earth, the Moon and Mars), nine live at once, each a place and a route the same for everyone
+// Earth, the Moon, Mars, Vesta and Ceres), fifteen live at once, each a place and a route the same for everyone
 // (src/drive-app/challenge-rules.js lays it out), each with its own board of each player's best time.
 //
 // Picking them: by themselves, in a rotation round the featured places (the start spots, the
-// places' pages, the Moon's and Mars's places) and the busy drop-in places the owner has approved
+// places' pages, each other world's places) and the busy drop-in places the owner has approved
 // (dropins.js: part 1's ranking can be pushed by anyone with many addresses, so nothing it ranks
 // goes in without the owner's say). The order and each period's kind and route come from HMACs of
 // the period's key with a key derived from the Worker's secret, so every Worker instance agrees and
@@ -98,7 +99,7 @@ export const REPOST = 5 * 60 * 1000;
 // The boards: the top TOP, the list's top LIST_TOP for each challenge, and the finish screen's
 // FINISH_TOP. Kept in Cloudflare's cache as the leaderboard's are: a live challenge's board, the
 // list's tops and each player's own rows CHALLENGE_CACHE s (a new best clears them in the one of
-// Cloudflare's places it's posted in; elsewhere they're at most that behind), so the nine live boards
+// Cloudflare's places it's posted in; elsewhere they're at most that behind), so the fifteen live boards
 // are read from D1 at most once a minute each in a place, whoever asks; a finished challenge's board
 // FINISHED_CACHE s, as its times can't change (a name cleaned up on it shows within a day, or at
 // once after a purge of the cache: the docs); and each board's order (boardOrders: the first
@@ -113,16 +114,16 @@ const ORDER_KEPT = 10 * 60;
 // D1 for them at most once a minute; a challenge the owner replaces is seen everywhere within it (a
 // time posted for the old one is checked against D1 itself).
 const LIVE_KEPT = 60 * 1000;
-// At most this many routes laid out and checked on their ground (the Moon's and Mars's: below) in
-// one request; the rest are left for the next. Each is about a millisecond or two of the Worker's
-// CPU, but the first in a Worker instance just started is 5 to 10 (its code not yet compiled), and
-// the Free plan gives a request 10: three is as many as the Moon alone ever needed at once (its
-// month's, week's and day's starting together), while a new week or month needs four on the two
-// worlds, and a month starting on a Monday six (measured in Node: six together 1.3 ms on average in
-// a warm instance, 3 at the 99th percentile, but 8 to 20 in a cold one). So such a day's first ask
-// gets the challenges fixed so far (the Earth's always all three: its routes aren't checked, and
-// cost next to nothing), and the next fixes the rest; nothing is kept as live till they're all
-// there. (A new day alone needs two: one ask.)
+// At most this many routes laid out and checked on their ground (every world's but the Earth's:
+// below) in one request; the rest are left for the next. Each is about a millisecond or two of the
+// Worker's CPU, but the first in a Worker instance just started is 5 to 10 (its code not yet
+// compiled), and the Free plan gives a request 10: three is as many as the Moon alone ever needed
+// at once (its month's, week's and day's starting together), while a new week or month needs eight
+// on the four worlds, and a month starting on a Monday twelve (measured in Node with the Moon and
+// Mars: six together 1.3 ms on average in a warm instance, 3 at the 99th percentile, but 8 to 20 in
+// a cold one). So such a day's first ask gets the challenges fixed so far (the Earth's always all
+// three: its routes aren't checked, and cost next to nothing), and the next asks fix the rest;
+// nothing is kept as live till they're all there. (A new day alone needs four: two asks.)
 const CHECKED_MOST = 3;
 // The admin page's busy places (dropins.js's topPlaces over the last BUSY_DAYS), kept BUSY_KEPT ms.
 const BUSY_DAYS = 30;
@@ -130,7 +131,7 @@ const BUSY_KEPT = 10 * 60 * 1000;
 // A pick can be made for a period up to AHEAD days ahead; at most APPROVED places a world.
 const AHEAD = 400;
 const APPROVED = 100;
-// The routes on a world made in the page (the Moon's, Mars's) are checked on its own heights (body-
+// The routes on a world made in the page (every one but the Earth) are checked on its own heights (body-
 // height.js's ground, as the page's, from the site's /<world>/height.bin): each point (and a
 // landmark's start) on ground sloping under SLOPE degrees across ±SLOPE_REACH m, so no gate is on a
 // crater's wall; and each leg in its order (a sprint's, from the start through its gates; a
@@ -138,7 +139,9 @@ const APPROVED = 100;
 // stretch of LEG_REACH m rising or falling SLOPE degrees or more a fault, a point's counting
 // POINT_FAULTS (a gate on a wall is worse than a wall on the way to it, which can be driven round or
 // flown over). Craters smaller than DETAIL m are left out of the check (the car drives over them),
-// which keeps a route's check to a few milliseconds.
+// which keeps a route's check to a few milliseconds. On a world with a level spheroid (Vesta, Ceres:
+// level.js) a slope is measured from what's level there, that spheroid's surface, as the car drives
+// it: not from the sphere its heights are over, which leans up to 12° from it on Vesta.
 const SLOPE = 20;
 const SLOPE_REACH = 15;
 const DETAIL = 30;
@@ -164,8 +167,8 @@ const GHOST_KEPT = 30 * 24 * 60 * 60;
 // are the longest and the least raced. Only when it would be the slowest kept is a new best kept
 // without its ghost (nobody can race it, nor a link to it). So slow runs posted to fill it (a script
 // posting the largest ghosts the rules take, about 64 KB a run of 6 min 49 s, 260 of them) are let
-// go for each quicker best after them, and keep no quicker driver's ghost out. The nine live at once
-// keep 144 MB at most of D1's 500 MB (the Free plan's for a database), whatever's posted: a fair
+// go for each quicker best after them, and keep no quicker driver's ghost out. The fifteen live at
+// once keep 240 MB at most of D1's 500 MB (the Free plan's for a database), whatever's posted: a fair
 // ghost is about 4.8 KB of text a minute of run, so that's thousands of a daily's or hundreds of a
 // monthly's few minutes. The owner can raise it on Workers Paid (10 GB a database).
 const GHOST_BUDGET = 16 * 1024 * 1024;
@@ -189,7 +192,7 @@ const FEATURED = {
 	],
 	...Object.fromEntries( OFF_EARTH.map( world => [ world, ( PLACES_ON[ world ] ?? [] ).map( place => ( { id: place.id, name: place.name, region: place.region, lat: place.lat, lon: place.lon } ) ) ] ) ),
 };
-// Each world made in the page with heights (worlds.js: the Moon, Mars): its ground, as the page has
+// Each world made in the page with heights (worlds.js: the Moon, Mars, Vesta, Ceres): its ground, as the page has
 // it (body-height.js), handed its heights once per Worker instance (groundCheck); the Moon's is
 // moon-height.js's own, the one Moon the Worker has.
 export const GROUNDS = Object.fromEntries( OFF_EARTH.filter( world => WORLD_DATA[ world ].heights ).map( world => [ world, world === MOON ? moonGround : createGround( WORLD_DATA[ world ] ) ] ) );
@@ -208,7 +211,7 @@ const orders = new Map();
 
 // --- the routes ---
 
-// GET /api/challenges?id=: the nine live challenges (the page puts the current world's first):
+// GET /api/challenges?id=: the fifteen live challenges (the page puts the current world's first):
 // { now, challenges: [ CHALLENGE + { total, top, race, me } ], more? }, more true when some aren't
 // fixed yet (a period's first ask: CHECKED_MOST; the page asks again), top the LIST_TOP best ({ rank,
 // name, ms, vehicle, level, title, supporter? }), race the quickest time with a ghost to race (as a
@@ -544,7 +547,7 @@ export async function postTime( context ) {
 	if ( ! visit ) throw new HttpError( 403, 'Forbidden', { reason: 'visit' } );
 	// Every post that gets this far reads D1 (the challenge, the player, the visit, the best, the gap)
 	// before the gap, the visit's times or the visitor's day can turn it away, so it's one of the
-	// address's CHALLENGE_MISSES (15 a minute, shared with its lists and boards that miss the cache),
+	// address's CHALLENGE_MISSES (24 a minute, shared with its lists and boards that miss the cache),
 	// asked before D1 is. A page posts once a run (and again only if its answer's lost), so it's
 	// never near that; a script resending a good body over and over reads about ten rows each of
 	// fifteen a minute.
@@ -555,8 +558,8 @@ export async function postTime( context ) {
 	const open = row && row.replaced_at === null && row.final_at === null && now >= row.starts_at && ( now < row.ends_at || ( now < row.ends_at + GRACE && now - ms < row.ends_at ) );
 	if ( ! open ) throw new HttpError( 403, 'That challenge is over', { reason: 'challenge' } );
 	// An Earth challenge needs an Earth visit (one the Earth's caps let through, or the owner's): a
-	// free world's visit costs nothing but a robot check. A free world's (worlds.js: the Moon's,
-	// Mars's) takes any; any other's (the Earth's, or a world that isn't one now) an Earth visit.
+	// free world's visit costs nothing but a robot check. A free world's (worlds.js: every one but
+	// the Earth) takes any; any other's (the Earth's, or a world that isn't one now) an Earth visit.
 	if ( ! WORLD_DATA[ row.world ]?.free && ! visit.earth && ! visit.owner ) throw new HttpError( 403, 'Forbidden', { reason: 'world' } );
 	const challenge = challengeOf( row );
 	// No longer than the visit has lasted, and possible on the route.
@@ -1036,7 +1039,7 @@ export async function adminChange( context ) {
 // --- the live challenges ---
 
 // The live challenges' rows (the day's, the week's and the month's on the Earth, then the Moon,
-// then Mars: WORLDS' order), fixed in D1 the first time each is asked for in its period (from the
+// Mars, Vesta and Ceres: WORLDS' order), fixed in D1 the first time each is asked for in its period (from the
 // owner's pick, or the rotation's), kept LIVE_KEPT ms in this Worker instance. Those to fix are
 // fixed a world at a time (WORLDS' order), each world's the longest first (the month, the week,
 // then the day), each of the rotation's clear of those fixed already, those fixed here included,
@@ -1049,7 +1052,8 @@ export async function adminChange( context ) {
 // fixed so far (kept as live only once every world's three are there, allThere; till then
 // listChallenges' answer says `more`, and the page asks again for the rest, challenges.js). A
 // world at a time, so a world's three come together: the Moon's are all fixed in a period's first
-// ask, as they always were, and Mars's in the next at worst. Challenges whose period ended at least
+// ask, as they always were, and the other worlds' in the asks after (a month starting on a Monday,
+// twelve to check, in four). Challenges whose period ended at least
 // GRACE ago are given their final places as this goes (finishEnded), in the background: it's no
 // part of the answer, so it can neither slow one nor turn one into an error.
 export async function liveChallenges( context ) {
@@ -1154,7 +1158,7 @@ export async function rotationPick( env, period, world, approved, fixed = null )
 
 	const places = candidates( world, approved );
 	if ( fixed ) return rotate( env, period, world, approved, places, fixed );
-	// (Kept for this instance: a day's asks for its week's and month's, and the admin page for nine.)
+	// (Kept for this instance: a day's asks for its week's and month's, and the admin page for fifteen.)
 	const key = `${ env.TURNSTILE_SECRET }:${ period.key }:${ world }:${ places.map( place => place.id ).join( ',' ) }`;
 	if ( ! picked.has( key ) ) {
 
@@ -1379,7 +1383,7 @@ function rowsOf( rows ) {
 }
 
 // The player's best and rank on each of the challenges `ids` ({ [ id ]: { ms, rank, owner? } }),
-// kept as the boards are: their rows by their keys (nine at most), each rank found in its board's
+// kept as the boards are: their rows by their keys (fifteen at most), each rank found in its board's
 // order (boardOrders), so a look costs the same few rows read however far down the boards they are,
 // and however many players are asked as in turn.
 async function myStanding( context, db, ids, player, miss ) {
@@ -1727,9 +1731,12 @@ export function legFaultsOn( world, lat, lon, toLat, toLon, enough = Infinity ) 
 	const height = i => heights[ i ] ??= heightAt( ...destination( world, lat, lon, bearing, i * step ), DETAIL );
 	const across = Math.max( 1, Math.round( LEG_REACH / step ) );
 	const most = Math.tan( SLOPE * Math.PI / 180 ) * across * step;
+	// Whether the stretch from `i` to `j` (steps along) is steep: its rise against the way across (on
+	// a world with a level spheroid, along and across what's level at `i`).
+	const steep = levelled( world ) ? levelSteep( world, i => destination( world, lat, lon, bearing, i * step ), height ) : ( i, j ) => Math.abs( height( j ) - height( i ) ) >= most;
 	if ( enough === 1 ) {
 
-		for ( let i = steps - across; i >= 0; i -- ) if ( Math.abs( height( i + across ) - height( i ) ) >= most ) return 1;
+		for ( let i = steps - across; i >= 0; i -- ) if ( steep( i, i + across ) ) return 1;
 		return 0;
 
 	}
@@ -1737,7 +1744,7 @@ export function legFaultsOn( world, lat, lon, toLat, toLon, enough = Infinity ) 
 	let faults = 0;
 	for ( let i = 0; i + across <= steps && faults < enough; i ++ ) {
 
-		if ( Math.abs( height( i + across ) - height( i ) ) < most ) continue;
+		if ( ! steep( i, i + across ) ) continue;
 		faults ++;
 		i += across - 1;
 
@@ -1752,8 +1759,36 @@ export function legFaultsOn( world, lat, lon, toLat, toLon, enough = Infinity ) 
 export function steepOn( world, lat, lon ) {
 
 	const { heightAt } = GROUNDS[ world ];
-	const [ n, e, s, w ] = [ 0, 90, 180, 270 ].map( bearing => heightAt( ...destination( world, lat, lon, bearing, SLOPE_REACH ), DETAIL ) );
-	return Math.hypot( n - s, e - w ) / ( 2 * SLOPE_REACH ) >= Math.tan( SLOPE * Math.PI / 180 );
+	const places = [ 0, 90, 180, 270 ].map( bearing => destination( world, lat, lon, bearing, SLOPE_REACH ) );
+	const [ n, e, s, w ] = places.map( place => heightAt( ...place, DETAIL ) );
+	if ( ! levelled( world ) ) return Math.hypot( n - s, e - w ) / ( 2 * SLOPE_REACH ) >= Math.tan( SLOPE * Math.PI / 180 );
+	// Each in the level frame there (level.js): its rise north to south over how far apart they are
+	// that way, and east to west the same.
+	const frame = levelFrame( world, lat, lon, 0 );
+	const [ pn, pe, ps, pw ] = places.map( ( place, i ) => inFrame( frame, pointOn( world, ...place, [ n, e, s, w ][ i ] ) ) );
+	return Math.hypot( ( pn[ 2 ] - ps[ 2 ] ) / ( pn[ 1 ] - ps[ 1 ] ), ( pe[ 2 ] - pw[ 2 ] ) / ( pe[ 0 ] - pw[ 0 ] ) ) >= Math.tan( SLOPE * Math.PI / 180 );
+
+}
+
+// legFaultsOn's steepness on a world with a level spheroid: whether the stretch from step `i` to
+// step `j` along a leg (`placeAt( i )` its [ lat, lon ], `height( i )` its height over the sphere)
+// rises or falls SLOPE degrees or more from what's level at `i` (level.js's up there).
+function levelSteep( world, placeAt, height ) {
+
+	const tan = Math.tan( SLOPE * Math.PI / 180 );
+	const [ places, points ] = [ [], [] ];
+	const place = i => places[ i ] ??= placeAt( i );
+	const point = i => points[ i ] ??= pointOn( world, ...place( i ), height( i ) );
+	return ( i, j ) => {
+
+		const { up } = levelFrame( world, ...place( i ) );
+		const [ a, b ] = [ point( i ), point( j ) ];
+		const d = [ b[ 0 ] - a[ 0 ], b[ 1 ] - a[ 1 ], b[ 2 ] - a[ 2 ] ];
+		const rise = d[ 0 ] * up[ 0 ] + d[ 1 ] * up[ 1 ] + d[ 2 ] * up[ 2 ];
+		const way = Math.hypot( d[ 0 ] - rise * up[ 0 ], d[ 1 ] - rise * up[ 1 ], d[ 2 ] - rise * up[ 2 ] );
+		return Math.abs( rise ) >= tan * way;
+
+	};
 
 }
 

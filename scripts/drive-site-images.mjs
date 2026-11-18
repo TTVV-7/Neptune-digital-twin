@@ -9,16 +9,18 @@
 //   (og:image), and og/<slug>.png for each place's page (drive/site/places.js). The name, the line
 //   under it and the Earth are drawn in HTML and CSS; the car is the muscle car as World Drive
 //   draws it, on nothing. No picture of Google's tiles: the cards are World Drive's own drawing.
-// - moon, mars (a world made in the page, worlds.js's OFF_EARTH): og/<world>.png for its page
-//   (/moon/, /mars/), the world from space as World Drive's globe shows it, and og/<world>-<slug>.png
-//   for each of its places' pages (drive/site/moon.js, mars.js): World Drive itself, dropped in at
-//   the place's start spot in a ride, the camera set by it, looking across the sun (on the Moon,
-//   toward the Earth where it's low enough in the sky to share the picture with the ground, so it's
-//   where it really is), with the words over it as the other cards have them. The Moon and Mars are
-//   NASA's (public domain) and drawn by the game, so these are pictures of them, not of Google's
-//   tiles. Slow: a drop-in in Chromium's software renderer takes 15 to 30 s and a frame a second or
-//   two, so they're only drawn when asked for by name; `moon tycho plato` draws just those places'
-//   cards, `mars hub` just Mars's own, and `moon hub mars korolev` some of each.
+// - moon, mars, vesta, ceres (a world made in the page, worlds.js's OFF_EARTH): og/<world>.png for
+//   its page (/moon/ to /ceres/), the world from space as World Drive's globe shows it, and
+//   og/<world>-<slug>.png for each of its places' pages (drive/site/<world>.js): World Drive itself,
+//   dropped in at the place's start spot in a ride, the camera set by it, looking across the sun (on
+//   the Moon, toward the Earth where it's low enough in the sky to share the picture with the ground,
+//   so it's where it really is), with the words over it as the other cards have them. The Moon and
+//   Mars are NASA's (public domain), Vesta and Ceres from NASA's Dawn mission, and all drawn by the
+//   game, so these are pictures of them, not of Google's tiles. Until a world's are drawn its pages
+//   show World Drive's own card (build.js looks for each file). Slow: a drop-in in Chromium's
+//   software renderer takes 15 to 30 s and a frame a second or two, so they're only drawn when asked
+//   for by name; `moon tycho plato` draws just those places' cards, `mars hub` just Mars's own, and
+//   `moon hub mars korolev` some of each (`vesta`, or `ceres`, alone draws all of that world's).
 //
 // Run it after changing the places (a new page gets its card) or the look. Needs Playwright with
 // Chromium for the cards, as the tests do; it starts World Drive's dev server (with no Maps key) on
@@ -102,6 +104,36 @@ const MARS_SHOTS = {
 	'arsia-mons': { vehicle: 'muscle-car', look: 315 },
 	korolev: { vehicle: 'go-kart', look: 135 },
 };
+// Vesta's and Ceres's: headings too (no moons, nothing in their black skies), across the sun, from
+// the south-west there as well, toward what rises or falls most round the spot (heights measured in
+// their height.bin over the level): down a peak's or a scarp's steepest side, up to a crater's
+// highest rim, toward Urvara's central peak.
+const VESTA_SHOTS = {
+	'rheasilvia-central-peak': { vehicle: 'muscle-car', look: 135 },
+	rheasilvia: { vehicle: 'go-kart', look: 135 },
+	marcia: { vehicle: 'muscle-car', look: 135 },
+	calpurnia: { vehicle: 'go-kart', look: 135 },
+	'divalia-fossae': { vehicle: 'muscle-car', look: 315 },
+	'matronalia-rupes': { vehicle: 'go-kart', look: 135 },
+	veneneia: { vehicle: 'muscle-car', look: 135 },
+	'saturnalia-fossae': { vehicle: 'go-kart', look: 135 },
+	'vestalia-terra': { vehicle: 'muscle-car', look: 315 },
+	cornelia: { vehicle: 'go-kart', look: 315 },
+	claudia: { vehicle: 'muscle-car', look: 315 },
+};
+const CERES_SHOTS = {
+	occator: { vehicle: 'muscle-car', look: 315 },
+	'cerealia-facula': { vehicle: 'go-kart', look: 135 },
+	'ahuna-mons': { vehicle: 'muscle-car', look: 135 },
+	kerwan: { vehicle: 'go-kart', look: 135 },
+	yalode: { vehicle: 'muscle-car', look: 315 },
+	urvara: { vehicle: 'go-kart', look: 315 },
+	dantu: { vehicle: 'muscle-car', look: 135 },
+	haulani: { vehicle: 'go-kart', look: 135 },
+	ernutet: { vehicle: 'muscle-car', look: 315 },
+	juling: { vehicle: 'go-kart', look: 135 },
+	kait: { vehicle: 'muscle-car', look: 315 },
+};
 // And what every one has, unless its own says otherwise: the field of view (°, driving's own); where
 // on the card the ride and the Earth are (rideAt, earthAt: across and up, -1 to 1, both on the
 // right, the words' side clear); how far the ride's turned from facing away from the camera (°);
@@ -112,11 +144,15 @@ const MOON_EARTH_HIGHEST = 56;
 // Each world's cards: the chips on them (what it's made from, and on its own page's its gravity),
 // how its places' are framed, and where its globe looks on its own page's (lat, lon: the middle of
 // the view; nearer: a share of the globe's own distance): the Moon's near side; Mars's Tharsis
-// volcanoes and Valles Marineris.
+// volcanoes and Valles Marineris; Vesta's Rheasilvia, its central peak on the limb; Ceres's Occator
+// and its bright spots.
 const WORLD_CARDS = {
 	moon: { real: 'The real Moon, from NASA', gravity: 'A sixth of the gravity', shots: MOON_SHOTS, globe: { lat: 10, lon: 8, nearer: 0.9 } },
 	mars: { real: 'The real Mars, from NASA', gravity: '38% of the gravity', shots: MARS_SHOTS, globe: { lat: - 2, lon: - 88, nearer: 0.9 } },
+	vesta: { real: 'The real Vesta, from NASA\'s Dawn', gravity: '2.5% of the gravity', shots: VESTA_SHOTS, globe: { lat: - 40, lon: 80, nearer: 0.9 } },
+	ceres: { real: 'The real Ceres, from NASA\'s Dawn', gravity: '2.9% of the gravity', shots: CERES_SHOTS, globe: { lat: 15, lon: - 120, nearer: 0.9 } },
 };
+for ( const id of OFF_EARTH ) if ( ! WORLD_CARDS[ id ] ) throw new Error( `No cards for ${ id }: add it to WORLD_CARDS` );
 // The cards are photographs, which a PNG keeps large: under this many bytes each, fewer colours
 // as needed.
 const WORLD_CARD_BYTES = 200000;
