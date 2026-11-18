@@ -60,8 +60,9 @@ import { MOON, WORLDS } from './worlds.js';
 //   Vesta and Ceres) as [ r, g, b ], and the share of Lommel-Seeliger's light (how bare dust scatters
 //   it: a full Moon's edge as bright as its middle); and `tint`, [ r, g, b ] times the picture's
 //   colours (the Viking mosaic's Mars is pinker and bluer than the butterscotch ground the rovers
-//   see; Dawn's pictures of Vesta and Ceres are grey and stretched alike, so the tint is what makes
-//   Vesta's bright rock brighter than the Moon's and Ceres's dark ground darker).
+//   see; Dawn's pictures of Vesta and Ceres are grey and evened out alike, to the Moon's picture's
+//   spread, so the tint is what makes Vesta's pale rock a little brighter than the Moon's and
+//   Ceres's dark ground darker).
 // - haze: on a world with air, how far off (m) its dust hides half of what's there, and its colour,
 //   seen from the ground (none from high up); null for none.
 // - sky: on a world with air, its sky's colours, overhead and at the horizon, round the sun, and the
@@ -105,7 +106,7 @@ export const LOOKS = {
 	// kilometres lower than the ground under the camera all the way.
 	vesta: {
 		horizon: 3000,
-		shade: { sun: 2.2, ambient: [ 0.03, 0.03, 0.03 ], lommel: 0.15, tint: [ 1.3, 1.26, 1.18 ] },
+		shade: { sun: 2.2, ambient: [ 0.03, 0.03, 0.03 ], lommel: 0.15, tint: [ 1.06, 1.03, 0.97 ] },
 		haze: null,
 		sky: null,
 		sun: [ - 0.62, - 0.66, 0.42 ],
@@ -116,7 +117,7 @@ export const LOOKS = {
 	},
 	ceres: {
 		horizon: 2000,
-		shade: { sun: 2.2, ambient: [ 0.025, 0.025, 0.025 ], lommel: 0.12, tint: [ 0.84, 0.84, 0.86 ] },
+		shade: { sun: 2.2, ambient: [ 0.025, 0.025, 0.025 ], lommel: 0.12, tint: [ 0.6, 0.6, 0.62 ] },
 		haze: null,
 		sky: null,
 		sun: [ - 0.72, - 0.55, 0.42 ],

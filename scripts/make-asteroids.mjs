@@ -132,16 +132,25 @@ for ( const id of asked === 'both' ? Object.keys( WORLDS ) : [ asked ] ) {
 
 	const mosaic = await raster( given[ `${ id }-mosaic` ] ?? MOSAICS + world.mosaic.file );
 	const means = resample( mosaic, world.mosaic, ...PICTURE, value => value );
-	// Stretched so its darkest and brightest few in a thousand are black and white (the Dawn
-	// mosaics are calibrated to what each frame saw, not to the body's own albedo: each world's look
-	// says how bright its ground is, body.js).
-	const sorted = Float64Array.from( means ).sort();
-	const [ dark, bright ] = [ sorted[ Math.floor( sorted.length * 0.002 ) ], sorted[ Math.floor( sorted.length * 0.998 ) ] ];
+	// Evened out to the Moon's picture's spread (a mean of 140 and a deviation of 30 in 255): the Dawn
+	// mosaics are calibrated to what each frame saw, with the long shadows of a low sun in them, so
+	// stretched to their full range they're far harsher than the ground the page shades itself
+	// (body.js). How bright each world's ground is, Vesta's bright and Ceres's dark, is its look's.
+	let [ sum, squares ] = [ 0, 0 ];
+	for ( const value of means ) {
+
+		sum += value;
+		squares += value * value;
+
+	}
+
+	const mean = sum / means.length;
+	const spread = Math.sqrt( squares / means.length - mean * mean );
 	const grey = new Uint8Array( means.length );
-	for ( let i = 0; i < means.length; i ++ ) grey[ i ] = Math.max( 0, Math.min( 255, Math.round( ( means[ i ] - dark ) / ( bright - dark ) * 255 ) ) );
+	for ( let i = 0; i < means.length; i ++ ) grey[ i ] = Math.max( 0, Math.min( 255, Math.round( 140 + ( means[ i ] - mean ) / spread * 30 ) ) );
 	const picture = await sharp( Buffer.from( grey.buffer ), { raw: { width: PICTURE[ 0 ], height: PICTURE[ 1 ], channels: 1 } } ).webp( { quality: 72 } ).toBuffer();
 	writeFileSync( new URL( 'colour.webp', out ), picture );
-	console.log( `${ id }: ${ picture.length } bytes to ${ new URL( 'colour.webp', out ).pathname } (stretched from ${ dark.toFixed( 1 ) }-${ bright.toFixed( 1 ) })` );
+	console.log( `${ id }: ${ picture.length } bytes to ${ new URL( 'colour.webp', out ).pathname } (from a mean of ${ mean.toFixed( 1 ) } and a spread of ${ spread.toFixed( 1 ) })` );
 	// The picture's brightness at each known place against its surroundings (Occator's bright spots
 	// should stand out, if it's on the heights' grid).
 	const bright1 = ( lat, lon ) => grey[ Math.min( PICTURE[ 1 ] - 1, Math.floor( ( 90 - lat ) / 180 * PICTURE[ 1 ] ) ) * PICTURE[ 0 ] + Math.floor( ( ( lon + 540 ) % 360 ) / 360 * PICTURE[ 0 ] ) % PICTURE[ 0 ] ];

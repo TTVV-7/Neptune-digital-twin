@@ -15,7 +15,7 @@ const vesta = ( id, name, region, lat, lon, extra = {} ) => ( { id: `vesta-${ id
 export const VESTA_SPOTS = [
 	vesta( 'rheasilvia-peak', 'Rheasilvia\'s central peak', 'Rising some 20 km over the basin floor', - 78.31, 86.31, { also: [ 'Rheasilvia Mons', 'Central peak', 'Highest mountain' ] } ),
 	vesta( 'rheasilvia', 'Rheasilvia', 'The great south pole basin, 450 km across', - 71.951, 86.303, { also: [ 'Rheasilvia basin', 'South pole basin' ] } ),
-	vesta( 'snowman', 'Marcia', 'The "Snowman"\'s biggest crater, 68 km', 8.979, - 20.452, { also: [ 'Snowman', 'Snowman craters' ] } ),
+	vesta( 'snowman', 'Marcia', 'The biggest of the Snowman\'s three craters, 68 km', 8.979, - 20.452, { also: [ 'Snowman', 'Snowman craters' ] } ),
 	vesta( 'calpurnia', 'Calpurnia', 'The Snowman\'s middle crater, 50 km', 16.722, - 10.899 ),
 	vesta( 'divalia-fossae', 'Divalia Fossae', 'Troughs round the equator, 549 km long', - 9.053, - 163.769 ),
 	vesta( 'matronalia-rupes', 'Matronalia Rupes', 'A scarp on Rheasilvia\'s rim, 15 km up', - 49.416, - 127.24 ),
