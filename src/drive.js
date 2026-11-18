@@ -2,6 +2,7 @@ import { Box3, Euler, MathUtils, Quaternion, Raycaster, Vector3 } from 'three';
 import { enuToLocal, headingToYaw, localToEnu, yawToHeading } from './geo.js';
 import { blocks, isTyping } from './walk.js';
 import { createDriveFx } from './drive-fx.js';
+import { PlaneMode } from './plane.js';
 
 // Race mode: drive a placed vehicle at highway speeds. Arcade physics rather than a simulation:
 // the vehicle follows the ground under its wheels, keeps its upward speed off ramps and crests so
@@ -21,6 +22,11 @@ import { createDriveFx } from './drive-fx.js';
 // unless an app gives one (World Drive's drive-app/water.js, which tells water from ground on
 // Google's mesh): every vehicle drives on water as on the ground (it's ground in the mesh), and one
 // whose tuning says it `floats` (a hovercraft) throws up spray behind it there.
+//
+// And `plane`, off unless an app asks: T turns the vehicle into a little plane (plane.js) that
+// goes faster the higher it flies, and T again lands it. It's kept apart from everything scored:
+// no tricks or boost while it's a plane, and a new stunt run once it's down. canPlane() may say why
+// it can't be one just now (a challenge's run going), and onPlane( on ) hears it change.
 
 const KMH = 3.6;
 const GRAVITY = 9.81;
@@ -275,7 +281,7 @@ export class Driver {
 	// over y: { level }, the water's surface height there (null where it isn't water). gravity: the
 	// world's, as a share of the Earth's (World Drive's Moon: 0.165), which an app may change between
 	// drives (see leap).
-	constructor( { camera, models, controls, getColliders, hud, onStop, onScore = null, fly = false, booster = false, drift = false, crash = 'stop', water = null, effects = null, gravity = 1 } ) {
+	constructor( { camera, models, controls, getColliders, hud, onStop, onScore = null, fly = false, booster = false, drift = false, crash = 'stop', water = null, effects = null, gravity = 1, plane = false, canPlane = null, onPlane = null } ) {
 
 		this.camera = camera;
 		this.models = models;
@@ -320,8 +326,12 @@ export class Driver {
 		// Machines that aren't driven like a car bring their own controls (see addMachine).
 		this.machines = new Map();
 		this.machine = null;
+		// Plane mode (plane.js), with the `plane` option.
+		this.aircraft = plane ? new PlaneMode( this ) : null;
+		this.canPlane = canPlane;
+		this.onPlane = onPlane;
 
-		this.driveKeys = [ 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight', 'KeyR', ...booster ? [ 'KeyB' ] : [], ...this.fly ? [ 'KeyF' ] : [], ...this.launch ? [ 'KeyQ', 'KeyE' ] : [] ];
+		this.driveKeys = [ 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight', 'KeyR', ...booster ? [ 'KeyB' ] : [], ...this.fly ? [ 'KeyF' ] : [], ...this.launch ? [ 'KeyQ', 'KeyE' ] : [], ...plane ? [ 'KeyT' ] : [] ];
 		window.addEventListener( 'keydown', e => {
 
 			// Browser shortcuts (Ctrl+R, Cmd+F...) are left to the browser, and don't drive or dig.
@@ -370,6 +380,17 @@ export class Driver {
 
 		}
 
+		// T: into a plane and back. As one, the car's own keys (hop, booster, reset) do nothing: plane.js
+		// reads the held keys itself.
+		if ( this.aircraft && code === 'KeyT' ) {
+
+			this.togglePlane();
+			return;
+
+		}
+
+		if ( this.aircraft?.on ) return;
+
 		// With kart handling, Space without steering is a drift waiting for the steering, or a hop
 		// if it's let go at once (see release).
 		if ( code === 'Space' && this.grounded && this.drift && this.steerInput() === 0 ) this.spaceTap = this.clock;
@@ -394,6 +415,42 @@ export class Driver {
 		const tapped = this.clock - this.spaceTap <= HOP_TAP;
 		this.spaceTap = null;
 		if ( tapped && this.active && this.grounded && ! this.drifting && ! this.machine ) this.hop();
+
+	}
+
+	// T: a plane, unless the app says not now (a challenge's run), or it's wiping out; as one, down.
+	togglePlane() {
+
+		const plane = this.aircraft;
+		if ( ! plane.on ) {
+
+			const reason = this.canPlane?.();
+			if ( reason ) {
+
+				this.hud.flash( reason );
+				return;
+
+			}
+
+			if ( this.air?.wipeout ) return;
+
+		}
+
+		plane.toggle();
+
+	}
+
+	// A new stunt run (crash: 'launch'): the score from nothing.
+	newRun() {
+
+		if ( ! this.launch ) return;
+		this.score = 0;
+		this.mult = 1;
+		this.runStart = this.clock;
+		this.runAir = 0;
+		this.bestAir = 0;
+		this.bestJump = null;
+		this.showScore();
 
 	}
 
@@ -437,6 +494,8 @@ export class Driver {
 		this.entry = entry;
 		this.spec = spec;
 		entry.driving = true;
+		this.aircraft?.reset();
+		this.hud.setPlane?.( false );
 
 		// Measure the vehicle in its own frame: it faces -Z there once turned by its front axis.
 		const { pivot, state } = entry;
@@ -587,6 +646,14 @@ export class Driver {
 		this.active = false;
 		this.machine?.stop();
 		this.machine = null;
+		if ( this.aircraft?.on ) {
+
+			this.aircraft.reset();
+			this.hud.setPlane?.( false );
+			this.onPlane?.( false );
+
+		}
+
 		const { entry } = this;
 		entry.driving = false;
 		this.showCab( false );
@@ -645,6 +712,13 @@ export class Driver {
 		}
 
 		this.clock += dt;
+		if ( this.aircraft?.on ) {
+
+			this.updatePlane( dt );
+			return;
+
+		}
+
 		const { keys, spec } = this;
 		// Flying with stunts on, holding Space turns W/S and A/D into flips and rolls (see airInput).
 		const tricking = this.flying && !! this.air && this.airKey( 'Space' );
@@ -857,6 +931,30 @@ export class Driver {
 
 		}
 
+		this.placeCamera( dt );
+
+	}
+
+	// A frame as a plane (plane.js moves it): posed, its parts moved (the kit's `plane` share out for
+	// those that fold: cars.js's wheels), the readouts and the camera.
+	updatePlane( dt ) {
+
+		const plane = this.aircraft;
+		plane.update( dt );
+		const { pivot } = this.entry;
+		this.pose();
+		pivot.updateMatrixWorld( true );
+		// (Its wheels spin as fans while it's a plane.)
+		const share = plane.deploy;
+		for ( const animate of this.animators ) animate( { steer: plane.on ? 0 : this.steer, speed: plane.on ? 20 + this.speed * 0.2 : this.speed, dt, airborne: plane.on, vy: this.vy, throttle: false, plane: share } );
+		this.updateFx( dt );
+		this.hud.update( {
+			kmh: Math.abs( this.speed ) * KMH, reverse: false, top: this.topSpeed * KMH, bestAir: this.bestAir, air: 0, boost: false,
+			altitude: plane.on ? plane.height : null,
+		} );
+		if ( this.booster ) this.hud.setBoost?.( this.gauge );
+		this.ringJolts( dt );
+		if ( this.launch ) this.turnView( dt );
 		this.placeCamera( dt );
 
 	}
@@ -1376,7 +1474,7 @@ export class Driver {
 			velocity: _target.set( - Math.sin( this.course * Math.PI / 180 ) * this.speed, this.vy, Math.cos( this.course * Math.PI / 180 ) * this.speed ),
 			flame: this.firing ? 1 : this.boost ? 0.55 : 0,
 			// A trail (World Drive's Garage) shows behind it boosting or flying.
-			trail: this.firing || this.boost || this.flying ? 1 : 0,
+			trail: this.firing || this.boost || this.flying || this.aircraft?.on ? 1 : 0,
 			drifting: !! this.drifting && this.grounded,
 			level: this.driftLevel,
 			scrape: this.scraping > 0 ? this.scrapeAt : null,
@@ -2221,9 +2319,11 @@ export class Driver {
 			// Never inside a building, a container or the vehicle itself: the camera heads for a spot
 			// behind and above the vehicle's box (a crane's boom and all), in front of whatever is
 			// behind it, and on the way there it keeps out of both. A small vehicle has it nearer.
+			// As a plane, further back and up the faster it goes, to see where it's heading.
+			const pull = this.aircraft?.on ? 1 + this.aircraft.deploy * ( 0.7 + Math.min( 1.3, Math.abs( this.speed ) / 150 ) ) : 1;
 			const reach = Math.min( 5, 1.5 + this.length );
-			const lift = Math.min( 2.5, 0.6 + this.length * 0.4 ) * this.chaseZoom;
-			const back = this.rear + ( this.length * 0.3 + reach ) * this.chaseZoom;
+			const lift = Math.min( 2.5, 0.6 + this.length * 0.4 ) * this.chaseZoom * pull;
+			const back = this.rear + ( this.length * 0.3 + reach ) * this.chaseZoom * pull;
 			_target.copy( base ).addScaledVector( forward, - back ).setY( base.y + height + lift );
 			_eye.copy( base ).setY( base.y + height * 0.8 );
 			this.clearView( _eye, _target, base, lift );

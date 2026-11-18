@@ -69,6 +69,7 @@ address, and the construction app is unchanged by it.
 | Space | Drift: hold it and steer round a bend, let go for a mini-turbo; tap it to hop |
 | Shift (or B) | Booster: hold for overdrive while the gauge lasts; let go to save the rest |
 | F | Fly: hold to lift off, let go to glide down |
+| T | Plane: your ride turns into a little plane ([Plane mode](#plane-mode)); T again lands it |
 | In the air | A / D spin, W / S flip (W forward, S back), Q / E roll (or Space with A / D) |
 | R | Stuck? Back on the road a few metres on (on water too) |
 | C | Chase or driver's-seat camera |
@@ -132,6 +133,55 @@ Hit something (a wall, a building, a parked car, a barrier) and you don't stop: 
   the **DRIFT** chip and button fill with the mini-turbo's charge in its colour (yellow, then teal,
   then pink after 0.7, 1.5 and 2.5 s). Let go for a short, strong boost. Space held before you
   steer waits for the steering rather than hopping; a quick tap hops.
+
+### Plane mode
+
+**T** turns whatever you're driving into a little plane: wings swing down from its sides with a jet
+under each, a fin rises at the back, and on a model car the wheels fold out flat as fans. It lifts
+a few metres off the ground and hovers. **W** speeds up and **S** slows down (to a hover; let go
+of both and it cruises at that speed), **A**/**D** turn and bank, **Space** (or **F**) climbs and
+**Shift** comes down. **T** again flies it down by itself (you still steer) and folds it back into
+a car on the ground, driving on at the speed it landed with. Press **T** on the way down to fly on.
+On a touch screen the ✈ button under CAM is T, FLY is up and BOOST is down.
+
+**Faster the higher you fly.** Just off the ground it's 60 km/h at most, slow enough to look at a
+place properly. Higher up it may go faster, and climbing and coming down get quicker too
+(`SPEEDS` and `CLIMB` in `src/plane.js`):
+
+| Height over the ground | Top speed |
+| --- | --- |
+| 0 m | 60 km/h |
+| 30 m | 100 km/h |
+| 150 m | 250 km/h |
+| 600 m | 500 km/h |
+| 2 km | 900 km/h |
+| 6 km | 1,800 km/h |
+| 12 km (the ceiling) | 2,700 km/h |
+
+Coming down, it eases off to the top speed for its height, so it lands at about 60 km/h. It
+never goes below 0.8 m over the ground (a slope is flown up), stops short of a wall ("Bonk!") and
+never climbs through a roof or a bridge.
+
+**It's for looking round, not for points.** It's kept apart from everything scored:
+
+- **No challenges.** T does nothing during a challenge's countdown or run ("No plane during a
+  challenge run"), so no board's time is ever flown. Times are still checked against the fastest
+  anything drives along the ground (`FASTEST` in `challenge-rules.js`), which the plane isn't.
+- **No stunts or boost.** Turning into a plane drops a jump's tricks unlanded and puts the booster
+  out. As a plane there's no hop, drift, booster or tricks. Once it's down, a **new stunt run**
+  starts (the last one's place may be far behind).
+- **No levels.** Its distance, air and the areas it flies over don't count for XP (`driven` in
+  `main.js`).
+
+**Google's tiles.** Google bills by the session (one a page load: see the top of `main.js`), not
+by the tile, so flying high or far costs no more there. What a fast plane costs is your device's
+download and drawing, so flying fast it makes do with coarser tiles: their screen-space error
+target goes up to 2.5 times the usual from 30 m/s to 250 m/s (`PLANE_TILE_ERROR` in `main.js`).
+Driving, the tiles are as sharp as ever.
+
+**Not yet:** flying high enough to come out on the globe and pick somewhere else; others driving
+with you see your car (not a plane) in the sky, flagged as flying; the code-built rides (go-kart,
+coupe, bus, monster truck, hovercraft) get the wings but keep their wheels as they are.
 
 ### Boosting
 

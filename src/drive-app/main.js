@@ -45,6 +45,10 @@ import * as screens from './screens.js';
 // scene is recentred on each new place instead (recentre below). boot.js, the page's first script,
 // runs the robot check while this loads, then asks for the visit and calls start.
 //
+// How many times Google's tiles' usual screen-space error a plane flying fast makes do with (see
+// the frame loop).
+const PLANE_TILE_ERROR = 2.5;
+
 // Modes: 'globe' (the globe and its panel), 'dropping' (flying down and waiting for the ground),
 // 'driving' and 'paused'. M goes back to the globe from any of the others.
 //
@@ -452,6 +456,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// Until Google's root tileset arrives the tiles sit in the Earth's own frame; then
 	// ReorientationPlugin moves them, and the camera has to move with them.
 	tiles?.addEventListener( 'load-root-tileset', () => globe.restore() );
+	// (The tiles' usual error target, which a plane flying fast raises: see the frame loop.)
+	const usualTileError = tiles?.errorTarget ?? 0;
 
 	const models = new ModelManager( { getGround: grounds, renderer } );
 	scene.add( models.group );
@@ -477,6 +483,15 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		// ride drives on as on the ground). Its effects (bursts, fewer on a phone and calmer for those
 		// asking for less motion) as screen-fx.js sets them.
 		fly: true, booster: true, drift: true, crash: 'launch', water, effects: { detail: 1, calm: false },
+		// T: plane mode (plane.js), for looking round, kept apart from what's scored: not during a
+		// challenge's run, its distance not counted for levels (driven), and a new stunt run once down.
+		plane: true,
+		canPlane: () => challenges?.run && [ 'countdown', 'racing' ].includes( challenges.run.phase ) ? 'No plane during a challenge run' : null,
+		onPlane: () => {
+
+			runScore = 0;
+
+		},
 	} );
 	// Speed lines, overdrive's white edges and the camera's jolts and shakes, with their switch in
 	// the pause menu (screen-fx.js).
@@ -1949,6 +1964,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	function driven() {
 
 		const d = driver;
+		// As a plane, nothing counts: not its distance, nor its air, nor the areas it flies over.
+		if ( d.aircraft?.on ) return { speed: 0, air: false, boost: null, together: withOthers(), where: nowhere, vehicle: state.vehicle?.id ?? null };
 		return {
 			speed: velocityOf( d, _velocity ).length(),
 			air: ! d.grounded && ! d.flying,
@@ -2326,7 +2343,15 @@ export async function start( { key, left = null, visit: token = null, worker = t
 			moon.update( camera, state.entry ? state.entry.pivot.getWorldPosition( _focus ) : null );
 			moonLight( dt );
 
-		} else tiles?.update();
+		} else if ( tiles ) {
+
+			// As a plane going fast, coarser tiles are good enough (they're gone past in a moment):
+			// fewer to fetch and draw. Driving, Google's tiles as sharp as ever.
+			const fast = driving && driver.aircraft?.on ? MathUtils.smoothstep( Math.abs( driver.speed ), 30, 250 ) : 0;
+			tiles.errorTarget = usualTileError * ( 1 + fast * ( PLANE_TILE_ERROR - 1 ) );
+			tiles.update();
+
+		}
 		models.update( dt );
 		ghosts?.update( dt, state.mode === 'driving' || state.mode === 'paused' );
 		online?.update();

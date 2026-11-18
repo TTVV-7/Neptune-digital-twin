@@ -1077,8 +1077,8 @@ export function flagsOf( driver, paused ) {
 	if ( d.firing ) flags |= FLAGS.firing;
 	if ( d.boost ) flags |= FLAGS.boost;
 	if ( d.drifting && d.grounded ) flags |= FLAGS.drift;
-	if ( d.flying ) flags |= FLAGS.flying;
-	if ( ! d.grounded && ! d.flying ) flags |= FLAGS.air;
+	if ( d.flying || d.aircraft?.on ) flags |= FLAGS.flying;
+	if ( ! d.grounded && ! d.flying && ! d.aircraft?.on ) flags |= FLAGS.air;
 	if ( d.supersonic ) flags |= FLAGS.supersonic;
 	if ( d.grounded && ! d.flying && ! d.air ) flags |= FLAGS.grounded;
 	if ( d.floats && d.onWater && d.grounded && ! d.flying ) flags |= FLAGS.spray;
