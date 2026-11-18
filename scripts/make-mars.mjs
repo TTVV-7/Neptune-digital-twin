@@ -52,12 +52,12 @@ for ( let r = 0; r < ROWS; r ++ ) {
 
 writeFileSync( new URL( 'height.bin', OUT ), Buffer.from( heights.buffer ) );
 
-// Known places, to see it read right: Olympus Mons's summit (21.2 km over the areoid in MOLA's full
-// resolution, 18.65° N 226.2° E), Hellas's floor (about 7 km under it, near 42.4° S 70.5° E), and
-// Curiosity's landing in Gale crater (4.59° S 137.44° E, about 4.5 km under it), each lower or
-// higher here by this grid's 7.4 km cells.
+// Known places, to see it read right: Olympus Mons's summit, the highest place on Mars (21,171 m
+// over the areoid in MOLA's grid, on its caldera's south rim, 17.34° N 226.97° E), Badwater crater in
+// Hellas, the lowest (-8,177 m, 32.84° S 62.22° E), and Curiosity's landing in Gale crater (4.59° S
+// 137.44° E, 4,501 m under the areoid), each a little lower or higher here by this grid's 7.4 km cells.
 const at = ( lat, lon ) => heights[ Math.floor( ( 90 - lat ) * 8 ) * COLUMNS + Math.floor( ( ( lon + 540 ) % 360 ) * 8 ) % COLUMNS ];
-for ( const [ name, lat, lon ] of [ [ 'Olympus Mons', 18.65, - 133.8 ], [ 'Hellas Planitia', - 42.4, 70.5 ], [ 'Bradbury Landing', - 4.5895, 137.4417 ] ] ) {
+for ( const [ name, lat, lon ] of [ [ 'Olympus Mons summit', 17.34, - 133.03 ], [ 'Badwater crater', - 32.84, 62.22 ], [ 'Bradbury Landing', - 4.5895, 137.4417 ] ] ) {
 
 	console.log( `${ name }: ${ at( lat, lon ) } m` );
 

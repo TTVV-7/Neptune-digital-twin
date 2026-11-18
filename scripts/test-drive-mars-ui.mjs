@@ -173,7 +173,11 @@ describe( 'World Drive on Mars', () => {
 		const search = page.locator( '#globe-ui .search input' );
 		await search.fill( 'olympus' );
 		await search.press( 'Enter' );
-		assert.deepEqual( await page.locator( '#globe-ui .results button b' ).allTextContents(), [ 'Olympus Mons' ] );
+		assert.deepEqual( await page.locator( '#globe-ui .results button b' ).allTextContents(), [ 'Olympus Mons', 'Olympus Mons summit' ] );
+		// The lowest place, by what it is.
+		await search.fill( 'lowest' );
+		await search.press( 'Enter' );
+		assert.deepEqual( await page.locator( '#globe-ui .results button b' ).allTextContents(), [ 'Badwater crater' ] );
 		// Landing sites by their missions.
 		await search.fill( 'Curiosity' );
 		await search.press( 'Enter' );

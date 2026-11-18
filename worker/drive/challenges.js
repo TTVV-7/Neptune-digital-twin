@@ -539,10 +539,10 @@ export async function postTime( context ) {
 	if ( ! visit ) throw new HttpError( 403, 'Forbidden', { reason: 'visit' } );
 	// Every post that gets this far reads D1 (the challenge, the player, the visit, the best, the gap)
 	// before the gap, the visit's times or the visitor's day can turn it away, so it's one of the
-	// address's CHALLENGE_MISSES (10 a minute, shared with its lists and boards that miss the cache),
+	// address's CHALLENGE_MISSES (15 a minute, shared with its lists and boards that miss the cache),
 	// asked before D1 is. A page posts once a run (and again only if its answer's lost), so it's
-	// never near that; a script resending a good body over and over reads about ten rows each of ten
-	// a minute.
+	// never near that; a script resending a good body over and over reads about ten rows each of
+	// fifteen a minute.
 	await miss();
 	// The challenge itself, from D1 (one the owner has replaced in the last minute may still be in
 	// some instance's list): live, or over a moment ago with the run begun before its end.

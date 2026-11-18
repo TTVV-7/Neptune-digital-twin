@@ -19,7 +19,8 @@ const root = join( dirname( fileURLToPath( import.meta.url ) ), '..' );
 const wrangler = join( dirname( createRequire( import.meta.url ).resolve( 'wrangler/package.json' ) ), 'bin', 'wrangler.js' );
 
 // Wrangler insists the site folder exists. npm run build:drive fills it; until then the page
-// comes from the Vite dev server anyway.
+// comes from the Vite dev server anyway, and the Worker lays out the Moon's and Mars's challenges
+// without checking their ground (it reads /moon/height.bin and /mars/height.bin from the site).
 mkdirSync( join( root, 'dist-drive' ), { recursive: true } );
 
 const migrate = spawnSync( process.execPath, [ wrangler, 'd1', 'migrations', 'apply', 'DB', '--local', '-c', 'wrangler.drive.jsonc' ], { cwd: root, stdio: 'inherit' } );

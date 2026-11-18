@@ -1598,7 +1598,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// SEA_EVERY s, whether the ground under it or ahead of it along its way is the bed of the sea or a
 	// big lake, out past where Google draws the water's surface, and if so the surface laid there
 	// (see SEA_MARGIN and OPEN); and while the look round the spot found isn't done, that carried on
-	// in each frame instead (see OPEN_RAYS). The Moon has no water.
+	// in each frame instead (see OPEN_RAYS). The other worlds have no water.
 	function watchSea( dt ) {
 
 		if ( offEarth() || ! driver.active || sea.shown || ! state.place ) {
@@ -1776,7 +1776,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 			if ( drop.cancelled ) return { y: null, settled: false };
 			const now = performance.now();
 			const y = ground.heightAt( 0, 0, top, depth );
-			// (On the Moon, its squares still to build.)
+			// (On another world, its squares still to build.)
 			const loading = offEarth() ? body().pending > 0 : !! tiles?.isLoading;
 			quiet = y !== null && ! loading ? quiet + ( now - last ) / 1000 : 0;
 			last = now;
@@ -1952,7 +1952,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 			speed: velocityOf( d, _velocity ).length(),
 			air: ! d.grounded && ! d.flying,
 			boost: d.boost,
-			// (On the Moon, nobody's driving with you, and it's none of the Earth's areas or spots.)
+			// (On another world, nobody's driving with you, and it's none of the Earth's areas or spots.)
 			together: ! offEarth() && !! live && [ ...live.players.values() ].some( p => ! p.away ),
 			where: offEarth() ? nowhere : carWhere,
 			vehicle: state.vehicle?.id ?? null,
@@ -2356,8 +2356,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	}
 
-	// The sun on the Moon's globe: from space, over the viewer's left shoulder (the side in view lit,
-	// as a Moon nearly full); coming down to the ground, low across it from the left and ahead (30° up),
+	// The sun on another world's globe: from space, over the viewer's left shoulder (the side in view
+	// lit, as a Moon nearly full); coming down to the ground, low across it from the left and ahead (30° up),
 	// as head-on light would show none of its craters.
 	const _up = new Vector3();
 	const _left = new Vector3();
