@@ -9318,7 +9318,7 @@ describe( 'World Drive challenges', () => {
 			new PerformanceObserver( list => {
 
 				const { run, race } = window.drive.challenges;
-				for ( const entry of list.getEntries() ) window.longTasks.push( { start: Math.round( entry.startTime ), ms: Math.round( entry.duration ), phase: run?.phase ?? null, ready: !! race?.ready } );
+				for ( const entry of list.getEntries() ) window.longTasks.push( { start: Math.round( entry.startTime * 10 ) / 10, ms: Math.round( entry.duration ), phase: run?.phase ?? null, ready: !! race?.ready } );
 
 			} ).observe( { type: 'longtask' } );
 
@@ -9335,9 +9335,12 @@ describe( 'World Drive challenges', () => {
 		await page.evaluate( () => new Promise( resolve => setTimeout( resolve, 1000 ) ) );
 		const { tasks, timing, held } = await page.evaluate( () => {
 
+			// (Each gap between beats as much of it as is between built and made light: the frame that
+			// first draws it comes straight after, its shaders made then, seconds in SwiftShader, and
+			// whether a beat comes between is chance; nor is it the making light.)
 			const { timing } = window.drive.challenges.race;
 			let held = 0;
-			for ( let i = 1; i < window.beats.length; i ++ ) if ( window.beats[ i ] > timing.built && window.beats[ i - 1 ] < timing.light ) held = Math.max( held, window.beats[ i ] - window.beats[ i - 1 ] );
+			for ( let i = 1; i < window.beats.length; i ++ ) if ( window.beats[ i ] > timing.built && window.beats[ i - 1 ] < timing.light ) held = Math.max( held, Math.min( window.beats[ i ], timing.light ) - Math.max( window.beats[ i - 1 ], timing.built ) );
 			return { tasks: window.longTasks, timing, held: Math.round( held ) };
 
 		} );
@@ -9554,12 +9557,26 @@ describe( 'World Drive challenges', () => {
 				step();
 
 			} ) );
-			await page.locator( '#drive-ui .ch-split' ).waitFor();
-			const hud = await page.locator( '#drive-ui .ch-hud' ).boundingBox();
+			// (Where each is, all as the split shows, in one look: it's shown SPLIT_SHOW ms, and a frame
+			// drawing something for the first time can take seconds of that in SwiftShader.)
+			const boxes = await ( await page.waitForFunction( () => {
+
+				const box = selector => {
+
+					const el = document.querySelector( selector );
+					const r = el && ! el.hidden ? el.getBoundingClientRect() : null;
+					return r && r.width && r.height ? { x: r.x, y: r.y, width: r.width, height: r.height } : null;
+
+				};
+				const split = box( '#drive-ui .ch-hud .ch-split' );
+				return split && { hud: box( '#drive-ui .ch-hud' ), '.ch-split': split, '.ch-ghost-toggle': box( '#drive-ui .ch-hud .ch-ghost-toggle' ) };
+
+			} ) ).jsonValue();
+			const { hud } = boxes;
 			assert.ok( hud.x >= 0 && hud.x + hud.width <= viewport.width && hud.y >= 0, JSON.stringify( hud ) );
 			for ( const part of [ '.ch-split', '.ch-ghost-toggle' ] ) {
 
-				const at = await page.locator( `#drive-ui .ch-hud ${ part }` ).boundingBox();
+				const at = boxes[ part ];
 				assert.ok( at && at.x >= hud.x - 1 && at.x + at.width <= hud.x + hud.width + 1 && at.y + at.height <= hud.y + hud.height + 1, `${ name } ${ part }: ${ JSON.stringify( { at, hud } ) }` );
 
 			}
