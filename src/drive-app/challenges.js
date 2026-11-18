@@ -302,7 +302,7 @@ export function setUpChallenges( app ) {
 
 	}
 
-	// The six, the current world's three first, a heading for each world.
+	// The nine, the current world's three first, a heading for each world.
 	function render() {
 
 		const here = app.world();

@@ -283,11 +283,20 @@ export const GOOGLE_STUB = `window.google = { accounts: { id: {
 
 // The Vite dev server on 127.0.0.1:port, with env added to this process's environment (TWIN_API
 // sends /api to a local server). config: another Vite config, e.g. World Drive's
-// vite.drive.config.js. Resolves once it answers.
+// vite.drive.config.js. Resolves once it answers. Throws if something still answers there after a
+// few seconds (one just stopped is given those to go): a server left running by a run that was
+// killed (its own process group outlives it) would otherwise be tested in this one's place,
+// serving whatever tree it was started in.
 export async function startVite( port, env = {}, config = null ) {
 
 	const bin = join( dirname( createRequire( import.meta.url ).resolve( 'vite/package.json' ) ), 'bin', 'vite.js' );
 	const base = `http://127.0.0.1:${ port }`;
+	for ( let i = 0; await fetch( base ).then( () => true, () => false ); i ++ ) {
+
+		if ( i === 20 ) throw new Error( `Something is already answering on port ${ port }: stop it (a dev server left from a killed run?), or set this test's port` );
+		await new Promise( resolve => setTimeout( resolve, 250 ) );
+
+	}
 	// Never a Maps key in tests: blank every name the Vite config would read one from.
 	const noKey = Object.fromEntries( [ 'GOOGLE_API', 'google_api', 'GOOGLE_MAPS_API_KEY', 'VITE_GOOGLE_MAPS_API_KEY', 'GOOGLE_MAPS_KEY', 'GOOGLE_MAPS_API' ].map( name => [ name, '' ] ) );
 	const child = spawn( process.execPath, [ bin, ...( config ? [ '--config', config ] : [] ), '--port', String( port ), '--strictPort', '--host', '127.0.0.1' ], {
@@ -306,6 +315,8 @@ export async function startVite( port, env = {}, config = null ) {
 
 	for ( let i = 0; i < 100; i ++ ) {
 
+		// (--strictPort: it quits rather than take another port.)
+		if ( child.exitCode !== null ) throw new Error( `Vite quit (exit ${ child.exitCode }): is port ${ port } taken?` );
 		try {
 
 			if ( ( await fetch( base ) ).ok ) return { base, stop };
