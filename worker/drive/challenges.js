@@ -209,7 +209,8 @@ const orders = new Map();
 // --- the routes ---
 
 // GET /api/challenges?id=: the nine live challenges (the page puts the current world's first):
-// { now, challenges: [ CHALLENGE + { total, top, race, me } ] }, top the LIST_TOP best ({ rank,
+// { now, challenges: [ CHALLENGE + { total, top, race, me } ], more? }, more true when some aren't
+// fixed yet (a period's first ask: CHECKED_MOST; the page asks again), top the LIST_TOP best ({ rank,
 // name, ms, vehicle, level, title, supporter? }), race the quickest time with a ghost to race (as a
 // row, with its run: what a newcomer races; raceQuery) or null, and me, with a player's id, their
 // best and rank there ({ ms, rank } or null). CHALLENGE: { id, period, key, world, kind, place, region, route, startsAt,
@@ -247,6 +248,8 @@ export async function listChallenges( context ) {
 	return json( {
 		now: context.now,
 		challenges: rows.map( row => ( { ...challengeOf( row ), ...tops[ row.id ], me: mine[ row.id ] ?? null } ) ),
+		// (Some held back for the next ask: CHECKED_MOST.)
+		...allThere( periodsAt( context.now ), rows ) ? {} : { more: true },
 	}, 200, { 'X-Board-Cache': cached ? 'hit' : 'miss' } );
 
 }
@@ -1036,20 +1039,19 @@ export async function adminChange( context ) {
 // then Mars: WORLDS' order), fixed in D1 the first time each is asked for in its period (from the
 // owner's pick, or the rotation's), kept LIVE_KEPT ms in this Worker instance. Those to fix are
 // fixed a world at a time (WORLDS' order), each world's the longest first (the month, the week,
-// then the day), each of the
-// rotation's clear of those fixed already, those fixed here included, and of the periods before
-// (read with the owner's picks): so whatever chose them, and whatever has changed since (the
-// approved places, this code), the three live on a world are three places and none is the one
-// before's. No more than CHECKED_MOST of them checked on their ground a request: past those, the
-// rest of those checked (each world's in the same order, so its day's is never fixed before its
-// week's) are left for the next ask, which fixes them as this one would have, while those that
-// aren't checked (the Earth's) are fixed as ever; and this one answers with those fixed so far
-// (kept as live only once every world's three are there; the page asks again for the rest,
-// challenges.js). A world at a time, so a world's three come together: the Moon's are all fixed in
-// a period's first ask, as they always were, and Mars's in the next at worst. Challenges
-// whose period ended at least GRACE ago are given their final places as this goes (finishEnded), in
-// the background: it's no part of the answer, so it can neither slow one nor turn one into an
-// error.
+// then the day), each of the rotation's clear of those fixed already, those fixed here included,
+// and of the periods before (read with the owner's picks): so whatever chose them, and whatever has
+// changed since (the approved places, this code), the three live on a world are three places and
+// none is the one before's. No more than CHECKED_MOST of them checked on their ground a request:
+// past those, the rest of those checked (each world's in the same order, so its day's is never
+// fixed before its week's) are left for the next ask, which fixes them as this one would have,
+// while those that aren't checked (the Earth's) are fixed as ever; and this one answers with those
+// fixed so far (kept as live only once every world's three are there, allThere; till then
+// listChallenges' answer says `more`, and the page asks again for the rest, challenges.js). A
+// world at a time, so a world's three come together: the Moon's are all fixed in a period's first
+// ask, as they always were, and Mars's in the next at worst. Challenges whose period ended at least
+// GRACE ago are given their final places as this goes (finishEnded), in the background: it's no
+// part of the answer, so it can neither slow one nor turn one into an error.
 export async function liveChallenges( context ) {
 
 	const { env, now } = context;
@@ -1093,10 +1095,16 @@ export async function liveChallenges( context ) {
 
 	await later( context.ctx, finishEnded( db, now ), 'Finishing challenges' );
 	rows.sort( ( a, b ) => WORLDS.indexOf( a.world ) - WORLDS.indexOf( b.world ) || PERIOD_KINDS.indexOf( periodKind( a.period ) ) - PERIOD_KINDS.indexOf( periodKind( b.period ) ) );
-	// (Every world's three, by period and world: not a count, which a row of a world no longer in
-	// WORLDS would make up.)
-	if ( periods.every( period => WORLDS.every( world => rows.some( row => row.period === period.key && row.world === world ) ) ) ) live = { keys, at: now, rows };
+	if ( allThere( periods, rows ) ) live = { keys, at: now, rows };
 	return rows;
+
+}
+
+// Whether `rows` has every world's challenge for each of `periods` (by period and world: not a
+// count, which a row of a world no longer in WORLDS would make up).
+function allThere( periods, rows ) {
+
+	return periods.every( period => WORLDS.every( world => rows.some( row => row.period === period.key && row.world === world ) ) );
 
 }
 

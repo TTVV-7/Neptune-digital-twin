@@ -4844,9 +4844,9 @@ longest of the three), the others any of the three alike.
   A new day alone needs two checked (the Moon's day and Mars's): one ask. A new week, or a new
   month, needs four: its first ask lists 8 of the 9 (Mars's day the one left). A month starting on a
   Monday, or a database with none yet, needs six: its first ask lists 6 of the 9 (the Earth's three
-  and the Moon's three), and the next Mars's three. The page lists what it's given, and while a
-  world's day, week or month is missing from it, with the list open, asks again (at once, then after
-  5 s, 10 and 20: four times at most), as it does when one has ended.
+  and the Moon's three), and the next Mars's three. Such an answer says so (`more: true`); the page
+  lists what it's given, and while it says there's more, with the list open, asks again (at once,
+  then after 5 s, 10 and 20: four times at most), as it does when one has ended.
 
 ### The owner's controls
 
@@ -5511,10 +5511,11 @@ that visit). `npm run test:drive-seo`: none of it in the first load. Pictures wi
 ### The Worker's routes
 
 - `GET /api/challenges?id=<player>`: `{ now, challenges: [ { id, period, key, world, kind, place,
-  region, route, startsAt, endsAt, total, top, me } ] }`, `top` the board's best three (`{ rank,
+  region, route, startsAt, endsAt, total, top, me } ], more? }`, `top` the board's best three (`{ rank,
   name, ms, vehicle, date, level, title, supporter? }`) and `me`, with a player's id, their `{ ms,
   rank }` (and `owner: true` for the owner's) or null. The first ask in a period fixes its
-  challenges. A rank is at most 1,001: past the board's first thousand (the page's "#1000+").
+  challenges; `more: true` when some are left for the next ask ([how they're
+  picked](#how-theyre-picked)). A rank is at most 1,001: past the board's first thousand (the page's "#1000+").
 - `GET /api/challenges/board?challenge=<id>&id=<player>`: `{ challenge, total, rows, me }`, the top 20
   of any challenge, live or past (`challenge` with its `replacedAt` and `finalAt`); 404 for none.
 - `POST /api/challenges/time { id, secret, visit, challenge, run, ms, passes, vehicle, look, ghost }`:

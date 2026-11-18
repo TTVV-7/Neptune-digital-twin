@@ -538,6 +538,45 @@ describe( 'World Drive challenges on Mars', () => {
 
 	} );
 
+	test( 'a period\'s first list with more to come (the Worker\'s more): asked again at once, Mars\'s coming with the next; whole, it isn\'t asked again', async () => {
+
+		const page = await newPage();
+		try {
+
+			const asked = [];
+			const json = ( route, body, status = 200 ) => route.fulfill( { status, contentType: 'application/json', body: JSON.stringify( body ) } );
+			await page.route( 'https://challenges.cloudflare.com/turnstile/**', route => route.fulfill( { contentType: 'text/javascript', body: `window.turnstile = { render( el, options ) { setTimeout( () => options.callback( '${ TOKEN }' ), 50 ); return 'w1'; }, remove() {}, reset() {} };` } ) );
+			await page.route( `${ BASE }/api/config`, route => json( route, { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true } ) );
+			await page.route( `${ BASE }/api/visit`, route => json( route, { moon: true, free: true, world: 'mars', visit: MARS_VISIT } ) );
+			await page.route( `${ BASE }/api/challenges?*`, route => {
+
+				asked.push( Date.now() );
+				if ( asked.length === 1 ) return json( route, { now: Date.now(), challenges: listed().filter( c => c.world !== 'mars' ), more: true } );
+				json( route, { now: Date.now(), challenges: listed() } );
+
+			} );
+			await page.goto( `${ BASE }/?spot=mars-curiosity` );
+			await page.waitForFunction( () => window.drive?.mode === 'globe' && window.drive.world === 'mars', null, { timeout: 90000 } );
+			await page.locator( '#globe-ui .challenges-open' ).click();
+			const dialog = page.locator( '#challenges' );
+			await dialog.locator( '.ch-card[data-id="33"]' ).waitFor( { timeout: 10000 } );
+			const came = Date.now();
+			assert.equal( asked.length, 2 );
+			assert.ok( asked[ 1 ] - asked[ 0 ] < 3000, `asked again ${ asked[ 1 ] - asked[ 0 ] } ms after` );
+			assert.deepEqual( await dialog.locator( '.ch-world' ).allTextContents(), [ 'On Mars', 'On the Earth' ] );
+			// Whole now (a list without Mars's or the Moon's day isn't short: the Worker says when it is).
+			await page.waitForTimeout( Math.max( 0, 6500 - ( Date.now() - came ) ) );
+			assert.equal( asked.length, 2 );
+			assert.deepEqual( page.errors, [] );
+
+		} finally {
+
+			await page.context().close();
+
+		}
+
+	} );
+
 	test( 'a friend\'s link to a Mars challenge: a free visit for Mars, the game on Mars at once (none of the Moon\'s files asked for), Mars\'s challenges first, the link\'s card in Mars\'s words', async () => {
 
 		const page = await newPage();

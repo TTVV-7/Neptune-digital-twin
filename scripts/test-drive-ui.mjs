@@ -5423,7 +5423,7 @@ describe( 'World Drive with its Worker', () => {
 		await page.locator( '#globe-ui .worlds [data-world="earth"]' ).click();
 		await page.locator( '#notice[data-kind="used-up"]' ).waitFor();
 		assert.equal( await page.locator( '#notice .title' ).textContent(), 'Today\'s free Earth drives are used up' );
-		assert.match( await page.locator( '#notice .message' ).textContent(), /The Moon is free and unlimited/ );
+		assert.match( await page.locator( '#notice .message' ).textContent(), /The Moon and Mars are free and unlimited/ );
 		assert.equal( await page.locator( '#notice .countdown' ).textContent(), 'Fresh Earth drives in 5 h 2 min' );
 		await shot( page, 'drive-notice-used-up' );
 		assert.equal( await page.evaluate( () => window.drive.world ), 'moon' );
@@ -5521,7 +5521,7 @@ describe( 'World Drive with its Worker', () => {
 		await page.waitForFunction( () => window.drive?.tiles, null, { timeout: 30000 } );
 		assert.equal( visits.length, 2 );
 		for ( const visit of visits ) assert.deepEqual( visit, { body: { token: TOKEN }, type: 'application/json' } );
-		assert.match( await page.locator( '#toast' ).textContent(), /1 more free drive today/ );
+		assert.match( await page.locator( '#toast' ).textContent(), /^1 more Earth drive today after this one\.$/ );
 		const roots = () => page.outside.filter( url => url.includes( '/v1/3dtiles/root.json' ) );
 		await page.waitForFunction( () => window.drive.tiles.rootLoadingState !== undefined, null, { timeout: 5000 } ).catch( () => {} );
 		await page.waitForTimeout( 1500 );
@@ -7629,7 +7629,7 @@ describe( 'World Drive\'s admin page: where people drop in', () => {
 			assert.match( await page.locator( '#places-world button[data-world="moon"] span' ).textContent(), /^[1-9]/ );
 			await page.locator( '#places-days button', { hasText: 'Week' } ).click();
 			await page.locator( '#places-range', { hasText: 'Couldn\'t reach the server. Try again in a moment.' } ).waitFor();
-			assert.deepEqual( await page.locator( '#places-world button span' ).allTextContents(), [ '', '' ] );
+			assert.deepEqual( await page.locator( '#places-world button span' ).allTextContents(), [ '', '', '' ] );
 			assert.equal( await page.locator( '#places-empty' ).isVisible(), true );
 			assert.equal( await page.locator( '#places-empty' ).textContent(), 'Couldn\'t reach the server. Try again in a moment.' );
 			assert.equal( await page.locator( '#places-top tbody tr' ).count(), 0 );
@@ -7648,7 +7648,7 @@ describe( 'World Drive\'s admin page: where people drop in', () => {
 			await page.locator( '#places-world button[data-world="moon"]' ).click();
 			await page.waitForTimeout( 300 );
 			assert.equal( await page.locator( '#places-range' ).textContent(), 'Loading...' );
-			assert.deepEqual( await page.locator( '#places-world button span' ).allTextContents(), [ '', '' ] );
+			assert.deepEqual( await page.locator( '#places-world button span' ).allTextContents(), [ '', '', '' ] );
 			assert.equal( await page.locator( '#places-top tbody tr' ).count(), 0 );
 			await drawn( page, 'moon', 1 );
 			assert.match( await page.locator( '#places-range' ).textContent(), new RegExp( `^${ TODAY } so far, UTC · 1 drop-in counted in 1 cell \\(1 km\\)$` ) );

@@ -6815,13 +6815,15 @@ describe( 'World Drive challenges', () => {
 		const first = await call( server, '/api/challenges', { ip: nextIp(), time: CHALLENGE_DAY } );
 		assert.equal( first.status, 200, first.text );
 		assert.deepEqual( first.json.challenges.map( c => `${ c.world } ${ c.key }` ), [ 'earth day:2026-11-16', 'earth week:2026-11-16', 'earth month:2026-11', 'moon day:2026-11-16', 'moon week:2026-11-16', 'moon month:2026-11' ] );
+		assert.equal( first.json.more, true );
 		assert.equal( server.d1( 'SELECT COUNT(*) AS n FROM challenges' )[ 0 ].n, 6 );
-		// The next fixes the rest (Mars's month, week and day: three checked again).
+		// The next fixes the rest (Mars's month, week and day: three checked again), and says no more.
 		const res = await call( server, '/api/challenges', { ip: nextIp(), time: CHALLENGE_DAY + MINUTE } );
 		assert.equal( res.status, 200, res.text );
 		assert.equal( res.headers.get( 'Cache-Control' ), 'no-store' );
 		live = res.json.challenges;
 		assert.equal( res.json.now, CHALLENGE_DAY + MINUTE );
+		assert.equal( 'more' in res.json, false );
 		assert.deepEqual( live.map( c => `${ c.world } ${ c.key }` ), [
 			'earth day:2026-11-16', 'earth week:2026-11-16', 'earth month:2026-11', 'moon day:2026-11-16', 'moon week:2026-11-16', 'moon month:2026-11',
 			'mars day:2026-11-16', 'mars week:2026-11-16', 'mars month:2026-11',
