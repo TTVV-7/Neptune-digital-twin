@@ -39,6 +39,8 @@ const LINE = 30;
 const STREET_REACH = 48;
 const STREET_STEP = 4;
 const DROP = 2.5;
+// How far aside (m) a probe down a seam tries again (Ground.heightAt).
+const SEAM = 0.001;
 // The height (m, in the scene) a vehicle is put on the ground from, as models.js does: the street
 // must be what's highest there, open to the sky, or the vehicle lands on whatever is over it.
 const SKY = 2000;
@@ -68,7 +70,10 @@ export class Ground {
 	// nothing has loaded there.
 	heightAt( x, z, top = 9000, depth = 20000 ) {
 
-		const hit = this.cast( _origin.set( x, top, z ), DOWN, depth );
+		// A ray straight down a seam (two squares' shared edge, as at a place exactly on a cube
+		// face's middle line, such as Ceres's Kait at 0°) can slip between both: once more, a
+		// millimetre aside, before it counts as nothing there.
+		const hit = this.cast( _origin.set( x, top, z ), DOWN, depth ) ?? this.cast( _origin.set( x + SEAM, top, z + SEAM ), DOWN, depth );
 		return hit ? hit.point.y : null;
 
 	}
