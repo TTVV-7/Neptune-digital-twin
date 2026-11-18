@@ -333,7 +333,11 @@ export class DriveLimits extends DurableObject {
 	// DriveRoom's closedTo), so a connection let in on the Moon's budget can't drive on a spent Earth.
 	// Any visit but the owner's comes with its `address` and `share`: an address whose connections
 	// have spent a world's budget over `share` today (see liveSpent) is turned away on that world, {
-	// open, spent, refused: true, reason: 'share' }, whatever its visits.
+	// open, spent, refused: true, reason: 'share' }, whatever its visits. And for a party's room
+	// (`room` 'party:...'), whether it's past its share of the other world's day too (`over`: [ that
+	// world ], left out if not), looked at and not counted: the room lets it drive on its own world
+	// but not move onto that one (DriveRoom's overTo), so being let in on one world's share isn't a
+	// way onto the other's once that's spent.
 	async liveOpen( { now, budget, moonBudget = budget, world = EARTH, visit = null, room = null, connects = Infinity, address = null, addressVisits = null, share = null } ) {
 
 		const day = dayOf( now );
@@ -361,6 +365,8 @@ export class DriveLimits extends DurableObject {
 			const seq = ( row?.connects ?? 0 ) + 1;
 			if ( seq > connects ) return { ...today, refused: true };
 			if ( addressKey && share > 0 && addressSpent( this.sql, day, addressKey, world ) >= own / share ) return { ...today, refused: true, reason: 'share' };
+			const party = typeof room === 'string' && room.startsWith( 'party:' );
+			if ( party && addressKey && share > 0 && addressSpent( this.sql, day, addressKey, other ) >= ( moon ? budget : moonBudget ) / share ) today.over = [ other ];
 			if ( addressKey && Number.isFinite( addressVisits ) ) {
 
 				const known = this.sql.exec( 'SELECT 1 AS known FROM live_addresses WHERE day = ? AND address = ? AND visit = ?', day, addressKey, visitKey ).toArray()[ 0 ];
@@ -376,7 +382,7 @@ export class DriveLimits extends DurableObject {
 
 			this.sql.exec( 'INSERT INTO live_visits ( day, visit, room, connects ) VALUES ( ?, ?, ?, ? ) ON CONFLICT ( day, visit ) DO UPDATE SET room = excluded.room, connects = excluded.connects', day, visit, room, seq );
 			if ( ! row || row.room === room ) return { ...today, seq, was: null };
-			return { ...addLive( this.sql, day, 1, own, world ), closed: today.closed, seq, was: row.room };
+			return { ...addLive( this.sql, day, 1, own, world ), closed: today.closed, ...( today.over ? { over: today.over } : {} ), seq, was: row.room };
 
 		} );
 

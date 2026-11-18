@@ -1555,8 +1555,8 @@ account) and 20 Moon visits, each with one room at a time.
 But a count of visits doesn't bound what each connection spends: one may send 20 messages a second,
 each a twentieth of a request whatever it is (even keepalives, even alone in its room), about
 3,700 requests an hour. Twenty Moon visits from one address would spend the Moon's 20,000 in about
-16 minutes, and its 8 Earth visits the Earth's 40,000 in about 80, closing that world for everyone
-until midnight UTC. So **each address may spend only its share of each world's day**: the budget
+16 minutes, and its 8 Earth visits and 20 Moon visits (which can drive on the Earth too) the Earth's
+40,000 in about 23, closing that world for everyone until midnight UTC. So **each address may spend only its share of each world's day**: the budget
 over `LIVE_ADDRESS_SHARE` (**8**), 5,000 requests on the Earth and 2,500 on the Moon (about five
 and a half hours of driving with others on the Earth, nearly three on the Moon, and many more alone).
 Every visit but the owner's counts, Earth and Moon visits alike, on whichever world it's driving. A
@@ -1570,11 +1570,26 @@ remembered by the Worker instance until midnight UTC, so the next visit from it 
 `DriveLimits` (the same for an address past its Moon visits). An address is closed within about a
 minute of passing its share (its rooms report once a minute while they've that much to say), so it
 can go past it by what its connections send in that minute (up to about 1,200 requests with all 20
-Moon visits flat out), and it takes about eight addresses (or /48s), however fast, to spend either
-world's day.
-What a connection leaves in a room just before it hibernates, and what a report says beyond 64
-addresses (a room has far fewer), is counted against the world's budget but not its address's:
-little, as a room only hibernates while nobody's sending.
+Moon visits flat out, about 1,700 with its 28 visits on the Earth): so it takes about six addresses
+(or /48s) to spend either world's day flat out, and eight at the least.
+In a party, an address's connection let in on one world's share could drive on the other once its
+address had spent that one's, and come back on a fresh connection let in on the first: so
+`DriveLimits`' `liveOpen` also says, for a party's room, whether the address is past its share of
+the other world (`over`, looked at, not counted), `/api/live` hands that to the room
+(`X-Live-Over`, never for the owner's), the room keeps it in the connection's attachment along with
+every world its reports have said the address is past, and a driver who says it's on such a world
+is closed there and then (`CLOSE.rate`, as at a report). What a connection spent itself before it
+went is kept by address in the attachment of one still in the room (up to 8 addresses each), so it
+outlasts hibernation, as what's carried for the budget does; and a connection the room closes with
+nobody left in it (too many messages, say) has the room report there and then, rather than keep it
+in memory until the page answers the close, which a script needn't ever do. Only what a report says
+beyond 64 addresses (a room has far fewer) is counted against the world's budget but not its
+address's.
+An address past its share on one world is turned away there, and a page turned away 8 times in a
+row while the Worker says it's on stops driving with others for the rest of the visit (see [When it
+stops](#driving-with-others)), on both worlds: a page can't tell why it was turned away. That takes
+hours of driving with others from one address in a day (5,000 requests is about five and a half on
+the Earth), so it's left at that.
 
 **Old pages.** The page speaks a new version of the protocol, `worlddrive-live.v2` (PLACE and
 PLAYER with a `world`, an away with the world of its globe, the Moon's areas and frame), and offers
@@ -1604,9 +1619,10 @@ times, a shared machine), 0.6 to 1.2 µs a frame, against 0.1 µs with no car, s
 microsecond more, a hundred-thousandth of a 60 fps frame even on a phone several times slower. The
 others' cars (`ghosts.update`) and the dots (`online.update`, nothing while driving) loop over
 nothing when alone, as before. Frame time in Chromium's software renderer can't show that: on a
-phone on its side (760 × 390), a frame with five others' cars drawn took 0.94 to 1.0 times as long
-as alone, in each of eight runs (the middle of 12 frames each, measured in `test-drive-live-ui.mjs`,
-the Moon's ground being nearly all of it there). What a frame takes in itself depends on how loaded
+phone on its side (760 × 390), a frame with five others' cars drawn took within about 5% either way
+of a frame alone, which is the noise of a shared machine (the middle of 12 frames each, measured in
+`test-drive-live-ui.mjs`, the Moon's ground being nearly all of it there; 0.94 to 1.05 times as long
+across nine runs). What a frame takes in itself depends on how loaded
 the shared machine was: from about 0.6 s to 1.3 s alone across those runs (1,033 ms both alone and
 with five in the last). Five cars cost nothing that shows, and that comparison was only
 made on the new code. The game's code (loaded with the globe, after the robot check, as
@@ -1814,7 +1830,8 @@ always was.
   the day's budget is spent ("Lots of drivers today: driving with others is back after midnight
   UTC.", once), when it's turned away at the door 8 times in a row while the Worker says it's on
   ("Driving with others couldn't connect from here, so you're driving on your own.": a network
-  that blocks WebSockets, say), or, without a word, when it's switched off. Then none of it shows.
+  that blocks WebSockets, say, or an address past its share of that world's day, see [Bounded per
+  address](#driving-with-others-on-the-moon), which ends it on both worlds), or, without a word, when it's switched off. Then none of it shows.
   Driving alone carries on. A party's link opened while the day's budget is spent says the same.
 
 ### What others can see about you

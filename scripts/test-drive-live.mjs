@@ -26,7 +26,9 @@
 // closing everyone when the day's is spent, and carrying on when DriveLimits fails; in a party across
 // worlds, each world's spend counted against its own budget even with nobody left on it; each
 // address's share (what its connections spent themselves, its connections closed past it, and
-// /api/live remembering an address turned away). And the page's
+// /api/live remembering an address turned away; what one that went spent kept through hibernation,
+// and one closed with nobody left reported at once; a party's driver past its share of the other
+// world closed as it moves there; the owner's visits handed on as uncounted). And the page's
 // side (src/drive-app/live.js) on stand-ins for the browser: turned away at the door, a connection
 // gone quiet, a busy area tried again, and quiet with only those on the globe to see it. Then who's
 // driving now, on the globe: Earth-centred metres to latitude, longitude and height and back (known
@@ -1835,12 +1837,12 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 	let visits = 0;
 	// A connection as /api/live hands it to `room` (checked there), numbered `seq` among its visit's:
 	// the room's end of it.
-	async function arrive( room, ctx, { visit = `visit-${ ++ visits }`, expires = clock + 6 * HOUR, name = 'party:ABCDEFG', seq = 1, version = null, world = null, closed = null, from = null, uncounted = false } = {} ) {
+	async function arrive( room, ctx, { visit = `visit-${ ++ visits }`, expires = clock + 6 * HOUR, name = 'party:ABCDEFG', seq = 1, version = null, world = null, closed = null, from = null, uncounted = false, over = null } = {} ) {
 
 		const headers = new Headers( {
 			Upgrade: 'websocket', 'X-Live-Visit': visit, 'X-Live-Expires': String( expires ), 'X-Live-Room': name, 'X-Live-Seq': String( seq ),
 			...( version ? { 'X-Live-Version': String( version ) } : {} ), ...( world ? { 'X-Live-World': world } : {} ), ...( closed ? { 'X-Live-Closed': closed } : {} ),
-			...( from ? { 'X-Live-From': from } : {} ), ...( uncounted ? { 'X-Live-Uncounted': '1' } : {} ),
+			...( from ? { 'X-Live-From': from } : {} ), ...( uncounted ? { 'X-Live-Uncounted': '1' } : {} ), ...( over ? { 'X-Live-Over': over } : {} ),
 		} );
 		// Node's Response doesn't take a 101.
 		globalThis.Response = class {
@@ -3028,6 +3030,178 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 
 	} );
 
+	test( 'in a party, an address past its share of the other world\'s day (OVER, from /api/live, or a report since) drives on the world it was let in on, and is closed (CLOSE.rate) as it says it\'s on that one, even after the room hibernates; never the owner\'s', async () => {
+
+		const limits = limitsStub();
+		const ctx = runtime();
+		const env = { LIMITS: limits.binding };
+		const room = new DriveRoom( ctx, env );
+		const rate = { code: CLOSE.rate, reason: 'too much from here today' };
+		const friend = await hello( room, ctx, { version: 2, from: 'from-friend' } );
+		// Let in on the Earth (whose share it hasn't touched), its address past its Moon share: on the
+		// Earth it drives on; dropping in on the Moon closes it.
+		const sly = await hello( room, ctx, { version: 2, from: 'from-x', over: 'moon' } );
+		await ping( room, sly );
+		assert.equal( sly.closedWith, null );
+		await say( room, sly, { t: 'place', place: TYCHO } );
+		assert.deepEqual( sly.closedWith, rate );
+		// Saying hello on the Moon straight away, or turning to the Moon's globe: closed as well.
+		const slier = await arrive( room, ctx, { version: 2, from: 'from-x', over: 'moon' } );
+		await say( room, slier, { ...HELLO, place: TYCHO } );
+		assert.deepEqual( slier.closedWith, rate );
+		const globe = await hello( room, ctx, { version: 2, from: 'from-x', over: 'moon' } );
+		await say( room, globe, { t: 'away', world: 'moon' } );
+		assert.deepEqual( globe.closedWith, rate );
+		// The owner's visit on the same address isn't held to it.
+		const owner = await hello( room, ctx, { version: 2, from: 'from-x', over: 'moon', uncounted: true } );
+		await say( room, owner, { t: 'place', place: TYCHO } );
+		assert.equal( owner.closedWith, null );
+
+		// A report saying another address is past its Moon share: its connection on the Moon is closed,
+		// the one on the Earth drives on there, but can't move onto the Moon, though the room hibernates.
+		const una = await hello( room, ctx, { version: 2, world: 'moon', from: 'from-y' }, MOON_HELLO );
+		const ed = await hello( room, ctx, { version: 2, from: 'from-y' } );
+		limits.over = { earth: [], moon: [ 'from-y' ] };
+		await drive( room, ctx, friend, REPORT_MS + 5 * SECOND, [ una, ed, owner ] );
+		assert.ok( limits.reports.length >= 1 );
+		assert.deepEqual( una.closedWith, rate );
+		assert.equal( ed.closedWith, null );
+		const woken = new DriveRoom( ctx, env );
+		await say( woken, ed, { t: 'place', place: FURKA } );
+		assert.equal( ed.closedWith, null );
+		await say( woken, ed, { t: 'place', place: TYCHO } );
+		assert.deepEqual( ed.closedWith, rate );
+		assert.deepEqual( [ friend.closedWith, owner.closedWith ], [ null, null ] );
+
+	} );
+
+	// What each report says each address spent itself, added up: { from: { earth, moon } }.
+	const spentBy = reports => {
+
+		const byFrom = {};
+		for ( const report of reports ) for ( const { from, earth, moon } of report.addresses ?? [] ) {
+
+			byFrom[ from ] ??= { earth: 0, moon: 0 };
+			byFrom[ from ].earth += earth;
+			byFrom[ from ].moon += moon;
+
+		}
+
+		return byFrom;
+
+	};
+
+	test( 'what a connection spent itself is held to its address\'s share though it goes just before the room hibernates (kept in the attachment of one still there), or is closed with nobody left and never answers the close (reported then and there)', async () => {
+
+		const limits = limitsStub();
+		const ctx = runtime();
+		const env = { LIMITS: limits.binding };
+		const room = new DriveRoom( ctx, env );
+		// A friend parked in the room, and from-x sending keepalives and going before any report.
+		const friend = await hello( room, ctx, { version: 2, from: 'from-friend' } );
+		const sly = await hello( room, ctx, { version: 2, from: 'from-x' } );
+		for ( let i = 0; i < 30; i ++ ) await ping( room, sly );
+		await leave( room, sly );
+		assert.equal( limits.reports.length, 0 );
+		// The room hibernates: a new one, with only what the sockets kept, makes the reports.
+		const woken = new DriveRoom( ctx, env );
+		await ping( woken, friend );
+		await wait( woken, ctx, 10 * REPORT_MS );
+		const close = ( a, b ) => Math.abs( a - b ) < 1e-9;
+		const byFrom = spentBy( limits.reports );
+		assert.ok( close( byFrom[ 'from-x' ]?.earth ?? 0, COST.connect + 31 * COST.message ), JSON.stringify( byFrom ) );
+
+		// Alone, closed for too many messages, its page never answering the close: what it spent is
+		// reported as it's closed, not kept in memory for a room that may hibernate first.
+		const later = runtime();
+		const alone = new DriveRoom( later, env );
+		limits.reports.length = 0;
+		const lone = await hello( alone, later, { version: 2, from: 'from-z' } );
+		let messages = 1;
+		while ( ! lone.closedWith && messages < 10 * BURST ) {
+
+			await say( alone, lone, { t: 'honk' } );
+			messages ++;
+
+		}
+
+		assert.deepEqual( lone.closedWith, { code: CLOSE.rate, reason: 'too many messages' } );
+		assert.equal( limits.reports.length, 1 );
+		assert.ok( close( spentBy( limits.reports )[ 'from-z' ]?.earth ?? 0, COST.connect + messages * COST.message ), JSON.stringify( limits.reports ) );
+
+	} );
+
+	test( 'a connection the room has closed that goes on sending: those messages are its address\'s too', async () => {
+
+		const limits = limitsStub();
+		const ctx = runtime();
+		const room = new DriveRoom( ctx, { LIMITS: limits.binding } );
+		const alice = await hello( room, ctx, { version: 2, from: 'from-a' } );
+		const bob = await hello( room, ctx, { version: 2, from: 'from-b' } );
+		let messages = 1;
+		while ( ! bob.closedWith && messages < 10 * BURST ) {
+
+			await say( room, bob, { t: 'trick', score: 10 } );
+			messages ++;
+
+		}
+
+		assert.deepEqual( bob.closedWith, { code: CLOSE.rate, reason: 'too many messages' } );
+		// His page doesn't answer, and goes on (a few, under BURST: the room doesn't reset).
+		for ( let i = 0; i < 5; i ++ ) await say( room, bob, { t: 'honk' } );
+		messages += 5;
+		assert.equal( ctx.aborted, null );
+		await leave( room, alice );
+		const close = ( a, b ) => Math.abs( a - b ) < 1e-9;
+		const byFrom = spentBy( limits.reports );
+		assert.ok( close( byFrom[ 'from-b' ]?.earth ?? 0, COST.connect + messages * COST.message ), JSON.stringify( byFrom ) );
+		assert.ok( close( byFrom[ 'from-a' ]?.earth ?? 0, COST.connect + COST.message ), JSON.stringify( byFrom ) );
+
+	} );
+
+	test( '/api/live hands the room the owner\'s visits as uncounted (X-Live-Uncounted), and no other; and for a party, the other world whose share the address has spent (X-Live-Over)', async () => {
+
+		const env = {
+			TURNSTILE_SECRET: PASS_SECRET, LIVE_DAILY_BUDGET: '7791', LIVE_MOON_DAILY_BUDGET: '7792',
+			ROOMS: { idFromName: name => name, get: () => ( { fetch: async request => {
+
+				sent.push( request );
+				return { status: 101 };
+
+			} } ) },
+		};
+		const sent = [];
+		let answer = { open: true, spent: 0, seq: 1 };
+		const limits = { liveOpen: async () => answer };
+		const open = async ( kind, room, ip, world = null ) => {
+
+			const token = await makeVisit( { TURNSTILE_SECRET: PASS_SECRET }, clock, kind );
+			const url = new URL( `https://worlddrive.app/api/live?room=${ encodeURIComponent( room ) }${ world ? `&world=${ world }` : '' }` );
+			const headers = new Headers( { Upgrade: 'websocket', Origin: url.origin, 'Sec-WebSocket-Protocol': `${ PROTOCOL_WORLDS }, ${ PROTOCOL }, ${ token }`, 'CF-Connecting-IP': ip } );
+			await live( { request: { headers }, env, url, limits, now: clock } );
+			return sent.at( - 1 ).headers;
+
+		};
+		const owner = await open( 'owner', TYCHO_AREA, '203.0.113.21' );
+		assert.equal( owner.get( 'X-Live-Uncounted' ), '1' );
+		for ( const kind of [ 'moon', 'earth' ] ) {
+
+			const theirs = await open( kind, FURKA_AREA, '203.0.113.22' );
+			assert.equal( theirs.get( 'X-Live-Uncounted' ), null, kind );
+			assert.equal( theirs.get( 'X-Live-Over' ), '', kind );
+
+		}
+
+		// DriveLimits saying the address is past its Moon share, for a party on the Earth: handed on,
+		// but never for the owner's.
+		answer = { open: true, spent: 0, seq: 1, over: [ 'moon' ] };
+		const party = await open( 'moon', 'party:ABCDEFG', '203.0.113.23', 'earth' );
+		assert.equal( party.get( 'X-Live-Over' ), 'moon' );
+		assert.equal( party.get( 'X-Live-Uncounted' ), null );
+		assert.equal( ( await open( 'owner', 'party:ABCDEFG', '203.0.113.23', 'earth' ) ).get( 'X-Live-Over' ), '' );
+
+	} );
+
 	test( '/api/live: an address DriveLimits turned away for the day (past its share of a world, or its visits) is remembered by the Worker instance and turned away without asking again, only on that world (or only its Moon visits) and until midnight UTC; every visit but the owner\'s says its address and share, only the Moon\'s its visits', async () => {
 
 		const asked = [];
@@ -4189,6 +4363,13 @@ describe( 'DriveLimits keeping who\'s driving now, here on SQLite', () => {
 		assert.equal( await refusal( 'earth', 'address-key-1' ), null );
 		assert.equal( await refusal( 'moon', 'address-key-2' ), null );
 		assert.equal( await refusal( 'moon', null ), null );
+		// For a party's room let in on the Earth, its address past its Moon share is in over (the room
+		// lets it drive on the Earth, not move onto the Moon); not for an area's, nor another address.
+		const party = address => limits.liveOpen( { now, ...budgets, world: 'earth', visit: `visit-${ ++ visits }-AAAAAAAAAAm`, room: 'party:ABCDEFG', address, share } );
+		const partied = await party( 'address-key-1' );
+		assert.deepEqual( [ partied.open, partied.refused, partied.over ], [ true, undefined, [ 'moon' ] ] );
+		assert.equal( ( await open( 'earth', 'address-key-1' ) ).over, undefined );
+		assert.equal( ( await party( 'address-key-2' ) ).over, undefined );
 		// What's malformed is left out: not an object, no from or not text, a from too long, past the
 		// 64th, a negative or not a number.
 		const junk = [ null, 7, { moon: 50 }, { from: 9, moon: 50 }, { from: 'x'.repeat( 129 ), moon: 50 }, { from: 'address-key-3', moon: - 50, earth: 'lots' } ];

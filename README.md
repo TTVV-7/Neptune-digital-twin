@@ -788,8 +788,12 @@ worlds: **Go to** and **Join** turn the globe to the friend's world and drop in 
 Moon's rooms keep a budget of their own (`LIVE_MOON_DAILY_BUDGET`), so the Earth's being spent never
 shuts them (nor can a party's driver let in on the Moon drive on with an Earth that's spent: it's
 closed as it says it's there), and its visits (never limited) are held to 20 a day connecting from
-one address (see
-[Driving with others on the Moon](docs/world-drive.md#driving-with-others-on-the-moon)).
+one address. And on either world, each address's connections (any but the owner's) may spend only
+an eighth of that world's day (`LIVE_ADDRESS_SHARE`: 5,000 requests on the Earth, 2,500 on the
+Moon, hours of driving with others), past which they're closed and turned away there until midnight
+UTC (see
+[Driving with others on the Moon](docs/world-drive.md#driving-with-others-on-the-moon), "Bounded per
+address").
 
 **Levels**: driving earns XP (each km, air off jumps, drift boosts, boost pads, landed tricks, the
 first drive in each area and at each start spot, minutes with others, and the day's first drive,
