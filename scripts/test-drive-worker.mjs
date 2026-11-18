@@ -4566,6 +4566,13 @@ describe( 'Where people drop in: the cells', () => {
 		assert.deepEqual( keys( checkPlaces( [ golden, tycho ], [ [ 'dropin', 'moon', 1 ] ] ) ), [ tycho ] );
 		assert.deepEqual( keys( checkPlaces( [ golden, golden, tycho ], [ [ 'dropin', 'other', 2 ], [ 'dropin', 'moon', 1 ] ] ) ), [ golden, tycho ] );
 		assert.deepEqual( keys( checkPlaces( [ golden ], [ [ 'play', 'go-kart', 60 ] ] ) ), [] );
+		// Mars's cells by Mars's drop-ins alone: never through the Earth's or the Moon's, nor through a
+		// drop-in at a world that isn't one (counted as the Earth's), however many.
+		const gale = cellOf( 'mars', - 4.5895, 137.4417 );
+		assert.deepEqual( keys( checkPlaces( [ golden, tycho, gale ], [ [ 'dropin', 'mars', 1 ] ] ) ), [ gale ] );
+		assert.deepEqual( keys( checkPlaces( [ gale, tycho, golden ], [ [ 'dropin', 'other', 3 ], [ 'dropin', 'moon', 3 ] ] ) ), [ tycho, golden ] );
+		assert.deepEqual( keys( checkPlaces( [ gale, golden ], [ [ 'dropin', 'pluto', 5 ] ] ) ), [ golden ] );
+		assert.deepEqual( keys( checkPlaces( [ gale, 'pluto:1:1' ], [ [ 'dropin', 'mars', 1 ], [ 'dropin', 'pluto', 1 ] ] ) ), [ gale ] );
 
 	} );
 
@@ -4592,6 +4599,25 @@ describe( 'Where people drop in: the cells', () => {
 		const offDaedalus = named( 'moon', - 5.9, - 179.9 );
 		assert.deepEqual( [ offDaedalus.name, offDaedalus.region ], [ '21 km E of Daedalus crater', '' ] );
 		assert.match( offDaedalus.link, /world=moon/ );
+		// Mars's, the same, named up to 500 km off (it's about twice the Moon's size), its links to Mars.
+		const curiosity = MARS_PLACES.find( p => p.id === 'mars-curiosity' );
+		assert.deepEqual( named( 'mars', curiosity.lat, curiosity.lon ), { name: curiosity.name, region: curiosity.region, link: '/?spot=mars-curiosity', featured: true } );
+		const nearest = ( lat, lon ) => MARS_PLACES.map( p => [ metresOn( 'mars', lat, lon, p.lat, p.lon ), p ] ).sort( ( a, b ) => a[ 0 ] - b[ 0 ] )[ 0 ];
+		const olympus = MARS_PLACES.find( p => p.id === 'mars-olympus-mons' );
+		for ( const metres of [ 120000, 300000, 450000 ] ) {
+
+			const [ lat, lon ] = destination( 'mars', olympus.lat, olympus.lon, 70, metres );
+			const [ far, place ] = nearest( lat, lon );
+			const off = named( 'mars', lat, lon );
+			assert.match( off.name, new RegExp( `^${ Math.round( far / 1000 ) } km [NESW]{1,2} of ${ place.name }$` ) );
+			assert.deepEqual( [ off.region, off.featured, new URLSearchParams( off.link.slice( 2 ) ).get( 'world' ) ], [ '', false, 'mars' ] );
+
+		}
+
+		// Further than that from them all: its coordinates.
+		const [ alone ] = [ [ 10, 10 ], [ 60, - 40 ], [ - 60, 100 ], [ 40, 160 ] ].filter( ( [ lat, lon ] ) => nearest( lat, lon )[ 0 ] > 500000 );
+		assert.ok( alone );
+		assert.match( named( 'mars', ...alone ).name, /^\d+\.\d\d° [NS], \d+\.\d\d° [EW]$/ );
 		// What a page would get from the link: the place pinned, by name.
 		const link = new URLSearchParams( named( 'earth', 45.8386, 4.9505 ).link.slice( 2 ) );
 		assert.deepEqual( Object.fromEntries( link ), { at: '45.8386,4.9505', name: '12 km NE of Lyon', region: 'Rhône-Alpes, France' } );
@@ -4645,7 +4671,7 @@ describe( 'Where people drop in: the cells', () => {
 		assert.deepEqual( keys( await topCells( d1, { world: 'earth', from: '2026-11-10', to: '2026-11-10' } ) ), [ [ A, 6, 1 ], [ B, 2, 1 ] ] );
 		// The Moon's own; a world that isn't one is an error.
 		assert.deepEqual( keys( await topCells( d1, { world: 'moon', ...period } ) ), [ [ MOON, 9, 1 ] ] );
-		await assert.rejects( topCells( d1, { world: 'mars', ...period } ), /No world mars/ );
+		await assert.rejects( topCells( d1, { world: 'pluto', ...period } ), /No world pluto/ );
 		// At least one, and at most 2,000.
 		for ( const most of [ 1, 0, - 3, 'x' ] ) assert.deepEqual( keys( await topCells( d1, { world: 'earth', ...period, most } ) ), [ [ B, 6, 3 ] ], String( most ) );
 		for ( let i = 0; i < 2100; i ++ ) add( '2026-11-20', cellOf( 'earth', - 60 + i * 0.01, 100 ), 1 );
@@ -4814,13 +4840,37 @@ describe( 'The look that travels', () => {
 // 30 November's night, a week after the next week starts.
 const CHALLENGE_DAY = Date.UTC( 2026, 10, 16, 15, 0, 0 );
 const MOON_HEIGHTS = new URL( '../drive/public/moon/height.bin', import.meta.url );
+const MARS_HEIGHTS = new URL( '../drive/public/mars/height.bin', import.meta.url );
 
-// A Moon route's points on steep ground that could have been elsewhere: all but the place's own pin
-// (a sprint's or collectibles' start, a landmark's goal), which is where it is.
-function movableFaults( route ) {
+// The site's files as the Worker's ASSETS binding has them, for those that ask it: each world's
+// heights by its own path (/moon/height.bin, /mars/height.bin), nothing else.
+function heightsAssets() {
+
+	const files = { '/moon/height.bin': MOON_HEIGHTS, '/mars/height.bin': MARS_HEIGHTS };
+	return { fetch: async request => {
+
+		const file = files[ new URL( request.url ).pathname ];
+		return file ? new Response( readFileSync( file ) ) : new Response( 'Not found', { status: 404 } );
+
+	} };
+
+}
+
+// `world`'s heights (one made in the page: the Moon's, Mars's) handed to the Worker's ground for it
+// (challenges.js's GROUNDS: the Moon's is moon-height.js's own), as it hands them over itself.
+function giveHeights( world ) {
+
+	const bytes = readFileSync( world === 'moon' ? MOON_HEIGHTS : MARS_HEIGHTS );
+	GROUNDS[ world ].setHeights( new Int16Array( bytes.buffer, bytes.byteOffset, bytes.byteLength / 2 ) );
+
+}
+
+// A Moon (or Mars) route's points on steep ground that could have been elsewhere: all but the
+// place's own pin (a sprint's or collectibles' start, a landmark's goal), which is where it is.
+function movableFaults( route, world = 'moon' ) {
 
 	const [ lat, lon ] = route.goal ? route.points[ 0 ] : [ route.start.lat, route.start.lon ];
-	return [ [ route.start.lat, route.start.lon ], ...route.points ].filter( point => moonSteep( ...point ) ).length - ( moonSteep( lat, lon ) ? 1 : 0 );
+	return [ [ route.start.lat, route.start.lon ], ...route.points ].filter( point => steepOn( world, ...point ) ).length - ( steepOn( world, lat, lon ) ? 1 : 0 );
 
 }
 
@@ -5052,7 +5102,7 @@ describe( 'World Drive challenges: the rules', () => {
 
 		const bytes = seq => Uint8Array.from( { length: 32 }, ( _, i ) => ( i * 29 + seq * 7 ) & 255 );
 		const golden = { name: 'Golden Gate Bridge', lat: 37.8199, lon: - 122.4783, heading: 352 };
-		for ( const world of [ 'earth', 'moon' ] ) {
+		for ( const world of WORLD_IDS ) {
 
 			for ( const size of [ 'day', 'week', 'month' ] ) {
 
@@ -5147,7 +5197,7 @@ describe( 'World Drive challenges: the rules', () => {
 
 		const env = { TURNSTILE_SECRET: PASS_SECRET };
 		const other = { TURNSTILE_SECRET: '2x0000000000000000000000000000000AA' };
-		for ( const world of [ 'earth', 'moon' ] ) {
+		for ( const world of WORLD_IDS ) {
 
 			// A round of days: as many as there are places, each one once.
 			const first = periodOf( 'day', CHALLENGE_DAY );
@@ -5200,7 +5250,7 @@ describe( 'World Drive challenges: the rules', () => {
 
 			const env = { TURNSTILE_SECRET: secret };
 			const pick = async ( kind, time, world ) => ( await rotationPick( env, periodOf( kind, time ), world, [] ) ).place.id;
-			for ( const world of [ 'earth', 'moon' ] ) {
+			for ( const world of WORLD_IDS ) {
 
 				let last = null;
 				for ( let i = 0; i < 3 * 366; i ++ ) {
@@ -5424,7 +5474,7 @@ describe( 'World Drive challenges: the rules', () => {
 				put: async ( request, response ) => void kept.set( request.url, { body: await response.text(), control: response.headers.get( 'Cache-Control' ) } ),
 				delete: async request => kept.delete( request.url ),
 			} };
-			// A day no other test asks for the six on (this process keeps the six it has fixed a minute).
+			// A day no other test asks for the nine on (this process keeps the nine it has fixed a minute).
 			const now = Date.UTC( 2027, 2, 10, 12 );
 			const env = { DB, TURNSTILE_SECRET: PASS_SECRET };
 			const ask = async ( handler, path ) => {
@@ -5435,9 +5485,12 @@ describe( 'World Drive challenges: the rules', () => {
 				return { body: await res.json(), read };
 
 			};
-			const ids = ( await ask( listChallenges, '/api/challenges' ) ).body.challenges.map( c => c.id );
-			assert.equal( ids.length, 6 );
-			// Each of the six a board of 1,240: 1,200 quicker times, then 40 players at the bottom of all six
+			// (Asked again if the first ask left some for the next: no more than three checked on their
+			// ground an ask, should this process have the Moon's or Mars's heights already.)
+			let ids = ( await ask( listChallenges, '/api/challenges' ) ).body.challenges.map( c => c.id );
+			if ( ids.length < 9 ) ids = ( await ask( listChallenges, '/api/challenges' ) ).body.challenges.map( c => c.id );
+			assert.equal( ids.length, 9 );
+			// Each of the nine a board of 1,240: 1,200 quicker times, then 40 players at the bottom of all nine
 			// (a script's own, asked as in turn); and a finished board of yesterday's, the same.
 			const { meta: { last_row_id: past } } = await raw.prepare( 'INSERT INTO challenges ( period, world, kind, place, region, route, source, starts_at, ends_at, created_at, final_at ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )' )
 				.bind( 'day:2027-03-09', 'earth', 'sprint', 'Old', '', '{"start":{"lat":0,"lon":0},"points":[[0,0.01]],"radius":30}', 'rotation', now - 36 * HOUR, now - 12 * HOUR, now - 36 * HOUR, now - 11 * HOUR ).run();
@@ -5459,9 +5512,9 @@ describe( 'World Drive challenges: the rules', () => {
 			// list's tops.
 			const first = await ask( listChallenges, `/api/challenges?id=${ player( 0 ) }` );
 			assert.ok( first.body.challenges.every( c => c.me.rank === RANK_MOST + 1 ) );
-			assert.ok( first.read <= 6 * ( RANK_MOST + 40 ), String( first.read ) );
+			assert.ok( first.read <= 9 * ( RANK_MOST + 40 ), String( first.read ) );
 			// Then a script's 40 players in turn, each missing the cache for its own rows: a few rows each,
-			// not six counts of the 1,000 ahead.
+			// not nine counts of the 1,000 ahead.
 			for ( let i = 1; i < bottom; i ++ ) {
 
 				const look = await ask( listChallenges, `/api/challenges?id=${ player( i ) }` );
@@ -5968,6 +6021,90 @@ describe( 'World Drive challenges: the rules', () => {
 
 	} );
 
+	test( 'on Mars, as on the Moon: its routes checked on its own heights (MOLA\'s, from /mars/height.bin, on its own made-up ground), no gate on ground sloping 20° or more and its legs kept off its canyons\' walls where any of its tries is', async () => {
+
+		giveHeights( 'moon' );
+		giveHeights( 'mars' );
+		// Mars's own ground: Olympus Mons's top over 20 km up (higher than anything on the Moon), and down
+		// Valles Marineris's south wall into Coprates Chasma, from the plateau to the canyon's floor 8 km
+		// under it, steep stretch after steep stretch; along the floor, none. The Moon's ground at the
+		// same latitudes and longitudes is nothing like it.
+		const place = id => MARS_PLACES.find( p => p.id === id );
+		const summit = place( 'mars-olympus-summit' );
+		assert.ok( GROUNDS.mars.heightAt( summit.lat, summit.lon ) > 20000 );
+		assert.ok( GROUNDS.moon.heightAt( summit.lat, summit.lon ) < 12000 );
+		const canyon = place( 'mars-valles-marineris' );
+		const south = metres => destination( 'mars', canyon.lat, canyon.lon, 180, metres );
+		const wall = legFaultsOn( 'mars', ...south( 42000 ), ...south( 28000 ) );
+		assert.ok( wall >= 50, String( wall ) );
+		assert.equal( legFaultsOn( 'mars', canyon.lat, canyon.lon, ...destination( 'mars', canyon.lat, canyon.lon, 90, 2000 ) ), 0, 'the canyon\'s floor' );
+		assert.notEqual( legFaultsOn( 'moon', ...south( 42000 ), ...south( 28000 ) ), wall );
+		// Every Mars place's routes of each kind, laid out as the Worker does (its check on Mars's
+		// heights): hardly a point left on steep ground.
+		let checked = 0;
+		let faults = 0;
+		const check = ( route, kind, enough ) => routeFaults( 'mars', route, kind, enough );
+		for ( const at of MARS_PLACES ) {
+
+			for ( const kind of KINDS ) {
+
+				const bytes = Uint8Array.from( { length: 16 }, ( _, i ) => at.id.charCodeAt( i % at.id.length ) * ( i + 1 ) );
+				const route = makeRoute( { kind, size: 'week', world: 'mars', place: at }, randomFrom( bytes ), check );
+				faults += movableFaults( route, 'mars' );
+				checked += route.points.length;
+
+			}
+
+		}
+
+		assert.ok( faults <= checked * 0.01, `${ faults } of ${ checked }` );
+		// And their sprints' and landmarks' legs of each length: fewer steep ones than with the points
+		// alone checked, and hardly any.
+		const lay = check => {
+
+			let legs = 0;
+			let steep = 0;
+			for ( const at of MARS_PLACES ) {
+
+				for ( const size of [ 'day', 'week', 'month' ] ) {
+
+					for ( const kind of [ 'sprint', 'landmark' ] ) {
+
+						const seed = Uint8Array.from( { length: 16 }, ( _, i ) => ( at.id.charCodeAt( i % at.id.length ) * ( i + 7 ) + size.length * 31 + kind.length ) & 255 );
+						const route = makeRoute( { kind, size, world: 'mars', place: at }, randomFrom( seed ), check );
+						const points = [ [ route.start.lat, route.start.lon ], ...route.points ];
+						for ( let i = 1; i < points.length; i ++ ) {
+
+							legs ++;
+							if ( legFaultsOn( 'mars', ...points[ i - 1 ], ...points[ i ] ) ) steep ++;
+
+						}
+
+					}
+
+				}
+
+			}
+
+			return { legs, steep };
+
+		};
+		const legs = lay( check );
+		const pointsAlone = lay( route => [ [ route.start.lat, route.start.lon ], ...route.points ].filter( point => steepOn( 'mars', ...point ) ).length );
+		assert.ok( legs.steep <= legs.legs * 0.005 && legs.steep < pointsAlone.steep, JSON.stringify( { legs, pointsAlone } ) );
+		// The Worker lays them out so: on Mars with Mars's heights from the site's own file (through
+		// ASSETS), and the Moon's with the Moon's.
+		const env = { TURNSTILE_SECRET: PASS_SECRET, ASSETS: heightsAssets() };
+		const period = periodOf( 'week', CHALLENGE_DAY );
+		const at = place( 'mars-curiosity' );
+		const made = JSON.parse( ( await challengeFor( env, period, 'mars', { place: at, kind: 'sprint', source: 'rotation' }, CHALLENGE_DAY ) ).route );
+		// (Its random numbers the Worker's own: an HMAC of the period, the world, the kind and the place.)
+		const key = await derivedKey( PASS_SECRET, 'world-drive challenges v1' );
+		const random = randomFrom( new Uint8Array( await crypto.subtle.sign( 'HMAC', key, encoder.encode( `route:${ period.key }:mars:sprint:${ at.lat },${ at.lon }` ) ) ) );
+		assert.deepEqual( made, makeRoute( { kind: 'sprint', size: 'week', world: 'mars', place: at }, random, check ) );
+
+	} );
+
 	test( 'the rotation keeps clear of what D1 has fixed: a year of days fixed as the Worker fixes them, with the owner\'s picks for weeks and months and places approved and unapproved on the way, never a place twice in a row nor two of the three live alike', async () => {
 
 		// As liveChallenges fixes them: each day the periods not yet fixed, the longest first, each from
@@ -5981,11 +6118,12 @@ describe( 'World Drive challenges: the rules', () => {
 			{ world: 'earth', cell_row: 14212, cell_column: 5052, name: 'Lombard Street', region: 'San Francisco', lat: 37.8021, lon: - 122.4187 },
 			{ world: 'earth', cell_row: 15000, cell_column: 4000, name: 'Somewhere busy', region: '', lat: 41.2, lon: 12.1 },
 			{ world: 'moon', cell_row: 300, cell_column: 400, name: 'A busy crater', region: '', lat: 12.5, lon: 30.25 },
+			{ world: 'mars', cell_row: 5000, cell_column: 9000, name: 'A busy plain', region: '', lat: - 5.4, lon: - 27.9 },
 		];
 		for ( const secret of [ PASS_SECRET, 'another-secret-for-the-rotation-x' ] ) {
 
 			const env = { TURNSTILE_SECRET: secret };
-			for ( const world of [ 'earth', 'moon' ] ) {
+			for ( const world of WORLD_IDS ) {
 
 				const rows = new Map();
 				let approved = [];
@@ -6493,11 +6631,12 @@ describe( 'World Drive challenges', () => {
 				// A visitor's times a day, held to fewer than challenges.js's 300 to see it reached.
 				CHALLENGE_TIMES_PER_VISITOR_DAILY: '4',
 			},
-			// The towns busy places are named by, and the Moon's heights its routes are checked on, as
-			// the site has them.
+			// The towns busy places are named by, and the Moon's and Mars's heights their routes are
+			// checked on, as the site has them.
 			assets: {
 				'places/towns.tsv': readFileSync( new URL( '../drive/public/places/towns.tsv', import.meta.url ) ),
 				'moon/height.bin': readFileSync( MOON_HEIGHTS ),
+				'mars/height.bin': readFileSync( MARS_HEIGHTS ),
 				// The page itself, its link card's tags as the site has them (a link's page rewrites them).
 				'index.html': readFileSync( new URL( '../drive/index.html', import.meta.url ) ),
 			},
@@ -6520,7 +6659,16 @@ describe( 'World Drive challenges', () => {
 		ip,
 		time,
 	} );
-	const list = ( { time = CHALLENGE_DAY, id, ip = nextIp() } = {} ) => call( server, `/api/challenges${ id ? `?id=${ id }` : '' }`, { ip, time } );
+	// The list, asked again (at most twice more, from another address) while it has fewer than the
+	// nine: a period's first ask lays out only CHECKED_MOST checked routes (challenges.js), the next the
+	// rest.
+	const list = async ( { time = CHALLENGE_DAY, id, ip = nextIp() } = {} ) => {
+
+		let res = await call( server, `/api/challenges${ id ? `?id=${ id }` : '' }`, { ip, time } );
+		for ( let k = 0; k < 2 && res.status === 200 && res.json.challenges.length < 3 * WORLD_IDS.length; k ++ ) res = await call( server, `/api/challenges${ id ? `?id=${ id }` : '' }`, { ip: nextIp(), time } );
+		return res;
+
+	};
 	const board = ( challenge, { time = CHALLENGE_DAY, id, ip = nextIp() } = {} ) => call( server, `/api/challenges/board?challenge=${ challenge }${ id ? `&id=${ id }` : '' }`, { ip, time } );
 
 	// A player with an address and a visit (`kind`: 'earth', 'moon' or 'owner') of their own, from
@@ -6595,18 +6743,29 @@ describe( 'World Drive challenges', () => {
 
 	} );
 
-	test( 'six live: the day\'s, the week\'s and the month\'s on each world, fixed in D1 as they\'re first asked for, the same on every ask and as another instance works them out', async () => {
+	test( 'nine live: the day\'s, the week\'s and the month\'s on each world, fixed in D1 as they\'re first asked for (no more than three checked on their ground an ask, the rest by the next), the same on every ask and as another instance works them out', async () => {
 
 		assert.equal( server.d1( 'SELECT COUNT(*) AS n FROM challenges' )[ 0 ].n, 0 );
-		const res = await list();
+		// The first ask: the longest first, each world in turn, till a fourth would be checked on its
+		// ground (the Moon's month and week and Mars's month checked; Mars's week the fourth): those
+		// fixed so far, and nothing kept as live.
+		const first = await call( server, '/api/challenges', { ip: nextIp(), time: CHALLENGE_DAY } );
+		assert.equal( first.status, 200, first.text );
+		assert.deepEqual( first.json.challenges.map( c => `${ c.world } ${ c.key }` ), [ 'earth week:2026-11-16', 'earth month:2026-11', 'moon week:2026-11-16', 'moon month:2026-11', 'mars month:2026-11' ] );
+		// The next fixes the rest (Mars's week, then the day's on each world: three checked again).
+		const res = await call( server, '/api/challenges', { ip: nextIp(), time: CHALLENGE_DAY + MINUTE } );
 		assert.equal( res.status, 200, res.text );
 		assert.equal( res.headers.get( 'Cache-Control' ), 'no-store' );
 		live = res.json.challenges;
-		assert.equal( res.json.now, CHALLENGE_DAY );
-		assert.deepEqual( live.map( c => `${ c.world } ${ c.key }` ), [ 'earth day:2026-11-16', 'earth week:2026-11-16', 'earth month:2026-11', 'moon day:2026-11-16', 'moon week:2026-11-16', 'moon month:2026-11' ] );
+		assert.equal( res.json.now, CHALLENGE_DAY + MINUTE );
+		assert.deepEqual( live.map( c => `${ c.world } ${ c.key }` ), [
+			'earth day:2026-11-16', 'earth week:2026-11-16', 'earth month:2026-11', 'moon day:2026-11-16', 'moon week:2026-11-16', 'moon month:2026-11',
+			'mars day:2026-11-16', 'mars week:2026-11-16', 'mars month:2026-11',
+		] );
+		assert.deepEqual( first.json.challenges.map( c => c.id ), live.filter( c => first.json.challenges.some( f => f.id === c.id ) ).map( c => c.id ) );
 		const rows = server.d1( 'SELECT id, period, world, kind, place, route, source, starts_at, ends_at FROM challenges ORDER BY id' );
-		assert.equal( rows.length, 6 );
-		const featured = { earth: [ ...SPOTS.map( s => s.name ), 'Eiffel Tower', 'Colosseum', 'Piccadilly Circus', 'Hollywood Boulevard', 'Copacabana' ], moon: MOON_PLACES.map( p => p.name ) };
+		assert.equal( rows.length, 9 );
+		const featured = { earth: [ ...SPOTS.map( s => s.name ), 'Eiffel Tower', 'Colosseum', 'Piccadilly Circus', 'Hollywood Boulevard', 'Copacabana' ], moon: MOON_PLACES.map( p => p.name ), mars: MARS_PLACES.map( p => p.name ) };
 		for ( const c of live ) {
 
 			const row = rows.find( r => r.id === c.id );
@@ -6620,23 +6779,24 @@ describe( 'World Drive challenges', () => {
 			assert.equal( c.route.points.length, { sprint: SHAPES[ c.world ][ c.period ].sprint.gates, collect: SHAPES[ c.world ][ c.period ].collect.items, landmark: 1 }[ c.kind ] );
 			assert.deepEqual( [ c.total, c.top, c.me ], [ 0, [], null ] );
 			// As this process, another instance with the same secret, works it out: the place, the kind and
-			// the route, the Moon's checked on its heights too.
-			const env = { TURNSTILE_SECRET: PASS_SECRET, ASSETS: { fetch: async () => new Response( readFileSync( MOON_HEIGHTS ) ) } };
+			// the route, the Moon's and Mars's checked on their heights too (each from its own file).
+			const env = { TURNSTILE_SECRET: PASS_SECRET, ASSETS: heightsAssets() };
 			const pick = await rotationPick( env, period, c.world, [] );
 			assert.equal( pick.place.name, c.place );
 			assert.equal( pick.kind, c.kind );
 			const made = await challengeFor( env, period, c.world, pick, CHALLENGE_DAY );
 			assert.deepEqual( JSON.parse( made.route ), c.route );
 			if ( c.world === 'moon' ) assert.equal( movableFaults( c.route ), 0, c.place );
+			if ( c.world === 'mars' ) assert.equal( movableFaults( c.route, 'mars' ), 0, c.place );
 
 		}
 
 		// The three on a world are three places.
-		for ( const world of [ 'earth', 'moon' ] ) assert.equal( new Set( live.filter( c => c.world === world ).map( c => c.place ) ).size, 3 );
+		for ( const world of WORLD_IDS ) assert.equal( new Set( live.filter( c => c.world === world ).map( c => c.place ) ).size, 3 );
 		// Asked again, later in the period, from anywhere: the same, nothing more fixed.
 		const again = await list( { time: CHALLENGE_DAY + 8 * HOUR } );
 		assert.deepEqual( again.json.challenges.map( c => [ c.id, c.place, c.kind ] ), live.map( c => [ c.id, c.place, c.kind ] ) );
-		assert.equal( server.d1( 'SELECT COUNT(*) AS n FROM challenges' )[ 0 ].n, 6 );
+		assert.equal( server.d1( 'SELECT COUNT(*) AS n FROM challenges' )[ 0 ].n, 9 );
 
 	} );
 
@@ -7280,7 +7440,7 @@ describe( 'World Drive challenges', () => {
 		assert.equal( res.json.featured.earth.length, 17 );
 		assert.equal( res.json.featured.moon.length, MOON_PLACES.length );
 		assert.deepEqual( res.json.approved, [] );
-		assert.deepEqual( Object.keys( res.json.busy ), [ 'earth', 'moon' ] );
+		assert.deepEqual( Object.keys( res.json.busy ), WORLD_IDS );
 
 	} );
 
