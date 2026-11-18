@@ -1386,7 +1386,7 @@ describe( 'World Drive Supporter Pass', () => {
 		const res = await me();
 		assert.equal( res.status, 200 );
 		assert.equal( res.headers.get( 'Cache-Control' ), 'no-store' );
-		assert.deepEqual( res.json, { signedIn: false, supporter: false, purchase: { enabled: true, link: PASS_LINK, price: 'CA$4.99/month' } } );
+		assert.deepEqual( res.json, { signedIn: false, supporter: false, purchase: { enabled: true, link: PASS_LINK, price: 'CA$2/month' } } );
 		assert.equal( ( await call( server, '/api/config' ) ).json.googleClientId, CLIENT_ID );
 
 	} );
@@ -1400,7 +1400,7 @@ describe( 'World Drive Supporter Pass', () => {
 		// the whole site, never from http or another site).
 		assert.equal( alice.headers.get( 'Set-Cookie' ), `__Host-wd_session=${ alice.token }; Max-Age=2592000; Path=/; HttpOnly; SameSite=Lax; Secure` );
 		const [ account ] = server.d1( 'SELECT id, google_sub, email, name FROM accounts WHERE google_sub = \'1001\'' );
-		assert.deepEqual( alice.json, { signedIn: true, name: 'Alice Example', email: 'alice@example.com', google: true, username: null, supporter: false, purchase: { enabled: true, link: PASS_LINK, price: 'CA$4.99/month', clientReferenceId: String( account.id ) } } );
+		assert.deepEqual( alice.json, { signedIn: true, name: 'Alice Example', email: 'alice@example.com', google: true, username: null, supporter: false, purchase: { enabled: true, link: PASS_LINK, price: 'CA$2/month', clientReferenceId: String( account.id ) } } );
 		alice.id = account.id;
 		assert.deepEqual( ( await me( alice.cookie ) ).json, alice.json );
 		// Only the token's SHA-256 is kept.
