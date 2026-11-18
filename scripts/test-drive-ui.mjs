@@ -915,7 +915,7 @@ function supersonic() {
 	out.streaks = d.fx.particles.alive;
 	out.warp = Math.round( d.warp * 100 ) / 100;
 	out.still = d.supersonic;
-	// Out of boost (B was only a tap: it fires till the gauge is empty), and braking.
+	// Out of boost (B let go: the booster's out), and braking.
 	d.gauge = 0;
 	d.release( 'KeyB' );
 	d.release( 'KeyW' );
@@ -1408,8 +1408,8 @@ function effects( style ) {
 	// Lit at 55 km/h: its burst, the nose kicked up, and the view jolted wider and back.
 	d.press( 'KeyW' );
 	step( 10 );
+	// (Held: the booster burns while B is down.)
 	d.press( 'KeyB' );
-	d.release( 'KeyB' );
 	let punch = 0;
 	let nod = 0;
 	let squat = 0;
@@ -1427,6 +1427,7 @@ function effects( style ) {
 	d.gauge = 0.01;
 	step( 2 );
 	out.dry = { firing: d.firing, alive: d.fx.particles.alive };
+	d.release( 'KeyB' );
 	d.release( 'KeyW' );
 	step( 150 );
 	out.dry.after = d.fx.particles.alive;
@@ -1526,10 +1527,10 @@ function effects( style ) {
 
 		d.gauge = 1;
 		d.press( 'KeyB' );
-		d.release( 'KeyB' );
 		step( 25 );
 		d.gauge = 0.001;
 		step( 5 );
+		d.release( 'KeyB' );
 
 	}
 
@@ -5398,7 +5399,7 @@ describe( 'World Drive, the open sea', () => {
 
 describe( 'World Drive with its Worker', () => {
 
-	test( 'over the daily cap: the used-up screen, with the Moon (never limited) a tap away; the Earth stays shut', async () => {
+	test( 'over the daily cap: straight onto the Moon\'s globe (never limited), with a word on why; the Earth shows the used-up screen and stays shut', async () => {
 
 		const page = await newPage( {
 			api: {
@@ -5408,33 +5409,50 @@ describe( 'World Drive with its Worker', () => {
 			},
 		} );
 		await page.goto( BASE );
+		// On the Moon at once, no notice in the way: no key, no Google tiles, the Earth's test globe out of sight.
+		await page.waitForFunction( () => window.drive?.mode === 'globe' && window.drive.world === 'moon', null, { timeout: 90000 } );
+		assert.equal( await page.locator( '#notice' ).isHidden(), true );
+		assert.equal( await page.evaluate( () => !! window.drive.tiles ), false );
+		assert.equal( await page.locator( '#globe-ui .worlds [data-world="moon"]' ).getAttribute( 'aria-checked' ), 'true' );
+		assert.ok( ! page.outside.some( url => /tile\.googleapis|maps\.googleapis/.test( url ) ), page.outside.join( ' ' ) );
+		await page.locator( '#toast', { hasText: 'Today\'s free Earth drives are all taken, so you\'re on the Moon' } ).waitFor();
+		await shot( page, 'drive-used-up-moon' );
+
+		// The Earth: the notice, and still on the Moon; and from there back to it, the same game.
+		const canvases = await page.locator( 'canvas' ).count();
+		await page.locator( '#globe-ui .worlds [data-world="earth"]' ).click();
 		await page.locator( '#notice[data-kind="used-up"]' ).waitFor();
 		assert.equal( await page.locator( '#notice .title' ).textContent(), 'Today\'s free Earth drives are used up' );
 		assert.match( await page.locator( '#notice .message' ).textContent(), /The Moon is free and unlimited/ );
 		assert.equal( await page.locator( '#notice .countdown' ).textContent(), 'Fresh Earth drives in 5 h 2 min' );
-		assert.equal( await page.evaluate( () => !! window.drive ), false, 'the globe started anyway' );
-		assert.equal( await page.locator( 'canvas' ).count(), 0 );
 		await shot( page, 'drive-notice-used-up' );
-
-		// On the Moon: no key, no Google tiles, the Earth's test globe out of sight.
-		await page.locator( '#notice button', { hasText: 'Drive on the Moon' } ).click();
-		await page.locator( '#notice' ).waitFor( { state: 'hidden' } );
-		await page.waitForFunction( () => window.drive?.mode === 'globe' && window.drive.world === 'moon', null, { timeout: 90000 } );
-		assert.equal( await page.evaluate( () => !! window.drive.tiles ), false );
-		assert.equal( await page.locator( '#globe-ui .worlds [data-world="moon"]' ).getAttribute( 'aria-checked' ), 'true' );
-		assert.ok( ! page.outside.some( url => /tile\.googleapis|maps\.googleapis/.test( url ) ), page.outside.join( ' ' ) );
-		await shot( page, 'drive-used-up-moon' );
-
-		// The Earth: the notice again, and still on the Moon; and from there back to it, the same game.
-		const canvases = await page.locator( 'canvas' ).count();
-		await page.locator( '#globe-ui .worlds [data-world="earth"]' ).click();
-		await page.locator( '#notice[data-kind="used-up"]' ).waitFor();
 		assert.equal( await page.evaluate( () => window.drive.world ), 'moon' );
 		assert.equal( await page.locator( '#globe-ui .worlds [data-world="moon"]' ).getAttribute( 'aria-checked' ), 'true' );
 		await page.locator( '#notice button', { hasText: 'Drive on the Moon' } ).click();
 		await page.locator( '#notice' ).waitFor( { state: 'hidden' } );
 		await page.waitForTimeout( 500 );
 		assert.equal( await page.locator( 'canvas' ).count(), canvases, 'a second game started' );
+		assert.deepEqual( page.errors, [] );
+		await page.context().close();
+
+	} );
+
+	test( 'over this visitor\'s own one free Earth drive: on the Moon with a word saying so, and the Earth\'s notice says the same', async () => {
+
+		const page = await newPage( {
+			api: {
+				config: { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true },
+				turnstile: true,
+				visit: route => route.fulfill( { status: 429, contentType: 'application/json', body: JSON.stringify( { error: 'You\'ve had today\'s free drives', reason: 'visitor', retryAfter: 3600, visit: 'v1.moon-visit' } ) } ),
+			},
+		} );
+		await page.goto( BASE );
+		await page.waitForFunction( () => window.drive?.mode === 'globe' && window.drive.world === 'moon', null, { timeout: 90000 } );
+		await page.locator( '#toast', { hasText: 'You\'ve had today\'s free Earth drive, so you\'re on the Moon' } ).waitFor();
+		await page.locator( '#globe-ui .worlds [data-world="earth"]' ).click();
+		await page.locator( '#notice[data-kind="used-up"]' ).waitFor();
+		assert.equal( await page.locator( '#notice .title' ).textContent(), 'You\'ve had today\'s free Earth drive' );
+		assert.match( await page.locator( '#notice .message' ).textContent(), /one free Earth drive a day/ );
 		assert.deepEqual( page.errors, [] );
 		await page.context().close();
 
@@ -5467,7 +5485,8 @@ describe( 'World Drive with its Worker', () => {
 		// The Earth: the page again without the link (anything else in the address stays), asking for
 		// an Earth drive.
 		await page.locator( '#globe-ui .worlds [data-world="earth"]' ).click();
-		await page.locator( '#notice[data-kind="used-up"]' ).waitFor( { timeout: 60000 } );
+		// Over the cap there, so it opens on the Moon again, a word on why.
+		await page.locator( '#toast', { hasText: 'so you\'re on the Moon' } ).waitFor( { timeout: 60000 } );
 		assert.deepEqual( asked, [ 'moon', 'earth' ] );
 		const url = new URL( page.url() );
 		assert.equal( url.searchParams.get( 'spot' ), null );
@@ -6309,7 +6328,7 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 
 	} );
 
-	test( 'used up on this address: the screen signs in, and once the pass is here the visit is asked for again, once', async () => {
+	test( 'used up on this address: on the Moon, the Earth\'s notice signs in, and once the pass is here the visit is asked for again (a reload), once', async () => {
 
 		const usedUp = reason => ( { status: 429, contentType: 'application/json', body: JSON.stringify( { error: 'You\'ve had today\'s free drives', reason, retryAfter: 3600 } ) } );
 		// The second answer is the Worker's own refusal for another reason, so no Maps key is ever handed out here.
@@ -6327,52 +6346,59 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 
 		};
 		const notice = page => page.locator( '#notice' );
+		const onMoon = page => page.waitForFunction( () => window.drive?.mode === 'globe' && window.drive.world === 'moon', null, { timeout: 90000 } );
+		const toEarth = page => page.locator( '#globe-ui .worlds [data-world="earth"]' ).click();
 
-		// A supporter on a new browser: signs in on the screen, and the visit is asked for again.
+		// A supporter on a new browser: on the Moon; the Earth's notice signs in, and the visit is asked for again.
 		let page = await usedUpPage( [ usedUp( 'visitor' ), mapsOff ], { signedInAs: { ...ALICE, supporter: true } } );
 		await page.goto( BASE );
+		await onMoon( page );
+		await toEarth( page );
 		await notice( page ).locator( '.account .stub-google' ).waitFor();
-		assert.equal( await notice( page ).locator( '.title' ).textContent(), 'Today\'s free Earth drives are used up' );
+		assert.equal( await notice( page ).locator( '.title' ).textContent(), 'You\'ve had today\'s free Earth drive' );
 		assert.match( await notice( page ).locator( '.account' ).textContent(), /Have the Supporter Pass\? Sign in to use it here\./ );
 		await shot( page, 'pass-7-used-up-sign-in' );
 		await page.evaluate( () => window.testCredential = 'good-token' );
 		await notice( page ).locator( '.stub-google' ).click();
-		await page.locator( '#notice[data-kind="error"]' ).waitFor();
+		await page.locator( '#notice[data-kind="error"]' ).waitFor( { timeout: 60000 } );
 		assert.equal( page.visits, 2 );
 		assert.equal( await notice( page ).locator( '.message' ).textContent(), 'Maps are off today' );
 		assert.ok( await notice( page ).locator( '.account' ).isHidden(), 'the sign-in stayed on another notice' );
 		assert.deepEqual( page.errors, [] );
 		await page.context().close();
 
-		// Back from paying before Stripe's word: asked again once it's here.
+		// Back from paying before Stripe's word: on the Moon, and asked again once it's here.
 		page = await usedUpPage( [ usedUp( 'visitor' ), mapsOff ], { me: ALICE } );
 		await page.goto( `${ BASE }/?supporter=thanks` );
-		await notice( page ).locator( '.account', { hasText: 'Signed in as Alice Example · Sign out' } ).waitFor();
+		await onMoon( page );
 		assert.equal( page.visits, 1 );
 		page.state.me = { ...ALICE, supporter: true };
-		await page.locator( '#notice[data-kind="error"]' ).waitFor( { timeout: 15000 } );
-		await page.locator( '#toast', { hasText: 'Thanks! Supporter Pass unlocked' } ).waitFor();
+		await page.locator( '#notice[data-kind="error"]' ).waitFor( { timeout: 60000 } );
 		assert.equal( page.visits, 2 );
 		assert.equal( new URL( page.url() ).search, '' );
 		await page.context().close();
 
-		// A supporter who has had their 30: asked again once, then the screen stays, saying who's signed in.
+		// A supporter who has had their 30: asked again once, then on the Moon to stay, the Earth's
+		// notice saying who's signed in.
 		page = await usedUpPage( [ usedUp( 'visitor' ) ], { me: { ...ALICE, supporter: true } } );
 		await page.goto( BASE );
-		await notice( page ).locator( '.account', { hasText: 'Signed in as Alice Example · ⭐ Supporter Pass · Sign out' } ).waitFor();
+		for ( let tries = 0; tries < 300 && page.visits < 2; tries ++ ) await page.waitForTimeout( 100 );
+		await onMoon( page );
 		await page.waitForTimeout( 1500 );
 		assert.equal( page.visits, 2 );
+		await toEarth( page );
+		await notice( page ).locator( '.account', { hasText: 'Signed in as Alice Example · ⭐ Supporter Pass · Sign out' } ).waitFor();
 		assert.equal( await page.locator( '#notice' ).getAttribute( 'data-kind' ), 'used-up' );
 		await page.context().close();
 
-		// Everyone's drives used up, not this address's: no sign-in, and not Google's script.
+		// Everyone's drives used up, not this address's: no sign-in on the Earth's notice.
 		page = await usedUpPage( [ usedUp( 'daily' ) ] );
 		await page.goto( BASE );
+		await onMoon( page );
+		await toEarth( page );
 		await page.locator( '#notice[data-kind="used-up"]' ).waitFor();
 		await page.waitForTimeout( 500 );
 		assert.ok( await notice( page ).locator( '.account' ).isHidden() );
-		assert.equal( page.asked.me, 0 );
-		assert.equal( page.google, 0 );
 		await page.context().close();
 
 	} );
@@ -9465,13 +9491,8 @@ describe( 'World Drive challenges', () => {
 			await page.route( `${ BASE }/api/challenges?*`, route => json( route, { now: Date.now(), challenges: listed() } ) );
 			await page.route( `${ BASE }/api/challenges`, route => json( route, { now: Date.now(), challenges: listed() } ) );
 			await page.route( `${ BASE }/api/challenges/link?*`, route => json( route, { challenge: { ...listed()[ 0 ], replacedAt: null, finalAt: null }, vs: { name: 'Ann Racer', ms: 23900, vehicle: 'go-kart', run: 'friendRun0000001', ghost: true, date: '2026-11-16', level: 4, title: 'rookie' } } ) );
+			// (Over the cap, it opens on the Moon by itself.)
 			await page.goto( `${ BASE }/?challenge=11&vs=FriendHandle0001` );
-			if ( usedUp ) {
-
-				await page.locator( '#notice[data-kind="used-up"]' ).waitFor();
-				await page.locator( '#notice button', { hasText: 'Drive on the Moon' } ).click();
-
-			}
 
 			const card = page.locator( '#challenges .ch-link' );
 			await card.waitFor( { timeout: 90000 } );

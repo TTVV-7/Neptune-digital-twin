@@ -59,8 +59,9 @@ const FLY_CLIMB = 7;
 const FLY_CEILING = 150;
 const FLY_GLIDE = 3;
 const FLY_YAW = 75;
-// Booster: a full gauge fires for BOOST_TIME s and refills in BOOST_RECHARGE s; firing pushes at
-// BOOST_ACCEL m/s² up to BOOST_SPEED times the top speed. It needs BOOST_MIN of the gauge to fire.
+// Booster: held down, it burns a full gauge in BOOST_TIME s; let go and it stops, and the gauge
+// refills in BOOST_RECHARGE s. Firing pushes at BOOST_ACCEL m/s² up to BOOST_SPEED times the top
+// speed. It needs BOOST_MIN of the gauge to light (but, once lit, burns down to empty if held).
 const BOOST_TIME = 2.5;
 const BOOST_RECHARGE = 8;
 const BOOST_ACCEL = 28;
@@ -344,7 +345,12 @@ export class Driver {
 
 		}, true );
 		window.addEventListener( 'keyup', e => this.release( e.code ), true );
-		window.addEventListener( 'blur', () => this.keys.clear() );
+		window.addEventListener( 'blur', () => {
+
+			this.keys.clear();
+			this.cutBooster();
+
+		} );
 		// A HUD with buttons for touch screens (drive-hud.js) presses keys through press() and release().
 		hud.attach?.( this );
 
@@ -369,7 +375,12 @@ export class Driver {
 		if ( code === 'Space' && this.grounded && this.drift && this.steerInput() === 0 ) this.spaceTap = this.clock;
 		else if ( code === 'Space' && this.grounded ) this.hop();
 		// The booster goes on Shift, by the gas and steering keys, as well as B.
-		else if ( this.booster && ( code === 'KeyB' || code === 'ShiftLeft' || code === 'ShiftRight' ) ) this.fireBooster();
+		else if ( this.booster && ( code === 'KeyB' || code === 'ShiftLeft' || code === 'ShiftRight' ) ) {
+
+			this.ranDry = false;
+			this.fireBooster();
+
+		}
 		else if ( code === 'KeyR' ) this.respawn();
 
 	}
@@ -377,6 +388,8 @@ export class Driver {
 	release( code ) {
 
 		this.keys.delete( code );
+		// Hold to boost: letting go of the last boost key puts the booster out.
+		if ( this.booster && this.firing && ( code === 'KeyB' || code === 'ShiftLeft' || code === 'ShiftRight' ) && ! this.boostHeld() ) this.cutBooster();
 		if ( code !== 'Space' || this.spaceTap === null ) return;
 		const tapped = this.clock - this.spaceTap <= HOP_TAP;
 		this.spaceTap = null;
@@ -484,6 +497,7 @@ export class Driver {
 		this.flying = false;
 		this.gauge = 1;
 		this.firing = false;
+		this.ranDry = false;
 		// How long it has boosted near its top speed, whether it's supersonic, and how far into the
 		// supersonic view it is (0 to 1).
 		this.nearTop = 0;
@@ -990,6 +1004,22 @@ export class Driver {
 
 	}
 
+	// Whether a boost key (Shift or B, or the touch BOOST button, which presses B) is held.
+	boostHeld() {
+
+		return this.keys.has( 'KeyB' ) || this.keys.has( 'ShiftLeft' ) || this.keys.has( 'ShiftRight' );
+
+	}
+
+	// Let go of the booster before it runs dry: the exhaust cools, and the gauge starts refilling.
+	cutBooster() {
+
+		if ( ! this.firing ) return;
+		this.firing = false;
+		this.fx?.cool();
+
+	}
+
 	// Boost from somewhere else (World Drive's boost pads): `share` of a full gauge, filling it at
 	// most. Returns how much it took.
 	addBoost( share ) {
@@ -997,6 +1027,7 @@ export class Driver {
 		if ( ! this.booster || ! this.active ) return 0;
 		const before = this.gauge;
 		this.gauge = Math.min( 1, this.gauge + share );
+		this.ranDry = false;
 		this.hud.setBoost?.( this.gauge );
 		this.hud.refuel?.( this.gauge - before );
 		return this.gauge - before;
@@ -1038,6 +1069,10 @@ export class Driver {
 	// back down to the top speed.
 	thrust( dt, top ) {
 
+		// Held down, the booster lights as soon as there's enough in the gauge (pressed with too
+		// little, a pad's top-up, held from before a resume), but not again after the hold ran it
+		// dry, until it's pressed again (or a pad tops it up): no sputter of 15 % bursts.
+		if ( this.booster && ! this.firing && ! this.ranDry && this.gauge >= BOOST_MIN && this.boostHeld() ) this.fireBooster();
 		const base = this.spec.topSpeed / KMH;
 		if ( this.firing ) {
 
@@ -1046,6 +1081,7 @@ export class Driver {
 
 				// Run dry: the exhaust glows on and cools.
 				this.firing = false;
+				this.ranDry = true;
 				this.fx?.cool();
 
 			}

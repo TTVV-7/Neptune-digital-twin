@@ -1,7 +1,7 @@
 import './challenges.css';
 import {
 	Color, CylinderGeometry, DataTexture, DoubleSide, InstancedMesh, MathUtils, Matrix4, MeshBasicMaterial, OctahedronGeometry, Quaternion,
-	LinearFilter, TorusGeometry, Vector3,
+	LinearFilter, Shape, ShapeGeometry, TorusGeometry, Vector2, Vector3,
 } from 'three';
 import { send } from './api.js';
 import { createRaceGhost, createRecorder } from './challenge-ghost.js';
@@ -45,12 +45,39 @@ const READING = 6;
 // wider), a beam BEAM round and BEAM_HIGH up from the ground (twice that on the Moon, where it's
 // seen from further), an item ITEM across, ITEM_UP over the ground, turning at SPIN rad/s.
 const RING = 10;
-const RING_TUBE = 0.035;
+const RING_TUBE = 0.06;
 const BEAM = 3;
 const BEAM_HIGH = 320;
 const ITEM = 2.2;
 const ITEM_UP = 3;
 const SPIN = 1.6;
+// The next gate (or star) stands out: its beam NEXT_WIDE times as wide, and its ring breathing
+// NEXT_PULSE of its size either way at PULSE_RATE rad/s.
+const NEXT_WIDE = 1.8;
+const NEXT_PULSE = 0.08;
+const PULSE_RATE = 4;
+// The course on the Moon's ground (its heights are known everywhere, so it can be laid on them):
+// glowing chevrons CHEVRON_GAP m apart, CHEVRON across and CHEVRON_UP over the ground, pointing the
+// way, leaned up CHEVRON_LEAN rad from lying flat (flat, they're lines a few metres off from a
+// driver's low view). Bright on the way to the next gate (from the gate before, or the start), from the car up to
+// COURSE_REACH m ahead; dim on the way on from it (the turn coming), PREVIEW_REACH m of it. For a
+// star hunt, from the car to the nearest star. Laid again as the next one changes and each
+// COURSE_MOVE m driven; a wave of light runs along them toward the gate, WAVE m long, every
+// WAVE_TIME s. COURSE_MOST at most.
+const CHEVRON_GAP = 18;
+const CHEVRON = 1.7;
+const CHEVRON_UP = 0.15;
+const CHEVRON_LEAN = 0.35;
+const COURSE_REACH = 720;
+const PREVIEW_REACH = 260;
+const COURSE_MOVE = 12;
+const WAVE = 90;
+const WAVE_TIME = 1.1;
+const COURSE_MOST = 64;
+// The marker on the screen over the next gate (or star): this far (m) over its top, kept EDGE px in
+// from the screen's sides when the gate's off the screen or behind.
+const MARKER_UP = 4;
+const EDGE = 44;
 // The middle of a gate's zone is this far (m) over its ground.
 const ZONE_UP = 2;
 // On the Earth a gate's ground is found by rays down at its middle and at eight points round it,
@@ -110,8 +137,12 @@ const WORLD_NAMES = { earth: 'On the Earth', moon: 'On the Moon' };
 const _v = new Vector3();
 const _q = new Quaternion();
 const _s = new Vector3();
+const _w = new Vector3();
+const _colour = new Color();
 const _m = new Matrix4();
 const _up = new Vector3( 0, 1, 0 );
+const _inverse = new Matrix4();
+const _carto = { lat: 0, lon: 0, height: 0 };
 
 // app: what main.js hands over: visit(), player(), pickName( name, say ), world(), moonOnly
 // ({ onEarth } when there's no Earth this visit), mode(), place(), vehicle(), the driver, ground,
@@ -124,6 +155,7 @@ export function setUpChallenges( app ) {
 
 	const dialog = makeDialog();
 	const hud = makeHud( app.driveUi );
+	const marker = makeMarker( app.driveUi );
 	// The HUD's parts, and what's written in each (updateHud).
 	const hudParts = {
 		clock: hud.querySelector( '.ch-clock' ), gates: hud.querySelector( '.ch-gates' ), dist: hud.querySelector( '.ch-dist' ), arrow: hud.querySelector( '.ch-arrow' ),
@@ -1067,6 +1099,8 @@ export function setUpChallenges( app ) {
 
 		}
 
+		// (Not lit again by a boost key still held: see Driver.thrust.)
+		d.ranDry = true;
 		d.boost = null;
 
 	}
@@ -1160,6 +1194,7 @@ export function setUpChallenges( app ) {
 	function showingHud( shown ) {
 
 		hud.hidden = ! shown;
+		marker.root.hidden = true;
 		document.body.classList.toggle( 'ch-running', shown );
 		for ( const key of Object.keys( written ) ) delete written[ key ];
 
@@ -1191,8 +1226,9 @@ export function setUpChallenges( app ) {
 		write( 'clock', formatTime( done ? run.ms : run.clock * 1000 ) );
 		write( 'gates', run.challenge.kind === 'landmark' ? run.challenge.route.goal : `${ run.passes.length } / ${ run.gates.length }${ run.challenge.kind === 'collect' ? ' ★' : '' }` );
 		const target = done ? null : nextGate( d );
-		write( 'aim', target ? '' : 'none', () => hudParts.arrow.hidden = hudParts.dist.hidden = ! target );
+		write( 'aim', target ? '' : 'none', () => hudParts.arrow.hidden = hudParts.dist.hidden = marker.root.hidden = ! target );
 		if ( ! target ) return;
+		placeMarker( target );
 		const east = - target.x - d.east;
 		const north = target.z - d.north;
 		app.camera.getWorldDirection( _v );
@@ -1200,7 +1236,55 @@ export function setUpChallenges( app ) {
 		const degrees = Math.round( ( Math.atan2( east, north ) - facing ) * MathUtils.RAD2DEG );
 		write( 'turn', degrees, () => hudParts.arrow.style.transform = `rotate( ${ degrees }deg )` );
 		const metres = Math.hypot( east, north );
-		write( 'dist', metres >= 1000 ? `${ ( metres / 1000 ).toFixed( 1 ) } km` : `${ Math.round( metres ) } m` );
+		write( 'dist', metres >= 1000 ? `${ ( metres / 1000 ).toFixed( 1 ) } km` : `${ Math.round( metres ) } m`, () => marker.dist.textContent = hudParts.dist.textContent = written.dist );
+
+	}
+
+	// The marker over the next gate (or star) on the screen, with how far it is: where it is in the
+	// view, or held at the screen's edge on its side when it's off the screen (or behind you, turned
+	// round to the side it's on), pointing to it there. Coloured as the gate is.
+	function placeMarker( target ) {
+
+		const ringed = run.challenge.kind !== 'collect';
+		const ring = Math.min( RING, run.challenge.route.radius * 0.5 );
+		const y = ( target.ground ?? target.guess ) + ( ringed ? ring * 2 + 0.6 : ITEM_UP + ITEM ) + MARKER_UP;
+		const camera = app.camera;
+		camera.getWorldPosition( _s );
+		camera.getWorldDirection( _v );
+		const behind = _w.set( target.x, y, target.z ).sub( _s ).dot( _v ) < 0;
+		_v.set( target.x, y, target.z ).project( camera );
+		let x = behind ? - _v.x : _v.x;
+		let yy = behind ? - _v.y : _v.y;
+		const width = window.innerWidth;
+		const height = window.innerHeight;
+		const ex = 1 - 2 * EDGE / width;
+		const ey = 1 - 2 * EDGE / height;
+		const off = behind || Math.abs( x ) > ex || Math.abs( yy ) > ey;
+		let angle = 0;
+		if ( off ) {
+
+			// Out along its direction from the middle until it meets the edge.
+			if ( behind && Math.abs( x ) < 1e-3 && Math.abs( yy ) < 1e-3 ) yy = - 1;
+			const scale = 1 / Math.max( Math.abs( x ) / ex, Math.abs( yy ) / ey );
+			x *= scale;
+			yy *= scale;
+			angle = Math.round( Math.atan2( x * width, yy * height ) * MathUtils.RAD2DEG );
+
+		}
+
+		const px = Math.round( ( x + 1 ) / 2 * width );
+		const py = Math.round( ( 1 - yy ) / 2 * height );
+		write( 'marker', `${ px },${ py }`, () => marker.root.style.transform = `translate( ${ px }px, ${ py }px )` );
+		write( 'markerOff', off ? angle : 'on', () => {
+
+			marker.root.classList.toggle( 'off', off );
+			// Pointing down, the arrow is where the distance goes: that goes over the diamond.
+			marker.root.classList.toggle( 'below', off && Math.abs( angle ) > 90 );
+			marker.pointer.style.transform = `rotate( ${ angle }deg )`;
+
+		} );
+		const last = ringed && target === run.gates[ run.gates.length - 1 ];
+		write( 'markerKind', ringed ? last ? 'goal' : 'gate' : 'star', () => marker.root.dataset.kind = ringed ? last ? 'goal' : 'gate' : 'star' );
 
 	}
 
@@ -1602,7 +1686,11 @@ export function setUpChallenges( app ) {
 		const beams = new InstancedMesh( beamGeometry, new MeshBasicMaterial( { transparent: true, opacity: 0.6, alphaMap: alpha, depthWrite: false, side: DoubleSide, forceSinglePass: true, toneMapped: false } ), most );
 		const rings = new InstancedMesh( new TorusGeometry( 1, RING_TUBE, 6, 36 ), new MeshBasicMaterial( { toneMapped: false } ), most );
 		const items = new InstancedMesh( new OctahedronGeometry( 1 ), new MeshBasicMaterial( { toneMapped: false } ), most );
-		for ( const mesh of [ beams, rings, items ] ) {
+		// The course's chevrons: a V pointing along +z, standing on the ground leaned forward.
+		const vee = new Shape( [ [ 0, 0.6 ], [ 1, - 0.4 ], [ 1, - 0.9 ], [ 0, 0.1 ], [ - 1, - 0.9 ], [ - 1, - 0.4 ] ].map( ( [ x, y ] ) => new Vector2( x, y ) ) );
+		const chevrons = new InstancedMesh( new ShapeGeometry( vee ).translate( 0, 0.9, 0 ).rotateX( Math.PI / 2 - CHEVRON_LEAN ), new MeshBasicMaterial( { transparent: true, opacity: 0.9, depthWrite: false, side: DoubleSide, toneMapped: false } ), COURSE_MOST );
+		chevrons.setColorAt( 0, NEXT );
+		for ( const mesh of [ beams, rings, items, chevrons ] ) {
 
 			mesh.frustumCulled = false;
 			mesh.count = 0;
@@ -1614,14 +1702,27 @@ export function setUpChallenges( app ) {
 		}
 
 		beams.name = 'challenge-beams';
+		chevrons.name = 'challenge-course';
+		// Marks on the ground, drawn before the beams always (both see-through: by the depth of
+		// bounding spheres made once, which a moving course would leave stale, the order would flip).
+		chevrons.renderOrder = 1;
 		let spin = 0;
+		let pulse = 0;
+		let wave = 0;
+		// The course as laid: each chevron's distance (m) to the gate it leads to, and whether it's on
+		// the way on from the next (dim); what it was laid for (the gate, and where the car was).
+		let laid = [];
+		let laidFor = null;
 		const added = () => !! beams.parent;
 		return {
-			beams, rings, items,
+			beams, rings, items, chevrons,
 			show( shown ) {
 
 				const ringed = shown.challenge.kind !== 'collect';
-				if ( ! added() ) app.scene.add( beams, rings, items );
+				if ( ! added() ) app.scene.add( beams, rings, items, chevrons );
+				chevrons.count = 0;
+				laid = [];
+				laidFor = null;
 				beams.count = rings.count = items.count = 0;
 				beams.count = shown.gates.length;
 				( ringed ? rings : items ).count = shown.gates.length;
@@ -1629,11 +1730,13 @@ export function setUpChallenges( app ) {
 				items.visible = ! ringed;
 				this.place( shown );
 				this.colour( shown );
+				// (Its bounds made again for this route's gates when it's next drawn.)
+				beams.boundingSphere = rings.boundingSphere = items.boundingSphere = null;
 
 			},
 			hide() {
 
-				if ( added() ) app.scene.remove( beams, rings, items );
+				if ( added() ) app.scene.remove( beams, rings, items, chevrons );
 
 			},
 			// Where each is: at its ground (or its guess), a passed one shrunk to nothing. With
@@ -1644,16 +1747,19 @@ export function setUpChallenges( app ) {
 				const radius = shown.challenge.route.radius;
 				const ringed = shown.challenge.kind !== 'collect';
 				const ring = Math.min( RING, radius * 0.5 );
+				const next = ringed ? shown.gates.find( gate => ! gate.passed ) : null;
+				const breathe = 1 + NEXT_PULSE * Math.sin( pulse );
 				shown.gates.forEach( ( gate, i ) => {
 
 					const y = gate.ground ?? gate.guess;
 					const gone = gate.passed ? 0 : 1;
 					if ( ! ringed ) items.setMatrixAt( i, _m.compose( _v.set( gate.x, y + ITEM_UP, gate.z ), _q.setFromAxisAngle( _up, spin + i ), _s.set( ITEM * gone, ITEM * 1.4 * gone, ITEM * gone ) ) );
 					if ( itemsOnly ) return;
-					const wide = ( moonly ? 1.6 : 1 ) * BEAM * ( ringed ? 1 : 0.7 );
+					const wide = ( moonly ? 1.6 : 1 ) * BEAM * ( ringed ? 1 : 0.7 ) * ( gate === next ? NEXT_WIDE : 1 );
 					beams.setMatrixAt( i, _m.compose( _v.set( gate.x, y, gate.z ), _q.identity(), _s.set( wide * gone, ( moonly ? 2 : 1 ) * BEAM_HIGH * gone, wide * gone ) ) );
-					// Standing up, facing along the way to it.
-					if ( ringed ) rings.setMatrixAt( i, _m.compose( _v.set( gate.x, y + ring + 0.6, gate.z ), _q.setFromAxisAngle( _up, gate.facing ), _s.setScalar( ring * gone ) ) );
+					// Standing up, facing along the way to it; the next one breathing.
+					const size = ring * gone * ( gate === next ? breathe : 1 );
+					if ( ringed ) rings.setMatrixAt( i, _m.compose( _v.set( gate.x, y + ring + 0.6, gate.z ), _q.setFromAxisAngle( _up, gate.facing ), _s.setScalar( size ) ) );
 
 				} );
 				items.instanceMatrix.needsUpdate = true;
@@ -1678,17 +1784,123 @@ export function setUpChallenges( app ) {
 				this.place( shown );
 
 			},
-			// Items turn; rings stay.
+			// Items turn; the next ring breathes; the course is laid and its light runs on.
 			update( shown, dt ) {
 
-				if ( shown.challenge.kind !== 'collect' || ! added() ) return;
-				spin = ( spin + dt * SPIN ) % ( Math.PI * 2 );
-				this.place( shown, true );
+				if ( ! added() ) return;
+				if ( shown.challenge.kind === 'collect' ) {
+
+					spin = ( spin + dt * SPIN ) % ( Math.PI * 2 );
+					this.place( shown, true );
+
+				} else if ( shown.phase !== 'done' ) {
+
+					pulse = ( pulse + dt * PULSE_RATE ) % ( Math.PI * 2 );
+					const index = shown.gates.findIndex( gate => ! gate.passed );
+					if ( index >= 0 ) {
+
+						rings.getMatrixAt( index, _m );
+						_m.decompose( _v, _q, _s );
+						const ring = Math.min( RING, shown.challenge.route.radius * 0.5 );
+						rings.setMatrixAt( index, _m.compose( _v, _q, _s.setScalar( ring * ( 1 + NEXT_PULSE * Math.sin( pulse ) ) ) ) );
+						rings.instanceMatrix.needsUpdate = true;
+
+					}
+
+				}
+
+				this.course( shown, dt );
+
+			},
+			// The course on the Moon's ground to the next gate (see CHEVRON_GAP), laid again when the
+			// next one changes or the car's moved COURSE_MOVE m, its wave of light moved on each frame.
+			course( shown, dt ) {
+
+				const target = shown.phase === 'done' || shown.phase === 'stopped' || shown.challenge.world !== MOON ? null : nextGate( app.driver );
+				if ( ! target || ! app.moon?.heightAt ) {
+
+					chevrons.count = 0;
+					laidFor = null;
+					return;
+
+				}
+
+				const d = app.driver;
+				const car = { x: - d.east, z: d.north };
+				if ( ! laidFor || laidFor.target !== target || Math.hypot( car.x - laidFor.x, car.z - laidFor.z ) > COURSE_MOVE ) {
+
+					this.lay( shown, target, car );
+					laidFor = { target, ...car };
+
+				}
+
+				wave = ( wave + dt / WAVE_TIME ) % 1;
+				laid.forEach( ( chevron, i ) => {
+
+					// A crest running toward the gate: brightest where (distance / WAVE + time) is whole.
+					const phase = ( chevron.to / WAVE + wave ) % 1;
+					const light = 0.4 + 0.5 * Math.max( 0, Math.cos( phase * Math.PI * 2 ) ) ** 3;
+					_colour.copy( chevron.dim ? LATER : chevron.goal ? GOAL : NEXT ).multiplyScalar( chevron.dim ? 0.5 : light );
+					chevrons.setColorAt( i, _colour );
+
+				} );
+				if ( chevrons.instanceColor ) chevrons.instanceColor.needsUpdate = true;
+
+			},
+			lay( shown, target, car ) {
+
+				const ordered = shown.challenge.kind !== 'collect';
+				const { start } = shown.challenge.route;
+				const index = shown.gates.indexOf( target );
+				// The leg to it: from the gate before, or the start; a star from the car.
+				const from = ! ordered ? latLonOf( app.globe, car.x, app.driver.y, car.z ) : index ? shown.gates[ index - 1 ] : start;
+				laid = [];
+				const legs = [ { from, to: target, dim: false, goal: ordered && index === shown.gates.length - 1 } ];
+				if ( ordered && index + 1 < shown.gates.length ) legs.push( { from: target, to: shown.gates[ index + 1 ], dim: true, goal: false } );
+				for ( const leg of legs ) {
+
+					const a = sceneOf( app.globe, leg.from.lat, leg.from.lon, 0 ).clone();
+					const b = sceneOf( app.globe, leg.to.lat, leg.to.lon, 0 );
+					const length = Math.hypot( b.x - a.x, b.z - a.z );
+					if ( length < 1 ) continue;
+					const angle = Math.atan2( b.x - a.x, b.z - a.z );
+					// How far along the leg the car is (from its gate), so the bright ones start at the car.
+					const carTo = leg.dim ? length : Math.max( 0, Math.min( length, ( ( b.x - car.x ) * ( b.x - a.x ) + ( b.z - car.z ) * ( b.z - a.z ) ) / length ) );
+					// Not on the gate's own zone, where the ring is.
+					const first = Math.max( CHEVRON_GAP, shown.challenge.route.radius * 0.6 );
+					for ( let to = first; to < length; to += CHEVRON_GAP ) {
+
+						if ( laid.length >= COURSE_MOST ) break;
+						if ( leg.dim ? length - to > PREVIEW_REACH : to > carTo || carTo - to > COURSE_REACH ) continue;
+						const t = 1 - to / length;
+						const lat = leg.from.lat + ( leg.to.lat - leg.from.lat ) * t;
+						const lon = leg.from.lon + ( leg.to.lon - leg.from.lon ) * t;
+						const at = sceneOf( app.globe, lat, lon, ( app.moon.heightAt( lat, lon ) ?? 0 ) + CHEVRON_UP );
+						chevrons.setMatrixAt( laid.length, _m.compose( at, _q.setFromAxisAngle( _up, angle ), _s.setScalar( CHEVRON ) ) );
+						laid.push( { to, dim: leg.dim, goal: leg.goal } );
+
+					}
+
+				}
+
+				chevrons.count = laid.length;
+				chevrons.instanceMatrix.needsUpdate = true;
+				chevrons.boundingSphere = null;
 
 			},
 		};
 
 	}
+
+}
+
+// The latitude and longitude (degrees) of a point in the scene ({ lat, lon }), on the world the globe is on.
+function latLonOf( globe, x, y, z ) {
+
+	globe.earth.updateWorldMatrix( true, false );
+	_inverse.copy( globe.earth.matrixWorld ).invert();
+	globe.ellipsoid.getPositionToCartographic( _w.set( x, y, z ).applyMatrix4( _inverse ), _carto );
+	return { lat: _carto.lat * MathUtils.RAD2DEG, lon: _carto.lon * MathUtils.RAD2DEG };
 
 }
 
@@ -1699,6 +1911,20 @@ function sceneOf( globe, lat, lon, height ) {
 	globe.earth.updateWorldMatrix( true, false );
 	globe.ellipsoid.getCartographicToPosition( lat * MathUtils.DEG2RAD, lon * MathUtils.DEG2RAD, height, _v );
 	return _v.applyMatrix4( globe.earth.matrixWorld );
+
+}
+
+// The marker over the next gate on the screen: a diamond with how far it is under it, and an arrow
+// pointing to it when it's held at the screen's edge.
+function makeMarker( parent ) {
+
+	const root = document.createElement( 'div' );
+	root.className = 'ch-marker';
+	root.hidden = true;
+	root.setAttribute( 'aria-hidden', 'true' );
+	root.innerHTML = '<span class="ch-marker-pointer"><svg viewBox="0 0 20 20" width="18" height="18"><path d="M10 1 17 13H3z" fill="currentColor"/></svg></span><span class="ch-marker-diamond"></span><span class="ch-marker-dist"></span>';
+	parent.append( root );
+	return { root, dist: root.querySelector( '.ch-marker-dist' ), pointer: root.querySelector( '.ch-marker-pointer' ) };
 
 }
 
