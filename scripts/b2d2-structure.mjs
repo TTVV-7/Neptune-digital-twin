@@ -12,7 +12,8 @@
 // - the C31 gallery: its walls and floor kept, between the pit and the north end
 //   where the drawings have them; at grade the pony walls, slab strips, train support beams 1
 //   and 2 and cross beams G1 to G12 redrawn, the steel plates between them, and the north end's
-//   lid with its two openings and G13, G14;
+//   lid with its two openings and G13, G14; and under the slab, the downstand along each wall
+//   (the gallery's lowest ceiling, as the cross beams' elevations on -ST011 show it);
 // - the gallery's hoppers (the two sloped plates under the slot between the rails) taken out of
 //   it: they were broken out by 10 November 2026. hopperBays() gives them back bay by bay, G1 to
 //   G13, for the timeline to show them until each bay went;
@@ -76,6 +77,12 @@ const TRAIN_BEAMS = { 1: [ 5.43, 5.84 ], 2: [ 3.92, 4.33 ] };
 const GALLERY = { x: [ 8.00, 61.57 ], end: [ 61.57, 68.35 ] };
 const PONY = { east: [ 1.64, 1.98 ], west: [ 7.77, 8.12 ] };
 const PLATE = 0.6; // steel plates beside the rail beams, across
+// The downstand along each of the gallery's walls under the slab at grade, tight against the wall:
+// 0.66 m out from its inside face, its underside 1.38 m below the cross beams' top (0.31 m below
+// their underside), up to the slab. Measured off -ST011's cross beam elevations (beam G4's
+// south face, to about 2 cm), whose beams match the model's to the centimetre. The model's walls'
+// inside faces are at letter 2.832 (east) and 7.17 (west).
+const DOWNSTAND = { width: 0.66, el: [ 2.88, 4.26 ], east: 2.832, west: 7.17 };
 const G_WIDTH = 0.455;
 const G_BEAMS = [ 7.86, 12.45, 16.89, 21.34, 25.78, 30.22, 34.67, 39.12, 43.56, 48.01, 52.45, 56.90, 61.56, 65.03 ];
 const G_ACROSS = [ 2.60, 7.20 ]; // into the walls, as the model has them
@@ -318,6 +325,9 @@ function gallery( was ) {
 	// cross beams: beams()).
 	s.box( { x, l: PONY.east }, EL.pony ).box( { x, l: PONY.west }, EL.pony );
 	s.box( { x, l: [ PONY.east[ 1 ], rail2[ 0 ] - PLATE ] }, EL.strip ).box( { x, l: [ rail1[ 1 ] + PLATE, PONY.west[ 0 ] ] }, EL.strip );
+	// The downstand along each wall, the length of the gallery.
+	s.box( { x, l: [ DOWNSTAND.east, DOWNSTAND.east + DOWNSTAND.width ] }, DOWNSTAND.el );
+	s.box( { x, l: [ DOWNSTAND.west - DOWNSTAND.width, DOWNSTAND.west ] }, DOWNSTAND.el );
 	// The north end's lid, open twice (G13 and G14 under it: beams()).
 	s.plate( 'el', EL.endLid, { x: GALLERY.end, l: WAS.endLid.l }, END_OPENINGS );
 	return s.layer();
@@ -436,3 +446,4 @@ export function correctStructure( site ) {
 export const C32_LINE = ( C32.x[ 0 ] + C32.x[ 1 ] ) / 2;
 export const C32_INSIDE = C32.x;
 export const PIT_INSIDE = PIT;
+export const C31_DOWNSTAND = { ...DOWNSTAND, x: GALLERY.x };

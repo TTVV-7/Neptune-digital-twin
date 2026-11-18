@@ -268,6 +268,8 @@ left as it came):
   train support beams 1 and 2 over the pit and along the gallery, G1 to G14, the cross beam, the
   shed support beam and B1 to B6. At grade they're under Google's ground (**U** cuts it away over
   the structure), and from inside C31 they're overhead;
+- along each of C31's walls under the slab, the **downstand** the ceiling repairs there are on (0.66 m
+  out from the wall, its underside 0.31 m below the cross beams'), as -ST011's beam elevations draw it;
 - the gallery's **hoppers** (the two sloped plates under the slot between the rail beams) taken out:
   others broke them out with machines, bay by bay, by 10 November. They're kept in the model's data
   bay by bay (G1–G2 at the pit to G12–G13 at the north end) with the day each went, for the
@@ -412,7 +414,10 @@ places each polygon on the wall, floor or soffit of the model it's drawn on, kee
 that are still there (within 0.6 m of where they were, closest pairs first; `--match 1.2` after the
 structure has been moved, `--match 2.5` when outlines were moved on the drawing, as two C32 floor
 panels were on 10 November), and lists what's new, what's gone and anything it couldn't place
-(`--dry-run` only lists). Only an area chipped the same day keeps an old one's id (a day's colour
+(`--dry-run` only lists). The ground floor plan's areas drawn along C31's wall lines are ceiling
+repairs: they go on the underside of the downstand along that wall (0.66 m wide, its underside 0.31 m
+below the cross beams', off -ST011's beam elevations), from the wall out, at the same grid; the rest
+stay on the slab's top. Only an area chipped the same day keeps an old one's id (a day's colour
 doesn't change from drawing to drawing), so `--match 2.5` can't hand an old panel's id to a new
 day's beside it. Areas take the drawing's measured m². Each chipped area gets a rim in its date's
 colour, the legend's for 2 to 17 November (blue 9 November, yellow 10 November, dark green 11,

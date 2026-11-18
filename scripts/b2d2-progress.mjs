@@ -32,7 +32,7 @@ import { NodeIO } from '@gltf-transform/core';
 import { PDFDict, PDFDocument, PDFName } from 'pdf-lib';
 import { BufferAttribute, BufferGeometry, DoubleSide, Mesh, MeshBasicMaterial, Raycaster, Vector3 } from 'three';
 import { area3, fEL, gridRef, letRange, numRange, zoneOf } from '../src/repair-geometry.js';
-import { C32_INSIDE, C32_LINE, correctStructure, PIT_INSIDE } from './b2d2-structure.mjs';
+import { C31_DOWNSTAND, C32_INSIDE, C32_LINE, correctStructure, PIT_INSIDE } from './b2d2-structure.mjs';
 
 const ROOT = new URL( '../', import.meta.url );
 const { values: opts, positionals } = parseArgs( { allowPositionals: true, options: {
@@ -311,6 +311,31 @@ function faceOf( view, zone, n, pony, x ) {
 
 // ---------- Placing ----------
 
+// The ground floor plan's areas along C31's wall lines, inside the gallery, are repairs to the
+// ceiling there: the underside of the downstand along that wall (b2d2-structure.mjs), not the slab's
+// top. Drawn across the wall line (letters about 1.9 to 3.6 on the east side, 6.4 to 7.65 on the
+// west), each goes onto the downstand from the wall's face out, as wide as it's drawn (at most the
+// downstand's width), at the same grid along the gallery.
+const ALONG_WALL = { east: [ 1.9, 3.6 ], west: [ 6.4, 7.65 ] };
+function downstandSide( view, grid ) {
+
+	if ( view !== 'gnd' ) return null;
+	const p = grid.reduce( ( s, g ) => s + g[ 0 ], 0 ) / grid.length;
+	const q = grid.reduce( ( s, g ) => s + g[ 1 ], 0 ) / grid.length;
+	if ( p < C31_DOWNSTAND.x[ 0 ] + 0.1 || p > C31_DOWNSTAND.x[ 1 ] - 0.1 ) return null;
+	return Object.keys( ALONG_WALL ).find( side => q >= ALONG_WALL[ side ][ 0 ] && q <= ALONG_WALL[ side ][ 1 ] ) ?? null;
+
+}
+
+function ontoDownstand( side, grid ) {
+
+	const qs = grid.map( g => g[ 1 ] );
+	const [ q0, q1 ] = [ Math.min( ...qs ), Math.max( ...qs ) ];
+	const k = Math.min( 1, ( C31_DOWNSTAND.width - 0.02 ) / ( q1 - q0 || 1 ) );
+	return grid.map( ( [ p, q ] ) => [ p, side === 'east' ? C31_DOWNSTAND.east + 0.01 + ( q - q0 ) * k : C31_DOWNSTAND.west - 0.01 - ( q1 - q ) * k ] );
+
+}
+
 const raycaster = new Raycaster();
 function place( poly, meshes ) {
 
@@ -318,11 +343,15 @@ function place( poly, meshes ) {
 	const v = VIEWS[ view ];
 	const grid = poly.pts.map( ( [ x, y ] ) => [ ( x - v.ax ) / v.bx, ( y - v.ay ) / v.by ] );
 	const pony = ( view === 'wallW' || view === 'wallE' ) && Math.min( ...grid.map( g => g[ 1 ] ) ) >= PONY.from;
-	const rays = grid.map( ( [ p, q ] ) => rayOf( view, p, q, pony ) );
+	// Along a C31 wall on the ground floor plan: up from inside the gallery onto the downstand.
+	const side = downstandSide( view, grid );
+	const at = side ? ontoDownstand( side, grid ) : grid;
+	const looking = side ? 'ceil31' : view;
+	const rays = at.map( ( [ p, q ] ) => rayOf( looking, p, q, pony ) );
 	// The face: hit at the middle of the outline, else at the first corner that hits anything.
-	const mid = grid.reduce( ( s, g ) => [ s[ 0 ] + g[ 0 ] / grid.length, s[ 1 ] + g[ 1 ] / grid.length ], [ 0, 0 ] );
+	const mid = at.reduce( ( s, g ) => [ s[ 0 ] + g[ 0 ] / at.length, s[ 1 ] + g[ 1 ] / at.length ], [ 0, 0 ] );
 	let hit = null;
-	for ( const ray of [ rayOf( view, ...mid, pony ), ...rays ] ) {
+	for ( const ray of [ rayOf( looking, ...mid, pony ), ...rays ] ) {
 
 		raycaster.set( ray.at, ray.dir );
 		raycaster.far = 60;
@@ -341,7 +370,7 @@ function place( poly, meshes ) {
 		return at.clone().addScaledVector( dir, t ).toArray().map( c => +c.toFixed( 3 ) );
 
 	} );
-	return { grid, pony, pts, n: n.toArray().map( c => +c.toFixed( 4 ) ), layer: hit.object.name };
+	return { grid, pony, side, pts, n: n.toArray().map( c => +c.toFixed( 4 ) ), layer: hit.object.name };
 
 }
 
@@ -383,8 +412,9 @@ for ( const poly of polys ) {
 	const section = poly.view === 'wallD' || poly.view === 'wallS';
 	// Sections A and B over grid 0-8 below grade: the pit's side walls.
 	const pitSide = ( poly.view === 'wallW' || poly.view === 'wallE' ) && ! placed.pony && middle[ 0 ] < PIT_NORTH;
-	const zone = pitEnd || pitSide ? 'pit' : poly.view === 'gnd' ? 'ground' : section ? 'c32' : zoneOf( middle );
-	const face = poly.view === 'gnd' ? 'ground floor slab'
+	const zone = pitEnd || pitSide ? 'pit' : placed.side ? 'c31' : poly.view === 'gnd' ? 'ground' : section ? 'c32' : zoneOf( middle );
+	const face = placed.side ? `soffit of the downstand along the ${ placed.side === 'east' ? 'east wall (AA side)' : 'west wall (AJ side)' }`
+		: poly.view === 'gnd' ? 'ground floor slab'
 		: poly.view === 'b1' && zone !== 'c31' ? 'B1 level slab (pit corner)'
 			: faceOf( poly.view, zone, placed.n, placed.pony, middle[ 0 ] );
 	const ps = placed.grid.map( g => g[ 0 ] ), qs = placed.grid.map( g => g[ 1 ] );
@@ -418,8 +448,12 @@ const taken = new Set();
 const pairs = [];
 for ( const m of made ) for ( const o of before ) {
 
-	const facing = o.n[ 0 ] * m.n[ 0 ] + o.n[ 1 ] * m.n[ 1 ] + o.n[ 2 ] * m.n[ 2 ] > 0.9;
-	const distance = Math.hypot( ...centre( o ).map( ( v, i ) => v - centre( m )[ i ] ) );
+	// A ground floor plan area now on the downstand's underside was on the slab's top before: the
+	// same area, turned over.
+	const turned = /downstand/.test( m.face ) && o.face === 'ground floor slab';
+	const facing = turned || o.n[ 0 ] * m.n[ 0 ] + o.n[ 1 ] * m.n[ 1 ] + o.n[ 2 ] * m.n[ 2 ] > 0.9;
+	// (In plan, for one turned over: it went down to the downstand as well.)
+	const distance = Math.hypot( ...centre( o ).map( ( v, i ) => turned && i === 1 ? 0 : v - centre( m )[ i ] ) );
 	const sameDay = ! o.f?.chipped || o.f.chipped === m.f.chipped;
 	if ( facing && sameDay && distance < Number( opts.match ) ) pairs.push( { m, o, distance } );
 
