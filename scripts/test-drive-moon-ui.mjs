@@ -7,7 +7,7 @@
 // grid, about a kilometre each way; an underglow lying on its ground under the kart, as on the Earth; the
 // ground made sharp round the vehicle; M back to its globe, and back to
 // the Earth; a link to a Moon spot; and a phone. And a Moon challenge with today's Earth drives used
-// up (from the used-up screen's Drive on the Moon): its drop-in, its gate on the Moon's own ground,
+// up (straight onto the Moon): its drop-in, its gate on the Moon's own ground,
 // driven through and posted. Every request that isn't to the local server is blocked.
 //
 // The tests drive the go-kart (drawn in code; the pickup is too slow in Chromium's software
@@ -443,8 +443,8 @@ describe( 'World Drive\'s Moon, by a link and on a phone', () => {
 } );
 
 // Challenges on the Moon (src/drive-app/challenges.js), with the Worker's answers made here and
-// today's Earth drives used up: from the used-up screen's Drive on the Moon (main.js's Moon-only
-// mode, its visit the 429's), the list with the Moon's three first and the Earth's saying they need
+// today's Earth drives used up: straight onto the Moon (main.js's Moon-only mode, its visit the
+// 429's), the list with the Moon's three first and the Earth's saying they need
 // an Earth drive (which shows the used-up screen again), a Moon challenge's drop-in at its start, its
 // gate on the Moon's own heights (as the ground built there has them), driven through, and its time
 // posted with the Moon visit.
@@ -481,9 +481,8 @@ describe( 'World Drive challenges on the Moon', () => {
 				json( route, { ms: body.ms, rank: 1, total: 2, isNewBest: true, top: [ { rank: 1, name: PLAYER.name, ms: body.ms, vehicle: 'go-kart', date: '2026-11-16', level: 1, title: 'rookie' } ] } );
 
 			} );
+			// Over the cap: on the Moon by itself.
 			await page.goto( BASE );
-			await page.locator( '#notice[data-kind="used-up"]' ).waitFor();
-			await page.locator( '#notice button', { hasText: 'Drive on the Moon' } ).click();
 			await page.waitForFunction( () => window.drive?.mode === 'globe' && window.drive.world === 'moon', null, { timeout: 90000 } );
 			await page.locator( '#globe-ui .challenges-open' ).click();
 			const dialog = page.locator( '#challenges' );

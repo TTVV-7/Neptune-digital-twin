@@ -1,6 +1,6 @@
 import './supporter.css';
 import { endSession, getMe, linkPlayer as postLink, send, startSession } from './api.js';
-import { PRICE } from './pass.js';
+import { PRICE, setPrice } from './pass.js';
 import { isPro, setPro } from './pro.js';
 import { storage } from './places.js';
 import { toast } from './screens.js';
@@ -72,10 +72,11 @@ const changed = new Set();
 
 // As World Drive starts. worker: whether there's a Worker (not on the Vite dev server alone);
 // googleClientId: /api/config's; player(): this browser's leaderboard player, { id, secret } or null.
-// The used-up screen sets it up first (main.js), with onPass(): called once, as soon as the account
-// here has the pass, to ask for the visit again. Set up again as the drive starts, it only takes the
-// new player(), onPass (none) and onBuy(): Buy opening the Payment Link, for the play stats. The
-// questions already asked, and their answers, carry on.
+// The game sets it up as it starts (main.js), with onPass none; over the day's Earth drives,
+// boot.js sets it up again after that with onPass(): called once, as soon as the account here has
+// the pass, to ask for the visit again (a reload). Set up again, it only takes the new player(),
+// onPass and onBuy(): Buy opening the Payment Link, for the play stats. The questions already
+// asked, and their answers, carry on.
 // passwords and turnstileSiteKey: /api/config's, for usernames and passwords.
 export function setUpSupporter( { worker, googleClientId, passwords: passwordsOn = false, turnstileSiteKey = '', player, onPass: whenPass = null, onBuy: whenBuy = null } ) {
 
@@ -542,8 +543,15 @@ function renderBuy( root ) {
 
 	if ( ! accountsOn() || ! me ) return;
 	const purchase = me.purchase ?? { enabled: false };
+	if ( purchase.enabled ) setPrice( purchase.price );
 	const parts = [];
-	if ( me.supporter ) parts.push( Object.assign( line( '⭐ You have the Supporter Pass. Thanks for helping keep World Drive on the road!' ), { className: 'supporter-thanks' } ) );
+	if ( me.supporter ) {
+
+		parts.push( Object.assign( line( '⭐ You have the Supporter Pass. Thanks for helping keep World Drive on the road!' ), { className: 'supporter-thanks' } ) );
+		// A running subscription's: where to cancel it or change the card (Stripe's portal).
+		if ( me.subscribed && purchase.manage ) parts.push( line( Object.assign( document.createElement( 'a' ), { href: purchase.manage, target: '_blank', rel: 'noopener', textContent: 'Manage your subscription' } ) ) );
+
+	}
 	else if ( ! purchase.enabled ) {
 
 		parts.push( Object.assign( button( 'Coming soon' ), { className: 'primary buy', disabled: true } ) );
@@ -570,7 +578,7 @@ function renderBuy( root ) {
 	}
 
 	if ( status ) parts.push( statusLine() );
-	if ( ! me.supporter ) parts.push( Object.assign( line( purchase.enabled ? 'One payment, no subscription. Paid securely with Stripe.' : 'One payment, no subscription. Buying opens soon.' ), { className: 'small' } ) );
+	if ( ! me.supporter ) parts.push( Object.assign( line( purchase.enabled ? 'A subscription: cancel any time. Paid securely with Stripe.' : 'A subscription: cancel any time. Buying opens soon.' ), { className: 'small' } ) );
 	root.replaceChildren( ...parts );
 
 }

@@ -3,7 +3,7 @@ import { HttpError, isObject, json, noContent, randomToken, readJson, sha256Hex 
 import { SESSION_SECONDS, profileFrom, sessionCookies, testCertsUrl } from '../sessions.js';
 import { PERIODS, forgetBoards } from './boards.js';
 import { authenticate, credentials, database, takeTurn } from './players.js';
-import { isSupporter, purchaseFor } from './supporter.js';
+import { purchaseFor, supporterPass } from './supporter.js';
 import { googleClientId } from './settings.js';
 
 // World Drive's accounts (docs/world-drive.md): "Sign in with Google", or a username and a password
@@ -113,8 +113,9 @@ export async function accountById( db, id ) {
 
 }
 
-// GET /api/me: { signedIn, name?, email?, google?, username?, supporter, purchase: { enabled,
-// link?, price?, clientReferenceId? } }. google: whether a Google account is linked (name and email
+// GET /api/me: { signedIn, name?, email?, google?, username?, supporter, subscribed?, purchase:
+// { enabled, link?, price?, manage?, clientReferenceId? } }. subscribed: the pass is a running
+// subscription's (manage: Stripe's portal, to cancel it or change the card). google: whether a Google account is linked (name and email
 // are its, '' without one); username: the account's own username, or null (it's shown to its owner
 // only, never on the boards).
 export async function getMe( context ) {
@@ -126,9 +127,10 @@ export async function getMe( context ) {
 export async function meFor( env, account ) {
 
 	if ( ! account ) return { signedIn: false, supporter: false, purchase: purchaseFor( env, null ) };
+	const pass = await supporterPass( env, account );
 	return {
 		signedIn: true, name: account.name, email: account.email, google: !! account.google, username: account.username ?? null,
-		supporter: await isSupporter( env, account ), purchase: purchaseFor( env, account ),
+		supporter: pass.supporter, ...( pass.subscribed ? { subscribed: true } : {} ), purchase: purchaseFor( env, account ),
 	};
 
 }

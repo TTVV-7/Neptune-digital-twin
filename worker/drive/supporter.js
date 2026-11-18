@@ -3,8 +3,9 @@ import { LINK_ID_PATTERN, cleanEmail, readEvent, stripeId } from '../stripe.js';
 import { database } from './players.js';
 import { googleClientId } from './settings.js';
 
-// The Supporter Pass (docs/world-drive.md): one payment, through a Stripe Payment Link, towards
-// World Drive's running costs. What it unlocks in the page (four more rides, the whole Garage) the
+// The Supporter Pass (docs/world-drive.md): a subscription, through a Stripe Payment Link, towards
+// World Drive's running costs. Passes bought before it was a subscription (one payment each) are
+// legacy passes, kept for good. What it unlocks in the page (four more rides, the whole Garage) the
 // page locks itself (src/drive-app/pro.js); the Worker keeps who has it, gives supporters more
 // drives a day (index.js) and puts a ⭐ by their names on the leaderboard (scores.js). Stripe tells
 // us about each payment, refund and chargeback through a webhook, signed (checked in ../stripe.js,
@@ -18,7 +19,10 @@ import { googleClientId } from './settings.js';
 //   SUPPORTER_PAYMENT_LINK_ID    optional, plink_... (public): only checkouts through that link
 //                                count. The Stripe account is World Drive's own, so without it every
 //                                paid checkout on the account is a pass.
-//   SUPPORTER_PRICE              what it costs, as the page shows it: "CA$4.99"
+//   SUPPORTER_PRICE              what it costs, as the page shows it: "CA$4.99/month"
+//   SUPPORTER_MANAGE_LINK        optional (public): Stripe's customer portal login link,
+//                                https://billing.stripe.com/p/login/..., where a subscriber cancels
+//                                or changes their card. The pass's sheet links to it.
 //   STRIPE_WEBHOOK_SECRET        secret: the webhook endpoint's signing secret, whsec_...
 //   SUPPORTER_EMAILS             optional secret, comma-separated: people with the pass without paying
 //   PER_VISITOR_DAILY_SUPPORTER  a supporter's drives a day (30 if unset)
@@ -28,6 +32,10 @@ import { googleClientId } from './settings.js';
 
 const ACCOUNT_ID = /^[1-9][0-9]{0,14}$/;
 const MAX_PRICE = 40;
+// A subscription's statuses that keep its pass (past_due: Stripe is still retrying the card).
+// Any other (canceled, unpaid, incomplete_expired, paused...) takes it away until it's active again.
+export const ACTIVE_STATUSES = [ 'active', 'trialing', 'past_due' ];
+const STATUS = /^[a-z_]{1,40}$/;
 
 // { secret, linkId, testMode } for the webhook, or null when it can't check what Stripe sends. It
 // needs only the secret: a payment that arrives is kept, whether or not the page offers buying just
@@ -74,21 +82,50 @@ export function purchaseFor( env, account ) {
 	const settings = purchaseSettings( env );
 	if ( ! settings ) return { enabled: false };
 	const purchase = { enabled: true, link: settings.link, price: settings.price };
+	const manage = manageLink( env );
+	if ( manage ) purchase.manage = manage;
 	if ( account ) purchase.clientReferenceId = String( account.id );
 	return purchase;
+
+}
+
+// SUPPORTER_MANAGE_LINK when it's an https link, else ''.
+function manageLink( env ) {
+
+	try {
+
+		const url = new URL( text( env.SUPPORTER_MANAGE_LINK ) );
+		return url.protocol === 'https:' ? url.href : '';
+
+	} catch {
+
+		return '';
+
+	}
 
 }
 
 // Whether this account ({ id, email }) has the pass.
 export async function isSupporter( env, account ) {
 
-	const row = await database( env ).prepare( `SELECT ${ hasPass( '?1', '?2' ) } AS supporter` ).bind( account.id, supporterEmails( env ) ).first();
-	return !! row?.supporter;
+	return ( await supporterPass( env, account ) ).supporter;
+
+}
+
+// { supporter, subscribed }: whether this account has the pass, and whether it has it through a
+// subscription that's running (so the page offers to manage it) rather than only a legacy pass or
+// SUPPORTER_EMAILS.
+export async function supporterPass( env, account ) {
+
+	const row = await database( env ).prepare( `SELECT ${ hasPass( '?1', '?2' ) } AS supporter, EXISTS ( SELECT 1 FROM accounts a JOIN purchases u ON ${ ownPurchase( 'u', 'a' ) }
+		WHERE a.id = ?1 AND u.subscription IS NOT NULL AND ${ livePurchase( 'u' ) } ) AS subscribed` ).bind( account.id, supporterEmails( env ) ).first();
+	return { supporter: !! row?.supporter, subscribed: !! row?.supporter && !! row?.subscribed };
 
 }
 
 // SQL that's true when the account with the id `account` (SQL: a parameter or a column) has the
-// pass: bought by it and not refunded, or bought with its email by someone not signed in (Google has
+// pass: bought by it and not refunded (and, for a subscription, the subscription still active:
+// livePurchase; a legacy one-time purchase, with no subscription, keeps it for good), or bought with its email by someone not signed in (Google has
 // checked the email is theirs), or its email is in SUPPORTER_EMAILS, bound at `emails` as a JSON
 // list (supporterEmails). NULL, a player of no account's, is never a supporter. An account with no
 // Google account linked has no email (''), and a purchase Stripe sent without one has '' too: the
@@ -97,7 +134,25 @@ export async function isSupporter( env, account ) {
 export function hasPass( account, emails ) {
 
 	return `EXISTS ( SELECT 1 FROM accounts a WHERE a.id = ${ account } AND ( a.email IN ( SELECT value FROM json_each( ${ emails } ) )
-		OR EXISTS ( SELECT 1 FROM purchases u WHERE u.refunded_at IS NULL AND ( u.account_id = a.id OR ( u.account_id IS NULL AND u.email = a.email AND a.email <> '' ) ) ) ) )`;
+		OR EXISTS ( SELECT 1 FROM purchases u WHERE ${ livePurchase( 'u' ) } AND ${ ownPurchase( 'u', 'a' ) } ) ) )`;
+
+}
+
+// SQL: the purchase `u` is the account `a`'s (bought signed in as it, or with its Google email).
+function ownPurchase( u, a ) {
+
+	return `( ${ u }.account_id = ${ a }.id OR ( ${ u }.account_id IS NULL AND ${ u }.email = ${ a }.email AND ${ a }.email <> '' ) )`;
+
+}
+
+// SQL: the purchase `u` still gives the pass: not refunded, and either a legacy one-time purchase
+// (no subscription) or a subscription Stripe hasn't told us has stopped (none heard of yet counts:
+// its checkout was paid).
+function livePurchase( u ) {
+
+	const active = ACTIVE_STATUSES.map( status => `'${ status }'` ).join( ', ' );
+	return `( ${ u }.refunded_at IS NULL AND ( ${ u }.subscription IS NULL
+		OR NOT EXISTS ( SELECT 1 FROM subscriptions s WHERE s.id = ${ u }.subscription AND s.status NOT IN ( ${ active } ) ) ) )`;
 
 }
 
@@ -129,6 +184,13 @@ export async function stripeWebhook( { request, env, now } ) {
 	// A chargeback: the bank takes the money back as the dispute opens, and gives it back if it's won.
 	else if ( event.type === 'charge.dispute.funds_withdrawn' ) await takeBack( db, object.payment_intent, 'disputed', now );
 	else if ( event.type === 'charge.dispute.funds_reinstated' ) await giveBack( db, object.payment_intent );
+	// A subscription started, changed (a renewal that failed, a card fixed) or ended: its pass follows.
+	else if ( event.type === 'customer.subscription.created' || event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted' ) {
+
+		await subscriptionChanged( db, object, Number.isSafeInteger( event.created ) ? event.created * 1000 : now, now );
+
+	}
+
 	return json( { received: true } );
 
 }
@@ -140,9 +202,12 @@ export async function stripeWebhook( { request, env, now } ) {
 // there is one; else nobody's yet, and whoever signs in with the email paid with has it. A payment
 // already taken back (its refund delivered first, while Stripe was still retrying this) comes in
 // taken back.
+// A subscription's checkout has its subscription's id, so the pass lasts while that's active; one
+// that starts with a free trial completes with nothing to pay ('no_payment_required').
 async function recordPurchase( db, settings, session, now ) {
 
-	if ( session.payment_status !== 'paid' ) return;
+	const subscription = session.mode === 'subscription' ? stripeId( session.subscription ) : null;
+	if ( session.payment_status !== 'paid' && ! ( subscription && session.payment_status === 'no_payment_required' ) ) return;
 	if ( settings.linkId && stripeId( session.payment_link ) !== settings.linkId ) return;
 	const id = stripeId( session.id );
 	if ( ! id ) return;
@@ -150,10 +215,23 @@ async function recordPurchase( db, settings, session, now ) {
 	const reference = typeof session.client_reference_id === 'string' && ACCOUNT_ID.test( session.client_reference_id ) ? Number( session.client_reference_id ) : null;
 	const amount = Number.isSafeInteger( session.amount_total ) ? session.amount_total : null;
 	const currency = typeof session.currency === 'string' && /^[a-z]{3}$/.test( session.currency ) ? session.currency : null;
-	await db.prepare( `INSERT INTO purchases ( checkout_session, account_id, email, amount, currency, payment_intent, status, created_at, refunded_at )
+	await db.prepare( `INSERT INTO purchases ( checkout_session, account_id, email, amount, currency, payment_intent, status, created_at, refunded_at, subscription )
 		VALUES ( ?1, ( SELECT id FROM accounts WHERE id = ?2 ), ?3, ?4, ?5, ?6, COALESCE( ( SELECT status FROM reversals WHERE payment_intent = ?6 ), 'paid' ), ?7,
-			( SELECT created_at FROM reversals WHERE payment_intent = ?6 ) ) ON CONFLICT ( checkout_session ) DO NOTHING` )
-		.bind( id, reference, email, amount, currency, stripeId( session.payment_intent ), now ).run();
+			( SELECT created_at FROM reversals WHERE payment_intent = ?6 ), ?8 ) ON CONFLICT ( checkout_session ) DO NOTHING` )
+		.bind( id, reference, email, amount, currency, stripeId( session.payment_intent ), now, subscription ).run();
+
+}
+
+// A subscription's status as Stripe says it is, from an event made at `eventAt` (ms): kept unless
+// a newer event has already said otherwise.
+async function subscriptionChanged( db, subscription, eventAt, now ) {
+
+	const id = stripeId( subscription.id );
+	const status = typeof subscription.status === 'string' && STATUS.test( subscription.status ) ? subscription.status : null;
+	if ( ! id || ! id.startsWith( 'sub_' ) || ! status ) return;
+	await db.prepare( `INSERT INTO subscriptions ( id, status, event_at, updated_at ) VALUES ( ?1, ?2, ?3, ?4 )
+		ON CONFLICT ( id ) DO UPDATE SET status = excluded.status, event_at = excluded.event_at, updated_at = excluded.updated_at
+		WHERE excluded.event_at >= subscriptions.event_at` ).bind( id, status, eventAt, now ).run();
 
 }
 

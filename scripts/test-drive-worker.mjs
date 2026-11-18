@@ -1324,9 +1324,12 @@ describe( 'World Drive Supporter Pass', () => {
 				DROPIN_PLACES_PER_VISITOR: '6',
 				DROPIN_PLACES_DAILY: '12',
 				DROPIN_ASKS_PER_VISIT: '5',
-				// PER_VISITOR_DAILY (8), PER_VISITOR_DAILY_SUPPORTER (30) and SUPPORTER_PRICE ("CA$4.99")
-				// are wrangler.drive.jsonc's, and SUPPORTER_PAYMENT_LINK_ID isn't set: the account is
-				// World Drive's own, so any paid checkout on it counts.
+				// 8 Earth drives a visitor, not wrangler.drive.jsonc's 1, so an address here makes
+				// several visits (the drop-in places' tests).
+				PER_VISITOR_DAILY: '8',
+				// PER_VISITOR_DAILY_SUPPORTER (30) and SUPPORTER_PRICE are wrangler.drive.jsonc's, and
+				// SUPPORTER_PAYMENT_LINK_ID isn't set: the account is World Drive's own, so any paid
+				// checkout on it counts.
 			},
 			// The towns drop-in places are named by, as the site has them.
 			assets: { 'places/towns.tsv': readFileSync( new URL( '../drive/public/places/towns.tsv', import.meta.url ) ) },
@@ -1383,7 +1386,7 @@ describe( 'World Drive Supporter Pass', () => {
 		const res = await me();
 		assert.equal( res.status, 200 );
 		assert.equal( res.headers.get( 'Cache-Control' ), 'no-store' );
-		assert.deepEqual( res.json, { signedIn: false, supporter: false, purchase: { enabled: true, link: PASS_LINK, price: 'CA$4.99' } } );
+		assert.deepEqual( res.json, { signedIn: false, supporter: false, purchase: { enabled: true, link: PASS_LINK, price: 'CA$4.99/month' } } );
 		assert.equal( ( await call( server, '/api/config' ) ).json.googleClientId, CLIENT_ID );
 
 	} );
@@ -1397,7 +1400,7 @@ describe( 'World Drive Supporter Pass', () => {
 		// the whole site, never from http or another site).
 		assert.equal( alice.headers.get( 'Set-Cookie' ), `__Host-wd_session=${ alice.token }; Max-Age=2592000; Path=/; HttpOnly; SameSite=Lax; Secure` );
 		const [ account ] = server.d1( 'SELECT id, google_sub, email, name FROM accounts WHERE google_sub = \'1001\'' );
-		assert.deepEqual( alice.json, { signedIn: true, name: 'Alice Example', email: 'alice@example.com', google: true, username: null, supporter: false, purchase: { enabled: true, link: PASS_LINK, price: 'CA$4.99', clientReferenceId: String( account.id ) } } );
+		assert.deepEqual( alice.json, { signedIn: true, name: 'Alice Example', email: 'alice@example.com', google: true, username: null, supporter: false, purchase: { enabled: true, link: PASS_LINK, price: 'CA$4.99/month', clientReferenceId: String( account.id ) } } );
 		alice.id = account.id;
 		assert.deepEqual( ( await me( alice.cookie ) ).json, alice.json );
 		// Only the token's SHA-256 is kept.
@@ -1596,6 +1599,88 @@ describe( 'World Drive Supporter Pass', () => {
 		const friend = await signIn( { sub: '1006', email: 'friend@example.com', name: 'A Friend' } );
 		assert.equal( friend.json.supporter, true );
 		assert.equal( server.d1( 'SELECT COUNT(*) AS n FROM purchases WHERE email = \'friend@example.com\'' )[ 0 ].n, 0 );
+
+	} );
+
+	test( 'a subscription\'s pass lasts while Stripe says it\'s active; a legacy one-time pass stays for good', async () => {
+
+		const dana = await signIn( { sub: '1010', email: 'dana@example.com', name: 'Dana' } );
+		assert.equal( dana.json.supporter, false );
+		const subscribe = ( id, sub, reference = null ) => {
+
+			const event = checkout( id, { reference, email: `${ id }@example.com` } );
+			Object.assign( event.data.object, { mode: 'subscription', subscription: sub, payment_intent: null } );
+			return event;
+
+		};
+		const changed = ( sub, status, created, type = 'customer.subscription.updated' ) => ( {
+			id: `evt_${ sub }_${ status }_${ created }`, object: 'event', type, livemode: false, created,
+			data: { object: { id: sub, object: 'subscription', status } },
+		} );
+		const pass = async () => {
+
+			const { json } = await me( dana.cookie );
+			return [ json.supporter, json.subscribed ?? false ];
+
+		};
+		const T = Math.floor( PASS_DAY / 1000 );
+		assert.equal( ( await webhook( server, subscribe( 'dana', 'sub_dana' ) ) ).status, 200 );
+		// Dana's (as the page's client_reference_id would make it).
+		server.d1( `UPDATE purchases SET account_id = ( SELECT id FROM accounts WHERE email = 'dana@example.com' ) WHERE checkout_session = 'cs_test_dana'` );
+		assert.deepEqual( server.d1( 'SELECT subscription FROM purchases WHERE checkout_session = \'cs_test_dana\'' ), [ { subscription: 'sub_dana' } ] );
+		assert.deepEqual( await pass(), [ true, true ] );
+		// A failed renewal Stripe is still retrying keeps it; unpaid takes it away.
+		assert.equal( ( await webhook( server, changed( 'sub_dana', 'past_due', T + 10 ) ) ).status, 200 );
+		assert.deepEqual( await pass(), [ true, true ] );
+		assert.equal( ( await webhook( server, changed( 'sub_dana', 'unpaid', T + 20 ) ) ).status, 200 );
+		assert.deepEqual( await pass(), [ false, false ] );
+		// An older event arriving late changes nothing.
+		assert.equal( ( await webhook( server, changed( 'sub_dana', 'active', T + 15 ) ) ).status, 200 );
+		assert.deepEqual( await pass(), [ false, false ] );
+		// The card fixed: back. Cancelled: gone.
+		assert.equal( ( await webhook( server, changed( 'sub_dana', 'active', T + 30 ) ) ).status, 200 );
+		assert.deepEqual( await pass(), [ true, true ] );
+		assert.equal( ( await webhook( server, changed( 'sub_dana', 'canceled', T + 40, 'customer.subscription.deleted' ) ) ).status, 200 );
+		assert.deepEqual( await pass(), [ false, false ] );
+		// A subscription that ended before its checkout arrived never gives the pass.
+		const erin = await signIn( { sub: '1011', email: 'erin@example.com', name: 'Erin' } );
+		assert.equal( ( await webhook( server, changed( 'sub_erin', 'canceled', T + 5, 'customer.subscription.deleted' ) ) ).status, 200 );
+		assert.equal( ( await webhook( server, subscribe( 'erin', 'sub_erin' ) ) ).status, 200 );
+		assert.equal( ( await me( erin.cookie ) ).json.supporter, false );
+		// Nonsense ids and statuses are let go of.
+		assert.equal( ( await webhook( server, changed( 'cus_nope', 'canceled', T + 50 ) ) ).status, 200 );
+		assert.equal( ( await webhook( server, changed( 'sub_x', 'Not A Status!', T + 50 ) ) ).status, 200 );
+		assert.equal( server.d1( 'SELECT COUNT(*) AS n FROM subscriptions WHERE id IN ( \'cus_nope\', \'sub_x\' )' )[ 0 ].n, 0 );
+		// Alice's pass is a legacy one-time payment: hers for good, and no subscription to manage.
+		const { json: aliceMe } = await me( alice.cookie );
+		assert.equal( aliceMe.supporter, true );
+		assert.equal( aliceMe.subscribed, undefined );
+		// (The suite's later tests count the purchases as they were.)
+		server.d1( 'DELETE FROM purchases WHERE checkout_session IN ( \'cs_test_dana\', \'cs_test_erin\' )' );
+
+	} );
+
+	test( 'every visit is counted for the admin page, those over a cap (sent to the Moon) too, by where it went', async () => {
+
+		// On the suite's own day (others' visits that day are counted too: what these add is compared).
+		const day = PASS_DAY;
+		const key = new Date( day ).toISOString().slice( 0, 10 );
+		const counts = () => Object.fromEntries( server.d1( `SELECT metric, key, n FROM stats_daily WHERE day = '${ key }' AND metric IN ( 'visit', 'visit_kind' )` ).map( r => [ `${ r.metric }:${ r.key }`, r.n ] ) );
+		const before = counts();
+		const ip = nextIp();
+		const drive = body => call( server, '/api/visit', { method: 'POST', headers: { Origin: server.base, 'Content-Type': 'application/json' }, body: JSON.stringify( { token: TOKEN, ...body } ), ip, time: day } );
+		for ( let i = 0; i < 8; i ++ ) assert.equal( ( await drive() ).status, 200 );
+		assert.equal( ( await drive() ).status, 429 );
+		assert.equal( ( await drive() ).status, 429 );
+		assert.equal( ( await drive( { world: 'moon' } ) ).status, 200 );
+		const added = () => {
+
+			const now = counts();
+			return Object.fromEntries( Object.entries( now ).map( ( [ name, n ] ) => [ name, n - ( before[ name ] ?? 0 ) ] ).filter( ( [ , n ] ) => n ) );
+
+		};
+		for ( let tries = 0; tries < 30 && added()[ 'visit:all' ] !== 11; tries ++ ) await new Promise( resolve => setTimeout( resolve, 100 ) );
+		assert.deepEqual( added(), { 'visit:all': 11, 'visit_kind:earth': 8, 'visit_kind:moon_visitor_cap': 2, 'visit_kind:moon_link': 1 } );
 
 	} );
 
@@ -1828,7 +1913,7 @@ describe( 'World Drive Supporter Pass', () => {
 		} ) ).status, 204 );
 		const day = new Date( STATS_DAY ).toISOString().slice( 0, 10 );
 		assert.deepEqual( statsRows( day ), {
-			'visit:all': 1, 'visit_hour:12': 1,
+			'visit:all': 1, 'visit_hour:12': 1, 'visit_kind:earth': 1,
 			'play:go-kart': 120 + 60 + 600, 'garage_edit:colour': 3, 'garage_edit:glow': 2, 'garage_edit:horn': 1, 'garage_open:all': 1, 'dropin:furka': 1, 'ride:go-kart': 1,
 			'load:google.com': 1, 'load:direct': 1, 'load_time:2-5 s': 1, 'load_ms:total': 3456,
 			'funnel:globe': FUNNEL.length, 'funnel:pin': 1, 'funnel:dropin': 1, 'funnel:driving': 1, 'funnel:drove_1m': 1, 'device:phone': 1, 'device:computer': 1,
@@ -2161,7 +2246,7 @@ describe( 'World Drive Supporter Pass', () => {
 
 			const res = await visitFrom( ip );
 			assert.equal( res.status, 200, res.text );
-			// Each /64 its own 8 drives a day (wrangler.drive.jsonc's): the second /64's first visit has 7
+			// Each /64 its own 8 drives a day (this suite's): the second /64's first visit has 7
 			// left, as the first's.
 			assert.equal( res.json.left, 7, ip );
 			visits[ ip ] = res.json.visit;
@@ -2943,10 +3028,11 @@ describe( 'Username and password rules', () => {
 		db.exec( 'PRAGMA foreign_keys = ON' );
 		const migrations = new URL( '../worker/drive/migrations/', import.meta.url );
 		const files = readdirSync( migrations ).sort();
-		assert.equal( files.at( - 1 ), '0009_achievements.sql' );
-		for ( const file of files.slice( 0, - 1 ) ) db.exec( readFileSync( new URL( file, migrations ), 'utf8' ) );
+		const at = files.indexOf( '0009_achievements.sql' );
+		assert.ok( at > 0 );
+		for ( const file of files.slice( 0, at ) ) db.exec( readFileSync( new URL( file, migrations ), 'utf8' ) );
 		db.exec( `INSERT INTO players ( id, name, name_key, secret_hash, created_at, last_seen_at, xp, streak ) VALUES ( 'p', 'Alice', 'aiice', 's', 1, 1, 500, 4 )` );
-		db.exec( readFileSync( new URL( files.at( - 1 ), migrations ), 'utf8' ) );
+		db.exec( readFileSync( new URL( files[ at ], migrations ), 'utf8' ) );
 		assert.deepEqual( { ...db.prepare( 'SELECT xp, streak, tallies, parties, party_marks FROM players' ).get() }, { xp: 500, streak: 4, tallies: '{}', parties: 0, party_marks: '[]' } );
 		db.exec( `INSERT INTO achievements ( player_id, achievement, earned_at ) VALUES ( 'p', 'km-10', 1 )` );
 		// One row an achievement a player, and nothing of an address or a name.

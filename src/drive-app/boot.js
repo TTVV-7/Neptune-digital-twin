@@ -88,7 +88,7 @@ async function start( options ) {
 // rather than leaving a blank page.
 function run( main, options ) {
 
-	main.start( options ).catch( err => {
+	return main.start( options ).catch( err => {
 
 		console.error( err );
 		const message = /WebGL/i.test( err?.message ?? '' )
@@ -143,11 +143,6 @@ async function visit( config ) {
 
 }
 
-// Whether the visit has been asked for again as a supporter's (see usedUp).
-let askedAsSupporter = false;
-// Whether the game has started on the Moon from the used-up notice (see usedUp).
-let onMoonOnly = false;
-
 // A link to the Moon (a Moon spot's ?spot=moon-..., or ?at= with world=moon; places.js's linkedPlace).
 function opensOnMoon( search ) {
 
@@ -167,53 +162,103 @@ function toEarth() {
 
 }
 
-// Today's Earth drives are used up. The Moon is ours to stream and costs nothing, so it's never
-// limited: the notice offers it, and the game starts there with the Earth closed (main.js's
-// moonOnly); picking the Earth shows this notice again. A supporter's drives are counted by their
-// account, not this address (30 a day), so with signing in set up the screen has a sign-in too: a
-// supporter on a new browser, or back from paying before Stripe's word arrived (?supporter=thanks,
-// supporter.js), would otherwise be stuck here until tomorrow. Once the account here has the pass,
-// the visit is asked for again: once, so a supporter who has had their 30 sees this screen rather
-// than asking round and round (a reload, if the game's already going on the Moon).
+// Today's Earth drives are used up (this visitor's free one, or everyone's for the day). The Moon is
+// ours to stream and costs nothing, so it's never limited: the game starts there at once, on the
+// Moon's globe with the Earth closed (main.js's moonOnly), and a toast says why. Picking the Earth
+// shows the used-up notice, with its countdown and a way back to the Moon. A supporter's drives are
+// counted by their account, not this address (30 a day), so with signing in set up that notice has
+// a sign-in too: a supporter on a new browser, or back from paying before Stripe's word arrived
+// (?supporter=thanks, supporter.js), would otherwise be stuck on the Moon until tomorrow. Once the
+// account here has the pass (signing in there, or the page's own first word on it), the page
+// reloads to ask for the visit again: once, so a supporter who has had their 30 stays on the Moon
+// rather than reloading round and round.
 // (supporter.js comes with the game's code, so it's waited for here.)
 async function usedUp( config, outcome, main, link = null ) {
 
 	const { retryAfter, reason } = outcome;
-	const toMoon = () => {
+	// The notice's sign-in: only when it's this address's drives that are used up (a supporter's
+	// own are counted by their account), and only with signing in set up.
+	const accounts = reason === 'visitor' && !! ( config.googleClientId || config.passwords === true );
+	const watch = accounts && ! askedAgain();
+	let supporter = null;
+	const again = () => {
 
-		if ( onMoonOnly ) return;
-		onMoonOnly = true;
-		run( main, {
-			key: null, visit: outcome.visit, googleClientId: config.googleClientId, passwords: config.passwords === true, turnstileSiteKey: config.turnstileSiteKey, live: !! config.live, liveReason: config.liveReason, adsense: config.adsense ?? null, challengeLink: link,
-			moonOnly: { onEarth: () => usedUp( config, outcome, main ) },
-		} );
+		markAskedAgain();
+		location.reload();
 
 	};
-	screens.notice( 'used-up', { retryAfter, onMoon: toMoon } );
-	if ( reason !== 'visitor' || ! ( config.googleClientId || config.passwords === true ) ) return;
-	let supporter;
+	const watchForPass = () => {
+
+		if ( ! watch || ! supporter ) return;
+		const handle = supporter.setUpSupporter( { worker: true, googleClientId: config.googleClientId, passwords: config.passwords === true, turnstileSiteKey: config.turnstileSiteKey, onPass: again } );
+		// The pass already known here (it came after the visit was counted): at once.
+		if ( handle?.me?.supporter ) again();
+
+	};
+	const earthClosed = () => {
+
+		screens.notice( 'used-up', { retryAfter, reason, onMoon: () => {} } );
+		if ( ! supporter ) return;
+		watchForPass();
+		supporter.fillAccountArea( $( 'notice' ).querySelector( '.account' ) );
+
+	};
+	const started = run( main, {
+		key: null, visit: outcome.visit, googleClientId: config.googleClientId, passwords: config.passwords === true, turnstileSiteKey: config.turnstileSiteKey, live: !! config.live, liveReason: config.liveReason, adsense: config.adsense ?? null, challengeLink: link,
+		moonOnly: { onEarth: earthClosed },
+	} );
+	// Once the globe is up (its own start would hide a toast shown over the splash).
+	started.then( game => game && screens.toast( reason === 'daily'
+		? 'Today\'s free Earth drives are all taken, so you\'re on the Moon: free and unlimited. The Earth opens again tomorrow.'
+		: 'You\'ve had today\'s free Earth drive, so you\'re on the Moon: free and unlimited. The Earth opens again tomorrow.', 8000 ) );
+	if ( ! accounts ) return;
 	try {
 
 		supporter = await import( './supporter.js' );
 
 	} catch ( err ) {
 
-		// The screen stays, without its sign-in.
+		// The notice goes without its sign-in.
 		console.error( err );
 		return;
 
 	}
 
-	const again = () => {
+	// After the game has set up the pass's sign-in itself (which clears onPass), so a supporter whose
+	// account here has the pass (or gets it: back from paying) is sent back to the Earth.
+	if ( await started ) watchForPass();
 
-		askedAsSupporter = true;
-		if ( onMoonOnly ) return location.reload();
-		$( 'notice' ).hidden = true;
-		visit( config );
+}
 
-	};
-	supporter.setUpSupporter( { worker: true, googleClientId: config.googleClientId, passwords: config.passwords === true, turnstileSiteKey: config.turnstileSiteKey, onPass: askedAsSupporter ? null : again } );
-	supporter.fillAccountArea( $( 'notice' ).querySelector( '.account' ) );
+// Whether the page has already reloaded once to ask for the visit as a supporter's (see usedUp),
+// this tab: kept for the tab's session, as the reload starts the page afresh.
+const ASKED_AGAIN = 'world-drive-asked-as-supporter';
+
+function askedAgain() {
+
+	try {
+
+		return sessionStorage.getItem( ASKED_AGAIN ) === String( new Date().toISOString().slice( 0, 10 ) );
+
+	} catch {
+
+		return false;
+
+	}
+
+}
+
+function markAskedAgain() {
+
+	try {
+
+		sessionStorage.setItem( ASKED_AGAIN, String( new Date().toISOString().slice( 0, 10 ) ) );
+
+	} catch {
+
+		// Without storage, a supporter past their 30 could reload once more each time; no worse.
+
+	}
 
 }
 

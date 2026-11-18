@@ -31,10 +31,11 @@
 	// deploy. The ones below are set from here on every deploy: change them here, not there.
 	"keep_vars": true,
 	"vars": {
-		// Visits a day for everyone together, and for each visitor; both start again at midnight UTC.
+		// Earth visits a day for everyone together, and for each visitor (one: past it, or past the day's
+		// cap, the page opens on the Moon, which costs nothing); both start again at midnight UTC.
 		// Each visit is one billed Google Maps session.
 		"DAILY_VISITS": "300",
-		"PER_VISITOR_DAILY": "8",
+		"PER_VISITOR_DAILY": "1",
 		// The Turnstile widget for worlddrive.app (public; its secret is the TURNSTILE_SECRET secret).
 		"TURNSTILE_SITE_KEY": "0x4AAAAAAFs3k5sgUIQHSuGC",
 		// The Supporter Pass (docs/world-drive.md, worker/drive/supporter.js), all public: a supporter's
@@ -44,7 +45,7 @@
 		"PER_VISITOR_DAILY_SUPPORTER": "30",
 		"GOOGLE_CLIENT_ID": "979605278581-il852i6ql3e6j2t1kobqo2bg46pkaii5.apps.googleusercontent.com",
 		"SUPPORTER_PAYMENT_LINK": "https://buy.stripe.com/9B6bJ0fSYaMf3nc0cCfrW00",
-		"SUPPORTER_PRICE": "CA$4.99",
+		"SUPPORTER_PRICE": "CA$4.99/month",
 		// Driving with others (worker/drive/live.js): "off" is the kill switch. New connections are
 		// turned away, those already in a room are closed as they next say anything (or at the room's
 		// next alarm) once the room runs the new version (a busy one can take up to 5 minutes to; see

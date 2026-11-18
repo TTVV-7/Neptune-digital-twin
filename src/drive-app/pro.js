@@ -1,4 +1,4 @@
-// The Supporter Pass (docs/world-drive.md): a one-time payment towards World Drive's running costs
+// The Supporter Pass (docs/world-drive.md): a subscription towards World Drive's running costs
 // that unlocks the four extra rides and the Garage's extras. Whether this visitor has it is kept
 // here, and only here: everything locked asks isPro(), and follows onProChange. It's off until the
 // payments code (Google sign-in, Stripe and the entitlement kept by the Worker) says otherwise with

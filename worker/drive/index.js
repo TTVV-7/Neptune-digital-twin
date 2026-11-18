@@ -47,7 +47,7 @@ export { DriveRoom } from './live.js';
 //   TURNSTILE_SECRET      secret: the Turnstile widget's secret key
 //   TURNSTILE_SITE_KEY    the widget's site key (public)
 //   DAILY_VISITS          visits a day for everyone together (300 if unset); 0 closes for the day
-//   PER_VISITOR_DAILY     visits a day per visitor (8 if unset)
+//   PER_VISITOR_DAILY     Earth visits a day per visitor (1 if unset); past it, the page opens on the Moon
 //   NAMES_PER_VISITOR_DAILY, SCORES_PER_VISITOR_DAILY   the leaderboard's new names and renames
 //                         (20 if unset) and scores (1500) a day per visitor
 //   PER_VISITOR_DAILY_SUPPORTER   a supporter's visits a day (30 if unset), counted by account
@@ -279,7 +279,7 @@ async function visit( { request, env, url, ctx, limits, now } ) {
 	// Counted for the admin page's stats (stats.js), without holding up the answer.
 	if ( moon ) {
 
-		ctx?.waitUntil?.( countVisit( env, now ) );
+		ctx?.waitUntil?.( countVisit( env, now, 'moon_link' ) );
 		const { admin } = await whoIsVisiting( { request, env, url, now }, { supporter: false } );
 		return json( { moon: true, visit: await makeVisit( env, now, admin ? 'owner' : 'moon' ) } );
 
@@ -292,7 +292,7 @@ async function visit( { request, env, url, ctx, limits, now } ) {
 	const { supporter, admin } = await whoIsVisiting( { request, env, url, now } );
 	if ( admin ) {
 
-		ctx?.waitUntil?.( countVisit( env, now ) );
+		ctx?.waitUntil?.( countVisit( env, now, 'owner' ) );
 		return json( { mapsKey: key, left: null, visit: await makeVisit( env, now, 'owner' ) } );
 
 	}
@@ -300,17 +300,20 @@ async function visit( { request, env, url, ctx, limits, now } ) {
 	const outcome = await limits.visit( supporter ? `account:${ supporter.id }` : addressOf( request ), {
 		now,
 		daily: setting( env.DAILY_VISITS, 300 ),
-		perVisitor: supporter ? setting( env.PER_VISITOR_DAILY_SUPPORTER, 30 ) : setting( env.PER_VISITOR_DAILY, 8 ),
+		perVisitor: supporter ? setting( env.PER_VISITOR_DAILY_SUPPORTER, 30 ) : setting( env.PER_VISITOR_DAILY, 1 ),
 	} );
 	if ( ! outcome.ok ) {
 
 		const { reason, retryAfter } = outcome;
+		// Counted all the same (the page opens on the Moon instead), so the admin page shows every
+		// visit, not only the ones under the caps.
+		ctx?.waitUntil?.( countVisit( env, now, reason === 'daily' ? 'moon_daily_cap' : 'moon_visitor_cap' ) );
 		const message = reason === 'daily' ? 'Today\'s free drives are used up' : 'You\'ve had today\'s free drives';
 		throw new HttpError( 429, message, { reason, retryAfter, visit: await makeVisit( env, now, 'moon' ) }, { 'Retry-After': String( retryAfter ) } );
 
 	}
 
-	ctx?.waitUntil?.( countVisit( env, now ) );
+	ctx?.waitUntil?.( countVisit( env, now, supporter ? 'earth_supporter' : 'earth' ) );
 	return json( { mapsKey: key, left: outcome.left, visit: await makeVisit( env, now ) } );
 
 }
