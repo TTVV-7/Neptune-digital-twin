@@ -231,12 +231,12 @@ test( 'the 17 November progress drawing: its dates, and the panel numbers on the
 
 test( 'C31\'s downstands: along each wall under the slab, and the ground floor plan\'s areas along the walls on their undersides', () => {
 
-	// Up from the gallery's floor beside each wall: the downstand's underside, 0.31 m below the cross
-	// beams'; in the middle, up past it to the cross beam or the slab.
+	// Up from the gallery's floor beside each wall: the downstand's underside at EL +1.22; in the
+	// middle, up past it to the cross beam or the slab.
 	for ( const x of [ 10, 30, 50, 60 ] ) {
 
-		near( cast( [ x, 0, 3.1 ], [ 0, 1, 0 ] ), 2.88, `east downstand at grid ${ x }` );
-		near( cast( [ x, 0, 6.9 ], [ 0, 1, 0 ] ), 2.88, `west downstand at grid ${ x }` );
+		near( cast( [ x, 0, 3.1 ], [ 0, 1, 0 ] ), 1.22, `east downstand at grid ${ x }` );
+		near( cast( [ x, 0, 6.9 ], [ 0, 1, 0 ] ), 1.22, `west downstand at grid ${ x }` );
 		assert.ok( ( cast( [ x, 0, 5 ], [ 0, 1, 0 ] ) ?? Infinity ) > 3, `the middle at grid ${ x } is open above the downstands` );
 
 	}
@@ -246,7 +246,7 @@ test( 'C31\'s downstands: along each wall under the slab, and the ground floor p
 	for ( const m of under ) {
 
 		assert.ok( m.n[ 1 ] < - 0.99, `${ m.id } faces down` );
-		assert.ok( m.pts.every( p => Math.abs( p[ 1 ] - 2.88 ) < 0.01 ), `${ m.id } on the downstand's underside` );
+		assert.ok( m.pts.every( p => Math.abs( p[ 1 ] - 1.22 ) < 0.01 ), `${ m.id } on the downstand's underside` );
 		const l = m.pts.map( p => - p[ 2 ] );
 		const east = /east/.test( m.face );
 		assert.ok( l.every( v => east ? v > 2.83 && v < 3.5 : v > 6.5 && v < 7.18 ), `${ m.id } within the downstand` );

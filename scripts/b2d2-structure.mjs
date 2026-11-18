@@ -78,11 +78,14 @@ const GALLERY = { x: [ 8.00, 61.57 ], end: [ 61.57, 68.35 ] };
 const PONY = { east: [ 1.64, 1.98 ], west: [ 7.77, 8.12 ] };
 const PLATE = 0.6; // steel plates beside the rail beams, across
 // The downstand along each of the gallery's walls under the slab at grade, tight against the wall:
-// 0.66 m out from its inside face, its underside 1.38 m below the cross beams' top (0.31 m below
-// their underside), up to the slab. Measured off -ST011's cross beam elevations (beam G4's
-// south face, to about 2 cm), whose beams match the model's to the centimetre. The model's walls'
-// inside faces are at letter 2.832 (east) and 7.17 (west).
-const DOWNSTAND = { width: 0.66, el: [ 2.88, 4.26 ], east: 2.832, west: 7.17 };
+// 0.66 m out from its inside face, its underside at EL +1.22, up to the slab. Measured off -ST011's
+// cross beam elevations (beam G4's south face, to about 2 cm) on the drawings' own grid, which puts
+// the pony walls' tops at EL +3.69 (the drawings' 3.700) and the cross beams' undersides at +1.54.
+// The walls' repair areas on -ST007 stop at about +1.2, where it starts. (The model's grade is
+// higher than the drawings', by about 1.5 m: its slab and beams are the Shapr3D model's. The
+// downstand goes up to them.) The model's walls' inside faces are at letter 2.832 (east) and 7.17
+// (west).
+const DOWNSTAND = { width: 0.66, el: [ 1.22, 4.26 ], east: 2.832, west: 7.17 };
 const G_WIDTH = 0.455;
 const G_BEAMS = [ 7.86, 12.45, 16.89, 21.34, 25.78, 30.22, 34.67, 39.12, 43.56, 48.01, 52.45, 56.90, 61.56, 65.03 ];
 const G_ACROSS = [ 2.60, 7.20 ]; // into the walls, as the model has them
