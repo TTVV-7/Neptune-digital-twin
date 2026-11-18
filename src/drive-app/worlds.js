@@ -1,5 +1,6 @@
 // The worlds World Drive drives (docs/world-drive.md, "Worlds"): the Earth, on Google's tiles, and the
-// worlds made in the page from NASA's maps (body.js): the Moon and Mars. Plain data and small
+// worlds made in the page from NASA's maps (body.js): the Moon, Mars, and the asteroids Vesta and
+// Ceres (Ceres a dwarf planet too). Plain data and small
 // functions, with no imports, so the page, its first script (boot.js), the Worker, the site's build
 // and the tests all share the one list: which worlds there are, what each is called, its size, its
 // gravity, its files, and how its ground is made up below what its heights show (body-height.js).
@@ -13,6 +14,8 @@
 export const EARTH = 'earth';
 export const MOON = 'moon';
 export const MARS = 'mars';
+export const VESTA = 'vesta';
+export const CERES = 'ceres';
 
 // The Moon's made-up ground (body-height.js): craters of thirteen sizes, from 12.8 km across down to
 // 3 m, as many of each as the Moon has, most old and worn, a few fresh and bright; and four layers of
@@ -53,12 +56,46 @@ const MARS_GROUND = {
 	seed: 1,
 };
 
+// Vesta's: battered all over, its craters deep for their size in its weak gravity; Dawn's map has
+// those bigger than a kilometre or so (its heights every 570 m), so the made-up ones start at 2 km
+// cubes. Shorter rolling ground, for a world whose horizon is a kilometre or two away.
+const VESTA_GROUND = {
+	cells: MOON_GROUND.cells,
+	presence: [ 0, 0, 0, 0, 0.6, 0.7, 0.75, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8 ],
+	fresh: [ 0.18, 0.8, 2 ],
+	bright: { above: 0.5, by: 0.6 },
+	depth: { small: 0.2, large: 0.14, across: 3000 },
+	lip: 0.036,
+	floor: { across: 800, depth: - 0.7 },
+	rolls: [ [ 600, 6 ], [ 180, 1.6 ], [ 50, 0.35 ], [ 14, 0.06 ] ],
+	seed: 2,
+};
+
+// Ceres's: icier and softer, fewer small craters and gentler bowls (its ice creeps and fills them);
+// Dawn's map has those bigger than about two kilometres (every kilometre), so from 1 km cubes.
+const CERES_GROUND = {
+	cells: MOON_GROUND.cells,
+	presence: [ 0, 0, 0, 0, 0, 0.5, 0.6, 0.6, 0.6, 0.55, 0.5, 0.45, 0.4 ],
+	fresh: [ 0.15, 0.7, 2.2 ],
+	bright: { above: 0.55, by: 0.8 },
+	depth: { small: 0.16, large: 0.09, across: 2000 },
+	lip: 0.028,
+	floor: { across: 500, depth: - 0.65 },
+	rolls: [ [ 800, 7 ], [ 220, 1.8 ], [ 60, 0.4 ], [ 16, 0.07 ] ],
+	seed: 3,
+};
+
 // Each world: its id; its name (as a heading, "Mars"), in a sentence ("the Moon", "Mars"); its
 // radius (m: the sphere its heights are over); whether it's free (never limited); the prefix of its
 // start spots' ids (places.js); its gravity (a share of the Earth's 9.81 m/s²); its heights (Int16
 // metres over the sphere, `columns` × `rows` from 90° N and 180° W, each the middle of its cell);
 // its picture (the whole world, 2:1, from 180° W); the heights its ground can be at (m, made-up
-// craters in); its credit; its made-up ground; and where its globe first looks.
+// craters in); its credit; its made-up ground; and where its globe first looks. A small world far
+// from round has two more: its heights' `step` (m: Vesta's are in steps of 2 m) and its `level`, the
+// spheroid [ equatorial, polar radius ] (m) whose surface is level there, its up along that
+// spheroid's normal rather than out from the middle (level.js); and `recentre`, how far (m) the car
+// goes before the scene's frame is moved to it while driving, so the ground's curve, a few metres a
+// kilometre there, never tilts the flat frame the car drives in (main.js).
 export const WORLDS = {
 	earth: {
 		id: EARTH,
@@ -102,6 +139,48 @@ export const WORLDS = {
 		ground: MARS_GROUND,
 		// Over Valles Marineris, with the Tharsis volcanoes to the west.
 		first: { lat: - 5, lon: - 80 },
+	},
+	vesta: {
+		id: VESTA,
+		name: 'Vesta',
+		the: 'Vesta',
+		// Its mean radius (it's 572 × 557 × 446 km): its heights, radii from Dawn's map, over this.
+		radius: 262700,
+		free: true,
+		prefix: 'vesta-',
+		gravity: 0.25 / 9.81,
+		heights: { url: '/vesta/height.bin', columns: 2880, rows: 1440, step: 2 },
+		picture: '/vesta/colour.webp',
+		// From 212 to 293 km out: 50.7 km under the sphere (Rheasilvia's floor) to 30.3 over it.
+		lowest: - 52000,
+		highest: 32000,
+		level: [ 285000, 229000 ],
+		recentre: 1000,
+		credit: 'Vesta: NASA Dawn (DLR, USGS)',
+		ground: VESTA_GROUND,
+		// Over the Snowman's craters and the equator's troughs, Rheasilvia's rim to the south.
+		first: { lat: - 20, lon: 0 },
+	},
+	ceres: {
+		id: CERES,
+		name: 'Ceres',
+		the: 'Ceres',
+		// The sphere Dawn's map gives its heights over (its mean radius is 469.7 km).
+		radius: 470000,
+		free: true,
+		prefix: 'ceres-',
+		gravity: 0.284 / 9.81,
+		heights: { url: '/ceres/height.bin', columns: 2880, rows: 1440 },
+		picture: '/ceres/colour.webp',
+		// 27.9 km under the sphere (its poles, it's flattened) to 17.0 over it.
+		lowest: - 29000,
+		highest: 18500,
+		level: [ 482000, 446000 ],
+		recentre: 1500,
+		credit: 'Ceres: NASA Dawn (DLR, USGS)',
+		ground: CERES_GROUND,
+		// Over Occator and its bright spots.
+		first: { lat: 20, lon: - 120 },
 	},
 };
 

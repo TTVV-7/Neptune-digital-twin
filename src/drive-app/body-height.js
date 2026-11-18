@@ -1,5 +1,5 @@
-// A world's ground made in the page (body.js; the Moon's and Mars's, worlds.js): how high it is
-// anywhere, to the metre and below. The big shapes are the real world's, from NASA's maps: its
+// A world's ground made in the page (body.js; the Moon's, Mars's, Vesta's and Ceres's, worlds.js):
+// how high it is anywhere, to the metre and below. The big shapes are the real world's, from NASA's maps: its
 // heights at a grid of points (the Moon's every quarter of a degree, 7.6 km at its equator; Mars's
 // every eighth, 7.4 km), from /<world>/height.bin (scripts/make-moon.mjs, make-mars.mjs), read between
 // them with smooth (Catmull-Rom) curves, so its basins, mountains, canyons and big craters are where
@@ -43,11 +43,13 @@ export function createGround( world ) {
 	let northMean = 0;
 	let southMean = 0;
 
-	// Hand over the heights (an Int16Array of COLUMNS × ROWS metres, as height.bin has them).
+	// Hand over the heights (an Int16Array of COLUMNS × ROWS, as height.bin has them: metres, or steps
+	// of world.heights.step metres, Vesta's 2, whose 81 km of heights 16 bits of metres can't hold).
 	function setHeights( table ) {
 
 		if ( table.length !== COLUMNS * ROWS ) throw new Error( `${ world.name }'s heights should be ${ COLUMNS * ROWS } values, not ${ table.length }` );
-		heights = table;
+		const step = world.heights.step ?? 1;
+		heights = step === 1 ? table : Float32Array.from( table, units => units * step );
 		let north = 0;
 		let south = 0;
 		for ( let c = 0; c < COLUMNS; c ++ ) {
