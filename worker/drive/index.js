@@ -57,8 +57,14 @@ export { DriveRoom } from './live.js';
 //   DB                    the D1 database binding: the leaderboard's and the accounts' tables
 //                         (worker/drive/migrations)
 //   LIVE                  'off' switches driving with others off (anything else, or unset, is on)
-//   LIVE_DAILY_BUDGET     the Durable Object requests a day driving with others may use (40000 if
-//                         unset), then it's off till midnight UTC (see live.js); 0 is off
+//   LIVE_DAILY_BUDGET     the Durable Object requests a day driving with others may use on the Earth
+//                         (40000 if unset), then it's off there till midnight UTC (see live.js); 0 is off
+//   LIVE_MOON_DAILY_BUDGET   the Moon's, apart (20000 if unset): spending the Earth's never shuts the
+//                         Moon's rooms, nor the Moon's the Earth's; 0 is off on the Moon
+//   LIVE_ADDRESS_VISITS   the most visits not counted against the Earth's caps (the Moon's) that
+//                         connect to rooms from one address (an IPv6 one by its /48) in a day (20)
+//   LIVE_ADDRESS_SHARE    each world's budget over this (8 if unset) is what one address's
+//                         connections may spend there in a day (the owner's aren't counted)
 //   LIVE_PARTY_MAX, LIVE_NEARBY_MAX   the most in a party (8 if unset) and in an area's room (20)
 //   LIVE_VISIT_CONNECTS   the most connections to rooms a visit makes in a day (200 if unset)
 //   ROOMS                 the Durable Object binding for the rooms (DriveRoom, live.js)
@@ -233,18 +239,23 @@ function adsTxt( request, env ) {
 // (without a key it shows a "back soon" screen instead of the globe), the sign-in button's client
 // id ('' when there's no signing in with Google, see accounts.js), whether there are usernames and
 // passwords (passwords, logins.js), adsense: { client, slot } only while Google's ads are on
-// (settings.js's adsense; nothing about ads otherwise), and whether driving with others is on, with
-// liveReason: BUDGET_SPENT when it's off for the rest of the day (its budget, see live.js). If
-// DriveLimits can't say, it's off, with liveReason 'unknown': a page already driving with others
-// that was turned away tries again rather than stopping.
+// (settings.js's adsense; nothing about ads otherwise), and whether driving with others is on on the
+// Earth (live), with liveReason: BUDGET_SPENT when it's off for the rest of the day (its budget, see
+// live.js), and on the Moon (liveMoon: its rooms have a budget of their own, so it can be on there
+// with the Earth's spent; a page from before the Moon had drivers doesn't read it), with
+// liveMoonReason the same way for the Moon's (none when it's only switched off there, so the page
+// says nothing of lots of drivers). If DriveLimits can't say, both are off, with liveReason and
+// liveMoonReason 'unknown': a page already driving with others that was turned away tries again
+// rather than stopping.
 async function getConfig( { env, limits, now } ) {
 
 	const today = await liveToday( { env, limits, now } );
 	const ads = adsense( env );
 	return json( {
-		turnstileSiteKey: env.TURNSTILE_SITE_KEY ?? '', mapsOn: !! mapsKey( env ), googleClientId: googleClientId( env ), passwords: passwordsOn( env ), live: today.open,
+		turnstileSiteKey: env.TURNSTILE_SITE_KEY ?? '', mapsOn: !! mapsKey( env ), googleClientId: googleClientId( env ), passwords: passwordsOn( env ), live: today.open, liveMoon: today.moon.open,
 		...( ads ? { adsense: ads } : {} ),
 		...( today.reason === BUDGET_SPENT || today.reason === 'unknown' ? { liveReason: today.reason } : {} ),
+		...( today.moon.reason === BUDGET_SPENT || today.moon.reason === 'unknown' ? { liveMoonReason: today.moon.reason } : {} ),
 	} );
 
 }

@@ -389,7 +389,7 @@ describe( 'what search engines read', () => {
 		assert.equal( html.match( /<h1[\s>]/g )?.length, 1 );
 		assert.ok( wordsOf( html ).length > 500, `/moon/: only ${ wordsOf( html ).length } words` );
 		const text = wordsOf( html ).join( ' ' );
-		for ( const phrase of [ 'LOLA', 'LROC', 'public domain', 'made up', 'a sixth of the gravity', 'two and a half times as long', 'The Earth in the sky', 'No water', 'On your own' ] ) assert.ok( text.toLowerCase().includes( phrase.toLowerCase() ), `/moon/: no "${ phrase }"` );
+		for ( const phrase of [ 'LOLA', 'LROC', 'public domain', 'made up', 'a sixth of the gravity', 'two and a half times as long', 'The Earth in the sky', 'No water', 'With others', 'bring friends in a party' ] ) assert.ok( text.toLowerCase().includes( phrase.toLowerCase() ), `/moon/: no "${ phrase }"` );
 		const links = linksOf( html );
 		for ( const place of MOON_PAGES ) {
 

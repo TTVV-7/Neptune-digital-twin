@@ -781,7 +781,19 @@ Object on the WebSocket Hibernation API (`worker/drive/live.js`, speaking
 `src/drive-app/live-protocol.js`). It switches itself off for the rest of the UTC day once it has
 used its daily budget of Durable Object requests (`LIVE_DAILY_BUDGET`), so it can't use up what the
 visits need, and `LIVE` in `wrangler.drive.jsonc` switches it all off (see
-[Driving with others](docs/world-drive.md#driving-with-others), with what it costs).
+[Driving with others](docs/world-drive.md#driving-with-others), with what it costs). On the Moon it's
+the same in the Moon's own rooms (its areas the Earth's size, cars sent in the Moon's frame and drawn
+on its ground), with its own **Driving now** and dots on the Moon's globe, and parties span both
+worlds: **Go to** and **Join** turn the globe to the friend's world and drop in beside them. The
+Moon's rooms keep a budget of their own (`LIVE_MOON_DAILY_BUDGET`), so the Earth's being spent never
+shuts them (nor can a party's driver let in on the Moon drive on with an Earth that's spent: it's
+closed as it says it's there), and its visits (never limited) are held to 20 a day connecting from
+one address. And on either world, each address's connections (any but the owner's) may spend only
+an eighth of that world's day (`LIVE_ADDRESS_SHARE`: 5,000 requests on the Earth, 2,500 on the
+Moon, hours of driving with others), past which they're closed and turned away there until midnight
+UTC (see
+[Driving with others on the Moon](docs/world-drive.md#driving-with-others-on-the-moon), "Bounded per
+address").
 
 **Levels**: driving earns XP (each km, air off jumps, drift boosts, boost pads, landed tricks, the
 first drive in each area and at each start spot, minutes with others, and the day's first drive,
@@ -864,8 +876,9 @@ craters smaller than a few kilometres are made up, the same on every visit, down
 ground is a quadtree of squares on a cube blown up into a sphere, a point every 1.3 m by the
 vehicle. It has a dozen start spots (the Apollo sites, Tycho, Copernicus, a pole, the far side) and
 its own search; you drive it in a sixth of the Earth's gravity (jumps as high, two and a half times
-as long, scored as on the Earth), under black sky with the Earth hanging in it, with no water, and on
-your own: driving with others is the Earth's. It needs no Google tiles, so `npm run dev:drive` has the
+as long, scored as on the Earth), under black sky with the Earth hanging in it, with no water; and
+driving with others is there too, in the Moon's own rooms (see [Driving with others on the
+Moon](docs/world-drive.md#driving-with-others-on-the-moon)). It needs no Google tiles, so `npm run dev:drive` has the
 real Moon without a key (see [The Moon](docs/world-drive.md#the-moon)).
 
 World Drive's fourteen cars are models from Sketchfab (CC BY, credited in its About box and ride

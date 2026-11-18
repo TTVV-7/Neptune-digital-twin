@@ -236,12 +236,9 @@ button.primary:active,
 	color: var( --muted );
 }
 
-/* On the Moon there's no map search (its own places are searched), nobody else driving, and no
-   party to drive with: you drive it on your own (main.js). */
-body[data-world='moon'] #globe-ui :is( .osm, .online, .online-dots, .friends, .party-banner ),
-body[data-world='moon'] #pause .friends,
-body[data-world='moon'] #drive-ui :is( .live-chip, .players, .horn, .live-key ),
-body[data-world='moon'] #live-tags {
+/* On the Moon there's no map search (its own places are searched). Driving with others is there as
+   on the Earth (its rooms are the Moon's own: live.js). */
+body[data-world='moon'] #globe-ui .osm {
 	display: none !important;
 }
 
@@ -2101,13 +2098,30 @@ body:not( .touch ) #drive-ui .horn {
 		min-width: 0;
 	}
 
+	/* How far the party's banner sits from the bottom of the screen on a phone: above the pin's card,
+	   over the sheet. */
+	body {
+		--party-banner-bottom: calc( 46% + 84px );
+	}
+
 	/* Above the pin's card, over the sheet. */
 	#globe-ui .party-banner {
 		top: auto;
 		left: 12px;
 		right: 12px;
-		bottom: calc( 46% + 84px );
+		bottom: var( --party-banner-bottom );
 		max-width: none;
+	}
+
+}
+
+/* On a phone on its side with a party's banner over the globe, the map's credit (Google's on the
+   Earth, NASA's on the Moon) goes just below the banner rather than behind it, where they'd meet.
+   It follows the banner's own offset from the bottom, --party-banner-bottom (above). */
+@media ( max-width: 760px ) and ( orientation: landscape ) {
+
+	body[data-mode='globe']:has( #globe-ui .party-banner:not( [hidden] ) ) :is( #moon-credit, #attribution ) {
+		top: calc( 100% - var( --party-banner-bottom ) + 6px );
 	}
 
 }

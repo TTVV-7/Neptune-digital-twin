@@ -67,11 +67,13 @@ const _chord = new Vector3();
 const noRay = () => {};
 
 // scene: where the ghosts go; earth: the tiles' (or test globe's) group, whose matrixWorld takes
-// Earth-centred positions into the scene as it is now; vehicles: loadVehicles()'; loader: the
+// Earth-centred positions into the scene as it is now; frame(): the group for the world this page is
+// on (earth, or on the Moon the Moon's group, whose matrixWorld takes Moon-centred positions in):
+// only the drivers on that world are drawn, through it; vehicles: loadVehicles()'; loader: the
 // ModelManager's glTF loader (or models: ghostModels' own, shared with a challenge's ghost); live:
 // live.js's; tags: the element their names go in; own(): your car's pivot, or null; effects: what
 // drive-fx.js is asked for (the Driver's: fewer on a phone).
-export function createGhosts( { scene, earth, camera, vehicles, loader, models = ghostModels( loader ), live, tags, own, effects = undefined } ) {
+export function createGhosts( { scene, earth, frame = () => earth, camera, vehicles, loader, models = ghostModels( loader ), live, tags, own, effects = undefined } ) {
 
 	const group = new Group();
 	group.name = 'ghosts';
@@ -461,8 +463,10 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, models =
 
 		const now = performance.now();
 		const at = now - INTERP_MS;
-		earth.updateWorldMatrix( true, false );
-		_earth.setFromRotationMatrix( earth.matrixWorld );
+		const world = frame();
+		const on = live.world ?? 'earth';
+		world.updateWorldMatrix( true, false );
+		_earth.setFromRotationMatrix( world.matrixWorld );
 		camera.getWorldPosition( _cam );
 		const ownPivot = shown ? own() : null;
 		ownPivot?.getWorldPosition( _own );
@@ -471,10 +475,11 @@ export function createGhosts( { scene, earth, camera, vehicles, loader, models =
 		for ( const ghost of ghosts.values() ) {
 
 			ghost.drawn = false;
-			if ( ! shown || ghost.away || hidden.has( ghost.name ) || ! sample( ghost, at ) ) continue;
+			// (A driver on the other world is no car here: theirs is in its frame.)
+			if ( ! shown || ghost.away || ( live.players.get( ghost.pid )?.world ?? 'earth' ) !== on || hidden.has( ghost.name ) || ! sample( ghost, at ) ) continue;
 			// No word for STALE_MS: gone, unless its driver paused (parked, it stays).
 			if ( now - ghost.heard > STALE_MS && ! ( ghost.flags & FLAGS.paused ) ) continue;
-			ghost.scene.copy( ghost.p ).applyMatrix4( earth.matrixWorld );
+			ghost.scene.copy( ghost.p ).applyMatrix4( world.matrixWorld );
 			ghost.distance = ghost.scene.distanceTo( _cam );
 			drawn.push( ghost );
 

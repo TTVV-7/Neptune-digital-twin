@@ -350,11 +350,12 @@ export function emptyReport() {
 
 const SPOT_IDS = new Set( SPOTS.map( spot => spot.id ) );
 
-// An area's name as cellOf gives it ('near:1277.1088'), or null.
+// An area's name as cellOf gives it ('near:1277.1088'), or null. Only the Earth's: the Moon's areas
+// (moon:...) are rooms for driving with others there, not areas levels count.
 export function checkArea( text ) {
 
 	const room = parseRoom( text );
-	return room?.kind === 'near' && room.shard === 0 && room.cell === text ? text : null;
+	return room?.kind === 'near' && room.world === 'earth' && room.shard === 0 && room.cell === text ? text : null;
 
 }
 

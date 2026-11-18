@@ -348,11 +348,12 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorl
 		section.hidden = ! online;
 		if ( ! online ) return;
 		section.querySelector( '.summary' ).textContent = online.summary;
-		const key = JSON.stringify( online.areas.map( ( { title, subtitle, place } ) => [ title, subtitle, place.lat, place.lon ] ) );
+		const key = JSON.stringify( online.areas.map( ( { title, subtitle, place, world: there } ) => [ title, subtitle, place?.lat, place?.lon, there ] ) );
 		if ( key === onlineKey ) return;
 		onlineKey = key;
 		const list = section.querySelector( '.areas' );
-		list.replaceChildren( ...online.areas.map( area => item( area.title, area.subtitle, () => flyTo( area.place ) ) ) );
+		// (A row for those driving on the other world turns the globe there: onClick.)
+		list.replaceChildren( ...online.areas.map( area => item( area.title, area.subtitle, () => area.onClick ? area.onClick() : flyTo( area.place ) ) ) );
 		list.hidden = online.areas.length === 0;
 
 	}
