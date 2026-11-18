@@ -1,5 +1,5 @@
 import './repair-areas.css';
-import { BufferAttribute, BufferGeometry, CanvasTexture, Color, DoubleSide, Group, Line, LineBasicMaterial, LineLoop, Matrix3, Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial, Plane, PropertyBinding, Raycaster, Sprite, SpriteMaterial, SRGBColorSpace, Vector2, Vector3 } from 'three';
+import { BufferAttribute, BufferGeometry, CanvasTexture, Color, DoubleSide, Group, Line, LineBasicMaterial, LineLoop, Matrix3, Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial, Plane, PlaneGeometry, PropertyBinding, Raycaster, Sprite, SpriteMaterial, SRGBColorSpace, Vector2, Vector3 } from 'three';
 import { loadConfig } from './cloud.js';
 import { sendForEveryone } from './placements.js';
 import { useFastRaycast } from './raycast.js';
@@ -18,6 +18,9 @@ import { isTyping } from './walk.js';
 // (chipped, sandblasted, epoxy coated, shotcreted: each with its look, LOOKS in repair-geometry.js)
 // and the day it got there. "Add area" draws one on the wall, floor or soffit you start on: drag a
 // box, or click its corners.
+// A picked area shows its size (width × height and m²) in the panel, where it can be typed in, and
+// square handles on its edges and corners that drag it bigger or smaller, as an excavation's do.
+// While editing, every area carries a tag with its size (the Show panel's Panel sizes row hides them).
 // Every area is built with the build's own code (repair-geometry.js), chipped recess, rebar and
 // all, and the concrete it's cut out of is cut again.
 //
@@ -46,6 +49,14 @@ const TYPES = [ 'Exposed rebar', 'Spall', 'Delamination', 'Crack', 'Honeycombing
 const NUMBER = { perMetre: 0.022, min: 0.11, max: 0.5, off: 0.07 };
 const IDENTITY = new Matrix4();
 const NUMBERS_LAYER = 'panel-numbers';
+const SIZES_LAYER = 'panel-sizes';
+// An area can't be made narrower than this (m) a side.
+const NARROWEST = 0.05;
+// Nor wider than this (m) a side, by dragging or typing.
+const WIDEST = 30;
+// The handles on a picked area: about this big on the screen (share of the distance), between these
+// sizes (m); a press this close (px) to one takes it.
+const HANDLE = { perMetre: 0.014, min: 0.025, max: 0.2, reach: 14 };
 // What's kept of a markup's details for an area changed or added here (worker/area-edits.js).
 const DETAILS = [ 'status', 'type', 'text', ...STAGES.map( stage => stage.date ).filter( Boolean ) ];
 // An area marked but not chipped yet: the artifact's colours.
@@ -80,6 +91,7 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 	let sinceCut = 0;
 	const history = []; // { s, id, had, value }, for Undo
 	let numbersShown = true; // the Show panel's Panel numbers row
+	let sizesShown = true; // the Show panel's Panel sizes row
 	let numbersCounted = 0;
 	const onEditing = []; // told when editing areas starts, or looking back (the model editor, to stop)
 	const onNow = []; // told when an editor starts, so the areas are as they are now (the timeline, to close)
@@ -117,6 +129,13 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 				<button type="button" data-turn="-1" title="Turn clockwise">⟳</button>
 				<select class="turn" aria-label="Turn by">${ TURNS.map( ( [ name, v ], i ) => `<option value="${ v }"${ i === 1 ? ' selected' : '' }>${ name }</option>` ).join( '' ) }</select>
 			</div>
+			<div class="row size"><span class="label">Size</span>
+				<input type="number" class="size-w" data-size="width" min="${ NARROWEST }" max="${ WIDEST }" step="0.01" aria-label="Width (m)" title="Width (m), across as it lies on its face">
+				<span class="by">×</span>
+				<input type="number" class="size-h" data-size="height" min="${ NARROWEST }" max="${ WIDEST }" step="0.01" aria-label="Height (m)" title="Height (m), up the wall (or along the floor)">
+				<span class="unit">m</span>
+			</div>
+			<p class="size-note"></p>
 			<div class="row">
 				<button type="button" class="surface wide" title="Then click the wall, floor or soffit it belongs on">Move to another surface…</button>
 			</div>
@@ -147,6 +166,7 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 	$( '.done' ).addEventListener( 'click', () => setEditing( false ) );
 	$( '.add' ).addEventListener( 'click', () => drawing ? stopDrawing() : startDrawing() );
 	for ( const button of panel.querySelectorAll( '[data-move]' ) ) button.addEventListener( 'click', () => nudge( button.dataset.move ) );
+	for ( const input of panel.querySelectorAll( '[data-size]' ) ) input.addEventListener( 'change', () => setSize( input.dataset.size, Number( input.value ) ) );
 	for ( const button of panel.querySelectorAll( '[data-turn]' ) ) button.addEventListener( 'click', () => turn( Number( button.dataset.turn ) * Number( $( '.turn' ).value ) ) );
 	$( '.surface' ).addEventListener( 'click', () => {
 
@@ -234,6 +254,10 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 			$( '.date span' ).textContent = stage.short;
 			$( '.swatch' ).style.background = rimOf( m )?.colour ?? AREA_COLOUR;
 			$( '#area-dates' ).innerHTML = options( [ ...new Set( [ ...allDates(), today() ] ) ].sort() );
+			const size = sizeOf( selected.s, selected.id, m );
+			if ( document.activeElement !== $( '.size-w' ) ) $( '.size-w' ).value = size.width.toFixed( 2 );
+			if ( document.activeElement !== $( '.size-h' ) ) $( '.size-h' ).value = size.height.toFixed( 2 );
+			$( '.size-note' ).textContent = `${ ( m.area ?? size.width * size.height ).toFixed( 2 ) } m²${ size.square ? '' : ' (not a rectangle: the size is the box round it)' }. Drag the yellow squares on it to resize.`;
 
 		}
 
@@ -273,7 +297,7 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 		if ( on ) {
 
 			if ( controls.locked ) document.exitPointerLock?.();
-			for ( const s of states.values() ) ensureData( s ).catch( () => toast?.( 'Couldn\'t load the repair areas\' data, so they can\'t be changed.' ) );
+			for ( const s of states.values() ) ensureData( s ).then( () => showSizes( s ) ).catch( () => toast?.( 'Couldn\'t load the repair areas\' data, so they can\'t be changed.' ) );
 			// One editor at a time has the clicks, and areas are edited as they are now.
 			for ( const told of onEditing ) told();
 			backToNow();
@@ -281,6 +305,7 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 		} else {
 
 			select( null );
+			for ( const s of states.values() ) showSizes( s );
 			const count = changes();
 			if ( count ) toast?.( `${ count } change${ count === 1 ? ' to the repair areas isn\'t' : 's to the repair areas aren\'t' } saved for everyone yet: only you see ${ count === 1 ? 'it' : 'them' }, until the page is reloaded` );
 
@@ -793,6 +818,7 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 			old?.removeFromParent();
 			discard( old );
 			s.nodes.delete( id );
+			dropSize( s, id );
 			if ( selected?.s === s && selected.id === id ) select( null );
 			return;
 
@@ -842,6 +868,7 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 		node.updateMatrixWorld( true );
 		s.nodes.set( id, node );
 		if ( selected?.s === s && selected.id === id ) highlight( s, id );
+		if ( s.sizes ) showSize( s, id );
 
 	}
 
@@ -963,6 +990,24 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 	} );
 	const _at = new Vector3();
 	onUpdate?.( () => {
+
+		if ( editing ) for ( const s of states.values() ) {
+
+			for ( const sprite of s.sizes?.values() ?? [] ) {
+
+				const height = 0.9 * Math.min( NUMBER.max, Math.max( NUMBER.min, sprite.getWorldPosition( _at ).distanceTo( camera.position ) * NUMBER.perMetre ) );
+				sprite.scale.set( height * sprite.userData.aspect, height, 1 );
+
+			}
+
+			for ( const handle of s.handles?.children ?? [] ) {
+
+				const size = Math.min( HANDLE.max, Math.max( HANDLE.min, handle.getWorldPosition( _at ).distanceTo( camera.position ) * HANDLE.perMetre ) );
+				handle.scale.set( size, size, size );
+
+			}
+
+		}
 
 		if ( ! numbersShown ) return;
 		for ( const sprite of numbers() ) {
@@ -1090,6 +1135,7 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 			s.highlight?.removeFromParent();
 			s.highlight?.geometry.dispose();
 			s.highlight = null;
+			dropHandles( s );
 
 		}
 
@@ -1129,8 +1175,268 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 		// In the same frame as the areas (the model's own).
 		( s.group?.parent ?? s.content ).add( line );
 		s.highlight = line;
+		addHandles( s, id, m );
 
 	}
+
+	// ---------- Size ----------
+
+	// An area's size as it lies on its face: along its own sides (the longest edge's way, or level
+	// and up the face when that's square to them), A across and B up, N out of the face; its
+	// outline's extent along each from c (its corners' middle), and whether it's a rectangle.
+	function sizeOf( s, id, m = markupOf( s, id ) ) {
+
+		const { N, U, V } = faceOf( s, id );
+		const c = centroid( m.pts );
+		const flat = m.pts.map( p => {
+
+			const d = new Vector3( ...p ).sub( c );
+			return [ d.dot( U ), d.dot( V ) ];
+
+		} );
+		let longest = null;
+		flat.forEach( ( p, i ) => {
+
+			const q = flat[ ( i + 1 ) % flat.length ];
+			const length = Math.hypot( q[ 0 ] - p[ 0 ], q[ 1 ] - p[ 1 ] );
+			if ( ! longest || length > longest.length ) longest = { length, angle: Math.atan2( q[ 1 ] - p[ 1 ], q[ 0 ] - p[ 0 ] ) };
+
+		} );
+		// Within a quarter turn: whichever of the sides is nearest level is across.
+		let angle = longest.angle - Math.round( longest.angle / ( Math.PI / 2 ) ) * Math.PI / 2;
+		if ( Math.abs( angle ) < Math.PI / 360 ) angle = 0;
+		const A = U.clone().multiplyScalar( Math.cos( angle ) ).addScaledVector( V, Math.sin( angle ) );
+		const B = V.clone().multiplyScalar( Math.cos( angle ) ).addScaledVector( U, - Math.sin( angle ) );
+		const along = m.pts.map( p => {
+
+			const d = new Vector3( ...p ).sub( c );
+			return [ d.dot( A ), d.dot( B ), d.dot( N ) ];
+
+		} );
+		const a0 = Math.min( ...along.map( p => p[ 0 ] ) ), a1 = Math.max( ...along.map( p => p[ 0 ] ) );
+		const b0 = Math.min( ...along.map( p => p[ 1 ] ) ), b1 = Math.max( ...along.map( p => p[ 1 ] ) );
+		const width = a1 - a0, height = b1 - b0;
+		// A rectangle: its outline fills the box round it.
+		let twice = 0;
+		along.forEach( ( p, i ) => {
+
+			const q = along[ ( i + 1 ) % along.length ];
+			twice += p[ 0 ] * q[ 1 ] - q[ 0 ] * p[ 1 ];
+
+		} );
+		const square = Math.abs( twice ) / 2 > width * height * 0.98;
+		return { A, B, N, c, along, a0, a1, b0, b1, width, height, square };
+
+	}
+
+	// The area stretched from the box round it (size, as sizeOf has it) to another (a0, a1, b0, b1
+	// along the same sides), as an edit. The drawing's measured m² goes with it, by as much.
+	function resized( s, id, m, size, to ) {
+
+		const sx = ( to.a1 - to.a0 ) / ( size.width || 1 );
+		const sy = ( to.b1 - to.b0 ) / ( size.height || 1 );
+		const pts = size.along.map( ( [ a, b, n ] ) => size.c.clone()
+			.addScaledVector( size.A, to.a0 + ( a - size.a0 ) * sx )
+			.addScaledVector( size.B, to.b0 + ( b - size.b0 ) * sy )
+			.addScaledVector( size.N, n )
+			.toArray().map( round ) );
+		const value = placed( s, id, pts, m.n );
+		if ( ! value.added && m.area != null ) value.area = Math.round( m.area * sx * sy * 1000 ) / 1000;
+		return value;
+
+	}
+
+	// Typed in the panel: the width or height (m), the area grown or shrunk about its middle.
+	function setSize( which, metres ) {
+
+		if ( ! selected || ! Number.isFinite( metres ) ) return render();
+		const { s, id } = selected;
+		const m = markupOf( s, id );
+		if ( ! m ) return;
+		const size = sizeOf( s, id, m );
+		const want = Math.min( WIDEST, Math.max( NARROWEST, Math.round( metres * 1000 ) / 1000 ) );
+		const to = { a0: size.a0, a1: size.a1, b0: size.b0, b1: size.b1 };
+		const [ lo, hi ] = which === 'width' ? [ 'a0', 'a1' ] : [ 'b0', 'b1' ];
+		if ( Math.abs( to[ hi ] - to[ lo ] - want ) < 1e-4 ) return render();
+		const middle = ( to[ lo ] + to[ hi ] ) / 2;
+		to[ lo ] = middle - want / 2;
+		to[ hi ] = middle + want / 2;
+		change( s, id, resized( s, id, m, size, to ) );
+
+	}
+
+	// The handles on the picked area: a yellow square at each corner and the middle of each side of
+	// the box round it. Drawn over everything, sized for the screen as you go (see onUpdate).
+	const handleLook = new MeshBasicMaterial( { color: HIGHLIGHT, depthTest: false, transparent: true, side: DoubleSide } );
+	const handleEdge = new LineBasicMaterial( { color: 0x1d1d1d, depthTest: false, transparent: true } );
+	const handleShape = new PlaneGeometry( 1, 1 );
+	const handleOutline = new BufferGeometry().setFromPoints( [ [ - 0.5, - 0.5 ], [ 0.5, - 0.5 ], [ 0.5, 0.5 ], [ - 0.5, 0.5 ] ].map( ( [ x, y ] ) => new Vector3( x, y, 0 ) ) );
+	function dropHandles( s ) {
+
+		s.handles?.removeFromParent();
+		s.handles = null;
+
+	}
+
+	function addHandles( s, id, m ) {
+
+		dropHandles( s );
+		if ( ! editing || asOf ) return;
+		const size = sizeOf( s, id, m );
+		const group = new Group();
+		group.userData.noCollide = true;
+		const turn = new Matrix4().makeBasis( size.A, size.B, size.N );
+		for ( const ex of [ - 1, 0, 1 ] ) for ( const ey of [ - 1, 0, 1 ] ) {
+
+			if ( ! ex && ! ey ) continue;
+			const a = ex < 0 ? size.a0 : ex > 0 ? size.a1 : ( size.a0 + size.a1 ) / 2;
+			const b = ey < 0 ? size.b0 : ey > 0 ? size.b1 : ( size.b0 + size.b1 ) / 2;
+			const at = size.c.clone().addScaledVector( size.A, a ).addScaledVector( size.B, b ).addScaledVector( size.N, 0.012 ).sub( s.origin );
+			const handle = new Mesh( handleShape, handleLook );
+			handle.add( new LineLoop( handleOutline, handleEdge ) );
+			handle.position.copy( at );
+			handle.quaternion.setFromRotationMatrix( turn );
+			handle.renderOrder = 1000;
+			handle.children[ 0 ].renderOrder = 1001;
+			handle.raycast = () => {};
+			handle.children[ 0 ].raycast = () => {};
+			handle.userData = { ex, ey, noCollide: true };
+			group.add( handle );
+
+		}
+
+		( s.group?.parent ?? s.content ).add( group );
+		group.updateMatrixWorld( true );
+		s.handles = group;
+
+	}
+
+	// The handle under the pointer, if any: the nearest on the screen within reach.
+	function handleAt( e ) {
+
+		const s = selected?.s;
+		if ( ! s?.handles ) return null;
+		const rect = canvas.getBoundingClientRect();
+		let best = null;
+		for ( const handle of s.handles.children ) {
+
+			const v = handle.getWorldPosition( new Vector3() ).project( camera );
+			if ( v.z > 1 ) continue;
+			const x = rect.left + ( v.x + 1 ) / 2 * rect.width, y = rect.top + ( 1 - v.y ) / 2 * rect.height;
+			const d = Math.hypot( e.clientX - x, e.clientY - y );
+			if ( d < HANDLE.reach && ( ! best || d < best.d ) ) best = { d, handle };
+
+		}
+
+		return best?.handle ?? null;
+
+	}
+
+	// Dragging a handle: the side (or both, at a corner) it's on goes where the pointer is on the
+	// face, the other side staying put; to the centimetre, never narrower than NARROWEST.
+	function dragHandle( e ) {
+
+		const { s, id, m, size, ex, ey } = press;
+		const point = ray( e ).ray.intersectPlane( press.plane, new Vector3() );
+		if ( ! point ) return;
+		const d = toModelPoint( s, point ).sub( size.c );
+		// Seen nearly edge-on, a little move of the mouse is a long way on the face: never more than
+		// WIDEST a side.
+		const clamp = ( v, lo, hi ) => Math.min( hi - NARROWEST, Math.max( lo + NARROWEST, v ) );
+		const a = clamp( Math.round( d.dot( size.A ) * 100 ) / 100, size.a1 - WIDEST, size.a0 + WIDEST );
+		const b = clamp( Math.round( d.dot( size.B ) * 100 ) / 100, size.b1 - WIDEST, size.b0 + WIDEST );
+		const to = { a0: size.a0, a1: size.a1, b0: size.b0, b1: size.b1 };
+		if ( ex > 0 ) to.a1 = Math.max( to.a0 + NARROWEST, a );
+		if ( ex < 0 ) to.a0 = Math.min( to.a1 - NARROWEST, a );
+		if ( ey > 0 ) to.b1 = Math.max( to.b0 + NARROWEST, b );
+		if ( ey < 0 ) to.b0 = Math.min( to.b1 - NARROWEST, b );
+		change( s, id, resized( s, id, m, size, to ), ! press.dragging );
+		press.dragging = true;
+
+	}
+
+	// ---------- Size tags ----------
+
+	// While editing, each area's size floats on it, under its number: "1.20 × 0.80 m" and its m².
+	function sizeTag( s, id, m ) {
+
+		const size = sizeOf( s, id, m );
+		const lines = [ `${ size.width.toFixed( 2 ) } × ${ size.height.toFixed( 2 ) } m`, `${ ( m.area ?? size.width * size.height ).toFixed( 2 ) } m²` ];
+		const canvas = document.createElement( 'canvas' );
+		const ctx = canvas.getContext( '2d' );
+		const font = '600 30px system-ui, -apple-system, "Segoe UI", sans-serif';
+		ctx.font = font;
+		canvas.width = Math.ceil( Math.max( ...lines.map( line => ctx.measureText( line ).width ) ) ) + 28;
+		canvas.height = 84;
+		ctx.fillStyle = 'rgba( 29, 29, 29, 0.85 )';
+		ctx.strokeStyle = '#ffd21f';
+		ctx.lineWidth = 3;
+		ctx.beginPath();
+		ctx.roundRect( 2, 2, canvas.width - 4, canvas.height - 4, 10 );
+		ctx.fill();
+		ctx.stroke();
+		ctx.font = font;
+		ctx.textAlign = 'center';
+		ctx.textBaseline = 'middle';
+		ctx.fillStyle = '#ffe27a';
+		ctx.fillText( lines[ 0 ], canvas.width / 2, 25 );
+		ctx.fillStyle = '#ffffff';
+		ctx.fillText( lines[ 1 ], canvas.width / 2, 59 );
+		const map = new CanvasTexture( canvas );
+		map.colorSpace = SRGBColorSpace;
+		const sprite = new Sprite( new SpriteMaterial( { map, transparent: true, depthWrite: false } ) );
+		sprite.position.copy( centroid( m.pts ).addScaledVector( size.N, NUMBER.off ).sub( s.origin ) );
+		// Under the number (if it has one), hanging from the middle.
+		sprite.center.set( 0.5, m.no || photos.count( s.model, id ) ? 1.25 : 0.5 );
+		sprite.userData = { sizeTag: true, aspect: canvas.width / canvas.height, noCollide: true };
+		sprite.scale.set( NUMBER.min * sprite.userData.aspect, NUMBER.min, 1 );
+		sprite.raycast = () => {};
+		return sprite;
+
+	}
+
+	function dropSize( s, id ) {
+
+		const sprite = s.sizes?.get( id );
+		if ( ! sprite ) return;
+		sprite.removeFromParent();
+		sprite.material.map?.dispose();
+		sprite.material.dispose();
+		s.sizes.delete( id );
+
+	}
+
+	// One area's tag, as it is now (none when not editing, hidden, or not there).
+	function showSize( s, id ) {
+
+		dropSize( s, id );
+		if ( ! editing || ! sizesShown || asOf || ! s.data ) return;
+		const m = markupOf( s, id );
+		if ( ! m || ! s.nodes.has( id ) ) return;
+		const sprite = sizeTag( s, id, m );
+		( s.group?.parent ?? s.content ).add( sprite );
+		( s.sizes ??= new Map() ).set( id, sprite );
+
+	}
+
+	function showSizes( s ) {
+
+		for ( const id of [ ...( s.sizes?.keys() ?? [] ) ] ) dropSize( s, id );
+		if ( s.data ) for ( const id of ids( s ) ) showSize( s, id );
+		layers?.update();
+
+	}
+
+	layers?.addLayer( SIZES_LAYER, {
+		name: 'Panel sizes',
+		count: () => states.size ? [ ...states.values() ].reduce( ( n, s ) => n + ( s.sizes?.size ?? 0 ), 0 ) || true : 0,
+		setShown: () => {
+
+			sizesShown = layers.isLayerShown( SIZES_LAYER );
+			for ( const s of states.values() ) showSizes( s );
+
+		},
+	} );
 
 	// ---------- Moving ----------
 
@@ -1553,6 +1859,21 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 
 		}
 
+		const handle = handleAt( e );
+		if ( handle ) {
+
+			const { s, id } = selected;
+			const m = markupOf( s, id );
+			const size = sizeOf( s, id, m );
+			press = {
+				s, id, m, size, ex: handle.userData.ex, ey: handle.userData.ey, resizing: true, dragging: false, x: e.clientX, y: e.clientY,
+				plane: new Plane().setFromNormalAndCoplanarPoint( size.N.clone().transformDirection( s.content.matrixWorld ), toScene( s, size.c ) ),
+			};
+			canvas.setPointerCapture?.( e.pointerId );
+			return;
+
+		}
+
 		const at = areaAt( e );
 		if ( ! at ) {
 
@@ -1587,6 +1908,7 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 		if ( ! press ) return;
 		e.stopImmediatePropagation();
 		if ( ! press.dragging && Math.hypot( e.clientX - press.x, e.clientY - press.y ) < DRAG ) return;
+		if ( press.resizing ) return dragHandle( e );
 		const point = ray( e ).ray.intersectPlane( press.plane, new Vector3() );
 		if ( ! point ) return;
 		const { s, id } = press;
@@ -1671,6 +1993,7 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 		if ( ! s ) return;
 		states.delete( entry );
 		if ( selected?.s === s ) select( null );
+		for ( const id of [ ...( s.sizes?.keys() ?? [] ) ] ) dropSize( s, id );
 		if ( drawing?.s === s ) stopDrawing();
 		if ( dirtyCut === s ) dirtyCut = null;
 		for ( let i = history.length - 1; i >= 0; i -- ) if ( history[ i ].s === s ) history.splice( i, 1 );
@@ -1715,7 +2038,9 @@ export function setUpRepairAreas( { models, controls, onUpdate, toast, bar, laye
 			return s ? ensureData( s ) : Promise.resolve();
 
 		},
-		startDrawing, nudge, turn, undo, save,
+		startDrawing, nudge, turn, undo, save, setSize,
+		// For tests: the picked area's size as the panel has it.
+		size: () => selected && markupOf( selected.s, selected.id ) ? ( ( { width, height, square } ) => ( { width, height, square, area: markupOf( selected.s, selected.id ).area } ) )( sizeOf( selected.s, selected.id ) ) : null,
 		// Looking back (repair-timeline.js): the days anything reached a stage, the areas drawn as
 		// they were by the end of a day (null: as they are now), and how many areas and m² were at
 		// each stage then.
