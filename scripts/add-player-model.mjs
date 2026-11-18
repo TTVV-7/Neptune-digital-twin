@@ -4,9 +4,10 @@
 // one mesh standing with arms down, facing +z) made light enough for the web and put to scale.
 // It's simplified to about --triangles triangles, its textures made 2048 px WebP, then scaled so
 // it stands --height metres tall (hard hat and all) with its feet at 0 and the middle between
-// them at the origin, still facing +z. src/player.js gives it its bones when it loads.
+// them at the origin, still facing +z. --out names the file (another character). src/player.js
+// gives it its bones when it loads.
 //
-// Writes public/models/player-worker.glb.
+// Writes public/models/player-worker.glb, or --out.
 
 import { parseArgs } from 'node:util';
 import { NodeIO } from '@gltf-transform/core';
@@ -51,8 +52,19 @@ for ( let i = 0; i < pos.length; i ++ ) {
 
 }
 
+// Centred between his feet (the bottom 5% of him), not on the box round all of him: arms held out
+// in front would pull that forward of where he stands.
+const feet = [ [ Infinity, - Infinity ], [ Infinity, - Infinity ] ];
+for ( let i = 0; i < pos.length; i += 3 ) {
+
+	if ( pos[ i + 1 ] > min[ 1 ] + ( max[ 1 ] - min[ 1 ] ) * 0.05 ) continue;
+	feet[ 0 ] = [ Math.min( feet[ 0 ][ 0 ], pos[ i ] ), Math.max( feet[ 0 ][ 1 ], pos[ i ] ) ];
+	feet[ 1 ] = [ Math.min( feet[ 1 ][ 0 ], pos[ i + 2 ] ), Math.max( feet[ 1 ][ 1 ], pos[ i + 2 ] ) ];
+
+}
+
 const scale = Number( opts.height ) / ( max[ 1 ] - min[ 1 ] );
-const at = [ - ( min[ 0 ] + max[ 0 ] ) / 2, - min[ 1 ], - ( min[ 2 ] + max[ 2 ] ) / 2 ];
+const at = [ - ( feet[ 0 ][ 0 ] + feet[ 0 ][ 1 ] ) / 2, - min[ 1 ], - ( feet[ 1 ][ 0 ] + feet[ 1 ][ 1 ] ) / 2 ];
 const matrix = [ scale, 0, 0, 0, 0, scale, 0, 0, 0, 0, scale, 0, at[ 0 ] * scale, at[ 1 ] * scale, at[ 2 ] * scale, 1 ];
 transformMesh( root.listMeshes()[ 0 ], matrix );
 root.listMeshes()[ 0 ].setName( 'Player' );

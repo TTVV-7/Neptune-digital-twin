@@ -166,7 +166,9 @@ building; the status top left says when it's on.
 
 ### Walking as a construction worker
 
-Walking (**F**), you're a construction worker in a hard hat and hi-vis vest (a hi3D model). In
+Walking (**F**), you're a construction worker in a hard hat and hi-vis vest (hi3D models): **K**
+changes who, between the *Foreman* (jeans, arms at his sides) and the *Labourer* (hoodie, cargo
+pants, forearms held out in front), remembered in your browser. In
 **third person** the camera follows behind him and over his right shoulder: he turns to face the way
 he walks, his legs and arms swing in step (further when running with Shift), his knees come up when
 he jumps, and the camera comes in closer when a wall or the ground is behind him, so it works down
@@ -175,15 +177,19 @@ boots. The choice is remembered in your browser; flying and driving are as befor
 
 The model is one mesh with no skeleton: `src/player.js` gives it one as it loads (hips, spine,
 chest, head, thighs, shins, upper arms and forearms), weighting each part of the body to its bones
-by where it is, and walks it. To use another person (standing with arms down, facing +z):
+by where it is, and walks it. To add another person (standing, facing +z), make the model and
+add a line to `CHARACTERS` at the top of `src/player.js`:
 
 ```bash
-node scripts/add-player-model.mjs path/to/person.glb --height 1.88
+node scripts/add-player-model.mjs path/to/person.glb --height 1.88 --out public/models/player-worker-3.glb
 ```
+
+A character holding its forearms out in front (as the Labourer does) says so with `forward` there,
+and one whose body stands back of its feet with `z`.
 
 That makes it about 40,000 triangles with 2048 px WebP textures (the hi3D export was 2 million and
 48 MB; this is 1 MB), stands it on its feet at the height given, and writes
-`public/models/player-worker.glb`. If its joints aren't where a typical person's are, `JOINTS` at
+`public/models/player-worker.glb` (or `--out`), centred between its feet. If its joints aren't where a typical person's are, `JOINTS` at
 the top of `src/player.js` moves them (shares of the height).
 
 ## Adding your own model
@@ -1002,7 +1008,7 @@ src/placements.js   models' positions saved on the live site for everyone (Save 
                     and the admin passcode for anything saved for everyone
 src/shared-items.js items the admin saved for everyone: loaded for everyone, Save / Remove for everyone
 src/legend.js       the Controls panel: the keys for what you're doing now
-src/player.js       the construction worker you walk as: his bones, his walk, third and first person (C)
+src/player.js       the construction workers you walk as (K): their bones, their walk, third and first person (C)
 src/layers.js       the Show panel: layers, hidden items and Before / After (B)
 src/drive-prompt.js V: what it drives, the "Press V to drive" prompt and twin.startDriving()
 src/models.js       loads and places your glTF models

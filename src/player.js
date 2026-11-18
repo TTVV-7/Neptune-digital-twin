@@ -24,8 +24,12 @@ import { blocks, isTyping } from './walk.js';
 // Who you can walk as (K changes, remembered in this browser), each made by
 // scripts/add-player-model.mjs. Only the one you're walking as is loaded.
 export const CHARACTERS = [
-	{ id: 'worker', name: 'Worker in a vest', url: 'models/player-worker.glb' },
-	{ id: 'worker-2', name: 'Worker 2', url: 'models/player-worker-2.glb' },
+	// Bearded, sunglasses, SWC vest and jeans, arms down at his sides.
+	{ id: 'worker', name: 'Foreman (jeans)', url: 'models/player-worker.glb' },
+	// Hoodie under a lime vest, cargo pants, holding his forearms out in front of him: his body
+	// stands 4% of his height back of his feet's middle, and what's in front of it at the waist
+	// (`forward`) is his forearms, bent at the elbow already.
+	{ id: 'worker-2', name: 'Labourer (hoodie)', url: 'models/player-worker-2.glb', z: - 0.04, forward: { from: 0.48, to: 0.7, z: 0.075 }, elbow: 0 },
 ];
 const STORAGE_KEY = 'neptune-twin.player-view';
 const CHARACTER_KEY = 'neptune-twin.player-character';
@@ -56,7 +60,7 @@ const smooth = ( a, b, v ) => MathUtils.smoothstep( v, a, b );
 // How much each bone moves a point of him, from where it is (x across, y up, as shares of his
 // height): the arms are what hangs out past his sides, the legs what's below the crotch, the head
 // what's above the neck, and the rest his body, from the hips to the chest. Soft at the joins.
-function weigh( x, y ) {
+function weigh( x, y, z, who ) {
 
 	const w = {};
 	const add = ( name, v ) => {
@@ -68,8 +72,12 @@ function weigh( x, y ) {
 	const ax = Math.abs( x );
 	// His sides: 0.118 of his height out from the middle, wider up to the shoulders.
 	const edge = y < 0.66 ? 0.118 : 0.118 + ( Math.min( y, 0.78 ) - 0.66 ) / 0.12 * 0.03;
-	const arm = y > 0.4 && y < 0.81 ? smooth( edge - 0.012, edge + 0.012, ax ) * ( 1 - smooth( 0.79, 0.81, y ) ) : 0;
-	const fore = 1 - smooth( 0.585, 0.625, y );
+	const hanging = y > 0.4 && y < 0.81 ? smooth( edge - 0.012, edge + 0.012, ax ) * ( 1 - smooth( 0.79, 0.81, y ) ) : 0;
+	// Forearms held out in front: whatever's in front of his body at the waist.
+	const { forward } = who;
+	const ahead = forward && y > forward.from && y < forward.to ? smooth( forward.z - 0.015, forward.z + 0.015, z - ( who.z ?? 0 ) ) : 0;
+	const arm = Math.max( hanging, ahead );
+	const fore = Math.max( 1 - smooth( 0.585, 0.625, y ), ahead );
 	add( `arm${ side }`, arm * ( 1 - fore ) );
 	add( `forearm${ side }`, arm * fore );
 	let rest = 1 - arm;
@@ -95,7 +103,7 @@ function weigh( x, y ) {
 }
 
 // The loaded mesh, given its bones: a SkinnedMesh with them in its bind pose.
-function rig( mesh ) {
+function rig( mesh, who ) {
 
 	const geometry = mesh.geometry;
 	geometry.computeBoundingBox();
@@ -106,7 +114,7 @@ function rig( mesh ) {
 		const [ x, y ] = JOINTS[ name ];
 		const bone = new Bone();
 		bone.name = name;
-		bone.userData.at = new Vector3( x * height, y * height, 0 );
+		bone.userData.at = new Vector3( x * height, y * height, ( who.z ?? 0 ) * height );
 		bones[ name ] = bone;
 
 	}
@@ -130,7 +138,7 @@ function rig( mesh ) {
 	const weight = new Float32Array( position.count * 4 );
 	for ( let i = 0; i < position.count; i ++ ) {
 
-		weigh( position.getX( i ) / height, position.getY( i ) / height ).forEach( ( [ bone, v ], k ) => {
+		weigh( position.getX( i ) / height, position.getY( i ) / height, position.getZ( i ) / height, who ).forEach( ( [ bone, v ], k ) => {
 
 			index[ i * 4 + k ] = bone;
 			weight[ i * 4 + k ] = v;
@@ -212,7 +220,7 @@ export function setUpPlayer( { scene, camera, controls, driver, getColliders, to
 
 			} );
 			if ( ! mesh ) throw new Error( 'no mesh in it' );
-			const rigged = rig( mesh );
+			const rigged = rig( mesh, which );
 			rigged.name = `Player: ${ which.name }`;
 			// Never in the way of walking, clicking or the camera's own check: only drawn.
 			rigged.frustumCulled = false;
@@ -305,7 +313,9 @@ export function setUpPlayer( { scene, camera, controls, driver, getColliders, to
 			// The arm on the other side swings with the leg.
 			bones[ `arm${ side }` ].rotation.x = swing * SWING.arm * big;
 			bones[ `arm${ side }` ].rotation.z = k * 0.06;
-			bones[ `forearm${ side }` ].rotation.x = - ( 0.12 + SWING.elbow * big * ( 0.5 + 0.5 * k * s ) );
+			// Bent a little more as the arm comes forward (not for forearms held out already).
+			const elbow = character.elbow ?? 1;
+			bones[ `forearm${ side }` ].rotation.x = - elbow * ( 0.12 + SWING.elbow * big * ( 0.5 + 0.5 * k * s ) );
 
 		}
 
