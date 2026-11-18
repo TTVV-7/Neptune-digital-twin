@@ -2586,7 +2586,7 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 
 	}
 
-	test( 'an area\'s room says where its drivers are with its reports: a lone driver at REPORT_MS, though it has little to report, then only as the room reports anyway; going, it takes its dot off. A party\'s room never says', async () => {
+	test( 'an area\'s room says where its drivers are with its reports: a lone driver DOTS_GAP after she connects, though it has little to report, then only as the room reports anyway; going, it takes its dot off. A party\'s room never says', async () => {
 
 		const ctx = runtime();
 		const limits = limitsStub();
@@ -2595,10 +2595,11 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 		const alone = await hello( room, ctx, { name: FURKA_AREA } );
 		await idle( room, ctx, [ alone ], 30 * MINUTE );
 		const reported = dotsIn( limits.reports );
-		// Every report of an area's room has its dots: the first REPORT_MS after it connected, where it
-		// dropped in (its page sends no states alone), to about a kilometre and 10 m.
+		// Every report of an area's room has its dots: the first DOTS_GAP (15 s) after she connected (a
+		// room counts from its first connection as from a report), where she dropped in (her page sends no states alone), to about a kilometre and 10 m.
 		assert.equal( reported.length, limits.reports.length );
-		assert.deepEqual( reported[ 0 ], { at: start + REPORT_MS, room: FURKA_AREA, dots: [ FURKA_DOT ] } );
+		assert.ok( reported[ 0 ].at - start <= 16 * SECOND, `${ reported[ 0 ].at - start } ms` );
+		assert.deepEqual( { ...reported[ 0 ], at: 0 }, { at: 0, room: FURKA_AREA, dots: [ FURKA_DOT ] } );
 		// Nothing changing, then only the reports the room makes anyway: every few minutes for a lone
 		// driver, never more than REPORT_MOST and its next alarm apart (well within ONLINE_TTL, 12).
 		for ( let i = 1; i < reported.length; i ++ ) {
@@ -2628,7 +2629,7 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 
 	} );
 
-	test( 'who\'s counted: those on the globe aren\'t, a paused driver is; a change goes with the next report REPORT_MS after the last, though there\'s little to report', async () => {
+	test( 'who\'s counted: those on the globe aren\'t, a paused driver is; a change goes in a report DOTS_SOON after it (no sooner than DOTS_GAP after the last), though there\'s little to report', async () => {
 
 		const ctx = runtime();
 		const limits = limitsStub();
@@ -2638,31 +2639,53 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 		// Bob's on the globe, still in the area's room (for a minute, as a page is).
 		const bob = await hello( room, ctx, { name: FURKA_AREA }, { place: null, away: true } );
 		await idle( room, ctx, [ alice, bob ], REPORT_MS );
-		assert.deepEqual( dotsIn( limits.reports ), [ { at: start + REPORT_MS, room: FURKA_AREA, dots: [ FURKA_DOT ] } ] );
+		const [ first ] = dotsIn( limits.reports );
+		assert.equal( dotsIn( limits.reports ).length, 1 );
+		assert.ok( first.at - start <= 16 * SECOND, `${ first.at - start } ms` );
+		assert.deepEqual( first.dots, [ FURKA_DOT ] );
 
-		// He drops in beside her and parks (paused): two, at their mean, from the next report on: as soon
-		// as one may be, REPORT_MS after the last (or REPORT_EARLY before), with less than REPORT_LEAST
-		// (5) to report.
+		// He drops in beside her and parks (paused): two, at their mean, in a report DOTS_SOON (3 s)
+		// after, with less than REPORT_LEAST (5) to report.
+		let said = clock;
 		await say( room, bob, { t: 'place', place: FURKA } );
 		await say( room, bob, { t: 's', s: carAt( 46.5725, 8.4153, { north: 30, flags: FLAGS.paused | FLAGS.grounded } ) } );
 		await idle( room, ctx, [ alice, bob ], REPORT_MS );
 		let reported = dotsIn( limits.reports );
 		assert.equal( reported.length, 2 );
-		assert.ok( reported[ 1 ].at - reported[ 0 ].at <= REPORT_MS && reported[ 1 ].at - reported[ 0 ].at >= REPORT_MS - 10 * SECOND, `${ reported[ 1 ].at - reported[ 0 ].at } ms` );
+		assert.ok( reported[ 1 ].at - said <= 4 * SECOND, `${ reported[ 1 ].at - said } ms` );
 		assert.ok( limits.reports[ 1 ].amount < 5, `${ limits.reports[ 1 ].amount } reported` );
 		assert.deepEqual( reported[ 1 ].dots, [ { ...FURKA_DOT, count: 2 } ] );
 
-		// Back on the globe: one again, within the minute.
+		// Back on the globe: one again, within seconds.
+		said = clock;
 		await say( room, bob, { t: 'away' } );
 		await idle( room, ctx, [ alice, bob ], REPORT_MS );
 		reported = dotsIn( limits.reports );
 		assert.equal( reported.length, 3 );
-		assert.ok( reported[ 2 ].at - reported[ 1 ].at <= REPORT_MS );
+		assert.ok( reported[ 2 ].at - said <= 4 * SECOND, `${ reported[ 2 ].at - said } ms` );
+		// Back and forth faster than DOTS_GAP (15 s): the room reports no sooner than that after its
+		// last, so a page coming and going can't have it report more than four times a minute.
+		const before = dotsIn( limits.reports ).length;
+		for ( let i = 0; i < 6; i ++ ) {
+
+			await say( room, bob, i % 2 ? { t: 'away' } : { t: 'place', place: FURKA } );
+			await wait( room, ctx, 5 * SECOND );
+
+		}
+
+		await idle( room, ctx, [ alice, bob ], REPORT_MS );
+		const quick = dotsIn( limits.reports ).slice( before - 1 );
+		for ( let i = 1; i < quick.length; i ++ ) assert.ok( quick[ i ].at - quick[ i - 1 ].at >= 15 * SECOND, JSON.stringify( quick.map( r => r.at ) ) );
+		assert.deepEqual( quick.at( - 1 ).dots, [ FURKA_DOT ] );
 		assert.deepEqual( reported[ 2 ].dots, [ FURKA_DOT ] );
 		// And with nothing changing, no report for the minutes after that but what the room's alarms
 		// add up to.
+		// (Here at most the one the back and forth above spent enough for, REPORT_LEAST.)
+		const settled = dotsIn( limits.reports ).length;
 		await idle( room, ctx, [ alice, bob ], 3 * MINUTE );
-		assert.equal( dotsIn( limits.reports ).length, 3 );
+		const after = dotsIn( limits.reports ).slice( settled );
+		assert.ok( after.length <= 1, JSON.stringify( after ) );
+		for ( const report of after ) assert.deepEqual( report.dots, [ FURKA_DOT ] );
 
 	} );
 
@@ -2679,7 +2702,7 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 		await say( room, c, { t: 's', s: carAt( 46.5725, 8.4153, { north: - 3500 } ) } );
 		await idle( room, ctx, [ a, b, c ], REPORT_MS );
 		const [ first ] = dotsIn( limits.reports );
-		assert.equal( first.at, start + REPORT_MS );
+		assert.ok( first.at - start <= 16 * SECOND, `${ first.at - start } ms` );
 		const south = toGeodetic( ...Object.values( ecef( 46.5725 - 3500 / 111200, 8.4153, 2430 ) ) );
 		assert.deepEqual( first.dots, [ { lat: 46.57, lon: 8.42, height: 2430, count: 2 }, { lat: Math.round( south.lat * 100 ) / 100, lon: 8.42, height: 2430, count: 1 } ] );
 
