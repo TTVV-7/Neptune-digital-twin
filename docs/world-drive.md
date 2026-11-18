@@ -1917,17 +1917,18 @@ near ("Near Golden Gate Bridge"), as text only.
   is taken to be in the area nearest where it last knew their car to be (or where they dropped in),
   if there's one within 5 km, so others in the room driving in dots of their own don't stop it.
 
-**Timing.** A new driver shows within about a minute: their room says where its drivers are at
-its next report, which goes when they've changed (someone joined, left, went to the globe, came
-back, or a dot moved to another rounded spot) as soon as a report may, 50 to 60 s after the last
-(a room's first comes a minute after its first driver connected), even with little else to
-report. Then `/api/online` is kept up to 30 s, and a page asks when the globe shows and every
-minute while it's showing and the tab can be seen, but not while the Garage is open over it, nor
-once nobody has touched the page (a click, tap, key or wheel) for 10 minutes: a tab left on the
-globe on a second screen stops asking, and asks again at once at the next touch. One who's gone
-goes the same way within about a minute, or at once when their room empties (its last report says
-none); a room that went without a word (a restart) is left out once its last report is 12 minutes
-old.
+**Timing.** A new driver shows within about half a minute: their room says where its drivers are
+in a report 3 s after they've changed (someone joined, left, went to the globe or came back), but
+no sooner than 15 s after its last report (a room's first, 15 s after its first driver connected),
+so a page coming and going can't have a room report more than four times a minute; a dot moving to another rounded spot waits for the room's next report as
+before (50 to 60 s after the last). Then `/api/online` is kept up to 30 s, and a page asks when the
+globe shows and every 20 s while it's showing and the tab can be seen, but not while the Garage is
+open over it, nor once nobody has touched the page (a click, tap, key or wheel) for 10 minutes: a
+tab left on the globe on a second screen stops asking, and asks again at once at the next touch.
+One who's gone goes the same way within about half a minute, or at once when their room empties
+(its last report says none); a room that went without a word (a restart) is left out once its last
+report is 12 minutes old. (Until November 2026 a room's first report came a minute after its first
+driver, and a page asked once a minute: up to about 2½ minutes.)
 
 **How it works.** Each area's room puts its dots (`live-protocol.js`'s `dotsOf`) in the reports of
 what it has spent that it makes to `DriveLimits` anyway (`liveSpent`), which keeps them in a table
@@ -1969,11 +1970,11 @@ for each report of an area's room). An answer not kept is a `DriveLimits` reques
 the day's budget: about two a minute in each Worker instance where someone's on the globe (those
 in one Cloudflare location share its cache when their requests are spread out, and a burst in one
 instance asks once), and none at all while nobody looks. So a page alone on the globe in its
-location is an ask a minute, about 60 an hour (a lone driver's room is about 93), and however many
+location is an ask every 40 s or so (each 20 s ask, every other one answered from the 30 s kept), about 90 an hour (a lone driver's room is about 93), and however many
 watch in one location it's about 120 an hour there; it stops once nobody has touched the page for
 10 minutes, so a tab forgotten on the globe costs 10 minutes' worth. Each such ask reads a row for
 each area's room with drivers (rows read: Free 5 million a day). Every ask that reaches the Worker
-is a Worker request (Free: 100,000 a day): a page on the globe asks once a minute, and the browser
+is a Worker request (Free: 100,000 a day): a page on the globe asks every 20 s, and the browser
 answers any ask within 30 s of the last itself.
 
 ### The rooms
@@ -2142,7 +2143,7 @@ Worked through:
 | A driver alone in a room, an hour, all told (its keepalives, the room's alarm about every 50 s, a report every 5 minutes or so) | 144 | about 93 (110 for a tab in the background, keepalives once a minute) |
 | Connecting to a room (the Worker's ask, the connection, and an alarm 10 s later for its hello) | | 3 (and 2 rows written), 1 more on a change of room |
 | A page load (`/api/config`'s ask, at most one every 30 s in each Worker instance) | | 0 or 1 |
-| A page on the globe, an hour (`/api/online` once a minute, kept 30 s; none after 10 minutes untouched, or with the Garage open) | | about 60 alone in its Cloudflare location; about 120 a location however many watch |
+| A page on the globe, an hour (`/api/online` every 20 s, kept 30 s; none after 10 minutes untouched, or with the Garage open) | | about 90 alone in its Cloudflare location; about 120 a location however many watch |
 
 So the default budget of 40,000 a day is about **40 driver-hours with others** (two driving
 together for an hour is 2 × 900 + 120 = 1,920), or about 430 hours of drivers each alone in their

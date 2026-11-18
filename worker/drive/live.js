@@ -146,6 +146,13 @@ const REPORT_MS = 60000;
 const REPORT_EARLY = 10000;
 const REPORT_LEAST = 5;
 const REPORT_MOST = 10 * 60000;
+// Someone coming, going, dropping in or going back to the globe changes who's driving now: the room
+// reports that DOTS_SOON after (an alarm then, so a few changes together make one report), but no
+// sooner than DOTS_GAP after its last report, so a page coming and going can't have it report more
+// than four times a minute (a room counts from its first connection as from a report, so its first
+// is DOTS_GAP after that). The globe has a newcomer within about half a minute (online.js).
+const DOTS_SOON = 3000;
+const DOTS_GAP = 15000;
 // The most addresses a report says what they spent (a room has at most a few dozen connections).
 const ADDRESSES_MOST = 64;
 // The most addresses one connection's attachment holds what others from them spent before they went
@@ -724,6 +731,7 @@ export class DriveRoom extends DurableObject {
 		if ( ! this.handle( ws, driver, m, now ) ) return this.shut( ws, CLOSE.protocol, 'bad message' );
 		this.save( ws, driver );
 		this.flush( now );
+		if ( ( m.t === 'place' || m.t === 'away' ) && ! driver.left ) await this.dotsSoon( now );
 
 	}
 
@@ -782,6 +790,7 @@ export class DriveRoom extends DurableObject {
 		this.partied( Date.now() );
 		this.save( ws, driver );
 		this.flush( Date.now() );
+		await this.dotsSoon( Date.now() );
 
 	}
 
@@ -1107,6 +1116,18 @@ export class DriveRoom extends DurableObject {
 		// The next report REPORT_MS after the last; one put off (reportDue) no sooner than it would
 		// have been, so the alarm doesn't come straight back to put it off again.
 		await this.wake( Math.min( next, Math.max( ( this.reportedAt() ?? now ) + REPORT_MS, now + REPORT_MS - REPORT_EARLY ) ) );
+		// (Who's driving now changed since this report, or since the last if this one was put off.)
+		await this.dotsSoon( now );
+
+	}
+
+	// An area's room whose dots have changed since it last reported (who's driving now): its alarm
+	// DOTS_SOON from `now`, no sooner than DOTS_GAP after the last report, unless it's set sooner.
+	async dotsSoon( now ) {
+
+		if ( parseRoom( this.name )?.kind !== 'near' || ! this.sockets().length || ! this.dotsChanged() ) return;
+		const reported = this.reportedAt();
+		await this.wake( Math.max( now + DOTS_SOON, reported === null ? now : reported + DOTS_GAP ) );
 
 	}
 
@@ -1117,6 +1138,7 @@ export class DriveRoom extends DurableObject {
 
 		const reported = this.reportedAt();
 		if ( reported === null ) return true;
+		if ( now >= reported + DOTS_GAP && this.dotsChanged() ) return true;
 		if ( now < reported + REPORT_MS - REPORT_EARLY ) return false;
 		const unreported = this.sockets().reduce( ( sum, ws ) => sum + ( this.driver( ws ).spent ?? 0 ), this.owing() );
 		return unreported >= REPORT_LEAST || now >= reported + REPORT_MOST || this.dotsChanged();
@@ -1632,7 +1654,7 @@ export class DriveRoom extends DurableObject {
 			// (Unless someone came while that was said.)
 			if ( ! this.sockets().some( other => other !== ws ) ) await this.empty();
 
-		}
+		} else await this.dotsSoon( now );
 
 	}
 

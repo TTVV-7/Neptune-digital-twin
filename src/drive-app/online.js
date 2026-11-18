@@ -20,12 +20,12 @@ import { MOON_SPOTS } from './moon-places.js';
 // IDLE_MS (a tab left on the globe on a second screen): it asks again at the next touch. An answer is
 // kept 30 s, by the Worker in each of Cloudflare's locations and by the browser, and only a Worker
 // with none kept asks DriveLimits, which counts it against driving with others' budget for the day:
-// a page alone on the globe in its location is an ask a minute. Answered off (LIVE, or the day's
+// a page alone on the globe in its location is an ask every 40 s or so. Answered off (LIVE, or the day's
 // budget spent), or with driving with others over for this visit (live.js's ended, or the visit run
 // out), it's gone for the visit: on that world (each world's budget is its own: it goes on asking
 // there, for the other's count), or on both (asking nothing more).
 
-const POLL_MS = 60000;
+const POLL_MS = 20000;
 const IDLE_MS = 10 * 60000;
 // The panel lists the busiest this many areas.
 const LISTED = 5;
