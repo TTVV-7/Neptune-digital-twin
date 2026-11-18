@@ -5,3 +5,5 @@ drive/public/sea/*.bin binary
 # And so are its Moon's and Mars's (scripts/make-moon.mjs, make-mars.mjs).
 drive/public/moon/*.bin binary
 drive/public/mars/*.bin binary
+drive/public/vesta/*.bin binary
+drive/public/ceres/*.bin binary
