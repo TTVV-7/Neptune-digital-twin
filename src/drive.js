@@ -375,7 +375,12 @@ export class Driver {
 		if ( code === 'Space' && this.grounded && this.drift && this.steerInput() === 0 ) this.spaceTap = this.clock;
 		else if ( code === 'Space' && this.grounded ) this.hop();
 		// The booster goes on Shift, by the gas and steering keys, as well as B.
-		else if ( this.booster && ( code === 'KeyB' || code === 'ShiftLeft' || code === 'ShiftRight' ) ) this.fireBooster();
+		else if ( this.booster && ( code === 'KeyB' || code === 'ShiftLeft' || code === 'ShiftRight' ) ) {
+
+			this.ranDry = false;
+			this.fireBooster();
+
+		}
 		else if ( code === 'KeyR' ) this.respawn();
 
 	}
@@ -492,6 +497,7 @@ export class Driver {
 		this.flying = false;
 		this.gauge = 1;
 		this.firing = false;
+		this.ranDry = false;
 		// How long it has boosted near its top speed, whether it's supersonic, and how far into the
 		// supersonic view it is (0 to 1).
 		this.nearTop = 0;
@@ -1021,6 +1027,7 @@ export class Driver {
 		if ( ! this.booster || ! this.active ) return 0;
 		const before = this.gauge;
 		this.gauge = Math.min( 1, this.gauge + share );
+		this.ranDry = false;
 		this.hud.setBoost?.( this.gauge );
 		this.hud.refuel?.( this.gauge - before );
 		return this.gauge - before;
@@ -1062,6 +1069,10 @@ export class Driver {
 	// back down to the top speed.
 	thrust( dt, top ) {
 
+		// Held down, the booster lights as soon as there's enough in the gauge (pressed with too
+		// little, a pad's top-up, held from before a resume), but not again after the hold ran it
+		// dry, until it's pressed again (or a pad tops it up): no sputter of 15 % bursts.
+		if ( this.booster && ! this.firing && ! this.ranDry && this.gauge >= BOOST_MIN && this.boostHeld() ) this.fireBooster();
 		const base = this.spec.topSpeed / KMH;
 		if ( this.firing ) {
 
@@ -1070,6 +1081,7 @@ export class Driver {
 
 				// Run dry: the exhaust glows on and cools.
 				this.firing = false;
+				this.ranDry = true;
 				this.fx?.cool();
 
 			}

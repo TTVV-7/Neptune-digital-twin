@@ -1099,6 +1099,8 @@ export function setUpChallenges( app ) {
 
 		}
 
+		// (Not lit again by a boost key still held: see Driver.thrust.)
+		d.ranDry = true;
 		d.boost = null;
 
 	}
@@ -1276,6 +1278,8 @@ export function setUpChallenges( app ) {
 		write( 'markerOff', off ? angle : 'on', () => {
 
 			marker.root.classList.toggle( 'off', off );
+			// Pointing down, the arrow is where the distance goes: that goes over the diamond.
+			marker.root.classList.toggle( 'below', off && Math.abs( angle ) > 90 );
 			marker.pointer.style.transform = `rotate( ${ angle }deg )`;
 
 		} );
@@ -1699,6 +1703,9 @@ export function setUpChallenges( app ) {
 
 		beams.name = 'challenge-beams';
 		chevrons.name = 'challenge-course';
+		// Marks on the ground, drawn before the beams always (both see-through: by the depth of
+		// bounding spheres made once, which a moving course would leave stale, the order would flip).
+		chevrons.renderOrder = 1;
 		let spin = 0;
 		let pulse = 0;
 		let wave = 0;
@@ -1723,6 +1730,8 @@ export function setUpChallenges( app ) {
 				items.visible = ! ringed;
 				this.place( shown );
 				this.colour( shown );
+				// (Its bounds made again for this route's gates when it's next drawn.)
+				beams.boundingSphere = rings.boundingSphere = items.boundingSphere = null;
 
 			},
 			hide() {
@@ -1876,6 +1885,7 @@ export function setUpChallenges( app ) {
 
 				chevrons.count = laid.length;
 				chevrons.instanceMatrix.needsUpdate = true;
+				chevrons.boundingSphere = null;
 
 			},
 		};

@@ -496,6 +496,10 @@ dialog.ch-dialog::backdrop {
 	transform: translateY( -22px );
 }
 
+#drive-ui .ch-marker.below .ch-marker-dist {
+	top: -31px;
+}
+
 #drive-ui .ch-marker.off .ch-marker-pointer {
 	display: block;
 }

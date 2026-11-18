@@ -915,7 +915,7 @@ function supersonic() {
 	out.streaks = d.fx.particles.alive;
 	out.warp = Math.round( d.warp * 100 ) / 100;
 	out.still = d.supersonic;
-	// Out of boost (B was only a tap: it fires till the gauge is empty), and braking.
+	// Out of boost (B let go: the booster's out), and braking.
 	d.gauge = 0;
 	d.release( 'KeyB' );
 	d.release( 'KeyW' );
@@ -1408,8 +1408,8 @@ function effects( style ) {
 	// Lit at 55 km/h: its burst, the nose kicked up, and the view jolted wider and back.
 	d.press( 'KeyW' );
 	step( 10 );
+	// (Held: the booster burns while B is down.)
 	d.press( 'KeyB' );
-	d.release( 'KeyB' );
 	let punch = 0;
 	let nod = 0;
 	let squat = 0;
@@ -1427,6 +1427,7 @@ function effects( style ) {
 	d.gauge = 0.01;
 	step( 2 );
 	out.dry = { firing: d.firing, alive: d.fx.particles.alive };
+	d.release( 'KeyB' );
 	d.release( 'KeyW' );
 	step( 150 );
 	out.dry.after = d.fx.particles.alive;
@@ -1526,10 +1527,10 @@ function effects( style ) {
 
 		d.gauge = 1;
 		d.press( 'KeyB' );
-		d.release( 'KeyB' );
 		step( 25 );
 		d.gauge = 0.001;
 		step( 5 );
+		d.release( 'KeyB' );
 
 	}
 
