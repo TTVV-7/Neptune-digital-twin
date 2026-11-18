@@ -59,8 +59,9 @@ const FLY_CLIMB = 7;
 const FLY_CEILING = 150;
 const FLY_GLIDE = 3;
 const FLY_YAW = 75;
-// Booster: a full gauge fires for BOOST_TIME s and refills in BOOST_RECHARGE s; firing pushes at
-// BOOST_ACCEL m/s² up to BOOST_SPEED times the top speed. It needs BOOST_MIN of the gauge to fire.
+// Booster: held down, it burns a full gauge in BOOST_TIME s; let go and it stops, and the gauge
+// refills in BOOST_RECHARGE s. Firing pushes at BOOST_ACCEL m/s² up to BOOST_SPEED times the top
+// speed. It needs BOOST_MIN of the gauge to light (but, once lit, burns down to empty if held).
 const BOOST_TIME = 2.5;
 const BOOST_RECHARGE = 8;
 const BOOST_ACCEL = 28;
@@ -344,7 +345,12 @@ export class Driver {
 
 		}, true );
 		window.addEventListener( 'keyup', e => this.release( e.code ), true );
-		window.addEventListener( 'blur', () => this.keys.clear() );
+		window.addEventListener( 'blur', () => {
+
+			this.keys.clear();
+			this.cutBooster();
+
+		} );
 		// A HUD with buttons for touch screens (drive-hud.js) presses keys through press() and release().
 		hud.attach?.( this );
 
@@ -377,6 +383,8 @@ export class Driver {
 	release( code ) {
 
 		this.keys.delete( code );
+		// Hold to boost: letting go of the last boost key puts the booster out.
+		if ( this.booster && this.firing && ( code === 'KeyB' || code === 'ShiftLeft' || code === 'ShiftRight' ) && ! this.boostHeld() ) this.cutBooster();
 		if ( code !== 'Space' || this.spaceTap === null ) return;
 		const tapped = this.clock - this.spaceTap <= HOP_TAP;
 		this.spaceTap = null;
@@ -987,6 +995,22 @@ export class Driver {
 		this.fx?.ignite();
 		this.jolt( ...JOLTS.ignite );
 		if ( this.body ) this.body.pitch.speed += BODY.kick * this.handling.squash;
+
+	}
+
+	// Whether a boost key (Shift or B, or the touch BOOST button, which presses B) is held.
+	boostHeld() {
+
+		return this.keys.has( 'KeyB' ) || this.keys.has( 'ShiftLeft' ) || this.keys.has( 'ShiftRight' );
+
+	}
+
+	// Let go of the booster before it runs dry: the exhaust cools, and the gauge starts refilling.
+	cutBooster() {
+
+		if ( ! this.firing ) return;
+		this.firing = false;
+		this.fx?.cool();
 
 	}
 

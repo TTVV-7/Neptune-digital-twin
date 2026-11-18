@@ -67,7 +67,7 @@ address, and the construction app is unchanged by it.
 | W / S | Gas; brake, and reverse once stopped |
 | A / D | Steer |
 | Space | Drift: hold it and steer round a bend, let go for a mini-turbo; tap it to hop |
-| Shift (or B) | Booster: flat out for a moment, overdrive |
+| Shift (or B) | Booster: hold for overdrive while the gauge lasts; let go to save the rest |
 | F | Fly: hold to lift off, let go to glide down |
 | In the air | A / D spin, W / S flip (W forward, S back), Q / E roll (or Space with A / D) |
 | R | Stuck? Back on the road a few metres on (on water too) |
@@ -135,7 +135,8 @@ Hit something (a wall, a building, a parked car, a barrier) and you don't stop: 
 
 ### Boosting
 
-- **The booster** (**Shift**, or **B**) fires the whole gauge, 2.5 s of it (it needs 15 % to light), pushing you up
+- **The booster** (**Shift**, or **B**, or the BOOST button) burns while it's held: a full gauge lasts
+  2.5 s (it needs 15 % to light), and letting go puts it out with the rest saved, pushing you up
   to twice the ride's top speed. The gauge refills by itself in 8 s; landed tricks top it up (a fifth
   each), and so do boost pads (once they're switched on). What it leaves behind is the ride's **boost style** from the
   [Garage](#the-garage): the classic flame, bubbles, confetti, music notes or cherry blossom, or
@@ -4267,7 +4268,13 @@ same for everyone in its period, with its own board of each player's best time.
   nearest star not taken), turned as it lies from where the camera looks, with how far it is. A
   sprint's gates are rings standing across the way, a landmark's one ring, collectibles spinning
   stars; each has a beam of light up from the ground, seen from a long way off (twice as tall on the
-  Moon), the next gate's yellow, the last green, the rest blue, stars gold. A gate goes as it's
+  Moon), the next gate's yellow, the last green, the rest blue, stars gold. The next gate's beam is
+  wider and its ring breathes, and a marker sits over it on the screen (a diamond with how far it
+  is), held at the screen's edge with an arrow pointing the way when it's off the screen or behind
+  you. On the Moon, whose heights are known everywhere, the course is laid on the ground too: glowing
+  chevrons every 16 m on the line to the next gate (from the car up to 720 m ahead, a wave of light
+  running along them toward it) and dim ones on the first 260 m of the leg after it, so the turn
+  coming shows; for a star hunt, from the car to the nearest star. A gate goes as it's
   passed, with "Gate 2 / 6" (or "3 / 6 stars") said over the speed. A sprint's gates count in their
   order only; stars in any.
 - **Passing** one is driving into its zone: within its radius across the ground (30 m for a gate on
