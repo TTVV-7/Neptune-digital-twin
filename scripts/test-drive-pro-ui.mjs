@@ -388,7 +388,7 @@ describe( 'Supporter Pass, without it', () => {
 		await page.locator( '#pass' ).waitFor();
 		assert.equal( await panel.locator( '.vehicle.picked b' ).textContent(), 'Go-kart' );
 		const sheet = page.locator( '#pass' );
-		assert.match( await sheet.textContent(), /Seventeen more rides[\s\S]*whole Garage[\s\S]*on the leaderboard[\s\S]*30 drives a day[\s\S]*Instead of 8/ );
+		assert.match( await sheet.textContent(), /Seventeen more rides[\s\S]*whole Garage[\s\S]*on the leaderboard[\s\S]*30 Earth drives a day[\s\S]*Instead of 1/ );
 		assert.match( await sheet.locator( '.rides' ).textContent(), /Thirteen cars and four built rides; levels bring six too\./ );
 		// Each ride named by its picture, for a screen reader too.
 		assert.equal( await sheet.locator( '.ride-icon' ).count(), 17 );

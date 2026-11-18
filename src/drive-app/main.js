@@ -872,7 +872,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		if ( state.mode === 'globe' ) flyToPlace( place );
 
 	} );
-	if ( left !== null && left <= 2 ) screens.toast( left === 0 ? 'This is your last free drive today.' : `${ left } more free drive${ left === 1 ? '' : 's' } today after this one.` );
+	if ( left !== null && left <= 2 ) screens.toast( left === 0 ? 'This is today\'s free Earth drive: drop in anywhere as often as you like while this page stays open. Reload and it\'s the Moon until tomorrow.' : `${ left } more Earth drive${ left === 1 ? '' : 's' } today after this one.`, left === 0 ? 8000 : 5000 );
 
 	// Driving with others (live.js, ghosts.js, friends.js): only when the Worker has it on and this
 	// visit has a token to show the room. Without it, nothing of it is made. When the Worker couldn't
@@ -2435,5 +2435,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		dropIn, toGlobe, resume, recentre, waterOver, watchSea, moveCar, besideOf, goBeside,
 		where: () => formatLatLon( carto.lat * MathUtils.RAD2DEG, carto.lon * MathUtils.RAD2DEG ),
 	};
+	// The same, for boot.js (which world the globe is on, once it's up).
+	return window.drive;
 
 }

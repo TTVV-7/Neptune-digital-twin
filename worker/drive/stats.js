@@ -97,15 +97,23 @@ export async function postStats( context ) {
 
 }
 
+// The kinds of visit countVisit counts (metric 'visit_kind'): on the Earth ('earth', a supporter's
+// 'earth_supporter'), the owner's, and on the Moon: opened on a link to it, or over the day's cap for
+// everyone or the visitor's own (the page opens on the Moon instead).
+const VISIT_KINDS = new Set( [ 'earth', 'earth_supporter', 'owner', 'moon_link', 'moon_daily_cap', 'moon_visitor_cap' ] );
+
 // A visit handed out at `now`: counted for the day and its hour (UTC). Never in the visit's way: a
 // count that fails is only logged.
-export async function countVisit( env, now ) {
+export async function countVisit( env, now, kind = '' ) {
 
 	try {
 
 		if ( ! env.DB ) return;
 		const hour = String( new Date( now ).getUTCHours() ).padStart( 2, '0' );
-		await add( env.DB, dayOf( now ), [ [ 'visit', 'all', 1 ], [ 'visit_hour', hour, 1 ] ] );
+		const counts = [ [ 'visit', 'all', 1 ], [ 'visit_hour', hour, 1 ] ];
+		// Where the visit went (VISIT_KINDS): the Earth, or the Moon and why.
+		if ( VISIT_KINDS.has( kind ) ) counts.push( [ 'visit_kind', kind, 1 ] );
+		await add( env.DB, dayOf( now ), counts );
 
 	} catch ( err ) {
 
