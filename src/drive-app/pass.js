@@ -10,7 +10,7 @@ import { PRO_RIDES } from './rides/index.js';
 // payments code (supporter.js: Google sign-in and Stripe) fills it with its own, and that calls
 // setPro( true ) in pro.js once the pass is bought.
 
-export const PRICE = 'CA$2/month';
+export const PRICE = 'CA$1.99/month';
 const BADGE = '⭐ Supporter Pass';
 const COUNTS = [ 'No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen', 'Twenty' ];
 const count = n => COUNTS[ n ] ?? String( n );

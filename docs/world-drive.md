@@ -2882,7 +2882,7 @@ others keep their paint, with only an underglow, boost, trail and horn to pick.
 
 ## Supporter Pass (buying it)
 
-The pass is a **subscription** (`SUPPORTER_PRICE`, CA$2/month as set), through a Stripe Payment
+The pass is a **subscription** (`SUPPORTER_PRICE`, CA$1.99/month as set), through a Stripe Payment
 Link in World Drive's own Stripe account, and lasts while the subscription is active. Passes bought
 before it was a subscription (one payment each, no subscription id) are **legacy passes, kept for
 good**. It comes with what's [above](#supporter-pass-content) (seven cars of its
@@ -2997,8 +2997,8 @@ and times on every device, and driving and the leaderboard never need it.
 | Setting | Where | What it is |
 | --- | --- | --- |
 | `GOOGLE_CLIENT_ID` | `vars` | The OAuth web client's id (public). Empty: no signing in, no buying, and the sheet says "Coming soon" |
-| `SUPPORTER_PAYMENT_LINK` | `vars` | The Payment Link, `https://buy.stripe.com/9B6bJ0fSYaMf3nc0cCfrW00` (live, public) |
-| `SUPPORTER_PRICE` | `vars` | The price as the page shows it: `CA$2/month` |
+| `SUPPORTER_PAYMENT_LINK` | `vars` | The Payment Link, `https://buy.stripe.com/00weVc36c5rVaPE7F4frW01` (live, public) |
+| `SUPPORTER_PRICE` | `vars` | The price as the page shows it: `CA$1.99/month` |
 | `SUPPORTER_MANAGE_LINK` | `vars` or dashboard text, optional | Stripe's customer portal login link, `https://billing.stripe.com/p/login/...`: where subscribers cancel or change their card |
 | `PER_VISITOR_DAILY_SUPPORTER` | `vars` | A supporter's Earth drives a day (30) |
 | `STRIPE_WEBHOOK_SECRET` | secret | The webhook endpoint's signing secret, `whsec_...`: the live endpoint's while the link is live |
@@ -3058,7 +3058,7 @@ offers buying just then.
 ### Switching the pass to a subscription
 
 1. **Stripe** (live, World Drive's account): **Product catalog** → the pass → **Add another price**:
-   **Recurring**, monthly (or whatever you choose), e.g. CA$2. Then **Payment Links → New**, with
+   **Recurring**, monthly (or whatever you choose), e.g. CA$1.99. Then **Payment Links → New**, with
    that price, the same **After payment** redirect (`https://worlddrive.app/?supporter=thanks`) and
    quantity locked.
 2. **Deactivate the old one-time link** (Payment Links → the old link → **Deactivate**), so nobody
@@ -3068,7 +3068,7 @@ offers buying just then.
 4. **Optional: the customer portal**, so subscribers can cancel themselves: Settings → Billing →
    **Customer portal** → activate it and copy its **login link** into `SUPPORTER_MANAGE_LINK`.
 5. **`wrangler.drive.jsonc`**: the new link in `SUPPORTER_PAYMENT_LINK`, the price as it should read
-   in `SUPPORTER_PRICE` (`CA$2/month`), and if `SUPPORTER_PAYMENT_LINK_ID` is set in the
+   in `SUPPORTER_PRICE` (`CA$1.99/month`), and if `SUPPORTER_PAYMENT_LINK_ID` is set in the
    dashboard, the new link's `plink_...` there. Commit and push: the deploy applies
    `0010_supporter_subscriptions.sql` first.
 

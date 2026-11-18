@@ -877,7 +877,7 @@ finding its wheels so they spin and steer (a three-wheeler's too, and standing u
 lying down, or painting over a real place's number plate), and `npm run drive-car-thumbs` draws its
 picture for the picker (see [World Drive's cars](docs/world-drive.md#world-drives-cars)).
 
-A **Supporter Pass** (a subscription, CA$2/month, towards the running costs; passes bought before it was one are kept for good) unlocks seventeen more
+A **Supporter Pass** (a subscription, CA$1.99/month, towards the running costs; passes bought before it was one are kept for good) unlocks seventeen more
 rides: the six cars levels bring, at once; seven cars of its own (a neon racer, a night cruiser, a
 dune buggy, a farm truck, a police cruiser and two showpieces, a hypercar and a cyber muscle car);
 and four built in code (a sports coupe, a monster truck, a city bus and a hovercraft), each handling
