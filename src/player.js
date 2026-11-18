@@ -6,7 +6,8 @@ import { blocks, isTyping } from './walk.js';
 // Walking round the site as a construction worker (public/models/player-worker.glb, made by
 // scripts/add-player-model.mjs from a hi3D model): seen from behind in third person, or from his
 // eyes in first person, where looking down shows his vest, hands and boots. C switches between
-// them while walking (as it switches the camera while driving), remembered in this browser.
+// them while walking (as it switches the camera while driving), remembered in this browser. K
+// changes who you walk as, between the CHARACTERS.
 //
 // The model is one mesh standing with its arms down, facing +z, with no bones. It's given them
 // here as it loads: hips, spine, chest and head, a thigh and shin each side and an upper arm and
@@ -20,8 +21,14 @@ import { blocks, isTyping } from './walk.js';
 // and everything else go on from his eyes as before. It comes in closer when a wall or the ground
 // is in the way.
 
-const URL_ = new URL( 'models/player-worker.glb', document.baseURI );
+// Who you can walk as (K changes, remembered in this browser), each made by
+// scripts/add-player-model.mjs. Only the one you're walking as is loaded.
+export const CHARACTERS = [
+	{ id: 'worker', name: 'Worker in a vest', url: 'models/player-worker.glb' },
+	{ id: 'worker-2', name: 'Worker 2', url: 'models/player-worker-2.glb' },
+];
 const STORAGE_KEY = 'neptune-twin.player-view';
+const CHARACTER_KEY = 'neptune-twin.player-character';
 // Third person: the camera this far (m) behind his eyes, this far to his right and up.
 const CHASE = { back: 3.2, right: 0.45, up: 0.25, nearest: 0.6, margin: 0.2, ease: 6 };
 // First person: the camera this far (m) in front of the middle of his body, at his eyes; looking
@@ -143,19 +150,40 @@ function rig( mesh ) {
 
 }
 
-export function setUpPlayer( { scene, camera, controls, driver, getColliders } ) {
+const load = ( key, fallback ) => {
 
-	let body = null;
-	let thirdPerson = true;
 	try {
 
-		thirdPerson = localStorage.getItem( STORAGE_KEY ) !== 'first';
+		return localStorage.getItem( key ) ?? fallback;
 
 	} catch {
 
-		// Third person, then.
+		return fallback;
 
 	}
+
+};
+const keep = ( key, value ) => {
+
+	try {
+
+		localStorage.setItem( key, value );
+
+	} catch {
+
+		// Just for now, then.
+
+	}
+
+};
+
+export function setUpPlayer( { scene, camera, controls, driver, getColliders, toast } ) {
+
+	let body = null;
+	let character = CHARACTERS.find( c => c.id === load( CHARACTER_KEY ) ) ?? CHARACTERS[ 0 ];
+	// Each character's body once loaded and given its bones, by id (a promise while loading).
+	const bodies = new Map();
+	let thirdPerson = load( STORAGE_KEY ) !== 'first';
 
 	let phase = 0;
 	let moving = 0; // 0 standing still to 1 walking, eased
@@ -173,30 +201,73 @@ export function setUpPlayer( { scene, camera, controls, driver, getColliders } )
 	const _want = new Vector3();
 	const _dir = new Vector3();
 
-	new GLTFLoader().loadAsync( URL_.href ).then( gltf => {
+	function bodyOf( which ) {
 
-		let mesh = null;
-		gltf.scene.traverse( object => {
+		if ( ! bodies.has( which.id ) ) bodies.set( which.id, new GLTFLoader().loadAsync( new URL( which.url, document.baseURI ).href ).then( gltf => {
 
-			if ( object.isMesh && ! mesh ) mesh = object;
+			let mesh = null;
+			gltf.scene.traverse( object => {
 
-		} );
-		if ( ! mesh ) return;
-		body = rig( mesh );
-		// Never in the way of walking, clicking or the camera's own check: only drawn.
-		body.frustumCulled = false;
-		body.raycast = () => {};
-		body.userData.noCollide = true;
-		body.visible = false;
-		scene.add( body );
+				if ( object.isMesh && ! mesh ) mesh = object;
 
-	} ).catch( err => console.warn( `The player's model didn't load: ${ err.message }` ) );
+			} );
+			if ( ! mesh ) throw new Error( 'no mesh in it' );
+			const rigged = rig( mesh );
+			rigged.name = `Player: ${ which.name }`;
+			// Never in the way of walking, clicking or the camera's own check: only drawn.
+			rigged.frustumCulled = false;
+			rigged.raycast = () => {};
+			rigged.userData.noCollide = true;
+			rigged.visible = false;
+			return rigged;
+
+		} ) );
+		return bodies.get( which.id );
+
+	}
+
+	// Walk as this character: the one shown changes once its model is in.
+	async function setCharacter( which ) {
+
+		character = which;
+		keep( CHARACTER_KEY, which.id );
+		try {
+
+			const next = await bodyOf( which );
+			if ( character !== which ) return;
+			body?.removeFromParent();
+			body = next;
+			scene.add( body );
+
+		} catch ( err ) {
+
+			console.warn( `The player's model (${ which.name }) didn't load: ${ err.message }` );
+			bodies.delete( which.id );
+			if ( which !== CHARACTERS[ 0 ] && character === which ) {
+
+				toast?.( `${ which.name } couldn't be loaded` );
+				setCharacter( CHARACTERS[ 0 ] );
+
+			}
+
+		}
+
+	}
+
+	setCharacter( character );
 
 	window.addEventListener( 'keydown', e => {
 
-		if ( e.code !== 'KeyC' || e.repeat || isTyping( e ) || e.ctrlKey || e.metaKey || e.altKey ) return;
+		if ( ( e.code !== 'KeyC' && e.code !== 'KeyK' ) || e.repeat || isTyping( e ) || e.ctrlKey || e.metaKey || e.altKey ) return;
 		if ( controls.mode !== 'walk' || ! controls.enabled || driver?.active ) return;
-		setThirdPerson( ! thirdPerson );
+		if ( e.code === 'KeyC' ) setThirdPerson( ! thirdPerson );
+		else {
+
+			const next = CHARACTERS[ ( CHARACTERS.indexOf( character ) + 1 ) % CHARACTERS.length ];
+			setCharacter( next );
+			toast?.( `Walking as: ${ next.name } (K for the next)` );
+
+		}
 
 	} );
 
@@ -204,15 +275,7 @@ export function setUpPlayer( { scene, camera, controls, driver, getColliders } )
 
 		thirdPerson = on;
 		distance = CHASE.nearest;
-		try {
-
-			localStorage.setItem( STORAGE_KEY, on ? 'third' : 'first' );
-
-		} catch {
-
-			// Just for now, then.
-
-		}
+		keep( STORAGE_KEY, on ? 'third' : 'first' );
 
 	}
 
@@ -267,7 +330,13 @@ export function setUpPlayer( { scene, camera, controls, driver, getColliders } )
 			return !! body;
 
 		},
+		get character() {
+
+			return character;
+
+		},
 		setThirdPerson,
+		setCharacter: id => setCharacter( CHARACTERS.find( c => c.id === id ) ?? CHARACTERS[ 0 ] ),
 
 		// Before the frame is drawn: him where the walker is, and the camera behind him in third person.
 		beforeRender( dt ) {
