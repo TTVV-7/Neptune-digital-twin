@@ -301,6 +301,17 @@ left as it came):
     sheave on the new anchor pedestal. The belt's width (1.2 m) and the members' sizes aren't on these
     drawings and are drawn typical.
 
+  - **how it's built, stage by stage:** a picker in the views bar (*C32 take-up*: 1 Demolition, 2 Excavation,
+    3 Forms & rebar, 4 Built, All; remembered in your browser, `src/build-stages.js`). Demolition shows what
+    comes out; Excavation the pits (the pad's with 300 mm to work in and 1:1 sides, cut straight where it
+    meets the existing tower foundation; the pedestals' inside the broken-out slab) and lean concrete, with
+    Google's ground cut away over them; Forms & rebar the formwork (19 mm plywood, studs, walers, braces and
+    stakes; column forms with clamps), the reinforcing as ST232 calls it and the anchor rods set in the
+    forms; Built the new concrete, the new counterweight tower with its ladder and the take-up rope, and the
+    conveyor back on. The conveyor is taken out for the work, so it's only there when it's built. The
+    methods are typical, not from the drawings. A model's scene extras `buildStages` and its nodes'
+    `buildStage` drive this, for any model built in stages. The **Take-up close** view looks at the work.
+
   Concrete in pale new concrete, steel in its own layer (*C32 take-up steel & embedded items*). Where grid 4
   is along C32 the drawings don't say: `TAKE_UP.GRID_4` in `scripts/b2d2-structure.mjs` puts it 4 m past
   the tunnel's end, worked out from the belt's height there; they stand on the model's ground (`GRADE`, as
@@ -1048,6 +1059,7 @@ src/placements.js   models' positions saved on the live site for everyone (Save 
                     and the admin passcode for anything saved for everyone
 src/shared-items.js items the admin saved for everyone: loaded for everyone, Save / Remove for everyone
 src/legend.js       the Controls panel: the keys for what you're doing now
+src/build-stages.js the stage picker for a model built in stages (C32's take-up: demolition to built)
 src/player.js       the construction workers you walk as (K): their bones, their walk, third and first person (C)
 src/layers.js       the Show panel: layers, hidden items and Before / After (B)
 src/drive-prompt.js V: what it drives, the "Press V to drive" prompt and twin.startDriving()

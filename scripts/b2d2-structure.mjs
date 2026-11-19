@@ -189,6 +189,21 @@ const TAKE_UP = {
 	// take-up frame (EL 9.737), and at grids 1 and 1X on rows A1 and B up to the drive's top steel
 	// (EL 12.578), with the drive's platform at EL 7.45 from grid 2 to 1X.
 	steel: { column: 0.25, takeUpTop: 9.737, driveTop: 12.578, platform: 7.45 },
+	// How it's built (shown stage by stage in the twin): the pits dug for the new concrete, its
+	// formwork and its reinforcing. Typical methods, not on the drawings.
+	build: {
+		// Under the new concrete: 100 mm of lean concrete; round the pad 300 mm to work in and its sides
+		// cut back 1:1, except where it meets the existing tower foundation (toward grid 4); the
+		// pedestals' pit is the broken-out area, its sides cut straight (inside the slab's edge).
+		lean: 0.1, room: 0.3, batter: 1,
+		pedestalPit: 2.8,
+		// Formwork: 19 mm plywood, 38 × 89 studs at 400, two 38 × 140 walers, braces every 1.2 m.
+		ply: 0.019, stud: [ 0.038, 0.089 ], studs: 0.4, waler: [ 0.038, 0.14 ], braces: 1.2,
+		// Reinforcing, as -ST232 calls it: the pad 20M @ 300 each way top and bottom; the sheave
+		// anchor pedestal 25M @ 250 up each face and 20M @ 300 round it; P1 and P2 4-20M with 15M
+		// ties; 75 mm cover (50 in the pedestals).
+		bars: { pad: [ 0.0195, 0.3 ], vertical: [ 0.0252, 0.25 ], hoops: [ 0.0195, 0.3 ], column: 0.0195, ties: [ 0.016, 0.3 ], cover: 0.075, columnCover: 0.05 },
+	},
 	// The embedded items: anchor rods, [ along, across ] from where they're set out, `size` their
 	// diameter, `embed` into the concrete and `proud` out of it, with a nut on top.
 	anchors: [
@@ -745,7 +760,10 @@ function takeUpSteel() {
 	const [ ml, ma, mh ] = hoist.motor;
 	box( around( hoist.d + 0.35, ml / 2 ), around( hoist.a, ma / 2 ), [ pad + fh, pad + fh + mh ] );
 
-	// Anchor rods: where the concrete's top is under each, in, out, and a nut.
+	// Anchor rods: where the concrete's top is under each, in, out, and a nut. A layer of their own:
+	// they're set in the forms before the concrete is poured.
+	const embeds = new Solid();
+	const rod = ( [ d0, d1 ], [ a0, a1 ], [ e0, e1 ] ) => embeds.box( { x: [ line + a0, line + a1 ], l: [ GRID_4 + d0, GRID_4 + d1 ] }, [ e0 + GRADE, e1 + GRADE ] );
 	const sheaveTop = d => {
 
 		const [ d0 ] = sheave.d, [ run, drop ] = sheave.chamfer, e1 = sheave.el[ 1 ];
@@ -762,14 +780,14 @@ function takeUpSteel() {
 
 			const rd = d + u * Math.cos( t ) - v * Math.sin( t ), ra = a + u * Math.sin( t ) + v * Math.cos( t );
 			const surface = topAt( name, rd );
-			box( around( rd, size / 2 ), around( ra, size / 2 ), [ surface - embed, surface + proud ] );
-			box( around( rd, size * 0.8 ), around( ra, size * 0.8 ), [ surface + proud - 0.06, surface + proud - 0.03 ] );
+			rod( around( rd, size / 2 ), around( ra, size / 2 ), [ surface - embed, surface + proud ] );
+			rod( around( rd, size * 0.8 ), around( ra, size * 0.8 ), [ surface + proud - 0.06, surface + proud - 0.03 ] );
 
 		}
 
 	}
 
-	return s.layer();
+	return { takeUpSteel: s.layer(), takeUpEmbeds: embeds.layer() };
 
 }
 
@@ -787,7 +805,12 @@ function takeUpSurroundings() {
 	const P = ( d, a, el ) => [ line + a, el + GRADE, GRID_4 + d ];
 	const tan = Math.tan( cv.slope * Math.PI / 180 );
 	const belt = d => cv.el + d * tan;
-	const s = new Solid(), rubber = new Solid(), yellow = new Solid();
+	// What stays through the work (the take-up frame and drive tower, the pulleys, the take-up
+	// carriage), what's taken out for it and put back (the conveyor), and what's new (the
+	// counterweight tower, its ladder and the rope): layers of their own, for the twin's stages.
+	const s = new Solid(), yellow = new Solid();
+	const conveyor = new Solid(), rubber = new Solid(), walkRails = new Solid();
+	const cwtSteel = new Solid(), cage = new Solid(), rope = new Solid();
 	const ground = 3.825;
 	// A box between two corners ( d, a, el ).
 	const box = ( solid, [ d0, a0, e0 ], [ d1, a1, e1 ] ) => solid.box( { x: [ line + Math.min( a0, a1 ), line + Math.max( a0, a1 ) ], l: [ GRID_4 + Math.min( d0, d1 ), GRID_4 + Math.max( d0, d1 ) ] }, [ Math.min( e0, e1 ) + GRADE, Math.max( e0, e1 ) + GRADE ] );
@@ -822,8 +845,8 @@ function takeUpSurroundings() {
 	for ( const sa of [ - 1, 1 ] ) {
 
 		const a = sa * stringer[ 0 ];
-		along( s, span, [ [ a - 0.005, stringer[ 1 ] ], [ a + 0.005, stringer[ 1 ] ], [ a + 0.005, stringer[ 2 ] ], [ a - 0.005, stringer[ 2 ] ] ] );
-		for ( const h of [ stringer[ 1 ], stringer[ 2 ] - 0.01 ] ) along( s, span, [ [ a - sa * 0.075, h ], [ a, h ], [ a, h + 0.01 ], [ a - sa * 0.075, h + 0.01 ] ] );
+		along( conveyor, span, [ [ a - 0.005, stringer[ 1 ] ], [ a + 0.005, stringer[ 1 ] ], [ a + 0.005, stringer[ 2 ] ], [ a - 0.005, stringer[ 2 ] ] ] );
+		for ( const h of [ stringer[ 1 ], stringer[ 2 ] - 0.01 ] ) along( conveyor, span, [ [ a - sa * 0.075, h ], [ a, h ], [ a, h + 0.01 ], [ a - sa * 0.075, h + 0.01 ] ] );
 
 	}
 
@@ -833,14 +856,14 @@ function takeUpSurroundings() {
 	for ( let d = cv.from + 0.6; d < cv.to; d += cv.idlers, k ++ ) {
 
 		const at = ( a, h ) => P( d, a, belt( d ) + h );
-		s.tube( at( - half, centre ), at( half, centre ), roll, 10 );
-		for ( const sa of [ - 1, 1 ] ) s.tube( at( sa * ( half + 0.02 ), centre + 0.01 ), at( sa * wingEnd[ 0 ], wingEnd[ 1 ] ), roll, 10 );
-		box( s, [ d - 0.04, - stringer[ 0 ], belt( d ) + centre - 0.14 ], [ d + 0.04, stringer[ 0 ], belt( d ) + centre - 0.08 ] );
-		for ( const sa of [ - 1, 1 ] ) box( s, [ d - 0.03, sa * ( wingEnd[ 0 ] + 0.04 ) - 0.02, belt( d ) + centre - 0.14 ], [ d + 0.03, sa * ( wingEnd[ 0 ] + 0.04 ) + 0.02, belt( d ) + wingEnd[ 1 ] ] );
+		conveyor.tube( at( - half, centre ), at( half, centre ), roll, 10 );
+		for ( const sa of [ - 1, 1 ] ) conveyor.tube( at( sa * ( half + 0.02 ), centre + 0.01 ), at( sa * wingEnd[ 0 ], wingEnd[ 1 ] ), roll, 10 );
+		box( conveyor, [ d - 0.04, - stringer[ 0 ], belt( d ) + centre - 0.14 ], [ d + 0.04, stringer[ 0 ], belt( d ) + centre - 0.08 ] );
+		for ( const sa of [ - 1, 1 ] ) box( conveyor, [ d - 0.03, sa * ( wingEnd[ 0 ] + 0.04 ) - 0.02, belt( d ) + centre - 0.14 ], [ d + 0.03, sa * ( wingEnd[ 0 ] + 0.04 ) + 0.02, belt( d ) + wingEnd[ 1 ] ] );
 		if ( k % 2 === 0 ) {
 
-			s.tube( at( - wingEnd[ 0 ], ret ), at( wingEnd[ 0 ], ret ), roll, 10 );
-			for ( const sa of [ - 1, 1 ] ) box( s, [ d - 0.02, sa * stringer[ 0 ] - 0.01, belt( d ) + ret - 0.05 ], [ d + 0.02, sa * stringer[ 0 ] + 0.01, belt( d ) + stringer[ 1 ] ] );
+			conveyor.tube( at( - wingEnd[ 0 ], ret ), at( wingEnd[ 0 ], ret ), roll, 10 );
+			for ( const sa of [ - 1, 1 ] ) box( conveyor, [ d - 0.02, sa * stringer[ 0 ] - 0.01, belt( d ) + ret - 0.05 ], [ d + 0.02, sa * stringer[ 0 ] + 0.01, belt( d ) + stringer[ 1 ] ] );
 
 		}
 
@@ -849,25 +872,25 @@ function takeUpSurroundings() {
 	// The walkway on the A side, from past the tunnel's mouth up to the take-up frame: a grating
 	// deck, its handrail (posts every 1.5 m, top and mid rails, toe board) on the outer edge.
 	const walk = [ cv.from + 1, grids.d[ '2' ] ], deck = [ 0.85, 1.65 ], under = stringer[ 1 ] - 0.05;
-	along( s, walk, [ [ deck[ 0 ], under - 0.05 ], [ deck[ 1 ], under - 0.05 ], [ deck[ 1 ], under ], [ deck[ 0 ], under ] ] );
-	for ( const a of deck ) along( s, walk, [ [ a - 0.04, under - 0.2 ], [ a + 0.04, under - 0.2 ], [ a + 0.04, under - 0.05 ], [ a - 0.04, under - 0.05 ] ] );
+	along( conveyor, walk, [ [ deck[ 0 ], under - 0.05 ], [ deck[ 1 ], under - 0.05 ], [ deck[ 1 ], under ], [ deck[ 0 ], under ] ] );
+	for ( const a of deck ) along( conveyor, walk, [ [ a - 0.04, under - 0.2 ], [ a + 0.04, under - 0.2 ], [ a + 0.04, under - 0.05 ], [ a - 0.04, under - 0.05 ] ] );
 	for ( let d = walk[ 0 ]; d <= walk[ 1 ] + 1e-6; d += 1.5 ) {
 
-		box( s, [ d - 0.04, stringer[ 0 ], belt( d ) + under - 0.17 ], [ d + 0.04, deck[ 1 ], belt( d ) + under - 0.11 ] );
-		yellow.tube( P( d, deck[ 1 ] - 0.03, belt( d ) + under ), P( d, deck[ 1 ] - 0.03, belt( d ) + under + 1.07 ), 0.024, 8 );
+		box( conveyor, [ d - 0.04, stringer[ 0 ], belt( d ) + under - 0.17 ], [ d + 0.04, deck[ 1 ], belt( d ) + under - 0.11 ] );
+		walkRails.tube( P( d, deck[ 1 ] - 0.03, belt( d ) + under ), P( d, deck[ 1 ] - 0.03, belt( d ) + under + 1.07 ), 0.024, 8 );
 
 	}
 
-	for ( const h of [ 0.53, 1.07 ] ) yellow.tube( P( walk[ 0 ], deck[ 1 ] - 0.03, belt( walk[ 0 ] ) + under + h ), P( walk[ 1 ], deck[ 1 ] - 0.03, belt( walk[ 1 ] ) + under + h ), 0.021, 8 );
-	along( yellow, walk, [ [ deck[ 1 ] - 0.01, under ], [ deck[ 1 ], under ], [ deck[ 1 ], under + 0.1 ], [ deck[ 1 ] - 0.01, under + 0.1 ] ] );
+	for ( const h of [ 0.53, 1.07 ] ) walkRails.tube( P( walk[ 0 ], deck[ 1 ] - 0.03, belt( walk[ 0 ] ) + under + h ), P( walk[ 1 ], deck[ 1 ] - 0.03, belt( walk[ 1 ] ) + under + h ), 0.021, 8 );
+	along( walkRails, walk, [ [ deck[ 1 ] - 0.01, under ], [ deck[ 1 ], under ], [ deck[ 1 ], under + 0.1 ], [ deck[ 1 ] - 0.01, under + 0.1 ] ] );
 
 	// Its legs: on the new P2s and P1s, and bents of two legs and a tie every 3 m from the tunnel's
 	// mouth to the take-up frame where nothing else carries it.
 	const leg = ( d, a, foot ) => {
 
 		const top = belt( d ) + stringer[ 1 ];
-		box( s, [ d - 0.06, a - 0.06, foot ], [ d + 0.06, a + 0.06, top ] );
-		box( s, [ d - 0.15, a - 0.15, foot ], [ d + 0.15, a + 0.15, foot + 0.02 ] );
+		box( conveyor, [ d - 0.06, a - 0.06, foot ], [ d + 0.06, a + 0.06, top ] );
+		box( conveyor, [ d - 0.15, a - 0.15, foot ], [ d + 0.15, a + 0.15, foot + 0.02 ] );
 
 	};
 	for ( const [ d, a ] of p2.at ) leg( d, Math.sign( a ) * stringer[ 0 ], p2.top + SHOW );
@@ -875,7 +898,7 @@ function takeUpSurroundings() {
 	for ( const d of [ - 2.5, 4.4 ] ) {
 
 		for ( const sa of [ - 1, 1 ] ) leg( d, sa * stringer[ 0 ], ground + SHOW );
-		box( s, [ d - 0.04, - stringer[ 0 ], ground + 1 ], [ d + 0.04, stringer[ 0 ], ground + 1.08 ] );
+		box( conveyor, [ d - 0.04, - stringer[ 0 ], ground + 1 ], [ d + 0.04, stringer[ 0 ], ground + 1.08 ] );
 
 	}
 
@@ -939,10 +962,10 @@ function takeUpSurroundings() {
 
 	};
 	// X-bracing between two columns' faces, in a bay from el0 to el1.
-	const brace = ( [ d0, a0 ], [ d1, a1 ], el0, el1 ) => {
+	const brace = ( [ d0, a0 ], [ d1, a1 ], el0, el1, solid = s ) => {
 
-		s.tube( P( d0, a0, el0 ), P( d1, a1, el1 ), 0.035, 6 );
-		s.tube( P( d0, a0, el1 ), P( d1, a1, el0 ), 0.035, 6 );
+		solid.tube( P( d0, a0, el0 ), P( d1, a1, el1 ), 0.035, 6 );
+		solid.tube( P( d0, a0, el1 ), P( d1, a1, el0 ), 0.035, 6 );
 
 	};
 	const { d: gd, a: ga } = grids;
@@ -973,8 +996,8 @@ function takeUpSurroundings() {
 	const [ ld, la ] = tower.legs, top = tower.el[ 1 ];
 	for ( let e = tower.el[ 0 ] + 0.4; e + 2 < top; e += 2.3 ) {
 
-		for ( const sd of [ - 1, 1 ] ) brace( [ tower.d + sd * ld, tower.a - la ], [ tower.d + sd * ld, tower.a + la ], e, e + 2.3 );
-		for ( const sa of [ - 1, 1 ] ) brace( [ tower.d - ld, tower.a + sa * la ], [ tower.d + ld, tower.a + sa * la ], e, e + 2.3 );
+		for ( const sd of [ - 1, 1 ] ) brace( [ tower.d + sd * ld, tower.a - la ], [ tower.d + sd * ld, tower.a + la ], e, e + 2.3, cwtSteel );
+		for ( const sa of [ - 1, 1 ] ) brace( [ tower.d - ld, tower.a + sa * la ], [ tower.d + ld, tower.a + sa * la ], e, e + 2.3, cwtSteel );
 
 	}
 
@@ -982,27 +1005,27 @@ function takeUpSurroundings() {
 	const sheaveR = 0.35, topSheaves = [ - 0.355, 0.355 ].map( u => [ tower.d + u, top + sheaveR + 0.05 ] );
 	for ( const [ d, el ] of topSheaves ) {
 
-		s.cylinder( P( d, tower.a, el ), 'x', sheaveR, 0.06, 24 );
-		for ( const sa of [ - 1, 1 ] ) box( s, [ d - 0.12, tower.a + sa * 0.14 - 0.02, top ], [ d + 0.12, tower.a + sa * 0.14 + 0.02, el + 0.06 ] );
+		cwtSteel.cylinder( P( d, tower.a, el ), 'x', sheaveR, 0.06, 24 );
+		for ( const sa of [ - 1, 1 ] ) box( cwtSteel, [ d - 0.12, tower.a + sa * 0.14 - 0.02, top ], [ d + 0.12, tower.a + sa * 0.14 + 0.02, el + 0.06 ] );
 
 	}
 
 	// A ladder up the tower's face toward B, from the ground to its top.
 	const ladderA = tower.a - la - 0.35;
-	for ( const u of [ - 0.22, 0.22 ] ) s.tube( P( tower.d + u, ladderA, ground + SHOW ), P( tower.d + u, ladderA, top + 1.0 ), 0.03, 6 );
-	for ( let e = ground + 0.3; e < top + 0.9; e += 0.3 ) s.tube( P( tower.d - 0.22, ladderA, e ), P( tower.d + 0.22, ladderA, e ), 0.012, 6 );
+	for ( const u of [ - 0.22, 0.22 ] ) cwtSteel.tube( P( tower.d + u, ladderA, ground + SHOW ), P( tower.d + u, ladderA, top + 1.0 ), 0.03, 6 );
+	for ( let e = ground + 0.3; e < top + 0.9; e += 0.3 ) cwtSteel.tube( P( tower.d - 0.22, ladderA, e ), P( tower.d + 0.22, ladderA, e ), 0.012, 6 );
 	for ( let e = ground + 2.4; e < top + 0.9; e += 1.2 ) for ( const [ a0, a1 ] of [ [ ladderA, ladderA - 0.7 ] ] ) {
 
-		yellow.tube( P( tower.d - 0.35, a0, e ), P( tower.d - 0.35, a1, e ), 0.015, 6 );
-		yellow.tube( P( tower.d + 0.35, a0, e ), P( tower.d + 0.35, a1, e ), 0.015, 6 );
-		yellow.tube( P( tower.d - 0.35, a1, e ), P( tower.d + 0.35, a1, e ), 0.015, 6 );
+		cage.tube( P( tower.d - 0.35, a0, e ), P( tower.d - 0.35, a1, e ), 0.015, 6 );
+		cage.tube( P( tower.d + 0.35, a0, e ), P( tower.d + 0.35, a1, e ), 0.015, 6 );
+		cage.tube( P( tower.d - 0.35, a1, e ), P( tower.d + 0.35, a1, e ), 0.015, 6 );
 
 	}
 
 	// The take-up rope (25 mm): off the hoist's drum, up over the tower's first top sheave, down round
 	// the counterweight's sheave, up over the second, down to a sheave at the tower's foot, across
 	// to the take-up sheave on the new sheave anchor pedestal, and up the rails to the carriage.
-	const rope = 0.0125, R = ( d, a, el ) => P( d, a, el );
+	const ropeR = 0.0125, R = ( d, a, el ) => P( d, a, el );
 	const drumTop = [ hoist.d - 0.15, hoist.a, pad.el[ 1 ] + SHOW + hoist.frame[ 2 ] + hoist.drum[ 0 ] * 2 + 0.1 ];
 	const [ s1, s2 ] = topSheaves;
 	const cwSheave = cw.el[ 1 ] + cw.plates + cw.channel[ 0 ] + cw.sheave + 0.05;
@@ -1021,10 +1044,171 @@ function takeUpSurroundings() {
 		[ tp[ 0 ] - 0.75, 0, rail( tp[ 0 ] - 0.75 ) + 0.1 ],
 	];
 	// Over a sheave the rope runs across its top (the pair of points either side); elsewhere straight.
-	for ( let i = 0; i + 1 < path.length; i ++ ) rubber.tube( R( ...path[ i ] ), R( ...path[ i + 1 ] ), rope, 6 );
-	s.cylinder( P( foot[ 0 ], foot[ 1 ], foot[ 2 ] ), 'x', 0.3, 0.05, 20 );
-	s.cylinder( P( ...takeUpSheave.slice( 0, 2 ), takeUpSheave[ 2 ] - 0.3 ), 'x', 0.3, 0.05, 20 );
-	return { takeUpExisting: s.layer(), takeUpBelt: rubber.layer(), takeUpRails: yellow.layer() };
+	for ( let i = 0; i + 1 < path.length; i ++ ) rope.tube( R( ...path[ i ] ), R( ...path[ i + 1 ] ), ropeR, 6 );
+	cwtSteel.cylinder( P( foot[ 0 ], foot[ 1 ], foot[ 2 ] ), 'x', 0.3, 0.05, 20 );
+	cwtSteel.cylinder( P( ...takeUpSheave.slice( 0, 2 ), takeUpSheave[ 2 ] - 0.3 ), 'x', 0.3, 0.05, 20 );
+	return {
+		takeUpExisting: s.layer(), takeUpRails: yellow.layer(),
+		conveyorSteel: conveyor.layer(), conveyorBelt: rubber.layer(), conveyorRails: walkRails.layer(),
+		cwtTower: cwtSteel.layer(), cwtCage: cage.layer(), takeUpRope: rope.layer(),
+	};
+
+}
+
+// How it's built: the pits (their sides and floors, in the ground's colour, open at the top; the
+// twin cuts Google's ground away over them for this stage), the formwork (plywood, studs, walers and
+// braces) round the new concrete, and its reinforcing.
+function takeUpBuild() {
+
+	const { GRID_4, GRADE, pad, sheave, p1, p2, base, breakOut, build: b } = TAKE_UP;
+	const line = ( C32.x[ 0 ] + C32.x[ 1 ] ) / 2;
+	const P = ( d, a, el ) => [ line + a, el + GRADE, GRID_4 + d ];
+	const ground = 3.825;
+	const pits = new Solid(), forms = new Solid(), rebar = new Solid();
+	const box = ( solid, [ d0, a0, e0 ], [ d1, a1, e1 ] ) => solid.box( { x: [ line + Math.min( a0, a1 ), line + Math.max( a0, a1 ) ], l: [ GRID_4 + Math.min( d0, d1 ), GRID_4 + Math.max( d0, d1 ) ] }, [ Math.min( e0, e1 ) + GRADE, Math.max( e0, e1 ) + GRADE ] );
+
+	// A pit: its floor `bottom` ( [ d, a ] round it, in order) at el `floor`, its sides up to `top`
+	// at the ground, each face looking into the pit.
+	const pit = ( bottom, top, floor ) => {
+
+		const c = bottom.reduce( ( m, [ d, a ] ) => [ m[ 0 ] + d / bottom.length, m[ 1 ] + a / bottom.length ], [ 0, 0 ] );
+		const ring = bottom.map( ( [ d, a ] ) => new Vector2( line + a, GRID_4 + d ) );
+		if ( ShapeUtils.isClockWise( ring ) ) ring.reverse();
+		for ( const tri of ShapeUtils.triangulateShape( ring, [] ) ) pits.face( tri.map( n => [ ring[ n ].x, floor + GRADE, ring[ n ].y ] ), [ 0, 1, 0 ] );
+		for ( let i = 0; i < bottom.length; i ++ ) {
+
+			const j = ( i + 1 ) % bottom.length;
+			const mid = [ ( bottom[ i ][ 0 ] + bottom[ j ][ 0 ] ) / 2, ( bottom[ i ][ 1 ] + bottom[ j ][ 1 ] ) / 2 ];
+			const into = P( c[ 0 ] - mid[ 0 ], c[ 1 ] - mid[ 1 ], 0 ).map( ( v, k ) => v - P( 0, 0, 0 )[ k ] );
+			pits.face( [ P( ...bottom[ i ], floor ), P( ...bottom[ j ], floor ), P( ...top[ j ], ground ), P( ...top[ i ], ground ) ], into );
+
+		}
+
+	};
+	// The pad's pit: room round it, cut back 1:1 except on its side at the existing foundation.
+	const floor = pad.el[ 0 ] - b.lean, depth = ground - floor, out = depth * b.batter;
+	const [ d0, d1 ] = pad.d, [ a0, a1 ] = pad.a;
+	const lo = [ [ d0, a0 - b.room ], [ d1 + b.room, a0 - b.room ], [ d1 + b.room, a1 + b.room ], [ d0, a1 + b.room ] ];
+	const hi = [ [ d0, a0 - b.room - out ], [ d1 + b.room + out, a0 - b.room - out ], [ d1 + b.room + out, a1 + b.room + out ], [ d0, a1 + b.room + out ] ];
+	pit( lo, hi, floor );
+	// The pedestals' pit: the broken-out area, straight down.
+	pit( breakOut.areas[ 0 ], breakOut.areas[ 0 ], b.pedestalPit );
+	// Lean concrete under the pad.
+	box( pits, [ d0, a0, floor ], [ d1, a1, pad.el[ 0 ] ] );
+
+	// ---- Formwork ----
+	// A form along one face: plywood from e0 to e1 on the line from p to q ( [ d, a ] ), `outward`
+	// the way away from the concrete ( [ dd, da ], unit), studs, two walers and braces to the floor.
+	const formFace = ( p, q, e0, e1, outward, braceTo ) => {
+
+		const [ od, oa ] = outward;
+		const off = n => [ od * n, oa * n ];
+		const [ pd, pa ] = p, [ qd, qa ] = q;
+		const len = Math.hypot( qd - pd, qa - pa );
+		const along = [ ( qd - pd ) / len, ( qa - pa ) / len ];
+		const corner = ( t, n ) => [ pd + along[ 0 ] * t + off( n )[ 0 ], pa + along[ 1 ] * t + off( n )[ 1 ] ];
+		// Plywood.
+		box( forms, [ ...corner( - b.ply, 0 ), e0 ], [ ...corner( len + b.ply, b.ply ), e1 + 0.05 ] );
+		// Studs.
+		for ( let t = 0.1; t < len; t += b.studs ) box( forms, [ ...corner( t - b.stud[ 0 ] / 2, b.ply ), e0 ], [ ...corner( t + b.stud[ 0 ] / 2, b.ply + b.stud[ 1 ] ), e1 + 0.05 ] );
+		// Walers, a pair at a third and two-thirds up.
+		const outer = b.ply + b.stud[ 1 ];
+		for ( const f of [ 1 / 3, 2 / 3 ] ) {
+
+			const e = e0 + ( e1 - e0 ) * f;
+			for ( const k of [ 0, 1 ] ) box( forms, [ ...corner( - 0.15, outer + k * b.waler[ 0 ] ), e - b.waler[ 1 ] / 2 ], [ ...corner( len + 0.15, outer + ( k + 1 ) * b.waler[ 0 ] ), e + b.waler[ 1 ] / 2 ] );
+
+		}
+
+		// Braces from the upper waler down to the floor, a stake at each foot.
+		const reach = Math.min( 1.2, ( e1 - e0 ) * 0.8 + 0.3 );
+		for ( let t = 0.3; t < len; t += b.braces ) {
+
+			const top = [ ...corner( t, outer + 2 * b.waler[ 0 ] ), e0 + ( e1 - e0 ) * 2 / 3 ];
+			const foot = [ ...corner( t, outer + 2 * b.waler[ 0 ] + reach ), braceTo ];
+			forms.tube( P( ...top ), P( ...foot ), 0.035, 4 );
+			box( forms, [ foot[ 0 ] - 0.025, foot[ 1 ] - 0.025, braceTo - 0.3 ], [ foot[ 0 ] + 0.025, foot[ 1 ] + 0.025, braceTo + 0.25 ] );
+
+		}
+
+	};
+	// Round a rectangle [ d0, d1 ] × [ a0, a1 ], on the sides listed ( 'd0', 'd1', 'a0', 'a1' ).
+	const formBox = ( [ fd0, fd1 ], [ fa0, fa1 ], e0, e1, sides, braceTo ) => {
+
+		if ( sides.includes( 'd0' ) ) formFace( [ fd0, fa1 ], [ fd0, fa0 ], e0, e1, [ - 1, 0 ], braceTo );
+		if ( sides.includes( 'd1' ) ) formFace( [ fd1, fa0 ], [ fd1, fa1 ], e0, e1, [ 1, 0 ], braceTo );
+		if ( sides.includes( 'a0' ) ) formFace( [ fd0, fa0 ], [ fd1, fa0 ], e0, e1, [ 0, - 1 ], braceTo );
+		if ( sides.includes( 'a1' ) ) formFace( [ fd1, fa1 ], [ fd0, fa1 ], e0, e1, [ 0, 1 ], braceTo );
+
+	};
+	// The pad, on its three open sides (the fourth is against the existing foundation).
+	formBox( pad.d, pad.a, pad.el[ 0 ], pad.el[ 1 ], [ 'd1', 'a0', 'a1' ], floor );
+	// The sheave anchor pedestal, all round, on the grade beam, braced to the pit's floor.
+	formBox( sheave.d, sheave.a, sheave.el[ 0 ], sheave.el[ 1 ], [ 'd0', 'd1', 'a0', 'a1' ], b.pedestalPit );
+	// P1 and P2: plywood boxes with steel column clamps every 400.
+	for ( const { size: [ al, ac ], top, at } of [ p1, p2 ] ) for ( const [ d, a ] of at ) {
+
+		const [ cd0, cd1, ca0, ca1 ] = [ d - al / 2, d + al / 2, a - ac / 2, a + ac / 2 ];
+		box( forms, [ cd0 - b.ply, ca0 - b.ply, base ], [ cd1 + b.ply, ca0, top + 0.05 ] );
+		box( forms, [ cd0 - b.ply, ca1, base ], [ cd1 + b.ply, ca1 + b.ply, top + 0.05 ] );
+		box( forms, [ cd0 - b.ply, ca0, base ], [ cd0, ca1, top + 0.05 ] );
+		box( forms, [ cd1, ca0, base ], [ cd1 + b.ply, ca1, top + 0.05 ] );
+		for ( let e = base + 0.2; e < top; e += 0.4 ) {
+
+			const g = b.ply + 0.05;
+			box( forms, [ cd0 - g, ca0 - g, e ], [ cd1 + g, ca0 - g + 0.05, e + 0.06 ] );
+			box( forms, [ cd0 - g, ca1 + g - 0.05, e ], [ cd1 + g, ca1 + g, e + 0.06 ] );
+
+		}
+
+	}
+
+	// ---- Reinforcing ----
+	const bar = ( p, q, r ) => rebar.tube( P( ...p ), P( ...q ), r / 2, 6 );
+	// The pad: a mat top and bottom, each way.
+	{
+
+		const [ r, at ] = b.bars.pad, c = b.cover;
+		for ( const e of [ pad.el[ 0 ] + c, pad.el[ 1 ] - c ] ) {
+
+			for ( let d = d0 + c; d <= d1 - c + 1e-6; d += at ) bar( [ d, a0 + c, e ], [ d, a1 - c, e ], r );
+			for ( let a = a0 + c; a <= a1 - c + 1e-6; a += at ) bar( [ d0 + c, a, e + r ], [ d1 - c, a, e + r ], r );
+
+		}
+
+		// Dowels into the existing foundation, 20M @ 300 top and bottom, 800 in and 300 out of it.
+		for ( let a = a0 + c; a <= a1 - c + 1e-6; a += at ) for ( const e of [ pad.el[ 0 ] + c, pad.el[ 1 ] - c ] ) bar( [ d0 - 0.3, a, e + r * 2 ], [ d0 + 0.8, a, e + r * 2 ], r );
+
+	}
+
+	// The sheave anchor pedestal: bars up each face, hoops round them.
+	{
+
+		const c = b.bars.columnCover, [ rv, sv ] = b.bars.vertical, [ rh, sh ] = b.bars.hoops;
+		const [ sd0, sd1 ] = sheave.d, [ sa0, sa1 ] = sheave.a, [ se0, se1 ] = sheave.el;
+		const top = se1 - c - 0.2;
+		for ( let d = sd0 + c; d <= sd1 - c + 1e-6; d += sv ) for ( const a of [ sa0 + c, sa1 - c ] ) bar( [ d, a, se0 + c ], [ d, a, top ], rv );
+		for ( let a = sa0 + c + sv; a < sa1 - c - 1e-6; a += sv ) for ( const d of [ sd0 + c, sd1 - c ] ) bar( [ d, a, se0 + c ], [ d, a, top ], rv );
+		for ( let e = se0 + c + 0.1; e <= top; e += sh ) {
+
+			const cr = [ [ sd0 + c, sa0 + c ], [ sd1 - c, sa0 + c ], [ sd1 - c, sa1 - c ], [ sd0 + c, sa1 - c ] ];
+			for ( let i = 0; i < 4; i ++ ) bar( [ ...cr[ i ], e ], [ ...cr[ ( i + 1 ) % 4 ], e ], rh );
+
+		}
+
+	}
+
+	// P1 and P2: four bars in the corners, ties round them.
+	for ( const { size: [ al, ac ], top, at } of [ p1, p2 ] ) for ( const [ d, a ] of at ) {
+
+		const c = b.bars.columnCover, [ rt, st ] = b.bars.ties;
+		const cr = [ [ d - al / 2 + c, a - ac / 2 + c ], [ d + al / 2 - c, a - ac / 2 + c ], [ d + al / 2 - c, a + ac / 2 - c ], [ d - al / 2 + c, a + ac / 2 - c ] ];
+		for ( const p of cr ) bar( [ ...p, base + c ], [ ...p, top - c ], b.bars.column );
+		for ( let e = base + c + 0.05; e <= top - c; e += st ) for ( let i = 0; i < 4; i ++ ) bar( [ ...cr[ i ], e ], [ ...cr[ ( i + 1 ) % 4 ], e ], rt );
+
+	}
+
+	return { takeUpPits: pits.layer(), takeUpForms: forms.layer(), takeUpRebar: rebar.layer() };
 
 }
 
@@ -1054,7 +1238,7 @@ function demolition() {
 // the structure put on the drawings' grid, and the beams as a layer of their own (beams).
 export function correctStructure( site ) {
 
-	return { ...site, pit: pit(), c31: gallery( site.c31 ), beams: beams(), steel: plates(), c32: c32( site.c32 ), pedestals: pedestals(), takeUpSteel: takeUpSteel(), ...demolition(), ...takeUpSurroundings() };
+	return { ...site, pit: pit(), c31: gallery( site.c31 ), beams: beams(), steel: plates(), c32: c32( site.c32 ), pedestals: pedestals(), ...takeUpSteel(), ...demolition(), ...takeUpSurroundings(), ...takeUpBuild() };
 
 }
 
