@@ -49,6 +49,7 @@
     "test:drive-moon-ui": "node --test scripts/test-drive-moon-ui.mjs",
     "test:drive-mars-ui": "node --test scripts/test-drive-mars-ui.mjs",
     "test:drive-asteroids-ui": "node --test scripts/test-drive-asteroids-ui.mjs",
+    "test:drive-orrery-ui": "node --test scripts/test-drive-orrery-ui.mjs",
     "deploy": "vite build --mode cloudflare && wrangler deploy",
     "deploy:cloudflare": "wrangler d1 migrations apply DB --remote && npm run deploy",
     "deploy:drive": "wrangler d1 migrations apply DB --remote -c wrangler.drive.jsonc && vite build --config vite.drive.config.js && wrangler deploy -c wrangler.drive.jsonc"

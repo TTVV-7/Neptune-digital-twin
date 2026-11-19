@@ -271,6 +271,12 @@ export const BUDGET_SPENT = 'budget';
 // its visit and with others on the rest (a v1 or v2 page is closed with CLOSE.rate instead, as it
 // always was, tries again and is turned away there).
 export const SHARE_SPENT = 'share';
+// Driving with others is switched off on the connection's world only (its budget is 0, while some
+// other world's isn't and LIVE isn't 'off'): the reason CLOSE.off comes with then, so that a v3 page
+// closes that world alone and drives with others on the rest, as it does when /api/live turns it
+// away there. Switched off everywhere (LIVE=off, or every budget 0) stays reason 'off', the end of
+// driving with others for the visit (and a page from before v3 reads this one as that too).
+export const WORLD_OFF = 'world off';
 
 // --- what's said ---------------------------------------------------------------------------------
 //
@@ -310,8 +316,8 @@ export const SHARE_SPENT = 'share';
 //        A car can be in one twice, oldest first: a state that was held back, and its next if
 //        that came FLUSH_MS or more after it (closer together, only the later goes)
 //   { t: 'trick', pid, score }   { t: 'honk', pid }
-//   then a close with one of CLOSE's codes when it's over (CLOSE.off with BUDGET_SPENT or, to a v3
-//   page, SHARE_SPENT: only for the world it was on).
+//   then a close with one of CLOSE's codes when it's over (CLOSE.off with BUDGET_SPENT, WORLD_OFF
+//   or, to a v3 page, SHARE_SPENT: only for the world it was on; with 'off': every world).
 //
 // PID: the room's own id for a connection (8 characters), never the leaderboard's player id.
 // PLAYER: { pid, name, star (a Supporter Pass), level, title, vehicle, look, place, away, s: STATE |

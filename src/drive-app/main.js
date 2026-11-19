@@ -1182,7 +1182,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	}
 
-	if ( ( worldsLink === '1' || ORRERY_TEST?.onLoad ) && ! challengeLink ) openOrrery();
+	// (challengeLink is boot.js's promise, of null for no link: it's what it comes to that counts.)
+	if ( worldsLink === '1' || ORRERY_TEST?.onLoad ) Promise.resolve( challengeLink ).then( link => link || openOrrery(), () => openOrrery() );
 
 	// --- the orrery (orrery.js, its own chunk, its CSS and pictures under /orrery/: nothing of it is
 	// fetched until it's first opened) ---

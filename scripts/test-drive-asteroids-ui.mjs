@@ -30,6 +30,7 @@ import { levelFrame, pointOn } from '../src/drive-app/level.js';
 import { checkPasses, destination } from '../src/drive-app/challenge-rules.js';
 import { ghostFault } from '../src/drive-app/ghost-rules.js';
 import { startVite } from './worker-harness.mjs';
+import { openWorlds, pickWorld, worldShown } from './worlds-ui.mjs';
 
 const require = createRequire( import.meta.url );
 const PORT = Number( process.env.TEST_VITE_PORT ) || 5591;
@@ -148,7 +149,7 @@ const apart = ( world, a, b ) => {
 
 async function toWorld( page, world ) {
 
-	await page.locator( `#globe-ui .worlds [data-world="${ world }"]` ).click();
+	await pickWorld( page, world );
 	await page.waitForFunction( id => window.drive.world === id, world, { timeout: 90000 } );
 	await flown( page );
 
@@ -166,15 +167,17 @@ describe( 'World Drive on Vesta and Ceres', () => {
 
 	after( () => page?.context().close() );
 
-	test( 'five worlds in the switch; the globe turns to Vesta: its spots and words, its own files fetched only now, its credit', async () => {
+	test( 'five worlds in the orrery; the globe turns to Vesta: its spots and words, its own files fetched only now, its credit', async () => {
 
 		await openGlobe( page );
 		assert.deepEqual( page.worlds, [], 'nothing of the other worlds\' is fetched on the Earth' );
-		assert.deepEqual( await page.locator( '#globe-ui .worlds button' ).evaluateAll( buttons => buttons.map( b => b.dataset.world ) ), [ 'earth', 'moon', 'mars', 'vesta', 'ceres' ] );
+		await openWorlds( page );
+		assert.deepEqual( await page.locator( '#orrery .orrery-worlds [role=radio]' ).evaluateAll( buttons => buttons.map( b => b.dataset.world ) ), [ 'earth', 'moon', 'mars', 'vesta', 'ceres' ] );
+		assert.deepEqual( page.worlds, [], 'nothing of the other worlds\' is fetched by the orrery' );
 
 		await toWorld( page, 'vesta' );
 		assert.deepEqual( [ ...page.worlds ].sort(), [ '/vesta/colour.webp', '/vesta/height.bin' ], 'Vesta\'s files, and no other world\'s' );
-		assert.equal( await page.locator( '#globe-ui .worlds [data-world="vesta"]' ).getAttribute( 'aria-checked' ), 'true' );
+		assert.equal( await worldShown( page ), 'vesta' );
 		assert.equal( await page.evaluate( () => document.body.dataset.world ), 'vesta' );
 		assert.deepEqual( await names( page ), VESTA_SPOTS.map( spot => spot.name ) );
 		assert.equal( await page.locator( '#globe-ui .tagline' ).textContent(), 'Pick anywhere on Vesta. Drop in. Drive.' );
@@ -436,23 +439,23 @@ describe( 'World Drive on Vesta and Ceres', () => {
 
 describe( 'World Drive\'s five worlds on a phone and from the keyboard', () => {
 
-	test( 'on a phone the five worlds fit across the top of the sheet; Vesta tapped', async () => {
+	test( 'on a phone the five worlds fit in one row of the orrery; Vesta tapped', async () => {
 
 		const page = await newPage( { viewport: { width: 360, height: 740 }, touch: true } );
 		try {
 
 			await openGlobe( page );
-			const sheet = await page.locator( '#globe-ui .panel' ).boundingBox();
-			const boxes = await page.locator( '#globe-ui .worlds button' ).evaluateAll( buttons => buttons.map( b => {
+			await openWorlds( page, { tap: true } );
+			const boxes = await page.locator( '#orrery .orrery-worlds [role=radio]' ).evaluateAll( buttons => buttons.map( b => {
 
 				const box = b.getBoundingClientRect();
-				return { left: box.left, right: box.right, top: box.top, fits: b.scrollWidth <= b.clientWidth };
+				return { left: box.left, right: box.right, top: box.top, height: box.height, fits: b.scrollWidth <= b.clientWidth };
 
 			} ) );
 			assert.equal( boxes.length, 5 );
-			assert.ok( boxes.every( box => box.left >= sheet.x && box.right <= sheet.x + sheet.width && box.fits && Math.abs( box.top - boxes[ 0 ].top ) < 1 ), JSON.stringify( { sheet, boxes } ) );
+			assert.ok( boxes.every( box => box.left >= 0 && box.right <= 360 && box.height >= 44 && box.fits && Math.abs( box.top - boxes[ 0 ].top ) < 1 ), JSON.stringify( boxes ) );
 			assert.equal( await page.evaluate( () => document.documentElement.scrollWidth <= innerWidth ), true, 'no sideways scroll' );
-			await page.locator( '#globe-ui .worlds [data-world="vesta"]' ).tap();
+			await pickWorld( page, 'vesta', { tap: true } );
 			await page.waitForFunction( () => window.drive.world === 'vesta', null, { timeout: 90000 } );
 			await flown( page );
 			assert.deepEqual( await names( page ), VESTA_SPOTS.map( spot => spot.name ) );
@@ -467,19 +470,21 @@ describe( 'World Drive\'s five worlds on a phone and from the keyboard', () => {
 
 	} );
 
-	test( 'the switch\'s arrow keys: left from the Earth round to Ceres; ?spot=ceres-ahuna-mons opens Ceres pinned there', async () => {
+	test( 'the orrery\'s arrow keys: left from the Earth round to Ceres, Enter drives there; ?spot=ceres-ahuna-mons opens Ceres pinned there', async () => {
 
 		const page = await newPage();
 		try {
 
 			await openGlobe( page );
-			const tabs = () => page.locator( '#globe-ui .worlds button' ).evaluateAll( buttons => buttons.map( b => b.tabIndex ) );
+			await openWorlds( page );
+			const tabs = () => page.locator( '#orrery .orrery-worlds [role=radio]' ).evaluateAll( buttons => buttons.map( b => b.tabIndex ) );
 			assert.deepEqual( await tabs(), [ 0, - 1, - 1, - 1, - 1 ] );
-			await page.locator( '#globe-ui .worlds [data-world="earth"]' ).focus();
+			assert.equal( await page.evaluate( () => document.activeElement.dataset.world ), 'earth' );
 			await page.keyboard.press( 'ArrowLeft' );
-			await page.waitForFunction( () => window.drive.world === 'ceres', null, { timeout: 90000 } );
 			assert.equal( await page.evaluate( () => document.activeElement.dataset.world ), 'ceres' );
 			assert.deepEqual( await tabs(), [ - 1, - 1, - 1, - 1, 0 ] );
+			await page.keyboard.press( 'Enter' );
+			await page.waitForFunction( () => window.drive.world === 'ceres', null, { timeout: 90000 } );
 
 			await openGlobe( page, '/?spot=ceres-ahuna-mons' );
 			await page.waitForFunction( () => window.drive.world === 'ceres' && window.drive.panel.pinned?.id === 'ceres-ahuna-mons', null, { timeout: 90000 } );

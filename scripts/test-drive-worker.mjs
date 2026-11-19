@@ -328,7 +328,7 @@ describe( 'World Drive Worker', () => {
 
 		const { status, json, text } = await call( server, '/api/config' );
 		assert.equal( status, 200 );
-		assert.deepEqual( json, { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true, googleClientId: '', passwords: true, live: true, liveMoon: true } );
+		assert.deepEqual( json, { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true, googleClientId: '', passwords: true, live: true, liveMoon: true, liveWorlds: { earth: { open: true }, moon: { open: true }, mars: { open: true }, vesta: { open: true }, ceres: { open: true } } } );
 		assert.ok( ! text.includes( MAPS_KEY ) );
 
 	} );
@@ -583,7 +583,7 @@ describe( 'World Drive Worker, Turnstile failing and maps off', () => {
 	test( 'config says maps are off, with the site key from wrangler.drive.jsonc', async () => {
 
 		const { json } = await call( server, '/api/config' );
-		assert.deepEqual( json, { turnstileSiteKey: '0x4AAAAAAFs3k5sgUIQHSuGC', mapsOn: false, googleClientId: '', passwords: true, live: true, liveMoon: true } );
+		assert.deepEqual( json, { turnstileSiteKey: '0x4AAAAAAFs3k5sgUIQHSuGC', mapsOn: false, googleClientId: '', passwords: true, live: true, liveMoon: true, liveWorlds: { earth: { open: true }, moon: { open: true }, mars: { open: true }, vesta: { open: true }, ceres: { open: true } } } );
 
 	} );
 
@@ -4120,7 +4120,7 @@ describe( 'World Drive Worker with the key set as Google_maps_api', () => {
 			};
 			const config = await worker.fetch( new Request( 'https://worlddrive.app/api/config' ), env, {} );
 			// (No database here, so no usernames and passwords.)
-			assert.deepEqual( await config.json(), { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true, googleClientId: '', passwords: false, live: true, liveMoon: true }, name );
+			assert.deepEqual( await config.json(), { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true, googleClientId: '', passwords: false, live: true, liveMoon: true, liveWorlds: { earth: { open: true }, moon: { open: true }, mars: { open: true }, vesta: { open: true }, ceres: { open: true } } }, name );
 
 			const failed = await ask( { ...env, TURNSTILE_SECRET: FAIL_SECRET }, '198.51.100.30' );
 			assert.equal( failed.status, 403, name );
@@ -4195,7 +4195,7 @@ describe( 'World Drive Worker with AdSense set', () => {
 
 			const json = await ( await ask( vars ) ).json();
 			assert.ok( ! ( 'adsense' in json ), JSON.stringify( vars ) );
-			assert.deepEqual( Object.keys( json ).sort(), [ 'googleClientId', 'live', 'liveMoon', 'mapsOn', 'passwords', 'turnstileSiteKey' ], JSON.stringify( vars ) );
+			assert.deepEqual( Object.keys( json ).sort(), [ 'googleClientId', 'live', 'liveMoon', 'liveWorlds', 'mapsOn', 'passwords', 'turnstileSiteKey' ], JSON.stringify( vars ) );
 			const res = await ask( vars, '/ads.txt' );
 			assert.equal( res.status, 404, JSON.stringify( vars ) );
 			assert.ok( ! ( await res.text() ).includes( 'google.com' ) );
@@ -4278,7 +4278,7 @@ describe( 'World Drive Worker asking whether driving with others is open today',
 		};
 		const day = Date.UTC( 2030, 5, 1, 12 );
 		assert.deepEqual( await config( day ), { live: true, liveReason: undefined } );
-		assert.deepEqual( asked, [ { now: day, budget: 1234, moonBudget: 20000 } ] );
+		assert.deepEqual( asked, [ { now: day, budgets: { earth: 1234, moon: 20000, mars: 4000, vesta: 3000, ceres: 3000 }, budget: 1234, moonBudget: 20000 } ] );
 		// An open answer holds for 30 s from when it was given (anyone can ask, and every page load
 		// does): not asked again till then.
 		for ( const later of [ 1, 10000, 29999 ] ) assert.deepEqual( await config( day + later ), { live: true, liveReason: undefined } );
@@ -4299,6 +4299,12 @@ describe( 'World Drive Worker asking whether driving with others is open today',
 			answer = new Error( 'DriveLimits is down' );
 			assert.deepEqual( await config( day + MINUTE ), { live: false, liveReason: 'unknown' } );
 			assert.deepEqual( logged, [ 'Live budget check Error DriveLimits is down' ] );
+			// Every world 'unknown' then, but one known here without asking (switched off: Mars's budget
+			// of 0) said as it is, so the page closes it from the start.
+			const failing = await ( await worker.fetch( new Request( 'https://worlddrive.app/api/config', { headers: { 'X-Test-Time': String( day + MINUTE + 1 ) } } ), { ...env, LIVE_MARS_DAILY_BUDGET: '0' }, {} ) ).json();
+			const unknown = { open: false, reason: 'unknown' };
+			assert.deepEqual( failing.liveWorlds, { earth: unknown, moon: unknown, mars: { open: false }, vesta: unknown, ceres: unknown } );
+			assert.deepEqual( [ failing.live, failing.liveReason, failing.liveMoon, failing.liveMoonReason ], [ false, 'unknown', false, 'unknown' ] );
 
 		} finally {
 
@@ -4306,8 +4312,9 @@ describe( 'World Drive Worker asking whether driving with others is open today',
 
 		}
 
-		// Spent: off, saying why, and this Worker doesn't ask again that day (an ask is a request too).
-		answer = { open: false, spent: 1234 };
+		// Spent (every world's: the far worlds' too, or this Worker would still ask for them, every
+		// FAR_OPEN_MS): off, saying why, and this Worker doesn't ask again that day (an ask is a request too).
+		answer = { open: false, spent: 1234, worlds: { mars: { open: false, spent: 4000 }, vesta: { open: false, spent: 3000 }, ceres: { open: false, spent: 3000 } } };
 		assert.deepEqual( await config( day + 2 * MINUTE ), { live: false, liveReason: 'budget' } );
 		const asks = asked.length;
 		assert.deepEqual( await config( day + 11 * HOUR ), { live: false, liveReason: 'budget' } );
@@ -4316,10 +4323,19 @@ describe( 'World Drive Worker asking whether driving with others is open today',
 		answer = { open: true, spent: 1 };
 		assert.deepEqual( await config( day + DAY ), { live: true, liveReason: undefined } );
 		assert.equal( asked.length, asks + 1 );
-		// A budget of 0 on both worlds, or LIVE off: off, without asking.
-		assert.deepEqual( await config( day + DAY, { LIVE_DAILY_BUDGET: '0', LIVE_MOON_DAILY_BUDGET: '0' } ), { live: false, liveReason: undefined } );
+		// A budget of 0 on every world, or LIVE off: off, without asking.
+		const allOff = { LIVE_DAILY_BUDGET: '0', LIVE_MOON_DAILY_BUDGET: '0', LIVE_MARS_DAILY_BUDGET: '0', LIVE_VESTA_DAILY_BUDGET: '0', LIVE_CERES_DAILY_BUDGET: '0' };
+		assert.deepEqual( await config( day + DAY, allOff ), { live: false, liveReason: undefined } );
 		assert.deepEqual( await config( day + DAY, { LIVE: 'off' } ), { live: false, liveReason: undefined } );
 		assert.equal( asked.length, asks + 1 );
+		// The Earth's and the Moon's of 0 with the far worlds' open: off on the Earth (no reason), and
+		// asked, for the far worlds (their budgets in the ask).
+		const nearOff = await worker.fetch( new Request( 'https://worlddrive.app/api/config', { headers: { 'X-Test-Time': String( day + DAY + 1 ) } } ), { ...env, LIVE_DAILY_BUDGET: '0', LIVE_MOON_DAILY_BUDGET: '0' }, {} );
+		const nearJson = await nearOff.json();
+		assert.deepEqual( [ nearJson.live, nearJson.liveReason, nearJson.liveMoon ], [ false, undefined, false ] );
+		assert.deepEqual( nearJson.liveWorlds, { earth: { open: false }, moon: { open: false }, mars: { open: true }, vesta: { open: true }, ceres: { open: true } } );
+		assert.equal( asked.length, asks + 2 );
+		assert.deepEqual( asked.at( - 1 ).budgets, { earth: 0, moon: 0, mars: 4000, vesta: 3000, ceres: 3000 } );
 
 	} );
 
@@ -4349,19 +4365,39 @@ describe( 'World Drive Worker asking whether driving with others is open today',
 		};
 		const day = Date.UTC( 2030, 7, 1, 12 );
 		assert.deepEqual( await config( day ), { live: true, liveReason: undefined, liveMoon: true } );
-		assert.deepEqual( asked, [ { now: day, budget: 1235, moonBudget: 321 } ] );
+		assert.deepEqual( asked, [ { now: day, budgets: { earth: 1235, moon: 321, mars: 4000, vesta: 3000, ceres: 3000 }, budget: 1235, moonBudget: 321 } ] );
 		// The Earth's spent: off there, saying why, and on on the Moon; asked again (for the Moon).
 		answer = { open: false, spent: 1235, moon: { open: true, spent: 3 } };
 		assert.deepEqual( await config( day + MINUTE ), { live: false, liveReason: 'budget', liveMoon: true } );
 		assert.deepEqual( await config( day + 2 * MINUTE ), { live: false, liveReason: 'budget', liveMoon: true } );
 		assert.equal( moonReason, undefined );
 		assert.equal( asked.length, 3 );
-		// The Moon's spent too: neither asked about again that day.
+		// The Moon's spent too: with the far worlds' budgets 0, neither asked about again that day.
 		answer = { open: false, spent: 1235, moon: { open: false, spent: 321 } };
-		assert.deepEqual( await config( day + 3 * MINUTE ), { live: false, liveReason: 'budget', liveMoon: false } );
-		assert.deepEqual( await config( day + HOUR ), { live: false, liveReason: 'budget', liveMoon: false } );
+		const farOff = { LIVE_MARS_DAILY_BUDGET: '0', LIVE_VESTA_DAILY_BUDGET: '0', LIVE_CERES_DAILY_BUDGET: '0' };
+		assert.deepEqual( await config( day + 3 * MINUTE, farOff ), { live: false, liveReason: 'budget', liveMoon: false } );
+		assert.deepEqual( await config( day + HOUR, farOff ), { live: false, liveReason: 'budget', liveMoon: false } );
 		assert.equal( moonReason, 'budget' );
 		assert.equal( asked.length, 4 );
+		// With the far worlds' open (the defaults), asked again, but at most once every FAR_OPEN_MS
+		// (10 min) in this instance, the ask counted against the Earth's (spent) day.
+		answer = { open: false, spent: 1235, moon: { open: false, spent: 321 }, worlds: { mars: { open: true, spent: 5 }, vesta: { open: true, spent: 1 }, ceres: { open: false, spent: 3000 } } };
+		assert.deepEqual( await config( day + 2 * HOUR ), { live: false, liveReason: 'budget', liveMoon: false } );
+		assert.equal( asked.length, 5 );
+		for ( const later of [ MINUTE, 5 * MINUTE, 10 * MINUTE - 1 ] ) await config( day + 2 * HOUR + later );
+		assert.equal( asked.length, 5 );
+		await config( day + 2 * HOUR + 10 * MINUTE );
+		assert.equal( asked.length, 6 );
+		// (Ceres's said spent: its reason; Mars and Vesta open.)
+		const far = await ( await worker.fetch( new Request( 'https://worlddrive.app/api/config', { headers: { 'X-Test-Time': String( day + 2 * HOUR + 11 * MINUTE ) } } ), env, {} ) ).json();
+		assert.deepEqual( far.liveWorlds, { earth: { open: false, reason: 'budget' }, moon: { open: false, reason: 'budget' }, mars: { open: true }, vesta: { open: true }, ceres: { open: false, reason: 'budget' } } );
+		assert.equal( asked.length, 6 );
+		// All five known spent: not asked again that day.
+		answer = { open: false, spent: 1235, moon: { open: false, spent: 321 }, worlds: { mars: { open: false, spent: 4000 }, vesta: { open: false, spent: 3000 }, ceres: { open: false, spent: 3000 } } };
+		await config( day + 3 * HOUR );
+		assert.equal( asked.length, 7 );
+		await config( day + 5 * HOUR );
+		assert.equal( asked.length, 7 );
 		// The Moon's budget of 0: off there, the Earth's as it is (a new day, asked).
 		answer = { open: true, spent: 1, moon: { open: true, spent: 1 } };
 		assert.deepEqual( await config( day + DAY, { LIVE_MOON_DAILY_BUDGET: '0' } ), { live: true, liveReason: undefined, liveMoon: false } );

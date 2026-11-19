@@ -40,6 +40,13 @@
 // busiest, each ask charged to the budget); /api/online on stand-ins (its cache, a burst asking
 // once, DriveLimits failing, the budget spent, LIVE off); and the whole way round on a Worker of its
 // own (the real Cache API, the TTL), on: false with LIVE off and the budget spent.
+// Mars, Vesta and Ceres (protocol v3, next to v1 and v2): each world's areas, bands, frames
+// (level.js's pointOn) and checks; v3's handshake and v1/v2 pages kept out of far areas; a v2 page in
+// a party seeing a Mars driver as on the globe and away's globe to v3 only; each world's budget,
+// table and dots its own (no Earth fallback), far asks charged to the Earth's while it's open, the
+// share's floor, past-share v3 closed CLOSE.off/SHARE_SPENT (v2 CLOSE.rate), WORLD_OFF, the party's
+// charge rule; the page's here(), per-world refusals and closing; online.js's "On other worlds" and
+// self-discounted counts; and Mars's dots the whole way round.
 // TEST_DRIVE_LIVE_PORT=8950 moves the four wrangler servers (that port and the next three).
 
 import assert from 'node:assert/strict';
@@ -51,10 +58,14 @@ import { serialize } from 'node:v8';
 import { after, before, describe, mock, test } from 'node:test';
 import { CLIENT_ID, makeKey, makeToken, serveKeys, startWorker } from './worker-harness.mjs';
 import {
-	BUDGET_SPENT, BURST, CLOSE, DOT_SPREAD, FLAGS, FLUSH_MS, HELLO_MS, HONK_GAP, IDLE_MS, KEEPALIVE_MS, MAX_HELLO, MAX_MESSAGE, MOON_CELL_DEG, MOON_RADIUS,
+	BUDGET_SPENT, BURST, CLOSE, WORLD_OFF, DOT_SPREAD, FLAGS, FLUSH_MS, HELLO_MS, HONK_GAP, IDLE_MS, KEEPALIVE_MS, MAX_HELLO, MAX_MESSAGE, MOON_CELL_DEG, MOON_RADIUS,
 	NEARBY_SHARDS, ONLINE_AREAS, PARTY_MAX, PING, PONG, PROTOCOL, PROTOCOL_WORLDS, ROOM_DOTS, SEND_HZ, STILL_HZ, VIEW_RANGE,
 	boundsOf, cellOf, checkDot, checkPlace, checkState, dotsOf, fromMoonFrame, makePartyCode, packState, parseRoom, shardOf, toEcef, toGeodetic, toMoonFrame,
+	CELL_DEGS, KNOWN_WORLDS, LIVE_WORLD_IDS, PAGE_PROTOCOLS, PLACE_HEIGHTS, PROTOCOL_ALL, SHARE_SPENT, STATE_RADII,
+	fromFrame, knows, placeWorld, toBodyFrame, toFrame, versionOf, worldOfRoom,
 } from '../src/drive-app/live-protocol.js';
+import { pointOn } from '../src/drive-app/level.js';
+import { WORLDS } from '../src/drive-app/worlds.js';
 import { MOON_RADIUS as MOON_SPHERE } from '../src/drive-app/moon-height.js';
 import { makeVisit } from '../worker/drive/visits.js';
 import { partyMark } from '../worker/drive/achievements.js';
@@ -118,6 +129,22 @@ const TYCHO_AREA = cellOf( TYCHO.lat, TYCHO.lon, 'moon' );
 function moonCarAt( lat, lon, { north = 0, flags = 128, speed = 0, height = TYCHO.height } = {} ) {
 
 	return packState( toMoonFrame( lat + north / ( MOON_RADIUS * Math.PI / 180 ), lon, height ), { x: 0, y: 0, z: 0, w: 1 }, { x: speed, y: 0, z: 0 }, flags );
+
+}
+
+// Mars, Vesta and Ceres: a spot on each, and a car's STATE there in that world's own frame (its
+// body frame), as a page driving there sends it.
+const GALE = { name: 'Gale crater (Mars)', lat: - 5.4, lon: 137.8, height: - 4500, world: 'mars' };
+const GALE_AREA = cellOf( GALE.lat, GALE.lon, 'mars' );
+const RHEASILVIA = { name: 'Rheasilvia (Vesta)', lat: - 75, lon: - 59, height: - 20000, world: 'vesta' };
+const RHEASILVIA_AREA = cellOf( RHEASILVIA.lat, RHEASILVIA.lon, 'vesta' );
+const OCCATOR = { name: 'Occator crater (Ceres)', lat: 19.8, lon: - 120.7, height: - 2000, world: 'ceres' };
+const OCCATOR_AREA = cellOf( OCCATOR.lat, OCCATOR.lon, 'ceres' );
+const SPOT_ON = { mars: GALE, vesta: RHEASILVIA, ceres: OCCATOR };
+function worldCarAt( world, { north = 0, flags = 128, speed = 0, height = SPOT_ON[ world ].height } = {} ) {
+
+	const { lat, lon } = SPOT_ON[ world ];
+	return packState( toBodyFrame( lat + north / ( WORLDS[ world ].radius * Math.PI / 180 ), lon, height, world ), { x: 0, y: 0, z: 0, w: 1 }, { x: speed, y: 0, z: 0 }, flags );
 
 }
 
@@ -213,13 +240,15 @@ class Page {
 // { status, body } when it's turned away.
 // worlds: as a page that knows of the Moon (v2) connects, offering both versions; world: the
 // ?world= it says (for a party, the world it's on).
-async function connect( server, room, { token, protocols, origin = server.base, headers = {}, worlds = false, world = null } = {} ) {
+// all: as a page since Mars, Vesta and Ceres have drivers connects (v3), offering all three.
+async function connect( server, room, { token, protocols, origin = server.base, headers = {}, worlds = false, all = false, world = null } = {} ) {
 
 	token ??= await visitToken();
 	const query = room === null ? '' : `?room=${ encodeURIComponent( room ) }${ world ? `&world=${ world }` : '' }`;
 	return new Promise( ( resolve, reject ) => {
 
-		const ws = new WebSocket( `${ server.base.replace( 'http', 'ws' ) }/api/live${ query }`, protocols ?? ( worlds ? [ PROTOCOL_WORLDS, PROTOCOL, token ] : [ PROTOCOL, token ] ), { origin, headers } );
+		const offer = all ? [ ...PAGE_PROTOCOLS, token ] : worlds ? [ PROTOCOL_WORLDS, PROTOCOL, token ] : [ PROTOCOL, token ];
+		const ws = new WebSocket( `${ server.base.replace( 'http', 'ws' ) }/api/live${ query }`, protocols ?? offer, { origin, headers } );
 		const page = new Page( ws );
 		ws.on( 'open', () => resolve( page ) );
 		ws.on( 'unexpected-response', ( req, res ) => {
@@ -382,10 +411,12 @@ before( async () => {
 	presence.erin = await join( server, cellOf( MONACO.lat, MONACO.lon ), { place: MONACO } );
 	presence.pat = await join( server, partyRoom(), { place: TIMES } );
 	presence.gil = await join( server, cellOf( TIMES.lat, TIMES.lon ), { place: null, away: true } );
+	// And Max at Gale crater, alone in Mars's area's room (a v3 page): counted on Mars only.
+	presence.max = await join( server, GALE_AREA, { place: GALE }, { all: true } );
 	// Their keepalives, as their pages send them.
 	presence.alive = setInterval( () => {
 
-		for ( const page of [ presence.alice, presence.erin, presence.pat, presence.gil ] ) if ( page.ws.readyState === WebSocket.OPEN ) page.send( PING );
+		for ( const page of [ presence.alice, presence.erin, presence.pat, presence.gil, presence.max ] ) if ( page.ws.readyState === WebSocket.OPEN ) page.send( PING );
 
 	}, 20 * SECOND );
 
@@ -394,7 +425,7 @@ before( async () => {
 after( () => {
 
 	clearInterval( presence.alive );
-	for ( const page of [ presence.alice, presence.erin, presence.pat, presence.gil ] ) page?.ws.terminate();
+	for ( const page of [ presence.alice, presence.erin, presence.pat, presence.gil, presence.max ] ) page?.ws.terminate();
 	presence.server?.stop();
 
 } );
@@ -786,6 +817,67 @@ describe( 'Driving with others', () => {
 		assert.equal( await earthly.take( 'S', 100 ), null );
 		assert.equal( await ann.ended( 100 ), null );
 		await Promise.all( [ ann.close(), ben.close(), earthly.close() ] );
+
+	} );
+
+	test( 'Mars\'s, Vesta\'s and Ceres\'s areas are rooms of their own, for v3 pages: two on Mars see each other\'s cars in Mars\'s frame, none of an Earth area\'s at the same numbers; v1 and v2 pages are turned away from them; a v2 page in a party sees a Mars driver as on the globe', async () => {
+
+		// v1 and v2 pages: not into a far area; a v3 page offering its versions out of order: no page.
+		for ( const area of [ GALE_AREA, RHEASILVIA_AREA, OCCATOR_AREA ] ) {
+
+			assert.equal( ( await connect( server, area ) ).status, 400, area );
+			assert.equal( ( await connect( server, area, { worlds: true } ) ).status, 400, area );
+
+		}
+
+		assert.equal( ( await connect( server, GALE_AREA, { protocols: [ PROTOCOL_ALL, PROTOCOL, await visitToken() ] } ) ).status, 400 );
+		assert.equal( ( await connect( server, partyRoom(), { all: true, world: 'pluto' } ) ).status, 400 );
+		const ann = await join( server, GALE_AREA, { place: GALE }, { all: true } );
+		assert.equal( ann.ws.protocol, PROTOCOL_ALL );
+		assert.equal( ann.welcome.room, GALE_AREA );
+		const ben = await join( server, GALE_AREA, { place: GALE }, { all: true } );
+		const joined = await ann.take( 'join' );
+		assert.deepEqual( [ joined.player.world, joined.player.place ], [ 'mars', GALE ] );
+		// The Earth's area at those numbers is another room.
+		const earthly = await join( server, cellOf( GALE.lat, GALE.lon ), { place: { name: 'Indian Ocean', lat: GALE.lat, lon: GALE.lon, height: 0 } }, { all: true } );
+		assert.deepEqual( earthly.welcome.players, [] );
+		const car = worldCarAt( 'mars', { speed: 4 } );
+		ann.send( { t: 's', s: car } );
+		assert.deepEqual( ( await ben.take( 'S' ) ).s[ 0 ].slice( 1, 12 ), car );
+		// An Earth state, or a Vesta one, is no car of hers on Mars.
+		ann.send( { t: 's', s: carAt( 46.5725, 8.4153 ) } );
+		ann.send( { t: 's', s: worldCarAt( 'vesta' ) } );
+		assert.equal( await ben.take( 'S', 600 ), null );
+		assert.equal( await earthly.take( 'S', 100 ), null );
+
+		// Vesta: the same, in Vesta's frame (flying well over its ground too).
+		const cal = await join( server, RHEASILVIA_AREA, { place: RHEASILVIA }, { all: true } );
+		const dee = await join( server, RHEASILVIA_AREA, { place: RHEASILVIA }, { all: true } );
+		await cal.take( 'join' );
+		const flying = worldCarAt( 'vesta', { height: 30000, speed: 20 } );
+		cal.send( { t: 's', s: flying } );
+		assert.deepEqual( ( await dee.take( 'S' ) ).s[ 0 ].slice( 1, 12 ), flying );
+
+		// A party across worlds: Max on Mars (v3), Vic on the Earth (v3), Old Olive (v2): Vic hears where
+		// Max is, on Mars, and his car; Olive that he's on the globe, and nothing of his car.
+		const room = partyRoom();
+		const max = await join( server, room, { place: GALE }, { all: true, world: 'mars' } );
+		const vic = await join( server, room, { place: MONACO }, { all: true } );
+		const olive = await join( server, room, { place: MONACO }, { worlds: true } );
+		const ofMax = page => page.welcome.players.find( p => p.pid === max.pid );
+		assert.deepEqual( ( ( { world, place, away } ) => ( { world, place, away } ) )( ofMax( vic ) ), { world: 'mars', place: GALE, away: false } );
+		assert.deepEqual( ( ( { world, place, away } ) => ( { world, place, away } ) )( ofMax( olive ) ), { world: undefined, place: null, away: true } );
+		await max.take( 'join' );
+		await max.take( 'join' );
+		const marsCar = worldCarAt( 'mars' );
+		max.send( { t: 's', s: marsCar } );
+		assert.deepEqual( ( await vic.take( 'S' ) ).s[ 0 ].slice( 1, 12 ), marsCar );
+		assert.equal( await olive.take( 'S', 600 ), null );
+		// Max to Vesta's globe: Vic hears which globe; Olive that he's away, no globe.
+		max.send( { t: 'away', world: 'mars', globe: 'vesta' } );
+		assert.deepEqual( await vic.take( 'away' ), { t: 'away', pid: max.pid, globe: 'vesta' } );
+		assert.deepEqual( await olive.take( 'away' ), { t: 'away', pid: max.pid } );
+		await Promise.all( [ ann, ben, earthly, cal, dee, max, vic, olive ].map( page => page.close() ) );
 
 	} );
 
@@ -1564,8 +1656,10 @@ describe( 'Driving with others\' daily budget', () => {
 		// And the door's shut until midnight, and the globe shows nobody driving.
 		assert.equal( ( await connect( tight, partyRoom() ) ).status, 503 );
 		assert.deepEqual( ( ( { live, liveReason } ) => ( { live, liveReason } ) )( await config() ), { live: false, liveReason: BUDGET_SPENT } );
-		// (Off on the Earth: but how many are on the Moon, whose budget is its own: nobody yet.)
-		assert.deepEqual( await online( tight, Date.now() ), { on: false, total: 0, areas: [], moon: 0 } );
+		// (Off on the Earth: but how many are on the Moon, whose budget is its own: nobody yet; and on
+		// every world, the Earth's off, from the Moon's answer.)
+		const W = on => ( { on, total: 0 } );
+		assert.deepEqual( await online( tight, Date.now() ), { on: false, total: 0, areas: [], moon: 0, worlds: { earth: W( false ), moon: W( true ), mars: W( true ), vesta: W( true ), ceres: W( true ) } } );
 
 	} );
 
@@ -1858,7 +1952,7 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 
 			const res = await room.fetch( { headers } );
 			assert.equal( res.status, 101 );
-			assert.equal( res.headers[ 'Sec-WebSocket-Protocol' ], version === 2 ? PROTOCOL_WORLDS : PROTOCOL );
+			assert.equal( res.headers[ 'Sec-WebSocket-Protocol' ], version === 3 ? PROTOCOL_ALL : version === 2 ? PROTOCOL_WORLDS : PROTOCOL );
 
 		} finally {
 
@@ -1938,15 +2032,18 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 	// dots, online), kept; open, or not, or failing, as the test says.
 	function limitsStub() {
 
-		const stub = { reports: [], open: true, moonOpen: true, fail: false, over: null };
+		// (Every world's amounts and budgets, and the floor, as a room since the far worlds says them,
+		// are kept apart in `full`; `worlds`, if set, the far worlds' { open } it answers.)
+		const stub = { reports: [], full: [], open: true, moonOpen: true, worlds: null, fail: false, over: null };
 		stub.binding = {
 			idFromName: name => name,
 			get: () => ( {
-				liveSpent: async ( amount, { now, budget, moon = 0, moonBudget, online, addresses, share } ) => {
+				liveSpent: async ( amount, { now, budget, moon = 0, moonBudget, online, addresses, share, amounts, budgets, floor } ) => {
 
 					if ( stub.fail ) throw new Error( 'DriveLimits is down' );
 					stub.reports.push( { amount, now, budget, moon, moonBudget, ...( online ? { online: structuredClone( online ) } : {} ), ...( addresses ? { addresses: structuredClone( addresses ), share } : {} ) } );
-					return { open: stub.open, spent: 0, moon: { open: stub.moonOpen, spent: 0 }, ...( stub.over ? { over: stub.over } : {} ) };
+					stub.full.push( { amounts: structuredClone( amounts ), budgets: structuredClone( budgets ), floor, ...( online ? { online: structuredClone( online ) } : {} ), ...( addresses ? { addresses: structuredClone( addresses ) } : {} ) } );
+					return { open: stub.open, spent: 0, moon: { open: stub.moonOpen, spent: 0 }, ...( stub.worlds ? { worlds: structuredClone( stub.worlds ) } : {} ), ...( stub.over ? { over: stub.over } : {} ) };
 
 				},
 			} ),
@@ -3370,10 +3467,258 @@ describe( 'A room, here on a stand-in for the runtime', () => {
 		const moonOff = new DriveRoom( moonCtx, { LIMITS: limits.binding, LIVE_MOON_DAILY_BUDGET: '0' } );
 		const dee = await arrive( moonOff, moonCtx, { name: TYCHO_AREA, version: 2 } );
 		await ping( moonOff, dee );
+		// (Off on that world only, the others open: WORLD_OFF, so a v3 page closes that world alone.)
+		assert.deepEqual( dee.closedWith, { code: CLOSE.off, reason: WORLD_OFF } );
+
+	} );
+
+
+	// --- Mars, Vesta and Ceres (protocol v3) ---
+
+	const helloOn = world => ( { place: SPOT_ON[ world ] } );
+
+	test( 'v3: a Mars area\'s room answers v3 and takes Mars places and cars in Mars\'s frame; an Earth, Moon or Vesta state is no car there, nor an Earth place a place', async () => {
+
+		const ctx = runtime();
+		const room = new DriveRoom( ctx, { LIMITS: limitsStub().binding } );
+		const enter = () => hello( room, ctx, { name: GALE_AREA, version: 3 }, helloOn( 'mars' ) );
+		const ann = await enter();
+		const ben = await enter();
+		assert.deepEqual( ann.said().map( m => [ m.t, m.player.world, m.player.place ] ), [ [ 'join', 'mars', GALE ] ] );
+		assert.deepEqual( ben.welcome.players.map( p => [ p.world, p.place ] ), [ [ 'mars', GALE ] ] );
+		const car = worldCarAt( 'mars', { speed: 5 } );
+		await say( room, ann, { t: 's', s: car } );
+		assert.deepEqual( ben.said().filter( m => m.t === 'S' ).map( m => m.s[ 0 ].slice( 1, 12 ) ), [ car ] );
+		await wait( room, ctx, FLUSH_MS );
+		for ( const wrong of [ carAt( 46.5725, 8.4153 ), moonCarAt( TYCHO.lat, TYCHO.lon ), worldCarAt( 'vesta' ), worldCarAt( 'mars', { height: 60000 } ) ] ) {
+
+			await say( room, ann, { t: 's', s: wrong } );
+			await wait( room, ctx, FLUSH_MS );
+			await ping( room, ben );
+			assert.deepEqual( ben.said().filter( m => m.t === 'S' ), [] );
+			assert.equal( ann.closedWith, null );
+
+		}
+
+		await say( room, ann, { t: 'place', place: FURKA } );
+		await say( room, ann, { t: 'place', place: TYCHO } );
+		assert.deepEqual( ben.said(), [] );
+		// Moving about Mars: heard, with Mars's world.
+		await say( room, ann, { t: 'place', place: { ...GALE, name: 'Mount Sharp', height: 5000 } } );
+		assert.deepEqual( ben.said(), [ { t: 'place', pid: ann.pid, place: { ...GALE, name: 'Mount Sharp', height: 5000 } } ] );
+
+	} );
+
+	test( 'v3 in a party across five worlds: a v3 page hears a Mars driver\'s world, place, car, tricks and honks; a v2 or v1 page hears only that they\'re on the globe (away), and none of the rest; away\'s globe goes to v3 pages only', async () => {
+
+		const ctx = runtime();
+		const room = new DriveRoom( ctx, { LIMITS: limitsStub().binding } );
+		const v1 = await hello( room, ctx, { version: 1 } );
+		const v2 = await hello( room, ctx, { version: 2 } );
+		const v3 = await hello( room, ctx, { version: 3 } );
+		const max = await hello( room, ctx, { version: 3, world: 'mars' }, helloOn( 'mars' ) );
+		const joinOf = ws => ws.said().find( m => m.t === 'join' && m.player.pid === max.pid ).player;
+		const seen = ( { world, place, away, s } ) => ( { world, place, away, s } );
+		assert.deepEqual( seen( joinOf( v3 ) ), { world: 'mars', place: GALE, away: false, s: null } );
+		assert.deepEqual( seen( joinOf( v2 ) ), { world: undefined, place: null, away: true, s: null } );
+		assert.deepEqual( seen( joinOf( v1 ) ), { world: undefined, place: null, away: true, s: null } );
+		// Max's car, a trick and a honk: to the v3 page alone.
+		await say( room, max, { t: 's', s: worldCarAt( 'mars' ) } );
+		await wait( room, ctx, FLUSH_MS );
+		await say( room, max, { t: 'trick', score: 1500 } );
+		await say( room, max, { t: 'honk' } );
+		assert.deepEqual( v3.said().map( m => m.t ), [ 'S', 'trick', 'honk' ] );
+		assert.deepEqual( [ v2.said(), v1.said() ], [ [], [] ] );
+		// A Mars state from an Earth driver (or an Earth state from Max) is no car of theirs.
+		await say( room, v3, { t: 's', s: worldCarAt( 'mars' ) } );
+		await say( room, max, { t: 's', s: carAt( 46.5725, 8.4153 ) } );
+		await wait( room, ctx, FLUSH_MS );
+		await ping( room, v2 );
+		assert.deepEqual( [ v2.said(), max.said() ], [ [], [] ] );
+		// Max to Mars's globe after looking at Vesta's: v3 pages hear which globe; the others today's away.
+		await say( room, max, { t: 'away', world: 'mars', globe: 'vesta' } );
+		assert.deepEqual( v3.said(), [ { t: 'away', pid: max.pid, globe: 'vesta' } ] );
+		// (v1 and v2 had Max away already: told so again, as on the Moon, with no globe.)
+		assert.deepEqual( [ v2.said(), v1.said() ], [ [ { t: 'away', pid: max.pid } ], [ { t: 'away', pid: max.pid } ] ] );
+		// And to someone joining, v3: away with the globe; v2: away, none.
+		const late3 = await hello( room, ctx, { version: 3 } );
+		const late2 = await hello( room, ctx, { version: 2 } );
+		const inWelcome = ws => ( ( { away, globe, world } ) => ( { away, globe, world } ) )( ws.welcome.players.find( p => p.pid === max.pid ) );
+		assert.deepEqual( inWelcome( late3 ), { away: true, globe: 'vesta', world: 'mars' } );
+		assert.deepEqual( inWelcome( late2 ), { away: true, globe: undefined, world: undefined } );
+		// The v3 Earth page goes to the Earth's globe looking at Ceres: v3 pages hear the globe; v2 and
+		// v1 pages a plain away.
+		for ( const ws of [ v1, v2, v3, max, late3, late2 ] ) ws.said();
+		await say( room, v3, { t: 'away', world: 'earth', globe: 'ceres' } );
+		assert.deepEqual( [ max.said(), late3.said() ], [ [ { t: 'away', pid: v3.pid, globe: 'ceres' } ], [ { t: 'away', pid: v3.pid, globe: 'ceres' } ] ] );
+		assert.deepEqual( [ v1.said(), v2.said(), late2.said() ], [ [ { t: 'away', pid: v3.pid } ], [ { t: 'away', pid: v3.pid } ], [ { t: 'away', pid: v3.pid } ] ] );
+		// Max drops in on Mars again: the place (clearing the globe) to v3; v2 and v1 that he's away (on
+		// the globe, as far as they know, as a Moon place is to a v1 page).
+		await say( room, max, { t: 'place', place: GALE } );
+		assert.deepEqual( [ v3.said(), late3.said() ], [ [ { t: 'place', pid: max.pid, place: GALE } ], [ { t: 'place', pid: max.pid, place: GALE } ] ] );
+		const away = [ { t: 'away', pid: max.pid } ];
+		assert.deepEqual( [ v1.said(), v2.said(), late2.said() ], [ away, away, away ] );
+		// A v2 page saying it's on Mars is not on Mars (a world it doesn't know): an Earth place, on the Earth.
+		await say( room, v2, { t: 'place', place: { ...GALE, height: 100 } } );
+		assert.deepEqual( max.said().filter( m => m.t === 'place' ).map( m => [ m.pid, m.place.world ] ), [ [ v2.pid, undefined ] ] );
+
+	} );
+
+	test( 'a far area\'s room spends only its own world\'s budget (amounts by world, every budget said, with the floor); its world spent closes everyone in it (BUDGET_SPENT); switched off there alone: WORLD_OFF, not \'off\'', async () => {
+
+		const limits = limitsStub();
+		const ctx = runtime();
+		const room = new DriveRoom( ctx, { LIMITS: limits.binding } );
+		const ann = await hello( room, ctx, { name: RHEASILVIA_AREA, version: 3, from: 'from-ann' }, helloOn( 'vesta' ) );
+		const ben = await hello( room, ctx, { name: RHEASILVIA_AREA, version: 3, from: 'from-ben' }, helloOn( 'vesta' ) );
+		await drive( room, ctx, ann, REPORT_MS + 5 * SECOND, [ ben ], step => worldCarAt( 'vesta', { north: step, speed: 5 } ) );
+		assert.equal( limits.full.length, 1 );
+		const [ report ] = limits.full;
+		assert.deepEqual( report.budgets, { earth: 40000, moon: 20000, mars: 4000, vesta: 3000, ceres: 3000 } );
+		assert.equal( report.floor, 1000 );
+		assert.deepEqual( [ report.amounts.earth, report.amounts.moon, report.amounts.mars ?? 0, report.amounts.ceres ?? 0 ], [ 0, 0, 0, 0 ] );
+		assert.ok( report.amounts.vesta > 2 * COST.connect + COST.alarm + COST.report, JSON.stringify( report.amounts ) );
+		// (Its dots go with it: Vesta's area's.)
+		assert.equal( report.online.room, RHEASILVIA_AREA );
+		assert.deepEqual( report.addresses.map( a => Object.keys( a ).sort() ), [ [ 'earth', 'from', 'moon', 'vesta' ], [ 'earth', 'from', 'moon', 'vesta' ] ] );
+		// (And the legacy amount, the Earth's, nothing.)
+		assert.deepEqual( [ limits.reports[ 0 ].amount, limits.reports[ 0 ].moon ], [ 0, 0 ] );
+		// Mars spent: nothing here; Vesta spent: both closed for the budget.
+		limits.worlds = { mars: { open: false }, vesta: { open: true }, ceres: { open: true } };
+		await drive( room, ctx, ann, REPORT_MS, [ ben ], step => worldCarAt( 'vesta', { north: step, speed: 5 } ) );
+		assert.deepEqual( [ ann.closedWith, ben.closedWith ], [ null, null ] );
+		limits.worlds = { mars: { open: false }, vesta: { open: false }, ceres: { open: true } };
+		await drive( room, ctx, ann, REPORT_MS, [ ben ], step => worldCarAt( 'vesta', { north: step, speed: 5 } ) );
+		assert.deepEqual( [ ann.closedWith, ben.closedWith ], [ { code: CLOSE.off, reason: BUDGET_SPENT }, { code: CLOSE.off, reason: BUDGET_SPENT } ] );
+
+		// Ceres switched off (its budget 0), the others on: a Ceres room's driver is closed with WORLD_OFF,
+		// so a v3 page closes Ceres alone; with every budget 0 (or LIVE off), 'off'.
+		const ceresCtx = runtime();
+		const ceresOff = new DriveRoom( ceresCtx, { LIMITS: limits.binding, LIVE_CERES_DAILY_BUDGET: '0' } );
+		const cal = await arrive( ceresOff, ceresCtx, { name: OCCATOR_AREA, version: 3 } );
+		await ping( ceresOff, cal );
+		assert.deepEqual( cal.closedWith, { code: CLOSE.off, reason: WORLD_OFF } );
+		const allCtx = runtime();
+		const allOff = new DriveRoom( allCtx, { LIMITS: limits.binding, LIVE_DAILY_BUDGET: '0', LIVE_MOON_DAILY_BUDGET: '0', LIVE_MARS_DAILY_BUDGET: '0', LIVE_VESTA_DAILY_BUDGET: '0', LIVE_CERES_DAILY_BUDGET: '0' } );
+		const dee = await arrive( allOff, allCtx, { name: OCCATOR_AREA, version: 3 } );
+		await ping( allOff, dee );
 		assert.deepEqual( dee.closedWith, { code: CLOSE.off, reason: 'off' } );
 
 	} );
 
+	test( 'past its address\'s share of its world: a v3 connection is closed CLOSE.off with SHARE_SPENT (its page drives on alone there), a v2 one CLOSE.rate as before; the others drive on', async () => {
+
+		const limits = limitsStub();
+		const ctx = runtime();
+		const room = new DriveRoom( ctx, { LIMITS: limits.binding } );
+		const max = await hello( room, ctx, { version: 3, world: 'mars', from: 'from-x' }, helloOn( 'mars' ) );
+		const old = await hello( room, ctx, { version: 2, from: 'from-y' } );
+		const friend = await hello( room, ctx, { version: 3, from: 'from-z' } );
+		limits.over = { earth: [ 'from-y' ], moon: [], mars: [ 'from-x' ], vesta: [], ceres: [] };
+		await drive( room, ctx, friend, REPORT_MS + 5 * SECOND, [ max, old ] );
+		assert.deepEqual( max.closedWith, { code: CLOSE.off, reason: SHARE_SPENT } );
+		assert.deepEqual( old.closedWith, { code: CLOSE.rate, reason: 'too much from here today' } );
+		assert.equal( friend.closedWith, null );
+		// A v3 Earth driver from an address past its Mars share drives on on the Earth, but is closed
+		// (SHARE_SPENT) as it drops in on Mars.
+		const sly = await hello( room, ctx, { version: 3, from: 'from-w', over: 'mars' } );
+		await ping( room, sly );
+		assert.equal( sly.closedWith, null );
+		await say( room, sly, { t: 'place', place: GALE } );
+		assert.deepEqual( sly.closedWith, { code: CLOSE.off, reason: SHARE_SPENT } );
+
+	} );
+
+	test( 'a party\'s own alarms and reports are charged to the one world everyone in it is on; mixed, the Earth; with the Earth\'s budget 0, the open world most are on (ties in the worlds\' order)', async () => {
+
+		const charged = async ( env, worlds ) => {
+
+			const limits = limitsStub();
+			const ctx = runtime();
+			const room = new DriveRoom( ctx, { LIMITS: limits.binding, ...env } );
+			const pages = [];
+			for ( const world of worlds ) pages.push( await hello( room, ctx, { version: 3, ...( world === 'earth' ? {} : { world } ) }, world === 'earth' ? {} : helloOn( world ) ) );
+			// Only keepalives (each page's own spend on its own world), a minute and more.
+			await drive( room, ctx, pages[ 0 ], REPORT_MS + 5 * SECOND, pages.slice( 1 ), () => worlds[ 0 ] === 'earth' ? carAt( 46.5725, 8.4153 ) : worldCarAt( worlds[ 0 ] ) );
+			const { amounts } = limits.full[ 0 ];
+			// The room's own (its alarm and report, at least 2) on one world: the one whose amount isn't
+			// only its drivers' (at most a connection, a hello and a few keepalives each, under 2.5 for those idle).
+			return Object.entries( amounts ).filter( ( [ w, a ] ) => a > 0 && ( w !== worlds[ 0 ] ? a - worlds.filter( x => x === w ).length * ( COST.connect + 2 * COST.message ) >= 2 - 1e-9 : true ) ).map( ( [ w ] ) => w );
+
+		};
+		// All on Vesta: Vesta's.
+		assert.deepEqual( await charged( {}, [ 'vesta', 'vesta' ] ), [ 'vesta' ] );
+		// Mars and Ceres: the Earth's.
+		const mixed = await charged( {}, [ 'mars', 'ceres' ] );
+		assert.ok( mixed.includes( 'earth' ), JSON.stringify( mixed ) );
+		// The Earth's budget 0: Ceres (two there, one on Mars).
+		const most = await charged( { LIVE_DAILY_BUDGET: '0' }, [ 'mars', 'ceres', 'ceres' ] );
+		assert.ok( most.includes( 'ceres' ) && ! most.includes( 'earth' ), JSON.stringify( most ) );
+		// A tie: Mars before Ceres.
+		const tie = await charged( { LIVE_DAILY_BUDGET: '0' }, [ 'ceres', 'mars' ] );
+		assert.ok( tie.includes( 'mars' ) && ! tie.includes( 'earth' ), JSON.stringify( tie ) );
+
+	} );
+
+	test( '/api/live with v3: exactly [ v3, v2, v1, token ]; a far area only for a v3 page (v1 and v2 a 400), ?world= any world the version knows; the room told the version and world; a far world switched off, 503', async () => {
+
+		const asked = [];
+		const limits = { liveOpen: async options => ( asked.push( options ), { open: true, spent: 0, seq: 1, was: null, closed: [], over: [] } ) };
+		const handed = [];
+		const env = {
+			TURNSTILE_SECRET: PASS_SECRET,
+			ROOMS: { idFromName: name => name, get: name => ( { fetch: async request => ( handed.push( { name, headers: Object.fromEntries( request.headers ) } ), { status: 101 } ) } ) },
+		};
+		const now = clock;
+		const open = async ( room, offer, { world = null, more = {} } = {} ) => {
+
+			const token = await makeVisit( { TURNSTILE_SECRET: PASS_SECRET }, now, 'earth' );
+			const url = new URL( `https://worlddrive.app/api/live?room=${ encodeURIComponent( room ) }${ world ? `&world=${ world }` : '' }` );
+			const headers = new Headers( { Upgrade: 'websocket', Origin: url.origin, 'Sec-WebSocket-Protocol': [ ...offer, token ].join( ', ' ), 'CF-Connecting-IP': `203.0.113.${ 40 + handed.length }` } );
+			try {
+
+				return ( await live( { request: { headers }, env: { ...env, ...more }, url, limits, now } ) ).status;
+
+			} catch ( err ) {
+
+				return err.status;
+
+			}
+
+		};
+		const v1 = [ PROTOCOL ];
+		const v2 = [ PROTOCOL_WORLDS, PROTOCOL ];
+		const v3 = [ PROTOCOL_ALL, PROTOCOL_WORLDS, PROTOCOL ];
+		for ( const area of [ GALE_AREA, RHEASILVIA_AREA, OCCATOR_AREA ] ) {
+
+			assert.deepEqual( [ await open( area, v1 ), await open( area, v2 ) ], [ 400, 400 ], area );
+			assert.equal( await open( area, v3 ), 101, area );
+			assert.deepEqual( [ handed.at( - 1 ).name, handed.at( - 1 ).headers[ 'x-live-version' ], handed.at( - 1 ).headers[ 'x-live-world' ] ], [ area, '3', worldOfRoom( area ) ] );
+
+		}
+
+		// Malformed offers: v3 without v2, v3 last, v2 first with v3 after.
+		for ( const offer of [ [ PROTOCOL_ALL, PROTOCOL ], [ PROTOCOL_WORLDS, PROTOCOL_ALL, PROTOCOL ], [ PROTOCOL_ALL ] ] ) assert.equal( await open( GALE_AREA, offer ), 400, offer.join() );
+		// A party: ?world= any world the version knows.
+		assert.equal( await open( 'party:ABCDEFG', v3, { world: 'vesta' } ), 101 );
+		assert.deepEqual( [ handed.at( - 1 ).headers[ 'x-live-version' ], handed.at( - 1 ).headers[ 'x-live-world' ] ], [ '3', 'vesta' ] );
+		assert.equal( await open( 'party:ABCDEFG', v3, { world: 'earth' } ), 101 );
+		assert.deepEqual( [ await open( 'party:ABCDEFG', v2, { world: 'vesta' } ), await open( 'party:ABCDEFG', v3, { world: 'pluto' } ), await open( 'party:ABCDEFG', v1, { world: 'moon' } ) ], [ 400, 400, 400 ] );
+		// v1 and v2 as before: the Moon's area for v2, the Earth's for both.
+		assert.equal( await open( TYCHO_AREA, v2 ), 101 );
+		assert.equal( handed.at( - 1 ).headers[ 'x-live-version' ], '2' );
+		assert.equal( await open( FURKA_AREA, v1 ), 101 );
+		assert.equal( handed.at( - 1 ).headers[ 'x-live-version' ], '1' );
+		// The connection's ask is the world's own, with every budget and the floor.
+		const vestaAsk = asked.find( a => a.world === 'vesta' );
+		assert.deepEqual( [ vestaAsk.budgets, vestaAsk.floor, vestaAsk.share ], [ { earth: 40000, moon: 20000, mars: 4000, vesta: 3000, ceres: 3000 }, 1000, 8 ] );
+		// Mars switched off: 503 there, Vesta still let in.
+		const asks = asked.length;
+		assert.equal( await open( GALE_AREA, v3, { more: { LIVE_MARS_DAILY_BUDGET: '0' } } ), 503 );
+		assert.equal( asked.length, asks );
+		assert.equal( await open( RHEASILVIA_AREA, v3, { more: { LIVE_MARS_DAILY_BUDGET: '0' } } ), 101 );
+
+	} );
 } );
 
 // --- the page's side, here -------------------------------------------------------------------
@@ -3560,6 +3905,9 @@ describe( 'The page\'s side (src/drive-app/live.js), here on stand-ins for the b
 	test( 'turned away at the door while the Worker says it\'s on: /api/config asked the first time only, and after 8 in a row it stops', async () => {
 
 		const live = page();
+		// (On the Earth alone: the Moon's off. Refusals are counted per world, and the visit's live ends
+		// only when every open world has refused; with the Moon open, the Earth alone would close.)
+		configs = [ { live: true, liveMoon: false } ];
 		const ended = [];
 		live.on( 'ended', reason => ended.push( reason ) );
 		live.setPlace( PAD );
@@ -3732,13 +4080,13 @@ describe( 'The page\'s side (src/drive-app/live.js), here on stand-ins for the b
 
 	const sentOf = ( ws, t ) => ws.sent.filter( text => text !== PING ).map( text => JSON.parse( text ) ).filter( m => m.t === t );
 
-	test( 'it offers the protocol that knows of the Moon and the one before, then its token; on the Moon its area\'s room is the Moon\'s, the Earth\'s goes at once as its globe turns there, and a party is told which world it\'s on', async () => {
+	test( 'it offers the protocol that knows of every world, the one that knows of the Moon and the one before, then its token; on the Moon its area\'s room is the Moon\'s, the Earth\'s goes at once as its globe turns there, and a party is told which world it\'s on', async () => {
 
 		let world = 'earth';
 		const live = page( { world: () => world } );
 		live.setPlace( PAD );
 		const earthly = sockets.at( - 1 );
-		assert.deepEqual( [ earthly.protocols, earthly.room, earthly.world ], [ [ PROTOCOL_WORLDS, PROTOCOL, TOKEN ], cellOf( PAD.lat, PAD.lon ), null ] );
+		assert.deepEqual( [ earthly.protocols, earthly.room, earthly.world ], [ [ PROTOCOL_ALL, PROTOCOL_WORLDS, PROTOCOL, TOKEN ], cellOf( PAD.lat, PAD.lon ), null ] );
 		earthly.open();
 		welcome( earthly );
 		assert.deepEqual( sentOf( earthly, 'hello' )[ 0 ].world, 'earth' );
@@ -3827,23 +4175,38 @@ describe( 'The page\'s side (src/drive-app/live.js), here on stand-ins for the b
 		const ws = sockets.at( - 1 );
 		ws.open();
 		welcome( ws );
-		// The room closes it for the Earth's budget: on the Earth, it drives on alone.
+		// The room closes it for the Earth's budget: on the Earth, it drives on alone, but the party isn't
+		// dropped for a budget it needn't use: kept at once through the Moon's (the page away there, on
+		// the globe to the others), sending no car from the Earth.
 		ws.readyState = 3;
 		ws.emit( 'close', { code: CLOSE.off, reason: BUDGET_SPENT } );
-		assert.deepEqual( [ closed, live.status, live.closedHere, live.ended ], [ [ 'earth' ], 'closed', true, null ] );
+		assert.deepEqual( [ closed, live.closedHere, live.ended, live.world, live.gameWorld ], [ [ 'earth' ], true, null, 'moon', 'earth' ] );
+		const through = sockets.at( - 1 );
+		assert.deepEqual( [ through.room, through.world ], [ 'party:DEFGHJK', 'moon' ] );
+		through.open();
+		const [ hi ] = sentOf( through, 'hello' );
+		assert.deepEqual( [ hi.place, hi.away, hi.world ], [ null, true, 'moon' ] );
+		welcome( through, [ friend( 'friend02', { away: false, place: TYCHO, world: 'moon' } ) ] );
+		await advance( 3 * SECOND, () => live.drive() );
+		assert.equal( states( through ), 0 );
 		const made = sockets.length;
-		await advance( MINUTE );
-		assert.equal( sockets.length, made );
-		// On the Moon's globe: back with the party, as on the Moon.
+		// On the Moon's globe: the same party room.
 		live.setAway();
 		world = 'moon';
 		live.worldChanged();
-		assert.equal( sockets.length, made + 1 );
-		assert.equal( sockets.at( - 1 ).world, 'moon' );
-		// Turned away at the door there, with /api/config saying the Moon's is spent too: over.
+		assert.equal( sockets.length, made );
+		assert.equal( sockets.at( - 1 ), through );
+		// Dropped, and turned away at the door as it comes back, with /api/config saying the Moon's is
+		// spent too: over.
 		configs = [ { live: false, liveReason: BUDGET_SPENT, liveMoon: false, liveMoonReason: BUDGET_SPENT } ];
-		sockets.at( - 1 ).end( 1006 );
-		await advance( SECOND );
+		through.end( 1006 );
+		for ( let i = 0; i < 10 && ! live.ended; i ++ ) {
+
+			await advance( 5 * SECOND );
+			if ( sockets.at( - 1 ) !== through && sockets.at( - 1 ).readyState === 0 ) sockets.at( - 1 ).end( 1006 );
+
+		}
+
 		assert.equal( live.ended, 'budget' );
 
 		// Turned away on the Earth with /api/config saying only the Earth's is spent: closed there, not
@@ -3887,6 +4250,258 @@ describe( 'The page\'s side (src/drive-app/live.js), here on stand-ins for the b
 
 	} );
 
+
+	// --- five worlds (protocol v3) ---
+
+	// A page with every world's frame (each body's group and its sphere, where its car would be at
+	// that world's spot), on world(); config: what /api/config said.
+	function pageOnWorlds( { world = () => 'earth', closed = [], config = null, answers = null } = {} ) {
+
+		configs = answers ?? [ config ?? { live: true, liveMoon: true, liveWorlds: { earth: { open: true }, moon: { open: true }, mars: { open: true }, vesta: { open: true }, ceres: { open: true } } } ];
+		asked = 0;
+		sockets.length = 0;
+		const group = () => ( { matrixWorld: new Matrix4(), updateWorldMatrix() {} } );
+		const spot = where => ( { getPositionToCartographic: ( p, out ) => Object.assign( out, { lat: where.lat * Math.PI / 180, lon: where.lon * Math.PI / 180, height: where.height } ) } );
+		const bodies = { moon: { group: group(), ellipsoid: spot( TYCHO ) }, mars: { group: group(), ellipsoid: spot( GALE ) }, vesta: { group: group(), ellipsoid: spot( RHEASILVIA ) }, ceres: { group: group(), ellipsoid: spot( OCCATOR ) } };
+		const live = createLive( { earth: group(), ellipsoid: spot( PAD ), bodies, world, closed, visit: TOKEN, player: () => null, ride: { vehicle: 'go-kart', look: {} } } );
+		const pivot = new Object3D();
+		const velocity = new Vector3();
+		live.car = { pivot, velocity, flags: 128 };
+		// A frame of driving at `speed` m/s, at the game's world's spot.
+		live.drive = ( speed = 10 ) => {
+
+			const on = world();
+			const at = on === 'earth' ? ecef( PAD.lat, PAD.lon, PAD.height ) : toFrame( ( { moon: TYCHO, ...SPOT_ON } )[ on ].lat, ( { moon: TYCHO, ...SPOT_ON } )[ on ].lon, ( { moon: TYCHO, ...SPOT_ON } )[ on ].height, on );
+			velocity.set( 0, 0, - speed );
+			pivot.position.set( at.x, at.y, at.z + ( pivot.userData.z = ( pivot.userData.z ?? 0 ) + speed / 20 ) );
+			live.update( live.car );
+
+		};
+		return live;
+
+	}
+
+	test( 'v3 on Mars: its area\'s room is Mars\'s, the page offers v3 and says Mars as its world; a party from Mars says &world=mars; friends\' worlds and globes are read as v3 knows them; its car goes in Mars\'s frame, theirs checked in theirs', async () => {
+
+		const { worldsOf } = await import( '../src/drive-app/live.js' );
+		const all = { liveWorlds: { earth: { open: true }, moon: { open: true }, mars: { open: true }, vesta: { open: true }, ceres: { open: true } } };
+		assert.deepEqual( worldsOf( all ), { earth: 'open', moon: 'open', mars: 'open', vesta: 'open', ceres: 'open' } );
+		assert.deepEqual( worldsOf( { liveWorlds: { ...all.liveWorlds, vesta: { open: false, reason: BUDGET_SPENT }, ceres: { open: false } } } ), { earth: 'open', moon: 'open', mars: 'open', vesta: 'spent', ceres: 'off' } );
+		// An older Worker (no liveWorlds): the Earth and the Moon from the legacy keys, the far worlds off.
+		assert.deepEqual( worldsOf( { live: true, liveMoon: false, liveMoonReason: BUDGET_SPENT } ), { earth: 'open', moon: 'spent', mars: 'off', vesta: 'off', ceres: 'off' } );
+		let world = 'mars';
+		const live = pageOnWorlds( { world: () => world } );
+		assert.equal( live.world, 'mars' );
+		assert.deepEqual( live.openWorlds(), [ 'earth', 'moon', 'mars', 'vesta', 'ceres' ] );
+		live.setPlace( GALE );
+		const area = sockets.at( - 1 );
+		assert.deepEqual( [ area.room, area.world, area.protocols ], [ GALE_AREA, null, [ PROTOCOL_ALL, PROTOCOL_WORLDS, PROTOCOL, TOKEN ] ] );
+		area.open( PROTOCOL_ALL );
+		const [ hello ] = sentOf( area, 'hello' );
+		assert.deepEqual( [ hello.place, hello.away, hello.world, hello.globe ], [ GALE, false, 'mars', undefined ] );
+		// Friends: one on Vesta's globe, one driving on Ceres, one on a world v3 doesn't know (the Earth's).
+		const marsCar = worldCarAt( 'mars' );
+		welcome( area, [
+			friend( 'f1', { away: true, world: 'earth', globe: 'vesta' } ),
+			friend( 'f2', { away: false, place: OCCATOR, world: 'ceres' } ),
+			friend( 'f3', { away: false, place: GALE, world: 'mars', s: marsCar } ),
+			friend( 'f4', { away: false, place: { ...FURKA, world: 'pluto' }, world: 'pluto' } ),
+		] );
+		const p = pid => ( ( { world, globe, away } ) => ( { world, globe, away } ) )( live.players.get( pid ) );
+		assert.deepEqual( [ p( 'f1' ), p( 'f2' ), p( 'f3' ) ], [ { world: 'earth', globe: 'vesta', away: true }, { world: 'ceres', globe: null, away: false }, { world: 'mars', globe: null, away: false } ] );
+		assert.equal( p( 'f4' ).world, 'earth' );
+		assert.deepEqual( live.players.get( 'f3' ).s, marsCar );
+		// f2 to Mars's globe: away with that globe; then dropping in on Mars clears it.
+		area.hear( { t: 'away', pid: 'f2', globe: 'mars' } );
+		assert.deepEqual( p( 'f2' ), { world: 'ceres', globe: 'mars', away: true } );
+		area.hear( { t: 'place', pid: 'f2', place: GALE } );
+		assert.deepEqual( p( 'f2' ), { world: 'mars', globe: null, away: false } );
+		// Its car: in Mars's frame, checked as Mars's; a state from f3 in the Earth's frame is none of hers.
+		await advance( SECOND, () => live.drive() );
+		const sent = sentOf( area, 's' ).at( - 1 ).s;
+		assert.ok( checkState( sent, 'mars' ), JSON.stringify( sent ) );
+		const heard = [];
+		live.on( 'states', ( { states: list } ) => heard.push( ...list.map( entry => entry.pid ) ) );
+		area.hear( { t: 'S', at: 1, s: [ [ 'f3', ...carAt( PAD.lat, PAD.lon ), 0 ], [ 'f3', ...marsCar, 0 ] ] } );
+		assert.deepEqual( heard, [ 'f3' ] );
+		// A party from Mars: &world=mars.
+		live.joinParty( 'EFGHJKL' );
+		const party = sockets.at( - 1 );
+		assert.deepEqual( [ party.room, party.world ], [ 'party:EFGHJKL', 'mars' ] );
+		party.open( PROTOCOL_ALL );
+		welcome( party );
+		// Back on the globe and turned to Vesta's: the party is told, with Vesta's world and globe.
+		live.setAway();
+		world = 'vesta';
+		live.worldChanged();
+		assert.deepEqual( sentOf( party, 'away' ).at( - 1 ), { t: 'away', world: 'vesta', globe: 'vesta' } );
+		live.leaveParty();
+		live.setNearby( false );
+
+	} );
+
+	test( 'v3 room on old code (answering v1 or v2): on Mars the page is on the globe to it and sends no car; a 400 for a Mars area from a Worker before v3 counts as a refusal on Mars alone', async () => {
+
+		for ( const answered of [ PROTOCOL, PROTOCOL_WORLDS ] ) {
+
+			const live = pageOnWorlds( { world: () => 'mars' } );
+			live.joinParty( 'FGHJKLM' );
+			live.setPlace( GALE );
+			const ws = sockets.at( - 1 );
+			ws.open( answered );
+			const [ hello ] = sentOf( ws, 'hello' );
+			assert.deepEqual( [ hello.place, hello.away, hello.globe ], [ null, true, undefined ], answered );
+			welcome( ws, [ friend( 'friend01', { away: false, place: PAD } ) ] );
+			await advance( 3 * SECOND, () => live.drive() );
+			assert.equal( states( ws ), 0, answered );
+			assert.deepEqual( sentOf( ws, 'place' ), [] );
+			live.leaveParty();
+
+		}
+
+		// The Mars area turned away at the door 8 times while /api/config says Mars is open: Mars closed
+		// (quietly), live not over; the Earth still open.
+		let world = 'mars';
+		const live = pageOnWorlds( { world: () => world } );
+		const closed = [];
+		live.on( 'closed', e => closed.push( e ) );
+		live.setPlace( GALE );
+		for ( let i = 0; i < 12 && ! live.closedWorlds.has( 'mars' ); i ++ ) {
+
+			sockets.at( - 1 ).end( 1006 );
+			await advance( 31 * SECOND );
+
+		}
+
+		assert.deepEqual( [ live.closedWorlds.has( 'mars' ), live.ended, live.world, live.closedHere ], [ true, null, 'earth', true ] );
+		assert.deepEqual( closed.map( ( { world: w, quiet } ) => [ w, quiet ] ), [ [ 'mars', true ] ] );
+		const made = sockets.length;
+		await advance( MINUTE );
+		assert.equal( sockets.length, made );
+		// On the Earth: its area's room as ever.
+		live.setAway();
+		world = 'earth';
+		live.worldChanged();
+		live.setPlace( PAD );
+		assert.equal( sockets.at( - 1 ).room, FURKA_AREA );
+		live.setNearby( false );
+
+		// With the Earth and the Moon open too, 8 refusals on the Earth close the Earth alone; only when
+		// every open world has refused 8 times is live over for the visit ('refused').
+		const earthly = page();
+		earthly.setPlace( PAD );
+		for ( let i = 0; i < 12 && ! earthly.closedWorlds.has( 'earth' ); i ++ ) {
+
+			sockets.at( - 1 ).end( 1006 );
+			await advance( 31 * SECOND );
+
+		}
+
+		assert.deepEqual( [ earthly.closedWorlds.has( 'earth' ), earthly.ended, earthly.world ], [ true, null, 'moon' ] );
+		earthly.setNearby( false );
+
+	} );
+
+	test( 'per world closing: CLOSE.off with WORLD_OFF (switched off there alone) closes that world quietly; with SHARE_SPENT it closes it with the share toast\'s event, keeping the party through another open world; BUDGET_SPENT the same with the budget\'s; \'off\' ends live everywhere', async () => {
+
+		const run = async ( reason, world = 'vesta' ) => {
+
+			const live = pageOnWorlds( { world: () => world } );
+			const closed = [];
+			const ended = [];
+			live.on( 'closed', e => closed.push( e ) );
+			live.on( 'ended', e => ended.push( e ) );
+			live.joinParty( 'GHJKLMN' );
+			live.setPlace( SPOT_ON[ world ] );
+			const party = sockets.at( - 1 );
+			assert.deepEqual( [ party.room, party.world ], [ 'party:GHJKLMN', world ] );
+			party.open( PROTOCOL_ALL );
+			welcome( party );
+			party.readyState = 3;
+			party.emit( 'close', { code: CLOSE.off, reason } );
+			return { live, closed, ended, party };
+
+		};
+		// Vesta switched off alone: Vesta closed quietly; the party back at once through the Earth (the
+		// first open world), the page away there with Vesta's globe.
+		const off = await run( WORLD_OFF );
+		assert.deepEqual( off.closed, [ { world: 'vesta', quiet: true, share: false } ] );
+		assert.deepEqual( [ off.ended, off.live.world, off.live.gameWorld, off.live.closedHere, [ ...off.live.closedWorlds ] ], [ [], 'earth', 'vesta', true, [ 'vesta' ] ] );
+		const back = sockets.at( - 1 );
+		assert.deepEqual( [ back.room, back.world ], [ 'party:GHJKLMN', null ] );
+		back.open( PROTOCOL_ALL );
+		const [ again ] = sentOf( back, 'hello' );
+		assert.deepEqual( [ again.place, again.away, again.world, again.globe ], [ null, true, 'earth', 'vesta' ] );
+		welcome( back );
+		assert.equal( off.live.status, 'live' );
+		// Driving on alone on Vesta: no car to the party (it's through the Earth's room).
+		await advance( 3 * SECOND, () => off.live.drive() );
+		assert.equal( states( back ), 0 );
+		// Turned to Mars's globe (open): Mars is where its rooms are now; told so.
+		off.live.setAway();
+		off.live.leaveParty();
+		off.live.setNearby( false );
+
+		// Past its share on Mars: Mars closed, with share (the page toasts SHARE_TOAST), not quiet.
+		const share = await run( SHARE_SPENT, 'mars' );
+		assert.deepEqual( share.closed, [ { world: 'mars', quiet: false, share: true } ] );
+		assert.deepEqual( [ share.ended, share.live.world, share.live.openWorlds() ], [ [], 'earth', [ 'earth', 'moon', 'vesta', 'ceres' ] ] );
+		share.live.leaveParty();
+		share.live.setNearby( false );
+		// Ceres's budget spent: closed, not quiet, no share.
+		const spent = await run( BUDGET_SPENT, 'ceres' );
+		assert.deepEqual( spent.closed, [ { world: 'ceres', quiet: false, share: false } ] );
+		assert.deepEqual( spent.ended, [] );
+		spent.live.leaveParty();
+		spent.live.setNearby( false );
+		// 'off' (LIVE off, or every world's budget 0): over for the visit, every world.
+		const all = await run( 'off', 'mars' );
+		assert.deepEqual( all.ended, [ 'off' ] );
+		all.live.setNearby( false );
+
+	} );
+
+	test( 'here(): on a closed world the rooms\' world is the last open one it was on, else the first open; with every live world closed, nothing (live over); a world closed from the start is never tried, and closing the last open world ends live', async () => {
+
+		let world = 'mars';
+		// Vesta and Ceres spent at load.
+		const live = pageOnWorlds( { world: () => world, closed: [ 'vesta', 'ceres' ] } );
+		assert.equal( live.world, 'mars' );
+		live.setAway();
+		world = 'vesta';
+		live.worldChanged();
+		// On spent Vesta: Mars's rooms (the last open world it was on).
+		assert.deepEqual( [ live.world, live.gameWorld, live.closedHere ], [ 'mars', 'vesta', true ] );
+		live.setPlace( RHEASILVIA );
+		assert.deepEqual( [ sockets.length, live.status ], [ 0, 'closed' ] );
+		// A party joined there goes through Mars, the page away (globe Vesta).
+		live.joinParty( 'HJKLMNP' );
+		const party = sockets.at( - 1 );
+		assert.deepEqual( [ party.room, party.world ], [ 'party:HJKLMNP', 'mars' ] );
+		party.open( PROTOCOL_ALL );
+		const [ hello ] = sentOf( party, 'hello' );
+		assert.deepEqual( [ hello.away, hello.world, hello.globe ], [ true, 'mars', 'vesta' ] );
+		welcome( party, [ friend( 'm1', { away: false, place: GALE, world: 'mars' } ) ] );
+		// Mars's budget spent now: the party goes on through the Earth (first open), still away.
+		party.readyState = 3;
+		party.emit( 'close', { code: CLOSE.off, reason: BUDGET_SPENT } );
+		assert.deepEqual( [ live.world, [ ...live.closedWorlds ].sort(), live.ended ], [ 'earth', [ 'ceres', 'mars', 'vesta' ], null ] );
+		const through = sockets.at( - 1 );
+		assert.deepEqual( [ through.room, through.world ], [ 'party:HJKLMNP', null ] );
+		through.open( PROTOCOL_ALL );
+		welcome( through );
+		// Then the Earth's and the Moon's spent: nothing open, over for the visit.
+		through.readyState = 3;
+		through.emit( 'close', { code: CLOSE.off, reason: BUDGET_SPENT } );
+		assert.equal( live.world, 'moon' );
+		const last = sockets.at( - 1 );
+		last.open( PROTOCOL_ALL );
+		welcome( last );
+		last.readyState = 3;
+		last.emit( 'close', { code: CLOSE.off, reason: BUDGET_SPENT } );
+		assert.deepEqual( [ live.world, live.ended ], [ null, 'budget' ] );
+
+	} );
 } );
 
 // --- the globe's Driving now, here ------------------------------------------------------------
@@ -3999,6 +4614,70 @@ describe( 'The globe\'s "Driving now" (src/drive-app/online.js), here on stand-i
 
 	} );
 
+
+	test( 'across five worlds: on Mars its own dots (each a Mars place, so Drive here stays on Mars) and Mars\'s spot names; one other world with drivers, today\'s row; two or more, "On other worlds" (onOthers with the row); `worlds` self-discounted, kept when off, null when live is over; onCounts only on a change', async () => {
+
+		let on = 'mars';
+		const set = [];
+		const counted = [];
+		const others = [];
+		const W = ( e, m, ma, v, c ) => ( { earth: { on: true, total: e }, moon: { on: true, total: m }, mars: { on: true, total: ma }, vesta: { on: v !== null, total: v ?? 0 }, ceres: { on: true, total: c } } );
+		const answers = {
+			'/api/online?world=mars': { on: true, total: 3, areas: [ { lat: - 5.4, lon: 137.8, height: - 4500, count: 3 } ], worlds: W( 0, 0, 3, 0, 0 ) },
+			'/api/online': { on: true, total: 0, areas: [], moon: 2, worlds: W( 0, 2, 1, 4, 0 ) },
+		};
+		const fetched = [];
+		globalThis.fetch = async url => ( fetched.push( url ), { ok: true, headers: new Headers( { 'Content-Type': 'application/json' } ), json: async () => answers[ url ] } );
+		const shape = {
+			getCartographicToPosition: ( lat, lon, height, target ) => target.set( lat, lon, height ),
+			getCartographicToNormal: ( lat, lon, target ) => target.set( 0, 0, 1 ),
+		};
+		const live = { players: new Map(), status: 'live', room: null, place: null, ended: null, visitEnds: Infinity, closedHere: false, closedWorlds: new Set() };
+		const body = { group: {}, ellipsoid: shape };
+		const online = createOnline( {
+			camera: {}, earth: {}, ellipsoid: shape, bodies: { moon: body, mars: body, vesta: body, ceres: body }, world: () => on, canvas: { addEventListener() {}, style: {} }, live,
+			layer: { append() {}, hidden: false }, panel: { setOnline: shown => set.push( shown ), pinned: null, setPin() {} }, covers: [], mode: () => 'globe',
+			onPick() {}, onZoom() {}, onOthers: row => others.push( row ), onCounts: w => counted.push( w ),
+		} );
+		await online.refresh();
+		assert.equal( fetched.at( - 1 ), '/api/online?world=mars' );
+		assert.equal( online.world, 'mars' );
+		assert.equal( set.at( - 1 ).summary, '3 driving on Mars now. Tap a glowing dot to join them.' );
+		// (A Mars dot's place is on Mars: a Mars dot never flies to the Earth.)
+		assert.equal( set.at( - 1 ).areas[ 0 ].place.world, 'mars' );
+		assert.equal( set.at( - 1 ).areas[ 0 ].title, 'Near Mount Sharp' );
+		assert.deepEqual( online.worlds.mars, { on: true, total: 3 } );
+		// Back on the globe from driving on Mars in its area's room, turned to the Earth: this page off
+		// Mars's count, so the orrery agrees with the panel.
+		live.room = GALE_AREA;
+		online.left( { lat: GALE.lat, lon: GALE.lon } );
+		on = 'earth';
+		await online.refresh();
+		const last = set.at( - 1 );
+		assert.deepEqual( [ last.summary, last.areas.map( a => `${ a.title } · ${ a.subtitle }` ) ], [ 'Nobody driving on the Earth right now: 6 drivers on other worlds.', [ 'On other worlds · 6 drivers' ] ] );
+		assert.deepEqual( online.worlds, { earth: { on: true, total: 0 }, moon: { on: true, total: 2 }, mars: { on: true, total: 0 }, vesta: { on: true, total: 4 }, ceres: { on: true, total: 0 } } );
+		last.areas[ 0 ].onClick( { currentTarget: 'ROW' } );
+		assert.deepEqual( others, [ 'ROW' ] );
+		assert.equal( counted.length, 2 );
+		// The same again: no onCounts.
+		await online.refresh();
+		assert.equal( counted.length, 2 );
+		// Vesta off: one other world with drivers (the Moon): today's row.
+		answers[ '/api/online' ] = { on: true, total: 0, areas: [], moon: 2, worlds: W( 0, 2, 0, null, 0 ) };
+		await online.refresh();
+		assert.deepEqual( set.at( - 1 ).areas.map( a => `${ a.title } · ${ a.subtitle }` ), [ 'On the Moon · 2 drivers' ] );
+		assert.equal( counted.length, 3 );
+		// The Earth off: its worlds kept, from the off answer (Mars's 5 still less this page, just back
+		// from driving there: 4).
+		answers[ '/api/online' ] = { on: false, total: 0, areas: [], moon: 2, worlds: { ...W( 0, 2, 5, null, 0 ), earth: { on: false, total: 0 } } };
+		await online.refresh();
+		assert.deepEqual( [ online.on, online.worlds.mars, set.at( - 1 ).summary ], [ false, { on: true, total: 4 }, '6 drivers on other worlds right now.' ] );
+		// Live over for the visit: null, and onCounts( null ).
+		live.ended = 'budget';
+		online.update();
+		assert.deepEqual( [ online.worlds, counted.at( - 1 ) ], [ null, null ] );
+
+	} );
 } );
 
 // --- who's driving now -----------------------------------------------------------------------
@@ -4111,7 +4790,7 @@ describe( 'Who\'s driving now: where, as dots', () => {
 		assert.ok( Math.abs( tall - 10916 ) < 50 && wide > 10000 && wide < 12500, `${ tall } × ${ wide }` );
 		assert.equal( MOON_CELL_DEG, 0.36 );
 		assert.deepEqual( parseRoom( shardOf( TYCHO_AREA, 3 ) ), { kind: 'near', world: 'moon', cell: TYCHO_AREA, shard: 3, max: 20 } );
-		for ( const bad of [ 'moon:500.0', 'moon:499.99999', `${ TYCHO_AREA }#4`, 'mars:1.1' ] ) assert.equal( parseRoom( bad ), null, bad );
+		for ( const bad of [ 'moon:500.0', 'moon:499.99999', `${ TYCHO_AREA }#4`, 'mars:1000.0', 'pluto:1.1' ] ) assert.equal( parseRoom( bad ), null, bad );
 		// The same numbers on the Earth are another area altogether.
 		assert.notEqual( cellOf( TYCHO.lat, TYCHO.lon ), TYCHO_AREA );
 		// Moon-centred metres and back, to a millimetre; a dot where its drivers are, inside its area.
@@ -4125,7 +4804,166 @@ describe( 'Who\'s driving now: where, as dots', () => {
 		assert.deepEqual( [ !! checkState( car, 'moon' ), !! checkState( car ), !! checkState( carAt( 46.5725, 8.4153 ), 'moon' ) ], [ true, false, false ] );
 		assert.deepEqual( checkPlace( { ...TYCHO, height: - 9000 } ), { ...TYCHO, height: - 9000 } );
 		assert.equal( checkPlace( { ...TYCHO, height: - 9000, world: 'earth' } ), null );
-		assert.deepEqual( Object.keys( checkPlace( { ...FURKA, world: 'mars' } ) ), [ 'name', 'lat', 'lon', 'height' ] );
+		// (A world that isn't one is the Earth's; Mars's is kept, with its own heights.)
+		assert.deepEqual( Object.keys( checkPlace( { ...FURKA, world: 'pluto' } ) ), [ 'name', 'lat', 'lon', 'height' ] );
+		assert.deepEqual( checkPlace( { ...FURKA, world: 'mars' } ), { ...FURKA, world: 'mars' } );
+
+	} );
+
+} );
+
+describe( 'Five worlds on the wire (live-protocol.js v3): areas, bands, frames and checks per world', () => {
+
+	test( 'v3 next to v1 and v2: the page offers all three, newest first; versionOf reads a room\'s answer; KNOWN_WORLDS are literals (a sixth world is v4)', () => {
+
+		assert.equal( PROTOCOL_ALL, 'worlddrive-live.v3' );
+		assert.deepEqual( PAGE_PROTOCOLS, [ PROTOCOL_ALL, PROTOCOL_WORLDS, PROTOCOL ] );
+		assert.ok( Object.isFrozen( PAGE_PROTOCOLS ) );
+		assert.deepEqual( [ PROTOCOL, PROTOCOL_WORLDS, PROTOCOL_ALL, 'worlddrive-live.v4', '', undefined ].map( versionOf ), [ 1, 2, 3, 0, 0, 0 ] );
+		assert.deepEqual( KNOWN_WORLDS, { 1: [ 'earth' ], 2: [ 'earth', 'moon' ], 3: [ 'earth', 'moon', 'mars', 'vesta', 'ceres' ] } );
+		assert.ok( Object.isFrozen( KNOWN_WORLDS ) && Object.values( KNOWN_WORLDS ).every( Object.isFrozen ) );
+		assert.deepEqual( LIVE_WORLD_IDS, [ 'earth', 'moon', 'mars', 'vesta', 'ceres' ] );
+		// Which version knows which world.
+		const table = [ 1, 2, 3 ].map( v => LIVE_WORLD_IDS.map( w => knows( v, w ) ) );
+		assert.deepEqual( table, [ [ true, false, false, false, false ], [ true, true, false, false, false ], [ true, true, true, true, true ] ] );
+		for ( const bad of [ 'pluto', 'constructor', '__proto__', null, undefined, 1 ] ) assert.equal( knows( 3, bad ), false, String( bad ) );
+
+	} );
+
+	test( 'each world\'s areas are about 11 km on a side, its own rooms (mars:, vesta:, ceres:), round-tripping through parseRoom and boundsOf; nothing falls back to the Earth', () => {
+
+		assert.deepEqual( CELL_DEGS, { earth: 0.1, moon: 0.36, mars: 0.18, vesta: 2.4, ceres: 1.25 } );
+		const SIDES = { earth: [ 11100, 6371009 ], moon: [ 10900, MOON_RADIUS ], mars: [ 10600, WORLDS.mars.radius ], vesta: [ 11000, WORLDS.vesta.radius ], ceres: [ 10300, WORLDS.ceres.radius ] };
+		for ( const world of LIVE_WORLD_IDS ) {
+
+			const [ side, radius ] = SIDES[ world ];
+			const tall = CELL_DEGS[ world ] * Math.PI / 180 * radius;
+			assert.ok( Math.abs( tall - side ) < 100, `${ world }: ${ tall } m` );
+			// Random spots: the area holds the spot, its name parses back to itself, every shard too,
+			// and its world is the world.
+			let seed = 7;
+			const random = () => ( seed = ( seed * 16807 ) % 2147483647 ) / 2147483647;
+			for ( let i = 0; i < 400; i ++ ) {
+
+				const lat = random() * 179.8 - 89.9;
+				const lon = random() * 359.8 - 179.9;
+				const cell = cellOf( lat, lon, world );
+				assert.equal( cell.split( ':' )[ 0 ], world === 'earth' ? 'near' : world );
+				assert.equal( worldOfRoom( cell ), world );
+				assert.ok( cell.length <= 40 );
+				assert.deepEqual( parseRoom( cell ), { kind: 'near', world, cell, shard: 0, max: 20 }, cell );
+				assert.deepEqual( parseRoom( shardOf( cell, 3 ) ), { kind: 'near', world, cell, shard: 3, max: 20 } );
+				const b = boundsOf( cell );
+				assert.ok( lat >= b.south - 1e-9 && lat <= b.north + 1e-9 && lon >= b.west - 1e-9 && lon <= b.east + 1e-9, `${ cell } ${ lat } ${ lon }` );
+
+			}
+
+		}
+
+		assert.match( GALE_AREA, /^mars:\d+\.\d+$/ );
+		assert.match( RHEASILVIA_AREA, /^vesta:\d+\.\d+$/ );
+		assert.match( OCCATOR_AREA, /^ceres:\d+\.\d+$/ );
+		// Past a world's last band or column, a fifth shard, another prefix: no room.
+		for ( const bad of [ 'mars:1000.0', 'vesta:75.0', 'ceres:144.0', `${ GALE_AREA }#4`, 'pluto:1.1', 'Mars:1.1', 'constructor:1.1' ] ) assert.equal( parseRoom( bad ), null, bad );
+		// The same numbers on two worlds are two rooms.
+		assert.equal( new Set( LIVE_WORLD_IDS.map( w => cellOf( GALE.lat, GALE.lon, w ) ) ).size, 5 );
+		// A world that isn't one throws (it is never taken for the Earth); worldOfRoom says null.
+		for ( const bad of [ 'pluto', null, 'Mars' ] ) assert.throws( () => cellOf( 1, 2, bad ), TypeError, String( bad ) );
+		assert.throws( () => boundsOf( 'pluto:1.1' ) );
+		assert.throws( () => toFrame( 1, 2, 0, 'pluto' ) );
+		assert.deepEqual( [ 'party:ABCDEFG', 'constructor:1.1', '', null ].map( worldOfRoom ), [ null, null, null, null ] );
+
+	} );
+
+	test( 'a car\'s STATE is checked against its own world\'s band, and no two worlds\' bands overlap: a car on one is never one on another', () => {
+
+		assert.deepEqual( STATE_RADII, { earth: [ 6340000, 6400000 ], moon: [ MOON_RADIUS - 12000, MOON_RADIUS + 30000 ], mars: [ 3377000, 3442000 ], vesta: [ 207700, 334700 ], ceres: [ 438000, 528500 ] } );
+		// Each far world's: its radius with its lowest ground less 3 km to its highest plus its flying margin.
+		const MARGIN = { mars: 30000, vesta: 40000, ceres: 40000 };
+		for ( const w of [ 'mars', 'vesta', 'ceres' ] ) assert.deepEqual( STATE_RADII[ w ], [ WORLDS[ w ].radius + WORLDS[ w ].lowest - 3000, WORLDS[ w ].radius + WORLDS[ w ].highest + MARGIN[ w ] ], w );
+		const sorted = Object.values( STATE_RADII ).toSorted( ( a, b ) => a[ 0 ] - b[ 0 ] );
+		for ( let i = 1; i < sorted.length; i ++ ) assert.ok( sorted[ i ][ 0 ] > sorted[ i - 1 ][ 1 ], JSON.stringify( sorted ) );
+		// A car at each world's spot checks only there.
+		const carsOn = { earth: carAt( 46.5725, 8.4153 ), moon: moonCarAt( TYCHO.lat, TYCHO.lon ), mars: worldCarAt( 'mars' ), vesta: worldCarAt( 'vesta' ), ceres: worldCarAt( 'ceres' ) };
+		for ( const [ on, car ] of Object.entries( carsOn ) ) assert.deepEqual( LIVE_WORLD_IDS.map( w => !! checkState( car, w ) ), LIVE_WORLD_IDS.map( w => w === on ), on );
+		// Flying: Vesta's car 38 km over its highest ground still is one; 45 km over, it isn't.
+		assert.ok( checkState( worldCarAt( 'vesta', { height: WORLDS.vesta.highest + 38000 } ), 'vesta' ) );
+		assert.equal( checkState( worldCarAt( 'vesta', { height: WORLDS.vesta.highest + 45000 } ), 'vesta' ), null );
+		// A world that isn't one checks nothing (not the Earth's).
+		assert.equal( checkState( carsOn.earth, 'pluto' ), null );
+
+	} );
+
+	test( 'the far worlds\' frames are level.js\'s pointOn exactly (a sphere of the world\'s radius, planetocentric), and back to a millimetre', () => {
+
+		let seed = 11;
+		const random = () => ( seed = ( seed * 16807 ) % 2147483647 ) / 2147483647;
+		for ( const world of [ 'moon', 'mars', 'vesta', 'ceres' ] ) {
+
+			for ( let i = 0; i < 300; i ++ ) {
+
+				const [ lat, lon, height ] = [ random() * 180 - 90, random() * 360 - 180, PLACE_HEIGHTS[ world ][ 0 ] + random() * ( PLACE_HEIGHTS[ world ][ 1 ] - PLACE_HEIGHTS[ world ][ 0 ] ) ];
+				const at = toFrame( lat, lon, height, world );
+				assert.deepEqual( [ at.x, at.y, at.z ], pointOn( world, lat, lon, height ), world );
+				const back = fromFrame( at.x, at.y, at.z, world );
+				assert.ok( Math.abs( back.lat - lat ) < 1e-9 && Math.abs( back.lon - lon ) < 1e-9 && Math.abs( back.height - height ) < 1e-3, `${ world } ${ lat } ${ lon } ${ height }` );
+
+			}
+
+		}
+
+		// (The Earth's stays ECEF.)
+		assert.deepEqual( toFrame( 46.5725, 8.4153, 2429 ), toEcef( 46.5725, 8.4153, 2429 ) );
+		assert.throws( () => toBodyFrame( 1, 2, 0, 'earth' ) );
+
+	} );
+
+	test( 'a PLACE keeps its world for the Moon, Mars, Vesta and Ceres, checked against that world\'s heights; anything else is the Earth\'s with no world', () => {
+
+		assert.deepEqual( PLACE_HEIGHTS, { earth: [ - 2000, 10000 ], moon: [ - 12000, 12000 ], mars: [ - 9500, 22500 ], vesta: [ - 52000, 32000 ], ceres: [ - 29000, 18500 ] } );
+		for ( const spot of [ GALE, RHEASILVIA, OCCATOR ] ) {
+
+			assert.deepEqual( checkPlace( spot ), spot );
+			assert.equal( placeWorld( checkPlace( spot ) ), spot.world );
+			const [ low, high ] = PLACE_HEIGHTS[ spot.world ];
+			assert.ok( checkPlace( { ...spot, height: low } ) && checkPlace( { ...spot, height: high } ) );
+			assert.equal( checkPlace( { ...spot, height: low - 1 } ), null );
+			assert.equal( checkPlace( { ...spot, height: high + 1 } ), null );
+
+		}
+
+		// Olympus Mons's 21 km is Mars's, no place on the Earth; Rheasilvia's -20 km is no Earth place.
+		assert.equal( checkPlace( { ...GALE, height: 21000, world: undefined } ), null );
+		assert.equal( checkPlace( { ...RHEASILVIA, world: 'earth' } ), null );
+		// No world, the Earth's, or one that isn't: the Earth's, no world kept.
+		for ( const world of [ undefined, 'earth', 'pluto', 'MARS', 7 ] ) {
+
+			const place = checkPlace( { ...FURKA, world } );
+			assert.deepEqual( place, FURKA, String( world ) );
+			assert.equal( placeWorld( place ), 'earth' );
+
+		}
+
+		assert.deepEqual( [ placeWorld( null ), placeWorld( { world: 'pluto' } ) ], [ 'earth', 'earth' ] );
+		assert.equal( SHARE_SPENT, 'share' );
+		assert.equal( WORLD_OFF, 'world off' );
+
+	} );
+
+	test( 'each far world\'s drivers as dots, on its own sphere, inside its own area', () => {
+
+		for ( const [ world, spot, area ] of [ [ 'mars', GALE, GALE_AREA ], [ 'vesta', RHEASILVIA, RHEASILVIA_AREA ], [ 'ceres', OCCATOR, OCCATOR_AREA ] ] ) {
+
+			const at = toFrame( spot.lat, spot.lon, spot.height, world );
+			const near = toFrame( spot.lat + 0.001, spot.lon, spot.height, world );
+			const [ dot ] = dotsOf( [ at, near ], area );
+			assert.equal( dot.count, 2, world );
+			assert.ok( checkDot( dot ), world );
+			assert.ok( Math.abs( dot.lat - spot.lat ) < 0.011 && Math.abs( dot.lon - spot.lon ) < 0.011 && Math.abs( dot.height - spot.height ) <= 10, `${ world } ${ JSON.stringify( dot ) }` );
+			const b = boundsOf( area );
+			assert.ok( dot.lat >= b.south && dot.lat <= b.north && dot.lon >= b.west && dot.lon <= b.east );
+
+		}
 
 	} );
 
@@ -4190,6 +5028,8 @@ describe( 'DriveLimits keeping who\'s driving now, here on SQLite', () => {
 		};
 		const limits = new DriveLimits( { storage }, {} );
 		limits.rows = () => sql.exec( 'SELECT room, dots, at FROM live_online ORDER BY room' ).toArray();
+		// A world's table of spends (live, live_moon, live_mars, ...), as rows.
+		limits.table = name => sql.exec( `SELECT day, spent FROM ${ name } ORDER BY day` ).toArray();
 		return limits;
 
 	}
@@ -4414,6 +5254,139 @@ describe( 'DriveLimits keeping who\'s driving now, here on SQLite', () => {
 
 	} );
 
+
+	// --- five worlds ---
+
+	// (DriveLimits' day, limits.js's dayOf.)
+	const dayOf = time => new Date( time ).toISOString().slice( 0, 10 );
+	const BUDGETS = { earth: 1000, moon: 500, mars: 40, vesta: 30, ceres: 30 };
+	const GALE_DOT = { lat: - 5.4, lon: 137.8, height: - 4500, count: 2 };
+	const VESTA_DOT = { lat: - 75, lon: - 59, height: - 20000, count: 1 };
+
+	test( 'a report adds each world\'s amount to its own table: the Earth\'s and the Moon\'s every time, as always; a far world\'s only when it has something (a Mars-only report leaves the Earth\'s and the Moon\'s spends as they were, and writes no row for Vesta or Ceres)', async () => {
+
+		const limits = fresh();
+		const answer = await limits.liveSpent( 0, { now, budget: BUDGETS.earth, moonBudget: BUDGETS.moon, budgets: BUDGETS, amounts: { earth: 0, moon: 0, mars: 7 } } );
+		assert.deepEqual( answer, { open: true, spent: 0, moon: { open: true, spent: 0 }, worlds: { earth: { open: true, spent: 0 }, moon: { open: true, spent: 0 }, mars: { open: true, spent: 7 }, vesta: { open: true, spent: 0 }, ceres: { open: true, spent: 0 } } } );
+		const day = dayOf( now );
+		assert.deepEqual( [ limits.table( 'live' ), limits.table( 'live_moon' ), limits.table( 'live_mars' ) ], [ [ { day, spent: 0 } ], [ { day, spent: 0 } ], [ { day, spent: 7 } ] ] );
+		assert.deepEqual( [ limits.table( 'live_vesta' ), limits.table( 'live_ceres' ) ], [ [], [] ] );
+		// A report with no far amount touches no far table.
+		await limits.liveSpent( 3, { now, budget: BUDGETS.earth, moonBudget: BUDGETS.moon, budgets: BUDGETS, amounts: { earth: 3, moon: 1 } } );
+		assert.deepEqual( [ limits.table( 'live' )[ 0 ].spent, limits.table( 'live_moon' )[ 0 ].spent, limits.table( 'live_mars' )[ 0 ].spent, limits.table( 'live_vesta' ).length ], [ 3, 1, 7, 0 ] );
+		// Mars's spent: closed there only, the others open.
+		const spent = await limits.liveSpent( 0, { now, budget: BUDGETS.earth, moonBudget: BUDGETS.moon, budgets: BUDGETS, amounts: { mars: 40 } } );
+		assert.deepEqual( Object.fromEntries( Object.entries( spent.worlds ).map( ( [ w, { open } ] ) => [ w, open ] ) ), { earth: true, moon: true, mars: false, vesta: true, ceres: true } );
+		// A room from before the far worlds (no budgets): answered as it always was, no worlds.
+		assert.deepEqual( await limits.liveSpent( 1, { now, budget: BUDGETS.earth, moon: 1, moonBudget: BUDGETS.moon } ), { open: true, spent: 4, moon: { open: true, spent: 2 } } );
+
+	} );
+
+	test( 'each world\'s areas\' dots are its own: the Earth\'s ask has no Mars dot, Mars\'s none of the Earth\'s, every world\'s count in `worlds`; a far area\'s dots kept only while its own world is open', async () => {
+
+		const limits = fresh();
+		const reportOn = ( room, dots, amounts = {} ) => limits.liveSpent( 0, { now, budget: BUDGETS.earth, moonBudget: BUDGETS.moon, budgets: BUDGETS, amounts, online: { room, dots } } );
+		await reportOn( FURKA_AREA, [ FURKA_DOT ] );
+		await reportOn( GALE_AREA, [ GALE_DOT ], { mars: 1 } );
+		await reportOn( RHEASILVIA_AREA, [ VESTA_DOT ], { vesta: 1 } );
+		const askOn = world => limits.liveOnline( { now, budgets: BUDGETS, budget: BUDGETS.earth, moonBudget: BUDGETS.moon, world, ttl: TTL, most: ONLINE_AREAS } );
+		const counts = { earth: { on: true, total: 1 }, moon: { on: true, total: 0 }, mars: { on: true, total: 2 }, vesta: { on: true, total: 1 }, ceres: { on: true, total: 0 } };
+		assert.deepEqual( askOn( 'earth' ), { open: true, total: 1, areas: [ FURKA_DOT ], elsewhere: 0, worlds: counts } );
+		assert.deepEqual( askOn( 'mars' ), { open: true, total: 2, areas: [ GALE_DOT ], elsewhere: 0, worlds: counts } );
+		assert.deepEqual( askOn( 'vesta' ), { open: true, total: 1, areas: [ VESTA_DOT ], elsewhere: 0, worlds: counts } );
+		assert.deepEqual( askOn( 'ceres' ), { open: true, total: 0, areas: [], elsewhere: 0, worlds: counts } );
+		// A legacy ask (no budgets) never counts a far world's drivers in elsewhere, and says no worlds.
+		assert.deepEqual( ask( limits ), { open: true, total: 1, areas: [ FURKA_DOT ], elsewhere: 0 } );
+		// Vesta spent: its room's report lets go of its dots; Vesta's count 0 and off; the others as they were.
+		await reportOn( RHEASILVIA_AREA, [ VESTA_DOT ], { vesta: 30 } );
+		assert.deepEqual( limits.rows().map( row => row.room ).sort(), [ FURKA_AREA, GALE_AREA ].sort() );
+		assert.deepEqual( askOn( 'earth' ).worlds.vesta, { on: false, total: 0 } );
+		assert.deepEqual( askOn( 'vesta' ), { open: false } );
+		// And a far ask throws for a world that isn't one (never the Earth's).
+		assert.throws( () => limits.liveOnline( { now, budgets: BUDGETS, world: 'pluto', ttl: TTL, most: ONLINE_AREAS } ) );
+
+	} );
+
+	test( 'a far world\'s globe asked for (/api/online?world=mars) is counted against the Earth\'s while that\'s open, else the Moon\'s, else the world\'s own; never a far world\'s while either is open', () => {
+
+		const limits = fresh();
+		const budgets = { earth: 3, moon: 2, mars: 5, vesta: 5, ceres: 5 };
+		const askOn = world => limits.liveOnline( { now, budgets, budget: budgets.earth, moonBudget: budgets.moon, world, ttl: TTL, most: ONLINE_AREAS } );
+		const spends = () => [ 'live', 'live_moon', 'live_mars', 'live_vesta', 'live_ceres' ].map( name => limits.table( name )[ 0 ]?.spent ?? 0 );
+		for ( const world of [ 'mars', 'vesta', 'ceres' ] ) assert.equal( askOn( world ).open, true, world );
+		assert.deepEqual( spends(), [ 3, 0, 0, 0, 0 ] );
+		// The Earth's spent: the Moon's.
+		assert.equal( askOn( 'mars' ).open, true );
+		assert.equal( askOn( 'vesta' ).open, true );
+		assert.deepEqual( spends(), [ 3, 2, 0, 0, 0 ] );
+		// Both spent: the asked world's own; open till that's spent, then { open: false }.
+		for ( let i = 0; i < 4; i ++ ) assert.equal( askOn( 'mars' ).open, true );
+		assert.deepEqual( askOn( 'mars' ), { open: false } );
+		assert.deepEqual( spends(), [ 3, 2, 5, 0, 0 ] );
+		// (Vesta's own then, and still open; the Earth's ask: { open: false }, adding to the Earth's.)
+		assert.equal( askOn( 'vesta' ).open, true );
+		assert.deepEqual( askOn( 'earth' ), { open: false } );
+		assert.deepEqual( spends(), [ 4, 2, 5, 1, 0 ] );
+
+	} );
+
+	test( '/api/config\'s ask is counted against the Earth\'s (the Moon\'s once that\'s spent, the Earth\'s again once both are), every far world looked at and not counted; with budgets, every world\'s state in `worlds`', async () => {
+
+		const limits = fresh();
+		const budgets = { earth: 2, moon: 1, mars: 4, vesta: 0, ceres: 3 };
+		const config = () => limits.liveOpen( { now, budgets, budget: budgets.earth, moonBudget: budgets.moon } );
+		const spends = () => [ 'live', 'live_moon', 'live_mars', 'live_vesta', 'live_ceres' ].map( name => limits.table( name )[ 0 ]?.spent ?? 0 );
+		const first = await config();
+		assert.deepEqual( first, { open: true, spent: 1, moon: { open: true, spent: 0 }, worlds: { earth: { open: true, spent: 1 }, moon: { open: true, spent: 0 }, mars: { open: true, spent: 0 }, vesta: { open: false, spent: 0 }, ceres: { open: true, spent: 0 } } } );
+		await config();
+		assert.deepEqual( spends(), [ 2, 0, 0, 0, 0 ] );
+		await config();
+		assert.deepEqual( spends(), [ 2, 1, 0, 0, 0 ] );
+		const both = await config();
+		assert.deepEqual( spends(), [ 3, 1, 0, 0, 0 ] );
+		assert.deepEqual( Object.fromEntries( Object.entries( both.worlds ).map( ( [ w, { open } ] ) => [ w, open ] ) ), { earth: false, moon: false, mars: true, vesta: false, ceres: true } );
+		// A caller from before (no budgets): the Earth's and the Moon's only.
+		assert.deepEqual( Object.keys( await limits.liveOpen( { now, budget: 2, moonBudget: 1 } ) ).sort(), [ 'moon', 'open', 'spent' ] );
+
+	} );
+
+	test( 'a connection\'s ask is counted against its own world; `closed` lists every other world spent or switched off, and a party\'s `over` every other world whose share its address is past', async () => {
+
+		const limits = fresh();
+		const budgets = { earth: 1000, moon: 1000, mars: 1000, vesta: 0, ceres: 2 };
+		await limits.liveSpent( 0, { now, budget: budgets.earth, moonBudget: budgets.moon, budgets, amounts: { ceres: 2 } } );
+		const connectOn = ( world, room, more = {} ) => limits.liveOpen( { now, budgets, budget: budgets.earth, moonBudget: budgets.moon, world, visit: `v-${ world }-${ room }`, room, ...more } );
+		const mars = await connectOn( 'mars', GALE_AREA );
+		assert.deepEqual( ( ( { open, spent, closed, seq, was } ) => ( { open, spent, closed, seq, was } ) )( mars ), { open: true, spent: 1, closed: [ 'vesta', 'ceres' ], seq: 1, was: null } );
+		assert.deepEqual( limits.table( 'live' ), [ { day: dayOf( now ), spent: 0 } ] );
+		// Ceres's spent: its connection's turned away.
+		assert.equal( ( await connectOn( 'ceres', OCCATOR_AREA ) ).open, false );
+		// An address past its share of Mars (a floor of 50 on a share of 1000/8 = 125: the 125): in a
+		// party on the Earth, Mars is over; on Mars, turned away for its share.
+		const address = 'from-a';
+		const over = await limits.liveSpent( 0, { now, budget: budgets.earth, moonBudget: budgets.moon, budgets, amounts: { mars: 130 }, addresses: [ { from: address, mars: 130 } ], share: 8, floor: 50 } );
+		assert.deepEqual( over.over, { earth: [], moon: [], mars: [ address ], vesta: [], ceres: [] } );
+		const party = await connectOn( 'earth', 'party:ABCDEFG', { address, share: 8, floor: 50 } );
+		assert.deepEqual( [ party.open, party.over, party.closed ], [ true, [ 'mars' ], [ 'vesta', 'ceres' ] ] );
+		assert.deepEqual( ( ( { open, refused, reason } ) => ( { open, refused, reason } ) )( await connectOn( 'mars', GALE_AREA, { address, share: 8, floor: 50 } ) ), { open: true, refused: true, reason: 'share' } );
+
+	} );
+
+	test( 'each address\'s share of a world\'s day is the budget over LIVE_ADDRESS_SHARE, but never less than the floor (1000 a world by default in the Worker): on Vesta\'s 3000, 1000, not 375', async () => {
+
+		const limits = fresh();
+		const budgets = { earth: 40000, moon: 20000, mars: 4000, vesta: 3000, ceres: 3000 };
+		const spend = ( from, vesta, floor ) => limits.liveSpent( 0, { now, budget: budgets.earth, moonBudget: budgets.moon, budgets, amounts: { vesta }, addresses: [ { from, vesta } ], share: 8, floor } );
+		// Without a floor: 375 is past it.
+		assert.deepEqual( ( await spend( 'a', 375, 0 ) ).over.vesta, [ 'a' ] );
+		// With the floor: 999 isn't, 1000 is.
+		assert.equal( ( await spend( 'b', 999, 1000 ) ).over, undefined );
+		assert.deepEqual( ( await spend( 'b', 1, 1000 ) ).over.vesta, [ 'b' ] );
+		// The Earth's share (40000 / 8 = 5000) is over the floor: as it was.
+		const earth = await limits.liveSpent( 0, { now, budget: budgets.earth, moonBudget: budgets.moon, budgets, amounts: { earth: 4999 }, addresses: [ { from: 'c', earth: 4999 } ], share: 8, floor: 1000 } );
+		assert.equal( earth.over, undefined );
+
+	} );
 } );
 
 describe( '/api/online, here with stand-ins for DriveLimits and Cloudflare\'s cache', () => {
@@ -4646,7 +5619,7 @@ describe( '/api/online, here with stand-ins for DriveLimits and Cloudflare\'s ca
 		const moon = await get( env, { path: '/api/online?world=moon', headers: at } );
 		assert.deepEqual( [ moon.keep, moon.body ], [ 'public, max-age=30', { on: true, total: 2, areas: [ tycho ], earth: 1 } ] );
 		assert.deepEqual( ( ( { world, budget, moonBudget } ) => ( { world, budget, moonBudget } ) )( limits.asked[ 0 ] ), { world: 'moon', budget: 4323, moonBudget: 777 } );
-		const earth = await get( env, { path: '/api/online?world=mars', headers: at } );
+		const earth = await get( env, { path: '/api/online?world=pluto', headers: at } );
 		assert.deepEqual( earth.body, { on: true, total: 1, areas: [ FURKA_DOT ], moon: 2 } );
 		assert.equal( limits.asked[ 1 ].world, 'earth' );
 		// Each kept apart: asked again, neither reaches DriveLimits.
@@ -4673,6 +5646,61 @@ describe( '/api/online, here with stand-ins for DriveLimits and Cloudflare\'s ca
 
 	} );
 
+
+	test( '?world=mars, vesta or ceres: each far world\'s own answer (no legacy key), kept under its own address, asked of DriveLimits with every world\'s budget (it charges the ask to the Earth\'s while that\'s open), every world\'s counts passed on; off on Mars, the first other open world\'s counts; every world off, nothing', async () => {
+
+		kept.clear();
+		cacheClock = 0;
+		const gale = { lat: - 5.4, lon: 137.8, height: - 4500, count: 3 };
+		const counts = { earth: { on: true, total: 1 }, moon: { on: true, total: 0 }, mars: { on: true, total: 3 }, vesta: { on: true, total: 0 }, ceres: { on: false, total: 0 } };
+		const limits = limitsAnswering( null );
+		const answers = {
+			earth: { open: true, total: 1, areas: [ FURKA_DOT ], elsewhere: 0, worlds: counts },
+			mars: { open: true, total: 3, areas: [ gale ], elsewhere: 0, worlds: counts },
+			// (A count that isn't one, or a world said nothing of, is none.)
+			vesta: { open: true, total: 0, areas: [], elsewhere: 0, worlds: { ...counts, moon: { on: true, total: - 4 }, ceres: 'no' } },
+		};
+		limits.binding.get = () => ( {
+			liveOnline: async options => {
+
+				limits.asked.push( options );
+				return answers[ options.world ];
+
+			},
+		} );
+		const env = { TEST_CLOCK: 'header', LIVE_DAILY_BUDGET: '4324', LIVE_MARS_DAILY_BUDGET: '444', LIMITS: limits.binding };
+		const at = { 'X-Test-Time': String( Date.UTC( 2032, 2, 2, 12 ) ) };
+		const mars = await get( env, { path: '/api/online?world=mars', headers: at } );
+		assert.deepEqual( [ mars.keep, mars.body ], [ 'public, max-age=30', { on: true, total: 3, areas: [ gale ], worlds: counts } ] );
+		assert.deepEqual( ( ( { world, budgets } ) => ( { world, budgets } ) )( limits.asked[ 0 ] ), { world: 'mars', budgets: { earth: 4324, moon: 20000, mars: 444, vesta: 3000, ceres: 3000 } } );
+		const vesta = await get( env, { path: '/api/online?world=vesta', headers: at } );
+		assert.deepEqual( vesta.body, { on: true, total: 0, areas: [], worlds: { ...counts, moon: { on: true, total: 0 }, ceres: { on: false, total: 0 } } } );
+		// The Earth's has the far worlds' counts too, and its legacy `moon` counts only the Moon.
+		const earth = await get( env, { path: '/api/online', headers: at } );
+		assert.deepEqual( earth.body, { on: true, total: 1, areas: [ FURKA_DOT ], moon: 0, worlds: counts } );
+		// Each kept apart.
+		for ( const [ path, body ] of [ [ '/api/online?world=mars', mars.body ], [ '/api/online?world=vesta', vesta.body ], [ '/api/online', earth.body ] ] ) assert.deepEqual( ( await get( env, { path, headers: at } ) ).body, body );
+		assert.equal( limits.asked.length, 3 );
+
+		// Mars switched off (a budget of 0): off there, asking nothing for Mars, with every world's counts
+		// from the first other open world's answer (the Earth's), and no legacy key.
+		const off = { ...env, LIVE_MARS_DAILY_BUDGET: '0' };
+		const later = { 'X-Test-Time': String( Date.UTC( 2032, 2, 2, 13 ) ) };
+		const marsOff = await get( off, { path: '/api/online?world=mars', headers: later } );
+		assert.deepEqual( marsOff.body, { on: false, total: 0, areas: [], worlds: counts } );
+		assert.deepEqual( limits.asked.slice( 3 ).map( options => options.world ), [ 'earth' ] );
+		// Mars spent (DriveLimits says so): the same, and Mars not asked again that day.
+		answers.mars = { open: false };
+		const evening = { 'X-Test-Time': String( Date.UTC( 2032, 2, 2, 14 ) ) };
+		assert.deepEqual( ( await get( env, { path: '/api/online?world=mars', headers: evening } ) ).body, { on: false, total: 0, areas: [], worlds: counts } );
+		const asks = limits.asked.length;
+		assert.deepEqual( ( await get( env, { path: '/api/online?world=mars', headers: { 'X-Test-Time': String( Date.UTC( 2032, 2, 2, 15 ) ) } } ) ).body.on, false );
+		assert.deepEqual( limits.asked.slice( asks ).map( options => options.world ), [ 'earth' ] );
+		// Every world off: nothing at all.
+		const allOff = { ...env, LIVE_DAILY_BUDGET: '0', LIVE_MOON_DAILY_BUDGET: '0', LIVE_MARS_DAILY_BUDGET: '0', LIVE_VESTA_DAILY_BUDGET: '0', LIVE_CERES_DAILY_BUDGET: '0' };
+		assert.deepEqual( ( await get( allOff, { path: '/api/online?world=ceres', headers: evening } ) ).body, { on: false, total: 0, areas: [] } );
+
+	} );
 } );
 
 describe( 'Who\'s driving now, the Worker\'s whole way round', () => {
@@ -4680,11 +5708,14 @@ describe( 'Who\'s driving now, the Worker\'s whole way round', () => {
 	// Each ask at a time of its own (the tests' clock), so it isn't one kept.
 	let asked = 0;
 	const fresh = ( later = 0 ) => online( presence.server, Date.now() + later + ++ asked );
+	// Every world's count, as every answer has them: the Earth's `earth`, Mars's `mars` (Max, at
+	// Gale, in Mars's area's room), the others none.
+	const everywhere = ( earth, mars = 1 ) => ( { earth: { on: true, total: earth }, moon: { on: true, total: 0 }, mars: { on: true, total: mars }, vesta: { on: true, total: 0 }, ceres: { on: true, total: 0 } } );
 
 	test( 'an area\'s room\'s driver is in /api/online within about a minute of connecting, where she dropped in; one in a party, or on the globe, never', async () => {
 
 		let answer = await fresh();
-		while ( answer.total < 2 && Date.now() < presence.at + 90 * SECOND ) {
+		while ( ( answer.total < 2 || answer.worlds?.mars.total < 1 ) && Date.now() < presence.at + 90 * SECOND ) {
 
 			await sleep( SECOND );
 			answer = await fresh();
@@ -4692,7 +5723,22 @@ describe( 'Who\'s driving now, the Worker\'s whole way round', () => {
 		}
 
 		console.log( `    in /api/online ${ Math.round( ( Date.now() - presence.at ) / SECOND ) } s after connecting (a minute and the suite's other tests)` );
-		assert.deepEqual( answer, { on: true, total: 2, areas: [ MONACO_DOT, FURKA_DOT ], moon: 0 } );
+		// (The legacy `moon` counts only the Moon: Max on Mars is in `worlds` alone, and no Mars dot is
+		// on the Earth's map.)
+		assert.deepEqual( answer, { on: true, total: 2, areas: [ MONACO_DOT, FURKA_DOT ], moon: 0, worlds: everywhere( 2 ) } );
+
+	} );
+
+	test( '?world=mars: Mars\'s own drivers as dots on Mars\'s sphere, with every world\'s counts and no legacy key; kept under its own address', async () => {
+
+		const res = await fetch( `${ presence.server.base }/api/online?world=mars`, { headers: { 'X-Test-Time': String( Date.now() + ++ asked ) } } );
+		assert.equal( res.status, 200 );
+		const mars = await res.json();
+		// (Gale's -5.4° is its area's south edge: the dot kept just inside it.)
+		assert.deepEqual( mars, { on: true, total: 1, areas: [ { lat: - 5.39, lon: 137.8, height: - 4500, count: 1 } ], worlds: everywhere( 2 ) } );
+		// Vesta's: nobody there, but the same counts.
+		const vesta = await ( await fetch( `${ presence.server.base }/api/online?world=vesta`, { headers: { 'X-Test-Time': String( Date.now() + ++ asked ) } } ) ).json();
+		assert.deepEqual( vesta, { on: true, total: 0, areas: [], worlds: everywhere( 2 ) } );
 
 	} );
 
@@ -4700,11 +5746,11 @@ describe( 'Who\'s driving now, the Worker\'s whole way round', () => {
 
 		const res = await fetch( `${ presence.server.base }/api/online` );
 		const first = { keep: res.headers.get( 'Cache-Control' ), date: res.headers.get( 'Date' ), body: await res.json() };
-		assert.deepEqual( [ first.keep, first.body ], [ 'public, max-age=30', { on: true, total: 2, areas: [ MONACO_DOT, FURKA_DOT ], moon: 0 } ] );
+		assert.deepEqual( [ first.keep, first.body ], [ 'public, max-age=30', { on: true, total: 2, areas: [ MONACO_DOT, FURKA_DOT ], moon: 0, worlds: everywhere( 2 ) } ] );
 		// Alice goes: her room says so as it empties.
 		await presence.alice.close();
 		await sleep( 1500 );
-		assert.deepEqual( await fresh(), { on: true, total: 1, areas: [ MONACO_DOT ], moon: 0 } );
+		assert.deepEqual( await fresh(), { on: true, total: 1, areas: [ MONACO_DOT ], moon: 0, worlds: everywhere( 1 ) } );
 		// The same address, and with a query: the answer kept, made when the first was (its Date).
 		for ( const path of [ '/api/online', '/api/online?again' ] ) {
 
@@ -4717,8 +5763,8 @@ describe( 'Who\'s driving now, the Worker\'s whole way round', () => {
 
 	test( 'a room\'s dots older than 12 minutes are left out and deleted: asked 13 minutes on, Erin\'s room (which won\'t say again for minutes) has none, and then nor has it now', async () => {
 
-		assert.deepEqual( await fresh( 13 * MINUTE ), { on: true, total: 0, areas: [], moon: 0 } );
-		assert.deepEqual( await fresh(), { on: true, total: 0, areas: [], moon: 0 } );
+		assert.deepEqual( await fresh( 13 * MINUTE ), { on: true, total: 0, areas: [], moon: 0, worlds: everywhere( 0, 0 ) } );
+		assert.deepEqual( await fresh(), { on: true, total: 0, areas: [], moon: 0, worlds: everywhere( 0, 0 ) } );
 
 	} );
 

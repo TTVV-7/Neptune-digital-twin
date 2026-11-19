@@ -28,6 +28,7 @@ import { cellOf } from '../src/drive-app/dropin-cells.js';
 import { checkPasses, destination, formatTime } from '../src/drive-app/challenge-rules.js';
 import { GHOST_BYTES, countFor, everyFor, ghostFault, ghostText, localOf, packGhost, sampleTime } from '../src/drive-app/ghost-rules.js';
 import { startVite } from './worker-harness.mjs';
+import { OPENER, openWorlds, pickWorld, radio, worldShown } from './worlds-ui.mjs';
 
 const require = createRequire( import.meta.url );
 const PORT = Number( process.env.TEST_VITE_PORT ) || 5571;
@@ -107,7 +108,7 @@ const names = page => page.locator( '#globe-ui .spots button b' ).allTextContent
 
 async function toMoon( page ) {
 
-	await page.locator( '#globe-ui .worlds [data-world="moon"]' ).click();
+	await pickWorld( page, 'moon' );
 	await page.waitForFunction( () => window.drive.world === 'moon', null, { timeout: 60000 } );
 	await flown( page );
 
@@ -144,12 +145,12 @@ describe( 'World Drive on the Moon', () => {
 		await openGlobe( page );
 		assert.deepEqual( page.moon, [], 'nothing of the Moon\'s is fetched on the Earth' );
 		assert.equal( await page.evaluate( () => window.drive.moon.stars ), null, 'nor its stars made' );
-		assert.equal( await page.locator( '#globe-ui .worlds [data-world="earth"]' ).getAttribute( 'aria-checked' ), 'true' );
+		assert.equal( await worldShown( page ), 'earth' );
 		assert.deepEqual( await names( page ), SPOTS.map( spot => spot.name ) );
 
 		await toMoon( page );
 		assert.deepEqual( page.moon.sort(), [ '/moon/colour.webp', '/moon/height.bin' ] );
-		assert.equal( await page.locator( '#globe-ui .worlds [data-world="moon"]' ).getAttribute( 'aria-checked' ), 'true' );
+		assert.equal( await worldShown( page ), 'moon' );
 		assert.equal( await page.evaluate( () => document.body.dataset.world ), 'moon' );
 		assert.deepEqual( await names( page ), MOON_SPOTS.map( spot => spot.name ) );
 		assert.equal( await page.locator( '#globe-ui .tagline' ).textContent(), 'Pick anywhere on the Moon. Drop in. Drive.' );
@@ -325,7 +326,7 @@ describe( 'World Drive on the Moon', () => {
 		assert.equal( await page.evaluate( () => localStorage.getItem( 'world-drive.recent' ) ), null, 'the Earth\'s recent places are untouched' );
 		await shot( page, 'moon-3-back' );
 
-		await page.locator( '#globe-ui .worlds [data-world="earth"]' ).click();
+		await pickWorld( page, 'earth' );
 		await page.waitForFunction( () => window.drive.world === 'earth', null, { timeout: 30000 } );
 		await flown( page );
 		const earth = await page.evaluate( () => {
@@ -393,17 +394,21 @@ describe( 'World Drive\'s Moon, by a link and on a phone', () => {
 
 			} );
 			await openGlobe( page );
-			await page.locator( '#globe-ui .worlds [data-world="moon"]' ).click();
-			await page.waitForFunction( () => document.querySelector( '#globe-ui .worlds [data-world="moon"]' ).getAttribute( 'aria-busy' ) === 'true' );
+			await pickWorld( page, 'moon' );
+			// The Worlds button says so while it loads: "Loading the Moon…", busy.
+			await page.waitForFunction( () => document.querySelector( '#globe-ui .worlds-open' ).getAttribute( 'aria-busy' ) === 'true' );
+			assert.equal( await page.locator( '#globe-ui .worlds-open .worlds-name' ).textContent(), 'Loading the Moon…' );
+			assert.equal( await page.locator( OPENER ).getAttribute( 'aria-label' ), 'Change world. Loading the Moon…' );
 			await page.locator( '#globe-ui .spots button', { hasText: 'Furka Pass' } ).click();
 			release();
 			await page.waitForFunction( () => window.drive.moon.ready, null, { timeout: 60000 } );
 			await page.waitForTimeout( 500 );
 			assert.deepEqual( await page.evaluate( () => ( {
 				world: window.drive.world, pin: window.drive.panel.pinned?.id ?? null,
-				busy: document.querySelector( '#globe-ui .worlds [data-world="moon"]' ).getAttribute( 'aria-busy' ),
-				earth: document.querySelector( '#globe-ui .worlds [data-world="earth"]' ).getAttribute( 'aria-checked' ),
-			} ) ), { world: 'earth', pin: 'furka', busy: null, earth: 'true' } );
+				busy: document.querySelector( '#globe-ui .worlds-open' ).getAttribute( 'aria-busy' ),
+				earth: document.querySelector( '#globe-ui .worlds-open' ).dataset.world,
+				name: document.querySelector( '#globe-ui .worlds-open .worlds-name' ).textContent,
+			} ) ), { world: 'earth', pin: 'furka', busy: null, earth: 'earth', name: 'Earth' } );
 			// And now it's loaded, Moon goes straight there.
 			await toMoon( page );
 			assert.deepEqual( page.errors, [] );
@@ -416,16 +421,19 @@ describe( 'World Drive\'s Moon, by a link and on a phone', () => {
 
 	} );
 
-	test( 'on a phone the switch is at the top of the sheet', async () => {
+	test( 'on a phone the Worlds button is at the top of the sheet, and the Moon tapped in the worlds it opens', async () => {
 
 		const page = await newPage( { viewport: { width: 390, height: 760 }, touch: true } );
 		try {
 
 			await openGlobe( page );
 			const sheet = await page.locator( '#globe-ui .panel' ).boundingBox();
-			const worlds = await page.locator( '#globe-ui .worlds' ).boundingBox();
-			assert.ok( worlds.y >= sheet.y && worlds.y < sheet.y + 40, JSON.stringify( { sheet, worlds } ) );
-			await page.locator( '#globe-ui .worlds [data-world="moon"]' ).tap();
+			const worlds = await page.locator( OPENER ).boundingBox();
+			assert.ok( worlds.y >= sheet.y && worlds.y < sheet.y + 40 && worlds.height >= 44, JSON.stringify( { sheet, worlds } ) );
+			await openWorlds( page, { tap: true } );
+			const moon = await page.locator( radio( 'moon' ) ).boundingBox();
+			assert.ok( moon.width >= 44 && moon.height >= 44, JSON.stringify( moon ) );
+			await pickWorld( page, 'moon', { tap: true } );
 			await page.waitForFunction( () => window.drive.world === 'moon', null, { timeout: 60000 } );
 			await flown( page );
 			assert.deepEqual( await names( page ), MOON_SPOTS.map( spot => spot.name ) );

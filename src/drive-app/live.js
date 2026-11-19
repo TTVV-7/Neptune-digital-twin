@@ -1,7 +1,7 @@
 import { MathUtils, Matrix4, Quaternion, Vector3 } from 'three';
 import {
 	BUDGET_SPENT, CLOSE, EARTH, FLAGS, HONK_GAP, KEEPALIVE_MS, LIVE_WORLD_IDS, MOON_WORLD, NEARBY_SHARDS, PAGE_PROTOCOLS, PARTY_MAX, PING, PONG, SEND_HZ, SHARE_SPENT,
-	STALE_MS, STILL_HZ, cellOf, checkLook, checkPlace, checkState, checkTrick, checkVehicle, cleanPartyCode, knows, makePartyCode, packState, placeWorld, shardOf,
+	STALE_MS, WORLD_OFF, STILL_HZ, cellOf, checkLook, checkPlace, checkState, checkTrick, checkVehicle, cleanPartyCode, knows, makePartyCode, packState, placeWorld, shardOf,
 	versionOf, worldOfRoom,
 } from './live-protocol.js';
 import { getConfig } from './api.js';
@@ -437,6 +437,9 @@ export function createLive( {
 		else if ( code === CLOSE.off && reason === BUDGET_SPENT ) closeWorld( which );
 		// This address has had its share of that world's budget today: that world only.
 		else if ( code === CLOSE.off && reason === SHARE_SPENT ) closeWorld( which, { share: true } );
+		// Switched off on that world only (its budget is 0): that world only, without a word, as
+		// turnedAway does when /api/live turns it away there. Any other reason is off everywhere.
+		else if ( code === CLOSE.off && reason === WORLD_OFF ) closeWorld( which, { quiet: true } );
 		else if ( code === CLOSE.off ) end( 'off' );
 		else if ( code === CLOSE.protocol ) {
 

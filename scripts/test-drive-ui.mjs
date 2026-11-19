@@ -95,6 +95,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { GOOGLE_STUB, startVite } from './worker-harness.mjs';
+import { pickWorld, worldShown } from './worlds-ui.mjs';
 import { cellMiddle, cellOf, checkCell } from '../src/drive-app/dropin-cells.js';
 import { checkPasses, destination, formatTime } from '../src/drive-app/challenge-rules.js';
 import { GHOST_BYTES, TURN, countFor, everyFor, ghostFault, ghostText, localOf, packGhost, readGhost, sampleTime } from '../src/drive-app/ghost-rules.js';
@@ -2890,8 +2891,14 @@ async function dropInOver( page, where, depth ) {
 // Back on the globe with the pad where land is (and where it was, if dropInBeside moved it).
 async function padBack( page ) {
 
-	await page.keyboard.press( 'KeyM' );
-	await page.waitForFunction( () => window.drive.mode === 'globe' );
+	// (M only from a drive: on the globe it opens the worlds.)
+	if ( await mode( page ) !== 'globe' ) {
+
+		await page.keyboard.press( 'KeyM' );
+		await page.waitForFunction( () => window.drive.mode === 'globe' );
+
+	}
+
 	await page.evaluate( () => {
 
 		const pad = window.drive.ground.getColliders()[ 0 ];
@@ -5413,21 +5420,21 @@ describe( 'World Drive with its Worker', () => {
 		await page.waitForFunction( () => window.drive?.mode === 'globe' && window.drive.world === 'moon', null, { timeout: 90000 } );
 		assert.equal( await page.locator( '#notice' ).isHidden(), true );
 		assert.equal( await page.evaluate( () => !! window.drive.tiles ), false );
-		assert.equal( await page.locator( '#globe-ui .worlds [data-world="moon"]' ).getAttribute( 'aria-checked' ), 'true' );
+		assert.equal( await worldShown( page ), 'moon' );
 		assert.ok( ! page.outside.some( url => /tile\.googleapis|maps\.googleapis/.test( url ) ), page.outside.join( ' ' ) );
 		await page.locator( '#toast', { hasText: 'Today\'s free Earth drives are all taken, so you\'re on the Moon' } ).waitFor();
 		await shot( page, 'drive-used-up-moon' );
 
 		// The Earth: the notice, and still on the Moon; and from there back to it, the same game.
 		const canvases = await page.locator( 'canvas' ).count();
-		await page.locator( '#globe-ui .worlds [data-world="earth"]' ).click();
+		await pickWorld( page, 'earth' );
 		await page.locator( '#notice[data-kind="used-up"]' ).waitFor();
 		assert.equal( await page.locator( '#notice .title' ).textContent(), 'Today\'s free Earth drives are used up' );
 		assert.match( await page.locator( '#notice .message' ).textContent(), /The Moon, Mars, Vesta and Ceres are free and unlimited/ );
 		assert.equal( await page.locator( '#notice .countdown' ).textContent(), 'Fresh Earth drives in 5 h 2 min' );
 		await shot( page, 'drive-notice-used-up' );
 		assert.equal( await page.evaluate( () => window.drive.world ), 'moon' );
-		assert.equal( await page.locator( '#globe-ui .worlds [data-world="moon"]' ).getAttribute( 'aria-checked' ), 'true' );
+		assert.equal( await worldShown( page ), 'moon' );
 		await page.locator( '#notice button', { hasText: 'Drive on the Moon' } ).click();
 		await page.locator( '#notice' ).waitFor( { state: 'hidden' } );
 		await page.waitForTimeout( 500 );
@@ -5449,7 +5456,7 @@ describe( 'World Drive with its Worker', () => {
 		await page.goto( BASE );
 		await page.waitForFunction( () => window.drive?.mode === 'globe' && window.drive.world === 'moon', null, { timeout: 90000 } );
 		await page.locator( '#toast', { hasText: 'You\'ve had today\'s free Earth drive, so you\'re on the Moon' } ).waitFor();
-		await page.locator( '#globe-ui .worlds [data-world="earth"]' ).click();
+		await pickWorld( page, 'earth' );
 		await page.locator( '#notice[data-kind="used-up"]' ).waitFor();
 		assert.equal( await page.locator( '#notice .title' ).textContent(), 'You\'ve had today\'s free Earth drive' );
 		assert.match( await page.locator( '#notice .message' ).textContent(), /one free Earth drive a day/ );
@@ -5484,7 +5491,7 @@ describe( 'World Drive with its Worker', () => {
 
 		// The Earth: the page again without the link (anything else in the address stays), asking for
 		// an Earth drive.
-		await page.locator( '#globe-ui .worlds [data-world="earth"]' ).click();
+		await pickWorld( page, 'earth' );
 		// Over the cap there, so it opens on the Moon again, a word on why.
 		await page.locator( '#toast', { hasText: 'so you\'re on the Moon' } ).waitFor( { timeout: 60000 } );
 		assert.deepEqual( asked, [ 'moon', 'earth' ] );
@@ -6347,7 +6354,7 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		};
 		const notice = page => page.locator( '#notice' );
 		const onMoon = page => page.waitForFunction( () => window.drive?.mode === 'globe' && window.drive.world === 'moon', null, { timeout: 90000 } );
-		const toEarth = page => page.locator( '#globe-ui .worlds [data-world="earth"]' ).click();
+		const toEarth = page => pickWorld( page, 'earth' );
 
 		// A supporter on a new browser: on the Moon; the Earth's notice signs in, and the visit is asked for again.
 		let page = await usedUpPage( [ usedUp( 'visitor' ), mapsOff ], { signedInAs: { ...ALICE, supporter: true } } );
@@ -6410,6 +6417,8 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		await page.waitForFunction( () => window.drive.supporter.me );
 		await openPass( page );
 		const area = sheet( page );
+		// (Google's button is drawn once it's in view: at the foot of the sheet, under its list.)
+		await area.locator( '.supporter-google' ).scrollIntoViewIfNeeded();
 		await area.locator( '.stub-google' ).waitFor();
 		assert.equal( await area.locator( '.buy' ).textContent(), 'Coming soon' );
 		assert.ok( await area.locator( '.buy' ).isDisabled() );

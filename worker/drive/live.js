@@ -2,7 +2,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { HttpError, isObject, json, randomToken, sha256Hex } from '../http.js';
 import {
 	BUDGET_SPENT, BURST, CLOSE, EARTH, FLUSH_MS, HELLO_MS, HONK_GAP, IDLE_MS, LIVE_WORLD_IDS, MAX_HELLO, MAX_MESSAGE, MOON_WORLD, NEARBY_MAX, ONLINE_AREAS, PARTY_MAX,
-	PING, PONG, PROTOCOL, PROTOCOL_ALL, PROTOCOL_WORLDS, RATE, SHARE_SPENT, VIEW_RANGE,
+	PING, PONG, PROTOCOL, PROTOCOL_ALL, PROTOCOL_WORLDS, RATE, SHARE_SPENT, VIEW_RANGE, WORLD_OFF,
 	boundsOf, cellOf, checkLook, checkPlace, checkState, checkTrick, checkVehicle, dotsOf, isLiveWorld, knows, parseRoom, placeWorld, shardOf, toFrame,
 } from '../../src/drive-app/live-protocol.js';
 import { dayOf } from './limits.js';
@@ -463,8 +463,9 @@ export async function liveToday( { env, limits, now, world = EARTH, connection =
 	} catch ( err ) {
 
 		console.error( 'Live budget check', err?.name, err?.message );
-		const unknown = { open: false, reason: 'unknown' };
-		return { ...unknown, moon: unknown, worlds: Object.fromEntries( LIVE_WORLD_IDS.map( w => [ w, unknown ] ) ) };
+		// (What's known here without asking, a world switched off or spent today, is said as it is.)
+		const worlds = Object.fromEntries( LIVE_WORLD_IDS.map( w => [ w, known( w ) ?? { open: false, reason: 'unknown' } ] ) );
+		return { ...worlds[ EARTH ], moon: worlds[ MOON_WORLD ], worlds };
 
 	} finally {
 
@@ -650,6 +651,15 @@ function worldOff( env, world ) {
 
 }
 
+// The reason CLOSE.off comes with to a connection whose world is switched off (worldOff): 'off'
+// when it's switched off everywhere (liveOff), the end of driving with others for the visit, else
+// WORLD_OFF, that world only.
+function offReason( env ) {
+
+	return liveOff( env ) ? 'off' : WORLD_OFF;
+
+}
+
 // A room's one name, whichever way it was written ('near:1277.01088#0' is 'near:1277.1088'; the
 // other worlds' 'moon:...', 'mars:...' the same way).
 function roomName( room ) {
@@ -809,7 +819,7 @@ export class DriveRoom extends DurableObject {
 		// Every message in is billed, whatever becomes of it (each way on from here saves it).
 		driver.spent = ( driver.spent ?? 0 ) + COST.message;
 		driver.own = ( driver.own ?? 0 ) + COST.message;
-		if ( worldOff( this.env, this.worldOf( driver ) ) ) return this.shut( ws, CLOSE.off, 'off' );
+		if ( worldOff( this.env, this.worldOf( driver ) ) ) return this.shut( ws, CLOSE.off, offReason( this.env ) );
 		if ( now >= driver.expires ) return this.shut( ws, CLOSE.expired, 'expired' );
 		if ( typeof message !== 'string' ) return this.shut( ws, CLOSE.protocol, 'text only' );
 		// The keepalive, answered here, before hello too: held to the rate as anything else is.
@@ -1216,7 +1226,7 @@ export class DriveRoom extends DurableObject {
 
 			const driver = this.driver( ws );
 			const hello = driver.pid || driver.pending ? Infinity : driver.at + HELLO_MS;
-			if ( worldOff( this.env, this.worldOf( driver ) ) ) this.shut( ws, CLOSE.off, 'off' );
+			if ( worldOff( this.env, this.worldOf( driver ) ) ) this.shut( ws, CLOSE.off, offReason( this.env ) );
 			else if ( now >= driver.expires ) this.shut( ws, CLOSE.expired, 'expired' );
 			else if ( now >= hello ) this.shut( ws, CLOSE.hello, 'no hello' );
 			else if ( now >= driver.heard + IDLE_MS ) this.shut( ws, CLOSE.idle, 'idle' );
@@ -1603,12 +1613,12 @@ export class DriveRoom extends DurableObject {
 	}
 
 	// Driver `driver` (on `ws`) just said which world it's on: closed if that world is switched off
-	// (CLOSE.off, 'off') or its day is spent (shutClosed), so that nobody in a party drives on a world
+	// (CLOSE.off, offReason) or its day is spent (shutClosed), so that nobody in a party drives on a world
 	// that's closed, not even until the room's next report. Whether it was.
 	stopped( ws, driver, now ) {
 
 		const world = this.worldOf( driver );
-		if ( worldOff( this.env, world ) ) this.shut( ws, CLOSE.off, 'off' );
+		if ( worldOff( this.env, world ) ) this.shut( ws, CLOSE.off, offReason( this.env ) );
 		else if ( this.closedTo( world, now ) ) this.shutClosed( ws, driver );
 		else if ( this.overTo( driver, world, now ) ) this.pastShare( ws, driver );
 		else return false;

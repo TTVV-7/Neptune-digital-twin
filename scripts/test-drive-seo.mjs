@@ -67,7 +67,7 @@ const WORLD_CHECKS = {
 		coordinates: 'areocentric latitude and longitude',
 		honest: /no landers, rovers or tracks/,
 		credit: 'https://astrogeology.usgs.gov/search/map/mars_viking_colorized_global_mosaic_232m',
-		phrases: [ 'MOLA', 'Mars Global Surveyor', 'Viking', 'USGS', 'areoid', 'public domain', 'made up', '38% of the gravity', 'about 1.6 times as long', 'butterscotch sky', 'Phobos', 'No water', 'On your own' ],
+		phrases: [ 'MOLA', 'Mars Global Surveyor', 'Viking', 'USGS', 'areoid', 'public domain', 'made up', '38% of the gravity', 'about 1.6 times as long', 'butterscotch sky', 'Phobos', 'No water', 'With others', 'Mars\'s own rooms' ],
 		files: { '/mars/height.bin': 8294400, '/mars/colour.webp': 1050320 },
 	},
 	vesta: {
@@ -75,7 +75,7 @@ const WORLD_CHECKS = {
 		coordinates: 'planetocentric latitude and longitude',
 		honest: /Dawn never landed, and there's no spacecraft in it/,
 		credit: 'https://planetarymaps.usgs.gov/mosaic/',
-		phrases: [ 'Dawn', 'DLR', 'framing camera', 'made up', '2.5% of the gravity', 'about six times as long', 'black sky full of stars', 'No water', 'On your own' ],
+		phrases: [ 'Dawn', 'DLR', 'framing camera', 'made up', '2.5% of the gravity', 'about six times as long', 'black sky full of stars', 'No water', 'With others', 'Vesta\'s own rooms' ],
 		files: { '/vesta/height.bin': 8294400, '/vesta/colour.webp': 444068 },
 	},
 	ceres: {
@@ -83,7 +83,7 @@ const WORLD_CHECKS = {
 		coordinates: 'planetocentric latitude and longitude',
 		honest: /Dawn never landed, and there's no spacecraft in it/,
 		credit: 'https://planetarymaps.usgs.gov/mosaic/',
-		phrases: [ 'Dawn', 'DLR', 'framing camera', 'made up', '2.9% of the gravity', 'nearly six times as long', 'black sky full of stars', 'No water', 'On your own' ],
+		phrases: [ 'Dawn', 'DLR', 'framing camera', 'made up', '2.9% of the gravity', 'nearly six times as long', 'black sky full of stars', 'No water', 'With others', 'Ceres\'s own rooms' ],
 		files: { '/ceres/height.bin': 8294400, '/ceres/colour.webp': 781442 },
 	},
 };
@@ -479,6 +479,8 @@ describe( 'what search engines read', () => {
 			assert.ok( wordsOf( html ).length > 500, `/${ id }/: only ${ wordsOf( html ).length } words` );
 			const text = textOf( html );
 			for ( const phrase of checks.phrases ) assert.ok( text.toLowerCase().includes( phrase.toLowerCase() ), `/${ id }/: no "${ phrase }"` );
+			// Driving with others on every world now: none of it "on your own".
+			assert.doesNotMatch( text, /on your own/i, `/${ id }/` );
 			const links = linksOf( html );
 			for ( const place of own ) {
 
@@ -624,7 +626,10 @@ describe( 'what search engines read', () => {
 		const words = wordsOf( html );
 		assert.ok( words.length >= HOME_WORDS, `only ${ words.length } words` );
 		const text = words.join( ' ' );
-		for ( const phrase of [ 'Drive anywhere on Earth', 'photorealistic 3D', 'free arcade driving game', 'nothing to download', 'Stunts', 'Boost', 'drift', 'Fly', 'party', 'levels', 'Can I drive on the Moon?', 'Can I drive on Mars?', 'Can I drive on Vesta?', 'Can I drive on Ceres?', 'NASA\'s maps' ] ) assert.ok( text.includes( phrase ), `no "${ phrase }"` );
+		for ( const phrase of [ 'Drive anywhere on Earth', 'photorealistic 3D', 'free arcade driving game', 'nothing to download', 'Stunts', 'Boost', 'drift', 'Fly', 'party', 'levels', 'Can I drive on the Moon?', 'Can I drive on Mars?', 'Can I drive on Vesta?', 'Can I drive on Ceres?', 'NASA\'s maps',
+			// Every world by the panel's Worlds button, and driving with others on each.
+			'press Worlds at the top of this panel and pick Mars', 'on every world', 'You can drive with others on Vesta too', 'You can drive with others on Ceres too' ] ) assert.ok( text.includes( phrase ), `no "${ phrase }"` );
+		assert.doesNotMatch( text, /on your own/i );
 		const links = linksOf( html );
 		for ( const place of PLACES ) assert.ok( links.includes( `/drive/${ place.slug }/` ), `the home page doesn't link to ${ place.slug }` );
 		for ( const place of MOON_PAGES ) assert.ok( links.includes( `/moon/${ place.slug }/` ), `the home page doesn't link to the Moon's ${ place.slug }` );
@@ -990,6 +995,34 @@ describe( 'the dev server and the load', () => {
 		assert.match( read( chunk ), /Needs an Earth drive/ );
 		// (Its ghosts and links with it: the share, the link's card, the ghost's button.)
 		for ( const word of [ 'Challenge a friend', 'time to beat', 'world-drive.ghost' ] ) assert.ok( read( chunk ).includes( word ), word );
+
+	} );
+
+	test( 'the orrery (the worlds to pick from) is a chunk of its own, script and styles, with its pictures under /orrery/: nothing of it in the page\'s first load', () => {
+
+		const assets = readdirSync( join( DIST, 'assets' ) );
+		const chunk = assets.find( name => /^orrery-[\w-]+\.js$/.test( name ) );
+		const styles = assets.find( name => /^orrery-[\w-]+\.css$/.test( name ) );
+		assert.ok( chunk && styles, assets.join( ' ' ) );
+		const html = readFileSync( join( DIST, 'index.html' ), 'utf8' );
+		assert.ok( ! /assets\/orrery-/.test( html ) && ! /\/orrery\//.test( html ), 'the page itself asks for it' );
+		// Only its empty dialog in the page, and the Worlds button that opens it.
+		assert.match( html, /<dialog id="orrery" class="orrery" aria-labelledby="orrery-title" tabindex="-1"><\/dialog>/ );
+		assert.match( html, /<button type="button" class="worlds-open"[^>]*aria-haspopup="dialog" aria-controls="orrery"/ );
+		const read = name => readFileSync( join( DIST, 'assets', name ), 'utf8' );
+		const game = assets.filter( name => /^(main|index)-[\w-]+\.(js|css)$/.test( name ) );
+		for ( const name of game ) {
+
+			const text = read( name );
+			for ( const word of [ 'Worlds you can drive on', 'not in the game yet', 'no ground to drive on', 'orrery-sheet', 'Saturn' ] ) assert.ok( ! text.includes( word ), `${ name } has "${ word }"` );
+
+		}
+
+		assert.ok( game.some( name => name.endsWith( '.js' ) && read( name ).includes( chunk ) ), 'the game never imports the chunk' );
+		assert.match( read( chunk ), /Worlds you can drive on/ );
+		// Its pictures: the five worlds', and Vesta's and Ceres's shapes (1°, 360 × 180 Int16).
+		for ( const id of [ 'earth', 'moon', 'mars', 'vesta', 'ceres' ] ) assert.ok( existsSync( join( DIST, 'orrery', `${ id }.webp` ) ), id );
+		for ( const id of [ 'vesta', 'ceres' ] ) assert.equal( statSync( join( DIST, 'orrery', `${ id }-height.bin` ) ).size, 360 * 180 * 2, id );
 
 	} );
 

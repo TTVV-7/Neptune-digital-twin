@@ -63,8 +63,9 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorl
 	function showOpener() {
 
 		const name = WORLDS[ busy ?? world ].name;
-		const loading = busy && `Loading ${ TheWorld( busy ) }…`;
-		for ( const icon of opener.querySelectorAll( '[data-icon]' ) ) icon.hidden = icon.dataset.icon !== ( busy ?? world );
+		const loading = busy && `Loading ${ WORLDS[ busy ].the }…`;
+		// (They're <svg>s, which have no hidden property: the attribute itself.)
+		for ( const icon of opener.querySelectorAll( '[data-icon]' ) ) icon.toggleAttribute( 'hidden', icon.dataset.icon !== ( busy ?? world ) );
 		opener.querySelector( '.worlds-name' ).textContent = loading || name;
 		const driving = ! busy && count > 0 ? `${ count } driving` : '';
 		opener.querySelector( '.worlds-count' ).textContent = driving;

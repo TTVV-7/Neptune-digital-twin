@@ -1686,7 +1686,9 @@ hands that to the room (`X-Live-Closed`), the room keeps it in each connection's
 (through hibernation, for that UTC day) along with every world its reports have heard is spent,
 and a party's driver who says it's on a closed world (hello, place or a world's globe) is closed
 there and then (`CLOSE.off`, `budget`), before anyone hears where; on a world switched off,
-`CLOSE.off`, `off`. What such a connection spent counts against the world it was let in on (the
+`CLOSE.off` with `world off` when only that world is (its budget is 0: a v3 page closes that world
+alone and drives with others on the rest), or `off` when every world is (`LIVE=off`, or every
+budget 0: the end of driving with others for the visit). What such a connection spent counts against the world it was let in on (the
 room keeps it, `admitted`), as does what a connection still on a spent world's ground had spent
 when the room closes it, if it was let in on the other, still open: the Moon's budget bounds what
 connections let in on the Moon cost. And a connection's spend, as it goes, is carried by one on the
