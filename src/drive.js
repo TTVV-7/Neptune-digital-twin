@@ -1,4 +1,4 @@
-import { Box3, Euler, MathUtils, Quaternion, Raycaster, Vector3 } from 'three';
+import { BufferGeometry, Box3, DoubleSide, Euler, Float32BufferAttribute, Group, LineBasicMaterial, LineSegments, MathUtils, Mesh, MeshStandardMaterial, Quaternion, Raycaster, SphereGeometry, Vector3 } from 'three';
 import { enuToLocal, headingToYaw, localToEnu, yawToHeading } from './geo.js';
 import { blocks, isTyping } from './walk.js';
 import { createDriveFx } from './drive-fx.js';
@@ -59,6 +59,17 @@ const FLY_CLIMB = 7;
 const FLY_CEILING = 150;
 const FLY_GLIDE = 3;
 const FLY_YAW = 75;
+// Flying goes up to FLY_SPEED times the ride's top speed (as fast as the booster takes it on the
+// ground, so nothing goes faster than it did: challenge-rules.js's FASTEST, levels.js's CAPS.kmh),
+// speeding up FLY_ACCEL times as hard as on the ground. Let go of F and it drops out of the sky,
+// falling free (and with stunts on, free to flip and spin), until PARACHUTE.open m over the ground
+// (or at once, let go lower), where a parachute opens: down to `sink` m/s at `settle` (1/s), its
+// speed across the ground slowing at `drag` (1/s), turned back upright at `right` (1/s), so it
+// lands on its wheels. `size`: the canopy's radius as a share of the vehicle's width (at least
+// `least` m).
+const FLY_SPEED = 2;
+const FLY_ACCEL = 2.5;
+const PARACHUTE = { open: 30, sink: 5, settle: 3, drag: 0.25, right: 3, size: 1.3, least: 2.5 };
 // Booster: held down, it burns a full gauge in BOOST_TIME s; let go and it stops, and the gauge
 // refills in BOOST_RECHARGE s. Firing pushes at BOOST_ACCEL m/s² up to BOOST_SPEED times the top
 // speed. It needs BOOST_MIN of the gauge to light (but, once lit, burns down to empty if held).
@@ -508,6 +519,7 @@ export class Driver {
 		this.topSpeed = 0;
 		this.lastSafe = { east: this.east, north: this.north, y: this.y };
 		this.flying = false;
+		this.chute = null;
 		this.gauge = 1;
 		this.firing = false;
 		this.ranDry = false;
@@ -599,6 +611,8 @@ export class Driver {
 
 		if ( ! this.active ) return;
 		this.active = false;
+		this.showChute( false );
+		this.disposeChute();
 		this.machine?.stop();
 		this.machine = null;
 		const { entry } = this;
@@ -676,13 +690,14 @@ export class Driver {
 		const east = this.east;
 		const north = this.north;
 
-		// Speed. Boost raises the top speed by a third.
-		const top = spec.topSpeed * ( boost ? 4 / 3 : 1 ) / KMH;
+		// Speed. Boost raises the top speed by a third; flying goes FLY_SPEED times as fast.
+		let top = spec.topSpeed * ( boost ? 4 / 3 : 1 ) / KMH;
+		if ( this.flying ) top = spec.topSpeed * FLY_SPEED / KMH;
 		if ( this.grounded || this.flying ) {
 
 			if ( throttle && this.speed >= - 0.5 ) {
 
-				this.speed += spec.accel * ( boost ? 1.6 : 1 ) * Math.max( 0, 1 - ( this.speed / top ) ** 2 ) * dt;
+				this.speed += spec.accel * ( boost ? 1.6 : 1 ) * ( this.flying ? FLY_ACCEL : 1 ) * Math.max( 0, 1 - ( this.speed / top ) ** 2 ) * dt;
 
 			} else if ( brake ) {
 
@@ -797,7 +812,7 @@ export class Driver {
 
 			} else {
 
-				this.vy -= this.fall * dt;
+				this.fallStep( dt, this.y - ground );
 				this.y += this.vy * dt;
 				this.airTime += dt;
 				this.pitch += ( MathUtils.clamp( this.vy / Math.max( 1, Math.abs( this.speed ) ), - 0.5, 0.5 ) - this.pitch ) * Math.min( 1, dt * 2 );
@@ -871,6 +886,9 @@ export class Driver {
 
 		}
 
+		// The parachute packs away once it's down (or flying again).
+		if ( this.chute && ( this.grounded || this.flying ) ) this.showChute( false );
+		else this.placeChute();
 		this.placeCamera( dt );
 
 	}
@@ -1179,6 +1197,14 @@ export class Driver {
 	// height instead of gliding down, so it can't sink through ground that arrives late.
 	flyHeight( dt, shift, ground ) {
 
+		// F let go (with the ground known under it): out of the sky, falling, the parachute to come.
+		if ( ! shift && ground !== null ) {
+
+			this.exitFlight();
+			return;
+
+		}
+
 		this.altitude = ground === null ? null : Math.max( 0, this.y - ground );
 		const glide = ground === null ? 0 : - FLY_GLIDE;
 		const climb = shift ? FLY_CLIMB * MathUtils.clamp( 1 - ( this.altitude ?? 0 ) / FLY_CEILING, - 0.5, 1 ) : glide;
@@ -1200,6 +1226,137 @@ export class Driver {
 		}
 
 		this.pitch += ( MathUtils.clamp( this.vy / Math.max( 6, Math.abs( this.speed ) ), - 0.35, 0.35 ) - this.pitch ) * Math.min( 1, dt * 3 );
+
+	}
+
+	// F let go while flying: it stops flying and falls (see PARACHUTE). With stunts on, the flight's
+	// turn becomes a jump's, free to flip and spin, the keys held counting only once pressed again
+	// (W was the gas a moment ago, not a frontflip).
+	exitFlight() {
+
+		this.flying = false;
+		this.altitude = null;
+		this.hud.setFlying?.( false );
+		this.chute = { open: false, t: 0 };
+		const { air } = this;
+		if ( ! air ) {
+
+			this.grounded = false;
+			return;
+
+		}
+
+		const q = this.attitude( new Quaternion() );
+		const at = localToEnu( this.middle( _b ) );
+		air.q.copy( q );
+		air.flight = false;
+		air.wall = null;
+		air.since = this.clock + KEY_GRACE;
+		this.east = at.east;
+		this.north = at.north;
+		this.y = at.up - this.centre.y;
+		this.grounded = false;
+
+	}
+
+	// Falling `height` m over the ground: gravity, or under the parachute (opened as it comes down
+	// through PARACHUTE.open), a slow, steady sink and its speed across the ground easing off.
+	fallStep( dt, height ) {
+
+		const chute = this.chute;
+		if ( chute && ! chute.open && this.vy < 0 && height <= PARACHUTE.open ) {
+
+			chute.open = true;
+			this.hud.flash( 'Parachute!' );
+			this.showChute( true );
+
+		}
+
+		if ( chute?.open ) {
+
+			chute.t += dt;
+			this.vy += ( - PARACHUTE.sink * Math.sqrt( this.gravity ) - this.vy ) * Math.min( 1, dt * PARACHUTE.settle );
+			this.speed *= Math.exp( - PARACHUTE.drag * dt );
+
+		} else {
+
+			this.vy -= this.fall * dt;
+
+		}
+
+	}
+
+	// The parachute's canopy and lines, over the vehicle while it's open (made the first time).
+	showChute( on ) {
+
+		if ( ! on ) {
+
+			this.chute = null;
+			if ( this.chuteMesh ) this.chuteMesh.visible = false;
+			return;
+
+		}
+
+		const radius = Math.max( PARACHUTE.least, this.width * PARACHUTE.size );
+		if ( ! this.chuteMesh || this.chuteMesh.userData.radius !== radius ) {
+
+			this.disposeChute();
+			const group = new Group();
+			group.userData.radius = radius;
+			const canopy = new Mesh( new SphereGeometry( radius, 24, 8, 0, Math.PI * 2, 0, Math.PI / 2.6 ), new MeshStandardMaterial( { color: 0xff5a36, roughness: 0.8, side: DoubleSide } ) );
+			canopy.scale.y = 0.6;
+			group.add( canopy );
+			// Lines from round the canopy's rim down to the vehicle's roof (the group's origin is the canopy's middle).
+			const rim = Math.sin( Math.PI / 2.6 ) * radius;
+			const rimY = Math.cos( Math.PI / 2.6 ) * radius * 0.6;
+			const drop = radius * 1.6;
+			const points = [];
+			for ( let i = 0; i < 8; i ++ ) {
+
+				const a = i / 8 * Math.PI * 2;
+				points.push( Math.cos( a ) * rim, rimY, Math.sin( a ) * rim, 0, - drop, 0 );
+
+			}
+
+			const lines = new LineSegments( new BufferGeometry().setAttribute( 'position', new Float32BufferAttribute( points, 3 ) ), new LineBasicMaterial( { color: 0xeeeeee } ) );
+			group.add( lines );
+			for ( const part of [ canopy, lines ] ) part.userData.noCollide = true;
+			group.userData.drop = drop;
+			( this.models.group.parent ?? this.models.group ).add( group );
+			this.chuteMesh = group;
+
+		}
+
+		this.chuteMesh.visible = true;
+		this.placeChute();
+
+	}
+
+	// Over the middle of the vehicle's roof, opening out over a moment and swaying a little.
+	placeChute() {
+
+		const mesh = this.chuteMesh;
+		if ( ! mesh?.visible || ! this.chute ) return;
+		const t = this.chute.t;
+		this.middle( mesh.position );
+		mesh.position.y += this.height / 2 + mesh.userData.drop;
+		const open = MathUtils.clamp( t / 0.4, 0.1, 1 );
+		mesh.scale.set( open, MathUtils.clamp( t / 0.25, 0.3, 1 ), open );
+		mesh.rotation.set( Math.sin( t * 1.7 ) * 0.06, headingToYaw( this.heading ), Math.cos( t * 1.3 ) * 0.06 );
+
+	}
+
+	disposeChute() {
+
+		if ( ! this.chuteMesh ) return;
+		this.chuteMesh.removeFromParent();
+		this.chuteMesh.traverse( part => {
+
+			part.geometry?.dispose();
+			part.material?.dispose();
+
+		} );
+		this.chuteMesh = null;
 
 	}
 
@@ -1784,9 +1941,17 @@ export class Driver {
 
 		const { air } = this;
 		if ( air.righting ) return;
-		const input = air.wipeout ? null : this.airInput();
-		this.turn( dt, input, AIR_DAMP );
+		// Under the parachute it hangs: no more tricks, and it swings back upright to land.
+		const hanging = !! this.chute?.open;
+		const input = air.wipeout || hanging ? null : this.airInput();
+		this.turn( dt, input, hanging ? AIR_STOP : AIR_DAMP );
 		const { q, spin } = air;
+		if ( hanging ) {
+
+			_euler.setFromQuaternion( q, 'YXZ' );
+			q.slerp( _q.setFromEuler( _euler.set( 0, _euler.y, 0, 'YXZ' ) ), 1 - Math.exp( - PARACHUTE.right * dt ) );
+
+		}
 		const idle = input && ! input.yaw && ! input.pitch && ! input.roll;
 		if ( idle && air.time > 0.15 && this.tilt( q ) < ASSIST_TILT ) {
 
@@ -1853,7 +2018,7 @@ export class Driver {
 
 		}
 
-		this.vy -= this.fall * dt;
+		this.fallStep( dt, ground === null ? Infinity : middle - ground );
 		const reach = this.extent( UP, air.q );
 		if ( this.vy > 0 ) {
 
@@ -1912,7 +2077,10 @@ export class Driver {
 		const slope = this.slopeAlong( this.course );
 		const across = ( this.speed + this.vy * slope ) / ( 1 + slope * slope );
 		const impact = Math.min( 0, ( this.vy - this.speed * slope ) / Math.sqrt( 1 + slope * slope ) );
-		this.speed = this.vy >= 0 && Math.abs( across ) > Math.abs( this.speed ) ? this.speed : across;
+		// (And never past what the booster reaches, the fastest anything goes: challenge-rules.js's
+		// FASTEST.)
+		const most = Math.max( Math.abs( this.speed ), this.spec.topSpeed / KMH * BOOST_SPEED );
+		this.speed = this.vy >= 0 && Math.abs( across ) > Math.abs( this.speed ) ? this.speed : MathUtils.clamp( across, - most, most );
 		// Down at an angle to the way it was going: it loses what was sideways, unless Space (drift) is
 		// held, when it powerslides on, sideways, into a drift (see POWERSLIDE).
 		const slip = ( ( this.heading - this.course ) % 360 + 540 ) % 360 - 180;
@@ -1964,6 +2132,7 @@ export class Driver {
 		const lost = this.tricksOf( air );
 		const hard = Math.max( 0, - this.vy );
 		air.wipeout = true;
+		this.showChute( false );
 		this.y = Math.max( this.y, ground + this.extent( UP, air.q ) - this.centre.y );
 		if ( ! air.flew ) this.bestAir = Math.max( this.bestAir, air.time );
 		this.vy = MathUtils.clamp( hard * 0.3, WIPE_HOP * 0.6 * this.leap, WIPE_HOP * this.leap );
