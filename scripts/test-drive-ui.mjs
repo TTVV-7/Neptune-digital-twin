@@ -413,6 +413,8 @@ describe( 'World Drive, desktop', () => {
 			const score = d.score;
 			d.hop();
 			d.vy = 12;
+			// (Thrown up, as a launch is: all of its air counts, none of it the hop's own.)
+			d.air.hop = 0;
 			d.press( 'KeyS' );
 			step( 5, () => {
 
@@ -5741,6 +5743,8 @@ function landBackflip( page ) {
 		const before = d.score;
 		d.hop();
 		d.vy = 12;
+		// (Thrown up, as a launch is: all of its air counts, none of it the hop's own.)
+		d.air.hop = 0;
 		d.press( 'KeyS' );
 		for ( let i = 0; i < 300; i ++ ) {
 

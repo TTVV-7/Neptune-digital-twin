@@ -306,11 +306,11 @@ describe( 'World Drive on the Moon', () => {
 			return { speed, high: top - start.y, time: i / 60, landed: d.grounded, scored: d.score - start.score, pending: d.air?.pending ?? '', best: d.bestJump?.lines ?? null };
 
 		} );
-		// 7 m/s on the Earth: 2.5 m up and 1.43 s in the air.
-		assert.ok( Math.abs( hop.speed - 7 * LEAP ) < 1e-6, JSON.stringify( hop ) );
-		assert.ok( hop.high > 2 && hop.high < 3, JSON.stringify( hop ) );
-		assert.ok( hop.time > 3 && hop.time < 4.2, JSON.stringify( hop ) );
-		// As long in Earth time as the Earth's hop, under big air's 1.5 s: nothing scored.
+		// 10 m/s on the Earth: 5.1 m up and 2.04 s in the air; here as high, for 2.04 / LEAP s.
+		assert.ok( Math.abs( hop.speed - 10 * LEAP ) < 1e-6, JSON.stringify( hop ) );
+		assert.ok( hop.high > 4.5 && hop.high < 5.5, JSON.stringify( hop ) );
+		assert.ok( hop.time > 4.5 && hop.time < 5.6, JSON.stringify( hop ) );
+		// A hop's own time in the air is never big air: nothing scored.
 		assert.deepEqual( [ hop.landed, hop.scored ], [ true, 0 ], JSON.stringify( hop ) );
 
 	} );
