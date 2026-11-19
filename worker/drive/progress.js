@@ -6,7 +6,7 @@ import {
 import { addTallies, claimTallies, countsOf, crossed, hasTallies, readTallies } from '../../src/drive-app/achievement-rules.js';
 import { earnQuery, featList, featsOf } from './achievements.js';
 import { PERIODS, forgetBoards } from './boards.js';
-import { credentials, database } from './players.js';
+import { credentials, database, secretOk } from './players.js';
 import { hasPass, supporterEmails } from './supporter.js';
 import { readVisit } from './visits.js';
 
@@ -222,7 +222,7 @@ function fromBefore( kept, player, today ) {
 async function playerFor( db, env, id, secret ) {
 
 	const player = await db.prepare( `SELECT p.xp, p.title, p.progress_at, p.progress_id, p.streak_day, p.streak, p.discoveries, p.tallies, p.parties, p.created_at, ${ xpOf( 'p' ) } AS total,
-		${ hasPass( 'p.account_id', '?3' ) } AS supporter FROM players p WHERE p.id = ?1 AND p.secret_hash = ?2` ).bind( id, await sha256Hex( secret ), supporterEmails( env ) ).first();
+		${ hasPass( 'p.account_id', '?3' ) } AS supporter FROM players p WHERE p.id = ?1 AND ${ secretOk( 'p', '?2' ) }` ).bind( id, await sha256Hex( secret ), supporterEmails( env ) ).first();
 	if ( ! player ) throw new HttpError( 403, 'Forbidden', { reason: 'player' } );
 	return player;
 

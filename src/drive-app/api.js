@@ -276,9 +276,10 @@ export function startSession( credential ) {
 
 }
 
-export function endSession() {
+// key: the secret this browser was handed for the account's player (accountPlayer), which goes too.
+export function endSession( key = null ) {
 
-	return send( 'DELETE', '/api/session', {} );
+	return send( 'DELETE', '/api/session', key ? { key } : {} );
 
 }
 
@@ -286,6 +287,15 @@ export function endSession() {
 export function linkPlayer( { id, secret } ) {
 
 	return send( 'POST', '/api/player/link', { id, secret } );
+
+}
+
+// The signed-in account's player for this browser (worker/drive/accounts.js's accountPlayer): this
+// browser's own (`player`, or null for none) linked to it, or the account's, handed over with a
+// secret for this browser, this browser's own folded into it.
+export function accountPlayer( player ) {
+
+	return send( 'POST', '/api/player/mine', player ? { id: player.id, secret: player.secret } : {} );
 
 }
 

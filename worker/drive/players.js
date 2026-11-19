@@ -84,11 +84,21 @@ export function credentials( body ) {
 
 }
 
-// The player with this id and secret ({ id, name, last_score_at, last_time_at }), or a 403: the
-// same for an unknown id as for the wrong secret.
+// SQL that's true when the SHA-256 of a secret, `param` ('?2'), is player row `p`'s: its own (the
+// browser that made it), or one of its keys (a browser it was handed to as its account signed in
+// there: accounts.js's accountPlayer).
+export function secretOk( p, param ) {
+
+	return `( ${ p }.secret_hash = ${ param } OR EXISTS ( SELECT 1 FROM player_keys k WHERE k.secret_hash = ${ param } AND k.player_id = ${ p }.id ) )`;
+
+}
+
+// The player with this id and secret ({ id, name, account_id, last_score_at, last_time_at, by_key }:
+// by_key 1 when the secret is a key handed to a browser, not the player's own), or a 403: the same
+// for an unknown id as for the wrong secret.
 export async function authenticate( db, id, secret ) {
 
-	const player = await db.prepare( 'SELECT id, name, last_score_at, last_time_at FROM players WHERE id = ? AND secret_hash = ?' ).bind( id, await sha256Hex( secret ) ).first();
+	const player = await db.prepare( `SELECT p.id, p.name, p.account_id, p.last_score_at, p.last_time_at, p.secret_hash <> ?2 AS by_key FROM players p WHERE p.id = ?1 AND ${ secretOk( 'p', '?2' ) }` ).bind( id, await sha256Hex( secret ) ).first();
 	if ( ! player ) throw new HttpError( 403, 'Forbidden', { reason: 'player' } );
 	return player;
 
