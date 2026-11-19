@@ -1,8 +1,8 @@
 import { MathUtils, Matrix4, Quaternion, Vector3 } from 'three';
 import {
-	BUDGET_SPENT, CLOSE, EARTH, FLAGS, HONK_GAP, KEEPALIVE_MS, MOON_WORLD, NEARBY_SHARDS, PARTY_MAX, PING, PONG, PROTOCOL, PROTOCOL_WORLDS, SEND_HZ, STALE_MS,
-	STILL_HZ, cellOf, checkLook, checkPlace, checkState, checkTrick, checkVehicle, cleanPartyCode, makePartyCode, packState, placeWorld, shardOf,
-	worldOfRoom,
+	BUDGET_SPENT, CLOSE, EARTH, FLAGS, HONK_GAP, KEEPALIVE_MS, LIVE_WORLD_IDS, MOON_WORLD, NEARBY_SHARDS, PAGE_PROTOCOLS, PARTY_MAX, PING, PONG, SEND_HZ, SHARE_SPENT,
+	STALE_MS, STILL_HZ, cellOf, checkLook, checkPlace, checkState, checkTrick, checkVehicle, cleanPartyCode, knows, makePartyCode, packState, placeWorld, shardOf,
+	versionOf, worldOfRoom,
 } from './live-protocol.js';
 import { getConfig } from './api.js';
 import { LEVEL_MAX, TITLES } from './levels.js';
@@ -10,27 +10,28 @@ import { storage } from './places.js';
 
 // Driving with others (docs/world-drive.md): the page's side of live-protocol.js. One WebSocket to
 // one room at a time: a party's (party:CODE, everyone who opened its link) whenever this page is in
-// one, on the globe too and on either world; otherwise, with "Show me to drivers nearby" on, the
-// area the car is in (near:BAND.COL on the Earth, moon:BAND.COL on the Moon, from a drop-in until a
-// minute back on the globe, or at once on the other world's globe), or the next of its shards when
-// one is full. Each world's budget for the day is its own (worker/drive/live.js): one spent, this
-// page drives on alone on that world (closed) and with others on the other. It says where the car
-// is, Earth-centred (Moon-centred on the Moon) so that pages centred on other places agree,
-// up to SEND_HZ times a second while it moves and only while someone else is there to see it (each
-// message is billed: alone it's quiet, with only those on the globe it's slow, and it sends the car
-// as soon as someone comes); hands what the room says to whoever listens (ghosts.js draws the
-// others, friends.js the list and the party); and comes back after a dropped connection, one that
-// went quiet included.
+// one, on the globe too and on any world; otherwise, with "Show me to drivers nearby" on, the area
+// the car is in (near:BAND.COL on the Earth, moon:, mars:, vesta: or ceres:BAND.COL on the others,
+// from a drop-in until a minute back on the globe, or at once on another world's globe), or the
+// next of its shards when one is full. Each world's budget for the day is its own
+// (worker/drive/live.js): one spent, this page drives on alone on that world (closed) and with
+// others on the rest; a party is kept, through a world still open (here), while it looks at or
+// drives alone on a closed one. It says where the car is in its world's own frame (Earth-centred,
+// Moon-centred, Mars-centred...) so that pages centred on other places agree, up to SEND_HZ times a
+// second while it moves and only while someone else is there to see it (each message is billed:
+// alone it's quiet, with only those on the globe it's slow, and it sends the car as soon as someone
+// comes); hands what the room says to whoever listens (ghosts.js draws the others, friends.js the
+// list and the party); and comes back after a dropped connection, one that went quiet included.
 //
 // Events (on( type, fn )): 'status' (connecting, live...), 'party' (joined or left one), 'nearby'
 // (the switch), 'welcome' { room, you, max, players }, 'join' PLAYER, 'leave' { pid, player },
-// 'look' { pid, vehicle, look }, 'place' { pid, place }, 'away' { pid }, 'states' { at, states:
-// [ { pid, s, age } ] }, 'trick' { pid, score }, 'honk' { pid }, 'clear' (everyone's gone: a new
-// room, or the connection dropped), 'full' { max } (a party with its most already), 'closed'
-// { world, quiet } (that world's budget for the day is spent, or it's switched off there, quiet,
-// and the other's isn't) and 'ended' (why: driving
-// with others is over for this visit; 'budget' when it's off till midnight UTC on both worlds,
-// 'refused' when the Worker kept turning it away).
+// 'look' { pid, vehicle, look }, 'place' { pid, place }, 'away' { pid, globe }, 'states' { at,
+// states: [ { pid, s, age } ] }, 'trick' { pid, score }, 'honk' { pid }, 'clear' (everyone's gone: a
+// new room, or the connection dropped), 'full' { max } (a party with its most already), 'closed'
+// { world, quiet, share } (that world's budget for the day is spent, or it's switched off there,
+// quiet, or this address has had its share of it today, share, and some other world's isn't) and
+// 'ended' (why: driving with others is over for this visit; 'budget' when it's off till midnight
+// UTC on every world, 'refused' when the Worker kept turning it away on every world still open).
 
 const NEARBY_KEY = 'world-drive.nearby';
 // Seconds to wait before connecting again after a dropped connection: the first time, the
@@ -58,8 +59,8 @@ const FOLLOW_MS = 500;
 // that drops everything), and is taken as dropped.
 const SILENT_MS = 10000;
 // Turned away at the door: /api/config is asked the first time in a row (and each time while it
-// can't be reached), then at most this often (ms); and REFUSALS in a row while the Worker is there
-// and on is over for the visit.
+// can't be reached), then at most this often (ms); and REFUSALS in a row on a world while the Worker
+// says it's on there closes that world for the visit (and on every world still open, it's over).
 const CONFIG_MS = 5 * 60000;
 const REFUSALS = 8;
 
@@ -73,31 +74,48 @@ const _lastQ = new Quaternion();
 const _carto = {};
 
 // earth: the tiles' group (or the test globe's), whose matrixWorld takes Earth-centred positions
-// into the scene; ellipsoid: its. moon: { group, ellipsoid } the same for the Moon (moon.js), and
-// world(): which one the page is on ('earth' or 'moon'). visit: the visit's token. player(): the
-// leaderboard's player ({ id, secret, name }) or null. ride: { vehicle, look }, what's driven to
-// begin with. closed: the worlds whose budget for the day /api/config said was spent.
-export function createLive( { earth, ellipsoid, moon = null, world = () => EARTH, visit, player = () => null, ride: firstRide, closed: closedAtFirst = [] } ) {
+// into the scene; ellipsoid: its. bodies: { moon, mars, vesta, ceres: { group, ellipsoid } } the same
+// for each other world (body.js's group, the one a recentre moves; moon: the Moon's alone, from
+// before), and world(): which one the game is on. liveWorlds: the worlds with driving with others
+// (main.js's LIVE_WORLDS). visit: the visit's token. player(): the leaderboard's player ({ id,
+// secret, name }) or null. ride: { vehicle, look }, what's driven to begin with. closed: the worlds
+// whose budget for the day /api/config said was spent (or switched off); config: what it said, if
+// the page has it already.
+export function createLive( {
+	earth, ellipsoid, bodies = {}, moon = null, world = () => EARTH, liveWorlds = LIVE_WORLD_IDS, visit, player = () => null, ride: firstRide, closed: closedAtFirst = [],
+	config: firstConfig = null,
+} ) {
 
 	const listeners = new Map();
 	// The frame each world's positions are in: its group, whose matrixWorld takes them into the
 	// scene, and its shape.
-	const frames = { [ EARTH ]: { group: earth, ellipsoid }, [ MOON_WORLD ]: moon };
-	// Worlds whose budget for the day is spent: on them, this page drives alone.
+	const frames = { [ EARTH ]: { group: earth, ellipsoid } };
+	for ( const id of LIVE_WORLD_IDS ) {
+
+		const frame = bodies[ id ] ?? ( id === MOON_WORLD ? moon : null );
+		if ( id !== EARTH && frame?.group && frame.ellipsoid ) frames[ id ] = frame;
+
+	}
+
+	// The worlds this page drives with others on (those it has a frame for), in LIVE_WORLD_IDS' order.
+	const usable = LIVE_WORLD_IDS.filter( id => liveWorlds.includes( id ) && frames[ id ] );
+	// Worlds whose budget for the day is spent (or switched off, or that kept turning this page
+	// away): on them, this page drives alone.
 	const closedWorlds = new Set( closedAtFirst );
-	// Which world's rooms this page is in. Mars, Vesta and Ceres have no rooms of their own (the
-	// protocol knows only the Earth and the Moon), so there it stays with the last of the two the page
-	// was on (the Earth for a visit that began elsewhere), or the other if that one's budget is spent
-	// and the other's isn't: a party isn't dropped for a budget it needn't use.
-	let roomWorld = EARTH;
+	// Of those, the ones that kept turning it away while the Worker said they were on.
+	const refusedWorlds = new Set();
+	const open = id => usable.includes( id ) && ! closedWorlds.has( id );
+	// Which world's rooms and budget this page uses (here): the game's world, when it has driving
+	// with others and it's open; otherwise (on a closed world, or one without) the last world it was
+	// on that's still open, else the first open one, else none: a party isn't dropped for a budget
+	// it needn't use. (Its room is told this page is on the globe there: see shown.)
+	let roomWorld = null;
 	const here = () => {
 
 		const on = world();
-		if ( on === EARTH || ( on === MOON_WORLD && moon ) ) return ( roomWorld = on );
-		if ( on === MOON_WORLD ) return EARTH;
-		const other = roomWorld === MOON_WORLD ? EARTH : MOON_WORLD;
-		if ( closedWorlds.has( roomWorld ) && ! closedWorlds.has( other ) && ( other === EARTH || moon ) ) return other;
-		return roomWorld;
+		if ( open( on ) ) return ( roomWorld = on );
+		if ( roomWorld && open( roomWorld ) ) return roomWorld;
+		return usable.find( open ) ?? null;
 
 	};
 	let party = null;
@@ -128,19 +146,22 @@ export function createLive( { earth, ellipsoid, moon = null, world = () => EARTH
 	let tries = 0;
 	let retryTimer = null;
 	let status = 'off';
-	// Attempts in a row turned away at the door, what /api/config last said (null: it couldn't be
-	// reached) and when (turnedAway).
-	let refusals = 0;
-	let config = null;
+	// Attempts in a row turned away at the door, on each world, what /api/config last said (null: it
+	// couldn't be reached) and when (turnedAway).
+	const refusals = {};
+	let config = firstConfig;
 	let configAt = - Infinity;
 	// What the room has been told of this page (see tell), when anything last went, the last state
 	// sent (when, its flags, where, whether the car was moving), the car's latest state (null without
 	// a car), the budget left and the last honk.
 	let told = null;
-	// Whether the room this page is in speaks of the Moon (PROTOCOL_WORLDS): a room still running the
-	// code from before (for a few minutes after a deploy) doesn't, and then this page stays on the
-	// globe as far as it's told while it's on the Moon, as a page from before did.
-	let worlds = true;
+	// Which version of the protocol the room this page is in speaks (versionOf: 3 knows every world, 2
+	// the Earth and the Moon, 1 the Earth): a room still running the code from before (for a few
+	// minutes after a deploy) may speak an older one, and then this page is on the globe as far as
+	// it's told while it's on a world that one doesn't know, as a page from before was; and the world
+	// its socket's budget is (the area's, or here's for a party's).
+	let version = 3;
+	let socketWorld = null;
 	let sentAt = 0;
 	let stateAt = - Infinity;
 	let flagsSent = - 1;
@@ -199,12 +220,14 @@ export function createLive( { earth, ellipsoid, moon = null, world = () => EARTH
 
 	function wanted() {
 
-		if ( ended || closedWorlds.has( here() ) ) return null;
+		const on = here();
+		if ( ended || ! on ) return null;
 		if ( party ) return `party:${ party }`;
 		if ( ! nearby || ! cell || busy === cell ) return null;
 		if ( away && performance.now() - awaySince >= AWAY_MS ) return null;
-		// An area of the other world: on its globe now, so not coming back near.
-		if ( worldOfRoom( cell ) !== here() ) return null;
+		// An area of another world (on its globe now, so not coming back near), or of a world closed
+		// or without driving with others (here is another, for a party's sake).
+		if ( worldOfRoom( cell ) !== on || on !== world() ) return null;
 		// Shard 0 is the area's own name (cellOf's), the others '#1' to '#3' after it.
 		return shard ? shardOf( cell, shard ) : cell;
 
@@ -226,7 +249,8 @@ export function createLive( { earth, ellipsoid, moon = null, world = () => EARTH
 
 	function setStatus() {
 
-		const next = ended ? 'ended' : closedWorlds.has( here() ) ? 'closed'
+		// (Closed: alone on the game's world, with no party's room through another.)
+		const next = ended ? 'ended' : ! here() || ( ! room && closedWorlds.has( world() ) ) ? 'closed'
 			: ! room ? ( ! party && nearby && busy && busy === cell ? 'busy' : 'off' ) : you ? 'live' : retryTimer ? 'retrying' : 'connecting';
 		if ( next === status ) return;
 		status = next;
@@ -253,12 +277,12 @@ export function createLive( { earth, ellipsoid, moon = null, world = () => EARTH
 		try {
 
 			// The visit's token goes as the last subprotocol, after the protocol's versions (the one
-			// that knows of the Moon, and the one from before, for a room still running that): a
-			// browser can't set headers on a WebSocket, and in the address it would end up in logs. The
-			// room's name has a '#' for a shard; for a party, which world this page is on (its budget
-			// is that world's).
-			const on = name.startsWith( 'party:' ) && here() === MOON_WORLD ? `&world=${ MOON_WORLD }` : '';
-			ws = new WebSocket( `${ scheme }://${ location.host }/api/live?room=${ encodeURIComponent( name ) }${ on }`, [ PROTOCOL_WORLDS, PROTOCOL, visit ] );
+			// that knows every world, and those from before, for a room still running one): a browser
+			// can't set headers on a WebSocket, and in the address it would end up in logs. The room's
+			// name has a '#' for a shard; for a party, which world's budget this page uses (here's).
+			socketWorld = worldOfRoom( name ) ?? here() ?? EARTH;
+			const on = name.startsWith( 'party:' ) && socketWorld !== EARTH ? `&world=${ socketWorld }` : '';
+			ws = new WebSocket( `${ scheme }://${ location.host }/api/live?room=${ encodeURIComponent( name ) }${ on }`, [ ...PAGE_PROTOCOLS, visit ] );
 
 		} catch ( err ) {
 
@@ -274,13 +298,13 @@ export function createLive( { earth, ellipsoid, moon = null, world = () => EARTH
 
 			opened = true;
 			if ( socket !== ws ) return;
-			refusals = 0;
+			refusals[ socketWorld ] = 0;
 			heardAt = performance.now();
 			pingAt = - Infinity;
-			worlds = ws.protocol !== PROTOCOL;
+			version = versionOf( ws.protocol ) || 1;
 			const [ where, gone ] = shown();
-			told = { ride: JSON.stringify( ride ), place: JSON.stringify( where ), away: gone, world: here() };
-			transmit( { t: 'hello', player: helloPlayer(), vehicle: ride.vehicle, look: ride.look, place: where, away: gone, ...( worlds ? { world: here() } : {} ) } );
+			told = { ride: JSON.stringify( ride ), place: JSON.stringify( where ), away: gone, world: here(), globe: globeOf( gone ) };
+			transmit( { t: 'hello', player: helloPlayer(), vehicle: ride.vehicle, look: ride.look, place: where, away: gone, ...worldOf( gone ) } );
 
 		} );
 		ws.addEventListener( 'message', e => {
@@ -326,32 +350,54 @@ export function createLive( { earth, ellipsoid, moon = null, world = () => EARTH
 
 	}
 
-	// What the room is told of where this page is: [ place, away ]. To a room from before the Moon had
-	// drivers, a page on the Moon is on the globe.
+	// What the room is told of where this page is: [ place, away ]. To a room from before a world had
+	// drivers (one that doesn't know it), a page there is on the globe; and so is a page driving on a
+	// world other than here (closed, or without driving with others), in a party through here.
 	function shown() {
 
-		return ! worlds && placeWorld( place ) === MOON_WORLD ? [ null, true ] : [ place, away ];
+		const on = placeWorld( place );
+		return ! knows( version, on ) || on !== here() || on !== world() ? [ null, true ] : [ place, away ];
 
 	}
 
-	// This page's world's budget for the day is spent (the room said so as it closed it, or the
-	// Worker as it turned it away), or it's switched off there (`quiet`: nothing's said of lots of
-	// drivers): it drives alone there, and with others on the other world unless that's spent too
-	// (`both`), or isn't known not to be, and then it's over for the visit.
-	function closeWorld( which, both = false, quiet = false ) {
+	// What goes with hello and away of which world: here's (whose budget the room charges this page
+	// to), to a room that knows of worlds and of it; and, on the globe, which world's globe this page
+	// is on (the game's: only to be shown, never charged), to a room that knows of that.
+	function worldOf( gone ) {
+
+		const on = here();
+		const globe = globeOf( gone );
+		return { ...( version >= 2 && on && knows( version, on ) ? { world: on } : {} ), ...( globe ? { globe } : {} ) };
+
+	}
+
+	function globeOf( gone ) {
+
+		const on = world();
+		return gone && version >= 3 && knows( version, on ) ? on : null;
+
+	}
+
+	// A world's budget for the day is spent (the room said so as it closed it, or the Worker as it
+	// turned it away), or it's switched off there (`quiet`: nothing's said of lots of drivers), or
+	// this address has had its share of it today (`share`), or it kept turning this page away: it
+	// drives alone there, and with others on the rest; with none of them left open, it's over for the
+	// visit.
+	function closeWorld( which, { quiet = false, share = false } = {} ) {
 
 		if ( ended ) return;
 		closedWorlds.add( which );
-		if ( both || closedWorlds.size >= 2 ) {
+		if ( ! usable.some( open ) ) {
 
-			end( 'budget' );
+			end( refusedWorlds.has( which ) ? 'refused' : 'budget' );
 			return;
 
 		}
 
+		// The room goes: a party's comes back at once through a world still open (see here).
 		leave();
-		setStatus();
-		emit( 'closed', { world: which, quiet } );
+		sync();
+		emit( 'closed', { world: which, quiet, share } );
 
 	}
 
@@ -362,6 +408,9 @@ export function createLive( { earth, ellipsoid, moon = null, world = () => EARTH
 
 		socket = null;
 		const name = room;
+		// (The world whose budget that socket was: an area's; a party's, here's, as it connected if it
+		// never got in, else as the room was last told.)
+		const which = worldOfRoom( name ) ?? ( opened ? here() : socketWorld ) ?? EARTH;
 		forget();
 		if ( code === CLOSE.full ) {
 
@@ -385,60 +434,69 @@ export function createLive( { earth, ellipsoid, moon = null, world = () => EARTH
 
 		} else if ( code === CLOSE.replaced ) end( 'replaced' );
 		else if ( code === CLOSE.expired ) end( 'expired' );
-		else if ( code === CLOSE.off && reason === BUDGET_SPENT ) closeWorld( here() );
+		else if ( code === CLOSE.off && reason === BUDGET_SPENT ) closeWorld( which );
+		// This address has had its share of that world's budget today: that world only.
+		else if ( code === CLOSE.off && reason === SHARE_SPENT ) closeWorld( which, { share: true } );
 		else if ( code === CLOSE.off ) end( 'off' );
 		else if ( code === CLOSE.protocol ) {
 
 			console.error( `World Drive: the room ${ name } turned away what this page said (close ${ code }); driving with others is off for this visit.` );
 			end( 'protocol' );
 
-		} else if ( ! opened ) turnedAway( name );
+		} else if ( ! opened ) turnedAway( name, which );
 		else retry( name );
 		setStatus();
 
 	}
 
 	// Never let in: the Worker said no before the room (as it does to everyone while LIVE is off, or
-	// once the day's budget is spent, and to a visit that keeps connecting), or wasn't there to ask.
-	// A browser doesn't say which, so its config does: switched off is over for this visit (without
-	// a word, or with one for the budget); anything else (DriveLimits not answering just then, with
+	// once that world's budget for the day is spent, and to a visit that keeps connecting; and a room
+	// still on the code from before to an area of a world it doesn't know), or wasn't there to ask.
+	// A browser doesn't say which, so its config does: switched off everywhere is over for this visit
+	// (without a word); that world spent or switched off is alone there (and over for the visit with
+	// every other spent or off too); anything else (DriveLimits not answering just then, with
 	// liveReason 'unknown', included) is tried again as a dropped connection is. Each ask the Worker
 	// answers is a request, so it's asked the first time in a row and then only every CONFIG_MS: a
 	// network that blocks WebSockets would otherwise have it asked every 30 s for hours. While it
 	// can't be reached (offline, or the Worker restarting), each time, to hear as soon as it's back
-	// whether it's on. And turned away REFUSALS times in a row while the Worker last said it was on
-	// (never when it couldn't be reached), it's over for this visit too.
-	async function turnedAway( name ) {
+	// whether it's on. And turned away REFUSALS times in a row on a world the Worker last said was on
+	// (never while it couldn't be reached), that world is closed for this visit; once every world it
+	// says is on has, driving with others is over for the visit.
+	async function turnedAway( name, which ) {
 
-		refusals ++;
-		if ( refusals === 1 || ! config || performance.now() - configAt >= CONFIG_MS ) {
+		const tried = refusals[ which ] = ( refusals[ which ] ?? 0 ) + 1;
+		if ( tried === 1 || ! config || performance.now() - configAt >= CONFIG_MS ) {
 
 			configAt = performance.now();
 			config = await getConfig();
 			if ( room !== name || socket || ended ) return;
-			// Switched off (on both worlds), or this world's budget spent or switched off: alone here, and
-			// over for the visit if the other world's is too (see worldsOf).
 			const state = worldsOf( config );
-			const there = state[ here() === MOON_WORLD ? EARTH : MOON_WORLD ];
-			if ( state[ here() ] === 'off' && there !== 'open' ) {
+			const others = usable.filter( id => id !== which );
+			if ( state[ which ] === 'off' && ! others.some( id => state[ id ] === 'open' && ! closedWorlds.has( id ) ) ) {
 
 				end( 'off' );
 				return;
 
 			}
 
-			if ( state[ here() ] === 'spent' || state[ here() ] === 'off' ) {
+			if ( state[ which ] === 'spent' || state[ which ] === 'off' ) {
 
-				closeWorld( here(), there === 'spent' || there === 'off', state[ here() ] === 'off' );
+				// (The others it says are spent or off too, as they are: here won't go to one.)
+				for ( const id of others ) if ( state[ id ] === 'spent' || state[ id ] === 'off' ) closedWorlds.add( id );
+				closeWorld( which, { quiet: state[ which ] === 'off' } );
 				return;
 
 			}
 
 		}
 
-		if ( worldsOf( config )[ here() ] === 'open' && refusals >= REFUSALS ) {
+		const state = worldsOf( config );
+		if ( state[ which ] === 'open' && tried >= REFUSALS ) {
 
-			end( 'refused' );
+			refusedWorlds.add( which );
+			// Every world the Worker says is on has turned this page away: over for the visit.
+			if ( usable.every( id => state[ id ] !== 'open' || closedWorlds.has( id ) || refusedWorlds.has( id ) ) ) end( 'refused' );
+			else closeWorld( which, { quiet: true } );
 			return;
 
 		}
@@ -526,13 +584,15 @@ export function createLive( { earth, ellipsoid, moon = null, world = () => EARTH
 
 		const [ where, gone ] = shown();
 		const placeKey = JSON.stringify( where );
-		// Back on the globe; or on it still, turned to the other world (a room that knows of the Moon
-		// is told which, for a party's budget).
-		if ( gone && ( ! told.away || ( worlds && told.world !== here() ) ) ) transmit( { t: 'away', ...( worlds ? { world: here() } : {} ) } );
+		// Back on the globe; or on it still, turned to another world (a room that knows of worlds is
+		// told which world's budget, for a party's, and which world's globe, for the others' lists).
+		const extra = worldOf( gone );
+		if ( gone && ( ! told.away || ( version >= 2 && ( told.world !== here() || told.globe !== ( extra.globe ?? null ) ) ) ) ) transmit( { t: 'away', ...extra } );
 		else if ( ! gone && where && ( told.away || told.place !== placeKey ) ) transmit( { t: 'place', place: where } );
 		told.away = gone;
 		told.place = placeKey;
 		told.world = here();
+		told.globe = extra.globe ?? null;
 
 	}
 
@@ -612,11 +672,11 @@ export function createLive( { earth, ellipsoid, moon = null, world = () => EARTH
 			self = { name: cleanName( message.name ), star: message.star === true };
 			max = Number( message.max ) || 0;
 			tries = 0;
-			refusals = 0;
+			refusals[ socketWorld ] = 0;
 			stateAt = - Infinity;
 			flagsSent = - 1;
 			players.clear();
-			worlds = socket?.protocol !== PROTOCOL;
+			version = versionOf( socket?.protocol ) || 1;
 			for ( const raw of Array.isArray( message.players ) ? message.players : [] ) {
 
 				const p = playerOf( raw );
@@ -671,11 +731,13 @@ export function createLive( { earth, ellipsoid, moon = null, world = () => EARTH
 		} else if ( t === 'place' && p ) {
 
 			const where = checkPlace( message.place );
-			if ( ! where ) return;
+			// (A place on a world this room's version doesn't know: none, as if it weren't said.)
+			if ( ! where || ! knows( version, placeWorld( where ) ) ) return;
 			// The first to drop in where only those on the globe were: the car, at once, as for a join.
 			const was = watched();
 			p.place = where;
 			p.world = placeWorld( where );
+			p.globe = null;
 			p.away = false;
 			p.s = null;
 			emit( 'place', { pid: p.pid, place: where } );
@@ -685,7 +747,9 @@ export function createLive( { earth, ellipsoid, moon = null, world = () => EARTH
 
 			p.away = true;
 			p.s = null;
-			emit( 'away', { pid: p.pid } );
+			// Which world's globe they're on, if the room says (one this page's room knows).
+			p.globe = knowable( message.globe );
+			emit( 'away', { pid: p.pid, globe: p.globe } );
 
 		} else if ( t === 'S' && Array.isArray( message.s ) && Number.isFinite( message.at ) ) {
 
@@ -726,10 +790,13 @@ export function createLive( { earth, ellipsoid, moon = null, world = () => EARTH
 	function playerOf( raw ) {
 
 		if ( ! raw || typeof raw !== 'object' || typeof raw.pid !== 'string' || raw.pid === you ) return null;
-		// Which world they're on (the room says, to a page that knows of the Moon), and so which frame
-		// their place and car are in.
-		const on = raw.world === MOON_WORLD ? MOON_WORLD : EARTH;
-		const place = checkPlace( raw.place );
+		// Which world they're on (the room says, to a page that knows of worlds: one its version doesn't
+		// know is none, the Earth), and so which frame their place and car are in; a place on a world
+		// it doesn't know is no place (they're on the globe, as far as this page is told).
+		const on = knowable( raw.world ) ?? EARTH;
+		const said = checkPlace( raw.place );
+		const place = said && knows( version, placeWorld( said ) ) ? said : null;
+		const gone = raw.away === true || ( !! said && ! place );
 		return {
 			pid: raw.pid,
 			name: cleanName( raw.name ),
@@ -741,20 +808,32 @@ export function createLive( { earth, ellipsoid, moon = null, world = () => EARTH
 			look: checkLook( raw.look ) ?? {},
 			place,
 			world: place ? placeWorld( place ) : on,
-			away: raw.away === true,
-			s: checkState( raw.s, place ? placeWorld( place ) : on ),
+			// On the globe: which world's, if the room says.
+			globe: gone ? knowable( raw.globe ) : null,
+			away: gone,
+			s: gone ? null : checkState( raw.s, place ? placeWorld( place ) : on ),
 		};
+
+	}
+
+	// A world as the room names one (world, globe), if it's one this room's version knows, else null.
+	function knowable( id ) {
+
+		return typeof id === 'string' && knows( version, id ) ? id : null;
 
 	}
 
 	// --- the car ---
 
-	// The car's STATE, Earth-centred (on the Moon, Moon-centred): the pivot's position and turn taken
-	// out of the scene by its world's group's matrix as it is now (recentring moves it), and its
-	// velocity turned the same way.
+	// The car's STATE in its world's own frame (Earth-centred, Moon-centred...): the pivot's position
+	// and turn taken out of the scene by its world's group's matrix as it is now (recentring moves it),
+	// and its velocity turned the same way. None on a world other than here (closed, or without
+	// driving with others): the room isn't told of that car.
 	function stateOf( { pivot, velocity, flags } ) {
 
-		const { group } = frames[ here() ];
+		const on = world();
+		if ( on !== here() || ! frames[ on ] ) return null;
+		const { group } = frames[ on ];
 		group.updateWorldMatrix( true, false );
 		_inverse.copy( group.matrixWorld ).invert();
 		_earth.setFromRotationMatrix( group.matrixWorld ).invert();
@@ -764,7 +843,7 @@ export function createLive( { earth, ellipsoid, moon = null, world = () => EARTH
 		_v.copy( velocity ).applyQuaternion( _earth );
 		if ( _v.length() > MAX_SPEED ) _v.setLength( MAX_SPEED );
 		// Out of the protocol's bounds (flown far up): not sent.
-		return checkState( packState( _p, _q, _v, flags ), here() );
+		return checkState( packState( _p, _q, _v, flags ), on );
 
 	}
 
@@ -858,9 +937,10 @@ export function createLive( { earth, ellipsoid, moon = null, world = () => EARTH
 
 		},
 
-		// Dropped in at `where` ({ name, lat, lon, height, world }: world 'moon' on the Moon): there, and
-		// no longer on the globe. A new area's room straight away (the minute back on the globe was for
-		// coming back near).
+		// Dropped in at `where` ({ name, lat, lon, height, world }: world 'moon', 'mars'... off the
+		// Earth): there, and no longer on the globe. A new area's room straight away (the minute back on
+		// the globe was for coming back near). On a world other than here (closed, or without driving
+		// with others), a party's room is told this page is on the globe there (see shown).
 		setPlace( where ) {
 
 			place = checkPlace( where );
@@ -894,9 +974,9 @@ export function createLive( { earth, ellipsoid, moon = null, world = () => EARTH
 
 		},
 
-		// The globe turned to the other world (main.js's world() says which now): the room goes or
-		// comes as this world's budget allows (an area of the other world's goes at once), and a party
-		// is told which world's globe this page is on.
+		// The globe turned to another world (main.js's world() says which now): the room goes or
+		// comes as that world's budget allows (an area of another world's goes at once), and a party
+		// is told which world's budget and globe this page is on.
 		worldChanged() {
 
 			sync();
@@ -976,17 +1056,37 @@ export function createLive( { earth, ellipsoid, moon = null, world = () => EARTH
 			return status;
 
 		},
-		// Whether this page's world's budget for the day is spent: it drives alone here (but not
-		// necessarily on the other world).
+		// Whether the game's world's budget for the day is spent (or it's switched off there, or no world
+		// is open at all): it drives alone there (in a party's room through another world, if in one).
 		get closedHere() {
 
-			return closedWorlds.has( here() );
+			return ! here() || closedWorlds.has( world() );
 
 		},
-		// Which world this page is on.
+		// Which world's rooms and budget this page uses (here): the game's, or the one a party goes
+		// through while the game's is closed; null with none open.
 		get world() {
 
 			return here();
+
+		},
+		// The game's world, as this page was told (ghosts.js draws others only while it's here).
+		get gameWorld() {
+
+			return world();
+
+		},
+		// The worlds closed for this visit (spent, switched off, or turned away): read them, don't
+		// change them.
+		get closedWorlds() {
+
+			return closedWorlds;
+
+		},
+		// The worlds still open, in WORLD_IDS' order.
+		openWorlds() {
+
+			return usable.filter( open );
 
 		},
 		get ended() {
@@ -1058,19 +1158,41 @@ export function createLive( { earth, ellipsoid, moon = null, world = () => EARTH
 
 }
 
-// What /api/config says of each world (null: it couldn't be reached): { earth, moon }, each 'open',
-// 'spent' (its budget for the day), 'off' (switched off there: LIVE, or a budget of 0) or 'unknown'
-// (DriveLimits couldn't say). The Moon's is liveMoon, and why not liveMoonReason, as liveReason is
-// the Earth's (none when it's switched off there); a Worker from before the Moon had rooms doesn't
-// say them, and then the Moon's is the Earth's.
-function worldsOf( config ) {
+// What /api/config says of each world (null: it couldn't be reached): { earth, moon, mars, vesta,
+// ceres }, each 'open', 'spent' (its budget for the day), 'off' (switched off there: LIVE, or a
+// budget of 0) or 'unknown' (DriveLimits couldn't say, or the Worker couldn't be reached). From its
+// liveWorlds ({ id: { open, reason } }); a Worker from before that says only the Earth's (live,
+// liveReason) and the Moon's (liveMoon, liveMoonReason; one from before the Moon had rooms not even
+// those, and then the Moon's is the Earth's), and the rest are off there.
+export function worldsOf( config ) {
 
-	const earth = config?.live === true ? 'open' : config?.live !== false ? 'unknown'
-		: config.liveReason === BUDGET_SPENT ? 'spent' : config.liveReason === 'unknown' ? 'unknown' : 'off';
-	if ( typeof config?.liveMoon !== 'boolean' ) return { [ EARTH ]: earth, [ MOON_WORLD ]: earth };
-	const reason = config.liveMoonReason ?? ( config.liveReason === 'unknown' ? 'unknown' : null );
-	const moon = config.liveMoon ? 'open' : reason === BUDGET_SPENT ? 'spent' : reason === 'unknown' ? 'unknown' : 'off';
-	return { [ EARTH ]: earth, [ MOON_WORLD ]: moon };
+	const out = {};
+	if ( ! config ) {
+
+		for ( const id of LIVE_WORLD_IDS ) out[ id ] = 'unknown';
+		return out;
+
+	}
+
+	const of = ( on, reason ) => on === true ? 'open' : on !== false ? 'unknown' : reason === BUDGET_SPENT ? 'spent' : reason === 'unknown' ? 'unknown' : 'off';
+	if ( config.liveWorlds && typeof config.liveWorlds === 'object' ) {
+
+		for ( const id of LIVE_WORLD_IDS ) {
+
+			const entry = config.liveWorlds[ id ];
+			out[ id ] = entry && typeof entry === 'object' ? of( entry.open, entry.reason ) : 'off';
+
+		}
+
+		return out;
+
+	}
+
+	const earth = of( config.live, config.liveReason );
+	const moon = typeof config.liveMoon !== 'boolean' ? earth
+		: of( config.liveMoon, config.liveMoonReason ?? ( config.liveReason === 'unknown' ? 'unknown' : null ) );
+	for ( const id of LIVE_WORLD_IDS ) out[ id ] = 'off';
+	return { ...out, [ EARTH ]: earth, [ MOON_WORLD ]: moon };
 
 }
 

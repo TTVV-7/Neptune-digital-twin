@@ -9,9 +9,10 @@ import { createDriveHud } from '../drive-hud.js';
 import { GlobeView } from './globe.js';
 import { Ground } from './spawn.js';
 import { createTestGlobe, placeBody, placeEarth } from './test-globe.js';
-import { levelled } from './level.js';
+import { levelFrame, levelled } from './level.js';
 import { createBody, LOOKS } from './body.js';
-import { EARTH, FALLBACK, MOON, OFF_EARTH, listOf, onWorld, TheWorld, WORLDS } from './worlds.js';
+import { EARTH, FALLBACK, MOON, OFF_EARTH, isWorld, listOf, onWorld, TheWorld, WORLD_IDS, WORLDS } from './worlds.js';
+import { SPOTS_ON } from './world-places.js';
 import { loadVehicle, loadVehicles, lookOf, specOf } from './vehicles.js';
 import { setUpPanel } from './panel.js';
 import { setUpGarage } from './garage.js';
@@ -29,14 +30,14 @@ import { createProgress, onLevelChange } from './progress.js';
 import { ACHIEVEMENTS, ridesOf } from './achievement-rules.js';
 import { onFeatsChange } from './feats.js';
 import { setUpProfile } from './profile.js';
-import { formatLatLon, LINK_PARAMS, linkedPlace, rememberPlace, worldOf } from './places.js';
-import { createLive, flagsOf, velocityOf } from './live.js';
+import { formatLatLon, LINK_PARAMS, linkedPlace, rememberPlace, SPOTS, worldOf } from './places.js';
+import { createLive, flagsOf, velocityOf, worldsOf } from './live.js';
 import { createStats } from './stats.js';
 import { METRICS, dropinBucket } from './stats-protocol.js';
 import { createGhosts, ghostModels } from './ghosts.js';
 import { BUDGET_TOAST, budgetToast, setUpFriends } from './friends.js';
 import { createOnline } from './online.js';
-import { BUDGET_SPENT, cleanPartyCode, FLAGS } from './live-protocol.js';
+import { cleanPartyCode, FLAGS } from './live-protocol.js';
 import { send } from './api.js';
 import * as screens from './screens.js';
 
@@ -50,18 +51,20 @@ import * as screens from './screens.js';
 // 'driving' and 'paused'. M goes back to the globe from any of the others.
 //
 // Worlds (worlds.js): the Earth (Google's tiles), and the worlds made in the page from NASA's maps,
-// the Moon, Mars, Vesta and Ceres (body.js), picked on the globe's panel. On another world the globe
-// is its own, what's driven on is its ground, gravity is its own and there's no water. Driving with
-// others is on the Earth and the Moon (LIVE_WORLDS), the Moon's in its own rooms and frame (live.js),
-// and a friend on the other of those is a Go to or a Join away (goBeside turns the globe there
-// first). On Mars, Vesta and Ceres you drive on your own: nothing is sent to the room of who's
-// driving (it's as if you were on the globe), and the others' ghosts aren't drawn. On a small world
+// the Moon, Mars, Vesta and Ceres (body.js), picked in the orrery (orrery.js, its own chunk: the
+// panel's Worlds button, M on the globe), which shows the Sun, the planets and the belt and how many
+// are driving on each world now. On another world the globe is its own, what's driven on is its
+// ground, gravity is its own and there's no water. Driving with others is on every world
+// (LIVE_WORLDS), each in its own rooms and frame (live.js), and a friend on another world is a Go to
+// or a Join away (goBeside turns the globe there first). On a small world
 // (Vesta, Ceres: WORLDS' `recentre`), whose ground curves away a few metres in a kilometre, the
 // scene's frame is moved to the car as it drives (follow), so the flat frame it drives in is always
 // level where it is.
 
-// The worlds with driving with others (live-protocol.js's rooms and frames): the rest are driven alone.
-const LIVE_WORLDS = [ EARTH, MOON ];
+// The worlds with driving with others (live-protocol.js's rooms and frames): all five. One taken out
+// again is driven alone (nothing sent to the rooms: away, as on the globe), and its live UI hidden
+// (body[data-live='off'], liveHere).
+const LIVE_WORLDS = WORLD_IDS;
 
 const SKY = new Color( 0x9fcbee );
 const SPACE = new Color( 0x070c16 );
@@ -324,6 +327,10 @@ const STATS_TEST = import.meta.env.DEV ? window.worldDriveStatsTest ?? null : nu
 // scripts/test-drive-ui.mjs does: the other tests drive longer than that, and look at what the toast
 // says.
 const NUDGE_AFTER = import.meta.env.DEV ? window.worldDriveNudgeTest?.after ?? null : 40;
+// The orrery opens on its own only with ?worlds=1 in the address, never on a plain load; and on the
+// dev server when a test asks for it as the page loads, { onLoad: true }
+// (scripts/test-drive-orrery-ui.mjs).
+const ORRERY_TEST = import.meta.env.DEV ? window.worldDriveOrreryTest ?? null : null;
 
 const $ = id => document.getElementById( id );
 const frame = () => new Promise( resolve => requestAnimationFrame( resolve ) );
@@ -367,14 +374,17 @@ const _before = new Matrix4();
 // live: whether the Worker has driving with others on (its /api/config says), and liveReason why
 // not when it's off for the rest of the day; liveMoon: whether it's on on the Moon (its rooms have a
 // budget of their own: null when the Worker doesn't say), and liveMoonReason why not the same way
-// (none when it's switched off there); earthClosed: { onEarth, world } when there's no Earth
-// this visit (today's Earth drives are used up, or the page opened on a link to another world:
-// `world`, its id, boot.js): the globe opens on that world (a place's link flies there itself), or
-// else the Moon (FALLBACK), which are never limited, and picking the Earth calls onEarth instead;
+// (none when it's switched off there); liveWorlds: every world's at once, { earth, moon, mars,
+// vesta, ceres: { open, reason } } (null from a Worker from before: the Earth's and the Moon's are
+// then the keys before, and the rest are off: live.js's worldsOf); earthClosed: { onEarth, world }
+// when there's no Earth this visit (today's Earth drives are used up, or the page opened on a link
+// to another world: `world`, its id, boot.js): the globe opens on that world (a place's link flies
+// there itself), or else the Moon (FALLBACK), which are never limited, and picking the Earth calls
+// onEarth instead;
 // challengeLink: a "challenge a friend" link's ({ link: { challenge, vs }, answer }, boot.js), or a
 // promise of it (or of null: no link), opened once the globe is up and it's here (challenges.js);
 // adsense: /api/config's { client, slot } while Google's ads are on (ads.js), else null.
-export async function start( { key, left = null, visit: token = null, worker = true, googleClientId = '', passwords = false, turnstileSiteKey = '', live: liveOn = false, liveReason = '', liveMoon = null, liveMoonReason = '', earthClosed = null, challengeLink = null, adsense = null } ) {
+export async function start( { key, left = null, visit: token = null, worker = true, googleClientId = '', passwords = false, turnstileSiteKey = '', live: liveOn = false, liveReason = '', liveMoon = null, liveMoonReason = '', liveWorlds = null, earthClosed = null, challengeLink = null, adsense = null } ) {
 
 	const visit = token ?? VISIT_TEST?.visit ?? null;
 	// Play stats for the owner's admin page (stats.js): only a real visit's, counts with nothing of who.
@@ -449,9 +459,20 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	const moon = bodies[ MOON ];
 	let world = EARTH;
 	const offEarth = () => world !== EARTH;
-	// Whether driving with others is on the world being shown: the Earth's and the Moon's (live.js
-	// knows those two); on Mars, Vesta and Ceres you drive on your own, away as far as the room knows.
+	// Whether driving with others is on the world being shown (LIVE_WORLDS: every world now); on one
+	// without, you'd drive on your own, away as far as the room knows, and its live UI is hidden
+	// (body[data-live], style.css). Set again on every turn to another world (setWorld).
 	const liveHere = () => LIVE_WORLDS.includes( world );
+	const markLive = () => {
+
+		document.body.dataset.live = liveHere() ? 'on' : 'off';
+
+	};
+	markLive();
+	// Whether the visitor asks for less motion (the orrery stands still, a world's globe comes in
+	// without its fly-in), as it is now.
+	const lessMotion = window.matchMedia?.( '(prefers-reduced-motion: reduce)' ) ?? null;
+	const reducedMotion = () => !! lessMotion?.matches;
 	// The world being driven's ground (body.js), or null on the Earth.
 	const body = () => bodies[ world ] ?? null;
 	// Where the globe was looking on each world when it last left it, and a turn to another world
@@ -527,7 +548,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		flyTo: place => flyToPlace( place ),
 		onDrive: place => dropIn( place ),
 		onClearPin: () => pinAt( null ),
-		onWorld: world => setWorld( world ),
+		// Its Worlds button: the orrery, to pick a world from.
+		onWorlds: opener => openOrrery( opener ),
 		// (Its kind only, for the play stats: never what was typed.)
 		onSearch: kind => stats.add( 'search', kind ),
 		onAchievements: () => openAchievements(),
@@ -921,27 +943,39 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// (The free worlds by name: "the Moon, Mars, Vesta and Ceres".)
 	if ( left !== null && left <= 2 ) screens.toast( left === 0 ? `This is today's free Earth drive: drop in anywhere as often as you like while this page stays open. Reload and it's ${ listOf( OFF_EARTH ) } until tomorrow.` : `${ left } more Earth drive${ left === 1 ? '' : 's' } today after this one.`, left === 0 ? 8000 : 5000 );
 
-	// Driving with others (live.js, ghosts.js, friends.js): only when the Worker has it on (on either
+	// The orrery (see openOrrery), once it's loaded: told of new counts and party changes from here on.
+	let orrery = null;
+	let orreryLoading = null;
+	let orreryOpening = false;
+	let orreryOpener = null;
+
+	// Driving with others (live.js, ghosts.js, friends.js): only when the Worker has it on (on any
 	// world) and this visit has a token to show the room. Without it, nothing of it is made. When the
 	// Worker couldn't say ('unknown': DriveLimits didn't answer, as for a few minutes after a deploy
 	// while it still runs its old code) it's made anyway: turned away at the door, it tries again as a
 	// dropped connection does, so the visit isn't left without it for hours over a moment's hiccup.
-	// A world whose budget for the day is spent starts closed: alone there, with others on the other.
+	// A world whose budget for the day is spent starts closed: alone there, with others on the rest.
+	// Each world's as /api/config said (live.js's worldsOf: its liveWorlds, or from a Worker from
+	// before, the Earth's and the Moon's keys and the rest off): 'open', 'spent', 'off' or 'unknown'.
 	const liveVisit = LIVE_TEST?.visit ?? visit;
-	const closedWorlds = [ ...( ! liveOn && liveReason !== 'unknown' ? [ 'earth' ] : [] ), ...( liveMoon === false && ( liveMoonReason || liveReason ) !== 'unknown' ? [ MOON ] : [] ) ];
+	const liveStates = worldsOf( { live: liveOn, liveReason, liveMoon, liveMoonReason, ...( liveWorlds && typeof liveWorlds === 'object' ? { liveWorlds } : {} ) } );
+	const closedWorlds = LIVE_WORLDS.filter( id => liveStates[ id ] === 'spent' || liveStates[ id ] === 'off' );
 	// (Of those, the ones whose budget is spent, for the toast below: a world only switched off says
 	// nothing of lots of drivers.)
-	const spentWorlds = [ ...( liveReason === BUDGET_SPENT ? [ 'earth' ] : [] ), ...( liveMoonReason === BUDGET_SPENT ? [ MOON ] : [] ) ];
-	const live = ( liveOn || liveMoon === true || liveReason === 'unknown' ) && typeof liveVisit === 'string' && liveVisit
+	const spentWorlds = LIVE_WORLDS.filter( id => liveStates[ id ] === 'spent' );
+	// Each other world's frame (body.js's group, the one a recentre moves, and its sphere), for the
+	// rooms (live.js) and the dots (online.js).
+	const liveBodies = Object.fromEntries( OFF_EARTH.map( id => [ id, { group: bodies[ id ].group, ellipsoid: bodies[ id ].ellipsoid } ] ) );
+	const live = LIVE_WORLDS.some( id => liveStates[ id ] === 'open' || liveStates[ id ] === 'unknown' ) && typeof liveVisit === 'string' && liveVisit
 		? createLive( {
-			earth, ellipsoid, moon: { group: moon.group, ellipsoid: moon.ellipsoid }, world: () => world, closed: closedWorlds,
+			earth, ellipsoid, bodies: liveBodies, world: () => world, liveWorlds: LIVE_WORLDS, closed: closedWorlds,
 			visit: liveVisit, player: () => board.player, ride: { vehicle: panel.vehicle.id, look: lookOf( panel.vehicle ) },
 		} )
 		: null;
-	// The others' cars, through the frame of the world this page is on: the Earth's, or the Moon's
-	// (on Mars, Vesta and Ceres none are drawn: see liveHere).
+	// The others' cars, through the frame of the world this page is on (drawn only for those on it,
+	// and only while its rooms are this page's: ghosts.js).
 	const ghosts = live && createGhosts( {
-		scene, earth, frame: () => world === MOON ? moon.group : earth, camera, vehicles, models: ghostShapes, live, tags: $( 'live-tags' ), own: () => state.entry?.pivot ?? null,
+		scene, earth, frame: () => world === EARTH ? earth : bodies[ world ].group, camera, vehicles, models: ghostShapes, live, tags: $( 'live-tags' ), own: () => state.entry?.pivot ?? null,
 		effects: driver.effects,
 	} );
 	// (On a world without driving with others, they're told it's that world's, as if not on the
@@ -949,10 +983,19 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	const liveMode = () => liveHere() ? state.mode : world;
 	const friends = live && setUpFriends( { live, ghosts, vehicles, mode: liveMode, goTo, onInvite: () => stats.add( 'party', 'made' ) } );
 	// Where people are driving now, on the globe (online.js): with driving with others, and nothing
-	// of it without; on the Moon's globe, the Moon's.
+	// of it without; on each world's globe, that world's. Its row for drivers on two or more other
+	// worlds opens the orrery (onOthers), and each world's count (onCounts, null without) goes on the
+	// panel's Worlds button and into the orrery.
 	const globeUi = $( 'globe-ui' );
 	const online = live && createOnline( {
-		camera, earth, ellipsoid, moon: { group: moon.group, ellipsoid: moon.ellipsoid }, world: () => world, onWorld: next => setWorld( next ),
+		camera, earth, ellipsoid, bodies: liveBodies, world: () => world, onWorld: next => setWorld( next ),
+		onOthers: row => openOrrery( row ),
+		onCounts: worlds => {
+
+			panel.setWorldCount( worlds?.[ world ]?.total ?? null );
+			orrery?.update();
+
+		},
 		canvas, live, panel, mode: liveMode, onPick: flyToPlace, onZoom: zoomTo, earthless: !! earthClosed,
 		// The Garage covers the globe (the whole screen on a phone): nothing's asked while it's open.
 		paused: () => garage.isOpen,
@@ -969,10 +1012,9 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 		friends.joinParty( partyCode );
 		stats.add( 'party', 'joined' );
-		// (Its room for this world's spent today: why nothing comes of it here; on the other, it does.
-		// On Mars, Vesta or Ceres the party's rooms are the Earth's or the Moon's (live.js), and closed
-		// there means closed on both.)
-		if ( live.closedHere && spentWorlds.includes( live.world ) ) screens.toast( live.world === world ? budgetToast( world ) : BUDGET_TOAST, 10000 );
+		// (Its rooms on this world are spent today: why nothing comes of it here; on the worlds still
+		// open, it does, the party's room going on through one of them (live.js's here).)
+		if ( live.closedHere && spentWorlds.includes( world ) ) screens.toast( budgetToast( world, live.openWorlds() ), 10000 );
 
 	}
 	else if ( partyCode && spentWorlds.length ) screens.toast( BUDGET_TOAST, 10000 );
@@ -1067,6 +1109,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	function setMode( mode ) {
 
+		// Anything that leaves the globe (a drop-in, Join, a challenge's start) closes the orrery first.
+		if ( mode !== 'globe' && orrery?.isOpen ) orrery.close();
 		state.mode = mode;
 		document.body.dataset.mode = mode;
 		// A level-up waiting shows as the drive starts, and one showing goes as it pauses or ends.
@@ -1127,6 +1171,95 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	if ( earthClosed && worldOf( linked ) === EARTH ) setWorld( earthClosed.world ?? FALLBACK );
 	// A "challenge a friend" link: its card, over the challenges' list.
 	if ( challengeLink ) openChallengeLink( challengeLink );
+	// ?worlds=1 (and on the dev server a test's word): the orrery, open from the start; then it's out
+	// of the address, so a reload is a plain one. Not over a challenge's card.
+	const worldsLink = new URLSearchParams( location.search ).get( 'worlds' );
+	if ( worldsLink !== null ) {
+
+		const url = new URL( location.href );
+		url.searchParams.delete( 'worlds' );
+		history.replaceState( history.state, '', url );
+
+	}
+
+	if ( ( worldsLink === '1' || ORRERY_TEST?.onLoad ) && ! challengeLink ) openOrrery();
+
+	// --- the orrery (orrery.js, its own chunk, its CSS and pictures under /orrery/: nothing of it is
+	// fetched until it's first opened) ---
+
+	// It's a modal <dialog> (#orrery) over the globe, drawn by this page's renderer into its canvas
+	// in place of the scene while it's open (the frame below), so there's no second WebGL context.
+	// Picking a world there turns the globe to it (setWorld).
+	async function loadOrrery() {
+
+		if ( orrery ) return true;
+		orreryLoading ??= import( './orrery.js' ).then( module => module.createOrrery( {
+			dialog: $( 'orrery' ),
+			renderer,
+			current: () => world,
+			counts: () => online?.worlds ?? null,
+			party: () => live?.party ? [ ...live.players.values() ].map( ( { pid, name, world: on, away, globe: looking } ) => ( { pid, name, world: on, away, globe: looking ?? null } ) ) : [],
+			spots: id => ( id === EARTH ? SPOTS : SPOTS_ON[ id ] ?? [] ).slice( 0, 4 ).map( spot => ( { id: spot.id, name: spot.name, place: spot } ) ),
+			earthClosed: () => !! earthClosed,
+			reducedMotion,
+			onDrive: id => setWorld( id ),
+			onPlace: place => flyToPlace( place ),
+			onJoin: pid => goTo( pid ),
+			onClose: orreryClosed,
+		} ) );
+		try {
+
+			orrery = await orreryLoading;
+			return true;
+
+		} catch ( err ) {
+
+			orreryLoading = null;
+			screens.toast( `The worlds didn't load (${ err.message }). Try again in a moment.`, 6000 );
+			return false;
+
+		}
+
+	}
+
+	// Open it, from the globe only, and not over another dialog (the Garage, the leaderboard...).
+	// `opener`: what opened it, which has the focus back when it closes (else the Worlds button).
+	async function openOrrery( opener = null ) {
+
+		if ( orreryOpening || orrery?.isOpen || state.mode !== 'globe' ) return false;
+		orreryOpening = true;
+		try {
+
+			if ( ! await loadOrrery() ) return false;
+			if ( state.mode !== 'globe' || orrery.isOpen || document.querySelector( 'dialog[open]:not( #orrery )' ) ) return false;
+			orreryOpener = opener instanceof Element ? opener : document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
+			document.body.dataset.orrery = 'open';
+			globe.setEnabled( false );
+			orrery.open( orreryOpener );
+			return true;
+
+		} finally {
+
+			orreryOpening = false;
+
+		}
+
+	}
+
+	// Its onClose (before any Drive, spot or Join it closed for): the globe back as it was, and the
+	// focus back where it came from.
+	function orreryClosed() {
+
+		delete document.body.dataset.orrery;
+		globe.setEnabled( state.mode === 'globe' );
+		const back = orreryOpener?.isConnected && orreryOpener.getClientRects().length ? orreryOpener : globeUi.querySelector( '.worlds-open' );
+		orreryOpener = null;
+		back?.focus( { preventScroll: true } );
+
+	}
+
+	// The party's changes (who's in it, where they are) into the orrery's sheet while it's open.
+	if ( live ) for ( const type of [ 'welcome', 'join', 'leave', 'place', 'away', 'party', 'clear', 'closed', 'ended' ] ) live.on( type, () => orrery?.isOpen && orrery.update() );
 
 	// --- moving the scene to a new place, without loading anything again ---
 
@@ -1198,6 +1331,9 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		pads.transform( move );
 		if ( ! driver.active && state.entry ) carryParked( state.entry, move );
 		challenges?.recentred?.( move );
+		// The others' cars' effects and what's worked out of them in the scene (their snaps, in the
+		// world's own frame, are read through the frame's new matrixWorld anyway).
+		ghosts?.transform?.( move );
 		origin = { lat: place.lat, lon: place.lon, height: place.height ?? 0 };
 		recentres ++;
 		return move;
@@ -1291,19 +1427,23 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		pinAt( null );
 		globe.setBody( globeBodies[ world ] ?? earthBody );
 		panel.setWorld( world );
-		// A party is told which world's globe this is; an area's room of the other world goes. (Mars,
-		// Vesta and Ceres have no rooms: live.js keeps them in the last of the Earth's or the Moon's,
-		// away.)
+		panel.setWorldCount( online?.worlds?.[ world ]?.total ?? null );
+		markLive();
+		// A party is told which world's globe this is; an area's room of the world left goes. (On a
+		// world whose rooms are closed today, live.js keeps a party in another world's still open,
+		// away, looking at this one's globe.)
 		live?.worldChanged();
 		const look = at ?? lastLook[ world ] ?? WORLDS[ world ].first ?? home;
 		// The world's frame on the place looked at, as the Earth's is on the last place driven.
 		if ( offEarth() ) placeFrame( { lat: look.lat, lon: look.lon, height: 0 } );
-		// In from further out, as if arriving (and the light by where the camera now is).
+		// In from further out, as if arriving (and the light by where the camera now is); for a
+		// visitor asking for less motion, straight there.
 		const orbit = globe.orbit( look.lat, look.lon );
-		globe.place( { ...orbit, distance: orbit.distance * 2.4 } );
+		const still = ! at && reducedMotion();
+		globe.place( still ? orbit : { ...orbit, distance: orbit.distance * 2.4 } );
 		globe.capture();
 		lightFor();
-		if ( ! at ) globe.flyTo( orbit, { duration: 2.2 } );
+		if ( ! at && ! still ) globe.flyTo( orbit, { duration: 2.2 } );
 		return true;
 
 	}
@@ -1531,10 +1671,11 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		stats.add( 'dropin_time', dropinBucket( performance.now() - drop.began ) );
 		stats.once( 'funnel', 'driving' );
 		live?.setRide( vehicle.id, lookOf( vehicle ) );
-		// Where you dropped in, on its world: the Moon's has its own rooms, and its place says so. On
-		// Mars, Vesta and Ceres nobody's told where you are: you're on the globe as far as they know.
+		// Where you dropped in, on its world: each has its own rooms, and a place off the Earth says
+		// which. (On a world without driving with others nobody's told: you're on the globe as far as
+		// they know.)
 		if ( ! liveHere() ) live?.setAway();
-		else live?.setPlace( { name: placeLabel( state.place ), lat: state.place.lat, lon: state.place.lon, height: state.place.height, ...( world === MOON ? { world: MOON } : {} ) } );
+		else live?.setPlace( { name: placeLabel( state.place ), lat: state.place.lat, lon: state.place.lon, height: state.place.height, ...( offEarth() ? { world } : {} ) } );
 		// A challenge's start: its gates or items and its countdown (challenges.js), which shows the keys
 		// over it if they haven't been this visit.
 		const started = challenges?.arrived( state.place ) ?? false;
@@ -2071,10 +2212,10 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	}
 
 	// A world's frame: its group, whose matrixWorld takes positions in it (Earth-centred, or the
-	// Moon's) into the scene, and its shape.
+	// other world's own, body-fixed) into the scene, and its shape (the Earth's for anything else).
 	function frameOf( which ) {
 
-		return which === MOON ? { group: moon.group, shape: moon.ellipsoid } : { group: earth, shape: ellipsoid };
+		return which !== EARTH && bodies[ which ] ? { group: bodies[ which ].group, shape: bodies[ which ].ellipsoid } : { group: earth, shape: ellipsoid };
 
 	}
 
@@ -2095,11 +2236,11 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	}
 
 	// Whether others in the room are driving on this page's world (not on the globe, and not a party
-	// friend on the other world): what levels count as together, and the play stats as with others.
-	// (On Mars, Vesta and Ceres nobody is: liveHere() is false there.)
+	// friend on another world): what levels count as together, and the play stats as with others.
+	// (Nobody is while this world's rooms are closed today and a party's room is another world's.)
 	function withOthers() {
 
-		return !! live && liveHere() && [ ...live.players.values() ].some( p => ! p.away && p.world === live.world );
+		return !! live && liveHere() && live.world === world && [ ...live.players.values() ].some( p => ! p.away && p.world === world );
 
 	}
 
@@ -2166,11 +2307,11 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 		const spot = besideOf( other );
 		if ( ! spot ) return;
-		const theirs = other.world === MOON ? MOON : EARTH;
+		const theirs = isWorld( other.world ) ? other.world : EARTH;
 		const laid = theirs === world && sea.active && ( sea.lake !== null || sea.reaches( - spot.local.x, spot.local.z ) ) ? { lake: sea.lake } : null;
 		const beside = {
 			name: other.place?.name || 'Dropped pin', lat: spot.lat, lon: spot.lon, height: spot.height, heading: spot.heading, beside: true, laid, riding: spot.riding,
-			...( theirs === MOON ? { world: MOON } : {} ),
+			...( theirs !== EARTH ? { world: theirs } : {} ),
 		};
 		// On another world: there (the globe turned to it, loading it the first time, or from a page
 		// with no Earth this visit the way boot.js has to it), and a drop-in beside them.
@@ -2183,8 +2324,10 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		}
 
 		const here = () => ( state.mode === 'driving' || state.mode === 'paused' ) && !! state.entry;
-		// On the Moon, near enough: straight there, on the Moon's ground under them (no water there).
-		if ( world === MOON && here() && spot.local.length() < GO_NEAR ) {
+		// On another world, near enough: straight there, on its ground under them (no water there). On
+		// a small world whose frame follows the car (WORLDS' recentre), only within that of the scene's
+		// middle, where its ground is sharp already; farther, a drop-in, which settles the ground.
+		if ( offEarth() && here() && spot.local.length() < Math.min( GO_NEAR, WORLDS[ world ].recentre ?? Infinity ) ) {
 
 			const y = ground.heightAt( spot.local.x, spot.local.z, spot.local.y + 3, 6 );
 			if ( y !== null ) {
@@ -2218,8 +2361,10 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// grounded; where they dropped in, they started on it), else null.
 	function besideOf( other ) {
 
-		// (In their world's frame: the Moon's for a driver there. `local` is only of use on that world.)
-		const { group, shape: ellipsoid } = frameOf( other.world === MOON ? MOON : 'earth' );
+		// (In their world's frame: the Earth's, or their other world's own. `local` is only of use on
+		// that world.)
+		const theirs = isWorld( other.world ) ? other.world : EARTH;
+		const { group, shape: ellipsoid } = frameOf( theirs );
 		group.updateWorldMatrix( true, false );
 		if ( ! other.s ) {
 
@@ -2240,7 +2385,11 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		const [ sinLat, cosLat, sinLon, cosLon ] = [ Math.sin( carto.lat ), Math.cos( carto.lat ), Math.sin( carto.lon ), Math.cos( carto.lon ) ];
 		_ahead.set( 0, 0, - 1 ).applyQuaternion( _q );
 		const east = - sinLon * _ahead.x + cosLon * _ahead.y;
-		const north = - sinLat * cosLon * _ahead.x - sinLat * sinLon * _ahead.y + cosLat * _ahead.z;
+		// (North along the ground: on a small world far from round, along its level there (level.js),
+		// which a car on it is level with; the step beside them stays along the sphere's.)
+		const level = levelled( theirs ) ? levelFrame( theirs, carto.lat * MathUtils.RAD2DEG, carto.lon * MathUtils.RAD2DEG ).north : null;
+		const north = level ? level[ 0 ] * _ahead.x + level[ 1 ] * _ahead.y + level[ 2 ] * _ahead.z
+			: - sinLat * cosLon * _ahead.x - sinLat * sinLon * _ahead.y + cosLat * _ahead.z;
 		const turn = Math.atan2( east, north );
 		const heading = MathUtils.euclideanModulo( turn * MathUtils.RAD2DEG, 360 );
 		// To the right of that heading along the ground (east and north there), at their height: not
@@ -2330,9 +2479,12 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	window.addEventListener( 'keydown', e => {
 
-		// The leaderboard (or the challenges) over everything: its own keys (Esc closes it).
-		if ( board.isOpen || challenges?.isOpen || isTyping( e ) || e.ctrlKey || e.metaKey || e.altKey || e.repeat ) return;
+		// The leaderboard (or the challenges, or the orrery, or that coming up) over everything: its
+		// own keys (Esc closes it; the orrery's M too).
+		if ( board.isOpen || challenges?.isOpen || orreryOpening || orrery?.isOpen || isTyping( e ) || e.ctrlKey || e.metaKey || e.altKey || e.repeat ) return;
+		// M: out a level, from driving to the globe, and from the globe to the orrery.
 		if ( e.code === 'KeyM' && state.mode !== 'globe' ) toGlobe();
+		else if ( e.code === 'KeyM' && ! garage.isOpen ) openOrrery();
 		else if ( e.code === 'KeyH' && state.mode === 'driving' && friends ) friends.honk();
 		else if ( state.mode === 'paused' && ( e.code === 'Escape' || e.code === 'Enter' ) ) {
 
@@ -2498,9 +2650,16 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		ghosts?.update( dt, liveHere() && ( state.mode === 'driving' || state.mode === 'paused' ) );
 		online?.update();
 		// Not while the Garage is open: its turntable draws instead, and on a phone it covers the
-		// screen, so drawing the world behind it as well would only halve the frame rate.
-		if ( ! garage.isOpen ) renderer.render( scene, camera );
-		globe.capture();
+		// screen, so drawing the world behind it as well would only halve the frame rate. While the
+		// orrery's open, it draws in the world's place (into this canvas, under its dialog), and only
+		// when something there has changed.
+		if ( orrery?.isOpen ) orrery.render( dt );
+		else {
+
+			if ( ! garage.isOpen ) renderer.render( scene, camera );
+			globe.capture();
+
+		}
 
 		slow -= dt;
 		if ( slow <= 0 ) {
@@ -2655,6 +2814,16 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 		},
 		openChallenges, openAchievements,
+		// The orrery: open() (resolves whether it opened), close() and whether it's open.
+		orrery: {
+			open: () => openOrrery(),
+			close: () => orrery?.isOpen && orrery.close(),
+			get isOpen() {
+
+				return !! orrery?.isOpen;
+
+			},
+		},
 		// The achievements' notices waiting to be shown (a challenge's run holds them).
 		get notices() {
 

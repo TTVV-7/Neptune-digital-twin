@@ -56,20 +56,36 @@
 		// the message: an hour driving with others is about 900 requests (5 a second, billed 20 to a
 		// request), and a driver alone in a room sends only a keepalive. On the Free plan every
 		// Durable Object fails for the rest of the day once all of them together pass 100,000,
-		// DriveLimits' visit counts included, and then nobody could start a drive: 40,000 leaves the
-		// rest for those, with room for the minute the rooms' counts can run behind. On Workers Paid,
+		// DriveLimits' visit counts included, and then nobody could start a drive: 40,000 (with the other
+		// worlds' below, 70,000) leaves the rest for those, with room for the minute the rooms' counts
+		// can run behind. On Workers Paid,
 		// past the million a month included, requests are $0.15 a million: each 100,000 a day more is
 		// 3 million a month, $0.45 (docs/world-drive.md, "What it costs"). 0 is off.
 		"LIVE_DAILY_BUDGET": "40000",
 		// The Moon's rooms' own budget, the same way: the Moon is never limited by the Earth's caps,
 		// and spending the Earth's budget never shuts its rooms, but on the Free plan the bill is the
-		// same 100,000, so they keep to a day's share of their own (20,000), and the Earth's and the
-		// Moon's together leave 40,000 for the rest. At most LIVE_ADDRESS_VISITS (20, unset) visits not
-		// counted against the Earth's caps (the Moon's) connect to rooms from one address in a day, in
-		// all, and one address's connections spend at most an eighth of each world's budget in a day
-		// (LIVE_ADDRESS_SHARE, 8, unset): it takes eight addresses to spend either. On Workers Paid
-		// each can be raised; 0 is off on the Moon.
+		// same 100,000, so they keep to a day's share of their own (20,000). At most
+		// LIVE_ADDRESS_VISITS (20, unset) visits not counted against the Earth's caps (the free
+		// worlds') connect to rooms from one address in a day, in all, and one address's connections
+		// spend at most an eighth of each world's budget in a day (LIVE_ADDRESS_SHARE, 8, unset; but
+		// never less than LIVE_ADDRESS_FLOOR, below): it takes eight addresses to spend the Earth's or
+		// the Moon's. On Workers Paid each can be raised; 0 is off on the Moon.
 		"LIVE_MOON_DAILY_BUDGET": "20000",
+		// Mars's, Vesta's and Ceres's rooms' own budgets, the same way (0 is off on that world). Each pays
+		// only for its own area rooms (one with anyone in it is about 2,880 a day kept busy all day: an
+		// alarm and a report a minute) and its own drivers' connections and messages (about 900 an hour
+		// for each moving with others in sight), never for anyone watching its globe or page loads
+		// (those are the Earth's, or the Moon's once the Earth's is spent). The Earth's, the Moon's and
+		// these come to 70,000 a day, leaving 30,000 of the Free plan's 100,000 for visits, names and
+		// scores (the owner chose the Free plan with these). One address's connections may spend a
+		// world's budget over LIVE_ADDRESS_SHARE (8, unset) in a day, but never less than
+		// LIVE_ADDRESS_FLOOR: an eighth of Vesta's would be 375, under half an hour with others in
+		// sight, so it's 1,000 on each world (past it, that address drives on alone on that world only).
+		// On Workers Paid they can be raised (10,000 each would cost at most about $0.05 a month more).
+		"LIVE_MARS_DAILY_BUDGET": "4000",
+		"LIVE_VESTA_DAILY_BUDGET": "3000",
+		"LIVE_CERES_DAILY_BUDGET": "3000",
+		"LIVE_ADDRESS_FLOOR": "1000",
 		// Google AdSense (docs/world-drive.md, "Ads"): one banner on the globe, never while driving and
 		// never for a supporter. ADSENSE_CLIENT is the publisher id, "ca-pub-" and 16 digits (public);
 		// empty, no ads at all: nothing about them is loaded or shown, and /ads.txt is a 404.

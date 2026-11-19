@@ -5,41 +5,88 @@
 // imports it too.
 //
 // A room is one Durable Object: a party (party:CODE, the friends who opened its link) or the
-// drivers in one area (near:BAND.COL, about 11 km across, with up to NEARBY_SHARDS of it when one
-// is full). A page is in one room at a time. Everyone is a ghost: cars pass through each other.
+// drivers in one area of one world (near:BAND.COL on the Earth, moon:, mars:, vesta: or ceres:
+// BAND.COL on the others, each about 11 km across, with up to NEARBY_SHARDS of it when one is full).
+// A page is in one room at a time. Everyone is a ghost: cars pass through each other.
 //
-// The page connects to /api/live?room=<room> with the subprotocols [ PROTOCOL, <visit token> ]
-// (the token /api/visit handed out: a browser can't set headers on a WebSocket, and a token in the
-// address would end up in logs), from worlddrive.app itself (its Origin). The Worker checks both
-// before the room is touched, and the room answers with PROTOCOL.
+// The page connects to /api/live?room=<room> with the subprotocols [ ...PAGE_PROTOCOLS, <visit
+// token> ] (the token /api/visit handed out: a browser can't set headers on a WebSocket, and a token
+// in the address would end up in logs), from worlddrive.app itself (its Origin). The Worker checks
+// both before the room is touched, and the room answers with the protocol of the version it speaks.
 //
-// Positions are Earth-centred (ECEF, metres) and orientations a quaternion in that same frame, so
-// two pages centred on different places (each recentres the scene where it dropped in) agree on
-// where a car is: each turns them into its own scene with the tiles' (or test globe's) matrixWorld.
-// On the Moon they're Moon-centred instead, in the Moon's own frame (moon.js: Z through its north
-// pole, X through 0° N 0° E, a sphere of MOON_RADIUS), and the page turns them into its scene with
-// the Moon's group's matrixWorld. Which world a driver is on goes with where they dropped in
-// (PLACE's world), and the Moon's areas are rooms of their own (moon:BAND.COL), so a Moon driver
-// only ever shares an area's room with Moon drivers; a party has both.
+// Positions are in the driver's world's own frame: on the Earth Earth-centred (ECEF, metres), and on
+// every other world centred on it in its body frame (body.js, level.js: Z through its north pole, X
+// through 0° N 0° E, a sphere of WORLDS[ world ].radius, planetocentric); orientations a quaternion
+// in that same frame. So two pages centred on different places (each recentres its scene where it
+// dropped in, and Vesta and Ceres as the car drives on, in a levelled frame) agree on where a car is:
+// each turns them into its own scene with that world's group's (or the tiles') matrixWorld, read
+// afresh every frame. Which world a driver is on goes with where they dropped in (PLACE's world), and
+// each world's areas are rooms of their own, so a driver only ever shares an area's room with
+// drivers on its world; a party has all five.
 //
-// Versions: a page from before the Moon had drivers speaks PROTOCOL (v1) and offers
-// [ PROTOCOL, token ]; a page since speaks PROTOCOL_WORLDS (v2) and offers [ PROTOCOL_WORLDS,
-// PROTOCOL, token ], so a room still running the old code (for a few minutes after a deploy) can
-// answer it with v1, and the page then stays alone on the Moon as an old page does. A room tells a
-// v1 page nothing of the Moon: a Moon driver in its party is on the globe to it, with no place,
-// car, trick or honk (see worker/drive/live.js's seenBy); and a v1 page is never let into one of
-// the Moon's areas.
+// Versions (see versionOf): a page from before the Moon had drivers speaks PROTOCOL (v1) and offers
+// [ PROTOCOL, token ]; one from when the Moon had them PROTOCOL_WORLDS (v2), offering [
+// PROTOCOL_WORLDS, PROTOCOL, token ]; and one since Mars, Vesta and Ceres have them PROTOCOL_ALL
+// (v3), offering [ PROTOCOL_ALL, PROTOCOL_WORLDS, PROTOCOL, token ]. Each version knows the worlds
+// in KNOWN_WORLDS (a literal, never worlds.js's list: a sixth world's drivers need a v4, as no page
+// already out there could tell where they are). A room still running older code (for a few minutes
+// after a deploy) answers with the newest it speaks, and the page then behaves as that version for
+// the connection: alone on any world that version doesn't know. A room tells a page nothing of a
+// world its version doesn't know: a driver there in its party is on the globe to it, with no place,
+// car, trick or honk (see worker/drive/live.js's seenBy); and a page is never let into one of such
+// a world's areas.
 
 import { DRIVE_CARS, LIBRARY_VEHICLES, PASS_RIDES, WORKS_RIDES } from './catalog.js';
+import { WORLDS } from './worlds.js';
 
 export const PROTOCOL = 'worlddrive-live.v1';
 export const PROTOCOL_WORLDS = 'worlddrive-live.v2';
+export const PROTOCOL_ALL = 'worlddrive-live.v3';
+// What a page from now offers, newest first (then its visit's token).
+export const PAGE_PROTOCOLS = Object.freeze( [ PROTOCOL_ALL, PROTOCOL_WORLDS, PROTOCOL ] );
 
-// The worlds there are, as places and rooms name them ('moon' is moon-places.js's MOON).
+// The version (1, 2 or 3) a protocol's name is, or 0 for none of them.
+export function versionOf( protocol ) {
+
+	return protocol === PROTOCOL_ALL ? 3 : protocol === PROTOCOL_WORLDS ? 2 : protocol === PROTOCOL ? 1 : 0;
+
+}
+
+// The worlds there are, as places and rooms name them (worlds.js's ids).
 export const EARTH = 'earth';
 export const MOON_WORLD = 'moon';
 // The Moon's radius (m), as moon-height.js's MOON_RADIUS: its frame's sphere.
 export const MOON_RADIUS = 1737400;
+// The worlds driving with others is on, in worlds.js's order: a literal, as KNOWN_WORLDS is.
+export const LIVE_WORLD_IDS = Object.freeze( [ EARTH, MOON_WORLD, 'mars', 'vesta', 'ceres' ] );
+// The worlds each version of the protocol knows of: literals, so a world added to worlds.js later
+// isn't taken by a page already out there for one it knows (its drivers need a new version).
+export const KNOWN_WORLDS = Object.freeze( {
+	1: Object.freeze( [ EARTH ] ),
+	2: Object.freeze( [ EARTH, MOON_WORLD ] ),
+	3: LIVE_WORLD_IDS,
+} );
+
+export function isLiveWorld( id ) {
+
+	return typeof id === 'string' && LIVE_WORLD_IDS.includes( id );
+
+}
+
+// Whether a page (or room) speaking `version` knows of `world`: one it doesn't is dropped as if it
+// weren't said (its driver is away, on the globe, to that page).
+export function knows( version, world ) {
+
+	return typeof world === 'string' && ( KNOWN_WORLDS[ version ] ?? KNOWN_WORLDS[ 1 ] ).includes( world );
+
+}
+
+// The error for a world that driving with others isn't on (never taken for the Earth).
+function unknownWorld( world ) {
+
+	return new TypeError( `Not a world driving with others is on: ${ world }` );
+
+}
 
 // --- rooms ---------------------------------------------------------------------------------------
 
@@ -51,20 +98,21 @@ const PARTY_CODE = new RegExp( `^[${ PARTY_ALPHABET }]{${ PARTY_CODE_LENGTH }}$`
 export const PARTY_MAX = 8;
 export const NEARBY_MAX = 20;
 export const NEARBY_SHARDS = 4;
-// Nearby areas: bands CELL_DEG of latitude tall, cut into columns about as wide: on the Earth 0.1°
-// (11.1 km), and on the Moon MOON_CELL_DEG, which is as many kilometres on its smaller sphere (0.36°
-// of 1,737.4 km is 10.9 km), so a Moon area is the size of an Earth one. Each world's areas are
-// named by a prefix of their own: near:BAND.COL on the Earth, moon:BAND.COL on the Moon.
+// Nearby areas: bands CELL_DEGS[ world ] of latitude tall, cut into columns about as wide, so an area
+// is about 11 km across on each world: on the Earth CELL_DEG, 0.1° (11.1 km); on the Moon
+// MOON_CELL_DEG, 0.36° of 1,737.4 km (10.9 km); on Mars 0.18° of 3,389.5 km (10.6 km); on Vesta 2.4°
+// of its 262.7 km sphere (11.0 km); on Ceres 1.25° of 470 km (10.3 km). Each a whole number of bands
+// in 180°. Near the poles a column is held to 20 times a band's width (columnDeg), wide on Vesta;
+// its rooms stay small all the same. Each world's areas are named by a prefix of their own: near:
+// BAND.COL on the Earth, and the world's id on the others (moon:126.330, vesta:30.12).
 export const CELL_DEG = 0.1;
 export const MOON_CELL_DEG = 0.36;
-const GRIDS = {
-	[ EARTH ]: { prefix: 'near', deg: CELL_DEG, bands: Math.round( 180 / CELL_DEG ) },
-	[ MOON_WORLD ]: { prefix: 'moon', deg: MOON_CELL_DEG, bands: Math.round( 180 / MOON_CELL_DEG ) },
-};
-const NEAR = /^(near|moon):(\d{1,4})\.(\d{1,5})(?:#(\d))?$/;
+export const CELL_DEGS = Object.freeze( { [ EARTH ]: CELL_DEG, [ MOON_WORLD ]: MOON_CELL_DEG, mars: 0.18, vesta: 2.4, ceres: 1.25 } );
+const GRIDS = Object.fromEntries( LIVE_WORLD_IDS.map( world => [ world, { prefix: world === EARTH ? 'near' : world, deg: CELL_DEGS[ world ], bands: Math.round( 180 / CELL_DEGS[ world ] ) } ] ) );
+const NEAR = /^(near|moon|mars|vesta|ceres):(\d{1,4})\.(\d{1,5})(?:#(\d))?$/;
 const PARTY = /^party:([A-Z0-9]+)$/;
 // Which world each prefix is.
-const WORLD_OF = { near: EARTH, moon: MOON_WORLD };
+const WORLD_OF = Object.fromEntries( LIVE_WORLD_IDS.map( world => [ GRIDS[ world ].prefix, world ] ) );
 
 // A new party code from `random`, a function filling a Uint8Array and returning it: bytes =>
 // crypto.getRandomValues( bytes ) (passed bare, getRandomValues has lost its crypto and throws).
@@ -97,11 +145,13 @@ function columns( band, grid = GRIDS[ EARTH ] ) {
 
 }
 
-// The nearby room for a spot (degrees) on `world` (the Earth unless it's 'moon'), shard 0: e.g.
-// 'near:1277.1088', or on the Moon 'moon:126.330'.
+// The nearby room for a spot (degrees, planetocentric off the Earth) on `world` (one of
+// LIVE_WORLD_IDS: any other throws, never taken for the Earth), shard 0: e.g. 'near:1277.1088', or
+// on the Moon 'moon:126.330'.
 export function cellOf( lat, lon, world = EARTH ) {
 
-	const grid = GRIDS[ world === MOON_WORLD ? MOON_WORLD : EARTH ];
+	const grid = GRIDS[ world ];
+	if ( ! isLiveWorld( world ) ) throw unknownWorld( world );
 	const band = Math.min( grid.bands - 1, Math.max( 0, Math.floor( ( lat + 90 ) / grid.deg ) ) );
 	const wrapped = ( ( lon + 180 ) % 360 + 360 ) % 360;
 	const col = Math.min( columns( band, grid ) - 1, Math.floor( wrapped / columnDeg( band, grid ) ) );
@@ -109,10 +159,13 @@ export function cellOf( lat, lon, world = EARTH ) {
 
 }
 
-// Which world an area's room (any shard) is on: 'earth' or 'moon'; null for anything else.
+// Which world an area's room (any shard) is on: one of LIVE_WORLD_IDS; null for anything else (a
+// party's too).
 export function worldOfRoom( room ) {
 
-	return typeof room === 'string' ? WORLD_OF[ room.slice( 0, room.indexOf( ':' ) ) ] ?? null : null;
+	if ( typeof room !== 'string' ) return null;
+	const prefix = room.slice( 0, room.indexOf( ':' ) );
+	return Object.hasOwn( WORLD_OF, prefix ) ? WORLD_OF[ prefix ] : null;
 
 }
 
@@ -127,7 +180,9 @@ export function shardOf( room, shard ) {
 // band stops at 180°.
 export function boundsOf( cell ) {
 
-	const grid = GRIDS[ worldOfRoom( cell ) ?? EARTH ];
+	const world = worldOfRoom( cell );
+	if ( ! world ) throw unknownWorld( cell );
+	const grid = GRIDS[ world ];
 	const [ band, col ] = cell.slice( cell.indexOf( ':' ) + 1 ).split( '#' )[ 0 ].split( '.' ).map( Number );
 	const width = columnDeg( band, grid );
 	const west = col * width - 180;
@@ -136,8 +191,8 @@ export function boundsOf( cell ) {
 }
 
 // { kind: 'party', code, max, world: null } or { kind: 'near', world, cell, shard, max } for a
-// room's name (world: 'earth' for near:..., 'moon' for moon:...), or null for anything that isn't
-// one.
+// room's name (world: 'earth' for near:..., and the prefix's world for moon:, mars:, vesta: and
+// ceres:), or null for anything that isn't one.
 export function parseRoom( text ) {
 
 	if ( typeof text !== 'string' || text.length > 40 ) return null;
@@ -203,27 +258,40 @@ export const CLOSE = {
 	hello: 4003, // no hello in time
 	rate: 4004, // too many messages
 	expired: 4005, // the visit's token ran out (VISIT_HOURS after it was handed out)
-	off: 4006, // driving with others is switched off (LIVE), or till midnight UTC (BUDGET_SPENT)
+	off: 4006, // driving with others is switched off (LIVE), or till midnight UTC on this world (its reason)
 	idle: 4007, // nothing heard for IDLE_MS
 };
-// The day's budget for driving with others is spent (worker/drive/live.js): the reason CLOSE.off
-// comes with, /api/live's 503 says in `reason` and /api/config in `liveReason` (with live: false).
-// It's back after midnight UTC.
+// The day's budget for driving with others on a world is spent (worker/drive/live.js): the reason
+// CLOSE.off comes with, /api/live's 503 says in `reason` and /api/config in `liveReason` (with live:
+// false), `liveMoonReason` and each world's `liveWorlds[ world ].reason`. It's back after midnight
+// UTC.
 export const BUDGET_SPENT = 'budget';
+// The connection's address has spent its share of its world's day (worker/drive/live.js): the
+// reason CLOSE.off comes with to a v3 page, which then drives on alone on that world for the rest of
+// its visit and with others on the rest (a v1 or v2 page is closed with CLOSE.rate instead, as it
+// always was, tries again and is turned away there).
+export const SHARE_SPENT = 'share';
 
 // --- what's said ---------------------------------------------------------------------------------
 //
+// A WORLD below is one of LIVE_WORLD_IDS, said only to (and only taken from) a page whose version
+// knows it (knows): anything else is as if it weren't said. The Earth is said as no world at all
+// wherever a page from before the Moon had drivers would read it.
+//
 // Page → room (JSON text, one message each):
 //   { t: 'hello', player: { id, secret } | null, vehicle, look, place: PLACE | null, away: bool,
-//        world? }
+//        world?, globe? }
 //        first, once. player is the leaderboard's (its name is looked up; without one the room
-//        names you "Guest 1234"). away: on the globe, not driving yet. world (v2): 'moon' while
-//        its globe is the Moon's (otherwise the Earth's, or its place's).
+//        names you "Guest 1234"). away: on the globe, not driving yet. world (v2 and on): the
+//        WORLD whose rooms and budget it uses while on the globe (otherwise its place's; v2 sends
+//        only 'moon'); globe (v3): the WORLD whose globe it's looking at, which may be another,
+//        shown to its party and never charged.
 //   { t: 's', s: STATE }        where the car is (see packState), while anyone else is there
 //   { t: 'look', vehicle, look }   a new ride or look
 //   { t: 'place', place: PLACE }   dropped in somewhere (and so not away)
-//   { t: 'away', world? }       back on the globe (v2: the Moon's, with world 'moon'; a page
-//                               turning its globe to the other world says so again)
+//   { t: 'away', world?, globe? }   back on the globe: world (v2 and on) the WORLD whose budget it
+//                               uses (v2: the Moon's with world 'moon'), globe (v3) the WORLD whose
+//                               globe it's looking at; a page turning its globe says so again
 //   { t: 'trick', score }       landed a trick worth this (a whole number, 1 to MAX_TRICK)
 //   { t: 'honk' }
 //   'ping'                      (plain text) keepalive
@@ -234,29 +302,34 @@ export const BUDGET_SPENT = 'budget';
 //   { t: 'full', room, max }   the room has its most already: sent just before CLOSE.full, which
 //        can be slow to arrive, so the page moves on as soon as it hears this
 //   { t: 'join', player: PLAYER }   { t: 'leave', pid }
-//   { t: 'look', pid, vehicle, look }   { t: 'place', pid, place }   { t: 'away', pid }
+//   { t: 'look', pid, vehicle, look }   { t: 'place', pid, place }   { t: 'away', pid, globe? }
+//        (globe, to a v3 page: the WORLD whose globe they're looking at, when they said)
 //   { t: 'S', at: ms, s: [ [ PID, ...STATE, AGE ]... ] }   what's moved since the last of these, at
 //        the room's clock, each with how long (AGE, ms) the room had held it: a batch goes with the
 //        next message to arrive once FLUSH_MS has passed, so a car's state may be new or a while old.
 //        A car can be in one twice, oldest first: a state that was held back, and its next if
 //        that came FLUSH_MS or more after it (closer together, only the later goes)
 //   { t: 'trick', pid, score }   { t: 'honk', pid }
-//   then a close with one of CLOSE's codes when it's over.
+//   then a close with one of CLOSE's codes when it's over (CLOSE.off with BUDGET_SPENT or, to a v3
+//   page, SHARE_SPENT: only for the world it was on).
 //
 // PID: the room's own id for a connection (8 characters), never the leaderboard's player id.
 // PLAYER: { pid, name, star (a Supporter Pass), level, title, vehicle, look, place, away, s: STATE |
-//   null, world? }. level (1 to 50) and title (an id in levels.js's TITLES) are the leaderboard
-//   player's, null for a guest. s is null on the globe, and for a driver who was alone in the room:
-//   its page sends its car as it hears the join. world (to a v2 page only): 'moon' for a driver on
-//   the Moon (dropped in there, or on its globe), and then their place and s are the Moon's.
-// PLACE: { name, lat, lon, height, world? } (degrees, and the ground's height there in metres above
-//   the ellipsoid, or on the Moon above its sphere; world 'moon' for the Moon, none for the Earth):
-//   where its driver dropped in.
-// STATE: [ x, y, z, qx, qy, qz, qw, vx, vy, vz, flags ]: the car's pivot (ECEF metres, 2
-//   decimals; on the Moon, Moon-centred metres in its frame), its orientation (a quaternion in that
-//   frame, 4 decimals), its velocity (m/s in that frame, 2 decimals) and FLAGS. Which world a state
-//   is in is its driver's (the room only takes one that's on its driver's world: the two can't be
-//   mistaken, as no point is near both the Earth's ground and the Moon's).
+//   null, world?, globe? }. level (1 to 50) and title (an id in levels.js's TITLES) are the
+//   leaderboard player's, null for a guest. s is null on the globe, and for a driver who was alone in
+//   the room: its page sends its car as it hears the join. world: the driver's WORLD when it isn't
+//   the Earth (dropped in there, or using its rooms on the globe), and then their place and s are
+//   that world's; a driver on a world the page doesn't know is on the globe to it (away, no place,
+//   no s, no world). globe (to a v3 page, for a driver on the globe who said): the WORLD whose globe
+//   they're looking at.
+// PLACE: { name, lat, lon, height, world? } (degrees, planetocentric off the Earth, and the ground's
+//   height there in metres above the ellipsoid, or off the Earth above its world's sphere; world the
+//   WORLD for any but the Earth, none for the Earth): where its driver dropped in.
+// STATE: [ x, y, z, qx, qy, qz, qw, vx, vy, vz, flags ]: the car's pivot (in its world's frame,
+//   metres, 2 decimals: ECEF on the Earth, its body frame on the others, see toFrame), its
+//   orientation (a quaternion in that frame, 4 decimals), its velocity (m/s in that frame, 2
+//   decimals) and FLAGS. Which world a state is in is its driver's (the room only takes one that's on
+//   its driver's world, STATE_RADII: no two worlds' can be mistaken, as their shells don't overlap).
 
 export const MAX_TRICK = 1e7;
 
@@ -278,13 +351,31 @@ export const FLAGS = {
 };
 const FLAG_LIMIT = 1 << 12;
 
-// Earth-centred positions a car can be at: from the Dead Sea's shore under the polar radius to
-// well over Everest at the equator, flying. And Moon-centred ones: from under the floor of Antoniadi
-// crater (8.9 km down) to well over the Selenean summit (10.5 km up), flying, with room to spare.
-const NEAR_EARTH = [ 6340000, 6400000 ];
-const NEAR_MOON = [ MOON_RADIUS - 12000, MOON_RADIUS + 30000 ];
-// The heights a PLACE can be at (m), over the ellipsoid or the Moon's sphere.
-const PLACE_HEIGHTS = { [ EARTH ]: [ - 2000, 10000 ], [ MOON_WORLD ]: [ - 12000, 12000 ] };
+// The distances (m) from its world's middle a car on each can be at (STATE): on the Earth from the
+// Dead Sea's shore under the polar radius to well over Everest at the equator, flying; on the Moon
+// from under the floor of Antoniadi crater (8.9 km down) to well over the Selenean summit (10.5 km
+// up), flying, with room to spare. On the others, its sphere's radius with its lowest ground less
+// 3 km to its highest plus FLY_MARGIN (worlds.js): Mars 30 km, Vesta and Ceres 40 km (in their weak
+// gravity a boosted car climbs higher; how high isn't measured). Literals, as a world's radius and
+// heights never change once anything's been counted on it. No two worlds' overlap (Vesta's up to
+// 0.33 Mm, Ceres's 0.44 to 0.53, the Moon's 1.73 to 1.77, Mars's 3.38 to 3.44, the Earth's 6.34
+// to 6.40), so a state can't be taken for another world's.
+export const STATE_RADII = Object.freeze( {
+	[ EARTH ]: Object.freeze( [ 6340000, 6400000 ] ),
+	[ MOON_WORLD ]: Object.freeze( [ MOON_RADIUS - 12000, MOON_RADIUS + 30000 ] ),
+	mars: Object.freeze( [ 3377000, 3442000 ] ),
+	vesta: Object.freeze( [ 207700, 334700 ] ),
+	ceres: Object.freeze( [ 438000, 528500 ] ),
+} );
+// The heights a PLACE can be at (m), over the Earth's ellipsoid or the other worlds' spheres: each
+// world's lowest to highest ground (worlds.js).
+export const PLACE_HEIGHTS = Object.freeze( {
+	[ EARTH ]: Object.freeze( [ - 2000, 10000 ] ),
+	[ MOON_WORLD ]: Object.freeze( [ - 12000, 12000 ] ),
+	mars: Object.freeze( [ - 9500, 22500 ] ),
+	vesta: Object.freeze( [ - 52000, 32000 ] ),
+	ceres: Object.freeze( [ - 29000, 18500 ] ),
+} );
 // Faster than any ride goes, booster and all (m/s).
 const TOP_SPEED = 500;
 
@@ -303,14 +394,14 @@ export function packState( position, quaternion, velocity, flags ) {
 
 }
 
-// A STATE as sent, if it's one a real car on `world` (the Earth unless it's 'moon') could be in,
-// else null.
+// A STATE as sent, if it's one a real car on `world` (one of LIVE_WORLD_IDS) could be in, else null
+// (null too on any other world: none is taken for the Earth's).
 export function checkState( s, world = EARTH ) {
 
-	if ( ! Array.isArray( s ) || s.length !== 11 || ! s.every( Number.isFinite ) ) return null;
+	if ( ! isLiveWorld( world ) || ! Array.isArray( s ) || s.length !== 11 || ! s.every( Number.isFinite ) ) return null;
 	const [ x, y, z, qx, qy, qz, qw, vx, vy, vz, flags ] = s;
 	const r = Math.hypot( x, y, z );
-	const [ low, high ] = world === MOON_WORLD ? NEAR_MOON : NEAR_EARTH;
+	const [ low, high ] = STATE_RADII[ world ];
 	if ( r < low || r > high ) return null;
 	const q = Math.hypot( qx, qy, qz, qw );
 	if ( q < 0.9 || q > 1.1 ) return null;
@@ -363,27 +454,28 @@ export function checkLook( look ) {
 const PLACE_TEXT = /[^\p{L}\p{M}\p{N} .,'’\-#&/()°]+/gu;
 export const PLACE_LENGTH = 60;
 
-// A PLACE as sent, if it's one, else null. Its world is the Moon's only as world: 'moon' (anything
-// else is the Earth, as a page from before the Moon had drivers sends no world), and an Earth place
-// has none, so it's as it always was.
+// A PLACE as sent, if it's one, else null. Its world is one of the others than the Earth (moon,
+// mars, vesta, ceres) only as that world's id, its height checked against that world's ground;
+// anything else is the Earth's (as a page from before the Moon had drivers sends no world), and an
+// Earth place has none, so it's as it always was.
 export function checkPlace( place ) {
 
 	if ( ! place || typeof place !== 'object' ) return null;
 	const { lat, lon, height } = place;
-	const moon = place.world === MOON_WORLD;
-	const [ low, high ] = PLACE_HEIGHTS[ moon ? MOON_WORLD : EARTH ];
+	const world = isLiveWorld( place.world ) && place.world !== EARTH ? place.world : EARTH;
+	const [ low, high ] = PLACE_HEIGHTS[ world ];
 	if ( ! Number.isFinite( lat ) || Math.abs( lat ) > 90 || ! Number.isFinite( lon ) || Math.abs( lon ) > 180 ) return null;
 	if ( ! Number.isFinite( height ) || height < low || height > high ) return null;
 	// Only a string: anything else (an object with its own toString) is no name.
 	const name = [ ...( typeof place.name === 'string' ? place.name : '' ).replace( PLACE_TEXT, ' ' ).replace( /\s+/g, ' ' ).trim() ].slice( 0, PLACE_LENGTH ).join( '' ).trim();
-	return { name, lat: round( lat, 6 ), lon: round( lon, 6 ), height: round( height, 1 ), ...( moon ? { world: MOON_WORLD } : {} ) };
+	return { name, lat: round( lat, 6 ), lon: round( lon, 6 ), height: round( height, 1 ), ...( world === EARTH ? {} : { world } ) };
 
 }
 
-// Which world a PLACE is on: 'moon' or 'earth'.
+// Which world a PLACE is on: its world when that's one of LIVE_WORLD_IDS, else 'earth'.
 export function placeWorld( place ) {
 
-	return place?.world === MOON_WORLD ? MOON_WORLD : EARTH;
+	return isLiveWorld( place?.world ) ? place.world : EARTH;
 
 }
 
@@ -400,15 +492,19 @@ export function checkTrick( score ) {
 // already makes to DriveLimits (worker/drive/live.js), as dots: positions and counts, never who. A
 // party is private and never says; those on the globe aren't counted (paused drivers are: they're
 // parked in the game), nor anyone with "Show me to drivers nearby" off, who isn't in an area's room.
-// GET /api/online hands out the Earth's, and GET /api/online?world=moon the Moon's (kept under an
-// address of its own):
-//   { on, total, areas: [ DOT... ], moon }      the Earth's
-//   { on, total, areas: [ DOT... ], earth }     the Moon's
+// GET /api/online hands out the Earth's, and GET /api/online?world=<WORLD> another world's (each kept
+// under an address of its own):
+//   { on, total, areas: [ DOT... ], moon?, earth?, worlds? }
 // on: false while driving with others is off on that world (LIVE, its budget of 0, or its budget for
 // the day spent), with total 0 and no areas; total: how many are driving in all on that world;
-// areas: at most ONLINE_AREAS dots, busiest first; moon (or earth): how many are driving on the
-// other world, as its rooms last said (on an answer that's off, too, unless the other world is off
-// as well: then it's left out). A page from before the Moon had drivers reads none of it.
+// areas: at most ONLINE_AREAS dots, busiest first. moon, on the Earth's answer only (and earth on the
+// Moon's only), as a page from before Mars had drivers reads it: how many are driving on that one
+// other world, as its rooms last said (on an answer that's off, too, unless that world is off as
+// well: then it's left out). worlds: { earth: { on, total }, moon, mars, vesta, ceres }, every
+// world's at once from the same look (on whether it's open there today, total how many are driving
+// there), on an answer that's off too (as the first other world that's open says), so a page can
+// show them all from the one ask; left out when every world is off. A page from before the Moon had
+// drivers reads none of it but on, total and areas.
 // DOT: { lat, lon, height, count }: where (degrees, to DOT_PLACES decimals: about a kilometre; and
 //   metres above the ellipsoid, to DOT_HEIGHT), and how many are driving there.
 
@@ -466,43 +562,63 @@ export function toGeodetic( x, y, z ) {
 
 }
 
-// The Moon's frame: Moon-centred metres ({ x, y, z }) for a spot (degrees, and metres over its
-// sphere), and back.
+// A world's body frame (any but the Earth): metres ({ x, y, z }) from its middle, Z through its
+// north pole and X through 0° N 0° E, for a spot (planetocentric degrees, and metres over its sphere
+// of WORLDS[ world ].radius), as level.js's pointOn has it (the same sums in the same order), and
+// back.
+export function toBodyFrame( lat, lon, height = 0, world = MOON_WORLD ) {
+
+	if ( ! isLiveWorld( world ) || world === EARTH ) throw unknownWorld( world );
+	const r = WORLDS[ world ].radius + height;
+	const [ phi, lambda ] = [ lat * DEG, lon * DEG ];
+	return { x: r * Math.cos( phi ) * Math.cos( lambda ), y: r * Math.cos( phi ) * Math.sin( lambda ), z: r * Math.sin( phi ) };
+
+}
+
+export function fromBodyFrame( x, y, z, world = MOON_WORLD ) {
+
+	if ( ! isLiveWorld( world ) || world === EARTH ) throw unknownWorld( world );
+	const r = Math.hypot( x, y, z );
+	return { lat: Math.asin( Math.max( - 1, Math.min( 1, z / r ) ) ) / DEG, lon: Math.atan2( y, x ) / DEG, height: r - WORLDS[ world ].radius };
+
+}
+
+// The Moon's frame (its body frame, a sphere of MOON_RADIUS), either way.
 export function toMoonFrame( lat, lon, height = 0 ) {
 
-	const r = MOON_RADIUS + height;
-	const cos = Math.cos( lat * DEG );
-	return { x: r * cos * Math.cos( lon * DEG ), y: r * cos * Math.sin( lon * DEG ), z: r * Math.sin( lat * DEG ) };
+	return toBodyFrame( lat, lon, height, MOON_WORLD );
 
 }
 
 export function fromMoonFrame( x, y, z ) {
 
-	const r = Math.hypot( x, y, z );
-	return { lat: Math.asin( Math.max( - 1, Math.min( 1, z / r ) ) ) / DEG, lon: Math.atan2( y, x ) / DEG, height: r - MOON_RADIUS };
+	return fromBodyFrame( x, y, z, MOON_WORLD );
 
 }
 
-// A world's frame either way: positions ({ x, y, z }) for spots, and spots for positions.
+// A world's frame either way: positions ({ x, y, z }) for spots, and spots for positions. The
+// Earth's is ECEF (WGS84); every other's its body frame. A world that isn't one of LIVE_WORLD_IDS
+// throws: none is taken for the Earth.
 export function toFrame( lat, lon, height, world = EARTH ) {
 
-	return world === MOON_WORLD ? toMoonFrame( lat, lon, height ) : toEcef( lat, lon, height );
+	return world === EARTH ? toEcef( lat, lon, height ) : toBodyFrame( lat, lon, height, world );
 
 }
 
 export function fromFrame( x, y, z, world = EARTH ) {
 
-	return world === MOON_WORLD ? fromMoonFrame( x, y, z ) : toGeodetic( x, y, z );
+	return world === EARTH ? toGeodetic( x, y, z ) : fromBodyFrame( x, y, z, world );
 
 }
 
 // A nearby room's drivers as dots: `points`, their positions ({ x, y, z }) in its world's frame
-// (Earth-centred, or the Moon's), in an order that doesn't change from one call to the next, in the
+// (toFrame's), in an order that doesn't change from one call to the next, in the
 // area `cell` (shard 0's name, whose prefix says which world), which the dots are kept inside.
 // [ DOT... ], busiest first.
 export function dotsOf( points, cell ) {
 
-	const world = worldOfRoom( cell ) ?? EARTH;
+	const world = worldOfRoom( cell );
+	if ( ! world ) throw unknownWorld( cell );
 
 	const groups = [];
 	for ( const point of points ) {

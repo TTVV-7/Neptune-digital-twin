@@ -15,7 +15,7 @@ import { isAdmin } from './admin.js';
 import { adminDropins } from './dropins.js';
 import { LINK_PATH } from '../../src/drive-app/challenge-rules.js';
 import { adminChallenges, adminChange, challengeBoard, challengeGhost, challengeLink, linkPage, listChallenges, postTime } from './challenges.js';
-import { BUDGET_SPENT } from '../../src/drive-app/live-protocol.js';
+import { BUDGET_SPENT, LIVE_WORLD_IDS } from '../../src/drive-app/live-protocol.js';
 import { adminAchievements, postAchievements } from './achievements.js';
 import { EARTH, WORLDS, isWorld } from '../../src/drive-app/worlds.js';
 
@@ -60,12 +60,17 @@ export { DriveRoom } from './live.js';
 //   LIVE                  'off' switches driving with others off (anything else, or unset, is on)
 //   LIVE_DAILY_BUDGET     the Durable Object requests a day driving with others may use on the Earth
 //                         (40000 if unset), then it's off there till midnight UTC (see live.js); 0 is off
-//   LIVE_MOON_DAILY_BUDGET   the Moon's, apart (20000 if unset): spending the Earth's never shuts the
-//                         Moon's rooms, nor the Moon's the Earth's; 0 is off on the Moon
-//   LIVE_ADDRESS_VISITS   the most visits not counted against the Earth's caps (the Moon's) that
+//   LIVE_MOON_DAILY_BUDGET, LIVE_MARS_DAILY_BUDGET, LIVE_VESTA_DAILY_BUDGET, LIVE_CERES_DAILY_BUDGET
+//                         each other world's, apart (20000, 4000, 3000 and 3000 if unset): spending one
+//                         world's never shuts another's rooms; 0 is off on that world. A far world's
+//                         (Mars's, Vesta's, Ceres's) pays only for its own rooms and connections, never
+//                         for /api/config or anyone watching its globe (/api/online)
+//   LIVE_ADDRESS_VISITS   the most visits not counted against the Earth's caps (the free worlds') that
 //                         connect to rooms from one address (an IPv6 one by its /48) in a day (20)
 //   LIVE_ADDRESS_SHARE    each world's budget over this (8 if unset) is what one address's
 //                         connections may spend there in a day (the owner's aren't counted)
+//   LIVE_ADDRESS_FLOOR    but never less than this on any world (1000 if unset; 0 for none), so a
+//                         small world's share is still a drive of a while
 //   LIVE_PARTY_MAX, LIVE_NEARBY_MAX   the most in a party (8 if unset) and in an area's room (20)
 //   LIVE_VISIT_CONNECTS   the most connections to rooms a visit makes in a day (200 if unset)
 //   ROOMS                 the Durable Object binding for the rooms (DriveRoom, live.js)
@@ -245,9 +250,12 @@ function adsTxt( request, env ) {
 // live.js), and on the Moon (liveMoon: its rooms have a budget of their own, so it can be on there
 // with the Earth's spent; a page from before the Moon had drivers doesn't read it), with
 // liveMoonReason the same way for the Moon's (none when it's only switched off there, so the page
-// says nothing of lots of drivers). If DriveLimits can't say, both are off, with liveReason and
-// liveMoonReason 'unknown': a page already driving with others that was turned away tries again
-// rather than stopping.
+// says nothing of lots of drivers). And every world's at once, liveWorlds: { earth: { open,
+// reason? }, moon, mars, vesta, ceres }, reason the same way (a page since Mars, Vesta and Ceres
+// have drivers reads only this; one from before reads the others, which are as they always were).
+// If DriveLimits can't say, every world is off, with liveReason, liveMoonReason and each reason
+// 'unknown': a page already driving with others that was turned away tries again rather than
+// stopping.
 async function getConfig( { env, limits, now } ) {
 
 	const today = await liveToday( { env, limits, now } );
@@ -257,6 +265,12 @@ async function getConfig( { env, limits, now } ) {
 		...( ads ? { adsense: ads } : {} ),
 		...( today.reason === BUDGET_SPENT || today.reason === 'unknown' ? { liveReason: today.reason } : {} ),
 		...( today.moon.reason === BUDGET_SPENT || today.moon.reason === 'unknown' ? { liveMoonReason: today.moon.reason } : {} ),
+		liveWorlds: Object.fromEntries( LIVE_WORLD_IDS.map( world => {
+
+			const { open, reason } = today.worlds?.[ world ] ?? { open: false, reason: 'unknown' };
+			return [ world, { open, ...( reason === BUDGET_SPENT || reason === 'unknown' ? { reason } : {} ) } ];
+
+		} ) ),
 	} );
 
 }

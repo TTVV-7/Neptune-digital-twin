@@ -2,7 +2,7 @@ import { searchPlaces } from './api.js';
 import { DEFAULT_RIDE } from './catalog.js';
 import { formatLatLon, parseLatLon, recentPlaces, SPOTS, storage } from './places.js';
 import { searchWorld, SPOTS_ON } from './world-places.js';
-import { EARTH, TheWorld, WORLDS } from './worlds.js';
+import { EARTH, OnWorld, TheWorld, WORLD_IDS, WORLDS } from './worlds.js';
 import { openPass, proBadge } from './pass.js';
 import { onProChange } from './pro.js';
 import { getLevel, onLevelChange } from './progress.js';
@@ -10,12 +10,13 @@ import { onFeatsChange } from './feats.js';
 import { rideLocked, rideUnlock, unlockChip } from './vehicles.js';
 import { drivers } from './online.js';
 
-// The globe's panel: which world (the Earth or one made in the page), search, the starting spots,
-// recent places, the vehicle picker and who's driving now (online.js), and the card under the pin
-// with "Drive here".
+// The globe's panel: which world it's on (the Earth or one made in the page) with its Worlds button,
+// which opens the orrery to pick another (main.js, orrery.js), search, the starting spots, recent
+// places, the vehicle picker and who's driving now (online.js), and the card under the pin with
+// "Drive here".
 // Choosing a spot, a search result or an area where people are driving flies the globe there and
 // pins it; a tap on the globe pins the spot tapped. On another world (main.js, body.js) the search,
-// spots and recent places are its own (world-places.js), and who's driving now isn't shown.
+// spots and recent places are its own (world-places.js), and who's driving now is that world's.
 
 const VEHICLE_KEY = 'world-drive.vehicle';
 
@@ -29,13 +30,13 @@ const WORDS = {
 };
 
 // root: #globe-ui. vehicles: from loadVehicles(). flyTo( place ): fly the globe there and pin it.
-// onDrive( place ): drop in at the pin. onWorld( world ): a world picked (worlds.js's id: 'earth',
-// 'moon', 'mars', 'vesta' or 'ceres'); main.js turns the globe and calls setWorld once it's there.
+// onDrive( place ): drop in at the pin. onWorlds( button ): the Worlds button pressed (main.js opens
+// the orrery, whose Drive turns the globe: setWorld, which calls setWorld here once it's there).
 // onSearch( kind ): a search made, for the play stats: 'earth' (the map asked), a world's id (its
 // places: 'moon', 'mars' and so on), 'coordinates' (typed), and 'nothing' as well for one that
 // found nothing; never what was typed.
 // onAchievements(): open the Achievements grid (a locked construction ride's note links to it).
-export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorld = () => {}, onSearch = () => {}, onAchievements = () => {} } ) {
+export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorlds = () => {}, onSearch = () => {}, onAchievements = () => {} } ) {
 
 	const $ = selector => root.querySelector( selector );
 	const form = $( '.search' );
@@ -46,46 +47,57 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorl
 	let pinned = null;
 	let searching = 0;
 	let world = EARTH;
-	// The other world while it's loading (main.js's setWorld), so a click on this one stays here.
+	// The other world while it's loading (main.js's setWorld), and how many are driving on this one
+	// now (online.js's, null when that isn't known).
 	let busy = null;
+	let count = null;
 
 	// --- the Earth or another world ---
 
-	// The switch: a row of radio buttons, one a world. A click picks one; the arrow keys move along
-	// them (and pick), as a group of radio buttons does.
-	const worlds = [ ...root.querySelectorAll( '.worlds button' ) ];
-	for ( const button of worlds ) {
+	// The Worlds button: this world's icon and name (and how many are driving on it), opening the
+	// orrery; while another world loads, "Loading Mars…".
+	const opener = $( '.worlds-open' );
+	opener.addEventListener( 'click', () => onWorlds( opener ) );
+	showOpener();
 
-		button.addEventListener( 'click', () => ( button.dataset.world !== world || busy ) && onWorld( button.dataset.world ) );
-		button.addEventListener( 'keydown', event => {
+	function showOpener() {
 
-			const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: - 1, ArrowUp: - 1 }[ event.key ];
-			if ( ! step ) return;
-			event.preventDefault();
-			const next = worlds[ ( worlds.indexOf( button ) + step + worlds.length ) % worlds.length ];
-			next.focus();
-			next.click();
-
-		} );
+		const name = WORLDS[ busy ?? world ].name;
+		const loading = busy && `Loading ${ TheWorld( busy ) }…`;
+		for ( const icon of opener.querySelectorAll( '[data-icon]' ) ) icon.hidden = icon.dataset.icon !== ( busy ?? world );
+		opener.querySelector( '.worlds-name' ).textContent = loading || name;
+		const driving = ! busy && count > 0 ? `${ count } driving` : '';
+		opener.querySelector( '.worlds-count' ).textContent = driving;
+		opener.dataset.world = world;
+		opener.setAttribute( 'aria-label', loading ? `Change world. ${ loading }` : `Change world. ${ OnWorld( world ) } now${ driving ? `, ${ driving }` : '' }` );
+		if ( busy ) opener.setAttribute( 'aria-busy', 'true' );
+		else opener.removeAttribute( 'aria-busy' );
 
 	}
 
-	// The panel for `which` world: its switch, words, spots and recent places. While `busy` (another
-	// world loading), its button says so. Only the picked world's button is in the tab order.
+	// How many are driving on this world now (null: not known, or none of it on), for its button.
+	function setWorldCount( n ) {
+
+		count = Number.isFinite( n ) ? n : null;
+		showOpener();
+
+	}
+
+	// The panel for `which` world: its button, words, spots and recent places. While `busy` (another
+	// world loading), its button says so.
 	function setWorld( which, { busy: loading = null } = {} ) {
 
-		busy = loading;
-		for ( const button of worlds ) {
+		busy = WORLD_IDS.includes( loading ) ? loading : null;
+		const changed = ! busy && WORLD_IDS.includes( which ) && which !== world;
+		if ( changed ) {
 
-			button.setAttribute( 'aria-checked', String( button.dataset.world === which ) );
-			button.tabIndex = button.dataset.world === which ? 0 : - 1;
-			if ( button.dataset.world === busy ) button.setAttribute( 'aria-busy', 'true' );
-			else button.removeAttribute( 'aria-busy' );
+			world = which;
+			count = null;
 
 		}
 
-		if ( busy || which === world ) return;
-		world = which;
+		showOpener();
+		if ( ! changed ) return;
 		// (A search of the other world's still on its way is no use here.)
 		searching ++;
 		document.body.dataset.world = world;
@@ -376,7 +388,8 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorl
 		onlineKey = key;
 		const list = section.querySelector( '.areas' );
 		// (A row for those driving on the other world turns the globe there: onClick.)
-		list.replaceChildren( ...online.areas.map( area => item( area.title, area.subtitle, () => area.onClick ? area.onClick() : flyTo( area.place ) ) ) );
+		// (Its button to its onClick, for "On other worlds", whose orrery gives the focus back to it.)
+		list.replaceChildren( ...online.areas.map( area => item( area.title, area.subtitle, e => area.onClick ? area.onClick( e ) : flyTo( area.place ) ) ) );
 		list.hidden = online.areas.length === 0;
 
 	}
@@ -415,6 +428,7 @@ export function setUpPanel( { root, vehicles, flyTo, onDrive, onClearPin, onWorl
 		refreshRecent,
 		vehiclePicker,
 		setWorld,
+		setWorldCount,
 		// The ride being driven (null: off driving), for the pickers to show.
 		setDriven( vehicle ) {
 

@@ -161,52 +161,85 @@ button.primary:active,
 	color: var( --muted );
 }
 
-/* The Earth, the Moon, Mars, Vesta and Ceres: a pill cut into one part a world, the one picked in
-   the accent, as the leaderboard's tabs are. Five across leave each part under 50 px inside on the
-   panel and on a 320 px phone, too narrow for an icon beside a name, so each has its icon over a
-   small name; and a part never grows past its share (minmax( 0, 1fr ): a plain 1fr would let a long
-   name push the row wider than the panel). */
-.worlds {
-	display: grid;
-	grid-auto-flow: column;
-	grid-auto-columns: minmax( 0, 1fr );
-	gap: 4px;
+/* Which world the globe is on, and how many are driving there now: one full-width button, its
+   world's icon and name and "Worlds ›", that opens the orrery (panel.js, orrery.js) to pick another.
+   While another world loads it says so ("Loading Mars…", aria-busy). */
+#globe-ui .worlds-open {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	width: 100%;
+	min-height: 44px;
 	margin: 0 0 12px;
-	padding: 4px;
+	padding: 8px 12px;
+	border: 1px solid transparent;
 	border-radius: 12px;
 	background: var( --chip );
-}
-
-.worlds button {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	gap: 3px;
-	min-width: 0;
-	padding: 7px 2px 6px;
-	border: 0;
-	border-radius: 9px;
-	background: none;
-	font-size: 12px;
-	font-weight: 800;
-	line-height: 1.1;
-	white-space: nowrap;
-	color: var( --muted );
-}
-
-.worlds button:hover {
+	text-align: left;
 	color: var( --ink );
 }
 
-.worlds button[aria-checked='true'] {
-	background: var( --accent );
-	color: var( --accent-ink );
+#globe-ui .worlds-open:hover {
+	border-color: var( --accent );
 }
 
-.worlds button[aria-busy='true'] {
-	opacity: 0.6;
+#globe-ui .worlds-open > svg {
+	flex: none;
+	width: 20px;
+	height: 20px;
+	color: var( --accent );
+}
+
+#globe-ui .worlds-open > svg[hidden] {
+	display: none;
+}
+
+#globe-ui .worlds-open .worlds-what {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-width: 0;
+	line-height: 1.2;
+}
+
+#globe-ui .worlds-open .worlds-name {
+	overflow: hidden;
+	font-weight: 800;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+#globe-ui .worlds-open .worlds-count {
+	font-size: 12px;
+	color: var( --muted );
+}
+
+#globe-ui .worlds-open .worlds-count:empty {
+	display: none;
+}
+
+#globe-ui .worlds-open .worlds-more {
+	display: flex;
+	flex: none;
+	align-items: center;
+	gap: 2px;
+	font-size: 12px;
+	font-weight: 800;
+	letter-spacing: 0.6px;
+	text-transform: uppercase;
+	color: var( --muted );
+}
+
+#globe-ui .worlds-open:hover .worlds-more {
+	color: var( --ink );
+}
+
+#globe-ui .worlds-open[aria-busy='true'] {
 	cursor: progress;
+}
+
+#globe-ui .worlds-open[aria-busy='true'] .worlds-name {
+	opacity: 0.7;
 }
 
 /* Challenges (challenges.js, loaded once this is pressed): a full-width button under the worlds,
@@ -246,18 +279,31 @@ button.primary:active,
 }
 
 /* On another world (the Moon, Mars, Vesta, Ceres) there's no map search (its own places are
-   searched). Driving with others is on the Moon as on the Earth (its rooms are the Moon's own:
-   live.js); on Mars, Vesta and Ceres there's nobody else driving and no party to drive with: you
-   drive them on your own (main.js's LIVE_WORLDS). */
+   searched). */
 body[data-world]:not( [data-world='earth'] ) #globe-ui .osm {
 	display: none !important;
 }
 
-body[data-world]:not( [data-world='earth'] ):not( [data-world='moon'] ) #globe-ui :is( .online, .online-dots, .friends, .party-banner ),
-body[data-world]:not( [data-world='earth'] ):not( [data-world='moon'] ) #pause .friends,
-body[data-world]:not( [data-world='earth'] ):not( [data-world='moon'] ) #drive-ui :is( .live-chip, .players, .horn, .live-key ),
-body[data-world]:not( [data-world='earth'] ):not( [data-world='moon'] ) #live-tags {
+/* Driving with others is on every world, each in its own rooms (live.js); on a world without it
+   (main.js's LIVE_WORLDS, liveHere: body[data-live='off']) there'd be nobody else driving and no
+   party to drive with, and none of it shows. */
+body[data-live='off'] #globe-ui :is( .online, .online-dots, .friends, .party-banner ),
+body[data-live='off'] #pause .friends,
+body[data-live='off'] #drive-ui :is( .live-chip, .players, .horn, .live-key ),
+body[data-live='off'] #live-tags {
 	display: none !important;
+}
+
+/* The orrery (orrery.js, its styles orrery.css, loaded with it): a modal <dialog> over the globe,
+   drawn into the page's own canvas. While it's open, the globe's own things are hidden (kept in
+   their places, so the ad's slot keeps its width: ads.js waits to ask for one until it's closed),
+   and it's nothing at all until it's opened. */
+body[data-orrery='open'] :is( #globe-ui, #live-tags, #pin, #attribution, .world-credit ) {
+	visibility: hidden;
+}
+
+#orrery:not( [open] ) {
+	display: none;
 }
 
 .search {

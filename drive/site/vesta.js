@@ -233,7 +233,7 @@ export const VESTA_DRIVING = [
 	'<b>A black sky full of stars.</b> No air, so the stars are out day and night, with the sun low in the south-west wherever you drive. Vesta has no moons.',
 	'<b>A world far from round.</b> Vesta is 572 by 557 by 446 km, so its ground curves away fast and the horizon is close, about a kilometre off on level ground, and its slopes go on for tens of kilometres.',
 	'<b>No water and no roads.</b> Grey dust and rock to the horizon: basin floors, crater rims, troughs and scarps.',
-	'<b>On your own.</b> Driving with others is on the Earth and the Moon: on Vesta you drive alone. Driving, air, drifts and tricks still earn XP, and your best runs go on the leaderboard (the bonuses for new start spots and areas are the Earth\'s).',
+	'<b>With others.</b> See who\'s driving near you on Vesta, in Vesta\'s own rooms, or bring friends in a party, wherever each of you is: a friend on the Earth, the Moon, Mars or Ceres is a tap away. Vesta\'s globe shows where others are driving now: those who let drivers nearby see them. Vesta\'s daily allowance for driving with others is smaller than the Earth\'s, so on a busy day it\'s back after midnight UTC. Driving, air, drifts and tricks earn XP, and your best runs go on the leaderboard (the bonuses for new start spots and areas are the Earth\'s).',
 ];
 
 // The rest of what Vesta's pages say (build.js): its page's title, description and words, the line

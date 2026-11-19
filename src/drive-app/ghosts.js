@@ -64,12 +64,14 @@ const _turn = new Quaternion();
 const _half = new Quaternion();
 const _axis = new Vector3();
 const _chord = new Vector3();
+const _splash = new Vector3();
 const noRay = () => {};
 
 // scene: where the ghosts go; earth: the tiles' (or test globe's) group, whose matrixWorld takes
-// Earth-centred positions into the scene as it is now; frame(): the group for the world this page is
-// on (earth, or on the Moon the Moon's group, whose matrixWorld takes Moon-centred positions in):
-// only the drivers on that world are drawn, through it; vehicles: loadVehicles()'; loader: the
+// Earth-centred positions into the scene as it is now; frame(): the group for the world the game is
+// on (earth, or off the Earth that world's group, whose matrixWorld takes positions in its own frame
+// in, levelled and recentred as it is now): only the drivers on that world are drawn, through it, and
+// only while live.js's rooms are that world's (none on a closed world, alone there); vehicles: loadVehicles()'; loader: the
 // ModelManager's glTF loader (or models: ghostModels' own, shared with a challenge's ghost); live:
 // live.js's; tags: the element their names go in; own(): your car's pivot, or null; effects: what
 // drive-fx.js is asked for (the Driver's: fewer on a phone).
@@ -465,6 +467,9 @@ export function createGhosts( { scene, earth, frame = () => earth, camera, vehic
 		const at = now - INTERP_MS;
 		const world = frame();
 		const on = live.world ?? 'earth';
+		// (On a world closed, or without driving with others, live.js's rooms are another's, if any:
+		// nobody here is drawn.)
+		if ( live.gameWorld !== undefined && live.gameWorld !== on ) shown = false;
 		world.updateWorldMatrix( true, false );
 		_earth.setFromRotationMatrix( world.matrixWorld );
 		camera.getWorldPosition( _cam );
@@ -593,9 +598,33 @@ export function createGhosts( { scene, earth, frame = () => earth, camera, vehic
 
 	}
 
+	// The scene moved by `matrix` (main.js's shiftTo, as a small world recentres on the car): what
+	// ghosts keep in the scene's terms goes with it (their effects' smoke, sparks, trails and spray,
+	// a splash's level, where they were drawn), and their last yaw is forgotten, so the turn isn't
+	// taken for steering. Where they are (their words, in their world's own frame) isn't: it's drawn
+	// through the frame's matrix as it is now, every frame.
+	function transform( matrix ) {
+
+		for ( const ghost of ghosts.values() ) {
+
+			ghost.fx?.transform( matrix );
+			ghost.yaw = null;
+			ghost.scene.applyMatrix4( matrix );
+			if ( ghost.model ) {
+
+				const { position } = ghost.model.pivot;
+				ghost.splashLevel = _splash.set( position.x, ghost.splashLevel, position.z ).applyMatrix4( matrix ).y;
+
+			}
+
+		}
+
+	}
+
 	return {
 		group,
 		update,
+		transform,
 		// Your honk, over your own car.
 		honkSelf() {
 
