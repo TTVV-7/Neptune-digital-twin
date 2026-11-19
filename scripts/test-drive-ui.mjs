@@ -6091,18 +6091,22 @@ const PLAYER = { id: 'P1ayer-id_000000', secret: 'S'.repeat( 32 ), name: 'Speed 
 // sign-in (window.testCredential 'good-token') makes it signedIn. page.asked has what was sent, and
 // page.google how often Google's script (stood in for, harness's GOOGLE_STUB) was loaded. config and
 // visit: /api/config (maps off, the test pad) and /api/visit (never answered) as newPage takes them.
-async function supporterPage( { me = SIGNED_OUT, signedInAs = ALICE, clientId = CLIENT, player = null, accountPlayer = null, config = RESTING, visit = route => route.abort(), ...options } = {} ) {
+async function supporterPage( { me = SIGNED_OUT, signedInAs = ALICE, clientId = CLIENT, player = null, seedOnce = false, accountPlayer = null, config = RESTING, visit = route => route.abort(), ...options } = {} ) {
 
 	const page = await newPage( { ...options, api: { config: { ...config, googleClientId: clientId }, turnstile: true, visit } } );
 	// Never a page of Stripe's: Buy's new tab is only noted.
 	await page.context().route( /^https?:\/\/(?!127\.0\.0\.1)/, route => route.abort() );
-	await page.addInitScript( ( { player } ) => {
+	// (seedOnce: the player put in as the first page loads only, so the next visit has what the page
+	// left there.)
+	await page.addInitScript( ( { player, seedOnce } ) => {
 
 		window.opened = [];
 		window.open = ( ...args ) => ( window.opened.push( args ), null );
-		if ( player ) localStorage.setItem( 'world-drive.player', JSON.stringify( player ) );
+		if ( ! player || ( seedOnce && sessionStorage.getItem( 'test.seeded' ) ) ) return;
+		localStorage.setItem( 'world-drive.player', JSON.stringify( player ) );
+		sessionStorage.setItem( 'test.seeded', '1' );
 
-	}, { player } );
+	}, { player, seedOnce } );
 	const state = page.state = { me, signedInAs };
 	const asked = page.asked = { me: 0, sessions: [], signOuts: 0, links: [] };
 	page.google = 0;
@@ -6319,7 +6323,7 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 
 		// This browser's own nickname (made before signing in), and the account's, from another device.
 		const mine = { id: 'Ac0unt-player_00', secret: 'K'.repeat( 32 ), name: 'Tom' };
-		const page = await supporterPage( { me: ALICE, player: { ...PLAYER, name: 'Tom 2' }, accountPlayer: mine } );
+		const page = await supporterPage( { me: ALICE, player: { ...PLAYER, name: 'Tom 2' }, seedOnce: true, accountPlayer: mine } );
 		await testPad( page );
 		await page.waitForFunction( () => JSON.parse( localStorage.getItem( 'world-drive.player' ) ?? 'null' )?.name === 'Tom' );
 		assert.deepEqual( page.asked.links, [ { id: PLAYER.id, secret: PLAYER.secret } ] );

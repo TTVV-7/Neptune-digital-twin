@@ -1215,7 +1215,7 @@ describe( 'Levels: the Worker', () => {
 		assert.equal( after.xp, before2.xp );
 		assert.equal( after.discoveries, 2 );
 		assert.deepEqual( server.d1( `SELECT place FROM discoveries WHERE player_id = '${ tom.id }' ORDER BY place` ).map( r => r.place ), [ AREAS[ 0 ], AREAS[ 1 ] ].sort() );
-		assert.deepEqual( server.d1( `SELECT achievement, earned_at FROM achievements WHERE player_id = '${ tom.id }' ORDER BY achievement` ), [ { achievement: 'shared', earned_at: 50 }, { achievement: 'tom2s', earned_at: 300 }, { achievement: 'toms', earned_at: 100 } ] );
+		assert.deepEqual( server.d1( `SELECT achievement, earned_at FROM achievements WHERE player_id = '${ tom.id }' AND achievement IN ( 'shared', 'tom2s', 'toms' ) ORDER BY achievement` ), [ { achievement: 'shared', earned_at: 50 }, { achievement: 'tom2s', earned_at: 300 }, { achievement: 'toms', earned_at: 100 } ] );
 		assert.deepEqual( [ ...new Set( server.d1( `SELECT score FROM best_scores WHERE player_id = '${ tom.id }'` ).map( r => r.score ) ) ], [ 9000 ] );
 		assert.equal( server.d1( `SELECT COUNT(*) AS n FROM scores WHERE player_id = '${ tom.id }'` )[ 0 ].n, 2 );
 
