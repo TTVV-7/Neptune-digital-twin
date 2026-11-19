@@ -93,11 +93,12 @@ export function secretOk( p, param ) {
 
 }
 
-// The player with this id and secret ({ id, name, account_id, last_score_at, last_time_at }), or a
-// 403: the same for an unknown id as for the wrong secret.
+// The player with this id and secret ({ id, name, account_id, last_score_at, last_time_at, by_key }:
+// by_key 1 when the secret is a key handed to a browser, not the player's own), or a 403: the same
+// for an unknown id as for the wrong secret.
 export async function authenticate( db, id, secret ) {
 
-	const player = await db.prepare( `SELECT p.id, p.name, p.account_id, p.last_score_at, p.last_time_at FROM players p WHERE p.id = ?1 AND ${ secretOk( 'p', '?2' ) }` ).bind( id, await sha256Hex( secret ) ).first();
+	const player = await db.prepare( `SELECT p.id, p.name, p.account_id, p.last_score_at, p.last_time_at, p.secret_hash <> ?2 AS by_key FROM players p WHERE p.id = ?1 AND ${ secretOk( 'p', '?2' ) }` ).bind( id, await sha256Hex( secret ) ).first();
 	if ( ! player ) throw new HttpError( 403, 'Forbidden', { reason: 'player' } );
 	return player;
 

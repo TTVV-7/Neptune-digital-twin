@@ -2478,7 +2478,10 @@ level-only colours.
   higher XP of the two (never the sum), the later streak, the achievements' counts the more of each,
   and all of both's discoveries, achievements, scores, challenge times and visits, the account's
   player's kept where both have one (a best score keeps the higher). Its name is free again. A
-  player that's another account's is left alone. Accounts with several players from before still
+  player that's another account's is left alone, and a key is never used to move a player to
+  another account. A browser's key goes as it signs out (the page sends it with
+  `DELETE /api/session`, and forgets the player), and every key of the account as it signs out
+  everywhere: a shared computer doesn't go on driving as you. Accounts with several players from before still
   show the level of their best (`xpOf`) until each browser has signed in once more. (Each player's
   XP is its own, and the caps below are each player's: an account's players added up would let
   several players' caps add up too.) The page reports what it drove every 2 minutes while

@@ -359,12 +359,36 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace, on
 
 	}
 
+	// The Worker no longer takes this player. Another tab may have moved this browser on to another
+	// (signed in: the account's player, the old one folded into it): then that one, and what's kept
+	// is left as it is.
 	function forgetPlayer() {
+
+		const saved = loadPlayer();
+		if ( saved && saved.id !== player?.id ) {
+
+			player = saved;
+			onName();
+			return;
+
+		}
 
 		player = null;
 		storage( () => localStorage.removeItem( PLAYER_KEY ) );
 
 	}
+
+	// Another tab's player (made, renamed or handed over there) is this one's too.
+	window.addEventListener( 'storage', event => {
+
+		if ( event.key !== PLAYER_KEY ) return;
+		const saved = loadPlayer();
+		if ( saved?.id === player?.id && saved?.name === player?.name ) return;
+		player = saved;
+		onName();
+		if ( dialog.open ) showYou();
+
+	} );
 
 	// --- the panel ---
 
@@ -531,9 +555,21 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace, on
 		pickName,
 		// The signed-in account's player ({ id, secret, name }), in place of this browser's own
 		// (supporter.js's linkPlayer): kept here from now on, and posted for.
+		// With null, none: the one handed over goes (signed out), and a nickname is picked again.
 		adopt( next ) {
 
-			player = { id: next.id, secret: next.secret, name: next.name };
+			if ( ! next ) {
+
+				player = null;
+				storage( () => localStorage.removeItem( PLAYER_KEY ) );
+				asked = false;
+				onName();
+				if ( dialog.open ) showYou();
+				return;
+
+			}
+
+			player = { id: next.id, secret: next.secret, name: next.name, ...next.handed ? { handed: true } : {} };
 			storage( () => localStorage.setItem( PLAYER_KEY, JSON.stringify( player ) ) );
 			// Today's bests were the old player's: the new one's go up as they're beaten.
 			posted = {};

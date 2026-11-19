@@ -846,10 +846,10 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// place of the one made here, which the Worker has folded into it.
 	const supporter = setUpSupporter( {
 		worker, googleClientId, passwords, turnstileSiteKey, player: () => board.player, onBuy: () => stats.add( 'pass', 'buy' ),
-		adopt: ( player, { merged, from } ) => {
+		adopt: ( player, { merged = false, from = null } = {} ) => {
 
 			board.adopt( player );
-			screens.toast( merged && from ? `Signed in as ${ player.name }: ${ from.name }'s progress here is now ${ player.name }'s` : `Signed in as ${ player.name }`, 6000 );
+			if ( player ) screens.toast( merged && from ? `Signed in as ${ player.name }: ${ from.name }'s progress here is now ${ player.name }'s` : `Signed in as ${ player.name }`, 6000 );
 
 		},
 	} );

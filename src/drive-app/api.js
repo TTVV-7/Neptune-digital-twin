@@ -276,9 +276,10 @@ export function startSession( credential ) {
 
 }
 
-export function endSession() {
+// key: the secret this browser was handed for the account's player (accountPlayer), which goes too.
+export function endSession( key = null ) {
 
-	return send( 'DELETE', '/api/session', {} );
+	return send( 'DELETE', '/api/session', key ? { key } : {} );
 
 }
 

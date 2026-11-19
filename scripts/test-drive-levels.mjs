@@ -1248,7 +1248,52 @@ describe( 'Levels: the Worker', () => {
 		const crossed = await mine( cookie, ann );
 		assert.equal( crossed.json.player.id, tom.id );
 		assert.equal( crossed.json.merged, false );
+		assert.equal( crossed.json.foreign, true );
 		assert.equal( server.d1( `SELECT COUNT(*) AS n FROM players WHERE id = '${ ann.id }'` )[ 0 ].n, 1 );
+
+		// A key to Tom left in a browser (signed in there, never signed out): whoever signs in there
+		// next, with an account of no player, isn't given Tom, and can't link Tom to their account.
+		const kit = await signIn( 'kit-1' );
+		const left = { ...tom, secret: third.json.player.secret };
+		assert.deepEqual( ( await mine( kit, left ) ).json, { player: null, foreign: true } );
+		assert.equal( ( await call( '/api/player/link', { method: 'POST', body: { id: tom.id, secret: left.secret }, cookie: kit } ) ).status, 403 );
+		assert.equal( server.d1( `SELECT a.google_sub FROM players p JOIN accounts a ON a.id = p.account_id WHERE p.id = '${ tom.id }'` )[ 0 ].google_sub, 'tom-1' );
+
+		// Signed out there, the key goes with the session: Tom's no longer driven from that browser.
+		const shared = await signIn( 'tom-1' );
+		const lent = await mine( shared, null );
+		const lentTom = { ...tom, secret: lent.json.player.secret };
+		assert.equal( ( await report( lentTom, {}, { after: 15 * MINUTE } ) ).status, 200 );
+		assert.equal( ( await call( '/api/session', { method: 'DELETE', body: { key: lent.json.player.secret }, cookie: shared } ) ).status, 204 );
+		assert.equal( ( await report( lentTom, {}, { after: 16 * MINUTE } ) ).status, 403 );
+		// (Another key, and Tom's own secret, go on.)
+		assert.equal( ( await report( here, {}, { after: 16 * MINUTE } ) ).status, 200 );
+		assert.equal( ( await report( tom, {}, { after: 16 * MINUTE } ) ).status, 200 );
+
+	} );
+
+	test( 'merging an account\'s players from before (both linked): the higher XP, the later streak, the counts of both', async () => {
+
+		const session = await call( '/api/session', { method: 'POST', body: { credential: await makeToken( googleKey, { sub: 'old-1', email: 'old@example.com' } ) } } );
+		const cookie = `__Host-wd_session=${ /__Host-wd_session=([\w-]{43})/.exec( session.headers.get( 'Set-Cookie' ) )[ 1 ] }`;
+		const older = await player();
+		const newer = await player( { time: NOON + MINUTE } );
+		// Both linked the old way, each browser its own.
+		for ( const who of [ older, newer ] ) assert.equal( ( await call( '/api/player/link', { method: 'POST', body: { id: who.id, secret: who.secret }, cookie } ) ).status, 200 );
+		server.d1( `UPDATE players SET xp = 500, streak_day = '2026-10-20', streak = 9, parties = 1,
+			tallies = '{"km":40,"moon":2,"looks":1,"rides":["go-kart"],"streak":9,"run":9,"runDay":"2026-10-20","day":"2026-10-20","today":{"km":1,"moon":0,"looks":0,"rides":0}}' WHERE id = '${ older.id }'` );
+		server.d1( `UPDATE players SET xp = 300, streak_day = '2026-10-31', streak = 2, parties = 4,
+			tallies = '{"km":10,"moon":5,"looks":0,"rides":["pickup-truck"],"streak":3,"run":2,"runDay":"2026-10-31","day":"2026-10-31","today":{"km":2,"moon":0,"looks":0,"rides":0}}' WHERE id = '${ newer.id }'` );
+		// The newer browser signs in again: it's the older player now (the account's oldest).
+		const merged = await call( '/api/player/mine', { method: 'POST', body: { id: newer.id, secret: newer.secret }, cookie } );
+		assert.equal( merged.status, 200, merged.text );
+		assert.deepEqual( [ merged.json.player.id, merged.json.merged ], [ older.id, true ] );
+		const [ kept ] = server.d1( `SELECT xp, streak_day, streak, parties, tallies FROM players WHERE id = '${ older.id }'` );
+		assert.deepEqual( { ...kept, tallies: JSON.parse( kept.tallies ) }, {
+			xp: 500, streak_day: '2026-10-31', streak: 2, parties: 4,
+			tallies: { km: 40, moon: 5, looks: 1, rides: [ 'go-kart', 'pickup-truck' ], streak: 9, run: 2, runDay: '2026-10-31', day: '2026-10-20', today: { km: 1, moon: 0, looks: 0, rides: 0 } },
+		} );
+		assert.equal( server.d1( `SELECT COUNT(*) AS n FROM players WHERE account_id = ( SELECT account_id FROM players WHERE id = '${ older.id }' )` )[ 0 ].n, 1 );
 
 	} );
 

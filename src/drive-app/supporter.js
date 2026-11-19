@@ -221,7 +221,10 @@ export async function restorePurchases() {
 export async function signOut( { everywhere = false } = {} ) {
 
 	say( 'Signing out...' );
-	const answer = everywhere ? await send( 'POST', '/api/account/sign-out-everywhere', {} ) : await endSession();
+	// The account's player, handed to this browser as it signed in (not one made here), goes with
+	// the session: a shared computer doesn't go on driving as them.
+	const handed = getPlayer()?.handed ? getPlayer() : null;
+	const answer = everywhere ? await send( 'POST', '/api/account/sign-out-everywhere', {} ) : await endSession( handed?.secret );
 	if ( ! answer.ok ) {
 
 		say( answer.status && typeof answer.body?.error === 'string' ? answer.body.error.replace( /([^.!?])$/, '$1.' ) : UNREACHABLE );
@@ -232,6 +235,7 @@ export async function signOut( { everywhere = false } = {} ) {
 	say( '' );
 	// The email in it stays off a shared computer; signing in again links the player again, once.
 	storage( () => localStorage.removeItem( LINKED_KEY ) );
+	if ( handed && getPlayer()?.id === handed.id ) adoptPlayer?.( null );
 	window.google?.accounts?.id?.disableAutoSelect?.();
 	if ( ! await refresh() ) update( { signedIn: false, supporter: false, purchase: { enabled: false } } );
 	toast( everywhere ? 'Signed out everywhere' : 'Signed out' );
@@ -246,9 +250,19 @@ export async function signOut( { everywhere = false } = {} ) {
 // for each player and account; called again when a player is made here (leaderboard.js), and not
 // before the game is there to take a player (adoptPlayer).
 let linking = null;
+let linkingFor = null;
 export function linkPlayer() {
 
-	linking ??= link().finally( () => linking = null );
+	// Asked again for another player (one made here while it asked for none): after that ask.
+	const id = getPlayer()?.id ?? null;
+	if ( linking && linkingFor !== id ) return linking.then( linkPlayer );
+	if ( ! linking ) {
+
+		linkingFor = id;
+		linking = link().finally( () => linking = null );
+
+	}
+
 	return linking;
 
 }
@@ -267,8 +281,15 @@ async function link() {
 	let now = player;
 	if ( mine && typeof mine.id === 'string' && typeof mine.name === 'string' && typeof mine.secret === 'string' ) {
 
-		now = { id: mine.id, secret: mine.secret, name: mine.name };
+		now = { id: mine.id, secret: mine.secret, name: mine.name, handed: true };
 		adoptPlayer( now, { merged: answer.body.merged === true, from: player } );
+
+	} else if ( ! mine && answer.body.foreign === true && player?.handed ) {
+
+		// Another account's player, left here by someone who didn't sign out: not this account's to
+		// drive as. A nickname is picked for this one instead.
+		now = null;
+		adoptPlayer( null );
 
 	}
 

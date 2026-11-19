@@ -81,11 +81,24 @@ export function signedOutCookie( url ) {
 
 }
 
-// DELETE /api/session: signed out, here (other browsers stay signed in).
+// DELETE /api/session { key? }: signed out, here (other browsers stay signed in). `key`: the secret
+// this browser was handed for the account's player (accountPlayer), which goes with the session,
+// so a shared computer doesn't go on driving as them.
 export async function signOut( { request, env, url } ) {
 
 	const token = cookies.read( request, url );
-	if ( token && env.DB ) await env.DB.prepare( 'DELETE FROM sessions WHERE token_hash = ?' ).bind( await sha256Hex( token ) ).run();
+	if ( token && env.DB ) {
+
+		const body = await readJson( request, 1024 ).catch( () => null );
+		const key = isObject( body ) && typeof body.key === 'string' && body.key.length <= 64 ? await sha256Hex( body.key ) : null;
+		const hash = await sha256Hex( token );
+		await env.DB.batch( [
+			...key ? [ env.DB.prepare( 'DELETE FROM player_keys WHERE secret_hash = ?1 AND account_id = ( SELECT account_id FROM sessions WHERE token_hash = ?2 )' ).bind( key, hash ) ] : [],
+			env.DB.prepare( 'DELETE FROM sessions WHERE token_hash = ?' ).bind( hash ),
+		] );
+
+	}
+
 	return noContent( { 'Set-Cookie': cookies.write( url, '', 0 ) } );
 
 }
@@ -150,6 +163,9 @@ export async function linkPlayer( context ) {
 	if ( ! isObject( body ) ) throw new HttpError( 400, 'Bad request' );
 	const { id, secret } = credentials( body );
 	const player = await authenticate( db, id, secret );
+	// A key handed to a browser as its account signed in there is for driving as that account's
+	// player, never for giving it to another account.
+	if ( player.by_key && player.account_id !== account.id ) throw new HttpError( 403, 'Forbidden', { reason: 'player' } );
 	await takeTurn( limits, request, 'link', now, LINKS_DAILY, 48 );
 	await db.prepare( 'UPDATE players SET account_id = ? WHERE id = ?' ).bind( account.id, id ).run();
 	// The ⭐ on today's, this week's and the all-time boards straight away (the boards of one place
@@ -196,6 +212,11 @@ export async function accountPlayer( context ) {
 	await takeTurn( limits, request, 'link', now, LINKS_DAILY, 48 );
 	const main = await db.prepare( 'SELECT id, name FROM players WHERE account_id = ? ORDER BY created_at, id LIMIT 1' ).bind( account.id ).first();
 	const boards = Object.values( PERIODS ).map( period => [ period( now ), '' ] );
+	// Another account's player stays theirs (`foreign`): this browser drives as this account's, or
+	// with none, picks a nickname. (A key left in a browser, signed in there before by someone who
+	// didn't sign out, never moves their player to whoever signs in next.)
+	const foreign = !! here && here.account_id !== null && here.account_id !== account.id;
+	if ( ! main && foreign ) return json( { player: null, foreign: true } );
 	if ( ! main || main.id === here?.id ) {
 
 		// The account's first player, or its own: linked (the ⭐ by its name straight away).
@@ -212,13 +233,13 @@ export async function accountPlayer( context ) {
 	}
 
 	// Another account's player stays theirs: this browser only moves on to this account's.
-	const merged = !! here && ( here.account_id === null || here.account_id === account.id );
+	const merged = !! here && ! foreign;
 	if ( merged ) await mergePlayers( db, here.id, main.id );
 	const secret = randomToken( 24 );
-	await db.prepare( 'INSERT INTO player_keys ( secret_hash, player_id, created_at ) VALUES ( ?, ?, ? )' ).bind( await sha256Hex( secret ), main.id, now ).run();
+	await db.prepare( 'INSERT INTO player_keys ( secret_hash, player_id, account_id, created_at ) VALUES ( ?, ?, ?, ? )' ).bind( await sha256Hex( secret ), main.id, account.id, now ).run();
 	await forgetBoards( url, boards, main.id );
 	if ( merged ) await forgetBoards( url, boards, here.id );
-	return json( { player: { id: main.id, name: main.name, secret }, merged } );
+	return json( { player: { id: main.id, name: main.name, secret }, merged, ...foreign ? { foreign: true } : {} } );
 
 }
 

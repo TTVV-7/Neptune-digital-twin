@@ -6130,6 +6130,7 @@ async function supporterPage( { me = SIGNED_OUT, signedInAs = ALICE, clientId = 
 		if ( request.method() === 'DELETE' ) {
 
 			asked.signOuts ++;
+			asked.signOutBodies = [ ...asked.signOutBodies ?? [], request.postDataJSON() ];
 			state.me = SIGNED_OUT;
 			return route.fulfill( { status: 204 } );
 
@@ -6327,7 +6328,7 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		await testPad( page );
 		await page.waitForFunction( () => JSON.parse( localStorage.getItem( 'world-drive.player' ) ?? 'null' )?.name === 'Tom' );
 		assert.deepEqual( page.asked.links, [ { id: PLAYER.id, secret: PLAYER.secret } ] );
-		assert.deepEqual( await page.evaluate( () => JSON.parse( localStorage.getItem( 'world-drive.player' ) ) ), mine );
+		assert.deepEqual( await page.evaluate( () => JSON.parse( localStorage.getItem( 'world-drive.player' ) ) ), { ...mine, handed: true } );
 		assert.equal( await page.evaluate( () => localStorage.getItem( 'world-drive.linked.2' ) ), `${ mine.id } ${ ALICE.email }` );
 		await page.locator( '#toast', { hasText: 'Signed in as Tom: Tom 2\'s progress here is now Tom\'s' } ).waitFor();
 		// The next visit asks no more.
@@ -6335,6 +6336,10 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		await page.waitForFunction( () => window.drive.supporter.me );
 		await page.waitForTimeout( 300 );
 		assert.equal( page.asked.links.length, 1, 'asked again on the next visit' );
+		// Signed out, the account's player goes from this browser, its key with the session.
+		await page.evaluate( () => window.drive.supporter.signOut() );
+		assert.deepEqual( page.asked.signOutBodies, [ { key: mine.secret } ] );
+		assert.equal( await page.evaluate( () => localStorage.getItem( 'world-drive.player' ) ), null );
 		assert.deepEqual( page.errors, [] );
 		await page.context().close();
 
