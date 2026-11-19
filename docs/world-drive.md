@@ -2470,11 +2470,18 @@ level-only colours.
 ### Saving it, and claiming it
 
 - **With a nickname**, XP is kept with the leaderboard player in D1 (`players.xp`), so it's yours
-  wherever that nickname is. A player linked to a Google account (signing in for the pass links the
-  browser's player, `accounts.js`) shows the level of the account's best player: sign in on another
-  device and pick a nickname there, and it shows the account's level until its own XP passes it.
-  (Each player's XP is its own, and the caps below are each player's: an account's players added up
-  would let several players' caps add up too.) The page reports what it drove every 2 minutes while
+  wherever that nickname is. **One account, one player:** signed in (Google or a username), every
+  browser drives as the account's player, its oldest (`accounts.js`'s `accountPlayer`,
+  `POST /api/player/mine`). The first browser signed in gives the account its player; any other is
+  handed that player with a secret of its own (`player_keys`; the player's own secret stays the
+  first browser's), and a nickname made there before signing in is folded into it and deleted: the
+  higher XP of the two (never the sum), the later streak, the achievements' counts the more of each,
+  and all of both's discoveries, achievements, scores, challenge times and visits, the account's
+  player's kept where both have one (a best score keeps the higher). Its name is free again. A
+  player that's another account's is left alone. Accounts with several players from before still
+  show the level of their best (`xpOf`) until each browser has signed in once more. (Each player's
+  XP is its own, and the caps below are each player's: an account's players added up would let
+  several players' caps add up too.) The page reports what it drove every 2 minutes while
   driving, as it pauses, as it goes back to the globe, and as the page goes (`pagehide`, with
   `fetch( ..., { keepalive: true } )`: `navigator.sendBeacon` can't send JSON with the right
   Content-Type). What hasn't been reported is kept in the browser (`world-drive.progress`), and so
@@ -3189,6 +3196,13 @@ and times on every device, and driving and the leaderboard never need it.
   [Username and password accounts](#username-and-password-accounts)).
 - `POST /api/player/link { id, secret }`, signed in: the leaderboard player (proved by its secret, as
   a rename is) becomes the account's (`players.account_id`); 20 a day from one visitor.
+- `POST /api/player/mine { id?, secret? }`, signed in: `{ player: { id, name, secret? } | null,
+  merged? }`, the account's player for this browser. With no player, the account takes this
+  browser's (as `/api/player/link`); with one that isn't this browser's, it's handed over with a
+  `secret` of this browser's own, and this browser's player (unlinked, or the same account's) is
+  folded into it (`merged`). A player sent that doesn't check out is as none. 401 signed out; 20 a
+  day from one visitor (with `/api/player/link`). The page asks once for each player and account
+  (`world-drive.linked.2`).
 - **Stripe's webhook**, `POST /api/stripe/webhook` (`worker/drive/supporter.js`): the one route without
   the same-origin and JSON checks (it comes from Stripe's servers, not a page) and without a session.
   It proves itself with its `Stripe-Signature`, checked by the code the construction app's webhook

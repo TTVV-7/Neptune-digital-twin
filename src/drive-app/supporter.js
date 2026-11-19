@@ -1,5 +1,5 @@
 import './supporter.css';
-import { endSession, getMe, linkPlayer as postLink, send, startSession } from './api.js';
+import { accountPlayer, endSession, getMe, send, startSession } from './api.js';
 import { PRICE, setPrice } from './pass.js';
 import { isPro, setPro } from './pro.js';
 import { storage } from './places.js';
@@ -34,7 +34,8 @@ const RECHECKS = 10;
 // How long after Buy (ms) the window getting focus back asks whether the pass has come.
 const WAIT_FOR = 60 * 60 * 1000;
 // The player last linked to the account, as "<player id> <email>", so it's linked once, not each visit.
-const LINKED_KEY = 'world-drive.linked';
+// (.2: since one account has one player on every device, each browser signed in asks once more.)
+const LINKED_KEY = 'world-drive.linked.2';
 const UNREACHABLE = 'Couldn\'t reach World Drive. Check your connection and try again.';
 
 let clientId = '';
@@ -42,6 +43,9 @@ let clientId = '';
 let passwords = false;
 let siteKey = '';
 let getPlayer = () => null;
+// Takes the account's player for this browser in place of its own (the leaderboard's adopt), or null
+// until the game has set it up.
+let adoptPlayer = null;
 // /api/me's answer, or null until it's known.
 let me = null;
 // What's going on, shown in each area ('' for nothing).
@@ -78,9 +82,10 @@ const changed = new Set();
 // onPass and onBuy(): Buy opening the Payment Link, for the play stats. The questions already
 // asked, and their answers, carry on.
 // passwords and turnstileSiteKey: /api/config's, for usernames and passwords.
-export function setUpSupporter( { worker, googleClientId, passwords: passwordsOn = false, turnstileSiteKey = '', player, onPass: whenPass = null, onBuy: whenBuy = null } ) {
+export function setUpSupporter( { worker, googleClientId, passwords: passwordsOn = false, turnstileSiteKey = '', player, adopt = null, onPass: whenPass = null, onBuy: whenBuy = null } ) {
 
 	getPlayer = player ?? getPlayer;
+	adoptPlayer = adopt ?? adoptPlayer;
 	onPass = whenPass;
 	onBuy = whenBuy ?? onBuy;
 	if ( handle ) {
@@ -234,18 +239,47 @@ export async function signOut( { everywhere = false } = {} ) {
 
 }
 
-// This browser's leaderboard player, linked to the signed-in account so a supporter's ⭐ is by its
-// name: once for each player and account. Called again when a player is made (leaderboard.js).
-export async function linkPlayer() {
+// One account, one player, on every device: signed in here, this browser's leaderboard player is the
+// account's (accounts.js's accountPlayer). If the account has none yet, it takes this browser's
+// (so a supporter's ⭐ is by its name); if it has one, this browser switches to it, and a nickname
+// made here before (a "Tom 2") is folded into it, its level, achievements and scores with it. Once
+// for each player and account; called again when a player is made here (leaderboard.js), and not
+// before the game is there to take a player (adoptPlayer).
+let linking = null;
+export function linkPlayer() {
+
+	linking ??= link().finally( () => linking = null );
+	return linking;
+
+}
+
+async function link() {
 
 	const player = getPlayer();
-	if ( ! me?.signedIn || ! player ) return;
-	const key = `${ player.id } ${ me.email || me.username }`;
-	if ( storage( () => localStorage.getItem( LINKED_KEY ) ) === key ) return;
-	const answer = await postLink( player );
-	if ( ! answer.ok ) return;
-	storage( () => localStorage.setItem( LINKED_KEY, key ) );
-	for ( const fn of linked ) fn( player );
+	if ( ! me?.signedIn || ! adoptPlayer ) return;
+	const who = me.email || me.username;
+	if ( storage( () => localStorage.getItem( LINKED_KEY ) ) === `${ player?.id ?? '' } ${ who }` ) return;
+	const answer = await accountPlayer( player );
+	if ( ! answer.ok || ! isObjectLike( answer.body ) ) return;
+	const mine = answer.body.player;
+	// Signed out, or another player made here, while it asked: asked again then.
+	if ( ! me?.signedIn || getPlayer()?.id !== player?.id ) return;
+	let now = player;
+	if ( mine && typeof mine.id === 'string' && typeof mine.name === 'string' && typeof mine.secret === 'string' ) {
+
+		now = { id: mine.id, secret: mine.secret, name: mine.name };
+		adoptPlayer( now, { merged: answer.body.merged === true, from: player } );
+
+	}
+
+	storage( () => localStorage.setItem( LINKED_KEY, `${ now?.id ?? '' } ${ who }` ) );
+	if ( now ) for ( const fn of linked ) fn( now );
+
+}
+
+function isObjectLike( value ) {
+
+	return !! value && typeof value === 'object';
 
 }
 

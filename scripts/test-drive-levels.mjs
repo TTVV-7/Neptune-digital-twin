@@ -1160,6 +1160,127 @@ describe( 'Levels: the Worker', () => {
 
 	} );
 
+	test( 'one account, one player on every device: signed in on a second browser, its own nickname folds into the account\'s', async () => {
+
+		const signIn = async sub => {
+
+			const session = await call( '/api/session', { method: 'POST', body: { credential: await makeToken( googleKey, { sub, email: `${ sub }@example.com` } ) } } );
+			assert.equal( session.status, 200, session.text );
+			return `__Host-wd_session=${ /__Host-wd_session=([\w-]{43})/.exec( session.headers.get( 'Set-Cookie' ) )[ 1 ] }`;
+
+		};
+		const mine = ( cookie, who, time = NOON ) => call( '/api/player/mine', { method: 'POST', body: who ? { id: who.id, secret: who.secret } : {}, cookie, time } );
+		const score = ( who, points, time, secret = who.secret ) => call( '/api/score', { method: 'POST', body: { id: who.id, secret, visit: who.visit, score: points, tricks: 'Backflip!', place: 'Furka Pass', vehicle: 'go-kart', airTime: 1, runSeconds: 100 }, time } );
+
+		// Not signed in: nothing to ask for. Signed in to an account with no player, and none here: none.
+		assert.equal( ( await mine( null, null ) ).status, 401 );
+		const cookie = await signIn( 'tom-1' );
+		assert.deepEqual( ( await mine( cookie, null ) ).json, { player: null } );
+
+		// The first browser: Tom, with some XP, an area, an achievement and a best score; it becomes
+		// the account's player (no new secret: its own goes on).
+		const tom = await player();
+		await report( tom, { km: 4, areas: [ AREAS[ 0 ] ] }, { after: 3 * MINUTE } );
+		assert.equal( ( await score( tom, 5000, tom.at + 4 * MINUTE ) ).status, 200 );
+		server.d1( `INSERT INTO achievements ( player_id, achievement, earned_at ) VALUES ( '${ tom.id }', 'shared', 200 ), ( '${ tom.id }', 'toms', 100 )` );
+		const first = await mine( cookie, tom );
+		assert.equal( first.status, 200, first.text );
+		assert.deepEqual( first.json, { player: { id: tom.id, name: tom.name } } );
+		assert.equal( server.d1( `SELECT account_id FROM players WHERE id = '${ tom.id }'` )[ 0 ].account_id !== null, true );
+		// Asked again: the same, still no new secret.
+		assert.deepEqual( ( await mine( cookie, tom ) ).json, { player: { id: tom.id, name: tom.name } } );
+
+		// A second browser, where a second nickname was picked before signing in ("Tom 2"): more XP,
+		// another area, its own achievements and a better score.
+		const tom2 = await player();
+		await report( tom2, { km: 7, areas: [ AREAS[ 1 ] ] }, { after: 3 * MINUTE } );
+		await report( tom2, { km: 7 }, { after: 6 * MINUTE } );
+		assert.equal( ( await score( tom2, 9000, tom2.at + 7 * MINUTE ) ).status, 200 );
+		server.d1( `INSERT INTO achievements ( player_id, achievement, earned_at ) VALUES ( '${ tom2.id }', 'shared', 50 ), ( '${ tom2.id }', 'tom2s', 300 )` );
+		const [ before, before2 ] = [ row( tom ), row( tom2 ) ];
+		assert.ok( before2.xp > before.xp );
+
+		// Signed in there: it's Tom from now on, with a secret of its own, and Tom 2 is gone.
+		const second = await mine( cookie, tom2, tom2.at + 8 * MINUTE );
+		assert.equal( second.status, 200, second.text );
+		assert.equal( second.json.player.id, tom.id );
+		assert.equal( second.json.player.name, tom.name );
+		assert.equal( second.json.merged, true );
+		assert.match( second.json.player.secret, /^[A-Za-z0-9_-]{32}$/ );
+		assert.notEqual( second.json.player.secret, tom.secret );
+		assert.equal( server.d1( `SELECT COUNT(*) AS n FROM players WHERE id = '${ tom2.id }'` )[ 0 ].n, 0 );
+		// Tom: the higher XP (not the sum), the areas of both, every achievement (the one both had
+		// from the earlier day), the better best score, and both players' scores.
+		const after = row( tom );
+		assert.equal( after.xp, before2.xp );
+		assert.equal( after.discoveries, 2 );
+		assert.deepEqual( server.d1( `SELECT place FROM discoveries WHERE player_id = '${ tom.id }' ORDER BY place` ).map( r => r.place ), [ AREAS[ 0 ], AREAS[ 1 ] ].sort() );
+		assert.deepEqual( server.d1( `SELECT achievement, earned_at FROM achievements WHERE player_id = '${ tom.id }' ORDER BY achievement` ), [ { achievement: 'shared', earned_at: 50 }, { achievement: 'tom2s', earned_at: 300 }, { achievement: 'toms', earned_at: 100 } ] );
+		assert.deepEqual( [ ...new Set( server.d1( `SELECT score FROM best_scores WHERE player_id = '${ tom.id }'` ).map( r => r.score ) ) ], [ 9000 ] );
+		assert.equal( server.d1( `SELECT COUNT(*) AS n FROM scores WHERE player_id = '${ tom.id }'` )[ 0 ].n, 2 );
+
+		// The second browser drives on as Tom, with its new secret (and its visit, now Tom's); the
+		// first browser's own secret works as it always has; Tom 2's no longer does.
+		const here = { ...tom, secret: second.json.player.secret, visit: tom2.visit, at: tom2.at };
+		const driven = await report( here, { km: 1 }, { after: 12 * MINUTE } );
+		assert.equal( driven.status, 200, driven.text );
+		assert.equal( driven.json.own, before2.xp + XP.km );
+		assert.equal( ( await report( tom, {}, { after: 13 * MINUTE } ) ).status, 200 );
+		assert.equal( ( await report( tom2, {}, { after: 13 * MINUTE } ) ).status, 403 );
+		// The name Tom 2 had is free again.
+		const again = await call( '/api/player', { method: 'POST', body: { name: tom2.name, visit: await visitAt( NOON ) } } );
+		assert.equal( again.status, 201, again.text );
+
+		// A third browser with no nickname yet: handed Tom, with a secret of its own.
+		const third = await mine( cookie, null );
+		assert.equal( third.json.player.id, tom.id );
+		assert.equal( third.json.merged, false );
+		assert.notEqual( third.json.player.secret, second.json.player.secret );
+		assert.equal( ( await report( { ...tom, secret: third.json.player.secret }, {}, { after: 14 * MINUTE } ) ).status, 200 );
+		// A stale player here (deleted, or a wrong secret) is as none.
+		assert.equal( ( await mine( cookie, tom2 ) ).json.player.id, tom.id );
+
+		// Another account's player stays theirs: a browser holding it, signed in to this account,
+		// moves on to this account's player, and the other keeps its own.
+		const other = await signIn( 'ann-1' );
+		const ann = await player();
+		assert.deepEqual( ( await mine( other, ann ) ).json, { player: { id: ann.id, name: ann.name } } );
+		const crossed = await mine( cookie, ann );
+		assert.equal( crossed.json.player.id, tom.id );
+		assert.equal( crossed.json.merged, false );
+		assert.equal( server.d1( `SELECT COUNT(*) AS n FROM players WHERE id = '${ ann.id }'` )[ 0 ].n, 1 );
+
+	} );
+
+	test( 'merging players moves challenge times and their ghosts, keeping the account\'s where both have one', async () => {
+
+		const session = await call( '/api/session', { method: 'POST', body: { credential: await makeToken( googleKey, { sub: 'racer-1', email: 'racer@example.com' } ) } } );
+		const cookie = `__Host-wd_session=${ /__Host-wd_session=([\w-]{43})/.exec( session.headers.get( 'Set-Cookie' ) )[ 1 ] }`;
+		const main = await player();
+		const extra = await player();
+		assert.equal( ( await call( '/api/player/mine', { method: 'POST', body: { id: main.id, secret: main.secret }, cookie } ) ).status, 200 );
+		// Two challenges: both have a time (and a ghost) on the first, only `extra` on the second.
+		server.d1( `INSERT INTO challenges ( id, period, world, kind, place, route, source, starts_at, ends_at, drivers, ghost_bytes, created_at ) VALUES
+			( 9101, 'd-merge-1', 'earth', 'sprint', 'A', '{}', 'rotation', 0, 1, 2, 30, 0 ), ( 9102, 'd-merge-2', 'earth', 'sprint', 'B', '{}', 'rotation', 0, 1, 1, 20, 0 )` );
+		const time = ( c, who, ms, run ) => `( ${ c }, '${ who.id }', ${ ms }, '[]', 'go-kart', '${ run }', 'v', 0, 0, 0 )`;
+		server.d1( `INSERT INTO challenge_times ( challenge_id, player_id, ms, passes, vehicle, run_id, visit, owner, created_at, first_at ) VALUES
+			${ time( 9101, main, 50000, 'run-main-1' ) }, ${ time( 9101, extra, 40000, 'run-extra-1' ) }, ${ time( 9102, extra, 60000, 'run-extra-2' ) }` );
+		const ghost = ( c, who, run, bytes ) => `( ${ c }, '${ who.id }', '${ run }', 1, '[]', 'go-kart', 'g', ${ bytes }, 1, 0 )`;
+		server.d1( `INSERT INTO challenge_ghosts ( challenge_id, player_id, run_id, ms, passes, vehicle, ghost, bytes, least_ms, created_at ) VALUES
+			${ ghost( 9101, main, 'run-main-1', 10 ) }, ${ ghost( 9101, extra, 'run-extra-1', 20 ) }, ${ ghost( 9102, extra, 'run-extra-2', 20 ) }` );
+
+		const merged = await call( '/api/player/mine', { method: 'POST', body: { id: extra.id, secret: extra.secret }, cookie } );
+		assert.equal( merged.status, 200, merged.text );
+		assert.equal( merged.json.merged, true );
+		assert.deepEqual( server.d1( `SELECT challenge_id, player_id, run_id FROM challenge_times WHERE challenge_id IN ( 9101, 9102 ) ORDER BY challenge_id` ),
+			[ { challenge_id: 9101, player_id: main.id, run_id: 'run-main-1' }, { challenge_id: 9102, player_id: main.id, run_id: 'run-extra-2' } ] );
+		assert.deepEqual( server.d1( `SELECT challenge_id, player_id, run_id FROM challenge_ghosts WHERE challenge_id IN ( 9101, 9102 ) ORDER BY challenge_id` ),
+			[ { challenge_id: 9101, player_id: main.id, run_id: 'run-main-1' }, { challenge_id: 9102, player_id: main.id, run_id: 'run-extra-2' } ] );
+		// The first challenge has one driver fewer and its dropped ghost's bytes back; the second is as it was.
+		assert.deepEqual( server.d1( 'SELECT id, drivers, ghost_bytes FROM challenges WHERE id IN ( 9101, 9102 ) ORDER BY id' ), [ { id: 9101, drivers: 1, ghost_bytes: 10 }, { id: 9102, drivers: 1, ghost_bytes: 20 } ] );
+
+	} );
+
 	test( 'a player removed takes their discoveries with them', async () => {
 
 		const max = await player();

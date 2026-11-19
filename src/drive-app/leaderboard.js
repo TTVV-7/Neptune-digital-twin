@@ -529,6 +529,20 @@ export function setUpLeaderboard( { dialog, card, vehicles, worker, getPlace, on
 		// A new player, or a new name for this one, as the panel's form picks it (true if it worked;
 		// say( text ) tells how it went): a challenge's finish card asks for a name with it.
 		pickName,
+		// The signed-in account's player ({ id, secret, name }), in place of this browser's own
+		// (supporter.js's linkPlayer): kept here from now on, and posted for.
+		adopt( next ) {
+
+			player = { id: next.id, secret: next.secret, name: next.name };
+			storage( () => localStorage.setItem( PLAYER_KEY, JSON.stringify( player ) ) );
+			// Today's bests were the old player's: the new one's go up as they're beaten.
+			posted = {};
+			storage( () => localStorage.removeItem( POSTED_KEY ) );
+			onName();
+			if ( dialog.open ) showYou();
+			if ( waiting.size ) schedule();
+
+		},
 		get player() {
 
 			return player;

@@ -289,6 +289,15 @@ export function linkPlayer( { id, secret } ) {
 
 }
 
+// The signed-in account's player for this browser (worker/drive/accounts.js's accountPlayer): this
+// browser's own (`player`, or null for none) linked to it, or the account's, handed over with a
+// secret for this browser, this browser's own folded into it.
+export function accountPlayer( player ) {
+
+	return send( 'POST', '/api/player/mine', player ? { id: player.id, secret: player.secret } : {} );
+
+}
+
 // A request to the Worker that never throws: { ok, status, body, retryAfter }, status 0 when it
 // couldn't be reached (the challenges' chunk, challenges.js, asks with it too).
 export async function send( method, path, body, { keepalive = false } = {} ) {

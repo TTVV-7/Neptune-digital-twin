@@ -6,7 +6,7 @@ import { leaderboard, postScore } from './scores.js';
 import { postProgress, setTitle } from './progress.js';
 import { addressOf, adsense, clock, googleClientId, setting } from './settings.js';
 import { makeVisit } from './visits.js';
-import { currentAccount, getMe, linkPlayer, signIn, signOut } from './accounts.js';
+import { accountPlayer, currentAccount, getMe, linkPlayer, signIn, signOut } from './accounts.js';
 import { linkGoogle, passwordSignIn, passwordsOn, removePassword, setPassword, signOutEverywhere, signUp, unlinkGoogle } from './logins.js';
 import { isSupporter, stripeWebhook } from './supporter.js';
 import { live, liveToday, online } from './live.js';
@@ -118,6 +118,7 @@ const ROUTES = [
 	{ method: 'POST', path: '/api/player', handler: createPlayer },
 	{ method: 'POST', path: '/api/player/rename', handler: renamePlayer },
 	{ method: 'POST', path: '/api/player/link', handler: linkPlayer },
+	{ method: 'POST', path: '/api/player/mine', handler: accountPlayer },
 	{ method: 'POST', path: '/api/player/title', handler: setTitle },
 	{ method: 'POST', path: '/api/achievements', handler: postAchievements },
 	{ method: 'POST', path: '/api/score', handler: postScore },

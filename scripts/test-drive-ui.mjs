@@ -6091,7 +6091,7 @@ const PLAYER = { id: 'P1ayer-id_000000', secret: 'S'.repeat( 32 ), name: 'Speed 
 // sign-in (window.testCredential 'good-token') makes it signedIn. page.asked has what was sent, and
 // page.google how often Google's script (stood in for, harness's GOOGLE_STUB) was loaded. config and
 // visit: /api/config (maps off, the test pad) and /api/visit (never answered) as newPage takes them.
-async function supporterPage( { me = SIGNED_OUT, signedInAs = ALICE, clientId = CLIENT, player = null, config = RESTING, visit = route => route.abort(), ...options } = {} ) {
+async function supporterPage( { me = SIGNED_OUT, signedInAs = ALICE, clientId = CLIENT, player = null, accountPlayer = null, config = RESTING, visit = route => route.abort(), ...options } = {} ) {
 
 	const page = await newPage( { ...options, api: { config: { ...config, googleClientId: clientId }, turnstile: true, visit } } );
 	// Never a page of Stripe's: Buy's new tab is only noted.
@@ -6138,10 +6138,14 @@ async function supporterPage( { me = SIGNED_OUT, signedInAs = ALICE, clientId = 
 		json( route, state.me );
 
 	} );
-	await page.route( `${ BASE }/api/player/link`, route => {
+	// The account's player for this browser: this browser's own (no secret), or `accountPlayer`'s,
+	// handed over with a secret of its own, this browser's folded into it.
+	await page.route( `${ BASE }/api/player/mine`, route => {
 
-		asked.links.push( route.request().postDataJSON() );
-		json( route, { id: PLAYER.id, name: PLAYER.name } );
+		const sent = route.request().postDataJSON();
+		asked.links.push( sent );
+		if ( accountPlayer ) return json( route, { player: accountPlayer, merged: !! sent.id } );
+		json( route, { player: sent.id ? { id: sent.id, name: PLAYER.name } : null } );
 
 	} );
 	return page;
@@ -6298,7 +6302,7 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		const page = await supporterPage( { me: ALICE, player: PLAYER } );
 		await testPad( page );
 		await page.waitForFunction( () => window.drive.supporter.me );
-		await page.waitForFunction( () => localStorage.getItem( 'world-drive.linked' ) );
+		await page.waitForFunction( () => localStorage.getItem( 'world-drive.linked.2' ) );
 		assert.deepEqual( page.asked.links, [ { id: PLAYER.id, secret: PLAYER.secret } ] );
 		await testPad( page );
 		await page.waitForFunction( () => window.drive.supporter.me );
@@ -6306,7 +6310,28 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		assert.equal( page.asked.links.length, 1, 'linked again on the next visit' );
 		// Signed out, the email in it goes from this browser.
 		await page.evaluate( () => window.drive.supporter.signOut() );
-		assert.equal( await page.evaluate( () => localStorage.getItem( 'world-drive.linked' ) ), null );
+		assert.equal( await page.evaluate( () => localStorage.getItem( 'world-drive.linked.2' ) ), null );
+		await page.context().close();
+
+	} );
+
+	test( 'signed in on another browser, it drives as the account\'s player: its own nickname folded in, once', async () => {
+
+		// This browser's own nickname (made before signing in), and the account's, from another device.
+		const mine = { id: 'Ac0unt-player_00', secret: 'K'.repeat( 32 ), name: 'Tom' };
+		const page = await supporterPage( { me: ALICE, player: { ...PLAYER, name: 'Tom 2' }, accountPlayer: mine } );
+		await testPad( page );
+		await page.waitForFunction( () => JSON.parse( localStorage.getItem( 'world-drive.player' ) ?? 'null' )?.name === 'Tom' );
+		assert.deepEqual( page.asked.links, [ { id: PLAYER.id, secret: PLAYER.secret } ] );
+		assert.deepEqual( await page.evaluate( () => JSON.parse( localStorage.getItem( 'world-drive.player' ) ) ), mine );
+		assert.equal( await page.evaluate( () => localStorage.getItem( 'world-drive.linked.2' ) ), `${ mine.id } ${ ALICE.email }` );
+		await page.locator( '#toast', { hasText: 'Signed in as Tom: Tom 2\'s progress here is now Tom\'s' } ).waitFor();
+		// The next visit asks no more.
+		await testPad( page );
+		await page.waitForFunction( () => window.drive.supporter.me );
+		await page.waitForTimeout( 300 );
+		assert.equal( page.asked.links.length, 1, 'asked again on the next visit' );
+		assert.deepEqual( page.errors, [] );
 		await page.context().close();
 
 	} );
