@@ -29,6 +29,7 @@ const TRICKS_TIME = 2200;
 const TOUCH_WORDS = [
 	[ 'Hold F to fly or press R', 'Hold FLY, or tap ↺' ],
 	[ 'Press R', 'Tap ↺' ],
+	[ 'Space up · Shift down · T to land', 'UP · DOWN · ✈ to land' ],
 	[ 'A/D spin · W/S flip · Q/E roll', '◀ ▶ spin · GAS/BRAKE flip · DRIFT + ◀ ▶ roll' ],
 ];
 
@@ -690,6 +691,20 @@ const CSS = `
 	top: calc( var( --drive-hud-top, 12px ) + 52px );
 }
 
+/* Plane mode's T, under CAM. */
+.dhud .dhud-touch .plane {
+	right: var( --drive-hud-side, 16px );
+	top: calc( var( --drive-hud-top, 12px ) + 104px );
+	width: 52px;
+	height: 44px;
+	font-size: 22px;
+	background: rgba( 61, 224, 255, 0.4 );
+}
+
+.dhud.plane .dhud-fly {
+	background: #ffffff;
+}
+
 @media ( max-width: 760px ) {
 
 	.dhud .dhud-keys {
@@ -803,6 +818,7 @@ export function createDriveHud( parent = document.body ) {
 			<button class="fly" data-key="KeyF" hidden>FLY</button>
 			<button class="reset" data-key="KeyR" aria-label="Back on the road">↺</button>
 			<button class="camera" data-tap="camera" aria-label="Camera">CAM</button>
+			<button class="plane" data-key="KeyT" hidden aria-label="Plane">✈</button>
 		</div>`;
 	parent.append( root );
 
@@ -839,6 +855,7 @@ export function createDriveHud( parent = document.body ) {
 	let tilt = 1;
 	let panel = null;
 	let flying = false;
+	let plane = false;
 	// Only touch what changed: these are set many times a second.
 	const shown = new Map();
 	const set = ( key, value, apply ) => {
@@ -900,12 +917,14 @@ export function createDriveHud( parent = document.body ) {
 			row( [ 'Space' ], driver?.drift ? 'drift (hold and steer), hop (tap)' : 'hop' ),
 			driver?.booster ? row( [ 'Shift' ], 'boost (hold: overdrive while the gauge lasts)' ) : row( [ 'Shift' ], 'boost' ),
 			driver?.fly && row( [ 'F' ], 'fly' ),
+			driver?.aircraft && row( driver.fly ? [ 'T' ] : [ 'F', 'T' ], 'plane (again to bail out)' ),
 			driver?.launch && row( [ 'Q', 'E' ], 'roll in the air' ),
 			row( [ 'R' ], 'reset' ),
 			row( [ 'C' ], 'camera' ),
 		].filter( Boolean ).join( ' · ' );
 		$( '.booster' ).hidden = ! driver?.booster;
 		$( '.fly' ).hidden = ! driver?.fly;
+		$( '.plane' ).hidden = ! driver?.aircraft;
 		$( '.drift' ).firstChild.textContent = driver?.drift ? 'DRIFT' : 'HOP';
 		driftHold.hidden = ! driver?.drift || !! panel;
 
@@ -1001,7 +1020,7 @@ export function createDriveHud( parent = document.body ) {
 			set( 'boosting', !! boost, value => root.classList.toggle( 'boosting', value ) );
 			const statsText = `TOP ${ Math.round( top ) } · BEST AIR ${ bestAir.toFixed( 1 ) } s${ air > 0.2 ? ` · AIR ${ air.toFixed( 1 ) } s` : '' }`;
 			set( 'stats', statsText, value => stats.textContent = value );
-			set( 'altitude', altitude === null ? null : Math.round( altitude ), value => flyBadge.textContent = value === null ? 'FLYING' : `FLYING · ${ value } m` );
+			set( 'altitude', altitude === null ? null : Math.round( altitude ), value => flyBadge.textContent = `${ plane ? 'PLANE' : 'FLYING' }${ value === null ? '' : ` · ${ value.toLocaleString() } m` }` );
 			set( 'drift', drift, value => {
 
 				driftBadge.hidden = value === null;
@@ -1070,7 +1089,7 @@ export function createDriveHud( parent = document.body ) {
 			const was = shown.get( 'gauge' );
 			set( 'gauge', level === null ? null : Math.round( level * 100 ), value => {
 
-				boostRow.hidden = value === null || !! panel;
+				boostRow.hidden = value === null || !! panel || plane;
 				if ( value === null ) return;
 				boostBar.style.width = `${ value }%`;
 				boostRow.classList.toggle( 'ready', value >= 100 );
@@ -1088,7 +1107,24 @@ export function createDriveHud( parent = document.body ) {
 		setFlying( on ) {
 
 			flying = on;
-			flyBadge.hidden = ! on || !! panel;
+			flyBadge.hidden = ! ( on || plane ) || !! panel;
+
+		},
+
+		// Plane mode (drive.js's T), or not: the badge says PLANE, and on a touch screen FLY climbs and
+		// BOOST comes down.
+		setPlane( on ) {
+
+			plane = !! on;
+			root.classList.toggle( 'plane', plane );
+			flyBadge.hidden = ! ( flying || plane ) || !! panel;
+			shown.delete( 'altitude' );
+			$( '.fly' ).textContent = plane ? 'UP' : 'FLY';
+			$( '.booster' ).textContent = plane ? 'DOWN' : 'BOOST';
+			$( '.drift' ).firstChild.textContent = plane ? 'UP' : driver?.drift ? 'DRIFT' : 'HOP';
+			// (No drifting or boosting as a plane: their readouts go while it's one.)
+			driftHold.hidden = plane || ! driver?.drift || !! panel;
+			boostRow.hidden = plane || ! driver?.booster || !! panel;
 
 		},
 

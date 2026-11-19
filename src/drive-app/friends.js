@@ -246,9 +246,10 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 		heading.textContent = inParty() ? `Party ${ live.party }` : 'Drivers nearby';
 		const shown = others();
 		empty.hidden = shown.length > 0;
-		empty.textContent = inParty() ? 'Nobody else here yet. Invite friends from the pause menu.'
+		const says = inParty() ? 'Nobody else here yet. Invite friends from the pause menu.'
 			: live.status === 'busy' ? 'This area is full just now, so you\'re driving on your own here.'
 				: 'Nobody else driving near here yet.';
+		if ( empty.textContent !== says ) empty.textContent = says;
 		for ( const [ pid, row ] of rowOf ) {
 
 			if ( live.players.has( pid ) ) continue;
@@ -260,11 +261,15 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 		for ( const { p, distance } of shown ) {
 
 			if ( ! rowOf.has( p.pid ) ) rowOf.set( p.pid, makeRow( p.pid ) );
-			const row = rowOf.get( p.pid );
-			row.fill( p, distance );
-			rows.append( row.li );
+			rowOf.get( p.pid ).fill( p, distance );
 
 		}
+
+		// Put in order only when the order changed: moving a row takes it out of the page and back,
+		// which drops the focus from its button (tabbed to, every half second) and, on a slow page,
+		// has it gone for a moment under a tap.
+		const order = shown.map( ( { p } ) => rowOf.get( p.pid ).li );
+		if ( order.length !== rows.children.length || order.some( ( li, i ) => rows.children[ i ] !== li ) ) rows.append( ...order );
 
 	}
 
@@ -296,10 +301,12 @@ export function setUpFriends( { live, ghosts, vehicles, mode, goTo, onInvite = (
 				name = p.name;
 				const paused = p.s && p.s[ 10 ] & FLAGS.paused;
 				const where = p.away ? onGlobe( p ) : elsewhere( p ) ?? ( paused ? 'paused' : distance !== null ? far( distance ) : p.place?.name ? `at ${ p.place.name }` : 'driving' );
-				what.textContent = `${ rides.get( p.vehicle ) ?? 'Go-kart' } · ${ where }`;
+				// (Each written only when it changes, as the list refreshes twice a second.)
+				const says = `${ rides.get( p.vehicle ) ?? 'Go-kart' } · ${ where }`;
+				if ( what.textContent !== says ) what.textContent = says;
 				go.disabled = p.away || ( ! p.s && ! p.place );
 				const hiddenHere = ghosts.isHidden( name );
-				hide.textContent = hiddenHere ? 'Show' : 'Hide';
+				if ( hide.textContent !== ( hiddenHere ? 'Show' : 'Hide' ) ) hide.textContent = hiddenHere ? 'Show' : 'Hide';
 				hide.title = hiddenHere ? 'Show them again' : 'Hide them for this visit';
 				// Whose, for a screen reader: otherwise a column of the same two words.
 				go.setAttribute( 'aria-label', `Go to ${ name }` );

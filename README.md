@@ -269,6 +269,58 @@ left as it came):
   train support beams 1 and 2 over the pit and along the gallery, G1 to G14, the cross beam, the
   shed support beam and B1 to B6. At grade they're under Google's ground (**U** cuts it away over
   the structure), and from inside C31 they're overhead;
+- past C32's tunnel mouth, **C32's take-up** (624-24070-DWG-ST231 and -ST232, -ME208 for levels, -ME217
+  for the counterweight), on C32's centre line:
+  - the new **sheave anchor pedestal** (1.5 × 1.49 m, up to EL 5.325, its top chamfered at the tunnel end
+    for the belt), **P1** (450 × 450, two) and **P2** (450 × 550, two);
+  - the **pad**, the new tower foundation extension (3.24 × 3.13 m, 1067 thick, top EL 3.825) with the
+    take-up **hoist** on it;
+  - the **counterweight tower** (its legs and top frame, up to EL 13.355) with the **counterweight**,
+    CTWT-624-43, in it (1300 × 850 × 3575 concrete, its ten plates, two MC200s and sheave; drawn where
+    -ME208 has it, though it rides up and down with the take-up);
+  - the **embedded items**: the anchor rods with their nuts, 6 for the sheave assembly and 4 for the rope
+    anchor (3/4", 350 in, 125 out), 2 for the conveyor's legs on each P1 and P2, 4 for the hoist frame on
+    the pad, and the counterweight's four 1" rods.
+
+  - what's **being demolished**, see-through so the new work shows through it: the asphalt (75 mm) and the
+    concrete under it (200 mm) broken out over the two areas marked on ST231 (13.62 m² round the sheave
+    anchor pedestal, P1 and P2; 10.5 m² over the pad), and in red the existing C32 rope and sheave anchor
+    pedestal above the ground and the conveyor table pedestals where the new P2s go (their height isn't
+    given: drawn 300 mm). Layers *To demolish: asphalt* and *To demolish: concrete*, which don't stop you
+    walking.
+
+  - the **existing structures round it** (-ME208 Section A, -ST231's plan): the C32 conveyor from the tunnel's
+    mouth up past grid 1X (belt, stringers, idlers, its legs on the P2s), its secondary drive, primary
+    drive, LT bend and take-up pulleys, the take-up carriage's 15° rails, the tower's columns at grids 3
+    and 2 on rows A, A1 and B up to the take-up frame (EL 9.737), and at grids 1 and 1X up to the drive's
+    top steel (EL 12.578) with its platform at EL 7.45. In detail: a troughed belt on three-roll idlers
+    (35°) with return rolls and channel stringers, a walkway with handrails and toe board on the A side,
+    the conveyor's legs and bents, pulleys on shafts in pillow blocks with gearboxes and motors on the two
+    drive pulleys, the take-up carriage on its rails, wide-flange columns and beams with X-bracing, the
+    drive platform's handrails, the counterweight tower's bracing, top sheaves and caged ladder, and the
+    take-up rope reeved from the hoist over the tower's sheaves and round the counterweight to the take-up
+    sheave on the new anchor pedestal. The belt's width (1.2 m) and the members' sizes aren't on these
+    drawings and are drawn typical.
+
+  - **how it's built, stage by stage:** a picker in the views bar (*C32 take-up*: 1 Demolition, 2 Excavation,
+    3 Forms & rebar, 4 Built, All; remembered in your browser, `src/build-stages.js`). Demolition shows what
+    comes out; Excavation the pits (the pad's with 300 mm to work in and 1:1 sides, cut straight where it
+    meets the existing tower foundation; the pedestals' inside the broken-out slab) and lean concrete, with
+    Google's ground cut away over them; Forms & rebar the formwork (19 mm plywood, studs, walers, braces and
+    stakes; column forms with clamps), the reinforcing as ST232 calls it and the anchor rods set in the
+    forms; Built the new concrete, the new counterweight tower with its ladder and the take-up rope, and the
+    conveyor back on. The conveyor is taken out for the work, so it's only there when it's built. The
+    methods are typical, not from the drawings. A model's scene extras `buildStages` and its nodes'
+    `buildStage` drive this, for any model built in stages. The **Take-up close** view looks at the work.
+
+  Concrete in pale new concrete, steel in its own layer (*C32 take-up steel & embedded items*). Where grid 4
+  is along C32 the drawings don't say: `TAKE_UP.GRID_4` in `scripts/b2d2-structure.mjs` puts it 4 m past
+  the tunnel's end, worked out from the belt's height there. Levels are on the C32 tunnel's datum (its floor
+  where it comes out is the take-up's ground, EL 3.825); the model's grade over C31 is about 1.3 m higher
+  (`GRADE` would lift the take-up to it). Concrete level with the ground shows 10 cm proud (`SHOW`). The **C32 take-up**
+  view looks at them;
+- along each of C31's walls under the slab, the **downstand** (0.66 m out from the wall, its underside
+  at EL +1.22, where the walls' repair areas stop), as -ST011's beam elevations draw it;
 - the gallery's **hoppers** (the two sloped plates under the slot between the rail beams) taken out:
   others broke them out with machines, bay by bay, by 10 November. They're kept in the model's data
   bay by bay (G1–G2 at the pit to G12–G13 at the north end) with the day each went, for the
@@ -1059,6 +1111,7 @@ src/placements.js   models' positions saved on the live site for everyone (Save 
                     and the admin passcode for anything saved for everyone
 src/shared-items.js items the admin saved for everyone: loaded for everyone, Save / Remove for everyone
 src/legend.js       the Controls panel: the keys for what you're doing now
+src/build-stages.js the stage picker for a model built in stages (C32's take-up: demolition to built)
 src/player.js       the construction workers you walk as (K): their bones, their walk, third and first person (C)
 src/layers.js       the Show panel: layers, hidden items and Before / After (B)
 src/drive-prompt.js V: what it drives, the "Press V to drive" prompt and twin.startDriving()

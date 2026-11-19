@@ -562,35 +562,53 @@ describe( 'World Drive, driving with others', () => {
 		await a.evaluate( () => window.track = null );
 		await b.evaluate( () => window.track = null );
 
-		// Each frame B drew while A was moving, against where A was INTERP_MS before.
-		const errors = [];
-		const turns = [];
-		for ( const [ t, ...rest ] of drawn ) {
+		// Each frame B drew while A was moving, against where A was INTERP_MS (and `lag` ms) before.
+		// A state is as of when the room heard it: up to a frame after A's car was there (A sends at
+		// the end of its frame), plus the trip to the room, which B can't take out (it takes out only
+		// the room's trip to it). So B draws A a little later than INTERP_MS, by a lag that's steady:
+		// found here as the one B's drawing fits A's way best, and checked to be no more than one of
+		// A's frames and 50 ms. At that lag, B's drawing is on A's way to a few tens of centimetres.
+		// (On a machine drawing in software at 11 frames a second, the lag was 60 ms, and 0.92 m at
+		// none, 0.11 m at it.)
+		const along = lag => {
 
-			const when = t - INTERP_MS;
-			const i = truth.findIndex( row => row[ 0 ] > when );
-			if ( when < started + 500 || i < 1 ) continue;
-			const [ t0, ...s0 ] = truth[ i - 1 ];
-			const [ t1, ...s1 ] = truth[ i ];
-			const u = ( when - t0 ) / ( t1 - t0 );
-			const p = [ 0, 1, 2 ].map( k => s0[ k ] + ( s1[ k ] - s0[ k ] ) * u );
-			if ( distance( s0, s1 ) < 1e-3 ) continue;
-			errors.push( distance( p, rest ) );
-			// Its turn then, between the two (near enough to a slerp, a frame apart).
-			const sign = Math.sign( [ 3, 4, 5, 6 ].reduce( ( sum, k ) => sum + s0[ k ] * s1[ k ], 0 ) ) || 1;
-			const q = [ 3, 4, 5, 6 ].map( k => s0[ k ] + ( s1[ k ] * sign - s0[ k ] ) * u );
-			const length = Math.hypot( ...q );
-			const dot = Math.abs( q.reduce( ( sum, value, k ) => sum + value / length * rest[ k + 3 ], 0 ) );
-			turns.push( 2 * Math.acos( Math.min( 1, dot ) ) * 180 / Math.PI );
+			const errors = [];
+			const turns = [];
+			for ( const [ t, ...rest ] of drawn ) {
 
-		}
+				const when = t - INTERP_MS - lag;
+				const i = truth.findIndex( row => row[ 0 ] > when );
+				if ( when < started + 500 || i < 1 ) continue;
+				const [ t0, ...s0 ] = truth[ i - 1 ];
+				const [ t1, ...s1 ] = truth[ i ];
+				const u = ( when - t0 ) / ( t1 - t0 );
+				const p = [ 0, 1, 2 ].map( k => s0[ k ] + ( s1[ k ] - s0[ k ] ) * u );
+				if ( distance( s0, s1 ) < 1e-3 ) continue;
+				errors.push( distance( p, rest ) );
+				// Its turn then, between the two (near enough to a slerp, a frame apart).
+				const sign = Math.sign( [ 3, 4, 5, 6 ].reduce( ( sum, k ) => sum + s0[ k ] * s1[ k ], 0 ) ) || 1;
+				const q = [ 3, 4, 5, 6 ].map( k => s0[ k ] + ( s1[ k ] * sign - s0[ k ] ) * u );
+				const length = Math.hypot( ...q );
+				const dot = Math.abs( q.reduce( ( sum, value, k ) => sum + value / length * rest[ k + 3 ], 0 ) );
+				turns.push( 2 * Math.acos( Math.min( 1, dot ) ) * 180 / Math.PI );
 
-		errors.sort( ( x, y ) => x - y );
-		turns.sort( ( x, y ) => x - y );
+			}
+
+			errors.sort( ( x, y ) => x - y );
+			turns.sort( ( x, y ) => x - y );
+			return { lag, errors, turns };
+
+		};
 		const at = ( list, share ) => list[ Math.min( list.length - 1, Math.floor( list.length * share ) ) ];
-		const summary = `${ errors.length } frames: median ${ at( errors, 0.5 )?.toFixed( 2 ) } m, 90 % ${ at( errors, 0.9 )?.toFixed( 2 ) } m, most ${ errors.at( - 1 )?.toFixed( 2 ) } m; turned ${ at( turns, 0.5 )?.toFixed( 1 ) }° (median), ${ turns.at( - 1 )?.toFixed( 1 ) }° at most`;
+		const frames = truth.slice( 1 ).map( ( row, i ) => row[ 0 ] - truth[ i ][ 0 ] ).sort( ( x, y ) => x - y );
+		const frame = at( frames, 0.5 );
+		const fits = [];
+		for ( let lag = 0; lag <= 200; lag += 5 ) fits.push( along( lag ) );
+		const { lag, errors, turns } = fits.filter( fit => fit.errors.length >= 8 ).sort( ( x, y ) => at( x.errors, 0.5 ) - at( y.errors, 0.5 ) )[ 0 ] ?? fits[ 0 ];
+		const summary = `${ errors.length } frames, ${ lag } ms after INTERP_MS (A's frames ${ Math.round( frame ) } ms): median ${ at( errors, 0.5 )?.toFixed( 2 ) } m, 90 % ${ at( errors, 0.9 )?.toFixed( 2 ) } m, most ${ errors.at( - 1 )?.toFixed( 2 ) } m; turned ${ at( turns, 0.5 )?.toFixed( 1 ) }° (median), ${ turns.at( - 1 )?.toFixed( 1 ) }° at most`;
 		console.log( `    ghost following: ${ summary }` );
 		assert.ok( errors.length >= 8, `too few frames to tell: ${ summary }` );
+		assert.ok( lag <= frame + 50, `B draws A too late: ${ summary }` );
 		// (Each state comes with how long the room held it, so the error is the drawing's, not the
 		// batching's: words a fifth of a second apart, curved between with their velocities, a few
 		// tens of centimetres at 15 to 25 m/s.)
@@ -669,6 +687,48 @@ describe( 'World Drive, driving with others', () => {
 		// Each level (a car's sent at once when its flags change, and they're 0.8 s and more apart),
 		// and the mini-turbo once.
 		assert.deepEqual( { tier: after.tier - before.tier, turbo: after.turbo - before.turbo }, { tier: 3, turbo: 1 }, JSON.stringify( { before, after } ) );
+
+	} );
+
+	test( 'A turns into a plane (T): B\'s ghost unfolds its wings, flies up with it, and folds them away as A lands', async () => {
+
+		await placeCar( a, 0, 0, 0 );
+		await b.waitForFunction( () => window.drive.ghosts.list()[ 0 ]?.visible, null, { timeout: 15000 } );
+		await a.evaluate( () => window.drive.driver.press( 'KeyT' ) );
+		// The flag, then the kit on B's ghost, all the way out and drawn.
+		await b.waitForFunction( flag => {
+
+			const ghost = window.drive.ghosts.list()[ 0 ];
+			return ghost.flags & flag && ghost.plane === 1 && ghost.kit;
+
+		}, FLAGS.plane, { timeout: 15000 } );
+		await shot( b, 'live-plane' );
+		// Up 40 m and more on A: B's ghost goes up with it, wings and all.
+		const height = () => b.evaluate( () => window.drive.ghosts.list()[ 0 ].position[ 1 ] );
+		const before = await height();
+		await a.evaluate( () => window.drive.driver.keys.add( 'Space' ) );
+		await a.waitForFunction( () => window.drive.driver.aircraft.height > 40, null, { timeout: 60000 } );
+		await a.evaluate( () => window.drive.driver.keys.delete( 'Space' ) );
+		await b.waitForFunction( least => window.drive.ghosts.list()[ 0 ].position[ 1 ] > least, before + 35, { timeout: 15000 } );
+		assert.ok( await b.evaluate( () => window.drive.ghosts.list()[ 0 ].kit ), 'the wings went from B\'s ghost while A flew' );
+		await shot( b, 'live-plane-up' );
+		// T again: A flies down and folds back into a car; B's ghost folds its wings away, and the kit goes.
+		await a.evaluate( () => window.drive.driver.press( 'KeyT' ) );
+		await a.waitForFunction( () => ! window.drive.driver.aircraft.on, null, { timeout: 90000 } );
+		await b.waitForFunction( flag => {
+
+			const ghost = window.drive.ghosts.list()[ 0 ];
+			return ! ( ghost.flags & flag ) && ghost.plane === 0 && ! ghost.kit;
+
+		}, FLAGS.plane, { timeout: 15000 } );
+		const left = await b.evaluate( () => {
+
+			let kits = 0;
+			window.drive.ghosts.group.traverse( o => kits += o.name === 'plane kit' ? 1 : 0 );
+			return kits;
+
+		} );
+		assert.equal( left, 0, 'a plane kit left on B after A landed' );
 
 	} );
 
@@ -2052,7 +2112,13 @@ describe( 'World Drive, driving with others on the Moon', () => {
 		await a.evaluate( () => window.drive.driver.release( 'KeyW' ) );
 		await a.waitForTimeout( 2000 );
 		await d.locator( '#drive-ui .live-chip' ).click();
-		await d.locator( '#drive-ui .players li .go' ).first().click();
+		// Tabbed to, Go to keeps the focus as the list refreshes (twice a second): its row is only
+		// moved when the order changes, as moving it takes it out of the page and the focus with it.
+		const go = d.locator( '#drive-ui .players li .go' ).first();
+		await go.focus();
+		await d.waitForTimeout( 1500 );
+		assert.ok( await go.evaluate( button => document.activeElement === button ), 'Go to lost the focus as the list refreshed' );
+		await go.click();
 		await d.waitForTimeout( 3000 );
 		const [ hersNow, mineNow ] = await Promise.all( [ whereOnMoon( a ), whereOnMoon( d ) ] );
 		const beside = Math.hypot( ...mineNow.own.at.map( ( x, i ) => x - hersNow.own.at[ i ] ) );

@@ -8,7 +8,7 @@ import { adminAccount } from './admin.js';
 import { dayOf } from '../../src/drive-app/levels.js';
 import { keyedHex, lookKey } from './challenges.js';
 import { VISITOR_PREFIX } from './dropins.js';
-import { credentials, database, takeTurn } from './players.js';
+import { credentials, database, secretOk, takeTurn } from './players.js';
 import { setting } from './settings.js';
 
 // Achievements (docs/world-drive.md, "Achievements and rewards"; the list and its rules are
@@ -213,7 +213,7 @@ export async function postAchievements( { request, env, limits, now } ) {
 	const { id, secret } = credentials( body );
 	await takeTurn( limits, request, 'achievements', now, setting( env.ACHIEVEMENT_LOOKS_PER_VISITOR_DAILY, LOOKS_DAILY ), VISITOR_PREFIX );
 	const [ me, players, earned, finished ] = await db.batch( [
-		db.prepare( 'SELECT id FROM players WHERE id = ? AND secret_hash = ?' ).bind( id, await sha256Hex( secret ) ),
+		db.prepare( `SELECT p.id FROM players p WHERE p.id = ?1 AND ${ secretOk( 'p', '?2' ) }` ).bind( id, await sha256Hex( secret ) ),
 		db.prepare( `SELECT id, tallies, parties FROM players WHERE id IN ( ${ playersOf( '?1' ) } ) LIMIT ${ PLAYERS_MOST + 1 }` ).bind( id ),
 		db.prepare( `SELECT achievement, MIN( earned_at ) AS at FROM ( ${ featRows( '?1' ) } ) GROUP BY achievement` ).bind( id ),
 		db.prepare( `SELECT COUNT( * ) AS n FROM ( SELECT 1 FROM challenge_times WHERE player_id IN ( ${ playersOf( '?1' ) } ) LIMIT ${ CHALLENGES_MOST } )` ).bind( id ),

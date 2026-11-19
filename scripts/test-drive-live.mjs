@@ -1132,6 +1132,12 @@ describe( 'Driving with others', () => {
 		assert.deepEqual( sent.slice( 4, 12 ), [ 0, 0, 0.7071, 0.7071, 12.35, 0, 0, 129 ] );
 		assert.equal( sent[ 1 ], Math.round( ( p.x + 0.123456 ) * 100 ) / 100 );
 
+		// A plane (FLAGS.plane, flying with it) going 2,700 km/h, as fast as one goes at its ceiling: passed on.
+		await sleep( FLUSH_MS + 20 );
+		alice.send( { t: 's', s: [ p.x, p.y, p.z + 12000, 0, 0, 0, 1, 750, 0, 0, 4096 | 8 ] } );
+		const flown = ( await bob.take( 'S' ) ).s[ 0 ];
+		assert.deepEqual( flown.slice( 8, 12 ), [ 750, 0, 0, 4096 | 8 ] );
+
 		await sleep( FLUSH_MS + 20 );
 		const good = carAt( 46.5725, 8.4153 );
 		const nope = {
@@ -1139,7 +1145,7 @@ describe( 'Driving with others', () => {
 			'at the Earth\'s centre': [ 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 128 ],
 			'no turn at all': [ ...good.slice( 0, 3 ), 0, 0, 0, 0, 0, 0, 0, 128 ],
 			'faster than anything': [ ...good.slice( 0, 7 ), 900, 0, 0, 128 ],
-			'flags it hasn\'t': [ ...good.slice( 0, 10 ), 1 << 12 ],
+			'flags it hasn\'t': [ ...good.slice( 0, 10 ), 1 << 13 ],
 			'flags not whole': [ ...good.slice( 0, 10 ), 1.5 ],
 			'a NaN, as JSON sends it': [ ...good.slice( 0, 7 ), null, 0, 0, 128 ],
 			'too short': good.slice( 0, 10 ),

@@ -193,7 +193,7 @@ test( 'an area follows its face where the structure was moved, and onto the side
 test( 'the 17 November progress drawing: its dates, and the panel numbers on the areas they point at', () => {
 
 	const days = new Set( data.markups.map( m => m.f.chipped ) );
-	for ( const day of [ '2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05/08', '2026-11-09', '2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13', '2026-11-14', '2026-11-15', '2026-11-16' ] ) assert.ok( days.has( day ), day );
+	for ( const day of [ '2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05/08', '2026-11-09', '2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13', '2026-11-14', '2026-11-15', '2026-11-16', '2026-11-17' ] ) assert.ok( days.has( day ), day );
 	assert.equal( data.markups.filter( m => m.f.chipped === '2026-11-09' ).length, 13 );
 	assert.equal( data.markups.filter( m => m.f.chipped === '2026-11-10' ).length, 2 );
 	assert.equal( data.markups.filter( m => m.f.chipped === '2026-11-16' ).length, 14 );
@@ -226,6 +226,26 @@ test( 'the 17 November progress drawing: its dates, and the panel numbers on the
 	const west = along( 'west pony wall at grade (AJ side)', 'CW0021', 'CW0046' );
 	assert.ok( east[ 0 ] > 55 && east.at( - 1 ) < 20, `east: ${ east[ 0 ] } to ${ east.at( - 1 ) }` );
 	assert.ok( west[ 0 ] < 12 && west.at( - 1 ) > 58, `west: ${ west[ 0 ] } to ${ west.at( - 1 ) }` );
+
+} );
+
+test( 'C31\'s downstands: along each wall under the slab, their undersides at EL +1.22', () => {
+
+	// Up from the gallery's floor beside each wall: the downstand's underside; in the middle, up past
+	// it to the cross beam or the slab.
+	for ( const x of [ 10, 30, 50, 60 ] ) {
+
+		near( cast( [ x, 0, 3.1 ], [ 0, 1, 0 ] ), 1.22, `east downstand at grid ${ x }` );
+		near( cast( [ x, 0, 6.9 ], [ 0, 1, 0 ] ), 1.22, `west downstand at grid ${ x }` );
+		assert.ok( ( cast( [ x, 0, 5 ], [ 0, 1, 0 ] ) ?? Infinity ) > 3, `the middle at grid ${ x } is open above the downstands` );
+
+	}
+
+	// The ground floor plan's areas stay on the slab's top at grade.
+	const top = data.markups.filter( m => m.face === 'ground floor slab' );
+	assert.equal( top.length, 34 );
+	assert.ok( top.every( m => m.n[ 1 ] > 0.99 ) );
+	assert.equal( data.markups.filter( m => /downstand/.test( m.face ) ).length, 0 );
 
 } );
 
@@ -312,8 +332,8 @@ test( 'looking back: an area is at the stage it had reached by the end of a day,
 	const by = day => data.markups.filter( m => stageAt( m, day ) ).length;
 	assert.equal( by( '2026-11-01' ), 0 );
 	assert.ok( by( '2026-11-02' ) > 0 && by( '2026-11-02' ) < by( '2026-11-04' ) );
-	assert.equal( by( '2026-11-16' ), data.markups.length );
-	assert.ok( by( '2026-11-08' ) < by( '2026-11-10' ) && by( '2026-11-10' ) < by( '2026-11-16' ) );
+	assert.equal( by( '2026-11-17' ), data.markups.length );
+	assert.ok( by( '2026-11-08' ) < by( '2026-11-10' ) && by( '2026-11-10' ) < by( '2026-11-16' ) && by( '2026-11-16' ) < by( '2026-11-17' ) );
 
 } );
 

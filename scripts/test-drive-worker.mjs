@@ -3755,12 +3755,23 @@ describe( 'World Drive username and password accounts', () => {
 
 		const one = await signUp( 'Leaver', 'the leaver\'s passphrase' );
 		const two = await signIn( 'Leaver', 'the leaver\'s passphrase' );
+		// The account's player, made in the first browser, and handed to the second as it signed in.
+		const ip = nextIp();
+		const visited = await send( 'POST', '/api/visit', { token: TOKEN }, { ip } );
+		const made = await send( 'POST', '/api/player', { name: 'Leaver Plays', visit: visited.json.visit }, { ip } );
+		assert.equal( ( await send( 'POST', '/api/player/mine', { id: made.json.id, secret: made.json.secret }, { cookie: one.cookie } ) ).status, 200 );
+		const handed = await send( 'POST', '/api/player/mine', {}, { cookie: two.cookie } );
+		assert.equal( handed.json.player.id, made.json.id );
+		assert.equal( server.d1( `SELECT COUNT(*) AS n FROM player_keys WHERE player_id = '${ made.json.id }'` )[ 0 ].n, 1 );
 		const out = await send( 'POST', '/api/account/sign-out-everywhere', {}, { cookie: one.cookie } );
 		assert.equal( out.status, 204 );
 		assert.match( out.headers.get( 'Set-Cookie' ), /^__Host-wd_session=; Max-Age=0;/ );
 		assert.equal( ( await me( one.cookie ) ).json.signedIn, false );
 		assert.equal( ( await me( two.cookie ) ).json.signedIn, false );
 		assert.equal( ( await signIn( 'Leaver', 'the leaver\'s passphrase' ) ).status, 200 );
+		// The key handed to the second browser went with it; the player's own secret didn't.
+		assert.equal( server.d1( `SELECT COUNT(*) AS n FROM player_keys WHERE player_id = '${ made.json.id }'` )[ 0 ].n, 0 );
+		assert.equal( server.d1( `SELECT COUNT(*) AS n FROM players WHERE id = '${ made.json.id }'` )[ 0 ].n, 1 );
 
 	} );
 

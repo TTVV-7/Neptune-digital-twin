@@ -28,8 +28,9 @@ export const KIND_NAMES = { sprint: 'Checkpoint sprint', collect: 'Collect them 
 // times the booster's, which pushes up to twice a ride's top speed (BOOST_SPEED in src/drive.js).
 // Nothing beats that: a drift's mini-turbo is at most 1.5 times the top speed and a landed trick's
 // burst 1.25 times (DRIFT_BOOSTS, TRICK_BOOST), a boost pad only fills the booster, flying goes at
-// the ride's own speed, a hit keeps 85 % of the speed along the wall, R stops the car 4 m on, and
-// going downhill or falling adds nothing along the ground (drive.js keeps upward speed apart). So
+// the ride's own speed, a hit keeps 85 % of the speed along the wall, R stops the car 4 m on,
+// going downhill adds nothing along the ground (drive.js keeps upward speed apart), and a landing
+// carried on down a slope never passes the booster's. (Plane mode is never a challenge run.) So
 // 430 km/h, 119.4 m/s; scripts/test-drive-worker.mjs reads those numbers from the game's own files
 // and fails if any of them changes.
 export const TOP_SPEED = 215;

@@ -1502,7 +1502,8 @@ dialog#leaderboard .note {
 	margin: 14px 0 0;
 }
 
-dialog#about {
+dialog#about,
+dialog#scoring {
 	max-width: min( 520px, calc( 100% - 32px ) );
 	padding: 24px;
 	border: 1px solid var( --line );
@@ -1511,28 +1512,62 @@ dialog#about {
 	color: var( --ink );
 }
 
-dialog#about::backdrop {
+dialog#about::backdrop,
+dialog#scoring::backdrop {
 	background: rgba( 4, 8, 16, 0.6 );
 }
 
-dialog#about h2 {
+dialog#about h2,
+dialog#scoring h2 {
 	margin: 0 0 10px;
 	font: 900 italic 26px/1 var( --font );
 	text-transform: uppercase;
 }
 
-dialog#about h3 {
+dialog#about h3,
+dialog#scoring h3 {
 	margin: 18px 0 6px;
 	font-size: 13px;
 }
 
-dialog#about ul {
+dialog#about ul,
+dialog#scoring ul {
 	padding-left: 18px;
 }
 
-dialog#about form {
+dialog#about form,
+dialog#scoring form {
 	margin-top: 16px;
 	text-align: right;
+}
+
+/* How scoring works (scoring.js). */
+dialog#scoring .scoring-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 13px;
+}
+
+dialog#scoring .scoring-table th,
+dialog#scoring .scoring-table td {
+	padding: 6px 8px 6px 0;
+	border-bottom: 1px solid var( --line );
+	text-align: left;
+	vertical-align: top;
+}
+
+dialog#scoring .scoring-table thead th {
+	color: var( --muted );
+	font-weight: 600;
+}
+
+dialog#scoring .scoring-table .how {
+	color: var( --muted );
+}
+
+dialog#scoring .scoring-rules li {
+	margin: 6px 0;
+	font-size: 13px;
 }
 
 /* --- driving with others ------------------------------------------------------------------- */

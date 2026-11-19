@@ -228,6 +228,16 @@ export const FLUSH_MS = 100;
 // (seven still states running) is taken away.
 export const INTERP_MS = 300;
 export const TELEPORT = 60;
+
+// Whether a car went from snapshot `a` to `b` ({ p, v, at } in ms) all at once rather than by
+// driving or flying there: further than TELEPORT, and further than half again what it was going
+// (a plane at 750 m/s covers more than TELEPORT between two words).
+export function teleported( a, b ) {
+
+	const flown = Math.max( a.v.length(), b.v.length() ) * Math.abs( b.at - a.at ) / 1000 * 1.5;
+	return a.p.distanceTo( b.p ) > Math.max( TELEPORT, flown );
+
+}
 export const STALE_MS = 15000;
 // In an area, a car only goes to those within VIEW_RANGE m of it.
 export const VIEW_RANGE = 5000;
@@ -351,18 +361,21 @@ export const FLAGS = {
 	grounded: 128, // its wheels on the ground (ink, dust)
 	paused: 256, // its driver paused: parked where it is
 	spray: 512, // a hovercraft on water
+	plane: 4096, // a plane (T, src/plane.js): its wings out, or on their way out
 	// The drift's boost level, 0 to 3, in these two bits.
 	levelShift: 10,
 	levelMask: 3 << 10,
 };
-const FLAG_LIMIT = 1 << 12;
+const FLAG_LIMIT = 1 << 13;
 
 // The distances (m) from its world's middle a car on each can be at (STATE): on the Earth from the
 // Dead Sea's shore under the polar radius to well over Everest at the equator, flying; on the Moon
 // from under the floor of Antoniadi crater (8.9 km down) to well over the Selenean summit (10.5 km
 // up), flying, with room to spare. On the others, its sphere's radius with its lowest ground less
 // 3 km to its highest plus FLY_MARGIN (worlds.js): Mars 30 km, Vesta and Ceres 40 km (in their weak
-// gravity a boosted car climbs higher; how high isn't measured). Literals, as a world's radius and
+// gravity a boosted car climbs higher; how high isn't measured). A plane flies at most 12 km over
+// the ground (src/plane.js CEILING), which fits under every world's top: on the Earth, Chimborazo's
+// summit (6,384 km out) plus 12 km is under 6,400 km. Literals, as a world's radius and
 // heights never change once anything's been counted on it. No two worlds' overlap (Vesta's up to
 // 0.33 Mm, Ceres's 0.44 to 0.53, the Moon's 1.73 to 1.77, Mars's 3.38 to 3.44, the Earth's 6.34
 // to 6.40), so a state can't be taken for another world's.
@@ -382,8 +395,9 @@ export const PLACE_HEIGHTS = Object.freeze( {
 	vesta: Object.freeze( [ - 52000, 32000 ] ),
 	ceres: Object.freeze( [ - 29000, 18500 ] ),
 } );
-// Faster than any ride goes, booster and all (m/s).
-const TOP_SPEED = 500;
+// Faster than any ride goes, booster and all, and a plane at its ceiling (2,700 km/h: src/plane.js)
+// (m/s).
+const TOP_SPEED = 800;
 
 const round = ( value, places ) => Math.round( value * 10 ** places ) / 10 ** places;
 

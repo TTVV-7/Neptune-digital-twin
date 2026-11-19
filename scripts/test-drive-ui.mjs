@@ -2658,10 +2658,14 @@ describe( 'World Drive water', () => {
 			kit.reset( - 250, 180, 60 );
 			const out = {};
 			// Up on F, out over the sea, and down again with it let go.
+			// (The driver's own flying on F, off in World Drive, where F is the plane: on here to fly low
+			// over the water and let it down.)
+			d.fly = true;
 			d.press( 'KeyF' );
 			kit.step( 4 );
 			Object.assign( out, { flying: d.flying, overSea: d.north < - 300, high: d.y } );
 			d.release( 'KeyF' );
+			d.fly = false;
 			kit.step( 30, () => d.flying || ! d.grounded );
 			Object.assign( out, { down: { north: d.north, y: d.y, flying: d.flying, grounded: d.grounded } } );
 			d.press( 'KeyW' );
@@ -3398,10 +3402,14 @@ describe( 'World Drive, the open sea', () => {
 			step( 1.5 );
 			out.far = { y: d.y, look: water.look( d.east, d.north, d.y ).level, expected: - ( d.north ** 2 ) / ( 2 * 6371000 ) };
 			// Up on F, and down again with it let go.
+			// (The driver's own flying on F, off in World Drive, where F is the plane: on here to fly low
+			// over the water and let it down.)
+			d.fly = true;
 			d.press( 'KeyF' );
 			step( 2 );
 			const high = d.y - out.far.y;
 			d.release( 'KeyF' );
+			d.fly = false;
 			step( 20, () => ! d.grounded || d.flying );
 			step( 0.5 );
 			out.flew = { high, flying: d.flying, grounded: d.grounded, y: d.y, onWater: water.at( d.east, d.north, d.y ) !== null };
@@ -3860,6 +3868,9 @@ describe( 'World Drive, the open sea', () => {
 			kit.paint( [ 40, 170, 190 ] );
 			kit.reset( - 250, 60 );
 			d.press( 'KeyW' );
+			// (The driver's own flying on F, off in World Drive, where F is the plane: on here to fly low
+			// over the water and let it down.)
+			d.fly = true;
 			d.press( 'KeyF' );
 			const flew = { high: - Infinity, laid: null };
 			kit.step( 40, () => {
@@ -3870,6 +3881,7 @@ describe( 'World Drive, the open sea', () => {
 
 			} );
 			d.release( 'KeyF' );
+			d.fly = false;
 			kit.step( 30, () => d.flying || ! d.grounded );
 			d.release( 'KeyW' );
 			kit.step( 0.2 );
@@ -3976,6 +3988,9 @@ describe( 'World Drive, the open sea', () => {
 			const kit = window.coastKit;
 			kit.reset( - 250, 60 );
 			d.press( 'KeyW' );
+			// (The driver's own flying on F, off in World Drive, where F is the plane: on here to fly low
+			// over the water and let it down.)
+			d.fly = true;
 			d.press( 'KeyF' );
 			let laid = null;
 			kit.step( 40, () => {
@@ -3985,6 +4000,7 @@ describe( 'World Drive, the open sea', () => {
 
 			} );
 			d.release( 'KeyF' );
+			d.fly = false;
 			kit.step( 30, () => d.flying || ! d.grounded );
 			d.release( 'KeyW' );
 			kit.step( 0.2 );
@@ -4533,6 +4549,9 @@ describe( 'World Drive, the open sea', () => {
 			// Flown off the levee over the houses at up to 50 km/h, let down and driven on.
 			kit.reset( - 150, 40 );
 			d.press( 'KeyW' );
+			// (The driver's own flying on F, off in World Drive, where F is the plane: on here to fly low
+			// over the water and let it down.)
+			d.fly = true;
 			d.press( 'KeyF' );
 			const flew = { laid: false, high: - Infinity };
 			const air = () => {
@@ -4549,6 +4568,7 @@ describe( 'World Drive, the open sea', () => {
 
 			} );
 			d.release( 'KeyF' );
+			d.fly = false;
 			kit.step( 60, () => {
 
 				air();
@@ -6098,18 +6118,22 @@ const PLAYER = { id: 'P1ayer-id_000000', secret: 'S'.repeat( 32 ), name: 'Speed 
 // sign-in (window.testCredential 'good-token') makes it signedIn. page.asked has what was sent, and
 // page.google how often Google's script (stood in for, harness's GOOGLE_STUB) was loaded. config and
 // visit: /api/config (maps off, the test pad) and /api/visit (never answered) as newPage takes them.
-async function supporterPage( { me = SIGNED_OUT, signedInAs = ALICE, clientId = CLIENT, player = null, config = RESTING, visit = route => route.abort(), ...options } = {} ) {
+async function supporterPage( { me = SIGNED_OUT, signedInAs = ALICE, clientId = CLIENT, player = null, seedOnce = false, accountPlayer = null, config = RESTING, visit = route => route.abort(), ...options } = {} ) {
 
 	const page = await newPage( { ...options, api: { config: { ...config, googleClientId: clientId }, turnstile: true, visit } } );
 	// Never a page of Stripe's: Buy's new tab is only noted.
 	await page.context().route( /^https?:\/\/(?!127\.0\.0\.1)/, route => route.abort() );
-	await page.addInitScript( ( { player } ) => {
+	// (seedOnce: the player put in as the first page loads only, so the next visit has what the page
+	// left there.)
+	await page.addInitScript( ( { player, seedOnce } ) => {
 
 		window.opened = [];
 		window.open = ( ...args ) => ( window.opened.push( args ), null );
-		if ( player ) localStorage.setItem( 'world-drive.player', JSON.stringify( player ) );
+		if ( ! player || ( seedOnce && sessionStorage.getItem( 'test.seeded' ) ) ) return;
+		localStorage.setItem( 'world-drive.player', JSON.stringify( player ) );
+		sessionStorage.setItem( 'test.seeded', '1' );
 
-	}, { player } );
+	}, { player, seedOnce } );
 	const state = page.state = { me, signedInAs };
 	const asked = page.asked = { me: 0, sessions: [], signOuts: 0, links: [] };
 	page.google = 0;
@@ -6133,6 +6157,7 @@ async function supporterPage( { me = SIGNED_OUT, signedInAs = ALICE, clientId = 
 		if ( request.method() === 'DELETE' ) {
 
 			asked.signOuts ++;
+			asked.signOutBodies = [ ...asked.signOutBodies ?? [], request.postDataJSON() ];
 			state.me = SIGNED_OUT;
 			return route.fulfill( { status: 204 } );
 
@@ -6145,10 +6170,14 @@ async function supporterPage( { me = SIGNED_OUT, signedInAs = ALICE, clientId = 
 		json( route, state.me );
 
 	} );
-	await page.route( `${ BASE }/api/player/link`, route => {
+	// The account's player for this browser: this browser's own (no secret), or `accountPlayer`'s,
+	// handed over with a secret of its own, this browser's folded into it.
+	await page.route( `${ BASE }/api/player/mine`, route => {
 
-		asked.links.push( route.request().postDataJSON() );
-		json( route, { id: PLAYER.id, name: PLAYER.name } );
+		const sent = route.request().postDataJSON();
+		asked.links.push( sent );
+		if ( accountPlayer ) return json( route, { player: accountPlayer, merged: !! sent.id } );
+		json( route, { player: sent.id ? { id: sent.id, name: PLAYER.name } : null } );
 
 	} );
 	return page;
@@ -6305,7 +6334,7 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		const page = await supporterPage( { me: ALICE, player: PLAYER } );
 		await testPad( page );
 		await page.waitForFunction( () => window.drive.supporter.me );
-		await page.waitForFunction( () => localStorage.getItem( 'world-drive.linked' ) );
+		await page.waitForFunction( () => localStorage.getItem( 'world-drive.linked.2' ) );
 		assert.deepEqual( page.asked.links, [ { id: PLAYER.id, secret: PLAYER.secret } ] );
 		await testPad( page );
 		await page.waitForFunction( () => window.drive.supporter.me );
@@ -6313,7 +6342,32 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		assert.equal( page.asked.links.length, 1, 'linked again on the next visit' );
 		// Signed out, the email in it goes from this browser.
 		await page.evaluate( () => window.drive.supporter.signOut() );
-		assert.equal( await page.evaluate( () => localStorage.getItem( 'world-drive.linked' ) ), null );
+		assert.equal( await page.evaluate( () => localStorage.getItem( 'world-drive.linked.2' ) ), null );
+		await page.context().close();
+
+	} );
+
+	test( 'signed in on another browser, it drives as the account\'s player: its own nickname folded in, once', async () => {
+
+		// This browser's own nickname (made before signing in), and the account's, from another device.
+		const mine = { id: 'Ac0unt-player_00', secret: 'K'.repeat( 32 ), name: 'Tom' };
+		const page = await supporterPage( { me: ALICE, player: { ...PLAYER, name: 'Tom 2' }, seedOnce: true, accountPlayer: mine } );
+		await testPad( page );
+		await page.waitForFunction( () => JSON.parse( localStorage.getItem( 'world-drive.player' ) ?? 'null' )?.name === 'Tom' );
+		assert.deepEqual( page.asked.links, [ { id: PLAYER.id, secret: PLAYER.secret } ] );
+		assert.deepEqual( await page.evaluate( () => JSON.parse( localStorage.getItem( 'world-drive.player' ) ) ), { ...mine, handed: true } );
+		assert.equal( await page.evaluate( () => localStorage.getItem( 'world-drive.linked.2' ) ), `${ mine.id } ${ ALICE.email }` );
+		await page.locator( '#toast', { hasText: 'Signed in as Tom: Tom 2\'s progress here is now Tom\'s' } ).waitFor();
+		// The next visit asks no more.
+		await testPad( page );
+		await page.waitForFunction( () => window.drive.supporter.me );
+		await page.waitForTimeout( 300 );
+		assert.equal( page.asked.links.length, 1, 'asked again on the next visit' );
+		// Signed out, the account's player goes from this browser, its key with the session.
+		await page.evaluate( () => window.drive.supporter.signOut() );
+		assert.deepEqual( page.asked.signOutBodies, [ { key: mine.secret } ] );
+		assert.equal( await page.evaluate( () => localStorage.getItem( 'world-drive.player' ) ), null );
+		assert.deepEqual( page.errors, [] );
 		await page.context().close();
 
 	} );

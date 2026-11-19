@@ -533,7 +533,7 @@ describe( 'what search engines read', () => {
 		// Off the site, only the credits: OpenStreetMap's copyright page, NASA's for the Moon, the
 		// USGS's colour mosaic for Mars and its planetary maps for Vesta and Ceres.
 		const outside = new Set( pages.flatMap( ( { html } ) => linksOf( html ) ).filter( href => /^https?:/.test( href ) && ! href.startsWith( SITE ) ) );
-		assert.deepEqual( [ ...outside ].sort(), [ 'https://astrogeology.usgs.gov/search/map/mars_viking_colorized_global_mosaic_232m', 'https://planetarymaps.usgs.gov/mosaic/', 'https://svs.gsfc.nasa.gov/4720/', 'https://www.openstreetmap.org/copyright' ] );
+		assert.deepEqual( [ ...outside ].sort(), [ 'https://astrogeology.usgs.gov/search/map/mars_viking_colorized_global_mosaic_232m', 'https://planetarymaps.usgs.gov/mosaic/', 'https://svs.gsfc.nasa.gov/4720/', 'https://www.instagram.com/printyours.ca/', 'https://www.openstreetmap.org/copyright' ] );
 
 		// Each world's pages are beside the files the game fetches from /moon/ and /mars/, which are
 		// still there, whole.
@@ -661,6 +661,12 @@ describe( 'what search engines read', () => {
 		// About still opens from it.
 		await page.locator( '#globe-ui .site-info .about-open' ).click();
 		assert.ok( await page.locator( 'dialog#about' ).isVisible() );
+		// Who made it, with a plain link (no embed) that opens in a tab of its own.
+		assert.match( await page.locator( 'dialog#about' ).textContent(), /Made by Thomas in Vancouver, Canada/ );
+		const insta = page.locator( 'dialog#about a[href="https://www.instagram.com/printyours.ca/"]' );
+		assert.equal( await insta.count(), 1 );
+		assert.equal( await insta.getAttribute( 'target' ), '_blank' );
+		assert.match( await insta.getAttribute( 'rel' ), /noopener/ );
 		await page.locator( 'dialog#about button', { hasText: 'Close' } ).click();
 
 		// A tap on a place there flies the globe to it, as a start spot does, rather than leaving the
