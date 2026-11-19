@@ -40,6 +40,19 @@
 	padding: 4px 6px;
 }
 
+/* build-stages.js: the stage picker for a model built in stages. */
+#views .build-stage {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 0 4px;
+	white-space: nowrap;
+}
+
+#views .build-stage[hidden] {
+	display: none;
+}
+
 #views .buttons {
 	display: flex;
 	gap: 2px;

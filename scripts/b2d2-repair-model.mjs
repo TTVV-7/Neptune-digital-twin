@@ -66,9 +66,31 @@ const STRUCTURE = {
 	c32: { name: 'C32 tunnel', color: '#c9c4b8', cut: true },
 	steel: { name: 'Steel plates at grade', color: '#c9cfd5', metal: true },
 	// C32's take-up tower foundation past the tunnel's mouth: new concrete, paler than the old.
-	pedestals: { name: 'C32 take-up pedestals', color: '#ddd8cb' },
+	pedestals: { name: 'C32 take-up pedestals', color: '#ddd8cb', stages: [ 'built', 'all' ] },
 	// Its counterweight tower, the counterweight's steel, the hoist and the anchor rods cast in.
-	takeUpSteel: { name: 'C32 take-up steel & embedded items', color: '#7d8691', metal: true },
+	takeUpSteel: { name: 'C32 take-up steel', color: '#7d8691', metal: true, stages: [ 'built', 'all' ] },
+	takeUpEmbeds: { name: 'C32 take-up embedded items', color: '#9aa3ad', metal: true, stages: [ 'forms', 'built', 'all' ] },
+	// How it's built: the pits, the formwork and the reinforcing (see-through to walk, shown by stage).
+	takeUpPits: { name: 'C32 take-up excavation', color: '#8a6a45', stages: [ 'excavation', 'forms' ], noCollide: true },
+	takeUpOldConcrete: { name: 'C32 take-up existing grade beam', color: '#a9a497' },
+	takeUpForms: { name: 'C32 take-up formwork', color: '#c9a36b', stages: [ 'forms' ], noCollide: true },
+	takeUpRebar: { name: 'C32 take-up reinforcing', color: '#8c4a2b', stages: [ 'forms' ], noCollide: true },
+	// The existing structures round it, through the work: the take-up frame and drive tower with the
+	// pulleys and carriage, and the drive platform's handrails.
+	takeUpExisting: { name: 'C32 take-up frame & drive (existing)', color: '#7f8c99' },
+	takeUpRails: { name: 'C32 drive platform handrails', color: '#e3b62a' },
+	// The conveyor, taken out for the work and put back.
+	conveyorSteel: { name: 'C32 conveyor', color: '#7f8c99', stages: [ 'built', 'all' ] },
+	conveyorBelt: { name: 'C32 belt', color: '#26282b', stages: [ 'built', 'all' ] },
+	conveyorRails: { name: 'C32 conveyor walkway handrails', color: '#e3b62a', stages: [ 'built', 'all' ] },
+	// New: the counterweight tower, its ladder's cage and the take-up rope.
+	cwtTower: { name: 'C32 counterweight tower (new)', color: '#7f8c99', stages: [ 'built', 'all' ] },
+	cwtCage: { name: 'C32 counterweight tower ladder cage', color: '#e3b62a', stages: [ 'built', 'all' ] },
+	takeUpRope: { name: 'C32 take-up rope', color: '#26282b', stages: [ 'built', 'all' ] },
+	// What's being demolished there, see-through so the new work shows through it: the asphalt and
+	// the concrete broken out where the new foundations go, and the existing pedestals.
+	demoAsphalt: { name: 'To demolish: asphalt', color: '#1f1f1f', alpha: 0.6, stages: [ 'demolition', 'all' ] },
+	demoConcrete: { name: 'To demolish: concrete', color: '#e2402f', alpha: 0.45, stages: [ 'demolition', 'all' ] },
 	building: { name: 'Dumper building (for lining up)', color: '#ff8a1f', alpha: 0.35 },
 	equip: { name: 'Conveyors, tent & temporary works', color: '#7f8fa3', alpha: 0.6 },
 };
@@ -93,7 +115,9 @@ const VIEWS = [
 	{ name: 'Ground', from: [ 67.5, 7.0, - 4.95 ], at: [ 20, 5.3, - 4.95 ] },
 	// C32's take-up: its pedestals, pad and counterweight tower, from up the conveyor looking back
 	// down at the tunnel's mouth.
-	{ name: 'C32 take-up', from: [ C32_LINE + 7, 10.5, - ( C32_TAKE_UP.GRID_4 + 11 ) ], at: [ C32_LINE - 2.2, 6.4, - ( C32_TAKE_UP.GRID_4 + 2.5 ) ] },
+	{ name: 'C32 take-up', from: [ C32_LINE + 19, 12.2 + C32_TAKE_UP.GRADE, - ( C32_TAKE_UP.GRID_4 + 3 ) ], at: [ C32_LINE - 1.5, 5.3 + C32_TAKE_UP.GRADE, - ( C32_TAKE_UP.GRID_4 + 7 ) ] },
+	// Close in on the new foundations: the pits, forms and pedestals.
+	{ name: 'Take-up close', from: [ C32_LINE + 6, 8.2 + C32_TAKE_UP.GRADE, - ( C32_TAKE_UP.GRID_4 - 3 ) ], at: [ C32_LINE - 2, 3.3 + C32_TAKE_UP.GRADE, - ( C32_TAKE_UP.GRID_4 + 3 ) ] },
 ];
 
 
@@ -262,6 +286,15 @@ const scene = doc.createScene( 'B2D2 repair model' ).setExtras( {
 	views: VIEWS.map( ( { from, at, ...view } ) => ( { ...view, from: from.map( ( c, i ) => +( c - ORIGIN[ i ] ).toFixed( 3 ) ), at: at.map( ( c, i ) => +( c - ORIGIN[ i ] ).toFixed( 3 ) ) } ) ),
 	// What the twin's area editor rebuilds the areas from, next to the model (see the end).
 	repairs: basename( DATA ),
+	// C32's take-up, as it's built: the stages the twin offers (build-stages.js), which layers
+	// show at each (their nodes' buildStage), and the view to go to.
+	buildStages: { title: 'C32 take-up', view: 'C32 take-up', default: 'all', stages: [
+		{ id: 'demolition', name: '1 Demolition' },
+		{ id: 'excavation', name: '2 Excavation', underground: true },
+		{ id: 'forms', name: '3 Forms & rebar', underground: true },
+		{ id: 'built', name: '4 Built' },
+		{ id: 'all', name: 'All' },
+	] },
 } );
 const structure = doc.createNode( 'Structure' );
 scene.addChild( structure );
@@ -298,7 +331,10 @@ for ( const [ key, layer ] of Object.entries( STRUCTURE ) ) {
 	}
 
 	const node = doc.createNode( layer.name ).setMesh( doc.createMesh( layer.name ).addPrimitive( prim ) );
-	if ( layer.alpha ) node.setExtras( { noCollide: true } );
+	// See-through layers and the building ones don't stop you walking; the take-up's stages say which
+	// of the twin's build stages show them (build-stages.js).
+	const extras = { ...( layer.alpha || layer.noCollide ? { noCollide: true } : {} ), ...( layer.stages ? { buildStage: layer.stages } : {} ) };
+	if ( Object.keys( extras ).length ) node.setExtras( extras );
 	structure.addChild( node );
 
 }
