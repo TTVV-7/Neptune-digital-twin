@@ -16,7 +16,8 @@ Google's photorealistic 3D map, and you can drop your own detailed models on top
 - **Premium (work in progress, off until set up):** a Pro equipment pack bought once with Stripe.
 
 The same repository also holds a second app, **[World Drive](#world-drive-worlddriveapp)**: pick
-anywhere on Earth from a globe and drive it, or the Moon, Mars or the asteroids Vesta and Ceres.
+anywhere on Earth from a globe and drive it, or the Moon, Mars or the asteroids Vesta and Ceres,
+with others on every one.
 
 The step-by-step plan, with prompts you can paste to Claude, is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
@@ -807,7 +808,7 @@ posted with the visit's signed token and checked against what the game can score
 
 **Driving with others**: everyone else driving the same area (about 11 km across) shows up live as a
 ghost car you pass straight through, with their nickname, ride and Garage look (underglow too);
-**Invite friends** makes a party link (`/?party=CODE`) that brings friends to you anywhere on Earth,
+**Invite friends** makes a party link (`/?party=CODE`) that brings friends to you anywhere, on any world,
 and **H** honks (in the horn picked in the Garage, which the others hear as yours). No chat; the
 others see your nickname (or a guest name), your ride and where your car is in the
 game, including the spot you dropped in, and nothing else of you. On the globe, a glowing dot
@@ -817,25 +818,32 @@ one, down over them till they part). Only those visible nearby count (never a pa
 **Show me to drivers nearby** off), as positions to about a kilometre and counts, no names; the
 rooms add their dots to the reports they already make, and `/api/online` is kept 30 s by
 Cloudflare's cache, each Worker instance and browsers. A page alone on the globe in its Cloudflare
-location still costs about 60 of the day's budget an hour (about 120 an hour in a location however
+location still costs about 90 of the day's budget an hour (about 120 an hour in a location however
 many watch), so it stops asking once nobody has touched it for 10 minutes. Each room is a Durable
 Object on the WebSocket Hibernation API (`worker/drive/live.js`, speaking
 `src/drive-app/live-protocol.js`). It switches itself off for the rest of the UTC day once it has
 used its daily budget of Durable Object requests (`LIVE_DAILY_BUDGET`), so it can't use up what the
 visits need, and `LIVE` in `wrangler.drive.jsonc` switches it all off (see
-[Driving with others](docs/world-drive.md#driving-with-others), with what it costs). On the Moon it's
-the same in the Moon's own rooms (its areas the Earth's size, cars sent in the Moon's frame and drawn
-on its ground), with its own **Driving now** and dots on the Moon's globe, and parties span both
-worlds: **Go to** and **Join** turn the globe to the friend's world and drop in beside them. The
-Moon's rooms keep a budget of their own (`LIVE_MOON_DAILY_BUDGET`), so the Earth's being spent never
-shuts them (nor can a party's driver let in on the Moon drive on with an Earth that's spent: it's
-closed as it says it's there), and its visits (never limited) are held to 20 a day connecting from
-one address. And on either world, each address's connections (any but the owner's) may spend only
-an eighth of that world's day (`LIVE_ADDRESS_SHARE`: 5,000 requests on the Earth, 2,500 on the
-Moon, hours of driving with others), past which they're closed and turned away there until midnight
-UTC (see
-[Driving with others on the Moon](docs/world-drive.md#driving-with-others-on-the-moon), "Bounded per
-address").
+[Driving with others](docs/world-drive.md#driving-with-others), with what it costs). The Moon, Mars,
+Vesta and Ceres have it the same way, each in rooms of its own (areas about the Earth's 11 km on a
+grid of each world's, `mars:BAND.COL` and the like; cars sent in the world's own frame and drawn on
+its ground, so on Vesta and Ceres they never jump as the scene follows the car), with its own
+**Driving now** and dots on its own globe, and parties span every world: **Go to** and **Join** turn
+the globe to the friend's world and drop in beside them, and a friend elsewhere is "· on Mars". Each
+world keeps a day's budget of its own (`LIVE_MOON_DAILY_BUDGET` 20,000, `LIVE_MARS_DAILY_BUDGET`
+4,000, `LIVE_VESTA_DAILY_BUDGET` and `LIVE_CERES_DAILY_BUDGET` 3,000: with the Earth's 40,000,
+70,000 a day, leaving 30,000 of Cloudflare's Free plan for the rest), so one world's being spent
+never shuts another's (a page drives alone there and with others on the rest, a party carrying on
+through another world), and Mars's, Vesta's and Ceres's pay only for their own rooms and drivers,
+never for page loads or anyone watching their globes (those are the Earth's, else the Moon's). Free
+worlds' visits (never limited) are held to 20 a day connecting from one address, and on each world
+an address's connections (any but the owner's) may spend only an eighth of that world's day
+(`LIVE_ADDRESS_SHARE`), but never less than 1,000 requests (`LIVE_ADDRESS_FLOOR`): 5,000 on the
+Earth, 2,500 on the Moon, 1,000 on the others, past which they're closed and turned away on that
+world alone until midnight UTC. Pages speak protocol v3, which knows the five worlds by name, so
+older pages (v2, v1) carry on and see far drivers as on the globe (see [Driving with others on
+every world](docs/world-drive.md#on-every-world) and [on the
+Moon](docs/world-drive.md#driving-with-others-on-the-moon)).
 
 **Levels**: driving earns XP (each km, air off jumps, drift boosts, boost pads, landed tricks, the
 first drive in each area and at each start spot, minutes with others, and the day's first drive,
@@ -909,15 +917,20 @@ counts how many players have each (`src/drive-app/achievement-rules.js`,
 `worker/drive/achievements.js`, migration `0009_achievements.sql`; see [Achievements and
 rewards](docs/world-drive.md#achievements-and-rewards)).
 
-**The Moon, Mars, Vesta and Ceres**: the globe's panel has a button a world, **Earth**, **Moon**,
-**Mars**, **Vesta** and **Ceres** (the arrow keys move along them). The worlds but the Earth are
+**The Moon, Mars, Vesta and Ceres**: **Worlds**, at the top of the globe's panel (or **M** on the
+globe, or a link with `?worlds=1`), opens an orrery: the Solar System, its planets going round (still
+for those who ask for less motion), where the Earth, the Moon, Mars, Vesta and Ceres are picked, each
+with a sheet of its spots, your party's friends there and how many are driving there now (Mercury,
+Venus and the giants are there too, "not in the game yet" or with "no ground to drive on"). It's a
+native modal dialog (the five a radio group for the arrow keys), drawn by the page's own renderer, a
+chunk of its own with its pictures under `/orrery/` (`node scripts/make-orrery.mjs` makes them from
+the game's own maps and NASA's Blue Marble), so none of it is in the page's first load, and the ad
+waits while it's open (see [Picking a world](docs/world-drive.md#picking-a-world-the-orrery)). The worlds but the Earth are
 made in the page rather than streamed, the same way (`src/drive-app/body.js`, its heights and made-up ground in
 `body-height.js`), and what each is (its size, gravity, files, credit and made-up ground) is one
 list, `src/drive-app/worlds.js`, which the page, the Worker, the site and the tests share; each is
-free and never limited. Driving with others is on the Earth and the Moon, the Moon's in rooms of its
-own (see [Driving with others on the Moon](docs/world-drive.md#driving-with-others-on-the-moon));
-on Mars, Vesta and Ceres you drive on your own (see [Worlds](docs/world-drive.md#worlds), with how
-to add one).
+free and never limited. Driving with others is on every world, each in rooms of its own (see
+[Worlds](docs/world-drive.md#worlds), with how to add one).
 
 The Moon's shapes are NASA's (LRO's laser altimeter, every quarter degree,
 `drive/public/moon/height.bin`), its colours LRO's camera's mosaic (`drive/public/moon/colour.webp`;
@@ -937,7 +950,8 @@ hour), and its craters, fewer and more worn than the Moon's, are made up below t
 dozen start spots (Olympus Mons's summit caldera, Valles Marineris, the rovers' and landers' sites,
 Hellas, Noctis Labyrinthus, Arsia Mons, Korolev's ice) and its own search of 55 places; you drive it
 in 38% of the Earth's gravity (jumps as high and about 1.6 times as long), under a dusty
-butterscotch sky with Phobos in it, with no water (see [Mars](docs/world-drive.md#mars)).
+butterscotch sky with Phobos in it, with no water; and driving with others is there too, in Mars's
+own rooms (see [Mars](docs/world-drive.md#mars)).
 
 Vesta's and Ceres's shapes are from NASA's Dawn mission (the DLR's shape models from its framing
 camera, and its photographs, as the USGS has them; `npm run make-asteroids` makes
@@ -950,7 +964,8 @@ search of every place the IAU has named; you drive them in 2.5% and 2.9% of the 
 from round, so up there is along a spheroid their gravity holds level, not out from their middle
 (`src/drive-app/level.js`, which the page and the Worker share), and the scene follows the car,
 moved to it every 1 km on Vesta and 1.5 km on Ceres with everything in it carried, a challenge's run
-and its ghost too (see [Vesta and Ceres](docs/world-drive.md#vesta-and-ceres)).
+and its ghost too, and the others' cars driving with you there, in each world's own rooms (see
+[Vesta and Ceres](docs/world-drive.md#vesta-and-ceres)).
 
 World Drive's fourteen cars are models from Sketchfab (CC BY, credited in its About box and ride
 picker): sports cars and supercars (a retro wedge, a formula racer, a hypercar, a cyber muscle car)
@@ -1013,7 +1028,7 @@ Tiles API, a daily quota and budget alerts) are in [docs/world-drive.md](docs/wo
 Tests: `npm run test:drive-worker`, `npm run test:drive-ui`, `npm run test:drive-pro-ui`,
 `npm run test:drive-seo`, `npm run test:drive-live`, `npm run test:drive-live-ui`,
 `npm run test:drive-levels`, `npm run test:drive-levels-ui`, `npm run test:drive-moon-ui`,
-`npm run test:drive-mars-ui` and `npm run test:drive-asteroids-ui`.
+`npm run test:drive-mars-ui`, `npm run test:drive-asteroids-ui` and `npm run test:drive-orrery-ui`.
 
 ## About the Sketchfab model
 
@@ -1104,6 +1119,7 @@ scripts/add-drive-car.mjs, drive-car-thumbs.mjs   import a car for World Drive i
 scripts/make-moon.mjs   World Drive's Moon (drive/public/moon/): NASA's heights and picture of it
 scripts/make-mars.mjs   World Drive's Mars (drive/public/mars/): MOLA's heights and the Viking mosaic
 scripts/make-asteroids.mjs   World Drive's Vesta and Ceres (drive/public/vesta/, ceres/): Dawn's maps
+scripts/make-orrery.mjs   World Drive's orrery pictures (drive/public/orrery/): the worlds' own, small
 scripts/make-towns.mjs  the towns World Drive's admin page names drop-in places by (Natural Earth's)
 src/geo.js          lat/lon <-> local metres
 public/models/      put your .glb files here

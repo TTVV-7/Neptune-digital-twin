@@ -56,8 +56,10 @@ address, and the construction app is unchanged by it.
    water's surface ([the open sea](#the-open-sea)). Where there's nothing at all to drive on, it
    says so and goes back to the globe.
 5. **M** (or the **Globe** button) goes back to the globe, from driving or from a drop-in on its way
-   down. Pick somewhere else and drop in again: as often as you like, without reloading.
-6. **Challenges** (under **Earth | Moon | Mars | Vesta | Ceres** on the panel, and in the pause menu): a daily, a weekly
+   down. Pick somewhere else and drop in again: as often as you like, without reloading. On the
+   globe, **M** (or **Worlds**, at the top of the panel) opens the Solar System to pick another
+   world from ([picking a world](#picking-a-world-the-orrery)).
+6. **Challenges** (under **Worlds** on the panel, and in the pause menu): a daily, a weekly
    and a monthly one on each world, a checkpoint sprint, a hunt for stars or a drive to a landmark
    against the clock, each with its own board ([Challenges](#challenges)).
 
@@ -74,7 +76,7 @@ address, and the construction app is unchanged by it.
 | R | Stuck? Back on the road a few metres on (on water too) |
 | C | Chase or driver's-seat camera |
 | Wheel | Chase camera nearer or farther |
-| M | Back to the globe |
+| M | Back to the globe; on the globe, the [worlds](#picking-a-world-the-orrery) (and M again closes them) |
 | H | Horn, for those [driving with you](#driving-with-others) (only while that's on) |
 | Esc | Pause: keep driving, change ride, or back to the globe |
 
@@ -1373,8 +1375,10 @@ Monica Pier, the kart drove on down the slope.
 
 ## Worlds
 
-The globe's panel has a button a world at its top: **Earth**, **Moon**, **Mars**, **Vesta** and
-**Ceres**. The Earth is Google's tiles; [the Moon](#the-moon), [Mars](#mars) and the asteroids
+At the top of the globe's panel, **Worlds** (with the world you're on, and how many drive there
+now) opens the Solar System, where the five worlds you can drive on are picked: the Earth,
+the Moon, Mars, Vesta and Ceres ([picking a world](#picking-a-world-the-orrery)). The Earth is
+Google's tiles; [the Moon](#the-moon), [Mars](#mars) and the asteroids
 [Vesta and Ceres](#vesta-and-ceres) are made in the page from NASA's maps (`src/drive-app/body.js`),
 and are made the same way, so most of what's said of the Moon below is true of the others too, and of
 any world added after them. Vesta and Ceres are small and far from round, which takes two things more
@@ -1430,9 +1434,9 @@ always had.
 - **It's free and never limited**: its ground is our own files, so it costs nothing to stream and
   needs no Maps key (it's the real world under `npm run dev:drive` too). A visit there costs a robot
   check and nothing else ([what a visit costs](#what-a-visit-costs-and-how-its-capped)).
-- **On Mars, Vesta and Ceres you drive on your own**: driving with others is the Earth's and the
-  Moon's ([Mars, Vesta and Ceres: on your own](#driving-with-others-on-the-moon) says what that
-  means; the Moon has rooms of its own).
+- **Driving with others, in rooms of its own**: its own areas (a grid sized to the world, about
+  11 km across), cars sent in its own frame, its own day's budget, its own **Driving now** and dots
+  on its own globe, and parties across every world ([on every world](#on-every-world)).
 - **No water, no sea** (`water.none`), and boost pads by the Moon's rules (`MOON_RULES`), for open
   ground with no roofs or banks.
 - **Its own gravity** (`driver.gravity`, the world's `gravity`), with what throws a vehicle up
@@ -1464,15 +1468,102 @@ always had.
   [achievements](#achievements-and-rewards); and three [challenges](#challenges) of its own, laid out
   on its own heights.
 
-### The switch
+### Picking a world: the orrery
 
-The buttons are a pill cut into one part a world (`.worlds`: a column a button, however many there
-are, each its icon over its name in 12 px type, so the five fit across a phone's sheet, which the
-test checks at 360 px). They're
-a group of radio buttons: a click picks one, and the arrow keys (left and up back, right and down
-on, round from one end to the other) move along them and pick as they go; only the one picked is in
-the tab order (`panel.js`). While a world's files are coming its button says so (`aria-busy`). (With
-three, each was its icon beside its name.)
+**Worlds**, at the top of the globe's panel (`.worlds-open`), is one button: the world you're on
+with its icon ("Mars"), how many drive there now when there's anyone ("3 driving", the shown
+world's count from [who's driving now](#on-the-globe-whos-driving-now)), and "Worlds ›". Its label
+says it all to a screen reader ("Change world. On Mars now, 3 driving"); while a world's files are
+coming it reads "Loading Mars…" ("Loading the Moon…"), busy (`aria-busy`). It opens **the orrery**:
+the Solar System, the Sun with Mercury, Venus, the Earth and the Moon, Mars, the asteroid belt with
+Vesta and Ceres, and Jupiter, Saturn (with its rings), Uranus and Neptune, not to scale, the planets
+going round and turning (none of it with the system asking for less motion), drawn over the page's
+stars. It opens on the whole of it; a world picked (its button, its tag or its body in the scene,
+which a drag turns and a scroll or pinch zooms) is flown to, with a sheet beside it (under it on a
+phone): what it is, its radius and gravity, how many are driving there now, up to four of its start
+spots (each flying the globe to it there), your party's friends there (**Join**, or "on its globe"
+for one looking at it from its globe), and **Drive on Mars** (or **Back to the Earth** for the
+world you're on, which also stops a switch to another still loading). Mercury and Venus are "not in
+the game yet", the giants have "no ground to drive on": their sheets say so, with no Drive. While
+this visit's Earth drives are spent the Earth's sheet says so ("The Earth is used up for today"),
+and its Drive shows the [used-up notice](#what-a-visit-costs-and-how-its-capped) as the Earth
+always does.
+
+- **Opening it.** **Worlds**; **M** on the globe; the panel's **On other worlds** row ([who's driving
+  now](#on-the-globe-whos-driving-now), when two or more other worlds have drivers); or a link with
+  `?worlds=1`, which opens it as the page loads and is then taken out of the address (never over a
+  challenge link's card). Never on a plain load, nor off the globe, nor over another open dialog
+  (the Garage, the leaderboard, challenges and the rest). On the dev server
+  `window.worldDriveOrreryTest = { onLoad: true }` does what `?worlds=1` does, for the tests.
+- **Closing it.** Esc (first back from an other body's sheet to the whole Solar System, then
+  closed), **M**, its ✕, a Drive, a spot or a **Join**, and anything that leaves the globe (a
+  drop-in: main.js's `setMode` closes it first). The focus goes back to what opened it, or to
+  **Worlds** if that's gone. It closes before a Drive, spot or Join acts, so the panel's back first.
+- **For the keyboard and screen readers.** It's a native modal `<dialog id="orrery">`
+  (`showModal()`: the page behind it inert, as every other dialog here), titled "Pick a world". The
+  five worlds you can drive on are a radio group ("Worlds you can drive on"), the one you're on
+  checked and focused as it opens: the arrow keys (round from one end to the other), Home and End
+  move along them and show each one's sheet, Space picks, Enter drives there; only the one picked is
+  in the tab order. Each says its count in its name ("Mars, 3 driving now"; with driving with others
+  off there, or unknown, just "Mars"), never in a live region; the rest are buttons ("Saturn, no
+  ground to drive on"). Everything on the canvas is in the dialog's buttons; the floating tags are
+  for the mouse (`aria-hidden`). Keys stop at the dialog (and main.js's key handler does nothing
+  while it's open or opening), so none reaches the game behind it.
+- **What's counted.** The header's "N driving now" and each world's count are who's driving now's
+  own numbers, as the panel shows them (`online.worlds`, with this page taken off the world it just
+  left), so the orrery and the panel agree; the sheet says what counts ("Counted: drivers in an
+  area's room, who show themselves to drivers nearby. Not anyone on a globe, or only in a party.").
+  It asks the Worker for nothing of its own.
+- **How it's drawn.** By the page's own renderer into its own canvas (no second WebGL context, no
+  context lost beside Google's tiles): while it's open main.js's frame loop calls `orrery.render( dt
+  )` in place of drawing the scene (and the globe's `capture`), everything else going on as before,
+  the globe's controls off. It sets and puts back the renderer's target, clear colour and `autoClear`
+  round each draw, and with the system asking for less motion draws only when something changed (a
+  pick, a resize, the counts, the world you're on). The dialog and its backdrop are clear; while
+  it's open `body[data-orrery='open']` hides the panel, the tags, the pin and the credits
+  (`visibility`, so the ad's slot keeps its size). **The ad** isn't asked for while it's open
+  (`ads.js` waits for it to close, watching `data-orrery` as it watches the panel); one already
+  shown is hidden under it and back as it closes.
+- **Phones.** Up to 760 px wide the five are one row at the top (each at least 44 px, as every
+  button in it is), the rest a row that scrolls sideways under them, and the sheet at the bottom,
+  half the height at most, its words scrolling and Drive kept in view; on its side (520 px tall or
+  less) the sheet runs down the right, 42% of the width. A touch screen's hint says "Drag to turn,
+  pinch to zoom".
+- **Its files.** It's a chunk of its own, script and styles (`src/drive-app/orrery.js`,
+  `orrery.css`, its bodies' facts in `orrery-bodies.js`, the drivable ones' names, radii and
+  gravity from worlds.js), loaded the first time it's opened, so nothing of it is in the page's first
+  load; its pictures are fetched then too, from `/orrery/`: `earth.webp`, `moon.webp`, `mars.webp`,
+  `vesta.webp` and `ceres.webp`, 1024 × 512 each, and Vesta's and Ceres's shapes
+  (`vesta-height.bin`, `ceres-height.bin`, 360 × 180 signed 16-bit heights a degree apart, 129,600
+  bytes each, in each world's own steps), about 640 kB in all, and none of any world's own files.
+  `node scripts/make-orrery.mjs` makes them: the Moon's, Mars's, Vesta's and Ceres's from the
+  game's own pictures and heights (`drive/public/<world>/`, so the same NASA maps with the same
+  credits), and the Earth's from NASA's Blue Marble (NASA Visible Earth, public domain) as the
+  three-globe package (2.45.6, on npm) has it, fetched by the script, or a copy given with
+  `--earth=`: in the game the Earth is Google's tiles, which can't be used as a picture like that.
+  Mercury, Venus and the giants are drawn in the page. The scene is built the first time it opens
+  and kept for the visit (freed as the page goes, `pagehide`).
+- **The world.** A Drive is main.js's `setWorld`, as the switch before it was: under reduced
+  motion the globe's put at the world's orbit at once rather than flown in over 2.2 s.
+  `window.drive.orrery` (`open()`, `close()`, `isOpen`) is there for the tests.
+
+**How it's tested**: `npm run test:drive-orrery-ui` (`scripts/test-drive-orrery-ui.mjs`, on
+`TEST_VITE_PORT`, 5601 if unset), fourteen tests in Chromium on the test pad: never open on a plain
+load, and nothing of it nor of the other worlds fetched until it opens, then one WebGL context
+still; opened by **Worlds** (the focus back on it as it closes), by **M** (and closed by M, not
+opened again), by `?worlds=1` (then out of the address) and the dev server's seam, and closed by a
+drop-in; Esc, with the focus left on the scene too, the pin kept; the eleven bodies, the five a
+radio group in the game's order and the rest named for why not; an other body's sheet with no
+Drive, Esc back to the whole of it, then closed; the arrows (round), Home and End, Space and Enter;
+each world picked and driven to, and a sheet's spot flying the globe there; "Loading Mars…" on
+**Worlds** while Mars comes, and **Back to the Earth** stopping it; the Earth used up; each world's
+count in its name, the total, the sheet, **Worlds**' label and the **On other worlds** row opening
+it (the focus back on the row), from a stand-in `/api/online`; 360 × 640 and 740 × 360 with nothing
+wider than the screen, every target 44 px or more and Drive in view; nothing drawn while still under
+reduced motion; and the ad not asked for under it and not lost to it. `scripts/worlds-ui.mjs` is
+how every other UI test picks a world (**Worlds**, then the world, then Drive).
+
+(Before, the panel had a button a world, a pill of five radio buttons, `.worlds`.)
 
 ### Adding a world
 
@@ -1489,8 +1580,12 @@ three, each was its icon beside its name.)
    places its search finds, each with `world: '<id>'`, in `world-places.js`'s `SPOTS_ON` and
    `PLACES_ON`; and its words in panel.js's `WORDS`.
 4. **Its look**: `LOOKS[ id ]` in body.js.
-5. **The page**: its button in `drive/index.html`'s `.worlds`, its credit (`#<id>-credit`, with the
-   class `world-credit`), and a word of it in the panel's words and About.
+5. **The page**: its icon in `drive/index.html`'s **Worlds** button (`.worlds-open`, an
+   `<svg data-icon="<id>">`), its credit (`#<id>-credit`, with the class `world-credit`), and a
+   word of it in the panel's words, the FAQ and About. **The orrery**: its entry in
+   `orrery-bodies.js` (`DRIVE_BODIES` follows `WORLD_IDS`; its icon in `ICONS`, where it is in the
+   Solar System) and its picture, `drive/public/orrery/<id>.webp` (`scripts/make-orrery.mjs`, and a
+   `-height.bin` for a world far from round).
 6. **Its pages**: `drive/site/<id>.js` with its pages' words and its `<WORLD>_SITE`, in `build.js`'s
    `WORLD_SITES` (the build stops if a world in `OFF_EARTH` has none), a `<!-- <id> places -->`
    marker in `drive/index.html`, and its cards (`WORLD_CARDS` and its shots in
@@ -1510,13 +1605,24 @@ three, each was its icon beside its name.)
 9. **Achievements**: its drives' count (added by name in achievement-rules.js and
    worker/drive/achievements.js, and its icon in achievements.js's `ICONS`; progress.js and the page's
    grid follow the list) and its three badges.
-10. **Tests**: a UI test of its own (`test-drive-mars-ui.mjs` is the one to copy, or
+10. **Driving with others**: a new world's live play needs **a new version of the protocol**
+    (`worlddrive-live.v4`): the worlds each version knows (`KNOWN_WORLDS` in `live-protocol.js`)
+    are written out, never `WORLD_IDS`, so a page or room of today's never takes a sixth world's
+    places or cars for anything ([old pages](#on-every-world)). Then its grid (`CELL_DEGS`: an area
+    about 11 km across, and its rooms' prefix, the world's id), its car's band (`STATE_RADII`: from
+    3 km under its lowest to its highest and as high as a car can fly, apart from every other
+    world's) and its places' heights (`PLACE_HEIGHTS`); its day's budget (`LIVE_<ID>_DAILY_BUDGET`
+    in wrangler.drive.jsonc, `DEFAULT_BUDGETS` and `BUDGET_VARS` in worker/drive/live.js) and its
+    table in `DriveLimits` (`live_<id>`, `liveTable`); and `LIVE_WORLD_IDS`. main.js's
+    `LIVE_WORLDS` is `WORLD_IDS`: a world left out of it is one you drive alone on (away to the
+    rooms, its live parts hidden by `body[data-live='off']`).
+11. **Tests**: a UI test of its own (`test-drive-mars-ui.mjs` is the one to copy, or
     `test-drive-asteroids-ui.mjs` for a world with a level), its values in the search pages' test
     (`WORLD_CHECKS`), and its heights for the Worker's tests.
 
 ## The Moon
 
-**Moon**, on the globe's panel, turns the globe to the Moon: a whole Moon, made in the page
+**The Moon**, picked in the orrery that the globe panel's **Worlds** opens, turns the globe to the Moon: a whole Moon, made in the page
 (`src/drive-app/body.js`, as every [world](#worlds) but the Earth is) rather than streamed: its
 shapes are the real Moon's down to a few kilometres, from NASA's Lunar Reconnaissance Orbiter, its
 colours LRO's photographs of the whole Moon, and everything smaller made up, the same on every
@@ -1524,14 +1630,14 @@ visit. It needs no Google tiles and no Maps key, so it's the real Moon under `np
 
 ### Going there
 
-- **Moon**, on [the switch](#the-switch). The first time, the Moon's two files are fetched (never
-  before: the Earth never asks for them, nor makes its stars), the heights (`/moon/height.bin`, 2.1
-  MB) and the picture (`/moon/colour.webp`, 0.7 MB), the Moon button dimmed meanwhile; if they don't
-  come, a word says so and the globe stays on the world it was on. Earth, or a place or a drop-in on
+- **The Moon**, picked in [the orrery](#picking-a-world-the-orrery) (**Worlds**). The first time, the Moon's two files are fetched (never
+  before: the Earth never asks for them, nor makes its stars, nor does the orrery), the heights (`/moon/height.bin`, 2.1
+  MB) and the picture (`/moon/colour.webp`, 0.7 MB), **Worlds** saying "Loading the Moon…" meanwhile; if they don't
+  come, a word says so and the globe stays on the world it was on. **Back to the Earth** in the orrery, or a place or a drop-in on
   the Earth, while they're on their way stays on the Earth. Then the globe turns to the Moon, coming
   in from further out, over the Apollo sites (12° N, 18° E) the first time, else where it was looking
   when it left; the Earth's tiles are hidden and not updated, so none load under it, and a world left
-  (Mars, say) lets go of its ground but its coarsest. Earth turns back, to where it was.
+  (Mars, say) lets go of its ground but its coarsest. The Earth, picked again, turns back to where it was.
 - **Start spots**: a dozen (`MOON_SPOTS` in `src/drive-app/moon-places.js`): Tranquility Base
   (Apollo 11), Hadley Rille (Apollo 15), the Taurus-Littrow valley (Apollo 17), Tycho, Copernicus,
   Aristarchus, Plato, Mons Huygens, Shackleton crater's rim by the south pole, Mare Orientale,
@@ -1602,14 +1708,16 @@ visit. It needs no Google tiles and no Maps key, so it's the real Moon under `np
   rim), up to 40 m over or under where the vehicle last stood, and while it's up to 60 m over the
   ground in its long jumps. The Earth's rules keep pads off roofs and banks, and the Moon has none.
   (Every other world's pads go down by these rules too.)
-- **M** goes back to the Moon's globe, **Earth** or another world on the panel to theirs.
+- **M** goes back to the Moon's globe (and there, **M** again opens the orrery, for another world).
 
 ### Driving with others on the Moon
 
 [Driving with others](#driving-with-others) is on the Moon as on the Earth: the Moon is never
 limited (its ground is our own and costs nothing to stream), and a minute's drive alone on a grey
 plain is where most visits ended, so it's where company helps most. Everything the Earth has, the
-Moon has, in rooms of its own:
+Moon has, in rooms of its own. It was the first world after the Earth to have it, and what follows
+is how it was done; Mars, Vesta and Ceres have it the same way since, each in rooms of its own, and
+what differs is in [on every world](#on-every-world):
 
 - **Nearby, in the Moon's own areas.** Its areas are rooms of their own, `moon:BAND.COL` (and
   `moon:BAND.COL#1` to `#3` for their shards), so a Moon driver only ever shares an area's room
@@ -1625,32 +1733,35 @@ Moon has, in rooms of its own:
   1.5 m of the ground under it, a car having just stopped); with their ride, Garage look and name
   tag, a construction ride shown only with the achievement that unlocks it, as on the Earth. A state is checked against the Moon's ground (from
   12 km under its sphere to 30 km over: the deepest crater to well over the highest summit, flying)
-  and a place's height to ±12 km; one in the other world's frame is no car and is dropped.
+  and a place's height to ±12 km; one in another world's frame is no car and is dropped.
 - **The globe.** On the Moon's globe, the panel's **Driving now** is the Moon's ("3 driving on the
   Moon now"), its areas named after the Moon's start spots ("Near Tranquility Base"), and the dots
   are over the Moon (`/api/online?world=moon`): tap one, **Drive here**, and you're in their room. On
   the Earth's globe the list ends with a line **On the Moon** with how many drive there, and the
-  Moon's with **On the Earth**: a tap turns the globe to the other world. With nobody on this world
-  and some on the other, the panel says so ("Nobody driving on the Earth right now: 2 drivers on the
+  Moon's with **On the Earth**: a tap turns the globe to the other world (with drivers on two or more
+  other worlds, one line, **On other worlds**, that opens [the orrery](#picking-a-world-the-orrery)
+  with each world's count). With nobody on this world
+  and some on another, the panel says so ("Nobody driving on the Earth right now: 2 drivers on the
   Moon.") rather than "be the first" over that line. With this world's budget for the day spent, its
-  dots go but the line to the other world stays while anyone's there ("2 drivers on the Moon right
-  now."), as the Worker's answer that's off still says how many are on the other. Just back on the
+  dots go but the line to the other worlds stays while anyone's there ("2 drivers on the Moon right
+  now."), as the Worker's answer that's off still says how many are on each. Just back on the
   globe from driving on one world and turned to the other, the page takes itself off the other's
   count, as it does off an area's. A visit with no Earth (a link to the Moon, Mars, Vesta or Ceres,
   or today's Earth drives used up) has no **On the Earth** line: it would lead only to the used-up screen.
-- **Parties span both worlds.** A party's room has its members wherever they are: one on the other
-  world is "on the Moon" (or "on the Earth") in the list and the party's members, and their place's
+- **Parties span every world.** A party's room has its members wherever they are: one on another
+  world is "on the Moon" (or "on the Earth", "on Mars") in the list and the party's members, and their place's
   name says it too ("Ana is driving at Tranquility Base (Moon)"). **Go to**, **Join** on the banner
   and **Join** on a toast ("Sam went to Tycho crater (Moon).") go to them across worlds: the globe
-  turns to the other world (the Moon's files loaded the first time, as the **Moon** button does),
-  then a drop-in beside them, 5 m to their right, facing their way. On the Moon, within 10 km, **Go
-  to** puts you there straight away, on the ground under them. From a page opened with no Earth
+  turns to their world (its files loaded the first time, as picking it in the orrery does),
+  then a drop-in beside them, 5 m to their right, facing their way. On the Moon (and Mars), within 10 km, **Go
+  to** puts you there straight away, on the ground under them (on Vesta and Ceres only within their
+  recentre's 1 or 1.5 km, where the ground's already fine; farther, a drop-in). From a page opened with no Earth
   this visit (a link to the Moon, Mars, Vesta or Ceres, or today's Earth drives used up), a friend on the Earth is the way
   the **Earth** button is: a reload without the link, or the used-up screen. The party's banner
   shows on the Moon's globe, the pause menu has **Drive with friends**, the horn and tricks' points
   go to the room, and a party counts for its achievements (**Party time**, **Party regular**) there
   the same way.
-- **What a page does with friends on the other world.** Its car is no use to them to see, so it
+- **What a page does with friends on another world.** Its car is no use to them to see, so it
   goes once every 2 s (for their **Join**, as with friends on the globe), and 5 times a second only
   for those on its own world; they're not drawn, nor heard.
 - **Levels** count minutes driving with others there too (with others on the Moon); still not the
@@ -1663,17 +1774,18 @@ So the Moon's rooms can't go unbounded; but they mustn't be shut by the Earth's 
 They keep a day's budget of their own, `LIVE_MOON_DAILY_BUDGET` (**20,000**), counted the same way
 in a table of its own in `DriveLimits` (`live_moon`): spending the Earth's switches off only the
 Earth's rooms (and in a party, only those on the Earth: the others drive on), and the Moon's only
-the Moon's. The two together leave 40,000 of the Free plan's 100,000 for visits, names and scores.
+the Moon's. The two together leave 40,000 of the Free plan's 100,000 for visits, names and scores
+(30,000 with Mars's, Vesta's and Ceres's since: [on every world](#on-every-world)).
 A connection counts against the world it's on (an area's own; in a party, where its page last said
 it was), and a room's own alarms and reports against its world (a party's against the Earth's
-unless everyone in it is on the Moon). `/api/config` says both: `live` (and `liveReason`) for the
+unless everyone in it is on one world: [who pays](#on-every-world)). `/api/config` says both: `live` (and `liveReason`) for the
 Earth, `liveMoon` (and `liveMoonReason`, `budget` or `unknown`, none when it's only switched off
-there) for the Moon, its ask counted against the Earth's while that's open and else the Moon's. A
+there) for the Moon (and now every world, `liveWorlds`), its ask counted against the Earth's while that's open and else the Moon's. A
 page whose world's budget is spent is alone there ("Lots of drivers on the Earth today: driving
-with others there is back after midnight UTC. You can still drive with others on the Moon."), and
-with others on the other world; with both spent, it's over for the visit as before. A world
-switched off (its budget of 0) closes there without a word: it isn't lots of drivers. On Workers
-Paid either can be raised.
+with others there is back after midnight UTC. You can still drive with others on the Moon, Mars,
+Vesta and Ceres."), and with others on the other worlds; with every world spent, it's over for the
+visit as before. A world switched off (its budget of 0) closes there without a word: it isn't lots
+of drivers. On Workers Paid each can be raised.
 
 **Nobody drives on a world that's closed, even in a party.** A party's connection is let in on the
 budget of the world its page says it's on (`?world=`), and in the room a driver's world is wherever
@@ -1681,7 +1793,7 @@ its page says it is (its hello, a place, back on a world's globe). So a page let
 or a script saying it's on the Moon, could otherwise say hello at the Furka Pass and drive with the
 party on an Earth whose budget is spent, until the room's next report a minute on; and again on a
 fresh connection, each costing the Earth requests the Moon's budget never saw. So `DriveLimits`'
-`liveOpen` also says whether the other world's day is spent (looked at, not counted), `/api/live`
+`liveOpen` also says whether every other world's day is spent (looked at, not counted), `/api/live`
 hands that to the room (`X-Live-Closed`), the room keeps it in each connection's attachment
 (through hibernation, for that UTC day) along with every world its reports have heard is spent,
 and a party's driver who says it's on a closed world (hello, place or a world's globe) is closed
@@ -1692,7 +1804,7 @@ budget 0: the end of driving with others for the visit). What such a connection 
 room keeps it, `admitted`), as does what a connection still on a spent world's ground had spent
 when the room closes it, if it was let in on the other, still open: the Moon's budget bounds what
 connections let in on the Moon cost. And a connection's spend, as it goes, is carried by one on the
-same world if there is one; with nobody left on that world (a party with only the other world's
+same world if there is one; with nobody left on that world (a party with only another world's
 drivers in it), one on the other carries it apart from its own, in its attachment (so it outlasts
 hibernation), as that world's: either way it's counted against the world it was spent on, never the
 other's.
@@ -1718,13 +1830,18 @@ each a twentieth of a request whatever it is (even keepalives, even alone in its
 16 minutes, and its 8 Earth visits and 20 Moon visits (which can drive on the Earth too) the Earth's
 40,000 in about 23, closing that world for everyone until midnight UTC. So **each address may spend only its share of each world's day**: the budget
 over `LIVE_ADDRESS_SHARE` (**8**), 5,000 requests on the Earth and 2,500 on the Moon (about five
-and a half hours of driving with others on the Earth, nearly three on the Moon, and many more alone).
+and a half hours of driving with others on the Earth, nearly three on the Moon, and many more alone),
+but never less than `LIVE_ADDRESS_FLOOR` (**1,000**, which only Mars's, Vesta's and Ceres's smaller
+budgets meet: [on every world](#on-every-world)).
 Every visit but the owner's counts, Earth and Moon visits alike, on whichever world it's driving. A
 room's reports say what each address's connections spent themselves (by the same keyed hash,
 `from`: never what one carries for another as it goes), `DriveLimits` adds each up for the day under
 a hash of the day's salt with it (`live_address_spent`, deleted with the day, as `live_addresses`)
 and says which are past their share on a world; the room closes those addresses' connections on that
-world (`CLOSE.rate`, which any page, old or new, takes as a dropped connection), and `/api/live`
+world (a page since Mars, Vesta and Ceres have drivers, v3, with `CLOSE.off` and the reason `share`:
+it closes that world alone for the visit, "You've driven with others a lot on the Moon today. You
+can still drive with others on the Earth, Mars, Vesta and Ceres.", and drives with others on the
+rest; an older page with `CLOSE.rate`, which it takes as a dropped connection), and `/api/live`
 turns that address away there for the rest of the day (429, "Too many drivers from here today"),
 remembered by the Worker instance until midnight UTC, so the next visit from it isn't another ask of
 `DriveLimits` (the same for an address past its Moon visits). An address is closed within about a
@@ -1735,10 +1852,10 @@ Moon visits flat out, about 1,700 with its 28 visits on the Earth): so it takes 
 In a party, an address's connection let in on one world's share could drive on the other once its
 address had spent that one's, and come back on a fresh connection let in on the first: so
 `DriveLimits`' `liveOpen` also says, for a party's room, whether the address is past its share of
-the other world (`over`, looked at, not counted), `/api/live` hands that to the room
+each other world (`over`, looked at, not counted), `/api/live` hands that to the room
 (`X-Live-Over`, never for the owner's), the room keeps it in the connection's attachment along with
 every world its reports have said the address is past, and a driver who says it's on such a world
-is closed there and then (`CLOSE.rate`, as at a report). What a connection spent itself before it
+is closed there and then (as at a report). What a connection spent itself before it
 went is kept by address in the attachment of one still in the room (up to 8 addresses each), so it
 outlasts hibernation, as what's carried for the budget does; and a connection the room closes with
 nobody left in it (too many messages, say) has the room report there and then, rather than keep it
@@ -1746,18 +1863,21 @@ in memory until the page answers the close, which a script needn't ever do. Only
 beyond 64 addresses (a room has far fewer) is counted against the world's budget but not its
 address's.
 An address past its share on one world is turned away there, and a page turned away 8 times in a
-row while the Worker says it's on stops driving with others for the rest of the visit (see [When it
-stops](#driving-with-others)), on both worlds: a page can't tell why it was turned away. That takes
-hours of driving with others from one address in a day (5,000 requests is about five and a half on
-the Earth), so it's left at that.
+row on a world while the Worker says that world is on closes that world alone for the visit,
+quietly (a page can't tell why it was turned away), and drives with others on the rest; it stops
+for the rest of the visit only once every world it could drive with others on is closed or has
+turned it away so (see [When it stops](#what-you-see-and-do)). (Before Mars, Vesta and Ceres had
+drivers, 8 refusals ended it on both worlds.)
 
-**Old pages.** The page speaks a new version of the protocol, `worlddrive-live.v2` (PLACE and
-PLAYER with a `world`, an away with the world of its globe, the Moon's areas and frame), and offers
+**Old pages.** The Moon brought a new version of the protocol, `worlddrive-live.v2` (PLACE and
+PLAYER with a `world`, an away with the world of its globe, the Moon's areas and frame), offered as
 `[ 'worlddrive-live.v2', 'worlddrive-live.v1', <token> ]`, so a room still running the old code for
-a few minutes after a deploy answers v1, and the page then stays on the globe as far as that room
-knows while it's on the Moon (as a page from before did). A page from before (v1) gets on as ever:
+a few minutes after a deploy answered v1, and the page then stayed on the globe as far as that room
+knew while it was on the Moon (as a page from before did). A page from before (v1) gets on as ever:
 it's never let into a Moon area (400), and in a party a Moon driver is on the globe to it, with no
-place, car, trick or honk (the room's `seenBy`); a place it sends is always the Earth's.
+place, car, trick or honk (the room's `seenBy`); a place it sends is always the Earth's. Today's
+pages speak v3, which knows all five worlds ([on every world](#on-every-world)); a v2 page is to
+them what a v1 page is to a v2 one.
 
 **What's kept:** nothing more than on the Earth: a room keeps nothing once it empties, a Moon
 area's dots go to `live_online` like the Earth's (positions to about a kilometre and counts), and the
@@ -1820,21 +1940,10 @@ told of with **Join** and "on the Earth" in the list, one gone to the Moon told 
 driver on the Moon not counted as with others in the play stats; a phone on its side with five others' cars drawn,
 its frame time measured. Screenshots `moon-live-*`.
 
-**Mars, Vesta and Ceres: on your own.** Driving with others is the Earth's and the Moon's
-(`live-protocol.js` knows those two worlds' rooms and frames; main.js's `LIVE_WORLDS`). On Mars,
-Vesta and Ceres nothing is sent to a room (it's as if you were on the globe, away: the others see
-you "on the globe", and to `live.js` that's the Earth's globe), the others' ghosts aren't drawn, the
-panel's "Driving now" and its dots, the party banner, the pause menu's friends and the horn aren't
-shown (the CSS hides those parts for any `data-world` but `earth` and `moon`), no trick's points go
-to the room, and neither levels nor the play stats count any of it as with others. **Join** on a
-party's word that someone went somewhere, from one of them, goes to that friend's world (the Earth
-or the Moon) and drops in beside them. Levels count driving, air, drifts, pads and tricks there as
-anywhere, but not areas or start spots (those are the Earth's). A drop-in there is counted in the
-[play stats](#play-stats) as its world's (`dropin:mars`, which never says where), with its cell, to
-about a kilometre, in [where people drop in](#where-people-drop-in); its driving as its world's play
-time, and each turn of the globe to it (and it not loading) is counted too. Bringing driving with
-others to them (rooms and frames of their own, and on Vesta and Ceres a frame that follows the car:
-[the moving recentre](#the-moving-recentre)) is still to come.
+**Mars, Vesta and Ceres** have all of this the same way, each in rooms of its own, with its own
+frame, budget, dots and globe: see [on every world](#on-every-world). (Until November 2026 you
+drove on them on your own: nothing was sent to a room from them and the party saw you on the Earth's
+or the Moon's globe.)
 
 ### How it's made
 
@@ -1905,13 +2014,15 @@ nothing found), a drop-in at Tranquility Base (on its ground to 30 cm, the Moon'
 stars and the Earth in the sky, no water and no sea, the Moon's pad rules, its ground the only thing
 driven on and at its finest by the vehicle), a hop as high as on the Earth that stays up 3 to 4.2 s
 and scores nothing, M back to the Moon's globe with its own recent places, back to the Earth
-(driving there as it was: its gravity, its water), `?spot=moon-tycho`, and a phone's sheet. The
+(driving there as it was: its gravity, its water), `?spot=moon-tycho`, **Worlds** saying "Loading
+the Moon…" (busy) while its files come, and a phone's sheet with **Worlds** at its top and the Moon
+tapped in the orrery. The
 tests drive the go-kart: the Moon's ground is heavy drawing without a GPU, about a frame a second
 in Chromium's software renderer at 800 × 500.
 
 ## Mars
 
-**Mars**, on the globe's panel, turns the globe to Mars: a whole planet made in the page as the Moon
+**Mars**, picked in the orrery (**Worlds**, on the globe's panel), turns the globe to Mars: a whole planet made in the page as the Moon
 is ([worlds](#worlds): the same `body.js` and `body-height.js`, with Mars's numbers in worlds.js and
 its look in `LOOKS.mars`). Its shapes are the real Mars's down to a few kilometres, from the laser
 altimeter on NASA's Mars Global Surveyor (MOLA), its colours the Viking orbiters' photographs of the
@@ -1920,9 +2031,9 @@ no Maps key either.
 
 ### Going there
 
-- **Mars**, on [the switch](#the-switch). The first time, its two files are fetched (never before,
+- **Mars**, picked in [the orrery](#picking-a-world-the-orrery). The first time, its two files are fetched (never before,
   nor any of the Moon's), the heights (`/mars/height.bin`, 8.3 MB) and the picture
-  (`/mars/colour.webp`, 1.05 MB), its button dimmed meanwhile; if they don't come, a word says so ("Mars
+  (`/mars/colour.webp`, 1.05 MB), **Worlds** saying "Loading Mars…" meanwhile; if they don't come, a word says so ("Mars
   didn't load ..."), and the globe stays on the world it was on. Then the globe turns to Mars,
   coming in from further out, over Valles Marineris with the Tharsis volcanoes to the west (5° S,
   80° W) the first time, else where it was looking when it left, and a world left lets go of its
@@ -1992,13 +2103,16 @@ no Maps key either.
 - **No water**, and **boost pads** by the Moon's rules, as on the Moon.
 - **M** goes back to Mars's globe.
 
-### On Mars you drive on your own
+### Driving with others on Mars
 
-As driving with others has it for the worlds without it ([Mars, Vesta and Ceres: on your
-own](#driving-with-others-on-the-moon); until the Moon had rooms of its own, the Moon was the same):
-nothing sent to a room, no ghosts, dots, party banner or horn, **Join** going to the friend's world
-(the Earth or the Moon), and levels counting driving, air, drifts, pads and
-tricks but not areas or start spots. A drop-in is counted as Mars's (`dropin:mars`, with its cell of
+As on the Moon ([driving with others on the Moon](#driving-with-others-on-the-moon)), in Mars's own
+rooms ([on every world](#on-every-world)): its areas are `mars:BAND.COL`, bands 0.18° of latitude
+tall (10.6 km on its 3,389.5 km sphere), the cars sent Mars-centred in its own frame and drawn on its
+ground, its own **Driving now** and dots on Mars's globe (`/api/online?world=mars`), and a party's
+friend there is "on Mars" with **Go to** and **Join**. Its day's budget is its own,
+`LIVE_MARS_DAILY_BUDGET` (**4,000**: about 4 driver-hours with others, less what its rooms cost
+themselves). Levels count minutes with others there too, and the play stats its time with others.
+A drop-in is counted as Mars's (`dropin:mars`, with its cell of
 Mars's grid), its driving as Mars's play time (`play_world:mars`), and each turn of the globe to
 Mars (`world:mars`) and Mars not loading (`problem:mars_failed`) too.
 
@@ -2053,16 +2167,17 @@ vehicle, Phobos not drawn at 80° of latitude, NASA's credit, the cell and `drop
 back to Mars's globe with its recent places in `world-drive.recent-mars` alone; to the Moon (Mars
 let go of: none of its squares drawn, its six roots kept) and back to the Earth (its gravity, its
 water, no dust colour); `?spot=mars-olympus-mons` (the summit over 18 km up) and
-`?at=...&world=mars`; the switch's five buttons in order and the arrow keys (round from the Earth to
-Ceres and back, then on to Vesta and Mars, the tab order); a phone's sheet with the five buttons
-across it; and a Mars challenge from a link: a free visit (`{
+`?at=...&world=mars`; **Worlds** saying "Change world. On Mars now", and in [the
+orrery](#picking-a-world-the-orrery) the arrow keys (round from the Earth to Ceres and back, then on
+to Vesta and Mars, the tab order, none of it changing the game's world) and Enter driving to Mars; a
+phone's orrery with the five in one row, each at least 44 px; and a Mars challenge from a link: a free visit (`{
 token, world: 'mars' }`), on Mars at once, "On Mars" first and the Earth's saying **Needs an Earth
 drive**, its gate on Mars's own heights within a metre, driven through and posted with the visit. It
 takes 3 to 4 minutes in Chromium's software renderer.
 
 ## Vesta and Ceres
 
-**Vesta** and **Ceres**, on the globe's panel, turn the globe to the two biggest bodies of the
+**Vesta** and **Ceres**, picked in the orrery (**Worlds**, on the globe's panel), turn the globe to the two biggest bodies of the
 asteroid belt (Ceres a dwarf planet too), each made in the page as the Moon and Mars are
 ([worlds](#worlds): the same `body.js` and `body-height.js`, with their numbers in worlds.js and their
 looks in `LOOKS.vesta` and `LOOKS.ceres`). Their shapes are the real ones down to about a kilometre,
@@ -2079,10 +2194,10 @@ or so ([the moving recentre](#the-moving-recentre)).
 
 ### Going there
 
-- **Vesta** or **Ceres**, on [the switch](#the-switch). The first time, the world's two files are
+- **Vesta** or **Ceres**, picked in [the orrery](#picking-a-world-the-orrery). The first time, the world's two files are
   fetched (never before, nor any other world's), the heights (`/vesta/height.bin` and
   `/ceres/height.bin`, 8.3 MB each) and the picture (`/vesta/colour.webp`, 0.44 MB;
-  `/ceres/colour.webp`, 0.78 MB), its button dimmed meanwhile; if they don't come, a word says so,
+  `/ceres/colour.webp`, 0.78 MB), **Worlds** saying "Loading Vesta…" meanwhile; if they don't come, a word says so,
   and the globe stays on the world it was on. Then the globe turns to it, coming in from further
   out, the first time over Vesta's Snowman craters and the equator's troughs with Rheasilvia's rim to
   the south (20° S 0°), or over Ceres's Occator and its bright spots (20° N 120° W), else where it was
@@ -2149,13 +2264,21 @@ or so ([the moving recentre](#the-moving-recentre)).
 - **M** goes back to the world's globe, over where the scene is now (it has followed the car), not
   where it was dropped in.
 
-### On Vesta and Ceres you drive on your own
+### Driving with others on Vesta and Ceres
 
-As driving with others has it for the worlds without it ([Mars, Vesta and Ceres: on your
-own](#driving-with-others-on-the-moon); until the Moon had rooms of its own, the Moon was the same):
-nothing sent to a room, no ghosts, dots, party banner or horn, **Join** going to the friend's world
-(the Earth or the Moon), and levels counting driving, air, drifts, pads and
-tricks but not areas or start spots. A drop-in is counted as the world's (`dropin:vesta`,
+As on the Moon and Mars, each in rooms of its own ([on every world](#on-every-world)): areas
+`vesta:BAND.COL` (bands 2.4° tall, 11.0 km on Vesta's 262.7 km sphere) and `ceres:BAND.COL` (1.25°,
+10.3 km), the cars sent in the world's own frame, its own **Driving now** and dots on its globe, and
+parties across every world. Their days' budgets are their own, `LIVE_VESTA_DAILY_BUDGET` and
+`LIVE_CERES_DAILY_BUDGET` (**3,000** each). What's different is that the scene moves under the car:
+a car is sent where it is on the world (its frame's, never the scene's), each page draws the others
+through the world's group as it is now, so [the moving recentre](#the-moving-recentre), its own or
+the driver's, never makes a car jump (the others' effects and how a ghost's turned are carried by
+the move, `ghosts.transform`: in the tests a ghost stayed within half a metre of where it was on
+Vesta across a viewer's move of over 100 m, and within 3 m of the driver's car across the driver's).
+Go to a friend on Vesta or Ceres faces their way along the [level](#the-level-frame), and puts you
+there straight away only within the world's recentre (1 km, 1.5 km); farther, it's a drop-in beside
+them, which brings the ground in first. A drop-in is counted as the world's (`dropin:vesta`,
 `dropin:ceres`, with its cell of the world's grid), its driving as its play time
 (`play_world:vesta`), and each turn of the globe to it (`world:vesta`) and its not loading
 (`problem:vesta_failed`) too, and the same for Ceres.
@@ -2227,7 +2350,11 @@ equator, is 184 km across), so the frame follows the car (main.js's `follow`):
   - the boost pads down (`pads.transform`; where the car was a frame ago is forgotten, so one frame's
     sweep is lost rather than a sweep along a line a kilometre long);
   - a parked car, while paused (`carryParked`, its saved state and how it was parked kept in step);
-  - and a challenge's run (`challenges.recentred`, below).
+  - a challenge's run (`challenges.recentred`, below);
+  - and the others' cars ([driving with others](#driving-with-others-on-vesta-and-ceres)): only what
+    each has in the scene (its effects, which way it was last drawn turned, its splash's level,
+    `ghosts.transform`), as where each is comes in the world's own frame and is drawn through the
+    world's group as it is each frame.
 
   Then the middle (`origin`) is the new place, and a count goes up (`recentres`). `window.drive` has
   `shiftTo`, `origin`, `recentres` and `recentring` (the world's distance, or null) for the tests.
@@ -2289,8 +2416,8 @@ equator, is 184 km across), so the frame follows the car (main.js's `follow`):
 
 ### How Vesta and Ceres are tested
 
-`npm run test:drive-asteroids-ui` (on `TEST_VITE_PORT`, 5591 if unset), nine tests: the switch's
-five buttons in order and the globe turned to Vesta (its two files fetched only then, and later
+`npm run test:drive-asteroids-ui` (on `TEST_VITE_PORT`, 5591 if unset), nine tests: the orrery's
+five worlds in order (nothing of any world's files fetched by it) and the globe turned to Vesta (its two files fetched only then, and later
 Ceres's alone; its spots, words and credit, the others' hidden; the stars; `recentring` 1,000);
 its search (names, other names, "highest", "fossae", nothing found, coordinates as "Vesta
 coordinates · ..." with the pin's height deep in Rheasilvia); a drop-in at Marcia (the scene's up
@@ -2301,8 +2428,9 @@ a hop 2 to 3 m up, in the air 5.5 to 7 times the Earth's 1.43 s; the moving rece
 its place on Vesta moving under 5 m, its height under 1 m, its way under 1° and its speed under
 1.5 m/s, the scene level at the car on every frame); M to the globe and on to Ceres (its own files
 and words, a drop-in at Occator level by Ceres's spheroid, `recentring` 1,500) and back to the
-Earth (its gravity and water, `shiftTo` doing nothing there); a 360 px phone's sheet with the five
-buttons across it; the arrow keys round from the Earth to Ceres and `?spot=ceres-ahuna-mons`; and a
+Earth (its gravity and water, `shiftTo` doing nothing there); a 360 px phone's orrery with the five
+in one row; the orrery's arrow keys round from the Earth to Ceres, Enter driving there, and
+`?spot=ceres-ahuna-mons`; and a
 challenge on Vesta, a sprint to a gate 1,150 m north driven across a recentre, its time and ghost
 posted with the visit and taken by `checkPasses` and `ghostFault`, then **Retry** moving the scene
 back to the start with the gate where it was, not passed. It takes about 7 minutes in Chromium's
@@ -2319,23 +2447,20 @@ others:
 - **Nearby** (the default). After you drop in, you're in the room for the area you're in (about
   11 km across) and see everyone else driving there, so a popular spot is busy.
 - **A party.** **Invite friends** makes a link (`https://worlddrive.app/?party=CODE`); whoever
-  opens it is in your party wherever each of you is, on the Earth or the Moon, and can join you
-  where you are. On Mars, Vesta or Ceres you stay in it, on your own there: the party sees you on
-  the globe of whichever of the Earth or the Moon you were last on (the Earth for a visit that began
-  elsewhere), and that world's budget is the one used.
+  opens it is in your party wherever each of you is, on any of the five worlds, and can join you
+  where you are.
 
-On the Moon it's the same, in the Moon's own rooms (see [Driving with others on the
-Moon](#driving-with-others-on-the-moon)).
+On the Moon, Mars, Vesta and Ceres it's the same, each in rooms of its own (see [Driving with others
+on the Moon](#driving-with-others-on-the-moon), the first, and [on every world](#on-every-world)).
 
 And on the globe, **who's driving now**: a glowing dot wherever people are driving in an area's
 room, with how many (see [On the globe: who's driving now](#on-the-globe-whos-driving-now)).
 
-It's only on when the Worker says so (`live: true` in `/api/config`, or for the Moon `liveMoon:
-true`: the `LIVE` setting below, and [the day's budget](#the-days-budget) of that world not spent)
-and the visit has a token, which every visit the Worker hands out has (an Earth one, a free world's
-and the owner's; the test pad has none). It's on the Earth and the Moon; on [the other
-worlds](#worlds) you're away (see [Driving with others on the Moon](#driving-with-others-on-the-moon)).
-When it's off, nothing of it appears: no chip, no **Drive with friends**, no H in
+It's only on when the Worker says so (each world's `open` in `/api/config`'s `liveWorlds`: the
+`LIVE` setting below, that world's budget not 0, and [the day's budget](#the-days-budget) of that
+world not spent) and the visit has a token, which every visit the Worker hands out has (an Earth
+one, a free world's and the owner's; the test pad has none). It's on every world, each apart: one
+closed (spent or switched off) leaves the others on. When it's off, nothing of it appears: no chip, no **Drive with friends**, no H in
 the keys card, no horn button, no dots or **Driving now** on the globe, and driving alone is as it
 always was.
 
@@ -2412,12 +2537,18 @@ always was.
   it's dropped. It stops for the rest of the visit when another tab with the same visit takes over
   ("Driving with others moved to another tab."), when the visit runs out after 6 hours ("Driving
   with others has ended for this visit (after 6 hours). It's on again on your next visit."), when
-  the day's budget is spent ("Lots of drivers today: driving with others is back after midnight
-  UTC.", once), when it's turned away at the door 8 times in a row while the Worker says it's on
-  ("Driving with others couldn't connect from here, so you're driving on your own.": a network
-  that blocks WebSockets, say, or an address past its share of that world's day, see [Bounded per
-  address](#driving-with-others-on-the-moon), which ends it on both worlds), or, without a word, when it's switched off. Then none of it shows.
-  Driving alone carries on. A party's link opened while the day's budget is spent says the same.
+  every world's day's budget is spent ("Lots of drivers today: driving with others is back after midnight
+  UTC.", once), when it's turned away at the door 8 times in a row on every world it could drive
+  with others on while the Worker says they're on ("Driving with others couldn't connect from
+  here, so you're driving on your own.": a network that blocks WebSockets, say), or, without a
+  word, when it's switched off everywhere. Then none of it shows. Driving alone carries on. A
+  party's link opened while the day's budget is spent says the same. **One world** closing leaves
+  the others on: its day's budget spent ("Lots of drivers on Mars today: driving with others there
+  is back after midnight UTC. You can still drive with others on the Earth, the Moon, Vesta and
+  Ceres."), this address past [its share](#on-every-world) of that world's day ("You've driven with
+  others a lot on Mars today. ..."), that world switched off, or turned away 8 times there: on that
+  world you drive alone for the rest of the visit, and a party goes on through another
+  ([on every world](#on-every-world)).
 
 ### What others can see about you
 
@@ -2521,12 +2652,17 @@ none (or as it reports with the day's budget spent, as it then closes everyone);
 minutes (the TTL: a room still there reports at least every 10 minutes and its next alarm) is left
 out and deleted. A room knows what it last reported from what its connections keep through
 hibernation, so waking up doesn't make it report again. `GET /api/online` answers the Earth's
-`{ on, total, areas: [ { lat, lon, height, count } ], moon }`, and `GET /api/online?world=moon` the
-Moon's, `{ on, total, areas, earth }`: at most 200 areas, busiest first (those of an area's rooms at
-the same spot as one), `total` counting them all, and `moon` (or `earth`) how many are driving on
-the other world, as its rooms last said. It's kept 30 s in Cloudflare's cache (the Cache API,
-`caches.default`, under the address without its query but for `?world=moon`, which has a key of its
-own, so no other query can get round it; each Cloudflare location has its own), and by browsers for what's left of that
+`{ on, total, areas: [ { lat, lon, height, count } ], moon, worlds }`, `GET /api/online?world=moon`
+the Moon's, `{ on, total, areas, earth, worlds }`, and `?world=mars` (`vesta`, `ceres`) that
+world's, `{ on, total, areas, worlds }`: at most 200 areas, busiest first (those of an area's rooms
+at the same spot as one), `total` counting them all, `moon` (or `earth`) how many are driving on the
+other of the two, as its rooms last said (only those two: a page from before Mars had drivers
+reads it), and `worlds`, every world's `{ on, total }` from the same ask (`on: false` for a world
+closed today, its total 0). The page takes itself off the world it's just left in `worlds` as in
+`total`, so the orrery and the panel say the same. It's kept 30 s in Cloudflare's cache (the Cache API,
+`caches.default`, under the address without its query but for `?world=<id>` of a world other than the
+Earth, each of which has a key of its own, so no other query can get round it; each Cloudflare
+location has its own), and by browsers for what's left of that
 (`Cache-Control: public, max-age=30` and the `Date` it was made), and by each Worker instance
 (as plain values: what it last heard, answered with the same `Date`). Only a request that finds none
 kept asks `DriveLimits` (`liveOnline`), which counts that ask against the day's budget in the same
@@ -2538,12 +2674,15 @@ out, the others it gets are answered with what it last heard, a little old and k
 budget is spent or switched off, asking nothing for it then (a Worker instance remembers a spent
 day, as for `/api/config`, and an answer that it's off for the day is kept no later than midnight
 UTC: a page told it's off shows none of that world's dots for the rest of its visit, though it goes
-on asking for the other's count). Unless the other world is off too, an answer that's off still says
-how many are driving on the other, as the other's own answer does (from wherever that's kept, or
-asked for as a request for it would be, counted against the other's budget), so the page can point
+on asking for the others' counts). Unless every world is off, an answer that's off still says
+how many are driving on the others (`worlds`, and the Earth's or the Moon's partner key), as the
+first other open world's own answer does (in the five's order; from wherever that's kept, or
+asked for as a request for it would be, and charged as that one is), so the page can point
 there. If `DriveLimits` can't say, it's `on: true` with nobody, kept 10 s: never an
 error. The same-origin checks every route has apply. On the page it's `src/drive-app/online.js` (the
-dots, projected each frame through the globe's ellipsoid and the Earth's matrix as it is then) and
+dots, projected each frame through the shown world's ellipsoid and frame as it is then; a dot's
+place carries its world, so a Mars dot's **Drive here** stays on Mars, and it's named after that
+world's nearest start spot) and
 the panel's part in `panel.js`; `window.drive.online` has what it shows, for the tests.
 
 **What it costs.** No Durable Object requests of its own from the rooms: the dots ride on reports
@@ -2551,7 +2690,9 @@ they already make. The only extra is a report when a quiet room's dots change (a
 room reports a minute after they arrive rather than a few minutes later), at most one a minute, as
 ever: a request and a row written, and the dots' own row in `DriveLimits` (an upsert or a delete
 for each report of an area's room). An answer not kept is a `DriveLimits` request, counted against
-the day's budget: about two a minute in each Worker instance where someone's on the globe (those
+the day's budget (the Earth's or the Moon's for theirs; for Mars's, Vesta's or Ceres's globe the
+Earth's while it's open, else the Moon's, and only with both spent the world's own: [who
+pays](#on-every-world)): about two a minute in each Worker instance where someone's on the globe (those
 in one Cloudflare location share its cache when their requests are spread out, and a burst in one
 instance asks once), and none at all while nobody looks. So a page alone on the globe in its
 location is an ask every 40 s or so (each 20 s ask, every other one answered from the 30 s kept), about 90 an hour (a lone driver's room is about 93), and however many
@@ -2565,14 +2706,17 @@ answers any ask within 30 s of the last itself.
 
 Each room is one Durable Object (`DriveRoom`, `worker/drive/live.js`) on the WebSocket Hibernation
 API: `party:CODE`, or `near:BAND.COL` for an area of the Earth (bands 0.1° of latitude tall, cut
-into columns about as wide) and `near:BAND.COL#1` to `#3` for its other shards, and `moon:BAND.COL`
-(0.36° bands) for the Moon's. What's said is `src/drive-app/live-protocol.js`, which the page and
+into columns about as wide) and `near:BAND.COL#1` to `#3` for its other shards, and `moon:`,
+`mars:`, `vesta:` and `ceres:BAND.COL` for the other worlds' ([on every world](#on-every-world)).
+What's said is `src/drive-app/live-protocol.js`, which the page and
 the Worker both import:
 
-- The page opens `GET /api/live?room=<room>` (with `&world=moon` for a party from the Moon) with the
-  subprotocols `[ 'worlddrive-live.v2', 'worlddrive-live.v1', <visit token> ]` (a page from before
-  the Moon had drivers, `[ 'worlddrive-live.v1', <visit token> ]`; see [Old
-  pages](#driving-with-others-on-the-moon)), as a browser can't set headers on a WebSocket, and a
+- The page opens `GET /api/live?room=<room>` (with `&world=<id>` for a party from any world but
+  the Earth) with the subprotocols `[ 'worlddrive-live.v3', 'worlddrive-live.v2',
+  'worlddrive-live.v1', <visit token> ]` (a page from before Mars, Vesta and Ceres had drivers
+  `[ 'worlddrive-live.v2', 'worlddrive-live.v1', <visit token> ]`, and from before the Moon had
+  them `[ 'worlddrive-live.v1', <visit token> ]`; see [old pages](#on-every-world)), as a browser
+  can't set headers on a WebSocket, and a
   token in the address would end up in logs. Before the room is touched the Worker turns away anything that isn't a WebSocket (426), from
   another site (403: the Origin must be worlddrive.app's own, as WebSockets have no CORS), while
   `LIVE` is off (503), to a room that isn't one (400), without the protocol (400), without a good
@@ -2580,15 +2724,17 @@ the Worker both import:
   minute (429, on Cloudflare's rate limiter, `LIVE_CONNECTS`, which costs no Durable Object
   request) or more than 200 times a day (429, `LIVE_VISIT_CONNECTS`) or once the day's budget is
   spent (503 with `reason: 'budget'`, asked of `DriveLimits` only after everything else checks
-  out; a Moon visit's address is held to its day's visits then too, 429). A v1 page asking for a
-  Moon area, or a `world` that isn't one, is 400. The room gets only what was checked. A visit is in
+  out; a free world's visit's address is held to its day's visits then too, 429; an address past
+  its share of that world's day, 429). A page asking for an area, or a `world`, its version doesn't
+  know (a v1 page and the Moon, a v2 page and Mars), or a `world` that isn't one, is 400. The room gets only what was checked. A visit is in
   one room at a time: `DriveLimits` keeps
   each visit's room today (a `live_visits` table, deleted with the day), and when it connects to
   another the Worker has the room it was in let go of it first (4002, as another tab in the same
   room would be; one of its connections still on its way in there is turned away too), so one
   visit can't be in a hundred rooms at once.
 - Positions are Earth-centred (ECEF metres) and turns a quaternion in that frame, so two pages
-  centred on different places agree on where a car is; on the Moon, Moon-centred in its own frame. A page sends its car 5 times a second while
+  centred on different places agree on where a car is; on any other world, centred on it in its
+  own frame (Z through its north pole, X through 0° N 0° E, on its sphere). A page sends its car 5 times a second while
   it moves, once every 2 s while it's still (and once more at 5 a second as it stops, so where it
   stopped isn't what waits), and at once when what it's doing changes (at most 14 messages a second
   on average and 24 at once, under the room's limit). **Alone in its room it sends none**: they'd
@@ -2608,7 +2754,10 @@ the Worker both import:
   (4004), keepalives and honks included (a honk within 0.8 s of the last is dropped, but counts);
   a message it can't take (4000); the visit run out (4005); another connection with the same visit,
   in this room or another (4002, the older goes); a full room (a `full` message, then 4001);
-  switched off (4006), or the day's budget spent (4006 with the reason `budget`). A state no car
+  switched off (4006: `off` when it's off everywhere, `world off` when only this world is, its
+  budget 0), the day's budget spent (4006 with the reason `budget`), or this address past its share
+  of the world's day (4006 with `share` to a v3 page; 4004, as a too-fast connection, to an older
+  one). A state no car
   could be in is dropped, not closed on, and a place's name that isn't text is no name. The room
   answers the keepalive itself (`ping`, `pong`), not with the runtime's auto-response: that would
   answer it without the room seeing it, so it could be neither counted nor held to the rate.
@@ -2619,6 +2768,117 @@ the Worker both import:
   wouldn't stop has to connect again, a request, to carry on.
 - A room stores nothing but its alarm (about once a minute while anyone's in it: the limits above,
   and adding what it has spent to the day's), and deletes that when it empties.
+
+### On every world
+
+Since November 2026 every world has driving with others, each the way [the
+Moon](#driving-with-others-on-the-moon) first had it: rooms, cars, horns, tricks, parties and who's
+driving now, in rooms of its own, with a day's budget of its own and its own dots on its own globe.
+Before, Mars, Vesta and Ceres were on your own.
+
+**The rooms and the cars.** Each world's areas are about the Earth's 11 km, on a grid of its own
+(`CELL_DEGS` and `cellOf( lat, lon, world )` in `live-protocol.js`), and a car is checked against
+its own world's shell: from 3 km under its lowest ground to as high as one can fly over its highest
+(`STATE_RADII`; the five are apart, so a car can't be taken for another world's), and a place's
+height against its own lowest and highest (`PLACE_HEIGHTS`).
+
+| World | Rooms | Bands | Area | A car between (from the middle) | Day's budget |
+| --- | --- | --- | --- | --- | --- |
+| Earth | `near:BAND.COL` | 0.1° | 11.1 km | 6,340 to 6,400 km | `LIVE_DAILY_BUDGET`, 40,000 |
+| Moon | `moon:BAND.COL` | 0.36° | 10.9 km | 1,725.4 to 1,767.4 km | `LIVE_MOON_DAILY_BUDGET`, 20,000 |
+| Mars | `mars:BAND.COL` | 0.18° | 10.6 km | 3,377 to 3,442 km | `LIVE_MARS_DAILY_BUDGET`, 4,000 |
+| Vesta | `vesta:BAND.COL` | 2.4° | 11.0 km | 207.7 to 334.7 km | `LIVE_VESTA_DAILY_BUDGET`, 3,000 |
+| Ceres | `ceres:BAND.COL` | 1.25° | 10.3 km | 438 to 528.5 km | `LIVE_CERES_DAILY_BUDGET`, 3,000 |
+
+An area's shards are `#1` to `#3` on every world; a party (`party:CODE`) is one room across all of
+them. Columns are about as wide as a band is tall, but no narrower than at about 87° of latitude (`cos`
+held to 0.05), so near Vesta's poles they're wide. Off the Earth a position is in the world's own
+frame on its sphere (`toFrame( …, world )`, the same sum to the bit as level.js's `pointOn`): the
+level's tilt and [the moving recentre](#the-moving-recentre) are only in the page's scene, never on
+the wire.
+
+**The protocol, v3.** Today's pages speak `worlddrive-live.v3` and offer `[ v3, v2, v1, <token> ]`;
+the Worker takes exactly `[ v1, token ]`, `[ v2, v1, token ]` or `[ v3, v2, v1, token ]`, and the
+room answers in the version it was asked in, which the page reads back (`versionOf( ws.protocol )`)
+and speaks for that connection. Which worlds each version knows is written out, never the list of
+worlds (`KNOWN_WORLDS`: v1 the Earth, v2 the Earth and the Moon, v3 all five; `knows( version,
+world )`), so a world added later needs a v4 ([adding a world](#adding-a-world)). Both sides read
+every `world` through it: to a v2 page in a party, a driver on Mars is on the globe, with no place,
+car, trick or honk (the room's `seenBy`), as a Moon driver is to a v1 page; a place on a world a page
+doesn't know is taken as the Earth's; and v1 and v2 pages are never let into Mars's, Vesta's or
+Ceres's areas (400). `away` says which globe a driver's looking at (`{ t: 'away', world, globe }`
+from a v3 page; the room passes `globe` on only to v3 pages), so a friend who drove on the Earth and
+turned to Mars's globe is "on Mars's globe" in the list. (A v2 page shows a friend on Mars's globe
+as on the Earth's: it can't know Mars.) **Old pages and old rooms**: a room still on the code from
+before for a few minutes after a deploy answers a v3 page in v1 (it knows only v2 and v1), so for
+that connection the page is a v1 page, the Moon included; an old Worker's 400 for a far area counts
+as a refusal on that world alone. Page and Worker ship as one Worker, so only rooms run old code,
+and only for those minutes (unless a gradual deployment sends some requests to an older Worker,
+which would answer 400 to every v3 page).
+
+**Who pays** (worker/drive/live.js, with the charging inside `DriveLimits`):
+
+- A connection, and what it sends: the world it's on (an area's own; in a party, where its page
+  says it is, `?world=`).
+- An area's room's own alarms and reports: its world. A party's room's: the world everyone in it is
+  on; with them on several, the Earth's, or, with the Earth's budget 0, the open world most of them
+  are on (a tie to the first in `earth, moon, mars, vesta, ceres`).
+- What isn't driving is never a far world's while the Earth or the Moon is open: `/api/config`'s
+  ask (a page load) is counted against the Earth's, else the Moon's, every other world only looked
+  at in the same request; a globe's `/api/online` ask against the Earth's (or the Moon's, for the
+  Moon's globe) and for Mars's, Vesta's or Ceres's globe the Earth's while it's open, else the
+  Moon's, else the world's own. With the Earth's and the Moon's both spent, a Worker instance asks
+  `/api/config`'s question again at most once every 10 minutes (`FAR_OPEN_MS`) while a far world is
+  still open, not every 30 s; with every world known spent or off, not at all.
+- Mars's, Vesta's and Ceres's tables (`live_mars`, `live_vesta`, `live_ceres` in `DriveLimits`,
+  beside `live` and `live_moon`) are written only when a report has something for them, as rows
+  written are a Free-plan limit too.
+
+So a far world's budget pays for its own rooms and drivers only: an area's room with drivers moving
+is 120 an hour itself (about 2,880 a day kept busy all day), and each driver with others in sight
+about 900 an hour, so Mars's 4,000 is about two hours of two driving together (1,920 an hour), and
+Vesta's or Ceres's 3,000 about an hour and a half. All five come to **70,000 a day**, leaving
+30,000 of the Free plan's 100,000 for visits, names and scores: the owner chose the Free plan with
+these. On Workers Paid they can be raised; 10,000 each on the three would cost at most about $0.05
+a month more.
+
+**Each address's share, per world.** One address's connections may spend a world's budget over
+`LIVE_ADDRESS_SHARE` (8) in a day, but never less than `LIVE_ADDRESS_FLOOR` (**1,000**; 0 for no
+floor): 5,000 on the Earth and 2,500 on the Moon as before, and 1,000 on Mars, Vesta and Ceres (an
+eighth of Vesta's would be 375, under half an hour with others in sight). The floor isn't held under
+the budget, so it takes three or four addresses to spend a far world's day. An address past its
+share is closed on that world alone (a v3 page with `CLOSE.off` and `share`, toasting "You've driven
+with others a lot on Vesta today. You can still drive with others on the Earth, the Moon, Mars and
+Ceres.", or with none left open "…: it's back after midnight UTC."; an older page with
+`CLOSE.rate`) and turned away there (429); it drives with others on the rest. In a party, the room
+is told which worlds the address is past (`X-Live-Over`) and which are spent (`X-Live-Closed`), for
+every world, and closes a driver who says it's on one.
+
+**A world closed, the rest on.** `/api/config`'s `liveWorlds` says each world's state (`{ open,
+reason? }`, `reason` `budget` or `unknown`); a page reads only that (from an older Worker, the Earth
+and the Moon from `live` and `liveMoon`, the others off). A world closes for the visit when its day
+is spent (`CLOSE.off`, `budget`: "Lots of drivers on Mars today: …"), when it's switched off alone
+(`CLOSE.off`, `world off`, quietly), when this address is past its share there, or after 8 refusals
+in a row there while the Worker says it's on (quietly); `off`, every world switched off, still ends
+it all. On a closed world you drive alone: no car sent, none drawn, no area room, no dots. But a
+party isn't dropped for a budget it needn't use: the page's rooms go through the last world it was
+on that's still open (else the first open one), where it's away, looking at the closed world's globe
+(`globe`), and comes back as soon as it's on an open world. In `live.js`: `live.world` is that world
+(`here()`), `live.gameWorld` the game's, `live.closedHere` whether the game's world is closed,
+`live.closedWorlds` and `live.openWorlds()`; `budgetToast( world, open )` and `SHARE_TOAST` in
+friends.js. The page's live parts (the chip, the horn, **Drive with friends** and the rest) show by
+`body[data-live]`, which main.js sets from `LIVE_WORLDS` (every world), so a world taken out again is
+one line.
+
+**Parties across worlds.** A friend on another world is "· on Mars" in the list, and "Ana is
+driving at Bradbury Landing (Mars)" on the banner; **Go to**, **Join** and a toast's **Join** turn
+the globe to their world (its files fetched the first time) and drop in beside them; a friend on a
+globe is "on Mars's globe". [The orrery](#picking-a-world-the-orrery)'s sheet for a world lists your
+party's friends there, with **Join**.
+
+**What it costs a page.** Nothing more in its first load: the orrery is a chunk of its own, and the
+rest is the game's own code, which loads with the globe. Driving on Mars, Vesta or Ceres, a frame
+works out where the car is in the world's frame, as on the Moon (a microsecond or so).
 
 ### Switching it off
 
@@ -2640,8 +2900,10 @@ of each day once it has spent that day's budget (below).
 | `LIVE` | `on` (in `vars`) | `off` switches driving with others off |
 | `LIVE_DAILY_BUDGET` | 40000 (in `vars`) | The Durable Object requests a day it may use on the Earth; 0 is off there |
 | `LIVE_MOON_DAILY_BUDGET` | 20000 (in `vars`) | The Moon's, apart; 0 is off on the Moon |
+| `LIVE_MARS_DAILY_BUDGET`, `LIVE_VESTA_DAILY_BUDGET`, `LIVE_CERES_DAILY_BUDGET` | 4000, 3000, 3000 (in `vars`) | Mars's, Vesta's and Ceres's, each apart; 0 is off on that world ([on every world](#on-every-world)) |
 | `LIVE_ADDRESS_VISITS` | 20 (unset) | The most visits not counted by the Earth's caps (opened from a link to the Moon, Mars, Vesta or Ceres) connecting from one address a day |
 | `LIVE_ADDRESS_SHARE` | 8 (unset) | One address's connections may spend each world's budget over this in a day (5,000 on the Earth, 2,500 on the Moon); the owner's aren't counted |
+| `LIVE_ADDRESS_FLOOR` | 1000 (in `vars`) | But an address's share of a world's day is never less than this (Mars's, Vesta's and Ceres's are 1,000); 0 for no floor |
 | `LIVE_PARTY_MAX` | 8 (unset) | The most in a party |
 | `LIVE_NEARBY_MAX` | 20 (unset) | The most in each of an area's rooms |
 | `LIVE_VISIT_CONNECTS` | 200 (unset) | The most connections to rooms a visit makes in a day |
@@ -2655,8 +2917,10 @@ and nobody could start a drive. It isn't known which plan the account is on, so 
 keeps to a budget of its own, `LIVE_DAILY_BUDGET` billed requests a day (**40,000** in
 `wrangler.drive.jsonc`), and the Moon's rooms to theirs, `LIVE_MOON_DAILY_BUDGET` (**20,000**,
 counted the same way and apart, so neither world's shuts the other's: see [Driving with others on
-the Moon](#driving-with-others-on-the-moon)), and leaves the rest for visits, names, scores and
-searches. What follows is the Earth's; the Moon's is the same:
+the Moon](#driving-with-others-on-the-moon)), and Mars's, Vesta's and Ceres's to theirs (**4,000**,
+**3,000** and **3,000**: [on every world](#on-every-world)), and leaves the rest (30,000) for
+visits, names, scores and searches. What follows is the Earth's; every world's is the same, but for
+who pays for page loads and globes ([who pays](#on-every-world)):
 
 - **What's counted**, in billed requests as Cloudflare counts them (below): each connection (1),
   each message a room is sent (1/20 each, keepalives included, and those a closed connection goes
@@ -2675,12 +2939,13 @@ searches. What follows is the Earth's; the Moon's is the same:
   next report, within the minute for rooms with drivers moving, within a few for quiet ones.
   `/api/live` turns new connections away (503 with
   `reason: 'budget'`) and `/api/config` says `live: false` with `liveReason: 'budget'`, so new page
-  loads show none of it. A page turned off this way toasts once, "Lots of drivers today: driving
+  loads show none of it. A page turned off this way (every world spent) toasts once, "Lots of drivers today: driving
   with others is back after midnight UTC.", hides it all and drives on alone. With only one world's
   spent (the Earth's, say), it says so ("Lots of drivers on the Earth today: driving with others
-  there is back after midnight UTC. You can still drive with others on the Moon."), hides it all on
-  that world (the chip, the list, **Drive with friends**, the banner, **Driving now**'s areas and
-  its dots: only its line to the other world stays, while anyone's there) and has it on the other; a
+  there is back after midnight UTC. You can still drive with others on the Moon, Mars, Vesta and
+  Ceres."), hides it on that world (the chip, the list, the banner, **Driving now**'s areas and
+  its dots: only its line to the other worlds stays, while anyone's there; a party goes on through
+  another world, so its list and **Drive with friends** stay) and has it on the others; a
   party's link opened then says the same. A world switched off (its budget of 0) closes the same way
   without a word. At 00:00 UTC it's a
   fresh day: pages loaded after that have it again. Once a Worker instance has heard the day is
@@ -2691,8 +2956,8 @@ searches. What follows is the Earth's; the Moon's is the same:
   others that's turned away keeps trying, asking `/api/config` the first time and then every 5
   minutes (each time while the Worker can't be reached at all).
 - The count runs a minute behind (up to 10 for quiet rooms, with less than 5 each to add), which is
-  why the budget isn't all of what's left: 40,000 of the Free plan's requests are left for the rest
-  of the site (with the Moon's 20,000), and for the last minutes' driving.
+  why the budget isn't all of what's left: 30,000 of the Free plan's requests are left for the rest
+  of the site (with the other worlds' 30,000), and for the last minutes' driving.
   On Workers Paid, going over costs money rather than switching everything off, so it can be
   raised there (see what that costs below).
 
@@ -2760,6 +3025,12 @@ most 1.8 million a month, 0.8 million past the included million: $0.12 a month a
 a day more on either is $0.45 a month. A Moon dot's ask (`/api/online?world=moon`) is kept 30 s
 apart from the Earth's, so a page on the Moon's globe is the same ask a minute.
 
+**On Mars, Vesta and Ceres** the same again, each against its own budget (4,000, 3,000 and 3,000 a
+day), which pays only for its own rooms and drivers: their globes' asks and page loads are the
+Earth's (or the Moon's), as [who pays](#on-every-world) says. All five come to at most 70,000 a day,
+30,000 of the Free plan's 100,000 left. On Workers Paid all five are at most 2.1 million a month,
+1.1 million past the included million: about $0.17 a month at most.
+
 ### How it's tested
 
 `npm run test:drive-live` (the rooms, `scripts/test-drive-live.mjs`): under `wrangler dev`, with
@@ -2816,7 +3087,52 @@ the day's spent, or when it's off; `liveReason: 'unknown'` when `DriveLimits` fa
 `DriveLimits`.
 
 What's tested of the Moon's rooms, budget and pages is in [Driving with others on the
-Moon](#driving-with-others-on-the-moon).
+Moon](#driving-with-others-on-the-moon). Of [every world](#on-every-world)'s, `npm run
+test:drive-live` has: the protocol (v3 offered first and each version's worlds written out, frozen;
+every world's areas about 11 km and their rooms' names round the grid and back; no room, world or
+frame of one that isn't, never the Earth's instead; the five cars' shells apart, each world's car
+good only there; `toFrame` the same to the bit as `pointOn` on the Moon, Mars, Vesta and Ceres;
+places' heights per world; dots per world); the room on its stand-in runtime (a v3 Mars area
+answering v3 and dropping the Earth's, the Moon's and Vesta's cars and places; a party across five
+worlds as v3, v2 and v1 pages hear it, `globe` to v3 only, a v2 page saying Mars placed on the Earth;
+a Vesta area spending only Vesta's budget, with every budget and the floor in its report; Mars spent
+leaving it be, Vesta spent closing it `budget`, Ceres at 0 `world off`, every world at 0 `off`; past
+the share, v3 closed `share` and v2 `CLOSE.rate`, an Earth driver past its Mars share closed as it
+drops in on Mars; who pays for a party's room, everyone on Vesta, mixed, the Earth at 0 and a tie;
+`/api/live`'s 400 for v1 and v2 pages in a far area and for a bad v3 offer, `?world=` per version,
+the room told v3 and the world, the ask carrying every budget, the floor and the share, Mars at 0
+turned away without asking while Vesta's let in); `DriveLimits` on SQLite (a Mars-only report
+leaving the Earth's and the Moon's tables alone and writing no Vesta or Ceres row, no Mars dot in the
+Earth's answer, `worlds`' counts, a Vesta area's dots gone once Vesta's spent, a far globe's ask
+charged to the Earth's, then the Moon's, then its own, `/api/config`'s to the Earth's then the
+Moon's with the far worlds only looked at, a connection to its own world with the others listed
+closed or over, and the floor: Vesta's share 1,000, not 375); `/api/online?world=mars` and `vesta`
+on stand-ins (each its own answer and cache key, `worlds`, off answers taking the Earth's counts,
+nothing with every world off); the page's `live.js` (`worldsOf`, a v3 Mars area and its hello,
+friends' worlds and globes read by what the room's version knows, the car in Mars's frame, a party's
+`&world=mars`, away with world and globe; an old room answering v1 or v2 seeing it away on Mars; 8
+refusals on Mars closing Mars alone; `world off`, `share`, `budget` each closing one world and `off`
+ending it; on a spent Vesta the rooms going through Mars, the last world it was on, then the Earth,
+then the Moon, then over) and `online.js` (Mars's dots as Mars places named after its spots, **On
+other worlds** for two or more with its row handed to `onOthers`, `worlds` without the page itself,
+kept when off and gone when the visit ends, `onCounts` only on a change); and under `wrangler dev`
+a v3 driver at Gale in Mars's area, not in the Earth's dots nor its `moon` count, in `worlds.mars`
+and in `?world=mars`'s dots; two v3 pages on Mars seeing each other in Mars's frame, the Earth's
+area at the same numbers another room; a car 30 km over Vesta relayed; and a party of a v3 driver on
+Mars, a v3 friend who sees his car and a v2 one who sees him away. `npm run test:drive-worker`
+checks `/api/config`'s `liveWorlds`, the ask carrying every budget, all five at 0 asking nothing, the
+far worlds open with the Earth's and the Moon's at 0, `DriveLimits` failing (a world off here still
+off, the rest `unknown`), and asking again only every 10 minutes once the Earth and the Moon are
+spent while a far world's open, and not at all once all five are. `npm run test:drive-live-ui`
+has two pages at Bradbury Landing in one `mars:` room, each drawing the other's car within 3 m of
+where it is and 1.5 m of Mars's ground; a party made on Mars, its link opened on the Earth ("Ana ⭐ is
+driving at Bradbury Landing (Mars)"), **Join** dropping in 2 to 12 m from her on Mars, "· on the
+Earth" and "· on Mars" in the two lists, **Go to** back to Mars; Vesta at Cornelia across a recentre,
+the driver's (her car where it was on Vesta, the other's ghost of it within 3 m and never jumping)
+and the viewer's (its ghost within half a metre of where it was on Vesta, carried by exactly the
+move); a page told Mars is spent alone there and in Vesta's room; the budget toast ending "…on the
+Moon, Mars, Vesta and Ceres."; and every **M** it presses checked to be from a drive, as on the globe
+**M** opens the orrery. About 50 minutes in all, a quarter of it the five-world part.
 
 `npm run test:drive-live-ui` (`scripts/test-drive-live-ui.mjs`): two to four pages in Chromium on
 the test pad, against the real Worker under `wrangler dev` behind Vite's proxy (the test pad has no
@@ -2876,7 +3192,7 @@ the Worker both import, so the page shows what the Worker counts.
 | Each second in the air off a jump (not flying) | 3 |
 | Each drift boost paid out | 8 |
 | Each boost pad driven over | 4 |
-| Each minute driving with others in your room (someone else there, driving on the same world: not on the globe, nor a party friend on the other world) | 6 |
+| Each minute driving with others in your room (someone else there, driving on the same world: not on the globe, nor a party friend on another world) | 6 |
 | The first drive in an area (live-protocol.js's `cellOf`, about 11 km across), once you've driven a km in it | 100 |
 | Each start spot, the first time (driving within 300 m of it, 100 m into the drive) | 250 |
 | The day's first drive (UTC days), once you've driven 250 m | 100, and 25 more for each day in a row before it, up to 200 from the fifth |
@@ -4365,7 +4681,7 @@ starts one. World Drive is built so that one page load is one session, however m
   `world` that isn't a free world (one that isn't a world at all, or `earth`) asks for an Earth
   visit.
 - **Over a cap the page opens on the Moon by itself** (worlds.js's `FALLBACK`; the other free worlds
-  are a tap away): the 429 carries a visit (for scores and stats), the game starts on the Moon's globe
+  are picked in the orrery, from **Worlds**): the 429 carries a visit (for scores and stats), the game starts on the Moon's globe
   without a key, loading nothing from Google, and a toast says why (*You've had today's free Earth
   drive, so you're on the Moon: free and unlimited, as Mars, Vesta and Ceres are...*, the others
   listed by worlds.js's `listOf`, or *Today's free Earth drives
@@ -4582,7 +4898,7 @@ share), a day, as `metric:key`:
 | `device` | `phone`, `tablet`, `computer` | What the visit's on (once): a fine main pointer (a mouse, a trackpad) is a computer's, whatever its screen; a coarse one (a finger, `pointer: coarse`) is a tablet's when the screen's shorter side is 600 CSS px or more, else a phone's. A laptop with a touch screen is a computer, and so is a tablet with a trackpad |
 | `dropin`, `ride` | a start spot's id, `other`, or a world's id off the Earth (`moon`, `mars`, `vesta`, `ceres`); a ride | Where drop-ins are and in what: this key never says where off a start spot; the drop-in's cell, to about a kilometre, goes to [where people drop in](#where-people-drop-in) |
 | `dropin_time` | under 5 s, 5-10 s, 10-20 s, 20-40 s, over 40 s | How long each drop-in took, from Drive here to driving |
-| `play`, `play_world`, `play_with_others` | a ride; a world (`earth`, `moon`, `mars`, `vesta`, `ceres`); `all` | Seconds driven, not paused: by ride, by world, and with others driving on the same world (as levels count together: not those on the globe, nor a party friend on the other world; never on Mars, Vesta or Ceres, which have no driving with others). From the release that brought driving with others to the Moon (November 2026), `play_with_others` means that: before, it counted any time with anyone else in the room (a party friend on the globe too) and never the Moon, so the admin page's **With others** row against the period before it compares two meanings, not a trend |
+| `play`, `play_world`, `play_with_others` | a ride; a world (`earth`, `moon`, `mars`, `vesta`, `ceres`); `all` | Seconds driven, not paused: by ride, by world, and with others driving on the same world (as levels count together: not those on the globe, nor a party friend on another world; on Mars, Vesta and Ceres too from the release that brought driving with others to them, November 2026, and never before it). From the release that brought driving with others to the Moon (November 2026), `play_with_others` means that: before, it counted any time with anyone else in the room (a party friend on the globe too) and never the Moon, so the admin page's **With others** row against the period before it compares two meanings, not a trend |
 | `world` | `moon`, `mars`, `vesta`, `ceres` | Each time the globe turns to another world |
 | `search` | `earth`, `moon`, `mars`, `vesta`, `ceres`, `coordinates`, `nothing` | Searches made: of the map, of another world's places (by its id), coordinates typed; and, as well, each map or world's search that found nothing. Never what was typed |
 | `problem` | `no_ground`, `ride_failed`, `moon_failed`, `mars_failed`, `vesta_failed`, `ceres_failed`, `map_failed`, `map_session_ended`, `drop_abandoned` | What went wrong: no ground at a drop-in (no 3D map there, or another world's ground not loading), a ride's model not loading (whether the go-kart was driven instead or not), another world not loading, Google's map not loading at all, Google refusing the visit's tiles (its map session over), and a drop-in left for the globe before it was driving. The two map ones once a visit; the others each time |
@@ -7051,7 +7367,10 @@ a publisher id, and never for anyone with the [Supporter Pass](#supporter-pass-b
   (`requestIdleCallback`, at most 5 s; 3 s on a browser without it). Google's script,
   `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=<ADSENSE_CLIENT>` (`async`,
   `crossorigin="anonymous"`), is only asked for while the globe shows (dropped in before then, it
-  waits for the globe), as an ad slot with no width is one Google can't fill.
+  waits for the globe), as an ad slot with no width is one Google can't fill; nor while [the
+  orrery](#picking-a-world-the-orrery) is open over the globe (`body[data-orrery='open']`, which
+  hides the panel and the slot with it): it waits for it to close. One already shown is only hidden
+  while the orrery's open, and back as it closes.
 - The slot is an `<ins class="adsbygoogle">` with `data-ad-client`, `data-ad-slot` when there is
   one and `data-full-width-responsive="false"`, sized by `ads.css` (Google's way to give a
   responsive unit an exact size: no `data-ad-format`), so the ad can't grow over the sheet. Its
@@ -7134,7 +7453,9 @@ pass comes mid-visit; blocked and unfilled, gone quietly with the pin's card whe
 on a phone upright and on its side, clear of the sheet, the title, the trophy and the pin's card
 (with the pin still between the title and its card), with a picture of each (`drive-ad-desktop.png`,
 `drive-ad-phone.png`, `drive-ad-phone-landscape.png`, in `TEST_SCREENSHOTS` or the system's temporary
-folder).
+folder). `npm run test:drive-orrery-ui` opens [the orrery](#picking-a-world-the-orrery) with
+`?worlds=1` and the same stand-in: no ad asked for under it; closed, one asked for and shown, none
+counted blocked; opened again, the ad hidden but kept, and back as it closes.
 
 ## Settings
 
@@ -7153,6 +7474,8 @@ In `wrangler.drive.jsonc` (`vars`, set on every deploy; change them there, not i
 | `LIVE` | `on` | [Driving with others](#switching-it-off); `off` switches it off |
 | `LIVE_DAILY_BUDGET` | 40000 | [The Durable Object requests a day](#the-days-budget) driving with others may use on the Earth; 0 is off there |
 | `LIVE_MOON_DAILY_BUDGET` | 20000 | [The Moon's own](#driving-with-others-on-the-moon), apart; 0 is off on the Moon |
+| `LIVE_MARS_DAILY_BUDGET`, `LIVE_VESTA_DAILY_BUDGET`, `LIVE_CERES_DAILY_BUDGET` | 4000, 3000, 3000 | [Each world's own](#on-every-world), apart; 0 is off on that world |
+| `LIVE_ADDRESS_FLOOR` | 1000 | The least [an address's share](#on-every-world) of a world's day is; 0 for none |
 | `ADSENSE_CLIENT`, `ADSENSE_SLOT` | empty | [Google's ad on the globe](#ads): the AdSense publisher id (empty: no ads) and, if wanted, a display unit's id |
 
 Secrets, set by the owner and never in a file (Cloudflare dashboard: Workers & Pages → world-drive →
@@ -7234,7 +7557,13 @@ page loaded then makes driving with others anyway and is turned away at the door
 `DriveLimits` runs the new code; it tries again as after a dropped connection, so it's in a room a
 few minutes later at most. `npx wrangler deploy -c wrangler.drive.jsonc
 --durable-objects-code-update-mode immediate` (after `npm run build:drive` and the migrations)
-skips the wait, at the cost of dropping everyone's connection to their room for a moment.
+skips the wait, at the cost of dropping everyone's connection to their room for a moment. The
+deploy that brought driving with others to Mars, Vesta and Ceres (protocol v3, the far worlds'
+budgets, `LIVE_ADDRESS_FLOOR` and the `live_mars`, `live_vesta` and `live_ceres` tables, which
+`DriveLimits` makes itself: no migration) is the same: for those minutes a room on the old code
+answers a new page in v1 ([old pages and old rooms](#on-every-world)), and an old `DriveLimits` says
+nothing of the far worlds, which the Worker then takes as open. Don't send part of the requests to
+an older Worker with a gradual deployment across it: that one would turn every new page away (400).
 
 **Rolling back** (a version picked in the dashboard's Deployments, or a gradual deployment sending
 some requests to an older one) past the deploy that brought [where people drop
@@ -7435,7 +7764,7 @@ the Moon), every world being in every page's footer.
 on NASA's Mars Global Surveyor, MOLA, from NASA's Planetary Data System, and its colours from the
 Viking orbiters' photographs as the USGS's colour mosaic has them, all in the public domain; the
 small craters made up), what's different there (38% of the gravity, jumps as high and about 1.6
-times as long, a butterscotch sky with Phobos in it, no water, on your own), its places and a big
+times as long, a butterscotch sky with Phobos in it, no water, and driving with others in Mars's own rooms), its places and a big
 **Drive on Mars** that opens the game on Mars with Olympus Mons pinned. Each of its twelve start
 spots (`MARS_SPOTS`) has a page at `/mars/<slug>/`: `olympus-mons`, `valles-marineris`,
 `bradbury-landing` (Curiosity's), `mount-sharp`, `jezero`, `hellas-planitia`, `chryse-planitia`
@@ -7472,8 +7801,8 @@ the files on. To add one: a start spot in `MARS_SPOTS` first (dropped in on), th
 DLR's shape model from the framing camera on NASA's Dawn, which orbited it, and the framing camera's
 photographs; the small craters made up; "Dawn never landed, and there's no spacecraft in it"), what's
 different there (2.5% and 2.9% of the gravity, jumps as high and about six times as long, a black sky
-full of stars with the sun low in the south-west, no moons, no water, a world far from round, on your
-own), their places and a big **Drive on Vesta** (Rheasilvia's central peak pinned) or **Drive on
+full of stars with the sun low in the south-west, no moons, no water, a world far from round, and
+driving with others in its own rooms), their places and a big **Drive on Vesta** (Rheasilvia's central peak pinned) or **Drive on
 Ceres** (Occator). Each of their eleven start spots has a page: on Vesta
 `rheasilvia-central-peak`, `rheasilvia`, `marcia`, `calpurnia`, `divalia-fossae`,
 `matronalia-rupes`, `veneneia`, `saturnalia-fossae`, `vestalia-terra`, `cornelia` and `claudia`; on
@@ -7643,7 +7972,7 @@ list, on `/drive/` ("And the Moon, Mars, Vesta and Ceres") and in every page's f
 ... (areocentric ...)", "made up", its honesty line and its `/?spot=mars-...` link (`linkedPlace`
 making it a Mars place); `/mars/` over 500 words, with MOLA, Mars Global Surveyor, Viking, USGS,
 the areoid, public domain, made up, "38% of the gravity", "about 1.6 times as long", the
-butterscotch sky, Phobos, "No water" and "On your own" in it (read whole: the page's word list
+butterscotch sky, Phobos, "No water", "With others" and "Mars's own rooms" in it, and nothing "on your own" (read whole: the page's word list
 leaves out "38%"), and what its **Drive on Mars** pins; the USGS's mosaic page the one more outside
 link allowed; `/mars/height.bin` (8,294,400 bytes) and `/mars/colour.webp` (1,050,320) served
 whole, and `/mars/olympus-mons` sent on to its slash (307); Mars's pages in the sitemap; the home
@@ -7654,10 +7983,18 @@ the sitemap's Mars pages, the home page's list and Mars's files passed on. And f
 the same checks of their pages and files (their `WORLD_CHECKS`: "planetocentric latitude and
 longitude", "Dawn never landed, and there's no spacecraft in it", Dawn, the DLR, the framing camera,
 "2.5% of the gravity" and "about six times as long", "2.9%" and "nearly six times as long", "black sky
-full of stars"; `height.bin` 8,294,400 bytes each, `colour.webp` 444,068 and 781,442), eleven pages
-each, the USGS's planetary maps the one more outside link, their lists on the home page and "Can I
-drive on Vesta?" and "...on Ceres?"; their cards World Drive's own until theirs are drawn (`DRAWN`).
-Twenty tests, about 3 to 4.5 minutes (not timed again with the five worlds).
+full of stars", "With others" and "Vesta's own rooms" or "Ceres's own rooms"; `height.bin` 8,294,400
+bytes each, `colour.webp` 444,068 and 781,442), eleven pages each, the USGS's planetary maps the one
+more outside link, their lists on the home page and "Can I drive on Vesta?" and "...on Ceres?";
+their cards World Drive's own until theirs are drawn (`DRAWN`). Since driving with others came to
+every world, no world's page and not the home page says "on your own", and the home page's FAQ says
+"press Worlds at the top of this panel and pick Mars", "on every world" and "You can drive with
+others on Vesta too" (and Ceres). And [the orrery](#picking-a-world-the-orrery) is a chunk of its
+own, script and styles, that the game never imports in its first load and the page never asks for:
+only its empty `<dialog id="orrery">` and the **Worlds** button are in the page, none of its words
+in the game's code, and its pictures under `/orrery/` (five worlds' and Vesta's and Ceres's
+129,600-byte shapes). Twenty-one tests, about 3 to 4.5 minutes (not timed again with the five
+worlds).
 
 ### The owner's steps
 
@@ -7736,6 +8073,8 @@ secret `1x0000000000000000000000000000000AA` always passes; secret
   test pad a visit for everything a visit does (names, scores, [levels](#levels)' reports and
   driving with others), as `scripts/test-drive-levels-ui.mjs` does, and `window.worldDriveStatsTest
   = { visit }` one for the [play stats](#play-stats) alone, as `scripts/test-drive-ui.mjs` does.
+  `window.worldDriveOrreryTest = { onLoad: true }` opens [the orrery](#picking-a-world-the-orrery)
+  as the page loads, as `?worlds=1` does (`scripts/test-drive-orrery-ui.mjs`).
 - The other worlds need neither a key nor the Worker: their files are in the repository
   (`drive/public/moon/`, `drive/public/mars/`, `drive/public/vesta/`, `drive/public/ceres/`), so
   they're the real worlds under `npm run dev:drive` alone. `npm run make-moon`, `npm run make-mars`
@@ -7743,7 +8082,9 @@ secret `1x0000000000000000000000000000000AA` always passes; secret
   and the USGS's maps (Mars's about half an hour, nearly all of it the Viking mosaic's 12.7 GB, read
   a quarter of a gigabyte at a time; Vesta's and Ceres's maps a few hundred MB each, fetched whole,
   or given as copies; through a proxy, Node needs `NODE_USE_ENV_PROXY=1`), and say a few known
-  places' heights as they go, to see the grid read right.
+  places' heights as they go, to see the grid read right. `node scripts/make-orrery.mjs` makes
+  the orrery's pictures (`drive/public/orrery/`) from those files and NASA's Blue Marble (fetched in
+  the three-globe package from npm, or `--earth=<file>`); it has no `npm run` of its own yet.
 - In the browser console, `window.drive` has the scene, the globe, the driver and `dropIn( { name,
   lat, lon } )`, the world being driven (`world`), each other world's ground (`bodies`, by id:
   `bodies.mars.stats()` says how many of its squares are drawn and built) and `setWorld`; on Vesta
@@ -7751,7 +8092,8 @@ secret `1x0000000000000000000000000000000AA` always passes; secret
   recentre](#the-moving-recentre)); levels'
   `progress` (`progress.level`, `progress.progress`, what's `unsent` and the report on its way,
   `flying`) and `profile`, the play stats' `stats` (`stats.counts`, what's counted and not posted
-  yet), and with driving with others on, `live`, `ghosts` and `friends`.
+  yet), and with driving with others on, `live`, `ghosts` and `friends`; and `orrery` (`open()`,
+  `close()`, `isOpen`).
 
 Tests: `npm run test:drive-worker` (the Worker under `wrangler dev`, with stand-ins for Turnstile
 and Nominatim: the caps, their reset at midnight UTC, Turnstile passing and failing, same-origin and
@@ -7836,8 +8178,9 @@ what [search engines](#how-the-search-pages-are-tested) see, `npm run test:drive
 test:drive-live-ui` [driving with others](#how-its-tested), `npm run test:drive-levels` and `npm run
 test:drive-levels-ui` [levels](#how-levels-are-tested), `npm run test:drive-moon-ui` [the
 Moon](#how-the-moon-is-tested), `npm run test:drive-mars-ui` [Mars](#how-mars-is-tested) (5581
-its port unless `TEST_VITE_PORT` says) and `npm run test:drive-asteroids-ui` [Vesta and
-Ceres](#how-vesta-and-ceres-are-tested) (5591). The UI tests drive the go-kart unless a test picks another
+its port unless `TEST_VITE_PORT` says), `npm run test:drive-asteroids-ui` [Vesta and
+Ceres](#how-vesta-and-ceres-are-tested) (5591) and `npm run test:drive-orrery-ui` [the
+orrery](#picking-a-world-the-orrery) (5601). The UI tests drive the go-kart unless a test picks another
 (the pickup, the default, is 219,000 triangles, about a frame a second in Chromium's software
 renderer); `npm run test:drive-ui` checks the pickup is the default, and that the go-kart takes over
 if its model doesn't load. `TEST_VITE_PORT` picks a test's port, and `TEST_VITE_CACHE` a folder for
@@ -7915,6 +8258,8 @@ src/drive-app/world-places.js each world's spots and places (moon-places.js, mar
                              their search (place-search.js)
 drive/public/moon/, mars/,   each world's height.bin and colour.webp; scripts/make-moon.mjs,
   vesta/, ceres/             make-mars.mjs and make-asteroids.mjs make them
+drive/public/orrery/         the orrery's pictures of the five worlds and Vesta's and Ceres's
+                             shapes, which scripts/make-orrery.mjs makes
 src/drive-app/api.js         /api/config, the visit with Turnstile, /api/search, the leaderboard's and
                              the Supporter Pass's calls
 src/drive-app/leaderboard.js the leaderboard: the panel, names, posting runs, the new-best card
@@ -7946,7 +8291,12 @@ src/drive-app/live.js        the page's connection to its room: which room, send
 src/drive-app/ghosts.js      the others' cars, their name tags and effects
 src/drive-app/friends.js     the chip and list, Drive with friends, the party's banner and toasts,
                              the horn (each driver's, horns.js)
-src/drive-app/online.js      who's driving now on the globe: /api/online, the dots, Driving now
+src/drive-app/online.js      who's driving now on the globe: /api/online, the dots, Driving now,
+                             and every world's count (online.worlds) for the orrery and Worlds
+src/drive-app/orrery.js      the orrery: the Solar System the worlds are picked from, in the
+                             #orrery dialog, drawn by the page's renderer, a chunk of its own
+                             loaded as it first opens (orrery.css its look); orrery-bodies.js its
+                             eleven bodies
 src/drive-app/screens.js     start screen, notices, loading card, pause, keys, messages
 src/drive-app/test-globe.js  the Earth without Google's tiles, for working without a key
 src/drive-app/stats.js       the play stats in the page: counting, posting with the visit's token;
@@ -8019,7 +8369,8 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   a city, so a made-up time that fits it gets through: the owner looks after the boards
   ([Looking after them](#looking-after-them)).
 - On the Moon, driving with others has a budget of its own (see [there](#driving-with-others-on-the-moon)),
-  so the Free plan's 100,000 a day are shared three ways: the Earth's rooms, the Moon's and the rest. Its shapes
+  as Mars, Vesta and Ceres do, so the Free plan's 100,000 a day are shared six ways: each world's rooms
+  and the rest. Its shapes
   are the real Moon's only down to a few kilometres; every crater smaller than about 20 km across
   that you drive in is made up. Nothing casts a shadow there: a crater's far wall is darker for
   facing away from the sun, but its floor isn't in its rim's shade. As on the Earth the scene isn't
@@ -8027,7 +8378,7 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   ground is 29 m lower and gravity 0.33° off true. Driving fast enough (in overdrive), the vehicle
   can outrun the finest squares being built (5 ms a frame), and drives on the next size up (a point
   every 2.6 m) until they catch up.
-- On Mars, as on the Moon (but on your own, with no driving with others), its shapes the real Mars's only down to a few kilometres (its
+- On Mars, as on the Moon, its shapes the real Mars's only down to a few kilometres (its
   heights 7.4 km apart at the equator), the craters you drive among (from about 13 km across down)
   made up, no shadows, and the scene not recentred while driving (Mars curves away about twice as
   fast as the Earth: 10 km from the drop-in the ground is 15 m lower and gravity 0.17° off true).
@@ -8038,8 +8389,11 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   caldera there are pale grey-white patches (cloud, most likely), one at its northern edge where the
   Gazetteer puts the volcano's middle, which is why its start spot is in the caldera's middle.
   Mars's heights are 8.3 MB to fetch the first time it's picked (the Moon's 2.1 MB), kept plain, so
-  a slow connection waits for them with the Mars button dimmed.
-- On Vesta and Ceres, the same again: on your own, their shapes the real ones only down to about a
+  a slow connection waits for them with **Worlds** saying "Loading Mars…". Its day's budget for
+  driving with others is small (4,000: about two hours of two driving together), so on a busy day
+  driving with others there ends early, and one address has a share of 1,000 of it.
+- On Vesta and Ceres, the same again (and their budgets for driving with others smaller still,
+  3,000 each): their shapes the real ones only down to about a
   kilometre (their heights 573 m and 1,025 m apart at the equator; the bit of Vesta round its north
   pole that Dawn couldn't map filled in on its map), the craters you drive among made up, no
   shadows, and the sun fixed in the scene. The scene follows the car ([the moving
@@ -8253,7 +8607,7 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   way up from a phone shows in how a ghost moves). **Hide** goes by name, so two guests who happen
   to have the same one (1 in 10,000) are hidden together. It switches itself off for the rest of
   the UTC day once it has spent [its budget](#the-days-budget) (by default about 40 driver-hours
-  with others), so on a busy day it ends early for everyone; its count of what it has spent runs a
+  with others on the Earth, each world apart), so on a busy day it ends early for everyone there; its count of what it has spent runs a
   minute behind (up to 10 for quiet rooms). One connection can still send at the room's limit, 20
   messages a second (four times what a page sends), for its visit's six hours: about 3,600 billed
   requests an hour, which nothing but the day's budget stops.
@@ -8268,6 +8622,15 @@ Shared modules take World Drive's place as a parameter, with the terminal as the
   left over, and in about 150 bands that's under 0.014° wide: no spot to 0.01° fits 0.002° inside
   it, so a dot there is drawn in the column before, and Drive here on it joins that column's room
   (open ocean, Antarctica, Chukotka and a few Fiji and Aleutian bands).
+- [On every world](#on-every-world): a car is sent only within its world's shell, up to 30 km over
+  Mars's highest ground and 40 km over Vesta's and Ceres's; flown higher than that (it's not known
+  how high a car can fly in their weak gravity), its ghost stops where it was on the others' screens
+  until it's back down. Near Vesta's poles an area's columns are wide (held to the width at about
+  87°). A page from before Mars, Vesta and Ceres had drivers (v2) shows a friend looking at Mars's
+  globe as on the Earth's. A dot on Vesta's or Ceres's globe is hidden round the back by the
+  sphere's test, so near the edge one may show through a high crater rim (not checked by eye). The
+  orrery's counts are who's driving now's, so after 10 minutes untouched on the globe (no more
+  asks) they can be old, and nothing says so.
 - [Levels](#levels): the page says what it drove, so a script reporting the most the caps allow
   from a real visit levels about ten times as fast as driving, and a new player's claim counts an
   hour of that at once; the Garage's unlocks are in the page, as the pass's are. Each device's
