@@ -69,6 +69,9 @@ const STRUCTURE = {
 	pedestals: { name: 'C32 take-up pedestals', color: '#ddd8cb' },
 	// Its counterweight tower, the counterweight's steel, the hoist and the anchor rods cast in.
 	takeUpSteel: { name: 'C32 take-up steel & embedded items', color: '#7d8691', metal: true },
+	// The existing structures round it: the conveyor's steel and the tower steel, and its belt.
+	takeUpExisting: { name: 'C32 conveyor & take-up tower (existing)', color: '#7f8c99' },
+	takeUpBelt: { name: 'C32 belt', color: '#26282b' },
 	// What's being demolished there, see-through so the new work shows through it: the asphalt and
 	// the concrete broken out where the new foundations go, and the existing pedestals.
 	demoAsphalt: { name: 'To demolish: asphalt', color: '#1f1f1f', alpha: 0.6 },
@@ -97,7 +100,7 @@ const VIEWS = [
 	{ name: 'Ground', from: [ 67.5, 7.0, - 4.95 ], at: [ 20, 5.3, - 4.95 ] },
 	// C32's take-up: its pedestals, pad and counterweight tower, from up the conveyor looking back
 	// down at the tunnel's mouth.
-	{ name: 'C32 take-up', from: [ C32_LINE + 7, 10.5, - ( C32_TAKE_UP.GRID_4 + 11 ) ], at: [ C32_LINE - 2.2, 6.4, - ( C32_TAKE_UP.GRID_4 + 2.5 ) ] },
+	{ name: 'C32 take-up', from: [ C32_LINE + 19, 13.5, - ( C32_TAKE_UP.GRID_4 + 3 ) ], at: [ C32_LINE - 1.5, 6.6, - ( C32_TAKE_UP.GRID_4 + 7 ) ] },
 ];
 
 

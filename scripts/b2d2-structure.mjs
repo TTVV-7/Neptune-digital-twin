@@ -167,6 +167,28 @@ const TAKE_UP = {
 		{ name: 'conveyor table pedestal', d: [ 2.524 - 0.25, 2.524 + 0.25 ], a: [ 1.067 - 0.25, 1.067 + 0.25 ], el: [ 3.825, 4.125 ] },
 		{ name: 'conveyor table pedestal', d: [ 2.524 - 0.25, 2.524 + 0.25 ], a: [ - 1.067 - 0.25, - 1.067 + 0.25 ], el: [ 3.825, 4.125 ] },
 	],
+	// The existing structures round it, as -ME208's Section A and -ST231's plan draw them, on the
+	// same grid: grids 3, 2, 1 and 1X are 6.706, 9.906, 16.612 and 19.66 m up from grid 4, rows A1
+	// and B 1.829 m either side of the centre line and A 4.424 m toward A.
+	grids: { d: { 4: 0, 3: 6.706, 2: 9.906, 1: 16.612, '1X': 19.66 }, a: { A: 4.424, A1: 1.829, B: - 1.829 } },
+	// The conveyor: its belt's top 6.03 m up at grid 4 (EL), rising at 13.659° toward the drive,
+	// from the tunnel's mouth (4 m short of grid 4) to past grid 1X. The belt's width isn't on these
+	// drawings: 1.2 m; its stringers either side under the idlers, its legs on the new P2s.
+	conveyor: { el: 6.03, slope: 13.659, from: - 4, to: 21, belt: 1.2, stringers: 0.9, idlers: 1.2, carryDrop: 0.15, returnDrop: 0.75 },
+	// Its pulleys (-ME208 Section A): [ along from grid 4, centre EL, radius ].
+	pulleys: [
+		{ name: 'secondary drive pulley (PUL-624-04)', at: [ 16.612 - 2.286, 8.11, 0.5 ] },
+		{ name: 'primary drive pulley (PUL-624-03)', at: [ 16.612 - 4.267, 8.1, 0.5 ] },
+		{ name: 'LT bend pulley (PUL-624-06)', at: [ 9.906 + 0.61, 7.64, 0.36 ] },
+		{ name: 'take-up pulley (PUL-624-05)', at: [ 6.706 + 1.78, 6.7, 0.4 ] },
+	],
+	// The take-up pulley carriage's support frame: rails at 15° under it, 1.2 m apart, T.O. steel
+	// EL 5.277 and 6.142 where -ME208 marks them.
+	carriage: { from: [ 4.0, 4.55 ], to: [ 10.5, 6.3 ], apart: 1.2 },
+	// The tower's steel: columns at grids 3 and 2 on rows A, A1 and B (-ST231's plan) up to the
+	// take-up frame (EL 9.737), and at grids 1 and 1X on rows A1 and B up to the drive's top steel
+	// (EL 12.578), with the drive's platform at EL 7.45 from grid 2 to 1X.
+	steel: { column: 0.25, takeUpTop: 9.737, driveTop: 12.578, platform: 7.45 },
 	// The embedded items: anchor rods, [ along, across ] from where they're set out, `size` their
 	// diameter, `embed` into the concrete and `proud` out of it, with a nut on top.
 	anchors: [
@@ -274,6 +296,24 @@ class Solid {
 				this.face( [ end( sign ), at( t0, sign * half ), at( t1, sign * half ) ], o );
 
 			}
+
+		}
+
+		return this;
+
+	}
+
+	// Six faces through eight corners [ x, el, letter ]: the bottom four in order round, then the
+	// top four above them. Each face looks away from the middle.
+	brick( corners ) {
+
+		const mid = [ 0, 1, 2 ].map( k => corners.reduce( ( s, c ) => s + c[ k ] / 8, 0 ) );
+		const faces = [ [ 0, 1, 2, 3 ], [ 4, 5, 6, 7 ], [ 0, 1, 5, 4 ], [ 1, 2, 6, 5 ], [ 2, 3, 7, 6 ], [ 3, 0, 4, 7 ] ];
+		for ( const f of faces ) {
+
+			const c = f.map( i => corners[ i ] );
+			const centre = [ 0, 1, 2 ].map( k => c.reduce( ( s, p ) => s + p[ k ] / 4, 0 ) );
+			this.face( c, centre.map( ( v, k ) => v - mid[ k ] ) );
 
 		}
 
@@ -702,6 +742,73 @@ function takeUpSteel() {
 
 }
 
+// The existing structures round C32's take-up: the conveyor (belt, stringers, idlers, its legs on
+// the new P2s and its pulleys) and the tower steel (columns, the take-up carriage's rails, the drive's
+// platform and top steel).
+function takeUpSurroundings() {
+
+	const { GRID_4, GRADE, grids, conveyor: cv, pulleys, carriage, steel, p2 } = TAKE_UP;
+	const line = ( C32.x[ 0 ] + C32.x[ 1 ] ) / 2;
+	const P = ( d, a, el ) => [ line + a, el + GRADE, GRID_4 + d ];
+	const tan = Math.tan( cv.slope * Math.PI / 180 );
+	const belt = d => cv.el + d * tan;
+	const s = new Solid(), rubber = new Solid();
+	// An inclined strip along the conveyor from d0 to d1, across a0 to a1, its top `drop` under the
+	// belt's top, `t` thick.
+	const strip = ( solid, [ d0, d1 ], [ a0, a1 ], drop, t ) => solid.brick( [
+		P( d0, a0, belt( d0 ) - drop - t ), P( d1, a0, belt( d1 ) - drop - t ), P( d1, a1, belt( d1 ) - drop - t ), P( d0, a1, belt( d0 ) - drop - t ),
+		P( d0, a0, belt( d0 ) - drop ), P( d1, a0, belt( d1 ) - drop ), P( d1, a1, belt( d1 ) - drop ), P( d0, a1, belt( d0 ) - drop ),
+	] );
+	const span = [ cv.from, cv.to ], half = cv.belt / 2;
+	// The belt, carrying and returning; the stringers.
+	strip( rubber, span, [ - half, half ], 0, 0.02 );
+	strip( rubber, span, [ - half, half ], cv.returnDrop, 0.02 );
+	for ( const sa of [ - 1, 1 ] ) strip( s, span, [ sa * cv.stringers - 0.04, sa * cv.stringers + 0.04 ], cv.carryDrop + 0.05, 0.2 );
+	// Idlers: a roll across under the belt every `idlers` m, and a return roll under that.
+	for ( let d = cv.from + 0.6; d < cv.to; d += cv.idlers ) {
+
+		s.cylinder( P( d, 0, belt( d ) - 0.07 ), 'x', 0.065, half );
+		s.cylinder( P( d, 0, belt( d ) - cv.returnDrop - 0.09 ), 'x', 0.065, half );
+
+	}
+
+	// Its legs on the new P2s, up to the stringers.
+	for ( const [ d, a ] of p2.at ) {
+
+		const side = Math.sign( a ) * cv.stringers;
+		s.box( { x: [ line + side - 0.05, line + side + 0.05 ], l: [ GRID_4 + d - 0.05, GRID_4 + d + 0.05 ] }, [ p2.top + GRADE + TAKE_UP.SHOW, belt( d ) - cv.carryDrop - 0.25 + GRADE ] );
+
+	}
+
+	// Pulleys, their shafts across.
+	for ( const { at: [ d, el, r ] } of pulleys ) s.cylinder( P( d, 0, el ), 'x', r, half + 0.1 );
+	// The take-up carriage's rails.
+	const [ [ f0, e0 ], [ f1, e1 ] ] = [ carriage.from, carriage.to ];
+	for ( const sa of [ - 1, 1 ] ) {
+
+		const a = sa * carriage.apart / 2;
+		s.brick( [ P( f0, a - 0.05, e0 - 0.2 ), P( f1, a - 0.05, e1 - 0.2 ), P( f1, a + 0.05, e1 - 0.2 ), P( f0, a + 0.05, e0 - 0.2 ),
+			P( f0, a - 0.05, e0 ), P( f1, a - 0.05, e1 ), P( f1, a + 0.05, e1 ), P( f0, a + 0.05, e0 ) ] );
+
+	}
+
+	// The tower's columns, and a frame along each row at their tops.
+	const col = steel.column / 2;
+	const column = ( d, a, top ) => s.box( { x: [ line + a - col, line + a + col ], l: [ GRID_4 + d - col, GRID_4 + d + col ] }, [ 3.825 + GRADE, top + GRADE ] );
+	const beam = ( [ d0, d1 ], [ a0, a1 ], el ) => s.box( { x: [ line + Math.min( a0, a1 ) - col, line + Math.max( a0, a1 ) + col ], l: [ GRID_4 + Math.min( d0, d1 ) - col, GRID_4 + Math.max( d0, d1 ) + col ] }, [ el - 0.3 + GRADE, el + GRADE ] );
+	const { d: gd, a: ga } = grids;
+	for ( const g of [ '3', '2' ] ) for ( const r of [ 'A', 'A1', 'B' ] ) column( gd[ g ], ga[ r ], steel.takeUpTop );
+	for ( const g of [ '1', '1X' ] ) for ( const r of [ 'A1', 'B' ] ) column( gd[ g ], ga[ r ], steel.driveTop );
+	for ( const g of [ '3', '2' ] ) beam( [ gd[ g ], gd[ g ] ], [ ga.A, ga.B ], steel.takeUpTop );
+	for ( const r of [ 'A', 'A1', 'B' ] ) beam( [ gd[ '3' ], gd[ '2' ] ], [ ga[ r ], ga[ r ] ], steel.takeUpTop );
+	for ( const r of [ 'A1', 'B' ] ) beam( [ gd[ '1' ], gd[ '1X' ] ], [ ga[ r ], ga[ r ] ], steel.driveTop );
+	for ( const g of [ '1', '1X' ] ) beam( [ gd[ g ], gd[ g ] ], [ ga.A1, ga.B ], steel.driveTop );
+	// The drive's platform, grid 2 to 1X between rows A1 and B.
+	s.box( { x: [ line + ga.B, line + ga.A1 ], l: [ GRID_4 + gd[ '2' ], GRID_4 + gd[ '1X' ] ] }, [ steel.platform - 0.05 + GRADE, steel.platform + GRADE ] );
+	return { takeUpExisting: s.layer(), takeUpBelt: rubber.layer() };
+
+}
+
 // What's being demolished, as two layers: the asphalt, and the concrete (the slab under the asphalt
 // and the existing pedestals). Like the new concrete level with the ground, drawn SHOW up so they
 // show over Google's ground, the asphalt just over the new pad's top.
@@ -728,7 +835,7 @@ function demolition() {
 // the structure put on the drawings' grid, and the beams as a layer of their own (beams).
 export function correctStructure( site ) {
 
-	return { ...site, pit: pit(), c31: gallery( site.c31 ), beams: beams(), steel: plates(), c32: c32( site.c32 ), pedestals: pedestals(), takeUpSteel: takeUpSteel(), ...demolition() };
+	return { ...site, pit: pit(), c31: gallery( site.c31 ), beams: beams(), steel: plates(), c32: c32( site.c32 ), pedestals: pedestals(), takeUpSteel: takeUpSteel(), ...demolition(), ...takeUpSurroundings() };
 
 }
 

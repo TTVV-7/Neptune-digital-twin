@@ -288,6 +288,13 @@ left as it came):
     given: drawn 300 mm). Layers *To demolish: asphalt* and *To demolish: concrete*, which don't stop you
     walking.
 
+  - the **existing structures round it** (-ME208 Section A, -ST231's plan): the C32 conveyor from the tunnel's
+    mouth up past grid 1X (belt, stringers, idlers, its legs on the P2s), its secondary drive, primary
+    drive, LT bend and take-up pulleys, the take-up carriage's 15° rails, the tower's columns at grids 3
+    and 2 on rows A, A1 and B up to the take-up frame (EL 9.737), and at grids 1 and 1X up to the drive's
+    top steel (EL 12.578) with its platform at EL 7.45. The belt's width (1.2 m) and the members' sizes
+    aren't on these drawings and are drawn typical.
+
   Concrete in pale new concrete, steel in its own layer (*C32 take-up steel & embedded items*). Where grid 4
   is along C32 the drawings don't say: `TAKE_UP.GRID_4` in `scripts/b2d2-structure.mjs` puts it 4 m past
   the tunnel's end, worked out from the belt's height there; they stand on the model's ground (`GRADE`, as
