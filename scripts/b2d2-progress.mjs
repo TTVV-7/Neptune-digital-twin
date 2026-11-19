@@ -418,8 +418,12 @@ const taken = new Set();
 const pairs = [];
 for ( const m of made ) for ( const o of before ) {
 
-	const facing = o.n[ 0 ] * m.n[ 0 ] + o.n[ 1 ] * m.n[ 1 ] + o.n[ 2 ] * m.n[ 2 ] > 0.9;
-	const distance = Math.hypot( ...centre( o ).map( ( v, i ) => v - centre( m )[ i ] ) );
+	// A ground floor plan area that was put on the underside of C31's downstand for a while is back on
+	// the slab's top: the same area, turned over.
+	const turned = /downstand/.test( o.face ) && m.face === 'ground floor slab';
+	const facing = turned || o.n[ 0 ] * m.n[ 0 ] + o.n[ 1 ] * m.n[ 1 ] + o.n[ 2 ] * m.n[ 2 ] > 0.9;
+	// (In plan, for one turned over: it went down to the downstand as well.)
+	const distance = Math.hypot( ...centre( o ).map( ( v, i ) => turned && i === 1 ? 0 : v - centre( m )[ i ] ) );
 	const sameDay = ! o.f?.chipped || o.f.chipped === m.f.chipped;
 	if ( facing && sameDay && distance < Number( opts.match ) ) pairs.push( { m, o, distance } );
 

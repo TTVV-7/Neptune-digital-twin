@@ -268,6 +268,8 @@ left as it came):
   train support beams 1 and 2 over the pit and along the gallery, G1 to G14, the cross beam, the
   shed support beam and B1 to B6. At grade they're under Google's ground (**U** cuts it away over
   the structure), and from inside C31 they're overhead;
+- along each of C31's walls under the slab, the **downstand** (0.66 m out from the wall, its underside
+  at EL +1.22, where the walls' repair areas stop), as -ST011's beam elevations draw it;
 - the gallery's **hoppers** (the two sloped plates under the slot between the rail beams) taken out:
   others broke them out with machines, bay by bay, by 10 November. They're kept in the model's data
   bay by bay (G1–G2 at the pit to G12–G13 at the north end) with the day each went, for the
