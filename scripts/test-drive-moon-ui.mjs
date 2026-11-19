@@ -315,6 +315,49 @@ describe( 'World Drive on the Moon', () => {
 
 	} );
 
+	test( 'overdrive with no air: no white shock and no vapour, embers falling at the Moon\'s gravity', async () => {
+
+		const run = await page.evaluate( async () => {
+
+			const { SHAPES, FLAT } = await import( '/src/drive-boosts.js' );
+			const { driver: d, scene } = window.drive;
+			const out = { air: d.effects.air, gravity: d.effects.gravity };
+			// Kept at the booster's top speed, stepped by hand, until it goes supersonic.
+			for ( const code of [ ...d.keys ] ) d.release?.( code );
+			d.keys.clear();
+			const top = d.spec.topSpeed / 3.6 * 2;
+			Object.assign( d, { speed: top, gauge: 1, firing: false, boost: null, supersonic: false, nearTop: 0 } );
+			d.press( 'KeyB' );
+			for ( let i = 0; i < 400 && ! d.supersonic; i ++ ) {
+
+				d.speed = top;
+				d.gauge = 1;
+				d.update( 1 / 60 );
+
+			}
+
+			const root = scene.getObjectByName( 'drive-fx' );
+			const batches = [];
+			root.traverse( o => o.userData.batch && batches.push( o.userData.batch ) );
+			const fresh = batches.flatMap( batch => batch.items.filter( p => p.age < p.life && p.age < 0.05 ) );
+			out.supersonic = d.supersonic;
+			out.rings = fresh.filter( p => p.mode === FLAT && ( p.frame === SHAPES.shock || p.frame === SHAPES.ring ) ).length;
+			out.puffs = fresh.filter( p => p.frame === SHAPES.puff ).length;
+			out.fall = Math.round( root.getObjectByName( 'drive-bursts' ).userData.batch.gravity * 1000 ) / 1000;
+			d.release( 'KeyB' );
+			Object.assign( d, { speed: 0, firing: false } );
+			for ( let i = 0; i < 90; i ++ ) d.update( 1 / 60 );
+			out.after = d.supersonic;
+			return out;
+
+		} );
+		// Three rings (no white shock ahead of them), no collar; the bursts fall at a sixth of g.
+		assert.deepEqual( { ...run, gravity: 0, fall: 0 }, { air: false, gravity: 0, supersonic: true, rings: 3, puffs: 0, fall: 0, after: false } );
+		assert.ok( Math.abs( run.gravity - GRAVITY ) < 1e-6 && Math.abs( run.fall - 1.62 ) < 0.01, JSON.stringify( run ) );
+		assert.deepEqual( page.errors, [] );
+
+	} );
+
 	test( 'M goes back to the Moon\'s globe, its recent places its own; then back to the Earth', async () => {
 
 		await page.keyboard.press( 'KeyM' );
@@ -348,6 +391,8 @@ describe( 'World Drive on the Moon', () => {
 			return { gravity: d.gravity, water: d.water === water, none: water.none, rules: pads.rules.tilt, grounds: ground.getColliders().length };
 
 		} ), { gravity: 1, water: true, none: false, rules: 0.96, grounds: 1 } );
+		// And its effects: air again, the Earth's gravity.
+		assert.deepEqual( await page.evaluate( () => ( { air: window.drive.driver.effects.air, gravity: window.drive.driver.effects.gravity } ) ), { air: true, gravity: 1 } );
 		assert.deepEqual( page.errors, [] );
 		assert.deepEqual( page.outside, [] );
 

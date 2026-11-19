@@ -249,7 +249,7 @@ describe( 'World Drive, desktop', () => {
 			'Go-kart', 'Pickup', 'Muscle car', 'Golf cart', 'Tuk-tuk', 'Ice-cream van', 'Lawn tractor', 'Retro wedge', 'Formula racer',
 			'Neon racer', 'Night cruiser', 'Dune buggy', 'Farm truck', 'Police cruiser', 'Hypercar', 'Cyber muscle',
 			'Skid steer', 'Telehandler', 'Concrete mixer', 'Road roller', 'Wheel loader', 'Dump truck', 'Bulldozer', 'Vac truck',
-			'Sports coupe', 'Monster truck', 'City bus', 'Hovercraft',
+			'Sports coupe', 'Monster truck', 'City bus', 'Hovercraft', 'Lunar rover', 'Flying saucer', 'Rocket dragster',
 		] );
 		assert.equal( await panel.locator( '.vehicle.picked b' ).textContent(), 'Go-kart' );
 		assert.match( await panel.locator( '.osm' ).textContent(), /Search © OpenStreetMap contributors/ );
@@ -876,11 +876,13 @@ describe( 'World Drive on a phone', () => {
 // Boosting flat out with the gauge kept full, from a standstill on the test pad, at a fixed step:
 // when it goes supersonic (and how fast it's going), the boom and streaks (the supersonic effects'
 // particles: the free rides' classic flame has none of its own), the tag and the wider view a
-// second on; then out of fuel and braking, when it ends.
+// second on, with the flame's shock diamonds and white-hot core and the tag glowing in its colour;
+// then out of fuel and braking, when it ends.
 function supersonic() {
 
-	const { driver: d } = window.drive;
+	const { driver: d, scene } = window.drive;
 	const tag = document.querySelector( '#hud .dhud-sonic' );
+	const hud = tag.closest( '.dhud' );
 	const step = () => {
 
 		d.update( 1 / 60 );
@@ -915,6 +917,13 @@ function supersonic() {
 	out.streaks = d.fx.particles.alive;
 	out.warp = Math.round( d.warp * 100 ) / 100;
 	out.still = d.supersonic;
+	// The supersonic effects' batch (the classic flame has no other) draws more quads than it has
+	// particles alive: the diamonds; the flame's core is solid; the tag sweeps its sheen.
+	const fx = scene.getObjectByName( 'drive-fx' );
+	const sonic = fx.children.filter( o => o.name === 'boost-batch' ).at( - 1 ).userData.batch;
+	out.diamonds = sonic.mesh.geometry.instanceCount - sonic.alive;
+	out.core = Math.round( fx.children[ 0 ].children[ 1 ].material.opacity * 100 ) / 100;
+	out.hud = { sonic: hud.classList.contains( 'sonic' ), tint: hud.style.getPropertyValue( '--sonic' ), animation: getComputedStyle( tag ).animationName };
 	// Out of boost (B let go: the booster's out), and braking.
 	d.gauge = 0;
 	d.release( 'KeyB' );
@@ -933,6 +942,8 @@ function supersonic() {
 	out.tagAfter = ! tag.hidden;
 	out.warpAfter = Math.round( d.warp * 100 ) / 100;
 	out.particlesAfter = d.fx.particles.alive;
+	out.drawnAfter = sonic.mesh.geometry.instanceCount;
+	out.hudAfter = hud.classList.contains( 'sonic' );
 	return out;
 
 }
@@ -984,6 +995,10 @@ describe( 'World Drive boosts: supersonic and boost pads', () => {
 			// Out of boost and braking, it ends once under three quarters of that top speed.
 			assert.ok( ride.endedAt !== null && ride.endedAt < ride.boostedTop * 0.75 + 1 && ride.endedAt > ride.boostedTop * 0.6, JSON.stringify( ride ) );
 			assert.ok( ! ride.tagAfter && ride.warpAfter < 0.15 && ride.particlesAfter === 0, JSON.stringify( ride ) );
+			// In overdrive the flame burns with shock diamonds and a solid white-hot core, and the tag
+			// glows in the ride's colour with its sheen sweeping; after, nothing's drawn and it's gone.
+			assert.ok( ride.diamonds > 0 && ride.core > 0.95 && ride.drawnAfter === 0, JSON.stringify( ride ) );
+			assert.ok( ride.hud.sonic && /^#[0-9a-f]{6}$/.test( ride.hud.tint ) && /dhud-sonic-sheen/.test( ride.hud.animation ) && ! ride.hudAfter, JSON.stringify( ride ) );
 
 		}
 
@@ -1423,15 +1438,34 @@ function effects( style ) {
 
 	} );
 	Object.assign( out.lit, { punch: Math.round( punch * 10 ) / 10, nod: Math.round( nod * 1000 ) / 1000, squat: Math.round( squat * 1000 ) / 1000 } );
-	// Run dry: the exhaust glows on and cools; then, a while later, nothing's left.
+	// Run dry: the exhaust glows on and cools; then, a while later, nothing's left. (The flame,
+	// shown or not each frame, coughs out as it runs dry.)
+	const flame = () => root().children[ 0 ];
+	let coughed = '';
+	const seen = () => coughed += flame().visible ? 1 : 0;
 	d.gauge = 0.01;
-	step( 2 );
+	step( 2, seen );
 	out.dry = { firing: d.firing, alive: d.fx.particles.alive };
 	d.release( 'KeyB' );
 	d.release( 'KeyW' );
-	step( 150 );
+	step( 30, seen );
+	out.coughed = coughed;
+	step( 120 );
 	out.dry.after = d.fx.particles.alive;
 	out.dry.punch = Math.round( d.punch * 1000 ) / 1000;
+
+	// Let go: the flame dies down into the nozzle rather than going out at once.
+	reset( 15 );
+	d.press( 'KeyW' );
+	d.press( 'KeyB' );
+	step( 20 );
+	const burning = flame().scale.x;
+	d.release( 'KeyB' );
+	step( 1 );
+	out.letGo = { shown: flame().visible, shrunk: flame().scale.x < burning };
+	d.release( 'KeyW' );
+	step( 60 );
+	out.letGo.after = flame().visible;
 
 	// A boost pad driven over: its burst, carried along with the vehicle (its chevrons at its
 	// speed), and the vehicle lit up.
@@ -1586,6 +1620,13 @@ describe( 'World Drive boost and driving effects', () => {
 			assert.ok( r.lit.alive >= 10 && r.lit.punch >= 3 && r.lit.nod > 0.1 && r.lit.squat > 0.03, JSON.stringify( r.lit ) );
 			// Run dry: it glows on, then everything's gone, the punch rung out.
 			assert.ok( ! r.dry.firing && r.dry.alive > 0 && r.dry.after === 0 && r.dry.punch === 0, JSON.stringify( r.dry ) );
+			// The classic flame coughs out as it runs dry (cut out and back), and dies down let go.
+			if ( r.style === 'classic' ) {
+
+				assert.ok( /10+1/.test( r.coughed ) && r.coughed.endsWith( '0' ), r.coughed );
+				assert.deepEqual( r.letGo, { shown: true, shrunk: true, after: false } );
+
+			}
 			assert.ok( r.pad.lit && r.pad.gauge > 0.6 && r.pad.carried > 0.95, JSON.stringify( r.pad ) );
 			// The plane under it: level, a few centimetres over the pad (through its rear tyres).
 			assert.ok( r.floor.wheels > 0.99 && r.floor.at < 0 && r.floor.at > - 0.2 && r.floor.air, JSON.stringify( r.floor ) );
@@ -2016,6 +2057,9 @@ describe( 'World Drive boost and driving effects', () => {
 			const lines = scene.getObjectByName( 'speed-lines' );
 			const bar = document.querySelector( '#hud .dhud-boost' );
 			const whiteout = document.getElementById( 'whiteout' );
+			// The lines' colour, as a hex number, and their near white.
+			const { uColour } = lines.material.uniforms;
+			const lineWhite = new uColour.value.constructor( 0xf4faff ).getHex();
 			const top = d.spec.topSpeed / 3.6 * 2;
 			for ( const code of [ ...d.keys ] ) d.release( code );
 			const out = {};
@@ -2041,16 +2085,24 @@ describe( 'World Drive boost and driving effects', () => {
 
 			}, 30 );
 			out.boosting = { lines: Math.round( screenFx.lines * 100 ) / 100, shown: lines.visible };
+			out.boostingWhite = uColour.value.getHex() === lineWhite;
 			let white = false;
+			let shock = null;
 			await window.untilFrame( () => {
 
 				hold( top )();
 				d.gauge = 0.9;
 				white ||= whiteout.classList.contains( 'on' );
+				// The shock front sweeping out, in the ride's colour.
+				if ( white && ! shock ) shock = { animation: getComputedStyle( whiteout, '::after' ).animationName, sonic: whiteout.style.getPropertyValue( '--sonic' ) };
 				return d.supersonic && white;
 
 			} );
 			out.overdrive = { lines: Math.round( screenFx.lines * 100 ) / 100, white, supersonic: d.supersonic };
+			out.shock = shock;
+			// A moment into overdrive the lines have a wash of the ride's colour.
+			await window.untilFrame( () => ( hold( top )(), d.gauge = 0.9, false ), 20 );
+			out.overdriveTinted = uColour.value.getHex() !== lineWhite;
 			// Run dry: the gauge flashes.
 			d.gauge = 0.004;
 			let empty = false;
@@ -2084,6 +2136,9 @@ describe( 'World Drive boost and driving effects', () => {
 		assert.deepEqual( run.cruising, { lines: 0, shown: false, ready: true, pulse: 'dhud-ready' } );
 		assert.ok( run.boosting.lines > 0.2 && run.boosting.shown, JSON.stringify( run.boosting ) );
 		assert.ok( run.overdrive.supersonic && run.overdrive.white && run.overdrive.lines > run.boosting.lines, JSON.stringify( run.overdrive ) );
+		// Near white boosting; tinted in overdrive, whose edges sweep a shock front in the ride's colour.
+		assert.ok( run.boostingWhite && run.overdriveTinted, JSON.stringify( run ) );
+		assert.ok( run.shock?.animation === 'shockfront' && /^#[0-9a-f]{6}$/.test( run.shock.sonic ), JSON.stringify( run.shock ) );
 		assert.deepEqual( run.dry, { empty: true, firing: false } );
 		assert.match( run.refill ?? '', /width/ );
 		assert.deepEqual( run.slow, { lines: 0, shown: false } );
@@ -2241,6 +2296,8 @@ describe( 'World Drive boost and driving effects', () => {
 			assert.deepEqual( run, { motion: false, calm: true, switch: true, shaken: 0, lit: false, burst: run.burst, pulse: 'none' } );
 			assert.ok( run.burst > 10, JSON.stringify( run ) );
 			assert.deepEqual( off, { punch: 0, lines: 0, white: false, supersonic: true } );
+			// OVERDRIVE just shows, still.
+			assert.equal( await calm.evaluate( () => getComputedStyle( document.querySelector( '#hud .dhud-sonic' ) ).animationName ), 'none' );
 			assert.deepEqual( calm.errors, [] );
 
 		} finally {
@@ -2291,7 +2348,7 @@ describe( 'World Drive boost and driving effects', () => {
 			await driveHere( calm );
 			const boom = await calm.evaluate( async () => {
 
-				const { SHAPES, FLAT } = await import( '/src/drive-boosts.js' );
+				const { SHAPES, FLAT, FACING } = await import( '/src/drive-boosts.js' );
 				const { driver: d, renderer, scene, camera, screenFx } = window.drive;
 				// Frame by frame by hand, each read back off the canvas.
 				renderer.setAnimationLoop( null );
@@ -2325,6 +2382,8 @@ describe( 'World Drive boost and driving effects', () => {
 				const fresh = batches.flatMap( batch => batch.items.filter( p => p.age < p.life && p.age < 0.05 ) );
 				const rings = fresh.filter( p => p.mode === FLAT && ( p.frame === SHAPES.shock || p.frame === SHAPES.ring ) );
 				const out = { supersonic: d.supersonic, rings: rings.length, kept: Math.round( Math.min( ...rings.map( p => p.carry.length() ) ) / top * 100 ) / 100, flares: fresh.filter( p => p.frame === SHAPES.flare ).length, frames: [] };
+				// The collar of vapour round it, facing the camera (so never one of the rings).
+				out.puffs = fresh.filter( p => p.frame === SHAPES.puff && p.mode === FACING ).length;
 				for ( let k = 0; k < 24; k ++ ) {
 
 					tick();
@@ -2343,6 +2402,7 @@ describe( 'World Drive boost and driving effects', () => {
 			console.log( 'sonic boom:', JSON.stringify( boom ) );
 			// Its four rings carried at 0.97 of the speed, so the camera is never inside one.
 			assert.ok( boom.supersonic && boom.rings === 4 && boom.kept > 0.95 && boom.flares === 0, JSON.stringify( boom ) );
+			assert.ok( boom.puffs > 0, JSON.stringify( boom ) );
 			// With them falling back through the camera the view went near white (over 50 % of it) for 6 frames, twice.
 			assert.ok( Math.max( ...boom.frames ) < 50, `the view went white: ${ boom.frames.join( ' ' ) }` );
 			assert.deepEqual( calm.errors, [] );
@@ -6150,9 +6210,9 @@ async function supporterPage( { me = SIGNED_OUT, signedInAs = ALICE, clientId = 
 
 // (Not the construction rides: only achievements unlock those, never the pass.)
 const locked = page => page.locator( '#globe-ui .vehicle.locked:not( :has( .feat-chip ) )' ).count();
-// What the pass unlocks in the picker, at level 1: thirteen cars (six of them levels' too) and four
+// What the pass unlocks in the picker, at level 1: thirteen cars (six of them levels' too) and seven
 // rides.
-const LOCKED = 17;
+const LOCKED = 20;
 const sheet = page => page.locator( '#pass .buy-area' );
 
 async function openPass( page ) {

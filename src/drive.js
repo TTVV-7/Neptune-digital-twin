@@ -1049,7 +1049,8 @@ export class Driver {
 				this.jolt( ...JOLTS.boom );
 				// (The shake dies away with stunts on, which is where it's used: see turnView.)
 				if ( this.launch ) this.shake = Math.max( this.shake, SUPERSONIC.shake );
-				this.hud.setSupersonic?.( true );
+				// The HUD's tag glows in the ride's colour (its flame's, or its boost style's).
+				this.hud.setSupersonic?.( true, this.fx?.tint );
 
 			}
 
@@ -1079,10 +1080,10 @@ export class Driver {
 			this.gauge = Math.max( 0, this.gauge - dt / BOOST_TIME );
 			if ( this.gauge === 0 ) {
 
-				// Run dry: the exhaust glows on and cools.
+				// Run dry: the flame coughs out, and the exhaust glows on and cools.
 				this.firing = false;
 				this.ranDry = true;
-				this.fx?.cool();
+				this.fx?.cool( true );
 
 			}
 			if ( this.speed < base * BOOST_SPEED ) this.speed = Math.min( this.speed + BOOST_ACCEL * dt, base * BOOST_SPEED );

@@ -1481,19 +1481,53 @@ dialog#about form {
 	pointer-events: none;
 }
 
-/* Going into overdrive: the edges of the view flash white for a moment (screen-fx.js). Over the
-   world, under the names and the HUD. */
+/* Going into overdrive: the edges of the view flash for a moment, white at the rim over a band of
+   the ride's colour (--sonic, set by screen-fx.js with how long it lasts, --whiteout-time), and a
+   shock front sweeps out from round the vehicle past the edges, white-edged with the ride's colour behind
+   it, as the shock passing over the camera. With no air (the Moon) the rim is the ride's colour
+   too. Over the world, under the names and the HUD, and screened over it, so the ride's colour can
+   only lighten the view (laid over a grey road and a blue sky, an orange goes a dusty brown). */
 #whiteout {
+	--sonic: #bfe4ff;
+	--whiteout-time: 0.55s;
 	position: fixed;
 	inset: 0;
 	z-index: 2;
+	overflow: hidden;
 	pointer-events: none;
 	opacity: 0;
+	mix-blend-mode: screen;
+	/* (Plain white for a browser without color-mix.) */
 	background: radial-gradient( ellipse at center, rgba( 255, 255, 255, 0 ) 42%, rgba( 236, 246, 255, 0.5 ) 74%, rgba( 255, 255, 255, 0.95 ) 100% );
+	background: radial-gradient( ellipse at center, rgba( 255, 255, 255, 0 ) 42%, color-mix( in srgb, var( --sonic ) 45%, transparent ) 72%, rgba( 255, 255, 255, 0.9 ) 100% );
+}
+
+#whiteout.airless {
+	background: radial-gradient( ellipse at center, rgba( 255, 255, 255, 0 ) 42%, color-mix( in srgb, var( --sonic ) 45%, transparent ) 72%, color-mix( in srgb, var( --sonic ) 85%, transparent ) 100% );
+}
+
+/* The shock front, from low in the view where the chase camera has the vehicle (65 % of the way down
+   the view, 61 % of the way down this bigger box). */
+#whiteout::after {
+	content: '';
+	position: absolute;
+	inset: -20%;
+	opacity: 0;
+	transform: scale( 0.35 );
+	transform-origin: 50% 61%;
+	background: radial-gradient( ellipse at 50% 61%, transparent 52%, color-mix( in srgb, var( --sonic ) 70%, transparent ) 60%, rgba( 255, 255, 255, 0.95 ) 64%, transparent 68% );
+}
+
+#whiteout.airless::after {
+	background: radial-gradient( ellipse at 50% 61%, transparent 52%, color-mix( in srgb, var( --sonic ) 50%, transparent ) 60%, color-mix( in srgb, var( --sonic ) 85%, transparent ) 64%, transparent 68% );
 }
 
 #whiteout.on {
-	animation: whiteout 0.55s ease-out;
+	animation: whiteout var( --whiteout-time ) ease-out;
+}
+
+#whiteout.on::after {
+	animation: shockfront var( --whiteout-time ) cubic-bezier( 0.2, 0.7, 0.3, 1 );
 }
 
 @keyframes whiteout {
@@ -1502,6 +1536,17 @@ dialog#about form {
 	}
 	to {
 		opacity: 0;
+	}
+}
+
+@keyframes shockfront {
+	from {
+		opacity: 1;
+		transform: scale( 0.35 );
+	}
+	to {
+		opacity: 0;
+		transform: scale( 1.3 );
 	}
 }
 

@@ -478,7 +478,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		// asking for less motion) as screen-fx.js sets them.
 		fly: true, booster: true, drift: true, crash: 'launch', water, effects: { detail: 1, calm: false },
 	} );
-	// Speed lines, overdrive's white edges and the camera's jolts and shakes, with their switch in
+	// Speed lines, overdrive's flashing edges and the camera's jolts and shakes, with their switch in
 	// the pause menu (screen-fx.js).
 	const screenFx = createScreenFx( { scene, driver, toggle: $( 'pause' ).querySelector( '.camera-toggle' ), touch: () => document.body.classList.contains( 'touch' ) } );
 
@@ -1795,6 +1795,10 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		// The Moon's gravity, and no water there (which its grey dust would look like to water.js).
 		const moonly = onMoon();
 		driver.gravity = moonly ? MOON_GRAVITY : 1;
+		// Its effects told too, as the others' cars' share them: the Moon has no air for a boom's
+		// vapour, and the bursts' embers fall in its gravity.
+		driver.effects.air = ! moonly;
+		driver.effects.gravity = driver.gravity;
 		driver.water = moonly ? null : water;
 		water.none = moonly;
 		pads.rules = moonly ? MOON_RULES : EARTH_RULES;

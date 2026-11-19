@@ -402,7 +402,9 @@ export function createGhosts( { scene, earth, frame = () => earth, camera, vehic
 		else if ( ! firing && was & FLAGS.firing ) burst( ghost, 'cool' );
 		if ( flags & FLAGS.drift && level > wasLevel ) burst( ghost, 'tier', level );
 		if ( was & FLAGS.drift && ! ( flags & FLAGS.drift ) && boosting && wasLevel > 0 ) burst( ghost, 'turbo', wasLevel );
-		// The boom as it goes supersonic, and the splash as it goes in.
+		// The boom as it goes supersonic (before the update, which sets it off), and the splash as it
+		// goes in.
+		if ( flags & FLAGS.supersonic && ! ( ghost.fxFlags & FLAGS.supersonic ) ) ghost.fx.boom();
 		if ( flags & FLAGS.splash && ! ( ghost.fxFlags & FLAGS.splash ) ) {
 
 			ghost.splashLevel = pivot.position.y;
@@ -421,7 +423,6 @@ export function createGhosts( { scene, earth, frame = () => earth, camera, vehic
 			water: flags & FLAGS.splash ? { level: ghost.splashLevel, sinking: true } : flags & FLAGS.spray ? { level: pivot.position.y, spray: MathUtils.clamp( speed / 25, 0, 1 ) } : null,
 			dt,
 		} );
-		if ( flags & FLAGS.supersonic && ! ( ghost.fxFlags & FLAGS.supersonic ) ) ghost.fx.boom();
 		ghost.fxFlags = flags;
 
 	}

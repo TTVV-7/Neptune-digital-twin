@@ -48,6 +48,8 @@ const _p = new Vector3();
 const _v = new Vector3();
 const _a = new Vector3();
 const _b = new Vector3();
+const _r = new Vector3();
+const _hue = new Color();
 // A batch's update() with nothing of a style's own.
 const NO_HOOKS = {};
 
@@ -677,6 +679,8 @@ export class Batch {
 			size: 1, grow: 0, aspect: 1, turn: 0, spin: 0, alpha: 1, frame: 0, mode: FACING, drag: 0, fall: 0, phase: 0, kind: 0, fresh: false,
 		} ) );
 		this.next = 0;
+		// What its particles fall by (m/s², the world's own: drive-bursts.js has the Moon's there).
+		this.gravity = 9.81;
 		this.capacity = particles + quads;
 		this.count = 0;
 		// What a style's look() may change about how a particle shows this frame (see update).
@@ -823,7 +827,7 @@ export class Batch {
 
 				}
 
-				p.velocity.y -= 9.81 * p.fall * dt;
+				p.velocity.y -= this.gravity * p.fall * dt;
 				if ( p.drag ) p.velocity.multiplyScalar( Math.max( 0, 1 - p.drag * dt ) );
 				step?.( p, dt );
 				p.position.addScaledVector( p.velocity, dt ).addScaledVector( p.carry, dt );
@@ -875,7 +879,8 @@ export class Batch {
 // 1, a drift boost about half, 0 when off), grounded, dt, clock (s), nozzle and lastNozzle (the
 // exhaust, world, now and a frame ago), back, up and right (unit, world: out of its back, its up
 // and its right), middle (the middle of its box, world), ground (on its wheels, a point a little
-// over the ground under it, world), scale (1 for a kart, more for something bigger) }.
+// over the ground under it, world), scale (1 for a kart, more for something bigger), hot (how far
+// into overdrive the flame is, 0 to 1, for the supersonic effects below) }.
 //
 // A style: `flame`, colours for the classic flame's cones and glow { outer, inner, halo } or just
 // { halo } for a glow alone, with how long (`length`) and how wildly (`flicker`) it burns and
@@ -2984,67 +2989,143 @@ export function createBoostStyle( root, id ) {
 // --- supersonic --------------------------------------------------------------------------------
 
 // Going supersonic (see drive.js): a sonic boom once, shock rings blown out round the vehicle with
-// a flash, the widest of them lingering as it spreads so it's seen from the chase camera; and while
-// it lasts, streaks of air streaming back past its body. Any style gets these.
-export function createSupersonic( root ) {
+// a flash, the widest of them lingering as it spreads so it's seen from the chase camera, and a
+// collar of condensation snapping out round its body; and while it lasts, streaks of air streaming
+// back past it on the cone of the shock it drags behind it, and shock diamonds burning down its
+// flame. Any style gets these. `tint`: the ride's colour (its flame's glow, or its style's), which
+// the boom's rings and the streaks take on, or null for the default ice blue; `rainbow`: they run
+// through the hues instead; `deep`: a deep flame (see drive-fx.js's DEEP), whose rings take less of
+// its colour, so they still read as light; `diamonds`: the ride has a flame for them to burn in;
+// `effects`: drive-fx.js's, read as they're needed: `detail` and `calm` as the bursts have them, and
+// `air` false where there's none (World Drive's Moon), with no vapour, no white shock and no
+// diamonds, which all need air round the vehicle.
+export function createSupersonic( root, { tint = null, rainbow = false, deep = false, diamonds = false, effects = {} } = {} ) {
 
-	const batch = new Batch( root, { particles: 120, blending: AdditiveBlending } );
+	// (Room for the boom's longest ring to live out its life with the collar and the streaks after
+	// it, on something big.)
+	const batch = new Batch( root, { particles: 136, quads: DIAMONDS_OVER * 2, blending: AdditiveBlending } );
 	const streaks = emitter();
 	const travel = new Vector3();
+	// The boom's colours, made once: white-hot, a pale wash of the ride's colour and a richer one.
+	const white = new Color( 0xffffff );
+	const pale = new Color( 0xbfe4ff );
+	const rich = new Color( 0x9fd4ff );
+	if ( tint ) {
+
+		pale.copy( white ).lerp( tint, 0.4 );
+		rich.copy( white ).lerp( tint, deep ? 0.45 : 0.65 );
+
+	}
+
+	const roles = { white, pale, rich };
+	// The diamonds, white at the nozzle and fading down the flame towards its colour.
+	const at = new Vector3();
+	const axis = new Vector3();
+	const diamond = new Color();
+	const far = tint ?? pale;
 	let f = null;
 	let speed = 0;
+	let clock = 0;
+	const air = () => effects.air !== false;
 	const streak = () => {
 
 		const p = batch.spawn( 0.2 + Math.random() * 0.15 );
 		const { width, height, length } = f.size;
-		// Round its body, a little out from it: up its sides and over its top.
+		// On the cone of the shock it drags: peeling off just ahead of its nose (k 0) and back past
+		// its tail (k 1), just clear of its body at the front (never drawn over its roof) and splaying
+		// wider towards the rear, up its sides and over its top (never into the ground).
+		const k = Math.random();
 		const angle = Math.random() * Math.PI;
-		p.position.copy( f.middle ).addScaledVector( f.right, Math.cos( angle ) * ( width * 0.55 + Math.random() * 0.5 ) )
-			.addScaledVector( f.up, Math.sin( angle ) * ( height * 0.55 + Math.random() * 0.4 ) - height * 0.1 )
-			.addScaledVector( travel, ( Math.random() - 0.3 ) * length );
-		// Slipping back past it, a little slower than it goes (not so slow they reach the camera).
+		const spread = 1 + 0.8 * k;
+		const out = 0.15 * height + Math.random() * 0.3;
+		_r.copy( f.right ).multiplyScalar( Math.cos( angle ) ).addScaledVector( f.up, Math.sin( angle ) );
+		p.position.copy( f.middle ).addScaledVector( f.right, Math.cos( angle ) * ( width * 0.55 * spread + out ) )
+			.addScaledVector( f.up, Math.sin( angle ) * ( height * 0.6 * spread + out ) - height * 0.1 )
+			.addScaledVector( travel, ( 0.6 - 1.4 * k ) * length );
+		// Slipping back past it, a little slower than it goes (not so slow they reach the camera),
+		// leaning out as the cone does: hardly at the nose (any more, and those far ahead, seen end on
+		// from the chase camera, stick out sideways like whiskers), more towards the tail.
 		p.carry.copy( f.velocity ).multiplyScalar( 0.88 );
 		p.mode = ALONG;
 		p.frame = SHAPES.streak;
-		p.axis.copy( travel ).multiplyScalar( Math.min( 2.2, 0.4 + speed * 0.025 ) * Math.sqrt( f.scale ) );
-		p.size = ( 0.035 + Math.random() * 0.02 ) * f.scale;
-		p.colour.set( Math.random() < 0.6 ? 0xffffff : 0xbfe4ff );
-		p.alpha = 0.6;
+		p.axis.copy( travel ).addScaledVector( _r, - 0.08 - 0.22 * k ).normalize().multiplyScalar( Math.min( 2.2, 0.4 + speed * 0.025 ) * Math.sqrt( f.scale ) );
+		// Those at the nose's shoulder, where the shock is strongest, brighter and fatter; thinner and
+		// fainter towards the tail, where they're nearer the chase camera.
+		const shoulder = k < 0.15;
+		p.size = ( 0.035 + Math.random() * 0.02 ) * f.scale * ( shoulder ? 1.5 : 1 ) * ( 1 - 0.3 * k );
+		// With no air, only faint streaks of its colour; otherwise white and a pale wash of it, or
+		// shimmering through the hues.
+		if ( ! air() ) p.colour.copy( pale );
+		else if ( rainbow ) p.colour.copy( _hue.setHSL( ( clock / RAINBOW_TURN + Math.random() * 0.15 ) % 1, 1, 0.75 ) );
+		else p.colour.copy( Math.random() >= 0.55 ? pale : white );
+		p.alpha = ( shoulder ? 0.75 : 0.6 ) * ( 1 - 0.35 * k ) * ( effects.calm ? 0.65 : 1 ) * ( air() ? 1 : 0.75 );
+		p.kind = 0;
 
 	};
 	const hooks = {
 		look( p, t, view ) {
 
-			// Streaks come and go; the boom's rings thin out as they spread.
+			// Streaks come and go; the boom's rings thin out as they spread, and its flashes go fast
+			// and linger as they fade; the collar snaps out and thins away.
 			if ( p.kind === 0 ) view.alpha = p.alpha * Math.sin( t * Math.PI );
 			else if ( p.kind === 1 ) view.alpha = p.alpha * ( 1 - t ) ** 1.5;
+			else if ( p.kind === 2 ) view.alpha = p.alpha * ( 1 - t ) ** 2;
+			else if ( p.kind === 3 ) view.alpha = p.alpha * Math.sin( Math.min( 1, t * 4 ) * Math.PI / 2 ) * ( 1 - t ) ** 2;
 
 		},
 	};
 	return {
 
-		// Each frame, with the frame a style has (see above) and whether it's supersonic now.
+		// Each frame, with the frame a style has (see above, and its `hot`: how far into overdrive
+		// the flame is, 0 to 1) and whether it's supersonic now.
 		update( frame, on ) {
 
 			f = frame;
+			clock += frame.dt;
 			speed = frame.velocity.length();
 			if ( speed > 1 ) travel.copy( frame.velocity ).divideScalar( speed );
 			else travel.copy( frame.back ).negate();
 			batch.begin();
-			// More round something bigger: about as thick on it as on a kart.
-			streaks( on ? 1 : 0, frame.dt, 80 * Math.sqrt( frame.scale ), streak );
+			// Shock diamonds down the flame, put down each frame where it is now (as the afterburner's
+			// are): fewer on a phone, and steady for a visitor asking for less motion.
+			if ( diamonds && air() && frame.hot > 0.02 && frame.power > 0.5 ) {
+
+				const n = ( effects.detail ?? 1 ) < 1 ? DIAMONDS_OVER - 1 : DIAMONDS_OVER;
+				for ( let i = 0; i < n; i ++ ) {
+
+					const k = i / ( DIAMONDS_OVER - 1 );
+					at.copy( frame.nozzle ).addScaledVector( frame.back, ( 0.35 + i * 0.42 ) * frame.scale );
+					axis.copy( frame.back ).multiplyScalar( 0.12 * frame.scale * ( 1 - 0.25 * k ) );
+					diamond.lerpColors( white, far, k * 0.85 );
+					const throb = effects.calm ? 1 : 0.85 + 0.15 * Math.sin( frame.clock * 70 + i * 1.7 );
+					const alpha = frame.hot * frame.power * 0.8 * ( 1 - 0.45 * k ) * throb;
+					batch.put( at, axis, ALONG, 0.26 * frame.scale * ( 1 - 0.25 * k ), 1, 0, SHAPES.diamond, diamond, alpha );
+					const glow = 0.1 * frame.scale * ( 1 - 0.25 * k );
+					batch.put( at, frame.up, FACING, glow, glow, 0, SHAPES.glow, diamond, alpha * 0.6 );
+
+				}
+
+			}
+
+			// More round something bigger: about as thick on it as on a kart; fewer on a phone, and
+			// fewer and fainter for a visitor asking for less motion.
+			streaks( on ? 1 : 0, frame.dt, 80 * Math.sqrt( frame.scale ) * ( effects.detail ?? 1 ) * ( effects.calm ? 0.6 : 1 ), streak );
 			batch.update( frame.dt, hooks );
 
 		},
 
 		// The boom, round the middle of its box, for a vehicle about `size` m across. `calm` (the
-		// visitor asked for less motion): no flare, and the rings fainter.
+		// visitor asked for less motion): no flare, the rings fainter and the collar thinner.
 		boom( frame, size, calm = false ) {
 
 			const way = speed > 1 ? travel : frame.back;
-			for ( const [ picture, life, inherit, start, spread, colour, alpha = 1, aspect = 1 ] of BOOM ) {
+			const airy = air();
+			for ( let row = 0; row < BOOM.length; row ++ ) {
 
+				const [ picture, life, inherit, start, spread, colour, alpha = 1, aspect = 1 ] = BOOM[ row ];
 				if ( calm && picture === SHAPES.flare ) continue;
+				// With no air there's no pressure wave to see: no white shock.
+				if ( ! airy && row === 0 ) continue;
 				const p = batch.spawn( life );
 				p.position.copy( frame.middle );
 				p.carry.copy( frame.velocity ).multiplyScalar( inherit );
@@ -3056,9 +3137,35 @@ export function createSupersonic( root ) {
 				p.size = size * start;
 				p.grow = size * spread;
 				p.aspect = aspect;
-				p.colour.set( colour );
+				if ( rainbow && colour !== 'white' ) p.colour.copy( _hue.setHSL( ( clock / RAINBOW_TURN + row * 0.17 ) % 1, 1, 0.7 ) );
+				else p.colour.copy( roles[ colour ] );
 				p.alpha = alpha * ( calm && ! facing ? CALM_RINGS : 1 );
 				p.kind = facing ? 2 : 1;
+
+			}
+
+			if ( ! airy ) return;
+			// The collar: puffs of condensation round its body, out from it all the way round (those
+			// below it fade out down to the ground, see Batch.floor), a little ahead of its middle.
+			const n = Math.max( 4, Math.round( ( calm ? 8 : 14 ) * ( effects.detail ?? 1 ) ) );
+			for ( let i = 0; i < n; i ++ ) {
+
+				const a = ( i + Math.random() * 0.4 ) / n * Math.PI * 2;
+				_r.copy( frame.right ).multiplyScalar( Math.cos( a ) ).addScaledVector( frame.up, Math.sin( a ) );
+				const p = batch.spawn( 0.4 + Math.random() * 0.1 );
+				p.position.copy( frame.middle ).addScaledVector( way, 0.15 * size ).addScaledVector( _r, 0.62 * size );
+				// Kept up with it, as the rings are, so it never sweeps back through the camera.
+				p.carry.copy( frame.velocity ).multiplyScalar( 0.97 );
+				p.velocity.copy( _r ).multiplyScalar( 1.2 );
+				p.drag = 2;
+				p.mode = FACING;
+				p.frame = SHAPES.puff;
+				p.size = 0.22 * size;
+				p.grow = 0.3 * size;
+				p.turn = Math.random() * Math.PI * 2;
+				p.colour.setHex( 0xf2f8ff );
+				p.alpha = calm ? 0.22 : 0.35;
+				p.kind = 3;
 
 			}
 
@@ -3081,20 +3188,27 @@ export function createSupersonic( root ) {
 }
 
 // The boom: a shock ring, a thinner ring inside it and a flash, kept small enough not to white out
-// a phone's narrow view (World Drive flashes the edges of the view white instead, screen-fx.js); a
-// wide ring lingering as it spreads to seven times the vehicle's size, a second, bluer one inside
-// that, and a flare side to side. Each [ picture, life (s), share of the vehicle's speed it keeps,
-// size and growth (times the vehicle's size), colour, alpha, height for its width ]. The rings keep
-// up with the vehicle (0.97 of its speed, drifting back a metre or few over their life): any
-// slower and at overdrive's speed they fall back through the chase camera while still growing, and
-// with the camera inside a ring's bright band the whole view goes white, twice.
+// a phone's narrow view (World Drive flashes the edges of the view instead, screen-fx.js); a wide
+// ring lingering as it spreads to seven times the vehicle's size, a second, richer one inside that,
+// and a flare side to side. The leading shock and the flashes are white-hot, so it still reads as a
+// pressure wave; the rings behind it take the ride's colour ('pale' or 'rich', see
+// createSupersonic). Each [ picture, life (s), share of the vehicle's speed it keeps, size and
+// growth (times the vehicle's size), colour, alpha, height for its width ]. The rings keep up with
+// the vehicle (0.97 of its speed, drifting back a metre or few over their life): any slower and at
+// overdrive's speed they fall back through the chase camera while still growing, and with the
+// camera inside a ring's bright band the whole view goes white, twice.
 const BOOM = [
-	[ SHAPES.shock, 0.5, 0.97, 0.6, 4.5, 0xffffff ],
-	[ SHAPES.ring, 0.4, 0.97, 0.4, 3, 0xcfeaff ],
-	[ SHAPES.glow, 0.18, 1, 1.1, 1, 0xffffff, 0.75 ],
-	[ SHAPES.shock, 0.95, 0.97, 1, 6, 0xeaf6ff, 0.6 ],
-	[ SHAPES.ring, 0.75, 0.97, 0.8, 4, 0x9fd4ff, 0.6 ],
-	[ SHAPES.flare, 0.22, 1, 1.4, 1.2, 0xffffff, 0.5, 0.25 ],
+	[ SHAPES.shock, 0.5, 0.97, 0.6, 4.5, 'white' ],
+	[ SHAPES.ring, 0.4, 0.97, 0.4, 3, 'pale' ],
+	[ SHAPES.glow, 0.18, 1, 1.1, 1, 'white', 0.75 ],
+	[ SHAPES.shock, 0.95, 0.97, 1, 6, 'rich', 0.6 ],
+	[ SHAPES.ring, 0.75, 0.97, 0.8, 4, 'rich', 0.6 ],
+	[ SHAPES.flare, 0.22, 1, 1.4, 1.2, 'white', 0.5, 0.25 ],
 ];
 // How bright the boom's rings are for a visitor asking for less motion.
 const CALM_RINGS = 0.6;
+// Shock diamonds down the flame in overdrive (a phone's one fewer), each a lozenge and a glow.
+const DIAMONDS_OVER = 4;
+// A rainbow flame's turn through the hues (s), as drive-fx.js has it (which imports this file, so
+// it can't be imported from there).
+const RAINBOW_TURN = 1.6;

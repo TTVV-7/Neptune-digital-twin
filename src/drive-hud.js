@@ -1,6 +1,7 @@
 // A driving HUD any app can use with a Driver (drive.js): the speed, a boost gauge (which glows on
 // and off when it's full, flashes red as it runs dry, and fills up before your eyes when something
-// tops it up), FLYING with the height, SUPERSONIC, drift and jump readouts, big messages ("Crash!", "1.2 s air") and, on a touch screen,
+// tops it up), FLYING with the height, OVERDRIVE (supersonic, as drive.js has it: glowing in the
+// ride's colour, the gauge with it), drift and jump readouts, big messages ("Crash!", "1.2 s air") and, on a touch screen,
 // buttons to drive with. With kart handling a DRIFT button (SPACE) sits under the speed, and its
 // chip lights up while drifting with the mini-turbo's charge. With stunts (crash: 'launch') a hit
 // pops up a word ("WHAM!"), tricks pop up as they're landed, and the score, its combo multiplier
@@ -182,12 +183,18 @@ const CSS = `
 	background: var( --fly );
 }
 
-/* Supersonic: white-hot, arriving with a jolt. */
+/* Overdrive (supersonic): heavy and slanted as the hits' words are, white-hot through the ride's
+   colour (--sonic, its flame's) to the accent's yellow and glowing in its colour, slamming in from
+   big with a little overshoot, and a sheen sweeping across it while it lasts. */
 .dhud .dhud-sonic {
-	background: linear-gradient( 100deg, #ffffff, #bfe4ff 45%, #ffd23f );
+	background: linear-gradient( 100deg, #ffffff 0%, var( --sonic, #bfe4ff ) 35%, var( --accent ) 60%, #ffffff 80%, var( --sonic, #bfe4ff ) 100% );
+	background-size: 250% 100%;
 	box-shadow: 0 0 16px rgba( 191, 228, 255, 0.9 );
+	box-shadow: 0 0 16px color-mix( in srgb, var( --sonic, #bfe4ff ) 85%, transparent );
+	font-weight: 900;
 	font-style: italic;
-	animation: dhud-sonic 0.45s ease-out;
+	letter-spacing: 0.02em;
+	animation: dhud-sonic 0.45s cubic-bezier( 0.3, 1.6, 0.5, 1 ), dhud-sonic-sheen 1.4s linear 0.45s infinite;
 }
 
 @keyframes dhud-sonic {
@@ -195,6 +202,25 @@ const CSS = `
 		opacity: 0;
 		transform: scale( 1.8 );
 	}
+}
+
+@keyframes dhud-sonic-sheen {
+	from {
+		background-position: 100% 0;
+	}
+	to {
+		background-position: -150% 0;
+	}
+}
+
+/* The booster burning: the gauge glows hot; in overdrive, in the ride's colour. (On the bar, which
+   clips its fill; its other states' glows, animated, show over this while they run.) */
+.dhud.boosting .dhud-boost .dhud-bar {
+	box-shadow: 0 0 8px 1px color-mix( in srgb, var( --boost ) 80%, transparent );
+}
+
+.dhud.sonic .dhud-boost .dhud-bar {
+	box-shadow: 0 0 10px 2px color-mix( in srgb, var( --sonic, var( --boost ) ) 85%, transparent );
 }
 
 /* The gauge topped up (a boost pad): a ring of light round it, and what it took by BOOST. */
@@ -266,8 +292,12 @@ const CSS = `
 	}
 }
 
-/* Asked for less motion: a steady glow when full, and one flash run dry. */
+/* Asked for less motion: a steady glow when full, one flash run dry, and OVERDRIVE just there. */
 @media ( prefers-reduced-motion: reduce ) {
+
+	.dhud .dhud-sonic {
+		animation: none;
+	}
 
 	.dhud .dhud-boost.ready .dhud-bar {
 		animation: none;
@@ -957,6 +987,7 @@ export function createDriveHud( parent = document.body ) {
 				boostRow.hidden = ! driver?.booster;
 				flyBadge.hidden = ! flying;
 				sonicBadge.hidden = true;
+				root.classList.remove( 'sonic' );
 				shown.delete( 'sonic' );
 				driftBadge.hidden = true;
 				scoreRow.hidden = ! scoring;
@@ -1092,10 +1123,18 @@ export function createDriveHud( parent = document.body ) {
 
 		},
 
-		// Supersonic (boosting flat out, see drive.js), or not.
-		setSupersonic( on ) {
+		// Supersonic (boosting flat out, see drive.js), or not; `tint`, the ride's colour (a three.js
+		// Color, its fx's), which the tag and the gauge glow in.
+		setSupersonic( on, tint = null ) {
 
-			set( 'sonic', !! on && ! panel, value => sonicBadge.hidden = ! value );
+			set( 'sonic', !! on && ! panel, value => {
+
+				sonicBadge.hidden = ! value;
+				root.classList.toggle( 'sonic', value );
+
+			} );
+			// (With none, a rainbow flame's, the CSS's own ice blue, not the last ride's.)
+			if ( on ) set( 'sonic-tint', tint ? tint.getHexString() : '', hex => hex ? root.style.setProperty( '--sonic', `#${ hex }` ) : root.style.removeProperty( '--sonic' ) );
 
 		},
 

@@ -279,6 +279,14 @@ export function createBursts( root, { detail = 1 } = {} ) {
 
 		},
 
+		// The world's gravity, as a share of the Earth's (World Drive's Moon: 0.165): sparks and
+		// embers fall by it, in long slow arcs on the Moon.
+		set gravity( g ) {
+
+			batch.gravity = 9.81 * g;
+
+		},
+
 		// How many are alive, and the most there can be.
 		get alive() {
 

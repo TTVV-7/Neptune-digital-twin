@@ -31,9 +31,11 @@ import { createBursts } from './drive-bursts.js';
 // hard. An app can colour the flame or swap it for a boost style of drive-boosts.js (plasma,
 // lightning, bubbles, a comet's tail...), and add a trail behind the vehicle while it boosts or
 // flies (World Drive's Garage): smoke, sparkles, fire, stars, a rainbow or neon. Going supersonic
-// (drive.js) adds a sonic boom and streaks of air past it. The moments in between have bursts of
-// their own (drive-bursts.js): the booster lighting with a pop of its flame, running dry and
-// cooling, a boost pad driven over (and the vehicle flashing), a drift's charge levels and its
+// (drive.js; overdrive, World Drive calls it) adds a sonic boom in the ride's colour with a collar
+// of vapour, streaks of air past it, and its flame burning longer and white-hot with shock diamonds
+// down it. The moments in between have bursts of their own (drive-bursts.js): the booster lighting
+// with a pop of its flame, let go (the flame dying down) or running dry (coughing out) and cooling,
+// a boost pad driven over (and the vehicle flashing), a drift's charge levels and its
 // mini-turbo; and flooring it from a standstill smokes its tyres. With water (World Drive's),
 // coming down in it throws up a splash: spray and droplets, rings of foam spreading over the
 // surface and a patch of foam where it went in, then foam bubbling round it as it sinks; a
@@ -142,6 +144,16 @@ const WATER_COLOURS = [ 0xffffff, 0xe6f6ff, 0xc9ecff ];
 const SURGE = 1.4;
 const SURGE_FADE = 7;
 const PAD_FLASH = 0.26;
+// Let go, the flame dies back into the nozzle at FLAME_FALL (1/s) rather than going out at once;
+// run dry, it coughs out first: misfires over COUGH_TIME s, the flame cutting out and coming back
+// smaller, its size at each step in COUGH (a module constant, so nothing is made as it coughs).
+const FLAME_FALL = 16;
+const COUGH_TIME = 0.35;
+const COUGH = [ 1, 0, 0.85, 0, 0.5, 0 ];
+// In overdrive the flame burns hotter, easing in and out at OVERDRIVE_EASE (1/s, as drive.js's
+// SUPERSONIC eases the view): longer and steadier, its core near WHITE_HOT.
+const WHITE_HOT = new Color( 0xf6f9ff );
+const OVERDRIVE_EASE = 4;
 // Tyre smoke off the rear tyres floored from a standstill (`burnout`): a puff every BURNOUT_STEP s
 // from each at full spin.
 const BURNOUT_STEP = 0.045;
@@ -151,7 +163,10 @@ const BURNOUT_STEP = 0.045;
 // low exhaust goes into it.
 const FLOOR = { soft: 0.22, reach: 4 };
 // How an app asks for its effects: `detail` (0 to 1) of their usual number of particles in a burst
-// (fewer on a phone); `calm`, fewer flashes (the visitor asked for less motion).
+// (fewer on a phone); `calm`, fewer flashes (the visitor asked for less motion); and, if it has
+// worlds of its own, `air` (false where there's none, World Drive's Moon: overdrive with no vapour)
+// and `gravity` (a share of the Earth's, which the bursts' sparks and embers fall by; this fx's own
+// `gravity` if not given).
 const EFFECTS = { detail: 1, calm: false };
 
 const _v = new Vector3();
@@ -348,16 +363,28 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 	// from the side or on the Garage's turntable: the cone, the core added over it, and the glow, a
 	// soft haze round the exhaust, over both. (With bounds of their own, three.js would sort the cone
 	// by its middle, half its length back, and from behind draw it last, over the core.)
-	if ( style ? styled?.deep : DEEP.has( flameName ) ) outer.material.blending = halo.material.blending = NormalBlending;
+	const deep = style ? !! styled?.deep : DEEP.has( flameName );
+	if ( deep ) outer.material.blending = halo.material.blending = NormalBlending;
+	// The core's own colour, which overdrive heats towards white.
+	const core = inner.material.color.clone();
 
-	const sonic = createSupersonic( root );
-	// The bursts (drive-bursts.js), flashing in the style's colour, or the classic flame's glow's.
-	const bursts = createBursts( root, { detail: effects.detail ?? 1 } );
+	// The colour the bursts flash in (drive-bursts.js) and the supersonic effects take on: the
+	// style's, or the classic flame's glow's; a rainbow flame's runs through the hues instead.
 	const tint = new Color( style ? styleTint( boost ) ?? 0xffffff : ( FLAMES[ flameName ] ?? FLAMES.orange )[ 2 ] );
-	// What's to go off at the next update, which knows where the vehicle is: the booster lit or run
-	// dry, a drift's charge level reached or its mini-turbo let go (each 1 to 3).
-	const due = { ignite: false, cool: false, tier: 0, turbo: 0 };
+	const hued = rainbow && ! style;
+	const sonic = createSupersonic( root, { tint: hued ? null : tint, rainbow: hued, deep, diamonds: ! style || !! styled?.outer, effects } );
+	const bursts = createBursts( root, { detail: effects.detail ?? 1 } );
+	// What's to go off at the next update, which knows where the vehicle is: the booster lit, let go
+	// or run dry, the sonic boom, a drift's charge level reached or its mini-turbo let go (each 1 to
+	// 3).
+	const due = { ignite: false, cool: false, dry: false, boom: false, tier: 0, turbo: 0 };
 	let surge = 0;
+	// How big the flame burns (0 to 1): as the booster asks at once as it lights, dying down after
+	// it's let go (see FLAME_FALL); how long it has left to cough (see COUGH); and how far into
+	// overdrive it is (0 to 1).
+	let lit = 0;
+	let cough = 0;
+	let hot = 0;
 	// A boost pad driven over lights the vehicle up: a glow over all of it, drawn over it.
 	const padFlash = new Sprite( new SpriteMaterial( { map: soft, color: 0xffffff, transparent: true, blending: AdditiveBlending, depthWrite: false, depthTest: false } ) );
 	padFlash.name = 'pad-flash';
@@ -372,7 +399,7 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 	// What the style and the supersonic effects are told each frame (see drive-boosts.js): one
 	// object, filled in again each time.
 	const frame = {
-		pivot: null, size: null, velocity: new Vector3(), power: 0, grounded: true, dt: 0, clock: 0, scale: 1,
+		pivot: null, size: null, velocity: new Vector3(), power: 0, grounded: true, dt: 0, clock: 0, scale: 1, hot: 0,
 		nozzle: new Vector3(), lastNozzle: new Vector3(), back: new Vector3(), up: new Vector3(), right: new Vector3(), middle: new Vector3(),
 		// On its wheels, a point a little over the ground under it, for the batches' floor (see FLOOR).
 		ground: new Vector3(),
@@ -566,14 +593,32 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 		if ( due.ignite ) {
 
 			// The rainbow flame flashes in whatever colour it's burning in now.
-			if ( rainbow && ! style ) tint.setHSL( flicker / RAINBOW_TURN % 1, 1, 0.65 );
+			if ( hued ) tint.setHSL( flicker / RAINBOW_TURN % 1, 1, 0.65 );
 			bursts.ignite( frame, tint, !! effects.calm );
 			style?.ignite( frame, effects.detail ?? 1, !! effects.calm );
 			surge = 1;
+			cough = 0;
 
 		}
 
-		if ( due.cool ) bursts.cool( frame, tint );
+		if ( due.cool ) {
+
+			// The rainbow flame cools from whatever colour it was burning in when it was cut.
+			if ( hued ) tint.setHSL( flicker / RAINBOW_TURN % 1, 1, 0.65 );
+			bursts.cool( frame, tint );
+			// Run dry, it coughs out (not for a visitor asking for less motion: that's flashing).
+			if ( due.dry && ! effects.calm ) cough = COUGH_TIME;
+
+		}
+
+		// The boom, round it where it is now, and the flame giving a fat surge with it.
+		if ( due.boom ) {
+
+			sonic.boom( frame, Math.max( frame.size.width, frame.size.height ), !! effects.calm );
+			surge = Math.max( surge, 0.8 );
+
+		}
+
 		if ( due.tier && wheels.length >= 2 ) {
 
 			for ( let i = 0; i < 2; i ++ ) frame.pivot.localToWorld( _tyres[ i ].copy( wheels[ i ] ) );
@@ -588,7 +633,7 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 
 		}
 
-		due.ignite = due.cool = false;
+		due.ignite = due.cool = due.dry = due.boom = false;
 		due.tier = due.turbo = 0;
 
 	}
@@ -748,12 +793,33 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 			} else pivot.getWorldPosition( frame.ground );
 
 			for ( const batch of batches ) batch.floor( grounded ? frame.ground : null, frame.up, FLOOR.soft * frame.scale, FLOOR.reach * frame.scale );
+			// Overdrive heating the flame, eased as the view's warp is.
+			hot += ( ( supersonic ? 1 : 0 ) - hot ) * Math.min( 1, dt * OVERDRIVE_EASE );
+			if ( hot < 0.001 ) hot = 0;
+			frame.hot = hot;
+			// The world's gravity, read each frame (a ghost's fx is made once, wherever it was).
+			bursts.gravity = effects.gravity ?? gravity;
+			// A boom asked for while it was out of sight (a ghost's) goes off only if it's still
+			// supersonic, never late once it isn't.
+			if ( ! supersonic ) due.boom = false;
 			goOff( wheels );
 			bursts.update( frame );
 			style?.update( frame );
 			sonic.update( frame, supersonic );
 			surge *= Math.exp( - SURGE_FADE * dt );
-			flame.visible = power > 0.01 && ( ! style || !! styled );
+			// The flame lights at once, and dies down once it's let go; coughing, it misfires.
+			if ( power >= lit ) lit = power;
+			else lit = Math.max( power, lit * Math.exp( - FLAME_FALL * dt ) );
+			if ( lit < 0.01 ) lit = 0;
+			let burn = lit;
+			if ( cough > 0 ) {
+
+				cough = Math.max( 0, cough - dt );
+				burn = Math.max( power, COUGH[ Math.min( COUGH.length - 1, Math.floor( ( 1 - cough / COUGH_TIME ) * COUGH.length ) ) ] );
+
+			}
+
+			flame.visible = burn > 0.01 && ( ! style || !! styled );
 			if ( flame.visible && rainbow && ! style ) {
 
 				const hue = flicker / RAINBOW_TURN % 1;
@@ -769,21 +835,30 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 				pivot.localToWorld( flame.position.set( 0, size.height * 0.33 / size.scale, ( size.rear + 0.02 ) / size.scale ) );
 				pivot.getWorldQuaternion( flame.quaternion );
 				// A style's flame may burn longer or shorter, and flicker more wildly; any flame flickers
-				// harder the harder it burns, and pops as it lights (surge).
-				const wild = styled?.flicker ?? 1;
+				// harder the harder it burns, and pops as it lights (surge). In overdrive (hot) its
+				// flicker steadies into a hard roar and it burns longer and a little narrower, its core
+				// near white and solid (a deep colour's less so, so a red flame stays red); with no air
+				// round it (the Moon), a rocket's plume in a vacuum: wider and fainter, no longer. A
+				// longer flame still sits in its bounds (see above).
+				const air = effects.air !== false;
+				const wild = ( styled?.flicker ?? 1 ) * ( 1 - 0.6 * hot );
 				const flutter = Math.abs( Math.sin( flicker * 47 * wild ) * Math.sin( flicker * 31 * wild ) );
 				const steady = 0.85 + 0.3 * wild * flutter;
-				const jitter = steady + 0.18 * wild * power * flutter + 0.08 * power * Math.sin( flicker * 83 );
+				const jitter = steady + 0.18 * wild * burn * flutter + 0.08 * burn * Math.sin( flicker * 83 );
 				const pop = 1 + SURGE * surge;
 				const swell = 1 + 0.35 * surge;
-				flame.scale.set( scale * power * swell, scale * power * swell, scale * ( 0.6 + power * 2.6 ) * jitter * ( styled?.length ?? 1 ) * pop );
-				outer.material.opacity = Math.min( 1, 0.25 + 0.35 * jitter + 0.3 * surge );
-				inner.material.opacity = 0.9;
+				const width = air ? 1 - 0.1 * hot : 1 + 0.5 * hot;
+				const reach = air ? 1 + 0.3 * hot : 1;
+				flame.scale.set( scale * burn * swell * width, scale * burn * swell * width, scale * ( 0.6 + burn * 2.6 ) * jitter * ( styled?.length ?? 1 ) * pop * reach );
+				outer.material.opacity = Math.min( 1, 0.25 + 0.35 * jitter + 0.3 * surge + 0.15 * hot ) * ( air ? 1 : 1 - 0.4 * hot );
+				inner.material.opacity = 0.9 + 0.1 * hot;
+				// (The rainbow's core is white already.)
+				if ( ! hued ) inner.material.color.lerpColors( core, WHITE_HOT, hot * ( deep ? 0.35 : 0.8 ) );
 				// The glow is as big as it always was, however hard the flame flickers or pops (any bigger,
 				// a sprite this low is cut off by the ground): only brighter as it lights. The bursts'
 				// flash, which fades out down to the ground, makes the light.
 				halo.scale.setScalar( 1.6 * steady / swell );
-				halo.material.opacity = Math.min( 1, 0.75 * power + 0.25 * surge );
+				halo.material.opacity = Math.min( 1, 0.75 * burn + 0.25 * surge );
 
 			}
 
@@ -883,11 +958,12 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 
 		},
 
-		// The sonic boom, going supersonic: a shock ring round it and a flash (calmer for a visitor
-		// asking for less motion).
+		// The sonic boom, going supersonic: shock rings round it in its colour, a flash and a collar
+		// of vapour (calmer for a visitor asking for less motion), at the next update, which knows
+		// where it is now.
 		boom() {
 
-			if ( framed ) sonic.boom( frame, Math.max( frame.size.width, frame.size.height ), !! effects.calm );
+			due.boom = true;
 
 		},
 
@@ -895,14 +971,16 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 		ignite() {
 
 			due.ignite = true;
-			due.cool = false;
+			due.cool = due.dry = false;
 
 		},
 
-		// The booster run dry: the exhaust glowing on and cooling.
-		cool() {
+		// The booster let go, or run dry (`dry`): the exhaust cools; run dry, the flame coughs out
+		// first.
+		cool( dry = false ) {
 
 			due.cool = true;
+			due.dry = !! dry;
 
 		},
 
@@ -928,6 +1006,14 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 			if ( effects.calm || ! framed ) return;
 			padFlash.material.color.set( colour );
 			padFlashLeft = PAD_FLASH;
+
+		},
+
+		// The colour its bursts and its overdrive take on (see `tint` above), or null for a rainbow
+		// flame's, which runs through the hues.
+		get tint() {
+
+			return hued ? null : tint;
 
 		},
 

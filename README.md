@@ -780,7 +780,9 @@ or pick the go-kart or the muscle car (more as your level climbs), press **Drive
 arcade-style: drift (Space), boost (Shift), fly (F), and hit something to bounce off it into the
 air, where **A**/**D** spin, **W**/**S** flip and **Q**/**E** roll for tricks that score (times a
 combo multiplier) when you land on your wheels; a wipeout loses the combo and rolls you back onto
-them. Boosting flat out hits **overdrive** (a sonic boom, streaks of air, a wider view), and glowing
+them. Boosting flat out hits **overdrive** (a sonic boom in your flame's colour with a collar of
+vapour, the flame burning long and white-hot with shock diamonds, streaks of air, a wider view;
+on the Moon, with no air, no vapour), and glowing
 **boost pads** can turn up on open ground as you drive to top the booster up (they're off until a
 switch in the pause menu turns them on). Lighting the booster, running it dry, a pad, each drift
 charge level and its mini-turbo have bursts of their own, the view jolts and streams with speed
@@ -1037,8 +1039,8 @@ src/drive-hud.js    a self-contained driving HUD with touch buttons, the DRIFT b
                     trick pop-ups and the score, for other apps (World Drive)
 src/drive-fx.js     booster flame, tyre smoke and drift sparks; a hit's sparks and bits, scrapes, dust;
                     a hovercraft's spray, and a splash's spray and foam (others' cars from older pages)
-src/drive-boosts.js boost styles (plasma, lightning, bubbles, a galaxy...) and the supersonic boom and
-                    streaks, each a fixed batch of quads drawn in one go (two for dragon fire and
+src/drive-boosts.js boost styles (plasma, lightning, bubbles, a galaxy...) and the supersonic boom,
+                    streaks and shock diamonds, each a fixed batch of quads drawn in one go (two for dragon fire and
                     spooky), for drive-fx.js
 src/kart.js         the go-kart model and its library item
 src/layout.js       saves placed items in the browser; export/import
