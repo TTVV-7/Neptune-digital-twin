@@ -179,9 +179,17 @@ download and drawing, so flying fast it makes do with coarser tiles: their scree
 target goes up to 2.5 times the usual from 30 m/s to 250 m/s (`PLANE_TILE_ERROR` in `main.js`).
 Driving, the tiles are as sharp as ever.
 
-**Not yet:** flying high enough to come out on the globe and pick somewhere else; others driving
-with you see your car (not a plane) in the sky, flagged as flying; the code-built rides (go-kart,
-coupe, bus, monster truck, hovercraft) get the wings but keep their wheels as they are.
+**Driving with others.** They see you as a plane too: each state you send carries `FLAGS.plane`
+(`live-protocol.js`) while your wings are out, and their copy of your car unfolds the same kit at
+the same pace, flies with you, and folds it away as you fold yours (`planeOf` in `ghosts.js`). A
+plane's states go up to 800 m/s (`TOP_SPEED` there) and, flying fast, more than `TELEPORT` m apart
+are still flown between rather than jumped (`teleported`).
+
+**Wheels.** The model cars' wheels (`cars.js`) and the go-kart's (`kart.js`) fold out flat as
+fans. The other code-built rides (coupe, bus, monster truck, hovercraft) get the wings but keep
+their wheels as they are.
+
+**Not yet:** flying high enough to come out on the globe and pick somewhere else.
 
 ### Boosting
 

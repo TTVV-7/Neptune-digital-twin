@@ -1078,6 +1078,8 @@ export function flagsOf( driver, paused ) {
 	if ( d.boost ) flags |= FLAGS.boost;
 	if ( d.drifting && d.grounded ) flags |= FLAGS.drift;
 	if ( d.flying || d.aircraft?.on ) flags |= FLAGS.flying;
+	// (Not while folding back into a car: others see it fold as it does.)
+	if ( d.aircraft?.on && d.aircraft.phase !== 'folding' ) flags |= FLAGS.plane;
 	if ( ! d.grounded && ! d.flying && ! d.aircraft?.on ) flags |= FLAGS.air;
 	if ( d.supersonic ) flags |= FLAGS.supersonic;
 	if ( d.grounded && ! d.flying && ! d.air ) flags |= FLAGS.grounded;

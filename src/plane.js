@@ -16,8 +16,8 @@ import { enuToLocal } from './geo.js';
 // using its position (east, north, y, heading, speed), its rays and its camera.
 
 // How long (s) the kit takes to unfold and fold, and how high (m) it lifts as it unfolds.
-const UNFOLD = 0.9;
-const FOLD = 0.7;
+export const UNFOLD = 0.9;
+export const FOLD = 0.7;
 const LIFT = 3;
 // The lowest it flies over the ground (m), and the highest (m over the ground).
 const CLEARANCE = 0.8;
@@ -128,7 +128,7 @@ export class PlaneMode {
 		this.vy = 0;
 		this.steer = d.steer;
 		this.from = d.y;
-		this.kit = createPlaneKit( d );
+		this.kit = createPlaneKit( { pivot: d.entry.pivot, box: d.ownBox } );
 		d.speed = Math.max( 0, d.speed );
 		d.hud.flash( 'Plane! Space up · Shift down · T to land' );
 		d.onPlane?.( true );
@@ -321,13 +321,13 @@ export class PlaneMode {
 }
 
 // The kit that makes a ride a plane, sized to it: wings that swing down from its sides with a jet
-// under each, and a fin that rises at the back. update( dt, deploy, thrust ): deploy from 0 (folded
-// away, hidden) to 1 (out), the jets' glow by the thrust. The ride's own parts that can join in
-// (its wheels, folding flat as fans: cars.js) do so through onDrive's `plane`.
-export function createPlaneKit( driver ) {
+// under each, and a fin that rises at the back. On `pivot`, the ride's (facing -Z), sized to `box`,
+// the ride's box in the pivot's own frame. update( dt, deploy, thrust ): deploy from 0 (folded away,
+// hidden) to 1 (out), the jets' glow by the thrust. The ride's own parts that can join in (its
+// wheels, folding flat as fans: cars.js, kart.js) do so through onDrive's `plane`. For a car seen
+// driving with you (ghosts.js) too: `noRay` keeps rays off it there.
+export function createPlaneKit( { pivot, box, noRay = null } ) {
 
-	const { pivot } = driver.entry;
-	const box = driver.ownBox;
 	const width = box.max.x - box.min.x;
 	const length = box.max.z - box.min.z;
 	const height = box.max.y - box.min.y;
@@ -411,6 +411,7 @@ export function createPlaneKit( driver ) {
 		object.castShadow = object.material !== glow;
 		// Not something to stand on or bump into (see blocks in walk.js): it's part of the vehicle.
 		object.userData.noCollide = true;
+		if ( noRay ) object.raycast = noRay;
 
 	} );
 

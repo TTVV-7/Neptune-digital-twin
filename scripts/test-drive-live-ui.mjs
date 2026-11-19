@@ -647,6 +647,48 @@ describe( 'World Drive, driving with others', () => {
 
 	} );
 
+	test( 'A turns into a plane (T): B\'s ghost unfolds its wings, flies up with it, and folds them away as A lands', async () => {
+
+		await placeCar( a, 0, 0, 0 );
+		await b.waitForFunction( () => window.drive.ghosts.list()[ 0 ]?.visible, null, { timeout: 15000 } );
+		await a.evaluate( () => window.drive.driver.press( 'KeyT' ) );
+		// The flag, then the kit on B's ghost, all the way out and drawn.
+		await b.waitForFunction( flag => {
+
+			const ghost = window.drive.ghosts.list()[ 0 ];
+			return ghost.flags & flag && ghost.plane === 1 && ghost.kit;
+
+		}, FLAGS.plane, { timeout: 15000 } );
+		await shot( b, 'live-plane' );
+		// Up 40 m and more on A: B's ghost goes up with it, wings and all.
+		const height = () => b.evaluate( () => window.drive.ghosts.list()[ 0 ].position[ 1 ] );
+		const before = await height();
+		await a.evaluate( () => window.drive.driver.keys.add( 'Space' ) );
+		await a.waitForFunction( () => window.drive.driver.aircraft.height > 40, null, { timeout: 60000 } );
+		await a.evaluate( () => window.drive.driver.keys.delete( 'Space' ) );
+		await b.waitForFunction( least => window.drive.ghosts.list()[ 0 ].position[ 1 ] > least, before + 35, { timeout: 15000 } );
+		assert.ok( await b.evaluate( () => window.drive.ghosts.list()[ 0 ].kit ), 'the wings went from B\'s ghost while A flew' );
+		await shot( b, 'live-plane-up' );
+		// T again: A flies down and folds back into a car; B's ghost folds its wings away, and the kit goes.
+		await a.evaluate( () => window.drive.driver.press( 'KeyT' ) );
+		await a.waitForFunction( () => ! window.drive.driver.aircraft.on, null, { timeout: 90000 } );
+		await b.waitForFunction( flag => {
+
+			const ghost = window.drive.ghosts.list()[ 0 ];
+			return ! ( ghost.flags & flag ) && ghost.plane === 0 && ! ghost.kit;
+
+		}, FLAGS.plane, { timeout: 15000 } );
+		const left = await b.evaluate( () => {
+
+			let kits = 0;
+			window.drive.ghosts.group.traverse( o => kits += o.name === 'plane kit' ? 1 : 0 );
+			return kits;
+
+		} );
+		assert.equal( left, 0, 'a plane kit left on B after A landed' );
+
+	} );
+
 	test( 'A hidden on B while it drives: B keeps only the last of what it hears of A, not all of it', async () => {
 
 		await b.evaluate( () => window.drive.ghosts.hide( 'Ana' ) );
