@@ -66,10 +66,9 @@ address, and the construction app is unchanged by it.
 | --- | --- |
 | W / S | Gas; brake, and reverse once stopped |
 | A / D | Steer |
-| Space | Drift: hold it and steer round a bend, let go for a mini-turbo; tap it to hop |
+| Space | Drift: hold it and steer round a bend, let go for a mini-turbo; tap it to jump (about 5 m, over a car or a barrier) |
 | Shift (or B) | Booster: hold for overdrive while the gauge lasts; let go to save the rest |
-| F | Fly: hold to lift off, let go to glide down |
-| T | Plane: your ride turns into a little plane ([Plane mode](#plane-mode)); T again bails out (a parachute near the ground), or lands it low down |
+| F or T | Plane: your ride turns into a little plane ([Plane mode](#plane-mode)); again bails out (a parachute near the ground), or lands it low down |
 | In the air | A / D spin, W / S flip (W forward, S back), Q / E roll (or Space with A / D) |
 | R | Stuck? Back on the road a few metres on (on water too) |
 | C | Chase or driver's-seat camera |
@@ -136,7 +135,7 @@ Hit something (a wall, a building, a parked car, a barrier) and you don't stop: 
 
 ### Plane mode
 
-**T** turns whatever you're driving into a little plane: wings swing down from its sides with a jet
+**F** or **T** turns whatever you're driving into a little plane (F is the way into the air: there's no flying a car on F any more): wings swing down from its sides with a jet
 under each, a fin rises at the back, and on a model car the wheels fold out flat as fans. It lifts
 a few metres off the ground and hovers. **W** speeds up and **S** slows down (to a hover; let go
 of both and it cruises at that speed), **A**/**D** turn and bank, **Space** (or **F**) climbs and

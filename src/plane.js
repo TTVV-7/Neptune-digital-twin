@@ -170,7 +170,7 @@ export class PlaneMode {
 		this.from = d.y;
 		this.kit = createPlaneKit( { pivot: d.entry.pivot, box: d.ownBox } );
 		d.speed = Math.max( 0, d.speed );
-		d.hud.flash( 'Plane! Space up · Shift down · T to land' );
+		d.hud.flash( d.fly ? 'Plane! Space up · Shift down · T to bail out' : 'Plane! Space up · Shift down · F to bail out' );
 		d.onPlane?.( true );
 
 	}
@@ -201,7 +201,8 @@ export class PlaneMode {
 		const { keys } = d;
 		const forward = keys.has( 'KeyW' ) || keys.has( 'ArrowUp' );
 		const back = keys.has( 'KeyS' ) || keys.has( 'ArrowDown' );
-		const up = keys.has( 'Space' ) || keys.has( 'KeyF' );
+		// (F only climbs where it doesn't also turn the plane back into a car: the `fly` option on.)
+		const up = keys.has( 'Space' ) || d.fly && keys.has( 'KeyF' );
 		const down = keys.has( 'ShiftLeft' ) || keys.has( 'ShiftRight' ) || keys.has( 'KeyB' );
 		const steerInput = d.steerInput();
 

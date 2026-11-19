@@ -483,7 +483,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		// throws you into the air for stunts, and the hovercraft throws up spray on water (which every
 		// ride drives on as on the ground). Its effects (bursts, fewer on a phone and calmer for those
 		// asking for less motion) as screen-fx.js sets them.
-		fly: true, booster: true, drift: true, crash: 'launch', water, effects: { detail: 1, calm: false },
+		fly: false, booster: true, drift: true, crash: 'launch', water, effects: { detail: 1, calm: false },
 		// T: plane mode (plane.js), for looking round, kept apart from what's scored: not during a
 		// challenge's run, its distance not counted for levels (driven), and a new stunt run once down.
 		plane: true,

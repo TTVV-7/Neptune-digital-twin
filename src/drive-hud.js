@@ -917,7 +917,7 @@ export function createDriveHud( parent = document.body ) {
 			row( [ 'Space' ], driver?.drift ? 'drift (hold and steer), hop (tap)' : 'hop' ),
 			driver?.booster ? row( [ 'Shift' ], 'boost (hold: overdrive while the gauge lasts)' ) : row( [ 'Shift' ], 'boost' ),
 			driver?.fly && row( [ 'F' ], 'fly' ),
-			driver?.aircraft && row( [ 'T' ], 'plane (again to land)' ),
+			driver?.aircraft && row( driver.fly ? [ 'T' ] : [ 'F', 'T' ], 'plane (again to bail out)' ),
 			driver?.launch && row( [ 'Q', 'E' ], 'roll in the air' ),
 			row( [ 'R' ], 'reset' ),
 			row( [ 'C' ], 'camera' ),

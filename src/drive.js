@@ -30,7 +30,10 @@ import { PARACHUTE, PlaneMode } from './plane.js';
 
 const KMH = 3.6;
 const GRAVITY = 9.81;
-const JUMP_SPEED = 7;
+// A hop (Space, tapped) leaves the ground at JUMP_SPEED m/s: about 5 m up, over a car or a barrier.
+// Its own time in the air (2 × JUMP_SPEED / g, about 2 s) isn't big air: only what more a ramp or a
+// drop gives it is (see tricksOf).
+const JUMP_SPEED = 10;
 // The ground is looked for this far (m) under the wheels; fallen this far (m) under where it last
 // stood, with none found, it's put back there. Both further in low gravity (by 1 / gravity), where
 // a jump goes higher over the ground falling away beneath it.
@@ -347,7 +350,7 @@ export class Driver {
 		this.canPlane = canPlane;
 		this.onPlane = onPlane;
 
-		this.driveKeys = [ 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight', 'KeyR', ...booster ? [ 'KeyB' ] : [], ...this.fly ? [ 'KeyF' ] : [], ...this.launch ? [ 'KeyQ', 'KeyE' ] : [], ...plane ? [ 'KeyT' ] : [] ];
+		this.driveKeys = [ 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight', 'KeyR', ...booster ? [ 'KeyB' ] : [], ...this.fly || plane ? [ 'KeyF' ] : [], ...this.launch ? [ 'KeyQ', 'KeyE' ] : [], ...plane ? [ 'KeyT' ] : [] ];
 		window.addEventListener( 'keydown', e => {
 
 			// Browser shortcuts (Ctrl+R, Cmd+F...) are left to the browser, and don't drive or dig.
@@ -396,9 +399,10 @@ export class Driver {
 
 		}
 
-		// T: into a plane and back. As one, the car's own keys (hop, booster, reset) do nothing: plane.js
-		// reads the held keys itself.
-		if ( this.aircraft && code === 'KeyT' ) {
+		// T: into a plane and back; F too, unless F flies (the `fly` option, off in World Drive: the
+		// plane is its way into the air). As one, the car's own keys (hop, booster, reset) do nothing:
+		// plane.js reads the held keys itself.
+		if ( this.aircraft && ( code === 'KeyT' || code === 'KeyF' && ! this.fly ) ) {
 
 			this.togglePlane();
 			return;
@@ -1040,7 +1044,12 @@ export class Driver {
 		}
 
 		this.grounded = false;
-		if ( this.launch && ! this.driftHop ) this.enterAir();
+		if ( this.launch && ! this.driftHop ) {
+
+			this.enterAir();
+			this.air.hop = 2 * JUMP_SPEED / GRAVITY;
+
+		}
 
 	}
 
@@ -2345,7 +2354,7 @@ export class Driver {
 		if ( air.hits > 0 && ! air.flew ) tricks.push( { name: air.hits > 1 ? `Wall bounce ×${ air.hits }` : 'Wall bounce', points: POINTS.bounce * air.hits } );
 		// In low gravity it's counted as the time the same jump would have taken on the Earth (see
 		// leap), so the Moon's long, slow jumps don't score more than the Earth's.
-		const earthAir = air.time * this.leap;
+		const earthAir = air.time * this.leap - ( air.hop ?? 0 );
 		if ( earthAir >= BIG_AIR && ! air.flew ) tricks.push( { name: `Big air ${ air.time.toFixed( 1 ) } s`, points: Math.round( earthAir * POINTS.air ), pending: 'Big air' } );
 		return tricks;
 

@@ -2657,10 +2657,14 @@ describe( 'World Drive water', () => {
 			kit.reset( - 250, 180, 60 );
 			const out = {};
 			// Up on F, out over the sea, and down again with it let go.
+			// (The driver's own flying on F, off in World Drive, where F is the plane: on here to fly low
+			// over the water and let it down.)
+			d.fly = true;
 			d.press( 'KeyF' );
 			kit.step( 4 );
 			Object.assign( out, { flying: d.flying, overSea: d.north < - 300, high: d.y } );
 			d.release( 'KeyF' );
+			d.fly = false;
 			kit.step( 30, () => d.flying || ! d.grounded );
 			Object.assign( out, { down: { north: d.north, y: d.y, flying: d.flying, grounded: d.grounded } } );
 			d.press( 'KeyW' );
@@ -3391,10 +3395,14 @@ describe( 'World Drive, the open sea', () => {
 			step( 1.5 );
 			out.far = { y: d.y, look: water.look( d.east, d.north, d.y ).level, expected: - ( d.north ** 2 ) / ( 2 * 6371000 ) };
 			// Up on F, and down again with it let go.
+			// (The driver's own flying on F, off in World Drive, where F is the plane: on here to fly low
+			// over the water and let it down.)
+			d.fly = true;
 			d.press( 'KeyF' );
 			step( 2 );
 			const high = d.y - out.far.y;
 			d.release( 'KeyF' );
+			d.fly = false;
 			step( 20, () => ! d.grounded || d.flying );
 			step( 0.5 );
 			out.flew = { high, flying: d.flying, grounded: d.grounded, y: d.y, onWater: water.at( d.east, d.north, d.y ) !== null };
@@ -3853,6 +3861,9 @@ describe( 'World Drive, the open sea', () => {
 			kit.paint( [ 40, 170, 190 ] );
 			kit.reset( - 250, 60 );
 			d.press( 'KeyW' );
+			// (The driver's own flying on F, off in World Drive, where F is the plane: on here to fly low
+			// over the water and let it down.)
+			d.fly = true;
 			d.press( 'KeyF' );
 			const flew = { high: - Infinity, laid: null };
 			kit.step( 40, () => {
@@ -3863,6 +3874,7 @@ describe( 'World Drive, the open sea', () => {
 
 			} );
 			d.release( 'KeyF' );
+			d.fly = false;
 			kit.step( 30, () => d.flying || ! d.grounded );
 			d.release( 'KeyW' );
 			kit.step( 0.2 );
@@ -3969,6 +3981,9 @@ describe( 'World Drive, the open sea', () => {
 			const kit = window.coastKit;
 			kit.reset( - 250, 60 );
 			d.press( 'KeyW' );
+			// (The driver's own flying on F, off in World Drive, where F is the plane: on here to fly low
+			// over the water and let it down.)
+			d.fly = true;
 			d.press( 'KeyF' );
 			let laid = null;
 			kit.step( 40, () => {
@@ -3978,6 +3993,7 @@ describe( 'World Drive, the open sea', () => {
 
 			} );
 			d.release( 'KeyF' );
+			d.fly = false;
 			kit.step( 30, () => d.flying || ! d.grounded );
 			d.release( 'KeyW' );
 			kit.step( 0.2 );
@@ -4526,6 +4542,9 @@ describe( 'World Drive, the open sea', () => {
 			// Flown off the levee over the houses at up to 50 km/h, let down and driven on.
 			kit.reset( - 150, 40 );
 			d.press( 'KeyW' );
+			// (The driver's own flying on F, off in World Drive, where F is the plane: on here to fly low
+			// over the water and let it down.)
+			d.fly = true;
 			d.press( 'KeyF' );
 			const flew = { laid: false, high: - Infinity };
 			const air = () => {
@@ -4542,6 +4561,7 @@ describe( 'World Drive, the open sea', () => {
 
 			} );
 			d.release( 'KeyF' );
+			d.fly = false;
 			kit.step( 60, () => {
 
 				air();
