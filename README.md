@@ -281,6 +281,13 @@ left as it came):
     anchor (3/4", 350 in, 125 out), 2 for the conveyor's legs on each P1 and P2, 4 for the hoist frame on
     the pad, and the counterweight's four 1" rods.
 
+  - what's **being demolished**, see-through so the new work shows through it: the asphalt (75 mm) and the
+    concrete under it (200 mm) broken out over the two areas marked on ST231 (13.62 m² round the sheave
+    anchor pedestal, P1 and P2; 10.5 m² over the pad), and in red the existing C32 rope and sheave anchor
+    pedestal above the ground and the conveyor table pedestals where the new P2s go (their height isn't
+    given: drawn 300 mm). Layers *To demolish: asphalt* and *To demolish: concrete*, which don't stop you
+    walking.
+
   Concrete in pale new concrete, steel in its own layer (*C32 take-up steel & embedded items*). Where grid 4
   is along C32 the drawings don't say: `TAKE_UP.GRID_4` in `scripts/b2d2-structure.mjs` puts it 4 m past
   the tunnel's end, worked out from the belt's height there; they stand on the model's ground (`GRADE`, as

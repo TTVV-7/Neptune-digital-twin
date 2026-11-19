@@ -69,6 +69,10 @@ const STRUCTURE = {
 	pedestals: { name: 'C32 take-up pedestals', color: '#ddd8cb' },
 	// Its counterweight tower, the counterweight's steel, the hoist and the anchor rods cast in.
 	takeUpSteel: { name: 'C32 take-up steel & embedded items', color: '#7d8691', metal: true },
+	// What's being demolished there, see-through so the new work shows through it: the asphalt and
+	// the concrete broken out where the new foundations go, and the existing pedestals.
+	demoAsphalt: { name: 'To demolish: asphalt', color: '#1f1f1f', alpha: 0.6 },
+	demoConcrete: { name: 'To demolish: concrete', color: '#e2402f', alpha: 0.45 },
 	building: { name: 'Dumper building (for lining up)', color: '#ff8a1f', alpha: 0.35 },
 	equip: { name: 'Conveyors, tent & temporary works', color: '#7f8fa3', alpha: 0.6 },
 };

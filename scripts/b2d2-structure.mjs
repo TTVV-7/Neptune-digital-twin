@@ -146,6 +146,27 @@ const TAKE_UP = {
 	// from grid 2 (5.5 m up from grid 4): its frame, drum (its axle across) and motor. Its base
 	// detail is still to come on the drawings.
 	hoist: { d: 5.5, a: - 3.889, frame: [ 1.24, 1.0, 0.15 ], drum: [ 0.3, 0.45 ], motor: [ 0.45, 0.4, 0.6 ] },
+	// What's being demolished. The asphalt and the concrete under it broken out where the new
+	// foundations go: the two areas marked on -ST231 (13.62 m² round the sheave anchor pedestal,
+	// P1 and P2; 10.5 m² over the pad), 75 mm of asphalt over 200 mm of concrete from the ground
+	// (EL 3.825) down. Outlines as [ along, across ] from grid 4 and the centre line, off the
+	// markups (the plan at 1:40, grid 4 at x 1390.1 pt and the centre line at y 1090.3 pt).
+	breakOut: {
+		asphalt: 0.075, concrete: 0.2,
+		areas: [
+			[ [ 1147.7, 1165.3 ], [ 1147.7, 1228.1 ], [ 1195.5, 1227.7 ], [ 1300.1, 1228.3 ], [ 1300.1, 1189.6 ], [ 1401.9, 1190.5 ], [ 1432.5, 1190.1 ], [ 1432.1, 1168.7 ], [ 1432.5, 1008.3 ], [ 1432.5, 980.2 ], [ 1265.8, 979.4 ], [ 1266.7, 954.8 ], [ 1194.9, 955.2 ], [ 1149, 954.8 ] ],
+			[ [ 907.1, 681.2 ], [ 1145.5, 681.2 ], [ 1145.5, 903 ], [ 908.2, 903 ] ],
+		].map( area => area.map( ( [ x, y ] ) => [ ( 1390.1 - x ) / 70.866, ( y - 1090.3 ) / 70.866 ] ) ),
+	},
+	// Existing concrete the drawings mark for demolition: the C32 rope and sheave anchor pedestal
+	// above the ground (-ST231, -ST232 Section A: from 1.37 to 2.28 m up from grid 4, 1.02 m toward A
+	// to 0.20 m toward B, up to about EL 5.0), and the conveyor table pedestals where the new P2s go
+	// (their height isn't given: drawn 300 mm up).
+	demolish: [
+		{ name: 'rope and sheave anchor pedestal', d: [ 1.37, 2.28 ], a: [ - 0.20, 1.02 ], el: [ 3.825, 5.0 ] },
+		{ name: 'conveyor table pedestal', d: [ 2.524 - 0.25, 2.524 + 0.25 ], a: [ 1.067 - 0.25, 1.067 + 0.25 ], el: [ 3.825, 4.125 ] },
+		{ name: 'conveyor table pedestal', d: [ 2.524 - 0.25, 2.524 + 0.25 ], a: [ - 1.067 - 0.25, - 1.067 + 0.25 ], el: [ 3.825, 4.125 ] },
+	],
 	// The embedded items: anchor rods, [ along, across ] from where they're set out, `size` their
 	// diameter, `embed` into the concrete and `proud` out of it, with a nut on top.
 	anchors: [
@@ -253,6 +274,34 @@ class Solid {
 				this.face( [ end( sign ), at( t0, sign * half ), at( t1, sign * half ) ], o );
 
 			}
+
+		}
+
+		return this;
+
+	}
+
+	// A flat-topped solid: the outline [ [ x, letter ], ... ] (in order round it) from el e0 to e1.
+	prism( outline, [ e0, e1 ] ) {
+
+		const ring = outline.map( ( [ x, l ] ) => new Vector2( x, l ) );
+		if ( ShapeUtils.isClockWise( ring ) ) ring.reverse();
+		for ( const [ a, b, c ] of ShapeUtils.triangulateShape( ring, [] ) ) {
+
+			const [ p, q, r ] = [ a, b, c ].map( n => ring[ n ] );
+			this.face( [ p, q, r ].map( v => [ v.x, e1, v.y ] ), [ 0, 1, 0 ] );
+			this.face( [ p, q, r ].map( v => [ v.x, e0, v.y ] ), [ 0, - 1, 0 ] );
+
+		}
+
+		const mid = ring.reduce( ( m, v ) => m.add( v.clone().divideScalar( ring.length ) ), new Vector2() );
+		for ( let i = 0; i < ring.length; i ++ ) {
+
+			const p = ring[ i ], q = ring[ ( i + 1 ) % ring.length ];
+			// Away from the middle (the outlines here are near enough convex at each edge).
+			const n = new Vector2( q.y - p.y, p.x - q.x );
+			if ( n.dot( p.clone().sub( mid ) ) < 0 ) n.negate();
+			this.face( [ [ p.x, e0, p.y ], [ q.x, e0, q.y ], [ q.x, e1, q.y ], [ p.x, e1, p.y ] ], [ n.x, 0, n.y ] );
 
 		}
 
@@ -653,11 +702,33 @@ function takeUpSteel() {
 
 }
 
+// What's being demolished, as two layers: the asphalt, and the concrete (the slab under the asphalt
+// and the existing pedestals). Like the new concrete level with the ground, drawn SHOW up so they
+// show over Google's ground, the asphalt just over the new pad's top.
+function demolition() {
+
+	const { GRID_4, GRADE, SHOW, breakOut, demolish } = TAKE_UP;
+	const line = ( C32.x[ 0 ] + C32.x[ 1 ] ) / 2;
+	const ground = 3.825 + GRADE + SHOW + 0.01;
+	const plan = area => area.map( ( [ d, a ] ) => [ line + a, GRID_4 + d ] );
+	const asphalt = new Solid(), concrete = new Solid();
+	for ( const area of breakOut.areas ) {
+
+		asphalt.prism( plan( area ), [ ground - breakOut.asphalt, ground ] );
+		concrete.prism( plan( area ), [ ground - breakOut.asphalt - breakOut.concrete, ground - breakOut.asphalt ] );
+
+	}
+
+	for ( const { d: [ d0, d1 ], a: [ a0, a1 ], el: [ e0, e1 ] } of demolish ) concrete.box( { x: [ line + a0, line + a1 ], l: [ GRID_4 + d0, GRID_4 + d1 ] }, [ e0 + GRADE + SHOW + 0.01, e1 + GRADE ] );
+	return { demoAsphalt: asphalt.layer(), demoConcrete: concrete.layer() };
+
+}
+
 // The site's layers ({ key: { positions, index } }, keys c31, pit, c32, steel and the rest) with
 // the structure put on the drawings' grid, and the beams as a layer of their own (beams).
 export function correctStructure( site ) {
 
-	return { ...site, pit: pit(), c31: gallery( site.c31 ), beams: beams(), steel: plates(), c32: c32( site.c32 ), pedestals: pedestals(), takeUpSteel: takeUpSteel() };
+	return { ...site, pit: pit(), c31: gallery( site.c31 ), beams: beams(), steel: plates(), c32: c32( site.c32 ), pedestals: pedestals(), takeUpSteel: takeUpSteel(), ...demolition() };
 
 }
 
