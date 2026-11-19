@@ -67,6 +67,8 @@ const STRUCTURE = {
 	steel: { name: 'Steel plates at grade', color: '#c9cfd5', metal: true },
 	// C32's take-up tower foundation past the tunnel's mouth: new concrete, paler than the old.
 	pedestals: { name: 'C32 take-up pedestals', color: '#ddd8cb' },
+	// Its counterweight tower, the counterweight's steel, the hoist and the anchor rods cast in.
+	takeUpSteel: { name: 'C32 take-up steel & embedded items', color: '#7d8691', metal: true },
 	building: { name: 'Dumper building (for lining up)', color: '#ff8a1f', alpha: 0.35 },
 	equip: { name: 'Conveyors, tent & temporary works', color: '#7f8fa3', alpha: 0.6 },
 };
@@ -89,8 +91,9 @@ const VIEWS = [
 	// From the pit's north-east corner, under the B1 slab, across to C32's mouth.
 	{ name: 'Pit', from: [ PIT_INSIDE.x[ 1 ] - 0.4, - 3.0, - 0.7 ], at: [ 1.8, - 5.2, - 6 ] },
 	{ name: 'Ground', from: [ 67.5, 7.0, - 4.95 ], at: [ 20, 5.3, - 4.95 ] },
-	// C32's take-up pedestals, from up the conveyor looking back down at the tunnel's mouth.
-	{ name: 'C32 take-up', from: [ C32_LINE + 5.5, 8.4, - ( C32_TAKE_UP.GRID_4 + 6.5 ) ], at: [ C32_LINE, 5.4, - ( C32_TAKE_UP.GRID_4 + 0.8 ) ] },
+	// C32's take-up: its pedestals, pad and counterweight tower, from up the conveyor looking back
+	// down at the tunnel's mouth.
+	{ name: 'C32 take-up', from: [ C32_LINE + 7, 10.5, - ( C32_TAKE_UP.GRID_4 + 11 ) ], at: [ C32_LINE - 2.2, 6.4, - ( C32_TAKE_UP.GRID_4 + 2.5 ) ] },
 ];
 
 

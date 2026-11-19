@@ -123,6 +123,47 @@ const TAKE_UP = {
 	sheave: { d: [ - 0.222, 1.278 ], a: [ - 0.20, 1.29 ], el: [ 3.38, 5.325 ], chamfer: [ 0.62, 0.2 ] },
 	// What's under ground: the small pedestals go down to here.
 	base: 2.9,
+	// New concrete whose top is level with the ground (the pad, P2) stands this much proud of it
+	// in the model, so its pale new concrete shows: level with it, Google's ground (bumpy by a few
+	// centimetres) covers it, as it would a laydown area (laydown.js draws those 10 cm up, too).
+	SHOW: 0.1,
+	// The new tower foundation extension (-ST231 plan, -ST232 Section C): a pad 3.24 m along by
+	// 3.13 m across, 1067 thick, its top at EL 3.825 to match the existing concrete, doweled into
+	// the counterweight tower's existing foundation; the take-up hoist stands on it.
+	pad: { d: [ 3.47, 6.71 ], a: [ - 5.745, - 2.619 ], el: [ 3.825 - 1.067, 3.825 ] },
+	// The counterweight tower (-ME208 Sections B and C): 1550 up from grid 4, 1829 + 2060 toward B
+	// from the centre line, legs 850 either way along and 600 either way across, from the concrete
+	// (EL 3.825) to its top steel (EL 13.355). Drawn as its four legs and the frame at the top.
+	tower: { d: 1.55, a: - 3.889, legs: [ 0.85, 0.6 ], el: [ 3.825, 13.355 ], leg: 0.2 },
+	// The counterweight, CTWT-624-43 (-ME217): a concrete block 1300 along by 850 across by 3575
+	// tall, (10) PL. 13 × 850 × 1300 on it, (2) MC200 across them and sheave assembly type 1 on top
+	// (11,080 kg in all). Drawn where -ME208's Section B has it (its block's top at about EL 11.16);
+	// it rides up and down the tower with the take-up.
+	counterweight: { size: [ 1.3, 0.85 ], el: [ 11.155 - 3.575, 11.155 ], plates: 0.13, channel: [ 0.2, 0.076 ], sheave: 0.35,
+		// (4) 1"Ø threaded anchor rods 1360 long, 560 proud of the concrete, through the plates.
+		rods: { at: [ [ 0.255, 0.155 ], [ 0.255, - 0.155 ], [ - 0.255, 0.155 ], [ - 0.255, - 0.155 ] ], size: 0.0254, length: 1.36, proud: 0.56 } },
+	// The take-up hoist (WCA-624-42, -ME208 Section B), on the pad in line with the tower, 4406
+	// from grid 2 (5.5 m up from grid 4): its frame, drum (its axle across) and motor. Its base
+	// detail is still to come on the drawings.
+	hoist: { d: 5.5, a: - 3.889, frame: [ 1.24, 1.0, 0.15 ], drum: [ 0.3, 0.45 ], motor: [ 0.45, 0.4, 0.6 ] },
+	// The embedded items: anchor rods, [ along, across ] from where they're set out, `size` their
+	// diameter, `embed` into the concrete and `proud` out of it, with a nut on top.
+	anchors: [
+		// Sheave assembly base plate on the sheave anchor pedestal (-ST231 Detail 1): (6) AR-3/4"-RS-350-125,
+		// 200 apart along the sheave's line in two rows 300 apart, the sheave turned 15° in plan.
+		{ name: 'sheave', at: [ 0.77, 0.36 ], turn: 15, size: 0.019, embed: 0.35, proud: 0.125,
+			rods: [ - 0.2, 0, 0.2 ].flatMap( u => [ [ u, 0.15 ], [ u, - 0.15 ] ] ) },
+		// Rope anchor base plate at grid 4 (-ST231 Detail 2): (4) AR-3/4"-RS-350-125, 130 × 100.
+		{ name: 'rope anchor', at: [ 0, 0.98 ], size: 0.019, embed: 0.35, proud: 0.125,
+			rods: [ [ - 0.065, - 0.05 ], [ - 0.065, 0.05 ], [ 0.065, - 0.05 ], [ 0.065, 0.05 ] ] },
+		// The conveyor's legs on P1 and P2 (-ST232 Section A): 2-3/4"Ø A193 B7 HDG anchors each,
+		// embedded 200 into the concrete.
+		...[ 'p1', 'p2' ].flatMap( key => ( { p1: [ [ 1.70, - 0.95 ], [ 0, - 0.95 ] ], p2: [ [ 2.524, 1.067 ], [ 2.524, - 1.067 ] ] }[ key ] ).map( at => (
+			{ name: `conveyor leg (${ key.toUpperCase() })`, at, size: 0.019, embed: 0.2, proud: 0.1, rods: [ [ 0, - 0.1 ], [ 0, 0.1 ] ] } ) ) ),
+		// The hoist frame on the pad (-ST232 Section C: post-installed anchors), at its corners.
+		{ name: 'hoist frame', at: [ 5.5, - 3.889 ], size: 0.019, embed: 0.2, proud: 0.1,
+			rods: [ [ - 0.55, - 0.45 ], [ - 0.55, 0.45 ], [ 0.55, - 0.45 ], [ 0.55, 0.45 ] ] },
+	],
 };
 
 // ---------- The model's own dimensions, to tell its parts by and to move them from ----------
@@ -172,6 +213,49 @@ class Solid {
 		this.face( [ [ x0, e0, l1 ], [ x1, e0, l1 ], [ x1, e1, l1 ], [ x0, e1, l1 ] ], [ 0, 0, 1 ] );
 		this.face( [ [ x0, e0, l0 ], [ x0, e1, l0 ], [ x0, e1, l1 ], [ x0, e0, l1 ] ], [ - 1, 0, 0 ] );
 		this.face( [ [ x1, e0, l0 ], [ x1, e1, l0 ], [ x1, e1, l1 ], [ x1, e0, l1 ] ], [ 1, 0, 0 ] );
+		return this;
+
+	}
+
+	// A cylinder about `axis` ('x', 'el' or 'l') through c [ x, el, letter ], radius r, half as long
+	// as `half` each way, in `n` flat sides.
+	cylinder( c, axis, r, half, n = 20 ) {
+
+		const k = { x: 0, el: 1, l: 2 }[ axis ];
+		const [ i, j ] = [ 0, 1, 2 ].filter( v => v !== k );
+		const at = ( t, along ) => {
+
+			const p = [ ...c ];
+			p[ i ] += r * Math.cos( t );
+			p[ j ] += r * Math.sin( t );
+			p[ k ] += along;
+			return p;
+
+		};
+		const end = sign => {
+
+			const p = [ ...c ];
+			p[ k ] += sign * half;
+			return p;
+
+		};
+		for ( let m = 0; m < n; m ++ ) {
+
+			const t0 = m / n * Math.PI * 2, t1 = ( m + 1 ) / n * Math.PI * 2, tm = ( t0 + t1 ) / 2;
+			const out = [ 0, 0, 0 ];
+			out[ i ] = Math.cos( tm );
+			out[ j ] = Math.sin( tm );
+			this.face( [ at( t0, - half ), at( t1, - half ), at( t1, half ), at( t0, half ) ], out );
+			for ( const sign of [ - 1, 1 ] ) {
+
+				const o = [ 0, 0, 0 ];
+				o[ k ] = sign;
+				this.face( [ end( sign ), at( t0, sign * half ), at( t1, sign * half ) ], o );
+
+			}
+
+		}
+
 		return this;
 
 	}
@@ -471,13 +555,19 @@ function c32( was ) {
 function pedestals() {
 
 	const s = new Solid();
-	const { GRID_4, GRADE, p1, p2, sheave, base } = TAKE_UP;
+	const { GRID_4, GRADE, SHOW, p1, p2, sheave, base } = TAKE_UP;
 	const line = ( C32.x[ 0 ] + C32.x[ 1 ] ) / 2;
 	for ( const { size: [ along, across ], top, at } of [ p1, p2 ] ) for ( const [ d, a ] of at ) {
 
-		s.box( { x: [ line + a - across / 2, line + a + across / 2 ], l: [ GRID_4 + d - along / 2, GRID_4 + d + along / 2 ] }, [ base + GRADE, top + GRADE ] );
+		s.box( { x: [ line + a - across / 2, line + a + across / 2 ], l: [ GRID_4 + d - along / 2, GRID_4 + d + along / 2 ] }, [ base + GRADE, top + GRADE + ( top <= 3.825 ? SHOW : 0 ) ] );
 
 	}
+
+	// The pad, and the counterweight's concrete block in its tower.
+	const box = ( [ d0, d1 ], [ a0, a1 ], [ e0, e1 ] ) => s.box( { x: [ line + a0, line + a1 ], l: [ GRID_4 + d0, GRID_4 + d1 ] }, [ e0 + GRADE, e1 + GRADE ] );
+	const { pad, tower, counterweight: cw } = TAKE_UP;
+	box( pad.d, pad.a, [ pad.el[ 0 ], pad.el[ 1 ] + SHOW ] );
+	box( [ tower.d - cw.size[ 0 ] / 2, tower.d + cw.size[ 0 ] / 2 ], [ tower.a - cw.size[ 1 ] / 2, tower.a + cw.size[ 1 ] / 2 ], cw.el );
 
 	// The sheave anchor pedestal: its outline along the conveyor ( letter, el ), drawn across it.
 	const [ d0, d1 ] = sheave.d, [ e0, e1 ] = sheave.el, [ run, drop ] = sheave.chamfer;
@@ -501,11 +591,73 @@ function pedestals() {
 
 }
 
+// The take-up's steel: the counterweight tower, the counterweight's plates, channels, sheave and
+// rods, the hoist, and the anchor rods cast into the concrete, each with its nut.
+function takeUpSteel() {
+
+	const s = new Solid();
+	const { GRID_4, GRADE, tower, counterweight: cw, hoist, anchors, sheave } = TAKE_UP;
+	const line = ( C32.x[ 0 ] + C32.x[ 1 ] ) / 2;
+	const box = ( [ d0, d1 ], [ a0, a1 ], [ e0, e1 ] ) => s.box( { x: [ line + a0, line + a1 ], l: [ GRID_4 + d0, GRID_4 + d1 ] }, [ e0 + GRADE, e1 + GRADE ] );
+	const around = ( c, half ) => [ c - half, c + half ];
+	const P = ( d, a, el ) => [ line + a, el + GRADE, GRID_4 + d ];
+
+	// The tower: four legs, and a frame round their tops.
+	const [ ld, la ] = tower.legs, w = tower.leg / 2;
+	for ( const sd of [ - 1, 1 ] ) for ( const sa of [ - 1, 1 ] ) box( around( tower.d + sd * ld, w ), around( tower.a + sa * la, w ), tower.el );
+	const top = [ tower.el[ 1 ] - 0.2, tower.el[ 1 ] ];
+	for ( const sd of [ - 1, 1 ] ) box( around( tower.d + sd * ld, w ), [ tower.a - la - w, tower.a + la + w ], top );
+	for ( const sa of [ - 1, 1 ] ) box( [ tower.d - ld - w, tower.d + ld + w ], around( tower.a + sa * la, w ), top );
+
+	// The counterweight's plates, channels and sheave over its concrete.
+	const [ cl, ca ] = cw.size, [ e0, e1 ] = cw.el;
+	box( around( tower.d, cl / 2 ), around( tower.a, ca / 2 ), [ e1, e1 + cw.plates ] );
+	const [ ch, cwid ] = cw.channel, onTop = e1 + cw.plates;
+	for ( const sa of [ - 1, 1 ] ) box( around( tower.d, cl / 2 ), around( tower.a + sa * 0.2, cwid / 2 ), [ onTop, onTop + ch ] );
+	s.cylinder( P( tower.d, tower.a, onTop + ch + cw.sheave + 0.05 ), 'x', cw.sheave, 0.06 );
+	for ( const [ u, v ] of cw.rods.at ) box( around( tower.d + u, cw.rods.size / 2 ), around( tower.a + v, cw.rods.size / 2 ), [ e1 + cw.rods.proud - cw.rods.length, e1 + cw.rods.proud ] );
+
+	// The hoist on the pad: frame, drum (axle across) and motor beside it.
+	const [ fl, fa, fh ] = hoist.frame, pad = TAKE_UP.pad.el[ 1 ] + TAKE_UP.SHOW;
+	box( around( hoist.d, fl / 2 ), around( hoist.a, fa / 2 ), [ pad, pad + fh ] );
+	const [ dr, dh ] = hoist.drum;
+	s.cylinder( P( hoist.d - 0.15, hoist.a, pad + fh + dr + 0.1 ), 'x', dr, dh );
+	const [ ml, ma, mh ] = hoist.motor;
+	box( around( hoist.d + 0.35, ml / 2 ), around( hoist.a, ma / 2 ), [ pad + fh, pad + fh + mh ] );
+
+	// Anchor rods: where the concrete's top is under each, in, out, and a nut.
+	const sheaveTop = d => {
+
+		const [ d0 ] = sheave.d, [ run, drop ] = sheave.chamfer, e1 = sheave.el[ 1 ];
+		return d >= d0 + run ? e1 : e1 - drop + drop * ( d - d0 ) / run;
+
+	};
+	const topAt = ( name, d ) => name.startsWith( 'conveyor leg (P1' ) ? TAKE_UP.p1.top
+		: name.startsWith( 'conveyor leg (P2' ) ? TAKE_UP.p2.top + TAKE_UP.SHOW
+			: name === 'hoist frame' ? pad : sheaveTop( d );
+	for ( const { name, at: [ d, a ], turn = 0, size, embed, proud, rods } of anchors ) {
+
+		const t = turn * Math.PI / 180;
+		for ( const [ u, v ] of rods ) {
+
+			const rd = d + u * Math.cos( t ) - v * Math.sin( t ), ra = a + u * Math.sin( t ) + v * Math.cos( t );
+			const surface = topAt( name, rd );
+			box( around( rd, size / 2 ), around( ra, size / 2 ), [ surface - embed, surface + proud ] );
+			box( around( rd, size * 0.8 ), around( ra, size * 0.8 ), [ surface + proud - 0.06, surface + proud - 0.03 ] );
+
+		}
+
+	}
+
+	return s.layer();
+
+}
+
 // The site's layers ({ key: { positions, index } }, keys c31, pit, c32, steel and the rest) with
 // the structure put on the drawings' grid, and the beams as a layer of their own (beams).
 export function correctStructure( site ) {
 
-	return { ...site, pit: pit(), c31: gallery( site.c31 ), beams: beams(), steel: plates(), c32: c32( site.c32 ), pedestals: pedestals() };
+	return { ...site, pit: pit(), c31: gallery( site.c31 ), beams: beams(), steel: plates(), c32: c32( site.c32 ), pedestals: pedestals(), takeUpSteel: takeUpSteel() };
 
 }
 
