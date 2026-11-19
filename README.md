@@ -292,8 +292,14 @@ left as it came):
     mouth up past grid 1X (belt, stringers, idlers, its legs on the P2s), its secondary drive, primary
     drive, LT bend and take-up pulleys, the take-up carriage's 15° rails, the tower's columns at grids 3
     and 2 on rows A, A1 and B up to the take-up frame (EL 9.737), and at grids 1 and 1X up to the drive's
-    top steel (EL 12.578) with its platform at EL 7.45. The belt's width (1.2 m) and the members' sizes
-    aren't on these drawings and are drawn typical.
+    top steel (EL 12.578) with its platform at EL 7.45. In detail: a troughed belt on three-roll idlers
+    (35°) with return rolls and channel stringers, a walkway with handrails and toe board on the A side,
+    the conveyor's legs and bents, pulleys on shafts in pillow blocks with gearboxes and motors on the two
+    drive pulleys, the take-up carriage on its rails, wide-flange columns and beams with X-bracing, the
+    drive platform's handrails, the counterweight tower's bracing, top sheaves and caged ladder, and the
+    take-up rope reeved from the hoist over the tower's sheaves and round the counterweight to the take-up
+    sheave on the new anchor pedestal. The belt's width (1.2 m) and the members' sizes aren't on these
+    drawings and are drawn typical.
 
   Concrete in pale new concrete, steel in its own layer (*C32 take-up steel & embedded items*). Where grid 4
   is along C32 the drawings don't say: `TAKE_UP.GRID_4` in `scripts/b2d2-structure.mjs` puts it 4 m past

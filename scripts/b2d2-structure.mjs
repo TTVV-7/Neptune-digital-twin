@@ -303,6 +303,37 @@ class Solid {
 
 	}
 
+	// A round bar from p0 to p1 ( [ x, el, letter ] ), radius r, in n flat sides, its ends closed.
+	tube( p0, p1, r, n = 8 ) {
+
+		const u = p1.map( ( v, k ) => v - p0[ k ] );
+		const len = Math.hypot( ...u );
+		if ( len < 1e-6 ) return this;
+		const ax = u.map( v => v / len );
+		const pick = Math.abs( ax[ 1 ] ) < 0.9 ? [ 0, 1, 0 ] : [ 1, 0, 0 ];
+		const cross = ( a, b ) => [ a[ 1 ] * b[ 2 ] - a[ 2 ] * b[ 1 ], a[ 2 ] * b[ 0 ] - a[ 0 ] * b[ 2 ], a[ 0 ] * b[ 1 ] - a[ 1 ] * b[ 0 ] ];
+		const norm = a => {
+
+			const l = Math.hypot( ...a );
+			return a.map( v => v / l );
+
+		};
+		const v = norm( cross( ax, pick ) ), w = cross( ax, v );
+		const ring = ( c, t ) => c.map( ( x, k ) => x + r * ( Math.cos( t ) * v[ k ] + Math.sin( t ) * w[ k ] ) );
+		for ( let m = 0; m < n; m ++ ) {
+
+			const t0 = m / n * Math.PI * 2, t1 = ( m + 1 ) / n * Math.PI * 2, tm = ( t0 + t1 ) / 2;
+			const out = v.map( ( x, k ) => Math.cos( tm ) * x + Math.sin( tm ) * w[ k ] );
+			this.face( [ ring( p0, t0 ), ring( p0, t1 ), ring( p1, t1 ), ring( p1, t0 ) ], out );
+			this.face( [ p0, ring( p0, t0 ), ring( p0, t1 ) ], ax.map( x => - x ) );
+			this.face( [ p1, ring( p1, t0 ), ring( p1, t1 ) ], ax );
+
+		}
+
+		return this;
+
+	}
+
 	// Six faces through eight corners [ x, el, letter ]: the bottom four in order round, then the
 	// top four above them. Each face looks away from the middle.
 	brick( corners ) {
@@ -742,70 +773,258 @@ function takeUpSteel() {
 
 }
 
-// The existing structures round C32's take-up: the conveyor (belt, stringers, idlers, its legs on
-// the new P2s and its pulleys) and the tower steel (columns, the take-up carriage's rails, the drive's
-// platform and top steel).
+// The existing structures round C32's take-up, with their detail: the conveyor (troughed belt on
+// three-roll idlers, return rolls, channel stringers, a walkway with handrails on the A side, its
+// legs), the drive (pulleys on shafts in pillow blocks, gearboxes and motors on the drive pulleys),
+// the take-up (its carriage on 15° rails, the rope reeved from the hoist over the counterweight
+// tower's sheaves and round the counterweight to the take-up sheave), and the steel (wide-flange
+// columns and beams, X-bracing, the drive's platform and handrails, the counterweight tower's
+// bracing, top sheaves and ladder). Sizes the drawings don't give are typical.
 function takeUpSurroundings() {
 
-	const { GRID_4, GRADE, grids, conveyor: cv, pulleys, carriage, steel, p2 } = TAKE_UP;
+	const { GRID_4, GRADE, SHOW, grids, conveyor: cv, pulleys, carriage, steel, p1, p2, tower, hoist, pad, counterweight: cw } = TAKE_UP;
 	const line = ( C32.x[ 0 ] + C32.x[ 1 ] ) / 2;
 	const P = ( d, a, el ) => [ line + a, el + GRADE, GRID_4 + d ];
 	const tan = Math.tan( cv.slope * Math.PI / 180 );
 	const belt = d => cv.el + d * tan;
-	const s = new Solid(), rubber = new Solid();
-	// An inclined strip along the conveyor from d0 to d1, across a0 to a1, its top `drop` under the
-	// belt's top, `t` thick.
-	const strip = ( solid, [ d0, d1 ], [ a0, a1 ], drop, t ) => solid.brick( [
-		P( d0, a0, belt( d0 ) - drop - t ), P( d1, a0, belt( d1 ) - drop - t ), P( d1, a1, belt( d1 ) - drop - t ), P( d0, a1, belt( d0 ) - drop - t ),
-		P( d0, a0, belt( d0 ) - drop ), P( d1, a0, belt( d1 ) - drop ), P( d1, a1, belt( d1 ) - drop ), P( d0, a1, belt( d0 ) - drop ),
-	] );
-	const span = [ cv.from, cv.to ], half = cv.belt / 2;
-	// The belt, carrying and returning; the stringers.
-	strip( rubber, span, [ - half, half ], 0, 0.02 );
-	strip( rubber, span, [ - half, half ], cv.returnDrop, 0.02 );
-	for ( const sa of [ - 1, 1 ] ) strip( s, span, [ sa * cv.stringers - 0.04, sa * cv.stringers + 0.04 ], cv.carryDrop + 0.05, 0.2 );
-	// Idlers: a roll across under the belt every `idlers` m, and a return roll under that.
-	for ( let d = cv.from + 0.6; d < cv.to; d += cv.idlers ) {
+	const s = new Solid(), rubber = new Solid(), yellow = new Solid();
+	const ground = 3.825;
+	// A box between two corners ( d, a, el ).
+	const box = ( solid, [ d0, a0, e0 ], [ d1, a1, e1 ] ) => solid.box( { x: [ line + Math.min( a0, a1 ), line + Math.max( a0, a1 ) ], l: [ GRID_4 + Math.min( d0, d1 ), GRID_4 + Math.max( d0, d1 ) ] }, [ Math.min( e0, e1 ) + GRADE, Math.max( e0, e1 ) + GRADE ] );
+	// Along the conveyor, from d0 to d1: a solid whose cross-section ( a, height over the idlers'
+	// line ) is the quad q, following the slope.
+	const along = ( solid, [ d0, d1 ], [ q0, q1, q2, q3 ] ) => {
 
-		s.cylinder( P( d, 0, belt( d ) - 0.07 ), 'x', 0.065, half );
-		s.cylinder( P( d, 0, belt( d ) - cv.returnDrop - 0.09 ), 'x', 0.065, half );
+		const at = ( d, [ a, h ] ) => P( d, a, belt( d ) + h );
+		solid.brick( [ at( d0, q0 ), at( d1, q0 ), at( d1, q1 ), at( d0, q1 ), at( d0, q3 ), at( d1, q3 ), at( d1, q2 ), at( d0, q2 ) ] );
+
+	};
+
+	// ---- The conveyor ----
+	// Heights under the belt's top line ( belt() ): the carrying idlers' centre roll, its wings at
+	// 35°, the return roll, the stringers.
+	const centre = - 0.25, wing = 0.42, trough = 35 * Math.PI / 180, roll = 0.065, half = 0.2;
+	const wingEnd = [ half + wing * Math.cos( trough ), centre + wing * Math.sin( trough ) ];
+	const ret = centre - 0.6, stringer = [ 0.72, centre - 0.32, centre - 0.12 ];
+	const span = [ cv.from, cv.to ];
+	// The belt, troughed over the idlers (its centre and two wings, 12 mm), and returning flat.
+	const t = 0.012, on = centre + roll;
+	along( rubber, span, [ [ - half, on ], [ half, on ], [ half, on + t ], [ - half, on + t ] ] );
+	for ( const sa of [ - 1, 1 ] ) {
+
+		const a0 = sa * half, a1 = sa * ( wingEnd[ 0 ] + 0.02 ), h1 = wingEnd[ 1 ] + roll;
+		along( rubber, span, [ [ a0, on ], [ a1, h1 ], [ a1, h1 + t ], [ a0, on + t ] ] );
 
 	}
 
-	// Its legs on the new P2s, up to the stringers.
-	for ( const [ d, a ] of p2.at ) {
+	along( rubber, span, [ [ - wingEnd[ 0 ], ret + roll ], [ wingEnd[ 0 ], ret + roll ], [ wingEnd[ 0 ], ret + roll + t ], [ - wingEnd[ 0 ], ret + roll + t ] ] );
+	// Channel stringers either side: web and flanges.
+	for ( const sa of [ - 1, 1 ] ) {
 
-		const side = Math.sign( a ) * cv.stringers;
-		s.box( { x: [ line + side - 0.05, line + side + 0.05 ], l: [ GRID_4 + d - 0.05, GRID_4 + d + 0.05 ] }, [ p2.top + GRADE + TAKE_UP.SHOW, belt( d ) - cv.carryDrop - 0.25 + GRADE ] );
+		const a = sa * stringer[ 0 ];
+		along( s, span, [ [ a - 0.005, stringer[ 1 ] ], [ a + 0.005, stringer[ 1 ] ], [ a + 0.005, stringer[ 2 ] ], [ a - 0.005, stringer[ 2 ] ] ] );
+		for ( const h of [ stringer[ 1 ], stringer[ 2 ] - 0.01 ] ) along( s, span, [ [ a - sa * 0.075, h ], [ a, h ], [ a, h + 0.01 ], [ a - sa * 0.075, h + 0.01 ] ] );
 
 	}
 
-	// Pulleys, their shafts across.
-	for ( const { at: [ d, el, r ] } of pulleys ) s.cylinder( P( d, 0, el ), 'x', r, half + 0.1 );
-	// The take-up carriage's rails.
+	// Idler sets every `idlers` m: three carrying rolls on a frame across the stringers, and a
+	// return roll every other one.
+	let k = 0;
+	for ( let d = cv.from + 0.6; d < cv.to; d += cv.idlers, k ++ ) {
+
+		const at = ( a, h ) => P( d, a, belt( d ) + h );
+		s.tube( at( - half, centre ), at( half, centre ), roll, 10 );
+		for ( const sa of [ - 1, 1 ] ) s.tube( at( sa * ( half + 0.02 ), centre + 0.01 ), at( sa * wingEnd[ 0 ], wingEnd[ 1 ] ), roll, 10 );
+		box( s, [ d - 0.04, - stringer[ 0 ], belt( d ) + centre - 0.14 ], [ d + 0.04, stringer[ 0 ], belt( d ) + centre - 0.08 ] );
+		for ( const sa of [ - 1, 1 ] ) box( s, [ d - 0.03, sa * ( wingEnd[ 0 ] + 0.04 ) - 0.02, belt( d ) + centre - 0.14 ], [ d + 0.03, sa * ( wingEnd[ 0 ] + 0.04 ) + 0.02, belt( d ) + wingEnd[ 1 ] ] );
+		if ( k % 2 === 0 ) {
+
+			s.tube( at( - wingEnd[ 0 ], ret ), at( wingEnd[ 0 ], ret ), roll, 10 );
+			for ( const sa of [ - 1, 1 ] ) box( s, [ d - 0.02, sa * stringer[ 0 ] - 0.01, belt( d ) + ret - 0.05 ], [ d + 0.02, sa * stringer[ 0 ] + 0.01, belt( d ) + stringer[ 1 ] ] );
+
+		}
+
+	}
+
+	// The walkway on the A side, from past the tunnel's mouth up to the take-up frame: a grating
+	// deck, its handrail (posts every 1.5 m, top and mid rails, toe board) on the outer edge.
+	const walk = [ cv.from + 1, grids.d[ '2' ] ], deck = [ 0.85, 1.65 ], under = stringer[ 1 ] - 0.05;
+	along( s, walk, [ [ deck[ 0 ], under - 0.05 ], [ deck[ 1 ], under - 0.05 ], [ deck[ 1 ], under ], [ deck[ 0 ], under ] ] );
+	for ( const a of deck ) along( s, walk, [ [ a - 0.04, under - 0.2 ], [ a + 0.04, under - 0.2 ], [ a + 0.04, under - 0.05 ], [ a - 0.04, under - 0.05 ] ] );
+	for ( let d = walk[ 0 ]; d <= walk[ 1 ] + 1e-6; d += 1.5 ) {
+
+		box( s, [ d - 0.04, stringer[ 0 ], belt( d ) + under - 0.17 ], [ d + 0.04, deck[ 1 ], belt( d ) + under - 0.11 ] );
+		yellow.tube( P( d, deck[ 1 ] - 0.03, belt( d ) + under ), P( d, deck[ 1 ] - 0.03, belt( d ) + under + 1.07 ), 0.024, 8 );
+
+	}
+
+	for ( const h of [ 0.53, 1.07 ] ) yellow.tube( P( walk[ 0 ], deck[ 1 ] - 0.03, belt( walk[ 0 ] ) + under + h ), P( walk[ 1 ], deck[ 1 ] - 0.03, belt( walk[ 1 ] ) + under + h ), 0.021, 8 );
+	along( yellow, walk, [ [ deck[ 1 ] - 0.01, under ], [ deck[ 1 ], under ], [ deck[ 1 ], under + 0.1 ], [ deck[ 1 ] - 0.01, under + 0.1 ] ] );
+
+	// Its legs: on the new P2s and P1s, and bents of two legs and a tie every 3 m from the tunnel's
+	// mouth to the take-up frame where nothing else carries it.
+	const leg = ( d, a, foot ) => {
+
+		const top = belt( d ) + stringer[ 1 ];
+		box( s, [ d - 0.06, a - 0.06, foot ], [ d + 0.06, a + 0.06, top ] );
+		box( s, [ d - 0.15, a - 0.15, foot ], [ d + 0.15, a + 0.15, foot + 0.02 ] );
+
+	};
+	for ( const [ d, a ] of p2.at ) leg( d, Math.sign( a ) * stringer[ 0 ], p2.top + SHOW );
+	for ( const [ d ] of p1.at ) leg( d, - stringer[ 0 ], p1.top );
+	for ( const d of [ - 2.5, 4.4 ] ) {
+
+		for ( const sa of [ - 1, 1 ] ) leg( d, sa * stringer[ 0 ], ground + SHOW );
+		box( s, [ d - 0.04, - stringer[ 0 ], ground + 1 ], [ d + 0.04, stringer[ 0 ], ground + 1.08 ] );
+
+	}
+
+	// ---- Pulleys and the drive ----
+	const shaft = cv.belt / 2 + 0.35;
+	for ( const { at: [ d, el, r ] } of pulleys ) {
+
+		s.cylinder( P( d, 0, el ), 'x', r, cv.belt / 2 + 0.05, 24 );
+		s.tube( P( d, - shaft, el ), P( d, shaft, el ), 0.07, 12 );
+		for ( const sa of [ - 1, 1 ] ) box( s, [ d - 0.15, sa * ( shaft - 0.12 ) - 0.09, el - 0.2 ], [ d + 0.15, sa * ( shaft - 0.12 ) + 0.09, el + 0.08 ] );
+
+	}
+
+	// Gearboxes and motors on the two drive pulleys, on the B side, on the platform.
+	for ( const { at: [ d, el ] } of pulleys.slice( 0, 2 ) ) {
+
+		box( s, [ d - 0.4, - shaft - 0.7, el - 0.45 ], [ d + 0.4, - shaft, el + 0.35 ] );
+		s.tube( P( d - 0.15, - shaft - 0.35, el - 0.05 ), P( d - 1.15, - shaft - 0.35, el - 0.05 ), 0.25, 16 );
+		box( s, [ d - 1.25, - shaft - 0.65, steel.platform ], [ d + 0.45, - shaft - 0.05, el - 0.45 ] );
+
+	}
+
+	// The take-up carriage: side frames either side of the take-up pulley, on the rails.
+	const tp = pulleys[ 3 ].at;
 	const [ [ f0, e0 ], [ f1, e1 ] ] = [ carriage.from, carriage.to ];
+	const rail = d => e0 + ( d - f0 ) * ( e1 - e0 ) / ( f1 - f0 );
 	for ( const sa of [ - 1, 1 ] ) {
 
 		const a = sa * carriage.apart / 2;
 		s.brick( [ P( f0, a - 0.05, e0 - 0.2 ), P( f1, a - 0.05, e1 - 0.2 ), P( f1, a + 0.05, e1 - 0.2 ), P( f0, a + 0.05, e0 - 0.2 ),
 			P( f0, a - 0.05, e0 ), P( f1, a - 0.05, e1 ), P( f1, a + 0.05, e1 ), P( f0, a + 0.05, e0 ) ] );
+		box( s, [ tp[ 0 ] - 0.7, sa * ( shaft - 0.05 ) - 0.01, rail( tp[ 0 ] ) ], [ tp[ 0 ] + 0.7, sa * ( shaft - 0.05 ) + 0.01, tp[ 1 ] + 0.15 ] );
+		for ( const w of [ - 0.5, 0.5 ] ) s.cylinder( P( tp[ 0 ] + w, a, rail( tp[ 0 ] + w ) + 0.08 ), 'x', 0.08, 0.04, 12 );
 
 	}
 
-	// The tower's columns, and a frame along each row at their tops.
-	const col = steel.column / 2;
-	const column = ( d, a, top ) => s.box( { x: [ line + a - col, line + a + col ], l: [ GRID_4 + d - col, GRID_4 + d + col ] }, [ 3.825 + GRADE, top + GRADE ] );
-	const beam = ( [ d0, d1 ], [ a0, a1 ], el ) => s.box( { x: [ line + Math.min( a0, a1 ) - col, line + Math.max( a0, a1 ) + col ], l: [ GRID_4 + Math.min( d0, d1 ) - col, GRID_4 + Math.max( d0, d1 ) + col ] }, [ el - 0.3 + GRADE, el + GRADE ] );
+	// The rails' supports down to the ground every 2 m.
+	for ( let d = f0 + 0.3; d < f1; d += 2 ) for ( const sa of [ - 1, 1 ] ) box( s, [ d - 0.05, sa * carriage.apart / 2 - 0.05, ground + SHOW ], [ d + 0.05, sa * carriage.apart / 2 + 0.05, rail( d ) - 0.2 ] );
+
+	// ---- The tower steel ----
+	// A wide-flange column (flanges across the conveyor) and beam (flanges up and down).
+	const W = { depth: 0.25, flange: 0.25, tf: 0.016, tw: 0.01 };
+	const column = ( d, a, top ) => {
+
+		const [ h, b ] = [ W.depth / 2, W.flange / 2 ];
+		for ( const sd of [ - 1, 1 ] ) box( s, [ d + sd * h - ( sd > 0 ? W.tf : 0 ), a - b, ground + SHOW ], [ d + sd * h + ( sd < 0 ? W.tf : 0 ), a + b, top ] );
+		box( s, [ d - h, a - W.tw / 2, ground + SHOW ], [ d + h, a + W.tw / 2, top ] );
+		box( s, [ d - 0.25, a - 0.25, ground + SHOW ], [ d + 0.25, a + 0.25, ground + SHOW + 0.025 ] );
+
+	};
+	const beam = ( [ d0, a0 ], [ d1, a1 ], el ) => {
+
+		const b = W.flange / 2, alongD = Math.abs( d1 - d0 ) > Math.abs( a1 - a0 );
+		// Flanges and web, from one end to the other, `lo` to `hi` across the beam's line.
+		const part = ( e0, e1, lo, hi ) => alongD
+			? box( s, [ Math.min( d0, d1 ), a0 + lo, e0 ], [ Math.max( d0, d1 ), a0 + hi, e1 ] )
+			: box( s, [ d0 + lo, Math.min( a0, a1 ), e0 ], [ d0 + hi, Math.max( a0, a1 ), e1 ] );
+		part( el - W.tf, el, - b, b );
+		part( el - W.depth, el - W.depth + W.tf, - b, b );
+		part( el - W.depth, el, - W.tw / 2, W.tw / 2 );
+
+	};
+	// X-bracing between two columns' faces, in a bay from el0 to el1.
+	const brace = ( [ d0, a0 ], [ d1, a1 ], el0, el1 ) => {
+
+		s.tube( P( d0, a0, el0 ), P( d1, a1, el1 ), 0.035, 6 );
+		s.tube( P( d0, a0, el1 ), P( d1, a1, el0 ), 0.035, 6 );
+
+	};
 	const { d: gd, a: ga } = grids;
-	for ( const g of [ '3', '2' ] ) for ( const r of [ 'A', 'A1', 'B' ] ) column( gd[ g ], ga[ r ], steel.takeUpTop );
-	for ( const g of [ '1', '1X' ] ) for ( const r of [ 'A1', 'B' ] ) column( gd[ g ], ga[ r ], steel.driveTop );
-	for ( const g of [ '3', '2' ] ) beam( [ gd[ g ], gd[ g ] ], [ ga.A, ga.B ], steel.takeUpTop );
-	for ( const r of [ 'A', 'A1', 'B' ] ) beam( [ gd[ '3' ], gd[ '2' ] ], [ ga[ r ], ga[ r ] ], steel.takeUpTop );
-	for ( const r of [ 'A1', 'B' ] ) beam( [ gd[ '1' ], gd[ '1X' ] ], [ ga[ r ], ga[ r ] ], steel.driveTop );
-	for ( const g of [ '1', '1X' ] ) beam( [ gd[ g ], gd[ g ] ], [ ga.A1, ga.B ], steel.driveTop );
-	// The drive's platform, grid 2 to 1X between rows A1 and B.
-	s.box( { x: [ line + ga.B, line + ga.A1 ], l: [ GRID_4 + gd[ '2' ], GRID_4 + gd[ '1X' ] ] }, [ steel.platform - 0.05 + GRADE, steel.platform + GRADE ] );
-	return { takeUpExisting: s.layer(), takeUpBelt: rubber.layer() };
+	const frame = ( gs, rows, top ) => {
+
+		for ( const g of gs ) for ( const r of rows ) column( gd[ g ], ga[ r ], top );
+		for ( const g of gs ) beam( [ gd[ g ], ga[ rows[ 0 ] ] ], [ gd[ g ], ga[ rows.at( - 1 ) ] ], top );
+		for ( const r of rows ) beam( [ gd[ gs[ 0 ] ], ga[ r ] ], [ gd[ gs[ 1 ] ], ga[ r ] ], top );
+		// Bracing in the outer rows' bays, along, and across the outer grid lines, in two tiers.
+		const mid = ( ground + top ) / 2;
+		for ( const r of [ rows[ 0 ], rows.at( - 1 ) ] ) for ( const [ e0, e1 ] of [ [ ground + 0.3, mid ], [ mid, top - 0.3 ] ] ) brace( [ gd[ gs[ 0 ] ], ga[ r ] ], [ gd[ gs[ 1 ] ], ga[ r ] ], e0, e1 );
+		for ( const g of gs ) for ( let i = 0; i + 1 < rows.length; i ++ ) brace( [ gd[ g ], ga[ rows[ i ] ] ], [ gd[ g ], ga[ rows[ i + 1 ] ] ], ground + 0.3, mid );
+
+	};
+	frame( [ '3', '2' ], [ 'A', 'A1', 'B' ], steel.takeUpTop );
+	frame( [ '1', '1X' ], [ 'A1', 'B' ], steel.driveTop );
+	// The drive's platform (grating on beams), grid 2 to 1X between rows A1 and B, with handrails.
+	box( s, [ gd[ '2' ], ga.B, steel.platform - 0.05 ], [ gd[ '1X' ], ga.A1, steel.platform ] );
+	for ( const r of [ 'A1', 'B' ] ) beam( [ gd[ '2' ], ga[ r ] ], [ gd[ '1X' ], ga[ r ] ], steel.platform - 0.05 );
+	for ( const sa of [ ga.A1 - 0.05, ga.B + 0.05 ] ) {
+
+		for ( let d = gd[ '2' ]; d <= gd[ '1X' ] + 1e-6; d += ( gd[ '1X' ] - gd[ '2' ] ) / 6 ) yellow.tube( P( d, sa, steel.platform ), P( d, sa, steel.platform + 1.07 ), 0.024, 8 );
+		for ( const h of [ 0.53, 1.07 ] ) yellow.tube( P( gd[ '2' ], sa, steel.platform + h ), P( gd[ '1X' ], sa, steel.platform + h ), 0.021, 8 );
+
+	}
+
+	// ---- The counterweight tower: bracing, top sheaves, ladder, the rope ----
+	const [ ld, la ] = tower.legs, top = tower.el[ 1 ];
+	for ( let e = tower.el[ 0 ] + 0.4; e + 2 < top; e += 2.3 ) {
+
+		for ( const sd of [ - 1, 1 ] ) brace( [ tower.d + sd * ld, tower.a - la ], [ tower.d + sd * ld, tower.a + la ], e, e + 2.3 );
+		for ( const sa of [ - 1, 1 ] ) brace( [ tower.d - ld, tower.a + sa * la ], [ tower.d + ld, tower.a + sa * la ], e, e + 2.3 );
+
+	}
+
+	// Two sheaves on the top frame, 710 apart along the conveyor, their axles across.
+	const sheaveR = 0.35, topSheaves = [ - 0.355, 0.355 ].map( u => [ tower.d + u, top + sheaveR + 0.05 ] );
+	for ( const [ d, el ] of topSheaves ) {
+
+		s.cylinder( P( d, tower.a, el ), 'x', sheaveR, 0.06, 24 );
+		for ( const sa of [ - 1, 1 ] ) box( s, [ d - 0.12, tower.a + sa * 0.14 - 0.02, top ], [ d + 0.12, tower.a + sa * 0.14 + 0.02, el + 0.06 ] );
+
+	}
+
+	// A ladder up the tower's face toward B, from the ground to its top.
+	const ladderA = tower.a - la - 0.35;
+	for ( const u of [ - 0.22, 0.22 ] ) s.tube( P( tower.d + u, ladderA, ground + SHOW ), P( tower.d + u, ladderA, top + 1.0 ), 0.03, 6 );
+	for ( let e = ground + 0.3; e < top + 0.9; e += 0.3 ) s.tube( P( tower.d - 0.22, ladderA, e ), P( tower.d + 0.22, ladderA, e ), 0.012, 6 );
+	for ( let e = ground + 2.4; e < top + 0.9; e += 1.2 ) for ( const [ a0, a1 ] of [ [ ladderA, ladderA - 0.7 ] ] ) {
+
+		yellow.tube( P( tower.d - 0.35, a0, e ), P( tower.d - 0.35, a1, e ), 0.015, 6 );
+		yellow.tube( P( tower.d + 0.35, a0, e ), P( tower.d + 0.35, a1, e ), 0.015, 6 );
+		yellow.tube( P( tower.d - 0.35, a1, e ), P( tower.d + 0.35, a1, e ), 0.015, 6 );
+
+	}
+
+	// The take-up rope (25 mm): off the hoist's drum, up over the tower's first top sheave, down round
+	// the counterweight's sheave, up over the second, down to a sheave at the tower's foot, across
+	// to the take-up sheave on the new sheave anchor pedestal, and up the rails to the carriage.
+	const rope = 0.0125, R = ( d, a, el ) => P( d, a, el );
+	const drumTop = [ hoist.d - 0.15, hoist.a, pad.el[ 1 ] + SHOW + hoist.frame[ 2 ] + hoist.drum[ 0 ] * 2 + 0.1 ];
+	const [ s1, s2 ] = topSheaves;
+	const cwSheave = cw.el[ 1 ] + cw.plates + cw.channel[ 0 ] + cw.sheave + 0.05;
+	const foot = [ tower.d - 0.355, tower.a, ground + 0.6 ];
+	const takeUpSheave = [ 0.77, 0.36, 5.325 + 0.35 ];
+	const path = [
+		drumTop,
+		[ s2[ 0 ] + sheaveR, tower.a, s2[ 1 ] ],
+		[ s2[ 0 ] - sheaveR, tower.a, s2[ 1 ] ],
+		[ tower.d + cw.sheave, tower.a, cwSheave ],
+		[ tower.d - cw.sheave, tower.a, cwSheave ],
+		[ s1[ 0 ] + sheaveR, tower.a, s1[ 1 ] ],
+		[ s1[ 0 ] - sheaveR, tower.a, s1[ 1 ] ],
+		foot,
+		takeUpSheave,
+		[ tp[ 0 ] - 0.75, 0, rail( tp[ 0 ] - 0.75 ) + 0.1 ],
+	];
+	// Over a sheave the rope runs across its top (the pair of points either side); elsewhere straight.
+	for ( let i = 0; i + 1 < path.length; i ++ ) rubber.tube( R( ...path[ i ] ), R( ...path[ i + 1 ] ), rope, 6 );
+	s.cylinder( P( foot[ 0 ], foot[ 1 ], foot[ 2 ] ), 'x', 0.3, 0.05, 20 );
+	s.cylinder( P( ...takeUpSheave.slice( 0, 2 ), takeUpSheave[ 2 ] - 0.3 ), 'x', 0.3, 0.05, 20 );
+	return { takeUpExisting: s.layer(), takeUpBelt: rubber.layer(), takeUpRails: yellow.layer() };
 
 }
 

@@ -71,7 +71,8 @@ const STRUCTURE = {
 	takeUpSteel: { name: 'C32 take-up steel & embedded items', color: '#7d8691', metal: true },
 	// The existing structures round it: the conveyor's steel and the tower steel, and its belt.
 	takeUpExisting: { name: 'C32 conveyor & take-up tower (existing)', color: '#7f8c99' },
-	takeUpBelt: { name: 'C32 belt', color: '#26282b' },
+	takeUpBelt: { name: 'C32 belt & take-up rope', color: '#26282b' },
+	takeUpRails: { name: 'C32 take-up handrails & ladder cage', color: '#e3b62a' },
 	// What's being demolished there, see-through so the new work shows through it: the asphalt and
 	// the concrete broken out where the new foundations go, and the existing pedestals.
 	demoAsphalt: { name: 'To demolish: asphalt', color: '#1f1f1f', alpha: 0.6 },
