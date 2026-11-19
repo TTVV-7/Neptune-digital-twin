@@ -154,6 +154,7 @@ export function createLegend( { controls, driver, player, models, getSidebar, ge
 			[ [ 'W', 'A', 'S', 'D' ], 'Move · Shift runs' ],
 			[ [ 'Space' ], 'Jump' ],
 			[ [ 'C' ], player?.thirdPerson ? 'Camera: first person' : 'Camera: third person' ],
+			[ [ 'K' ], `Character: ${ player?.character?.name ?? '' }` ],
 			[ [ 'F' ], 'Fly' ],
 			...look(),
 			...zoom,

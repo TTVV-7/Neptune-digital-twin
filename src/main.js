@@ -314,7 +314,7 @@ function start( apiKey, keySource ) {
 	} );
 
 	// Walking as a construction worker: third person behind him, or first person (C).
-	const player = setUpPlayer( { scene, camera, controls, driver, getColliders: () => [ ...grounds, models.group ] } );
+	const player = setUpPlayer( { scene, camera, controls, driver, getColliders: () => [ ...grounds, models.group ], toast } );
 	const legend = createLegend( { controls, driver, player, models, getSidebar: () => sidebar, getDriving: () => driving, getLayers: () => layers, getUnderground: () => underground, toggleHelp } );
 	setUpZoom( { canvas: renderer.domElement, camera, controls, driver, getColliders: () => [ ...grounds, models.group ] } );
 
