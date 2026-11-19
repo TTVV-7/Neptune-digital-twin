@@ -22,12 +22,15 @@ export function setUpScoring( dialog, openers, { onOpen = null } = {} ) {
 		`<li><b>Multiplier.</b> The jump's points are then multiplied by your multiplier (the ×2, ×3 by your score). Each trick landed puts it up by one, to ×${ multMax }. It drops back to ×1 after ${ chainTime } s on the ground without landing a trick, so keep them coming.</li>`,
 		`<li><b>Bigger is better.</b> Two spins (360°) score twice one; a double backflip twice a backflip. Flips are worth the most, then rolls, then spins.</li>`,
 		`<li><b>The plane</b> (<kbd>F</kbd> or <kbd>T</kbd>) is for looking round: nothing scores while you're one, and landing starts a new run.</li>`,
-		`<li><b>On the Moon</b> jumps last longer, so turns are worth less (by as much as the jump is longer) and big air counts the time the same jump would take on the Earth.</li>`,
+		`<li><b>Off the Earth</b> (the Moon, Mars, Vesta, Ceres) jumps last longer, so turns are worth less (by as much as the jump is longer) and big air counts the time the same jump would take on the Earth.</li>`,
 		`<li><b>Bonus.</b> Each trick landed tops up the booster by ${ Math.round( gauge * 100 ) }%, and landing going forward gives a burst of speed.</li>`,
 		`<li><b>Your score</b> is the run's total, from dropping in until you change ride or place. The leaderboard keeps your best run.</li>`,
 	].join( '' );
 
 	dialog.querySelector( '.close' )?.addEventListener( 'click', () => dialog.close() );
+	// Keys pressed here are the dialog's, not the game's: Esc closes it, M doesn't go to the globe
+	// with it left open over it.
+	dialog.addEventListener( 'keydown', e => e.stopPropagation() );
 	for ( const opener of openers ) opener?.addEventListener( 'click', () => {
 
 		onOpen?.();

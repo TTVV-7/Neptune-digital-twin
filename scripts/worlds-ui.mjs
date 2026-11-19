@@ -1,6 +1,9 @@
 // The panel's Worlds button and the orrery it opens (src/drive-app/orrery.js), for the browser
 // suites that change worlds through the page as a player does: test-drive-ui.mjs, moon-ui, mars-ui,
-// asteroids-ui and test-drive-orrery-ui.mjs. Each takes a Playwright page on the globe.
+// asteroids-ui and test-drive-orrery-ui.mjs. Each takes a Playwright page on the globe. And the Earth's
+// hop (HOP), which those on other worlds measure theirs against.
+
+import { readFileSync } from 'node:fs';
 
 export const OPENER = '#globe-ui .worlds-open';
 export const ORRERY = '#orrery';
@@ -34,3 +37,12 @@ export async function pickWorld( page, id, { tap = false } = {} ) {
 
 // The world the Worlds button says the game is on.
 export const worldShown = page => page.locator( OPENER ).getAttribute( 'data-world' );
+
+// A hop (Space, tapped) on the Earth, for the suites that hop on another world (moon-ui, mars-ui,
+// asteroids-ui): it leaves the ground at src/drive.js's JUMP_SPEED m/s (read from its source, so
+// they follow it), goes `high` m up and is `time` s in the air. Under g times the Earth's gravity it
+// leaves at JUMP_SPEED × √g, goes as high, and stays up 1 / √g times as long.
+const JUMP = /^const JUMP_SPEED = ([\d.]+);$/m.exec( readFileSync( new URL( '../src/drive.js', import.meta.url ), 'utf8' ) );
+if ( ! JUMP ) throw new Error( 'worlds-ui.mjs: no JUMP_SPEED in src/drive.js' );
+const SPEED = Number( JUMP[ 1 ] );
+export const HOP = Object.freeze( { speed: SPEED, high: SPEED ** 2 / ( 2 * 9.81 ), time: 2 * SPEED / 9.81 } );

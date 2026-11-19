@@ -33,6 +33,7 @@ import { DECALS, FINISHES, FLAMES, GLOWS, HORNS, RIMS, SMOKES, SWATCHES, TRAILS,
 import { SPOTS } from '../src/drive-app/places.js';
 import { makeVisit } from '../worker/drive/visits.js';
 import { featList, featRows, featsOf, playersOf, ridesSql } from '../worker/drive/achievements.js';
+import { mergeTallies as mergePlayerTallies } from '../worker/drive/accounts.js';
 import {
 	ACHIEVEMENTS, CLAIM_TALLY, COUNTS, PLACINGS, RIDE_FEATS, TALLY_DAY,
 	addTallies, checkTallies, claimTallies, crossed, countsOf, hasTallies, mergeTallies, progressLine, readTallies, rideFeat,
@@ -1344,7 +1345,8 @@ describe( 'Levels: the Worker', () => {
 		const [ kept ] = server.d1( `SELECT xp, streak_day, streak, parties, tallies FROM players WHERE id = '${ older.id }'` );
 		assert.deepEqual( { ...kept, tallies: JSON.parse( kept.tallies ) }, {
 			xp: 500, streak_day: '2026-10-31', streak: 2, parties: 4,
-			tallies: { km: 40, moon: 5, looks: 1, rides: [ 'go-kart', 'pickup-truck' ], streak: 9, run: 2, runDay: '2026-10-31', day: '2026-10-20', today: { km: 1, moon: 0, looks: 0, rides: 0 } },
+			// readTallies' shape: every world's count (Mars, Vesta and Ceres at 0 here), today's too.
+			tallies: { km: 40, moon: 5, mars: 0, vesta: 0, ceres: 0, looks: 1, rides: [ 'go-kart', 'pickup-truck' ], streak: 9, run: 2, runDay: '2026-10-31', day: '2026-10-20', today: { km: 1, moon: 0, mars: 0, vesta: 0, ceres: 0, looks: 0, rides: 0 } },
 		} );
 		assert.equal( server.d1( `SELECT COUNT(*) AS n FROM players WHERE account_id = ( SELECT account_id FROM players WHERE id = '${ older.id }' )` )[ 0 ].n, 1 );
 
@@ -1488,6 +1490,11 @@ describe( 'Achievements: the rules', () => {
 			assert.deepEqual( [ taken[ world ], taken.today[ world ], taken.mars, taken.today.mars ], [ 4, 4, 2, 1 ] );
 
 		}
+
+		// Two players made one (signing in: accounts.js's mergePlayers): the more of each world's drives,
+		// Mars, Vesta and Ceres as the Moon, so the player folded in loses none of its progress.
+		const kept = mergePlayerTallies( readTallies( { km: 3, moon: 1, mars: 2 } ), readTallies( { km: 2, moon: 4, mars: 9, vesta: 4, ceres: 7, looks: 2 } ) );
+		assert.deepEqual( [ kept.km, kept.moon, kept.mars, kept.vesta, kept.ceres, kept.looks ], [ 3, 4, 9, 4, 7, 2 ] );
 
 		// Tallies kept before Mars (a player's row from then, today's too): none on Mars, and its drives
 		// added from none; a report from a page before Mars (no mars) still taken.

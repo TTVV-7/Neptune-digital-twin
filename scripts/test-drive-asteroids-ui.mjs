@@ -30,7 +30,7 @@ import { levelFrame, pointOn } from '../src/drive-app/level.js';
 import { checkPasses, destination } from '../src/drive-app/challenge-rules.js';
 import { ghostFault } from '../src/drive-app/ghost-rules.js';
 import { startVite } from './worker-harness.mjs';
-import { openWorlds, pickWorld, worldShown } from './worlds-ui.mjs';
+import { HOP, openWorlds, pickWorld, worldShown } from './worlds-ui.mjs';
 
 const require = createRequire( import.meta.url );
 const PORT = Number( process.env.TEST_VITE_PORT ) || 5591;
@@ -41,8 +41,6 @@ const OCCATOR = CERES_SPOTS.find( spot => spot.id === 'ceres-occator' );
 // Vesta's gravity as a share of the Earth's (0.25 m/s²), and what a hop's speed is multiplied by there.
 const GRAVITY = 0.25 / 9.81;
 const LEAP = Math.sqrt( GRAVITY );
-// The Earth's hop: 7 m/s up, 2.5 m high and 1.43 s in the air.
-const EARTH_HOP = 2 * 7 / 9.81;
 
 let chromium;
 let browser;
@@ -296,10 +294,11 @@ describe( 'World Drive on Vesta and Ceres', () => {
 			return { speed, high: top - start.y, time: i / 60, landed: d.grounded };
 
 		} );
-		// 7 m/s on the Earth, 7 √g here: as high, and 1 / √g (6.3) times as long.
-		assert.ok( Math.abs( hop.speed - 7 * LEAP ) < 1e-6, JSON.stringify( hop ) );
-		assert.ok( hop.high > 2 && hop.high < 3, JSON.stringify( hop ) );
-		const times = hop.time / EARTH_HOP;
+		// The Earth's hop (worlds-ui.mjs's HOP: 10 m/s, 5.1 m up, 2.04 s in the air), 10 √g here: as
+		// high, and 1 / √g (6.3) times as long.
+		assert.ok( Math.abs( hop.speed - HOP.speed * LEAP ) < 1e-6, JSON.stringify( hop ) );
+		assert.ok( hop.high > HOP.high * 0.8 && hop.high < HOP.high * 1.2, JSON.stringify( hop ) );
+		const times = hop.time / HOP.time;
 		assert.ok( times > 5.5 && times < 7, `${ times.toFixed( 2 ) } times the Earth's: ${ JSON.stringify( hop ) }` );
 		assert.ok( hop.landed, JSON.stringify( hop ) );
 

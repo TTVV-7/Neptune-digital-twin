@@ -750,6 +750,7 @@ export class Driver {
 		// Turning any way in the air, the middle of its box is where it is, and its attitude its own;
 		// otherwise its wheels, turned by its heading, pitch and roll.
 		const at = carry( this.east, this.north, this.y + ( stunt ? this.centre.y : 0 ) );
+		const was = this.y;
 		this.east = at.east;
 		this.north = at.north;
 		this.y = at.up - ( stunt ? this.centre.y : 0 );
@@ -799,6 +800,8 @@ export class Driver {
 		this.lastSafe = spot( this.lastSafe );
 		this.lastGood = spot( good );
 		this.recentGood = this.recentGood === good ? this.lastGood : spot( this.recentGood );
+		// A plane's heights of its own go with it (plane.js's transform).
+		this.aircraft?.transform( this.y - was );
 
 		this.scrapeAt.at.applyMatrix4( matrix );
 		this.scrapeAt.normal.applyQuaternion( _turn );

@@ -169,7 +169,11 @@ takes over where it's faster, and climbing and coming down get quicker too (`SPE
 
 Coming down, it eases off to the top speed for its height. It
 never goes below 0.8 m over the ground (a slope is flown up), stops short of a wall ("Bonk!") and
-never climbs through a roof or a bridge.
+never climbs through a roof or a bridge. Over the ceiling it comes back down to it: where the scene
+stays where you dropped in (the Earth, the Moon, Mars), the world curves away under you, and a long
+level flight would otherwise climb out of reach of the others (on the Moon, after about 250 km at
+the ceiling). Its speed goes to others as it is (up to 790 m/s, under the room's 800: `MAX_SPEED`
+in `live.js`), so a plane at 2,700 km/h is seen flying between updates, not jumping 150 m at a time.
 
 **It's for looking round, not for points.** It's kept apart from everything scored:
 
@@ -1743,9 +1747,9 @@ visit. It needs no Google tiles and no Maps key, so it's the real Moon under `np
   up (a hop, a hit's throw, a crest's climb, a wipeout's tumble, a bounce on soft springs) is
   multiplied by its square root, 0.41 (`driver.leap`), so each goes as high as on the Earth and
   stays up two and a half times as long (what a landing's speed is measured against, for a hard one
-  losing speed or soft springs bouncing, too): a hop 2.5 m up for 3.5 s (1.43 s on the Earth).
+  losing speed or soft springs bouncing, too): a hop 5.1 m up for 5 s (2.04 s on the Earth).
   Thrown as hard as on the Earth they'd go six times as high and stay up six times as long: a hit's
-  throw 52 m up, a hop 8.6 s. A drift's little hop is as short as on the Earth. The ground is looked
+  throw 52 m up, a hop 12.3 s. A drift's little hop is as short as on the Earth. The ground is looked
   for 2.4 km down rather than 400 m, and a vehicle fallen 1.2 km under where it last stood with no
   ground found is put back there (200 m on the Earth), as long jumps go higher over ground falling
   away. Leaving the ground going down a slope (falling more than 35 cm under it in a frame), a vehicle keeps
@@ -2083,7 +2087,7 @@ or the Moon's globe.)
 its words, NASA's credit, the Earth hidden), its search (names, other names, accents, coordinates,
 nothing found), a drop-in at Tranquility Base (on its ground to 30 cm, the Moon's gravity, the
 stars and the Earth in the sky, no water and no sea, the Moon's pad rules, its ground the only thing
-driven on and at its finest by the vehicle), a hop as high as on the Earth that stays up 3 to 4.2 s
+driven on and at its finest by the vehicle), a hop as high as on the Earth that stays up about 5 s
 and scores nothing, M back to the Moon's globe with its own recent places, back to the Earth
 (driving there as it was: its gravity, its water), `?spot=moon-tycho`, **Worlds** saying "Loading
 the Moon…" (busy) while its files come, and a phone's sheet with **Worlds** at its top and the Moon
@@ -2142,8 +2146,8 @@ no Maps key either.
 - **The drop-in** is the Moon's: the height at the pin worked out, the scene centred at once, the
   ground built on the way down. In Chromium's software renderer it took about 21 s.
 - **Gravity** is Mars's, 3.71 m/s², 38% of the Earth's: `driver.gravity = 0.378`, `driver.leap =
-  0.615`. A jump goes as high as on the Earth and stays up about 1.6 times as long: a hop 2.5 m up
-  for 2.3 s (1.43 s on the Earth). The ground is looked for 1.06 km down, and a vehicle fallen 530 m
+  0.615`. A jump goes as high as on the Earth and stays up about 1.6 times as long: a hop 5.1 m up
+  for 3.3 s (2.04 s on the Earth). The ground is looked for 1.06 km down, and a vehicle fallen 530 m
   with no ground found is put back (400 m and 200 m divided by the gravity, as on the Moon).
 - **Scores** are fair to the Earth's as on the Moon (air × 0.615, tricks × 0.615 to the nearest 10),
   and the leaderboard has "Olympus Mons (Mars)", or for a pin "Mars, 4.59° S, 137.44° E".
@@ -2234,7 +2238,7 @@ coordinates · ...", nothing found, nothing asked of anyone); a drop-in at Bradb
 ground to 30 cm, Mars's gravity, its sky, Phobos, the haze and its dust's colour, no water, the
 Moon's pad rules, its ground (`mars-terrain`) the only thing driven on and 17 splits down by the
 vehicle, Phobos not drawn at 80° of latitude, NASA's credit, the cell and `dropin:mars` and
-`world:mars` posted, never where); a hop 2 to 3 m up and in the air 2 to 2.8 s, scoring nothing; M
+`world:mars` posted, never where); a hop as high as the Earth's (5.1 m) and in the air about 3.3 s, scoring nothing; M
 back to Mars's globe with its recent places in `world-drive.recent-mars` alone; to the Moon (Mars
 let go of: none of its squares drawn, its six roots kept) and back to the Earth (its gravity, its
 water, no dust colour); `?spot=mars-olympus-mons` (the summit over 18 km up) and
@@ -2308,7 +2312,7 @@ or so ([the moving recentre](#the-moving-recentre)).
   software renderer Vesta's ground draws at about a frame and a half a second.
 - **Gravity** is Vesta's 0.25 m/s² (2.5% of the Earth's: `driver.gravity = 0.0255`, `driver.leap =
   0.16`) and Ceres's 0.284 m/s² (2.9%: 0.029 and 0.17). A jump goes as high as on the Earth and stays
-  up about six times as long: a hop 2.5 m up for about 9 s on Vesta and 8.4 s on Ceres (1.43 s on
+  up about six times as long: a hop 5.1 m up for about 12.8 s on Vesta and 12 s on Ceres (2.04 s on
   the Earth), the hardest throw of a hit about 20 s. The ground is looked for 15.7 km down on Vesta
   and 13.8 km on Ceres (400 m divided by the gravity), and a vehicle fallen 1.5 km with no ground
   found is put back (`FALL_MOST`: 200 m divided by the gravity would be 7.8 km and 6.9 km, minutes of
@@ -2494,7 +2498,8 @@ its search (names, other names, "highest", "fossae", nothing found, coordinates 
 coordinates · ..." with the pin's height deep in Rheasilvia); a drop-in at Marcia (the scene's up
 within 0.05° of the level's at the car and more than 1° from the sphere's, Vesta's gravity, on the
 ground to 30 cm, the scene's middle at the spot, no water, `vesta-terrain` driven on, NASA's credit);
-a hop 2 to 3 m up, in the air 5.5 to 7 times the Earth's 1.43 s; the moving recentre (the car put
+a hop as high as the Earth's (5.1 m, from `JUMP_SPEED`: scripts/worlds-ui.mjs's `HOP`), in the air
+5.5 to 7 times the Earth's 2.04 s; the moving recentre (the car put
 15 m short of it at 30 m/s: one move, the car under 6 m from the new middle, and across that frame
 its place on Vesta moving under 5 m, its height under 1 m, its way under 1° and its speed under
 1.5 m/s, the scene level at the car on every frame); M to the globe and on to Ceres (its own files

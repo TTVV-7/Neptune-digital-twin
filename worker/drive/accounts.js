@@ -3,7 +3,7 @@ import { HttpError, isObject, json, noContent, randomToken, readJson, sha256Hex 
 import { SESSION_SECONDS, profileFrom, sessionCookies, testCertsUrl } from '../sessions.js';
 import { PERIODS, forgetBoards } from './boards.js';
 import { authenticate, credentials, database, takeTurn } from './players.js';
-import { readTallies } from '../../src/drive-app/achievement-rules.js';
+import { NUMBERS, readTallies } from '../../src/drive-app/achievement-rules.js';
 import { purchaseFor, supporterPass } from './supporter.js';
 import { googleClientId } from './settings.js';
 
@@ -292,14 +292,16 @@ async function mergePlayers( db, from, to ) {
 
 }
 
-// Two players' achievement counts (readTallies') as one: the more of each (the rides, all of both),
-// the longer streak, and the later run of days; today's counts are `a`'s (the player that stays).
-function mergeTallies( a, b ) {
+// Two players' achievement counts (readTallies') as one: the more of each (km and every count
+// achievement-rules.js's NUMBERS has, every world's drives among them; the rides, all of both), the
+// longer streak, and the later run of days; today's counts are `a`'s (the player that stays).
+export function mergeTallies( a, b ) {
 
 	const run = b.runDay > a.runDay || ( b.runDay === a.runDay && b.run > a.run ) ? { run: b.run, runDay: b.runDay } : { run: a.run, runDay: a.runDay };
+	const most = Object.fromEntries( [ 'km', ...NUMBERS ].map( field => [ field, Math.max( a[ field ], b[ field ] ) ] ) );
 	return {
-		...a, ...run,
-		km: Math.max( a.km, b.km ), moon: Math.max( a.moon, b.moon ), looks: Math.max( a.looks, b.looks ), streak: Math.max( a.streak, b.streak ),
+		...a, ...run, ...most,
+		streak: Math.max( a.streak, b.streak ),
 		rides: [ ...new Set( [ ...a.rides, ...b.rides ] ) ],
 	};
 

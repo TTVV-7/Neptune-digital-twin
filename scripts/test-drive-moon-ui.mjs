@@ -28,7 +28,7 @@ import { cellOf } from '../src/drive-app/dropin-cells.js';
 import { checkPasses, destination, formatTime } from '../src/drive-app/challenge-rules.js';
 import { GHOST_BYTES, countFor, everyFor, ghostFault, ghostText, localOf, packGhost, sampleTime } from '../src/drive-app/ghost-rules.js';
 import { startVite } from './worker-harness.mjs';
-import { OPENER, openWorlds, pickWorld, radio, worldShown } from './worlds-ui.mjs';
+import { HOP, OPENER, openWorlds, pickWorld, radio, worldShown } from './worlds-ui.mjs';
 
 const require = createRequire( import.meta.url );
 const PORT = Number( process.env.TEST_VITE_PORT ) || 5571;
@@ -307,11 +307,13 @@ describe( 'World Drive on the Moon', () => {
 			return { speed, high: top - start.y, time: i / 60, landed: d.grounded, scored: d.score - start.score, pending: d.air?.pending ?? '', best: d.bestJump?.lines ?? null };
 
 		} );
-		// 7 m/s on the Earth: 2.5 m up and 1.43 s in the air.
-		assert.ok( Math.abs( hop.speed - 7 * LEAP ) < 1e-6, JSON.stringify( hop ) );
-		assert.ok( hop.high > 2 && hop.high < 3, JSON.stringify( hop ) );
-		assert.ok( hop.time > 3 && hop.time < 4.2, JSON.stringify( hop ) );
-		// As long in Earth time as the Earth's hop, under big air's 1.5 s: nothing scored.
+		// The Earth's hop (10 m/s: 5.1 m up and 2.04 s in the air); on the Moon as high, and 1 / 0.406
+		// times as long (5 s).
+		assert.ok( Math.abs( hop.speed - HOP.speed * LEAP ) < 1e-6, JSON.stringify( hop ) );
+		assert.ok( hop.high > HOP.high * 0.8 && hop.high < HOP.high * 1.2, JSON.stringify( hop ) );
+		const times = hop.time / ( HOP.time / LEAP );
+		assert.ok( times > 0.85 && times < 1.2, `${ times.toFixed( 2 ) } of what it should be: ${ JSON.stringify( hop ) }` );
+		// As long in Earth time as the Earth's hop, and a hop's own time isn't big air: nothing scored.
 		assert.deepEqual( [ hop.landed, hop.scored ], [ true, 0 ], JSON.stringify( hop ) );
 
 	} );

@@ -194,6 +194,20 @@ export class PlaneMode {
 
 	}
 
+	// The scene's frame moved under it (Driver.transform, which has carried the vehicle and its
+	// velocity): the heights it keeps in the scene's frame (where it lifts off to while unfolding, and
+	// the ground last found under it) go up or down by as much as the vehicle did (`dy` m), so a
+	// recentre mid-unfold doesn't send it shooting up or diving to the ground; and its climb is the
+	// vehicle's, turned with the frame.
+	transform( dy ) {
+
+		if ( ! this.on ) return;
+		if ( this.from !== undefined ) this.from += dy;
+		if ( this.ground !== null ) this.ground += dy;
+		this.vy = this.driver.vy;
+
+	}
+
 	// Each frame while it's a plane: moves the vehicle (the Driver poses it and places the camera).
 	update( dt ) {
 
@@ -265,6 +279,10 @@ export class PlaneMode {
 		else if ( this.phase === 'landing' ) want = - rate;
 		else if ( flying ) want = up ? rate : down ? - rate : 0;
 		if ( this.height >= CEILING && want > 0 ) want = 0;
+		// Over the ceiling, it comes back down to it: where the frame stays where it was dropped in (the
+		// Moon, Mars, the Earth) the world curves away under a level flight, so in the end flying level
+		// is climbing, up to where others would stop being sent it (live-protocol.js's STATE_RADII).
+		if ( this.height > CEILING ) want = Math.min( want, - Math.min( rate, this.height - CEILING ) );
 		this.vy += ( want - this.vy ) * Math.min( 1, dt * 2.5 );
 		if ( this.vy > 0 ) {
 

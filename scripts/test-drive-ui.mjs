@@ -5746,10 +5746,11 @@ function landBackflip( page ) {
 		Object.assign( d, { east: 0, north: 0, y: 0, heading: 0, course: 0, view: 0, speed: 40 / 3.6, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, boost: null } );
 		d.update( 1 / 60 );
 		const before = d.score;
+		// Thrown up at 20 m/s off a hop: about 4.1 s up, 2 s more than the hop's own (which isn't big air).
 		d.hop();
-		d.vy = 12;
+		d.vy = 20;
 		d.press( 'KeyS' );
-		for ( let i = 0; i < 300; i ++ ) {
+		for ( let i = 0; i < 400; i ++ ) {
 
 			d.update( 1 / 60 );
 			if ( d.air && d.air.turned.x > Math.PI * 2 - 0.8 ) d.release( 'KeyS' );
@@ -5902,7 +5903,7 @@ describe( 'World Drive leaderboard', () => {
 		assert.deepEqual( Object.keys( sent ).sort(), [ 'airTime', 'id', 'place', 'runSeconds', 'score', 'secret', 'tricks', 'vehicle', 'visit' ] );
 		const { airTime, runSeconds, tricks, ...rest } = sent;
 		assert.deepEqual( rest, { id: 'P1ayer-id_000000', secret: 'S'.repeat( 32 ), visit: 'v1.test-visit-token', score, place: 'Furka Pass', vehicle: 'go-kart' } );
-		// The jump's tricks as the HUD named them, and its air: a backflip thrown up at 12 m/s is big air.
+		// The jump's tricks as the HUD named them, and its air: a backflip thrown up at 20 m/s off a hop is big air.
 		assert.match( tricks, /^Backflip! \+ Big air \d\.\d s$/ );
 		assert.equal( airTime, Number( tricks.match( /Big air (\d\.\d)/ )[ 1 ] ) );
 		assert.ok( Number.isInteger( runSeconds ) && runSeconds >= airTime, `runSeconds ${ runSeconds }` );

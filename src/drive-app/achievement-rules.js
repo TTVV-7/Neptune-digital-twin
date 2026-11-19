@@ -140,8 +140,9 @@ export function achievementOf( id ) {
 // doesn't send is none), and the rides tried (ids, at most RIDE_IDS' size). Its km are the report's
 // own. null if it isn't one the page could send.
 const TALLY_MOST = 10000;
-// The trusted counts that are whole numbers added up (rides are ids).
-const NUMBERS = [ 'moon', 'mars', 'vesta', 'ceres', 'looks' ];
+// The trusted counts that are whole numbers added up (rides are ids); the Worker's account merge
+// (worker/drive/accounts.js) keeps the more of each, so a world added here is kept there too.
+export const NUMBERS = [ 'moon', 'mars', 'vesta', 'ceres', 'looks' ];
 
 export function checkTallies( raw ) {
 

@@ -147,7 +147,8 @@ export async function startWorker( { port, vars, config = null, assets: files = 
 
 		}
 
-		rmSync( dir, { recursive: true, force: true } );
+		// workerd may still be writing a room's state as it stops: retry while the folder isn't empty yet.
+		rmSync( dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 } );
 		if ( without.length ) rmSync( join( ROOT, config ), { force: true } );
 
 	};
