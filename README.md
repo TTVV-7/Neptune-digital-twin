@@ -268,6 +268,12 @@ left as it came):
   train support beams 1 and 2 over the pit and along the gallery, G1 to G14, the cross beam, the
   shed support beam and B1 to B6. At grade they're under Google's ground (**U** cuts it away over
   the structure), and from inside C31 they're overhead;
+- past C32's tunnel mouth, **C32's take-up pedestals** (624-24070-DWG-ST231 and -ST232, levels off
+  -ME208): the new sheave anchor pedestal (1.5 × 1.49 m, up to EL 5.325, its top chamfered at the
+  tunnel end for the belt), P1 (450 × 450, two) and P2 (450 × 550, two), on C32's centre line. Where
+  their grid 4 is along C32 the drawings don't say: `TAKE_UP.GRID_4` in `scripts/b2d2-structure.mjs`
+  puts it 4 m past the tunnel's end, worked out from the belt's height there; and they stand on the
+  model's ground (`GRADE`, as at grade over C31). The **C32 take-up** view looks at them;
 - along each of C31's walls under the slab, the **downstand** (0.66 m out from the wall, its underside
   at EL +1.22, where the walls' repair areas stop), as -ST011's beam elevations draw it;
 - the gallery's **hoppers** (the two sloped plates under the slot between the rail beams) taken out:

@@ -96,6 +96,35 @@ const END_OPENINGS = [
 // C32's inside faces, as the drawings have them where it meets the pit.
 const C32 = { x: [ 0.61, 3.96 ] };
 
+// C32's take-up tower foundation, at grade past the tunnel's mouth: the new concrete pedestals of
+// 624-24070-DWG-ST231 (plan) and -ST232 (sections and details), with -ME208's levels. On that set's
+// own grid, 1X to 4 along the conveyor (4 nearest the tunnel) and A to C across it, on C32's centre
+// line. Distances `d` are from grid 4 toward grid 3 (up the conveyor, away from the tunnel: more
+// letter grid here), `a` across from the centre line toward grid A (+x here), levels as the
+// drawings give them. They're put on the model's ground there, GRADE above the drawings' levels
+// (as at grade over C31: the model's grade is the Shapr3D model's): the existing concrete at grid
+// 4, EL 3.825, at the model's ground, y 5.1.
+//
+// Where grid 4 is along C32 the drawings don't say. GRID_4 puts it 4 m past the tunnel's end
+// (letter 44.5): there the belt, 6.15 m up at grid 4 on -ME208's Section A, is as high above
+// C32's floor (FL in the progress script) as it would be in the tunnel. Change it if it's known.
+const TAKE_UP = {
+	GRID_4: 48.5,
+	GRADE: 5.1 - 3.825,
+	// P1: 450 × 450, top EL 4.237 (-ME208); one 1.70 m up the conveyor from grid 4, one at grid 4,
+	// both 0.95 m toward grid B.
+	p1: { size: [ 0.45, 0.45 ], top: 4.237, at: [ [ 1.70, - 0.95 ], [ 0, - 0.95 ] ] },
+	// P2: 450 along × 550 across, top EL 3.825 (-ST232 Section A): 2.524 m up from grid 4 (1278 +
+	// 1246), either side of the centre line at 1.067 m.
+	p2: { size: [ 0.45, 0.55 ], top: 3.825, at: [ [ 2.524, 1.067 ], [ 2.524, - 1.067 ] ] },
+	// The new sheave anchor pedestal (-ST232 Section A): from 0.222 m past grid 4 to 1.278 m up
+	// from it, 1.29 m toward A to 0.20 m toward B; on the existing grade beam (EL 3.38) up to EL
+	// 5.325, its top chamfered 200 mm down over the 600 mm at the tunnel end for the belt.
+	sheave: { d: [ - 0.222, 1.278 ], a: [ - 0.20, 1.29 ], el: [ 3.38, 5.325 ], chamfer: [ 0.62, 0.2 ] },
+	// What's under ground: the small pedestals go down to here.
+	base: 2.9,
+};
+
 // ---------- The model's own dimensions, to tell its parts by and to move them from ----------
 
 const WAS = {
@@ -437,11 +466,46 @@ function c32( was ) {
 
 }
 
+// ---------- C32's take-up pedestals ----------
+
+function pedestals() {
+
+	const s = new Solid();
+	const { GRID_4, GRADE, p1, p2, sheave, base } = TAKE_UP;
+	const line = ( C32.x[ 0 ] + C32.x[ 1 ] ) / 2;
+	for ( const { size: [ along, across ], top, at } of [ p1, p2 ] ) for ( const [ d, a ] of at ) {
+
+		s.box( { x: [ line + a - across / 2, line + a + across / 2 ], l: [ GRID_4 + d - along / 2, GRID_4 + d + along / 2 ] }, [ base + GRADE, top + GRADE ] );
+
+	}
+
+	// The sheave anchor pedestal: its outline along the conveyor ( letter, el ), drawn across it.
+	const [ d0, d1 ] = sheave.d, [ e0, e1 ] = sheave.el, [ run, drop ] = sheave.chamfer;
+	const outline = [ [ d0, e0 ], [ d1, e0 ], [ d1, e1 ], [ d0 + run, e1 ], [ d0, e1 - drop ] ].map( ( [ d, e ] ) => [ GRID_4 + d, e + GRADE ] );
+	const [ x0, x1 ] = sheave.a.map( a => line + a );
+	for ( const [ x, out ] of [ [ x0, - 1 ], [ x1, 1 ] ] ) for ( let i = 1; i + 1 < outline.length; i ++ ) {
+
+		s.face( [ outline[ 0 ], outline[ i ], outline[ i + 1 ] ].map( ( [ l, e ] ) => [ x, e, l ] ), [ out, 0, 0 ] );
+
+	}
+
+	for ( let i = 0; i < outline.length; i ++ ) {
+
+		const [ l0, e0_ ] = outline[ i ], [ l1, e1_ ] = outline[ ( i + 1 ) % outline.length ];
+		// Out of the outline: to the right of each edge, going round it anticlockwise in ( letter, el ).
+		s.face( [ [ x0, e0_, l0 ], [ x1, e0_, l0 ], [ x1, e1_, l1 ], [ x0, e1_, l1 ] ], [ 0, - ( l1 - l0 ), e1_ - e0_ ] );
+
+	}
+
+	return s.layer();
+
+}
+
 // The site's layers ({ key: { positions, index } }, keys c31, pit, c32, steel and the rest) with
 // the structure put on the drawings' grid, and the beams as a layer of their own (beams).
 export function correctStructure( site ) {
 
-	return { ...site, pit: pit(), c31: gallery( site.c31 ), beams: beams(), steel: plates(), c32: c32( site.c32 ) };
+	return { ...site, pit: pit(), c31: gallery( site.c31 ), beams: beams(), steel: plates(), c32: c32( site.c32 ), pedestals: pedestals() };
 
 }
 
@@ -449,4 +513,5 @@ export function correctStructure( site ) {
 export const C32_LINE = ( C32.x[ 0 ] + C32.x[ 1 ] ) / 2;
 export const C32_INSIDE = C32.x;
 export const PIT_INSIDE = PIT;
+export const C32_TAKE_UP = { ...TAKE_UP, line: ( C32.x[ 0 ] + C32.x[ 1 ] ) / 2 };
 export const C31_DOWNSTAND = { ...DOWNSTAND, x: GALLERY.x };
