@@ -37,7 +37,8 @@ address, and the construction app is unchanged by it.
    lawn tractor at 22, a retro wedge at 30 and a formula racer at 40); or with the
    [Supporter Pass](#supporter-pass-content) those six at once, seven cars of its own (a neon racer, a
    night cruiser, a dune buggy, a farm truck, a police cruiser, a hypercar and a cyber muscle car) and
-   four rides built for it (a sports coupe, a monster truck, a city bus and a hovercraft). They're in
+   seven rides built for it (a sports coupe, a monster truck, a city bus, a hovercraft, a lunar rover,
+   a flying saucer and a rocket dragster). They're in
    three rows that scroll sideways. A locked one says what it needs ("Lv 8 · or Pass", or the pass's
    badge); picked, a level's says which level you're at, and the pass's opens its sheet. The choice
    is remembered; until one is picked (and while the one picked is locked) it's the pickup, or the
@@ -140,7 +141,7 @@ Hit something (a wall, a building, a parked car, a barrier) and you don't stop: 
   to twice the ride's top speed. The gauge refills by itself in 8 s; landed tricks top it up (a fifth
   each), and so do boost pads (once they're switched on). What it leaves behind is the ride's **boost style** from the
   [Garage](#the-garage): the classic flame, bubbles, confetti, music notes or cherry blossom, or
-  with the pass (or, for some, a level) one of seventeen more.
+  with the pass (or, for some, a level) one of twenty more.
 - **Overdrive.** Boost at 85 % or more of that doubled top speed for three quarters of a second and
   you hit overdrive (the code calls it supersonic): a sonic boom (shock rings blown out round you, a flash and a jolt, the edges of the view flashing white), streaks of
   air streaming back past you, the view 9° wider and **OVERDRIVE** by the speed. It lasts, boosting
@@ -325,12 +326,12 @@ water is told, the open sea, the big lakes) were made while it was a splash, whi
 speak of splashes and of the way back; `water.js` tells water the same way still, for three things
 (all on the Earth: the Moon has none):
 
-- **The hovercraft** rides on water as every ride does, but throws up spray behind it there. It
+- **The hovercraft** (and the flying saucer) rides on water as every ride does, but throws up spray behind it there. Each
   says `floats: true` in its tuning, and under it the Driver looks for water every 0.2 s while it's
   on the ground: that's the Driver's `water` option (`src/drive.js`; off unless an app gives one, so
   the construction app's driving never looks), which World Drive gives `src/drive-app/water.js`.
   The spray comes out of `drive-fx.js`'s pools (150 droplets and 48 puffs, and 6 rings and 2
-  patches of foam), made with a ride's other effects only when it floats: no other throws any up.
+  patches of foam), made with a ride's other effects only when it floats: no others throw any up.
 - **Boost pads** never go down on water, nor by it: they belong on the streets, and Google's water,
   as flat and open as anything on its mesh, would take most of them by a coast or a river.
 - **The open sea**: a drop-in far out at sea, where Google draws only the sea bed, starts on a
@@ -2657,8 +2658,8 @@ only when the page is on `localhost` or `127.0.0.1` (`testPass` decides), never 
 
 **Locked things** show a small **⭐ Supporter Pass** badge (in the Garage, a ⭐ on each locked choice
 under one line saying what the stars mean), and picking one opens the pass's sheet
-instead (`src/drive-app/pass.js`): what the pass is and what comes with it (seventeen more rides,
-thirteen cars, six of which levels bring too, and four built in code, each with its picture in two
+instead (`src/drive-app/pass.js`): what the pass is and what comes with it (twenty more rides,
+thirteen cars, six of which levels bring too, and seven built in code, each with its picture in two
 rows; every Garage look at once, which levels otherwise unlock some of over time; +50% XP; a ⭐ by
 your name on the leaderboard, 30 Earth drives a day instead of 1) and its buy
 area (`buyArea()`), which says **Coming soon** until the payments code fills it. The sheet also opens from **⭐ Supporter
@@ -2670,9 +2671,9 @@ sheet only opens when something locked, or one of those buttons, is picked.
 The leaderboard takes runs in the pass's rides and cars as in the free ones (`PASS_RIDES` and
 `DRIVE_CARS` in `src/drive-app/catalog.js`, which `VEHICLES` in `worker/drive/scores.js` reads).
 
-### The four rides
+### The seven rides
 
-Built in code like the kart (`src/drive-app/rides/`), each 3,600 to 7,800 triangles, facing -Z on
+Built in code like the kart (`src/drive-app/rides/`), each 3,600 to 10,600 triangles, facing -Z on
 y = 0 at its real size, with its own handling (`handling` in its tuning, which `drive.js` reads in
 place of its constants: see `HANDLING` there; vehicles without it handle as before):
 
@@ -2682,10 +2683,22 @@ place of its constants: see `HANDLING` there; vehicles without it handle as befo
 | Monster truck | 5.4 × 3.5 m, 3.4 m tall | 125 km/h | Thrown about twice as high by the same hit (gravity at 0.75 in the air, launches × 1.3), quicker to flip than its size would make it (as quick as the kart) and landing up to 55° off upright, bouncing on soft springs; its bumpers are 1.5 m up, so it drives up over cars, barriers and kerbs |
 | City bus | 12 × 2.55 m, 3.2 m tall | 90 km/h | Slow away (22 km/h after 3 s), rolls on and on off the gas, turns wide; barely thrown up by a crash, slow to turn in the air, and squashes and shakes the view the most |
 | Hovercraft | 4.2 × 2.1 m | 135 km/h | No wheels: it floats 16 cm up on its skirt, over [water](#water) too (which every ride drives on), throwing up spray there; slides wide through every turn (about 50° at 50 km/h, under 10° for the others), glides on and stops slowly, and bounces on its cushion |
+| Lunar rover | 3.6 × 2.4 m, 2.1 m tall | 75 km/h | Made for [the Moon](#the-moon) but drives anywhere: slow, floaty (gravity at 0.55 in the air, launches × 1.25), a long ride off every ramp and a soft landing on its struts |
+| Flying saucer | 4.8 m across, 2.0 m tall | 170 km/h | No wheels: hovers 50 cm up, over water too (spray there, as the hovercraft); slides through turns, turns at much the same rate whatever its speed, glides on, floats down |
+| Rocket dragster | 7.2 × 2.2 m | 215 km/h | The quickest away of everything and as fast as the hypercar, but turns like a train (32°/s at speed) with a racer's lock; stops hard, as if its parachute were out |
 
 Wheels spin and front wheels steer (the monster truck steers all four, the back ones the other way);
 the monster truck's body rides on springs that sink and rebound as it lands and lean it out of
 turns; the hovercraft bobs, its fan spins up with the gas and its rudders follow the steering.
+The lunar rover's six wheels ride up and down over the bumps each on its own strut, hang in the
+air and squash as it lands; its front and back pairs steer opposite ways, its dish antenna turns
+slowly to keep its fix, its camera mast pans where it steers and its beacon double-blinks. The
+flying saucer bobs and banks into turns, dipping its nose as it speeds up; its ring of lights turns
+with the speed and chases round faster with the gas, and while it dawdles a tractor beam shimmers
+down to the ground, fading out at speed and in the air. The rocket dragster's flame roars out
+long and bright with the gas (three cones and shock diamonds, drawn added to what's behind) and
+drops back to a flicker without it, its nozzle glowing hot and cooling, and its nose lifts as it
+launches. These moving parts play on the Garage's turntable too.
 Nothing turns in the air faster than the kart, whatever its handling: the leaderboard's limits
 (`SCORING` in `worker/drive/scores.js`) take the kart's rate as the most there is. Each
 has a driver: behind tinted glass in the coupe and the truck, at the front of the bus (with its

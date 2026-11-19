@@ -52,7 +52,7 @@ const require = createRequire( import.meta.url );
 const PORT = Number( process.env.TEST_VITE_PORT ) || 5531;
 const SHOTS = process.env.TEST_SCREENSHOTS;
 const BASE = `http://127.0.0.1:${ PORT }`;
-const RIDES = [ 'Sports coupe', 'Monster truck', 'City bus', 'Hovercraft' ];
+const RIDES = [ 'Sports coupe', 'Monster truck', 'City bus', 'Hovercraft', 'Lunar rover', 'Flying saucer', 'Rocket dragster' ];
 // World Drive's cars (src/drive-app/cars.js): the first is free, the next six come with levels (or
 // the pass), the rest with the pass alone. Without the pass, at level 1, all but the first are
 // locked.
@@ -388,10 +388,10 @@ describe( 'Supporter Pass, without it', () => {
 		await page.locator( '#pass' ).waitFor();
 		assert.equal( await panel.locator( '.vehicle.picked b' ).textContent(), 'Go-kart' );
 		const sheet = page.locator( '#pass' );
-		assert.match( await sheet.textContent(), /Seventeen more rides[\s\S]*whole Garage[\s\S]*on the leaderboard[\s\S]*30 Earth drives a day[\s\S]*Instead of 1/ );
-		assert.match( await sheet.locator( '.rides' ).textContent(), /Thirteen cars and four built rides; levels bring six too\./ );
+		assert.match( await sheet.textContent(), /Twenty more rides[\s\S]*whole Garage[\s\S]*on the leaderboard[\s\S]*30 Earth drives a day[\s\S]*Instead of 1/ );
+		assert.match( await sheet.locator( '.rides' ).textContent(), /Thirteen cars and seven built rides; levels bring six too\./ );
 		// Each ride named by its picture, for a screen reader too.
-		assert.equal( await sheet.locator( '.ride-icon' ).count(), 17 );
+		assert.equal( await sheet.locator( '.ride-icon' ).count(), LOCKED.length );
 		assert.deepEqual( await sheet.locator( '.ride-icon' ).evaluateAll( icons => icons.map( icon => icon.title ) ), LOCKED );
 		assert.deepEqual( await sheet.locator( '.ride-icon[role="img"]' ).evaluateAll( icons => icons.map( icon => icon.getAttribute( 'aria-label' ) ) ), LOCKED );
 		// Short enough for Buy and signing in under it to be on a laptop's screen (1280 × 800).
@@ -817,6 +817,8 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 
 	test( 'the hovercraft hovers and has no wheels; the monster truck drives up over a car', async () => {
 
+		// (The last ride driven before this is the dragster.)
+		await swapTo( page, 'Hovercraft' );
 		const hover = await page.evaluate( () => {
 
 			const { driver: d } = window.drive;
@@ -890,6 +892,72 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 		assert.ok( over.high > 1.3 && over.north > 26 && ! over.hit, JSON.stringify( over ) );
 		// Down off the car it sinks onto its springs; in the air the wheels hang (the body rises).
 		assert.ok( over.sank < - 0.05 && over.rose > 0.05, JSON.stringify( over ) );
+
+	} );
+
+	test( 'the new rides move: the rover\'s dish turns and its wheels ride over bumps, the saucer hovers with its beam, the dragster\'s flame roars with the gas', async () => {
+
+		const watch = async ( name, run ) => {
+
+			await swapTo( page, name );
+			return page.evaluate( run );
+
+		};
+		const rover = await watch( 'Lunar rover', () => {
+
+			const { driver: d } = window.drive;
+			const dish = d.entry.pivot.getObjectByName( 'dish' );
+			const from = dish.rotation.y;
+			const heights = new Set();
+			d.press( 'KeyW' );
+			for ( let i = 0; i < 180; i ++ ) {
+
+				d.update( 1 / 60 );
+				// Its struts, the groups holding a wheel each, riding up and down.
+				d.entry.pivot.traverse( o => o.isGroup && o.children.length === 2 && o.children[ 0 ].isGroup && heights.add( Math.round( o.position.y * 1000 ) ) );
+
+			}
+
+			d.release( 'KeyW' );
+			return { name: d.entry.state.name, turned: Math.abs( dish.rotation.y - from ), heights: heights.size };
+
+		} );
+		assert.equal( rover.name, 'Lunar rover' );
+		assert.ok( rover.turned > 0.05 && rover.heights > 10, JSON.stringify( rover ) );
+		const saucer = await watch( 'Flying saucer', () => {
+
+			const { driver: d } = window.drive;
+			for ( const code of [ ...d.keys ] ) d.release( code );
+			Object.assign( d, { speed: 0, steer: 0 } );
+			for ( let i = 0; i < 90; i ++ ) d.update( 1 / 60 );
+			const { pivot } = d.entry;
+			const box = new d.ownBox.constructor().setFromObject( pivot.getObjectByName( 'hover' ), true );
+			let tyres = 0;
+			pivot.traverse( o => o.isMesh && o.material.color?.getHex() === 0x17181a && tyres ++ );
+			return { name: d.entry.state.name, gap: box.min.y - d.y, beam: pivot.getObjectByName( 'beam' ).visible, tyres };
+
+		} );
+		assert.equal( saucer.name, 'Flying saucer' );
+		assert.ok( saucer.gap > 0.2 && saucer.beam && saucer.tyres === 0, JSON.stringify( saucer ) );
+		const dragster = await watch( 'Rocket dragster', () => {
+
+			const { driver: d } = window.drive;
+			const flame = d.entry.pivot.getObjectByName( 'flame' );
+			// The outer cone's length (its first child; the shock diamonds come after the cones).
+			const length = () => flame.children[ 0 ].scale.z;
+			for ( const code of [ ...d.keys ] ) d.release( code );
+			for ( let i = 0; i < 60; i ++ ) d.update( 1 / 60 );
+			const idle = length();
+			d.press( 'KeyW' );
+			for ( let i = 0; i < 60; i ++ ) d.update( 1 / 60 );
+			const full = length();
+			d.release( 'KeyW' );
+			return { name: d.entry.state.name, idle, full };
+
+		} );
+		assert.equal( dragster.name, 'Rocket dragster' );
+		assert.ok( dragster.full > dragster.idle * 3, JSON.stringify( dragster ) );
+		console.log( 'the new rides moving:', JSON.stringify( { rover, saucer, dragster } ) );
 
 	} );
 
