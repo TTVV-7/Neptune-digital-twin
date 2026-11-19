@@ -101,16 +101,17 @@ const C32 = { x: [ 0.61, 3.96 ] };
 // own grid, 1X to 4 along the conveyor (4 nearest the tunnel) and A to C across it, on C32's centre
 // line. Distances `d` are from grid 4 toward grid 3 (up the conveyor, away from the tunnel: more
 // letter grid here), `a` across from the centre line toward grid A (+x here), levels as the
-// drawings give them. They're put on the model's ground there, GRADE above the drawings' levels
-// (as at grade over C31: the model's grade is the Shapr3D model's): the existing concrete at grid
-// 4, EL 3.825, at the model's ground, y 5.1.
+// drawings give them, on the C32 tunnel's datum: its floor where it comes out (y 3.6 at letter
+// 44.5) is the take-up's ground, EL 3.825 at grid 4. (The model's grade over C31 is the Shapr3D
+// model's, about 1.3 m higher: GRADE would lift the take-up to it, but then it stands above the
+// tunnel's exit.)
 //
 // Where grid 4 is along C32 the drawings don't say. GRID_4 puts it 4 m past the tunnel's end
 // (letter 44.5): there the belt, 6.15 m up at grid 4 on -ME208's Section A, is as high above
 // C32's floor (FL in the progress script) as it would be in the tunnel. Change it if it's known.
 const TAKE_UP = {
 	GRID_4: 48.5,
-	GRADE: 5.1 - 3.825,
+	GRADE: 0,
 	// P1: 450 × 450, top EL 4.237 (-ME208); one 1.70 m up the conveyor from grid 4, one at grid 4,
 	// both 0.95 m toward grid B.
 	p1: { size: [ 0.45, 0.45 ], top: 4.237, at: [ [ 1.70, - 0.95 ], [ 0, - 0.95 ] ] },
@@ -197,6 +198,13 @@ const TAKE_UP = {
 		// pedestals' pit is the broken-out area, its sides cut straight (inside the slab's edge).
 		lean: 0.1, room: 0.3, batter: 1,
 		pedestalPit: 2.8,
+		// The existing grade beam the sheave anchor pedestal stands on (-ST232 Section A: its top at
+		// about EL 3.38), drawn under the pedestal down to the pit's floor.
+		gradeBeam: { d: [ - 0.32, 1.38 ], a: [ - 0.3, 1.39 ], el: [ 2.8, 3.38 ] },
+		// Braces: on the pad's forms, from the upper waler down onto the cut slope (they bear on it
+		// 250 mm above the floor); in the pedestals' pit, short kickers this far out to its floor,
+		// left out where one would run into another form or out of the pit.
+		kicker: 0.35,
 		// Formwork: 19 mm plywood, 38 × 89 studs at 400, two 38 × 140 walers, braces every 1.2 m.
 		ply: 0.019, stud: [ 0.038, 0.089 ], studs: 0.4, waler: [ 0.038, 0.14 ], braces: 1.2,
 		// Reinforcing, as -ST232 calls it: the pad 20M @ 300 each way top and bottom; the sheave
@@ -1095,11 +1103,14 @@ function takeUpBuild() {
 	pit( breakOut.areas[ 0 ], breakOut.areas[ 0 ], b.pedestalPit );
 	// Lean concrete under the pad.
 	box( pits, [ d0, a0, floor ], [ d1, a1, pad.el[ 0 ] ] );
+	// The existing grade beam under the sheave anchor pedestal, there at every stage.
+	const old = new Solid();
+	box( old, [ b.gradeBeam.d[ 0 ], b.gradeBeam.a[ 0 ], b.gradeBeam.el[ 0 ] ], [ b.gradeBeam.d[ 1 ], b.gradeBeam.a[ 1 ], b.gradeBeam.el[ 1 ] ] );
 
 	// ---- Formwork ----
 	// A form along one face: plywood from e0 to e1 on the line from p to q ( [ d, a ] ), `outward`
 	// the way away from the concrete ( [ dd, da ], unit), studs, two walers and braces to the floor.
-	const formFace = ( p, q, e0, e1, outward, braceTo ) => {
+	const formFace = ( p, q, e0, e1, outward, braceFoot ) => {
 
 		const [ od, oa ] = outward;
 		const off = n => [ od * n, oa * n ];
@@ -1120,31 +1131,74 @@ function takeUpBuild() {
 
 		}
 
-		// Braces from the upper waler down to the floor, a stake at each foot.
-		const reach = Math.min( 1.2, ( e1 - e0 ) * 0.8 + 0.3 );
+		// Braces from the upper waler down to where braceFoot puts their feet (none where it says not),
+		// a cleat at each foot.
+		const out0 = outer + 2 * b.waler[ 0 ];
 		for ( let t = 0.3; t < len; t += b.braces ) {
 
-			const top = [ ...corner( t, outer + 2 * b.waler[ 0 ] ), e0 + ( e1 - e0 ) * 2 / 3 ];
-			const foot = [ ...corner( t, outer + 2 * b.waler[ 0 ] + reach ), braceTo ];
+			const top = [ ...corner( t, out0 ), e0 + ( e1 - e0 ) * 2 / 3 ];
+			const foot = braceFoot( t, out0, corner );
+			if ( ! foot ) continue;
 			forms.tube( P( ...top ), P( ...foot ), 0.035, 4 );
-			box( forms, [ foot[ 0 ] - 0.025, foot[ 1 ] - 0.025, braceTo - 0.3 ], [ foot[ 0 ] + 0.025, foot[ 1 ] + 0.025, braceTo + 0.25 ] );
+			box( forms, [ foot[ 0 ] - 0.04, foot[ 1 ] - 0.04, foot[ 2 ] - 0.05 ], [ foot[ 0 ] + 0.04, foot[ 1 ] + 0.04, foot[ 2 ] + 0.05 ] );
 
 		}
 
 	};
 	// Round a rectangle [ d0, d1 ] × [ a0, a1 ], on the sides listed ( 'd0', 'd1', 'a0', 'a1' ).
-	const formBox = ( [ fd0, fd1 ], [ fa0, fa1 ], e0, e1, sides, braceTo ) => {
+	const formBox = ( [ fd0, fd1 ], [ fa0, fa1 ], e0, e1, sides, braceFoot ) => {
 
-		if ( sides.includes( 'd0' ) ) formFace( [ fd0, fa1 ], [ fd0, fa0 ], e0, e1, [ - 1, 0 ], braceTo );
-		if ( sides.includes( 'd1' ) ) formFace( [ fd1, fa0 ], [ fd1, fa1 ], e0, e1, [ 1, 0 ], braceTo );
-		if ( sides.includes( 'a0' ) ) formFace( [ fd0, fa0 ], [ fd1, fa0 ], e0, e1, [ 0, - 1 ], braceTo );
-		if ( sides.includes( 'a1' ) ) formFace( [ fd1, fa1 ], [ fd0, fa1 ], e0, e1, [ 0, 1 ], braceTo );
+		if ( sides.includes( 'd0' ) ) formFace( [ fd0, fa1 ], [ fd0, fa0 ], e0, e1, [ - 1, 0 ], braceFoot );
+		if ( sides.includes( 'd1' ) ) formFace( [ fd1, fa0 ], [ fd1, fa1 ], e0, e1, [ 1, 0 ], braceFoot );
+		if ( sides.includes( 'a0' ) ) formFace( [ fd0, fa0 ], [ fd1, fa0 ], e0, e1, [ 0, - 1 ], braceFoot );
+		if ( sides.includes( 'a1' ) ) formFace( [ fd1, fa1 ], [ fd0, fa1 ], e0, e1, [ 0, 1 ], braceFoot );
 
 	};
-	// The pad, on its three open sides (the fourth is against the existing foundation).
-	formBox( pad.d, pad.a, pad.el[ 0 ], pad.el[ 1 ], [ 'd1', 'a0', 'a1' ], floor );
-	// The sheave anchor pedestal, all round, on the grade beam, braced to the pit's floor.
-	formBox( sheave.d, sheave.a, sheave.el[ 0 ], sheave.el[ 1 ], [ 'd0', 'd1', 'a0', 'a1' ], b.pedestalPit );
+	// The pad, on its three open sides (the fourth is against the existing foundation): braced onto
+	// the cut slope, 250 mm up it, inside the pit.
+	const onSlope = ( t, out0, corner ) => {
+
+		const up = 0.25, x = b.room + up / b.batter;
+		return x > out0 + 0.05 ? [ ...corner( t, x ), floor + up ] : null;
+
+	};
+	formBox( pad.d, pad.a, pad.el[ 0 ], pad.el[ 1 ], [ 'd1', 'a0', 'a1' ], onSlope );
+	// The pedestals' pit: the sheave anchor pedestal formed all round on the grade beam, kickers to
+	// the pit's floor where they clear P1's and P2's forms and stay in the pit.
+	const inPit = ( [ d, a ], margin ) => {
+
+		const poly = breakOut.areas[ 0 ];
+		let inside = false;
+		for ( let i = 0, j = poly.length - 1; i < poly.length; j = i ++ ) {
+
+			const [ di, ai ] = poly[ i ], [ dj, aj ] = poly[ j ];
+			if ( ( ai > a ) !== ( aj > a ) && d < ( dj - di ) * ( a - ai ) / ( aj - ai ) + di ) inside = ! inside;
+
+		}
+
+		if ( ! inside ) return false;
+		for ( let i = 0, j = poly.length - 1; i < poly.length; j = i ++ ) {
+
+			const [ di, ai ] = poly[ i ], [ dj, aj ] = poly[ j ];
+			const len = Math.hypot( dj - di, aj - ai ) || 1;
+			const u = Math.max( 0, Math.min( 1, ( ( d - di ) * ( dj - di ) + ( a - ai ) * ( aj - ai ) ) / ( len * len ) ) );
+			if ( Math.hypot( d - di - u * ( dj - di ), a - ai - u * ( aj - ai ) ) < margin ) return false;
+
+		}
+
+		return true;
+
+	};
+	const columns = [ p1, p2 ].flatMap( ( { size: [ al, ac ], at } ) => at.map( ( [ d, a ] ) => [ d - al / 2 - 0.12, d + al / 2 + 0.12, a - ac / 2 - 0.12, a + ac / 2 + 0.12 ] ) );
+	const clear = ( [ d, a ] ) => inPit( [ d, a ], 0.08 ) && ! columns.some( ( [ cd0, cd1, ca0, ca1 ] ) => d > cd0 && d < cd1 && a > ca0 && a < ca1 );
+	const kicker = ( t, out0, corner ) => {
+
+		const foot = corner( t, out0 + b.kicker );
+		for ( let f = 0; f <= 1.0001; f += 0.1 ) if ( ! clear( corner( t, out0 + b.kicker * f ) ) ) return null;
+		return [ ...foot, b.pedestalPit ];
+
+	};
+	formBox( sheave.d, sheave.a, sheave.el[ 0 ], sheave.el[ 1 ], [ 'd0', 'd1', 'a0', 'a1' ], kicker );
 	// P1 and P2: plywood boxes with steel column clamps every 400.
 	for ( const { size: [ al, ac ], top, at } of [ p1, p2 ] ) for ( const [ d, a ] of at ) {
 
@@ -1208,7 +1262,7 @@ function takeUpBuild() {
 
 	}
 
-	return { takeUpPits: pits.layer(), takeUpForms: forms.layer(), takeUpRebar: rebar.layer() };
+	return { takeUpPits: pits.layer(), takeUpForms: forms.layer(), takeUpRebar: rebar.layer(), takeUpOldConcrete: old.layer() };
 
 }
 

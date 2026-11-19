@@ -314,8 +314,9 @@ left as it came):
 
   Concrete in pale new concrete, steel in its own layer (*C32 take-up steel & embedded items*). Where grid 4
   is along C32 the drawings don't say: `TAKE_UP.GRID_4` in `scripts/b2d2-structure.mjs` puts it 4 m past
-  the tunnel's end, worked out from the belt's height there; they stand on the model's ground (`GRADE`, as
-  at grade over C31), and concrete level with the ground shows 10 cm proud (`SHOW`). The **C32 take-up**
+  the tunnel's end, worked out from the belt's height there. Levels are on the C32 tunnel's datum (its floor
+  where it comes out is the take-up's ground, EL 3.825); the model's grade over C31 is about 1.3 m higher
+  (`GRADE` would lift the take-up to it). Concrete level with the ground shows 10 cm proud (`SHOW`). The **C32 take-up**
   view looks at them;
 - along each of C31's walls under the slab, the **downstand** (0.66 m out from the wall, its underside
   at EL +1.22, where the walls' repair areas stop), as -ST011's beam elevations draw it;

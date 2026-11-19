@@ -72,6 +72,7 @@ const STRUCTURE = {
 	takeUpEmbeds: { name: 'C32 take-up embedded items', color: '#9aa3ad', metal: true, stages: [ 'forms', 'built', 'all' ] },
 	// How it's built: the pits, the formwork and the reinforcing (see-through to walk, shown by stage).
 	takeUpPits: { name: 'C32 take-up excavation', color: '#8a6a45', stages: [ 'excavation', 'forms' ], noCollide: true },
+	takeUpOldConcrete: { name: 'C32 take-up existing grade beam', color: '#a9a497' },
 	takeUpForms: { name: 'C32 take-up formwork', color: '#c9a36b', stages: [ 'forms' ], noCollide: true },
 	takeUpRebar: { name: 'C32 take-up reinforcing', color: '#8c4a2b', stages: [ 'forms' ], noCollide: true },
 	// The existing structures round it, through the work: the take-up frame and drive tower with the
@@ -114,9 +115,9 @@ const VIEWS = [
 	{ name: 'Ground', from: [ 67.5, 7.0, - 4.95 ], at: [ 20, 5.3, - 4.95 ] },
 	// C32's take-up: its pedestals, pad and counterweight tower, from up the conveyor looking back
 	// down at the tunnel's mouth.
-	{ name: 'C32 take-up', from: [ C32_LINE + 19, 13.5, - ( C32_TAKE_UP.GRID_4 + 3 ) ], at: [ C32_LINE - 1.5, 6.6, - ( C32_TAKE_UP.GRID_4 + 7 ) ] },
+	{ name: 'C32 take-up', from: [ C32_LINE + 19, 12.2 + C32_TAKE_UP.GRADE, - ( C32_TAKE_UP.GRID_4 + 3 ) ], at: [ C32_LINE - 1.5, 5.3 + C32_TAKE_UP.GRADE, - ( C32_TAKE_UP.GRID_4 + 7 ) ] },
 	// Close in on the new foundations: the pits, forms and pedestals.
-	{ name: 'Take-up close', from: [ C32_LINE + 6, 9.5, - ( C32_TAKE_UP.GRID_4 - 3 ) ], at: [ C32_LINE - 2, 4.6, - ( C32_TAKE_UP.GRID_4 + 3 ) ] },
+	{ name: 'Take-up close', from: [ C32_LINE + 6, 8.2 + C32_TAKE_UP.GRADE, - ( C32_TAKE_UP.GRID_4 - 3 ) ], at: [ C32_LINE - 2, 3.3 + C32_TAKE_UP.GRADE, - ( C32_TAKE_UP.GRID_4 + 3 ) ] },
 ];
 
 
