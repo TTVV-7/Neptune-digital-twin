@@ -4974,7 +4974,6 @@ describe( 'World Drive challenges: the rules', () => {
 		assert.equal( constant( 'BOOST_SPEED' ), BOOSTED, 'src/drive.js boosts to a different share of the top speed now: change BOOSTED in challenge-rules.js' );
 		for ( const boost of constant( 'DRIFT_BOOSTS' ) ) assert.ok( boost.speed <= BOOSTED, 'a drift boost faster than the booster' );
 		assert.ok( constant( 'TRICK_BOOST' ).speed <= BOOSTED, 'a trick\'s burst faster than the booster' );
-		assert.ok( constant( 'FLY_SPEED' ) <= BOOSTED, 'flying faster than the booster' );
 		// Holding Shift without the booster raises the top speed by a share of its own: under it too.
 		assert.ok( new Function( `return ( ${ drive.match( /spec\.topSpeed \* \( boost \? ([\d. /]+) : 1 \)/ )[ 1 ] } );` )() <= BOOSTED, 'Shift\'s boost faster than the booster' );
 		// Every top speed (km/h) written anywhere a ride is tuned: drive.js's tuning by name (SPECS,

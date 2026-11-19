@@ -173,6 +173,16 @@ export const FLUSH_MS = 100;
 // (seven still states running) is taken away.
 export const INTERP_MS = 300;
 export const TELEPORT = 60;
+
+// Whether a car went from snapshot `a` to `b` ({ p, v, at } in ms) all at once rather than by
+// driving or flying there: further than TELEPORT, and further than half again what it was going
+// (a plane at 750 m/s covers more than TELEPORT between two words).
+export function teleported( a, b ) {
+
+	const flown = Math.max( a.v.length(), b.v.length() ) * Math.abs( b.at - a.at ) / 1000 * 1.5;
+	return a.p.distanceTo( b.p ) > Math.max( TELEPORT, flown );
+
+}
 export const STALE_MS = 15000;
 // In an area, a car only goes to those within VIEW_RANGE m of it.
 export const VIEW_RANGE = 5000;
@@ -272,11 +282,12 @@ export const FLAGS = {
 	grounded: 128, // its wheels on the ground (ink, dust)
 	paused: 256, // its driver paused: parked where it is
 	spray: 512, // a hovercraft on water
+	plane: 4096, // a plane (T, src/plane.js): its wings out, or on their way out
 	// The drift's boost level, 0 to 3, in these two bits.
 	levelShift: 10,
 	levelMask: 3 << 10,
 };
-const FLAG_LIMIT = 1 << 12;
+const FLAG_LIMIT = 1 << 13;
 
 // Earth-centred positions a car can be at: from the Dead Sea's shore under the polar radius to
 // well over Everest at the equator, flying. And Moon-centred ones: from under the floor of Antoniadi
@@ -285,8 +296,9 @@ const NEAR_EARTH = [ 6340000, 6400000 ];
 const NEAR_MOON = [ MOON_RADIUS - 12000, MOON_RADIUS + 30000 ];
 // The heights a PLACE can be at (m), over the ellipsoid or the Moon's sphere.
 const PLACE_HEIGHTS = { [ EARTH ]: [ - 2000, 10000 ], [ MOON_WORLD ]: [ - 12000, 12000 ] };
-// Faster than any ride goes, booster and all (m/s).
-const TOP_SPEED = 500;
+// Faster than any ride goes, booster and all, and a plane at its ceiling (2,700 km/h: src/plane.js)
+// (m/s).
+const TOP_SPEED = 800;
 
 const round = ( value, places ) => Math.round( value * 10 ** places ) / 10 ** places;
 

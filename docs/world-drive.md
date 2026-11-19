@@ -69,6 +69,7 @@ address, and the construction app is unchanged by it.
 | Space | Drift: hold it and steer round a bend, let go for a mini-turbo; tap it to hop |
 | Shift (or B) | Booster: hold for overdrive while the gauge lasts; let go to save the rest |
 | F | Fly: hold to lift off, let go to glide down |
+| T | Plane: your ride turns into a little plane ([Plane mode](#plane-mode)); T again bails out (a parachute near the ground), or lands it low down |
 | In the air | A / D spin, W / S flip (W forward, S back), Q / E roll (or Space with A / D) |
 | R | Stuck? Back on the road a few metres on (on water too) |
 | C | Chase or driver's-seat camera |
@@ -133,6 +134,70 @@ Hit something (a wall, a building, a parked car, a barrier) and you don't stop: 
   then pink after 0.7, 1.5 and 2.5 s). Let go for a short, strong boost. Space held before you
   steer waits for the steering rather than hopping; a quick tap hops.
 
+### Plane mode
+
+**T** turns whatever you're driving into a little plane: wings swing down from its sides with a jet
+under each, a fin rises at the back, and on a model car the wheels fold out flat as fans. It lifts
+a few metres off the ground and hovers. **W** speeds up and **S** slows down (to a hover; let go
+of both and it cruises at that speed), **A**/**D** turn and bank, **Space** (or **F**) climbs and
+**Shift** comes down. **T** again **bails out**: the wings fold away and the car falls, no faster
+than a skydiver (55 m/s, its speed across the ground easing off to the ride's own), and a
+**parachute** opens as it nears the ground (30 m over it, or 0.8 s of the fall over it, falling
+faster: `PARACHUTE` in `src/plane.js`), sinking at 5 m/s, steered a little with **A**/**D**, and
+righting it to land on its wheels, driving on at the speed it landed with (never more than the
+booster's). Press **T** while falling to be a plane again. Within 12 m of the ground, **T** flies it
+down by itself instead and folds it back into a car on the ground (**T** on the way down flies on).
+Others driving with you see the plane fold away and the car come down, without the parachute.
+On a touch screen the ✈ button under CAM is T, FLY is up and BOOST is down.
+
+**Faster the higher you fly.** Just off the ground it goes up to twice the ride's own top speed
+(`CAR_SHARE`: 320 km/h in the pickup), a plane's speed even low down. Higher up the table below
+takes over where it's faster, and climbing and coming down get quicker too (`SPEEDS` and `CLIMB` in
+`src/plane.js`):
+
+| Height over the ground | Top speed |
+| --- | --- |
+| 0 m | 60 km/h |
+| 30 m | 100 km/h |
+| 150 m | 250 km/h |
+| 600 m | 500 km/h |
+| 2 km | 900 km/h |
+| 6 km | 1,800 km/h |
+| 12 km (the ceiling) | 2,700 km/h |
+
+Coming down, it eases off to the top speed for its height. It
+never goes below 0.8 m over the ground (a slope is flown up), stops short of a wall ("Bonk!") and
+never climbs through a roof or a bridge.
+
+**It's for looking round, not for points.** It's kept apart from everything scored:
+
+- **No challenges.** T does nothing during a challenge's countdown or run ("No plane during a
+  challenge run"), so no board's time is ever flown. Times are still checked against the fastest
+  anything drives along the ground (`FASTEST` in `challenge-rules.js`), which the plane isn't.
+- **No stunts or boost.** Turning into a plane drops a jump's tricks unlanded and puts the booster
+  out. As a plane there's no hop, drift, booster or tricks. Once it's down, a **new stunt run**
+  starts (the last one's place may be far behind).
+- **No levels.** Its distance, air and the areas it flies over don't count for XP (`driven` in
+  `main.js`).
+
+**Google's tiles.** Google bills by the session (one a page load: see the top of `main.js`), not
+by the tile, so flying high or far costs no more there. What a fast plane costs is your device's
+download and drawing, so flying fast it makes do with coarser tiles: their screen-space error
+target goes up to 2.5 times the usual from 30 m/s to 250 m/s (`PLANE_TILE_ERROR` in `main.js`).
+Driving, the tiles are as sharp as ever.
+
+**Driving with others.** They see you as a plane too: each state you send carries `FLAGS.plane`
+(`live-protocol.js`) while your wings are out, and their copy of your car unfolds the same kit at
+the same pace, flies with you, and folds it away as you fold yours (`planeOf` in `ghosts.js`). A
+plane's states go up to 800 m/s (`TOP_SPEED` there) and, flying fast, more than `TELEPORT` m apart
+are still flown between rather than jumped (`teleported`).
+
+**Wheels.** The model cars' wheels (`cars.js`) and the go-kart's (`kart.js`) fold out flat as
+fans. The other code-built rides (coupe, bus, monster truck, hovercraft) get the wings but keep
+their wheels as they are.
+
+**Not yet:** flying high enough to come out on the globe and pick somewhere else.
+
 ### Boosting
 
 - **The booster** (**Shift**, or **B**, or the BOOST button) burns while it's held: a full gauge lasts
@@ -141,6 +206,13 @@ Hit something (a wall, a building, a parked car, a barrier) and you don't stop: 
   each), and so do boost pads (once they're switched on). What it leaves behind is the ride's **boost style** from the
   [Garage](#the-garage): the classic flame, bubbles, confetti, music notes or cherry blossom, or
   with the pass (or, for some, a level) one of seventeen more.
+- **In the air it pushes the way the nose points.** On the road it pushes you forward. Off the
+  ground (a jump, a launch, flying on **F**) it pushes along the car as it's turned: nose up and it
+  climbs (adding up to 20 m/s upward, `BOOST_CLIMB`), nose down and it dives, pointing back mid-spin
+  and it slows you and then sends you backwards. Along the ground it still never takes you past
+  twice the top speed, so challenge times are checked the same way. Flying on **F**, only the part
+  along the way you're heading counts, since flying follows your heading. (`pushAlongNose` in
+  `src/drive.js`.)
 - **Overdrive.** Boost at 85 % or more of that doubled top speed for three quarters of a second and
   you hit overdrive (the code calls it supersonic): a sonic boom (shock rings blown out round you, a flash and a jolt, the edges of the view flashing white), streaks of
   air streaming back past you, the view 9° wider and **OVERDRIVE** by the speed. It lasts, boosting

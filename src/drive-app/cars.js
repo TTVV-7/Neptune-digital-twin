@@ -299,7 +299,9 @@ export async function loadCar( loader, car, entry ) {
 		hub.userData.wheel = wheel.userData.wheel;
 		delete wheel.userData.wheel;
 		hub.position.fromArray( entry.wheels?.find( w => w.name === wheel.name )?.at ?? wheel.position.toArray() );
-		hub.rotation.order = 'YXZ';
+		// Folded flat (plane mode, about Z), then steered, then spun: with nothing folded, as YXZ.
+		hub.rotation.order = 'ZYX';
+		hub.userData.rest = hub.position.y;
 		wheel.parent.add( hub );
 		wheel.position.sub( hub.position );
 		hub.add( wheel );
@@ -308,13 +310,17 @@ export async function loadCar( loader, car, entry ) {
 	} );
 	const turns = hubs.map( () => 0 );
 	let lean = 0;
-	model.userData.onDrive = ( { steer, speed, dt, airborne = false } ) => {
+	// As a plane (drive.js's plane mode, `plane` from 0 to 1 as it unfolds), each wheel folds out flat
+	// and up a little, its tyre turned to the sky, to spin as a fan.
+	model.userData.onDrive = ( { steer, speed, dt, airborne = false, plane = 0 } ) => {
 
 		hubs.forEach( ( hub, i ) => {
 
 			turns[ i ] = ( turns[ i ] + speed * dt / hub.userData.wheel.radius ) % ( Math.PI * 2 );
 			hub.rotation.x = - turns[ i ];
 			if ( hub.userData.wheel.steers ) hub.rotation.y = - steer * STEER_LOCK;
+			hub.rotation.z = ( hub.position.x < 0 ? 1 : - 1 ) * plane * Math.PI / 2;
+			hub.position.y = hub.userData.rest + plane * hub.userData.wheel.radius * 0.6;
 
 		} );
 		if ( ! car.drive?.lean || ! sprung || dt <= 0 ) return;
