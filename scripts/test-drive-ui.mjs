@@ -414,6 +414,8 @@ describe( 'World Drive, desktop', () => {
 			const score = d.score;
 			d.hop();
 			d.vy = 12;
+			// (Thrown up, as a launch is: all of its air counts, none of it the hop's own.)
+			d.air.hop = 0;
 			d.press( 'KeyS' );
 			step( 5, () => {
 
@@ -5746,9 +5748,11 @@ function landBackflip( page ) {
 		Object.assign( d, { east: 0, north: 0, y: 0, heading: 0, course: 0, view: 0, speed: 40 / 3.6, vy: 0, pitch: 0, roll: 0, grounded: true, air: null, boost: null } );
 		d.update( 1 / 60 );
 		const before = d.score;
-		// Thrown up at 20 m/s off a hop: about 4.1 s up, 2 s more than the hop's own (which isn't big air).
+		// Thrown up at 12 m/s off a hop: about 2.4 s up.
 		d.hop();
-		d.vy = 20;
+		d.vy = 12;
+		// (Thrown up, as a launch is: all of its air counts, none of it the hop's own.)
+		d.air.hop = 0;
 		d.press( 'KeyS' );
 		for ( let i = 0; i < 400; i ++ ) {
 
