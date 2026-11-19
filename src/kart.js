@@ -99,17 +99,23 @@ export function makeKart() {
 	// Wheels: a turning knuckle for each front one, and a spinning hub inside each.
 	const spinners = [];
 	const knuckles = [];
+	// Every wheel's mount (the front ones' knuckles and the rear ones' hubs), each folded flat about
+	// Z as a plane (onDrive's `plane`), then steered, then spun.
+	const mounts = [];
 	for ( const side of [ - 1, 1 ] ) {
 
 		const knuckle = new Group();
 		knuckle.position.set( side * FRONT_TYRE.x, FRONT_TYRE.radius, FRONT_AXLE );
+		knuckle.rotation.order = 'ZYX';
 		kart.add( knuckle );
 		knuckles.push( knuckle );
+		mounts.push( { mount: knuckle, side, radius: FRONT_TYRE.radius } );
 		spinners.push( wheel( knuckle, FRONT_TYRE, side ) );
 
 		const rear = new Group();
 		rear.position.set( side * REAR_TYRE.x, REAR_TYRE.radius, REAR_AXLE );
 		kart.add( rear );
+		mounts.push( { mount: rear, side, radius: REAR_TYRE.radius } );
 		spinners.push( wheel( rear, REAR_TYRE, side ) );
 
 	}
@@ -129,9 +135,18 @@ export function makeKart() {
 	kart.userData.decals = KART_DECALS;
 
 	let roll = 0;
-	kart.userData.onDrive = ( { steer, speed, dt } ) => {
+	// As a plane (drive.js's plane mode, `plane` from 0 to 1 as it unfolds), each wheel folds out
+	// flat and up a little, its tyre to the sky, to spin as a fan (as cars.js's do).
+	kart.userData.onDrive = ( { steer, speed, dt, plane = 0 } ) => {
 
 		for ( const knuckle of knuckles ) knuckle.rotation.y = - steer * STEER_LOCK;
+		for ( const { mount, side, radius } of mounts ) {
+
+			mount.rotation.z = - side * plane * Math.PI / 2;
+			mount.position.y = radius * ( 1 + plane * 0.6 );
+
+		}
+
 		roll += speed * dt / ( ( FRONT_TYRE.radius + REAR_TYRE.radius ) / 2 );
 		roll %= Math.PI * 2;
 		// Forward is -Z, so rolling forward turns the top of the wheel toward -Z: negative about X.

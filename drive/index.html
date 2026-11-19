@@ -152,7 +152,7 @@
 						<li><b>Drive anywhere.</b> Search for a city, a landmark or an address, type coordinates, or tap the globe.</li>
 						<li><b>Stunts.</b> Hit a wall and you bounce off it into the air: spin, flip and roll, land on your wheels to score, and chain tricks into combos.</li>
 						<li><b>Boost and drift.</b> The booster takes you into overdrive, a drift pays out a mini-turbo, and glowing pads on the road (switched on in the pause menu) fill the booster up.</li>
-						<li><b>Fly.</b> Lift off over the rooftops and glide back down.</li>
+						<li><b>Fly.</b> Turn your ride into a plane and fly over the city, then bail out and parachute back down.</li>
 						<li><b>Drive on the Moon.</b> Switch the globe to the Moon and drive its craters, seas and the Apollo landing sites, in low gravity, with the Earth in the sky.</li>
 						<li><b>Drive with others.</b> See who's driving nearby as ghost cars, or invite friends to a party with a link, wherever each of you is.</li>
 						<li><b>Levels and the leaderboard.</b> Driving earns XP for 50 levels of cars, paint, boost trails and titles, and your best runs go on the leaderboard.</li>
@@ -160,7 +160,7 @@
 						<li><b>Your ride.</b> A pickup, a go-kart or a muscle car to start, and six more cars as you level up, from a golf cart and a tuk-tuk to a formula racer, all painted in the Garage; the optional Supporter Pass adds more.</li>
 					</ul>
 					<h3>How to play</h3>
-					<p><kbd>W</kbd> <kbd>S</kbd> gas and brake, <kbd>A</kbd> <kbd>D</kbd> steer, <kbd>Space</kbd> drift, <kbd>Shift</kbd> boost, <kbd>F</kbd> fly, <kbd>R</kbd> back on the road and <kbd>M</kbd> back to the globe. On a phone or a tablet, buttons on the screen.</p>
+					<p><kbd>W</kbd> <kbd>S</kbd> gas and brake, <kbd>A</kbd> <kbd>D</kbd> steer, <kbd>Space</kbd> drift (tap to jump), <kbd>Shift</kbd> boost, <kbd>F</kbd> plane, <kbd>R</kbd> back on the road and <kbd>M</kbd> back to the globe. On a phone or a tablet, buttons on the screen.</p>
 					<h3>Places to drive</h3>
 					<ul class="site-places"><!-- places --></ul>
 					<p><a href="/drive/" target="_blank" rel="noopener">All the places, with what to do there</a></p>
@@ -207,11 +207,11 @@
 			<dl class="keys" hidden>
 				<div><dt><kbd>W</kbd> <kbd>S</kbd></dt><dd>Gas, brake &amp; reverse</dd></div>
 				<div><dt><kbd>A</kbd> <kbd>D</kbd></dt><dd>Steer</dd></div>
-				<div><dt><kbd>Space</kbd></dt><dd><b>Drift</b>: hold and steer, let go to boost; tap to hop</dd></div>
+				<div><dt><kbd>Space</kbd></dt><dd><b>Drift</b>: hold and steer, let go to boost; tap to hop. Let go and press again to flick into the next drift. Hold it as you land sideways to <b>powerslide</b></dd></div>
 				<div><dt><kbd>Shift</kbd></dt><dd><b>Boost</b> (or B): flat out for a moment, you hit overdrive; boost pads (switched on in the pause menu) fill it up</dd></div>
-				<div><dt><kbd>F</kbd></dt><dd>Fly</dd></div>
+				<div><dt><kbd>F</kbd> <kbd>T</kbd></dt><dd><b>Plane</b>: <kbd>W</kbd> <kbd>S</kbd> thrust, <kbd>Space</kbd> up, <kbd>Shift</kbd> down; at least twice a car's speed, faster the higher you fly. <kbd>F</kbd> or <kbd>T</kbd> again to bail out: free fall, then a parachute near the ground (low down, it lands). Just for looking round: no points</dd></div>
 				<div><dt>In the air</dt><dd><kbd>A</kbd> <kbd>D</kbd> spin · <kbd>W</kbd> <kbd>S</kbd> flip · <kbd>Q</kbd> <kbd>E</kbd> roll</dd></div>
-				<div><dt>Stunts</dt><dd>Hit things to launch; land on your wheels to score</dd></div>
+				<div><dt>Stunts</dt><dd>Hit things to launch; land on your wheels to score. <button type="button" class="link scoring-open">How scoring works</button></dd></div>
 				<div><dt><kbd>R</kbd></dt><dd>Back on the road</dd></div>
 				<div><dt><kbd>C</kbd></dt><dd>Camera</dd></div>
 				<div><dt>Wheel</dt><dd>Camera nearer or farther</dd></div>
@@ -242,6 +242,7 @@
 				<div class="more">
 					<button type="button" class="board-open" hidden><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M6 2.5h8v4.5a4 4 0 0 1-8 0z" fill="currentColor"/><path d="M6 4.5H3.2v1.2A3.3 3.3 0 0 0 6.3 9M14 4.5h2.8v1.2A3.3 3.3 0 0 1 13.7 9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10 11v4M6.5 17.5h7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Leaderboard</button>
 					<button type="button" class="challenges-open" hidden><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M4 2.5v15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M5 3h11.5v8.5H5z" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5 3h2.9v2.8H5zM10.8 3h2.9v2.8h-2.9zM7.9 5.8h2.9v2.9H7.9zM13.7 5.8h2.8v2.9h-2.8zM5 8.7h2.9v2.8H5zM10.8 8.7h2.9v2.8h-2.9z" fill="currentColor"/></svg> Challenges</button>
+					<button type="button" class="scoring-open">How scoring works</button>
 					<button type="button" class="to-globe">Back to the globe <kbd>M</kbd></button>
 				</div>
 				<div class="settings">
@@ -314,6 +315,17 @@
 			<ul class="credits small"></ul>
 			<p class="small">World Drive is checked by Cloudflare Turnstile so the free drives go to people rather than robots.</p>
 			<form method="dialog"><button type="submit" class="primary">Close</button></form>
+		</dialog>
+
+		<dialog id="scoring" aria-labelledby="scoring-title">
+			<h2 id="scoring-title">How scoring works</h2>
+			<p>Get some air (a ramp, a crest, a hop on <kbd>Space</kbd>, or hit a wall to bounce off it), do tricks, and land on your wheels.</p>
+			<table class="scoring-table">
+				<thead><tr><th scope="col">Trick</th><th scope="col">Points</th><th scope="col">How</th></tr></thead>
+				<tbody></tbody>
+			</table>
+			<ul class="scoring-rules"></ul>
+			<form method="dialog"><button type="submit" class="primary">Got it</button></form>
 		</dialog>
 
 		<dialog id="leaderboard" aria-labelledby="board-title">
