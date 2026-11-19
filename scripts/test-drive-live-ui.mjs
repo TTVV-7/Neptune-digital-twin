@@ -2083,7 +2083,13 @@ describe( 'World Drive, driving with others on the Moon', () => {
 		await a.evaluate( () => window.drive.driver.release( 'KeyW' ) );
 		await a.waitForTimeout( 2000 );
 		await d.locator( '#drive-ui .live-chip' ).click();
-		await d.locator( '#drive-ui .players li .go' ).first().click();
+		// Tabbed to, Go to keeps the focus as the list refreshes (twice a second): its row is only
+		// moved when the order changes, as moving it takes it out of the page and the focus with it.
+		const go = d.locator( '#drive-ui .players li .go' ).first();
+		await go.focus();
+		await d.waitForTimeout( 1500 );
+		assert.ok( await go.evaluate( button => document.activeElement === button ), 'Go to lost the focus as the list refreshed' );
+		await go.click();
 		await d.waitForTimeout( 3000 );
 		const [ hersNow, mineNow ] = await Promise.all( [ whereOnMoon( a ), whereOnMoon( d ) ] );
 		const beside = Math.hypot( ...mineNow.own.at.map( ( x, i ) => x - hersNow.own.at[ i ] ) );
