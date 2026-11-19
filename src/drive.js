@@ -100,8 +100,17 @@ const KART_YAW = [ 150, 55 ];
 // of `kick` m/s and then pushes for `time` s up to `speed` times the top speed: strong and short.
 // Space pressed without steering waits to see: held, then steered, it drifts with no hop (the
 // DRIFT button is pressed before steering); let go within HOP_TAP s, it hops.
+//
+// Drifts chain: pressing Space again within DRIFT_CHAIN s of letting go of one, steering, starts
+// the next drift at once on the ground, with no hop, so left-right-left S-turns flow. (Each one
+// used to hop first, and a hop kept it off the ground for half a second.) Space held as it lands
+// at POWERSLIDE.min° or more off the way it's going (up to POWERSLIDE.max°) powerslides: it keeps
+// its speed and slides on the way it was going, sideways, into a drift that way, keeping `keep` of
+// its speed, instead of losing what was sideways.
 const DRIFT_MIN = 5;
-const DRIFT_HOP = 2.4;
+const DRIFT_HOP = 1.8;
+const DRIFT_CHAIN = 0.35;
+const POWERSLIDE = { min: 12, max: 120, keep: 0.97 };
 const DRIFT_YAW = [ 40, 110 ];
 const DRIFT_SLIP = 2;
 const GRIP = 12;
@@ -192,6 +201,9 @@ const CHAIN_TIME = 6;
 const TRICK_GAUGE = 0.2;
 const TRICK_BOOST = { speed: 1.25, time: 0.3, each: 0.15, max: 0.9 };
 const BEST_KEY = 'drive.stunt-best';
+// The scoring rules as numbers, for the "How scoring works" card (drive-app/scoring.js), so what it
+// says is always what the game does.
+export const SCORING = { points: POINTS, spinTol: SPIN_TOL, flipTol: FLIP_TOL, bigAir: BIG_AIR, combo: COMBO_BONUS, multMax: MULT_MAX, chainTime: CHAIN_TIME, landTilt: LAND_TILT, bounceMin: BOUNCE_SCORE, gauge: TRICK_GAUGE };
 // Hits and landings squash the model, which springs back: a spring of `stiffness` (1/s²) and
 // `damping` (1/s), kicked at `hit` per m/s into a wall and `land` per m/s coming down, so it's
 // quick (about 0.3 s) and never more than `max` of its size. The camera shakes by SHAKE m per m/s
@@ -373,6 +385,7 @@ export class Driver {
 		// With kart handling, Space without steering is a drift waiting for the steering, or a hop
 		// if it's let go at once (see release).
 		if ( code === 'Space' && this.grounded && this.drift && this.steerInput() === 0 ) this.spaceTap = this.clock;
+		else if ( code === 'Space' && this.drift && this.chainable() ) this.startDrift( this.steerInput() );
 		else if ( code === 'Space' && this.grounded ) this.hop();
 		// The booster goes on Shift, by the gas and steering keys, as well as B.
 		else if ( this.booster && ( code === 'KeyB' || code === 'ShiftLeft' || code === 'ShiftRight' ) ) {
@@ -506,6 +519,7 @@ export class Driver {
 		this.drifting = 0;
 		this.driftTime = 0;
 		this.driftLevel = 0;
+		this.driftEnded = - Infinity;
 		this.driftHop = false;
 		this.boost = null;
 		this.stuckTime = 0;
@@ -903,13 +917,15 @@ export class Driver {
 		if ( this.drift && steer !== 0 && this.speed > DRIFT_MIN ) {
 
 			// (As short as on the Earth, wherever: it's a flick into the drift, not a jump.)
-			this.vy = DRIFT_HOP * this.gravity;
+			// Up from the ground's own climb (the jump is off the slope, not straight up the world,
+			// so a hop going up a hill doesn't drop into it).
+			this.vy = Math.max( this.vy, 0 ) + DRIFT_HOP * this.gravity;
 			this.driftHop = true;
 			this.startDrift( steer );
 
 		} else {
 
-			this.vy = JUMP_SPEED * this.leap;
+			this.vy = Math.max( this.vy, 0 ) + JUMP_SPEED * this.leap;
 			this.driftHop = false;
 
 		}
@@ -927,7 +943,7 @@ export class Driver {
 
 		this.steer += ( steerInput - this.steer ) * Math.min( 1, dt * 10 );
 		const space = this.keys.has( 'Space' );
-		if ( ! this.drifting && space && steerInput !== 0 && this.grounded && this.speed > DRIFT_MIN ) this.startDrift( steerInput );
+		if ( ! this.drifting && space && steerInput !== 0 && ( this.grounded || this.driftHop ) && this.speed > DRIFT_MIN ) this.startDrift( steerInput );
 		if ( this.drifting && ! space ) this.endDrift( true );
 		else if ( this.drifting && this.speed < DRIFT_MIN * 0.6 ) this.endDrift( false );
 
@@ -958,10 +974,19 @@ export class Driver {
 
 		}
 
-		this.heading += yawRate * ( this.grounded ? 1 : 0.5 ) * dt;
+		// (A drift's hop is a flick into it: it turns as on the ground.)
+		this.heading += yawRate * ( this.grounded || this.driftHop ? 1 : 0.5 ) * dt;
 		// The way it travels follows the way it points: slowly while sliding, almost at once with grip.
 		const slip = ( ( this.heading - this.course ) % 360 + 540 ) % 360 - 180;
 		this.course += slip * Math.min( 1, dt * ( this.drifting ? handling.slip : handling.grip ) );
+
+	}
+
+	// Space pressed again just after a drift, steering at speed on the ground: straight into the next
+	// one (see DRIFT_CHAIN).
+	chainable() {
+
+		return ! this.drifting && this.grounded && ! this.air && this.steerInput() !== 0 && this.speed > DRIFT_MIN && this.clock - this.driftEnded <= DRIFT_CHAIN;
 
 	}
 
@@ -988,6 +1013,7 @@ export class Driver {
 
 		}
 
+		if ( this.drifting ) this.driftEnded = this.clock;
 		this.drifting = 0;
 		this.driftLevel = 0;
 
@@ -1812,8 +1838,14 @@ export class Driver {
 		this.airTime += dt;
 		const middle = this.y + this.centre.y;
 		// The ground under its middle, looked for from just over it (before it moves, so it can't
-		// drop through a roof), never a bridge or a roof overhead.
-		const ground = this.groundAt( this.east, this.north, middle + 0.3 );
+		// drop through a roof), never a bridge or a roof overhead. Over it by as much again as a
+		// steep slope (56°) climbs in this frame's travel: flying into a hill, its middle had already
+		// gone under the hillside by the time it looked, the ray found nothing (the map's ground is a
+		// skin, seen only from above) and it fell through the world. Should it still find nothing,
+		// it looks again from over the top of its box, for a hillside it has gone into.
+		const climb = Math.abs( this.speed ) * dt * 1.5;
+		let ground = this.groundAt( this.east, this.north, middle + 0.3 + climb );
+		if ( ground === null ) ground = this.groundAt( this.east, this.north, middle + this.extent( UP, air.q ) + 1 + climb );
 		if ( air.righting ) {
 
 			this.rightStep( dt, ground );
@@ -1847,8 +1879,10 @@ export class Driver {
 		}
 
 		// Down only coming down: thrown up off something low, the top of that thing can be under its
-		// middle and over its wheels for a moment, and it isn't landing on it.
-		if ( this.vy > 0 || this.y + this.centre.y - reach > ground ) return;
+		// middle and over its wheels for a moment, and it isn't landing on it. Unless the ground is
+		// over its middle: a hill rising faster than it climbs, which it lands on.
+		const buried = ground > this.y + this.centre.y;
+		if ( ! buried && ( this.vy > 0 || this.y + this.centre.y - reach > ground ) ) return;
 		this.y = ground + reach - this.centre.y;
 		if ( air.wipeout ) this.startRighting();
 		else if ( this.tilt( air.q ) <= this.handling.landTilt ) this.touchDown( ground );
@@ -1870,14 +1904,38 @@ export class Driver {
 		this.heading = yawToHeading( _euler.y );
 		this.pitch = _euler.x;
 		this.roll = _euler.z;
-		this.speed *= Math.cos( ( this.course - this.heading ) * MathUtils.DEG2RAD );
-		this.course = this.heading;
-		if ( this.vy < - 12 * this.leap ) this.speed *= 0.8;
-		this.squashBy( - this.vy * SQUASH.land, 'land' );
-		if ( this.vy < - 5 ) this.fx?.dust( enuToLocal( this.east, this.north, ground, _c ), MathUtils.clamp( - this.vy / 15, 0, 1 ), this.width );
+		// Its speed along the slope it lands on: coming down onto a downhill run it carries the fall
+		// on as speed, as a skier does; onto an uphill one it loses some. (On the ground `speed` is
+		// across the ground, climbing at speed × slope, so it's the velocity's share along the slope,
+		// measured across the ground. Still rising, it never gains from that: that's the jump's own
+		// push, not a fall.) Only the speed into the slope is the landing's thump.
+		const slope = this.slopeAlong( this.course );
+		const across = ( this.speed + this.vy * slope ) / ( 1 + slope * slope );
+		const impact = Math.min( 0, ( this.vy - this.speed * slope ) / Math.sqrt( 1 + slope * slope ) );
+		this.speed = this.vy >= 0 && Math.abs( across ) > Math.abs( this.speed ) ? this.speed : across;
+		// Down at an angle to the way it was going: it loses what was sideways, unless Space (drift) is
+		// held, when it powerslides on, sideways, into a drift (see POWERSLIDE).
+		const slip = ( ( this.heading - this.course ) % 360 + 540 ) % 360 - 180;
+		const powerslide = this.drift && this.keys.has( 'Space' ) && Math.abs( slip ) >= POWERSLIDE.min && Math.abs( slip ) <= POWERSLIDE.max && this.speed > DRIFT_MIN;
+		if ( powerslide ) {
+
+			this.speed *= POWERSLIDE.keep;
+			this.startDrift( this.steerInput() || Math.sign( slip ) );
+			this.hud.flash( 'Powerslide!' );
+
+		} else {
+
+			this.speed *= Math.cos( slip * MathUtils.DEG2RAD );
+			this.course = this.heading;
+
+		}
+
+		if ( impact < - 12 * this.leap ) this.speed *= 0.8;
+		this.squashBy( - impact * SQUASH.land, 'land' );
+		if ( impact < - 5 ) this.fx?.dust( enuToLocal( this.east, this.north, ground, _c ), MathUtils.clamp( - impact / 15, 0, 1 ), this.width );
 		if ( ! air.flew ) this.bestAir = Math.max( this.bestAir, air.time );
 		const tricks = this.tricksOf( air );
-		const fall = - this.vy;
+		const fall = - impact;
 		this.vy = 0;
 		this.airTime = 0;
 		this.grounded = true;
@@ -2390,6 +2448,19 @@ export class Driver {
 	get leap() {
 
 		return Math.sqrt( this.gravity );
+
+	}
+
+	// How steeply the ground climbs (rise over run) the way `heading` points, across the vehicle's
+	// length about where it is; 0 where it can't tell.
+	slopeAlong( heading ) {
+
+		const rad = heading * Math.PI / 180;
+		const d = Math.max( 1, this.wheelbase / 2 );
+		const from = this.y + 2 + d;
+		const ahead = this.groundAt( this.east + Math.sin( rad ) * d, this.north + Math.cos( rad ) * d, from );
+		const behind = this.groundAt( this.east - Math.sin( rad ) * d, this.north - Math.cos( rad ) * d, from );
+		return ahead === null || behind === null ? 0 : MathUtils.clamp( ( ahead - behind ) / ( 2 * d ), - 1.5, 1.5 );
 
 	}
 

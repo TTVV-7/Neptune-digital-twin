@@ -37,6 +37,7 @@ import { BUDGET_TOAST, budgetToast, setUpFriends } from './friends.js';
 import { createOnline } from './online.js';
 import { BUDGET_SPENT, cleanPartyCode, FLAGS } from './live-protocol.js';
 import { send } from './api.js';
+import { setUpScoring } from './scoring.js';
 import * as screens from './screens.js';
 
 // World Drive (worlddrive.app, docs/world-drive.md): pick anywhere on Earth from a globe of
@@ -2166,6 +2167,14 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	$( 'drive-ui' ).querySelector( '.to-globe' ).addEventListener( 'click', () => toGlobe() );
 	$( 'drive-ui' ).querySelector( '.pause-open' ).addEventListener( 'click', pauseDrive );
 	$( 'drive-ui' ).querySelector( '.keys-toggle' ).addEventListener( 'click', () => screens.toggleKeys() );
+	// How scoring works: from the keys card (pausing first, so the car isn't left driving under it)
+	// and from the pause menu.
+	setUpScoring( $( 'scoring' ), [ $( 'drive-ui' ).querySelector( '.scoring-open' ), $( 'pause' ).querySelector( '.scoring-open' ) ], { onOpen: () => {
+
+		screens.hideKeys();
+		pauseDrive();
+
+	} } );
 	$( 'pause' ).querySelector( '.resume' ).addEventListener( 'click', resume );
 	$( 'pause' ).querySelector( '.to-globe' ).addEventListener( 'click', () => toGlobe() );
 	$( 'loading' ).querySelector( '.cancel' ).addEventListener( 'click', () => toGlobe() );
