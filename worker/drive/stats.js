@@ -100,23 +100,27 @@ export async function postStats( context ) {
 
 // The kinds of visit countVisit counts (metric 'visit_kind'): on the Earth ('earth', a supporter's
 // 'earth_supporter'), the owner's, on a free world opened on a link to it ('moon_link',
-// 'mars_link', 'vesta_link', 'ceres_link'), a plain load's, which opens on the orrery with none of
-// the Earth's drives spent until the Earth's picked ('orrery': picking it then reloads the page into
-// an 'earth' visit of its own), and on the Moon over the day's cap for everyone or the visitor's own
-// (the page opens on the Moon instead).
-const VISIT_KINDS = new Set( [ 'earth', 'earth_supporter', 'owner', ...OFF_EARTH.map( world => `${ world }_link` ), 'orrery', 'moon_daily_cap', 'moon_visitor_cap' ] );
+// 'mars_link', 'vesta_link', 'ceres_link'), a plain load's, which opens on the orrery ('orrery'), a
+// page opened on its own globe of the Earth (a link to an Earth place, challenge or party: 'globe'),
+// neither with any of the Earth's drives spent until it drives there (an 'earth' kind then, counted
+// with `again`, not as another visit), and turned away by the day's cap for everyone or the
+// visitor's own ('moon_daily_cap', 'moon_visitor_cap': from the globe it stays on the globe; a page
+// from before, which asked as it loaded, opened on the Moon instead).
+const VISIT_KINDS = new Set( [ 'earth', 'earth_supporter', 'owner', ...OFF_EARTH.map( world => `${ world }_link` ), 'orrery', 'globe', 'moon_daily_cap', 'moon_visitor_cap' ] );
 
-// A visit handed out at `now`: counted for the day and its hour (UTC). Never in the visit's way: a
-// count that fails is only logged.
-export async function countVisit( env, now, kind = '' ) {
+// A visit handed out at `now`: counted for the day and its hour (UTC). again: an Earth drive asked
+// for by a page that was counted as a visit already (its globe's or a link's), so only where it went
+// is counted, not another visit. Never in the visit's way: a count that fails is only logged.
+export async function countVisit( env, now, kind = '', { again = false } = {} ) {
 
 	try {
 
 		if ( ! env.DB ) return;
 		const hour = String( new Date( now ).getUTCHours() ).padStart( 2, '0' );
-		const counts = [ [ 'visit', 'all', 1 ], [ 'visit_hour', hour, 1 ] ];
+		const counts = again ? [] : [ [ 'visit', 'all', 1 ], [ 'visit_hour', hour, 1 ] ];
 		// Where the visit went (VISIT_KINDS): the Earth, or another world and why.
 		if ( VISIT_KINDS.has( kind ) ) counts.push( [ 'visit_kind', kind, 1 ] );
+		if ( ! counts.length ) return;
 		await add( env.DB, dayOf( now ), counts );
 
 	} catch ( err ) {

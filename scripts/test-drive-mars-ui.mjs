@@ -457,9 +457,8 @@ describe( 'World Drive\'s Mars, by a link and from the keyboard', () => {
 
 // A challenge on Mars (src/drive-app/challenges.js), with the Worker's answers made here: a link to
 // a Mars spot asks for a free visit (world: 'mars': no Earth drive spent, no Maps key), and the game
-// opens on Mars with the Earth closed; the list with Mars's first, under "On Mars", the Earth's a
-// reload away (no Earth drive was turned away today, so its Start reloads to the Earth's visit,
-// challenges.js's earthFor); a Mars challenge's drop-in at its start, its gate on Mars's own heights
+// opens on Mars; the list with Mars's first, under "On Mars", the Earth's with a plain Start (the
+// Earth is our own globe there too, its drive asked for at the drop-in); a Mars challenge's drop-in at its start, its gate on Mars's own heights
 // (as the ground built there has them), driven through, and its time posted with that visit.
 describe( 'World Drive challenges on Mars', () => {
 
@@ -508,8 +507,8 @@ describe( 'World Drive challenges on Mars', () => {
 			// On Mars: its own first, under its own heading (no "the").
 			assert.deepEqual( await dialog.locator( '.ch-world' ).allTextContents(), [ 'On Mars', 'On the Earth' ] );
 			assert.deepEqual( await dialog.locator( '.ch-card' ).evaluateAll( cards => cards.map( card => [ card.dataset.id, card.dataset.world ] ) ), [ [ '33', 'mars' ], [ '31', 'earth' ] ] );
-			// The Earth's: not used up today (that's the Moon's cap case), so its Start reloads to it.
-			assert.equal( await dialog.locator( '.ch-card[data-id="31"] .ch-start' ).textContent(), 'Opens the Earth (reloads)' );
+			// The Earth's: a plain Start, its Earth drive asked for at the drop-in.
+			assert.equal( await dialog.locator( '.ch-card[data-id="31"] .ch-start' ).textContent(), 'Start' );
 			assert.equal( await dialog.locator( '.ch-card[data-id="33"] .ch-start' ).textContent(), 'Start' );
 			await shot( page, 'challenges-mars-1-list' );
 			// Mars's: a drop-in at its start, its gate on its own ground.

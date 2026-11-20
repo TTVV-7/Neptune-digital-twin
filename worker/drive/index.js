@@ -278,17 +278,26 @@ async function getConfig( { env, limits, now } ) {
 
 }
 
-// POST /api/visit { token, world }: the page asks for the Maps key once as it starts. Turnstile
-// first, then the caps (both counted at once), and only then the key, with the visit's token for
-// posting scores (visits.js). The caps are the Earth's: Google's tiles cost a little each visit, and
-// the worlds made in the page (worlds.js's free ones, every one but the Earth: body.js, our own
-// ground) cost nothing to stream, so they're never limited:
+// POST /api/visit { token, world, globe, fromGlobe }: the page asks for a visit as it starts, and for
+// the Maps key when it first drives on the Earth. Turnstile first, then the caps (both counted at
+// once), and only then the key, with the visit's token for posting scores (visits.js). The caps are
+// the Earth's: Google's tiles cost a little each visit, and the worlds made in the page (worlds.js's
+// free ones, every one but the Earth: body.js, our own ground) cost nothing to stream, so they're
+// never limited:
+// - globe: true (and no free world): the page's own globe, our picture of the Earth, which costs
+//   nothing either. The page asks for this as it starts, so the leaderboard, the stats and driving
+//   with others have a visit, and asks for the Earth's drive (fromGlobe) only once someone drives on
+//   the Earth: { free: true, globe: true, world: 'earth', visit }, no key and nothing counted against
+//   the caps, counted for the admin page as 'globe'.
+// - fromGlobe: true: an Earth visit (the caps, the key) for a page already counted as a visit (its
+//   globe's, the orrery's, or a link's to another world): counted by where it went (visit_kind) but not again as
+//   a visit, so the admin page's Visits stay one a page.
 // - world: one of those, 'moon', 'mars', 'vesta' or 'ceres' (the page opened on a link to it): no
 //   key and nothing counted against the caps, { moon: true, free: true, world, visit } (moon: true
 //   as the answer always was for the Moon, which a page from before Mars, still in a browser's
 //   cache, goes by).
-//   Going to the Earth from there reloads the page, which asks again without it. Any other world
-//   (one that isn't one, or 'earth') is the Earth's visit.
+//   The Earth from there is the page's own globe, its drive asked for with fromGlobe. Any other
+//   world (one that isn't one, or 'earth') is the globe's (globe: true) or the Earth's visit.
 //   With start: 'orrery' (a plain load, which opens on the orrery to pick a world before any of the
 //   day's Earth drives is spent: boot.js) it's counted as 'orrery' rather than as a link to that
 //   world; any other start is ignored. A page from before sends none, and is counted as before.
@@ -323,6 +332,19 @@ async function visit( { request, env, url, ctx, limits, now } ) {
 
 	}
 
+	// The globe's visit: a free one, as a free world's is (no `moon: true`: only a page that knows
+	// the globe's visit asks for it).
+	if ( body.globe === true ) {
+
+		ctx?.waitUntil?.( countVisit( env, now, 'globe' ) );
+		const { admin } = await whoIsVisiting( { request, env, url, now }, { supporter: false } );
+		return json( { free: true, globe: true, world: EARTH, visit: await makeVisit( env, now, admin ? 'owner' : 'free' ) } );
+
+	}
+
+	// (An Earth drive for a page counted already as a visit: by where it went, not as a visit again.)
+	const again = { again: body.fromGlobe === true };
+
 	// Before counting: with no key there's nothing to count.
 	const key = mapsKey( env );
 	if ( ! key ) throw new HttpError( 503, 'Maps are off today' );
@@ -330,7 +352,7 @@ async function visit( { request, env, url, ctx, limits, now } ) {
 	const { supporter, admin } = await whoIsVisiting( { request, env, url, now } );
 	if ( admin ) {
 
-		ctx?.waitUntil?.( countVisit( env, now, 'owner' ) );
+		ctx?.waitUntil?.( countVisit( env, now, 'owner', again ) );
 		return json( { mapsKey: key, left: null, visit: await makeVisit( env, now, 'owner' ) } );
 
 	}
@@ -345,15 +367,15 @@ async function visit( { request, env, url, ctx, limits, now } ) {
 	if ( ! outcome.ok ) {
 
 		const { reason, retryAfter } = outcome;
-		// Counted all the same (the page opens on the Moon instead), so the admin page shows every
-		// visit, not only the ones under the caps.
-		ctx?.waitUntil?.( countVisit( env, now, reason === 'daily' ? 'moon_daily_cap' : 'moon_visitor_cap' ) );
+		// Counted all the same (the page opens on the Moon instead, or from its globe stays there), so
+		// the admin page shows every visit, not only the ones under the caps.
+		ctx?.waitUntil?.( countVisit( env, now, reason === 'daily' ? 'moon_daily_cap' : 'moon_visitor_cap', again ) );
 		const message = reason === 'daily' ? 'Today\'s free drives are used up' : 'You\'ve had today\'s free drives';
 		throw new HttpError( 429, message, { reason, retryAfter, visit: await makeVisit( env, now, 'free' ) }, { 'Retry-After': String( retryAfter ) } );
 
 	}
 
-	ctx?.waitUntil?.( countVisit( env, now, supporter ? 'earth_supporter' : 'earth' ) );
+	ctx?.waitUntil?.( countVisit( env, now, supporter ? 'earth_supporter' : 'earth', again ) );
 	return json( { mapsKey: key, left: outcome.left, visit: await makeVisit( env, now ) } );
 
 }

@@ -1,10 +1,14 @@
-import { CanvasTexture, Euler, Group, MathUtils, Matrix4, Mesh, MeshBasicMaterial, SphereGeometry, SRGBColorSpace, Vector3 } from 'three';
+import { CanvasTexture, Euler, Group, MathUtils, Matrix4, Mesh, MeshBasicMaterial, SphereGeometry, SRGBColorSpace, TextureLoader, Vector3 } from 'three';
 import { OBJECT_FRAME, WGS84_ELLIPSOID } from '3d-tiles-renderer';
 import { levelFrame } from './level.js';
 
-// The Earth without Google's tiles (no Maps key: the dev server on its own, or the test pad when
-// maps are off): an ocean-blue ellipsoid the size of the Earth with a line every 15°, so the
-// globe, pins, flights and drop-ins all work for testing.
+// The Earth without Google's tiles: World Drive's own globe, an ellipsoid the size of the Earth with
+// NASA's Blue Marble on it (`picture`: drive/public/earth/colour.webp, scripts/make-earth.mjs), the
+// globe a place is picked on until someone drives on the Earth, which costs nothing to show where
+// Google's tiles cost a billed session a page (main.js asks for those at the first Earth drive). Until
+// the picture has come (or if it doesn't), and with none, ocean blue with a line every 15°. With no
+// Maps key at all (the dev server on its own, or the test pad when maps are off) it's the globe the
+// pins, flights and drop-ins work on for testing too.
 
 const _m = new Matrix4();
 const _east = new Vector3();
@@ -14,7 +18,9 @@ const _up = new Vector3();
 // north, +X west).
 const OBJECT_TURN = new Matrix4().makeRotationFromEuler( new Euler( - Math.PI / 2, 0, Math.PI, 'XYZ' ) );
 
-export function createTestGlobe() {
+// picture: the Earth's picture's address (2:1, from 180° W), or none for the drawn one alone;
+// showPicture() fetches it.
+export function createTestGlobe( { picture = null } = {} ) {
 
 	const canvas = document.createElement( 'canvas' );
 	canvas.width = 2048;
@@ -58,11 +64,34 @@ export function createTestGlobe() {
 	mesh.rotation.x = Math.PI / 2;
 	mesh.scale.set( x, z, y );
 	mesh.name = 'test-earth';
+	// The picture, fetched the first time showPicture() is called (main.js: the first time this Earth
+	// is shown), and never again.
+	let asked = ! picture;
+	const showPicture = () => {
+
+		if ( asked ) return;
+		asked = true;
+		new TextureLoader().load( picture, map => {
+
+			map.colorSpace = SRGBColorSpace;
+			map.anisotropy = 4;
+			mesh.material.map = map;
+			mesh.material.needsUpdate = true;
+			mesh.userData.picture = picture;
+			texture.dispose();
+
+		}, undefined, () => {
+
+			// Not come: the drawn one stays.
+
+		} );
+
+	};
 
 	const group = new Group();
 	group.name = 'test-globe';
 	group.add( mesh );
-	return { group, mesh, ellipsoid: WGS84_ELLIPSOID };
+	return { group, mesh, ellipsoid: WGS84_ELLIPSOID, showPicture };
 
 }
 

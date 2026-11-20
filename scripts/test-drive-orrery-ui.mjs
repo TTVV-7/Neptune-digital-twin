@@ -341,10 +341,11 @@ describe( 'World Drive\'s orrery: where it opens from', () => {
 
 // A page that opts in to a plain load's orrery (the dev server gives a test's browser the plain Earth
 // load unless its seam says { first: true }), with the Worker's side answered here: /api/config with
-// maps on, Turnstile's stand-in, and /api/visit answering a free world's visit as free and the
-// Earth's as used up (so no Google key is needed, and the page goes to the Moon). page.visits: each
-// visit's body, in order. `noConfig`: no Worker at all (the dev server alone), so no visit either.
-async function firstPage( { noConfig = false, live = false, init = {}, ...options } = {} ) {
+// maps on, Turnstile's stand-in, and /api/visit answering a free world's visit and the globe's as
+// free, and the Earth's drive with `earth` (route => ...; used up unless it says, so no Google key is
+// needed). page.visits: each visit's body, in order. `noConfig`: no Worker at all (the dev server
+// alone), so no visit either.
+async function firstPage( { noConfig = false, live = false, init = {}, earth = null, ...options } = {} ) {
 
 	const page = await newPage( { ...options, init: { worldDriveOrreryTest: { first: true }, ...( live ? { worldDriveLiveTest: { visit: 'v1.first-live', online: { poll: 1000 } } } : {} ), ...init } } );
 	page.visits = [];
@@ -367,6 +368,8 @@ async function firstPage( { noConfig = false, live = false, init = {}, ...option
 
 		const body = JSON.parse( route.request().postData() ?? '{}' );
 		if ( body.world && body.world !== 'earth' ) return json( route, { moon: true, free: true, world: body.world, visit: 'v1.free-visit' } );
+		if ( body.globe === true ) return json( route, { free: true, globe: true, world: 'earth', visit: 'v1.globe-visit' } );
+		if ( earth ) return earth( route );
 		json( route, { error: 'You\'ve had today\'s free drives', reason: 'visitor', retryAfter: 3600, visit: 'v1.moon-visit' }, 429 );
 
 	} );
@@ -391,7 +394,7 @@ async function loadedAt( page, match ) {
 
 }
 
-// The Earth picked on the orrery's sheet: Drive (which reloads the page, so nothing's waited on here).
+// The Earth picked on the orrery's sheet: Drive (the page turns to the Earth's globe in place).
 async function driveEarth( page ) {
 
 	await page.locator( radio( 'earth' ) ).click();
@@ -482,7 +485,7 @@ describe( 'World Drive\'s orrery: first, on a plain load', () => {
 
 	} );
 
-	test( 'Mars picked: on Mars with no reload; the Earth\'s sheet says a reload, and the Discoveries line comes from sheetExtra', async () => {
+	test( 'Mars picked: on Mars with no reload; the Earth\'s sheet says no reload, and the Discoveries line comes from sheetExtra', async () => {
 
 		const page = await firstPage();
 		try {
@@ -491,7 +494,7 @@ describe( 'World Drive\'s orrery: first, on a plain load', () => {
 			await orreryUp( page );
 			await page.evaluate( () => window.__marker = 'same page' );
 			await page.locator( radio( 'earth' ) ).click();
-			assert.match( await page.locator( '#orrery .orrery-note' ).textContent(), /uses one of today's free Earth drives .*Picking it reloads the page\./ );
+			assert.doesNotMatch( await page.locator( '#orrery .orrery-note' ).textContent(), /reload/ );
 			assert.equal( await page.locator( '#orrery .orrery-note' ).evaluate( el => el.classList.contains( 'closed' ) ), false );
 			assert.equal( await page.locator( '#orrery .orrery-hint-used' ).isVisible(), false );
 			await pickWorld( page, 'mars' );
@@ -509,21 +512,32 @@ describe( 'World Drive\'s orrery: first, on a plain load', () => {
 
 	} );
 
-	test( 'the Earth picked: the page goes to ?worlds=0, which asks for the Earth\'s visit and doesn\'t open it; an Earth spot picked goes to its link', async () => {
+	test( 'the Earth picked: the page turns to our own globe of the Earth in place, no reload and no visit asked; Drive here asks for the Earth\'s drive, once; an Earth spot picked is flown to and pinned on the same page', async () => {
 
-		const page = await firstPage();
+		const page = await firstPage( { earth: route => json( route, { mapsKey: 'test-key-not-real', left: 0, visit: 'v1.earth-visit' } ) } );
 		try {
 
 			await page.goto( BASE );
 			await orreryUp( page );
+			await page.evaluate( () => window.__marker = 'same page' );
 			await driveEarth( page );
-			await loadedAt( page, /^\/\?worlds=0$/ );
-			await page.waitForTimeout( 1500 );
-			assert.equal( await worldsOpen( page ), false );
-			assert.deepEqual( page.visits, [ { token: TOKEN, world: 'moon', start: 'orrery' }, { token: TOKEN } ] );
-			// (Used up here: the Earth visit's answer, kept for the next plain load's Earth sheet.)
-			assert.equal( await page.evaluate( () => localStorage.getItem( 'world-drive.earth-used-up' ) ), new Date().toISOString().slice( 0, 10 ) );
-			assert.deepEqual( page.errors, [] );
+			await closed( page );
+			await page.waitForFunction( () => window.drive.world === 'earth' && window.drive.scene.getObjectByName( 'test-globe' ).visible, null, { timeout: 60000 } );
+			assert.equal( await page.evaluate( () => window.__marker ), 'same page' );
+			assert.deepEqual( page.docs, [ '/' ] );
+			assert.deepEqual( page.visits, [ { token: TOKEN, world: 'moon', start: 'orrery' } ] );
+			assert.equal( await page.evaluate( () => window.drive.tiles ), null );
+			// Our own Earth, NASA's picture on it, fetched now it's shown.
+			await page.waitForFunction( () => window.drive.scene.getObjectByName( 'test-earth' ).userData.picture === '/earth/colour.webp', null, { timeout: 30000 } );
+			assert.ok( ! page.outside.some( url => /tile\.googleapis|maps\.googleapis/.test( url ) ), page.outside.join( ' ' ) );
+			await shot( page, 'orrery-first-3-earth-globe' );
+			// Drive here: the Earth's drive, from the globe, and Google's tiles (blocked here).
+			await page.locator( '.spots button' ).first().click();
+			await page.locator( '.pin-card .go' ).click();
+			await page.waitForFunction( () => window.drive.tiles, null, { timeout: 30000 } );
+			assert.deepEqual( page.visits, [ { token: TOKEN, world: 'moon', start: 'orrery' }, { token: TOKEN, fromGlobe: true } ] );
+			assert.equal( await page.evaluate( () => window.drive.earthAsked ), 1 );
+			assert.deepEqual( page.docs, [ '/' ] );
 
 		} finally {
 
@@ -538,9 +552,10 @@ describe( 'World Drive\'s orrery: first, on a plain load', () => {
 			await orreryUp( spot );
 			await spot.locator( radio( 'earth' ) ).click();
 			await spot.locator( `#orrery .orrery-spots button[data-spot="${ SPOTS[ 0 ].id }"]` ).click();
-			await loadedAt( spot, new RegExp( `^/\\?spot=${ SPOTS[ 0 ].id }(&|$)` ) );
-			assert.deepEqual( spot.visits.at( - 1 ), { token: TOKEN } );
-			assert.equal( await worldsOpen( spot ), false );
+			await closed( spot );
+			await spot.waitForFunction( id => window.drive.world === 'earth' && window.drive.panel.pinned?.id === id, SPOTS[ 0 ].id, { timeout: 60000 } );
+			assert.deepEqual( spot.docs, [ '/' ] );
+			assert.deepEqual( spot.visits, [ { token: TOKEN, world: 'moon', start: 'orrery' } ] );
 			assert.deepEqual( spot.errors, [] );
 
 		} finally {
@@ -551,14 +566,46 @@ describe( 'World Drive\'s orrery: first, on a plain load', () => {
 
 	} );
 
+	test( 'over a cap at Drive here on the Earth picked from the orrery: the used-up notice, with "Get more Earth drives" (signing in set up), still on the Earth\'s globe', async () => {
+
+		const page = await firstPage();
+		await page.route( `${ BASE }/api/config`, route => json( route, { turnstileSiteKey: '1x00000000000000000000AA', mapsOn: true, googleClientId: 'test-client.apps.googleusercontent.com' } ) );
+		try {
+
+			await page.goto( BASE );
+			await orreryUp( page );
+			await driveEarth( page );
+			await closed( page );
+			await page.waitForFunction( () => window.drive.world === 'earth', null, { timeout: 60000 } );
+			await page.locator( '.spots button' ).first().click();
+			await page.locator( '.pin-card .go' ).click();
+			await page.locator( '#notice[data-kind="used-up"]' ).waitFor( { timeout: 30000 } );
+			assert.equal( await page.locator( '#notice .title' ).textContent(), 'You\'ve had today\'s free Earth drive' );
+			await page.locator( '#notice button', { hasText: 'Get more Earth drives' } ).waitFor();
+			await shot( page, 'orrery-first-4-used-up-drive-here' );
+			assert.deepEqual( page.visits, [ { token: TOKEN, world: 'moon', start: 'orrery' }, { token: TOKEN, fromGlobe: true } ] );
+			assert.equal( await page.evaluate( () => [ window.drive.world, window.drive.mode, !! window.drive.tiles ] ).then( JSON.stringify ), JSON.stringify( [ 'earth', 'globe', false ] ) );
+			await page.locator( '#notice button', { hasText: 'Get more Earth drives' } ).click();
+			await page.locator( '#pass' ).waitFor();
+			assert.deepEqual( page.docs, [ '/' ] );
+
+		} finally {
+
+			await page.context().close();
+
+		}
+
+	} );
+
 	test( 'not for ?worlds=0, a place\'s link, a challenge\'s, a party\'s, or the way back from paying', async () => {
 
+		// (The Earth's are the globe's free visit: its drive is asked for at Drive here.)
 		for ( const [ path, visit ] of [
-			[ '/?worlds=0', { token: TOKEN } ],
+			[ '/?worlds=0', { token: TOKEN, globe: true } ],
 			[ '/?spot=moon-tycho', { token: TOKEN, world: 'moon' } ],
-			[ '/?challenge=1', { token: TOKEN } ],
-			[ '/?party=ABCDEF', { token: TOKEN } ],
-			[ '/?supporter=thanks', { token: TOKEN } ],
+			[ '/?challenge=1', { token: TOKEN, globe: true } ],
+			[ '/?party=ABCDEF', { token: TOKEN, globe: true } ],
+			[ '/?supporter=thanks', { token: TOKEN, globe: true } ],
 		] ) {
 
 			const page = await firstPage();
@@ -573,31 +620,6 @@ describe( 'World Drive\'s orrery: first, on a plain load', () => {
 				await page.context().close();
 
 			}
-
-		}
-
-	} );
-
-	test( 'today\'s Earth drive turned away here before: the Earth\'s sheet says it may be used up, and Drive still goes to ?worlds=0', async () => {
-
-		const today = new Date().toISOString().slice( 0, 10 );
-		const page = await firstPage( { init: { worldDriveUsedUpDay: today } } );
-		try {
-
-			await page.addInitScript( () => window.worldDriveUsedUpDay && localStorage.setItem( 'world-drive.earth-used-up', window.worldDriveUsedUpDay ) );
-			await page.goto( BASE );
-			await orreryUp( page );
-			await page.locator( radio( 'earth' ) ).click();
-			assert.equal( await page.locator( '#orrery .orrery-hint-used' ).textContent(), 'Today\'s free Earth drive may be used up.' );
-			assert.equal( await page.locator( '#orrery .orrery-note' ).evaluate( el => el.classList.contains( 'closed' ) ), false );
-			await page.locator( '#orrery .orrery-drive' ).click();
-			await loadedAt( page, /^\/\?worlds=0$/ );
-			assert.deepEqual( page.visits.at( - 1 ), { token: TOKEN } );
-			assert.deepEqual( page.errors, [] );
-
-		} finally {
-
-			await page.context().close();
 
 		}
 
@@ -631,7 +653,7 @@ describe( 'World Drive\'s orrery: first, on a plain load', () => {
 
 	} );
 
-	test( 'a Mars place\'s link: its Earth goes to ?worlds=0 (an Earth visit, no orrery)', async () => {
+	test( 'a Mars place\'s link: its Earth is our own globe, on the same page (no orrery, no visit asked)', async () => {
 
 		const page = await firstPage();
 		try {
@@ -641,10 +663,10 @@ describe( 'World Drive\'s orrery: first, on a plain load', () => {
 			assert.equal( await worldsOpen( page ), false );
 			await openWorlds( page );
 			await driveEarth( page );
-			await loadedAt( page, /^\/\?worlds=0$/ );
-			await page.waitForTimeout( 1500 );
-			assert.equal( await worldsOpen( page ), false );
-			assert.deepEqual( page.visits, [ { token: TOKEN, world: 'mars' }, { token: TOKEN } ] );
+			await closed( page );
+			await page.waitForFunction( () => window.drive.world === 'earth', null, { timeout: 60000 } );
+			assert.equal( page.docs.length, 1 );
+			assert.deepEqual( page.visits, [ { token: TOKEN, world: 'mars' } ] );
 			assert.deepEqual( page.errors, [] );
 
 		} finally {
@@ -655,7 +677,7 @@ describe( 'World Drive\'s orrery: first, on a plain load', () => {
 
 	} );
 
-	test( 'who\'s driving still points to the Earth\'s drivers on a plain load (the Earth is a reload away, not shut)', async () => {
+	test( 'who\'s driving still points to the Earth\'s drivers on a plain load (the Earth is open, not shut)', async () => {
 
 		const page = await firstPage( { live: true } );
 		await page.route( `${ BASE }/api/online*`, route => json( route, { on: true, total: 0, areas: [], worlds: { earth: { on: true, total: 4 }, moon: { on: true, total: 0 }, mars: { on: true, total: 0 }, vesta: { on: true, total: 0 }, ceres: { on: true, total: 0 } } } ) );

@@ -46,11 +46,15 @@ import { send } from './api.js';
 import { setUpScoring } from './scoring.js';
 import * as screens from './screens.js';
 
-// World Drive (worlddrive.app, docs/world-drive.md): pick anywhere on Earth from a globe of
-// Google's photorealistic 3D tiles, drop in and drive it. One page load is one Google Maps session
-// (the root tileset is loaded once), so flying off somewhere else never reloads the tiles: the
-// scene is recentred on each new place instead (recentre below). boot.js, the page's first script,
-// runs the robot check while this loads, then asks for the visit and calls start.
+// World Drive (worlddrive.app, docs/world-drive.md): pick anywhere on Earth from a globe, drop in
+// and drive it on Google's photorealistic 3D tiles. The globe a place is picked on is our own
+// picture of the Earth (test-globe.js), which costs nothing; Google's tiles, a billed Google Maps
+// session, are only asked for when the page first drives on the Earth (openEarth below: boot.js's
+// earthVisit, the robot check again and the day's caps), and then kept for the rest of the page:
+// one session at most a page load (the root tileset is loaded once), so flying off somewhere else
+// never reloads the tiles: the scene is recentred on each new place instead (recentre below).
+// boot.js, the page's first script, runs the robot check while this loads, then asks for the visit
+// (the globe's, free) and calls start.
 //
 // How many times Google's tiles' usual screen-space error a plane flying fast makes do with (see
 // the frame loop).
@@ -80,6 +84,15 @@ const SPACE = new Color( 0x070c16 );
 // Field of view on the globe, and driving; supersonic (drive.js), the view widens by this much more,
 // and a jolt (the booster lighting, the sonic boom) punches it wider still for a moment.
 const GLOBE_FOV = 50;
+// How far (m) the camera flies from a pin: over Google's tiles, close enough to see the streets;
+// over our own Earth's picture (a texel about 10 km), far enough that it isn't a blur.
+const PIN_DISTANCE = 2200;
+const PICTURE_PIN_DISTANCE = 1.2e6;
+// Our own Earth's picture (scripts/make-earth.mjs), and how far (m) under the ellipsoid its sphere
+// sinks once Google's tiles are there too, so the two don't fight where both are drawn (the coarsest
+// tiles from afar, as they load), till the tiles are up and it goes.
+const EARTH_PICTURE = '/earth/colour.webp';
+const PICTURE_SINK = 3000;
 const DRIVE_FOV = 70;
 const SUPERSONIC_FOV = 9;
 // The sky fades from blue to space between these heights (m); above, the page's stars show.
@@ -381,8 +394,14 @@ const _focus = new Vector3();
 const _sun = new Vector3();
 const _before = new Matrix4();
 
-// key: the Maps key (none: the test globe and pad); left: free drives left today; visit: the
-// visit's token, for posting scores; worker: whether there's a Worker (not on the dev server alone);
+// key: the Maps key (none: our own globe of the Earth, and with no earthVisit either, the test pad);
+// left: free drives left today; visit: the visit's token, for posting scores; earthVisit: boot.js's
+// way to the Earth's drive, asked for only when the page first drives there (openEarth): a promise
+// of { key, left, visit } (the robot check again, and one of the day's Earth drives), or of null
+// when there's none (boot.js has said why: the used-up notice, or a word on the robot check); none
+// without a Worker, or with maps off (the test pad); opensOn: the world the globe opens on (a
+// page opened on a link to another world: worlds.js's id), the Earth unless it's said;
+// worker: whether there's a Worker (not on the dev server alone);
 // googleClientId: the sign-in button's, for the Supporter Pass ('' when there's no signing in with
 // Google); passwords: whether there are usernames and passwords, turnstileSiteKey their robot
 // checks' (supporter.js, account.js);
@@ -392,25 +411,25 @@ const _before = new Matrix4();
 // (none when it's switched off there); liveWorlds: every world's at once, { earth, moon, mars,
 // vesta, ceres: { open, reason } } (null from a Worker from before: the Earth's and the Moon's are
 // then the keys before, and the rest are off: live.js's worldsOf);
-// earthClosed: { onEarth, world, later, usedUp, usedUpHint } when there's no Earth this visit: used up
-// for today (usedUp: picking it shows boot.js's notice), or a reload away (later: a plain load, which
-// opens on the orrery, or a page opened on a link to another world: `world`, its id; usedUpHint: the
-// last Earth visit here was turned away today, which the orrery's Earth sheet says). The globe opens on
-// that world (a place's link flies there itself), or else the Moon (FALLBACK), never limited, and
-// picking the Earth calls onEarth( at ) instead, with what was picked (a place, or a challenge:
-// { challenge, vs }) for the page it reloads to; orreryFirst: a plain load, which opens on the orrery
-// with nothing loaded behind it (no world's ground fetched until one's picked, or it's closed: then
-// the Moon);
+// earthClosed: { onEarth, world, usedUp } when there's no Earth this visit: used up for today, a page
+// turned away as it loaded by a Worker from before the globe's visit (usedUp: picking it shows
+// boot.js's notice). The globe opens on `world` (a place's link flies there itself), or else the Moon
+// (FALLBACK), never limited, and picking the Earth calls onEarth( at ) instead; orreryFirst: a plain
+// load, which opens on the orrery with nothing shown behind it (no world's ground fetched until one's
+// picked, or it's closed: then the Moon; the Earth picked turns the page to its own globe, in place);
 // challengeLink: a "challenge a friend" link's ({ link: { challenge, vs }, answer }, boot.js), or a
 // promise of it (or of null: no link), opened once the globe is up and it's here (challenges.js);
 // adsense: /api/config's { client, slot } while Google's ads are on (ads.js), else null.
-export async function start( { key, left = null, visit: token = null, worker = true, googleClientId = '', passwords = false, turnstileSiteKey = '', live: liveOn = false, liveReason = '', liveMoon = null, liveMoonReason = '', liveWorlds = null, earthClosed = null, orreryFirst = false, challengeLink = null, adsense = null } ) {
+export async function start( { key, left = null, visit: token = null, earthVisit = null, opensOn = null, worker = true, googleClientId = '', passwords = false, turnstileSiteKey = '', live: liveOn = false, liveReason = '', liveMoon = null, liveMoonReason = '', liveWorlds = null, earthClosed = null, orreryFirst = false, challengeLink = null, adsense = null } ) {
 
-	const visit = token ?? VISIT_TEST?.visit ?? null;
-	// The Earth shut for the whole visit (today's drives used up), as against a reload away (a plain
-	// load's orrery, or another world's link): only then is it left out of "who's driving" and an
-	// Earth challenge's Start says it needs an Earth drive.
+	// (The globe's visit to begin with; the Earth's once the page has its Earth drive: setVisit.)
+	let visit = token ?? VISIT_TEST?.visit ?? null;
+	// The Earth shut for the whole visit (today's drives used up): it's left out of "who's driving" and
+	// an Earth challenge's Start says it needs an Earth drive.
 	const earthShut = !! earthClosed?.usedUp;
+	// The Earth's globe not shown yet: a plain load's, behind its orrery, till the Earth's picked
+	// (setWorld turns to it then as to any other world).
+	let earthHidden = orreryFirst;
 	// Play stats for the owner's admin page (stats.js): only a real visit's, counts with nothing of who.
 	const stats = createStats( { visit: token ?? STATS_TEST?.visit ?? null } );
 	const vehicles = await loadVehicles();
@@ -431,37 +450,42 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	// The globe opens facing your part of the world, going by your clock.
 	const home = { lat: 25, lon: MathUtils.clamp( - new Date().getTimezoneOffset() / 4, - 170, 170 ) };
+	// The Earth: our own globe of it (test-globe.js, NASA's Blue Marble), whose group is the Earth's
+	// frame from start to end (its world matrix takes Earth-centred positions into the scene: the
+	// globe's, the rooms', the dots'); and Google's tiles (`tiles`, made by useTiles) once the page has
+	// its Earth drive (with a key from the start, at once), kept in step with that frame (frameOn).
+	// Until then a drop-in on the Earth asks for them first (openEarth). With no way to them at all
+	// (no Worker, or maps off) the test pad is driven instead: flat ground at whatever place you drop in.
 	let tiles = null;
-	let earth;
-	let ellipsoid;
-	let testEarth = null;
+	// (Its picture's fetched the first time it's shown: not for a plain load whose orrery picks another
+	// world. The test pad's globe, with no way to Google's tiles, keeps the drawn one.)
+	const { group: earth, mesh: testEarth, ellipsoid, showPicture } = createTestGlobe( { picture: key || earthVisit ? EARTH_PICTURE : null } );
+	placeEarth( earth, ellipsoid, home );
+	// Where the Earth's frame is now (placeEarth's place), where Google's tiles are centred as they come.
+	let earthAt = home;
+	useFastRaycast( earth );
+	scene.add( earth );
+	// Once Google's tiles are up (their first loads all in), our own Earth goes (see the frame loop).
+	let tilesUp = false;
+	// (The tiles' usual error target, which a plane flying fast raises: see the frame loop.)
+	let usualTileError = 0;
 	let pad = null;
-	if ( key ) {
+	if ( ! key && ! earthVisit ) {
 
-		tiles = createGoogleTiles( { apiKey: key, camera, renderer, site: home, autoRefreshToken: false, onError: tileError } );
-		scene.add( tiles.group );
-		earth = tiles.group;
-		ellipsoid = tiles.ellipsoid;
-
-	} else {
-
-		( { group: earth, mesh: testEarth, ellipsoid } = createTestGlobe() );
-		placeEarth( earth, ellipsoid, home );
-		useFastRaycast( earth );
-		scene.add( earth );
-		// The test pad to drive on: flat ground at whatever place you drop in.
 		pad = createPlaceholderGround();
 		pad.visible = false;
 		scene.add( pad );
-		// Only on the other worlds this visit: the test globe stays out of sight.
-		if ( earthClosed ) earth.visible = false;
 		// On worlddrive.app there's always a Worker, so none answering means its settings didn't
 		// come (or a crawler kept off /api/ by robots.txt): a word for a visitor, not the developer's.
-		else screens.toast( ! worker && location.hostname === 'worlddrive.app'
+		// (Only on the other worlds this visit: nothing to say of the Earth's test pad.)
+		if ( ! earthClosed && ! orreryFirst ) screens.toast( ! worker && location.hostname === 'worlddrive.app'
 			? 'Couldn\'t reach World Drive\'s server, so this is only a preview globe. Reload the page to drive on the 3D map.'
 			: 'No Google 3D tiles here: a test globe, and a flat test pad wherever you drop in.', 6000 );
 
 	}
+
+	// Only on the other worlds this visit, or not yet (behind a plain load's orrery): out of sight.
+	if ( earthClosed || earthHidden ) earth.visible = false;
 
 	// What's driven on: Google's tiles (or the test pad), and out at sea the sea's own surface.
 	const sea = createSea( { scene } );
@@ -506,7 +530,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	// What's driven on: the world's own ground, or Google's tiles (or the test pad) and the sea's
 	// surface where it's round the vehicle, unless that's left out for a moment (`bare`: underSea).
 	let bare = false;
-	const grounds = () => offEarth() ? [ body().terrain ] : sea.shown && ! bare ? [ tiles ? tiles.group : pad, sea.mesh ] : [ tiles ? tiles.group : pad ];
+	// (On the Earth before its tiles, with no test pad either, nothing: nothing's driven there then.)
+	const grounds = () => offEarth() ? [ body().terrain ] : [ tiles ? tiles.group : pad, ...sea.shown && ! bare ? [ sea.mesh ] : [] ].filter( Boolean );
 	const globe = new GlobeView( { camera, canvas, earth, surface: earth, ellipsoid, pin: $( 'pin' ) } );
 	scene.add( globe.air );
 	// The globe as each world has it (GlobeView.setBody): the Earth's, and each other world's, its
@@ -522,11 +547,26 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	} ) );
 	globe.place( globe.orbit( home.lat, home.lon ) );
 	globe.capture();
-	// Until Google's root tileset arrives the tiles sit in the Earth's own frame; then
-	// ReorientationPlugin moves them, and the camera has to move with them.
-	tiles?.addEventListener( 'load-root-tileset', () => globe.restore() );
-	// (The tiles' usual error target, which a plane flying fast raises: see the frame loop.)
-	const usualTileError = tiles?.errorTarget ?? 0;
+	// A key from the start (a Worker from before the globe's visit, which hands one out as the page
+	// loads): Google's tiles at once.
+	if ( key ) useTiles( key );
+
+	// Google's tiles, from `key` (the one session this page has): centred where the Earth's frame is
+	// (ReorientationPlugin puts them there as their root arrives, and frameOn keeps them there, so
+	// nothing moves under the camera as it comes), what a tap or the globe's height checks hit from
+	// now on, our own Earth sunk under them till they're up.
+	function useTiles( key ) {
+
+		tiles = createGoogleTiles( { apiKey: key, camera, renderer, site: earthAt, autoRefreshToken: false, onError: tileError } );
+		tiles.group.visible = earth.visible && world === EARTH;
+		scene.add( tiles.group );
+		usualTileError = tiles.errorTarget;
+		tiles.addEventListener( 'tiles-load-end', () => tilesUp ||= !! tiles.root && tiles.visibleTiles.size > 0 );
+		testEarth.scale.multiplyScalar( 1 - PICTURE_SINK / ellipsoid.radius.x );
+		earthBody.surface = tiles.group;
+		if ( world === EARTH ) globe.setSurface( tiles.group );
+
+	}
 
 	const models = new ModelManager( { getGround: grounds, renderer } );
 	scene.add( models.group );
@@ -1026,7 +1066,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	} );
 	// (The free worlds by name: "the Moon, Mars, Vesta and Ceres".)
-	if ( left !== null && left <= 2 ) screens.toast( left === 0 ? `This is today's free Earth drive: drop in anywhere as often as you like while this page stays open. Reload and it's ${ listOf( OFF_EARTH ) } until tomorrow.` : `${ left } more Earth drive${ left === 1 ? '' : 's' } today after this one.`, left === 0 ? 8000 : 5000 );
+	drivesLeft( left );
 
 	// The orrery (see openOrrery), once it's loaded: told of new counts and party changes from here on.
 	let orrery = null;
@@ -1143,7 +1183,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 		// (An Earth place with no Earth this visit goes through setWorld too, even with the Earth's hidden
 		// globe "current" behind a plain load's orrery: it reloads there, or says it's used up.)
-		const away = worldOf( place ) !== world || earthClosed && worldOf( place ) === EARTH;
+		const away = worldOf( place ) !== world || ( earthClosed || earthHidden ) && worldOf( place ) === EARTH;
 		if ( away && ! await setWorld( worldOf( place ), { at: place } ) ) return;
 		stayPut();
 		const height = globe.surfaceHeight( place.lat, place.lon );
@@ -1151,7 +1191,9 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		globe.setPin( pin );
 		panel.setPin( pin );
 		stats.once( 'funnel', 'pin' );
-		const view = { lat: place.lat, lon: place.lon, height: height ?? 0, distance: 2200, heading: place.heading ?? 0, pitch: - 50 };
+		// (Over our own Earth's picture, with a Worker to ask for the tiles, from further up.)
+		const distance = world === EARTH && ! tiles && earthVisit ? PICTURE_PIN_DISTANCE : PIN_DISTANCE;
+		const view = { lat: place.lat, lon: place.lon, height: height ?? 0, distance, heading: place.heading ?? 0, pitch: - 50 };
 		globe.flyTo( globe.lifted( view, pinLift(), GLOBE_FOV ) ).then( arrived => {
 
 			// Sharper tiles have loaded on the way down: sit the pin on them.
@@ -1236,10 +1278,11 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	// A place's link (?spot= or ?at=, its "Drive here" on the places' pages, drive/site/): the
 	// globe flies there and pins it, so Drive here is one more tap; it never drops in by itself.
-	// Only once the panel shows (the pin is lifted clear of it), and on Google's tiles once their
-	// root has arrived, as that moves the Earth under the camera. Then it's out of the address (a
-	// ?party= stays), so a reload doesn't fly there again; not before, so the reload the root's
-	// error screen asks for still goes there.
+	// Only once the panel shows (the pin is lifted clear of it), and on Google's tiles (a page given
+	// its key as it loaded, from a Worker from before the globe's visit) once their root has arrived.
+	// Then it's out of the address (a ?party= stays), so a reload doesn't fly there again; not before,
+	// so the reload the root's error screen asks for still goes there. On our own globe of the Earth,
+	// at once: a link asks for no Earth drive till Drive here.
 	// (With the Earth closed this visit, a link to the Earth's left in the address for later.)
 	const linked = linkedPlace( location.search );
 	if ( linked && ! ( earthClosed && worldOf( linked ) === EARTH ) ) {
@@ -1262,10 +1305,12 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	}
 
-	// (Not on a plain load: its orrery opens over nothing loaded, the Earth's test globe hidden, so no
-	// world's ground is fetched for anyone who picks another; closing it without a pick turns to the
-	// Moon then, orreryClosed.)
-	if ( earthClosed && worldOf( linked ) === EARTH && ! orreryFirst ) setWorld( earthClosed.world ?? FALLBACK );
+	// The world the globe opens on, but for a place's link elsewhere: with no Earth this visit, the
+	// link's world or the Moon; a page opened on a link to another world (a challenge's there) on that.
+	// (Not on a plain load: its orrery opens over nothing shown, so no world's ground is fetched for
+	// anyone who picks another; closing it without a pick turns to the Moon then, orreryClosed.)
+	const firstWorld = earthClosed ? earthClosed.world ?? FALLBACK : opensOn;
+	if ( firstWorld && firstWorld !== EARTH && worldOf( linked ) === EARTH && ! orreryFirst ) setWorld( firstWorld );
 	// A "challenge a friend" link: its card, over the challenges' list.
 	if ( challengeLink ) openChallengeLink( challengeLink );
 	// ?worlds=1 (and on the dev server a test's word): the orrery, open from the start; then it's out
@@ -1304,7 +1349,7 @@ export async function start( { key, left = null, visit: token = null, worker = t
 			dialog: $( 'orrery' ),
 			renderer,
 			// (None yet behind a plain load's orrery: the Earth's globe is hidden, nothing's loaded.)
-			current: () => world === EARTH && earthClosed ? null : world,
+			current: () => world === EARTH && ( earthClosed || earthHidden ) ? null : world,
 			counts: () => online?.worlds ?? null,
 			party: () => live?.party ? [ ...live.players.values() ].map( ( { pid, name, world: on, away, globe: looking } ) => ( { pid, name, world: on, away, globe: looking ?? null } ) ) : [],
 			spots: id => ( id === EARTH ? SPOTS : SPOTS_ON[ id ] ?? [] ).slice( 0, 4 ).map( spot => ( { id: spot.id, name: spot.name, place: spot } ) ),
@@ -1412,8 +1457,15 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 		globe.capture();
 		if ( offEarth() ) placeFrame( place );
-		else if ( tiles ) recentreTiles( tiles, place );
-		else placeEarth( earth, ellipsoid, place );
+		else {
+
+			// Our own Earth is the frame; Google's tiles, if they're here, centred the same way.
+			placeEarth( earth, ellipsoid, place );
+			earthAt = { lat: place.lat, lon: place.lon, height: place.height ?? 0 };
+			if ( tiles ) recentreTiles( tiles, place );
+
+		}
+
 		globe.restore();
 
 	}
@@ -1527,7 +1579,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 		}
 
-		if ( next === world ) {
+		// (The Earth's hidden globe, behind a plain load's orrery, isn't one to stay on: it's turned to.)
+		if ( next === world && ! ( next === EARTH && earthHidden ) ) {
 
 			switching = null;
 			panel.setWorld( world );
@@ -1582,6 +1635,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		if ( offEarth() ) stats.add( 'world', world );
 		for ( const [ id, other ] of Object.entries( bodies ) ) other.group.visible = id === world;
 		earth.visible = ! offEarth();
+		if ( ! offEarth() ) earthHidden = false;
+		if ( tiles ) tiles.group.visible = ! offEarth();
 		pinAt( null );
 		globe.setBody( globeBodies[ world ] ?? earthBody );
 		panel.setWorld( world );
@@ -1616,6 +1671,68 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	}
 
+	// --- the Earth's drive ---
+
+	// Google's tiles for this page, the first time it drives on the Earth: boot.js's earthVisit (the
+	// robot check again, then one of the day's Earth drives, counted against the caps), and with its
+	// key the tiles (useTiles), its Earth visit's token from then on (setVisit). Resolves whether the
+	// tiles are here. Asked once at a time (two drop-ins at once share it), and once answered with a
+	// key never again: one Google session a page, kept for good, the globe and every drop-in on it.
+	// A drop-in given up on meanwhile (Back to the globe) still has its tiles made, paid for as they
+	// are, for the next one.
+	let earthOpening = null;
+	let earthAsked = 0;
+	function openEarth() {
+
+		if ( tiles ) return Promise.resolve( true );
+		if ( ! earthVisit ) return Promise.resolve( false );
+		earthOpening ??= ( async () => {
+
+			earthAsked ++;
+			let outcome = null;
+			try {
+
+				outcome = await earthVisit();
+
+			} catch ( err ) {
+
+				console.error( err );
+				screens.toast( 'The 3D Earth didn\'t open. Try again in a moment.', 7000 );
+
+			}
+
+			if ( ! outcome?.key ) return false;
+			if ( ! tiles ) useTiles( outcome.key );
+			setVisit( outcome.visit );
+			drivesLeft( outcome.left ?? null );
+			return true;
+
+		} )().finally( () => earthOpening = null );
+		return earthOpening;
+
+	}
+
+	// The Earth visit's token in place of the globe's, for what's posted from now on: scores, levels,
+	// challenge times (an Earth challenge's needs an Earth visit's), the play stats (and the Earth's
+	// drop-in places, which only an Earth visit posts) and the rooms connected to from now on.
+	function setVisit( next ) {
+
+		if ( typeof next !== 'string' || ! next || VISIT_TEST?.visit ) return;
+		visit = next;
+		board.setVisit( visit );
+		if ( ! STATS_TEST?.visit ) stats.setVisit( visit );
+		if ( ! LIVE_TEST?.visit ) live?.setVisit( visit );
+
+	}
+
+	// The day's Earth drives left after this one (the Worker's `left`, null for a supporter's
+	// or the owner's, uncounted), said when there are only a couple.
+	function drivesLeft( left ) {
+
+		if ( left !== null && left <= 2 ) screens.toast( left === 0 ? `This is today's free Earth drive: drop in anywhere as often as you like while this page stays open. Reload and it's ${ listOf( OFF_EARTH ) } until tomorrow.` : `${ left } more Earth drive${ left === 1 ? '' : 's' } today after this one.`, left === 0 ? 8000 : 5000 );
+
+	}
+
 	// --- dropping in ---
 
 	async function dropIn( place ) {
@@ -1637,6 +1754,30 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		if ( offEarth() ) return dropInBody( place, began );
 		const drop = state.drop = { cancelled: false, began };
 		const gone = () => drop.cancelled || state.drop !== drop;
+		// No Google tiles yet this page: the Earth's drive first (the loading card up meanwhile, its
+		// Back to the globe there to give up on it). Turned away (over a cap: boot.js shows the used-up
+		// notice), back on the globe as it was, the pin still there.
+		const opening = ! tiles && !! earthVisit;
+		if ( opening ) {
+
+			const before = state.place;
+			state.place = place;
+			setMode( 'dropping' );
+			screens.loading( 'Opening the 3D Earth...' );
+			const opened = await openEarth();
+			if ( gone() ) return;
+			if ( ! opened ) {
+
+				state.drop = null;
+				state.place = before;
+				screens.hideLoading();
+				setMode( 'globe' );
+				return;
+
+			}
+
+		}
+
 		let { lat, lon } = place;
 		state.place = place;
 		// (Not a place picked, as a landmark challenge's start isn't: recent: false.)
@@ -1652,8 +1793,9 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		$( 'drive-ui' ).querySelector( '.place' ).textContent = shown;
 		screens.loading( `Dropping in: ${ shown }` );
 
-		// Centre the scene on the pin, at about the height of the ground there.
-		const estimate = place.height ?? globe.surfaceHeight( lat, lon ) ?? 0;
+		// Centre the scene on the pin, at about the height of the ground there. (A pin's height on our
+		// own Earth says nothing of the ground: only a driver's, beside them, does then.)
+		const estimate = ( opening && ! place.beside ? null : place.height ) ?? globe.surfaceHeight( lat, lon ) ?? 0;
 		recentre( { lat, lon, height: estimate } );
 		removeVehicle();
 		const vehicle = panel.vehicle;
@@ -2813,7 +2955,9 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 		}
 
-		if ( testEarth ) testEarth.visible = ! offEarth() && ( state.mode === 'globe' || altitude > 20000 );
+		// Our own Earth: on the globe, and from high up; never once Google's tiles are up.
+		testEarth.visible = ! offEarth() && ! tilesUp && ( state.mode === 'globe' || altitude > 20000 );
+		if ( testEarth.visible && earth.visible ) showPicture();
 		const driving = state.mode === 'driving' || state.mode === 'paused';
 		const fov = driving ? DRIVE_FOV + SUPERSONIC_FOV * driver.warp : GLOBE_FOV;
 		if ( Math.abs( view.fov - fov ) > 0.01 ) view.fov += ( fov - view.fov ) * Math.min( 1, dt * 3 );
@@ -2959,6 +3103,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 	function updateAttribution() {
 
 		for ( const id of OFF_EARTH ) $( `${ id }-credit` ).hidden = world !== id;
+		// Our own Earth's picture, NASA's, while it's what's shown (not the test globe's drawn one).
+		$( 'earth-credit' ).hidden = offEarth() || ! testEarth.visible || ! testEarth.userData.picture;
 		const root = $( 'attribution' );
 		root.hidden = offEarth() || ! tiles || tiles.visibleTiles.size === 0;
 		if ( root.hidden ) return;
@@ -2971,7 +3117,20 @@ export async function start( { key, left = null, visit: token = null, worker = t
 
 	// For poking around from the browser console, and for the tests.
 	window.drive = {
-		scene, camera, renderer, tiles, globe, models, driver, ground, panel, leaderboard: board,
+		scene, camera, renderer, globe,
+		// Google's tiles, once the page has its Earth drive (null till then), and how many times it has
+		// asked boot.js for that drive (never more than once with an answer: openEarth).
+		get tiles() {
+
+			return tiles;
+
+		},
+		get earthAsked() {
+
+			return earthAsked;
+
+		},
+		models, driver, ground, panel, leaderboard: board,
 		garage, supporter, pads, water, sea, live, ghosts, friends, online, progress, profile, screenFx, stats,
 		get mode() {
 
