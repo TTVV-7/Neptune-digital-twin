@@ -1755,6 +1755,56 @@ describe( 'World Drive Supporter Pass', () => {
 
 	} );
 
+	test( 'the globe\'s visit is free and never limited, counted as a visit on the globe; its Earth drive, asked for later, is counted by where it went and not as a visit again', async () => {
+
+		const day = PASS_DAY + 3600000;
+		const key = new Date( day ).toISOString().slice( 0, 10 );
+		const counts = () => Object.fromEntries( server.d1( `SELECT metric, key, n FROM stats_daily WHERE day = '${ key }' AND metric IN ( 'visit', 'visit_kind' )` ).map( r => [ `${ r.metric }:${ r.key }`, r.n ] ) );
+		const before = counts();
+		const ip = nextIp();
+		const ask = body => call( server, '/api/visit', { method: 'POST', headers: { Origin: server.base, 'Content-Type': 'application/json' }, body: JSON.stringify( { token: TOKEN, ...body } ), ip, time: day } );
+		// As many globes as anyone likes, none of them an Earth drive: no key, and a free world's token.
+		for ( let i = 0; i < 10; i ++ ) {
+
+			const globe = await ask( { globe: true } );
+			assert.equal( globe.status, 200 );
+			assert.deepEqual( Object.keys( globe.json ).sort(), [ 'free', 'globe', 'visit', 'world' ] );
+			assert.equal( globe.json.free, true );
+			assert.equal( globe.json.world, 'earth' );
+			assert.equal( globe.json.mapsKey, undefined );
+			assert.match( globe.json.visit, /^v1\.[A-Za-z0-9_-]{21}m\./ );
+
+		}
+
+		// A free world's link wins over globe: true (its own kind).
+		assert.equal( ( await ask( { globe: true, world: 'moon' } ) ).json.world, 'moon' );
+		// Then the Earth's drives from the globe: the caps as ever (8 a visitor in this suite), the key,
+		// and an Earth visit's token.
+		for ( let i = 0; i < 8; i ++ ) {
+
+			const earth = await ask( { fromGlobe: true } );
+			assert.equal( earth.status, 200, earth.text );
+			assert.equal( typeof earth.json.mapsKey, 'string' );
+			assert.match( earth.json.visit, /^v1\.[A-Za-z0-9_-]{21}e\./ );
+
+		}
+
+		const over = await ask( { fromGlobe: true } );
+		assert.equal( over.status, 429 );
+		assert.equal( over.json.reason, 'visitor' );
+		const added = () => {
+
+			const now = counts();
+			return Object.fromEntries( Object.entries( now ).map( ( [ name, n ] ) => [ name, n - ( before[ name ] ?? 0 ) ] ).filter( ( [ , n ] ) => n ) );
+
+		};
+		for ( let tries = 0; tries < 30 && added()[ 'visit_kind:moon_visitor_cap' ] !== 1; tries ++ ) await new Promise( resolve => setTimeout( resolve, 100 ) );
+		// Eleven pages (ten globes and the Moon's link), not twenty: the Earth drives and the one over
+		// the cap were each a page already counted.
+		assert.deepEqual( added(), { 'visit:all': 11, 'visit_kind:globe': 10, 'visit_kind:moon_link': 1, 'visit_kind:earth': 8, 'visit_kind:moon_visitor_cap': 1 } );
+
+	} );
+
 	test( 'a supporter gets 30 drives a day, counted by their account; anyone else 8, by their address', async () => {
 
 		const ip = nextIp();
