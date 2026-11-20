@@ -2040,7 +2040,7 @@ const STYLES = {
 
 			const batch = new Batch( root, { particles: 100 } );
 			const hearts = emitter();
-			const colours = [ 0xff3d7f, 0xff6fae, 0xff9ccc, 0xe0245e ];
+			const colours = [ 0xff3d7f, 0xff6fae, 0xff9ccc, 0xff2f6e ];
 			let f = null;
 			let n = 0;
 			let phase = 0;
@@ -2060,8 +2060,8 @@ const STYLES = {
 					// Started a little behind the seat, so the big ones don't rise over the driver.
 					nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.35, ( Math.random() - 0.2 ) * 0.15 * f.scale, p.position )
 						.addScaledVector( f.back, 0.3 * f.scale );
-					thrown( f, p, 0.95, 1.6 + Math.random() * 0.8, 1.2, 0.3 );
-					p.size = ( 0.16 + Math.random() * 0.04 ) * f.scale;
+					thrown( f, p, 0.97, 1.4 + Math.random() * 0.6, 1.2, 0.3 );
+					p.size = ( 0.15 + Math.random() * 0.03 ) * f.scale;
 					p.grow = p.size * 0.2;
 					p.kind = 1;
 
@@ -2077,7 +2077,8 @@ const STYLES = {
 				} else {
 
 					nozzleAt( f, k, ( Math.random() - 0.5 ) * f.size.width * 0.5, ( Math.random() - 0.2 ) * 0.3 * f.scale, p.position );
-					thrown( f, p, 0.94, 1.2 + Math.random() * 0.8, 1.1, 0.6 );
+					// (Kept up with it, a few metres of hearts behind it rather than a stream past the lens.)
+					thrown( f, p, 0.97, 1.2 + Math.random() * 0.6, 1.1, 0.6 );
 					p.size = ( 0.08 + Math.random() * 0.04 ) * f.scale;
 					p.grow = p.size * 0.3;
 
@@ -2096,8 +2097,10 @@ const STYLES = {
 
 					if ( p.kind === 2 ) {
 
-						// A ring of heart, going out round it.
-						view.alpha = p.alpha * ( 1 - t ) ** 2;
+						// A burst of little hearts on the beat, shrinking away.
+						view.sx *= 1 - t * t;
+						view.sy = view.sx;
+						view.alpha = 1;
 						return;
 
 					}
@@ -2106,10 +2109,17 @@ const STYLES = {
 					if ( p.kind < 2 ) view.sx *= 1 + beat * ( p.kind === 1 ? 0.18 : 0.12 );
 					view.sy = view.sx;
 					if ( p.kind < 3 ) view.turn = 0.3 * Math.sin( p.age * 3 + p.phase );
-					view.alpha = t < 0.7 ? 1 : ( 1 - t ) / 0.3;
-					// Faded out over the vehicle itself, so the hearts never hide the driver.
+					// Going, a heart shrinks away rather than fading: see-through, its pink over the grey
+					// road turns muddy. Shrunk away over the vehicle itself too, so it never hides the driver.
+					let shrink = t < 0.7 ? 1 : ( 1 - t ) / 0.3;
 					const near = view.position.distanceTo( f.middle ) / f.scale;
-					if ( near < 1.1 ) view.alpha *= Math.max( 0, ( near - 0.5 ) / 0.6 );
+					if ( near < 1.2 ) shrink *= Math.max( 0, ( near - 0.55 ) / 0.65 );
+					// And well behind it, before the chase camera's near fade turns it see-through.
+					const behind = _a.subVectors( view.position, f.middle ).dot( f.back ) / f.scale;
+					if ( behind > 2.4 ) shrink *= Math.max( 0, ( 3.4 - behind ) );
+					view.sx *= shrink;
+					view.sy *= shrink;
+					view.alpha = shrink > 0.05 ? 1 : 0;
 
 				},
 			};
@@ -2128,20 +2138,23 @@ const STYLES = {
 					beating = beat > 0.8 * ( frame.calm ? 0.3 : 1 );
 					if ( beating && ! was && overdrive( frame ) > 0 && fl > 0.01 ) {
 
-						// Kept at the exhaust, quick and faint: a pulse round it, never a blob drifting back
-						// over the view.
-						const p = batch.spawn( 0.35 );
-						p.position.copy( frame.nozzle ).addScaledVector( frame.back, 0.2 * frame.scale );
-						p.carry.copy( frame.velocity );
-						p.axis.copy( frame.back );
-						p.mode = FLAT;
-						p.frame = SHAPES.heart;
-						p.size = 0.25 * frame.scale;
-						p.grow = ( frame.calm ? 0.4 : 0.6 ) * frame.scale;
-						p.turn = Math.PI;
-						p.colour.set( 0xff6fb5 );
-						p.alpha = frame.calm ? 0.2 : 0.35;
-						p.kind = 2;
+						// Little solid hearts, kept at the exhaust and gone quickly (a see-through ring of
+						// heart, pink over the grey road, only turned muddy).
+						const count = frame.calm ? 4 : 6;
+						for ( let i = 0; i < count; i ++ ) {
+
+							const p = batch.spawn( 0.4 );
+							around( frame, ( i + 0.5 ) / count * Math.PI * 2, _v );
+							p.position.copy( frame.nozzle ).addScaledVector( frame.back, 0.2 * frame.scale ).addScaledVector( _v, 0.15 * frame.scale );
+							p.carry.copy( frame.velocity );
+							p.velocity.copy( _v ).multiplyScalar( frame.calm ? 1.2 : 2 );
+							p.drag = 2;
+							p.frame = SHAPES.heart;
+							p.size = 0.07 * frame.scale;
+							p.colour.set( i & 1 ? 0xffe3f0 : 0xff3d7f );
+							p.kind = 2;
+
+						}
 
 					}
 
@@ -2180,9 +2193,9 @@ const STYLES = {
 
 						// Drifting back as they rise, not hanging over it: what's thrown them back is
 						// kept (no more drag), and the stream carries them on a little less.
-						p.fall = frame.air ? - 0.35 : 0;
+						p.fall = frame.air ? - 0.3 : 0;
 						p.carry.multiplyScalar( 0.95 );
-						p.velocity.addScaledVector( frame.up, frame.air ? 1.6 : 0 );
+						p.velocity.addScaledVector( frame.up, frame.air ? 1.1 : 0 ).addScaledVector( frame.back, 0.8 );
 
 					}
 
