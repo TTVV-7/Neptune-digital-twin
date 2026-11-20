@@ -6977,7 +6977,7 @@ describe( 'World Drive accounts: usernames and passwords', () => {
 		assert.deepEqual( await fields( account.locator( 'form' ) ), [ [ 'username', 'text', 'username', 'Username' ], [ 'password', 'password', 'current-password', 'Password' ] ] );
 		await account.locator( '.account-tabs button', { hasText: 'Create account' } ).click();
 		const form = account.locator( 'form.account-sign-up' );
-		assert.deepEqual( await fields( form ), [ [ 'username', 'text', 'username', 'Username' ], [ 'password', 'password', 'new-password', 'Password' ] ] );
+		assert.deepEqual( await fields( form ), [ [ 'username', 'text', 'username', 'Username' ], [ 'password', 'password', 'new-password', 'Password' ], [ 'email', 'email', 'email', 'Email (optional)' ] ] );
 		assert.equal( await form.locator( 'input[name="username"]' ).getAttribute( 'autocapitalize' ), 'none' );
 		assert.match( await form.textContent(), /The email is only for receipts: nothing is sent to it, so a forgotten password can't be recovered, unless you also link Google\./ );
 		await shot( page, 'account-1-create-desktop' );
