@@ -2241,17 +2241,19 @@ const STYLES = {
 				p.size = grid;
 				if ( overdrive( f ) > 0 ) {
 
-					// A rainbow band: one pixel down each row in turn, and now and then a white one.
+					// A rainbow band lying across the road behind it, one pixel in each lane in turn, and now
+					// and then a white one: stacked up, the chase camera sees it end on, a tower of cubes
+					// straight down the view with the top ones over the driver's back.
 					const row = n ++ % 6;
-					nozzleAt( f, k, 0, ( row - 2.5 ) * grid * 0.8, p.position );
-					thrown( f, p, 0.97, 2.5, 0, 0 );
+					nozzleAt( f, k, ( row - 2.5 ) * grid * 0.85, - 0.12 * f.scale, p.position ).addScaledVector( f.back, 0.2 * f.scale );
+					thrown( f, p, 0.97, 2.2, 0, 0 );
 					p.size = grid * 0.8;
 					p.colour.set( RAINBOW[ row ] );
 					p.kind = 2;
 					if ( row === 5 && ( n / 6 | 0 ) % 4 === 0 && ! f.calm ) {
 
 						const white = batch.spawn( p.life );
-						nozzleAt( f, k, 0, ( Math.floor( Math.random() * 6 ) - 2.5 ) * grid * 0.8, white.position );
+						nozzleAt( f, k, ( Math.floor( Math.random() * 6 ) - 2.5 ) * grid * 0.85, - 0.12 * f.scale, white.position ).addScaledVector( f.back, 0.2 * f.scale );
 						white.carry.copy( p.carry );
 						white.velocity.copy( p.velocity );
 						white.frame = SHAPES.pixel;
@@ -2263,9 +2265,13 @@ const STYLES = {
 
 				} else {
 
-					nozzleAt( f, k, ( Math.floor( Math.random() * 3 ) - 1 ) * grid, ( Math.random() - 0.4 ) * 0.3 * f.scale, p.position );
-					thrown( f, p, 0.95, 2 + Math.random(), 0.3, 0.3 );
+					// (Out of the exhaust a little way back, so the white-hot ones aren't stuck on its rear,
+					// and kept up with it, a trail behind it rather than big cubes flying past the lens.)
+					nozzleAt( f, k, ( Math.floor( Math.random() * 3 ) - 1 ) * grid, ( Math.random() - 0.5 ) * 0.25 * f.scale, p.position ).addScaledVector( f.back, 0.15 * f.scale );
+					thrown( f, p, 0.97, 1.6 + Math.random() * 0.8, 0.3, 0.3 );
 					p.drag = 0.6;
+					p.size = grid * 0.75;
+					p.life *= 0.75;
 
 				}
 
@@ -2329,8 +2335,9 @@ const STYLES = {
 					}
 
 				},
-				// Let go: the trail powers down, every pixel shrinking to its next step at once. Run dry:
-				// game over, grey pixels falling out of it.
+				// Let go: the trail powers down, every pixel shrinking to its next step at once, and the
+				// last of it breaks up into a little puff of pixels, as an old game's sprite does. Run
+				// dry: game over, grey pixels tumbling out of it, blinking.
 				cool( frame, dry ) {
 
 					f = frame;
@@ -2341,16 +2348,36 @@ const STYLES = {
 
 					}
 
-					if ( ! dry ) return;
-					for ( let i = 0; i < 12; i ++ ) {
+					if ( ! dry ) {
 
-						const p = batch.spawn( 0.8 + Math.random() * 0.3 );
-						p.position.copy( frame.nozzle ).addScaledVector( frame.right, ( Math.random() - 0.5 ) * 0.4 * frame.scale );
-						thrown( frame, p, 0.92, 1, 0.5, 0.6 );
+						for ( let i = 0; i < 8; i ++ ) {
+
+							const p = batch.spawn( 0.5 + Math.random() * 0.15 );
+							around( frame, i / 8 * Math.PI * 2, _v );
+							p.position.copy( frame.nozzle ).addScaledVector( frame.back, 0.2 * frame.scale );
+							p.carry.copy( frame.velocity ).multiplyScalar( 0.95 );
+							p.velocity.copy( _v ).multiplyScalar( 2.2 ).addScaledVector( frame.back, 0.8 );
+							p.frame = SHAPES.pixel;
+							p.size = grid * 0.8;
+							p.colour.copy( PIXEL_RAMP[ 1 + i % 4 ] );
+							p.drag = 2;
+							p.kind = 1;
+
+						}
+
+						return;
+
+					}
+
+					for ( let i = 0; i < 14; i ++ ) {
+
+						const p = batch.spawn( 1 + Math.random() * 0.3 );
+						p.position.copy( frame.nozzle ).addScaledVector( frame.right, ( Math.random() - 0.5 ) * 0.5 * frame.scale );
+						thrown( frame, p, 0.95, 1, 1.2, 0.8 );
 						p.frame = SHAPES.pixel;
-						p.size = grid * 0.66;
-						p.colour.set( 0x6b6b6b );
-						p.fall = 1;
+						p.size = grid * 0.8;
+						p.colour.set( i % 4 ? 0x8a8a8a : 0xff3b5c );
+						p.fall = 0.8;
 						p.drag = 0.5;
 						p.kind = 3;
 
