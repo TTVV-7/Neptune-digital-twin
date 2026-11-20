@@ -1,6 +1,6 @@
 import './supporter.css';
 import { accountPlayer, endSession, getMe, send, startSession } from './api.js';
-import { PRICE, setPrice } from './pass.js';
+import { DAY_PRICE, PRICE, setPrice } from './pass.js';
 import { isPro, setPro } from './pro.js';
 import { storage } from './places.js';
 import { toast } from './screens.js';
@@ -63,8 +63,16 @@ let asking = null;
 let known = Promise.resolve();
 // Called once the account signed in here has the pass (see setUpSupporter), or null.
 let onPass = null;
-// Called as Buy opens the Payment Link (for the play stats).
+// Called as Buy opens a Payment Link, with which ('life' or 'day'), and as someone signed out picks
+// one and is asked to sign in first ('ask'), for the play stats.
 let onBuy = () => {};
+// The pass someone signed out picked ('life' or 'day'), so once they've signed in its button is the
+// one to press (a new tab opened after signing in, not from a click, would be blocked).
+let picked = null;
+// Whether the sheet shows the ways to sign in, signed out: once a pass is picked, or "Sign in" tapped
+// (until then it's the prices alone, short enough for a laptop's screen, and Google's script isn't
+// loaded).
+let signingIn = false;
 let handle = null;
 const areas = new Map();
 const observers = new Set();
@@ -158,18 +166,23 @@ function addArea( root, kind ) {
 
 }
 
-// Opens the Payment Link in a new tab for the signed-in account. false if buying isn't open, or
-// nobody's signed in (the pass has to be someone's).
-export function openSupporterCheckout() {
+// Opens the Payment Link in a new tab for the signed-in account: the lifetime pass's, or with kind
+// 'day' the 24-hour pass's. false if buying isn't open (or there's no day pass), or nobody's signed
+// in (the pass has to be someone's).
+export function openSupporterCheckout( kind = 'life' ) {
 
 	const purchase = me?.purchase;
-	if ( ! me?.signedIn || ! purchase?.enabled || ! purchase.link ) return false;
-	const url = new URL( purchase.link );
+	const link = kind === 'day' ? purchase?.day?.link : purchase?.link;
+	if ( ! me?.signedIn || ! purchase?.enabled || ! link ) return false;
+	picked = null;
+	const url = new URL( link );
 	if ( purchase.clientReferenceId ) url.searchParams.set( 'client_reference_id', purchase.clientReferenceId );
-	if ( me.email ) url.searchParams.set( 'prefilled_email', me.email );
+	// Google's email, or the one a username's account gave for its receipts.
+	const email = me.email || me.contactEmail;
+	if ( email ) url.searchParams.set( 'prefilled_email', email );
 	waitingSince = Date.now();
 	window.open( url.href, '_blank', 'noopener' );
-	onBuy();
+	onBuy( kind );
 	render();
 	return true;
 
@@ -219,6 +232,9 @@ export async function restorePurchases() {
 // Worker's answer (api.js's send): not ok when it couldn't be reached (status 0) or said no (a 429
 // past the day's changes, say), its words in the sheet's status line, and in the account panel's.
 export async function signOut( { everywhere = false } = {} ) {
+
+	// Signed out on the sheet, its ways to sign in again show at once.
+	signingIn = true;
 
 	say( 'Signing out...' );
 	// The account's player, handed to this browser as it signed in (not one made here), goes with
@@ -347,6 +363,9 @@ function update( next ) {
 	}
 
 	if ( me.supporter ) waitingSince = 0;
+	// Signed in now, having picked a pass signed out: its button stands out, one tap from paying.
+	if ( me.signedIn && picked && ! me.supporter ) status = `Signed in. Tap ${ picked === 'day' ? '24 hours' : 'For good' } to pay.`;
+	else if ( me.supporter ) picked = null;
 	render();
 	for ( const fn of changed ) fn();
 	if ( me.signedIn ) linkPlayer();
@@ -593,34 +612,64 @@ function render() {
 
 }
 
-// The pass's sheet: sign in, then buy; or the pass, with thanks.
+// The pass's sheet: the two ways to buy it (for good, or for 24 hours), with their prices, for
+// everyone; picked while signed out, signing in (or making an account) first, since the pass is an
+// account's; or the pass, with thanks (and with only a day pass, how long it has left, and the
+// lifetime pass to keep it).
 function renderBuy( root ) {
 
 	if ( ! accountsOn() || ! me ) return;
 	const purchase = me.purchase ?? { enabled: false };
 	if ( purchase.enabled ) setPrice( purchase.price );
 	const parts = [];
+	const lifetime = me.supporter && ! me.dayPassUntil;
 	if ( me.supporter ) {
 
-		parts.push( Object.assign( line( '⭐ You have the Supporter Pass. Thanks for helping keep World Drive on the road!' ), { className: 'supporter-thanks' } ) );
-		// A running subscription's: where to cancel it or change the card (Stripe's portal).
+		parts.push( Object.assign( line( lifetime ? '⭐ You have the Supporter Pass. Thanks for helping keep World Drive on the road!' : `⭐ Your 24-hour pass has ${ timeLeft( me.dayPassUntil ) } left. Thanks for helping keep World Drive on the road!` ), { className: 'supporter-thanks' } ) );
+		// A running subscription's (from when the pass was one): where to cancel it or change the card.
 		if ( me.subscribed && purchase.manage ) parts.push( line( Object.assign( document.createElement( 'a' ), { href: purchase.manage, target: '_blank', rel: 'noopener', textContent: 'Manage your subscription' } ) ) );
 
 	}
-	else if ( ! purchase.enabled ) {
 
-		parts.push( Object.assign( button( 'Coming soon' ), { className: 'primary buy', disabled: true } ) );
+	if ( ! purchase.enabled ) {
+
+		if ( ! me.supporter ) parts.push( Object.assign( button( 'Coming soon' ), { className: 'primary buy', disabled: true } ) );
 		if ( ! me.signedIn ) parts.push( line( 'Have the pass already? Sign in to use it here.' ), ...signInParts() );
 
-	} else if ( ! me.signedIn ) {
+	} else if ( ! lifetime ) {
 
-		parts.push( ...signInParts(), line( 'Sign in to buy, so the pass is yours in any browser. Bought it already? Signing in brings it back.' ) );
+		// The lifetime pass, and (not while one's running) the day pass: chosen signed out, it's
+		// signing in first, and that one's button stands out once that's done.
+		const choose = kind => () => {
 
-	} else {
+			if ( me.signedIn ) return openSupporterCheckout( kind );
+			picked = kind;
+			signingIn = true;
+			onBuy( 'ask' );
+			say( 'Sign in or make a free account first, so the pass is yours on any device.' );
+			root.querySelector( '.supporter-status' )?.scrollIntoView( { block: 'nearest' } );
 
-		const buy = button( `Buy for ${ purchase.price || PRICE }`, () => openSupporterCheckout() );
-		buy.className = 'primary buy';
-		parts.push( buy );
+		};
+		const life = button( me.supporter ? `Keep it for good: ${ purchase.price || PRICE }` : `For good: ${ purchase.price || PRICE }`, choose( 'life' ) );
+		life.className = 'primary buy buy-life';
+		const options = [ life ];
+		if ( purchase.day && ! me.supporter ) {
+
+			const day = button( `24 hours: ${ purchase.day.price || DAY_PRICE }`, choose( 'day' ) );
+			day.className = 'buy buy-day';
+			options.push( day );
+
+		}
+
+		if ( me.signedIn && picked ) for ( const option of options ) option.classList.toggle( 'picked', option.classList.contains( `buy-${ picked }` ) );
+		parts.push( Object.assign( document.createElement( 'div' ), { className: 'buy-options' } ) );
+		parts.at( -1 ).append( ...options );
+		if ( ! me.signedIn ) parts.push( ...( signingIn ? signInParts() : [ line( 'Have the pass already? ', linkButton( 'Sign in', () => {
+
+			signingIn = true;
+			render();
+
+		} ) ) ] ) );
 		if ( waitingSince ) parts.push( line( 'Finish paying in the new tab: the pass unlocks here as soon as it\'s done. ', linkButton( 'Check again', () => restorePurchases() ) ) );
 
 	}
@@ -633,8 +682,16 @@ function renderBuy( root ) {
 	}
 
 	if ( status ) parts.push( statusLine() );
-	if ( ! me.supporter ) parts.push( Object.assign( line( purchase.enabled ? 'A subscription: cancel any time. Paid securely with Stripe.' : 'A subscription: cancel any time. Buying opens soon.' ), { className: 'small' } ) );
+	if ( ! lifetime ) parts.push( Object.assign( line( purchase.enabled ? 'No subscription: pay once and the pass is yours for good, or 24 hours and it simply ends. Paid securely with Stripe, in any country.' : 'Pay once, keep it for good. Buying opens soon.' ), { className: 'small' } ) );
 	root.replaceChildren( ...parts );
+
+}
+
+// "14 h", or "35 min" under an hour, until `until` (ms).
+function timeLeft( until ) {
+
+	const minutes = Math.max( 1, Math.ceil( ( until - Date.now() ) / 60000 ) );
+	return minutes >= 60 ? `${ Math.floor( minutes / 60 ) } h` : `${ minutes } min`;
 
 }
 

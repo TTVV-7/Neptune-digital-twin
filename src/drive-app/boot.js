@@ -194,8 +194,11 @@ function earthVisit( config, game ) {
 	const turnedAway = async outcome => {
 
 		refused = { outcome, until: Date.now() + outcome.retryAfter * 1000 };
-		usedUpNotice( outcome, { world: FALLBACK, onMoon: () => game()?.setWorld( FALLBACK ) } );
-		if ( outcome.reason !== 'visitor' || ! accounts ) return;
+		const pitch = game()?.pitchPass;
+		usedUpNotice( outcome, { world: FALLBACK, onMoon: () => game()?.setWorld( FALLBACK ), onPass: accounts && pitch ? () => pitch() : undefined } );
+		// (The sign-in: with signing in set up, over either cap, as usedUp's; a supporter's drives are
+		// their account's.)
+		if ( ! accounts ) return;
 		let supporter;
 		try {
 
@@ -210,7 +213,7 @@ function earthVisit( config, game ) {
 		}
 
 		supporter.fillAccountArea( $( 'notice' ).querySelector( '.account' ) );
-		// A supporter here already has had their 30 today; anyone else signing in with the pass (or
+		// A supporter here already has had their 10 today; anyone else signing in with the pass (or
 		// getting it) is a supporter whose drives are their account's: asked again at the next Drive here.
 		const setUp = onPass => supporter.setUpSupporter( { worker: true, googleClientId: config.googleClientId, passwords: config.passwords === true, turnstileSiteKey: config.turnstileSiteKey, onPass } );
 		if ( setUp( null )?.me?.supporter ) return;
@@ -264,10 +267,11 @@ function earthVisit( config, game ) {
 // The used-up notice (screens.js's 'used-up'), wherever today's Earth drives turn out to be used up:
 // a page whose visit was turned away as it loaded (usedUp) and a Drive here on the Earth turned away
 // (earthVisit). outcome: postVisit's { retryAfter, reason }; world: the free world its button names,
-// onMoon what it does.
-function usedUpNotice( { retryAfter, reason }, { world, onMoon } ) {
+// onMoon what it does; onPass, with signing in set up, its "Get more Earth drives" (main.js's
+// pitchPass: the pass's sheet).
+function usedUpNotice( { retryAfter, reason }, { world, onMoon, onPass } ) {
 
-	screens.notice( 'used-up', { retryAfter, reason, world, onMoon } );
+	screens.notice( 'used-up', { retryAfter, reason, world, onMoon, onPass } );
 
 }
 
@@ -275,19 +279,21 @@ function usedUpNotice( { retryAfter, reason }, { world, onMoon } ) {
 // worlds (the Moon, Mars, Vesta and Ceres) are ours to stream and cost nothing, so they're never
 // limited: the game starts on the Moon at once, on the Moon's globe with the Earth closed (main.js's
 // earthClosed; the others are a tap away), and a toast says why. Picking the Earth shows the used-up
-// notice, with its countdown and a way back to the Moon. A supporter's drives are counted by their
-// account, not this address (30 a day), so with signing in set up that notice has a sign-in too: a supporter on a new browser, or back from paying before Stripe's word arrived
-// (?supporter=thanks, supporter.js), would otherwise be stuck on the Moon until tomorrow. Once the
-// account here has the pass (signing in there, or the page's own first word on it), the page
-// reloads to ask for the visit again: once, so a supporter who has had their 30 stays on the Moon
-// rather than reloading round and round.
+// notice, with its countdown and a way back to the Moon. A supporter's drives (a day pass's too) are
+// counted by their account, not this address (10 a day), and the day's cap for everyone doesn't
+// turn them away, so with signing in set up that notice has a sign-in too, and the pitch: this is
+// the moment someone wants more of the Earth, so the toast and the notice both offer "Get more Earth
+// drives" (the pass's sheet: 24 hours, or for good). A supporter on a new browser, or back from
+// paying (?supporter=thanks, supporter.js, or the tab they paid in closed), would otherwise be stuck
+// on the Moon until tomorrow. Once the account here has the pass (signing in there, paying, or the
+// page's own first word on it), the page reloads to ask for the visit again: once, so a supporter
+// who has had their 10 stays on the Moon rather than reloading round and round.
 // (supporter.js comes with the game's code, so it's waited for here.)
 async function usedUp( config, outcome, main, link = null ) {
 
 	const { retryAfter, reason } = outcome;
-	// The notice's sign-in: only when it's this address's drives that are used up (a supporter's
-	// own are counted by their account), and only with signing in set up.
-	const accounts = reason === 'visitor' && !! ( config.googleClientId || config.passwords === true );
+	// The notice's sign-in and the pitch: only with signing in set up (a pass is an account's).
+	const accounts = !! ( config.googleClientId || config.passwords === true );
 	const watch = accounts && ! askedAgain();
 	let supporter = null;
 	const again = () => {
@@ -308,7 +314,7 @@ async function usedUp( config, outcome, main, link = null ) {
 	let game = null;
 	const earthClosed = () => {
 
-		usedUpNotice( outcome, { world: game?.world ?? FALLBACK, onMoon: () => {} } );
+		usedUpNotice( outcome, { world: game?.world ?? FALLBACK, onMoon: () => {}, onPass: accounts && game?.pitchPass ? () => game.pitchPass() : undefined } );
 		if ( ! supporter ) return;
 		watchForPass();
 		supporter.fillAccountArea( $( 'notice' ).querySelector( '.account' ) );
@@ -330,7 +336,8 @@ async function usedUp( config, outcome, main, link = null ) {
 			const here = game.world;
 			const others = OFF_EARTH.filter( id => id !== here );
 			const free = `so you're ${ onWorld( here ) }: free and unlimited, as ${ listOf( others ) } ${ others.length > 1 ? 'are' : 'is' }. The Earth opens again tomorrow.`;
-			screens.toast( reason === 'daily' ? `Today's free Earth drives are all taken, ${ free }` : `You've had today's free Earth drive, ${ free }`, 10000 );
+			const more = accounts && game.pitchPass ? { label: 'Get more Earth drives', onClick: () => game.pitchPass() } : null;
+			screens.toast( reason === 'daily' ? `Today's free Earth drives are all taken, ${ free }` : `You've had today's free Earth drive, ${ free }`, more ? 15000 : 10000, more );
 
 		} );
 

@@ -69,3 +69,32 @@
 	margin-left: 5px;
 	font-size: 0.85em;
 }
+
+/* The two ways to buy the pass, side by side (for good, the main one; 24 hours), stacked on a
+   narrow phone. The one picked while signed out stands out once signing in is done. */
+#pass .buy-options {
+	display: flex;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+
+#pass .buy-options button {
+	flex: 1 1 180px;
+	width: auto;
+}
+
+#pass .buy-options .buy-day {
+	padding: 12px 22px;
+	border: 2px solid var( --accent );
+	border-radius: 12px;
+	background: transparent;
+	color: var( --ink );
+	font-weight: 900;
+	font-style: italic;
+	cursor: pointer;
+}
+
+#pass .buy-options button.picked {
+	outline: 3px solid var( --ink );
+	outline-offset: 2px;
+}

@@ -39,13 +39,20 @@
 		// The Turnstile widget for worlddrive.app (public; its secret is the TURNSTILE_SECRET secret).
 		"TURNSTILE_SITE_KEY": "0x4AAAAAAFs3k5sgUIQHSuGC",
 		// The Supporter Pass (docs/world-drive.md, worker/drive/supporter.js), all public: a supporter's
-		// visits a day; the "Sign in with Google" button's OAuth client id (empty: no signing in and no
-		// buying, and the pass says "Coming soon"); the Payment Link, in World Drive's own Stripe
-		// account, and its price as the page shows it.
-		"PER_VISITOR_DAILY_SUPPORTER": "30",
+		// Earth drives a day (a day pass's too; never turned away by DAILY_VISITS); the "Sign in with
+		// Google" button's OAuth client id (empty: no Google sign-in); the lifetime pass's Payment Link
+		// in World Drive's own Stripe account and its price as the page shows it; the links whose
+		// checkouts count (the lifetime one, and the old monthly one for anyone who bought through it);
+		// and the 24-hour pass's link, its id (which is how a checkout is known to be a day pass) and
+		// its price.
+		"PER_VISITOR_DAILY_SUPPORTER": "10",
 		"GOOGLE_CLIENT_ID": "979605278581-il852i6ql3e6j2t1kobqo2bg46pkaii5.apps.googleusercontent.com",
-		"SUPPORTER_PAYMENT_LINK": "https://buy.stripe.com/00weVc36c5rVaPE7F4frW01",
-		"SUPPORTER_PRICE": "CA$1.99/month",
+		"SUPPORTER_PAYMENT_LINK": "https://buy.stripe.com/00w9AS7ms1bF5vkgbAfrW02",
+		"SUPPORTER_PRICE": "CA$9.99",
+		"SUPPORTER_PAYMENT_LINK_ID": "plink_1UdfbXCEvam6zTiEplkoEAQf, plink_1Ucxa9CEvam6zTiEG1ci9oRM",
+		"DAY_PASS_PAYMENT_LINK": "https://buy.stripe.com/28E14mgX21bFf5U1gGfrW03",
+		"DAY_PASS_PAYMENT_LINK_ID": "plink_1UdfbbCEvam6zTiEHMlUr66T",
+		"DAY_PASS_PRICE": "CA$0.99",
 		// Driving with others (worker/drive/live.js): "off" is the kill switch. New connections are
 		// turned away, those already in a room are closed as they next say anything (or at the room's
 		// next alarm) once the room runs the new version (a busy one can take up to 5 minutes to; see

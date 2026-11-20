@@ -8,10 +8,12 @@ import { listOf, OFF_EARTH } from './worlds.js';
 // The Supporter Pass sheet: what the pass is and what comes with it (the rides, every Garage look at
 // once, +50% XP for levels, the ⭐, more drives a day), opened from the globe's panel, the pause
 // menu, the Garage, and anything locked (see pro.js). Its buy area says "Coming soon" until the
-// payments code (supporter.js: Google sign-in and Stripe) fills it with its own, and that calls
-// setPro( true ) in pro.js once the pass is bought.
+// payments code (supporter.js: signing in and Stripe) fills it with its own, and that calls
+// setPro( true ) in pro.js once the pass is bought. The pass is bought once and kept for good, or
+// for 24 hours (a day pass: the same pass, for a day).
 
-export const PRICE = 'CA$1.99/month';
+export const PRICE = 'CA$9.99';
+export const DAY_PRICE = 'CA$0.99';
 const BADGE = '⭐ Supporter Pass';
 const COUNTS = [ 'No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen', 'Twenty' ];
 const count = n => COUNTS[ n ] ?? String( n );
@@ -64,7 +66,7 @@ export function buyArea() {
 
 }
 
-// The price as the Worker says it is (SUPPORTER_PRICE), in the sheet's words.
+// The lifetime pass's price as the Worker says it is (SUPPORTER_PRICE), in the sheet's words.
 export function setPrice( price ) {
 
 	if ( ! price ) return;
@@ -90,17 +92,17 @@ function build() {
 			<button type="button" class="close" aria-label="Close">&times;</button>
 			<p class="pro-badge">${ BADGE }</p>
 			<h2 id="pass-title">Supporter Pass</h2>
-			<p class="lead">World Drive streams the real 3D world, and every drive costs us a little. The pass is a subscription of <b class="pass-price">${ PRICE }</b>, cancel any time, that helps keep it running, and comes with:</p>
+			<p class="lead">World Drive streams the real 3D world, and every drive costs us a little. The pass helps keep it running: <b class="pass-price">${ PRICE }</b> once, yours for good (no subscription), or try it for a day. It comes with:</p>
 			<ul class="perks">
 				<li class="rides"><b>${ count( PASS_CARS.length + PRO_RIDES.length ) } more rides</b><span>${ count( PASS_CARS.length ) } cars and ${ count( PRO_RIDES.length ).toLowerCase() } built rides; levels bring ${ count( LEVEL_CARS.length ).toLowerCase() } too.</span><div class="ride-icons"></div></li>
 				<li><b>The whole Garage, now</b><span>Every look at once: 20 colours, finishes up to chrome, eight decals, rims, underglow, horns, ${ count( PASS_BOOSTS ).toLowerCase() } more boost styles (a galaxy, dragon fire...), flame colours and trails. Levels unlock some as you drive; the pass doesn't wait.</span></li>
 				<li><b>+50% XP</b><span>Every level sooner, with its titles and level-only colours.</span></li>
 				<li><b>A ⭐ on the leaderboard</b><span>By your name, for everyone to see.</span></li>
-				<li><b>30 Earth drives a day</b><span>Instead of 1. ${ FREE_WORLDS } are free for everyone.</span></li>
+				<li><b>10 Earth drives a day</b><span>Instead of 1, even once the day's free drives are all taken. ${ FREE_WORLDS } are free for everyone.</span></li>
 			</ul>
 			<div class="buy-area">
 				<button type="button" class="primary buy" disabled>Coming soon</button>
-				<p class="small">A subscription: cancel any time. Buying opens soon.</p>
+				<p class="small">Pay once, keep it for good. Buying opens soon.</p>
 			</div>
 		</div>`;
 	dialog.querySelector( '.ride-icons' ).replaceChildren( ...[ ...PASS_CARS, ...PRO_RIDES ].map( ride => {

@@ -368,11 +368,12 @@ export async function signUp( context ) {
 	const sent = await body( request );
 	const username = newUsername( sent.username );
 	const password = newPassword( sent.password, username );
+	const contactEmail = contactEmailOf( sent.email );
 	if ( ! await robotPassed( env, request, sent.token ) ) throw new HttpError( 403, 'Show you\'re not a robot first', { reason: 'robot' } );
 	await takeTurn( limits, request, 'sign-up', now, SIGN_UPS_DAILY, 48 );
 	const key = usernameKey( username );
 	if ( await db.prepare( 'SELECT 1 AS taken FROM logins WHERE username_key = ?' ).bind( key ).first() ) throw new HttpError( 409, 'That username is taken' );
-	const id = await newAccount( db, { username, key, hash: await newHash( env, password ), now } );
+	const id = await newAccount( db, { username, key, hash: await newHash( env, password ), now, contactEmail } );
 	if ( ! id ) throw new HttpError( 409, 'That username is taken' );
 	return signedIn( context, id );
 
@@ -382,17 +383,45 @@ export async function signUp( context ) {
 // when the username was taken first. The account and its login in one batch (one transaction: if it
 // fails, neither is kept), found by its new random Google id; the login's UNIQUE key decides between
 // two at the same time, and the account made for the one that lost is taken back in the same go.
-export async function newAccount( db, { username, key, hash, now } ) {
+export async function newAccount( db, { username, key, hash, now, contactEmail = '' } ) {
 
 	const sub = NO_GOOGLE + randomToken( 16 );
 	const [ , added ] = await db.batch( [
-		db.prepare( 'INSERT INTO accounts ( google_sub, email, name, created_at, last_login_at ) VALUES ( ?, \'\', \'\', ?, ? )' ).bind( sub, now, now ),
+		db.prepare( 'INSERT INTO accounts ( google_sub, email, name, created_at, last_login_at, contact_email ) VALUES ( ?, \'\', \'\', ?, ?, ? )' ).bind( sub, now, now, contactEmail ),
 		db.prepare( `INSERT INTO logins ( account_id, username, username_key, password_hash, salt, iterations, created_at, changed_at )
 			SELECT id, ?, ?, ?, ?, ?, ?, ? FROM accounts WHERE google_sub = ? ON CONFLICT ( username_key ) DO NOTHING RETURNING account_id` )
 			.bind( username, key, hash.password_hash, hash.salt, hash.iterations, now, now, sub ),
 		db.prepare( 'DELETE FROM accounts WHERE google_sub = ? AND NOT EXISTS ( SELECT 1 FROM logins WHERE account_id = accounts.id )' ).bind( sub ),
 	] );
 	return added.results?.[ 0 ]?.account_id ?? null;
+
+}
+
+// An email typed in for receipts (sign-up's, or setContactEmail's): '' for none, the email in lower
+// case, or a 400 for something that isn't one.
+function contactEmailOf( value ) {
+
+	if ( value === undefined || value === null || value === '' ) return '';
+	const email = typeof value === 'string' ? value.trim().toLowerCase() : '';
+	if ( email === '' ) return '';
+	if ( email.length > 254 || ! /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test( email ) ) throw new HttpError( 400, 'That doesn\'t look like an email address', { reason: 'email' } );
+	return email;
+
+}
+
+// POST /api/account/email { email }, signed in: the email for this account's receipts, '' to take it
+// off. Never checked (nothing is sent to it), so it's only ever put on the Stripe checkout; it makes
+// no purchase the account's (see the migration, 0013_contact_email.sql). Answers /api/me's body.
+export async function setContactEmail( context ) {
+
+	const { request, env, now } = context;
+	const db = checkOn( env );
+	const account = await currentAccount( context );
+	if ( ! account ) throw new HttpError( 401, 'Sign in first' );
+	const sent = await body( request );
+	const email = contactEmailOf( sent.email );
+	await db.prepare( 'UPDATE accounts SET contact_email = ? WHERE id = ?' ).bind( email, account.id ).run();
+	return json( await meFor( env, await accountById( db, account.id ), now ) );
 
 }
 
