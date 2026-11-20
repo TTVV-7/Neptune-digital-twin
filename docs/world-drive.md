@@ -1885,7 +1885,7 @@ hibernation), as that world's: either way it's counted against the world it was 
 other's.
 
 **Bounded per address, as the Earth's are.** The Earth's visits are capped at 8 a day for each
-address (10 a day for a supporter or a day pass, counted by account; the owner's not at all), and so are their
+address (30 a day for a supporter or a day pass, counted by account; the owner's not at all), and so are their
 connections (each visit's 20 a minute and 200 a day, one room at a time).
 The Moon's visits aren't capped (anyone gets one for each robot check they pass), nor are those
 opened from a link to Mars, Vesta or Ceres, so a visit not counted against the Earth's caps (one of
@@ -3387,7 +3387,7 @@ first and the fast ones later. They're `ride` rewards in `REWARDS` (`rideLevel`,
 ### What the Supporter Pass gives
 
 Every Garage look at once (the 41 on the track and the 47 that are the pass's alone), the six cars
-on the track and its own eleven rides, **+50% XP**; and still a ⭐ and 10 Earth drives a day
+on the track and its own eleven rides, **+50% XP**; and still a ⭐ and 30 Earth drives a day
 ([below](#supporter-pass-buying-it)). Levels' own rewards (titles, badges, the level-only colours)
 come with levels for everyone, supporters too. The ×1.5 is the Worker's: it looks up the pass of the
 account the player is linked to, never anything the page says.
@@ -3646,7 +3646,7 @@ under one line saying what the stars mean), and picking one opens the pass's she
 instead (`src/drive-app/pass.js`): what the pass is and what comes with it (seventeen more rides,
 thirteen cars, six of which levels bring too, and four built in code, each with its picture in two
 rows; every Garage look at once, which levels otherwise unlock some of over time; +50% XP; a ⭐ by
-your name on the leaderboard, 10 Earth drives a day instead of 1) and its buy
+your name on the leaderboard, 30 Earth drives a day instead of 1) and its buy
 area (`buyArea()`), which says **Coming soon** until the payments code fills it. The sheet also opens from **⭐ Supporter
 Pass** under the rides on the globe and in the pause menu. A ride or a look saved while the pass was
 on falls back to the pickup, or to the free choices, without it (a level's car, until its level).
@@ -4112,17 +4112,15 @@ others keep their paint, with only an underglow, boost, trail and horn to pick.
 
 ## Supporter Pass (buying it)
 
-The pass is bought **once and kept for good** (`SUPPORTER_PRICE`, CA$9.99 as set: no subscription),
-or for **24 hours** (a **day pass**, `DAY_PASS_PRICE`, CA$0.99: the same pass for a day, then it
-simply ends), each through a Stripe Payment Link of its own in World Drive's own Stripe account. The
-pass was a CA$1.99/month subscription for a while (with no buyers: 118 opened its sheet in a week and
-nobody pressed Buy), and before that a one-time CA$4.99; those passes keep working as they did
-(a subscription's while it runs, a one-time one for good). It comes with what's
-[above](#supporter-pass-content) (seven cars of its own, the six levels bring, the four rides and
-every Garage look at once), **+50% XP** for [levels](#levels), a **⭐ by your name on the
-leaderboard**, and **10 Earth drives a day** instead of 1, which the day's cap for everyone never
-turns away: they've paid for them. 10 rather than the 30 it was, so a lifetime pass that's driven
-every day can't cost more in Google's sessions than it brought in.
+The pass is bought three ways, each through a Stripe Payment Link of its own in World Drive's own
+Stripe account: **monthly** (`SUPPORTER_MONTHLY_PRICE`, CA$1.99/month, a subscription kept while it
+runs: the first one was bought on 20 November 2026, so it stays and leads), **once and kept for
+good** (`SUPPORTER_PRICE`, CA$19.99), or for **24 hours** (a **day pass**, `DAY_PASS_PRICE`,
+CA$0.99: the same pass for a day, then it simply ends). One-time CA$4.99 passes from before keep
+working for good. It comes with what's [above](#supporter-pass-content) (seven cars of its own, the
+six levels bring, the four rides and every Garage look at once), **+50% XP** for [levels](#levels),
+a **⭐ by your name on the leaderboard**, and **30 Earth drives a day** instead of 1, which the day's
+cap for everyone never turns away: they've paid for them.
 
 **Where it's offered.** On the pass's sheet, from anything locked, as before; and above all where
 someone wants more of the Earth: a visit over the Earth's caps (its address's one free drive, or the
@@ -4143,21 +4141,22 @@ and times on every device, and driving and the leaderboard never need it.
 ### What people see
 
 - **The pass's sheet** (any locked ride or Garage choice, **⭐ Supporter Pass** under the rides, or
-  **Get more Earth drives**): both ways to buy it for everyone, signed in or not, **For good:
-  CA$9.99** and **24 hours: CA$0.99**, and "No subscription: pay once and the pass is yours for
-  good, or 24 hours and it simply ends. Paid securely with Stripe, in any country." Signed out,
+  **Get more Earth drives**): the three ways to buy it for everyone, signed in or not, **24 hours:
+  CA$0.99**, **Monthly: CA$1.99/month** (the main button) and **For good: CA$19.99**, and "Monthly is
+  a subscription: cancel any time. For good and 24 hours are paid once. Paid securely with Stripe,
+  in any country." Signed out, the prices and "Have the pass already? Sign in"; picking one shows
   Google's **Sign in with Google** button and, with usernames on, "Or use a username and password"
-  under them; picking one signed out says "Sign in or make a free account first, so the pass is yours
+  under them, and says "Sign in or make a free account first, so the pass is yours
   on any device." (`pass:ask_signin`), and once signed in that one's button stands out ("Signed in.
   Tap For good to pay."): a new tab opened by signing in rather than by a tap would be blocked.
   Signed in, "Signed in as ... · Restore purchases · Sign out" under them.
-- **Buying** opens that pass's Payment Link in a new tab (`pass:buy`, `pass:buy_day`), with
+- **Buying** opens that pass's Payment Link in a new tab (`pass:buy`, `pass:buy_month`, `pass:buy_day`), with
   `client_reference_id` (the account's id, which Stripe hands back with the payment, so the Worker
   knows whose it is) and `prefilled_email` (the Google address, or a username's [email for
   receipts](#username-and-password-accounts)). The sheet says to finish paying there, with **Check
   again**.
 - **With a day pass**, the sheet says "Your 24-hour pass has 14 h left" and offers **Keep it for
-  good: CA$9.99** (not another day pass while one runs).
+  good: CA$19.99** and **Monthly** (not another day pass while one runs).
 - **Back from Stripe.** Stripe sends the buyer to `https://worlddrive.app/?supporter=thanks`: the page
   tidies the address, asks the Worker (again every 3 s for half a minute, in case Stripe's webhook is
   a moment behind) and says **Thanks! Supporter Pass unlocked**. Going back to the first tab instead,
@@ -4252,9 +4251,9 @@ and times on every device, and driving and the leaderboard never need it.
   `dayPassUntil` (ms) when all the account has is a day pass. `/api/me` also says `subscribed: true` when it's a running
   subscription's, and the sheet then links to `SUPPORTER_MANAGE_LINK` (**Manage your subscription**). It's looked up
   each time, never copied, so a refund or a change to `SUPPORTER_EMAILS` counts straight away.
-- **10 drives a day**: `/api/visit` with a supporter's session (a day pass's too) counts the visit
+- **30 drives a day**: `/api/visit` with a supporter's session (a day pass's too) counts the visit
   against the account (hashed with the day's salt, like an address) with
-  `PER_VISITOR_DAILY_SUPPORTER` (10), not against the address, and `DAILY_VISITS` never turns it
+  `PER_VISITOR_DAILY_SUPPORTER` (30), not against the address, and `DAILY_VISITS` never turns it
   away (it still counts towards it for everyone else). If the database can't be asked
   just then, the visit goes ahead as anyone's.
 - **The ⭐**: leaderboard rows (and your own row) have `supporter: true` for a player linked to a
@@ -4269,16 +4268,18 @@ and times on every device, and driving and the leaderboard never need it.
 | Setting | Where | What it is |
 | --- | --- | --- |
 | `GOOGLE_CLIENT_ID` | `vars` | The OAuth web client's id (public). Empty: no signing in, no buying, and the sheet says "Coming soon" |
-| `SUPPORTER_PAYMENT_LINK` | `vars` | The lifetime pass's Payment Link, `https://buy.stripe.com/00w9AS7ms1bF5vkgbAfrW02` (live, public) |
-| `SUPPORTER_PRICE` | `vars` | Its price as the page shows it: `CA$9.99` |
+| `SUPPORTER_PAYMENT_LINK` | `vars` | The lifetime pass's Payment Link, `https://buy.stripe.com/aFa8wOgX2cUn1f4aRgfrW04` (live, public) |
+| `SUPPORTER_PRICE` | `vars` | Its price as the page shows it: `CA$19.99` |
+| `SUPPORTER_MONTHLY_PAYMENT_LINK` | `vars` | The subscription's Payment Link, `https://buy.stripe.com/00weVc36c5rVaPE7F4frW01` (live, public) |
+| `SUPPORTER_MONTHLY_PRICE` | `vars` | Its price as the page shows it: `CA$1.99/month` |
 | `DAY_PASS_PAYMENT_LINK` | `vars` | The 24-hour pass's Payment Link, `https://buy.stripe.com/28E14mgX21bFf5U1gGfrW03` (live, public) |
 | `DAY_PASS_PAYMENT_LINK_ID` | `vars` | Its `plink_...` id, `plink_1UdfbbCEvam6zTiEHMlUr66T`: how a checkout is known to be a day pass. Without it the day pass isn't offered |
 | `DAY_PASS_PRICE` | `vars` | Its price as the page shows it: `CA$0.99` |
 | `SUPPORTER_MANAGE_LINK` | `vars` or dashboard text, optional | Stripe's customer portal login link, `https://billing.stripe.com/p/login/...`: where subscribers cancel or change their card |
-| `PER_VISITOR_DAILY_SUPPORTER` | `vars` | A supporter's Earth drives a day, a day pass's too (10) |
+| `PER_VISITOR_DAILY_SUPPORTER` | `vars` | A supporter's Earth drives a day, a day pass's too (30) |
 | `STRIPE_WEBHOOK_SECRET` | secret | The webhook endpoint's signing secret, `whsec_...`: the live endpoint's while the link is live |
 | `SUPPORTER_EMAILS` | secret, optional | Comma-separated: people who have the pass without paying (you, testers) |
-| `SUPPORTER_PAYMENT_LINK_ID` | `vars`, optional (recommended) | The links' `plink_...` ids, comma-separated: only their checkouts (and the day pass's) count. Set to the lifetime link and the old monthly one |
+| `SUPPORTER_PAYMENT_LINK_ID` | `vars`, optional (recommended) | The links' `plink_...` ids, comma-separated: only their checkouts (and the day pass's) count. Set to the lifetime link and the monthly one |
 
 Buying is on only when `GOOGLE_CLIENT_ID`, the link (an `https://` address) and a `whsec_` secret
 are all set, and `SUPPORTER_PAYMENT_LINK_ID`, if set, is a `plink_` id. Anything else leaves it off,
@@ -4347,22 +4348,21 @@ offers buying just then.
    dashboard, the new link's `plink_...` there. Commit and push: the deploy applies
    `0010_supporter_subscriptions.sql` first.
 
-### Switching to a lifetime pass and the day pass
+### Monthly, lifetime and the day pass side by side
 
 What was done in November 2026, for changing prices again the same way:
 
-1. **Stripe** (live): two products, **Supporter Pass (lifetime)** at CA$9.99 and **24-hour pass**
-   at CA$0.99, one-time prices, tax code `txcd_10201004` as the pass had. A Payment Link for each,
-   with **After payment** redirecting to `https://worlddrive.app/?supporter=thanks`, Managed
-   Payments and automatic tax on (as the monthly link had).
-2. **`wrangler.drive.jsonc`**: the lifetime link in `SUPPORTER_PAYMENT_LINK` with `SUPPORTER_PRICE`,
-   the day pass's link, id and price in `DAY_PASS_PAYMENT_LINK`, `DAY_PASS_PAYMENT_LINK_ID` and
-   `DAY_PASS_PRICE`, `SUPPORTER_PAYMENT_LINK_ID` listing the lifetime link and the old monthly one,
-   and `PER_VISITOR_DAILY_SUPPORTER` 10. The webhook needs nothing new (`checkout.session.completed`
-   was already on it). The deploy applies `0012_day_pass.sql` first.
-3. **Once it's deployed**, deactivate the old monthly Payment Link (Payment Links → it →
-   **Deactivate**), so nobody finds it from an old bookmark. Anyone subscribed through it keeps the
-   pass while their subscription runs.
+1. **Stripe** (live): the monthly subscription's link as it was; a product **Supporter Pass
+   (lifetime)** at CA$19.99 and **24-hour pass** at CA$0.99, one-time prices, tax code
+   `txcd_10201004` as the pass had, each with a Payment Link whose **After payment** redirects to
+   `https://worlddrive.app/?supporter=thanks`, Managed Payments and automatic tax on. (A CA$9.99
+   lifetime link made first, never bought through, is deactivated.)
+2. **`wrangler.drive.jsonc`**: `SUPPORTER_PAYMENT_LINK` and `SUPPORTER_PRICE` (lifetime),
+   `SUPPORTER_MONTHLY_PAYMENT_LINK` and `SUPPORTER_MONTHLY_PRICE`, the day pass's link, id and price
+   in `DAY_PASS_PAYMENT_LINK`, `DAY_PASS_PAYMENT_LINK_ID` and `DAY_PASS_PRICE`,
+   `SUPPORTER_PAYMENT_LINK_ID` listing the lifetime and monthly links, and
+   `PER_VISITOR_DAILY_SUPPORTER` 30. The webhook needs nothing new. The deploy applies
+   `0012_day_pass.sql` and `0013_contact_email.sql` first.
 
 To change a price, make a new price and Payment Link in Stripe, and put the link (and, for the day
 pass, its id) and the price as it should read in the vars above.
@@ -4393,7 +4393,7 @@ UPDATE purchases SET account_id = 12 WHERE checkout_session = 'cs_live_...';
 
 - **The lock is in the page.** The pass's rides and the Garage's extras are code in the public site,
   so someone who digs through it can switch them on in their own browser. What the Worker keeps for
-  supporters (the 10 drives and the ⭐) can't be had that way.
+  supporters (the 30 drives and the ⭐) can't be had that way.
 - A chargeback's "won" (`funds_reinstated`) delivered before its "withdrawn" leaves the pass taken
   away: Stripe would have to retry the first for longer than the whole dispute took. Give it back by
   hand (above). An early fraud warning or an inquiry takes no money, so it changes nothing.
@@ -4406,6 +4406,19 @@ UPDATE purchases SET account_id = 12 WHERE checkout_session = 'cs_live_...';
   row may show one of those by a name without a ⭐ or at a lower level. Likewise the cars' models are public files, as the library's are.
 - No receipts or purchase history in the page: Stripe emails its own receipt if that's on in its
   settings.
+
+## Music
+
+A song for each world, made by the owner with Suno, looping from the first drive on (a browser only
+plays sound after a click or a key, and a drive is always one) and changing with the world, fading
+from one to the next: **Road to Nowhere** on the Earth, **The Long Way Round the Moon** on the Moon,
+and **The Long Way Round** on Mars, Vesta and Ceres (`src/drive-app/music.js`, the songs in
+`drive/public/music/`, AAC at 128 kbps so every browser plays them, about 3.5 MB each). It goes on
+through pausing (quieter) and the globe. The pause menu's **Music** switch turns it off, kept in the
+browser (`world-drive.music`); on unless it's been switched off. Nothing is downloaded until a song
+plays, and only the song of the world being driven. On an iPhone or iPad a page can't set its
+sound's volume, so the music plays at the phone's own volume there. Suno's terms let songs be used
+commercially only if they were made on a paid plan.
 
 ## Username and password accounts
 
@@ -4824,7 +4837,7 @@ starts one. World Drive is built so that one page load is one session, however m
   arrived (so a download that fails spends no drive: [the load](#the-load)), and only while the
   day's visits are under two caps: **DAILY_VISITS** for everyone together (300) and
   **PER_VISITOR_DAILY** for each visitor (1: one free Earth drive a day; a supporter signed in has
-  **PER_VISITOR_DAILY_SUPPORTER**, 10, counted by their account, and never turned away by the cap for everyone). Both start again at midnight UTC.
+  **PER_VISITOR_DAILY_SUPPORTER**, 30, counted by their account, and never turned away by the cap for everyone). Both start again at midnight UTC.
   The owner's accounts (`ADMIN_EMAILS`, signed in) aren't counted at all.
 - **Every world but the Earth is never limited** (the Moon, Mars, Vesta and Ceres: worlds.js's `free`). Their
   ground is our own (body.js), so it costs nothing to stream. A page opened on a link to one
@@ -7622,11 +7635,11 @@ In `wrangler.drive.jsonc` (`vars`, set on every deploy; change them there, not i
 | `DAILY_VISITS` | 300 | Visits a day for everyone together; 0 closes for the day |
 | `PER_VISITOR_DAILY` | 8 | Visits a day per visitor |
 | `TURNSTILE_SITE_KEY` | `0x4AAAAAAFs3k5sgUIQHSuGC` | The worlddrive.app Turnstile widget (public) |
-| `PER_VISITOR_DAILY_SUPPORTER` | 10 | Visits a day for a supporter (or a day pass), signed in |
+| `PER_VISITOR_DAILY_SUPPORTER` | 30 | Visits a day for a supporter (or a day pass), signed in |
 | `PASSWORD_ACCOUNTS` | unset (on) | [Username and password accounts](#username-and-password-accounts); `off` switches them off |
 | `GOOGLE_CLIENT_ID` | empty | The Supporter Pass's Google sign-in (public); empty, no signing in or buying |
 | `SUPPORTER_PAYMENT_LINK` | the live link | The Supporter Pass's Stripe Payment Link (public) |
-| `SUPPORTER_PRICE` | `CA$9.99` | Its price, as the page shows it |
+| `SUPPORTER_PRICE` | `CA$19.99` | Its price, as the page shows it |
 | `LIVE` | `on` | [Driving with others](#switching-it-off); `off` switches it off |
 | `LIVE_DAILY_BUDGET` | 40000 | [The Durable Object requests a day](#the-days-budget) driving with others may use on the Earth; 0 is off there |
 | `LIVE_MOON_DAILY_BUDGET` | 20000 | [The Moon's own](#driving-with-others-on-the-moon), apart; 0 is off on the Moon |
@@ -8263,7 +8276,7 @@ for Stripe's: signing in and every bad token turned away, the session cookie, `/
 webhook's signatures and five minutes, a payment once, bank debits, buying before signing in,
 refunds and chargebacks (either delivered before its checkout), another link's checkouts, test-mode
 payments with a live link, the same-origin checks only the webhook goes without, `SUPPORTER_EMAILS`,
-10 drives a day for a supporter, the ⭐, the owner's SQL, and buying off without its settings;
+30 drives a day for a supporter, the ⭐, the owner's SQL, and buying off without its settings;
 [usernames and passwords](#how-usernames-and-passwords-are-tested) (all that's listed there); and
 the [play stats](#play-stats): each metric's keys checked and held to a post's most, `MAX_COUNTS`,
 and the admin page's answer with the facts from the leaderboard's and the pass's tables, refunds

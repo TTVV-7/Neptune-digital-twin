@@ -2096,6 +2096,25 @@ describe( 'World Drive boost and driving effects', () => {
 
 	} );
 
+	test( 'the pause menu\'s "Music" switch: on to begin, off kept in the browser, and on again; the Earth\'s song for the Earth', async () => {
+
+		await page.keyboard.press( 'Escape' );
+		await page.locator( '#pause' ).waitFor();
+		const toggle = page.locator( '#pause .music-toggle' );
+		assert.ok( await toggle.isChecked() );
+		// (This test browser can't play AAC, so it's which song, not the sound itself.)
+		assert.ok( await page.evaluate( () => !! window.drive.music ) );
+		await toggle.uncheck();
+		assert.equal( await page.evaluate( () => localStorage.getItem( 'world-drive.music' ) ), 'off' );
+		assert.equal( await page.evaluate( () => window.drive.music.playing ), false );
+		await toggle.check();
+		assert.equal( await page.evaluate( () => localStorage.getItem( 'world-drive.music' ) ), 'on' );
+		await page.locator( '#pause .resume' ).click();
+		await page.waitForFunction( () => window.drive.mode === 'driving' );
+		assert.deepEqual( page.errors, [] );
+
+	} );
+
 	test( 'the pause menu\'s "Camera effects" switch turns off the jolts, shakes, speed lines and white edges, kept across a reload, and on again', async () => {
 
 		await page.keyboard.press( 'Escape' );
@@ -6115,7 +6134,8 @@ const CLIENT = 'test-client.apps.googleusercontent.com';
 // machine is reached).
 const PASS_LINK = 'https://buy.stripe.com/test_madeUpLink000';
 const DAY_LINK = 'https://buy.stripe.com/test_madeUpDayLink000';
-const SIGNED_OUT = { signedIn: false, supporter: false, purchase: { enabled: true, link: PASS_LINK, price: 'CA$4.99', day: { link: DAY_LINK, price: 'CA$0.89' } } };
+const MONTH_LINK = 'https://buy.stripe.com/test_madeUpMonthLink000';
+const SIGNED_OUT = { signedIn: false, supporter: false, purchase: { enabled: true, link: PASS_LINK, price: 'CA$4.99', monthly: { link: MONTH_LINK, price: 'CA$1.79/month' }, day: { link: DAY_LINK, price: 'CA$0.89' } } };
 const ALICE = { signedIn: true, name: 'Alice Example', email: 'alice@example.com', supporter: false, purchase: { ...SIGNED_OUT.purchase, clientReferenceId: '42' } };
 const PLAYER = { id: 'P1ayer-id_000000', secret: 'S'.repeat( 32 ), name: 'Speed Demon' };
 
@@ -6222,7 +6242,9 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		await area.locator( '.buy-life' ).waitFor();
 		assert.equal( await area.locator( '.buy-life' ).textContent(), 'For good: CA$4.99' );
 		assert.equal( await area.locator( '.buy-day' ).textContent(), '24 hours: CA$0.89' );
-		assert.match( await area.textContent(), /Have the pass already\? Sign in[\s\S]*No subscription/ );
+		assert.equal( await area.locator( '.buy-month.primary' ).textContent(), 'Monthly: CA$1.79/month' );
+		assert.deepEqual( await area.locator( '.buy-options button' ).allTextContents(), [ '24 hours: CA$0.89', 'Monthly: CA$1.79/month', 'For good: CA$4.99' ] );
+		assert.match( await area.textContent(), /Have the pass already\? Sign in[\s\S]*Monthly is a subscription: cancel any time\./ );
 		assert.equal( await area.locator( '.stub-google' ).count(), 0 );
 		assert.equal( page.google, 0 );
 		await area.locator( '.buy-life' ).click();
@@ -6257,6 +6279,10 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		const day = new URL( ( await page.evaluate( () => window.opened ) )[ 1 ][ 0 ] );
 		assert.equal( `${ day.origin }${ day.pathname }`, DAY_LINK );
 		assert.equal( day.searchParams.get( 'client_reference_id' ), '42' );
+		// And monthly's.
+		await area.locator( '.buy-month' ).click();
+		const month = new URL( ( await page.evaluate( () => window.opened ) )[ 2 ][ 0 ] );
+		assert.equal( `${ month.origin }${ month.pathname }`, MONTH_LINK );
 		await area.locator( '.supporter-line', { hasText: 'Finish paying in the new tab' } ).waitFor();
 		assert.equal( await locked( page ), LOCKED );
 		// Asked before Stripe's word has come: it says so, rather than that there's no pass.
@@ -6499,7 +6525,7 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		await toEarth( page );
 		await page.locator( '#notice[data-kind="used-up"]' ).waitFor();
 		await notice( page ).locator( '.account .stub-google' ).waitFor();
-		assert.match( await notice( page ).locator( '.message' ).textContent(), /a 24-hour pass, or the Supporter Pass for good: 10 Earth drives a day/ );
+		assert.match( await notice( page ).locator( '.message' ).textContent(), /the Supporter Pass: 30 Earth drives a day, for 24 hours, monthly or for good/ );
 		await notice( page ).locator( 'button', { hasText: 'Get more Earth drives' } ).click();
 		await page.locator( '#pass .buy-day', { hasText: '24 hours: CA$0.89' } ).waitFor();
 		await shot( page, 'pass-8-used-up-pitch' );
