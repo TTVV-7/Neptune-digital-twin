@@ -15,9 +15,10 @@ Google's photorealistic 3D map, and you can drop your own detailed models on top
   hosted on Cloudflare or Vercel.
 - **Premium (work in progress, off until set up):** a Pro equipment pack bought once with Stripe.
 
-The same repository also holds a second app, **[World Drive](#world-drive-worlddriveapp)**: pick
-anywhere on Earth from a globe and drive it, or the Moon, Mars or the asteroids Vesta and Ceres,
-with others on every one.
+The same repository also holds a second app, **[World Drive](#world-drive-worlddriveapp)**: it
+opens on the Solar System, where you pick the Moon, Mars, the asteroids Vesta and Ceres (built from
+real spacecraft maps, with real named places to discover) or the Earth, anywhere on it from a globe,
+and drive it, with others on every one.
 
 The step-by-step plan, with prompts you can paste to Claude, is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
@@ -825,10 +826,15 @@ testing with test cards and the known gaps are in [docs/premium.md](docs/premium
 
 ## World Drive (worlddrive.app)
 
-A second app in this repository, on its own address: pick anywhere on Earth from a globe of Google's
-3D tiles (search, a dozen start spots, recent places, or a tap on the globe), start in the pickup
+A second app in this repository, on its own address. A plain load opens on the Solar System (the
+orrery, below) to pick a world, so nobody is sent to the Earth first: closed without a pick, it's the
+Moon, and picking the Earth reloads the page into the day's free Earth drive. On the Earth, pick
+anywhere from a globe of Google's 3D tiles (search, a dozen start spots, recent places, or a tap on
+the globe), start in the pickup
 or pick the go-kart or the muscle car (more as your level climbs), press **Drive here** and drive the real world
-arcade-style: drift (Space), boost (Shift), fly (F), and hit something to bounce off it into the
+arcade-style: drift (Space), boost (Shift), fly (F: a plane up to 3,500 km/h, which rolls with
+**Q**/**E** and loops with **Z**/**X** for tricks that score like the car's; F again bails out into a
+fast free fall, **W** to dive, then a slow parachute), and hit something to bounce off it into the
 air, where **A**/**D** spin, **W**/**S** flip and **Q**/**E** roll for tricks that score (times a
 combo multiplier) when you land on your wheels; a wipeout loses the combo and rolls you back onto
 them. Boosting flat out hits **overdrive** (a sonic boom, streaks of air, a wider view), and glowing
@@ -950,9 +956,9 @@ spending no Earth drive), and the Worker gives the link a preview card of its ow
 (`src/drive-app/ghost-rules.js`, `challenge-ghost.js`, migration `0007_challenge_ghosts.sql`; see
 [Ghosts and challenge a friend](docs/world-drive.md#ghosts-and-challenge-a-friend)).
 
-**Achievements and construction rides**: 34 badges (first drive; 10, 100 and 1,000 km; drives on the
+**Achievements and construction rides**: 45 badges (first drive; 10, 100 and 1,000 km; drives on the
 Moon, Mars, Vesta and Ceres; challenges finished and placed in, top 10, top 3 and first, on any
-board and on a daily, weekly or monthly one; parties with others; Garage looks changed and rides tried; 3, 7 and 30
+board and on a daily, weekly or monthly one; parties with others; Garage looks changed and rides tried; Discoveries collected, half and all of a world's and all 68; 3, 7 and 30
 days in a row), in a grid from the profile card with how far toward each ("34 / 100 km") and when it
 was earned, a toast as one comes ("Achievement: 100 km driven"), never during a challenge's run.
 Eight construction rides from the library come with them, driven at their real size and slow and
@@ -969,8 +975,10 @@ counts how many players have each (`src/drive-app/achievement-rules.js`,
 `worker/drive/achievements.js`, migration `0009_achievements.sql`; see [Achievements and
 rewards](docs/world-drive.md#achievements-and-rewards)).
 
-**The Moon, Mars, Vesta and Ceres**: **Worlds**, at the top of the globe's panel (or **M** on the
-globe, or a link with `?worlds=1`), opens an orrery: the Solar System, its planets going round (still
+**The Moon, Mars, Vesta and Ceres**: a plain load opens on an orrery first (a free visit, none of the
+day's Earth drives spent until the Earth is picked, `src/drive-app/orrery-first.js`), and
+**Worlds**, at the top of the globe's panel (or **M** on the globe, or a link with `?worlds=1`),
+opens it again: the Solar System, its planets going round (still
 for those who ask for less motion), where the Earth, the Moon, Mars, Vesta and Ceres are picked, each
 with a sheet of its spots, your party's friends there and how many are driving there now (Mercury,
 Venus and the giants are there too, "not in the game yet" or with "no ground to drive on"). It's a
@@ -983,6 +991,19 @@ made in the page rather than streamed, the same way (`src/drive-app/body.js`, it
 list, `src/drive-app/worlds.js`, which the page, the Worker, the site and the tests share; each is
 free and never limited. Driving with others is on every world, each in rooms of its own (see
 [Worlds](docs/world-drive.md#worlds), with how to add one).
+
+**Discoveries and the data lens** show that those four are real data. 68 real named places (21 on
+the Moon, 20 on Mars, 13 on Vesta, 14 on Ceres: the Apollo, Chang'e and Chandrayaan sites, the
+rovers' landing sites, Olympus Mons, Hellas, Rheasilvia's central peak, Occator's bright spots...)
+each have a glowing beacon; drive or fly to one and it's collected, with a card of facts each traced
+to a source (the hand-checked site pages, the places' own lines, the IAU's gazetteer, NASA's NSSDCA)
+and its height measured in the game's own height grid by `scripts/make-finds.mjs`, never typed, with
+the dataset named. Each world has a collection book (**Discoveries** on the profile card), worth
+100 XP a find and eleven achievements (`src/drive-app/finds*.js`; see
+[Discoveries](docs/world-drive.md#discoveries)). **L** (or **Heights**) colours the ground by its
+real measured height over the world's datum, with a scale bar naming the dataset (LOLA, MOLA,
+Dawn's HAMO) and the height under the car (`src/drive-app/lens.js`; see
+[Data lens](docs/world-drive.md#data-lens)).
 
 The Moon's shapes are NASA's (LRO's laser altimeter, every quarter degree,
 `drive/public/moon/height.bin`), its colours LRO's camera's mosaic (`drive/public/moon/colour.webp`;
@@ -1080,7 +1101,10 @@ Tiles API, a daily quota and budget alerts) are in [docs/world-drive.md](docs/wo
 Tests: `npm run test:drive-worker`, `npm run test:drive-ui`, `npm run test:drive-pro-ui`,
 `npm run test:drive-seo`, `npm run test:drive-live`, `npm run test:drive-live-ui`,
 `npm run test:drive-levels`, `npm run test:drive-levels-ui`, `npm run test:drive-moon-ui`,
-`npm run test:drive-mars-ui`, `npm run test:drive-asteroids-ui` and `npm run test:drive-orrery-ui`.
+`npm run test:drive-mars-ui`, `npm run test:drive-asteroids-ui`, `npm run test:drive-orrery-ui`,
+`npm run test:drive-orrery-first`, `npm run test:drive-plane`, `npm run test:drive-finds`,
+`npm run test:drive-finds-ui`, `npm run test:drive-lens` and `npm run test:drive-lens-ui` (the
+browser ones one at a time).
 
 ## About the Sketchfab model
 
