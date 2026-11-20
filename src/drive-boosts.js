@@ -1496,12 +1496,15 @@ const STYLES = {
 		tint: 0xfff3c4,
 		make( root ) {
 
-			const batch = new Batch( root, { particles: 260, blending: AdditiveBlending } );
+			// Drawn over what's behind it, not added: added, white and pastel stars all come out near
+			// white, and over a pale road or among the speed lines they're lost. Rich colours, gold
+			// most of all, so it reads as glitter in daylight.
+			const batch = new Batch( root, { particles: 260 } );
 			const stars = emitter();
 			const helices = [ emitter(), emitter() ];
 			const gems = emitter();
-			const colours = [ 0xffffff, 0xffe08a, 0xffb3ec, 0xa8f0ff, 0xd9b8ff ];
-			const dust = [ 0xffffff, 0xfff6d0, 0xd8f4ff ];
+			const colours = [ 0xffc21a, 0xff3fae, 0x22c8ff, 0xffd84d, 0x9a5cff, 0xff8a1f ];
+			const dust = [ 0xffd84d, 0xfff2b0, 0x7fe0ff ];
 			let f = null;
 			let n = 0;
 			let spin = 0;
@@ -1515,7 +1518,7 @@ const STYLES = {
 				if ( n % 7 === 0 ) {
 
 					p.size = ( 0.17 + Math.random() * 0.05 ) * f.scale;
-					p.colour.set( Math.random() < 0.5 ? 0xffffff : 0xffe08a );
+					p.colour.set( Math.random() < 0.5 ? 0xfff0a0 : 0xffc21a );
 					p.life = 0.9;
 
 				} else {
@@ -1546,7 +1549,7 @@ const STYLES = {
 					p.colour.set( pick( dust ) );
 					p.kind = 1;
 
-				} else star( p, ( 0.07 + Math.random() * 0.08 ) * f.scale );
+				} else star( p, ( 0.09 + Math.random() * 0.08 ) * f.scale );
 
 			};
 			// Two strands of a corkscrew, kept up with it so the twist reads at speed.
@@ -1576,14 +1579,14 @@ const STYLES = {
 			};
 			const pinch = size => {
 
-				for ( let i = 0; i < 4; i ++ ) {
+				for ( let i = 0; i < 7; i ++ ) {
 
-					const p = batch.spawn( 0.5 + Math.random() * 0.2 );
+					const p = batch.spawn( 0.6 + Math.random() * 0.3 );
 					p.position.copy( f.nozzle );
-					flung( f, p, 0.9, 0.6, 0.5 );
+					flung( f, p, 0.95, 1, 0.5, 0.6 );
 					p.frame = SHAPES.star;
 					p.size = size * f.scale;
-					p.colour.set( 0xffe08a );
+					p.colour.set( colours[ i % colours.length ] );
 					p.fall = 0.3;
 					p.drag = 1;
 
@@ -1623,7 +1626,7 @@ const STYLES = {
 						pinchDue -= frame.dt;
 						if ( pinchDue <= 0 ) {
 
-							pinch( [ 0.1, 0.07, 0.05 ][ 3 - pinches ] );
+							pinch( [ 0.13, 0.1, 0.07 ][ 3 - pinches ] );
 							pinches --;
 							pinchDue = 0.12;
 
@@ -2980,9 +2983,9 @@ const STYLES = {
 			const batch = new Batch( root, { particles: 60, quads: 50, blending: AdditiveBlending } );
 			const dust = emitter();
 			const tail = Array.from( { length: TAIL }, () => ( { at: new Vector3(), velocity: new Vector3(), born: - Infinity, width: 0 } ) );
-			const white = new Color( 0xeaffff );
+			const white = new Color( 0xc8f2ff );
 			const pale = new Color( 0xcfe6ff );
-			const blue = new Color( 0x4a6dff );
+			const blue = new Color( 0x3a5cff );
 			const coma = new Color( 0x7fa8ff );
 			const ionNear = new Color( 0x5a8cff );
 			const ionFar = new Color( 0x2a46e0 );
@@ -2999,7 +3002,8 @@ const STYLES = {
 				nozzleAt( f, k, ( Math.random() - 0.5 ) * 0.4 * f.scale, ( Math.random() - 0.5 ) * 0.4 * f.scale, p.position );
 				thrown( f, p, 0.7 + 0.2 * f.hot, 3, 0, 1.2 );
 				p.size = ( 0.05 + Math.random() * 0.05 ) * f.scale;
-				p.colour.set( Math.random() < 0.5 ? 0xbfe8ff : 0xffffff );
+				// Ice and dust: blue and gold, so they show over a pale road and among the speed lines.
+				p.colour.set( Math.random() < 0.5 ? 0x5fb8ff : 0xffcf6a );
 
 			};
 			const hooks = {
@@ -3070,7 +3074,7 @@ const STYLES = {
 						if ( t > 1 ) break;
 						middle.addVectors( a.at, b.at ).multiplyScalar( 0.5 );
 						axis.subVectors( a.at, b.at ).multiplyScalar( 0.5 );
-						colour.lerpColors( white, blue, Math.min( 1, Math.sqrt( t ) * ( 1 + hot ) ) );
+						colour.lerpColors( white, blue, Math.min( 1, Math.sqrt( t ) * ( 1.8 + hot ) ) );
 						batch.put( middle, axis, ALONG, b.width * ( 1 - t ) ** 0.7, 1, 0, SHAPES.streak, colour, ( 1 - t ) * ( 0.95 - 0.3 * hot ) );
 
 					}
