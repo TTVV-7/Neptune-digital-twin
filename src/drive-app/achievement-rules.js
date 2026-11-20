@@ -1,4 +1,5 @@
 import { DRIVE_CARS, LIBRARY_VEHICLES, PASS_RIDES, WORKS_RIDES } from './catalog.js';
+import { FINDS_ON, FIND_IDS } from './finds-data.js';
 
 // Achievements (docs/world-drive.md, "Achievements and rewards"): badges for what a player has
 // done, and the construction rides some of them unlock. What the page (achievements.js, the grid
@@ -12,7 +13,8 @@ import { DRIVE_CARS, LIBRARY_VEHICLES, PASS_RIDES, WORKS_RIDES } from './catalog
 // another address (the party's room says so, never the page), and their days in a row (the days
 // the Worker itself saw them take the daily bonus, by its own clock: never the streak a new
 // nickname's claim brings from before it). The rest only the page can say (how far it drove, its
-// drives on the Moon, Mars, Vesta and Ceres, its Garage looks, the rides it tried): those come with its
+// drives on the Moon, Mars, Vesta and Ceres, its Garage looks, the rides it tried, the Discoveries it
+// collected, finds-data.js): those come with its
 // progress reports, each capped as XP is (by the time since the last report), again by a day's
 // worth (TALLY_DAY), and a new nickname's claim of what was driven before it by CLAIM_TALLY, so a
 // script can't earn them all in one go.
@@ -27,6 +29,13 @@ export const COUNTS = {
 	ceres: 'trusted', // drives on Ceres (a drop-in there and 250 m driven)
 	looks: 'trusted', // Garage choices changed
 	rides: 'trusted', // different rides driven (250 m in each)
+	// Discoveries collected (finds-data.js: a list of ids, as rides are), all of them and on each world
+	// (counted from the list by FINDS_ON, so the book and the achievements always agree).
+	finds: 'trusted',
+	'finds-moon': 'trusted',
+	'finds-mars': 'trusted',
+	'finds-vesta': 'trusted',
+	'finds-ceres': 'trusted',
 	streak: 'checked', // the most UTC days in a row the Worker saw the daily bonus taken
 	parties: 'checked', // parties driven in with another player, or a guest from another address
 	challenges: 'checked', // challenges finished (a time on the board)
@@ -35,15 +44,18 @@ export const COUNTS = {
 
 // The most of each trusted count the Worker takes in one UTC day, whatever the reports say: about
 // a long day's driving (500 km is seven hours at 72 km/h), ten drives on each world but the Earth,
-// ten Garage changes and four new rides. So 1,000 km takes at least two days of a script, and 25
-// looks three.
-export const TALLY_DAY = { km: 500, moon: 10, mars: 10, vesta: 10, ceres: 10, looks: 10, rides: 4 };
+// ten Garage changes, four new rides and 40 Discoveries (more than a keen day finds: the Worker can't
+// check where the car was, so this and the report's own rate, worker/drive/progress.js, are what keep
+// a script from filling the book at once; the stakes are a book and a little XP, no board). So 1,000
+// km takes at least two days of a script, and 25 looks three.
+export const TALLY_DAY = { km: 500, moon: 10, mars: 10, vesta: 10, ceres: 10, looks: 10, rides: 4, finds: 40 };
 
 // The most of each trusted count a new nickname's first report (the claim of what was driven before
 // it) adds, whatever it says: enough for what a first hour's drive earns (the 10 km's skid steer
 // among it), not the 100 km's wheel loader, which takes driving after the nickname (and at least
-// three reports' worth of time between them).
-export const CLAIM_TALLY = { km: 25, moon: 2, mars: 2, vesta: 2, ceres: 2, looks: 5, rides: 3 };
+// three reports' worth of time between them). Ten Discoveries: the rest of a browser's book isn't
+// lost, as the page sends again whatever the Worker's list lacks (finds.js's applyServer).
+export const CLAIM_TALLY = { km: 25, moon: 2, mars: 2, vesta: 2, ceres: 2, looks: 5, rides: 3, finds: 10 };
 
 // The drive that counts for a drive on a world but the Earth, or a ride tried: this far (km) since the drop-in,
 // as the day's bonus needs (levels.js's DAILY_KM).
@@ -72,6 +84,18 @@ export const ACHIEVEMENTS = [
 	{ id: 'ceres-1', name: 'Bright spot', goal: 'Drive on Ceres', count: 'ceres', target: 1 },
 	{ id: 'ceres-10', name: 'Ceres regular', goal: 'Drive on Ceres 10 times', count: 'ceres', target: 10 },
 	{ id: 'ceres-50', name: 'Cererian', goal: 'Drive on Ceres 50 times', count: 'ceres', target: 50 },
+	// The Discoveries: every target from the list itself, so they stay right as finds are added.
+	{ id: 'finds-1', name: 'Ground truth', goal: 'Collect your first discovery', count: 'finds', target: 1 },
+	{ id: 'finds-10', name: 'Field notes', goal: 'Collect 10 discoveries', count: 'finds', target: 10 },
+	{ id: 'moon-half', name: 'Lunar notes', goal: 'Collect half the Moon\'s discoveries', count: 'finds-moon', target: half( 'moon' ) },
+	{ id: 'mars-half', name: 'Red notes', goal: 'Collect half of Mars\'s discoveries', count: 'finds-mars', target: half( 'mars' ) },
+	{ id: 'vesta-half', name: 'Vesta notes', goal: 'Collect half of Vesta\'s discoveries', count: 'finds-vesta', target: half( 'vesta' ) },
+	{ id: 'ceres-half', name: 'Ceres notes', goal: 'Collect half of Ceres\'s discoveries', count: 'finds-ceres', target: half( 'ceres' ) },
+	{ id: 'moon-book', name: 'Lunar atlas', goal: 'Collect every discovery on the Moon', count: 'finds-moon', target: FINDS_ON.moon.length },
+	{ id: 'mars-book', name: 'Red atlas', goal: 'Collect every discovery on Mars', count: 'finds-mars', target: FINDS_ON.mars.length },
+	{ id: 'vesta-book', name: 'Vesta atlas', goal: 'Collect every discovery on Vesta', count: 'finds-vesta', target: FINDS_ON.vesta.length },
+	{ id: 'ceres-book', name: 'Ceres atlas', goal: 'Collect every discovery on Ceres', count: 'finds-ceres', target: FINDS_ON.ceres.length },
+	{ id: 'finds-all', name: 'Grand tour', goal: 'Collect every discovery on all four worlds', count: 'finds', target: FIND_IDS.size },
 	{ id: 'challenges-1', name: 'First challenge', goal: 'Finish a challenge', count: 'challenges', target: 1 },
 	{ id: 'challenges-10', name: '10 challenges', goal: 'Finish 10 challenges', count: 'challenges', target: 10 },
 	{ id: 'challenges-50', name: '50 challenges', goal: 'Finish 50 challenges', count: 'challenges', target: 50 },
@@ -92,6 +116,25 @@ export const ACHIEVEMENTS = [
 	{ id: 'streak-30', name: '30 days in a row', goal: 'Drive on 30 days in a row (UTC days)', count: 'streak', target: 30 },
 ];
 export const ACHIEVEMENT_IDS = new Set( ACHIEVEMENTS.map( a => a.id ) );
+
+// Half of a world's Discoveries, rounded up (a function declaration: ACHIEVEMENTS, above, uses it).
+function half( world ) {
+
+	return Math.ceil( FINDS_ON[ world ].length / 2 );
+
+}
+
+// The Discoveries' counts from a list of their ids: { finds, 'finds-moon', 'finds-mars', ... }, ids
+// that aren't finds (any longer) not counted.
+export function findCounts( ids ) {
+
+	const have = new Set( ( ids ?? [] ).filter( id => FIND_IDS.has( id ) ) );
+	return {
+		finds: have.size,
+		...Object.fromEntries( Object.keys( FINDS_ON ).map( world => [ `finds-${ world }`, FINDS_ON[ world ].filter( id => have.has( id ) ).length ] ) ),
+	};
+
+}
 
 // The placings, which the Worker writes as a challenge's final places are (worker/drive/challenges.js).
 export const PLACINGS = ACHIEVEMENTS.filter( a => a.count === 'placing' );
@@ -135,10 +178,11 @@ export function achievementOf( id ) {
 // --- what a report carries ---
 
 // The trusted counts a progress report (levels.js's REPORT) carries, as its `feats`: { moon, mars,
-// vesta, ceres, looks, rides }, each since the last report: drives on the Moon, Mars, Vesta and
+// vesta, ceres, looks, rides, finds }, each since the last report: drives on the Moon, Mars, Vesta and
 // Ceres, Garage changes (whole numbers, at most TALLY_MOST each; one a page from before a world
-// doesn't send is none), and the rides tried (ids, at most RIDE_IDS' size). Its km are the report's
-// own. null if it isn't one the page could send.
+// doesn't send is none), the rides tried (ids, at most RIDE_IDS' size) and the Discoveries collected
+// (ids, finds-data.js's FIND_IDS, at most all of them; a page from before them sends none). Its km are
+// the report's own. null if it isn't one the page could send (an id that isn't a find among them).
 const TALLY_MOST = 10000;
 // The trusted counts that are whole numbers added up (rides are ids); the Worker's account merge
 // (worker/drive/accounts.js) keeps the more of each, so a world added here is kept there too.
@@ -147,7 +191,7 @@ export const NUMBERS = [ 'moon', 'mars', 'vesta', 'ceres', 'looks' ];
 export function checkTallies( raw ) {
 
 	if ( ! raw || typeof raw !== 'object' || Array.isArray( raw ) ) return null;
-	const tallies = { moon: 0, mars: 0, vesta: 0, ceres: 0, looks: 0, rides: [] };
+	const tallies = { moon: 0, mars: 0, vesta: 0, ceres: 0, looks: 0, rides: [], finds: [] };
 	for ( const field of NUMBERS ) {
 
 		const value = raw[ field ] ?? 0;
@@ -160,6 +204,11 @@ export function checkTallies( raw ) {
 	if ( ! Array.isArray( rides ) || rides.length > RIDE_IDS.size ) return null;
 	for ( const id of rides ) if ( typeof id !== 'string' || ! RIDE_IDS.has( id ) ) return null;
 	tallies.rides = [ ...new Set( rides ) ];
+
+	const finds = raw.finds ?? [];
+	if ( ! Array.isArray( finds ) || finds.length > FIND_IDS.size ) return null;
+	for ( const id of finds ) if ( typeof id !== 'string' || ! FIND_IDS.has( id ) ) return null;
+	tallies.finds = [ ...new Set( finds ) ];
 	return tallies;
 
 }
@@ -167,7 +216,7 @@ export function checkTallies( raw ) {
 // Whether a report's tallies have anything in them.
 export function hasTallies( tallies ) {
 
-	return !! tallies && ( NUMBERS.some( field => tallies[ field ] > 0 ) || tallies.rides?.length > 0 );
+	return !! tallies && ( NUMBERS.some( field => tallies[ field ] > 0 ) || tallies.rides?.length > 0 || tallies.finds?.length > 0 );
 
 }
 
@@ -182,6 +231,7 @@ export function mergeTallies( a, b ) {
 		ceres: ( a?.ceres ?? 0 ) + ( b?.ceres ?? 0 ),
 		looks: ( a?.looks ?? 0 ) + ( b?.looks ?? 0 ),
 		rides: [ ...new Set( [ ...a?.rides ?? [], ...b?.rides ?? [] ] ) ],
+		finds: [ ...new Set( [ ...a?.finds ?? [], ...b?.finds ?? [] ] ) ],
 	};
 
 }
@@ -189,10 +239,12 @@ export function mergeTallies( a, b ) {
 // --- the player's counts, as the Worker keeps them ---
 
 // A player's kept counts (players.tallies, JSON): { km, moon, mars, vesta, ceres, looks, rides:
-// [ ids ], streak (the most days in a row the Worker has seen), run and runDay (the days in a row
-// it's seeing now, and the last of them), day (the UTC day `today` is for), today: { km, moon, mars,
-// vesta, ceres, looks, rides } (what of each trusted count that day has taken) }, with anything
-// missing or damaged as none (so counts kept before Mars, Vesta or Ceres read with none on them).
+// [ ids ], finds: [ ids ], streak (the most days in a row the Worker has seen), run and runDay (the
+// days in a row it's seeing now, and the last of them), day (the UTC day `today` is for), today: { km,
+// moon, mars, vesta, ceres, looks, rides, finds } (what of each trusted count that day has taken) },
+// with anything missing or damaged as none (so counts kept before Mars, Vesta, Ceres or the
+// Discoveries read with none of them). Only these fields are kept: one added to the counts has to be
+// added here too, or the next report's write drops it.
 export function readTallies( text ) {
 
 	let raw = null;
@@ -212,11 +264,12 @@ export function readTallies( text ) {
 	return {
 		km: number( kept.km ), moon: number( kept.moon ), mars: number( kept.mars ), vesta: number( kept.vesta ), ceres: number( kept.ceres ), looks: number( kept.looks ),
 		rides: Array.isArray( kept.rides ) ? kept.rides.filter( id => RIDE_IDS.has( id ) ) : [],
+		finds: Array.isArray( kept.finds ) ? [ ...new Set( kept.finds.filter( id => FIND_IDS.has( id ) ) ) ] : [],
 		streak: number( kept.streak ),
 		run: number( kept.run ),
 		runDay: typeof kept.runDay === 'string' ? kept.runDay : '',
 		day: typeof kept.day === 'string' ? kept.day : '',
-		today: { km: number( today.km ), moon: number( today.moon ), mars: number( today.mars ), vesta: number( today.vesta ), ceres: number( today.ceres ), looks: number( today.looks ), rides: number( today.rides ) },
+		today: { km: number( today.km ), moon: number( today.moon ), mars: number( today.mars ), vesta: number( today.vesta ), ceres: number( today.ceres ), looks: number( today.looks ), rides: number( today.rides ), finds: number( today.finds ) },
 	};
 
 }
@@ -224,11 +277,13 @@ export function readTallies( text ) {
 // `tallies` (readTallies') with what a report adds on UTC day `day`: its km (already capped by the
 // time since the last report) and its `feats` (checkTallies'), each held to what's left of the day's
 // TALLY_DAY; `daily`, whether the Worker gave the day's bonus with it (a day driven, by its own
-// clock: one more in a row after a bonus yesterday, else the first). A new object; the counts taken
-// this report in `taken`.
-export function addTallies( tallies, { km = 0, feats = null, daily = false }, day ) {
+// clock: one more in a row after a bonus yesterday, else the first); `findsMost`, the most new
+// Discoveries this report may add (worker/drive/progress.js's rate, by the time since the last: the
+// rest aren't taken, and the page sends them again). A new object; the counts taken this report in
+// `taken` (its rides and finds: the ids newly added, those already kept never counted twice).
+export function addTallies( tallies, { km = 0, feats = null, daily = false, findsMost = Infinity }, day ) {
 
-	const today = tallies.day === day ? { mars: 0, vesta: 0, ceres: 0, ...tallies.today } : { km: 0, moon: 0, mars: 0, vesta: 0, ceres: 0, looks: 0, rides: 0 };
+	const today = tallies.day === day ? { mars: 0, vesta: 0, ceres: 0, finds: 0, ...tallies.today } : { km: 0, moon: 0, mars: 0, vesta: 0, ceres: 0, looks: 0, rides: 0, finds: 0 };
 	const room = field => Math.max( 0, TALLY_DAY[ field ] - today[ field ] );
 	const taken = {
 		km: Math.min( Math.max( 0, km ), room( 'km' ) ),
@@ -239,8 +294,11 @@ export function addTallies( tallies, { km = 0, feats = null, daily = false }, da
 		looks: Math.min( feats?.looks ?? 0, room( 'looks' ) ),
 	};
 	const fresh = ( feats?.rides ?? [] ).filter( id => ! tallies.rides.includes( id ) ).slice( 0, room( 'rides' ) );
+	const kept = tallies.finds ?? [];
+	const found = [ ...new Set( feats?.finds ?? [] ) ].filter( id => ! kept.includes( id ) ).slice( 0, Math.max( 0, Math.min( room( 'finds' ), findsMost ) ) );
 	for ( const field of [ 'km', ...NUMBERS ] ) today[ field ] += taken[ field ];
 	today.rides += fresh.length;
+	today.finds += found.length;
 	let { run, runDay } = tallies;
 	if ( daily && runDay !== day ) [ run, runDay ] = [ runDay === previousDay( day ) ? run + 1 : 1, day ];
 	return {
@@ -253,12 +311,13 @@ export function addTallies( tallies, { km = 0, feats = null, daily = false }, da
 			ceres: ( tallies.ceres ?? 0 ) + taken.ceres,
 			looks: tallies.looks + taken.looks,
 			rides: [ ...tallies.rides, ...fresh ],
+			finds: [ ...kept, ...found ],
 			streak: Math.max( tallies.streak, run ),
 			run, runDay,
 			day,
 			today: { ...today, km: Math.round( today.km * 1000 ) / 1000 },
 		},
-		taken: { ...taken, rides: fresh },
+		taken: { ...taken, rides: fresh, finds: found },
 	};
 
 }
@@ -273,18 +332,22 @@ export function claimTallies( { km = 0, feats = null } ) {
 			moon: Math.min( feats.moon, CLAIM_TALLY.moon ), mars: Math.min( feats.mars ?? 0, CLAIM_TALLY.mars ),
 			vesta: Math.min( feats.vesta ?? 0, CLAIM_TALLY.vesta ), ceres: Math.min( feats.ceres ?? 0, CLAIM_TALLY.ceres ),
 			looks: Math.min( feats.looks, CLAIM_TALLY.looks ), rides: feats.rides.slice( 0, CLAIM_TALLY.rides ),
+			finds: ( feats.finds ?? [] ).slice( 0, CLAIM_TALLY.finds ),
 		},
 	};
 
 }
 
 // The counts an achievement is earned by, from a player's tallies and the rest: { km, moon, mars,
-// vesta, ceres, looks, rides, streak, parties, challenges }. The streak is the Worker's own (tallies'), never the
-// one the daily bonus's XP goes by, which a claim can bring.
-export function countsOf( tallies, { parties = 0, challenges = 0 } = {} ) {
+// vesta, ceres, looks, rides, finds, finds-moon, ..., streak, parties, challenges }. The streak is the
+// Worker's own (tallies'), never the one the daily bonus's XP goes by, which a claim can bring. The
+// Discoveries' counts are from `finds` where it's given (an account's: the union of its players'
+// lists, so a book filled on two devices counts whole), else the tallies' own list.
+export function countsOf( tallies, { parties = 0, challenges = 0, finds = null } = {} ) {
 
 	return {
 		km: tallies.km, moon: tallies.moon, mars: tallies.mars ?? 0, vesta: tallies.vesta ?? 0, ceres: tallies.ceres ?? 0, looks: tallies.looks, rides: tallies.rides.length,
+		...findCounts( finds ?? tallies.finds ?? [] ),
 		streak: tallies.streak, parties, challenges,
 	};
 
@@ -317,7 +380,7 @@ export function progressLine( achievement, counts ) {
 
 	}
 
-	const unit = { moon: 'drives', mars: 'drives', vesta: 'drives', ceres: 'drives', looks: 'changes', rides: 'rides', streak: 'days', parties: 'parties', challenges: 'finished' }[ count ];
+	const unit = { moon: 'drives', mars: 'drives', vesta: 'drives', ceres: 'drives', looks: 'changes', rides: 'rides', streak: 'days', parties: 'parties', challenges: 'finished' }[ count ] ?? ( count.startsWith( 'finds' ) ? 'discoveries' : '' );
 	return `${ formatNumber( Math.floor( have ) ) } / ${ formatNumber( target ) } ${ unit }`;
 
 }

@@ -29,14 +29,16 @@ export async function getConfig() {
 // that), { robot: true } when the check failed, or { error } for anything else. With another world's
 // id ('moon', 'mars', 'vesta', 'ceres': the page opened on a link there) no drive is spent and
 // there's no key: { free: true, world, visit } (the Worker says moon: true, as it always has, for
-// every free world).
-export async function postVisit( token, { world = 'earth' } = {} ) {
+// every free world). `start: 'orrery'` with a free world says this is a plain load opening on the
+// orrery (boot.js), not a link to that world: the Worker counts it as such for the admin page's
+// stats, and answers the same.
+export async function postVisit( token, { world = 'earth', start = null } = {} ) {
 
 	let res;
 	let body = {};
 	try {
 
-		res = await fetch( '/api/visit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( world !== 'earth' ? { token, world } : { token } ) } );
+		res = await fetch( '/api/visit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( world !== 'earth' ? { token, world, ...( start ? { start } : {} ) } : { token } ) } );
 		body = await res.json().catch( () => ( {} ) );
 
 	} catch {

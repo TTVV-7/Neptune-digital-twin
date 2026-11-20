@@ -145,7 +145,10 @@ const _inverse = new Matrix4();
 const _carto = { lat: 0, lon: 0, height: 0 };
 
 // app: what main.js hands over: visit(), player(), pickName( name, say ), world(), earthClosed
-// ({ onEarth } when there's no Earth this visit), mode(), place(), vehicle(), the driver, ground,
+// ({ onEarth } when there's no Earth this visit), earthShut (true only when that's because today's
+// Earth drives are used up: otherwise, a plain load opened on the orrery or a page opened on a link to
+// another world, the Earth is one reload away, and an Earth challenge's Start is that reload, its
+// card opening there: onEarth( { challenge, vs } )), mode(), place(), vehicle(), the driver, ground,
 // camera, scene, globe, bodies (the other worlds' grounds, body.js, by id) and vehicles, stats,
 // startAt( place ), placeCar( pose ), toGlobe(), recentring (on a world whose scene follows the car,
 // how far it goes before the scene's moved to it; else null) and shiftTo( { lat, lon, height } ) (the
@@ -342,10 +345,10 @@ export function setUpChallenges( app ) {
 		const you = el( 'p', 'ch-you', best === undefined ? 'You haven\'t a time on it yet' : `Your best ${ formatTime( best ) }${ challenge.me?.rank ? ` · #${ rankText( challenge.me.rank ) } of ${ Math.max( challenge.total, challenge.me.rank ) }` : '' }` );
 		if ( challenge.me?.owner ) you.textContent = `Your best ${ formatTime( challenge.me.ms ) } (yours as the owner, kept off the board)`;
 		const buttons = el( 'div', 'ch-buttons' );
-		const earthShut = challenge.world === EARTH && !! app.earthClosed;
-		const start = el( 'button', earthShut ? 'ch-start' : 'primary ch-start', earthShut ? 'Needs an Earth drive' : 'Start' );
+		const { earthShut, reload } = earthFor( challenge );
+		const start = el( 'button', earthShut ? 'ch-start' : 'primary ch-start', earthShut ? 'Needs an Earth drive' : reload ? 'Opens the Earth (reloads)' : 'Start' );
 		start.type = 'button';
-		start.addEventListener( 'click', () => earthShut ? toEarth() : begin( challenge ) );
+		start.addEventListener( 'click', () => earthShut || reload ? toEarth( { challenge: challenge.id } ) : begin( challenge ) );
 		const board = el( 'button', 'ch-board-open', `Board${ challenge.total ? ` (${ challenge.total })` : '' }` );
 		board.type = 'button';
 		board.addEventListener( 'click', () => showBoard( challenge ) );
@@ -395,12 +398,24 @@ export function setUpChallenges( app ) {
 
 	}
 
-	// No Earth this visit (today's Earth drives used up, or a page opened on another world): its own word
-	// on how to get there.
-	function toEarth() {
+	// An Earth challenge on a visit with no Earth: shut (today's Earth drives are used up: its Start
+	// says so, and boot.js's notice says why), or a reload away (a plain load on the orrery, or a page
+	// opened on another world's link: its Start is that reload, which asks for the Earth's visit then).
+	// Neither for a challenge on a world made in the page, which is always open.
+	function earthFor( challenge ) {
+
+		const earthless = challenge.world === EARTH && !! app.earthClosed;
+		const earthShut = earthless && !! app.earthShut;
+		return { earthShut, reload: earthless && ! earthShut };
+
+	}
+
+	// No Earth this visit: its own word on how to get there (boot.js's onEarth). `target`, the challenge
+	// ({ challenge, vs }), so the page it reloads to opens its card (a used-up visit's onEarth ignores it).
+	function toEarth( target ) {
 
 		dialog.close();
-		app.earthClosed?.onEarth();
+		app.earthClosed?.onEarth( target );
 
 	}
 
@@ -544,8 +559,9 @@ export function setUpChallenges( app ) {
 	// with a handle that names nobody, the challenge with no ghost, said gently; one that's over, its
 	// final board, their place on it, and today's challenges instead. One that won't open (no such
 	// challenge, the Worker not answering) is said, over the list. `named`: whether the link named a
-	// time at all (a link to the challenge alone has no ghost to miss).
-	async function openLink( answer, { named = true } = {} ) {
+	// time at all (a link to the challenge alone has no ghost to miss); `handle`, the link's vs= as it
+	// was, carried along if its Start has to reload the page to reach the Earth.
+	async function openLink( answer, { named = true, handle = null } = {} ) {
 
 		app.stats.add( 'challenge', 'link' );
 		open();
@@ -595,12 +611,13 @@ export function setUpChallenges( app ) {
 		else if ( named ) head.append( `That link's time wasn't found (the address may have been cut short), so there's no ghost to race. Here's the challenge: ${ what }, ${ left } left.` );
 		else head.append( `Here's the challenge: ${ what }, ${ left } left.` );
 		card.append( el( 'p', 'ch-link-kicker', vs ? 'A friend\'s challenge' : 'A challenge' ), head );
-		const earthShut = challenge.world === EARTH && !! app.earthClosed;
-		const start = el( 'button', earthShut ? 'ch-start' : 'primary ch-start', earthShut ? 'Needs an Earth drive' : vs?.ghost ? 'Start: race their ghost' : 'Start' );
+		const { earthShut, reload } = earthFor( challenge );
+		const start = el( 'button', earthShut ? 'ch-start' : 'primary ch-start', earthShut ? 'Needs an Earth drive' : reload ? 'Opens the Earth (reloads)' : vs?.ghost ? 'Start: race their ghost' : 'Start' );
 		start.type = 'button';
 		start.addEventListener( 'click', () => {
 
-			if ( earthShut ) return toEarth();
+			// (The link's handle too, so the card there has the friend's ghost to race.)
+			if ( earthShut || reload ) return toEarth( { challenge: challenge.id, vs: handle } );
 			app.stats.add( 'challenge', 'link_start' );
 			begin( challenge, { ghost: vs?.ghost ? { kind: 'link', name: vs.name, ms: vs.ms, run: vs.run } : { kind: 'none' } } );
 

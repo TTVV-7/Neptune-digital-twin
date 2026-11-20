@@ -1,7 +1,12 @@
 import './style.css';
 import { getConfig, postVisit, robotCheck, send } from './api.js';
 import * as screens from './screens.js';
+import { EARTH_USED_UP, earthTarget, earthUrl, orreryFirstFor, usedUpToday, utcDay, writeStored } from './orrery-first.js';
 import { EARTH, FALLBACK, listOf, OFF_EARTH, onWorld, spotWorld } from './worlds.js';
+
+// (Which loads open on the orrery, and the Earth's address from one: orrery-first.js's, kept apart from
+// this script, which starts the page as it's imported, so the tests can load them in node.)
+export { earthUrl, orreryFirstFor };
 
 // World Drive's first script (docs/world-drive.md): the splash, the Worker's settings and the robot
 // check, while the game itself (main.js: three.js, the tiles, the driving, nearly all of the page's
@@ -23,6 +28,16 @@ const LINK_WAIT = 4000;
 const $ = id => document.getElementById( id );
 // Without WebGL 2 (which three.js needs) there's no game to load, nor a visit to spend on it.
 const webgl = hasWebGL();
+// Whether this load opens on the orrery to pick a world (orrery-first.js): a plain load does, a link
+// to a place, a challenge or a party doesn't. Decided once, from the address as it came (the game
+// takes things out of it as it uses them). A test's browser on the dev server is asked about only
+// there: a built page never reads navigator.webdriver.
+const orreryFirst = orreryFirstFor( location.search, {
+	path: location.pathname,
+	dev: import.meta.env.DEV,
+	webdriver: import.meta.env.DEV && navigator.webdriver === true,
+	seam: import.meta.env.DEV ? window.worldDriveOrreryTest ?? null : null,
+} );
 const game = webgl ? import( './main.js' ) : null;
 // Caught where it's waited for (start, visit); this only keeps a failed load from being reported twice.
 game?.catch( () => {} );
@@ -34,8 +49,13 @@ async function boot() {
 	if ( ! webgl ) return noWebGL();
 	screens.splash( 'Warming up the engine...' );
 	const config = await getConfig();
-	// The Vite dev server on its own: a key from the environment, or the test globe.
-	if ( ! config ) return start( { key: DEV_KEY || null, worker: false } );
+	// The Vite dev server on its own (or a built page with no Worker): a key from the environment, or
+	// the test globe. A plain load there opens on the orrery as anywhere, the test globe hidden behind
+	// it and the Earth a reload away (at ?worlds=0) as on a free visit; not with a key, which is a
+	// developer driving Google's tiles.
+	if ( ! config ) return start( orreryFirst && ! DEV_KEY
+		? { key: null, worker: false, orreryFirst: true, earthClosed: { world: FALLBACK, later: true, onEarth: goEarth } }
+		: { key: DEV_KEY || null, worker: false } );
 	// (Maps off: the test pad, a challenge link's card over it all the same.)
 	if ( ! config.mapsOn ) return screens.notice( 'resting', { onTestPad: () => start( { key: null, googleClientId: config.googleClientId, passwords: config.passwords === true, turnstileSiteKey: config.turnstileSiteKey, live: !! config.live, liveReason: config.liveReason, liveMoon: config.liveMoon ?? null, liveMoonReason: config.liveMoonReason ?? '', liveWorlds: config.liveWorlds ?? null, adsense: config.adsense ?? null, challengeLink: challengeLink() } ) } );
 	visit( config );
@@ -129,15 +149,27 @@ async function visit( config ) {
 	if ( robot ) return screens.notice( 'robot', { onRetry: () => visit( config ) } );
 	if ( err ) return loadFailed( err );
 
-	const challenge = await linkWithin();
-	const linkedWorld = opensOffEarth( location.search ) ?? offEarth( challenge?.answer.body?.challenge?.world );
-	const outcome = await postVisit( token, { world: linkedWorld ?? EARTH } );
+	// A plain load opening on the orrery asks for a free visit (the Moon's, as the fallback world is,
+	// but counted as the orrery's): none of the day's Earth drives is spent until the Earth's picked,
+	// which reloads the page at an Earth address (goEarth) to ask for one then.
+	const challenge = orreryFirst ? null : await linkWithin();
+	const linkedWorld = orreryFirst ? FALLBACK : opensOffEarth( location.search ) ?? offEarth( challenge?.answer.body?.challenge?.world );
+	const outcome = await postVisit( token, orreryFirst ? { world: FALLBACK, start: 'orrery' } : { world: linkedWorld ?? EARTH } );
+	// What an Earth visit's answer says of the days ahead, for the orrery's Earth sheet (usedUpToday):
+	// turned away as used up today, or got in (which clears it).
+	if ( linkedWorld === null && outcome.key ) writeStored( EARTH_USED_UP, null );
+	if ( linkedWorld === null && outcome.usedUp ) writeStored( EARTH_USED_UP, utcDay() );
 	// (The link's answer as it comes, if it hadn't within LINK_WAIT.)
 	const settings = { googleClientId: config.googleClientId, passwords: config.passwords === true, turnstileSiteKey: config.turnstileSiteKey, live: !! config.live, liveReason: config.liveReason, liveMoon: config.liveMoon ?? null, liveMoonReason: config.liveMoonReason ?? '', liveWorlds: config.liveWorlds ?? null, adsense: config.adsense ?? null, challengeLink: challengeLink() };
 	if ( outcome.key ) return run( main, { key: outcome.key, left: outcome.left, visit: outcome.visit, ...settings } );
+	// A plain load: the orrery, over nothing loaded yet (main.js), the Earth a reload away from it,
+	// carrying what was picked there (an Earth spot, a challenge). Its Earth sheet says today's Earth
+	// drive may be used up if the last Earth visit here was turned away today (only a word: Drive still
+	// reloads, and the Worker decides).
+	if ( outcome.free && orreryFirst ) return run( main, { key: null, visit: outcome.visit, ...settings, orreryFirst: true, earthClosed: { world: FALLBACK, later: true, usedUpHint: usedUpToday(), onEarth: goEarth } } );
 	// A link to another world (a challenge's there too): on that world, with none of the day's Earth
 	// drives spent. The Earth is a reload away (without the link, so that one does ask for a drive).
-	if ( outcome.free ) return run( main, { key: null, visit: outcome.visit, ...settings, earthClosed: { onEarth: toEarth, world: linkedWorld } } );
+	if ( outcome.free ) return run( main, { key: null, visit: outcome.visit, ...settings, earthClosed: { onEarth: toEarth, world: linkedWorld, later: true } } );
 	if ( outcome.usedUp ) return usedUp( config, outcome, main, challengeLink() );
 	if ( outcome.robot ) return screens.notice( 'robot', { onRetry: () => visit( config ) } );
 	screens.notice( 'error', { message: outcome.error, onRetry: () => visit( config ) } );
@@ -162,13 +194,19 @@ function offEarth( id ) {
 }
 
 // From a page opened on another world by a link, to the Earth: the same page without the link (at /, a
-// challenge link's /c too), which asks for one of the day's drives as it loads (a ?party= stays).
-function toEarth() {
+// challenge link's /c too), which asks for one of the day's drives as it loads (a ?party= stays), and
+// at ?worlds=0 (earthUrl) so it goes straight to the Earth rather than to the orrery again. Something
+// picked on the way (main.js's setWorld( EARTH, { at } ): an Earth spot, a challenge) goes with it.
+function toEarth( picked = null ) {
 
-	const url = new URL( location.href );
-	url.pathname = '/';
-	for ( const name of [ 'spot', 'at', 'name', 'region', 'heading', 'world', 'challenge', 'vs' ] ) url.searchParams.delete( name );
-	location.assign( url );
+	location.assign( earthUrl( earthTarget( picked ), location.href ) );
+
+}
+
+// The orrery's way to the Earth, on a plain load (or the dev server's, with no Worker): the same.
+function goEarth( picked = null ) {
+
+	toEarth( picked );
 
 }
 
@@ -193,10 +231,11 @@ async function usedUp( config, outcome, main, link = null ) {
 	const accounts = !! ( config.googleClientId || config.passwords === true );
 	const watch = accounts && ! askedAgain();
 	let supporter = null;
+	// (Not a plain reload, which would be a plain load, the orrery's: the same page at an Earth address.)
 	const again = () => {
 
 		markAskedAgain();
-		location.reload();
+		location.assign( earthUrl( null, location.href ) );
 
 	};
 	const watchForPass = () => {
@@ -219,7 +258,7 @@ async function usedUp( config, outcome, main, link = null ) {
 	};
 	const started = run( main, {
 		key: null, visit: outcome.visit, googleClientId: config.googleClientId, passwords: config.passwords === true, turnstileSiteKey: config.turnstileSiteKey, live: !! config.live, liveReason: config.liveReason, liveMoon: config.liveMoon ?? null, liveMoonReason: config.liveMoonReason ?? '', liveWorlds: config.liveWorlds ?? null, adsense: config.adsense ?? null, challengeLink: link,
-		earthClosed: { onEarth: earthClosed },
+		earthClosed: { onEarth: earthClosed, usedUp: true },
 	} );
 	// Once the globe has turned to the Moon (it loads after the game starts), so it's read with the
 	// Moon in view rather than running out over the splash; named by the world it's on by then (Mars,

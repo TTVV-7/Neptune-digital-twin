@@ -232,7 +232,17 @@ export function createGround( world ) {
 
 	}
 
-	return { world: world.id, radius: RADIUS, setHeights, hasHeights, groundAt, heightAt };
+	// The measured grid itself, as handed over: { data (the Int16Array as height.bin has it), columns,
+	// rows, step (m per unit: data × step is metres over the sphere) }, or null before setHeights. The
+	// data lens (lens.js) paints it as a texture, so it shows only what was measured, never the made-up
+	// craters above. (Not `grid`: that's the Catmull-Rom reader above.)
+	function heightsTable() {
+
+		return heights && { data: heights, columns: COLUMNS, rows: ROWS, step: STEP };
+
+	}
+
+	return { world: world.id, radius: RADIUS, setHeights, hasHeights, groundAt, heightAt, heightsTable };
 
 }
 

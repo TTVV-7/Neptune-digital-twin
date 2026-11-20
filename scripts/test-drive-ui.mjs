@@ -6499,7 +6499,9 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		page.state.me = { ...ALICE, supporter: true };
 		await page.locator( '#notice[data-kind="error"]' ).waitFor( { timeout: 60000 } );
 		assert.equal( page.visits, 2 );
-		assert.equal( new URL( page.url() ).search, '' );
+		// (Asked again at ?worlds=0, the Earth's address: a plain reload would be a plain load, the
+		// orrery's. orrery-first.js's earthUrl; supporter=thanks was already taken off.)
+		assert.equal( new URL( page.url() ).search, '?worlds=0' );
 		await page.context().close();
 
 		// A supporter who has had their 30: asked again once, then on the Moon to stay, the Earth's

@@ -289,6 +289,9 @@ async function getConfig( { env, limits, now } ) {
 //   cache, goes by).
 //   Going to the Earth from there reloads the page, which asks again without it. Any other world
 //   (one that isn't one, or 'earth') is the Earth's visit.
+//   With start: 'orrery' (a plain load, which opens on the orrery to pick a world before any of the
+//   day's Earth drives is spent: boot.js) it's counted as 'orrery' rather than as a link to that
+//   world; any other start is ignored. A page from before sends none, and is counted as before.
 // - Over a cap: 429 with retryAfter (the seconds until midnight UTC, when the counts start again)
 //   and a visit all the same, so the page can still open on the Moon.
 // Those two visits' tokens say so (visits.js: a free world's), so they post no Earth drop-in places
@@ -313,7 +316,8 @@ async function visit( { request, env, url, ctx, limits, now } ) {
 	// Counted for the admin page's stats (stats.js), without holding up the answer.
 	if ( world !== EARTH ) {
 
-		ctx?.waitUntil?.( countVisit( env, now, `${ world }_link` ) );
+		const kind = body.start === 'orrery' ? 'orrery' : `${ world }_link`;
+		ctx?.waitUntil?.( countVisit( env, now, kind ) );
 		const { admin } = await whoIsVisiting( { request, env, url, now }, { supporter: false } );
 		return json( { moon: true, free: true, world, visit: await makeVisit( env, now, admin ? 'owner' : 'free' ) } );
 

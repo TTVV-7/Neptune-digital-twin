@@ -1,5 +1,5 @@
 import './achievements.css';
-import { ACHIEVEMENTS, COUNTS, progressLine, ridesOf } from './achievement-rules.js';
+import { ACHIEVEMENTS, COUNTS, findCounts, progressLine, ridesOf } from './achievement-rules.js';
 import { postAchievements } from './api.js';
 import { getFeats, onFeatsChange, setFeats } from './feats.js';
 
@@ -14,7 +14,10 @@ import { getFeats, onFeatsChange, setFeats } from './feats.js';
 
 // How long (ms) an answer is shown again rather than asked for anew.
 const KEEP = 60 * 1000;
-const ICONS = { km: '🛣️', moon: '🌙', mars: '🔴', vesta: '🪨', ceres: '🌑', looks: '🎨', rides: '🚗', streak: '📅', parties: '🎉', challenges: '🏁', placing: '🏆' };
+const ICONS = {
+	km: '🛣️', moon: '🌙', mars: '🔴', vesta: '🪨', ceres: '🌑', looks: '🎨', rides: '🚗', streak: '📅', parties: '🎉', challenges: '🏁', placing: '🏆',
+	finds: '🔭', 'finds-moon': '📔', 'finds-mars': '📕', 'finds-vesta': '📗', 'finds-ceres': '📘',
+};
 
 let dialog = null;
 let app = null;
@@ -24,7 +27,7 @@ let askedFor = '';
 
 // progress: createProgress's; vehicles: loadVehicles'; worker: whether there's a Worker; player():
 // the leaderboard player or null; onRide( vehicle ): see a ride in the Garage; onNickname(): where a
-// nickname is picked.
+// nickname is picked; onFinds( ids ): the account's Discoveries (finds.js's applyServer).
 export function openAchievements( options ) {
 
 	app = options;
@@ -82,6 +85,10 @@ async function ask() {
 		[ askedAt, askedFor ] = [ Date.now(), me.id ];
 		status.hidden = true;
 		setFeats( answer.achievements.map( a => a.id ), { add: true } );
+		// The account's Discoveries, all its players' together: those found on another device go in
+		// this browser's book (finds.js's applyServer; any it has that this lacks go with progress
+		// reports, which carry the player's own list).
+		if ( Array.isArray( answer.finds ) ) app.onFinds?.( answer.finds );
 
 	} else {
 
@@ -99,7 +106,8 @@ async function ask() {
 // add to nothing else), no more of it than the Worker will take today (its `left`), and the account's
 // best is shown where that's more: so a count doesn't run ahead and then fall back. Each trusted
 // count is one the page adds to (COUNTS); one the Worker's answer lacks (a Worker from before a world
-// was added) reads as none.
+// was added) reads as none. The Discoveries are a list, not a number: the account's (the answer's
+// finds) with this browser's not yet in it, counted as one.
 function counts() {
 
 	const pending = app.progress.pending;
@@ -107,7 +115,8 @@ function counts() {
 	if ( ! kept ) return { ...pending, parties: 0, challenges: 0 };
 	const shown = count => Math.max( kept[ count ] ?? 0, ( answer.own?.[ count ] ?? kept[ count ] ?? 0 ) + Math.min( pending[ count ] ?? 0, answer.left?.[ count ] ?? Infinity ) );
 	const trusted = Object.keys( COUNTS ).filter( count => COUNTS[ count ] === 'trusted' );
-	return { ...kept, ...Object.fromEntries( trusted.map( count => [ count, shown( count ) ] ) ) };
+	const finds = Array.isArray( answer.finds ) ? findCounts( [ ...answer.finds, ...app.progress.pendingFinds ?? [] ] ) : {};
+	return { ...kept, ...Object.fromEntries( trusted.map( count => [ count, shown( count ) ] ) ), ...finds };
 
 }
 
