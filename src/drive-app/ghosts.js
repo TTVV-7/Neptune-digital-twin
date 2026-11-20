@@ -437,7 +437,7 @@ export function createGhosts( { scene, earth, frame = () => earth, camera, vehic
 		const { model, flags } = ghost;
 		const { pivot, size } = model;
 		const fresh = ! ghost.fx;
-		ghost.fx ??= createDriveFx( group, fxOf( cleanLook( model.vehicle, ghost.look ) ), { water: true, effects } );
+		ghost.fx ??= createDriveFx( group, fxOf( cleanLook( model.vehicle, ghost.look ) ), { water: true, effects, gravity: effects.gravity ?? 1, ...effects.dust ? { dust: effects.dust } : {} } );
 		const firing = flags & FLAGS.firing;
 		const boosting = flags & FLAGS.boost;
 		const speed = _v.length();

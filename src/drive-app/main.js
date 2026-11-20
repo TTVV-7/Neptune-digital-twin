@@ -2127,6 +2127,8 @@ export async function start( { key, left = null, visit: token = null, worker = t
 		water.none = other;
 		pads.rules = other ? MOON_RULES : EARTH_RULES;
 		driver.dust = other ? LOOKS[ world ].dust : null;
+		// Others' cars here throw up the same dust (ghosts.js reads it as each one's effects are made).
+		driver.effects.dust = driver.dust;
 		driver.start( state.entry, specOf( state.vehicle ) );
 
 	}
