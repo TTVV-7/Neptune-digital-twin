@@ -20,7 +20,6 @@
     "drive-car-thumbs": "node scripts/drive-car-thumbs.mjs",
     "drive-site-images": "node scripts/drive-site-images.mjs",
     "make-moon": "node scripts/make-moon.mjs",
-    "make-earth": "node scripts/make-earth.mjs",
     "make-mars": "node scripts/make-mars.mjs",
     "make-asteroids": "node scripts/make-asteroids.mjs",
     "dev:api": "node scripts/dev-api.mjs",

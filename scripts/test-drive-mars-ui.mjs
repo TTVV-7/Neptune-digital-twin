@@ -472,7 +472,7 @@ describe( 'World Drive challenges on Mars', () => {
 		{ id: 33, period: 'day', key: 'day:2026-11-18', world: 'mars', kind: 'sprint', place: 'Bradbury Landing', region: CURIOSITY.region, route: { start: { lat: CURIOSITY.lat, lon: CURIOSITY.lon }, points: [ [ Math.round( gateLat * 1e6 ) / 1e6, Math.round( gateLon * 1e6 ) / 1e6 ] ], radius: 40 }, startsAt: - 3600e3, endsAt: 3600e3, total: 1, top: [ { rank: 1, name: 'Rover', ms: 9000, vehicle: 'go-kart', date: '2026-11-18', level: 3, title: 'rookie' } ], me: null },
 	];
 
-	test( 'a link to Mars: a free visit, the game on Mars at once; Mars\'s challenges first, the Earth\'s asking for an Earth drive at its Start; a gate on Mars\'s own ground, driven through, the time posted with that visit', async () => {
+	test( 'a link to Mars: a free visit, the game on Mars at once; Mars\'s challenges first, the Earth\'s needing an Earth drive; a gate on Mars\'s own ground, driven through, the time posted with that visit', async () => {
 
 		const page = await newPage();
 		try {
@@ -507,8 +507,7 @@ describe( 'World Drive challenges on Mars', () => {
 			// On Mars: its own first, under its own heading (no "the").
 			assert.deepEqual( await dialog.locator( '.ch-world' ).allTextContents(), [ 'On Mars', 'On the Earth' ] );
 			assert.deepEqual( await dialog.locator( '.ch-card' ).evaluateAll( cards => cards.map( card => [ card.dataset.id, card.dataset.world ] ) ), [ [ '33', 'mars' ], [ '31', 'earth' ] ] );
-			// (The Earth's is our own globe there too: its Start asks for the Earth's drive, as any drop-in on it does.)
-			assert.equal( await dialog.locator( '.ch-card[data-id="31"] .ch-start' ).textContent(), 'Start' );
+			assert.equal( await dialog.locator( '.ch-card[data-id="31"] .ch-start' ).textContent(), 'Needs an Earth drive' );
 			assert.equal( await dialog.locator( '.ch-card[data-id="33"] .ch-start' ).textContent(), 'Start' );
 			await shot( page, 'challenges-mars-1-list' );
 			// Mars's: a drop-in at its start, its gate on its own ground.

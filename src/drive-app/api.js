@@ -23,23 +23,20 @@ export async function getConfig() {
 
 }
 
-// Trades the robot check's token for a visit. For the Maps key, one of the day's drives on the
-// Earth, it answers { key, left, visit } (visit: the token scores are posted with, see postScore),
-// or { usedUp: true, retryAfter, reason, visit } over a daily cap (the Moon's still open: visit, if
-// it came, is for that), { robot: true } when the check failed, or { error } for anything else;
-// fromGlobe: true asks for it from a page that has its visit already (the globe's, or a link's to
-// another world), so the Worker doesn't count it as a visit again. With another world's id ('moon',
-// 'mars', 'vesta', 'ceres': the page opened on a link there), or globe: true (the page's own globe
-// of the Earth, as it loads), no drive is spent and there's no key: { free: true, world, visit } (the
-// Worker says moon: true, as it always has, for every free world, and globe: true for the globe's).
-export async function postVisit( token, { world = 'earth', globe = false, fromGlobe = false } = {} ) {
+// Trades the robot check's token for the Maps key: one of the day's drives on the Earth. Answers
+// { key, left, visit } (visit: the token scores are posted with, see postScore), or { usedUp: true,
+// retryAfter, reason, visit } over a daily cap (the Moon's still open: visit, if it came, is for
+// that), { robot: true } when the check failed, or { error } for anything else. With another world's
+// id ('moon', 'mars', 'vesta', 'ceres': the page opened on a link there) no drive is spent and
+// there's no key: { free: true, world, visit } (the Worker says moon: true, as it always has, for
+// every free world).
+export async function postVisit( token, { world = 'earth' } = {} ) {
 
 	let res;
 	let body = {};
 	try {
 
-		const asked = world !== 'earth' ? { token, world } : globe ? { token, globe: true } : fromGlobe ? { token, fromGlobe: true } : { token };
-		res = await fetch( '/api/visit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( asked ) } );
+		res = await fetch( '/api/visit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify( world !== 'earth' ? { token, world } : { token } ) } );
 		body = await res.json().catch( () => ( {} ) );
 
 	} catch {

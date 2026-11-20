@@ -265,7 +265,7 @@
 	const PROBLEMS = [ [ 'no_ground', 'No ground at a drop-in' ], [ 'ride_failed', 'A ride didn\'t load' ], ...OFF_EARTH.map( world => [ `${ world }_failed`, `${ capital( WORLDS[ world ].the ) } didn't load` ] ), [ 'map_failed', 'Google\'s map didn\'t load' ], [ 'map_session_ended', 'Map session ended' ], [ 'drop_abandoned', 'Drop-in left for the globe' ] ];
 	// What each metric is, for the chart of any metric by day.
 	const NAMES = {
-		visit: 'Visits', visit_kind: 'Visits by where they went (the globe, Earth, a link to another world, or over a cap)', visit_hour: 'Visits by UTC hour', load: 'Loads by referring site', load_time: 'Load time (buckets)', load_ms: 'Load time (ms, all together)',
+		visit: 'Visits', visit_kind: 'Visits by where they went (Earth, a link to another world, or the Moon over a cap)', visit_hour: 'Visits by UTC hour', load: 'Loads by referring site', load_time: 'Load time (buckets)', load_ms: 'Load time (ms, all together)',
 		dropin: 'Drop-ins by place', ride: 'Drop-ins by ride', play: 'Play time by ride (s)', play_with_others: 'Play with others (s)', play_world: 'Play time by world (s)',
 		garage_open: 'Garage opened', garage_edit: 'Garage changes', party: 'Parties', funnel: 'Funnel steps', device: 'Devices', world: 'Turns to the other worlds',
 		search: 'Searches', dropin_time: 'Drop-in time (buckets)', problem: 'Problems', board: 'Leaderboard', pass: 'Supporter Pass', level_up: 'Level-ups', ad: 'Ad on the globe (visits it showed in, and blocked in)',
@@ -365,10 +365,7 @@
 			// Where they went (counted from when every visit was, turned-away ones too): no change shown,
 			// as days before that have none.
 			[ 'Earth drives', num( total( 'visit_kind', 'earth' ) + total( 'visit_kind', 'earth_supporter' ) ), null ],
-			// (Visits opened on the page's own globe, with no Earth drive asked for as they load: the
-			// Earth drives among them are counted above as they're asked for, and not as visits again.)
-			[ 'Opened on the globe', num( total( 'visit_kind', 'globe' ) ), null ],
-			[ 'Over a cap, no Earth drive', num( total( 'visit_kind', 'moon_daily_cap' ) + total( 'visit_kind', 'moon_visitor_cap' ) ), null ],
+			[ 'Over a cap, sent to the Moon', num( total( 'visit_kind', 'moon_daily_cap' ) + total( 'visit_kind', 'moon_visitor_cap' ) ), null ],
 			[ 'Play time', hours( play ), [ play, earlier( 'play' ) ] ],
 			[ 'Play per visit', visits ? hours( play / visits ) : '-', [ visits ? play / visits : 0, earlier( 'visit' ) ? earlier( 'play' ) / earlier( 'visit' ) : 0 ] ],
 			[ 'Drop-ins', num( total( 'dropin' ) ), [ total( 'dropin' ), earlier( 'dropin' ) ] ],

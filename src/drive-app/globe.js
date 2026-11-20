@@ -175,16 +175,6 @@ export class GlobeView {
 
 	}
 
-	// What a tap or a height check hits on the body shown now, changed without turning to another
-	// (main.js: the Earth's own globe, then Google's tiles once the page has its Earth drive). The
-	// frame, the pin and any flight stay as they are.
-	setSurface( surface ) {
-
-		this.surface = surface;
-		this.controls.setScene( surface );
-
-	}
-
 	// On for the globe, off while driving (the drive moves the camera then).
 	setEnabled( on ) {
 
