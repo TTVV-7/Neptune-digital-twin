@@ -262,6 +262,9 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 
 		const query = search.value.trim().toLowerCase();
 		for ( const { card, item } of cards ) card.hidden = query && ! `${ item.name } ${ item.category }`.toLowerCase().includes( query );
+		// The tools too, so what's found isn't pushed down out of sight below them.
+		for ( const card of toolCards.children ) card.hidden = query && ! `${ card.textContent } tools`.toLowerCase().includes( query );
+		toolCards.hidden = [ ...toolCards.children ].every( card => card.hidden );
 		for ( const heading of list.querySelectorAll( 'h3' ) ) {
 
 			let next = heading.nextElementSibling;
@@ -274,6 +277,27 @@ export function createSidebar( { library, models, layout, scene, camera, canvas,
 			}
 
 			heading.hidden = ! any;
+
+		}
+
+	} );
+
+	// Typing in the search box, L and Esc are letters and keys of the box, not the library's: Esc
+	// there clears the search, and with nothing in it closes the library.
+	search.addEventListener( 'keydown', e => {
+
+		if ( e.code !== 'Escape' ) return;
+		e.preventDefault();
+		e.stopPropagation();
+		if ( search.value ) {
+
+			search.value = '';
+			search.dispatchEvent( new Event( 'input' ) );
+
+		} else {
+
+			search.blur();
+			setOpen( false );
 
 		}
 

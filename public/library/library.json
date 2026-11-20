@@ -2133,5 +2133,39 @@
 		"triangles": 4020,
 		"sizeKB": 32,
 		"own": "Weave-Trial: construction_site/Roll_Off_Dumpster_20yd.glb"
+	},
+	{
+		"id": "worker-foreman",
+		"name": "Construction worker, foreman in jeans (1.88 m)",
+		"category": "People",
+		"file": "worker-foreman.glb",
+		"thumb": "thumbs/worker-foreman.webp",
+		"front": "+z",
+		"scale": 1,
+		"dimensions": {
+			"length": 0.4,
+			"width": 0.73,
+			"height": 1.88
+		},
+		"triangles": 40000,
+		"sizeKB": 543,
+		"own": "hi3D: public/models/player-worker.glb (the Foreman you walk as)"
+	},
+	{
+		"id": "worker-labourer",
+		"name": "Construction worker, labourer in a hoodie (1.88 m)",
+		"category": "People",
+		"file": "worker-labourer.glb",
+		"thumb": "thumbs/worker-labourer.webp",
+		"front": "+z",
+		"scale": 1,
+		"dimensions": {
+			"length": 0.71,
+			"width": 0.78,
+			"height": 1.88
+		},
+		"triangles": 39994,
+		"sizeKB": 613,
+		"own": "hi3D: public/models/player-worker-2.glb (the Labourer you walk as)"
 	}
 ]
