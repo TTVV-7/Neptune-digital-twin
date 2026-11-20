@@ -177,7 +177,8 @@ export function createLive( {
 	let heardAt = 0;
 	let pingAt = - Infinity;
 	// When the visit's token runs out (its third part, in seconds): the rooms turn it away after.
-	const visitEnds = Number( String( visit ).split( '.' )[ 2 ] ) * 1000 || Infinity;
+	const endsOf = token => Number( String( token ).split( '.' )[ 2 ] ) * 1000 || Infinity;
+	let visitEnds = endsOf( visit );
 
 	// The keepalive, the minute back on the globe and the wait to try again run on a timer of their
 	// own, so they go on while frames don't (a tab in the background).
@@ -1105,6 +1106,15 @@ export function createLive( {
 		get visitEnds() {
 
 			return visitEnds;
+
+		},
+		// Another visit's token for the connections made from now on (main.js: the Earth visit's, once
+		// the page has its Earth drive, in place of the globe's); one open now carries on as it is.
+		setVisit( next ) {
+
+			if ( typeof next !== 'string' || ! next ) return;
+			visit = next;
+			visitEnds = endsOf( next );
 
 		},
 		get party() {
