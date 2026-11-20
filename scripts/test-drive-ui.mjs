@@ -7078,7 +7078,7 @@ describe( 'World Drive Supporter Pass: buying and signing in', () => {
 		await page.locator( '.pin-card .go' ).click();
 		const notice = page.locator( '#notice[data-kind="used-up"]' );
 		await notice.waitFor( { timeout: 30000 } );
-		assert.match( await notice.locator( '.message' ).textContent(), /a 24-hour pass, or the Supporter Pass for good: 10 Earth drives a day/ );
+		assert.match( await notice.locator( '.message' ).textContent(), /the Supporter Pass: 30 Earth drives a day, for 24 hours, monthly or for good/ );
 		await notice.locator( '.account .stub-google' ).waitFor();
 		await shot( page, 'pass-9-drive-here-used-up-pitch' );
 		// The pitch: the pass's sheet.
