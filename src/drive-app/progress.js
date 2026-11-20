@@ -3,7 +3,8 @@ import {
 	DAILY_KM, DISCOVERIES_MAX, DISCOVER_KM, REPORT_PLACES, SUPPORTER_XP, XP,
 	areaOf, dailyXp, dayBefore, dayOf, drivingXp, emptyReport, isEmptyReport as isEmpty, levelOf, progressOf, rewardsBetween, spotAt, titleOf, trickXp,
 } from './levels.js';
-import { ACHIEVEMENTS, CLAIM_TALLY, TALLY_KM, mergeTallies, reached } from './achievement-rules.js';
+import { ACHIEVEMENTS, CLAIM_TALLY, TALLY_KM, findCounts, mergeTallies, reached } from './achievement-rules.js';
+import { FIND_IDS } from './finds-data.js';
 import { setFeats } from './feats.js';
 import { storage } from './places.js';
 import { isPro } from './pro.js';
@@ -30,12 +31,18 @@ const WORLD_TALLIES = OFF_EARTH;
 // the Worker counts it once.
 //
 // Achievements (achievement-rules.js) ride on the same reports: the counts only the page can tell
-// (drives on each world but the Earth, Garage changes, rides tried) go as each report's `feats`, and its
+// (drives on each world but the Earth, Garage changes, rides tried, Discoveries collected) go as each report's `feats`, and its
 // km are the report's own. The answers say which the player has earned (feats.js keeps them, for the
 // construction rides' locks), and those that are new are told (onAchievement), once each: the ones
 // a report just earned, and any the player has that this browser hadn't seen yet (a challenge's
 // places, written as its board ended). Before a nickname nothing's earned, but what's been driven
 // counts toward them as it does toward XP, and comes with the claim.
+//
+// Discoveries (finds.js) ride on them too, as a list of ids, and nothing collected is ever lost to a
+// cap: the Worker answers with the ones it took (accepted.finds), the rest go with the next report,
+// and every answer carries the player's whole list (finds), which onFinds hands to finds.js: it adds
+// those found on another device to the book and gives back the ones this browser has that the list
+// lacks, which are sent again (the Worker takes each once, so sending one twice costs nothing).
 
 const KEY = 'world-drive.progress';
 // Report every REPORT_EVERY ms while driving (and as the drive pauses, ends or the page goes).
@@ -101,8 +108,10 @@ function setLevel( next ) {
 // onChange(): what's shown has changed (XP, level, title); onPop( { text, kind } ): something to
 // say over the drive; onLevelUp( { level, from, rewards, nickname } ): a level reached (nickname:
 // there's no player to keep it with yet, and one could be picked now); onAchievement( { ids, local } ):
-// achievements earned (local: reached in this browser before a nickname, not yet kept).
-export function createProgress( { worker, visit = () => null, player = () => null, onChange = () => {}, onPop = () => {}, onLevelUp = () => {}, onAchievement = () => {} } ) {
+// achievements earned (local: reached in this browser before a nickname, not yet kept); onFinds( ids ):
+// the Worker's list of the player's Discoveries, returning the ids this browser has that it lacks
+// (finds.js's applyServer).
+export function createProgress( { worker, visit = () => null, player = () => null, onChange = () => {}, onPop = () => {}, onLevelUp = () => {}, onAchievement = () => {}, onFinds = () => [] } ) {
 
 	const saved = load();
 	// What the Worker last said, for the player it's for: { id, xp (the account's best), own (the
@@ -161,6 +170,8 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 	let rideKm = 0;
 	// The trick run going on: its ride (entry), how long it's lasted and the XP it's had.
 	let run = { entry: null, seconds: 0, xp: 0 };
+	// The Discoveries the Worker last said the player has, and for whom ({ id, list }).
+	let serverFinds = { id: '', list: [] };
 
 	const who = () => player()?.id ?? '';
 	const today = () => dayOf( Date.now() );
@@ -189,7 +200,7 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 	// What a report is worth, before the Worker's caps.
 	function estimate( report ) {
 
-		const places = report.areas.length * XP.area + report.spots.length * XP.spot;
+		const places = report.areas.length * XP.area + report.spots.length * XP.spot + ( report.feats?.finds?.length ?? 0 ) * XP.find;
 		const daily = report.daily ? dailyXp( streakToday() ) : 0;
 		return ( drivingXp( report ) + places + daily + report.tricks ) * multiplier();
 
@@ -452,10 +463,38 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 
 	}
 
+	// A Discovery collected (finds.js): sent with the next report, once (its XP and achievements come
+	// with the Worker's answer; before a nickname, kept for the claim).
+	function found( id ) {
+
+		if ( ! FIND_IDS.has( id ) || onTheWay( id ) ) return;
+		tally().finds.push( id );
+		save();
+		changed();
+
+	}
+
+	// Whether Discovery `id` is already on its way: in what's to be sent, or in the report out now.
+	function onTheWay( id ) {
+
+		return unsent.feats?.finds?.includes( id ) || ( flying?.player === who() && flying.sent.feats?.finds?.includes( id ) );
+
+	}
+
+	// Discoveries for the next report (again: the Worker didn't take them, or its list lacks them).
+	function sendAgain( ids ) {
+
+		const fresh = ids.filter( id => FIND_IDS.has( id ) && ! onTheWay( id ) );
+		if ( fresh.length ) tally().finds.push( ...fresh );
+
+	}
+
 	// The achievements' counts since the last report, made as they're first needed.
 	function tally() {
 
 		unsent.feats ??= { ...Object.fromEntries( WORLD_TALLIES.map( id => [ id, 0 ] ) ), looks: 0, rides: [] };
+		// (Kept from before the Discoveries, a report's counts have none.)
+		unsent.feats.finds ??= [];
 		return unsent.feats;
 
 	}
@@ -470,7 +509,8 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 
 	// The counts this browser has toward each achievement beyond what the Worker last said: what's
 	// been driven since, and before a nickname, everything driven here ({ km, moon, mars, vesta,
-	// ceres, looks, rides, streak }, as achievement-rules.js's countsOf has them).
+	// ceres, looks, rides, finds, finds-moon, ..., streak }, as achievement-rules.js's countsOf has
+	// them; the Discoveries' from pendingFinds, those the Worker's list already has not counted again).
 	function pending() {
 
 		const parts = [ unsent, ...flying?.player === who() ? [ flying.before ] : [], ...who() ? [] : [ local.totals ] ];
@@ -479,8 +519,19 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 			km: parts.reduce( ( sum, part ) => sum + ( part.km || 0 ), 0 ),
 			...Object.fromEntries( WORLD_TALLIES.map( id => [ id, feats?.[ id ] ?? 0 ] ) ),
 			looks: feats?.looks ?? 0, rides: feats?.rides?.length ?? 0,
+			...findCounts( pendingFinds() ),
 			streak: who() ? 0 : local.streak ?? 0,
 		};
+
+	}
+
+	// The Discoveries this browser is sending that the Worker's list for the player doesn't have yet
+	// (before a nickname, all of them).
+	function pendingFinds() {
+
+		const parts = [ unsent, ...flying?.player === who() ? [ flying.before, flying.sent ] : [], ...who() ? [] : [ local.totals ] ];
+		const known = new Set( who() && serverFinds.id === who() ? serverFinds.list : [] );
+		return [ ...new Set( parts.flatMap( part => part.feats?.finds ?? [] ) ) ].filter( id => ! known.has( id ) );
 
 	}
 
@@ -538,6 +589,8 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 			km: Math.min( counts.km, CLAIM_TALLY.km ),
 			...Object.fromEntries( WORLD_TALLIES.map( id => [ id, Math.min( counts[ id ], CLAIM_TALLY[ id ] ?? 0 ) ] ) ),
 			looks: Math.min( counts.looks, CLAIM_TALLY.looks ), rides: Math.min( counts.rides, CLAIM_TALLY.rides ), streak: 0,
+			// (The claim takes the first CLAIM_TALLY.finds of them, in the order collected.)
+			...findCounts( pendingFinds().slice( 0, CLAIM_TALLY.finds ) ),
 		} );
 		const news = now.filter( feat => ! had.has( feat ) );
 		if ( ! news.length ) return;
@@ -640,6 +693,10 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 			const areas = [ ...was.sent.areas.filter( place => ! accepted.areas?.includes( place ) ), ...was.later ];
 			unsent.areas.push( ...areas.filter( place => ! unsent.areas.includes( place ) ) );
 			unsent.spots.push( ...was.sent.spots.filter( id => ! accepted.spots?.includes( id ) && ! unsent.spots.includes( id ) ) );
+			// The Discoveries over a cap (the report's rate, the day's, the claim's) go with the next.
+			// (A Worker from before them says nothing of them: its answer's list, if any, settles it.)
+			const tookFinds = answer.body.repeated ? was.sent.feats?.finds ?? [] : answer.body.accepted?.finds;
+			if ( Array.isArray( tookFinds ) ) sendAgain( ( was.sent.feats?.finds ?? [] ).filter( id => ! tookFinds.includes( id ) ) );
 			retryAt = 0;
 			// Asked where they stand while it was on its way, or not yet asked for their whole list of
 			// achievements this page (a report sent as it started, in refresh's place).
@@ -704,6 +761,24 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 
 		earned( { all: Array.isArray( body.feats ) ? body.feats : null, earned: Array.isArray( body.earned ) ? body.earned : [] } );
 		const me = player();
+		if ( Array.isArray( body.finds ) ) {
+
+			serverFinds = { id: me.id, list: body.finds.filter( id => FIND_IDS.has( id ) ) };
+			let lacking = [];
+			try {
+
+				lacking = onFinds( serverFinds.list ) ?? [];
+
+			} catch ( err ) {
+
+				console.warn( 'Discoveries:', err?.message );
+
+			}
+
+			sendAgain( lacking );
+
+		}
+
 		const was = server?.id === me.id ? server : { title: '', streakDay: '', streak: 0 };
 		server = {
 			id: me.id,
@@ -808,6 +883,7 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 		landed,
 		dropped,
 		look,
+		found,
 		report,
 		refresh,
 		setTitle,
@@ -859,6 +935,12 @@ export function createProgress( { worker, visit = () => null, player = () => nul
 		get pending() {
 
 			return pending();
+
+		},
+		// The Discoveries not yet in the Worker's list (pendingFinds, above).
+		get pendingFinds() {
+
+			return pendingFinds();
 
 		},
 	};

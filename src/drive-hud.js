@@ -34,6 +34,12 @@ const TOUCH_WORDS = [
 	[ 'Press R', 'Tap ↺' ],
 	[ 'Space up · Shift down · T to land', 'UP · DOWN · ✈ to land' ],
 	[ 'A/D spin · W/S flip · Q/E roll', '◀ ▶ spin · GAS/BRAKE flip · DRIFT + ◀ ▶ roll' ],
+	// The plane's (plane.js): TRICK is the ↺ button, as one.
+	[ 'Space up · Shift down · Q/E roll · Z loop', 'UP · DOWN · TRICK roll · TRICK + UP loop' ],
+	[ 'F/T to bail out', '✈ to bail out' ],
+	[ 'T to bail out', '✈ to bail out' ],
+	[ 'W dive · A/D steer', 'GAS dive · ◀ ▶ steer' ],
+	[ 'A/D steer · S to drop faster', '◀ ▶ steer · BRAKE to drop faster' ],
 ];
 
 const CSS = `
@@ -957,6 +963,12 @@ const CSS = `
 	top: calc( var( --drive-hud-top, 12px ) + 52px );
 }
 
+/* As a plane, reset is TRICK (plane.js): a word in the same small button. */
+.dhud.plane .dhud-touch .reset {
+	font-size: 11px;
+	font-weight: 700;
+}
+
 /* Plane mode's T, under CAM. */
 .dhud .dhud-touch .plane {
 	right: var( --drive-hud-side, 16px );
@@ -1187,7 +1199,8 @@ export function createDriveHud( parent = document.body ) {
 			driver?.booster ? row( [ 'Shift' ], 'boost (hold: overdrive while the gauge lasts)' ) : row( [ 'Shift' ], 'boost' ),
 			driver?.fly && row( [ 'F' ], 'fly' ),
 			driver?.aircraft && row( driver.fly ? [ 'T' ] : [ 'F', 'T' ], 'plane (again to bail out)' ),
-			driver?.launch && row( [ 'Q', 'E' ], 'roll in the air' ),
+			driver?.launch && row( [ 'Q', 'E' ], driver?.aircraft ? 'roll in the air (and the plane)' : 'roll in the air' ),
+			driver?.aircraft && driver?.launch && row( [ 'Z', 'X' ], 'loop (plane)' ),
 			row( [ 'R' ], 'reset' ),
 			row( [ 'C' ], 'camera' ),
 		].filter( Boolean ).join( ' · ' );
@@ -1409,6 +1422,12 @@ export function createDriveHud( parent = document.body ) {
 			$( '.fly' ).textContent = plane ? 'UP' : 'FLY';
 			$( '.booster' ).textContent = plane ? 'DOWN' : 'BOOST';
 			$( '.drift' ).firstChild.textContent = plane ? 'UP' : driver?.drift ? 'DRIFT' : 'HOP';
+			// ↺ (R) does nothing in a plane, so it's TRICK there, with stunts on: tapped, a roll; held
+			// with UP or DOWN, a loop (plane.js).
+			const reset = $( '.reset' );
+			const trick = plane && !! driver?.launch;
+			reset.textContent = trick ? 'TRICK' : '↺';
+			reset.setAttribute( 'aria-label', trick ? 'Trick: tap to roll, hold with UP or DOWN to loop' : 'Back on the road' );
 			// (No drifting or boosting as a plane: their readouts go while it's one.)
 			driftHold.hidden = plane || ! driver?.drift || !! panel;
 			boostRow.hidden = plane || ! driver?.booster || !! panel;

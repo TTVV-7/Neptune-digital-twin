@@ -457,8 +457,9 @@ describe( 'World Drive\'s Mars, by a link and from the keyboard', () => {
 
 // A challenge on Mars (src/drive-app/challenges.js), with the Worker's answers made here: a link to
 // a Mars spot asks for a free visit (world: 'mars': no Earth drive spent, no Maps key), and the game
-// opens on Mars with the Earth closed; the list with Mars's first, under "On Mars", the Earth's
-// needing an Earth drive; a Mars challenge's drop-in at its start, its gate on Mars's own heights
+// opens on Mars with the Earth closed; the list with Mars's first, under "On Mars", the Earth's a
+// reload away (no Earth drive was turned away today, so its Start reloads to the Earth's visit,
+// challenges.js's earthFor); a Mars challenge's drop-in at its start, its gate on Mars's own heights
 // (as the ground built there has them), driven through, and its time posted with that visit.
 describe( 'World Drive challenges on Mars', () => {
 
@@ -472,7 +473,7 @@ describe( 'World Drive challenges on Mars', () => {
 		{ id: 33, period: 'day', key: 'day:2026-11-18', world: 'mars', kind: 'sprint', place: 'Bradbury Landing', region: CURIOSITY.region, route: { start: { lat: CURIOSITY.lat, lon: CURIOSITY.lon }, points: [ [ Math.round( gateLat * 1e6 ) / 1e6, Math.round( gateLon * 1e6 ) / 1e6 ] ], radius: 40 }, startsAt: - 3600e3, endsAt: 3600e3, total: 1, top: [ { rank: 1, name: 'Rover', ms: 9000, vehicle: 'go-kart', date: '2026-11-18', level: 3, title: 'rookie' } ], me: null },
 	];
 
-	test( 'a link to Mars: a free visit, the game on Mars at once; Mars\'s challenges first, the Earth\'s needing an Earth drive; a gate on Mars\'s own ground, driven through, the time posted with that visit', async () => {
+	test( 'a link to Mars: a free visit, the game on Mars at once; Mars\'s challenges first, the Earth\'s a reload away; a gate on Mars\'s own ground, driven through, the time posted with that visit', async () => {
 
 		const page = await newPage();
 		try {
@@ -507,7 +508,8 @@ describe( 'World Drive challenges on Mars', () => {
 			// On Mars: its own first, under its own heading (no "the").
 			assert.deepEqual( await dialog.locator( '.ch-world' ).allTextContents(), [ 'On Mars', 'On the Earth' ] );
 			assert.deepEqual( await dialog.locator( '.ch-card' ).evaluateAll( cards => cards.map( card => [ card.dataset.id, card.dataset.world ] ) ), [ [ '33', 'mars' ], [ '31', 'earth' ] ] );
-			assert.equal( await dialog.locator( '.ch-card[data-id="31"] .ch-start' ).textContent(), 'Needs an Earth drive' );
+			// The Earth's: not used up today (that's the Moon's cap case), so its Start reloads to it.
+			assert.equal( await dialog.locator( '.ch-card[data-id="31"] .ch-start' ).textContent(), 'Opens the Earth (reloads)' );
 			assert.equal( await dialog.locator( '.ch-card[data-id="33"] .ch-start' ).textContent(), 'Start' );
 			await shot( page, 'challenges-mars-1-list' );
 			// Mars's: a drop-in at its start, its gate on its own ground.

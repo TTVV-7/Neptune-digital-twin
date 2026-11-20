@@ -1,0 +1,235 @@
+/* The data lens (lens.js): a "Heights" button, and when it's on, a scale bar with the dataset named,
+   bottom right just over the world's credit (NASA's, which it explains), clear of the globe's panel
+   on the left. Its offset from the bottom is --lens-bottom, so the page can lift it clear of whatever
+   else is down there. */
+
+.lens {
+	position: fixed;
+	right: 10px;
+	bottom: var( --lens-bottom, calc( 26px + var( --safe-bottom, 0px ) ) );
+	z-index: 12;
+	display: flex;
+	flex-direction: column-reverse;
+	align-items: flex-end;
+	gap: 6px;
+	max-width: min( 420px, calc( 100vw - 24px ) );
+	font-size: 12px;
+	color: var( --ink, #f4f7fb );
+	pointer-events: none;
+}
+
+.lens[hidden] {
+	display: none;
+}
+
+.lens > * {
+	pointer-events: auto;
+}
+
+/* Hidden under the orrery, as the world's credit is. */
+body[data-orrery='open'] .lens {
+	display: none;
+}
+
+.lens-button {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	padding: 6px 10px;
+	border: 1px solid var( --line, rgba( 255, 255, 255, 0.12 ) );
+	border-radius: 999px;
+	background: var( --panel, rgba( 9, 15, 27, 0.84 ) );
+	color: inherit;
+	font: inherit;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.lens-button:hover {
+	background: var( --panel-solid, #0b1322 );
+}
+
+.lens-button[aria-pressed='true'] {
+	border-color: var( --accent, #ffd23f );
+}
+
+.lens-button:focus-visible,
+.lens-range button:focus-visible {
+	outline: 2px solid var( --accent, #ffd23f );
+	outline-offset: 2px;
+}
+
+.lens-swatch {
+	width: 18px;
+	height: 8px;
+	border-radius: 2px;
+}
+
+.lens-button kbd {
+	padding: 0 4px;
+	border: 1px solid var( --line, rgba( 255, 255, 255, 0.12 ) );
+	border-radius: 4px;
+	font: 10px/1.4 var( --font, system-ui, sans-serif );
+	color: var( --muted, rgba( 244, 247, 251, 0.68 ) );
+}
+
+body.touch .lens-button kbd {
+	display: none;
+}
+
+
+.lens-panel {
+	width: 100%;
+	padding: 9px 11px 8px;
+	border: 1px solid var( --line, rgba( 255, 255, 255, 0.12 ) );
+	border-radius: 12px;
+	background: var( --panel, rgba( 9, 15, 27, 0.84 ) );
+}
+
+.lens-panel[hidden] {
+	display: none;
+}
+
+.lens-top {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+}
+
+.lens-scale {
+	flex: 1;
+	min-width: 0;
+	/* Room for the end labels, which hang out past the bar's ends a little. */
+	padding: 0 4px;
+}
+
+.lens-bar {
+	position: relative;
+	height: 10px;
+	border-radius: 3px;
+}
+
+/* Where the car is on the scale. */
+.lens-marker {
+	position: absolute;
+	top: 8px;
+	transform: translateX( -50% );
+	font-size: 10px;
+	line-height: 1;
+	color: #fff;
+	text-shadow: 0 1px 2px rgba( 0, 0, 0, 0.9 );
+}
+
+.lens-marker[hidden] {
+	display: none;
+}
+
+.lens-ticks {
+	position: relative;
+	height: 16px;
+	margin-top: 4px;
+	font-size: 10px;
+	font-variant-numeric: tabular-nums;
+	color: var( --muted, rgba( 244, 247, 251, 0.68 ) );
+}
+
+.lens-ticks span {
+	position: absolute;
+	top: 2px;
+	transform: translateX( -50% );
+	white-space: nowrap;
+}
+
+.lens-ticks span.start {
+	transform: none;
+}
+
+.lens-ticks span.end {
+	transform: translateX( -100% );
+}
+
+.lens-range {
+	display: flex;
+	flex: none;
+	border: 1px solid var( --line, rgba( 255, 255, 255, 0.12 ) );
+	border-radius: 999px;
+	overflow: hidden;
+}
+
+.lens-range[hidden] {
+	display: none;
+}
+
+.lens-range button {
+	padding: 3px 8px;
+	border: 0;
+	background: transparent;
+	color: var( --muted, rgba( 244, 247, 251, 0.68 ) );
+	font: inherit;
+	font-size: 11px;
+	cursor: pointer;
+}
+
+.lens-range button[aria-pressed='true'] {
+	background: var( --chip-hover, rgba( 255, 255, 255, 0.14 ) );
+	color: var( --ink, #f4f7fb );
+}
+
+.lens-panel p {
+	margin: 4px 0 0;
+	line-height: 1.35;
+}
+
+.lens-here {
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+.lens-here[hidden] {
+	display: none;
+}
+
+.lens-what {
+	color: var( --ink, #f4f7fb );
+}
+
+.lens-source {
+	font-size: 10.5px;
+	color: var( --muted, rgba( 244, 247, 251, 0.68 ) );
+}
+
+/* A phone: narrower and smaller. On the globe the panel is a sheet over the bottom half, so the lens
+   goes to the top right, level with the world's credit at the top left (the page can set --lens-top
+   for the exact spot). */
+@media ( max-width: 760px ) {
+
+	.lens {
+		top: var( --lens-top, calc( 84px + env( safe-area-inset-top, 0px ) ) );
+		bottom: auto;
+		flex-direction: column;
+		max-width: calc( 100vw - 20px );
+		font-size: 11px;
+	}
+
+	.lens-top {
+		flex-direction: column;
+		align-items: stretch;
+		gap: 6px;
+	}
+
+	.lens-range {
+		align-self: flex-start;
+	}
+
+}
+
+/* Driving on a touch screen (any size), the bottom is the driving buttons' and the top right reset
+   and Cam: top left, under the bar with Globe and pause. */
+body.touch[data-mode='driving'] .lens {
+	top: var( --lens-top-driving, calc( 64px + env( safe-area-inset-top, 0px ) ) );
+	bottom: auto;
+	left: 10px;
+	right: auto;
+	flex-direction: column;
+	align-items: flex-start;
+}

@@ -50,6 +50,12 @@
     "test:drive-mars-ui": "node --test scripts/test-drive-mars-ui.mjs",
     "test:drive-asteroids-ui": "node --test scripts/test-drive-asteroids-ui.mjs",
     "test:drive-orrery-ui": "node --test scripts/test-drive-orrery-ui.mjs",
+    "test:drive-orrery-first": "node --test scripts/test-drive-orrery-first.mjs",
+    "test:drive-plane": "node --test scripts/test-drive-plane.mjs",
+    "test:drive-finds": "node --test scripts/test-drive-finds.mjs",
+    "test:drive-finds-ui": "node --test scripts/test-drive-finds-ui.mjs",
+    "test:drive-lens": "node --test scripts/test-drive-lens.mjs",
+    "test:drive-lens-ui": "node --test scripts/test-drive-lens-ui.mjs",
     "deploy": "vite build --mode cloudflare && wrangler deploy",
     "deploy:cloudflare": "wrangler d1 migrations apply DB --remote && npm run deploy",
     "deploy:drive": "wrangler d1 migrations apply DB --remote -c wrangler.drive.jsonc && vite build --config vite.drive.config.js && wrangler deploy -c wrangler.drive.jsonc"

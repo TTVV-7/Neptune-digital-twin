@@ -1672,7 +1672,7 @@ describe( 'World Drive Supporter Pass', () => {
 
 	} );
 
-	test( 'every visit is counted for the admin page, those over a cap (sent to the Moon) too, by where it went (a link to the Moon or to Mars each its own)', async () => {
+	test( 'every visit is counted for the admin page, those over a cap (sent to the Moon) too, by where it went (a link to the Moon or to Mars each its own, a plain load\'s orrery its own)', async () => {
 
 		// On the suite's own day (others' visits that day are counted too: what these add is compared).
 		const day = PASS_DAY;
@@ -1686,14 +1686,22 @@ describe( 'World Drive Supporter Pass', () => {
 		assert.equal( ( await drive() ).status, 429 );
 		assert.equal( ( await drive( { world: 'moon' } ) ).status, 200 );
 		assert.equal( ( await drive( { world: 'mars' } ) ).status, 200 );
+		// A plain load, which opens on the orrery (boot.js): free, and counted as the orrery's; a start
+		// the Worker doesn't know is let go of (a link to the Moon, as before).
+		const orrery = await drive( { world: 'moon', start: 'orrery' } );
+		assert.equal( orrery.status, 200 );
+		assert.equal( orrery.json.free, true );
+		assert.equal( orrery.json.mapsKey, undefined );
+		assert.equal( typeof orrery.json.visit, 'string' );
+		assert.equal( ( await drive( { world: 'moon', start: 'nonsense' } ) ).status, 200 );
 		const added = () => {
 
 			const now = counts();
 			return Object.fromEntries( Object.entries( now ).map( ( [ name, n ] ) => [ name, n - ( before[ name ] ?? 0 ) ] ).filter( ( [ , n ] ) => n ) );
 
 		};
-		for ( let tries = 0; tries < 30 && added()[ 'visit:all' ] !== 12; tries ++ ) await new Promise( resolve => setTimeout( resolve, 100 ) );
-		assert.deepEqual( added(), { 'visit:all': 12, 'visit_kind:earth': 8, 'visit_kind:moon_visitor_cap': 2, 'visit_kind:moon_link': 1, 'visit_kind:mars_link': 1 } );
+		for ( let tries = 0; tries < 30 && added()[ 'visit:all' ] !== 14; tries ++ ) await new Promise( resolve => setTimeout( resolve, 100 ) );
+		assert.deepEqual( added(), { 'visit:all': 14, 'visit_kind:earth': 8, 'visit_kind:moon_visitor_cap': 2, 'visit_kind:moon_link': 2, 'visit_kind:mars_link': 1, 'visit_kind:orrery': 1 } );
 
 	} );
 

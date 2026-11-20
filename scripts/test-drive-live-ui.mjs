@@ -732,6 +732,38 @@ describe( 'World Drive, driving with others', () => {
 
 	} );
 
+	test( 'A rolls the plane (Q): A\'s car turns over, B\'s ghost turns with it, and the roll scores once A levels out', async () => {
+
+		// How far (radians) quaternion `q` is turned from `was` (both [ x, y, z, w ]).
+		const apart = ( q, was ) => 2 * Math.acos( Math.min( 1, Math.abs( q[ 0 ] * was[ 0 ] + q[ 1 ] * was[ 1 ] + q[ 2 ] * was[ 2 ] + q[ 3 ] * was[ 3 ] ) ) );
+		await placeCar( a, 0, 0, 0 );
+		await b.waitForFunction( () => window.drive.ghosts.list()[ 0 ]?.visible, null, { timeout: 15000 } );
+		await a.evaluate( () => window.drive.driver.press( 'KeyT' ) );
+		await a.evaluate( () => window.drive.driver.keys.add( 'Space' ) );
+		await a.waitForFunction( () => window.drive.driver.aircraft.phase === 'flying' && window.drive.driver.aircraft.height > 60, null, { timeout: 60000 } );
+		await a.evaluate( () => window.drive.driver.keys.delete( 'Space' ) );
+		// Level, and B's ghost caught up with it.
+		await a.waitForTimeout( 1500 );
+		const own = await a.evaluate( () => window.drive.entry.pivot.quaternion.toArray() );
+		const ghost = await b.evaluate( () => window.drive.ghosts.list()[ 0 ].quaternion );
+		const score = await a.evaluate( () => window.drive.driver.score );
+		await a.evaluate( () => window.drive.driver.press( 'KeyQ' ) );
+		await a.waitForFunction( ( [ was, source ] ) => Function( `return ${ source }` )()( window.drive.entry.pivot.quaternion.toArray(), was ) > 1, [ own, apart.toString() ], { timeout: 10000 } );
+		await b.waitForFunction( ( [ was, source ] ) => Function( `return ${ source }` )()( window.drive.ghosts.list()[ 0 ].quaternion, was ) > 1, [ ghost, apart.toString() ], { timeout: 10000 } );
+		await shot( b, 'live-plane-roll' );
+		// Let go after about a turn: it rights, and the roll is paid (a barrel roll, at least).
+		await a.waitForTimeout( 600 );
+		await a.evaluate( () => window.drive.driver.release( 'KeyQ' ) );
+		await a.waitForFunction( () => ! window.drive.driver.air, null, { timeout: 15000 } );
+		assert.ok( await a.evaluate( () => window.drive.driver.score ) > score, 'the roll scored nothing' );
+		// Down again (bailing out), and the run keeps what the plane scored.
+		const scored = await a.evaluate( () => window.drive.driver.score );
+		await a.evaluate( () => window.drive.driver.press( 'KeyT' ) );
+		await a.waitForFunction( () => ! window.drive.driver.aircraft.on, null, { timeout: 120000 } );
+		assert.equal( await a.evaluate( () => window.drive.driver.score ), scored );
+
+	} );
+
 	test( 'A hidden on B while it drives: B keeps only the last of what it hears of A, not all of it', async () => {
 
 		await b.evaluate( () => window.drive.ghosts.hide( 'Ana' ) );

@@ -40,7 +40,7 @@ const ICONS = {
 // whether a nickname can be picked now (a Worker and a visit). onGarage( reward ): open the
 // Garage (on a ride reward's ride); onNickname(): show where a nickname is picked; onTitle(): a new
 // title was picked. mode(): main.js's mode ('driving', 'globe'...).
-export function setUpProfile( { progress, player, canName = () => false, onGarage = () => {}, onNickname = () => {}, onTitle = () => {}, onAchievements = () => {}, mode = () => 'globe' } ) {
+export function setUpProfile( { progress, player, canName = () => false, onGarage = () => {}, onNickname = () => {}, onTitle = () => {}, onAchievements = () => {}, onDiscoveries = () => {}, discoveries = () => null, mode = () => 'globe' } ) {
 
 	// --- driving: the bar and the pop-ups ---
 
@@ -196,10 +196,13 @@ export function setUpProfile( { progress, player, canName = () => false, onGarag
 		<label class="title-pick small" hidden>Title <select></select></label>
 		<p class="title-status small" role="status" hidden></p>
 		<p class="save-note small" hidden>Your progress is kept in this browser. <button type="button" class="link">Pick a nickname</button> to save it.</p>
-		<button type="button" class="achievements-open"><span aria-hidden="true">🏅</span> Achievements <span class="feat-count small"></span></button>`;
+		<button type="button" class="achievements-open"><span aria-hidden="true">🏅</span> Achievements <span class="feat-count small"></span></button>
+		<button type="button" class="discoveries-open"><span aria-hidden="true">🔭</span> Discoveries <span class="finds-total small"></span></button>`;
 	panel.querySelector( '.osm' ).after( profile );
 	profile.querySelector( '.track-open' ).addEventListener( 'click', () => openTrack() );
 	profile.querySelector( '.achievements-open' ).addEventListener( 'click', () => onAchievements() );
+	// The Discoveries' books (finds.js): real named places on the other worlds, collected by driving there.
+	profile.querySelector( '.discoveries-open' ).addEventListener( 'click', () => onDiscoveries() );
 	profile.querySelector( '.save-note button' ).addEventListener( 'click', () => onNickname() );
 	const select = profile.querySelector( 'select' );
 	const titleStatus = profile.querySelector( '.title-status' );
@@ -307,6 +310,8 @@ export function setUpProfile( { progress, player, canName = () => false, onGarag
 		profile.querySelector( '.next' ).textContent = coming ? `Next: ${ coming.name } at Lv ${ coming.level }` : 'Every reward is yours';
 		profile.querySelector( '.save-note' ).hidden = ! progress.local || ! canName();
 		profile.querySelector( '.feat-count' ).textContent = `${ feats } / ${ ACHIEVEMENTS.length }`;
+		const found = discoveries();
+		profile.querySelector( '.finds-total' ).textContent = found ? `${ found.have } / ${ found.of }` : '';
 
 		// The titles there are to pick: the newest by default, or any one unlocked.
 		const picker = profile.querySelector( '.title-pick' );

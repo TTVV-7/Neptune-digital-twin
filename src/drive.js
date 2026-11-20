@@ -24,9 +24,11 @@ import { PARACHUTE, PlaneMode } from './plane.js';
 // whose tuning says it `floats` (a hovercraft) throws up spray behind it there.
 //
 // And `plane`, off unless an app asks: T turns the vehicle into a little plane (plane.js) that
-// goes faster the higher it flies, and T again lands it. It's kept apart from everything scored:
-// no tricks or boost while it's a plane, and a new stunt run once it's down. canPlane() may say why
-// it can't be one just now (a challenge's run going), and onPlane( on ) hears it change.
+// goes faster the higher it flies, and T again lands it. As one it does the car's rolls and loops
+// on top of how it flies (with stunts on), scored by plane-tricks.js's bounded rules and paid
+// through payTricks as a jump's are; nothing else of the car's goes with it (no drifts, hops or
+// boost), and the run carries on once it's down. canPlane() may say why it can't be one just now
+// (a challenge's run going), and onPlane( on ) hears it change.
 
 const KMH = 3.6;
 const GRAVITY = 9.81;
@@ -254,6 +256,10 @@ const WORDS = [ [ 18, 'WHAM!', 'wham' ], [ 9, 'BOING!', 'boing' ], [ 0, 'BONK!',
 const WATER_EVERY = 0.2;
 // Told once, the first time it's thrown into the air.
 const AIR_HINT = 'In the air: A/D spin · W/S flip · Q/E roll';
+// A plane's trick keys besides Q/E (plane.js's trickInput): Z and X loop it, and , . and / roll and
+// loop it from by the arrow keys. Driving keys only with a plane and stunts on (World Drive): /
+// is otherwise the globe's (drive-app/main.js), which isn't up while driving.
+const PLANE_TRICK_KEYS = [ 'KeyZ', 'KeyX', 'Comma', 'Period', 'Slash' ];
 
 // How a vehicle handles, which its tuning can change as "handling" (see specFor): whatever it
 // leaves out is as the constants above have it, so a vehicle without any handles as it always
@@ -371,7 +377,7 @@ export class Driver {
 		this.canPlane = canPlane;
 		this.onPlane = onPlane;
 
-		this.driveKeys = [ 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight', 'KeyR', ...booster ? [ 'KeyB' ] : [], ...this.fly || plane ? [ 'KeyF' ] : [], ...this.launch ? [ 'KeyQ', 'KeyE' ] : [], ...plane ? [ 'KeyT' ] : [] ];
+		this.driveKeys = [ 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft', 'ShiftRight', 'KeyR', ...booster ? [ 'KeyB' ] : [], ...this.fly || plane ? [ 'KeyF' ] : [], ...this.launch ? [ 'KeyQ', 'KeyE' ] : [], ...plane ? [ 'KeyT' ] : [], ...plane && this.launch ? PLANE_TRICK_KEYS : [] ];
 		window.addEventListener( 'keydown', e => {
 
 			// Browser shortcuts (Ctrl+R, Cmd+F...) are left to the browser, and don't drive or dig.
@@ -422,7 +428,7 @@ export class Driver {
 
 		// T: into a plane and back; F too, unless F flies (the `fly` option, off in World Drive: the
 		// plane is its way into the air). As one, the car's own keys (hop, booster, reset) do nothing:
-		// plane.js reads the held keys itself.
+		// plane.js reads the held keys itself, and hears them go down (R is its TRICK, for touch).
 		if ( this.aircraft && ( code === 'KeyT' || code === 'KeyF' && ! this.fly ) ) {
 
 			this.togglePlane();
@@ -430,7 +436,12 @@ export class Driver {
 
 		}
 
-		if ( this.aircraft?.on ) return;
+		if ( this.aircraft?.on ) {
+
+			if ( this.launch ) this.aircraft.press( code );
+			return;
+
+		}
 
 		// With kart handling, Space without steering is a drift waiting for the steering, or a hop
 		// if it's let go at once (see release).
@@ -1111,6 +1122,15 @@ export class Driver {
 		} );
 		if ( this.booster ) this.hud.setBoost?.( this.gauge );
 		this.ringJolts( dt );
+		// A combo lasts while tricks keep coming, flying as driving: CHAIN_TIME s without a paid pass
+		// (and none being flown) and it's back to 1.
+		if ( this.mult > 1 && ! this.air && this.clock - this.lastTrick > CHAIN_TIME ) {
+
+			this.mult = 1;
+			this.showScore();
+
+		}
+
 		if ( this.launch ) this.turnView( dt );
 		this.placeChute();
 		this.placeCamera( dt );
@@ -2236,6 +2256,24 @@ export class Driver {
 			this.hud.flash( AIR_HINT );
 
 		}
+
+	}
+
+	// A plane's trick (plane.js's trick: `input` from its own keys), on top of how it flies, as
+	// flightSpin turns one: turned at the car's rates, and with no roll or loop asked for, righted at
+	// FLIGHT_RIGHTING times `righting`.
+	planeSpin( dt, input, righting = 1 ) {
+
+		this.turn( dt, input, FLIGHT_DAMP );
+		if ( ! input.pitch && ! input.roll ) this.air.q.slerp( LEVEL, 1 - Math.exp( - FLIGHT_RIGHTING * righting * dt ) );
+
+	}
+
+	// How fast (rad/s) a plane's loop turns its nose at most: the car's flip rate, slower for a big
+	// vehicle (trickRate). A loop's size is its speed over this (plane.js).
+	get loopRate() {
+
+		return AIR_RATE.pitch * this.trickRate;
 
 	}
 

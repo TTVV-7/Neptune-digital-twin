@@ -1,9 +1,10 @@
 # World Drive (worlddrive.app)
 
-World Drive is the second app in this repository: pick anywhere on Earth from a globe of Google's
-photorealistic 3D tiles, drop in and drive the real world, arcade style; or switch the globe to
-[the Moon](#the-moon), [Mars](#mars) or the asteroids [Vesta and Ceres](#vesta-and-ceres) and drive
-that ([worlds](#worlds)). It shares `src/` with the
+World Drive is the second app in this repository: pick a world from the Solar System it opens on,
+[the Moon](#the-moon), [Mars](#mars), the asteroids [Vesta and Ceres](#vesta-and-ceres) (each built
+from real spacecraft maps, with [Discoveries](#discoveries) to collect) or the Earth, where you pick
+anywhere from a globe of Google's photorealistic 3D tiles, drop in and drive the real world, arcade
+style ([worlds](#worlds)). It shares `src/` with the
 construction app (the tiles, the models, the driving) but has its own page, build, Worker and
 address, and the construction app is unchanged by it.
 
@@ -16,7 +17,10 @@ address, and the construction app is unchanged by it.
 
 ## Playing
 
-1. **The globe.** It opens on the whole Earth, slowly turning, facing your part of the world (going by
+1. **Pick a world.** A plain load opens on the Solar System ([the orrery](#picking-a-world-the-orrery)):
+   the Moon, Mars, Vesta, Ceres or the Earth (picking the Earth reloads the page into an Earth visit,
+   which uses one of the day's free Earth drives). Closed without a pick, it's the Moon.
+   **The globe**: the Earth's opens on the whole Earth, slowly turning, facing your part of the world (going by
    your clock). Drag to spin it, scroll or pinch to zoom, right-drag or two fingers to tilt.
 2. **Pick a place**, any of these ways:
    - **Search** for a place or an address and press Enter (or **Go**). It only searches when you ask,
@@ -63,6 +67,11 @@ address, and the construction app is unchanged by it.
 6. **Challenges** (under **Worlds** on the panel, and in the pause menu): a daily, a weekly
    and a monthly one on each world, a checkpoint sprint, a hunt for stars or a drive to a landmark
    against the clock, each with its own board ([Challenges](#challenges)).
+7. **Discoveries and the data lens** (on the Moon, Mars, Vesta and Ceres): glowing beacons at real
+   named places, the landing sites and the great craters, volcanoes and peaks, to drive or fly to and
+   collect, each with a card of true facts and its height in the very data the ground is built from,
+   in a collection book a world ([Discoveries](#discoveries)); and **L** (or **Heights**) colours the
+   ground by its real measured height, with a scale bar naming the dataset ([Data lens](#data-lens)).
 
 ### Keys
 
@@ -72,12 +81,14 @@ address, and the construction app is unchanged by it.
 | A / D | Steer |
 | Space | Drift: hold it and steer round a bend, let go for a mini-turbo; tap it to jump (about 5 m, over a car or a barrier) |
 | Shift (or B) | Booster: hold for overdrive while the gauge lasts; let go to save the rest |
-| F or T | Plane: your ride turns into a little plane ([Plane mode](#plane-mode)); again bails out (a parachute near the ground), or lands it low down |
+| F or T | Plane: your ride turns into a little plane ([Plane mode](#plane-mode)); again bails out (a free fall, W to dive, then a parachute; S under it drops faster), or lands it low down |
+| Q / E (or , / .), Z / X (or /) | As a plane: roll it left / right (a barrel roll), loop it nose up and over / nose down and under ([Plane tricks](#plane-tricks)) |
 | In the air | A / D spin, W / S flip (W forward, S back), Q / E roll (or Space with A / D) |
-| R | Stuck? Back on the road a few metres on (on water too) |
+| R | Stuck? Back on the road a few metres on (on water too). As a plane: a whole roll, a loop with Space, an outside loop with Shift ([Plane tricks](#plane-tricks)) |
 | C | Chase or driver's-seat camera |
 | Wheel | Chase camera nearer or farther |
 | M | Back to the globe; on the globe, the [worlds](#picking-a-world-the-orrery) (and M again closes them) |
+| L | On another world, colour the ground by its real measured height ([Data lens](#data-lens)) |
 | H | Horn, for those [driving with you](#driving-with-others) (only while that's on) |
 | Esc | Pause: keep driving, change ride, or back to the globe |
 
@@ -159,15 +170,27 @@ Hit something (a wall, a building, a parked car, a barrier) and you don't stop: 
 under each, a fin rises at the back, and on a model car the wheels fold out flat as fans. It lifts
 a few metres off the ground and hovers. **W** speeds up and **S** slows down (to a hover; let go
 of both and it cruises at that speed), **A**/**D** turn and bank, **Space** (or **F**) climbs and
-**Shift** comes down. **T** again **bails out**: the wings fold away and the car falls, no faster
-than a skydiver (55 m/s, its speed across the ground easing off to the ride's own), and a
-**parachute** opens as it nears the ground (30 m over it, or 0.8 s of the fall over it, falling
-faster: `PARACHUTE` in `src/plane.js`), sinking at 5 m/s, steered a little with **A**/**D**, and
-righting it to land on its wheels, driving on at the speed it landed with (never more than the
-booster's). Press **T** while falling to be a plane again. Within 12 m of the ground, **T** flies it
-down by itself instead and folds it back into a car on the ground (**T** on the way down flies on).
-Others driving with you see the plane fold away and the car come down, without the parachute.
-On a touch screen the ✈ button under CAM is T, FLY is up and BOOST is down.
+**Shift** comes down. **T** again **bails out** ("Freefall! W dive · A/D steer"): the wings fold away
+and the car falls as fast as a skydiver, 90 m/s spread out on the Earth and 144 m/s head-down with
+**W** (`DROP` and `dropTerminal` in `src/plane.js`). It speeds up at the world's own gravity, but never
+slower than 5 m/s² (`DROP.pull`): there's no air on the Moon, Vesta or Ceres to set a falling speed
+and a real fall there would crawl for minutes, so their cap is a game's, 60 m/s (96 diving), and
+Mars's about 68. What's left of the plane's speed across the ground over the ride's own is shed in a
+couple of seconds (`DROP.shed`), so a bail-out at 3,500 km/h reads as a fall, not a car skimming the
+ground. A **parachute** opens in good time before the ground: 30 m over it, 60 m on the Earth, or 1.2 s
+out at the speed it's coming at the ground, counting ground rising along the way it's going (a ray 1 s
+ahead finds a slope on Mars or Vesta before the car reaches it: `chuteHeight` and `closingSpeed`), so on
+the Earth it opens about 108 m up, 173 m diving. Under it the car comes down slowly, 2.5 m/s on the
+Earth, 1.5 on Mars and 1 m/s on the Moon, Vesta and Ceres (`chuteSink`: the square root of the gravity,
+never under 1 m/s, or the asteroids would hang for minutes), and **S** (or ↓) spills air from the
+canopy to come down twice as fast. **A**/**D** steer it a little, and it rights the car to land on its
+wheels, driving on at the speed it landed with (never more than the booster's). Press **T** while
+falling to be a plane again. Within 12 m of the ground, **T** flies it down by itself instead and folds
+it back into a car on the ground (**T** on the way down flies on). Others driving with you see the
+plane fold away and the car come down, without the parachute. On a touch screen the ✈ button under CAM
+is T, FLY is up and BOOST is down, GAS dives and BRAKE spills air. (Before, it fell at no more than
+55 m/s and sank at 5 m/s under the canopy: now the fall is quicker and the parachute slower, so a
+bail-out feels like a skydive and then a float.)
 
 **Faster the higher you fly.** Just off the ground it goes up to twice the ride's own top speed
 (`CAR_SHARE`: 320 km/h in the pickup), a plane's speed even low down. Higher up the table below
@@ -177,31 +200,84 @@ takes over where it's faster, and climbing and coming down get quicker too (`SPE
 | Height over the ground | Top speed |
 | --- | --- |
 | 0 m | 60 km/h |
-| 30 m | 100 km/h |
-| 150 m | 250 km/h |
-| 600 m | 500 km/h |
-| 2 km | 900 km/h |
-| 6 km | 1,800 km/h |
-| 12 km (the ceiling) | 2,700 km/h |
+| 30 m | 130 km/h |
+| 150 m | 325 km/h |
+| 600 m | 650 km/h |
+| 2 km | 1,170 km/h |
+| 6 km | 2,340 km/h |
+| 12 km (the ceiling) | 3,500 km/h |
+
+(Each about 30% faster than it was, 2,700 km/h at the ceiling before, but for the crawl near the
+ground. Faster over the Earth means more of Google's 3D tiles fetched a minute while flying: no more
+on Google's bill, which is by the session (below), but more for the player's device to download and
+draw; if phones struggle, `SPEEDS` is the one place to turn it back.)
 
 Coming down, it eases off to the top speed for its height. It
 never goes below 0.8 m over the ground (a slope is flown up), stops short of a wall ("Bonk!") and
 never climbs through a roof or a bridge. Over the ceiling it comes back down to it: where the scene
 stays where you dropped in (the Earth, the Moon, Mars), the world curves away under you, and a long
 level flight would otherwise climb out of reach of the others (on the Moon, after about 250 km at
-the ceiling). Its speed goes to others as it is (up to 790 m/s, under the room's 800: `MAX_SPEED`
-in `live.js`), so a plane at 2,700 km/h is seen flying between updates, not jumping 150 m at a time.
+the ceiling). Its speed goes to others with it, so a plane at 3,500 km/h is seen flying between
+updates, not jumping 150 m at a time. The room takes up to 1,100 m/s (a plane flat out is 972 m/s,
+and up to 1,087 over the top of a loop), but for now what's sent is held to 790 (`MAX_SPEED` in
+`live.js`): a page still open from before the plane got faster drops anything over its old 800.
+That's still seen as flying, not a jump (`teleported` allows half again the speed sent), and can go
+up to 1,090 once those pages have aged out.
 
-**It's for looking round, not for points.** It's kept apart from everything scored:
+**What it scores and what it doesn't.** Its own tricks score (below); everything else is kept apart:
 
 - **No challenges.** T does nothing during a challenge's countdown or run ("No plane during a
   challenge run"), so no board's time is ever flown. Times are still checked against the fastest
   anything drives along the ground (`FASTEST` in `challenge-rules.js`), which the plane isn't.
-- **No stunts or boost.** Turning into a plane drops a jump's tricks unlanded and puts the booster
-  out. As a plane there's no hop, drift, booster or tricks. Once it's down, a **new stunt run**
-  starts (the last one's place may be far behind).
+- **No car stunts or boost.** Turning into a plane drops a jump's tricks unlanded and puts the booster
+  out. As a plane there's no hop, drift or booster. Its run carries on once it's down: what its tricks
+  scored is kept, and a trick boost paid in the air is dropped as it lands, or the car would shoot off.
 - **No levels.** Its distance, air and the areas it flies over don't count for XP (`driven` in
   `main.js`).
+
+#### Plane tricks
+
+With stunts on (World Drive's `crash: 'launch'`), the plane rolls and loops on top of how it flies:
+**Q** / **E** (or **,** / **.**) roll it left or right, **Z** (or **/**) loops it nose up and over and
+**X** nose down and under; roll keys while looping make a rolling loop, both scoring. Let go and it
+rights itself. On a touch screen, as a plane the ↺ button is **TRICK**: tapped, a whole roll toward the
+way you're steering (right if you aren't); held with UP, a loop; held with DOWN, an outside loop. On
+a keyboard **R** is that button (it has no road to put the plane back on while flying): tapped, a
+whole roll; held with **Space**, a loop; held with **Shift** (or **B**), an outside loop. The plane's
+flash names the first of them ("Plane! Space up · Shift down · Q/E roll · Z loop", then the bail-out key),
+and the keys card lists Q/E and Z/X while it's a plane.
+
+They're the car's own flight-trick layer (`Driver.enterAir( true )` and `planeSpin` in `drive.js`), so
+they're drawn by `pose()` and others see them in the car's quaternion with nothing new in the live
+protocol. A loop also lifts the plane over a hump as high as the loop's radius (its speed over the
+trick's turn rate: about 177 m for a kart flat out, 321 m for the biggest rides, a few metres at the
+crawl), read from where the nose is now rather than from how far it has turned in all, so a loop let go
+of half-way rights and leaves the plane where it went in (`noseAngle`, `followLoop` and `loopOffset` in
+`src/plane-tricks.js`). The hump goes into the climb others are sent, so their copy loops too. An inside
+loop starts only over 40 m above the ground (it climbs first), an outside loop only over its whole dip
+plus 40 m (it dives first); below that the nose input is ignored and it rights twice as fast. Rolls go
+at any height. The floor, the ceiling and roofs still hold it.
+
+A pass is paid once no trick key has been held for 0.4 s and it's back within 15° of level (and,
+whole turns only, on bailing out, coming down to land or getting out), through `payTricks` like a
+jump's: the combo bonus for two or more, the multiplier, the leaderboard's best jump, XP. A whole turn
+give or take 40° counts. A roll is a "Barrel roll" (800, the car's name and points, so the leaderboard
+already takes it), a loop "Loop!" or "Outside loop!" (1,000, a flip's points). Since a plane never has
+to land a trick, it's bounded (`PLANE_TRICKS` and `HEIGHTS` in `src/plane-tricks.js`):
+
+- at most **3 rolls and 2 loops** score in one pass (more still show on the HUD, scoring nothing);
+- the same kind again in the same flight is worth **half** the last (1, 0.5, 0.25...), so variety pays,
+  down to nothing once it rounds below 10 points (it still shows), so each kind's worth over a flight
+  is bounded;
+- flown more than **300 m** over the ground (at its highest in the pass) a pass is worth half, over
+  **2 km** a tenth: the skill is doing it low down, not holding Q at 12 km.
+
+So one pass is worth at most (3 × 800 + 2 × 1,000) × 1.5 = 6,600 before the multiplier, about a good
+car jump. The multiplier ends in the air as it does on the ground: 6 s without a paid pass
+(`CHAIN_TIME`, in `updatePlane`), or a pass of whole turns that pays nothing (`endPass`), puts it
+back to 1, so it can't be held at ×10 for a whole flight. The Worker's `TRICK` pattern (`worker/drive/scores.js`) takes "Loop!", "Loop ×2", "Outside
+loop!" and "Outside loop ×2", never ×3, matching the per-pass cap; the other limits are the page's (a
+plane's barrel roll can't be told from a car's there, the same trust as every car trick).
 
 **Google's tiles.** Google bills by the session (one a page load: see the top of `main.js`), not
 by the tile, so flying high or far costs no more there. What a fast plane costs is your device's
@@ -212,7 +288,8 @@ Driving, the tiles are as sharp as ever.
 **Driving with others.** They see you as a plane too: each state you send carries `FLAGS.plane`
 (`live-protocol.js`) while your wings are out, and their copy of your car unfolds the same kit at
 the same pace, flies with you, and folds it away as you fold yours (`planeOf` in `ghosts.js`). A
-plane's states go up to 800 m/s (`TOP_SPEED` there) and, flying fast, more than `TELEPORT` m apart
+plane's states go up to 1,100 m/s (`TOP_SPEED` there: 972 m/s flat out, a loop's hump on top, and the
+rounding) and, flying fast, more than `TELEPORT` m apart
 are still flown between rather than jumped (`teleported`).
 
 **Wheels.** The model cars' wheels (`cars.js`) and the go-kart's (`kart.js`) fold out flat as
@@ -220,6 +297,21 @@ fans. The other code-built rides (coupe, bus, monster truck, hovercraft, lunar r
 and rocket dragster) get the wings but keep their wheels as they are.
 
 **Not yet:** flying high enough to come out on the globe and pick somewhere else.
+
+**How it's tested**: `npm run test:drive-plane` (`scripts/test-drive-plane.mjs`, node, no browser),
+26 tests: the speeds (3,500 km/h at the ceiling, still 60 km/h off the ground) and the live protocol
+taking a plane flat out with a loop's hump on top while what's sent stays under old pages' 800; the
+drop (90 m/s spread out on the Earth and never faster, 144 diving, 60 m/s on the Moon within 13 s, the
+speed across the ground down to the car's own within 3 s of a bail-out at 3,500 km/h); the parachute
+(2.5 m/s on the Earth, 1 on the Moon and Vesta, twice that spilling air, opening 108 m up on the Earth
+and earlier over rising ground) and both flashes; the tricks' rules (whole turns give or take 40°, the
+per-pass caps, halving, the heights' shares, a repeat rounding to nothing, the nose angle, the points
+still drive.js's, the Worker's `TRICK` pattern); and tricks flown on a stand-in driver (Q a barrel
+roll paid once level, Z and X loops, the second worth half, a TRICK tap, TRICK with UP, a loop let go
+of part-way coming back, the hump sent to others, the floor and the outside loop's height, bailing out
+mid-roll, a roll flown high, and nothing without stunts). `scripts/test-drive-live.mjs` passes a
+1,000 m/s plane state and refuses 1,150; `scripts/test-drive-live-ui.mjs` has one driver roll the
+plane (Q) while the other sees it turn, the roll scoring once level and kept after bailing out.
 
 ### Boosting
 
@@ -1602,6 +1694,8 @@ always had.
   opened on a link to it (`visit_kind:<id>_link`); its drives, for its
   [achievements](#achievements-and-rewards); and three [challenges](#challenges) of its own, laid out
   on its own heights.
+- The [data lens](#data-lens) (L): its ground coloured by its real measured height, the dataset named;
+  and its [Discoveries](#discoveries), real named places to drive to and collect.
 
 ### Picking a world: the orrery
 
@@ -1622,20 +1716,43 @@ world you're on, which also stops a switch to another still loading). Mercury an
 the game yet", the giants have "no ground to drive on": their sheets say so, with no Drive. While
 this visit's Earth drives are spent the Earth's sheet says so ("The Earth is used up for today"),
 and its Drive shows the [used-up notice](#what-a-visit-costs-and-how-its-capped) as the Earth
-always does.
+always does. Each far world's sheet carries a line on the data its ground is built from and how many
+of its [Discoveries](#discoveries) are found, with its collection a tap away (`sheetExtra`); the
+Earth's says Discoveries are on the other four.
 
-- **Opening it.** **Worlds**; **M** on the globe; the panel's **On other worlds** row ([who's driving
-  now](#on-the-globe-whos-driving-now), when two or more other worlds have drivers); or a link with
-  `?worlds=1`, which opens it as the page loads and is then taken out of the address (never over a
-  challenge link's card). Never on a plain load, nor off the globe, nor over another open dialog
-  (the Garage, the leaderboard, challenges and the rest). On the dev server
-  `window.worldDriveOrreryTest = { onLoad: true }` does what `?worlds=1` does, for the tests.
+- **Opening it.** **On a plain load**, first: anyone arriving at worlddrive.app sees the Sun's family
+  and picks a world, so the Earth isn't the one everyone drives just because the page used to start
+  there. A plain load spends none of the day's Earth drives: it asks the Worker for a free visit
+  (`/api/visit` with `{ world: 'moon', start: 'orrery' }`, counted `orrery` on the admin page) and
+  nothing is loaded behind the orrery (no world's heights or colours: the Earth's globe is hidden).
+  Picking the Moon, Mars, Vesta or Ceres turns to it with no reload. Picking the Earth reloads the page
+  at the Earth's address, `/?worlds=0` (or an Earth spot's link, `/?spot=…`, or a challenge's,
+  `/?challenge=…`, so what was picked survives the reload: `src/drive-app/orrery-first.js`'s
+  `earthUrl`), which asks for an Earth visit as before; its sheet says so ("The Earth uses one of
+  today's free Earth drives (Google's 3D tiles). Picking it reloads the page."), and adds "Today's free
+  Earth drive may be used up." when the last Earth visit in this browser was turned away today (only a
+  word: Drive still reloads, and the Worker decides). It opens with the world last picked here
+  (`localStorage['world-drive.last-world']`) already chosen and its Drive focused, so a returning player
+  is one tap or Enter away; the first time, the whole Solar System. Closed without a pick (Esc, ✕, M),
+  the page turns to the Moon with a toast, "You're on the Moon. Worlds (M) to pick another." ("Tap
+  Worlds" on a touch screen). Not on a plain load: a link to a place (`?spot=`, `?at=`), a challenge
+  link, a party link (`?party=`), the way back from paying (`?supporter=thanks`), `?worlds=0`, a page
+  with no WebGL, and the Worker's "resting" notice's test pad. Otherwise: **Worlds**; **M** on the globe;
+  the panel's **On other worlds** row ([who's driving now](#on-the-globe-whos-driving-now), when two or
+  more other worlds have drivers); or a link with `?worlds=1`, which opens it over an Earth visit as
+  the page loads and is then taken out of the address (never over a challenge link's card). Never off
+  the globe, nor over another open dialog (the Garage, the leaderboard, challenges and the rest). On
+  the dev server a test's browser (`navigator.webdriver`, read only there) gets the plain Earth load,
+  so the suites written for it go on as they were, unless `window.worldDriveOrreryTest = { first: true }`;
+  `{ onLoad: true }` does what `?worlds=1` does.
 - **Closing it.** Esc (first back from an other body's sheet to the whole Solar System, then
   closed), **M**, its ✕, a Drive, a spot or a **Join**, and anything that leaves the globe (a
   drop-in: main.js's `setMode` closes it first). The focus goes back to what opened it, or to
   **Worlds** if that's gone. It closes before a Drive, spot or Join acts, so the panel's back first.
 - **For the keyboard and screen readers.** It's a native modal `<dialog id="orrery">`
-  (`showModal()`: the page behind it inert, as every other dialog here), titled "Pick a world". The
+  (`showModal()`: the page behind it inert, as every other dialog here), titled "Pick a world" and
+  described by its intro line, "Every surface here is built from real spacecraft maps."
+  (`aria-describedby="orrery-intro"`), the first thing a screen reader (and a crawler's renderer) meets. The
   five worlds you can drive on are a radio group ("Worlds you can drive on"), the one you're on
   checked and focused as it opens: the arrow keys (round from one end to the other), Home and End
   move along them and show each one's sheet, Space picks, Enter drives there; only the one picked is
@@ -1683,9 +1800,17 @@ always does.
   `window.drive.orrery` (`open()`, `close()`, `isOpen`) is there for the tests.
 
 **How it's tested**: `npm run test:drive-orrery-ui` (`scripts/test-drive-orrery-ui.mjs`, on
-`TEST_VITE_PORT`, 5601 if unset), fourteen tests in Chromium on the test pad: never open on a plain
-load, and nothing of it nor of the other worlds fetched until it opens, then one WebGL context
-still; opened by **Worlds** (the focus back on it as it closes), by **M** (and closed by M, not
+`TEST_VITE_PORT`, 5601 if unset), 22 tests in Chromium on the test pad. **First, on a plain load**
+(each page asking for it with the seam's `{ first: true }`): the free visit asked for (`start:
+'orrery'`), not the Earth's, nothing of any world fetched behind it, and its intro; Esc without a pick
+on the Moon with the toast; Mars picked with no reload, the Earth's sheet saying it reloads, and the
+Discoveries line from `sheetExtra`; the Earth picked going to `/?worlds=0` (which asks for the
+Earth's visit and doesn't open it) and an Earth spot to its link; none for `?worlds=0`, a place's,
+a challenge's or a party's link or `?supporter=thanks`; the used-up word, with Drive still going to
+`?worlds=0`; the world last picked opening with its sheet up and Drive focused; a Mars link's Earth
+going to `/?worlds=0`; and who's driving still pointing to the Earth's drivers. **The rest**, as
+before: a test's browser never opening it on a plain load without the seam, and nothing of it nor of
+the other worlds fetched until it opens, then one WebGL context still; opened by **Worlds** (the focus back on it as it closes), by **M** (and closed by M, not
 opened again), by `?worlds=1` (then out of the address) and the dev server's seam, and closed by a
 drop-in; Esc, with the focus left on the scene too, the pin kept; the eleven bodies, the five a
 radio group in the game's order and the rest named for why not; an other body's sheet with no
@@ -1697,6 +1822,13 @@ it (the focus back on the row), from a stand-in `/api/online`; 360 × 640 and 74
 wider than the screen, every target 44 px or more and Drive in view; nothing drawn while still under
 reduced motion; and the ad not asked for under it and not lost to it. `scripts/worlds-ui.mjs` is
 how every other UI test picks a world (**Worlds**, then the world, then Drive).
+`npm run test:drive-orrery-first` (`scripts/test-drive-orrery-first.mjs`, node, 15 tests) is which
+loads open on it (`orreryFirstFor`: a plain load does, whatever else is in the address; a place's,
+a challenge's or a party's link, the way back from paying, a `/c` path and `?worlds=0` or `=1` don't;
+a test's browser only with its seam), `earthUrl` and `earthTarget` (every address they make for the
+Earth is one that doesn't open the orrery, and keeps what was picked: a spot, a pin, a challenge with
+its friend's handle), and what's kept in the browser (the used-up word today's only; storage that
+throws is no storage, never an error).
 
 (Before, the panel had a button a world, a pill of five radio buttons, `.worlds`.)
 
@@ -2584,6 +2716,205 @@ back to the start with the gate where it was, not passed. It takes about 7 minut
 software renderer, Vesta's ground drawing at about a frame and a half a second, so the car is moved
 by setting its speed and way rather than with held keys.
 
+## Data lens
+
+The far worlds are built from spacecraft measurements, but a photograph laid over hills doesn't say
+so. The data lens does: **L** or the **Heights** button (bottom right; on a phone at the top) colours
+the Moon's, Mars's, Vesta's or Ceres's ground by its real measured height, on the globe and while
+driving, with a scale bar that names the dataset. It isn't on the Earth: its ground is Google's
+tiles, with no height grid of ours under it.
+
+### What it shows
+- The colours are **viridis** (dark violet low, yellow high: even steps to the eye and readable with
+  colour blindness), with thin contour lines, every 1,000 m over the whole world and every 250 m
+  around the car; lines fade where they'd crowd closer than a few pixels. The light still falls on the
+  slopes, so the relief reads under the colours.
+- Heights are over each world's datum, the level its mission's team gives heights over: the Moon's
+  1,737.4 km sphere (LOLA's reference), Mars's areoid (its "sea level"), and on Vesta and Ceres their
+  level spheroids (285 × 229 km for Vesta, the one the Dawn team uses; 482 × 446 km for Ceres, the
+  game's own), not the spheres their maps are laid on, whose "heights" would mostly just be the
+  asteroid's flattening. The same sum (`levelRadius` in level.js) gives the heights on the Discoveries'
+  cards, so the two always agree.
+- **Only the measured grid.** The game adds small made-up craters and rolling ground for close-up
+  driving; they're in the ground's shape but not in the lens's colours. Where the colours stop
+  changing is where the data's detail ends: about 7.6 km on the Moon, 7.4 km on Mars, 570 m on
+  Vesta, 1 km on Ceres.
+- The bar: the scale's ends, 0 (the datum) when it's in range and one round value between; under it
+  what the colours are ("Height above Mars's datum (the areoid) · lines every 1,000 m") and where the
+  heights come from and what the game did to them ("Heights: NASA MGS MOLA (MEGDR, 1/16°), resampled
+  to a 1/8° grid (~7.4 km), above the areoid…").
+- **Whole world / Around me** (driving only): the world's measured lowest to highest, or 5 km either
+  side of the car's height, re-centred a kilometre at a time (on Mars most of the planet otherwise
+  sits in the violet third between Tharsis and Hellas). The globe always shows the whole world.
+- **Here:** while driving, the height under the car twice a second ("Here: 4,510 m below the datum
+  · MOLA") with a ▲ on the bar, read from the same grid as the colours, so the number matches the
+  colour under the wheels. Drive uphill and watch it climb the real data.
+- Whether it's on and which range was picked are kept per browser (`localStorage`
+  `world-drive.lens`).
+
+### How it works
+`lens.js` makes, the first time the lens is on for a world, a texture of the world's height grid
+(`body.heights()`, body-height.js's `heightsTable`: height.bin as loaded) in half floats, metres over
+the datum (`lens-heights.js`'s `lensTexels`), and hands it to the world's own ground material
+(body.js: `lensAmount`, `lensHeights`, `lensRamp`, `lensLow`, `lensHigh`, `lensStep`). The fragment
+shader reads it by the same longitude/latitude it reads the picture by, so nothing is rebuilt and it
+works at globe scale. Its rows are written south first: a DataTexture's first row is at the bottom,
+where body.js's picture coordinates have the south pole (the picture only lines up because image
+textures are flipped on upload). About 8 MB per world (the Moon's 2 MB), made once, in a tenth of a
+second or two (the button says "Measuring…"), let go when the world is left. Off, it costs the shader
+one uniform test; on, two texture reads per pixel. It never touches the physics or the Earth.
+
+### How it's tested
+`npm run test:drive-lens` (node, on the real height.bin files): `levelRadius` (spheres unchanged,
+Vesta's and Ceres's spheroids at the equator and poles, and Vesta spanning about +19.6 to −22.4 km
+over its spheroid), the texture (one value per cell; Mars's highest at Olympus Mons and lowest in
+Hellas, the grid's own values; rows south first; Vesta's over its spheroid), the readout agreeing with
+the texture, the ranges, ticks and labels ("1,930 m below", never "−1,930 m below"), and every world
+naming its dataset. `npm run test:drive-lens-ui` (browser): nothing on the Earth; on Mars's globe L
+colours the ground (Olympus Mons's summit yellow with it, not without), the bar names MOLA and the
+areoid; L again takes it off; driving at Bradbury Landing shows "Here: … m below the datum · MOLA"
+(Gale's floor) and Around me / Whole world change the scale; kept across a reload.
+
+## Discoveries
+
+Driving on the Moon, Mars, Vesta and Ceres is driving on real mission data, and Discoveries show it
+off: real, named places on those four worlds (68 of them: 21 on the Moon, 20 on Mars, 13 on Vesta,
+14 on Ceres) each marked by a glowing beacon. Drive or fly to one and it's collected, with a card of
+true facts about it, its height in the very data the ground is built from, and that data named. Each
+world has a collection book, and they count toward XP and achievements. The Earth has none: its
+ground is Google's tiles, not data the game can show or credit as its own. In the code they're
+`finds` everywhere ("discoveries" already means the first drives in the Earth's areas and spots).
+
+**The list** (`src/drive-app/finds-data.js`): each find's id is its place's id in the world's
+`*-places.js`, which is where its name and coordinates come from, never typed twice. Landing sites
+of the famous missions (Apollo 11, 15 and 17, Lunokhod 1, Chang'e 4, Chandrayaan-3; Curiosity,
+Perseverance, Viking 1, Pathfinder, Opportunity, Zhurong) and features whose real shape reads at the
+grid's size (Tycho, Copernicus, Orientale, the Moon's highest and lowest places; Olympus Mons and its
+summit, Valles Marineris, the Tharsis volcanoes, Hellas, Badwater, Gale and Mount Sharp; Rheasilvia
+and its central peak, the Snowman; Occator and its bright spots, Ahuna Mons, Kerwan...).
+
+**The facts rule.** Every fact on a card says where it's from (`source`, kept in the data, never
+shown, and checked by the test): the hand-checked pages of `drive/site/<world>.js`, the place's own
+line in `*-places.js`, the IAU's gazetteer for a namesake, NASA's NSSDCA for a mission's date, or
+MOLA's data file's own label for its highest and lowest. Nothing else; where the sources disagree
+(Rheasilvia's size: 450 km in the gazetteer, about 505 km since Dawn), the number is left out. No
+general sentence about how a world's features are named.
+
+**Heights are measured, not typed.** `scripts/make-finds.mjs` (run by hand) reads each find's height
+from the world's own `height.bin` the way the game reads it (`body-height.js`), with the made-up
+craters and rolling ground left out, and writes `src/drive-app/finds-heights.js`: over the Moon's
+1,737.4 km sphere, over Mars's areoid, and on Vesta and Ceres over the world's `level` spheroid
+(`level.js`'s `levelRadius`, which the data lens uses too, so the card and the lens's scale bar give
+the same number). For a feature with a `relief`, also the lowest and highest ground within that many
+km ("Rises 5,800 m from its lowest to its highest point within 60 km"), kept within the feature
+itself (no wider than its radius), and left out where even that ring takes in ground that would read
+as a wrong size: Ahuna Mons (the ground falls far below its foot on one side, so the rise comes to
+well over its 4 km) and Kerwan (9 km from its middle within its own radius, beside "shallow for its
+size"). A mountain or volcano whose beacon, at its named point, is 500 m or more below the highest
+ground in its ring says so ("… at the beacon; the highest ground within 30 km is 2,870 m above":
+Mons Huygens's point is 2 km under its summit in LOLA's grid; a Tharsis volcano's is its caldera),
+so the height isn't read as the peak's. Where a published figure sits
+beside the measured one, the card says why they differ: "MOLA's 1/16° grid has it at 21,171 m above;
+this map's 7.4 km cells average it to 21,160 m above." Every card carries the grid's size and a note
+that narrow peaks and pits read lower or shallower than they are, and every landing site a "What
+you're looking at" line: the lander isn't in the map, this is the ground around it. The test
+(`test-drive-finds.mjs`) measures every height again and fails if the file is out of date.
+
+**Finding them.** On the globe each is a pin (gold not found, cyan found); clicking one opens its
+tile in the book. While driving, a pointer always names the nearest one not yet found and how far
+("Tycho · 412 km"), at the screen's edge when it's out of view; beacons stand over those within
+150 km, taller the further off. A drop-in on one not yet found (the search, a spot, a pin, the book's
+"Drive to it") starts the car 2.5 km from it, facing it from the flattest of eight ways in. It's
+collected within 150 m in a car, or within 250 m and no more than 2,000 m up in the air (a plane, a
+jump, falling, a parachute), tested along each frame's step so a fast plane on a slow phone can't
+skip over one; and only once the car has been a kilometre from it since it was put down (so a drop-in
+right on one doesn't count), which the approach spawn meets by itself. That rule starts again only
+when the car really is put down somewhere (a drop-in, Go beside, a challenge's Retry), never on
+resuming from a pause or changing ride, where it hasn't moved. In a challenge's run the card is small
+and nothing else changes; finds score no stunt points and send nothing to a room. The card goes when
+the drive pauses (so Esc, which pauses, closes it), its Collection button pauses the drive before
+the book opens over it (as every dialog opened mid-drive does), and on a touch screen it sits above
+the driving buttons, never under a pedal. On the dev server the approach spawn is off unless a test
+asks for it (`window.worldDriveFindsTest = { approach: true }`), since the other suites drop in on
+those same places and look for the car on them.
+
+**Kept and counted.** Collected ones are kept in the browser (`localStorage['world-drive.finds']`),
+so they're everyone's, nickname or not. With a nickname they go with the progress reports as
+`feats.finds` (a list of ids): the Worker takes each once (real ids only, a 400 otherwise), at most
+one and one more a minute a report (`findsRate`), 40 a UTC day (`TALLY_DAY.finds`) and 10 in a new
+nickname's claim (`CLAIM_TALLY.finds`), kept in `players.tallies` with the other trusted counts (no
+migration; never in the `discoveries` table), each worth 100 XP (`XP.find`). Nothing is lost to a
+cap: the answer lists the ones it took (`accepted.finds`) and the rest go with the next report, and
+every answer carries the player's whole list (`finds`), whose missing ones the page sends again
+(`applyServer`): only those collected in this browser, never one that came from the Worker; the
+achievements answer carries the account's, all its players' together, which the book merges in (so a
+book filled on two devices is whole on both) but which isn't sent again as this player's, or one
+find could be paid on two players of an account. The Worker doesn't check where
+the car was: the stakes are a book, at most 6,800 XP once, and no board.
+
+**The collection book.** **Discoveries** (🔭, beside Achievements under your nickname, `profile.js`,
+with "n / 68" on it), a card's **Collection**, or a world's line in the orrery opens it: a dialog
+with a button a world ("Moon 3 / 21", the one shown pressed), a bar of how many are found, and a
+tile a find. A found one shows its card's facts, its height and the day it was found; one not yet
+found shows its name and region, **Drive to it** (the approach drop-in) and, on the globe, **Show on
+the globe**. Its foot names that world's data, as the card does. Each world's sheet in
+[the orrery](#picking-a-world-the-orrery) says how many are found there ("3 / 21 discovered") with
+the same **Collection** button. The count goes toward the [achievements](#achievements-and-rewards) and each
+first find is worth 100 XP ([How XP is earned](#how-xp-is-earned)).
+
+**Every world's list.** The ground each is driven on, and so the data every card names:
+
+- **The Moon** (21): heights from NASA LRO's laser altimeter (LOLA, a quarter degree, about 7.6 km),
+  colour from LRO's camera (LROC), over the 1,737.4 km sphere. Tranquility Base (Apollo 11, 1969),
+  Hadley Rille (Apollo 15, 1971), Taurus-Littrow valley (Apollo 17, 1972), Lunokhod 1 (Luna 17,
+  1970), Von Kármán crater (Chang'e 4, 2019), Shiv Shakti point (Chandrayaan-3, 2023); the craters
+  Tycho, Copernicus, Aristarchus, Plato, Shackleton's rim, Tsiolkovskiy, Alphonsus, Clavius,
+  Theophilus, Petavius and Schickard; Mons Huygens; Mare Orientale; the Selenean summit (the
+  highest point) and Antoniadi crater (the lowest).
+- **Mars** (20): heights from NASA Mars Global Surveyor's laser altimeter (MOLA, its 1/16° grid
+  resampled to 1/8°, about 7.4 km), colour from the Viking orbiters' mosaic (USGS), over the
+  areoid. Bradbury Landing (Curiosity, 2012), Jezero crater (Perseverance, 2021), Chryse Planitia
+  (Viking 1, 1976), Ares Vallis (Mars Pathfinder, 1997), Meridiani Planum (Opportunity, 2004), the
+  Zhurong site (Tianwen-1, 2021); Olympus Mons and its summit (the highest point), Arsia, Pavonis,
+  Ascraeus and Elysium Mons; Valles Marineris and Noctis Labyrinthus; Hellas and Argyre Planitia;
+  Badwater crater (the lowest point); Gale crater and Mount Sharp; Korolev crater.
+- **Vesta** (13): heights from DLR's model of its shape from NASA Dawn's framing camera (HAMO, about
+  570 m apart), the same camera's pictures, over the Dawn team's 285 × 229 km spheroid.
+  Rheasilvia and its central peak; Veneneia; the Snowman's Marcia, Calpurnia and Minucia; Divalia
+  and Saturnalia Fossae (the troughs); Matronalia Rupes; Vestalia Terra; the craters Cornelia,
+  Numisia and Aconia.
+- **Ceres** (14): heights from DLR's HAMO model from Dawn (about 1 km apart) and Dawn's pictures,
+  over the game's 482 × 446 km spheroid. Occator and its Cerealia Facula and Vinalia Faculae (the
+  bright spots); Ahuna Mons; Kerwan; Yalode, Urvara, Dantu, Haulani, Ernutet, Juling, Kait, Ezinu and
+  Azacca.
+
+Those datasets and their credits are the worlds' own (`worlds.js`, `FIND_DATA` in finds-data.js, the
+About box and the site pages), so a card never names a source the ground isn't made from. To add a
+find: give its place an id in the world's `*-places.js` (it needs one there anyway to be searched
+for), add it to `FINDS` with facts from one of the sources above and each one's `source`, run
+`node scripts/make-finds.mjs`, then `npm run test:drive-finds` (it fails on a fact over 160
+characters or with no source, a landing site with no "What you're looking at" line, two finds on a
+world within 2 km, or a stale height); the achievements' targets follow the list by themselves.
+
+**How it's tested**: `npm run test:drive-finds` (`scripts/test-drive-finds.mjs`, node, on the real
+height.bin files), 26 tests: the facts rule (every find a place on its world, once; every fact short
+with its source; every kind a real one; every landing site's seeing line; none within 2 km of another;
+every world naming its data), the heights (finds-heights.js within 10 m of the grid today, and the
+highest and lowest finds the grid's own highest and lowest ground), the card's words on each world
+(over the sphere, the areoid, the Dawn team's spheroid and the game's, the published figure beside
+the measured one, "… m below" and never a minus sign, every find a whole card), reaching one (150 m in
+a car, 250 m and 2,000 m up in the air, along the frame's step, the 1 km rule), the approach spawn,
+what's kept and sent again, every start spot with a find within 80 km, and the achievements' rules
+(eleven, every target from the list, real ids once, the caps, an account's union).
+`npm run test:drive-finds-ui` (`scripts/test-drive-finds-ui.mjs`, browser, on `TEST_VITE_PORT`, 5583
+if unset), six tests: the Moon's globe with a gold pin for each find in view and none on the Earth;
+a drop-in on Tranquility Base from the search starting about 2.5 km out, facing it; driven in, its
+card (the name, what you're looking at, its height in the map); the book at 1 / 21 and the orrery's
+sheet with the count and the Moon's data; a plane's pass 500 m over one collecting it, one at 2.5 km
+not; and a reload keeping them. The Worker's side is in `npm run test:drive-levels` (the claim, the
+report's rate and day caps, carry-over, XP, 400s, an account's union and its owed achievements, and
+an account merge's union).
+
 ## Driving with others
 
 Other people driving World Drive show up as they drive: their car, in their own ride and Garage
@@ -3343,6 +3674,7 @@ the Worker both import, so the page shows what the Worker counts.
 | Each minute driving with others in your room (someone else there, driving on the same world: not on the globe, nor a party friend on another world) | 6 |
 | The first drive in an area (live-protocol.js's `cellOf`, about 11 km across), once you've driven a km in it | 100 |
 | Each start spot, the first time (driving within 300 m of it, 100 m into the drive) | 250 |
+| A [Discovery](#discoveries) collected (the first time) | 100 |
 | The day's first drive (UTC days), once you've driven 250 m | 100, and 25 more for each day in a row before it, up to 200 from the fifth |
 | A landed trick run | half the square root of the run's points (10,000 points is 50 XP, 40,000 is 100), 300 at most a run |
 | With the Supporter Pass | everything ×1.5 |
@@ -4924,8 +5256,10 @@ starts one. World Drive is built so that one page load is one session, however m
   page reloads once to ask for an Earth drive as theirs.
 - **Every visit is counted for the admin page**, those over a cap too: `visit` for all of them, and
   `visit_kind` by where it went (`earth`, `earth_supporter`, `owner`, `moon_link`, `mars_link`,
-  `vesta_link` and `ceres_link` for a page opened on a link to one, and `moon_daily_cap` or `moon_visitor_cap` for one sent to the
-  Moon). The admin page shows **Earth drives** and **Over a cap, sent to the Moon** beside
+  `vesta_link` and `ceres_link` for a page opened on a link to one, `orrery` for a plain load's free
+  visit (its body's `start: 'orrery'`, with a free world; anything else in `start` is ignored), and
+  `moon_daily_cap` or `moon_visitor_cap` for one sent to the
+  Moon). An Earth picked from a plain load's orrery is then a second visit of its own, counted `earth`. The admin page shows **Earth drives** and **Over a cap, sent to the Moon** beside
   **Visits**, and each world's link visits in its card **The worlds**. (Before this, a visit turned away
   wasn't counted at all, so the visits seemed to stop at `DAILY_VISITS`.) A failed robot check shows **We couldn't check you're a person**
   with **Try again**. With no key set, it shows **World Drive is getting ready** (with a flat test pad
@@ -4954,6 +5288,17 @@ Cloudflare's cache for a day (by the tidied query, so `Furka  Pass` and `furka p
 answers only with `{ name, lat, lon, type }`, and refuses queries over 120 characters or with
 anything but letters, numbers and an address's punctuation. The globe's panel shows
 "Search © OpenStreetMap contributors".
+
+**A plain load's visit.** A plain load opens on the orrery and asks for a free visit, so none of the
+day's Earth drives is spent until someone picks the Earth (the page then reloads at `/?worlds=0` and
+asks for the Earth's, which the caps count as always). The `earth` visit stat now counts people who
+chose the Earth. The cost: picking the Earth takes two robot checks and two visit tokens (the free one,
+then the Earth's), and a reload (about 1-2 s on a computer, more on a phone; the game's code is
+cached). Free visits skip the Earth's caps, but their rooms count against `LIVE_ADDRESS_VISITS` (20 an
+address a day, live.js, only for visits that connect), so shared addresses (schools, carrier NAT) reach
+it a little sooner. Watch the admin page's `orrery` and `earth` rows after release; nothing changes
+unless they show a problem. `boot.js` keeps `localStorage['world-drive.earth-used-up']` (the UTC day an
+Earth visit was turned away, cleared by any that gets in) only for the orrery's Earth-sheet word.
 
 ## The leaderboard
 
@@ -5667,10 +6012,12 @@ and a route the same for everyone in its period, with its own board of each play
   recent places (`recent: false`: picking it there later would drop you kilometres from the
   landmark). Pressed as its period ends (the list a moment behind), a challenge that's over doesn't
   start: the list says why ("That challenge has ended, so a run of it wouldn't count. Here are the
-  new ones."). With today's Earth drives used up (or a page opened on a link to another world:
-  main.js's `earthClosed`), the Earth's cards say **Needs an Earth drive**, which shows why (the
-  used-up screen, or for a page opened on another world, the reload to the Earth); the other
-  worlds' start there as anywhere, from the used-up screen's **Drive on the Moon** too.
+  new ones."). With today's Earth drives used up (main.js's `earthShut`), the Earth's cards say
+  **Needs an Earth drive**, which shows the used-up screen; with the Earth a reload away (a plain
+  load's orrery, or a page opened on a link to another world: `earthClosed` with `later`) they say
+  **Opens the Earth (reloads)** and reload at `/?challenge=<id>` (with the link's `vs=` for a
+  friend's), where its card opens. The other worlds' start there as anywhere, from the used-up
+  screen's **Drive on the Moon** too.
 - **The run.** The car comes down at the start and a countdown, **3, 2, 1, GO!**, holds it there:
   the gas can be held down, ready, and nothing moves till GO. The visit's first time on a computer,
   the keys card is shown over the countdown, which is longer then (6 s, "Get ready" till the 3), and
@@ -7076,7 +7423,8 @@ within a day, or at once after a purge of the cache.
   gate on the Moon's own heights (where a ray down meets the ground built there, within a metre),
   driven through and posted with the Moon visit.
 - `npm run test:drive-mars-ui`: a Mars challenge from a link: a free visit (`{ token, world: 'mars'
-  }`), on Mars at once, "On Mars" first and the Earth's needing an Earth drive, a gate on Mars's own
+  }`), on Mars at once, "On Mars" first and the Earth's a reload away (**Opens the Earth
+(reloads)**, as no Earth drive was turned away today), a gate on Mars's own
   heights within a metre, driven through and posted with that visit.
 - `npm run test:drive-asteroids-ui`: a sprint on Vesta driven across a moving recentre, its time
   and ghost posted with the visit and taken by `checkPasses` and `ghostFault`, then **Retry** moving
@@ -7166,7 +7514,7 @@ migration `0009_achievements.sql`), and checks a construction ride wherever it s
 
 ### The list
 
-34 achievements, in the grid's order. **Checked**: the Worker counts it from its own records.
+45 achievements, in the grid's order. **Checked**: the Worker counts it from its own records.
 **Trusted**: only the page can say it (as it says what it drove for XP), so the Worker takes it within
 its caps.
 
@@ -7180,6 +7528,10 @@ its caps.
 | Touchdown, Red regular, Martian | Drive on Mars (1, 10, 50 times) | Mars drives (the same) in reports | trusted | |
 | Into the belt, Vesta regular, Vestal | Drive on Vesta (1, 10, 50 times) | Vesta drives (the same) in reports | trusted | |
 | Bright spot, Ceres regular, Cererian | Drive on Ceres (1, 10, 50 times) | Ceres drives (the same) in reports | trusted | |
+| Ground truth, Field notes | Collect 1, 10 discoveries | Discoveries collected (ids) in reports | trusted | |
+| Lunar notes, Red notes, Vesta notes, Ceres notes | Collect half of a world's discoveries (11, 10, 7, 7) | the account's finds on that world, together | trusted | |
+| Lunar atlas, Red atlas, Vesta atlas, Ceres atlas | Collect every discovery on a world (21, 20, 13, 14) | the same | trusted | |
+| Grand tour | Collect every discovery on all four worlds (68) | the same | trusted | |
 | First challenge, 10 challenges, 50 challenges | Finish a challenge (1, 10, 50) | `challenge_times`: a time on the board | checked | **Concrete mixer** (1), **Dump truck** (10) |
 | Top 10, Podium, Winner | Finish a challenge in its top 10, top 3, first | `final_rank` on a finished board, any period | checked | **Bulldozer** (top 10) |
 | Daily winner | First on a daily | `final_rank` on a finished daily | checked | |
@@ -7201,14 +7553,18 @@ supporters and everyone else earn them alike (`rideUnlock` in `vehicles.js` says
 - **Trusted counts ride on the progress reports** (`POST /api/progress`,
   [levels](#reports-and-how-cheating-is-limited)): the report's own km (already capped by the time
   since the last report, 450 km/h of it), and a new `feats: { moon, mars, vesta, ceres, looks,
-  rides }` (drives on each other world, Garage changes, the ids of rides tried, each since the last
-  report; a page from before Mars sends no `mars`, and one from before Vesta and Ceres no `vesta` or
+  rides, finds }` (drives on each other world, Garage changes, the ids of rides tried, and of
+  [Discoveries](#discoveries) collected, each since the last report; a page from before Mars sends no `mars`, and one from before Vesta and Ceres no `vesta` or
   `ceres`, which is none; `checkTallies`: whole numbers, ride ids the game
   offers, a 400 otherwise; a Garage change is counted only when it changes the look, `garage.js`).
   The Worker adds them to the player's `players.tallies` (JSON: `{ km, moon, mars, vesta, ceres,
-  looks, rides: [ ids ], streak, run, runDay, day, today }`; tallies kept before Mars, or before
+  looks, rides: [ ids ], finds: [ ids ], streak, run, runDay, day, today }`; tallies kept before Mars, or before
   Vesta and Ceres, with none of theirs, read as none there), each held to a day's worth
-  (`TALLY_DAY`): 500 km, 10 drives on each other world, 10 Garage changes and 4 new rides a UTC day, whatever the reports say. So 1,000 km takes at least two
+  (`TALLY_DAY`): 500 km, 10 drives on each other world, 10 Garage changes, 4 new rides and 40 Discoveries a UTC day, whatever the reports say. The
+  Discoveries' counts (`finds`, `finds-moon`, ...) are worked out from the list by `FINDS_ON`, and on an
+  account from all its players' lists together (POST /api/achievements writes any of their achievements
+  that union has reached), not the best of them, so the book and the atlas achievements agree on two
+  devices. So 1,000 km takes at least two
   days of a script (and more than two hours of reports at the time cap), 25 looks three days, 50
   Moon drives five, and 50 on Mars, Vesta or Ceres five. The claim (a new nickname's first report, carrying what was
   driven before it) counts for XP as before (an hour's km at most), but toward the achievements only
@@ -7350,7 +7706,7 @@ on this computer (localhost or 127.0.0.1, `feats.js`, as `?pro=1`) unlocks them 
 
 ### What's kept, and what isn't
 
-`achievements`: a player's id, an achievement's id and when, 34 rows a player at most, removed with
+`achievements`: a player's id, an achievement's id and when, 45 rows a player at most, removed with
 the player. `players.tallies` (a few numbers, the ids of up to 31 rides, the days in a row and the
 day's counts), `players.parties` and `players.party_marks` (up to 10 short HMACs of the player's id
 with a party's code under a key from the Worker's secret, so a party isn't counted twice; not the
@@ -7368,7 +7724,7 @@ a month included):
 
 | | Rows read | Rows written | Other |
 | --- | --- | --- | --- |
-| A report with something in it | none more (the tallies are in the player's row) | none more, and 1 an achievement earned (34 a player, ever) | |
+| A report with something in it | none more (the tallies are in the player's row) | none more, and 1 an achievement earned (45 a player, ever) | |
 | An empty report | the player's row, as before | none | |
 | The page's ask for the whole list (an empty report with `feats: true`, once a visit) | the account's achievements: a few dozen, about 250 at most whatever the account (its first 20 players, 200 rows of the others', each counted again as they're grouped) | 1 (`visits.listed`) | |
 | A challenge time, a player's first on that challenge | up to 50 (their nth time, by key), usually 1 to 10 | 1 an achievement earned | |
@@ -7390,7 +7746,7 @@ reads, and no writes. An empty report reads only the player's row; the whole lis
 (8 Earth visits a day an address, and a robot check each for the other worlds'), so about 250
 rows a page load at most. Its reports, times and parties were bounded already (levels' 30 s gap and
 `PROGRESS_POSTS`, the challenges' `CHALLENGE_MISSES` and daily caps, `LIVE_CONNECTS`), and
-achievements add at most 34 rows written a player, ever, 2 a party joined and 1 a visit's list. A
+achievements add at most 45 rows written a player, ever, 2 a party joined and 1 a visit's list. A
 score in a locked construction ride is refused only after the score's gap (one every 10 s a player)
 and the visitor's day (1,500 an address), as any score is: at most 1,500 lookups of about 60 rows,
 90,000 rows a day. A time in one likewise only after the time's gap (one every 10 s a player), its
@@ -7450,7 +7806,7 @@ which phones already draw.)
 
 ### How it's tested
 
-- `npm run test:drive-levels` (`scripts/test-drive-levels.mjs`): the rules as written (34, each
+- `npm run test:drive-levels` (`scripts/test-drive-levels.mjs`): the rules as written (45, each
   count known, every construction ride unlocked by one, the pass none; `checkTallies` turning away a
   ride that isn't one, a count that isn't whole or is negative; a day's worth taken by `addTallies`
   and again the next day; what `crossed` reaches; the grid's lines), then the Worker under `wrangler
@@ -7483,7 +7839,12 @@ which phones already draw.)
   they're reached: Touchdown, Red regular, Martian), with tallies kept from before Mars (no `mars`
   in them) counting none there; and Vesta's and Ceres's the same (a claim's 2 each earning Into the
   belt and Bright spot, a day's 10 Vesta regular, the grid's counts, `own` and `left` for each, and
-  a count that isn't whole, is negative or isn't a number a 400).
+  a count that isn't whole, is negative or isn't a number a 400); and [Discoveries](#discoveries)
+  (a claim's first 10, one and one more a minute a report, 40 a UTC day, the rest carried to the
+  next report, 100 XP each once, a find that isn't one a 400; on an account, the counts from all its
+  players' finds together and the achievements that union has reached written as asked; an account
+  merge taking the union). `npm run test:drive-finds` has the eleven Discoveries achievements' rules
+  without the Worker.
 - `npm run test:drive-worker`: migration 0009 on top of 0001 to 0008 with a player kept and their
   counts none yet, one row an achievement, removed with the player; in the challenges' story a
   player's first time writing their first challenge finished (and the rows a time writes, one more
@@ -7562,7 +7923,9 @@ ON CONFLICT DO NOTHING;
 ## Ads
 
 World Drive can show one Google AdSense display ad, and only on the globe: off until the owner sets
-a publisher id, and never for anyone with the [Supporter Pass](#supporter-pass-buying-it).
+a publisher id, and never for anyone with the [Supporter Pass](#supporter-pass-buying-it). A plain
+load opens on [the orrery](#picking-a-world-the-orrery), and ads.js holds every ad while
+`body[data-orrery='open']`, so the first ad waits until it's closed (as it does under `?worlds=1`).
 
 ### What people see
 
@@ -7814,6 +8177,22 @@ one and deploys the other), and the Worker still answers a free visit with `moon
 it did. **Vesta and Ceres** came the same way, with no migration: a page from before them sends no
 `vesta` or `ceres` in its reports (none), and its list shows the nine of the three worlds it knows
 (it lists by its own list of worlds), leaving the new six out. `CHALLENGE_MISSES`' new 24 comes with `wrangler.drive.jsonc`.
+
+**The orrery first, Discoveries and the plane's tricks** came with no migration either, and no new
+setting, secret or binding: `npm run deploy:drive` as always (it finds no migration to apply). What
+changed in the Worker: a free visit's `start: 'orrery'` counted `orrery` (`index.js`, `stats.js`'s
+`VISIT_KINDS`; the admin page's **Opened on the orrery** row); the reports' `finds`, kept in
+`players.tallies` beside the other trusted counts, with their caps and XP (`progress.js`), an
+account's finds together in POST /api/achievements and its eleven new achievements
+(`achievements.js`, the rules in `achievement-rules.js`, which the page shares), a merge's union
+(`accounts.js`); and the leaderboard's `TRICK` pattern taking "Loop!" and "Outside loop!"
+(`scores.js`). A page from before it, still in a browser's cache, sends no `start` and no `finds`
+and does no loops, so it's taken and counted as before; the new page needs the new Worker for its
+loops' scores and finds' XP, so the two go out together, as `deploy:drive` sends them. The live
+rooms take up to 1,100 m/s from this deploy (`TOP_SPEED`), but pages send no more than 790 until
+those from before it have aged out of browsers' caches (a few weeks); then `MAX_SPEED` in `live.js`
+can go up to 1,090 ([Plane mode](#plane-mode)). After it, watch the admin page's **Opened on the
+orrery** and **Earth drives** rows for a few days ([A plain load's visit](#what-a-visit-costs-and-how-its-capped)).
 
 To deploy from GitHub on every push with Workers Builds (as the construction app is): in the
 Cloudflare dashboard open the **world-drive** Worker → Settings → Build, connect this repository and
@@ -8306,7 +8685,9 @@ secret `1x0000000000000000000000000000000AA` always passes; secret
   driving with others), as `scripts/test-drive-levels-ui.mjs` does, and `window.worldDriveStatsTest
   = { visit }` one for the [play stats](#play-stats) alone, as `scripts/test-drive-ui.mjs` does.
   `window.worldDriveOrreryTest = { onLoad: true }` opens [the orrery](#picking-a-world-the-orrery)
-  as the page loads, as `?worlds=1` does (`scripts/test-drive-orrery-ui.mjs`).
+  as the page loads, as `?worlds=1` does, and `{ first: true }` gives a test's browser a plain load's
+  orrery (which it otherwise doesn't get on the dev server: `scripts/test-drive-orrery-ui.mjs`,
+  `scripts/test-drive-orrery-first.mjs` for which loads open it).
 - The other worlds need neither a key nor the Worker: their files are in the repository
   (`drive/public/moon/`, `drive/public/mars/`, `drive/public/vesta/`, `drive/public/ceres/`), so
   they're the real worlds under `npm run dev:drive` alone. `npm run make-moon`, `npm run make-mars`
@@ -8417,8 +8798,13 @@ test:drive-live-ui` [driving with others](#how-its-tested), `npm run test:drive-
 test:drive-levels-ui` [levels](#how-levels-are-tested), `npm run test:drive-moon-ui` [the
 Moon](#how-the-moon-is-tested), `npm run test:drive-mars-ui` [Mars](#how-mars-is-tested) (5581
 its port unless `TEST_VITE_PORT` says), `npm run test:drive-asteroids-ui` [Vesta and
-Ceres](#how-vesta-and-ceres-are-tested) (5591) and `npm run test:drive-orrery-ui` [the
-orrery](#picking-a-world-the-orrery) (5601). The UI tests drive the go-kart unless a test picks another
+Ceres](#how-vesta-and-ceres-are-tested) (5591), `npm run test:drive-orrery-ui` [the
+orrery](#picking-a-world-the-orrery) (5601), `npm run test:drive-finds-ui`
+[Discoveries](#discoveries) (5583) and `npm run test:drive-lens-ui` [the data lens](#data-lens)
+(5587). Without a browser: `npm run test:drive-orrery-first` (which loads open on the orrery),
+`npm run test:drive-plane` ([the plane](#plane-mode)'s speeds, fall, parachute and tricks),
+`npm run test:drive-finds` and `npm run test:drive-lens`. Run the browser suites one at a time:
+each starts its own dev server and Chromium's software renderer is slow. The UI tests drive the go-kart unless a test picks another
 (the pickup, the default, is 219,000 triangles, about a frame a second in Chromium's software
 renderer); `npm run test:drive-ui` checks the pickup is the default, and that the go-kart takes over
 if its model doesn't load. `TEST_VITE_PORT` picks a test's port, and `TEST_VITE_CACHE` a folder for
@@ -8534,7 +8920,16 @@ src/drive-app/online.js      who's driving now on the globe: /api/online, the do
 src/drive-app/orrery.js      the orrery: the Solar System the worlds are picked from, in the
                              #orrery dialog, drawn by the page's renderer, a chunk of its own
                              loaded as it first opens (orrery.css its look); orrery-bodies.js its
-                             eleven bodies
+                             eleven bodies; orrery-first.js which loads open on it first and
+                             the address every reload to the Earth goes to
+src/drive-app/finds.js       Discoveries: the beacons, the pointer, the globe's pins, the card and
+                             the collection book (finds.css its look); finds-data.js the list and
+                             its facts with their sources; finds-heights.js each one's height in
+                             the game's own data, which scripts/make-finds.mjs makes; finds-rules.js
+                             reaching one, the card's words, what's kept (node can test it)
+src/drive-app/lens.js        the data lens: L and the Heights button, the scale bar and the reading
+                             under the car (lens.css its look); lens-heights.js the height texture,
+                             ranges and labels; body.js's shader colours the ground with it
 src/drive-app/screens.js     start screen, notices, loading card, pause, keys, messages
 src/drive-app/test-globe.js  the Earth without Google's tiles, for working without a key
 src/drive-app/stats.js       the play stats in the page: counting, posting with the visit's token;
@@ -8580,7 +8975,9 @@ The driving and its effects are shared with the construction app, World Drive's 
 options on: `src/drive.js` (the Driver; its feel, `BODY`, `SPIN` and the jolts, only with the
 booster, drifts or stunts), `src/drive-fx.js` (the flame, smoke, sparks and the rest),
 `src/drive-boosts.js` (the boost styles, each one's ignition, overdrive), `src/drive-bursts.js` (the
-bursts of each moment) and `src/drive-hud.js` (the HUD, its gauge pulsing and flashing).
+bursts of each moment) and `src/drive-hud.js` (the HUD, its gauge pulsing and flashing). The plane
+is the Driver's `plane` option (World Drive's alone): `src/plane.js` (flying, the drop and the
+parachute) and `src/plane-tricks.js` (its tricks' rules, which node can test without three.js).
 
 Shared modules take World Drive's place as a parameter, with the terminal as the default:
 `createGoogleTiles( { site } )` and `recentreTiles` in `src/world.js`, and the `site` argument of
