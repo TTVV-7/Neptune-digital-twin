@@ -21,8 +21,10 @@ const SPEED_SCALE = 200;
 // How long a message stays (ms), a little longer for a long one.
 const FLASH_TIME = 1500;
 const FLASH_PER_CHAR = 30;
-// How long a hit's word and landed tricks stay (ms), and a top-up's on the boost gauge.
-const POP_TIME = 750;
+// How long a hit's word and landed tricks stay (ms), and a top-up's on the boost gauge. Hits within
+// CHAIN_TIME ms of each other count up (×2, ×3...), each word a little bigger.
+const POP_TIME = 900;
+const CHAIN_TIME = 1200;
 const REFUEL_TIME = 700;
 const EMPTY_TIME = 650;
 const TRICKS_TIME = 2200;
@@ -426,10 +428,12 @@ const CSS = `
 }
 
 /* A hit's word: big, tilted and gone in a moment, bursting off the vehicle (in the middle of the
-   view, below the tricks). */
+   view, over it rather than on its roof, between it and the tricks), each in its own way by how hard the
+   hit was: BONK! a small white pop that drops away, BOING! a springy squash and stretch, WHAM! hot
+   on a starburst, shaken; WIPEOUT! rolls over and drops. */
 .dhud .dhud-pop {
 	position: absolute;
-	top: 58%;
+	top: 40%;
 	left: 50%;
 	font-size: clamp( 34px, 7vw, 80px );
 	font-weight: 900;
@@ -444,9 +448,49 @@ const CSS = `
 	animation: dhud-wham 0.75s ease-out forwards;
 }
 
+.dhud .dhud-pop.bonk {
+	font-size: calc( clamp( 34px, 7vw, 80px ) * 0.8 );
+	color: #fff;
+	-webkit-text-stroke: 4px var( --accent );
+	text-shadow: 0 0 2px #1a1206, 0 5px 0 rgba( 0, 0, 0, 0.35 );
+	animation: dhud-bonk 0.45s ease-out forwards;
+}
+
+.dhud .dhud-pop.boing {
+	animation: dhud-boing 0.75s ease-out forwards;
+}
+
+/* WHAM!'s word in a hot gradient (a span of its own, so the starburst behind it is under the word:
+   the pop's own background would be under the starburst), shadowed as a whole rather than by
+   text-shadow, which would cover the gradient. */
+.dhud .dhud-pop.wham {
+	text-shadow: none;
+	filter: drop-shadow( 0 6px 0 rgba( 0, 0, 0, 0.35 ) );
+	animation: dhud-wham-hit 0.9s ease-out forwards;
+}
+
+.dhud .dhud-pop.wham span {
+	background: linear-gradient( #ffd23a 25%, #ff4a1a 80% );
+	-webkit-background-clip: text;
+	background-clip: text;
+	-webkit-text-fill-color: transparent;
+}
+
+.dhud .dhud-pop.wham::before {
+	content: '';
+	position: absolute;
+	inset: -30% -6%;
+	z-index: -1;
+	background: var( --accent );
+	opacity: 0.85;
+	clip-path: polygon( 50% 0%, 61% 24%, 85% 15%, 76% 39%, 100% 50%, 76% 61%, 85% 85%, 61% 76%, 50% 100%, 39% 76%, 15% 85%, 24% 61%, 0% 50%, 24% 39%, 15% 15%, 39% 24% );
+	animation: dhud-plate 0.9s ease-out forwards;
+}
+
 .dhud .dhud-pop.wipeout {
 	color: #ff5a5a;
 	font-size: clamp( 28px, 5.5vw, 60px );
+	animation: dhud-wipeout 0.9s ease-out forwards;
 }
 
 @keyframes dhud-wham {
@@ -468,6 +512,154 @@ const CSS = `
 		opacity: 0;
 		transform: translate( -50%, -60% ) rotate( var( --tilt, -6deg ) ) scale( calc( var( --size, 1 ) * 1.05 ) );
 	}
+}
+
+/* A quick pop, and down it drops. */
+@keyframes dhud-bonk {
+	0% {
+		opacity: 0;
+		transform: translate( -50%, -50% ) rotate( var( --tilt, -6deg ) ) scale( calc( var( --size, 1 ) * 0.3 ) );
+	}
+	25% {
+		opacity: 1;
+		transform: translate( -50%, -50% ) rotate( var( --tilt, -6deg ) ) scale( calc( var( --size, 1 ) * 1.15 ) );
+	}
+	45% {
+		opacity: 1;
+		transform: translate( -50%, -50% ) rotate( var( --tilt, -6deg ) ) scale( var( --size, 1 ) );
+	}
+	100% {
+		opacity: 0;
+		transform: translate( -50%, -10% ) rotate( calc( var( --tilt, -6deg ) * 2 ) ) scale( calc( var( --size, 1 ) * 0.9 ) );
+	}
+}
+
+/* Squashed flat, stretched tall, and springing back. */
+@keyframes dhud-boing {
+	0% {
+		opacity: 0;
+		transform: translate( -50%, -50% ) rotate( var( --tilt, -6deg ) ) scale( var( --size, 1 ) ) scale( 0.4, 0.3 );
+	}
+	14% {
+		opacity: 1;
+		transform: translate( -50%, -50% ) rotate( var( --tilt, -6deg ) ) scale( var( --size, 1 ) ) scale( 1.35, 0.6 );
+	}
+	32% {
+		transform: translate( -50%, -55% ) rotate( var( --tilt, -6deg ) ) scale( var( --size, 1 ) ) scale( 0.82, 1.25 );
+	}
+	50% {
+		transform: translate( -50%, -50% ) rotate( var( --tilt, -6deg ) ) scale( var( --size, 1 ) ) scale( 1.1, 0.9 );
+	}
+	64% {
+		transform: translate( -50%, -50% ) rotate( var( --tilt, -6deg ) ) scale( var( --size, 1 ) ) scale( 1, 1 );
+	}
+	78% {
+		opacity: 1;
+	}
+	100% {
+		opacity: 0;
+		transform: translate( -50%, -58% ) rotate( var( --tilt, -6deg ) ) scale( var( --size, 1 ) ) scale( 1, 1 );
+	}
+}
+
+/* Slammed in big, shaken for a moment, and gone. */
+@keyframes dhud-wham-hit {
+	0% {
+		opacity: 0;
+		transform: translate( -50%, -50% ) rotate( var( --tilt, -6deg ) ) scale( calc( var( --size, 1 ) * 2.2 ) );
+	}
+	12% {
+		opacity: 1;
+		transform: translate( -50%, -50% ) rotate( var( --tilt, -6deg ) ) scale( calc( var( --size, 1 ) * 0.92 ) );
+	}
+	18% {
+		transform: translate( calc( -50% + 4px ), calc( -50% - 3px ) ) rotate( var( --tilt, -6deg ) ) scale( calc( var( --size, 1 ) * 1.05 ) );
+	}
+	22% {
+		transform: translate( calc( -50% - 4px ), calc( -50% + 2px ) ) rotate( var( --tilt, -6deg ) ) scale( var( --size, 1 ) );
+	}
+	26% {
+		transform: translate( calc( -50% + 3px ), calc( -50% + 3px ) ) rotate( var( --tilt, -6deg ) ) scale( var( --size, 1 ) );
+	}
+	30% {
+		transform: translate( -50%, -50% ) rotate( var( --tilt, -6deg ) ) scale( var( --size, 1 ) );
+	}
+	75% {
+		opacity: 1;
+	}
+	100% {
+		opacity: 0;
+		transform: translate( -50%, -58% ) rotate( var( --tilt, -6deg ) ) scale( calc( var( --size, 1 ) * 1.08 ) );
+	}
+}
+
+@keyframes dhud-plate {
+	0% {
+		transform: scale( 0 ) rotate( -20deg );
+	}
+	20% {
+		transform: scale( 1.15 ) rotate( 0deg );
+	}
+	35% {
+		transform: scale( 1 );
+	}
+	100% {
+		transform: scale( 1.05 ) rotate( 6deg );
+	}
+}
+
+/* Rolled over once as it comes, dropping a little, and settling. */
+@keyframes dhud-wipeout {
+	0% {
+		opacity: 0;
+		transform: translate( -50%, -56% ) rotate( var( --tilt, -6deg ) ) scale( calc( var( --size, 1 ) * 0.4 ) );
+	}
+	39% {
+		opacity: 1;
+		transform: translate( -50%, -44% ) rotate( calc( var( --tilt, -6deg ) + 360deg ) ) scale( calc( var( --size, 1 ) * 1.1 ) );
+	}
+	55% {
+		transform: translate( -50%, -50% ) rotate( calc( var( --tilt, -6deg ) + 360deg ) ) scale( var( --size, 1 ) );
+	}
+	78% {
+		opacity: 1;
+	}
+	100% {
+		opacity: 0;
+		transform: translate( -50%, -50% ) rotate( calc( var( --tilt, -6deg ) + 360deg ) ) scale( var( --size, 1 ) );
+	}
+}
+
+/* Asked for less motion: the words just fade in and out where they are, the starburst still. */
+@keyframes dhud-pop-calm {
+	0% {
+		opacity: 0;
+	}
+	15% {
+		opacity: 1;
+	}
+	70% {
+		opacity: 1;
+	}
+	100% {
+		opacity: 0;
+	}
+}
+
+@media ( prefers-reduced-motion: reduce ) {
+
+	.dhud .dhud-pop,
+	.dhud .dhud-pop.bonk,
+	.dhud .dhud-pop.boing,
+	.dhud .dhud-pop.wham,
+	.dhud .dhud-pop.wipeout {
+		animation: dhud-pop-calm 0.75s ease-out forwards;
+	}
+
+	.dhud .dhud-pop.wham::before {
+		animation: none;
+	}
+
 }
 
 /* Tricks: what it's doing in the air (dim), then what it landed and the points (bright), or what a
@@ -533,6 +725,39 @@ const CSS = `
 
 .dhud .dhud-flash:not( [hidden] ) {
 	animation: dhud-pop 0.25s ease-out;
+}
+
+/* "Crash!": red, and knocked side to side for a moment (just there for a visitor asking for less
+   motion). */
+.dhud .dhud-flash.crash {
+	color: #ff4a4a;
+}
+
+.dhud .dhud-flash.crash:not( [hidden] ) {
+	animation: dhud-pop 0.25s ease-out, dhud-knock 0.3s linear;
+}
+
+@keyframes dhud-knock {
+	20% {
+		translate: 4px 0;
+	}
+	40% {
+		translate: -4px 0;
+	}
+	60% {
+		translate: 3px 0;
+	}
+	80% {
+		translate: -2px 0;
+	}
+}
+
+@media ( prefers-reduced-motion: reduce ) {
+
+	.dhud .dhud-flash.crash:not( [hidden] ) {
+		animation: dhud-pop 0.25s ease-out;
+	}
+
 }
 
 @keyframes dhud-pop {
@@ -867,6 +1092,8 @@ export function createDriveHud( parent = document.body ) {
 	let emptyTimer;
 	let scoring = false;
 	let tilt = 1;
+	let chain = 0;
+	let lastPop = - Infinity;
 	let panel = null;
 	let flying = false;
 	// Only touch what changed: these are set many times a second.
@@ -1062,16 +1289,26 @@ export function createDriveHud( parent = document.body ) {
 
 		},
 
-		// A hit's word ("WHAM!"), `power` 0 to 1 by how hard; kind 'wipeout' for a wipeout.
+		// A hit's word ("WHAM!"), `power` 0 to 1 by how hard; `kind` how it shows: 'bonk', 'boing',
+		// 'wham' (by how hard, as drive.js has them) or 'wipeout'. A hit within CHAIN_TIME of the last
+		// counts up (×2, ×3...) and is a little bigger each time.
 		pop( word, power = 0.5, kind = '' ) {
 
+			// Hits count up together; a wipeout is a word of its own.
+			const now = performance.now();
+			const hit = kind !== 'wipeout';
+			chain = hit && now - lastPop < CHAIN_TIME ? chain + 1 : 1;
+			lastPop = hit ? now : - Infinity;
 			const element = document.createElement( 'div' );
 			element.className = `dhud-pop ${ kind }`.trim();
-			element.textContent = word;
+			// The word in a span of its own (WHAM!'s starburst goes behind it: see the CSS).
+			const text = document.createElement( 'span' );
+			text.textContent = chain > 1 ? `${ word } ×${ chain }` : word;
+			element.append( text );
 			// Tilted one way, then the other.
 			tilt = - tilt;
 			element.style.setProperty( '--tilt', `${ tilt * ( 4 + power * 5 ) }deg` );
-			element.style.setProperty( '--size', String( 0.75 + power * 0.5 ) );
+			element.style.setProperty( '--size', String( 0.75 + power * 0.5 + 0.1 * Math.min( 5, chain - 1 ) ) );
 			pops.replaceChildren( element );
 			setTimeout( () => element.remove(), POP_TIME );
 
@@ -1160,11 +1397,13 @@ export function createDriveHud( parent = document.body ) {
 
 		},
 
-		flash( message ) {
+		// A big message for a moment; `kind` 'crash' for "Crash!", knocked side to side in red.
+		flash( message, kind = '' ) {
 
 			if ( root.classList.contains( 'touch' ) ) for ( const [ keys, buttons ] of TOUCH_WORDS ) message = message.replace( keys, buttons );
 			flash.textContent = message;
 			flash.classList.toggle( 'long', message.length > 18 );
+			flash.classList.toggle( 'crash', kind === 'crash' );
 			// Restart the pop for a new message on top of the last.
 			flash.hidden = true;
 			void flash.offsetWidth;

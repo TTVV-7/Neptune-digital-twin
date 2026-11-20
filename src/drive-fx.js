@@ -8,8 +8,12 @@ import {
 	ConeGeometry,
 	DoubleSide,
 	DynamicDrawUsage,
+	Euler,
 	Group,
+	InstancedBufferAttribute,
+	InstancedMesh,
 	MathUtils,
+	Matrix4,
 	Mesh,
 	MeshBasicMaterial,
 	MeshStandardMaterial,
@@ -22,8 +26,9 @@ import {
 	SpriteMaterial,
 	Vector3,
 } from 'three';
-import { createBoostStyle, createSupersonic, styleFlame, styleTint } from './drive-boosts.js';
+import { createBoostStyle, createSupersonic, styleEmber, styleFlame, styleTint } from './drive-boosts.js';
 import { createBursts } from './drive-bursts.js';
+import { createCrashes } from './drive-crash.js';
 
 // What driving shows besides the vehicle: the booster's flame and glow, tyre smoke while drifting
 // and the sparks that say how big the drift boost will be; and with stunts, sparks, bits and a
@@ -45,12 +50,21 @@ import { createBursts } from './drive-bursts.js';
 
 const SMOKE_POOL = 64;
 const SPARK_POOL = 120;
-const DEBRIS_POOL = 24;
+const DEBRIS_POOL = 32;
 const SMOKE_LIFE = 0.9;
 const SPARK_LIFE = 0.28;
-// A hit's sparks fly for longer and fall; its bits (debris) tumble and bounce once on the ground.
-const HIT_SPARK_LIFE = 0.55;
-const DEBRIS_LIFE = 1.1;
+// A hit's bits (debris) tumble, bounce twice on the ground (keeping DEBRIS_BOUNCE of their speed up)
+// and lie there till they shrink away over the last DEBRIS_FADE of their life: DEBRIS_LIFE s on the
+// Earth, longer in low gravity (they fly longer), up to DEBRIS_LONGEST. Bodywork, dark trim and
+// glass, in DEBRIS_MIX's shares (glass catching the light as it flies: see drive-crash.js).
+const DEBRIS_LIFE = 1.4;
+const DEBRIS_LONGEST = 2.2;
+const DEBRIS_BOUNCE = 0.35;
+const DEBRIS_FADE = 0.3;
+const DEBRIS_MIX = [ [ 0.5, new Color( 0xd9dde2 ) ], [ 0.8, new Color( 0x2a2d31 ) ], [ 1, new Color( 0xcfe8ff ) ] ];
+// A hit hard enough to say WHAM! holds the crash's sparks and bits nearly still for a moment (s),
+// so they're seen in one bright frame before they fly: their time alone, never the drive's.
+const HITCH_SLOW = 0.15;
 const GRAVITY = 9.81;
 // Spark colours for drift levels 1, 2 and 3.
 export const SPARK_COLOURS = [ 0xffc83d, 0x3dffd8, 0xff3df0 ];
@@ -174,6 +188,11 @@ const _p = new Vector3();
 const _across = new Vector3();
 const _q = new Quaternion();
 const _tyres = [ new Vector3(), new Vector3() ];
+const _scale = new Vector3();
+const _euler = new Euler();
+const _matrix = new Matrix4();
+const _slide = new Vector3();
+const UP = new Vector3( 0, 1, 0 );
 
 let textures = null;
 function getTextures() {
@@ -372,7 +391,12 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 	// style's, or the classic flame's glow's; a rainbow flame's runs through the hues instead.
 	const tint = new Color( style ? styleTint( boost ) ?? 0xffffff : ( FLAMES[ flameName ] ?? FLAMES.orange )[ 2 ] );
 	const hued = rainbow && ! style;
-	const sonic = createSupersonic( root, { tint: hued ? null : tint, rainbow: hued, deep, diamonds: ! style || !! styled?.outer, effects } );
+	// A style that draws its own overdrive in its flame (the afterburner's diamonds, the galaxy's warp,
+	// the dragon's breath) has none of these diamonds; one may burn them in a colour of its own.
+	const sonic = createSupersonic( root, { tint: hued ? null : tint, rainbow: hued, deep, diamonds: ( ! style || !! styled?.outer ) && styled?.diamonds !== false, diamondTint: styled?.diamondTint ?? null, effects } );
+	// The colours a style's exhaust cools through once it's let go (see drive-bursts.js), or the
+	// classic ember and ash.
+	const ember = styleEmber( boost );
 	const bursts = createBursts( root, { detail: effects.detail ?? 1 } );
 	// What's to go off at the next update, which knows where the vehicle is: the booster lit, let go
 	// or run dry, the sonic boom, a drift's charge level reached or its mini-turbo let go (each 1 to
@@ -399,7 +423,8 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 	// What the style and the supersonic effects are told each frame (see drive-boosts.js): one
 	// object, filled in again each time.
 	const frame = {
-		pivot: null, size: null, velocity: new Vector3(), power: 0, grounded: true, dt: 0, clock: 0, scale: 1, hot: 0,
+		pivot: null, size: null, velocity: new Vector3(), power: 0, grounded: true, dt: 0, clock: 0, scale: 1, hot: 0, lit: 0, dry: false,
+		calm: false, detail: 1, air: true, gravity: 1,
 		nozzle: new Vector3(), lastNozzle: new Vector3(), back: new Vector3(), up: new Vector3(), right: new Vector3(), middle: new Vector3(),
 		// On its wheels, a point a little over the ground under it, for the batches' floor (see FLOOR).
 		ground: new Vector3(),
@@ -408,22 +433,26 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 
 	const smoke = pool( SMOKE_POOL, () => new SpriteMaterial( { map: soft, color: 0xdedede, transparent: true, depthWrite: false } ) );
 	const sparks = pool( SPARK_POOL, () => new SpriteMaterial( { map: glow, color: 0xffffff, transparent: true, blending: AdditiveBlending, depthWrite: false } ) );
-	// A hit's flash: one glow, big and brief.
-	const flash = pool( 3, () => new SpriteMaterial( { map: glow, color: 0xfff4d0, transparent: true, blending: AdditiveBlending, depthWrite: false } ) );
-	// Bits knocked off: small dark boxes, sharing one shape.
-	const chunk = new BoxGeometry( 1, 1, 1 );
-	const debris = [];
-	for ( let i = 0; i < DEBRIS_POOL; i ++ ) {
-
-		const mesh = new Mesh( chunk, new MeshStandardMaterial( { color: 0x3b3f45, roughness: 0.8, transparent: true } ) );
-		mesh.visible = false;
-		mesh.raycast = () => {};
-		root.add( mesh );
-		debris.push( { mesh, age: Infinity, life: DEBRIS_LIFE, velocity: new Vector3(), spin: new Vector3(), floor: 0 } );
-
-	}
-
+	// What crashing looks like (drive-crash.js): its sparks, rings and dust.
+	const crashes = createCrashes( root, effects );
+	// Bits knocked off: little boxes in one draw, each its own size and colour, written in place.
+	const debrisMesh = new InstancedMesh( new BoxGeometry( 1, 1, 1 ), new MeshStandardMaterial( { roughness: 0.5, metalness: 0.3 } ), DEBRIS_POOL );
+	debrisMesh.name = 'drive-debris';
+	debrisMesh.instanceMatrix.setUsage( DynamicDrawUsage );
+	debrisMesh.instanceColor = new InstancedBufferAttribute( new Float32Array( DEBRIS_POOL * 3 ), 3 );
+	debrisMesh.count = 0;
+	debrisMesh.visible = false;
+	// Its bits are all over the place; it's never far from the vehicle.
+	debrisMesh.frustumCulled = false;
+	debrisMesh.raycast = () => {};
+	root.add( debrisMesh );
+	const debris = Array.from( { length: DEBRIS_POOL }, () => ( { age: Infinity, life: DEBRIS_LIFE, position: new Vector3(), velocity: new Vector3(), turn: new Vector3(), spin: new Vector3(), size: new Vector3(), floor: 0, bounces: 0 } ) );
+	debrisMesh.userData.items = debris;
 	let nextDebris = 0;
+	// Where the ground is for the bits (and the crash's sparks) to bounce on: under its wheels the
+	// last time it was on them (null till then). And how much is left of a hard hit's hitch (s).
+	let groundY = null;
+	let hitchLeft = 0;
 
 	// The trail, made only if there is one: its own pool, or a ribbon.
 	const trailKind = trail?.kind;
@@ -507,38 +536,102 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 
 	}
 
-	// Bits fly, tumble, bounce once off a floor a little below where they were knocked from (about
-	// the ground) and fade.
+	// Bits fly, tumble, bounce twice off the ground under them (at the world's gravity, read each
+	// frame: a ghost's fx is made once, wherever it was) and lie there, shrinking away at the end.
+	// Only the live ones are written, up to the last of them.
 	function ageDebris( dt ) {
 
-		for ( const item of debris ) {
+		const g = GRAVITY * ( effects.gravity ?? gravity );
+		let last = - 1;
+		for ( let i = 0; i < debris.length; i ++ ) {
 
+			const item = debris[ i ];
 			if ( item.age >= item.life ) continue;
 			item.age += dt;
-			if ( item.age >= item.life ) {
+			if ( item.age >= item.life ) continue;
+			last = i;
+			const { position, velocity, spin, turn } = item;
+			velocity.y -= g * dt;
+			position.addScaledVector( velocity, dt );
+			if ( position.y < item.floor ) {
 
-				item.mesh.visible = false;
-				continue;
+				position.y = item.floor;
+				if ( item.bounces < 2 ) {
+
+					item.bounces ++;
+					velocity.set( velocity.x * 0.5, Math.abs( velocity.y ) * DEBRIS_BOUNCE, velocity.z * 0.5 );
+					spin.multiplyScalar( 0.5 );
+
+				} else {
+
+					// Down for good: it skids to a stop and lies still.
+					velocity.set( velocity.x * Math.max( 0, 1 - 6 * dt ), 0, velocity.z * Math.max( 0, 1 - 6 * dt ) );
+					spin.multiplyScalar( Math.max( 0, 1 - 8 * dt ) );
+
+				}
 
 			}
 
-			const { mesh, velocity, spin } = item;
-			velocity.y -= GRAVITY * gravity * dt;
-			mesh.position.addScaledVector( velocity, dt );
-			if ( mesh.position.y < item.floor ) {
-
-				mesh.position.y = item.floor;
-				velocity.set( velocity.x * 0.5, Math.abs( velocity.y ) * 0.35, velocity.z * 0.5 );
-				spin.multiplyScalar( 0.5 );
-
-			}
-
-			mesh.rotation.x += spin.x * dt;
-			mesh.rotation.y += spin.y * dt;
-			mesh.rotation.z += spin.z * dt;
-			mesh.material.opacity = Math.min( 1, 3 * ( 1 - item.age / item.life ) );
+			turn.addScaledVector( spin, dt );
 
 		}
+
+		for ( let i = 0; i <= last; i ++ ) {
+
+			const item = debris[ i ];
+			const left = item.age < item.life ? ( item.life - item.age ) / ( item.life * DEBRIS_FADE ) : 0;
+			_scale.copy( item.size ).multiplyScalar( Math.min( 1, left ) );
+			_q.setFromEuler( _euler.set( item.turn.x, item.turn.y, item.turn.z ) );
+			debrisMesh.setMatrixAt( i, _matrix.compose( item.position, _q, _scale ) );
+
+		}
+
+		debrisMesh.count = last + 1;
+		debrisMesh.visible = last >= 0;
+		if ( last >= 0 ) debrisMesh.instanceMatrix.needsUpdate = true;
+
+	}
+
+	// As many of `n` as `detail` asks for (fewer on a phone), at least one.
+	function count( n ) {
+
+		return Math.max( 1, Math.round( n * ( effects.detail ?? 1 ) ) );
+
+	}
+
+	// `bits` bits knocked off `at` (world) out from `normal` at about `speed` (m/s), up at most
+	// `rise` m/s, onto the ground at `floor` (a height, world). The glass among them glints as it
+	// flies (drive-crash.js).
+	function knock( at, normal, bits, speed, rise, floor ) {
+
+		const g = Math.max( 0.05, effects.gravity ?? gravity );
+		for ( let i = 0; i < bits; i ++ ) {
+
+			const index = nextDebris;
+			const item = debris[ index ];
+			nextDebris = ( nextDebris + 1 ) % debris.length;
+			item.position.copy( at );
+			spray( normal, speed, 1, item.velocity );
+			item.velocity.y = Math.min( item.velocity.y, rise );
+			item.spin.set( Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5 ).multiplyScalar( 24 );
+			item.turn.set( Math.random(), Math.random(), Math.random() ).multiplyScalar( Math.PI );
+			const pick = Math.random();
+			let kind = 0;
+			while ( pick >= DEBRIS_MIX[ kind ][ 0 ] && kind < DEBRIS_MIX.length - 1 ) kind ++;
+			// Bodywork's panels flat and wide, trim chunky, glass in little chips.
+			const big = kind === 2 ? 0.5 : 1;
+			item.size.set( ( 0.06 + Math.random() * 0.12 ) * big, ( kind === 0 ? 0.02 : 0.04 ) + Math.random() * 0.04, ( 0.06 + Math.random() * 0.14 ) * big );
+			item.floor = floor + item.size.y / 2;
+			item.bounces = 0;
+			item.age = 0;
+			// In low gravity they fly in long slow arcs, so they last longer to come down.
+			item.life = Math.min( DEBRIS_LONGEST, DEBRIS_LIFE / Math.sqrt( Math.min( 1, g ) ) );
+			debrisMesh.setColorAt( index, DEBRIS_MIX[ kind ][ 1 ] );
+			if ( kind === 2 ) crashes.glint( at, item.velocity );
+
+		}
+
+		debrisMesh.instanceColor.needsUpdate = true;
 
 	}
 
@@ -554,7 +647,8 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 	let smokeDue = 0;
 	let burnoutDue = 0;
 	let sparkDue = 0;
-	let scrapeDue = 0;
+	let wiping = false;
+	const wipeAt = new Vector3();
 	let trailDue = 0;
 	let sparkleCount = 0;
 	let starCount = 0;
@@ -572,6 +666,12 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 		frame.dt = dt;
 		frame.clock = flicker;
 		frame.scale = Math.max( 0.35, Math.min( size.width, size.height ) * 0.45 ) / 0.45;
+		// What the visitor asked for and where it is (see EFFECTS), read each frame, as a ghost's fx is
+		// made once: less motion, how many particles, whether there's air, and the world's gravity.
+		frame.calm = !! effects.calm;
+		frame.detail = effects.detail ?? 1;
+		frame.air = effects.air !== false;
+		frame.gravity = effects.gravity ?? gravity;
 		frame.lastNozzle.copy( frame.nozzle );
 		pivot.localToWorld( frame.nozzle.set( 0, size.height * 0.33 / size.scale, ( size.rear + 0.02 ) / size.scale ) );
 		pivot.localToWorld( frame.middle.set( 0, size.height * 0.5 / size.scale, ( size.rear - ( size.length ?? size.rear * 2 ) / 2 ) / size.scale ) );
@@ -605,9 +705,11 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 
 			// The rainbow flame cools from whatever colour it was burning in when it was cut.
 			if ( hued ) tint.setHSL( flicker / RAINBOW_TURN % 1, 1, 0.65 );
-			bursts.cool( frame, tint );
+			bursts.cool( frame, tint, ember?.ember, ember?.ash );
 			// Run dry, it coughs out (not for a visitor asking for less motion: that's flashing).
 			if ( due.dry && ! effects.calm ) cough = COUGH_TIME;
+			// And the style lets go its own way (or sputters out, run dry).
+			style?.cool( frame, due.dry, effects.detail ?? 1, !! effects.calm );
 
 		}
 
@@ -798,16 +900,14 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 			if ( hot < 0.001 ) hot = 0;
 			frame.hot = hot;
 			// The world's gravity, read each frame (a ghost's fx is made once, wherever it was).
-			bursts.gravity = effects.gravity ?? gravity;
+			bursts.gravity = frame.gravity;
+			if ( style ) style.gravity = frame.gravity;
 			// A boom asked for while it was out of sight (a ghost's) goes off only if it's still
 			// supersonic, never late once it isn't.
 			if ( ! supersonic ) due.boom = false;
 			goOff( wheels );
-			bursts.update( frame );
-			style?.update( frame );
-			sonic.update( frame, supersonic );
-			surge *= Math.exp( - SURGE_FADE * dt );
-			// The flame lights at once, and dies down once it's let go; coughing, it misfires.
+			// The flame lights at once, and dies down once it's let go; coughing, it misfires. Worked
+			// out before the style's frame, which dies down and coughs with it (frame.lit, frame.dry).
 			if ( power >= lit ) lit = power;
 			else lit = Math.max( power, lit * Math.exp( - FLAME_FALL * dt ) );
 			if ( lit < 0.01 ) lit = 0;
@@ -818,6 +918,13 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 				burn = Math.max( power, COUGH[ Math.min( COUGH.length - 1, Math.floor( ( 1 - cough / COUGH_TIME ) * COUGH.length ) ) ] );
 
 			}
+
+			frame.lit = burn;
+			frame.dry = cough > 0;
+			bursts.update( frame );
+			style?.update( frame );
+			sonic.update( frame, supersonic );
+			surge *= Math.exp( - SURGE_FADE * dt );
 
 			flame.visible = burn > 0.01 && ( ! style || !! styled );
 			if ( flame.visible && rainbow && ! style ) {
@@ -850,7 +957,9 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 				const width = air ? 1 - 0.1 * hot : 1 + 0.5 * hot;
 				const reach = air ? 1 + 0.3 * hot : 1;
 				flame.scale.set( scale * burn * swell * width, scale * burn * swell * width, scale * ( 0.6 + burn * 2.6 ) * jitter * ( styled?.length ?? 1 ) * pop * reach );
-				outer.material.opacity = Math.min( 1, 0.25 + 0.35 * jitter + 0.3 * surge + 0.15 * hot ) * ( air ? 1 : 1 - 0.4 * hot );
+				// (A style's deep cone, drawn over the scene, thins a little as it burns longer in
+				// overdrive, so it stays fire rather than a solid stick: its own particles carry it.)
+				outer.material.opacity = Math.min( 1, 0.25 + 0.35 * jitter + 0.3 * surge + 0.15 * hot ) * ( air ? 1 : 1 - 0.4 * hot ) * ( deep && style ? 1 - 0.35 * hot : 1 );
 				inner.material.opacity = 0.9 + 0.1 * hot;
 				// (The rainbow's core is white already.)
 				if ( ! hued ) inner.material.color.lerpColors( core, WHITE_HOT, hot * ( deep ? 0.35 : 0.8 ) );
@@ -935,24 +1044,24 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 
 			}
 
-			// Scraping along a wall: a stream of sparks off the corner rubbing on it, left behind.
-			if ( scrape ) {
+			// Scraping along a wall: a fountain of sparks off the corner rubbing on it, thrown back
+			// along it, a glow there and scuff marks left on the wall (drive-crash.js).
+			if ( scrape ) crashes.scrape( scrape, velocity, dt, groundY ?? undefined );
 
-				scrapeDue -= dt;
-				while ( scrapeDue <= 0 ) {
-
-					scrapeDue += 0.012;
-					spray( scrape.normal, 3, 0.6, _v ).addScaledVector( velocity, 0.3 );
-					emit( sparks, scrape.at, _v, HIT_SPARK_LIFE * 0.6, 0.14, 0, Math.random() < 0.5 ? 0xffd27a : 0xffffff, 0.6 );
-
-				}
-
-			}
+			// Sliding on its roof in a wipeout (see wipe): dust and sparks off it as it goes.
+			if ( wiping ) crashes.wipe( wipeAt, velocity, dt );
+			wiping = false;
 
 			age( smoke, dt, 0.7 );
 			age( sparks, dt, 1 );
-			age( flash, dt, 1 );
-			ageDebris( dt );
+			// The ground under its wheels, the last time it was on them, for bits and sparks to bounce on.
+			if ( grounded ) groundY = frame.ground.y;
+			// A hard hit's hitch: the crash's own sparks and bits held nearly still for a moment.
+			const crashDt = hitchLeft > 0 ? dt * HITCH_SLOW : dt;
+			hitchLeft = Math.max( 0, hitchLeft - dt );
+			crashes.gravity = effects.gravity ?? gravity;
+			crashes.update( frame, crashDt );
+			ageDebris( crashDt );
 			updateTrail( pivot, size, velocity, trailPower, dt, preview );
 			if ( surface ) updateWater( pivot, size, velocity, wet, dt );
 
@@ -1017,59 +1126,77 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 
 		},
 
-		// How many of the boost style's, the supersonic effects' and the bursts' particles are alive,
-		// and the most there can be.
+		// How many of the boost style's, the supersonic effects', the bursts' and the crashes'
+		// particles are alive, and the most there can be.
 		get particles() {
 
-			return { alive: ( style?.alive ?? 0 ) + sonic.alive + bursts.alive, budget: ( style?.budget ?? 0 ) + sonic.budget + bursts.budget };
+			return {
+				alive: ( style?.alive ?? 0 ) + sonic.alive + bursts.alive + crashes.alive,
+				budget: ( style?.budget ?? 0 ) + sonic.budget + bursts.budget + crashes.budget,
+			};
 
 		},
 
-		// A hit at `at` (world) on something facing `normal`, `power` 0 to 1 by how hard: a flash,
-		// sparks and bits flying off it.
-		burst( at, normal, power ) {
+		// A hit at `at` (world: over where it hit, for the flash) on something facing `normal`, where
+		// the vehicle met it at `contact` (world; `at` if not given), `power` 0 to 1 by how hard: the
+		// crash's layers (drive-crash.js) and bits knocked off it, bouncing on the ground at `ground`
+		// (a height, world: the ground under where it hit, if it's known). Not known, the ground under
+		// its wheels the last time it was on them, if that's under where it hit; else a little under it.
+		burst( at, normal, power, contact = at, ground = null ) {
 
-			emit( flash, at, _v.set( 0, 0, 0 ), 0.16, 1 + power * 2.5, 1.5, 0xfff4d0 );
-			const count = Math.round( 10 + 30 * power );
-			for ( let i = 0; i < count; i ++ ) {
-
-				spray( normal, 4 + 8 * power, 0.9, _v );
-				emit( sparks, at, _v, HIT_SPARK_LIFE * ( 0.6 + Math.random() * 0.6 ), 0.18 + Math.random() * 0.14, 0, i % 3 ? 0xffc94a : 0xfff6d8, 0.8 );
-
-			}
-
-			const bits = Math.round( 3 + 9 * power );
-			for ( let i = 0; i < bits; i ++ ) {
-
-				const item = debris[ nextDebris ];
-				nextDebris = ( nextDebris + 1 ) % debris.length;
-				item.mesh.position.copy( at );
-				item.mesh.scale.set( 0.06 + Math.random() * 0.12, 0.04 + Math.random() * 0.08, 0.06 + Math.random() * 0.14 );
-				spray( normal, 3 + 5 * power, 1, item.velocity );
-				item.spin.set( Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5 ).multiplyScalar( 24 );
-				item.floor = at.y - 1.2;
-				item.age = 0;
-				item.mesh.material.opacity = 1;
-				item.mesh.visible = true;
-
-			}
+			const floor = ground ?? ( groundY !== null && groundY <= contact.y ? groundY : contact.y - 1.2 );
+			crashes.hit( at, contact, normal, power, floor );
+			_p.copy( contact ).addScaledVector( normal, 0.1 );
+			knock( _p, normal, count( 3 + 9 * power ), 2 + 4 * power, 3.5, floor );
 
 		},
 
-		// Dust thrown up round `at` (world, on the ground) as it comes down hard, `power` 0 to 1, round
-		// a vehicle `width` (m) wide.
-		dust( at, power, width ) {
+		// Hold the crash's sparks and bits nearly still for `seconds` (a hard hit's hitch), so they're
+		// seen in one bright moment before they fly. Not for a visitor asking for less motion.
+		hitch( seconds ) {
 
-			const count = Math.round( 4 + 8 * power );
-			for ( let i = 0; i < count; i ++ ) {
+			if ( ! effects.calm ) hitchLeft = Math.max( hitchLeft, seconds );
 
-				// Starting high enough that the ground doesn't cut the puffs off flat.
-				const angle = i / count * Math.PI * 2;
-				_p.set( Math.cos( angle ) * width * 0.6, 0.35 + power * 0.25, Math.sin( angle ) * width * 0.6 ).add( at );
-				_v.set( Math.cos( angle ) * ( 1.5 + 2 * power ), 0.8 + Math.random() * 0.8, Math.sin( angle ) * ( 1.5 + 2 * power ) );
-				emit( smoke, _p, _v, SMOKE_LIFE, 0.5 + power * 0.4, 1.1 + power * 1.1, 0xcfc8bc );
+		},
 
-			}
+		// Coming down on its wheels at `at` (world, on the ground), `power` 0 to 1, round a vehicle
+		// `width` (m) wide: hard, a ring of dust spreading over the ground and dust thrown out round it
+		// (regolith on the Moon), and grit knocked up from a very hard one; `soft`, a small landing, a
+		// puff off each rear tyre (`rear`, world, from `at` back to its rear axle).
+		dust( at, power, width, soft = false, rear = null ) {
+
+			crashes.land( at, power, width, soft, rear );
+			if ( soft || power <= 0.6 ) return;
+			knock( _p.copy( at ).setY( at.y + 0.1 ), UP, count( 4 ), 2, 3, at.y );
+
+		},
+
+		// A wipeout slamming down at `at` (world, on the ground), `power` 0 to 1, a vehicle `width` (m)
+		// wide sliding the way `slide` (world, along the ground): a ring of dust, dust spreading
+		// (regolith on the Moon), sparks skidding off along the ground and a few bits knocked off.
+		slam( at, power, width, slide ) {
+
+			_slide.copy( slide ).setY( 0 );
+			if ( _slide.lengthSq() < 1e-6 ) _slide.set( 0, 0, 1 );
+			crashes.slam( at, power, width, _slide.normalize() );
+			knock( _p.copy( at ).setY( at.y + 0.15 ), UP, count( 2 + 2 * power ), 2 + 2 * power, 2.5, at.y );
+
+		},
+
+		// Sliding along on its roof or side in a wipeout, over the ground at `at` (world), this frame:
+		// dust and sparks off it as it goes.
+		wipe( at ) {
+
+			wiping = true;
+			wipeAt.copy( at );
+
+		},
+
+		// Back on its wheels after a wipeout at `at` (world, on the ground), `width` m wide: a puff of
+		// dust round its wheels and a thin ring.
+		settle( at, width ) {
+
+			crashes.settle( at, width );
 
 		},
 
@@ -1113,10 +1240,11 @@ export function createDriveFx( world, { boost = 'classic', flame: flameName = 'o
 			world.remove( root );
 			root.traverse( o => {
 
-				// Sprites share one geometry across the whole app; the textures are shared too. The bits
-				// share one box, and disposing of it again is harmless.
+				// Sprites share one geometry across the whole app; the textures are shared too.
 				if ( ! o.isSprite ) o.geometry?.dispose();
 				o.material?.dispose();
+				// (An instanced mesh's own buffers, the bits', go with it.)
+				if ( o.isInstancedMesh ) o.dispose();
 
 			} );
 

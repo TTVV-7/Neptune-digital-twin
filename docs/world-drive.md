@@ -104,10 +104,21 @@ Hit something (a wall, a building, a parked car, a barrier) and you don't stop: 
   sets you spinning: clip a corner and you spin round; hit square on and the nose goes up and back.
   Left alone you come down on your wheels, tipped back 25° to 45° by a hit at up to 160 km/h; a
   harder one (with the booster) takes you over backwards, so finish the backflip with **S** or wipe
-  out. Hits shake the view, squash the vehicle for a moment and throw sparks and bits, with a word
-  for how hard: **BONK!**, **BOING!** or **WHAM!** The chase camera follows you up and down a little
-  behind, so you see yourself thrown.
-- **Not every hit launches.** Meet a wall at under 15° and you scrape along it in sparks. A nudge
+  out. Hits shake the view, kick it (pulled in and dipped for a moment), squash the vehicle and go
+  off in layers by how hard: a white-hot flash and a starburst where you hit, a shock ring round the
+  wall's face, streaks of sparks that fall and bounce once off the ground, a little dust, and bits
+  of bodywork, dark trim and glass knocked off, bouncing twice and lying on the ground before they
+  shrink away (glass glints as it flies). A **WHAM!** holds its sparks and bits still for a moment
+  (60 ms of the effects' own time: the drive, its clock and its physics never stop). The word for
+  how hard shows over the vehicle, each its own way: **BONK!** a small white pop that drops away,
+  **BOING!** a springy squash and stretch, **WHAM!** hot on a starburst, shaken; hits within 1.2 s
+  of each other count up (**BOING! ×2**). The chase camera follows you up and down a little
+  behind, so you see yourself thrown. On the Moon there's no dust, the sparks and bits fly in long
+  slow arcs at its gravity. A visitor asking for less motion gets no flash, starburst or hold, a
+  faint ring, and words that only fade in and out; on a phone there are fewer sparks and bits.
+- **Not every hit launches.** Meet a wall at under 15° and you scrape along it: a fountain of sparks
+  thrown back along the wall, more the faster you grind, a hot glow where you rub, scuff marks left
+  on the wall (grey dust on the Moon) and a rumble in the view. A nudge
   under about 11 km/h stops you against it, so pressing on into a wall doesn't jitter, and up to
   22 km/h it knocks you back along the ground. Kerbs and other low steps are still driven over.
 - **In the air** (after a hit, off a ramp, a crest or a hop): **A**/**D** spin, **W**/**S** flip, **Q**/**E**
@@ -117,8 +128,13 @@ Hit something (a wall, a building, a parked car, a barrier) and you don't stop: 
   and with **A**/**D** (or **Q**/**E**) rolls, and you right yourself when you let go.
 - **Landing.** Within about 40° of upright you land: the suspension takes it, the tricks you did
   pay out, the booster is topped up (a fifth for each trick) and, going forward, you get a burst
-  of speed. On your roof or side it's a **wipeout**: a short tumble, the tricks and the combo are
-  lost, and the vehicle rolls back onto its wheels by itself (or press **R**).
+  of speed, with dust thrown up as you come down: a puff off each rear tyre for a small landing, and
+  coming down hard a ring of it spreading over the ground (wider the harder) and a nod of the view
+  (on the Moon, grains of regolith in a crown, no billow). On your roof or side it's a **wipeout**,
+  **WIPEOUT!** rolling over in red: slammed down in a ring of dust with sparks skidding off along
+  the way you slide, dust and sparks off you as you slide on your roof, a short tumble, the tricks
+  and the combo are lost, and the vehicle rolls back onto its wheels by itself (or press **R**), in
+  a puff of dust and a thin ring.
 - **Tricks and score.** A spin counts by half turns (180, 360, 720...), flips and barrel rolls by
   whole turns, give or take a little. Each scores: 300 a half turn, 1,000 a flip, 800 a roll, 150 a
   wall bounce (a **BOING!** or a **WHAM!**, 32 km/h or more into it) and 300 a second for big air
@@ -221,11 +237,17 @@ construction app's driving looks and behaves as it always has.
   with a little overshoot, a sheen sweeping across it every 1.4 s; the gauge glows the boost's
   orange while the booster burns, and the ride's colour in overdrive (a rainbow flame's ice blue).
 - **Letting go** the flame dies back into the nozzle over about 0.15 s, rather than going out in one
-  frame, as the exhaust's glow takes over.
+  frame, as the exhaust's glow takes over. A boost style's stream thins out with it over about a
+  quarter of a second, and each style has a moment of its own as it's let go: plasma's ball of
+  lightning, the comet breaking up, the rings imploding, the laser's beams retracting (the
+  [Garage's table](#the-garage) has them all).
 - **Running dry.** The flame coughs out first: for about 0.35 s it misfires two or three times, cut
-  out and coming back smaller, before it dies. The exhaust glows on and cools, white-hot in the
-  style's colour (a rainbow flame's in the hue it was burning in when it was cut), through orange
-  to a dull red and out in 0.9 s, with a few embers drifting off it. The car settles: its nose
+  out and coming back smaller, before it dies, and a boost style's stream sputters on the same
+  misfires, with a sputter of its own (pixel's game over, a dragon's choke, the laser's beams
+  dropping out one by one). The exhaust glows on and cools, white-hot in the style's colour (a
+  rainbow flame's in the hue it was burning in when it was cut), through orange to a dull red and
+  out in 0.9 s (or through a style's own colours: frost's to ice blue, the galaxy's to violet), with
+  a few embers drifting off it. The car settles: its nose
   dips as it slows back to its top speed, and it bounces back level.
 - **Boost pads.** Driven over one, a ring spreads out from the pad, chevrons rise off it, sparkles
   fly up round it and the vehicle lights up in the pad's colour for a quarter of a second. The burst
@@ -3038,27 +3060,70 @@ your horn, theirs in theirs.
 | Style | | As it lights ([more](#how-boosting-and-driving-look)) |
 | --- | --- | --- |
 | Classic flame | The flame as it always was, in its colour | The flame popping, a flash and a ring in its glow's colour |
-| Bubbles | Soap bubbles floating up and wobbling away, each popping at the end | A froth of big bubbles blown out round the exhaust |
-| Confetti | Paper rectangles in party colours, tumbling over and over as they flutter down behind | A party popper: a cone of confetti shot up and out |
-| Plasma | A blue-white electric flame crackling with little arcs, throwing blue sparks | Arcs crackling out all round the exhaust at once, and a spray of sparks |
-| Lightning | Forked bolts crackling back and out from the exhaust, struck again every few hundredths of a second | A strike: four long forks thrown out behind and to both sides, each with a flash |
-| Glitter | A stream of tiny twinkling stars in white, gold, pink, sky and lilac | A puff of stars bursting out every way |
-| Comet | A throbbing white-blue head and a long glowing tail that narrows and turns blue behind it | Its head flaring up, and a shower of specks |
-| Neon rings | Glowing hoops thrown out flat across the way it's going, so the camera looks through them | Three hoops at once, one inside the next |
-| Fireworks | Little rockets bursting over it into balls of sparks in one colour, which fall and twinkle out | A starburst at the exhaust and a salvo of three rockets bursting just over it |
-| Hearts | Hearts rising and swaying away, beating as they go | A ring of hearts thrown out round the exhaust, then rising |
-| Pixel | Chunky squares in a bright palette on a grid in the world, shrinking in steps and blinking out | An old game's explosion: pixels thrown out eight ways in rings, white-hot inside |
-| Ink | Blobs of bright paint flung out behind, leaving splats on the road for five seconds, drawn out longer the faster it goes | A big splash of blobs in a fan, and a few splats on the road at once |
-| Music notes | Eighth notes and beamed pairs in bright colours, rising and swaying away, all bobbing to one beat (two a second) | A chord: a ring of notes thrown out round the exhaust |
-| Cherry blossom | Pink petals fluttering out behind, tumbling over and over as they drift down, and now and then a whole flower | A gust of blossom swirling out round the exhaust |
-| Afterburner | A jet's long blue cone with a row of white shock diamonds burning in it, throbbing, a rosy glow at its tail and blue sparks streaming off it | A shock ring blown out behind, diamonds shot back down the cone, and a spray of sparks |
-| Frost | Snowflakes turning as they drift, and glints of ice, out of a cold mist | Shards of ice thrown out all round the exhaust, a cold puff and a flurry of snow |
-| Galaxy | A violet flame streaming twinkling stars through drifting pink and blue clouds of nebula | A little spiral galaxy, two arms of stars swirling out round a bright core |
-| Dragon fire | A deep red flame roaring out tongues of fire that cool from orange to a deep red, with glowing embers floating up and curls of dark smoke | A roar: a fireball of tongues, a shower of embers and a ring of smoke |
-| Butterflies | Butterflies in bright colours fluttering up and away, wings beating, each wandering its own way | A flutter of butterflies bursting out every way |
-| Spooky | Glowing wisps curling up out of a ghostly green flame, and now and then a little ghost floating off behind, bobbing as it goes | "Boo!": a ring of ghosts popping out round the exhaust, and a puff of wisps |
-| Neon laser | A laser show: beams in cyan, pink, lime and blue fanning up and out behind and sweeping, with bolts of light shot along them | A starburst of beams all round at once, and a hoop of light |
-| Slime | Blobs of green goo flung out behind, wobbling as they fly, bubbles that swell and pop, and puddles on the road for a couple of seconds | A splurt of blobs in a fan, a froth of bubbles and a puddle or two |
+| Bubbles | Soap bubbles blown out of a wand at the exhaust (its ring slowly changing colour, the next bubble seen swelling in it), floating up and wobbling away, each popping into a ring and, a big one, a few droplets | A froth of big bubbles blown out round the exhaust |
+| Confetti | Paper rectangles in party colours shot out of two cannons at the corners of its back in a V, tumbling over and over as they flutter down behind, with streamers curling after them | A party popper: a cone of confetti shot up and out |
+| Plasma | A blue-white electric flame crackling with little arcs, pinched by magnetic rings running back down it, throwing blue sparks drawn along the way they fly | Arcs crackling out all round the exhaust at once, and a spray of sparks |
+| Lightning | Forked bolts crackling back and out from the exhaust, struck again every few hundredths of a second, each ending in a hot point of light; every third grounds on the road behind with a scorch | A strike: four long forks thrown out behind and to both sides, each with a flash |
+| Glitter | A corkscrew of twinkling stars in white, gold, pink, sky and lilac twisting back from the exhaust in a scatter of more, every seventh a big one that catches the light in a cross glint | A puff of stars bursting out every way |
+| Comet | A small bright head in a faint blue coma, a straight blue ion tail, and a long dust tail that curves away, narrowing and turning blue behind it | Its head flaring up, and a shower of specks |
+| Neon rings | Glowing double hoops (a neon tube's two lines) thrown out in threes to a beat, flat across the way it's going, so the camera looks through them | Three hoops at once, one inside the next |
+| Fireworks | Little rockets on short arcs, trailing sparks, bursting just over and behind it as peonies, rings or drooping golden willows, in colours that show in daylight | A starburst at the exhaust and a salvo of three rockets bursting just over it |
+| Hearts | Big and little hearts streaming out behind, swaying, all beating together, lub-dub | A ring of hearts thrown out round the exhaust, then rising |
+| Pixel | Chunky squares in three lanes on a grid that moves with it, white-hot at the exhaust and cooling in steps through yellow, orange and red to purple, shrinking in steps and blinking out | An old game's explosion: pixels thrown out eight ways in rings, white-hot inside |
+| Ink | Strings of bright paint flung out behind, splatting where they land on the road and staying four or five seconds, drawn out longer the faster it goes | A big splash of blobs in a fan, and a few splats on the road at once |
+| Music notes | Eighth notes and beamed pairs in bright colours rising and swaying away off a five-line staff that ripples out behind it, all bobbing to one beat (two a second) | A chord: a ring of notes thrown out round the exhaust |
+| Cherry blossom | Pink petals whirling out behind in a soft pink haze, tumbling over and over as they drift down, and now and then a whole flower, out of a pink glow at the exhaust | A gust of blossom swirling out round the exhaust |
+| Afterburner | A jet's long blue cone with a row of white shock diamonds burning in it, each with its Mach disk (a ring across the cone), throbbing, a rosy glow at its tip and blue sparks streaming off it | A shock ring blown out behind, diamonds shot back down the cone, and a spray of sparks |
+| Frost | Snowflakes turning as they drift, and glints of ice, out of a cold mist under a crown of ice spinning across the exhaust, frosting the road behind it | Shards of ice thrown out all round the exhaust, a cold puff and a flurry of snow |
+| Galaxy | A violet flame streaming a two-armed spiral of twinkling stars, some glinting, through drifting violet, pink and blue clouds of nebula over a strip of dark night sky | A little spiral galaxy, two arms of stars swirling out round a bright core |
+| Dragon fire | A deep red flame (drawn over what's behind it, as the red flame is) roaring in breaths, ragged tongues of fire that cool from orange to a deep red, embers streaking up and curls of dark smoke | A roar: a fireball of tongues, a shower of embers and a ring of smoke |
+| Butterflies | Clutches of butterflies in neighbouring colours fluttering up and away, keeping up with it, wings beating, each wandering its own way with a gold sparkle | A flutter of butterflies bursting out every way |
+| Spooky | Glowing wisps streaming and corkscrewing out of a ghostly green flame, and little ghosts floating off behind, creeping after it, bobbing as they go | "Boo!": a ring of ghosts popping out round the exhaust, and a puff of wisps |
+| Neon laser | A laser show: beams in cyan, pink, lime and blue fanning up and out behind and sweeping, a flare at each one's end, with bolts of light shot along them and a scan line swept across the road behind | A starburst of beams all round at once, and a hoop of light |
+| Slime | Blobs of green goo out of a gooey jet, wobbling as they fly and splatting where they land, bubbles that swell and pop, and puddles on the road for a couple of seconds | A splurt of blobs in a fan, a froth of bubbles and a puddle or two |
+
+In **overdrive** each style has a form of its own, raising its own density or brightness so it reads
+through the shared streaks of air, and **let go** each has a moment of its own as its stream dies
+down with the flame (run dry, a sputter):
+
+| Style | In overdrive | Let go (run dry) |
+| --- | --- | --- |
+| Bubbles | A fizzy jet of little bubbles, and every 0.4 s a big one riding along with it | One last big bubble (one swelling at the exhaust and popping at once) |
+| Confetti | A ticker-tape parade: thicker, more streamers, and foil flashing as it turns to the light | A last little popper and two streamers (one limp streamer flopping out) |
+| Plasma | A Tesla cage: arcs reaching in to the flame off the corners of its back; the pinches faster and tighter | A ball of lightning hanging at the exhaust, shrinking, then popping with a few arcs (and a whiff of ozone) |
+| Lightning | A steady return stroke straight back from it, and the forks crawling forward round its flanks | A last strike straight back with a flash (its last forks dulling as they sputter) |
+| Glitter | A tighter, faster white-hot spiral of diamond dust, with gems in it | The glitter in the air slows and drifts down (the shaker gives three pinches, each smaller) |
+| Comet | Perihelion: both tails longer, the ion tail paler, and a flare across the head | It breaks up, twinkling fragments flung off its head |
+| Neon rings | A warp tunnel of rings and shock waves walking through the hues | The last three hoops implode (one big faint ring) |
+| Fireworks | A grand finale: rockets in pairs, every burst a ring with a flare | A last salvo of three (two duds, fizzling out in dim embers) |
+| Hearts | Two spiralling strands, and on each beat a ring of heart blown out round it | A blown kiss: the hearts float up and away (heartbreak: three dull hearts drooping out of it) |
+| Pixel | A rainbow band of scan lines, white pixels flickering in it | The trail powers down, every pixel shrinking a step at once (game over: grey pixels falling, blinking) |
+| Ink | Twin pressure-washer jets, painting two lanes in two colours | A drip and a last blot on the road (half grey: the paint's run out) |
+| Music notes | Double time, chords on the beat and a speaker's thump, the staff brighter | A fermata: a double bar line, the notes holding (a sour note: three grey notes drooping) |
+| Cherry blossom | A storm of blossom off the cone of the shock as well, the haze deeper pink | Petals settle round it and on the road (a wilting flower dropping out) |
+| Afterburner | Reheat: up to seven diamonds, further apart, the first pure white and the last violet, a violet tail and a flare across the nozzle | The diamonds collapse tail first (a compressor stall: two bangs and a puff) |
+| Frost | A blizzard: driven snow streaking back, a bigger crown spinning faster | Every flake freezes where it is, hangs a moment and shatters into glints (a last cold breath) |
+| Galaxy | Warp: the stars stretch into hyperspace lines round a turning accretion disk and a white core | The galaxy drifts on (a dying star: a red giant shrinking in a nova's shell) |
+| Dragon fire | Blue-hot breath, a blue base to the flame and volleys of fireballs | A snort of smoke from both nostrils (a choke: three black puffs) |
+| Butterflies | A migration: V formations of monarchs, banked, beating quicker | They scatter (three tired ones, wings shut, spiralling down) |
+| Spooky | A vortex of spirits circling the exhaust, more wisps, and the shock diamonds burning green | Every ghost vanishes with a poof (one big ghost rising out of it: it gave up the ghost) |
+| Neon laser | The beams close into a turning tunnel, longer and thicker, shot through with hoops | The beams retract into the exhaust (run dry, they drop out one by one, each with a ring) |
+| Slime | Rooster tails of it thrown up off the rear wheels, and more puddles | It drips for a moment (a sploot: a big blob, bubbles popping and a puddle) |
+
+Each style's stream runs at its `flow( frame )`: what the booster asks while it's held, and once
+it's let go a little less than the flame's own dying down (`frame.lit`, drive-fx.js's
+`FLAME_FALL`), so a stream thins out over about a quarter of a second with the flame rather than
+stopping in one frame, and run dry it sputters on the flame's own three coughs. The exhaust cools
+in the style's own colours where it has them (frost to ice blue, petals to pink, notes to cream,
+the comet to blue, bubbles to white, the galaxy to violet, spooky to green, slime to lime,
+butterflies to gold; `ember` and `ash`, see drive-bursts.js). For a visitor asking for less motion
+the styles have no new flare, starburst, strobe or blink: a bolt only shimmers (never under 0.6 of
+its brightness) rather than flickering off, the throbs are steady, and a beat or a spin is slower.
+On a phone each steady stream is thinner (its rates times the effects' `detail`). With no air
+(World Drive's Moon) every style's particles fall at the Moon's gravity, nothing floats up (bubbles,
+hearts, notes, spooky's wisps), there's no smoke or mist (dragon fire, frost, cherry blossom's haze,
+the afterburner's stall, plasma's ozone), fireworks burst in perfect widening spheres, butterflies
+fall in long arcs, and the afterburner's plume is a widening glow with no diamonds.
 
 The flame colour was the Garage's only boost choice before the styles. It's now the classic flame's
 colour, shown under it, so a look saved before (a flame and no style) is the classic flame in the
@@ -3077,20 +3142,25 @@ never left out of view while any of it is on screen), so the three are as far fr
 any side, and three.js draws them in the order they were made: the cone, the core over it and the
 glow over both.
 
-Each style is one batch of quads drawn from one picture sheet, in one draw call (dragon fire and
-spooky two: their glowing parts are added to what's behind, their tongues of fire, smoke and ghosts
-drawn over it, so the fire stays red and the ghosts white against a bright sky): billboards, strips
+Each style is one batch of quads drawn from one picture sheet, in one draw call (dragon fire,
+spooky, fireworks and the galaxy two: their glowing parts are added to what's behind, their tongues
+of fire, smoke, ghosts, fireworks' bursting stars and the galaxy's strip of night sky drawn over
+it, so the fire stays red, the ghosts white, the stars in their colours and the night dark against
+a bright sky): billboards, strips
 along a line (a bolt, a comet's tail, a laser's beam, a tongue of fire) or quads flat across a
 normal (a ring, a splat on the road). The sheet is drawn once on a canvas, 6 by 6 pictures of
 128 px: soft glows, stars, a heart, pixels, rings, bubbles, splats, sparks, a shock diamond, a
 snowflake, notes, a petal and a blossom, a ghost, a shard of ice, a puff of cloud, a butterfly, a
 wisp and a beam. A style has a fixed number of particles, made once with its buffers (its budget,
-40 to 280; the oldest is reused when they're all in use), and each frame only the numbers in its
+70 to 320, and up to 55 quads put down each frame; the oldest is reused when they're all in use), and each frame only the numbers in its
 buffers change, so
 nothing is made while boosting. Most of what's thrown out is carried along at 85 to 97 % of the
 vehicle's speed (ink and a comet's tail less), with the air slowing only its own motion, so at
 150 km/h it trails a few metres behind, between the vehicle and the chase camera, rather than being left on the road, which at that
-speed is behind the camera in a tenth of a second. The supersonic effects are one more batch (136
+speed is behind the camera in a tenth of a second. Nothing is carried on faster than the vehicle
+is going now, so as it slows (out of overdrive, or braking) a trail never catches it up and flies
+through the chase camera, and any quad within about 2 m of the camera fades out rather than filling
+the view. The supersonic effects are one more batch (136
 particles, and 8 quads for overdrive's shock diamonds, put down each frame).
 On the test pad (software rendering in the test's browser), a minute of boosting each made nothing
 new (no geometries, textures, programs, objects or materials) and kept within its budget (at most
@@ -3159,7 +3229,13 @@ turning in the air faster than the kart, each ride going supersonic, the boost s
 (five free, the rest opening the sheet, each with its picture and saying what unlocks it: "Pass", or
 "Lv 12 · or Pass" for those on the track), a look saved before the styles keeping its flame's colour,
 every style drawn at 150 km/h (with a picture of each), making nothing new in a minute of boosting
-and timed, every flame colour drawn in its own colours and every trail drawn (seen from behind and
+and timed, each style still drawn 50 ms after it's let go, coughing out run dry within its budget,
+having an overdrive of its own (pictures or a count it doesn't have short of it) and making nothing
+new through it all, and on the Moon every style's particles falling at its gravity with no smoke
+or mist from those that have it and no bubble floating up, for a visitor asking for less motion no
+flare or starburst drawn boosting, in overdrive, let go or run dry and its bolts never dimmed under
+0.6 of their brightness (flickering down to a quarter otherwise), and on a phone no more alive
+after two seconds of boosting, every flame colour drawn in its own colours and every trail drawn (seen from behind and
 off to the side, a good deal more than the flame alone), the ribbons drawn out on the turntable
 (more than 3 m behind a 2 m ride in three quarters of a second) and as they were standing still
 anywhere else and moving, and the Garage (375 px across, its row of
@@ -6884,7 +6960,12 @@ the period before added up, the totals and the tidying after two years), and `np
 (the page in Chromium without a key: the globe and panel, search on Enter, spots, pins, dropping in
 and driving, the play stats it posts (the funnel once a visit, the device, searches by kind and
 never what was typed, play time, a drop-in's time and one left for the globe), stunts (a wall throwing the kart into the air and never through it, a backflip landed
-for points, the DRIFT button), changing ride, M and teleporting again without a reload, recent
+for points, the DRIFT button), crashes (a wall hit's layers growing with its tier, its bits lying
+on the ground, the view kicked, none of it for a visitor asking for less motion, fewer on a phone,
+no dust on the Moon, fifty hits making nothing new; the same hit going the same way with its
+effects and without, hitch and all; BONK!, BOING! and WHAM! each their own way over the kart,
+counting up, only fading for less motion, and "Crash!" knocked in red; a wipeout's flat slam, a
+landing's dust by how hard, regolith on the Moon, and a scrape's sparks by its speed), changing ride, M and teleporting again without a reload, recent
 places, a phone with touch buttons, boosting flat out going supersonic in each free ride (the boom,
 the streaks, the flame's shock diamonds and white-hot core, the tag glowing in the ride's colour
 with its sheen, the wider view, and its end as it slows), boost pads on the test pad (off

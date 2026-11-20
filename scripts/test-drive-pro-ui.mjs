@@ -21,6 +21,9 @@
 // heard in its own sound, and Horn sounds switched off silencing it and the Garage's horns; what a
 // trail and the booster cost a frame; every boost style drawn at 150 km/h (a picture of each),
 // keeping to its budget and making nothing new in a minute of boosting, and what each costs a frame;
+// each still drawn as it's let go, coughing out run dry and with an overdrive of its own, falling at
+// the Moon's gravity with no smoke there, with no flare or flash for a visitor asking for less
+// motion, and thinner on a phone;
 // every flame colour drawn in its own colours and every trail drawn behind the kart, and the ribbons
 // drawn out on the Garage's turntable (and only there); and the Garage and the badges on a phone
 // (375 px across, its row of groups all on screen, the one tapped lit until a finger drags the list).
@@ -141,6 +144,108 @@ async function openGlobe( page, query = '' ) {
 async function shot( page, name ) {
 
 	if ( SHOTS ) await page.screenshot( { path: join( SHOTS, `${ name }.png` ) } );
+
+}
+
+// A boost style's own batches, driven straight through drive-fx.js at 150 km/h on a box the size of
+// the kart, for the tests of how the styles let go, cough, go into overdrive and keep to the Moon,
+// less motion and a phone: window.styleRig( style, effects ).
+async function installStyleRig( page ) {
+
+	await page.evaluate( () => {
+
+		window.styleRig = async ( style, effects = { detail: 1, calm: false } ) => {
+
+			const { createDriveFx } = await import( '/src/drive-fx.js' );
+			const d = window.drive.driver;
+			const world = d.models.group.parent;
+			const Vector3 = d.entry.pivot.position.constructor;
+			const batchesOf = root => {
+
+				const found = [];
+				root.traverse( o => o.userData.batch && found.push( o.userData.batch ) );
+				return found;
+
+			};
+			// The bursts' and the supersonic effects' batches, which every fx has, made after the style's.
+			const classic = createDriveFx( world, { boost: 'classic', flame: 'orange', trail: null }, { effects } );
+			const shared = batchesOf( world.children.at( - 1 ) ).length;
+			classic.dispose();
+			const fx = createDriveFx( world, { boost: style, flame: 'orange', trail: null }, { effects, gravity: effects.gravity ?? 1 } );
+			const root = world.children.at( - 1 );
+			const all = batchesOf( root );
+			const batches = all.slice( 0, all.length - shared );
+			const pivot = new d.entry.pivot.constructor();
+			world.add( pivot );
+			const size = { width: 1.2, height: 1, length: 2, rear: 1, scale: 1 };
+			const wheels = [ new Vector3( - 0.4, 0.05, 0.7 ), new Vector3( 0.4, 0.05, 0.7 ) ];
+			const velocity = new Vector3( 0, 0, - 150 / 3.6 );
+			const count = () => {
+
+				const materials = new Set();
+				const geometries = new Set();
+				let objects = 0;
+				root.traverse( o => {
+
+					objects ++;
+					if ( o.material ) materials.add( o.material );
+					if ( o.geometry ) geometries.add( o.geometry );
+
+				} );
+				return { objects, materials: materials.size, geometries: geometries.size };
+
+			};
+			const drawn = () => batches.reduce( ( sum, batch ) => sum + batch.mesh.geometry.instanceCount, 0 );
+			const attributes = batch => ( { aShape: batch.shapes.array, aColour: batch.colours.array, aAxis: batch.axes.array } );
+			const run = ( frames, { power = 1, supersonic = false } = {} ) => {
+
+				for ( let i = 0; i < frames; i ++ ) {
+
+					pivot.position.addScaledVector( velocity, 1 / 60 );
+					if ( pivot.position.z < - 800 ) pivot.position.z += 1000;
+					pivot.updateMatrixWorld( true );
+					fx.update( { pivot, size, wheels, velocity, flame: power, trail: 0, drifting: false, level: 0, grounded: true, supersonic, dt: 1 / 60 } );
+
+				}
+
+			};
+			// What's drawn over `frames` frames: each picture and how it's drawn ('cell:mode'), and how
+			// many on average.
+			const watch = ( frames, state ) => {
+
+				const cells = new Set();
+				let total = 0;
+				for ( let i = 0; i < frames; i ++ ) {
+
+					run( 1, state );
+					for ( const batch of batches ) {
+
+						const { aShape, aAxis } = attributes( batch );
+						for ( let j = 0; j < batch.count; j ++ ) cells.add( `${ aShape[ j * 4 + 3 ] }:${ aAxis[ j * 4 + 3 ] }` );
+
+					}
+
+					total += drawn();
+
+				}
+
+				return { cells: [ ...cells ].sort(), count: Math.round( total / frames ) };
+
+			};
+			return {
+				fx, root, batches, run, watch, drawn, count, attributes,
+				alive: () => batches.reduce( ( sum, batch ) => sum + batch.alive, 0 ),
+				dispose() {
+
+					fx.dispose();
+					world.remove( pivot );
+
+				},
+			};
+
+		};
+
+	} );
 
 }
 
@@ -1680,6 +1785,222 @@ describe( 'Supporter Pass, with ?pro=1 on this computer', () => {
 		}
 
 		await page.evaluate( () => window.drive.driver.firing = false );
+		assert.deepEqual( page.errors, [] );
+
+	} );
+
+	test( 'every boost style fades out on let-go, coughs run dry, has an overdrive form of its own, and stays in budget making nothing new', async () => {
+
+		if ( await page.evaluate( () => window.drive?.mode ) !== 'driving' ) {
+
+			await openGlobe( page, '?pro=1' );
+			await dropIn( page );
+
+		}
+
+		await installStyleRig( page );
+		const result = await page.evaluate( async () => {
+
+			const { BOOST_STYLES } = await import( '/src/drive-boosts.js' );
+			const out = {};
+			for ( const style of BOOST_STYLES ) {
+
+				const rig = await window.styleRig( style );
+				const own = out[ style ] = {};
+				const before = rig.count();
+				rig.fx.ignite();
+				rig.run( 60, { power: 1 } );
+				// Let go: three frames on (about 50 ms), its stream is still being drawn.
+				rig.fx.cool();
+				rig.run( 3, { power: 0 } );
+				own.letGo = rig.drawn();
+				rig.run( 60, { power: 0 } );
+				// Boosting (the overdrive's own diamonds, cells and counts), then held supersonic: what's
+				// drawn over the last 30 frames of each.
+				rig.fx.ignite();
+				rig.run( 90, { power: 1 } );
+				const plain = rig.watch( 30, { power: 1 } );
+				rig.run( 90, { power: 1, supersonic: true } );
+				const over = rig.watch( 30, { power: 1, supersonic: true } );
+				own.plain = plain;
+				own.over = over;
+				own.newCells = over.cells.filter( cell => ! plain.cells.includes( cell ) );
+				// Run dry: coughing out, with nothing going wrong and none over budget.
+				rig.fx.cool( true );
+				own.most = 0;
+				for ( let i = 0; i < 30; i ++ ) {
+
+					rig.run( 1, { power: 0 } );
+					own.most = Math.max( own.most, rig.fx.particles.alive );
+
+				}
+
+				own.budget = rig.fx.particles.budget;
+				const after = rig.count();
+				own.grew = Object.fromEntries( Object.entries( after ).filter( ( [ key, value ] ) => value !== before[ key ] ).map( ( [ key, value ] ) => [ key, `${ before[ key ] } → ${ value }` ] ) );
+				rig.dispose();
+
+			}
+
+			return out;
+
+		} );
+		for ( const [ style, own ] of Object.entries( result ) ) {
+
+			console.log( `boost style ${ style.padEnd( 11 ) } let go ${ own.letGo } drawn, plain ${ own.plain.count } → overdrive ${ own.over.count }, new in overdrive ${ JSON.stringify( own.newCells ) }, most ${ own.most } of ${ own.budget }` );
+			assert.ok( own.letGo > 0, `${ style }: nothing drawn 50 ms after it was let go` );
+			const changed = Math.abs( own.over.count - own.plain.count ) >= 0.1 * own.plain.count;
+			assert.ok( own.newCells.length > 0 || changed, `${ style } has no overdrive of its own: ${ JSON.stringify( own ) }` );
+			assert.ok( own.most <= own.budget, `${ style }: ${ own.most } alive, over its budget of ${ own.budget }` );
+			assert.deepEqual( own.grew, {}, `${ style } made new things` );
+
+		}
+
+		assert.deepEqual( page.errors, [] );
+
+	} );
+
+	test( 'boost styles on the Moon fall at its gravity with nothing floating or smoking, ask for less motion with no flare or flash, and are thinner on a phone', async () => {
+
+		if ( await page.evaluate( () => window.drive?.mode ) !== 'driving' ) {
+
+			await openGlobe( page, '?pro=1' );
+			await dropIn( page );
+
+		}
+
+		await installStyleRig( page );
+		const result = await page.evaluate( async () => {
+
+			const { BOOST_STYLES, SHAPES } = await import( '/src/drive-boosts.js' );
+			const out = { gravity: {}, smoke: {}, floating: 0, flashes: {}, bolts: { calm: 1, wild: 1 }, phone: {} };
+			// The Moon: no air, a sixth of the Earth's gravity.
+			for ( const style of BOOST_STYLES ) {
+
+				const rig = await window.styleRig( style, { air: false, gravity: 0.165, detail: 1, calm: false } );
+				rig.run( 1, { power: 0 } );
+				out.gravity[ style ] = [ ...new Set( rig.batches.map( batch => Math.round( batch.gravity * 1000 ) / 1000 ) ) ];
+				// What's alive of smoke and mist: none with no air.
+				let puffs = 0;
+				const smoke = () => {
+
+					for ( const batch of rig.batches ) for ( const p of batch.items ) if ( p.age < p.life && p.frame === SHAPES.puff ) puffs ++;
+
+				};
+				rig.fx.ignite();
+				for ( let i = 0; i < 30; i ++ ) {
+
+					rig.run( 1, { power: 1 } );
+					smoke();
+
+				}
+
+				// Bubbles don't float up.
+				if ( style === 'bubbles' ) for ( const batch of rig.batches ) for ( const p of batch.items ) if ( p.age < p.life && p.frame === SHAPES.bubble ) out.floating = Math.max( out.floating, p.velocity.y );
+				rig.fx.cool();
+				for ( let i = 0; i < 30; i ++ ) {
+
+					rig.run( 1, { power: 0 } );
+					smoke();
+
+				}
+
+				// And run dry.
+				rig.fx.ignite();
+				rig.run( 20, { power: 1 } );
+				rig.fx.cool( true );
+				for ( let i = 0; i < 30; i ++ ) {
+
+					rig.run( 1, { power: 0 } );
+					smoke();
+
+				}
+
+				out.smoke[ style ] = puffs;
+				rig.dispose();
+
+			}
+
+			// Asking for less motion: no flare or starburst drawn boosting, in overdrive, let go or run
+			// dry; and a bolt shimmers rather than flickering off.
+			const shimmer = ( rig, kind ) => {
+
+				const { aShape, aColour } = rig.attributes( rig.batches[ 0 ] );
+				for ( let i = 0; i < rig.batches[ 0 ].count; i ++ ) if ( aShape[ i * 4 + 3 ] === SHAPES.bolt ) out.bolts[ kind ] = Math.min( out.bolts[ kind ], aColour[ i * 4 + 3 ] );
+
+			};
+			for ( const style of BOOST_STYLES ) {
+
+				const rig = await window.styleRig( style, { calm: true, detail: 1 } );
+				const seen = new Set();
+				const look = () => {
+
+					for ( const batch of rig.batches ) {
+
+						const { aShape } = rig.attributes( batch );
+						for ( let i = 0; i < batch.count; i ++ ) if ( aShape[ i * 4 + 3 ] === SHAPES.flare || aShape[ i * 4 + 3 ] === SHAPES.burst ) seen.add( aShape[ i * 4 + 3 ] );
+
+					}
+
+				};
+				const phases = [ [ 'ignite', 60, { power: 1 } ], [ 'cool', 40, { power: 0 } ], [ 'ignite', 40, { power: 1 } ], [ 'dry', 40, { power: 0 } ], [ 'ignite', 150, { power: 1, supersonic: true } ], [ 'cool', 40, { power: 0 } ] ];
+				let overdriven = false;
+				for ( const [ start, frames, state ] of phases ) {
+
+					overdriven ||= state.supersonic;
+					if ( start === 'ignite' ) rig.fx.ignite();
+					else if ( start ) rig.fx.cool( start === 'dry' );
+					for ( let i = 0; i < frames; i ++ ) {
+
+						rig.run( 1, state );
+						look();
+						// (Overdrive's return stroke, lightning's, only fades: it's steady.)
+						if ( ( style === 'plasma' || style === 'lightning' ) && ! overdriven ) shimmer( rig, 'calm' );
+
+					}
+
+				}
+
+				out.flashes[ style ] = [ ...seen ];
+				rig.dispose();
+				if ( style !== 'plasma' && style !== 'lightning' ) continue;
+				// The same bolts, not asking for less motion, flicker off.
+				const wild = await window.styleRig( style, { calm: false, detail: 1 } );
+				wild.fx.ignite();
+				for ( let i = 0; i < 60; i ++ ) {
+
+					wild.run( 1, { power: 1 } );
+					shimmer( wild, 'wild' );
+
+				}
+
+				wild.dispose();
+
+			}
+
+			// On a phone: two seconds of boosting at 150 km/h leave no more alive than on a computer.
+			for ( const style of BOOST_STYLES ) for ( const detail of [ 1, 0.6 ] ) {
+
+				const rig = await window.styleRig( style, { detail, calm: false } );
+				rig.run( 120, { power: 1 } );
+				( out.phone[ style ] ??= {} )[ detail ] = rig.alive();
+				rig.dispose();
+
+			}
+
+			return out;
+
+		} );
+		console.log( 'boost styles on the Moon, asking for less motion and on a phone:', JSON.stringify( result ) );
+		for ( const [ style, gravity ] of Object.entries( result.gravity ) ) assert.deepEqual( gravity, [ Math.round( 9.81 * 0.165 * 1000 ) / 1000 ], style );
+		for ( const style of [ 'dragon', 'frost', 'petals', 'afterburner', 'plasma' ] ) assert.equal( result.smoke[ style ], 0, `${ style } smokes with no air` );
+		assert.ok( result.floating <= 0.01, `bubbles float up on the Moon: ${ result.floating }` );
+		for ( const [ style, flashes ] of Object.entries( result.flashes ) ) assert.deepEqual( flashes, [], `${ style } flashes for a visitor asking for less motion` );
+		// (A bolt's glow is drawn at 0.45: asking for less motion, never under 0.6 of that; otherwise
+		// flickering down to a quarter of it.)
+		assert.ok( result.bolts.calm >= 0.45 * 0.6 - 0.005, `a bolt flickers off asking for less motion: ${ result.bolts.calm }` );
+		assert.ok( result.bolts.wild < 0.45 * 0.5, `bolts don't flicker: ${ result.bolts.wild }` );
+		for ( const [ style, alive ] of Object.entries( result.phone ) ) assert.ok( alive[ 0.6 ] <= alive[ 1 ], `${ style } on a phone: ${ JSON.stringify( alive ) }` );
 		assert.deepEqual( page.errors, [] );
 
 	} );

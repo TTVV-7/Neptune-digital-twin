@@ -7,7 +7,8 @@ import { ALONG, Batch, FACING, FLAT, SHAPES } from './drive-boosts.js';
 //   sparks popping out of it, in the boost style's colour (each style adds a burst of its own, see
 //   drive-boosts.js);
 // - the booster running dry: the exhaust glowing on for a moment and cooling, white-hot to red to
-//   nothing, with a few embers drifting off;
+//   nothing (or through a boost style's own colours: frost's to ice blue), with a few embers
+//   drifting off;
 // - a boost pad driven over: a ring spreading over it, chevrons rising off it and sparkles;
 // - each of a drift's charge levels reached: a little burst of sparks and a ring at each rear tyre
 //   in that level's colour; and its mini-turbo let go: a flash, a ring and a spray of sparks out
@@ -41,6 +42,9 @@ export function createBursts( root, { detail = 1 } = {} ) {
 	const tint = new Color();
 	const glow = new Color();
 	const cooling = { left: 0, tint: new Color(), size: 1 };
+	// What the exhaust cools through: EMBER and ASH, or a boost style's own (frost cools to ice blue).
+	const ember = new Color();
+	const ash = new Color();
 
 	const count = n => Math.max( 1, Math.round( n * detail ) );
 
@@ -132,8 +136,8 @@ export function createBursts( root, { detail = 1 } = {} ) {
 				cooling.left = Math.max( 0, cooling.left - frame.dt );
 				const t = 1 - cooling.left / COOL_TIME;
 				// White-hot in its tint, through orange to a dull red, and out.
-				if ( t < 0.35 ) glow.lerpColors( cooling.tint, EMBER, t / 0.35 );
-				else glow.lerpColors( EMBER, ASH, ( t - 0.35 ) / 0.65 );
+				if ( t < 0.35 ) glow.lerpColors( cooling.tint, ember, t / 0.35 );
+				else glow.lerpColors( ember, ash, ( t - 0.35 ) / 0.65 );
 				const size = cooling.size * ( 1 - 0.45 * t ) * ( 0.95 + 0.05 * Math.sin( frame.clock * 37 ) );
 				// A little behind the exhaust, so the bodywork round it doesn't hide it.
 				_v.copy( frame.nozzle ).addScaledVector( frame.back, 0.12 * frame.scale );
@@ -172,9 +176,12 @@ export function createBursts( root, { detail = 1 } = {} ) {
 		},
 
 		// The booster run dry: its exhaust glows on and cools (see update), and embers drift off it.
-		cool( frame, colour ) {
+		// `toEmber` and `toAsh` (hex): the colours it cools through, if not the classic ember's.
+		cool( frame, colour, toEmber = EMBER, toAsh = ASH ) {
 
 			tint.set( colour );
+			ember.set( toEmber );
+			ash.set( toAsh );
 			cooling.left = COOL_TIME;
 			cooling.tint.set( colour );
 			cooling.size = 0.6 * frame.scale;
@@ -187,7 +194,7 @@ export function createBursts( root, { detail = 1 } = {} ) {
 				p.velocity.set( Math.random() - 0.5, Math.random() * 0.5, Math.random() - 0.5 ).multiplyScalar( 1.6 ).addScaledVector( frame.back, 1.2 ).addScaledVector( frame.up, 0.8 );
 				p.frame = SHAPES.glow;
 				p.size = ( 0.05 + Math.random() * 0.06 ) * frame.scale;
-				p.colour.copy( i % 2 ? EMBER : tint );
+				p.colour.copy( i % 2 ? ember : tint );
 				p.fall = 0.15;
 				p.drag = 1.5;
 				p.kind = 4;
