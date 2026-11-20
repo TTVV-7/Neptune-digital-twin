@@ -1620,7 +1620,7 @@ describe( 'World Drive Supporter Pass', () => {
 	test( 'with only some links counted (SUPPORTER_PAYMENT_LINK_ID), the day pass\'s link still counts, as a day pass', () => {
 
 		assert.deepEqual( purchaseFor( { GOOGLE_CLIENT_ID: CLIENT_ID, SUPPORTER_PAYMENT_LINK: PASS_LINK, STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET, SUPPORTER_PAYMENT_LINK_ID: `${ PASS_LINK_ID }, plink_1Other`, DAY_PASS_PAYMENT_LINK: DAY_LINK, DAY_PASS_PAYMENT_LINK_ID: DAY_LINK_ID, DAY_PASS_PRICE: 'CA$0.99', SUPPORTER_PRICE: 'CA$9.99' }, null ),
-			{ enabled: true, link: PASS_LINK, price: 'CA$19.99', monthly: { link: MONTH_LINK, price: 'CA$1.99/month' }, day: { link: DAY_LINK, price: 'CA$0.99' } } );
+			{ enabled: true, link: PASS_LINK, price: 'CA$9.99', day: { link: DAY_LINK, price: 'CA$0.99' } } );
 		// Without its id, the day pass isn't offered (its checkouts couldn't be told from a lifetime pass's).
 		assert.equal( purchaseFor( { GOOGLE_CLIENT_ID: CLIENT_ID, SUPPORTER_PAYMENT_LINK: PASS_LINK, STRIPE_WEBHOOK_SECRET: WEBHOOK_SECRET, DAY_PASS_PAYMENT_LINK: DAY_LINK }, null ).day, undefined );
 
