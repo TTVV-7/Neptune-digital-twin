@@ -2225,3 +2225,16 @@ body:not( .touch ) #drive-ui .horn {
 	}
 
 }
+
+/* The data lens (lens.js, lens.css) sits at the bottom right over the world's credit; driving with
+   keys, the speedometer has that corner, so the lens goes up over it (its card is about 230 px tall).
+   On a touch screen lens.css moves it to the top left instead. */
+body:not( .touch ):is( [data-mode='driving'], [data-mode='paused'] ) {
+	--lens-bottom: calc( 286px + var( --safe-bottom, 0px ) );
+}
+
+/* On the globe, a pinned place's card (bottom middle, with Drive here) would sit under the lens's
+   scale on a narrower window: the lens goes up over the card while one shows. */
+body[data-mode='globe']:has( #globe-ui .pin-card:not( [hidden] ) ) {
+	--lens-bottom: calc( 112px + var( --safe-bottom, 0px ) );
+}

@@ -489,6 +489,7 @@ body.touch .orrery-hint-touch {
 }
 
 .orrery-note,
+.orrery-hint-used,
 .orrery-counted {
 	font-size: 12px;
 	line-height: 1.5;
@@ -501,7 +502,8 @@ body.touch .orrery-hint-touch {
 	color: var( --accent );
 }
 
-.orrery-note:empty {
+.orrery-note:empty,
+.orrery-hint-used:empty {
 	display: none;
 }
 

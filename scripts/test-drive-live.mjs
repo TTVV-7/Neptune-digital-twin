@@ -1132,11 +1132,18 @@ describe( 'Driving with others', () => {
 		assert.deepEqual( sent.slice( 4, 12 ), [ 0, 0, 0.7071, 0.7071, 12.35, 0, 0, 129 ] );
 		assert.equal( sent[ 1 ], Math.round( ( p.x + 0.123456 ) * 100 ) / 100 );
 
-		// A plane (FLAGS.plane, flying with it) going 2,700 km/h, as fast as one goes at its ceiling: passed on.
+		// A plane (FLAGS.plane, flying with it) going 2,700 km/h (750 m/s): passed on.
 		await sleep( FLUSH_MS + 20 );
 		alice.send( { t: 's', s: [ p.x, p.y, p.z + 12000, 0, 0, 0, 1, 750, 0, 0, 4096 | 8 ] } );
 		const flown = ( await bob.take( 'S' ) ).s[ 0 ];
 		assert.deepEqual( flown.slice( 8, 12 ), [ 750, 0, 0, 4096 | 8 ] );
+
+		// And at 3,500 km/h (972 m/s, its ceiling now), with a loop's hump on top: 1,000 m/s, passed on
+		// too (live-protocol.js's TOP_SPEED is 1,100).
+		await sleep( FLUSH_MS + 20 );
+		alice.send( { t: 's', s: [ p.x, p.y, p.z + 12000, 0, 0, 0, 1, 1000, 0, 0, 4096 | 8 ] } );
+		const fastest = ( await bob.take( 'S' ) ).s[ 0 ];
+		assert.deepEqual( fastest.slice( 8, 12 ), [ 1000, 0, 0, 4096 | 8 ] );
 
 		await sleep( FLUSH_MS + 20 );
 		const good = carAt( 46.5725, 8.4153 );
@@ -1144,7 +1151,7 @@ describe( 'Driving with others', () => {
 			'in orbit': [ p.x * 2, p.y * 2, p.z * 2, 0, 0, 0, 1, 0, 0, 0, 128 ],
 			'at the Earth\'s centre': [ 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 128 ],
 			'no turn at all': [ ...good.slice( 0, 3 ), 0, 0, 0, 0, 0, 0, 0, 128 ],
-			'faster than anything': [ ...good.slice( 0, 7 ), 900, 0, 0, 128 ],
+			'faster than anything (1,150 m/s, over a plane looping flat out)': [ ...good.slice( 0, 7 ), 1150, 0, 0, 128 ],
 			'flags it hasn\'t': [ ...good.slice( 0, 10 ), 1 << 13 ],
 			'flags not whole': [ ...good.slice( 0, 10 ), 1.5 ],
 			'a NaN, as JSON sends it': [ ...good.slice( 0, 7 ), null, 0, 0, 128 ],

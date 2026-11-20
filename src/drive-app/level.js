@@ -42,6 +42,23 @@ export function levelFrame( world, lat, lon, height = 0 ) {
 
 }
 
+// How far (m) from `world`'s middle its level is at planetocentric latitude `lat` (degrees): the
+// spheroid's surface in that direction for a world with a `level` (a·c / √((c·cos φ)² + (a·sin φ)²),
+// the point of x²/a² + y²/a² + z²/c² = 1 on the ray), else its sphere. A height over the level there
+// is ( radius + height over the sphere ) − this. The data lens (lens.js) and the Discoveries' heights
+// (scripts/make-finds.mjs) both use it, so the scale bar and a find's card give the same number: on
+// Vesta, over the 285 × 229 km spheroid the Dawn team gives heights over, not the sphere the map is
+// laid on (whose "heights" are mostly just the asteroid being flattened).
+export function levelRadius( world, lat ) {
+
+	const { radius, level } = WORLDS[ world ];
+	if ( ! level ) return radius;
+	const [ a, c ] = level;
+	const phi = lat * DEG;
+	return a * c / Math.hypot( c * Math.cos( phi ), a * Math.sin( phi ) );
+
+}
+
 // The point ( lat, lon, height ) on `world`'s sphere, in the world's frame.
 export function pointOn( world, lat, lon, height = 0 ) {
 

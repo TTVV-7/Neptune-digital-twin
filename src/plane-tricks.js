@@ -11,8 +11,11 @@
 // Scoring is bounded, so the sky can't be farmed for points, which a car's jumps never could be
 // (a jump ends when it lands): at most PLANE_TRICKS.rolls rolls and PLANE_TRICKS.loops loops score in
 // one pass (more still show, scoring nothing); the same kind of trick again in the same flight is
-// worth `repeat` times as much each time (1, 0.5, 0.25...), so variety pays; and flying high is worth
-// less (HEIGHTS), since the skill is doing it near the ground, not holding Q at 12 km.
+// worth `repeat` times as much each time (1, 0.5, 0.25...), down to nothing once it rounds below 10
+// points, so variety pays and each kind's worth over a flight is bounded; and flying high is worth
+// less (HEIGHTS), since the skill is doing it near the ground, not holding Q at 12 km. The combo
+// multiplier ends in flight as on the ground (drive.js's updatePlane, after CHAIN_TIME s without a
+// paid pass), and a pass of whole turns that pays nothing ends it too (plane.js's endPass).
 
 // Points for each, the car's own (drive.js's POINTS.roll and POINTS.flip: the test checks they
 // still match): a roll scores as the car's barrel roll does and a loop as a flip.
@@ -41,10 +44,12 @@ export function heightShare( height ) {
 }
 
 const whole = radians => Math.floor( ( Math.abs( radians ) * 180 / Math.PI + TURN_TOL ) / 360 );
-const tens = points => Math.max( 10, Math.round( points / 10 ) * 10 );
+// To the nearest 10: a trick repeated until it's worth under 5 points scores nothing (it still
+// shows, as a capped one does), so repeating one kind of trick all flight long runs dry.
+const tens = points => Math.round( points / 10 ) * 10;
 
 // The tricks in a pass so far, from its `air` record ({ turned }): { tricks, lines }. `tricks`, what
-// it would score now, as drive.js's payTricks takes them ([ { name, points, kind } ], `kind` 'roll',
+// it would score now (a trick worth nothing left out), as drive.js's payTricks takes them ([ { name, points, kind } ], `kind` 'roll',
 // 'loop' or 'outside' for countTricks); `lines`, what it reads as while it's being flown, with every
 // whole turn made, scoring or not. `height`: the highest (m over the ground) the pass has been
 // flown; `counts`: how many of each kind this flight has scored already ({ kind: n }).
@@ -64,7 +69,8 @@ export function planeTricksOf( air, { height = 0, counts = {} } = {} ) {
 		const scored = Math.min( rolls, PLANE_TRICKS.rolls );
 		const name = scored > 1 ? `Barrel roll ×${ scored }` : 'Barrel roll!';
 		lines.push( rolls > 1 ? `Barrel roll ×${ rolls }` : 'Barrel roll!' );
-		tricks.push( { name, points: tens( worth( 'roll', PLANE_POINTS.roll * scored ) ), kind: 'roll' } );
+		const points = tens( worth( 'roll', PLANE_POINTS.roll * scored ) );
+		if ( points > 0 ) tricks.push( { name, points, kind: 'roll' } );
 
 	}
 
@@ -77,7 +83,8 @@ export function planeTricksOf( air, { height = 0, counts = {} } = {} ) {
 		const label = kind === 'loop' ? 'Loop' : 'Outside loop';
 		const scored = Math.min( loops, PLANE_TRICKS.loops );
 		lines.push( loops > 1 ? `${ label } ×${ loops }` : `${ label }!` );
-		tricks.push( { name: scored > 1 ? `${ label } ×${ scored }` : `${ label }!`, points: tens( worth( kind, PLANE_POINTS.loop * scored ) ), kind } );
+		const points = tens( worth( kind, PLANE_POINTS.loop * scored ) );
+		if ( points > 0 ) tricks.push( { name: scored > 1 ? `${ label } ×${ scored }` : `${ label }!`, points, kind } );
 
 	}
 

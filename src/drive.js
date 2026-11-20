@@ -1109,6 +1109,15 @@ export class Driver {
 		} );
 		if ( this.booster ) this.hud.setBoost?.( this.gauge );
 		this.ringJolts( dt );
+		// A combo lasts while tricks keep coming, flying as driving: CHAIN_TIME s without a paid pass
+		// (and none being flown) and it's back to 1.
+		if ( this.mult > 1 && ! this.air && this.clock - this.lastTrick > CHAIN_TIME ) {
+
+			this.mult = 1;
+			this.showScore();
+
+		}
+
 		if ( this.launch ) this.turnView( dt );
 		this.placeChute();
 		this.placeCamera( dt );

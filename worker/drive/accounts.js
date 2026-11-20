@@ -293,8 +293,9 @@ async function mergePlayers( db, from, to ) {
 }
 
 // Two players' achievement counts (readTallies') as one: the more of each (km and every count
-// achievement-rules.js's NUMBERS has, every world's drives among them; the rides, all of both), the
-// longer streak, and the later run of days; today's counts are `a`'s (the player that stays).
+// achievement-rules.js's NUMBERS has, every world's drives among them; the rides and the Discoveries,
+// all of both), the longer streak, and the later run of days; today's counts are `a`'s (the player
+// that stays).
 export function mergeTallies( a, b ) {
 
 	const run = b.runDay > a.runDay || ( b.runDay === a.runDay && b.run > a.run ) ? { run: b.run, runDay: b.runDay } : { run: a.run, runDay: a.runDay };
@@ -303,6 +304,7 @@ export function mergeTallies( a, b ) {
 		...a, ...run, ...most,
 		streak: Math.max( a.streak, b.streak ),
 		rides: [ ...new Set( [ ...a.rides, ...b.rides ] ) ],
+		finds: [ ...new Set( [ ...a.finds ?? [], ...b.finds ?? [] ] ) ],
 	};
 
 }

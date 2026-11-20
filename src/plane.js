@@ -396,14 +396,44 @@ export class PlaneMode {
 
 		const d = this.driver;
 		if ( ! d.air?.plane ) return;
-		const { tricks } = planeTricksOf( d.air, { height: this.passTop, counts: this.counts } );
+		const { tricks, lines } = planeTricksOf( d.air, { height: this.passTop, counts: this.counts } );
+		// The turn as a yaw, a pitch and a roll (YXZ, as pose() draws them). Each turn has two such
+		// readings; the one with the smaller yaw is taken (half-way round a loop, nose up π rather
+		// than turned round π and rolled over π), and that yaw goes into the heading, so cut short at
+		// any attitude (a bail-out or a landing mid-loop) the plane is drawn as it was, not snapped
+		// round. (A settled pass is within PLANE_TRICKS.level of level, so it's a few degrees at most.)
 		_e.setFromQuaternion( d.air.q, 'YXZ' );
-		d.pitch += _e.x;
-		d.roll += _e.z;
+		let { x, y, z } = _e;
+		if ( Math.abs( y ) > Math.PI / 2 ) {
+
+			x = Math.PI - x;
+			y -= Math.sign( y ) * Math.PI;
+			z -= Math.sign( z || 1 ) * Math.PI;
+
+		}
+
+		d.pitch += x;
+		d.roll += z;
+		d.heading -= y * MathUtils.RAD2DEG;
+		d.course = d.heading;
 		d.air = null;
 		d.hud.setPending?.( null );
 		this.clearPass();
-		if ( tricks.length === 0 ) return;
+		if ( tricks.length === 0 ) {
+
+			// Whole turns that pay nothing (repeated until they're worth nothing): the combo ends, as
+			// it would on the ground, so the multiplier can't be held at its top all flight.
+			if ( lines.length && d.mult > 1 ) {
+
+				d.mult = 1;
+				d.showScore();
+
+			}
+
+			return;
+
+		}
+
 		countTricks( this.counts, tricks );
 		d.payTricks( tricks );
 
@@ -525,7 +555,14 @@ export class PlaneMode {
 
 			// Not up through a roof or a bridge on a loop's hump either.
 			enuToLocal( d.east, d.north, d.y + d.height / 2, _a );
-			if ( d.cast( _a, UP, d.height / 2 + this.loopStep + 0.3 ) ) this.loopStep = 0;
+			// What's blocked comes off the hump as well, so it comes down by only what it went up
+			// (loopOffset's rule: a loop leaves the plane as high as it went in).
+			if ( d.cast( _a, UP, d.height / 2 + this.loopStep + 0.3 ) ) {
+
+				this.loopLift -= this.loopStep;
+				this.loopStep = 0;
+
+			}
 
 		}
 

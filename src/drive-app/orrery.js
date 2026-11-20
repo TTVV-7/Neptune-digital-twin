@@ -172,7 +172,7 @@ export function createOrrery( {
 			spots: el( 'div', { class: 'orrery-spots' } ),
 			party: el( 'div', { class: 'orrery-party' } ),
 			note: el( 'p', { class: 'orrery-note' } ),
-			hint: el( 'p', { class: 'orrery-note orrery-hint-used' } ),
+			hint: el( 'p', { class: 'orrery-hint-used' } ),
 			// sheetExtra's: the data a world's ground is made from, a line more and its button.
 			extra: el( 'div', { class: 'orrery-extra', hidden: true } ),
 			source: el( 'p', { class: 'orrery-source' } ),

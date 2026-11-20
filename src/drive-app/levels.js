@@ -36,6 +36,7 @@ export const XP = {
 	together: 6, // each minute driving with others in your room
 	area: 100, // the first drive in an area (about 11 km across)
 	spot: 250, // each start spot, the first time
+	find: 100, // each Discovery collected (finds-data.js), the first time: as an area, a few minutes' driving
 	daily: 100, // the day's first drive (UTC days)
 	streak: 25, // and this much more for each day in a row before it...
 	streakMax: 4, // ...counting at most this many: 200 at most, from the fifth day in a row
@@ -337,7 +338,8 @@ export function badgeOf( level ) {
 // once; and only in a claim, days: { xp, streak, day }, the days' bonuses counted in this browser
 // before the nickname (their XP together, and the streak they made, as of `day`). And feats, when
 // there's anything in it: the achievements' trusted counts since the last report (the drives on the
-// Moon, Mars, Vesta and Ceres, Garage changes, rides tried: achievement-rules.js's checkTallies).
+// Moon, Mars, Vesta and Ceres, Garage changes, rides tried, Discoveries collected: achievement-rules.js's
+// checkTallies).
 export const REPORT_FIELDS = [ 'km', 'air', 'drifts', 'pads', 'together', 'tricks' ];
 export const REPORT_ID = /^[\w-]{8,40}$/;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;

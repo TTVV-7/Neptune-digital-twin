@@ -25,7 +25,11 @@ const DAY = 24 * 60 * 60 * 1000;
 // no faster than any ride goes, a minute of air a minute, and so on, at most CAPS.window of it in
 // one report, CAPS.claim for the first, and no sooner than CAPS.gap after the last, which keeps the
 // rows written down), areas and spots only the first time (kept in
-// `discoveries`), the day's bonus once a UTC day, and one visit for one player. An account counts
+// `discoveries`), the day's bonus once a UTC day, and one visit for one player. The Discoveries
+// (src/drive-app/finds-data.js: kept in players.tallies with the achievements' counts, never in
+// `discoveries`, which is the Earth's areas and spots) are taken each once, real ids only, at most
+// FINDS_RATE's worth a report and TALLY_DAY's a day; where the car was isn't checked (the page is
+// the page's), so a script gains a book and at most a few thousand XP, once, and no board. An account counts
 // its best player, not all of them together: each player's caps are its own, so players added to
 // an account mustn't add up. A supporter's XP counts SUPPORTER_XP times, by the pass of the account
 // the player is linked to, never by anything the page says. None of it asks a Durable Object: the
@@ -50,11 +54,13 @@ export function standingOf( xp, title ) {
 
 // POST /api/progress { id, secret, visit, report }: what was driven since the last report (a
 // REPORT, levels.js). { xp, own, level, gained, unlocked: [ rewards ], supporter, title, chosen,
-// streakDay, streak, accepted: { areas, spots }, daily?: { streak, xp }, repeated? }: xp and level
+// streakDay, streak, accepted: { areas, spots, finds }, finds, daily?: { streak, xp }, repeated? }: xp and level
 // the player's (their account's best), own their own XP, gained what this report earned, unlocked
 // what the levels it climbed gave, title the one shown and chosen the one picked ('' for the
 // newest), streakDay and streak their last daily bonus's day and its days in a row, accepted the
-// places it took (new or already known: those over the cap aren't, and are for the next report).
+// places it took (new or already known: those over the cap aren't, and are for the next report), and
+// likewise the Discoveries it took; finds, every Discovery the player has (the page adds those found
+// on another device to its book, and sends again any it has that this lacks).
 // earned: the achievements this report's counts reached (achievements.js); and with a report with
 // nothing in it whose body asks for them (feats: true, as the page does once as it starts), feats:
 // every achievement the player and their account have, the first time the visit asks (visits.listed:
@@ -77,7 +83,7 @@ export async function postProgress( { request, env, now } ) {
 	const player = await playerFor( db, env, id, secret );
 	if ( report.id && report.id === player.progress_id ) {
 
-		return json( { ...standing( player, player.total, player.xp, 0 ), streakDay: player.streak_day, streak: player.streak, accepted: { areas: [], spots: [] }, earned: [], repeated: true } );
+		return json( { ...standing( player, player.total, player.xp, 0 ), streakDay: player.streak_day, streak: player.streak, accepted: { areas: [], spots: [], finds: [] }, finds: readTallies( player.tallies ).finds, earned: [], repeated: true } );
 
 	}
 
@@ -135,11 +141,11 @@ export async function postProgress( { request, env, now } ) {
 	const kept = readTallies( player.tallies );
 	if ( ! claim && ! kept.day && player.streak_day ) fromBefore( kept, player, today );
 	const counted = claim ? claimTallies( { km: capped.km, feats: report.feats } ) : { km: capped.km, feats: report.feats };
-	const { tallies } = addTallies( kept, { ...counted, daily: !! daily }, today );
+	const { tallies, taken: added } = addTallies( kept, { ...counted, daily: !! daily, findsMost: findsRate( seconds ) }, today );
 	const feats = crossed( countsOf( readTallies( player.tallies ), { parties: player.parties } ), countsOf( tallies, { parties: player.parties } ) );
 
 	const multiplier = player.supporter ? SUPPORTER_XP : 1;
-	const earned = drivingXp( capped, seconds ) + ( fresh.length - spots ) * XP.area + spots * XP.spot + ( daily?.xp ?? 0 ) + earlier + capped.tricks;
+	const earned = drivingXp( capped, seconds ) + ( fresh.length - spots ) * XP.area + spots * XP.spot + added.finds.length * XP.find + ( daily?.xp ?? 0 ) + earlier + capped.tricks;
 	const gained = Math.round( earned * multiplier );
 	const anything = gained > 0 || fresh.length > 0 || streakDay !== player.streak_day || [ 'km', 'air', 'drifts', 'pads', 'together' ].some( field => report[ field ] > 0 ) || hasTallies( report.feats );
 	if ( anything ) {
@@ -165,7 +171,9 @@ export async function postProgress( { request, env, now } ) {
 		...standing( player, Math.max( player.total, own ), own, gained ),
 		streakDay: anything ? streakDay : player.streak_day,
 		streak: anything ? streak : player.streak,
-		accepted: { areas: capped.areas, spots: capped.spots },
+		// (The Discoveries it has now: those over a cap aren't among them, and the page sends them again.)
+		accepted: { areas: capped.areas, spots: capped.spots, finds: ( report.feats?.finds ?? [] ).filter( id => ( anything ? tallies : kept ).finds.includes( id ) ) },
+		finds: ( anything ? tallies : kept ).finds,
 		// The achievements this report earned; and asked for with nothing reported, once a visit, all
 		// the player's and their account's.
 		earned: anything ? feats : [],
@@ -247,6 +255,15 @@ function standing( player, xp, own, gained ) {
 	const before = levelOf( player.total );
 	const { level, title } = standingOf( xp, player.title );
 	return { xp, own, level, gained, unlocked: rewardsBetween( before, level ), supporter: !! player.supporter, title, chosen: player.title ?? '' };
+
+}
+
+// The most new Discoveries a report counting `seconds` takes: one, and one more a minute (as
+// CAPS.places is for areas). Even the approach spawn's 2.5 km takes a minute or so to drive, so this
+// is never less than a player can collect; the rest wait for the next report.
+export function findsRate( seconds ) {
+
+	return 1 + Math.floor( Math.max( 0, seconds ) / 60 );
 
 }
 

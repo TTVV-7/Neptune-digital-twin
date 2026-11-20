@@ -51,12 +51,15 @@ const FLAG_GAP = 60;
 // What this page sends a second on average, and at most at once: under the room's RATE and BURST,
 // whatever the flags do.
 const BUDGET = { rate: 14, burst: 24 };
-// Faster than this (m/s) goes as this: the room turns away anything over the protocol's top speed
-// (live-protocol.js's TOP_SPEED, 1,100), and a plane goes up to 972 (src/plane.js), 1,087 over the
-// top of a loop (its hump: src/plane-tricks.js), which has to arrive as it is for others to see it
-// fly between words rather than jump (teleported) and to be carried on past the last word at its
-// speed. A little under 1,100, for the rounding.
-const MAX_SPEED = 1090;
+// Faster than this (m/s) goes as this. The room and this page take up to the protocol's top speed
+// (live-protocol.js's TOP_SPEED, 1,100: a plane goes up to 972, src/plane.js, and 1,087 over the
+// top of a loop, its hump: src/plane-tricks.js). But a page still open from before the plane got
+// faster checks what it's sent against the old top speed, 800, and drops a car going faster, so
+// what's sent stays a little under 800 for now (790, for the rounding). Others still see it fly
+// rather than jump: teleported allows half again the speed sent between two words (790 × 1.5 is
+// more than 1,087), and the next word puts it right. Once those pages have gone (a few weeks), this
+// can go up to 1,090.
+const MAX_SPEED = 790;
 // How often (ms) the car's area is worked out again.
 const FOLLOW_MS = 500;
 // Nothing heard this long (ms) after a keepalive: the connection has gone without a word (a network

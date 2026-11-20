@@ -116,7 +116,7 @@ describe( 'plane speeds', () => {
 
 	} );
 
-	test( 'the live protocol and the client\'s clamp take a plane flat out with a loop\'s hump on top', () => {
+	test( 'the live protocol takes a plane flat out with a loop\'s hump on top; what\'s sent stays under old pages\' 800', () => {
 
 		const protocol = readFileSync( new URL( '../src/drive-app/live-protocol.js', import.meta.url ), 'utf8' );
 		const live = readFileSync( new URL( '../src/drive-app/live.js', import.meta.url ), 'utf8' );
@@ -124,7 +124,10 @@ describe( 'plane speeds', () => {
 		const clamp = Number( live.match( /^const MAX_SPEED = (\d+);$/m )[ 1 ] );
 		// (Flat out, and climbing at half that at the steepest of a loop.)
 		const fastest = planeTopSpeed( 12000 ) * Math.hypot( 1, LOOP.lift );
-		assert.ok( fastest < clamp && clamp < top, JSON.stringify( { fastest, clamp, top } ) );
+		assert.ok( fastest < top, JSON.stringify( { fastest, top } ) );
+		// Under the 800 a page from before the faster plane still checks against (live.js's MAX_SPEED),
+		// and still seen flying rather than jumping: teleported allows half again the speed sent.
+		assert.ok( clamp < 800 && fastest < clamp * 1.5, JSON.stringify( { fastest, clamp } ) );
 
 	} );
 
@@ -275,6 +278,22 @@ describe( 'plane tricks: the rules', () => {
 		assert.equal( planeTricksOf( air( 0, 360 ), { height: 1000 } ).tricks[ 0 ].points, 400 );
 		assert.equal( planeTricksOf( air( 0, 360 ), { height: 5000 } ).tricks[ 0 ].points, 80 );
 		assert.deepEqual( HEIGHTS.map( ( [ , share ] ) => share ), [ 1, 0.5, 0.1 ] );
+
+	} );
+
+	test( 'a trick repeated until it rounds below 10 points scores nothing, so a flight can\'t be farmed', () => {
+
+		// High up (a tenth), a roll's 80 halves to 40, 20, 10, 5 (10 to the nearest 10), then 2.5: nothing
+		// from the sixth on.
+		const worth = n => planeTricksOf( air( 0, 360 ), { height: 5000, counts: { roll: n } } );
+		assert.equal( worth( 2 ).tricks[ 0 ].points, 20 );
+		assert.deepEqual( worth( 6 ).tricks, [] );
+		// It still shows.
+		assert.deepEqual( worth( 6 ).lines, [ 'Barrel roll!' ] );
+		// Each kind's worth over a whole flight is bounded.
+		let total = 0;
+		for ( let n = 0; n < 100; n ++ ) total += worth( n ).tricks[ 0 ]?.points ?? 0;
+		assert.ok( total < 200, `${ total }` );
 
 	} );
 

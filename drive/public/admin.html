@@ -222,7 +222,7 @@
 		<h2 id="achievements-title">Achievements</h2>
 		<p class="muted small" id="ach-total"></p>
 		<div id="ach-list"></div>
-		<p class="note">How many players (nicknames) have each achievement, of all of them; nothing of who. Checked: the game counts it itself (challenge times and final places, parties, days in a row). Trusted: the page says it (km, drives on the Moon, Mars, Vesta and Ceres, Garage changes, rides tried), each held to a day's worth. A construction ride comes with the achievement beside it.</p>
+		<p class="note">How many players (nicknames) have each achievement, of all of them; nothing of who. Checked: the game counts it itself (challenge times and final places, parties, days in a row). Trusted: the page says it (km, drives on the Moon, Mars, Vesta and Ceres, Garage changes, rides tried, Discoveries collected), each held to a day's worth; the Discoveries' counts are the account's players' finds together. A construction ride comes with the achievement beside it.</p>
 	</section>
 	<div id="more"></div>
 	<p class="muted" style="margin-top:24px;font-size:13px">Counts only, nothing of who. Days are UTC, and each period ends with today so far. ▲ and ▼ compare with the as many days just before it. Referrers, countries and page speed in more detail are in Cloudflare's dashboard (Web Analytics).</p>
@@ -365,6 +365,9 @@
 			// Where they went (counted from when every visit was, turned-away ones too): no change shown,
 			// as days before that have none.
 			[ 'Earth drives', num( total( 'visit_kind', 'earth' ) + total( 'visit_kind', 'earth_supporter' ) ), null ],
+			// A plain load opens on the orrery with a free visit; picking the Earth reloads into an Earth
+			// drive, counted again (so this and the Earth's row together over-count people a little).
+			[ 'Opened on the orrery', num( total( 'visit_kind', 'orrery' ) ), null ],
 			[ 'Over a cap, sent to the Moon', num( total( 'visit_kind', 'moon_daily_cap' ) + total( 'visit_kind', 'moon_visitor_cap' ) ), null ],
 			[ 'Play time', hours( play ), [ play, earlier( 'play' ) ] ],
 			[ 'Play per visit', visits ? hours( play / visits ) : '-', [ visits ? play / visits : 0, earlier( 'visit' ) ? earlier( 'play' ) / earlier( 'visit' ) : 0 ] ],
